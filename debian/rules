@@ -1,0 +1,652 @@
+#! /usr/bin/make -f
+
+SHELL = /bin/sh
+srcdir = .
+
+MESA            := mesag3
+MESA_DEV        := mesag-dev
+MESA_GLIDE      := mesag3-glide2
+MESA_GLIDE_DEV  := mesag-glide2-dev
+MESA_GGI        := mesag3+ggi
+MESA_GGI_DEV    := mesag3+ggi-dev
+LIBGLU          := libglu1-mesa
+LIBGLU_DEV      := libglu1-mesa-dev
+MESA_COMMON_DEV := mesa-common-dev
+OSMESA          := libosmesa4
+OSMESA_DEV      := libosmesa4-dev
+
+LIBGL = libGL
+
+MESAMAJOR=5
+MESAMINOR=0
+MESAMICRO=0
+MESAVERSION=$(MESAMAJOR).$(MESAMINOR).$(MESAMICRO)
+
+OPENGLMAJOR=1
+OPENGLMINOR=4
+OPENGLMICRO=$(MESAMAJOR)$(MESAMINOR)$(MESAMICRO)
+OPENGLVERSION=$(OPENGLMAJOR).$(OPENGLMINOR).$(OPENGLMICRO)
+
+OSMESAMAJOR=4
+OSMESAMINOR=0
+OSMESAMICRO=$(MESAMAJOR)$(MESAMINOR)$(MESAMICRO)
+OSMESAVERSION=$(OSMESAMAJOR).$(OSMESAMINOR).$(OSMESAMICRO)
+
+GLUMAJOR=1
+GLUMINOR=3
+GLUMICRO=$(MESAMAJOR)$(MESAMINOR)$(MESAMICRO)
+GLUVERSION=$(GLUMAJOR).$(GLUMINOR).$(GLUMICRO)
+
+INSTALL         := install
+INSTALL_DATA    := $(INSTALL) -p -m 644 -o root -g root
+INSTALL_DIR     := $(INSTALL) -p -m 755 -o root -g root -d
+INSTALL_LIB     := $(INSTALL) -p -m 644 -o root -g root
+INSTALL_PROGRAM := $(INSTALL) -p -m 755 -o root -g root
+INSTALL_SCRIPT  := $(INSTALL) -p -m 755 -o root -g root
+
+LN_S := ln -sf
+
+CFLAGS = -Wall -g
+ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
+CFLAGS += -O0
+else
+CFLAGS += -O2
+endif
+
+ifeq ($(findstring nostrip,$(DEB_BUILD_OPTIONS)),)
+INSTALL_PROGRAM += -s
+ifeq ($(DEB_HOST_ARCH), alpha)
+STRIP_LIB       := strip --remove-section .note --strip-unneeded
+else
+STRIP_LIB       := strip --remove-section .note --remove-section .comment --strip-unneeded
+endif
+else
+STRIP_LIB       := :
+endif
+
+GGI_ARCHS := $(shell grep-dctrl -n -s Architecture -F Package -X $(MESA_GGI) debian/control)
+GLIDE_ARCHS := $(shell grep-dctrl -n -s Architecture -F Package -X $(MESA_GLIDE) debian/control)
+
+CONFIG_OPTS =
+
+ifeq ($(DEB_HOST_ARCH), i386)
+CONFIG_OPTS = --enable-x86 --enable-mmx --enable-3dnow
+endif
+
+ifeq ($(DEB_HOST_ARCH), sparc)
+CONFIG_OPTS = --enable-sparc
+endif
+
+# Compile the software rasterizer?  Normally yes
+DO_SWR=y
+DO_OSMESA=y
+
+# Compile the GGI rasterizer?
+ifneq ($(findstring $(DEB_HOST_ARCH),$(GGI_ARCHS)),)
+DO_GGI=y
+else
+DO_GGI=n
+endif
+
+# Compile GLIDE rasterizer?
+ifneq ($(findstring $(DEB_HOST_ARCH),$(GLIDE_ARCHS)),)
+DO_GLIDE=y
+else
+DO_GLIDE=n
+endif
+
+#DO_WIDGETS=(motif|xt)
+DO_WIDGETS=xt
+
+ifneq ($(strip $(DO_WIDGETS)),)
+BUILD_WIDGETS=build-widgets-$(DO_WIDGETS)
+INSTALL_WIDGETS_DEV=install-widgets-dev
+endif
+
+USE_GLU=sgi
+
+ifeq ($(USE_GLU),sgi)
+GLU_SRC=si-glu
+endif
+ifeq ($(USE_GLU),bogdan)
+GLU_SRC=src-glu
+endif
+
+BUILDDIR = build/$(TARGET)
+DTEMPDIR = debian/$(PACKAGE)
+CONFFILES = $(DTEMPDIR)/DEBIAN/conffiles
+
+CONFIG_SWR   = --without-glut --without-glide   --without-ggi   --without-svga --enable-osmesa=yes
+CONFIG_GLIDE = --without-glut --with-glide=/usr --without-ggi   --without-svga --enable-osmesa=no
+CONFIG_GGI   = --without-glut --without-glide   --with-ggi=/usr --without-svga --enable-osmesa=no  --prefix=/ --exec-prefix=/usr
+
+STAMPDIR = debian/stamp
+
+config: $(STAMPDIR)/config
+$(STAMPDIR)/config:
+	$(checkdir)
+	-rm -rf config.guess config.sub
+	install -m 0755 debian/config.guess config.guess
+	install -m 0755 debian/config.sub config.sub
+	cp /usr/share/aclocal/libtool.m4 m4/libtool.m4
+	cat m4/*.m4 > acinclude.m4
+	libtoolize --force --copy
+	aclocal
+	automake
+	autoconf
+	mkdir -p $(STAMPDIR)
+	touch $@
+
+build: $(STAMPDIR)/build
+$(STAMPDIR)/build:
+	$(checkdir)
+	$(MAKE) -f debian/rules config
+ifeq ($(DO_SWR),y)
+	$(MAKE) -f debian/rules build-swr
+endif
+ifeq ($(DO_GLIDE),y)
+	$(MAKE) -f debian/rules build-glide
+endif
+ifeq ($(DO_GGI), y)
+	$(MAKE) -f debian/rules build-ggi
+endif
+ifneq ($(strip $(BUILD_WIDGETS)),)
+	$(MAKE) -f debian/rules $(BUILD_WIDGETS)
+endif
+	touch $@
+
+clean:
+	$(checkdir)
+	-rm -rf build
+	-rm -rf $(STAMPDIR)
+	-rm -rf debian/tmp* debian/files* debian/substvars
+	-rm -rf debian/$(MESA) debian/$(MESA_DEV) \
+		debian/$(MESA_GGI) debian/$(MESA_GGI_DEV) \
+		debian/$(MESA_GLIDE) debian/$(MESA_GLIDE_DEV) \
+		debian/$(LIBGLU) debian/$(LIBGLU_DEV) \
+		debian/$(MESA_COMMON_DEV) \
+		debian/$(OSMESA) debian/$(OSMESA_DEV) \
+		debian/substvars.*
+	-rm -rf \
+		acinclude.m4 aclocal.m4 \
+		config.guess config.sub configure \
+		ltmain.sh m4/libtool.m4 \
+		$(shell find -name Makefile.in) autom4te.cache
+	-rm -f config.status config.cache libtool conf.h
+	-rm -f `find . -name "Makefile.orig"`
+	-rm -f `find . -name "Makefile.DJ"`
+	-rm -f `find . -name "Makefile.dja"`
+	-rm -f `find . -name "Makefile.win"`
+	-rm -f `find . -name "Makefile.cygnus"`
+	-rm -f `find . -name "*~"`
+	-rm -f config.guess config.sub
+
+binary-arch: checkroot
+	$(checkdir)
+	$(MAKE) -f debian/rules build
+ifeq ($(DO_SWR),y)
+	$(MAKE) -f debian/rules binary-swr
+	$(MAKE) -f debian/rules binary-swr-dev
+	$(MAKE) -f debian/rules binary-libglu
+	$(MAKE) -f debian/rules binary-libglu-dev
+endif
+ifeq ($(DO_GLIDE),y)
+	$(MAKE) -f debian/rules binary-glide
+	$(MAKE) -f debian/rules binary-glide-dev
+endif
+ifeq ($(DO_GGI),y)
+	$(MAKE) -f debian/rules binary-ggi
+	$(MAKE) -f debian/rules binary-ggi-dev
+endif
+ifeq ($(DO_OSMESA),y)
+	$(MAKE) -f debian/rules binary-osmesa
+	$(MAKE) -f debian/rules binary-osmesa-dev
+endif
+
+define checkdir
+	test -f debian/rules
+endef
+
+define install_stddocs
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/share/doc/$(PACKAGE)
+	$(INSTALL_DATA) debian/copyright $(DTEMPDIR)/usr/share/doc/$(PACKAGE)
+	$(INSTALL_DATA) debian/changelog \
+		$(DTEMPDIR)/usr/share/doc/$(PACKAGE)/changelog.Debian
+	$(INSTALL_DATA) docs/VERSIONS \
+		$(DTEMPDIR)/usr/share/doc/$(PACKAGE)/changelog
+	gzip -9 $(DTEMPDIR)/usr/share/doc/$(PACKAGE)/changelog*
+	$(INSTALL_DATA) debian/README.Debian \
+		$(DTEMPDIR)/usr/share/doc/$(PACKAGE)/
+endef
+
+define install_package_scripts
+	for script in preinst postinst prerm postrm ; do \
+	    if [ -f debian/$${script}.$(PACKAGE) ] ; then \
+		    $(INSTALL_SCRIPT) debian/$${script}.$(PACKAGE) \
+			$(DTEMPDIR)/DEBIAN/$${script} ; \
+	    fi ; \
+	done
+endef
+
+binary-indep: checkroot
+	$(checkdir)
+	$(MAKE) -f debian/rules binary-common-dev
+
+########################################################################
+#
+# The stuff common to all rasterizers
+#
+########################################################################
+
+build-common:
+	$(checkdir)
+	test -f $(STAMPDIR)/config || $(MAKE) -f debian/rules config
+	mkdir -p $(BUILDDIR)
+
+	cd $(BUILDDIR) && \
+	../../configure $(CONFIG_OPTS) --enable-static --enable-shared $(CONFIG)
+	perl -pi -e 's/(hardcode_libdir_flag_spec)=.*/$$1=" "/' $(BUILDDIR)/libtool
+
+	make -C $(BUILDDIR)/src
+
+install-shared:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/lib
+	$(INSTALL_LIB) $(BUILDDIR)/src/.libs/$(LIBGL).so.$(OPENGLVERSION) $(DTEMPDIR)/usr/lib/
+	$(STRIP_LIB) $(DTEMPDIR)/usr/lib/$(LIBGL).so.$(OPENGLVERSION)
+	$(LN_S) $(LIBGL).so.$(OPENGLVERSION) \
+		$(DTEMPDIR)/usr/lib/$(LIBGL).so.$(OPENGLMAJOR)
+	# The docs
+	$(install_stddocs)
+	$(INSTALL_DATA) docs/README $(DTEMPDIR)/usr/share/doc/$(PACKAGE)
+
+install-shared-dev:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/lib
+	$(INSTALL_LIB) $(BUILDDIR)/src/.libs/$(LIBGL).a $(DTEMPDIR)/usr/lib/
+	$(STRIP_LIB) $(DTEMPDIR)/usr/lib/$(LIBGL).a
+	$(LN_S) $(LIBGL).so.$(OPENGLVERSION) $(DTEMPDIR)/usr/lib/$(LIBGL).so
+	$(install_stddocs)
+
+binary-shared:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)/DEBIAN
+	$(INSTALL_DIR) $(DTEMPDIR)/DEBIAN
+	if test -f debian/shlibs.$(PACKAGE) ; then \
+	    $(INSTALL_DATA) debian/shlibs.$(PACKAGE) $(DTEMPDIR)/DEBIAN/shlibs ; \
+	else \
+	    $(INSTALL_DATA) debian/shlibs.libgl $(DTEMPDIR)/DEBIAN/shlibs ; \
+	fi
+	$(install_package_scripts)
+	dpkg-shlibdeps -Tdebian/substvars.$(PACKAGE) $(SHLIBDEPS_FLAGS) \
+		$(DTEMPDIR)/usr/lib/$(LIBGL).so.$(OPENGLVERSION)
+	if test -d "$(DTEMPDIR)/etc" ; then \
+	    find "$(DTEMPDIR)/etc" -type f | \
+	    sed -e 's,$(DTEMPDIR),,' > "$(CONFFILES)" ; \
+	fi
+	dpkg-gencontrol -isp -p$(PACKAGE) -P$(DTEMPDIR) \
+		-Tdebian/substvars.$(PACKAGE)
+	dpkg --build $(DTEMPDIR) ..
+
+binary-shared-dev:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)/DEBIAN
+	$(INSTALL_DIR) $(DTEMPDIR)/DEBIAN
+	$(install_package_scripts)
+	if test -d "$(DTEMPDIR)/etc" ; then \
+	    find "$(DTEMPDIR)/etc" -type f | \
+	    sed -e 's,$(DTEMPDIR),,' > "$(CONFFILES)" ; \
+	fi
+	dpkg-gencontrol -isp -p$(PACKAGE) -P$(DTEMPDIR)
+	dpkg --build $(DTEMPDIR) ..
+
+########################################################################
+#
+# The software rasterizer
+#
+########################################################################
+
+build-swr: $(STAMPDIR)/swr
+$(STAMPDIR)/swr:
+	$(checkdir)
+	$(MAKE) -f debian/rules TARGET=swr CONFIG="$(CONFIG_SWR)" build-common
+	touch $@
+
+install-swr: $(STAMPDIR)/swr
+install-swr: TARGET=swr
+install-swr: PACKAGE=$(MESA)
+install-swr: install-shared
+install-swr:
+	$(INSTALL_DATA) docs/README.X11 $(DTEMPDIR)/usr/share/doc/$(PACKAGE)
+
+binary-swr: install-swr
+binary-swr: PACKAGE=$(MESA)
+binary-swr: binary-shared
+
+install-swr-dev: $(STAMPDIR)/swr
+install-swr-dev: TARGET=swr
+install-swr-dev: PACKAGE=$(MESA_DEV)
+install-swr-dev: install-shared-dev $(INSTALL_WIDGETS_DEV)
+install-swr-dev:
+
+binary-swr-dev: install-swr-dev
+binary-swr-dev: PACKAGE=$(MESA_DEV)
+binary-swr-dev: binary-shared-dev
+
+########################################################################
+#
+# The Glide rasterizer
+#
+########################################################################
+
+build-glide: $(STAMPDIR)/glide
+$(STAMPDIR)/glide:
+	$(checkdir)
+	$(MAKE) -f debian/rules TARGET=glide CONFIG="$(CONFIG_GLIDE)" build-common
+	touch $@
+
+install-glide: $(STAMPDIR)/glide
+install-glide: TARGET=glide
+install-glide: PACKAGE=$(MESA_GLIDE)
+install-glide: install-shared
+install-glide:
+	# The version specific stuff
+	$(INSTALL_DATA) docs/README.3DFX $(DTEMPDIR)/usr/share/doc/$(PACKAGE)
+
+binary-glide: install-glide
+binary-glide: PACKAGE=$(MESA_GLIDE)
+binary-glide: binary-shared
+
+install-glide-dev: $(STAMPDIR)/glide
+install-glide-dev: TARGET=glide
+install-glide-dev: PACKAGE=$(MESA_GLIDE_DEV)
+install-glide-dev: install-shared-dev
+install-glide-dev:
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/include/GL
+	$(INSTALL_DATA) include/GL/fxmesa.h $(DTEMPDIR)/usr/include/GL
+
+binary-glide-dev: install-glide-dev
+binary-glide-dev: PACKAGE=$(MESA_GLIDE_DEV)
+binary-glide-dev: binary-shared-dev
+
+########################################################################
+#
+# The GGI rasterizer
+#
+########################################################################
+
+build-ggi: $(STAMPDIR)/ggi
+$(STAMPDIR)/ggi:
+	$(checkdir)
+	$(MAKE) -f debian/rules TARGET=ggi CONFIG="$(CONFIG_GGI)" build-common
+	touch $@
+
+install-ggi: $(STAMPDIR)/ggi
+install-ggi: TARGET=ggi
+install-ggi: PACKAGE=$(MESA_GGI)
+install-ggi: install-shared
+install-ggi:
+	# The version specific stuff
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/lib/ggi/mesa/default
+	# This is largely an educated guess regarding what should be
+	# installed, it has NOT been tested.  Please mail me if it works.
+	$(INSTALL_LIB) $(BUILDDIR)/src/GGI/default/.libs/*.so.0.0.0 \
+		$(DTEMPDIR)/usr/lib/ggi/mesa/default
+	$(STRIP_LIB) $(DTEMPDIR)/usr/lib/ggi/mesa/default/*.so.0.0.0
+	( cd $(DTEMPDIR)/usr/lib/ggi/mesa/default && \
+		$(LN_S) linear_8.so.0.0.0 linear_8.so.0 && \
+		$(LN_S) linear_15.so.0.0.0 linear_15.so.0 && \
+		$(LN_S) linear_16.so.0.0.0 linear_16.so.0 && \
+		$(LN_S) linear_24.so.0.0.0 linear_24.so.0 && \
+		$(LN_S) linear_32.so.0.0.0 linear_32.so.0 && \
+		$(LN_S) stubs.so.0.0.0 stubs.so.0 )
+	( cd $(DTEMPDIR)/usr/lib/ggi/mesa/default && \
+		$(LN_S) linear_8.so.0.0.0 linear_8.so && \
+		$(LN_S) linear_15.so.0.0.0 linear_15.so && \
+		$(LN_S) linear_16.so.0.0.0 linear_16.so && \
+		$(LN_S) linear_24.so.0.0.0 linear_24.so && \
+		$(LN_S) linear_32.so.0.0.0 linear_32.so && \
+		$(LN_S) stubs.so.0.0.0 stubs.so )
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/lib/ggi/mesa/display
+	$(INSTALL_LIB) $(BUILDDIR)/src/GGI/display/.libs/fbdev.so \
+		$(DTEMPDIR)/usr/lib/ggi/mesa/display
+	$(STRIP_LIB) $(DTEMPDIR)/usr/lib/ggi/mesa/display/*.so
+#	$(LN_S) fbdev.so.0.0.0 $(DTEMPDIR)/usr/lib/ggi/mesa/display/fbdev.so.0
+#	$(LN_S) fbdev.so.0.0.0 $(DTEMPDIR)/usr/lib/ggi/mesa/display/fbdev.so
+	$(INSTALL_DIR) $(DTEMPDIR)/etc/ggi/mesa/targets
+	$(INSTALL_DATA) $(BUILDDIR)/src/GGI/ggimesa.conf $(DTEMPDIR)/etc/ggi
+	$(INSTALL_DATA) $(BUILDDIR)/src/GGI/display/fbdev.conf \
+		$(DTEMPDIR)/etc/ggi/mesa/targets
+#	$(INSTALL_DATA) $(BUILDDIR)/src/GGI/default/genkgi.conf \
+#		$(DTEMPDIR)/etc/ggi/mesa/targets
+	$(INSTALL_DATA) docs/README.GGI $(DTEMPDIR)/usr/share/doc/$(PACKAGE)
+
+binary-ggi: install-ggi
+binary-ggi: PACKAGE=$(MESA_GGI)
+binary-ggi: binary-shared
+
+install-ggi-dev: $(STAMPDIR)/ggi
+install-ggi-dev: TARGET=ggi
+install-ggi-dev: PACKAGE=$(MESA_GGI_DEV)
+install-ggi-dev: install-shared-dev
+install-ggi-dev:
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/include/GL
+	$(INSTALL_DATA) include/GL/ggimesa.h $(DTEMPDIR)/usr/include/GL
+
+binary-ggi-dev: install-ggi-dev
+binary-ggi-dev: PACKAGE=$(MESA_GGI_DEV)
+binary-ggi-dev: binary-shared-dev
+
+########################################################################
+#
+# libGLU
+#
+########################################################################
+
+build-libglu: build-swr
+build-libglu: $(STAMPDIR)/libglu
+$(STAMPDIR)/libglu: TARGET=swr
+$(STAMPDIR)/libglu:
+	$(checkdir)
+	make -C $(BUILDDIR)/$(GLU_SRC)
+
+# Nasty hack to work arround libtool's stubbornness
+	mv $(BUILDDIR)/libtool.bak $(BUILDDIR)/libtool || true
+	perl -i.bak -pe 's/^CC=.*/CC="g++"/' $(BUILDDIR)/libtool
+	rm $(BUILDDIR)/$(GLU_SRC)/libGLU.la
+	make -C $(BUILDDIR)/$(GLU_SRC)
+	mv $(BUILDDIR)/libtool.bak $(BUILDDIR)/libtool
+
+	touch $@
+
+install-libglu: PACKAGE=$(LIBGLU)
+install-libglu: build-libglu
+install-libglu: TARGET=swr
+install-libglu:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/lib
+	$(INSTALL_LIB) $(BUILDDIR)/$(GLU_SRC)/.libs/libGLU.so.$(GLUVERSION) \
+		$(DTEMPDIR)/usr/lib/
+	$(STRIP_LIB) $(DTEMPDIR)/usr/lib/libGLU.so.$(GLUVERSION)
+	$(LN_S) libGLU.so.$(GLUVERSION) \
+		$(DTEMPDIR)/usr/lib/libGLU.so.$(GLUMAJOR)
+	$(install_stddocs)
+ifeq ($(USE_GLU),bogdan)
+	$(INSTALL_DATA) src-glu/README1 \
+		$(DTEMPDIR)/usr/share/doc/$(PACKAGE)/README.GLU
+endif
+
+install-libglu-dev: PACKAGE=$(LIBGLU_DEV)
+install-libglu-dev: build-libglu
+install-libglu-dev: TARGET=swr
+install-libglu-dev:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/lib $(DTEMPDIR)/usr/include/GL
+	$(INSTALL_LIB) $(BUILDDIR)/$(GLU_SRC)/.libs/libGLU.a \
+		$(DTEMPDIR)/usr/lib/
+	$(STRIP_LIB) $(DTEMPDIR)/usr/lib/libGLU.a
+	$(LN_S) libGLU.so.$(GLUVERSION) $(DTEMPDIR)/usr/lib/libGLU.so
+	$(INSTALL_DATA) include/GL/glu.h $(DTEMPDIR)/usr/include/GL
+	$(install_stddocs)
+
+binary-libglu: install-libglu
+binary-libglu: PACKAGE=$(LIBGLU)
+binary-libglu:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)/DEBIAN
+	$(INSTALL_DIR) $(DTEMPDIR)/DEBIAN
+	$(INSTALL_DATA) debian/shlibs.libglu $(DTEMPDIR)/DEBIAN/shlibs
+	$(install_package_scripts)
+	dpkg-shlibdeps -Tdebian/substvars.$(PACKAGE) \
+		$(DTEMPDIR)/usr/lib/libGLU.so.$(GLUVERSION)
+	dpkg-gencontrol -isp -p$(PACKAGE) -P$(DTEMPDIR) \
+		-Tdebian/substvars.$(PACKAGE)
+	dpkg --build $(DTEMPDIR) ..
+
+binary-libglu-dev: install-libglu-dev
+binary-libglu-dev: PACKAGE=$(LIBGLU_DEV)
+binary-libglu-dev:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)/DEBIAN
+	$(INSTALL_DIR) $(DTEMPDIR)/DEBIAN
+	$(install_package_scripts)
+	dpkg-gencontrol -isp -p$(PACKAGE) -P$(DTEMPDIR)
+	dpkg --build $(DTEMPDIR) ..
+
+########################################################################
+#
+# The off-screen rasterizer
+#
+########################################################################
+
+build-osmesa: $(STAMPDIR)/swr
+build-osmesa: $(STAMPDIR)/osmesa
+$(STAMPDIR)/osmesa:
+	$(checkdir)
+	touch $@
+
+install-osmesa: $(STAMPDIR)/osmesa
+install-osmesa: TARGET=swr
+install-osmesa: PACKAGE=$(OSMESA)
+install-osmesa: LIBGL=libOSMesa
+install-osmesa:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/lib
+	$(INSTALL_LIB) $(BUILDDIR)/src/OSmesa/.libs/$(LIBGL).so.$(OSMESAVERSION) $(DTEMPDIR)/usr/lib/
+	$(STRIP_LIB) $(DTEMPDIR)/usr/lib/$(LIBGL).so.$(OSMESAVERSION)
+	$(LN_S) $(LIBGL).so.$(OSMESAVERSION) \
+		$(DTEMPDIR)/usr/lib/$(LIBGL).so.$(OSMESAMAJOR)
+	$(install_stddocs)
+	$(INSTALL_DATA) docs/README $(DTEMPDIR)/usr/share/doc/$(PACKAGE)
+
+binary-osmesa: install-osmesa
+binary-osmesa: PACKAGE=$(OSMESA)
+binary-osmesa: LIBGL=libOSMesa
+binary-osmesa: OPENGLVERSION=$(OSMESAVERSION)
+binary-osmesa: binary-shared
+
+install-osmesa-dev: $(STAMPDIR)/osmesa
+install-osmesa-dev: TARGET=swr
+install-osmesa-dev: PACKAGE=$(OSMESA_DEV)
+install-osmesa-dev: LIBGL=libOSMesa
+install-osmesa-dev:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/lib
+	$(INSTALL_LIB) $(BUILDDIR)/src/OSmesa/.libs/$(LIBGL).a $(DTEMPDIR)/usr/lib/
+	$(STRIP_LIB) $(DTEMPDIR)/usr/lib/$(LIBGL).a
+	$(LN_S) $(LIBGL).so.$(OSMESAVERSION) $(DTEMPDIR)/usr/lib/$(LIBGL).so
+	$(install_stddocs)
+
+binary-osmesa-dev: install-osmesa-dev
+binary-osmesa-dev: PACKAGE=$(OSMESA_DEV)
+binary-osmesa-dev: binary-shared-dev
+
+########################################################################
+#
+# The widgets
+#
+########################################################################
+
+build-widgets-xt: $(STAMPDIR)/widgets-xt
+$(STAMPDIR)/widgets-xt: TARGET=widgets-xt
+$(STAMPDIR)/widgets-xt:
+	$(checkdir)
+	test -f $(STAMPDIR)/config || $(MAKE) -f debian/rules config
+	mkdir -p $(BUILDDIR)
+	cd $(BUILDDIR) && ( \
+		$(CC) $(CFLAGS) -I../../include -I/usr/X11R6/include -c ../../widgets-sgi/GLwDrawA.c ; \
+		ar ru libGLw.a GLwDrawA.o ; \
+		cp ../../widgets-sgi/GLwDrawA.h . ; \
+	)
+	touch $@
+
+build-widgets-motif: $(STAMPDIR)/widgets-motif
+$(STAMPDIR)/widgets-motif: TARGET=widgets-motif
+$(STAMPDIR)/widgets-motif:
+	$(checkdir)
+	test -f $(STAMPDIR)/config || $(MAKE) -f debian/rules config
+	mkdir -p $(BUILDDIR)
+	cd $(BUILDDIR) && ( \
+		$(CC) $(CFLAGS) -I../../include -I/usr/X11R6/include -c ../../widgets-sgi/GLwDrawA.c ; \
+		$(CC) $(CFLAGS) -I../../include -I/usr/X11R6/include -c ../../widgets-sgi/GLwMDrawA.c ; \
+		ar ru libGLw.a GLwDrawA.o GLwMDrawA.o ; \
+		cp ../../widgets-sgi/GLwDrawA.h ../../widgets-sgi/GLwMDrawA.h . ; \
+	)
+	touch $@
+
+install-widgets-dev: $(STAMPDIR)/widgets-$(DO_WIDGETS)
+install-widgets-dev: TARGET=widgets-$(DO_WIDGETS)
+install-widgets-dev:
+	$(checkdir)
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/lib $(DTEMPDIR)/usr/include/GL
+	$(INSTALL_LIB) $(BUILDDIR)/libGLw.a $(DTEMPDIR)/usr/lib/
+	$(INSTALL_DATA) $(BUILDDIR)/*.h $(DTEMPDIR)/usr/include/GL/
+
+########################################################################
+#
+# The common-dev stuff
+#
+########################################################################
+
+install-common-dev:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)
+	$(install_stddocs)
+	$(INSTALL_DIR) $(DTEMPDIR)/usr/include/GL
+	$(INSTALL_DATA) include/GL/gl.h include/GL/glext.h \
+		$(DTEMPDIR)/usr/include/GL
+	$(INSTALL_DATA) include/GL/glx*.h \
+		$(DTEMPDIR)/usr/include/GL
+	$(INSTALL_DATA) include/GL/xmesa.h \
+		$(DTEMPDIR)/usr/include/GL
+	$(INSTALL_DATA) docs/CONFORM \
+		$(DTEMPDIR)/usr/share/doc/$(PACKAGE)
+	$(INSTALL_DATA) docs/RELNOTES-* \
+		$(DTEMPDIR)/usr/share/doc/$(PACKAGE)
+	$(INSTALL_DATA) docs/*.spec \
+		$(DTEMPDIR)/usr/share/doc/$(PACKAGE)/
+
+binary-common-dev: checkroot
+binary-common-dev: install-common-dev
+binary-common-dev: PACKAGE=$(MESA_COMMON_DEV)
+binary-common-dev:
+	$(checkdir)
+	rm -rf $(DTEMPDIR)/DEBIAN
+	$(INSTALL_DIR) $(DTEMPDIR)/DEBIAN
+	$(install_package_scripts)
+	dpkg-gencontrol -isp -p$(PACKAGE) -P$(DTEMPDIR)
+	dpkg --build $(DTEMPDIR) ..
+
+binary: binary-arch binary-indep
+
+checkroot:
+	$(checkdir)
+	test `id -u` = 0
+
+.PHONY: config clean build binary binary-arch binary-indep build-common

@@ -1,0 +1,29 @@
+Mesa for Debian
+---------------
+
+All Debian packages providing the OpenGL interface will be providing
+libGL and libGLU so compiling against one should allow binaries to work
+with any of them.
+
+The mesa-glide package supports Glide2, *not* Glide 3 (at the request of
+the maintainer of the libglide* packages).  It also deviates a little
+from upstream in that it reads /etc/mesa/3dfx.conf to obtain some
+configuration parameters.  The information is first read from the
+environment and if it's not found there, from the file.  The file uses a
+'key=value' format.  Everything after a dash (#) is removed.  The following
+keys are recognized:
+
+    FX_DONT_FAKE_MULTITEX
+    FX_EMULATE_SINGLE_TMU
+    FX_GLIDE_SWAPINTERVAL
+    FX_NO_FAST
+    MESA_FX_INFO
+    MESA_FX_NO_SIGNALS
+    MESA_FX_SWAP_PENDING
+    MESA_GLX_FX
+
+Consult the 3DFX specific read for the meaning of these variables.  Yes,
+"FX_" vs "MESA_FX_" is inconsistent, but that's the way it is.  I won't
+change that.
+
+Marcelo E. Magallon <mmagallo@debian.org> Sat, 19 May 2001 13:57:57 +0200

@@ -1,0 +1,29 @@
+CFLAGS=-DHAVE_XMU=1 -DHAVE_XAW=1 -DSTDC_HEADERS=1 -DHAVE_STRCHR=1 -DHAVE_MEMCPY=1 -DHAVE_MEMMOVE=1  -pipe -Wall
+INC=-I/usr/X11R6/include
+LIBS=-lGLU -lGL -L/usr/X11R6/lib -lXaw -lXmu -lXext -lXt -lSM -lICE -lX11 -lm 
+EXTRALIBS=-lMesaGLw
+MOTIFEXTRALIBS=-lMesaGLwM -lXm
+OPT=-O2
+CC=gcc
+.c.o:
+	$(CC) $(CFLAGS) $(INC) $(OPT) -c $<
+
+all: cube mcube ed tea cube-m mcube-m ed-m
+
+cube: cube.o
+	$(CC) $(EXTRALIBS) $(LIBS) cube.o -o cube
+mcube: mcube.o
+	$(CC) $(EXTRALIBS) $(LIBS) mcube.o -o mcube
+cube-m: cube-m.o
+	$(CC) $(MOTIFEXTRALIBS) $(LIBS) cube-m.o -o cube-m
+mcube-m: mcube-m.o
+	$(CC) $(MOTIFEXTRALIBS) $(LIBS) mcube-m.o -o mcube-m
+ed: ed.o
+	$(CC) $(EXTRALIBS) $(LIBS) ed.o -o ed
+ed-m: ed-m.o
+	$(CC) $(MOTIFEXTRALIBS) $(LIBS) ed-m.o -o ed-m
+tea: tea.o
+	$(CC) $(EXTRALIBS) $(LIBS) tea.o -o tea
+
+clean:
+	rm -f cube mcube ed tea cube-m mcube-m ed-m *.o

@@ -1,0 +1,149 @@
+Source: mesa
+Section: graphics
+Priority: optional
+Maintainer: Marcelo E. Magallon <mmagallo@debian.org>
+Standards-Version: 3.5.8
+Build-Depends: libggi2-dev [alpha arm hppa i386 ia64 m68k mips mipsel powerpc s390 sparc], libglide2-dev [i386], lesstif2-dev, xlibs-dev, automake, libtool, autoconf, g++ (>= 2:3.2), grep-dctrl
+
+Package: mesag3
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, libglu1-mesa
+Conflicts: mesag3-glide, mesag3-glide2, mesag3+ggi, libgl1, nvidia-glx
+Provides: libgl1
+Replaces: libgl1
+Description: A 3-D graphics library which implements the OpenGL API
+ Mesa is a 3-D graphics library with an API which is very similar to
+ that of OpenGL.  To the extent that Mesa utilizes the OpenGL command
+ syntax or state machine, it is being used with authorization from
+ Silicon Graphics, Inc.  However, the author makes no claim that Mesa
+ is in any way a compatible replacement for OpenGL or associated with
+ Silicon Graphics, Inc.
+
+Package: mesag-dev
+Section: devel
+Architecture: any
+Depends: mesag3 (= ${Source-Version}), libc6-dev, xlibs-dev, mesa-common-dev (= ${Source-Version})
+Provides: libgl-dev, mesag3-widgets, mesag-widgets-dev
+Conflicts: mesa-dev, libgl-dev, mesag3 (<< 3.1-1), nvidia-glx-dev
+Replaces: libgl-dev
+Description: Development library for Mesa
+ Includes headers and static libraries for compiling programs with mesa.
+
+Package: libglu1-mesa
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}
+Provides: libglu1
+Conflicts: mesag3 (<< 5.0.0-1), xlibmesa3, libglu1
+Replaces: libglu1
+Description: The OpenGL utility library, libGLU
+ The OpenGL utility library (GLU) offers simple interfaces for building
+ mipmaps; checking for the presence of extensions in the OpenGL (or
+ other libraries which follow the same conventions for advertising
+ extensions); drawing piecewise linear curves, NURBS, quadrics and other
+ primitives (including, but not limited to, teapots); tesselating
+ surfaces; setting up projection matrices and unprojecting screen
+ coordinates to world coordinates.
+
+Package: libglu1-mesa-dev
+Section: devel
+Architecture: any
+Depends: ${shlibs:Depends}, libglu1-mesa (= ${Source-Version})
+Provides: libglu-dev
+Conflicts: mesag-dev (<< 5.0.0-1), mesa-glide2-dev (<< 5.0.0-1), mesag3+ggi-dev (<< 5.0.0-1), xlibmesa-dev
+Replaces: libglu-dev
+Description: The OpenGL utility library development environment
+ Includes headers and static libraries for compiling programs with GLU.
+
+Package: mesag3-glide2
+Section: libs
+Architecture: i386
+Depends: ${shlibs:Depends}, libglide2, libglu1-mesa
+Conflicts: mesag3-glide, mesag3, mesag3+ggi, libgl1, nvidia-glx
+Provides: mesag3, libgl1
+Replaces: libgl1
+Description: A 3-D graphics library which implements the OpenGL API
+ Mesa is a 3-D graphics library with an API which is very similar to
+ that of OpenGL.  To the extent that Mesa utilizes the OpenGL command
+ syntax or state machine, it is being used with authorization from
+ Silicon Graphics, Inc.  However, the author makes no claim that Mesa
+ is in any way a compatible replacement for OpenGL or associated with
+ Silicon Graphics, Inc.
+ .
+ This version of Mesa takes advantage of 3DFX-based graphics cards for
+ rendering.
+
+Package: mesag-glide2-dev
+Section: devel
+Architecture: i386
+Depends: mesag3-glide2 (= ${Source-Version}), libc6-dev, libglide2-dev, mesa-common-dev (= ${Source-Version})
+Provides: mesag-dev, libgl-dev
+Conflicts: mesa-dev, libgl-dev, nvidia-glx-dev
+Replaces: mesag-dev, libgl-dev
+Description: Development library for Mesa
+ Includes headers and static libraries for compiling programs with Mesa.
+ .
+ This version of Mesa takes advantage of 3DFX-based graphics cards for
+ rendering.
+
+Package: mesag3+ggi
+Section: libs
+Architecture: alpha arm hppa i386 ia64 m68k mips mipsel powerpc s390 sparc
+Depends: ${shlibs:Depends}, libglu1-mesa
+Conflicts: mesag3-glide, mesag3, mesag3-glide2, libgl1, nvidia-glx
+Provides: mesag3, libgl1
+Replaces: libgl1
+Description: A 3-D graphics library which implements the OpenGL API
+ Mesa is a 3-D graphics library with an API which is very similar to
+ that of OpenGL.  To the extent that Mesa utilizes the OpenGL command
+ syntax or state machine, it is being used with authorization from
+ Silicon Graphics, Inc.  However, the author makes no claim that Mesa
+ is in any way a compatible replacement for OpenGL or associated with
+ Silicon Graphics, Inc.
+ .
+ This version of Mesa takes advantage of the GGI for rendering
+ operations.
+
+Package: mesag3+ggi-dev
+Section: devel
+Architecture: alpha arm hppa i386 ia64 m68k mips mipsel powerpc s390 sparc
+Depends: mesag3+ggi (= ${Source-Version}), libc6-dev, libggi-dev, libgii-dev, mesa-common-dev (= ${Source-Version})
+Provides: mesag-dev, libgl-dev
+Conflicts: mesa-dev, libgl-dev, nvidia-glx-dev
+Replaces: mesag-dev, libgl-dev
+Description: Development library for Mesa
+ Includes headers and static libraries for compiling programs with Mesa.
+
+Package: mesa-common-dev
+Section: devel
+Architecture: all
+Depends: mesag-dev (>> 5) | mesag-glide2-dev (>> 5) | mesag3+ggi-dev (>> 5), libglu1-mesa-dev
+Description: Developer documentation for Mesa
+ This package includes the specifications for the Mesa-specific OpenGL
+ extensions, the complete set of release release notes and the
+ development header files common to all Mesa packages.
+
+Package: libosmesa4
+Section: libs
+Architecture: any
+Depends: mesag3 (= ${Source-Version})
+Conflicts: xlibosmesa3
+Replaces: xlibosmesa3
+Provides: xlibosmesa3
+Description: Mesa Off-screen rendering extension
+ OSmesa is a Mesa extension that allows programs to render to an
+ off-screen buffer using the OpenGL API without having to create a
+ rendering context on a X Server.  It uses a pure software renderer.
+
+Package: libosmesa4-dev
+Section: devel
+Architecture: any
+Depends: libosmesa4 (= ${Source-Version}), mesag-dev (= ${Source-Version})
+Conflicts: xlibosmesa-dev
+Replaces: xlibosmesa-dev
+Provides: xlibosmesa-dev
+Description: Mesa Off-screen rendering extension -- development support files
+ This package contains all the headers and support files required for
+ developing programs that use the off-screen rendering extension of
+ Mesa.  For more information on OSmesa see the libosmesa4 package.
