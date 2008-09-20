@@ -1,0 +1,10 @@
+# Configuration for building Mesa (swx11 and GLU) with runtime-detected
+# assembler optimizations on sparc.
+
+include $(TOP)/configs/linux-sparc
+include $(TOP)/configs/debian-swx11+glu-default
+
+CONFIG_NAME = debian-swx11+glu-sparc
+
+# vim: ft=make
+

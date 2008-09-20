@@ -1,0 +1,4 @@
+usr/include/GL/gl.h
+usr/include/GL/glext.h
+usr/include/GL/gl_mangle.h
+usr/include/GL/glx*.h

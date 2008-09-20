@@ -1,0 +1,30 @@
+.TH glxheads 1 "2006-11-29"
+.SH NAME
+glxheads \- exercise multiple GLX connections
+.SH SYNOPSIS
+.B glxheads
+[\fIdisplay\fP ...]
+.SH DESCRIPTION
+The \fIglxheads\fP program will try to open GLX connections on multiple X
+displays as specified on the command-line. If a connection can be made it will
+try to create a direct GLX context (and fallback to using indirect contexts if
+that fails) and open a window displaying a spinning green triangle.
+.PP
+If no display names are specified, \fIglxheads\fP will default to opening a
+single local connection on display 0.
+.SH EXAMPLE
+To open a local connection on display 0 and two remote connections to the
+hosts \fImars\fP (display 0) and \fIvenus\fP (display 1), run glxheads with
+the following command-line:
+.PP
+.RS 3n
+.nf
+$ glxheads :0 mars:0 venus:1
+.fi
+.RE
+.SH AUTHOR
+glxheads was written by Brian Paul <brian.paul@tungstengraphics.com>.
+.PP
+This manual page was written by Thierry Reding <thierry@gilfi.de> for the
+Debian project (but may be used by others).
+

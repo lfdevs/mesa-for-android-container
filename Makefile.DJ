@@ -20,10 +20,10 @@
 # AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-# DOS/DJGPP makefile v1.1 for Mesa 4.0
+# DOS/DJGPP makefile for Mesa
 #
-#  Copyright (C) 2002 - Borca Daniel
-#  Email : dborca@yahoo.com
+#  Author: Daniel Borca
+#  Email : dborca@users.sourceforge.net
 #  Web   : http://www.geocities.com/dborca
 
 
@@ -31,26 +31,14 @@
 #  Available options:
 #
 #    Environment variables:
-#	CPU		optimize for the given processor.
-#			default = k6
-#	BIG_OPT=1	crazy optimizations; not very useful, though...
+#	GLIDE		path to Glide3 SDK; used with FX.
+#			default = $(TOP)/glide3
+#	FX=1		build for 3dfx Glide3. Note that this disables
+#			compilation of most DMesa code and requires fxMesa.
+#			As a consequence, you'll need the DJGPP Glide3
+#			library to build any application.
 #			default = no
-#	GLIDE		absolute path to Glide library; used with FX.
-#			default = $(TOP)/include/glide3
-#	FX=1		build for 3dfx Glide3; use it if you have the glide
-#			SDK (designed for your platform), and, of course, a
-#			3dfx card... Note that this disables compilation of
-#			actual DMesa code, as Glide does all the stuff!
-#			default = no
-#	HAVE_X86=1	optimize for i386.
-#			default = no
-#	HAVE_MMX=1	MMX instructions; use only if you assembler/compiler
-#			supports MMX instruction set; backwards compatibility
-#			with older processors is still preserved.
-#			default = no
-#	HAVE_SSE=1	(see HAVE_MMX)
-#			default = no
-#	HAVE_3DNOW=1	(see HAVE_MMX)
+#	X86=1		optimize for x86 (if possible, use MMX, SSE, 3DNow).
 #			default = no
 #
 #    Targets:
@@ -66,34 +54,35 @@
 
 .PHONY : all libgl libglu libglut clean realclean
 
-CPU ?= k6
 CFLAGS = -Wall -W -pedantic
-CFLAGS += -O2 -ffast-math -mcpu=$(CPU)
-ifdef BIG_OPT
-CFLAGS += -fomit-frame-pointer -funroll-loops -fexpensive-optimizations -DBIG_OPT
-endif
+CFLAGS += -O2 -ffast-math
 
 export CFLAGS
 
-RM = del
+ifeq ($(wildcard $(addsuffix /rm.exe,$(subst ;, ,$(PATH)))),)
+UNLINK = del $(subst /,\,$(1))
+else
+UNLINK = $(RM) $(1)
+endif
 
 all: libgl libglu libglut
 
 libgl: lib
-	$(MAKE) -f Makefile.DJ -C src
+	$(MAKE) -f Makefile.DJ -C src/mesa
 libglu: lib
-	$(MAKE) -f Makefile.DJ -C src-glu
+	$(MAKE) -f Makefile.DJ -C src/glu/sgi
 libglut: lib
-	$(MAKE) -f Makefile.DJ -C src-glut.dos
+	$(MAKE) -f Makefile.DJ -C src/glut/dos
 
 lib:
 	mkdir lib
 
 clean:
-	$(MAKE) -f Makefile.DJ clean -C src
-	$(MAKE) -f Makefile.DJ clean -C src-glu
-	$(MAKE) -f Makefile.DJ clean -C src-glut.dos
+	$(MAKE) -f Makefile.DJ clean -C src/mesa
+	$(MAKE) -f Makefile.DJ clean -C src/glu/mesa
+	$(MAKE) -f Makefile.DJ clean -C src/glu/sgi
+	$(MAKE) -f Makefile.DJ clean -C src/glut/dos
 
 realclean: clean
-	-$(RM) $(subst /,\,lib/*.a)
-	-$(RM) $(subst /,\,lib/*.dxe)
+	-$(call UNLINK,lib/*.a)
+	-$(call UNLINK,lib/*.dxe)

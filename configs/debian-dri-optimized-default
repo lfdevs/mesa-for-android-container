@@ -1,0 +1,13 @@
+# Configuration defaults for CPU-optimized builds of the DRI drivers and
+# DRI/GLX-enabled libGL.
+
+include $(TOP)/configs/debian-dri-default
+
+CONFIG_NAME = debian-dri-optimized-default
+
+# override so that the utility programs are not rebuilt with CPU-specific
+# optimizations
+SRC_DIRS = glx/x11 mesa
+
+# vim: ft=make
+

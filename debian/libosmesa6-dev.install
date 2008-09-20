@@ -1,0 +1,7 @@
+usr/include/GL/osmesa.h
+usr/lib/libOSMesa.a
+usr/lib/libOSMesa.so
+usr/lib/libOSMesa16.a
+usr/lib/libOSMesa16.so
+usr/lib/libOSMesa32.a
+usr/lib/libOSMesa32.so

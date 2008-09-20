@@ -1,0 +1,17 @@
+Patch that allows the Mesa makefile to create a LIB_DIR that is more than one
+level below TOP.
+
+This patch by Thierry Reding.
+Not submitted to Mesa.
+
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -29,7 +29,7 @@
+ 	done
+ 
+ $(TOP)/$(LIB_DIR):
+-	-mkdir $(TOP)/$(LIB_DIR)
++	mkdir -p $(TOP)/$(LIB_DIR)
+ 
+ 
+ clean:

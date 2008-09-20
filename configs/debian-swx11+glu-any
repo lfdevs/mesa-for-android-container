@@ -1,0 +1,9 @@
+# Configuration for building Mesa (swx11 and GLU) on the build architecture.
+
+include $(TOP)/configs/linux
+include $(TOP)/configs/debian-swx11+glu-default
+
+CONFIG_NAME = debian-swx11+glu-any
+
+# vim: ft=make
+

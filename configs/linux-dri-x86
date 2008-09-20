@@ -1,0 +1,14 @@
+# -*-makefile-*-
+# Configuration for linux-dri: Linux DRI hardware drivers for XFree86 & others
+
+include $(TOP)/configs/linux-dri
+
+CONFIG_NAME = linux-dri-x86
+
+# Add -m32 to CFLAGS:
+ARCH_FLAGS = -m32
+
+ASM_FLAGS = -DUSE_X86_ASM -DUSE_MMX_ASM -DUSE_3DNOW_ASM -DUSE_SSE_ASM
+ASM_SOURCES = $(X86_SOURCES)
+ASM_API = $(X86_API)
+

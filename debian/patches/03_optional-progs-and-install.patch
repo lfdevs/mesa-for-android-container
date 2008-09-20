@@ -1,0 +1,51 @@
+Allow the programs that are to be built to be defined in the build
+configuration.
+
+Provide an install target for installing the programs in $(INSTALL_DIR)/bin.
+
+This patch by Thierry Reding.
+Not submitted to Mesa.
+--
+Also remove references to GLU library since it is not required
+and we don't actually build it at this point.
+
+
+--- mesa.orig/progs/xdemos/Makefile
++++ mesa/progs/xdemos/Makefile
+@@ -10,7 +10,7 @@
+ 
+ LIBS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) $(APP_LIB_DEPS)
+ 
+-PROGS = \
++PROGS ?= \
+ 	glthreads \
+ 	glxdemo \
+ 	glxgears \
+@@ -55,6 +55,11 @@
+ extra: $(EXTRA_PROGS)
+ 
+ 
++install: $(PROGS)
++	$(INSTALL) -d $(DESTDIR)$(INSTALL_DIR)/bin
++	$(INSTALL) -m 755 $(PROGS) $(DESTDIR)$(INSTALL_DIR)/bin
++
++
+ clean:
+ 	-rm -f $(PROGS) $(EXTRA_PROGS)
+ 	-rm -f *.o *~
+--- mesa.orig/progs/Makefile
++++ mesa/progs/Makefile
+@@ -21,8 +21,12 @@
+ 		fi \
+ 	done
+ 
+-# Dummy install target
+ install:
++	@for dir in $(SUBDIRS) ; do \
++		if [ -d $$dir ] ; then \
++			(cd $$dir ; $(MAKE) install) ; \
++		fi \
++	done
+ 
+ clean:
+ 	@for dir in $(SUBDIRS) tests ; do \

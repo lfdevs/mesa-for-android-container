@@ -1,0 +1,91 @@
+# Default/template configuration
+
+# This is included by other config files which may override some
+# of these variables.
+# Think of this as a base class from which configs are derived.
+
+
+CONFIG_NAME = default
+
+# Version info
+MESA_MAJOR=7
+MESA_MINOR=0
+MESA_TINY=4
+
+# external projects.  This should be useless now that we use libdrm.
+DRM_SOURCE_PATH=$(TOP)/../drm
+
+# Compiler and flags
+CC = cc
+CXX = CC
+CFLAGS = -O
+CXXFLAGS = -O
+LDFLAGS =
+GLU_CFLAGS = 
+
+# Misc tools and flags
+MKLIB_OPTIONS = 
+MKDEP = makedepend
+MKDEP_OPTIONS = -fdepend
+MAKE = make
+INSTALL = $(TOP)/bin/minstall
+
+# Tools for regenerating glapi (generally only needed by the developers)
+PYTHON2 = python
+PYTHON_FLAGS = -t -O -O
+INDENT = indent
+INDENT_FLAGS = -i4 -nut -br -brs -npcs -ce -T GLubyte -T GLbyte -T Bool
+
+# Library names (base name)
+GL_LIB = GL
+GLU_LIB = GLU
+GLUT_LIB = glut
+GLW_LIB = GLw
+OSMESA_LIB = OSMesa
+
+
+# Library names (actual file names)
+GL_LIB_NAME = lib$(GL_LIB).so
+GLU_LIB_NAME = lib$(GLU_LIB).so
+GLUT_LIB_NAME = lib$(GLUT_LIB).so
+GLW_LIB_NAME = lib$(GLW_LIB).so
+OSMESA_LIB_NAME = lib$(OSMESA_LIB).so
+
+
+# Optional assembly language optimization files for libGL
+ASM_SOURCES = 
+
+# GLw widget sources (Append "GLwMDrawA.c" here and add -lXm to GLW_LIB_DEPS in
+# order to build the Motif widget too)
+GLW_SOURCES = GLwDrawA.c
+
+
+# Directories to build
+LIB_DIR = lib
+SRC_DIRS = mesa glu glut/glx glw
+GLU_DIRS = sgi
+DRIVER_DIRS = x11 osmesa
+# Which subdirs under $(TOP)/progs/ to enter:
+PROGRAM_DIRS = demos redbook samples glsl xdemos
+
+
+# Library dependencies
+#EXTRA_LIB_PATH ?=
+GL_LIB_DEPS = $(EXTRA_LIB_PATH) -lX11 -lXext -lm -lpthread
+OSMESA_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB)
+GLU_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) -lm
+GLUT_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(GLU_LIB) -l$(GL_LIB) $(EXTRA_LIB_PATH) -lX11 -lXmu -lXt -lXi -lm
+GLW_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) $(EXTRA_LIB_PATH) -lXt -lX11
+
+# Program dependencies - specific GL/glut libraries added in Makefiles
+APP_LIB_DEPS = -lm
+
+
+
+# Installation directories (for make install)
+INSTALL_DIR = /usr/local
+DRI_DRIVER_INSTALL_DIR = /usr/X11R6/lib/modules/dri
+
+# Where libGL will look for DRI hardware drivers
+DRI_DRIVER_SEARCH_DIR = $(DRI_DRIVER_INSTALL_DIR)
+

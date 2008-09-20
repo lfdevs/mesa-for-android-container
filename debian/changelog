@@ -1,3 +1,734 @@
+mesa (7.0.3-6) unstable; urgency=high
+
+  * Update debian/copyright to the SGI Free Software License B, version 2.0.
+    It now mirrors the free X11 license used by X.Org (closes: #368560).
+    http://www.sgi.com/company_info/newsroom/press_releases/2008/september/opengl.html
+
+ -- Julien Cristau <jcristau@debian.org>  Sat, 20 Sep 2008 16:30:44 +0200
+
+mesa (7.0.3-5) unstable; urgency=low
+
+  * Disable the i915tex driver, it doesn't build against libdrm 2.3.1.
+  * Pull from mesa_7_0_branch (27425708).
+
+ -- Julien Cristau <jcristau@debian.org>  Sat, 12 Jul 2008 18:56:19 +0200
+
+mesa (7.0.3-4) unstable; urgency=low
+
+  * Pull from mesa_7_0_branch (2ac4919d).
+  * Put back our configs/ changes into the .diff.gz since choose-configs
+    needs them before quilt is invoked. Put 04_cleanup-osmesa-configs.patch
+    there as well for #485161.
+
+ -- Brice Goglin <bgoglin@debian.org>  Wed, 18 Jun 2008 20:59:14 +0200
+
+mesa (7.0.3-3) unstable; urgency=low
+
+  * Pull from mesa_7_0_branch (718724de).
+    + Fix intel_batchbuffer_space on i965, closes: #455817.
+    + Fix busy error in i915_wait_irq for real now, closes: #467319.
+  * Move our configs/ changes from the .diff.gz into our quilt patches,
+    with 04_cleanup-osmesa-configs.patch renamed into 04_debian-configs.patch,
+    closes: #485161.
+
+ -- Brice Goglin <bgoglin@debian.org>  Tue, 17 Jun 2008 20:00:51 +0200
+
+mesa (7.0.3-2) unstable; urgency=low
+
+  * Pull from mesa_7_0_branch (03447de3).
+  * Set right cliprects for the current draw region on Intel, closes: #467319.
+  * Use BRW_TEXCOORDMODE_CLAMP instead of BRW_TEXCOORDMODE_CLAMP_BORDER
+    to implement GL_CLAMP on i965, closes: #478880.
+  * Fix segment fault with BASE_LEVEL set to 5 for MipMap on i915,
+    closes: #451339.
+  * Disable low impact fallback on r300 by default, closes: #440868.
+
+ -- Brice Goglin <bgoglin@debian.org>  Fri, 13 Jun 2008 06:53:29 +0200
+
+mesa (7.0.3-1) unstable; urgency=low
+
+  * New upstream release.
+  * Only call ProgramStringNotify if program parsing succeeded,
+    closes: #473551.
+
+ -- Brice Goglin <bgoglin@debian.org>  Fri, 11 Apr 2008 08:42:37 +0200
+
+mesa (7.0.3~rc2-2) unstable; urgency=low
+
+  * Pull from mesa_7_0_branch (1e83d70b).
+  * Fixes regression in the i965 dri driver (closes: #470984, #470084)
+  * Update 02_use-ieee-fp-on-s390-and-m68k.patch.
+  * Change libgl1-mesa-swx11-i686's pre-dependency on libgl1-mesa-swx11 to a
+    regular versioned dependency, and add ${shlibs:Depends}.
+
+ -- Julien Cristau <jcristau@debian.org>  Mon, 31 Mar 2008 16:47:31 +0200
+
+mesa (7.0.3~rc2-1) unstable; urgency=low
+
+  * New upstream release candidate.
+    + enable user-defined clip planes for R300 (closes: #408679)
+    + 03_optional-progs-and-install.patch: partly applied upstream, fixed up
+  * Stop building with -O0 on hppa. Bug #451047 should be fixed in recent gcc
+    versions.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 24 Feb 2008 10:22:54 +0100
+
+mesa (7.0.2-4) unstable; urgency=low
+
+  * Update to mesa_7_0_branch head (commit 48ae5cf0).
+  * Add Vcs-Git, Vcs-Browser and Homepage fields in debian/control.
+
+ -- Julien Cristau <jcristau@debian.org>  Thu, 17 Jan 2008 22:23:06 +0100
+
+mesa (7.0.2-3) unstable; urgency=low
+
+  * Update to mesa_7_0_branch head (commit 0107acde).
+  * Bump Standards-Version to 3.7.3.
+  * Move libgl1-mesa-swx11-dbg, mesa-common-dev and libosmesa6-dev to section
+    libdevel.
+  * libgl1-mesa-swx11 conflicts with libgl1-mesa-glx.  Move it and
+    libgl1-mesa-swx11-dev to priority extra.
+  * Fix typo in mesa-common-dev's long description.
+
+ -- Julien Cristau <jcristau@debian.org>  Tue, 18 Dec 2007 19:13:18 +0100
+
+mesa (7.0.2-2) unstable; urgency=low
+
+  [ Julien Cristau ]
+  * Don't set -fno-strict-aliasing in configs/debian-default.  It is set
+    upstream now.
+  * Workaround gcc ICE on hppa: build libOSMesa with -O0 (see bug#451047).
+  * Add build-dep on libxext-dev.  Thanks, Timo Aaltonen!
+
+ -- Brice Goglin <bgoglin@debian.org>  Tue, 13 Nov 2007 21:43:40 +0100
+
+mesa (7.0.2-1) unstable; urgency=low
+
+  * New upstream release.
+    + Fix Blender crash in triangle_twoside(), closes: #439668, #446315.
+    + Fix crash in _generic_read_RGBA_span_RGB565_MMX(), closes: #445313.
+    + Fix the new __gluInvertMatrix() function, closes: #440137 ,#441071.
+    + Refresh 03_optional-progs-and-install.patch since libGLU is not
+      built when building progs/xdemos.
+    + Refresh 04_cleanup-osmesa-configs.patch.
+    + Drop 05_static-nonpic.patch,, applied upstream.
+    + Remove DESTDIR from INSTALL_DIR in configs/debian-default since
+      the upstream Makefiles now support DESTDIR.
+  * Add myself to Uploaders.
+
+ -- Brice Goglin <bgoglin@debian.org>  Sun, 11 Nov 2007 11:53:26 +0100
+
+mesa (7.0.1-2) unstable; urgency=low
+
+  * Update to latest git (from mesa_7_0_branch)
+    + adds support for some new intel chipsets (i915 and i915_tex dri drivers)
+      (closes: #437333)
+    + broken inline asm in dri drivers fixed (closes: #423739)
+
+ -- Julien Cristau <jcristau@debian.org>  Tue, 28 Aug 2007 12:11:30 +0200
+
+mesa (7.0.1-1) unstable; urgency=low
+
+  * New upstream release.
+  * Upload to unstable.
+
+ -- Julien Cristau <jcristau@debian.org>  Thu, 09 Aug 2007 11:56:16 +0200
+
+mesa (7.0.1~rc2-1) experimental; urgency=low
+
+  [ David Nusinow ]
+  * New upstream release candidate
+  * Bite the bullet and add myself to uploaders
+
+  [ Julien Cristau ]
+  * Modify the short descriptions of various packages so they fit in .changes
+    files without being cut off.  Thanks, Marc 'HE' Brockschmidt!
+  * Add a shlibs file for libgl1-mesa-swx11-i686.
+
+ -- Julien Cristau <jcristau@debian.org>  Fri, 27 Jul 2007 20:17:48 +0200
+
+mesa (6.5.3-1) experimental; urgency=low
+
+  [ David Nusinow ]
+  * New upstream release
+
+  [ Julien Cristau ]
+  * Cherry-pick commit 65faf023679988f93da82b4c7ebdc689f2094459 by Michel
+    Dänzer to fix r300 crash.
+
+ -- Julien Cristau <jcristau@debian.org>  Mon, 21 May 2007 11:34:51 +0200
+
+mesa (6.5.3~rc3-1) experimental; urgency=low
+
+  [ Brice Goglin ]
+  * Split out libGLw libs and headers from libgl1-mesa-swx11 and ship both
+    static and shared libraries, creating libglw1-mesa and libglw1-mesa-dev
+    (closes: #374904).
+
+  [ Julien Cristau ]
+  * New upstream release candidate.
+    + 06_fix_texture_data_corruption.patch,
+      07_call_radeonSetCliprects_from_radeonMakeCurrent.patch,
+      08_r300_update_window_state_when_bound_but_stamp_changed.patch,
+      09_i915_always_enable_pixel_fog.patch: remove, included upstream.
+    + 01_fix-makefile.patch, 02_use-ieee-fp-on-s390-and-m68k.patch: refresh.
+  * Add build-dependencies on libxdamage-dev and libxfixes-dev.
+  * Resync debian/scripts/install-source.sh.
+  * Build mesa-swx11-source only in binary-indep.
+  * Update from upstream git (commit
+    dee1b0d5bbe91f83854813cbbcd3090327bcb5c2).
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 25 Apr 2007 10:36:50 +0200
+
+mesa (6.5.2-7) unstable; urgency=low
+
+  [ Brice Goglin ]
+  * libgl1-mesa-dev does not need to depend on libgl1-mesa-dri,
+    libgl1-mesa-glx is enough (since their split in 6.4.1-0.1);
+    closes: #432081.  Thanks, Samuel Thibault!
+
+  [ Julien Cristau ]
+  * libgl1-mesa-dev Depends on libgl1-mesa-glx (>= ${source:Upstream-Version})
+    instead of >= ${Source-Version}.  This way it's still installable on
+    architectures where mesa isn't built yet when a minor revision is
+    uploaded.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 11 Jul 2007 05:50:45 +0200
+
+mesa (6.5.2-6) unstable; urgency=low
+
+  * libgl1-mesa-swx11 needs to depend on libosmesa6 (>= 6.5.2-1) because
+    it used to contain libOSMesa.so.6.  This means that programs linked
+    against this lib got a dependency on -swx11 which was broken since
+    6.5.2-1.
+  * Fix build on hurd-i386 (build libgl1-mesa-glx without dri support and
+    don't build the dri drivers); closes: #420403.  Thanks, Samuel Thibault!
+
+ -- Julien Cristau <jcristau@debian.org>  Thu, 05 Jul 2007 00:56:35 +0200
+
+mesa (6.5.2-5) unstable; urgency=low
+
+  [ Brice Goglin ]
+  * Add 07_call_radeonSetCliprects_from_radeonMakeCurrent.patch
+    (closes: #420164). Thanks to Christian Ohm.
+  * Add 08_r300_update_window_state_when_bound_but_stamp_changed.patch
+  * Add 09_i915_always_enable_pixel_fog.patch
+
+ -- Julien Cristau <jcristau@debian.org>  Fri, 18 May 2007 13:36:25 +0200
+
+mesa (6.5.2-4) unstable; urgency=low
+
+  [ Julien Cristau ]
+  * debian/control: libgl1-mesa-dri now suggests libglide3, with an
+    explanation in the description (closes: #387339).
+  * Upload to unstable.
+
+  [ Brice Goglin ]
+  * Add 06_fix_texture_data_corruption.patch (closes: #412346).
+
+ -- Julien Cristau <jcristau@debian.org>  Fri, 20 Apr 2007 05:57:35 +0200
+
+mesa (6.5.2-3) experimental; urgency=low
+
+  * Set LIB_DIR and EXTRA_LIB_PATH in configs/debian-default to override
+    settings in configs/linux-x86-64. This fixes a FTBFS on amd64, thanks to
+    Marc 'HE' Brockschmidt for the report (closes: #410118).
+
+ -- Julien Cristau <jcristau@debian.org>  Wed,  7 Feb 2007 23:04:28 +0100
+
+mesa (6.5.2-2) experimental; urgency=low
+
+  * Sync Section/Priority for all packages with the override.
+  * Build the arch:all debs in binary-indep, and use the debhelper -s option
+    for commands in binary-arch, to fix FTBFS on non-i386 archs, thanks to
+    Marc 'HE' Brockschmidt (closes: #409638).
+  * Add myself to Uploaders.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun,  4 Feb 2007 21:14:02 +0100
+
+mesa (6.5.2-1) experimental; urgency=low
+
+  [ Thierry Reding ]
+  * New upstream release.
+  * Set the Debian X Strike Force as maintainer.
+  * Add myself to uploaders.
+  * Build the i915tex DRI module on the i386 and amd64 architectures.
+  * Add patch 04_cleanup-osmesa-configs that makes the OSMesa configurations
+    behave as expected.
+  * Add patch 05_static-nonpic to build static libraries without -fPIC.
+  * Make debugging symbol packages depend on the corresponding binary package
+    and put them into the libdevel section.
+  * Bump shlibs file for the libosmesa6 package to account for added symbols.
+    Thanks Julien Cristau.
+  * Build the DRI modules with the default optimization flags. Thanks Julien
+    Cristau.
+  * mesa-common-dev now ships the GLX header files so it needs to replace
+    libgl1-mesa-swx11-dev and libgl1-mesa-dev. Thanks Julien Cristau.
+  * All OSMesa libraries were moved to the libosmesa6 and libosmesa6-dev
+    package, so have them replace libgl1-mesa-swx11, libgl1-mesa-swx11-dev and
+    mesa-common-dev respectively. Thanks Julien Cristau.
+
+  [ Julien Cristau ]
+  * Drop obsolete depends on xlibs.
+
+ -- Thierry Reding <thierry@gilfi.de>  Thu, 11 Jan 2007 15:06:52 +0100
+
+mesa (6.5.2~rc3-0.1) experimental; urgency=low
+
+  * Non-maintainer upload.
+  * Update to latest upstream release candidate.
+
+ -- Thierry Reding <thierry@gilfi.de>  Fri,  1 Dec 2006 01:06:28 +0100
+
+mesa (6.5.2~rc2-0.1) experimental; urgency=low
+
+  * Non-maintainer upload.
+  * New upstream release candidate:
+    + Refresh 02_use-ieee-fp-on-s390-and-m68k.patch.
+  * Add manual pages for the glxdemo, glxgears, glxheads and glxinfo
+    utilities (Closes: #385463).
+
+ -- Thierry Reding <thierry@gilfi.de>  Wed, 22 Nov 2006 20:49:06 +0100
+
+mesa (6.5.2~rc1-0.1) experimental; urgency=low
+
+  * Non-maintainer upload.
+  * New upstream release candidate.
+  * Update patches:
+    + Drop hunk #2 of 01_fix-makefile.patch, applied upstream.
+    + Drop 03_handle-sync-and-dont-unlock-display.patch, applied upstream.
+  * Bump build-dependency on libdrm-dev (>= 2.2.0).
+  * Use the new upstream minstall utility to install files and directories.
+    Using /usr/bin/install would result in a symlink's target being copied
+    instead of the symlink.
+
+ -- Thierry Reding <thierry@gilfi.de>  Sat, 18 Nov 2006 22:23:04 +0100
+
+mesa (6.5.1-0.6) experimental; urgency=low
+
+  * Non-maintainer upload.
+  * Rewrote the debian/rules file to make it easier to understand.
+  * Provide i686 optimized versions in libgl1-mesa-swx11-i686 instead of in
+    libgl1-mesa-swx11.
+  * Statically link libOSMesa with the software rasterization code from libGL
+    so that it works independently of the installed libGL. (Closes: #387706)
+  * Make libosmesa6-dev depend on mesa-common-dev because it only needs the
+    gl.h header file and no libGL anymore.
+  * Move glx*.h headers from libgl1-mesa(-swx11)-dev into mesa-common-dev
+    because both packages provide identical files.
+  * Add debugging symbol packages for libgl1-mesa-swx11, libgl1-mesa-glx and
+    libgl1-mesa-dri.
+  * Repack the contents of the three Mesa tarballs (MesaDemos, MesaGLUT and
+    MesaLib) as the original source tarball. (Closes: #392715)
+  * Make mesa-common-dev depend on libx11-dev.
+  * Provide a new package: mesa-utils. These utilities are shipped in the
+    MesaDemos package so mesa is the right package to provide them.
+
+ -- Thierry Reding <thierry@gilfi.de>  Sat, 18 Nov 2006 18:50:07 +0100
+
+mesa (6.5.1-0.5) unstable; urgency=low
+
+  * Non-maintainer upload.
+  * Build with -fno-strict-aliasing to fix misbuild of i965_dri.so
+    (closes: #394311).  Thanks to Michel Dänzer for the fix, and to Ryan
+    Richter for the report and testing.
+
+ -- Julien Cristau <julien.cristau@ens-lyon.org>  Wed,  3 Jan 2007 13:48:20 +0100
+
+mesa (6.5.1-0.4) unstable; urgency=medium
+
+  * Non-maintainer upload (and brown paper bag release).
+  * _Depend_ on libx11-dev from libgl1-mesa-dev; revert previous change.
+    Fixes FTBFS in other packages. (Really Closes: #396498)
+
+ -- Steinar H. Gunderson <sesse@debian.org>  Sat, 11 Nov 2006 13:55:20 +0100
+
+mesa (6.5.1-0.3) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Build-depend on libx11-dev; fixes FTBFS. (Closes: #396498)
+
+ -- Steinar H. Gunderson <sesse@debian.org>  Wed,  8 Nov 2006 20:58:40 +0100
+
+mesa (6.5.1-0.2) unstable; urgency=low
+
+  * Non-maintainer upload
+  * Disable generation of SSE instructions (closes: #390560)
+  * Remove duplicate and unused build configurations
+  * Remove extra source files left from CVS snapshots (closes: #389283)
+  * Enable i965 DRI driver on i386 and amd64. Thanks to Ryan Richter
+    for the patch. (closes: #392030)
+  * Enable Unichrome DRI driver on amd64 (closes: #391900)
+  * Enable FFB DRI driver on sparc, not i386 (closes: #388025)
+  * Consistently compile C sources as C99 (closes: #373623)
+  * Fix X display locking error in GLX. Thanks to Josh Triplett for
+    the patch. (closes: #391681)
+
+ -- Ben Hutchings <ben@decadent.org.uk>  Fri, 13 Oct 2006 02:25:52 +0100
+
+mesa (6.5.1-0.1) unstable; urgency=low
+
+  * New upstream version
+  * Build-dep on x11proto-gl-dev >= 1.4.8
+  * Stuff not in the upstream tarballs
+    + os2 glut stuff
+    + docs/gears.png
+  * Bump libdrm-dev build-dep to >= 2.0.2
+  * Add libdrm cflags to the debian-dri config. This allows the build system
+    to find drm.h
+  * Make sure that libGl looks for the dri drivers in the proper location. Do
+    this by setting the appropriate variables in the debian config
+  * Re-add s390 and m68k to the USE_IEEE test in src/mesa/main/imports.h. This
+    package seriously needs to store patches somewhere that are easy to find
+    and re-apply.
+  * Add patch from Cyril Brulebois to allow package to build on HURD, which
+    lacks DRI and directfb. This includes not using lib-directfb in the
+    build-depends for hurd-i386. It also creates a new debian config,
+    debian-indirect, which is used when building for HURD. This config is
+    invoked in the debian-dri config on hurd-i386. Thanks to Cyril Brulebois
+    for the patch, Michael Banck, Michel Dänzer, and Samuel Thibault for
+    input on an appropriate fix. (closes: #358065)
+
+ -- David Nusinow <dnusinow@debian.org>  Mon, 25 Sep 2006 21:21:47 -0400
+
+mesa (6.5.0.cvs.20060524-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Upload mesa 6.5 cvs to unstable, because we need it for Xorg 7.1.
+  * Upload with medium urgency instead of high, since this is a new
+    upstream that should get some testing in unstable in spite of the
+    multiple RC bugfixes.
+  * Update debian/copyright with the full text of the SGI Free B and SGI
+    MIT-style licenses in use in the package, and take a stab at
+    cleaning up the list of paths and licenses.
+    Closes: #368562.
+  * Make mesa-common-dev Replaces: xlibosmesa-dev from sarge.
+    Closes: #384057.
+  * Fix libgl1-mesa-glx to not Provides: libgl1-mesa-dri, since it
+    definitely doesn't provide DRI support and this Provides: breaks
+    upgrades from sarge.  Closes: #384282.
+  * debian/libgl1-mesa-swx11.shlibs: create a static shlibs file,
+    because libOSMesa.so.6 is not provided by all implementations of
+    libGL and so needs a separate shlibs declaration.  Also make
+    libgl1-mesa-glx the default alternative instead of libgl1-mesa-swx11
+    for consistency even when building against libgl1-mesa-swx11,
+    because to the extent these are interchangeable (i.e., 99%...),
+    there should be no reason to prefer one over the other -- and to the
+    extent that they aren't interchangeable, it's wrong to list libgl1
+    as an alternative dependency at all.  Closes: #386185.
+  * Don't provide shlibs at all for libgl1-mesa-swx11-dbg; this is an
+    unnecessary duplication of the existing libgl1-mesa-swx11 shlibs
+    since packages should not really be linking against /usr/lib/debug/
+    separately.
+  * src/mesa/tnl/t_vb_render.c: Drop a pointless printf() in the
+    RENDER_LINE macro, getting rid of copious debug output on console.
+    Closes: #369895.
+  * libgl1-mesa-swx11 has no reason to depend on libglu, anything that
+    wants libglu will have its own dependency on it; drop this
+    hard-coded dependency from debian/control.
+  * Have libglu1-mesa-dev Provides: xlibmesa-glu-dev, since it's the
+    successor to that package and xlibmesa-glu-dev is still referenced
+    in a number of places and this makes for more reliable builds than
+    depending on alternatives without requiring another dummy -dev
+    package from xorg.
+  * Replace references to Source-Version in debian/control with either 
+    binary:Version or source:Version, depending on whether the
+    relationship references an arch: any or arch: all package, making
+    mesa binNMU-safe; add build-depends on dpkg-dev (>= 1.13.19) to
+    ensure these substvars are available.
+
+ -- Steve Langasek <vorlon@debian.org>  Fri, 15 Sep 2006 15:51:16 -0700
+
+mesa (6.5.0.cvs.20060524-1) experimental; urgency=low
+
+  * The "-O666 -fwater-c00ling -DBE_F4ST" release
+  * New pull from CVS
+  * Merge back and forth with 6.4.2-1
+  * configs/debian*_i386: disabled, optimized build fuxxored.
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Wed, 24 May 2006 14:12:13 -0600
+
+mesa (6.5.0.cvs.20060512-0.0.1) experimental; urgency=low
+
+  * New upstream release (6.5.0)
+  * Pulled CVS as of 2006-05-12
+  * debian/control: remove DirectFB packages
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Fri, 12 May 2006 15:23:49 -0600
+
+mesa (6.4.2-1) unstable; urgency=low
+
+  * The "please, please, please don't hate me" release.
+  * New upstream release.
+  * Ack NMUs
+  * debian/control: mesa-common-dev Replaces xlibmesa-gl-dev (<< 1:7)
+    AGAINST MY BETTER JUDGEMENT.  The problem here is gratuitous package
+    renames within a system that does not support them.  (closes:
+    bug#362063)
+  * debian/control: hurd-i386 doesn't have drm.  Doesn't fix #358065,
+    yet.
+  * bin/mklib: fix from Robert Millan to support hurd-i386 and
+    GNU/kFreeBSD.  Thanks Robert.  (closes: bug#358066)
+  * src/glx/x11/indirect_vertex_array.c, src/mesa/main/glheader.h,
+    src/mesa/drivers/dri/common/glcontextmodes.c: fix broken indirect
+    rendering on 64-bit platforms.  Thanks Aaron M. Ucko.  (closes:
+    bug#364228)
+  * debian/control: b-d on x11proto-gl-dev.  Please don't hate me!
+  * debian/control: Standards-Version: 3.7.2
+  * debian/rules: export DEB_HOST_ARCH
+  * configs/debian-dri: use DEB_HOST_ARCH to decide if certain DRI drivers
+    should be built or not.
+        + Built only for i386: i810 i830 sis.
+          Rationale: integrated chipsets available only for i386 processors.
+        + Built only for i386: ffb.
+          Rationale: Michel Dänzer said so, no idea why.
+        + Built only for i386, amd64: i915.
+          Rationale: Apparently this is available in the 64-bit Intel chipset.
+    Please file a bug report stating which drivers should be included/excluded
+    for which architectures.  Positive lists are preferred.  If possible state
+    why.
+  * debian/mesa-swx11-source.install: nuke this abomination.  Dinamically
+    generate the list at build time.
+  * debian/drivers.map: add gl-debian-dri_i386
+  * debian/README.build: updated, add big friendly letters in short sentences.
+    Perhaps I can read it myself this way...
+  * debian/rules, configs/debian, configs/debian-dri, configs/debian_i386,
+    configs/debian-dri_i386, debian/libdir.map, debian/drivers.map: hack in
+    support for variable driver's dir.  If you want this for your pet
+    architecture please provide BOTH configs/debian_arch and
+    configs/debian-dri_arch.  If you just want to include/exclude DRI drivers
+    on your architecture look in configs/debian-dri.
+  * configs/debian*_i386: disabled, optimized build fuxxored.
+  * debian/rules: remove misguided Perl construct, replace by something
+    simpler in shell.  I actually meant to do something else with the Perl
+    thing, but got distracted and forgot about it.  Thanks Aaron M. Ucko!
+  * debian/rules: make it work like debian/README.build says it works wrt to
+    building optimized targets.
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Tue, 16 May 2006 18:07:53 -0600
+
+mesa (6.4.1-0.4) unstable; urgency=low
+
+  * NMU
+  * Add versioned conflict between libgl1-mesa-dri and xlibmesa-dri so that
+    the xlibmesa-dri transitional upgrade package works
+
+ -- David Nusinow <dnusinow@debian.org>  Mon,  6 Mar 2006 21:46:18 -0500
+
+mesa (6.4.1-0.3) unstable; urgency=low
+
+  * NMU
+  * Add s390 and m68k to the USE_IEEE test in src/mesa/main/imports.h.
+    (closes: #349437)
+
+ -- David Nusinow <dnusinow@debian.org>  Sat, 11 Feb 2006 17:59:26 -0500
+
+mesa (6.4.1-0.2) unstable; urgency=low
+
+  * NMU
+  * Re-add dh_installdirs call to binary-indep target so that we get
+    arch-specific dirs for the mesa-swx11-source package
+  * Remove makedepend from build-depends. Now we'll just build-dep on xutils
+    to get the app, which will translate over to our own xorg 7.0 plans.
+
+ -- David Nusinow <dnusinow@debian.org>  Tue, 31 Jan 2006 19:21:12 -0500
+
+mesa (6.4.1-0.1) unstable; urgency=low
+
+  [ Marcelo E. Magallon <mmagallo@debian.org> ]
+  * debian/control: build-depend on xutils
+  * include/GL/glx{int,proto,md,tokens}.h: missing upstream (closes: bug#326466)
+  * debian/libgl1-mesa-dri-dev.install: install GLX include files here, too.
+  * debian/rules: GLU and GLW don't have arch-specific targets.
+
+  [ Daniel Stone <daniels@debian.org> ]
+  * New upstream version, incorporating changes from Ubuntu 6.3 packaging.
+  * Rename packages:
+    - mesag3 -> libgl1-mesa-swrast
+    - mesag-dev -> libgl1-mesa-swrast-dev
+    - libgl1-mesa-dri -> libgl1-mesa
+    - libgl1-mesa-dri-dev -> libgl1-mesa-dev
+    - libgl1-mesa-dri still exists, but now contains the DRI modules only.
+  * Drop dependency *from* mesa-common-dev on libgl1-mesa-dev and
+    libglu1-mesa-dev; it should be the other way around. (closes: #336565)
+  * Add Build-Depends on pkg-config to get flags from libdrm, and libexpat-dev
+    for DRI configuration.  Break out xlibs-dev Build-Depends to the
+    individual libraries required.
+  * Bump libdrm-dev Build-Depends to >> 1.0.5, in order to get new
+    via_drm.h to build the unichrome DRI driver.
+  * Configs: pare DRI drivers down to a sensible set for each architecture.
+  * Remove completely broken Glide target, which caused FTBFS.
+  * Add mesa-swrast-source package, providing the source for the software
+    rasteriser for libGLcore in the X server.
+  * Drop tight libosmesa6 -> libgl1-mesa-swrast Depends, replace with
+    shlibs:Depends.
+
+  [ David Nusinow <dnusinow@debian.org> ]
+  * New upstream version (6.4.1) (closes: #232665)
+  * Merge changes from Ubuntu version 6.4.1-0ubuntu1.
+    (closes: #341479, #340168, #334742)
+    + Add new files required by xorg-server GL build to mesa-swrast-source.
+  * NMU to begin getting Xorg 7.0 in to Debian
+  * Change libgl1-mesa-swrast Depends on libx11-6-dev to libx11-dev.
+  * Change libgl1-mesa-swrast to be named libgl1-mesa-swx11
+  * Change libgl1-mesa to be named libgl1-mesa-glx
+  * mesa-swrast-src.install stop looking for the swx11 dir and look for swrast
+
+ -- David Nusinow <dnusinow@debian.org>  Sat, 21 Jan 2006 21:43:37 -0500
+
+mesa (6.3.2-2.1) unstable; urgency=low
+
+  * Non-maintainer upload.
+  * Adjust Build-Depends:
+    + xlibs transition (Closes: #347129).
+    + xutils, xlibmesa-gl-dev (Closes: #326466).
+  * mesag-dev: Depends: libx11-dev (Closes: #347205).
+
+ -- Christoph Berg <myon@debian.org>  Fri, 20 Jan 2006 20:45:43 +0100
+
+mesa (6.3.2-2) unstable; urgency=low
+
+  * debian/rules: build only whatever needs to be build according to
+    debian/control.
+  * debian/libdir.map: it's usr/lib/debug not usr/lib/dbg
+  * debian/rules: select optimized targets for the current host architecture
+    only (thanks Michel!)
+  * debian/README.build: reword some of the directions, add more info.
+  * debian/control: forgot to add CPR relationships in the new packages
+    (thanks Michel!)
+  * debian/control: Set maintainer to pkg-mesa-devel, add myself as uploader
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Sun, 28 Aug 2005 14:41:15 -0600
+
+mesa (6.3.2-1) unstable; urgency=low
+
+  * New upstream
+  * configs/debian-dri: new target
+  * debian/control: add build-depends on libdrm-dev
+  * debian/rules: pass SRC_DIRS instead of SUBDIRS on the command line.
+    This allows for configurations to override the command line in a
+    sane way.
+  * configs/debian-dri: override SRC_DIRS
+  * configs/debian: add -D_GNU_SOURCE (required by dri drivers)
+  * debian/control, debian/rules: drop glide out of this package, it
+    will be moved to the mesa-legacy package, forked from 6.2.1-7.
+  * debian/drivers.map, debian/rules: take into account that some
+    drivers have external components.
+        + To be fixed: debian/drivers.map hardcodes locations
+  * debian/control: libgl1-mesa-dri, libgl1-mesa-directfb: new drivers
+  * dh_makeshlibs for libgl1-mesa-dri and libgl1-mesa-directfb
+  * debian/control: priority is optional... again...
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Sun, 21 Aug 2005 17:13:19 -0600
+
+mesa (6.2.1-7) unstable; urgency=low
+
+  * Previous upload got lost somewhere
+      + bin/mklib: add GNU/kFreeBSD, patch from Aurelien Jarno (closes:
+        bug#307154)
+      + recompile with newer g++
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Tue, 02 Aug 2005 06:47:20 -0600
+
+mesa (6.2.1-6) unstable; urgency=low
+
+  * bin/mklib: add GNU/kFreeBSD, patch from Aurelien Jarno (closes:
+    bug#307154)
+  * recompile with newer g++
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Sun, 24 Jul 2005 11:47:16 -0600
+
+mesa (6.2.1-5) unstable; urgency=low
+
+  * debian/rules: big mess up, files are not being moved to their proper
+    places.  I naively assumed that command-line options to debhelper
+    commands would override DH_OPTIONS, that is, that having
+    DH_OPTIONS=-i (as suggested in the documentation) would mean
+    something like "use -i unless -p is passed on the command line".  It
+    actually means "use -i in addition to -p passed on the command
+    line", which does not make any sense, but is consistent with the
+    wording in the documentation. (closes: bug#306499, bug#306918,
+    bug#307095)
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Sun, 01 May 2005 09:45:12 -0600
+
+mesa (6.2.1-4) unstable; urgency=low
+
+  * debian/control: fix description to reflect the exact content and
+    purpose of package (libosmesa-dev, mesag-dev).
+  * debian/rules: DH_OPTIONS=-s added to binary-arch target.  (closes:
+    bug#306091)
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Sat, 26 Mar 2005 08:03:44 -0600
+
+mesa (6.2.1-3) unstable; urgency=low
+
+  * debian/control: try to match the override file.  If mesa is "extra"
+    (for whatever reason), all the packages should be extra.
+  * debian/rules: quick workaround for left-over libGL.so in GLU -dev
+    package.
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Thu, 24 Mar 2005 19:35:34 -0600
+
+mesa (6.2.1-2) unstable; urgency=low
+
+  * The "thank you so much, I'm still voting against you" release.
+  * debian/rules: correct artifact of me not having had a proper
+    pbuilder environment to build stuff on and the repackaging from the
+    previous release.  The -glu- and -glw- targets now explicitly depend
+    on the matching -gl- target, and symlinks are placed in the build
+    directories in order to actually have a libGL.so to make ld happy
+    when creating the libraries.
+  * debian/rules: uncomment dh_install :-\  There was a reason why I had
+    commented that out...
+  * First change closes: bug#298922
+  * Second change closes: bug#300302, bug#300284, bug#300430
+  * debian/control: "An X", whatever, I've been corrected multiple times
+    in both ways (translators beware).  (closes: bug#300012)
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Sun, 20 Mar 2005 22:03:29 -0600
+
+mesa (6.2.1-1) unstable; urgency=low
+
+  * The "autobuilders, please please please don't hate me" release.
+  * New upstream.
+  * Repackage:
+        + Fall prey to debhelper
+        + Entries below this one preserved for historical reasons or
+          sentimental value, pick as many as you want.  They bear NO
+          relation to the actual packages!
+  * configs/debian, configs/debian-debug, configs/debian-debug-i386,
+    configs/debian-glide, configs/debian-glide-i386, configs/debian-i386,
+    configs/debian-osmesa16, configs/debian-osmesa16-static,
+    configs/debian-osmesa32, configs/debian-osmesa32-static,
+    configs/debian-static, configs/debian-static-i386: new files.
+  * configs/debian-sparc: Dave Miller confirmed that the sparc assembly
+    files do work on Linux.  I don't know where to install the optimized
+    libraries, so the file doesn't actually exist.  Please read
+    debian/README.build if you want to have a sparc-optimized library.
+  * debian/control: GGI and glide2 are gone.  glide is glide3.
+  * debian/rules: modify shlibs file for the glide3 target to require glide3
+    and only glide3 because that library exports functions not available in
+    other libGLs.  Rationale: if someone is compiling a Debian package and
+    uses the glide target either he doesn't know what he is doing or he knows
+    exactly what he is doing.  In the first case the package should not be
+    installable and in the second case the package requires this particular
+    version.
+  * debian/control: libgl1-mesa-glide3-dev does NOT provide a proper OpenGL
+    development environment (see above).
+  * PCR is bound to be wrong... *sigh*
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Sat, 25 Dec 2004 14:50:02 -0600
+
+mesa (6.0.1-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/rules: redid a bunch of stuff in order to support new build system
+    without autoconf and automake stuff.  The next version is going to change
+    this _again_.
+
+ -- Marcelo E. Magallon <mmagallo@debian.org>  Sun, 11 Apr 2004 07:00:19 -0600
+
 mesa (5.0.0-5.1) unstable; urgency=low
 
   * Non-Maintainer Upload.

@@ -1,0 +1,4 @@
+00_create-libdir.patch
+01_fix-makefile.patch
+02_use-ieee-fp-on-s390-and-m68k.patch
+03_optional-progs-and-install.patch

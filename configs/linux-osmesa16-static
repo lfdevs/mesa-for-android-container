@@ -1,0 +1,17 @@
+# Configuration for 16 bits/channel OSMesa library on Linux
+
+include $(TOP)/configs/linux-osmesa16
+
+CONFIG_NAME = linux-osmesa16-static
+
+# Compiler and flags
+MKLIB_OPTIONS = -static
+PIC_FLAGS =
+
+# Work around aliasing bugs - developers should comment this out
+CFLAGS += -fno-strict-aliasing
+CXXFLAGS += -fno-strict-aliasing
+
+# Library names
+OSMESA_LIB_NAME = lib$(OSMESA_LIB).a
+

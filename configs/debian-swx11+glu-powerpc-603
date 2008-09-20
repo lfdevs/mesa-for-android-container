@@ -1,0 +1,13 @@
+# Configuration for building Mesa (swx11 and GLU) with runtime-detected
+# assembler optimizations on powerpc (603 optimized).
+
+include $(TOP)/configs/linux-ppc
+include $(TOP)/configs/debian-swx11+glu-default
+
+CONFIG_NAME = debian-swx11+glu-powerpc-603
+
+SRC_DIRS = mesa
+LIB_DIR = lib/603/cmov
+
+# vim: ft=make
+

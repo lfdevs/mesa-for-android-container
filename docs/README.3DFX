@@ -3,6 +3,223 @@
 
 
 
+Requirements:
+-------------
+
+A Voodoo-based videocard/accelerator
+DOS (with DJGPP), Windows9x/2k (with MinGW), Linux
+Glide3x library for your OS
+
+http://sourceforge.net/projects/glide/
+
+
+
+How to compile:
+---------------
+
+DJGPP:
+   Place the Glide3 SDK in the top Mesa directory:
+	$(MESA)/glide3/include/
+		3dfx.h, g3ext.h, glide.h, glidesys.h, glideutl.h, sst1vid.h
+	$(MESA)/glide3/lib/
+		libgld3x.a, libgld3i.a, glide3x.dxe
+   Type:
+	make -f Makefile.DJ X86=1 FX=1
+   Look into the makefile for further information.
+
+MinGW:
+   Place the Glide3 SDK in the top Mesa directory:
+	$(MESA)/glide3/include/
+		3dfx.h, g3ext.h, glide.h, glidesys.h, glideutl.h, sst1vid.h
+	$(MESA)/glide3/lib/
+		libglide3x.a, glide3x.dll
+   Type:
+	make -f Makefile.mgw X86=1 FX=1
+   Look into the makefile for further information.
+
+Linux:
+   Place the Glide3 SDK in /usr/local/glide
+	/usr/local/glide/include/
+		3dfx.h, g3ext.h, glide.h, glidesys.h, glideutl.h, sst1vid.h
+	/usr/local/glide/lib/
+		libglide3x.a, libglide3x.so
+   Type:
+	make linux-glide
+	or
+	make linux-x86-glide
+
+
+
+Compilation defines:
+--------------------
+
+FX_DEBUG
+	enable driver debug code
+FX_TRAP_GLIDE
+	enable Glide trace code
+FX_PACKEDCOLOR
+	use packed color in vertex structure
+FX_TC_NAPALM
+	map GL_COMPRESSED_RGB[A] to FXT1. Works with VSA100-based cards only.
+FX_COMPRESS_S3TC_AS_FXT1_HACK
+	map S3TC to FXT1
+FX_RESCALE_BIG_TEXURES_HACK
+	fake textures larger than HW can support
+	(see MESA_FX_MAXLOD environment variable)
+
+
+
+Environment variables:
+----------------------
+
+The following environment variables affect MesaFX. Those that affect Glide
+only, are beyond the scope of this section. Entries that don't have a "Value"
+field, can have any value whatsoever
+	ex: set MESA_FX_IGNORE_CMBEXT=y
+
+"Note" (*) means that the environment variable affects Glide, too; also, if
+the var is not found in the environment, it is searched in windoze registry.
+"Note" (!) means that the environment variable is not working as expected;
+may have undefined effects, might have effects only at Glide level or might
+not have any effect whatsoever. Caveat emptor! Those are to be revised soon.
+
+It is recommended to leave the envvars alone, so that Mesa/Glide will run with
+default values. Use them only when you experience crashes or strange behavior.
+
+FX_GLIDE_NUM_TMU
+	OS: all
+	HW: dual-TMU cards (Voodoo2, Avenger, Napalm)
+	Desc: force single-TMU
+	Note: (*)
+	Value: "1"
+FX_GLIDE_SWAPPENDINGCOUNT
+	OS: all
+	HW: all
+	Desc: max # of buffers allowed to build up
+	Note: (*) (!)
+	Value: "0", "1", "2", "3", "4", "5" or "6"
+FX_GLIDE_SWAPINTERVAL
+	OS: all
+	HW: all
+	Desc: number of vertical retraces to wait before swapping
+	Note: (*) (!) works only at Glide-level?
+SSTH3_SLI_AA_CONFIGURATION
+	OS: all
+	HW: VSA100-based cards
+	Desc: SLI/AA setup
+	Note: (*) (!) works only at Glide-level?
+	Value:
+	    1, 2, 4 chip cards
+		"0" - SLI & AA disable
+		"1" - SLI disabled, 2 sample AA enabled
+	    2, 4 chip cards
+		"2" - 2-way SLI enabled, AA disabled
+		"3" - 2-way SLI enabled, 2 sample AA enabled
+		"4" - SLI disabled, 4 sample AA enabled
+	    4 chip cards
+		"5" - 4-way SLI enabled, AA disabled
+		"6" - 4-way SLI enabled, 2 sample AA enabled
+		"7" - 2-way SLI enabled, 4 sample AA enabled
+		"8" - SLI disabled, 8 sample AA enabled 
+SST_DUALHEAD
+	OS: win32
+	HW: ?
+	Desc: ?
+	Note: (!) disabled?
+MESA_FX_NO_SIGNALS
+	OS: linux
+	HW: all
+	Desc: avoid installing signals
+	Note: (!) untested!
+MESA_FX_INFO
+	OS: all
+	HW: all
+	Desc: verbose to stderr
+	Value: any; special value "r" to redirect stderr to MESA.LOG
+MESA_FX_NOSNAP
+	OS: all
+	HW: Voodoo1, Rush, Banshee
+	Desc: do not snap vertices inside Mesa
+	Note: to be used with Glide3x that snaps vertices internally
+MESA_FX_POINTCAST
+	OS: all
+	HW: dual-TMU cards (some Voodoo1, Voodoo2, Avenger, Napalm)
+	Desc: try to use pointcast palette
+	Note: may give adverse effects on UMA cards (Avenger, Napalm)
+MESA_FX_IGNORE_PALEXT
+	OS: all
+	HW: all
+	Desc: disable 6666 palette
+MESA_FX_IGNORE_PIXEXT
+	OS: all
+	HW: Napalm
+	Desc: force 565 16bpp mode (traditional Voodoo, no 32/15bpp)
+MESA_FX_IGNORE_TEXFMT
+	OS: all
+	HW: Napalm
+	Desc: disable 32bit textures
+MESA_FX_IGNORE_CMBEXT
+	OS: all
+	HW: Napalm
+	Desc: disable Napalm combiners (color/alpha/texture)
+	Note: this option allows dual-TMU cards perform single-pass
+	      trilinear, but some advanced (multi)texturing modes
+	      won't work (GL_EXT_texture_env_combine)
+MESA_FX_IGNORE_MIREXT
+	OS: all
+	HW: all
+	Desc: disable mirror extension
+MESA_FX_IGNORE_TEXUMA
+	OS: all
+	HW: all
+	Desc: disable UMA
+MESA_FX_IGNORE_TEXUS2
+	OS: all
+	HW: all
+	Desc: disable Texus2
+MESA_FX_MAXLOD
+	OS: all
+	HW: non VSA-100 cards
+	Desc: enable large texture support using SW rescaling
+	Value:
+	    "9"  - 512x512 textures
+	    "10" - 1024x1024 textures
+	    "11" - 2048x2048 textures
+MESA_FX_ALLOW_VP
+	OS: all
+	HW: all
+	Desc: allow vertex program extensions
+MESA_GLX_FX
+	OS: linux
+	HW: Voodoo1, Rush, Voodoo2
+	Desc: display mode
+	Note: (!) experimental
+	Value:
+	    "w" - windowed mode
+	    "f" - fullscreen mode
+	    "d" - disable glide driver
+	OS: win32
+	HW: Rush, Banshee, Avenger, Napalm
+	Desc: display mode
+	Note: (!) experimental
+	Value:
+	    "w" - windowed mode
+
+
+
+Contact:
+--------
+
+Daniel Borca <dborca 'at' users 'dot' sourceforge 'dot' net>
+Hiroshi Morii <koolsmoky 'at' users 'dot' sourceforge 'dot' net>
+
+
+
+WARNING! The info below this line is outdated (yet some of it useful). WARNING!
+*******************************************************************************
+
+
+
 Info for Mesa 4.1
 -----------------
 

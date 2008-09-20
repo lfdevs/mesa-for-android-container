@@ -8,7 +8,7 @@ Name Strings
 
 Contact
 
-    Brian Paul, Tungsten Graphics, Inc. (brian 'at' tungstengraphics.com)
+    Brian Paul, Tungsten Graphics, Inc. (brian.paul 'at' tungstengraphics.com)
     Keith Whitwell, Tungsten Graphics, Inc.  (keith 'at' tungstengraphics.com)
 
 Status
@@ -48,7 +48,7 @@ Issues
 
 New Procedures and Functions
 
-    GLuint glXGetAGPOffsetMESA( const GLvoid *pointer )
+    unsigned int glXGetAGPOffsetMESA( const void *pointer )
 
 New Tokens
 
@@ -92,3 +92,4 @@ Revision History
 
     20 September 2002 - Initial draft
     2 October 2002 - finished GLX chapter 3 additions
+    27 July 2004 - use unsigned int instead of GLuint, void instead of GLvoid

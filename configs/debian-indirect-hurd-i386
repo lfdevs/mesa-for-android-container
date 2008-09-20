@@ -1,0 +1,9 @@
+# Configuration for building the DRI drivers on the build architecture.
+
+include $(TOP)/configs/linux-indirect
+include $(TOP)/configs/debian-indirect-default
+
+CONFIG_NAME = debian-indirect-hurd-i386
+
+# vim: ft=make
+

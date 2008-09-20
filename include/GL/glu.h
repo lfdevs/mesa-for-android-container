@@ -40,9 +40,21 @@
 #define GLAPIENTRY
 #endif
 
-#ifndef GLAPI
-#define GLAPI
+#ifndef GLAPIENTRYP
+#define GLAPIENTRYP GLAPIENTRY *
 #endif
+
+#if (defined(_MSC_VER) || defined(__MINGW32__)) && defined(BUILD_GLU32)
+# undef GLAPI
+# define GLAPI __declspec(dllexport)
+#elif (defined(_MSC_VER) || defined(__MINGW32__)) && defined(_DLL)
+/* tag specifying we're building for DLL runtime support */
+# undef GLAPI
+# define GLAPI __declspec(dllimport)
+#elif !defined(GLAPI)
+/* for use with static link lib build of Win32 edition only */
+# define GLAPI extern
+#endif /* _STATIC_MESA support */
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,6 +83,7 @@ extern "C" {
 #define GLU_INVALID_ENUM                   100900
 #define GLU_INVALID_VALUE                  100901
 #define GLU_OUT_OF_MEMORY                  100902
+#define GLU_INCOMPATIBLE_GL_VERSION        100903
 #define GLU_INVALID_OPERATION              100904
 
 /* NurbsDisplay */
@@ -266,7 +279,7 @@ typedef GLUtesselator GLUtriangulatorObj;
 #define GLU_TESS_MAX_COORD 1.0e150
 
 /* Internal convenience typedefs */
-typedef void (GLAPIENTRY *_GLUfuncptr)();
+typedef void (GLAPIENTRYP _GLUfuncptr)();
 
 GLAPI void GLAPIENTRY gluBeginCurve (GLUnurbs* nurb);
 GLAPI void GLAPIENTRY gluBeginPolygon (GLUtesselator* tess);

@@ -1,5 +1,3 @@
-/* $Id: xmesa.h,v 1.14 2002/10/05 03:03:37 brianp Exp $ */
-
 /*
  * Mesa 3-D graphics library
  * Version:  4.1
@@ -89,8 +87,8 @@ extern struct Library *XLibBase;
 #endif
 
 
-#define XMESA_MAJOR_VERSION 4
-#define XMESA_MINOR_VERSION 1
+#define XMESA_MAJOR_VERSION 6
+#define XMESA_MINOR_VERSION 3
 
 
 
@@ -180,6 +178,21 @@ extern XMesaContext XMesaCreateContext( XMesaVisual v,
  * Destroy a rendering context as returned by XMesaCreateContext()
  */
 extern void XMesaDestroyContext( XMesaContext c );
+
+
+#ifdef XFree86Server
+/*
+ * These are the extra routines required for integration with XFree86.
+ * None of these routines should be user visible. -KEM
+ */
+extern GLboolean XMesaForceCurrent( XMesaContext c );
+
+extern GLboolean XMesaLoseCurrent( XMesaContext c );
+
+extern GLboolean XMesaCopyContext( XMesaContext src,
+				   XMesaContext dst,
+				   GLuint mask );
+#endif /* XFree86Server */
 
 
 /*

@@ -1,0 +1,10 @@
+# Configuration for building OSMesa with support for 32 bits per color
+# channel.
+
+include $(TOP)/configs/linux-osmesa32
+include $(TOP)/configs/debian-osmesa-default
+
+CONFIG_NAME = debian-osmesa32
+
+# vim: ft=make
+

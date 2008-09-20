@@ -1,0 +1,7 @@
+# Configuration defaults for building GLX-enabled libGL.
+
+include $(TOP)/configs/debian-dri-default
+
+CONFIG_NAME = debian-indirect-default
+
+DRI_DIRS = 

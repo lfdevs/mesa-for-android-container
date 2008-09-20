@@ -1,0 +1,10 @@
+# Configuration for building static versions of the libraries (swx11 and GLU)
+# on amd64.
+
+include $(TOP)/configs/linux-x86-64-static
+include $(TOP)/configs/debian-swx11+glu-default
+
+CONFIG_NAME = debian-swx11+glu-static-amd64
+
+# vim: ft=make
+

@@ -1,0 +1,14 @@
+# Configuration for building the DRI drivers on i386.
+
+include $(TOP)/configs/linux-dri-x86
+include $(TOP)/configs/debian-dri-optimized-default
+
+CONFIG_NAME = debian-dri-i386-i686
+
+ARCH_FLAGS = -march=i686
+LIB_DIR = lib/glx/i686/cmov
+
+DRI_DRIVER_INSTALL_DIR = $(INSTALL_DIR)/lib/dri/i686/cmov
+
+# vim: ft=make
+

@@ -1,0 +1,19 @@
+# Configuration for 16 bits/channel OSMesa library on Linux
+
+include $(TOP)/configs/linux-osmesa
+
+CONFIG_NAME = linux-osmesa16
+
+# Work around aliasing bugs - developers should comment this out
+CFLAGS += -fno-strict-aliasing
+CXXFLAGS += -fno-strict-aliasing
+DEFINES += -DCHAN_BITS=16 -DDEFAULT_SOFTWARE_DEPTH_BITS=32
+# Library names
+OSMESA_LIB = OSMesa16
+
+# Directories
+PROGRAM_DIRS = 
+
+# Dependencies
+APP_LIB_DEPS = -l$(OSMESA_LIB)
+

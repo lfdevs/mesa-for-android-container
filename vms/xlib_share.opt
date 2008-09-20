@@ -1,6 +1,6 @@
-[-.lib]libmesagl.exe/share
-[-.lib]libmesaglu.exe/share
-[-.lib]libglut.exe/share
+[--.lib]libmesagl.exe/share
+[--.lib]libmesaglu.exe/share
+[--.lib]libglut.exe/share
 sys$library:decw$xlibshr.exe/share
 sys$library:decw$xmulibshr.exe/share
 sys$library:decw$xmlibshr12/share

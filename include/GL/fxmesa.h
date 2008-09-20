@@ -1,5 +1,3 @@
-/* $Id: fxmesa.h,v 1.4 2001/09/23 16:06:13 brianp Exp $ */
-
 /*
  * Mesa 3-D graphics library
  * Version:  4.0
@@ -24,7 +22,7 @@
 /*
  * FXMesa - 3Dfx Glide driver for Mesa.  Contributed by David Bucciarelli
  *
- * NOTE: This version requires Glide 2.3 or later.
+ * NOTE: This version requires Glide3 (http://sourceforge.net/projects/glide)
  */
 
 
@@ -40,8 +38,8 @@ extern "C" {
 #endif
 
 
-#define FXMESA_MAJOR_VERSION 4
-#define FXMESA_MINOR_VERSION 0
+#define FXMESA_MAJOR_VERSION 6
+#define FXMESA_MINOR_VERSION 3
 
 
 /*
@@ -53,6 +51,8 @@ extern "C" {
 #define FXMESA_DEPTH_SIZE	12      /* followed by an integer */
 #define FXMESA_STENCIL_SIZE	13      /* followed by an integer */
 #define FXMESA_ACCUM_SIZE	14      /* followed by an integer */
+#define FXMESA_COLORDEPTH	20      /* followed by an integer */
+#define FXMESA_SHARE_CONTEXT 990099	/* keep in sync with xmesa1.c! */
 
 
 
@@ -73,7 +73,7 @@ GLAPI fxMesaContext GLAPIENTRY fxMesaCreateBestContext(GLuint win,
 						      const GLint attribList[]);
 GLAPI void GLAPIENTRY fxMesaDestroyContext(fxMesaContext ctx);
 
-GLAPI GLboolean GLAPIENTRY fxMesaSelectCurrentBoard(int n);
+GLAPI GLint GLAPIENTRY fxMesaSelectCurrentBoard(int n);
 
 GLAPI void GLAPIENTRY fxMesaMakeCurrent(fxMesaContext ctx);
 
@@ -85,9 +85,9 @@ GLAPI void GLAPIENTRY fxMesaSetNearFar(GLfloat nearVal, GLfloat farVal);
 
 GLAPI void GLAPIENTRY fxMesaUpdateScreenSize(fxMesaContext ctx);
 
-GLAPI int GLAPIENTRY fxQueryHardware(void);
-
 GLAPI void GLAPIENTRY fxCloseHardware(void);
+
+GLAPI void GLAPIENTRY fxGetScreenGeometry (GLint *w, GLint *h);
 
 
 #if defined (__BEOS__)
