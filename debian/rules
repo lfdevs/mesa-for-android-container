@@ -22,9 +22,11 @@ endif
 
 DEB_BUILD_ARCH     ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
 DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 DEB_BUILD_DIR      ?= $(CURDIR)/obj-$(DEB_BUILD_GNU_TYPE)
 
 export DEB_BUILD_ARCH
+export DEB_HOST_ARCH_CPU
 
 # choose which configurations to build
 SWX11_GLU_CONFIGS =

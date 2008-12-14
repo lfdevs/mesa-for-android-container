@@ -1,3 +1,12 @@
+mesa (7.0.3-7) unstable; urgency=low
+
+  * Cherry-pick patch from upstream:
+    Use 3Dnow! x86-64 routines only on processors that support 3Dnow!
+    (closes: #484180).
+  * Also build the x86-specific dri drivers on kfreebsd (closes: #492894).
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 14 Dec 2008 07:34:58 +0530
+
 mesa (7.0.3-6) unstable; urgency=high
 
   * Update debian/copyright to the SGI Free Software License B, version 2.0.
