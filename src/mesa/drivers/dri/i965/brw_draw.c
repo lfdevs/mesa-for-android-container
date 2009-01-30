@@ -27,30 +27,29 @@
 
 #include <stdlib.h>
 
-#include "glheader.h"
-#include "context.h"
-#include "state.h"
-#include "api_validate.h"
-#include "enums.h"
+#include "main/glheader.h"
+#include "main/context.h"
+#include "main/state.h"
+#include "main/api_validate.h"
+#include "main/enums.h"
 
 #include "brw_draw.h"
 #include "brw_defines.h"
 #include "brw_context.h"
-#include "brw_aub.h"
 #include "brw_state.h"
 #include "brw_fallback.h"
 
-#include "intel_ioctl.h"
 #include "intel_batchbuffer.h"
 #include "intel_buffer_objects.h"
 
 #include "tnl/tnl.h"
 #include "vbo/vbo_context.h"
 #include "swrast/swrast.h"
+#include "swrast_setup/swrast_setup.h"
 
+#define FILE_DEBUG_FLAG DEBUG_BATCH
 
-
-static GLuint hw_prim[GL_POLYGON+1] = {
+static GLuint prim_to_hw_prim[GL_POLYGON+1] = {
    _3DPRIM_POINTLIST,
    _3DPRIM_LINELIST,
    _3DPRIM_LINELOOP,
@@ -104,11 +103,9 @@ static GLuint brw_set_prim(struct brw_context *brw, GLenum prim)
 	 brw->intel.reduced_primitive = reduced_prim[prim];
 	 brw->state.dirty.brw |= BRW_NEW_REDUCED_PRIMITIVE;
       }
-
-      brw_validate_state(brw);
    }
 
-   return hw_prim[prim];
+   return prim_to_hw_prim[prim];
 }
 
 
@@ -123,28 +120,9 @@ static GLuint trim(GLenum prim, GLuint length)
 }
 
 
-static void brw_emit_cliprect( struct brw_context *brw, 
-			       const drm_clip_rect_t *rect )
-{
-   struct brw_drawrect bdr;
-
-   bdr.header.opcode = CMD_DRAW_RECT;
-   bdr.header.length = sizeof(bdr)/4 - 2;
-   bdr.xmin = rect->x1;
-   bdr.xmax = rect->x2 - 1;
-   bdr.ymin = rect->y1;
-   bdr.ymax = rect->y2 - 1;
-   bdr.xorg = brw->intel.drawX;
-   bdr.yorg = brw->intel.drawY;
-
-   intel_batchbuffer_data( brw->intel.batch, &bdr, sizeof(bdr), 
-			   INTEL_BATCH_NO_CLIPRECTS);
-}
-
-
-static void brw_emit_prim( struct brw_context *brw, 
-			   const struct _mesa_prim *prim )
-
+static void brw_emit_prim(struct brw_context *brw,
+			  const struct _mesa_prim *prim,
+			  uint32_t hw_prim)
 {
    struct brw_3d_primitive prim_packet;
 
@@ -155,7 +133,7 @@ static void brw_emit_prim( struct brw_context *brw,
    prim_packet.header.opcode = CMD_3D_PRIM;
    prim_packet.header.length = sizeof(prim_packet)/4 - 2;
    prim_packet.header.pad = 0;
-   prim_packet.header.topology = brw_set_prim(brw, prim->mode);
+   prim_packet.header.topology = hw_prim;
    prim_packet.header.indexed = prim->indexed;
 
    prim_packet.verts_per_instance = trim(prim->mode, prim->count);
@@ -164,20 +142,25 @@ static void brw_emit_prim( struct brw_context *brw,
    prim_packet.start_instance_location = 0;
    prim_packet.base_vert_location = 0;
 
+   /* Can't wrap here, since we rely on the validated state. */
+   brw->no_batch_wrap = GL_TRUE;
    if (prim_packet.verts_per_instance) {
-      intel_batchbuffer_data( brw->intel.batch, &prim_packet, sizeof(prim_packet), 
-			      INTEL_BATCH_NO_CLIPRECTS);
+      intel_batchbuffer_data( brw->intel.batch, &prim_packet,
+			      sizeof(prim_packet), LOOP_CLIPRECTS);
    }
+   brw->no_batch_wrap = GL_FALSE;
 }
 
 static void brw_merge_inputs( struct brw_context *brw,
 		       const struct gl_client_array *arrays[])
 {
-   struct brw_vertex_element *inputs = brw->vb.inputs;
    struct brw_vertex_info old = brw->vb.info;
    GLuint i;
 
-   memset(inputs, 0, sizeof(*inputs));
+   for (i = 0; i < VERT_ATTRIB_MAX; i++)
+      dri_bo_unreference(brw->vb.inputs[i].bo);
+
+   memset(&brw->vb.inputs, 0, sizeof(brw->vb.inputs));
    memset(&brw->vb.info, 0, sizeof(brw->vb.info));
 
    for (i = 0; i < VERT_ATTRIB_MAX; i++) {
@@ -188,7 +171,8 @@ static void brw_merge_inputs( struct brw_context *brw,
 	 if (arrays[i]->StrideB != 0)
 	    brw->vb.info.varying |= 1 << i;
 
-	 brw->vb.info.sizes[i/16] |= (inputs[i].glarray->Size - 1) << ((i%16) * 2);
+	 brw->vb.info.sizes[i/16] |= (brw->vb.inputs[i].glarray->Size - 1) <<
+	    ((i%16) * 2);
       }
    }
 
@@ -270,15 +254,29 @@ static GLboolean brw_try_draw_prims( GLcontext *ctx,
    struct intel_context *intel = intel_context(ctx);
    struct brw_context *brw = brw_context(ctx);
    GLboolean retval = GL_FALSE;
-   GLuint i, j;
+   GLboolean warn = GL_FALSE;
+   GLboolean first_time = GL_TRUE;
+   GLuint i;
 
    if (ctx->NewState)
       _mesa_update_state( ctx );
 
+   if (check_fallbacks(brw, prim, nr_prims))
+      return GL_FALSE;
+
+   brw_validate_textures( brw );
+
    /* Bind all inputs, derive varying and size information:
     */
    brw_merge_inputs( brw, arrays );
-      
+
+   brw->ib.ib = ib;
+   brw->state.dirty.brw |= BRW_NEW_INDICES;
+
+   brw->vb.min_index = min_index;
+   brw->vb.max_index = max_index;
+   brw->state.dirty.brw |= BRW_NEW_VERTICES;
+
    /* Have to validate state quite late.  Will rebuild tnl_program,
     * which depends on varying information.  
     * 
@@ -288,100 +286,72 @@ static GLboolean brw_try_draw_prims( GLcontext *ctx,
 
    LOCK_HARDWARE(intel);
 
-   if (brw->intel.numClipRects == 0) {
-      assert(intel->batch->ptr == intel->batch->map + intel->batch->offset);
+   if (!intel->constant_cliprect && intel->driDrawable->numClipRects == 0) {
       UNLOCK_HARDWARE(intel);
       return GL_TRUE;
    }
 
-   {
-      /* Set the first primitive early, ahead of validate_state:
-       */
-      brw_set_prim(brw, prim[0].mode);
+   for (i = 0; i < nr_prims; i++) {
+      uint32_t hw_prim;
 
-      /* XXX:  Need to separate validate and upload of state.  
+      /* Flush the batch if it's approaching full, so that we don't wrap while
+       * we've got validated state that needs to be in the same batch as the
+       * primitives.  This fraction is just a guess (minimal full state plus
+       * a primitive is around 512 bytes), and would be better if we had
+       * an upper bound of how much we might emit in a single
+       * brw_try_draw_prims().
        */
-      brw_validate_state( brw );
+      intel_batchbuffer_require_space(intel->batch, intel->batch->size / 4,
+				      LOOP_CLIPRECTS);
 
-      /* Various fallback checks:
-       */
-      if (brw->intel.Fallback) 
-	 goto out;
+      hw_prim = brw_set_prim(brw, prim[i].mode);
 
-      if (check_fallbacks( brw, prim, nr_prims ))
-	 goto out;
-	  
-      /* Upload index, vertex data: 
-       */
-      if (ib)
-	 brw_upload_indices( brw, ib );
+      if (first_time || (brw->state.dirty.brw & BRW_NEW_PRIMITIVE)) {
+	 first_time = GL_FALSE;
 
-      if (!brw_upload_vertices( brw, min_index, max_index)) {
-	 goto out;
-      }
+	 brw_validate_state(brw);
 
-      /* For single cliprect, state is already emitted: 
-       */
-      if (brw->intel.numClipRects == 1) {
-	 for (i = 0; i < nr_prims; i++) {
-	    brw_emit_prim(brw, &prim[i]);   
-	 }
-      }
-      else {
-	 /* Otherwise, explicitly do the cliprects at this point:
+	 /* Various fallback checks:  */
+	 if (brw->intel.Fallback)
+	    goto out;
+
+	 /* Check that we can fit our state in with our existing batchbuffer, or
+	  * flush otherwise.
 	  */
-          GLuint nprims = 0;
-	 for (j = 0; j < brw->intel.numClipRects; j++) {
-	    brw_emit_cliprect(brw, &brw->intel.pClipRects[j]);
+	 if (dri_bufmgr_check_aperture_space(brw->state.validated_bos,
+					     brw->state.validated_bo_count)) {
+	    static GLboolean warned;
+	    intel_batchbuffer_flush(intel->batch);
 
-	    /* Emit prims to batchbuffer: 
+	    /* Validate the state after we flushed the batch (which would have
+	     * changed the set of dirty state).  If we still fail to
+	     * check_aperture, warn of what's happening, but attempt to continue
+	     * on since it may succeed anyway, and the user would probably rather
+	     * see a failure and a warning than a fallback.
 	     */
-	    for (i = 0; i < nr_prims; i++) {
-	       brw_emit_prim(brw, &prim[i]);   
-
-          if (++nprims == VBO_MAX_PRIM) {
-              intel_batchbuffer_flush(brw->intel.batch);
-              nprims = 0;
-          }
+	    brw_validate_state(brw);
+	    if (!warned &&
+		dri_bufmgr_check_aperture_space(brw->state.validated_bos,
+						brw->state.validated_bo_count)) {
+	       warn = GL_TRUE;
+	       warned = GL_TRUE;
 	    }
 	 }
+
+	 brw_upload_state(brw);
       }
-      
-      intel->need_flush = GL_TRUE;
+
+      brw_emit_prim(brw, &prim[i], hw_prim);
+
       retval = GL_TRUE;
    }
 
  out:
-
-   /* Currently have to do this to synchronize with the map/unmap of
-    * the vertex buffer in brw_exec_api.c.  Not sure if there is any
-    * way around this, as not every flush is due to a buffer filling
-    * up.
-    */
-   if (!intel_batchbuffer_flush( brw->intel.batch )) {
-      DBG("%s intel_batchbuffer_flush failed\n", __FUNCTION__);
-      retval = GL_FALSE;
-   }
-
-   if (retval && intel->thrashing) {
-      bmSetFence(intel);
-   }
-
-   /* Free any old data so it doesn't clog up texture memory - we
-    * won't be referencing it again.
-    */
-   while (brw->vb.upload.wrap != brw->vb.upload.buf) {
-      ctx->Driver.BufferData(ctx,
-			     GL_ARRAY_BUFFER_ARB,
-			     BRW_UPLOAD_INIT_SIZE,
-			     NULL,
-			     GL_DYNAMIC_DRAW_ARB,
-			     brw->vb.upload.vbo[brw->vb.upload.wrap]);
-      brw->vb.upload.wrap++;
-      brw->vb.upload.wrap %= BRW_NR_UPLOAD_BUFS;
-   }
-
    UNLOCK_HARDWARE(intel);
+
+   if (warn)
+      fprintf(stderr, "i965: Single primitive emit potentially exceeded "
+	      "available aperture space\n");
 
    if (!retval)
       DBG("%s failed\n", __FUNCTION__);
@@ -425,7 +395,6 @@ void brw_draw_prims( GLcontext *ctx,
 		     GLuint min_index,
 		     GLuint max_index )
 {
-   struct intel_context *intel = intel_context(ctx);
    GLboolean retval;
 
    /* Decide if we want to rebase.  If so we end up recursing once
@@ -440,24 +409,9 @@ void brw_draw_prims( GLcontext *ctx,
       return;
    }
 
-
    /* Make a first attempt at drawing:
     */
    retval = brw_try_draw_prims(ctx, arrays, prim, nr_prims, ib, min_index, max_index);
-
-   
-   /* This looks like out-of-memory but potentially we have
-    * situation where there is enough memory but it has become
-    * fragmented.  Clear out all heaps and start from scratch by
-    * faking a contended lock event:  (done elsewhere)
-    */
-   if (!retval && !intel->Fallback && bmError(intel)) {
-      DBG("retrying\n");
-      /* Then try a second time only to upload textures and draw the
-       * primitives:
-       */
-      retval = brw_try_draw_prims(ctx, arrays, prim, nr_prims, ib, min_index, max_index);
-   }
 
    /* Otherwise, we really are out of memory.  Pass the drawing
     * command to the software tnl module and which will in turn call
@@ -468,56 +422,32 @@ void brw_draw_prims( GLcontext *ctx,
       _tnl_draw_prims(ctx, arrays, prim, nr_prims, ib, min_index, max_index);
    }
 
-   if (intel->aub_file && (INTEL_DEBUG & DEBUG_SYNC)) {
-      intelFinish( &intel->ctx );
-      intel->aub_wrap = 1;
-   }
 }
-
-
-static void brw_invalidate_vbo_cb( struct intel_context *intel, void *ptr )
-{
-   /* nothing to do, we don't rely on the contents being preserved */
-}
-
 
 void brw_draw_init( struct brw_context *brw )
 {
    GLcontext *ctx = &brw->intel.ctx;
    struct vbo_context *vbo = vbo_context(ctx);
-   GLuint i;
-   
+
    /* Register our drawing function: 
     */
    vbo->draw_prims = brw_draw_prims;
-
-   brw->vb.upload.size = BRW_UPLOAD_INIT_SIZE;
-
-   for (i = 0; i < BRW_NR_UPLOAD_BUFS; i++) {
-      brw->vb.upload.vbo[i] = ctx->Driver.NewBufferObject(ctx, 1, GL_ARRAY_BUFFER_ARB);
-      
-      /* NOTE:  These are set to no-backing-store.
-       */
-      bmBufferSetInvalidateCB(&brw->intel,
-			      intel_bufferobj_buffer(intel_buffer_object(brw->vb.upload.vbo[i])),
-			      brw_invalidate_vbo_cb,
-			      &brw->intel,
-			      GL_TRUE);
-   }
-
-   ctx->Driver.BufferData( ctx, 
-			   GL_ARRAY_BUFFER_ARB, 
-			   BRW_UPLOAD_INIT_SIZE,
-			   NULL,
-			   GL_DYNAMIC_DRAW_ARB,
-			   brw->vb.upload.vbo[0] );
 }
 
 void brw_draw_destroy( struct brw_context *brw )
 {
-   GLcontext *ctx = &brw->intel.ctx;
-   GLuint i;
-   
-   for (i = 0; i < BRW_NR_UPLOAD_BUFS; i++)
-      ctx->Driver.DeleteBuffer(ctx, brw->vb.upload.vbo[i]);
+   int i;
+
+   if (brw->vb.upload.bo != NULL) {
+      dri_bo_unreference(brw->vb.upload.bo);
+      brw->vb.upload.bo = NULL;
+   }
+
+   for (i = 0; i < VERT_ATTRIB_MAX; i++) {
+      dri_bo_unreference(brw->vb.inputs[i].bo);
+      brw->vb.inputs[i].bo = NULL;
+   }
+
+   dri_bo_unreference(brw->ib.bo);
+   brw->ib.bo = NULL;
 }

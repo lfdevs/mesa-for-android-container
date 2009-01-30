@@ -1,4 +1,4 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/ffb/ffb_tris.c,v 1.3 2002/10/30 12:51:28 alanh Exp $
+/* 
  *
  * GLX Hardware Device Driver for Sun Creator/Creator3D
  * Copyright (C) 2000, 2001 David S. Miller
@@ -25,12 +25,12 @@
  *    David S. Miller <davem@redhat.com>
  */
 
-#include "glheader.h"
-#include "mtypes.h"
-#include "macros.h"
+#include "main/glheader.h"
+#include "main/mtypes.h"
+#include "main/macros.h"
 #include "swrast/swrast.h"
-#include "swrast_setup/swrast_setup.h"
 #include "swrast/s_context.h"
+#include "swrast_setup/swrast_setup.h"
 #include "tnl/t_context.h"
 #include "tnl/t_pipeline.h"
 
@@ -138,10 +138,10 @@ static void ffb_translate_vertex(GLcontext *ctx, const ffb_vertex *src,
 	const GLfloat ty = m[13];
 	const GLfloat tz = m[14];
 
-	dst->win[0] = sx * src->x + tx;
-	dst->win[1] = sy * src->y + ty;
-	dst->win[2] = sz * src->z + tz;
-	dst->win[3] = 1.0;
+	dst->attrib[FRAG_ATTRIB_WPOS][0] = sx * src->x + tx;
+	dst->attrib[FRAG_ATTRIB_WPOS][1] = sy * src->y + ty;
+	dst->attrib[FRAG_ATTRIB_WPOS][2] = sz * src->z + tz;
+	dst->attrib[FRAG_ATTRIB_WPOS][3] = 1.0;
       
 	dst->color[0] = FFB_UBYTE_FROM_COLOR(src->color[0].red);
 	dst->color[1] = FFB_UBYTE_FROM_COLOR(src->color[0].green);

@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/radeon/radeon_tex.c,v 1.6 2002/09/16 18:05:20 eich Exp $ */
 /*
 Copyright 2000, 2001 ATI Technologies Inc., Ontario, Canada, and
                      VA Linux Systems Inc., Fremont, California.
@@ -32,18 +31,17 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *    Brian Paul <brianp@valinux.com>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "colormac.h"
-#include "context.h"
-#include "enums.h"
-#include "image.h"
-#include "simple_list.h"
-#include "texformat.h"
-#include "texstore.h"
-#include "teximage.h"
-#include "texobj.h"
-
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/colormac.h"
+#include "main/context.h"
+#include "main/enums.h"
+#include "main/image.h"
+#include "main/simple_list.h"
+#include "main/texformat.h"
+#include "main/texstore.h"
+#include "main/teximage.h"
+#include "main/texobj.h"
 
 #include "radeon_context.h"
 #include "radeon_state.h"

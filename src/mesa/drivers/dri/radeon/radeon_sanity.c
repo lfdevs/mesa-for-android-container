@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/radeon/radeon_sanity.c,v 1.1 2002/10/30 12:51:55 alanh Exp $ */
 /**************************************************************************
 
 Copyright 2002 ATI Technologies Inc., Ontario, Canada, and
@@ -34,7 +33,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <errno.h> 
 
-#include "glheader.h"
+#include "main/glheader.h"
 
 #include "radeon_context.h"
 #include "radeon_ioctl.h"

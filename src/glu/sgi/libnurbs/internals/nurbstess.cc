@@ -35,8 +35,6 @@
 /*
  * nurbstess.c++
  *
- * $Date: 2006/03/14 15:08:52 $ $Revision: 1.2 $
- * $Header: /home/krh/git/sync/mesa-cvs-repo/Mesa/src/glu/sgi/libnurbs/internals/nurbstess.cc,v 1.2 2006/03/14 15:08:52 brianp Exp $
  */
 
 #include "glimports.h"
@@ -677,7 +675,7 @@ NurbsTessellator::do_nurbserror( int msg )
 }
 
 int 
-NurbsTessellator::do_check_knots( Knotvector *knots, char *msg )
+NurbsTessellator::do_check_knots( Knotvector *knots, const char *msg )
 {
     int status = knots->validate();
     if( status ) {

@@ -173,6 +173,48 @@ struct brw_depthbuffer
       } bits;
       GLuint dword;
    } dword4;
+};
+
+struct brw_depthbuffer_g4x
+{
+   union header_union header;
+   
+   union {
+      struct {
+	 GLuint pitch:18; 
+	 GLuint format:3; 
+	 GLuint pad:2;
+	 GLuint software_tiled_rendering_mode:2;
+	 GLuint depth_offset_disable:1; 
+	 GLuint tile_walk:1; 
+	 GLuint tiled_surface:1; 
+	 GLuint pad2:1;
+	 GLuint surface_type:3; 
+      } bits;
+      GLuint dword;
+   } dword1;
+   
+   GLuint dword2_base_addr; 
+ 
+   union {
+      struct {
+	 GLuint pad:1;
+	 GLuint mipmap_layout:1; 
+	 GLuint lod:4; 
+	 GLuint width:13; 
+	 GLuint height:13; 
+      } bits;
+      GLuint dword;
+   } dword3;
+
+   union {
+      struct {
+	 GLuint pad:10;
+	 GLuint min_array_element:11; 
+	 GLuint depth:11; 
+      } bits;
+      GLuint dword;
+   } dword4;
 
    union {
       struct {
@@ -267,39 +309,39 @@ struct brw_pipelined_state_pointers
    
    struct {
       GLuint pad:5;
-      GLuint offset:27; 
+      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
    } vs;
    
    struct
    {
       GLuint enable:1;
       GLuint pad:4;
-      GLuint offset:27; 
+      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
    } gs;
    
    struct
    {
       GLuint enable:1;
       GLuint pad:4;
-      GLuint offset:27; 
+      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
    } clp;
    
    struct
    {
       GLuint pad:5;
-      GLuint offset:27; 
+      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
    } sf;
 
    struct
    {
       GLuint pad:5;
-      GLuint offset:27; 
+      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
    } wm;
    
    struct
    {
       GLuint pad:5;
-      GLuint offset:27; /* KW: check me! */
+      GLuint offset:27; /* Offset from GENERAL_STATE_BASE. KW: check me! */
    } cc;
 };
 
@@ -502,7 +544,7 @@ struct thread0
    GLuint pad0:1;
    GLuint grf_reg_count:3; 
    GLuint pad1:2;
-   GLuint kernel_start_pointer:26; 
+   GLuint kernel_start_pointer:26; /* Offset from GENERAL_STATE_BASE */
 };
 
 struct thread1
@@ -666,7 +708,7 @@ struct brw_cc_unit_state
    struct
    {
       GLuint pad0:5; 
-      GLuint cc_viewport_state_offset:27; 
+      GLuint cc_viewport_state_offset:27; /* Offset from GENERAL_STATE_BASE */
    } cc4;
    
    struct
@@ -728,7 +770,7 @@ struct brw_sf_unit_state
       GLuint front_winding:1; 
       GLuint viewport_transform:1; 
       GLuint pad0:3;
-      GLuint sf_viewport_state_offset:27; 
+      GLuint sf_viewport_state_offset:27; /* Offset from GENERAL_STATE_BASE */
    } sf5;
    
    struct
@@ -960,6 +1002,7 @@ struct brw_sf_viewport
       GLfloat m32;  
    } viewport;
 
+   /* scissor coordinates are inclusive */
    struct {
       GLshort xmin;
       GLshort ymin;
@@ -1362,7 +1405,7 @@ struct brw_instruction
          GLuint msg_target:4;
          GLuint pad1:3;
          GLuint end_of_thread:1;
-      } sampler_gm45_g4x; 
+      } sampler_g4x;
 
       struct brw_urb_immediate urb;
 

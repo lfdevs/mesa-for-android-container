@@ -28,7 +28,7 @@
 #ifndef BRW_DRAW_H
 #define BRW_DRAW_H
 
-#include "mtypes.h"		/* for GLcontext... */
+#include "main/mtypes.h"		/* for GLcontext... */
 #include "vbo/vbo.h"
 
 struct brw_context;
@@ -49,17 +49,5 @@ void brw_draw_destroy( struct brw_context *brw );
  */
 void brw_init_current_values(GLcontext *ctx,
 			     struct gl_client_array *arrays);
-
-
-/* brw_draw_upload.c
- */
-void brw_upload_indices( struct brw_context *brw,
-			 const struct _mesa_index_buffer *index_buffer);
-
-GLboolean brw_upload_vertices( struct brw_context *brw,
-			       GLuint min_index,
-			       GLuint max_index );
-
-
 
 #endif

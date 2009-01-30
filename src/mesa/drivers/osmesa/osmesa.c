@@ -33,14 +33,14 @@
  */
 
 
-#include "glheader.h"
+#include "main/glheader.h"
 #include "GL/osmesa.h"
-#include "context.h"
-#include "extensions.h"
-#include "framebuffer.h"
-#include "imports.h"
-#include "mtypes.h"
-#include "renderbuffer.h"
+#include "main/context.h"
+#include "main/extensions.h"
+#include "main/framebuffer.h"
+#include "main/imports.h"
+#include "main/mtypes.h"
+#include "main/renderbuffer.h"
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
 #include "swrast/s_context.h"
@@ -1226,6 +1226,8 @@ OSMesaCreateContextExt( GLenum format, GLint depthBits, GLint stencilBits,
       _mesa_enable_1_3_extensions(&(osmesa->mesa));
       _mesa_enable_1_4_extensions(&(osmesa->mesa));
       _mesa_enable_1_5_extensions(&(osmesa->mesa));
+      _mesa_enable_2_0_extensions(&(osmesa->mesa));
+      _mesa_enable_2_1_extensions(&(osmesa->mesa));
 
       osmesa->gl_buffer = _mesa_create_framebuffer(osmesa->gl_visual);
       if (!osmesa->gl_buffer) {

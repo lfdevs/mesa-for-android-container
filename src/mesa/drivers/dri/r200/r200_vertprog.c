@@ -30,10 +30,10 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Aapo Tahkola <aet@rasterburn.org>
  *   Roland Scheidegger <rscheidegger_lists@hispeed.ch>
  */
-#include "glheader.h"
-#include "macros.h"
-#include "enums.h"
-#include "program.h"
+#include "main/glheader.h"
+#include "main/macros.h"
+#include "main/enums.h"
+#include "shader/program.h"
 #include "shader/prog_instruction.h"
 #include "shader/prog_parameter.h"
 #include "shader/prog_statevars.h"
@@ -154,7 +154,7 @@ static GLboolean r200VertexProgUpdateParams(GLcontext *ctx, struct r200_vertex_p
    return GL_TRUE;
 }
 
-static __inline unsigned long t_dst_mask(GLuint mask)
+static INLINE unsigned long t_dst_mask(GLuint mask)
 {
    /* WRITEMASK_* is equivalent to VSF_FLAG_* */
    return mask & VSF_FLAG_ALL;
@@ -215,6 +215,7 @@ static unsigned long t_src_class(enum register_file file)
    case PROGRAM_LOCAL_PARAM:
    case PROGRAM_ENV_PARAM:
    case PROGRAM_NAMED_PARAM:
+   case PROGRAM_CONSTANT:
    case PROGRAM_STATE_VAR:
       return VSF_IN_CLASS_PARAM;
    /*
@@ -228,7 +229,7 @@ static unsigned long t_src_class(enum register_file file)
    }
 }
 
-static __inline unsigned long t_swizzle(GLubyte swizzle)
+static INLINE unsigned long t_swizzle(GLubyte swizzle)
 {
 /* this is in fact a NOP as the Mesa SWIZZLE_* are all identical to VSF_IN_COMPONENT_* */
    return swizzle;
@@ -408,6 +409,7 @@ static GLboolean r200_translate_vertex_program(GLcontext *ctx, struct r200_verte
    int fog_temp_i = 0;
    int free_inputs;
    int array_count = 0;
+   int u_temp_used;
 
    vp->native = GL_FALSE;
    vp->translated = GL_TRUE;
@@ -1061,14 +1063,15 @@ else {
          dofogfix = 0;
       }
 
+      u_temp_used = (R200_VSF_MAX_TEMPS - 1) - u_temp_i;
       if (mesa_vp->Base.NumNativeTemporaries <
-	 (mesa_vp->Base.NumTemporaries + (R200_VSF_MAX_TEMPS - 1 - u_temp_i))) {
+	 (mesa_vp->Base.NumTemporaries + u_temp_used)) {
 	 mesa_vp->Base.NumNativeTemporaries =
-	    mesa_vp->Base.NumTemporaries + (R200_VSF_MAX_TEMPS - 1 - u_temp_i);
+	    mesa_vp->Base.NumTemporaries + u_temp_used;
       }
-      if (u_temp_i < mesa_vp->Base.NumTemporaries) {
+      if ((mesa_vp->Base.NumTemporaries + u_temp_used) > R200_VSF_MAX_TEMPS) {
 	 if (R200_DEBUG & DEBUG_FALLBACKS) {
-	    fprintf(stderr, "Ran out of temps, num temps %d, us %d\n", mesa_vp->Base.NumTemporaries, u_temp_i);
+	    fprintf(stderr, "Ran out of temps, num temps %d, us %d\n", mesa_vp->Base.NumTemporaries, u_temp_used);
 	 }
 	 return GL_FALSE;
       }

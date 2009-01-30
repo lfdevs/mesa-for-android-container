@@ -24,7 +24,6 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 **************************************************************************/
-/* $XFree86: xc/lib/GL/mesa/src/drv/sis/sis_ctx.c,v 1.3 2000/09/26 15:56:48 tsi Exp $ */
 
 /*
  * Authors:
@@ -43,11 +42,11 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "sis_tris.h"
 #include "sis_alloc.h"
 
-#include "imports.h"
-#include "matrix.h"
-#include "extensions.h"
+#include "main/imports.h"
+#include "main/matrix.h"
+#include "main/extensions.h"
 #include "utils.h"
-#include "framebuffer.h"
+#include "main/framebuffer.h"
 
 #include "drivers/common/driverfuncs.h"
 

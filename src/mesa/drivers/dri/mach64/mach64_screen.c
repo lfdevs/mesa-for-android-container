@@ -1,4 +1,4 @@
-/* $XFree86$ */ /* -*- mode: c; c-basic-offset: 3 -*- */
+/* -*- mode: c; c-basic-offset: 3 -*- */
 /*
  * Copyright 2000 Gareth Hughes
  * All Rights Reserved.
@@ -35,10 +35,10 @@
 #include "mach64_vb.h"
 #include "mach64_span.h"
 
-#include "context.h"
-#include "imports.h"
-#include "framebuffer.h"
-#include "renderbuffer.h"
+#include "main/context.h"
+#include "main/imports.h"
+#include "main/framebuffer.h"
+#include "main/renderbuffer.h"
 
 #include "utils.h"
 #include "vblank.h"
@@ -69,79 +69,15 @@ static const GLuint __driNConfigOptions = 2;
 
 extern const struct dri_extension card_extensions[];
 
-static __GLcontextModes * fill_in_modes( __GLcontextModes * modes,
-					 unsigned pixel_bits, 
-					 unsigned depth_bits,
-					 unsigned stencil_bits,
-					 const GLenum * db_modes,
-					 unsigned num_db_modes,
-					 int visType )
+static const __DRIconfig **
+mach64FillInModes( __DRIscreenPrivate *psp,
+		   unsigned pixel_bits, unsigned depth_bits,
+		   unsigned stencil_bits, GLboolean have_back_buffer )
 {
-       static const u_int8_t bits[2][4] = {
-	{          5,          6,          5,          0 },
-	{          8,          8,          8,          0 }
-    };
-
-    static const u_int32_t masks[2][4] = {
-	{ 0x0000F800, 0x000007E0, 0x0000001F, 0x00000000 },
-	{ 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00000000 }
-    };
-
-    unsigned   i;
-    unsigned   j;
-    const unsigned index = ((pixel_bits + 15) / 16) - 1;
-
-    for ( i = 0 ; i < num_db_modes ; i++ ) {
-	for ( j = 0 ; j < 2 ; j++ ) {
-
-	    modes->redBits   = bits[index][0];
-	    modes->greenBits = bits[index][1];
-	    modes->blueBits  = bits[index][2];
-	    modes->alphaBits = bits[index][3];
-	    modes->redMask   = masks[index][0];
-	    modes->greenMask = masks[index][1];
-	    modes->blueMask  = masks[index][2];
-	    modes->alphaMask = masks[index][3];
-	    modes->rgbBits   = modes->redBits + modes->greenBits
-		+ modes->blueBits + modes->alphaBits;
-
-	    modes->accumRedBits   = 16 * j;
-	    modes->accumGreenBits = 16 * j;
-	    modes->accumBlueBits  = 16 * j;
-	    modes->accumAlphaBits = 0;
-	    modes->visualRating = (j == 0) ? GLX_NONE : GLX_SLOW_CONFIG;
-	    modes->drawableType = GLX_WINDOW_BIT | GLX_PIXMAP_BIT;
-	    modes->stencilBits = stencil_bits;
-	    modes->depthBits = depth_bits;
-
-	    modes->visualType = visType;
-	    modes->renderType = GLX_RGBA_BIT;
-	    modes->rgbMode = GL_TRUE;
-
-	    if ( db_modes[i] == GLX_NONE ) {
-
-		modes->doubleBufferMode = GL_FALSE;
-	    }
-	    else {
-		modes->doubleBufferMode = GL_TRUE;
-		modes->swapMethod = db_modes[i];
-	    }
-
-	    modes = modes->next;
-	}
-    }
-    
-    return modes;
-}
-
-
-static __GLcontextModes *
-mach64FillInModes( unsigned pixel_bits, unsigned depth_bits,
-		 unsigned stencil_bits, GLboolean have_back_buffer )
-{
-   __GLcontextModes * modes;
+    __DRIconfig **configs;
     __GLcontextModes * m;
-    unsigned num_modes;
+    GLenum fb_format;
+    GLenum fb_type;
     unsigned depth_buffer_factor;
     unsigned back_buffer_factor;
     unsigned i;
@@ -155,49 +91,51 @@ mach64FillInModes( unsigned pixel_bits, unsigned depth_bits,
 	GLX_NONE, GLX_SWAP_UNDEFINED_OML /*, GLX_SWAP_COPY_OML */
     };
 
-    int depth_buffer_modes[2][2];
+    uint8_t depth_bits_array[2];
+    uint8_t stencil_bits_array[2];
 
-
-    depth_buffer_modes[0][0] = depth_bits;
-    depth_buffer_modes[1][0] = depth_bits;
+    depth_bits_array[0] = depth_bits;
+    depth_bits_array[1] = depth_bits;
     
     /* Just like with the accumulation buffer, always provide some modes
      * with a stencil buffer.  It will be a sw fallback, but some apps won't
      * care about that.
      */
-    depth_buffer_modes[0][1] = 0;
-    depth_buffer_modes[1][1] = (stencil_bits == 0) ? 8 : stencil_bits;
+    stencil_bits_array[0] = 0;
+    stencil_bits_array[1] = (stencil_bits == 0) ? 8 : stencil_bits;
 
     depth_buffer_factor = ((depth_bits != 0) || (stencil_bits != 0)) ? 2 : 1;
     back_buffer_factor  = (have_back_buffer) ? 2 : 1;
 
-    num_modes = depth_buffer_factor * back_buffer_factor * 4;
-
-    modes = (*dri_interface->createContextModes)( num_modes, sizeof( __GLcontextModes ) );
-    m = modes;
-    for ( i = 0 ; i < depth_buffer_factor ; i++ ) {
-	m = fill_in_modes( m, pixel_bits, 
-			   depth_buffer_modes[i][0], depth_buffer_modes[i][1],
-			   back_buffer_modes, back_buffer_factor,
-			   GLX_TRUE_COLOR );
+    if (pixel_bits == 16) {
+       fb_format = GL_RGB;
+       fb_type = GL_UNSIGNED_SHORT_5_6_5;
+    }
+    else {
+       fb_format = GL_BGRA;
+       fb_type = GL_UNSIGNED_INT_8_8_8_8_REV;
     }
 
-    for ( i = 0 ; i < depth_buffer_factor ; i++ ) {
-	m = fill_in_modes( m, pixel_bits, 
-			   depth_buffer_modes[i][0], depth_buffer_modes[i][1],
-			   back_buffer_modes, back_buffer_factor,
-			   GLX_DIRECT_COLOR );
+    configs = driCreateConfigs(fb_format, fb_type,
+			       depth_bits_array, stencil_bits_array,
+			       depth_buffer_factor, back_buffer_modes,
+			       back_buffer_factor);
+    if (configs == NULL) {
+       fprintf(stderr, "[%s:%u] Error creating FBConfig!\n",
+	       __func__, __LINE__);
+       return NULL;
     }
 
     /* Mark the visual as slow if there are "fake" stencil bits.
      */
-    for ( m = modes ; m != NULL ; m = m->next ) {
-       if ( (m->stencilBits != 0) && (m->stencilBits != stencil_bits) ){
-	    m->visualRating = GLX_SLOW_CONFIG;
-	}
+    for (i = 0; configs[i]; i++) {
+       m = &configs[i]->modes;
+       if ((m->stencilBits != 0) && (m->stencilBits != stencil_bits)) {
+	  m->visualRating = GLX_SLOW_CONFIG;
+       }
     }
 
-    return modes;
+    return (const __DRIconfig **) configs;
 }
 
 
@@ -208,9 +146,7 @@ mach64CreateScreen( __DRIscreenPrivate *sPriv )
 {
    mach64ScreenPtr mach64Screen;
    ATIDRIPtr serverInfo = (ATIDRIPtr)sPriv->pDevPriv;
-   PFNGLXSCRENABLEEXTENSIONPROC glx_enable_extension =
-     (PFNGLXSCRENABLEEXTENSIONPROC) (*dri_interface->getProcAddress("glxEnableExtension"));
-   void * const psc = sPriv->psc->screenConfigs;
+   int i;
 
    if (sPriv->devPrivSize != sizeof(ATIDRIRec)) {
       fprintf(stderr,"\nERROR!  sizeof(ATIDRIRec) does not match passed size from device driver\n");
@@ -319,15 +255,14 @@ mach64CreateScreen( __DRIscreenPrivate *sPriv )
 
    mach64Screen->driScreen = sPriv;
 
-   if ( glx_enable_extension != NULL ) {
-      if ( mach64Screen->irq != 0 ) {
-	 (*glx_enable_extension)( psc, "GLX_SGI_swap_control" );
-	 (*glx_enable_extension)( psc, "GLX_SGI_video_sync" );
-	 (*glx_enable_extension)( psc, "GLX_MESA_swap_control" );
-      }
-
-      (*glx_enable_extension)( psc, "GLX_MESA_swap_frame_usage" );
+   i = 0;
+   mach64Screen->extensions[i++] = &driFrameTrackingExtension.base;
+   if ( mach64Screen->irq != 0 ) {
+      mach64Screen->extensions[i++] = &driSwapControlExtension.base;
+      mach64Screen->extensions[i++] = &driMediaStreamCounterExtension.base;
    }
+   mach64Screen->extensions[i++] = NULL;
+   sPriv->extensions = mach64Screen->extensions;
 
    return mach64Screen;
 }
@@ -475,9 +410,48 @@ mach64InitDriver( __DRIscreenPrivate *driScreen )
    return GL_TRUE;
 }
 
+/**
+ * This is the driver specific part of the createNewScreen entry point.
+ * 
+ * \todo maybe fold this into intelInitDriver
+ *
+ * \return the __GLcontextModes supported by this driver
+ */
+static const __DRIconfig **
+mach64InitScreen(__DRIscreenPrivate *psp)
+{
+   static const __DRIversion ddx_expected = { 6, 4, 0 };
+   static const __DRIversion dri_expected = { 4, 0, 0 };
+   static const __DRIversion drm_expected = { 2, 0, 0 };
+   ATIDRIPtr dri_priv = (ATIDRIPtr) psp->pDevPriv;
 
-static struct __DriverAPIRec mach64API = {
-   .InitDriver      = mach64InitDriver,
+   if ( ! driCheckDriDdxDrmVersions2( "Mach64",
+				      &psp->dri_version, & dri_expected,
+				      &psp->ddx_version, & ddx_expected,
+				      &psp->drm_version, & drm_expected ) ) {
+      return NULL;
+   }
+   
+   /* Calling driInitExtensions here, with a NULL context pointer,
+    * does not actually enable the extensions.  It just makes sure
+    * that all the dispatch offsets for all the extensions that
+    * *might* be enables are known.  This is needed because the
+    * dispatch offsets need to be known when _mesa_context_create is
+    * called, but we can't enable the extensions until we have a
+    * context pointer.
+    *
+    * Hello chicken.  Hello egg.  How are you two today?
+    */
+   driInitExtensions( NULL, card_extensions, GL_FALSE );
+
+   if (!mach64InitDriver(psp))
+      return NULL;
+
+   return  mach64FillInModes( psp, dri_priv->cpp * 8, 16, 0, 1);
+}
+
+const struct __DriverAPIRec driDriverAPI = {
+   .InitScreen      = mach64InitScreen,
    .DestroyScreen   = mach64DestroyScreen,
    .CreateContext   = mach64CreateContext,
    .DestroyContext  = mach64DestroyContext,
@@ -487,71 +461,9 @@ static struct __DriverAPIRec mach64API = {
    .MakeCurrent     = mach64MakeCurrent,
    .UnbindContext   = mach64UnbindContext,
    .GetSwapInfo     = NULL,
-   .GetMSC          = driGetMSC32,
+   .GetDrawableMSC  = driDrawableGetMSC32,
    .WaitForMSC      = driWaitForMSC32,
    .WaitForSBC      = NULL,
    .SwapBuffersMSC  = NULL
 };
 
-
-/**
- * This is the bootstrap function for the driver.  libGL supplies all of the
- * requisite information about the system, and the driver initializes itself.
- * This routine also fills in the linked list pointed to by \c driver_modes
- * with the \c __GLcontextModes that the driver can support for windows or
- * pbuffers.
- * 
- * \return A pointer to a \c __DRIscreenPrivate on success, or \c NULL on 
- *         failure.
- */
-PUBLIC
-void * __driCreateNewScreen_20050727( __DRInativeDisplay *dpy, int scrn, __DRIscreen *psc,
-			     const __GLcontextModes * modes,
-			     const __DRIversion * ddx_version,
-			     const __DRIversion * dri_version,
-			     const __DRIversion * drm_version,
-			     const __DRIframebuffer * frame_buffer,
-			     drmAddress pSAREA, int fd, 
-			     int internal_api_version,
-			     const __DRIinterfaceMethods * interface,
-			     __GLcontextModes ** driver_modes )
-			     
-{
-   __DRIscreenPrivate *psp;
-   static const __DRIversion ddx_expected = { 6, 4, 0 };
-   static const __DRIversion dri_expected = { 4, 0, 0 };
-   static const __DRIversion drm_expected = { 2, 0, 0 };
-
-   dri_interface = interface;
-
-   if ( ! driCheckDriDdxDrmVersions2( "Mach64",
-				      dri_version, & dri_expected,
-				      ddx_version, & ddx_expected,
-				      drm_version, & drm_expected ) ) {
-      return NULL;
-   }
-
-   psp = __driUtilCreateNewScreen(dpy, scrn, psc, NULL,
-				  ddx_version, dri_version, drm_version,
-				  frame_buffer, pSAREA, fd,
-				  internal_api_version, &mach64API);
-   if ( psp != NULL ) {
-      ATIDRIPtr dri_priv = (ATIDRIPtr) psp->pDevPriv;
-      *driver_modes = mach64FillInModes( dri_priv->cpp * 8,
-					 16,
-					 0,
-					 1);
-
-      /* Calling driInitExtensions here, with a NULL context pointer, does not actually
-       * enable the extensions.  It just makes sure that all the dispatch offsets for all
-       * the extensions that *might* be enables are known.  This is needed because the
-       * dispatch offsets need to be known when _mesa_context_create is called, but we can't
-       * enable the extensions until we have a context pointer.
-       *
-       * Hello chicken.  Hello egg.  How are you two today?
-       */
-      driInitExtensions( NULL, card_extensions, GL_FALSE );
-   }
-
-   return (void *) psp;
-}

@@ -1,4 +1,4 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/ffb/ffb_bitmap.c,v 1.1 2002/02/22 21:32:58 dawes Exp $
+/* 
  *
  * GLX Hardware Device Driver for Sun Creator/Creator3D
  * Copyright (C) 2001 David S. Miller
@@ -30,8 +30,8 @@
 #include "ffb_lock.h"
 #include "ffb_bitmap.h"
 #include "swrast/swrast.h"
-#include "image.h"
-#include "macros.h"
+#include "main/image.h"
+#include "main/macros.h"
 
 /* Compute ceiling of integer quotient of A divided by B: */
 #define CEILING( A, B )  ( (A) % (B) == 0 ? (A)/(B) : (A)/(B)+1 )

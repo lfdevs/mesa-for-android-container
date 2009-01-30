@@ -28,10 +28,10 @@
 #define _TRIDENT_CONTEXT_H_
 
 #include "dri_util.h"
-#include "macros.h"
-#include "mtypes.h"
+#include "main/macros.h"
+#include "main/mtypes.h"
 #include "drm.h"
-#include "mm.h"
+#include "main/mm.h"
 
 #define SUBPIXEL_X (0.0F)
 #define SUBPIXEL_Y (0.125F)
@@ -54,14 +54,14 @@
 #undef TAG
 
 /* these require that base be dword-aligned */
-static inline void MMIO_OUT32(unsigned char *base, unsigned int offset,
+static INLINE void MMIO_OUT32(unsigned char *base, unsigned int offset,
                               unsigned int val)
 {
     unsigned int *addr = (unsigned int *)(base + offset);
     *addr = val;
 }
 
-static inline unsigned int MMIO_IN32(unsigned char *base, unsigned int offset)
+static INLINE unsigned int MMIO_IN32(unsigned char *base, unsigned int offset)
 {
     unsigned int *addr = (unsigned int *)(base + offset);
     return *addr;

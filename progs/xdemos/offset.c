@@ -70,12 +70,12 @@ typedef Vertex Quad[4];
 
 /* data to define the six faces of a unit cube */
 Quad quads[MAXQUAD] = {
-   { {0,0,0}, {1,0,0}, {1,1,0}, {0,1,0} },
-   { {0,0,1}, {1,0,1}, {1,1,1}, {0,1,1} },
-   { {0,0,0}, {1,0,0}, {1,0,1}, {0,0,1} },
-   { {0,1,0}, {1,1,0}, {1,1,1}, {0,1,1} },
-   { {0,0,0}, {0,0,1}, {0,1,1}, {0,1,0} },
-   { {1,0,0}, {1,0,1}, {1,1,1}, {1,1,0} }
+   { {0,0,0}, {0,0,1}, {0,1,1}, {0,1,0} }, /* x = 0 */
+   { {0,0,0}, {1,0,0}, {1,0,1}, {0,0,1} }, /* y = 0 */
+   { {0,0,0}, {1,0,0}, {1,1,0}, {0,1,0} }, /* z = 0 */
+   { {1,0,0}, {1,0,1}, {1,1,1}, {1,1,0} }, /* x = 1 */
+   { {0,1,0}, {1,1,0}, {1,1,1}, {0,1,1} }, /* y = 1 */
+   { {0,0,1}, {1,0,1}, {1,1,1}, {0,1,1} }  /* z = 1 */
 };
 
 #define WIREFRAME	0
@@ -85,7 +85,7 @@ static void error(const char* prog, const char* msg);
 static void cubes(int mx, int my, int mode);
 static void fill(Quad quad);
 static void outline(Quad quad);
-static void draw_hidden(Quad quad, int mode);
+static void draw_hidden(Quad quad, int mode, int face);
 static void process_input(Display *dpy, Window win);
 static int query_extension(char* extName);
 
@@ -100,6 +100,7 @@ int main(int argc, char** argv) {
     XSetWindowAttributes swa;
     Window win;
     GLXContext cx;
+    GLint z;
 
     dpy = XOpenDisplay(0);
     if (!dpy) error(argv[0], "can't open display");
@@ -140,6 +141,9 @@ int main(int argc, char** argv) {
     /* set other relevant state information */
     glEnable(GL_DEPTH_TEST);
 
+    glGetIntegerv(GL_DEPTH_BITS, &z);
+    printf("GL_DEPTH_BITS = %d\n", z);
+
 #ifdef GL_EXT_polygon_offset
     printf("using 1.0 offset extension\n");
     glPolygonOffsetEXT( 1.0, 0.00001 );
@@ -159,6 +163,7 @@ int main(int argc, char** argv) {
 
 static void
 draw_scene(int mx, int my) {
+   glClearColor(0.25, 0.25, 0.25, 0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glPushMatrix();
@@ -205,7 +210,7 @@ cubes(int mx, int my, int mode) {
 		glTranslatef(x, y, z);
 		glScalef(0.8, 0.8, 0.8);
 		for (i = 0; i < MAXQUAD; i++)
-		    draw_hidden(quads[i], mode);
+                    draw_hidden(quads[i], mode, i);
 		glPopMatrix();
 	    }
 	}
@@ -235,13 +240,18 @@ outline(Quad quad) {
 }
 
 static void
-draw_hidden(Quad quad, int mode) {
+draw_hidden(Quad quad, int mode, int face) {
+    static const GLfloat colors[3][3] = {
+        {0.5, 0.5, 0.0},
+        {0.8, 0.5, 0.0},
+        {0.0, 0.5, 0.8}
+    };
     if (mode == HIDDEN_LINE) {
-	glColor3f(0, 0, 0);
+        glColor3fv(colors[face % 3]);
 	fill(quad);
     }
 
-    /* draw the outline using white, optionally fill the interior with black */
+    /* draw the outline using white */
     glColor3f(1, 1, 1);
     outline(quad);
 }

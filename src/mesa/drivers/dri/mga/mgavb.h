@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/mga/mgavb.h,v 1.8 2002/10/30 12:51:36 alanh Exp $ */
 /*
  * Copyright 2000-2001 VA Linux Systems, Inc.
  * All Rights Reserved.
@@ -29,7 +28,7 @@
 #ifndef MGAVB_INC
 #define MGAVB_INC
 
-#include "mtypes.h"
+#include "main/mtypes.h"
 #include "mgacontext.h"
 #include "swrast/swrast.h"
 

@@ -62,6 +62,9 @@ typedef struct __GlutWindow_s {
      IDirectFBSurface      *surface;
      IDirectFBGL           *gl;
 
+     /* display mode */
+     GLenum                 mode;
+
      /* cursor position in fullscreen mode */
      int                    cx;
      int                    cy;
@@ -124,6 +127,7 @@ extern void          __glutDestroyWindow( __GlutWindow *window );
 extern void          __glutDestroyWindows( void );
 /* callback.c */
 extern void          __glutHandleTimers( void );
+extern GLboolean     __glutGetTimeout( int *ret_msec );
 extern void          __glutFreeTimers( void );
 
 

@@ -30,14 +30,14 @@
  * \author Others at S3 Graphics?
  */
 
-#include "glheader.h"
-#include "context.h"
-#include "matrix.h"
-#include "state.h"
-#include "simple_list.h"
-#include "extensions.h"
-#include "framebuffer.h"
-#include "renderbuffer.h"
+#include "main/glheader.h"
+#include "main/context.h"
+#include "main/matrix.h"
+#include "main/state.h"
+#include "main/simple_list.h"
+#include "main/extensions.h"
+#include "main/framebuffer.h"
+#include "main/renderbuffer.h"
 
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
@@ -59,7 +59,7 @@
 #include "via_fb.h"
 
 #include <stdio.h>
-#include "macros.h"
+#include "main/macros.h"
 #include "drirenderbuffer.h"
 
 #define need_GL_ARB_multisample
@@ -123,7 +123,7 @@ static const GLubyte *viaGetString(GLcontext *ctx, GLenum name)
  * 
  * \returns A pixel width that meets the alignment requirements.
  */
-static __inline__ unsigned
+static INLINE unsigned
 buffer_align( unsigned width )
 {
     return (width + 0x0f) & ~0x0f;
@@ -601,9 +601,6 @@ viaCreateContext(const __GLcontextModes *visual,
     _tnl_allow_pixel_fog(ctx, GL_FALSE);
     _tnl_allow_vertex_fog(ctx, GL_TRUE);
 
-/*     vmesa->display = dpy; */
-    vmesa->display = sPriv->display;
-    
     vmesa->hHWContext = driContextPriv->hHWContext;
     vmesa->driFd = sPriv->fd;
     vmesa->driHwLock = &sPriv->pSAREA->lock;
@@ -661,14 +658,10 @@ viaCreateContext(const __GLcontextModes *visual,
         driQueryOptionb(&vmesa->optionCache, "no_rast"))
        FALLBACK(vmesa, VIA_FALLBACK_USER_DISABLE, 1);
 
-    vmesa->vblank_flags =
-       vmesa->viaScreen->irqEnabled ?
-        driGetDefaultVBlankFlags(&vmesa->optionCache) : VBLANK_FLAG_NO_IRQ;
-
     if (getenv("VIA_PAGEFLIP"))
        vmesa->allowPageFlip = 1;
 
-    (*dri_interface->getUST)( &vmesa->swap_ust );
+    (*sPriv->systemTime->getUST)( &vmesa->swap_ust );
 
 
     vmesa->regMMIOBase = (GLuint *)((unsigned long)viaScreen->reg);
@@ -686,10 +679,24 @@ void
 viaDestroyContext(__DRIcontextPrivate *driContextPriv)
 {
     GET_CURRENT_CONTEXT(ctx);
-    struct via_context *vmesa = 
+    struct via_context *vmesa =
        (struct via_context *)driContextPriv->driverPrivate;
     struct via_context *current = ctx ? VIA_CONTEXT(ctx) : NULL;
+
     assert(vmesa); /* should never be null */
+
+    if (vmesa->driDrawable) {
+       viaWaitIdle(vmesa, GL_FALSE);
+
+       if (vmesa->doPageFlip) {
+	  LOCK_HARDWARE(vmesa);
+	  if (vmesa->pfCurrentOffset != 0) {
+	     fprintf(stderr, "%s - reset pf\n", __FUNCTION__);
+	     viaResetPageFlippingLocked(vmesa);
+	  }
+	  UNLOCK_HARDWARE(vmesa);
+       }
+    }
 
     /* check if we're deleting the currently bound context */
     if (vmesa == current) {
@@ -697,35 +704,23 @@ viaDestroyContext(__DRIcontextPrivate *driContextPriv)
       _mesa_make_current(NULL, NULL, NULL);
     }
 
-    if (vmesa) {
-        viaWaitIdle(vmesa, GL_FALSE);
-	if (vmesa->doPageFlip) {
-	   LOCK_HARDWARE(vmesa);
-	   if (vmesa->pfCurrentOffset != 0) {
-	      fprintf(stderr, "%s - reset pf\n", __FUNCTION__);
-	      viaResetPageFlippingLocked(vmesa);
-	   }
-	   UNLOCK_HARDWARE(vmesa);
-	}
-	
-	_swsetup_DestroyContext(vmesa->glCtx);
-        _tnl_DestroyContext(vmesa->glCtx);
-        _vbo_DestroyContext(vmesa->glCtx);
-        _swrast_DestroyContext(vmesa->glCtx);
-        /* free the Mesa context */
-	_mesa_destroy_context(vmesa->glCtx);
-	/* release our data */
-	FreeBuffer(vmesa);
+    _swsetup_DestroyContext(vmesa->glCtx);
+    _tnl_DestroyContext(vmesa->glCtx);
+    _vbo_DestroyContext(vmesa->glCtx);
+    _swrast_DestroyContext(vmesa->glCtx);
+    /* free the Mesa context */
+    _mesa_destroy_context(vmesa->glCtx);
+    /* release our data */
+    FreeBuffer(vmesa);
 
-	assert (is_empty_list(&vmesa->tex_image_list[VIA_MEM_AGP]));
-	assert (is_empty_list(&vmesa->tex_image_list[VIA_MEM_VIDEO]));
-	assert (is_empty_list(&vmesa->tex_image_list[VIA_MEM_SYSTEM]));
-	assert (is_empty_list(&vmesa->freed_tex_buffers));
+    assert (is_empty_list(&vmesa->tex_image_list[VIA_MEM_AGP]));
+    assert (is_empty_list(&vmesa->tex_image_list[VIA_MEM_VIDEO]));
+    assert (is_empty_list(&vmesa->tex_image_list[VIA_MEM_SYSTEM]));
+    assert (is_empty_list(&vmesa->freed_tex_buffers));
 
-	driDestroyOptionCache(&vmesa->optionCache);
+    driDestroyOptionCache(&vmesa->optionCache);
 
-	FREE(vmesa);
-    }
+    FREE(vmesa);
 }
 
 
@@ -743,8 +738,8 @@ void viaXMesaWindowMoved(struct via_context *vmesa)
    draw_buffer =  (struct via_renderbuffer *) drawable->driverPrivate;
    read_buffer =  (struct via_renderbuffer *) readable->driverPrivate;
    
-   switch (vmesa->glCtx->DrawBuffer->_ColorDrawBufferMask[0]) {
-   case BUFFER_BIT_BACK_LEFT: 
+   switch (vmesa->glCtx->DrawBuffer->_ColorDrawBufferIndexes[0]) {
+   case BUFFER_BACK_LEFT: 
       if (drawable->numBackClipRects == 0) {
 	 vmesa->numClipRects = drawable->numClipRects;
 	 vmesa->pClipRects = drawable->pClipRects;
@@ -754,7 +749,7 @@ void viaXMesaWindowMoved(struct via_context *vmesa)
 	 vmesa->pClipRects = drawable->pBackClipRects;
       }
       break;
-   case BUFFER_BIT_FRONT_LEFT:
+   case BUFFER_FRONT_LEFT:
       vmesa->numClipRects = drawable->numClipRects;
       vmesa->pClipRects = drawable->pClipRects;
       break;
@@ -840,13 +835,17 @@ viaMakeCurrent(__DRIcontextPrivate *driContextPriv,
         drawBuffer = (GLframebuffer *)driDrawPriv->driverPrivate;
         readBuffer = (GLframebuffer *)driReadPriv->driverPrivate;
 
-	if (vmesa->driDrawable != driDrawPriv) {
-	   driDrawableInitVBlank(driDrawPriv, vmesa->vblank_flags,
-				 &vmesa->vbl_seq);
-	}
-
        if ((vmesa->driDrawable != driDrawPriv)
 	   || (vmesa->driReadable != driReadPriv)) {
+	  if (driDrawPriv->swap_interval == (unsigned)-1) {
+	     driDrawPriv->vblFlags =
+		vmesa->viaScreen->irqEnabled ?
+		driGetDefaultVBlankFlags(&vmesa->optionCache) :
+		VBLANK_FLAG_NO_IRQ;
+
+	     driDrawableInitVBlank(driDrawPriv);
+	  }
+
 	  vmesa->driDrawable = driDrawPriv;
 	  vmesa->driReadable = driReadPriv;
 

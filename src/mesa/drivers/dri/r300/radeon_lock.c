@@ -45,7 +45,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r300_context.h"
 #include "r300_state.h"
 
-#include "framebuffer.h"
+#include "main/framebuffer.h"
 
 #include "drirenderbuffer.h"
 
@@ -68,8 +68,8 @@ void radeonUpdatePageFlipping(radeonContextPtr rmesa)
 	}
 
 	use_back = rmesa->glCtx->DrawBuffer ?
-	    (rmesa->glCtx->DrawBuffer->_ColorDrawBufferMask[0] ==
-	     BUFFER_BIT_BACK_LEFT) : 1;
+	    (rmesa->glCtx->DrawBuffer->_ColorDrawBufferIndexes[0] ==
+	     BUFFER_BACK_LEFT) : 1;
 	use_back ^= (rmesa->sarea->pfCurrentPage == 1);
 
 	if (use_back) {

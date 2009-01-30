@@ -23,7 +23,6 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/tdfx/tdfx_tex.c,v 1.7 2002/11/05 17:46:10 tsi Exp $ */
 
 /*
  * New fixes:
@@ -39,14 +38,14 @@
  */
 
 
-#include "enums.h"
-#include "image.h"
-#include "mipmap.h"
-#include "texcompress.h"
-#include "texformat.h"
-#include "teximage.h"
-#include "texstore.h"
-#include "texobj.h"
+#include "main/enums.h"
+#include "main/image.h"
+#include "main/mipmap.h"
+#include "main/texcompress.h"
+#include "main/texformat.h"
+#include "main/teximage.h"
+#include "main/texstore.h"
+#include "main/texobj.h"
 #include "tdfx_context.h"
 #include "tdfx_tex.h"
 #include "tdfx_texman.h"
@@ -1822,7 +1821,7 @@ tdfxTestProxyTexImage(GLcontext *ctx, GLenum target,
             tdfxTexInfo *ti;
             int memNeeded;
 
-            tObj = ctx->Texture.Proxy2D;
+            tObj = ctx->Texture.ProxyTex[TEXTURE_2D_INDEX];
             if (!tObj->DriverData)
                 tObj->DriverData = fxAllocTexObjData(fxMesa);
             ti = TDFX_TEXTURE_DATA(tObj);

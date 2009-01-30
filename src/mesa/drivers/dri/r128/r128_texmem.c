@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r128/r128_texmem.c,v 1.1 2002/02/22 21:44:58 dawes Exp $ */
 /**************************************************************************
 
 Copyright 1999, 2000 ATI Technologies Inc. and Precision Insight, Inc.,
@@ -39,11 +38,11 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r128_tris.h"
 #include "r128_tex.h"
 
-#include "context.h"
-#include "macros.h"
-#include "simple_list.h"
-#include "texformat.h"
-#include "imports.h"
+#include "main/context.h"
+#include "main/macros.h"
+#include "main/simple_list.h"
+#include "main/texformat.h"
+#include "main/imports.h"
 
 #define TEX_0	1
 #define TEX_1	2
@@ -85,7 +84,7 @@ static void uploadSubImage( r128ContextPtr rmesa, r128TexObjPtr t,
    int imageWidth, imageHeight;
    int remaining, rows;
    int format, dwords;
-   u_int32_t pitch, offset;
+   uint32_t pitch, offset;
    int i;
 
    /* Ensure we have a valid texture to upload */
@@ -201,7 +200,7 @@ static void uploadSubImage( r128ContextPtr rmesa, r128TexObjPtr t,
 	 remaining > 0 ;
 	 remaining -= rows, y += rows, i++ )
    {
-      u_int32_t *dst;
+      uint32_t *dst;
       drmBufPtr buffer;
 
       assert(image->Data);
@@ -212,7 +211,7 @@ static void uploadSubImage( r128ContextPtr rmesa, r128TexObjPtr t,
       LOCK_HARDWARE( rmesa );
       buffer = r128GetBufferLocked( rmesa );
 
-      dst = (u_int32_t *)((char *)buffer->address + R128_HOSTDATA_BLIT_OFFSET);
+      dst = (uint32_t *)((char *)buffer->address + R128_HOSTDATA_BLIT_OFFSET);
 
       /* Copy the next chunck of the texture image into the blit buffer */
       {

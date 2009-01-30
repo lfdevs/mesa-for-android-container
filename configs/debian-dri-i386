@@ -1,9 +1,0 @@
-# Configuration for building the DRI drivers on i386.
-
-include $(TOP)/configs/linux-dri-x86
-include $(TOP)/configs/debian-dri-default
-
-CONFIG_NAME = debian-dri-i386
-
-# vim: ft=make
-

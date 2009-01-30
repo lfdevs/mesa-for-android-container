@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/radeon/radeon_ioctl.h,v 1.6 2002/12/16 16:18:58 dawes Exp $ */
 /**************************************************************************
 
 Copyright 2000, 2001 ATI Technologies Inc., Ontario, Canada, and
@@ -37,7 +36,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef __RADEON_IOCTL_H__
 #define __RADEON_IOCTL_H__
 
-#include "simple_list.h"
+#include "main/simple_list.h"
 #include "radeon_lock.h"
 
 
@@ -87,9 +86,9 @@ extern void radeonReleaseDmaRegion( radeonContextPtr rmesa,
 				    struct radeon_dma_region *region,
 				    const char *caller );
 
-extern void radeonCopyBuffer( const __DRIdrawablePrivate *drawable,
+extern void radeonCopyBuffer( __DRIdrawablePrivate *drawable,
 			      const drm_clip_rect_t	 *rect);
-extern void radeonPageFlip( const __DRIdrawablePrivate *drawable );
+extern void radeonPageFlip( __DRIdrawablePrivate *drawable );
 extern void radeonFlush( GLcontext *ctx );
 extern void radeonFinish( GLcontext *ctx );
 extern void radeonWaitForIdleLocked( radeonContextPtr rmesa );
@@ -124,7 +123,7 @@ do {								\
    memcpy( rmesa->hw.ATOM.lastcmd, rmesa->hw.ATOM.cmd,	\
 	   rmesa->hw.ATOM.cmd_size * 4)
 
-static __inline int RADEON_DB_STATECHANGE( 
+static INLINE int RADEON_DB_STATECHANGE( 
    radeonContextPtr rmesa,
    struct radeon_state_atom *atom )
 {
@@ -177,7 +176,7 @@ do {							\
  * and hang on to the lock until the critical section is finished and we flush
  * the buffer again and unlock.
  */
-static __inline void radeonEnsureCmdBufSpace( radeonContextPtr rmesa,
+static INLINE void radeonEnsureCmdBufSpace( radeonContextPtr rmesa,
 					      int bytes )
 {
    if (rmesa->store.cmd_used + bytes > RADEON_CMD_BUF_SZ)
@@ -187,7 +186,7 @@ static __inline void radeonEnsureCmdBufSpace( radeonContextPtr rmesa,
 
 /* Alloc space in the command buffer
  */
-static __inline char *radeonAllocCmdBuf( radeonContextPtr rmesa,
+static INLINE char *radeonAllocCmdBuf( radeonContextPtr rmesa,
 					 int bytes, const char *where )
 {
    if (rmesa->store.cmd_used + bytes > RADEON_CMD_BUF_SZ)

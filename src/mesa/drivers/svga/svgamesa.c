@@ -1,4 +1,3 @@
-/* $Id: svgamesa.c,v 1.27 2006/10/15 18:51:22 brianp Exp $ */
 
 /*
  * Mesa 3-D graphics library
@@ -39,12 +38,12 @@
 #include <string.h>
 #include <vga.h>
 #include "GL/svgamesa.h"
-#include "buffers.h"
-#include "context.h"
-#include "extensions.h"
-#include "imports.h"
-#include "matrix.h"
-#include "mtypes.h"
+#include "main/buffers.h"
+#include "main/context.h"
+#include "main/extensions.h"
+#include "main/imports.h"
+#include "main/matrix.h"
+#include "main/mtypes.h"
 #include "swrast/swrast.h"
 #include "svgapix.h"
 #include "svgamesa8.h"

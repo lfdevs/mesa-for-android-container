@@ -1,18 +1,17 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/i810/i810ioctl.c,v 1.7 2002/10/30 12:51:33 alanh Exp $ */
 
 #include <unistd.h> /* for usleep() */
 
-#include "glheader.h"
-#include "mtypes.h"
-#include "macros.h"
-#include "dd.h"
+#include "main/glheader.h"
+#include "main/mtypes.h"
+#include "main/macros.h"
+#include "main/dd.h"
 #include "swrast/swrast.h"
-#include "mm.h"
+#include "main/mm.h"
 
 #include "i810screen.h"
 #include "i810_dri.h"
 
-#include "i810context.h"
+#include "main/context.h"
 #include "i810ioctl.h"
 #include "i810state.h"
 

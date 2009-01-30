@@ -64,7 +64,9 @@ static void brw_set_dest( struct brw_instruction *insn,
 
       if (insn->header.access_mode == BRW_ALIGN_1) {
 	 insn->bits1.da1.dest_subreg_nr = dest.subnr;
-	 insn->bits1.da1.dest_horiz_stride = BRW_HORIZONTAL_STRIDE_1;
+	 if (dest.hstride == BRW_HORIZONTAL_STRIDE_0)
+	    dest.hstride = BRW_HORIZONTAL_STRIDE_1;
+	 insn->bits1.da1.dest_horiz_stride = dest.hstride;
       }
       else {
 	 insn->bits1.da16.dest_subreg_nr = dest.subnr / 16;
@@ -78,7 +80,9 @@ static void brw_set_dest( struct brw_instruction *insn,
        */
       if (insn->header.access_mode == BRW_ALIGN_1) {
 	 insn->bits1.ia1.dest_indirect_offset = dest.dw1.bits.indirect_offset;
-	 insn->bits1.ia1.dest_horiz_stride = BRW_HORIZONTAL_STRIDE_1;
+	 if (dest.hstride == BRW_HORIZONTAL_STRIDE_0)
+	    dest.hstride = BRW_HORIZONTAL_STRIDE_1;
+	 insn->bits1.ia1.dest_horiz_stride = dest.hstride;
       }
       else {
 	 insn->bits1.ia16.dest_indirect_offset = dest.dw1.bits.indirect_offset;
@@ -319,7 +323,7 @@ static void brw_set_dp_read_message( struct brw_instruction *insn,
 }
 
 static void brw_set_sampler_message(struct brw_context *brw,
-				     struct brw_instruction *insn,
+                 struct brw_instruction *insn,
 				     GLuint binding_table_index,
 				     GLuint sampler,
 				     GLuint msg_type,
@@ -329,14 +333,14 @@ static void brw_set_sampler_message(struct brw_context *brw,
 {
    brw_set_src1(insn, brw_imm_d(0));
 
-   if (BRW_IS_GM45(brw) || BRW_IS_G4X(brw)) {
-      insn->bits3.sampler_gm45_g4x.binding_table_index = binding_table_index;
-      insn->bits3.sampler_gm45_g4x.sampler = sampler;
-      insn->bits3.sampler_gm45_g4x.msg_type = msg_type;
-      insn->bits3.sampler_gm45_g4x.response_length = response_length;
-      insn->bits3.sampler_gm45_g4x.msg_length = msg_length;
-      insn->bits3.sampler_gm45_g4x.end_of_thread = eot;
-      insn->bits3.sampler_gm45_g4x.msg_target = BRW_MESSAGE_TARGET_SAMPLER;
+   if (BRW_IS_G4X(brw)) {
+      insn->bits3.sampler_g4x.binding_table_index = binding_table_index;
+      insn->bits3.sampler_g4x.sampler = sampler;
+      insn->bits3.sampler_g4x.msg_type = msg_type;
+      insn->bits3.sampler_g4x.response_length = response_length;
+      insn->bits3.sampler_g4x.msg_length = msg_length;
+      insn->bits3.sampler_g4x.end_of_thread = eot;
+      insn->bits3.sampler_g4x.msg_target = BRW_MESSAGE_TARGET_SAMPLER;
    } else {
       insn->bits3.sampler.binding_table_index = binding_table_index;
       insn->bits3.sampler.sampler = sampler;
@@ -435,6 +439,7 @@ ALU2(ADD)
 ALU2(MUL)
 ALU1(FRC)
 ALU1(RNDD)
+ALU1(RNDZ)
 ALU2(MAC)
 ALU2(MACH)
 ALU1(LZD)
@@ -513,6 +518,8 @@ struct brw_instruction *brw_IF(struct brw_compile *p, GLuint execute_size)
    insn->header.compression_control = BRW_COMPRESSION_NONE;
    insn->header.predicate_control = BRW_PREDICATE_NORMAL;
    insn->header.mask_control = BRW_MASK_ENABLE;
+   if (!p->single_program_flow)
+       insn->header.thread_control = BRW_THREAD_SWITCH;
 
    p->current->header.predicate_control = BRW_PREDICATE_NONE;
 
@@ -538,6 +545,8 @@ struct brw_instruction *brw_ELSE(struct brw_compile *p,
    insn->header.compression_control = BRW_COMPRESSION_NONE;
    insn->header.execution_size = if_insn->header.execution_size;
    insn->header.mask_control = BRW_MASK_ENABLE;
+   if (!p->single_program_flow)
+       insn->header.thread_control = BRW_THREAD_SWITCH;
 
    /* Patch the if instruction to point at this instruction.
     */
@@ -579,6 +588,7 @@ void brw_ENDIF(struct brw_compile *p,
       insn->header.compression_control = BRW_COMPRESSION_NONE;
       insn->header.execution_size = patch_insn->header.execution_size;
       insn->header.mask_control = BRW_MASK_ENABLE;
+      insn->header.thread_control = BRW_THREAD_SWITCH;
 
       assert(patch_insn->bits3.if_else.jump_count == 0);
 
@@ -617,7 +627,7 @@ struct brw_instruction *brw_BREAK(struct brw_compile *p)
    brw_set_src1(insn, brw_imm_d(0x0));
    insn->header.compression_control = BRW_COMPRESSION_NONE;
    insn->header.execution_size = BRW_EXECUTE_8;
-   insn->header.mask_control = BRW_MASK_DISABLE;
+   /* insn->header.mask_control = BRW_MASK_DISABLE; */
    insn->bits3.if_else.pad0 = 0;
    return insn;
 }
@@ -631,7 +641,7 @@ struct brw_instruction *brw_CONT(struct brw_compile *p)
    brw_set_src1(insn, brw_imm_d(0x0));
    insn->header.compression_control = BRW_COMPRESSION_NONE;
    insn->header.execution_size = BRW_EXECUTE_8;
-   insn->header.mask_control = BRW_MASK_DISABLE;
+   /* insn->header.mask_control = BRW_MASK_DISABLE; */
    insn->bits3.if_else.pad0 = 0;
    return insn;
 }
@@ -655,7 +665,7 @@ struct brw_instruction *brw_DO(struct brw_compile *p, GLuint execute_size)
       insn->header.execution_size = execute_size;
       insn->header.predicate_control = BRW_PREDICATE_NONE;
       /* insn->header.mask_control = BRW_MASK_ENABLE; */
-      insn->header.mask_control = BRW_MASK_DISABLE;
+      /* insn->header.mask_control = BRW_MASK_DISABLE; */
 
       return insn;
    }
@@ -694,7 +704,7 @@ struct brw_instruction *brw_WHILE(struct brw_compile *p,
 
 /*    insn->header.mask_control = BRW_MASK_ENABLE; */
 
-   insn->header.mask_control = BRW_MASK_DISABLE;
+   /* insn->header.mask_control = BRW_MASK_DISABLE; */
    p->current->header.predicate_control = BRW_PREDICATE_NONE;   
    return insn;
 }

@@ -24,7 +24,6 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 **************************************************************************/
-/* $XFree86: xc/lib/GL/mesa/src/drv/sis/sis_span.c,v 1.5 2001/03/21 16:14:26 dawes Exp $ */
 
 /*
  * Authors:
@@ -85,6 +84,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /* 16 bit depthbuffer functions.
  */
+#define VALUE_TYPE GLushort
+
 #define WRITE_DEPTH( _x, _y, d )	\
    *(GLushort *)(buf + (_x)*2 + (_y)*srb->pitch) = d;
 
@@ -97,6 +98,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /* 32 bit depthbuffer functions.
  */
+#define VALUE_TYPE GLuint
+
 #define WRITE_DEPTH( _x, _y, d )	\
    *(GLuint *)(buf + (_x)*4 + (_y)*srb->pitch) = d;
 
@@ -109,6 +112,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /* 8/24 bit interleaved depth/stencil functions
  */
+#define VALUE_TYPE GLuint
+
 #define WRITE_DEPTH( _x, _y, d ) {				\
    GLuint tmp = *(GLuint *)(buf + (_x)*4 + (_y)*srb->pitch);	\
    tmp &= 0xff000000;						\

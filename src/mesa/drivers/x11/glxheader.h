@@ -30,10 +30,11 @@
 #include <GL/vms_x_fix.h>
 #endif
 
-#include "glheader.h"
+#include "main/glheader.h"
 
 #ifdef XFree86Server
 
+# include "xorg-server.h"
 # include "resource.h"
 # include "windowstr.h"
 

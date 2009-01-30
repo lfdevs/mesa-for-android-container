@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/radeon/radeon_state_init.c,v 1.3 2003/02/22 06:21:11 dawes Exp $ */
 /*
  * Copyright 2000, 2001 VA Linux Systems Inc., Fremont, California.
  *
@@ -28,9 +27,9 @@
  *    Keith Whitwell <keith@tungstengraphics.com>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "api_arrayelt.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/api_arrayelt.h"
 
 #include "swrast/swrast.h"
 #include "vbo/vbo.h"

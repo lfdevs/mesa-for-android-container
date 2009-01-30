@@ -32,18 +32,19 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * \author Keith Whitwell <keith@tungstengraphics.com>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "colormac.h"
-#include "context.h"
-#include "enums.h"
-#include "image.h"
-#include "simple_list.h"
-#include "texformat.h"
-#include "texstore.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/colormac.h"
+#include "main/context.h"
+#include "main/enums.h"
+#include "main/image.h"
+#include "main/simple_list.h"
+#include "main/texformat.h"
+#include "main/texstore.h"
+#include "main/teximage.h"
+#include "main/texobj.h"
+
 #include "texmem.h"
-#include "teximage.h"
-#include "texobj.h"
 
 #include "r300_context.h"
 #include "r300_state.h"
@@ -52,129 +53,59 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "xmlpool.h"
 
-/**
- * Set the texture wrap modes.
- *
- * \param t Texture object whose wrap modes are to be set
- * \param swrap Wrap mode for the \a s texture coordinate
- * \param twrap Wrap mode for the \a t texture coordinate
- */
 
-static void r300SetTexWrap(r300TexObjPtr t, GLenum swrap, GLenum twrap,
-			   GLenum rwrap)
+static unsigned int translate_wrap_mode(GLenum wrapmode)
 {
-	unsigned long hw_swrap = 0, hw_twrap = 0, hw_qwrap = 0;
-
-	t->filter &=
-	    ~(R300_TX_WRAP_S_MASK | R300_TX_WRAP_T_MASK | R300_TX_WRAP_Q_MASK);
-
-	switch (swrap) {
-	case GL_REPEAT:
-		hw_swrap |= R300_TX_REPEAT;
-		break;
-	case GL_CLAMP:
-		hw_swrap |= R300_TX_CLAMP;
-		break;
-	case GL_CLAMP_TO_EDGE:
-		hw_swrap |= R300_TX_CLAMP_TO_EDGE;
-		break;
-	case GL_CLAMP_TO_BORDER:
-		hw_swrap |= R300_TX_CLAMP_TO_BORDER;
-		break;
-	case GL_MIRRORED_REPEAT:
-		hw_swrap |= R300_TX_REPEAT | R300_TX_MIRRORED;
-		break;
-	case GL_MIRROR_CLAMP_EXT:
-		hw_swrap |= R300_TX_CLAMP | R300_TX_MIRRORED;
-		break;
-	case GL_MIRROR_CLAMP_TO_EDGE_EXT:
-		hw_swrap |= R300_TX_CLAMP_TO_EDGE | R300_TX_MIRRORED;
-		break;
-	case GL_MIRROR_CLAMP_TO_BORDER_EXT:
-		hw_swrap |= R300_TX_CLAMP_TO_BORDER | R300_TX_MIRRORED;
-		break;
+	switch(wrapmode) {
+	case GL_REPEAT: return R300_TX_REPEAT;
+	case GL_CLAMP: return R300_TX_CLAMP;
+	case GL_CLAMP_TO_EDGE: return R300_TX_CLAMP_TO_EDGE;
+	case GL_CLAMP_TO_BORDER: return R300_TX_CLAMP_TO_BORDER;
+	case GL_MIRRORED_REPEAT: return R300_TX_REPEAT | R300_TX_MIRRORED;
+	case GL_MIRROR_CLAMP_EXT: return R300_TX_CLAMP | R300_TX_MIRRORED;
+	case GL_MIRROR_CLAMP_TO_EDGE_EXT: return R300_TX_CLAMP_TO_EDGE | R300_TX_MIRRORED;
+	case GL_MIRROR_CLAMP_TO_BORDER_EXT: return R300_TX_CLAMP_TO_BORDER | R300_TX_MIRRORED;
 	default:
-		_mesa_problem(NULL, "bad S wrap mode in %s", __FUNCTION__);
+		_mesa_problem(NULL, "bad wrap mode in %s", __FUNCTION__);
+		return 0;
 	}
-
-	switch (twrap) {
-	case GL_REPEAT:
-		hw_twrap |= R300_TX_REPEAT;
-		break;
-	case GL_CLAMP:
-		hw_twrap |= R300_TX_CLAMP;
-		break;
-	case GL_CLAMP_TO_EDGE:
-		hw_twrap |= R300_TX_CLAMP_TO_EDGE;
-		break;
-	case GL_CLAMP_TO_BORDER:
-		hw_twrap |= R300_TX_CLAMP_TO_BORDER;
-		break;
-	case GL_MIRRORED_REPEAT:
-		hw_twrap |= R300_TX_REPEAT | R300_TX_MIRRORED;
-		break;
-	case GL_MIRROR_CLAMP_EXT:
-		hw_twrap |= R300_TX_CLAMP | R300_TX_MIRRORED;
-		break;
-	case GL_MIRROR_CLAMP_TO_EDGE_EXT:
-		hw_twrap |= R300_TX_CLAMP_TO_EDGE | R300_TX_MIRRORED;
-		break;
-	case GL_MIRROR_CLAMP_TO_BORDER_EXT:
-		hw_twrap |= R300_TX_CLAMP_TO_BORDER | R300_TX_MIRRORED;
-		break;
-	default:
-		_mesa_problem(NULL, "bad T wrap mode in %s", __FUNCTION__);
-	}
-
-	switch (rwrap) {
-	case GL_REPEAT:
-		hw_qwrap |= R300_TX_REPEAT;
-		break;
-	case GL_CLAMP:
-		hw_qwrap |= R300_TX_CLAMP;
-		break;
-	case GL_CLAMP_TO_EDGE:
-		hw_qwrap |= R300_TX_CLAMP_TO_EDGE;
-		break;
-	case GL_CLAMP_TO_BORDER:
-		hw_qwrap |= R300_TX_CLAMP_TO_BORDER;
-		break;
-	case GL_MIRRORED_REPEAT:
-		hw_qwrap |= R300_TX_REPEAT | R300_TX_MIRRORED;
-		break;
-	case GL_MIRROR_CLAMP_EXT:
-		hw_qwrap |= R300_TX_CLAMP | R300_TX_MIRRORED;
-		break;
-	case GL_MIRROR_CLAMP_TO_EDGE_EXT:
-		hw_qwrap |= R300_TX_CLAMP_TO_EDGE | R300_TX_MIRRORED;
-		break;
-	case GL_MIRROR_CLAMP_TO_BORDER_EXT:
-		hw_qwrap |= R300_TX_CLAMP_TO_BORDER | R300_TX_MIRRORED;
-		break;
-	default:
-		_mesa_problem(NULL, "bad R wrap mode in %s", __FUNCTION__);
-	}
-
-	t->filter |= hw_swrap << R300_TX_WRAP_S_SHIFT;
-	t->filter |= hw_twrap << R300_TX_WRAP_T_SHIFT;
-	t->filter |= hw_qwrap << R300_TX_WRAP_Q_SHIFT;
 }
 
-static void r300SetTexMaxAnisotropy(r300TexObjPtr t, GLfloat max)
+
+/**
+ * Update the cached hardware registers based on the current texture wrap modes.
+ *
+ * \param t Texture object whose wrap modes are to be set
+ */
+static void r300UpdateTexWrap(r300TexObjPtr t)
 {
+	struct gl_texture_object *tObj = t->base.tObj;
 
-	t->filter &= ~R300_TX_MAX_ANISO_MASK;
+	t->filter &=
+	    ~(R300_TX_WRAP_S_MASK | R300_TX_WRAP_T_MASK | R300_TX_WRAP_R_MASK);
 
-	if (max <= 1.0) {
-		t->filter |= R300_TX_MAX_ANISO_1_TO_1;
-	} else if (max <= 2.0) {
-		t->filter |= R300_TX_MAX_ANISO_2_TO_1;
-	} else if (max <= 4.0) {
-		t->filter |= R300_TX_MAX_ANISO_4_TO_1;
-	} else if (max <= 8.0) {
-		t->filter |= R300_TX_MAX_ANISO_8_TO_1;
+	t->filter |= translate_wrap_mode(tObj->WrapS) << R300_TX_WRAP_S_SHIFT;
+
+	if (tObj->Target != GL_TEXTURE_1D) {
+		t->filter |= translate_wrap_mode(tObj->WrapT) << R300_TX_WRAP_T_SHIFT;
+
+		if (tObj->Target == GL_TEXTURE_3D)
+			t->filter |= translate_wrap_mode(tObj->WrapR) << R300_TX_WRAP_R_SHIFT;
+	}
+}
+
+static GLuint aniso_filter(GLfloat anisotropy)
+{
+	if (anisotropy >= 16.0) {
+		return R300_TX_MAX_ANISO_16_TO_1;
+	} else if (anisotropy >= 8.0) {
+		return R300_TX_MAX_ANISO_8_TO_1;
+	} else if (anisotropy >= 4.0) {
+		return R300_TX_MAX_ANISO_4_TO_1;
+	} else if (anisotropy >= 2.0) {
+		return R300_TX_MAX_ANISO_2_TO_1;
 	} else {
-		t->filter |= R300_TX_MAX_ANISO_16_TO_1;
+		return R300_TX_MAX_ANISO_1_TO_1;
 	}
 }
 
@@ -184,54 +115,47 @@ static void r300SetTexMaxAnisotropy(r300TexObjPtr t, GLfloat max)
  * \param t Texture whose filter modes are to be set
  * \param minf Texture minification mode
  * \param magf Texture magnification mode
+ * \param anisotropy Maximum anisotropy level
  */
-
-static void r300SetTexFilter(r300TexObjPtr t, GLenum minf, GLenum magf)
+static void r300SetTexFilter(r300TexObjPtr t, GLenum minf, GLenum magf, GLfloat anisotropy)
 {
-	GLuint anisotropy = (t->filter & R300_TX_MAX_ANISO_MASK);
+	t->filter &= ~(R300_TX_MIN_FILTER_MASK | R300_TX_MIN_FILTER_MIP_MASK | R300_TX_MAG_FILTER_MASK | R300_TX_MAX_ANISO_MASK);
+	t->filter_1 &= ~R300_EDGE_ANISO_EDGE_ONLY;
 
-	t->filter &= ~(R300_TX_MIN_FILTER_MASK | R300_TX_MAG_FILTER_MASK);
+	/* Note that EXT_texture_filter_anisotropic is extremely vague about
+	 * how anisotropic filtering interacts with the "normal" filter modes.
+	 * When anisotropic filtering is enabled, we override min and mag
+	 * filter settings completely. This includes driconf's settings.
+	 */
+	if (anisotropy >= 2.0 && (minf != GL_NEAREST) && (magf != GL_NEAREST)) {
+		t->filter |= R300_TX_MAG_FILTER_ANISO
+			| R300_TX_MIN_FILTER_ANISO
+			| R300_TX_MIN_FILTER_MIP_LINEAR
+			| aniso_filter(anisotropy);
+		if (RADEON_DEBUG & DEBUG_TEXTURE)
+			fprintf(stderr, "Using maximum anisotropy of %f\n", anisotropy);
+		return;
+	}
 
-	if (anisotropy == R300_TX_MAX_ANISO_1_TO_1) {
-		switch (minf) {
-		case GL_NEAREST:
-			t->filter |= R300_TX_MIN_FILTER_NEAREST;
-			break;
-		case GL_LINEAR:
-			t->filter |= R300_TX_MIN_FILTER_LINEAR;
-			break;
-		case GL_NEAREST_MIPMAP_NEAREST:
-			t->filter |= R300_TX_MIN_FILTER_NEAREST_MIP_NEAREST;
-			break;
-		case GL_NEAREST_MIPMAP_LINEAR:
-			t->filter |= R300_TX_MIN_FILTER_NEAREST_MIP_LINEAR;
-			break;
-		case GL_LINEAR_MIPMAP_NEAREST:
-			t->filter |= R300_TX_MIN_FILTER_LINEAR_MIP_NEAREST;
-			break;
-		case GL_LINEAR_MIPMAP_LINEAR:
-			t->filter |= R300_TX_MIN_FILTER_LINEAR_MIP_LINEAR;
-			break;
-		}
-	} else {
-		switch (minf) {
-		case GL_NEAREST:
-			t->filter |= R300_TX_MIN_FILTER_ANISO_NEAREST;
-			break;
-		case GL_LINEAR:
-			t->filter |= R300_TX_MIN_FILTER_ANISO_LINEAR;
-			break;
-		case GL_NEAREST_MIPMAP_NEAREST:
-		case GL_LINEAR_MIPMAP_NEAREST:
-			t->filter |=
-			    R300_TX_MIN_FILTER_ANISO_NEAREST_MIP_NEAREST;
-			break;
-		case GL_NEAREST_MIPMAP_LINEAR:
-		case GL_LINEAR_MIPMAP_LINEAR:
-			t->filter |=
-			    R300_TX_MIN_FILTER_ANISO_NEAREST_MIP_LINEAR;
-			break;
-		}
+	switch (minf) {
+	case GL_NEAREST:
+		t->filter |= R300_TX_MIN_FILTER_NEAREST;
+		break;
+	case GL_LINEAR:
+		t->filter |= R300_TX_MIN_FILTER_LINEAR;
+		break;
+	case GL_NEAREST_MIPMAP_NEAREST:
+		t->filter |= R300_TX_MIN_FILTER_NEAREST|R300_TX_MIN_FILTER_MIP_NEAREST;
+		break;
+	case GL_NEAREST_MIPMAP_LINEAR:
+		t->filter |= R300_TX_MIN_FILTER_NEAREST|R300_TX_MIN_FILTER_MIP_LINEAR;
+		break;
+	case GL_LINEAR_MIPMAP_NEAREST:
+		t->filter |= R300_TX_MIN_FILTER_LINEAR|R300_TX_MIN_FILTER_MIP_NEAREST;
+		break;
+	case GL_LINEAR_MIPMAP_LINEAR:
+		t->filter |= R300_TX_MIN_FILTER_LINEAR|R300_TX_MIN_FILTER_MIP_LINEAR;
+		break;
 	}
 
 	/* Note we don't have 3D mipmaps so only use the mag filter setting
@@ -249,7 +173,7 @@ static void r300SetTexFilter(r300TexObjPtr t, GLenum minf, GLenum magf)
 
 static void r300SetTexBorderColor(r300TexObjPtr t, GLubyte c[4])
 {
-	t->pp_border_color = PACK_COLOR_8888(c[0], c[1], c[2], c[3]);
+	t->pp_border_color = PACK_COLOR_8888(c[3], c[0], c[1], c[2]);
 }
 
 /**
@@ -277,9 +201,8 @@ static r300TexObjPtr r300AllocTexObj(struct gl_texture_object *texObj)
 
 		make_empty_list(&t->base);
 
-		r300SetTexWrap(t, texObj->WrapS, texObj->WrapT, texObj->WrapR);
-		r300SetTexMaxAnisotropy(t, texObj->MaxAnisotropy);
-		r300SetTexFilter(t, texObj->MinFilter, texObj->MagFilter);
+		r300UpdateTexWrap(t);
+		r300SetTexFilter(t, texObj->MinFilter, texObj->MagFilter, texObj->MaxAnisotropy);
 		r300SetTexBorderColor(t, texObj->_BorderChan);
 	}
 
@@ -294,27 +217,20 @@ static const struct gl_texture_format *r300Choose8888TexFormat(GLenum srcFormat,
 	const GLubyte littleEndian = *((const GLubyte *)&ui);
 
 	if ((srcFormat == GL_RGBA && srcType == GL_UNSIGNED_INT_8_8_8_8) ||
-	    (srcFormat == GL_RGBA && srcType == GL_UNSIGNED_BYTE
-	     && !littleEndian) || (srcFormat == GL_ABGR_EXT
-				   && srcType == GL_UNSIGNED_INT_8_8_8_8_REV)
-	    || (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_BYTE
-		&& littleEndian)) {
+	    (srcFormat == GL_RGBA && srcType == GL_UNSIGNED_BYTE && !littleEndian) ||
+	    (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_INT_8_8_8_8_REV) ||
+	    (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_BYTE && littleEndian)) {
 		return &_mesa_texformat_rgba8888;
-	} else
-	    if ((srcFormat == GL_RGBA && srcType == GL_UNSIGNED_INT_8_8_8_8_REV)
-		|| (srcFormat == GL_RGBA && srcType == GL_UNSIGNED_BYTE
-		    && littleEndian) || (srcFormat == GL_ABGR_EXT
-					 && srcType == GL_UNSIGNED_INT_8_8_8_8)
-		|| (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_BYTE
-		    && !littleEndian)) {
+	} else if ((srcFormat == GL_RGBA && srcType == GL_UNSIGNED_INT_8_8_8_8_REV) ||
+		   (srcFormat == GL_RGBA && srcType == GL_UNSIGNED_BYTE && littleEndian) ||
+		   (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_INT_8_8_8_8) ||
+		   (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_BYTE && !littleEndian)) {
 		return &_mesa_texformat_rgba8888_rev;
-	} else if (srcFormat == GL_BGRA &&
-		   ((srcType == GL_UNSIGNED_BYTE && !littleEndian) ||
-		    srcType == GL_UNSIGNED_INT_8_8_8_8)) {
+	} else if (srcFormat == GL_BGRA && ((srcType == GL_UNSIGNED_BYTE && !littleEndian) ||
+					    srcType == GL_UNSIGNED_INT_8_8_8_8)) {
 		return &_mesa_texformat_argb8888_rev;
-	} else if (srcFormat == GL_BGRA &&
-		   ((srcType == GL_UNSIGNED_BYTE && littleEndian) ||
-		    srcType == GL_UNSIGNED_INT_8_8_8_8_REV)) {
+	} else if (srcFormat == GL_BGRA && ((srcType == GL_UNSIGNED_BYTE && littleEndian) ||
+					    srcType == GL_UNSIGNED_INT_8_8_8_8_REV)) {
 		return &_mesa_texformat_argb8888;
 	} else
 		return _dri_texformat_argb8888;
@@ -489,6 +405,25 @@ static const struct gl_texture_format *r300ChooseTextureFormat(GLcontext * ctx,
 	case GL_RGBA32F_ARB:
 		return &_mesa_texformat_rgba_float32;
 
+	case GL_DEPTH_COMPONENT:
+	case GL_DEPTH_COMPONENT16:
+	case GL_DEPTH_COMPONENT24:
+	case GL_DEPTH_COMPONENT32:
+#if 0
+		switch (type) {
+		case GL_UNSIGNED_BYTE:
+		case GL_UNSIGNED_SHORT:
+			return &_mesa_texformat_z16;
+		case GL_UNSIGNED_INT:
+			return &_mesa_texformat_z32;
+		case GL_UNSIGNED_INT_24_8_EXT:
+		default:
+			return &_mesa_texformat_z24_s8;
+		}
+#else
+		return &_mesa_texformat_z16;
+#endif
+
 	default:
 		_mesa_problem(ctx,
 			      "unexpected internalFormat 0x%x in r300ChooseTextureFormat",
@@ -563,34 +498,31 @@ r300ValidateClientStorage(GLcontext * ctx, GLenum target,
 		return 0;
 	}
 
-	{
-		GLint srcRowStride = _mesa_image_row_stride(packing, srcWidth,
-							    format, type);
+	GLint srcRowStride = _mesa_image_row_stride(packing, srcWidth,
+						    format, type);
 
-		if (RADEON_DEBUG & DEBUG_TEXTURE)
-			fprintf(stderr, "%s: srcRowStride %d/%x\n",
-				__FUNCTION__, srcRowStride, srcRowStride);
+	if (RADEON_DEBUG & DEBUG_TEXTURE)
+		fprintf(stderr, "%s: srcRowStride %d/%x\n",
+			__FUNCTION__, srcRowStride, srcRowStride);
 
-		/* Could check this later in upload, pitch restrictions could be
-		 * relaxed, but would need to store the image pitch somewhere,
-		 * as packing details might change before image is uploaded:
-		 */
-		if (!r300IsGartMemory(rmesa, pixels, srcHeight * srcRowStride)
-		    || (srcRowStride & 63))
-			return 0;
+	/* Could check this later in upload, pitch restrictions could be
+	 * relaxed, but would need to store the image pitch somewhere,
+	 * as packing details might change before image is uploaded:
+	 */
+	if (!r300IsGartMemory(rmesa, pixels, srcHeight * srcRowStride)
+	    || (srcRowStride & 63))
+		return 0;
 
-		/* Have validated that _mesa_transfer_teximage would be a straight
-		 * memcpy at this point.  NOTE: future calls to TexSubImage will
-		 * overwrite the client data.  This is explicitly mentioned in the
-		 * extension spec.
-		 */
-		texImage->Data = (void *)pixels;
-		texImage->IsClientData = GL_TRUE;
-		texImage->RowStride =
-		    srcRowStride / texImage->TexFormat->TexelBytes;
+	/* Have validated that _mesa_transfer_teximage would be a straight
+	 * memcpy at this point.  NOTE: future calls to TexSubImage will
+	 * overwrite the client data.  This is explicitly mentioned in the
+	 * extension spec.
+	 */
+	texImage->Data = (void *)pixels;
+	texImage->IsClientData = GL_TRUE;
+	texImage->RowStride = srcRowStride / texImage->TexFormat->TexelBytes;
 
-		return 1;
-	}
+	return 1;
 }
 
 static void r300TexImage1D(GLcontext * ctx, GLenum target, GLint level,
@@ -967,60 +899,6 @@ r300TexSubImage3D(GLcontext * ctx, GLenum target, GLint level,
 	t->dirty_images[0] |= (1 << level);
 }
 
-static void r300TexEnv(GLcontext * ctx, GLenum target,
-		       GLenum pname, const GLfloat * param)
-{
-	if (RADEON_DEBUG & DEBUG_STATE) {
-		fprintf(stderr, "%s( %s )\n",
-			__FUNCTION__, _mesa_lookup_enum_by_nr(pname));
-	}
-
-	/* This is incorrect: Need to maintain this data for each of
-	 * GL_TEXTURE_{123}D, GL_TEXTURE_RECTANGLE_NV, etc, and switch
-	 * between them according to _ReallyEnabled.
-	 */
-	switch (pname) {
-	case GL_TEXTURE_LOD_BIAS_EXT:{
-#if 0				/* Needs to be relocated in order to make sure we got the right tmu */
-			GLfloat bias, min;
-			GLuint b;
-
-			/* The R300's LOD bias is a signed 2's complement value with a
-			 * range of -16.0 <= bias < 16.0.
-			 *
-			 * NOTE: Add a small bias to the bias for conform mipsel.c test.
-			 */
-			bias = *param + .01;
-			min =
-			    driQueryOptionb(&rmesa->radeon.optionCache,
-					    "no_neg_lod_bias") ? 0.0 : -16.0;
-			bias = CLAMP(bias, min, 16.0);
-
-			/* 0.0 - 16.0 == 0x0 - 0x1000 */
-			/* 0.0 - -16.0 == 0x1001 - 0x1fff */
-			b = 0x1000 / 16.0 * bias;
-			b &= R300_LOD_BIAS_MASK;
-
-			if (b !=
-			    (rmesa->hw.tex.unknown1.
-			     cmd[R300_TEX_VALUE_0 +
-				 unit] & R300_LOD_BIAS_MASK)) {
-				R300_STATECHANGE(rmesa, tex.unknown1);
-				rmesa->hw.tex.unknown1.cmd[R300_TEX_VALUE_0 +
-							   unit] &=
-				    ~R300_LOD_BIAS_MASK;
-				rmesa->hw.tex.unknown1.cmd[R300_TEX_VALUE_0 +
-							   unit] |= b;
-			}
-#endif
-			break;
-		}
-
-	default:
-		return;
-	}
-}
-
 /**
  * Changes variables and flags for a state update, which will happen at the
  * next UpdateTextureState
@@ -1041,14 +919,13 @@ static void r300TexParameter(GLcontext * ctx, GLenum target,
 	case GL_TEXTURE_MIN_FILTER:
 	case GL_TEXTURE_MAG_FILTER:
 	case GL_TEXTURE_MAX_ANISOTROPY_EXT:
-		r300SetTexMaxAnisotropy(t, texObj->MaxAnisotropy);
-		r300SetTexFilter(t, texObj->MinFilter, texObj->MagFilter);
+		r300SetTexFilter(t, texObj->MinFilter, texObj->MagFilter, texObj->MaxAnisotropy);
 		break;
 
 	case GL_TEXTURE_WRAP_S:
 	case GL_TEXTURE_WRAP_T:
 	case GL_TEXTURE_WRAP_R:
-		r300SetTexWrap(t, texObj->WrapS, texObj->WrapT, texObj->WrapR);
+		r300UpdateTexWrap(t);
 		break;
 
 	case GL_TEXTURE_BORDER_COLOR:
@@ -1067,13 +944,24 @@ static void r300TexParameter(GLcontext * ctx, GLenum target,
 		driSwapOutTextureObject((driTextureObject *) t);
 		break;
 
+	case GL_DEPTH_TEXTURE_MODE:
+		if (!texObj->Image[0][texObj->BaseLevel])
+			return;
+		if (texObj->Image[0][texObj->BaseLevel]->TexFormat->BaseFormat
+		    == GL_DEPTH_COMPONENT) {
+			r300SetDepthTexMode(texObj);
+			break;
+		} else {
+			/* If the texture isn't a depth texture, changing this
+			 * state won't cause any changes to the hardware.
+			 * Don't force a flush of texture state.
+			 */
+			return;
+		}
+
 	default:
 		return;
 	}
-
-	/* Mark this texobj as dirty (one bit per tex unit)
-	 */
-	t->dirty_state = TEX_ALL;
 }
 
 static void r300BindTexture(GLcontext * ctx, GLenum target,
@@ -1156,7 +1044,6 @@ void r300InitTextureFuncs(struct dd_function_table *functions)
 	functions->DeleteTexture = r300DeleteTexture;
 	functions->IsTextureResident = driIsTextureResident;
 
-	functions->TexEnv = r300TexEnv;
 	functions->TexParameter = r300TexParameter;
 
 	functions->CompressedTexImage2D = r300CompressedTexImage2D;

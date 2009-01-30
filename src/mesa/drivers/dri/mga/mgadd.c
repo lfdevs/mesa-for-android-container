@@ -24,13 +24,12 @@
  * Authors:
  *    Keith Whitwell <keith@tungstengraphics.com>
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/mga/mgadd.c,v 1.14 2002/10/30 12:51:35 alanh Exp $ */
 
 
-#include "mtypes.h"
-#include "framebuffer.h"
+#include "main/mtypes.h"
+#include "main/framebuffer.h"
+#include "main/mm.h"
 
-#include "mm.h"
 #include "mgacontext.h"
 #include "mgadd.h"
 #include "mgastate.h"
@@ -41,7 +40,7 @@
 #include "mga_xmesa.h"
 #include "utils.h"
 
-#define DRIVER_DATE	"20061030"
+#define DRIVER_DATE	"20071017"
 
 
 /***************************************

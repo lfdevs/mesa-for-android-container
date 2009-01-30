@@ -23,7 +23,6 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/tdfx/tdfx_state.h,v 1.2 2002/02/22 21:45:04 dawes Exp $ */
 
 /*
  * Original rewrite:
@@ -38,7 +37,7 @@
 #ifndef __TDFX_STATE_H__
 #define __TDFX_STATE_H__
 
-#include "context.h"
+#include "main/context.h"
 #include "tdfx_context.h"
 
 extern void tdfxDDInitStateFuncs( GLcontext *ctx );

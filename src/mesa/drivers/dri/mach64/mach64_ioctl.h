@@ -1,4 +1,4 @@
-/* $XFree86$ */ /* -*- mode: c; c-basic-offset: 3 -*- */
+/* -*- mode: c; c-basic-offset: 3 -*- */
 /*
  * Copyright 2000 Gareth Hughes
  * All Rights Reserved.
@@ -44,7 +44,7 @@ extern void mach64FlushVerticesLocked( mach64ContextPtr mmesa );
 extern void mach64FlushDMALocked( mach64ContextPtr mmesa );
 extern void mach64UploadHwStateLocked( mach64ContextPtr mmesa );
 
-static __inline void *mach64AllocDmaLow( mach64ContextPtr mmesa, int bytes )
+static INLINE void *mach64AllocDmaLow( mach64ContextPtr mmesa, int bytes )
 {
    CARD32 *head;
 
@@ -60,7 +60,7 @@ static __inline void *mach64AllocDmaLow( mach64ContextPtr mmesa, int bytes )
    return head;
 }
 
-static __inline void *mach64AllocDmaLocked( mach64ContextPtr mmesa, int bytes )
+static INLINE void *mach64AllocDmaLocked( mach64ContextPtr mmesa, int bytes )
 {
    CARD32 *head;
 
@@ -78,7 +78,7 @@ extern void mach64FireBlitLocked( mach64ContextPtr mmesa, void *buffer,
 				  GLint offset, GLint pitch, GLint format,
 				  GLint x, GLint y, GLint width, GLint height );
 
-extern void mach64CopyBuffer( const __DRIdrawablePrivate *dPriv );
+extern void mach64CopyBuffer( __DRIdrawablePrivate *dPriv );
 #if ENABLE_PERF_BOXES
 extern void mach64PerformanceCounters( mach64ContextPtr mmesa );
 extern void mach64PerformanceBoxesLocked( mach64ContextPtr mmesa );

@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r128/r128_context.h,v 1.12 2002/12/16 16:18:52 dawes Exp $ */
 /**************************************************************************
 
 Copyright 1999, 2000 ATI Technologies Inc. and Precision Insight, Inc.,
@@ -40,7 +39,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "drm.h"
 #include "r128_drm.h"
 
-#include "mtypes.h"
+#include "main/mtypes.h"
 #include "tnl/t_vertex.h"
 
 #include "r128_reg.h"
@@ -138,9 +137,9 @@ struct r128_context {
    GLfloat hw_viewport[16];
    GLfloat depth_scale;
 
-   u_int32_t ClearColor;			/* Color used to clear color buffer */
-   u_int32_t ClearDepth;			/* Value used to clear depth buffer */
-   u_int32_t ClearStencil;		/* Value used to clear stencil */
+   uint32_t ClearColor;			/* Color used to clear color buffer */
+   uint32_t ClearDepth;			/* Value used to clear depth buffer */
+   uint32_t ClearStencil;		/* Value used to clear stencil */
 
    /* Map GL texture units onto hardware
     */
@@ -209,11 +208,6 @@ struct r128_context {
    GLuint c_textureSwaps;
    GLuint c_textureBytes;
    GLuint c_vertexBuffers;
-
-   /* VBI
-    */
-   GLuint vbl_seq;
-   GLuint vblank_flags;
 
    /* Configuration cache
     */

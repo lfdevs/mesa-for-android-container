@@ -1,4 +1,3 @@
-/* $XFree86$ */
 /**************************************************************************
 
 Copyright (C) The Weather Channel, Inc.  2002.  All Rights Reserved.
@@ -34,13 +33,13 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Keith Whitwell <keith@tungstengraphics.com>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "api_arrayelt.h"
-#include "enums.h"
-#include "colormac.h"
-#include "light.h"
-#include "framebuffer.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/api_arrayelt.h"
+#include "main/enums.h"
+#include "main/colormac.h"
+#include "main/light.h"
+#include "main/framebuffer.h"
 
 #include "swrast/swrast.h"
 #include "vbo/vbo.h"
@@ -773,9 +772,11 @@ static void r200LineWidth( GLcontext *ctx, GLfloat widthf )
    R200_STATECHANGE( rmesa, set );
 
    /* Line width is stored in U6.4 format.
+    * Same min/max limits for AA, non-AA lines.
     */
    rmesa->hw.lin.cmd[LIN_SE_LINE_WIDTH] &= ~0xffff;
-   rmesa->hw.lin.cmd[LIN_SE_LINE_WIDTH] |= (GLuint)(ctx->Line._Width * 16.0);
+   rmesa->hw.lin.cmd[LIN_SE_LINE_WIDTH] |= (GLuint)
+      (CLAMP(widthf, ctx->Const.MinLineWidth, ctx->Const.MaxLineWidth) * 16.0);
 
    if ( widthf > 1.0 ) {
       rmesa->hw.set.cmd[SET_SE_CNTL] |=  R200_WIDELINE_ENABLE;
@@ -901,7 +902,7 @@ static void r200PolygonMode( GLcontext *ctx, GLenum face, GLenum mode )
 static void r200UpdateSpecular( GLcontext *ctx )
 {
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
-   u_int32_t p = rmesa->hw.ctx.cmd[CTX_PP_CNTL];
+   uint32_t p = rmesa->hw.ctx.cmd[CTX_PP_CNTL];
 
    R200_STATECHANGE( rmesa, tcl );
    R200_STATECHANGE( rmesa, vtx );
@@ -1858,8 +1859,7 @@ void r200SetCliprects( r200ContextPtr rmesa )
    GLframebuffer *const draw_fb = (GLframebuffer*) drawable->driverPrivate;
    GLframebuffer *const read_fb = (GLframebuffer*) readable->driverPrivate;
 
-   if (draw_fb->_ColorDrawBufferMask[0]
-       == BUFFER_BIT_BACK_LEFT) {
+   if (draw_fb->_ColorDrawBufferIndexes[0] == BUFFER_BIT_BACK_LEFT) {
       /* Can't ignore 2d windows if we are page flipping.
        */
       if ( drawable->numBackClipRects == 0 || rmesa->doPageFlip ) {
@@ -1909,17 +1909,18 @@ static void r200DrawBuffer( GLcontext *ctx, GLenum mode )
 
    R200_FIREVERTICES(rmesa);	/* don't pipeline cliprect changes */
 
-   /*
-    * _ColorDrawBufferMask is easier to cope with than <mode>.
-    * Check for software fallback, update cliprects.
-    */
-   switch ( ctx->DrawBuffer->_ColorDrawBufferMask[0] ) {
-   case BUFFER_BIT_FRONT_LEFT:
-   case BUFFER_BIT_BACK_LEFT:
+   if (ctx->DrawBuffer->_NumColorDrawBuffers != 1) {
+      /* 0 (GL_NONE) buffers or multiple color drawing buffers */
+      FALLBACK( rmesa, R200_FALLBACK_DRAW_BUFFER, GL_TRUE );
+      return;
+   }
+
+   switch ( ctx->DrawBuffer->_ColorDrawBufferIndexes[0] ) {
+   case BUFFER_FRONT_LEFT:
+   case BUFFER_BACK_LEFT:
       FALLBACK( rmesa, R200_FALLBACK_DRAW_BUFFER, GL_FALSE );
       break;
    default:
-      /* 0 (GL_NONE) buffers or multiple color drawing buffers */
       FALLBACK( rmesa, R200_FALLBACK_DRAW_BUFFER, GL_TRUE );
       return;
    }
@@ -2444,11 +2445,11 @@ r200UpdateDrawBuffer(GLcontext *ctx)
    struct gl_framebuffer *fb = ctx->DrawBuffer;
    driRenderbuffer *drb;
 
-   if (fb->_ColorDrawBufferMask[0] == BUFFER_BIT_FRONT_LEFT) {
+   if (fb->_ColorDrawBufferIndexes[0] == BUFFER_FRONT_LEFT) {
       /* draw to front */
       drb = (driRenderbuffer *) fb->Attachment[BUFFER_FRONT_LEFT].Renderbuffer;
    }
-   else if (fb->_ColorDrawBufferMask[0] == BUFFER_BIT_BACK_LEFT) {
+   else if (fb->_ColorDrawBufferIndexes[0] == BUFFER_BACK_LEFT) {
       /* draw to back */
       drb = (driRenderbuffer *) fb->Attachment[BUFFER_BACK_LEFT].Renderbuffer;
    }

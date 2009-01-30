@@ -1,4 +1,4 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/ffb/ffb_depth.c,v 1.2 2002/02/22 21:32:58 dawes Exp $
+/* 
  *
  * GLX Hardware Device Driver for Sun Creator/Creator3D
  * Copyright (C) 2000 David S. Miller
@@ -25,7 +25,7 @@
  *    David S. Miller <davem@redhat.com>
  */
 
-#include "mtypes.h"
+#include "main/mtypes.h"
 #include "swrast/swrast.h"
 #include "ffb_dd.h"
 #include "ffb_span.h"
@@ -33,7 +33,6 @@
 #include "ffb_depth.h"
 #include "ffb_lock.h"
 
-#include "swrast/swrast.h"
 
 #undef DEPTH_TRACE
 

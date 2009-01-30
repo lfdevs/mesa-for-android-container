@@ -34,9 +34,9 @@
 #define BRW_WM_H
 
 
+#include "shader/prog_instruction.h"
 #include "brw_context.h"
 #include "brw_eu.h"
-#include "prog_instruction.h"
 
 /* A big lookup table is used to figure out which and how many
  * additional regs will inserted before the main payload in the WM
@@ -49,8 +49,7 @@
 #define IZ_DEPTH_TEST_ENABLE_BIT    0x8
 #define IZ_STENCIL_WRITE_ENABLE_BIT 0x10
 #define IZ_STENCIL_TEST_ENABLE_BIT  0x20
-#define IZ_EARLY_DEPTH_TEST_BIT     0x40
-#define IZ_BIT_MAX                  0x80
+#define IZ_BIT_MAX                  0x40
 
 #define AA_NEVER     0
 #define AA_SOMETIMES 1
@@ -143,6 +142,8 @@ struct brw_wm_instruction {
    GLuint writemask:4;
    GLuint tex_unit:4;   /* texture unit for TEX, TXD, TXP instructions */
    GLuint tex_idx:3;    /* TEXTURE_1D,2D,3D,CUBE,RECT_INDEX source target */
+   GLuint eot:1;    	/* End of thread indicator for FB_WRITE*/
+   GLuint target:10;    /* target binding table index for FB_WRITE*/
 };
 
 
@@ -155,6 +156,7 @@ struct brw_wm_instruction {
 #define BRW_WM_MAX_PARAM 256
 #define BRW_WM_MAX_CONST 256
 #define BRW_WM_MAX_KILLS MAX_NV_FRAGMENT_PROGRAM_INSTRUCTIONS
+#define BRW_WM_MAX_SUBROUTINE 16
 
 
 
@@ -197,6 +199,7 @@ struct brw_wm_compile {
    GLuint nr_fp_insns;
    GLuint fp_temp;
    GLuint fp_interp_emitted;
+   GLuint fp_fragcolor_emitted;
    GLuint fp_deriv_emitted;
 
    struct prog_src_register pixel_xy;
@@ -243,7 +246,10 @@ struct brw_wm_compile {
    struct brw_reg stack;
    struct brw_reg emit_mask_reg;
    GLuint reg_index;
+   GLuint tmp_regs[BRW_WM_MAX_GRF];
    GLuint tmp_index;
+   GLuint tmp_max;
+   GLuint subroutines[BRW_WM_MAX_SUBROUTINE];
 };
 
 

@@ -26,21 +26,21 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "glheader.h"
-#include "macros.h"
-#include "mtypes.h"
-#include "enums.h"
-#include "colortab.h"
-#include "convolve.h"
-#include "context.h"
-#include "mipmap.h"
-#include "simple_list.h"
-#include "texcompress.h"
-#include "texformat.h"
-#include "texobj.h"
-#include "texstore.h"
+#include "main/glheader.h"
+#include "main/macros.h"
+#include "main/mtypes.h"
+#include "main/enums.h"
+#include "main/colortab.h"
+#include "main/convolve.h"
+#include "main/context.h"
+#include "main/mipmap.h"
+#include "main/simple_list.h"
+#include "main/texcompress.h"
+#include "main/texformat.h"
+#include "main/texobj.h"
+#include "main/texstore.h"
 
-#include "mm.h"
+#include "main/mm.h"
 #include "via_context.h"
 #include "via_fb.h"
 #include "via_tex.h"
@@ -820,9 +820,7 @@ static void viaTexImage(GLcontext *ctx,
 
    /* GL_SGIS_generate_mipmap */
    if (level == texObj->BaseLevel && texObj->GenerateMipmap) {
-      _mesa_generate_mipmap(ctx, target,
-                            &ctx->Texture.Unit[ctx->Texture.CurrentUnit],
-                            texObj);
+      _mesa_generate_mipmap(ctx, target, texObj);
    }
 
    _mesa_unmap_teximage_pbo(ctx, packing);

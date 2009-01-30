@@ -1,4 +1,3 @@
-/* $Id: svgapix.h,v 1.5 2002/11/11 18:42:44 brianp Exp $ */
 
 /*
  * Mesa 3-D graphics library
@@ -33,8 +32,8 @@
 
 #include "GL/gl.h"
 #include "GL/svgamesa.h"
-#include "context.h"
-#include "colormac.h"
+#include "main/context.h"
+#include "main/colormac.h"
 #include "vga.h"
 
 struct svgamesa_context {

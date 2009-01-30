@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r128/r128_tris.h,v 1.4 2001/01/08 01:07:24 martin Exp $ */
 /**************************************************************************
 
 Copyright 2000, 2001 ATI Technologies Inc., Ontario, Canada, and
@@ -37,7 +36,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef __R128_TRIS_H__
 #define __R128_TRIS_H__
 
-#include "mtypes.h"
+#include "main/mtypes.h"
 
 extern void savageInitTriFuncs( GLcontext *ctx );
 

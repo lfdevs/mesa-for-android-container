@@ -24,7 +24,6 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 **************************************************************************/
-/* $XFree86: xc/lib/GL/mesa/src/drv/i810/i810screen.c,v 1.2 2002/10/30 12:51:33 alanh Exp $ */
 
 /*
  * Authors:
@@ -33,14 +32,14 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
-#include "glheader.h"
-#include "imports.h"
-#include "context.h"
-#include "framebuffer.h"
-#include "fbobject.h"
-#include "matrix.h"
-#include "renderbuffer.h"
-#include "simple_list.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/context.h"
+#include "main/framebuffer.h"
+#include "main/fbobject.h"
+#include "main/matrix.h"
+#include "main/renderbuffer.h"
+#include "main/simple_list.h"
 #include "utils.h"
 
 #include "i810screen.h"
@@ -56,77 +55,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 extern const struct dri_extension card_extensions[];
 
-static __GLcontextModes *fill_in_modes( __GLcontextModes *modes,
-				       unsigned pixel_bits,
-				       unsigned depth_bits,
-				       unsigned stencil_bits,
-				       const GLenum * db_modes,
-				       unsigned num_db_modes,
-				       int visType )
-{
-    static const u_int8_t bits[1][4] = {
-	{          5,          6,          5,          0 }
-    };
-
-    static const u_int32_t masks[1][4] = {
-	{ 0x0000F800, 0x000007E0, 0x0000001F, 0x00000000 }
-    };
-
-    unsigned   i;
-    unsigned   j;
-    const unsigned index = 0;
-
-    for ( i = 0 ; i < num_db_modes ; i++ ) {
-	for ( j = 0 ; j < 2 ; j++ ) {
-
-	    modes->redBits   = bits[index][0];
-	    modes->greenBits = bits[index][1];
-	    modes->blueBits  = bits[index][2];
-	    modes->alphaBits = bits[index][3];
-	    modes->redMask   = masks[index][0];
-	    modes->greenMask = masks[index][1];
-	    modes->blueMask  = masks[index][2];
-	    modes->alphaMask = masks[index][3];
-	    modes->rgbBits   = modes->redBits + modes->greenBits
-		+ modes->blueBits + modes->alphaBits;
-
-	    modes->accumRedBits   = 16 * j;
-	    modes->accumGreenBits = 16 * j;
-	    modes->accumBlueBits  = 16 * j;
-	    modes->accumAlphaBits = (masks[index][3] != 0) ? 16 * j : 0;
-	    modes->visualRating = (j == 0) ? GLX_NONE : GLX_SLOW_CONFIG;
-
-	    modes->stencilBits = stencil_bits;
-	    modes->depthBits = depth_bits;
-
-	    modes->visualType = visType;
-	    modes->renderType = GLX_RGBA_BIT;
-	    modes->drawableType = GLX_WINDOW_BIT;
-	    modes->rgbMode = GL_TRUE;
-
-	    if ( db_modes[i] == GLX_NONE ) {
-		modes->doubleBufferMode = GL_FALSE;
-	    }
-	    else {
-		modes->doubleBufferMode = GL_TRUE;
-		modes->swapMethod = db_modes[i];
-	    }
-
-	    modes = modes->next;
-	}
-    }
-
-    return modes;
-
-}
-
-
-static __GLcontextModes *
-i810FillInModes( unsigned pixel_bits, unsigned depth_bits,
+static const __DRIconfig **
+i810FillInModes( __DRIscreenPrivate *psp,
+		 unsigned pixel_bits, unsigned depth_bits,
 		 unsigned stencil_bits, GLboolean have_back_buffer )
-{    __GLcontextModes * modes;
+{
+    __DRIconfig **configs;
     __GLcontextModes * m;
-    unsigned num_modes;
     unsigned depth_buffer_factor;
     unsigned back_buffer_factor;
     unsigned i;
@@ -140,50 +75,42 @@ i810FillInModes( unsigned pixel_bits, unsigned depth_bits,
 	GLX_NONE, GLX_SWAP_UNDEFINED_OML /*, GLX_SWAP_COPY_OML */
     };
 
-    int depth_buffer_modes[2][2];
+    uint8_t depth_bits_array[2];
+    uint8_t stencil_bits_array[2];
 
-
-    depth_buffer_modes[0][0] = depth_bits;
-    depth_buffer_modes[1][0] = depth_bits;
+    depth_bits_array[0] = depth_bits;
+    depth_bits_array[1] = depth_bits;
 
     /* Just like with the accumulation buffer, always provide some modes
      * with a stencil buffer.  It will be a sw fallback, but some apps won't
      * care about that.
      */
-    depth_buffer_modes[0][1] = 0;
-    depth_buffer_modes[1][1] = (stencil_bits == 0) ? 8 : stencil_bits;
+    stencil_bits_array[0] = 0;
+    stencil_bits_array[1] = (stencil_bits == 0) ? 8 : stencil_bits;
 
     depth_buffer_factor = ((depth_bits != 0) || (stencil_bits != 0)) ? 2 : 1;
     back_buffer_factor  = (have_back_buffer) ? 2 : 1;
 
-    num_modes = depth_buffer_factor * back_buffer_factor * 4;
-
-    modes = (*dri_interface->createContextModes)( num_modes, sizeof( __GLcontextModes ) );
-    m = modes;
-    for ( i = 0 ; i < depth_buffer_factor ; i++ ) {
-	m = fill_in_modes( m, pixel_bits,
-			   depth_buffer_modes[i][0], depth_buffer_modes[i][1],
-			   back_buffer_modes, back_buffer_factor,
-			   GLX_TRUE_COLOR );
-    }
-
-    for ( i = 0 ; i < depth_buffer_factor ; i++ ) {
-	m = fill_in_modes( m, pixel_bits,
-			   depth_buffer_modes[i][0], depth_buffer_modes[i][1],
-			   back_buffer_modes, back_buffer_factor,
-			   GLX_DIRECT_COLOR );
+    configs = driCreateConfigs(GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
+			       depth_bits_array, stencil_bits_array,
+			       depth_buffer_factor,
+			       back_buffer_modes, back_buffer_factor);
+    if (configs == NULL) {
+	fprintf( stderr, "[%s:%u] Error creating FBConfig!\n",
+		 __func__, __LINE__ );
+	return NULL;
     }
 
     /* Mark the visual as slow if there are "fake" stencil bits.
      */
-    for ( m = modes ; m != NULL ; m = m->next ) {
-	if ( (m->stencilBits != 0) && (m->stencilBits != stencil_bits) ) {
+    for (i = 0; configs[i]; i++) {
+	m = &configs[i]->modes;
+	if ((m->stencilBits != 0) && (m->stencilBits != stencil_bits)) {
 	    m->visualRating = GLX_SLOW_CONFIG;
 	}
     }
 
-    return modes;
-
+    return (const __DRIconfig **) configs;
 }
 
      
@@ -219,11 +146,23 @@ static drmBufMapPtr i810_create_empty_buffers(void)
 }
 
 
-static GLboolean
-i810InitDriver(__DRIscreenPrivate *sPriv)
+static const __DRIconfig **
+i810InitScreen(__DRIscreen *sPriv)
 {
+   static const __DRIversion ddx_expected = { 1, 0, 0 };
+   static const __DRIversion dri_expected = { 4, 0, 0 };
+   static const __DRIversion drm_expected = { 1, 2, 0 };
    i810ScreenPrivate *i810Screen;
    I810DRIPtr         gDRIPriv = (I810DRIPtr)sPriv->pDevPriv;
+
+   if ( ! driCheckDriDdxDrmVersions2( "i810",
+				      &sPriv->dri_version, & dri_expected,
+				      &sPriv->ddx_version, & ddx_expected,
+				      &sPriv->drm_version, & drm_expected ) ) {
+      return NULL;
+   }
+
+   driInitExtensions( NULL, card_extensions, GL_TRUE );
 
    if (sPriv->devPrivSize != sizeof(I810DRIRec)) {
       fprintf(stderr,"\nERROR!  sizeof(I810DRIRec) does not match passed size from device driver\n");
@@ -312,7 +251,7 @@ i810InitDriver(__DRIscreenPrivate *sPriv)
 
    i810Screen->sarea_priv_offset = gDRIPriv->sarea_priv_offset;
 
-   return GL_TRUE;
+   return i810FillInModes(sPriv, 16, 16, 0, 1);
 }
 
 static void
@@ -401,9 +340,8 @@ i810DestroyBuffer(__DRIdrawablePrivate *driDrawPriv)
     _mesa_unreference_framebuffer((GLframebuffer **)(&(driDrawPriv->driverPrivate)));
 }
 
-
-static const struct __DriverAPIRec i810API = {
-   .InitDriver      = i810InitDriver,
+const struct __DriverAPIRec driDriverAPI = {
+   .InitScreen      = i810InitScreen,
    .DestroyScreen   = i810DestroyScreen,
    .CreateContext   = i810CreateContext,
    .DestroyContext  = i810DestroyContext,
@@ -413,60 +351,8 @@ static const struct __DriverAPIRec i810API = {
    .MakeCurrent     = i810MakeCurrent,
    .UnbindContext   = i810UnbindContext,
    .GetSwapInfo     = NULL,
-   .GetMSC          = NULL,
+   .GetDrawableMSC  = NULL,
    .WaitForMSC      = NULL,
    .WaitForSBC      = NULL,
    .SwapBuffersMSC  = NULL
 };
-
-
-/**
- * This is the bootstrap function for the driver.  libGL supplies all of the
- * requisite information about the system, and the driver initializes itself.
- * This routine also fills in the linked list pointed to by \c driver_modes
- * with the \c __GLcontextModes that the driver can support for windows or
- * pbuffers.
- *
- * \return A pointer to a \c __DRIscreenPrivate on success, or \c NULL on 
- *         failure.
- */
-PUBLIC
-void * __driCreateNewScreen_20050727( __DRInativeDisplay *dpy, int scrn, __DRIscreen *psc,
-			     const __GLcontextModes * modes,
-			     const __DRIversion * ddx_version,
-			     const __DRIversion * dri_version,
-			     const __DRIversion * drm_version,
-			     const __DRIframebuffer * frame_buffer,
-			     drmAddress pSAREA, int fd,
-			     int internal_api_version,
-			     const __DRIinterfaceMethods * interface,
-			     __GLcontextModes ** driver_modes )
-
-{
-   __DRIscreenPrivate *psp;
-   static const __DRIversion ddx_expected = { 1, 0, 0 };
-   static const __DRIversion dri_expected = { 4, 0, 0 };
-   static const __DRIversion drm_expected = { 1, 2, 0 };
-
-   dri_interface = interface;
-
-   if ( ! driCheckDriDdxDrmVersions2( "i810",
-				      dri_version, & dri_expected,
-				      ddx_version, & ddx_expected,
-				      drm_version, & drm_expected ) ) {
-      return NULL;
-   }
-
-   psp = __driUtilCreateNewScreen(dpy, scrn, psc, NULL,
-				  ddx_version, dri_version, drm_version,
-				  frame_buffer, pSAREA, fd,
-				  internal_api_version, &i810API);
-   if ( psp != NULL ) {
-      *driver_modes = i810FillInModes( 16,
-				       16, 0,
-				       1);
-      driInitExtensions( NULL, card_extensions, GL_TRUE );
-   }
-
-   return (void *) psp;
-}

@@ -26,11 +26,11 @@
  */
 
 
-#include "mtypes.h"
-#include "colormac.h"
-#include "dd.h"
+#include "main/mtypes.h"
+#include "main/colormac.h"
+#include "main/dd.h"
+#include "main/mm.h"
 
-#include "mm.h"
 #include "mgacontext.h"
 #include "mgadd.h"
 #include "mgastate.h"
@@ -778,8 +778,6 @@ void mgaUpdateRects( mgaContextPtr mmesa, GLuint buffers )
 {
    __DRIdrawablePrivate *const driDrawable = mmesa->driDrawable;
    __DRIdrawablePrivate *const driReadable = mmesa->driReadable;
-   drm_mga_sarea_t *sarea = mmesa->sarea;
-
 
    mmesa->dirty_cliprects = 0;	
 
@@ -789,9 +787,6 @@ void mgaUpdateRects( mgaContextPtr mmesa, GLuint buffers )
    }
 
    mga_set_cliprects(mmesa);
-
-   sarea->req_drawable = driDrawable->draw;
-   sarea->req_draw_buffer = mmesa->draw_buffer;
 
    mgaUpdateClipping( mmesa->glCtx );
    mgaCalcViewport( mmesa->glCtx );
@@ -804,20 +799,22 @@ static void mgaDDDrawBuffer(GLcontext *ctx, GLenum mode )
 
    FLUSH_BATCH( mmesa );
 
-   /*
-    * _DrawDestMask is easier to cope with than <mode>.
-    */
-   switch ( ctx->DrawBuffer->_ColorDrawBufferMask[0] ) {
-   case BUFFER_BIT_FRONT_LEFT:
+   if (ctx->DrawBuffer->_NumColorDrawBuffers != 1) {
+      /* GL_NONE or GL_FRONT_AND_BACK or stereo left&right, etc */
+      FALLBACK( ctx, MGA_FALLBACK_DRAW_BUFFER, GL_TRUE );
+      return;
+   }
+
+   switch ( ctx->DrawBuffer->_ColorDrawBufferIndexes[0] ) {
+   case BUFFER_FRONT_LEFT:
       mmesa->setup.dstorg = mmesa->mgaScreen->frontOffset;
       mmesa->draw_buffer = MGA_FRONT;
       break;
-   case BUFFER_BIT_BACK_LEFT:
+   case BUFFER_BACK_LEFT:
       mmesa->setup.dstorg = mmesa->mgaScreen->backOffset;
       mmesa->draw_buffer = MGA_BACK;
       break;
    default:
-      /* GL_NONE or GL_FRONT_AND_BACK or stereo left&right, etc */
       FALLBACK( ctx, MGA_FALLBACK_DRAW_BUFFER, GL_TRUE );
       return;
    }

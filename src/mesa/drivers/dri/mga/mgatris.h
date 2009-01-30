@@ -24,12 +24,11 @@
  * Authors:
  *    Keith Whitwell <keith@tungstengraphics.com>
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/mga/mgatris.h,v 1.10 2002/10/30 12:51:36 alanh Exp $ */
 
 #ifndef MGATRIS_INC
 #define MGATRIS_INC
 
-#include "mtypes.h"
+#include "main/mtypes.h"
 
 extern void mgaDDInitTriFuncs( GLcontext *ctx );
 extern void mgaChooseRenderState( GLcontext *ctx );

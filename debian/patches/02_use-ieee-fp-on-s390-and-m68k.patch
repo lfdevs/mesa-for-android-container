@@ -4,15 +4,15 @@ This patch by David Nusinow.
 
 Index: mesa/src/mesa/main/imports.h
 ===================================================================
---- mesa.orig/src/mesa/main/imports.h	2007-04-25 01:44:31.000000000 +0200
-+++ mesa/src/mesa/main/imports.h	2007-04-25 01:45:04.000000000 +0200
+--- mesa.orig/src/mesa/main/imports.h	2008-07-01 15:26:57.000000000 +0300
++++ mesa/src/mesa/main/imports.h	2008-07-01 15:45:49.000000000 +0300
 @@ -158,8 +158,9 @@
   *** USE_IEEE: Determine if we're using IEEE floating point
   ***/
  #if defined(__i386__) || defined(__386__) || defined(__sparc__) || \
 -    defined(__s390x__) || defined(__powerpc__) || \
 +    defined(__s390__) || defined(__s390x__) || defined(__powerpc__) || \
-     defined(__amd64__) || defined(__x86_64__) || \
+     defined(__x86_64__) || \
 +    defined(__m68k__) || \
      defined(ia64) || defined(__ia64__) || \
      defined(__hppa__) || defined(hpux) || \

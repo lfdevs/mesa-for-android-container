@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/radeon/radeon_ioctl.c,v 1.11 2003/01/29 22:04:59 dawes Exp $ */
 /**************************************************************************
 
 Copyright 2000, 2001 ATI Technologies Inc., Ontario, Canada, and
@@ -38,9 +37,9 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <sched.h>
 #include <errno.h> 
 
-#include "glheader.h"
-#include "imports.h"
-#include "simple_list.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/simple_list.h"
 #include "swrast/swrast.h"
 
 #include "radeon_context.h"
@@ -778,11 +777,11 @@ void radeonAllocDmaRegion( radeonContextPtr rmesa,
  * SwapBuffers with client-side throttling
  */
 
-static u_int32_t radeonGetLastFrame (radeonContextPtr rmesa) 
+static uint32_t radeonGetLastFrame (radeonContextPtr rmesa) 
 {
    drm_radeon_getparam_t gp;
    int ret;
-   u_int32_t frame;
+   uint32_t frame;
 
    gp.param = RADEON_PARAM_LAST_FRAME;
    gp.value = (int *)&frame;
@@ -863,13 +862,14 @@ static void radeonWaitForFrameCompletion( radeonContextPtr rmesa )
 
 /* Copy the back color buffer to the front color buffer.
  */
-void radeonCopyBuffer( const __DRIdrawablePrivate *dPriv,
+void radeonCopyBuffer( __DRIdrawablePrivate *dPriv,
 		       const drm_clip_rect_t	  *rect)
 {
    radeonContextPtr rmesa;
    GLint nbox, i, ret;
    GLboolean   missed_target;
    int64_t ust;
+   __DRIscreenPrivate *psp;
 
    assert(dPriv);
    assert(dPriv->driContextPriv);
@@ -891,7 +891,7 @@ void radeonCopyBuffer( const __DRIdrawablePrivate *dPriv,
    if (!rect)
    {
        UNLOCK_HARDWARE( rmesa );
-       driWaitForVBlank( dPriv, & rmesa->vbl_seq, rmesa->vblank_flags, & missed_target );
+       driWaitForVBlank( dPriv, & missed_target );
        LOCK_HARDWARE( rmesa );
    }
 
@@ -918,15 +918,17 @@ void radeonCopyBuffer( const __DRIdrawablePrivate *dPriv,
 	      if (rect->y2 < b->y2)
 		  b->y2 = rect->y2;
 
-	      if (b->x1 < b->x2 && b->y1 < b->y2)
-		  b++;
+	      if (b->x1 >= b->x2 || b->y1 >= b->y2)
+		  continue;
 	  }
-	  else
-	      b++;
 
+	  b++;
 	  n++;
       }
       rmesa->sarea->nbox = n;
+
+      if (!n)
+	 continue;
 
       ret = drmCommandNone( rmesa->dri.fd, DRM_RADEON_SWAP );
 
@@ -940,8 +942,9 @@ void radeonCopyBuffer( const __DRIdrawablePrivate *dPriv,
    UNLOCK_HARDWARE( rmesa );
    if (!rect)
    {
+       psp = dPriv->driScreenPriv;
        rmesa->swap_count++;
-       (*dri_interface->getUST)( & ust );
+       (*psp->systemTime->getUST)( & ust );
        if ( missed_target ) {
 	   rmesa->swap_missed_count++;
 	   rmesa->swap_missed_ust = ust - rmesa->swap_ust;
@@ -952,17 +955,19 @@ void radeonCopyBuffer( const __DRIdrawablePrivate *dPriv,
    }
 }
 
-void radeonPageFlip( const __DRIdrawablePrivate *dPriv )
+void radeonPageFlip( __DRIdrawablePrivate *dPriv )
 {
    radeonContextPtr rmesa;
    GLint ret;
    GLboolean   missed_target;
+   __DRIscreenPrivate *psp;
 
    assert(dPriv);
    assert(dPriv->driContextPriv);
    assert(dPriv->driContextPriv->driverPrivate);
 
    rmesa = (radeonContextPtr) dPriv->driContextPriv->driverPrivate;
+   psp = dPriv->driScreenPriv;
 
    if ( RADEON_DEBUG & DEBUG_IOCTL ) {
       fprintf(stderr, "%s: pfCurrentPage: %d\n", __FUNCTION__,
@@ -987,10 +992,10 @@ void radeonPageFlip( const __DRIdrawablePrivate *dPriv )
     */
    radeonWaitForFrameCompletion( rmesa );
    UNLOCK_HARDWARE( rmesa );
-   driWaitForVBlank( dPriv, & rmesa->vbl_seq, rmesa->vblank_flags, & missed_target );
+   driWaitForVBlank( dPriv, & missed_target );
    if ( missed_target ) {
       rmesa->swap_missed_count++;
-      (void) (*dri_interface->getUST)( & rmesa->swap_missed_ust );
+      (void) (*psp->systemTime->getUST)( & rmesa->swap_missed_ust );
    }
    LOCK_HARDWARE( rmesa );
 
@@ -1004,7 +1009,7 @@ void radeonPageFlip( const __DRIdrawablePrivate *dPriv )
    }
 
    rmesa->swap_count++;
-   (void) (*dri_interface->getUST)( & rmesa->swap_ust );
+   (void) (*psp->systemTime->getUST)( & rmesa->swap_ust );
 
    /* Get ready for drawing next frame.  Update the renderbuffers'
     * flippedOffset/Pitch fields so we draw into the right place.
@@ -1026,7 +1031,7 @@ static void radeonClear( GLcontext *ctx, GLbitfield mask )
    radeonContextPtr rmesa = RADEON_CONTEXT(ctx);
    __DRIdrawablePrivate *dPriv = rmesa->dri.drawable;
    drm_radeon_sarea_t *sarea = rmesa->sarea;
-   u_int32_t clear;
+   uint32_t clear;
    GLuint flags = 0;
    GLuint color_mask = 0;
    GLint ret, i;

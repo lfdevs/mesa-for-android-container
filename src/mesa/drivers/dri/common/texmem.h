@@ -28,7 +28,6 @@
  *    Kevin E. Martin <kem@users.sourceforge.net>
  *    Gareth Hughes <gareth@nvidia.com>
  */
-/* $XFree86:$ */
 
 /** \file texmem.h
  * Public interface to the DRI texture memory management routines.
@@ -39,8 +38,8 @@
 #ifndef DRI_TEXMEM_H
 #define DRI_TEXMEM_H
 
-#include "mtypes.h"
-#include "mm.h"
+#include "main/mtypes.h"
+#include "main/mm.h"
 #include "xf86drm.h"
 
 struct dri_tex_heap;

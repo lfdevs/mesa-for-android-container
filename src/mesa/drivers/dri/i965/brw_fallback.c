@@ -25,52 +25,47 @@
  * 
  **************************************************************************/
 
+#include "main/glheader.h"
+#include "main/context.h"
+#include "main/enums.h"
+#include "main/imports.h"
+#include "main/macros.h"
+#include "main/mtypes.h"
+
 #include "swrast_setup/swrast_setup.h"
 #include "swrast/swrast.h"
 #include "tnl/tnl.h"
-#include "context.h"
 #include "brw_context.h"
 #include "brw_fallback.h"
 
-#include "glheader.h"
-#include "enums.h"
-#include "glapi.h"
-#include "imports.h"
-#include "macros.h"
-#include "mtypes.h"
+#include "glapi/glapi.h"
 
-
-
-
-
-
+#define FILE_DEBUG_FLAG DEBUG_FALLBACKS
 
 static GLboolean do_check_fallback(struct brw_context *brw)
 {
    GLcontext *ctx = &brw->intel.ctx;
    GLuint i;
-   
+
    /* BRW_NEW_METAOPS
     */
    if (brw->metaops.active)
       return GL_FALSE;
 
-   if (brw->intel.no_rast)
+   if (brw->intel.no_rast) {
+      DBG("FALLBACK: rasterization disabled\n");
       return GL_TRUE;
-   
-   /* _NEW_BUFFERS
-    */
-   if (ctx->DrawBuffer->_ColorDrawBufferMask[0] != BUFFER_BIT_FRONT_LEFT &&
-       ctx->DrawBuffer->_ColorDrawBufferMask[0] != BUFFER_BIT_BACK_LEFT)
-      return GL_TRUE;
+   }
 
    /* _NEW_RENDERMODE
     *
     * XXX: need to save/restore RenderMode in metaops state, or
     * somehow move to a new attribs pointer:
     */
-   if (ctx->RenderMode != GL_RENDER)
+   if (ctx->RenderMode != GL_RENDER) {
+      DBG("FALLBACK: render mode\n");
       return GL_TRUE;
+   }
 
    /* _NEW_TEXTURE:
     */
@@ -79,8 +74,10 @@ static GLboolean do_check_fallback(struct brw_context *brw)
       if (texUnit->_ReallyEnabled) {
 	 struct intel_texture_object *intelObj = intel_texture_object(texUnit->_Current);
 	 struct gl_texture_image *texImage = intelObj->base.Image[0][intelObj->firstLevel];
-	 if (texImage->Border)
+	 if (texImage->Border) {
+	    DBG("FALLBACK: texture border\n");
 	    return GL_TRUE;
+	 }
       }
    }
    
@@ -88,6 +85,7 @@ static GLboolean do_check_fallback(struct brw_context *brw)
     */
    if (brw->attribs.Stencil->Enabled && 
        !brw->intel.hw_stencil) {
+      DBG("FALLBACK: stencil\n");
       return GL_TRUE;
    }
 
@@ -106,7 +104,7 @@ const struct brw_tracked_state brw_check_fallback = {
       .brw  = BRW_NEW_METAOPS,
       .cache = 0
    },
-   .update = check_fallback
+   .prepare = check_fallback
 };
 
 

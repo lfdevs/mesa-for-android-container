@@ -1,4 +1,4 @@
-/* $XFree86$ */ /* -*- mode: c; c-basic-offset: 3 -*- */
+/* -*- mode: c; c-basic-offset: 3 -*- */
 /*
  * Copyright 1999, 2000 ATI Technologies Inc. and Precision Insight, Inc.,
  *                                                Cedar Park, Texas.
@@ -38,11 +38,11 @@
 #include "mach64_tris.h"
 #include "mach64_tex.h"
 
-#include "context.h"
-#include "macros.h"
-#include "simple_list.h"
-#include "texformat.h"
-#include "imports.h"
+#include "main/context.h"
+#include "main/macros.h"
+#include "main/simple_list.h"
+#include "main/texformat.h"
+#include "main/imports.h"
 
 
 /* Destroy hardware state associated with texture `t'.

@@ -22,12 +22,11 @@
  *
  *
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/i810/i810tris.h,v 1.10 2002/02/22 21:33:04 dawes Exp $ */
 
 #ifndef I810TRIS_INC
 #define I810TRIS_INC
 
-#include "mtypes.h"
+#include "main/mtypes.h"
 
 extern void i810PrintRenderState( const char *msg, GLuint state );
 extern void i810InitTriFuncs( GLcontext *ctx );

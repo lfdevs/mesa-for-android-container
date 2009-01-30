@@ -36,7 +36,7 @@
 
 #include "brw_context.h"
 #include "brw_eu.h"
-#include "program.h"
+#include "shader/program.h"
 
 
 struct brw_vs_prog_key {
@@ -79,9 +79,5 @@ struct brw_vs_compile {
 };
 
 void brw_vs_emit( struct brw_vs_compile *c );
-
-
-void brw_ProgramCacheDestroy( GLcontext *ctx );
-void brw_ProgramCacheInit( GLcontext *ctx );
 
 #endif

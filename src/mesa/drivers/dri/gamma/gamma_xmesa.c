@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/gamma/gamma_xmesa.c,v 1.14 2002/10/30 12:51:30 alanh Exp $ */
 /*
  * Copyright 2001 by Alan Hourihane.
  *
@@ -25,10 +24,10 @@
  * 3DLabs Gamma driver
  */
 
-#include "gamma_context.h"
+#include "gammacontext.h"
 #include "gamma_vb.h"
-#include "context.h"
-#include "matrix.h"
+#include "main/context.h"
+#include "main/matrix.h"
 #include "glint_dri.h"
 
 #include "swrast/swrast.h"
@@ -238,7 +237,7 @@ gammaUnbindContext( __DRIcontextPrivate *driContextPriv )
    return GL_TRUE;
 }
 
-static struct __DriverAPIRec gammaAPI = {
+const struct __DriverAPIRec driDriverAPI = {
    gammaInitDriver,
    gammaDestroyScreen,
    gammaCreateContext,

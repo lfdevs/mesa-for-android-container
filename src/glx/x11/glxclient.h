@@ -1,37 +1,32 @@
 /*
-** License Applicability. Except to the extent portions of this file are
-** made subject to an alternative license as permitted in the SGI Free
-** Software License B, Version 1.1 (the "License"), the contents of this
-** file are subject only to the provisions of the License. You may not use
-** this file except in compliance with the License. You may obtain a copy
-** of the License at Silicon Graphics, Inc., attn: Legal Services, 1600
-** Amphitheatre Parkway, Mountain View, CA 94043-1351, or at:
-** 
-** http://oss.sgi.com/projects/FreeB
-** 
-** Note that, as provided in the License, the Software is distributed on an
-** "AS IS" basis, with ALL EXPRESS AND IMPLIED WARRANTIES AND CONDITIONS
-** DISCLAIMED, INCLUDING, WITHOUT LIMITATION, ANY IMPLIED WARRANTIES AND
-** CONDITIONS OF MERCHANTABILITY, SATISFACTORY QUALITY, FITNESS FOR A
-** PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
-** 
-** Original Code. The Original Code is: OpenGL Sample Implementation,
-** Version 1.2.1, released January 26, 2000, developed by Silicon Graphics,
-** Inc. The Original Code is Copyright (c) 1991-2000 Silicon Graphics, Inc.
-** Copyright in any portions created by third parties is as indicated
-** elsewhere herein. All Rights Reserved.
-** 
-** Additional Notice Provisions: The application programming interfaces
-** established by SGI in conjunction with the Original Code are The
-** OpenGL(R) Graphics System: A Specification (Version 1.2.1), released
-** April 1, 1999; The OpenGL(R) Graphics System Utility Library (Version
-** 1.3), released November 4, 1998; and OpenGL(R) Graphics with the X
-** Window System(R) (Version 1.3), released October 19, 1998. This software
-** was created using the OpenGL(R) version 1.2.1 Sample Implementation
-** published by SGI, but has not been independently verified as being
-** compliant with the OpenGL(R) version 1.2.1 Specification.
-*/
-/* $XFree86: xc/lib/GL/glx/glxclient.h,v 1.21 2004/02/09 23:46:31 alanh Exp $ */
+ * SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008)
+ * Copyright (C) 1991-2000 Silicon Graphics, Inc. All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice including the dates of first publication and
+ * either this permission notice or a reference to
+ * http://oss.sgi.com/projects/FreeB/
+ * shall be included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+ * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * SILICON GRAPHICS, INC. BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
+ * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ * Except as contained in this notice, the name of Silicon Graphics, Inc.
+ * shall not be used in advertising or otherwise to promote the sale, use or
+ * other dealings in this Software without prior written authorization from
+ * Silicon Graphics, Inc.
+ */
 
 /**
  * \file glxclient.h
@@ -58,26 +53,50 @@
 #include "GL/glxint.h"
 #include "GL/glxproto.h"
 #include "GL/internal/glcore.h"
-#include "glapitable.h"
-#include "glxextensions.h"
+#include "glapi/glapitable.h"
+#include "glxhash.h"
 #if defined( USE_XTHREADS )
 # include <X11/Xthreads.h>
 #elif defined( PTHREADS )
 # include <pthread.h>
 #endif
 
+#include "glxextensions.h"
+
+
+/* If we build the library with gcc's -fvisibility=hidden flag, we'll
+ * use the PUBLIC macro to mark functions that are to be exported.
+ *
+ * We also need to define a USED attribute, so the optimizer doesn't 
+ * inline a static function that we later use in an alias. - ajax
+ */
+#if defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__) >= 303
+#  define PUBLIC __attribute__((visibility("default")))
+#  define USED __attribute__((used))
+#else
+#  define PUBLIC
+#  define USED
+#endif
+
+
+
 #define GLX_MAJOR_VERSION	1	/* current version numbers */
 #define GLX_MINOR_VERSION	4
 
 #define __GLX_MAX_TEXTURE_UNITS 32
 
+typedef struct __GLXscreenConfigsRec __GLXscreenConfigs;
 typedef struct __GLXcontextRec __GLXcontext;
+typedef struct __GLXdrawableRec __GLXdrawable;
 typedef struct __GLXdisplayPrivateRec __GLXdisplayPrivate;
 typedef struct _glapi_table __GLapi;
 
 /************************************************************************/
 
 #ifdef GLX_DIRECT_RENDERING
+
+#define containerOf(ptr, type, member)			\
+    (type *)( (char *)ptr - offsetof(type,member) )
 
 #include <GL/internal/dri_interface.h>
 
@@ -86,43 +105,69 @@ typedef struct _glapi_table __GLapi;
  * Display dependent methods.  This structure is initialized during the
  * \c driCreateDisplay call.
  */
-struct __DRIdisplayRec {
+typedef struct __GLXDRIdisplayRec __GLXDRIdisplay;
+typedef struct __GLXDRIscreenRec __GLXDRIscreen;
+typedef struct __GLXDRIdrawableRec __GLXDRIdrawable;
+typedef struct __GLXDRIcontextRec __GLXDRIcontext;
+
+#include "glxextensions.h"
+
+struct __GLXDRIdisplayRec {
     /**
      * Method to destroy the private DRI display data.
      */
-    void (*destroyDisplay)(Display *dpy, void *displayPrivate);
+    void (*destroyDisplay)(__GLXDRIdisplay *display);
 
-    /**
-     * Opaque pointer to private per display direct rendering data.
-     * \c NULL if direct rendering is not supported on this display.
-     */
-    struct __DRIdisplayPrivateRec *private;
-
-    /**
-     * Array of pointers to methods to create and initialize the private DRI
-     * screen data.
-     */
-    PFNCREATENEWSCREENFUNC * createNewScreen;
+    __GLXDRIscreen *(*createScreen)(__GLXscreenConfigs *psc, int screen,
+				    __GLXdisplayPrivate *priv);
 };
 
+struct __GLXDRIscreenRec {
 
-/*
-** We keep a linked list of these structures, one per DRI device driver.
-*/
-struct __DRIdriverRec {
-   const char *name;
-   void *handle;
-   PFNCREATENEWSCREENFUNC createNewScreenFunc;
-   struct __DRIdriverRec *next;
+    void (*destroyScreen)(__GLXscreenConfigs *psc);
+
+    __GLXDRIcontext *(*createContext)(__GLXscreenConfigs *psc,
+				      const __GLcontextModes *mode,
+				      GLXContext gc,
+				      GLXContext shareList, int renderType);
+	
+    __GLXDRIdrawable *(*createDrawable)(__GLXscreenConfigs *psc,
+					XID drawable,
+					GLXDrawable glxDrawable,
+					const __GLcontextModes *modes);
+
+    void (*swapBuffers)(__GLXDRIdrawable *pdraw);
+    void (*copySubBuffer)(__GLXDRIdrawable *pdraw,
+			  int x, int y, int width, int height);
+};
+
+struct __GLXDRIcontextRec {
+    void (*destroyContext)(__GLXDRIcontext *context, __GLXscreenConfigs *psc,
+			   Display *dpy);
+    Bool (*bindContext)(__GLXDRIcontext *context,
+			__GLXDRIdrawable *pdraw,
+			__GLXDRIdrawable *pread);
+    
+    void (*unbindContext)(__GLXDRIcontext *context);
+};
+
+struct __GLXDRIdrawableRec {
+    void (*destroyDrawable)(__GLXDRIdrawable *drawable);
+
+    XID xDrawable;
+    XID drawable;
+    __GLXscreenConfigs *psc;
+    GLenum textureTarget;
+    __DRIdrawable *driDrawable;
 };
 
 /*
 ** Function to create and DRI display data and initialize the display
 ** dependent methods.
 */
-extern void *driCreateDisplay(Display *dpy, __DRIdisplay *pdisp);
-
-extern  __DRIdriver *driGetDriver(Display *dpy, int scrNum);
+extern __GLXDRIdisplay *driswCreateDisplay(Display *dpy);
+extern __GLXDRIdisplay *driCreateDisplay(Display *dpy);
+extern __GLXDRIdisplay *dri2CreateDisplay(Display *dpy);
 
 extern void DRI_glXUseXFont( Font font, int first, int count, int listbase );
 
@@ -133,8 +178,6 @@ extern void DRI_glXUseXFont( Font font, int first, int count, int listbase );
 extern const char *glXGetScreenDriver (Display *dpy, int scrNum);
 
 extern const char *glXGetDriverConfig (const char *driverName);
-
-extern Bool __glXWindowExists(Display *dpy, GLXDrawable draw);
 
 #endif
 
@@ -227,18 +270,10 @@ struct __GLXcontextRec {
     XID share_xid;
 
     /**
-     * Visual id.
-     * 
-     * \deprecated
-     * This filed has been largely been replaced by the \c mode field, but
-     * the work is not quite done.
-     */
-    VisualID vid;
-
-    /**
      * Screen number.
      */
     GLint screen;
+    __GLXscreenConfigs *psc;
 
     /**
      * \c GL_TRUE if the context was created with ImportContext, which
@@ -344,24 +379,15 @@ struct __GLXcontextRec {
      */
     GLint majorOpcode;
 
+    /**
+     * Pointer to the mode used to create this context.
+     */
+    const __GLcontextModes * mode;
+
 #ifdef GLX_DIRECT_RENDERING
-    /**
-     * Per context direct rendering interface functions and data.
-     */
-    __DRIcontext driContext;
+    __GLXDRIcontext *driContext;
+    __DRIcontext *__driContext;
 #endif
-    
-    /**
-     * \c GLXFBConfigID used to create this context.  May be \c None.  This
-     * field has been replaced by the \c mode field.
-     *
-     * \since Internal API version 20030317.
-     *
-     * \deprecated
-     * This filed has been largely been replaced by the \c mode field, but
-     * the work is not quite done.
-     */
-    GLXFBConfigID  fbconfigID;
 
     /**
      * The current read-drawable for this context.  Will be None if this
@@ -439,7 +465,7 @@ extern void __glFreeAttributeState(__GLXcontext *);
  * One of these records exists per screen of the display.  It contains
  * a pointer to the config data for that screen (if the screen supports GL).
  */
-typedef struct __GLXscreenConfigsRec {
+struct __GLXscreenConfigsRec {
     /**
      * GLX extension string reported by the X-server.
      */
@@ -455,13 +481,48 @@ typedef struct __GLXscreenConfigsRec {
     /**
      * Per screen direct rendering interface functions and data.
      */
-    __DRIscreen driScreen;
+    __DRIscreen *__driScreen;
+    const __DRIcoreExtension *core;
+    const __DRIlegacyExtension *legacy;
+    const __DRIswrastExtension *swrast;
+    const __DRIdri2Extension *dri2;
+    __glxHashTable *drawHash;
+    Display *dpy;
+    int scr, fd;
+    void *driver;
+
+    __GLXDRIscreen *driScreen;
+
+#ifdef __DRI_COPY_SUB_BUFFER
+    const __DRIcopySubBufferExtension *driCopySubBuffer;
+#endif
+
+#ifdef __DRI_SWAP_CONTROL
+    const __DRIswapControlExtension *swapControl;
+#endif
+
+#ifdef __DRI_ALLOCATE
+    const __DRIallocateExtension *allocate;
+#endif
+
+#ifdef __DRI_FRAME_TRACKING
+    const __DRIframeTrackingExtension *frameTracking;
+#endif
+
+#ifdef __DRI_MEDIA_STREAM_COUNTER
+    const __DRImediaStreamCounterExtension *msc;
+#endif
+
+#ifdef __DRI_TEX_BUFFER
+    const __DRItexBufferExtension *texBuffer;
+#endif
+
 #endif
 
     /**
-     * Linked list of configurations for this screen.
+     * Linked list of glx visuals and  fbconfigs for this screen.
      */
-    __GLcontextModes *configs;
+    __GLcontextModes *visuals, *configs;
 
     /**
      * Per-screen dynamic GLX extension tracking.  The \c direct_support
@@ -475,7 +536,7 @@ typedef struct __GLXscreenConfigsRec {
     GLboolean ext_list_first_time;
     /*@}*/
 
-} __GLXscreenConfigs;
+};
 
 /**
  * Per display private data.  One of these records exists for each display
@@ -524,11 +585,12 @@ struct __GLXdisplayPrivateRec {
     /**
      * Per display direct rendering interface functions and data.
      */
-    __DRIdisplay driDisplay;
+    __GLXDRIdisplay *driswDisplay;
+    __GLXDRIdisplay *driDisplay;
+    __GLXDRIdisplay *dri2Display;
 #endif
 };
 
-void __glXFreeContext(__GLXcontext*);
 
 extern GLubyte *__glXFlushRenderBuffer(__GLXcontext*, GLubyte*);
 
@@ -571,6 +633,10 @@ extern __GLXcontext *__glXcurrentContext;
 #define __glXSetCurrentContext(gc)	__glXcurrentContext = gc
 
 #endif /* defined( USE_XTHREADS ) || defined( PTHREADS ) */
+
+extern void __glXSetCurrentContextNull(void);
+
+extern void __glXFreeContext(__GLXcontext*);
 
 
 /*
@@ -646,9 +712,10 @@ extern void __glEmptyImage(__GLXcontext*, GLint, GLint, GLint, GLint, GLenum,
 
 
 /*
-** Allocate and Initialize Vertex Array client state 
+** Allocate and Initialize Vertex Array client state, and free.
 */
-extern void __glXInitVertexArrayState(__GLXcontext*);
+extern void __glXInitVertexArrayState(__GLXcontext *);
+extern void __glXFreeVertexArrayState(__GLXcontext *);
 
 /*
 ** Inform the Server of the major and minor numbers and of the client
@@ -672,8 +739,10 @@ extern void _XSend(Display*, const void*, long);
 extern void __glXInitializeVisualConfigFromTags( __GLcontextModes *config,
     int count, const INT32 *bp, Bool tagged_only, Bool fbconfig_style_tags );
 
-extern char * __glXGetStringFromServer( Display * dpy, int opcode,
-    CARD32 glxCode, CARD32 for_whom, CARD32 name );
+extern char * __glXQueryServerString(Display* dpy, int opcode,
+                                     CARD32 screen, CARD32 name);
+extern char * __glXGetString(Display* dpy, int opcode,
+                             CARD32 screen, CARD32 name);
 
 extern char *__glXstrdup(const char *str);
 
@@ -681,13 +750,16 @@ extern char *__glXstrdup(const char *str);
 extern const char __glXGLClientVersion[];
 extern const char __glXGLClientExtensions[];
 
-/* Determine the internal API version */
-extern int __glXGetInternalVersion(void);
-
 /* Get the unadjusted system time */
 extern int __glXGetUST( int64_t * ust );
 
-extern Bool __glXGetMscRateOML(Display * dpy, GLXDrawable drawable,
-    int32_t * numerator, int32_t * denominator);
+extern GLboolean __glXGetMscRateOML(Display * dpy, GLXDrawable drawable,
+				    int32_t * numerator, int32_t * denominator);
+
+#ifdef GLX_DIRECT_RENDERING
+GLboolean
+__driGetMscRateOML(__DRIdrawable *draw,
+		   int32_t *numerator, int32_t *denominator, void *private);
+#endif
 
 #endif /* !__GLX_client_h__ */

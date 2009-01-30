@@ -39,13 +39,13 @@
 #if defined(FX)
 
 #include "fxdrv.h"
-#include "enums.h"
-#include "image.h"
-#include "teximage.h"
-#include "texformat.h"
-#include "texcompress.h"
-#include "texobj.h"
-#include "texstore.h"
+#include "main/enums.h"
+#include "main/image.h"
+#include "main/teximage.h"
+#include "main/texformat.h"
+#include "main/texcompress.h"
+#include "main/texobj.h"
+#include "main/texstore.h"
 
 
 /* no borders! can't halve 1x1! (stride > width * comp) not allowed */
@@ -504,7 +504,7 @@ fxDDIsTextureResident(GLcontext *ctx, struct gl_texture_object *tObj)
 static GrTexTable_t
 convertPalette(const fxMesaContext fxMesa, FxU32 data[256], const struct gl_color_table *table)
 {
-   const GLubyte *tableUB = (const GLubyte *) table->TableUB;
+   const GLubyte *tableUB = (const GLubyte *) table->Table;
    GLint width = table->Size;
    FxU32 r, g, b, a;
    GLint i;
@@ -580,7 +580,7 @@ fxDDTexPalette(GLcontext * ctx, struct gl_texture_object *tObj)
 		 tObj->Name, (GLuint) tObj->DriverData);
       }
       /* This might be a proxy texture. */
-      if (!tObj->Palette.TableUB) /* TODO: is that ok or should it be TableF? */
+      if (!tObj->Palette.Table)
          return;
       if (!tObj->DriverData)
          tObj->DriverData = fxAllocTexObjData(fxMesa);

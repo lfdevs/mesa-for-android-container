@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r200/r200_tex.c,v 1.2 2002/11/05 17:46:08 tsi Exp $ */
 /*
 Copyright (C) The Weather Channel, Inc.  2002.  All Rights Reserved.
 
@@ -32,18 +31,19 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Keith Whitwell <keith@tungstengraphics.com>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "colormac.h"
-#include "context.h"
-#include "enums.h"
-#include "image.h"
-#include "simple_list.h"
-#include "texformat.h"
-#include "texstore.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/colormac.h"
+#include "main/context.h"
+#include "main/enums.h"
+#include "main/image.h"
+#include "main/simple_list.h"
+#include "main/texformat.h"
+#include "main/texstore.h"
+#include "main/teximage.h"
+#include "main/texobj.h"
+
 #include "texmem.h"
-#include "teximage.h"
-#include "texobj.h"
 
 #include "r200_context.h"
 #include "r200_state.h"
@@ -103,37 +103,39 @@ static void r200SetTexWrap( r200TexObjPtr t, GLenum swrap, GLenum twrap, GLenum 
       _mesa_problem(NULL, "bad S wrap mode in %s", __FUNCTION__);
    }
 
-   switch ( twrap ) {
-   case GL_REPEAT:
-      t->pp_txfilter |= R200_CLAMP_T_WRAP;
-      break;
-   case GL_CLAMP:
-      t->pp_txfilter |= R200_CLAMP_T_CLAMP_GL;
-      is_clamp = GL_TRUE;
-      break;
-   case GL_CLAMP_TO_EDGE:
-      t->pp_txfilter |= R200_CLAMP_T_CLAMP_LAST;
-      break;
-   case GL_CLAMP_TO_BORDER:
-      t->pp_txfilter |= R200_CLAMP_T_CLAMP_GL;
-      is_clamp_to_border = GL_TRUE;
-      break;
-   case GL_MIRRORED_REPEAT:
-      t->pp_txfilter |= R200_CLAMP_T_MIRROR;
-      break;
-   case GL_MIRROR_CLAMP_EXT:
-      t->pp_txfilter |= R200_CLAMP_T_MIRROR_CLAMP_GL;
-      is_clamp = GL_TRUE;
-      break;
-   case GL_MIRROR_CLAMP_TO_EDGE_EXT:
-      t->pp_txfilter |= R200_CLAMP_T_MIRROR_CLAMP_LAST;
-      break;
-   case GL_MIRROR_CLAMP_TO_BORDER_EXT:
-      t->pp_txfilter |= R200_CLAMP_T_MIRROR_CLAMP_GL;
-      is_clamp_to_border = GL_TRUE;
-      break;
-   default:
-      _mesa_problem(NULL, "bad T wrap mode in %s", __FUNCTION__);
+   if (t->base.tObj->Target != GL_TEXTURE_1D) {
+      switch ( twrap ) {
+      case GL_REPEAT:
+         t->pp_txfilter |= R200_CLAMP_T_WRAP;
+         break;
+      case GL_CLAMP:
+         t->pp_txfilter |= R200_CLAMP_T_CLAMP_GL;
+         is_clamp = GL_TRUE;
+         break;
+      case GL_CLAMP_TO_EDGE:
+         t->pp_txfilter |= R200_CLAMP_T_CLAMP_LAST;
+         break;
+      case GL_CLAMP_TO_BORDER:
+         t->pp_txfilter |= R200_CLAMP_T_CLAMP_GL;
+         is_clamp_to_border = GL_TRUE;
+         break;
+      case GL_MIRRORED_REPEAT:
+         t->pp_txfilter |= R200_CLAMP_T_MIRROR;
+         break;
+      case GL_MIRROR_CLAMP_EXT:
+         t->pp_txfilter |= R200_CLAMP_T_MIRROR_CLAMP_GL;
+         is_clamp = GL_TRUE;
+         break;
+      case GL_MIRROR_CLAMP_TO_EDGE_EXT:
+         t->pp_txfilter |= R200_CLAMP_T_MIRROR_CLAMP_LAST;
+         break;
+      case GL_MIRROR_CLAMP_TO_BORDER_EXT:
+         t->pp_txfilter |= R200_CLAMP_T_MIRROR_CLAMP_GL;
+         is_clamp_to_border = GL_TRUE;
+         break;
+      default:
+         _mesa_problem(NULL, "bad T wrap mode in %s", __FUNCTION__);
+      }
    }
 
    t->pp_txformat_x &= ~R200_CLAMP_Q_MASK;
@@ -182,7 +184,7 @@ static void r200SetTexMaxAnisotropy( r200TexObjPtr t, GLfloat max )
 {
    t->pp_txfilter &= ~R200_MAX_ANISO_MASK;
 
-   if ( max == 1.0 ) {
+   if ( max <= 1.0 ) {
       t->pp_txfilter |= R200_MAX_ANISO_1_TO_1;
    } else if ( max <= 2.0 ) {
       t->pp_txfilter |= R200_MAX_ANISO_2_TO_1;
@@ -483,7 +485,7 @@ r200ValidateClientStorage( GLcontext *ctx, GLenum target,
 {
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
 
-   if (0)
+   if ( R200_DEBUG & DEBUG_TEXTURE )
       fprintf(stderr, "intformat %s format %s type %s\n",
 	      _mesa_lookup_enum_by_nr( internalFormat ),
 	      _mesa_lookup_enum_by_nr( format ),
@@ -549,7 +551,7 @@ r200ValidateClientStorage( GLcontext *ctx, GLenum target,
 						  format, type);
 
       
-      if (0)
+      if ( R200_DEBUG & DEBUG_TEXTURE )
 	 fprintf(stderr, "%s: srcRowStride %d/%x\n", 
 		 __FUNCTION__, srcRowStride, srcRowStride);
 

@@ -10,6 +10,8 @@ Also remove references to GLU library since it is not required
 and we don't actually build it at this point.
 
 
+Index: mesa/progs/xdemos/Makefile
+===================================================================
 --- mesa.orig/progs/xdemos/Makefile
 +++ mesa/progs/xdemos/Makefile
 @@ -10,7 +10,7 @@
@@ -18,10 +20,10 @@ and we don't actually build it at this point.
  
 -PROGS = \
 +PROGS ?= \
+ 	corender \
+ 	glsync \
  	glthreads \
- 	glxdemo \
- 	glxgears \
-@@ -55,6 +55,11 @@
+@@ -61,6 +61,11 @@
  extra: $(EXTRA_PROGS)
  
  
@@ -33,6 +35,8 @@ and we don't actually build it at this point.
  clean:
  	-rm -f $(PROGS) $(EXTRA_PROGS)
  	-rm -f *.o *~
+Index: mesa/progs/Makefile
+===================================================================
 --- mesa.orig/progs/Makefile
 +++ mesa/progs/Makefile
 @@ -21,8 +21,12 @@
@@ -48,4 +52,4 @@ and we don't actually build it at this point.
 +	done
  
  clean:
- 	@for dir in $(SUBDIRS) tests ; do \
+ 	-@for dir in $(SUBDIRS) tests ; do \

@@ -26,7 +26,7 @@
  */
 
 #include "utils.h"
-#include "dispatch.h"
+#include "glapi/dispatch.h"
 
 #ifndef NULL
 # define NULL 0
@@ -37,13 +37,6 @@ static const char UniformMatrix3fvARB_names[] =
     "iiip\0" /* Parameter signature */
     "glUniformMatrix3fv\0"
     "glUniformMatrix3fvARB\0"
-    "";
-#endif
-
-#if defined(need_GL_NV_vertex_program)
-static const char ProgramParameter4fNV_names[] = 
-    "iiffff\0" /* Parameter signature */
-    "glProgramParameter4fNV\0"
     "";
 #endif
 
@@ -440,6 +433,13 @@ static const char Color4ubVertex3fvSUN_names[] =
     "";
 #endif
 
+#if defined(need_GL_EXT_texture_array)
+static const char FramebufferTextureLayerEXT_names[] = 
+    "iiiii\0" /* Parameter signature */
+    "glFramebufferTextureLayerEXT\0"
+    "";
+#endif
+
 #if defined(need_GL_SGIX_list_priority)
 static const char GetListParameterivSGIX_names[] = 
     "iip\0" /* Parameter signature */
@@ -562,13 +562,6 @@ static const char ImageTransformParameterfHP_names[] =
 static const char MatrixIndexusvARB_names[] = 
     "ip\0" /* Parameter signature */
     "glMatrixIndexusvARB\0"
-    "";
-#endif
-
-#if defined(need_GL_NV_vertex_program)
-static const char ProgramParameter4dvNV_names[] = 
-    "iip\0" /* Parameter signature */
-    "glProgramParameter4dvNV\0"
     "";
 #endif
 
@@ -960,13 +953,6 @@ static const char GenerateMipmapEXT_names[] =
     "";
 #endif
 
-#if defined(need_GL_NV_vertex_program)
-static const char ProgramParameter4dNV_names[] = 
-    "iidddd\0" /* Parameter signature */
-    "glProgramParameter4dNV\0"
-    "";
-#endif
-
 #if defined(need_GL_ATI_fragment_shader)
 static const char SetFragmentShaderConstantATI_names[] = 
     "ip\0" /* Parameter signature */
@@ -1304,10 +1290,11 @@ static const char Color3fVertex3fSUN_names[] =
     "";
 #endif
 
-#if defined(need_GL_ARB_vertex_program)
+#if defined(need_GL_ARB_vertex_program) || defined(need_GL_NV_vertex_program)
 static const char ProgramEnvParameter4fvARB_names[] = 
     "iip\0" /* Parameter signature */
     "glProgramEnvParameter4fvARB\0"
+    "glProgramParameter4fvNV\0"
     "";
 #endif
 
@@ -2028,13 +2015,6 @@ static const char WeightfvARB_names[] =
     "";
 #endif
 
-#if defined(need_GL_NV_vertex_program)
-static const char ProgramParameter4fvNV_names[] = 
-    "iip\0" /* Parameter signature */
-    "glProgramParameter4fvNV\0"
-    "";
-#endif
-
 #if defined(need_GL_MESA_window_pos)
 static const char WindowPos4fMESA_names[] = 
     "ffff\0" /* Parameter signature */
@@ -2425,10 +2405,11 @@ static const char GetBufferPointervARB_names[] =
     "";
 #endif
 
-#if defined(need_GL_ARB_vertex_program)
+#if defined(need_GL_ARB_vertex_program) || defined(need_GL_NV_vertex_program)
 static const char ProgramEnvParameter4fARB_names[] = 
     "iiffff\0" /* Parameter signature */
     "glProgramEnvParameter4fARB\0"
+    "glProgramParameter4fNV\0"
     "";
 #endif
 
@@ -2796,10 +2777,11 @@ static const char ReplacementCodePointerSUN_names[] =
     "";
 #endif
 
-#if defined(need_GL_ARB_vertex_program)
+#if defined(need_GL_ARB_vertex_program) || defined(need_GL_NV_vertex_program)
 static const char ProgramEnvParameter4dARB_names[] = 
     "iidddd\0" /* Parameter signature */
     "glProgramEnvParameter4dARB\0"
+    "glProgramParameter4dNV\0"
     "";
 #endif
 
@@ -3653,10 +3635,11 @@ static const char GetColorTableParameteriv_names[] =
     "";
 #endif
 
-#if defined(need_GL_ARB_vertex_program)
+#if defined(need_GL_ARB_vertex_program) || defined(need_GL_NV_vertex_program)
 static const char ProgramEnvParameter4dvARB_names[] = 
     "iip\0" /* Parameter signature */
     "glProgramEnvParameter4dvARB\0"
+    "glProgramParameter4dvNV\0"
     "";
 #endif
 
@@ -5500,6 +5483,13 @@ static const struct dri_extension_function GL_EXT_texture3D_functions[] = {
 };
 #endif
 
+#if defined(need_GL_EXT_texture_array)
+static const struct dri_extension_function GL_EXT_texture_array_functions[] = {
+    { FramebufferTextureLayerEXT_names, FramebufferTextureLayerEXT_remap_index, -1 },
+    { NULL, 0, 0 }
+};
+#endif
+
 #if defined(need_GL_EXT_texture_object)
 static const struct dri_extension_function GL_EXT_texture_object_functions[] = {
     { PrioritizeTextures_names, -1, 331 },
@@ -5734,12 +5724,10 @@ static const struct dri_extension_function GL_NV_vertex_array_range_functions[] 
 
 #if defined(need_GL_NV_vertex_program)
 static const struct dri_extension_function GL_NV_vertex_program_functions[] = {
-    { ProgramParameter4fNV_names, ProgramParameter4fNV_remap_index, -1 },
     { VertexAttrib4ubvNV_names, VertexAttrib4ubvNV_remap_index, -1 },
     { VertexAttrib4svNV_names, VertexAttrib4svNV_remap_index, -1 },
     { VertexAttribs1dvNV_names, VertexAttribs1dvNV_remap_index, -1 },
     { VertexAttrib1fvNV_names, VertexAttrib1fvNV_remap_index, -1 },
-    { ProgramParameter4dvNV_names, ProgramParameter4dvNV_remap_index, -1 },
     { VertexAttrib4fNV_names, VertexAttrib4fNV_remap_index, -1 },
     { VertexAttrib2dNV_names, VertexAttrib2dNV_remap_index, -1 },
     { VertexAttrib4ubNV_names, VertexAttrib4ubNV_remap_index, -1 },
@@ -5747,7 +5735,7 @@ static const struct dri_extension_function GL_NV_vertex_program_functions[] = {
     { VertexAttribs4fvNV_names, VertexAttribs4fvNV_remap_index, -1 },
     { VertexAttrib2sNV_names, VertexAttrib2sNV_remap_index, -1 },
     { VertexAttribs3fvNV_names, VertexAttribs3fvNV_remap_index, -1 },
-    { ProgramParameter4dNV_names, ProgramParameter4dNV_remap_index, -1 },
+    { ProgramEnvParameter4fvARB_names, ProgramEnvParameter4fvARB_remap_index, -1 },
     { LoadProgramNV_names, LoadProgramNV_remap_index, -1 },
     { VertexAttrib4fvNV_names, VertexAttrib4fvNV_remap_index, -1 },
     { VertexAttrib3fNV_names, VertexAttrib3fNV_remap_index, -1 },
@@ -5757,14 +5745,15 @@ static const struct dri_extension_function GL_NV_vertex_program_functions[] = {
     { VertexAttrib2fvNV_names, VertexAttrib2fvNV_remap_index, -1 },
     { VertexAttrib2dvNV_names, VertexAttrib2dvNV_remap_index, -1 },
     { VertexAttrib1dvNV_names, VertexAttrib1dvNV_remap_index, -1 },
-    { ProgramParameter4fvNV_names, ProgramParameter4fvNV_remap_index, -1 },
     { VertexAttrib1svNV_names, VertexAttrib1svNV_remap_index, -1 },
+    { ProgramEnvParameter4fARB_names, ProgramEnvParameter4fARB_remap_index, -1 },
     { VertexAttribs2svNV_names, VertexAttribs2svNV_remap_index, -1 },
     { GetVertexAttribivNV_names, GetVertexAttribivNV_remap_index, -1 },
     { GetVertexAttribfvNV_names, GetVertexAttribfvNV_remap_index, -1 },
     { VertexAttrib2svNV_names, VertexAttrib2svNV_remap_index, -1 },
     { VertexAttribs1fvNV_names, VertexAttribs1fvNV_remap_index, -1 },
     { IsProgramNV_names, IsProgramNV_remap_index, -1 },
+    { ProgramEnvParameter4dARB_names, ProgramEnvParameter4dARB_remap_index, -1 },
     { VertexAttrib2fNV_names, VertexAttrib2fNV_remap_index, -1 },
     { RequestResidentProgramsNV_names, RequestResidentProgramsNV_remap_index, -1 },
     { ExecuteProgramNV_names, ExecuteProgramNV_remap_index, -1 },
@@ -5777,6 +5766,7 @@ static const struct dri_extension_function GL_NV_vertex_program_functions[] = {
     { GetProgramivNV_names, GetProgramivNV_remap_index, -1 },
     { GetVertexAttribdvNV_names, GetVertexAttribdvNV_remap_index, -1 },
     { VertexAttrib3fvNV_names, VertexAttrib3fvNV_remap_index, -1 },
+    { ProgramEnvParameter4dvARB_names, ProgramEnvParameter4dvARB_remap_index, -1 },
     { VertexAttribs2fvNV_names, VertexAttribs2fvNV_remap_index, -1 },
     { DeleteProgramsNV_names, DeleteProgramsNV_remap_index, -1 },
     { GetVertexAttribPointervNV_names, GetVertexAttribPointervNV_remap_index, -1 },

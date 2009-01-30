@@ -35,7 +35,6 @@
 #include "brw_context.h"
 #include "brw_state.h"
 #include "brw_defines.h"
-#include "brw_hal.h"
 
 #define VS 0
 #define GS 1
@@ -43,7 +42,44 @@
 #define SF 3
 #define CS 4
 
-/* XXX: Are the min_entry_size numbers useful?
+/** @file brw_urb.c
+ *
+ * Manages the division of the URB space between the various fixed-function
+ * units.
+ *
+ * See the Thread Initiation Management section of the GEN4 B-Spec, and
+ * the individual *_STATE structures for restrictions on numbers of
+ * entries and threads.
+ */
+
+/*
+ * Generally, a unit requires a min_nr_entries based on how many entries
+ * it produces before the downstream unit gets unblocked and can use and
+ * dereference some of its handles.
+ *
+ * The SF unit preallocates a PUE at the start of thread dispatch, and only
+ * uses that one.  So it requires one entry per thread.
+ *
+ * For CLIP, the SF unit will hold the previous primitive while the
+ * next is getting assembled, meaning that linestrips require 3 CLIP VUEs
+ * (vertices) to ensure continued processing, trifans require 4, and tristrips
+ * require 5.  There can be 1 or 2 threads, and each has the same requirement.
+ *
+ * GS has the same requirement as CLIP, but it never handles tristrips,
+ * so we can lower the minimum to 4 for the POLYGONs (trifans) it produces.
+ * We only run it single-threaded.
+ *
+ * For VS, the number of entries may be 8, 12, 16, or 32 (or 64 on G4X).
+ * Each thread processes 2 preallocated VUEs (vertices) at a time, and they
+ * get streamed down as soon as threads processing earlier vertices get
+ * theirs accepted.
+ *
+ * Each unit will take the number of URB entries we give it (based on the
+ * entry size calculated in brw_vs_emit.c for VUEs, brw_sf_emit.c for PUEs,
+ * and brw_curbe.c for the CURBEs) and decide its maximum number of
+ * threads it can support based on that. in brw_*_state.c.
+ *
+ * XXX: Are the min_entry_size numbers useful?
  * XXX: Verify min_nr_entries, esp for VS.
  * XXX: Verify SF min_entry_size.
  */
@@ -55,7 +91,7 @@ static const struct {
 } limits[CS+1] = {
    { 16, 32, 1, 5 },			/* vs */
    { 4, 8,  1, 5 },			/* gs */
-   { 6, 8,  1, 5 },			/* clp */
+   { 5, 10,  1, 5 },			/* clp */
    { 1, 8,  1, 12 },		        /* sf */
    { 1, 4,  1, 32 }			/* cs */
 };
@@ -81,20 +117,6 @@ static void recalculate_urb_fence( struct brw_context *brw )
    GLuint vsize = brw->vs.prog_data->urb_entry_size;
    GLuint sfsize = brw->sf.prog_data->urb_entry_size;
 
-   static GLboolean (*hal_recalculate_urb_fence) (struct brw_context *brw);
-   static GLboolean hal_tried;
-
-   if (!hal_tried)
-   {
-      hal_recalculate_urb_fence = brw_hal_find_symbol ("intel_hal_recalculate_urb_fence");
-      hal_tried = 1;
-   }
-   if (hal_recalculate_urb_fence)
-   {
-      if ((*hal_recalculate_urb_fence) (brw))
-	 return;
-   }
-   
    if (csize < limits[CS].min_entry_size)
       csize = limits[CS].min_entry_size;
 
@@ -107,9 +129,9 @@ static void recalculate_urb_fence( struct brw_context *brw )
    if (brw->urb.vsize < vsize ||
        brw->urb.sfsize < sfsize ||
        brw->urb.csize < csize ||
-       (brw->urb.constrained && (brw->urb.vsize > brw->urb.vsize ||
-				 brw->urb.sfsize > brw->urb.sfsize ||
-				 brw->urb.csize > brw->urb.csize))) {
+       (brw->urb.constrained && (brw->urb.vsize > vsize ||
+				 brw->urb.sfsize > sfsize ||
+				 brw->urb.csize > csize))) {
       
 
       brw->urb.csize = csize;
@@ -129,6 +151,10 @@ static void recalculate_urb_fence( struct brw_context *brw )
 	 brw->urb.nr_sf_entries = limits[SF].min_nr_entries;	
 	 brw->urb.nr_cs_entries = limits[CS].min_nr_entries;	
 
+	 /* Mark us as operating with constrained nr_entries, so that next
+	  * time we recalculate we'll resize the fences in the hope of
+	  * escaping constrained mode and getting back to normal performance.
+	  */
 	 brw->urb.constrained = 1;
 	 
 	 if (!check_urb_layout(brw)) {
@@ -167,7 +193,7 @@ const struct brw_tracked_state brw_recalculate_urb_fence = {
       .cache = (CACHE_NEW_VS_PROG |
 		CACHE_NEW_SF_PROG)
    },
-   .update = recalculate_urb_fence
+   .prepare = recalculate_urb_fence
 };
 
 
@@ -201,15 +227,3 @@ void brw_upload_urb_fence(struct brw_context *brw)
 
    BRW_BATCH_STRUCT(brw, &uf);
 }
-
-
-#if 0
-const struct brw_tracked_state brw_urb_fence = {
-   .dirty = {
-      .mesa = 0,
-      .brw = BRW_NEW_URB_FENCE | BRW_NEW_PSP,
-      .cache = 0
-   },
-   .update = brw_upload_urb_fence
-};
-#endif

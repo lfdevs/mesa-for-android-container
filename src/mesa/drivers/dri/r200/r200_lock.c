@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r200/r200_lock.c,v 1.1 2002/10/30 12:51:52 alanh Exp $ */
 /*
 Copyright (C) The Weather Channel, Inc.  2002.  All Rights Reserved.
 
@@ -61,7 +60,7 @@ r200UpdatePageFlipping( r200ContextPtr rmesa )
 
 
 
-/* Update the hardware state.  This is called if another context has
+/* Update the hardware state.  This is called if another main/context.has
  * grabbed the hardware lock, which includes the X server.  This
  * function also updates the driver's window state after the X server
  * moves, resizes or restacks a window -- the change will be reflected

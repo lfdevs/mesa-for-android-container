@@ -11,11 +11,11 @@
 #include "s3v_regs.h"
 #include "s3v_macros.h"
 #include "s3v_screen.h"
-#include "colormac.h"
-#include "macros.h"
-#include "mtypes.h"
+#include "main/colormac.h"
+#include "main/macros.h"
+#include "main/mtypes.h"
 #include "drm.h"
-#include "mm.h"
+#include "main/mm.h"
 #include "drirenderbuffer.h"
 
 /* Flags for context */
@@ -419,9 +419,9 @@ struct s3v_context {
 #define S3VIRGEPACKCOLOR4444( r, g, b, a ) \
     ((((a) & 0xf0) << 8) | (((r) & 0xf0) << 4) | ((g) & 0xf0) | ((b) >> 4))
 
-static __inline GLuint s3vPackColor( GLuint cpp,
-					GLubyte r, GLubyte g,
-					GLubyte b, GLubyte a )
+static INLINE GLuint s3vPackColor( GLuint cpp,
+                                   GLubyte r, GLubyte g,
+                                   GLubyte b, GLubyte a )
 {
 	unsigned int ret;
 	DEBUG(("cpp = %i, r=0x%x, g=0x%x, b=0x%x, a=0x%x\n", cpp, r, g, b, a));

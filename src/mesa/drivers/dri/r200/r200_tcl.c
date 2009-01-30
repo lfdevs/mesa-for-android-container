@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r200/r200_tcl.c,v 1.2 2002/12/16 16:18:55 dawes Exp $ */
 /*
 Copyright (C) The Weather Channel, Inc.  2002.  All Rights Reserved.
 
@@ -33,12 +32,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Keith Whitwell <keith@tungstengraphics.com>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "mtypes.h"
-#include "enums.h"
-#include "colormac.h"
-#include "light.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/mtypes.h"
+#include "main/enums.h"
+#include "main/colormac.h"
+#include "main/light.h"
 
 #include "vbo/vbo.h"
 #include "tnl/tnl.h"

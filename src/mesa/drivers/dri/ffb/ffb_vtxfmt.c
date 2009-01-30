@@ -1,4 +1,4 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/ffb/ffb_vtxfmt.c,v 1.1 2002/02/22 21:32:59 dawes Exp $
+/* 
  *
  * GLX Hardware Device Driver for Sun Creator/Creator3D
  * Copyright (C) 2001 David S. Miller
@@ -25,26 +25,22 @@
  *    David S. Miller <davem@redhat.com>
  */
 
-#include "glheader.h"
+#include "main/glheader.h"
 #include "api_noop.h"
-#include "context.h"
+#include "main/context.h"
 #include "light.h"
-#include "macros.h"
-#include "imports.h"
-#include "mtypes.h"
-#include "simple_list.h"
+#include "main/macros.h"
+#include "main/imports.h"
+#include "main/mtypes.h"
+#include "main/simple_list.h"
 #include "vtxfmt.h"
 #include "ffb_xmesa.h"
 #include "ffb_context.h"
 #include "ffb_vb.h"
 #include "tnl/tnl.h"
-#include "tnl/t_context.h"
+#include "tnl/tcontext.h"
 
 #include "ffb_vtxfmt.h"
-
-#ifndef __GNUC__
-#define __inline  /**/
-#endif
 
 #define TNL_VERTEX			ffbTnlVertex
 
@@ -60,7 +56,7 @@ do {						\
 
 /* Color functions: */
 
-static __inline void ffb_recalc_base_color(GLcontext *ctx)
+static INLINE void ffb_recalc_base_color(GLcontext *ctx)
 {
 	ffbContextPtr fmesa = FFB_CONTEXT(ctx);
 	struct gl_light *light;

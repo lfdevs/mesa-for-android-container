@@ -1,4 +1,4 @@
-/* $XFree86$ */ /* -*- mode: c; c-basic-offset: 3 -*- */
+/* -*- mode: c; c-basic-offset: 3 -*- */
 /*
  * Copyright 2000 Gareth Hughes
  * All Rights Reserved.
@@ -31,7 +31,7 @@
 #ifndef __MACH64_TRIS_H__
 #define __MACH64_TRIS_H__
 
-#include "mtypes.h"
+#include "main/mtypes.h"
 
 extern void mach64InitTriFuncs( GLcontext *ctx );
 

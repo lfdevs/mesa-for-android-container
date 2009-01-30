@@ -9,17 +9,8 @@ CONFIG_NAME = linux-osmesa
 # Compiler and flags
 CC = gcc
 CXX = g++
-
-PIC_FLAGS  = -fPIC
-
-DEFINES = -D_POSIX_SOURCE -D_POSIX_C_SOURCE=199309L -D_SVID_SOURCE \
-	-D_BSD_SOURCE -D_GNU_SOURCE \
-	-DPTHREADS -DUSE_XSHM -DHAVE_POSIX_MEMALIGN
-
-CFLAGS = -ansi -pedantic $(OPT_FLAGS) $(PIC_FLAGS) $(ARCH_FLAGS) $(DEFINES) \
-	$(ASM_FLAGS) -ffast-math
-
-CXXFLAGS = -ansi -pedantic $(OPT_FLAGS) $(PIC_FLAGS) $(ARCH_FLAGS) $(DEFINES)
+CFLAGS = -O3 -ansi -pedantic -fPIC -ffast-math -D_POSIX_SOURCE -D_POSIX_C_SOURCE=199309L -D_SVID_SOURCE -D_BSD_SOURCE -DPTHREADS
+CXXFLAGS = -O3 -ansi -pedantic -fPIC -ffast-math -D_POSIX_SOURCE -D_POSIX_C_SOURCE=199309L -D_SVID_SOURCE -D_BSD_SOURCE
 
 # Work around aliasing bugs - developers should comment this out
 CFLAGS += -fno-strict-aliasing
@@ -34,5 +25,4 @@ PROGRAM_DIRS = osdemos
 # Dependencies
 OSMESA_LIB_DEPS = -lm -lpthread
 GLU_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(OSMESA_LIB)
-APP_LIB_DEPS = -lOSMesa -lGLU
-
+APP_LIB_DEPS = -lm -lpthread

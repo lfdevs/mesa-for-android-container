@@ -43,20 +43,18 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "dri_util.h"
 #include "texmem.h"
 
-#include "macros.h"
-#include "mtypes.h"
-#include "colormac.h"
+#include "main/macros.h"
+#include "main/mtypes.h"
+#include "main/colormac.h"
 
 #define USER_BUFFERS
-
-//#define OPTIMIZE_ELTS
 
 struct r300_context;
 typedef struct r300_context r300ContextRec;
 typedef struct r300_context *r300ContextPtr;
 
 #include "radeon_lock.h"
-#include "mm.h"
+#include "main/mm.h"
 
 /* From http://gcc.gnu.org/onlinedocs/gcc-3.2.3/gcc/Variadic-Macros.html .
    I suppose we could inline this and use macro to fetch out __LINE__ and stuff in case we run into trouble
@@ -75,12 +73,12 @@ typedef struct r300_context *r300ContextPtr;
 	}
 
 #include "r300_vertprog.h"
-#include "r300_fragprog.h"
+#include "r500_fragprog.h"
 
 /**
  * This function takes a float and packs it into a uint32_t
  */
-static __inline__ uint32_t r300PackFloat32(float fl)
+static INLINE uint32_t r300PackFloat32(float fl)
 {
 	union {
 		float fl;
@@ -97,7 +95,7 @@ static __inline__ uint32_t r300PackFloat32(float fl)
  * But it works for most things.  I'll fix it later if someone
  * else with a better clue doesn't
  */
-static __inline__ uint32_t r300PackFloat24(float f)
+static INLINE uint32_t r300PackFloat24(float f)
 {
 	float mantissa;
 	int exponent;
@@ -149,7 +147,6 @@ struct r300_dma_region {
 	int aos_offset;		/* address in GART memory */
 	int aos_stride;		/* distance between elements, in dwords */
 	int aos_size;		/* number of components (1-4) */
-	int aos_reg;		/* VAP register assignment */
 };
 
 struct r300_dma {
@@ -180,13 +177,6 @@ struct r300_tex_obj {
 
 	GLuint bufAddr;		/* Offset to start of locally
 				   shared texture block */
-
-	GLuint dirty_state;	/* Flags (1 per texunit) for
-				   whether or not this texobj
-				   has dirty hardware state
-				   (pp_*) that needs to be
-				   brought into the
-				   texunit. */
 
 	drm_radeon_tex_image_t image[6][RADEON_MAX_TEXTURE_LEVELS];
 	/* Six, for the cube faces */
@@ -333,15 +323,17 @@ struct r300_state_atom {
 #define R300_RI_INTERP_7	8
 #define R300_RI_CMDSIZE		9
 
+#define R500_RI_CMDSIZE	       17
+
 #define R300_RR_CMD_0		0	/* rr is variable size (at least 1) */
-#define R300_RR_ROUTE_0		1
-#define R300_RR_ROUTE_1		2
-#define R300_RR_ROUTE_2		3
-#define R300_RR_ROUTE_3		4
-#define R300_RR_ROUTE_4		5
-#define R300_RR_ROUTE_5		6
-#define R300_RR_ROUTE_6		7
-#define R300_RR_ROUTE_7		8
+#define R300_RR_INST_0		1
+#define R300_RR_INST_1		2
+#define R300_RR_INST_2		3
+#define R300_RR_INST_3		4
+#define R300_RR_INST_4		5
+#define R300_RR_INST_5		6
+#define R300_RR_INST_6		7
+#define R300_RR_INST_7		8
 #define R300_RR_CMDSIZE		9
 
 #define R300_FP_CMD_0		0
@@ -355,6 +347,17 @@ struct r300_state_atom {
 #define R300_FP_NODE3		8
 #define R300_FP_CMDSIZE		9
 
+#define R500_FP_CMD_0           0
+#define R500_FP_CNTL            1
+#define R500_FP_PIXSIZE         2
+#define R500_FP_CMD_1           3
+#define R500_FP_CODE_ADDR       4
+#define R500_FP_CODE_RANGE      5
+#define R500_FP_CODE_OFFSET     6
+#define R500_FP_CMD_2           7
+#define R500_FP_FC_CNTL         8
+#define R500_FP_CMDSIZE         9
+
 #define R300_FPT_CMD_0		0
 #define R300_FPT_INSTR_0	1
 #define R300_FPT_CMDSIZE	65
@@ -362,10 +365,14 @@ struct r300_state_atom {
 #define R300_FPI_CMD_0		0
 #define R300_FPI_INSTR_0	1
 #define R300_FPI_CMDSIZE	65
+/* R500 has space for 512 instructions - 6 dwords per instruction */
+#define R500_FPI_CMDSIZE	(512*6+1)
 
 #define R300_FPP_CMD_0		0
 #define R300_FPP_PARAM_0	1
 #define R300_FPP_CMDSIZE	(32*4+1)
+/* R500 has spcae for 256 constants - 4 dwords per constant */
+#define R500_FPP_CMDSIZE	(256*4+1)
 
 #define R300_FOGS_CMD_0		0
 #define R300_FOGS_STATE		1
@@ -413,6 +420,12 @@ struct r300_state_atom {
 #define R300_ZB_PITCH		2
 #define R300_ZB_CMDSIZE		3
 
+#define R300_VAP_CNTL_FLUSH     0
+#define R300_VAP_CNTL_FLUSH_1   1
+#define R300_VAP_CNTL_CMD       2
+#define R300_VAP_CNTL_INSTR     3
+#define R300_VAP_CNTL_SIZE      4
+
 #define R300_VPI_CMD_0		0
 #define R300_VPI_INSTR_0	1
 #define R300_VPI_CMDSIZE	1025	/* 256 16 byte instructions */
@@ -454,63 +467,67 @@ struct r300_hw_state {
 
 	struct r300_state_atom vpt;	/* viewport (1D98) */
 	struct r300_state_atom vap_cntl;
+        struct r300_state_atom vap_index_offset; /* 0x208c r5xx only */
 	struct r300_state_atom vof;	/* VAP output format register 0x2090 */
 	struct r300_state_atom vte;	/* (20B0) */
-	struct r300_state_atom unk2134;	/* (2134) */
+	struct r300_state_atom vap_vf_max_vtx_indx;	/* Maximum Vertex Indx Clamp (2134) */
 	struct r300_state_atom vap_cntl_status;
 	struct r300_state_atom vir[2];	/* vap input route (2150/21E0) */
 	struct r300_state_atom vic;	/* vap input control (2180) */
-	struct r300_state_atom unk21DC;	/* (21DC) */
+	struct r300_state_atom vap_psc_sgn_norm_cntl; /* Programmable Stream Control Signed Normalize Control (21DC) */
 	struct r300_state_atom vap_clip_cntl;
-	struct r300_state_atom unk2220;	/* (2220) */
-	struct r300_state_atom unk2288;	/* (2288) */
+	struct r300_state_atom vap_clip;
+	struct r300_state_atom vap_pvs_vtx_timeout_reg;	/* Vertex timeout register (2288) */
 	struct r300_state_atom pvs;	/* pvs_cntl (22D0) */
 	struct r300_state_atom gb_enable;	/* (4008) */
 	struct r300_state_atom gb_misc;	/* Multisampling position shifts ? (4010) */
-	struct r300_state_atom unk4200;	/* (4200) */
-	struct r300_state_atom unk4214;	/* (4214) */
+	struct r300_state_atom ga_point_s0;	/* S Texture Coordinate of Vertex 0 for Point texture stuffing (LLC) (4200) */
+	struct r300_state_atom ga_triangle_stipple;	/* (4214) */
 	struct r300_state_atom ps;	/* pointsize (421C) */
-	struct r300_state_atom unk4230;	/* (4230) */
+	struct r300_state_atom ga_point_minmax;	/* (4230) */
 	struct r300_state_atom lcntl;	/* line control */
-	struct r300_state_atom unk4260;	/* (4260) */
+	struct r300_state_atom ga_line_stipple;	/* (4260) */
 	struct r300_state_atom shade;
 	struct r300_state_atom polygon_mode;
 	struct r300_state_atom fogp;	/* fog parameters (4294) */
-	struct r300_state_atom unk429C;	/* (429C) */
+	struct r300_state_atom ga_soft_reset;	/* (429C) */
 	struct r300_state_atom zbias_cntl;
 	struct r300_state_atom zbs;	/* zbias (42A4) */
 	struct r300_state_atom occlusion_cntl;
 	struct r300_state_atom cul;	/* cull cntl (42B8) */
-	struct r300_state_atom unk42C0;	/* (42C0) */
+	struct r300_state_atom su_depth_scale;	/* (42C0) */
 	struct r300_state_atom rc;	/* rs control (4300) */
 	struct r300_state_atom ri;	/* rs interpolators (4310) */
 	struct r300_state_atom rr;	/* rs route (4330) */
-	struct r300_state_atom unk43A4;	/* (43A4) */
-	struct r300_state_atom unk43E8;	/* (43E8) */
+	struct r300_state_atom sc_hyperz;	/* (43A4) */
+	struct r300_state_atom sc_screendoor;	/* (43E8) */
 	struct r300_state_atom fp;	/* fragment program cntl + nodes (4600) */
 	struct r300_state_atom fpt;	/* texi - (4620) */
-	struct r300_state_atom unk46A4;	/* (46A4) */
+	struct r300_state_atom us_out_fmt;	/* (46A4) */
+	struct r300_state_atom r500fp;	/* r500 fp instructions */
+	struct r300_state_atom r500fp_const;	/* r500 fp constants */
 	struct r300_state_atom fpi[4];	/* fp instructions (46C0/47C0/48C0/49C0) */
 	struct r300_state_atom fogs;	/* fog state (4BC0) */
 	struct r300_state_atom fogc;	/* fog color (4BC8) */
 	struct r300_state_atom at;	/* alpha test (4BD4) */
-	struct r300_state_atom unk4BD8;	/* (4BD8) */
+	struct r300_state_atom fg_depth_src;	/* (4BD8) */
 	struct r300_state_atom fpp;	/* 0x4C00 and following */
-	struct r300_state_atom unk4E00;	/* (4E00) */
+	struct r300_state_atom rb3d_cctl;	/* (4E00) */
 	struct r300_state_atom bld;	/* blending (4E04) */
 	struct r300_state_atom cmk;	/* colormask (4E0C) */
 	struct r300_state_atom blend_color;	/* constant blend color */
+	struct r300_state_atom rop;	/* ropcntl */
 	struct r300_state_atom cb;	/* colorbuffer (4E28) */
-	struct r300_state_atom unk4E50;	/* (4E50) */
-	struct r300_state_atom unk4E88;	/* (4E88) */
-	struct r300_state_atom unk4EA0;	/* (4E88) I saw it only written on RV350 hardware..  */
+	struct r300_state_atom rb3d_dither_ctl;	/* (4E50) */
+	struct r300_state_atom rb3d_aaresolve_ctl;	/* (4E88) */
+	struct r300_state_atom rb3d_discard_src_pixel_lte_threshold;	/* (4E88) I saw it only written on RV350 hardware..  */
 	struct r300_state_atom zs;	/* zstencil control (4F00) */
 	struct r300_state_atom zstencil_format;
 	struct r300_state_atom zb;	/* z buffer (4F20) */
-	struct r300_state_atom unk4F28;	/* (4F28) */
+	struct r300_state_atom zb_depthclearvalue;	/* (4F28) */
 	struct r300_state_atom unk4F30;	/* (4F30) */
-	struct r300_state_atom unk4F44;	/* (4F44) */
-	struct r300_state_atom unk4F54;	/* (4F54) */
+	struct r300_state_atom zb_hiz_offset;	/* (4F44) */
+	struct r300_state_atom zb_hiz_pitch;	/* (4F54) */
 
 	struct r300_state_atom vpi;	/* vp instructions */
 	struct r300_state_atom vpp;	/* vp parameters */
@@ -557,9 +574,7 @@ struct r300_depthbuffer_state {
 };
 
 struct r300_stencilbuffer_state {
-	GLuint clear;
 	GLboolean hw_stencil;
-
 };
 
 /* Vertex shader state */
@@ -579,37 +594,20 @@ struct r300_vertex_shader_fragment {
 	union {
 		GLuint d[VSF_MAX_FRAGMENT_LENGTH];
 		float f[VSF_MAX_FRAGMENT_LENGTH];
-		VERTEX_SHADER_INSTRUCTION i[VSF_MAX_FRAGMENT_LENGTH / 4];
+		GLuint i[VSF_MAX_FRAGMENT_LENGTH];
 	} body;
 };
 
-#define VSF_DEST_PROGRAM	0x0
-#define VSF_DEST_MATRIX0	0x200
-#define VSF_DEST_MATRIX1	0x204
-#define VSF_DEST_MATRIX2	0x208
-#define VSF_DEST_VECTOR0	0x20c
-#define VSF_DEST_VECTOR1	0x20d
-#define VSF_DEST_UNKNOWN1	0x400
-#define VSF_DEST_UNKNOWN2	0x406
-
 struct r300_vertex_shader_state {
 	struct r300_vertex_shader_fragment program;
-
-	struct r300_vertex_shader_fragment unknown1;
-	struct r300_vertex_shader_fragment unknown2;
-
-	int program_start;
-	int unknown_ptr1;	/* pointer within program space */
-	int program_end;
-
-	int param_offset;
-	int param_count;
-
-	int unknown_ptr2;	/* pointer within program space */
-	int unknown_ptr3;	/* pointer within program space */
 };
 
 extern int hw_tcl_on;
+
+#define COLOR_IS_RGBA
+#define TAG(x) r300##x
+#include "tnl_dd/t_dd_vertex.h"
+#undef TAG
 
 //#define CURRENT_VERTEX_SHADER(ctx) (ctx->VertexProgram._Current)
 #define CURRENT_VERTEX_SHADER(ctx) (R300_CONTEXT(ctx)->selected_vp)
@@ -624,6 +622,7 @@ extern int hw_tcl_on;
 struct r300_vertex_program_key {
 	GLuint InputsRead;
 	GLuint OutputsWritten;
+	GLuint OutputsAdded;
 };
 
 struct r300_vertex_program {
@@ -655,82 +654,75 @@ struct r300_vertex_program_cont {
 #define PFS_NUM_TEMP_REGS	32
 #define PFS_NUM_CONST_REGS	16
 
-/* Mapping Mesa registers to R300 temporaries */
-struct reg_acc {
-	int reg;		/* Assigned hw temp */
-	unsigned int refcount;	/* Number of uses by mesa program */
+struct r300_pfs_compile_state;
+
+
+/**
+ * Stores state that influences the compilation of a fragment program.
+ */
+struct r300_fragment_program_external_state {
+	struct {
+		/**
+		 * If the sampler is used as a shadow sampler,
+		 * this field is:
+		 *  0 - GL_LUMINANCE
+		 *  1 - GL_INTENSITY
+		 *  2 - GL_ALPHA
+		 * depending on the depth texture mode.
+		 */
+		GLuint depth_texture_mode : 2;
+
+		/**
+		 * If the sampler is used as a shadow sampler,
+		 * this field is (texture_compare_func - GL_NEVER).
+		 * [e.g. if compare function is GL_LEQUAL, this field is 3]
+		 *
+		 * Otherwise, this field is 0.
+		 */
+		GLuint texture_compare_func : 3;
+	} unit[16];
+};
+
+
+struct r300_fragment_program_node {
+	int tex_offset; /**< first tex instruction */
+	int tex_end; /**< last tex instruction, relative to tex_offset */
+	int alu_offset; /**< first ALU instruction */
+	int alu_end; /**< last ALU instruction, relative to alu_offset */
+	int flags;
 };
 
 /**
- * Describe the current lifetime information for an R300 temporary
+ * Stores an R300 fragment program in its compiled-to-hardware form.
  */
-struct reg_lifetime {
-	/* Index of the first slot where this register is free in the sense
-	   that it can be used as a new destination register.
-	   This is -1 if the register has been assigned to a Mesa register
-	   and the last access to the register has not yet been emitted */
-	int free;
+struct r300_fragment_program_code {
+	struct {
+		int length; /**< total # of texture instructions used */
+		GLuint inst[PFS_MAX_TEX_INST];
+	} tex;
 
-	/* Index of the first slot where this register is currently reserved.
-	   This is used to stop e.g. a scalar operation from being moved
-	   before the allocation time of a register that was first allocated
-	   for a vector operation. */
-	int reserved;
+	struct {
+		int length; /**< total # of ALU instructions used */
+		struct {
+			GLuint inst0;
+			GLuint inst1;
+			GLuint inst2;
+			GLuint inst3;
+		} inst[PFS_MAX_ALU_INST];
+	} alu;
 
-	/* Index of the first slot in which the register can be used as a
-	   source without losing the value that is written by the last
-	   emitted instruction that writes to the register */
-	int vector_valid;
-	int scalar_valid;
+	struct r300_fragment_program_node node[4];
+	int cur_node;
+	int first_node_has_tex;
 
-	/* Index to the slot where the register was last read.
-	   This is also the first slot in which the register may be written again */
-	int vector_lastread;
-	int scalar_lastread;
-};
+	/**
+	 * Remember which program register a given hardware constant
+	 * belongs to.
+	 */
+	struct prog_src_register constant[PFS_NUM_CONST_REGS];
+	int const_nr;
 
-/**
- * Store usage information about an ALU instruction slot during the
- * compilation of a fragment program.
- */
-#define SLOT_SRC_VECTOR  (1<<0)
-#define SLOT_SRC_SCALAR  (1<<3)
-#define SLOT_SRC_BOTH    (SLOT_SRC_VECTOR | SLOT_SRC_SCALAR)
-#define SLOT_OP_VECTOR   (1<<16)
-#define SLOT_OP_SCALAR   (1<<17)
-#define SLOT_OP_BOTH     (SLOT_OP_VECTOR | SLOT_OP_SCALAR)
-
-struct r300_pfs_compile_slot {
-	/* Bitmask indicating which parts of the slot are used, using SLOT_ constants
-	   defined above */
-	unsigned int used;
-
-	/* Selected sources */
-	int vsrc[3];
-	int ssrc[3];
-};
-
-/**
- * Store information during compilation of fragment programs.
- */
-struct r300_pfs_compile_state {
-	int nrslots;		/* number of ALU slots used so far */
-
-	/* Track which (parts of) slots are already filled with instructions */
-	struct r300_pfs_compile_slot slot[PFS_MAX_ALU_INST];
-
-	/* Track the validity of R300 temporaries */
-	struct reg_lifetime hwtemps[PFS_NUM_TEMP_REGS];
-
-	/* Used to map Mesa's inputs/temps onto hardware temps */
-	int temp_in_use;
-	struct reg_acc temps[PFS_NUM_TEMP_REGS];
-	struct reg_acc inputs[32];	/* don't actually need 32... */
-
-	/* Track usage of hardware temps, for register allocation,
-	 * indirection detection, etc. */
-	GLuint used_in_node;
-	GLuint dest_in_node;
+	int max_temp_idx;
 };
 
 /**
@@ -740,107 +732,99 @@ struct r300_pfs_compile_state {
 struct r300_fragment_program {
 	struct gl_fragment_program mesa_program;
 
-	GLcontext *ctx;
 	GLboolean translated;
 	GLboolean error;
-	struct r300_pfs_compile_state *cs;
 
+	struct r300_fragment_program_external_state state;
+	struct r300_fragment_program_code code;
+
+	GLboolean WritesDepth;
+	GLuint optimization;
+};
+
+struct r500_pfs_compile_state;
+
+struct r500_fragment_program_external_state {
 	struct {
-		int length;
-		GLuint inst[PFS_MAX_TEX_INST];
-	} tex;
+		/**
+		 * If the sampler is used as a shadow sampler,
+		 * this field is:
+		 *  0 - GL_LUMINANCE
+		 *  1 - GL_INTENSITY
+		 *  2 - GL_ALPHA
+		 * depending on the depth texture mode.
+		 */
+		GLuint depth_texture_mode : 2;
 
+		/**
+		 * If the sampler is used as a shadow sampler,
+		 * this field is (texture_compare_func - GL_NEVER).
+		 * [e.g. if compare function is GL_LEQUAL, this field is 3]
+		 *
+		 * Otherwise, this field is 0.
+		 */
+		GLuint texture_compare_func : 3;
+	} unit[16];
+};
+
+struct r500_fragment_program_code {
 	struct {
-		struct {
-			GLuint inst0;
-			GLuint inst1;
-			GLuint inst2;
-			GLuint inst3;
-		} inst[PFS_MAX_ALU_INST];
-	} alu;
+		GLuint inst0;
+		GLuint inst1;
+		GLuint inst2;
+		GLuint inst3;
+		GLuint inst4;
+		GLuint inst5;
+	} inst[512];
 
-	struct {
-		int tex_offset;
-		int tex_end;
-		int alu_offset;
-		int alu_end;
-		int flags;
-	} node[4];
-	int cur_node;
-	int first_node_has_tex;
+	int inst_offset;
+	int inst_end;
 
-	int alu_offset;
-	int alu_end;
-	int tex_offset;
-	int tex_end;
-
-	/* Hardware constants.
-	 * Contains a pointer to the value. The destination of the pointer
-	 * is supposed to be updated when GL state changes.
-	 * Typically, this is either a pointer into
-	 * gl_program_parameter_list::ParameterValues, or a pointer to a
-	 * global constant (e.g. for sin/cos-approximation)
+	/**
+	 * Remember which program register a given hardware constant
+	 * belongs to.
 	 */
-	const GLfloat *constant[PFS_NUM_CONST_REGS];
+	struct prog_src_register constant[PFS_NUM_CONST_REGS];
 	int const_nr;
 
 	int max_temp_idx;
+};
+
+struct r500_fragment_program {
+	struct gl_fragment_program mesa_program;
+
+	GLcontext *ctx;
+	GLboolean translated;
+	GLboolean error;
+
+	struct r500_fragment_program_external_state state;
+	struct r500_fragment_program_code code;
+
+	GLboolean writes_depth;
 
 	GLuint optimization;
 };
 
 #define R300_MAX_AOS_ARRAYS		16
 
-#define AOS_FORMAT_USHORT	0
-#define AOS_FORMAT_FLOAT	1
-#define AOS_FORMAT_UBYTE	2
-#define AOS_FORMAT_FLOAT_COLOR	3
-
 #define REG_COORDS	0
 #define REG_COLOR0	1
 #define REG_TEX0	2
-
-struct dt {
-	GLint size;
-	GLenum type;
-	GLsizei stride;
-	void *data;
-};
-
-struct radeon_vertex_buffer {
-	int Count;
-	void *Elts;
-	int elt_size;
-	int elt_min, elt_max;	/* debug */
-
-	struct dt AttribPtr[VERT_ATTRIB_MAX];
-
-	const struct _mesa_prim *Primitive;
-	GLuint PrimitiveCount;
-	GLint LockFirst;
-	GLsizei LockCount;
-	int lock_uptodate;
-};
 
 struct r300_state {
 	struct r300_depthbuffer_state depth;
 	struct r300_texture_state texture;
 	int sw_tcl_inputs[VERT_ATTRIB_MAX];
 	struct r300_vertex_shader_state vertex_shader;
-	struct r300_pfs_compile_state pfs_compile;
 	struct r300_dma_region aos[R300_MAX_AOS_ARRAYS];
 	int aos_count;
-	struct radeon_vertex_buffer VB;
 
 	GLuint *Elts;
 	struct r300_dma_region elt_dma;
 
-	 DECLARE_RENDERINPUTS(render_inputs_bitset);	/* actual render inputs that R300 was configured for.
+	struct r300_dma_region swtcl_dma;
+	DECLARE_RENDERINPUTS(render_inputs_bitset);	/* actual render inputs that R300 was configured for.
 							   They are the same as tnl->render_inputs for fixed pipeline */
-
-	struct {
-		int transform_offset;	/* Transform matrix offset, -1 if none */
-	} vap_param;		/* vertex processor parameter allocation - tells where to write parameters */
 
 	struct r300_stencilbuffer_state stencil;
 
@@ -849,6 +833,62 @@ struct r300_state {
 #define R300_FALLBACK_NONE 0
 #define R300_FALLBACK_TCL 1
 #define R300_FALLBACK_RAST 2
+
+/* r300_swtcl.c
+ */
+struct r300_swtcl_info {
+   GLuint RenderIndex;
+
+   /**
+    * Size of a hardware vertex.  This is calculated when \c ::vertex_attrs is
+    * installed in the Mesa state vector.
+    */
+   GLuint vertex_size;
+
+   /**
+    * Attributes instructing the Mesa TCL pipeline where / how to put vertex
+    * data in the hardware buffer.
+    */
+   struct tnl_attr_map vertex_attrs[VERT_ATTRIB_MAX];
+
+   /**
+    * Number of elements of \c ::vertex_attrs that are actually used.
+    */
+   GLuint vertex_attr_count;
+
+   /**
+    * Cached pointer to the buffer where Mesa will store vertex data.
+    */
+   GLubyte *verts;
+
+   /* Fallback rasterization functions
+    */
+  //   r200_point_func draw_point;
+  //   r200_line_func draw_line;
+  //   r200_tri_func draw_tri;
+
+   GLuint hw_primitive;
+   GLenum render_primitive;
+   GLuint numverts;
+
+   /**
+    * Offset of the 4UB color data within a hardware (swtcl) vertex.
+    */
+   GLuint coloroffset;
+
+   /**
+    * Offset of the 3UB specular color data within a hardware (swtcl) vertex.
+    */
+   GLuint specoffset;
+
+   /**
+    * Should Mesa project vertex data or will the hardware do it?
+    */
+   GLboolean needproj;
+
+   struct r300_dma_region indexed_verts;
+};
+
 
 /**
  * \brief R300 context structure.
@@ -888,6 +928,9 @@ struct r300_context {
 	GLvector4f *temp_attrib[_TNL_ATTRIB_MAX];
 
 	GLboolean disable_lowimpact_fallback;
+
+	DECLARE_RENDERINPUTS(tnl_index_bitset);	/* index of bits for last tnl_install_attrs */
+	struct r300_swtcl_info swtcl;
 };
 
 struct r300_buffer_object {

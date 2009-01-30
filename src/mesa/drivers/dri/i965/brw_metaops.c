@@ -32,15 +32,16 @@
  
 
 
-#include "glheader.h"
-#include "context.h"
-#include "macros.h"
+#include "main/glheader.h"
+#include "main/context.h"
+#include "main/macros.h"
 
 #include "shader/arbprogparse.h"
 
 #include "intel_screen.h"
 #include "intel_batchbuffer.h"
 #include "intel_regions.h"
+#include "intel_buffers.h"
 
 #include "brw_context.h"
 #include "brw_defines.h"
@@ -156,7 +157,7 @@ static const char *fp_tex_prog =
  *   FragmentProgram->_Current
  *   VertexProgram->_Enabled
  *   brw->vertex_program
- *   DrawBuffer->_ColorDrawBufferMask[0]
+ *   DrawBuffer->_ColorDrawBufferIndexes[0]
  * 
  *
  * More if drawpixels-through-texture is added.  
@@ -361,12 +362,20 @@ static void meta_draw_region( struct intel_context *intel,
    struct brw_context *brw = brw_context(&intel->ctx);
 
    if (!brw->metaops.saved_draw_region) {
-      brw->metaops.saved_draw_region = brw->state.draw_region;
+      brw->metaops.saved_draw_region = brw->state.draw_regions[0];
+      brw->metaops.saved_nr_draw_regions = brw->state.nr_draw_regions;
       brw->metaops.saved_depth_region = brw->state.depth_region;
    }
 
-   brw->state.draw_region = draw_region;
+   brw->state.draw_regions[0] = draw_region;
+   brw->state.nr_draw_regions = 1;
    brw->state.depth_region = depth_region;
+
+   if (intel->frame_buffer_texobj != NULL)
+      brw_FrameBufferTexDestroy(brw);
+
+   if (draw_region)
+       brw_FrameBufferTexInit(brw, draw_region);
 
    brw->state.dirty.mesa |= _NEW_BUFFERS;
 }
@@ -376,8 +385,7 @@ static void meta_draw_quad(struct intel_context *intel,
 			   GLfloat x0, GLfloat x1,
 			   GLfloat y0, GLfloat y1, 
 			   GLfloat z,
-			   GLubyte red, GLubyte green,
-			   GLubyte blue, GLubyte alpha,
+			   GLuint color,
 			   GLfloat s0, GLfloat s1,
 			   GLfloat t0, GLfloat t1)
 {
@@ -388,7 +396,6 @@ static void meta_draw_quad(struct intel_context *intel,
    struct gl_client_array *attribs[VERT_ATTRIB_MAX];
    struct _mesa_prim prim[1];
    GLfloat pos[4][3];
-   GLubyte color[4];
 
    ctx->Driver.BufferData(ctx,
 			  GL_ARRAY_BUFFER_ARB,
@@ -413,7 +420,6 @@ static void meta_draw_quad(struct intel_context *intel,
    pos[3][1] = y1;
    pos[3][2] = z;
 
-
    ctx->Driver.BufferSubData(ctx,
 			     GL_ARRAY_BUFFER_ARB,
 			     0,
@@ -421,16 +427,15 @@ static void meta_draw_quad(struct intel_context *intel,
 			     pos,
 			     brw->metaops.vbo);
 
-   color[0] = red;
-   color[1] = green;
-   color[2] = blue;
-   color[3] = alpha;
+   /* Convert incoming ARGB to required RGBA */
+   /* Note this color is stored as GL_UNSIGNED_BYTE */
+   color = (color & 0xff00ff00) | (((color >> 16) | (color << 16)) & 0xff00ff);
 
    ctx->Driver.BufferSubData(ctx,
 			     GL_ARRAY_BUFFER_ARB,
 			     sizeof(pos),
 			     sizeof(color),
-			     color,
+			     &color,
 			     brw->metaops.vbo);
 
    /* Ignoring texture coords. 
@@ -486,6 +491,7 @@ static void install_meta_state( struct intel_context *intel )
 {
    GLcontext *ctx = &intel->ctx;
    struct brw_context *brw = brw_context(ctx);
+   GLuint i;
 
    if (!brw->metaops.vbo) {
       init_metaops_state(brw);
@@ -495,12 +501,18 @@ static void install_meta_state( struct intel_context *intel )
    
    meta_no_texture(&brw->intel);
    meta_flat_shade(&brw->intel);
-   brw->metaops.restore_draw_mask = ctx->DrawBuffer->_ColorDrawBufferMask[0];
+   for (i = 0; i < ctx->Const.MaxDrawBuffers; i++) {
+      brw->metaops.restore_draw_buffers[i]
+         = ctx->DrawBuffer->_ColorDrawBufferIndexes[i];
+   }
+   brw->metaops.restore_num_draw_buffers = ctx->DrawBuffer->_NumColorDrawBuffers;
+
    brw->metaops.restore_fp = ctx->FragmentProgram.Current;
 
    /* This works without adjusting refcounts.  Fix later? 
     */
-   brw->metaops.saved_draw_region = brw->state.draw_region;
+   brw->metaops.saved_draw_region = brw->state.draw_regions[0];
+   brw->metaops.saved_nr_draw_regions = brw->state.nr_draw_regions;
    brw->metaops.saved_depth_region = brw->state.depth_region;
    brw->metaops.active = 1;
    
@@ -511,13 +523,20 @@ static void leave_meta_state( struct intel_context *intel )
 {
    GLcontext *ctx = &intel->ctx;
    struct brw_context *brw = brw_context(ctx);
+   GLuint i;
 
    restore_attribs(brw);
 
-   ctx->DrawBuffer->_ColorDrawBufferMask[0] = brw->metaops.restore_draw_mask;
+   for (i = 0; i < ctx->Const.MaxDrawBuffers; i++) {
+      ctx->DrawBuffer->_ColorDrawBufferIndexes[i]
+         = brw->metaops.restore_draw_buffers[i];
+   }
+   ctx->DrawBuffer->_NumColorDrawBuffers = brw->metaops.restore_num_draw_buffers;
+
    ctx->FragmentProgram.Current = brw->metaops.restore_fp;
 
-   brw->state.draw_region = brw->metaops.saved_draw_region;
+   brw->state.draw_regions[0] = brw->metaops.saved_draw_region;
+   brw->state.nr_draw_regions = brw->metaops.saved_nr_draw_regions;
    brw->state.depth_region = brw->metaops.saved_depth_region;
    brw->metaops.saved_draw_region = NULL;
    brw->metaops.saved_depth_region = NULL;

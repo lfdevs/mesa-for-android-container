@@ -1,0 +1,22 @@
+Index: mesa/src/mesa/drivers/osmesa/Makefile
+===================================================================
+--- mesa.orig/src/mesa/drivers/osmesa/Makefile
++++ mesa/src/mesa/drivers/osmesa/Makefile
+@@ -45,7 +45,7 @@
+ 
+ $(TOP)/$(LIB_DIR)/$(OSMESA_LIB_NAME): $(OBJECTS)
+ 	$(MKLIB) -o $(OSMESA_LIB) -linker '$(CC)' -ldflags '$(LDFLAGS)' \
+-		-major $(MESA_MAJOR) -minor $(MESA_MINOR) -patch $(MESA_TINY) \
++		-major 6 -minor 5 -patch 3 \
+ 		-install $(TOP)/$(LIB_DIR) $(MKLIB_OPTIONS) \
+ 		-id $(INSTALL_LIB_DIR)/lib$(OSMESA_LIB).$(MESA_MAJOR).dylib \
+ 		$(OSMESA_LIB_DEPS) $(OBJECTS)
+@@ -57,7 +57,7 @@
+ # with all the other Mesa sources (compiled with -DCHAN_BITS=16/32
+ osmesa16: $(OBJECTS) $(CORE_MESA)
+ 	$(MKLIB) -o $(OSMESA_LIB) -linker '$(CC)' -ldflags '$(LDFLAGS)' \
+-		-major $(MESA_MAJOR) -minor $(MESA_MINOR) -patch $(MESA_TINY) \
++		-major 6 -minor 5 -patch 3 \
+ 		-install $(TOP)/$(LIB_DIR) $(MKLIB_OPTIONS) \
+ 		-id $(INSTALL_LIB_DIR)/lib$(OSMESA_LIB).$(MESA_MAJOR).dylib \
+ 		$(OSMESA_LIB_DEPS) $(OBJECTS) $(CORE_MESA)

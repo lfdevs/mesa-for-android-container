@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r128/r128_screen.c,v 1.9 2003/03/26 20:43:49 tsi Exp $ */
 /**************************************************************************
 
 Copyright 1999, 2000 ATI Technologies Inc. and Precision Insight, Inc.,
@@ -40,10 +39,10 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r128_span.h"
 #include "r128_tris.h"
 
-#include "context.h"
-#include "imports.h"
-#include "framebuffer.h"
-#include "renderbuffer.h"
+#include "main/context.h"
+#include "main/imports.h"
+#include "main/framebuffer.h"
+#include "main/renderbuffer.h"
 
 #include "utils.h"
 #include "vblank.h"
@@ -98,9 +97,7 @@ r128CreateScreen( __DRIscreenPrivate *sPriv )
 {
    r128ScreenPtr r128Screen;
    R128DRIPtr r128DRIPriv = (R128DRIPtr)sPriv->pDevPriv;
-   PFNGLXSCRENABLEEXTENSIONPROC glx_enable_extension =
-     (PFNGLXSCRENABLEEXTENSIONPROC) (*dri_interface->getProcAddress("glxEnableExtension"));
-   void * const psc = sPriv->psc->screenConfigs;
+   int i;
 
    if (sPriv->devPrivSize != sizeof(R128DRIRec)) {
       fprintf(stderr,"\nERROR!  sizeof(R128DRIRec) does not match passed size from device driver\n");
@@ -121,7 +118,7 @@ r128CreateScreen( __DRIscreenPrivate *sPriv )
    r128Screen->IsPCI = r128DRIPriv->IsPCI;
    r128Screen->sarea_priv_offset = r128DRIPriv->sarea_priv_offset;
    
-   if (sPriv->drmMinor >= 3) {
+   if (sPriv->drm_version.minor >= 3) {
       drm_r128_getparam_t gp;
       int ret;
 
@@ -226,15 +223,14 @@ r128CreateScreen( __DRIscreenPrivate *sPriv )
 
    r128Screen->driScreen = sPriv;
 
-   if ( glx_enable_extension != NULL ) {
-      if ( r128Screen->irq != 0 ) {
-	 (*glx_enable_extension)( psc, "GLX_SGI_swap_control" );
-	 (*glx_enable_extension)( psc, "GLX_SGI_video_sync" );
-	 (*glx_enable_extension)( psc, "GLX_MESA_swap_control" );
-      }
-
-      (*glx_enable_extension)( psc, "GLX_MESA_swap_frame_usage" );
+   i = 0;
+   r128Screen->extensions[i++] = &driFrameTrackingExtension.base;
+   if ( r128Screen->irq != 0 ) {
+       r128Screen->extensions[i++] = &driSwapControlExtension.base;
+       r128Screen->extensions[i++] = &driMediaStreamCounterExtension.base;
    }
+   r128Screen->extensions[i++] = NULL;
+   sPriv->extensions = r128Screen->extensions;
 
    return r128Screen;
 }
@@ -402,37 +398,18 @@ r128InitDriver( __DRIscreenPrivate *sPriv )
    return GL_TRUE;
 }
 
-
-static struct __DriverAPIRec r128API = {
-   .InitDriver      = r128InitDriver,
-   .DestroyScreen   = r128DestroyScreen,
-   .CreateContext   = r128CreateContext,
-   .DestroyContext  = r128DestroyContext,
-   .CreateBuffer    = r128CreateBuffer,
-   .DestroyBuffer   = r128DestroyBuffer,
-   .SwapBuffers     = r128SwapBuffers,
-   .MakeCurrent     = r128MakeCurrent,
-   .UnbindContext   = r128UnbindContext,
-   .GetSwapInfo     = NULL,
-   .GetMSC          = driGetMSC32,
-   .WaitForMSC      = driWaitForMSC32,
-   .WaitForSBC      = NULL,
-   .SwapBuffersMSC  = NULL
-
-};
-
-
-static __GLcontextModes *
-r128FillInModes( unsigned pixel_bits, unsigned depth_bits,
+static const __DRIconfig **
+r128FillInModes( __DRIscreenPrivate *psp,
+		 unsigned pixel_bits, unsigned depth_bits,
 		 unsigned stencil_bits, GLboolean have_back_buffer )
 {
-    __GLcontextModes * modes;
+    __DRIconfig **configs;
     __GLcontextModes * m;
-    unsigned num_modes;
     unsigned depth_buffer_factor;
     unsigned back_buffer_factor;
     GLenum fb_format;
     GLenum fb_type;
+    int i;
 
     /* Right now GLX_SWAP_COPY_OML isn't supported, but it would be easy
      * enough to add support.  Basically, if a context is created with an
@@ -443,8 +420,8 @@ r128FillInModes( unsigned pixel_bits, unsigned depth_bits,
 	GLX_NONE, GLX_SWAP_UNDEFINED_OML /*, GLX_SWAP_COPY_OML */
     };
 
-    u_int8_t depth_bits_array[2];
-    u_int8_t stencil_bits_array[2];
+    uint8_t depth_bits_array[2];
+    uint8_t stencil_bits_array[2];
 
 
     depth_bits_array[0] = depth_bits;
@@ -460,8 +437,6 @@ r128FillInModes( unsigned pixel_bits, unsigned depth_bits,
     depth_buffer_factor = ((depth_bits != 0) || (stencil_bits != 0)) ? 2 : 1;
     back_buffer_factor  = (have_back_buffer) ? 2 : 1;
 
-    num_modes = depth_buffer_factor * back_buffer_factor * 4;
-
     if ( pixel_bits == 16 ) {
         fb_format = GL_RGB;
         fb_type = GL_UNSIGNED_SHORT_5_6_5;
@@ -471,97 +446,85 @@ r128FillInModes( unsigned pixel_bits, unsigned depth_bits,
         fb_type = GL_UNSIGNED_INT_8_8_8_8_REV;
     }
 
-    modes = (*dri_interface->createContextModes)( num_modes, sizeof( __GLcontextModes ) );
-    m = modes;
-    if ( ! driFillInModes( & m, fb_format, fb_type,
-			   depth_bits_array, stencil_bits_array, depth_buffer_factor,
-			   back_buffer_modes, back_buffer_factor,
-			   GLX_TRUE_COLOR ) ) {
-	fprintf( stderr, "[%s:%u] Error creating FBConfig!\n",
-		 __func__, __LINE__ );
-	return NULL;
-    }
+   configs = driCreateConfigs(fb_format, fb_type,
+			      depth_bits_array, stencil_bits_array,
+			      depth_buffer_factor, back_buffer_modes,
+			      back_buffer_factor);
+   if (configs == NULL) {
+    fprintf(stderr, "[%s:%u] Error creating FBConfig!\n", __func__,
+              __LINE__);
+      return NULL;
+   }
 
-    if ( ! driFillInModes( & m, fb_format, fb_type,
-			   depth_bits_array, stencil_bits_array, depth_buffer_factor,
-			   back_buffer_modes, back_buffer_factor,
-			   GLX_DIRECT_COLOR ) ) {
-	fprintf( stderr, "[%s:%u] Error creating FBConfig!\n",
-		 __func__, __LINE__ );
-	return NULL;
-    }
+   /* Mark the visual as slow if there are "fake" stencil bits.
+    */
+   for (i = 0; configs[i]; i++) {
+      m = &configs[i]->modes;
+      if ((m->stencilBits != 0) && (m->stencilBits != stencil_bits)) {
+         m->visualRating = GLX_SLOW_CONFIG;
+      }
+   }
 
-    /* Mark the visual as slow if there are "fake" stencil bits.
-     */
-    for ( m = modes ; m != NULL ; m = m->next ) {
-	if ( (m->stencilBits != 0) && (m->stencilBits != stencil_bits) ) {
-	    m->visualRating = GLX_SLOW_CONFIG;
-	}
-    }
-
-    return modes;
+   return (const __DRIconfig **) configs;
 }
 
 
 /**
- * This is the bootstrap function for the driver.  libGL supplies all of the
- * requisite information about the system, and the driver initializes itself.
- * This routine also fills in the linked list pointed to by \c driver_modes
- * with the \c __GLcontextModes that the driver can support for windows or
- * pbuffers.
+ * This is the driver specific part of the createNewScreen entry point.
  * 
- * \return A pointer to a \c __DRIscreenPrivate on success, or \c NULL on 
- *         failure.
+ * \todo maybe fold this into intelInitDriver
+ *
+ * \return the __GLcontextModes supported by this driver
  */
-PUBLIC
-void * __driCreateNewScreen_20050727( __DRInativeDisplay *dpy, int scrn, __DRIscreen *psc,
-			     const __GLcontextModes * modes,
-			     const __DRIversion * ddx_version,
-			     const __DRIversion * dri_version,
-			     const __DRIversion * drm_version,
-			     const __DRIframebuffer * frame_buffer,
-			     drmAddress pSAREA, int fd, 
-			     int internal_api_version,
-			     const __DRIinterfaceMethods * interface,
-			     __GLcontextModes ** driver_modes )
-			     
+static const __DRIconfig **
+r128InitScreen(__DRIscreenPrivate *psp)
 {
-   __DRIscreenPrivate *psp;
    static const __DRIversion ddx_expected = { 4, 0, 0 };
    static const __DRIversion dri_expected = { 4, 0, 0 };
    static const __DRIversion drm_expected = { 2, 2, 0 };
-
-
-   dri_interface = interface;
+   R128DRIPtr dri_priv = (R128DRIPtr) psp->pDevPriv;
 
    if ( ! driCheckDriDdxDrmVersions2( "Rage128",
-				      dri_version, & dri_expected,
-				      ddx_version, & ddx_expected,
-				      drm_version, & drm_expected ) ) {
+				      &psp->dri_version, & dri_expected,
+				      &psp->ddx_version, & ddx_expected,
+				      &psp->drm_version, & drm_expected ) )
       return NULL;
-   }
-      
-   psp = __driUtilCreateNewScreen(dpy, scrn, psc, NULL,
-				  ddx_version, dri_version, drm_version,
-				  frame_buffer, pSAREA, fd,
-				  internal_api_version, &r128API);
-   if ( psp != NULL ) {
-      R128DRIPtr dri_priv = (R128DRIPtr) psp->pDevPriv;
-      *driver_modes = r128FillInModes( dri_priv->bpp,
-				       (dri_priv->bpp == 16) ? 16 : 24,
-				       (dri_priv->bpp == 16) ? 0  : 8,
-				       (dri_priv->backOffset != dri_priv->depthOffset) );
 
-      /* Calling driInitExtensions here, with a NULL context pointer, does not actually
-       * enable the extensions.  It just makes sure that all the dispatch offsets for all
-       * the extensions that *might* be enables are known.  This is needed because the
-       * dispatch offsets need to be known when _mesa_context_create is called, but we can't
-       * enable the extensions until we have a context pointer.
-       *
-       * Hello chicken.  Hello egg.  How are you two today?
-       */
-      driInitExtensions( NULL, card_extensions, GL_FALSE );
-   }
+   /* Calling driInitExtensions here, with a NULL context pointer,
+    * does not actually enable the extensions.  It just makes sure
+    * that all the dispatch offsets for all the extensions that
+    * *might* be enables are known.  This is needed because the
+    * dispatch offsets need to be known when _mesa_context_create is
+    * called, but we can't enable the extensions until we have a
+    * context pointer.
+    *
+    * Hello chicken.  Hello egg.  How are you two today?
+    */
+   driInitExtensions( NULL, card_extensions, GL_FALSE );
 
-   return (void *) psp;
+   if (!r128InitDriver(psp))
+       return NULL;
+
+   return r128FillInModes( psp,
+			   dri_priv->bpp,
+			   (dri_priv->bpp == 16) ? 16 : 24,
+			   (dri_priv->bpp == 16) ? 0  : 8,
+			   (dri_priv->backOffset != dri_priv->depthOffset) );
 }
+
+const struct __DriverAPIRec driDriverAPI = {
+   .InitScreen      = r128InitScreen,
+   .DestroyScreen   = r128DestroyScreen,
+   .CreateContext   = r128CreateContext,
+   .DestroyContext  = r128DestroyContext,
+   .CreateBuffer    = r128CreateBuffer,
+   .DestroyBuffer   = r128DestroyBuffer,
+   .SwapBuffers     = r128SwapBuffers,
+   .MakeCurrent     = r128MakeCurrent,
+   .UnbindContext   = r128UnbindContext,
+   .GetSwapInfo     = NULL,
+   .GetDrawableMSC  = driDrawableGetMSC32,
+   .WaitForMSC      = driWaitForMSC32,
+   .WaitForSBC      = NULL,
+   .SwapBuffersMSC  = NULL
+};

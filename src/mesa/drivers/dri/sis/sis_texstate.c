@@ -24,7 +24,6 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 **************************************************************************/
-/* $XFree86$ */
 
 /*
  * Authors:
@@ -32,12 +31,12 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Eric Anholt <anholt@FreeBSD.org>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "colormac.h"
-#include "context.h"
-#include "macros.h"
-#include "texformat.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/colormac.h"
+#include "main/context.h"
+#include "main/macros.h"
+#include "main/texformat.h"
 
 #include "sis_context.h"
 #include "sis_state.h"

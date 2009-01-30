@@ -1,21 +1,20 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/gamma/gamma_tex.c,v 1.4 2002/11/05 17:46:07 tsi Exp $ */
 
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "glheader.h"
-#include "mtypes.h"
-#include "imports.h"
-#include "simple_list.h"
-#include "enums.h"
-#include "texstore.h"
+#include "main/glheader.h"
+#include "main/mtypes.h"
+#include "main/imports.h"
+#include "main/simple_list.h"
+#include "main/enums.h"
+#include "main/texstore.h"
 #include "teximage.h"
-#include "texformat.h"
+#include "main/texformat.h"
 #include "texobj.h"
 #include "swrast/swrast.h"
 
-#include "mm.h"
-#include "gamma_context.h"
+#include "main/mm.h"
+#include "gammacontext.h"
 #include "colormac.h"
 
 
@@ -32,8 +31,8 @@ static GLuint gammaComputeLodBias(GLfloat bias)
 static void gammaSetTexWrapping(gammaTextureObjectPtr t, 
 			       GLenum wraps, GLenum wrapt)
 {
-   u_int32_t t1 = t->TextureAddressMode;
-   u_int32_t t2 = t->TextureReadMode;
+   uint32_t t1 = t->TextureAddressMode;
+   uint32_t t2 = t->TextureReadMode;
 
    t1 &= ~(TAM_SWrap_Mask | TAM_TWrap_Mask);
    t2 &= ~(TRM_UWrap_Mask | TRM_VWrap_Mask);
@@ -58,8 +57,8 @@ static void gammaSetTexFilter(gammaContextPtr gmesa,
 			     GLenum minf, GLenum magf,
                              GLfloat bias)
 {
-   u_int32_t t1 = t->TextureAddressMode;
-   u_int32_t t2 = t->TextureReadMode;
+   uint32_t t1 = t->TextureAddressMode;
+   uint32_t t2 = t->TextureReadMode;
 
    t2 &= ~(TRM_Mag_Mask | TRM_Min_Mask);
 

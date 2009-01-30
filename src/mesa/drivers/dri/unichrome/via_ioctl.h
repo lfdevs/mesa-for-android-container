@@ -33,8 +33,8 @@ void viaFlushDma(struct via_context *vmesa);
 void viaFlushDmaLocked(struct via_context *vmesa, GLuint flags);
 
 void viaInitIoctlFuncs(GLcontext *ctx);
-void viaCopyBuffer(const __DRIdrawablePrivate *dpriv);
-void viaPageFlip(const __DRIdrawablePrivate *dpriv);
+void viaCopyBuffer(__DRIdrawablePrivate *dpriv);
+void viaPageFlip(__DRIdrawablePrivate *dpriv);
 void viaCheckDma(struct via_context *vmesa, GLuint bytes);
 void viaResetPageFlippingLocked(struct via_context *vmesa);
 void viaWaitIdle(struct via_context *vmesa, GLboolean light);
@@ -58,7 +58,7 @@ void viaEmitBreadcrumb( struct via_context *vmesa );
 
 void viaWrapPrimitive( struct via_context *vmesa );
 
-static __inline__ GLuint *viaAllocDma(struct via_context *vmesa, int bytes)
+static INLINE GLuint *viaAllocDma(struct via_context *vmesa, int bytes)
 {
    if (vmesa->dmaLow + bytes > VIA_DMA_HIGHWATER) {
       viaFlushDma(vmesa);
@@ -72,7 +72,7 @@ static __inline__ GLuint *viaAllocDma(struct via_context *vmesa, int bytes)
 }
 
 
-static GLuint __inline__ *viaExtendPrimitive(struct via_context *vmesa, int bytes)
+static GLuint INLINE *viaExtendPrimitive(struct via_context *vmesa, int bytes)
 {
    if (vmesa->dmaLow + bytes > VIA_DMA_HIGHWATER) {
       viaWrapPrimitive(vmesa);

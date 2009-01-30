@@ -31,9 +31,9 @@
 
 
 #include "glxheader.h"
-#include "depth.h"
-#include "macros.h"
-#include "mtypes.h"
+#include "main/depth.h"
+#include "main/macros.h"
+#include "main/mtypes.h"
 #include "xmesaP.h"
 
 /* Internal swrast includes:
@@ -121,7 +121,7 @@ void xmesa_choose_point( GLcontext *ctx )
 
 
 #define GET_XRB(XRB)  struct xmesa_renderbuffer *XRB = \
-   xmesa_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0][0]->Wrapped)
+   xmesa_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0]->Wrapped)
 
 
 /*
@@ -556,10 +556,10 @@ xor_line(GLcontext *ctx, const SWvertex *vert0, const SWvertex *vert1)
                                               vert1->color[0], vert1->color[1],
                                               vert1->color[2], vert1->color[3],
                                               xmesa->pixelformat);
-   int x0 = (int) vert0->win[0];
-   int y0 = YFLIP(xrb, (GLint) vert0->win[1]);
-   int x1 = (int) vert1->win[0];
-   int y1 = YFLIP(xrb, (GLint) vert1->win[1]);
+   int x0 =            (GLint) vert0->attrib[FRAG_ATTRIB_WPOS][0];
+   int y0 = YFLIP(xrb, (GLint) vert0->attrib[FRAG_ATTRIB_WPOS][1]);
+   int x1 =            (GLint) vert1->attrib[FRAG_ATTRIB_WPOS][0];
+   int y1 = YFLIP(xrb, (GLint) vert1->attrib[FRAG_ATTRIB_WPOS][1]);
    XMesaSetForeground(dpy, gc, pixel);
    XMesaSetFunction(dpy, gc, GXxor);
    XSetLineAttributes(dpy, gc, (int) ctx->Line.Width,
@@ -587,8 +587,8 @@ get_line_func(GLcontext *ctx)
    const int depth = GET_VISUAL_DEPTH(xmesa->xm_visual);
    const struct xmesa_renderbuffer *xrb;
 
-   if ((ctx->DrawBuffer->_ColorDrawBufferMask[0]
-        & (BUFFER_BIT_FRONT_LEFT | BUFFER_BIT_BACK_LEFT)) == 0)
+   if ((ctx->DrawBuffer->_ColorDrawBufferIndexes[0] != BUFFER_BIT_FRONT_LEFT) &&
+       (ctx->DrawBuffer->_ColorDrawBufferIndexes[0] != BUFFER_BIT_BACK_LEFT))
       return (swrast_line_func) NULL;
    if (ctx->RenderMode != GL_RENDER)      return (swrast_line_func) NULL;
    if (ctx->Line.SmoothFlag)              return (swrast_line_func) NULL;
@@ -598,7 +598,7 @@ get_line_func(GLcontext *ctx)
    if (swrast->_RasterMask & MULTI_DRAW_BIT) return (swrast_line_func) NULL;
    if (xmbuf->swAlpha)                    return (swrast_line_func) NULL;
 
-   xrb = xmesa_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0][0]->Wrapped);
+   xrb = xmesa_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0]->Wrapped);
 
    if (xrb->ximage
        && swrast->_RasterMask==DEPTH_BIT
@@ -661,8 +661,8 @@ get_line_func(GLcontext *ctx)
    }
 
 #ifndef XFree86Server
-   if (ctx->DrawBuffer->_NumColorDrawBuffers[0] == 1
-       && ctx->DrawBuffer->_ColorDrawBufferMask[0] == BUFFER_BIT_FRONT_LEFT
+   if (ctx->DrawBuffer->_NumColorDrawBuffers == 1
+       && ctx->DrawBuffer->_ColorDrawBufferIndexes[0] == BUFFER_FRONT_LEFT
        && swrast->_RasterMask == LOGIC_OP_BIT
        && ctx->Color.LogicOp == GL_XOR
        && !ctx->Line.StippleFlag

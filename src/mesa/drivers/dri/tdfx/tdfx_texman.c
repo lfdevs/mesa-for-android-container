@@ -23,7 +23,6 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/tdfx/tdfx_texman.c,v 1.5 2002/02/22 21:45:04 dawes Exp $ */
 
 /*
  * Original rewrite:
@@ -38,8 +37,8 @@
 #include "tdfx_context.h"
 #include "tdfx_tex.h"
 #include "tdfx_texman.h"
-#include "texobj.h"
-#include "hash.h"
+#include "main/texobj.h"
+#include "main/hash.h"
 
 
 #define BAD_ADDRESS ((FxU32) -1)

@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r128/r128_texobj.h,v 1.5 2002/02/22 21:44:58 dawes Exp $ */
 /**************************************************************************
 
 Copyright 1999, 2000 ATI Technologies Inc. and Precision Insight, Inc.,
@@ -36,7 +35,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef _R128_TEXOBJ_H_
 #define _R128_TEXOBJ_H_
 
-#include "mm.h"
+#include "main/mm.h"
 
 /* Individual texture image information.
  */
@@ -53,14 +52,14 @@ typedef struct r128_tex_obj r128TexObj, *r128TexObjPtr;
 struct r128_tex_obj {
    driTextureObject   base;
 
-   u_int32_t bufAddr;			/* Offset to start of locally
+   uint32_t bufAddr;			/* Offset to start of locally
 					   shared texture block */
 
    GLuint age;
    r128TexImage image[R128_MAX_TEXTURE_LEVELS]; /* Image data for all
 						   mipmap levels */
 
-   u_int32_t textureFormat;		/* Actual hardware format */
+   uint32_t textureFormat;		/* Actual hardware format */
 
    drm_r128_texture_regs_t setup;		/* Setup regs for texture */
 };

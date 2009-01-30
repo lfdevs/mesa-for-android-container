@@ -23,7 +23,6 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/tdfx/tdfx_pixels.h,v 1.2 2002/02/22 21:45:03 dawes Exp $ */
 
 /*
  * Original rewrite:
@@ -39,7 +38,7 @@
 #ifndef __TDFX_PIXELS_H__
 #define __TDFX_PIXELS_H__
 
-#include "context.h"
+#include "main/context.h"
 
 extern void
 tdfx_bitmap_R5G6B5( GLcontext *ctx, GLint px, GLint py,

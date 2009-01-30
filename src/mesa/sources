@@ -2,6 +2,7 @@
 
 MAIN_SOURCES = \
 	main/api_arrayelt.c \
+	main/api_exec.c \
 	main/api_loopback.c \
 	main/api_noop.c \
 	main/api_validate.c \
@@ -11,6 +12,7 @@ MAIN_SOURCES = \
 	main/blend.c \
 	main/bufferobj.c \
 	main/buffers.c \
+	main/clear.c \
 	main/clip.c \
 	main/colortab.c \
 	main/context.c \
@@ -19,6 +21,7 @@ MAIN_SOURCES = \
 	main/depth.c \
 	main/depthstencil.c \
 	main/dlist.c \
+	main/dlopen.c \
 	main/drawpix.c \
 	main/enable.c \
 	main/enums.c \
@@ -27,6 +30,7 @@ MAIN_SOURCES = \
 	main/extensions.c \
 	main/fbobject.c \
 	main/feedback.c \
+	main/ffvertex_prog.c \
 	main/fog.c \
 	main/framebuffer.c \
 	main/get.c \
@@ -41,23 +45,30 @@ MAIN_SOURCES = \
 	main/matrix.c \
 	main/mipmap.c \
 	main/mm.c \
+	main/multisample.c \
 	main/pixel.c \
+	main/pixelstore.c \
 	main/points.c \
 	main/polygon.c \
 	main/queryobj.c \
 	main/rastpos.c \
 	main/rbadaptors.c \
+	main/readpix.c \
 	main/renderbuffer.c \
+	main/scissor.c \
 	main/shaders.c \
 	main/state.c \
 	main/stencil.c \
 	main/texcompress.c \
 	main/texcompress_s3tc.c \
 	main/texcompress_fxt1.c \
+	main/texenv.c \
 	main/texenvprogram.c \
 	main/texformat.c \
+	main/texgen.c \
 	main/teximage.c \
 	main/texobj.c \
+	main/texparam.c \
 	main/texrender.c \
 	main/texstate.c \
 	main/texstore.c \
@@ -67,6 +78,7 @@ MAIN_SOURCES = \
 GLAPI_SOURCES = \
 	main/dispatch.c \
 	glapi/glapi.c \
+	glapi/glapi_getproc.c \
 	glapi/glthread.c
 
 MATH_SOURCES = \
@@ -118,6 +130,7 @@ TNL_SOURCES = \
 	tnl/t_context.c \
 	tnl/t_pipeline.c \
 	tnl/t_draw.c \
+	tnl/t_rasterpos.c \
 	tnl/t_vb_program.c \
 	tnl/t_vb_render.c \
 	tnl/t_vb_texgen.c \
@@ -159,12 +172,15 @@ SHADER_SOURCES = \
 	shader/nvprogram.c \
 	shader/nvvertparse.c \
 	shader/program.c \
+	shader/prog_cache.c \
 	shader/prog_debug.c \
 	shader/prog_execute.c \
 	shader/prog_instruction.c \
+	shader/prog_noise.c \
 	shader/prog_parameter.c \
 	shader/prog_print.c \
 	shader/prog_statevars.c \
+	shader/prog_uniform.c \
 	shader/programopt.c \
 	shader/shader_api.c \
 
@@ -179,7 +195,6 @@ SLANG_SOURCES =	\
 	shader/slang/slang_emit.c	\
 	shader/slang/slang_ir.c	\
 	shader/slang/slang_label.c	\
-	shader/slang/slang_library_noise.c	\
 	shader/slang/slang_link.c	\
 	shader/slang/slang_log.c	\
 	shader/slang/slang_mem.c	\
@@ -240,58 +255,11 @@ SPARC_API =			\
 COMMON_DRIVER_SOURCES =			\
 	drivers/common/driverfuncs.c
 
-X11_DRIVER_SOURCES =		\
-	drivers/x11/glxapi.c	\
-	drivers/x11/fakeglx.c	\
-	drivers/x11/xfonts.c	\
-	drivers/x11/xm_api.c	\
-	drivers/x11/xm_buffer.c	\
-	drivers/x11/xm_dd.c	\
-	drivers/x11/xm_glide.c	\
-	drivers/x11/xm_line.c	\
-	drivers/x11/xm_span.c	\
-	drivers/x11/xm_tri.c
-
-OSMESA_DRIVER_SOURCES = \
-	drivers/osmesa/osmesa.c
-
-GLIDE_DRIVER_SOURCES =			\
-	drivers/glide/fxapi.c		\
-	drivers/glide/fxdd.c		\
-	drivers/glide/fxddtex.c		\
-	drivers/glide/fxsetup.c		\
-	drivers/glide/fxtexman.c	\
-	drivers/glide/fxtris.c		\
-	drivers/glide/fxvb.c		\
-	drivers/glide/fxglidew.c	\
-	drivers/glide/fxg.c
-
-#	drivers/fxddspan.c
-
-SVGA_DRIVER_SOURCES =			\
-	drivers/svga/svgamesa.c		\
-	drivers/svga/svgamesa8.c	\
-	drivers/svga/svgamesa15.c	\
-	drivers/svga/svgamesa16.c	\
-	drivers/svga/svgamesa24.c	\
-	drivers/svga/svgamesa32.c
-
-FBDEV_DRIVER_SOURCES =			\
-	drivers/fbdev/glfbdev.c
 
 
 ### All the core C sources
 
-ALL_SOURCES = \
-	$(GLAPI_SOURCES)	\
-	$(SOLO_SOURCES)		\
-	$(ASM_SOURCES)		\
-	$(COMMON_DRIVER_SOURCES)\
-	$(X11_DRIVER_SOURCES)	\
-	$(FBDEV_DRIVER_SOURCES) \
-	$(OSMESA_DRIVER_SOURCES)
-
-SOLO_SOURCES = \
+MESA_SOURCES = \
 	$(MAIN_SOURCES)		\
 	$(MATH_SOURCES)		\
 	$(VBO_SOURCES)		\
@@ -299,45 +267,39 @@ SOLO_SOURCES = \
 	$(SHADER_SOURCES)	\
 	$(SWRAST_SOURCES)	\
 	$(SWRAST_SETUP_SOURCES)	\
+	$(COMMON_DRIVER_SOURCES) \
 	$(ASM_C_SOURCES)	\
 	$(SLANG_SOURCES)
 
-CORE_SOURCES = \
+ALL_SOURCES = \
+	$(MESA_SOURCES)		\
 	$(GLAPI_SOURCES)	\
-	$(SOLO_SOURCES)
+	$(ASM_SOURCES)		\
+	$(COMMON_DRIVER_SOURCES)
+
 
 
 ### Object files
 
-SOLO_OBJECTS = \
-	$(SOLO_SOURCES:.c=.o) \
+MESA_OBJECTS = \
+	$(MESA_SOURCES:.c=.o) \
 	$(ASM_SOURCES:.S=.o)
 
 GLAPI_OBJECTS = \
 	$(GLAPI_SOURCES:.c=.o) \
 	$(ASM_API:.S=.o)
 
-CORE_OBJECTS = $(SOLO_OBJECTS) $(GLAPI_OBJECTS)
-
-OSMESA_DRIVER_OBJECTS = $(OSMESA_DRIVER_SOURCES:.c=.o)
 
 COMMON_DRIVER_OBJECTS = $(COMMON_DRIVER_SOURCES:.c=.o)
-
-FBDEV_DRIVER_OBJECTS = $(FBDEV_DRIVER_SOURCES:.c=.o)
 
 
 
 ### Include directories
+### XXX we should be able to trim this down to just -Iinclude/ and -Isrc/mesa/
+### since most #includes have been changed from #include "mtypes.h" to
+### #include "main/mtypes.h", etc.
 
 INCLUDE_DIRS = \
 	-I$(TOP)/include \
 	-I$(TOP)/src/mesa \
-	-I$(TOP)/src/mesa/main \
-	-I$(TOP)/src/mesa/glapi \
-	-I$(TOP)/src/mesa/math \
-	-I$(TOP)/src/mesa/tnl \
-	-I$(TOP)/src/mesa/shader \
-	-I$(TOP)/src/mesa/shader/grammar \
-	-I$(TOP)/src/mesa/shader/slang \
-	-I$(TOP)/src/mesa/swrast \
-	-I$(TOP)/src/mesa/swrast_setup
+	-I$(TOP)/src/mesa/main

@@ -25,15 +25,15 @@
  *
  */
 
-#include "glheader.h"
-#include "context.h"
-#include "macros.h"
-#include "imports.h"
-#include "mtypes.h"
+#include "main/glheader.h"
+#include "main/context.h"
+#include "main/macros.h"
+#include "main/imports.h"
+#include "main/mtypes.h"
 
-#include "tnl/t_context.h"
+#include "tnl/tcontext.h"
 
-#include "gamma_context.h"
+#include "gammacontext.h"
 #include "gamma_tris.h"
 #include "gamma_vb.h"
 
@@ -74,7 +74,7 @@ static void gamma_emit( GLcontext *ctx, GLuint start, GLuint end)
 	    WRITEF(gmesa->buf, Tr4, tc0[i][2]);
 	    WRITEF(gmesa->buf, Tt4, tc0[i][0]);
 	    WRITEF(gmesa->buf, Ts4, tc0[i][1]);
-	    WRITE(gmesa->buf, PackedColor4, *(u_int32_t*)col[i]);
+	    WRITE(gmesa->buf, PackedColor4, *(uint32_t*)col[i]);
 	    WRITEF(gmesa->buf, Vw, coord[i][3]);
 	    WRITEF(gmesa->buf, Vz, coord[i][2]);
 	    WRITEF(gmesa->buf, Vy, coord[i][1]);
@@ -85,7 +85,7 @@ static void gamma_emit( GLcontext *ctx, GLuint start, GLuint end)
 	    CHECK_DMA_BUFFER(gmesa, 7);
 	    WRITEF(gmesa->buf, Tt2, tc0[i][0]);
 	    WRITEF(gmesa->buf, Ts2, tc0[i][1]);
-	    WRITE(gmesa->buf, PackedColor4, *(u_int32_t*)col[i]);
+	    WRITE(gmesa->buf, PackedColor4, *(uint32_t*)col[i]);
 	    WRITEF(gmesa->buf, Vw, coord[i][3]);
 	    WRITEF(gmesa->buf, Vz, coord[i][2]);
 	    WRITEF(gmesa->buf, Vy, coord[i][1]);
@@ -94,7 +94,7 @@ static void gamma_emit( GLcontext *ctx, GLuint start, GLuint end)
    } else {
       for (i=start; i < end; i++) {
 	    CHECK_DMA_BUFFER(gmesa, 4);
-	    WRITE(gmesa->buf, PackedColor4, *(u_int32_t*)col[i]);
+	    WRITE(gmesa->buf, PackedColor4, *(uint32_t*)col[i]);
 	    WRITEF(gmesa->buf, Vz, coord[i][2]);
 	    WRITEF(gmesa->buf, Vy, coord[i][1]);
 	    WRITEF(gmesa->buf, Vx3, coord[i][0]);
@@ -129,13 +129,13 @@ static const GLuint hw_prim[GL_POLYGON+1] = {
    B_PrimType_Polygon
 };
 
-static __inline void gammaStartPrimitive( gammaContextPtr gmesa, GLenum prim )
+static INLINE void gammaStartPrimitive( gammaContextPtr gmesa, GLenum prim )
 {
    CHECK_DMA_BUFFER(gmesa, 1);
    WRITE(gmesa->buf, Begin, gmesa->Begin | hw_prim[prim]);
 }
 
-static __inline void gammaEndPrimitive( gammaContextPtr gmesa )
+static INLINE void gammaEndPrimitive( gammaContextPtr gmesa )
 {
    GLcontext *ctx = gmesa->glCtx;
 

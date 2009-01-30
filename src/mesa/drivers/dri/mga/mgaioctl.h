@@ -25,7 +25,6 @@
  *    Keith Whitwell <keith@tungstengraphics.com>
  *    Gareth Hughes <gareth@valinux.com>
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/mga/mgaioctl.h,v 1.11 2002/10/30 12:51:36 alanh Exp $ */
 
 #ifndef MGA_IOCTL_H
 #define MGA_IOCTL_H
@@ -33,7 +32,7 @@
 #include "mgacontext.h"
 #include "mga_xmesa.h"
 
-void mgaCopyBuffer( const __DRIdrawablePrivate *dPriv );
+void mgaCopyBuffer( __DRIdrawablePrivate *dPriv );
 void mgaWaitForVBlank( mgaContextPtr mmesa );
 
 void mgaGetILoadBufferLocked( mgaContextPtr mmesa );
@@ -62,7 +61,7 @@ void mgaInitIoctlFuncs( struct dd_function_table *functions );
 
 extern drmBufPtr mga_get_buffer_ioctl( mgaContextPtr mmesa );
 
-static __inline
+static INLINE
 GLuint *mgaAllocDmaLow( mgaContextPtr mmesa, int bytes )
 {
    GLuint *head;

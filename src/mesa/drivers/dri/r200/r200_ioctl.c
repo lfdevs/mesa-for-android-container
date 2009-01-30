@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r200/r200_ioctl.c,v 1.4 2002/12/17 00:32:56 dawes Exp $ */
 /*
 Copyright (C) The Weather Channel, Inc.  2002.  All Rights Reserved.
 
@@ -36,10 +35,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <sched.h>
 #include <errno.h>
 
-#include "glheader.h"
-#include "imports.h"
-#include "macros.h"
-#include "context.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/macros.h"
+#include "main/context.h"
 #include "swrast/swrast.h"
 
 #include "r200_context.h"
@@ -334,11 +333,11 @@ void r200AllocDmaRegion( r200ContextPtr rmesa,
  * SwapBuffers with client-side throttling
  */
 
-static u_int32_t r200GetLastFrame(r200ContextPtr rmesa)
+static uint32_t r200GetLastFrame(r200ContextPtr rmesa)
 {
    drm_radeon_getparam_t gp;
    int ret;
-   u_int32_t frame;
+   uint32_t frame;
 
    gp.param = RADEON_PARAM_LAST_FRAME;
    gp.value = (int *)&frame;
@@ -420,13 +419,14 @@ static void r200WaitForFrameCompletion( r200ContextPtr rmesa )
 
 /* Copy the back color buffer to the front color buffer.
  */
-void r200CopyBuffer( const __DRIdrawablePrivate *dPriv,
+void r200CopyBuffer( __DRIdrawablePrivate *dPriv,
 		      const drm_clip_rect_t	 *rect)
 {
    r200ContextPtr rmesa;
    GLint nbox, i, ret;
    GLboolean   missed_target;
    int64_t ust;
+   __DRIscreenPrivate *psp = dPriv->driScreenPriv;
 
    assert(dPriv);
    assert(dPriv->driContextPriv);
@@ -450,7 +450,7 @@ void r200CopyBuffer( const __DRIdrawablePrivate *dPriv,
    if (!rect)
    {
        UNLOCK_HARDWARE( rmesa );
-       driWaitForVBlank( dPriv, & rmesa->vbl_seq, rmesa->vblank_flags, & missed_target );
+       driWaitForVBlank( dPriv, & missed_target );
        LOCK_HARDWARE( rmesa );
    }
 
@@ -477,15 +477,17 @@ void r200CopyBuffer( const __DRIdrawablePrivate *dPriv,
 	     if (rect->y2 < b->y2)
 		 b->y2 = rect->y2;
 
-	     if (b->x1 < b->x2 && b->y1 < b->y2)
-		 b++;
+	     if (b->x1 >= b->x2 || b->y1 >= b->y2)
+		 continue;
 	  }
-	  else
-	      b++;
 
+	  b++;
 	  n++;
       }
       rmesa->sarea->nbox = n;
+
+      if (!n)
+	 continue;
 
       ret = drmCommandNone( rmesa->dri.fd, DRM_RADEON_SWAP );
 
@@ -502,7 +504,7 @@ void r200CopyBuffer( const __DRIdrawablePrivate *dPriv,
        rmesa->hw.all_dirty = GL_TRUE;
 
        rmesa->swap_count++;
-       (*dri_interface->getUST)( & ust );
+       (*psp->systemTime->getUST)( & ust );
        if ( missed_target ) {
 	   rmesa->swap_missed_count++;
 	   rmesa->swap_missed_ust = ust - rmesa->swap_ust;
@@ -514,11 +516,12 @@ void r200CopyBuffer( const __DRIdrawablePrivate *dPriv,
    }
 }
 
-void r200PageFlip( const __DRIdrawablePrivate *dPriv )
+void r200PageFlip( __DRIdrawablePrivate *dPriv )
 {
    r200ContextPtr rmesa;
    GLint ret;
    GLboolean   missed_target;
+   __DRIscreenPrivate *psp = dPriv->driScreenPriv;
 
    assert(dPriv);
    assert(dPriv->driContextPriv);
@@ -554,10 +557,10 @@ void r200PageFlip( const __DRIdrawablePrivate *dPriv )
     */
    r200WaitForFrameCompletion( rmesa );
    UNLOCK_HARDWARE( rmesa );
-   driWaitForVBlank( dPriv, & rmesa->vbl_seq, rmesa->vblank_flags, & missed_target );
+   driWaitForVBlank( dPriv, & missed_target );
    if ( missed_target ) {
       rmesa->swap_missed_count++;
-      (void) (*dri_interface->getUST)( & rmesa->swap_missed_ust );
+      (void) (*psp->systemTime->getUST)( & rmesa->swap_missed_ust );
    }
    LOCK_HARDWARE( rmesa );
 
@@ -571,7 +574,7 @@ void r200PageFlip( const __DRIdrawablePrivate *dPriv )
    }
 
    rmesa->swap_count++;
-   (void) (*dri_interface->getUST)( & rmesa->swap_ust );
+   (void) (*psp->systemTime->getUST)( & rmesa->swap_ust );
 
 #if 000
    if ( rmesa->sarea->pfCurrentPage == 1 ) {
@@ -858,7 +861,7 @@ void r200Finish( GLcontext *ctx )
  * the kernel data structures, and the current context to get the
  * device fd.
  */
-void *r200AllocateMemoryMESA(__DRInativeDisplay *dpy, int scrn, GLsizei size,
+void *r200AllocateMemoryMESA(__DRIscreen *screen, GLsizei size,
 			     GLfloat readfreq, GLfloat writefreq, 
 			     GLfloat priority)
 {
@@ -900,7 +903,7 @@ void *r200AllocateMemoryMESA(__DRInativeDisplay *dpy, int scrn, GLsizei size,
 
 
 /* Called via glXFreeMemoryMESA() */
-void r200FreeMemoryMESA(__DRInativeDisplay *dpy, int scrn, GLvoid *pointer)
+void r200FreeMemoryMESA(__DRIscreen *screen, GLvoid *pointer)
 {
    GET_CURRENT_CONTEXT(ctx);
    r200ContextPtr rmesa;
@@ -937,7 +940,7 @@ void r200FreeMemoryMESA(__DRInativeDisplay *dpy, int scrn, GLvoid *pointer)
 }
 
 /* Called via glXGetMemoryOffsetMESA() */
-GLuint r200GetMemoryOffsetMESA(__DRInativeDisplay *dpy, int scrn, const GLvoid *pointer)
+GLuint r200GetMemoryOffsetMESA(__DRIscreen *screen, const GLvoid *pointer)
 {
    GET_CURRENT_CONTEXT(ctx);
    r200ContextPtr rmesa;

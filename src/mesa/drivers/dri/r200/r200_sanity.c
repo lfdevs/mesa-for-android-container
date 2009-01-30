@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r200/r200_sanity.c,v 1.1 2002/10/30 12:51:52 alanh Exp $ */
 /**************************************************************************
 
 Copyright 2002 ATI Technologies Inc., Ontario, Canada, and
@@ -35,8 +34,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  
 #include <errno.h> 
 
-#include "glheader.h"
-#include "imports.h"
+#include "main/glheader.h"
+#include "main/imports.h"
 
 #include "r200_context.h"
 #include "r200_ioctl.h"

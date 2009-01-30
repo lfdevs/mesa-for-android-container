@@ -1,4 +1,4 @@
-/* $XFree86$ */ /* -*- mode: c; c-basic-offset: 3 -*- */
+/* -*- mode: c; c-basic-offset: 3 -*- */
 /*
  * Copyright 2000 Gareth Hughes
  * All Rights Reserved.
@@ -29,11 +29,11 @@
  *	José Fonseca <j_r_fonseca@yahoo.co.uk>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "context.h"
-#include "macros.h"
-#include "texformat.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/context.h"
+#include "main/macros.h"
+#include "main/texformat.h"
 
 #include "mach64_context.h"
 #include "mach64_ioctl.h"

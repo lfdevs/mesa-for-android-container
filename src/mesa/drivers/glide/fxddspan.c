@@ -275,6 +275,8 @@
 #undef BYTESPERPIXEL
 #define BYTESPERPIXEL 2
 
+#define VALUE_TYPE GLushort
+
 #define WRITE_DEPTH( _x, _y, d )					\
     *(GLushort *)(buf + _x*BYTESPERPIXEL + _y*pitch) = d
 
@@ -301,6 +303,8 @@
 
 #undef BYTESPERPIXEL
 #define BYTESPERPIXEL 4
+
+#define VALUE_TYPE GLuint
 
 #define WRITE_DEPTH( _x, _y, d )					\
     *(GLuint *)(buf + _x*BYTESPERPIXEL + _y*pitch) = d << 8
@@ -549,7 +553,6 @@ void
 fxSetupDDSpanPointers(GLcontext * ctx)
 {
    struct swrast_device_driver *swdd = _swrast_GetDeviceDriverReference( ctx );
-#if 0
    fxMesaContext fxMesa = FX_CONTEXT(ctx);
 
    switch (fxMesa->colDepth) {
@@ -603,8 +606,6 @@ fxSetupDDSpanPointers(GLcontext * ctx)
       swdd->WriteStencilPixels = fxWriteStencilPixels;
       swdd->ReadStencilPixels = fxReadStencilPixels;
    }
-#endif
-
 #if 0
    swdd->WriteCI8Span		= NULL;
    swdd->WriteCI32Span		= NULL;

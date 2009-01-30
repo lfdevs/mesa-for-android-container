@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r128/r128_tris.h,v 1.8 2002/10/30 12:51:43 alanh Exp $ */
 /**************************************************************************
 
 Copyright 2003 Eric Anholt
@@ -33,7 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define __SIS_TRIS_H__
 
 #include "sis_lock.h"
-#include "mtypes.h"
+#include "main/mtypes.h"
 
 extern void sisInitTriFuncs( GLcontext *ctx );
 extern void sisFlushPrims( sisContextPtr smesa );
@@ -48,7 +47,7 @@ do {							\
       sisFlushPrims(smesa);				\
 } while (0)
 
-static __inline GLuint *sisAllocDmaLow(sisContextPtr smesa, int bytes)
+static INLINE GLuint *sisAllocDmaLow(sisContextPtr smesa, int bytes)
 {
    GLuint *start;
 

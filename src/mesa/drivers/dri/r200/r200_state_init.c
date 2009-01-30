@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r200/r200_state_init.c,v 1.4 2003/02/22 06:21:11 dawes Exp $ */
 /*
 Copyright (C) The Weather Channel, Inc.  2002.  All Rights Reserved.
 
@@ -32,11 +31,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Keith Whitwell <keith@tungstengraphics.com>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "enums.h"
-#include "colormac.h"
-#include "api_arrayelt.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/enums.h"
+#include "main/colormac.h"
+#include "main/api_arrayelt.h"
 
 #include "swrast/swrast.h"
 #include "vbo/vbo.h"

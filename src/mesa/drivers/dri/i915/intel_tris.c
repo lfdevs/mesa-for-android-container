@@ -25,11 +25,19 @@
  * 
  **************************************************************************/
 
-#include "glheader.h"
-#include "context.h"
-#include "macros.h"
-#include "enums.h"
-#include "dd.h"
+/** @file intel_tris.c
+ *
+ * This file contains functions for managing the vertex buffer and emitting
+ * primitives into it.
+ */
+
+#include "main/glheader.h"
+#include "main/context.h"
+#include "main/macros.h"
+#include "main/enums.h"
+#include "main/texobj.h"
+#include "main/state.h"
+#include "main/dd.h"
 
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
@@ -38,19 +46,284 @@
 #include "tnl/t_vertex.h"
 
 #include "intel_screen.h"
+#include "intel_context.h"
 #include "intel_tris.h"
 #include "intel_batchbuffer.h"
+#include "intel_buffers.h"
 #include "intel_reg.h"
 #include "intel_span.h"
-
-/* XXX we shouldn't include these headers in this file, but we need them
- * for fallbackStrings, below.
- */
+#include "intel_tex.h"
+#include "intel_chipset.h"
 #include "i830_context.h"
-#include "i915_context.h"
+#include "i830_reg.h"
 
-static void intelRenderPrimitive( GLcontext *ctx, GLenum prim );
-static void intelRasterPrimitive( GLcontext *ctx, GLenum rprim, GLuint hwprim );
+static void intelRenderPrimitive(GLcontext * ctx, GLenum prim);
+static void intelRasterPrimitive(GLcontext * ctx, GLenum rprim,
+                                 GLuint hwprim);
+
+static void
+intel_flush_inline_primitive(struct intel_context *intel)
+{
+   GLuint used = intel->batch->ptr - intel->prim.start_ptr;
+
+   assert(intel->prim.primitive != ~0);
+
+/*    _mesa_printf("/\n"); */
+
+   if (used < 8)
+      goto do_discard;
+
+   *(int *) intel->prim.start_ptr = (_3DPRIMITIVE |
+                                     intel->prim.primitive | (used / 4 - 2));
+
+   goto finished;
+
+ do_discard:
+   intel->batch->ptr -= used;
+
+ finished:
+   intel->prim.primitive = ~0;
+   intel->prim.start_ptr = 0;
+   intel->prim.flush = 0;
+}
+
+static void intel_start_inline(struct intel_context *intel, uint32_t prim)
+{
+   BATCH_LOCALS;
+   uint32_t batch_flags = LOOP_CLIPRECTS;
+
+   intel->vtbl.emit_state(intel);
+
+   intel->no_batch_wrap = GL_TRUE;
+
+   /*_mesa_printf("%s *", __progname);*/
+
+   /* Emit a slot which will be filled with the inline primitive
+    * command later.
+    */
+   BEGIN_BATCH(2, batch_flags);
+   OUT_BATCH(0);
+
+   assert((intel->batch->dirty_state & (1<<1)) == 0);
+
+   intel->prim.start_ptr = intel->batch->ptr;
+   intel->prim.primitive = prim;
+   intel->prim.flush = intel_flush_inline_primitive;
+
+   OUT_BATCH(0);
+   ADVANCE_BATCH();
+
+   intel->no_batch_wrap = GL_FALSE;
+/*    _mesa_printf(">"); */
+}
+
+static void intel_wrap_inline(struct intel_context *intel)
+{
+   GLuint prim = intel->prim.primitive;
+
+   intel_flush_inline_primitive(intel);
+   intel_batchbuffer_flush(intel->batch);
+   intel_start_inline(intel, prim);  /* ??? */
+}
+
+static GLuint *intel_extend_inline(struct intel_context *intel, GLuint dwords)
+{
+   GLuint sz = dwords * sizeof(GLuint);
+   GLuint *ptr;
+
+   assert(intel->prim.flush == intel_flush_inline_primitive);
+
+   if (intel_batchbuffer_space(intel->batch) < sz)
+      intel_wrap_inline(intel);
+
+/*    _mesa_printf("."); */
+
+   intel->vtbl.assert_not_dirty(intel);
+
+   ptr = (GLuint *) intel->batch->ptr;
+   intel->batch->ptr += sz;
+
+   return ptr;
+}
+
+/** Sets the primitive type for a primitive sequence, flushing as needed. */
+void intel_set_prim(struct intel_context *intel, uint32_t prim)
+{
+   /* if we have no VBOs */
+
+   if (intel->intelScreen->no_vbo) {
+      intel_start_inline(intel, prim);
+      return;
+   }
+   if (prim != intel->prim.primitive) {
+      INTEL_FIREVERTICES(intel);
+      intel->prim.primitive = prim;
+   }
+}
+
+/** Returns mapped VB space for the given number of vertices */
+uint32_t *intel_get_prim_space(struct intel_context *intel, unsigned int count)
+{
+   uint32_t *addr;
+
+   if (intel->intelScreen->no_vbo) {
+      return intel_extend_inline(intel, count * intel->vertex_size);
+   }
+
+   /* Check for space in the existing VB */
+   if (intel->prim.vb_bo == NULL ||
+       (intel->prim.current_offset +
+	count * intel->vertex_size * 4) > INTEL_VB_SIZE ||
+       (intel->prim.count + count) >= (1 << 16)) {
+      /* Flush existing prim if any */
+      INTEL_FIREVERTICES(intel);
+
+      intel_finish_vb(intel);
+
+      /* Start a new VB */
+      if (intel->prim.vb == NULL)
+	 intel->prim.vb = malloc(INTEL_VB_SIZE);
+      intel->prim.vb_bo = dri_bo_alloc(intel->bufmgr, "vb",
+				       INTEL_VB_SIZE, 4);
+      intel->prim.start_offset = 0;
+      intel->prim.current_offset = 0;
+   }
+
+   intel->prim.flush = intel_flush_prim;
+
+   addr = (uint32_t *)(intel->prim.vb + intel->prim.current_offset);
+   intel->prim.current_offset += intel->vertex_size * 4 * count;
+   intel->prim.count += count;
+
+   return addr;
+}
+
+/** Dispatches the accumulated primitive to the batchbuffer. */
+void intel_flush_prim(struct intel_context *intel)
+{
+   BATCH_LOCALS;
+   dri_bo *aper_array[2];
+   dri_bo *vb_bo;
+   unsigned int offset, count;
+
+   /* Must be called after an intel_start_prim. */
+   assert(intel->prim.primitive != ~0);
+
+   if (intel->prim.count == 0)
+      return;
+
+   /* Clear the current prims out of the context state so that a batch flush
+    * flush triggered by emit_state doesn't loop back to flush_prim again.
+    */
+   vb_bo = intel->prim.vb_bo;
+   dri_bo_reference(vb_bo);
+   count = intel->prim.count;
+   intel->prim.count = 0;
+   offset = intel->prim.start_offset;
+   intel->prim.start_offset = intel->prim.current_offset;
+   if (!IS_9XX(intel->intelScreen->deviceID))
+      intel->prim.start_offset = ALIGN(intel->prim.start_offset, 128);
+   intel->prim.flush = NULL;
+
+   intel->vtbl.emit_state(intel);
+
+   aper_array[0] = intel->batch->buf;
+   aper_array[1] = vb_bo;
+   if (dri_bufmgr_check_aperture_space(aper_array, 2)) {
+      intel_batchbuffer_flush(intel->batch);
+      intel->vtbl.emit_state(intel);
+   }
+
+   /* Ensure that we don't start a new batch for the following emit, which
+    * depends on the state just emitted. emit_state should be making sure we
+    * have the space for this.
+    */
+   intel->no_batch_wrap = GL_TRUE;
+
+   /* Check that we actually emitted the state into this batch, using the
+    * UPLOAD_CTX bit as the signal.
+    */
+   assert((intel->batch->dirty_state & (1<<1)) == 0);
+
+#if 0
+   printf("emitting %d..%d=%d vertices size %d\n", offset,
+	  intel->prim.current_offset, count,
+	  intel->vertex_size * 4);
+#endif
+
+   if (IS_9XX(intel->intelScreen->deviceID)) {
+      BEGIN_BATCH(5, LOOP_CLIPRECTS);
+      OUT_BATCH(_3DSTATE_LOAD_STATE_IMMEDIATE_1 |
+		I1_LOAD_S(0) | I1_LOAD_S(1) | 1);
+      assert((offset & !S0_VB_OFFSET_MASK) == 0);
+      OUT_RELOC(vb_bo, I915_GEM_DOMAIN_VERTEX, 0, offset);
+      OUT_BATCH((intel->vertex_size << S1_VERTEX_WIDTH_SHIFT) |
+		(intel->vertex_size << S1_VERTEX_PITCH_SHIFT));
+
+      OUT_BATCH(_3DPRIMITIVE |
+		PRIM_INDIRECT |
+		PRIM_INDIRECT_SEQUENTIAL |
+		intel->prim.primitive |
+		count);
+      OUT_BATCH(0); /* Beginning vertex index */
+      ADVANCE_BATCH();
+   } else {
+      struct i830_context *i830 = i830_context(&intel->ctx);
+
+      BEGIN_BATCH(5, LOOP_CLIPRECTS);
+      OUT_BATCH(_3DSTATE_LOAD_STATE_IMMEDIATE_1 |
+		I1_LOAD_S(0) | I1_LOAD_S(2) | 1);
+      /* S0 */
+      assert((offset & !S0_VB_OFFSET_MASK_830) == 0);
+      OUT_RELOC(vb_bo, I915_GEM_DOMAIN_VERTEX, 0,
+		offset | (intel->vertex_size << S0_VB_PITCH_SHIFT_830) |
+		S0_VB_ENABLE_830);
+      /* S2
+       * This is somewhat unfortunate -- VB width is tied up with
+       * vertex format data that we've already uploaded through
+       * _3DSTATE_VFT[01]_CMD.  We may want to replace emits of VFT state with
+       * STATE_IMMEDIATE_1 like this to avoid duplication.
+       */
+      OUT_BATCH((i830->state.Ctx[I830_CTXREG_VF] & VFT0_TEX_COUNT_MASK) >>
+		VFT0_TEX_COUNT_SHIFT << S2_TEX_COUNT_SHIFT_830 |
+		(i830->state.Ctx[I830_CTXREG_VF2] << 16) |
+		intel->vertex_size << S2_VERTEX_0_WIDTH_SHIFT_830);
+
+      OUT_BATCH(_3DPRIMITIVE |
+		PRIM_INDIRECT |
+		PRIM_INDIRECT_SEQUENTIAL |
+		intel->prim.primitive |
+		count);
+      OUT_BATCH(0); /* Beginning vertex index */
+      ADVANCE_BATCH();
+   }
+
+   intel->no_batch_wrap = GL_FALSE;
+
+   dri_bo_unreference(vb_bo);
+}
+
+/**
+ * Uploads the locally-accumulated VB into the buffer object.
+ *
+ * This avoids us thrashing the cachelines in and out as the buffer gets
+ * filled, dispatched, then reused as the hardware completes rendering from it,
+ * and also lets us clflush less if we dispatch with a partially-filled VB.
+ *
+ * This is called normally from get_space when we're finishing a BO, but also
+ * at batch flush time so that we don't try accessing the contents of a
+ * just-dispatched buffer.
+ */
+void intel_finish_vb(struct intel_context *intel)
+{
+   if (intel->prim.vb_bo == NULL)
+      return;
+
+   dri_bo_subdata(intel->prim.vb_bo, 0, intel->prim.start_offset,
+		  intel->prim.vb);
+   dri_bo_unreference(intel->prim.vb_bo);
+   intel->prim.vb_bo = NULL;
+}
 
 /***********************************************************************
  *                    Emit primitives as inline vertices               *
@@ -69,75 +342,81 @@ do {								\
 #else
 #define COPY_DWORDS( j, vb, vertsize, v )	\
 do {						\
-   if (0) fprintf(stderr, "\n");	\
    for ( j = 0 ; j < vertsize ; j++ ) {		\
-      if (0) fprintf(stderr, "   -- v(%d): %x/%f\n",j,	\
-	      ((GLuint *)v)[j],			\
-	      ((GLfloat *)v)[j]);		\
       vb[j] = ((GLuint *)v)[j];			\
    }						\
    vb += vertsize;				\
 } while (0)
 #endif
 
-static void __inline__ intel_draw_quad( intelContextPtr intel,
-					intelVertexPtr v0,
-					intelVertexPtr v1,
-					intelVertexPtr v2,
-					intelVertexPtr v3 )
+static void
+intel_draw_quad(struct intel_context *intel,
+                intelVertexPtr v0,
+                intelVertexPtr v1, intelVertexPtr v2, intelVertexPtr v3)
 {
    GLuint vertsize = intel->vertex_size;
-   GLuint *vb = intelExtendInlinePrimitive( intel, 6 * vertsize );
+   GLuint *vb = intel_get_prim_space(intel, 6);
    int j;
 
-   COPY_DWORDS( j, vb, vertsize, v0 );
-   COPY_DWORDS( j, vb, vertsize, v1 );
-   COPY_DWORDS( j, vb, vertsize, v3 );
-   COPY_DWORDS( j, vb, vertsize, v1 );
-   COPY_DWORDS( j, vb, vertsize, v2 );
-   COPY_DWORDS( j, vb, vertsize, v3 );
+   COPY_DWORDS(j, vb, vertsize, v0);
+   COPY_DWORDS(j, vb, vertsize, v1);
+
+   /* If smooth shading, draw like a trifan which gives better
+    * rasterization.  Otherwise draw as two triangles with provoking
+    * vertex in third position as required for flat shading.
+    */
+   if (intel->ctx.Light.ShadeModel == GL_FLAT) {
+      COPY_DWORDS(j, vb, vertsize, v3);
+      COPY_DWORDS(j, vb, vertsize, v1);
+   }
+   else {
+      COPY_DWORDS(j, vb, vertsize, v2);
+      COPY_DWORDS(j, vb, vertsize, v0);
+   }
+
+   COPY_DWORDS(j, vb, vertsize, v2);
+   COPY_DWORDS(j, vb, vertsize, v3);
 }
 
-static void __inline__ intel_draw_triangle( intelContextPtr intel,
-					    intelVertexPtr v0,
-					    intelVertexPtr v1,
-					    intelVertexPtr v2 )
+static void
+intel_draw_triangle(struct intel_context *intel,
+                    intelVertexPtr v0, intelVertexPtr v1, intelVertexPtr v2)
 {
    GLuint vertsize = intel->vertex_size;
-   GLuint *vb = intelExtendInlinePrimitive( intel, 3 * vertsize );
-   int j;
-   
-   COPY_DWORDS( j, vb, vertsize, v0 );
-   COPY_DWORDS( j, vb, vertsize, v1 );
-   COPY_DWORDS( j, vb, vertsize, v2 );
-}
-
-
-static __inline__ void intel_draw_line( intelContextPtr intel,
-					intelVertexPtr v0,
-					intelVertexPtr v1 )
-{
-   GLuint vertsize = intel->vertex_size;
-   GLuint *vb = intelExtendInlinePrimitive( intel, 2 * vertsize );
+   GLuint *vb = intel_get_prim_space(intel, 3);
    int j;
 
-   COPY_DWORDS( j, vb, vertsize, v0 );
-   COPY_DWORDS( j, vb, vertsize, v1 );
+   COPY_DWORDS(j, vb, vertsize, v0);
+   COPY_DWORDS(j, vb, vertsize, v1);
+   COPY_DWORDS(j, vb, vertsize, v2);
 }
 
 
-static __inline__ void intel_draw_point( intelContextPtr intel,
-					 intelVertexPtr v0 )
+static void
+intel_draw_line(struct intel_context *intel,
+                intelVertexPtr v0, intelVertexPtr v1)
 {
    GLuint vertsize = intel->vertex_size;
-   GLuint *vb = intelExtendInlinePrimitive( intel, vertsize );
+   GLuint *vb = intel_get_prim_space(intel, 2);
+   int j;
+
+   COPY_DWORDS(j, vb, vertsize, v0);
+   COPY_DWORDS(j, vb, vertsize, v1);
+}
+
+
+static void
+intel_draw_point(struct intel_context *intel, intelVertexPtr v0)
+{
+   GLuint vertsize = intel->vertex_size;
+   GLuint *vb = intel_get_prim_space(intel, 1);
    int j;
 
    /* Adjust for sub pixel position -- still required for conform. */
-   *(float *)&vb[0] = v0->v.x - 0.125;
-   *(float *)&vb[1] = v0->v.y - 0.125;
-   for (j = 2 ; j < vertsize ; j++)
-     vb[j] = v0->ui[j];
+   *(float *) &vb[0] = v0->v.x;
+   *(float *) &vb[1] = v0->v.y;
+   for (j = 2; j < vertsize; j++)
+      vb[j] = v0->ui[j];
 }
 
 
@@ -146,13 +425,17 @@ static __inline__ void intel_draw_point( intelContextPtr intel,
  *                Fixup for ARB_point_parameters                       *
  ***********************************************************************/
 
-static void intel_atten_point( intelContextPtr intel, intelVertexPtr v0 )
+/* Currently not working - VERT_ATTRIB_POINTSIZE isn't correctly
+ * represented in the fragment program InputsRead field.
+ */
+static void
+intel_atten_point(struct intel_context *intel, intelVertexPtr v0)
 {
    GLcontext *ctx = &intel->ctx;
    GLfloat psz[4], col[4], restore_psz, restore_alpha;
 
-   _tnl_get_attr( ctx, v0, _TNL_ATTRIB_POINTSIZE, psz );
-   _tnl_get_attr( ctx, v0, _TNL_ATTRIB_COLOR0, col );
+   _tnl_get_attr(ctx, v0, _TNL_ATTRIB_POINTSIZE, psz);
+   _tnl_get_attr(ctx, v0, _TNL_ATTRIB_COLOR0, col);
 
    restore_psz = psz[0];
    restore_alpha = col[3];
@@ -170,19 +453,19 @@ static void intel_atten_point( intelContextPtr intel, intelVertexPtr v0 )
       psz[0] = 1.0;
 
    if (restore_psz != psz[0] || restore_alpha != col[3]) {
-      _tnl_set_attr( ctx, v0, _TNL_ATTRIB_POINTSIZE, psz);
-      _tnl_set_attr( ctx, v0, _TNL_ATTRIB_COLOR0, col);
-   
-      intel_draw_point( intel, v0 );
+      _tnl_set_attr(ctx, v0, _TNL_ATTRIB_POINTSIZE, psz);
+      _tnl_set_attr(ctx, v0, _TNL_ATTRIB_COLOR0, col);
+
+      intel_draw_point(intel, v0);
 
       psz[0] = restore_psz;
       col[3] = restore_alpha;
 
-      _tnl_set_attr( ctx, v0, _TNL_ATTRIB_POINTSIZE, psz);
-      _tnl_set_attr( ctx, v0, _TNL_ATTRIB_COLOR0, col);
+      _tnl_set_attr(ctx, v0, _TNL_ATTRIB_POINTSIZE, psz);
+      _tnl_set_attr(ctx, v0, _TNL_ATTRIB_COLOR0, col);
    }
    else
-      intel_draw_point( intel, v0 );
+      intel_draw_point(intel, v0);
 }
 
 
@@ -195,10 +478,9 @@ static void intel_atten_point( intelContextPtr intel, intelVertexPtr v0 )
 
 
 
-static void intel_wpos_triangle( intelContextPtr intel,
-				 intelVertexPtr v0,
-				 intelVertexPtr v1,
-				 intelVertexPtr v2 )
+static void
+intel_wpos_triangle(struct intel_context *intel,
+                    intelVertexPtr v0, intelVertexPtr v1, intelVertexPtr v2)
 {
    GLuint offset = intel->wpos_offset;
    GLuint size = intel->wpos_size;
@@ -214,13 +496,14 @@ static void intel_wpos_triangle( intelContextPtr intel,
    v1_wpos[1] = -v1_wpos[1] + intel->driDrawable->h;
    v2_wpos[1] = -v2_wpos[1] + intel->driDrawable->h;
 
+
    intel_draw_triangle(intel, v0, v1, v2);
 }
 
 
-static void intel_wpos_line( intelContextPtr intel,
-			     intelVertexPtr v0,
-			     intelVertexPtr v1 )
+static void
+intel_wpos_line(struct intel_context *intel,
+                intelVertexPtr v0, intelVertexPtr v1)
 {
    GLuint offset = intel->wpos_offset;
    GLuint size = intel->wpos_size;
@@ -233,12 +516,12 @@ static void intel_wpos_line( intelContextPtr intel,
    v0_wpos[1] = -v0_wpos[1] + intel->driDrawable->h;
    v1_wpos[1] = -v1_wpos[1] + intel->driDrawable->h;
 
-   intel_draw_line( intel, v0, v1 );
+   intel_draw_line(intel, v0, v1);
 }
 
 
-static void intel_wpos_point( intelContextPtr intel,
-			      intelVertexPtr v0 )
+static void
+intel_wpos_point(struct intel_context *intel, intelVertexPtr v0)
 {
    GLuint offset = intel->wpos_offset;
    GLuint size = intel->wpos_size;
@@ -247,7 +530,7 @@ static void intel_wpos_point( intelContextPtr intel,
    __memcpy(v0_wpos, v0, size);
    v0_wpos[1] = -v0_wpos[1] + intel->driDrawable->h;
 
-   intel_draw_point( intel, v0 );
+   intel_draw_point(intel, v0);
 }
 
 
@@ -304,11 +587,12 @@ do { 						\
 #define INTEL_MAX_TRIFUNC	0x10
 
 
-static struct {
-   tnl_points_func	        points;
-   tnl_line_func		line;
-   tnl_triangle_func	triangle;
-   tnl_quad_func		quad;
+static struct
+{
+   tnl_points_func points;
+   tnl_line_func line;
+   tnl_triangle_func triangle;
+   tnl_quad_func quad;
 } rast_tab[INTEL_MAX_TRIFUNC];
 
 
@@ -369,10 +653,10 @@ do {							\
 #define VERT_RESTORE_SPEC( idx ) if (specoffset) v[idx]->ui[specoffset] = spec[idx]
 
 #define LOCAL_VARS(n)							\
-   intelContextPtr intel = INTEL_CONTEXT(ctx);				\
-   GLuint color[n], spec[n];						\
-   GLuint coloroffset = intel->coloroffset;		\
-   GLboolean specoffset = intel->specoffset;			\
+   struct intel_context *intel = intel_context(ctx);			\
+   GLuint color[n] = { 0, }, spec[n] = { 0, };				\
+   GLuint coloroffset = intel->coloroffset;				\
+   GLboolean specoffset = intel->specoffset;				\
    (void) color; (void) spec; (void) coloroffset; (void) specoffset;
 
 
@@ -380,7 +664,7 @@ do {							\
  *                Helpers for rendering unfilled primitives            *
  ***********************************************************************/
 
-static const GLuint hw_prim[GL_POLYGON+1] = {
+static const GLuint hw_prim[GL_POLYGON + 1] = {
    PRIM3D_POINTLIST,
    PRIM3D_LINELIST,
    PRIM3D_LINELIST,
@@ -470,7 +754,8 @@ static const GLuint hw_prim[GL_POLYGON+1] = {
 #include "tnl_dd/t_dd_tritmp.h"
 
 
-static void init_rast_tab( void )
+static void
+init_rast_tab(void)
 {
    init();
    init_offset();
@@ -501,10 +786,8 @@ static void init_rast_tab( void )
  * primitives.
  */
 static void
-intel_fallback_tri( intelContextPtr intel,
-		   intelVertex *v0,
-		   intelVertex *v1,
-		   intelVertex *v2 )
+intel_fallback_tri(struct intel_context *intel,
+                   intelVertex * v0, intelVertex * v1, intelVertex * v2)
 {
    GLcontext *ctx = &intel->ctx;
    SWvertex v[3];
@@ -512,19 +795,20 @@ intel_fallback_tri( intelContextPtr intel,
    if (0)
       fprintf(stderr, "\n%s\n", __FUNCTION__);
 
-   _swsetup_Translate( ctx, v0, &v[0] );
-   _swsetup_Translate( ctx, v1, &v[1] );
-   _swsetup_Translate( ctx, v2, &v[2] );
-   intelSpanRenderStart( ctx );
-   _swrast_Triangle( ctx, &v[0], &v[1], &v[2] );
-   intelSpanRenderFinish( ctx );
+   INTEL_FIREVERTICES(intel);
+
+   _swsetup_Translate(ctx, v0, &v[0]);
+   _swsetup_Translate(ctx, v1, &v[1]);
+   _swsetup_Translate(ctx, v2, &v[2]);
+   intelSpanRenderStart(ctx);
+   _swrast_Triangle(ctx, &v[0], &v[1], &v[2]);
+   intelSpanRenderFinish(ctx);
 }
 
 
 static void
-intel_fallback_line( intelContextPtr intel,
-		    intelVertex *v0,
-		    intelVertex *v1 )
+intel_fallback_line(struct intel_context *intel,
+                    intelVertex * v0, intelVertex * v1)
 {
    GLcontext *ctx = &intel->ctx;
    SWvertex v[2];
@@ -532,17 +816,18 @@ intel_fallback_line( intelContextPtr intel,
    if (0)
       fprintf(stderr, "\n%s\n", __FUNCTION__);
 
-   _swsetup_Translate( ctx, v0, &v[0] );
-   _swsetup_Translate( ctx, v1, &v[1] );
-   intelSpanRenderStart( ctx );
-   _swrast_Line( ctx, &v[0], &v[1] );
-   intelSpanRenderFinish( ctx );
+   INTEL_FIREVERTICES(intel);
+
+   _swsetup_Translate(ctx, v0, &v[0]);
+   _swsetup_Translate(ctx, v1, &v[1]);
+   intelSpanRenderStart(ctx);
+   _swrast_Line(ctx, &v[0], &v[1]);
+   intelSpanRenderFinish(ctx);
 }
 
-
 static void
-intel_fallback_point( intelContextPtr intel,
-		     intelVertex *v0 )
+intel_fallback_point(struct intel_context *intel,
+		     intelVertex * v0)
 {
    GLcontext *ctx = &intel->ctx;
    SWvertex v[1];
@@ -550,12 +835,13 @@ intel_fallback_point( intelContextPtr intel,
    if (0)
       fprintf(stderr, "\n%s\n", __FUNCTION__);
 
-   _swsetup_Translate( ctx, v0, &v[0] );
-   intelSpanRenderStart( ctx );
-   _swrast_Point( ctx, &v[0] );
-   intelSpanRenderFinish( ctx );
-}
+   INTEL_FIREVERTICES(intel);
 
+   _swsetup_Translate(ctx, v0, &v[0]);
+   intelSpanRenderStart(ctx);
+   _swrast_Point(ctx, &v[0]);
+   intelSpanRenderFinish(ctx);
+}
 
 
 /**********************************************************************/
@@ -572,7 +858,7 @@ intel_fallback_point( intelContextPtr intel,
 #define INIT(x) intelRenderPrimitive( ctx, x )
 #undef LOCAL_VARS
 #define LOCAL_VARS						\
-    intelContextPtr intel = INTEL_CONTEXT(ctx);			\
+    struct intel_context *intel = intel_context(ctx);			\
     GLubyte *vertptr = (GLubyte *)intel->verts;			\
     const GLuint vertsize = intel->vertex_size;       	\
     const GLuint * const elt = TNL_CONTEXT(ctx)->vb.Elts;	\
@@ -595,10 +881,10 @@ intel_fallback_point( intelContextPtr intel,
 
 
 
-static void intelRenderClippedPoly( GLcontext *ctx, const GLuint *elts,
-				   GLuint n )
+static void
+intelRenderClippedPoly(GLcontext * ctx, const GLuint * elts, GLuint n)
 {
-   intelContextPtr intel = INTEL_CONTEXT(ctx);
+   struct intel_context *intel = intel_context(ctx);
    TNLcontext *tnl = TNL_CONTEXT(ctx);
    struct vertex_buffer *VB = &TNL_CONTEXT(ctx)->vb;
    GLuint prim = intel->render_primitive;
@@ -607,39 +893,40 @@ static void intelRenderClippedPoly( GLcontext *ctx, const GLuint *elts,
     */
    {
       GLuint *tmp = VB->Elts;
-      VB->Elts = (GLuint *)elts;
-      tnl->Driver.Render.PrimTabElts[GL_POLYGON]( ctx, 0, n, 
-						  PRIM_BEGIN|PRIM_END );
+      VB->Elts = (GLuint *) elts;
+      tnl->Driver.Render.PrimTabElts[GL_POLYGON] (ctx, 0, n,
+                                                  PRIM_BEGIN | PRIM_END);
       VB->Elts = tmp;
    }
 
    /* Restore the render primitive
     */
    if (prim != GL_POLYGON)
-      tnl->Driver.Render.PrimitiveNotify( ctx, prim );
+      tnl->Driver.Render.PrimitiveNotify(ctx, prim);
 }
 
-static void intelRenderClippedLine( GLcontext *ctx, GLuint ii, GLuint jj )
+static void
+intelRenderClippedLine(GLcontext * ctx, GLuint ii, GLuint jj)
 {
    TNLcontext *tnl = TNL_CONTEXT(ctx);
 
-   tnl->Driver.Render.Line( ctx, ii, jj );
+   tnl->Driver.Render.Line(ctx, ii, jj);
 }
 
-static void intelFastRenderClippedPoly( GLcontext *ctx, const GLuint *elts,
-				       GLuint n )
+static void
+intelFastRenderClippedPoly(GLcontext * ctx, const GLuint * elts, GLuint n)
 {
-   intelContextPtr intel = INTEL_CONTEXT( ctx );
+   struct intel_context *intel = intel_context(ctx);
    const GLuint vertsize = intel->vertex_size;
-   GLuint *vb = intelExtendInlinePrimitive( intel, (n-2) * 3 * vertsize );
-   GLubyte *vertptr = (GLubyte *)intel->verts;
-   const GLuint *start = (const GLuint *)V(elts[0]);
-   int i,j;
+   GLuint *vb = intel_get_prim_space(intel, (n - 2) * 3);
+   GLubyte *vertptr = (GLubyte *) intel->verts;
+   const GLuint *start = (const GLuint *) V(elts[0]);
+   int i, j;
 
-   for (i = 2 ; i < n ; i++) {
-      COPY_DWORDS( j, vb, vertsize, V(elts[i-1]) );
-      COPY_DWORDS( j, vb, vertsize, V(elts[i]) );
-      COPY_DWORDS( j, vb, vertsize, start );
+   for (i = 2; i < n; i++) {
+      COPY_DWORDS(j, vb, vertsize, V(elts[i - 1]));
+      COPY_DWORDS(j, vb, vertsize, V(elts[i]));
+      COPY_DWORDS(j, vb, vertsize, start);
    }
 }
 
@@ -650,68 +937,75 @@ static void intelFastRenderClippedPoly( GLcontext *ctx, const GLuint *elts,
 
 
 
-#define POINT_FALLBACK (0)
-#define LINE_FALLBACK (DD_LINE_STIPPLE)
-#define TRI_FALLBACK (0)
-#define ANY_FALLBACK_FLAGS (POINT_FALLBACK|LINE_FALLBACK|TRI_FALLBACK|\
-                            DD_TRI_STIPPLE|DD_POINT_ATTEN)
-#define ANY_RASTER_FLAGS (DD_TRI_LIGHT_TWOSIDE|DD_TRI_OFFSET|DD_TRI_UNFILLED)
+#define ANY_FALLBACK_FLAGS (DD_LINE_STIPPLE | DD_TRI_STIPPLE | DD_POINT_ATTEN | DD_POINT_SMOOTH | DD_TRI_SMOOTH)
+#define ANY_RASTER_FLAGS (DD_TRI_LIGHT_TWOSIDE | DD_TRI_OFFSET | DD_TRI_UNFILLED)
 
-void intelChooseRenderState(GLcontext *ctx)
+void
+intelChooseRenderState(GLcontext * ctx)
 {
    TNLcontext *tnl = TNL_CONTEXT(ctx);
-   intelContextPtr intel = INTEL_CONTEXT(ctx);
+   struct intel_context *intel = intel_context(ctx);
    GLuint flags = ctx->_TriangleCaps;
    const struct gl_fragment_program *fprog = ctx->FragmentProgram._Current;
    GLboolean have_wpos = (fprog && (fprog->Base.InputsRead & FRAG_BIT_WPOS));
    GLuint index = 0;
 
    if (INTEL_DEBUG & DEBUG_STATE)
-     fprintf(stderr,"\n%s\n",__FUNCTION__);
+      fprintf(stderr, "\n%s\n", __FUNCTION__);
 
-   if ((flags & (ANY_FALLBACK_FLAGS|ANY_RASTER_FLAGS)) || have_wpos) {
+   if ((flags & (ANY_FALLBACK_FLAGS | ANY_RASTER_FLAGS)) || have_wpos) {
 
       if (flags & ANY_RASTER_FLAGS) {
-	 if (flags & DD_TRI_LIGHT_TWOSIDE)    index |= INTEL_TWOSIDE_BIT;
-	 if (flags & DD_TRI_OFFSET)	      index |= INTEL_OFFSET_BIT;
-	 if (flags & DD_TRI_UNFILLED)	      index |= INTEL_UNFILLED_BIT;
+         if (flags & DD_TRI_LIGHT_TWOSIDE)
+            index |= INTEL_TWOSIDE_BIT;
+         if (flags & DD_TRI_OFFSET)
+            index |= INTEL_OFFSET_BIT;
+         if (flags & DD_TRI_UNFILLED)
+            index |= INTEL_UNFILLED_BIT;
       }
 
       if (have_wpos) {
-	 intel->draw_point = intel_wpos_point;
-	 intel->draw_line = intel_wpos_line;
-	 intel->draw_tri = intel_wpos_triangle;
+         intel->draw_point = intel_wpos_point;
+         intel->draw_line = intel_wpos_line;
+         intel->draw_tri = intel_wpos_triangle;
 
-	 /* Make sure these get called:
-	  */
-	 index |= INTEL_FALLBACK_BIT;
+         /* Make sure these get called:
+          */
+         index |= INTEL_FALLBACK_BIT;
       }
       else {
-	 intel->draw_point = intel_draw_point;
-	 intel->draw_line = intel_draw_line;
-	 intel->draw_tri = intel_draw_triangle;
+         intel->draw_point = intel_draw_point;
+         intel->draw_line = intel_draw_line;
+         intel->draw_tri = intel_draw_triangle;
       }
 
       /* Hook in fallbacks for specific primitives.
        */
-      if (flags & ANY_FALLBACK_FLAGS)
-      {
-	 if (flags & POINT_FALLBACK)
-	    intel->draw_point = intel_fallback_point;
+      if (flags & ANY_FALLBACK_FLAGS) {
+         if (flags & DD_LINE_STIPPLE)
+            intel->draw_line = intel_fallback_line;
 
-	 if (flags & LINE_FALLBACK)
-	    intel->draw_line = intel_fallback_line;
+         if ((flags & DD_TRI_STIPPLE) && !intel->hw_stipple)
+            intel->draw_tri = intel_fallback_tri;
 
-	 if (flags & TRI_FALLBACK)
-	    intel->draw_tri = intel_fallback_tri;
+         if (flags & DD_TRI_SMOOTH) {
+	    if (intel->strict_conformance)
+	       intel->draw_tri = intel_fallback_tri;
+	 }
 
-	 if ((flags & DD_TRI_STIPPLE) && !intel->hw_stipple) 
-	    intel->draw_tri = intel_fallback_tri;
+         if (flags & DD_POINT_ATTEN) {
+	    if (0)
+	       intel->draw_point = intel_atten_point;
+	    else
+	       intel->draw_point = intel_fallback_point;
+	 }
 
-	 if (flags & DD_POINT_ATTEN)
-	    intel->draw_point = intel_atten_point;
+	 if (flags & DD_POINT_SMOOTH) {
+	    if (intel->strict_conformance)
+	       intel->draw_point = intel_fallback_point;
+	 }
 
-	 index |= INTEL_FALLBACK_BIT;
+         index |= INTEL_FALLBACK_BIT;
       }
    }
 
@@ -724,20 +1018,21 @@ void intelChooseRenderState(GLcontext *ctx)
       tnl->Driver.Render.Quad = rast_tab[index].quad;
 
       if (index == 0) {
-	 tnl->Driver.Render.PrimTabVerts = intel_render_tab_verts;
-	 tnl->Driver.Render.PrimTabElts = intel_render_tab_elts;
-	 tnl->Driver.Render.ClippedLine = line; /* from tritmp.h */
-	 tnl->Driver.Render.ClippedPolygon = intelFastRenderClippedPoly;
-      } else {
-	 tnl->Driver.Render.PrimTabVerts = _tnl_render_tab_verts;
-	 tnl->Driver.Render.PrimTabElts = _tnl_render_tab_elts;
-	 tnl->Driver.Render.ClippedLine = intelRenderClippedLine;
-	 tnl->Driver.Render.ClippedPolygon = intelRenderClippedPoly;
+         tnl->Driver.Render.PrimTabVerts = intel_render_tab_verts;
+         tnl->Driver.Render.PrimTabElts = intel_render_tab_elts;
+         tnl->Driver.Render.ClippedLine = line; /* from tritmp.h */
+         tnl->Driver.Render.ClippedPolygon = intelFastRenderClippedPoly;
+      }
+      else {
+         tnl->Driver.Render.PrimTabVerts = _tnl_render_tab_verts;
+         tnl->Driver.Render.PrimTabElts = _tnl_render_tab_elts;
+         tnl->Driver.Render.ClippedLine = intelRenderClippedLine;
+         tnl->Driver.Render.ClippedPolygon = intelRenderClippedPoly;
       }
    }
 }
 
-static const GLenum reduced_prim[GL_POLYGON+1] = {
+static const GLenum reduced_prim[GL_POLYGON + 1] = {
    GL_POINTS,
    GL_LINES,
    GL_LINES,
@@ -758,35 +1053,52 @@ static const GLenum reduced_prim[GL_POLYGON+1] = {
 
 
 
-static void intelRunPipeline( GLcontext *ctx )
+static void
+intelRunPipeline(GLcontext * ctx)
 {
-   intelContextPtr intel = INTEL_CONTEXT(ctx);
+   struct intel_context *intel = intel_context(ctx);
+
+   _mesa_lock_context_textures(ctx);
+   
+   if (ctx->NewState)
+      _mesa_update_state_locked(ctx);
 
    if (intel->NewGLState) {
       if (intel->NewGLState & _NEW_TEXTURE) {
-	 intel->vtbl.update_texture_state( intel ); 
+         intel->vtbl.update_texture_state(intel);
       }
 
       if (!intel->Fallback) {
-	 if (intel->NewGLState & _INTEL_NEW_RENDERSTATE)
-	    intelChooseRenderState( ctx );
+         if (intel->NewGLState & _INTEL_NEW_RENDERSTATE)
+            intelChooseRenderState(ctx);
       }
 
       intel->NewGLState = 0;
    }
 
-   _tnl_run_pipeline( ctx );
+   _tnl_run_pipeline(ctx);
+
+   _mesa_unlock_context_textures(ctx);
 }
 
-static void intelRenderStart( GLcontext *ctx )
+static void
+intelRenderStart(GLcontext * ctx)
 {
-   INTEL_CONTEXT(ctx)->vtbl.render_start( INTEL_CONTEXT(ctx) );
+   struct intel_context *intel = intel_context(ctx);
+
+   intel->vtbl.render_start(intel_context(ctx));
+   intel->vtbl.emit_state(intel);
 }
 
-static void intelRenderFinish( GLcontext *ctx )
+static void
+intelRenderFinish(GLcontext * ctx)
 {
-   if (INTEL_CONTEXT(ctx)->RenderIndex & INTEL_FALLBACK_BIT)
-      _swrast_flush( ctx );
+   struct intel_context *intel = intel_context(ctx);
+
+   if (intel->RenderIndex & INTEL_FALLBACK_BIT)
+      _swrast_flush(ctx);
+
+   INTEL_FIREVERTICES(intel);
 }
 
 
@@ -795,28 +1107,33 @@ static void intelRenderFinish( GLcontext *ctx )
  /* System to flush dma and emit state changes based on the rasterized
   * primitive.
   */
-static void intelRasterPrimitive( GLcontext *ctx, GLenum rprim, GLuint hwprim )
+static void
+intelRasterPrimitive(GLcontext * ctx, GLenum rprim, GLuint hwprim)
 {
-   intelContextPtr intel = INTEL_CONTEXT(ctx);
+   struct intel_context *intel = intel_context(ctx);
 
    if (0)
-      fprintf(stderr, "%s %s %x\n", __FUNCTION__, 
-	      _mesa_lookup_enum_by_nr(rprim), hwprim);
+      fprintf(stderr, "%s %s %x\n", __FUNCTION__,
+              _mesa_lookup_enum_by_nr(rprim), hwprim);
 
-   intel->vtbl.reduced_primitive_state( intel, rprim );
-    
+   intel->vtbl.reduced_primitive_state(intel, rprim);
+
    /* Start a new primitive.  Arrange to have it flushed later on.
     */
-   if (hwprim != intel->prim.primitive) 
-      intelStartInlinePrimitive( intel, hwprim );
+   if (hwprim != intel->prim.primitive) {
+      INTEL_FIREVERTICES(intel);
+
+      intel_set_prim(intel, hwprim);
+   }
 }
 
 
-/* 
- */
-static void intelRenderPrimitive( GLcontext *ctx, GLenum prim )
+ /* 
+  */
+static void
+intelRenderPrimitive(GLcontext * ctx, GLenum prim)
 {
-   intelContextPtr intel = INTEL_CONTEXT(ctx);
+   struct intel_context *intel = intel_context(ctx);
 
    if (0)
       fprintf(stderr, "%s %s\n", __FUNCTION__, _mesa_lookup_enum_by_nr(prim));
@@ -831,63 +1148,54 @@ static void intelRenderPrimitive( GLcontext *ctx, GLenum prim )
     * lower level functions in that case, potentially pingponging the
     * state:
     */
-   if (reduced_prim[prim] == GL_TRIANGLES && 
+   if (reduced_prim[prim] == GL_TRIANGLES &&
        (ctx->_TriangleCaps & DD_TRI_UNFILLED))
       return;
 
    /* Set some primitive-dependent state and Start? a new primitive.
     */
-   intelRasterPrimitive( ctx, reduced_prim[prim], hw_prim[prim] );
+   intelRasterPrimitive(ctx, reduced_prim[prim], hw_prim[prim]);
 }
 
 
-/**********************************************************************/
-/*           Transition to/from hardware rasterization.               */
-/**********************************************************************/
+ /**********************************************************************/
+ /*           Transition to/from hardware rasterization.               */
+ /**********************************************************************/
 
-static struct {
-   GLuint bit;
-   const char *str;
-} fallbackStrings[] = {
-   { INTEL_FALLBACK_DRAW_BUFFER, "Draw buffer" },
-   { INTEL_FALLBACK_READ_BUFFER, "Read buffer" },
-   { INTEL_FALLBACK_USER, "User" },
-   { INTEL_FALLBACK_NO_BATCHBUFFER, "No Batchbuffer" },
-   { INTEL_FALLBACK_NO_TEXMEM, "No Texmem" },
-   { INTEL_FALLBACK_RENDERMODE, "Rendermode" },
+static char *fallbackStrings[] = {
+   [0] = "Draw buffer",
+   [1] = "Read buffer",
+   [2] = "Depth buffer",
+   [3] = "Stencil buffer",
+   [4] = "User disable",
+   [5] = "Render mode",
 
-   { I830_FALLBACK_TEXTURE, "i830 texture" },
-   { I830_FALLBACK_COLORMASK, "i830 colormask" },
-   { I830_FALLBACK_STENCIL, "i830 stencil" },
-   { I830_FALLBACK_STIPPLE, "i830 stipple" },
-   { I830_FALLBACK_LOGICOP, "i830 logicop" },
-
-   { I915_FALLBACK_TEXTURE, "i915 texture" },
-   { I915_FALLBACK_COLORMASK, "i915 colormask" },
-   { I915_FALLBACK_STENCIL, "i915 stencil" },
-   { I915_FALLBACK_STIPPLE, "i915 stipple" },
-   { I915_FALLBACK_PROGRAM, "i915 program" },
-   { I915_FALLBACK_LOGICOP, "i915 logicop" },
-   { I915_FALLBACK_POLYGON_SMOOTH, "i915 polygon smooth" },
-   { I915_FALLBACK_POINT_SMOOTH, "i915 point smooth" },
-
-   { 0, NULL }
+   [12] = "Texture",
+   [13] = "Color mask",
+   [14] = "Stencil",
+   [15] = "Stipple",
+   [16] = "Program",
+   [17] = "Logic op",
+   [18] = "Smooth polygon",
+   [19] = "Smooth point",
 };
 
 
-static const char *
+static char *
 getFallbackString(GLuint bit)
 {
-   int i;
-   for (i = 0; fallbackStrings[i].bit; i++) {
-      if (fallbackStrings[i].bit == bit)
-         return fallbackStrings[i].str;
+   int i = 0;
+   while (bit > 1) {
+      i++;
+      bit >>= 1;
    }
-   return "unknown fallback bit";
+   return fallbackStrings[i];
 }
 
 
-void intelFallback( intelContextPtr intel, GLuint bit, GLboolean mode )
+
+void
+intelFallback(struct intel_context *intel, GLuint bit, GLboolean mode)
 {
    GLcontext *ctx = &intel->ctx;
    TNLcontext *tnl = TNL_CONTEXT(ctx);
@@ -897,20 +1205,19 @@ void intelFallback( intelContextPtr intel, GLuint bit, GLboolean mode )
       intel->Fallback |= bit;
       if (oldfallback == 0) {
          intelFlush(ctx);
-         if (INTEL_DEBUG & DEBUG_FALLBACKS) 
-            fprintf(stderr, "ENTER FALLBACK 0x%x: %s\n",
+         if (INTEL_DEBUG & DEBUG_FALLBACKS)
+            fprintf(stderr, "ENTER FALLBACK %x: %s\n",
                     bit, getFallbackString(bit));
-         _swsetup_Wakeup( ctx );
+         _swsetup_Wakeup(ctx);
          intel->RenderIndex = ~0;
       }
    }
    else {
       intel->Fallback &= ~bit;
       if (oldfallback == bit) {
-         _swrast_flush( ctx );
-         if (INTEL_DEBUG & DEBUG_FALLBACKS) 
-            fprintf(stderr, "LEAVE FALLBACK 0x%x: %s\n",
-                    bit, getFallbackString(bit));
+         _swrast_flush(ctx);
+         if (INTEL_DEBUG & DEBUG_FALLBACKS)
+            fprintf(stderr, "LEAVE FALLBACK %s\n", getFallbackString(bit));
          tnl->Driver.Render.Start = intelRenderStart;
          tnl->Driver.Render.PrimitiveNotify = intelRenderPrimitive;
          tnl->Driver.Render.Finish = intelRenderFinish;
@@ -918,18 +1225,99 @@ void intelFallback( intelContextPtr intel, GLuint bit, GLboolean mode )
          tnl->Driver.Render.CopyPV = _tnl_copy_pv;
          tnl->Driver.Render.Interp = _tnl_interp;
 
-         _tnl_invalidate_vertex_state( ctx, ~0 );
-         _tnl_invalidate_vertices( ctx, ~0 );
-         _tnl_install_attrs( ctx, 
-                             intel->vertex_attrs, 
-                             intel->vertex_attr_count,
-                             intel->ViewportMatrix.m, 0 ); 
+         _tnl_invalidate_vertex_state(ctx, ~0);
+         _tnl_invalidate_vertices(ctx, ~0);
+         _tnl_install_attrs(ctx,
+                            intel->vertex_attrs,
+                            intel->vertex_attr_count,
+                            intel->ViewportMatrix.m, 0);
 
          intel->NewGLState |= _INTEL_NEW_RENDERSTATE;
       }
    }
 }
 
+union fi
+{
+   GLfloat f;
+   GLint i;
+};
+
+
+/**********************************************************************/
+/*             Used only with the metaops callbacks.                  */
+/**********************************************************************/
+static void
+intel_meta_draw_poly(struct intel_context *intel,
+                     GLuint n,
+                     GLfloat xy[][2],
+                     GLfloat z, GLuint color, GLfloat tex[][2])
+{
+   union fi *vb;
+   GLint i;
+   GLboolean was_locked = intel->locked;
+   unsigned int saved_vertex_size = intel->vertex_size;
+
+   if (!was_locked)
+       LOCK_HARDWARE(intel);
+
+   intel->vertex_size = 6;
+
+   /* All 3d primitives should be emitted with LOOP_CLIPRECTS,
+    * otherwise the drawing origin (DR4) might not be set correctly.
+    */
+   intel_set_prim(intel, PRIM3D_TRIFAN);
+   vb = (union fi *) intel_get_prim_space(intel, n);
+
+   for (i = 0; i < n; i++) {
+      vb[0].f = xy[i][0];
+      vb[1].f = xy[i][1];
+      vb[2].f = z;
+      vb[3].i = color;
+      vb[4].f = tex[i][0];
+      vb[5].f = tex[i][1];
+      vb += 6;
+   }
+
+   INTEL_FIREVERTICES(intel);
+
+   intel->vertex_size = saved_vertex_size;
+
+   if (!was_locked)
+       UNLOCK_HARDWARE(intel);
+}
+
+static void
+intel_meta_draw_quad(struct intel_context *intel,
+                     GLfloat x0, GLfloat x1,
+                     GLfloat y0, GLfloat y1,
+                     GLfloat z,
+                     GLuint color,
+                     GLfloat s0, GLfloat s1, GLfloat t0, GLfloat t1)
+{
+   GLfloat xy[4][2];
+   GLfloat tex[4][2];
+
+   xy[0][0] = x0;
+   xy[0][1] = y0;
+   xy[1][0] = x1;
+   xy[1][1] = y0;
+   xy[2][0] = x1;
+   xy[2][1] = y1;
+   xy[3][0] = x0;
+   xy[3][1] = y1;
+
+   tex[0][0] = s0;
+   tex[0][1] = t0;
+   tex[1][0] = s1;
+   tex[1][1] = t0;
+   tex[2][0] = s1;
+   tex[2][1] = t1;
+   tex[3][0] = s0;
+   tex[3][1] = t1;
+
+   intel_meta_draw_poly(intel, 4, xy, z, color, tex);
+}
 
 
 
@@ -938,8 +1326,10 @@ void intelFallback( intelContextPtr intel, GLuint bit, GLboolean mode )
 /**********************************************************************/
 
 
-void intelInitTriFuncs( GLcontext *ctx )
+void
+intelInitTriFuncs(GLcontext * ctx)
 {
+   struct intel_context *intel = intel_context(ctx);
    TNLcontext *tnl = TNL_CONTEXT(ctx);
    static int firsttime = 1;
 
@@ -956,4 +1346,6 @@ void intelInitTriFuncs( GLcontext *ctx )
    tnl->Driver.Render.BuildVertices = _tnl_build_vertices;
    tnl->Driver.Render.CopyPV = _tnl_copy_pv;
    tnl->Driver.Render.Interp = _tnl_interp;
+
+   intel->vtbl.meta_draw_quad = intel_meta_draw_quad;
 }

@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r128/r128_dd.c,v 1.15 2002/10/30 12:51:38 alanh Exp $ */
 /**************************************************************************
 
 Copyright 1999, 2000 ATI Technologies Inc. and Precision Insight, Inc.,
@@ -39,8 +38,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r128_dd.h"
 #include "swrast/swrast.h"
 
-#include "context.h"
-#include "framebuffer.h"
+#include "main/context.h"
+#include "main/framebuffer.h"
 
 #include "utils.h"
 

@@ -1,12 +1,16 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/i810/i810state.c,v 1.9 2002/10/30 12:51:33 alanh Exp $ */
 
 #include <stdio.h>
 
-#include "glheader.h"
-#include "context.h"
-#include "macros.h"
-#include "dd.h"
-#include "colormac.h"
+#include "main/glheader.h"
+#include "main/context.h"
+#include "main/macros.h"
+#include "main/dd.h"
+#include "main/colormac.h"
+#include "swrast/swrast.h"
+#include "tnl/tnl.h"
+#include "tnl/t_pipeline.h"
+#include "vbo/vbo.h"
+#include "swrast_setup/swrast_setup.h"
 
 #include "texmem.h"
 
@@ -20,14 +24,8 @@
 #include "i810tris.h"
 #include "i810ioctl.h"
 
-#include "swrast/swrast.h"
-#include "tnl/tnl.h"
-#include "vbo/vbo.h"
-#include "swrast_setup/swrast_setup.h"
 
-#include "tnl/t_pipeline.h"
-
-static __inline__ GLuint i810PackColor(GLuint format,
+static INLINE GLuint i810PackColor(GLuint format,
 				       GLubyte r, GLubyte g,
 				       GLubyte b, GLubyte a)
 {
@@ -292,18 +290,20 @@ void i810DrawBuffer(GLcontext *ctx, GLenum mode )
    i810ContextPtr imesa = I810_CONTEXT(ctx);
    int front = 0;
   
-   /*
-    * _DrawDestMask is easier to cope with than <mode>.
-    */
-   switch ( ctx->DrawBuffer->_ColorDrawBufferMask[0]) {
-   case BUFFER_BIT_FRONT_LEFT:
+   if (ctx->DrawBuffer->_NumColorDrawBuffers != 1) {
+      /* GL_NONE or GL_FRONT_AND_BACK or stereo left&right, etc */
+      FALLBACK( imesa, I810_FALLBACK_DRAW_BUFFER, GL_TRUE );
+      return;
+   }
+
+   switch ( ctx->DrawBuffer->_ColorDrawBufferIndexes[0]) {
+   case BUFFER_FRONT_LEFT:
      front = 1;
      break;
-   case BUFFER_BIT_BACK_LEFT:
+   case BUFFER_BACK_LEFT:
      front = 0;
      break;
    default:
-      /* GL_NONE or GL_FRONT_AND_BACK or stereo left&right, etc */
       FALLBACK( imesa, I810_FALLBACK_DRAW_BUFFER, GL_TRUE );
       return;
    }
@@ -380,7 +380,10 @@ static void i810CullFaceFrontFace(GLcontext *ctx, GLenum unused)
 static void i810LineWidth( GLcontext *ctx, GLfloat widthf )
 {
    i810ContextPtr imesa = I810_CONTEXT( ctx );
-   int width = (int)ctx->Line._Width;
+   /* AA, non-AA limits are same */
+   const int width = (int) CLAMP(ctx->Line.Width,
+                                 ctx->Const.MinLineWidth,
+                                 ctx->Const.MaxLineWidth);
 
    imesa->LcsLineWidth = 0;
    if (width & 1) imesa->LcsLineWidth |= LCS_LINEWIDTH_1_0;
@@ -396,7 +399,10 @@ static void i810LineWidth( GLcontext *ctx, GLfloat widthf )
 static void i810PointSize( GLcontext *ctx, GLfloat sz )
 {
    i810ContextPtr imesa = I810_CONTEXT( ctx );
-   int size = (int)ctx->Point._Size;
+   /* AA, non-AA limits are same */
+   const int size = (int) CLAMP(ctx->Point.Size,
+                                ctx->Const.MinPointSize,
+                                ctx->Const.MaxPointSize);
 
    imesa->LcsPointSize = 0;
    if (size & 1) imesa->LcsPointSize |= LCS_LINEWIDTH_1_0;

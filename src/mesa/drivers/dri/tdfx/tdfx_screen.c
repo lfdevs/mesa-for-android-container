@@ -23,7 +23,6 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/tdfx/tdfx_screen.c,v 1.3 2002/02/22 21:45:03 dawes Exp $ */
 
 /*
  * Original rewrite:
@@ -41,8 +40,8 @@
 #include "tdfx_span.h"
 #include "tdfx_tris.h"
 
-#include "framebuffer.h"
-#include "renderbuffer.h"
+#include "main/framebuffer.h"
+#include "main/renderbuffer.h"
 #include "xmlpool.h"
 
 #include "utils.h"
@@ -63,6 +62,11 @@ DRI_CONF_BEGIN
     DRI_CONF_SECTION_END
 DRI_CONF_END;
 
+static const __DRIextension *tdfxExtensions[] = {
+    &driReadDrawableExtension,
+    NULL
+};
+
 static const GLuint __driNConfigOptions = 1;
 
 extern const struct dri_extension card_extensions[];
@@ -73,9 +77,6 @@ tdfxCreateScreen( __DRIscreenPrivate *sPriv )
 {
    tdfxScreenPrivate *fxScreen;
    TDFXDRIPtr fxDRIPriv = (TDFXDRIPtr) sPriv->pDevPriv;
-   PFNGLXSCRENABLEEXTENSIONPROC glx_enable_extension =
-     (PFNGLXSCRENABLEEXTENSIONPROC) (*dri_interface->getProcAddress("glxEnableExtension"));
-   void *const psc = sPriv->psc->screenConfigs;
 
    if (sPriv->devPrivSize != sizeof(TDFXDRIRec)) {
       fprintf(stderr,"\nERROR!  sizeof(TDFXDRIRec) does not match passed size from device driver\n");
@@ -116,9 +117,7 @@ tdfxCreateScreen( __DRIscreenPrivate *sPriv )
       return GL_FALSE;
    }
 
-   if (glx_enable_extension != NULL) {
-      (*glx_enable_extension)(psc, "GLX_SGI_make_current_read");
-   }
+   sPriv->extensions = tdfxExtensions;
 
    return GL_TRUE;
 }
@@ -344,9 +343,100 @@ tdfxSwapBuffers( __DRIdrawablePrivate *driDrawPriv )
    }
 }
 
+static const __DRIconfig **
+tdfxFillInModes(__DRIscreenPrivate *psp,
+		unsigned pixel_bits,
+		unsigned depth_bits,
+		unsigned stencil_bits,
+		GLboolean have_back_buffer)
+{
+	unsigned deep = (depth_bits > 17);
 
-static const struct __DriverAPIRec tdfxAPI = {
-   .InitDriver      = tdfxInitDriver,
+	/* Right now GLX_SWAP_COPY_OML isn't supported, but it would be easy
+	 * enough to add support.  Basically, if a context is created with an
+	 * fbconfig where the swap method is GLX_SWAP_COPY_OML, pageflipping
+	 * will never be used.
+	 */
+
+	static const GLenum db_modes[2] = { GLX_NONE, GLX_SWAP_UNDEFINED_OML };
+	uint8_t depth_bits_array[4];
+	uint8_t stencil_bits_array[4];
+	if(deep) {
+		depth_bits_array[0] = 0;
+		depth_bits_array[1] = 24;
+		stencil_bits_array[0] = 0;
+		stencil_bits_array[1] = 8;
+	} else {
+		depth_bits_array[0] = depth_bits;
+		depth_bits_array[1] = 0;
+		depth_bits_array[2] = depth_bits;
+		depth_bits_array[3] = 0;
+		stencil_bits_array[0] = 0;
+		stencil_bits_array[1] = 0;
+		stencil_bits_array[2] = 8;
+		stencil_bits_array[3] = 8;
+	}
+
+	return driCreateConfigs(
+		deep ? GL_RGBA : GL_RGB,
+		deep ? GL_UNSIGNED_INT_8_8_8_8 : GL_UNSIGNED_SHORT_5_6_5,
+		depth_bits_array,
+		stencil_bits_array,
+		deep ? 2 : 4,
+		db_modes, 2);
+}
+
+/**
+ * This is the driver specific part of the createNewScreen entry point.
+ * 
+ * \todo maybe fold this into intelInitDriver
+ *
+ * \return the __GLcontextModes supported by this driver
+ */
+static const __DRIconfig **
+tdfxInitScreen(__DRIscreen *psp)
+{
+   static const __DRIversion ddx_expected = { 1, 1, 0 };
+   static const __DRIversion dri_expected = { 4, 0, 0 };
+   static const __DRIversion drm_expected = { 1, 0, 0 };
+
+   /* divined from tdfx_dri.c, sketchy */
+   TDFXDRIPtr dri_priv = (TDFXDRIPtr) psp->pDevPriv;
+
+   /* XXX i wish it was like this */
+   /* bpp = dri_priv->bpp */
+   int bpp = (dri_priv->cpp > 2) ? 24 : 16;
+
+   if ( ! driCheckDriDdxDrmVersions2( "tdfx",
+				      &psp->dri_version, & dri_expected,
+				      &psp->ddx_version, & ddx_expected,
+				      &psp->drm_version, & drm_expected ) )
+      return NULL;
+
+   /* Calling driInitExtensions here, with a NULL context pointer,
+    * does not actually enable the extensions.  It just makes sure
+    * that all the dispatch offsets for all the extensions that
+    * *might* be enables are known.  This is needed because the
+    * dispatch offsets need to be known when _mesa_context_create is
+    * called, but we can't enable the extensions until we have a
+    * context pointer.
+    *
+    * Hello chicken.  Hello egg.  How are you two today?
+    */
+   driInitExtensions( NULL, card_extensions, GL_FALSE );
+   driInitExtensions( NULL, napalm_extensions, GL_FALSE );
+
+   if (!tdfxInitDriver(psp))
+      return NULL;
+      
+   return tdfxFillInModes(psp,
+			  bpp, (bpp == 16) ? 16 : 24,
+			  (bpp == 16) ? 0 : 8,
+			  (dri_priv->backOffset!=dri_priv->depthOffset));
+}
+
+const struct __DriverAPIRec driDriverAPI = {
+   .InitScreen      = tdfxInitScreen,
    .DestroyScreen   = tdfxDestroyScreen,
    .CreateContext   = tdfxCreateContext,
    .DestroyContext  = tdfxDestroyContext,
@@ -356,145 +446,8 @@ static const struct __DriverAPIRec tdfxAPI = {
    .MakeCurrent     = tdfxMakeCurrent,
    .UnbindContext   = tdfxUnbindContext,
    .GetSwapInfo     = NULL,
-   .GetMSC          = NULL,
+   .GetDrawableMSC  = NULL,
    .WaitForMSC      = NULL,
    .WaitForSBC      = NULL,
    .SwapBuffersMSC  = NULL
 };
-
-
-static __GLcontextModes *tdfxFillInModes(unsigned pixel_bits,
-					 unsigned depth_bits,
-					 unsigned stencil_bits,
-					 GLboolean have_back_buffer)
-{
-	__GLcontextModes *modes;
-	__GLcontextModes *m;
-	unsigned num_modes;
-	unsigned vis[2] = { GLX_TRUE_COLOR, GLX_DIRECT_COLOR };
-	unsigned deep = (depth_bits > 17);
-	unsigned i, db, depth, accum, stencil;
-
-	/* Right now GLX_SWAP_COPY_OML isn't supported, but it would be easy
-	 * enough to add support.  Basically, if a context is created with an
-	 * fbconfig where the swap method is GLX_SWAP_COPY_OML, pageflipping
-	 * will never be used.
-	 */
-
-	num_modes = (depth_bits == 16) ? 32 : 16;
-
-	modes = (*dri_interface->createContextModes)(num_modes, sizeof(__GLcontextModes));
-	m = modes;
-
-	for (i = 0; i <= 1; i++) {
-	    for (db = 0; db <= 1; db++) {
-		for (depth = 0; depth <= 1; depth++) {
-		    for (accum = 0; accum <= 1; accum++) {
-			for (stencil = 0; stencil <= !deep; stencil++) {
-			    if (deep) stencil = depth;
-			    m->redBits		= deep ? 8 : 5;
-			    m->greenBits	= deep ? 8 : 6;
-			    m->blueBits		= deep ? 8 : 5;
-			    m->alphaBits	= deep ? 8 : 0;
-			    m->redMask		= deep ?0xFF000000 :0x0000F800;
-			    m->greenMask	= deep ?0x00FF0000 :0x000007E0;
-			    m->blueMask		= deep ?0x0000FF00 :0x0000001F;
-			    m->alphaMask	= deep ? 0x000000FF : 0;
-			    m->rgbBits		= m->redBits + m->greenBits +
-			    			  m->blueBits + m->alphaBits;
-			    m->accumRedBits	= accum ? 16 : 0;
-			    m->accumGreenBits	= accum ? 16 : 0;
-			    m->accumBlueBits	= accum ? 16 : 0;
-			    m->accumAlphaBits	= (accum && deep) ? 16 : 0;
-			    m->stencilBits	= stencil ? 8 : 0;
-			    m->depthBits	= deep
-			    			  ? (depth ? 24 : 0)
-			    			  : (depth ? 0 : depth_bits);
-			    m->visualType	= vis[i];
-			    m->renderType	= GLX_RGBA_BIT;
-			    m->drawableType	= GLX_WINDOW_BIT;
-			    m->rgbMode		= GL_TRUE;
-			    m->doubleBufferMode = db ? GL_TRUE : GL_FALSE;
-			    if (db)
-			    	m->swapMethod = GLX_SWAP_UNDEFINED_OML;
-			    m->visualRating	= ((stencil && !deep) || accum)
-			    			  ? GLX_SLOW_CONFIG
-						  : GLX_NONE;
-			    m = m->next;
-			    if (deep) stencil = 0;
-			}
-		    }
-		}
-	    }
-	}
-
-	return modes;
-}
-
-/**
- * This is the bootstrap function for the driver.  libGL supplies all of the
- * requisite information about the system, and the driver initializes itself.
- * This routine also fills in the linked list pointed to by \c driver_modes
- * with the \c __GLcontextModes that the driver can support for windows or
- * pbuffers.
- *
- * \return A pointer to a \c __DRIscreenPrivate on success, or \c NULL on
- *         failure.
- */
-PUBLIC
-void * __driCreateNewScreen_20050727( __DRInativeDisplay *dpy, int scrn, __DRIscreen *psc,
-			     const __GLcontextModes * modes,
-			     const __DRIversion * ddx_version,
-			     const __DRIversion * dri_version,
-			     const __DRIversion * drm_version,
-			     const __DRIframebuffer * frame_buffer,
-			     drmAddress pSAREA, int fd,
-			     int internal_api_version,
-			     const __DRIinterfaceMethods * interface,
-			     __GLcontextModes ** driver_modes )
-{
-   __DRIscreenPrivate *psp;
-   static const __DRIversion ddx_expected = { 1, 1, 0 };
-   static const __DRIversion dri_expected = { 4, 0, 0 };
-   static const __DRIversion drm_expected = { 1, 0, 0 };
-
-   dri_interface = interface;
-
-   if ( ! driCheckDriDdxDrmVersions2( "tdfx",
-				      dri_version, & dri_expected,
-				      ddx_version, & ddx_expected,
-				      drm_version, & drm_expected ) ) {
-      return NULL;
-   }
-
-   psp = __driUtilCreateNewScreen(dpy, scrn, psc, NULL,
-   				  ddx_version, dri_version, drm_version,
-				  frame_buffer, pSAREA, fd,
-				  internal_api_version, &tdfxAPI);
-
-   if (psp != NULL) {
-      /* divined from tdfx_dri.c, sketchy */
-      TDFXDRIPtr dri_priv = (TDFXDRIPtr) psp->pDevPriv;
-      int bpp = (dri_priv->cpp > 2) ? 24 : 16;
-
-      /* XXX i wish it was like this */
-      /* bpp = dri_priv->bpp */
-      
-      *driver_modes = tdfxFillInModes(bpp, (bpp == 16) ? 16 : 24,
-				(bpp == 16) ? 0 : 8,
-				(dri_priv->backOffset!=dri_priv->depthOffset));
-
-      /* Calling driInitExtensions here, with a NULL context pointer, does not actually
-       * enable the extensions.  It just makes sure that all the dispatch offsets for all
-       * the extensions that *might* be enables are known.  This is needed because the
-       * dispatch offsets need to be known when _mesa_context_create is called, but we can't
-       * enable the extensions until we have a context pointer.
-       *
-       * Hello chicken.  Hello egg.  How are you two today?
-       */
-      driInitExtensions( NULL, card_extensions, GL_FALSE );
-      driInitExtensions( NULL, napalm_extensions, GL_FALSE );
-   }
-
-   return (void *)psp;
-}

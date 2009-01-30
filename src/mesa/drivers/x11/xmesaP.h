@@ -1,8 +1,8 @@
 /*
  * Mesa 3-D graphics library
- * Version:  6.5
+ * Version:  7.1
  *
- * Copyright (C) 1999-2006  Brian Paul   All Rights Reserved.
+ * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -27,10 +27,10 @@
 #define XMESAP_H
 
 
-#include "GL/xmesa.h"
-#include "mtypes.h"
+#include "xmesa.h"
+#include "main/mtypes.h"
 #if defined(FX)
-#include "GL/fxmesa.h"
+#include "fxmesa.h"
 #include "xm_glide.h"
 #endif
 #ifdef XFree86Server
@@ -127,7 +127,7 @@ struct xmesa_visual {
 
 
 /**
- * Context info, dDerived from GLcontext.
+ * Context info, derived from GLcontext.
  * Basically corresponds to a GLXContext.
  */
 struct xmesa_context {
@@ -266,6 +266,11 @@ struct xmesa_buffer {
    GLboolean FXwindowHack;	/* Are we rendering into a window? */
    fxMesaContext FXctx;
 #endif
+
+   /* GLX_EXT_texture_from_pixmap */
+   GLint TextureTarget; /** GLX_TEXTURE_1D_EXT, for example */
+   GLint TextureFormat; /** GLX_TEXTURE_FORMAT_RGB_EXT, for example */
+   GLint TextureMipmap; /** 0 or 1 */
 
    struct xmesa_buffer *Next;	/* Linked list pointer: */
 };
@@ -535,7 +540,6 @@ xmesa_renderbuffer(struct gl_renderbuffer *rb)
 /**
  * Return pointer to XMesaContext corresponding to a Mesa GLcontext.
  * Since we're using structure containment, it's just a cast!.
- * XXX should use inlined function for better type safety.
  */
 static INLINE XMesaContext
 XMESA_CONTEXT(GLcontext *ctx)
@@ -547,7 +551,6 @@ XMESA_CONTEXT(GLcontext *ctx)
 /**
  * Return pointer to XMesaBuffer corresponding to a Mesa GLframebuffer.
  * Since we're using structure containment, it's just a cast!.
- * XXX should use inlined function for better type safety.
  */
 static INLINE XMesaBuffer
 XMESA_BUFFER(GLframebuffer *b)

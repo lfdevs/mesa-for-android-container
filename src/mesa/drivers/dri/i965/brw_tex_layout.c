@@ -35,7 +35,10 @@
 
 #include "intel_mipmap_tree.h"
 #include "intel_tex_layout.h"
-#include "macros.h"
+#include "intel_context.h"
+#include "main/macros.h"
+
+#define FILE_DEBUG_FLAG DEBUG_MIPTREE
 
 GLboolean brw_miptree_layout( struct intel_context *intel, struct intel_mipmap_tree *mt )
 {
@@ -62,7 +65,7 @@ GLboolean brw_miptree_layout( struct intel_context *intel, struct intel_mipmap_t
           mt->pitch = ALIGN(width, align_w);
           pack_y_pitch = (height + 3) / 4;
       } else {
-          mt->pitch = ALIGN(mt->width0 * mt->cpp, 4) / mt->cpp;
+          mt->pitch = intel_miptree_pitch_align (intel, mt, mt->width0);
           pack_y_pitch = ALIGN(mt->height0, align_h);
       }
 

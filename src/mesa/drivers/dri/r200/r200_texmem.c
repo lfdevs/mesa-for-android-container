@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r200/r200_texmem.c,v 1.5 2002/12/17 00:32:56 dawes Exp $ */
 /**************************************************************************
 
 Copyright (C) Tungsten Graphics 2002.  All Rights Reserved.  
@@ -38,11 +37,11 @@ SOFTWARE.
  
 #include <errno.h>
 
-#include "glheader.h"
-#include "imports.h"
-#include "context.h"
-#include "colormac.h"
-#include "macros.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/context.h"
+#include "main/colormac.h"
+#include "main/macros.h"
 #include "r200_context.h"
 #include "r200_ioctl.h"
 #include "r200_tex.h"

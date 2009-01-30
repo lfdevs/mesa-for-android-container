@@ -23,7 +23,6 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/tdfx/tdfx_tris.c,v 1.4 2002/10/30 12:52:01 alanh Exp $ */
 
 /* New fixes:
  *	Daniel Borca <dborca@users.sourceforge.net>, 19 Jul 2004
@@ -32,10 +31,10 @@
  *    Keith Whitwell <keith@tungstengraphics.com>
  */
 
-#include "glheader.h"
-#include "mtypes.h"
-#include "macros.h"
-#include "colormac.h"
+#include "main/glheader.h"
+#include "main/mtypes.h"
+#include "main/macros.h"
+#include "main/colormac.h"
 
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
@@ -142,10 +141,10 @@ tdfx_translate_vertex( GLcontext *ctx, const tdfxVertex *src, SWvertex *dst)
    tdfxContextPtr fxMesa = TDFX_CONTEXT(ctx);
 
    if (fxMesa->vertexFormat == TDFX_LAYOUT_TINY) {
-      dst->win[0] = src->x - fxMesa->x_offset;
-      dst->win[1] = src->y - (fxMesa->screen_height - fxMesa->height - fxMesa->y_offset);
-      dst->win[2] = src->z;
-      dst->win[3] = 1.0;
+      dst->attrib[FRAG_ATTRIB_WPOS][0] = src->x - fxMesa->x_offset;
+      dst->attrib[FRAG_ATTRIB_WPOS][1] = src->y - (fxMesa->screen_height - fxMesa->height - fxMesa->y_offset);
+      dst->attrib[FRAG_ATTRIB_WPOS][2] = src->z;
+      dst->attrib[FRAG_ATTRIB_WPOS][3] = 1.0;
 
       dst->color[0] = src->color[2];
       dst->color[1] = src->color[1];
@@ -155,10 +154,10 @@ tdfx_translate_vertex( GLcontext *ctx, const tdfxVertex *src, SWvertex *dst)
    else {
       GLfloat w = 1.0 / src->rhw;
 
-      dst->win[0] = src->x - fxMesa->x_offset;
-      dst->win[1] = src->y - (fxMesa->screen_height - fxMesa->height - fxMesa->y_offset);
-      dst->win[2] = src->z;
-      dst->win[3] = src->rhw;
+      dst->attrib[FRAG_ATTRIB_WPOS][0] = src->x - fxMesa->x_offset;
+      dst->attrib[FRAG_ATTRIB_WPOS][1] = src->y - (fxMesa->screen_height - fxMesa->height - fxMesa->y_offset);
+      dst->attrib[FRAG_ATTRIB_WPOS][2] = src->z;
+      dst->attrib[FRAG_ATTRIB_WPOS][3] = src->rhw;
 
       dst->color[0] = src->color[2];
       dst->color[1] = src->color[1];
@@ -184,7 +183,7 @@ tdfx_translate_vertex( GLcontext *ctx, const tdfxVertex *src, SWvertex *dst)
       }
    }
 
-   dst->pointSize = ctx->Point._Size;
+   dst->pointSize = ctx->Point.Size;
 }
 
 

@@ -33,69 +33,6 @@
 #ifndef BRW_DEFINES_H
 #define BRW_DEFINES_H
 
-/*
- */
-#define MI_NOOP                              0x00
-#define MI_USER_INTERRUPT                    0x02
-#define MI_WAIT_FOR_EVENT                    0x03
-#define MI_FLUSH                             0x04
-#define MI_REPORT_HEAD                       0x07
-#define MI_ARB_ON_OFF                        0x08
-#define MI_BATCH_BUFFER_END                  0x0A
-#define MI_OVERLAY_FLIP                      0x11
-#define MI_LOAD_SCAN_LINES_INCL              0x12
-#define MI_LOAD_SCAN_LINES_EXCL              0x13
-#define MI_DISPLAY_BUFFER_INFO               0x14
-#define MI_SET_CONTEXT                       0x18
-#define MI_STORE_DATA_IMM                    0x20
-#define MI_STORE_DATA_INDEX                  0x21
-#define MI_LOAD_REGISTER_IMM                 0x22
-#define MI_STORE_REGISTER_MEM                0x24
-#define MI_BATCH_BUFFER_START                0x31
-
-#define MI_SYNCHRONOUS_FLIP                  0x0 
-#define MI_ASYNCHRONOUS_FLIP                 0x1
-
-#define MI_BUFFER_SECURE                     0x0 
-#define MI_BUFFER_NONSECURE                  0x1
-
-#define MI_ARBITRATE_AT_CHAIN_POINTS         0x0 
-#define MI_ARBITRATE_BETWEEN_INSTS           0x1
-#define MI_NO_ARBITRATION                    0x3 
-
-#define MI_CONDITION_CODE_WAIT_DISABLED      0x0
-#define MI_CONDITION_CODE_WAIT_0             0x1
-#define MI_CONDITION_CODE_WAIT_1             0x2
-#define MI_CONDITION_CODE_WAIT_2             0x3
-#define MI_CONDITION_CODE_WAIT_3             0x4
-#define MI_CONDITION_CODE_WAIT_4             0x5
-
-#define MI_DISPLAY_PIPE_A                    0x0
-#define MI_DISPLAY_PIPE_B                    0x1
-
-#define MI_DISPLAY_PLANE_A                   0x0 
-#define MI_DISPLAY_PLANE_B                   0x1
-#define MI_DISPLAY_PLANE_C                   0x2
-
-#define MI_STANDARD_FLIP                                 0x0
-#define MI_ENQUEUE_FLIP_PERFORM_BASE_FRAME_NUMBER_LOAD   0x1
-#define MI_ENQUEUE_FLIP_TARGET_FRAME_NUMBER_RELATIVE     0x2
-#define MI_ENQUEUE_FLIP_ABSOLUTE_TARGET_FRAME_NUMBER     0x3
-
-#define MI_PHYSICAL_ADDRESS                  0x0
-#define MI_VIRTUAL_ADDRESS                   0x1
-
-#define MI_BUFFER_MEMORY_MAIN                0x0 
-#define MI_BUFFER_MEMORY_GTT                 0x2
-#define MI_BUFFER_MEMORY_PER_PROCESS_GTT     0x3 
-
-#define MI_FLIP_CONTINUE                     0x0
-#define MI_FLIP_ON                           0x1
-#define MI_FLIP_OFF                          0x2
-
-#define MI_UNTRUSTED_REGISTER_SPACE          0x0
-#define MI_TRUSTED_REGISTER_SPACE            0x1
-
 /* 3D state:
  */
 #define _3DOP_3DSTATE_PIPELINED       0x0
@@ -119,7 +56,6 @@
 #define _3DSTATE_LINE_STIPPLE                 0x08
 #define _3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP    0x09
 #define _3DCONTROL    0x00
-#define _3DPRIMITIVE  0x00
 
 #define PIPE_CONTROL_NOWRITE          0x00
 #define PIPE_CONTROL_WRITEIMMEDIATE   0x01
@@ -487,20 +423,6 @@
 #define BRW_VERTEX_SUBPIXEL_PRECISION_8BITS  0
 #define BRW_VERTEX_SUBPIXEL_PRECISION_4BITS  1
 
-#define BRW_VERTEXBUFFER_ACCESS_VERTEXDATA     0
-#define BRW_VERTEXBUFFER_ACCESS_INSTANCEDATA   1
-
-#define BRW_VFCOMPONENT_NOSTORE      0
-#define BRW_VFCOMPONENT_STORE_SRC    1
-#define BRW_VFCOMPONENT_STORE_0      2
-#define BRW_VFCOMPONENT_STORE_1_FLT  3
-#define BRW_VFCOMPONENT_STORE_1_INT  4
-#define BRW_VFCOMPONENT_STORE_VID    5
-#define BRW_VFCOMPONENT_STORE_IID    6
-#define BRW_VFCOMPONENT_STORE_PID    7
-
-
-
 /* Execution Unit (EU) defines
  */
 
@@ -822,8 +744,32 @@
 
 #define CMD_PIPELINED_STATE_POINTERS  0x7800
 #define CMD_BINDING_TABLE_PTRS        0x7801
+
 #define CMD_VERTEX_BUFFER             0x7808
+# define BRW_VB0_INDEX_SHIFT		27
+# define BRW_VB0_ACCESS_VERTEXDATA	(0 << 26)
+# define BRW_VB0_ACCESS_INSTANCEDATA	(1 << 26)
+# define BRW_VB0_PITCH_SHIFT		0
+
 #define CMD_VERTEX_ELEMENT            0x7809
+# define BRW_VE0_INDEX_SHIFT		27
+# define BRW_VE0_FORMAT_SHIFT		16
+# define BRW_VE0_VALID			(1 << 26)
+# define BRW_VE0_SRC_OFFSET_SHIFT	0
+# define BRW_VE1_COMPONENT_NOSTORE	0
+# define BRW_VE1_COMPONENT_STORE_SRC	1
+# define BRW_VE1_COMPONENT_STORE_0	2
+# define BRW_VE1_COMPONENT_STORE_1_FLT	3
+# define BRW_VE1_COMPONENT_STORE_1_INT	4
+# define BRW_VE1_COMPONENT_STORE_VID	5
+# define BRW_VE1_COMPONENT_STORE_IID	6
+# define BRW_VE1_COMPONENT_STORE_PID	7
+# define BRW_VE1_COMPONENT_0_SHIFT	28
+# define BRW_VE1_COMPONENT_1_SHIFT	24
+# define BRW_VE1_COMPONENT_2_SHIFT	20
+# define BRW_VE1_COMPONENT_3_SHIFT	16
+# define BRW_VE1_DST_OFFSET_SHIFT	0
+
 #define CMD_INDEX_BUFFER              0x780a
 #define CMD_VF_STATISTICS_965         0x780b
 #define CMD_VF_STATISTICS_GM45        0x680b
@@ -850,12 +796,11 @@
 #define R02_PRIM_END    0x1
 #define R02_PRIM_START  0x2
 
-#define BRW_IS_GM45(brw)                ((brw)->intel.intelScreen->deviceID == PCI_CHIP_GM45_GM)
-#define BRW_IS_G4X(brw)                 (((brw)->intel.intelScreen->deviceID == PCI_CHIP_IGD_E_G) || \
-                                         ((brw)->intel.intelScreen->deviceID == PCI_CHIP_G45_G) || \
-                                         ((brw)->intel.intelScreen->deviceID == PCI_CHIP_Q45_G))
-#define CMD_PIPELINE_SELECT(brw)       ((BRW_IS_GM45(brw) || BRW_IS_G4X(brw)) ? CMD_PIPELINE_SELECT_GM45 : CMD_PIPELINE_SELECT_965)
-#define CMD_VF_STATISTICS(brw)         ((BRW_IS_GM45(brw) || BRW_IS_G4X(brw)) ? CMD_VF_STATISTICS_GM45 : CMD_VF_STATISTICS_965)
-#define URB_SIZES(brw)                 ((BRW_IS_GM45(brw) || BRW_IS_G4X(brw)) ? 384 : 256)  /* 512 bit unit */
+#include "intel_chipset.h"
+
+#define BRW_IS_G4X(brw)         (IS_G4X((brw)->intel.intelScreen->deviceID))
+#define CMD_PIPELINE_SELECT(brw)        (BRW_IS_G4X(brw) ? CMD_PIPELINE_SELECT_GM45 : CMD_PIPELINE_SELECT_965)
+#define CMD_VF_STATISTICS(brw)          (BRW_IS_G4X(brw) ? CMD_VF_STATISTICS_GM45 : CMD_VF_STATISTICS_965)
+#define URB_SIZES(brw)                  (BRW_IS_G4X(brw) ? 384 : 256)  /* 512 bit units */
 
 #endif

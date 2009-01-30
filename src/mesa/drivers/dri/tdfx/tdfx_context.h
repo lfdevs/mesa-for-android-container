@@ -23,7 +23,6 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/tdfx/tdfx_context.h,v 1.5 2002/02/24 21:51:10 dawes Exp $ */
 
 /*
  * New fixes:
@@ -45,7 +44,7 @@
 #ifdef XFree86Server
 #include "GL/xf86glx.h"
 #else
-#include "glheader.h"
+#include "main/glheader.h"
 #endif
 #if defined(__linux__)
 #include <signal.h>
@@ -56,12 +55,12 @@
 #include "tdfx_glide.h"
 #include "xmlconfig.h"
 
-#include "clip.h"
-#include "context.h"
-#include "macros.h"
-#include "matrix.h"
-#include "imports.h"
-#include "mtypes.h"
+#include "main/clip.h"
+#include "main/context.h"
+#include "main/macros.h"
+#include "main/matrix.h"
+#include "main/imports.h"
+#include "main/mtypes.h"
 
 #include "tdfx_screen.h"
 
@@ -984,9 +983,9 @@ FX_grColorMaskv_NoLock(GLcontext *ctx, const GLboolean rgba[4]);
 #define TDFXPACKCOLOR4444( r, g, b, a )					   \
    ((((a) & 0xf0) << 8) | (((b) & 0xf0) << 4) | ((g) & 0xf0) | ((r) >> 4))
 
-static __inline__ GrColor_t tdfxPackColor( GLuint cpp,
-					   GLubyte r, GLubyte g,
-					   GLubyte b, GLubyte a )
+static INLINE GrColor_t tdfxPackColor( GLuint cpp,
+                                       GLubyte r, GLubyte g,
+                                       GLubyte b, GLubyte a )
 {
    switch ( cpp ) {
    case 2:

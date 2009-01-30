@@ -28,7 +28,6 @@
  *    Kevin E. Martin <kem@users.sourceforge.net>
  *    Gareth Hughes <gareth@nvidia.com>
  */
-/* $XFree86:$ */
 
 /** \file texmem.c
  * Implements all of the device-independent texture memory management.
@@ -44,10 +43,10 @@
  */
 
 #include "texmem.h"
-#include "simple_list.h"
-#include "imports.h"
-#include "macros.h"
-#include "texformat.h"
+#include "main/simple_list.h"
+#include "main/imports.h"
+#include "main/macros.h"
+#include "main/texformat.h"
 
 #include <assert.h>
 

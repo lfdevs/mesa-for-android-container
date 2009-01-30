@@ -9,8 +9,9 @@ CONFIG_NAME = default
 
 # Version info
 MESA_MAJOR=7
-MESA_MINOR=0
-MESA_TINY=2
+MESA_MINOR=1
+MESA_TINY=0
+MESA_VERSION = $(MESA_MAJOR).$(MESA_MINOR).$(MESA_TINY)
 
 # external projects.  This should be useless now that we use libdrm.
 DRM_SOURCE_PATH=$(TOP)/../drm
@@ -24,15 +25,19 @@ LDFLAGS =
 GLU_CFLAGS = 
 
 # Misc tools and flags
+SHELL = /bin/sh
+MKLIB = $(SHELL) $(TOP)/bin/mklib
 MKLIB_OPTIONS = 
 MKDEP = makedepend
 MKDEP_OPTIONS = -fdepend
 MAKE = make
-INSTALL = $(TOP)/bin/minstall
+INSTALL = $(SHELL) $(TOP)/bin/minstall
 
-# Python and flags (generally only needed by the developers)
+# Tools for regenerating glapi (generally only needed by the developers)
 PYTHON2 = python
 PYTHON_FLAGS = -t -O -O
+INDENT = indent
+INDENT_FLAGS = -i4 -nut -br -brs -npcs -ce -T GLubyte -T GLbyte -T Bool
 
 # Library names (base name)
 GL_LIB = GL
@@ -49,6 +54,12 @@ GLUT_LIB_NAME = lib$(GLUT_LIB).so
 GLW_LIB_NAME = lib$(GLW_LIB).so
 OSMESA_LIB_NAME = lib$(OSMESA_LIB).so
 
+# globs used to install the lib and all symlinks
+GL_LIB_GLOB = $(GL_LIB_NAME)*
+GLU_LIB_GLOB = $(GLU_LIB_NAME)*
+GLUT_LIB_GLOB = $(GLUT_LIB_NAME)*
+GLW_LIB_GLOB = $(GLW_LIB_NAME)*
+OSMESA_LIB_GLOB = $(OSMESA_LIB_NAME)*
 
 # Optional assembly language optimization files for libGL
 ASM_SOURCES = 
@@ -56,6 +67,7 @@ ASM_SOURCES =
 # GLw widget sources (Append "GLwMDrawA.c" here and add -lXm to GLW_LIB_DEPS in
 # order to build the Motif widget too)
 GLW_SOURCES = GLwDrawA.c
+MOTIF_CFLAGS = -I/usr/include/Motif1.2
 
 
 # Directories to build
@@ -72,17 +84,18 @@ PROGRAM_DIRS = demos redbook samples glsl xdemos
 GL_LIB_DEPS = $(EXTRA_LIB_PATH) -lX11 -lXext -lm -lpthread
 OSMESA_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB)
 GLU_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) -lm
-GLUT_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(GLU_LIB) -l$(GL_LIB) $(EXTRA_LIB_PATH) -lX11 -lXmu -lXt -lXi -lm
+GLUT_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(GLU_LIB) -l$(GL_LIB) $(EXTRA_LIB_PATH) -lX11 -lXmu -lXi -lm
 GLW_LIB_DEPS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) $(EXTRA_LIB_PATH) -lXt -lX11
 
 # Program dependencies - specific GL/glut libraries added in Makefiles
 APP_LIB_DEPS = -lm
 
 
-
 # Installation directories (for make install)
 INSTALL_DIR = /usr/local
-DRI_DRIVER_INSTALL_DIR = /usr/X11R6/lib/modules/dri
+INSTALL_LIB_DIR = $(INSTALL_DIR)/$(LIB_DIR)
+INSTALL_INC_DIR = $(INSTALL_DIR)/include
+DRI_DRIVER_INSTALL_DIR = $(INSTALL_LIB_DIR)/dri
 
 # Where libGL will look for DRI hardware drivers
 DRI_DRIVER_SEARCH_DIR = $(DRI_DRIVER_INSTALL_DIR)

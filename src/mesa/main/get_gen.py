@@ -50,7 +50,8 @@ TypeStrings = {
 #  - the GL state name, such as GL_CURRENT_COLOR
 #  - the state datatype, one of GLint, GLfloat, GLboolean or GLenum
 #  - list of code fragments to get the state, such as ["ctx->Foo.Bar"]
-#  - optional extra code or empty string
+#  - optional extra code or empty string.  If present, "CONVERSION" will be
+#    replaced by ENUM_TO_FLOAT, INT_TO_FLOAT, etc.
 #  - optional extensions to check, or None
 #
 StateVars = [
@@ -179,7 +180,7 @@ StateVars = [
 	( "GL_DEPTH_BIAS", GLfloat, ["ctx->Pixel.DepthBias"], "", None ),
 	( "GL_DEPTH_BITS", GLint, ["ctx->DrawBuffer->Visual.depthBits"],
 	  "", None ),
-	( "GL_DEPTH_CLEAR_VALUE", GLfloat, ["ctx->Depth.Clear"], "", None ),
+	( "GL_DEPTH_CLEAR_VALUE", GLfloatN, ["((GLfloat) ctx->Depth.Clear)"], "", None ),
 	( "GL_DEPTH_FUNC", GLenum, ["ctx->Depth.Func"], "", None ),
 	( "GL_DEPTH_RANGE", GLfloatN,
 	  [ "ctx->Viewport.Near", "ctx->Viewport.Far" ], "", None ),
@@ -372,6 +373,9 @@ StateVars = [
 	( "GL_POLYGON_OFFSET_BIAS_EXT", GLfloat, ["ctx->Polygon.OffsetUnits"], "", None ),
 	( "GL_POLYGON_OFFSET_FACTOR", GLfloat, ["ctx->Polygon.OffsetFactor "], "", None ),
 	( "GL_POLYGON_OFFSET_UNITS", GLfloat, ["ctx->Polygon.OffsetUnits "], "", None ),
+	( "GL_POLYGON_OFFSET_POINT", GLboolean, ["ctx->Polygon.OffsetPoint"], "", None ),
+	( "GL_POLYGON_OFFSET_LINE", GLboolean, ["ctx->Polygon.OffsetLine"], "", None ),
+	( "GL_POLYGON_OFFSET_FILL", GLboolean, ["ctx->Polygon.OffsetFill"], "", None ),
 	( "GL_POLYGON_SMOOTH", GLboolean, ["ctx->Polygon.SmoothFlag"], "", None ),
 	( "GL_POLYGON_SMOOTH_HINT", GLenum, ["ctx->Hint.PolygonSmooth"], "", None ),
 	( "GL_POLYGON_STIPPLE", GLboolean, ["ctx->Polygon.StippleFlag"], "", None ),
@@ -425,18 +429,18 @@ StateVars = [
 	( "GL_TEXTURE_1D", GLboolean, ["_mesa_IsEnabled(GL_TEXTURE_1D)"], "", None ),
 	( "GL_TEXTURE_2D", GLboolean, ["_mesa_IsEnabled(GL_TEXTURE_2D)"], "", None ),
 	( "GL_TEXTURE_3D", GLboolean, ["_mesa_IsEnabled(GL_TEXTURE_3D)"], "", None ),
+	( "GL_TEXTURE_1D_ARRAY_EXT", GLboolean, ["_mesa_IsEnabled(GL_TEXTURE_1D_ARRAY_EXT)"], "", ["MESA_texture_array"] ),
+	( "GL_TEXTURE_2D_ARRAY_EXT", GLboolean, ["_mesa_IsEnabled(GL_TEXTURE_2D_ARRAY_EXT)"], "", ["MESA_texture_array"] ),
 	( "GL_TEXTURE_BINDING_1D", GLint,
 	  ["ctx->Texture.Unit[ctx->Texture.CurrentUnit].Current1D->Name"], "", None ),
 	( "GL_TEXTURE_BINDING_2D", GLint,
 	  ["ctx->Texture.Unit[ctx->Texture.CurrentUnit].Current2D->Name"], "", None ),
 	( "GL_TEXTURE_BINDING_3D", GLint,
 	  ["ctx->Texture.Unit[ctx->Texture.CurrentUnit].Current3D->Name"], "", None ),
-	( "GL_TEXTURE_ENV_COLOR", GLfloatN,
-	  ["color[0]", "color[1]", "color[2]", "color[3]"],
-	  "const GLfloat *color = ctx->Texture.Unit[ctx->Texture.CurrentUnit].EnvColor;",
-	  None ),
-	( "GL_TEXTURE_ENV_MODE", GLenum,
-	  ["ctx->Texture.Unit[ctx->Texture.CurrentUnit].EnvMode"], "", None ),
+	( "GL_TEXTURE_BINDING_1D_ARRAY_EXT", GLint,
+	  ["ctx->Texture.Unit[ctx->Texture.CurrentUnit].Current1DArray->Name"], "", ["MESA_texture_array"] ),
+	( "GL_TEXTURE_BINDING_2D_ARRAY_EXT", GLint,
+	  ["ctx->Texture.Unit[ctx->Texture.CurrentUnit].Current2DArray->Name"], "", ["MESA_texture_array"] ),
 	( "GL_TEXTURE_GEN_S", GLboolean,
 	  ["((ctx->Texture.Unit[ctx->Texture.CurrentUnit].TexGenEnabled & S_BIT) ? 1 : 0)"], "", None ),
 	( "GL_TEXTURE_GEN_T", GLboolean,
@@ -529,7 +533,7 @@ StateVars = [
          GLuint i, n = _mesa_get_compressed_formats(ctx, formats, GL_FALSE);
          ASSERT(n <= 100);
          for (i = 0; i < n; i++)
-            params[i] = ENUM_TO_INT(formats[i]);""",
+            params[i] = CONVERSION(formats[i]);""",
 	  ["ARB_texture_compression"] ),
 
 	# GL_EXT_compiled_vertex_array
@@ -1080,10 +1084,11 @@ def EmitGetFunction(stateVars, returnType):
 				assert len(extensions) == 4
 				print ('         CHECK_EXT4(%s, %s, %s, %s, "%s");' %
 					   (extensions[0], extensions[1], extensions[2], extensions[3], function))
+		conversion = ConversionFunc(varType, returnType)
 		if optionalCode:
+			optionalCode = string.replace(optionalCode, "CONVERSION", conversion);	
 			print "         {"
 			print "         " + optionalCode
-		conversion = ConversionFunc(varType, returnType)
 		n = len(state)
 		for i in range(n):
 			if conversion:
@@ -1125,10 +1130,6 @@ def EmitHeader():
 #define FLOAT_TO_BOOLEAN(X)   ( (X) ? GL_TRUE : GL_FALSE )
 
 #define INT_TO_BOOLEAN(I)     ( (I) ? GL_TRUE : GL_FALSE )
-
-#define ENUM_TO_BOOLEAN(E)    ( (E) ? GL_TRUE : GL_FALSE )
-#define ENUM_TO_INT(E)        ( (GLint) (E) )
-#define ENUM_TO_FLOAT(E)      ( (GLfloat) (E) )
 
 #define BOOLEAN_TO_INT(B)     ( (GLint) (B) )
 #define BOOLEAN_TO_FLOAT(B)   ( (B) ? 1.0F : 0.0F )

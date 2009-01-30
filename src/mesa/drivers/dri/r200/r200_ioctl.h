@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r200/r200_ioctl.h,v 1.1 2002/10/30 12:51:52 alanh Exp $ */
 /*
 Copyright (C) The Weather Channel, Inc.  2002.  All Rights Reserved.
 
@@ -36,7 +35,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef __R200_IOCTL_H__
 #define __R200_IOCTL_H__
 
-#include "simple_list.h"
+#include "main/simple_list.h"
 #include "radeon_dri.h"
 #include "r200_lock.h"
 
@@ -90,19 +89,19 @@ extern void r200ReleaseDmaRegion( r200ContextPtr rmesa,
 				    struct r200_dma_region *region,
 				    const char *caller );
 
-extern void r200CopyBuffer( const __DRIdrawablePrivate *drawable,
+extern void r200CopyBuffer( __DRIdrawablePrivate *drawable,
 			    const drm_clip_rect_t      *rect);
-extern void r200PageFlip( const __DRIdrawablePrivate *drawable );
+extern void r200PageFlip( __DRIdrawablePrivate *drawable );
 extern void r200Flush( GLcontext *ctx );
 extern void r200Finish( GLcontext *ctx );
 extern void r200WaitForIdleLocked( r200ContextPtr rmesa );
 extern void r200WaitForVBlank( r200ContextPtr rmesa );
 extern void r200InitIoctlFuncs( struct dd_function_table *functions );
 
-extern void *r200AllocateMemoryMESA( __DRInativeDisplay *dpy, int scrn, GLsizei size, GLfloat readfreq,
+extern void *r200AllocateMemoryMESA( __DRIscreen *screen, GLsizei size, GLfloat readfreq,
 				   GLfloat writefreq, GLfloat priority );
-extern void r200FreeMemoryMESA( __DRInativeDisplay *dpy, int scrn, GLvoid *pointer );
-extern GLuint r200GetMemoryOffsetMESA( __DRInativeDisplay *dpy, int scrn, const GLvoid *pointer );
+extern void r200FreeMemoryMESA( __DRIscreen *screen, GLvoid *pointer );
+extern GLuint r200GetMemoryOffsetMESA( __DRIscreen *screen, const GLvoid *pointer );
 
 extern GLboolean r200IsGartMemory( r200ContextPtr rmesa, const GLvoid *pointer,
 				   GLint size );
@@ -138,7 +137,7 @@ do {								\
    memcpy( rmesa->hw.ATOM.lastcmd, rmesa->hw.ATOM.cmd,	\
 	   rmesa->hw.ATOM.cmd_size * 4)
 
-static __inline int R200_DB_STATECHANGE( 
+static INLINE int R200_DB_STATECHANGE( 
    r200ContextPtr rmesa,
    struct r200_state_atom *atom )
 {
@@ -184,7 +183,7 @@ do {							\
  * and hang on to the lock until the critical section is finished and we flush
  * the buffer again and unlock.
  */
-static __inline void r200EnsureCmdBufSpace( r200ContextPtr rmesa, int bytes )
+static INLINE void r200EnsureCmdBufSpace( r200ContextPtr rmesa, int bytes )
 {
    if (rmesa->store.cmd_used + bytes > R200_CMD_BUF_SZ)
       r200FlushCmdBuf( rmesa, __FUNCTION__ );
@@ -193,7 +192,7 @@ static __inline void r200EnsureCmdBufSpace( r200ContextPtr rmesa, int bytes )
 
 /* Alloc space in the command buffer
  */
-static __inline char *r200AllocCmdBuf( r200ContextPtr rmesa,
+static INLINE char *r200AllocCmdBuf( r200ContextPtr rmesa,
 					 int bytes, const char *where )
 {
    char * head;

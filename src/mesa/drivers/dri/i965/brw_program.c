@@ -29,15 +29,15 @@
   *   Keith Whitwell <keith@tungstengraphics.com>
   */
   
+#include "main/imports.h"
+#include "main/enums.h"
 #include "shader/prog_parameter.h"
-#include "brw_context.h"
-#include "brw_aub.h"
-#include "brw_util.h"
-#include "program.h"
-#include "imports.h"
-#include "enums.h"
+#include "shader/program.h"
+#include "shader/programopt.h"
 #include "tnl/tnl.h"
 
+#include "brw_context.h"
+#include "brw_util.h"
 
 static void brwBindProgram( GLcontext *ctx,
 			    GLenum target, 
@@ -111,13 +111,18 @@ static void brwProgramStringNotify( GLcontext *ctx,
 				    struct gl_program *prog )
 {
    if (target == GL_FRAGMENT_PROGRAM_ARB) {
+      struct gl_fragment_program *fprog = (struct gl_fragment_program *) prog;
       struct brw_context *brw = brw_context(ctx);
       struct brw_fragment_program *p = (struct brw_fragment_program *)prog;
       struct brw_fragment_program *fp = (struct brw_fragment_program *)brw->fragment_program;
+      if (fprog->FogOption) {
+         _mesa_append_fog_code(ctx, fprog);
+         fprog->FogOption = GL_NONE;
+      }
+
       if (p == fp)
 	 brw->state.dirty.brw |= BRW_NEW_FRAGMENT_PROGRAM;
       p->id = brw->program_id++;      
-      p->param_state = p->program.Base.Parameters->StateFlags;
    }
    else if (target == GL_VERTEX_PROGRAM_ARB) {
       struct brw_context *brw = brw_context(ctx);
@@ -129,7 +134,6 @@ static void brwProgramStringNotify( GLcontext *ctx,
 	 _mesa_insert_mvp_code(ctx, &p->program);
       }
       p->id = brw->program_id++;      
-      p->param_state = p->program.Base.Parameters->StateFlags;
 
       /* Also tell tnl about it:
        */

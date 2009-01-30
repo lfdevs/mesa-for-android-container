@@ -34,66 +34,26 @@
 #include "brw_util.h"
 #include "brw_wm.h"
 #include "brw_state.h"
-#include "brw_hal.h"
 
 
+/** Return number of src args for given instruction */
 GLuint brw_wm_nr_args( GLuint opcode )
 {
    switch (opcode) {
-
    case WM_PIXELXY:
-   case OPCODE_ABS:
-   case OPCODE_FLR:
-   case OPCODE_FRC:
-   case OPCODE_SWZ:
-   case OPCODE_MOV:
-   case OPCODE_COS:
-   case OPCODE_EX2:
-   case OPCODE_LG2:
-   case OPCODE_RCP:
-   case OPCODE_RSQ:
-   case OPCODE_SIN:
-   case OPCODE_SCS:
-   case OPCODE_TEX:
-   case OPCODE_TXB:
-   case OPCODE_TXP:	
-   case OPCODE_KIL:
-   case OPCODE_LIT: 
-   case WM_CINTERP: 
-   case WM_WPOSXY: 
+   case WM_CINTERP:
+   case WM_WPOSXY:
       return 1;
-
-   case OPCODE_POW:
-   case OPCODE_SUB:
-   case OPCODE_SGE:
-   case OPCODE_SGT:
-   case OPCODE_SLE:
-   case OPCODE_SLT:
-   case OPCODE_SEQ:
-   case OPCODE_SNE:
-   case OPCODE_ADD:
-   case OPCODE_MAX:
-   case OPCODE_MIN:
-   case OPCODE_MUL:
-   case OPCODE_XPD:
-   case OPCODE_DP3:	
-   case OPCODE_DP4:
-   case OPCODE_DPH:
-   case OPCODE_DST:
-   case WM_LINTERP: 
+   case WM_LINTERP:
    case WM_DELTAXY:
    case WM_PIXELW:
       return 2;
-
    case WM_FB_WRITE:
-   case WM_PINTERP: 
-   case OPCODE_MAD:	
-   case OPCODE_CMP:
-   case OPCODE_LRP:
+   case WM_PINTERP:
       return 3;
-      
    default:
-      return 0;
+      assert(opcode < MAX_OPCODE);
+      return _mesa_num_inst_src_regs(opcode);
    }
 }
 
@@ -120,20 +80,6 @@ GLuint brw_wm_is_scalar_result( GLuint opcode )
 }
 
 
-static void brw_wm_pass_hal (struct brw_wm_compile *c)
-{
-   static void (*hal_wm_pass) (struct brw_wm_compile *c);
-   static GLboolean hal_tried;
-   
-   if (!hal_tried)
-   {
-      hal_wm_pass = brw_hal_find_symbol ("intel_hal_wm_pass");
-      hal_tried = 1;
-   }
-   if (hal_wm_pass)
-      (*hal_wm_pass) (c);
-}
-
 static void do_wm_prog( struct brw_context *brw,
 			struct brw_fragment_program *fp, 
 			struct brw_wm_prog_key *key)
@@ -154,6 +100,7 @@ static void do_wm_prog( struct brw_context *brw,
    c->fp = fp;
    c->env_param = brw->intel.ctx.FragmentProgram.Parameters;
 
+    brw_init_compile(brw, &c->func);
    if (brw_wm_is_glsl(&c->fp->program)) {
        brw_wm_glsl_emit(brw, c);
    } else {
@@ -161,7 +108,7 @@ static void do_wm_prog( struct brw_context *brw,
 	* post-fragment-program tasks such as interpolation and fogging.
 	*/
        brw_wm_pass_fp(c);
-   
+
        /* Translate to intermediate representation.  Build register usage
 	* chains.
 	*/
@@ -171,17 +118,9 @@ static void do_wm_prog( struct brw_context *brw,
 	*/
        brw_wm_pass1(c);
 
-       /* Hal optimization
-	*/
-       brw_wm_pass_hal (c);
-   
        /* Register allocation.
 	*/
        c->grf_limit = BRW_WM_MAX_GRF/2;
-
-       /* This is where we start emitting gen4 code:
-	*/
-       brw_init_compile(brw, &c->func);    
 
        brw_wm_pass2(c);
 
@@ -197,20 +136,20 @@ static void do_wm_prog( struct brw_context *brw,
 	*/
        brw_wm_emit(c);
    }
+   if (INTEL_DEBUG & DEBUG_WM)
+      fprintf(stderr, "\n");
 
    /* get the program
     */
    program = brw_get_program(&c->func, &program_size);
 
-   /*
-    */
-   brw->wm.prog_gs_offset = brw_upload_cache( &brw->cache[BRW_WM_PROG],
-					      &c->key,
-					      sizeof(c->key),
-					      program,
-					      program_size,
-					      &c->prog_data,
-					      &brw->wm.prog_data );
+   dri_bo_unreference(brw->wm.prog_bo);
+   brw->wm.prog_bo = brw_upload_cache( &brw->cache, BRW_WM_PROG,
+				       &c->key, sizeof(c->key),
+				       NULL, 0,
+				       program, program_size,
+				       &c->prog_data,
+				       &brw->wm.prog_data );
 }
 
 
@@ -255,12 +194,6 @@ static void brw_wm_populate_key( struct brw_context *brw,
 	 lookup |= IZ_STENCIL_WRITE_ENABLE_BIT;
    }
 
-   /* XXX: when should this be disabled?
-    */
-   if (1)
-      lookup |= IZ_EARLY_DEPTH_TEST_BIT;
-
-   
    line_aa = AA_NEVER;
 
    /* _NEW_LINE, _NEW_POLYGON, BRW_NEW_REDUCED_PRIMITIVE */
@@ -304,12 +237,6 @@ static void brw_wm_populate_key( struct brw_context *brw,
       const struct gl_texture_object *t = unit->_Current;
 
       if (unit->_ReallyEnabled) {
-
-	 if (t->CompareMode == GL_COMPARE_R_TO_TEXTURE_ARB &&
-	     t->Image[0][t->BaseLevel]->_BaseFormat == GL_DEPTH_COMPONENT) {
-	    key->shadowtex_mask |= 1<<i;
-	 }
-
 	 if (t->Image[0][t->BaseLevel]->InternalFormat == GL_YCBCR_MESA) {
 	    key->yuvtex_mask |= 1<<i;
 	    if (t->Image[0][t->BaseLevel]->TexFormat->MesaFormat == 
@@ -318,6 +245,9 @@ static void brw_wm_populate_key( struct brw_context *brw,
 	 }
       }
    }
+
+   /* Shadow */
+   key->shadowtex_mask = fp->program.Base.ShadowSamplers;
 
    /* _NEW_BUFFERS */
    /*
@@ -350,7 +280,7 @@ static void brw_wm_populate_key( struct brw_context *brw,
 }
 
 
-static void brw_upload_wm_prog( struct brw_context *brw )
+static void brw_prepare_wm_prog(struct brw_context *brw)
 {
    struct brw_wm_prog_key key;
    struct brw_fragment_program *fp = (struct brw_fragment_program *)
@@ -360,13 +290,13 @@ static void brw_upload_wm_prog( struct brw_context *brw )
 
    /* Make an early check for the key.
     */
-   if (brw_search_cache(&brw->cache[BRW_WM_PROG], 
-			&key, sizeof(key),
-			&brw->wm.prog_data,
-			&brw->wm.prog_gs_offset))
-      return;
-
-   do_wm_prog(brw, fp, &key);
+   dri_bo_unreference(brw->wm.prog_bo);
+   brw->wm.prog_bo = brw_search_cache(&brw->cache, BRW_WM_PROG,
+				      &key, sizeof(key),
+				      NULL, 0,
+				      &brw->wm.prog_data);
+   if (brw->wm.prog_bo == NULL)
+      do_wm_prog(brw, fp, &key);
 }
 
 
@@ -387,6 +317,6 @@ const struct brw_tracked_state brw_wm_prog = {
 		BRW_NEW_REDUCED_PRIMITIVE),
       .cache = 0
    },
-   .update = brw_upload_wm_prog
+   .prepare = brw_prepare_wm_prog
 };
 

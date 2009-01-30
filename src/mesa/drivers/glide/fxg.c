@@ -2306,18 +2306,4 @@ void tdfx_hook_glide (struct tdfx_glide *Glide, int pointcast)
 #undef GET_EXT_ADDR
 }
 
-#else
-
-/*
- * Need this to provide at least one external definition.
- */
-
-extern int gl_fxg_dummy_function(void);
-int
-gl_fxg_dummy_function(void)
-{
-   return 0;
-}
-
-
 #endif /* FX */

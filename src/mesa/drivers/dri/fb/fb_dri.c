@@ -47,14 +47,14 @@
 #include "drirenderbuffer.h"
 
 #include "buffers.h"
-#include "extensions.h"
-#include "framebuffer.h"
-#include "renderbuffer.h"
+#include "main/extensions.h"
+#include "main/framebuffer.h"
+#include "main/renderbuffer.h"
 #include "vbo/vbo.h"
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
 #include "tnl/tnl.h"
-#include "tnl/t_context.h"
+#include "tnl/tcontext.h"
 #include "tnl/t_pipeline.h"
 #include "drivers/common/driverfuncs.h"
 
@@ -657,8 +657,9 @@ struct DRIDriverRec __driDriver = {
 };
 
 static __GLcontextModes *
-fbFillInModes( unsigned pixel_bits, unsigned depth_bits,
-                 unsigned stencil_bits, GLboolean have_back_buffer )
+fbFillInModes( __DRIscreenPrivate *psp,
+	       unsigned pixel_bits, unsigned depth_bits,
+	       unsigned stencil_bits, GLboolean have_back_buffer )
 {
    __GLcontextModes * modes;
    __GLcontextModes * m;
@@ -677,8 +678,8 @@ fbFillInModes( unsigned pixel_bits, unsigned depth_bits,
       GLX_NONE, GLX_SWAP_UNDEFINED_OML /*, GLX_SWAP_COPY_OML */
    };
 
-   u_int8_t depth_bits_array[2];
-   u_int8_t stencil_bits_array[2];
+   uint8_t depth_bits_array[2];
+   uint8_t stencil_bits_array[2];
 
 
    depth_bits_array[0] = depth_bits;
@@ -705,7 +706,7 @@ fbFillInModes( unsigned pixel_bits, unsigned depth_bits,
       fb_type = GL_UNSIGNED_INT_8_8_8_8_REV;
    }
 
-   modes = (*dri_interface->createContextModes)( num_modes, sizeof( __GLcontextModes ) );
+   modes = (*psp->contextModes->createContextModes)( num_modes, sizeof( __GLcontextModes ) );
    m = modes;
    if ( ! driFillInModes( & m, fb_format, fb_type,
           depth_bits_array, stencil_bits_array, depth_buffer_factor,
@@ -776,7 +777,7 @@ void * __driCreateNewScreen( __DRInativeDisplay *dpy, int scrn, __DRIscreen *psc
                                          frame_buffer, pSAREA, fd,
                                          internal_api_version, &fbAPI);
           if ( psp != NULL ) {
-	     *driver_modes = fbFillInModes( psp->fbBPP,
+	     *driver_modes = fbFillInModes( psp, psp->fbBPP,
 					    (psp->fbBPP == 16) ? 16 : 24,
 					    (psp->fbBPP == 16) ? 0  : 8,
 					    1);

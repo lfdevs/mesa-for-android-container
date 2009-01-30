@@ -35,10 +35,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <sched.h>
 #include <errno.h>
 
-#include "glheader.h"
-#include "imports.h"
-#include "macros.h"
-#include "context.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/macros.h"
+#include "main/context.h"
 #include "swrast/swrast.h"
 #include "r300_context.h"
 #include "radeon_ioctl.h"
@@ -157,13 +157,14 @@ static void radeonWaitForFrameCompletion(radeonContextPtr radeon)
 
 /* Copy the back color buffer to the front color buffer.
  */
-void radeonCopyBuffer(const __DRIdrawablePrivate * dPriv,
+void radeonCopyBuffer(__DRIdrawablePrivate * dPriv,
 		      const drm_clip_rect_t	 * rect)
 {
 	radeonContextPtr radeon;
 	GLint nbox, i, ret;
 	GLboolean missed_target;
 	int64_t ust;
+	__DRIscreenPrivate *psp = dPriv->driScreenPriv;
 
 	assert(dPriv);
 	assert(dPriv->driContextPriv);
@@ -187,8 +188,7 @@ void radeonCopyBuffer(const __DRIdrawablePrivate * dPriv,
 	if (!rect)
 	{
 	    UNLOCK_HARDWARE(radeon);
-	    driWaitForVBlank(dPriv, &radeon->vbl_seq, radeon->vblank_flags,
-			     &missed_target);
+	    driWaitForVBlank(dPriv, &missed_target);
 	    LOCK_HARDWARE(radeon);
 	}
 
@@ -215,15 +215,17 @@ void radeonCopyBuffer(const __DRIdrawablePrivate * dPriv,
 			if (rect->y2 < b->y2)
 			    b->y2 = rect->y2;
 
-			if (b->x1 < b->x2 && b->y1 < b->y2)
-			    b++;
+			if (b->x1 >= b->x2 || b->y1 >= b->y2)
+			    continue;
 		    }
-		    else
-			b++;
 
+		    b++;
 		    n++;
 		}
 		radeon->sarea->nbox = n;
+
+		if (!n)
+		   continue;
 
 		ret = drmCommandNone(radeon->dri.fd, DRM_RADEON_SWAP);
 
@@ -241,7 +243,7 @@ void radeonCopyBuffer(const __DRIdrawablePrivate * dPriv,
 	    ((r300ContextPtr)radeon)->hw.all_dirty = GL_TRUE;
 
 	    radeon->swap_count++;
-	    (*dri_interface->getUST) (&ust);
+	    (*psp->systemTime->getUST) (&ust);
 	    if (missed_target) {
 		radeon->swap_missed_count++;
 		radeon->swap_missed_ust = ust - radeon->swap_ust;
@@ -253,11 +255,12 @@ void radeonCopyBuffer(const __DRIdrawablePrivate * dPriv,
 	}
 }
 
-void radeonPageFlip(const __DRIdrawablePrivate * dPriv)
+void radeonPageFlip(__DRIdrawablePrivate * dPriv)
 {
 	radeonContextPtr radeon;
 	GLint ret;
 	GLboolean missed_target;
+	__DRIscreenPrivate *psp = dPriv->driScreenPriv;
 
 	assert(dPriv);
 	assert(dPriv->driContextPriv);
@@ -293,11 +296,10 @@ void radeonPageFlip(const __DRIdrawablePrivate * dPriv)
 	 */
 	radeonWaitForFrameCompletion(radeon);
 	UNLOCK_HARDWARE(radeon);
-	driWaitForVBlank(dPriv, &radeon->vbl_seq, radeon->vblank_flags,
-			 &missed_target);
+	driWaitForVBlank(dPriv, &missed_target);
 	if (missed_target) {
 		radeon->swap_missed_count++;
-		(void)(*dri_interface->getUST) (&radeon->swap_missed_ust);
+		(void)(*psp->systemTime->getUST) (&radeon->swap_missed_ust);
 	}
 	LOCK_HARDWARE(radeon);
 
@@ -311,7 +313,7 @@ void radeonPageFlip(const __DRIdrawablePrivate * dPriv)
 	}
 
 	radeon->swap_count++;
-	(void)(*dri_interface->getUST) (&radeon->swap_ust);
+	(void)(*psp->systemTime->getUST) (&radeon->swap_ust);
 
         driFlipRenderbuffers(radeon->glCtx->WinSysDrawBuffer, 
                              radeon->sarea->pfCurrentPage);

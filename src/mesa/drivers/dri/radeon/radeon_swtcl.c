@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/radeon/radeon_swtcl.c,v 1.6 2003/05/06 23:52:08 daenzer Exp $ */
 /**************************************************************************
 
 Copyright 2000, 2001 ATI Technologies Inc., Ontario, Canada, and
@@ -33,12 +32,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Keith Whitwell <keith@tungstengraphics.com>
  */
 
-#include "glheader.h"
-#include "mtypes.h"
-#include "colormac.h"
-#include "enums.h"
-#include "imports.h"
-#include "macros.h"
+#include "main/glheader.h"
+#include "main/mtypes.h"
+#include "main/colormac.h"
+#include "main/enums.h"
+#include "main/imports.h"
+#include "main/macros.h"
 
 #include "swrast_setup/swrast_setup.h"
 #include "math/m_translate.h"

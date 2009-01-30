@@ -23,7 +23,6 @@
  * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/tdfx/tdfx_span.h,v 1.1 2001/03/21 16:14:28 dawes Exp $ */
 
 /*
  * Original rewrite:
@@ -38,7 +37,7 @@
 #ifndef __TDFX_SPAN_H__
 #define __TDFX_SPAN_H__
 
-#include "context.h"
+#include "main/context.h"
 #include "drirenderbuffer.h"
 
 extern void tdfxDDInitSpanFuncs( GLcontext *ctx );

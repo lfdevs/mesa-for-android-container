@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r200/r200_context.h,v 1.2 2002/12/16 16:18:54 dawes Exp $ */
 /*
 Copyright (C) The Weather Channel, Inc.  2002.  All Rights Reserved.
 
@@ -42,9 +41,9 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "dri_util.h"
 #include "texmem.h"
 
-#include "macros.h"
-#include "mtypes.h"
-#include "colormac.h"
+#include "main/macros.h"
+#include "main/mtypes.h"
+#include "main/colormac.h"
 #include "r200_reg.h"
 #include "r200_vertprog.h"
 
@@ -64,7 +63,7 @@ typedef union { GLfloat f; uint32_t ui32; } float_ui32_type;
 
 #include "r200_lock.h"
 #include "radeon_screen.h"
-#include "mm.h"
+#include "main/mm.h"
 
 /* Flags for software fallback cases */
 /* See correponding strings in r200_swtcl.c */
@@ -894,11 +893,8 @@ struct r200_context {
    GLuint TexGenCompSel;
    GLmatrix tmpmat;
 
-   /* VBI / buffer swap
+   /* buffer swap
     */
-   GLuint vbl_seq;
-   GLuint vblank_flags;
-
    int64_t swap_ust;
    int64_t swap_missed_ust;
 
@@ -931,7 +927,7 @@ struct r200_context {
 #define R200_CONTEXT(ctx)		((r200ContextPtr)(ctx->DriverCtx))
 
 
-static __inline GLuint r200PackColor( GLuint cpp,
+static INLINE GLuint r200PackColor( GLuint cpp,
 					GLubyte r, GLubyte g,
 					GLubyte b, GLubyte a )
 {

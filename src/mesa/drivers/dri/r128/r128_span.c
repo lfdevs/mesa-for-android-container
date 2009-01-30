@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/r128/r128_span.c,v 1.8 2002/10/30 12:51:39 alanh Exp $ */
 /**************************************************************************
 
 Copyright 1999, 2000 ATI Technologies Inc. and Precision Insight, Inc.,
@@ -131,6 +130,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /* 16-bit depth buffer functions
  */
+#define VALUE_TYPE GLushort
 
 #define WRITE_DEPTH_SPAN()						\
 do {									\
@@ -207,6 +207,8 @@ do {									\
 
 /* 24-bit depth, 8-bit stencil buffer functions
  */
+#define VALUE_TYPE GLuint
+
 #define WRITE_DEPTH_SPAN()						\
 do {									\
    GLuint buf[n];							\

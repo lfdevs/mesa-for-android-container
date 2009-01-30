@@ -1,6 +1,6 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.0.1
+ * Version:  7.1
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -42,13 +42,12 @@
 
 #include "glxheader.h"
 #include "glxapi.h"
-#include "GL/xmesa.h"
-#include "context.h"
-#include "config.h"
-#include "macros.h"
-#include "imports.h"
-#include "mtypes.h"
-#include "version.h"
+#include "main/context.h"
+#include "main/config.h"
+#include "main/macros.h"
+#include "main/imports.h"
+#include "main/mtypes.h"
+#include "main/version.h"
 #include "xfonts.h"
 #include "xmesaP.h"
 
@@ -78,6 +77,7 @@
    "GLX_MESA_pixmap_colormap " \
    "GLX_MESA_release_buffers " \
    "GLX_ARB_get_proc_address " \
+   "GLX_EXT_texture_from_pixmap " \
    "GLX_EXT_visual_info " \
    "GLX_EXT_visual_rating " \
    /*"GLX_SGI_video_sync "*/ \
@@ -1229,6 +1229,30 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
             /* ignore */
             break;
 
+#ifdef GLX_EXT_texture_from_pixmap
+         case GLX_BIND_TO_TEXTURE_RGB_EXT:
+            parselist++; /*skip*/
+            break;
+         case GLX_BIND_TO_TEXTURE_RGBA_EXT:
+            parselist++; /*skip*/
+            break;
+         case GLX_BIND_TO_MIPMAP_TEXTURE_EXT:
+            parselist++; /*skip*/
+            break;
+         case GLX_BIND_TO_TEXTURE_TARGETS_EXT:
+            parselist++;
+            if (*parselist & ~(GLX_TEXTURE_1D_BIT_EXT |
+                               GLX_TEXTURE_2D_BIT_EXT |
+                               GLX_TEXTURE_RECTANGLE_BIT_EXT)) {
+               /* invalid bit */
+               return NULL;
+            }
+            break;
+         case GLX_Y_INVERTED_EXT:
+            parselist++; /*skip*/
+            break;
+#endif
+
 	 case None:
             /* end of list */
 	    break;
@@ -1884,6 +1908,27 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
          *value = xmvis->visinfo->visualid;
          break;
 
+#ifdef GLX_EXT_texture_from_pixmap
+      case GLX_BIND_TO_TEXTURE_RGB_EXT:
+         *value = True; /*XXX*/
+         break;
+      case GLX_BIND_TO_TEXTURE_RGBA_EXT:
+         /* XXX review */
+         *value = xmvis->mesa_visual.alphaBits > 0 ? True : False;
+         break;
+      case GLX_BIND_TO_MIPMAP_TEXTURE_EXT:
+         *value = True; /*XXX*/
+         break;
+      case GLX_BIND_TO_TEXTURE_TARGETS_EXT:
+         *value = (GLX_TEXTURE_1D_BIT_EXT |
+                   GLX_TEXTURE_2D_BIT_EXT |
+                   GLX_TEXTURE_RECTANGLE_BIT_EXT); /*XXX*/
+         break;
+      case GLX_Y_INVERTED_EXT:
+         *value = True; /*XXX*/
+         break;
+#endif
+
       default:
 	 return GLX_BAD_ATTRIBUTE;
    }
@@ -2151,16 +2196,102 @@ Fake_glXCreatePixmap( Display *dpy, GLXFBConfig config, Pixmap pixmap,
 {
    XMesaVisual v = (XMesaVisual) config;
    XMesaBuffer b;
-
-   (void) dpy;
-   (void) config;
-   (void) pixmap;
-   (void) attribList;  /* Ignored in GLX 1.3 */
+   const int *attr;
+   int target = 0, format = 0, mipmap = 0;
+   int value;
 
    if (!dpy || !config || !pixmap)
       return 0;
 
-   b = XMesaCreatePixmapBuffer( v, pixmap, 0 );
+   for (attr = attribList; *attr; attr++) {
+      switch (*attr) {
+      case GLX_TEXTURE_FORMAT_EXT:
+         attr++;
+         switch (*attr) {
+         case GLX_TEXTURE_FORMAT_NONE_EXT:
+         case GLX_TEXTURE_FORMAT_RGB_EXT:
+         case GLX_TEXTURE_FORMAT_RGBA_EXT:
+            format = *attr;
+            break;
+         default:
+            /* error */
+            return 0;
+         }
+         break;
+      case GLX_TEXTURE_TARGET_EXT:
+         attr++;
+         switch (*attr) {
+         case GLX_TEXTURE_1D_EXT:
+         case GLX_TEXTURE_2D_EXT:
+         case GLX_TEXTURE_RECTANGLE_EXT:
+            target = *attr;
+            break;
+         default:
+            /* error */
+            return 0;
+         }
+         break;
+      case GLX_MIPMAP_TEXTURE_EXT:
+         attr++;
+         if (*attr)
+            mipmap = 1;
+         break;
+      default:
+         /* error */
+         return 0;
+      }
+   }
+
+   if (format == GLX_TEXTURE_FORMAT_RGB_EXT) {
+      if (get_config(v, GLX_BIND_TO_TEXTURE_RGB_EXT,
+                     &value, GL_TRUE) != Success
+          || !value) {
+         return 0; /* error! */
+      }
+   }
+   else if (format == GLX_TEXTURE_FORMAT_RGBA_EXT) {
+      if (get_config(v, GLX_BIND_TO_TEXTURE_RGBA_EXT,
+                     &value, GL_TRUE) != Success
+          || !value) {
+         return 0; /* error! */
+      }
+   }
+   if (mipmap) {
+      if (get_config(v, GLX_BIND_TO_MIPMAP_TEXTURE_EXT,
+                     &value, GL_TRUE) != Success
+          || !value) {
+         return 0; /* error! */
+      }
+   }
+   if (target == GLX_TEXTURE_1D_EXT) {
+      if (get_config(v, GLX_BIND_TO_TEXTURE_TARGETS_EXT,
+                     &value, GL_TRUE) != Success
+          || (value & GLX_TEXTURE_1D_BIT_EXT) == 0) {
+         return 0; /* error! */
+      }
+   }
+   else if (target == GLX_TEXTURE_2D_EXT) {
+      if (get_config(v, GLX_BIND_TO_TEXTURE_TARGETS_EXT,
+                     &value, GL_TRUE) != Success
+          || (value & GLX_TEXTURE_2D_BIT_EXT) == 0) {
+         return 0; /* error! */
+      }
+   }
+   if (target == GLX_TEXTURE_RECTANGLE_EXT) {
+      if (get_config(v, GLX_BIND_TO_TEXTURE_TARGETS_EXT,
+                     &value, GL_TRUE) != Success
+          || (value & GLX_TEXTURE_RECTANGLE_BIT_EXT) == 0) {
+         return 0; /* error! */
+      }
+   }
+
+   if (format || target || mipmap) {
+      /* texture from pixmap */
+      b = XMesaCreatePixmapTextureBuffer(v, pixmap, 0, format, target, mipmap);
+   }
+   else {
+      b = XMesaCreatePixmapBuffer( v, pixmap, 0 );
+   }
    if (!b) {
       return 0;
    }
@@ -2266,8 +2397,20 @@ Fake_glXQueryDrawable( Display *dpy, GLXDrawable draw, int attribute,
       case GLX_FBCONFIG_ID:
          *value = xmbuf->xm_visual->visinfo->visualid;
          return;
+#ifdef GLX_EXT_texture_from_pixmap
+      case GLX_TEXTURE_FORMAT_EXT:
+         *value = xmbuf->TextureFormat;
+         break;
+      case GLX_TEXTURE_TARGET_EXT:
+         *value = xmbuf->TextureTarget;
+         break;
+      case GLX_MIPMAP_TEXTURE_EXT:
+         *value = xmbuf->TextureMipmap;
+         break;
+#endif
+
       default:
-         return;  /* GLX_BAD_ATTRIBUTE? */
+         return; /* raise BadValue error */
    }
 }
 
@@ -2860,6 +3003,26 @@ Fake_glXGetAGPOffsetMESA( const GLvoid *pointer )
 }
 
 
+/*** GLX_EXT_texture_from_pixmap ***/
+
+static void
+Fake_glXBindTexImageEXT(Display *dpy, GLXDrawable drawable, int buffer,
+                        const int *attrib_list)
+{
+   XMesaBuffer b = XMesaFindBuffer(dpy, drawable);
+   if (b)
+      XMesaBindTexImage(dpy, b, buffer, attrib_list);
+}
+
+static void
+Fake_glXReleaseTexImageEXT(Display *dpy, GLXDrawable drawable, int buffer)
+{
+   XMesaBuffer b = XMesaFindBuffer(dpy, drawable);
+   if (b)
+      XMesaReleaseTexImage(dpy, b, buffer);
+}
+
+
 /* silence warning */
 extern struct _glxapi_table *_mesa_GetGLXDispatchTable(void);
 
@@ -3014,6 +3177,10 @@ _mesa_GetGLXDispatchTable(void)
 
    /*** GLX_MESA_agp_offset ***/
    glx.GetAGPOffsetMESA = Fake_glXGetAGPOffsetMESA;
+
+   /*** GLX_EXT_texture_from_pixmap ***/
+   glx.BindTexImageEXT = Fake_glXBindTexImageEXT;
+   glx.ReleaseTexImageEXT = Fake_glXReleaseTexImageEXT;
 
    return &glx;
 }

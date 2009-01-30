@@ -1,3 +1,94 @@
+mesa (7.3-1) experimental; urgency=low
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+
+  [ Julien Cristau ]
+  * Try to make the diff a bit smaller by removing directories that are in
+    upstream git but not in tarballs.
+
+ -- Julien Cristau <jcristau@debian.org>  Fri, 30 Jan 2009 20:00:34 +0100
+
+mesa (7.3~rc3-1) experimental; urgency=low
+
+  [ Timo Aaltonen ]
+  * New upstream release candidate.
+
+  [ Julien Cristau ]
+  * Refresh patches 03 and 04.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 21 Jan 2009 19:01:21 +0100
+
+mesa (7.3~rc1-1) experimental; urgency=low
+
+  * New upstream release candidate.
+    + provides DRI2 (closes: #411141).
+    + i915: fallback for cube map texture.  Fixes GPU hang with scorched3d
+      (closes: #484049).
+
+  [ Timo Aaltonen ]
+  * Remove debian/patches/01_disable-intel-classic-warn.diff, the
+    warning is gone now.
+  * debian/control:
+    - Build-depend on x11proto-dri2-dev (>= 1.99.3)
+
+  [ Julien Cristau ]
+  * Require libdrm-dev 2.4.3.
+  * Merge packaging changes from unstable, from 7.0.3-5 to 7.0.3-7.
+  * Delete unused configs/debian-*, and install-source.sh script.  We've
+    switched to using autoconf, and mesa-swx11-source is gone.
+  * Delete some now unused code from debian/rules.
+
+ -- Julien Cristau <jcristau@debian.org>  Sat, 10 Jan 2009 22:14:55 +0100
+
+mesa (7.2-1) experimental; urgency=low
+
+  [ Brice Goglin ]
+  * Fix grammar and punctuation in glxinfo(1), thanks Sam Hocevar,
+    closes: #498595.
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+  * Refresh patch 04_osmesa_version.diff
+
+  [ Julien Cristau ]
+  * Remove the build-dep on dri2proto, DRI2 support has been removed.
+  * intel: don't warn about TTM init failure.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 24 Sep 2008 14:28:21 +0200
+
+mesa (7.1-1) experimental; urgency=low
+
+  * Add parallel build support.
+  * New upstream development release
+    + libGLU now only exports its public interface (closes: #319388)
+  * Some more parallel build updates.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 27 Aug 2008 19:52:24 +0200
+
+mesa (7.1~rc3-1) experimental; urgency=low
+
+  [ Julien Cristau ]
+  * New upstream release candidate (updated to git commit 4fab47b1).
+  * Build against libdrm >= 2.3.1.
+  * 04_osmesa_version.diff: fix libOSMesa versioning, to revert accidental
+    SONAME bump.
+
+  [ Timo Aaltonen ]
+  * Refresh patches, and drop obsolete 00_create-libdir.patch and
+    01_fix-makefile.patch.
+  * Build-depend on x11proto-dri2-dev.
+  * Drop mesa-swx11-source.
+  * Add dri_interface.h to mesa-common-dev.
+  * Add gl.pc to libgl1-mesa-dev
+  * rules: Replace the old build system with the new autotools-based 
+    system.
+  * Run autoreconf before building the various flavours..
+  * Add automake & autoconf to build-deps.
+  * Use --enable-glx-tls for dri.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 13 Jul 2008 19:41:42 +0200
+
 mesa (7.0.3-7) unstable; urgency=low
 
   * Cherry-pick patch from upstream:

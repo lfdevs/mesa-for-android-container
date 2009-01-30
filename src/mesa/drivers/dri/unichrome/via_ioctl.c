@@ -24,13 +24,13 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include "glheader.h"
-#include "mtypes.h"
-#include "macros.h"
-#include "dd.h"
+#include "main/glheader.h"
+#include "main/mtypes.h"
+#include "main/macros.h"
+#include "main/dd.h"
 #include "swrast/swrast.h"
 
-#include "mm.h"
+#include "main/mm.h"
 #include "via_context.h"
 #include "via_tris.h"
 #include "via_ioctl.h"
@@ -507,11 +507,12 @@ void viaWaitIdleLocked( struct via_context *vmesa, GLboolean light )
  * except that WAIT_IDLE() will spin the CPU polling, while this is
  * IRQ driven.
  */
-static void viaWaitIdleVBlank( const __DRIdrawablePrivate *dPriv, 
+static void viaWaitIdleVBlank(  __DRIdrawablePrivate *dPriv, 
 			       struct via_context *vmesa,
 			       GLuint value )
 {
    GLboolean missed_target;
+   __DRIscreenPrivate *psp = dPriv->driScreenPriv;
 
    VIA_FLUSH_DMA(vmesa); 
 
@@ -523,11 +524,10 @@ static void viaWaitIdleVBlank( const __DRIdrawablePrivate *dPriv,
 	  vmesa->thrashing)
 	 viaSwapOutWork(vmesa);
 
-      driWaitForVBlank( dPriv, & vmesa->vbl_seq, 
-			vmesa->vblank_flags, & missed_target );
+      driWaitForVBlank( dPriv, & missed_target );
       if ( missed_target ) {
 	 vmesa->swap_missed_count++;
-	 (*dri_interface->getUST)( &vmesa->swap_missed_ust );
+	 (*psp->systemTime->getUST)( &vmesa->swap_missed_ust );
       }
    } 
    while (!viaCheckBreadcrumb(vmesa, value));	 
@@ -591,10 +591,11 @@ void viaResetPageFlippingLocked(struct via_context *vmesa)
 /*
  * Copy the back buffer to the front buffer. 
  */
-void viaCopyBuffer(const __DRIdrawablePrivate *dPriv)
+void viaCopyBuffer(__DRIdrawablePrivate *dPriv)
 {
    struct via_context *vmesa = 
       (struct via_context *)dPriv->driContextPriv->driverPrivate;
+   __DRIscreenPrivate *psp = dPriv->driScreenPriv;
 
    if (VIA_DEBUG & DEBUG_IOCTL)
       fprintf(stderr, 
@@ -607,7 +608,7 @@ void viaCopyBuffer(const __DRIdrawablePrivate *dPriv)
 
    VIA_FLUSH_DMA(vmesa);
 
-   if (vmesa->vblank_flags == VBLANK_FLAG_SYNC &&
+   if (dPriv->vblFlags == VBLANK_FLAG_SYNC &&
        vmesa->lastBreadcrumbWrite > 1)
       viaWaitIdleVBlank(dPriv, vmesa, vmesa->lastBreadcrumbWrite-1);
    else
@@ -630,18 +631,19 @@ void viaCopyBuffer(const __DRIdrawablePrivate *dPriv)
    viaEmitBreadcrumbLocked(vmesa);
    UNLOCK_HARDWARE(vmesa);
 
-   (*dri_interface->getUST)( &vmesa->swap_ust );
+   (*psp->systemTime->getUST)( &vmesa->swap_ust );
 }
 
 
-void viaPageFlip(const __DRIdrawablePrivate *dPriv)
+void viaPageFlip(__DRIdrawablePrivate *dPriv)
 {
     struct via_context *vmesa = 
        (struct via_context *)dPriv->driContextPriv->driverPrivate;
     struct via_renderbuffer buffer_tmp;
+    __DRIscreenPrivate *psp = dPriv->driScreenPriv;
 
     VIA_FLUSH_DMA(vmesa);
-   if (vmesa->vblank_flags == VBLANK_FLAG_SYNC &&
+   if (dPriv->vblFlags == VBLANK_FLAG_SYNC &&
        vmesa->lastBreadcrumbWrite > 1)
       viaWaitIdleVBlank(dPriv, vmesa, vmesa->lastBreadcrumbWrite - 1);
    else
@@ -654,7 +656,7 @@ void viaPageFlip(const __DRIdrawablePrivate *dPriv)
     viaEmitBreadcrumbLocked(vmesa);
     UNLOCK_HARDWARE(vmesa);
 
-    (*dri_interface->getUST)( &vmesa->swap_ust );
+    (*psp->systemTime->getUST)( &vmesa->swap_ust );
 
 
     /* KW: FIXME: When buffers are freed, could free frontbuffer by

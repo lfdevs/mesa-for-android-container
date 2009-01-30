@@ -1,4 +1,4 @@
-/* $XFree86$ */ /* -*- mode: c; c-basic-offset: 3 -*- */
+/* -*- mode: c; c-basic-offset: 3 -*- */
 /*
  * Copyright 2000 Gareth Hughes
  * All Rights Reserved.
@@ -35,8 +35,8 @@
 #include "mach64_ioctl.h"
 #include "mach64_tex.h"
 
-#include "imports.h"
-#include "macros.h"
+#include "main/imports.h"
+#include "main/macros.h"
 
 #include "swrast/swrast.h"
 
@@ -279,7 +279,7 @@ static int mach64WaitForFrameCompletion( mach64ContextPtr mmesa )
 
 /* Copy the back color buffer to the front color buffer.
  */
-void mach64CopyBuffer( const __DRIdrawablePrivate *dPriv )
+void mach64CopyBuffer( __DRIdrawablePrivate *dPriv )
 {
    mach64ContextPtr mmesa;
    GLint nbox, i, ret;
@@ -320,7 +320,7 @@ void mach64CopyBuffer( const __DRIdrawablePrivate *dPriv )
 #endif
 
    UNLOCK_HARDWARE( mmesa );
-   driWaitForVBlank( dPriv, &mmesa->vbl_seq, mmesa->vblank_flags, &missed_target );
+   driWaitForVBlank( dPriv, &missed_target );
    LOCK_HARDWARE( mmesa );
 
    /* use front buffer cliprects */

@@ -23,18 +23,17 @@
  *
  */
 
-#include "glheader.h"
-#include "macros.h"
-#include "mtypes.h"
-#include "simple_list.h"
-#include "enums.h"
-#include "colormac.h"
-#include "mm.h"
-#include "texformat.h"
+#include "main/glheader.h"
+#include "main/macros.h"
+#include "main/mtypes.h"
+#include "main/simple_list.h"
+#include "main/enums.h"
+#include "main/colormac.h"
+#include "main/mm.h"
+#include "main/texformat.h"
 
 #include "i810screen.h"
 #include "i810_dri.h"
-
 #include "i810context.h"
 #include "i810tex.h"
 #include "i810state.h"
@@ -64,7 +63,7 @@ void i810DestroyTexObj(i810ContextPtr imesa, i810TextureObjectPtr t)
 /* From linux kernel i386 header files, copes with odd sizes better
  * than COPY_DWORDS would:
  */
-static __inline__ void * __memcpy(void * to, const void * from, size_t n)
+static INLINE void * __memcpy(void * to, const void * from, size_t n)
 {
 int d0, d1, d2;
 __asm__ __volatile__(

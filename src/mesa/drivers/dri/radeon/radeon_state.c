@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/radeon/radeon_state.c,v 1.8 2002/12/16 16:18:58 dawes Exp $ */
 /**************************************************************************
 
 Copyright 2000, 2001 VA Linux Systems Inc., Fremont, California.
@@ -33,14 +32,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Keith Whitwell <keith@tungstengraphics.com>
  */
 
-#include "glheader.h"
-#include "imports.h"
-#include "api_arrayelt.h"
-#include "enums.h"
-#include "light.h"
-#include "state.h"
-#include "context.h"
-#include "framebuffer.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/api_arrayelt.h"
+#include "main/enums.h"
+#include "main/light.h"
+#include "main/state.h"
+#include "main/context.h"
+#include "main/framebuffer.h"
 
 #include "vbo/vbo.h"
 #include "tnl/tnl.h"
@@ -688,7 +687,7 @@ static void radeonPolygonMode( GLcontext *ctx, GLenum face, GLenum mode )
 static void radeonUpdateSpecular( GLcontext *ctx )
 {
    radeonContextPtr rmesa = RADEON_CONTEXT(ctx);
-   u_int32_t p = rmesa->hw.ctx.cmd[CTX_PP_CNTL];
+   uint32_t p = rmesa->hw.ctx.cmd[CTX_PP_CNTL];
    GLuint flag = 0;
 
    RADEON_STATECHANGE( rmesa, tcl );
@@ -1640,8 +1639,7 @@ void radeonSetCliprects( radeonContextPtr rmesa )
    GLframebuffer *const draw_fb = (GLframebuffer*) drawable->driverPrivate;
    GLframebuffer *const read_fb = (GLframebuffer*) readable->driverPrivate;
 
-   if (draw_fb->_ColorDrawBufferMask[0]
-       == BUFFER_BIT_BACK_LEFT) {
+   if (draw_fb->_ColorDrawBufferIndexes[0] == BUFFER_BACK_LEFT) {
       /* Can't ignore 2d windows if we are page flipping.
        */
       if ( drawable->numBackClipRects == 0 || rmesa->doPageFlip ) {
@@ -1693,17 +1691,18 @@ static void radeonDrawBuffer( GLcontext *ctx, GLenum mode )
 
    RADEON_FIREVERTICES(rmesa);	/* don't pipeline cliprect changes */
 
-   /*
-    * _ColorDrawBufferMask is easier to cope with than <mode>.
-    * Check for software fallback, update cliprects.
-    */
-   switch ( ctx->DrawBuffer->_ColorDrawBufferMask[0] ) {
-   case BUFFER_BIT_FRONT_LEFT:
-   case BUFFER_BIT_BACK_LEFT:
+   if (ctx->DrawBuffer->_NumColorDrawBuffers != 1) {
+      /* 0 (GL_NONE) buffers or multiple color drawing buffers */
+      FALLBACK( rmesa, RADEON_FALLBACK_DRAW_BUFFER, GL_TRUE );
+      return;
+   }
+
+   switch ( ctx->DrawBuffer->_ColorDrawBufferIndexes[0] ) {
+   case BUFFER_FRONT_LEFT:
+   case BUFFER_BACK_LEFT:
       FALLBACK( rmesa, RADEON_FALLBACK_DRAW_BUFFER, GL_FALSE );
       break;
    default:
-      /* 0 (GL_NONE) buffers or multiple color drawing buffers */
       FALLBACK( rmesa, RADEON_FALLBACK_DRAW_BUFFER, GL_TRUE );
       return;
    }
@@ -2222,11 +2221,11 @@ radeonUpdateDrawBuffer(GLcontext *ctx)
    struct gl_framebuffer *fb = ctx->DrawBuffer;
    driRenderbuffer *drb;
 
-   if (fb->_ColorDrawBufferMask[0] == BUFFER_BIT_FRONT_LEFT) {
+   if (fb->_ColorDrawBufferIndexes[0] == BUFFER_FRONT_LEFT) {
       /* draw to front */
       drb = (driRenderbuffer *) fb->Attachment[BUFFER_FRONT_LEFT].Renderbuffer;
    }
-   else if (fb->_ColorDrawBufferMask[0] == BUFFER_BIT_BACK_LEFT) {
+   else if (fb->_ColorDrawBufferIndexes[0] == BUFFER_BACK_LEFT) {
       /* draw to back */
       drb = (driRenderbuffer *) fb->Attachment[BUFFER_BACK_LEFT].Renderbuffer;
    }

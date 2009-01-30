@@ -40,7 +40,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
 
-#include "glheader.h"
+#include "main/glheader.h"
 #include "swrast/swrast.h"
 
 #include "r300_state.h"
@@ -172,6 +172,8 @@ radeon_mba_z16(const driRenderbuffer * drb, GLint x, GLint y)
 
 /* 16-bit depth buffer functions
  */
+#define VALUE_TYPE GLushort
+
 #define WRITE_DEPTH( _x, _y, d )					\
    *(GLushort *)(buf + radeon_mba_z16( drb, _x + xo, _y + yo )) = d;
 
@@ -186,6 +188,8 @@ radeon_mba_z16(const driRenderbuffer * drb, GLint x, GLint y)
  * Careful: It looks like the R300 uses ZZZS byte order while the R200
  * uses SZZZ for 24 bit depth, 8 bit stencil mode.
  */
+#define VALUE_TYPE GLuint
+
 #ifdef COMPILE_R300
 #define WRITE_DEPTH( _x, _y, d )					\
 do {									\
@@ -282,6 +286,30 @@ static void radeonSpanRenderStart(GLcontext * ctx)
 #endif
 	LOCK_HARDWARE(rmesa);
 	radeonWaitForIdleLocked(rmesa);
+
+	/* Read the first pixel in the frame buffer.  This should
+	 * be a noop, right?  In fact without this conform fails as reading
+	 * from the framebuffer sometimes produces old results -- the
+	 * on-card read cache gets mixed up and doesn't notice that the
+	 * framebuffer has been updated.
+	 *
+	 * Note that we should probably be reading some otherwise unused
+	 * region of VRAM, otherwise we might get incorrect results when
+	 * reading pixels from the top left of the screen.
+	 *
+	 * I found this problem on an R420 with glean's texCube test.
+	 * Note that the R200 span code also *writes* the first pixel in the
+	 * framebuffer, but I've found this to be unnecessary.
+	 *  -- Nicolai Hähnle, June 2008
+	 */
+	{
+		int p;
+		driRenderbuffer *drb =
+			(driRenderbuffer *) ctx->WinSysDrawBuffer->_ColorDrawBuffers[0];
+		volatile int *buf =
+			(volatile int *)(rmesa->dri.screen->pFB + drb->offset);
+		p = *buf;
+	}
 }
 
 static void radeonSpanRenderFinish(GLcontext * ctx)

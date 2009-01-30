@@ -57,13 +57,8 @@ static void TAG(emit)( GLcontext *ctx,
    int i;
 
    if (IND & SETUP_PSIZ) {
-      /*
       psize = VB->PointSizePtr->data;
       psize_stride = VB->PointSizePtr->stride;
-      */
-      /* TODO: fix this! */
-      psize = 0;
-      psize_stride = 0;
    }
 
    if (IND & SETUP_TMU0) {

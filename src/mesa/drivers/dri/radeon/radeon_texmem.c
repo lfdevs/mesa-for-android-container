@@ -1,4 +1,3 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/radeon/radeon_texmem.c,v 1.7 2002/12/16 16:18:59 dawes Exp $ */
 /**************************************************************************
 
 Copyright 2000, 2001 ATI Technologies Inc., Ontario, Canada, and
@@ -37,10 +36,10 @@ SOFTWARE.
  */
 #include <errno.h> 
 
-#include "glheader.h"
-#include "imports.h"
-#include "context.h"
-#include "macros.h"
+#include "main/glheader.h"
+#include "main/imports.h"
+#include "main/context.h"
+#include "main/macros.h"
 
 #include "radeon_context.h"
 #include "radeon_ioctl.h"
@@ -334,7 +333,7 @@ int radeonUploadTexImages( radeonContextPtr rmesa, radeonTexObjPtr t, GLuint fac
 {
    int numLevels;
 
-   if ( !t || t->base.totalSize == 0 )
+   if ( !t || t->base.totalSize == 0 || t->image_override )
       return 0;
 
    if ( RADEON_DEBUG & (DEBUG_TEXTURE|DEBUG_IOCTL) ) {

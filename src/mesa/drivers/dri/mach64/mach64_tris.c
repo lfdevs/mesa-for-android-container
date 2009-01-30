@@ -1,4 +1,4 @@
-/* $XFree86$ */ /* -*- mode: c; c-basic-offset: 3 -*- */
+/* -*- mode: c; c-basic-offset: 3 -*- */
 /*
  * Copyright 2000 Gareth Hughes
  * All Rights Reserved.
@@ -29,10 +29,10 @@
  *	José Fonseca <j_r_fonseca@yahoo.co.uk>
  */
 
-#include "glheader.h"
-#include "mtypes.h"
-#include "colormac.h"
-#include "macros.h"
+#include "main/glheader.h"
+#include "main/mtypes.h"
+#include "main/colormac.h"
+#include "main/macros.h"
 
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
@@ -113,7 +113,7 @@ do {									\
 #define COPY_VERTEX_OOA( vb, vertsize, v, n )	DO_COPY_VERTEX( vb, vertsize, v, n, 1 )
 
 
-static __inline void mach64_draw_quad( mach64ContextPtr mmesa,
+static INLINE void mach64_draw_quad( mach64ContextPtr mmesa,
 				       mach64VertexPtr v0,
 				       mach64VertexPtr v1,
 				       mach64VertexPtr v2,
@@ -419,7 +419,7 @@ static __inline void mach64_draw_quad( mach64ContextPtr mmesa,
 #endif
 }
 
-static __inline void mach64_draw_triangle( mach64ContextPtr mmesa,
+static INLINE void mach64_draw_triangle( mach64ContextPtr mmesa,
 					   mach64VertexPtr v0,
 					   mach64VertexPtr v1,
 					   mach64VertexPtr v2 )
@@ -666,14 +666,17 @@ static __inline void mach64_draw_triangle( mach64ContextPtr mmesa,
 #endif
 }
 
-static __inline void mach64_draw_line( mach64ContextPtr mmesa,
+static INLINE void mach64_draw_line( mach64ContextPtr mmesa,
 				     mach64VertexPtr v0,
 				     mach64VertexPtr v1 )
 {
 #if MACH64_NATIVE_VTXFMT
    GLcontext *ctx = mmesa->glCtx;
    const GLuint vertsize = mmesa->vertex_size;
-   GLint width = (GLint)(mmesa->glCtx->Line._Width * 2.0); /* 2 fractional bits for hardware */
+   /* 2 fractional bits for hardware: */
+   const int width = (int) (2.0 * CLAMP(mmesa->glCtx->Line.Width,
+                                        mmesa->glCtx->Const.MinLineWidth,
+                                        mmesa->glCtx->Const.MaxLineWidth));
    GLfloat ooa;
    GLuint *pxy0, *pxy1;
    GLuint xy0old, xy0, xy1old, xy1;
@@ -691,9 +694,6 @@ static __inline void mach64_draw_line( mach64ContextPtr mmesa,
       mach64_print_vertex( ctx, v1 );
    }
   
-   if( !width )
-      width = 1;	/* round to the nearest supported width */
-      
    pxy0 = &v0->ui[xyoffset];
    xy0old = *pxy0;
    xy0 = LE32_IN( &xy0old );
@@ -955,13 +955,16 @@ static __inline void mach64_draw_line( mach64ContextPtr mmesa,
 #endif
 }
 
-static __inline void mach64_draw_point( mach64ContextPtr mmesa,
+static INLINE void mach64_draw_point( mach64ContextPtr mmesa,
 				      mach64VertexPtr v0 )
 {
 #if MACH64_NATIVE_VTXFMT
    GLcontext *ctx = mmesa->glCtx;
    const GLuint vertsize = mmesa->vertex_size;
-   GLint sz = (GLint)(mmesa->glCtx->Point._Size * 2.0); /* 2 fractional bits for hardware */
+   /* 2 fractional bits for hardware: */
+   GLint sz = (GLint) (2.0 * CLAMP(mmesa->glCtx->Point.Size,
+                                   ctx->Const.MinPointSize,
+                                   ctx->Const.MaxPointSize));
    GLfloat ooa;
    GLuint *pxy;
    GLuint xyold, xy;

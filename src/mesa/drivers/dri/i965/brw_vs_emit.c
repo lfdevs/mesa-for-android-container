@@ -30,8 +30,8 @@
   */
             
 
-#include "program.h"
-#include "macros.h"
+#include "main/macros.h"
+#include "shader/program.h"
 #include "shader/prog_parameter.h"
 #include "shader/prog_print.h"
 #include "brw_context.h"
@@ -73,8 +73,6 @@ static void brw_vs_alloc_regs( struct brw_vs_compile *c )
 
    c->prog_data.curb_read_length = reg - 1;
 
-
-
    /* Allocate input regs:  
     */
    c->nr_inputs = 0;
@@ -84,8 +82,7 @@ static void brw_vs_alloc_regs( struct brw_vs_compile *c )
 	 c->regs[PROGRAM_INPUT][i] = brw_vec8_grf(reg, 0);
 	 reg++;
       }
-   }     
-
+   }
 
    /* Allocate outputs: TODO: could organize the non-position outputs
     * to go straight into message regs.
@@ -196,6 +193,7 @@ static void unalias1( struct brw_vs_compile *c,
       struct brw_reg tmp = brw_writemask(get_tmp(c), dst.dw1.bits.writemask);
       func(c, tmp, arg0);
       brw_MOV(p, dst, tmp);
+      release_tmp(c, tmp);
    }
    else {
       func(c, dst, arg0);
@@ -211,15 +209,41 @@ static void unalias2( struct brw_vs_compile *c,
 				    struct brw_reg,
 				    struct brw_reg ))
 {
-   if ((dst.file == arg0.file && dst.nr == arg0.nr) &&
+   if ((dst.file == arg0.file && dst.nr == arg0.nr) ||
        (dst.file == arg1.file && dst.nr == arg1.nr)) {
       struct brw_compile *p = &c->func;
       struct brw_reg tmp = brw_writemask(get_tmp(c), dst.dw1.bits.writemask);
       func(c, tmp, arg0, arg1);
       brw_MOV(p, dst, tmp);
+      release_tmp(c, tmp);
    }
    else {
       func(c, dst, arg0, arg1);
+   }
+}
+
+static void unalias3( struct brw_vs_compile *c,
+		      struct brw_reg dst,
+		      struct brw_reg arg0,
+		      struct brw_reg arg1,
+		      struct brw_reg arg2,
+		      void (*func)( struct brw_vs_compile *,
+				    struct brw_reg,
+				    struct brw_reg,
+				    struct brw_reg,
+				    struct brw_reg ))
+{
+   if ((dst.file == arg0.file && dst.nr == arg0.nr) ||
+       (dst.file == arg1.file && dst.nr == arg1.nr) ||
+       (dst.file == arg2.file && dst.nr == arg2.nr)) {
+      struct brw_compile *p = &c->func;
+      struct brw_reg tmp = brw_writemask(get_tmp(c), dst.dw1.bits.writemask);
+      func(c, tmp, arg0, arg1, arg2);
+      brw_MOV(p, dst, tmp);
+      release_tmp(c, tmp);
+   }
+   else {
+      func(c, dst, arg0, arg1, arg2);
    }
 }
 
@@ -339,6 +363,7 @@ static void emit_math1( struct brw_vs_compile *c,
    }
 }
 
+
 static void emit_math2( struct brw_vs_compile *c, 
 			GLuint function,
 			struct brw_reg dst,
@@ -370,7 +395,6 @@ static void emit_math2( struct brw_vs_compile *c,
       release_tmp(c, tmp);
    }
 }
-		     
 
 
 static void emit_exp_noalias( struct brw_vs_compile *c,
@@ -420,7 +444,7 @@ static void emit_exp_noalias( struct brw_vs_compile *c,
 		 BRW_MATH_FUNCTION_EXP, 
 		 brw_writemask(dst, WRITEMASK_Z),
 		 brw_swizzle1(arg0, 0), 
-		 BRW_MATH_PRECISION_PARTIAL);
+		 BRW_MATH_PRECISION_FULL);
    }  
 
    if (dst.dw1.bits.writemask & WRITEMASK_W) {
@@ -521,8 +545,6 @@ static void emit_log_noalias( struct brw_vs_compile *c,
 }
 
 
-      
-
 /* Need to unalias - consider swizzles:   r0 = DST r0.xxxx r1
  */
 static void emit_dst_noalias( struct brw_vs_compile *c, 
@@ -544,6 +566,7 @@ static void emit_dst_noalias( struct brw_vs_compile *c,
       brw_MOV(p, brw_writemask(dst, WRITEMASK_W), arg1);
 }
 
+
 static void emit_xpd( struct brw_compile *p,
 		      struct brw_reg dst,
 		      struct brw_reg t,
@@ -552,7 +575,6 @@ static void emit_xpd( struct brw_compile *p,
    brw_MUL(p, brw_null_reg(), brw_swizzle(t, 1,2,0,3),  brw_swizzle(u,2,0,1,3));
    brw_MAC(p, dst,     negate(brw_swizzle(t, 2,0,1,3)), brw_swizzle(u,1,2,0,3));
 }
-
 
 
 static void emit_lit_noalias( struct brw_vs_compile *c, 
@@ -595,8 +617,42 @@ static void emit_lit_noalias( struct brw_vs_compile *c,
    brw_ENDIF(p, if_insn);
 }
 
+static void emit_lrp_noalias(struct brw_vs_compile *c,
+			     struct brw_reg dst,
+			     struct brw_reg arg0,
+			     struct brw_reg arg1,
+			     struct brw_reg arg2)
+{
+   struct brw_compile *p = &c->func;
 
+   brw_ADD(p, dst, negate(arg0), brw_imm_f(1.0));
+   brw_MUL(p, brw_null_reg(), dst, arg2);
+   brw_MAC(p, dst, arg0, arg1);
+}
 
+/** 3 or 4-component vector normalization */
+static void emit_nrm( struct brw_vs_compile *c, 
+                      struct brw_reg dst,
+                      struct brw_reg arg0,
+                      int num_comps)
+{
+   struct brw_compile *p = &c->func;
+   struct brw_reg tmp = get_tmp(c);
+
+   /* tmp = dot(arg0, arg0) */
+   if (num_comps == 3)
+      brw_DP3(p, tmp, arg0, arg0);
+   else
+      brw_DP4(p, tmp, arg0, arg0);
+
+   /* tmp = 1 / sqrt(tmp) */
+   emit_math1(c, BRW_MATH_FUNCTION_RSQ, tmp, tmp, BRW_MATH_PRECISION_FULL);
+
+   /* dst = arg0 * tmp */
+   brw_MUL(p, dst, arg0, tmp);
+
+   release_tmp(c, tmp);
+}
 
 
 /* TODO: relative addressing!
@@ -632,7 +688,6 @@ static struct brw_reg get_reg( struct brw_vs_compile *c,
       return brw_null_reg();
    }
 }
-
 
 
 static struct brw_reg deref( struct brw_vs_compile *c,
@@ -728,8 +783,6 @@ static struct brw_reg get_dst( struct brw_vs_compile *c,
 }
 
 
-
-
 static void emit_swz( struct brw_vs_compile *c, 
 		      struct brw_reg dst,
 		      struct prog_src_register src )
@@ -801,8 +854,8 @@ static void emit_swz( struct brw_vs_compile *c,
 }
 
 
-
-/* Post-vertex-program processing.  Send the results to the URB.
+/**
+ * Post-vertex-program processing.  Send the results to the URB.
  */
 static void emit_vertex_write( struct brw_vs_compile *c)
 {
@@ -817,9 +870,7 @@ static void emit_vertex_write( struct brw_vs_compile *c)
 	      get_reg(c, PROGRAM_INPUT, VERT_ATTRIB_EDGEFLAG));
    }
 
-
-   /* Build ndc coords?   TODO: Shortcircuit when w is known to be one.
-    */
+   /* Build ndc coords */
    if (!c->key.know_w_is_one) {
       ndc = get_tmp(c);
       emit_math1(c, BRW_MATH_FUNCTION_INV, ndc, brw_swizzle1(pos, 3), BRW_MATH_PRECISION_FULL);
@@ -829,12 +880,12 @@ static void emit_vertex_write( struct brw_vs_compile *c)
       ndc = pos;
    }
 
-   /* This includes the workaround for -ve rhw, so is no longer an
-    * optional step:
+   /* Update the header for point size, user clipping flags, and -ve rhw
+    * workaround.
     */
    if ((c->prog_data.outputs_written & (1<<VERT_RESULT_PSIZ)) ||
        c->key.nr_userclip ||
-       !c->key.know_w_is_one)
+       (!BRW_IS_G4X(p->brw) && !c->key.know_w_is_one))
    {
       struct brw_reg header1 = retype(get_tmp(c), BRW_REGISTER_TYPE_UD);
       GLuint i;
@@ -849,14 +900,12 @@ static void emit_vertex_write( struct brw_vs_compile *c)
 	 brw_AND(p, brw_writemask(header1, WRITEMASK_W), header1, brw_imm_ud(0x7ff<<8));
       }
 
-
       for (i = 0; i < c->key.nr_userclip; i++) {
 	 brw_set_conditionalmod(p, BRW_CONDITIONAL_L);
 	 brw_DP4(p, brw_null_reg(), pos, c->userplane[i]);
 	 brw_OR(p, brw_writemask(header1, WRITEMASK_W), header1, brw_imm_ud(1<<i));
 	 brw_set_predicate_control(p, BRW_PREDICATE_NONE);
       }
-
 
       /* i965 clipping workaround: 
        * 1) Test for -ve rhw
@@ -867,7 +916,7 @@ static void emit_vertex_write( struct brw_vs_compile *c)
        * Later, clipping will detect ucp[6] and ensure the primitive is
        * clipped against all fixed planes.
        */
-      if (!(BRW_IS_GM45(p->brw) || BRW_IS_G4X(p->brw)) && !c->key.know_w_is_one) {
+      if (!BRW_IS_G4X(p->brw) && !c->key.know_w_is_one) {
 	 brw_CMP(p,
 		 vec8(brw_null_reg()),
 		 BRW_CONDITIONAL_L,
@@ -889,14 +938,12 @@ static void emit_vertex_write( struct brw_vs_compile *c)
       brw_MOV(p, retype(brw_message_reg(1), BRW_REGISTER_TYPE_UD), brw_imm_ud(0));
    }
 
-
    /* Emit the (interleaved) headers for the two vertices - an 8-reg
     * of zeros followed by two sets of NDC coordinates:
     */
    brw_set_access_mode(p, BRW_ALIGN_1);
    brw_MOV(p, offset(m0, 2), ndc);
    brw_MOV(p, offset(m0, 3), pos);
-   
 
    brw_urb_WRITE(p, 
 		 brw_null_reg(), /* dest */
@@ -910,8 +957,8 @@ static void emit_vertex_write( struct brw_vs_compile *c)
 		 1, 		/* writes complete */
 		 0, 		/* urb destination offset */
 		 BRW_URB_SWIZZLE_INTERLEAVE);
-
 }
+
 
 static void 
 post_vs_emit( struct brw_vs_compile *c, struct brw_instruction *end_inst )
@@ -959,7 +1006,7 @@ void brw_vs_emit(struct brw_vs_compile *c )
    GLuint file;
 
    if (INTEL_DEBUG & DEBUG_VS) {
-      _mesa_printf("\n\n\nvs-emit:\n");
+      _mesa_printf("vs-emit:\n");
       _mesa_print_program(&c->vp->program.Base); 
       _mesa_printf("\n");
    }
@@ -1017,12 +1064,20 @@ void brw_vs_emit(struct brw_vs_compile *c )
       else
 	  dst = get_dst(c, inst->DstReg);
 
+      if (inst->SaturateMode != SATURATE_OFF) {
+	 _mesa_problem(NULL, "Unsupported saturate %d in vertex shader",
+                       inst->SaturateMode);
+      }
+
       switch (inst->Opcode) {
       case OPCODE_ABS:
 	 brw_MOV(p, dst, brw_abs(args[0]));
 	 break;
       case OPCODE_ADD:
 	 brw_ADD(p, dst, args[0], args[1]);
+	 break;
+      case OPCODE_COS:
+	 emit_math1(c, BRW_MATH_FUNCTION_COS, dst, args[0], BRW_MATH_PRECISION_FULL);
 	 break;
       case OPCODE_DP3:
 	 brw_DP3(p, dst, args[0], args[1]);
@@ -1032,6 +1087,12 @@ void brw_vs_emit(struct brw_vs_compile *c )
 	 break;
       case OPCODE_DPH:
 	 brw_DPH(p, dst, args[0], args[1]);
+	 break;
+      case OPCODE_NRM3:
+	 emit_nrm(c, dst, args[0], 3);
+	 break;
+      case OPCODE_NRM4:
+	 emit_nrm(c, dst, args[0], 4);
 	 break;
       case OPCODE_DST:
 	 unalias2(c, dst, args[0], args[1], emit_dst_noalias); 
@@ -1059,6 +1120,9 @@ void brw_vs_emit(struct brw_vs_compile *c )
 	 break;
       case OPCODE_LIT:
 	 unalias1(c, dst, args[0], emit_lit_noalias);
+	 break;
+      case OPCODE_LRP:
+	 unalias3(c, dst, args[0], args[1], args[2], emit_lrp_noalias);
 	 break;
       case OPCODE_MAD:
 	 brw_MOV(p, brw_acc_reg(), args[2]);
@@ -1089,6 +1153,9 @@ void brw_vs_emit(struct brw_vs_compile *c )
       case OPCODE_SEQ:
          emit_seq(p, dst, args[0], args[1]);
          break;
+      case OPCODE_SIN:
+	 emit_math1(c, BRW_MATH_FUNCTION_SIN, dst, args[0], BRW_MATH_PRECISION_FULL);
+	 break;
       case OPCODE_SNE:
          emit_sne(p, dst, args[0], args[1]);
          break;
@@ -1097,7 +1164,7 @@ void brw_vs_emit(struct brw_vs_compile *c )
 	 break;
       case OPCODE_SGT:
          emit_sgt(p, dst, args[0], args[1]);
-        break;
+         break;
       case OPCODE_SLT:
 	 emit_slt(p, dst, args[0], args[1]);
 	 break;
@@ -1112,6 +1179,10 @@ void brw_vs_emit(struct brw_vs_compile *c )
 	  * correctly encoded the full swizzle:
 	  */
 	 emit_swz(c, dst, inst->SrcReg[0] );
+	 break;
+      case OPCODE_TRUNC:
+         /* round toward zero */
+	 brw_RNDZ(p, dst, args[0]);
 	 break;
       case OPCODE_XPD:
 	 emit_xpd(p, dst, args[0], args[1]);
@@ -1131,7 +1202,7 @@ void brw_vs_emit(struct brw_vs_compile *c )
          brw_set_predicate_control(p, BRW_PREDICATE_NORMAL);
          brw_ADD(p, brw_ip_reg(), brw_ip_reg(), brw_imm_d(1*16));
          brw_set_predicate_control_flag_value(p, 0xff);
-        break;
+         break;
       case OPCODE_CAL:
 	 brw_set_access_mode(p, BRW_ALIGN_1);
 	 brw_ADD(p, deref_1d(stack_index, 0), brw_ip_reg(), brw_imm_d(3*16));
@@ -1140,7 +1211,7 @@ void brw_vs_emit(struct brw_vs_compile *c )
 			 get_addr_reg(stack_index), brw_imm_d(4));
 	 inst->Data = &p->store[p->nr_insn];
 	 brw_ADD(p, brw_ip_reg(), brw_ip_reg(), brw_imm_d(1*16));
-        break;
+         break;
       case OPCODE_RET:
 	 brw_ADD(p, get_addr_reg(stack_index),
 			 get_addr_reg(stack_index), brw_imm_d(-4));
@@ -1149,20 +1220,45 @@ void brw_vs_emit(struct brw_vs_compile *c )
 	 brw_set_access_mode(p, BRW_ALIGN_16);
       case OPCODE_END:	
          brw_ADD(p, brw_ip_reg(), brw_ip_reg(), brw_imm_d(1*16));
-        break;
+         break;
       case OPCODE_PRINT:
       case OPCODE_BGNSUB:
       case OPCODE_ENDSUB:
+         /* no-op instructions */
 	 break;
       default:
-	 _mesa_printf("Unsupport opcode %d in vertex shader\n", inst->Opcode);
-	 break;
+	 _mesa_problem(NULL, "Unsupported opcode %i (%s) in vertex shader",
+                       inst->Opcode, inst->Opcode < MAX_OPCODE ?
+				    _mesa_opcode_string(inst->Opcode) :
+				    "unknown");
       }
 
-      if (inst->DstReg.File == PROGRAM_OUTPUT
-	      &&inst->DstReg.Index != VERT_RESULT_HPOS
-	      &&c->output_regs[inst->DstReg.Index].used_in_src)
-	  brw_MOV(p, get_dst(c, inst->DstReg), dst);
+      if ((inst->DstReg.File == PROGRAM_OUTPUT)
+          && (inst->DstReg.Index != VERT_RESULT_HPOS)
+          && c->output_regs[inst->DstReg.Index].used_in_src) {
+         brw_MOV(p, get_dst(c, inst->DstReg), dst);
+      }
+
+      /* Result color clamping.
+       *
+       * When destination register is an output register and
+       * it's primary/secondary front/back color, we have to clamp
+       * the result to [0,1]. This is done by enabling the
+       * saturation bit for the last instruction.
+       *
+       * We don't use brw_set_saturate() as it modifies
+       * p->current->header.saturate, which affects all the subsequent
+       * instructions. Instead, we directly modify the header
+       * of the last (already stored) instruction.
+       */
+      if (inst->DstReg.File == PROGRAM_OUTPUT) {
+         if ((inst->DstReg.Index == VERT_RESULT_COL0)
+             || (inst->DstReg.Index == VERT_RESULT_COL1)
+             || (inst->DstReg.Index == VERT_RESULT_BFC0)
+             || (inst->DstReg.Index == VERT_RESULT_BFC1)) {
+            p->store[p->nr_insn-1].header.saturate = 1;
+         }
+      }
 
       release_tmps(c);
    }

@@ -25,12 +25,11 @@
  * Authors:
  *    Ian Romanick <idr@us.ibm.com>
  */
-/* $XFree86:$ */
 
 #ifndef DRI_VBLANK_H
 #define DRI_VBLANK_H
 
-#include "context.h"
+#include "main/context.h"
 #include "dri_util.h"
 #include "xmlconfig.h"
 
@@ -46,17 +45,17 @@
 					  */
 
 extern int driGetMSC32( __DRIscreenPrivate * priv, int64_t * count );
+extern int driDrawableGetMSC32( __DRIscreenPrivate * priv,
+				__DRIdrawablePrivate * drawablePrivate,
+				int64_t * count);
 extern int driWaitForMSC32( __DRIdrawablePrivate *priv,
     int64_t target_msc, int64_t divisor, int64_t remainder, int64_t * msc );
 extern GLuint driGetDefaultVBlankFlags( const driOptionCache *optionCache );
-extern void driDrawableInitVBlank ( __DRIdrawablePrivate *priv, GLuint flags,
-				    GLuint *vbl_seq );
-extern unsigned driGetVBlankInterval( const  __DRIdrawablePrivate *priv,
-				      GLuint flags );
-extern void driGetCurrentVBlank( const  __DRIdrawablePrivate *priv,
-				 GLuint flags, GLuint *vbl_seq );
-extern int driWaitForVBlank( const __DRIdrawablePrivate *priv,
-    GLuint * vbl_seq, GLuint flags, GLboolean * missed_deadline );
+extern void driDrawableInitVBlank ( __DRIdrawablePrivate *priv );
+extern unsigned driGetVBlankInterval( const  __DRIdrawablePrivate *priv );
+extern void driGetCurrentVBlank( __DRIdrawablePrivate *priv );
+extern int driWaitForVBlank( __DRIdrawablePrivate *priv,
+			     GLboolean * missed_deadline );
 
 #undef usleep
 #include <unistd.h>  /* for usleep() */

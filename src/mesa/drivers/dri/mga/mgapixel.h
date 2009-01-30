@@ -24,12 +24,11 @@
  * Authors:
  *    Keith Whitwell <keith@tungstengraphics.com>
  */
-/* $XFree86: xc/lib/GL/mesa/src/drv/mga/mgapixel.h,v 1.5 2002/10/30 12:51:36 alanh Exp $ */
 
 #ifndef MGA_PIXELS_H
 #define MGA_PIXELS_H
 
-#include "mtypes.h"
+#include "main/mtypes.h"
 
 extern void mgaDDInitPixelFuncs( GLcontext *ctx );
 

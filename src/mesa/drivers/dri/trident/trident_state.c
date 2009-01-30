@@ -30,7 +30,7 @@
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
 #include "tnl/tnl.h"
-#include "framebuffer.h"
+#include "main/framebuffer.h"
 
 #define TRIDENTPACKCOLOR332(r, g, b)					\
    (((r) & 0xe0) | (((g) & 0xe0) >> 3) | (((b) & 0xc0) >> 6))
@@ -51,9 +51,9 @@
 #define TRIDENTPACKCOLOR4444(r, g, b, a)					\
    ((((a) & 0xf0) << 8) | (((r) & 0xf0) << 4) | ((g) & 0xf0) | ((b) >> 4))
 
-static __inline__ GLuint tridentPackColor( GLuint cpp,
-					  GLubyte r, GLubyte g,
-					  GLubyte b, GLubyte a )
+static INLINE GLuint tridentPackColor( GLuint cpp,
+                                       GLubyte r, GLubyte g,
+                                       GLubyte b, GLubyte a )
 {
    switch ( cpp ) {
    case 2:

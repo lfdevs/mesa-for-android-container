@@ -35,17 +35,17 @@
 #include "tnl/tnl.h"
 #include "tnl/t_pipeline.h"
 
-#include "context.h"
-#include "simple_list.h"
-#include "matrix.h"
-#include "extensions.h"
-#include "framebuffer.h"
-#include "renderbuffer.h"
+#include "main/context.h"
+#include "main/simple_list.h"
+#include "main/matrix.h"
+#include "main/extensions.h"
+#include "main/framebuffer.h"
+#include "main/renderbuffer.h"
 #if defined(USE_X86_ASM)
 #include "x86/common_x86_asm.h"
 #endif
-#include "simple_list.h"
-#include "mm.h"
+#include "main/simple_list.h"
+#include "main/mm.h"
 #include "drirenderbuffer.h"
 
 #include "drivers/common/driverfuncs.h"
@@ -417,8 +417,40 @@ tridentInitDriver(__DRIscreenPrivate *sPriv)
     return GL_TRUE;
 }
 
-static struct __DriverAPIRec tridentAPI = {
-   tridentInitDriver,
+/**
+ * This is the driver specific part of the createNewScreen entry point.
+ * 
+ * \todo maybe fold this into intelInitDriver
+ *
+ * \return the __GLcontextModes supported by this driver
+ */
+const __DRIconfig **tridentInitScreen(__DRIscreenPrivate *psp)
+{
+   static const __DRIversion ddx_expected = { 4, 0, 0 };
+   static const __DRIversion dri_expected = { 3, 1, 0 };
+   static const __DRIversion drm_expected = { 1, 0, 0 };
+   
+   if ( ! driCheckDriDdxDrmVersions2( "Trident",
+				      &psp->dri_version, & dri_expected,
+				      &psp->ddx_version, & ddx_expected,
+				      &psp->drm_version, & drm_expected ) )
+      return NULL;
+
+   if (!tridentInitDriver(psp))
+	return NULL;
+
+    /* Wait... what?  This driver doesn't report any modes... */
+#if 0
+   TRIDENTDRIPtr dri_priv = (TRIDENTDRIPtr) psp->pDevPriv;
+   *driver_modes = tridentFillInModes( dri_priv->bytesPerPixel * 8,
+				       GL_TRUE );
+#endif
+
+   return NULL;
+}
+
+const struct __DriverAPIRec driDriverAPI = {
+   tridentInitScreen,
    tridentDestroyScreen,
    tridentCreateContext,
    tridentDestroyContext,
@@ -428,45 +460,3 @@ static struct __DriverAPIRec tridentAPI = {
    tridentMakeCurrent,
    tridentUnbindContext,
 };
-
-
-PUBLIC void *__driCreateNewScreen_20050727( __DRInativeDisplay *dpy, int scrn,
-                                   __DRIscreen *psc,
-                                   const __GLcontextModes * modes,
-                                   const __DRIversion * ddx_version,
-                                   const __DRIversion * dri_version,
-                                   const __DRIversion * drm_version,
-                                   const __DRIframebuffer * frame_buffer,
-                                   drmAddress pSAREA, int fd,
-                                   int internal_api_version,
-				   const __DRIinterfaceMethods * interface,
-                                   __GLcontextModes ** driver_modes )
-{
-    __DRIscreenPrivate *psp;
-   static const __DRIversion ddx_expected = { 4, 0, 0 };
-   static const __DRIversion dri_expected = { 3, 1, 0 };
-   static const __DRIversion drm_expected = { 1, 0, 0 };
-
-   dri_interface = interface;
-
-   if ( ! driCheckDriDdxDrmVersions2( "Trident",
-				      dri_version, & dri_expected,
-				      ddx_version, & ddx_expected,
-				      drm_version, & drm_expected ) ) {
-      return NULL;
-   }
-
-    psp = __driUtilCreateNewScreen(dpy, scrn, psc, NULL,
-                                   ddx_version, dri_version, drm_version,
-                                   frame_buffer, pSAREA, fd,
-                                   internal_api_version, &tridentAPI);
-
-    if ( psp != NULL ) {
-#if 0
-       TRIDENTDRIPtr dri_priv = (TRIDENTDRIPtr) psp->pDevPriv;
-       *driver_modes = tridentFillInModes( dri_priv->bytesPerPixel * 8,
-					   GL_TRUE );
-#endif
-    }
-    return (void *) psp;
-}

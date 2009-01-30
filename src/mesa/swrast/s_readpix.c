@@ -23,17 +23,17 @@
  */
 
 
-#include "glheader.h"
-#include "bufferobj.h"
-#include "colormac.h"
-#include "convolve.h"
-#include "context.h"
-#include "feedback.h"
-#include "image.h"
-#include "macros.h"
-#include "imports.h"
-#include "pixel.h"
-#include "state.h"
+#include "main/glheader.h"
+#include "main/bufferobj.h"
+#include "main/colormac.h"
+#include "main/convolve.h"
+#include "main/context.h"
+#include "main/feedback.h"
+#include "main/image.h"
+#include "main/macros.h"
+#include "main/imports.h"
+#include "main/pixel.h"
+#include "main/state.h"
 
 #include "s_context.h"
 #include "s_depth.h"
@@ -574,28 +574,10 @@ _swrast_ReadPixels( GLcontext *ctx,
       return;
    }
 
-   if (clippedPacking.BufferObj->Name) {
-      /* pack into PBO */
-      GLubyte *buf;
-      if (!_mesa_validate_pbo_access(2, &clippedPacking, width, height, 1,
-                                     format, type, pixels)) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "glReadPixels(invalid PBO access)");
-	 RENDER_FINISH(swrast, ctx);
-	 return;
-      }
-      buf = (GLubyte *) ctx->Driver.MapBuffer(ctx, GL_PIXEL_PACK_BUFFER_EXT,
-                                              GL_WRITE_ONLY_ARB,
-                                              clippedPacking.BufferObj);
-      if (!buf) {
-         /* buffer is already mapped - that's an error */
-         _mesa_error(ctx, GL_INVALID_OPERATION, "glReadPixels(PBO is mapped)");
-	 RENDER_FINISH(swrast, ctx);
-	 return;
-      }
-      pixels = ADD_POINTERS(buf, pixels);
-   }
-
+   pixels = _mesa_map_readpix_pbo(ctx, &clippedPacking, pixels);
+   if (!pixels)
+      return;
+  
    switch (format) {
       case GL_COLOR_INDEX:
          read_index_pixels(ctx, x, y, width, height, type, pixels,
@@ -634,9 +616,5 @@ _swrast_ReadPixels( GLcontext *ctx,
 
    RENDER_FINISH(swrast, ctx);
 
-   if (clippedPacking.BufferObj->Name) {
-      /* done with PBO so unmap it now */
-      ctx->Driver.UnmapBuffer(ctx, GL_PIXEL_PACK_BUFFER_EXT,
-                              clippedPacking.BufferObj);
-   }
+   _mesa_unmap_readpix_pbo(ctx, &clippedPacking);
 }

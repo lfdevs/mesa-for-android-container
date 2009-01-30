@@ -24,7 +24,6 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 **************************************************************************/
-/* $XFree86: xc/lib/GL/mesa/src/drv/sis/sis_ctx.c,v 1.3 2000/09/26 15:56:48 tsi Exp $ */
 
 /*
  * Authors:
@@ -38,9 +37,9 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "sis_lock.h"
 #include "sis_tex.h"
 
-#include "context.h"
-#include "enums.h"
-#include "colormac.h"
+#include "main/context.h"
+#include "main/enums.h"
+#include "main/colormac.h"
 #include "swrast/swrast.h"
 #include "vbo/vbo.h"
 #include "tnl/tnl.h"
@@ -547,23 +546,24 @@ void sisDDDrawBuffer( GLcontext *ctx, GLenum mode )
    __GLSiSHardware *prev = &smesa->prev;
    __GLSiSHardware *current = &smesa->current;
 
-   /*
-    * _DrawDestMask is easier to cope with than <mode>.
-    */
+   if (ctx->DrawBuffer->_NumColorDrawBuffers != 1) {
+      FALLBACK( smesa, SIS_FALLBACK_DRAW_BUFFER, GL_TRUE );
+      return;
+   }
+
    current->hwDstSet &= ~MASK_DstBufferPitch;
-   switch ( ctx->DrawBuffer->_ColorDrawBufferMask[0] ) {
-   case BUFFER_BIT_FRONT_LEFT:
+   switch ( ctx->DrawBuffer->_ColorDrawBufferIndexes[0] ) {
+   case BUFFER_FRONT_LEFT:
       FALLBACK( smesa, SIS_FALLBACK_DRAW_BUFFER, GL_FALSE );
       current->hwOffsetDest = smesa->front.offset >> 1;
       current->hwDstSet |= smesa->front.pitch >> 2;
       break;
-   case BUFFER_BIT_BACK_LEFT:
+   case BUFFER_BACK_LEFT:
       FALLBACK( smesa, SIS_FALLBACK_DRAW_BUFFER, GL_FALSE );
       current->hwOffsetDest = smesa->back.offset >> 1;
       current->hwDstSet |= smesa->back.pitch >> 2;
       break;
    default:
-      /* GL_NONE or GL_FRONT_AND_BACK or stereo left&right, etc */
       FALLBACK( smesa, SIS_FALLBACK_DRAW_BUFFER, GL_TRUE );
       return;
    }

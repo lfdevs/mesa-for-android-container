@@ -32,10 +32,10 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Eric Anholt <anholt@FreeBSD.org>
  */
 
-#include "glheader.h"
-#include "mtypes.h"
-#include "colormac.h"
-#include "macros.h"
+#include "main/glheader.h"
+#include "main/mtypes.h"
+#include "main/colormac.h"
+#include "main/macros.h"
 
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
@@ -848,7 +848,7 @@ static void sisRenderStart( GLcontext *ctx )
 
    RENDERINPUTS_COPY( index_bitset, tnl->render_inputs_bitset );
 
-   if (ctx->DrawBuffer->_ColorDrawBufferMask[0] == BUFFER_BIT_FRONT_LEFT && 
+   if (ctx->DrawBuffer->_ColorDrawBufferIndexes[0] == BUFFER_FRONT_LEFT && 
       smesa->driDrawable->numClipRects != 0)
    {
       multipass_cliprect(ctx, 0);

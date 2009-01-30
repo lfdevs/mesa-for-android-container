@@ -1,4 +1,4 @@
-/* $XFree86: xc/lib/GL/mesa/src/drv/ffb/ffb_tex.c,v 1.1 2002/02/22 21:32:59 dawes Exp $
+/* 
  *
  * GLX Hardware Device Driver for Sun Creator/Creator3D
  * Copyright (C) 2001 David S. Miller
@@ -25,8 +25,8 @@
  *    David S. Miller <davem@redhat.com>
  */
 
-#include "glheader.h"
-#include "mtypes.h"
+#include "main/glheader.h"
+#include "main/mtypes.h"
 #include "ffb_tex.h"
 
 /* No texture unit, all software. */

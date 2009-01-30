@@ -41,11 +41,11 @@
 #if defined(FX)
 
 #include "fxdrv.h"
-#include "enums.h"
-#include "tnl.h"
+#include "main/enums.h"
+#include "main/texstore.h"
+#include "tnl/tnl.h"
 #include "tnl/t_context.h"
-#include "swrast.h"
-#include "texstore.h"
+#include "swrast/swrast.h"
 
 
 static void
@@ -154,8 +154,7 @@ fxTexValidate(GLcontext * ctx, struct gl_texture_object *tObj)
       }
    }
 
-	/* TODO: right format? */
-   ti->baseLevelInternalFormat = tObj->Image[0][minl]->_BaseFormat;
+   ti->baseLevelInternalFormat = tObj->Image[0][minl]->Format;
 
    ti->validated = GL_TRUE;
 
