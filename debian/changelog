@@ -1,3 +1,16 @@
+mesa (7.4~rc1-1) experimental; urgency=low
+
+  * New upstream release candidate.
+  * Fix watch file to make uscan not consider release candidates as newer than
+    actual releases.
+  * debian/control: add lpia to the Architecture field for
+    libgl1-mesa-dri{,-dbg} to match Ubuntu.
+  * debian/rules: on lpia, only build the i915 and i965 dri drivers (based on
+    Ubuntu changes).
+  * Build-depend on linux-libc-dev >= 2.6.29 on linux archs.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 25 Mar 2009 11:34:42 +0100
+
 mesa (7.3-1) experimental; urgency=low
 
   [ Timo Aaltonen ]

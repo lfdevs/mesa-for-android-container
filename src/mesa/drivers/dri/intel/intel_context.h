@@ -168,6 +168,7 @@ struct intel_context
 
       GLint saved_vp_x, saved_vp_y;
       GLsizei saved_vp_width, saved_vp_height;
+      GLenum saved_matrix_mode;
    } meta;
 
    GLint refcount;
@@ -209,7 +210,6 @@ struct intel_context
    char *prevLockFile;
    int prevLockLine;
 
-   GLubyte clear_chan[4];
    GLuint ClearColor565;
    GLuint ClearColor8888;
 
@@ -229,7 +229,12 @@ struct intel_context
    GLboolean hw_stipple;
    GLboolean depth_buffer_is_float;
    GLboolean no_rast;
-   GLboolean strict_conformance;
+
+   /* 0 - nonconformant, best performance;
+    * 1 - fallback to sw for known conformance bugs
+    * 2 - always fallback to sw
+    */
+   GLuint conformance_mode;
 
    /* State for intelvb.c and inteltris.c.
     */

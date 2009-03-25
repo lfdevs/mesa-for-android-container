@@ -53,12 +53,14 @@
 #include "intel_tex.h"
 #include "intel_batchbuffer.h"
 #include "intel_blit.h"
+#include "intel_clear.h"
 #include "intel_pixel.h"
 #include "intel_regions.h"
 #include "intel_buffer_objects.h"
 #include "intel_fbo.h"
 #include "intel_decode.h"
 #include "intel_bufmgr.h"
+#include "intel_swapbuffers.h"
 
 #include "drirenderbuffer.h"
 #include "vblank.h"
@@ -95,7 +97,7 @@ int INTEL_DEBUG = (0);
 
 #include "extension_helper.h"
 
-#define DRIVER_DATE                     "20090114"
+#define DRIVER_DATE                     "20090316 2009Q1 RC1"
 #define DRIVER_DATE_GEM                 "GEM " DRIVER_DATE
 
 static const GLubyte *
@@ -150,6 +152,10 @@ intelGetString(GLcontext * ctx, GLenum name)
 	 break;
       case PCI_CHIP_Q33_G:
 	 chipset = "Intel(R) Q33";
+	 break;
+      case PCI_CHIP_IGD_GM:
+      case PCI_CHIP_IGD_G:
+	 chipset = "Intel(R) IGD";
 	 break;
       case PCI_CHIP_I965_Q:
 	 chipset = "Intel(R) 965Q";
@@ -281,6 +287,9 @@ intel_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
 		   buffers[i].attachment);
 	   return;
        }
+
+       if (rb == NULL)
+	  continue;
 
        if (rb->region) {
 	  dri_bo_flink(rb->region->buffer, &name);
@@ -496,9 +505,8 @@ intelInvalidateState(GLcontext * ctx, GLuint new_state)
       intel->vtbl.invalidate_state( intel, new_state );
 }
 
-
-void
-intelFlush(GLcontext * ctx)
+static void
+intel_flush(GLcontext *ctx, GLboolean needs_mi_flush)
 {
    struct intel_context *intel = intel_context(ctx);
 
@@ -512,10 +520,23 @@ intelFlush(GLcontext * ctx)
     * lands onscreen in a timely manner, even if the X Server doesn't trigger
     * a flush for us.
     */
-   intel_batchbuffer_emit_mi_flush(intel->batch);
+   if (needs_mi_flush)
+      intel_batchbuffer_emit_mi_flush(intel->batch);
 
    if (intel->batch->map != intel->batch->ptr)
       intel_batchbuffer_flush(intel->batch);
+}
+
+void
+intelFlush(GLcontext * ctx)
+{
+   intel_flush(ctx, GL_FALSE);
+}
+
+static void
+intel_glFlush(GLcontext *ctx)
+{
+   intel_flush(ctx, GL_TRUE);
 }
 
 void
@@ -544,7 +565,7 @@ intelInitDriverFunctions(struct dd_function_table *functions)
 {
    _mesa_init_driver_functions(functions);
 
-   functions->Flush = intelFlush;
+   functions->Flush = intel_glFlush;
    functions->Finish = intelFinish;
    functions->GetString = intelGetString;
    functions->UpdateState = intelInvalidateState;
@@ -556,6 +577,7 @@ intelInitDriverFunctions(struct dd_function_table *functions)
 
    intelInitTextureFuncs(functions);
    intelInitStateFuncs(functions);
+   intelInitClearFuncs(functions);
    intelInitBufferFuncs(functions);
    intelInitPixelFuncs(functions);
 }
@@ -620,10 +642,16 @@ intelInitContext(struct intel_context *intel,
     * start.
     */
    if (getenv("INTEL_STRICT_CONFORMANCE")) {
-      intel->strict_conformance = 1;
+      unsigned int value = atoi(getenv("INTEL_STRICT_CONFORMANCE"));
+      if (value > 0) {
+         intel->conformance_mode = value;
+      }
+      else {
+         intel->conformance_mode = 1;
+      }
    }
 
-   if (intel->strict_conformance) {
+   if (intel->conformance_mode > 0) {
       ctx->Const.MinLineWidth = 1.0;
       ctx->Const.MinLineWidthAA = 1.0;
       ctx->Const.MaxLineWidth = 1.0;
@@ -857,6 +885,11 @@ intelMakeCurrent(__DRIcontextPrivate * driContextPriv,
 	       driDrawPriv->vblFlags = (intel->intelScreen->irq_active != 0)
 		  ? driGetDefaultVBlankFlags(&intel->optionCache)
 		 : VBLANK_FLAG_NO_IRQ;
+
+	       /* Prevent error printf if one crtc is disabled, this will
+		* be properly calculated in intelWindowMoved() next.
+		*/
+		driDrawPriv->vblFlags = intelFixupVblank(intel, driDrawPriv);
 
 	       (*psp->systemTime->getUST) (&intel_fb->swap_ust);
 	       driDrawableInitVBlank(driDrawPriv);

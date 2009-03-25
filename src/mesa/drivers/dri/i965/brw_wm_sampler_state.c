@@ -95,6 +95,7 @@ struct wm_sampler_key {
    int sampler_count;
 
    struct wm_sampler_entry {
+      GLenum tex_target;
       GLenum wrap_r, wrap_s, wrap_t;
       float maxlod, minlod;
       float lod_bias;
@@ -168,19 +169,20 @@ static void brw_update_sampler_state(struct wm_sampler_entry *key,
       }  
    }
 
-   sampler->ss1.r_wrap_mode = translate_wrap_mode(key->wrap_r);
-   sampler->ss1.s_wrap_mode = translate_wrap_mode(key->wrap_s);
-   sampler->ss1.t_wrap_mode = translate_wrap_mode(key->wrap_t);
-
-   /* Fulsim complains if I don't do this.  Hardware doesn't mind:
-    */
-#if 0
-   if (texObj->Target == GL_TEXTURE_CUBE_MAP_ARB) {
+   if (key->tex_target == GL_TEXTURE_CUBE_MAP &&
+       (key->minfilter != GL_NEAREST || key->magfilter != GL_NEAREST)) {
+      /* If we're using anything but nearest sampling for a cube map, we
+       * need to set this wrap mode to avoid GPU lock-ups.
+       */
       sampler->ss1.r_wrap_mode = BRW_TEXCOORDMODE_CUBE;
       sampler->ss1.s_wrap_mode = BRW_TEXCOORDMODE_CUBE;
       sampler->ss1.t_wrap_mode = BRW_TEXCOORDMODE_CUBE;
    }
-#endif
+   else {
+      sampler->ss1.r_wrap_mode = translate_wrap_mode(key->wrap_r);
+      sampler->ss1.s_wrap_mode = translate_wrap_mode(key->wrap_s);
+      sampler->ss1.t_wrap_mode = translate_wrap_mode(key->wrap_t);
+   }
 
    /* Set shadow function: 
     */
@@ -220,18 +222,21 @@ static void
 brw_wm_sampler_populate_key(struct brw_context *brw,
 			    struct wm_sampler_key *key)
 {
+   GLcontext *ctx = &brw->intel.ctx;
    int unit;
 
    memset(key, 0, sizeof(*key));
 
    for (unit = 0; unit < BRW_MAX_TEX_UNIT; unit++) {
-      if (brw->attribs.Texture->Unit[unit]._ReallyEnabled) {
+      if (ctx->Texture.Unit[unit]._ReallyEnabled) {
 	 struct wm_sampler_entry *entry = &key->sampler[unit];
-	 struct gl_texture_unit *texUnit = &brw->attribs.Texture->Unit[unit];
+	 struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
 	 struct gl_texture_object *texObj = texUnit->_Current;
 	 struct intel_texture_object *intelObj = intel_texture_object(texObj);
 	 struct gl_texture_image *firstImage =
 	    texObj->Image[0][intelObj->firstLevel];
+
+         entry->tex_target = texObj->Target;
 
 	 entry->wrap_r = texObj->WrapR;
 	 entry->wrap_s = texObj->WrapS;
@@ -274,6 +279,7 @@ brw_wm_sampler_populate_key(struct brw_context *brw,
  */
 static void upload_wm_samplers( struct brw_context *brw )
 {
+   GLcontext *ctx = &brw->intel.ctx;
    struct wm_sampler_key key;
    int i;
 
@@ -317,7 +323,7 @@ static void upload_wm_samplers( struct brw_context *brw )
 
       /* Emit SDC relocations */
       for (i = 0; i < BRW_MAX_TEX_UNIT; i++) {
-	 if (!brw->attribs.Texture->Unit[i]._ReallyEnabled)
+	 if (!ctx->Texture.Unit[i]._ReallyEnabled)
 	    continue;
 
 	 dri_bo_emit_reloc(brw->wm.sampler_bo,

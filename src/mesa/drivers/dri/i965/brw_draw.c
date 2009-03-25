@@ -84,15 +84,17 @@ static const GLenum reduced_prim[GL_POLYGON+1] = {
  */
 static GLuint brw_set_prim(struct brw_context *brw, GLenum prim)
 {
+   GLcontext *ctx = &brw->intel.ctx;
+
    if (INTEL_DEBUG & DEBUG_PRIMS)
       _mesa_printf("PRIM: %s\n", _mesa_lookup_enum_by_nr(prim));
    
    /* Slight optimization to avoid the GS program when not needed:
     */
    if (prim == GL_QUAD_STRIP &&
-       brw->attribs.Light->ShadeModel != GL_FLAT &&
-       brw->attribs.Polygon->FrontMode == GL_FILL &&
-       brw->attribs.Polygon->BackMode == GL_FILL)
+       ctx->Light.ShadeModel != GL_FLAT &&
+       ctx->Polygon.FrontMode == GL_FILL &&
+       ctx->Polygon.BackMode == GL_FILL)
       prim = GL_TRIANGLE_STRIP;
 
    if (prim != brw->primitive) {
@@ -166,14 +168,11 @@ static void brw_merge_inputs( struct brw_context *brw,
    for (i = 0; i < VERT_ATTRIB_MAX; i++) {
       brw->vb.inputs[i].glarray = arrays[i];
 
-      /* XXX: metaops passes null arrays */
-      if (arrays[i]) {
-	 if (arrays[i]->StrideB != 0)
-	    brw->vb.info.varying |= 1 << i;
+      if (arrays[i]->StrideB != 0)
+	 brw->vb.info.varying |= 1 << i;
 
 	 brw->vb.info.sizes[i/16] |= (brw->vb.inputs[i].glarray->Size - 1) <<
 	    ((i%16) * 2);
-      }
    }
 
    /* Raise statechanges if input sizes and varying have changed: 
@@ -192,12 +191,20 @@ static GLboolean check_fallbacks( struct brw_context *brw,
 				  const struct _mesa_prim *prim,
 				  GLuint nr_prims )
 {
+   GLcontext *ctx = &brw->intel.ctx;
    GLuint i;
 
-   if (!brw->intel.strict_conformance)
+   /* If we don't require strict OpenGL conformance, never 
+    * use fallbacks.  If we're forcing fallbacks, always
+    * use fallfacks.
+    */
+   if (brw->intel.conformance_mode == 0)
       return GL_FALSE;
 
-   if (brw->attribs.Polygon->SmoothFlag) {
+   if (brw->intel.conformance_mode == 2)
+      return GL_TRUE;
+
+   if (ctx->Polygon.SmoothFlag) {
       for (i = 0; i < nr_prims; i++)
 	 if (reduced_prim[prim[i].mode] == GL_TRIANGLES) 
 	    return GL_TRUE;
@@ -206,7 +213,7 @@ static GLboolean check_fallbacks( struct brw_context *brw,
    /* BRW hardware will do AA lines, but they are non-conformant it
     * seems.  TBD whether we keep this fallback:
     */
-   if (brw->attribs.Line->SmoothFlag) {
+   if (ctx->Line.SmoothFlag) {
       for (i = 0; i < nr_prims; i++)
 	 if (reduced_prim[prim[i].mode] == GL_LINES) 
 	    return GL_TRUE;
@@ -215,28 +222,61 @@ static GLboolean check_fallbacks( struct brw_context *brw,
    /* Stipple -- these fallbacks could be resolved with a little
     * bit of work?
     */
-   if (brw->attribs.Line->StippleFlag) {
+   if (ctx->Line.StippleFlag) {
       for (i = 0; i < nr_prims; i++) {
 	 /* GS doesn't get enough information to know when to reset
 	  * the stipple counter?!?
 	  */
-	 if (prim[i].mode == GL_LINE_LOOP) 
+	 if (prim[i].mode == GL_LINE_LOOP || prim[i].mode == GL_LINE_STRIP) 
 	    return GL_TRUE;
 	    
 	 if (prim[i].mode == GL_POLYGON &&
-	     (brw->attribs.Polygon->FrontMode == GL_LINE ||
-	      brw->attribs.Polygon->BackMode == GL_LINE))
+	     (ctx->Polygon.FrontMode == GL_LINE ||
+	      ctx->Polygon.BackMode == GL_LINE))
 	    return GL_TRUE;
       }
    }
 
-
-   if (brw->attribs.Point->SmoothFlag) {
+   if (ctx->Point.SmoothFlag) {
       for (i = 0; i < nr_prims; i++)
 	 if (prim[i].mode == GL_POINTS) 
 	    return GL_TRUE;
    }
+
+   /* BRW hardware doesn't handle GL_CLAMP texturing correctly;
+    * brw_wm_sampler_state:translate_wrap_mode() treats GL_CLAMP
+    * as GL_CLAMP_TO_EDGE instead.  If we're using GL_CLAMP, and
+    * we want strict conformance, force the fallback.
+    * Right now, we only do this for 2D textures.
+    */
+   {
+      int u;
+      for (u = 0; u < ctx->Const.MaxTextureCoordUnits; u++) {
+         struct gl_texture_unit *texUnit = &ctx->Texture.Unit[u];
+         if (texUnit->Enabled) {
+            if (texUnit->Enabled & TEXTURE_1D_BIT) {
+               if (texUnit->CurrentTex[TEXTURE_1D_INDEX]->WrapS == GL_CLAMP) {
+                   return GL_TRUE;
+               }
+            }
+            if (texUnit->Enabled & TEXTURE_2D_BIT) {
+               if (texUnit->CurrentTex[TEXTURE_2D_INDEX]->WrapS == GL_CLAMP ||
+                   texUnit->CurrentTex[TEXTURE_2D_INDEX]->WrapT == GL_CLAMP) {
+                   return GL_TRUE;
+               }
+            }
+            if (texUnit->Enabled & TEXTURE_3D_BIT) {
+               if (texUnit->CurrentTex[TEXTURE_3D_INDEX]->WrapS == GL_CLAMP ||
+                   texUnit->CurrentTex[TEXTURE_3D_INDEX]->WrapT == GL_CLAMP ||
+                   texUnit->CurrentTex[TEXTURE_3D_INDEX]->WrapR == GL_CLAMP) {
+                   return GL_TRUE;
+               }
+            }
+         }
+      }
+   }
       
+   /* Nothing stopping us from the fast path now */
    return GL_FALSE;
 }
 
@@ -261,10 +301,17 @@ static GLboolean brw_try_draw_prims( GLcontext *ctx,
    if (ctx->NewState)
       _mesa_update_state( ctx );
 
+   /* We have to validate the textures *before* checking for fallbacks;
+    * otherwise, the software fallback won't be able to rely on the
+    * texture state, the firstLevel and lastLevel fields won't be
+    * set in the intel texture object (they'll both be 0), and the 
+    * software fallback will segfault if it attempts to access any
+    * texture level other than level 0.
+    */
+   brw_validate_textures( brw );
+
    if (check_fallbacks(brw, prim, nr_prims))
       return GL_FALSE;
-
-   brw_validate_textures( brw );
 
    /* Bind all inputs, derive varying and size information:
     */

@@ -1,0 +1,29 @@
+# DO NOT DELETE
+
+GLwDrawA.o: /usr/include/X11/IntrinsicP.h /usr/include/X11/Intrinsic.h
+GLwDrawA.o: /usr/include/X11/Xlib.h /usr/include/sys/types.h
+GLwDrawA.o: /usr/include/features.h /usr/include/sys/cdefs.h
+GLwDrawA.o: /usr/include/bits/wordsize.h /usr/include/gnu/stubs.h
+GLwDrawA.o: /usr/include/gnu/stubs-32.h /usr/include/bits/types.h
+GLwDrawA.o: /usr/include/bits/typesizes.h /usr/include/time.h
+GLwDrawA.o: /usr/include/endian.h /usr/include/bits/endian.h
+GLwDrawA.o: /usr/include/sys/select.h /usr/include/bits/select.h
+GLwDrawA.o: /usr/include/bits/sigset.h /usr/include/bits/time.h
+GLwDrawA.o: /usr/include/sys/sysmacros.h /usr/include/bits/pthreadtypes.h
+GLwDrawA.o: /usr/include/X11/X.h /usr/include/X11/Xfuncproto.h
+GLwDrawA.o: /usr/include/X11/Xosdefs.h /usr/include/X11/Xutil.h
+GLwDrawA.o: /usr/include/X11/keysym.h /usr/include/X11/keysymdef.h
+GLwDrawA.o: /usr/include/X11/Xresource.h /usr/include/string.h
+GLwDrawA.o: /usr/include/X11/Core.h /usr/include/X11/Composite.h
+GLwDrawA.o: /usr/include/X11/Constraint.h /usr/include/X11/Object.h
+GLwDrawA.o: /usr/include/X11/RectObj.h /usr/include/X11/CoreP.h
+GLwDrawA.o: /usr/include/X11/CompositeP.h /usr/include/X11/ConstrainP.h
+GLwDrawA.o: /usr/include/X11/ObjectP.h /usr/include/X11/RectObjP.h
+GLwDrawA.o: /usr/include/X11/StringDefs.h ../../include/GL/glx.h
+GLwDrawA.o: ../../include/GL/gl.h ../../include/GL/glext.h
+GLwDrawA.o: /usr/include/inttypes.h /usr/include/stdint.h
+GLwDrawA.o: /usr/include/bits/wchar.h ../../include/GL/glxext.h GLwDrawAP.h
+GLwDrawA.o: GLwDrawA.h /usr/include/assert.h /usr/include/stdio.h
+GLwDrawA.o: /usr/include/libio.h /usr/include/_G_config.h
+GLwDrawA.o: /usr/include/wchar.h /usr/include/bits/stdio_lim.h
+GLwDrawA.o: /usr/include/bits/sys_errlist.h

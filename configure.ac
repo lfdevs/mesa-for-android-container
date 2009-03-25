@@ -46,10 +46,14 @@ esac
 MKDEP_OPTIONS=-fdepend
 dnl Ask gcc where it's keeping its secret headers
 if test "x$GCC" = xyes; then
-    GCC_INCLUDES=`$CC -print-file-name=include`
-    if test "x$GCC_INCLUDES" != x; then
-        MKDEP_OPTIONS="$MKDEP_OPTIONS -I$GCC_INCLUDES"
-    fi
+    for dir in include include-fixed; do
+        GCC_INCLUDES=`$CC -print-file-name=$dir`
+        if test "x$GCC_INCLUDES" != x && \
+           test "$GCC_INCLUDES" != "$dir" && \
+           test -d "$GCC_INCLUDES"; then
+            MKDEP_OPTIONS="$MKDEP_OPTIONS -I$GCC_INCLUDES"
+        fi
+    done
 fi
 AC_SUBST([MKDEP_OPTIONS])
 
@@ -83,7 +87,7 @@ dnl Compiler macros
 DEFINES=""
 AC_SUBST([DEFINES])
 case "$host_os" in
-*-gnu*)
+linux*|*-gnu*)
     DEFINES="$DEFINES -D_GNU_SOURCE -DPTHREADS"
     ;;
 solaris*)
@@ -362,7 +366,7 @@ default_driver="xlib"
 case "$host_os" in
 linux*)
     case "$host_cpu" in
-    i*86|x86_64|powerpc*) default_driver="dri";;
+    i*86|x86_64|powerpc*|sparc*) default_driver="dri";;
     esac
     ;;
 *freebsd* | dragonfly*)

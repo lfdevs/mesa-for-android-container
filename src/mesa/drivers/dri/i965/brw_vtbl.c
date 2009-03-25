@@ -65,7 +65,6 @@ static void brw_destroy_context( struct intel_context *intel )
    struct brw_context *brw = brw_context(&intel->ctx);
    int i;
 
-   brw_destroy_metaops(brw);
    brw_destroy_state(brw);
    brw_draw_destroy( brw );
 

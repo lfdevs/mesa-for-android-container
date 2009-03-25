@@ -43,6 +43,7 @@
 #include "intel_span.h"
 #include "intel_fbo.h"
 #include "intel_chipset.h"
+#include "intel_swapbuffers.h"
 
 #include "i915_drm.h"
 #include "i830_dri.h"
@@ -159,7 +160,7 @@ intelPrintSAREA(const drm_i915_sarea_t * sarea)
  * A number of the screen parameters are obtained/computed from
  * information in the SAREA.  This function updates those parameters.
  */
-void
+static void
 intelUpdateScreenFromSAREA(intelScreenPrivate * intelScreen,
                            drm_i915_sarea_t * sarea)
 {
@@ -316,8 +317,6 @@ intelCreateBuffer(__DRIscreenPrivate * driScrnPriv,
                   __DRIdrawablePrivate * driDrawPriv,
                   const __GLcontextModes * mesaVis, GLboolean isPixmap)
 {
-   intelScreenPrivate *screen = (intelScreenPrivate *) driScrnPriv->private;
-
    if (isPixmap) {
       return GL_FALSE;          /* not implemented */
    }

@@ -76,30 +76,6 @@ static void brwInitDriverFunctions( struct dd_function_table *functions )
    functions->Viewport = intel_viewport;
 }
 
-
-static void brw_init_attribs( struct brw_context *brw )
-{
-   GLcontext *ctx = &brw->intel.ctx;
-
-   brw->attribs.Color = &ctx->Color;
-   brw->attribs.Depth = &ctx->Depth;
-   brw->attribs.Fog = &ctx->Fog;
-   brw->attribs.Hint = &ctx->Hint;
-   brw->attribs.Light = &ctx->Light;
-   brw->attribs.Line = &ctx->Line;
-   brw->attribs.Point = &ctx->Point;
-   brw->attribs.Polygon = &ctx->Polygon;
-   brw->attribs.Scissor = &ctx->Scissor;
-   brw->attribs.Stencil = &ctx->Stencil;
-   brw->attribs.Texture = &ctx->Texture;
-   brw->attribs.Transform = &ctx->Transform;
-   brw->attribs.Viewport = &ctx->Viewport;
-   brw->attribs.VertexProgram = &ctx->VertexProgram;
-   brw->attribs.FragmentProgram = &ctx->FragmentProgram;
-   brw->attribs.PolygonStipple = &ctx->PolygonStipple[0];
-}
-
-
 GLboolean brwCreateContext( const __GLcontextModes *mesaVis,
 			    __DRIcontextPrivate *driContextPriv,
 			    void *sharedContextPrivate)
@@ -146,10 +122,11 @@ GLboolean brwCreateContext( const __GLcontextModes *mesaVis,
    /* if conformance mode is set, swrast can handle any size AA point */
    ctx->Const.MaxPointSizeAA = 255.0;
 
+   /* We want the GLSL compiler to emit code that uses condition codes */
+   ctx->Shader.EmitCondCodes = GL_TRUE;
+
 /*    ctx->Const.MaxNativeVertexProgramTemps = 32; */
 
-   brw_init_attribs( brw );
-   brw_init_metaops( brw );
    brw_init_state( brw );
 
    brw->state.dirty.mesa = ~0;

@@ -63,15 +63,18 @@ ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	DIRECT_RENDERING = --disable-driglx-direct
 else
 	DIRECT_RENDERING = --enable-driglx-direct
+  ifeq ($(DEB_HOST_ARCH), lpia)
+	DRI_DRIVERS += i915 i965
+  else
 	DRI_DRIVERS += mach64 mga r128 r200 r300 radeon s3v savage tdfx trident
-endif
-
-ifeq ($(DEB_HOST_GNU_CPU), i486)
+    ifeq ($(DEB_HOST_GNU_CPU), i486)
 	DRI_DRIVERS += i810 i915 i965 sis unichrome
-else ifeq ($(DEB_HOST_GNU_CPU), x86_64)
+    else ifeq ($(DEB_HOST_GNU_CPU), x86_64)
 	DRI_DRIVERS += i915 i965 sis unichrome
-else ifeq ($(DEB_HOST_ARCH), sparc)
+    else ifeq ($(DEB_HOST_ARCH), sparc)
 	DRI_DRIVERS += ffb
+    endif
+  endif
 endif
 
 confflags-dri = \

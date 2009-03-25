@@ -89,8 +89,14 @@ get_reg(struct brw_wm_compile *c, int file, int index, int component, int nr, GL
 	    break;
 	case PROGRAM_UNDEFINED:
 	    return brw_null_reg();	
-	default:
+	case PROGRAM_TEMPORARY:
+	case PROGRAM_INPUT:
+	case PROGRAM_OUTPUT:
+	case PROGRAM_PAYLOAD:
 	    break;
+	default:
+	    _mesa_problem(NULL, "Unexpected file in get_reg()");
+	    return brw_null_reg();
     }
 
     if(c->wm_regs[file][index][component].inited)
@@ -103,7 +109,20 @@ get_reg(struct brw_wm_compile *c, int file, int index, int component, int nr, GL
 	c->reg_index++;
     }
 
-    if (neg & (1<< component)) {
+    if (c->reg_index >= BRW_WM_MAX_GRF - 12) {
+	/* ran out of temporary registers! */
+#if 1
+        /* This is a big hack for now.
+         * Return bad register index, but don't just crash hange the GPU.
+         */
+        _mesa_fprintf(stderr, "out of regs %d\n", c->reg_index);
+        c->reg_index = BRW_WM_MAX_GRF - 13;
+#else
+	return brw_null_reg();
+#endif
+    }
+ 
+    if (neg & (1 << component)) {
 	reg = negate(reg);
     }
     if (abs)
@@ -627,23 +646,46 @@ static void emit_dph(struct brw_wm_compile *c,
     brw_set_saturate(p, 0);
 }
 
+/**
+ * Emit a scalar instruction, like RCP, RSQ, LOG, EXP.
+ * Note that the result of the function is smeared across the dest
+ * register's X, Y, Z and W channels (subject to writemasking of course).
+ */
 static void emit_math1(struct brw_wm_compile *c,
 		struct prog_instruction *inst, GLuint func)
 {
     struct brw_compile *p = &c->func;
-    struct brw_reg src0, dst;
+    struct brw_reg src0, dst, tmp;
+    const int mark = mark_tmps( c );
+    int i;
 
+    tmp = alloc_tmp(c);
+
+    /* Get first component of source register */
     src0 = get_src_reg(c, &inst->SrcReg[0], 0, 1);
-    dst = get_dst_reg(c, inst, get_scalar_dst_index(inst), 1);
+
+    /* tmp = func(src0) */
     brw_MOV(p, brw_message_reg(2), src0);
     brw_math(p,
-	    dst,
-	    func,
-	    (inst->SaturateMode != SATURATE_OFF) ? BRW_MATH_SATURATE_SATURATE : BRW_MATH_SATURATE_NONE,
-	    2,
-	    brw_null_reg(),
-	    BRW_MATH_DATA_VECTOR,
-	    BRW_MATH_PRECISION_FULL);
+             tmp,
+             func,
+             (inst->SaturateMode != SATURATE_OFF) ? BRW_MATH_SATURATE_SATURATE : BRW_MATH_SATURATE_NONE,
+             2,
+             brw_null_reg(),
+             BRW_MATH_DATA_VECTOR,
+             BRW_MATH_PRECISION_FULL);
+
+    /*tmp.dw1.bits.swizzle = SWIZZLE_XXXX;*/
+
+    /* replicate tmp value across enabled dest channels */
+    for (i = 0; i < 4; i++) {
+       if (inst->DstReg.WriteMask & (1 << i)) {
+          dst = get_dst_reg(c, inst, i, 1);    
+          brw_MOV(p, dst, tmp);
+       }
+    }
+
+    release_tmps(c, mark);
 }
 
 static void emit_rcp(struct brw_wm_compile *c,
@@ -2244,28 +2286,12 @@ static void emit_tex(struct brw_wm_compile *c,
 	brw_MOV(p, dst[3], brw_imm_f(1.0));
 }
 
+/**
+ * Resolve subroutine calls after code emit is done.
+ */
 static void post_wm_emit( struct brw_wm_compile *c )
 {
-    GLuint nr_insns = c->fp->program.Base.NumInstructions;
-    GLuint insn, target_insn;
-    struct prog_instruction *inst1, *inst2;
-    struct brw_instruction *brw_inst1, *brw_inst2;
-    int offset;
-    for (insn = 0; insn < nr_insns; insn++) {
-	inst1 = &c->fp->program.Base.Instructions[insn];
-	brw_inst1 = inst1->Data;
-	switch (inst1->Opcode) {
-	    case OPCODE_CAL:
-		target_insn = inst1->BranchTarget;
-		inst2 = &c->fp->program.Base.Instructions[target_insn];
-		brw_inst2 = inst2->Data;
-		offset = brw_inst2 - brw_inst1;
-		brw_set_src1(brw_inst1, brw_imm_d(offset*16));
-		break;
-	    default:
-		break;
-	}
-    }
+    brw_resolve_cals(&c->func);
 }
 
 static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
@@ -2285,10 +2311,6 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 
     for (i = 0; i < c->nr_fp_insns; i++) {
 	struct prog_instruction *inst = &c->prog_instructions[i];
-	struct prog_instruction *orig_inst;
-
-	if ((orig_inst = inst->Data) != 0)
-	    orig_inst->Data = current_insn(p);
 
 	if (inst->CondUpdate)
 	    brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
@@ -2446,7 +2468,10 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 		brw_ENDIF(p, if_inst[--if_insn]);
 		break;
 	    case OPCODE_BGNSUB:
+		brw_save_label(p, inst->Comment, p->nr_insn);
+		break;
 	    case OPCODE_ENDSUB:
+		/* no-op */
 		break;
 	    case OPCODE_CAL: 
 		brw_push_insn_state(p);
@@ -2456,8 +2481,7 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
                 brw_set_access_mode(p, BRW_ALIGN_16);
                 brw_ADD(p, get_addr_reg(stack_index),
                          get_addr_reg(stack_index), brw_imm_d(4));
-                orig_inst = inst->Data;
-                orig_inst->Data = &p->store[p->nr_insn];
+		brw_save_call(&c->func, inst->Comment, p->nr_insn);
                 brw_ADD(p, brw_ip_reg(), brw_ip_reg(), brw_imm_d(1*16));
                 brw_pop_insn_state(p);
 		break;
@@ -2510,8 +2534,11 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 	    brw_set_predicate_control(p, BRW_PREDICATE_NONE);
     }
     post_wm_emit(c);
-    for (i = 0; i < c->fp->program.Base.NumInstructions; i++)
-	c->fp->program.Base.Instructions[i].Data = NULL;
+
+    if (c->reg_index >= BRW_WM_MAX_GRF) {
+        _mesa_problem(NULL, "Ran out of registers in brw_wm_emit_glsl()");
+        /* XXX we need to do some proper error recovery here */
+    }
 }
 
 void brw_wm_glsl_emit(struct brw_context *brw, struct brw_wm_compile *c)
