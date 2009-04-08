@@ -1,3 +1,16 @@
+mesa (7.4-2) unstable; urgency=low
+
+  * Upload to unstable.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 08 Apr 2009 23:53:47 +0100
+
+mesa (7.4-1) experimental; urgency=low
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 01 Apr 2009 20:25:00 +0200
+
 mesa (7.4~rc1-1) experimental; urgency=low
 
   * New upstream release candidate.

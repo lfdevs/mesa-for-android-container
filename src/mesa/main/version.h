@@ -31,7 +31,7 @@
 #define MESA_MAJOR 7
 #define MESA_MINOR 4
 #define MESA_PATCH 0
-#define MESA_VERSION_STRING "7.4-rc1"
+#define MESA_VERSION_STRING "7.4"
 
 /* To make version comparison easy */
 #define MESA_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))

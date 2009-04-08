@@ -97,7 +97,7 @@ int INTEL_DEBUG = (0);
 
 #include "extension_helper.h"
 
-#define DRIVER_DATE                     "20090316 2009Q1 RC1"
+#define DRIVER_DATE                     "20090326 2009Q1 RC2"
 #define DRIVER_DATE_GEM                 "GEM " DRIVER_DATE
 
 static const GLubyte *
@@ -533,7 +533,7 @@ intelFlush(GLcontext * ctx)
    intel_flush(ctx, GL_FALSE);
 }
 
-static void
+void
 intel_glFlush(GLcontext *ctx)
 {
    intel_flush(ctx, GL_TRUE);

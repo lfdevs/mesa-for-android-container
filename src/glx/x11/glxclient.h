@@ -604,7 +604,6 @@ extern void __glXSendLargeCommand(__GLXcontext *, const GLvoid *, GLint,
 				  const GLvoid *, GLint);
 
 /* Initialize the GLX extension for dpy */
-extern __GLXdisplayPrivate * __glXGetPrivateFromDisplay(Display *dpy);
 extern __GLXdisplayPrivate *__glXInitialize(Display*);
 
 /************************************************************************/

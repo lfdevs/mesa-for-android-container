@@ -104,7 +104,7 @@ do_copy_texsubimage(struct intel_context *intel,
       return GL_FALSE;
    }
 
-   intelFlush(ctx);
+   intel_glFlush(ctx);
    LOCK_HARDWARE(intel);
    {
       GLuint image_offset = intel_miptree_image_offset(intelImage->mt,
@@ -155,6 +155,7 @@ do_copy_texsubimage(struct intel_context *intel,
    }
 
    UNLOCK_HARDWARE(intel);
+   intel_glFlush(ctx);
 
    /* GL_SGIS_generate_mipmap */
    if (intelImage->level == texObj->BaseLevel && texObj->GenerateMipmap) {

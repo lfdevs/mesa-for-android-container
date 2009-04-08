@@ -558,7 +558,6 @@ _mesa_update_state_locked( GLcontext *ctx )
     * Set ctx->NewState to zero to avoid recursion if
     * Driver.UpdateState() has to call FLUSH_VERTICES().  (fixed?)
     */
- out:
    new_state = ctx->NewState | new_prog_state;
    ctx->NewState = 0;
    ctx->Driver.UpdateState(ctx, new_state);
