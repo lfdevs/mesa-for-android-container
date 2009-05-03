@@ -207,20 +207,6 @@ clean: unpatch
 
 # Build architecture-independent files here.
 binary-indep: install
-	dh_testdir
-	dh_testroot
-	dh_installchangelogs -i
-	dh_installdocs -i
-	dh_installexamples -i
-	dh_install --sourcedir=debian/tmp --list-missing -i
-	dh_installman -i
-	dh_link -i
-	dh_compress -i
-	dh_fixperms -i
-	dh_installdeb -i
-	dh_gencontrol -i
-	dh_md5sums -i
-	dh_builddeb -i
 
 # Build architecture-dependent files here.
 binary-arch: install

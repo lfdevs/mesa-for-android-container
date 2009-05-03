@@ -1,3 +1,5 @@
 02_use-ieee-fp-on-s390-and-m68k.patch
 03_optional-progs-and-install.patch
 04_osmesa_version.diff
+05_hurd-ftbfs.diff
+06_kfreebsd-ftbfs.diff

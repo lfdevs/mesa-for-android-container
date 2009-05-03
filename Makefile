@@ -35,6 +35,8 @@ realclean: clean
 	  -name depend -o -name depend.bak ')' -exec rm -f '{}' ';'
 
 
+distclean: realclean
+
 
 install:
 	@for dir in $(SUBDIRS) ; do \
@@ -48,7 +50,9 @@ install:
 linux-directfb-install:
 	cd src/mesa/drivers/directfb && $(MAKE) install
 
-.PHONY: default doxygen clean realclean install linux-directfb-install
+
+.PHONY: default doxygen clean realclean distclean install linux-directfb-install
+
 
 # If there's no current configuration file
 $(TOP)/configs/current:
@@ -174,7 +178,7 @@ ultrix-gcc:
 
 # Rules for making release tarballs
 
-VERSION=7.4
+VERSION=7.4.1
 DIRECTORY = Mesa-$(VERSION)
 LIB_NAME = MesaLib-$(VERSION)
 DEMO_NAME = MesaDemos-$(VERSION)

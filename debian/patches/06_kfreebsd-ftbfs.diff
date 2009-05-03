@@ -1,0 +1,16 @@
+From: Aurelien Jarno <aurel32@debian.org>
+    
+mesa fails to build on GNU/kFreeBSD, since some parts are not enabled.
+    
+http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=524690
+
+--- mesa-7.4.orig/configure.ac
++++ mesa-7.4/configure.ac
+@@ -680,7 +680,7 @@
+             ;;
+         esac
+         ;;
+-    freebsd* | dragonfly*)
++    freebsd* | dragonfly* | kfreebsd*-gnu*)
+         DEFINES="$DEFINES -DPTHREADS -DUSE_EXTERNAL_DXTN_LIB=1"
+         DEFINES="$DEFINES -DIN_DRI_DRIVER -DHAVE_ALIAS"

@@ -1,3 +1,27 @@
+mesa (7.4.1-1) unstable; urgency=low
+
+  [ Julien Cristau ]
+  * Make libgl1-mesa-dev and mesa-common-dev 'Architecture: any'.  This gets
+    rid of uninstallability when a new upstream version isn't built on all
+    architectures, and allows us to ship potentially arch-specific .pc files.
+  * Install pkgconfig files for libGLU, libOSMesa and libGLw.
+  * Make libgl1-mesa-dri{,-dbg} 'Architecture: any', as swrast_dri.so should
+    get built everywhere.
+  * Drop the dependency on libgl1-mesa-glx from -dri, and make -glx recommend
+    -dri instead.  The dri drivers are also loaded by the X server, which
+    doesn't need libGL.  On the other hand, libGL needs one of the dri drivers
+    for direct rendering (either software or hardware).  Mark libgl1-mesa-dri
+    as breaking old xserver-xorg-core and libgl1-mesa-glx, to avoid
+    incompatibilities.
+  * Add patch by Samuel Thibault to fix FTBFS on hurd-i386.
+  * Pull from mesa_7_4_branch as of May 3rd (commit 63375254).
+  * Move -dbg packages to new 'debug' section.
+
+  [ Brice Goglin ]
+  * Add patch by Aurelien Jarno to fix FTBFS on kfreebsd-i386, closes: #524690.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 03 May 2009 16:05:09 +0200
+
 mesa (7.4-2) unstable; urgency=low
 
   * Upload to unstable.

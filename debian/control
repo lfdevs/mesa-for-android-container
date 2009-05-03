@@ -37,7 +37,7 @@ Description: A free implementation of the OpenGL API -- runtime
  On Linux, this library is also known as libGL or libGL.so.1.
 
 Package: libgl1-mesa-swx11-dbg
-Section: libdevel
+Section: debug
 Priority: extra
 Architecture: any
 Depends: libgl1-mesa-swx11 (= ${binary:Version})
@@ -89,7 +89,7 @@ Package: libgl1-mesa-swx11-dev
 Section: libdevel
 Priority: extra
 Architecture: any
-Depends: libgl1-mesa-swx11 (= ${binary:Version}), libc6-dev, libx11-dev, libxext6, mesa-common-dev (= ${source:Version})
+Depends: libgl1-mesa-swx11 (= ${binary:Version}), libc6-dev, libx11-dev, libxext6, mesa-common-dev (= ${binary:Version})
 Provides: libgl-dev, mesag-dev, libgl1-mesa-swrast-dev
 Conflicts: mesa-dev, libgl-dev, mesag3 (<< 3.1-1), nvidia-glx-dev, mesag-dev, libgl1-mesa-swrast-dev
 Replaces: libgl-dev, mesag-dev, libgl1-mesa-swrast-dev
@@ -106,6 +106,7 @@ Package: libgl1-mesa-glx
 Section: libs
 Architecture: any
 Depends: ${shlibs:Depends}
+Recommends: libgl1-mesa-dri (>= 7.2)
 Conflicts: libgl1, libgl1-mesa-dri (<< 6.4.0)
 Replaces: libgl1, libgl1-mesa-dri (<< 6.4.0)
 Provides: libgl1
@@ -121,7 +122,7 @@ Description: A free implementation of the OpenGL API -- GLX runtime
  libgl1-mesa-swx11 package.
 
 Package: libgl1-mesa-glx-dbg
-Section: libdevel
+Section: debug
 Priority: extra
 Architecture: any
 Depends: libgl1-mesa-glx (= ${binary:Version})
@@ -163,11 +164,12 @@ Description: Debugging symbols for the Mesa GLX runtime
 Package: libgl1-mesa-dri
 Section: libs
 Priority: optional
-Architecture: alpha amd64 arm armeb armel hppa i386 ia64 kfreebsd-i386 kfreebsd-amd64 lpia m68k mips mipsel powerpc s390 sparc
-Depends: ${shlibs:Depends}, libgl1-mesa-glx (= ${binary:Version})
+Architecture: any
+Depends: ${shlibs:Depends}
 Suggests: libglide3
 Conflicts: xlibmesa-dri (<< 1:7.0.0)
 Replaces: xlibmesa-dri (<< 1:7.0.0)
+Breaks: xserver-xorg-core (<< 2:1.5), libgl1-mesa-glx (<< 7.2)
 Description: A free implementation of the OpenGL API -- DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
  both direct and indirect rendering.  For direct rendering, it can use DRI
@@ -182,9 +184,9 @@ Description: A free implementation of the OpenGL API -- DRI modules
  The tdfx DRI module needs libglide3 to enable direct rendering.
 
 Package: libgl1-mesa-dri-dbg
-Section: libdevel
+Section: debug
 Priority: extra
-Architecture: alpha amd64 arm armeb armel hppa i386 ia64 kfreebsd-i386 kfreebsd-amd64 lpia m68k mips mipsel powerpc s390 sparc
+Architecture: any
 Depends: libgl1-mesa-dri (= ${binary:Version})
 Description: Debugging symbols for the Mesa DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
@@ -222,8 +224,8 @@ Description: Debugging symbols for the Mesa DRI modules
 
 Package: libgl1-mesa-dev
 Section: libdevel
-Architecture: all
-Depends: libc6-dev, mesa-common-dev (= ${source:Version}), libgl1-mesa-glx (>= ${source:Upstream-Version})
+Architecture: any
+Depends: libc6-dev, mesa-common-dev (= ${binary:Version}), libgl1-mesa-glx (= ${binary:Version})
 Conflicts: libgl-dev, libgl1-mesa-dri-dev
 Replaces: libgl-dev, libgl1-mesa-dri-dev
 Provides: libgl-dev, libgl1-mesa-dri-dev
@@ -240,7 +242,7 @@ Description: A free implementation of the OpenGL API -- GLX development files
 
 Package: mesa-common-dev
 Section: libdevel
-Architecture: all
+Architecture: any
 Replaces: xlibmesa-gl-dev (<< 1:7), xlibosmesa-dev, libgl1-mesa-swx11-dev (<< 6.5.2), libgl1-mesa-dev (<< 6.5.2)
 Depends: libx11-dev
 Description: Developer documentation for Mesa
@@ -264,7 +266,7 @@ Description: Mesa Off-screen rendering extension
 Package: libosmesa6-dev
 Section: libdevel
 Architecture: any
-Depends: libosmesa6 (= ${binary:Version}), mesa-common-dev (= ${source:Version}) | libgl-dev
+Depends: libosmesa6 (= ${binary:Version}), mesa-common-dev (= ${binary:Version}) | libgl-dev
 Conflicts: xlibosmesa-dev, libosmesa4-dev, libosmesa-dev
 Replaces: xlibosmesa-dev, libosmesa-dev, libgl1-mesa-swx11-dev (<< 6.5.2), mesa-common-dev (<< 6.5.2)
 Provides: xlibosmesa-dev, libosmesa-dev
@@ -329,7 +331,7 @@ Description: A free implementation of the OpenGL API -- runtime
 Package: libglw1-mesa-dev
 Section: libdevel
 Architecture: any
-Depends: libglw1-mesa (= ${binary:Version}), libc6-dev, libx11-dev, libxext6, mesa-common-dev (= ${source:Version})
+Depends: libglw1-mesa (= ${binary:Version}), libc6-dev, libx11-dev, libxext6, mesa-common-dev (= ${binary:Version})
 Provides: mesag3-widgets, mesag-widgets-dev, libglw-dev
 Conflicts: libglw-dev, libgl1-mesa-swx11-dev (<< 6.5.2-4)
 Replaces: libglw-dev
