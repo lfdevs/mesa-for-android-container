@@ -65,7 +65,7 @@ else
 	DIRECT_RENDERING = --enable-driglx-direct
   ifeq ($(DEB_HOST_ARCH), lpia)
 	DRI_DRIVERS += i915 i965
-  else
+  else ifneq ($(DEB_HOST_ARCH), s390)
 	DRI_DRIVERS += mach64 mga r128 r200 r300 radeon s3v savage tdfx trident
     ifeq ($(DEB_HOST_GNU_CPU), i486)
 	DRI_DRIVERS += i810 i915 i965 sis unichrome
@@ -129,6 +129,7 @@ confflags-swx11+glu = \
 	--disable-gl-osmesa \
 	--with-demos= \
 	--disable-glut \
+	--enable-motif \
 	CFLAGS="$(CFLAGS)"
 
 confflags-swx11+glu-static = \
@@ -137,6 +138,7 @@ confflags-swx11+glu-static = \
 	--enable-static \
 	--with-demos= \
 	--disable-glut \
+	--enable-motif \
 	CFLAGS="$(CFLAGS)"
 
 confflags-swx11+glu-i386-i686 = \
@@ -144,6 +146,7 @@ confflags-swx11+glu-i386-i686 = \
 	--disable-gl-osmesa \
 	--with-demos= \
 	--disable-glut \
+	--enable-motif \
 	--libdir=/usr/lib/i686/cmov \
 	CFLAGS="$(CFLAGS) -march=i686"
 

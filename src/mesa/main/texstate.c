@@ -429,7 +429,7 @@ texture_override(GLcontext *ctx,
       }
       if (texObj->_Complete) {
          texUnit->_ReallyEnabled = textureBit;
-         texUnit->_Current = texObj;
+         _mesa_reference_texobj(&texUnit->_Current, texObj);
          update_texture_compare_function(ctx, texObj);
       }
    }
@@ -485,7 +485,6 @@ update_texture_state( GLcontext *ctx )
       GLbitfield enableBits;
       GLuint tex;
 
-      texUnit->_Current = NULL;
       texUnit->_ReallyEnabled = 0;
       texUnit->_GenFlags = 0;
 
@@ -802,6 +801,9 @@ _mesa_free_texture_data(GLcontext *ctx)
    /* unreference current textures */
    for (u = 0; u < MAX_TEXTURE_IMAGE_UNITS; u++) {
       struct gl_texture_unit *unit = ctx->Texture.Unit + u;
+      /* The _Current texture could account for another reference */
+      _mesa_reference_texobj(&ctx->Texture.Unit[u]._Current, NULL);
+
       for (tgt = 0; tgt < NUM_TEXTURE_TARGETS; tgt++) {
          _mesa_reference_texobj(&unit->CurrentTex[tgt], NULL);
       }

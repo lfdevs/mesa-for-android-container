@@ -1009,7 +1009,10 @@ StateVars = [
 	# close enough for now.
 	( "GL_CURRENT_PROGRAM", GLint,
 	  ["ctx->Shader.CurrentProgram ? ctx->Shader.CurrentProgram->Name : 0"],
-	  "", ["ARB_shader_objects"] )
+	  "", ["ARB_shader_objects"] ),
+
+	( "GL_VERTEX_ARRAY_BINDING_APPLE", GLint, ["ctx->Array.ArrayObj->Name"], "",
+	  ["APPLE_vertex_array_object"] ),
 ]
 
 

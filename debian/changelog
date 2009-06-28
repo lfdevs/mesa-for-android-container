@@ -1,3 +1,16 @@
+mesa (7.4.4-1) unstable; urgency=low
+
+  [ Julien Cristau ]
+  * New upstream release.
+    + fixes a crash in swrast glXWaitX (closes: #528708)
+  * Don't build hardware dri drivers on s390.
+  * Update 04_osmesa_version.diff, refresh 06_kfreebsd-ftbfs.diff.
+
+  [ Brice Goglin ]
+  * Enable motif in GLw, closes: #527483.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 28 Jun 2009 18:58:27 +0200
+
 mesa (7.4.1-1) unstable; urgency=low
 
   [ Julien Cristau ]
