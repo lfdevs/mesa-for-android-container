@@ -97,7 +97,7 @@ intel_texture_drawpixels(GLcontext * ctx,
    /* We don't have a way to generate fragments with stencil values which
     * will set the resulting stencil value.
     */
-   if (format == GL_STENCIL_INDEX)
+   if (format == GL_STENCIL_INDEX || format == GL_DEPTH_STENCIL)
       return GL_FALSE;
 
    /* Check that we can load in a texture this big. */
@@ -117,6 +117,14 @@ intel_texture_drawpixels(GLcontext * ctx,
       if (INTEL_DEBUG & DEBUG_FALLBACKS)
 	 fprintf(stderr,
 		 "glDrawPixels() fallback: format == GL_DEPTH_COMPONENT\n");
+      return GL_FALSE;
+   }
+
+   if (!ctx->Extensions.ARB_texture_non_power_of_two &&
+       (!is_power_of_two(width) || !is_power_of_two(height))) {
+      if (INTEL_DEBUG & DEBUG_FALLBACKS)
+	 fprintf(stderr,
+		 "glDrawPixels() fallback: NPOT texture\n");
       return GL_FALSE;
    }
 
@@ -183,7 +191,7 @@ intel_texture_drawpixels(GLcontext * ctx,
    _mesa_TexCoordPointer(2, GL_FLOAT, 2 * sizeof(GLfloat), &texcoords);
    _mesa_Enable(GL_VERTEX_ARRAY);
    _mesa_Enable(GL_TEXTURE_COORD_ARRAY);
-   CALL_DrawArrays(ctx->Exec, (GL_TRIANGLE_FAN, 0, 4));
+   _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
    intel_meta_restore_transform(intel);
 
@@ -233,7 +241,7 @@ intel_stencil_drawpixels(GLcontext * ctx,
    }
 
    /* We don't support stencil testing/ops here */
-   if (ctx->Stencil.Enabled)
+   if (ctx->Stencil._Enabled)
       return GL_FALSE;
 
    /* We use FBOs for our wrapping of the depthbuffer into a color
@@ -270,6 +278,14 @@ intel_stencil_drawpixels(GLcontext * ctx,
 	 fprintf(stderr, "glDrawPixels(STENCIL_INDEX) fallback: "
 		 "bitmap too large (%dx%d)\n",
 		 width, height);
+      return GL_FALSE;
+   }
+
+   if (!ctx->Extensions.ARB_texture_non_power_of_two &&
+       (!is_power_of_two(width) || !is_power_of_two(height))) {
+      if (INTEL_DEBUG & DEBUG_FALLBACKS)
+	 fprintf(stderr,
+		 "glDrawPixels(GL_STENCIL_INDEX) fallback: NPOT texture\n");
       return GL_FALSE;
    }
 
@@ -367,7 +383,7 @@ intel_stencil_drawpixels(GLcontext * ctx,
    _mesa_TexCoordPointer(2, GL_FLOAT, 2 * sizeof(GLfloat), &texcoords);
    _mesa_Enable(GL_VERTEX_ARRAY);
    _mesa_Enable(GL_TEXTURE_COORD_ARRAY);
-   CALL_DrawArrays(ctx->Exec, (GL_TRIANGLE_FAN, 0, 4));
+   _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
    intel_meta_restore_transform(intel);
 

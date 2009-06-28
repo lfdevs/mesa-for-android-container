@@ -33,6 +33,7 @@
 #include "api_arrayelt.h"
 #include "api_loopback.h"
 #include "config.h"
+#include "mfeatures.h"
 #include "attrib.h"
 #include "blend.h"
 #include "buffers.h"
@@ -85,7 +86,6 @@
 #endif
 
 #include "math/m_matrix.h"
-#include "math/m_xform.h"
 
 #include "glapi/dispatch.h"
 
@@ -320,6 +320,8 @@ typedef enum
    /* GL_ARB_draw_buffers */
    OPCODE_DRAW_BUFFERS_ARB,
    /* GL_ATI_fragment_shader */
+   OPCODE_TEX_BUMP_PARAMETER_ATI,
+   /* GL_ATI_fragment_shader */
    OPCODE_BIND_FRAGMENT_SHADER_ATI,
    OPCODE_SET_FRAGMENT_SHADER_CONSTANTS_ATI,
    /* OpenGL 2.0 */
@@ -370,7 +372,7 @@ typedef enum
  * contiguous nodes in memory.
  * Each node is the union of a variety of data types.
  */
-union node
+union gl_dlist_node
 {
    OpCode opcode;
    GLboolean b;
@@ -385,6 +387,9 @@ union node
    GLvoid *data;
    void *next;                  /* If prev node's opcode==OPCODE_CONTINUE */
 };
+
+
+typedef union gl_dlist_node Node;
 
 
 /**
@@ -414,13 +419,13 @@ void mesa_print_display_list(GLuint list);
  * Make an empty display list.  This is used by glGenLists() to
  * reserve display list IDs.
  */
-static struct mesa_display_list *
-make_list(GLuint list, GLuint count)
+static struct gl_display_list *
+make_list(GLuint name, GLuint count)
 {
-   struct mesa_display_list *dlist = CALLOC_STRUCT(mesa_display_list);
-   dlist->id = list;
-   dlist->node = (Node *) _mesa_malloc(sizeof(Node) * count);
-   dlist->node[0].opcode = OPCODE_END_OF_LIST;
+   struct gl_display_list *dlist = CALLOC_STRUCT(gl_display_list);
+   dlist->Name = name;
+   dlist->Head = (Node *) _mesa_malloc(sizeof(Node) * count);
+   dlist->Head[0].opcode = OPCODE_END_OF_LIST;
    return dlist;
 }
 
@@ -428,10 +433,10 @@ make_list(GLuint list, GLuint count)
 /**
  * Lookup function to just encapsulate casting.
  */
-static INLINE struct mesa_display_list *
+static INLINE struct gl_display_list *
 lookup_list(GLcontext *ctx, GLuint list)
 {
-   return (struct mesa_display_list *)
+   return (struct gl_display_list *)
       _mesa_HashLookup(ctx->Shared->DisplayList, list);
 }
 
@@ -442,12 +447,12 @@ lookup_list(GLcontext *ctx, GLuint list)
  * \param dlist - display list pointer
  */
 void
-_mesa_delete_list(GLcontext *ctx, struct mesa_display_list *dlist)
+_mesa_delete_list(GLcontext *ctx, struct gl_display_list *dlist)
 {
    Node *n, *block;
    GLboolean done;
 
-   n = block = dlist->node;
+   n = block = dlist->Head;
 
    done = block ? GL_FALSE : GL_TRUE;
    while (!done) {
@@ -596,7 +601,7 @@ _mesa_delete_list(GLcontext *ctx, struct mesa_display_list *dlist)
 static void
 destroy_list(GLcontext *ctx, GLuint list)
 {
-   struct mesa_display_list *dlist;
+   struct gl_display_list *dlist;
 
    if (list == 0)
       return;
@@ -702,7 +707,7 @@ unpack_image(GLuint dimensions, GLsizei width, GLsizei height, GLsizei depth,
 /**
  * Allocate space for a display list instruction.
  * \param opcode  the instruction opcode (OPCODE_* value)
- * \param size   instruction size in bytes, not counting opcode.
+ * \param bytes   instruction size in bytes, not counting opcode.
  * \return pointer to the usable data area (not including the internal
  *         opcode).
  */
@@ -970,7 +975,7 @@ _mesa_save_CallList(GLuint list)
    ctx->Driver.CurrentSavePrimitive = PRIM_UNKNOWN;
 
    if (ctx->ExecuteFlag) {
-      CALL_CallList(ctx->Exec, (list));
+      _mesa_CallList(list);
    }
 }
 
@@ -2521,12 +2526,12 @@ save_MultMatrixd(const GLdouble * m)
 
 
 static void GLAPIENTRY
-save_NewList(GLuint list, GLenum mode)
+save_NewList(GLuint name, GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
    /* It's an error to call this function while building a display list */
    _mesa_error(ctx, GL_INVALID_OPERATION, "glNewList");
-   (void) list;
+   (void) name;
    (void) mode;
 }
 
@@ -4800,6 +4805,36 @@ save_DrawBuffersARB(GLsizei count, const GLenum * buffers)
    }
 }
 
+static void GLAPIENTRY
+save_TexBumpParameterfvATI(GLenum pname, const GLfloat *param)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   Node *n;
+
+   n = ALLOC_INSTRUCTION(ctx, OPCODE_TEX_BUMP_PARAMETER_ATI, 5);
+   if (n) {
+      n[1].ui = pname;
+      n[2].f = param[0];
+      n[3].f = param[1];
+      n[4].f = param[2];
+      n[5].f = param[3];
+   }
+   if (ctx->ExecuteFlag) {
+      CALL_TexBumpParameterfvATI(ctx->Exec, (pname, param));
+   }
+}
+
+static void GLAPIENTRY
+save_TexBumpParameterivATI(GLenum pname, const GLint *param)
+{
+   GLfloat p[4];
+   p[0] = INT_TO_FLOAT(param[0]);
+   p[1] = INT_TO_FLOAT(param[1]);
+   p[2] = INT_TO_FLOAT(param[2]);
+   p[3] = INT_TO_FLOAT(param[3]);
+   save_TexBumpParameterfvATI(pname, p);
+}
+
 #if FEATURE_ATI_fragment_shader
 static void GLAPIENTRY
 save_BindFragmentShaderATI(GLuint id)
@@ -4939,7 +4974,7 @@ save_Attr1fARB(GLenum attr, GLfloat x)
       n[2].f = x;
    }
 
-   ASSERT(attr < MAX_VERTEX_ATTRIBS);
+   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 1;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, 0, 0, 1);
 
@@ -4961,7 +4996,7 @@ save_Attr2fARB(GLenum attr, GLfloat x, GLfloat y)
       n[3].f = y;
    }
 
-   ASSERT(attr < MAX_VERTEX_ATTRIBS);
+   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 2;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, y, 0, 1);
 
@@ -4984,7 +5019,7 @@ save_Attr3fARB(GLenum attr, GLfloat x, GLfloat y, GLfloat z)
       n[4].f = z;
    }
 
-   ASSERT(attr < MAX_VERTEX_ATTRIBS);
+   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 3;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, y, z, 1);
 
@@ -5008,7 +5043,7 @@ save_Attr4fARB(GLenum attr, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
       n[5].f = w;
    }
 
-   ASSERT(attr < MAX_VERTEX_ATTRIBS);
+   ASSERT(attr < MAX_VERTEX_GENERIC_ATTRIBS);
    ctx->ListState.ActiveAttribSize[attr] = 4;
    ASSIGN_4V(ctx->ListState.CurrentAttrib[attr], x, y, z, w);
 
@@ -5471,7 +5506,7 @@ index_error(void)
 static void GLAPIENTRY
 save_VertexAttrib1fNV(GLuint index, GLfloat x)
 {
-   if (index < MAX_VERTEX_PROGRAM_ATTRIBS)
+   if (index < MAX_NV_VERTEX_PROGRAM_INPUTS)
       save_Attr1fNV(index, x);
    else
       index_error();
@@ -5480,7 +5515,7 @@ save_VertexAttrib1fNV(GLuint index, GLfloat x)
 static void GLAPIENTRY
 save_VertexAttrib1fvNV(GLuint index, const GLfloat * v)
 {
-   if (index < MAX_VERTEX_PROGRAM_ATTRIBS)
+   if (index < MAX_NV_VERTEX_PROGRAM_INPUTS)
       save_Attr1fNV(index, v[0]);
    else
       index_error();
@@ -5489,7 +5524,7 @@ save_VertexAttrib1fvNV(GLuint index, const GLfloat * v)
 static void GLAPIENTRY
 save_VertexAttrib2fNV(GLuint index, GLfloat x, GLfloat y)
 {
-   if (index < MAX_VERTEX_PROGRAM_ATTRIBS)
+   if (index < MAX_NV_VERTEX_PROGRAM_INPUTS)
       save_Attr2fNV(index, x, y);
    else
       index_error();
@@ -5498,7 +5533,7 @@ save_VertexAttrib2fNV(GLuint index, GLfloat x, GLfloat y)
 static void GLAPIENTRY
 save_VertexAttrib2fvNV(GLuint index, const GLfloat * v)
 {
-   if (index < MAX_VERTEX_PROGRAM_ATTRIBS)
+   if (index < MAX_NV_VERTEX_PROGRAM_INPUTS)
       save_Attr2fNV(index, v[0], v[1]);
    else
       index_error();
@@ -5507,7 +5542,7 @@ save_VertexAttrib2fvNV(GLuint index, const GLfloat * v)
 static void GLAPIENTRY
 save_VertexAttrib3fNV(GLuint index, GLfloat x, GLfloat y, GLfloat z)
 {
-   if (index < MAX_VERTEX_PROGRAM_ATTRIBS)
+   if (index < MAX_NV_VERTEX_PROGRAM_INPUTS)
       save_Attr3fNV(index, x, y, z);
    else
       index_error();
@@ -5516,7 +5551,7 @@ save_VertexAttrib3fNV(GLuint index, GLfloat x, GLfloat y, GLfloat z)
 static void GLAPIENTRY
 save_VertexAttrib3fvNV(GLuint index, const GLfloat * v)
 {
-   if (index < MAX_VERTEX_PROGRAM_ATTRIBS)
+   if (index < MAX_NV_VERTEX_PROGRAM_INPUTS)
       save_Attr3fNV(index, v[0], v[1], v[2]);
    else
       index_error();
@@ -5526,7 +5561,7 @@ static void GLAPIENTRY
 save_VertexAttrib4fNV(GLuint index, GLfloat x, GLfloat y,
                       GLfloat z, GLfloat w)
 {
-   if (index < MAX_VERTEX_PROGRAM_ATTRIBS)
+   if (index < MAX_NV_VERTEX_PROGRAM_INPUTS)
       save_Attr4fNV(index, x, y, z, w);
    else
       index_error();
@@ -5535,7 +5570,7 @@ save_VertexAttrib4fNV(GLuint index, GLfloat x, GLfloat y,
 static void GLAPIENTRY
 save_VertexAttrib4fvNV(GLuint index, const GLfloat * v)
 {
-   if (index < MAX_VERTEX_PROGRAM_ATTRIBS)
+   if (index < MAX_NV_VERTEX_PROGRAM_INPUTS)
       save_Attr4fNV(index, v[0], v[1], v[2], v[3]);
    else
       index_error();
@@ -5547,7 +5582,7 @@ save_VertexAttrib4fvNV(GLuint index, const GLfloat * v)
 static void GLAPIENTRY
 save_VertexAttrib1fARB(GLuint index, GLfloat x)
 {
-   if (index < MAX_VERTEX_ATTRIBS)
+   if (index < MAX_VERTEX_GENERIC_ATTRIBS)
       save_Attr1fARB(index, x);
    else
       index_error();
@@ -5556,7 +5591,7 @@ save_VertexAttrib1fARB(GLuint index, GLfloat x)
 static void GLAPIENTRY
 save_VertexAttrib1fvARB(GLuint index, const GLfloat * v)
 {
-   if (index < MAX_VERTEX_ATTRIBS)
+   if (index < MAX_VERTEX_GENERIC_ATTRIBS)
       save_Attr1fARB(index, v[0]);
    else
       index_error();
@@ -5565,7 +5600,7 @@ save_VertexAttrib1fvARB(GLuint index, const GLfloat * v)
 static void GLAPIENTRY
 save_VertexAttrib2fARB(GLuint index, GLfloat x, GLfloat y)
 {
-   if (index < MAX_VERTEX_ATTRIBS)
+   if (index < MAX_VERTEX_GENERIC_ATTRIBS)
       save_Attr2fARB(index, x, y);
    else
       index_error();
@@ -5574,7 +5609,7 @@ save_VertexAttrib2fARB(GLuint index, GLfloat x, GLfloat y)
 static void GLAPIENTRY
 save_VertexAttrib2fvARB(GLuint index, const GLfloat * v)
 {
-   if (index < MAX_VERTEX_ATTRIBS)
+   if (index < MAX_VERTEX_GENERIC_ATTRIBS)
       save_Attr2fARB(index, v[0], v[1]);
    else
       index_error();
@@ -5583,7 +5618,7 @@ save_VertexAttrib2fvARB(GLuint index, const GLfloat * v)
 static void GLAPIENTRY
 save_VertexAttrib3fARB(GLuint index, GLfloat x, GLfloat y, GLfloat z)
 {
-   if (index < MAX_VERTEX_ATTRIBS)
+   if (index < MAX_VERTEX_GENERIC_ATTRIBS)
       save_Attr3fARB(index, x, y, z);
    else
       index_error();
@@ -5592,7 +5627,7 @@ save_VertexAttrib3fARB(GLuint index, GLfloat x, GLfloat y, GLfloat z)
 static void GLAPIENTRY
 save_VertexAttrib3fvARB(GLuint index, const GLfloat * v)
 {
-   if (index < MAX_VERTEX_ATTRIBS)
+   if (index < MAX_VERTEX_GENERIC_ATTRIBS)
       save_Attr3fARB(index, v[0], v[1], v[2]);
    else
       index_error();
@@ -5602,7 +5637,7 @@ static void GLAPIENTRY
 save_VertexAttrib4fARB(GLuint index, GLfloat x, GLfloat y, GLfloat z,
                        GLfloat w)
 {
-   if (index < MAX_VERTEX_ATTRIBS)
+   if (index < MAX_VERTEX_GENERIC_ATTRIBS)
       save_Attr4fARB(index, x, y, z, w);
    else
       index_error();
@@ -5611,7 +5646,7 @@ save_VertexAttrib4fARB(GLuint index, GLfloat x, GLfloat y, GLfloat z,
 static void GLAPIENTRY
 save_VertexAttrib4fvARB(GLuint index, const GLfloat * v)
 {
-   if (index < MAX_VERTEX_ATTRIBS)
+   if (index < MAX_VERTEX_GENERIC_ATTRIBS)
       save_Attr4fARB(index, v[0], v[1], v[2], v[3]);
    else
       index_error();
@@ -5731,7 +5766,7 @@ islist(GLcontext *ctx, GLuint list)
 static void
 execute_list(GLcontext *ctx, GLuint list)
 {
-   struct mesa_display_list *dlist;
+   struct gl_display_list *dlist;
    Node *n;
    GLboolean done;
 
@@ -5752,7 +5787,7 @@ execute_list(GLcontext *ctx, GLuint list)
    if (ctx->Driver.BeginCallList)
       ctx->Driver.BeginCallList(ctx, dlist);
 
-   n = dlist->node;
+   n = dlist->Head;
 
    done = GL_FALSE;
    while (!done) {
@@ -6502,6 +6537,16 @@ execute_list(GLcontext *ctx, GLuint list)
                                                 n[9].i, n[10].e));
 	    break;
 #endif
+         case OPCODE_TEX_BUMP_PARAMETER_ATI:
+            {
+               GLfloat values[4];
+               GLuint i, pname = n[1].ui;
+
+               for (i = 0; i < 4; i++)
+                  values[i] = n[1 + i].f;
+               CALL_TexBumpParameterfvATI(ctx->Exec, (pname, values));
+            }
+            break;
 #if FEATURE_ATI_fragment_shader
          case OPCODE_BIND_FRAGMENT_SHADER_ATI:
             CALL_BindFragmentShaderATI(ctx->Exec, (n[1].i));
@@ -6723,7 +6768,7 @@ _mesa_GenLists(GLsizei range)
  * Begin a new display list.
  */
 void GLAPIENTRY
-_mesa_NewList(GLuint list, GLenum mode)
+_mesa_NewList(GLuint name, GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
    GLint i;
@@ -6732,10 +6777,10 @@ _mesa_NewList(GLuint list, GLenum mode)
    ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glNewList %u %s\n", list,
+      _mesa_debug(ctx, "glNewList %u %s\n", name,
                   _mesa_lookup_enum_by_nr(mode));
 
-   if (list == 0) {
+   if (name == 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glNewList");
       return;
    }
@@ -6745,7 +6790,7 @@ _mesa_NewList(GLuint list, GLenum mode)
       return;
    }
 
-   if (ctx->ListState.CurrentListPtr) {
+   if (ctx->ListState.CurrentList) {
       /* already compiling a display list */
       _mesa_error(ctx, GL_INVALID_OPERATION, "glNewList");
       return;
@@ -6755,10 +6800,8 @@ _mesa_NewList(GLuint list, GLenum mode)
    ctx->ExecuteFlag = (mode == GL_COMPILE_AND_EXECUTE);
 
    /* Allocate new display list */
-   ctx->ListState.CurrentListNum = list;
-   ctx->ListState.CurrentList = make_list(list, BLOCK_SIZE);
-   ctx->ListState.CurrentBlock = ctx->ListState.CurrentList->node;
-   ctx->ListState.CurrentListPtr = ctx->ListState.CurrentBlock;
+   ctx->ListState.CurrentList = make_list(name, BLOCK_SIZE);
+   ctx->ListState.CurrentBlock = ctx->ListState.CurrentList->Head;
    ctx->ListState.CurrentPos = 0;
 
    /* Reset acumulated list state:
@@ -6770,7 +6813,7 @@ _mesa_NewList(GLuint list, GLenum mode)
       ctx->ListState.ActiveMaterialSize[i] = 0;
 
    ctx->Driver.CurrentSavePrimitive = PRIM_UNKNOWN;
-   ctx->Driver.NewList(ctx, list, mode);
+   ctx->Driver.NewList(ctx, name, mode);
 
    ctx->CurrentDispatch = ctx->Save;
    _glapi_set_dispatch(ctx->CurrentDispatch);
@@ -6791,7 +6834,7 @@ _mesa_EndList(void)
       _mesa_debug(ctx, "glEndList\n");
 
    /* Check that a list is under construction */
-   if (!ctx->ListState.CurrentListPtr) {
+   if (!ctx->ListState.CurrentList) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "glEndList");
       return;
    }
@@ -6804,18 +6847,18 @@ _mesa_EndList(void)
    (void) ALLOC_INSTRUCTION(ctx, OPCODE_END_OF_LIST, 0);
 
    /* Destroy old list, if any */
-   destroy_list(ctx, ctx->ListState.CurrentListNum);
-   /* Install the list */
-   _mesa_HashInsert(ctx->Shared->DisplayList, ctx->ListState.CurrentListNum,
+   destroy_list(ctx, ctx->ListState.CurrentList->Name);
+
+   /* Install the new list */
+   _mesa_HashInsert(ctx->Shared->DisplayList,
+                    ctx->ListState.CurrentList->Name,
                     ctx->ListState.CurrentList);
 
 
    if (MESA_VERBOSE & VERBOSE_DISPLAY_LIST)
-      mesa_print_display_list(ctx->ListState.CurrentListNum);
+      mesa_print_display_list(ctx->ListState.CurrentList->Name);
 
    ctx->ListState.CurrentList = NULL;
-   ctx->ListState.CurrentListNum = 0;
-   ctx->ListState.CurrentListPtr = NULL;
    ctx->ExecuteFlag = GL_TRUE;
    ctx->CompileFlag = GL_FALSE;
 
@@ -8042,6 +8085,10 @@ _mesa_init_dlist_table(struct _glapi_table *table)
    SET_VertexAttribPointerNV(table, _mesa_VertexAttribPointerNV);
 #endif
 
+   /* 244. GL_ATI_envmap_bumpmap */
+   SET_TexBumpParameterivATI(table, save_TexBumpParameterivATI);
+   SET_TexBumpParameterfvATI(table, save_TexBumpParameterfvATI);
+
    /* 245. GL_ATI_fragment_shader */
 #if FEATURE_ATI_fragment_shader
    SET_BindFragmentShaderATI(table, save_BindFragmentShaderATI);
@@ -8209,7 +8256,7 @@ enum_string(GLenum k)
 static void GLAPIENTRY
 print_list(GLcontext *ctx, GLuint list)
 {
-   struct mesa_display_list *dlist;
+   struct gl_display_list *dlist;
    Node *n;
    GLboolean done;
 
@@ -8222,7 +8269,7 @@ print_list(GLcontext *ctx, GLuint list)
    if (!dlist)
       return;
 
-   n = dlist->node;
+   n = dlist->Head;
 
    _mesa_printf("START-LIST %u, address %p\n", list, (void *) n);
 
@@ -8584,9 +8631,7 @@ _mesa_init_display_list(GLcontext *ctx)
    ctx->ListState.CallDepth = 0;
    ctx->ExecuteFlag = GL_TRUE;
    ctx->CompileFlag = GL_FALSE;
-   ctx->ListState.CurrentListPtr = NULL;
    ctx->ListState.CurrentBlock = NULL;
-   ctx->ListState.CurrentListNum = 0;
    ctx->ListState.CurrentPos = 0;
 
    /* Display List group */

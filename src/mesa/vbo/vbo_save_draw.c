@@ -46,36 +46,55 @@ static void _playback_copy_to_current( GLcontext *ctx,
 				       const struct vbo_save_vertex_list *node )
 {
    struct vbo_context *vbo = vbo_context(ctx);
-   GLfloat vertex[VBO_ATTRIB_MAX * 4], *data = vertex;
+   GLfloat vertex[VBO_ATTRIB_MAX * 4];
+   GLfloat *data;
    GLuint i, offset;
 
-   if (node->count)
-      offset = (node->buffer_offset + 
-		(node->count-1) * node->vertex_size * sizeof(GLfloat));
-   else
-      offset = node->buffer_offset;
+   if (node->current_size == 0)
+      return;
 
-   ctx->Driver.GetBufferSubData( ctx, 0, offset, 
-				 node->vertex_size * sizeof(GLfloat), 
-				 data, node->vertex_store->bufferobj );
+   if (node->current_data) {
+      data = node->current_data;
+   }
+   else {
+      data = vertex;
 
-   data += node->attrsz[0]; /* skip vertex position */
+      if (node->count)
+         offset = (node->buffer_offset + 
+                   (node->count-1) * node->vertex_size * sizeof(GLfloat));
+      else
+         offset = node->buffer_offset;
+
+      ctx->Driver.GetBufferSubData( ctx, 0, offset, 
+                                    node->vertex_size * sizeof(GLfloat), 
+                                    data, node->vertex_store->bufferobj );
+
+      data += node->attrsz[0]; /* skip vertex position */
+   }
 
    for (i = VBO_ATTRIB_POS+1 ; i < VBO_ATTRIB_MAX ; i++) {
       if (node->attrsz[i]) {
 	 GLfloat *current = (GLfloat *)vbo->currval[i].Ptr;
+         GLfloat tmp[4];
 
-	 COPY_CLEAN_4V(current, 
-		       node->attrsz[i], 
-		       data);
+         COPY_CLEAN_4V(tmp, 
+                       node->attrsz[i], 
+                       data);
+         
+         if (memcmp(current, tmp, 4 * sizeof(GLfloat)) != 0)
+         {
+            memcpy(current, tmp, 4 * sizeof(GLfloat));
 
-	 vbo->currval[i].Size = node->attrsz[i];
+            vbo->currval[i].Size = node->attrsz[i];
+
+            if (i >= VBO_ATTRIB_FIRST_MATERIAL &&
+                i <= VBO_ATTRIB_LAST_MATERIAL)
+               ctx->NewState |= _NEW_LIGHT;
+
+            ctx->NewState |= _NEW_CURRENT_ATTRIB;
+         }
 
 	 data += node->attrsz[i];
-
-	 if (i >= VBO_ATTRIB_FIRST_MATERIAL &&
-	     i <= VBO_ATTRIB_LAST_MATERIAL)
-	    ctx->NewState |= _NEW_LIGHT;
       }
    }
 
@@ -107,10 +126,11 @@ static void vbo_bind_vertex_list( GLcontext *ctx,
    struct vbo_context *vbo = vbo_context(ctx);
    struct vbo_save_context *save = &vbo->save;
    struct gl_client_array *arrays = save->arrays;
-   GLuint data = node->buffer_offset;
+   GLuint buffer_offset = node->buffer_offset;
    const GLuint *map;
    GLuint attr;
    GLubyte node_attrsz[VBO_ATTRIB_MAX];  /* copy of node->attrsz[] */
+   GLbitfield varying_inputs = 0x0;
 
    memcpy(node_attrsz, node->attrsz, sizeof(node->attrsz));
 
@@ -161,11 +181,12 @@ static void vbo_bind_vertex_list( GLcontext *ctx,
          /* override the default array set above */
          save->inputs[attr] = &arrays[attr];
 
-	 arrays[attr].Ptr = (const GLubyte *) data;
+	 arrays[attr].Ptr = (const GLubyte *) NULL + buffer_offset;
 	 arrays[attr].Size = node->attrsz[src];
 	 arrays[attr].StrideB = node->vertex_size * sizeof(GLfloat);
 	 arrays[attr].Stride = node->vertex_size * sizeof(GLfloat);
 	 arrays[attr].Type = GL_FLOAT;
+         arrays[attr].Format = GL_RGBA;
 	 arrays[attr].Enabled = 1;
          _mesa_reference_buffer_object(ctx,
                                        &arrays[attr].BufferObj,
@@ -174,9 +195,12 @@ static void vbo_bind_vertex_list( GLcontext *ctx,
 	 
 	 assert(arrays[attr].BufferObj->Name);
 
-	 data += node->attrsz[src] * sizeof(GLfloat);
+	 buffer_offset += node->attrsz[src] * sizeof(GLfloat);
+         varying_inputs |= 1<<attr;
       }
    }
+
+   _mesa_set_varying_vp_inputs( ctx, varying_inputs );
 }
 
 static void vbo_save_loopback_vertex_list( GLcontext *ctx,
@@ -244,6 +268,11 @@ void vbo_save_playback_vertex_list( GLcontext *ctx, void *data )
       }
 
       vbo_bind_vertex_list( ctx, node );
+
+      /* Again...
+       */
+      if (ctx->NewState)
+	 _mesa_update_state( ctx );
 
       vbo_context(ctx)->draw_prims( ctx, 
 				    save->inputs, 

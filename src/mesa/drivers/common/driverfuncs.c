@@ -34,6 +34,7 @@
 #include "main/renderbuffer.h"
 #include "main/texcompress.h"
 #include "main/texformat.h"
+#include "main/texgetimage.h"
 #include "main/teximage.h"
 #include "main/texobj.h"
 #include "main/texstore.h"
@@ -134,9 +135,6 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
    driver->BindProgram = NULL;
    driver->NewProgram = _mesa_new_program;
    driver->DeleteProgram = _mesa_delete_program;
-#if FEATURE_MESA_program_debug
-   driver->GetProgramRegister = _mesa_get_program_register;
-#endif /* FEATURE_MESA_program_debug */
 
    /* simple state commands */
    driver->AlphaFunc = NULL;
@@ -233,6 +231,7 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
    driver->BeginQuery = _mesa_begin_query;
    driver->EndQuery = _mesa_end_query;
    driver->WaitQuery = _mesa_wait_query;
+   driver->CheckQuery = _mesa_check_query;
 
    /* APPLE_vertex_array_object */
    driver->NewArrayObject = _mesa_new_array_object;
@@ -308,7 +307,7 @@ _mesa_init_driver_state(GLcontext *ctx)
    ctx->Driver.Enable(ctx, GL_LINE_SMOOTH, ctx->Line.SmoothFlag);
    ctx->Driver.Enable(ctx, GL_POLYGON_STIPPLE, ctx->Polygon.StippleFlag);
    ctx->Driver.Enable(ctx, GL_SCISSOR_TEST, ctx->Scissor.Enabled);
-   ctx->Driver.Enable(ctx, GL_STENCIL_TEST, ctx->Stencil.Enabled);
+   ctx->Driver.Enable(ctx, GL_STENCIL_TEST, ctx->Stencil._Enabled);
    ctx->Driver.Enable(ctx, GL_TEXTURE_1D, GL_FALSE);
    ctx->Driver.Enable(ctx, GL_TEXTURE_2D, GL_FALSE);
    ctx->Driver.Enable(ctx, GL_TEXTURE_RECTANGLE_NV, GL_FALSE);

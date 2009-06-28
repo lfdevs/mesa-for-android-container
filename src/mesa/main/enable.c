@@ -37,7 +37,6 @@
 #include "mtypes.h"
 #include "enums.h"
 #include "math/m_matrix.h"
-#include "math/m_xform.h"
 #include "api_arrayelt.h"
 
 
@@ -603,11 +602,6 @@ _mesa_set_enable(GLcontext *ctx, GLenum cap, GLboolean state)
          ctx->Texture.SharedPalette = state;
          break;
       case GL_STENCIL_TEST:
-         if (state && ctx->DrawBuffer->Visual.stencilBits == 0) {
-            _mesa_warning(ctx,
-                          "glEnable(GL_STENCIL_TEST) but no stencil buffer");
-            return;
-         }
          if (ctx->Stencil.Enabled == state)
             return;
          FLUSH_VERTICES(ctx, _NEW_STENCIL);
@@ -772,35 +766,30 @@ _mesa_set_enable(GLcontext *ctx, GLenum cap, GLboolean state)
 
       /* GL_ARB_multisample */
       case GL_MULTISAMPLE_ARB:
-         CHECK_EXTENSION(ARB_multisample, cap);
          if (ctx->Multisample.Enabled == state)
             return;
          FLUSH_VERTICES(ctx, _NEW_MULTISAMPLE);
          ctx->Multisample.Enabled = state;
          break;
       case GL_SAMPLE_ALPHA_TO_COVERAGE_ARB:
-         CHECK_EXTENSION(ARB_multisample, cap);
          if (ctx->Multisample.SampleAlphaToCoverage == state)
             return;
          FLUSH_VERTICES(ctx, _NEW_MULTISAMPLE);
          ctx->Multisample.SampleAlphaToCoverage = state;
          break;
       case GL_SAMPLE_ALPHA_TO_ONE_ARB:
-         CHECK_EXTENSION(ARB_multisample, cap);
          if (ctx->Multisample.SampleAlphaToOne == state)
             return;
          FLUSH_VERTICES(ctx, _NEW_MULTISAMPLE);
          ctx->Multisample.SampleAlphaToOne = state;
          break;
       case GL_SAMPLE_COVERAGE_ARB:
-         CHECK_EXTENSION(ARB_multisample, cap);
          if (ctx->Multisample.SampleCoverage == state)
             return;
          FLUSH_VERTICES(ctx, _NEW_MULTISAMPLE);
          ctx->Multisample.SampleCoverage = state;
          break;
       case GL_SAMPLE_COVERAGE_INVERT_ARB:
-         CHECK_EXTENSION(ARB_multisample, cap);
          if (ctx->Multisample.SampleCoverageInvert == state)
             return;
          FLUSH_VERTICES(ctx, _NEW_MULTISAMPLE);
@@ -953,16 +942,6 @@ _mesa_set_enable(GLcontext *ctx, GLenum cap, GLboolean state)
             return;
          FLUSH_VERTICES(ctx, _NEW_DEPTH);
          ctx->Depth.BoundsTest = state;
-         break;
-
-      /* GL_MESA_program_debug */
-      case GL_FRAGMENT_PROGRAM_CALLBACK_MESA:
-         CHECK_EXTENSION(MESA_program_debug, cap);
-         ctx->FragmentProgram.CallbackEnabled = state;
-         break;
-      case GL_VERTEX_PROGRAM_CALLBACK_MESA:
-         CHECK_EXTENSION(MESA_program_debug, cap);
-         ctx->VertexProgram.CallbackEnabled = state;
          break;
 
 #if FEATURE_ATI_fragment_shader
@@ -1284,19 +1263,14 @@ _mesa_IsEnabled( GLenum cap )
 
       /* GL_ARB_multisample */
       case GL_MULTISAMPLE_ARB:
-         CHECK_EXTENSION(ARB_multisample);
          return ctx->Multisample.Enabled;
       case GL_SAMPLE_ALPHA_TO_COVERAGE_ARB:
-         CHECK_EXTENSION(ARB_multisample);
          return ctx->Multisample.SampleAlphaToCoverage;
       case GL_SAMPLE_ALPHA_TO_ONE_ARB:
-         CHECK_EXTENSION(ARB_multisample);
          return ctx->Multisample.SampleAlphaToOne;
       case GL_SAMPLE_COVERAGE_ARB:
-         CHECK_EXTENSION(ARB_multisample);
          return ctx->Multisample.SampleCoverage;
       case GL_SAMPLE_COVERAGE_INVERT_ARB:
-         CHECK_EXTENSION(ARB_multisample);
          return ctx->Multisample.SampleCoverageInvert;
 
       /* GL_IBM_rasterpos_clip */
@@ -1412,13 +1386,6 @@ _mesa_IsEnabled( GLenum cap )
          CHECK_EXTENSION(EXT_depth_bounds_test);
          return ctx->Depth.BoundsTest;
 
-      /* GL_MESA_program_debug */
-      case GL_FRAGMENT_PROGRAM_CALLBACK_MESA:
-         CHECK_EXTENSION(MESA_program_debug);
-         return ctx->FragmentProgram.CallbackEnabled;
-      case GL_VERTEX_PROGRAM_CALLBACK_MESA:
-         CHECK_EXTENSION(MESA_program_debug);
-         return ctx->VertexProgram.CallbackEnabled;
 #if FEATURE_ATI_fragment_shader
       case GL_FRAGMENT_SHADER_ATI:
 	 CHECK_EXTENSION(ATI_fragment_shader);

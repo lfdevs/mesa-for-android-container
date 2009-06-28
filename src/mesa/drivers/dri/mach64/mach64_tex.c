@@ -99,7 +99,7 @@ static void mach64SetTexFilter( mach64TexObjPtr t,
    }
 }
 
-static void mach64SetTexBorderColor( mach64TexObjPtr t, GLubyte c[4] )
+static void mach64SetTexBorderColor( mach64TexObjPtr t, const GLfloat c[4] )
 {
 #if 0
    GLuint border = mach64PackColor( 4, c[0], c[1], c[2], c[3] );
@@ -131,7 +131,7 @@ mach64AllocTexObj( struct gl_texture_object *texObj )
 
    mach64SetTexWrap( t, texObj->WrapS, texObj->WrapT );
    mach64SetTexFilter( t, texObj->MinFilter, texObj->MagFilter );
-   mach64SetTexBorderColor( t, texObj->_BorderChan );
+   mach64SetTexBorderColor( t, texObj->BorderColor );
 
    return t;
 }
@@ -152,6 +152,7 @@ mach64ChooseTextureFormat( GLcontext *ctx, GLint internalFormat,
    case GL_ALPHA8:
    case GL_ALPHA12:
    case GL_ALPHA16:
+   case GL_COMPRESSED_ALPHA:
    case 2:
    case GL_LUMINANCE_ALPHA:
    case GL_LUMINANCE4_ALPHA4:
@@ -160,9 +161,11 @@ mach64ChooseTextureFormat( GLcontext *ctx, GLint internalFormat,
    case GL_LUMINANCE12_ALPHA4:
    case GL_LUMINANCE12_ALPHA12:
    case GL_LUMINANCE16_ALPHA16:
+   case GL_COMPRESSED_LUMINANCE_ALPHA:
    case 4:
    case GL_RGBA:
    case GL_RGBA2:
+   case GL_COMPRESSED_RGBA:
       if (mmesa->mach64Screen->cpp == 4)
          return &_mesa_texformat_argb8888;
       else
@@ -193,6 +196,7 @@ mach64ChooseTextureFormat( GLcontext *ctx, GLint internalFormat,
    case GL_RGB10:
    case GL_RGB12:
    case GL_RGB16:
+   case GL_COMPRESSED_RGB:
       if (mmesa->mach64Screen->cpp == 4)
          return &_mesa_texformat_argb8888;
       else
@@ -204,6 +208,7 @@ mach64ChooseTextureFormat( GLcontext *ctx, GLint internalFormat,
    case GL_LUMINANCE8:
    case GL_LUMINANCE12:
    case GL_LUMINANCE16:
+   case GL_COMPRESSED_LUMINANCE:
       if (mmesa->mach64Screen->cpp == 4)
          return &_mesa_texformat_argb8888; /* inefficient but accurate */
       else
@@ -214,6 +219,7 @@ mach64ChooseTextureFormat( GLcontext *ctx, GLint internalFormat,
    case GL_INTENSITY8:
    case GL_INTENSITY12:
    case GL_INTENSITY16:
+   case GL_COMPRESSED_INTENSITY:
       if (mmesa->mach64Screen->cpp == 4)
          return &_mesa_texformat_argb8888; /* inefficient but accurate */
       else
@@ -465,7 +471,7 @@ static void mach64DDTexParameter( GLcontext *ctx, GLenum target,
 
    case GL_TEXTURE_BORDER_COLOR:
       if ( t->base.bound ) FLUSH_BATCH( mmesa );
-      mach64SetTexBorderColor( t, tObj->_BorderChan );
+      mach64SetTexBorderColor( t, tObj->BorderColor );
       break;
 
    case GL_TEXTURE_BASE_LEVEL:

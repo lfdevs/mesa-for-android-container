@@ -85,7 +85,22 @@ bytes_per_pixel(GLenum datatype, GLuint comps)
                                 rowC[j][e], rowC[k][e], \
                                 rowD[j][e], rowD[k][e]); \
    } while(0)
-   
+
+#define FILTER_SUM_3D_SIGNED(Aj, Ak, Bj, Bk, Cj, Ck, Dj, Dk) \
+   (Aj + Ak \
+    + Bj + Bk \
+    + Cj + Ck \
+    + Dj + Dk \
+    + 4) / 8
+
+#define FILTER_3D_SIGNED(e) \
+   do { \
+      dst[i][e] = FILTER_SUM_3D_SIGNED(rowA[j][e], rowA[k][e], \
+                                       rowB[j][e], rowB[k][e], \
+                                       rowC[j][e], rowC[k][e], \
+                                       rowD[j][e], rowD[k][e]); \
+   } while(0)
+
 #define FILTER_F_3D(e) \
    do { \
       dst[i][e] = (rowA[j][e] + rowA[k][e] \
@@ -180,6 +195,53 @@ do_row(GLenum datatype, GLuint comps, GLint srcWidth,
       }
    }
 
+   else if (datatype == GL_BYTE && comps == 4) {
+      GLuint i, j, k;
+      const GLbyte(*rowA)[4] = (const GLbyte(*)[4]) srcRowA;
+      const GLbyte(*rowB)[4] = (const GLbyte(*)[4]) srcRowB;
+      GLbyte(*dst)[4] = (GLbyte(*)[4]) dstRow;
+      for (i = j = 0, k = k0; i < (GLuint) dstWidth;
+           i++, j += colStride, k += colStride) {
+         dst[i][0] = (rowA[j][0] + rowA[k][0] + rowB[j][0] + rowB[k][0]) / 4;
+         dst[i][1] = (rowA[j][1] + rowA[k][1] + rowB[j][1] + rowB[k][1]) / 4;
+         dst[i][2] = (rowA[j][2] + rowA[k][2] + rowB[j][2] + rowB[k][2]) / 4;
+         dst[i][3] = (rowA[j][3] + rowA[k][3] + rowB[j][3] + rowB[k][3]) / 4;
+      }
+   }
+   else if (datatype == GL_BYTE && comps == 3) {
+      GLuint i, j, k;
+      const GLbyte(*rowA)[3] = (const GLbyte(*)[3]) srcRowA;
+      const GLbyte(*rowB)[3] = (const GLbyte(*)[3]) srcRowB;
+      GLbyte(*dst)[3] = (GLbyte(*)[3]) dstRow;
+      for (i = j = 0, k = k0; i < (GLuint) dstWidth;
+           i++, j += colStride, k += colStride) {
+         dst[i][0] = (rowA[j][0] + rowA[k][0] + rowB[j][0] + rowB[k][0]) / 4;
+         dst[i][1] = (rowA[j][1] + rowA[k][1] + rowB[j][1] + rowB[k][1]) / 4;
+         dst[i][2] = (rowA[j][2] + rowA[k][2] + rowB[j][2] + rowB[k][2]) / 4;
+      }
+   }
+   else if (datatype == GL_BYTE && comps == 2) {
+      GLuint i, j, k;
+      const GLbyte(*rowA)[2] = (const GLbyte(*)[2]) srcRowA;
+      const GLbyte(*rowB)[2] = (const GLbyte(*)[2]) srcRowB;
+      GLbyte(*dst)[2] = (GLbyte(*)[2]) dstRow;
+      for (i = j = 0, k = k0; i < (GLuint) dstWidth;
+           i++, j += colStride, k += colStride) {
+         dst[i][0] = (rowA[j][0] + rowA[k][0] + rowB[j][0] + rowB[k][0]) / 4;
+         dst[i][1] = (rowA[j][1] + rowA[k][1] + rowB[j][1] + rowB[k][1]) / 4;
+      }
+   }
+   else if (datatype == GL_BYTE && comps == 1) {
+      GLuint i, j, k;
+      const GLbyte *rowA = (const GLbyte *) srcRowA;
+      const GLbyte *rowB = (const GLbyte *) srcRowB;
+      GLbyte *dst = (GLbyte *) dstRow;
+      for (i = j = 0, k = k0; i < (GLuint) dstWidth;
+           i++, j += colStride, k += colStride) {
+         dst[i] = (rowA[j] + rowA[k] + rowB[j] + rowB[k]) / 4;
+      }
+   }
+
    else if (datatype == GL_UNSIGNED_SHORT && comps == 4) {
       GLuint i, j, k;
       const GLushort(*rowA)[4] = (const GLushort(*)[4]) srcRowA;
@@ -226,7 +288,6 @@ do_row(GLenum datatype, GLuint comps, GLint srcWidth,
          dst[i] = (rowA[j] + rowA[k] + rowB[j] + rowB[k]) / 4;
       }
    }
-
    else if (datatype == GL_FLOAT && comps == 4) {
       GLuint i, j, k;
       const GLfloat(*rowA)[4] = (const GLfloat(*)[4]) srcRowA;
@@ -543,6 +604,44 @@ do_row_3D(GLenum datatype, GLuint comps, GLint srcWidth,
       for (i = j = 0, k = k0; i < (GLuint) dstWidth;
            i++, j += colStride, k += colStride) {
          FILTER_3D(0);
+      }
+   }
+   if ((datatype == GL_BYTE) && (comps == 4)) {
+      DECLARE_ROW_POINTERS(GLbyte, 4);
+
+      for (i = j = 0, k = k0; i < (GLuint) dstWidth;
+           i++, j += colStride, k += colStride) {
+         FILTER_3D_SIGNED(0);
+         FILTER_3D_SIGNED(1);
+         FILTER_3D_SIGNED(2);
+         FILTER_3D_SIGNED(3);
+      }
+   }
+   else if ((datatype == GL_BYTE) && (comps == 3)) {
+      DECLARE_ROW_POINTERS(GLbyte, 3);
+
+      for (i = j = 0, k = k0; i < (GLuint) dstWidth;
+           i++, j += colStride, k += colStride) {
+         FILTER_3D_SIGNED(0);
+         FILTER_3D_SIGNED(1);
+         FILTER_3D_SIGNED(2);
+      }
+   }
+   else if ((datatype == GL_BYTE) && (comps == 2)) {
+      DECLARE_ROW_POINTERS(GLbyte, 2);
+
+      for (i = j = 0, k = k0; i < (GLuint) dstWidth;
+           i++, j += colStride, k += colStride) {
+         FILTER_3D_SIGNED(0);
+         FILTER_3D_SIGNED(1);
+       }
+   }
+   else if ((datatype == GL_BYTE) && (comps == 1)) {
+      DECLARE_ROW_POINTERS(GLbyte, 1);
+
+      for (i = j = 0, k = k0; i < (GLuint) dstWidth;
+           i++, j += colStride, k += colStride) {
+         FILTER_3D_SIGNED(0);
       }
    }
    else if ((datatype == GL_UNSIGNED_SHORT) && (comps == 4)) {
@@ -1176,7 +1275,7 @@ make_1d_stack_mipmap(GLenum datatype, GLuint comps, GLint border,
 
 
 /**
- * \bugs
+ * \bug
  * There is quite a bit of refactoring that could be done with this function
  * and \c make_2d_mipmap.
  */
@@ -1271,6 +1370,9 @@ make_2d_stack_mipmap(GLenum datatype, GLuint comps, GLint border,
 
 /**
  * Down-sample a texture image to produce the next lower mipmap level.
+ * \param comps  components per texel (1, 2, 3 or 4)
+ * \param srcRowStride  stride between source rows, in texels
+ * \param dstRowStride  stride between destination rows, in texels
  */
 void
 _mesa_generate_mipmap_level(GLenum target,
@@ -1495,9 +1597,6 @@ _mesa_generate_mipmap(GLcontext *ctx, GLenum target,
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "generating mipmaps");
          return;
       }
-
-      if (dstImage->ImageOffsets)
-         _mesa_free(dstImage->ImageOffsets);
 
       /* Free old image data */
       if (dstImage->Data)

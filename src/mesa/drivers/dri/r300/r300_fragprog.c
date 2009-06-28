@@ -163,6 +163,19 @@ static GLboolean transform_TEX(
 		}
 	}
 
+	if (inst.SrcReg[0].File != PROGRAM_TEMPORARY && inst.SrcReg[0].File != PROGRAM_INPUT) {
+		int tmpreg = radeonFindFreeTemporary(t);
+		tgt = radeonAppendInstructions(t->Program, 1);
+		tgt->Opcode = OPCODE_MOV;
+		tgt->DstReg.File = PROGRAM_TEMPORARY;
+		tgt->DstReg.Index = tmpreg;
+		tgt->SrcReg[0] = inst.SrcReg[0];
+
+		reset_srcreg(&inst.SrcReg[0]);
+		inst.SrcReg[0].File = PROGRAM_TEMPORARY;
+		inst.SrcReg[0].Index = tmpreg;
+	}
+	
 	tgt = radeonAppendInstructions(t->Program, 1);
 	_mesa_copy_instructions(tgt, &inst, 1);
 
@@ -201,9 +214,9 @@ static GLboolean transform_TEX(
 		 *   r  < tex  <=>      -tex+r < 0
 		 *   r >= tex  <=> not (-tex+r < 0 */
 		if (comparefunc == GL_LESS || comparefunc == GL_GEQUAL)
-			tgt[1].SrcReg[2].NegateBase = tgt[0].SrcReg[2].NegateBase ^ NEGATE_XYZW;
+			tgt[1].SrcReg[2].Negate = tgt[0].SrcReg[2].Negate ^ NEGATE_XYZW;
 		else
-			tgt[1].SrcReg[0].NegateBase = tgt[0].SrcReg[0].NegateBase ^ NEGATE_XYZW;
+			tgt[1].SrcReg[0].Negate = tgt[0].SrcReg[0].Negate ^ NEGATE_XYZW;
 
 		tgt[2].Opcode = OPCODE_CMP;
 		tgt[2].DstReg = orig_inst->DstReg;
@@ -343,8 +356,8 @@ static void insert_WPOS_trailer(struct r300_fragment_program_compiler *compiler)
 
 static void nqssadce_init(struct nqssadce_state* s)
 {
-	s->Outputs[FRAG_RESULT_COLR].Sourced = WRITEMASK_XYZW;
-	s->Outputs[FRAG_RESULT_DEPR].Sourced = WRITEMASK_W;
+	s->Outputs[FRAG_RESULT_COLOR].Sourced = WRITEMASK_XYZW;
+	s->Outputs[FRAG_RESULT_DEPTH].Sourced = WRITEMASK_W;
 }
 
 

@@ -1,6 +1,6 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.3
+ * Version:  7.6
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (C) 2009  VMware, Inc.   All Rights Reserved.
@@ -55,8 +55,105 @@
 #include "texparam.h"
 #include "texstate.h"
 #include "varray.h"
+#include "viewport.h"
 #include "mtypes.h"
-#include "math/m_xform.h"
+
+
+/**
+ * glEnable()/glDisable() attribute group (GL_ENABLE_BIT).
+ */
+struct gl_enable_attrib
+{
+   GLboolean AlphaTest;
+   GLboolean AutoNormal;
+   GLboolean Blend;
+   GLbitfield ClipPlanes;
+   GLboolean ColorMaterial;
+   GLboolean ColorTable[COLORTABLE_MAX];
+   GLboolean Convolution1D;
+   GLboolean Convolution2D;
+   GLboolean Separable2D;
+   GLboolean CullFace;
+   GLboolean DepthTest;
+   GLboolean Dither;
+   GLboolean Fog;
+   GLboolean Histogram;
+   GLboolean Light[MAX_LIGHTS];
+   GLboolean Lighting;
+   GLboolean LineSmooth;
+   GLboolean LineStipple;
+   GLboolean IndexLogicOp;
+   GLboolean ColorLogicOp;
+
+   GLboolean Map1Color4;
+   GLboolean Map1Index;
+   GLboolean Map1Normal;
+   GLboolean Map1TextureCoord1;
+   GLboolean Map1TextureCoord2;
+   GLboolean Map1TextureCoord3;
+   GLboolean Map1TextureCoord4;
+   GLboolean Map1Vertex3;
+   GLboolean Map1Vertex4;
+   GLboolean Map1Attrib[16];  /* GL_NV_vertex_program */
+   GLboolean Map2Color4;
+   GLboolean Map2Index;
+   GLboolean Map2Normal;
+   GLboolean Map2TextureCoord1;
+   GLboolean Map2TextureCoord2;
+   GLboolean Map2TextureCoord3;
+   GLboolean Map2TextureCoord4;
+   GLboolean Map2Vertex3;
+   GLboolean Map2Vertex4;
+   GLboolean Map2Attrib[16];  /* GL_NV_vertex_program */
+
+   GLboolean MinMax;
+   GLboolean Normalize;
+   GLboolean PixelTexture;
+   GLboolean PointSmooth;
+   GLboolean PolygonOffsetPoint;
+   GLboolean PolygonOffsetLine;
+   GLboolean PolygonOffsetFill;
+   GLboolean PolygonSmooth;
+   GLboolean PolygonStipple;
+   GLboolean RescaleNormals;
+   GLboolean Scissor;
+   GLboolean Stencil;
+   GLboolean StencilTwoSide;          /* GL_EXT_stencil_two_side */
+   GLboolean MultisampleEnabled;      /* GL_ARB_multisample */
+   GLboolean SampleAlphaToCoverage;   /* GL_ARB_multisample */
+   GLboolean SampleAlphaToOne;        /* GL_ARB_multisample */
+   GLboolean SampleCoverage;          /* GL_ARB_multisample */
+   GLboolean SampleCoverageInvert;    /* GL_ARB_multisample */
+   GLboolean RasterPositionUnclipped; /* GL_IBM_rasterpos_clip */
+
+   GLbitfield Texture[MAX_TEXTURE_UNITS];
+   GLbitfield TexGen[MAX_TEXTURE_UNITS];
+
+   /* SGI_texture_color_table */
+   GLboolean TextureColorTable[MAX_TEXTURE_UNITS];
+
+   /* GL_ARB_vertex_program / GL_NV_vertex_program */
+   GLboolean VertexProgram;
+   GLboolean VertexProgramPointSize;
+   GLboolean VertexProgramTwoSide;
+
+   /* GL_ARB_point_sprite / GL_NV_point_sprite */
+   GLboolean PointSprite;
+   GLboolean FragmentShaderATI;
+};
+
+
+/**
+ * Node for the attribute stack.
+ */
+struct gl_attrib_node
+{
+   GLbitfield kind;
+   void *data;
+   struct gl_attrib_node *next;
+};
+
+
 
 /**
  * Special struct for saving/restoring texture state (GL_TEXTURE_BIT)
@@ -444,6 +541,7 @@ end:
 static void
 pop_enable_group(GLcontext *ctx, const struct gl_enable_attrib *enable)
 {
+   const GLuint curTexUnitSave = ctx->Texture.CurrentUnit;
    GLuint i;
 
 #define TEST_AND_UPDATE(VALUE, NEWVALUE, ENUM)		\
@@ -588,59 +686,51 @@ pop_enable_group(GLcontext *ctx, const struct gl_enable_attrib *enable)
 
    /* texture unit enables */
    for (i = 0; i < ctx->Const.MaxTextureUnits; i++) {
-      if (ctx->Texture.Unit[i].Enabled != enable->Texture[i]) {
-         ctx->Texture.Unit[i].Enabled = enable->Texture[i];
-         if (ctx->Driver.Enable) {
-            if (ctx->Driver.ActiveTexture) {
-               (*ctx->Driver.ActiveTexture)(ctx, i);
-            }
-            (*ctx->Driver.Enable)( ctx, GL_TEXTURE_1D,
-                             (GLboolean) (enable->Texture[i] & TEXTURE_1D_BIT) );
-            (*ctx->Driver.Enable)( ctx, GL_TEXTURE_2D,
-                             (GLboolean) (enable->Texture[i] & TEXTURE_2D_BIT) );
-            (*ctx->Driver.Enable)( ctx, GL_TEXTURE_3D,
-                             (GLboolean) (enable->Texture[i] & TEXTURE_3D_BIT) );
-            if (ctx->Extensions.ARB_texture_cube_map)
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_CUBE_MAP_ARB,
-                          (GLboolean) (enable->Texture[i] & TEXTURE_CUBE_BIT) );
-            if (ctx->Extensions.NV_texture_rectangle)
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_RECTANGLE_NV,
-                          (GLboolean) (enable->Texture[i] & TEXTURE_RECT_BIT) );
+      const GLbitfield enabled = enable->Texture[i];
+      const GLbitfield genEnabled = enable->TexGen[i];
+
+      if (ctx->Texture.Unit[i].Enabled != enabled) {
+         _mesa_ActiveTextureARB(GL_TEXTURE0 + i);
+
+         _mesa_set_enable(ctx, GL_TEXTURE_1D,
+                          (enabled & TEXTURE_1D_BIT) ? GL_TRUE : GL_FALSE);
+         _mesa_set_enable(ctx, GL_TEXTURE_2D,
+                          (enabled & TEXTURE_2D_BIT) ? GL_TRUE : GL_FALSE);
+         _mesa_set_enable(ctx, GL_TEXTURE_3D,
+                          (enabled & TEXTURE_3D_BIT) ? GL_TRUE : GL_FALSE);
+         if (ctx->Extensions.NV_texture_rectangle) {
+            _mesa_set_enable(ctx, GL_TEXTURE_RECTANGLE_ARB,
+                             (enabled & TEXTURE_RECT_BIT) ? GL_TRUE : GL_FALSE);
+         }
+         if (ctx->Extensions.ARB_texture_cube_map) {
+            _mesa_set_enable(ctx, GL_TEXTURE_CUBE_MAP,
+                             (enabled & TEXTURE_CUBE_BIT) ? GL_TRUE : GL_FALSE);
+         }
+         if (ctx->Extensions.MESA_texture_array) {
+            _mesa_set_enable(ctx, GL_TEXTURE_1D_ARRAY_EXT,
+                           (enabled & TEXTURE_1D_ARRAY_BIT) ? GL_TRUE : GL_FALSE);
+            _mesa_set_enable(ctx, GL_TEXTURE_2D_ARRAY_EXT,
+                           (enabled & TEXTURE_2D_ARRAY_BIT) ? GL_TRUE : GL_FALSE);
          }
       }
 
-      if (ctx->Texture.Unit[i].TexGenEnabled != enable->TexGen[i]) {
-         ctx->Texture.Unit[i].TexGenEnabled = enable->TexGen[i];
-         if (ctx->Driver.Enable) {
-            if (ctx->Driver.ActiveTexture) {
-               (*ctx->Driver.ActiveTexture)(ctx, i);
-            }
-            if (enable->TexGen[i] & S_BIT)
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_GEN_S, GL_TRUE);
-            else
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_GEN_S, GL_FALSE);
-            if (enable->TexGen[i] & T_BIT)
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_GEN_T, GL_TRUE);
-            else
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_GEN_T, GL_FALSE);
-            if (enable->TexGen[i] & R_BIT)
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_GEN_R, GL_TRUE);
-            else
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_GEN_R, GL_FALSE);
-            if (enable->TexGen[i] & Q_BIT)
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_GEN_Q, GL_TRUE);
-            else
-               (*ctx->Driver.Enable)( ctx, GL_TEXTURE_GEN_Q, GL_FALSE);
-         }
+      if (ctx->Texture.Unit[i].TexGenEnabled != genEnabled) {
+         _mesa_ActiveTextureARB(GL_TEXTURE0 + i);
+         _mesa_set_enable(ctx, GL_TEXTURE_GEN_S,
+                          (genEnabled & S_BIT) ? GL_TRUE : GL_FALSE);
+         _mesa_set_enable(ctx, GL_TEXTURE_GEN_T,
+                          (genEnabled & T_BIT) ? GL_TRUE : GL_FALSE);
+         _mesa_set_enable(ctx, GL_TEXTURE_GEN_R,
+                          (genEnabled & R_BIT) ? GL_TRUE : GL_FALSE);
+         _mesa_set_enable(ctx, GL_TEXTURE_GEN_Q,
+                          (genEnabled & Q_BIT) ? GL_TRUE : GL_FALSE);
       }
 
       /* GL_SGI_texture_color_table */
       ctx->Texture.Unit[i].ColorTableEnabled = enable->TextureColorTable[i];
    }
 
-   if (ctx->Driver.ActiveTexture) {
-      (*ctx->Driver.ActiveTexture)(ctx, ctx->Texture.CurrentUnit);
-   }
+   _mesa_ActiveTextureARB(GL_TEXTURE0 + curTexUnitSave);
 }
 
 
@@ -673,32 +763,39 @@ pop_texture_group(GLcontext *ctx, struct texture_state *texstate)
          _mesa_set_enable(ctx, GL_TEXTURE_RECTANGLE_NV,
                      (unit->Enabled & TEXTURE_RECT_BIT) ? GL_TRUE : GL_FALSE);
       }
+      if (ctx->Extensions.MESA_texture_array) {
+         _mesa_set_enable(ctx, GL_TEXTURE_1D_ARRAY_EXT,
+                 (unit->Enabled & TEXTURE_1D_ARRAY_BIT) ? GL_TRUE : GL_FALSE);
+         _mesa_set_enable(ctx, GL_TEXTURE_2D_ARRAY_EXT,
+                 (unit->Enabled & TEXTURE_2D_ARRAY_BIT) ? GL_TRUE : GL_FALSE);
+      }
+
       if (ctx->Extensions.SGI_texture_color_table) {
          _mesa_set_enable(ctx, GL_TEXTURE_COLOR_TABLE_SGI,
                           unit->ColorTableEnabled);
       }
       _mesa_TexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, unit->EnvMode);
       _mesa_TexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, unit->EnvColor);
-      _mesa_TexGeni(GL_S, GL_TEXTURE_GEN_MODE, unit->GenModeS);
-      _mesa_TexGeni(GL_T, GL_TEXTURE_GEN_MODE, unit->GenModeT);
-      _mesa_TexGeni(GL_R, GL_TEXTURE_GEN_MODE, unit->GenModeR);
-      _mesa_TexGeni(GL_Q, GL_TEXTURE_GEN_MODE, unit->GenModeQ);
-      _mesa_TexGenfv(GL_S, GL_OBJECT_PLANE, unit->ObjectPlaneS);
-      _mesa_TexGenfv(GL_T, GL_OBJECT_PLANE, unit->ObjectPlaneT);
-      _mesa_TexGenfv(GL_R, GL_OBJECT_PLANE, unit->ObjectPlaneR);
-      _mesa_TexGenfv(GL_Q, GL_OBJECT_PLANE, unit->ObjectPlaneQ);
+      _mesa_TexGeni(GL_S, GL_TEXTURE_GEN_MODE, unit->GenS.Mode);
+      _mesa_TexGeni(GL_T, GL_TEXTURE_GEN_MODE, unit->GenT.Mode);
+      _mesa_TexGeni(GL_R, GL_TEXTURE_GEN_MODE, unit->GenR.Mode);
+      _mesa_TexGeni(GL_Q, GL_TEXTURE_GEN_MODE, unit->GenQ.Mode);
+      _mesa_TexGenfv(GL_S, GL_OBJECT_PLANE, unit->GenS.ObjectPlane);
+      _mesa_TexGenfv(GL_T, GL_OBJECT_PLANE, unit->GenT.ObjectPlane);
+      _mesa_TexGenfv(GL_R, GL_OBJECT_PLANE, unit->GenR.ObjectPlane);
+      _mesa_TexGenfv(GL_Q, GL_OBJECT_PLANE, unit->GenQ.ObjectPlane);
       /* Eye plane done differently to avoid re-transformation */
       {
          struct gl_texture_unit *destUnit = &ctx->Texture.Unit[u];
-         COPY_4FV(destUnit->EyePlaneS, unit->EyePlaneS);
-         COPY_4FV(destUnit->EyePlaneT, unit->EyePlaneT);
-         COPY_4FV(destUnit->EyePlaneR, unit->EyePlaneR);
-         COPY_4FV(destUnit->EyePlaneQ, unit->EyePlaneQ);
+         COPY_4FV(destUnit->GenS.EyePlane, unit->GenS.EyePlane);
+         COPY_4FV(destUnit->GenT.EyePlane, unit->GenT.EyePlane);
+         COPY_4FV(destUnit->GenR.EyePlane, unit->GenR.EyePlane);
+         COPY_4FV(destUnit->GenQ.EyePlane, unit->GenQ.EyePlane);
          if (ctx->Driver.TexGen) {
-            ctx->Driver.TexGen(ctx, GL_S, GL_EYE_PLANE, unit->EyePlaneS);
-            ctx->Driver.TexGen(ctx, GL_T, GL_EYE_PLANE, unit->EyePlaneT);
-            ctx->Driver.TexGen(ctx, GL_R, GL_EYE_PLANE, unit->EyePlaneR);
-            ctx->Driver.TexGen(ctx, GL_Q, GL_EYE_PLANE, unit->EyePlaneQ);
+            ctx->Driver.TexGen(ctx, GL_S, GL_EYE_PLANE, unit->GenS.EyePlane);
+            ctx->Driver.TexGen(ctx, GL_T, GL_EYE_PLANE, unit->GenT.EyePlane);
+            ctx->Driver.TexGen(ctx, GL_R, GL_EYE_PLANE, unit->GenR.EyePlane);
+            ctx->Driver.TexGen(ctx, GL_Q, GL_EYE_PLANE, unit->GenQ.EyePlane);
          }
       }
       _mesa_set_enable(ctx, GL_TEXTURE_GEN_S,
@@ -800,15 +897,9 @@ pop_texture_group(GLcontext *ctx, struct texture_state *texstate)
             _mesa_TexParameterf(target, GL_TEXTURE_MAX_ANISOTROPY_EXT,
                                 obj->MaxAnisotropy);
          }
-         if (ctx->Extensions.SGIX_shadow) {
-            _mesa_TexParameteri(target, GL_TEXTURE_COMPARE_SGIX,
-                                obj->CompareFlag);
-            _mesa_TexParameteri(target, GL_TEXTURE_COMPARE_OPERATOR_SGIX,
-                                obj->CompareOperator);
-         }
-         if (ctx->Extensions.SGIX_shadow_ambient) {
-            _mesa_TexParameterf(target, GL_SHADOW_AMBIENT_SGIX,
-                                obj->ShadowAmbient);
+         if (ctx->Extensions.ARB_shadow_ambient) {
+            _mesa_TexParameterf(target, GL_TEXTURE_COMPARE_FAIL_VALUE_ARB,
+                                obj->CompareFailValue);
          }
       }
 
@@ -889,14 +980,13 @@ _mesa_PopAttrib(void)
                    * function, but legal for the later.
                    */
                   GLboolean multipleBuffers = GL_FALSE;
-                  if (ctx->Extensions.ARB_draw_buffers) {
-                     GLuint i;
-                     for (i = 1; i < ctx->Const.MaxDrawBuffers; i++) {
-                        if (color->DrawBuffer[i] != GL_NONE) {
-                           multipleBuffers = GL_TRUE;
-                           break;
-                        }
-                     }
+		  GLuint i;
+
+		  for (i = 1; i < ctx->Const.MaxDrawBuffers; i++) {
+		     if (color->DrawBuffer[i] != GL_NONE) {
+			multipleBuffers = GL_TRUE;
+			break;
+		     }
                   }
                   /* Call the API_level functions, not _mesa_drawbuffers()
                    * since we need to do error checking on the pop'd
@@ -992,9 +1082,8 @@ _mesa_PopAttrib(void)
                _mesa_Hint(GL_FOG_HINT, hint->Fog);
                _mesa_Hint(GL_CLIP_VOLUME_CLIPPING_HINT_EXT,
                           hint->ClipVolumeClipping);
-               if (ctx->Extensions.ARB_texture_compression)
-                  _mesa_Hint(GL_TEXTURE_COMPRESSION_HINT_ARB,
-                             hint->TextureCompression);
+	       _mesa_Hint(GL_TEXTURE_COMPRESSION_HINT_ARB,
+			  hint->TextureCompression);
             }
             break;
          case GL_LIGHTING_BIT:
@@ -1015,7 +1104,7 @@ _mesa_PopAttrib(void)
 		  _mesa_light(ctx, i, GL_DIFFUSE, l->Diffuse);
 		  _mesa_light(ctx, i, GL_SPECULAR, l->Specular );
 		  _mesa_light(ctx, i, GL_POSITION, l->EyePosition);
-		  _mesa_light(ctx, i, GL_SPOT_DIRECTION, l->EyeDirection);
+		  _mesa_light(ctx, i, GL_SPOT_DIRECTION, l->SpotDirection);
 		  _mesa_light(ctx, i, GL_SPOT_EXPONENT, &l->SpotExponent);
 		  _mesa_light(ctx, i, GL_SPOT_CUTOFF, &l->SpotCutoff);
 		  _mesa_light(ctx, i, GL_CONSTANT_ATTENUATION,

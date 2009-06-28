@@ -30,6 +30,9 @@
 #include "main/state.h"
 #include "main/api_validate.h"
 #include "main/api_noop.h"
+#include "main/varray.h"
+#include "main/bufferobj.h"
+#include "glapi/dispatch.h"
 
 #include "vbo_context.h"
 
@@ -92,35 +95,36 @@ static void bind_array_obj( GLcontext *ctx )
 {
    struct vbo_context *vbo = vbo_context(ctx);
    struct vbo_exec_context *exec = &vbo->exec;
+   struct gl_array_object *arrayObj = ctx->Array.ArrayObj;
    GLuint i;
 
    /* TODO: Fix the ArrayObj struct to keep legacy arrays in an array
     * rather than as individual named arrays.  Then this function can
     * go away.
     */
-   exec->array.legacy_array[VERT_ATTRIB_POS] = &ctx->Array.ArrayObj->Vertex;
+   exec->array.legacy_array[VERT_ATTRIB_POS] = &arrayObj->Vertex;
    exec->array.legacy_array[VERT_ATTRIB_WEIGHT] = &vbo->legacy_currval[VERT_ATTRIB_WEIGHT];
-   exec->array.legacy_array[VERT_ATTRIB_NORMAL] = &ctx->Array.ArrayObj->Normal;
-   exec->array.legacy_array[VERT_ATTRIB_COLOR0] = &ctx->Array.ArrayObj->Color;
-   exec->array.legacy_array[VERT_ATTRIB_COLOR1] = &ctx->Array.ArrayObj->SecondaryColor;
-   exec->array.legacy_array[VERT_ATTRIB_FOG] = &ctx->Array.ArrayObj->FogCoord;
-   exec->array.legacy_array[VERT_ATTRIB_COLOR_INDEX] = &ctx->Array.ArrayObj->Index;
-   if (ctx->Array.ArrayObj->PointSize.Enabled) {
+   exec->array.legacy_array[VERT_ATTRIB_NORMAL] = &arrayObj->Normal;
+   exec->array.legacy_array[VERT_ATTRIB_COLOR0] = &arrayObj->Color;
+   exec->array.legacy_array[VERT_ATTRIB_COLOR1] = &arrayObj->SecondaryColor;
+   exec->array.legacy_array[VERT_ATTRIB_FOG] = &arrayObj->FogCoord;
+   exec->array.legacy_array[VERT_ATTRIB_COLOR_INDEX] = &arrayObj->Index;
+   if (arrayObj->PointSize.Enabled) {
       /* this aliases COLOR_INDEX */
-      exec->array.legacy_array[VERT_ATTRIB_POINT_SIZE] = &ctx->Array.ArrayObj->PointSize;
+      exec->array.legacy_array[VERT_ATTRIB_POINT_SIZE] = &arrayObj->PointSize;
    }
-   exec->array.legacy_array[VERT_ATTRIB_EDGEFLAG] = &ctx->Array.ArrayObj->EdgeFlag;
+   exec->array.legacy_array[VERT_ATTRIB_EDGEFLAG] = &arrayObj->EdgeFlag;
 
-   for (i = 0; i < 8; i++)
-      exec->array.legacy_array[VERT_ATTRIB_TEX0 + i] = &ctx->Array.ArrayObj->TexCoord[i];
+   for (i = 0; i < MAX_TEXTURE_COORD_UNITS; i++)
+      exec->array.legacy_array[VERT_ATTRIB_TEX0 + i] = &arrayObj->TexCoord[i];
 
-   for (i = 0; i < MAX_VERTEX_ATTRIBS; i++) {
-      assert(i < Elements(ctx->Array.ArrayObj->VertexAttrib));
+   for (i = 0; i < MAX_VERTEX_GENERIC_ATTRIBS; i++) {
+      assert(i < Elements(arrayObj->VertexAttrib));
       assert(i < Elements(exec->array.generic_array));
-      exec->array.generic_array[i] = &ctx->Array.ArrayObj->VertexAttrib[i];
+      exec->array.generic_array[i] = &arrayObj->VertexAttrib[i];
    }
    
-   exec->array.array_obj = ctx->Array.ArrayObj->Name;
+   exec->array.array_obj = arrayObj->Name;
 }
 
 static void recalculate_input_bindings( GLcontext *ctx )
@@ -128,6 +132,7 @@ static void recalculate_input_bindings( GLcontext *ctx )
    struct vbo_context *vbo = vbo_context(ctx);
    struct vbo_exec_context *exec = &vbo->exec;
    const struct gl_client_array **inputs = &exec->array.inputs[0];
+   GLbitfield const_inputs = 0x0;
    GLuint i;
 
    exec->array.program_mode = get_program_mode(ctx);
@@ -142,19 +147,24 @@ static void recalculate_input_bindings( GLcontext *ctx )
       for (i = 0; i <= VERT_ATTRIB_TEX7; i++) {
 	 if (exec->array.legacy_array[i]->Enabled)
 	    inputs[i] = exec->array.legacy_array[i];
-	 else
+	 else {
 	    inputs[i] = &vbo->legacy_currval[i];
+            const_inputs |= 1 << i;
+         }
       }
 
       for (i = 0; i < MAT_ATTRIB_MAX; i++) {
 	 inputs[VERT_ATTRIB_GENERIC0 + i] = &vbo->mat_currval[i];
+         const_inputs |= 1 << (VERT_ATTRIB_GENERIC0 + i);
       }
 
       /* Could use just about anything, just to fill in the empty
        * slots:
        */
-      for (i = MAT_ATTRIB_MAX; i < VERT_ATTRIB_MAX - VERT_ATTRIB_GENERIC0; i++)
+      for (i = MAT_ATTRIB_MAX; i < VERT_ATTRIB_MAX - VERT_ATTRIB_GENERIC0; i++) {
 	 inputs[VERT_ATTRIB_GENERIC0 + i] = &vbo->generic_currval[i];
+         const_inputs |= 1 << (VERT_ATTRIB_GENERIC0 + i);
+      }
 
       break;
    case VP_NV:
@@ -167,15 +177,19 @@ static void recalculate_input_bindings( GLcontext *ctx )
 	    inputs[i] = exec->array.generic_array[i];
 	 else if (exec->array.legacy_array[i]->Enabled)
 	    inputs[i] = exec->array.legacy_array[i];
-	 else
+	 else {
 	    inputs[i] = &vbo->legacy_currval[i];
+            const_inputs |= 1 << i;
+         }
       }
 
       /* Could use just about anything, just to fill in the empty
        * slots:
        */
-      for (i = VERT_ATTRIB_GENERIC0; i < VERT_ATTRIB_MAX; i++)
+      for (i = VERT_ATTRIB_GENERIC0; i < VERT_ATTRIB_MAX; i++) {
 	 inputs[i] = &vbo->generic_currval[i - VERT_ATTRIB_GENERIC0];
+         const_inputs |= 1 << i;
+      }
 
       break;
    case VP_ARB:
@@ -190,25 +204,34 @@ static void recalculate_input_bindings( GLcontext *ctx )
 	 inputs[0] = exec->array.generic_array[0];
       else if (exec->array.legacy_array[0]->Enabled)
 	 inputs[0] = exec->array.legacy_array[0];
-      else
+      else {
 	 inputs[0] = &vbo->legacy_currval[0];
+         const_inputs |= 1 << 0;
+      }
 
 
       for (i = 1; i <= VERT_ATTRIB_TEX7; i++) {
 	 if (exec->array.legacy_array[i]->Enabled)
 	    inputs[i] = exec->array.legacy_array[i];
-	 else
+	 else {
 	    inputs[i] = &vbo->legacy_currval[i];
+            const_inputs |= 1 << i;
+         }
       }
 
-      for (i = 0; i < 16; i++) {
+      for (i = 0; i < MAX_VERTEX_GENERIC_ATTRIBS; i++) {
 	 if (exec->array.generic_array[i]->Enabled)
 	    inputs[VERT_ATTRIB_GENERIC0 + i] = exec->array.generic_array[i];
-	 else
+	 else {
 	    inputs[VERT_ATTRIB_GENERIC0 + i] = &vbo->generic_currval[i];
+            const_inputs |= 1 << (VERT_ATTRIB_GENERIC0 + i);
+         }
+
       }
       break;
    }
+
+   _mesa_set_varying_vp_inputs( ctx, ~const_inputs );
 }
 
 static void bind_arrays( GLcontext *ctx )
@@ -258,6 +281,11 @@ vbo_exec_DrawArrays(GLenum mode, GLint start, GLsizei count)
 
    bind_arrays( ctx );
 
+   /* Again...
+    */
+   if (ctx->NewState)
+      _mesa_update_state( ctx );
+
    prim[0].begin = 1;
    prim[0].end = 1;
    prim[0].weak = 0;
@@ -268,6 +296,47 @@ vbo_exec_DrawArrays(GLenum mode, GLint start, GLsizei count)
    prim[0].indexed = 0;
 
    vbo->draw_prims( ctx, exec->array.inputs, prim, 1, NULL, start, start + count - 1 );
+
+#if 0
+   {
+      int i;
+
+      _mesa_printf("vbo_exec_DrawArrays(mode 0x%x, start %d, count %d):\n",
+                   mode, start, count);
+
+      for (i = 0; i < 32; i++) {
+         GLuint bufName = exec->array.inputs[i]->BufferObj->Name;
+         GLint stride = exec->array.inputs[i]->Stride;
+         _mesa_printf("attr %2d: size %d stride %d  enabled %d  "
+                      "ptr %p  Bufobj %u\n",
+                      i,
+                      exec->array.inputs[i]->Size,
+                      stride,
+                      /*exec->array.inputs[i]->Enabled,*/
+                      exec->array.legacy_array[i]->Enabled,
+                      exec->array.inputs[i]->Ptr,
+                      bufName);
+         
+         if (bufName) {
+            struct gl_buffer_object *buf = _mesa_lookup_bufferobj(ctx, bufName);
+            GLubyte *p = ctx->Driver.MapBuffer(ctx, GL_ARRAY_BUFFER_ARB,
+                                            GL_READ_ONLY_ARB, buf);
+            int offset = (int) exec->array.inputs[i]->Ptr;
+            float *f = (float *) (p + offset);
+            int *k = (int *) f;
+            int i;
+            int n = (count * stride) / 4;
+            if (n > 32)
+               n = 32;
+            _mesa_printf("  Data at offset %d:\n", offset);
+            for (i = 0; i < n; i++) {
+               _mesa_printf("    float[%d] = 0x%08x %f\n", i, k[i], f[i]);
+            }
+            ctx->Driver.UnmapBuffer(ctx, GL_ARRAY_BUFFER_ARB, buf);
+         }
+      }
+   }
+#endif
 }
 
 
@@ -297,6 +366,9 @@ vbo_exec_DrawRangeElements(GLenum mode,
    }
 
    bind_arrays( ctx );
+
+   if (ctx->NewState)
+      _mesa_update_state( ctx );
 
    ib.count = count;
    ib.type = type; 
@@ -405,4 +477,30 @@ void vbo_exec_array_init( struct vbo_exec_context *exec )
 void vbo_exec_array_destroy( struct vbo_exec_context *exec )
 {
    /* nothing to do */
+}
+
+
+/* This API entrypoint is not ordinarily used */
+void GLAPIENTRY
+_mesa_DrawArrays(GLenum mode, GLint first, GLsizei count)
+{
+   vbo_exec_DrawArrays(mode, first, count);
+}
+
+
+/* This API entrypoint is not ordinarily used */
+void GLAPIENTRY
+_mesa_DrawElements(GLenum mode, GLsizei count, GLenum type,
+                   const GLvoid *indices)
+{
+   vbo_exec_DrawElements(mode, count, type, indices);
+}
+
+
+/* This API entrypoint is not ordinarily used */
+void GLAPIENTRY
+_mesa_DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count,
+                        GLenum type, const GLvoid *indices)
+{
+   vbo_exec_DrawRangeElements(mode, start, end, count, type, indices);
 }

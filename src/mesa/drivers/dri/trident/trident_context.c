@@ -41,6 +41,7 @@
 #include "main/extensions.h"
 #include "main/framebuffer.h"
 #include "main/renderbuffer.h"
+#include "main/viewport.h"
 #if defined(USE_X86_ASM)
 #include "x86/common_x86_asm.h"
 #endif
@@ -127,6 +128,8 @@ tridentCreateContext( const __GLcontextModes *glVisual,
    ctx->Const.MinPointSizeAA = 0.5; /* 4x4 quality mode */
    ctx->Const.MaxPointSizeAA = 16.0; 
    ctx->Const.PointSizeGranularity = 0.25;
+
+   ctx->Const.MaxDrawBuffers = 1;
 
 #if 0
    tmesa->texHeap = mmInit( 0, tmesa->tridentScreen->textureSize );
@@ -279,7 +282,7 @@ tridentCreateBuffer( __DRIscreenPrivate *driScrnPriv,
 static void
 tridentDestroyBuffer(__DRIdrawablePrivate *driDrawPriv)
 {
-   _mesa_unreference_framebuffer((GLframebuffer **)(&(driDrawPriv->driverPrivate)));
+   _mesa_reference_framebuffer((GLframebuffer **)(&(driDrawPriv->driverPrivate)), NULL);
 }
 
 static void

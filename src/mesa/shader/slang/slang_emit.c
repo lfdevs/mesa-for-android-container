@@ -62,6 +62,8 @@ typedef struct
 
    GLuint MaxInstructions;  /**< size of prog->Instructions[] buffer */
 
+   GLboolean UnresolvedFunctions;
+
    /* code-gen options */
    GLboolean EmitHighLevelInstructions;
    GLboolean EmitCondCodes;
@@ -446,7 +448,7 @@ new_instruction(slang_emit_info *emitInfo, gl_inst_opcode opcode)
 
 static struct prog_instruction *
 emit_arl_load(slang_emit_info *emitInfo,
-              enum register_file file, GLint index, GLuint swizzle)
+              gl_register_file file, GLint index, GLuint swizzle)
 {
    struct prog_instruction *inst = new_instruction(emitInfo, OPCODE_ARL);
    inst->SrcReg[0].File = file;
@@ -872,6 +874,7 @@ emit_compare(slang_emit_info *emitInfo, slang_ir_node *n)
    emit(emitInfo, n->Children[1]);
 
    if (n->Children[0]->Store->Size != n->Children[1]->Store->Size) {
+      /* XXX this error should have been caught in slang_codegen.c */
       slang_info_log_error(emitInfo->log, "invalid operands to == or !=");
       n->Store = NULL;
       return NULL;
@@ -1132,7 +1135,7 @@ emit_negation(slang_emit_info *emitInfo, slang_ir_node *n)
                            n->Children[0]->Store,
                            NULL,
                            NULL);
-   inst->SrcReg[0].NegateBase = NEGATE_XYZW;
+   inst->SrcReg[0].Negate = NEGATE_XYZW;
    return inst;
 }
 
@@ -1261,16 +1264,33 @@ emit_tex(slang_emit_info *emitInfo, slang_ir_node *n)
 {
    struct prog_instruction *inst;
    gl_inst_opcode opcode;
+   GLboolean shadow = GL_FALSE;
 
-   if (n->Opcode == IR_TEX) {
+   switch (n->Opcode) {
+   case IR_TEX:
       opcode = OPCODE_TEX;
-   }
-   else if (n->Opcode == IR_TEXB) {
+      break;
+   case IR_TEX_SH:
+      opcode = OPCODE_TEX;
+      shadow = GL_TRUE;
+      break;
+   case IR_TEXB:
       opcode = OPCODE_TXB;
-   }
-   else {
-      assert(n->Opcode == IR_TEXP);
+      break;
+   case IR_TEXB_SH:
+      opcode = OPCODE_TXB;
+      shadow = GL_TRUE;
+      break;
+   case IR_TEXP:
       opcode = OPCODE_TXP;
+      break;
+   case IR_TEXP_SH:
+      opcode = OPCODE_TXP;
+      shadow = GL_TRUE;
+      break;
+   default:
+      _mesa_problem(NULL, "Bad IR TEX code");
+      return NULL;
    }
 
    if (n->Children[0]->Opcode == IR_ELEMENT) {
@@ -1301,6 +1321,8 @@ emit_tex(slang_emit_info *emitInfo, slang_ir_node *n)
                            n->Children[1]->Store,
                            NULL,
                            NULL);
+
+   inst->TexShadow = shadow;
 
    /* Store->Index is the uniform/sampler index */
    assert(n->Children[0]->Store->Index >= 0);
@@ -1337,7 +1359,8 @@ emit_copy(slang_emit_info *emitInfo, slang_ir_node *n)
    inst = emit(emitInfo, n->Children[1]);
 
    if (!n->Children[1]->Store || n->Children[1]->Store->Index < 0) {
-      if (!emitInfo->log->text) {
+      if (!emitInfo->log->text && !emitInfo->UnresolvedFunctions) {
+         /* XXX this error should have been caught in slang_codegen.c */
          slang_info_log_error(emitInfo->log, "invalid assignment");
       }
       return NULL;
@@ -2136,6 +2159,7 @@ emit_var_ref(slang_emit_info *emitInfo, slang_ir_node *n)
       if (index < 0) {
          /* error */
          char s[100];
+         /* XXX isn't this really an out of memory/resources error? */
          _mesa_snprintf(s, sizeof(s), "Undefined variable '%s'",
                         (char *) n->Var->a_name);
          slang_info_log_error(emitInfo->log, s);
@@ -2173,6 +2197,12 @@ emit(slang_emit_info *emitInfo, slang_ir_node *n)
 
    if (emitInfo->log->error_flag) {
       return NULL;
+   }
+
+   if (n->Comment) {
+      inst = new_instruction(emitInfo, OPCODE_NOP);
+      inst->Comment = _mesa_strdup(n->Comment);
+      inst = NULL;
    }
 
    switch (n->Opcode) {
@@ -2268,6 +2298,9 @@ emit(slang_emit_info *emitInfo, slang_ir_node *n)
    case IR_TEX:
    case IR_TEXB:
    case IR_TEXP:
+   case IR_TEX_SH:
+   case IR_TEXB_SH:
+   case IR_TEXP_SH:
       return emit_tex(emitInfo, n);
    case IR_NEG:
       return emit_negation(emitInfo, n);

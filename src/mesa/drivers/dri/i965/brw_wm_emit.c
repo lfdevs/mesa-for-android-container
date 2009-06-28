@@ -699,7 +699,6 @@ static void emit_tex( struct brw_wm_compile *c,
 {
    struct brw_compile *p = &c->func;
    GLuint msgLength, responseLength;
-   GLboolean shadow = (c->key.shadowtex_mask & (1<<inst->tex_unit)) ? 1 : 0;
    GLuint i, nr;
    GLuint emit;
 
@@ -721,7 +720,7 @@ static void emit_tex( struct brw_wm_compile *c,
       break;
    }
 
-   if (shadow) {
+   if (inst->tex_shadow) {
       nr = 4;
       emit |= WRITEMASK_W;
    }
@@ -743,10 +742,10 @@ static void emit_tex( struct brw_wm_compile *c,
 	      retype(vec16(dst[0]), BRW_REGISTER_TYPE_UW),
 	      1,
 	      retype(c->payload.depth[0].hw_reg, BRW_REGISTER_TYPE_UW),
-	      inst->tex_unit + MAX_DRAW_BUFFERS, /* surface */
+              SURF_INDEX_TEXTURE(inst->tex_unit),
 	      inst->tex_unit,	  /* sampler */
 	      inst->writemask,
-	      (shadow ? 
+	      (inst->tex_shadow ? 
 	       BRW_SAMPLER_MESSAGE_SIMD16_SAMPLE_COMPARE : 
 	       BRW_SAMPLER_MESSAGE_SIMD16_SAMPLE),
 	      responseLength,
@@ -792,7 +791,7 @@ static void emit_txb( struct brw_wm_compile *c,
 	      retype(vec16(dst[0]), BRW_REGISTER_TYPE_UW),
 	      1,
 	      retype(c->payload.depth[0].hw_reg, BRW_REGISTER_TYPE_UW),
-	      inst->tex_unit + MAX_DRAW_BUFFERS, /* surface */
+              SURF_INDEX_TEXTURE(inst->tex_unit),
 	      inst->tex_unit,	  /* sampler */
 	      inst->writemask,
 	      BRW_SAMPLER_MESSAGE_SIMD16_SAMPLE_BIAS,
@@ -914,6 +913,9 @@ static void emit_aa( struct brw_wm_compile *c,
 
 /* Post-fragment-program processing.  Send the results to the
  * framebuffer.
+ * \param arg0  the fragment color
+ * \param arg1  the pass-through depth value
+ * \param arg2  the shader-computed depth value
  */
 static void emit_fb_write( struct brw_wm_compile *c,
 			   struct brw_reg *arg0,
@@ -1022,8 +1024,8 @@ static void emit_fb_write( struct brw_wm_compile *c,
 }
 
 
-/* Post-fragment-program processing.  Send the results to the
- * framebuffer.
+/**
+ * Move a GPR to scratch memory. 
  */
 static void emit_spill( struct brw_wm_compile *c,
 			struct brw_reg reg,
@@ -1047,6 +1049,9 @@ static void emit_spill( struct brw_wm_compile *c,
 }
 
 
+/**
+ * Load a GPR from scratch memory. 
+ */
 static void emit_unspill( struct brw_wm_compile *c,
 			  struct brw_reg reg,
 			  GLuint slot )
@@ -1067,13 +1072,14 @@ static void emit_unspill( struct brw_wm_compile *c,
 
    brw_dp_READ_16(p,
 		  retype(vec16(reg), BRW_REGISTER_TYPE_UW),
-		  1, 
+		  1,
 		  slot);
 }
 
 
 /**
- * Retrieve upto 4 GEN4 register pairs for the given wm reg:
+ * Retrieve up to 4 GEN4 register pairs for the given wm reg:
+ * Args with unspill_reg != 0 will be loaded from scratch memory.
  */
 static void get_argument_regs( struct brw_wm_compile *c,
 			       struct brw_wm_ref *arg[],
@@ -1083,13 +1089,12 @@ static void get_argument_regs( struct brw_wm_compile *c,
 
    for (i = 0; i < 4; i++) {
       if (arg[i]) {
-
-	 if (arg[i]->unspill_reg) 
-	    emit_unspill(c, 
+	 if (arg[i]->unspill_reg)
+	    emit_unspill(c,
 			 brw_vec8_grf(arg[i]->unspill_reg, 0),
 			 arg[i]->value->spill_slot);
 
-	 regs[i] = arg[i]->hw_reg;	 
+	 regs[i] = arg[i]->hw_reg;
       }
       else {
 	 regs[i] = brw_null_reg();
@@ -1098,6 +1103,9 @@ static void get_argument_regs( struct brw_wm_compile *c,
 }
 
 
+/**
+ * For values that have a spill_slot!=0, write those regs to scratch memory.
+ */
 static void spill_values( struct brw_wm_compile *c,
 			  struct brw_wm_value *values,
 			  GLuint nr )

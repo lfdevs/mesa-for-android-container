@@ -189,6 +189,20 @@ determineTextureTarget(const int *attribs, int numAttribs)
 
    return target;
 }
+
+
+static GLenum
+determineTextureFormat(const int *attribs, int numAttribs)
+{
+   int i;
+
+   for (i = 0; i < numAttribs; i++) {
+      if (attribs[2 * i] == GLX_TEXTURE_FORMAT_EXT)
+	 return attribs[2 * i + 1];
+   }
+
+   return 0;
+}
 #endif
 
 /**
@@ -294,6 +308,9 @@ GetDrawableAttribute(Display * dpy, GLXDrawable drawable,
             if (pdraw != NULL && !pdraw->textureTarget)
                pdraw->textureTarget =
                   determineTextureTarget((const int *) data, num_attributes);
+            if (pdraw != NULL && !pdraw->textureFormat)
+               pdraw->textureFormat =
+                  determineTextureFormat((const int *) data, num_attributes);
          }
 #endif
 
@@ -374,6 +391,7 @@ CreateDrawable(Display * dpy, const __GLcontextModes * fbconfig,
       }
 
       pdraw->textureTarget = determineTextureTarget(attrib_list, i);
+      pdraw->textureFormat = determineTextureFormat(attrib_list, i);
    } while (0);
 #endif
 

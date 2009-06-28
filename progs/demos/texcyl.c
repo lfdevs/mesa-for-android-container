@@ -27,6 +27,8 @@
 #define LINEAR_FILTER 21
 #define QUIT 100
 
+static GLint Win = -1;
+
 static GLuint CylinderObj = 0;
 static GLboolean Animate = GL_TRUE;
 
@@ -77,6 +79,7 @@ static void Display( void )
          GLfloat seconds = (t - T0) / 1000.0;
          GLfloat fps = Frames / seconds;
          printf("%d frames in %g seconds = %g FPS\n", Frames, seconds, fps);
+         fflush(stdout);
          T0 = t;
          Frames = 0;
       }
@@ -159,6 +162,7 @@ static void Key( unsigned char key, int x, int y )
          glutIdleFunc(NULL);
       break;
       case 27:
+         glutDestroyWindow(Win);
          exit(0);
          break;
    }
@@ -263,7 +267,7 @@ int main( int argc, char *argv[] )
 
    glutInitDisplayMode( GLUT_RGB | GLUT_DOUBLE );
 
-   glutCreateWindow(argv[0] );
+   Win = glutCreateWindow(argv[0] );
 
    Init(argc, argv);
 

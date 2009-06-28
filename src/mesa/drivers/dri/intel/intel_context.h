@@ -48,6 +48,8 @@
 #define DV_PF_555  (1<<8)
 #define DV_PF_565  (2<<8)
 #define DV_PF_8888 (3<<8)
+#define DV_PF_4444 (8<<8)
+#define DV_PF_1555 (9<<8)
 
 struct intel_region;
 struct intel_context;
@@ -100,7 +102,6 @@ struct intel_context
 			       GLuint num_regions);
 
       GLuint (*flush_cmd) (void);
-      void (*emit_flush) (struct intel_context *intel, GLuint unused);
 
       void (*reduced_primitive_state) (struct intel_context * intel,
                                        GLenum rprim);
@@ -181,6 +182,7 @@ struct intel_context
    struct intel_region *front_region;
    struct intel_region *back_region;
    struct intel_region *depth_region;
+   GLboolean internal_viewport_call;
 
    /**
     * This value indicates that the kernel memory manager is being used
@@ -213,6 +215,14 @@ struct intel_context
    GLuint ClearColor565;
    GLuint ClearColor8888;
 
+   /* info for intel_clear_tris() */
+   struct
+   {
+      struct gl_array_object *arrayObj;
+      GLfloat vertices[4][3];
+      GLfloat color[4][4];
+   } clear;
+
    /* Offsets of fields within the current vertex:
     */
    GLuint coloroffset;
@@ -229,6 +239,8 @@ struct intel_context
    GLboolean hw_stipple;
    GLboolean depth_buffer_is_float;
    GLboolean no_rast;
+   GLboolean always_flush_batch;
+   GLboolean always_flush_cache;
 
    /* 0 - nonconformant, best performance;
     * 1 - fallback to sw for known conformance bugs
@@ -335,6 +347,7 @@ extern char *__progname;
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #define ALIGN(value, alignment)  ((value + alignment - 1) & ~(alignment - 1))
+#define IS_POWER_OF_TWO(val) (((val) & (val - 1)) == 0)
 
 #define INTEL_FIREVERTICES(intel)		\
 do {						\
@@ -458,10 +471,8 @@ extern void intelGetLock(struct intel_context *intel, GLuint flags);
 
 extern void intelFinish(GLcontext * ctx);
 extern void intelFlush(GLcontext * ctx);
-extern void intel_glFlush(GLcontext *ctx);
 
 extern void intelInitDriverFunctions(struct dd_function_table *functions);
-extern void intelInitExtensions(GLcontext *ctx, GLboolean enable_imaging);
 
 
 /* ================================================================
@@ -546,6 +557,12 @@ static INLINE struct intel_context *
 intel_context(GLcontext * ctx)
 {
    return (struct intel_context *) ctx;
+}
+
+static INLINE GLboolean
+is_power_of_two(uint32_t value)
+{
+   return (value & (value - 1)) == 0;
 }
 
 #endif

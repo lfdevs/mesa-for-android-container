@@ -33,7 +33,8 @@ pcedit = sed \
 	-e 's,@VERSION@,$(MAJOR).$(MINOR).$(TINY),' \
 	-e 's,@GLW_PC_REQ_PRIV@,$(GLW_PC_REQ_PRIV),' \
 	-e 's,@GLW_PC_LIB_PRIV@,$(GLW_PC_LIB_PRIV),' \
-	-e 's,@GLW_PC_CFLAGS@,$(GLW_PC_CFLAGS),'
+	-e 's,@GLW_PC_CFLAGS@,$(GLW_PC_CFLAGS),' \
+	-e 's,@GLW_LIB@,$(GLW_LIB),'
 glw.pc: glw.pc.in
 	$(pcedit) $< > $@
 
@@ -64,6 +65,7 @@ $(TOP)/$(LIB_DIR)/$(GLW_LIB_NAME): $(OBJECTS)
 # by any source file.
 # 
 depend: $(GLW_SOURCES)
+	rm -f depend
 	touch depend
 	$(MKDEP) $(MKDEP_OPTIONS) -I$(TOP)/include $(GLW_SOURCES) \
 		$(X11_INCLUDES) > /dev/null

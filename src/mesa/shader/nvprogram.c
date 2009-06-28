@@ -246,8 +246,7 @@ _mesa_GetProgramivNV(GLuint id, GLenum pname, GLint *params)
    struct gl_program *prog;
    GET_CURRENT_CONTEXT(ctx);
 
-   if (!ctx->_CurrentProgram)
-      ASSERT_OUTSIDE_BEGIN_END(ctx);
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    prog = _mesa_lookup_program(ctx, id);
    if (!prog) {
@@ -283,8 +282,7 @@ _mesa_GetProgramStringNV(GLuint id, GLenum pname, GLubyte *program)
    struct gl_program *prog;
    GET_CURRENT_CONTEXT(ctx);
 
-   if (!ctx->_CurrentProgram)
-      ASSERT_OUTSIDE_BEGIN_END(ctx);
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (pname != GL_PROGRAM_STRING_NV) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glGetProgramStringNV(pname)");
@@ -469,10 +467,6 @@ _mesa_GetVertexAttribivNV(GLuint index, GLenum pname, GLint *params)
          params[3] = (GLint) ctx->Current.Attrib[index][3];
          break;
       case GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING_ARB:
-         if (!ctx->Extensions.ARB_vertex_buffer_object) {
-            _mesa_error(ctx, GL_INVALID_ENUM, "glGetVertexAttribdvNV");
-            return;
-         }
          params[0] = ctx->Array.ArrayObj->VertexAttrib[index].BufferObj->Name;
          break;
       default:
@@ -712,7 +706,7 @@ _mesa_ProgramNamedParameter4fNV(GLuint id, GLsizei len, const GLubyte *name,
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_BEGIN_END(ctx);
 
-   FLUSH_VERTICES(ctx, _NEW_PROGRAM);
+   FLUSH_VERTICES(ctx, _NEW_PROGRAM | _NEW_PROGRAM_CONSTANTS);
 
    prog = _mesa_lookup_program(ctx, id);
    if (!prog || prog->Target != GL_FRAGMENT_PROGRAM_NV) {
@@ -777,8 +771,7 @@ _mesa_GetProgramNamedParameterfvNV(GLuint id, GLsizei len, const GLubyte *name,
 
    GET_CURRENT_CONTEXT(ctx);
 
-   if (!ctx->_CurrentProgram)
-      ASSERT_OUTSIDE_BEGIN_END(ctx);
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    prog = _mesa_lookup_program(ctx, id);
    if (!prog || prog->Target != GL_FRAGMENT_PROGRAM_NV) {

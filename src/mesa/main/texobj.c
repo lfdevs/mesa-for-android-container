@@ -28,7 +28,7 @@
  */
 
 
-#include "glheader.h"
+#include "mfeatures.h"
 #if FEATURE_colortable
 #include "colortab.h"
 #endif
@@ -42,6 +42,8 @@
 #include "texstate.h"
 #include "texobj.h"
 #include "mtypes.h"
+#include "shader/prog_instruction.h"
+
 
 
 /**********************************************************************/
@@ -132,12 +134,15 @@ _mesa_initialize_texture_object( struct gl_texture_object *obj,
    obj->BaseLevel = 0;
    obj->MaxLevel = 1000;
    obj->MaxAnisotropy = 1.0;
-   obj->CompareFlag = GL_FALSE;                      /* SGIX_shadow */
-   obj->CompareOperator = GL_TEXTURE_LEQUAL_R_SGIX;  /* SGIX_shadow */
    obj->CompareMode = GL_NONE;         /* ARB_shadow */
    obj->CompareFunc = GL_LEQUAL;       /* ARB_shadow */
+   obj->CompareFailValue = 0.0F;       /* ARB_shadow_ambient */
    obj->DepthMode = GL_LUMINANCE;      /* ARB_depth_texture */
-   obj->ShadowAmbient = 0.0F;          /* ARB/SGIX_shadow_ambient */
+   obj->Swizzle[0] = GL_RED;
+   obj->Swizzle[1] = GL_GREEN;
+   obj->Swizzle[2] = GL_BLUE;
+   obj->Swizzle[3] = GL_ALPHA;
+   obj->_Swizzle = SWIZZLE_NOOP;
 }
 
 
@@ -175,7 +180,7 @@ finish_texture_init(GLcontext *ctx, GLenum target,
  * Called via ctx->Driver.DeleteTexture() if not overriden by a driver.
  *
  * \param shared the shared GL state to which the object belongs.
- * \param texOjb the texture object to delete.
+ * \param texObj the texture object to delete.
  */
 void
 _mesa_delete_texture_object( GLcontext *ctx, struct gl_texture_object *texObj )
@@ -241,17 +246,17 @@ _mesa_copy_texture_object( struct gl_texture_object *dest,
    dest->BaseLevel = src->BaseLevel;
    dest->MaxLevel = src->MaxLevel;
    dest->MaxAnisotropy = src->MaxAnisotropy;
-   dest->CompareFlag = src->CompareFlag;
-   dest->CompareOperator = src->CompareOperator;
-   dest->ShadowAmbient = src->ShadowAmbient;
    dest->CompareMode = src->CompareMode;
    dest->CompareFunc = src->CompareFunc;
+   dest->CompareFailValue = src->CompareFailValue;
    dest->DepthMode = src->DepthMode;
    dest->_MaxLevel = src->_MaxLevel;
    dest->_MaxLambda = src->_MaxLambda;
    dest->GenerateMipmap = src->GenerateMipmap;
    dest->Palette = src->Palette;
    dest->_Complete = src->_Complete;
+   COPY_4V(dest->Swizzle, src->Swizzle);
+   dest->_Swizzle = src->_Swizzle;
 }
 
 
@@ -388,8 +393,7 @@ _mesa_test_texobj_completeness( const GLcontext *ctx,
     */
    if ((baseLevel < 0) || (baseLevel > MAX_TEXTURE_LEVELS)) {
       char s[100];
-      _mesa_sprintf(s, "obj %p (%d) base level = %d is invalid",
-              (void *) t, t->Name, baseLevel);
+      _mesa_sprintf(s, "base level = %d is invalid", baseLevel);
       incomplete(t, s);
       t->_Complete = GL_FALSE;
       return;
@@ -398,8 +402,7 @@ _mesa_test_texobj_completeness( const GLcontext *ctx,
    /* Always need the base level image */
    if (!t->Image[0][baseLevel]) {
       char s[100];
-      _mesa_sprintf(s, "obj %p (%d) Image[baseLevel=%d] == NULL",
-              (void *) t, t->Name, baseLevel);
+      _mesa_sprintf(s, "Image[baseLevel=%d] == NULL", baseLevel);
       incomplete(t, s);
       t->_Complete = GL_FALSE;
       return;
@@ -659,6 +662,59 @@ _mesa_test_texobj_completeness( const GLcontext *ctx,
    }
 }
 
+
+/**
+ * Return pointer to a default/fallback texture.
+ * The texture is a 2D 8x8 RGBA texture with all texels = (0,0,0,1).
+ * That's the value a sampler should get when sampling from an
+ * incomplete texture.
+ */
+struct gl_texture_object *
+_mesa_get_fallback_texture(GLcontext *ctx)
+{
+   if (!ctx->Shared->FallbackTex) {
+      /* create fallback texture now */
+      static GLubyte texels[8 * 8][4];
+      struct gl_texture_object *texObj;
+      struct gl_texture_image *texImage;
+      GLuint i;
+
+      for (i = 0; i < 8 * 8; i++) {
+         texels[i][0] =
+         texels[i][1] =
+         texels[i][2] = 0x0;
+         texels[i][3] = 0xff;
+      }
+
+      /* create texture object */
+      texObj = ctx->Driver.NewTextureObject(ctx, 0, GL_TEXTURE_2D);
+      assert(texObj->RefCount == 1);
+      texObj->MinFilter = GL_NEAREST;
+      texObj->MagFilter = GL_NEAREST;
+
+      /* create level[0] texture image */
+      texImage = _mesa_get_tex_image(ctx, texObj, GL_TEXTURE_2D, 0);
+
+      /* init the image fields */
+      _mesa_init_teximage_fields(ctx, GL_TEXTURE_2D, texImage,
+                                    8, 8, 1, 0, GL_RGBA); 
+
+      /* set image data */
+      ctx->Driver.TexImage2D(ctx, GL_TEXTURE_2D, 0, GL_RGBA,
+                             8, 8, 0,
+                             GL_RGBA, GL_UNSIGNED_BYTE, texels,
+                             &ctx->DefaultPacking, texObj, texImage);
+
+      _mesa_test_texobj_completeness(ctx, texObj);
+      assert(texObj->_Complete);
+
+      ctx->Shared->FallbackTex = texObj;
+   }
+   return ctx->Shared->FallbackTex;
+}
+
+
+
 /*@}*/
 
 
@@ -888,6 +944,7 @@ _mesa_BindTexture( GLenum target, GLuint texName )
    struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
    struct gl_texture_object *newTexObj = NULL, *defaultTexObj = NULL;
    GLint targetIndex;
+   GLboolean early_out = GL_FALSE;
    ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
@@ -940,6 +997,17 @@ _mesa_BindTexture( GLenum target, GLuint texName )
    }
 
    assert(valid_texture_object(newTexObj));
+
+   _glthread_LOCK_MUTEX(ctx->Shared->Mutex);
+   if ((ctx->Shared->RefCount == 1)
+       && (newTexObj == texUnit->CurrentTex[targetIndex])) {
+      early_out = GL_TRUE;
+   }
+   _glthread_UNLOCK_MUTEX(ctx->Shared->Mutex);
+
+   if (early_out) {
+      return;
+   }
 
    /* flush before changing binding */
    FLUSH_VERTICES(ctx, _NEW_TEXTURE);

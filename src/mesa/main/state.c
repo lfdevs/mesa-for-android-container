@@ -1,6 +1,6 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.1
+ * Version:  7.3
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  *
@@ -44,11 +44,13 @@
 #include "pixel.h"
 #endif
 #include "shader/program.h"
+#include "shader/prog_parameter.h"
 #include "state.h"
 #include "stencil.h"
 #include "texenvprogram.h"
 #include "texobj.h"
 #include "texstate.h"
+#include "viewport.h"
 
 
 static void
@@ -302,6 +304,36 @@ update_program(GLcontext *ctx)
 }
 
 
+/**
+ * Examine shader constants and return either _NEW_PROGRAM_CONSTANTS or 0.
+ */
+static GLbitfield
+update_program_constants(GLcontext *ctx)
+{
+   GLbitfield new_state = 0x0;
+
+   if (ctx->FragmentProgram._Current) {
+      const struct gl_program_parameter_list *params =
+         ctx->FragmentProgram._Current->Base.Parameters;
+      if (params && params->StateFlags & ctx->NewState) {
+         new_state |= _NEW_PROGRAM_CONSTANTS;
+      }
+   }
+
+   if (ctx->VertexProgram._Current) {
+      const struct gl_program_parameter_list *params =
+         ctx->VertexProgram._Current->Base.Parameters;
+      if (params && params->StateFlags & ctx->NewState) {
+         new_state |= _NEW_PROGRAM_CONSTANTS;
+      }
+   }
+
+   return new_state;
+}
+
+
+
+
 static void
 update_viewport_matrix(GLcontext *ctx)
 {
@@ -461,12 +493,16 @@ _mesa_update_state_locked( GLcontext *ctx )
    GLbitfield prog_flags = _NEW_PROGRAM;
    GLbitfield new_prog_state = 0x0;
 
+   if (new_state == _NEW_CURRENT_ATTRIB) 
+      goto out;
+
    if (MESA_VERBOSE & VERBOSE_STATE)
       _mesa_print_state("_mesa_update_state", new_state);
 
    /* Determine which state flags effect vertex/fragment program state */
    if (ctx->FragmentProgram._MaintainTexEnvProgram) {
-      prog_flags |= (_NEW_TEXTURE | _NEW_FOG | _DD_NEW_SEPARATE_SPECULAR);
+      prog_flags |= (_NEW_TEXTURE | _NEW_FOG | _DD_NEW_SEPARATE_SPECULAR |
+		     _NEW_ARRAY);
    }
    if (ctx->VertexProgram._MaintainTnlProgram) {
       prog_flags |= (_NEW_ARRAY | _NEW_TEXTURE | _NEW_TEXTURE_MATRIX |
@@ -488,7 +524,7 @@ _mesa_update_state_locked( GLcontext *ctx )
    if (new_state & (_NEW_PROGRAM|_NEW_TEXTURE|_NEW_TEXTURE_MATRIX))
       _mesa_update_texture( ctx, new_state );
 
-   if (new_state & (_NEW_BUFFERS | _NEW_COLOR | _NEW_PIXEL))
+   if (new_state & _NEW_BUFFERS)
       _mesa_update_framebuffer(ctx);
 
    if (new_state & (_NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT))
@@ -500,11 +536,11 @@ _mesa_update_state_locked( GLcontext *ctx )
    if (new_state & _NEW_LIGHT)
       _mesa_update_lighting( ctx );
 
-   if (new_state & _NEW_STENCIL)
+   if (new_state & (_NEW_STENCIL | _NEW_BUFFERS))
       _mesa_update_stencil( ctx );
 
 #if FEATURE_pixel_transfer
-   if (new_state & _IMAGE_NEW_TRANSFER_STATE)
+   if (new_state & _MESA_NEW_TRANSFER_STATE)
       _mesa_update_pixel( ctx, new_state );
 #endif
 
@@ -549,6 +585,10 @@ _mesa_update_state_locked( GLcontext *ctx )
       new_prog_state |= update_program( ctx );
    }
 
+
+ out:
+   new_prog_state |= update_program_constants(ctx);
+
    /*
     * Give the driver a chance to act upon the new_state flags.
     * The driver might plug in different span functions, for example.
@@ -573,4 +613,60 @@ _mesa_update_state( GLcontext *ctx )
    _mesa_lock_context_textures(ctx);
    _mesa_update_state_locked(ctx);
    _mesa_unlock_context_textures(ctx);
+}
+
+
+
+
+/**
+ * Want to figure out which fragment program inputs are actually
+ * constant/current values from ctx->Current.  These should be
+ * referenced as a tracked state variable rather than a fragment
+ * program input, to save the overhead of putting a constant value in
+ * every submitted vertex, transferring it to hardware, interpolating
+ * it across the triangle, etc...
+ *
+ * When there is a VP bound, just use vp->outputs.  But when we're
+ * generating vp from fixed function state, basically want to
+ * calculate:
+ *
+ * vp_out_2_fp_in( vp_in_2_vp_out( varying_inputs ) | 
+ *                 potential_vp_outputs )
+ *
+ * Where potential_vp_outputs is calculated by looking at enabled
+ * texgen, etc.
+ * 
+ * The generated fragment program should then only declare inputs that
+ * may vary or otherwise differ from the ctx->Current values.
+ * Otherwise, the fp should track them as state values instead.
+ */
+void
+_mesa_set_varying_vp_inputs( GLcontext *ctx,
+                             GLbitfield varying_inputs )
+{
+   if (ctx->varying_vp_inputs != varying_inputs) {
+      ctx->varying_vp_inputs = varying_inputs;
+      ctx->NewState |= _NEW_ARRAY;
+      /*_mesa_printf("%s %x\n", __FUNCTION__, varying_inputs);*/
+   }
+}
+
+
+/**
+ * Used by drivers to tell core Mesa that the driver is going to
+ * install/ use its own vertex program.  In particular, this will
+ * prevent generated fragment programs from using state vars instead
+ * of ordinary varyings/inputs.
+ */
+void
+_mesa_set_vp_override(GLcontext *ctx, GLboolean flag)
+{
+   if (ctx->VertexProgram._Overriden != flag) {
+      ctx->VertexProgram._Overriden = flag;
+
+      /* Set one of the bits which will trigger fragment program
+       * regeneration:
+       */
+      ctx->NewState |= _NEW_ARRAY; 
+   }
 }

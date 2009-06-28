@@ -23,14 +23,12 @@
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  
- **********************************************************************/
- /*
-  * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
-  */
-            
+**********************************************************************/
 
-
+/*
+ * Authors:
+ *   Keith Whitwell <keith@tungstengraphics.com>
+ */
 
 #include "main/glheader.h"
 #include "main/mtypes.h"
@@ -44,12 +42,11 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_state.h"
-
 #include "brw_draw.h"
 #include "brw_state.h"
 #include "brw_fallback.h"
 #include "brw_vs.h"
-#include <stdarg.h>
+
 
 static void
 dri_bo_release(dri_bo **bo)
@@ -58,7 +55,9 @@ dri_bo_release(dri_bo **bo)
    *bo = NULL;
 }
 
-/* called from intelDestroyContext()
+
+/**
+ * called from intelDestroyContext()
  */
 static void brw_destroy_context( struct intel_context *intel )
 {
@@ -68,16 +67,19 @@ static void brw_destroy_context( struct intel_context *intel )
    brw_destroy_state(brw);
    brw_draw_destroy( brw );
 
+   _mesa_free(brw->wm.compile_data);
+
    brw_FrameBufferTexDestroy( brw );
 
-   for (i = 0; i < brw->state.nr_draw_regions; i++)
-       intel_region_release(&brw->state.draw_regions[i]);
-   brw->state.nr_draw_regions = 0;
+   for (i = 0; i < brw->state.nr_color_regions; i++)
+      intel_region_release(&brw->state.color_regions[i]);
+   brw->state.nr_color_regions = 0;
    intel_region_release(&brw->state.depth_region);
 
    dri_bo_release(&brw->curbe.curbe_bo);
    dri_bo_release(&brw->vs.prog_bo);
    dri_bo_release(&brw->vs.state_bo);
+   dri_bo_release(&brw->vs.bind_bo);
    dri_bo_release(&brw->gs.prog_bo);
    dri_bo_release(&brw->gs.state_bo);
    dri_bo_release(&brw->clip.prog_bo);
@@ -91,6 +93,7 @@ static void brw_destroy_context( struct intel_context *intel )
    dri_bo_release(&brw->wm.bind_bo);
    for (i = 0; i < BRW_WM_MAX_SURF; i++)
       dri_bo_release(&brw->wm.surf_bo[i]);
+   dri_bo_release(&brw->wm.sampler_bo);
    dri_bo_release(&brw->wm.prog_bo);
    dri_bo_release(&brw->wm.state_bo);
    dri_bo_release(&brw->cc.prog_bo);
@@ -98,37 +101,46 @@ static void brw_destroy_context( struct intel_context *intel )
    dri_bo_release(&brw->cc.vp_bo);
 }
 
-/* called from intelDrawBuffer()
+
+/**
+ * called from intelDrawBuffer()
  */
 static void brw_set_draw_region( struct intel_context *intel, 
-				  struct intel_region *draw_regions[],
-				  struct intel_region *depth_region,
-				GLuint num_regions)
+                                 struct intel_region *color_regions[],
+                                 struct intel_region *depth_region,
+                                 GLuint num_color_regions)
 {
    struct brw_context *brw = brw_context(&intel->ctx);
-   int i;
+   GLuint i;
+
+   /* release old color/depth regions */
    if (brw->state.depth_region != depth_region)
       brw->state.dirty.brw |= BRW_NEW_DEPTH_BUFFER;
-   for (i = 0; i < brw->state.nr_draw_regions; i++)
-       intel_region_release(&brw->state.draw_regions[i]);
+   for (i = 0; i < brw->state.nr_color_regions; i++)
+       intel_region_release(&brw->state.color_regions[i]);
    intel_region_release(&brw->state.depth_region);
-   for (i = 0; i < num_regions; i++)
-       intel_region_reference(&brw->state.draw_regions[i], draw_regions[i]);
+
+   /* reference new color/depth regions */
+   for (i = 0; i < num_color_regions; i++)
+       intel_region_reference(&brw->state.color_regions[i], color_regions[i]);
    intel_region_reference(&brw->state.depth_region, depth_region);
-   brw->state.nr_draw_regions = num_regions;
+   brw->state.nr_color_regions = num_color_regions;
 }
 
-/* called from intel_batchbuffer_flush and children before sending a
+
+/**
+ * called from intel_batchbuffer_flush and children before sending a
  * batchbuffer off.
  */
 static void brw_finish_batch(struct intel_context *intel)
 {
    struct brw_context *brw = brw_context(&intel->ctx);
-
    brw_emit_query_end(brw);
 }
 
-/* called from intelFlushBatchLocked
+
+/**
+ * called from intelFlushBatchLocked
  */
 static void brw_new_batch( struct intel_context *intel )
 {
@@ -159,36 +171,17 @@ static void brw_new_batch( struct intel_context *intel )
    }
 }
 
-static void brw_note_fence( struct intel_context *intel, 
-			    GLuint fence )
+
+static void brw_note_fence( struct intel_context *intel, GLuint fence )
 {
    brw_context(&intel->ctx)->state.dirty.brw |= BRW_NEW_FENCE;
 }
- 
+
+
 static void brw_note_unlock( struct intel_context *intel )
 {
    struct brw_context *brw = brw_context(&intel->ctx);
-
    brw_state_cache_check_size(brw);
-}
-
-
-void brw_do_flush( struct brw_context *brw, 
-		   GLuint flags )
-{
-   struct brw_mi_flush flush;
-   memset(&flush, 0, sizeof(flush));      
-   flush.opcode = CMD_MI_FLUSH;
-   flush.flags = flags;
-   BRW_BATCH_STRUCT(brw, &flush);
-}
-
-
-static void brw_emit_flush( struct intel_context *intel,
-			GLuint unused )
-{
-   brw_do_flush(brw_context(&intel->ctx),
-		BRW_FLUSH_STATE_CACHE|BRW_FLUSH_READ_CACHE);
 }
 
 
@@ -205,6 +198,7 @@ static GLuint brw_flush_cmd( void )
    return *(GLuint *)&flush;
 }
 
+
 static void brw_invalidate_state( struct intel_context *intel, GLuint new_state )
 {
    /* nothing */
@@ -214,20 +208,18 @@ static void brw_invalidate_state( struct intel_context *intel, GLuint new_state 
 void brwInitVtbl( struct brw_context *brw )
 {
    brw->intel.vtbl.check_vertex_size = 0;
-   brw->intel.vtbl.emit_state = 0; 
-   brw->intel.vtbl.reduced_primitive_state = 0;	
+   brw->intel.vtbl.emit_state = 0;
+   brw->intel.vtbl.reduced_primitive_state = 0;
    brw->intel.vtbl.render_start = 0;
-   brw->intel.vtbl.update_texture_state = 0; 
+   brw->intel.vtbl.update_texture_state = 0;
 
-   brw->intel.vtbl.invalidate_state = brw_invalidate_state; 
-   brw->intel.vtbl.note_fence = brw_note_fence; 
-   brw->intel.vtbl.note_unlock = brw_note_unlock; 
+   brw->intel.vtbl.invalidate_state = brw_invalidate_state;
+   brw->intel.vtbl.note_fence = brw_note_fence;
+   brw->intel.vtbl.note_unlock = brw_note_unlock;
    brw->intel.vtbl.new_batch = brw_new_batch;
    brw->intel.vtbl.finish_batch = brw_finish_batch;
    brw->intel.vtbl.destroy = brw_destroy_context;
    brw->intel.vtbl.set_draw_region = brw_set_draw_region;
    brw->intel.vtbl.flush_cmd = brw_flush_cmd;
-   brw->intel.vtbl.emit_flush = brw_emit_flush;
    brw->intel.vtbl.debug_batch = brw_debug_batch;
 }
-

@@ -2,13 +2,13 @@ Patch that fixes Debian bug #349437.
 
 This patch by David Nusinow.
 
-Index: mesa/src/mesa/main/imports.h
+Index: mesa/src/mesa/main/compiler.h
 ===================================================================
---- mesa.orig/src/mesa/main/imports.h	2008-07-01 15:26:57.000000000 +0300
-+++ mesa/src/mesa/main/imports.h	2008-07-01 15:45:49.000000000 +0300
-@@ -158,8 +158,9 @@
-  *** USE_IEEE: Determine if we're using IEEE floating point
-  ***/
+--- mesa.orig/src/mesa/main/compiler.h
++++ mesa/src/mesa/main/compiler.h
+@@ -345,8 +345,9 @@
+  * USE_IEEE: Determine if we're using IEEE floating point
+  */
  #if defined(__i386__) || defined(__386__) || defined(__sparc__) || \
 -    defined(__s390x__) || defined(__powerpc__) || \
 +    defined(__s390__) || defined(__s390x__) || defined(__powerpc__) || \

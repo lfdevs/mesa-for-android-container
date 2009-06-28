@@ -97,7 +97,8 @@ bits_agree(GLbitfield flags1, GLbitfield flags2, GLbitfield bit)
  * which inputs are centroid-sampled, invariant, etc.
  */
 static GLboolean
-link_varying_vars(struct gl_shader_program *shProg, struct gl_program *prog)
+link_varying_vars(GLcontext *ctx,
+                  struct gl_shader_program *shProg, struct gl_program *prog)
 {
    GLuint *map, i, firstVarying, newFile;
    GLbitfield *inOutFlags;
@@ -156,8 +157,12 @@ link_varying_vars(struct gl_shader_program *shProg, struct gl_program *prog)
                                var->Flags);
       }
 
+      if (shProg->Varying->NumParameters > ctx->Const.MaxVarying) {
+         link_error(shProg, "Too many varying variables");
+         return GL_FALSE;
+      }
+
       /* Map varying[i] to varying[j].
-       * Plus, set prog->Input/OutputFlags[] as described above.
        * Note: the loop here takes care of arrays or large (sz>4) vars.
        */
       {
@@ -249,11 +254,6 @@ link_uniform_vars(GLcontext *ctx,
             _mesa_append_uniform(shProg->Uniforms, p->Name, prog->Target, i);
          if (uniform)
             uniform->Initialized = p->Initialized;
-
-	 /* Add the flag indicating that the program is dependent on constant
-	  * state.
-	  */
-	 prog->Parameters->StateFlags |= _NEW_PROGRAM;
       }
 
       /* The samplerMap[] table we build here is used to remap/re-index
@@ -300,6 +300,9 @@ link_uniform_vars(GLcontext *ctx,
             inst->TexSrcUnit = newSampNum;
             prog->SamplerTargets[newSampNum] = inst->TexSrcTarget;
             prog->SamplersUsed |= (1 << newSampNum);
+            if (inst->TexShadow) {
+               prog->ShadowSamplers |= (1 << newSampNum);
+            }
          }
       }
    }
@@ -321,7 +324,7 @@ _slang_resolve_attributes(struct gl_shader_program *shProg,
                           const struct gl_program *origProg,
                           struct gl_program *linkedProg)
 {
-   GLint attribMap[MAX_VERTEX_ATTRIBS];
+   GLint attribMap[MAX_VERTEX_GENERIC_ATTRIBS];
    GLuint i, j;
    GLbitfield usedAttributes; /* generics only, not legacy attributes */
 
@@ -357,7 +360,7 @@ _slang_resolve_attributes(struct gl_shader_program *shProg,
    }
 
    /* initialize the generic attribute map entries to -1 */
-   for (i = 0; i < MAX_VERTEX_ATTRIBS; i++) {
+   for (i = 0; i < MAX_VERTEX_GENERIC_ATTRIBS; i++) {
       attribMap[i] = -1;
    }
 
@@ -398,11 +401,11 @@ _slang_resolve_attributes(struct gl_shader_program *shProg,
                    * Start at 1 since generic attribute 0 always aliases
                    * glVertex/position.
                    */
-                  for (attr = 0; attr < MAX_VERTEX_ATTRIBS; attr++) {
+                  for (attr = 0; attr < MAX_VERTEX_GENERIC_ATTRIBS; attr++) {
                      if (((1 << attr) & usedAttributes) == 0)
                         break;
                   }
-                  if (attr == MAX_VERTEX_ATTRIBS) {
+                  if (attr == MAX_VERTEX_GENERIC_ATTRIBS) {
                      link_error(shProg, "Too many vertex attributes");
                      return GL_FALSE;
                   }
@@ -532,8 +535,112 @@ _slang_update_inputs_outputs(struct gl_program *prog)
          maxAddrReg = MAX2(maxAddrReg, inst->DstReg.Index + 1);
       }
    }
-
    prog->NumAddressRegs = maxAddrReg;
+}
+
+
+
+
+
+/**
+ * Return a new shader whose source code is the concatenation of
+ * all the shader sources of the given type.
+ */
+static struct gl_shader *
+concat_shaders(struct gl_shader_program *shProg, GLenum shaderType)
+{
+   struct gl_shader *newShader;
+   const struct gl_shader *firstShader = NULL;
+   GLuint shaderLengths[100];
+   GLchar *source;
+   GLuint totalLen = 0, len = 0;
+   GLuint i;
+
+   /* compute total size of new shader source code */
+   for (i = 0; i < shProg->NumShaders; i++) {
+      const struct gl_shader *shader = shProg->Shaders[i];
+      if (shader->Type == shaderType) {
+         shaderLengths[i] = _mesa_strlen(shader->Source);
+         totalLen += shaderLengths[i];
+         if (!firstShader)
+            firstShader = shader;
+      }
+   }
+
+   if (totalLen == 0)
+      return NULL;
+
+   source = (GLchar *) _mesa_malloc(totalLen + 1);
+   if (!source)
+      return NULL;
+
+   /* concatenate shaders */
+   for (i = 0; i < shProg->NumShaders; i++) {
+      const struct gl_shader *shader = shProg->Shaders[i];
+      if (shader->Type == shaderType) {
+         _mesa_memcpy(source + len, shader->Source, shaderLengths[i]);
+         len += shaderLengths[i];
+      }
+   }
+   source[len] = '\0';
+   /*
+   _mesa_printf("---NEW CONCATENATED SHADER---:\n%s\n------------\n", source);
+   */
+
+   newShader = CALLOC_STRUCT(gl_shader);
+   newShader->Type = shaderType;
+   newShader->Source = source;
+   newShader->Pragmas = firstShader->Pragmas;
+
+   return newShader;
+}
+
+
+/**
+ * Search the shader program's list of shaders to find the one that
+ * defines main().
+ * This will involve shader concatenation and recompilation if needed.
+ */
+static struct gl_shader *
+get_main_shader(GLcontext *ctx,
+                struct gl_shader_program *shProg, GLenum type)
+{
+   struct gl_shader *shader = NULL;
+   GLuint i;
+
+   /*
+    * Look for a shader that defines main() and has no unresolved references.
+    */
+   for (i = 0; i < shProg->NumShaders; i++) {
+      shader = shProg->Shaders[i];
+      if (shader->Type == type &&
+          shader->Main &&
+          !shader->UnresolvedRefs) {
+         /* All set! */
+         return shader;
+      }
+   }
+
+   /*
+    * There must have been unresolved references during the original
+    * compilation.  Try concatenating all the shaders of the given type
+    * and recompile that.
+    */
+   shader = concat_shaders(shProg, type);
+
+   if (shader) {
+      _slang_compile(ctx, shader);
+
+      /* Finally, check if recompiling failed */
+      if (!shader->CompileStatus ||
+          !shader->Main ||
+          shader->UnresolvedRefs) {
+         link_error(shProg, "Unresolved symbols");
+         return NULL;
+      }
+   }
+
+   return shader;
 }
 
 
@@ -553,12 +660,15 @@ _slang_link(GLcontext *ctx,
             GLhandleARB programObj,
             struct gl_shader_program *shProg)
 {
-   const struct gl_vertex_program *vertProg;
-   const struct gl_fragment_program *fragProg;
+   const struct gl_vertex_program *vertProg = NULL;
+   const struct gl_fragment_program *fragProg = NULL;
    GLuint numSamplers = 0;
    GLuint i;
 
    _mesa_clear_shader_program_data(ctx, shProg);
+
+   /* Initialize LinkStatus to "success".  Will be cleared if error. */
+   shProg->LinkStatus = GL_TRUE;
 
    /* check that all programs compiled successfully */
    for (i = 0; i < shProg->NumShaders; i++) {
@@ -571,24 +681,19 @@ _slang_link(GLcontext *ctx,
    shProg->Uniforms = _mesa_new_uniform_list();
    shProg->Varying = _mesa_new_parameter_list();
 
-   /**
-    * Find attached vertex, fragment shaders defining main()
+   /*
+    * Find the vertex and fragment shaders which define main()
     */
-   vertProg = NULL;
-   fragProg = NULL;
-   for (i = 0; i < shProg->NumShaders; i++) {
-      struct gl_shader *shader = shProg->Shaders[i];
-      if (shader->Type == GL_VERTEX_SHADER) {
-         if (shader->Main)
-            vertProg = vertex_program(shader->Program);
-      }
-      else if (shader->Type == GL_FRAGMENT_SHADER) {
-         if (shader->Main)
-            fragProg = fragment_program(shader->Program);
-      }
-      else {
-         _mesa_problem(ctx, "unexpected shader target in slang_link()");
-      }
+   {
+      struct gl_shader *vertShader, *fragShader;
+      vertShader = get_main_shader(ctx, shProg, GL_VERTEX_SHADER);
+      fragShader = get_main_shader(ctx, shProg, GL_FRAGMENT_SHADER);
+      if (vertShader)
+         vertProg = vertex_program(vertShader->Program);
+      if (fragShader)
+         fragProg = fragment_program(fragShader->Program);
+      if (!shProg->LinkStatus)
+         return;
    }
 
 #if FEATURE_es2_glsl
@@ -625,11 +730,11 @@ _slang_link(GLcontext *ctx,
 
    /* link varying vars */
    if (shProg->VertexProgram) {
-      if (!link_varying_vars(shProg, &shProg->VertexProgram->Base))
+      if (!link_varying_vars(ctx, shProg, &shProg->VertexProgram->Base))
          return;
    }
    if (shProg->FragmentProgram) {
-      if (!link_varying_vars(shProg, &shProg->FragmentProgram->Base))
+      if (!link_varying_vars(ctx, shProg, &shProg->FragmentProgram->Base))
          return;
    }
 
@@ -689,7 +794,7 @@ _slang_link(GLcontext *ctx,
    /* check that gl_FragColor and gl_FragData are not both written to */
    if (shProg->FragmentProgram) {
       GLbitfield outputsWritten = shProg->FragmentProgram->Base.OutputsWritten;
-      if ((outputsWritten & ((1 << FRAG_RESULT_COLR))) &&
+      if ((outputsWritten & ((1 << FRAG_RESULT_COLOR))) &&
           (outputsWritten >= (1 << FRAG_RESULT_DATA0))) {
          link_error(shProg, "Fragment program cannot write both gl_FragColor"
                     " and gl_FragData[].\n");
@@ -705,12 +810,12 @@ _slang_link(GLcontext *ctx,
       /* notify driver that a new fragment program has been compiled/linked */
       ctx->Driver.ProgramStringNotify(ctx, GL_FRAGMENT_PROGRAM_ARB,
                                       &shProg->FragmentProgram->Base);
-      if (MESA_VERBOSE & VERBOSE_GLSL_DUMP) {
-         printf("Mesa original fragment program:\n");
+      if (ctx->Shader.Flags & GLSL_DUMP) {
+         _mesa_printf("Mesa pre-link fragment program:\n");
          _mesa_print_program(&fragProg->Base);
          _mesa_print_program_parameters(ctx, &fragProg->Base);
 
-         printf("Mesa post-link fragment program:\n");
+         _mesa_printf("Mesa post-link fragment program:\n");
          _mesa_print_program(&shProg->FragmentProgram->Base);
          _mesa_print_program_parameters(ctx, &shProg->FragmentProgram->Base);
       }
@@ -723,20 +828,23 @@ _slang_link(GLcontext *ctx,
       /* notify driver that a new vertex program has been compiled/linked */
       ctx->Driver.ProgramStringNotify(ctx, GL_VERTEX_PROGRAM_ARB,
                                       &shProg->VertexProgram->Base);
-      if (MESA_VERBOSE & VERBOSE_GLSL_DUMP) {
-         printf("Mesa original vertex program:\n");
+      if (ctx->Shader.Flags & GLSL_DUMP) {
+         _mesa_printf("Mesa pre-link vertex program:\n");
          _mesa_print_program(&vertProg->Base);
          _mesa_print_program_parameters(ctx, &vertProg->Base);
 
-         printf("Mesa post-link vertex program:\n");
+         _mesa_printf("Mesa post-link vertex program:\n");
          _mesa_print_program(&shProg->VertexProgram->Base);
          _mesa_print_program_parameters(ctx, &shProg->VertexProgram->Base);
       }
    }
 
-   if (MESA_VERBOSE & VERBOSE_GLSL_DUMP) {
-      printf("Varying vars:\n");
+   if (ctx->Shader.Flags & GLSL_DUMP) {
+      _mesa_printf("Varying vars:\n");
       _mesa_print_parameter_list(shProg->Varying);
+      if (shProg->InfoLog) {
+         _mesa_printf("Info Log: %s\n", shProg->InfoLog);
+      }
    }
 
    shProg->LinkStatus = (shProg->VertexProgram || shProg->FragmentProgram);

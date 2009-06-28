@@ -1,0 +1,66 @@
+# src/gallium/Makefile.template
+
+# Template makefile for gallium libraries.
+#
+# Usage:
+#   The minimum that the including makefile needs to define
+#   is TOP, LIBNAME and one of of the *_SOURCES.
+#
+# Optional defines:
+#   LIBRARY_INCLUDES are appended to the list of includes directories.
+#   LIBRARY_DEFINES is not used for makedepend, but for compilation.
+
+### Basic defines ###
+
+OBJECTS = $(C_SOURCES:.c=.o) \
+	$(CPP_SOURCES:.cpp=.o) \
+	$(ASM_SOURCES:.S=.o)
+
+INCLUDES = \
+	-I. \
+	-I$(TOP)/src/gallium/include \
+	-I$(TOP)/src/gallium/auxiliary \
+	-I$(TOP)/src/gallium/drivers \
+	-I$(GALLIUM)/src/gallium/include \
+	-I$(GALLIUM)/src/gallium/auxiliary \
+	-I$(GALLIUM)/src/gallium/drivers \
+	$(LIBRARY_INCLUDES)
+
+
+##### TARGETS #####
+
+default: depend lib$(LIBNAME).a
+
+lib$(LIBNAME).a: $(OBJECTS) Makefile $(TOP)/src/gallium/Makefile.template
+	$(MKLIB) -o $(LIBNAME) -static $(OBJECTS)
+
+depend: $(C_SOURCES) $(CPP_SOURCES) $(ASM_SOURCES) $(SYMLINKS)
+	rm -f depend
+	touch depend
+	$(MKDEP) $(MKDEP_OPTIONS) $(INCLUDES) $(C_SOURCES) $(CPP_SOURCES) $(ASM_SOURCES) 2> /dev/null
+
+# Emacs tags
+tags:
+	etags `find . -name \*.[ch]` `find ../include`
+
+# Remove .o and backup files
+clean:
+	rm -f $(OBJECTS) lib$(LIBNAME).a depend depend.bak
+
+# Dummy target
+install:
+	@echo -n ""
+
+##### RULES #####
+
+.c.o:
+	$(CC) -c $(INCLUDES) $(CFLAGS) $(LIBRARY_DEFINES) $< -o $@
+
+.cpp.o:
+	$(CXX) -c $(INCLUDES) $(CXXFLAGS) $(LIBRARY_DEFINES) $< -o $@
+
+.S.o:
+	$(CC) -c $(INCLUDES) $(CFLAGS) $(LIBRARY_DEFINES)  $< -o $@
+
+
+sinclude depend

@@ -34,7 +34,23 @@
 /* THIS FILE ONLY INCLUDED BY mtypes.h !!!!! */
 
 struct gl_pixelstore_attrib;
-struct mesa_display_list;
+struct gl_display_list;
+
+#if FEATURE_ARB_vertex_buffer_object
+/* Modifies GL_MAP_UNSYNCHRONIZED_BIT to allow driver to fail (return
+ * NULL) if buffer is unavailable for immediate mapping.
+ *
+ * Does GL_MAP_INVALIDATE_RANGE_BIT do this?  It seems so, but it
+ * would require more book-keeping in the driver than seems necessary
+ * at this point.
+ *
+ * Does GL_MAP_INVALDIATE_BUFFER_BIT do this?  Not really -- we don't
+ * want to provoke the driver to throw away the old storage, we will
+ * respect the contents of already referenced data.
+ */
+#define MESA_MAP_NOWAIT_BIT       0x0040
+#endif
+
 
 /**
  * Device driver function table.
@@ -586,9 +602,6 @@ struct dd_function_table {
    /** Notify driver that a program string has been specified. */
    void (*ProgramStringNotify)(GLcontext *ctx, GLenum target, 
 			       struct gl_program *prog);
-   /** Get value of a program register during program execution. */
-   void (*GetProgramRegister)(GLcontext *ctx, enum register_file file,
-                              GLuint index, GLfloat val[4]);
 
    /** Query if program can be loaded onto hardware */
    GLboolean (*IsProgramNative)(GLcontext *ctx, GLenum target, 
@@ -785,6 +798,16 @@ struct dd_function_table {
    void * (*MapBuffer)( GLcontext *ctx, GLenum target, GLenum access,
 			struct gl_buffer_object *obj );
 
+   /* May return NULL if MESA_MAP_NOWAIT_BIT is set in access:
+    */
+   void * (*MapBufferRange)( GLcontext *ctx, GLenum target,
+                             GLintptr offset, GLsizeiptr length, GLbitfield access,
+                             struct gl_buffer_object *obj);
+
+   void (*FlushMappedBufferRange) (GLcontext *ctx, GLenum target, 
+                                   GLintptr offset, GLsizeiptr length,
+                                   struct gl_buffer_object *obj);
+
    GLboolean (*UnmapBuffer)( GLcontext *ctx, GLenum target,
 			     struct gl_buffer_object *obj );
    /*@}*/
@@ -808,6 +831,8 @@ struct dd_function_table {
                          struct gl_renderbuffer_attachment *att);
    void (*FinishRenderTexture)(GLcontext *ctx,
                                struct gl_renderbuffer_attachment *att);
+   void (*ValidateFramebuffer)(GLcontext *ctx,
+                               struct gl_framebuffer *fb);
    /*@}*/
 #endif
 #if FEATURE_EXT_framebuffer_blit
@@ -886,7 +911,7 @@ struct dd_function_table {
    void (*Uniform)(GLcontext *ctx, GLint location, GLsizei count,
                    const GLvoid *values, GLenum type);
    void (*UniformMatrix)(GLcontext *ctx, GLint cols, GLint rows,
-                         GLenum matrixType, GLint location, GLsizei count,
+                         GLint location, GLsizei count,
                          GLboolean transpose, const GLfloat *values);
    void (*UseProgram)(GLcontext *ctx, GLuint program);
    void (*ValidateProgram)(GLcontext *ctx, GLuint program);
@@ -952,6 +977,12 @@ struct dd_function_table {
    GLuint NeedFlush;
    GLuint SaveNeedFlush;
 
+
+   /* Called prior to any of the GLvertexformat functions being
+    * called.  Paired with Driver.FlushVertices().
+    */
+   void (*BeginVertices)( GLcontext *ctx );
+
    /**
     * If inside glBegin()/glEnd(), it should ASSERT(0).  Otherwise, if
     * FLUSH_STORED_VERTICES bit in \p flags is set flushes any buffered
@@ -997,7 +1028,7 @@ struct dd_function_table {
     * Notify the T&L component before and after calling a display list.
     */
    void (*BeginCallList)( GLcontext *ctx, 
-			  struct mesa_display_list *dlist );
+			  struct gl_display_list *dlist );
    /**
     * Called by glEndCallList().
     *

@@ -43,6 +43,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/matrix.h"
 #include "main/extensions.h"
 #include "main/state.h"
+#include "main/texobj.h"
 #include "main/bufferobj.h"
 
 #include "swrast/swrast.h"
@@ -77,19 +78,17 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 int future_hw_tcl_on = 1;
 int hw_tcl_on = 1;
 
-#define need_GL_EXT_stencil_two_side
-#define need_GL_ARB_multisample
+#define need_GL_VERSION_2_0
 #define need_GL_ARB_point_parameters
-#define need_GL_ARB_texture_compression
-#define need_GL_ARB_vertex_buffer_object
 #define need_GL_ARB_vertex_program
-#define need_GL_EXT_blend_minmax
-//#define need_GL_EXT_fog_coord
-#define need_GL_EXT_multi_draw_arrays
-#define need_GL_EXT_secondary_color
 #define need_GL_EXT_blend_equation_separate
 #define need_GL_EXT_blend_func_separate
+#define need_GL_EXT_blend_minmax
+#define need_GL_EXT_fog_coord
 #define need_GL_EXT_gpu_program_parameters
+#define need_GL_EXT_secondary_color
+#define need_GL_EXT_stencil_two_side
+#define need_GL_ATI_separate_stencil
 #define need_GL_NV_vertex_program
 #include "extension_helper.h"
 
@@ -97,27 +96,23 @@ const struct dri_extension card_extensions[] = {
   /* *INDENT-OFF* */
   {"GL_ARB_depth_texture",		NULL},
   {"GL_ARB_fragment_program",		NULL},
-  {"GL_ARB_multisample",		GL_ARB_multisample_functions},
   {"GL_ARB_multitexture",		NULL},
   {"GL_ARB_point_parameters",		GL_ARB_point_parameters_functions},
   {"GL_ARB_shadow",			NULL},
   {"GL_ARB_shadow_ambient",		NULL},
   {"GL_ARB_texture_border_clamp",	NULL},
-  {"GL_ARB_texture_compression",	GL_ARB_texture_compression_functions},
   {"GL_ARB_texture_cube_map",		NULL},
   {"GL_ARB_texture_env_add",		NULL},
   {"GL_ARB_texture_env_combine",	NULL},
   {"GL_ARB_texture_env_crossbar",	NULL},
   {"GL_ARB_texture_env_dot3",		NULL},
   {"GL_ARB_texture_mirrored_repeat",	NULL},
-  {"GL_ARB_vertex_buffer_object",	GL_ARB_vertex_buffer_object_functions},
   {"GL_ARB_vertex_program",		GL_ARB_vertex_program_functions},
   {"GL_EXT_blend_equation_separate",	GL_EXT_blend_equation_separate_functions},
   {"GL_EXT_blend_func_separate",	GL_EXT_blend_func_separate_functions},
   {"GL_EXT_blend_minmax",		GL_EXT_blend_minmax_functions},
   {"GL_EXT_blend_subtract",		NULL},
-//  {"GL_EXT_fog_coord",			GL_EXT_fog_coord_functions },
-  {"GL_EXT_multi_draw_arrays",		GL_EXT_multi_draw_arrays_functions},
+  {"GL_EXT_fog_coord",			GL_EXT_fog_coord_functions },
   {"GL_EXT_gpu_program_parameters",     GL_EXT_gpu_program_parameters_functions},
   {"GL_EXT_secondary_color", 		GL_EXT_secondary_color_functions},
   {"GL_EXT_shadow_funcs",		NULL},
@@ -130,6 +125,7 @@ const struct dri_extension card_extensions[] = {
   {"GL_EXT_texture_lod_bias",		NULL},
   {"GL_EXT_texture_mirror_clamp",	NULL},
   {"GL_EXT_texture_rectangle",		NULL},
+  {"GL_ATI_separate_stencil",		GL_ATI_separate_stencil_functions},
   {"GL_ATI_texture_env_combine3",	NULL},
   {"GL_ATI_texture_mirror_once",	NULL},
   {"GL_MESA_pack_invert",		NULL},
@@ -141,6 +137,16 @@ const struct dri_extension card_extensions[] = {
   {NULL,				NULL}
   /* *INDENT-ON* */
 };
+
+
+/**
+ * The GL 2.0 functions are needed to make display lists work with
+ * functions added by GL_ATI_separate_stencil.
+ */
+const struct dri_extension gl_20_extension[] = {
+  {"GL_VERSION_2_0",			GL_VERSION_2_0_functions },
+};
+
 
 extern struct tnl_pipeline_stage _r300_render_stage;
 extern const struct tnl_pipeline_stage _r300_tcl_stage;
@@ -283,10 +289,23 @@ GLboolean r300CreateContext(const __GLcontextModes * glVisual,
 	ctx->Const.MaxTextureMaxAnisotropy = 16.0;
 	ctx->Const.MaxTextureLodBias = 16.0;
 
-	if (screen->chip_family >= CHIP_FAMILY_RV515) {
+	if (screen->chip_family >= CHIP_FAMILY_RV515)
 	    ctx->Const.MaxTextureLevels = 13;
-	    ctx->Const.MaxTextureRectSize = 4096;
-	}
+	else
+	    ctx->Const.MaxTextureLevels = 12;
+
+        driCalculateMaxTextureLevels( r300->texture_heaps,
+                                      r300->nr_heaps,
+                                      & ctx->Const,
+                                      4,
+                                      ctx->Const.MaxTextureLevels - 1,
+                                      MIN2(ctx->Const.MaxTextureLevels,
+                                           MAX_3D_TEXTURE_LEVELS) - 1,
+                                      ctx->Const.MaxTextureLevels - 1,
+                                      ctx->Const.MaxTextureLevels - 1,
+                                      ctx->Const.MaxTextureLevels - 1,
+                                      GL_FALSE,
+                                      2 );
 
 	ctx->Const.MinPointSize = 1.0;
 	ctx->Const.MinPointSizeAA = 1.0;
@@ -305,6 +324,10 @@ GLboolean r300CreateContext(const __GLcontextModes * glVisual,
 	    ( /*512 */ RADEON_BUFFER_SIZE * 16 * 1024) / (4 * 4);
 #endif
 #endif
+
+	ctx->Const.MaxDrawBuffers = 1;
+
+	_mesa_set_mvp_with_dp4( ctx, GL_TRUE );
 
 	/* Initialize the software rasterizer and helper modules.
 	 */
@@ -480,6 +503,7 @@ void r300DestroyContext(__DRIcontextPrivate * driContextPriv)
 	r300ContextPtr r300 = (r300ContextPtr) driContextPriv->driverPrivate;
 	radeonContextPtr radeon = (radeonContextPtr) r300;
 	radeonContextPtr current = ctx ? RADEON_CONTEXT(ctx) : NULL;
+	int i;
 
 	if (RADEON_DEBUG & DEBUG_DRI) {
 		fprintf(stderr, "Destroying context !\n");
@@ -531,6 +555,11 @@ void r300DestroyContext(__DRIcontextPrivate * driContextPriv)
 			}
 
 			assert(is_empty_list(&r300->swapped));
+		}
+
+                /* Drop texture object references from current hardware state */
+		for (i = 0; i < 8; i++) {
+			_mesa_reference_texobj(&r300->state.texture.unit[i].texobj, NULL);
 		}
 
 		radeonCleanupContext(&r300->radeon);

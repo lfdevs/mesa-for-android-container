@@ -105,6 +105,7 @@ static void Redisplay (void)
 			GLfloat seconds = (GLfloat) (t - t0) / 1000.0f;
 			GLfloat fps = frames / seconds;
 			printf ("%d frames in %6.3f seconds = %6.3f FPS\n", frames, seconds, fps);
+                        fflush(stdout);
 			t0 = t;
 			frames = 0;
 		}
@@ -208,7 +209,31 @@ static void Init (void)
       "   // Compute dot product of light direction and normal vector\n"
       "   float dotProd = max (dot (lightPos, normalize (normal)), 0.0);\n"
       "   // Compute diffuse and specular contributions\n"
+#if 1
       "   gl_FragColor = diffuse * dotProd + specular * pow (dotProd, 20.0);\n"
+#elif 1 /* test IF/ELSE/ENDIF */
+      "   if (normal.y > 0.0) { \n"
+      "      gl_FragColor = diffuse * dotProd + specular * pow (dotProd, 20.0);\n"
+      "   } \n"
+      "   else { \n"
+      "      if (normal.x < 0.0) { \n"
+      "         gl_FragColor = vec4(1, 0, 0, 0); \n"
+      "      } \n"
+      "      else { \n"
+      "         gl_FragColor = vec4(1, 1, 0, 0); \n"
+      "      } \n"
+      "   } \n"
+#elif 1 /* test LOOP */
+      "   while (1) { \n"
+      "      if (normal.y >= 0.0) { \n"
+      "         gl_FragColor = vec4(1, 0, 0, 0); \n"
+      "         break; \n"
+      "      } else { \n"
+      "         gl_FragColor = diffuse * dotProd + specular * pow (dotProd, 20.0);\n"
+      "         break; \n"
+      "      } \n"
+      "   } \n"
+#endif
       "}\n"
    ;
    static const char *vertShaderText =

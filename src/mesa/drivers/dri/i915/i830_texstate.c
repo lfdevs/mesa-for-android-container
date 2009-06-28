@@ -38,7 +38,7 @@
 
 
 static GLuint
-translate_texture_format(GLuint mesa_format)
+translate_texture_format(GLuint mesa_format, GLuint internal_format)
 {
    switch (mesa_format) {
    case MESA_FORMAT_L8:
@@ -56,7 +56,10 @@ translate_texture_format(GLuint mesa_format)
    case MESA_FORMAT_ARGB4444:
       return MAPSURF_16BIT | MT_16BIT_ARGB4444;
    case MESA_FORMAT_ARGB8888:
-      return MAPSURF_32BIT | MT_32BIT_ARGB8888;
+      if (internal_format == GL_RGB)
+	 return MAPSURF_32BIT | MT_32BIT_XRGB8888;
+      else
+	 return MAPSURF_32BIT | MT_32BIT_ARGB8888;
    case MESA_FORMAT_YCBCR_REV:
       return (MAPSURF_422 | MT_422_YCRCB_NORMAL);
    case MESA_FORMAT_YCBCR:
@@ -119,6 +122,7 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    struct gl_texture_image *firstImage;
    GLuint *state = i830->state.Tex[unit], format, pitch;
    GLint lodbias;
+   GLubyte border[4];
 
    memset(state, 0, sizeof(state));
 
@@ -162,7 +166,8 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
 								0, intelObj->
 								firstLevel);
 
-      format = translate_texture_format(firstImage->TexFormat->MesaFormat);
+      format = translate_texture_format(firstImage->TexFormat->MesaFormat,
+					firstImage->InternalFormat);
       pitch = intelObj->mt->pitch * intelObj->mt->cpp;
    }
 
@@ -290,11 +295,16 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
                                                      (ws)));
    }
 
+   /* convert border color from float to ubyte */
+   CLAMPED_FLOAT_TO_UBYTE(border[0], tObj->BorderColor[0]);
+   CLAMPED_FLOAT_TO_UBYTE(border[1], tObj->BorderColor[1]);
+   CLAMPED_FLOAT_TO_UBYTE(border[2], tObj->BorderColor[2]);
+   CLAMPED_FLOAT_TO_UBYTE(border[3], tObj->BorderColor[3]);
 
-   state[I830_TEXREG_TM0S4] = INTEL_PACKCOLOR8888(tObj->_BorderChan[0],
-                                                  tObj->_BorderChan[1],
-                                                  tObj->_BorderChan[2],
-                                                  tObj->_BorderChan[3]);
+   state[I830_TEXREG_TM0S4] = INTEL_PACKCOLOR8888(border[0],
+                                                  border[1],
+                                                  border[2],
+                                                  border[3]);
 
 
    I830_ACTIVESTATE(i830, I830_UPLOAD_TEX(unit), GL_TRUE);

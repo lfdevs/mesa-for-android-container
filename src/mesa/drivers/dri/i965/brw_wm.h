@@ -65,15 +65,17 @@ struct brw_wm_prog_key {
    GLuint flat_shade:1;
    GLuint runtime_check_aads_emit:1;
    
-   GLuint projtex_mask:16;
+   GLbitfield proj_attrib_mask; /**< one bit per fragment program attribute */
    GLuint shadowtex_mask:16;
    GLuint yuvtex_mask:16;
    GLuint yuvtex_swap_mask:16;	/* UV swaped */
-   //   GLuint pad1:16;
+
+   GLuint tex_swizzles[BRW_MAX_TEX_UNIT];
 
    GLuint program_string_id:32;
    GLuint origin_x, origin_y;
    GLuint drawable_height;
+   GLuint vp_outputs_written;
 };
 
 
@@ -142,12 +144,11 @@ struct brw_wm_instruction {
    GLuint writemask:4;
    GLuint tex_unit:4;   /* texture unit for TEX, TXD, TXP instructions */
    GLuint tex_idx:3;    /* TEXTURE_1D,2D,3D,CUBE,RECT_INDEX source target */
+   GLuint tex_shadow:1; /* do shadow comparison? */
    GLuint eot:1;    	/* End of thread indicator for FB_WRITE*/
    GLuint target:10;    /* target binding table index for FB_WRITE*/
 };
 
-
-#define PROGRAM_INTERNAL_PARAM 
 
 #define BRW_WM_MAX_INSN  (MAX_NV_FRAGMENT_PROGRAM_INSTRUCTIONS*3 + FRAG_ATTRIB_MAX + 3)
 #define BRW_WM_MAX_GRF   128		/* hardware limit */
@@ -240,17 +241,25 @@ struct brw_wm_compile {
    GLuint max_wm_grf;
    GLuint last_scratch;
 
+   /** Mapping from Mesa registers to hardware registers */
    struct {
-	GLboolean inited;
-	struct brw_reg reg;
+      GLboolean inited;
+      struct brw_reg reg;
    } wm_regs[PROGRAM_PAYLOAD+1][256][4];
+
    struct brw_reg stack;
    struct brw_reg emit_mask_reg;
-   GLuint reg_index;
+   GLuint reg_index;  /**< Index of next free GRF register */
    GLuint tmp_regs[BRW_WM_MAX_GRF];
    GLuint tmp_index;
    GLuint tmp_max;
    GLuint subroutines[BRW_WM_MAX_SUBROUTINE];
+
+   /** we may need up to 3 constants per instruction (if use_const_buffer) */
+   struct {
+      GLint index;
+      struct brw_reg reg;
+   } current_const[3];
 };
 
 

@@ -158,7 +158,7 @@ void
 intel_region_reference(struct intel_region **dst, struct intel_region *src)
 {
    if (src)
-      DBG("%s %d\n", __FUNCTION__, src->refcount);
+      DBG("%s %p %d\n", __FUNCTION__, src, src->refcount);
 
    assert(*dst == NULL);
    if (src) {
@@ -175,7 +175,7 @@ intel_region_release(struct intel_region **region_handle)
    if (region == NULL)
       return;
 
-   DBG("%s %d\n", __FUNCTION__, region->refcount - 1);
+   DBG("%s %p %d\n", __FUNCTION__, region, region->refcount - 1);
 
    ASSERT(region->refcount > 0);
    region->refcount--;
@@ -466,7 +466,8 @@ intel_recreate_static(struct intel_context *intel,
    else
       region->cpp = intel->ctx.Visual.rgbBits / 8;
    region->pitch = intelScreen->pitch;
-   region->height = intelScreen->height;     /* needed? */
+   region->width = intelScreen->width;
+   region->height = intelScreen->height;
 
    if (region->buffer != NULL) {
       dri_bo_unreference(region->buffer);

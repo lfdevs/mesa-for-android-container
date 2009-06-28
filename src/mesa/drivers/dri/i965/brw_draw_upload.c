@@ -156,7 +156,13 @@ static GLuint byte_types_scale[5] = {
 };
 
 
-static GLuint get_surface_type( GLenum type, GLuint size, GLboolean normalized )
+/**
+ * Given vertex array type/size/format/normalized info, return
+ * the appopriate hardware surface type.
+ * Format will be GL_RGBA or possibly GL_BGRA for GLubyte[4] color arrays.
+ */
+static GLuint get_surface_type( GLenum type, GLuint size,
+                                GLenum format, GLboolean normalized )
 {
    if (INTEL_DEBUG & DEBUG_VERTS)
       _mesa_printf("type %s size %d normalized %d\n", 
@@ -171,11 +177,20 @@ static GLuint get_surface_type( GLenum type, GLuint size, GLboolean normalized )
       case GL_BYTE: return byte_types_norm[size];
       case GL_UNSIGNED_INT: return uint_types_norm[size];
       case GL_UNSIGNED_SHORT: return ushort_types_norm[size];
-      case GL_UNSIGNED_BYTE: return ubyte_types_norm[size];
+      case GL_UNSIGNED_BYTE:
+         if (format == GL_BGRA) {
+            /* See GL_EXT_vertex_array_bgra */
+            assert(size == 4);
+            return BRW_SURFACEFORMAT_B8G8R8A8_UNORM;
+         }
+         else {
+            return ubyte_types_norm[size];
+         }
       default: assert(0); return 0;
       }      
    }
    else {
+      assert(format == GL_RGBA); /* sanity check */
       switch (type) {
       case GL_DOUBLE: return double_types[size];
       case GL_FLOAT: return float_types[size];
@@ -262,6 +277,7 @@ copy_array_to_vbo_array( struct brw_context *brw,
 			 struct brw_vertex_element *element,
 			 GLuint dst_stride)
 {
+   struct intel_context *intel = &brw->intel;
    GLuint size = element->count * dst_stride;
 
    get_space(brw, size, &element->bo, &element->offset);
@@ -274,29 +290,52 @@ copy_array_to_vbo_array( struct brw_context *brw,
    }
 
    if (dst_stride == element->glarray->StrideB) {
-      dri_bo_subdata(element->bo,
-		     element->offset,
-		     size,
-		     element->glarray->Ptr);
+      if (intel->intelScreen->kernel_exec_fencing) {
+	 drm_intel_gem_bo_map_gtt(element->bo);
+	 memcpy((char *)element->bo->virtual + element->offset,
+		element->glarray->Ptr, size);
+	 drm_intel_gem_bo_unmap_gtt(element->bo);
+      } else {
+	 dri_bo_subdata(element->bo,
+			element->offset,
+			size,
+			element->glarray->Ptr);
+      }
    } else {
-      void *data;
       char *dest;
-      const char *src = element->glarray->Ptr;
+      const unsigned char *src = element->glarray->Ptr;
       int i;
 
-      data = _mesa_malloc(dst_stride * element->count);
-      dest = data;
-      for (i = 0; i < element->count; i++) {
-	 memcpy(dest, src, dst_stride);
-	 src += element->glarray->StrideB;
-	 dest += dst_stride;
-      }
+      if (intel->intelScreen->kernel_exec_fencing) {
+	 drm_intel_gem_bo_map_gtt(element->bo);
+	 dest = element->bo->virtual;
+	 dest += element->offset;
 
-      dri_bo_subdata(element->bo,
-		     element->offset,
-		     size,
-		     data);
-      _mesa_free(data);
+	 for (i = 0; i < element->count; i++) {
+	    memcpy(dest, src, dst_stride);
+	    src += element->glarray->StrideB;
+	    dest += dst_stride;
+	 }
+
+	 drm_intel_gem_bo_unmap_gtt(element->bo);
+      } else {
+	 void *data;
+
+	 data = _mesa_malloc(dst_stride * element->count);
+	 dest = data;
+	 for (i = 0; i < element->count; i++) {
+	    memcpy(dest, src, dst_stride);
+	    src += element->glarray->StrideB;
+	    dest += dst_stride;
+	 }
+
+	 dri_bo_subdata(element->bo,
+			element->offset,
+			size,
+			data);
+
+	 _mesa_free(data);
+      }
    }
 }
 
@@ -484,6 +523,7 @@ static void brw_emit_vertices(struct brw_context *brw)
       struct brw_vertex_element *input = enabled[i];
       uint32_t format = get_surface_type(input->glarray->Type,
 					 input->glarray->Size,
+					 input->glarray->Format,
 					 input->glarray->Normalized);
       uint32_t comp0 = BRW_VE1_COMPONENT_STORE_SRC;
       uint32_t comp1 = BRW_VE1_COMPONENT_STORE_SRC;
@@ -547,9 +587,15 @@ static void brw_prepare_indices(struct brw_context *brw)
 
       /* Straight upload
        */
-      dri_bo_subdata(bo, offset, ib_size, index_buffer->ptr);
+      if (intel->intelScreen->kernel_exec_fencing) {
+	 drm_intel_gem_bo_map_gtt(bo);
+	 memcpy((char *)bo->virtual + offset, index_buffer->ptr, ib_size);
+	 drm_intel_gem_bo_unmap_gtt(bo);
+      } else {
+	 dri_bo_subdata(bo, offset, ib_size, index_buffer->ptr);
+      }
    } else {
-      offset = (GLuint)index_buffer->ptr;
+      offset = (GLuint) (unsigned long) index_buffer->ptr;
 
       /* If the index buffer isn't aligned to its element size, we have to
        * rebase it into a temporary.

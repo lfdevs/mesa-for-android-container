@@ -44,6 +44,7 @@ static void upload_sf_vp(struct brw_context *brw)
    struct brw_sf_viewport sfv;
    GLfloat y_scale, y_bias;
    const GLboolean render_to_fbo = (ctx->DrawBuffer->Name != 0);
+   const GLfloat *v = ctx->Viewport._WindowMap.m;
 
    memset(&sfv, 0, sizeof(sfv));
 
@@ -58,8 +59,6 @@ static void upload_sf_vp(struct brw_context *brw)
 
    /* _NEW_VIEWPORT */
 
-   const GLfloat *v = ctx->Viewport._WindowMap.m;
-
    sfv.viewport.m00 = v[MAT_SX];
    sfv.viewport.m11 = v[MAT_SY] * y_scale;
    sfv.viewport.m22 = v[MAT_SZ] * depth_scale;
@@ -67,7 +66,9 @@ static void upload_sf_vp(struct brw_context *brw)
    sfv.viewport.m31 = v[MAT_TY] * y_scale + y_bias;
    sfv.viewport.m32 = v[MAT_TZ] * depth_scale;
 
-   /* _NEW_SCISSOR */
+   /* _NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT
+    * for DrawBuffer->_[XY]{min,max}
+    */
 
    /* The scissor only needs to handle the intersection of drawable and
     * scissor rect.  Clipping to the boundaries of static shared buffers
@@ -98,7 +99,8 @@ static void upload_sf_vp(struct brw_context *brw)
 const struct brw_tracked_state brw_sf_vp = {
    .dirty = {
       .mesa  = (_NEW_VIEWPORT | 
-		_NEW_SCISSOR),
+		_NEW_SCISSOR |
+		_NEW_BUFFERS),
       .brw   = 0,
       .cache = 0
    },
@@ -112,10 +114,13 @@ struct brw_sf_unit_key {
    unsigned int nr_urb_entries, urb_size, sfsize;
 
    GLenum front_face, cull_face;
-   GLboolean scissor, line_smooth, point_sprite, point_attenuated;
+   unsigned scissor:1;
+   unsigned line_smooth:1;
+   unsigned point_sprite:1;
+   unsigned point_attenuated:1;
+   unsigned render_to_fbo:1;
    float line_width;
    float point_size;
-   GLboolean render_to_fbo;
 };
 
 static void
@@ -145,7 +150,7 @@ sf_unit_populate_key(struct brw_context *brw, struct brw_sf_unit_key *key)
    key->line_smooth = ctx->Line.SmoothFlag;
 
    key->point_sprite = ctx->Point.PointSprite;
-   key->point_size = ctx->Point.Size;
+   key->point_size = CLAMP(ctx->Point.Size, ctx->Point.MinSize, ctx->Point.MaxSize);
    key->point_attenuated = ctx->Point._Attenuated;
 
    key->render_to_fbo = brw->intel.ctx.DrawBuffer->Name != 0;
@@ -229,7 +234,33 @@ sf_unit_create_from_key(struct brw_context *brw, struct brw_sf_unit_key *key,
        sf.sf6.line_width = 0;
 
    /* _NEW_POINT */
-   sf.sf6.point_rast_rule = BRW_RASTRULE_UPPER_RIGHT;	/* opengl conventions */
+   key->render_to_fbo = brw->intel.ctx.DrawBuffer->Name != 0;
+   if (!key->render_to_fbo) {
+      /* Rendering to an OpenGL window */
+      sf.sf6.point_rast_rule = BRW_RASTRULE_UPPER_RIGHT;
+   }
+   else {
+      /* If rendering to an FBO, the pixel coordinate system is
+       * inverted with respect to the normal OpenGL coordinate
+       * system, so BRW_RASTRULE_LOWER_RIGHT is correct.
+       * But this value is listed as "Reserved, but not seen as useful"
+       * in Intel documentation (page 212, "Point Rasterization Rule",
+       * section 7.4 "SF Pipeline State Summary", of document
+       * "Intel® 965 Express Chipset Family and Intel® G35 Express
+       * Chipset Graphics Controller Programmer's Reference Manual,
+       * Volume 2: 3D/Media", Revision 1.0b as of January 2008,
+       * available at 
+       *     http://intellinuxgraphics.org/documentation.html
+       * at the time of this writing).
+       *
+       * It does work on at least some devices, if not all;
+       * if devices that don't support it can be identified,
+       * the likely failure case is that points are rasterized
+       * incorrectly, which is no worse than occurs without
+       * the value, so we're using it here.
+       */
+      sf.sf6.point_rast_rule = BRW_RASTRULE_LOWER_RIGHT;
+   }
    /* XXX clamp max depends on AA vs. non-AA */
 
    sf.sf7.sprite_point = key->point_sprite;

@@ -32,6 +32,8 @@
 #include "main/macros.h"
 #include "main/mtypes.h"
 #include "main/light.h"
+#include "math/m_translate.h"
+#include "math/m_xform.h"
 
 #include "tnl.h"
 #include "t_context.h"
@@ -77,6 +79,12 @@ _tnl_CreateContext( GLcontext *ctx )
    tnl->Driver.NotifyMaterialChange = _mesa_validate_all_lighting_tables;
 
    tnl->nr_blocks = 0;
+
+   /* plug in the VBO drawing function */
+   vbo_set_draw_func(ctx, _tnl_draw_prims);
+
+   _math_init_transformation();
+   _math_init_translate();
 
    return GL_TRUE;
 }
@@ -141,13 +149,10 @@ _tnl_InvalidateState( GLcontext *ctx, GLuint new_state )
       /* fixed-function fog */
       RENDERINPUTS_SET( tnl->render_inputs_bitset, _TNL_ATTRIB_FOG );
    }
-   else if (ctx->FragmentProgram._Current) {
-      struct gl_fragment_program *fp = ctx->FragmentProgram._Current;
-      if (fp) {
-         if (fp->FogOption != GL_NONE || (fp->Base.InputsRead & FRAG_BIT_FOGC)) {
-            /* fragment program needs fog coord */
-            RENDERINPUTS_SET( tnl->render_inputs_bitset, _TNL_ATTRIB_FOG );
-         }
+   else if (fp) {
+      if (fp->FogOption != GL_NONE || (fp->Base.InputsRead & FRAG_BIT_FOGC)) {
+         /* fragment program needs fog coord */
+         RENDERINPUTS_SET( tnl->render_inputs_bitset, _TNL_ATTRIB_FOG );
       }
    }
 

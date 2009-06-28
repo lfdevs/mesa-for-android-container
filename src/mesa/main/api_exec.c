@@ -29,7 +29,7 @@
  */
 
 
-#include "glheader.h"
+#include "mfeatures.h"
 #if FEATURE_accum
 #include "accum.h"
 #endif
@@ -116,6 +116,7 @@
 #include "texstate.h"
 #include "mtypes.h"
 #include "varray.h"
+#include "viewport.h"
 #if FEATURE_NV_vertex_program
 #include "shader/nvprogram.h"
 #endif
@@ -838,6 +839,12 @@ _mesa_init_exec_table(struct _glapi_table *exec)
    SET_SetFragmentShaderConstantATI(exec, _mesa_SetFragmentShaderConstantATI);
 #endif
 
+  /* GL_ATI_envmap_bumpmap */
+   SET_GetTexBumpParameterivATI(exec, _mesa_GetTexBumpParameterivATI);
+   SET_GetTexBumpParameterfvATI(exec, _mesa_GetTexBumpParameterfvATI);
+   SET_TexBumpParameterivATI(exec, _mesa_TexBumpParameterivATI);
+   SET_TexBumpParameterfvATI(exec, _mesa_TexBumpParameterfvATI);
+
 #if FEATURE_EXT_framebuffer_object
    SET_IsRenderbufferEXT(exec, _mesa_IsRenderbufferEXT);
    SET_BindRenderbufferEXT(exec, _mesa_BindRenderbufferEXT);
@@ -880,5 +887,12 @@ _mesa_init_exec_table(struct _glapi_table *exec)
 
    /* GL_ATI_separate_stencil */
    SET_StencilFuncSeparateATI(exec, _mesa_StencilFuncSeparateATI);
+
+#if FEATURE_ARB_framebuffer_object
+   /* The ARB_fbo functions are the union of
+    * GL_EXT_fbo, GL_EXT_framebuffer_blit, GL_EXT_texture_array
+    */
+   SET_RenderbufferStorageMultisample(exec, _mesa_RenderbufferStorageMultisample);
+#endif
 }
 

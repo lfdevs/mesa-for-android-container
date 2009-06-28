@@ -12,6 +12,7 @@
 #include "main/simple_list.h"
 #include "main/texcompress.h"
 #include "main/texformat.h"
+#include "main/texgetimage.h"
 #include "main/texobj.h"
 #include "main/texstore.h"
 #include "main/teximage.h"
@@ -207,11 +208,12 @@ try_pbo_upload(struct intel_context *intel,
    if (!pbo ||
        intel->ctx._ImageTransferState ||
        unpack->SkipPixels || unpack->SkipRows) {
-      _mesa_printf("%s: failure 1\n", __FUNCTION__);
+      DBG("%s: failure 1\n", __FUNCTION__);
       return GL_FALSE;
    }
 
-   src_offset = (GLuint) pixels;
+   /* note: potential 64-bit ptr to 32-bit int cast */
+   src_offset = (GLuint) (unsigned long) pixels;
 
    if (unpack->RowLength > 0)
       src_stride = unpack->RowLength;
@@ -262,11 +264,12 @@ try_pbo_zcopy(struct intel_context *intel,
    if (!pbo ||
        intel->ctx._ImageTransferState ||
        unpack->SkipPixels || unpack->SkipRows) {
-      _mesa_printf("%s: failure 1\n", __FUNCTION__);
+      DBG("%s: failure 1\n", __FUNCTION__);
       return GL_FALSE;
    }
 
-   src_offset = (GLuint) pixels;
+   /* note: potential 64-bit ptr to 32-bit int cast */
+   src_offset = (GLuint) (unsigned long) pixels;
 
    if (unpack->RowLength > 0)
       src_stride = unpack->RowLength;
@@ -280,7 +283,7 @@ try_pbo_zcopy(struct intel_context *intel,
    dst_stride = intelImage->mt->pitch;
 
    if (src_stride != dst_stride || dst_offset != 0 || src_offset != 0) {
-      _mesa_printf("%s: failure 2\n", __FUNCTION__);
+      DBG("%s: failure 2\n", __FUNCTION__);
       return GL_FALSE;
    }
 
@@ -312,8 +315,8 @@ intelTexImage(GLcontext * ctx,
    GLint postConvWidth = width;
    GLint postConvHeight = height;
    GLint texelBytes, sizeInBytes;
-   GLuint dstRowStride, srcRowStride = texImage->RowStride;
-
+   GLuint dstRowStride = 0, srcRowStride = texImage->RowStride;
+   GLboolean needs_map;
 
    DBG("%s target %s level %d %dx%dx%d border %d\n", __FUNCTION__,
        _mesa_lookup_enum_by_nr(target), level, width, height, depth, border);
@@ -479,13 +482,21 @@ intelTexImage(GLcontext * ctx,
 
    LOCK_HARDWARE(intel);
 
+   /* Two cases where we need a mapping of the miptree: when the user supplied
+    * data is mapped as well (non-PBO, memcpy upload) or when we're going to do
+    * (software) mipmap generation.
+    */
+   needs_map = (pixels != NULL) || (level == texObj->BaseLevel &&
+				  texObj->GenerateMipmap);
+
    if (intelImage->mt) {
-      texImage->Data = intel_miptree_image_map(intel,
-                                               intelImage->mt,
-                                               intelImage->face,
-                                               intelImage->level,
-                                               &dstRowStride,
-                                               intelImage->base.ImageOffsets);
+      if (needs_map)
+         texImage->Data = intel_miptree_image_map(intel,
+                                                  intelImage->mt,
+                                                  intelImage->face,
+                                                  intelImage->level,
+                                                  &dstRowStride,
+                                                  intelImage->base.ImageOffsets);
       texImage->RowStride = dstRowStride / intelImage->mt->cpp;
    }
    else {
@@ -505,8 +516,9 @@ intelTexImage(GLcontext * ctx,
    }
 
    DBG("Upload image %dx%dx%d row_len %d "
-       "pitch %d\n",
-       width, height, depth, width * texelBytes, dstRowStride);
+       "pitch %d pixels %d compressed %d\n",
+       width, height, depth, width * texelBytes, dstRowStride,
+       pixels ? 1 : 0, compressed);
 
    /* Copy data.  Would like to know when it's ok for us to eg. use
     * the blitter to copy.  Or, use the hardware to do the format
@@ -519,7 +531,7 @@ intelTexImage(GLcontext * ctx,
 	       _mesa_copy_rect(texImage->Data, dst->cpp, dst->pitch,
 			       0, 0,
 			       intelImage->mt->level[level].width,
-			       intelImage->mt->level[level].height/4,
+			       (intelImage->mt->level[level].height+3)/4,
 			       pixels,
 			       srcRowStride,
 			       0, 0);
@@ -535,17 +547,18 @@ intelTexImage(GLcontext * ctx,
 						   format, type, pixels, unpack)) {
 	   _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTexImage");
        }
-   }
 
-   /* GL_SGIS_generate_mipmap */
-   if (level == texObj->BaseLevel && texObj->GenerateMipmap) {
-      intel_generate_mipmap(ctx, target, texObj);
+       /* GL_SGIS_generate_mipmap */
+       if (level == texObj->BaseLevel && texObj->GenerateMipmap) {
+	  intel_generate_mipmap(ctx, target, texObj);
+       }
    }
 
    _mesa_unmap_teximage_pbo(ctx, unpack);
 
    if (intelImage->mt) {
-      intel_miptree_image_unmap(intel, intelImage->mt);
+      if (needs_map)
+         intel_miptree_image_unmap(intel, intelImage->mt);
       texImage->Data = NULL;
    }
 
@@ -623,6 +636,12 @@ intel_get_tex_image(GLcontext * ctx, GLenum target, GLint level,
 {
    struct intel_context *intel = intel_context(ctx);
    struct intel_texture_image *intelImage = intel_texture_image(texImage);
+
+   /* If we're reading from a texture that has been rendered to, need to
+    * make sure rendering is complete.
+    * We could probably predicate this on texObj->_RenderToTexture
+    */
+   intelFlush(ctx);
 
    /* Map */
    if (intelImage->mt) {
@@ -712,7 +731,9 @@ intelSetTexOffset(__DRIcontext *pDRICtx, GLint texname,
 }
 
 void
-intelSetTexBuffer(__DRIcontext *pDRICtx, GLint target, __DRIdrawable *dPriv)
+intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
+		   GLint glx_texture_format,
+		   __DRIdrawable *dPriv)
 {
    struct intel_framebuffer *intel_fb = dPriv->driverPrivate;
    struct intel_context *intel = pDRICtx->driverPrivate;
@@ -743,7 +764,10 @@ intelSetTexBuffer(__DRIcontext *pDRICtx, GLint target, __DRIdrawable *dPriv)
 
    type = GL_BGRA;
    format = GL_UNSIGNED_BYTE;
-   internalFormat = (rb->region->cpp == 3 ? 3 : 4);
+   if (glx_texture_format == GLX_TEXTURE_FORMAT_RGB_EXT)
+      internalFormat = GL_RGB;
+   else
+      internalFormat = GL_RGBA;
 
    mt = intel_miptree_create_for_region(intel, target,
 					internalFormat,
@@ -782,4 +806,13 @@ intelSetTexBuffer(__DRIcontext *pDRICtx, GLint target, __DRIdrawable *dPriv)
    }
 
    _mesa_unlock_texture(&intel->ctx, texObj);
+}
+
+void
+intelSetTexBuffer(__DRIcontext *pDRICtx, GLint target, __DRIdrawable *dPriv)
+{
+   /* The old interface didn't have the format argument, so copy our
+    * implementation's behavior at the time.
+    */
+   intelSetTexBuffer2(pDRICtx, target, GLX_TEXTURE_FORMAT_RGBA_EXT, dPriv);
 }

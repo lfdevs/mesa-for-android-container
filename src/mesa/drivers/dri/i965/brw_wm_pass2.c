@@ -69,8 +69,6 @@ static void prealloc_reg(struct brw_wm_compile *c,
  */
 static void init_registers( struct brw_wm_compile *c )
 {
-   struct brw_context *brw = c->func.brw;
-   GLuint inputs = (brw->vs.prog_data->outputs_written & DO_SETUP_BITS);
    GLuint nr_interp_regs = 0;
    GLuint i = 0;
    GLuint j;
@@ -84,18 +82,22 @@ static void init_registers( struct brw_wm_compile *c )
    for (j = 0; j < c->nr_creg; j++) 
       prealloc_reg(c, &c->creg[j], i++);
 
-   for (j = 0; j < FRAG_ATTRIB_MAX; j++) 
-      if (inputs & (1<<j)) {
-	 /* index for vs output and ps input are not the same 
-	    in shader varying */
-	 GLuint index;
-	 if (j > FRAG_ATTRIB_VAR0)
-	     index = j - (VERT_RESULT_VAR0 - FRAG_ATTRIB_VAR0);
+   for (j = 0; j < FRAG_ATTRIB_MAX; j++) {
+      if (c->key.vp_outputs_written & (1<<j)) {
+	 int fp_index;
+
+	 if (j >= VERT_RESULT_VAR0)
+	    fp_index = j - (VERT_RESULT_VAR0 - FRAG_ATTRIB_VAR0);
+	 else if (j <= VERT_RESULT_TEX7)
+	    fp_index = j;
 	 else
-	     index = j;
+	    fp_index = -1;
+
 	 nr_interp_regs++;
-	 prealloc_reg(c, &c->payload.input_interp[index], i++);
+	 if (fp_index >= 0)
+	    prealloc_reg(c, &c->payload.input_interp[fp_index], i++);
       }
+   }
 
    assert(nr_interp_regs >= 1);
 
@@ -120,7 +122,7 @@ static void update_register_usage(struct brw_wm_compile *c,
       /* Only search those which can change:
        */
       if (grf->nextuse < thisinsn) {
-	 struct brw_wm_ref *ref = grf->value->lastuse;
+	 const struct brw_wm_ref *ref = grf->value->lastuse;
 
 	 /* Has last use of value been passed?
 	  */
@@ -148,7 +150,7 @@ static void spill_value(struct brw_wm_compile *c,
    /* Allocate a spill slot.  Note that allocations start from 0x40 -
     * the first slot is reserved to mean "undef" in brw_wm_emit.c
     */
-   if (!value->spill_slot) {  
+   if (!value->spill_slot) {
       c->last_scratch += 0x40;	
       value->spill_slot = c->last_scratch;
    }
@@ -189,7 +191,7 @@ static GLuint search_contiguous_regs(struct brw_wm_compile *c,
 	 if (grf[i+j].nextuse < group_nextuse)
 	    group_nextuse = grf[i+j].nextuse;
       }
-	 
+
       if (group_nextuse > furthest) {
 	 furthest = group_nextuse;
 	 reg = i;
@@ -197,7 +199,7 @@ static GLuint search_contiguous_regs(struct brw_wm_compile *c,
    }
 
    assert(furthest != thisinsn);
-   
+
    /* Any non-empty regs will need to be spilled:
     */
    for (j = 0; j < nr; j++) 
@@ -243,7 +245,7 @@ static void alloc_contiguous_dest(struct brw_wm_compile *c,
 
 static void load_args(struct brw_wm_compile *c, 
 		      struct brw_wm_instruction *inst)
-{   
+{
    GLuint thisinsn = inst - c->instruction;
    GLuint i,j;
 
@@ -258,17 +260,17 @@ static void load_args(struct brw_wm_compile *c,
 		* register allocation and mark the ref as requiring a fill.
 		*/
 	       GLuint reg = search_contiguous_regs(c, 1, thisinsn);
-            
+
 	       c->pass2_grf[reg].value = ref->value;
 	       c->pass2_grf[reg].nextuse = thisinsn;
-	    
+
 	       ref->value->resident = &c->pass2_grf[reg];
 
 	       /* Note that a fill is required:
 		*/
 	       ref->unspill_reg = reg*2;
 	    }
-	    
+
 	    /* Adjust the hw_reg to point at the value's current location:
 	     */
 	    assert(ref->value == ref->value->resident->value);
@@ -294,7 +296,7 @@ void brw_wm_pass2( struct brw_wm_compile *c )
 
    for (insn = 0; insn < c->nr_insns; insn++) {
       struct brw_wm_instruction *inst = &c->instruction[insn];
-      
+
       /* Update registers' nextuse values:
        */
       update_register_usage(c, insn);
@@ -322,11 +324,11 @@ void brw_wm_pass2( struct brw_wm_compile *c )
 	 break;
       }
 
-      if (TEST_DST_SPILLS && inst->opcode != WM_PIXELXY)
+      if (TEST_DST_SPILLS && inst->opcode != WM_PIXELXY) {
 	 for (i = 0; i < 4; i++)	
 	    if (inst->dst[i])
 	       spill_value(c, inst->dst[i]);
-
+      }
    }
 
    if (INTEL_DEBUG & DEBUG_WM) {
@@ -339,6 +341,3 @@ void brw_wm_pass2( struct brw_wm_compile *c )
        brw_wm_print_program(c, "pass2/done");
    }
 }
-
-
-

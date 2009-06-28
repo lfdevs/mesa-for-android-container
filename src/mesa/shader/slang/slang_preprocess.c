@@ -508,8 +508,7 @@ static GLvoid
 pp_ext_init(pp_ext *self, const struct gl_extensions *extensions)
 {
    pp_ext_disable_all (self);
-   if (extensions->ARB_draw_buffers)
-      self->ARB_draw_buffers = GL_TRUE;
+   self->ARB_draw_buffers = GL_TRUE;
    if (extensions->NV_texture_rectangle)
       self->ARB_texture_rectangle = GL_TRUE;
 }
@@ -531,14 +530,6 @@ pp_ext_set(pp_ext *self, const char *name, GLboolean enable)
 }
 
 
-static void
-pp_pragmas_init(struct gl_sl_pragmas *pragmas)
-{
-   pragmas->Optimize = GL_TRUE;
-   pragmas->Debug = GL_FALSE;
-}
-
-
 /**
  * Called in response to #pragma.  For example, "#pragma debug(on)" would
  * call this function as pp_pragma("debug", "on").
@@ -554,10 +545,12 @@ pp_pragma(struct gl_sl_pragmas *pragmas, const char *pragma, const char *param)
       if (!param)
          return GL_FALSE; /* missing required param */
       if (_mesa_strcmp(param, "on") == 0) {
-         pragmas->Optimize = GL_TRUE;
+         if (!pragmas->IgnoreOptimize)
+            pragmas->Optimize = GL_TRUE;
       }
       else if (_mesa_strcmp(param, "off") == 0) {
-         pragmas->Optimize = GL_FALSE;
+         if (!pragmas->IgnoreOptimize)
+            pragmas->Optimize = GL_FALSE;
       }
       else {
          return GL_FALSE; /* invalid param */
@@ -567,10 +560,12 @@ pp_pragma(struct gl_sl_pragmas *pragmas, const char *pragma, const char *param)
       if (!param)
          return GL_FALSE; /* missing required param */
       if (_mesa_strcmp(param, "on") == 0) {
-         pragmas->Debug = GL_TRUE;
+         if (!pragmas->IgnoreDebug)
+            pragmas->Debug = GL_TRUE;
       }
       else if (_mesa_strcmp(param, "off") == 0) {
-         pragmas->Debug = GL_FALSE;
+         if (!pragmas->IgnoreDebug)
+            pragmas->Debug = GL_FALSE;
       }
       else {
          return GL_FALSE; /* invalid param */
@@ -946,7 +941,6 @@ preprocess_source (slang_string *output, const char *source,
    }
 
    pp_state_init (&state, elog, extensions);
-   pp_pragmas_init (pragmas);
 
    /* add the predefined symbols to the symbol table */
    for (i = 0; predefined[i]; i++) {
@@ -1351,6 +1345,8 @@ _slang_preprocess_backslashes(slang_string *output,
  * \param output  the post-process results
  * \param input  the input text
  * \param elog  log to record warnings, errors
+ * \param extensions  out extension settings
+ * \param pragmas  in/out #pragma settings
  * \return GL_TRUE for success, GL_FALSE for error
  */
 GLboolean

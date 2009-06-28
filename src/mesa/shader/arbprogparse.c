@@ -30,6 +30,27 @@
  * \author Karl Rasche
  */
 
+/**
+Notes on program parameters, etc.
+
+The instructions we emit will use six kinds of source registers:
+
+  PROGRAM_INPUT      - input registers
+  PROGRAM_TEMPORARY  - temp registers
+  PROGRAM_ADDRESS    - address/indirect register
+  PROGRAM_SAMPLER    - texture sampler
+  PROGRAM_CONSTANT   - indexes into program->Parameters, a known constant/literal
+  PROGRAM_STATE_VAR  - indexes into program->Parameters, and may actually be:
+                       + a state variable, like "state.fog.color", or
+                       + a pointer to a "program.local[k]" parameter, or
+                       + a pointer to a "program.env[k]" parameter
+
+Basically, all the program.local[] and program.env[] values will get mapped
+into the unified gl_program->Parameters array.  This solves the problem of
+having three separate program parameter arrays.
+*/
+
+
 #include "main/glheader.h"
 #include "main/imports.h"
 #include "main/context.h"
@@ -38,15 +59,10 @@
 #include "shader/grammar/grammar_mesa.h"
 #include "arbprogparse.h"
 #include "program.h"
+#include "programopt.h"
 #include "prog_parameter.h"
 #include "prog_statevars.h"
 #include "prog_instruction.h"
-
-
-/* For ARB programs, use the NV instruction limits */
-#define MAX_INSTRUCTIONS MAX2(MAX_NV_FRAGMENT_PROGRAM_INSTRUCTIONS, \
-                              MAX_NV_VERTEX_PROGRAM_INSTRUCTIONS)
-
 
 /**
  * This is basically a union of the vertex_program and fragment_program
@@ -953,6 +969,7 @@ parse_output_color_num (GLcontext * ctx, const GLubyte ** inst,
    GLint i = parse_integer (inst, Program);
 
    if ((i < 0) || (i >= (int)ctx->Const.MaxDrawBuffers)) {
+      *color = 0;
       program_error(ctx, Program->Position, "Invalid draw buffer index");
       return 1;
    }
@@ -997,7 +1014,10 @@ parse_teximage_num (GLcontext * ctx, const GLubyte ** inst,
    GLint i = parse_integer (inst, Program);
 
    if ((i < 0) || (i >= (int)ctx->Const.MaxTextureImageUnits)) {
-      program_error(ctx, Program->Position, "Invalid texture image index");
+      char s[100];
+      _mesa_snprintf(s, sizeof(s), "Invalid texture image index %d (%u is max)",
+                     i, ctx->Const.MaxTextureImageUnits);
+      program_error(ctx, Program->Position, s);
       return 1;
    }
 
@@ -1678,7 +1698,7 @@ parse_result_binding(GLcontext *ctx, const GLubyte **inst,
              */
             parse_output_color_num(ctx, inst, Program, &out_color);
             ASSERT(out_color < MAX_DRAW_BUFFERS);
-            *outputReg = FRAG_RESULT_COLR;
+            *outputReg = FRAG_RESULT_COLOR;
          }
          else {
             /* for vtx programs, this is VERTEX_RESULT_POSITION */
@@ -1689,7 +1709,7 @@ parse_result_binding(GLcontext *ctx, const GLubyte **inst,
       case FRAGMENT_RESULT_DEPTH:
          if (Program->Base.Target == GL_FRAGMENT_PROGRAM_ARB) {
             /* for frag programs, this is FRAGMENT_RESULT_DEPTH */
-            *outputReg = FRAG_RESULT_DEPR;
+            *outputReg = FRAG_RESULT_DEPTH;
          }
          else {
             /* for vtx programs, this is VERTEX_RESULT_COLOR */
@@ -1897,7 +1917,11 @@ parse_param_elements (GLcontext * ctx, const GLubyte ** inst,
                                         const_values, 4);
          if (param_var->param_binding_begin == ~0U)
             param_var->param_binding_begin = idx;
-         param_var->param_binding_type = PROGRAM_CONSTANT;
+         param_var->param_binding_type = PROGRAM_STATE_VAR;
+         /* Note: when we reference this parameter in an instruction later,
+          * we'll check if it's really a constant/immediate and set the
+          * instruction register type appropriately.
+          */
          param_var->param_binding_length++;
          break;
 
@@ -2229,7 +2253,7 @@ parse_declaration (GLcontext * ctx, const GLubyte ** inst, struct var_cache **vc
 static GLuint
 parse_masked_dst_reg (GLcontext * ctx, const GLubyte ** inst,
                       struct var_cache **vc_head, struct arb_program *Program,
-                      enum register_file *File, GLuint *Index, GLint *WriteMask)
+                      gl_register_file *File, GLuint *Index, GLint *WriteMask)
 {
    GLuint tmp, result;
    struct var_cache *dst;
@@ -2461,7 +2485,7 @@ static GLuint
 parse_src_reg (GLcontext * ctx, const GLubyte ** inst,
                struct var_cache **vc_head,
                struct arb_program *Program,
-               enum register_file * File, GLint * Index,
+               gl_register_file * File, GLint * Index,
                GLboolean *IsRelOffset )
 {
    struct var_cache *src;
@@ -2510,7 +2534,7 @@ parse_src_reg (GLcontext * ctx, const GLubyte ** inst,
                   return 1;
                }
 
-               *File = (enum register_file) src->param_binding_type;
+               *File = (gl_register_file) src->param_binding_type;
 
                switch (*(*inst)++) {
                   case ARRAY_INDEX_ABSOLUTE:
@@ -2556,7 +2580,7 @@ parse_src_reg (GLcontext * ctx, const GLubyte ** inst,
                if (parse_param_use (ctx, inst, vc_head, Program, &src))
                   return 1;
 
-               *File = (enum register_file) src->param_binding_type;
+               *File = (gl_register_file) src->param_binding_type;
                *Index = src->param_binding_begin;
                break;
          }
@@ -2581,7 +2605,7 @@ parse_src_reg (GLcontext * ctx, const GLubyte ** inst,
 
                /* XXX: We have to handle offsets someplace in here!  -- or are those above? */
             case vt_param:
-               *File = (enum register_file) src->param_binding_type;
+               *File = (gl_register_file) src->param_binding_type;
                *Index = src->param_binding_begin;
                break;
 
@@ -2605,6 +2629,18 @@ parse_src_reg (GLcontext * ctx, const GLubyte ** inst,
          return 1;
    }
 
+   if (*File == PROGRAM_STATE_VAR) {
+      gl_register_file file;
+
+      /* If we're referencing the Program->Parameters[] array, check if the
+       * parameter is really a constant/literal.  If so, set File to CONSTANT.
+       */
+      assert(*Index < (GLint) Program->Base.Parameters->NumParameters);
+      file = Program->Base.Parameters->Parameters[*Index].Type;
+      if (file == PROGRAM_CONSTANT)
+         *File = PROGRAM_CONSTANT;
+   }
+
    /* Add attributes to InputsRead only if they are used the program.
     * This avoids the handling of unused ATTRIB declarations in the drivers. */
    if (*File == PROGRAM_INPUT)
@@ -2623,7 +2659,7 @@ parse_vector_src_reg(GLcontext *ctx, const GLubyte **inst,
                      struct arb_program *program,
                      struct prog_src_register *reg)
 {
-   enum register_file file;
+   gl_register_file file;
    GLint index;
    GLubyte negateMask;
    GLubyte swizzle[4];
@@ -2642,7 +2678,7 @@ parse_vector_src_reg(GLcontext *ctx, const GLubyte **inst,
    reg->File = file;
    reg->Index = index;
    reg->Swizzle = MAKE_SWIZZLE4(swizzle[0], swizzle[1], swizzle[2], swizzle[3]);
-   reg->NegateBase = negateMask;
+   reg->Negate = negateMask;
    reg->RelAddr = isRelOffset;
    return 0;
 }
@@ -2657,7 +2693,7 @@ parse_scalar_src_reg(GLcontext *ctx, const GLubyte **inst,
                      struct arb_program *program,
                      struct prog_src_register *reg)
 {
-   enum register_file file;
+   gl_register_file file;
    GLint index;
    GLubyte negateMask;
    GLubyte swizzle[4];
@@ -2676,7 +2712,7 @@ parse_scalar_src_reg(GLcontext *ctx, const GLubyte **inst,
    reg->File = file;
    reg->Index = index;
    reg->Swizzle = (swizzle[0] << 0);
-   reg->NegateBase = negateMask;
+   reg->Negate = negateMask;
    reg->RelAddr = isRelOffset;
    return 0;
 }
@@ -2693,7 +2729,7 @@ parse_dst_reg(GLcontext * ctx, const GLubyte ** inst,
 {
    GLint mask;
    GLuint idx;
-   enum register_file file;
+   gl_register_file file;
 
    if (parse_masked_dst_reg (ctx, inst, vc_head, program, &file, &idx, &mask))
       return 1;
@@ -2722,9 +2758,6 @@ parse_fp_instruction (GLcontext * ctx, const GLubyte ** inst,
    GLuint shadow_tex = 0;
 
    _mesa_init_instructions(fp, 1);
-
-   /* Record the position in the program string for debugging */
-   fp->StringPos = Program->Position;
 
    /* OP_ALU_INST or OP_TEX_INST */
    instClass = *(*inst)++;
@@ -2987,7 +3020,7 @@ parse_fp_instruction (GLcontext * ctx, const GLubyte ** inst,
 	 {
 	    GLubyte swizzle[4];
 	    GLubyte negateMask;
-            enum register_file file;
+            gl_register_file file;
 	    GLint index;
 
 	    if (parse_src_reg(ctx, inst, vc_head, Program, &file, &index, &rel))
@@ -2995,7 +3028,7 @@ parse_fp_instruction (GLcontext * ctx, const GLubyte ** inst,
 	    parse_extended_swizzle_mask(inst, swizzle, &negateMask);
 	    fp->SrcReg[0].File = file;
 	    fp->SrcReg[0].Index = index;
-	    fp->SrcReg[0].NegateBase = negateMask;
+	    fp->SrcReg[0].Negate = negateMask;
 	    fp->SrcReg[0].Swizzle = MAKE_SWIZZLE4(swizzle[0],
                                                   swizzle[1],
                                                   swizzle[2],
@@ -3074,6 +3107,9 @@ parse_fp_instruction (GLcontext * ctx, const GLubyte ** inst,
                fp->TexSrcTarget = TEXTURE_2D_ARRAY_INDEX;
                break;
          }
+
+         if (shadow_tex)
+            fp->TexShadow = 1;
 
          /* Don't test the first time a particular sampler is seen.  Each time
           * after that, make sure the shadow state is the same.
@@ -3162,8 +3198,6 @@ parse_vp_instruction (GLcontext * ctx, const GLubyte ** inst,
    code = *(*inst)++;
 
    _mesa_init_instructions(vp, 1);
-   /* Record the position in the program string for debugging */
-   vp->StringPos = Program->Position;
 
    switch (type) {
          /* XXX: */
@@ -3327,7 +3361,7 @@ parse_vp_instruction (GLcontext * ctx, const GLubyte ** inst,
 	    GLubyte swizzle[4]; 
 	    GLubyte negateMask;
 	    GLboolean relAddr;
-            enum register_file file;
+            gl_register_file file;
 	    GLint index;
 
 	    if (parse_dst_reg(ctx, inst, vc_head, Program, &vp->DstReg))
@@ -3338,7 +3372,7 @@ parse_vp_instruction (GLcontext * ctx, const GLubyte ** inst,
 	    parse_extended_swizzle_mask (inst, swizzle, &negateMask);
 	    vp->SrcReg[0].File = file;
 	    vp->SrcReg[0].Index = index;
-	    vp->SrcReg[0].NegateBase = negateMask;
+	    vp->SrcReg[0].Negate = negateMask;
 	    vp->SrcReg[0].Swizzle = MAKE_SWIZZLE4(swizzle[0],
                                                   swizzle[1],
                                                   swizzle[2],
@@ -3381,11 +3415,11 @@ debug_variables (GLcontext * ctx, struct var_cache *vc_head,
                fprintf (stderr, "%s\n",
                         Program->Base.Parameters->Parameters[a + b].Name);
                if (Program->Base.Parameters->Parameters[a + b].Type == PROGRAM_STATE_VAR) {
-                  const char *s;
+                  char *s;
                   s = _mesa_program_state_string(Program->Base.Parameters->Parameters
                                                  [a + b].StateIndexes);
                   fprintf(stderr, "%s\n", s);
-                  _mesa_free((char *) s);
+                  _mesa_free(s);
                }
                else
                   fprintf (stderr, "%f %f %f %f\n",
@@ -3433,7 +3467,7 @@ parse_instructions(GLcontext * ctx, const GLubyte * inst,
       : ctx->Const.VertexProgram.MaxInstructions;
    GLint err = 0;
 
-   ASSERT(MAX_INSTRUCTIONS >= maxInst);
+   ASSERT(MAX_PROGRAM_INSTRUCTIONS >= maxInst);
 
    Program->MajorVersion = (GLuint) * inst++;
    Program->MinorVersion = (GLuint) * inst++;
@@ -3525,10 +3559,6 @@ parse_instructions(GLcontext * ctx, const GLubyte * inst,
       const GLuint numInst = Program->Base.NumInstructions;
       _mesa_init_instructions(Program->Base.Instructions + numInst, 1);
       Program->Base.Instructions[numInst].Opcode = OPCODE_END;
-      /* YYY Wrong Position in program, whatever, at least not random -> crash
-	 Program->Position = parse_position (&inst);
-      */
-      Program->Base.Instructions[numInst].StringPos = Program->Position;
    }
    Program->Base.NumInstructions++;
 
@@ -3619,8 +3649,7 @@ enable_parser_extensions(GLcontext *ctx, grammar id)
    if (ctx->Extensions.NV_texture_rectangle
        && !enable_ext(ctx, id, "texture_rectangle"))
       return GL_FALSE;
-   if (ctx->Extensions.ARB_draw_buffers
-       && !enable_ext(ctx, id, "draw_buffers"))
+   if (!enable_ext(ctx, id, "draw_buffers"))
       return GL_FALSE;
    if (ctx->Extensions.MESA_texture_array
        && !enable_ext(ctx, id, "texture_array"))
@@ -3788,7 +3817,7 @@ _mesa_parse_arb_program(GLcontext *ctx, GLenum target,
 
    /* Initialize the arb_program struct */
    program->Base.String = strz;
-   program->Base.Instructions = _mesa_alloc_instructions(MAX_INSTRUCTIONS);
+   program->Base.Instructions = _mesa_alloc_instructions(MAX_PROGRAM_INSTRUCTIONS);
    program->Base.NumInstructions =
    program->Base.NumTemporaries =
    program->Base.NumParameters =
@@ -3833,12 +3862,12 @@ _mesa_parse_arb_program(GLcontext *ctx, GLenum target,
 
    _mesa_free (parsed);
 
-   /* Reallocate the instruction array from size [MAX_INSTRUCTIONS]
+   /* Reallocate the instruction array from size [MAX_PROGRAM_INSTRUCTIONS]
     * to size [ap.Base.NumInstructions].
     */
    program->Base.Instructions
       = _mesa_realloc_instructions(program->Base.Instructions,
-                                   MAX_INSTRUCTIONS,
+                                   MAX_PROGRAM_INSTRUCTIONS,
                                    program->Base.NumInstructions);
 
    return !err;
@@ -3901,6 +3930,16 @@ _mesa_parse_arb_fragment_program(GLcontext* ctx, GLenum target,
    if (program->Base.Parameters)
       _mesa_free_parameter_list(program->Base.Parameters);
    program->Base.Parameters    = ap.Base.Parameters;
+
+   /* Append fog instructions now if the program has "OPTION ARB_fog_exp"
+    * or similar.  We used to leave this up to drivers, but it appears
+    * there's no hardware that wants to do fog in a discrete stage separate
+    * from the fragment shader.
+    */
+   if (program->FogOption != GL_NONE) {
+      _mesa_append_fog_code(ctx, program);
+      program->FogOption = GL_NONE;
+   }
 
 #if DEBUG_FP
    _mesa_printf("____________Fragment program %u ________\n", program->Base.Id);

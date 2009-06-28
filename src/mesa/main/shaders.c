@@ -374,6 +374,43 @@ _mesa_LinkProgramARB(GLhandleARB programObj)
 }
 
 
+
+/**
+ * Read shader source code from a file.
+ * Useful for debugging to override an app's shader.
+ */
+static GLcharARB *
+_mesa_read_shader(const char *fname)
+{
+   const int max = 50*1000;
+   FILE *f = fopen(fname, "r");
+   GLcharARB *buffer, *shader;
+   int len;
+
+   if (!f) {
+      _mesa_fprintf(stderr, "Unable to open shader file %s\n", fname);
+      return NULL;
+   }
+
+   buffer = (char *) malloc(max);
+   len = fread(buffer, 1, max, f);
+   buffer[len] = 0;
+
+   fclose(f);
+
+   shader = _mesa_strdup(buffer);
+   free(buffer);
+
+   if (0) {
+      _mesa_fprintf(stderr, "Read shader %s:\n", fname);
+      _mesa_fprintf(stderr, "%s\n", shader);
+   }
+
+   return shader;
+}
+
+
+
 /**
  * Called via glShaderSource() and glShaderSourceARB() API functions.
  * Basically, concatenate the source code strings into one long string
@@ -437,6 +474,20 @@ _mesa_ShaderSourceARB(GLhandleARB shaderObj, GLsizei count,
    }
    source[totalLength - 1] = '\0';
    source[totalLength - 2] = '\0';
+
+#if 0
+   if (0) {
+      GLcharARB *newSource;
+
+      newSource = _mesa_read_shader("newshader.frag");
+      if (newSource) {
+         _mesa_free(source);
+         source = newSource;
+      }
+   }
+#else
+   (void) _mesa_read_shader;
+#endif
 
    ctx->Driver.ShaderSource(ctx, shaderObj, source);
 
@@ -587,8 +638,7 @@ _mesa_UniformMatrix2fvARB(GLint location, GLsizei count, GLboolean transpose,
                           const GLfloat * value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   ctx->Driver.UniformMatrix(ctx, 2, 2, GL_FLOAT_MAT2,
-                             location, count, transpose, value);
+   ctx->Driver.UniformMatrix(ctx, 2, 2, location, count, transpose, value);
 }
 
 void GLAPIENTRY
@@ -596,8 +646,7 @@ _mesa_UniformMatrix3fvARB(GLint location, GLsizei count, GLboolean transpose,
                           const GLfloat * value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   ctx->Driver.UniformMatrix(ctx, 3, 3, GL_FLOAT_MAT3,
-                             location, count, transpose, value);
+   ctx->Driver.UniformMatrix(ctx, 3, 3, location, count, transpose, value);
 }
 
 void GLAPIENTRY
@@ -605,8 +654,7 @@ _mesa_UniformMatrix4fvARB(GLint location, GLsizei count, GLboolean transpose,
                           const GLfloat * value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   ctx->Driver.UniformMatrix(ctx, 4, 4, GL_FLOAT_MAT4,
-                             location, count, transpose, value);
+   ctx->Driver.UniformMatrix(ctx, 4, 4, location, count, transpose, value);
 }
 
 
@@ -618,8 +666,7 @@ _mesa_UniformMatrix2x3fv(GLint location, GLsizei count, GLboolean transpose,
                          const GLfloat *value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   ctx->Driver.UniformMatrix(ctx, 2, 3, GL_FLOAT_MAT2x3,
-                             location, count, transpose, value);
+   ctx->Driver.UniformMatrix(ctx, 2, 3, location, count, transpose, value);
 }
 
 void GLAPIENTRY
@@ -627,8 +674,7 @@ _mesa_UniformMatrix3x2fv(GLint location, GLsizei count, GLboolean transpose,
                          const GLfloat *value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   ctx->Driver.UniformMatrix(ctx, 3, 2, GL_FLOAT_MAT3x2,
-                             location, count, transpose, value);
+   ctx->Driver.UniformMatrix(ctx, 3, 2, location, count, transpose, value);
 }
 
 void GLAPIENTRY
@@ -636,8 +682,7 @@ _mesa_UniformMatrix2x4fv(GLint location, GLsizei count, GLboolean transpose,
                          const GLfloat *value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   ctx->Driver.UniformMatrix(ctx, 2, 4, GL_FLOAT_MAT2x4,
-                             location, count, transpose, value);
+   ctx->Driver.UniformMatrix(ctx, 2, 4, location, count, transpose, value);
 }
 
 void GLAPIENTRY
@@ -645,8 +690,7 @@ _mesa_UniformMatrix4x2fv(GLint location, GLsizei count, GLboolean transpose,
                          const GLfloat *value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   ctx->Driver.UniformMatrix(ctx, 4, 2, GL_FLOAT_MAT4x2,
-                             location, count, transpose, value);
+   ctx->Driver.UniformMatrix(ctx, 4, 2, location, count, transpose, value);
 }
 
 void GLAPIENTRY
@@ -654,8 +698,7 @@ _mesa_UniformMatrix3x4fv(GLint location, GLsizei count, GLboolean transpose,
                          const GLfloat *value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   ctx->Driver.UniformMatrix(ctx, 3, 4, GL_FLOAT_MAT3x4,
-                             location, count, transpose, value);
+   ctx->Driver.UniformMatrix(ctx, 3, 4, location, count, transpose, value);
 }
 
 void GLAPIENTRY
@@ -663,8 +706,7 @@ _mesa_UniformMatrix4x3fv(GLint location, GLsizei count, GLboolean transpose,
                          const GLfloat *value)
 {
    GET_CURRENT_CONTEXT(ctx);
-   ctx->Driver.UniformMatrix(ctx, 4, 3, GL_FLOAT_MAT4x3,
-                             location, count, transpose, value);
+   ctx->Driver.UniformMatrix(ctx, 4, 3, location, count, transpose, value);
 }
 
 

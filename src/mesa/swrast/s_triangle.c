@@ -35,6 +35,7 @@
 #include "main/imports.h"
 #include "main/macros.h"
 #include "main/texformat.h"
+#include "shader/prog_instruction.h"
 
 #include "s_aatriangle.h"
 #include "s_context.h"
@@ -265,7 +266,7 @@ affine_span(GLcontext *ctx, SWspan *span,
             struct affine_info *info)
 {
    GLchan sample[4];  /* the filtered texture sample */
-   const GLuint texEnableSave = ctx->Texture._EnabledUnits;
+   const GLuint texEnableSave = ctx->Texture._EnabledCoordUnits;
 
    /* Instead of defining a function for each mode, a test is done
     * between the outer and inner loops. This is to reduce code size
@@ -396,7 +397,7 @@ affine_span(GLcontext *ctx, SWspan *span,
    GLchan *dest = span->array->rgba[0];
 
    /* Disable tex units so they're not re-applied in swrast_write_rgba_span */
-   ctx->Texture._EnabledUnits = 0x0;
+   ctx->Texture._EnabledCoordUnits = 0x0;
 
    span->intTex[0] -= FIXED_HALF;
    span->intTex[1] -= FIXED_HALF;
@@ -503,7 +504,7 @@ affine_span(GLcontext *ctx, SWspan *span,
    _swrast_write_rgba_span(ctx, span);
 
    /* re-enable texture units */
-   ctx->Texture._EnabledUnits = texEnableSave;
+   ctx->Texture._EnabledCoordUnits = texEnableSave;
 
 #undef SPAN_NEAREST
 #undef SPAN_LINEAR
@@ -663,8 +664,8 @@ fast_persp_span(GLcontext *ctx, SWspan *span,
    GLfloat tex_coord[3], tex_step[3];
    GLchan *dest = span->array->rgba[0];
 
-   const GLuint savedTexEnable = ctx->Texture._EnabledUnits;
-   ctx->Texture._EnabledUnits = 0;
+   const GLuint texEnableSave = ctx->Texture._EnabledCoordUnits;
+   ctx->Texture._EnabledCoordUnits = 0;
 
    tex_coord[0] = span->attrStart[FRAG_ATTRIB_TEX0][0]  * (info->smask + 1);
    tex_step[0] = span->attrStepX[FRAG_ATTRIB_TEX0][0] * (info->smask + 1);
@@ -777,7 +778,7 @@ fast_persp_span(GLcontext *ctx, SWspan *span,
 #undef SPAN_LINEAR
 
    /* restore state */
-   ctx->Texture._EnabledUnits = savedTexEnable;
+   ctx->Texture._EnabledCoordUnits = texEnableSave;
 }
 
 
@@ -1021,7 +1022,7 @@ _swrast_choose_triangle( GLcontext *ctx )
           ctx->Depth.Test &&
           ctx->Depth.Mask == GL_FALSE &&
           ctx->Depth.Func == GL_LESS &&
-          !ctx->Stencil.Enabled) {
+          !ctx->Stencil._Enabled) {
          if ((rgbmode &&
               ctx->Color.ColorMask[0] == 0 &&
               ctx->Color.ColorMask[1] == 0 &&
@@ -1068,6 +1069,7 @@ _swrast_choose_triangle( GLcontext *ctx )
              && ctx->Texture.Unit[0]._ReallyEnabled == TEXTURE_2D_BIT
              && texObj2D->WrapS == GL_REPEAT
              && texObj2D->WrapT == GL_REPEAT
+             && texObj2D->_Swizzle == SWIZZLE_NOOP
              && texImg->_IsPowerOfTwo
              && texImg->Border == 0
              && texImg->Width == texImg->RowStride
@@ -1075,7 +1077,8 @@ _swrast_choose_triangle( GLcontext *ctx )
              && minFilter == magFilter
              && ctx->Light.Model.ColorControl == GL_SINGLE_COLOR
              && !swrast->_FogEnabled
-             && ctx->Texture.Unit[0].EnvMode != GL_COMBINE_EXT) {
+             && ctx->Texture.Unit[0].EnvMode != GL_COMBINE_EXT
+             && ctx->Texture.Unit[0].EnvMode != GL_COMBINE4_NV) {
 	    if (ctx->Hint.PerspectiveCorrection==GL_FASTEST) {
 	       if (minFilter == GL_NEAREST
 		   && format == MESA_FORMAT_RGB

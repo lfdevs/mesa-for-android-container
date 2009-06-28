@@ -3,6 +3,7 @@
  * Version:  6.5.1
  *
  * Copyright (C) 1999-2006  Brian Paul   All Rights Reserved.
+ * Copyright (c) 2008 VMware, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -73,10 +74,12 @@ extern GLboolean _mesa_texstore_rgba_dxt5(TEXSTORE_PARAMS);
 #if FEATURE_EXT_texture_sRGB
 extern GLboolean _mesa_texstore_srgb8(TEXSTORE_PARAMS);
 extern GLboolean _mesa_texstore_srgba8(TEXSTORE_PARAMS);
+extern GLboolean _mesa_texstore_sargb8(TEXSTORE_PARAMS);
 extern GLboolean _mesa_texstore_sl8(TEXSTORE_PARAMS);
 extern GLboolean _mesa_texstore_sla8(TEXSTORE_PARAMS);
 #endif
-
+extern GLboolean _mesa_texstore_dudv8(TEXSTORE_PARAMS);
+extern GLboolean _mesa_texstore_signed_rgba8888(TEXSTORE_PARAMS);
 
 extern GLchan *
 _mesa_make_temp_chan_image(GLcontext *ctx, GLuint dims,
@@ -206,19 +209,6 @@ _mesa_store_compressed_texsubimage3d(GLcontext *ctx, GLenum target,
                                 struct gl_texture_object *texObj,
                                 struct gl_texture_image *texImage);
 
-
-extern void
-_mesa_get_teximage(GLcontext *ctx, GLenum target, GLint level,
-                   GLenum format, GLenum type, GLvoid *pixels,
-                   struct gl_texture_object *texObj,
-                   struct gl_texture_image *texImage);
-
-
-extern void
-_mesa_get_compressed_teximage(GLcontext *ctx, GLenum target, GLint level,
-                              GLvoid *img,
-                              struct gl_texture_object *texObj,
-                              struct gl_texture_image *texImage);
 
 extern const GLvoid *
 _mesa_validate_pbo_teximage(GLcontext *ctx, GLuint dimensions,

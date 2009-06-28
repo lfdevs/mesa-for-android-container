@@ -101,6 +101,7 @@ const struct brw_tracked_state brw_drawing_rect = {
 
 static void prepare_binding_table_pointers(struct brw_context *brw)
 {
+   brw_add_validated_bo(brw, brw->vs.bind_bo);
    brw_add_validated_bo(brw, brw->wm.bind_bo);
 }
 
@@ -117,13 +118,11 @@ static void upload_binding_table_pointers(struct brw_context *brw)
 
    BEGIN_BATCH(6, IGNORE_CLIPRECTS);
    OUT_BATCH(CMD_BINDING_TABLE_PTRS << 16 | (6 - 2));
-   OUT_BATCH(0); /* vs */
+   OUT_RELOC(brw->vs.bind_bo, I915_GEM_DOMAIN_SAMPLER, 0, 0); /* vs */
    OUT_BATCH(0); /* gs */
    OUT_BATCH(0); /* clip */
    OUT_BATCH(0); /* sf */
-   OUT_RELOC(brw->wm.bind_bo,
-	     I915_GEM_DOMAIN_SAMPLER, 0,
-	     0);
+   OUT_RELOC(brw->wm.bind_bo, I915_GEM_DOMAIN_SAMPLER, 0, 0); /* wm/ps */
    ADVANCE_BATCH();
 }
 
@@ -178,7 +177,7 @@ static void upload_psp_urb_cbs(struct brw_context *brw )
 {
    upload_pipelined_state_pointers(brw);
    brw_upload_urb_fence(brw);
-   brw_upload_constant_buffer_state(brw);
+   brw_upload_cs_urb_state(brw);
 }
 
 const struct brw_tracked_state brw_psp_urb_cbs = {

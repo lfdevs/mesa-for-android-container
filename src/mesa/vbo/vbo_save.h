@@ -64,6 +64,13 @@ struct vbo_save_vertex_list {
    GLubyte attrsz[VBO_ATTRIB_MAX];
    GLuint vertex_size;
 
+   /* Copy of the final vertex from node->vertex_store->bufferobj.
+    * Keep this in regular (non-VBO) memory to avoid repeated
+    * map/unmap of the VBO when updating GL current data.
+    */
+   GLfloat *current_data;
+   GLuint current_size;
+
    GLuint buffer_offset;
    GLuint count;
    GLuint wrap_count;		/* number of copied vertices at start */
@@ -130,7 +137,7 @@ struct vbo_save_context {
    struct vbo_save_vertex_store *vertex_store;
    struct vbo_save_primitive_store *prim_store;
 
-   GLfloat *vbptr;		   /* cursor, points into buffer */
+   GLfloat *buffer_ptr;		   /* cursor, points into buffer */
    GLfloat vertex[VBO_ATTRIB_MAX*4];	   /* current values */
    GLfloat *attrptr[VBO_ATTRIB_MAX];
    GLuint vert_count;
@@ -166,7 +173,7 @@ void vbo_loopback_vertex_list( GLcontext *ctx,
 void vbo_save_EndList( GLcontext *ctx );
 void vbo_save_NewList( GLcontext *ctx, GLuint list, GLenum mode );
 void vbo_save_EndCallList( GLcontext *ctx );
-void vbo_save_BeginCallList( GLcontext *ctx, struct mesa_display_list *list );
+void vbo_save_BeginCallList( GLcontext *ctx, struct gl_display_list *list );
 void vbo_save_SaveFlushVertices( GLcontext *ctx );
 GLboolean vbo_save_NotifyBegin( GLcontext *ctx, GLenum mode );
 

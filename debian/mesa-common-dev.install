@@ -1,5 +1,7 @@
 usr/include/GL/gl.h
 usr/include/GL/glext.h
 usr/include/GL/gl_mangle.h
-usr/include/GL/glx*.h
+usr/include/GL/glx.h
+usr/include/GL/glxext.h
+usr/include/GL/glx_mangle.h
 usr/include/GL/internal/dri_interface.h

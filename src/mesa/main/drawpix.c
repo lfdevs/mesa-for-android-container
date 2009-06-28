@@ -105,7 +105,7 @@ _mesa_DrawPixels( GLsizei width, GLsizei height,
    else if (ctx->RenderMode == GL_FEEDBACK) {
       /* Feedback the current raster pos info */
       FLUSH_CURRENT( ctx, 0 );
-      FEEDBACK_TOKEN( ctx, (GLfloat) (GLint) GL_DRAW_PIXEL_TOKEN );
+      _mesa_feedback_token( ctx, (GLfloat) (GLint) GL_DRAW_PIXEL_TOKEN );
       _mesa_feedback_vertex( ctx,
                              ctx->Current.RasterPos,
                              ctx->Current.RasterColor,
@@ -155,7 +155,7 @@ _mesa_CopyPixels( GLint srcx, GLint srcy, GLsizei width, GLsizei height,
       return;
    }
 
-   if (!ctx->Current.RasterPosValid) {
+   if (!ctx->Current.RasterPosValid || width ==0 || height == 0) {
       return;
    }
 
@@ -170,7 +170,7 @@ _mesa_CopyPixels( GLint srcx, GLint srcy, GLsizei width, GLsizei height,
    }
    else if (ctx->RenderMode == GL_FEEDBACK) {
       FLUSH_CURRENT( ctx, 0 );
-      FEEDBACK_TOKEN( ctx, (GLfloat) (GLint) GL_COPY_PIXEL_TOKEN );
+      _mesa_feedback_token( ctx, (GLfloat) (GLint) GL_COPY_PIXEL_TOKEN );
       _mesa_feedback_vertex( ctx, 
                              ctx->Current.RasterPos,
                              ctx->Current.RasterColor,
@@ -222,7 +222,7 @@ _mesa_Bitmap( GLsizei width, GLsizei height,
 
    if (ctx->RenderMode == GL_RENDER) {
       /* Truncate, to satisfy conformance tests (matches SGI's OpenGL). */
-      const GLfloat epsilon = (const GLfloat)0.0001;
+      const GLfloat epsilon = 0.0001F;
       GLint x = IFLOOR(ctx->Current.RasterPos[0] + epsilon - xorig);
       GLint y = IFLOOR(ctx->Current.RasterPos[1] + epsilon - yorig);
 
@@ -247,7 +247,7 @@ _mesa_Bitmap( GLsizei width, GLsizei height,
 #if _HAVE_FULL_GL
    else if (ctx->RenderMode == GL_FEEDBACK) {
       FLUSH_CURRENT(ctx, 0);
-      FEEDBACK_TOKEN( ctx, (GLfloat) (GLint) GL_BITMAP_TOKEN );
+      _mesa_feedback_token( ctx, (GLfloat) (GLint) GL_BITMAP_TOKEN );
       _mesa_feedback_vertex( ctx,
                              ctx->Current.RasterPos,
                              ctx->Current.RasterColor,
@@ -315,7 +315,7 @@ _mesa_DrawDepthPixelsMESA( GLsizei width, GLsizei height,
    else if (ctx->RenderMode == GL_FEEDBACK) {
       /* Feedback the current raster pos info */
       FLUSH_CURRENT( ctx, 0 );
-      FEEDBACK_TOKEN( ctx, (GLfloat) (GLint) GL_DRAW_PIXEL_TOKEN );
+      _mesa_feedback_token( ctx, (GLfloat) (GLint) GL_DRAW_PIXEL_TOKEN );
       _mesa_feedback_vertex( ctx,
                              ctx->Current.RasterPos,
                              ctx->Current.RasterColor,

@@ -1,24 +1,26 @@
-Microsoft Visual Studio Solution File, Format Version 7.00
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gears", "demos\gears.vcproj", "{3A7B0671-10F8-45D1-B012-F6D650F817CE}"
+Microsoft Visual Studio Solution File, Format Version 8.00
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wglthreads", "wgl\wglthreads.vcproj", "{ADDFBA10-B159-4884-9FAF-5E60A64903AE}"
+	ProjectSection(ProjectDependencies) = postProject
+	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "glut", "glut\glut.vcproj", "{0234F0D2-C8A6-4C4D-93E7-0E2248049C67}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sharedtex_mt", "wgl\sharedtex_mt.vcproj", "{ADDFBA10-B159-4884-9FAF-5E60A64903AE}"
+	ProjectSection(ProjectDependencies) = postProject
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfiguration) = preSolution
-		ConfigName.0 = Debug
-		ConfigName.1 = Release
-	EndGlobalSection
-	GlobalSection(ProjectDependencies) = postSolution
+		Debug = Debug
+		Release = Release
 	EndGlobalSection
 	GlobalSection(ProjectConfiguration) = postSolution
-		{3A7B0671-10F8-45D1-B012-F6D650F817CE}.Debug.ActiveCfg = Debug|Win32
-		{3A7B0671-10F8-45D1-B012-F6D650F817CE}.Debug.Build.0 = Debug|Win32
-		{3A7B0671-10F8-45D1-B012-F6D650F817CE}.Release.ActiveCfg = Release|Win32
-		{3A7B0671-10F8-45D1-B012-F6D650F817CE}.Release.Build.0 = Release|Win32
-		{0234F0D2-C8A6-4C4D-93E7-0E2248049C67}.Debug.ActiveCfg = Debug|Win32
-		{0234F0D2-C8A6-4C4D-93E7-0E2248049C67}.Debug.Build.0 = Debug|Win32
-		{0234F0D2-C8A6-4C4D-93E7-0E2248049C67}.Release.ActiveCfg = Release|Win32
-		{0234F0D2-C8A6-4C4D-93E7-0E2248049C67}.Release.Build.0 = Release|Win32
+		{ADDFBA10-B159-4884-9FAF-5E60A64903AE}.Debug.ActiveCfg = Debug|Win32
+		{ADDFBA10-B159-4884-9FAF-5E60A64903AE}.Debug.Build.0 = Debug|Win32
+		{ADDFBA10-B159-4884-9FAF-5E60A64903AE}.Release.ActiveCfg = Release|Win32
+		{ADDFBA10-B159-4884-9FAF-5E60A64903AE}.Release.Build.0 = Release|Win32
+		{ADDFBA10-B159-4884-9FAF-5E60A64903AE}.Debug.ActiveCfg = Debug|Win32
+		{ADDFBA10-B159-4884-9FAF-5E60A64903AE}.Debug.Build.0 = Debug|Win32
+		{ADDFBA10-B159-4884-9FAF-5E60A64903AE}.Release.ActiveCfg = Release|Win32
+		{ADDFBA10-B159-4884-9FAF-5E60A64903AE}.Release.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 	EndGlobalSection

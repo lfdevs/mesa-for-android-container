@@ -1,13 +1,18 @@
 #include "intel_context.h"
 #include "intel_tex.h"
+#include "intel_chipset.h"
 #include "main/texformat.h"
 #include "main/enums.h"
 
-/* It works out that this function is fine for all the supported
+
+/**
+ * Choose hardware texture format given the user's glTexImage parameters.
+ *
+ * It works out that this function is fine for all the supported
  * hardware.  However, there is still a need to map the formats onto
  * hardware descriptors.
- */
-/* Note that the i915 can actually support many more formats than
+ *
+ * Note that the i915 can actually support many more formats than
  * these if we take the step of simply swizzling the colors
  * immediately after sampling...
  */
@@ -16,7 +21,12 @@ intelChooseTextureFormat(GLcontext * ctx, GLint internalFormat,
                          GLenum format, GLenum type)
 {
    struct intel_context *intel = intel_context(ctx);
-   const GLboolean do32bpt = (intel->ctx.Visual.rgbBits == 32);
+   const GLboolean do32bpt = (intel->ctx.Visual.rgbBits >= 24);
+
+#if 0
+   printf("%s intFmt=0x%x format=0x%x type=0x%x\n",
+          __FUNCTION__, internalFormat, format, type);
+#endif
 
    switch (internalFormat) {
    case 4:
@@ -151,20 +161,36 @@ intelChooseTextureFormat(GLcontext * ctx, GLint internalFormat,
    case GL_SRGB8_EXT:
    case GL_SRGB_ALPHA_EXT:
    case GL_SRGB8_ALPHA8_EXT:
-   case GL_SLUMINANCE_EXT:
-   case GL_SLUMINANCE8_EXT:
-   case GL_SLUMINANCE_ALPHA_EXT:
-   case GL_SLUMINANCE8_ALPHA8_EXT:
    case GL_COMPRESSED_SRGB_EXT:
    case GL_COMPRESSED_SRGB_ALPHA_EXT:
    case GL_COMPRESSED_SLUMINANCE_EXT:
    case GL_COMPRESSED_SLUMINANCE_ALPHA_EXT:
-       return &_mesa_texformat_srgba8;
+      return &_mesa_texformat_sargb8;
+   case GL_SLUMINANCE_EXT:
+   case GL_SLUMINANCE8_EXT:
+      if (IS_G4X(intel->intelScreen->deviceID))
+         return &_mesa_texformat_sl8;
+      else
+         return &_mesa_texformat_sargb8;
+   case GL_SLUMINANCE_ALPHA_EXT:
+   case GL_SLUMINANCE8_ALPHA8_EXT:
+      if (IS_G4X(intel->intelScreen->deviceID))
+         return &_mesa_texformat_sla8;
+      else
+         return &_mesa_texformat_sargb8;
    case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
       return &_mesa_texformat_srgb_dxt1;
+
+   /* i915 could also do this */
+   case GL_DUDV_ATI:
+   case GL_DU8DV8_ATI:
+      return &_mesa_texformat_dudv8;
+   case GL_RGBA_SNORM:
+   case GL_RGBA8_SNORM:
+      return &_mesa_texformat_signed_rgba8888_rev;
 #endif
 
    default:

@@ -54,21 +54,39 @@ extern GLfloat _mesa_ubyte_to_float_color_tab[256];
 #define FLOAT_TO_BYTE(X)    ( (((GLint) (255.0F * (X))) - 1) / 2 )
 
 
-/** Convert GLushort in [0,65536] to GLfloat in [0.0,1.0] */
+/** Convert GLbyte in [-128,127] to GLfloat in [-1.0,1.0], texture/fb data */
+#define BYTE_TO_FLOAT_TEX(B)    ((B) == -128 ? -1.0F : (B) * (1.0F/127.0F))
+
+/** Convert GLfloat in [-1.0,1.0] to GLbyte in [-128,127], texture/fb data */
+#define FLOAT_TO_BYTE_TEX(X)    ( (GLint) (127.0F * (X)) )
+
+
+/** Convert GLushort in [0,65535] to GLfloat in [0.0,1.0] */
 #define USHORT_TO_FLOAT(S)  ((GLfloat) (S) * (1.0F / 65535.0F))
+
+/** Convert GLfloat in [0.0,1.0] to GLushort in [0, 65535] */
+#define FLOAT_TO_USHORT(X)   ((GLuint) ((X) * 65535.0F))
+
 
 /** Convert GLshort in [-32768,32767] to GLfloat in [-1.0,1.0] */
 #define SHORT_TO_FLOAT(S)   ((2.0F * (S) + 1.0F) * (1.0F/65535.0F))
 
-/** Convert GLfloat in [0.0,1.0] to GLshort in [-32768,32767] */
+/** Convert GLfloat in [-1.0,1.0] to GLshort in [-32768,32767] */
 #define FLOAT_TO_SHORT(X)   ( (((GLint) (65535.0F * (X))) - 1) / 2 )
+
+
+/** Convert GLshort in [-32768,32767] to GLfloat in [-1.0,1.0], texture/fb data */
+#define SHORT_TO_FLOAT_TEX(S)    ((S) == -32768 ? -1.0F : (S) * (1.0F/32767.0F))
+
+/** Convert GLfloat in [-1.0,1.0] to GLshort in [-32768,32767], texture/fb data */
+#define FLOAT_TO_SHORT_TEX(X)    ( (GLint) (32767.0F * (X)) )
 
 
 /** Convert GLuint in [0,4294967295] to GLfloat in [0.0,1.0] */
 #define UINT_TO_FLOAT(U)    ((GLfloat) (U) * (1.0F / 4294967295.0F))
 
 /** Convert GLfloat in [0.0,1.0] to GLuint in [0,4294967295] */
-#define FLOAT_TO_UINT(X)    ((GLuint) ((X) * 4294967295.0))
+#define FLOAT_TO_UINT(X)    ((GLuint) ((X) * 4294967295.0F))
 
 
 /** Convert GLint in [-2147483648,2147483647] to GLfloat in [-1.0,1.0] */
@@ -79,7 +97,14 @@ extern GLfloat _mesa_ubyte_to_float_color_tab[256];
 #define FLOAT_TO_INT(X)     ( (((GLint) (4294967294.0F * (X))) - 1) / 2 )
 */
 /* a close approximation: */
-#define FLOAT_TO_INT(X)     ( (GLint) (2147483647.0 * (X)) )
+#define FLOAT_TO_INT(X)     ( (GLint) (2147483647.0F * (X)) )
+
+
+/** Convert GLint in [-2147483648,2147483647] to GLfloat in [-1.0,1.0], texture/fb data */
+#define INT_TO_FLOAT_TEX(I)    ((I) == -2147483648 ? -1.0F : (I) * (1.0F/2147483647.0F))
+
+/** Convert GLfloat in [-1.0,1.0] to GLint in [-2147483648,2147483647], texture/fb data */
+#define FLOAT_TO_INT_TEX(X)    ( (GLint) (2147483647.0F * (X)) )
 
 
 #define BYTE_TO_UBYTE(b)   ((GLubyte) ((b) < 0 ? 0 : (GLubyte) (b)))
@@ -95,7 +120,7 @@ extern GLfloat _mesa_ubyte_to_float_color_tab[256];
 #define INT_TO_USHORT(i)   ((i) < 0 ? 0 : ((GLushort) ((i) >> 15)))
 #define UINT_TO_USHORT(i)  ((i) < 0 ? 0 : ((GLushort) ((i) >> 16)))
 #define UNCLAMPED_FLOAT_TO_USHORT(us, f)  \
-        us = ( (GLushort) IROUND( CLAMP((f), 0.0, 1.0) * 65535.0F) )
+        us = ( (GLushort) IROUND( CLAMP((f), 0.0F, 1.0F) * 65535.0F) )
 #define CLAMPED_FLOAT_TO_USHORT(us, f)  \
         us = ( (GLushort) IROUND( (f) * 65535.0F) )
 

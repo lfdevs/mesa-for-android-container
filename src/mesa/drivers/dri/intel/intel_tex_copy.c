@@ -104,7 +104,7 @@ do_copy_texsubimage(struct intel_context *intel,
       return GL_FALSE;
    }
 
-   intel_glFlush(ctx);
+   intelFlush(ctx);
    LOCK_HARDWARE(intel);
    {
       GLuint image_offset = intel_miptree_image_offset(intelImage->mt,
@@ -155,7 +155,6 @@ do_copy_texsubimage(struct intel_context *intel,
    }
 
    UNLOCK_HARDWARE(intel);
-   intel_glFlush(ctx);
 
    /* GL_SGIS_generate_mipmap */
    if (intelImage->level == texObj->BaseLevel && texObj->GenerateMipmap) {
@@ -232,6 +231,14 @@ intelCopyTexImage2D(GLcontext * ctx, GLenum target, GLint level,
    if (border)
       goto fail;
 
+   /* Setup or redefine the texture object, mipmap tree and texture
+    * image.  Don't populate yet.
+    */
+   ctx->Driver.TexImage2D(ctx, target, level, internalFormat,
+                          width, height, border,
+                          GL_RGBA, CHAN_TYPE, NULL,
+                          &ctx->DefaultPacking, texObj, texImage);
+
    srcx = x;
    srcy = y;
    dstx = 0;
@@ -241,15 +248,6 @@ intelCopyTexImage2D(GLcontext * ctx, GLenum target, GLint level,
 				   &srcx, &srcy,
 				   &width, &height))
       return;
-
-   /* Setup or redefine the texture object, mipmap tree and texture
-    * image.  Don't populate yet.  
-    */
-   ctx->Driver.TexImage2D(ctx, target, level, internalFormat,
-                          width, height, border,
-                          GL_RGBA, CHAN_TYPE, NULL,
-                          &ctx->DefaultPacking, texObj, texImage);
-
 
    if (!do_copy_texsubimage(intel_context(ctx), target,
                             intel_texture_image(texImage),

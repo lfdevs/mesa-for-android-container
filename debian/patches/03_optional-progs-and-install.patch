@@ -23,7 +23,7 @@ Index: mesa/progs/xdemos/Makefile
  	corender \
  	glsync \
  	glthreads \
-@@ -61,6 +61,11 @@
+@@ -62,6 +62,11 @@
  extra: $(EXTRA_PROGS)
  
  

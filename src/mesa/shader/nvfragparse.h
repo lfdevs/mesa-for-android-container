@@ -37,16 +37,7 @@ _mesa_parse_nv_fragment_program(GLcontext *ctx, GLenum target,
                                 struct gl_fragment_program *program);
 
 
-extern void
-_mesa_print_nv_fragment_program(const struct gl_fragment_program *program);
-
-
 extern const char *
 _mesa_nv_fragment_input_register_name(GLuint i);
-
-
-extern const char *
-_mesa_nv_fragment_output_register_name(GLuint i);
-
 
 #endif

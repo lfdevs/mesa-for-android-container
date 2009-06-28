@@ -321,18 +321,9 @@ intelCalcViewport(GLcontext * ctx)
 
    if (ctx->DrawBuffer->Name) {
       /* User created FBO */
-      struct intel_renderbuffer *irb
-         = intel_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0]);
-      if (irb && !irb->RenderToTexture) {
-         /* y=0=top */
-         yScale = -1.0;
-         yBias = irb->Base.Height;
-      }
-      else {
-         /* y=0=bottom */
-         yScale = 1.0;
-         yBias = 0.0;
-      }
+      /* y=0=bottom */
+      yScale = 1.0;
+      yBias = 0.0;
    }
    else {
       /* window buffer, y=0=top */
@@ -353,7 +344,7 @@ intelCalcViewport(GLcontext * ctx)
 
 /** Called from ctx->Driver.Viewport() */
 static void
-intelViewport(GLcontext * ctx,
+i915Viewport(GLcontext * ctx,
               GLint x, GLint y, GLsizei width, GLsizei height)
 {
    intelCalcViewport(ctx);
@@ -364,7 +355,7 @@ intelViewport(GLcontext * ctx,
 
 /** Called from ctx->Driver.DepthRange() */
 static void
-intelDepthRange(GLcontext * ctx, GLclampd nearval, GLclampd farval)
+i915DepthRange(GLcontext * ctx, GLclampd nearval, GLclampd farval)
 {
    intelCalcViewport(ctx);
 }
@@ -1033,8 +1024,8 @@ i915InitStateFunctions(struct dd_function_table *functions)
    functions->StencilFuncSeparate = i915StencilFuncSeparate;
    functions->StencilMaskSeparate = i915StencilMaskSeparate;
    functions->StencilOpSeparate = i915StencilOpSeparate;
-   functions->DepthRange = intelDepthRange;
-   functions->Viewport = intelViewport;
+   functions->DepthRange = i915DepthRange;
+   functions->Viewport = i915Viewport;
 }
 
 

@@ -29,6 +29,7 @@
 #include "main/macros.h"
 #include "main/mtypes.h"
 #include "main/colormac.h"
+#include "main/texformat.h"
 
 #include "intel_buffers.h"
 #include "intel_fbo.h"
@@ -131,6 +132,18 @@ pwrite_8(struct intel_renderbuffer *irb, uint32_t offset, uint8_t val)
    dri_bo_subdata(irb->region->buffer, offset, 1, &val);
 }
 
+static uint32_t
+z24s8_to_s8z24(uint32_t val)
+{
+   return (val << 24) | (val >> 8);
+}
+
+static uint32_t
+s8z24_to_z24s8(uint32_t val)
+{
+   return (val >> 24) | (val << 8);
+}
+
 static uint32_t no_tile_swizzle(struct intel_renderbuffer *irb,
 				int x, int y)
 {
@@ -150,7 +163,7 @@ static uint32_t x_tile_swizzle(struct intel_renderbuffer *irb,
 	int	x_tile_number, y_tile_number;
 	int	tile_off, tile_base;
 	
-	tile_stride = (irb->pfPitch * irb->region->cpp) << 3;
+	tile_stride = (irb->region->pitch * irb->region->cpp) << 3;
 
 	xbyte = x * irb->region->cpp;
 
@@ -190,7 +203,7 @@ static uint32_t x_tile_swizzle(struct intel_renderbuffer *irb,
 	printf("(%d,%d) -> %d + %d = %d (pitch = %d, tstride = %d)\n",
 	       x, y, tile_off, tile_base,
 	       tile_off + tile_base,
-	       irb->pfPitch, tile_stride);
+	       irb->region->pitch, tile_stride);
 #endif
 
 	return tile_base + tile_off;
@@ -205,7 +218,7 @@ static uint32_t y_tile_swizzle(struct intel_renderbuffer *irb,
 	int	x_tile_number, y_tile_number;
 	int	tile_off, tile_base;
 	
-	tile_stride = (irb->pfPitch * irb->region->cpp) << 5;
+	tile_stride = (irb->region->pitch * irb->region->cpp) << 5;
 
 	xbyte = x * irb->region->cpp;
 
@@ -255,8 +268,8 @@ static uint32_t y_tile_swizzle(struct intel_renderbuffer *irb,
 #define LOCAL_VARS							\
    struct intel_context *intel = intel_context(ctx);			\
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);		\
-   const GLint yScale = irb->RenderToTexture ? 1 : -1;			\
-   const GLint yBias = irb->RenderToTexture ? 0 : irb->Base.Height - 1;	\
+   const GLint yScale = ctx->DrawBuffer->Name ? 1 : -1;			\
+   const GLint yBias = ctx->DrawBuffer->Name ? 0 : irb->Base.Height - 1;\
    unsigned int num_cliprects;						\
    struct drm_clip_rect *cliprects;					\
    int x_off, y_off;							\
@@ -293,107 +306,51 @@ static uint32_t y_tile_swizzle(struct intel_renderbuffer *irb,
 #define X_TILE(_X, _Y) x_tile_swizzle(irb, (_X) + x_off, (_Y) + y_off)
 #define Y_TILE(_X, _Y) y_tile_swizzle(irb, (_X) + x_off, (_Y) + y_off)
 
-/* 16 bit, RGB565 color spanline and pixel functions
- */
-#define SPANTMP_PIXEL_FMT GL_RGB
-#define SPANTMP_PIXEL_TYPE GL_UNSIGNED_SHORT_5_6_5
+/* r5g6b5 color span and pixel functions */
+#define INTEL_PIXEL_FMT GL_RGB
+#define INTEL_PIXEL_TYPE GL_UNSIGNED_SHORT_5_6_5
+#define INTEL_READ_VALUE(offset) pread_16(irb, offset)
+#define INTEL_WRITE_VALUE(offset, v) pwrite_16(irb, offset, v)
+#define INTEL_TAG(x) x##_RGB565
+#include "intel_spantmp.h"
 
-#define TAG(x)    intel##x##_RGB565
-#define TAG2(x,y) intel##x##_RGB565##y
-#define GET_VALUE(X, Y) pread_16(irb, NO_TILE(X, Y))
-#define PUT_VALUE(X, Y, V) pwrite_16(irb, NO_TILE(X, Y), V)
-#include "spantmp2.h"
+/* a4r4g4b4 color span and pixel functions */
+#define INTEL_PIXEL_FMT GL_BGRA
+#define INTEL_PIXEL_TYPE GL_UNSIGNED_SHORT_4_4_4_4_REV
+#define INTEL_READ_VALUE(offset) pread_16(irb, offset)
+#define INTEL_WRITE_VALUE(offset, v) pwrite_16(irb, offset, v)
+#define INTEL_TAG(x) x##_ARGB4444
+#include "intel_spantmp.h"
 
-/* 32 bit, ARGB8888 color spanline and pixel functions
- */
-#define SPANTMP_PIXEL_FMT GL_BGRA
-#define SPANTMP_PIXEL_TYPE GL_UNSIGNED_INT_8_8_8_8_REV
+/* a1r5g5b5 color span and pixel functions */
+#define INTEL_PIXEL_FMT GL_BGRA
+#define INTEL_PIXEL_TYPE GL_UNSIGNED_SHORT_1_5_5_5_REV
+#define INTEL_READ_VALUE(offset) pread_16(irb, offset)
+#define INTEL_WRITE_VALUE(offset, v) pwrite_16(irb, offset, v)
+#define INTEL_TAG(x) x##_ARGB1555
+#include "intel_spantmp.h"
 
-#define TAG(x)    intel##x##_ARGB8888
-#define TAG2(x,y) intel##x##_ARGB8888##y
-#define GET_VALUE(X, Y) pread_32(irb, NO_TILE(X, Y))
-#define PUT_VALUE(X, Y, V) pwrite_32(irb, NO_TILE(X, Y), V)
-#include "spantmp2.h"
+/* a8r8g8b8 color span and pixel functions */
+#define INTEL_PIXEL_FMT GL_BGRA
+#define INTEL_PIXEL_TYPE GL_UNSIGNED_INT_8_8_8_8_REV
+#define INTEL_READ_VALUE(offset) pread_32(irb, offset)
+#define INTEL_WRITE_VALUE(offset, v) pwrite_32(irb, offset, v)
+#define INTEL_TAG(x) x##_ARGB8888
+#include "intel_spantmp.h"
 
-/* 32 bit, xRGB8888 color spanline and pixel functions
- */
-#define SPANTMP_PIXEL_FMT GL_BGRA
-#define SPANTMP_PIXEL_TYPE GL_UNSIGNED_INT_8_8_8_8_REV
-
-#define TAG(x)    intel##x##_xRGB8888
-#define TAG2(x,y) intel##x##_xRGB8888##y
-#define GET_VALUE(X, Y) pread_xrgb8888(irb, NO_TILE(X, Y))
-#define PUT_VALUE(X, Y, V) pwrite_xrgb8888(irb, NO_TILE(X, Y), V)
-#include "spantmp2.h"
-
-/* 16 bit RGB565 color tile spanline and pixel functions
- */
-
-#define SPANTMP_PIXEL_FMT GL_RGB
-#define SPANTMP_PIXEL_TYPE GL_UNSIGNED_SHORT_5_6_5
-
-#define TAG(x)    intel_XTile_##x##_RGB565
-#define TAG2(x,y) intel_XTile_##x##_RGB565##y
-#define GET_VALUE(X, Y) pread_16(irb, X_TILE(X, Y))
-#define PUT_VALUE(X, Y, V) pwrite_16(irb, X_TILE(X, Y), V)
-#include "spantmp2.h"
-
-#define SPANTMP_PIXEL_FMT GL_RGB
-#define SPANTMP_PIXEL_TYPE GL_UNSIGNED_SHORT_5_6_5
-
-#define TAG(x)    intel_YTile_##x##_RGB565
-#define TAG2(x,y) intel_YTile_##x##_RGB565##y
-#define GET_VALUE(X, Y) pread_16(irb, Y_TILE(X, Y))
-#define PUT_VALUE(X, Y, V) pwrite_16(irb, Y_TILE(X, Y), V)
-#include "spantmp2.h"
-
-/* 32 bit ARGB888 color tile spanline and pixel functions
- */
-
-#define SPANTMP_PIXEL_FMT GL_BGRA
-#define SPANTMP_PIXEL_TYPE GL_UNSIGNED_INT_8_8_8_8_REV
-
-#define TAG(x)    intel_XTile_##x##_ARGB8888
-#define TAG2(x,y) intel_XTile_##x##_ARGB8888##y
-#define GET_VALUE(X, Y) pread_32(irb, X_TILE(X, Y))
-#define PUT_VALUE(X, Y, V) pwrite_32(irb, X_TILE(X, Y), V)
-#include "spantmp2.h"
-
-#define SPANTMP_PIXEL_FMT GL_BGRA
-#define SPANTMP_PIXEL_TYPE GL_UNSIGNED_INT_8_8_8_8_REV
-
-#define TAG(x)    intel_YTile_##x##_ARGB8888
-#define TAG2(x,y) intel_YTile_##x##_ARGB8888##y
-#define GET_VALUE(X, Y) pread_32(irb, Y_TILE(X, Y))
-#define PUT_VALUE(X, Y, V) pwrite_32(irb, Y_TILE(X, Y), V)
-#include "spantmp2.h"
-
-/* 32 bit xRGB888 color tile spanline and pixel functions
- */
-
-#define SPANTMP_PIXEL_FMT GL_BGRA
-#define SPANTMP_PIXEL_TYPE GL_UNSIGNED_INT_8_8_8_8_REV
-
-#define TAG(x)    intel_XTile_##x##_xRGB8888
-#define TAG2(x,y) intel_XTile_##x##_xRGB8888##y
-#define GET_VALUE(X, Y) pread_xrgb8888(irb, X_TILE(X, Y))
-#define PUT_VALUE(X, Y, V) pwrite_xrgb8888(irb, X_TILE(X, Y), V)
-#include "spantmp2.h"
-
-#define SPANTMP_PIXEL_FMT GL_BGRA
-#define SPANTMP_PIXEL_TYPE GL_UNSIGNED_INT_8_8_8_8_REV
-
-#define TAG(x)    intel_YTile_##x##_xRGB8888
-#define TAG2(x,y) intel_YTile_##x##_xRGB8888##y
-#define GET_VALUE(X, Y) pread_xrgb8888(irb, Y_TILE(X, Y))
-#define PUT_VALUE(X, Y, V) pwrite_xrgb8888(irb, Y_TILE(X, Y), V)
-#include "spantmp2.h"
+/* x8r8g8b8 color span and pixel functions */
+#define INTEL_PIXEL_FMT GL_BGRA
+#define INTEL_PIXEL_TYPE GL_UNSIGNED_INT_8_8_8_8_REV
+#define INTEL_READ_VALUE(offset) pread_xrgb8888(irb, offset)
+#define INTEL_WRITE_VALUE(offset, v) pwrite_xrgb8888(irb, offset, v)
+#define INTEL_TAG(x) x##_xRGB8888
+#include "intel_spantmp.h"
 
 #define LOCAL_DEPTH_VARS						\
    struct intel_context *intel = intel_context(ctx);			\
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);		\
-   const GLint yScale = irb->RenderToTexture ? 1 : -1;			\
-   const GLint yBias = irb->RenderToTexture ? 0 : irb->Base.Height - 1; \
+   const GLint yScale = ctx->DrawBuffer->Name ? 1 : -1;			\
+   const GLint yBias = ctx->DrawBuffer->Name ? 0 : irb->Base.Height - 1;\
    unsigned int num_cliprects;						\
    struct drm_clip_rect *cliprects;					\
    int x_off, y_off;							\
@@ -402,98 +359,26 @@ static uint32_t y_tile_swizzle(struct intel_renderbuffer *irb,
 
 #define LOCAL_STENCIL_VARS LOCAL_DEPTH_VARS
 
-/**
- ** 16-bit depthbuffer functions.
- **/
-#define VALUE_TYPE GLushort
-#define WRITE_DEPTH(_x, _y, d) pwrite_16(irb, NO_TILE(_x, _y), d)
-#define READ_DEPTH(d, _x, _y) d = pread_16(irb, NO_TILE(_x, _y))
-#define TAG(x) intel##x##_z16
-#include "depthtmp.h"
+/* z16 depthbuffer functions. */
+#define INTEL_VALUE_TYPE GLushort
+#define INTEL_WRITE_DEPTH(offset, d) pwrite_16(irb, offset, d)
+#define INTEL_READ_DEPTH(offset) pread_16(irb, offset)
+#define INTEL_TAG(name) name##_z16
+#include "intel_depthtmp.h"
 
+/* z24 depthbuffer functions. */
+#define INTEL_VALUE_TYPE GLuint
+#define INTEL_WRITE_DEPTH(offset, d) pwrite_32(irb, offset, d)
+#define INTEL_READ_DEPTH(offset) pread_32(irb, offset)
+#define INTEL_TAG(name) name##_z24
+#include "intel_depthtmp.h"
 
-/**
- ** 16-bit x tile depthbuffer functions.
- **/
-#define VALUE_TYPE GLushort
-#define WRITE_DEPTH(_x, _y, d) pwrite_16(irb, X_TILE(_x, _y), d)
-#define READ_DEPTH(d, _x, _y) d = pread_16(irb, X_TILE(_x, _y))
-#define TAG(x) intel_XTile_##x##_z16
-#include "depthtmp.h"
-
-/**
- ** 16-bit y tile depthbuffer functions.
- **/
-#define VALUE_TYPE GLushort
-#define WRITE_DEPTH(_x, _y, d) pwrite_16(irb, Y_TILE(_x, _y), d)
-#define READ_DEPTH(d, _x, _y) d = pread_16(irb, Y_TILE(_x, _y))
-#define TAG(x) intel_YTile_##x##_z16
-#include "depthtmp.h"
-
-
-/**
- ** 24/8-bit interleaved depth/stencil functions
- ** Note: we're actually reading back combined depth+stencil values.
- ** The wrappers in main/depthstencil.c are used to extract the depth
- ** and stencil values.
- **/
-#define VALUE_TYPE GLuint
-
-/* Change ZZZS -> SZZZ */
-#define WRITE_DEPTH(_x, _y, d)					\
-   pwrite_32(irb, NO_TILE(_x, _y), ((d) >> 8) | ((d) << 24))
-
-/* Change SZZZ -> ZZZS */
-#define READ_DEPTH( d, _x, _y ) {				\
-   GLuint tmp = pread_32(irb, NO_TILE(_x, _y));			\
-   d = (tmp << 8) | (tmp >> 24);				\
-}
-
-#define TAG(x) intel##x##_z24_s8
-#include "depthtmp.h"
-
-
-/**
- ** 24/8-bit x-tile interleaved depth/stencil functions
- ** Note: we're actually reading back combined depth+stencil values.
- ** The wrappers in main/depthstencil.c are used to extract the depth
- ** and stencil values.
- **/
-#define VALUE_TYPE GLuint
-
-/* Change ZZZS -> SZZZ */
-#define WRITE_DEPTH(_x, _y, d)					\
-   pwrite_32(irb, X_TILE(_x, _y), ((d) >> 8) | ((d) << 24))
-
-/* Change SZZZ -> ZZZS */
-#define READ_DEPTH( d, _x, _y ) {				\
-   GLuint tmp = pread_32(irb, X_TILE(_x, _y));		\
-   d = (tmp << 8) | (tmp >> 24);				\
-}
-
-#define TAG(x) intel_XTile_##x##_z24_s8
-#include "depthtmp.h"
-
-/**
- ** 24/8-bit y-tile interleaved depth/stencil functions
- ** Note: we're actually reading back combined depth+stencil values.
- ** The wrappers in main/depthstencil.c are used to extract the depth
- ** and stencil values.
- **/
-#define VALUE_TYPE GLuint
-
-/* Change ZZZS -> SZZZ */
-#define WRITE_DEPTH(_x, _y, d)					\
-   pwrite_32(irb, Y_TILE(_x, _y), ((d) >> 8) | ((d) << 24))
-
-/* Change SZZZ -> ZZZS */
-#define READ_DEPTH( d, _x, _y ) {				\
-   GLuint tmp = pread_32(irb, Y_TILE(_x, _y));			\
-   d = (tmp << 8) | (tmp >> 24);				\
-}
-
-#define TAG(x) intel_YTile_##x##_z24_s8
-#include "depthtmp.h"
+/* z24s8 depthbuffer functions. */
+#define INTEL_VALUE_TYPE GLuint
+#define INTEL_WRITE_DEPTH(offset, d) pwrite_32(irb, offset, z24s8_to_s8z24(d))
+#define INTEL_READ_DEPTH(offset) s8z24_to_z24s8(pread_32(irb, offset))
+#define INTEL_TAG(name) name##_z24_s8
+#include "intel_depthtmp.h"
 
 
 /**
@@ -528,8 +413,6 @@ intel_renderbuffer_map(struct intel_context *intel, struct gl_renderbuffer *rb)
    if (irb == NULL || irb->region == NULL)
       return;
 
-   irb->pfPitch = irb->region->pitch;
-
    intel_set_span_functions(intel, rb);
 }
 
@@ -543,7 +426,6 @@ intel_renderbuffer_unmap(struct intel_context *intel,
       return;
 
    clear_span_cache(irb);
-   irb->pfPitch = 0;
 
    rb->GetRow = NULL;
    rb->PutRow = NULL;
@@ -696,8 +578,8 @@ intel_set_span_functions(struct intel_context *intel,
    else
       tiling = I915_TILING_NONE;
 
-   if (rb->_ActualFormat == GL_RGB5) {
-      /* 565 RGB */
+   switch (irb->texformat->MesaFormat) {
+   case MESA_FORMAT_RGB565:
       switch (tiling) {
       case I915_TILING_NONE:
       default:
@@ -710,38 +592,67 @@ intel_set_span_functions(struct intel_context *intel,
 	 intel_YTile_InitPointers_RGB565(rb);
 	 break;
       }
-   }
-   else if (rb->_ActualFormat == GL_RGB8) {
-      /* 8888 RGBx */
+      break;
+   case MESA_FORMAT_ARGB4444:
       switch (tiling) {
       case I915_TILING_NONE:
       default:
-	 intelInitPointers_xRGB8888(rb);
+	 intelInitPointers_ARGB4444(rb);
 	 break;
       case I915_TILING_X:
-	 intel_XTile_InitPointers_xRGB8888(rb);
+	 intel_XTile_InitPointers_ARGB4444(rb);
 	 break;
       case I915_TILING_Y:
-	 intel_YTile_InitPointers_xRGB8888(rb);
+	 intel_YTile_InitPointers_ARGB4444(rb);
 	 break;
       }
-   }
-   else if (rb->_ActualFormat == GL_RGBA8) {
-      /* 8888 RGBA */
+      break;
+   case MESA_FORMAT_ARGB1555:
       switch (tiling) {
       case I915_TILING_NONE:
       default:
-	 intelInitPointers_ARGB8888(rb);
+	 intelInitPointers_ARGB1555(rb);
 	 break;
       case I915_TILING_X:
-	 intel_XTile_InitPointers_ARGB8888(rb);
+	 intel_XTile_InitPointers_ARGB1555(rb);
 	 break;
       case I915_TILING_Y:
-	 intel_YTile_InitPointers_ARGB8888(rb);
+	 intel_YTile_InitPointers_ARGB1555(rb);
 	 break;
       }
-   }
-   else if (rb->_ActualFormat == GL_DEPTH_COMPONENT16) {
+      break;
+   case MESA_FORMAT_ARGB8888:
+      if (rb->AlphaBits == 0) { /* XXX: Need xRGB8888 Mesa format */
+	 /* 8888 RGBx */
+	 switch (tiling) {
+	 case I915_TILING_NONE:
+	 default:
+	    intelInitPointers_xRGB8888(rb);
+	    break;
+	 case I915_TILING_X:
+	    intel_XTile_InitPointers_xRGB8888(rb);
+	    break;
+	 case I915_TILING_Y:
+	    intel_YTile_InitPointers_xRGB8888(rb);
+	    break;
+	 }
+      } else {
+	 /* 8888 RGBA */
+	 switch (tiling) {
+	 case I915_TILING_NONE:
+	 default:
+	    intelInitPointers_ARGB8888(rb);
+	    break;
+	 case I915_TILING_X:
+	    intel_XTile_InitPointers_ARGB8888(rb);
+	    break;
+	 case I915_TILING_Y:
+	    intel_YTile_InitPointers_ARGB8888(rb);
+	    break;
+	 }
+      }
+      break;
+   case MESA_FORMAT_Z16:
       switch (tiling) {
       case I915_TILING_NONE:
       default:
@@ -754,38 +665,57 @@ intel_set_span_functions(struct intel_context *intel,
 	 intel_YTile_InitDepthPointers_z16(rb);
 	 break;
       }
-   }
-   else if (rb->_ActualFormat == GL_DEPTH_COMPONENT24 ||        /* XXX FBO remove */
-            rb->_ActualFormat == GL_DEPTH24_STENCIL8_EXT) {
-      switch (tiling) {
-      case I915_TILING_NONE:
-      default:
-	 intelInitDepthPointers_z24_s8(rb);
-	 break;
-      case I915_TILING_X:
-	 intel_XTile_InitDepthPointers_z24_s8(rb);
-	 break;
-      case I915_TILING_Y:
-	 intel_YTile_InitDepthPointers_z24_s8(rb);
-	 break;
+      break;
+   case MESA_FORMAT_S8_Z24:
+      /* There are a few different ways SW asks us to access the S8Z24 data:
+       * Z24 depth-only depth reads
+       * S8Z24 depth reads
+       * S8Z24 stencil reads.
+       */
+      if (rb->_ActualFormat == GL_DEPTH_COMPONENT24) {
+	 switch (tiling) {
+	 case I915_TILING_NONE:
+	 default:
+	    intelInitDepthPointers_z24(rb);
+	    break;
+	 case I915_TILING_X:
+	    intel_XTile_InitDepthPointers_z24(rb);
+	    break;
+	 case I915_TILING_Y:
+	    intel_YTile_InitDepthPointers_z24(rb);
+	    break;
+	 }
+      } else if (rb->_ActualFormat == GL_DEPTH24_STENCIL8_EXT) {
+	 switch (tiling) {
+	 case I915_TILING_NONE:
+	 default:
+	    intelInitDepthPointers_z24_s8(rb);
+	    break;
+	 case I915_TILING_X:
+	    intel_XTile_InitDepthPointers_z24_s8(rb);
+	    break;
+	 case I915_TILING_Y:
+	    intel_YTile_InitDepthPointers_z24_s8(rb);
+	    break;
+	 }
+      } else if (rb->_ActualFormat == GL_STENCIL_INDEX8_EXT) {
+	 switch (tiling) {
+	 case I915_TILING_NONE:
+	 default:
+	    intelInitStencilPointers_z24_s8(rb);
+	    break;
+	 case I915_TILING_X:
+	    intel_XTile_InitStencilPointers_z24_s8(rb);
+	    break;
+	 case I915_TILING_Y:
+	    intel_YTile_InitStencilPointers_z24_s8(rb);
+	    break;
+	 }
       }
-   }
-   else if (rb->_ActualFormat == GL_STENCIL_INDEX8_EXT) {
-      switch (tiling) {
-      case I915_TILING_NONE:
-      default:
-	 intelInitStencilPointers_z24_s8(rb);
-	 break;
-      case I915_TILING_X:
-	 intel_XTile_InitStencilPointers_z24_s8(rb);
-	 break;
-      case I915_TILING_Y:
-	 intel_YTile_InitStencilPointers_z24_s8(rb);
-	 break;
-      }
-   }
-   else {
+      break;
+   default:
       _mesa_problem(NULL,
-                    "Unexpected _ActualFormat in intelSetSpanFunctions");
+                    "Unexpected MesaFormat in intelSetSpanFunctions");
+      break;
    }
 }

@@ -52,7 +52,7 @@
 typedef void (*texture_sample_func)(GLcontext *ctx,
                                     const struct gl_texture_object *tObj,
                                     GLuint n, const GLfloat texcoords[][4],
-                                    const GLfloat lambda[], GLchan rgba[][4]);
+                                    const GLfloat lambda[], GLfloat rgba[][4]);
 
 typedef void (_ASMAPIP blend_func)( GLcontext *ctx, GLuint n,
                                     const GLubyte mask[],
@@ -131,7 +131,7 @@ typedef struct
    GLfloat _BackfaceSign;      /** +1 or -1 */
    GLfloat _BackfaceCullSign;  /** +1, 0, or -1 */
    GLboolean _PreferPixelFog;    /* Compute fog blend factor per fragment? */
-   GLboolean _AnyTextureCombine;
+   GLboolean _TextureCombinePrimary;
    GLboolean _FogEnabled;
    GLboolean _DeferredTexture;
    GLenum _FogMode;  /* either GL_FOG_MODE or fragment program's fog mode */
@@ -157,6 +157,7 @@ typedef struct
    GLbitfield NewState;
    GLuint StateChanges;
    GLenum Primitive;    /* current primitive being drawn (ala glBegin) */
+   GLboolean SpecularVertexAdd; /**< Add specular/secondary color per vertex */
 
    void (*InvalidateState)( GLcontext *ctx, GLbitfield new_state );
 
@@ -221,7 +222,7 @@ typedef struct
    /** Buffer for saving the sampled texture colors.
     * Needed for GL_ARB_texture_env_crossbar implementation.
     */
-   GLchan *TexelBuffer;
+   GLfloat *TexelBuffer;
 
    validate_texture_image_func ValidateTextureImage;
 
@@ -238,21 +239,43 @@ extern void
 _swrast_update_texture_samplers(GLcontext *ctx);
 
 
-#define SWRAST_CONTEXT(ctx) ((SWcontext *)ctx->swrast_context)
+/** Return SWcontext for the given GLcontext */
+static INLINE SWcontext *
+SWRAST_CONTEXT(GLcontext *ctx)
+{
+   return (SWcontext *) ctx->swrast_context;
+}
 
-#define RENDER_START(SWctx, GLctx)			\
-   do {							\
-      if ((SWctx)->Driver.SpanRenderStart) {		\
-         (*(SWctx)->Driver.SpanRenderStart)(GLctx);	\
-      }							\
-   } while (0)
+/** const version of above */
+static INLINE const SWcontext *
+CONST_SWRAST_CONTEXT(const GLcontext *ctx)
+{
+   return (const SWcontext *) ctx->swrast_context;
+}
 
-#define RENDER_FINISH(SWctx, GLctx)			\
-   do {							\
-      if ((SWctx)->Driver.SpanRenderFinish) {		\
-         (*(SWctx)->Driver.SpanRenderFinish)(GLctx);	\
-      }							\
-   } while (0)
+
+/**
+ * Called prior to framebuffer reading/writing.
+ * For drivers that rely on swrast for fallback rendering, this is the
+ * driver's opportunity to map renderbuffers and textures.
+ */
+static INLINE void
+swrast_render_start(GLcontext *ctx)
+{
+   SWcontext *swrast = SWRAST_CONTEXT(ctx);
+   if (swrast->Driver.SpanRenderStart)
+      swrast->Driver.SpanRenderStart(ctx);
+}
+
+
+/** Called after framebuffer reading/writing */
+static INLINE void
+swrast_render_finish(GLcontext *ctx)
+{
+   SWcontext *swrast = SWRAST_CONTEXT(ctx);
+   if (swrast->Driver.SpanRenderFinish)
+      swrast->Driver.SpanRenderFinish(ctx);
+}
 
 
 
@@ -263,6 +286,34 @@ _swrast_update_texture_samplers(GLcontext *ctx);
          ((TYPE == GL_UNSIGNED_BYTE) ? 4 * sizeof(GLubyte) :      \
           ((TYPE == GL_UNSIGNED_SHORT) ? 4 * sizeof(GLushort)     \
            : 4 * sizeof(GLfloat)))
+
+
+
+/*
+ * Fixed point arithmetic macros
+ */
+#ifndef FIXED_FRAC_BITS
+#define FIXED_FRAC_BITS 11
+#endif
+
+#define FIXED_SHIFT     FIXED_FRAC_BITS
+#define FIXED_ONE       (1 << FIXED_SHIFT)
+#define FIXED_HALF      (1 << (FIXED_SHIFT-1))
+#define FIXED_FRAC_MASK (FIXED_ONE - 1)
+#define FIXED_INT_MASK  (~FIXED_FRAC_MASK)
+#define FIXED_EPSILON   1
+#define FIXED_SCALE     ((float) FIXED_ONE)
+#define FIXED_DBL_SCALE ((double) FIXED_ONE)
+#define FloatToFixed(X) (IROUND((X) * FIXED_SCALE))
+#define FixedToDouble(X) ((X) * (1.0 / FIXED_DBL_SCALE))
+#define IntToFixed(I)   ((I) << FIXED_SHIFT)
+#define FixedToInt(X)   ((X) >> FIXED_SHIFT)
+#define FixedToUns(X)   (((unsigned int)(X)) >> FIXED_SHIFT)
+#define FixedCeil(X)    (((X) + FIXED_ONE - FIXED_EPSILON) & FIXED_INT_MASK)
+#define FixedFloor(X)   ((X) & FIXED_INT_MASK)
+#define FixedToFloat(X) ((X) * (1.0F / FIXED_SCALE))
+#define PosFloatToFixed(X)      FloatToFixed(X)
+#define SignedFloatToFixed(X)   FloatToFixed(X)
 
 
 

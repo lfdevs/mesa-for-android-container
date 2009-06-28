@@ -38,23 +38,28 @@
 #include "shader/prog_parameter.h"
 #include "shader/prog_statevars.h"
 #include "intel_batchbuffer.h"
+#include "intel_regions.h"
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_state.h"
 #include "brw_util.h"
 
 
-/* Partition the CURBE between the various users of constant values:
+/**
+ * Partition the CURBE between the various users of constant values:
+ * Note that vertex and fragment shaders can now fetch constants out
+ * of constant buffers.  We no longer allocatea block of the GRF for
+ * constants.  That greatly reduces the demand for space in the CURBE.
+ * Some of the comments within are dated...
  */
 static void calculate_curbe_offsets( struct brw_context *brw )
 {
    GLcontext *ctx = &brw->intel.ctx;
    /* CACHE_NEW_WM_PROG */
-   GLuint nr_fp_regs = (brw->wm.prog_data->nr_params + 15) / 16;
+   const GLuint nr_fp_regs = (brw->wm.prog_data->nr_params + 15) / 16;
    
    /* BRW_NEW_VERTEX_PROGRAM */
-   struct brw_vertex_program *vp = (struct brw_vertex_program *)brw->vertex_program;
-   GLuint nr_vp_regs = (vp->program.Base.Parameters->NumParameters * 4 + 15) / 16;
+   const GLuint nr_vp_regs = (brw->vs.prog_data->nr_params + 15) / 16;
    GLuint nr_clip_regs = 0;
    GLuint total_regs;
 
@@ -138,24 +143,24 @@ const struct brw_tracked_state brw_curbe_offsets = {
  * fixed-function hardware in a double-buffering scheme to avoid a
  * pipeline stall each time the contents of the curbe is changed.
  */
-void brw_upload_constant_buffer_state(struct brw_context *brw)
+void brw_upload_cs_urb_state(struct brw_context *brw)
 {
-   struct brw_constant_buffer_state cbs; 
-   memset(&cbs, 0, sizeof(cbs));
+   struct brw_cs_urb_state cs_urb;
+   memset(&cs_urb, 0, sizeof(cs_urb));
 
    /* It appears that this is the state packet for the CS unit, ie. the
     * urb entries detailed here are housed in the CS range from the
     * URB_FENCE command.
     */
-   cbs.header.opcode = CMD_CONST_BUFFER_STATE;
-   cbs.header.length = sizeof(cbs)/4 - 2;
+   cs_urb.header.opcode = CMD_CS_URB_STATE;
+   cs_urb.header.length = sizeof(cs_urb)/4 - 2;
 
    /* BRW_NEW_URB_FENCE */
-   cbs.bits0.nr_urb_entries = brw->urb.nr_cs_entries;
-   cbs.bits0.urb_entry_size = brw->urb.csize - 1;
+   cs_urb.bits0.nr_urb_entries = brw->urb.nr_cs_entries;
+   cs_urb.bits0.urb_entry_size = brw->urb.csize - 1;
 
    assert(brw->urb.nr_cs_entries);
-   BRW_CACHED_BATCH_STRUCT(brw, &cbs);
+   BRW_CACHED_BATCH_STRUCT(brw, &cs_urb);
 }
 
 static GLfloat fixed_plane[6][4] = {
@@ -174,10 +179,12 @@ static GLfloat fixed_plane[6][4] = {
 static void prepare_constant_buffer(struct brw_context *brw)
 {
    GLcontext *ctx = &brw->intel.ctx;
-   struct brw_vertex_program *vp = (struct brw_vertex_program *)brw->vertex_program;
-   struct brw_fragment_program *fp = (struct brw_fragment_program *)brw->fragment_program;
-   GLuint sz = brw->curbe.total_size;
-   GLuint bufsz = sz * 16 * sizeof(GLfloat);
+   const struct brw_vertex_program *vp =
+      brw_vertex_program_const(brw->vertex_program);
+   const struct brw_fragment_program *fp =
+      brw_fragment_program_const(brw->fragment_program);
+   const GLuint sz = brw->curbe.total_size;
+   const GLuint bufsz = sz * 16 * sizeof(GLfloat);
    GLfloat *buf;
    GLuint i;
 
@@ -189,27 +196,25 @@ static void prepare_constant_buffer(struct brw_context *brw)
    brw->curbe.tracked_state.dirty.mesa |= fp->program.Base.Parameters->StateFlags;
 
    if (sz == 0) {
-
       if (brw->curbe.last_buf) {
 	 free(brw->curbe.last_buf);
 	 brw->curbe.last_buf = NULL;
 	 brw->curbe.last_bufsz  = 0;
       }
-
       return;
    }
 
-   buf = (GLfloat *)malloc(bufsz);
+   buf = (GLfloat *) _mesa_calloc(bufsz);
 
-   memset(buf, 0, bufsz);
-
+   /* fragment shader constants */
    if (brw->curbe.wm_size) {
       GLuint offset = brw->curbe.wm_start * 16;
 
       _mesa_load_state_parameters(ctx, fp->program.Base.Parameters); 
 
+      /* copy float constants */
       for (i = 0; i < brw->wm.prog_data->nr_params; i++) 
-	 buf[offset + i] = brw->wm.prog_data->param[i][0];
+	 buf[offset + i] = *brw->wm.prog_data->param[i];
    }
 
 
@@ -244,18 +249,20 @@ static void prepare_constant_buffer(struct brw_context *brw)
       }
    }
 
-
+   /* vertex shader constants */
    if (brw->curbe.vs_size) {
       GLuint offset = brw->curbe.vs_start * 16;
-      GLuint nr = vp->program.Base.Parameters->NumParameters;
+      GLuint nr = brw->vs.prog_data->nr_params / 4;
 
       _mesa_load_state_parameters(ctx, vp->program.Base.Parameters); 
 
+      /* XXX just use a memcpy here */
       for (i = 0; i < nr; i++) {
-	 buf[offset + i * 4 + 0] = vp->program.Base.Parameters->ParameterValues[i][0];
-	 buf[offset + i * 4 + 1] = vp->program.Base.Parameters->ParameterValues[i][1];
-	 buf[offset + i * 4 + 2] = vp->program.Base.Parameters->ParameterValues[i][2];
-	 buf[offset + i * 4 + 3] = vp->program.Base.Parameters->ParameterValues[i][3];
+         const GLfloat *value = vp->program.Base.Parameters->ParameterValues[i];
+	 buf[offset + i * 4 + 0] = value[0];
+	 buf[offset + i * 4 + 1] = value[1];
+	 buf[offset + i * 4 + 2] = value[2];
+	 buf[offset + i * 4 + 3] = value[3];
       }
    }
 
@@ -274,11 +281,14 @@ static void prepare_constant_buffer(struct brw_context *brw)
        brw->curbe.last_buf &&
        bufsz == brw->curbe.last_bufsz &&
        memcmp(buf, brw->curbe.last_buf, bufsz) == 0) {
-      free(buf);
+      /* constants have not changed */
+      _mesa_free(buf);
    } 
    else {
+      /* constants have changed */
       if (brw->curbe.last_buf)
-	 free(brw->curbe.last_buf);
+	 _mesa_free(brw->curbe.last_buf);
+
       brw->curbe.last_buf = buf;
       brw->curbe.last_bufsz = bufsz;
 
@@ -326,10 +336,76 @@ static void prepare_constant_buffer(struct brw_context *brw)
 }
 
 
+/**
+ * Copy Mesa program parameters into given constant buffer.
+ */
+static void
+update_constant_buffer(struct brw_context *brw,
+                       const struct gl_program_parameter_list *params,
+                       dri_bo *const_buffer)
+{
+   struct intel_context *intel = &brw->intel;
+   const int size = params->NumParameters * 4 * sizeof(GLfloat);
+
+   /* copy Mesa program constants into the buffer */
+   if (const_buffer && size > 0) {
+
+      assert(const_buffer);
+      assert(const_buffer->size >= size);
+
+      if (intel->intelScreen->kernel_exec_fencing) {
+         drm_intel_gem_bo_map_gtt(const_buffer);
+         memcpy(const_buffer->virtual, params->ParameterValues, size);
+         drm_intel_gem_bo_unmap_gtt(const_buffer);
+      }
+      else {
+         dri_bo_subdata(const_buffer, 0, size, params->ParameterValues);
+      }
+
+      if (0) {
+         int i;
+         for (i = 0; i < params->NumParameters; i++) {
+            float *p = params->ParameterValues[i];
+            printf("%d: %f %f %f %f\n", i, p[0], p[1], p[2], p[3]);
+         }
+      }
+   }
+}
+
+
+/** Copy current vertex program's parameters into the constant buffer */
+static void
+update_vertex_constant_buffer(struct brw_context *brw)
+{
+   struct brw_vertex_program *vp =
+      (struct brw_vertex_program *) brw->vertex_program;
+   if (0) {
+      printf("update VS constants in buffer %p\n", vp->const_buffer);
+      printf("program %u\n", vp->program.Base.Id);
+   }
+   if (vp->use_const_buffer)
+      update_constant_buffer(brw, vp->program.Base.Parameters, vp->const_buffer);
+}
+
+
+/** Copy current fragment program's parameters into the constant buffer */
+static void
+update_fragment_constant_buffer(struct brw_context *brw)
+{
+   struct brw_fragment_program *fp =
+      (struct brw_fragment_program *) brw->fragment_program;
+   if (fp->use_const_buffer)
+      update_constant_buffer(brw, fp->program.Base.Parameters, fp->const_buffer);
+}
+
+
 static void emit_constant_buffer(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    GLuint sz = brw->curbe.total_size;
+
+   update_vertex_constant_buffer(brw);
+   update_fragment_constant_buffer(brw);
 
    BEGIN_BATCH(2, IGNORE_CLIPRECTS);
    if (sz == 0) {

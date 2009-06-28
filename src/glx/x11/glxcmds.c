@@ -869,6 +869,20 @@ PUBLIC void glXDestroyGLXPixmap(Display *dpy, GLXPixmap glxpixmap)
     req->glxpixmap = glxpixmap;
     UnlockDisplay(dpy);
     SyncHandle();
+
+#ifdef GLX_DIRECT_RENDERING
+    {
+	int screen;
+	__GLXdisplayPrivate *const priv = __glXInitialize(dpy);
+	__GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, glxpixmap, &screen);
+	__GLXscreenConfigs *psc = &priv->screenConfigs[screen];
+
+	if (pdraw != NULL) {
+	    (*pdraw->destroyDrawable) (pdraw);
+	    __glxHashDelete(psc->drawHash, glxpixmap);
+	}
+    }
+#endif
 }
 
 PUBLIC void glXSwapBuffers(Display *dpy, GLXDrawable drawable)
@@ -1319,28 +1333,29 @@ PUBLIC XVisualInfo *glXChooseVisual(Display *dpy, int screen, int *attribList)
     ** Eliminate visuals that don't meet minimum requirements
     ** Compute a score for those that do
     ** Remember which visual, if any, got the highest score
+    ** If no visual is acceptable, return None
+    ** Otherwise, create an XVisualInfo list with just the selected X visual
+    ** and return this.
     */
     for ( modes = psc->visuals ; modes != NULL ; modes = modes->next ) {
 	if ( fbconfigs_compatible( & test_config, modes )
 	     && ((best_config == NULL)
 		 || (fbconfig_compare( (const __GLcontextModes * const * const)&modes, &best_config ) < 0)) ) {
-	    best_config = modes;
+	    XVisualInfo visualTemplate;
+	    XVisualInfo *newList;
+	    int  i;
+
+	    visualTemplate.screen = screen;
+	    visualTemplate.visualid = modes->visualID;
+	    newList = XGetVisualInfo( dpy, VisualScreenMask|VisualIDMask,
+				      &visualTemplate, &i );
+
+	    if (newList) {
+		Xfree(visualList);
+		visualList = newList;
+		best_config = modes;
+	    }
 	}
-    }
-
-    /*
-    ** If no visual is acceptable, return None
-    ** Otherwise, create an XVisualInfo list with just the selected X visual
-    ** and return this.
-    */
-    if (best_config != NULL) {
-	XVisualInfo visualTemplate;
-	int  i;
-
-	visualTemplate.screen = screen;
-	visualTemplate.visualid = best_config->visualID;
-	visualList = XGetVisualInfo( dpy, VisualScreenMask|VisualIDMask,
-				     &visualTemplate, &i );
     }
 
     return visualList;
@@ -2632,11 +2647,19 @@ static void __glXBindTexImageEXT(Display *dpy,
     if (gc->driContext) {
 	__GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, drawable, NULL);
 
-	if (pdraw != NULL)
-	    (*pdraw->psc->texBuffer->setTexBuffer)(gc->__driContext,
-						   pdraw->textureTarget,
-						   pdraw->driDrawable);
-
+	if (pdraw != NULL) {
+	    if (pdraw->psc->texBuffer->base.version >= 2 &&
+		pdraw->psc->texBuffer->setTexBuffer2 != NULL) {
+		(*pdraw->psc->texBuffer->setTexBuffer2)(gc->__driContext,
+							pdraw->textureTarget,
+							pdraw->textureFormat,
+							pdraw->driDrawable);
+	    } else {
+		(*pdraw->psc->texBuffer->setTexBuffer)(gc->__driContext,
+						       pdraw->textureTarget,
+						       pdraw->driDrawable);
+	    }
+	}
 	return;
     }
 #endif

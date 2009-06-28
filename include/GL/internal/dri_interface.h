@@ -41,7 +41,7 @@
 #define DRI_INTERFACE_H
 
 /* For archs with no drm.h */
-#if !defined(__APPLE__) && !defined(__CYGWIN__)
+#if !defined(__APPLE__) && !defined(__CYGWIN__) && !defined(__GNU__)
 #include <drm.h>
 #else
 typedef unsigned int drm_context_t;
@@ -78,6 +78,7 @@ typedef struct __DRIswrastExtensionRec		__DRIswrastExtension;
 typedef struct __DRIbufferRec			__DRIbuffer;
 typedef struct __DRIdri2ExtensionRec		__DRIdri2Extension;
 typedef struct __DRIdri2LoaderExtensionRec	__DRIdri2LoaderExtension;
+typedef struct __DRI2flushExtensionRec	__DRI2flushExtension;
 
 /*@}*/
 
@@ -230,7 +231,7 @@ struct __DRItexOffsetExtensionRec {
 
 
 #define __DRI_TEX_BUFFER "DRI_TexBuffer"
-#define __DRI_TEX_BUFFER_VERSION 1
+#define __DRI_TEX_BUFFER_VERSION 2
 struct __DRItexBufferExtensionRec {
     __DRIextension base;
 
@@ -238,11 +239,33 @@ struct __DRItexBufferExtensionRec {
      * Method to override base texture image with the contents of a
      * __DRIdrawable. 
      *
-     * For GLX_EXT_texture_from_pixmap with AIGLX.
+     * For GLX_EXT_texture_from_pixmap with AIGLX.  Deprecated in favor of
+     * setTexBuffer2 in version 2 of this interface
      */
     void (*setTexBuffer)(__DRIcontext *pDRICtx,
 			 GLint target,
 			 __DRIdrawable *pDraw);
+
+    /**
+     * Method to override base texture image with the contents of a
+     * __DRIdrawable, including the required texture format attribute.
+     *
+     * For GLX_EXT_texture_from_pixmap with AIGLX.
+     */
+    void (*setTexBuffer2)(__DRIcontext *pDRICtx,
+			  GLint target,
+			  GLint format,
+			  __DRIdrawable *pDraw);
+};
+
+/**
+ * Used by drivers that implement DRI2
+ */
+#define __DRI2_FLUSH "DRI2_Flush"
+#define __DRI2_FLUSH_VERSION 1
+struct __DRI2flushExtensionRec {
+    __DRIextension base;
+    void (*flush)(__DRIdrawable *drawable);
 };
 
 
@@ -626,6 +649,7 @@ struct __DRIswrastExtensionRec {
 #define __DRI_BUFFER_ACCUM		6
 #define __DRI_BUFFER_FAKE_FRONT_LEFT	7
 #define __DRI_BUFFER_FAKE_FRONT_RIGHT	8
+#define __DRI_BUFFER_DEPTH_STENCIL	9  /**< Only available with DRI2 1.1 */
 
 struct __DRIbufferRec {
     unsigned int attachment;
@@ -636,7 +660,7 @@ struct __DRIbufferRec {
 };
 
 #define __DRI_DRI2_LOADER "DRI_DRI2Loader"
-#define __DRI_DRI2_LOADER_VERSION 2
+#define __DRI_DRI2_LOADER_VERSION 3
 struct __DRIdri2LoaderExtensionRec {
     __DRIextension base;
 
@@ -657,6 +681,31 @@ struct __DRIdri2LoaderExtensionRec {
      *                       into __DRIdri2ExtensionRec::createNewDrawable
      */
     void (*flushFrontBuffer)(__DRIdrawable *driDrawable, void *loaderPrivate);
+
+
+    /**
+     * Get list of buffers from the server
+     *
+     * Gets a list of buffer for the specified set of attachments.  Unlike
+     * \c ::getBuffers, this function takes a list of attachments paired with
+     * opaque \c unsigned \c int value describing the format of the buffer.
+     * It is the responsibility of the caller to know what the service that
+     * allocates the buffers will expect to receive for the format.
+     *
+     * \param driDrawable    Drawable whose buffers are being queried.
+     * \param width          Output where the width of the buffers is stored.
+     * \param height         Output where the height of the buffers is stored.
+     * \param attachments    List of pairs of attachment ID and opaque format
+     *                       requested for the drawable.
+     * \param count          Number of attachment / format pairs stored in
+     *                       \c attachments.
+     * \param loaderPrivate  Loader's private data that was previously passed
+     *                       into __DRIdri2ExtensionRec::createNewDrawable.
+     */
+    __DRIbuffer *(*getBuffersWithFormat)(__DRIdrawable *driDrawable,
+					 int *width, int *height,
+					 unsigned int *attachments, int count,
+					 int *out_count, void *loaderPrivate);
 };
 
 /**

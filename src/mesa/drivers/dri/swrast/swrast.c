@@ -73,7 +73,6 @@
 #define need_GL_EXT_gpu_program_parameters
 #define need_GL_EXT_paletted_texture
 #define need_GL_EXT_stencil_two_side
-#define need_GL_IBM_multimode_draw_arrays
 #define need_GL_MESA_resize_buffers
 #define need_GL_NV_vertex_program
 #define need_GL_NV_fragment_program
@@ -105,7 +104,6 @@ const struct dri_extension card_extensions[] =
     { "GL_EXT_gpu_program_parameters",	GL_EXT_gpu_program_parameters_functions },
     { "GL_EXT_paletted_texture",	GL_EXT_paletted_texture_functions },
     { "GL_EXT_stencil_two_side",	GL_EXT_stencil_two_side_functions },
-    { "GL_IBM_multimode_draw_arrays",	GL_IBM_multimode_draw_arrays_functions },
     { "GL_MESA_resize_buffers",		GL_MESA_resize_buffers_functions },
     { "GL_NV_vertex_program",		GL_NV_vertex_program_functions },
     { "GL_NV_fragment_program",		GL_NV_fragment_program_functions },
@@ -149,6 +147,7 @@ swrastFillInModes(__DRIscreen *psp,
 
     uint8_t depth_bits_array[4];
     uint8_t stencil_bits_array[4];
+    uint8_t msaa_samples_array[1];
 
     depth_bits_array[0] = 0;
     depth_bits_array[1] = 0;
@@ -162,6 +161,8 @@ swrastFillInModes(__DRIscreen *psp,
     stencil_bits_array[1] = (stencil_bits == 0) ? 8 : stencil_bits;
     stencil_bits_array[2] = 0;
     stencil_bits_array[3] = (stencil_bits == 0) ? 8 : stencil_bits;
+
+    msaa_samples_array[0] = 0;
 
     depth_buffer_factor = 4;
     back_buffer_factor = 2;
@@ -192,7 +193,7 @@ swrastFillInModes(__DRIscreen *psp,
     configs = driCreateConfigs(fb_format, fb_type,
 			       depth_bits_array, stencil_bits_array,
 			       depth_buffer_factor, back_buffer_modes,
-			       back_buffer_factor);
+			       back_buffer_factor, msaa_samples_array, 1);
     if (configs == NULL) {
 	fprintf(stderr, "[%s:%u] Error creating FBConfig!\n", __func__,
 		__LINE__);
@@ -208,7 +209,7 @@ driCreateNewScreen(int scrn, const __DRIextension **extensions,
 {
     static const __DRIextension *emptyExtensionList[] = { NULL };
     __DRIscreen *psp;
-    const __DRIconfig **configs8, **configs16, **configs24, **configs32;
+    __DRIconfig **configs8, **configs16, **configs24, **configs32;
 
     (void) data;
 
@@ -230,7 +231,8 @@ driCreateNewScreen(int scrn, const __DRIextension **extensions,
 
     configs16 = driConcatConfigs(configs8, configs16);
     configs24 = driConcatConfigs(configs16, configs24);
-    *driver_configs = driConcatConfigs(configs24, configs32);
+    *driver_configs = (const __DRIconfig **)
+       driConcatConfigs(configs24, configs32);
 
     driInitExtensions( NULL, card_extensions, GL_FALSE );
 
@@ -474,7 +476,7 @@ driDestroyDrawable(__DRIdrawable *buf)
 	_mesa_free(buf->row);
 
 	fb->DeletePending = GL_TRUE;
-	_mesa_unreference_framebuffer(&fb);
+	_mesa_reference_framebuffer(&fb, NULL);
     }
 }
 

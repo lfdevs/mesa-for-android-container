@@ -254,6 +254,7 @@ static const struct instruction_info InstInfo[MAX_OPCODE] = {
 GLuint
 _mesa_num_inst_src_regs(gl_inst_opcode opcode)
 {
+   ASSERT(opcode < MAX_OPCODE);
    ASSERT(opcode == InstInfo[opcode].Opcode);
    ASSERT(OPCODE_XPD == InstInfo[OPCODE_XPD].Opcode);
    return InstInfo[opcode].NumSrcRegs;
@@ -266,6 +267,7 @@ _mesa_num_inst_src_regs(gl_inst_opcode opcode)
 GLuint
 _mesa_num_inst_dst_regs(gl_inst_opcode opcode)
 {
+   ASSERT(opcode < MAX_OPCODE);
    ASSERT(opcode == InstInfo[opcode].Opcode);
    ASSERT(OPCODE_XPD == InstInfo[OPCODE_XPD].Opcode);
    return InstInfo[opcode].NumDstRegs;
@@ -284,12 +286,64 @@ _mesa_is_tex_instruction(gl_inst_opcode opcode)
 
 
 /**
+ * Check if there's a potential src/dst register data dependency when
+ * using SOA execution.
+ * Example:
+ *   MOV T, T.yxwz;
+ * This would expand into:
+ *   MOV t0, t1;
+ *   MOV t1, t0;
+ *   MOV t2, t3;
+ *   MOV t3, t2;
+ * The second instruction will have the wrong value for t0 if executed as-is.
+ */
+GLboolean
+_mesa_check_soa_dependencies(const struct prog_instruction *inst)
+{
+   GLuint i, chan;
+
+   if (inst->DstReg.WriteMask == WRITEMASK_X ||
+       inst->DstReg.WriteMask == WRITEMASK_Y ||
+       inst->DstReg.WriteMask == WRITEMASK_Z ||
+       inst->DstReg.WriteMask == WRITEMASK_W ||
+       inst->DstReg.WriteMask == 0x0) {
+      /* no chance of data dependency */
+      return GL_FALSE;
+   }
+
+   /* loop over src regs */
+   for (i = 0; i < 3; i++) {
+      if (inst->SrcReg[i].File == inst->DstReg.File &&
+          inst->SrcReg[i].Index == inst->DstReg.Index) {
+         /* loop over dest channels */
+         GLuint channelsWritten = 0x0;
+         for (chan = 0; chan < 4; chan++) {
+            if (inst->DstReg.WriteMask & (1 << chan)) {
+               /* check if we're reading a channel that's been written */
+               GLuint swizzle = GET_SWZ(inst->SrcReg[i].Swizzle, chan);
+               if (swizzle <= SWIZZLE_W &&
+                   (channelsWritten & (1 << swizzle))) {
+                  return GL_TRUE;
+               }
+
+               channelsWritten |= (1 << chan);
+            }
+         }
+      }
+   }
+   return GL_FALSE;
+}
+
+
+/**
  * Return string name for given program opcode.
  */
 const char *
 _mesa_opcode_string(gl_inst_opcode opcode)
 {
-   ASSERT(opcode < MAX_OPCODE);
-   return InstInfo[opcode].Name;
+   if (opcode < MAX_OPCODE)
+      return InstInfo[opcode].Name;
+   else
+      return "OP?";
 }
 

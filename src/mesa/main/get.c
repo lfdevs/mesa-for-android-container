@@ -460,7 +460,7 @@ _mesa_GetBooleanv( GLenum pname, GLboolean *params )
          params[0] = INT_TO_BOOLEAN(ctx->List.ListBase);
          break;
       case GL_LIST_INDEX:
-         params[0] = INT_TO_BOOLEAN(ctx->ListState.CurrentListNum);
+         params[0] = INT_TO_BOOLEAN((ctx->ListState.CurrentList ? ctx->ListState.CurrentList->Name : 0));
          break;
       case GL_LIST_MODE:
          {
@@ -1078,15 +1078,12 @@ _mesa_GetBooleanv( GLenum pname, GLboolean *params )
          params[0] = INT_TO_BOOLEAN((1 << (ctx->Const.MaxCubeTextureLevels - 1)));
          break;
       case GL_TEXTURE_COMPRESSION_HINT_ARB:
-         CHECK_EXT1(ARB_texture_compression, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Hint.TextureCompression);
          break;
       case GL_NUM_COMPRESSED_TEXTURE_FORMATS_ARB:
-         CHECK_EXT1(ARB_texture_compression, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(_mesa_get_compressed_formats(ctx, NULL, GL_FALSE));
          break;
       case GL_COMPRESSED_TEXTURE_FORMATS_ARB:
-         CHECK_EXT1(ARB_texture_compression, "GetBooleanv");
          {
          GLint formats[100];
          GLuint i, n = _mesa_get_compressed_formats(ctx, formats, GL_FALSE);
@@ -1368,35 +1365,27 @@ _mesa_GetBooleanv( GLenum pname, GLboolean *params )
          params[0] = FLOAT_TO_BOOLEAN(ctx->Const.MaxTextureMaxAnisotropy);
          break;
       case GL_MULTISAMPLE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetBooleanv");
          params[0] = ctx->Multisample.Enabled;
          break;
       case GL_SAMPLE_ALPHA_TO_COVERAGE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetBooleanv");
          params[0] = ctx->Multisample.SampleAlphaToCoverage;
          break;
       case GL_SAMPLE_ALPHA_TO_ONE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetBooleanv");
          params[0] = ctx->Multisample.SampleAlphaToOne;
          break;
       case GL_SAMPLE_COVERAGE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetBooleanv");
          params[0] = ctx->Multisample.SampleCoverage;
          break;
       case GL_SAMPLE_COVERAGE_VALUE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetBooleanv");
          params[0] = FLOAT_TO_BOOLEAN(ctx->Multisample.SampleCoverageValue);
          break;
       case GL_SAMPLE_COVERAGE_INVERT_ARB:
-         CHECK_EXT1(ARB_multisample, "GetBooleanv");
          params[0] = ctx->Multisample.SampleCoverageInvert;
          break;
       case GL_SAMPLE_BUFFERS_ARB:
-         CHECK_EXT1(ARB_multisample, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->DrawBuffer->Visual.sampleBuffers);
          break;
       case GL_SAMPLES_ARB:
-         CHECK_EXT1(ARB_multisample, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->DrawBuffer->Visual.samples);
          break;
       case GL_RASTER_POSITION_UNCLIPPED_IBM:
@@ -1592,43 +1581,33 @@ _mesa_GetBooleanv( GLenum pname, GLboolean *params )
          params[0] = FLOAT_TO_BOOLEAN(ctx->Const.MaxSpotExponent);
          break;
       case GL_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ArrayBufferObj->Name);
          break;
       case GL_VERTEX_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ArrayObj->Vertex.BufferObj->Name);
          break;
       case GL_NORMAL_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ArrayObj->Normal.BufferObj->Name);
          break;
       case GL_COLOR_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ArrayObj->Color.BufferObj->Name);
          break;
       case GL_INDEX_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ArrayObj->Index.BufferObj->Name);
          break;
       case GL_TEXTURE_COORD_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ArrayObj->TexCoord[ctx->Array.ActiveTexture].BufferObj->Name);
          break;
       case GL_EDGE_FLAG_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ArrayObj->EdgeFlag.BufferObj->Name);
          break;
       case GL_SECONDARY_COLOR_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ArrayObj->SecondaryColor.BufferObj->Name);
          break;
       case GL_FOG_COORDINATE_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ArrayObj->FogCoord.BufferObj->Name);
          break;
       case GL_ELEMENT_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Array.ElementArrayBufferObj->Name);
          break;
       case GL_PIXEL_PACK_BUFFER_BINDING_EXT:
@@ -1736,32 +1715,13 @@ _mesa_GetBooleanv( GLenum pname, GLboolean *params )
          params[0] = FLOAT_TO_BOOLEAN(ctx->Depth.BoundsMin);
          params[1] = FLOAT_TO_BOOLEAN(ctx->Depth.BoundsMax);
          break;
-      case GL_FRAGMENT_PROGRAM_CALLBACK_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetBooleanv");
-         params[0] = ctx->FragmentProgram.CallbackEnabled;
-         break;
-      case GL_VERTEX_PROGRAM_CALLBACK_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetBooleanv");
-         params[0] = ctx->VertexProgram.CallbackEnabled;
-         break;
-      case GL_FRAGMENT_PROGRAM_POSITION_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetBooleanv");
-         params[0] = INT_TO_BOOLEAN(ctx->FragmentProgram.CurrentPosition);
-         break;
-      case GL_VERTEX_PROGRAM_POSITION_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetBooleanv");
-         params[0] = INT_TO_BOOLEAN(ctx->VertexProgram.CurrentPosition);
-         break;
       case GL_MAX_DRAW_BUFFERS_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Const.MaxDrawBuffers);
          break;
       case GL_DRAW_BUFFER0_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetBooleanv");
          params[0] = ENUM_TO_BOOLEAN(ctx->DrawBuffer->ColorDrawBuffer[0]);
          break;
       case GL_DRAW_BUFFER1_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetBooleanv");
          {
          GLenum buffer;
          if (pname - GL_DRAW_BUFFER0_ARB >= ctx->Const.MaxDrawBuffers) {
@@ -1773,7 +1733,6 @@ _mesa_GetBooleanv( GLenum pname, GLboolean *params )
          }
          break;
       case GL_DRAW_BUFFER2_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetBooleanv");
          {
          GLenum buffer;
          if (pname - GL_DRAW_BUFFER0_ARB >= ctx->Const.MaxDrawBuffers) {
@@ -1785,7 +1744,6 @@ _mesa_GetBooleanv( GLenum pname, GLboolean *params )
          }
          break;
       case GL_DRAW_BUFFER3_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetBooleanv");
          {
          GLenum buffer;
          if (pname - GL_DRAW_BUFFER0_ARB >= ctx->Const.MaxDrawBuffers) {
@@ -1904,6 +1862,10 @@ _mesa_GetBooleanv( GLenum pname, GLboolean *params )
       case GL_CURRENT_PROGRAM:
          CHECK_EXT1(ARB_shader_objects, "GetBooleanv");
          params[0] = INT_TO_BOOLEAN(ctx->Shader.CurrentProgram ? ctx->Shader.CurrentProgram->Name : 0);
+         break;
+      case GL_MAX_SAMPLES:
+         CHECK_EXT1(ARB_framebuffer_object, "GetBooleanv");
+         params[0] = INT_TO_BOOLEAN(ctx->Const.MaxSamples);
          break;
       case GL_VERTEX_ARRAY_BINDING_APPLE:
          CHECK_EXT1(APPLE_vertex_array_object, "GetBooleanv");
@@ -2312,7 +2274,7 @@ _mesa_GetFloatv( GLenum pname, GLfloat *params )
          params[0] = (GLfloat)(ctx->List.ListBase);
          break;
       case GL_LIST_INDEX:
-         params[0] = (GLfloat)(ctx->ListState.CurrentListNum);
+         params[0] = (GLfloat)((ctx->ListState.CurrentList ? ctx->ListState.CurrentList->Name : 0));
          break;
       case GL_LIST_MODE:
          {
@@ -2930,15 +2892,12 @@ _mesa_GetFloatv( GLenum pname, GLfloat *params )
          params[0] = (GLfloat)((1 << (ctx->Const.MaxCubeTextureLevels - 1)));
          break;
       case GL_TEXTURE_COMPRESSION_HINT_ARB:
-         CHECK_EXT1(ARB_texture_compression, "GetFloatv");
          params[0] = (GLfloat)(ctx->Hint.TextureCompression);
          break;
       case GL_NUM_COMPRESSED_TEXTURE_FORMATS_ARB:
-         CHECK_EXT1(ARB_texture_compression, "GetFloatv");
          params[0] = (GLfloat)(_mesa_get_compressed_formats(ctx, NULL, GL_FALSE));
          break;
       case GL_COMPRESSED_TEXTURE_FORMATS_ARB:
-         CHECK_EXT1(ARB_texture_compression, "GetFloatv");
          {
          GLint formats[100];
          GLuint i, n = _mesa_get_compressed_formats(ctx, formats, GL_FALSE);
@@ -3220,35 +3179,27 @@ _mesa_GetFloatv( GLenum pname, GLfloat *params )
          params[0] = ctx->Const.MaxTextureMaxAnisotropy;
          break;
       case GL_MULTISAMPLE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetFloatv");
          params[0] = BOOLEAN_TO_FLOAT(ctx->Multisample.Enabled);
          break;
       case GL_SAMPLE_ALPHA_TO_COVERAGE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetFloatv");
          params[0] = BOOLEAN_TO_FLOAT(ctx->Multisample.SampleAlphaToCoverage);
          break;
       case GL_SAMPLE_ALPHA_TO_ONE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetFloatv");
          params[0] = BOOLEAN_TO_FLOAT(ctx->Multisample.SampleAlphaToOne);
          break;
       case GL_SAMPLE_COVERAGE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetFloatv");
          params[0] = BOOLEAN_TO_FLOAT(ctx->Multisample.SampleCoverage);
          break;
       case GL_SAMPLE_COVERAGE_VALUE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetFloatv");
          params[0] = ctx->Multisample.SampleCoverageValue;
          break;
       case GL_SAMPLE_COVERAGE_INVERT_ARB:
-         CHECK_EXT1(ARB_multisample, "GetFloatv");
          params[0] = BOOLEAN_TO_FLOAT(ctx->Multisample.SampleCoverageInvert);
          break;
       case GL_SAMPLE_BUFFERS_ARB:
-         CHECK_EXT1(ARB_multisample, "GetFloatv");
          params[0] = (GLfloat)(ctx->DrawBuffer->Visual.sampleBuffers);
          break;
       case GL_SAMPLES_ARB:
-         CHECK_EXT1(ARB_multisample, "GetFloatv");
          params[0] = (GLfloat)(ctx->DrawBuffer->Visual.samples);
          break;
       case GL_RASTER_POSITION_UNCLIPPED_IBM:
@@ -3444,43 +3395,33 @@ _mesa_GetFloatv( GLenum pname, GLfloat *params )
          params[0] = ctx->Const.MaxSpotExponent;
          break;
       case GL_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ArrayBufferObj->Name);
          break;
       case GL_VERTEX_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ArrayObj->Vertex.BufferObj->Name);
          break;
       case GL_NORMAL_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ArrayObj->Normal.BufferObj->Name);
          break;
       case GL_COLOR_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ArrayObj->Color.BufferObj->Name);
          break;
       case GL_INDEX_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ArrayObj->Index.BufferObj->Name);
          break;
       case GL_TEXTURE_COORD_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ArrayObj->TexCoord[ctx->Array.ActiveTexture].BufferObj->Name);
          break;
       case GL_EDGE_FLAG_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ArrayObj->EdgeFlag.BufferObj->Name);
          break;
       case GL_SECONDARY_COLOR_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ArrayObj->SecondaryColor.BufferObj->Name);
          break;
       case GL_FOG_COORDINATE_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ArrayObj->FogCoord.BufferObj->Name);
          break;
       case GL_ELEMENT_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetFloatv");
          params[0] = (GLfloat)(ctx->Array.ElementArrayBufferObj->Name);
          break;
       case GL_PIXEL_PACK_BUFFER_BINDING_EXT:
@@ -3588,32 +3529,13 @@ _mesa_GetFloatv( GLenum pname, GLfloat *params )
          params[0] = ctx->Depth.BoundsMin;
          params[1] = ctx->Depth.BoundsMax;
          break;
-      case GL_FRAGMENT_PROGRAM_CALLBACK_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetFloatv");
-         params[0] = BOOLEAN_TO_FLOAT(ctx->FragmentProgram.CallbackEnabled);
-         break;
-      case GL_VERTEX_PROGRAM_CALLBACK_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetFloatv");
-         params[0] = BOOLEAN_TO_FLOAT(ctx->VertexProgram.CallbackEnabled);
-         break;
-      case GL_FRAGMENT_PROGRAM_POSITION_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetFloatv");
-         params[0] = (GLfloat)(ctx->FragmentProgram.CurrentPosition);
-         break;
-      case GL_VERTEX_PROGRAM_POSITION_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetFloatv");
-         params[0] = (GLfloat)(ctx->VertexProgram.CurrentPosition);
-         break;
       case GL_MAX_DRAW_BUFFERS_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetFloatv");
          params[0] = (GLfloat)(ctx->Const.MaxDrawBuffers);
          break;
       case GL_DRAW_BUFFER0_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetFloatv");
          params[0] = ENUM_TO_FLOAT(ctx->DrawBuffer->ColorDrawBuffer[0]);
          break;
       case GL_DRAW_BUFFER1_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetFloatv");
          {
          GLenum buffer;
          if (pname - GL_DRAW_BUFFER0_ARB >= ctx->Const.MaxDrawBuffers) {
@@ -3625,7 +3547,6 @@ _mesa_GetFloatv( GLenum pname, GLfloat *params )
          }
          break;
       case GL_DRAW_BUFFER2_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetFloatv");
          {
          GLenum buffer;
          if (pname - GL_DRAW_BUFFER0_ARB >= ctx->Const.MaxDrawBuffers) {
@@ -3637,7 +3558,6 @@ _mesa_GetFloatv( GLenum pname, GLfloat *params )
          }
          break;
       case GL_DRAW_BUFFER3_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetFloatv");
          {
          GLenum buffer;
          if (pname - GL_DRAW_BUFFER0_ARB >= ctx->Const.MaxDrawBuffers) {
@@ -3756,6 +3676,10 @@ _mesa_GetFloatv( GLenum pname, GLfloat *params )
       case GL_CURRENT_PROGRAM:
          CHECK_EXT1(ARB_shader_objects, "GetFloatv");
          params[0] = (GLfloat)(ctx->Shader.CurrentProgram ? ctx->Shader.CurrentProgram->Name : 0);
+         break;
+      case GL_MAX_SAMPLES:
+         CHECK_EXT1(ARB_framebuffer_object, "GetFloatv");
+         params[0] = (GLfloat)(ctx->Const.MaxSamples);
          break;
       case GL_VERTEX_ARRAY_BINDING_APPLE:
          CHECK_EXT1(APPLE_vertex_array_object, "GetFloatv");
@@ -4164,7 +4088,7 @@ _mesa_GetIntegerv( GLenum pname, GLint *params )
          params[0] = ctx->List.ListBase;
          break;
       case GL_LIST_INDEX:
-         params[0] = ctx->ListState.CurrentListNum;
+         params[0] = (ctx->ListState.CurrentList ? ctx->ListState.CurrentList->Name : 0);
          break;
       case GL_LIST_MODE:
          {
@@ -4782,15 +4706,12 @@ _mesa_GetIntegerv( GLenum pname, GLint *params )
          params[0] = (1 << (ctx->Const.MaxCubeTextureLevels - 1));
          break;
       case GL_TEXTURE_COMPRESSION_HINT_ARB:
-         CHECK_EXT1(ARB_texture_compression, "GetIntegerv");
          params[0] = ctx->Hint.TextureCompression;
          break;
       case GL_NUM_COMPRESSED_TEXTURE_FORMATS_ARB:
-         CHECK_EXT1(ARB_texture_compression, "GetIntegerv");
          params[0] = _mesa_get_compressed_formats(ctx, NULL, GL_FALSE);
          break;
       case GL_COMPRESSED_TEXTURE_FORMATS_ARB:
-         CHECK_EXT1(ARB_texture_compression, "GetIntegerv");
          {
          GLint formats[100];
          GLuint i, n = _mesa_get_compressed_formats(ctx, formats, GL_FALSE);
@@ -5072,35 +4993,27 @@ _mesa_GetIntegerv( GLenum pname, GLint *params )
          params[0] = IROUND(ctx->Const.MaxTextureMaxAnisotropy);
          break;
       case GL_MULTISAMPLE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetIntegerv");
          params[0] = BOOLEAN_TO_INT(ctx->Multisample.Enabled);
          break;
       case GL_SAMPLE_ALPHA_TO_COVERAGE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetIntegerv");
          params[0] = BOOLEAN_TO_INT(ctx->Multisample.SampleAlphaToCoverage);
          break;
       case GL_SAMPLE_ALPHA_TO_ONE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetIntegerv");
          params[0] = BOOLEAN_TO_INT(ctx->Multisample.SampleAlphaToOne);
          break;
       case GL_SAMPLE_COVERAGE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetIntegerv");
          params[0] = BOOLEAN_TO_INT(ctx->Multisample.SampleCoverage);
          break;
       case GL_SAMPLE_COVERAGE_VALUE_ARB:
-         CHECK_EXT1(ARB_multisample, "GetIntegerv");
          params[0] = IROUND(ctx->Multisample.SampleCoverageValue);
          break;
       case GL_SAMPLE_COVERAGE_INVERT_ARB:
-         CHECK_EXT1(ARB_multisample, "GetIntegerv");
          params[0] = BOOLEAN_TO_INT(ctx->Multisample.SampleCoverageInvert);
          break;
       case GL_SAMPLE_BUFFERS_ARB:
-         CHECK_EXT1(ARB_multisample, "GetIntegerv");
          params[0] = ctx->DrawBuffer->Visual.sampleBuffers;
          break;
       case GL_SAMPLES_ARB:
-         CHECK_EXT1(ARB_multisample, "GetIntegerv");
          params[0] = ctx->DrawBuffer->Visual.samples;
          break;
       case GL_RASTER_POSITION_UNCLIPPED_IBM:
@@ -5296,43 +5209,33 @@ _mesa_GetIntegerv( GLenum pname, GLint *params )
          params[0] = IROUND(ctx->Const.MaxSpotExponent);
          break;
       case GL_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ArrayBufferObj->Name;
          break;
       case GL_VERTEX_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ArrayObj->Vertex.BufferObj->Name;
          break;
       case GL_NORMAL_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ArrayObj->Normal.BufferObj->Name;
          break;
       case GL_COLOR_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ArrayObj->Color.BufferObj->Name;
          break;
       case GL_INDEX_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ArrayObj->Index.BufferObj->Name;
          break;
       case GL_TEXTURE_COORD_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ArrayObj->TexCoord[ctx->Array.ActiveTexture].BufferObj->Name;
          break;
       case GL_EDGE_FLAG_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ArrayObj->EdgeFlag.BufferObj->Name;
          break;
       case GL_SECONDARY_COLOR_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ArrayObj->SecondaryColor.BufferObj->Name;
          break;
       case GL_FOG_COORDINATE_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ArrayObj->FogCoord.BufferObj->Name;
          break;
       case GL_ELEMENT_ARRAY_BUFFER_BINDING_ARB:
-         CHECK_EXT1(ARB_vertex_buffer_object, "GetIntegerv");
          params[0] = ctx->Array.ElementArrayBufferObj->Name;
          break;
       case GL_PIXEL_PACK_BUFFER_BINDING_EXT:
@@ -5440,32 +5343,13 @@ _mesa_GetIntegerv( GLenum pname, GLint *params )
          params[0] = IROUND(ctx->Depth.BoundsMin);
          params[1] = IROUND(ctx->Depth.BoundsMax);
          break;
-      case GL_FRAGMENT_PROGRAM_CALLBACK_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetIntegerv");
-         params[0] = BOOLEAN_TO_INT(ctx->FragmentProgram.CallbackEnabled);
-         break;
-      case GL_VERTEX_PROGRAM_CALLBACK_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetIntegerv");
-         params[0] = BOOLEAN_TO_INT(ctx->VertexProgram.CallbackEnabled);
-         break;
-      case GL_FRAGMENT_PROGRAM_POSITION_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetIntegerv");
-         params[0] = ctx->FragmentProgram.CurrentPosition;
-         break;
-      case GL_VERTEX_PROGRAM_POSITION_MESA:
-         CHECK_EXT1(MESA_program_debug, "GetIntegerv");
-         params[0] = ctx->VertexProgram.CurrentPosition;
-         break;
       case GL_MAX_DRAW_BUFFERS_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetIntegerv");
          params[0] = ctx->Const.MaxDrawBuffers;
          break;
       case GL_DRAW_BUFFER0_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetIntegerv");
          params[0] = ENUM_TO_INT(ctx->DrawBuffer->ColorDrawBuffer[0]);
          break;
       case GL_DRAW_BUFFER1_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetIntegerv");
          {
          GLenum buffer;
          if (pname - GL_DRAW_BUFFER0_ARB >= ctx->Const.MaxDrawBuffers) {
@@ -5477,7 +5361,6 @@ _mesa_GetIntegerv( GLenum pname, GLint *params )
          }
          break;
       case GL_DRAW_BUFFER2_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetIntegerv");
          {
          GLenum buffer;
          if (pname - GL_DRAW_BUFFER0_ARB >= ctx->Const.MaxDrawBuffers) {
@@ -5489,7 +5372,6 @@ _mesa_GetIntegerv( GLenum pname, GLint *params )
          }
          break;
       case GL_DRAW_BUFFER3_ARB:
-         CHECK_EXT1(ARB_draw_buffers, "GetIntegerv");
          {
          GLenum buffer;
          if (pname - GL_DRAW_BUFFER0_ARB >= ctx->Const.MaxDrawBuffers) {
@@ -5608,6 +5490,10 @@ _mesa_GetIntegerv( GLenum pname, GLint *params )
       case GL_CURRENT_PROGRAM:
          CHECK_EXT1(ARB_shader_objects, "GetIntegerv");
          params[0] = ctx->Shader.CurrentProgram ? ctx->Shader.CurrentProgram->Name : 0;
+         break;
+      case GL_MAX_SAMPLES:
+         CHECK_EXT1(ARB_framebuffer_object, "GetIntegerv");
+         params[0] = ctx->Const.MaxSamples;
          break;
       case GL_VERTEX_ARRAY_BINDING_APPLE:
          CHECK_EXT1(APPLE_vertex_array_object, "GetIntegerv");

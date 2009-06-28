@@ -30,6 +30,7 @@
 #include "main/context.h"
 #include "main/enable.h"
 #include "main/matrix.h"
+#include "main/viewport.h"
 #include "swrast/swrast.h"
 #include "shader/arbprogram.h"
 #include "shader/program.h"
@@ -112,7 +113,7 @@ intel_check_blit_fragment_ops(GLcontext * ctx, GLboolean src_alpha_is_one)
       return GL_FALSE;
    }
 
-   if (ctx->Stencil.Enabled) {
+   if (ctx->Stencil._Enabled) {
       DBG("fallback due to image stencil\n");
       return GL_FALSE;
    }
@@ -183,7 +184,9 @@ intel_meta_set_passthrough_transform(struct intel_context *intel)
    intel->meta.saved_vp_height = ctx->Viewport.Height;
    intel->meta.saved_matrix_mode = ctx->Transform.MatrixMode;
 
+   intel->internal_viewport_call = GL_TRUE;
    _mesa_Viewport(0, 0, ctx->DrawBuffer->Width, ctx->DrawBuffer->Height);
+   intel->internal_viewport_call = GL_FALSE;
 
    _mesa_MatrixMode(GL_PROJECTION);
    _mesa_PushMatrix();
@@ -205,8 +208,10 @@ intel_meta_restore_transform(struct intel_context *intel)
 
    _mesa_MatrixMode(intel->meta.saved_matrix_mode);
 
+   intel->internal_viewport_call = GL_TRUE;
    _mesa_Viewport(intel->meta.saved_vp_x, intel->meta.saved_vp_y,
 		  intel->meta.saved_vp_width, intel->meta.saved_vp_height);
+   intel->internal_viewport_call = GL_FALSE;
 }
 
 /**

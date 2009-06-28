@@ -316,7 +316,7 @@ viaCreateBuffer(__DRIscreenPrivate *driScrnPriv,
 static void
 viaDestroyBuffer(__DRIdrawablePrivate *driDrawPriv)
 {
-   _mesa_unreference_framebuffer((GLframebuffer **)(&(driDrawPriv->driverPrivate)));
+   _mesa_reference_framebuffer((GLframebuffer **)(&(driDrawPriv->driverPrivate)), NULL);
 }
 
 static const __DRIconfig **
@@ -342,6 +342,7 @@ viaFillInModes( __DRIscreenPrivate *psp,
      */
     static const uint8_t depth_bits_array[4]   = { 0, 16, 24, 32 };
     static const uint8_t stencil_bits_array[4] = { 0,  0,  8,  0 };
+    uint8_t msaa_samples_array[1] = { 0 };
     const unsigned depth_buffer_factor = 3;
 
     if ( pixel_bits == 16 ) {
@@ -356,7 +357,8 @@ viaFillInModes( __DRIscreenPrivate *psp,
     configs = driCreateConfigs(fb_format, fb_type,
 			       depth_bits_array, stencil_bits_array,
 			       depth_buffer_factor, back_buffer_modes,
-			       back_buffer_factor);
+			       back_buffer_factor,
+                               msaa_samples_array, 1);
     if (configs == NULL) {
 	fprintf(stderr, "[%s:%u] Error creating FBConfig!\n", __func__,
 		__LINE__);

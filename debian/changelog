@@ -1,3 +1,22 @@
+mesa (7.5~rc4-1) experimental; urgency=low
+
+  [ Timo Aaltonen ]
+  * New upstream release candidate.
+    + xdriinfo now works with DRI2 (closes: #527132)
+  * rules: Disable EGL.
+  * mesa-common-dev.install: Don't install glxew.h, conflicts with libglew.
+
+  [ Julien Cristau ]
+  * Update patches:
+    + 02_use-ieee-fp-on-s390-and-m68k.patch moved from imports.h to compiler.h
+    + 03_optional-progs-and-install.patch refreshed
+    + 05_hurd-ftbfs.diff partly applied upstream
+    + 06_kfreebsd-ftbfs.diff refreshed
+  * Install dri.pc, which will be needed to build xorg-server 1.7.
+  * Don't build gallium for now.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 28 Jun 2009 20:21:37 +0200
+
 mesa (7.4.4-1) unstable; urgency=low
 
   [ Julien Cristau ]

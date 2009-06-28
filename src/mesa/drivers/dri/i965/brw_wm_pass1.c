@@ -58,7 +58,8 @@ static void unlink_ref(struct brw_wm_ref *ref)
 
    if (ref == value->lastuse) {
       value->lastuse = ref->prevuse;
-   } else {
+   }
+   else {
       struct brw_wm_ref *i = value->lastuse;
       while (i->prevuse != ref) i = i->prevuse;
       i->prevuse = ref->prevuse;
@@ -75,8 +76,9 @@ static void track_arg(struct brw_wm_compile *c,
    for (i = 0; i < 4; i++) {
       struct brw_wm_ref *ref = inst->src[arg][i];
       if (ref) {
-	 if (readmask & (1<<i)) 
+	 if (readmask & (1<<i)) {
 	    ref->value->contributes_to_output = 1;
+         }
 	 else {
 	    unlink_ref(ref);
 	    inst->src[arg][i] = NULL;
@@ -88,14 +90,20 @@ static void track_arg(struct brw_wm_compile *c,
 static GLuint get_texcoord_mask( GLuint tex_idx )
 {
    switch (tex_idx) {
-   case TEXTURE_1D_INDEX: return WRITEMASK_X;
-   case TEXTURE_2D_INDEX: return WRITEMASK_XY;
-   case TEXTURE_3D_INDEX: return WRITEMASK_XYZ;
-   case TEXTURE_CUBE_INDEX: return WRITEMASK_XYZ;
-   case TEXTURE_RECT_INDEX: return WRITEMASK_XY;
+   case TEXTURE_1D_INDEX:
+      return WRITEMASK_X;
+   case TEXTURE_2D_INDEX:
+      return WRITEMASK_XY;
+   case TEXTURE_3D_INDEX:
+      return WRITEMASK_XYZ;
+   case TEXTURE_CUBE_INDEX:
+      return WRITEMASK_XYZ;
+   case TEXTURE_RECT_INDEX:
+      return WRITEMASK_XY;
    default: return 0;
    }
 }
+
 
 /* Step two: Basically this is dead code elimination.  
  *
@@ -202,9 +210,10 @@ void brw_wm_pass1( struct brw_wm_compile *c )
 	 break;
 
       case OPCODE_TEX:
+      case OPCODE_TXP:
 	 read0 = get_texcoord_mask(inst->tex_idx);
 
-	 if (c->key.shadowtex_mask & (1<<inst->tex_unit))
+         if (inst->tex_shadow)
 	    read0 |= WRITEMASK_Z;
 	 break;
 
@@ -259,7 +268,6 @@ void brw_wm_pass1( struct brw_wm_compile *c )
 	 break;
 
       case OPCODE_DST:
-      case OPCODE_TXP:
       case WM_FRONTFACING:
       default:
 	 break;
@@ -274,6 +282,3 @@ void brw_wm_pass1( struct brw_wm_compile *c )
       brw_wm_print_program(c, "pass1");
    }
 }
-
-
-

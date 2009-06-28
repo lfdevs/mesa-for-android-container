@@ -161,6 +161,7 @@ struct __GLXDRIdrawableRec {
     __GLXscreenConfigs *psc;
     GLenum textureTarget;
     __DRIdrawable *driDrawable;
+    GLenum textureFormat; /* EXT_texture_from_pixmap support */
 };
 
 /*
@@ -425,6 +426,11 @@ struct __GLXcontextRec {
    int server_minor;        /**< Minor version number. */
     /*@}*/
 
+   /**
+    * Thread ID we're currently current in. Zero if none.
+    */
+   unsigned long thread_id;
+
     char gl_extension_bits[ __GL_EXT_BYTES ];
 };
 
@@ -519,6 +525,10 @@ struct __GLXscreenConfigsRec {
     const __DRItexBufferExtension *texBuffer;
 #endif
 
+#ifdef __DRI2_FLUSH
+    const __DRI2flushExtension *f;
+#endif
+
 #endif
 
     /**
@@ -605,6 +615,8 @@ extern void __glXSendLargeCommand(__GLXcontext *, const GLvoid *, GLint,
 
 /* Initialize the GLX extension for dpy */
 extern __GLXdisplayPrivate *__glXInitialize(Display*);
+
+extern void __glXPreferEGL(int state);
 
 /************************************************************************/
 

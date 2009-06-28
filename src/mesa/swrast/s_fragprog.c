@@ -33,6 +33,32 @@
 
 
 /**
+ * Apply texture object's swizzle (X/Y/Z/W/0/1) to incoming 'texel'
+ * and return results in 'colorOut'.
+ */
+static INLINE void
+swizzle_texel(const GLfloat texel[4], GLfloat colorOut[4], GLuint swizzle)
+{
+   if (swizzle == SWIZZLE_NOOP) {
+      COPY_4V(colorOut, texel);
+   }
+   else {
+      GLfloat vector[6];
+      vector[SWIZZLE_X] = texel[0];
+      vector[SWIZZLE_Y] = texel[1];
+      vector[SWIZZLE_Z] = texel[2];
+      vector[SWIZZLE_W] = texel[3];
+      vector[SWIZZLE_ZERO] = 0.0F;
+      vector[SWIZZLE_ONE] = 1.0F;
+      colorOut[0] = vector[GET_SWZ(swizzle, 0)];
+      colorOut[1] = vector[GET_SWZ(swizzle, 1)];
+      colorOut[2] = vector[GET_SWZ(swizzle, 2)];
+      colorOut[3] = vector[GET_SWZ(swizzle, 3)];
+   }
+}
+
+
+/**
  * Fetch a texel with given lod.
  * Called via machine->FetchTexelLod()
  */
@@ -44,22 +70,17 @@ fetch_texel_lod( GLcontext *ctx, const GLfloat texcoord[4], GLfloat lambda,
 
    if (texObj) {
       SWcontext *swrast = SWRAST_CONTEXT(ctx);
-      GLchan rgba[4];
+      GLfloat rgba[4];
 
       lambda = CLAMP(lambda, texObj->MinLod, texObj->MaxLod);
 
-      /* XXX use a float-valued TextureSample routine here!!! */
       swrast->TextureSample[unit](ctx, texObj, 1,
                                   (const GLfloat (*)[4]) texcoord,
                                   &lambda, &rgba);
-      color[0] = CHAN_TO_FLOAT(rgba[0]);
-      color[1] = CHAN_TO_FLOAT(rgba[1]);
-      color[2] = CHAN_TO_FLOAT(rgba[2]);
-      color[3] = CHAN_TO_FLOAT(rgba[3]);
+      swizzle_texel(rgba, color, texObj->_Swizzle);
    }
    else {
-      color[0] = color[1] = color[2] = 0.0F;
-      color[3] = 1.0F;
+      ASSIGN_4V(color, 0.0F, 0.0F, 0.0F, 1.0F);
    }
 }
 
@@ -83,7 +104,7 @@ fetch_texel_deriv( GLcontext *ctx, const GLfloat texcoord[4],
       const GLfloat texW = (GLfloat) texImg->WidthScale;
       const GLfloat texH = (GLfloat) texImg->HeightScale;
       GLfloat lambda;
-      GLchan rgba[4];
+      GLfloat rgba[4];
 
       lambda = _swrast_compute_lambda(texdx[0], texdy[0], /* ds/dx, ds/dy */
                                       texdx[1], texdy[1], /* dt/dx, dt/dy */
@@ -94,18 +115,13 @@ fetch_texel_deriv( GLcontext *ctx, const GLfloat texcoord[4],
 
       lambda = CLAMP(lambda, texObj->MinLod, texObj->MaxLod);
 
-      /* XXX use a float-valued TextureSample routine here!!! */
       swrast->TextureSample[unit](ctx, texObj, 1,
                                   (const GLfloat (*)[4]) texcoord,
                                   &lambda, &rgba);
-      color[0] = CHAN_TO_FLOAT(rgba[0]);
-      color[1] = CHAN_TO_FLOAT(rgba[1]);
-      color[2] = CHAN_TO_FLOAT(rgba[2]);
-      color[3] = CHAN_TO_FLOAT(rgba[3]);
+      swizzle_texel(rgba, color, texObj->_Swizzle);
    }
    else {
-      color[0] = color[1] = color[2] = 0.0F;
-      color[3] = 1.0F;
+      ASSIGN_4V(color, 0.0F, 0.0F, 0.0F, 1.0F);
    }
 }
 
@@ -181,9 +197,9 @@ run_program(GLcontext *ctx, SWspan *span, GLuint start, GLuint end)
          if (_mesa_execute_program(ctx, &program->Base, machine)) {
 
             /* Store result color */
-            if (outputsWritten & (1 << FRAG_RESULT_COLR)) {
+            if (outputsWritten & (1 << FRAG_RESULT_COLOR)) {
                COPY_4V(span->array->attribs[FRAG_ATTRIB_COL0][i],
-                       machine->Outputs[FRAG_RESULT_COLR]);
+                       machine->Outputs[FRAG_RESULT_COLOR]);
             }
             else {
                /* Multiple drawbuffers / render targets
@@ -200,8 +216,8 @@ run_program(GLcontext *ctx, SWspan *span, GLuint start, GLuint end)
             }
 
             /* Store result depth/z */
-            if (outputsWritten & (1 << FRAG_RESULT_DEPR)) {
-               const GLfloat depth = machine->Outputs[FRAG_RESULT_DEPR][2];
+            if (outputsWritten & (1 << FRAG_RESULT_DEPTH)) {
+               const GLfloat depth = machine->Outputs[FRAG_RESULT_DEPTH][2];
                if (depth <= 0.0)
                   span->array->z[i] = 0;
                else if (depth >= 1.0)
@@ -234,20 +250,16 @@ _swrast_exec_fragment_program( GLcontext *ctx, SWspan *span )
       ASSERT(span->array->ChanType == GL_FLOAT);
    }
 
-   ctx->_CurrentProgram = GL_FRAGMENT_PROGRAM_ARB; /* or NV, doesn't matter */
-
    run_program(ctx, span, 0, span->end);
 
-   if (program->Base.OutputsWritten & (1 << FRAG_RESULT_COLR)) {
+   if (program->Base.OutputsWritten & (1 << FRAG_RESULT_COLOR)) {
       span->interpMask &= ~SPAN_RGBA;
       span->arrayMask |= SPAN_RGBA;
    }
 
-   if (program->Base.OutputsWritten & (1 << FRAG_RESULT_DEPR)) {
+   if (program->Base.OutputsWritten & (1 << FRAG_RESULT_DEPTH)) {
       span->interpMask &= ~SPAN_Z;
       span->arrayMask |= SPAN_Z;
    }
-
-   ctx->_CurrentProgram = 0;
 }
 

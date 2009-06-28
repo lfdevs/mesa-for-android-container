@@ -186,30 +186,6 @@ get_dst_register_pointer(const struct prog_dst_register *dest,
 
 
 
-#if FEATURE_MESA_program_debug
-static struct gl_program_machine *CurrentMachine = NULL;
-
-/**
- * For GL_MESA_program_debug.
- * Return current value (4*GLfloat) of a program register.
- * Called via ctx->Driver.GetProgramRegister().
- */
-void
-_mesa_get_program_register(GLcontext *ctx, enum register_file file,
-                           GLuint index, GLfloat val[4])
-{
-   if (CurrentMachine) {
-      struct prog_src_register srcReg;
-      const GLfloat *src;
-      srcReg.File = file;
-      srcReg.Index = index;
-      src = get_src_register_pointer(&srcReg, CurrentMachine);
-      COPY_4V(val, src);
-   }
-}
-#endif /* FEATURE_MESA_program_debug */
-
-
 /**
  * Fetch a 4-element float vector from the given source register.
  * Apply swizzling and negating as needed.
@@ -236,19 +212,14 @@ fetch_vector4(const struct prog_src_register *source,
       result[3] = src[GET_SWZ(source->Swizzle, 3)];
    }
 
-   if (source->NegateBase) {
-      result[0] = -result[0];
-      result[1] = -result[1];
-      result[2] = -result[2];
-      result[3] = -result[3];
-   }
    if (source->Abs) {
       result[0] = FABSF(result[0]);
       result[1] = FABSF(result[1]);
       result[2] = FABSF(result[2]);
       result[3] = FABSF(result[3]);
    }
-   if (source->NegateAbs) {
+   if (source->Negate) {
+      ASSERT(source->Negate == NEGATE_XYZW);
       result[0] = -result[0];
       result[1] = -result[1];
       result[2] = -result[2];
@@ -283,7 +254,7 @@ fetch_vector4ui(const struct prog_src_register *source,
       result[3] = src[GET_SWZ(source->Swizzle, 3)];
    }
 
-   /* Note: no NegateBase, Abs, NegateAbs here */
+   /* Note: no Negate or Abs here */
 }
 
 
@@ -323,19 +294,14 @@ fetch_vector4_deriv(GLcontext * ctx,
       result[2] = deriv[GET_SWZ(source->Swizzle, 2)];
       result[3] = deriv[GET_SWZ(source->Swizzle, 3)];
       
-      if (source->NegateBase) {
-         result[0] = -result[0];
-         result[1] = -result[1];
-         result[2] = -result[2];
-         result[3] = -result[3];
-      }
       if (source->Abs) {
          result[0] = FABSF(result[0]);
          result[1] = FABSF(result[1]);
          result[2] = FABSF(result[2]);
          result[3] = FABSF(result[3]);
       }
-      if (source->NegateAbs) {
+      if (source->Negate) {
+         ASSERT(source->Negate == NEGATE_XYZW);
          result[0] = -result[0];
          result[1] = -result[1];
          result[2] = -result[2];
@@ -360,13 +326,10 @@ fetch_vector1(const struct prog_src_register *source,
 
    result[0] = src[GET_SWZ(source->Swizzle, 0)];
 
-   if (source->NegateBase) {
-      result[0] = -result[0];
-   }
    if (source->Abs) {
       result[0] = FABSF(result[0]);
    }
-   if (source->NegateAbs) {
+   if (source->Negate) {
       result[0] = -result[0];
    }
 }
@@ -633,10 +596,6 @@ _mesa_execute_program(GLcontext * ctx,
       printf("execute program %u --------------------\n", program->Id);
    }
 
-#if FEATURE_MESA_program_debug
-   CurrentMachine = machine;
-#endif
-
    if (program->Target == GL_VERTEX_PROGRAM_ARB) {
       machine->EnvParams = ctx->VertexProgram.Parameters;
    }
@@ -646,15 +605,6 @@ _mesa_execute_program(GLcontext * ctx,
 
    for (pc = 0; pc < numInst; pc++) {
       const struct prog_instruction *inst = program->Instructions + pc;
-
-#if FEATURE_MESA_program_debug
-      if (ctx->FragmentProgram.CallbackEnabled &&
-          ctx->FragmentProgram.Callback) {
-         ctx->FragmentProgram.CurrentPosition = inst->StringPos;
-         ctx->FragmentProgram.Callback(program->Target,
-                                       ctx->FragmentProgram.CallbackData);
-      }
-#endif
 
       if (DEBUG_PROG) {
          _mesa_print_instruction(inst);
@@ -1551,7 +1501,7 @@ _mesa_execute_program(GLcontext * ctx,
                   ASSERT(swz <= 3);
                   result[i] = src[swz];
                }
-               if (source->NegateBase & (1 << i))
+               if (source->Negate & (1 << i))
                   result[i] = -result[i];
             }
             store_vector4(inst, machine, result);
@@ -1779,10 +1729,6 @@ _mesa_execute_program(GLcontext * ctx,
       }
 
    } /* for pc */
-
-#if FEATURE_MESA_program_debug
-   CurrentMachine = NULL;
-#endif
 
    return GL_TRUE;
 }

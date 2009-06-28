@@ -241,7 +241,7 @@ static void _save_reset_counters( GLcontext *ctx )
    save->buffer = (save->vertex_store->buffer + 
 		   save->vertex_store->used);
 
-   assert(save->buffer == save->vbptr);
+   assert(save->buffer == save->buffer_ptr);
 
    if (save->vertex_size)
       save->max_vert = ((VBO_SAVE_BUFFER_SIZE - save->vertex_store->used) / 
@@ -289,11 +289,36 @@ static void _save_compile_vertex_list( GLcontext *ctx )
    node->vertex_store->refcount++;
    node->prim_store->refcount++;
 
+
+   node->current_size = node->vertex_size - node->attrsz[0];
+   node->current_data = NULL;
+
+   if (node->current_size) {
+      /* If the malloc fails, we just pull the data out of the VBO
+       * later instead.
+       */
+      node->current_data = MALLOC( node->current_size * sizeof(GLfloat) );
+      if (node->current_data) {
+         const char *buffer = (const char *)save->vertex_store->buffer;
+         unsigned attr_offset = node->attrsz[0] * sizeof(GLfloat);
+         unsigned vertex_offset = 0;
+
+         if (node->count)
+            vertex_offset = (node->count-1) * node->vertex_size * sizeof(GLfloat);
+
+         memcpy( node->current_data,
+                 buffer + node->buffer_offset + vertex_offset + attr_offset,
+                 node->current_size * sizeof(GLfloat) );
+      }
+   }
+
+
+
    assert(node->attrsz[VBO_ATTRIB_POS] != 0 ||
 	  node->count == 0);
 
    if (save->dangling_attr_ref)
-      ctx->ListState.CurrentList->flags |= MESA_DLIST_DANGLING_REFS;
+      ctx->ListState.CurrentList->Flags |= DLIST_DANGLING_REFS;
 
    save->vertex_store->used += save->vertex_size * node->count;
    save->prim_store->used += node->prim_count;
@@ -343,7 +368,7 @@ static void _save_compile_vertex_list( GLcontext *ctx )
       /* Allocate and map new store:
        */
       save->vertex_store = alloc_vertex_store( ctx );
-      save->vbptr = map_vertex_store( ctx, save->vertex_store );
+      save->buffer_ptr = map_vertex_store( ctx, save->vertex_store );
    } 
 
    if (save->prim_store->used > VBO_SAVE_PRIM_SIZE - 6) {
@@ -414,9 +439,9 @@ static void _save_wrap_filled_vertex( GLcontext *ctx )
    assert(save->max_vert - save->vert_count > save->copied.nr);
 
    for (i = 0 ; i < save->copied.nr ; i++) {
-      _mesa_memcpy( save->vbptr, data, save->vertex_size * sizeof(GLfloat));
+      _mesa_memcpy( save->buffer_ptr, data, save->vertex_size * sizeof(GLfloat));
       data += save->vertex_size;
-      save->vbptr += save->vertex_size;
+      save->buffer_ptr += save->vertex_size;
       save->vert_count++;
    }
 }
@@ -550,7 +575,7 @@ static void _save_upgrade_vertex( GLcontext *ctx,
 	 }
       }
 
-      save->vbptr = dest;
+      save->buffer_ptr = dest;
       save->vert_count += save->copied.nr;
    }
 }
@@ -622,9 +647,9 @@ do {								\
       GLuint i;							\
 								\
       for (i = 0; i < save->vertex_size; i++)			\
-	 save->vbptr[i] = save->vertex[i];			\
+	 save->buffer_ptr[i] = save->vertex[i];			\
 								\
-      save->vbptr += save->vertex_size;				\
+      save->buffer_ptr += save->vertex_size;				\
 								\
       if (++save->vert_count >= save->max_vert)			\
 	 _save_wrap_filled_vertex( ctx );			\
@@ -1035,7 +1060,7 @@ void vbo_save_NewList( GLcontext *ctx, GLuint list, GLenum mode )
    if (!save->vertex_store) 
       save->vertex_store = alloc_vertex_store( ctx );
       
-   save->vbptr = map_vertex_store( ctx, save->vertex_store );
+   save->buffer_ptr = map_vertex_store( ctx, save->vertex_store );
    
    _save_reset_vertex( ctx );
    _save_reset_counters( ctx );  
@@ -1076,10 +1101,10 @@ void vbo_save_EndList( GLcontext *ctx )
    assert(save->vertex_size == 0);
 }
  
-void vbo_save_BeginCallList( GLcontext *ctx, struct mesa_display_list *dlist )
+void vbo_save_BeginCallList( GLcontext *ctx, struct gl_display_list *dlist )
 {
    struct vbo_save_context *save = &vbo_context(ctx)->save;
-   save->replay_flags |= dlist->flags;
+   save->replay_flags |= dlist->Flags;
 }
 
 void vbo_save_EndCallList( GLcontext *ctx )

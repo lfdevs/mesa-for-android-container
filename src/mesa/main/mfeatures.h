@@ -60,6 +60,8 @@
 
 #define FEATURE_ARB_occlusion_query  _HAVE_FULL_GL
 #define FEATURE_ARB_fragment_program  _HAVE_FULL_GL
+#define FEATURE_ARB_framebuffer_object  _HAVE_FULL_GL
+#define FEATURE_ARB_pixel_buffer_object  _HAVE_FULL_GL
 #define FEATURE_ARB_vertex_buffer_object  _HAVE_FULL_GL
 #define FEATURE_ARB_vertex_program  _HAVE_FULL_GL
 #define FEATURE_ARB_vertex_shader _HAVE_FULL_GL
@@ -74,7 +76,6 @@
 #define FEATURE_EXT_texture_sRGB _HAVE_FULL_GL
 #define FEATURE_EXT_timer_query  _HAVE_FULL_GL
 #define FEATURE_ATI_fragment_shader _HAVE_FULL_GL
-#define FEATURE_MESA_program_debug  _HAVE_FULL_GL
 #define FEATURE_NV_fence  _HAVE_FULL_GL
 #define FEATURE_NV_fragment_program  _HAVE_FULL_GL
 #define FEATURE_NV_vertex_program  _HAVE_FULL_GL

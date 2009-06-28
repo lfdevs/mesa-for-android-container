@@ -8,7 +8,7 @@ Index: mesa/configure.ac
 ===================================================================
 --- mesa.orig/configure.ac
 +++ mesa/configure.ac
-@@ -683,7 +683,7 @@
+@@ -721,7 +721,7 @@
              ;;
          esac
          ;;
