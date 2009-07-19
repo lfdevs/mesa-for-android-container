@@ -1534,7 +1534,7 @@ Optional Packages:
                           directory for the DRI drivers [${libdir}/dri]
   --with-dri-drivers[=DIRS...]
                           comma delimited DRI drivers list, e.g.
-                          "swrast,i965,radeon,nouveau" [default=auto]
+                          "swrast,i965,radeon" [default=auto]
   --with-expat=DIR        expat install directory
   --with-osmesa-bits=BITS OSMesa channel bits and library name: 8, 16, 32
                           [default=8]

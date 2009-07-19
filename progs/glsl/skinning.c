@@ -12,10 +12,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <GL/gl.h>
+#include <GL/glew.h>
 #include <GL/glut.h>
-#include <GL/glext.h>
-#include "extfuncs.h"
 #include "shaderutil.h"
 
 
@@ -64,11 +62,11 @@ Cylinder(GLfloat length, GLfloat radius, GLint slices, GLint stacks)
          float a = (float) i / (slices - 1) * M_PI * 2.0;
          float x = radius * cos(a);
          float y = radius * sin(a);
-         glVertexAttrib1f_func(WeightAttr, w0);
+         glVertexAttrib1f(WeightAttr, w0);
          glNormal3f(x, y, 0.0);
          glVertex3f(x, y, z0);
 
-         glVertexAttrib1f_func(WeightAttr, w0 + dw);
+         glVertexAttrib1f(WeightAttr, w0 + dw);
          glNormal3f(x, y, 0.0);
          glVertex3f(x, y, z0 + dz);
       }
@@ -106,8 +104,8 @@ Redisplay(void)
 {
    UpdateMatrices();
 
-   glUniformMatrix4fv_func(uMat0, 1, GL_FALSE, Matrices[0]);
-   glUniformMatrix4fv_func(uMat1, 1, GL_FALSE, Matrices[1]);
+   glUniformMatrix4fv(uMat0, 1, GL_FALSE, Matrices[0]);
+   glUniformMatrix4fv(uMat1, 1, GL_FALSE, Matrices[1]);
 
    if (WireFrame)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -148,9 +146,9 @@ Reshape(int width, int height)
 static void
 CleanUp(void)
 {
-   glDeleteShader_func(fragShader);
-   glDeleteShader_func(vertShader);
-   glDeleteProgram_func(program);
+   glDeleteShader(fragShader);
+   glDeleteShader(vertShader);
+   glDeleteProgram(program);
    glutDestroyWindow(win);
 }
 
@@ -221,18 +219,16 @@ Init(void)
    if (!ShadersSupported())
       exit(1);
 
-   GetExtensionFuncs();
-
    vertShader = CompileShaderFile(GL_VERTEX_SHADER, VertProgFile);
    fragShader = CompileShaderFile(GL_FRAGMENT_SHADER, FragProgFile);
    program = LinkShaders(vertShader, fragShader);
 
-   glUseProgram_func(program);
+   glUseProgram(program);
 
-   uMat0 = glGetUniformLocation_func(program, "mat0");
-   uMat1 = glGetUniformLocation_func(program, "mat1");
+   uMat0 = glGetUniformLocation(program, "mat0");
+   uMat1 = glGetUniformLocation(program, "mat1");
 
-   WeightAttr = glGetAttribLocation_func(program, "weight");
+   WeightAttr = glGetAttribLocation(program, "weight");
 
    assert(glGetError() == 0);
 
@@ -266,6 +262,7 @@ main(int argc, char *argv[])
    glutInitWindowSize(500, 500);
    glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
    win = glutCreateWindow(argv[0]);
+   glewInit();
    glutReshapeFunc(Reshape);
    glutKeyboardFunc(Key);
    glutSpecialFunc(SpecialKey);

@@ -37,7 +37,7 @@ endif
 ##############################################################################
 ## CPU-optimized configurations ##############################################
 
-ifeq ($(DEB_BUILD_ARCH), i386)
+ifneq (,$(filter $(DEB_BUILD_ARCH), i386 kfreebsd-i386)) 
 	SWX11_GLU_CONFIGS += swx11+glu-i386-i686
 #	DRI_CONFIGS += debian-dri-i386-i686
 endif

@@ -9,10 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <GL/gl.h>
+#include <GL/glew.h>
 #include <GL/glut.h>
-#include <GL/glext.h>
-#include "extfuncs.h"
 #include "shaderutil.h"
 
 
@@ -56,9 +54,9 @@ Redisplay(void)
    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
    
    /* set interactive uniform parameters */
-   glUniform1fv_func(uZoom, 1, &zoom);
-   glUniform1fv_func(uXcenter, 1, &xCenter);
-   glUniform1fv_func(uYcenter, 1, &yCenter);
+   glUniform1fv(uZoom, 1, &zoom);
+   glUniform1fv(uXcenter, 1, &xCenter);
+   glUniform1fv(uYcenter, 1, &yCenter);
 
    glPushMatrix();
    glRotatef(xRot, 1.0f, 0.0f, 0.0f);
@@ -94,9 +92,9 @@ Reshape(int width, int height)
 static void
 CleanUp(void)
 {
-   glDeleteShader_func(fragShader);
-   glDeleteShader_func(vertShader);
-   glDeleteProgram_func(program);
+   glDeleteShader(fragShader);
+   glDeleteShader(vertShader);
+   glDeleteProgram(program);
    glutDestroyWindow(win);
 }
 
@@ -155,19 +153,17 @@ Init(void)
    if (!ShadersSupported())
       exit(1);
 
-   GetExtensionFuncs();
-
    vertShader = CompileShaderFile(GL_VERTEX_SHADER, VertProgFile);
    fragShader = CompileShaderFile(GL_FRAGMENT_SHADER, FragProgFile);
    program = LinkShaders(vertShader, fragShader);
 
-   glUseProgram_func(program);
+   glUseProgram(program);
 
    InitUniforms(program, Uniforms);
 
-   uZoom = glGetUniformLocation_func(program, "Zoom");
-   uXcenter = glGetUniformLocation_func(program, "Xcenter");
-   uYcenter = glGetUniformLocation_func(program, "Ycenter");
+   uZoom = glGetUniformLocation(program, "Zoom");
+   uXcenter = glGetUniformLocation(program, "Xcenter");
+   uYcenter = glGetUniformLocation(program, "Ycenter");
 
    assert(glGetError() == 0);
 
@@ -175,9 +171,9 @@ Init(void)
 
    printf("GL_RENDERER = %s\n",(const char *) glGetString(GL_RENDERER));
 
-   assert(glIsProgram_func(program));
-   assert(glIsShader_func(fragShader));
-   assert(glIsShader_func(vertShader));
+   assert(glIsProgram(program));
+   assert(glIsShader(fragShader));
+   assert(glIsShader(vertShader));
 
    glColor3f(1, 0, 0);
 }
@@ -206,6 +202,7 @@ main(int argc, char *argv[])
    glutInitWindowSize(400, 400);
    glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
    win = glutCreateWindow(argv[0]);
+   glewInit();
    glutReshapeFunc(Reshape);
    glutKeyboardFunc(Key);
    glutSpecialFunc(SpecialKey);

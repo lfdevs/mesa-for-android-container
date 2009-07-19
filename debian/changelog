@@ -1,3 +1,18 @@
+mesa (7.5-1) unstable; urgency=low
+
+  [ Timo Aaltonen ]
+  * Move dri.pc to mesa-common-dev (closes: #521667)
+
+  [ Brice Goglin ]
+  * Enable i686 optimized libraries on kfreebsd-i386, closes: #537345.
+  * New upstream release:
+    + i915: Fix assertion failure on remapping a non-BO-backed VBO,
+      closes: #537147.
+    + GLX/DRI1: Mark GLX visuals with depth != screen depth non-conformant,
+      closes: #532980.
+
+ -- Brice Goglin <bgoglin@debian.org>  Sun, 19 Jul 2009 12:53:41 +0200
+
 mesa (7.5~rc4-1) experimental; urgency=low
 
   [ Timo Aaltonen ]

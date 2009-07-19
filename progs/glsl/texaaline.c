@@ -11,10 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <GL/gl.h>
+#include <GL/glew.h>
 #include <GL/glut.h>
-#include <GL/glext.h>
-#include "extfuncs.h"
 
 
 static GLint WinWidth = 300, WinHeight = 300;
@@ -328,8 +326,6 @@ Init(void)
       exit(1);
    }
 
-   GetExtensionFuncs();
-
    glClearColor(0.3f, 0.3f, 0.3f, 0.0f);
 
    printf("GL_RENDERER = %s\n",(const char *) glGetString(GL_RENDERER));
@@ -359,6 +355,7 @@ main(int argc, char *argv[])
    glutInitWindowSize(WinWidth, WinHeight);
    glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
    win = glutCreateWindow(argv[0]);
+   glewInit();
    glutReshapeFunc(Reshape);
    glutKeyboardFunc(Key);
    glutDisplayFunc(Redisplay);

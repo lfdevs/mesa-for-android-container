@@ -12,10 +12,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <GL/gl.h>
+#include <GL/glew.h>
 #include <GL/glut.h>
-#include <GL/glext.h>
-#include "extfuncs.h"
 #include "shaderutil.h"
 
 
@@ -59,11 +57,11 @@ Redisplay(void)
    glFrontFace(FrontWinding);
 
    if (DetermineFacingInFragProg) {
-      glUniform1i_func(u_fragface, 1);
+      glUniform1i(u_fragface, 1);
       glDisable(GL_VERTEX_PROGRAM_TWO_SIDE);
    }
    else {
-      glUniform1i_func(u_fragface, 0);
+      glUniform1i(u_fragface, 0);
       glEnable(GL_VERTEX_PROGRAM_TWO_SIDE);
    }
 
@@ -75,7 +73,7 @@ Redisplay(void)
    /* Draw a tristrip ring */
    glBegin(GL_TRIANGLE_STRIP);
    glColor4fv(Red);
-   glSecondaryColor3fv_func(Green);
+   glSecondaryColor3fv(Green);
    for (i = 0; i <= sections; i++) {
       float a = (float) i / (sections) * M_PI * 2.0;
       float x = radius * cos(a);
@@ -125,9 +123,9 @@ Reshape(int width, int height)
 static void
 CleanUp(void)
 {
-   glDeleteShader_func(fragShader);
-   glDeleteShader_func(vertShader);
-   glDeleteProgram_func(program);
+   glDeleteShader(fragShader);
+   glDeleteShader(vertShader);
+   glDeleteProgram(program);
    glutDestroyWindow(win);
 }
 
@@ -229,15 +227,13 @@ Init(void)
    if (!ShadersSupported())
       exit(1);
 
-   GetExtensionFuncs();
-
    vertShader = CompileShaderText(GL_VERTEX_SHADER, vertShaderText);
    fragShader = CompileShaderText(GL_FRAGMENT_SHADER, fragShaderText);
    program = LinkShaders(vertShader, fragShader);
 
-   glUseProgram_func(program);
+   glUseProgram(program);
 
-   u_fragface = glGetUniformLocation_func(program, "fragface");
+   u_fragface = glGetUniformLocation(program, "fragface");
    printf("Uniforms: %d\n", u_fragface);
 
    /*assert(glGetError() == 0);*/
@@ -246,9 +242,9 @@ Init(void)
 
    printf("GL_RENDERER = %s\n",(const char *) glGetString(GL_RENDERER));
 
-   assert(glIsProgram_func(program));
-   assert(glIsShader_func(fragShader));
-   assert(glIsShader_func(vertShader));
+   assert(glIsProgram(program));
+   assert(glIsShader(fragShader));
+   assert(glIsShader(vertShader));
 
    glEnable(GL_DEPTH_TEST);
 
@@ -293,6 +289,7 @@ main(int argc, char *argv[])
    glutInitWindowSize(WinWidth, WinHeight);
    glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
    win = glutCreateWindow(argv[0]);
+   glewInit();
    glutReshapeFunc(Reshape);
    glutKeyboardFunc(Key);
    glutDisplayFunc(Redisplay);
