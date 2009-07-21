@@ -1,3 +1,12 @@
+mesa (7.5-2) unstable; urgency=low
+
+  * Pull from upstream mesa_7_5_branch up to commit a6b31415
+    + radeon/DRI1: if we have HW stencil, only expose fbconfigs with stencil,
+      closes: #537732.
+  * Install the upstream changelog.
+
+ -- Brice Goglin <bgoglin@debian.org>  Tue, 21 Jul 2009 22:21:50 +0200
+
 mesa (7.5-1) unstable; urgency=low
 
   [ Timo Aaltonen ]

@@ -222,7 +222,7 @@ binary-indep: install
 binary-arch: install
 	dh_testdir
 	dh_testroot
-	dh_installchangelogs -s
+	dh_installchangelogs -s ChangeLog
 	dh_installdocs -s
 	dh_installexamples -s
 	dh_install -s --sourcedir=debian/tmp --list-missing
