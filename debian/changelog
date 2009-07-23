@@ -1,3 +1,13 @@
+mesa (7.5-3) unstable; urgency=low
+
+  * Pull from upstream mesa_7_5_branch up to commit b4ba6a66
+    (early 7.5.1 release snapshot).
+  * Only install the huge upstream changelog in mesa-common-dev,
+    closes: #538094.
+  * Enable i686 optimized libraries on hurd-i386.
+
+ -- Brice Goglin <bgoglin@debian.org>  Fri, 24 Jul 2009 00:29:28 +0200
+
 mesa (7.5-2) unstable; urgency=low
 
   * Pull from upstream mesa_7_5_branch up to commit a6b31415

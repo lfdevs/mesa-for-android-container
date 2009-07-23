@@ -64,7 +64,7 @@ Description: A free implementation of the OpenGL API -- debugging symbols
 Package: libgl1-mesa-swx11-i686
 Section: libs
 Priority: extra
-Architecture: i386 kfreebsd-i386
+Architecture: i386 kfreebsd-i386 hurd-i386
 Depends: libgl1-mesa-swx11 (= ${binary:Version}), ${shlibs:Depends}
 Description: Mesa OpenGL runtime [i686 optimized]
  Mesa is a 3-D graphics library with an API which is very similar to
@@ -143,7 +143,7 @@ Description: Debugging symbols for the Mesa GLX runtime
 #Package: libgl1-mesa-glx-i686
 #Section: libs
 #Priority: extra
-#Architecture: i386 kfreebsd-i386
+#Architecture: i386 kfreebsd-i386 hurd-i386
 #Pre-Depends: libgl1-mesa-glx
 #Description: A free implementation of the OpenGL API -- GLX runtime [i686 optimized]
 # This version of Mesa provides GLX and DRI capabilities: it is capable of
@@ -204,7 +204,7 @@ Description: Debugging symbols for the Mesa DRI modules
 #Package: libgl1-mesa-dri-i686
 #Section: libs
 #Priority: extra
-#Architecture: i386 kfreebsd-i386
+#Architecture: i386 kfreebsd-i386 hurd-i386
 #Pre-Depends: libgl1-mesa-dri
 #Description: A free implementation of the OpenGL API -- DRI modules [i686 optimized]
 # This version of Mesa provides GLX and DRI capabilities: it is capable of

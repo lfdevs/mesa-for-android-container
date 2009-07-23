@@ -182,7 +182,7 @@ ultrix-gcc:
 
 # Rules for making release tarballs
 
-VERSION=7.5
+VERSION=7.5.1
 DIRECTORY = Mesa-$(VERSION)
 LIB_NAME = MesaLib-$(VERSION)
 DEMO_NAME = MesaDemos-$(VERSION)
@@ -388,7 +388,14 @@ GLW_FILES = \
 	$(DIRECTORY)/src/glw/glw.pc.in			\
 	$(DIRECTORY)/src/glw/depend
 
+GLEW_FILES = \
+	$(DIRECTORY)/src/glew/*.c			\
+	$(DIRECTORY)/src/glew/Makefile			\
+	$(DIRECTORY)/src/glew/SConscript		\
+	$(DIRECTORY)/src/glew/LICENSE.txt
+
 DEMO_FILES = \
+	$(GLEW_FILES)					\
 	$(DIRECTORY)/progs/beos/*.cpp			\
 	$(DIRECTORY)/progs/beos/Makefile		\
 	$(DIRECTORY)/progs/images/*.rgb			\
