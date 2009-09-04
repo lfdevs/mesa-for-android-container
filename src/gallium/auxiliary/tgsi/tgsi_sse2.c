@@ -1502,6 +1502,14 @@ emit_instruction(
    if (indirect_temp_reference(inst))
       return FALSE;
 
+   /* we don't handle saturation/clamping yet */
+   if (inst->Instruction.Saturate != TGSI_SAT_NONE)
+      return FALSE;
+
+   /* need to use extra temps to fix SOA dependencies : */
+   if (tgsi_check_soa_dependencies(inst))
+      return FALSE;
+
    switch (inst->Instruction.Opcode) {
    case TGSI_OPCODE_ARL:
       FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {

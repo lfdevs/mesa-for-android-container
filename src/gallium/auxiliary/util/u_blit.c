@@ -45,6 +45,7 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_simple_shaders.h"
+#include "util/u_surface.h"
 
 #include "cso_cache/cso_context.h"
 
@@ -61,7 +62,7 @@ struct blit_state
    struct pipe_viewport_state viewport;
 
    void *vs;
-   void *fs;
+   void *fs[TGSI_WRITEMASK_XYZW + 1];
 
    struct pipe_buffer *vbuf;  /**< quad vertices */
    unsigned vbuf_slot;
@@ -124,7 +125,7 @@ util_create_blit(struct pipe_context *pipe, struct cso_context *cso)
    }
 
    /* fragment shader */
-   ctx->fs = util_make_fragment_tex_shader(pipe);
+   ctx->fs[TGSI_WRITEMASK_XYZW] = util_make_fragment_tex_shader(pipe);
    ctx->vbuf = NULL;
 
    /* init vertex data that doesn't change */
@@ -145,9 +146,13 @@ void
 util_destroy_blit(struct blit_state *ctx)
 {
    struct pipe_context *pipe = ctx->pipe;
+   unsigned i;
 
    pipe->delete_vs_state(pipe, ctx->vs);
-   pipe->delete_fs_state(pipe, ctx->fs);
+
+   for (i = 0; i < Elements(ctx->fs); i++)
+      if (ctx->fs[i])
+         pipe->delete_fs_state(pipe, ctx->fs[i]);
 
    pipe_buffer_reference(&ctx->vbuf, NULL);
 
@@ -155,7 +160,11 @@ util_destroy_blit(struct blit_state *ctx)
 }
 
 
-static unsigned get_next_slot( struct blit_state *ctx )
+/**
+ * Get offset of next free slot in vertex buffer for quad vertices.
+ */
+static unsigned
+get_next_slot( struct blit_state *ctx )
 {
    const unsigned max_slots = 4096 / sizeof ctx->vertices;
 
@@ -172,7 +181,6 @@ static unsigned get_next_slot( struct blit_state *ctx )
    return ctx->vbuf_slot++ * sizeof ctx->vertices;
 }
                                
-
 
 /**
  * Setup vertex data for the textured quad we'll draw.
@@ -260,20 +268,50 @@ setup_vertex_data_tex(struct blit_state *ctx,
 
    return offset;
 }
+
+
+/**
+ * \return TRUE if two regions overlap, FALSE otherwise
+ */
+static boolean
+regions_overlap(int srcX0, int srcY0,
+                int srcX1, int srcY1,
+                int dstX0, int dstY0,
+                int dstX1, int dstY1)
+{
+   if (MAX2(srcX0, srcX1) < MIN2(dstX0, dstX1))
+      return FALSE; /* src completely left of dst */
+
+   if (MAX2(dstX0, dstX1) < MIN2(srcX0, srcX1))
+      return FALSE; /* dst completely left of src */
+
+   if (MAX2(srcY0, srcY1) < MIN2(dstY0, dstY1))
+      return FALSE; /* src completely above dst */
+
+   if (MAX2(dstY0, dstY1) < MIN2(srcY0, srcY1))
+      return FALSE; /* dst completely above src */
+
+   return TRUE; /* some overlap */
+}
+
+
 /**
  * Copy pixel block from src surface to dst surface.
  * Overlapping regions are acceptable.
+ * Flipping and stretching are supported.
+ * XXX what about clipping???
  * XXX need some control over blitting Z and/or stencil.
  */
 void
-util_blit_pixels(struct blit_state *ctx,
-                 struct pipe_surface *src,
-                 int srcX0, int srcY0,
-                 int srcX1, int srcY1,
-                 struct pipe_surface *dst,
-                 int dstX0, int dstY0,
-                 int dstX1, int dstY1,
-                 float z, uint filter)
+util_blit_pixels_writemask(struct blit_state *ctx,
+                           struct pipe_surface *src,
+                           int srcX0, int srcY0,
+                           int srcX1, int srcY1,
+                           struct pipe_surface *dst,
+                           int dstX0, int dstY0,
+                           int dstX1, int dstY1,
+                           float z, uint filter,
+                           uint writemask)
 {
    struct pipe_context *pipe = ctx->pipe;
    struct pipe_screen *screen = pipe->screen;
@@ -285,10 +323,41 @@ util_blit_pixels(struct blit_state *ctx,
    const int srcLeft = MIN2(srcX0, srcX1);
    const int srcTop = MIN2(srcY0, srcY1);
    unsigned offset;
+   boolean overlap;
 
    assert(filter == PIPE_TEX_MIPFILTER_NEAREST ||
           filter == PIPE_TEX_MIPFILTER_LINEAR);
 
+   assert(screen->is_format_supported(screen, src->format, PIPE_TEXTURE_2D,
+                                      PIPE_TEXTURE_USAGE_SAMPLER, 0));
+   assert(screen->is_format_supported(screen, dst->format, PIPE_TEXTURE_2D,
+                                      PIPE_TEXTURE_USAGE_RENDER_TARGET, 0));
+
+   /* do the regions overlap? */
+   overlap = util_same_surface(src, dst) &&
+      regions_overlap(srcX0, srcY0, srcX1, srcY1,
+                      dstX0, dstY0, dstX1, dstY1);
+
+   /*
+    * Check for simple case:  no format conversion, no flipping, no stretching,
+    * no overlapping.
+    * Filter mode should not matter since there's no stretching.
+    */
+   if (dst->format == src->format &&
+       srcX0 < srcX1 &&
+       dstX0 < dstX1 &&
+       srcY0 < srcY1 &&
+       dstY0 < dstY1 &&
+       (dstX1 - dstX0) == (srcX1 - srcX0) &&
+       (dstY1 - dstY0) == (srcY1 - srcY0) &&
+       !overlap) {
+      pipe->surface_copy(pipe,
+			 dst, dstX0, dstY0, /* dest */
+			 src, srcX0, srcY0, /* src */
+			 srcW, srcH);       /* size */
+      return;
+   }
+   
    if (srcLeft != srcX0) {
       /* left-right flip */
       int tmp = dstX0;
@@ -303,20 +372,6 @@ util_blit_pixels(struct blit_state *ctx,
       dstY1 = tmp;
    }
 
-   assert(screen->is_format_supported(screen, src->format, PIPE_TEXTURE_2D,
-                                      PIPE_TEXTURE_USAGE_SAMPLER, 0));
-   assert(screen->is_format_supported(screen, dst->format, PIPE_TEXTURE_2D,
-                                      PIPE_TEXTURE_USAGE_SAMPLER, 0));
-
-   if(dst->format == src->format && (dstX1 - dstX0) == srcW && (dstY1 - dstY0) == srcH) {
-      /* FIXME: this will most surely fail for overlapping rectangles */
-      pipe->surface_copy(pipe,
-			 dst, dstX0, dstY0,   /* dest */
-			 src, srcX0, srcY0, /* src */
-			 srcW, srcH);     /* size */
-      return;
-   }
-   
    assert(screen->is_format_supported(screen, dst->format, PIPE_TEXTURE_2D,
                                       PIPE_TEXTURE_USAGE_RENDER_TARGET, 0));
 
@@ -376,8 +431,11 @@ util_blit_pixels(struct blit_state *ctx,
    /* texture */
    cso_set_sampler_textures(ctx->cso, 1, &tex);
 
+   if (ctx->fs[writemask] == NULL)
+      ctx->fs[writemask] = util_make_fragment_tex_shader_writemask(pipe, writemask);
+
    /* shaders */
-   cso_set_fragment_shader_handle(ctx->cso, ctx->fs);
+   cso_set_fragment_shader_handle(ctx->cso, ctx->fs[writemask]);
    cso_set_vertex_shader_handle(ctx->cso, ctx->vs);
 
    /* drawing dest */
@@ -409,6 +467,27 @@ util_blit_pixels(struct blit_state *ctx,
    cso_restore_vertex_shader(ctx->cso);
 
    pipe_texture_reference(&tex, NULL);
+}
+
+
+void
+util_blit_pixels(struct blit_state *ctx,
+                 struct pipe_surface *src,
+                 int srcX0, int srcY0,
+                 int srcX1, int srcY1,
+                 struct pipe_surface *dst,
+                 int dstX0, int dstY0,
+                 int dstX1, int dstY1,
+                 float z, uint filter )
+{
+   util_blit_pixels_writemask( ctx, src, 
+                               srcX0, srcY0,
+                               srcX1, srcY1,
+                               dst,
+                               dstX0, dstY0,
+                               dstX1, dstY1,
+                               z, filter,
+                               TGSI_WRITEMASK_XYZW );
 }
 
 
@@ -485,7 +564,7 @@ util_blit_pixels_tex(struct blit_state *ctx,
    cso_set_sampler_textures(ctx->cso, 1, &tex);
 
    /* shaders */
-   cso_set_fragment_shader_handle(ctx->cso, ctx->fs);
+   cso_set_fragment_shader_handle(ctx->cso, ctx->fs[TGSI_WRITEMASK_XYZW]);
    cso_set_vertex_shader_handle(ctx->cso, ctx->vs);
 
    /* drawing dest */

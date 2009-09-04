@@ -1,3 +1,17 @@
+mesa (7.5.1-1) unstable; urgency=low
+
+  [ Brice Goglin ]
+  * New upstream release.
+  * Add README.source.
+  * Bump Standards-Version to 3.8.3.
+
+  [ Julien Cristau ]
+  * Override 'package-name-doesnt-match-sonames' lintian warnings for libGLU,
+    libGLw and both libGLs.
+  * Use dh_lintian and bump debhelper build-dep accordingly.
+
+ -- Brice Goglin <bgoglin@debian.org>  Fri, 04 Sep 2009 11:38:46 +0200
+
 mesa (7.5-3) unstable; urgency=low
 
   * Pull from upstream mesa_7_5_branch up to commit b4ba6a66

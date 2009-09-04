@@ -1107,6 +1107,15 @@ static int
 emit_instruction(struct gen_context *gen,
                  struct tgsi_full_instruction *inst)
 {
+
+   /* we don't handle saturation/clamping yet */
+   if (inst->Instruction.Saturate != TGSI_SAT_NONE)
+      return 0;
+
+   /* need to use extra temps to fix SOA dependencies : */
+   if (tgsi_check_soa_dependencies(inst))
+      return FALSE;
+
    switch (inst->Instruction.Opcode) {
    case TGSI_OPCODE_MOV:
    case TGSI_OPCODE_SWZ:

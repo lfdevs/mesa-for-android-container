@@ -885,7 +885,7 @@ _mesa_get_active_attrib(GLcontext *ctx, GLuint program, GLuint index,
 static struct gl_program_parameter *
 get_uniform_parameter(const struct gl_shader_program *shProg, GLuint index)
 {
-   const struct gl_program *prog;
+   const struct gl_program *prog = NULL;
    GLint progPos;
 
    progPos = shProg->Uniforms->Uniforms[index].VertPos;
@@ -915,7 +915,7 @@ _mesa_get_active_uniform(GLcontext *ctx, GLuint program, GLuint index,
                          GLenum *type, GLchar *nameOut)
 {
    const struct gl_shader_program *shProg;
-   const struct gl_program *prog;
+   const struct gl_program *prog = NULL;
    const struct gl_program_parameter *param;
    GLint progPos;
 
@@ -1624,7 +1624,7 @@ set_program_uniform(GLcontext *ctx, struct gl_program *program,
 
    if (param->Type == PROGRAM_SAMPLER) {
       /* This controls which texture unit which is used by a sampler */
-      GLuint texUnit, sampler;
+      GLboolean changed = GL_FALSE;
       GLint i;
 
       /* data type for setting samplers must be int */
@@ -1639,8 +1639,9 @@ set_program_uniform(GLcontext *ctx, struct gl_program *program,
        * common thing...
        */
       for (i = 0; i < count; i++) {
-         sampler = (GLuint) program->Parameters->ParameterValues[index + i][0];
-         texUnit = ((GLuint *) values)[i];
+         GLuint sampler =
+            (GLuint) program->Parameters->ParameterValues[index + offset + i][0];
+         GLuint texUnit = ((GLuint *) values)[i];
 
          /* check that the sampler (tex unit index) is legal */
          if (texUnit >= ctx->Const.MaxTextureImageUnits) {
@@ -1651,13 +1652,27 @@ set_program_uniform(GLcontext *ctx, struct gl_program *program,
 
          /* This maps a sampler to a texture unit: */
          if (sampler < MAX_SAMPLERS) {
-            program->SamplerUnits[sampler] = texUnit;
+#if 0
+            _mesa_printf("Set program %p sampler %d '%s' to unit %u\n",
+                         program, sampler, param->Name, texUnit);
+#endif
+            if (program->SamplerUnits[sampler] != texUnit) {
+               program->SamplerUnits[sampler] = texUnit;
+               changed = GL_TRUE;
+            }
          }
       }
 
-      _mesa_update_shader_textures_used(program);
-
-      FLUSH_VERTICES(ctx, _NEW_TEXTURE);
+      if (changed) {
+         /* When a sampler's value changes it usually requires rewriting
+          * a GPU program's TEX instructions since there may not be a
+          * sampler->texture lookup table.  We signal this with the
+          * ProgramStringNotify() callback.
+          */
+         FLUSH_VERTICES(ctx, _NEW_TEXTURE | _NEW_PROGRAM);
+         _mesa_update_shader_textures_used(program);
+         ctx->Driver.ProgramStringNotify(ctx, program->Target, program);
+      }
    }
    else {
       /* ordinary uniform variable */
