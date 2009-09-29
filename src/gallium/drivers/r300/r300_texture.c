@@ -22,33 +22,35 @@
 
 #include "r300_texture.h"
 
-static int minify(int i)
-{
-    return MAX2(1, i >> 1);
-}
-
 static void r300_setup_texture_state(struct r300_texture* tex,
                                      unsigned width,
                                      unsigned height,
-                                     unsigned pitch)
+                                     unsigned pitch,
+                                     unsigned levels)
 {
     struct r300_texture_state* state = &tex->state;
 
     state->format0 = R300_TX_WIDTH((width - 1) & 0x7ff) |
-        R300_TX_HEIGHT((height - 1) & 0x7ff) | R300_TX_PITCH_EN;
+        R300_TX_HEIGHT((height - 1) & 0x7ff) |
+        R300_TX_NUM_LEVELS(levels) |
+        R300_TX_PITCH_EN;
 
     /* XXX */
-    state->format1 = R300_TX_FORMAT_A8R8G8B8;
+    state->format1 = r300_translate_texformat(tex->tex.format);
 
     state->format2 = pitch - 1;
 
-    /* XXX
+    /* Assume (somewhat foolishly) that oversized textures will
+     * not be permitted by the state tracker. */
     if (width > 2048) {
-        state->pitch |= R300_TXWIDTH_11;
+        state->format2 |= R500_TXWIDTH_BIT11;
     }
     if (height > 2048) {
-        state->pitch |= R300_TXHEIGHT_11;
-    } */
+        state->format2 |= R500_TXHEIGHT_BIT11;
+    }
+
+    debug_printf("r300: Set texture state (%dx%d, pitch %d, %d levels)\n",
+            width, height, pitch, levels);
 }
 
 static void r300_setup_miptree(struct r300_texture* tex)
@@ -65,16 +67,24 @@ static void r300_setup_miptree(struct r300_texture* tex)
         }
 
         base->nblocksx[i] = pf_get_nblocksx(&base->block, base->width[i]);
-        base->nblocksy[i] = pf_get_nblocksy(&base->block, base->width[i]);
+        base->nblocksy[i] = pf_get_nblocksy(&base->block, base->height[i]);
 
-        /* Radeons enjoy things in multiples of 32. */
-        /* XXX this can be 32 when POT */
-        stride = (base->nblocksx[i] * base->block.size + 63) & ~63;
+        /* Radeons enjoy things in multiples of 64.
+         *
+         * XXX
+         * POT, uncompressed, unmippmapped textures can be aligned to 32,
+         * instead of 64. */
+        stride = align(pf_get_stride(&base->block, base->width[i]), 32);
         size = stride * base->nblocksy[i] * base->depth[i];
 
-        tex->offset[i] = (tex->size + 63) & ~63;
+        tex->offset[i] = align(tex->size, 32);
         tex->size = tex->offset[i] + size;
 
+        debug_printf("r300: Texture miptree: Level %d "
+                "(%dx%dx%d px, pitch %d bytes)\n",
+                i, base->width[i], base->height[i], base->depth[i],
+                stride);
+        /* Save stride of first level to the texture. */
         if (i == 0) {
             tex->stride = stride;
         }
@@ -86,8 +96,6 @@ static struct pipe_texture*
     r300_texture_create(struct pipe_screen* screen,
                         const struct pipe_texture* template)
 {
-    /* XXX struct r300_screen* r300screen = r300_screen(screen); */
-
     struct r300_texture* tex = CALLOC_STRUCT(r300_texture);
 
     if (!tex) {
@@ -100,11 +108,10 @@ static struct pipe_texture*
 
     r300_setup_miptree(tex);
 
-    /* XXX */
-    r300_setup_texture_state(tex, tex->tex.width[0], tex->tex.height[0],
-            tex->tex.width[0]);
+    r300_setup_texture_state(tex, template->width[0], template->height[0],
+            template->width[0], template->last_level);
 
-    tex->buffer = screen->buffer_create(screen, 64,
+    tex->buffer = screen->buffer_create(screen, 1024,
                                         PIPE_BUFFER_USAGE_PIXEL,
                                         tex->size);
 
@@ -166,6 +173,7 @@ static struct pipe_texture*
 {
     struct r300_texture* tex;
 
+    /* XXX we should start doing mips now... */
     if (base->target != PIPE_TEXTURE_2D ||
         base->last_level != 0 ||
         base->depth[0] != 1) {
@@ -183,8 +191,9 @@ static struct pipe_texture*
 
     tex->stride = *stride;
 
+    /* XXX */
     r300_setup_texture_state(tex, tex->tex.width[0], tex->tex.height[0],
-            tex->stride);
+            tex->stride, 0);
 
     pipe_buffer_reference(&tex->buffer, buffer);
 

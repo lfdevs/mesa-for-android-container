@@ -82,12 +82,14 @@ softpipe_get_param(struct pipe_screen *screen, int param)
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
       return 1;
    case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
-      return 12; /* max 2Kx2K */
+      return 13; /* max 4Kx4K */
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-      return 8;  /* max 128x128x128 */
+      return 9;  /* max 256x256x256 */
    case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
-      return 12; /* max 2Kx2K */
+      return 13; /* max 4Kx4K */
    case PIPE_CAP_TGSI_CONT_SUPPORTED:
+      return 1;
+   case PIPE_CAP_BLEND_EQUATION_SEPARATE:
       return 1;
    default:
       return 0;
@@ -108,7 +110,7 @@ softpipe_get_paramf(struct pipe_screen *screen, int param)
    case PIPE_CAP_MAX_POINT_WIDTH_AA:
       return 255.0; /* arbitrary */
    case PIPE_CAP_MAX_TEXTURE_ANISOTROPY:
-      return 0.0;
+      return 16.0; /* not actually signficant at this time */
    case PIPE_CAP_MAX_TEXTURE_LOD_BIAS:
       return 16.0; /* arbitrary */
    default:

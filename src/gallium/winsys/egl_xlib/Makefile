@@ -37,7 +37,7 @@ UNUSED_LIBS = \
 	$(TOP)/src/mesa/libmesagallium.a \
 
 
-LOCAL_CFLAGS = -D_EGL_PLATFORM_X=1
+LOCAL_CFLAGS =
 
 
 .c.o:
@@ -74,7 +74,7 @@ depend: $(ALL_SOURCES)
 install: default
 	$(INSTALL) -d $(INSTALL_DIR)/$(LIB_DIR)
 	@if [ -e $(TOP)/$(LIB_DIR) ]; then \
-		$(INSTALL) $(TOP)/$(LIB_DIR)/$(DRIVER_NAME) $(INSTALL_DIR)/$(LIB_DIR); \
+		$(MINSTALL) $(TOP)/$(LIB_DIR)/$(DRIVER_NAME) $(INSTALL_DIR)/$(LIB_DIR); \
 	fi
 
 

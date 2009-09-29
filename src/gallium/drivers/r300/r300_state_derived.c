@@ -22,6 +22,9 @@
 
 #include "r300_state_derived.h"
 
+#include "r300_fs.h"
+#include "r300_vs.h"
+
 /* r300_state_derived: Various bits of state which are dependent upon
  * currently bound CSO data. */
 
@@ -46,34 +49,8 @@ static void r300_vs_tab_routes(struct r300_context* r300,
 
     assert(info->num_inputs <= 16);
 
-    if (r300screen->caps->has_tcl) {
-        /* Just copy vert attribs over as-is. */
-        for (i = 0; i < info->num_inputs; i++) {
-            tab[i] = i;
-        }
-        for (i = 0; i < info->num_outputs; i++) {
-            switch (info->output_semantic_name[i]) {
-                case TGSI_SEMANTIC_POSITION:
-                    pos = TRUE;
-                    break;
-                case TGSI_SEMANTIC_COLOR:
-                    cols++;
-                    break;
-                case TGSI_SEMANTIC_PSIZE:
-                    psize = TRUE;
-                    break;
-                case TGSI_SEMANTIC_FOG:
-                    fog = TRUE;
-                case TGSI_SEMANTIC_GENERIC:
-                    texs++;
-                    break;
-                default:
-                    debug_printf("r300: Unknown vertex output %d\n",
-                        info->output_semantic_name[i]);
-                    break;
-            }
-        }
-    } else {
+    if (!r300screen->caps->has_tcl || !r300->rs_state->enable_vte)
+    {
         for (i = 0; i < info->num_inputs; i++) {
             switch (info->input_semantic_name[i]) {
                 case TGSI_SEMANTIC_POSITION:
@@ -102,6 +79,40 @@ static void r300_vs_tab_routes(struct r300_context* r300,
             }
         }
     }
+    else
+    {
+        /* Just copy vert attribs over as-is. */
+        for (i = 0; i < info->num_inputs; i++) {
+            tab[i] = i;
+        }
+
+        for (i = 0; i < info->num_outputs; i++) {
+            switch (info->output_semantic_name[i]) {
+                case TGSI_SEMANTIC_POSITION:
+                    pos = TRUE;
+                    break;
+                case TGSI_SEMANTIC_COLOR:
+                    cols++;
+                    break;
+                case TGSI_SEMANTIC_PSIZE:
+                    psize = TRUE;
+                    break;
+                case TGSI_SEMANTIC_FOG:
+                    fog = TRUE;
+                    /* Fall through */
+                case TGSI_SEMANTIC_GENERIC:
+                    texs++;
+                    break;
+                default:
+                    debug_printf("r300: Unknown vertex output %d\n",
+                        info->output_semantic_name[i]);
+                    break;
+            }
+        }
+    }
+
+    /* XXX magic */
+    assert(texs <= 8);
 
     /* Do the actual vertex_info setup.
      *
@@ -140,12 +151,9 @@ static void r300_vs_tab_routes(struct r300_context* r300,
         vinfo->hwfmt[2] |= (R300_VAP_OUTPUT_VTX_FMT_0__COLOR_0_PRESENT << i);
     }
 
-    for (i = 0; i < texs; i++) {
-        draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_PERSPECTIVE,
-            draw_find_vs_output(r300->draw, TGSI_SEMANTIC_GENERIC, i));
-        vinfo->hwfmt[1] |= (R300_INPUT_CNTL_TC0 << i);
-        vinfo->hwfmt[3] |= (4 << (3 * i));
-    }
+    /* Init i right here, increment it if fog is enabled.
+     * This gets around a double-increment problem. */
+    i = 0;
 
     if (fog) {
         i++;
@@ -155,6 +163,20 @@ static void r300_vs_tab_routes(struct r300_context* r300,
         vinfo->hwfmt[3] |= (4 << (3 * i));
     }
 
+    for (i; i < texs; i++) {
+        draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_PERSPECTIVE,
+            draw_find_vs_output(r300->draw, TGSI_SEMANTIC_GENERIC, i));
+        vinfo->hwfmt[1] |= (R300_INPUT_CNTL_TC0 << i);
+        vinfo->hwfmt[3] |= (4 << (3 * i));
+    }
+
+    /* Handle the case where the vertex shader will be generating some of
+     * the attribs based on its inputs. */
+    if (r300screen->caps->has_tcl &&
+            info->num_inputs < info->num_outputs) {
+        vinfo->num_attribs = info->num_inputs;
+    }
+
     draw_compute_vertex_size(vinfo);
 }
 
@@ -162,26 +184,40 @@ static void r300_vs_tab_routes(struct r300_context* r300,
 static void r300_vertex_psc(struct r300_context* r300,
                             struct r300_vertex_format* vformat)
 {
+    struct r300_screen* r300screen = r300_screen(r300->context.screen);
     struct vertex_info* vinfo = &vformat->vinfo;
     int* tab = vformat->vs_tab;
     uint32_t temp;
-    int i;
+    int i, attrib_count;
 
-    debug_printf("r300: attrib count: %d\n", vinfo->num_attribs);
-    for (i = 0; i < vinfo->num_attribs; i++) {
-        debug_printf("r300: attrib: offset %d, interp %d, size %d,"
-               " tab %d\n", vinfo->attrib[i].src_index,
-               vinfo->attrib[i].interp_mode, vinfo->attrib[i].emit,
-               tab[i]);
+    /* Vertex shaders have no semantics on their inputs,
+     * so PSC should just route stuff based on their info,
+     * and not on attrib information. */
+    if (r300screen->caps->has_tcl) {
+        attrib_count = r300->vs->info.num_inputs;
+        debug_printf("r300: routing %d attribs in psc for vs\n",
+                attrib_count);
+    } else {
+        attrib_count = vinfo->num_attribs;
+        debug_printf("r300: attrib count: %d\n", attrib_count);
+        for (i = 0; i < attrib_count; i++) {
+            debug_printf("r300: attrib: offset %d, interp %d, size %d,"
+                   " tab %d\n", vinfo->attrib[i].src_index,
+                   vinfo->attrib[i].interp_mode, vinfo->attrib[i].emit,
+                   tab[i]);
+        }
     }
 
-    for (i = 0; i < vinfo->num_attribs; i++) {
+    for (i = 0; i < attrib_count; i++) {
         /* Make sure we have a proper destination for our attribute */
         assert(tab[i] != -1);
 
         /* Add the attribute to the PSC table. */
-        temp = translate_vertex_data_type(vinfo->attrib[i].emit) |
-            (tab[i] << R300_DST_VEC_LOC_SHIFT);
+        temp = r300screen->caps->has_tcl ?
+            R300_DATA_TYPE_FLOAT_4 :
+            translate_vertex_data_type(vinfo->attrib[i].emit);
+        temp |= tab[i] << R300_DST_VEC_LOC_SHIFT;
+
         if (i & 1) {
             vformat->vap_prog_stream_cntl[i >> 1] &= 0x0000ffff;
             vformat->vap_prog_stream_cntl[i >> 1] |= temp << 16;
@@ -206,7 +242,6 @@ static void r300_vertex_psc(struct r300_context* r300,
 /* Update the vertex format. */
 static void r300_update_vertex_format(struct r300_context* r300)
 {
-    struct r300_screen* r300screen = r300_screen(r300->context.screen);
     struct r300_vertex_format vformat;
     int i;
 

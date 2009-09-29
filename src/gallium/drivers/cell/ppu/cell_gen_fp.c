@@ -1767,7 +1767,7 @@ emit_instruction(struct codegen *gen,
    case TGSI_OPCODE_MAD:
       return emit_MAD(gen, inst);
    case TGSI_OPCODE_LERP:
-      return emit_LERP(gen, inst);
+      return emit_LRP(gen, inst);
    case TGSI_OPCODE_DP3:
       return emit_DP3(gen, inst);
    case TGSI_OPCODE_DP4:
@@ -1810,9 +1810,9 @@ emit_instruction(struct codegen *gen,
       return emit_function_call(gen, inst, "spu_sin", 1, TRUE);
    case TGSI_OPCODE_POW:
       return emit_function_call(gen, inst, "spu_pow", 2, TRUE);
-   case TGSI_OPCODE_EXPBASE2:
+   case TGSI_OPCODE_EX2:
       return emit_function_call(gen, inst, "spu_exp2", 1, TRUE);
-   case TGSI_OPCODE_LOGBASE2:
+   case TGSI_OPCODE_LG2:
       return emit_function_call(gen, inst, "spu_log2", 1, TRUE);
    case TGSI_OPCODE_TEX:
       /* fall-through for now */
@@ -1834,9 +1834,9 @@ emit_instruction(struct codegen *gen,
    case TGSI_OPCODE_ENDIF:
       return emit_ENDIF(gen, inst);
 
-   case TGSI_OPCODE_BGNLOOP2:
+   case TGSI_OPCODE_BGNLOOP:
       return emit_BGNLOOP(gen, inst);
-   case TGSI_OPCODE_ENDLOOP2:
+   case TGSI_OPCODE_ENDLOOP:
       return emit_ENDLOOP(gen, inst);
    case TGSI_OPCODE_BRK:
       return emit_BRK(gen, inst);
@@ -1875,9 +1875,9 @@ emit_immediate(struct codegen *gen, const struct tgsi_full_immediate *immed)
    assert(gen->num_imm < MAX_TEMPS);
 
    for (ch = 0; ch < 4; ch++) {
-      float val = immed->u.ImmediateFloat32[ch].Float;
+      float val = immed->u[ch].Float;
 
-      if (ch > 0 && val == immed->u.ImmediateFloat32[ch - 1].Float) {
+      if (ch > 0 && val == immed->u[ch - 1].Float) {
          /* re-use previous register */
          gen->imm_regs[gen->num_imm][ch] = gen->imm_regs[gen->num_imm][ch - 1];
       }

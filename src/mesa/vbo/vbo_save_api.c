@@ -73,6 +73,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/dlist.h"
 #include "main/enums.h"
 #include "main/macros.h"
+#include "main/api_noop.h"
 #include "main/api_validate.h"
 #include "main/api_arrayelt.h"
 #include "main/vtxfmt.h"
@@ -911,7 +912,7 @@ static void GLAPIENTRY _save_OBE_DrawElements(GLenum mode, GLsizei count, GLenum
 
    _ae_map_vbos( ctx );
 
-   if (ctx->Array.ElementArrayBufferObj->Name)
+   if (_mesa_is_bufferobj(ctx->Array.ElementArrayBufferObj))
       indices = ADD_POINTERS(ctx->Array.ElementArrayBufferObj->Pointer, indices);
 
    vbo_save_NotifyBegin( ctx, mode | VBO_SAVE_PRIM_WEAK );
@@ -1038,6 +1039,8 @@ static void _save_vtxfmt_init( GLcontext *ctx )
    vfmt->DrawArrays = _save_DrawArrays;
    vfmt->DrawElements = _save_DrawElements;
    vfmt->DrawRangeElements = _save_DrawRangeElements;
+   /* Loops back into vfmt->DrawElements */
+   vfmt->MultiDrawElementsEXT = _mesa_noop_MultiDrawElements;
 
 }
 
@@ -1158,10 +1161,10 @@ static void vbo_print_vertex_list( GLcontext *ctx, void *data )
    GLuint i;
    (void) ctx;
 
-   _mesa_debug(NULL, "VBO-VERTEX-LIST, %u vertices %d primitives, %d vertsize\n",
-               node->count,
-	       node->prim_count,
-	       node->vertex_size);
+   _mesa_printf("VBO-VERTEX-LIST, %u vertices %d primitives, %d vertsize\n",
+		node->count,
+		node->prim_count,
+		node->vertex_size);
 
    for (i = 0 ; i < node->prim_count ; i++) {
       struct _mesa_prim *prim = &node->prim[i];
@@ -1228,6 +1231,8 @@ void vbo_save_api_init( struct vbo_save_context *save )
    ctx->ListState.ListVtxfmt.DrawArrays = _save_OBE_DrawArrays;
    ctx->ListState.ListVtxfmt.DrawElements = _save_OBE_DrawElements;
    ctx->ListState.ListVtxfmt.DrawRangeElements = _save_OBE_DrawRangeElements;
+   /* loops back into _save_OBE_DrawElements */
+   ctx->ListState.ListVtxfmt.MultiDrawElementsEXT = _mesa_noop_MultiDrawElements;
    _mesa_install_save_vtxfmt( ctx, &ctx->ListState.ListVtxfmt );
 }
 

@@ -137,7 +137,6 @@ static PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC glRenderbufferStorageMultisample_
 static PFNGLFRAMEBUFFERTEXTURELAYERPROC glFramebufferTextureLayer_func = NULL;
 
 
-
 static void
 GetExtensionFuncs(void)
 {

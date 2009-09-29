@@ -33,6 +33,7 @@
 #include "mtypes.h"
 #include "hash.h"
 #include "arrayobj.h"
+#include "bufferobj.h"
 #include "shared.h"
 #include "shader/program.h"
 #include "shader/shader_api.h"
@@ -42,7 +43,9 @@
 #if FEATURE_ATI_fragment_shader
 #include "shader/atifragshader.h"
 #endif
-
+#if FEATURE_ARB_sync
+#include "syncobj.h"
+#endif
 
 /**
  * Allocate and initialize a shared context state structure.
@@ -92,7 +95,12 @@ _mesa_alloc_shared_state(GLcontext *ctx)
    shared->BufferObjects = _mesa_NewHashTable();
 #endif
 
-   shared->ArrayObjects = _mesa_NewHashTable();
+   /* Allocate the default buffer object and set refcount so high that
+    * it never gets deleted.
+    * XXX with recent/improved refcounting this may not longer be needed.
+    */
+   shared->NullBufferObj = ctx->Driver.NewBufferObject(ctx, 0, 0);
+   shared->NullBufferObj->RefCount = 1000 * 1000 * 1000;
 
    /* Create default texture objects */
    for (i = 0; i < NUM_TEXTURE_TARGETS; i++) {
@@ -119,6 +127,10 @@ _mesa_alloc_shared_state(GLcontext *ctx)
 #if FEATURE_EXT_framebuffer_object
    shared->FrameBuffers = _mesa_NewHashTable();
    shared->RenderBuffers = _mesa_NewHashTable();
+#endif
+
+#if FEATURE_ARB_sync
+   make_empty_list(& shared->SyncObjects);
 #endif
 
    return shared;
@@ -190,23 +202,11 @@ delete_bufferobj_cb(GLuint id, void *data, void *userData)
 {
    struct gl_buffer_object *bufObj = (struct gl_buffer_object *) data;
    GLcontext *ctx = (GLcontext *) userData;
-   if (bufObj->Pointer) {
+   if (_mesa_bufferobj_mapped(bufObj)) {
       ctx->Driver.UnmapBuffer(ctx, 0, bufObj);
       bufObj->Pointer = NULL;
    }
    ctx->Driver.DeleteBuffer(ctx, bufObj);
-}
-
-
-/**
- * Callback for deleting an array object.  Called by _mesa_HashDeleteAll().
- */
-static void
-delete_arrayobj_cb(GLuint id, void *data, void *userData)
-{
-   struct gl_array_object *arrayObj = (struct gl_array_object *) data;
-   GLcontext *ctx = (GLcontext *) userData;
-   _mesa_delete_array_object(ctx, arrayObj);
 }
 
 
@@ -312,9 +312,6 @@ _mesa_free_shared_state(GLcontext *ctx, struct gl_shared_state *shared)
    _mesa_HashDeleteAll(shared->Programs, delete_program_cb, ctx);
    _mesa_DeleteHashTable(shared->Programs);
 
-   _mesa_HashDeleteAll(shared->ArrayObjects, delete_arrayobj_cb, ctx);
-   _mesa_DeleteHashTable(shared->ArrayObjects);
-
 #if FEATURE_ARB_vertex_program
    _mesa_reference_vertprog(ctx, &shared->DefaultVertexProgram, NULL);
 #endif
@@ -339,6 +336,21 @@ _mesa_free_shared_state(GLcontext *ctx, struct gl_shared_state *shared)
    _mesa_DeleteHashTable(shared->FrameBuffers);
    _mesa_HashDeleteAll(shared->RenderBuffers, delete_renderbuffer_cb, ctx);
    _mesa_DeleteHashTable(shared->RenderBuffers);
+#endif
+
+#if FEATURE_ARB_vertex_buffer_object
+   ctx->Driver.DeleteBuffer(ctx, shared->NullBufferObj);
+#endif
+
+#if FEATURE_ARB_sync
+   {
+      struct simple_node *node;
+      struct simple_node *temp;
+
+      foreach_s(node, temp, & shared->SyncObjects) {
+	 _mesa_unref_sync_object(ctx, (struct gl_sync_object *) node);
+      }
+   }
 #endif
 
    /*

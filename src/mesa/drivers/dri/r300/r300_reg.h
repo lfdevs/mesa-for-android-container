@@ -1128,6 +1128,13 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 /* SU Depth Offset value */
 #define R300_SU_DEPTH_OFFSET                0x42c4
 
+#define R300_SU_REG_DEST		    0x42c8
+#	define R300_RASTER_PIPE_SELECT_0	(1 << 0)
+#	define R300_RASTER_PIPE_SELECT_1	(1 << 1)
+#	define R300_RASTER_PIPE_SELECT_2	(1 << 2)
+#	define R300_RASTER_PIPE_SELECT_3	(1 << 3)
+#	define R300_RASTER_PIPE_SELECT_ALL	0xf
+
 
 /* BEGIN: Rasterization / Interpolators - many guesses */
 
@@ -1467,6 +1474,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #	define R300_TX_FORMAT_3D		   (1 << 25)
 #	define R300_TX_FORMAT_CUBIC_MAP		   (2 << 25)
 
+#	define R300_TX_FORMAT_GAMMA			(1 << 21)
+
 	/* gap */
 	/* Floating point formats */
 	/* Note - hardware supports both 16 and 32 bit floating point */
@@ -1531,6 +1540,13 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #	define R500_SEL_FILTER4_TC3		 (3 << 18)
 
 #define R300_TX_OFFSET_0                    0x4540
+#define R300_TX_OFFSET_1                    0x4544
+#define R300_TX_OFFSET_2                    0x4548
+#define R300_TX_OFFSET_3                    0x454C
+#define R300_TX_OFFSET_4                    0x4550
+#define R300_TX_OFFSET_5                    0x4554
+#define R300_TX_OFFSET_6                    0x4558
+#define R300_TX_OFFSET_7                    0x455C
 	/* BEGIN: Guess from R200 */
 #       define R300_TXO_ENDIAN_NO_SWAP           (0 << 0)
 #       define R300_TXO_ENDIAN_BYTE_SWAP         (1 << 0)
@@ -2005,6 +2021,11 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define R500_FG_ALPHA_VALUE                0x4be0
 #	define R500_FG_ALPHA_VALUE_MASK 0x0000ffff
 
+#define RV530_FG_ZBREG_DEST                 0x4be8
+#	define RV530_FG_ZBREG_DEST_PIPE_SELECT_0             (1 << 0)
+#	define RV530_FG_ZBREG_DEST_PIPE_SELECT_1             (1 << 1)
+#	define RV530_FG_ZBREG_DEST_PIPE_SELECT_ALL           (3 << 0)
+
 /* gap */
 
 /* Fragment program parameters in 7.16 floating point */
@@ -2425,6 +2446,12 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 /* Z Buffer Clear Value */
 #define R300_ZB_DEPTHCLEARVALUE                  0x4f28
 
+#define R300_ZB_ZMASK_OFFSET                     0x4f30
+#define R300_ZB_ZMASK_PITCH                      0x4f34
+#define R300_ZB_ZMASK_WRINDEX                    0x4f38
+#define R300_ZB_ZMASK_DWORD                      0x4f3c
+#define R300_ZB_ZMASK_RDINDEX                    0x4f40
+
 /* Hierarchical Z Memory Offset */
 #define R300_ZB_HIZ_OFFSET                       0x4f44
 
@@ -2651,6 +2678,24 @@ enum {
 	PVS_SRC_ADDR_MODE_1_MASK	= 0x0,
 	PVS_SRC_ADDR_MODE_1_SHIFT	= 32,
 };
+
+
+#define PVS_OP_DST_OPERAND(opcode, math_inst, macro_inst, reg_index, reg_writemask, reg_class)	\
+	 (((opcode & PVS_DST_OPCODE_MASK) << PVS_DST_OPCODE_SHIFT)	\
+	 | ((math_inst & PVS_DST_MATH_INST_MASK) << PVS_DST_MATH_INST_SHIFT)	\
+	 | ((macro_inst & PVS_DST_MACRO_INST_MASK) << PVS_DST_MACRO_INST_SHIFT)	\
+	 | ((reg_index & PVS_DST_OFFSET_MASK) << PVS_DST_OFFSET_SHIFT)	\
+	 | ((reg_writemask & 0xf) << PVS_DST_WE_X_SHIFT)	/* X Y Z W */	\
+	 | ((reg_class & PVS_DST_REG_TYPE_MASK) << PVS_DST_REG_TYPE_SHIFT))
+
+#define PVS_SRC_OPERAND(in_reg_index, comp_x, comp_y, comp_z, comp_w, reg_class, negate)	\
+	(((in_reg_index & PVS_SRC_OFFSET_MASK) << PVS_SRC_OFFSET_SHIFT)				\
+	 | ((comp_x & PVS_SRC_SWIZZLE_X_MASK) << PVS_SRC_SWIZZLE_X_SHIFT)			\
+	 | ((comp_y & PVS_SRC_SWIZZLE_Y_MASK) << PVS_SRC_SWIZZLE_Y_SHIFT)			\
+	 | ((comp_z & PVS_SRC_SWIZZLE_Z_MASK) << PVS_SRC_SWIZZLE_Z_SHIFT)			\
+	 | ((comp_w & PVS_SRC_SWIZZLE_W_MASK) << PVS_SRC_SWIZZLE_W_SHIFT)			\
+	 | ((negate & 0xf) << PVS_SRC_MODIFIER_X_SHIFT)	/* X Y Z W */				\
+	 | ((reg_class & PVS_SRC_REG_TYPE_MASK) << PVS_SRC_REG_TYPE_SHIFT))
 
 /*\}*/
 
@@ -3164,6 +3209,9 @@ enum {
 #   define R300_W_SRC_US				(0 << 2)
 #   define R300_W_SRC_RAS				(1 << 2)
 
+
+/* Packet0 field ordering to write all values to the same reg */
+#define RADEON_ONE_REG_WR        (1 << 15)
 
 /* Draw a primitive from vertex data in arrays loaded via 3D_LOAD_VBPNTR.
  * Two parameter dwords:

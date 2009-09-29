@@ -1,3 +1,17 @@
+mesa (7.6-1) unstable; urgency=low
+
+  [ Brice Goglin ]
+  * New upstream release.
+    + Fix software fallback assertion on RS480, closes: #539162.
+    + Fix segfault in _swrast_ReadPixels on i915, closes: #545085.
+
+  [ Julien Cristau ]
+  * Don't run install from the various configs in parallel, hopefully fixing a
+    bug in the previous debian/rules.  Thanks to Bernhard R. Link for the
+    suggestions.
+
+ -- Brice Goglin <bgoglin@debian.org>  Tue, 29 Sep 2009 11:51:58 +0200
+
 mesa (7.5.1-1) unstable; urgency=low
 
   [ Brice Goglin ]

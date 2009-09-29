@@ -45,7 +45,6 @@ CONFIGS = $(SWX11_GLU_CONFIGS) \
 STAMP_DIR = debian/stamp
 STAMP = $(STAMP_DIR)/$(DEB_BUILD_GNU_TYPE)
 BUILD_STAMPS = $(addprefix $(STAMP)-build-, $(CONFIGS))
-INSTALL_TARGETS = $(addprefix install-, $(CONFIGS))
 
 QUILT_STAMPFN = $(STAMP_DIR)/patch
 include /usr/share/quilt/quilt.make
@@ -187,16 +186,15 @@ $(STAMP)-build-%: configure
 
 	touch $@
 
-install:
+install: build
 	# Add here commands to install the package into debian/tmp
 	dh_testdir
 	dh_testroot
 	dh_clean -k
 	dh_installdirs
-	$(MAKE) -f debian/rules $(INSTALL_TARGETS)
-
-install-%: $(STAMP)-build-%
-	cd $(DEB_BUILD_DIR)/$* && $(MAKE) DESTDIR=$(CURDIR)/debian/tmp install
+	set -e; for config in $(CONFIGS); do \
+		$(MAKE) -C $(DEB_BUILD_DIR)/$$config DESTDIR=$(CURDIR)/debian/tmp install; \
+	done
 
 clean: unpatch
 	dh_testdir

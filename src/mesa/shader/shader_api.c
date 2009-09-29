@@ -1,6 +1,6 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.5
+ * Version:  7.6
  *
  * Copyright (C) 2004-2008  Brian Paul   All Rights Reserved.
  * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
@@ -1431,6 +1431,9 @@ _mesa_shader_source(GLcontext *ctx, GLuint shader, const GLchar *source)
    }
    sh->Source = source;
    sh->CompileStatus = GL_FALSE;
+#ifdef DEBUG
+   sh->SourceChecksum = _mesa_str_checksum(sh->Source);
+#endif
 }
 
 
@@ -1471,6 +1474,21 @@ _mesa_link_program(GLcontext *ctx, GLuint program)
    FLUSH_VERTICES(ctx, _NEW_PROGRAM);
 
    _slang_link(ctx, program, shProg);
+
+   /* debug code */
+   if (0) {
+      GLuint i;
+
+      _mesa_printf("Link %u shaders in program %u: %s\n",
+                   shProg->NumShaders, shProg->Name,
+                   shProg->LinkStatus ? "Success" : "Failed");
+
+      for (i = 0; i < shProg->NumShaders; i++) {
+         _mesa_printf(" shader %u, type 0x%x\n",
+                      shProg->Shaders[i]->Name,
+                      shProg->Shaders[i]->Type);
+      }
+   }
 }
 
 
@@ -1488,7 +1506,7 @@ _mesa_use_program(GLcontext *ctx, GLuint program)
       return;
    }
 
-   FLUSH_VERTICES(ctx, _NEW_PROGRAM);
+   FLUSH_VERTICES(ctx, _NEW_PROGRAM | _NEW_PROGRAM_CONSTANTS);
 
    if (program) {
       shProg = _mesa_lookup_shader_program_err(ctx, program, "glUseProgram");
@@ -1506,10 +1524,15 @@ _mesa_use_program(GLcontext *ctx, GLuint program)
          GLuint i;
          _mesa_printf("Use Shader %u\n", shProg->Name);
          for (i = 0; i < shProg->NumShaders; i++) {
-            _mesa_printf(" shader %u, type 0x%x\n",
+            _mesa_printf(" shader %u, type 0x%x, checksum %u\n",
                          shProg->Shaders[i]->Name,
-                         shProg->Shaders[i]->Type);
+                         shProg->Shaders[i]->Type,
+                         shProg->Shaders[i]->SourceChecksum);
          }
+         if (shProg->VertexProgram)
+            printf(" vert prog %u\n", shProg->VertexProgram->Base.Id);
+         if (shProg->FragmentProgram)
+            printf(" frag prog %u\n", shProg->FragmentProgram->Base.Id);
       }
    }
    else {
@@ -1545,10 +1568,11 @@ _mesa_update_shader_textures_used(struct gl_program *prog)
 
    for (s = 0; s < MAX_SAMPLERS; s++) {
       if (prog->SamplersUsed & (1 << s)) {
-         GLuint u = prog->SamplerUnits[s];
-         GLuint t = prog->SamplerTargets[s];
-         assert(u < MAX_TEXTURE_IMAGE_UNITS);
-         prog->TexturesUsed[u] |= (1 << t);
+         GLuint unit = prog->SamplerUnits[s];
+         GLuint tgt = prog->SamplerTargets[s];
+         assert(unit < MAX_TEXTURE_IMAGE_UNITS);
+         assert(tgt < NUM_TEXTURE_TARGETS);
+         prog->TexturesUsed[unit] |= (1 << tgt);
       }
    }
 }
@@ -1603,10 +1627,8 @@ set_program_uniform(GLcontext *ctx, struct gl_program *program,
                     GLenum type, GLsizei count, GLint elems,
                     const void *values)
 {
-   struct gl_program_parameter *param =
+   const struct gl_program_parameter *param =
       &program->Parameters->Parameters[index];
-   const GLboolean isUniformBool = is_boolean_type(param->DataType);
-   const GLboolean areIntValues = is_integer_type(type);
 
    assert(offset >= 0);
    assert(elems >= 1);
@@ -1627,17 +1649,10 @@ set_program_uniform(GLcontext *ctx, struct gl_program *program,
       GLboolean changed = GL_FALSE;
       GLint i;
 
-      /* data type for setting samplers must be int */
-      if (type != GL_INT) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "glUniform(only glUniform1i can be used "
-                     "to set sampler uniforms)");
-         return;
-      }
+      /* this should have been caught by the compatible_types() check */
+      ASSERT(type == GL_INT);
 
-      /* XXX arrays of samplers haven't been tested much, but it's not a
-       * common thing...
-       */
+      /* loop over number of samplers to change */
       for (i = 0; i < count; i++) {
          GLuint sampler =
             (GLuint) program->Parameters->ParameterValues[index + offset + i][0];
@@ -1676,9 +1691,11 @@ set_program_uniform(GLcontext *ctx, struct gl_program *program,
    }
    else {
       /* ordinary uniform variable */
-      GLsizei k, i;
+      const GLboolean isUniformBool = is_boolean_type(param->DataType);
+      const GLboolean areIntValues = is_integer_type(type);
       const GLint slots = (param->Size + 3) / 4;
       const GLint typeSize = sizeof_glsl_type(param->DataType);
+      GLsizei k, i;
 
       if (param->Size > typeSize) {
          /* an array */
@@ -1805,7 +1822,7 @@ _mesa_uniform(GLcontext *ctx, GLint location, GLsizei count,
       return;
    }
 
-   FLUSH_VERTICES(ctx, _NEW_PROGRAM | _NEW_PROGRAM_CONSTANTS);
+   FLUSH_VERTICES(ctx, _NEW_PROGRAM_CONSTANTS);
 
    uniform = &shProg->Uniforms->Uniforms[location];
 
@@ -1945,7 +1962,7 @@ _mesa_uniform_matrix(GLcontext *ctx, GLint cols, GLint rows,
       return;
    }
 
-   FLUSH_VERTICES(ctx, _NEW_PROGRAM | _NEW_PROGRAM_CONSTANTS);
+   FLUSH_VERTICES(ctx, _NEW_PROGRAM_CONSTANTS);
 
    uniform = &shProg->Uniforms->Uniforms[location];
 
@@ -1973,19 +1990,74 @@ _mesa_uniform_matrix(GLcontext *ctx, GLint cols, GLint rows,
 }
 
 
-static void
-_mesa_validate_program(GLcontext *ctx, GLuint program)
+/**
+ * Validate a program's samplers.
+ * Specifically, check that there aren't two samplers of different types
+ * pointing to the same texture unit.
+ * \return GL_TRUE if valid, GL_FALSE if invalid
+ */
+static GLboolean
+validate_samplers(GLcontext *ctx, const struct gl_program *prog, char *errMsg)
 {
-   struct gl_shader_program *shProg;
+   static const char *targetName[] = {
+      "TEXTURE_2D_ARRAY",
+      "TEXTURE_1D_ARRAY",
+      "TEXTURE_CUBE",
+      "TEXTURE_3D",
+      "TEXTURE_RECT",
+      "TEXTURE_2D",
+      "TEXTURE_1D",
+   };
+   GLint targetUsed[MAX_TEXTURE_IMAGE_UNITS];
+   GLbitfield samplersUsed = prog->SamplersUsed;
+   GLuint i;
 
-   shProg = _mesa_lookup_shader_program_err(ctx, program, "glValidateProgram");
-   if (!shProg) {
-      return;
+   assert(Elements(targetName) == NUM_TEXTURE_TARGETS);
+
+   if (samplersUsed == 0x0)
+      return GL_TRUE;
+
+   for (i = 0; i < Elements(targetUsed); i++)
+      targetUsed[i] = -1;
+
+   /* walk over bits which are set in 'samplers' */
+   while (samplersUsed) {
+      GLuint unit;
+      gl_texture_index target;
+      GLint sampler = _mesa_ffs(samplersUsed) - 1;
+      assert(sampler >= 0);
+      assert(sampler < MAX_TEXTURE_IMAGE_UNITS);
+      unit = prog->SamplerUnits[sampler];
+      target = prog->SamplerTargets[sampler];
+      if (targetUsed[unit] != -1 && targetUsed[unit] != target) {
+         _mesa_snprintf(errMsg, 100,
+                       "Texture unit %d is accessed both as %s and %s",
+                       unit, targetName[targetUsed[unit]], targetName[target]);
+         return GL_FALSE;
+      }
+      targetUsed[unit] = target;
+      samplersUsed ^= (1 << sampler);
    }
 
+   return GL_TRUE;
+}
+
+
+/**
+ * Do validation of the given shader program.
+ * \param errMsg  returns error message if validation fails.
+ * \return GL_TRUE if valid, GL_FALSE if invalid (and set errMsg)
+ */
+GLboolean
+_mesa_validate_shader_program(GLcontext *ctx,
+                              const struct gl_shader_program *shProg,
+                              char *errMsg)
+{
+   const struct gl_vertex_program *vp = shProg->VertexProgram;
+   const struct gl_fragment_program *fp = shProg->FragmentProgram;
+
    if (!shProg->LinkStatus) {
-      shProg->Validated = GL_FALSE;
-      return;
+      return GL_FALSE;
    }
 
    /* From the GL spec, a program is invalid if any of these are true:
@@ -2003,7 +2075,44 @@ _mesa_validate_program(GLcontext *ctx, GLuint program)
      image units allowed.
    */
 
-   shProg->Validated = GL_TRUE;
+
+   /*
+    * Check: any two active samplers in the current program object are of
+    * different types, but refer to the same texture image unit,
+    */
+   if (vp && !validate_samplers(ctx, &vp->Base, errMsg)) {
+      return GL_FALSE;
+   }
+   if (fp && !validate_samplers(ctx, &fp->Base, errMsg)) {
+      return GL_FALSE;
+   }
+
+   return GL_TRUE;
+}
+
+
+/**
+ * Called via glValidateProgram()
+ */
+static void
+_mesa_validate_program(GLcontext *ctx, GLuint program)
+{
+   struct gl_shader_program *shProg;
+   char errMsg[100];
+
+   shProg = _mesa_lookup_shader_program_err(ctx, program, "glValidateProgram");
+   if (!shProg) {
+      return;
+   }
+
+   shProg->Validated = _mesa_validate_shader_program(ctx, shProg, errMsg);
+   if (!shProg->Validated) {
+      /* update info log */
+      if (shProg->InfoLog) {
+         _mesa_free(shProg->InfoLog);
+      }
+      shProg->InfoLog = _mesa_strdup(errMsg);
+   }
 }
 
 

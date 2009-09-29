@@ -119,6 +119,7 @@ client_state(GLcontext *ctx, GLenum cap, GLboolean state)
          CHECK_EXTENSION(NV_vertex_program, cap);
          {
             GLint n = (GLint) cap - GL_VERTEX_ATTRIB_ARRAY0_NV;
+            ASSERT(n < Elements(ctx->Array.ArrayObj->VertexAttrib));
             var = &ctx->Array.ArrayObj->VertexAttrib[n].Enabled;
             flag = _NEW_ARRAY_ATTRIB(n);
          }
@@ -222,16 +223,18 @@ get_texcoord_unit(GLcontext *ctx)
 
 /**
  * Helper function to enable or disable a texture target.
+ * \param bit  one of the TEXTURE_x_BIT values
+ * \return GL_TRUE if state is changing or GL_FALSE if no change
  */
 static GLboolean
-enable_texture(GLcontext *ctx, GLboolean state, GLbitfield bit)
+enable_texture(GLcontext *ctx, GLboolean state, GLbitfield texBit)
 {
    const GLuint curr = ctx->Texture.CurrentUnit;
    struct gl_texture_unit *texUnit = &ctx->Texture.Unit[curr];
-   const GLuint newenabled = (!state)
-       ? (texUnit->Enabled & ~bit) :  (texUnit->Enabled | bit);
+   const GLbitfield newenabled = state
+      ? (texUnit->Enabled | texBit) : (texUnit->Enabled & ~texBit);
 
-   if (!ctx->DrawBuffer->Visual.rgbMode || texUnit->Enabled == newenabled)
+   if (texUnit->Enabled == newenabled)
        return GL_FALSE;
 
    FLUSH_VERTICES(ctx, _NEW_TEXTURE);
@@ -933,11 +936,6 @@ _mesa_set_enable(GLcontext *ctx, GLenum cap, GLboolean state)
       /* GL_EXT_depth_bounds_test */
       case GL_DEPTH_BOUNDS_TEST_EXT:
          CHECK_EXTENSION(EXT_depth_bounds_test, cap);
-         if (state && ctx->DrawBuffer->Visual.depthBits == 0) {
-            _mesa_warning(ctx,
-                   "glEnable(GL_DEPTH_BOUNDS_TEST_EXT) but no depth buffer");
-            return;
-         }
          if (ctx->Depth.BoundsTest == state)
             return;
          FLUSH_VERTICES(ctx, _NEW_DEPTH);
@@ -968,6 +966,11 @@ _mesa_set_enable(GLcontext *ctx, GLenum cap, GLboolean state)
             return;
          }
          break;
+
+      case GL_TEXTURE_CUBE_MAP_SEAMLESS:
+	 CHECK_EXTENSION(ARB_seamless_cube_map, cap);
+	 ctx->Texture.CubeMapSeamless = state;
+	 break;
 
       default:
          _mesa_error(ctx, GL_INVALID_ENUM,
@@ -1314,6 +1317,7 @@ _mesa_IsEnabled( GLenum cap )
          CHECK_EXTENSION(NV_vertex_program);
          {
             GLint n = (GLint) cap - GL_VERTEX_ATTRIB_ARRAY0_NV;
+            ASSERT(n < Elements(ctx->Array.ArrayObj->VertexAttrib));
             return (ctx->Array.ArrayObj->VertexAttrib[n].Enabled != 0);
          }
       case GL_MAP1_VERTEX_ATTRIB0_4_NV:
@@ -1391,6 +1395,11 @@ _mesa_IsEnabled( GLenum cap )
 	 CHECK_EXTENSION(ATI_fragment_shader);
 	 return ctx->ATIFragmentShader.Enabled;
 #endif /* FEATURE_ATI_fragment_shader */
+
+      case GL_TEXTURE_CUBE_MAP_SEAMLESS:
+	 CHECK_EXTENSION(ARB_seamless_cube_map);
+	 return ctx->Texture.CubeMapSeamless;
+
       default:
          _mesa_error(ctx, GL_INVALID_ENUM, "glIsEnabled(0x%x)", (int) cap);
 	 return GL_FALSE;

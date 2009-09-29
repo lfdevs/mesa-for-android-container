@@ -1,5 +1,7 @@
 #include "main/macros.h"
 #include "shader/prog_parameter.h"
+#include "shader/prog_print.h"
+#include "shader/prog_optimize.h"
 #include "brw_context.h"
 #include "brw_eu.h"
 #include "brw_wm.h"
@@ -8,6 +10,9 @@ enum _subroutine {
     SUB_NOISE1, SUB_NOISE2, SUB_NOISE3, SUB_NOISE4
 };
 
+static struct brw_reg get_dst_reg(struct brw_wm_compile *c,
+                                  const struct prog_instruction *inst,
+                                  GLuint component);
 
 /**
  * Determine if the given fragment program uses GLSL features such
@@ -20,8 +25,8 @@ GLboolean brw_wm_is_glsl(const struct gl_fragment_program *fp)
     for (i = 0; i < fp->Base.NumInstructions; i++) {
 	const struct prog_instruction *inst = &fp->Base.Instructions[i];
 	switch (inst->Opcode) {
+	    case OPCODE_ARL:
 	    case OPCODE_IF:
-	    case OPCODE_TRUNC:
 	    case OPCODE_ENDIF:
 	    case OPCODE_CAL:
 	    case OPCODE_BRK:
@@ -42,6 +47,83 @@ GLboolean brw_wm_is_glsl(const struct gl_fragment_program *fp)
 }
 
 
+
+static void
+reclaim_temps(struct brw_wm_compile *c);
+
+
+/** Mark GRF register as used. */
+static void
+prealloc_grf(struct brw_wm_compile *c, int r)
+{
+   c->used_grf[r] = GL_TRUE;
+}
+
+
+/** Mark given GRF register as not in use. */
+static void
+release_grf(struct brw_wm_compile *c, int r)
+{
+   /*assert(c->used_grf[r]);*/
+   c->used_grf[r] = GL_FALSE;
+   c->first_free_grf = MIN2(c->first_free_grf, r);
+}
+
+
+/** Return index of a free GRF, mark it as used. */
+static int
+alloc_grf(struct brw_wm_compile *c)
+{
+   GLuint r;
+   for (r = c->first_free_grf; r < BRW_WM_MAX_GRF; r++) {
+      if (!c->used_grf[r]) {
+         c->used_grf[r] = GL_TRUE;
+         c->first_free_grf = r + 1;  /* a guess */
+         return r;
+      }
+   }
+
+   /* no free temps, try to reclaim some */
+   reclaim_temps(c);
+   c->first_free_grf = 0;
+
+   /* try alloc again */
+   for (r = c->first_free_grf; r < BRW_WM_MAX_GRF; r++) {
+      if (!c->used_grf[r]) {
+         c->used_grf[r] = GL_TRUE;
+         c->first_free_grf = r + 1;  /* a guess */
+         return r;
+      }
+   }
+
+   for (r = 0; r < BRW_WM_MAX_GRF; r++) {
+      assert(c->used_grf[r]);
+   }
+
+   /* really, no free GRF regs found */
+   if (!c->out_of_regs) {
+      /* print warning once per compilation */
+      _mesa_warning(NULL, "i965: ran out of registers for fragment program");
+      c->out_of_regs = GL_TRUE;
+   }
+
+   return -1;
+}
+
+
+/** Return number of GRF registers used */
+static int
+num_grf_used(const struct brw_wm_compile *c)
+{
+   int r;
+   for (r = BRW_WM_MAX_GRF - 1; r >= 0; r--)
+      if (c->used_grf[r])
+         return r + 1;
+   return 0;
+}
+
+
+
 /**
  * Record the mapping of a Mesa register to a hardware register.
  */
@@ -52,27 +134,26 @@ static void set_reg(struct brw_wm_compile *c, int file, int index,
     c->wm_regs[file][index][component].inited = GL_TRUE;
 }
 
-/**
- * Examine instruction's write mask to find index of first component
- * enabled for writing.
- */
-static int get_scalar_dst_index(const struct prog_instruction *inst)
-{
-    int i;
-    for (i = 0; i < 4; i++)
-	if (inst->DstReg.WriteMask & (1<<i))
-	    break;
-    return i;
-}
-
 static struct brw_reg alloc_tmp(struct brw_wm_compile *c)
 {
     struct brw_reg reg;
-    if(c->tmp_index == c->tmp_max)
-	c->tmp_regs[ c->tmp_max++ ] = c->reg_index++;
-    
+
+    /* if we need to allocate another temp, grow the tmp_regs[] array */
+    if (c->tmp_index == c->tmp_max) {
+       int r = alloc_grf(c);
+       if (r < 0) {
+          /*printf("Out of temps in %s\n", __FUNCTION__);*/
+          r = 50; /* XXX random register! */
+       }
+       c->tmp_regs[ c->tmp_max++ ] = r;
+    }
+
+    /* form the GRF register */
     reg = brw_vec8_grf(c->tmp_regs[ c->tmp_index++ ], 0);
+    /*printf("alloc_temp %d\n", reg.nr);*/
+    assert(reg.nr < BRW_WM_MAX_GRF);
     return reg;
+
 }
 
 /**
@@ -130,35 +211,29 @@ get_reg(struct brw_wm_compile *c, int file, int index, int component,
 	    return brw_null_reg();
     }
 
+    assert(index < 256);
+    assert(component < 4);
+
     /* see if we've already allocated a HW register for this Mesa register */
     if (c->wm_regs[file][index][component].inited) {
-	/* yes, re-use */
-	reg = c->wm_regs[file][index][component].reg;
+       /* yes, re-use */
+       reg = c->wm_regs[file][index][component].reg;
     }
     else {
 	/* no, allocate new register */
-	reg = brw_vec8_grf(c->reg_index, 0);
+       int grf = alloc_grf(c);
+       /*printf("alloc grf %d for reg %d:%d.%d\n", grf, file, index, component);*/
+       if (grf < 0) {
+          /* totally out of temps */
+          grf = 51; /* XXX random register! */
+       }
+
+       reg = brw_vec8_grf(grf, 0);
+       /*printf("Alloc new grf %d for %d.%d\n", reg.nr, index, component);*/
+
+       set_reg(c, file, index, component, reg);
     }
 
-    /* if this is a new register allocation, record it in the table */
-    if (!c->wm_regs[file][index][component].inited) {
-	set_reg(c, file, index, component, reg);
-	c->reg_index++;
-    }
-
-    if (c->reg_index >= BRW_WM_MAX_GRF - 12) {
-	/* ran out of temporary registers! */
-#if 1
-        /* This is a big hack for now.
-         * Return bad register index, just don't hang the GPU.
-         */
-        _mesa_fprintf(stderr, "out of regs %d\n", c->reg_index);
-        c->reg_index = BRW_WM_MAX_GRF - 13;
-#else
-	return brw_null_reg();
-#endif
-    }
- 
     if (neg & (1 << component)) {
 	reg = negate(reg);
     }
@@ -166,6 +241,46 @@ get_reg(struct brw_wm_compile *c, int file, int index, int component,
 	reg = brw_abs(reg);
     return reg;
 }
+
+
+
+/**
+ * This is called if we run out of GRF registers.  Examine the live intervals
+ * of temp regs in the program and free those which won't be used again.
+ */
+static void
+reclaim_temps(struct brw_wm_compile *c)
+{
+   GLint intBegin[MAX_PROGRAM_TEMPS];
+   GLint intEnd[MAX_PROGRAM_TEMPS];
+   int index;
+
+   /*printf("Reclaim temps:\n");*/
+
+   _mesa_find_temp_intervals(c->prog_instructions, c->nr_fp_insns,
+                             intBegin, intEnd);
+
+   for (index = 0; index < MAX_PROGRAM_TEMPS; index++) {
+      if (intEnd[index] != -1 && intEnd[index] < c->cur_inst) {
+         /* program temp[i] can be freed */
+         int component;
+         /*printf("  temp[%d] is dead\n", index);*/
+         for (component = 0; component < 4; component++) {
+            if (c->wm_regs[PROGRAM_TEMPORARY][index][component].inited) {
+               int r = c->wm_regs[PROGRAM_TEMPORARY][index][component].reg.nr;
+               release_grf(c, r);
+               /*
+               printf("  Reclaim temp %d, reg %d at inst %d\n",
+                      index, r, c->cur_inst);
+               */
+               c->wm_regs[PROGRAM_TEMPORARY][index][component].inited = GL_FALSE;
+            }
+         }
+      }
+   }
+}
+
+
 
 
 /**
@@ -179,6 +294,10 @@ static void prealloc_reg(struct brw_wm_compile *c)
     struct brw_reg reg;
     int urb_read_length = 0;
     GLuint inputs = FRAG_BIT_WPOS | c->fp_interp_emitted | c->fp_deriv_emitted;
+    GLuint reg_index = 0;
+
+    memset(c->used_grf, GL_FALSE, sizeof(c->used_grf));
+    c->first_free_grf = 0;
 
     for (i = 0; i < 4; i++) {
         if (i < c->key.nr_depth_regs) 
@@ -187,14 +306,20 @@ static void prealloc_reg(struct brw_wm_compile *c)
             reg = brw_vec8_grf(0, 0);
 	set_reg(c, PROGRAM_PAYLOAD, PAYLOAD_DEPTH, i, reg);
     }
-    c->reg_index += 2 * c->key.nr_depth_regs;
+    reg_index += 2 * c->key.nr_depth_regs;
 
     /* constants */
     {
-        const int nr_params = c->fp->program.Base.Parameters->NumParameters;
+        const GLuint nr_params = c->fp->program.Base.Parameters->NumParameters;
+        const GLuint nr_temps = c->fp->program.Base.NumTemporaries;
 
         /* use a real constant buffer, or just use a section of the GRF? */
-        c->fp->use_const_buffer = GL_FALSE; /* (nr_params > 8);*/
+        /* XXX this heuristic may need adjustment... */
+        if ((nr_params + nr_temps) * 4 + reg_index > 80)
+           c->fp->use_const_buffer = GL_TRUE;
+        else
+           c->fp->use_const_buffer = GL_FALSE;
+        /*printf("WM use_const_buffer = %d\n", c->fp->use_const_buffer);*/
 
         if (c->fp->use_const_buffer) {
            /* We'll use a real constant buffer and fetch constants from
@@ -216,7 +341,7 @@ static void prealloc_reg(struct brw_wm_compile *c)
            for (i = 0; i < nr_params; i++) {
               /* loop over XYZW channels */
               for (j = 0; j < 4; j++, index++) {
-                 reg = brw_vec1_grf(c->reg_index + index / 8, index % 8);
+                 reg = brw_vec1_grf(reg_index + index / 8, index % 8);
                  /* Save pointer to parameter/constant value.
                   * Constants will be copied in prepare_constant_buffer()
                   */
@@ -226,7 +351,7 @@ static void prealloc_reg(struct brw_wm_compile *c)
            }
            /* number of constant regs used (each reg is float[8]) */
            c->nr_creg = 2 * ((4 * nr_params + 15) / 16);
-           c->reg_index += c->nr_creg;
+           reg_index += c->nr_creg;
         }
     }
 
@@ -242,23 +367,52 @@ static void prealloc_reg(struct brw_wm_compile *c)
 	  fp_input = -1;
 
        if (fp_input >= 0 && inputs & (1 << fp_input)) {
-	  urb_read_length = c->reg_index;
-	  reg = brw_vec8_grf(c->reg_index, 0);
+	  urb_read_length = reg_index;
+	  reg = brw_vec8_grf(reg_index, 0);
 	  for (j = 0; j < 4; j++)
 	     set_reg(c, PROGRAM_PAYLOAD, fp_input, j, reg);
        }
        if (c->key.vp_outputs_written & (1 << i)) {
-	  c->reg_index += 2;
+	  reg_index += 2;
        }
     }
 
     c->prog_data.first_curbe_grf = c->key.nr_depth_regs * 2;
     c->prog_data.urb_read_length = urb_read_length;
     c->prog_data.curb_read_length = c->nr_creg;
-    c->emit_mask_reg = brw_uw1_reg(BRW_GENERAL_REGISTER_FILE, c->reg_index, 0);
-    c->reg_index++;
-    c->stack =  brw_uw16_reg(BRW_GENERAL_REGISTER_FILE, c->reg_index, 0);
-    c->reg_index += 2;
+    c->emit_mask_reg = brw_uw1_reg(BRW_GENERAL_REGISTER_FILE, reg_index, 0);
+    reg_index++;
+    c->stack =  brw_uw16_reg(BRW_GENERAL_REGISTER_FILE, reg_index, 0);
+    reg_index += 2;
+
+    /* mark GRF regs [0..reg_index-1] as in-use */
+    for (i = 0; i < reg_index; i++)
+       prealloc_grf(c, i);
+
+    /* Don't use GRF 126, 127.  Using them seems to lead to GPU lock-ups */
+    prealloc_grf(c, 126);
+    prealloc_grf(c, 127);
+
+    for (i = 0; i < c->nr_fp_insns; i++) {
+	const struct prog_instruction *inst = &c->prog_instructions[i];
+	struct brw_reg dst[4];
+
+	switch (inst->Opcode) {
+	case OPCODE_TEX:
+	case OPCODE_TXB:
+	    /* Allocate the channels of texture results contiguously,
+	     * since they are written out that way by the sampler unit.
+	     */
+	    for (j = 0; j < 4; j++) {
+		dst[j] = get_dst_reg(c, inst, j);
+		if (j != 0)
+		    assert(dst[j].nr == dst[j - 1].nr + 1);
+	    }
+	    break;
+	default:
+	    break;
+	}
+    }
 
     /* An instruction may reference up to three constants.
      * They'll be found in these registers.
@@ -267,12 +421,12 @@ static void prealloc_reg(struct brw_wm_compile *c)
     if (c->fp->use_const_buffer) {
        for (i = 0; i < 3; i++) {
           c->current_const[i].index = -1;
-          c->current_const[i].reg = alloc_tmp(c);
+          c->current_const[i].reg = brw_vec8_grf(alloc_grf(c), 0);
        }
     }
 #if 0
     printf("USE CONST BUFFER? %d\n", c->fp->use_const_buffer);
-    printf("AFTER PRE_ALLOC, reg_index = %d\n", c->reg_index);
+    printf("AFTER PRE_ALLOC, reg_index = %d\n", reg_index);
 #endif
 }
 
@@ -375,6 +529,14 @@ static struct brw_reg get_src_reg(struct brw_wm_compile *c,
     const struct prog_src_register *src = &inst->SrcReg[srcRegIndex];
     const GLuint nr = 1;
     const GLuint component = GET_SWZ(src->Swizzle, channel);
+
+    /* Extended swizzle terms */
+    if (component == SWIZZLE_ZERO) {
+       return brw_imm_f(0.0F);
+    }
+    else if (component == SWIZZLE_ONE) {
+       return brw_imm_f(1.0F);
+    }
 
     if (c->fp->use_const_buffer &&
         (src->File == PROGRAM_STATE_VAR ||
@@ -487,23 +649,6 @@ static void invoke_subroutine( struct brw_wm_compile *c,
 	
 	release_tmps( c, mark );
     }
-}
-
-static void emit_abs( struct brw_wm_compile *c,
-                      const struct prog_instruction *inst)
-{
-    int i;
-    struct brw_compile *p = &c->func;
-    brw_set_saturate(p, inst->SaturateMode != SATURATE_OFF);
-    for (i = 0; i < 4; i++) {
-	if (inst->DstReg.WriteMask & (1<<i)) {
-	    struct brw_reg src, dst;
-	    dst = get_dst_reg(c, inst, i);
-	    src = get_src_reg(c, inst, 0, i);
-	    brw_MOV(p, dst, brw_abs(src));
-	}
-    }
-    brw_set_saturate(p, 0);
 }
 
 static void emit_trunc( struct brw_wm_compile *c,
@@ -673,27 +818,26 @@ static void emit_fb_write(struct brw_wm_compile *c,
     }
 
     if (c->key.dest_depth_reg) {
-        GLuint comp = c->key.dest_depth_reg / 2;
-        GLuint off = c->key.dest_depth_reg % 2;
+        const GLuint comp = c->key.dest_depth_reg / 2;
+        const GLuint off = c->key.dest_depth_reg % 2;
 
-        assert(comp == 1);
-        assert(off == 0);
-#if 0
-        /* XXX do we need this code?   comp always 1, off always 0, it seems */
         if (off != 0) {
+            /* XXX this code needs review/testing */
+            struct brw_reg arg1_0 = get_src_reg(c, inst, 1, comp);
+            struct brw_reg arg1_1 = get_src_reg(c, inst, 1, comp+1);
+
             brw_push_insn_state(p);
             brw_set_compression_control(p, BRW_COMPRESSION_NONE);
 
-            brw_MOV(p, brw_message_reg(nr), offset(arg1[comp],1));
+            brw_MOV(p, brw_message_reg(nr), offset(arg1_0, 1));
             /* 2nd half? */
-            brw_MOV(p, brw_message_reg(nr+1), arg1[comp+1]);
+            brw_MOV(p, brw_message_reg(nr+1), arg1_1);
             brw_pop_insn_state(p);
         }
         else
-#endif
         {
-           struct brw_reg src =  get_src_reg(c, inst, 1, 1);
-           brw_MOV(p, brw_message_reg(nr), src);
+            struct brw_reg src =  get_src_reg(c, inst, 1, 1);
+            brw_MOV(p, brw_message_reg(nr), src);
         }
         nr += 2;
    }
@@ -882,12 +1026,20 @@ static void emit_dp3(struct brw_wm_compile *c,
     struct brw_reg src0[3], src1[3], dst;
     int i;
     struct brw_compile *p = &c->func;
+    GLuint mask = inst->DstReg.WriteMask;
+    int dst_chan = _mesa_ffs(mask & WRITEMASK_XYZW) - 1;
+
+    if (!(mask & WRITEMASK_XYZW))
+	return;
+
+    assert(is_power_of_two(mask & WRITEMASK_XYZW));
+
     for (i = 0; i < 3; i++) {
 	src0[i] = get_src_reg(c, inst, 0, i);
 	src1[i] = get_src_reg_imm(c, inst, 1, i);
     }
 
-    dst = get_dst_reg(c, inst, get_scalar_dst_index(inst));
+    dst = get_dst_reg(c, inst, dst_chan);
     brw_MUL(p, brw_null_reg(), src0[0], src1[0]);
     brw_MAC(p, brw_null_reg(), src0[1], src1[1]);
     brw_set_saturate(p, (inst->SaturateMode != SATURATE_OFF) ? 1 : 0);
@@ -901,11 +1053,19 @@ static void emit_dp4(struct brw_wm_compile *c,
     struct brw_reg src0[4], src1[4], dst;
     int i;
     struct brw_compile *p = &c->func;
+    GLuint mask = inst->DstReg.WriteMask;
+    int dst_chan = _mesa_ffs(mask & WRITEMASK_XYZW) - 1;
+
+    if (!(mask & WRITEMASK_XYZW))
+	return;
+
+    assert(is_power_of_two(mask & WRITEMASK_XYZW));
+
     for (i = 0; i < 4; i++) {
 	src0[i] = get_src_reg(c, inst, 0, i);
 	src1[i] = get_src_reg_imm(c, inst, 1, i);
     }
-    dst = get_dst_reg(c, inst, get_scalar_dst_index(inst));
+    dst = get_dst_reg(c, inst, dst_chan);
     brw_MUL(p, brw_null_reg(), src0[0], src1[0]);
     brw_MAC(p, brw_null_reg(), src0[1], src1[1]);
     brw_MAC(p, brw_null_reg(), src0[2], src1[2]);
@@ -920,11 +1080,19 @@ static void emit_dph(struct brw_wm_compile *c,
     struct brw_reg src0[4], src1[4], dst;
     int i;
     struct brw_compile *p = &c->func;
+    GLuint mask = inst->DstReg.WriteMask;
+    int dst_chan = _mesa_ffs(mask & WRITEMASK_XYZW) - 1;
+
+    if (!(mask & WRITEMASK_XYZW))
+	return;
+
+    assert(is_power_of_two(mask & WRITEMASK_XYZW));
+
     for (i = 0; i < 4; i++) {
 	src0[i] = get_src_reg(c, inst, 0, i);
 	src1[i] = get_src_reg_imm(c, inst, 1, i);
     }
-    dst = get_dst_reg(c, inst, get_scalar_dst_index(inst));
+    dst = get_dst_reg(c, inst, dst_chan);
     brw_MUL(p, brw_null_reg(), src0[0], src1[0]);
     brw_MAC(p, brw_null_reg(), src0[1], src1[1]);
     brw_MAC(p, dst, src0[2], src1[2]);
@@ -942,37 +1110,28 @@ static void emit_math1(struct brw_wm_compile *c,
                        const struct prog_instruction *inst, GLuint func)
 {
     struct brw_compile *p = &c->func;
-    struct brw_reg src0, dst, tmp;
-    const int mark = mark_tmps( c );
-    int i;
+    struct brw_reg src0, dst;
+    GLuint mask = inst->DstReg.WriteMask;
+    int dst_chan = _mesa_ffs(mask & WRITEMASK_XYZW) - 1;
 
-    tmp = alloc_tmp(c);
+    if (!(mask & WRITEMASK_XYZW))
+	return;
+
+    assert(is_power_of_two(mask & WRITEMASK_XYZW));
 
     /* Get first component of source register */
+    dst = get_dst_reg(c, inst, dst_chan);
     src0 = get_src_reg(c, inst, 0, 0);
 
-    /* tmp = func(src0) */
     brw_MOV(p, brw_message_reg(2), src0);
     brw_math(p,
-             tmp,
+             dst,
              func,
              (inst->SaturateMode != SATURATE_OFF) ? BRW_MATH_SATURATE_SATURATE : BRW_MATH_SATURATE_NONE,
              2,
              brw_null_reg(),
              BRW_MATH_DATA_VECTOR,
              BRW_MATH_PRECISION_FULL);
-
-    /*tmp.dw1.bits.swizzle = SWIZZLE_XXXX;*/
-
-    /* replicate tmp value across enabled dest channels */
-    for (i = 0; i < 4; i++) {
-       if (inst->DstReg.WriteMask & (1 << i)) {
-          dst = get_dst_reg(c, inst, i);
-          brw_MOV(p, dst, tmp);
-       }
-    }
-
-    release_tmps(c, mark);
 }
 
 static void emit_rcp(struct brw_wm_compile *c,
@@ -1043,24 +1202,6 @@ static void emit_arl(struct brw_wm_compile *c,
     brw_set_saturate(p, 0);
 }
 
-static void emit_sub(struct brw_wm_compile *c,
-                     const struct prog_instruction *inst)
-{
-    struct brw_compile *p = &c->func;
-    struct brw_reg src0, src1, dst;
-    GLuint mask = inst->DstReg.WriteMask;
-    int i;
-    brw_set_saturate(p, (inst->SaturateMode != SATURATE_OFF) ? 1 : 0);
-    for (i = 0 ; i < 4; i++) {
-	if (mask & (1<<i)) {
-	    dst = get_dst_reg(c, inst, i);
-	    src0 = get_src_reg(c, inst, 0, i);
-	    src1 = get_src_reg_imm(c, inst, 1, i);
-	    brw_ADD(p, dst, src0, negate(src1));
-	}
-    }
-    brw_set_saturate(p, 0);
-}
 
 static void emit_mul(struct brw_wm_compile *c,
                      const struct prog_instruction *inst)
@@ -1172,7 +1313,15 @@ static void emit_pow(struct brw_wm_compile *c,
 {
     struct brw_compile *p = &c->func;
     struct brw_reg dst, src0, src1;
-    dst = get_dst_reg(c, inst, get_scalar_dst_index(inst));
+    GLuint mask = inst->DstReg.WriteMask;
+    int dst_chan = _mesa_ffs(mask & WRITEMASK_XYZW) - 1;
+
+    if (!(mask & WRITEMASK_XYZW))
+	return;
+
+    assert(is_power_of_two(mask & WRITEMASK_XYZW));
+
+    dst = get_dst_reg(c, inst, dst_chan);
     src0 = get_src_reg_imm(c, inst, 0, 0);
     src1 = get_src_reg_imm(c, inst, 1, 0);
 
@@ -2474,8 +2623,12 @@ static void emit_txb(struct brw_wm_compile *c,
 {
     struct brw_compile *p = &c->func;
     struct brw_reg dst[4], src[4], payload_reg;
-    GLuint unit = c->fp->program.Base.SamplerUnits[inst->TexSrcUnit];
+    /* Note: TexSrcUnit was already looked up through SamplerTextures[] */
+    const GLuint unit = inst->TexSrcUnit;
     GLuint i;
+    GLuint msg_type;
+
+    assert(unit < BRW_MAX_TEX_UNIT);
 
     payload_reg = get_reg(c, PROGRAM_PAYLOAD, PAYLOAD_DEPTH, 0, 1, 0, 0);
 
@@ -2496,14 +2649,26 @@ static void emit_txb(struct brw_wm_compile *c,
 	    brw_MOV(p, brw_message_reg(3), src[1]);
 	    brw_MOV(p, brw_message_reg(4), brw_imm_f(0));
 	    break;
-	default:
+	case TEXTURE_3D_INDEX:
+	case TEXTURE_CUBE_INDEX:
 	    brw_MOV(p, brw_message_reg(2), src[0]);
 	    brw_MOV(p, brw_message_reg(3), src[1]);
 	    brw_MOV(p, brw_message_reg(4), src[2]);
 	    break;
+	default:
+            /* invalid target */
+            abort();
     }
     brw_MOV(p, brw_message_reg(5), src[3]);          /* bias */
     brw_MOV(p, brw_message_reg(6), brw_imm_f(0));    /* ref (unused?) */
+
+    if (BRW_IS_IGDNG(p->brw)) {
+        msg_type = BRW_SAMPLER_MESSAGE_SIMD8_SAMPLE_BIAS_IGDNG;
+    } else {
+        /* Does it work well on SIMD8? */
+        msg_type = BRW_SAMPLER_MESSAGE_SIMD16_SAMPLE_BIAS;
+    }
+
     brw_SAMPLE(p,
                retype(vec8(dst[0]), BRW_REGISTER_TYPE_UW),  /* dest */
                1,                                           /* msg_reg_nr */
@@ -2511,10 +2676,12 @@ static void emit_txb(struct brw_wm_compile *c,
                SURF_INDEX_TEXTURE(unit),
                unit,                                        /* sampler */
                inst->DstReg.WriteMask,                      /* writemask */
-               BRW_SAMPLER_MESSAGE_SIMD16_SAMPLE_BIAS,      /* msg_type */
+               msg_type,                                    /* msg_type */
                4,                                           /* response_length */
                4,                                           /* msg_length */
-               0);                                          /* eot */
+               0,                                           /* eot */
+               1,
+               BRW_SAMPLER_SIMD_MODE_SIMD8);	
 }
 
 
@@ -2523,11 +2690,15 @@ static void emit_tex(struct brw_wm_compile *c,
 {
     struct brw_compile *p = &c->func;
     struct brw_reg dst[4], src[4], payload_reg;
-    GLuint unit = c->fp->program.Base.SamplerUnits[inst->TexSrcUnit];
+    /* Note: TexSrcUnit was already looked up through SamplerTextures[] */
+    const GLuint unit = inst->TexSrcUnit;
     GLuint msg_len;
     GLuint i, nr;
     GLuint emit;
     GLboolean shadow = (c->key.shadowtex_mask & (1<<unit)) ? 1 : 0;
+    GLuint msg_type;
+
+    assert(unit < BRW_MAX_TEX_UNIT);
 
     payload_reg = get_reg(c, PROGRAM_PAYLOAD, PAYLOAD_DEPTH, 0, 1, 0, 0);
 
@@ -2546,10 +2717,14 @@ static void emit_tex(struct brw_wm_compile *c,
 	    emit = WRITEMASK_XY;
 	    nr = 2;
 	    break;
-	default:
+	case TEXTURE_3D_INDEX:
+	case TEXTURE_CUBE_INDEX:
 	    emit = WRITEMASK_XYZ;
 	    nr = 3;
 	    break;
+	default:
+           /* invalid target */
+           abort();
     }
     msg_len = 1;
 
@@ -2568,6 +2743,16 @@ static void emit_tex(struct brw_wm_compile *c,
        brw_MOV(p, brw_message_reg(6), src[2]);        /* ref value / R coord */
     }
 
+    if (BRW_IS_IGDNG(p->brw)) {
+        if (shadow)
+            msg_type = BRW_SAMPLER_MESSAGE_SIMD8_SAMPLE_COMPARE_IGDNG;
+        else
+            msg_type = BRW_SAMPLER_MESSAGE_SIMD8_SAMPLE_IGDNG;
+    } else {
+        /* Does it work for shadow on SIMD8 ? */
+        msg_type = BRW_SAMPLER_MESSAGE_SIMD8_SAMPLE;
+    }
+    
     brw_SAMPLE(p,
                retype(vec8(dst[0]), BRW_REGISTER_TYPE_UW), /* dest */
                1,                                          /* msg_reg_nr */
@@ -2575,10 +2760,12 @@ static void emit_tex(struct brw_wm_compile *c,
                SURF_INDEX_TEXTURE(unit),
                unit,                                       /* sampler */
                inst->DstReg.WriteMask,                     /* writemask */
-               BRW_SAMPLER_MESSAGE_SIMD8_SAMPLE,           /* msg_type */
+               msg_type,                                   /* msg_type */
                4,                                          /* response_length */
                shadow ? 6 : 4,                             /* msg_length */
-               0);                                         /* eot */
+               0,                                          /* eot */
+               1,
+               BRW_SAMPLER_SIMD_MODE_SIMD8);	
 
     if (shadow)
 	brw_MOV(p, dst[3], brw_imm_f(1.0));
@@ -2595,21 +2782,23 @@ static void post_wm_emit( struct brw_wm_compile *c )
 
 static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 {
-#define MAX_IFSN 32
+#define MAX_IF_DEPTH 32
 #define MAX_LOOP_DEPTH 32
-    struct brw_instruction *if_inst[MAX_IFSN], *loop_inst[MAX_LOOP_DEPTH];
-    struct brw_instruction *inst0, *inst1;
-    int i, if_insn = 0, loop_insn = 0;
+    struct brw_instruction *if_inst[MAX_IF_DEPTH], *loop_inst[MAX_LOOP_DEPTH];
+    GLuint i, if_depth = 0, loop_depth = 0;
     struct brw_compile *p = &c->func;
     struct brw_indirect stack_index = brw_indirect(0, 0);
 
-    c->reg_index = 0;
+    c->out_of_regs = GL_FALSE;
+
     prealloc_reg(c);
     brw_set_compression_control(p, BRW_COMPRESSION_NONE);
     brw_MOV(p, get_addr_reg(stack_index), brw_address(c->stack));
 
     for (i = 0; i < c->nr_fp_insns; i++) {
         const struct prog_instruction *inst = &c->prog_instructions[i];
+
+        c->cur_inst = i;
 
 #if 0
         _mesa_printf("Inst %d: ", i);
@@ -2653,17 +2842,11 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 	    case WM_FRONTFACING:
 		emit_frontfacing(c, inst);
 		break;
-	    case OPCODE_ABS:
-		emit_abs(c, inst);
-		break;
 	    case OPCODE_ADD:
 		emit_add(c, inst);
 		break;
 	    case OPCODE_ARL:
 		emit_arl(c, inst);
-		break;
-	    case OPCODE_SUB:
-		emit_sub(c, inst);
 		break;
 	    case OPCODE_FRC:
 		emit_frc(c, inst);
@@ -2770,15 +2953,15 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 		emit_kil(c);
 		break;
 	    case OPCODE_IF:
-		assert(if_insn < MAX_IFSN);
-		if_inst[if_insn++] = brw_IF(p, BRW_EXECUTE_8);
+		assert(if_depth < MAX_IF_DEPTH);
+		if_inst[if_depth++] = brw_IF(p, BRW_EXECUTE_8);
 		break;
 	    case OPCODE_ELSE:
-		if_inst[if_insn-1]  = brw_ELSE(p, if_inst[if_insn-1]);
+		if_inst[if_depth-1]  = brw_ELSE(p, if_inst[if_depth-1]);
 		break;
 	    case OPCODE_ENDIF:
-		assert(if_insn > 0);
-		brw_ENDIF(p, if_inst[--if_insn]);
+		assert(if_depth > 0);
+		brw_ENDIF(p, if_inst[--if_depth]);
 		break;
 	    case OPCODE_BGNSUB:
 		brw_save_label(p, inst->Comment, p->nr_insn);
@@ -2812,7 +2995,7 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 		break;
 	    case OPCODE_BGNLOOP:
                 /* XXX may need to invalidate the current_constant regs */
-		loop_inst[loop_insn++] = brw_DO(p, BRW_EXECUTE_8);
+		loop_inst[loop_depth++] = brw_DO(p, BRW_EXECUTE_8);
 		break;
 	    case OPCODE_BRK:
 		brw_BREAK(p);
@@ -2823,25 +3006,34 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 		brw_set_predicate_control(p, BRW_PREDICATE_NONE);
 		break;
 	    case OPCODE_ENDLOOP: 
-		loop_insn--;
-		inst0 = inst1 = brw_WHILE(p, loop_inst[loop_insn]);
-		/* patch all the BREAK instructions from
-		   last BEGINLOOP */
-		while (inst0 > loop_inst[loop_insn]) {
-		    inst0--;
-		    if (inst0->header.opcode == BRW_OPCODE_BREAK) {
-			inst0->bits3.if_else.jump_count = inst1 - inst0 + 1;
+               {
+                  struct brw_instruction *inst0, *inst1;
+                  GLuint br = 1;
+
+                  if (BRW_IS_IGDNG(brw))
+                     br = 2;
+ 
+                  loop_depth--;
+                  inst0 = inst1 = brw_WHILE(p, loop_inst[loop_depth]);
+                  /* patch all the BREAK/CONT instructions from last BGNLOOP */
+                  while (inst0 > loop_inst[loop_depth]) {
+                     inst0--;
+                     if (inst0->header.opcode == BRW_OPCODE_BREAK) {
+			inst0->bits3.if_else.jump_count = br * (inst1 - inst0 + 1);
 			inst0->bits3.if_else.pop_count = 0;
-		    } else if (inst0->header.opcode == BRW_OPCODE_CONTINUE) {
-                        inst0->bits3.if_else.jump_count = inst1 - inst0;
+                     }
+                     else if (inst0->header.opcode == BRW_OPCODE_CONTINUE) {
+                        inst0->bits3.if_else.jump_count = br * (inst1 - inst0);
                         inst0->bits3.if_else.pop_count = 0;
-                    }
-		}
-		break;
+                     }
+                  }
+               }
+               break;
 	    default:
 		_mesa_printf("unsupported IR in fragment shader %d\n",
 			inst->Opcode);
 	}
+
 	if (inst->CondUpdate)
 	    brw_set_predicate_control(p, BRW_PREDICATE_NORMAL);
 	else
@@ -2849,12 +3041,13 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
     }
     post_wm_emit(c);
 
-    if (c->reg_index >= BRW_WM_MAX_GRF) {
-        _mesa_problem(NULL, "Ran out of registers in brw_wm_emit_glsl()");
-        /* XXX we need to do some proper error recovery here */
+    if (INTEL_DEBUG & DEBUG_WM) {
+      _mesa_printf("wm-native:\n");
+      for (i = 0; i < p->nr_insn; i++)
+	 brw_disasm(stderr, &p->store[i]);
+      _mesa_printf("\n");
     }
 }
-
 
 /**
  * Do GPU code generation for shaders that use GLSL features such as
@@ -2876,6 +3069,6 @@ void brw_wm_glsl_emit(struct brw_context *brw, struct brw_wm_compile *c)
         brw_wm_print_program(c, "brw_wm_glsl_emit done");
     }
 
-    c->prog_data.total_grf = c->reg_index;
+    c->prog_data.total_grf = num_grf_used(c);
     c->prog_data.total_scratch = 0;
 }

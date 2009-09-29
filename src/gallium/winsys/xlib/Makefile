@@ -34,6 +34,7 @@ XLIB_WINSYS_SOURCES = \
 	xlib_brw_aub.c \
 	xlib_brw_context.c \
 	xlib_brw_screen.c \
+	xlib_llvmpipe.c \
 	xlib_softpipe.c \
 	xlib_trace.c 
 
@@ -90,7 +91,7 @@ install: default
 	$(INSTALL) -d $(INSTALL_DIR)/$(LIB_DIR)
 	$(INSTALL) -m 644 $(TOP)/include/GL/*.h $(INSTALL_DIR)/include/GL
 	@if [ -e $(TOP)/$(LIB_DIR)/$(GL_LIB_NAME) ]; then \
-		$(INSTALL) $(TOP)/$(LIB_DIR)/libGL* $(INSTALL_DIR)/$(LIB_DIR); \
+		$(MINSTALL) $(TOP)/$(LIB_DIR)/libGL* $(INSTALL_DIR)/$(LIB_DIR); \
 	fi
 
 

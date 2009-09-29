@@ -9,19 +9,16 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <GL/glew.h>
 #include <GL/glut.h>
 #include "shaderutil.h"
 
+/** time to compile previous shader */
+static GLdouble CompileTime = 0.0;
 
-static void
-Init(void)
-{
-   static GLboolean firstCall = GL_TRUE;
-   if (firstCall) {
-      firstCall = GL_FALSE;
-   }
-}
+/** time to linke previous program */
+static GLdouble LinkTime = 0.0;
 
 
 GLboolean
@@ -46,12 +43,17 @@ CompileShaderText(GLenum shaderType, const char *text)
 {
    GLuint shader;
    GLint stat;
-
-   Init();
+   GLdouble t0, t1;
 
    shader = glCreateShader(shaderType);
    glShaderSource(shader, 1, (const GLchar **) &text, NULL);
+
+   t0 = glutGet(GLUT_ELAPSED_TIME) * 0.001;
    glCompileShader(shader);
+   t1 = glutGet(GLUT_ELAPSED_TIME) * 0.001;
+
+   CompileTime = t1 - t0;
+
    glGetShaderiv(shader, GL_COMPILE_STATUS, &stat);
    if (!stat) {
       GLchar log[1000];
@@ -78,9 +80,6 @@ CompileShaderFile(GLenum shaderType, const char *filename)
    char *buffer = (char*) malloc(max);
    GLuint shader;
    FILE *f;
-
-   Init();
-
 
    f = fopen(filename, "r");
    if (!f) {
@@ -109,6 +108,7 @@ GLuint
 LinkShaders(GLuint vertShader, GLuint fragShader)
 {
    GLuint program = glCreateProgram();
+   GLdouble t0, t1;
 
    assert(vertShader || fragShader);
 
@@ -116,7 +116,12 @@ LinkShaders(GLuint vertShader, GLuint fragShader)
       glAttachShader(program, fragShader);
    if (vertShader)
       glAttachShader(program, vertShader);
+
+   t0 = glutGet(GLUT_ELAPSED_TIME) * 0.001;
    glLinkProgram(program);
+   t1 = glutGet(GLUT_ELAPSED_TIME) * 0.001;
+
+   LinkTime = t1 - t0;
 
    /* check link */
    {
@@ -135,8 +140,41 @@ LinkShaders(GLuint vertShader, GLuint fragShader)
 }
 
 
+GLboolean
+ValidateShaderProgram(GLuint program)
+{
+   GLint stat;
+   glValidateProgramARB(program);
+   glGetProgramiv(program, GL_VALIDATE_STATUS, &stat);
+
+   if (!stat) {
+      GLchar log[1000];
+      GLsizei len;
+      glGetProgramInfoLog(program, 1000, &len, log);
+      fprintf(stderr, "Program validation error:\n%s\n", log);
+      return 0;
+   }
+
+   return (GLboolean) stat;
+}
+
+
+GLdouble
+GetShaderCompileTime(void)
+{
+   return CompileTime;
+}
+
+
+GLdouble
+GetShaderLinkTime(void)
+{
+   return LinkTime;
+}
+
+
 void
-InitUniforms(GLuint program, struct uniform_info uniforms[])
+SetUniformValues(GLuint program, struct uniform_info uniforms[])
 {
    GLuint i;
 
@@ -144,28 +182,134 @@ InitUniforms(GLuint program, struct uniform_info uniforms[])
       uniforms[i].location
          = glGetUniformLocation(program, uniforms[i].name);
 
-      printf("Uniform %s location: %d\n", uniforms[i].name,
-             uniforms[i].location);
-
-      switch (uniforms[i].size) {
-      case 1:
-         if (uniforms[i].type == GL_INT)
-            glUniform1i(uniforms[i].location,
-                             (GLint) uniforms[i].value[0]);
-         else
-            glUniform1fv(uniforms[i].location, 1, uniforms[i].value);
+      switch (uniforms[i].type) {
+      case GL_INT:
+      case GL_SAMPLER_1D:
+      case GL_SAMPLER_2D:
+      case GL_SAMPLER_3D:
+      case GL_SAMPLER_CUBE:
+      case GL_SAMPLER_2D_RECT_ARB:
+         assert(uniforms[i].value[0] >= 0.0F);
+         glUniform1i(uniforms[i].location,
+                     (GLint) uniforms[i].value[0]);
          break;
-      case 2:
+      case GL_FLOAT:
+         glUniform1fv(uniforms[i].location, 1, uniforms[i].value);
+         break;
+      case GL_FLOAT_VEC2:
          glUniform2fv(uniforms[i].location, 1, uniforms[i].value);
          break;
-      case 3:
+      case GL_FLOAT_VEC3:
          glUniform3fv(uniforms[i].location, 1, uniforms[i].value);
          break;
-      case 4:
+      case GL_FLOAT_VEC4:
          glUniform4fv(uniforms[i].location, 1, uniforms[i].value);
          break;
       default:
-         abort();
+         if (strncmp(uniforms[i].name, "gl_", 3) == 0) {
+            /* built-in uniform: ignore */
+         }
+         else {
+            fprintf(stderr,
+                    "Unexpected uniform data type in SetUniformValues\n");
+            abort();
+         }
       }
+   }
+}
+
+
+/** Get list of uniforms used in the program */
+GLuint
+GetUniforms(GLuint program, struct uniform_info uniforms[])
+{
+   GLint n, max, i;
+
+   glGetProgramiv(program, GL_ACTIVE_UNIFORMS, &n);
+   glGetProgramiv(program, GL_ACTIVE_UNIFORM_MAX_LENGTH, &max);
+
+   for (i = 0; i < n; i++) {
+      GLint size, len;
+      GLenum type;
+      char name[100];
+
+      glGetActiveUniform(program, i, 100, &len, &size, &type, name);
+
+      uniforms[i].name = strdup(name);
+      uniforms[i].size = size;
+      uniforms[i].type = type;
+      uniforms[i].location = glGetUniformLocation(program, name);
+   }
+
+   uniforms[i].name = NULL; /* end of list */
+
+   return n;
+}
+
+
+void
+PrintUniforms(const struct uniform_info uniforms[])
+{
+   GLint i;
+
+   printf("Uniforms:\n");
+
+   for (i = 0; uniforms[i].name; i++) {
+      printf("  %d: %s size=%d type=0x%x loc=%d value=%g, %g, %g, %g\n",
+             i,
+             uniforms[i].name,
+             uniforms[i].size,
+             uniforms[i].type,
+             uniforms[i].location,
+             uniforms[i].value[0],
+             uniforms[i].value[1],
+             uniforms[i].value[2],
+             uniforms[i].value[3]);
+   }
+}
+
+
+/** Get list of attribs used in the program */
+GLuint
+GetAttribs(GLuint program, struct attrib_info attribs[])
+{
+   GLint n, max, i;
+
+   glGetProgramiv(program, GL_ACTIVE_ATTRIBUTES, &n);
+   glGetProgramiv(program, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH, &max);
+
+   for (i = 0; i < n; i++) {
+      GLint size, len;
+      GLenum type;
+      char name[100];
+
+      glGetActiveAttrib(program, i, 100, &len, &size, &type, name);
+
+      attribs[i].name = strdup(name);
+      attribs[i].size = size;
+      attribs[i].type = type;
+      attribs[i].location = glGetAttribLocation(program, name);
+   }
+
+   attribs[i].name = NULL; /* end of list */
+
+   return n;
+}
+
+
+void
+PrintAttribs(const struct attrib_info attribs[])
+{
+   GLint i;
+
+   printf("Attribs:\n");
+
+   for (i = 0; attribs[i].name; i++) {
+      printf("  %d: %s size=%d type=0x%x loc=%d\n",
+             i,
+             attribs[i].name,
+             attribs[i].size,
+             attribs[i].type,
+             attribs[i].location);
    }
 }

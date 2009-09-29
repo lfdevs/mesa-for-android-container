@@ -33,6 +33,7 @@
 struct pipe_surface;
 struct pipe_fence_handle;
 struct st_framebuffer;
+struct dri_context;
 
 #define DRI_SWAP_FENCES_MAX  8
 #define DRI_SWAP_FENCES_MASK 7
@@ -46,6 +47,13 @@ struct dri_drawable
    unsigned attachments[8];
    unsigned num_attachments;
 
+   boolean is_pixmap;
+
+   __DRIbuffer old[8];
+   unsigned old_num;
+   unsigned old_w;
+   unsigned old_h;
+
    /* gallium */
    struct st_framebuffer *stfb;
    struct pipe_fence_handle *swap_fences[DRI_SWAP_FENCES_MAX];
@@ -53,6 +61,9 @@ struct dri_drawable
    unsigned int tail;
    unsigned int desired_fences;
    unsigned int cur_fences;
+
+   enum pipe_format color_format;
+   enum pipe_format depth_stencil_format;
 };
 
 static INLINE struct dri_drawable *
@@ -81,6 +92,12 @@ dri_copy_sub_buffer(__DRIdrawablePrivate * dPriv, int x, int y, int w, int h);
 void dri_get_buffers(__DRIdrawablePrivate * dPriv);
 
 void dri_destroy_buffer(__DRIdrawablePrivate * dPriv);
+
+void dri2_set_tex_buffer2(__DRIcontext *pDRICtx, GLint target,
+                          GLint glx_texture_format, __DRIdrawable *dPriv);
+
+void dri2_set_tex_buffer(__DRIcontext *pDRICtx, GLint target,
+                         __DRIdrawable *dPriv);
 
 void
 dri1_update_drawables(struct dri_context *ctx,

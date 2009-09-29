@@ -1601,6 +1601,8 @@
 #       define RADEON_STENCIL_VALUE_MASK      (0xff << 16)
 #       define RADEON_STENCIL_WRITEMASK_SHIFT 24
 #       define RADEON_STENCIL_WRITE_MASK      (0xff << 24)
+#define RADEON_RB3D_ZPASS_DATA              0x3290
+#define RADEON_RB3D_ZPASS_ADDR              0x3294
 #define RADEON_RB3D_ZSTENCILCNTL            0x1c2c
 #       define RADEON_DEPTH_FORMAT_MASK          (0xf << 0)
 #       define RADEON_DEPTH_FORMAT_16BIT_INT_Z   (0  <<  0)
@@ -1661,6 +1663,9 @@
 #       define RADEON_FORCE_Z_DIRTY              (1  << 29)
 #       define RADEON_Z_WRITE_ENABLE             (1  << 30)
 #       define RADEON_Z_DECOMPRESSION_ENABLE     (1  << 31)
+
+#define RADEON_RE_STIPPLE_ADDR              0x1cc8
+#define RADEON_RE_STIPPLE_DATA              0x1ccc
 #define RADEON_RE_LINE_PATTERN              0x1cd0
 #       define RADEON_LINE_PATTERN_MASK             0x0000ffff
 #       define RADEON_LINE_REPEAT_COUNT_SHIFT       16
@@ -2031,6 +2036,9 @@
 #define RADEON_CP_PACKET3_3D_DRAW_INDX              0xC0002A00
 #define RADEON_CP_PACKET3_LOAD_PALETTE              0xC0002C00
 #define RADEON_CP_PACKET3_3D_LOAD_VBPNTR            0xC0002F00
+#define R200_CP_CMD_3D_DRAW_VBUF_2      0xC0003400
+#define R200_CP_CMD_3D_DRAW_IMMD_2      0xC0003500
+#define R200_CP_CMD_3D_DRAW_INDX_2      0xC0003600
 #define RADEON_CP_PACKET3_CNTL_PAINT                0xC0009100
 #define RADEON_CP_PACKET3_CNTL_BITBLT               0xC0009200
 #define RADEON_CP_PACKET3_CNTL_SMALLTEXT            0xC0009300

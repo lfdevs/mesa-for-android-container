@@ -85,6 +85,10 @@ static void brw_clip_line_alloc_regs( struct brw_clip_compile *c )
       i++;
    }
 
+   if (c->need_ff_sync) {
+      c->reg.ff_sync = retype(brw_vec1_grf(i, 0), BRW_REGISTER_TYPE_UD);
+      i++;
+   }
 
    c->first_tmp = i;
    c->last_tmp = i;
@@ -130,7 +134,7 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
    struct brw_instruction *plane_loop;
    struct brw_instruction *plane_active;
    struct brw_instruction *is_negative;
-   struct brw_instruction *is_neg2;
+   struct brw_instruction *is_neg2 = NULL;
    struct brw_instruction *not_culled;
    struct brw_reg v1_null_ud = retype(vec1(brw_null_reg()), BRW_REGISTER_TYPE_UD);
 
@@ -148,7 +152,7 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
    brw_clip_init_clipmask(c);
 
    /* -ve rhw workaround */
-   if (!BRW_IS_G4X(p->brw)) {
+   if (BRW_IS_965(p->brw)) {
       brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
       brw_AND(p, brw_null_reg(), get_element_ud(c->reg.R0, 2),
               brw_imm_ud(1<<20));
@@ -185,7 +189,7 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
               * Both can be negative on GM965/G965 due to RHW workaround
               * if so, this object should be rejected.
               */
-             if (!BRW_IS_G4X(p->brw)) {
+             if (BRW_IS_965(p->brw)) {
                  brw_CMP(p, vec1(brw_null_reg()), BRW_CONDITIONAL_LE, c->reg.dp0, brw_imm_f(0.0));
                  is_neg2 = brw_IF(p, BRW_EXECUTE_1);
                  {
@@ -210,7 +214,7 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
 
              /* If both are positive, do nothing */
              /* Only on GM965/G965 */
-             if (!BRW_IS_G4X(p->brw)) {
+             if (BRW_IS_965(p->brw)) {
                  brw_CMP(p, vec1(brw_null_reg()), BRW_CONDITIONAL_L, c->reg.dp0, brw_imm_f(0.0));
                  is_neg2 = brw_IF(p, BRW_EXECUTE_1);
              }
@@ -225,7 +229,7 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
                  brw_set_predicate_control(p, BRW_PREDICATE_NONE);
              }
 
-             if (!BRW_IS_G4X(p->brw)) {
+             if (BRW_IS_965(p->brw)) {
                  brw_ENDIF(p, is_neg2);
              }
          }
@@ -263,6 +267,7 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
 void brw_emit_line_clip( struct brw_clip_compile *c )
 {
    brw_clip_line_alloc_regs(c);
+   brw_clip_init_ff_sync(c);
 
    if (c->key.do_flat_shading)
       brw_clip_copy_colors(c, 0, 1);

@@ -48,19 +48,6 @@
 #define AA_LINE_ENABLE			((1<<1) | 1)
 #define AA_LINE_DISABLE			(1<<1)
 
-#define _3DSTATE_BUF_INFO_CMD	(CMD_3D | (0x1d<<24) | (0x8e<<16) | 1)
-/* Dword 1 */
-#define BUF_3D_ID_COLOR_BACK	(0x3<<24)
-#define BUF_3D_ID_DEPTH 	(0x7<<24)
-#define BUF_3D_USE_FENCE	(1<<23)
-#define BUF_3D_TILED_SURFACE	(1<<22)
-#define BUF_3D_TILE_WALK_X	0
-#define BUF_3D_TILE_WALK_Y	(1<<21)
-#define BUF_3D_PITCH(x)         (((x)/4)<<2)
-/* Dword 2 */
-#define BUF_3D_ADDR(x)		((x) & ~0x3)
-
-
 #define _3DSTATE_COLOR_FACTOR_CMD	(CMD_3D | (0x1d<<24) | (0x1<<16))
 
 #define _3DSTATE_COLOR_FACTOR_N_CMD(stage)	(CMD_3D | (0x1d<<24) | \
@@ -433,8 +420,11 @@
 #define ENABLE_LINE_STRIP_PROVOKE_VRTX	(1<<8)
 #define ENABLE_TRI_FAN_PROVOKE_VRTX	(1<<5)
 #define ENABLE_TRI_STRIP_PROVOKE_VRTX	(1<<2)
+#define LINE_STRIP_PROVOKE_VRTX_MASK	(3<<6)
 #define LINE_STRIP_PROVOKE_VRTX(x)	((x)<<6)
+#define TRI_FAN_PROVOKE_VRTX_MASK	(3<<3)
 #define TRI_FAN_PROVOKE_VRTX(x) 	((x)<<3)
+#define TRI_STRIP_PROVOKE_VRTX_MASK	(3<<0)
 #define TRI_STRIP_PROVOKE_VRTX(x)	(x)
 
 /* _3DSTATE_SCISSOR_ENABLE, p200 */

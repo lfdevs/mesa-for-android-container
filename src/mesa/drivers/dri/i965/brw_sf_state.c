@@ -113,7 +113,7 @@ struct brw_sf_unit_key {
 
    unsigned int nr_urb_entries, urb_size, sfsize;
 
-   GLenum front_face, cull_face;
+   GLenum front_face, cull_face, provoking_vertex;
    unsigned scissor:1;
    unsigned line_smooth:1;
    unsigned point_sprite:1;
@@ -153,6 +153,9 @@ sf_unit_populate_key(struct brw_context *brw, struct brw_sf_unit_key *key)
    key->point_size = CLAMP(ctx->Point.Size, ctx->Point.MinSize, ctx->Point.MaxSize);
    key->point_attenuated = ctx->Point._Attenuated;
 
+   /* _NEW_LIGHT */
+   key->provoking_vertex = ctx->Light.ProvokingVertex;
+
    key->render_to_fbo = brw->intel.ctx.DrawBuffer->Name != 0;
 }
 
@@ -162,7 +165,7 @@ sf_unit_create_from_key(struct brw_context *brw, struct brw_sf_unit_key *key,
 {
    struct brw_sf_unit_state sf;
    dri_bo *bo;
-
+   int chipset_max_threads;
    memset(&sf, 0, sizeof(sf));
 
    sf.thread0.grf_reg_count = ALIGN(key->total_grf, 16) / 16 - 1;
@@ -171,13 +174,26 @@ sf_unit_create_from_key(struct brw_context *brw, struct brw_sf_unit_key *key,
    sf.thread1.floating_point_mode = BRW_FLOATING_POINT_NON_IEEE_754;
 
    sf.thread3.dispatch_grf_start_reg = 3;
-   sf.thread3.urb_entry_read_offset = 1;
+
+   if (BRW_IS_IGDNG(brw))
+       sf.thread3.urb_entry_read_offset = 3;
+   else
+       sf.thread3.urb_entry_read_offset = 1;
+
    sf.thread3.urb_entry_read_length = key->urb_entry_read_length;
 
    sf.thread4.nr_urb_entries = key->nr_urb_entries;
    sf.thread4.urb_entry_allocation_size = key->sfsize - 1;
-   /* Each SF thread produces 1 PUE, and there can be up to 24 threads */
-   sf.thread4.max_threads = MIN2(24, key->nr_urb_entries) - 1;
+
+   /* Each SF thread produces 1 PUE, and there can be up to 24(Pre-IGDNG) or 
+    * 48(IGDNG) threads 
+    */
+   if (BRW_IS_IGDNG(brw))
+      chipset_max_threads = 48;
+   else
+      chipset_max_threads = 24;
+
+   sf.thread4.max_threads = MIN2(chipset_max_threads, key->nr_urb_entries) - 1;
 
    if (INTEL_DEBUG & DEBUG_SINGLE_THREAD)
       sf.thread4.max_threads = 0;
@@ -233,7 +249,7 @@ sf_unit_create_from_key(struct brw_context *brw, struct brw_sf_unit_key *key,
    else if (sf.sf6.line_width <= 0x2)
        sf.sf6.line_width = 0;
 
-   /* _NEW_POINT */
+   /* _NEW_BUFFERS */
    key->render_to_fbo = brw->intel.ctx.DrawBuffer->Name != 0;
    if (!key->render_to_fbo) {
       /* Rendering to an OpenGL window */
@@ -263,6 +279,7 @@ sf_unit_create_from_key(struct brw_context *brw, struct brw_sf_unit_key *key,
    }
    /* XXX clamp max depends on AA vs. non-AA */
 
+   /* _NEW_POINT */
    sf.sf7.sprite_point = key->point_sprite;
    sf.sf7.point_size = CLAMP(rint(key->point_size), 1, 255) * (1<<3);
    sf.sf7.use_point_size_state = !key->point_attenuated;
@@ -270,9 +287,15 @@ sf_unit_create_from_key(struct brw_context *brw, struct brw_sf_unit_key *key,
 
    /* might be BRW_NEW_PRIMITIVE if we have to adjust pv for polygons:
     */
-   sf.sf7.trifan_pv = 2;
-   sf.sf7.linestrip_pv = 1;
-   sf.sf7.tristrip_pv = 2;
+   if (key->provoking_vertex == GL_LAST_VERTEX_CONVENTION) {
+      sf.sf7.trifan_pv = 2;
+      sf.sf7.linestrip_pv = 1;
+      sf.sf7.tristrip_pv = 2;
+   } else {
+      sf.sf7.trifan_pv = 1;
+      sf.sf7.linestrip_pv = 0;
+      sf.sf7.tristrip_pv = 0;
+   }
    sf.sf7.line_last_pixel_enable = 0;
 
    /* Set bias for OpenGL rasterization rules:
@@ -286,6 +309,9 @@ sf_unit_create_from_key(struct brw_context *brw, struct brw_sf_unit_key *key,
 			 &sf, sizeof(sf),
 			 NULL, NULL);
 
+   /* STATE_PREFETCH command description describes this state as being
+    * something loaded through the GPE (L2 ISC), so it's INSTRUCTION domain.
+    */
    /* Emit SF program relocation */
    dri_bo_emit_reloc(bo,
 		     I915_GEM_DOMAIN_INSTRUCTION, 0,
@@ -326,9 +352,11 @@ static void upload_sf_unit( struct brw_context *brw )
 const struct brw_tracked_state brw_sf_unit = {
    .dirty = {
       .mesa  = (_NEW_POLYGON | 
+		_NEW_LIGHT |
 		_NEW_LINE | 
 		_NEW_POINT | 
-		_NEW_SCISSOR),
+		_NEW_SCISSOR |
+		_NEW_BUFFERS),
       .brw   = BRW_NEW_URB_FENCE,
       .cache = (CACHE_NEW_SF_VP |
 		CACHE_NEW_SF_PROG)

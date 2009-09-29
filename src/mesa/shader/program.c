@@ -62,6 +62,12 @@ _mesa_init_program(GLcontext *ctx)
    ASSERT(ctx->Const.FragmentProgram.MaxUniformComponents / 4
           <= (1 << INST_INDEX_BITS));
 
+   /* If this fails, increase prog_instruction::TexSrcUnit size */
+   ASSERT(MAX_TEXTURE_UNITS < (1 << 5));
+
+   /* If this fails, increase prog_instruction::TexSrcTarget size */
+   ASSERT(NUM_TEXTURE_TARGETS < (1 << 3));
+
    ctx->Program.ErrorPos = -1;
    ctx->Program.ErrorString = _mesa_strdup("");
 
@@ -496,6 +502,7 @@ _mesa_clone_program(GLcontext *ctx, const struct gl_program *prog)
             = (const struct gl_vertex_program *) prog;
          struct gl_vertex_program *vpc = (struct gl_vertex_program *) clone;
          vpc->IsPositionInvariant = vp->IsPositionInvariant;
+         vpc->IsNVProgram = vp->IsNVProgram;
       }
       break;
    case GL_FRAGMENT_PROGRAM_ARB:
@@ -819,4 +826,64 @@ _mesa_find_free_register(const struct gl_program *prog, GLuint regFile)
    }
 
    return -1;
+}
+
+
+
+/**
+ * "Post-process" a GPU program.  This is intended to be used for debugging.
+ * Example actions include no-op'ing instructions or changing instruction
+ * behaviour.
+ */
+void
+_mesa_postprocess_program(GLcontext *ctx, struct gl_program *prog)
+{
+   static const GLfloat white[4] = { 0.5, 0.5, 0.5, 0.5 };
+   GLuint i;
+   GLuint whiteSwizzle;
+   GLint whiteIndex = _mesa_add_unnamed_constant(prog->Parameters,
+                                                 white, 4, &whiteSwizzle);
+
+   (void) whiteIndex;
+
+   for (i = 0; i < prog->NumInstructions; i++) {
+      struct prog_instruction *inst = prog->Instructions + i;
+      const GLuint n = _mesa_num_inst_src_regs(inst->Opcode);
+
+      (void) n;
+
+      if (_mesa_is_tex_instruction(inst->Opcode)) {
+#if 0
+         /* replace TEX/TXP/TXB with MOV */
+         inst->Opcode = OPCODE_MOV;
+         inst->DstReg.WriteMask = WRITEMASK_XYZW;
+         inst->SrcReg[0].Swizzle = SWIZZLE_XYZW;
+         inst->SrcReg[0].Negate = NEGATE_NONE;
+#endif
+
+#if 0
+         /* disable shadow texture mode */
+         inst->TexShadow = 0;
+#endif
+      }
+
+      if (inst->Opcode == OPCODE_TXP) {
+#if 0
+         inst->Opcode = OPCODE_MOV;
+         inst->DstReg.WriteMask = WRITEMASK_XYZW;
+         inst->SrcReg[0].File = PROGRAM_CONSTANT;
+         inst->SrcReg[0].Index = whiteIndex;
+         inst->SrcReg[0].Swizzle = SWIZZLE_XYZW;
+         inst->SrcReg[0].Negate = NEGATE_NONE;
+#endif
+#if 0
+         inst->TexShadow = 0;
+#endif
+#if 0
+         inst->Opcode = OPCODE_TEX;
+         inst->TexShadow = 0;
+#endif
+      }
+
+   }
 }

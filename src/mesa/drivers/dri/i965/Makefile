@@ -14,6 +14,7 @@ DRIVER_SOURCES = \
 	intel_decode.c \
 	intel_extensions.c \
 	intel_fbo.c \
+	intel_generatemipmap.c \
 	intel_mipmap_tree.c \
 	intel_regions.c \
 	intel_screen.c \
@@ -22,8 +23,10 @@ DRIVER_SOURCES = \
 	intel_pixel_bitmap.c \
 	intel_pixel_copy.c \
 	intel_pixel_draw.c \
+	intel_pixel_read.c \
 	intel_state.c \
 	intel_swapbuffers.c \
+	intel_syncobj.c \
 	intel_tex.c \
 	intel_tex_copy.c \
 	intel_tex_format.c \
@@ -41,6 +44,7 @@ DRIVER_SOURCES = \
 	brw_clip_util.c \
 	brw_context.c \
 	brw_curbe.c \
+	brw_disasm.c \
 	brw_draw.c \
 	brw_draw_upload.c \
 	brw_eu.c \
@@ -69,6 +73,7 @@ DRIVER_SOURCES = \
 	brw_vs_constval.c \
 	brw_vs_emit.c \
 	brw_vs_state.c \
+	brw_vs_surface_state.c \
 	brw_vtbl.c \
 	brw_wm.c \
 	brw_wm_debug.c \

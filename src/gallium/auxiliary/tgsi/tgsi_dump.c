@@ -33,12 +33,20 @@
 #include "tgsi_info.h"
 #include "tgsi_iterate.h"
 
+
+/** Number of spaces to indent for IF/LOOP/etc */
+static const int indent_spaces = 3;
+
+
 struct dump_ctx
 {
    struct tgsi_iterate_context iter;
 
    uint instno;
+   int indent;
    
+   uint indentation;
+
    void (*printf)(struct dump_ctx *ctx, const char *format, ...);
 };
 
@@ -82,7 +90,7 @@ static const char *processor_type_names[] =
    "GEOM"
 };
 
-static const char *file_names[] =
+static const char *file_names[TGSI_FILE_COUNT] =
 {
    "NULL",
    "CONST",
@@ -91,7 +99,8 @@ static const char *file_names[] =
    "TEMP",
    "SAMP",
    "ADDR",
-   "IMM"
+   "IMM",
+   "LOOP"
 };
 
 static const char *interpolate_names[] =
@@ -295,10 +304,12 @@ iter_immediate(
    ENM( imm->Immediate.DataType, immediate_type_names );
 
    TXT( " { " );
+
+   assert( imm->Immediate.NrTokens <= 4 + 1 );
    for (i = 0; i < imm->Immediate.NrTokens - 1; i++) {
       switch (imm->Immediate.DataType) {
       case TGSI_IMM_FLOAT32:
-         FLT( imm->u.ImmediateFloat32[i].Float );
+         FLT( imm->u[i].Float );
          break;
       default:
          assert( 0 );
@@ -332,13 +343,19 @@ iter_instruction(
 {
    struct dump_ctx *ctx = (struct dump_ctx *) iter;
    uint instno = ctx->instno++;
-   
+   const struct tgsi_opcode_info *info = tgsi_get_opcode_info( inst->Instruction.Opcode );
    uint i;
    boolean first_reg = TRUE;
 
    INSTID( instno );
    TXT( ": " );
-   TXT( tgsi_get_opcode_info( inst->Instruction.Opcode )->mnemonic );
+   
+   ctx->indent -= info->pre_dedent;
+   for(i = 0; (int)i < ctx->indent; ++i)
+      TXT( "  " );
+   ctx->indent += info->post_indent;
+   
+   TXT( info->mnemonic );
 
    switch (inst->Instruction.Saturate) {
    case TGSI_SAT_NONE:
@@ -470,12 +487,20 @@ iter_instruction(
    switch (inst->Instruction.Opcode) {
    case TGSI_OPCODE_IF:
    case TGSI_OPCODE_ELSE:
-   case TGSI_OPCODE_BGNLOOP2:
-   case TGSI_OPCODE_ENDLOOP2:
+   case TGSI_OPCODE_BGNLOOP:
+   case TGSI_OPCODE_ENDLOOP:
    case TGSI_OPCODE_CAL:
       TXT( " :" );
       UID( inst->InstructionExtLabel.Label );
       break;
+   }
+
+   /* update indentation */
+   if (inst->Instruction.Opcode == TGSI_OPCODE_IF ||
+       inst->Instruction.Opcode == TGSI_OPCODE_ELSE ||
+       inst->Instruction.Opcode == TGSI_OPCODE_BGNFOR ||
+       inst->Instruction.Opcode == TGSI_OPCODE_BGNLOOP) {
+      ctx->indentation += indent_spaces;
    }
 
    EOL();
@@ -491,7 +516,9 @@ tgsi_dump_instruction(
    struct dump_ctx ctx;
 
    ctx.instno = instno;
+   ctx.indent = 0;
    ctx.printf = dump_ctx_printf;
+   ctx.indentation = 0;
 
    iter_instruction( &ctx.iter, (struct tgsi_full_instruction *)inst );
 }
@@ -523,7 +550,9 @@ tgsi_dump(
    ctx.iter.epilog = NULL;
 
    ctx.instno = 0;
+   ctx.indent = 0;
    ctx.printf = dump_ctx_printf;
+   ctx.indentation = 0;
 
    tgsi_iterate_shader( tokens, &ctx.iter );
 }
@@ -575,7 +604,9 @@ tgsi_dump_str(
    ctx.base.iter.epilog = NULL;
 
    ctx.base.instno = 0;
+   ctx.base.indent = 0;
    ctx.base.printf = &str_dump_ctx_printf;
+   ctx.base.indentation = 0;
 
    ctx.str = str;
    ctx.str[0] = 0;

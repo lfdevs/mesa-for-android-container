@@ -33,10 +33,8 @@
 #include "xf86.h"
 #include "xf86_OSproc.h"
 #include "compiler.h"
-#include "xf86RAC.h"
 #include "xf86PciInfo.h"
 #include "xf86Pci.h"
-#include "xf86Resources.h"
 #include "mipointer.h"
 #include "micmap.h"
 #include <X11/extensions/randr.h>
@@ -54,6 +52,7 @@
 
 #include <pciaccess.h>
 
+#include "pipe/p_context.h"
 #include "xorg_tracker.h"
 #include "xorg_winsys.h"
 
@@ -84,40 +83,8 @@ static const OptionInfoRec Options[] = {
 };
 
 /*
- * Functions that might be needed
- */
-
-static const char *exaSymbols[] = {
-    "exaGetVersion",
-    "exaDriverInit",
-    "exaDriverFini",
-    "exaOffscreenAlloc",
-    "exaOffscreenFree",
-    "exaWaitSync",
-    NULL
-};
-
-static const char *fbSymbols[] = {
-    "fbPictureInit",
-    "fbScreenInit",
-    NULL
-};
-
-static const char *ddcSymbols[] = {
-    "xf86PrintEDID",
-    "xf86SetDDCproperties",
-    NULL
-};
-
-/*
  * Exported Xorg driver functions to winsys
  */
-
-void
-xorg_tracker_loader_ref_sym_lists()
-{
-    LoaderRefSymLists(exaSymbols, fbSymbols, ddcSymbols, NULL);
-}
 
 const OptionInfoRec *
 xorg_tracker_available_options(int chipid, int busid)
@@ -179,8 +146,10 @@ CreateFrontBuffer(ScrnInfoPtr pScrn)
     modesettingPtr ms = modesettingPTR(pScrn);
     ScreenPtr pScreen = pScrn->pScreen;
     PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
+    unsigned handle, stride;
 
     ms->noEvict = TRUE;
+    xorg_exa_set_displayed_usage(rootPixmap);
     pScreen->ModifyPixmapHeader(rootPixmap,
 				pScrn->virtualX, pScrn->virtualY,
 				pScrn->depth, pScrn->bitsPerPixel,
@@ -188,13 +157,16 @@ CreateFrontBuffer(ScrnInfoPtr pScrn)
 				NULL);
     ms->noEvict = FALSE;
 
+    handle = xorg_exa_get_pixmap_handle(rootPixmap, &stride);
+
     drmModeAddFB(ms->fd,
 		 pScrn->virtualX,
 		 pScrn->virtualY,
 		 pScrn->depth,
 		 pScrn->bitsPerPixel,
-		 pScrn->displayWidth * pScrn->bitsPerPixel / 8,
-		 xorg_exa_get_pixmap_handle(rootPixmap), &ms->fb_id);
+		 stride,
+		 handle,
+		 &ms->fb_id);
 
     pScrn->frameX0 = 0;
     pScrn->frameY0 = 0;
@@ -282,10 +254,6 @@ PreInit(ScrnInfoPtr pScrn, int flags)
     } else
 	ms->entityPrivate = NULL;
 
-    if (xf86RegisterResources(ms->pEnt->index, NULL, ResNone)) {
-	return FALSE;
-    }
-
     if (xf86IsEntityShared(pScrn->entityList[0])) {
 	if (xf86IsPrimInitDone(pScrn->entityList[0])) {
 	    /* do something */
@@ -300,12 +268,12 @@ PreInit(ScrnInfoPtr pScrn, int flags)
 	    ms->PciInfo->dev, ms->PciInfo->func
 	);
 
+    ms->api = drm_api_create();
     ms->fd = drmOpen(NULL, BusID);
 
     if (ms->fd < 0)
 	return FALSE;
 
-    pScrn->racMemFlags = RAC_FB | RAC_COLORMAP;
     pScrn->monitor = pScrn->confScreen->monitor;
     pScrn->progClock = TRUE;
     pScrn->rgbBits = 8;
@@ -391,8 +359,6 @@ PreInit(ScrnInfoPtr pScrn, int flags)
 	return FALSE;
     }
 
-    xf86LoaderReqSymLists(fbSymbols, NULL);
-
     xf86LoadSubModule(pScrn, "exa");
 
 #ifdef DRI2
@@ -418,6 +384,44 @@ RestoreHWState(ScrnInfoPtr pScrn)
     return TRUE;
 }
 
+static void xorgBlockHandler(int i, pointer blockData, pointer pTimeout,
+                             pointer pReadmask)
+{
+    ScreenPtr pScreen = screenInfo.screens[i];
+    modesettingPtr ms = modesettingPTR(xf86Screens[pScreen->myNum]);
+
+    pScreen->BlockHandler = ms->blockHandler;
+    pScreen->BlockHandler(i, blockData, pTimeout, pReadmask);
+    pScreen->BlockHandler = xorgBlockHandler;
+
+    ms->ctx->flush(ms->ctx, PIPE_FLUSH_RENDER_CACHE, NULL);
+
+#ifdef DRM_MODE_FEATURE_DIRTYFB
+    {
+	RegionPtr dirty = DamageRegion(ms->damage);
+	unsigned num_cliprects = REGION_NUM_RECTS(dirty);
+
+	if (num_cliprects) {
+	    drmModeClip *clip = alloca(num_cliprects * sizeof(drmModeClip));
+	    BoxPtr rect = REGION_RECTS(dirty);
+	    int i;
+
+	    for (i = 0; i < num_cliprects; i++, rect++) {
+		clip[i].x = rect->x1;
+		clip[i].y = rect->y1;
+		clip[i].width = rect->x2 - rect->x1;
+		clip[i].height = rect->y2 - rect->y1;
+	    }
+
+	    /* TODO query connector property to see if this is needed */
+	    drmModeDirtyFB(ms->fd, ms->fb_id, clip, num_cliprects);
+
+	    DamageEmpty(ms->damage);
+	}
+    }
+#endif
+}
+
 static Bool
 CreateScreenResources(ScreenPtr pScreen)
 {
@@ -425,6 +429,7 @@ CreateScreenResources(ScreenPtr pScreen)
     modesettingPtr ms = modesettingPTR(pScrn);
     PixmapPtr rootPixmap;
     Bool ret;
+    unsigned handle, stride;
 
     ms->noEvict = TRUE;
 
@@ -434,20 +439,40 @@ CreateScreenResources(ScreenPtr pScreen)
 
     rootPixmap = pScreen->GetScreenPixmap(pScreen);
 
+    xorg_exa_set_displayed_usage(rootPixmap);
+    xorg_exa_set_shared_usage(rootPixmap);
     if (!pScreen->ModifyPixmapHeader(rootPixmap, -1, -1, -1, -1, -1, NULL))
 	FatalError("Couldn't adjust screen pixmap\n");
 
     ms->noEvict = FALSE;
+
+    handle = xorg_exa_get_pixmap_handle(rootPixmap, &stride);
 
     drmModeAddFB(ms->fd,
 		 pScrn->virtualX,
 		 pScrn->virtualY,
 		 pScrn->depth,
 		 pScrn->bitsPerPixel,
-		 pScrn->displayWidth * pScrn->bitsPerPixel / 8,
-		 xorg_exa_get_pixmap_handle(rootPixmap), &ms->fb_id);
+		 stride,
+		 handle,
+                 &ms->fb_id);
 
     AdjustFrame(pScrn->scrnIndex, pScrn->frameX0, pScrn->frameY0, 0);
+
+#ifdef DRM_MODE_FEATURE_DIRTYFB
+    ms->damage = DamageCreate(NULL, NULL, DamageReportNone, TRUE,
+                              pScreen, rootPixmap);
+
+    if (ms->damage) {
+       DamageRegister(&rootPixmap->drawable, ms->damage);
+
+       xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Damage tracking initialized\n");
+    } else {
+       xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                  "Failed to create screen damage record\n");
+       return FALSE;
+    }
+#endif
 
     return ret;
 }
@@ -476,7 +501,7 @@ ScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
     }
 
     if (!ms->screen) {
-	ms->screen = drm_api_hooks.create_screen(ms->fd, NULL);
+	ms->screen = ms->api->create_screen(ms->api, ms->fd, NULL);
 
 	if (!ms->screen) {
 	    FatalError("Could not init pipe_screen\n");
@@ -525,6 +550,8 @@ ScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 
     fbPictureInit(pScreen, NULL, 0);
 
+    ms->blockHandler = pScreen->BlockHandler;
+    pScreen->BlockHandler = xorgBlockHandler;
     ms->createScreenResources = pScreen->CreateScreenResources;
     pScreen->CreateScreenResources = CreateScreenResources;
 
@@ -593,10 +620,6 @@ FreeScreen(int scrnIndex, int flags)
     FreeRec(xf86Screens[scrnIndex]);
 }
 
-/* HACK */
-void
-cursor_destroy(xf86CrtcPtr crtc);
-
 static void
 LeaveVT(int scrnIndex, int flags)
 {
@@ -608,7 +631,7 @@ LeaveVT(int scrnIndex, int flags)
     for (o = 0; o < config->num_crtc; o++) {
 	xf86CrtcPtr crtc = config->crtc[o];
 
-	cursor_destroy(crtc);
+	crtc_cursor_destroy(crtc);
 
 	if (crtc->rotatedPixmap || crtc->rotatedData) {
 	    crtc->funcs->shadow_destroy(crtc, crtc->rotatedPixmap,
@@ -622,6 +645,10 @@ LeaveVT(int scrnIndex, int flags)
 
     RestoreHWState(pScrn);
 
+    if (drmDropMaster(ms->fd))
+	xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+		   "drmDropMaster failed: %s\n", strerror(errno));
+
     pScrn->vtSema = FALSE;
 }
 
@@ -633,6 +660,17 @@ EnterVT(int scrnIndex, int flags)
 {
     ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
     modesettingPtr ms = modesettingPTR(pScrn);
+
+    if (drmSetMaster(ms->fd)) {
+	if (errno == EINVAL) {
+	    xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+		       "drmSetMaster failed: 2.6.29 or newer kernel required for "
+		       "multi-server DRI\n");
+	} else {
+	    xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+		       "drmSetMaster failed: %s\n", strerror(errno));
+	}
+    }
 
     /*
      * Only save state once per server generation since that's what most
@@ -673,11 +711,22 @@ CloseScreen(int scrnIndex, ScreenPtr pScreen)
     driCloseScreen(pScreen);
 #endif
 
+    pScreen->BlockHandler = ms->blockHandler;
     pScreen->CreateScreenResources = ms->createScreenResources;
+
+#ifdef DRM_MODE_FEATURE_DIRTYFB
+    if (ms->damage) {
+	DamageUnregister(&pScreen->GetScreenPixmap(pScreen)->drawable, ms->damage);
+	DamageDestroy(ms->damage);
+	ms->damage = NULL;
+    }
+#endif
 
     if (ms->exa)
 	xorg_exa_close(pScrn);
 
+	ms->api->destroy(ms->api);
+	ms->api = NULL;
     drmClose(ms->fd);
     ms->fd = -1;
 

@@ -7,38 +7,38 @@ include $(TOP)/configs/current
 INCLUDE_DIRS = -I$(TOP)/include -I$(TOP)/src/mesa/glapi $(X11_INCLUDES)
 
 HEADERS = \
+	eglcompiler.h \
 	eglconfig.h \
 	eglconfigutil.h \
 	eglcontext.h \
+	eglcurrent.h \
 	egldefines.h \
 	egldisplay.h \
 	egldriver.h \
 	eglglobals.h \
 	egllog.h \
-	eglhash.h \
 	eglmisc.h \
 	eglmode.h \
+	eglmutex.h \
 	eglscreen.h \
 	eglstring.h \
-	eglsurface.h \
-	eglx.h
+	eglsurface.h
 
 SOURCES = \
 	eglapi.c \
 	eglconfig.c \
 	eglconfigutil.c \
 	eglcontext.c \
+	eglcurrent.c \
 	egldisplay.c \
 	egldriver.c \
 	eglglobals.c \
 	egllog.c \
-	eglhash.c \
 	eglmisc.c \
 	eglmode.c \
 	eglscreen.c \
 	eglstring.c \
-	eglsurface.c \
-	eglx.c
+	eglsurface.c
 
 OBJECTS = $(SOURCES:.c=.o)
 
@@ -66,11 +66,12 @@ $(TOP)/$(LIB_DIR)/libEGL.so: $(OBJECTS)
 
 install: default
 	$(INSTALL) -d $(DESTDIR)$(INSTALL_LIB_DIR)
-	$(INSTALL) $(TOP)/$(LIB_DIR)/libEGL.so* $(DESTDIR)$(INSTALL_LIB_DIR)
+	$(MINSTALL) $(TOP)/$(LIB_DIR)/libEGL.so* $(DESTDIR)$(INSTALL_LIB_DIR)
 
 clean:
 	-rm -f *.o *.so*
 	-rm -f core.*
+	-rm -f depend depend.bak
 
 
 depend: $(SOURCES) $(HEADERS)

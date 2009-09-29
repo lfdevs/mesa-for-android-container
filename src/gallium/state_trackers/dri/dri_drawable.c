@@ -36,6 +36,8 @@
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_inlines.h"
+#include "main/mtypes.h"
+#include "main/renderbuffer.h"
 #include "state_tracker/drm_api.h"
 #include "state_tracker/dri1_api.h"
 #include "state_tracker/st_public.h"
@@ -44,16 +46,9 @@
 
 #include "util/u_memory.h"
 
-static void
-dri_copy_to_front(__DRIdrawablePrivate * dPriv,
-		  struct pipe_surface *from,
-		  int x, int y, unsigned w, unsigned h)
-{
-   /* TODO send a message to the Xserver to copy to the real front buffer */
-}
-
 static struct pipe_surface *
-dri_surface_from_handle(struct pipe_screen *screen,
+dri_surface_from_handle(struct drm_api *api,
+			struct pipe_screen *screen,
 			unsigned handle,
 			enum pipe_format format,
 			unsigned width, unsigned height, unsigned pitch)
@@ -61,11 +56,6 @@ dri_surface_from_handle(struct pipe_screen *screen,
    struct pipe_surface *surface = NULL;
    struct pipe_texture *texture = NULL;
    struct pipe_texture templat;
-   struct pipe_buffer *buf = NULL;
-
-   buf = drm_api_hooks.buffer_from_handle(screen, "dri2 buffer", handle);
-   if (!buf)
-      return NULL;
 
    memset(&templat, 0, sizeof(templat));
    templat.tex_usage |= PIPE_TEXTURE_USAGE_RENDER_TARGET;
@@ -77,13 +67,13 @@ dri_surface_from_handle(struct pipe_screen *screen,
    templat.height[0] = height;
    pf_get_block(templat.format, &templat.block);
 
-   texture = screen->texture_blanket(screen, &templat, &pitch, buf);
+   texture = api->texture_from_shared_handle(api, screen, &templat,
+                                             "dri2 buffer", pitch, handle);
 
-   /* we don't need the buffer from this point on */
-   pipe_buffer_reference(&buf, NULL);
-
-   if (!texture)
+   if (!texture) {
+      debug_printf("%s: Failed to blanket the buffer with a texture\n", __func__);
       return NULL;
+   }
 
    surface = screen->get_tex_surface(screen, texture, 0, 0, 0,
 				     PIPE_BUFFER_USAGE_GPU_READ |
@@ -95,17 +85,48 @@ dri_surface_from_handle(struct pipe_screen *screen,
 }
 
 /**
+ * Pixmaps have will have the same name of fake front and front.
+ */
+static boolean
+dri2_check_if_pixmap(__DRIbuffer *buffers, int count)
+{
+   boolean found = FALSE;
+   boolean is_pixmap = FALSE;
+   unsigned name;
+   int i;
+
+   for (i = 0; i < count; i++) {
+      switch (buffers[i].attachment) {
+      case __DRI_BUFFER_FRONT_LEFT:
+      case __DRI_BUFFER_FAKE_FRONT_LEFT:
+         if (found) {
+            is_pixmap = buffers[i].name == name;
+         } else {
+            name = buffers[i].name;
+            found = TRUE;
+         }
+      default:
+	 continue;
+      }
+   }
+
+   return is_pixmap;
+}
+
+/**
  * This will be called a drawable is known to have been resized.
  */
 void
 dri_get_buffers(__DRIdrawablePrivate * dPriv)
 {
+
    struct dri_drawable *drawable = dri_drawable(dPriv);
    struct pipe_surface *surface = NULL;
    struct pipe_screen *screen = dri_screen(drawable->sPriv)->pipe_screen;
    __DRIbuffer *buffers = NULL;
    __DRIscreen *dri_screen = drawable->sPriv;
    __DRIdrawable *dri_drawable = drawable->dPriv;
+   struct drm_api *api = ((struct dri_screen*)(dri_screen->private))->api;
    boolean have_depth = FALSE;
    int i, count;
 
@@ -138,36 +159,45 @@ dri_get_buffers(__DRIdrawablePrivate * dPriv)
    dri_drawable->pBackClipRects[0].x2 = dri_drawable->w;
    dri_drawable->pBackClipRects[0].y2 = dri_drawable->h;
 
+   if (drawable->old_num == count &&
+       drawable->old_w == dri_drawable->w &&
+       drawable->old_h == dri_drawable->h &&
+       memcmp(drawable->old, buffers, sizeof(__DRIbuffer) * count) == 0) {
+       return;
+   } else {
+      drawable->old_num = count;
+      drawable->old_w = dri_drawable->w;
+      drawable->old_h = dri_drawable->h;
+      memcpy(drawable->old, buffers, sizeof(__DRIbuffer) * count);
+   }
+
+   drawable->is_pixmap = dri2_check_if_pixmap(buffers, count);
+
    for (i = 0; i < count; i++) {
       enum pipe_format format = 0;
       int index = 0;
 
       switch (buffers[i].attachment) {
       case __DRI_BUFFER_FRONT_LEFT:
-	 index = ST_SURFACE_FRONT_LEFT;
-	 format = PIPE_FORMAT_A8R8G8B8_UNORM;
-	 break;
+	 continue;
       case __DRI_BUFFER_FAKE_FRONT_LEFT:
 	 index = ST_SURFACE_FRONT_LEFT;
-	 format = PIPE_FORMAT_A8R8G8B8_UNORM;
+	 format = drawable->color_format;
 	 break;
       case __DRI_BUFFER_BACK_LEFT:
 	 index = ST_SURFACE_BACK_LEFT;
-	 format = PIPE_FORMAT_A8R8G8B8_UNORM;
+	 format = drawable->color_format;
 	 break;
       case __DRI_BUFFER_DEPTH:
-	 index = ST_SURFACE_DEPTH;
-	 format = PIPE_FORMAT_Z24S8_UNORM;
-	 break;
+      case __DRI_BUFFER_DEPTH_STENCIL:
       case __DRI_BUFFER_STENCIL:
 	 index = ST_SURFACE_DEPTH;
-	 format = PIPE_FORMAT_Z24S8_UNORM;
+	 format = drawable->depth_stencil_format;
 	 break;
       case __DRI_BUFFER_ACCUM:
       default:
 	 assert(0);
       }
-      assert(buffers[i].cpp == 4);
 
       if (index == ST_SURFACE_DEPTH) {
 	 if (have_depth)
@@ -176,11 +206,24 @@ dri_get_buffers(__DRIdrawablePrivate * dPriv)
 	    have_depth = TRUE;
       }
 
-      surface = dri_surface_from_handle(screen,
+      surface = dri_surface_from_handle(api,
+					screen,
 					buffers[i].name,
 					format,
 					dri_drawable->w,
 					dri_drawable->h, buffers[i].pitch);
+
+      switch (buffers[i].attachment) {
+      case __DRI_BUFFER_FAKE_FRONT_LEFT:
+      case __DRI_BUFFER_BACK_LEFT:
+	 drawable->color_format = surface->format;
+	 break;
+      case __DRI_BUFFER_DEPTH:
+      case __DRI_BUFFER_DEPTH_STENCIL:
+      case __DRI_BUFFER_STENCIL:
+	 drawable->depth_stencil_format = surface->format;
+	 break;
+      }
 
       st_set_framebuffer_surface(drawable->stfb, index, surface);
       pipe_surface_reference(&surface, NULL);
@@ -189,13 +232,60 @@ dri_get_buffers(__DRIdrawablePrivate * dPriv)
    st_resize_framebuffer(drawable->stfb, dri_drawable->w, dri_drawable->h);
 }
 
+/**
+ * These are used for GLX_EXT_texture_from_pixmap
+ */
+void dri2_set_tex_buffer2(__DRIcontext *pDRICtx, GLint target,
+                          GLint format, __DRIdrawable *dPriv)
+{
+   struct dri_drawable *drawable = dri_drawable(dPriv);
+   struct pipe_surface *ps;
+
+   if (!drawable->stfb->Base.Attachment[BUFFER_FRONT_LEFT].Renderbuffer) {
+      struct gl_renderbuffer *rb =
+         st_new_renderbuffer_fb(drawable->color_format, 0 /*XXX*/, FALSE);
+      _mesa_add_renderbuffer(&drawable->stfb->Base, BUFFER_FRONT_LEFT, rb);
+   }
+
+   dri_get_buffers(drawable->dPriv);
+   st_get_framebuffer_surface(drawable->stfb, ST_SURFACE_FRONT_LEFT, &ps);
+
+   st_bind_texture_surface(ps, target == GL_TEXTURE_2D ? ST_TEXTURE_2D :
+                           ST_TEXTURE_RECT, 0, drawable->color_format);
+}
+
+void dri2_set_tex_buffer(__DRIcontext *pDRICtx, GLint target,
+                         __DRIdrawable *dPriv)
+{
+   dri2_set_tex_buffer2(pDRICtx, target, GLX_TEXTURE_FORMAT_RGBA_EXT, dPriv);
+}
+
 void
 dri_flush_frontbuffer(struct pipe_screen *screen,
 		      struct pipe_surface *surf, void *context_private)
 {
    struct dri_context *ctx = (struct dri_context *)context_private;
+   struct dri_drawable *drawable = dri_drawable(ctx->dPriv);
+   __DRIdrawable *dri_drawable = ctx->dPriv;
+   __DRIscreen *dri_screen = ctx->sPriv;
 
-   dri_copy_to_front(ctx->dPriv, surf, 0, 0, surf->width, surf->height);
+   /* XXX Does this function get called with DRI1? */
+
+   if (ctx->dPriv == NULL) {
+      debug_printf("%s: no drawable bound to context\n", __func__);
+      return;
+   }
+
+#if 0
+   /* TODO if rendering to pixmaps is slow enable this code. */
+   if (drawable->is_pixmap)
+      return;
+#else
+   (void)drawable;
+#endif
+
+   (*dri_screen->dri2.loader->flushFrontBuffer)(dri_drawable,
+						dri_drawable->loaderPrivate);
 }
 
 /**
@@ -206,10 +296,8 @@ dri_create_buffer(__DRIscreenPrivate * sPriv,
 		  __DRIdrawablePrivate * dPriv,
 		  const __GLcontextModes * visual, boolean isPixmap)
 {
-   enum pipe_format colorFormat, depthFormat, stencilFormat;
    struct dri_screen *screen = sPriv->private;
    struct dri_drawable *drawable = NULL;
-   struct pipe_screen *pscreen = screen->pipe_screen;
    int i;
 
    if (isPixmap)
@@ -219,39 +307,43 @@ dri_create_buffer(__DRIscreenPrivate * sPriv,
    if (drawable == NULL)
       goto fail;
 
-   /* XXX: todo: use the pipe_screen queries to figure out which
-    * render targets are supportable.
-    */
-   assert(visual->redBits == 8);
-   assert(visual->depthBits == 24 || visual->depthBits == 0);
-   assert(visual->stencilBits == 8 || visual->stencilBits == 0);
-
-   colorFormat = PIPE_FORMAT_A8R8G8B8_UNORM;
-
-   if (visual->depthBits) {
-      if (pscreen->is_format_supported(pscreen, PIPE_FORMAT_Z24S8_UNORM,
-				       PIPE_TEXTURE_2D,
-				       PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0))
-	 depthFormat = PIPE_FORMAT_Z24S8_UNORM;
+   if (visual->redBits == 8) {
+      if (visual->alphaBits == 8)
+         drawable->color_format = PIPE_FORMAT_A8R8G8B8_UNORM;
       else
-	 depthFormat = PIPE_FORMAT_S8Z24_UNORM;
-   } else
-      depthFormat = PIPE_FORMAT_NONE;
+         drawable->color_format = PIPE_FORMAT_X8R8G8B8_UNORM;
+   } else {
+      drawable->color_format = PIPE_FORMAT_R5G6B5_UNORM;
+   }
 
-   if (visual->stencilBits) {
-      if (pscreen->is_format_supported(pscreen, PIPE_FORMAT_Z24S8_UNORM,
-				       PIPE_TEXTURE_2D,
-				       PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0))
-	 stencilFormat = PIPE_FORMAT_Z24S8_UNORM;
-      else
-	 stencilFormat = PIPE_FORMAT_S8Z24_UNORM;
-   } else
-      stencilFormat = PIPE_FORMAT_NONE;
+   switch(visual->depthBits) {
+   default:
+   case 0:
+      drawable->depth_stencil_format = PIPE_FORMAT_NONE;
+      break;
+   case 16:
+      drawable->depth_stencil_format = PIPE_FORMAT_Z16_UNORM;
+      break;
+   case 24:
+      if (visual->stencilBits == 0) {
+	 drawable->depth_stencil_format = (screen->d_depth_bits_last) ?
+	    PIPE_FORMAT_X8Z24_UNORM:
+	    PIPE_FORMAT_Z24X8_UNORM;
+      } else {
+	 drawable->depth_stencil_format = (screen->sd_depth_bits_last) ?
+	    PIPE_FORMAT_S8Z24_UNORM:
+	    PIPE_FORMAT_Z24S8_UNORM;
+      }
+      break;
+   case 32:
+      drawable->depth_stencil_format = PIPE_FORMAT_Z32_UNORM;
+      break;
+   }
 
    drawable->stfb = st_create_framebuffer(visual,
-					  colorFormat,
-					  depthFormat,
-					  stencilFormat,
+					  drawable->color_format,
+					  drawable->depth_stencil_format,
+					  drawable->depth_stencil_format,
 					  dPriv->w,
 					  dPriv->h, (void *)drawable);
    if (drawable->stfb == NULL)
@@ -262,17 +354,19 @@ dri_create_buffer(__DRIscreenPrivate * sPriv,
    dPriv->driverPrivate = (void *)drawable;
 
    /* setup dri2 buffers information */
+   /* TODO incase of double buffer visual, delay fake creation */
    i = 0;
    drawable->attachments[i++] = __DRI_BUFFER_FRONT_LEFT;
-#if 0
-   /* TODO incase of double buffer visual, delay fake creation */
-   drawable->attachments[i++] = __DRI_BUFFER_FAKE_FRONT_LEFT;
-#endif
+
    if (visual->doubleBufferMode)
       drawable->attachments[i++] = __DRI_BUFFER_BACK_LEFT;
-   if (visual->depthBits)
+   else
+      drawable->attachments[i++] = __DRI_BUFFER_FAKE_FRONT_LEFT;
+   if (visual->depthBits && visual->stencilBits)
+      drawable->attachments[i++] = __DRI_BUFFER_DEPTH_STENCIL;
+   else if (visual->depthBits)
       drawable->attachments[i++] = __DRI_BUFFER_DEPTH;
-   if (visual->stencilBits)
+   else if (visual->stencilBits)
       drawable->attachments[i++] = __DRI_BUFFER_STENCIL;
    drawable->num_attachments = i;
 

@@ -151,6 +151,7 @@ st_translate_vertex_program(struct st_context *st,
          case VERT_ATTRIB_TEX5:
          case VERT_ATTRIB_TEX6:
          case VERT_ATTRIB_TEX7:
+            assert(slot < Elements(vs_input_semantic_name));
             vs_input_semantic_name[slot] = TGSI_SEMANTIC_GENERIC;
             vs_input_semantic_index[slot] = num_generic++;
             break;
@@ -171,6 +172,7 @@ st_translate_vertex_program(struct st_context *st,
          case VERT_ATTRIB_GENERIC14:
          case VERT_ATTRIB_GENERIC15:
             assert(attr < VERT_ATTRIB_MAX);
+            assert(slot < Elements(vs_input_semantic_name));
             vs_input_semantic_name[slot] = TGSI_SEMANTIC_GENERIC;
             vs_input_semantic_index[slot] = num_generic++;
             break;
@@ -198,6 +200,7 @@ st_translate_vertex_program(struct st_context *st,
 
    /* initialize output semantics to defaults */
    for (i = 0; i < PIPE_MAX_SHADER_OUTPUTS; i++) {
+      assert(i < Elements(vs_output_semantic_name));
       vs_output_semantic_name[i] = TGSI_SEMANTIC_GENERIC;
       vs_output_semantic_index[i] = 0;
       output_flags[i] = 0x0;
@@ -273,6 +276,7 @@ st_translate_vertex_program(struct st_context *st,
          case VERT_RESULT_VAR0:
             /* fall-through */
          default:
+            assert(slot < Elements(vs_output_semantic_name));
             if (outputSemanticName) {
                /* use provided semantic into */
                assert(outputSemanticName[attr] != TGSI_SEMANTIC_COUNT);
@@ -286,6 +290,7 @@ st_translate_vertex_program(struct st_context *st,
             }
          }
 
+         assert(slot < Elements(output_flags));
          output_flags[slot] = stvp->Base.Base.OutputFlags[attr];
       }
    }
@@ -302,6 +307,26 @@ st_translate_vertex_program(struct st_context *st,
    else {
       outputMapping = defaultOutputMapping;
    }
+
+#if 0 /* debug */
+   {
+      GLuint i;
+      printf("outputMapping? %d\n", outputMapping ? 1 : 0);
+      if (outputMapping) {
+         printf("attr -> slot\n");
+         for (i = 0; i < 16;  i++) {
+            printf(" %2d       %3d\n", i, outputMapping[i]);
+         }
+      }
+      printf("slot    sem_name  sem_index\n");
+      for (i = 0; i < vs_num_outputs; i++) {
+         printf(" %2d         %d         %d\n",
+                i,
+                vs_output_semantic_name[i],
+                vs_output_semantic_index[i]);
+      }
+   }
+#endif
 
    /* free old shader state, if any */
    if (stvp->state.tokens) {
@@ -433,34 +458,20 @@ st_translate_fragment_program(struct st_context *st,
             stfp->input_semantic_index[slot] = 1;
             interpMode[slot] = TGSI_INTERPOLATE_LINEAR;
             break;
-         case FRAG_ATTRIB_FOGC: {
-            int extra_decls = 0;
-            if (stfp->Base.UsesFogFragCoord) {
-               stfp->input_semantic_name[slot] = TGSI_SEMANTIC_FOG;
-               stfp->input_semantic_index[slot] = 0;
-               interpMode[slot] = TGSI_INTERPOLATE_PERSPECTIVE;
-               input_flags[slot] = stfp->Base.Base.InputFlags[attr];
-               ++extra_decls;
-	    }
-            if (stfp->Base.UsesFrontFacing) {
-               GLint idx = slot + extra_decls;
-               stfp->input_semantic_name[idx] = TGSI_SEMANTIC_FACE;
-               stfp->input_semantic_index[idx] = 0;
-               interpMode[idx] = TGSI_INTERPOLATE_CONSTANT;
-               input_flags[idx] = stfp->Base.Base.InputFlags[attr];
-               ++extra_decls;
-            }
-            if (stfp->Base.UsesPointCoord) {
-               GLint idx = slot + extra_decls;
-               stfp->input_semantic_name[idx] = TGSI_SEMANTIC_GENERIC;
-               stfp->input_semantic_index[idx] = num_generic++;
-               interpMode[idx] = TGSI_INTERPOLATE_PERSPECTIVE;
-               input_flags[idx] = stfp->Base.Base.InputFlags[attr];
-               ++extra_decls;
-            }
-            fs_num_inputs += extra_decls - 1;
-            continue;
-         }
+         case FRAG_ATTRIB_FOGC:
+            stfp->input_semantic_name[slot] = TGSI_SEMANTIC_FOG;
+            stfp->input_semantic_index[slot] = 0;
+            interpMode[slot] = TGSI_INTERPOLATE_PERSPECTIVE;
+            break;
+         case FRAG_ATTRIB_FACE:
+            stfp->input_semantic_name[slot] = TGSI_SEMANTIC_FACE;
+            stfp->input_semantic_index[slot] = num_generic++;
+            interpMode[slot] = TGSI_INTERPOLATE_CONSTANT;
+            break;
+         case FRAG_ATTRIB_PNTC:
+            stfp->input_semantic_name[slot] = TGSI_SEMANTIC_GENERIC;
+            stfp->input_semantic_index[slot] = num_generic++;
+            interpMode[slot] = TGSI_INTERPOLATE_PERSPECTIVE;
             break;
          case FRAG_ATTRIB_TEX0:
          case FRAG_ATTRIB_TEX1:

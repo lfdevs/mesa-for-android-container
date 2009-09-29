@@ -3,8 +3,8 @@ Subject: Fix build on GNU/Hurd
 
 Index: mesa/src/glx/x11/dri2.c
 ===================================================================
---- mesa.orig/src/glx/x11/dri2.c
-+++ mesa/src/glx/x11/dri2.c
+--- mesa.orig/src/glx/x11/dri2.c	2009-09-29 11:44:48.000000000 +0200
++++ mesa/src/glx/x11/dri2.c	2009-09-29 11:44:55.000000000 +0200
 @@ -30,6 +30,7 @@
   *   Kristian Høgsberg (krh@redhat.com)
   */
@@ -13,16 +13,16 @@ Index: mesa/src/glx/x11/dri2.c
  
  #define NEED_REPLIES
  #include <X11/Xlibint.h>
-@@ -369,3 +370,4 @@
-     UnlockDisplay(dpy);
-     SyncHandle();
+@@ -377,3 +378,4 @@
+    UnlockDisplay(dpy);
+    SyncHandle();
  }
 +#endif
 Index: mesa/configure.ac
 ===================================================================
---- mesa.orig/configure.ac
-+++ mesa/configure.ac
-@@ -528,6 +528,13 @@
+--- mesa.orig/configure.ac	2009-09-29 11:44:48.000000000 +0200
++++ mesa/configure.ac	2009-09-29 11:44:55.000000000 +0200
+@@ -536,6 +536,13 @@
      enable_xcb=no
  fi
  
@@ -36,7 +36,7 @@ Index: mesa/configure.ac
  dnl
  dnl libGL configuration per driver
  dnl
-@@ -561,11 +568,13 @@
+@@ -569,11 +576,13 @@
          AC_MSG_ERROR([Can't use static libraries for DRI drivers])
      fi
  
@@ -53,9 +53,9 @@ Index: mesa/configure.ac
 +        DRI_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED"
 +    fi
  
-     # find the DRI deps for libGL
-     if test "$x11_pkgconfig" = yes; then
-@@ -632,12 +641,6 @@
+     PKG_CHECK_MODULES([LIBDRM_RADEON], [libdrm_radeon], HAVE_LIBDRM_RADEON=yes, HAVE_LIBDRM_RADEON=no)
+ 
+@@ -647,12 +656,6 @@
      [DRI_DRIVER_INSTALL_DIR="$withval"],
      [DRI_DRIVER_INSTALL_DIR='${libdir}/dri'])
  AC_SUBST([DRI_DRIVER_INSTALL_DIR])

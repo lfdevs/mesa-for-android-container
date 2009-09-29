@@ -30,8 +30,13 @@
 #ifndef RADEON_DRM_H
 #define RADEON_DRM_H
 
+#include <sys/ioctl.h>
+
+#include "xf86drm.h"
+
 #include "pipe/p_screen.h"
 
+#include "trace/tr_drm.h"
 #include "util/u_memory.h"
 
 #include "state_tracker/drm_api.h"
@@ -40,25 +45,35 @@
 #include "radeon_r300.h"
 #include "radeon_winsys_softpipe.h"
 
-struct pipe_screen* radeon_create_screen(int drmFB,
+/* XXX */
+#include "r300_screen.h"
+
+struct pipe_screen* radeon_create_screen(struct drm_api* api,
+                                         int drmFB,
 					 struct drm_create_screen_arg *arg);
 
-struct pipe_context* radeon_create_context(struct pipe_screen* screen);
+struct pipe_context* radeon_create_context(struct drm_api* api,
+                                           struct pipe_screen* screen);
 
-boolean radeon_buffer_from_texture(struct pipe_texture* texture,
+boolean radeon_buffer_from_texture(struct drm_api* api,
+                                   struct pipe_texture* texture,
                                    struct pipe_buffer** buffer,
                                    unsigned* stride);
 
-struct pipe_buffer* radeon_buffer_from_handle(struct pipe_screen* screen,
+struct pipe_buffer* radeon_buffer_from_handle(struct drm_api* api,
+                                              struct pipe_screen* screen,
                                               const char* name,
                                               unsigned handle);
 
-boolean radeon_handle_from_buffer(struct pipe_screen* screen,
+boolean radeon_handle_from_buffer(struct drm_api* api,
+                                  struct pipe_screen* screen,
                                   struct pipe_buffer* buffer,
                                   unsigned* handle);
 
-boolean radeon_global_handle_from_buffer(struct pipe_screen* screen,
+boolean radeon_global_handle_from_buffer(struct drm_api* api,
+                                         struct pipe_screen* screen,
                                          struct pipe_buffer* buffer,
                                          unsigned* handle);
 
+void radeon_destroy_drm_api(struct drm_api* api);
 #endif

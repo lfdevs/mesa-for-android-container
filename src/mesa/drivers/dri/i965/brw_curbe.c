@@ -36,6 +36,7 @@
 #include "main/macros.h"
 #include "main/enums.h"
 #include "shader/prog_parameter.h"
+#include "shader/prog_print.h"
 #include "shader/prog_statevars.h"
 #include "intel_batchbuffer.h"
 #include "intel_regions.h"
@@ -188,13 +189,6 @@ static void prepare_constant_buffer(struct brw_context *brw)
    GLfloat *buf;
    GLuint i;
 
-   /* Update our own dependency flags.  This works because this
-    * function will also be called whenever fp or vp changes.
-    */
-   brw->curbe.tracked_state.dirty.mesa = (_NEW_TRANSFORM|_NEW_PROJECTION);
-   brw->curbe.tracked_state.dirty.mesa |= vp->program.Base.Parameters->StateFlags;
-   brw->curbe.tracked_state.dirty.mesa |= fp->program.Base.Parameters->StateFlags;
-
    if (sz == 0) {
       if (brw->curbe.last_buf) {
 	 free(brw->curbe.last_buf);
@@ -254,6 +248,12 @@ static void prepare_constant_buffer(struct brw_context *brw)
       GLuint offset = brw->curbe.vs_start * 16;
       GLuint nr = brw->vs.prog_data->nr_params / 4;
 
+      if (brw->vertex_program->IsNVProgram)
+	 _mesa_load_tracked_matrices(ctx);
+
+      /* Updates the ParamaterValues[i] pointers for all parameters of the
+       * basic type of PROGRAM_STATE_VAR.
+       */
       _mesa_load_state_parameters(ctx, vp->program.Base.Parameters); 
 
       /* XXX just use a memcpy here */
@@ -335,77 +335,10 @@ static void prepare_constant_buffer(struct brw_context *brw)
     */
 }
 
-
-/**
- * Copy Mesa program parameters into given constant buffer.
- */
-static void
-update_constant_buffer(struct brw_context *brw,
-                       const struct gl_program_parameter_list *params,
-                       dri_bo *const_buffer)
-{
-   struct intel_context *intel = &brw->intel;
-   const int size = params->NumParameters * 4 * sizeof(GLfloat);
-
-   /* copy Mesa program constants into the buffer */
-   if (const_buffer && size > 0) {
-
-      assert(const_buffer);
-      assert(const_buffer->size >= size);
-
-      if (intel->intelScreen->kernel_exec_fencing) {
-         drm_intel_gem_bo_map_gtt(const_buffer);
-         memcpy(const_buffer->virtual, params->ParameterValues, size);
-         drm_intel_gem_bo_unmap_gtt(const_buffer);
-      }
-      else {
-         dri_bo_subdata(const_buffer, 0, size, params->ParameterValues);
-      }
-
-      if (0) {
-         int i;
-         for (i = 0; i < params->NumParameters; i++) {
-            float *p = params->ParameterValues[i];
-            printf("%d: %f %f %f %f\n", i, p[0], p[1], p[2], p[3]);
-         }
-      }
-   }
-}
-
-
-/** Copy current vertex program's parameters into the constant buffer */
-static void
-update_vertex_constant_buffer(struct brw_context *brw)
-{
-   struct brw_vertex_program *vp =
-      (struct brw_vertex_program *) brw->vertex_program;
-   if (0) {
-      printf("update VS constants in buffer %p\n", vp->const_buffer);
-      printf("program %u\n", vp->program.Base.Id);
-   }
-   if (vp->use_const_buffer)
-      update_constant_buffer(brw, vp->program.Base.Parameters, vp->const_buffer);
-}
-
-
-/** Copy current fragment program's parameters into the constant buffer */
-static void
-update_fragment_constant_buffer(struct brw_context *brw)
-{
-   struct brw_fragment_program *fp =
-      (struct brw_fragment_program *) brw->fragment_program;
-   if (fp->use_const_buffer)
-      update_constant_buffer(brw, fp->program.Base.Parameters, fp->const_buffer);
-}
-
-
 static void emit_constant_buffer(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    GLuint sz = brw->curbe.total_size;
-
-   update_vertex_constant_buffer(brw);
-   update_fragment_constant_buffer(brw);
 
    BEGIN_BATCH(2, IGNORE_CLIPRECTS);
    if (sz == 0) {
@@ -428,7 +361,7 @@ static void emit_constant_buffer(struct brw_context *brw)
  */
 const struct brw_tracked_state brw_constant_buffer = {
    .dirty = {
-      .mesa = (_NEW_TRANSFORM|_NEW_PROJECTION),      /* plus fp and vp flags */
+      .mesa = _NEW_PROGRAM_CONSTANTS,
       .brw  = (BRW_NEW_FRAGMENT_PROGRAM |
 	       BRW_NEW_VERTEX_PROGRAM |
 	       BRW_NEW_URB_FENCE | /* Implicit - hardware requires this, not used above */

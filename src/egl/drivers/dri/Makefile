@@ -50,11 +50,12 @@ $(TOP)/$(LIB_DIR)/libEGLdri.so: $(OBJECTS)
 
 install:
 	$(INSTALL) -d $(DESTDIR)$(INSTALL_LIB_DIR)
-	$(INSTALL) $(TOP)/$(LIB_DIR)/libEGLdri.so $(DESTDIR)$(INSTALL_LIB_DIR)
+	$(MINSTALL) $(TOP)/$(LIB_DIR)/libEGLdri.so $(DESTDIR)$(INSTALL_LIB_DIR)
 
 clean:
 	-rm -f *.o
 	-rm -f *.so
+	-rm -f depend depend.bak
 
 depend: $(SOURCES) $(HEADERS)
 	@ echo "running $(MKDEP)"

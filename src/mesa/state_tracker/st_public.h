@@ -103,7 +103,13 @@ void st_finish( struct st_context *st );
 
 void st_notify_swapbuffers(struct st_framebuffer *stfb);
 
-int st_set_teximage(struct pipe_texture *pt, int target);
+void st_swapbuffers(struct st_framebuffer *stfb,
+                    struct pipe_surface **front_left,
+                    struct pipe_surface **front_right);
+
+int st_bind_texture_surface(struct pipe_surface *ps, int target, int level,
+                            enum pipe_format format);
+int st_unbind_texture_surface(struct pipe_surface *ps, int target, int level);
 
 /** Redirect rendering into stfb's surface to a texture image */
 int st_bind_teximage(struct st_framebuffer *stfb, uint surfIndex,

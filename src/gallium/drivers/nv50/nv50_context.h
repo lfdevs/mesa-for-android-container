@@ -63,14 +63,19 @@ struct nv50_rasterizer_stateobj {
 	struct nouveau_stateobj *so;
 };
 
+struct nv50_sampler_stateobj {
+	bool normalized;
+	unsigned tsc[8];
+};
+
 struct nv50_miptree_level {
 	int *image_offset;
 	unsigned pitch;
+	unsigned tile_mode;
 };
 
 struct nv50_miptree {
-	struct pipe_texture base;
-	struct pipe_buffer *buffer;
+	struct nouveau_miptree base;
 
 	struct nv50_miptree_level level[PIPE_MAX_TEXTURE_LEVELS];
 	int image_nr;
@@ -93,13 +98,6 @@ nv50_surface(struct pipe_surface *pt)
 	return (struct nv50_surface *)pt;
 }
 
-static INLINE struct pipe_buffer *
-nv50_surface_buffer(struct pipe_surface *surface)
-{
-	struct nv50_miptree *mt = (struct nv50_miptree *)surface->texture;
-	return mt->buffer;
-}
-
 struct nv50_state {
 	unsigned dirty;
 
@@ -115,10 +113,12 @@ struct nv50_state {
 	unsigned viewport_bypass;
 	struct nouveau_stateobj *tsc_upload;
 	struct nouveau_stateobj *tic_upload;
+	unsigned miptree_nr;
 	struct nouveau_stateobj *vertprog;
 	struct nouveau_stateobj *fragprog;
 	struct nouveau_stateobj *vtxfmt;
 	struct nouveau_stateobj *vtxbuf;
+	struct nouveau_stateobj *vtxattr;
 };
 
 struct nv50_context {
@@ -147,7 +147,7 @@ struct nv50_context {
 	unsigned vtxbuf_nr;
 	struct pipe_vertex_element vtxelt[PIPE_MAX_ATTRIBS];
 	unsigned vtxelt_nr;
-	unsigned *sampler[PIPE_MAX_SAMPLERS];
+	struct nv50_sampler_stateobj *sampler[PIPE_MAX_SAMPLERS];
 	unsigned sampler_nr;
 	struct nv50_miptree *miptree[PIPE_MAX_SAMPLERS];
 	unsigned miptree_nr;

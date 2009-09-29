@@ -38,28 +38,24 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r200_context.h"
 
 extern void r200InitState( r200ContextPtr rmesa );
-extern void r200InitStateFuncs( struct dd_function_table *functions );
+extern void r200InitStateFuncs( struct dd_function_table *functions, GLboolean dri2 );
 extern void r200InitTnlFuncs( GLcontext *ctx );
 
 extern void r200UpdateMaterial( GLcontext *ctx );
 
-extern void r200SetCliprects( r200ContextPtr rmesa );
-extern void r200RecalcScissorRects( r200ContextPtr rmesa );
 extern void r200UpdateViewportOffset( GLcontext *ctx );
 extern void r200UpdateWindow( GLcontext *ctx );
 extern void r200UpdateDrawBuffer(GLcontext *ctx);
 
-extern void r200ValidateState( GLcontext *ctx );
+extern GLboolean r200ValidateState( GLcontext *ctx );
 
-extern void r200PrintDirty( r200ContextPtr rmesa,
-			      const char *msg );
-
+extern void r200_vtbl_update_scissor( GLcontext *ctx );
 
 extern void r200Fallback( GLcontext *ctx, GLuint bit, GLboolean mode );
 #define FALLBACK( rmesa, bit, mode ) do {				\
    if ( 0 ) fprintf( stderr, "FALLBACK in %s: #%d=%d\n",		\
 		     __FUNCTION__, bit, mode );				\
-   r200Fallback( rmesa->glCtx, bit, mode );				\
+   r200Fallback( rmesa->radeon.glCtx, bit, mode );				\
 } while (0)
 
 extern void r200LightingSpaceChange( GLcontext *ctx );

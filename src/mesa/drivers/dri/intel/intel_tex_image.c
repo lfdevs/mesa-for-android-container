@@ -131,6 +131,7 @@ guess_and_alloc_mipmap_tree(struct intel_context *intel,
       comp_byte = intel_compressed_num_bytes(intelImage->base.TexFormat->MesaFormat);
    intelObj->mt = intel_miptree_create(intel,
                                        intelObj->base.Target,
+                                       intelImage->base._BaseFormat,
                                        intelImage->base.InternalFormat,
                                        firstLevel,
                                        lastLevel,
@@ -205,7 +206,7 @@ try_pbo_upload(struct intel_context *intel,
    GLuint src_offset, src_stride;
    GLuint dst_offset, dst_stride;
 
-   if (!pbo ||
+   if (unpack->BufferObj->Name == 0 ||
        intel->ctx._ImageTransferState ||
        unpack->SkipPixels || unpack->SkipRows) {
       DBG("%s: failure 1\n", __FUNCTION__);
@@ -235,18 +236,20 @@ try_pbo_upload(struct intel_context *intel,
 					       INTEL_WRITE_FULL);
 
 
-      intelEmitCopyBlit(intel,
-                        intelImage->mt->cpp,
-                        src_stride, src_buffer, src_offset, GL_FALSE,
-                        dst_stride, dst_buffer, dst_offset, GL_FALSE,
-                        0, 0, 0, 0, width, height,
-			GL_COPY);
+      if (!intelEmitCopyBlit(intel,
+			     intelImage->mt->cpp,
+			     src_stride, src_buffer, src_offset, GL_FALSE,
+			     dst_stride, dst_buffer, dst_offset, GL_FALSE,
+			     0, 0, 0, 0, width, height,
+			     GL_COPY)) {
+	 UNLOCK_HARDWARE(intel);
+	 return GL_FALSE;
+      }
    }
    UNLOCK_HARDWARE(intel);
 
    return GL_TRUE;
 }
-
 
 
 static GLboolean
@@ -261,7 +264,7 @@ try_pbo_zcopy(struct intel_context *intel,
    GLuint src_offset, src_stride;
    GLuint dst_offset, dst_stride;
 
-   if (!pbo ||
+   if (unpack->BufferObj->Name == 0 ||
        intel->ctx._ImageTransferState ||
        unpack->SkipPixels || unpack->SkipRows) {
       DBG("%s: failure 1\n", __FUNCTION__);
@@ -293,10 +296,6 @@ try_pbo_zcopy(struct intel_context *intel,
 }
 
 
-
-
-
-
 static void
 intelTexImage(GLcontext * ctx,
               GLint dims,
@@ -307,7 +306,8 @@ intelTexImage(GLcontext * ctx,
               GLenum format, GLenum type, const void *pixels,
               const struct gl_pixelstore_attrib *unpack,
               struct gl_texture_object *texObj,
-              struct gl_texture_image *texImage, GLsizei imageSize, int compressed)
+              struct gl_texture_image *texImage, GLsizei imageSize,
+              GLboolean compressed)
 {
    struct intel_context *intel = intel_context(ctx);
    struct intel_texture_object *intelObj = intel_texture_object(texObj);
@@ -316,7 +316,6 @@ intelTexImage(GLcontext * ctx,
    GLint postConvHeight = height;
    GLint texelBytes, sizeInBytes;
    GLuint dstRowStride = 0, srcRowStride = texImage->RowStride;
-   GLboolean needs_map;
 
    DBG("%s target %s level %d %dx%dx%d border %d\n", __FUNCTION__,
        _mesa_lookup_enum_by_nr(target), level, width, height, depth, border);
@@ -414,7 +413,9 @@ intelTexImage(GLcontext * ctx,
        * a miptree, so create one just for our level and store it in the image.
        * It'll get moved into the object miptree at validate time.
        */
-      intelImage->mt = intel_miptree_create(intel, target, internalFormat,
+      intelImage->mt = intel_miptree_create(intel, target,
+					    intelImage->base.TexFormat->BaseFormat,
+					    internalFormat,
 					    level, level,
 					    width, height, depth,
 					    intelImage->base.TexFormat->TexelBytes,
@@ -426,7 +427,7 @@ intelTexImage(GLcontext * ctx,
     */
    if (dims <= 2 &&
        intelImage->mt &&
-       intel_buffer_object(unpack->BufferObj) &&
+       unpack->BufferObj->Name != 0 &&
        check_pbo_format(internalFormat, format,
                         type, intelImage->base.TexFormat)) {
 
@@ -464,8 +465,6 @@ intelTexImage(GLcontext * ctx,
       DBG("pbo upload failed\n");
    }
 
-
-
    /* intelCopyTexImage calls this function with pixels == NULL, with
     * the expectation that the mipmap tree will be set up but nothing
     * more will be done.  This is where those calls return:
@@ -482,15 +481,8 @@ intelTexImage(GLcontext * ctx,
 
    LOCK_HARDWARE(intel);
 
-   /* Two cases where we need a mapping of the miptree: when the user supplied
-    * data is mapped as well (non-PBO, memcpy upload) or when we're going to do
-    * (software) mipmap generation.
-    */
-   needs_map = (pixels != NULL) || (level == texObj->BaseLevel &&
-				  texObj->GenerateMipmap);
-
    if (intelImage->mt) {
-      if (needs_map)
+      if (pixels != NULL)
          texImage->Data = intel_miptree_image_map(intel,
                                                   intelImage->mt,
                                                   intelImage->face,
@@ -547,25 +539,26 @@ intelTexImage(GLcontext * ctx,
 						   format, type, pixels, unpack)) {
 	   _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTexImage");
        }
-
-       /* GL_SGIS_generate_mipmap */
-       if (level == texObj->BaseLevel && texObj->GenerateMipmap) {
-	  intel_generate_mipmap(ctx, target, texObj);
-       }
    }
 
    _mesa_unmap_teximage_pbo(ctx, unpack);
 
    if (intelImage->mt) {
-      if (needs_map)
+      if (pixels != NULL)
          intel_miptree_image_unmap(intel, intelImage->mt);
       texImage->Data = NULL;
    }
 
    UNLOCK_HARDWARE(intel);
+
+   /* GL_SGIS_generate_mipmap */
+   if (level == texObj->BaseLevel && texObj->GenerateMipmap) {
+      intel_generate_mipmap(ctx, target, texObj);
+   }
 }
 
-void
+
+static void
 intelTexImage3D(GLcontext * ctx,
                 GLenum target, GLint level,
                 GLint internalFormat,
@@ -578,11 +571,11 @@ intelTexImage3D(GLcontext * ctx,
 {
    intelTexImage(ctx, 3, target, level,
                  internalFormat, width, height, depth, border,
-                 format, type, pixels, unpack, texObj, texImage, 0, 0);
+                 format, type, pixels, unpack, texObj, texImage, 0, GL_FALSE);
 }
 
 
-void
+static void
 intelTexImage2D(GLcontext * ctx,
                 GLenum target, GLint level,
                 GLint internalFormat,
@@ -594,10 +587,11 @@ intelTexImage2D(GLcontext * ctx,
 {
    intelTexImage(ctx, 2, target, level,
                  internalFormat, width, height, 1, border,
-                 format, type, pixels, unpack, texObj, texImage, 0, 0);
+                 format, type, pixels, unpack, texObj, texImage, 0, GL_FALSE);
 }
 
-void
+
+static void
 intelTexImage1D(GLcontext * ctx,
                 GLenum target, GLint level,
                 GLint internalFormat,
@@ -609,20 +603,23 @@ intelTexImage1D(GLcontext * ctx,
 {
    intelTexImage(ctx, 1, target, level,
                  internalFormat, width, 1, 1, border,
-                 format, type, pixels, unpack, texObj, texImage, 0, 0);
+                 format, type, pixels, unpack, texObj, texImage, 0, GL_FALSE);
 }
 
-void intelCompressedTexImage2D( GLcontext *ctx, GLenum target, GLint level,
-				GLint internalFormat,
-				GLint width, GLint height, GLint border,
-				GLsizei imageSize, const GLvoid *data,
-				struct gl_texture_object *texObj,
-				struct gl_texture_image *texImage )
+
+static void
+intelCompressedTexImage2D( GLcontext *ctx, GLenum target, GLint level,
+                           GLint internalFormat,
+                           GLint width, GLint height, GLint border,
+                           GLsizei imageSize, const GLvoid *data,
+                           struct gl_texture_object *texObj,
+                           struct gl_texture_image *texImage )
 {
    intelTexImage(ctx, 2, target, level,
 		 internalFormat, width, height, 1, border,
-		 0, 0, data, &ctx->Unpack, texObj, texImage, imageSize, 1);
+		 0, 0, data, &ctx->Unpack, texObj, texImage, imageSize, GL_TRUE);
 }
+
 
 /**
  * Need to map texture image into memory before copying image data,
@@ -632,7 +629,7 @@ static void
 intel_get_tex_image(GLcontext * ctx, GLenum target, GLint level,
 		    GLenum format, GLenum type, GLvoid * pixels,
 		    struct gl_texture_object *texObj,
-		    struct gl_texture_image *texImage, int compressed)
+		    struct gl_texture_image *texImage, GLboolean compressed)
 {
    struct intel_context *intel = intel_context(ctx);
    struct intel_texture_image *intelImage = intel_texture_image(texImage);
@@ -686,27 +683,28 @@ intel_get_tex_image(GLcontext * ctx, GLenum target, GLint level,
    }
 }
 
-void
+
+static void
 intelGetTexImage(GLcontext * ctx, GLenum target, GLint level,
                  GLenum format, GLenum type, GLvoid * pixels,
                  struct gl_texture_object *texObj,
                  struct gl_texture_image *texImage)
 {
    intel_get_tex_image(ctx, target, level, format, type, pixels,
-		       texObj, texImage, 0);
-
-
+		       texObj, texImage, GL_FALSE);
 }
 
-void
+
+static void
 intelGetCompressedTexImage(GLcontext *ctx, GLenum target, GLint level,
 			   GLvoid *pixels,
 			   struct gl_texture_object *texObj,
 			   struct gl_texture_image *texImage)
 {
    intel_get_tex_image(ctx, target, level, 0, 0, pixels,
-		       texObj, texImage, 1);
+		       texObj, texImage, GL_TRUE);
 }
+
 
 void
 intelSetTexOffset(__DRIcontext *pDRICtx, GLint texname,
@@ -815,4 +813,17 @@ intelSetTexBuffer(__DRIcontext *pDRICtx, GLint target, __DRIdrawable *dPriv)
     * implementation's behavior at the time.
     */
    intelSetTexBuffer2(pDRICtx, target, GLX_TEXTURE_FORMAT_RGBA_EXT, dPriv);
+}
+
+
+void
+intelInitTextureImageFuncs(struct dd_function_table *functions)
+{
+   functions->TexImage1D = intelTexImage1D;
+   functions->TexImage2D = intelTexImage2D;
+   functions->TexImage3D = intelTexImage3D;
+   functions->GetTexImage = intelGetTexImage;
+
+   functions->CompressedTexImage2D = intelCompressedTexImage2D;
+   functions->GetCompressedTexImage = intelGetCompressedTexImage;
 }

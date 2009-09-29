@@ -48,8 +48,8 @@ static SymTabRec radeon_xorg_chipsets[] = {
 };
 
 static PciChipsets radeon_xorg_pci_devices[] = {
-    {PCI_MATCH_ANY, PCI_MATCH_ANY, RES_SHARED_VGA},
-    {-1, -1, RES_UNDEFINED}
+    {PCI_MATCH_ANY, PCI_MATCH_ANY, NULL},
+    {-1, -1, NULL}
 };
 
 static XF86ModuleVersionInfo radeon_xorg_version = {
@@ -106,12 +106,6 @@ radeon_xorg_setup(pointer module, pointer opts, int *errmaj, int *errmin)
 	xf86AddDriver(&modesetting, module, HaveDriverFuncs);
 
 	/*
-	 * Tell the loader about symbols from other modules that this module
-	 * might refer to.
-	 */
-	xorg_tracker_loader_ref_sym_lists();
-
-	/*
 	 * The return value must be non-NULL on success even though there
 	 * is no TearDownProc.
 	 */
@@ -141,7 +135,7 @@ radeon_xorg_pci_probe(DriverPtr driver,
 			       NULL, NULL, NULL, NULL, NULL);
     if (scrn != NULL) {
 	scrn->driverVersion = 1;
-	scrn->driverName = "modesetting";
+	scrn->driverName = "radeon";
 	scrn->name = "modesetting";
 	scrn->Probe = NULL;
 

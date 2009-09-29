@@ -136,9 +136,11 @@ static void *
 nv50_sampler_state_create(struct pipe_context *pipe,
 			  const struct pipe_sampler_state *cso)
 {
-	unsigned *tsc = CALLOC(8, sizeof(unsigned));
+	struct nv50_sampler_stateobj *sso = CALLOC(1, sizeof(*sso));
+	unsigned *tsc = sso->tsc;
+	float limit;
 
-	tsc[0] = (0x00024000 |
+	tsc[0] = (0x00026000 |
 		  (wrap_mode(cso->wrap_s) << 0) |
 		  (wrap_mode(cso->wrap_t) << 3) |
 		  (wrap_mode(cso->wrap_r) << 6));
@@ -202,7 +204,19 @@ nv50_sampler_state_create(struct pipe_context *pipe,
 		tsc[0] |= (nvgl_comparison_op(cso->compare_func) & 0x7);
 	}
 
-	return (void *)tsc;
+	limit = CLAMP(cso->lod_bias, -16.0, 15.0);
+	tsc[1] |= ((int)(limit * 256.0) & 0x1fff) << 12;
+
+	tsc[2] |= ((int)CLAMP(cso->max_lod, 0.0, 15.0) << 20) |
+		  ((int)CLAMP(cso->min_lod, 0.0, 15.0) << 8);
+
+	tsc[4] = fui(cso->border_color[0]);
+	tsc[5] = fui(cso->border_color[1]);
+	tsc[6] = fui(cso->border_color[2]);
+	tsc[7] = fui(cso->border_color[3]);
+
+	sso->normalized = cso->normalized_coords;
+	return (void *)sso;
 }
 
 static void
@@ -259,6 +273,8 @@ nv50_rasterizer_state_create(struct pipe_context *pipe,
 	so_method(so, tesla, NV50TCL_SHADE_MODEL, 1);
 	so_data  (so, cso->flatshade ? NV50TCL_SHADE_MODEL_FLAT :
 				       NV50TCL_SHADE_MODEL_SMOOTH);
+	so_method(so, tesla, 0x1684, 1);
+	so_data  (so, cso->flatshade_first ? 0 : 1);
 
 	so_method(so, tesla, NV50TCL_LINE_WIDTH, 1);
 	so_data  (so, fui(cso->line_width));
@@ -395,35 +411,35 @@ nv50_depth_stencil_alpha_state_create(struct pipe_context *pipe,
 		so_data  (so, 0);
 	}
 
-	/*XXX: yes, I know they're backwards.. header needs fixing */
+	/* XXX: keep hex values until header is updated (names reversed) */
 	if (cso->stencil[0].enabled) {
-		so_method(so, tesla, NV50TCL_STENCIL_BACK_ENABLE, 5);
+		so_method(so, tesla, 0x1380, 8);
 		so_data  (so, 1);
 		so_data  (so, nvgl_stencil_op(cso->stencil[0].fail_op));
 		so_data  (so, nvgl_stencil_op(cso->stencil[0].zfail_op));
 		so_data  (so, nvgl_stencil_op(cso->stencil[0].zpass_op));
 		so_data  (so, nvgl_comparison_op(cso->stencil[0].func));
-		so_method(so, tesla, NV50TCL_STENCIL_BACK_FUNC_REF, 3);
 		so_data  (so, cso->stencil[0].ref_value);
 		so_data  (so, cso->stencil[0].writemask);
 		so_data  (so, cso->stencil[0].valuemask);
 	} else {
-		so_method(so, tesla, NV50TCL_STENCIL_BACK_ENABLE, 1);
+		so_method(so, tesla, 0x1380, 1);
 		so_data  (so, 0);
 	}
 
 	if (cso->stencil[1].enabled) {
-		so_method(so, tesla, NV50TCL_STENCIL_FRONT_ENABLE, 8);
+		so_method(so, tesla, 0x1594, 5);
 		so_data  (so, 1);
 		so_data  (so, nvgl_stencil_op(cso->stencil[1].fail_op));
 		so_data  (so, nvgl_stencil_op(cso->stencil[1].zfail_op));
 		so_data  (so, nvgl_stencil_op(cso->stencil[1].zpass_op));
 		so_data  (so, nvgl_comparison_op(cso->stencil[1].func));
+		so_method(so, tesla, 0x0f54, 3);
 		so_data  (so, cso->stencil[1].ref_value);
 		so_data  (so, cso->stencil[1].writemask);
 		so_data  (so, cso->stencil[1].valuemask);
 	} else {
-		so_method(so, tesla, NV50TCL_STENCIL_FRONT_ENABLE, 1);
+		so_method(so, tesla, 0x1594, 1);
 		so_data  (so, 0);
 	}
 

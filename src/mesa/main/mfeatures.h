@@ -61,6 +61,7 @@
 #define FEATURE_ARB_occlusion_query  _HAVE_FULL_GL
 #define FEATURE_ARB_fragment_program  _HAVE_FULL_GL
 #define FEATURE_ARB_framebuffer_object  _HAVE_FULL_GL
+#define FEATURE_ARB_map_buffer_range  _HAVE_FULL_GL
 #define FEATURE_ARB_pixel_buffer_object  _HAVE_FULL_GL
 #define FEATURE_ARB_vertex_buffer_object  _HAVE_FULL_GL
 #define FEATURE_ARB_vertex_program  _HAVE_FULL_GL
@@ -69,6 +70,7 @@
 #define FEATURE_ARB_shader_objects (FEATURE_ARB_vertex_shader || FEATURE_ARB_fragment_shader)
 #define FEATURE_ARB_shading_language_100 FEATURE_ARB_shader_objects
 #define FEATURE_ARB_shading_language_120 FEATURE_ARB_shader_objects
+#define FEATURE_ARB_sync _HAVE_FULL_GL
 
 #define FEATURE_EXT_framebuffer_blit _HAVE_FULL_GL
 #define FEATURE_EXT_framebuffer_object _HAVE_FULL_GL

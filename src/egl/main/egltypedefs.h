@@ -6,6 +6,7 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
+#include "eglcompiler.h"
 
 typedef struct _egl_api _EGLAPI;
 
@@ -28,7 +29,7 @@ typedef struct _egl_surface _EGLSurface;
 typedef struct _egl_thread_info _EGLThreadInfo;
 
 
-typedef _EGLDriver *(*_EGLMain_t)(_EGLDisplay *dpy, const char *args);
+typedef _EGLDriver *(*_EGLMain_t)(const char *args);
 
 
 #endif /* EGLTYPEDEFS_INCLUDED */

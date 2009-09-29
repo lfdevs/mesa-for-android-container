@@ -6,5 +6,7 @@ eglinfo
 eglscreen
 egltri
 peglgears
+xeglbindtex
 xeglgears
+xeglthreads
 xegl_tri

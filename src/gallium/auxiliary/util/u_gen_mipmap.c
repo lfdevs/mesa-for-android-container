@@ -46,10 +46,6 @@
 #include "util/u_gen_mipmap.h"
 #include "util/u_simple_shaders.h"
 
-#include "tgsi/tgsi_build.h"
-#include "tgsi/tgsi_dump.h"
-#include "tgsi/tgsi_parse.h"
-
 #include "cso_cache/cso_context.h"
 
 
@@ -1518,6 +1514,17 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
    uint dstLevel;
    uint zslice = 0;
    uint offset;
+
+   /* The texture object should have room for the levels which we're
+    * about to generate.
+    */
+   assert(lastLevel <= pt->last_level);
+
+   /* If this fails, why are we here? */
+   assert(lastLevel > baseLevel);
+
+   assert(filter == PIPE_TEX_FILTER_LINEAR ||
+          filter == PIPE_TEX_FILTER_NEAREST);
 
    /* check if we can render in the texture's format */
    if (!screen->is_format_supported(screen, pt->format, PIPE_TEXTURE_2D,

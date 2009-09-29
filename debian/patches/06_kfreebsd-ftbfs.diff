@@ -6,9 +6,9 @@ http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=524690
 
 Index: mesa/configure.ac
 ===================================================================
---- mesa.orig/configure.ac
-+++ mesa/configure.ac
-@@ -721,7 +721,7 @@
+--- mesa.orig/configure.ac	2009-09-29 11:44:55.000000000 +0200
++++ mesa/configure.ac	2009-09-29 11:45:12.000000000 +0200
+@@ -736,7 +736,7 @@
              ;;
          esac
          ;;

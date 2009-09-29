@@ -42,6 +42,12 @@
 #include "shader/prog_statevars.h"
 
 
+/** An invalid texture target */
+#define TEX_TARGET_NONE NUM_TEXTURE_TARGETS
+
+/** An invalid texture unit */
+#define TEX_UNIT_NONE BRW_MAX_TEX_UNIT
+
 #define FIRST_INTERNAL_TEMP MAX_NV_FRAGMENT_PROGRAM_TEMPS
 
 #define X    0
@@ -199,6 +205,15 @@ static struct prog_instruction * emit_tex_op(struct brw_wm_compile *c,
 {
    struct prog_instruction *inst = get_fp_inst(c);
       
+   assert(tex_src_unit < BRW_MAX_TEX_UNIT ||
+          tex_src_unit == TEX_UNIT_NONE);
+   assert(tex_src_target < NUM_TEXTURE_TARGETS ||
+          tex_src_target == TEX_TARGET_NONE);
+
+   /* update mask of which texture units are referenced by this program */
+   if (tex_src_unit != TEX_UNIT_NONE)
+      c->fp->tex_units_used |= (1 << tex_src_unit);
+
    memset(inst, 0, sizeof(*inst));
 
    inst->Opcode = op;
@@ -223,11 +238,44 @@ static struct prog_instruction * emit_op(struct brw_wm_compile *c,
 				       struct prog_src_register src2 )
 {
    return emit_tex_op(c, op, dest, saturate,
-                      0, 0, 0,  /* tex unit, target, shadow */
+                      TEX_UNIT_NONE, TEX_TARGET_NONE, 0,  /* unit, tgt, shadow */
                       src0, src1, src2);
 }
-   
 
+
+/* Many Mesa opcodes produce the same value across all the result channels.
+ * We'd rather not have to support that splatting in the opcode implementations,
+ * and brw_wm_pass*.c wants to optimize them out by shuffling references around
+ * anyway.  We can easily get both by emitting the opcode to one channel, and
+ * then MOVing it to the others, which brw_wm_pass*.c already understands.
+ */
+static struct prog_instruction *emit_scalar_insn(struct brw_wm_compile *c,
+						 const struct prog_instruction *inst0)
+{
+   struct prog_instruction *inst;
+   unsigned int dst_chan;
+   unsigned int other_channel_mask;
+
+   if (inst0->DstReg.WriteMask == 0)
+      return NULL;
+
+   dst_chan = _mesa_ffs(inst0->DstReg.WriteMask) - 1;
+   inst = get_fp_inst(c);
+   *inst = *inst0;
+   inst->DstReg.WriteMask = 1 << dst_chan;
+
+   other_channel_mask = inst0->DstReg.WriteMask & ~(1 << dst_chan);
+   if (other_channel_mask != 0) {
+      inst = emit_op(c,
+		     OPCODE_MOV,
+		     dst_mask(inst0->DstReg, other_channel_mask),
+		     0,
+		     src_swizzle1(src_reg_from_dst(inst0->DstReg), dst_chan),
+		     src_undef(),
+		     src_undef());
+   }
+   return inst;
+}
 
 
 /***********************************************************************
@@ -354,24 +402,28 @@ static void emit_interp( struct brw_wm_compile *c,
 		 src_undef());
       }
       else {
-	 emit_op(c,
-		 WM_LINTERP,
-		 dst,
-		 0,
-		 interp,
-		 deltas,
-		 src_undef());
+         if (c->key.linear_color) {
+            emit_op(c,
+                    WM_LINTERP,
+                    dst,
+                    0,
+                    interp,
+                    deltas,
+                    src_undef());
+         }
+         else {
+            /* perspective-corrected color interpolation */
+            emit_op(c,
+                    WM_PINTERP,
+                    dst,
+                    0,
+                    interp,
+                    deltas,
+                    get_pixel_w(c));
+         }
       }
       break;
    case FRAG_ATTRIB_FOGC:
-      /* The FOGC input is really special.  When a program uses glFogFragCoord,
-       * the results returned are supposed to be (f,0,0,1).  But for Mesa GLSL,
-       * the glFrontFacing and glPointCoord values are also stashed in FOGC.
-       * So, write the interpolated fog value to X, then either 0, 1, or the
-       * stashed values to Y, Z, W.  Note that this means that
-       * glFogFragCoord.yzw can be wrong in those cases!
-       */
-
       /* Interpolate the fog coordinate */
       emit_op(c,
 	      WM_PINTERP,
@@ -381,26 +433,40 @@ static void emit_interp( struct brw_wm_compile *c,
 	      deltas,
 	      get_pixel_w(c));
 
-      /* Move the front facing value into FOGC.y if it's needed. */
-      if (c->fp->program.UsesFrontFacing) {
-	 emit_op(c,
-		 WM_FRONTFACING,
-		 dst_mask(dst, WRITEMASK_Y),
-		 0,
-		 src_undef(),
-		 src_undef(),
-		 src_undef());
-      } else {
-	 emit_op(c,
-		 OPCODE_MOV,
-		 dst_mask(dst, WRITEMASK_Y),
-		 0,
-		 src_swizzle1(interp, SWIZZLE_ZERO),
-		 src_undef(),
-		 src_undef());
-      }
+      emit_op(c,
+	      OPCODE_MOV,
+	      dst_mask(dst, WRITEMASK_YZW),
+	      0,
+	      src_swizzle(interp,
+			  SWIZZLE_ZERO,
+			  SWIZZLE_ZERO,
+			  SWIZZLE_ZERO,
+			  SWIZZLE_ONE),
+	      src_undef(),
+	      src_undef());
+      break;
 
-      /* Should do the PointCoord thing here. */
+   case FRAG_ATTRIB_FACE:
+      /* XXX review/test this case */
+      emit_op(c,
+              WM_FRONTFACING,
+              dst_mask(dst, WRITEMASK_X),
+              0,
+              src_undef(),
+              src_undef(),
+              src_undef());
+      break;
+
+   case FRAG_ATTRIB_PNTC:
+      /* XXX review/test this case */
+      emit_op(c,
+	      WM_PINTERP,
+	      dst_mask(dst, WRITEMASK_XY),
+	      0,
+	      interp,
+	      deltas,
+	      get_pixel_w(c));
+
       emit_op(c,
 	      OPCODE_MOV,
 	      dst_mask(dst, WRITEMASK_ZW),
@@ -413,6 +479,7 @@ static void emit_interp( struct brw_wm_compile *c,
 	      src_undef(),
 	      src_undef());
       break;
+
    default:
       emit_op(c,
 	      WM_PINTERP,
@@ -631,6 +698,8 @@ static void precalc_tex( struct brw_wm_compile *c,
    struct prog_dst_register tmpcoord;
    const GLuint unit = c->fp->program.Base.SamplerUnits[inst->TexSrcUnit];
 
+   assert(unit < BRW_MAX_TEX_UNIT);
+
    if (inst->TexSrcTarget == TEXTURE_CUBE_INDEX) {
        struct prog_instruction *out;
        struct prog_dst_register tmp0 = get_temp(c);
@@ -671,7 +740,7 @@ static void precalc_tex( struct brw_wm_compile *c,
 
        /* tmp0 = 1 / tmp1 */
        emit_op(c, OPCODE_RCP,
-               tmp0,
+               dst_mask(tmp0, WRITEMASK_X),
                0,
                tmp1src,
                src_undef(),
@@ -682,7 +751,7 @@ static void precalc_tex( struct brw_wm_compile *c,
                tmpcoord,
                0,
                src0,
-               tmp0src,
+               src_swizzle1(tmp0src, SWIZZLE_X),
                src_undef());
 
        release_temp(c, tmp0);
@@ -705,7 +774,11 @@ static void precalc_tex( struct brw_wm_compile *c,
 	      tmpcoord,
 	      0,
 	      inst->SrcReg[0],
-	      scale,
+	      src_swizzle(scale,
+			  SWIZZLE_X,
+			  SWIZZLE_Y,
+			  SWIZZLE_ONE,
+			  SWIZZLE_ONE),
 	      src_undef());
 
       coord = src_reg_from_dst(tmpcoord);
@@ -1029,6 +1102,7 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
    c->delta_xy = src_undef();
    c->pixel_w = src_undef();
    c->nr_fp_insns = 0;
+   c->fp->tex_units_used = 0x0;
 
    /* Emit preamble instructions.  This is where special instructions such as
     * WM_CINTERP, WM_LINTERP, WM_PINTERP and WM_WPOSXY are emitted to
@@ -1096,6 +1170,7 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
       case OPCODE_TXB:
 	 out = emit_insn(c, inst);
 	 out->TexSrcUnit = fp->program.Base.SamplerUnits[inst->TexSrcUnit];
+         assert(out->TexSrcUnit < BRW_MAX_TEX_UNIT);
 	 break;
 
       case OPCODE_XPD: 
@@ -1122,9 +1197,11 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
 	 break;
       case OPCODE_PRINT:
 	 break;
-	 
       default:
-	 emit_insn(c, inst);
+	 if (brw_wm_is_scalar_result(inst->Opcode))
+	    emit_scalar_insn(c, inst);
+	 else
+	    emit_insn(c, inst);
 	 break;
       }
    }

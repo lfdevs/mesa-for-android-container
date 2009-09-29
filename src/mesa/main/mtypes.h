@@ -40,6 +40,7 @@
 #include "main/mfeatures.h"
 #include "glapi/glapi.h"
 #include "math/m_matrix.h"	/* GLmatrix */
+#include "main/simple_list.h"	/* struct simple_node */
 
 
 /**
@@ -83,6 +84,7 @@
 /*@{*/
 struct _mesa_HashTable;
 struct gl_attrib_node;
+struct gl_meta_state;
 struct gl_pixelstore_attrib;
 struct gl_program_cache;
 struct gl_texture_format;
@@ -227,7 +229,9 @@ typedef enum
    FRAG_ATTRIB_TEX5 = 9,
    FRAG_ATTRIB_TEX6 = 10,
    FRAG_ATTRIB_TEX7 = 11,
-   FRAG_ATTRIB_VAR0 = 12,  /**< shader varying */
+   FRAG_ATTRIB_FACE = 12,  /**< front/back face */
+   FRAG_ATTRIB_PNTC = 13,  /**< sprite/point coord */
+   FRAG_ATTRIB_VAR0 = 14,  /**< shader varying */
    FRAG_ATTRIB_MAX = (FRAG_ATTRIB_VAR0 + MAX_VARYING)
 } gl_frag_attrib;
 
@@ -239,6 +243,8 @@ typedef enum
 #define FRAG_BIT_COL0  (1 << FRAG_ATTRIB_COL0)
 #define FRAG_BIT_COL1  (1 << FRAG_ATTRIB_COL1)
 #define FRAG_BIT_FOGC  (1 << FRAG_ATTRIB_FOGC)
+#define FRAG_BIT_FACE  (1 << FRAG_ATTRIB_FACE)
+#define FRAG_BIT_PNTC  (1 << FRAG_ATTRIB_PNTC)
 #define FRAG_BIT_TEX0  (1 << FRAG_ATTRIB_TEX0)
 #define FRAG_BIT_TEX1  (1 << FRAG_ATTRIB_TEX1)
 #define FRAG_BIT_TEX2  (1 << FRAG_ATTRIB_TEX2)
@@ -770,6 +776,7 @@ struct gl_light_attrib
 
    GLboolean Enabled;			/**< Lighting enabled flag */
    GLenum ShadeModel;			/**< GL_FLAT or GL_SMOOTH */
+   GLenum ProvokingVertex;              /**< GL_EXT_provoking_vertex */
    GLenum ColorMaterialFace;		/**< GL_FRONT, BACK or FRONT_AND_BACK */
    GLenum ColorMaterialMode;		/**< GL_AMBIENT, GL_DIFFUSE, etc */
    GLbitfield ColorMaterialBitmask;	/**< bitmask formed from Face and Mode */
@@ -1028,7 +1035,7 @@ struct gl_stencil_attrib
 
 /**
  * An index for each type of texture object.  These correspond to the GL
- * target target enums, such as GL_TEXTURE_2D, GL_TEXTURE_CUBE_MAP, etc.
+ * texture target enums, such as GL_TEXTURE_2D, GL_TEXTURE_CUBE_MAP, etc.
  * Note: the order is from highest priority to lowest priority.
  */
 typedef enum
@@ -1439,6 +1446,9 @@ struct gl_texture_attrib
 
    struct gl_texture_object *ProxyTex[NUM_TEXTURE_TARGETS];
 
+   /** GL_ARB_seamless_cubemap */
+   GLboolean CubeMapSeamless;
+
    /** GL_EXT_shared_texture_palette */
    GLboolean SharedPalette;
    struct gl_color_table Palette;
@@ -1498,14 +1508,17 @@ struct gl_buffer_object
 {
    GLint RefCount;
    GLuint Name;
-   GLenum Usage;
-   GLenum Access;
-   GLvoid *Pointer;          /**< Only valid while buffer is mapped */
-   GLintptr Offset;          /**< mapped offset */
-   GLsizeiptr Length;        /**< mapped length */
-   GLsizeiptrARB Size;       /**< Size of storage in bytes */
-   GLubyte *Data;            /**< Location of storage either in RAM or VRAM. */
-   GLboolean OnCard;         /**< Is buffer in VRAM? (hardware drivers) */
+   GLenum Usage;        /**< GL_STREAM_DRAW_ARB, GL_STREAM_READ_ARB, etc. */
+   GLsizeiptrARB Size;  /**< Size of buffer storage in bytes */
+   GLubyte *Data;       /**< Location of storage either in RAM or VRAM. */
+   /** Fields describing a mapped buffer */
+   /*@{*/
+   GLbitfield AccessFlags; /**< Mask of GL_MAP_x_BIT flags */
+   GLvoid *Pointer;     /**< User-space address of mapping */
+   GLintptr Offset;     /**< Mapped offset */
+   GLsizeiptr Length;   /**< Mapped length */
+   /*@}*/
+   GLboolean Written;   /**< Ever written to? (for debugging) */
 };
 
 
@@ -1541,10 +1554,10 @@ struct gl_client_array
    const GLubyte *Ptr;          /**< Points to array data */
    GLboolean Enabled;		/**< Enabled flag is a boolean */
    GLboolean Normalized;        /**< GL_ARB_vertex_program */
+   GLuint _ElementSize;         /**< size of each element in bytes */
 
-   /**< GL_ARB_vertex_buffer_object */
-   struct gl_buffer_object *BufferObj;
-   GLuint _MaxElement;
+   struct gl_buffer_object *BufferObj;/**< GL_ARB_vertex_buffer_object */
+   GLuint _MaxElement;          /**< max element index into array buffer + 1 */
 };
 
 
@@ -1559,10 +1572,12 @@ struct gl_array_object
 
    GLint RefCount;
    _glthread_Mutex Mutex;
+   GLboolean VBOonly;  /**< require all arrays to live in VBOs? */
 
    /** Conventional vertex arrays */
    /*@{*/
    struct gl_client_array Vertex;
+   struct gl_client_array Weight;
    struct gl_client_array Normal;
    struct gl_client_array Color;
    struct gl_client_array SecondaryColor;
@@ -1573,11 +1588,22 @@ struct gl_array_object
    struct gl_client_array PointSize;
    /*@}*/
 
-   /** Generic arrays for vertex programs/shaders */
-   struct gl_client_array VertexAttrib[VERT_ATTRIB_MAX];
+   /**
+    * Generic arrays for vertex programs/shaders.
+    * For NV vertex programs, these attributes alias and take priority
+    * over the conventional attribs above.  For ARB vertex programs and
+    * GLSL vertex shaders, these attributes are separate.
+    */
+   struct gl_client_array VertexAttrib[MAX_VERTEX_GENERIC_ATTRIBS];
 
    /** Mask of _NEW_ARRAY_* values indicating which arrays are enabled */
    GLbitfield _Enabled;
+
+   /**
+    * Min of all enabled arrays' _MaxElement.  When arrays reside inside VBOs
+    * we can determine the max legal (in bounds) glDrawElements array index.
+    */
+   GLuint _MaxElement;
 };
 
 
@@ -1586,8 +1612,14 @@ struct gl_array_object
  */
 struct gl_array_attrib
 {
+   /** Currently bound array object. See _mesa_BindVertexArrayAPPLE() */
    struct gl_array_object *ArrayObj;
+
+   /** The default vertex array object */
    struct gl_array_object *DefaultArrayObj;
+
+   /** Array objects (GL_ARB/APPLE_vertex_array_object) */
+   struct _mesa_HashTable *Objects;
 
    GLint ActiveTexture;		/**< Client Active Texture */
    GLuint LockFirst;            /**< GL_EXT_compiled_vertex_array */
@@ -1596,11 +1628,9 @@ struct gl_array_attrib
    GLbitfield NewState;		/**< mask of _NEW_ARRAY_* values */
 
 #if FEATURE_ARB_vertex_buffer_object
-   struct gl_buffer_object *NullBufferObj;
    struct gl_buffer_object *ArrayBufferObj;
    struct gl_buffer_object *ElementArrayBufferObj;
 #endif
-   GLuint _MaxElement;          /* Min of all enabled array's maxes */
 };
 
 
@@ -1770,7 +1800,7 @@ struct gl_program
    /** Map from sampler unit to texture unit (set by glUniform1i()) */
    GLubyte SamplerUnits[MAX_SAMPLERS];
    /** Which texture target is being sampled (TEXTURE_1D/2D/3D/etc_INDEX) */
-   GLubyte SamplerTargets[MAX_SAMPLERS];
+   gl_texture_index SamplerTargets[MAX_SAMPLERS];
 
    /** Logical counts */
    /*@{*/
@@ -1813,9 +1843,6 @@ struct gl_fragment_program
    struct gl_program Base;   /**< base class */
    GLenum FogOption;
    GLboolean UsesKill;          /**< shader uses KIL instruction */
-   GLboolean UsesPointCoord;    /**< shader uses gl_PointCoord */
-   GLboolean UsesFrontFacing;   /**< shader used gl_FrontFacing */
-   GLboolean UsesFogFragCoord;  /**< shader used gl_FogFragCoord */
 };
 
 
@@ -1960,6 +1987,21 @@ struct gl_query_state
 };
 
 
+/** Sync object state */
+struct gl_sync_object {
+   struct simple_node link;
+   GLenum Type;               /**< GL_SYNC_FENCE */
+   GLuint Name;               /**< Fence name */
+   GLint RefCount;            /**< Reference count */
+   GLboolean DeletePending;   /**< Object was deleted while there were still
+			       * live references (e.g., sync not yet finished)
+			       */
+   GLenum SyncCondition;
+   GLbitfield Flags;          /**< Flags passed to glFenceSync */
+   GLuint StatusFlag:1;       /**< Has the sync object been signaled? */
+};
+
+
 /** Set by #pragma directives */
 struct gl_sl_pragmas
 {
@@ -1983,6 +2025,7 @@ struct gl_shader
    GLboolean Main;  /**< shader defines main() */
    GLboolean UnresolvedRefs;
    const GLchar *Source;  /**< Source code string */
+   GLuint SourceChecksum;       /**< for debug/logging purposes */
    struct gl_program *Program;  /**< Post-compile assembly code */
    GLchar *InfoLog;
    struct gl_sl_pragmas Pragmas;
@@ -2013,6 +2056,7 @@ struct gl_shader_program
    struct gl_program_parameter_list *Varying;
    GLboolean LinkStatus;   /**< GL_LINK_STATUS */
    GLboolean Validated;
+   GLboolean _Used;        /**< Ever used for drawing? */
    GLchar *InfoLog;
 };   
 
@@ -2035,6 +2079,7 @@ struct gl_shader_state
    GLboolean EmitContReturn;            /**< Emit CONT/RET opcodes? */
    GLboolean EmitCondCodes;             /**< Use condition codes? */
    GLboolean EmitComments;              /**< Annotated instructions */
+   GLboolean EmitNVTempInitialization;  /**< 0-fill NV temp registers */
    void *MemPool;
    GLbitfield Flags;                    /**< Mask of GLSL_x flags */
    struct gl_sl_pragmas DefaultPragmas; /**< Default #pragma settings */
@@ -2068,6 +2113,8 @@ struct gl_shared_state
    GLuint TextureStateStamp;	        /**< state notification for shared tex */
    /*@}*/
 
+   /** Default buffer object for vertex arrays that aren't in VBOs */
+   struct gl_buffer_object *NullBufferObj;
 
    /**
     * \name Vertex/fragment programs
@@ -2101,8 +2148,9 @@ struct gl_shared_state
    struct _mesa_HashTable *FrameBuffers;
 #endif
 
-   /** Objects associated with the GL_APPLE_vertex_array_object extension. */
-   struct _mesa_HashTable *ArrayObjects;
+#if FEATURE_ARB_sync
+   struct simple_node SyncObjects;
+#endif
 
    void *DriverData;  /**< Device driver shared state */
 };
@@ -2407,6 +2455,15 @@ struct gl_constants
    GLuint MaxVarying;  /**< Number of float[4] varying parameters */
 
    GLbitfield SupportedBumpUnits; /**> units supporting GL_ATI_envmap_bumpmap as targets */
+
+   /**
+    * Maximum amount of time, measured in nanseconds, that the server can wait.
+    */
+   GLuint64 MaxServerWaitTimeout;
+
+
+   /**< GL_EXT_provoking_vertex */
+   GLboolean QuadsFollowProvokingVertexConvention;
 };
 
 
@@ -2417,6 +2474,7 @@ struct gl_constants
 struct gl_extensions
 {
    GLboolean dummy;  /* don't remove this! */
+   GLboolean ARB_copy_buffer;
    GLboolean ARB_depth_texture;
    GLboolean ARB_draw_buffers;
    GLboolean ARB_fragment_program;
@@ -2425,15 +2483,18 @@ struct gl_extensions
    GLboolean ARB_framebuffer_object;
    GLboolean ARB_half_float_pixel;
    GLboolean ARB_imaging;
+   GLboolean ARB_map_buffer_range;
    GLboolean ARB_multisample;
    GLboolean ARB_multitexture;
    GLboolean ARB_occlusion_query;
    GLboolean ARB_point_sprite;
+   GLboolean ARB_seamless_cube_map;
    GLboolean ARB_shader_objects;
    GLboolean ARB_shading_language_100;
    GLboolean ARB_shading_language_120;
    GLboolean ARB_shadow;
    GLboolean ARB_shadow_ambient; /* or GL_ARB_shadow_ambient */
+   GLboolean ARB_sync;
    GLboolean ARB_texture_border_clamp;
    GLboolean ARB_texture_compression;
    GLboolean ARB_texture_cube_map;
@@ -2444,6 +2505,7 @@ struct gl_extensions
    GLboolean ARB_texture_mirrored_repeat;
    GLboolean ARB_texture_non_power_of_two;
    GLboolean ARB_transpose_matrix;
+   GLboolean ARB_vertex_array_object;
    GLboolean ARB_vertex_buffer_object;
    GLboolean ARB_vertex_program;
    GLboolean ARB_vertex_shader;
@@ -2475,6 +2537,7 @@ struct gl_extensions
    GLboolean EXT_pixel_buffer_object;
    GLboolean EXT_point_parameters;
    GLboolean EXT_polygon_offset;
+   GLboolean EXT_provoking_vertex;
    GLboolean EXT_rescale_normal;
    GLboolean EXT_shadow_funcs;
    GLboolean EXT_secondary_color;
@@ -2623,6 +2686,7 @@ struct gl_matrix_stack
 #define _NEW_PROGRAM            0x8000000  /**< __GLcontextRec::VertexProgram */
 #define _NEW_CURRENT_ATTRIB     0x10000000  /**< __GLcontextRec::Current */
 #define _NEW_PROGRAM_CONSTANTS  0x20000000
+#define _NEW_BUFFER_OBJECT      0x40000000
 #define _NEW_ALL ~0
 /*@}*/
 
@@ -2948,7 +3012,12 @@ struct __GLcontextRec
    struct gl_shader_state Shader; /**< GLSL shader object state */
 
    struct gl_query_state Query;  /**< occlusion, timer queries */
+
+   struct gl_buffer_object *CopyReadBuffer; /**< GL_ARB_copy_buffer */
+   struct gl_buffer_object *CopyWriteBuffer; /**< GL_ARB_copy_buffer */
    /*@}*/
+
+   struct gl_meta_state *Meta;  /**< for "meta" operations */
 
 #if FEATURE_EXT_framebuffer_object
    struct gl_renderbuffer *CurrentRenderbuffer;

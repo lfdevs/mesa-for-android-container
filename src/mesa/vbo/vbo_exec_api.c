@@ -486,23 +486,6 @@ static void GLAPIENTRY vbo_exec_EvalPoint2( GLint i, GLint j )
 }
 
 
-/**
- * Check if programs/shaders are enabled and valid at glBegin time.
- */
-GLboolean 
-vbo_validate_shaders(GLcontext *ctx)
-{
-   if ((ctx->VertexProgram.Enabled && !ctx->VertexProgram._Enabled) ||
-       (ctx->FragmentProgram.Enabled && !ctx->FragmentProgram._Enabled)) {
-      return GL_FALSE;
-   }
-   if (ctx->Shader.CurrentProgram && !ctx->Shader.CurrentProgram->LinkStatus) {
-      return GL_FALSE;
-   }
-   return GL_TRUE;
-}
-
-
 /* Build a list of primitives on the fly.  Keep
  * ctx->Driver.CurrentExecPrimitive uptodate as well.
  */
@@ -521,9 +504,7 @@ static void GLAPIENTRY vbo_exec_Begin( GLenum mode )
 	 return;
       }
 
-      if (!vbo_validate_shaders(ctx)) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "glBegin (invalid vertex/fragment program)");
+      if (!_mesa_valid_to_render(ctx, "glBegin")) {
          return;
       }
 
@@ -675,7 +656,7 @@ void vbo_use_buffer_objects(GLcontext *ctx)
    GLsizei size = VBO_VERT_BUFFER_SIZE;
 
    /* Make sure this func is only used once */
-   assert(exec->vtx.bufferobj == ctx->Array.NullBufferObj);
+   assert(exec->vtx.bufferobj == ctx->Shared->NullBufferObj);
    if (exec->vtx.buffer_map) {
       _mesa_align_free(exec->vtx.buffer_map);
       exec->vtx.buffer_map = NULL;
@@ -701,7 +682,7 @@ void vbo_exec_vtx_init( struct vbo_exec_context *exec )
     */
    _mesa_reference_buffer_object(ctx,
                                  &exec->vtx.bufferobj,
-                                 ctx->Array.NullBufferObj);
+                                 ctx->Shared->NullBufferObj);
 
    ASSERT(!exec->vtx.buffer_map);
    exec->vtx.buffer_map = (GLfloat *)ALIGN_MALLOC(VBO_VERT_BUFFER_SIZE, 64);

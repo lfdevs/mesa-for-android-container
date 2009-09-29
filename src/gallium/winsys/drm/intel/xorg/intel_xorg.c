@@ -47,8 +47,8 @@ static SymTabRec intel_xorg_chipsets[] = {
 };
 
 static PciChipsets intel_xorg_pci_devices[] = {
-    {PCI_MATCH_ANY, PCI_MATCH_ANY, RES_SHARED_VGA},
-    {-1, -1, RES_UNDEFINED}
+    {PCI_MATCH_ANY, PCI_MATCH_ANY, NULL},
+    {-1, -1, NULL}
 };
 
 static XF86ModuleVersionInfo intel_xorg_version = {
@@ -105,12 +105,6 @@ intel_xorg_setup(pointer module, pointer opts, int *errmaj, int *errmin)
 	xf86AddDriver(&modesetting, module, HaveDriverFuncs);
 
 	/*
-	 * Tell the loader about symbols from other modules that this module
-	 * might refer to.
-	 */
-	xorg_tracker_loader_ref_sym_lists();
-
-	/*
 	 * The return value must be non-NULL on success even though there
 	 * is no TearDownProc.
 	 */
@@ -140,7 +134,7 @@ intel_xorg_pci_probe(DriverPtr driver,
 			       NULL, NULL, NULL, NULL, NULL);
     if (scrn != NULL) {
 	scrn->driverVersion = 1;
-	scrn->driverName = "modesetting";
+	scrn->driverName = "i915";
 	scrn->name = "modesetting";
 	scrn->Probe = NULL;
 

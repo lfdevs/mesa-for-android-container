@@ -140,12 +140,19 @@ void brw_clip_interp_vertex( struct brw_clip_compile *c,
 
    /* Just copy the vertex header:
     */
+   /*
+    * After CLIP stage, only first 256 bits of the VUE are read
+    * back on IGDNG, so needn't change it
+    */
    brw_copy_indirect_to_indirect(p, dest_ptr, v0_ptr, 1);
       
    /* Iterate over each attribute (could be done in pairs?)
     */
    for (i = 0; i < c->nr_attrs; i++) {
       GLuint delta = i*16 + 32;
+
+      if (BRW_IS_IGDNG(p->brw))
+          delta = i * 16 + 32 * 3;
 
       if (delta == c->offset[VERT_RESULT_EDGE]) {
 	 if (force_edgeflag) 
@@ -177,6 +184,10 @@ void brw_clip_interp_vertex( struct brw_clip_compile *c,
 
    if (i & 1) {
       GLuint delta = i*16 + 32;
+
+      if (BRW_IS_IGDNG(p->brw))
+          delta = i * 16 + 32 * 3;
+
       brw_MOV(p, deref_4f(dest_ptr, delta), brw_imm_f(0));
    }
 
@@ -201,6 +212,8 @@ void brw_clip_emit_vue(struct brw_clip_compile *c,
 {
    struct brw_compile *p = &c->func;
    GLuint start = c->last_mrf;
+
+   brw_clip_ff_sync(c);
 
    assert(!(allocate && eot));
    
@@ -252,6 +265,7 @@ void brw_clip_kill_thread(struct brw_clip_compile *c)
 {
    struct brw_compile *p = &c->func;
 
+   brw_clip_ff_sync(c);
    /* Send an empty message to kill the thread and release any
     * allocated urb entry:
     */
@@ -343,3 +357,40 @@ void brw_clip_init_clipmask( struct brw_clip_compile *c )
    }
 }
 
+void brw_clip_ff_sync(struct brw_clip_compile *c)
+{
+    if (c->need_ff_sync) {
+        struct brw_compile *p = &c->func;
+        struct brw_instruction *need_ff_sync;
+
+        brw_set_conditionalmod(p, BRW_CONDITIONAL_Z);
+        brw_AND(p, brw_null_reg(), c->reg.ff_sync, brw_imm_ud(0x1));
+        need_ff_sync = brw_IF(p, BRW_EXECUTE_1);
+        {
+            brw_OR(p, c->reg.ff_sync, c->reg.ff_sync, brw_imm_ud(0x1));
+            brw_ff_sync(p, 
+                    c->reg.R0,
+                    0,
+                    c->reg.R0,
+                    1,	
+                    1,		/* used */
+                    1,  	/* msg length */
+                    1,		/* response length */
+                    0,		/* eot */
+                    1,		/* write compelete */
+                    0,		/* urb offset */
+                    BRW_URB_SWIZZLE_NONE);
+        }
+        brw_ENDIF(p, need_ff_sync);
+        brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+    }
+}
+
+void brw_clip_init_ff_sync(struct brw_clip_compile *c)
+{
+    if (c->need_ff_sync) {
+	struct brw_compile *p = &c->func;
+        
+        brw_MOV(p, c->reg.ff_sync, brw_imm_ud(0));
+    }
+}

@@ -59,11 +59,12 @@ const struct brw_tracked_state *atoms[] =
    &brw_curbe_offsets,
    &brw_recalculate_urb_fence,
 
-
    &brw_cc_vp,
    &brw_cc_unit,
 
-   &brw_wm_surfaces,		/* must do before samplers */
+   &brw_vs_surfaces,		/* must do before unit */
+   &brw_wm_constant_surface,	/* must do before wm surfaces/bind bo */
+   &brw_wm_surfaces,		/* must do before samplers and unit */
    &brw_wm_samplers,
 
    &brw_wm_unit,
@@ -88,54 +89,27 @@ const struct brw_tracked_state *atoms[] =
 
    &brw_line_stipple,
    &brw_aa_line_parameters,
-   /* Ordering of the commands below is documented as fixed.  
-    */
-#if 0
-   &brw_pipelined_state_pointers,
-   &brw_urb_fence,
-   &brw_constant_buffer_state,
-#else
+
    &brw_psp_urb_cbs,
-#endif
 
    &brw_drawing_rect,
    &brw_indices,
+   &brw_index_buffer,
    &brw_vertices,
 
-   NULL,			/* brw_constant_buffer */
+   &brw_constant_buffer
 };
 
 
 void brw_init_state( struct brw_context *brw )
 {
-   GLuint i;
-
-   brw_init_cache(brw);
-
-   brw->state.atoms = _mesa_malloc(sizeof(atoms));
-   brw->state.nr_atoms = sizeof(atoms)/sizeof(*atoms);
-   _mesa_memcpy(brw->state.atoms, atoms, sizeof(atoms));
-
-   /* Patch in a pointer to the dynamic state atom:
-    */
-   for (i = 0; i < brw->state.nr_atoms; i++)
-      if (brw->state.atoms[i] == NULL)
-	 brw->state.atoms[i] = &brw->curbe.tracked_state;
-
-   _mesa_memcpy(&brw->curbe.tracked_state, 
-		&brw_constant_buffer,
-		sizeof(brw_constant_buffer));
+   brw_init_caches(brw);
 }
 
 
 void brw_destroy_state( struct brw_context *brw )
 {
-   if (brw->state.atoms) {
-      _mesa_free(brw->state.atoms);
-      brw->state.atoms = NULL;
-   }
-
-   brw_destroy_cache(brw);
+   brw_destroy_caches(brw);
    brw_destroy_batch_cache(brw);
 }
 
@@ -218,6 +192,7 @@ static struct dirty_bit_map mesa_bits[] = {
    DEFINE_BIT(_NEW_MULTISAMPLE),
    DEFINE_BIT(_NEW_TRACK_MATRIX),
    DEFINE_BIT(_NEW_PROGRAM),
+   DEFINE_BIT(_NEW_PROGRAM_CONSTANTS),
    {0, 0, 0}
 };
 
@@ -231,10 +206,10 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_PRIMITIVE),
    DEFINE_BIT(BRW_NEW_CONTEXT),
    DEFINE_BIT(BRW_NEW_WM_INPUT_DIMENSIONS),
-   DEFINE_BIT(BRW_NEW_INPUT_VARYING),
    DEFINE_BIT(BRW_NEW_PSP),
    DEFINE_BIT(BRW_NEW_FENCE),
    DEFINE_BIT(BRW_NEW_INDICES),
+   DEFINE_BIT(BRW_NEW_INDEX_BUFFER),
    DEFINE_BIT(BRW_NEW_VERTICES),
    DEFINE_BIT(BRW_NEW_BATCH),
    DEFINE_BIT(BRW_NEW_DEPTH_BUFFER),
@@ -312,6 +287,7 @@ void brw_validate_state( struct brw_context *brw )
    if (brw->emit_state_always) {
       state->mesa |= ~0;
       state->brw |= ~0;
+      state->cache |= ~0;
    }
 
    if (brw->fragment_program != ctx->FragmentProgram._Current) {
@@ -330,13 +306,13 @@ void brw_validate_state( struct brw_context *brw )
       return;
 
    if (brw->state.dirty.brw & BRW_NEW_CONTEXT)
-      brw_clear_batch_cache_flush(brw);
+      brw_clear_batch_cache(brw);
 
    brw->intel.Fallback = 0;
 
    /* do prepare stage for all atoms */
    for (i = 0; i < Elements(atoms); i++) {
-      const struct brw_tracked_state *atom = brw->state.atoms[i];
+      const struct brw_tracked_state *atom = atoms[i];
 
       if (brw->intel.Fallback)
          break;
@@ -345,6 +321,19 @@ void brw_validate_state( struct brw_context *brw )
          if (atom->prepare) {
             atom->prepare(brw);
         }
+      }
+   }
+
+   /* Make sure that the textures which are referenced by the current
+    * brw fragment program are actually present/valid.
+    * If this fails, we can experience GPU lock-ups.
+    */
+   {
+      const struct brw_fragment_program *fp;
+      fp = brw_fragment_program_const(brw->fragment_program);
+      if (fp) {
+         assert((fp->tex_units_used & ctx->Texture._EnabledUnits)
+                == fp->tex_units_used);
       }
    }
 }
@@ -367,8 +356,8 @@ void brw_upload_state(struct brw_context *brw)
       _mesa_memset(&examined, 0, sizeof(examined));
       prev = *state;
 
-      for (i = 0; i < brw->state.nr_atoms; i++) {	 
-	 const struct brw_tracked_state *atom = brw->state.atoms[i];
+      for (i = 0; i < Elements(atoms); i++) {	 
+	 const struct brw_tracked_state *atom = atoms[i];
 	 struct brw_state_flags generated;
 
 	 assert(atom->dirty.mesa ||
@@ -397,7 +386,7 @@ void brw_upload_state(struct brw_context *brw)
    }
    else {
       for (i = 0; i < Elements(atoms); i++) {	 
-	 const struct brw_tracked_state *atom = brw->state.atoms[i];
+	 const struct brw_tracked_state *atom = atoms[i];
 
 	 if (brw->intel.Fallback)
 	    break;

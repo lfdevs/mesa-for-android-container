@@ -31,8 +31,8 @@
 #include "r300_context.h"
 #include "r300_cs.h"
 #include "r300_emit.h"
-#include "r300_state_shader.h"
-#include "r300_state_tcl.h"
+#include "r300_fs.h"
+#include "r300_vs.h"
 #include "r300_state_inlines.h"
 
 static struct r300_blend_state blend_clear_state = {
@@ -72,17 +72,17 @@ static struct r300_rs_state rs_clear_state = {
     .color_control = R300_SHADE_MODEL_FLAT,
 };
 
-static struct r300_rs_block r300_rs_block_clear_state = {
-    .ip[0] = R500_RS_SEL_S(R300_RS_SEL_K0) |
-        R500_RS_SEL_T(R300_RS_SEL_K0) |
-        R500_RS_SEL_R(R300_RS_SEL_K0) |
+static struct r300_rs_block r3xx_rs_block_clear_state = {
+    .ip[0] = R500_RS_SEL_S(R300_RS_SEL_C0) |
+        R500_RS_SEL_T(R300_RS_SEL_C0) |
+        R500_RS_SEL_R(R300_RS_SEL_C0) |
         R500_RS_SEL_Q(R300_RS_SEL_K1),
     .inst[0] = R300_RS_INST_COL_CN_WRITE,
     .count = R300_IT_COUNT(0) | R300_IC_COUNT(1) | R300_HIRES_EN,
     .inst_count = 0,
 };
 
-static struct r300_rs_block r500_rs_block_clear_state = {
+static struct r300_rs_block r5xx_rs_block_clear_state = {
     .ip[0] = R500_RS_SEL_S(R500_RS_IP_PTR_K0) |
         R500_RS_SEL_T(R500_RS_IP_PTR_K0) |
         R500_RS_SEL_R(R500_RS_IP_PTR_K0) |
@@ -94,24 +94,24 @@ static struct r300_rs_block r500_rs_block_clear_state = {
 
 /* The following state is used for surface_copy only. */
 
-static struct r300_rs_block r300_rs_block_copy_state = {
+static struct r300_rs_block r3xx_rs_block_copy_state = {
     .ip[0] = R500_RS_SEL_S(R300_RS_SEL_K0) |
         R500_RS_SEL_T(R300_RS_SEL_K0) |
         R500_RS_SEL_R(R300_RS_SEL_K0) |
         R500_RS_SEL_Q(R300_RS_SEL_K1),
     .inst[0] = R300_RS_INST_COL_CN_WRITE,
     .count = R300_IT_COUNT(2) | R300_IC_COUNT(0) | R300_HIRES_EN,
-    .inst_count = R300_RS_TX_OFFSET(6),
+    .inst_count = R300_RS_TX_OFFSET(0),
 };
 
-static struct r300_rs_block r500_rs_block_copy_state = {
+static struct r300_rs_block r5xx_rs_block_copy_state = {
     .ip[0] = R500_RS_SEL_S(0) |
         R500_RS_SEL_T(1) |
         R500_RS_SEL_R(R500_RS_IP_PTR_K0) |
         R500_RS_SEL_Q(R500_RS_IP_PTR_K1),
     .inst[0] = R500_RS_INST_TEX_CN_WRITE,
     .count = R300_IT_COUNT(2) | R300_IC_COUNT(0) | R300_HIRES_EN,
-    .inst_count = R300_RS_TX_OFFSET(6),
+    .inst_count = R300_RS_TX_OFFSET(0),
 };
 
 static struct r300_sampler_state r300_sampler_copy_state = {

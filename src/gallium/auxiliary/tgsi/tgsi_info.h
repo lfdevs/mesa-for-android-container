@@ -36,17 +36,22 @@ extern "C" {
 
 struct tgsi_opcode_info
 {
-   uint num_dst;
-   uint num_src;
-   boolean is_tex;
-   boolean is_branch;
+   unsigned num_dst:3;
+   unsigned num_src:3;
+   unsigned is_tex:1;
+   unsigned is_branch:1;
+   int pre_dedent:2;
+   int post_indent:2;
    const char *mnemonic;
-   const char *alt_mnemonic1;
-   const char *alt_mnemonic2;
+   uint opcode;
 };
 
 const struct tgsi_opcode_info *
 tgsi_get_opcode_info( uint opcode );
+
+const char *
+tgsi_get_opcode_name( uint opcode );
+
 
 #if defined __cplusplus
 }

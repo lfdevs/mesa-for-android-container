@@ -32,6 +32,9 @@ nv50_state_validate_fb(struct nv50_context *nv50)
 	unsigned i, w, h, gw = 0;
 
 	for (i = 0; i < fb->nr_cbufs; i++) {
+		struct pipe_texture *pt = fb->cbufs[i]->texture;
+		struct nouveau_bo *bo = nv50_miptree(pt)->base.bo;
+
 		if (!gw) {
 			w = fb->cbufs[i]->width;
 			h = fb->cbufs[i]->height;
@@ -46,26 +49,24 @@ nv50_state_validate_fb(struct nv50_context *nv50)
 		so_data  (so, fb->cbufs[i]->height);
 
 		so_method(so, tesla, NV50TCL_RT_ADDRESS_HIGH(i), 5);
-		so_reloc (so, nv50_surface_buffer(fb->cbufs[i]), fb->cbufs[i]->offset,
-			  NOUVEAU_BO_VRAM | NOUVEAU_BO_HIGH |
-			  NOUVEAU_BO_RDWR, 0, 0);
-		so_reloc (so, nv50_surface_buffer(fb->cbufs[i]), fb->cbufs[i]->offset,
-			  NOUVEAU_BO_VRAM | NOUVEAU_BO_LOW |
-			  NOUVEAU_BO_RDWR, 0, 0);
+		so_reloc (so, bo, fb->cbufs[i]->offset, NOUVEAU_BO_VRAM |
+			      NOUVEAU_BO_HIGH | NOUVEAU_BO_RDWR, 0, 0);
+		so_reloc (so, bo, fb->cbufs[i]->offset, NOUVEAU_BO_VRAM |
+			      NOUVEAU_BO_LOW | NOUVEAU_BO_RDWR, 0, 0);
 		switch (fb->cbufs[i]->format) {
 		case PIPE_FORMAT_A8R8G8B8_UNORM:
-			so_data(so, 0xcf);
+			so_data(so, NV50TCL_RT_FORMAT_A8R8G8B8_UNORM);
 			break;
 		case PIPE_FORMAT_R5G6B5_UNORM:
-			so_data(so, 0xe8);
+			so_data(so, NV50TCL_RT_FORMAT_R5G6B5_UNORM);
 			break;
 		default:
 			NOUVEAU_ERR("AIIII unknown format %s\n",
 				    pf_name(fb->cbufs[i]->format));
-			so_data(so, 0xe6);
+			so_data(so, NV50TCL_RT_FORMAT_X8R8G8B8_UNORM);
 			break;
 		}
-		so_data(so, 0x00000000);
+		so_data(so, bo->tile_mode << 4);
 		so_data(so, 0x00000000);
 
 		so_method(so, tesla, 0x1224, 1);
@@ -73,6 +74,9 @@ nv50_state_validate_fb(struct nv50_context *nv50)
 	}
 
 	if (fb->zsbuf) {
+		struct pipe_texture *pt = fb->zsbuf->texture;
+		struct nouveau_bo *bo = nv50_miptree(pt)->base.bo;
+
 		if (!gw) {
 			w = fb->zsbuf->width;
 			h = fb->zsbuf->height;
@@ -83,31 +87,35 @@ nv50_state_validate_fb(struct nv50_context *nv50)
 		}
 
 		so_method(so, tesla, NV50TCL_ZETA_ADDRESS_HIGH, 5);
-		so_reloc (so, nv50_surface_buffer(fb->zsbuf), fb->zsbuf->offset,
-			  NOUVEAU_BO_VRAM | NOUVEAU_BO_HIGH |
-			  NOUVEAU_BO_RDWR, 0, 0);
-		so_reloc (so, nv50_surface_buffer(fb->zsbuf), fb->zsbuf->offset,
-			  NOUVEAU_BO_VRAM | NOUVEAU_BO_LOW |
-			  NOUVEAU_BO_RDWR, 0, 0);
+		so_reloc (so, bo, fb->zsbuf->offset, NOUVEAU_BO_VRAM |
+			      NOUVEAU_BO_HIGH | NOUVEAU_BO_RDWR, 0, 0);
+		so_reloc (so, bo, fb->zsbuf->offset, NOUVEAU_BO_VRAM |
+			      NOUVEAU_BO_LOW | NOUVEAU_BO_RDWR, 0, 0);
 		switch (fb->zsbuf->format) {
-		case PIPE_FORMAT_Z24S8_UNORM:
-			so_data(so, 0x16);
+		case PIPE_FORMAT_Z32_FLOAT:
+			so_data(so, NV50TCL_ZETA_FORMAT_Z32_FLOAT);
 			break;
-		case PIPE_FORMAT_Z16_UNORM:
-			so_data(so, 0x15);
+		case PIPE_FORMAT_Z24S8_UNORM:
+			so_data(so, NV50TCL_ZETA_FORMAT_Z24S8_UNORM);
+			break;
+		case PIPE_FORMAT_X8Z24_UNORM:
+			so_data(so, NV50TCL_ZETA_FORMAT_X8Z24_UNORM);
+			break;
+		case PIPE_FORMAT_S8Z24_UNORM:
+			so_data(so, NV50TCL_ZETA_FORMAT_S8Z24_UNORM);
 			break;
 		default:
 			NOUVEAU_ERR("AIIII unknown format %s\n",
 				    pf_name(fb->zsbuf->format));
-			so_data(so, 0x16);
+			so_data(so, NV50TCL_ZETA_FORMAT_S8Z24_UNORM);
 			break;
 		}
-		so_data(so, 0x00000000);
+		so_data(so, bo->tile_mode << 4);
 		so_data(so, 0x00000000);
 
 		so_method(so, tesla, 0x1538, 1);
 		so_data  (so, 1);
-		so_method(so, tesla, 0x1228, 3);
+		so_method(so, tesla, NV50TCL_ZETA_HORIZ, 3);
 		so_data  (so, fb->zsbuf->width);
 		so_data  (so, fb->zsbuf->height);
 		so_data  (so, 0x00010001);
@@ -116,12 +124,18 @@ nv50_state_validate_fb(struct nv50_context *nv50)
 	so_method(so, tesla, NV50TCL_VIEWPORT_HORIZ, 2);
 	so_data  (so, w << 16);
 	so_data  (so, h << 16);
-	so_method(so, tesla, 0x0e04, 2);
+	/* set window lower left corner */
+	so_method(so, tesla, NV50TCL_WINDOW_LEFT, 2);
+	so_data  (so, 0);
+	so_data  (so, 0);
+	/* set screen scissor rectangle */
+	so_method(so, tesla, NV50TCL_SCREEN_SCISSOR_HORIZ, 2);
 	so_data  (so, w << 16);
 	so_data  (so, h << 16);
-	so_method(so, tesla, 0xdf8, 2);
-	so_data  (so, 0);
-	so_data  (so, h);
+
+	/* we set scissors to framebuffer size when they're 'turned off' */
+	nv50->dirty |= NV50_NEW_SCISSOR;
+	so_ref(NULL, &nv50->state.scissor);
 
 	so_ref(so, &nv50->state.fb);
 	so_ref(NULL, &so);
@@ -131,48 +145,75 @@ static void
 nv50_state_emit(struct nv50_context *nv50)
 {
 	struct nv50_screen *screen = nv50->screen;
-	struct nouveau_winsys *nvws = screen->nvws;
+	struct nouveau_channel *chan = screen->base.channel;
 
 	if (nv50->pctx_id != screen->cur_pctx) {
-		nv50->state.dirty |= 0xffffffff;
+		if (nv50->state.fb)
+			nv50->state.dirty |= NV50_NEW_FRAMEBUFFER;
+		if (nv50->state.blend)
+			nv50->state.dirty |= NV50_NEW_BLEND;
+		if (nv50->state.zsa)
+			nv50->state.dirty |= NV50_NEW_ZSA;
+		if (nv50->state.vertprog)
+			nv50->state.dirty |= NV50_NEW_VERTPROG;
+		if (nv50->state.fragprog)
+			nv50->state.dirty |= NV50_NEW_FRAGPROG;
+		if (nv50->state.rast)
+			nv50->state.dirty |= NV50_NEW_RASTERIZER;
+		if (nv50->state.blend_colour)
+			nv50->state.dirty |= NV50_NEW_BLEND_COLOUR;
+		if (nv50->state.stipple)
+			nv50->state.dirty |= NV50_NEW_STIPPLE;
+		if (nv50->state.scissor)
+			nv50->state.dirty |= NV50_NEW_SCISSOR;
+		if (nv50->state.viewport)
+			nv50->state.dirty |= NV50_NEW_VIEWPORT;
+		if (nv50->state.tsc_upload)
+			nv50->state.dirty |= NV50_NEW_SAMPLER;
+		if (nv50->state.tic_upload)
+			nv50->state.dirty |= NV50_NEW_TEXTURE;
+		if (nv50->state.vtxfmt && nv50->state.vtxbuf)
+			nv50->state.dirty |= NV50_NEW_ARRAYS;
 		screen->cur_pctx = nv50->pctx_id;
 	}
 
 	if (nv50->state.dirty & NV50_NEW_FRAMEBUFFER)
-		so_emit(nvws, nv50->state.fb);
+		so_emit(chan, nv50->state.fb);
 	if (nv50->state.dirty & NV50_NEW_BLEND)
-		so_emit(nvws, nv50->state.blend);
+		so_emit(chan, nv50->state.blend);
 	if (nv50->state.dirty & NV50_NEW_ZSA)
-		so_emit(nvws, nv50->state.zsa);
+		so_emit(chan, nv50->state.zsa);
 	if (nv50->state.dirty & NV50_NEW_VERTPROG)
-		so_emit(nvws, nv50->state.vertprog);
+		so_emit(chan, nv50->state.vertprog);
 	if (nv50->state.dirty & NV50_NEW_FRAGPROG)
-		so_emit(nvws, nv50->state.fragprog);
+		so_emit(chan, nv50->state.fragprog);
 	if (nv50->state.dirty & NV50_NEW_RASTERIZER)
-		so_emit(nvws, nv50->state.rast);
+		so_emit(chan, nv50->state.rast);
 	if (nv50->state.dirty & NV50_NEW_BLEND_COLOUR)
-		so_emit(nvws, nv50->state.blend_colour);
+		so_emit(chan, nv50->state.blend_colour);
 	if (nv50->state.dirty & NV50_NEW_STIPPLE)
-		so_emit(nvws, nv50->state.stipple);
+		so_emit(chan, nv50->state.stipple);
 	if (nv50->state.dirty & NV50_NEW_SCISSOR)
-		so_emit(nvws, nv50->state.scissor);
+		so_emit(chan, nv50->state.scissor);
 	if (nv50->state.dirty & NV50_NEW_VIEWPORT)
-		so_emit(nvws, nv50->state.viewport);
+		so_emit(chan, nv50->state.viewport);
 	if (nv50->state.dirty & NV50_NEW_SAMPLER)
-		so_emit(nvws, nv50->state.tsc_upload);
+		so_emit(chan, nv50->state.tsc_upload);
 	if (nv50->state.dirty & NV50_NEW_TEXTURE)
-		so_emit(nvws, nv50->state.tic_upload);
+		so_emit(chan, nv50->state.tic_upload);
 	if (nv50->state.dirty & NV50_NEW_ARRAYS) {
-		so_emit(nvws, nv50->state.vtxfmt);
-		so_emit(nvws, nv50->state.vtxbuf);
+		so_emit(chan, nv50->state.vtxfmt);
+		so_emit(chan, nv50->state.vtxbuf);
+		if (nv50->state.vtxattr)
+			so_emit(chan, nv50->state.vtxattr);
 	}
 	nv50->state.dirty = 0;
 
-	so_emit_reloc_markers(nvws, nv50->state.fb);
-	so_emit_reloc_markers(nvws, nv50->state.vertprog);
-	so_emit_reloc_markers(nvws, nv50->state.fragprog);
-	so_emit_reloc_markers(nvws, nv50->state.vtxbuf);
-	so_emit_reloc_markers(nvws, nv50->screen->static_init);
+	so_emit_reloc_markers(chan, nv50->state.fb);
+	so_emit_reloc_markers(chan, nv50->state.vertprog);
+	so_emit_reloc_markers(chan, nv50->state.fragprog);
+	so_emit_reloc_markers(chan, nv50->state.vtxbuf);
+	so_emit_reloc_markers(chan, nv50->screen->static_init);
 }
 
 boolean
@@ -230,13 +271,13 @@ nv50_state_validate(struct nv50_context *nv50)
 		nv50->state.scissor_enabled = rast->scissor;
 
 		so = so_new(3, 0);
-		so_method(so, tesla, 0x0ff4, 2);
+		so_method(so, tesla, NV50TCL_SCISSOR_HORIZ, 2);
 		if (nv50->state.scissor_enabled) {
-			so_data(so, ((s->maxx - s->minx) << 16) | s->minx);
-			so_data(so, ((s->maxy - s->miny) << 16) | s->miny);
+			so_data(so, (s->maxx << 16) | s->minx);
+			so_data(so, (s->maxy << 16) | s->miny);
 		} else {
-			so_data(so, (8192 << 16));
-			so_data(so, (8192 << 16));
+			so_data(so, (nv50->framebuffer.width << 16));
+			so_data(so, (nv50->framebuffer.height << 16));
 		}
 		so_ref(so, &nv50->state.scissor);
 		so_ref(NULL, &so);
@@ -260,20 +301,22 @@ scissor_uptodate:
 
 		so = so_new(12, 0);
 		if (!bypass) {
-			so_method(so, tesla, NV50TCL_VIEWPORT_UNK1(0), 3);
+			so_method(so, tesla, NV50TCL_VIEWPORT_TRANSLATE(0), 3);
 			so_data  (so, fui(nv50->viewport.translate[0]));
 			so_data  (so, fui(nv50->viewport.translate[1]));
 			so_data  (so, fui(nv50->viewport.translate[2]));
-			so_method(so, tesla, NV50TCL_VIEWPORT_UNK0(0), 3);
+			so_method(so, tesla, NV50TCL_VIEWPORT_SCALE(0), 3);
 			so_data  (so, fui(nv50->viewport.scale[0]));
-			so_data  (so, fui(-nv50->viewport.scale[1]));
+			so_data  (so, fui(nv50->viewport.scale[1]));
 			so_data  (so, fui(nv50->viewport.scale[2]));
-			so_method(so, tesla, 0x192c, 1);
+
+			so_method(so, tesla, NV50TCL_VIEWPORT_TRANSFORM_EN, 1);
 			so_data  (so, 1);
+			/* no idea what 0f90 does */
 			so_method(so, tesla, 0x0f90, 1);
 			so_data  (so, 0);
 		} else {
-			so_method(so, tesla, 0x192c, 1);
+			so_method(so, tesla, NV50TCL_VIEWPORT_TRANSFORM_EN, 1);
 			so_data  (so, 0);
 			so_method(so, tesla, 0x0f90, 1);
 			so_data  (so, 1);
@@ -289,16 +332,17 @@ viewport_uptodate:
 		int i;
 
 		so = so_new(nv50->sampler_nr * 8 + 3, 0);
-		so_method(so, tesla, 0x0f00, 1);
+		so_method(so, tesla, NV50TCL_CB_ADDR, 1);
 		so_data  (so, NV50_CB_TSC);
-		so_method(so, tesla, 0x40000f04, nv50->sampler_nr * 8);
+		so_method(so, tesla, NV50TCL_CB_DATA(0) | 0x40000000,
+			nv50->sampler_nr * 8);
 		for (i = 0; i < nv50->sampler_nr; i++)
-			so_datap (so, nv50->sampler[i], 8);
+			so_datap (so, nv50->sampler[i]->tsc, 8);
 		so_ref(so, &nv50->state.tsc_upload);
 		so_ref(NULL, &so);
 	}
 
-	if (nv50->dirty & NV50_NEW_TEXTURE)
+	if (nv50->dirty & (NV50_NEW_TEXTURE | NV50_NEW_SAMPLER))
 		nv50_tex_validate(nv50);
 
 	if (nv50->dirty & NV50_NEW_ARRAYS)

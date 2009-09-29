@@ -44,8 +44,8 @@
 
 
 /** XXX move these */
-#define MAX_WIDTH 2048
-#define MAX_HEIGHT 2048
+#define MAX_WIDTH 4096
+#define MAX_HEIGHT 4096
 
 
 struct softpipe_tile_cache
@@ -116,6 +116,12 @@ sp_create_tile_cache( struct pipe_screen *screen )
 {
    struct softpipe_tile_cache *tc;
    uint pos;
+   int maxLevels, maxTexSize;
+
+   /* sanity checking: max sure MAX_WIDTH/HEIGHT >= largest texture image */
+   maxLevels = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
+   maxTexSize = 1 << (maxLevels - 1);
+   assert(MAX_WIDTH >= maxTexSize);
 
    tc = CALLOC_STRUCT( softpipe_tile_cache );
    if (tc) {

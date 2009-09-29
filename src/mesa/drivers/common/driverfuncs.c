@@ -45,6 +45,9 @@
 #include "main/fbobject.h"
 #include "main/texrender.h"
 #endif
+#if FEATURE_ARB_sync
+#include "main/syncobj.h"
+#endif
 
 #include "shader/program.h"
 #include "shader/prog_execute.h"
@@ -200,17 +203,17 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
    driver->GetDoublev = NULL;
    driver->GetFloatv = NULL;
    driver->GetIntegerv = NULL;
+   driver->GetInteger64v = NULL;
    driver->GetPointerv = NULL;
    
-#if FEATURE_ARB_vertex_buffer_object
-   driver->NewBufferObject = _mesa_new_buffer_object;
-   driver->DeleteBuffer = _mesa_delete_buffer_object;
-   driver->BindBuffer = NULL;
-   driver->BufferData = _mesa_buffer_data;
-   driver->BufferSubData = _mesa_buffer_subdata;
-   driver->GetBufferSubData = _mesa_buffer_get_subdata;
-   driver->MapBuffer = _mesa_buffer_map;
-   driver->UnmapBuffer = _mesa_buffer_unmap;
+   /* buffer objects */
+   _mesa_init_buffer_object_functions(driver);
+
+   /* query objects */
+   _mesa_init_query_object_functions(driver);
+
+#if FEATURE_ARB_sync
+   _mesa_init_sync_object_functions(driver);
 #endif
 
 #if FEATURE_EXT_framebuffer_object
@@ -224,14 +227,6 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
 #if FEATURE_EXT_framebuffer_blit
    driver->BlitFramebuffer = _swrast_BlitFramebuffer;
 #endif
-
-   /* query objects */
-   driver->NewQueryObject = _mesa_new_query_object;
-   driver->DeleteQuery = _mesa_delete_query;
-   driver->BeginQuery = _mesa_begin_query;
-   driver->EndQuery = _mesa_end_query;
-   driver->WaitQuery = _mesa_wait_query;
-   driver->CheckQuery = _mesa_check_query;
 
    /* APPLE_vertex_array_object */
    driver->NewArrayObject = _mesa_new_array_object;

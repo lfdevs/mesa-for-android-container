@@ -25,14 +25,21 @@
 
 #include "draw/draw_context.h"
 #include "draw/draw_vertex.h"
+
 #include "pipe/p_context.h"
+
 #include "tgsi/tgsi_scan.h"
+
 #include "util/u_memory.h"
+#include "util/u_simple_list.h"
 
 #include "r300_clear.h"
 #include "r300_query.h"
 #include "r300_screen.h"
 #include "r300_winsys.h"
+
+struct r300_fragment_shader;
+struct r300_vertex_shader;
 
 struct r300_blend_state {
     uint32_t blend_control;       /* R300_RB3D_CBLEND: 0x4e04 */
@@ -62,6 +69,11 @@ struct r300_dsa_state {
 struct r300_rs_state {
     /* Draw-specific rasterizer state */
     struct pipe_rasterizer_state rs;
+
+    /* Whether or not to enable the VTE. This is referenced at the very
+     * last moment during emission of VTE state, to decide whether or not
+     * the VTE should be used for transformation. */
+    boolean enable_vte;
 
     uint32_t vap_control_status;    /* R300_VAP_CNTL_STATUS: 0x2140 */
     uint32_t point_size;            /* R300_GA_POINT_SIZE: 0x421c */
@@ -112,23 +124,24 @@ struct r300_viewport_state {
     uint32_t vte_control; /* R300_VAP_VTE_CNTL:      0x20b0 */
 };
 
-#define R300_NEW_BLEND           0x0000001
-#define R300_NEW_BLEND_COLOR     0x0000002
-#define R300_NEW_CONSTANTS       0x0000004
-#define R300_NEW_DSA             0x0000008
-#define R300_NEW_FRAMEBUFFERS    0x0000010
-#define R300_NEW_FRAGMENT_SHADER 0x0000020
-#define R300_NEW_RASTERIZER      0x0000040
-#define R300_NEW_RS_BLOCK        0x0000080
-#define R300_NEW_SAMPLER         0x0000100
-#define R300_ANY_NEW_SAMPLERS    0x000ff00
-#define R300_NEW_SCISSOR         0x0010000
-#define R300_NEW_TEXTURE         0x0020000
-#define R300_ANY_NEW_TEXTURES    0x1fe0000
-#define R300_NEW_VERTEX_FORMAT   0x2000000
-#define R300_NEW_VERTEX_SHADER   0x4000000
-#define R300_NEW_VIEWPORT        0x8000000
-#define R300_NEW_KITCHEN_SINK    0xfffffff
+#define R300_NEW_BLEND           0x00000001
+#define R300_NEW_BLEND_COLOR     0x00000002
+#define R300_NEW_CLIP            0x00000004
+#define R300_NEW_CONSTANTS       0x00000008
+#define R300_NEW_DSA             0x00000010
+#define R300_NEW_FRAMEBUFFERS    0x00000020
+#define R300_NEW_FRAGMENT_SHADER 0x00000040
+#define R300_NEW_RASTERIZER      0x00000080
+#define R300_NEW_RS_BLOCK        0x00000100
+#define R300_NEW_SAMPLER         0x00000200
+#define R300_ANY_NEW_SAMPLERS    0x0001fe00
+#define R300_NEW_SCISSOR         0x00020000
+#define R300_NEW_TEXTURE         0x00040000
+#define R300_ANY_NEW_TEXTURES    0x03fc0000
+#define R300_NEW_VERTEX_FORMAT   0x04000000
+#define R300_NEW_VERTEX_SHADER   0x08000000
+#define R300_NEW_VIEWPORT        0x10000000
+#define R300_NEW_KITCHEN_SINK    0x1fffffff
 
 /* The next several objects are not pure Radeon state; they inherit from
  * various Gallium classes. */
@@ -136,66 +149,32 @@ struct r300_viewport_state {
 struct r300_constant_buffer {
     /* Buffer of constants */
     /* XXX first number should be raised */
-    float constants[8][4];
-    /* Number of user-defined constants */
-    int user_count;
+    float constants[32][4];
     /* Total number of constants */
-    int count;
+    unsigned count;
 };
 
-struct r3xx_fragment_shader {
-    /* Parent class */
-    struct pipe_shader_state state;
-    struct tgsi_shader_info info;
-
-    /* Has this shader been translated yet? */
-    boolean translated;
-
-    /* Pixel stack size */
-    int stack_size;
-};
-
-struct r300_fragment_shader {
-    /* Parent class */
-    struct r3xx_fragment_shader shader;
-
-    /* Number of ALU instructions */
-    int alu_instruction_count;
-
-    /* Number of texture instructions */
-    int tex_instruction_count;
-
-    /* Number of texture indirections */
-    int indirections;
-
-    /* Indirection node offsets */
-    int alu_offset[4];
-
-    /* Machine instructions */
-    struct {
-        uint32_t alu_rgb_inst;
-        uint32_t alu_rgb_addr;
-        uint32_t alu_alpha_inst;
-        uint32_t alu_alpha_addr;
-    } instructions[64]; /* XXX magic num */
-};
-
-struct r500_fragment_shader {
-    /* Parent class */
-    struct r3xx_fragment_shader shader;
-
-    /* Number of used instructions */
-    int instruction_count;
-
-    /* Machine instructions */
-    struct {
-        uint32_t inst0;
-        uint32_t inst1;
-        uint32_t inst2;
-        uint32_t inst3;
-        uint32_t inst4;
-        uint32_t inst5;
-    } instructions[256]; /*< XXX magic number */
+/* Query object.
+ *
+ * This is not a subclass of pipe_query because pipe_query is never
+ * actually fully defined. So, rather than have it as a member, and do
+ * subclass-style casting, we treat pipe_query as an opaque, and just
+ * trust that our state tracker does not ever mess up query objects.
+ */
+struct r300_query {
+    /* The kind of query. Currently only OQ is supported. */
+    unsigned type;
+    /* Whether this query is currently active. Only active queries will
+     * get emitted into the command stream, and only active queries get
+     * tallied. */
+    boolean active;
+    /* The current count of this query. Required to be at least 32 bits. */
+    unsigned int count;
+    /* The offset of this query into the query buffer, in bytes. */
+    unsigned offset;
+    /* Linked list members. */
+    struct r300_query* prev;
+    struct r300_query* next;
 };
 
 struct r300_texture {
@@ -207,7 +186,7 @@ struct r300_texture {
 
     /* Stride (pitch?) of this texture in bytes */
     unsigned stride;
-    
+
     /* Total size of this texture, in bytes. */
     unsigned size;
 
@@ -232,27 +211,9 @@ struct r300_vertex_format {
     int fs_tab[16];
 };
 
-struct r300_vertex_shader {
-    /* Parent class */
-    struct pipe_shader_state state;
-    struct tgsi_shader_info info;
-
-    /* Fallback shader, because Draw has issues */
-    struct draw_vertex_shader* draw;
-
-    /* Has this shader been translated yet? */
-    boolean translated;
-
-    /* Number of used instructions */
-    int instruction_count;
-
-    /* Machine instructions */
-    struct {
-        uint32_t inst0;
-        uint32_t inst1;
-        uint32_t inst2;
-        uint32_t inst3;
-    } instructions[128]; /*< XXX magic number */
+static struct pipe_viewport_state r300_viewport_identity = {
+    .scale = {1.0, 1.0, 1.0, 1.0},
+    .translate = {0.0, 0.0, 0.0, 0.0},
 };
 
 struct r300_context {
@@ -264,17 +225,29 @@ struct r300_context {
     /* Draw module. Used mostly for SW TCL. */
     struct draw_context* draw;
 
+    /* Vertex buffer for rendering. */
+    struct pipe_buffer* vbo;
+    /* Offset into the VBO. */
+    size_t vbo_offset;
+
+    /* Occlusion query buffer. */
+    struct pipe_buffer* oqbo;
+    /* Query list. */
+    struct r300_query* query_list;
+
     /* Various CSO state objects. */
     /* Blend state. */
     struct r300_blend_state* blend_state;
     /* Blend color state. */
     struct r300_blend_color_state* blend_color_state;
+    /* User clip planes. */
+    struct pipe_clip_state clip_state;
     /* Shader constants. */
     struct r300_constant_buffer shader_constants[PIPE_SHADER_TYPES];
     /* Depth, stencil, and alpha state. */
     struct r300_dsa_state* dsa_state;
     /* Fragment shader. */
-    struct r3xx_fragment_shader* fs;
+    struct r300_fragment_shader* fs;
     /* Framebuffer state. We currently don't need our own version of this. */
     struct pipe_framebuffer_state framebuffer_state;
     /* Rasterizer state. */
@@ -289,7 +262,7 @@ struct r300_context {
     /* Texture states. */
     struct r300_texture* textures[8];
     int texture_count;
-    /* Vertex buffers. */
+    /* Vertex buffers for Gallium. */
     struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];
     int vertex_buffer_count;
     /* Vertex information. */
@@ -305,7 +278,8 @@ struct r300_context {
 };
 
 /* Convenience cast wrapper. */
-static struct r300_context* r300_context(struct pipe_context* context) {
+static INLINE struct r300_context* r300_context(struct pipe_context* context)
+{
     return (struct r300_context*)context;
 }
 

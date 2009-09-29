@@ -26,8 +26,14 @@
  **************************************************************************/
 
 
+/**
+ * Functions for pixel buffer objects and vertex/element buffer objects.
+ */
+
+
 #include "main/imports.h"
 #include "main/mtypes.h"
+#include "main/arrayobj.h"
 #include "main/bufferobj.h"
 
 #include "st_inlines.h"
@@ -37,14 +43,6 @@
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_inlines.h"
-
-
-
-/* Pixel buffers and Vertex/index buffers are handled through these
- * mesa callbacks.  Framebuffer/Renderbuffer objects are
- * created/managed elsewhere.
- */
-
 
 
 /**
@@ -100,8 +98,10 @@ st_bufferobj_subdata(GLcontext *ctx,
 {
    struct st_buffer_object *st_obj = st_buffer_object(obj);
 
-   if (offset >= st_obj->size || size > (st_obj->size - offset))
-      return;
+   /* we may be called from VBO code, so double-check params here */
+   ASSERT(offset >= 0);
+   ASSERT(size >= 0);
+   ASSERT(offset + size <= obj->Size);
 
    st_cond_flush_pipe_buffer_write(st_context(ctx), st_obj->buffer,
 				   offset, size, data);
@@ -120,8 +120,10 @@ st_bufferobj_get_subdata(GLcontext *ctx,
 {
    struct st_buffer_object *st_obj = st_buffer_object(obj);
 
-   if (offset >= st_obj->size || size > (st_obj->size - offset))
-      return;
+   /* we may be called from VBO code, so double-check params here */
+   ASSERT(offset >= 0);
+   ASSERT(size >= 0);
+   ASSERT(offset + size <= obj->Size);
 
    st_cond_flush_pipe_buffer_read(st_context(ctx), st_obj->buffer,
 				  offset, size, data);
@@ -132,9 +134,10 @@ st_bufferobj_get_subdata(GLcontext *ctx,
  * Allocate space for and store data in a buffer object.  Any data that was
  * previously stored in the buffer object is lost.  If data is NULL,
  * memory will be allocated, but no copy will occur.
- * Called via glBufferDataARB().
+ * Called via ctx->Driver.BufferData().
+ * \return GL_TRUE for success, GL_FALSE if out of memory
  */
-static void
+static GLboolean
 st_bufferobj_data(GLcontext *ctx,
 		  GLenum target,
 		  GLsizeiptrARB size,
@@ -170,15 +173,13 @@ st_bufferobj_data(GLcontext *ctx,
    st_obj->buffer = pipe_buffer_create( pipe->screen, 32, buffer_usage, size );
 
    if (!st_obj->buffer) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glBufferDataARB");
-      return;
+      return GL_FALSE;
    }
-
-   st_obj->size = size;
 
    if (data)
       st_no_flush_pipe_buffer_write(st_context(ctx), st_obj->buffer, 0,
 				    size, data);
+   return GL_TRUE;
 }
 
 
@@ -190,7 +191,7 @@ st_bufferobj_map(GLcontext *ctx, GLenum target, GLenum access,
                  struct gl_buffer_object *obj)
 {
    struct st_buffer_object *st_obj = st_buffer_object(obj);
-   GLuint flags;
+   uint flags;
 
    switch (access) {
    case GL_WRITE_ONLY:
@@ -209,13 +210,12 @@ st_bufferobj_map(GLcontext *ctx, GLenum target, GLenum access,
    obj->Pointer = st_cond_flush_pipe_buffer_map(st_context(ctx),
 						st_obj->buffer,
 						flags);
-   if(obj->Pointer) {
+   if (obj->Pointer) {
       obj->Offset = 0;
       obj->Length = obj->Size;
    }
    return obj->Pointer;
 }
-
 
 
 /**
@@ -228,8 +228,7 @@ st_bufferobj_map_range(GLcontext *ctx, GLenum target,
 {
    struct pipe_context *pipe = st_context(ctx)->pipe;
    struct st_buffer_object *st_obj = st_buffer_object(obj);
-   GLuint flags = 0;
-   char *map;
+   uint flags = 0x0;
 
    if (access & GL_MAP_WRITE_BIT)
       flags |= PIPE_BUFFER_USAGE_CPU_WRITE;
@@ -251,14 +250,15 @@ st_bufferobj_map_range(GLcontext *ctx, GLenum target,
    assert(offset < obj->Size);
    assert(offset + length <= obj->Size);
 
-   map = obj->Pointer = pipe_buffer_map_range(pipe->screen, st_obj->buffer, offset, length, flags);
-   if(obj->Pointer) {
+   obj->Pointer = pipe_buffer_map_range(pipe->screen, st_obj->buffer, offset, length, flags);
+   if (obj->Pointer) {
+      obj->Pointer = (ubyte *) obj->Pointer + offset;
       obj->Offset = offset;
       obj->Length = length;
-      map += offset;
+      obj->AccessFlags = access;
    }
    
-   return map;
+   return obj->Pointer;
 }
 
 
@@ -297,6 +297,43 @@ st_bufferobj_unmap(GLcontext *ctx, GLenum target, struct gl_buffer_object *obj)
 }
 
 
+/**
+ * Called via glCopyBufferSubData().
+ */
+static void
+st_copy_buffer_subdata(GLcontext *ctx,
+                       struct gl_buffer_object *src,
+                       struct gl_buffer_object *dst,
+                       GLintptr readOffset, GLintptr writeOffset,
+                       GLsizeiptr size)
+{
+   struct pipe_context *pipe = st_context(ctx)->pipe;
+   struct st_buffer_object *srcObj = st_buffer_object(src);
+   struct st_buffer_object *dstObj = st_buffer_object(dst);
+   ubyte *srcPtr, *dstPtr;
+
+   /* buffer should not already be mapped */
+   assert(!src->Pointer);
+   assert(!dst->Pointer);
+
+   srcPtr = (ubyte *) pipe_buffer_map_range(pipe->screen,
+                                            srcObj->buffer,
+                                            readOffset, size,
+                                            PIPE_BUFFER_USAGE_CPU_READ);
+
+   dstPtr = (ubyte *) pipe_buffer_map_range(pipe->screen,
+                                            dstObj->buffer,
+                                            writeOffset, size,
+                                            PIPE_BUFFER_USAGE_CPU_WRITE);
+
+   if (srcPtr && dstPtr)
+      _mesa_memcpy(dstPtr + writeOffset, srcPtr + readOffset, size);
+
+   pipe_buffer_unmap(pipe->screen, srcObj->buffer);
+   pipe_buffer_unmap(pipe->screen, dstObj->buffer);
+}
+
+
 void
 st_init_bufferobject_functions(struct dd_function_table *functions)
 {
@@ -309,4 +346,9 @@ st_init_bufferobject_functions(struct dd_function_table *functions)
    functions->MapBufferRange = st_bufferobj_map_range;
    functions->FlushMappedBufferRange = st_bufferobj_flush_mapped_range;
    functions->UnmapBuffer = st_bufferobj_unmap;
+   functions->CopyBufferSubData = st_copy_buffer_subdata;
+
+   /* For GL_APPLE_vertex_array_object */
+   functions->NewArrayObject = _mesa_new_array_object;
+   functions->DeleteArrayObject = _mesa_delete_array_object;
 }

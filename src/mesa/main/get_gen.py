@@ -35,6 +35,7 @@ GLfloat = 3
 GLdouble = 4
 GLboolean = 5
 GLfloatN = 6    # A normalized value, such as a color or depth range
+GLint64 = 7
 
 
 TypeStrings = {
@@ -42,7 +43,8 @@ TypeStrings = {
 	GLenum : "GLenum",
 	GLfloat : "GLfloat",
 	GLdouble : "GLdouble",
-	GLboolean : "GLboolean"
+	GLboolean : "GLboolean",
+	GLint64 : "GLint64"
 }
 
 
@@ -176,7 +178,8 @@ StateVars = [
 	   "ctx->Current.Attrib[VERT_ATTRIB_TEX0 + texUnit][1]",
 	   "ctx->Current.Attrib[VERT_ATTRIB_TEX0 + texUnit][2]",
 	   "ctx->Current.Attrib[VERT_ATTRIB_TEX0 + texUnit][3]"],
-	  "const GLuint texUnit = ctx->Texture.CurrentUnit;", None ),
+	  """const GLuint texUnit = ctx->Texture.CurrentUnit;
+         FLUSH_CURRENT(ctx, 0);""", None ),
 	( "GL_DEPTH_BIAS", GLfloat, ["ctx->Pixel.DepthBias"], "", None ),
 	( "GL_DEPTH_BITS", GLint, ["ctx->DrawBuffer->Visual.depthBits"],
 	  "", None ),
@@ -976,6 +979,13 @@ StateVars = [
 	( "GL_READ_FRAMEBUFFER_BINDING_EXT", GLint, ["ctx->ReadBuffer->Name"], "",
 	  ["EXT_framebuffer_blit"] ),
 
+	# GL_EXT_provoking_vertex
+	( "GL_PROVOKING_VERTEX_EXT", GLboolean,
+	  ["ctx->Light.ProvokingVertex"], "", ["EXT_provoking_vertex"] ),
+	( "GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION_EXT", GLboolean,
+	  ["ctx->Const.QuadsFollowProvokingVertexConvention"], "",
+	  ["EXT_provoking_vertex"] ),
+
 	# GL_ARB_fragment_shader
 	( "GL_MAX_FRAGMENT_UNIFORM_COMPONENTS_ARB", GLint,
 	  ["ctx->Const.FragmentProgram.MaxUniformComponents"], "",
@@ -1008,6 +1018,14 @@ StateVars = [
 	# GL_APPLE_vertex_array_object
 	( "GL_VERTEX_ARRAY_BINDING_APPLE", GLint, ["ctx->Array.ArrayObj->Name"], "",
 	  ["APPLE_vertex_array_object"] ),
+
+	# GL_ARB_seamless_cube_map
+	( "GL_TEXTURE_CUBE_MAP_SEAMLESS", GLboolean, ["ctx->Texture.CubeMapSeamless"], "",
+	  ["ARB_seamless_cube_map"] ),
+
+	# GL_ARB_sync
+	( "GL_MAX_SERVER_WAIT_TIMEOUT", GLint64, ["ctx->Const.MaxServerWaitTimeout"], "",
+	  ["ARB_sync"] ),
 ]
 
 
@@ -1017,9 +1035,15 @@ def ConversionFunc(fromType, toType):
 		return ""
 	elif fromType == GLfloat and toType == GLint:
 		return "IROUND"
+	elif fromType == GLfloat and toType == GLint64:
+		return "IROUND64"
 	elif fromType == GLfloatN and toType == GLfloat:
 		return ""
 	elif fromType == GLint and toType == GLfloat: # but not GLfloatN!
+		return "(GLfloat)"
+	elif fromType == GLint and toType == GLint64:
+		return ""
+	elif fromType == GLint64 and toType == GLfloat: # but not GLfloatN!
 		return "(GLfloat)"
 	else:
 		if fromType == GLfloatN:
@@ -1035,6 +1059,7 @@ def EmitGetFunction(stateVars, returnType):
 	"""Emit the code to implement glGetBooleanv, glGetIntegerv or glGetFloatv."""
 	assert (returnType == GLboolean or
 			returnType == GLint or
+			returnType == GLint64 or
 			returnType == GLfloat)
 
 	strType = TypeStrings[returnType]
@@ -1045,8 +1070,13 @@ def EmitGetFunction(stateVars, returnType):
 		function = "GetBooleanv"
 	elif returnType == GLfloat:
 		function = "GetFloatv"
+	elif returnType == GLint64:
+		function = "GetInteger64v"
 	else:
 		abort()
+
+	if returnType == GLint64:
+		print "#if FEATURE_ARB_sync"
 
 	print "void GLAPIENTRY"
 	print "_mesa_%s( GLenum pname, %s *params )" % (function, strType)
@@ -1101,6 +1131,8 @@ def EmitGetFunction(stateVars, returnType):
 	print '         _mesa_error(ctx, GL_INVALID_ENUM, "gl%s(pname=0x%%x)", pname);' % function
 	print "   }"
 	print "}"
+	if returnType == GLint64:
+		print "#endif /* FEATURE_ARB_sync */"
 	print ""
 	return
 
@@ -1129,8 +1161,14 @@ def EmitHeader():
 
 #define INT_TO_BOOLEAN(I)     ( (I) ? GL_TRUE : GL_FALSE )
 
+#define INT64_TO_BOOLEAN(I)   ( (I) ? GL_TRUE : GL_FALSE )
+#define INT64_TO_INT(I)       ( (GLint)((I > INT_MAX) ? INT_MAX : ((I < INT_MIN) ? INT_MIN : (I))) )
+
 #define BOOLEAN_TO_INT(B)     ( (GLint) (B) )
+#define BOOLEAN_TO_INT64(B)   ( (GLint64) (B) )
 #define BOOLEAN_TO_FLOAT(B)   ( (B) ? 1.0F : 0.0F )
+
+#define ENUM_TO_INT64(E)      ( (GLint64) (E) )
 
 
 /*
@@ -1209,5 +1247,6 @@ EmitHeader()
 EmitGetFunction(StateVars, GLboolean)
 EmitGetFunction(StateVars, GLfloat)
 EmitGetFunction(StateVars, GLint)
+EmitGetFunction(StateVars, GLint64)
 EmitGetDoublev()
 

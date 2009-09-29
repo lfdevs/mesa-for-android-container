@@ -33,6 +33,7 @@
 #include "main/mtypes.h"
 #include "main/mm.h"
 #include "texmem.h"
+#include "dri_metaops.h"
 #include "drm.h"
 #include "intel_bufmgr.h"
 
@@ -79,9 +80,19 @@ extern void intelFallback(struct intel_context *intel, GLuint bit,
 
 #define INTEL_MAX_FIXUP 64
 
+struct intel_sync_object {
+   struct gl_sync_object Base;
+
+   /** Batch associated with this sync object */
+   drm_intel_bo *bo;
+};
+
+/**
+ * intel_context is derived from Mesa's context class: GLcontext.
+ */
 struct intel_context
 {
-   GLcontext ctx;               /* the parent class */
+   GLcontext ctx;  /**< base class, must be first field */
 
    struct
    {
@@ -91,7 +102,6 @@ struct intel_context
       void (*new_batch) (struct intel_context * intel);
       void (*emit_invarient_state) (struct intel_context * intel);
       void (*note_fence) (struct intel_context *intel, GLuint fence);
-      void (*note_unlock) (struct intel_context *intel);
       void (*update_texture_state) (struct intel_context * intel);
 
       void (*render_start) (struct intel_context * intel);
@@ -158,19 +168,7 @@ struct intel_context
       void (*debug_batch)(struct intel_context *intel);
    } vtbl;
 
-   struct {
-      struct gl_fragment_program *bitmap_fp;
-      struct gl_vertex_program *passthrough_vp;
-
-      struct gl_fragment_program *saved_fp;
-      GLboolean saved_fp_enable;
-      struct gl_vertex_program *saved_vp;
-      GLboolean saved_vp_enable;
-
-      GLint saved_vp_x, saved_vp_y;
-      GLsizei saved_vp_width, saved_vp_height;
-      GLenum saved_matrix_mode;
-   } meta;
+   struct dri_metaops meta;
 
    GLint refcount;
    GLuint Fallback;
@@ -182,7 +180,6 @@ struct intel_context
    struct intel_region *front_region;
    struct intel_region *back_region;
    struct intel_region *depth_region;
-   GLboolean internal_viewport_call;
 
    /**
     * This value indicates that the kernel memory manager is being used
@@ -216,13 +213,6 @@ struct intel_context
    GLuint ClearColor565;
    GLuint ClearColor8888;
 
-   /* info for intel_clear_tris() */
-   struct
-   {
-      struct gl_array_object *arrayObj;
-      GLfloat vertices[4][3];
-      GLfloat color[4][4];
-   } clear;
 
    /* Offsets of fields within the current vertex:
     */
@@ -295,6 +285,17 @@ struct intel_context
     * easily.
     */
    GLboolean is_front_buffer_rendering;
+   /**
+    * Track whether front-buffer is the current read target.
+    *
+    * This is closely associated with is_front_buffer_rendering, but may
+    * be set separately.  The DRI2 fake front buffer must be referenced
+    * either way.
+    */
+   GLboolean is_front_buffer_reading;
+
+   GLboolean use_texture_tiling;
+   GLboolean use_early_z;
 
    drm_clip_rect_t fboRect;     /**< cliprect for FBO rendering */
 
@@ -317,7 +318,7 @@ struct intel_context
    __DRIdrawablePrivate *driReadDrawable;
    __DRIscreenPrivate *driScreen;
    intelScreenPrivate *intelScreen;
-   volatile struct drm_i915_sarea *sarea;
+   volatile drm_i915_sarea_t *sarea;
 
    GLuint lastStamp;
 
@@ -475,6 +476,8 @@ extern void intelFlush(GLcontext * ctx);
 
 extern void intelInitDriverFunctions(struct dd_function_table *functions);
 
+void intel_init_syncobj_functions(struct dd_function_table *functions);
+
 
 /* ================================================================
  * intel_state.c:
@@ -549,6 +552,9 @@ void intel_viewport(GLcontext * ctx, GLint x, GLint y,
 
 void intel_update_renderbuffers(__DRIcontext *context,
 				__DRIdrawable *drawable);
+
+void i915_set_buf_info_for_region(uint32_t *state, struct intel_region *region,
+				  uint32_t buffer_id);
 
 /*======================================================================
  * Inline conversion functions.  

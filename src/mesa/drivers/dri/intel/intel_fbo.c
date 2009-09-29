@@ -35,6 +35,7 @@
 #include "main/context.h"
 #include "main/texformat.h"
 #include "main/texrender.h"
+#include "drivers/common/meta.h"
 
 #include "intel_context.h"
 #include "intel_buffers.h"
@@ -217,7 +218,8 @@ intel_alloc_renderbuffer_storage(GLcontext * ctx, struct gl_renderbuffer *rb,
       DBG("Allocating %d x %d Intel RBO (pitch %d)\n", width,
 	  height, pitch);
 
-      irb->region = intel_region_alloc(intel, cpp, width, height, pitch,
+      irb->region = intel_region_alloc(intel, I915_TILING_NONE,
+				       cpp, width, height, pitch,
 				       GL_TRUE);
       if (!irb->region)
          return GL_FALSE;       /* out of memory? */
@@ -575,9 +577,10 @@ intel_render_texture(GLcontext * ctx,
 
    ASSERT(newImage);
 
-   if (newImage->Border != 0) {
-      /* Fallback on drawing to a texture with a border, which won't have a
-       * miptree.
+   intel_image = intel_texture_image(newImage);
+   if (!intel_image->mt) {
+      /* Fallback on drawing to a texture that doesn't have a miptree
+       * (has a border, width/height 0, etc.)
        */
       _mesa_reference_renderbuffer(&att->Renderbuffer, NULL);
       _mesa_render_texture(ctx, fb, att);
@@ -608,7 +611,6 @@ intel_render_texture(GLcontext * ctx,
        irb->Base.RefCount);
 
    /* point the renderbufer's region to the texture image region */
-   intel_image = intel_texture_image(newImage);
    if (irb->region != intel_image->mt->region) {
       if (irb->region)
 	 intel_region_release(&irb->region);
@@ -680,6 +682,11 @@ intel_validate_framebuffer(GLcontext *ctx, struct gl_framebuffer *fb)
       if (rb == NULL)
 	 continue;
 
+      if (irb == NULL) {
+	 fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
+	 continue;
+      }
+
       switch (irb->texformat->MesaFormat) {
       case MESA_FORMAT_ARGB8888:
       case MESA_FORMAT_RGB565:
@@ -690,74 +697,6 @@ intel_validate_framebuffer(GLcontext *ctx, struct gl_framebuffer *fb)
 	 fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
       }
    }
-}
-
-
-/**
- * Called from glBlitFramebuffer().
- * For now, we're doing an approximation with glCopyPixels().
- * XXX we need to bypass all the per-fragment operations, except scissor.
- */
-static void
-intel_blit_framebuffer(GLcontext *ctx,
-                       GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
-                       GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
-                       GLbitfield mask, GLenum filter)
-{
-   const GLfloat xZoomSave = ctx->Pixel.ZoomX;
-   const GLfloat yZoomSave = ctx->Pixel.ZoomY;
-   GLsizei width, height;
-   GLfloat xFlip = 1.0F, yFlip = 1.0F;
-
-   if (srcX1 < srcX0) {
-      GLint tmp = srcX1;
-      srcX1 = srcX0;
-      srcX0 = tmp;
-      xFlip = -1.0F;
-   }
-
-   if (srcY1 < srcY0) {
-      GLint tmp = srcY1;
-      srcY1 = srcY0;
-      srcY0 = tmp;
-      yFlip = -1.0F;
-   }
-
-   width = srcX1 - srcX0;
-   height = srcY1 - srcY0;
-
-   ctx->Pixel.ZoomX = xFlip * (dstX1 - dstX0) / (srcX1 - srcY0);
-   ctx->Pixel.ZoomY = yFlip * (dstY1 - dstY0) / (srcY1 - srcY0);
-
-   if (ctx->Pixel.ZoomX < 0.0F) {
-      dstX0 = MAX2(dstX0, dstX1);
-   }
-   else {
-      dstX0 = MIN2(dstX0, dstX1);
-   }
-
-   if (ctx->Pixel.ZoomY < 0.0F) {
-      dstY0 = MAX2(dstY0, dstY1);
-   }
-   else {
-      dstY0 = MIN2(dstY0, dstY1);
-   }
-
-   if (mask & GL_COLOR_BUFFER_BIT) {
-      ctx->Driver.CopyPixels(ctx, srcX0, srcY0, width, height,
-                             dstX0, dstY0, GL_COLOR);
-   }
-   if (mask & GL_DEPTH_BUFFER_BIT) {
-      ctx->Driver.CopyPixels(ctx, srcX0, srcY0, width, height,
-                             dstX0, dstY0, GL_DEPTH);
-   }
-   if (mask & GL_STENCIL_BUFFER_BIT) {
-      ctx->Driver.CopyPixels(ctx, srcX0, srcY0, width, height,
-                             dstX0, dstY0, GL_STENCIL);
-   }
-      
-   ctx->Pixel.ZoomX = xZoomSave;
-   ctx->Pixel.ZoomY = yZoomSave;
 }
 
 
@@ -776,5 +715,5 @@ intel_fbo_init(struct intel_context *intel)
    intel->ctx.Driver.FinishRenderTexture = intel_finish_render_texture;
    intel->ctx.Driver.ResizeBuffers = intel_resize_buffers;
    intel->ctx.Driver.ValidateFramebuffer = intel_validate_framebuffer;
-   intel->ctx.Driver.BlitFramebuffer = intel_blit_framebuffer;
+   intel->ctx.Driver.BlitFramebuffer = _mesa_meta_blit_framebuffer;
 }

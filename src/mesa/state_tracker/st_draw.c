@@ -159,12 +159,21 @@ static GLuint fixed_types[4] = {
  * Return a PIPE_FORMAT_x for the given GL datatype and size.
  */
 GLuint
-st_pipe_vertex_format(GLenum type, GLuint size, GLboolean normalized)
+st_pipe_vertex_format(GLenum type, GLuint size, GLenum format,
+                      GLboolean normalized)
 {
    assert((type >= GL_BYTE && type <= GL_DOUBLE) ||
           type == GL_FIXED);
    assert(size >= 1);
    assert(size <= 4);
+   assert(format == GL_RGBA || format == GL_BGRA);
+
+   if (format == GL_BGRA) {
+      /* this is an odd-ball case */
+      assert(type == GL_UNSIGNED_BYTE);
+      assert(normalized);
+      return PIPE_FORMAT_B8G8R8A8_UNORM;
+   }
 
    if (normalized) {
       switch (type) {
@@ -220,8 +229,10 @@ setup_edgeflags(GLcontext *ctx, GLenum primMode, GLint start, GLint count,
       struct st_buffer_object *stobj = st_buffer_object(array->BufferObj);
       ubyte *map;
 
-      if (!stobj)
+      if (!stobj || stobj->Base.Name == 0) {
+         /* edge flags are not in a VBO */
          return NULL;
+      }
 
       vec = (unsigned *) _mesa_calloc(sizeof(unsigned) * ((count + 31) / 32));
       if (!vec)
@@ -317,23 +328,29 @@ get_arrays_bounds(const struct st_vertex_program *vp,
                        const GLubyte **low, const GLubyte **high)
 {
    const GLubyte *low_addr = NULL;
+   const GLubyte *high_addr = NULL;
    GLuint attr;
-   GLint stride;
 
    for (attr = 0; attr < vp->num_inputs; attr++) {
       const GLuint mesaAttr = vp->index_to_input[attr];
+      const GLint stride = arrays[mesaAttr]->StrideB;
       const GLubyte *start = arrays[mesaAttr]->Ptr;
-      stride = arrays[mesaAttr]->StrideB;
+      const unsigned sz = (arrays[mesaAttr]->Size * 
+                           _mesa_sizeof_type(arrays[mesaAttr]->Type));
+      const GLubyte *end = start + (max_index * stride) + sz;
+
       if (attr == 0) {
          low_addr = start;
+         high_addr = end;
       }
       else {
          low_addr = MIN2(low_addr, start);
+         high_addr = MAX2(high_addr, end);
       }
    }
 
    *low = low_addr;
-   *high = low_addr + (max_index + 1) * stride;
+   *high = high_addr;
 }
 
 
@@ -392,6 +409,7 @@ setup_interleaved_attribs(GLcontext *ctx,
       velements[attr].src_format =
          st_pipe_vertex_format(arrays[mesaAttr]->Type,
                                arrays[mesaAttr]->Size,
+                               arrays[mesaAttr]->Format,
                                arrays[mesaAttr]->Normalized);
       assert(velements[attr].src_format);
    }
@@ -479,6 +497,7 @@ setup_non_interleaved_attribs(GLcontext *ctx,
       velements[attr].src_format
          = st_pipe_vertex_format(arrays[mesaAttr]->Type,
                                  arrays[mesaAttr]->Size,
+                                 arrays[mesaAttr]->Format,
                                  arrays[mesaAttr]->Normalized);
       assert(velements[attr].src_format);
    }
@@ -520,6 +539,7 @@ st_draw_vbo(GLcontext *ctx,
             const struct _mesa_prim *prims,
             GLuint nr_prims,
             const struct _mesa_index_buffer *ib,
+	    GLboolean index_bounds_valid,
             GLuint min_index,
             GLuint max_index)
 {
@@ -531,6 +551,10 @@ st_draw_vbo(GLcontext *ctx,
    struct pipe_vertex_element velements[PIPE_MAX_ATTRIBS];
    unsigned num_vbuffers, num_velements;
    GLboolean userSpace;
+
+   /* Gallium probably doesn't want this in some cases. */
+   if (!index_bounds_valid)
+      vbo_get_minmax_index(ctx, prims, ib, &min_index, &max_index);
 
    /* sanity check for pointer arithmetic below */
    assert(sizeof(arrays[0]->Ptr[0]) == 1);

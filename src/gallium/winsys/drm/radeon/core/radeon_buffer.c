@@ -1,8 +1,8 @@
-/* 
+/*
  * Copyright © 2008 Jérôme Glisse
  *             2009 Corbin Simpson
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,14 +10,14 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
  * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
  * NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS, AUTHORS
  * AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  * The above copyright notice and this permission notice (including the
@@ -72,6 +72,7 @@ static struct pipe_buffer *radeon_buffer_create(struct pipe_winsys *ws,
             alignment, domain, 0);
     if (radeon_buffer->bo == NULL) {
         FREE(radeon_buffer);
+        return NULL;
     }
     return &radeon_buffer->base;
 }
@@ -93,6 +94,29 @@ static struct pipe_buffer *radeon_buffer_user_create(struct pipe_winsys *ws,
     return &radeon_buffer->base;
 }
 
+static struct pipe_buffer *radeon_surface_buffer_create(struct pipe_winsys *ws,
+                                                        unsigned width,
+                                                        unsigned height,
+                                                        enum pipe_format format,
+                                                        unsigned usage,
+                                                        unsigned *stride)
+{
+    struct pipe_format_block block;
+    unsigned nblocksx, nblocksy, size;
+
+    pf_get_block(format, &block);
+
+    nblocksx = pf_get_nblocksx(&block, width);
+    nblocksy = pf_get_nblocksy(&block, height);
+
+    /* Radeons enjoy things in multiples of 32. */
+    /* XXX this can be 32 when POT */
+    *stride = (nblocksx * block.size + 63) & ~63;
+    size = *stride * nblocksy;
+
+    return radeon_buffer_create(ws, 64, usage, size);
+}
+
 static void radeon_buffer_del(struct pipe_buffer *buffer)
 {
     struct radeon_pipe_buffer *radeon_buffer =
@@ -110,16 +134,17 @@ static void *radeon_buffer_map(struct pipe_winsys *ws,
         (struct radeon_pipe_buffer*)buffer;
     int write = 0;
 
-    if (flags & PIPE_BUFFER_USAGE_DONTBLOCK) {
-       /* XXX Remove this when radeon_bo_map supports DONTBLOCK */
-       return NULL;
+    if (!(flags & PIPE_BUFFER_USAGE_DONTBLOCK)) {
+        radeon_bo_wait(radeon_buffer->bo);
     }
     if (flags & PIPE_BUFFER_USAGE_CPU_WRITE) {
         write = 1;
     }
 
-    if (radeon_bo_map(radeon_buffer->bo, write))
+    if (radeon_bo_map(radeon_buffer->bo, write)) {
         return NULL;
+    }
+
     return radeon_buffer->bo->ptr;
 }
 
@@ -175,15 +200,17 @@ struct radeon_winsys* radeon_pipe_winsys(int fd)
         return NULL;
     }
 
+    radeon_ws->priv->fd = fd;
     radeon_ws->priv->bom = radeon_bo_manager_gem_ctor(fd);
 
     radeon_ws->base.flush_frontbuffer = radeon_flush_frontbuffer;
 
     radeon_ws->base.buffer_create = radeon_buffer_create;
-    radeon_ws->base.buffer_destroy = radeon_buffer_del;
     radeon_ws->base.user_buffer_create = radeon_buffer_user_create;
+    radeon_ws->base.surface_buffer_create = radeon_surface_buffer_create;
     radeon_ws->base.buffer_map = radeon_buffer_map;
     radeon_ws->base.buffer_unmap = radeon_buffer_unmap;
+    radeon_ws->base.buffer_destroy = radeon_buffer_del;
 
     radeon_ws->base.fence_reference = radeon_fence_reference;
     radeon_ws->base.fence_signalled = radeon_fence_signalled;

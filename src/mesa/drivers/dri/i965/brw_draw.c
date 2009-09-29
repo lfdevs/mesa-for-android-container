@@ -141,6 +141,8 @@ static void brw_emit_prim(struct brw_context *brw,
 
    prim_packet.verts_per_instance = trim(prim->mode, prim->count);
    prim_packet.start_vert_location = prim->start;
+   if (prim->indexed)
+      prim_packet.start_vert_location += brw->ib.start_vertex_offset;
    prim_packet.instance_count = 1;
    prim_packet.start_instance_location = 0;
    prim_packet.base_vert_location = 0;
@@ -185,21 +187,16 @@ static void brw_merge_inputs( struct brw_context *brw,
 
    for (i = 0; i < VERT_ATTRIB_MAX; i++) {
       brw->vb.inputs[i].glarray = arrays[i];
+      brw->vb.inputs[i].attrib = (gl_vert_attrib) i;
 
       if (arrays[i]->StrideB != 0)
-	 brw->vb.info.varying |= 1 << i;
-
 	 brw->vb.info.sizes[i/16] |= (brw->vb.inputs[i].glarray->Size - 1) <<
 	    ((i%16) * 2);
    }
 
-   /* Raise statechanges if input sizes and varying have changed: 
-    */
+   /* Raise statechanges if input sizes have changed. */
    if (memcmp(brw->vb.info.sizes, old.sizes, sizeof(old.sizes)) != 0)
       brw->state.dirty.brw |= BRW_NEW_INPUT_DIMENSIONS;
-
-   if (brw->vb.info.varying != old.varying)
-      brw->state.dirty.brw |= BRW_NEW_INPUT_VARYING;
 }
 
 /* XXX: could split the primitive list to fallback only on the
@@ -416,6 +413,8 @@ static GLboolean brw_try_draw_prims( GLcontext *ctx,
  out:
    UNLOCK_HARDWARE(intel);
 
+   brw_state_cache_check_size(brw);
+
    if (warn)
       fprintf(stderr, "i965: Single primitive emit potentially exceeded "
 	      "available aperture space\n");
@@ -426,54 +425,31 @@ static GLboolean brw_try_draw_prims( GLcontext *ctx,
    return retval;
 }
 
-static GLboolean brw_need_rebase( GLcontext *ctx,
-				  const struct gl_client_array *arrays[],
-				  const struct _mesa_index_buffer *ib,
-				  GLuint min_index )
-{
-   if (min_index == 0) 
-      return GL_FALSE;
-
-   if (ib) {
-      if (!vbo_all_varyings_in_vbos(arrays))
-	 return GL_TRUE;
-      else
-	 return GL_FALSE;
-   }
-   else {
-      /* Hmm.  This isn't quite what I wanted.  BRW can actually
-       * handle the mixed case well enough that we shouldn't need to
-       * rebase.  However, it's probably not very common, nor hugely
-       * expensive to do it this way:
-       */
-      if (!vbo_all_varyings_in_vbos(arrays))
-	 return GL_TRUE;
-      else
-	 return GL_FALSE;
-   }
-}
-				  
-
 void brw_draw_prims( GLcontext *ctx,
 		     const struct gl_client_array *arrays[],
 		     const struct _mesa_prim *prim,
 		     GLuint nr_prims,
 		     const struct _mesa_index_buffer *ib,
+		     GLboolean index_bounds_valid,
 		     GLuint min_index,
 		     GLuint max_index )
 {
    GLboolean retval;
 
-   /* Decide if we want to rebase.  If so we end up recursing once
-    * only into this function.
-    */
-   if (brw_need_rebase( ctx, arrays, ib, min_index )) {
-      vbo_rebase_prims( ctx, arrays, 
-			prim, nr_prims, 
-			ib, min_index, max_index, 
-			brw_draw_prims );
-      
-      return;
+   if (!vbo_all_varyings_in_vbos(arrays)) {
+      if (!index_bounds_valid)
+	 vbo_get_minmax_index(ctx, prim, ib, &min_index, &max_index);
+
+      /* Decide if we want to rebase.  If so we end up recursing once
+       * only into this function.
+       */
+      if (min_index != 0) {
+	 vbo_rebase_prims(ctx, arrays,
+			  prim, nr_prims,
+			  ib, min_index, max_index,
+			  brw_draw_prims );
+	 return;
+      }
    }
 
    /* Make a first attempt at drawing:

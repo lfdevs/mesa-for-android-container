@@ -40,6 +40,7 @@
 #include "shader/prog_statevars.h"
 #include "shader/prog_uniform.h"
 #include "shader/shader_api.h"
+#include "slang_builtin.h"
 #include "slang_link.h"
 
 
@@ -287,6 +288,7 @@ link_uniform_vars(GLcontext *ctx,
    for (i = 0; i < prog->NumInstructions; i++) {
       struct prog_instruction *inst = prog->Instructions + i;
       if (_mesa_is_tex_instruction(inst->Opcode)) {
+         /* here, inst->TexSrcUnit is really the sampler unit */
          const GLint oldSampNum = inst->TexSrcUnit;
 
 #if 0
@@ -294,7 +296,6 @@ link_uniform_vars(GLcontext *ctx,
                 inst->TexSrcUnit, samplerMap[ inst->TexSrcUnit ]);
 #endif
 
-         /* here, texUnit is really samplerUnit */
          if (oldSampNum < Elements(samplerMap)) {
             const GLuint newSampNum = samplerMap[oldSampNum];
             inst->TexSrcUnit = newSampNum;
@@ -327,6 +328,7 @@ _slang_resolve_attributes(struct gl_shader_program *shProg,
    GLint attribMap[MAX_VERTEX_GENERIC_ATTRIBS];
    GLuint i, j;
    GLbitfield usedAttributes; /* generics only, not legacy attributes */
+   GLbitfield inputsRead = 0x0;
 
    assert(origProg != linkedProg);
    assert(origProg->Target == GL_VERTEX_PROGRAM_ARB);
@@ -370,6 +372,10 @@ _slang_resolve_attributes(struct gl_shader_program *shProg,
    for (i = 0; i < linkedProg->NumInstructions; i++) {
       struct prog_instruction *inst = linkedProg->Instructions + i;
       for (j = 0; j < 3; j++) {
+         if (inst->SrcReg[j].File == PROGRAM_INPUT) {
+            inputsRead |= (1 << inst->SrcReg[j].Index);
+         }
+
          if (inst->SrcReg[j].File == PROGRAM_INPUT &&
              inst->SrcReg[j].Index >= VERT_ATTRIB_GENERIC0) {
             /*
@@ -431,6 +437,20 @@ _slang_resolve_attributes(struct gl_shader_program *shProg,
       }
    }
 
+   /* Handle pre-defined attributes here (gl_Vertex, gl_Normal, etc).
+    * When the user queries the active attributes we need to include both
+    * the user-defined attributes and the built-in ones.
+    */
+   for (i = VERT_ATTRIB_POS; i < VERT_ATTRIB_GENERIC0; i++) {
+      if (inputsRead & (1 << i)) {
+         _mesa_add_attribute(linkedProg->Attributes,
+                             _slang_vert_attrib_name(i),
+                             4, /* size in floats */
+                             _slang_vert_attrib_type(i),
+                             -1 /* attrib/input */);
+      }
+   }
+
    return GL_TRUE;
 }
 
@@ -484,20 +504,6 @@ _slang_update_inputs_outputs(struct gl_program *prog)
       for (j = 0; j < numSrc; j++) {
          if (inst->SrcReg[j].File == PROGRAM_INPUT) {
             prog->InputsRead |= 1 << inst->SrcReg[j].Index;
-            if (prog->Target == GL_FRAGMENT_PROGRAM_ARB &&
-                inst->SrcReg[j].Index == FRAG_ATTRIB_FOGC) {
-               /* The fragment shader FOGC input is used for fog,
-                * front-facing and sprite/point coord.
-                */
-               struct gl_fragment_program *fp = fragment_program(prog);
-               const GLint swz = GET_SWZ(inst->SrcReg[j].Swizzle, 0);
-               if (swz == SWIZZLE_X)
-                  fp->UsesFogFragCoord = GL_TRUE;
-               else if (swz == SWIZZLE_Y)
-                  fp->UsesFrontFacing = GL_TRUE;
-               else if (swz == SWIZZLE_Z || swz == SWIZZLE_W)
-                  fp->UsesPointCoord = GL_TRUE;
-            }
          }
          else if (inst->SrcReg[j].File == PROGRAM_ADDRESS) {
             maxAddrReg = MAX2(maxAddrReg, (GLuint) (inst->SrcReg[j].Index + 1));
@@ -539,6 +545,32 @@ _slang_update_inputs_outputs(struct gl_program *prog)
 }
 
 
+
+/**
+ * Remove extra #version directives from the concatenated source string.
+ * Disable the extra ones by converting first two chars to //, a comment.
+ * This is a bit of hack to work around a preprocessor bug that only
+ * allows one #version directive per source.
+ */
+static void
+remove_extra_version_directives(GLchar *source)
+{
+   GLuint verCount = 0;
+   while (1) {
+      char *ver = _mesa_strstr(source, "#version");
+      if (ver) {
+         verCount++;
+         if (verCount > 1) {
+            ver[0] = '/';
+            ver[1] = '/';
+         }
+         source += 8;
+      }
+      else {
+         break;
+      }
+   }
+}
 
 
 
@@ -586,6 +618,8 @@ concat_shaders(struct gl_shader_program *shProg, GLenum shaderType)
    /*
    _mesa_printf("---NEW CONCATENATED SHADER---:\n%s\n------------\n", source);
    */
+
+   remove_extra_version_directives(source);
 
    newShader = CALLOC_STRUCT(gl_shader);
    newShader->Type = shaderType;
@@ -717,6 +751,8 @@ _slang_link(GLcontext *ctx,
       struct gl_vertex_program *linked_vprog =
          vertex_program(_mesa_clone_program(ctx, &vertProg->Base));
       shProg->VertexProgram = linked_vprog; /* refcount OK */
+      /* vertex program ID not significant; just set Id for debugging purposes */
+      shProg->VertexProgram->Base.Id = shProg->Name;
       ASSERT(shProg->VertexProgram->Base.RefCount == 1);
    }
 
@@ -725,6 +761,8 @@ _slang_link(GLcontext *ctx,
       struct gl_fragment_program *linked_fprog = 
          fragment_program(_mesa_clone_program(ctx, &fragProg->Base));
       shProg->FragmentProgram = linked_fprog; /* refcount OK */
+      /* vertex program ID not significant; just set Id for debugging purposes */
+      shProg->FragmentProgram->Base.Id = shProg->Name;
       ASSERT(shProg->FragmentProgram->Base.RefCount == 1);
    }
 
@@ -837,6 +875,14 @@ _slang_link(GLcontext *ctx,
          _mesa_print_program(&shProg->VertexProgram->Base);
          _mesa_print_program_parameters(ctx, &shProg->VertexProgram->Base);
       }
+   }
+
+   /* Debug: */
+   if (0) {
+      if (shProg->VertexProgram)
+         _mesa_postprocess_program(ctx, &shProg->VertexProgram->Base);
+      if (shProg->FragmentProgram)
+         _mesa_postprocess_program(ctx, &shProg->FragmentProgram->Base);
    }
 
    if (ctx->Shader.Flags & GLSL_DUMP) {

@@ -73,7 +73,8 @@ struct intel_region
  * copied by calling intel_reference_region().
  */
 struct intel_region *intel_region_alloc(struct intel_context *intel,
-                                        GLuint cpp, GLuint width,
+                                        uint32_t tiling,
+					GLuint cpp, GLuint width,
                                         GLuint height, GLuint pitch,
 					GLboolean expect_accelerated_upload);
 
@@ -109,21 +110,15 @@ void intel_region_data(struct intel_context *intel,
 
 /* Copy rectangular sub-regions
  */
-void intel_region_copy(struct intel_context *intel,
-                       struct intel_region *dest,
-                       GLuint dest_offset,
-                       GLuint destx, GLuint desty,
-                       struct intel_region *src,
-                       GLuint src_offset,
-                       GLuint srcx, GLuint srcy, GLuint width, GLuint height);
-
-/* Fill a rectangular sub-region
- */
-void intel_region_fill(struct intel_context *intel,
-                       struct intel_region *dest,
-                       GLuint dest_offset,
-                       GLuint destx, GLuint desty,
-                       GLuint width, GLuint height, GLuint color);
+GLboolean
+intel_region_copy(struct intel_context *intel,
+		  struct intel_region *dest,
+		  GLuint dest_offset,
+		  GLuint destx, GLuint desty,
+		  struct intel_region *src,
+		  GLuint src_offset,
+		  GLuint srcx, GLuint srcy, GLuint width, GLuint height,
+		  GLenum logicop);
 
 /* Helpers for zerocopy uploads, particularly texture image uploads:
  */

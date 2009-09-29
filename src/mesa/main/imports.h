@@ -291,6 +291,7 @@ long iround(float f);
 #define IROUND(f)  ((int) (((f) >= 0.0F) ? ((f) + 0.5F) : ((f) - 0.5F)))
 #endif
 
+#define IROUND64(f)  ((GLint64) (((f) >= 0.0F) ? ((f) + 0.5F) : ((f) - 0.5F)))
 
 /***
  *** IROUND_POS: return (as an integer) positive float rounded to nearest int
@@ -585,6 +586,9 @@ _mesa_atoi( const char *s );
 
 extern double
 _mesa_strtod( const char *s, char **end );
+
+extern unsigned int
+_mesa_str_checksum(const char *str);
 
 extern int
 _mesa_sprintf( char *str, const char *fmt, ... );

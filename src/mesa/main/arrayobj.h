@@ -1,9 +1,10 @@
 /*
  * Mesa 3-D graphics library
- * Version:  6.5
+ * Version:  7.6
  *
  * Copyright (C) 1999-2004  Brian Paul   All Rights Reserved.
  * (C) Copyright IBM Corporation 2006
+ * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -56,21 +57,24 @@ extern void
 _mesa_initialize_array_object( GLcontext *ctx,
                                struct gl_array_object *obj, GLuint name );
 
-extern void
-_mesa_save_array_object( GLcontext *ctx, struct gl_array_object *obj );
 
 extern void
-_mesa_remove_array_object( GLcontext *ctx, struct gl_array_object *obj );
-
+_mesa_update_array_object_max_element(GLcontext *ctx,
+                                      struct gl_array_object *arrayObj);
 
 
 /*
  * API functions
  */
 
+
+void GLAPIENTRY _mesa_BindVertexArray( GLuint id );
+
 void GLAPIENTRY _mesa_BindVertexArrayAPPLE( GLuint id );
 
 void GLAPIENTRY _mesa_DeleteVertexArraysAPPLE(GLsizei n, const GLuint *ids);
+
+void GLAPIENTRY _mesa_GenVertexArrays(GLsizei n, GLuint *arrays);
 
 void GLAPIENTRY _mesa_GenVertexArraysAPPLE(GLsizei n, GLuint *buffer);
 

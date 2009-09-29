@@ -50,14 +50,11 @@
 #include <GL/gl.h>
 #include "glxclient.h"
 
-#define _EGL_PLATFORM_X
-
 #include "eglconfig.h"
 #include "eglcontext.h"
 #include "egldisplay.h"
 #include "egldriver.h"
 #include "eglglobals.h"
-#include "eglhash.h"
 #include "egllog.h"
 #include "eglsurface.h"
 
@@ -106,7 +103,13 @@ struct visual_attribs
 struct GLX_egl_driver
 {
    _EGLDriver Base;   /**< base class */
+};
 
+
+/** driver data of _EGLDisplay */
+struct GLX_egl_display
+{
+   Display *dpy;
    XVisualInfo *visuals;
    GLXFBConfig *fbconfigs;
 
@@ -136,6 +139,7 @@ struct GLX_egl_surface
 struct GLX_egl_config
 {
    _EGLConfig Base;   /**< base class */
+   int index;
 };
 
 /** cast wrapper */
@@ -143,6 +147,12 @@ static struct GLX_egl_driver *
 GLX_egl_driver(_EGLDriver *drv)
 {
    return (struct GLX_egl_driver *) drv;
+}
+
+static struct GLX_egl_display *
+GLX_egl_display(_EGLDisplay *dpy)
+{
+   return (struct GLX_egl_display *) dpy->DriverData;
 }
 
 static struct GLX_egl_context *
@@ -155,6 +165,12 @@ static struct GLX_egl_surface *
 GLX_egl_surface(_EGLSurface *surf)
 {
    return (struct GLX_egl_surface *) surf;
+}
+
+static int
+GLX_egl_config_index(_EGLConfig *conf)
+{
+   return ((struct GLX_egl_config *) conf)->index;
 }
 
 static GLboolean
@@ -267,6 +283,7 @@ glx_token_to_visual_class(int visual_type)
       return None;
    }
 }
+
 static int
 get_fbconfig_attribs(Display *dpy, GLXFBConfig fbconfig,
 		     struct visual_attribs *attribs)
@@ -345,23 +362,22 @@ get_fbconfig_attribs(Display *dpy, GLXFBConfig fbconfig,
 #endif
 
 static EGLBoolean
-create_configs(_EGLDisplay *disp, struct GLX_egl_driver *GLX_drv)
+create_configs(_EGLDisplay *disp, struct GLX_egl_display *GLX_dpy)
 {
    XVisualInfo theTemplate;
    int numVisuals;
    long mask;
    int i;
-   int egl_configs = 1;
    struct visual_attribs attribs;
 
-   GLX_drv->fbconfigs = NULL;
+   GLX_dpy->fbconfigs = NULL;
 
 #ifdef GLX_VERSION_1_3
    /* get list of all fbconfigs on this screen */
-   GLX_drv->fbconfigs = glXGetFBConfigs(disp->Xdpy, DefaultScreen(disp->Xdpy), &numVisuals);
+   GLX_dpy->fbconfigs = glXGetFBConfigs(GLX_dpy->dpy, DefaultScreen(GLX_dpy->dpy), &numVisuals);
 
    if (numVisuals == 0) {
-      GLX_drv->fbconfigs = NULL;
+      GLX_dpy->fbconfigs = NULL;
       goto xvisual;
    }
 
@@ -369,12 +385,13 @@ create_configs(_EGLDisplay *disp, struct GLX_egl_driver *GLX_drv)
       struct GLX_egl_config *config;
       int bit;
 
-      bit = get_fbconfig_attribs(disp->Xdpy, GLX_drv->fbconfigs[i], &attribs);
+      bit = get_fbconfig_attribs(GLX_dpy->dpy, GLX_dpy->fbconfigs[i], &attribs);
       if (!bit)
          continue;
 
       config = CALLOC_STRUCT(GLX_egl_config);
 
+      config->index = i;
       _eglInitConfig(&config->Base, (i+1));
       SET_CONFIG_ATTRIB(&config->Base, EGL_NATIVE_VISUAL_ID, attribs.id);
       SET_CONFIG_ATTRIB(&config->Base, EGL_BUFFER_SIZE, attribs.bufferSize);
@@ -400,18 +417,19 @@ create_configs(_EGLDisplay *disp, struct GLX_egl_driver *GLX_drv)
 
 xvisual:
    /* get list of all visuals on this screen */
-   theTemplate.screen = DefaultScreen(disp->Xdpy);
+   theTemplate.screen = DefaultScreen(GLX_dpy->dpy);
    mask = VisualScreenMask;
-   GLX_drv->visuals = XGetVisualInfo(disp->Xdpy, mask, &theTemplate, &numVisuals);
+   GLX_dpy->visuals = XGetVisualInfo(GLX_dpy->dpy, mask, &theTemplate, &numVisuals);
 
    for (i = 0; i < numVisuals; i++) {
       struct GLX_egl_config *config;
 
-      if (!get_visual_attribs(disp->Xdpy, &GLX_drv->visuals[i], &attribs))
+      if (!get_visual_attribs(GLX_dpy->dpy, &GLX_dpy->visuals[i], &attribs))
 	 continue;
 
       config = CALLOC_STRUCT(GLX_egl_config);
 
+      config->index = i;
       _eglInitConfig(&config->Base, (i+1));
       SET_CONFIG_ATTRIB(&config->Base, EGL_NATIVE_VISUAL_ID, attribs.id);
       SET_CONFIG_ATTRIB(&config->Base, EGL_BUFFER_SIZE, attribs.bufferSize);
@@ -441,76 +459,60 @@ end:
  * Called via eglInitialize(), GLX_drv->API.Initialize().
  */
 static EGLBoolean
-GLX_eglInitialize(_EGLDriver *drv, EGLDisplay dpy,
-                   EGLint *minor, EGLint *major)
+GLX_eglInitialize(_EGLDriver *drv, _EGLDisplay *disp,
+                   EGLint *major, EGLint *minor)
 {
-   struct GLX_egl_driver *GLX_drv = GLX_egl_driver(drv);
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
+   struct GLX_egl_display *GLX_dpy;
 
-   _eglLog(_EGL_DEBUG, "GLX: eglInitialize");
+   GLX_dpy = CALLOC_STRUCT(GLX_egl_display);
+   if (!GLX_dpy)
+      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
-   if (!disp->Xdpy) {
-      disp->Xdpy = XOpenDisplay(NULL);
-      if (!disp->Xdpy) {
+   GLX_dpy->dpy = (Display *) disp->NativeDisplay;
+   if (!GLX_dpy->dpy) {
+      GLX_dpy->dpy = XOpenDisplay(NULL);
+      if (!GLX_dpy->dpy) {
          _eglLog(_EGL_WARNING, "GLX: XOpenDisplay failed");
+         free(GLX_dpy);
          return EGL_FALSE;
       }
-   } 
+   }
 
-   glXQueryVersion(disp->Xdpy, &GLX_drv->glx_maj, &GLX_drv->glx_min);
-   
-   GLX_drv->Base.Initialized = EGL_TRUE;
+   disp->DriverData = (void *) GLX_dpy;
+   disp->ClientAPIsMask = all_apis;
 
-   GLX_drv->Base.Name = "GLX";
+   glXQueryVersion(GLX_dpy->dpy, &GLX_dpy->glx_maj, &GLX_dpy->glx_min);
 
    /* we're supporting EGL 1.4 */
-   *minor = 1;
-   *major = 4;
+   *major = 1;
+   *minor = 4;
 
-   create_configs(disp, GLX_drv);
+   create_configs(disp, GLX_dpy);
 
    return EGL_TRUE;
-}
-
-/*
- * Do some clean-up that normally occurs in XCloseDisplay().
- * We do this here because we're about to unload a dynamic library
- * that has added some per-display extension data and callbacks.
- * If we don't do this here we'll crash in XCloseDisplay() because it'll
- * try to call functions that went away when the driver library was unloaded.
- */
-static void
-FreeDisplayExt(Display *dpy)
-{
-   _XExtension *ext, *next;
-
-   for (ext = dpy->ext_procs; ext; ext = next) {
-      next = ext->next;
-      if (ext->close_display) {
-         ext->close_display(dpy, &ext->codes);
-         ext->close_display = NULL;
-      }
-      if (ext->name)
-         Xfree(ext->name);
-      Xfree(ext);
-   }
-   dpy->ext_procs = NULL;
-
-   _XFreeExtData (dpy->ext_data);
-   dpy->ext_data = NULL;
 }
 
 /**
  * Called via eglTerminate(), drv->API.Terminate().
  */
 static EGLBoolean
-GLX_eglTerminate(_EGLDriver *drv, EGLDisplay dpy)
+GLX_eglTerminate(_EGLDriver *drv, _EGLDisplay *disp)
 {
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
 
-   _eglLog(_EGL_DEBUG, "GLX: eglTerminate");
+   _eglReleaseDisplayResources(drv, disp);
+   _eglCleanupDisplay(disp);
 
-   FreeDisplayExt(disp->Xdpy);
+   if (GLX_dpy->visuals)
+      XFree(GLX_dpy->visuals);
+   if (GLX_dpy->fbconfigs)
+      XFree(GLX_dpy->fbconfigs);
+
+   if (!disp->NativeDisplay)
+      XCloseDisplay(GLX_dpy->dpy);
+   free(GLX_dpy);
+
+   disp->DriverData = NULL;
 
    return EGL_TRUE;
 }
@@ -519,52 +521,54 @@ GLX_eglTerminate(_EGLDriver *drv, EGLDisplay dpy)
 /**
  * Called via eglCreateContext(), drv->API.CreateContext().
  */
-static EGLContext
-GLX_eglCreateContext(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config,
-                      EGLContext share_list, const EGLint *attrib_list)
+static _EGLContext *
+GLX_eglCreateContext(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf,
+                      _EGLContext *share_list, const EGLint *attrib_list)
 {
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
    struct GLX_egl_context *GLX_ctx = CALLOC_STRUCT(GLX_egl_context);
-   struct GLX_egl_driver *GLX_drv = GLX_egl_driver(drv);
-   struct GLX_egl_context *GLX_ctx_shared = NULL;
-   _EGLConfig *conf;
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
+   struct GLX_egl_context *GLX_ctx_shared = GLX_egl_context(share_list);
 
-   if (!GLX_ctx)
-      return EGL_NO_CONTEXT;
+   if (!GLX_ctx) {
+      _eglError(EGL_BAD_ALLOC, "eglCreateContext");
+      return NULL;
+   }
 
-   if (!_eglInitContext(drv, dpy, &GLX_ctx->Base, config, attrib_list)) {
+   if (!_eglInitContext(drv, &GLX_ctx->Base, conf, attrib_list)) {
       free(GLX_ctx);
-      return EGL_NO_CONTEXT;
+      return NULL;
    }
-
-   if (share_list != EGL_NO_CONTEXT) {
-      _EGLContext *shareCtx = _eglLookupContext(share_list);
-      if (!shareCtx) {
-         _eglError(EGL_BAD_CONTEXT, "eglCreateContext(share_list)");
-         return EGL_FALSE;
-      }
-      GLX_ctx_shared = GLX_egl_context(shareCtx);
-   }
-
-   conf = _eglLookupConfig(drv, dpy, config);
-   assert(conf);
 
 #ifdef GLX_VERSION_1_3
-   if (GLX_drv->fbconfigs)
-      GLX_ctx->context = glXCreateNewContext(disp->Xdpy, GLX_drv->fbconfigs[(int)config-1], GLX_RGBA_TYPE, GLX_ctx_shared ? GLX_ctx_shared->context : NULL, GL_TRUE);
+   if (GLX_dpy->fbconfigs)
+      GLX_ctx->context =
+         glXCreateNewContext(GLX_dpy->dpy,
+                             GLX_dpy->fbconfigs[GLX_egl_config_index(conf)],
+                             GLX_RGBA_TYPE,
+                             GLX_ctx_shared ? GLX_ctx_shared->context : NULL,
+                             GL_TRUE);
    else
 #endif
-      GLX_ctx->context = glXCreateContext(disp->Xdpy, &GLX_drv->visuals[(int)config-1], GLX_ctx_shared ? GLX_ctx_shared->context : NULL, GL_TRUE);
-   if (!GLX_ctx->context)
-      return EGL_FALSE;
+      GLX_ctx->context =
+         glXCreateContext(GLX_dpy->dpy,
+                          &GLX_dpy->visuals[GLX_egl_config_index(conf)],
+                          GLX_ctx_shared ? GLX_ctx_shared->context : NULL,
+                          GL_TRUE);
+   if (!GLX_ctx->context) {
+      free(GLX_ctx);
+      return NULL;
+   }
 
 #if 1
    /* (maybe?) need to have a direct rendering context */
-   if (!glXIsDirect(disp->Xdpy, GLX_ctx->context))
-      return EGL_FALSE;
+   if (!glXIsDirect(GLX_dpy->dpy, GLX_ctx->context)) {
+      glXDestroyContext(GLX_dpy->dpy, GLX_ctx->context);
+      free(GLX_ctx);
+      return NULL;
+   }
 #endif
 
-   return _eglGetContextHandle(&GLX_ctx->Base);
+   return &GLX_ctx->Base;
 }
 
 
@@ -572,27 +576,32 @@ GLX_eglCreateContext(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config,
  * Called via eglMakeCurrent(), drv->API.MakeCurrent().
  */
 static EGLBoolean
-GLX_eglMakeCurrent(_EGLDriver *drv, EGLDisplay dpy, EGLSurface d,
-                    EGLSurface r, EGLContext context)
+GLX_eglMakeCurrent(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
+                   _EGLSurface *rsurf, _EGLContext *ctx)
 {
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
-   _EGLContext *ctx = _eglLookupContext(context);
-   _EGLSurface *dsurf = _eglLookupSurface(d);
-   _EGLSurface *rsurf = _eglLookupSurface(r);
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
    struct GLX_egl_surface *GLX_dsurf = GLX_egl_surface(dsurf);
    struct GLX_egl_surface *GLX_rsurf = GLX_egl_surface(rsurf);
    struct GLX_egl_context *GLX_ctx = GLX_egl_context(ctx);
+   GLXDrawable ddraw, rdraw;
+   GLXContext cctx;
 
-   if (!_eglMakeCurrent(drv, dpy, d, r, context))
+   if (!_eglMakeCurrent(drv, disp, dsurf, rsurf, ctx))
       return EGL_FALSE;
 
-#ifdef GLX_VERSION_1_3
-   if (!glXMakeContextCurrent(disp->Xdpy, GLX_dsurf ? GLX_dsurf->drawable : 0, GLX_rsurf ? GLX_rsurf->drawable : 0, GLX_ctx ? GLX_ctx->context : NULL))
-#endif
-      if (!glXMakeCurrent(disp->Xdpy, GLX_dsurf ? GLX_dsurf->drawable : 0, GLX_ctx ? GLX_ctx->context : NULL))
-         return EGL_FALSE;
+   ddraw = (GLX_dsurf) ? GLX_dsurf->drawable : None;
+   rdraw = (GLX_rsurf) ? GLX_rsurf->drawable : None;
+   cctx = (GLX_ctx) ? GLX_ctx->context : NULL;
 
-   return EGL_TRUE;
+#ifdef GLX_VERSION_1_3
+   if (glXMakeContextCurrent(GLX_dpy->dpy, ddraw, rdraw, cctx))
+      return EGL_TRUE;
+#endif
+
+   if (ddraw == rdraw && glXMakeCurrent(GLX_dpy->dpy, ddraw, cctx))
+      return EGL_TRUE;
+
+   return EGL_FALSE;
 }
 
 /** Get size of given window */
@@ -612,91 +621,105 @@ get_drawable_size(Display *dpy, Drawable d, uint *width, uint *height)
 /**
  * Called via eglCreateWindowSurface(), drv->API.CreateWindowSurface().
  */
-static EGLSurface
-GLX_eglCreateWindowSurface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config,
+static _EGLSurface *
+GLX_eglCreateWindowSurface(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf,
                             NativeWindowType window, const EGLint *attrib_list)
 {
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
    struct GLX_egl_surface *GLX_surf;
    uint width, height;
 
    GLX_surf = CALLOC_STRUCT(GLX_egl_surface);
-   if (!GLX_surf)
-      return EGL_NO_SURFACE;
-
-   if (!_eglInitSurface(drv, dpy, &GLX_surf->Base, EGL_WINDOW_BIT,
-                        config, attrib_list)) {
-      free(GLX_surf);
-      return EGL_FALSE;
+   if (!GLX_surf) {
+      _eglError(EGL_BAD_ALLOC, "eglCreateWindowSurface");
+      return NULL;
    }
 
-   _eglSaveSurface(&GLX_surf->Base);
+   if (!_eglInitSurface(drv, &GLX_surf->Base, EGL_WINDOW_BIT,
+                        conf, attrib_list)) {
+      free(GLX_surf);
+      return NULL;
+   }
 
    GLX_surf->drawable = window;
-   get_drawable_size(disp->Xdpy, window, &width, &height);
+   get_drawable_size(GLX_dpy->dpy, window, &width, &height);
    GLX_surf->Base.Width = width;
    GLX_surf->Base.Height = height;
 
-   return _eglGetSurfaceHandle(&GLX_surf->Base);
+   return &GLX_surf->Base;
 }
 
 #ifdef GLX_VERSION_1_3
-static EGLSurface
-GLX_eglCreatePixmapSurface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config, 
+static _EGLSurface *
+GLX_eglCreatePixmapSurface(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf,
 			   NativePixmapType pixmap, const EGLint *attrib_list)
 {
-   struct GLX_egl_driver *GLX_drv = GLX_egl_driver(drv);
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
    struct GLX_egl_surface *GLX_surf;
    int i;
 
-   GLX_surf = CALLOC_STRUCT(GLX_egl_surface);
-   if (!GLX_surf)
-      return EGL_NO_SURFACE;
+   /* GLX must >= 1.3 */
+   if (!(GLX_dpy->glx_maj == 1 && GLX_dpy->glx_min >= 3))
+      return NULL;
 
-   if (!_eglInitSurface(drv, dpy, &GLX_surf->Base, EGL_PIXMAP_BIT,
-                        config, attrib_list)) {
-      free(GLX_surf);
-      return EGL_FALSE;
+   GLX_surf = CALLOC_STRUCT(GLX_egl_surface);
+   if (!GLX_surf) {
+      _eglError(EGL_BAD_ALLOC, "eglCreatePixmapSurface");
+      return NULL;
    }
 
-   _eglSaveSurface(&GLX_surf->Base);
+   if (!_eglInitSurface(drv, &GLX_surf->Base, EGL_PIXMAP_BIT,
+                        conf, attrib_list)) {
+      free(GLX_surf);
+      return NULL;
+   }
 
    for (i = 0; attrib_list && attrib_list[i] != EGL_NONE; i++) {
       switch (attrib_list[i]) {
          /* no attribs at this time */
       default:
          _eglError(EGL_BAD_ATTRIBUTE, "eglCreatePixmapSurface");
-         return EGL_NO_SURFACE;
+         free(GLX_surf);
+         return NULL;
       }
    }
 
-   GLX_surf->drawable = glXCreatePixmap(disp->Xdpy, GLX_drv->fbconfigs[(int)config-1], pixmap, NULL);
+   GLX_surf->drawable =
+      glXCreatePixmap(GLX_dpy->dpy,
+                      GLX_dpy->fbconfigs[GLX_egl_config_index(conf)],
+                      pixmap, NULL);
+   if (!GLX_surf->drawable) {
+      free(GLX_surf);
+      return NULL;
+   }
 
-   return _eglGetSurfaceHandle(&GLX_surf->Base);
+   return &GLX_surf->Base;
 }
 
-static EGLSurface
-GLX_eglCreatePbufferSurface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config,
-                            const EGLint *attrib_list)
+static _EGLSurface *
+GLX_eglCreatePbufferSurface(_EGLDriver *drv, _EGLDisplay *disp,
+                            _EGLConfig *conf, const EGLint *attrib_list)
 {
-   struct GLX_egl_driver *GLX_drv = GLX_egl_driver(drv);
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
    struct GLX_egl_surface *GLX_surf;
    int attribs[5];
    int i = 0, j = 0;
 
-   GLX_surf = CALLOC_STRUCT(GLX_egl_surface);
-   if (!GLX_surf)
-      return EGL_NO_SURFACE;
+   /* GLX must >= 1.3 */
+   if (!(GLX_dpy->glx_maj == 1 && GLX_dpy->glx_min >= 3))
+      return NULL;
 
-   if (!_eglInitSurface(drv, dpy, &GLX_surf->Base, EGL_PBUFFER_BIT,
-                        config, attrib_list)) {
-      free(GLX_surf);
-      return EGL_NO_SURFACE;
+   GLX_surf = CALLOC_STRUCT(GLX_egl_surface);
+   if (!GLX_surf) {
+      _eglError(EGL_BAD_ALLOC, "eglCreatePbufferSurface");
+      return NULL;
    }
 
-   _eglSaveSurface(&GLX_surf->Base);
+   if (!_eglInitSurface(drv, &GLX_surf->Base, EGL_PBUFFER_BIT,
+                        conf, attrib_list)) {
+      free(GLX_surf);
+      return NULL;
+   }
 
    while(attrib_list[i] != EGL_NONE) {
       switch (attrib_list[i]) {
@@ -713,80 +736,81 @@ GLX_eglCreatePbufferSurface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config,
    }
    attribs[j++] = 0;
 
-   GLX_surf->drawable = glXCreatePbuffer(disp->Xdpy, GLX_drv->fbconfigs[(int)config-1], attribs);
+   GLX_surf->drawable =
+      glXCreatePbuffer(GLX_dpy->dpy,
+                       GLX_dpy->fbconfigs[GLX_egl_config_index(conf)],
+                       attribs);
+   if (!GLX_surf->drawable) {
+      free(GLX_surf);
+      return NULL;
+   }
 
-   return _eglGetSurfaceHandle(&GLX_surf->Base);
+   return &GLX_surf->Base;
 }
 #endif
 
 static EGLBoolean
-GLX_eglDestroySurface(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface)
+GLX_eglDestroySurface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
 {
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
-   _EGLSurface *surf = _eglLookupSurface(surface);
-   return EGL_TRUE;
-   if (surf) {
-      _eglHashRemove(_eglGlobal.Surfaces, (EGLuint) surface);
-      if (surf->IsBound) {
-         surf->DeletePending = EGL_TRUE;
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
+   if (!_eglIsSurfaceBound(surf)) {
+      struct GLX_egl_surface *GLX_surf = GLX_egl_surface(surf);
+      switch (surf->Type) {
+      case EGL_PBUFFER_BIT:
+         glXDestroyPbuffer(GLX_dpy->dpy, GLX_surf->drawable);
+         break;
+      case EGL_PIXMAP_BIT:
+         glXDestroyPixmap(GLX_dpy->dpy, GLX_surf->drawable);
+         break;
+      default:
+         break;
       }
-      else {
-         free(surf);
-      }
+      free(surf);
+   }
 
-      return EGL_TRUE;
-   }
-   else {
-      _eglError(EGL_BAD_SURFACE, "eglDestroySurface");
-      return EGL_FALSE;
-   }
+   return EGL_TRUE;
 }
 
 
 static EGLBoolean
-GLX_eglBindTexImage(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface,
+GLX_eglBindTexImage(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
                      EGLint buffer)
 {
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
-   _EGLSurface *surf = _eglLookupSurface(surface);
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
    struct GLX_egl_surface *GLX_surf = GLX_egl_surface(surf);
 
    /* buffer ?? */
-   glXBindTexImageEXT(disp->Xdpy, GLX_surf->drawable, GLX_FRONT_LEFT_EXT, NULL);
+   glXBindTexImageEXT(GLX_dpy->dpy, GLX_surf->drawable,
+                      GLX_FRONT_LEFT_EXT, NULL);
 
    return EGL_TRUE;
 }
 
 
 static EGLBoolean
-GLX_eglReleaseTexImage(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface,
+GLX_eglReleaseTexImage(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
                         EGLint buffer)
 {
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
-   _EGLSurface *surf = _eglLookupSurface(surface);
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
    struct GLX_egl_surface *GLX_surf = GLX_egl_surface(surf);
 
    /* buffer ?? */
-   glXReleaseTexImageEXT(disp->Xdpy, GLX_surf->drawable, GLX_FRONT_LEFT_EXT);
+   glXReleaseTexImageEXT(GLX_dpy->dpy, GLX_surf->drawable,
+                         GLX_FRONT_LEFT_EXT);
 
    return EGL_TRUE;
 }
 
 
 static EGLBoolean
-GLX_eglSwapBuffers(_EGLDriver *drv, EGLDisplay dpy, EGLSurface draw)
+GLX_eglSwapBuffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
 {
-   _EGLDisplay *disp = _eglLookupDisplay(dpy);
-   _EGLSurface *surf = _eglLookupSurface(draw);
-   struct GLX_egl_surface *GLX_surf = GLX_egl_surface(surf);
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
+   struct GLX_egl_surface *GLX_surf = GLX_egl_surface(draw);
 
    _eglLog(_EGL_DEBUG, "GLX: EGL SwapBuffers 0x%x",draw);
 
-   /* error checking step: */
-   if (!_eglSwapBuffers(drv, dpy, draw))
-      return EGL_FALSE;
-
-   glXSwapBuffers(disp->Xdpy, GLX_surf->drawable);
+   glXSwapBuffers(GLX_dpy->dpy, GLX_surf->drawable);
 
    return EGL_TRUE;
 }
@@ -802,15 +826,24 @@ GLX_eglGetProcAddress(const char *procname)
     * some point.
     */
    _EGLProc (*get_proc_addr)(const char *procname);
+   _EGLProc proc_addr;
    get_proc_addr = dlsym(NULL, "st_get_proc_address");
    if (get_proc_addr)
       return get_proc_addr(procname);
 
-   get_proc_addr = glXGetProcAddress((const GLubyte *)procname);
-   if (get_proc_addr)
-      return get_proc_addr(procname);
+   proc_addr = glXGetProcAddress((const GLubyte *)procname);
+   if (proc_addr)
+      return proc_addr;
 
    return (_EGLProc)dlsym(NULL, procname);
+}
+
+
+static void
+GLX_Unload(_EGLDriver *drv)
+{
+   struct GLX_egl_driver *GLX_drv = GLX_egl_driver(drv);
+   free(GLX_drv);
 }
 
 
@@ -819,11 +852,9 @@ GLX_eglGetProcAddress(const char *procname)
  * Create a new _EGLDriver object and init its dispatch table.
  */
 _EGLDriver *
-_eglMain(_EGLDisplay *disp, const char *args)
+_eglMain(const char *args)
 {
    struct GLX_egl_driver *GLX_drv = CALLOC_STRUCT(GLX_egl_driver);
-   char *env;
-   int maj = 0, min = 0;
 
    if (!GLX_drv)
       return NULL;
@@ -835,13 +866,8 @@ _eglMain(_EGLDisplay *disp, const char *args)
    GLX_drv->Base.API.MakeCurrent = GLX_eglMakeCurrent;
    GLX_drv->Base.API.CreateWindowSurface = GLX_eglCreateWindowSurface;
 #ifdef GLX_VERSION_1_3
-   if (GLX_drv->glx_maj == 1 && GLX_drv->glx_min >= 3) {
-      GLX_drv->Base.API.CreatePixmapSurface = GLX_eglCreatePixmapSurface;
-      GLX_drv->Base.API.CreatePbufferSurface = GLX_eglCreatePbufferSurface;
-      printf("GLX: Pbuffer and Pixmap support\n");
-   } else {
-      printf("GLX: No pbuffer or pixmap support\n");
-   }
+   GLX_drv->Base.API.CreatePixmapSurface = GLX_eglCreatePixmapSurface;
+   GLX_drv->Base.API.CreatePbufferSurface = GLX_eglCreatePbufferSurface;
 #endif
    GLX_drv->Base.API.DestroySurface = GLX_eglDestroySurface;
    GLX_drv->Base.API.BindTexImage = GLX_eglBindTexImage;
@@ -849,22 +875,8 @@ _eglMain(_EGLDisplay *disp, const char *args)
    GLX_drv->Base.API.SwapBuffers = GLX_eglSwapBuffers;
    GLX_drv->Base.API.GetProcAddress = GLX_eglGetProcAddress;
 
-   GLX_drv->Base.ClientAPIsMask = all_apis;
    GLX_drv->Base.Name = "GLX";
-
-   _eglLog(_EGL_DEBUG, "GLX: main(%s)", args);
-
-   /* set new DRI path to pick up EGL version (which doesn't contain any mesa 
-    * code), but don't override if one is already set.
-    */
-   env = getenv("LIBGL_DRIVERS_PATH");
-   if (env) {
-      if (!strstr(env, "egl")) {
-         sprintf(env, "%s/egl", env);
-         setenv("LIBGL_DRIVERS_PATH", env, 1);
-      }
-   } else
-      setenv("LIBGL_DRIVERS_PATH", DEFAULT_DRIVER_DIR"/egl", 0);
+   GLX_drv->Base.Unload = GLX_Unload;
 
    return &GLX_drv->Base;
 }

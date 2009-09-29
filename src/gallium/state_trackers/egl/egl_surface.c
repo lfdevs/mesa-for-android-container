@@ -67,39 +67,21 @@ drm_create_framebuffer(const __GLcontextModes *visual,
 }
 
 static void
-drm_create_texture(_EGLDriver *drv,
+drm_create_texture(_EGLDisplay *dpy,
                    struct drm_screen *scrn,
                    unsigned w, unsigned h)
 {
-	struct drm_device *dev = (struct drm_device *)drv;
+	struct drm_device *dev = lookup_drm_device(dpy);
 	struct pipe_screen *screen = dev->screen;
 	struct pipe_surface *surface;
 	struct pipe_texture *texture;
 	struct pipe_texture templat;
-	struct pipe_buffer *buf;
-	unsigned stride = 1024;
+	struct pipe_buffer *buf = NULL;
 	unsigned pitch = 0;
-	unsigned size = 0;
-
-	/* ugly */
-	if (stride < w)
-		stride = 2048;
-
-	pitch = stride * 4;
-	size = h * 2 * pitch;
-
-	buf = pipe_buffer_create(screen,
-	                         0, /* alignment */
-	                         PIPE_BUFFER_USAGE_GPU_READ_WRITE |
-	                         PIPE_BUFFER_USAGE_CPU_READ_WRITE,
-	                         size);
-
-	if (!buf)
-		goto err_buf;
 
 	memset(&templat, 0, sizeof(templat));
-	templat.tex_usage |= PIPE_TEXTURE_USAGE_DISPLAY_TARGET;
-	templat.tex_usage |= PIPE_TEXTURE_USAGE_RENDER_TARGET;
+	templat.tex_usage = PIPE_TEXTURE_USAGE_RENDER_TARGET;
+	templat.tex_usage |= PIPE_TEXTURE_USAGE_PRIMARY;
 	templat.target = PIPE_TEXTURE_2D;
 	templat.last_level = 0;
 	templat.depth[0] = 1;
@@ -108,10 +90,9 @@ drm_create_texture(_EGLDriver *drv,
 	templat.height[0] = h;
 	pf_get_block(templat.format, &templat.block);
 
-	texture = screen->texture_blanket(dev->screen,
-	                                  &templat,
-	                                  &pitch,
-	                                  buf);
+	texture = screen->texture_create(dev->screen,
+	                                 &templat);
+
 	if (!texture)
 		goto err_tex;
 
@@ -125,14 +106,13 @@ drm_create_texture(_EGLDriver *drv,
 	if (!surface)
 		goto err_surf;
 
-
 	scrn->tex = texture;
 	scrn->surface = surface;
-	scrn->buffer = buf;
 	scrn->front.width = w;
 	scrn->front.height = h;
 	scrn->front.pitch = pitch;
-	drm_api_hooks.handle_from_buffer(screen, scrn->buffer, &scrn->front.handle);
+	dev->api->local_handle_from_texture(dev->api, screen, texture,
+	                                    &scrn->front.pitch, &scrn->front.handle);
 	if (0)
 		goto err_handle;
 
@@ -144,7 +124,6 @@ err_surf:
 	pipe_texture_reference(&texture, NULL);
 err_tex:
 	pipe_buffer_reference(&buf, NULL);
-err_buf:
 	return;
 }
 
@@ -153,9 +132,9 @@ err_buf:
  */
 
 void
-drm_takedown_shown_screen(_EGLDriver *drv, struct drm_screen *screen)
+drm_takedown_shown_screen(_EGLDisplay *dpy, struct drm_screen *screen)
 {
-	struct drm_device *dev = (struct drm_device *)drv;
+	struct drm_device *dev = lookup_drm_device(dpy);
 
 	screen->surf = NULL;
 
@@ -178,22 +157,22 @@ drm_takedown_shown_screen(_EGLDriver *drv, struct drm_screen *screen)
 	screen->shown = 0;
 }
 
-EGLSurface
-drm_create_window_surface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config, NativeWindowType window, const EGLint *attrib_list)
+_EGLSurface *
+drm_create_window_surface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf, NativeWindowType window, const EGLint *attrib_list)
 {
-	return EGL_NO_SURFACE;
+	return NULL;
 }
 
 
-EGLSurface
-drm_create_pixmap_surface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config, NativePixmapType pixmap, const EGLint *attrib_list)
+_EGLSurface *
+drm_create_pixmap_surface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf, NativePixmapType pixmap, const EGLint *attrib_list)
 {
-	return EGL_NO_SURFACE;
+	return NULL;
 }
 
 
-EGLSurface
-drm_create_pbuffer_surface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config,
+_EGLSurface *
+drm_create_pbuffer_surface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf,
                            const EGLint *attrib_list)
 {
 	int i;
@@ -201,13 +180,6 @@ drm_create_pbuffer_surface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config,
 	int height = -1;
 	struct drm_surface *surf = NULL;
 	__GLcontextModes *visual;
-	_EGLConfig *conf;
-
-	conf = _eglLookupConfig(drv, dpy, config);
-	if (!conf) {
-		_eglError(EGL_BAD_CONFIG, "eglCreatePbufferSurface");
-		return EGL_NO_CONTEXT;
-	}
 
 	for (i = 0; attrib_list && attrib_list[i] != EGL_NONE; i++) {
 		switch (attrib_list[i]) {
@@ -225,14 +197,14 @@ drm_create_pbuffer_surface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config,
 
 	if (width < 1 || height < 1) {
 		_eglError(EGL_BAD_ATTRIBUTE, "eglCreatePbufferSurface");
-		return EGL_NO_SURFACE;
+		return NULL;
 	}
 
 	surf = (struct drm_surface *) calloc(1, sizeof(struct drm_surface));
 	if (!surf)
 		goto err;
 
-	if (!_eglInitSurface(drv, dpy, &surf->base, EGL_PBUFFER_BIT, config, attrib_list))
+	if (!_eglInitSurface(drv, &surf->base, EGL_PBUFFER_BIT, conf, attrib_list))
 		goto err_surf;
 
 	surf->w = width;
@@ -245,17 +217,16 @@ drm_create_pbuffer_surface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config,
 	                                    (void*)surf);
 	drm_visual_modes_destroy(visual);
 
-	_eglSaveSurface(&surf->base);
-	return surf->base.Handle;
+	return &surf->base;
 
 err_surf:
 	free(surf);
 err:
-	return EGL_NO_SURFACE;
+	return NULL;
 }
 
-EGLSurface
-drm_create_screen_surface_mesa(_EGLDriver *drv, EGLDisplay dpy, EGLConfig cfg,
+_EGLSurface *
+drm_create_screen_surface_mesa(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *cfg,
                                const EGLint *attrib_list)
 {
 	EGLSurface surf = drm_create_pbuffer_surface(drv, dpy, cfg, attrib_list);
@@ -264,22 +235,21 @@ drm_create_screen_surface_mesa(_EGLDriver *drv, EGLDisplay dpy, EGLConfig cfg,
 }
 
 EGLBoolean
-drm_show_screen_surface_mesa(_EGLDriver *drv, EGLDisplay dpy,
-                             EGLScreenMESA screen,
-                             EGLSurface surface, EGLModeMESA m)
+drm_show_screen_surface_mesa(_EGLDriver *drv, _EGLDisplay *dpy,
+                             _EGLScreen *screen,
+                             _EGLSurface *surface, _EGLMode *mode)
 {
-	struct drm_device *dev = (struct drm_device *)drv;
+	struct drm_device *dev = lookup_drm_device(dpy);
 	struct drm_surface *surf = lookup_drm_surface(surface);
-	struct drm_screen *scrn = lookup_drm_screen(dpy, screen);
-	_EGLMode *mode = _eglLookupMode(dpy, m);
+	struct drm_screen *scrn = lookup_drm_screen(screen);
 	int ret;
 	unsigned int i, k;
 
 	if (scrn->shown)
-		drm_takedown_shown_screen(drv, scrn);
+		drm_takedown_shown_screen(dpy, scrn);
 
 
-	drm_create_texture(drv, scrn, mode->Width, mode->Height);
+	drm_create_texture(dpy, scrn, mode->Width, mode->Height);
 	if (!scrn->buffer)
 		return EGL_FALSE;
 
@@ -361,15 +331,12 @@ err_bo:
 }
 
 EGLBoolean
-drm_destroy_surface(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface)
+drm_destroy_surface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface)
 {
 	struct drm_surface *surf = lookup_drm_surface(surface);
-	_eglRemoveSurface(&surf->base);
-	if (surf->base.IsBound) {
-		surf->base.DeletePending = EGL_TRUE;
-	} else {
+	if (!_eglIsSurfaceBound(&surf->base)) {
 		if (surf->screen)
-			drm_takedown_shown_screen(drv, surf->screen);
+			drm_takedown_shown_screen(dpy, surf->screen);
 		st_unreference_framebuffer(surf->stfb);
 		free(surf);
 	}
@@ -377,8 +344,9 @@ drm_destroy_surface(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface)
 }
 
 EGLBoolean
-drm_swap_buffers(_EGLDriver *drv, EGLDisplay dpy, EGLSurface draw)
+drm_swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *draw)
 {
+	struct drm_device *dev = lookup_drm_device(dpy);
 	struct drm_surface *surf = lookup_drm_surface(draw);
 	struct pipe_surface *back_surf;
 
@@ -396,7 +364,6 @@ drm_swap_buffers(_EGLDriver *drv, EGLDisplay dpy, EGLSurface draw)
 		st_notify_swapbuffers(surf->stfb);
 
 		if (surf->screen) {
-			surf->user->pipe->flush(surf->user->pipe, PIPE_FLUSH_RENDER_CACHE | PIPE_FLUSH_TEXTURE_CACHE, NULL);
 			surf->user->pipe->surface_copy(surf->user->pipe,
 				surf->screen->surface,
 				0, 0,
@@ -404,7 +371,15 @@ drm_swap_buffers(_EGLDriver *drv, EGLDisplay dpy, EGLSurface draw)
 				0, 0,
 				surf->w, surf->h);
 			surf->user->pipe->flush(surf->user->pipe, PIPE_FLUSH_RENDER_CACHE | PIPE_FLUSH_TEXTURE_CACHE, NULL);
-			/* TODO stuff here */
+
+#ifdef DRM_MODE_FEATURE_DIRTYFB
+			/* TODO query connector property to see if this is needed */
+			drmModeDirtyFB(dev->drmFD, surf->screen->fbID, NULL, 0);
+#else
+			(void)dev;
+#endif
+
+			/* TODO more stuff here */
 		}
 	}
 

@@ -507,6 +507,8 @@ static void print_vertex(const struct setup_context *setup,
 #endif
 
 /**
+ * Sort the vertices from top to bottom order, setting up the triangle
+ * edge fields (ebot, emaj, etop).
  * \return FALSE if coords are inf/nan (cull the tri), TRUE otherwise
  */
 static boolean setup_sort_vertices( struct setup_context *setup,
@@ -1051,7 +1053,10 @@ setup_line_coefficients(struct setup_context *setup,
    float area;
 
    /* use setup->vmin, vmax to point to vertices */
-   setup->vprovoke = v1;
+   if (softpipe->rasterizer->flatshade_first)
+      setup->vprovoke = v0;
+   else
+      setup->vprovoke = v1;
    setup->vmin = v0;
    setup->vmax = v1;
 

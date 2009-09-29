@@ -51,14 +51,16 @@ static GLfloat Xrot = 0.0, Yrot = .0, Zrot = 0.0;
 static GLfloat EyeDist = 10;
 static GLboolean Anim = GL_TRUE;
 static GLboolean UseArrays = GL_TRUE;
+static GLboolean UseVBO = GL_TRUE;
+static GLuint VBO = 0;
 
 static GLint VertCoord_attr = -1, TexCoord0_attr = -1, TexCoord1_attr = -1;
 
 
 /* value[0] = tex unit */
 static struct uniform_info Uniforms[] = {
-   { "tex1",  1, GL_INT, { 0, 0, 0, 0 }, -1 },
-   { "tex2",  1, GL_INT, { 1, 0, 0, 0 }, -1 },
+   { "tex1",  1, GL_SAMPLER_2D, { 0, 0, 0, 0 }, -1 },
+   { "tex2",  1, GL_SAMPLER_2D, { 1, 0, 0, 0 }, -1 },
    END_OF_UNIFORMS
 };
 
@@ -76,28 +78,81 @@ static const GLfloat VertCoords[4][2] = {
 };
 
 
+
+static void
+SetupVertexBuffer(void)
+{
+   glGenBuffersARB(1, &VBO);
+   glBindBufferARB(GL_ARRAY_BUFFER_ARB, VBO);
+
+   glBufferDataARB(GL_ARRAY_BUFFER_ARB,
+                        sizeof(VertCoords) +
+                        sizeof(Tex0Coords) +
+                        sizeof(Tex1Coords),
+                        NULL,
+                        GL_STATIC_DRAW_ARB);
+
+   /* non-interleaved vertex arrays */
+
+   glBufferSubDataARB(GL_ARRAY_BUFFER_ARB,
+                           0,                   /* offset */
+                           sizeof(VertCoords),  /* size */
+                           VertCoords);         /* data */
+
+   glBufferSubDataARB(GL_ARRAY_BUFFER_ARB,
+                           sizeof(VertCoords),  /* offset */
+                           sizeof(Tex0Coords),  /* size */
+                           Tex0Coords);         /* data */
+
+   glBufferSubDataARB(GL_ARRAY_BUFFER_ARB,
+                           sizeof(VertCoords) +
+                           sizeof(Tex0Coords),  /* offset */
+                           sizeof(Tex1Coords),  /* size */
+                           Tex1Coords);         /* data */
+
+   glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
+}
+
+
 static void
 DrawPolygonArray(void)
 {
+   void *vertPtr, *tex0Ptr, *tex1Ptr;
+
+   if (UseVBO) {
+      glBindBufferARB(GL_ARRAY_BUFFER_ARB, VBO);
+      vertPtr = (void *) 0;
+      tex0Ptr = (void *) sizeof(VertCoords);
+      tex1Ptr = (void *) (sizeof(VertCoords) + sizeof(Tex0Coords));
+   }
+   else {
+      glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
+      vertPtr = VertCoords;
+      tex0Ptr = Tex0Coords;
+      tex1Ptr = Tex1Coords;
+   }
+
    if (VertCoord_attr >= 0) {
       glVertexAttribPointer(VertCoord_attr, 2, GL_FLOAT, GL_FALSE,
-                                 0, VertCoords);
+                                 0, vertPtr);
       glEnableVertexAttribArray(VertCoord_attr);
    }
    else {
-      glVertexPointer(2, GL_FLOAT, 0, VertCoords);
-      glEnable(GL_VERTEX_ARRAY);
+      glVertexPointer(2, GL_FLOAT, 0, vertPtr);
+      glEnableClientState(GL_VERTEX_ARRAY);
    }
 
    glVertexAttribPointer(TexCoord0_attr, 2, GL_FLOAT, GL_FALSE,
-                              0, Tex0Coords);
+                              0, tex0Ptr);
    glEnableVertexAttribArray(TexCoord0_attr);
 
    glVertexAttribPointer(TexCoord1_attr, 2, GL_FLOAT, GL_FALSE,
-                              0, Tex1Coords);
+                              0, tex1Ptr);
    glEnableVertexAttribArray(TexCoord1_attr);
 
    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+   glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 }
 
 
@@ -162,6 +217,10 @@ key(unsigned char k, int x, int y)
    case 'a':
       UseArrays = !UseArrays;
       printf("Arrays: %d\n", UseArrays);
+      break;
+   case 'v':
+      UseVBO = !UseVBO;
+      printf("Use VBO: %d\n", UseVBO);
       break;
    case ' ':
       Anim = !Anim;
@@ -269,7 +328,10 @@ CreateProgram(const char *vertProgFile, const char *fragProgFile,
 
    glUseProgram(program);
 
-   InitUniforms(program, uniforms);
+   SetUniformValues(program, uniforms);
+   PrintUniforms(Uniforms);
+
+   assert(ValidateShaderProgram(program));
 
    VertCoord_attr = glGetAttribLocation(program, "VertCoord");
    if (VertCoord_attr > 0) {
@@ -314,9 +376,17 @@ InitGL(void)
       /*exit(1);*/
    }
    printf("GL_RENDERER = %s\n",(const char *) glGetString(GL_RENDERER));
+   printf("Usage:\n");
+   printf("  a     - toggle arrays vs. immediate mode rendering\n");
+   printf("  v     - toggle VBO usage for array rendering\n");
+   printf("  z/Z   - change viewing distance\n");
+   printf("  SPACE - toggle animation\n");
+   printf("  Esc   - exit\n");
 
    InitTextures();
    InitPrograms();
+
+   SetupVertexBuffer();
 
    glEnable(GL_DEPTH_TEST);
 

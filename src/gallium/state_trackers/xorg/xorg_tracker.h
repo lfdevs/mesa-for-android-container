@@ -31,11 +31,20 @@
 #ifndef _XORG_TRACKER_H_
 #define _XORG_TRACKER_H_
 
+#include <stddef.h>
+#include <stdint.h>
 #include <errno.h>
 #include <drm.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
-#include "exa.h"
+#include <xorg-server.h>
+#include <xf86.h>
+#include "xf86Crtc.h"
+#include <exa.h>
+
+#ifdef DRM_MODE_FEATURE_DIRTYFB
+#include <damage.h>
+#endif
 
 #include "pipe/p_screen.h"
 #include "state_tracker/drm_api.h"
@@ -72,16 +81,23 @@ typedef struct _modesettingRec
 
     unsigned int SaveGeneration;
 
+    void (*blockHandler)(int, pointer, pointer, pointer);
     CreateScreenResourcesProcPtr createScreenResources;
 
     /* gallium */
+    struct drm_api *api;
     struct pipe_screen *screen;
     struct pipe_context *ctx;
+    boolean d_depth_bits_last;
+    boolean ds_depth_bits_last;
 
     /* exa */
     void *exa;
     Bool noEvict;
 
+#ifdef DRM_MODE_FEATURE_DIRTYFB
+    DamagePtr damage;
+#endif
 } modesettingRec, *modesettingPtr;
 
 #define modesettingPTR(p) ((modesettingPtr)((p)->driverPrivate))
@@ -94,7 +110,13 @@ struct pipe_texture *
 xorg_exa_get_texture(PixmapPtr pPixmap);
 
 unsigned
-xorg_exa_get_pixmap_handle(PixmapPtr pPixmap);
+xorg_exa_get_pixmap_handle(PixmapPtr pPixmap, unsigned *stride);
+
+int
+xorg_exa_set_displayed_usage(PixmapPtr pPixmap);
+
+int
+xorg_exa_set_shared_usage(PixmapPtr pPixmap);
 
 void *
 xorg_exa_init(ScrnInfoPtr pScrn);
@@ -118,6 +140,9 @@ driCloseScreen(ScreenPtr pScreen);
  */
 void
 crtc_init(ScrnInfoPtr pScrn);
+
+void
+crtc_cursor_destroy(xf86CrtcPtr crtc);
 
 
 /***********************************************************************

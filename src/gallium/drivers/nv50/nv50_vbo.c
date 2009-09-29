@@ -22,6 +22,7 @@
 
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
+#include "pipe/p_inlines.h"
 
 #include "nv50_context.h"
 
@@ -48,12 +49,88 @@ nv50_prim(unsigned mode)
 	return NV50TCL_VERTEX_BEGIN_POINTS;
 }
 
+static INLINE uint32_t
+nv50_vbo_type_to_hw(unsigned type)
+{
+	switch (type) {
+	case PIPE_FORMAT_TYPE_FLOAT:
+		return NV50TCL_VERTEX_ARRAY_ATTRIB_TYPE_FLOAT;
+	case PIPE_FORMAT_TYPE_UNORM:
+		return NV50TCL_VERTEX_ARRAY_ATTRIB_TYPE_UNORM;
+	case PIPE_FORMAT_TYPE_SNORM:
+		return NV50TCL_VERTEX_ARRAY_ATTRIB_TYPE_SNORM;
+	case PIPE_FORMAT_TYPE_USCALED:
+		return NV50TCL_VERTEX_ARRAY_ATTRIB_TYPE_USCALED;
+	case PIPE_FORMAT_TYPE_SSCALED:
+		return NV50TCL_VERTEX_ARRAY_ATTRIB_TYPE_SSCALED;
+	/*
+	case PIPE_FORMAT_TYPE_UINT:
+		return NV50TCL_VERTEX_ARRAY_ATTRIB_TYPE_UINT;
+	case PIPE_FORMAT_TYPE_SINT:
+		return NV50TCL_VERTEX_ARRAY_ATTRIB_TYPE_SINT; */
+	default:
+		return 0;
+	}
+}
+
+static INLINE uint32_t
+nv50_vbo_size_to_hw(unsigned size, unsigned nr_c)
+{
+	static const uint32_t hw_values[] = {
+		0, 0, 0, 0,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_8,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_8_8,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_8_8_8,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_8_8_8_8,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_16,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_16_16,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_16_16_16,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_16_16_16_16,
+		0, 0, 0, 0,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_32,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_32_32,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_32_32_32,
+		NV50TCL_VERTEX_ARRAY_ATTRIB_SIZE_32_32_32_32 };
+
+	/* we'd also have R11G11B10 and R10G10B10A2 */
+
+	assert(nr_c > 0 && nr_c <= 4);
+
+	if (size > 32)
+		return 0;
+	size >>= (3 - 2);
+
+	return hw_values[size + (nr_c - 1)];
+}
+
+static INLINE uint32_t
+nv50_vbo_vtxelt_to_hw(struct pipe_vertex_element *ve)
+{
+	uint32_t hw_type, hw_size;
+	enum pipe_format pf = ve->src_format;
+	unsigned size = pf_size_x(pf) << pf_exp2(pf);
+
+	hw_type = nv50_vbo_type_to_hw(pf_type(pf));
+	hw_size = nv50_vbo_size_to_hw(size, ve->nr_components);
+
+	if (!hw_type || !hw_size) {
+		NOUVEAU_ERR("unsupported vbo format: %s\n", pf_name(pf));
+		abort();
+		return 0x24e80000;
+	}
+
+	if (pf_swizzle_x(pf) == 2) /* BGRA */
+		hw_size |= (1 << 31); /* no real swizzle bits :-( */
+
+	return (hw_type | hw_size);
+}
+
 boolean
 nv50_draw_arrays(struct pipe_context *pipe, unsigned mode, unsigned start,
 		 unsigned count)
 {
 	struct nv50_context *nv50 = nv50_context(pipe);
-	struct nouveau_channel *chan = nv50->screen->nvws->channel;
+	struct nouveau_channel *chan = nv50->screen->tesla->channel;
 	struct nouveau_grobj *tesla = nv50->screen->tesla;
 
 	nv50_state_validate(nv50);
@@ -83,7 +160,7 @@ static INLINE void
 nv50_draw_elements_inline_u08(struct nv50_context *nv50, uint8_t *map,
 			      unsigned start, unsigned count)
 {
-	struct nouveau_channel *chan = nv50->screen->nvws->channel;
+	struct nouveau_channel *chan = nv50->screen->tesla->channel;
 	struct nouveau_grobj *tesla = nv50->screen->tesla;
 
 	map += start;
@@ -101,7 +178,7 @@ nv50_draw_elements_inline_u08(struct nv50_context *nv50, uint8_t *map,
 
 		BEGIN_RING(chan, tesla, 0x400015f0, nr >> 1);
 		for (i = 0; i < nr; i += 2)
-			OUT_RING  (chan, (map[1] << 16) | map[0]);
+			OUT_RING  (chan, (map[i + 1] << 16) | map[i]);
 
 		count -= nr;
 		map += nr;
@@ -112,7 +189,7 @@ static INLINE void
 nv50_draw_elements_inline_u16(struct nv50_context *nv50, uint16_t *map,
 			      unsigned start, unsigned count)
 {
-	struct nouveau_channel *chan = nv50->screen->nvws->channel;
+	struct nouveau_channel *chan = nv50->screen->tesla->channel;
 	struct nouveau_grobj *tesla = nv50->screen->tesla;
 
 	map += start;
@@ -130,7 +207,7 @@ nv50_draw_elements_inline_u16(struct nv50_context *nv50, uint16_t *map,
 
 		BEGIN_RING(chan, tesla, 0x400015f0, nr >> 1);
 		for (i = 0; i < nr; i += 2)
-			OUT_RING  (chan, (map[1] << 16) | map[0]);
+			OUT_RING  (chan, (map[i + 1] << 16) | map[i]);
 
 		count -= nr;
 		map += nr;
@@ -138,10 +215,10 @@ nv50_draw_elements_inline_u16(struct nv50_context *nv50, uint16_t *map,
 }
 
 static INLINE void
-nv50_draw_elements_inline_u32(struct nv50_context *nv50, uint8_t *map,
+nv50_draw_elements_inline_u32(struct nv50_context *nv50, uint32_t *map,
 			      unsigned start, unsigned count)
 {
-	struct nouveau_channel *chan = nv50->screen->nvws->channel;
+	struct nouveau_channel *chan = nv50->screen->tesla->channel;
 	struct nouveau_grobj *tesla = nv50->screen->tesla;
 
 	map += start;
@@ -163,10 +240,12 @@ nv50_draw_elements(struct pipe_context *pipe,
 		   unsigned mode, unsigned start, unsigned count)
 {
 	struct nv50_context *nv50 = nv50_context(pipe);
-	struct nouveau_channel *chan = nv50->screen->nvws->channel;
+	struct nouveau_channel *chan = nv50->screen->tesla->channel;
 	struct nouveau_grobj *tesla = nv50->screen->tesla;
-	struct pipe_winsys *ws = pipe->winsys;
-	void *map = ws->buffer_map(ws, indexBuffer, PIPE_BUFFER_USAGE_CPU_READ);
+	struct pipe_screen *pscreen = pipe->screen;
+	void *map;
+	
+	map = pipe_buffer_map(pscreen, indexBuffer, PIPE_BUFFER_USAGE_CPU_READ);
 
 	nv50_state_validate(nv50);
 
@@ -193,7 +272,67 @@ nv50_draw_elements(struct pipe_context *pipe,
 	BEGIN_RING(chan, tesla, NV50TCL_VERTEX_END, 1);
 	OUT_RING  (chan, 0);
 
+	pipe_buffer_unmap(pscreen, indexBuffer);
 	pipe->flush(pipe, 0, NULL);
+	return TRUE;
+}
+
+static INLINE boolean
+nv50_vbo_static_attrib(struct nv50_context *nv50, unsigned attrib,
+		       struct nouveau_stateobj **pso,
+		       struct pipe_vertex_element *ve,
+		       struct pipe_vertex_buffer *vb)
+
+{
+	struct nouveau_stateobj *so;
+	struct nouveau_grobj *tesla = nv50->screen->tesla;
+	struct nouveau_bo *bo = nouveau_bo(vb->buffer);
+	float *v;
+	int ret;
+	enum pipe_format pf = ve->src_format;
+
+	if ((pf_type(pf) != PIPE_FORMAT_TYPE_FLOAT) ||
+	    (pf_size_x(pf) << pf_exp2(pf)) != 32)
+		return FALSE;
+
+	ret = nouveau_bo_map(bo, NOUVEAU_BO_RD);
+	if (ret)
+		return FALSE;
+	v = (float *)(bo->map + (vb->buffer_offset + ve->src_offset));
+
+	so = *pso;
+	if (!so)
+		*pso = so = so_new(nv50->vtxelt_nr * 5, 0);
+
+	switch (ve->nr_components) {
+	case 4:
+		so_method(so, tesla, NV50TCL_VTX_ATTR_4F_X(attrib), 4);
+		so_data  (so, fui(v[0]));
+		so_data  (so, fui(v[1]));
+		so_data  (so, fui(v[2]));
+		so_data  (so, fui(v[3]));
+		break;
+	case 3:
+		so_method(so, tesla, NV50TCL_VTX_ATTR_3F_X(attrib), 3);
+		so_data  (so, fui(v[0]));
+		so_data  (so, fui(v[1]));
+		so_data  (so, fui(v[2]));
+		break;
+	case 2:
+		so_method(so, tesla, NV50TCL_VTX_ATTR_2F_X(attrib), 2);
+		so_data  (so, fui(v[0]));
+		so_data  (so, fui(v[1]));
+		break;
+	case 1:
+		so_method(so, tesla, NV50TCL_VTX_ATTR_1F(attrib), 1);
+		so_data  (so, fui(v[0]));
+		break;
+	default:
+		nouveau_bo_unmap(bo);
+		return FALSE;
+	}
+
+	nouveau_bo_unmap(bo);
 	return TRUE;
 }
 
@@ -201,56 +340,61 @@ void
 nv50_vbo_validate(struct nv50_context *nv50)
 {
 	struct nouveau_grobj *tesla = nv50->screen->tesla;
-	struct nouveau_stateobj *vtxbuf, *vtxfmt;
-	int i;
+	struct nouveau_stateobj *vtxbuf, *vtxfmt, *vtxattr;
+	unsigned i;
 
-	vtxbuf = so_new(nv50->vtxelt_nr * 4, nv50->vtxelt_nr * 2);
+	/* don't validate if Gallium took away our buffers */
+	if (nv50->vtxbuf_nr == 0)
+		return;
+
+	vtxattr = NULL;
+	vtxbuf = so_new(nv50->vtxelt_nr * 7, nv50->vtxelt_nr * 4);
 	vtxfmt = so_new(nv50->vtxelt_nr + 1, 0);
-	so_method(vtxfmt, tesla, 0x1ac0, nv50->vtxelt_nr);
+	so_method(vtxfmt, tesla, NV50TCL_VERTEX_ARRAY_ATTRIB(0),
+		nv50->vtxelt_nr);
 
 	for (i = 0; i < nv50->vtxelt_nr; i++) {
 		struct pipe_vertex_element *ve = &nv50->vtxelt[i];
 		struct pipe_vertex_buffer *vb =
 			&nv50->vtxbuf[ve->vertex_buffer_index];
+		struct nouveau_bo *bo = nouveau_bo(vb->buffer);
+		uint32_t hw = nv50_vbo_vtxelt_to_hw(ve);
 
-		switch (ve->src_format) {
-		case PIPE_FORMAT_R32G32B32A32_FLOAT:
-			so_data(vtxfmt, 0x7e080000 | i);
-			break;
-		case PIPE_FORMAT_R32G32B32_FLOAT:
-			so_data(vtxfmt, 0x7e100000 | i);
-			break;
-		case PIPE_FORMAT_R32G32_FLOAT:
-			so_data(vtxfmt, 0x7e200000 | i);
-			break;
-		case PIPE_FORMAT_R32_FLOAT:
-			so_data(vtxfmt, 0x7e900000 | i);
-			break;
-		case PIPE_FORMAT_R8G8B8A8_UNORM:
-			so_data(vtxfmt, 0x24500000 | i);
-			break;
-		default:
-		{
-			NOUVEAU_ERR("invalid vbo format %s\n",
-				    pf_name(ve->src_format));
-			assert(0);
-			return;
-		}
-		}
+		if (!vb->stride &&
+		    nv50_vbo_static_attrib(nv50, i, &vtxattr, ve, vb)) {
+			so_data(vtxfmt, hw | (1 << 4));
 
-		so_method(vtxbuf, tesla, 0x900 + (i * 16), 3);
+			so_method(vtxbuf, tesla,
+				  NV50TCL_VERTEX_ARRAY_FORMAT(i), 1);
+			so_data  (vtxbuf, 0);
+			continue;
+		}
+		so_data(vtxfmt, hw | i);
+
+		so_method(vtxbuf, tesla, NV50TCL_VERTEX_ARRAY_FORMAT(i), 3);
 		so_data  (vtxbuf, 0x20000000 | vb->stride);
-		so_reloc (vtxbuf, vb->buffer, vb->buffer_offset +
+		so_reloc (vtxbuf, bo, vb->buffer_offset +
 			  ve->src_offset, NOUVEAU_BO_VRAM | NOUVEAU_BO_GART |
 			  NOUVEAU_BO_RD | NOUVEAU_BO_HIGH, 0, 0);
-		so_reloc (vtxbuf, vb->buffer, vb->buffer_offset +
+		so_reloc (vtxbuf, bo, vb->buffer_offset +
 			  ve->src_offset, NOUVEAU_BO_VRAM | NOUVEAU_BO_GART |
 			  NOUVEAU_BO_RD | NOUVEAU_BO_LOW, 0, 0);
+
+		/* vertex array limits */
+		so_method(vtxbuf, tesla, 0x1080 + (i * 8), 2);
+		so_reloc (vtxbuf, bo, vb->buffer->size - 1,
+			  NOUVEAU_BO_VRAM | NOUVEAU_BO_GART | NOUVEAU_BO_RD |
+			  NOUVEAU_BO_HIGH, 0, 0);
+		so_reloc (vtxbuf, bo, vb->buffer->size - 1,
+			  NOUVEAU_BO_VRAM | NOUVEAU_BO_GART | NOUVEAU_BO_RD |
+			  NOUVEAU_BO_LOW, 0, 0);
 	}
 
 	so_ref (vtxfmt, &nv50->state.vtxfmt);
 	so_ref (vtxbuf, &nv50->state.vtxbuf);
+	so_ref (vtxattr, &nv50->state.vtxattr);
 	so_ref (NULL, &vtxbuf);
 	so_ref (NULL, &vtxfmt);
+	so_ref (NULL, &vtxattr);
 }
 

@@ -29,6 +29,7 @@
 #define TGSI_EXEC_H
 
 #include "pipe/p_compiler.h"
+#include "pipe/p_state.h"
 
 #if defined __cplusplus
 extern "C" {
@@ -94,7 +95,6 @@ struct tgsi_exec_labels
 
 
 #define TGSI_EXEC_NUM_TEMPS       128
-#define TGSI_EXEC_NUM_TEMP_EXTRAS   6
 #define TGSI_EXEC_NUM_IMMEDIATES  256
 
 /*
@@ -162,9 +162,14 @@ struct tgsi_exec_labels
 #define TGSI_EXEC_MASK_I            (TGSI_EXEC_NUM_TEMPS + 3)
 #define TGSI_EXEC_MASK_C            2
 
+/* 4 register buffer for various purposes */
 #define TGSI_EXEC_TEMP_R0           (TGSI_EXEC_NUM_TEMPS + 4)
+#define TGSI_EXEC_NUM_TEMP_R        4
 
-#define TGSI_EXEC_TEMP_ADDR         (TGSI_EXEC_NUM_TEMPS + 5)
+#define TGSI_EXEC_TEMP_ADDR         (TGSI_EXEC_NUM_TEMPS + 8)
+#define TGSI_EXEC_NUM_ADDRS         1
+#define TGSI_EXEC_NUM_TEMP_EXTRAS   9
+
 
 
 #define TGSI_EXEC_MAX_COND_NESTING  20
@@ -181,30 +186,38 @@ struct tgsi_exec_labels
  */
 #define TGSI_EXEC_MAX_CONST_BUFFER  4096
 
+
+/** function call/activation record */
+struct tgsi_call_record
+{
+   uint CondStackTop;
+   uint LoopStackTop;
+   uint ContStackTop;
+   uint ReturnAddr;
+};
+
+
 /**
  * Run-time virtual machine state for executing TGSI shader.
  */
 struct tgsi_exec_machine
 {
    /* Total = program temporaries + internal temporaries
-    *         + 1 padding to align to 16 bytes
     */
-   struct tgsi_exec_vector       _Temps[TGSI_EXEC_NUM_TEMPS +
-                                        TGSI_EXEC_NUM_TEMP_EXTRAS + 1];
+   struct tgsi_exec_vector       Temps[TGSI_EXEC_NUM_TEMPS +
+                                       TGSI_EXEC_NUM_TEMP_EXTRAS];
 
-   /*
-    * This will point to _Temps after aligning to 16B boundary.
-    */
-   struct tgsi_exec_vector       *Temps;
+   float                         Imms[TGSI_EXEC_NUM_IMMEDIATES][4];
+
+   struct tgsi_exec_vector       Inputs[PIPE_MAX_ATTRIBS];
+   struct tgsi_exec_vector       Outputs[PIPE_MAX_ATTRIBS];
+
    struct tgsi_exec_vector       *Addrs;
 
    struct tgsi_sampler           **Samplers;
 
-   float                         Imms[TGSI_EXEC_NUM_IMMEDIATES][4];
    unsigned                      ImmLimit;
    const float                   (*Consts)[4];
-   struct tgsi_exec_vector       *Inputs;
-   struct tgsi_exec_vector       *Outputs;
    const struct tgsi_token       *Tokens;   /**< Declarations, instructions */
    unsigned                      Processor; /**< TGSI_PROCESSOR_x */
 
@@ -230,6 +243,14 @@ struct tgsi_exec_machine
    uint LoopStack[TGSI_EXEC_MAX_LOOP_NESTING];
    int LoopStackTop;
 
+   /** Loop label stack */
+   uint LoopLabelStack[TGSI_EXEC_MAX_LOOP_NESTING];
+   int LoopLabelStackTop;
+
+   /** Loop counter stack (x = count, y = current, z = step) */
+   struct tgsi_exec_vector LoopCounterStack[TGSI_EXEC_MAX_LOOP_NESTING];
+   int LoopCounterStackTop;
+   
    /** Loop continue mask stack (see comments in tgsi_exec.c) */
    uint ContStack[TGSI_EXEC_MAX_LOOP_NESTING];
    int ContStackTop;
@@ -239,7 +260,7 @@ struct tgsi_exec_machine
    int FuncStackTop;
 
    /** Function call stack for saving/restoring the program counter */
-   uint CallStack[TGSI_EXEC_MAX_CALL_NESTING];
+   struct tgsi_call_record CallStack[TGSI_EXEC_MAX_CALL_NESTING];
    int CallStackTop;
 
    struct tgsi_full_instruction *Instructions;
@@ -251,9 +272,11 @@ struct tgsi_exec_machine
    struct tgsi_exec_labels Labels;
 };
 
+struct tgsi_exec_machine *
+tgsi_exec_machine_create( void );
+
 void
-tgsi_exec_machine_init(
-   struct tgsi_exec_machine *mach );
+tgsi_exec_machine_destroy(struct tgsi_exec_machine *mach);
 
 
 void 

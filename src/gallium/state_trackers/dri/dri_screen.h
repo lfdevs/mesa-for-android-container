@@ -49,19 +49,16 @@ struct dri_screen
     */
    driOptionCache optionCache;
 
-   /**
-    * Temporary(?) context to use for SwapBuffers or other situations in
-    * which we need a rendering context, but none is currently bound.
-    */
-   struct dri_context *dummyContext;
-
    /* drm */
    int fd;
    drmLock *drmLock;
 
    /* gallium */
+   struct drm_api *api;
    struct pipe_winsys *pipe_winsys;
    struct pipe_screen *pipe_screen;
+   boolean d_depth_bits_last;
+   boolean sd_depth_bits_last;
 };
 
 /** cast wrapper */

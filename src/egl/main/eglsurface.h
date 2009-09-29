@@ -10,13 +10,15 @@
  */
 struct _egl_surface
 {
-   EGLSurface Handle;  /* The public/opaque handle which names this object */
-   _EGLConfig *Config;
+   /* Managed by EGLDisplay for linking */
+   _EGLDisplay *Display;
+   _EGLSurface *Next;
 
-   /* May need reference counting here */
-   EGLBoolean IsBound;
-   EGLBoolean DeletePending;
+   /* The bound status of the surface */
+   _EGLContext *Binding;
    EGLBoolean BoundToTexture;
+
+   _EGLConfig *Config;
 
    EGLint Type; /* one of EGL_WINDOW_BIT, EGL_PIXMAP_BIT or EGL_PBUFFER_BIT */
    EGLint Width, Height;
@@ -39,84 +41,74 @@ struct _egl_surface
 
 
 extern EGLBoolean
-_eglInitSurface(_EGLDriver *drv, EGLDisplay dpy,
-                _EGLSurface *surf, EGLint type, EGLConfig config,
-                const EGLint *attrib_list);
+_eglInitSurface(_EGLDriver *drv, _EGLSurface *surf, EGLint type,
+                _EGLConfig *config, const EGLint *attrib_list);
 
 
-extern void
-_eglSaveSurface(_EGLSurface *surf);
+extern EGLBoolean
+_eglSwapBuffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf);
 
 
-extern void
-_eglRemoveSurface(_EGLSurface *surf);
+extern EGLBoolean
+_eglCopyBuffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, NativePixmapType target);
 
 
-extern EGLSurface
-_eglGetSurfaceHandle(_EGLSurface *surface);
+extern EGLBoolean
+_eglQuerySurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint attribute, EGLint *value);
 
 
 extern _EGLSurface *
-_eglLookupSurface(EGLSurface surf);
- 
+_eglCreateWindowSurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf, NativeWindowType window, const EGLint *attrib_list);
+
 
 extern _EGLSurface *
-_eglGetCurrentSurface(EGLint readdraw);
+_eglCreatePixmapSurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf, NativePixmapType pixmap, const EGLint *attrib_list);
+
+
+extern _EGLSurface *
+_eglCreatePbufferSurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf, const EGLint *attrib_list);
 
 
 extern EGLBoolean
-_eglSwapBuffers(_EGLDriver *drv, EGLDisplay dpy, EGLSurface draw);
+_eglDestroySurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf);
 
 
 extern EGLBoolean
-_eglCopyBuffers(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface, NativePixmapType target);
+_eglSurfaceAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint attribute, EGLint value);
 
 
 extern EGLBoolean
-_eglQuerySurface(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface, EGLint attribute, EGLint *value);
-
-
-extern EGLSurface
-_eglCreateWindowSurface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config, NativeWindowType window, const EGLint *attrib_list);
-
-
-extern EGLSurface
-_eglCreatePixmapSurface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config, NativePixmapType pixmap, const EGLint *attrib_list);
-
-
-extern EGLSurface
-_eglCreatePbufferSurface(_EGLDriver *drv, EGLDisplay dpy, EGLConfig config, const EGLint *attrib_list);
+_eglBindTexImage(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint buffer);
 
 
 extern EGLBoolean
-_eglDestroySurface(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface);
+_eglReleaseTexImage(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint buffer);
 
 
 extern EGLBoolean
-_eglSurfaceAttrib(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface, EGLint attribute, EGLint value);
-
-
-extern EGLBoolean
-_eglBindTexImage(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface, EGLint buffer);
-
-
-extern EGLBoolean
-_eglReleaseTexImage(_EGLDriver *drv, EGLDisplay dpy, EGLSurface surface, EGLint buffer);
-
-
-extern EGLBoolean
-_eglSwapInterval(_EGLDriver *drv, EGLDisplay dpy, EGLint interval);
+_eglSwapInterval(_EGLDriver *drv, _EGLDisplay *dpy, EGLint interval);
 
 
 #ifdef EGL_VERSION_1_2
 
-extern EGLSurface
-_eglCreatePbufferFromClientBuffer(_EGLDriver *drv, EGLDisplay dpy,
+extern _EGLSurface *
+_eglCreatePbufferFromClientBuffer(_EGLDriver *drv, _EGLDisplay *dpy,
                                   EGLenum buftype, EGLClientBuffer buffer,
-                                  EGLConfig config, const EGLint *attrib_list);
+                                  _EGLConfig *conf, const EGLint *attrib_list);
 
 #endif /* EGL_VERSION_1_2 */
 
+
+/**
+ * Return true if the surface is bound to a thread.
+ * A surface bound to a texutre is not considered bound by
+ * this function.
+ */
+static INLINE EGLBoolean
+_eglIsSurfaceBound(_EGLSurface *surf)
+{
+   return (surf->Binding != NULL);
+}
 
 
 #endif /* EGLSURFACE_INCLUDED */

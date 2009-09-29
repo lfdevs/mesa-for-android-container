@@ -27,12 +27,7 @@
 #include "r300_cs.h"
 #include "r300_reg.h"
 
-struct r300_query {
-    /* The kind of query. Currently only OQ is supported. */
-    unsigned type;
-    /* Buffer object where we want our results to reside. */
-    struct pipe_buffer* buf;
-};
+struct r300_context;
 
 static INLINE struct r300_query* r300_query(struct pipe_query* q)
 {

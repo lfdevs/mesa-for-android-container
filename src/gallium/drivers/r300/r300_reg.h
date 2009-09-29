@@ -511,11 +511,13 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_PVS_XYZW_VALID_INST_SHIFT    10
 #       define R300_PVS_LAST_INST_SHIFT          20
 #       define R300_PVS_FIRST_INST(x)            ((x) << 0)
+#       define R300_PVS_XYZW_VALID_INST(x)       ((x) << 10)
 #       define R300_PVS_LAST_INST(x)             ((x) << 20)
 /* Addresses are relative the the vertex program parameters area. */
 #define R300_VAP_PVS_CONST_CNTL             0x22D4
 #       define R300_PVS_CONST_BASE_OFFSET_SHIFT  0
 #       define R300_PVS_MAX_CONST_ADDR_SHIFT     16
+#       define R300_PVS_MAX_CONST_ADDR(x)        ((x) << 16)
 #define R300_VAP_PVS_CODE_CNTL_1	    0x22D8
 #       define R300_PVS_LAST_VTX_SRC_INST_SHIFT  0
 #define R300_VAP_PVS_FLOW_CNTL_OPC          0x22DC
@@ -1062,8 +1064,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
         R300_GA_COLOR_CONTROL_RGB2_SHADING_FLAT | \
         R300_GA_COLOR_CONTROL_ALPHA2_SHADING_FLAT | \
         R300_GA_COLOR_CONTROL_RGB3_SHADING_FLAT | \
-        R300_GA_COLOR_CONTROL_ALPHA3_SHADING_FLAT | \
-        R300_GA_COLOR_CONTROL_PROVOKING_VERTEX_LAST )
+        R300_GA_COLOR_CONTROL_ALPHA3_SHADING_FLAT )
 
 #       define R300_SHADE_MODEL_SMOOTH ( \
         R300_GA_COLOR_CONTROL_RGB0_SHADING_GOURAUD | \
@@ -1073,8 +1074,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
         R300_GA_COLOR_CONTROL_RGB2_SHADING_GOURAUD | \
         R300_GA_COLOR_CONTROL_ALPHA2_SHADING_GOURAUD | \
         R300_GA_COLOR_CONTROL_RGB3_SHADING_GOURAUD | \
-        R300_GA_COLOR_CONTROL_ALPHA3_SHADING_GOURAUD | \
-        R300_GA_COLOR_CONTROL_PROVOKING_VERTEX_LAST )
+        R300_GA_COLOR_CONTROL_ALPHA3_SHADING_GOURAUD )
 
 /* Specifies red & green components of fill color -- S312 format -- Backwards comp. */
 #define R300_GA_SOLID_RG                         0x427c
@@ -1478,6 +1478,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_TX_PITCH_EN                  (1 << 31)
 #       define R300_TX_WIDTH(x)                  ((x) << 0)
 #       define R300_TX_HEIGHT(x)                 ((x) << 11)
+#       define R300_TX_NUM_LEVELS(x)             ((x) << 26)
 
 #define R300_TX_FORMAT1_0                   0x44C0
 	/* The interpretation of the format word by Wladimir van der Laan */
@@ -1485,9 +1486,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 	   They are given meanings as R, G, B and Alpha by the swizzle
 	   specification */
 #	define R300_TX_FORMAT_X8		    0x0
-#	define R500_TX_FORMAT_X1		    0x0 // bit set in format 2
 #	define R300_TX_FORMAT_X16		    0x1
-#	define R500_TX_FORMAT_X1_REV		    0x0 // bit set in format 2
 #	define R300_TX_FORMAT_Y4X4		    0x2
 #	define R300_TX_FORMAT_Y8X8		    0x3
 #	define R300_TX_FORMAT_Y16X16		    0x4
@@ -1504,31 +1503,29 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #	define R300_TX_FORMAT_DXT1	    	    0xF
 #	define R300_TX_FORMAT_DXT3	    	    0x10
 #	define R300_TX_FORMAT_DXT5	    	    0x11
-#	define R300_TX_FORMAT_D3DMFT_CxV8U8	    0x12     /* no swizzle */
-#	define R300_TX_FORMAT_A8R8G8B8	    	    0x13     /* no swizzle */
-#	define R300_TX_FORMAT_B8G8_B8G8	    	    0x14     /* no swizzle */
-#	define R300_TX_FORMAT_G8R8_G8B8	    	    0x15     /* no swizzle */
+#	define R300_TX_FORMAT_Y8           	    0x12
+#	define R300_TX_FORMAT_AVYU444 	    	    0x13
+#	define R300_TX_FORMAT_VYUY422  	    	    0x14
+#	define R300_TX_FORMAT_YVYU422  	    	    0x15
+#	define R300_TX_FORMAT_16_MPEG  	    	    0x16
+#	define R300_TX_FORMAT_16_16_MPEG    	    0x17
+#	define R300_TX_FORMAT_16F     	    	    0x18
+#	define R300_TX_FORMAT_16F_16F 	    	    0x19
+#	define R300_TX_FORMAT_16F_16F_16F_16F  	    0x1A
+#	define R300_TX_FORMAT_32F     	    	    0x1B
+#	define R300_TX_FORMAT_32F_32F 	    	    0x1C
+#	define R300_TX_FORMAT_32F_32F_32F_32F  	    0x1D
+#       define R300_TX_FORMAT_W24_FP                0x1E
 
-	/* These two values are wrong, but they're the only values that
-	 * produce any even vaguely correct results.  Can r300 only do 16-bit
-	 * depth textures?
-	 */
-#	define R300_TX_FORMAT_X24_Y8	    	    0x1e
-#	define R300_TX_FORMAT_X32	    	    0x1e
+#       define R300_TX_FORMAT_SIGNED_W             (1 << 5)
+#       define R300_TX_FORMAT_SIGNED_Z             (1 << 6)
+#       define R300_TX_FORMAT_SIGNED_Y             (1 << 7)
+#       define R300_TX_FORMAT_SIGNED_X             (1 << 8)
+#       define R300_TX_FORMAT_SIGNED               (0xf << 5)
 
-	/* 0x16 - some 16 bit green format.. ?? */
 #	define R300_TX_FORMAT_3D		   (1 << 25)
 #	define R300_TX_FORMAT_CUBIC_MAP		   (2 << 25)
 
-	/* gap */
-	/* Floating point formats */
-	/* Note - hardware supports both 16 and 32 bit floating point */
-#	define R300_TX_FORMAT_FL_I16	    	    0x18
-#	define R300_TX_FORMAT_FL_I16A16	    	    0x19
-#	define R300_TX_FORMAT_FL_R16G16B16A16	    0x1A
-#	define R300_TX_FORMAT_FL_I32	    	    0x1B
-#	define R300_TX_FORMAT_FL_I32A32	    	    0x1C
-#	define R300_TX_FORMAT_FL_R32G32B32A32	    0x1D
 	/* alpha modes, convenience mostly */
 	/* if you have alpha, pick constant appropriate to the
 	   number of channels (1 for I8, 2 for I8A8, 4 for R8G8B8A8, etc */
@@ -1569,7 +1566,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #	define R300_TX_FORMAT_CONST_Z		(4<<5)
 #	define R300_TX_FORMAT_CONST_W		(8<<5)
 
-#	define R300_TX_FORMAT_YUV_MODE		0x00800000
+#       define R300_TX_FORMAT_GAMMA               (1 << 21)
+#       define R300_TX_FORMAT_YUV_TO_RGB          (1 << 22)
 
 #define R300_TX_FORMAT2_0		    0x4500 /* obvious missing in gap */
 #       define R300_TX_PITCHMASK_SHIFT           0
@@ -3040,6 +3038,7 @@ enum {
 #   define R500_INST_RGB_WMASK_R			(1 << 11)
 #   define R500_INST_RGB_WMASK_G			(1 << 12)
 #   define R500_INST_RGB_WMASK_B			(1 << 13)
+#   define R500_INST_RGB_WMASK_RGB			(7 << 11)
 #   define R500_INST_ALPHA_WMASK			(1 << 14)
 #   define R500_INST_RGB_OMASK_R			(1 << 15)
 #   define R500_INST_RGB_OMASK_G			(1 << 16)
@@ -3312,6 +3311,10 @@ enum {
 #define RADEON_CP_PACKET3                           0xC0000000
 
 #define R200_3D_DRAW_IMMD_2      0xC0003500
+
+/* XXX Oh look, stuff not brought over from docs yet */
+
+#define R300_SU_REG_DEST                    0x42C8
 
 #endif /* _R300_REG_H */
 

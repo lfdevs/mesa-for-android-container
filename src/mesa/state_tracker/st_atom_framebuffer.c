@@ -122,6 +122,7 @@ update_framebuffer_state( struct st_context *st )
                                    strb->surface);
             framebuffer->nr_cbufs++;
          }
+         strb->defined = GL_TRUE; /* we'll be drawing something */
       }
    }
    for (i = framebuffer->nr_cbufs; i < PIPE_MAX_COLOR_BUFS; i++) {
