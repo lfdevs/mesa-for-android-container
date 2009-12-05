@@ -229,16 +229,15 @@ void radeonUpdateScissor( GLcontext *ctx )
 	}
 	if (!rmesa->radeonScreen->kernel_mm) {
 	   /* Fix scissors for dri 1 */
-
 	   __DRIdrawablePrivate *dPriv = radeon_get_drawable(rmesa);
 	   x1 += dPriv->x;
-	   x2 += dPriv->x;
+	   x2 += dPriv->x + 1;
 	   min_x += dPriv->x;
-	   max_x += dPriv->x;
+	   max_x += dPriv->x + 1;
 	   y1 += dPriv->y;
-	   y2 += dPriv->y;
+	   y2 += dPriv->y + 1;
 	   min_y += dPriv->y;
-	   max_y += dPriv->y;
+	   max_y += dPriv->y + 1;
 	}
 
 	rmesa->state.scissor.rect.x1 = CLAMP(x1,  min_x, max_x);
@@ -262,29 +261,6 @@ void radeonScissor(GLcontext* ctx, GLint x, GLint y, GLsizei w, GLsizei h)
 		radeonUpdateScissor(ctx);
 	}
 }
-
-void radeonPolygonStipplePreKMS( GLcontext *ctx, const GLubyte *mask )
-{
-   radeonContextPtr radeon = RADEON_CONTEXT(ctx);
-   GLuint i;
-   drm_radeon_stipple_t stipple;
-
-   /* Must flip pattern upside down.
-   */
-   for ( i = 0 ; i < 32 ; i++ ) {
-      stipple.mask[31 - i] = ((GLuint *) mask)[i];
-   }
-
-   /* TODO: push this into cmd mechanism
-   */
-   radeon_firevertices(radeon);
-   LOCK_HARDWARE( radeon );
-
-   drmCommandWrite( radeon->dri.fd, DRM_RADEON_STIPPLE,
-	 &stipple, sizeof(stipple) );
-   UNLOCK_HARDWARE( radeon );
-}
-
 
 /* ================================================================
  * SwapBuffers with client-side throttling

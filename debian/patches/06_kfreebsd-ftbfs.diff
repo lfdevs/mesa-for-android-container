@@ -4,11 +4,15 @@ mesa fails to build on GNU/kFreeBSD, since some parts are not enabled.
     
 http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=524690
 
-Index: mesa/configure.ac
+---
+ configure.ac |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Index: mesa-7.6.1~rc2/configure.ac
 ===================================================================
---- mesa.orig/configure.ac	2009-09-29 11:44:55.000000000 +0200
-+++ mesa/configure.ac	2009-09-29 11:45:12.000000000 +0200
-@@ -736,7 +736,7 @@
+--- mesa-7.6.1~rc2.orig/configure.ac	2009-12-06 00:10:10.000000000 +0100
++++ mesa-7.6.1~rc2/configure.ac	2009-12-06 00:10:10.000000000 +0100
+@@ -745,7 +745,7 @@
              ;;
          esac
          ;;

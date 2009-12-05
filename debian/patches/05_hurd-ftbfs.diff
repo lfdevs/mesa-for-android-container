@@ -1,10 +1,15 @@
 From: Samuel Thibault <samuel.thibault@ens-lyon.org>
 Subject: Fix build on GNU/Hurd
 
-Index: mesa/src/glx/x11/dri2.c
+---
+ configure.ac       |   25 ++++++++++++++-----------
+ src/glx/x11/dri2.c |    2 ++
+ 2 files changed, 16 insertions(+), 11 deletions(-)
+
+Index: mesa-7.6.1~rc2/src/glx/x11/dri2.c
 ===================================================================
---- mesa.orig/src/glx/x11/dri2.c	2009-09-29 11:44:48.000000000 +0200
-+++ mesa/src/glx/x11/dri2.c	2009-09-29 11:44:55.000000000 +0200
+--- mesa-7.6.1~rc2.orig/src/glx/x11/dri2.c	2009-12-05 23:51:01.000000000 +0100
++++ mesa-7.6.1~rc2/src/glx/x11/dri2.c	2009-12-06 00:10:10.000000000 +0100
 @@ -30,6 +30,7 @@
   *   Kristian Høgsberg (krh@redhat.com)
   */
@@ -18,11 +23,11 @@ Index: mesa/src/glx/x11/dri2.c
     SyncHandle();
  }
 +#endif
-Index: mesa/configure.ac
+Index: mesa-7.6.1~rc2/configure.ac
 ===================================================================
---- mesa.orig/configure.ac	2009-09-29 11:44:48.000000000 +0200
-+++ mesa/configure.ac	2009-09-29 11:44:55.000000000 +0200
-@@ -536,6 +536,13 @@
+--- mesa-7.6.1~rc2.orig/configure.ac	2009-12-05 23:50:57.000000000 +0100
++++ mesa-7.6.1~rc2/configure.ac	2009-12-06 00:10:27.000000000 +0100
+@@ -538,6 +538,13 @@
      enable_xcb=no
  fi
  
@@ -36,7 +41,7 @@ Index: mesa/configure.ac
  dnl
  dnl libGL configuration per driver
  dnl
-@@ -569,11 +576,13 @@
+@@ -571,11 +578,13 @@
          AC_MSG_ERROR([Can't use static libraries for DRI drivers])
      fi
  
@@ -55,10 +60,10 @@ Index: mesa/configure.ac
  
      PKG_CHECK_MODULES([LIBDRM_RADEON], [libdrm_radeon], HAVE_LIBDRM_RADEON=yes, HAVE_LIBDRM_RADEON=no)
  
-@@ -647,12 +656,6 @@
-     [DRI_DRIVER_INSTALL_DIR="$withval"],
-     [DRI_DRIVER_INSTALL_DIR='${libdir}/dri'])
- AC_SUBST([DRI_DRIVER_INSTALL_DIR])
+@@ -656,12 +665,6 @@
+     [DRI_DRIVER_SEARCH_DIR="$withval"],
+     [DRI_DRIVER_SEARCH_DIR='${DRI_DRIVER_INSTALL_DIR}'])
+ AC_SUBST([DRI_DRIVER_SEARCH_DIR])
 -dnl Direct rendering or just indirect rendering
 -AC_ARG_ENABLE([driglx-direct],
 -    [AS_HELP_STRING([--disable-driglx-direct],

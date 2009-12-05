@@ -839,7 +839,7 @@ intelDestroyContext(__DRIcontextPrivate * driContextPriv)
       _vbo_DestroyContext(&intel->ctx);
 
       _swrast_DestroyContext(&intel->ctx);
-      intel->Fallback = 0;      /* don't call _swrast_Flush later */
+      intel->Fallback = 0x0;      /* don't call _swrast_Flush later */
 
       intel_batchbuffer_free(intel->batch);
       intel->batch = NULL;
@@ -944,10 +944,23 @@ intelMakeCurrent(__DRIcontextPrivate * driContextPriv,
                  __DRIdrawablePrivate * driReadPriv)
 {
    __DRIscreenPrivate *psp = driDrawPriv->driScreenPriv;
+   struct intel_context *intel;
+   GET_CURRENT_CONTEXT(curCtx);
+
+   if (driContextPriv)
+      intel = (struct intel_context *) driContextPriv->driverPrivate;
+   else
+      intel = NULL;
+
+   /* According to the glXMakeCurrent() man page: "Pending commands to
+    * the previous context, if any, are flushed before it is released."
+    * But only flush if we're actually changing contexts.
+    */
+   if (intel_context(curCtx) && intel_context(curCtx) != intel) {
+      _mesa_flush(curCtx);
+   }
 
    if (driContextPriv) {
-      struct intel_context *intel =
-         (struct intel_context *) driContextPriv->driverPrivate;
       struct intel_framebuffer *intel_fb =
 	 (struct intel_framebuffer *) driDrawPriv->driverPrivate;
       GLframebuffer *readFb = (GLframebuffer *) driReadPriv->driverPrivate;
@@ -993,41 +1006,35 @@ intelMakeCurrent(__DRIcontextPrivate * driContextPriv,
 
       _mesa_make_current(&intel->ctx, &intel_fb->Base, readFb);
 
-      /* The drawbuffer won't always be updated by _mesa_make_current: 
-       */
-      if (intel->ctx.DrawBuffer == &intel_fb->Base) {
+      intel->driReadDrawable = driReadPriv;
 
-	 if (intel->driReadDrawable != driReadPriv)
-	    intel->driReadDrawable = driReadPriv;
+      if (intel->driDrawable != driDrawPriv) {
+         if (driDrawPriv->swap_interval == (unsigned)-1) {
+            int i;
 
-	 if (intel->driDrawable != driDrawPriv) {
-	    if (driDrawPriv->swap_interval == (unsigned)-1) {
-	       int i;
+            driDrawPriv->vblFlags = (intel->intelScreen->irq_active != 0)
+               ? driGetDefaultVBlankFlags(&intel->optionCache)
+               : VBLANK_FLAG_NO_IRQ;
 
-	       driDrawPriv->vblFlags = (intel->intelScreen->irq_active != 0)
-		  ? driGetDefaultVBlankFlags(&intel->optionCache)
-		 : VBLANK_FLAG_NO_IRQ;
+            /* Prevent error printf if one crtc is disabled, this will
+             * be properly calculated in intelWindowMoved() next.
+             */
+            driDrawPriv->vblFlags = intelFixupVblank(intel, driDrawPriv);
 
-	       /* Prevent error printf if one crtc is disabled, this will
-		* be properly calculated in intelWindowMoved() next.
-		*/
-		driDrawPriv->vblFlags = intelFixupVblank(intel, driDrawPriv);
+            (*psp->systemTime->getUST) (&intel_fb->swap_ust);
+            driDrawableInitVBlank(driDrawPriv);
+            intel_fb->vbl_waited = driDrawPriv->vblSeq;
 
-	       (*psp->systemTime->getUST) (&intel_fb->swap_ust);
-	       driDrawableInitVBlank(driDrawPriv);
-	       intel_fb->vbl_waited = driDrawPriv->vblSeq;
-
-	       for (i = 0; i < 2; i++) {
-		  if (intel_fb->color_rb[i])
-		     intel_fb->color_rb[i]->vbl_pending = driDrawPriv->vblSeq;
-	       }
-	    }
-	    intel->driDrawable = driDrawPriv;
-	    intelWindowMoved(intel);
-	 }
-
-	 intel_draw_buffer(&intel->ctx, &intel_fb->Base);
+            for (i = 0; i < 2; i++) {
+               if (intel_fb->color_rb[i])
+                  intel_fb->color_rb[i]->vbl_pending = driDrawPriv->vblSeq;
+            }
+         }
+         intel->driDrawable = driDrawPriv;
+         intelWindowMoved(intel);
       }
+
+      intel_draw_buffer(&intel->ctx, &intel_fb->Base);
    }
    else {
       _mesa_make_current(NULL, NULL, NULL);

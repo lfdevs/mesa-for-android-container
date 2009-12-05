@@ -115,7 +115,7 @@
  * Handles blending and (presumably) depth and stencil testing.
  */
 
-#define BRW_FALLBACK_TEXTURE		 0x1
+
 #define BRW_MAX_CURBE                    (32*16)
 
 struct brw_context;
@@ -454,7 +454,6 @@ struct brw_context
    GLuint primitive;
 
    GLboolean emit_state_always;
-   GLboolean tmp_fallback;
    GLboolean no_batch_wrap;
 
    struct {
