@@ -1134,7 +1134,11 @@ static int check_blnd(GLcontext *ctx, struct radeon_state_atom *atom)
 		count += 3;
 
 	if (context->radeon.radeonScreen->chip_family > CHIP_FAMILY_R600) {
-		for (ui = 0; ui < R700_MAX_RENDER_TARGETS; ui++) {
+		/* targets are enabled in r700SetRenderTarget but state
+		   size is calculated before that. Until MRT's are done
+		   hardcode target0 as enabled. */
+		count += 3;
+		for (ui = 1; ui < R700_MAX_RENDER_TARGETS; ui++) {
                         if (r700->render_target[ui].enabled)
 				count += 3;
 		}
@@ -1250,9 +1254,9 @@ void r600InitAtoms(context_t *context)
 	ALLOC_STATE(poly, always, 10, r700SendPolyState);
 	ALLOC_STATE(cb, cb, 18, r700SendCBState);
 	ALLOC_STATE(clrcmp, always, 6, r700SendCBCLRCMPState);
+	ALLOC_STATE(cb_target, always, 25, r700SendRenderTargetState);
 	ALLOC_STATE(blnd, blnd, (6 + (R700_MAX_RENDER_TARGETS * 3)), r700SendCBBlendState);
 	ALLOC_STATE(blnd_clr, always, 6, r700SendCBBlendColorState);
-	ALLOC_STATE(cb_target, always, 25, r700SendRenderTargetState);
 	ALLOC_STATE(sx, always, 9, r700SendSXState);
 	ALLOC_STATE(vgt, always, 41, r700SendVGTState);
 	ALLOC_STATE(spi, always, (59 + R700_MAX_SHADER_EXPORTS), r700SendSPIState);
