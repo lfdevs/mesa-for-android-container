@@ -24,11 +24,9 @@
 #ifndef R300_FS_H
 #define R300_FS_H
 
-#include "tgsi/tgsi_dump.h"
+#include "pipe/p_state.h"
 
-#include "r300_context.h"
-#include "r3xx_fs.h"
-#include "r5xx_fs.h"
+#include "tgsi/tgsi_scan.h"
 
 #include "radeon_code.h"
 
@@ -48,4 +46,10 @@ struct r300_fragment_shader {
 void r300_translate_fragment_shader(struct r300_context* r300,
                                     struct r300_fragment_shader* fs);
 
-    #endif /* R300_FS_H */
+static inline boolean r300_fragment_shader_writes_depth(struct r300_fragment_shader *fs)
+{
+    if (!fs)
+	return FALSE;
+    return (fs->code.writes_depth) ? TRUE : FALSE;
+}
+#endif /* R300_FS_H */

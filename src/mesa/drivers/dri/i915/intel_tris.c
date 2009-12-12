@@ -1076,7 +1076,9 @@ intelRunPipeline(GLcontext * ctx)
       intel->NewGLState = 0;
    }
 
+   intel_map_vertex_shader_textures(ctx);
    _tnl_run_pipeline(ctx);
+   intel_unmap_vertex_shader_textures(ctx);
 
    _mesa_unlock_context_textures(ctx);
 }
@@ -1086,6 +1088,7 @@ intelRenderStart(GLcontext * ctx)
 {
    struct intel_context *intel = intel_context(ctx);
 
+   intel_check_front_buffer_rendering(intel);
    intel->vtbl.render_start(intel_context(ctx));
    intel->vtbl.emit_state(intel);
 }

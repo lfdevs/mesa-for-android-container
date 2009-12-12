@@ -180,16 +180,7 @@ do_blit_readpixels(GLcontext * ctx,
    if (!src)
       return GL_FALSE;
 
-   if (pack->BufferObj->Name) {
-      /* XXX This validation should be done by core mesa:
-       */
-      if (!_mesa_validate_pbo_access(2, pack, width, height, 1,
-                                     format, type, pixels)) {
-         _mesa_error(ctx, GL_INVALID_OPERATION, "glDrawPixels");
-         return GL_TRUE;
-      }
-   }
-   else {
+   if (!_mesa_is_bufferobj(pack->BufferObj)) {
       /* PBO only for now:
        */
       if (INTEL_DEBUG & DEBUG_PIXEL)
@@ -225,9 +216,8 @@ do_blit_readpixels(GLcontext * ctx,
       rowLength = -rowLength;
    }
 
-   /* XXX 64-bit cast? */
-   dst_offset = (GLuint) _mesa_image_address(2, pack, pixels, width, height,
-                                             format, type, 0, 0, 0);
+   dst_offset = (GLintptr) _mesa_image_address(2, pack, pixels, width, height,
+					       format, type, 0, 0, 0);
 
 
    /* Although the blits go on the command buffer, need to do this and
@@ -295,11 +285,11 @@ intelReadPixels(GLcontext * ctx,
 
    intelFlush(ctx);
 
-#ifdef I915
    if (do_blit_readpixels
        (ctx, x, y, width, height, format, type, pack, pixels))
       return;
 
+#ifdef I915
    if (do_texture_readpixels
        (ctx, x, y, width, height, format, type, pack, pixels))
       return;

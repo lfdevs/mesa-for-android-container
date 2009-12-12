@@ -46,14 +46,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "r300_context.h"
 #include "r300_ioctl.h"
-#include "radeon_reg.h"
 #include "r300_reg.h"
 #include "r300_cmdbuf.h"
 #include "r300_emit.h"
 #include "radeon_bocs_wrapper.h"
 #include "radeon_mipmap_tree.h"
 #include "r300_state.h"
-#include "radeon_reg.h"
 #include "radeon_queryobj.h"
 
 /** # of dwords reserved for additional instructions that may need to be written
@@ -171,7 +169,7 @@ static void emit_tex_offsets(GLcontext *ctx, struct radeon_state_atom * atom)
 		if (t && !t->image_override) {
 			BEGIN_BATCH_NO_AUTOSTATE(4);
 			OUT_BATCH_REGSEQ(R300_TX_OFFSET_0 + (i * 4), 1);
-			OUT_BATCH_RELOC(t->tile_bits, t->mt->bo, 0,
+			OUT_BATCH_RELOC(t->tile_bits, t->mt->bo, get_base_teximage_offset(t),
 					RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0, 0);
 			END_BATCH();
 		} else if (!t) {
@@ -279,16 +277,33 @@ static void emit_cb_offset(GLcontext *ctx, struct radeon_state_atom * atom)
 	cbpitch = (rrb->pitch / rrb->cpp);
 	if (rrb->cpp == 4)
 		cbpitch |= R300_COLOR_FORMAT_ARGB8888;
-	else switch (rrb->base._ActualFormat) {
-	case GL_RGB5:
+	else switch (rrb->base.Format) {
+        case MESA_FORMAT_RGB565:
+		assert(_mesa_little_endian());
 		cbpitch |= R300_COLOR_FORMAT_RGB565;
 		break;
-	case GL_RGBA4:
+        case MESA_FORMAT_RGB565_REV:
+		assert(!_mesa_little_endian());
+		cbpitch |= R300_COLOR_FORMAT_RGB565;
+		break;
+        case MESA_FORMAT_ARGB4444:
+		assert(_mesa_little_endian());
 		cbpitch |= R300_COLOR_FORMAT_ARGB4444;
 		break;
-	case GL_RGB5_A1:
+        case MESA_FORMAT_ARGB4444_REV:
+		assert(!_mesa_little_endian());
+		cbpitch |= R300_COLOR_FORMAT_ARGB4444;
+		break;
+	case MESA_FORMAT_ARGB1555:
+		assert(_mesa_little_endian());
 		cbpitch |= R300_COLOR_FORMAT_ARGB1555;
 		break;
+	case MESA_FORMAT_ARGB1555_REV:
+		assert(!_mesa_little_endian());
+		cbpitch |= R300_COLOR_FORMAT_ARGB1555;
+		break;
+	default:
+		_mesa_problem(ctx, "unexpected format in emit_cb_offset()");
 	}
 
 	if (rrb->bo->flags & RADEON_BO_FLAGS_MACRO_TILE)
@@ -684,11 +699,7 @@ void r300InitCmdBuf(r300ContextPtr r300)
 	r300->hw.rb3d_dither_ctl.cmd[0] = cmdpacket0(r300->radeon.radeonScreen, R300_RB3D_DITHER_CTL, 9);
 	ALLOC_STATE(rb3d_aaresolve_ctl, always, 2, 0);
 	r300->hw.rb3d_aaresolve_ctl.cmd[0] = cmdpacket0(r300->radeon.radeonScreen, R300_RB3D_AARESOLVE_CTL, 1);
-	if ((r300->radeon.radeonScreen->chip_family >= CHIP_FAMILY_RV515) ||
-	      ( !r300->radeon.radeonScreen->kernel_mm && (
-	    (r300->radeon.radeonScreen->chip_family == CHIP_FAMILY_RS400) ||
-	    (r300->radeon.radeonScreen->chip_family == CHIP_FAMILY_RV410) ||
-	    (r300->radeon.radeonScreen->chip_family == CHIP_FAMILY_R420) ) ) ) {
+	if (r300->radeon.radeonScreen->chip_family >= CHIP_FAMILY_RV350) {
 		ALLOC_STATE(rb3d_discard_src_pixel_lte_threshold, always, 3, 0);
 	} else {
 		ALLOC_STATE(rb3d_discard_src_pixel_lte_threshold, never, 3, 0);
@@ -697,6 +708,14 @@ void r300InitCmdBuf(r300ContextPtr r300)
 	ALLOC_STATE(zs, always, R300_ZS_CMDSIZE, 0);
 	r300->hw.zs.cmd[R300_ZS_CMD_0] =
 	    cmdpacket0(r300->radeon.radeonScreen, R300_ZB_CNTL, 3);
+	if (is_r500) {
+		if (r300->radeon.radeonScreen->kernel_mm)
+			ALLOC_STATE(zsb, always, R300_ZSB_CMDSIZE, 0);
+		else
+			ALLOC_STATE(zsb, never, R300_ZSB_CMDSIZE, 0);
+		r300->hw.zsb.cmd[R300_ZSB_CMD_0] =
+			cmdpacket0(r300->radeon.radeonScreen, R500_ZB_STENCILREFMASK_BF, 1);
+	}
 
 	ALLOC_STATE(zstencil_format, always, 5, 0);
 	r300->hw.zstencil_format.cmd[0] =

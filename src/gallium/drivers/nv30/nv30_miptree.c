@@ -96,6 +96,11 @@ nv30_miptree_create(struct pipe_screen *pscreen, const struct pipe_texture *pt)
 		case PIPE_FORMAT_A8R8G8B8_UNORM:
 		case PIPE_FORMAT_X8R8G8B8_UNORM:
 		case PIPE_FORMAT_R16_SNORM:
+		case PIPE_FORMAT_R5G6B5_UNORM:
+		case PIPE_FORMAT_A8L8_UNORM:
+		case PIPE_FORMAT_A8_UNORM:
+		case PIPE_FORMAT_L8_UNORM:
+		case PIPE_FORMAT_I8_UNORM:
 		{
 			if (debug_get_bool_option("NOUVEAU_NO_SWIZZLE", FALSE))
 				mt->base.tex_usage |= NOUVEAU_TEXTURE_USAGE_LINEAR;
@@ -141,6 +146,9 @@ nv30_miptree_blanket(struct pipe_screen *pscreen, const struct pipe_texture *pt,
 	mt->base.screen = pscreen;
 	mt->level[0].pitch = stride[0];
 	mt->level[0].image_offset = CALLOC(1, sizeof(unsigned));
+
+	/* Assume whoever created this buffer expects it to be linear for now */
+	mt->base.tex_usage |= NOUVEAU_TEXTURE_USAGE_LINEAR;
 
 	pipe_buffer_reference(&mt->buffer, pb);
 	return &mt->base;

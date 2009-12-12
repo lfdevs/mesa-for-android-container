@@ -39,8 +39,9 @@
 #include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
-#include "tgsi_exec.h"
-#include "tgsi_sse2.h"
+#include "tgsi/tgsi_dump.h"
+#include "tgsi/tgsi_exec.h"
+#include "tgsi/tgsi_sse2.h"
 
 #include "rtasm/rtasm_x86sse.h"
 
@@ -1259,13 +1260,13 @@ emit_fetch(
    const struct tgsi_full_src_register *reg,
    const unsigned chan_index )
 {
-   unsigned swizzle = tgsi_util_get_full_src_register_extswizzle( reg, chan_index );
+   unsigned swizzle = tgsi_util_get_full_src_register_swizzle( reg, chan_index );
 
    switch (swizzle) {
-   case TGSI_EXTSWIZZLE_X:
-   case TGSI_EXTSWIZZLE_Y:
-   case TGSI_EXTSWIZZLE_Z:
-   case TGSI_EXTSWIZZLE_W:
+   case TGSI_SWIZZLE_X:
+   case TGSI_SWIZZLE_Y:
+   case TGSI_SWIZZLE_Z:
+   case TGSI_SWIZZLE_W:
       switch (reg->SrcRegister.File) {
       case TGSI_FILE_CONSTANT:
          emit_const(
@@ -1307,22 +1308,6 @@ emit_fetch(
       }
       break;
 
-   case TGSI_EXTSWIZZLE_ZERO:
-      emit_tempf(
-         func,
-         xmm,
-         TGSI_EXEC_TEMP_00000000_I,
-         TGSI_EXEC_TEMP_00000000_C );
-      break;
-
-   case TGSI_EXTSWIZZLE_ONE:
-      emit_tempf(
-         func,
-         xmm,
-         TEMP_ONE_I,
-         TEMP_ONE_C );
-      break;
-
    default:
       assert( 0 );
    }
@@ -1360,6 +1345,32 @@ emit_store(
    const struct tgsi_full_instruction *inst,
    unsigned chan_index )
 {
+   switch( inst->Instruction.Saturate ) {
+   case TGSI_SAT_NONE:
+      break;
+
+   case TGSI_SAT_ZERO_ONE:
+      sse_maxps(
+         func,
+         make_xmm( xmm ),
+         get_temp(
+            TGSI_EXEC_TEMP_00000000_I,
+            TGSI_EXEC_TEMP_00000000_C ) );
+
+      sse_minps(
+         func,
+         make_xmm( xmm ),
+         get_temp(
+            TGSI_EXEC_TEMP_ONE_I,
+            TGSI_EXEC_TEMP_ONE_C ) );
+      break;
+
+   case TGSI_SAT_MINUS_PLUS_ONE:
+      assert( 0 );
+      break;
+   }
+
+
    switch( reg->DstRegister.File ) {
    case TGSI_FILE_OUTPUT:
       emit_output(
@@ -1387,19 +1398,6 @@ emit_store(
 
    default:
       assert( 0 );
-   }
-
-   switch( inst->Instruction.Saturate ) {
-   case TGSI_SAT_NONE:
-      break;
-
-   case TGSI_SAT_ZERO_ONE:
-      /* assert( 0 ); */
-      break;
-
-   case TGSI_SAT_MINUS_PLUS_ONE:
-      assert( 0 );
-      break;
    }
 }
 
@@ -1568,13 +1566,13 @@ emit_kil(
    /* This mask stores component bits that were already tested. Note that
     * we test if the value is less than zero, so 1.0 and 0.0 need not to be
     * tested. */
-   uniquemask = (1 << TGSI_EXTSWIZZLE_ZERO) | (1 << TGSI_EXTSWIZZLE_ONE);
+   uniquemask = 0;
 
    FOR_EACH_CHANNEL( chan_index ) {
       unsigned swizzle;
 
       /* unswizzle channel */
-      swizzle = tgsi_util_get_full_src_register_extswizzle(
+      swizzle = tgsi_util_get_full_src_register_swizzle(
          reg,
          chan_index );
 
@@ -1747,14 +1745,6 @@ emit_instruction(
    if (indirect_temp_reference(inst))
       return FALSE;
 
-   /* we don't handle saturation/clamping yet */
-   if (inst->Instruction.Saturate != TGSI_SAT_NONE)
-      return FALSE;
-
-   /* need to use extra temps to fix SOA dependencies : */
-   if (tgsi_check_soa_dependencies(inst))
-      return FALSE;
-
    switch (inst->Instruction.Opcode) {
    case TGSI_OPCODE_ARL:
       FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {
@@ -1766,10 +1756,11 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_MOV:
-   case TGSI_OPCODE_SWZ:
       FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {
-         FETCH( func, *inst, 0, 0, chan_index );
-         STORE( func, *inst, 0, 0, chan_index );
+         FETCH( func, *inst, 4 + chan_index, 0, chan_index );
+      }
+      FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {
+         STORE( func, *inst, 4 + chan_index, 0, chan_index );
       }
       break;
 
@@ -1847,7 +1838,6 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_RCP:
-   /* TGSI_OPCODE_RECIP */
       FETCH( func, *inst, 0, 0, CHAN_X );
       emit_rcp( func, 0, 0 );
       FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {
@@ -1856,7 +1846,6 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_RSQ:
-   /* TGSI_OPCODE_RECIPSQRT */
       FETCH( func, *inst, 0, 0, CHAN_X );
       emit_abs( func, 0 );
       emit_rsqrt( func, 1, 0 );
@@ -1954,7 +1943,6 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_DP3:
-   /* TGSI_OPCODE_DOT3 */
       FETCH( func, *inst, 0, 0, CHAN_X );
       FETCH( func, *inst, 1, 1, CHAN_X );
       emit_mul( func, 0, 1 );
@@ -1972,7 +1960,6 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_DP4:
-   /* TGSI_OPCODE_DOT4 */
       FETCH( func, *inst, 0, 0, CHAN_X );
       FETCH( func, *inst, 1, 1, CHAN_X );
       emit_mul( func, 0, 1 );
@@ -2043,17 +2030,14 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_SLT:
-   /* TGSI_OPCODE_SETLT */
       emit_setcc( func, inst, cc_LessThan );
       break;
 
    case TGSI_OPCODE_SGE:
-   /* TGSI_OPCODE_SETGE */
       emit_setcc( func, inst, cc_NotLessThan );
       break;
 
    case TGSI_OPCODE_MAD:
-   /* TGSI_OPCODE_MADD */
       FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {
          FETCH( func, *inst, 0, 0, chan_index );
          FETCH( func, *inst, 1, 1, chan_index );
@@ -2283,7 +2267,7 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_SEQ:
-      return 0;
+      emit_setcc( func, inst, cc_Equal );
       break;
 
    case TGSI_OPCODE_SFL:
@@ -2291,7 +2275,7 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_SGT:
-      return 0;
+      emit_setcc( func, inst, cc_NotLessThanEqual );
       break;
 
    case TGSI_OPCODE_SIN:
@@ -2303,11 +2287,11 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_SLE:
-      return 0;
+      emit_setcc( func, inst, cc_LessThanEqual );
       break;
 
    case TGSI_OPCODE_SNE:
-      return 0;
+      emit_setcc( func, inst, cc_NotEqual );
       break;
 
    case TGSI_OPCODE_STR:
@@ -2371,7 +2355,6 @@ emit_instruction(
       break;
 
    case TGSI_OPCODE_SSG:
-   /* TGSI_OPCODE_SGN */
       FOR_EACH_DST0_ENABLED_CHANNEL( *inst, chan_index ) {
          FETCH( func, *inst, 0, 0, chan_index );
          emit_sgn( func, 0, 0 );
@@ -2929,6 +2912,21 @@ tgsi_emit_sse2(
                          parse.FullHeader.Processor.Processor == TGSI_PROCESSOR_VERTEX ?
                          "vertex shader" : "fragment shader");
 	 }
+
+         if (tgsi_check_soa_dependencies(&parse.FullToken.FullInstruction)) {
+            uint opcode = parse.FullToken.FullInstruction.Instruction.Opcode;
+
+            /* XXX: we only handle src/dst aliasing in a few opcodes
+             * currently.  Need to use an additional temporay to hold
+             * the result in the cases where the code is too opaque to
+             * fix.
+             */
+            if (opcode != TGSI_OPCODE_MOV) {
+               debug_printf("Warning: src/dst aliasing in instruction"
+                            " is not handled:\n");
+               tgsi_dump_instruction(&parse.FullToken.FullInstruction, 1);
+            }
+         }
          break;
 
       case TGSI_TOKEN_TYPE_IMMEDIATE:

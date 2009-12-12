@@ -44,6 +44,7 @@
 
 #include "compiler/radeon_compiler.h"
 
+#include "radeon_mesa_to_rc.h"
 #include "r300_state.h"
 
 
@@ -131,7 +132,7 @@ static void insert_WPOS_trailer(struct r300_fragment_program_compiler *compiler,
  */
 static void rewriteFog(struct r300_fragment_program_compiler *compiler, struct r300_fragment_program * fp)
 {
-	struct prog_src_register src;
+	struct rc_src_register src;
 	int i;
 
 	fp->fog_attr = FRAG_ATTRIB_MAX;
@@ -155,7 +156,7 @@ static void rewriteFog(struct r300_fragment_program_compiler *compiler, struct r
 	}
 
 	memset(&src, 0, sizeof(src));
-	src.File = PROGRAM_INPUT;
+	src.File = RC_FILE_INPUT;
 	src.Index = fp->fog_attr;
 	src.Swizzle = MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_ZERO, SWIZZLE_ZERO, SWIZZLE_ONE);
 	rc_move_input(&compiler->Base, FRAG_ATTRIB_FOGC, src);
@@ -232,7 +233,7 @@ static void translate_fragment_program(GLcontext *ctx, struct r300_fragment_prog
 		fflush(stderr);
 	}
 
-	rc_mesa_to_rc_program(&compiler.Base, &cont->Base.Base);
+	radeon_mesa_to_rc_program(&compiler.Base, &cont->Base.Base);
 
 	insert_WPOS_trailer(&compiler, fp);
 

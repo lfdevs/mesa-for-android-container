@@ -28,6 +28,7 @@ intel_drm_buffer_create(struct intel_winsys *iws,
    } else if (type == INTEL_NEW_VERTEX) {
       name = "gallium3d_vertex";
       pool = idws->pools.gem;
+      buf->map_gtt = TRUE;
    } else if (type == INTEL_NEW_SCANOUT) {
       name = "gallium3d_scanout";
       pool = idws->pools.gem;
@@ -57,11 +58,17 @@ intel_drm_buffer_set_fence_reg(struct intel_winsys *iws,
                                unsigned stride,
                                enum intel_buffer_tile tile)
 {
+   struct intel_drm_buffer *buf = intel_drm_buffer(buffer);
    assert(I915_TILING_NONE == INTEL_TILE_NONE);
    assert(I915_TILING_X == INTEL_TILE_X);
    assert(I915_TILING_Y == INTEL_TILE_Y);
 
-   return drm_intel_bo_set_tiling(intel_bo(buffer), &tile, stride);
+   if (tile != INTEL_TILE_NONE) {
+      assert(buf->map_count == 0);
+      buf->map_gtt = TRUE;
+   }
+
+   return drm_intel_bo_set_tiling(buf->bo, &tile, stride);
 }
 
 static void *
@@ -109,6 +116,18 @@ intel_drm_buffer_unmap(struct intel_winsys *iws,
       drm_intel_bo_unmap(intel_bo(buffer));
 }
 
+static int
+intel_drm_buffer_write(struct intel_winsys *iws,
+                       struct intel_buffer *buffer,
+                       size_t offset,
+                       size_t size,
+                       const void *data)
+{
+   struct intel_drm_buffer *buf = intel_drm_buffer(buffer);
+
+   return drm_intel_bo_subdata(buf->bo, offset, size, (void*)data);
+}
+
 static void
 intel_drm_buffer_destroy(struct intel_winsys *iws,
                          struct intel_buffer *buffer)
@@ -130,5 +149,6 @@ intel_drm_winsys_init_buffer_functions(struct intel_drm_winsys *idws)
    idws->base.buffer_set_fence_reg = intel_drm_buffer_set_fence_reg;
    idws->base.buffer_map = intel_drm_buffer_map;
    idws->base.buffer_unmap = intel_drm_buffer_unmap;
+   idws->base.buffer_write = intel_drm_buffer_write;
    idws->base.buffer_destroy = intel_drm_buffer_destroy;
 }

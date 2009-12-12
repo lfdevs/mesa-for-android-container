@@ -28,6 +28,7 @@
 #include "intel_context.h"
 #include "intel_mipmap_tree.h"
 #include "intel_regions.h"
+#include "intel_tex_layout.h"
 #include "intel_chipset.h"
 #ifndef I915
 #include "brw_state.h"
@@ -35,6 +36,7 @@
 #include "main/enums.h"
 
 #define FILE_DEBUG_FLAG DEBUG_MIPTREE
+
 
 static GLenum
 target_to_target(GLenum target)
@@ -51,6 +53,7 @@ target_to_target(GLenum target)
       return target;
    }
 }
+
 
 static struct intel_mipmap_tree *
 intel_miptree_create_internal(struct intel_context *intel,
@@ -101,6 +104,7 @@ intel_miptree_create_internal(struct intel_context *intel,
    return mt;
 }
 
+
 struct intel_mipmap_tree *
 intel_miptree_create(struct intel_context *intel,
 		     GLenum target,
@@ -118,7 +122,7 @@ intel_miptree_create(struct intel_context *intel,
 
    if (intel->use_texture_tiling && compress_byte == 0 &&
        intel->intelScreen->kernel_exec_fencing) {
-      if (IS_965(intel->intelScreen->deviceID) &&
+      if (intel->gen >= 4 &&
 	  (base_format == GL_DEPTH_COMPONENT ||
 	   base_format == GL_DEPTH_STENCIL_EXT))
 	 tiling = I915_TILING_Y;
@@ -154,6 +158,7 @@ intel_miptree_create(struct intel_context *intel,
 
    return mt;
 }
+
 
 struct intel_mipmap_tree *
 intel_miptree_create_for_region(struct intel_context *intel,
@@ -192,7 +197,8 @@ intel_miptree_create_for_region(struct intel_context *intel,
    intel_region_reference(&mt->region, region);
 
    return mt;
- }
+}
+
 
 /**
  * intel_miptree_pitch_align:
@@ -206,7 +212,6 @@ intel_miptree_create_for_region(struct intel_context *intel,
  * Given @pitch, compute a larger value which accounts for
  * any necessary alignment required by the device
  */
-
 int intel_miptree_pitch_align (struct intel_context *intel,
 			       struct intel_mipmap_tree *mt,
 			       uint32_t tiling,
@@ -252,6 +257,7 @@ int intel_miptree_pitch_align (struct intel_context *intel,
    return pitch;
 }
 
+
 void
 intel_miptree_reference(struct intel_mipmap_tree **dst,
                         struct intel_mipmap_tree *src)
@@ -260,6 +266,7 @@ intel_miptree_reference(struct intel_mipmap_tree **dst,
    *dst = src;
    DBG("%s %p refcount now %d\n", __FUNCTION__, src, src->refcount);
 }
+
 
 void
 intel_miptree_release(struct intel_context *intel,
@@ -300,33 +307,31 @@ intel_miptree_release(struct intel_context *intel,
 }
 
 
-
-
-/* Can the image be pulled into a unified mipmap tree.  This mirrors
+/**
+ * Can the image be pulled into a unified mipmap tree?  This mirrors
  * the completeness test in a lot of ways.
  *
  * Not sure whether I want to pass gl_texture_image here.
  */
 GLboolean
 intel_miptree_match_image(struct intel_mipmap_tree *mt,
-                          struct gl_texture_image *image,
-                          GLuint face, GLuint level)
+                          struct gl_texture_image *image)
 {
-   /* Images with borders are never pulled into mipmap trees. 
-    */
-   if (image->Border ||
-       ((image->_BaseFormat == GL_DEPTH_COMPONENT) &&
-        ((image->TexObject->WrapS == GL_CLAMP_TO_BORDER) ||
-         (image->TexObject->WrapT == GL_CLAMP_TO_BORDER)))) 
+   GLboolean isCompressed = _mesa_is_format_compressed(image->TexFormat);
+   struct intel_texture_image *intelImage = intel_texture_image(image);
+   GLuint level = intelImage->level;
+
+   /* Images with borders are never pulled into mipmap trees. */
+   if (image->Border)
       return GL_FALSE;
 
    if (image->InternalFormat != mt->internal_format ||
-       image->IsCompressed != mt->compressed)
+       isCompressed != mt->compressed)
       return GL_FALSE;
 
-   if (!image->IsCompressed &&
+   if (!isCompressed &&
        !mt->compressed &&
-       image->TexFormat->TexelBytes != mt->cpp)
+       _mesa_get_format_bytes(image->TexFormat) != mt->cpp)
       return GL_FALSE;
 
    /* Test image dimensions against the base level image adjusted for
@@ -388,6 +393,7 @@ intel_miptree_set_image_offset(struct intel_mipmap_tree *mt,
        mt->level[level].x_offset[img], mt->level[level].y_offset[img]);
 }
 
+
 void
 intel_miptree_get_image_offset(struct intel_mipmap_tree *mt,
 			       GLuint level, GLuint face, GLuint depth,
@@ -448,6 +454,7 @@ intel_miptree_image_map(struct intel_context * intel,
    }
 }
 
+
 void
 intel_miptree_image_unmap(struct intel_context *intel,
                           struct intel_mipmap_tree *mt)
@@ -457,8 +464,8 @@ intel_miptree_image_unmap(struct intel_context *intel,
 }
 
 
-
-/* Upload data for a particular image.
+/**
+ * Upload data for a particular image.
  */
 void
 intel_miptree_image_data(struct intel_context *intel,
@@ -469,7 +476,7 @@ intel_miptree_image_data(struct intel_context *intel,
 			 GLuint src_row_pitch,
 			 GLuint src_image_pitch)
 {
-   GLuint depth = dst->level[level].depth;
+   const GLuint depth = dst->level[level].depth;
    GLuint i;
 
    DBG("%s: %d/%d\n", __FUNCTION__, face, level);
@@ -481,6 +488,7 @@ intel_miptree_image_data(struct intel_context *intel,
       height = dst->level[level].height;
       if(dst->compressed)
 	 height = (height + 3) / 4;
+
       intel_region_data(intel,
 			dst->region, 0, dst_x, dst_y,
 			src,
@@ -492,8 +500,9 @@ intel_miptree_image_data(struct intel_context *intel,
    }
 }
 
-extern void intel_get_texture_alignment_unit(GLenum, GLuint *, GLuint *);
-/* Copy mipmap image between trees
+
+/**
+ * Copy mipmap image between trees
  */
 void
 intel_miptree_image_copy(struct intel_context *intel,
@@ -511,7 +520,8 @@ intel_miptree_image_copy(struct intel_context *intel,
    if (dst->compressed) {
        GLuint align_w, align_h;
 
-       intel_get_texture_alignment_unit(dst->internal_format, &align_w, &align_h);
+       intel_get_texture_alignment_unit(dst->internal_format,
+                                        &align_w, &align_h);
        height = (height + 3) / 4;
        width = ALIGN(width, align_w);
    }

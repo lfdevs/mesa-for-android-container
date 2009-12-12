@@ -181,6 +181,9 @@ static void release_temp( struct brw_wm_compile *c, struct prog_dst_register tem
 
 static struct prog_instruction *get_fp_inst(struct brw_wm_compile *c)
 {
+   assert(c->nr_fp_insns < BRW_WM_MAX_INSN);
+   memset(&c->prog_instructions[c->nr_fp_insns], 0,
+	  sizeof(*c->prog_instructions));
    return &c->prog_instructions[c->nr_fp_insns++];
 }
 
@@ -447,7 +450,6 @@ static void emit_interp( struct brw_wm_compile *c,
       break;
 
    case FRAG_ATTRIB_FACE:
-      /* XXX review/test this case */
       emit_op(c,
               WM_FRONTFACING,
               dst_mask(dst, WRITEMASK_X),
@@ -492,38 +494,6 @@ static void emit_interp( struct brw_wm_compile *c,
    }
 
    c->fp_interp_emitted |= 1<<idx;
-}
-
-static void emit_ddx( struct brw_wm_compile *c,
-        const struct prog_instruction *inst )
-{
-    GLuint idx = inst->SrcReg[0].Index;
-    struct prog_src_register interp = src_reg(PROGRAM_PAYLOAD, idx);
-
-    c->fp_deriv_emitted |= 1<<idx;
-    emit_op(c,
-            OPCODE_DDX,
-            inst->DstReg,
-            0,
-            interp,
-            get_pixel_w(c),
-            src_undef());
-}
-
-static void emit_ddy( struct brw_wm_compile *c,
-        const struct prog_instruction *inst )
-{
-    GLuint idx = inst->SrcReg[0].Index;
-    struct prog_src_register interp = src_reg(PROGRAM_PAYLOAD, idx);
-
-    c->fp_deriv_emitted |= 1<<idx;
-    emit_op(c,
-            OPCODE_DDY,
-            inst->DstReg,
-            0,
-            interp,
-            get_pixel_w(c),
-            src_undef());
 }
 
 /***********************************************************************
@@ -988,7 +958,7 @@ static void precalc_txp( struct brw_wm_compile *c,
 
 
 
-static void emit_fb_write( struct brw_wm_compile *c )
+static void emit_render_target_writes( struct brw_wm_compile *c )
 {
    struct prog_src_register payload_r0_depth = src_reg(PROGRAM_PAYLOAD, PAYLOAD_DEPTH);
    struct prog_src_register outdepth = src_reg(PROGRAM_OUTPUT, FRAG_RESULT_DEPTH);
@@ -996,36 +966,34 @@ static void emit_fb_write( struct brw_wm_compile *c )
    GLuint i;
 
    struct prog_instruction *inst, *last_inst;
-   struct brw_context *brw = c->func.brw;
 
    /* The inst->Aux field is used for FB write target and the EOT marker */
 
-   if (brw->state.nr_color_regions > 1) {
-      for (i = 0 ; i < brw->state.nr_color_regions; i++) {
+   if (c->key.nr_color_regions > 1) {
+      for (i = 0 ; i < c->key.nr_color_regions; i++) {
          outcolor = src_reg(PROGRAM_OUTPUT, FRAG_RESULT_DATA0 + i);
-         last_inst = inst = emit_op(c,
-                                    WM_FB_WRITE, dst_mask(dst_undef(),0), 0,
-                                    outcolor, payload_r0_depth, outdepth);
-         inst->Aux = (i<<1);
+         last_inst = inst = emit_op(c, WM_FB_WRITE, dst_mask(dst_undef(), 0),
+                                    0, outcolor, payload_r0_depth, outdepth);
+         inst->Aux = INST_AUX_TARGET(i);
          if (c->fp_fragcolor_emitted) {
             outcolor = src_reg(PROGRAM_OUTPUT, FRAG_RESULT_COLOR);
-            last_inst = inst = emit_op(c, WM_FB_WRITE, dst_mask(dst_undef(),0),
+            last_inst = inst = emit_op(c, WM_FB_WRITE, dst_mask(dst_undef(), 0),
                                        0, outcolor, payload_r0_depth, outdepth);
-            inst->Aux = (i<<1);
+            inst->Aux = INST_AUX_TARGET(i);
          }
       }
-      last_inst->Aux |= 1; //eot
+      last_inst->Aux |= INST_AUX_EOT;
    }
    else {
       /* if gl_FragData[0] is written, use it, else use gl_FragColor */
-      if (c->fp->program.Base.OutputsWritten & (1 << FRAG_RESULT_DATA0))
+      if (c->fp->program.Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DATA0))
          outcolor = src_reg(PROGRAM_OUTPUT, FRAG_RESULT_DATA0);
       else 
          outcolor = src_reg(PROGRAM_OUTPUT, FRAG_RESULT_COLOR);
 
       inst = emit_op(c, WM_FB_WRITE, dst_mask(dst_undef(),0),
                      0, outcolor, payload_r0_depth, outdepth);
-      inst->Aux = 1|(0<<1);
+      inst->Aux = INST_AUX_EOT | INST_AUX_TARGET(0);
    }
 }
 
@@ -1186,14 +1154,8 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
 	  */
 	 out->DstReg.WriteMask = 0;
 	 break;
-      case OPCODE_DDX:
-	 emit_ddx(c, inst);
-	 break;
-      case OPCODE_DDY:
-         emit_ddy(c, inst);
-	break;
       case OPCODE_END:
-	 emit_fb_write(c);
+	 emit_render_target_writes(c);
 	 break;
       case OPCODE_PRINT:
 	 break;

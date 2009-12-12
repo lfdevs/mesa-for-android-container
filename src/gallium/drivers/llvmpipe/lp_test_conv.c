@@ -59,8 +59,8 @@ write_tsv_header(FILE *fp)
 
 static void
 write_tsv_row(FILE *fp,
-              union lp_type src_type,
-              union lp_type dst_type,
+              struct lp_type src_type,
+              struct lp_type dst_type,
               double cycles,
               boolean success)
 {
@@ -80,8 +80,8 @@ write_tsv_row(FILE *fp,
 
 static void
 dump_conv_types(FILE *fp,
-               union lp_type src_type,
-               union lp_type dst_type)
+               struct lp_type src_type,
+               struct lp_type dst_type)
 {
    fprintf(fp, "src_type=");
    dump_type(fp, src_type);
@@ -96,8 +96,8 @@ dump_conv_types(FILE *fp,
 
 static LLVMValueRef
 add_conv_test(LLVMModuleRef module,
-              union lp_type src_type, unsigned num_srcs,
-              union lp_type dst_type, unsigned num_dsts)
+              struct lp_type src_type, unsigned num_srcs,
+              struct lp_type dst_type, unsigned num_dsts)
 {
    LLVMTypeRef args[2];
    LLVMValueRef func;
@@ -142,11 +142,12 @@ add_conv_test(LLVMModuleRef module,
 }
 
 
+ALIGN_STACK
 static boolean
 test_one(unsigned verbose,
          FILE *fp,
-         union lp_type src_type,
-         union lp_type dst_type)
+         struct lp_type src_type,
+         struct lp_type dst_type)
 {
    LLVMModuleRef module = NULL;
    LLVMValueRef func = NULL;
@@ -156,8 +157,8 @@ test_one(unsigned verbose,
    char *error = NULL;
    conv_test_ptr_t conv_test_ptr;
    boolean success;
-   const unsigned n = 32;
-   int64_t cycles[n];
+   const unsigned n = LP_TEST_NUM_SAMPLES;
+   int64_t cycles[LP_TEST_NUM_SAMPLES];
    double cycles_avg = 0.0;
    unsigned num_srcs;
    unsigned num_dsts;
@@ -229,8 +230,8 @@ test_one(unsigned verbose,
    for(i = 0; i < n && success; ++i) {
       unsigned src_stride = src_type.length*src_type.width/8;
       unsigned dst_stride = dst_type.length*dst_type.width/8;
-      uint8_t src[LP_MAX_VECTOR_LENGTH*LP_MAX_VECTOR_LENGTH];
-      uint8_t dst[LP_MAX_VECTOR_LENGTH*LP_MAX_VECTOR_LENGTH];
+      ALIGN16_ATTRIB uint8_t src[LP_MAX_VECTOR_LENGTH*LP_MAX_VECTOR_LENGTH];
+      ALIGN16_ATTRIB uint8_t dst[LP_MAX_VECTOR_LENGTH*LP_MAX_VECTOR_LENGTH];
       double fref[LP_MAX_VECTOR_LENGTH*LP_MAX_VECTOR_LENGTH];
       uint8_t ref[LP_MAX_VECTOR_LENGTH*LP_MAX_VECTOR_LENGTH];
       int64_t start_counter = 0;
@@ -343,35 +344,35 @@ test_one(unsigned verbose,
 }
 
 
-const union lp_type conv_types[] = {
+const struct lp_type conv_types[] = {
    /* float, fixed,  sign,  norm, width, len */
 
-   {{  TRUE, FALSE,  TRUE,  TRUE,    32,   4 }},
-   {{  TRUE, FALSE,  TRUE, FALSE,    32,   4 }},
-   {{  TRUE, FALSE, FALSE,  TRUE,    32,   4 }},
-   {{  TRUE, FALSE, FALSE, FALSE,    32,   4 }},
+   {   TRUE, FALSE,  TRUE,  TRUE,    32,   4 },
+   {   TRUE, FALSE,  TRUE, FALSE,    32,   4 },
+   {   TRUE, FALSE, FALSE,  TRUE,    32,   4 },
+   {   TRUE, FALSE, FALSE, FALSE,    32,   4 },
 
    /* TODO: test fixed formats too */
 
-   {{ FALSE, FALSE,  TRUE,  TRUE,    16,   8 }},
-   {{ FALSE, FALSE,  TRUE, FALSE,    16,   8 }},
-   {{ FALSE, FALSE, FALSE,  TRUE,    16,   8 }},
-   {{ FALSE, FALSE, FALSE, FALSE,    16,   8 }},
+   {  FALSE, FALSE,  TRUE,  TRUE,    16,   8 },
+   {  FALSE, FALSE,  TRUE, FALSE,    16,   8 },
+   {  FALSE, FALSE, FALSE,  TRUE,    16,   8 },
+   {  FALSE, FALSE, FALSE, FALSE,    16,   8 },
 
-   {{ FALSE, FALSE,  TRUE,  TRUE,    32,   4 }},
-   {{ FALSE, FALSE,  TRUE, FALSE,    32,   4 }},
-   {{ FALSE, FALSE, FALSE,  TRUE,    32,   4 }},
-   {{ FALSE, FALSE, FALSE, FALSE,    32,   4 }},
+   {  FALSE, FALSE,  TRUE,  TRUE,    32,   4 },
+   {  FALSE, FALSE,  TRUE, FALSE,    32,   4 },
+   {  FALSE, FALSE, FALSE,  TRUE,    32,   4 },
+   {  FALSE, FALSE, FALSE, FALSE,    32,   4 },
 
-   {{ FALSE, FALSE,  TRUE,  TRUE,    16,   8 }},
-   {{ FALSE, FALSE,  TRUE, FALSE,    16,   8 }},
-   {{ FALSE, FALSE, FALSE,  TRUE,    16,   8 }},
-   {{ FALSE, FALSE, FALSE, FALSE,    16,   8 }},
+   {  FALSE, FALSE,  TRUE,  TRUE,    16,   8 },
+   {  FALSE, FALSE,  TRUE, FALSE,    16,   8 },
+   {  FALSE, FALSE, FALSE,  TRUE,    16,   8 },
+   {  FALSE, FALSE, FALSE, FALSE,    16,   8 },
 
-   {{ FALSE, FALSE,  TRUE,  TRUE,     8,  16 }},
-   {{ FALSE, FALSE,  TRUE, FALSE,     8,  16 }},
-   {{ FALSE, FALSE, FALSE,  TRUE,     8,  16 }},
-   {{ FALSE, FALSE, FALSE, FALSE,     8,  16 }},
+   {  FALSE, FALSE,  TRUE,  TRUE,     8,  16 },
+   {  FALSE, FALSE,  TRUE, FALSE,     8,  16 },
+   {  FALSE, FALSE, FALSE,  TRUE,     8,  16 },
+   {  FALSE, FALSE, FALSE, FALSE,     8,  16 },
 };
 
 
@@ -381,8 +382,8 @@ const unsigned num_types = sizeof(conv_types)/sizeof(conv_types[0]);
 boolean
 test_all(unsigned verbose, FILE *fp)
 {
-   const union lp_type *src_type;
-   const union lp_type *dst_type;
+   const struct lp_type *src_type;
+   const struct lp_type *dst_type;
    bool success = TRUE;
 
    for(src_type = conv_types; src_type < &conv_types[num_types]; ++src_type) {
@@ -407,16 +408,16 @@ test_all(unsigned verbose, FILE *fp)
 boolean
 test_some(unsigned verbose, FILE *fp, unsigned long n)
 {
-   const union lp_type *src_type;
-   const union lp_type *dst_type;
+   const struct lp_type *src_type;
+   const struct lp_type *dst_type;
    unsigned long i;
    bool success = TRUE;
 
    for(i = 0; i < n; ++i) {
-      src_type = &conv_types[random() % num_types];
+      src_type = &conv_types[rand() % num_types];
       
       do {
-         dst_type = &conv_types[random() % num_types];
+         dst_type = &conv_types[rand() % num_types];
       } while (src_type == dst_type || src_type->norm != dst_type->norm);
 
       if(!test_one(verbose, fp, *src_type, *dst_type))

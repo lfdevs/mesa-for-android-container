@@ -141,7 +141,8 @@ static const char *file_names[TGSI_FILE_COUNT] =
    "SAMP",
    "ADDR",
    "IMM",
-   "LOOP"
+   "LOOP",
+   "PRED"
 };
 
 static boolean
@@ -358,7 +359,7 @@ epilog(
 
 boolean
 tgsi_sanity_check(
-   struct tgsi_token *tokens )
+   const struct tgsi_token *tokens )
 {
    struct sanity_check_ctx ctx;
 

@@ -32,6 +32,17 @@
 
 #include "radeon_buffer.h"
 
+#include "radeon_bo_gem.h"
+#include "softpipe/sp_texture.h"
+#include "r300_context.h"
+#include <X11/Xutil.h>
+struct radeon_vl_context
+{
+    Display *display;
+    int screen;
+    Drawable drawable;
+};
+
 static const char *radeon_get_name(struct pipe_winsys *ws)
 {
     return "Radeon/GEM+KMS";
@@ -99,6 +110,7 @@ static struct pipe_buffer *radeon_surface_buffer_create(struct pipe_winsys *ws,
                                                         unsigned height,
                                                         enum pipe_format format,
                                                         unsigned usage,
+                                                        unsigned tex_usage,
                                                         unsigned *stride)
 {
     struct pipe_format_block block;
@@ -134,8 +146,11 @@ static void *radeon_buffer_map(struct pipe_winsys *ws,
         (struct radeon_pipe_buffer*)buffer;
     int write = 0;
 
-    if (!(flags & PIPE_BUFFER_USAGE_DONTBLOCK)) {
-        radeon_bo_wait(radeon_buffer->bo);
+    if (flags & PIPE_BUFFER_USAGE_DONTBLOCK) {
+        uint32_t domain;
+
+        if (radeon_bo_is_busy(radeon_buffer->bo, &domain))
+            return NULL;
     }
     if (flags & PIPE_BUFFER_USAGE_CPU_WRITE) {
         write = 1;
@@ -177,17 +192,58 @@ static int radeon_fence_finish(struct pipe_winsys *ws,
     return 0;
 }
 
+static void radeon_display_surface(struct pipe_winsys *pws,
+                                   struct pipe_surface *psurf,
+                                   struct radeon_vl_context *rvl_ctx)
+{
+    struct r300_texture *r300tex = (struct r300_texture *)(psurf->texture);
+    XImage *ximage;
+    void *data;
+
+    ximage = XCreateImage(rvl_ctx->display,
+                          XDefaultVisual(rvl_ctx->display, rvl_ctx->screen),
+                          XDefaultDepth(rvl_ctx->display, rvl_ctx->screen),
+                          ZPixmap, 0,   /* format, offset */
+                          NULL,         /* data */
+                          0, 0,         /* size */
+                          32,           /* bitmap_pad */
+                          0);           /* bytes_per_line */
+
+    assert(ximage->format);
+    assert(ximage->bitmap_unit);
+
+    data = pws->buffer_map(pws, r300tex->buffer, 0);
+
+    /* update XImage's fields */
+    ximage->data = data;
+    ximage->width = psurf->width;
+    ximage->height = psurf->height;
+    ximage->bytes_per_line = psurf->width * (ximage->bits_per_pixel >> 3);
+
+    XPutImage(rvl_ctx->display, rvl_ctx->drawable,
+              XDefaultGC(rvl_ctx->display, rvl_ctx->screen),
+              ximage, 0, 0, 0, 0, psurf->width, psurf->height);
+
+    XSync(rvl_ctx->display, 0);
+
+    ximage->data = NULL;
+    XDestroyImage(ximage);
+
+    pws->buffer_unmap(pws, r300tex->buffer);
+}
+
 static void radeon_flush_frontbuffer(struct pipe_winsys *pipe_winsys,
                                      struct pipe_surface *pipe_surface,
                                      void *context_private)
 {
-    /* XXX TODO: call dri2CopyRegion */
+    struct radeon_vl_context *rvl_ctx;
+    rvl_ctx = (struct radeon_vl_context *) context_private;
+    radeon_display_surface(pipe_winsys, pipe_surface, rvl_ctx);
 }
 
 struct radeon_winsys* radeon_pipe_winsys(int fd)
 {
     struct radeon_winsys* radeon_ws;
-    struct radeon_bo_manager* bom;
 
     radeon_ws = CALLOC_STRUCT(radeon_winsys);
     if (radeon_ws == NULL) {

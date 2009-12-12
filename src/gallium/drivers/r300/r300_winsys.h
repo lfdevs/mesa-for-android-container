@@ -48,6 +48,9 @@ struct r300_winsys {
     /* GB pipe count */
     uint32_t gb_pipes;
 
+    /* Z pipe count (rv530 only) */
+    uint32_t z_pipes;
+
     /* GART size. */
     uint32_t gart_size;
 
@@ -92,6 +95,12 @@ struct r300_winsys {
 
     /* Flush the CS. */
     void (*flush_cs)(struct r300_winsys* winsys);
+
+    /* winsys flush - callback from winsys when flush required */
+    void (*set_flush_cb)(struct r300_winsys *winsys,
+			 void (*flush_cb)(void *), void *data);
+
+    void (*reset_bos)(struct r300_winsys *winsys);
 };
 
 struct pipe_context* r300_create_context(struct pipe_screen* screen,

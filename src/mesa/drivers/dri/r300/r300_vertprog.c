@@ -41,7 +41,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "tnl/tnl.h"
 
 #include "compiler/radeon_compiler.h"
-#include "compiler/radeon_nqssadce.h"
+#include "radeon_mesa_to_rc.h"
 #include "r300_context.h"
 #include "r300_fragprog_common.h"
 #include "r300_state.h"
@@ -211,20 +211,20 @@ static void initialize_NV_registers(struct radeon_compiler * compiler)
 
 	for(reg = 0; reg < 12; ++reg) {
 		inst = rc_insert_new_instruction(compiler, &compiler->Program.Instructions);
-		inst->I.Opcode = OPCODE_MOV;
-		inst->I.DstReg.File = PROGRAM_TEMPORARY;
-		inst->I.DstReg.Index = reg;
-		inst->I.SrcReg[0].File = PROGRAM_BUILTIN;
-		inst->I.SrcReg[0].Swizzle = SWIZZLE_0000;
+		inst->U.I.Opcode = RC_OPCODE_MOV;
+		inst->U.I.DstReg.File = RC_FILE_TEMPORARY;
+		inst->U.I.DstReg.Index = reg;
+		inst->U.I.SrcReg[0].File = RC_FILE_NONE;
+		inst->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_0000;
 	}
 
 	inst = rc_insert_new_instruction(compiler, &compiler->Program.Instructions);
-	inst->I.Opcode = OPCODE_ARL;
-	inst->I.DstReg.File = PROGRAM_ADDRESS;
-	inst->I.DstReg.Index = 0;
-	inst->I.DstReg.WriteMask = WRITEMASK_X;
-	inst->I.SrcReg[0].File = PROGRAM_BUILTIN;
-	inst->I.SrcReg[0].Swizzle = SWIZZLE_0000;
+	inst->U.I.Opcode = RC_OPCODE_ARL;
+	inst->U.I.DstReg.File = RC_FILE_ADDRESS;
+	inst->U.I.DstReg.Index = 0;
+	inst->U.I.DstReg.WriteMask = WRITEMASK_X;
+	inst->U.I.SrcReg[0].File = RC_FILE_NONE;
+	inst->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_0000;
 }
 
 static struct r300_vertex_program *build_program(GLcontext *ctx,
@@ -255,7 +255,7 @@ static struct r300_vertex_program *build_program(GLcontext *ctx,
 		_mesa_insert_mvp_code(ctx, vp->Base);
 	}
 
-	rc_mesa_to_rc_program(&compiler.Base, &vp->Base->Base);
+	radeon_mesa_to_rc_program(&compiler.Base, &vp->Base->Base);
 
 	if (mesa_vp->IsNVProgram)
 		initialize_NV_registers(&compiler.Base);

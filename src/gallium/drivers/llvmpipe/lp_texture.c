@@ -66,16 +66,24 @@ llvmpipe_texture_layout(struct llvmpipe_screen *screen,
    pf_get_block(lpt->base.format, &lpt->base.block);
 
    for (level = 0; level <= pt->last_level; level++) {
+      unsigned nblocksx, nblocksy;
+
       pt->width[level] = width;
       pt->height[level] = height;
       pt->depth[level] = depth;
       pt->nblocksx[level] = pf_get_nblocksx(&pt->block, width);  
-      pt->nblocksy[level] = pf_get_nblocksy(&pt->block, height);  
-      lpt->stride[level] = align(pt->nblocksx[level]*pt->block.size, 16);
+      pt->nblocksy[level] = pf_get_nblocksy(&pt->block, height);
+
+      /* Allocate storage for whole quads. This is particularly important
+       * for depth surfaces, which are currently stored in a swizzled format. */
+      nblocksx = pf_get_nblocksx(&pt->block, align(width, 2));
+      nblocksy = pf_get_nblocksy(&pt->block, align(height, 2));
+
+      lpt->stride[level] = align(nblocksx*pt->block.size, 16);
 
       lpt->level_offset[level] = buffer_size;
 
-      buffer_size += (pt->nblocksy[level] *
+      buffer_size += (nblocksy *
                       ((pt->target == PIPE_TEXTURE_CUBE) ? 6 : depth) *
                       lpt->stride[level]);
 
@@ -353,17 +361,9 @@ llvmpipe_transfer_map( struct pipe_screen *_screen,
 
    if(lpt->dt) {
       struct llvmpipe_winsys *winsys = screen->winsys;
-      unsigned flags = 0;
 
-      if (transfer->usage != PIPE_TRANSFER_READ) {
-         flags |= PIPE_BUFFER_USAGE_CPU_WRITE;
-      }
-
-      if (transfer->usage != PIPE_TRANSFER_WRITE) {
-         flags |= PIPE_BUFFER_USAGE_CPU_READ;
-      }
-
-      map = winsys->displaytarget_map(winsys, lpt->dt, flags);
+      map = winsys->displaytarget_map(winsys, lpt->dt,
+                                      pipe_transfer_buffer_flags(transfer));
       if (map == NULL)
          return NULL;
    }
@@ -373,7 +373,7 @@ llvmpipe_transfer_map( struct pipe_screen *_screen,
    /* May want to different things here depending on read/write nature
     * of the map:
     */
-   if (transfer->texture && transfer->usage != PIPE_TRANSFER_READ) 
+   if (transfer->texture && (transfer->usage & PIPE_TRANSFER_WRITE))
    {
       /* Do something to notify sharing contexts of a texture change.
        * In llvmpipe, that would mean flushing the texture cache.

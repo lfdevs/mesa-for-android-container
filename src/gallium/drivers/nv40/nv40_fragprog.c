@@ -321,56 +321,29 @@ src_native_swz(struct nv40_fpc *fpc, const struct tgsi_full_src_register *fsrc,
 {
 	const struct nv40_sreg none = nv40_sr(NV40SR_NONE, 0);
 	struct nv40_sreg tgsi = tgsi_src(fpc, fsrc);
-	uint mask = 0, zero_mask = 0, one_mask = 0, neg_mask = 0;
-	uint neg[4] = { fsrc->SrcRegisterExtSwz.NegateX,
-			fsrc->SrcRegisterExtSwz.NegateY,
-			fsrc->SrcRegisterExtSwz.NegateZ,
-			fsrc->SrcRegisterExtSwz.NegateW };
+	uint mask = 0;
 	uint c;
 
 	for (c = 0; c < 4; c++) {
-		switch (tgsi_util_get_full_src_register_extswizzle(fsrc, c)) {
-		case TGSI_EXTSWIZZLE_X:
-		case TGSI_EXTSWIZZLE_Y:
-		case TGSI_EXTSWIZZLE_Z:
-		case TGSI_EXTSWIZZLE_W:
+		switch (tgsi_util_get_full_src_register_swizzle(fsrc, c)) {
+		case TGSI_SWIZZLE_X:
+		case TGSI_SWIZZLE_Y:
+		case TGSI_SWIZZLE_Z:
+		case TGSI_SWIZZLE_W:
 			mask |= (1 << c);
-			break;
-		case TGSI_EXTSWIZZLE_ZERO:
-			zero_mask |= (1 << c);
-			tgsi.swz[c] = SWZ_X;
-			break;
-		case TGSI_EXTSWIZZLE_ONE:
-			one_mask |= (1 << c);
-			tgsi.swz[c] = SWZ_X;
 			break;
 		default:
 			assert(0);
 		}
-
-		if (!tgsi.negate && neg[c])
-			neg_mask |= (1 << c);
 	}
 
-	if (mask == MASK_ALL && !neg_mask)
+	if (mask == MASK_ALL)
 		return TRUE;
 
 	*src = temp(fpc);
 
 	if (mask)
 		arith(fpc, 0, MOV, *src, mask, tgsi, none, none);
-
-	if (zero_mask)
-		arith(fpc, 0, SFL, *src, zero_mask, *src, none, none);
-
-	if (one_mask)
-		arith(fpc, 0, STR, *src, one_mask, *src, none, none);
-
-	if (neg_mask) {
-		struct nv40_sreg one = temp(fpc);
-		arith(fpc, 0, STR, one, neg_mask, one, none, none);
-		arith(fpc, 0, MUL, *src, neg_mask, *src, neg(one), none);
-	}
 
 	return FALSE;
 }
@@ -567,12 +540,6 @@ nv40_fragprog_parse_instruction(struct nv40_fpc *fpc,
 		break;
 	case TGSI_OPCODE_MUL:
 		arith(fpc, sat, MUL, dst, mask, src[0], src[1], none);
-		break;
-	case TGSI_OPCODE_NOISE1:
-	case TGSI_OPCODE_NOISE2:
-	case TGSI_OPCODE_NOISE3:
-	case TGSI_OPCODE_NOISE4:
-		arith(fpc, sat, SFL, dst, mask, none, none, none);
 		break;
 	case TGSI_OPCODE_POW:
 		tmp = temp(fpc);

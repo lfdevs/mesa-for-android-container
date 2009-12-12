@@ -13,6 +13,9 @@
 #define INTEL_BATCH_CLIPRECTS    0x2
 
 #undef INTEL_RUN_SYNC
+#undef INTEL_MAP_BATCHBUFFER
+#undef INTEL_MAP_GTT
+#define INTEL_ALWAYS_FLUSH
 
 struct intel_drm_batchbuffer
 {
@@ -33,6 +36,7 @@ static void
 intel_drm_batchbuffer_reset(struct intel_drm_batchbuffer *batch)
 {
    struct intel_drm_winsys *idws = intel_drm_winsys(batch->base.iws);
+   int ret;
 
    if (batch->bo)
       drm_intel_bo_unreference(batch->bo);
@@ -40,8 +44,18 @@ intel_drm_batchbuffer_reset(struct intel_drm_batchbuffer *batch)
                                   "gallium3d_batchbuffer",
                                   batch->actual_size,
                                   4096);
-   drm_intel_bo_map(batch->bo, TRUE);
+
+#ifdef INTEL_MAP_BATCHBUFFER
+#ifdef INTEL_MAP_GTT
+   ret = drm_intel_gem_bo_map_gtt(batch->bo);
+#else
+   ret = drm_intel_bo_map(batch->bo, TRUE);
+#endif
+   assert(ret == 0);
    batch->base.map = batch->bo->virtual;
+#else
+   (void)ret;
+#endif
 
    memset(batch->base.map, 0, batch->actual_size);
    batch->base.ptr = batch->base.map;
@@ -55,7 +69,13 @@ intel_drm_batchbuffer_create(struct intel_winsys *iws)
    struct intel_drm_winsys *idws = intel_drm_winsys(iws);
    struct intel_drm_batchbuffer *batch = CALLOC_STRUCT(intel_drm_batchbuffer);
 
+   batch->actual_size = idws->max_batch_size;
+
+#ifdef INTEL_MAP_BATCHBUFFER
    batch->base.map = NULL;
+#else
+   batch->base.map = MALLOC(batch->actual_size);
+#endif
    batch->base.ptr = NULL;
    batch->base.size = 0;
 
@@ -63,8 +83,6 @@ intel_drm_batchbuffer_create(struct intel_winsys *iws)
    batch->base.max_relocs = 300;/*INTEL_DEFAULT_RELOCS;*/
 
    batch->base.iws = iws;
-
-   batch->actual_size = idws->max_batch_size;
 
    intel_drm_batchbuffer_reset(batch);
 
@@ -140,23 +158,32 @@ intel_drm_batchbuffer_flush(struct intel_batchbuffer *ibatch,
    used = batch->base.ptr - batch->base.map;
    assert((used & 3) == 0);
 
-   if (used & 4) {
-      // MI_FLUSH | FLUSH_MAP_CACHE;
-      intel_batchbuffer_dword(ibatch, (0x0<<29)|(0x4<<23)|(1<<0));
-      // MI_NOOP
-      intel_batchbuffer_dword(ibatch, (0x0<<29)|(0x0<<23));
-      // MI_BATCH_BUFFER_END;
-      intel_batchbuffer_dword(ibatch, (0x0<<29)|(0xA<<23));
-   } else {
-      //MI_FLUSH | FLUSH_MAP_CACHE;
-      intel_batchbuffer_dword(ibatch, (0x0<<29)|(0x4<<23)|(1<<0));
-      // MI_BATCH_BUFFER_END;
-      intel_batchbuffer_dword(ibatch, (0x0<<29)|(0xA<<23));
+
+#ifdef INTEL_ALWAYS_FLUSH
+   /* MI_FLUSH | FLUSH_MAP_CACHE */
+   intel_batchbuffer_dword(ibatch, (0x4<<23)|(1<<0));
+   used += 4;
+#endif
+
+   if ((used & 4) == 0) {
+      /* MI_NOOP */
+      intel_batchbuffer_dword(ibatch, 0);
    }
+   /* MI_BATCH_BUFFER_END */
+   intel_batchbuffer_dword(ibatch, (0xA<<23));
 
    used = batch->base.ptr - batch->base.map;
+   assert((used & 4) == 0);
 
+#ifdef INTEL_MAP_BATCHBUFFER
+#ifdef INTEL_MAP_GTT
+   drm_intel_gem_bo_unmap_gtt(batch->bo);
+#else
    drm_intel_bo_unmap(batch->bo);
+#endif
+#else
+   drm_intel_bo_subdata(batch->bo, 0, used, batch->base.map);
+#endif
 
    /* Do the sending to HW */
    ret = drm_intel_bo_exec(batch->bo, used, NULL, 0, 0);
@@ -202,7 +229,10 @@ intel_drm_batchbuffer_destroy(struct intel_batchbuffer *ibatch)
    if (batch->bo)
       drm_intel_bo_unreference(batch->bo);
 
-   free(batch);
+#ifndef INTEL_MAP_BATCHBUFFER
+   FREE(batch->base.map);
+#endif
+   FREE(batch);
 }
 
 void intel_drm_winsys_init_batchbuffer_functions(struct intel_drm_winsys *idws)

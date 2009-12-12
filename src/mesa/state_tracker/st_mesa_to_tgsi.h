@@ -39,7 +39,7 @@ extern "C" {
 struct tgsi_token;
 struct gl_program;
 
-GLuint
+const struct tgsi_token *
 st_translate_mesa_program(
    GLcontext *ctx,
    uint procType,
@@ -54,9 +54,10 @@ st_translate_mesa_program(
    const GLuint outputMapping[],
    const ubyte outputSemanticName[],
    const ubyte outputSemanticIndex[],
-   const GLbitfield outputFlags[],
-   struct tgsi_token *tokens,
-   GLuint maxTokens );
+   const GLbitfield outputFlags[] );
+
+void
+st_free_tokens(const struct tgsi_token *tokens);
 
 
 #if defined __cplusplus

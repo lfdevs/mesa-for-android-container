@@ -32,8 +32,9 @@
 #include "st_cb_fbo.h"
 #include "st_inlines.h"
 #include "main/enums.h"
-#include "main/texobj.h"
+#include "main/texfetch.h"
 #include "main/teximage.h"
+#include "main/texobj.h"
 #include "main/texstore.h"
 
 #undef Elements  /* fix re-defined macro warning */
@@ -128,7 +129,7 @@ st_texture_match_image(const struct pipe_texture *pt,
 
    /* Check if this image's format matches the established texture's format.
     */
-   if (st_mesa_format_to_pipe_format(image->TexFormat->MesaFormat) != pt->format)
+   if (st_mesa_format_to_pipe_format(image->TexFormat) != pt->format)
       return GL_FALSE;
 
    /* Test if this image's size matches what's expected in the
@@ -342,12 +343,21 @@ st_texture_image_copy(struct pipe_context *pipe,
       src_surface = screen->get_tex_surface(screen, src, face, srcLevel, i,
                                             PIPE_BUFFER_USAGE_GPU_READ);
 
-      pipe->surface_copy(pipe,
-			 dst_surface,
-			 0, 0, /* destX, Y */
-			 src_surface,
-			 0, 0, /* srcX, Y */
-			 width, height);
+      if (pipe->surface_copy) {
+         pipe->surface_copy(pipe,
+			    dst_surface,
+			    0, 0, /* destX, Y */
+			    src_surface,
+			    0, 0, /* srcX, Y */
+			    width, height);
+      } else {
+         util_surface_copy(pipe, FALSE,
+			   dst_surface,
+			   0, 0, /* destX, Y */
+			   src_surface,
+			   0, 0, /* srcX, Y */
+			   width, height);
+      }
 
       pipe_surface_reference(&src_surface, NULL);
       pipe_surface_reference(&dst_surface, NULL);
@@ -577,7 +587,6 @@ st_teximage_flush_before_map(struct st_context *st,
       pipe->is_texture_referenced(pipe, pt, face, level);
 
    if (referenced && ((referenced & PIPE_REFERENCED_FOR_WRITE) ||
-		      usage == PIPE_TRANSFER_WRITE ||
-		      usage == PIPE_TRANSFER_READ_WRITE))
-      st_flush(st, PIPE_FLUSH_RENDER_CACHE, NULL);
+		      (usage & PIPE_TRANSFER_WRITE)))
+      st->pipe->flush(st->pipe, PIPE_FLUSH_RENDER_CACHE, NULL);
 }

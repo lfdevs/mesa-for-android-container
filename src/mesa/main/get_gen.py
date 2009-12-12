@@ -905,6 +905,10 @@ StateVars = [
 	  ["ctx->Depth.BoundsMin", "ctx->Depth.BoundsMax"],
 	  "", ["EXT_depth_bounds_test"] ),
 
+	# GL_ARB_depth_clamp
+	( "GL_DEPTH_CLAMP", GLboolean, ["ctx->Transform.DepthClamp"], "",
+	  ["ARB_depth_clamp"] ),
+
 	# GL_ARB_draw_buffers
 	( "GL_MAX_DRAW_BUFFERS_ARB", GLint,
 	  ["ctx->Const.MaxDrawBuffers"], "", None ),
@@ -938,9 +942,9 @@ StateVars = [
 
 	# GL_OES_read_format
 	( "GL_IMPLEMENTATION_COLOR_READ_TYPE_OES", GLint,
-	  ["ctx->Const.ColorReadType"], "", ["OES_read_format"] ),
+	  ["_mesa_get_color_read_type(ctx)"], "", ["OES_read_format"] ),
 	( "GL_IMPLEMENTATION_COLOR_READ_FORMAT_OES", GLint,
-	  ["ctx->Const.ColorReadFormat"], "", ["OES_read_format"] ),
+	  ["_mesa_get_color_read_format(ctx)"], "", ["OES_read_format"] ),
 
 	# GL_ATI_fragment_shader
 	( "GL_NUM_FRAGMENT_REGISTERS_ATI", GLint, ["6"], "", ["ATI_fragment_shader"] ),
@@ -1155,6 +1159,7 @@ def EmitHeader():
 #include "mtypes.h"
 #include "state.h"
 #include "texcompress.h"
+#include "framebuffer.h"
 
 
 #define FLOAT_TO_BOOLEAN(X)   ( (X) ? GL_TRUE : GL_FALSE )

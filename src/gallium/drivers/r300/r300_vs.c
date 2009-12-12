@@ -35,7 +35,9 @@ static void set_vertex_inputs_outputs(struct r300_vertex_program_compiler * c)
 {
     struct r300_vertex_shader * vs = c->UserData;
     struct tgsi_shader_info* info = &vs->info;
-    boolean pointsize = false;
+    struct tgsi_parse_context parser;
+    struct tgsi_full_declaration * decl;
+    boolean pointsize = FALSE;
     int out_colors = 0;
     int colors = 0;
     int out_generic = 0;
@@ -50,7 +52,7 @@ static void set_vertex_inputs_outputs(struct r300_vertex_program_compiler * c)
     for (i = 0; i < info->num_outputs; i++) {
         switch (info->output_semantic_name[i]) {
             case TGSI_SEMANTIC_PSIZE:
-                pointsize = true;
+                pointsize = TRUE;
                 break;
             case TGSI_SEMANTIC_COLOR:
                 out_colors++;
@@ -62,8 +64,6 @@ static void set_vertex_inputs_outputs(struct r300_vertex_program_compiler * c)
         }
     }
 
-    struct tgsi_parse_context parser;
-
     tgsi_parse_init(&parser, vs->state.tokens);
 
     while (!tgsi_parse_end_of_tokens(&parser)) {
@@ -72,7 +72,7 @@ static void set_vertex_inputs_outputs(struct r300_vertex_program_compiler * c)
         if (parser.FullToken.Token.Type != TGSI_TOKEN_TYPE_DECLARATION)
             continue;
 
-        struct tgsi_full_declaration * decl = &parser.FullToken.FullDeclaration;
+        decl = &parser.FullToken.FullDeclaration;
 
         if (decl->Declaration.File != TGSI_FILE_OUTPUT)
             continue;
@@ -116,7 +116,7 @@ void r300_translate_vertex_shader(struct r300_context* r300,
     /* Setup the compiler */
     rc_init(&compiler.Base);
 
-    compiler.Base.Debug = 1;
+    compiler.Base.Debug = DBG_ON(r300, DBG_VP);
     compiler.code = &vs->code;
     compiler.UserData = vs;
 
@@ -146,89 +146,3 @@ void r300_translate_vertex_shader(struct r300_context* r300,
     rc_destroy(&compiler.Base);
     vs->translated = TRUE;
 }
-
-
-/* XXX get these to r300_reg */
-#define R300_PVS_DST_OPCODE(x)   ((x) << 0)
-#   define R300_VE_DOT_PRODUCT            1
-#   define R300_VE_MULTIPLY               2
-#   define R300_VE_ADD                    3
-#   define R300_VE_MAXIMUM                7
-#   define R300_VE_SET_LESS_THAN          10
-#define R300_PVS_DST_MATH_INST     (1 << 6)
-#   define R300_ME_RECIP_DX               6
-#define R300_PVS_DST_MACRO_INST    (1 << 7)
-#   define R300_PVS_MACRO_OP_2CLK_MADD    0
-#define R300_PVS_DST_REG_TYPE(x) ((x) << 8)
-#   define R300_PVS_DST_REG_TEMPORARY     0
-#   define R300_PVS_DST_REG_A0            1
-#   define R300_PVS_DST_REG_OUT           2
-#   define R300_PVS_DST_REG_OUT_REPL_X    3
-#   define R300_PVS_DST_REG_ALT_TEMPORARY 4
-#   define R300_PVS_DST_REG_INPUT         5
-#define R300_PVS_DST_OFFSET(x)   ((x) << 13)
-#define R300_PVS_DST_WE(x)       ((x) << 20)
-#define R300_PVS_DST_WE_XYZW     (0xf << 20)
-
-#define R300_PVS_SRC_REG_TYPE(x) ((x) << 0)
-#   define R300_PVS_SRC_REG_TEMPORARY     0
-#   define R300_PVS_SRC_REG_INPUT         1
-#   define R300_PVS_SRC_REG_CONSTANT      2
-#   define R300_PVS_SRC_REG_ALT_TEMPORARY 3
-#define R300_PVS_SRC_OFFSET(x)   ((x) << 5)
-#define R300_PVS_SRC_SWIZZLE(x)  ((x) << 13)
-#   define R300_PVS_SRC_SELECT_X          0
-#   define R300_PVS_SRC_SELECT_Y          1
-#   define R300_PVS_SRC_SELECT_Z          2
-#   define R300_PVS_SRC_SELECT_W          3
-#   define R300_PVS_SRC_SELECT_FORCE_0    4
-#   define R300_PVS_SRC_SELECT_FORCE_1    5
-#   define R300_PVS_SRC_SWIZZLE_XYZW \
-    ((R300_PVS_SRC_SELECT_X | (R300_PVS_SRC_SELECT_Y << 3) | \
-     (R300_PVS_SRC_SELECT_Z << 6) | (R300_PVS_SRC_SELECT_W << 9)) << 13)
-#   define R300_PVS_SRC_SWIZZLE_ZERO \
-    ((R300_PVS_SRC_SELECT_FORCE_0 | (R300_PVS_SRC_SELECT_FORCE_0 << 3) | \
-     (R300_PVS_SRC_SELECT_FORCE_0 << 6) | \
-      (R300_PVS_SRC_SELECT_FORCE_0 << 9)) << 13)
-#   define R300_PVS_SRC_SWIZZLE_ONE \
-    ((R300_PVS_SRC_SELECT_FORCE_1 | (R300_PVS_SRC_SELECT_FORCE_1 << 3) | \
-     (R300_PVS_SRC_SELECT_FORCE_1 << 6) | \
-      (R300_PVS_SRC_SELECT_FORCE_1 << 9)) << 13)
-#define R300_PVS_MODIFIER_X        (1 << 25)
-#define R300_PVS_MODIFIER_Y        (1 << 26)
-#define R300_PVS_MODIFIER_Z        (1 << 27)
-#define R300_PVS_MODIFIER_W        (1 << 28)
-#define R300_PVS_NEGATE_XYZW \
-    (R300_PVS_MODIFIER_X | R300_PVS_MODIFIER_Y | \
-     R300_PVS_MODIFIER_Z | R300_PVS_MODIFIER_W)
-
-struct r300_vertex_program_code r300_passthrough_vertex_shader = {
-    .length = 8, /* two instructions */
-
-    /* MOV out[0], in[0] */
-    .body.d[0] = R300_PVS_DST_OPCODE(R300_VE_ADD) |
-        R300_PVS_DST_REG_TYPE(R300_PVS_DST_REG_OUT) |
-        R300_PVS_DST_OFFSET(0) | R300_PVS_DST_WE_XYZW,
-    .body.d[1] = R300_PVS_SRC_REG_TYPE(R300_PVS_SRC_REG_INPUT) |
-        R300_PVS_SRC_OFFSET(0) | R300_PVS_SRC_SWIZZLE_XYZW,
-    .body.d[2] = R300_PVS_SRC_SWIZZLE_ZERO,
-    .body.d[3] = 0x0,
-
-    /* MOV out[1], in[1] */
-    .body.d[4] = R300_PVS_DST_OPCODE(R300_VE_ADD) |
-        R300_PVS_DST_REG_TYPE(R300_PVS_DST_REG_OUT) |
-        R300_PVS_DST_OFFSET(1) | R300_PVS_DST_WE_XYZW,
-    .body.d[5] = R300_PVS_SRC_REG_TYPE(R300_PVS_SRC_REG_INPUT) |
-        R300_PVS_SRC_OFFSET(1) | R300_PVS_SRC_SWIZZLE_XYZW,
-    .body.d[6] = R300_PVS_SRC_SWIZZLE_ZERO,
-    .body.d[7] = 0x0,
-
-    .inputs[0] = 0,
-    .inputs[1] = 1,
-    .outputs[0] = 0,
-    .outputs[1] = 1,
-
-    .InputsRead = 3,
-    .OutputsWritten = 3
-};
-

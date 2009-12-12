@@ -25,13 +25,15 @@
  * 
  **************************************************************************/
 
-#include <stdlib.h>
 
 #include "main/glheader.h"
 #include "main/context.h"
 #include "main/state.h"
-#include "main/api_validate.h"
 #include "main/enums.h"
+#include "tnl/tnl.h"
+#include "vbo/vbo_context.h"
+#include "swrast/swrast.h"
+#include "swrast_setup/swrast_setup.h"
 
 #include "brw_draw.h"
 #include "brw_defines.h"
@@ -41,11 +43,6 @@
 
 #include "intel_batchbuffer.h"
 #include "intel_buffer_objects.h"
-
-#include "tnl/tnl.h"
-#include "vbo/vbo_context.h"
-#include "swrast/swrast.h"
-#include "swrast_setup/swrast_setup.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BATCH
 
@@ -145,7 +142,7 @@ static void brw_emit_prim(struct brw_context *brw,
       prim_packet.start_vert_location += brw->ib.start_vertex_offset;
    prim_packet.instance_count = 1;
    prim_packet.start_instance_location = 0;
-   prim_packet.base_vert_location = 0;
+   prim_packet.base_vert_location = prim->basevertex;
 
    /* Can't wrap here, since we rely on the validated state. */
    brw->no_batch_wrap = GL_TRUE;
@@ -156,18 +153,14 @@ static void brw_emit_prim(struct brw_context *brw,
     * the besides the draw code.
     */
    if (intel->always_flush_cache) {
-      BEGIN_BATCH(1, IGNORE_CLIPRECTS);
-      OUT_BATCH(intel->vtbl.flush_cmd());
-      ADVANCE_BATCH();
+      intel_batchbuffer_emit_mi_flush(intel->batch);
    }
    if (prim_packet.verts_per_instance) {
       intel_batchbuffer_data( brw->intel.batch, &prim_packet,
 			      sizeof(prim_packet), LOOP_CLIPRECTS);
    }
    if (intel->always_flush_cache) {
-      BEGIN_BATCH(1, IGNORE_CLIPRECTS);
-      OUT_BATCH(intel->vtbl.flush_cmd());
-      ADVANCE_BATCH();
+      intel_batchbuffer_emit_mi_flush(intel->batch);
    }
 
    brw->no_batch_wrap = GL_FALSE;

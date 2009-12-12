@@ -56,6 +56,9 @@
 #include "lp_bld_type.h"
 
 
+#define LP_TEST_NUM_SAMPLES 32
+
+
 void
 write_tsv_header(FILE *fp);
 
@@ -68,17 +71,28 @@ boolean
 test_all(unsigned verbose, FILE *fp);
 
 
+#if defined(PIPE_CC_MSVC)
+
+unsigned __int64 __rdtsc();
+#pragma intrinsic(__rdtsc)
+#define rdtsc() __rdtsc()
+
+#elif defined(PIPE_CC_GCC) && (defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64))
+
 static INLINE uint64_t
 rdtsc(void)
 {
-#if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
    uint32_t hi, lo;
    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
    return ((uint64_t)lo) | (((uint64_t)hi) << 32);
-#else
-   return 0;
-#endif
 }
+
+#else
+
+#define rdtsc() 0
+
+#endif
+
 
 
 float
@@ -86,43 +100,43 @@ random_float(void);
 
 
 void
-dump_type(FILE *fp, union lp_type type);
+dump_type(FILE *fp, struct lp_type type);
 
 
 double
-read_elem(union lp_type type, const void *src, unsigned index);
+read_elem(struct lp_type type, const void *src, unsigned index);
 
 
 void
-write_elem(union lp_type type, void *dst, unsigned index, double src);
+write_elem(struct lp_type type, void *dst, unsigned index, double src);
 
 
 void
-random_elem(union lp_type type, void *dst, unsigned index);
+random_elem(struct lp_type type, void *dst, unsigned index);
 
 
 void
-read_vec(union lp_type type, const void *src, double *dst);
+read_vec(struct lp_type type, const void *src, double *dst);
 
 
 void
-write_vec(union lp_type type, void *dst, const double *src);
+write_vec(struct lp_type type, void *dst, const double *src);
 
 
 void
-random_vec(union lp_type type, void *dst);
+random_vec(struct lp_type type, void *dst);
 
 
 boolean
-compare_vec_with_eps(union lp_type type, const void *res, const void *ref, double eps);
+compare_vec_with_eps(struct lp_type type, const void *res, const void *ref, double eps);
 
 
 boolean
-compare_vec(union lp_type type, const void *res, const void *ref);
+compare_vec(struct lp_type type, const void *res, const void *ref);
 
 
 void
-dump_vec(FILE *fp, union lp_type type, const void *src);
+dump_vec(FILE *fp, struct lp_type type, const void *src);
 
 
 #endif /* !LP_TEST_H */

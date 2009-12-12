@@ -41,7 +41,7 @@
 static const char *
 cell_get_vendor(struct pipe_screen *screen)
 {
-   return "Tungsten Graphics, Inc.";
+   return "VMware, Inc.";
 }
 
 
@@ -64,8 +64,6 @@ cell_get_param(struct pipe_screen *screen, int param)
       return 1;
    case PIPE_CAP_GLSL:
       return 1;
-   case PIPE_CAP_S3TC:
-      return 0;
    case PIPE_CAP_ANISOTROPIC_FILTER:
       return 0;
    case PIPE_CAP_POINT_SPRITE:

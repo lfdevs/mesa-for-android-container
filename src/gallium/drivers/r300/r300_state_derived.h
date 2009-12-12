@@ -23,11 +23,11 @@
 #ifndef R300_STATE_DERIVED_H
 #define R300_STATE_DERIVED_H
 
-#include "draw/draw_vertex.h"
+struct r300_context;
 
-#include "r300_context.h"
-#include "r300_reg.h"
-#include "r300_state_inlines.h"
+unsigned r300_shader_key_hash(void* key);
+
+int r300_shader_key_compare(void* key1, void* key2);
 
 void r300_update_derived_state(struct r300_context* r300);
 

@@ -314,7 +314,7 @@ class Screen(Object):
         if texture is None:
             return None
         transfer = Transfer(texture.get_surface(face, level, zslice), x, y, w, h)
-        if transfer and usage != gallium.PIPE_TRANSFER_WRITE:
+        if transfer and usage & gallium.PIPE_TRANSFER_READ:
             if self.interpreter.options.all:
                 self.interpreter.present(transfer.surface, 'transf_read', x, y, w, h)
         return transfer
@@ -459,7 +459,7 @@ class Context(Object):
         sys.stdout.flush()
 
     def set_constant_buffer(self, shader, index, buffer):
-        if buffer is not None:
+        if buffer is not None and buffer.buffer is not None:
             self.real.set_constant_buffer(shader, index, buffer.buffer)
 
             self.dump_constant_buffer(buffer.buffer)

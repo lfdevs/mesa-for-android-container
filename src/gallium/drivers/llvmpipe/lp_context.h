@@ -88,9 +88,6 @@ struct llvmpipe_context {
    /** Mapped vertex buffers */
    ubyte *mapped_vbuffer[PIPE_MAX_ATTRIBS];
    
-   /** Mapped constant buffers */
-   void *mapped_constants[PIPE_SHADER_TYPES];
-
    /** Vertex format */
    struct vertex_info vertex_info;
    struct vertex_info vertex_info_vbuf;
@@ -124,9 +121,10 @@ struct llvmpipe_context {
 
    /** The primitive drawing context */
    struct draw_context *draw;
-   struct draw_stage *setup;
+
+   /** Draw module backend */
+   struct vbuf_render *vbuf_backend;
    struct draw_stage *vbuf;
-   struct llvmpipe_vbuf_render *vbuf_render;
 
    boolean dirty_render_cache;
    

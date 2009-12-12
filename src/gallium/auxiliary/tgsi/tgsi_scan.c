@@ -132,6 +132,7 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                if (file == TGSI_FILE_INPUT) {
                   info->input_semantic_name[reg] = (ubyte)fulldecl->Semantic.SemanticName;
                   info->input_semantic_index[reg] = (ubyte)fulldecl->Semantic.SemanticIndex;
+                  info->input_interpolate[reg] = (ubyte)fulldecl->Declaration.Interpolate;
                   info->num_inputs++;
                }
                else if (file == TGSI_FILE_OUTPUT) {
@@ -226,11 +227,6 @@ tgsi_is_passthrough_shader(const struct tgsi_token *tokens)
                 src->SrcRegister.SwizzleY != TGSI_SWIZZLE_Y ||
                 src->SrcRegister.SwizzleZ != TGSI_SWIZZLE_Z ||
                 src->SrcRegister.SwizzleW != TGSI_SWIZZLE_W ||
-
-                src->SrcRegisterExtSwz.ExtSwizzleX != TGSI_EXTSWIZZLE_X ||
-                src->SrcRegisterExtSwz.ExtSwizzleY != TGSI_EXTSWIZZLE_Y ||
-                src->SrcRegisterExtSwz.ExtSwizzleZ != TGSI_EXTSWIZZLE_Z ||
-                src->SrcRegisterExtSwz.ExtSwizzleW != TGSI_EXTSWIZZLE_W ||
 
                 dst->DstRegister.WriteMask != TGSI_WRITEMASK_XYZW)
             {

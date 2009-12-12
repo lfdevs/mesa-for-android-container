@@ -34,8 +34,8 @@
 
 #define MAX_CS_SIZE 64 * 1024 / 4
 
-#define VERY_VERBOSE_CS 0
-#define VERY_VERBOSE_REGISTERS 0
+#define VERY_VERBOSE_CS 1
+#define VERY_VERBOSE_REGISTERS 1
 
 /* XXX stolen from radeon_drm.h */
 #define RADEON_GEM_DOMAIN_CPU  0x1
@@ -49,7 +49,8 @@
     (RADEON_CP_PACKET0 | ((count) << 16) | ((register) >> 2))
 
 #define CS_LOCALS(context) \
-    struct r300_winsys* cs_winsys = context->winsys; \
+    struct r300_context* const cs_context_copy = (context); \
+    struct r300_winsys* cs_winsys = cs_context_copy->winsys; \
     int cs_count = 0;
 
 #define CHECK_CS(size) \
@@ -58,7 +59,7 @@
 #define BEGIN_CS(size) do { \
     CHECK_CS(size); \
     if (VERY_VERBOSE_CS) { \
-        debug_printf("r300: BEGIN_CS, count %d, in %s (%s:%d)\n", \
+        DBG(cs_context_copy, DBG_CS, "r300: BEGIN_CS, count %d, in %s (%s:%d)\n", \
                 size, __FUNCTION__, __FILE__, __LINE__); \
     } \
     cs_winsys->begin_cs(cs_winsys, (size), \
@@ -67,47 +68,55 @@
 } while (0)
 
 #define OUT_CS(value) do { \
+    if (VERY_VERBOSE_CS || VERY_VERBOSE_REGISTERS) { \
+        DBG(cs_context_copy, DBG_CS, "r300: writing %08x\n", value); \
+    } \
     cs_winsys->write_cs_dword(cs_winsys, (value)); \
     cs_count--; \
 } while (0)
 
 #define OUT_CS_32F(value) do { \
+    if (VERY_VERBOSE_CS || VERY_VERBOSE_REGISTERS) { \
+        DBG(cs_context_copy, DBG_CS, "r300: writing %f\n", value); \
+    } \
     cs_winsys->write_cs_dword(cs_winsys, fui(value)); \
     cs_count--; \
 } while (0)
 
 #define OUT_CS_REG(register, value) do { \
     if (VERY_VERBOSE_REGISTERS) \
-        debug_printf("r300: writing 0x%08X to register 0x%04X\n", \
+        DBG(cs_context_copy, DBG_CS, "r300: writing 0x%08X to register 0x%04X\n", \
             value, register); \
     assert(register); \
-    OUT_CS(CP_PACKET0(register, 0)); \
-    OUT_CS(value); \
+    cs_winsys->write_cs_dword(cs_winsys, CP_PACKET0(register, 0)); \
+    cs_winsys->write_cs_dword(cs_winsys, value); \
+    cs_count -= 2; \
 } while (0)
 
 /* Note: This expects count to be the number of registers,
  * not the actual packet0 count! */
 #define OUT_CS_REG_SEQ(register, count) do { \
     if (VERY_VERBOSE_REGISTERS) \
-        debug_printf("r300: writing register sequence of %d to 0x%04X\n", \
+        DBG(cs_context_copy, DBG_CS, "r300: writing register sequence of %d to 0x%04X\n", \
             count, register); \
     assert(register); \
-    OUT_CS(CP_PACKET0(register, ((count) - 1))); \
+    cs_winsys->write_cs_dword(cs_winsys, CP_PACKET0((register), ((count) - 1))); \
+    cs_count--; \
 } while (0)
 
 #define OUT_CS_RELOC(bo, offset, rd, wd, flags) do { \
-    debug_printf("r300: writing relocation for buffer %p, offset %d, " \
+    DBG(cs_context_copy, DBG_CS, "r300: writing relocation for buffer %p, offset %d, " \
             "domains (%d, %d, %d)\n", \
         bo, offset, rd, wd, flags); \
     assert(bo); \
-    OUT_CS(offset); \
+    cs_winsys->write_cs_dword(cs_winsys, offset); \
     cs_winsys->write_cs_reloc(cs_winsys, bo, rd, wd, flags); \
-    cs_count -= 2; \
+    cs_count -= 3; \
 } while (0)
 
 #define END_CS do { \
     if (VERY_VERBOSE_CS) { \
-        debug_printf("r300: END_CS in %s (%s:%d)\n", __FUNCTION__, \
+        DBG(cs_context_copy, DBG_CS, "r300: END_CS in %s (%s:%d)\n", __FUNCTION__, \
                 __FILE__, __LINE__); \
     } \
     if (cs_count != 0) \
@@ -117,7 +126,7 @@
 
 #define FLUSH_CS do { \
     if (VERY_VERBOSE_CS) { \
-        debug_printf("r300: FLUSH_CS in %s (%s:%d)\n\n", __FUNCTION__, \
+        DBG(cs_context_copy, DBG_CS, "r300: FLUSH_CS in %s (%s:%d)\n\n", __FUNCTION__, \
                 __FILE__, __LINE__); \
     } \
     cs_winsys->flush_cs(cs_winsys); \
@@ -127,27 +136,29 @@
 
 #define OUT_CS_ONE_REG(register, count) do { \
     if (VERY_VERBOSE_REGISTERS) \
-        debug_printf("r300: writing data sequence of %d to 0x%04X\n", \
+        DBG(cs_context_copy, DBG_CS, "r300: writing data sequence of %d to 0x%04X\n", \
             count, register); \
     assert(register); \
-    OUT_CS(CP_PACKET0(register, ((count) - 1)) | RADEON_ONE_REG_WR); \
+    cs_winsys->write_cs_dword(cs_winsys, CP_PACKET0((register), ((count) - 1)) | RADEON_ONE_REG_WR); \
+    cs_count--; \
 } while (0)
 
 #define CP_PACKET3(op, count) \
     (RADEON_CP_PACKET3 | (op) | ((count) << 16))
 
 #define OUT_CS_PKT3(op, count) do { \
-    OUT_CS(CP_PACKET3(op, count)); \
+    cs_winsys->write_cs_dword(cs_winsys, CP_PACKET3(op, count)); \
+    cs_count--; \
 } while (0)
 
 #define OUT_CS_INDEX_RELOC(bo, offset, count, rd, wd, flags) do { \
-    debug_printf("r300: writing relocation for index buffer %p," \
+    DBG(cs_context_copy, DBG_CS, "r300: writing relocation for index buffer %p," \
             "offset %d\n", bo, offset); \
     assert(bo); \
-    OUT_CS(offset); \
-    OUT_CS(count); \
+    cs_winsys->write_cs_dword(cs_winsys, offset); \
+    cs_winsys->write_cs_dword(cs_winsys, count); \
     cs_winsys->write_cs_reloc(cs_winsys, bo, rd, wd, flags); \
-    cs_count -= 2; \
+    cs_count -= 4; \
 } while (0)
 
 #endif /* R300_CS_H */

@@ -34,13 +34,28 @@
  */
 
 
+#include "util/u_cpu_detect.h"
+
 #include "lp_bld_const.h"
+#include "lp_bld_misc.h"
 #include "lp_test.h"
+
+
+#ifdef PIPE_CC_MSVC
+static INLINE double
+round(double x)
+{
+   if (x >= 0.0)
+      return floor(x + 0.5);
+   else
+      return ceil(x - 0.5);
+}
+#endif
 
 
 void
 dump_type(FILE *fp,
-          union lp_type type)
+          struct lp_type type)
 {
    fprintf(fp, "%s%s%u%sx%u",
            type.sign ? (type.floating || type.fixed ? "" : "s") : "u",
@@ -52,7 +67,7 @@ dump_type(FILE *fp,
 
 
 double
-read_elem(union lp_type type, const void *src, unsigned index)
+read_elem(struct lp_type type, const void *src, unsigned index)
 {
    double scale = lp_const_scale(type);
    double value;
@@ -115,7 +130,7 @@ read_elem(union lp_type type, const void *src, unsigned index)
 
 
 void
-write_elem(union lp_type type, void *dst, unsigned index, double value)
+write_elem(struct lp_type type, void *dst, unsigned index, double value)
 {
    assert(index < type.length);
    if(!type.sign && value < 0.0)
@@ -184,11 +199,11 @@ write_elem(union lp_type type, void *dst, unsigned index, double value)
 
 
 void
-random_elem(union lp_type type, void *dst, unsigned index)
+random_elem(struct lp_type type, void *dst, unsigned index)
 {
    double value;
    assert(index < type.length);
-   value = (double)random()/(double)RAND_MAX;
+   value = (double)rand()/(double)RAND_MAX;
    if(!type.norm) {
       unsigned long long mask;
       if (type.floating)
@@ -199,17 +214,17 @@ random_elem(union lp_type type, void *dst, unsigned index)
          mask = ((unsigned long long)1 << (type.width - 1)) - 1;
       else
          mask = ((unsigned long long)1 << type.width) - 1;
-      value += (double)(mask & random());
+      value += (double)(mask & rand());
    }
    if(!type.sign)
-      if(random() & 1)
+      if(rand() & 1)
          value = -value;
    write_elem(type, dst, index, value);
 }
 
 
 void
-read_vec(union lp_type type, const void *src, double *dst)
+read_vec(struct lp_type type, const void *src, double *dst)
 {
    unsigned i;
    for (i = 0; i < type.length; ++i)
@@ -218,7 +233,7 @@ read_vec(union lp_type type, const void *src, double *dst)
 
 
 void
-write_vec(union lp_type type, void *dst, const double *src)
+write_vec(struct lp_type type, void *dst, const double *src)
 {
    unsigned i;
    for (i = 0; i < type.length; ++i)
@@ -229,12 +244,12 @@ write_vec(union lp_type type, void *dst, const double *src)
 float
 random_float(void)
 {
-    return (float)((double)random()/(double)RAND_MAX);
+    return (float)((double)rand()/(double)RAND_MAX);
 }
 
 
 void
-random_vec(union lp_type type, void *dst)
+random_vec(struct lp_type type, void *dst)
 {
    unsigned i;
    for (i = 0; i < type.length; ++i)
@@ -243,7 +258,7 @@ random_vec(union lp_type type, void *dst)
 
 
 boolean
-compare_vec_with_eps(union lp_type type, const void *res, const void *ref, double eps)
+compare_vec_with_eps(struct lp_type type, const void *res, const void *ref, double eps)
 {
    unsigned i;
    for (i = 0; i < type.length; ++i) {
@@ -259,7 +274,7 @@ compare_vec_with_eps(union lp_type type, const void *res, const void *ref, doubl
 
 
 boolean
-compare_vec(union lp_type type, const void *res, const void *ref)
+compare_vec(struct lp_type type, const void *res, const void *ref)
 {
    double eps = lp_const_eps(type);
    return compare_vec_with_eps(type, res, ref, eps);
@@ -267,7 +282,7 @@ compare_vec(union lp_type type, const void *res, const void *ref)
 
 
 void
-dump_vec(FILE *fp, union lp_type type, const void *src)
+dump_vec(FILE *fp, struct lp_type type, const void *src)
 {
    unsigned i;
    for (i = 0; i < type.length; ++i) {
@@ -364,6 +379,11 @@ int main(int argc, char **argv)
       else
          n = atoi(argv[i]);
    }
+
+   LLVMLinkInJIT();
+   LLVMInitializeNativeTarget();
+
+   util_cpu_detect();
 
    if(fp) {
       /* Warm up the caches */

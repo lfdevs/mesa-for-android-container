@@ -29,6 +29,7 @@ COMMON_SOURCES = \
 RADEON_COMMON_SOURCES = \
 	radeon_bo_legacy.c \
 	radeon_common_context.c \
+	radeon_buffer_objects.c \
 	radeon_common.c \
 	radeon_cs_legacy.c \
 	radeon_dma.c \
@@ -65,8 +66,7 @@ DRIVER_SOURCES = \
 
 C_SOURCES = $(COMMON_SOURCES) $(DRIVER_SOURCES)
 
-DRIVER_DEFINES = -DCOMPILE_R600 -DR200_MERGED=0 \
-	-DRADEON_COMMON=1 -DRADEON_COMMON_FOR_R600 \
+DRIVER_DEFINES = -DRADEON_R600 \
 #	-DRADEON_BO_TRACK \
 	-Wall
 
@@ -76,4 +76,3 @@ DRI_LIB_DEPS += $(RADEON_LDFLAGS)
 
 include ../Makefile.template
 
-symlinks:

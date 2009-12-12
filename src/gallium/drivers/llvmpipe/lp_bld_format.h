@@ -25,77 +25,59 @@
  *
  **************************************************************************/
 
-#ifndef LP_BLD_H
-#define LP_BLD_H
+#ifndef LP_BLD_FORMAT_H
+#define LP_BLD_FORMAT_H
 
 
 /**
  * @file
- * LLVM IR building helpers interfaces.
- *
- * We use LLVM-C bindings for now. They are not documented, but follow the C++
- * interfaces very closely, and appear to be complete enough for code
- * genration. See
- * http://npcontemplation.blogspot.com/2008/06/secret-of-llvm-c-bindings.html
- * for a standalone example.
+ * Pixel format helpers.
  */
 
 #include <llvm-c/Core.h>  
- 
+
 #include "pipe/p_format.h"
 
+struct util_format_description;
+struct lp_type;
 
-union lp_type;
+
+boolean
+lp_format_is_rgba8(const struct util_format_description *desc);
 
 
-/**
- * Unpack a pixel into its RGBA components.
- *
- * @param packed integer.
- *
- * @return RGBA in a 4 floats vector.
- */
+void
+lp_build_format_swizzle_soa(const struct util_format_description *format_desc,
+                            struct lp_type type,
+                            const LLVMValueRef *unswizzled,
+                            LLVMValueRef *swizzled);
+
+
 LLVMValueRef
-lp_build_unpack_rgba(LLVMBuilderRef builder,
-                     enum pipe_format format, 
-                     LLVMValueRef packed);
+lp_build_unpack_rgba_aos(LLVMBuilderRef builder,
+                         const struct util_format_description *desc,
+                         LLVMValueRef packed);
 
 
-/**
- * Pack a pixel.
- *
- * @param rgba 4 float vector with the unpacked components.
- */
 LLVMValueRef
-lp_build_pack_rgba(LLVMBuilderRef builder,
-                   enum pipe_format format,
-                   LLVMValueRef rgba);
+lp_build_unpack_rgba8_aos(LLVMBuilderRef builder,
+                          const struct util_format_description *desc,
+                          struct lp_type type,
+                          LLVMValueRef packed);
 
 
-/**
- * Load a pixel into its RGBA components.
- *
- * @param ptr value with the pointer to the packed pixel. Pointer type is
- * irrelevant.
- *
- * @return RGBA in a 4 floats vector.
- */
 LLVMValueRef
-lp_build_load_rgba(LLVMBuilderRef builder,
-                   enum pipe_format format, 
-                   LLVMValueRef ptr);
+lp_build_pack_rgba_aos(LLVMBuilderRef builder,
+                       const struct util_format_description *desc,
+                       LLVMValueRef rgba);
 
 
-/**
- * Store a pixel.
- *
- * @param rgba 4 float vector with the unpacked components.
- */
-void 
-lp_build_store_rgba(LLVMBuilderRef builder,
-                    enum pipe_format format,
-                    LLVMValueRef ptr,
-                    LLVMValueRef rgba);
+void
+lp_build_unpack_rgba_soa(LLVMBuilderRef builder,
+                         const struct util_format_description *format_desc,
+                         struct lp_type type,
+                         LLVMValueRef packed,
+                         LLVMValueRef *rgba);
 
 
-#endif /* !LP_BLD_H */
+#endif /* !LP_BLD_FORMAT_H */

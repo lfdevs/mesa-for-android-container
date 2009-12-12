@@ -107,6 +107,7 @@
 #define TEMP_HALF_I        TGSI_EXEC_TEMP_HALF_I
 #define TEMP_HALF_C        TGSI_EXEC_TEMP_HALF_C
 #define TEMP_R0            TGSI_EXEC_TEMP_R0
+#define TEMP_P0            TGSI_EXEC_TEMP_P0
 
 #define IS_CHANNEL_ENABLED(INST, CHAN)\
    ((INST).FullDstRegisters[0].DstRegister.WriteMask & (1 << (CHAN)))
@@ -210,9 +211,8 @@ tgsi_check_soa_dependencies(const struct tgsi_full_instruction *inst)
          uint channelsWritten = 0x0;
          FOR_EACH_ENABLED_CHANNEL(*inst, chan) {
             /* check if we're reading a channel that's been written */
-            uint swizzle = tgsi_util_get_full_src_register_extswizzle(&inst->FullSrcRegisters[i], chan);
-            if (swizzle <= TGSI_SWIZZLE_W &&
-                (channelsWritten & (1 << swizzle))) {
+            uint swizzle = tgsi_util_get_full_src_register_swizzle(&inst->FullSrcRegisters[i], chan);
+            if (channelsWritten & (1 << swizzle)) {
                return TRUE;
             }
 
@@ -338,7 +338,7 @@ tgsi_exec_machine_bind_shader(
             /* XXX we only handle SOA dependencies properly for MOV/SWZ
              * at this time!
              */
-            if (opcode != TGSI_OPCODE_MOV && opcode != TGSI_OPCODE_SWZ) {
+            if (opcode != TGSI_OPCODE_MOV) {
                debug_printf("Warning: SOA dependency in instruction"
                             " is not handled:\n");
                tgsi_dump_instruction(&parse.FullToken.FullInstruction,
@@ -1130,10 +1130,10 @@ fetch_src_file_channel(
    union tgsi_exec_channel *chan )
 {
    switch( swizzle ) {
-   case TGSI_EXTSWIZZLE_X:
-   case TGSI_EXTSWIZZLE_Y:
-   case TGSI_EXTSWIZZLE_Z:
-   case TGSI_EXTSWIZZLE_W:
+   case TGSI_SWIZZLE_X:
+   case TGSI_SWIZZLE_Y:
+   case TGSI_SWIZZLE_Z:
+   case TGSI_SWIZZLE_W:
       switch( file ) {
       case TGSI_FILE_CONSTANT:
          assert(mach->Consts);
@@ -1188,6 +1188,17 @@ fetch_src_file_channel(
          chan->u[3] = mach->Addrs[index->i[3]].xyzw[swizzle].u[3];
          break;
 
+      case TGSI_FILE_PREDICATE:
+         assert(index->i[0] < TGSI_EXEC_NUM_PREDS);
+         assert(index->i[1] < TGSI_EXEC_NUM_PREDS);
+         assert(index->i[2] < TGSI_EXEC_NUM_PREDS);
+         assert(index->i[3] < TGSI_EXEC_NUM_PREDS);
+         chan->u[0] = mach->Addrs[0].xyzw[swizzle].u[0];
+         chan->u[1] = mach->Addrs[0].xyzw[swizzle].u[1];
+         chan->u[2] = mach->Addrs[0].xyzw[swizzle].u[2];
+         chan->u[3] = mach->Addrs[0].xyzw[swizzle].u[3];
+         break;
+
       case TGSI_FILE_OUTPUT:
          /* vertex/fragment output vars can be read too */
          chan->u[0] = mach->Outputs[index->i[0]].xyzw[swizzle].u[0];
@@ -1199,14 +1210,6 @@ fetch_src_file_channel(
       default:
          assert( 0 );
       }
-      break;
-
-   case TGSI_EXTSWIZZLE_ZERO:
-      *chan = mach->Temps[TEMP_0_I].xyzw[TEMP_0_C];
-      break;
-
-   case TGSI_EXTSWIZZLE_ONE:
-      *chan = mach->Temps[TEMP_1_I].xyzw[TEMP_1_C];
       break;
 
    default:
@@ -1367,7 +1370,7 @@ fetch_source(
        */
    }
 
-   swizzle = tgsi_util_get_full_src_register_extswizzle( reg, chan_index );
+   swizzle = tgsi_util_get_full_src_register_swizzle( reg, chan_index );
    fetch_src_file_channel(
       mach,
       reg->SrcRegister.File,
@@ -1475,117 +1478,15 @@ store_dest(
       dst = &mach->Addrs[index].xyzw[chan_index];
       break;
 
+   case TGSI_FILE_PREDICATE:
+      index = reg->DstRegister.Index;
+      assert(index < TGSI_EXEC_NUM_PREDS);
+      dst = &mach->Addrs[index].xyzw[chan_index];
+      break;
+
    default:
       assert( 0 );
       return;
-   }
-
-   if (inst->InstructionExtNv.CondFlowEnable) {
-      union tgsi_exec_channel *cc = &mach->Temps[TEMP_CC_I].xyzw[TEMP_CC_C];
-      uint swizzle;
-      uint shift;
-      uint mask;
-      uint test;
-
-      /* Only CC0 supported.
-       */
-      assert( inst->InstructionExtNv.CondFlowIndex < 1 );
-
-      switch (chan_index) {
-      case CHAN_X:
-         swizzle = inst->InstructionExtNv.CondSwizzleX;
-         break;
-      case CHAN_Y:
-         swizzle = inst->InstructionExtNv.CondSwizzleY;
-         break;
-      case CHAN_Z:
-         swizzle = inst->InstructionExtNv.CondSwizzleZ;
-         break;
-      case CHAN_W:
-         swizzle = inst->InstructionExtNv.CondSwizzleW;
-         break;
-      default:
-         assert( 0 );
-         return;
-      }
-
-      switch (swizzle) {
-      case TGSI_SWIZZLE_X:
-         shift = TGSI_EXEC_CC_X_SHIFT;
-         mask = TGSI_EXEC_CC_X_MASK;
-         break;
-      case TGSI_SWIZZLE_Y:
-         shift = TGSI_EXEC_CC_Y_SHIFT;
-         mask = TGSI_EXEC_CC_Y_MASK;
-         break;
-      case TGSI_SWIZZLE_Z:
-         shift = TGSI_EXEC_CC_Z_SHIFT;
-         mask = TGSI_EXEC_CC_Z_MASK;
-         break;
-      case TGSI_SWIZZLE_W:
-         shift = TGSI_EXEC_CC_W_SHIFT;
-         mask = TGSI_EXEC_CC_W_MASK;
-         break;
-      default:
-         assert( 0 );
-         return;
-      }
-
-      switch (inst->InstructionExtNv.CondMask) {
-      case TGSI_CC_GT:
-         test = ~(TGSI_EXEC_CC_GT << shift) & mask;
-         for (i = 0; i < QUAD_SIZE; i++)
-            if (cc->u[i] & test)
-               execmask &= ~(1 << i);
-         break;
-
-      case TGSI_CC_EQ:
-         test = ~(TGSI_EXEC_CC_EQ << shift) & mask;
-         for (i = 0; i < QUAD_SIZE; i++)
-            if (cc->u[i] & test)
-               execmask &= ~(1 << i);
-         break;
-
-      case TGSI_CC_LT:
-         test = ~(TGSI_EXEC_CC_LT << shift) & mask;
-         for (i = 0; i < QUAD_SIZE; i++)
-            if (cc->u[i] & test)
-               execmask &= ~(1 << i);
-         break;
-
-      case TGSI_CC_GE:
-         test = ~((TGSI_EXEC_CC_GT | TGSI_EXEC_CC_EQ) << shift) & mask;
-         for (i = 0; i < QUAD_SIZE; i++)
-            if (cc->u[i] & test)
-               execmask &= ~(1 << i);
-         break;
-
-      case TGSI_CC_LE:
-         test = ~((TGSI_EXEC_CC_LT | TGSI_EXEC_CC_EQ) << shift) & mask;
-         for (i = 0; i < QUAD_SIZE; i++)
-            if (cc->u[i] & test)
-               execmask &= ~(1 << i);
-         break;
-
-      case TGSI_CC_NE:
-         test = ~((TGSI_EXEC_CC_GT | TGSI_EXEC_CC_LT | TGSI_EXEC_CC_UN) << shift) & mask;
-         for (i = 0; i < QUAD_SIZE; i++)
-            if (cc->u[i] & test)
-               execmask &= ~(1 << i);
-         break;
-
-      case TGSI_CC_TR:
-         break;
-
-      case TGSI_CC_FL:
-         for (i = 0; i < QUAD_SIZE; i++)
-            execmask &= ~(1 << i);
-         break;
-
-      default:
-         assert( 0 );
-         return;
-      }
    }
 
    switch (inst->Instruction.Saturate) {
@@ -1622,51 +1523,6 @@ store_dest(
    default:
       assert( 0 );
    }
-
-   if (inst->InstructionExtNv.CondDstUpdate) {
-      union tgsi_exec_channel *cc = &mach->Temps[TEMP_CC_I].xyzw[TEMP_CC_C];
-      uint shift;
-      uint mask;
-
-      /* Only CC0 supported.
-       */
-      assert( inst->InstructionExtNv.CondDstIndex < 1 );
-
-      switch (chan_index) {
-      case CHAN_X:
-         shift = TGSI_EXEC_CC_X_SHIFT;
-         mask = ~TGSI_EXEC_CC_X_MASK;
-         break;
-      case CHAN_Y:
-         shift = TGSI_EXEC_CC_Y_SHIFT;
-         mask = ~TGSI_EXEC_CC_Y_MASK;
-         break;
-      case CHAN_Z:
-         shift = TGSI_EXEC_CC_Z_SHIFT;
-         mask = ~TGSI_EXEC_CC_Z_MASK;
-         break;
-      case CHAN_W:
-         shift = TGSI_EXEC_CC_W_SHIFT;
-         mask = ~TGSI_EXEC_CC_W_MASK;
-         break;
-      default:
-         assert( 0 );
-         return;
-      }
-
-      for (i = 0; i < QUAD_SIZE; i++)
-         if (execmask & (1 << i)) {
-            cc->u[i] &= mask;
-            if (dst->f[i] < 0.0f)
-               cc->u[i] |= TGSI_EXEC_CC_LT << shift;
-            else if (dst->f[i] > 0.0f)
-               cc->u[i] |= TGSI_EXEC_CC_GT << shift;
-            else if (dst->f[i] == 0.0f)
-               cc->u[i] |= TGSI_EXEC_CC_EQ << shift;
-            else
-               cc->u[i] |= TGSI_EXEC_CC_UN << shift;
-         }
-   }
 }
 
 #define FETCH(VAL,INDEX,CHAN)\
@@ -1689,10 +1545,8 @@ exec_kil(struct tgsi_exec_machine *mach,
    uint kilmask = 0; /* bit 0 = pixel 0, bit 1 = pixel 1, etc */
    union tgsi_exec_channel r[1];
 
-   /* This mask stores component bits that were already tested. Note that
-    * we test if the value is less than zero, so 1.0 and 0.0 need not to be
-    * tested. */
-   uniquemask = (1 << TGSI_EXTSWIZZLE_ZERO) | (1 << TGSI_EXTSWIZZLE_ONE);
+   /* This mask stores component bits that were already tested. */
+   uniquemask = 0;
 
    for (chan_index = 0; chan_index < 4; chan_index++)
    {
@@ -1700,7 +1554,7 @@ exec_kil(struct tgsi_exec_machine *mach,
       uint i;
 
       /* unswizzle channel */
-      swizzle = tgsi_util_get_full_src_register_extswizzle (
+      swizzle = tgsi_util_get_full_src_register_swizzle (
                         &inst->FullSrcRegisters[0],
                         chan_index);
 
@@ -1728,32 +1582,8 @@ exec_kilp(struct tgsi_exec_machine *mach,
 {
    uint kilmask; /* bit 0 = pixel 0, bit 1 = pixel 1, etc */
 
-   if (inst->InstructionExtNv.CondFlowEnable) {
-      uint swizzle[4];
-      uint chan_index;
-
-      kilmask = 0x0;
-
-      swizzle[0] = inst->InstructionExtNv.CondSwizzleX;
-      swizzle[1] = inst->InstructionExtNv.CondSwizzleY;
-      swizzle[2] = inst->InstructionExtNv.CondSwizzleZ;
-      swizzle[3] = inst->InstructionExtNv.CondSwizzleW;
-
-      for (chan_index = 0; chan_index < 4; chan_index++)
-      {
-         uint i;
-
-         for (i = 0; i < 4; i++) {
-            /* TODO: evaluate the condition code */
-            if (0)
-               kilmask |= 1 << i;
-         }
-      }
-   }
-   else {
-      /* "unconditional" kil */
-      kilmask = mach->ExecMask;
-   }
+   /* "unconditional" kil */
+   kilmask = mach->ExecMask;
    mach->Temps[TEMP_KILMASK_I].xyzw[TEMP_KILMASK_C].u[0] |= kilmask;
 }
 
@@ -1981,8 +1811,8 @@ exec_declaration(
             break;
 
          default:
-            eval = NULL;
             assert( 0 );
+            return;
          }
 
          if( mask == TGSI_WRITEMASK_XYZW ) {
@@ -2031,7 +1861,6 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_MOV:
-   case TGSI_OPCODE_SWZ:
       if (inst->Flags & SOA_DEPENDENCY_FLAG) {
          /* Do all fetches into temp regs, then do all stores to avoid
           * intermediate/accidental clobbering.  This could be done all the
@@ -3221,22 +3050,6 @@ exec_instruction(
 
    case TGSI_OPCODE_ENDSUB:
       /* no-op */
-      break;
-
-   case TGSI_OPCODE_NOISE1:
-      assert( 0 );
-      break;
-
-   case TGSI_OPCODE_NOISE2:
-      assert( 0 );
-      break;
-
-   case TGSI_OPCODE_NOISE3:
-      assert( 0 );
-      break;
-
-   case TGSI_OPCODE_NOISE4:
-      assert( 0 );
       break;
 
    case TGSI_OPCODE_NOP:

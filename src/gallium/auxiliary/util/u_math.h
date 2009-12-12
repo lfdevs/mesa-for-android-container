@@ -283,6 +283,14 @@ util_fast_pow(float x, float y)
    return util_fast_exp2(util_fast_log2(x) * y);
 }
 
+/* Note that this counts zero as a power of two.
+ */
+static INLINE boolean
+util_is_power_of_two( unsigned v )
+{
+   return (v & (v-1)) == 0;
+}
+
 
 /**
  * Floor(x), returned as int.
@@ -341,10 +349,22 @@ util_is_inf_or_nan(float x)
 
 
 /**
+ * Test whether x is a power of two.
+ */
+static INLINE boolean
+util_is_pot(unsigned x)
+{
+   return (x & (x - 1)) == 0;
+}
+
+
+/**
  * Find first bit set in word.  Least significant bit is 1.
  * Return 0 if no bits set.
  */
-#if defined(_MSC_VER) && _MSC_VER >= 1300
+#if defined(_MSC_VER) && _MSC_VER >= 1300 && (_M_IX86 || _M_AMD64 || _M_IA64)
+unsigned char _BitScanForward(unsigned long* Index, unsigned long Mask);
+#pragma intrinsic(_BitScanForward)
 static INLINE
 unsigned long ffs( unsigned long u )
 {
@@ -447,6 +467,26 @@ util_logbase2(unsigned n)
    while (n >>= 1)
       ++log2;
    return log2;
+}
+
+
+/**
+ * Returns the smallest power of two >= x
+ */
+static INLINE unsigned
+util_next_power_of_two(unsigned x)
+{
+   unsigned i;
+
+   if (x == 0)
+      return 1;
+
+   --x;
+
+   for (i = 1; i < sizeof(unsigned) * 8; i <<= 1)
+      x |= x >> i;
+
+   return x + 1;
 }
 
 

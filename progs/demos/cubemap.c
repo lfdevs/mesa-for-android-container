@@ -58,6 +58,9 @@ static GLint ClampIndex = 0;
 static GLboolean supportFBO = GL_FALSE;
 static GLboolean supportSeamless = GL_FALSE;
 static GLboolean seamless = GL_FALSE;
+static GLuint TexObj = 0;
+static GLint T0 = 0;
+static GLint Frames = 0;
 
 
 static struct {
@@ -282,6 +285,20 @@ static void draw( void )
    glPopMatrix();
 
    glutSwapBuffers();
+
+   Frames++;
+
+   {
+      GLint t = glutGet(GLUT_ELAPSED_TIME);
+      if (t - T0 >= 5000) {
+	 GLfloat seconds = (t - T0) / 1000.0;
+	 GLfloat fps = Frames / seconds;
+	 printf("%d frames in %6.3f seconds = %6.3f FPS\n", Frames, seconds, fps);
+	 fflush(stdout);
+	 T0 = t;
+	 Frames = 0;
+      }
+   }
 }
 
 
@@ -542,6 +559,10 @@ static void init( GLboolean useImageFiles )
    supportSeamless = glutExtensionSupported("GL_ARB_seamless_cube_map");
 
    printf("GL_RENDERER: %s\n", (char *) glGetString(GL_RENDERER));
+
+
+   glGenTextures(1, &TexObj);
+   glBindTexture(GL_TEXTURE_CUBE_MAP_ARB, TexObj);
 
    if (useImageFiles) {
       load_envmaps();

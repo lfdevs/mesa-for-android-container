@@ -189,19 +189,7 @@ intelGetString(GLcontext * ctx, GLenum name)
 static unsigned
 intel_bits_per_pixel(const struct intel_renderbuffer *rb)
 {
-   switch (rb->Base._ActualFormat) {
-   case GL_RGB5:
-   case GL_DEPTH_COMPONENT16:
-      return 16;
-   case GL_RGB8:
-   case GL_RGBA8:
-   case GL_DEPTH_COMPONENT24:
-   case GL_DEPTH24_STENCIL8_EXT:
-   case GL_STENCIL_INDEX8_EXT:
-      return 32;
-   default:
-      return 0;
-   }
+   return _mesa_get_format_bytes(rb->Base.Format) * 8;
 }
 
 void
@@ -489,14 +477,14 @@ intel_flush(GLcontext *ctx, GLboolean needs_mi_flush)
    if (intel->Fallback)
       _swrast_flush(ctx);
 
-   if (!IS_965(intel->intelScreen->deviceID))
+   if (intel->gen < 4)
       INTEL_FIREVERTICES(intel);
 
    /* Emit a flush so that any frontbuffer rendering that might have occurred
     * lands onscreen in a timely manner, even if the X Server doesn't trigger
     * a flush for us.
     */
-   if (needs_mi_flush)
+   if (!intel->driScreen->dri2.enabled && needs_mi_flush)
       intel_batchbuffer_emit_mi_flush(intel->batch);
 
    if (intel->batch->map != intel->batch->ptr)
@@ -588,11 +576,6 @@ intelInitDriverFunctions(struct dd_function_table *functions)
    functions->GetString = intelGetString;
    functions->UpdateState = intelInvalidateState;
 
-   functions->CopyColorTable = _swrast_CopyColorTable;
-   functions->CopyColorSubTable = _swrast_CopyColorSubTable;
-   functions->CopyConvolutionFilter1D = _swrast_CopyConvolutionFilter1D;
-   functions->CopyConvolutionFilter2D = _swrast_CopyConvolutionFilter2D;
-
    intelInitTextureFuncs(functions);
    intelInitTextureImageFuncs(functions);
    intelInitTextureSubImageFuncs(functions);
@@ -631,6 +614,13 @@ intelInitContext(struct intel_context *intel,
    intel->sarea = intelScreen->sarea;
    intel->driContext = driContextPriv;
 
+   if (IS_965(intel->intelScreen->deviceID))
+      intel->gen = 4;
+   else if (IS_9XX(intel->intelScreen->deviceID))
+      intel->gen = 3;
+   else
+      intel->gen = 2;
+
    /* Dri stuff */
    intel->hHWContext = driContextPriv->hHWContext;
    intel->driFd = sPriv->fd;
@@ -638,17 +628,13 @@ intelInitContext(struct intel_context *intel,
 
    driParseConfigFiles(&intel->optionCache, &intelScreen->optionCache,
                        intel->driScreen->myNum,
-		       IS_965(intelScreen->deviceID) ? "i965" : "i915");
+		       (intel->gen >= 4) ? "i965" : "i915");
    if (intelScreen->deviceID == PCI_CHIP_I865_G)
       intel->maxBatchSize = 4096;
    else
       intel->maxBatchSize = BATCH_SZ;
 
    intel->bufmgr = intelScreen->bufmgr;
-
-   if (0) /* for debug */
-      drm_intel_bufmgr_set_debug(intel->bufmgr, 1);
-
    intel->ttm = intelScreen->ttm;
    if (intel->ttm) {
       int bo_reuse_mode;
@@ -704,7 +690,7 @@ intelInitContext(struct intel_context *intel,
 
    meta_init_metaops(ctx, &intel->meta);
    ctx->Const.MaxColorAttachments = 4;  /* XXX FBO: review this */
-   if (IS_965(intelScreen->deviceID)) {
+   if (intel->gen >= 4) {
       if (MAX_WIDTH > 8192)
 	 ctx->Const.MaxRenderbufferSize = 8192;
    } else {
@@ -741,7 +727,7 @@ intelInitContext(struct intel_context *intel,
       break;
    }
 
-   if (IS_965(intelScreen->deviceID))
+   if (intel->gen >= 4)
       intel->polygon_offset_scale /= 0xffff;
 
    intel->RenderIndex = ~0;
@@ -754,12 +740,12 @@ intelInitContext(struct intel_context *intel,
 
    intel->do_usleeps = (fthrottle_mode == DRI_CONF_FTHROTTLE_USLEEPS);
 
-   if (IS_965(intelScreen->deviceID) && !intel->intelScreen->irq_active) {
+   if (intel->gen >= 4 && !intel->intelScreen->irq_active) {
       _mesa_printf("IRQs not active.  Exiting\n");
       exit(1);
    }
 
-   intelInitExtensions(ctx, GL_FALSE);
+   intelInitExtensions(ctx);
 
    INTEL_DEBUG = driParseDebugString(getenv("INTEL_DEBUG"), debug_control);
    if (INTEL_DEBUG & DEBUG_BUFMGR)

@@ -1,3 +1,10 @@
+mesa (7.7~rc2-1) experimental; urgency=low
+
+  * New upstream release candidate.
+    + s3v and trident DRI drivers removed since they never worked.
+
+ -- Brice Goglin <bgoglin@debian.org>  Sat, 12 Dec 2009 13:02:55 +0100
+
 mesa (7.6.1~rc3-1) unstable; urgency=low
 
   * New upstream release candidate.

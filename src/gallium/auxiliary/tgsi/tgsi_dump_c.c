@@ -79,7 +79,8 @@ static const char *TGSI_FILES[TGSI_FILE_COUNT] =
    "FILE_SAMPLER",
    "FILE_ADDRESS",
    "FILE_IMMEDIATE",
-   "FILE_LOOP"
+   "FILE_LOOP",
+   "FILE_PREDICATE"
 };
 
 static const char *TGSI_INTERPOLATES[] =
@@ -114,30 +115,9 @@ static const char *TGSI_SATS[] =
 
 static const char *TGSI_INSTRUCTION_EXTS[] =
 {
-   "INSTRUCTION_EXT_TYPE_NV",
+   "",
    "INSTRUCTION_EXT_TYPE_LABEL",
    "INSTRUCTION_EXT_TYPE_TEXTURE"
-};
-
-static const char *TGSI_PRECISIONS[] =
-{
-   "PRECISION_DEFAULT",
-   "PRECISION_FLOAT32",
-   "PRECISION_FLOAT16",
-   "PRECISION_FIXED12"
-};
-
-static const char *TGSI_CCS[] =
-{
-   "CC_GT",
-   "CC_EQ",
-   "CC_LT",
-   "CC_UN",
-   "CC_GE",
-   "CC_LE",
-   "CC_NE",
-   "CC_TR",
-   "CC_FL"
 };
 
 static const char *TGSI_SWIZZLES[] =
@@ -163,18 +143,8 @@ static const char *TGSI_TEXTURES[] =
 
 static const char *TGSI_SRC_REGISTER_EXTS[] =
 {
-   "SRC_REGISTER_EXT_TYPE_SWZ",
+   "",
    "SRC_REGISTER_EXT_TYPE_MOD"
-};
-
-static const char *TGSI_EXTSWIZZLES[] =
-{
-   "EXTSWIZZLE_X",
-   "EXTSWIZZLE_Y",
-   "EXTSWIZZLE_Z",
-   "EXTSWIZZLE_W",
-   "EXTSWIZZLE_ZERO",
-   "EXTSWIZZLE_ONE"
 };
 
 static const char *TGSI_WRITEMASKS[] =
@@ -199,7 +169,7 @@ static const char *TGSI_WRITEMASKS[] =
 
 static const char *TGSI_DST_REGISTER_EXTS[] =
 {
-   "DST_REGISTER_EXT_TYPE_CONDCODE",
+   "",
    "DST_REGISTER_EXT_TYPE_MODULATE"
 };
 
@@ -327,60 +297,6 @@ dump_instruction_verbose(
       UIX( inst->Instruction.Padding );
    }
 
-   if( deflt || tgsi_compare_instruction_ext_nv( inst->InstructionExtNv, fi->InstructionExtNv ) ) {
-      EOL();
-      TXT( "\nType          : " );
-      ENM( inst->InstructionExtNv.Type, TGSI_INSTRUCTION_EXTS );
-      if( deflt || fi->InstructionExtNv.Precision != inst->InstructionExtNv.Precision ) {
-         TXT( "\nPrecision     : " );
-         ENM( inst->InstructionExtNv.Precision, TGSI_PRECISIONS );
-      }
-      if( deflt || fi->InstructionExtNv.CondDstIndex != inst->InstructionExtNv.CondDstIndex ) {
-         TXT( "\nCondDstIndex  : " );
-         UID( inst->InstructionExtNv.CondDstIndex );
-      }
-      if( deflt || fi->InstructionExtNv.CondFlowIndex != inst->InstructionExtNv.CondFlowIndex ) {
-         TXT( "\nCondFlowIndex : " );
-         UID( inst->InstructionExtNv.CondFlowIndex );
-      }
-      if( deflt || fi->InstructionExtNv.CondMask != inst->InstructionExtNv.CondMask ) {
-         TXT( "\nCondMask      : " );
-         ENM( inst->InstructionExtNv.CondMask, TGSI_CCS );
-      }
-      if( deflt || fi->InstructionExtNv.CondSwizzleX != inst->InstructionExtNv.CondSwizzleX ) {
-         TXT( "\nCondSwizzleX  : " );
-         ENM( inst->InstructionExtNv.CondSwizzleX, TGSI_SWIZZLES );
-      }
-      if( deflt || fi->InstructionExtNv.CondSwizzleY != inst->InstructionExtNv.CondSwizzleY ) {
-         TXT( "\nCondSwizzleY  : " );
-         ENM( inst->InstructionExtNv.CondSwizzleY, TGSI_SWIZZLES );
-      }
-      if( deflt || fi->InstructionExtNv.CondSwizzleZ != inst->InstructionExtNv.CondSwizzleZ ) {
-         TXT( "\nCondSwizzleZ  : " );
-         ENM( inst->InstructionExtNv.CondSwizzleZ, TGSI_SWIZZLES );
-      }
-      if( deflt || fi->InstructionExtNv.CondSwizzleW != inst->InstructionExtNv.CondSwizzleW ) {
-         TXT( "\nCondSwizzleW  : " );
-         ENM( inst->InstructionExtNv.CondSwizzleW, TGSI_SWIZZLES );
-      }
-      if( deflt || fi->InstructionExtNv.CondDstUpdate != inst->InstructionExtNv.CondDstUpdate ) {
-         TXT( "\nCondDstUpdate : " );
-         UID( inst->InstructionExtNv.CondDstUpdate );
-      }
-      if( deflt || fi->InstructionExtNv.CondFlowEnable != inst->InstructionExtNv.CondFlowEnable ) {
-         TXT( "\nCondFlowEnable: " );
-         UID( inst->InstructionExtNv.CondFlowEnable );
-      }
-      if( ignored ) {
-         TXT( "\nPadding       : " );
-         UIX( inst->InstructionExtNv.Padding );
-         if( deflt || fi->InstructionExtNv.Extended != inst->InstructionExtNv.Extended ) {
-            TXT( "\nExtended      : " );
-            UID( inst->InstructionExtNv.Extended );
-         }
-      }
-   }
-
    if( deflt || tgsi_compare_instruction_ext_label( inst->InstructionExtLabel, fi->InstructionExtLabel ) ) {
       EOL();
       TXT( "\nType    : " );
@@ -451,44 +367,6 @@ dump_instruction_verbose(
          }
       }
 
-      if( deflt || tgsi_compare_dst_register_ext_concode( dst->DstRegisterExtConcode, fd->DstRegisterExtConcode ) ) {
-         EOL();
-         TXT( "\nType        : " );
-         ENM( dst->DstRegisterExtConcode.Type, TGSI_DST_REGISTER_EXTS );
-         if( deflt || fd->DstRegisterExtConcode.CondMask != dst->DstRegisterExtConcode.CondMask ) {
-            TXT( "\nCondMask    : " );
-            ENM( dst->DstRegisterExtConcode.CondMask, TGSI_CCS );
-         }
-         if( deflt || fd->DstRegisterExtConcode.CondSwizzleX != dst->DstRegisterExtConcode.CondSwizzleX ) {
-            TXT( "\nCondSwizzleX: " );
-            ENM( dst->DstRegisterExtConcode.CondSwizzleX, TGSI_SWIZZLES );
-         }
-         if( deflt || fd->DstRegisterExtConcode.CondSwizzleY != dst->DstRegisterExtConcode.CondSwizzleY ) {
-            TXT( "\nCondSwizzleY: " );
-            ENM( dst->DstRegisterExtConcode.CondSwizzleY, TGSI_SWIZZLES );
-         }
-         if( deflt || fd->DstRegisterExtConcode.CondSwizzleZ != dst->DstRegisterExtConcode.CondSwizzleZ ) {
-            TXT( "\nCondSwizzleZ: " );
-            ENM( dst->DstRegisterExtConcode.CondSwizzleZ, TGSI_SWIZZLES );
-         }
-         if( deflt || fd->DstRegisterExtConcode.CondSwizzleW != dst->DstRegisterExtConcode.CondSwizzleW ) {
-            TXT( "\nCondSwizzleW: " );
-            ENM( dst->DstRegisterExtConcode.CondSwizzleW, TGSI_SWIZZLES );
-         }
-         if( deflt || fd->DstRegisterExtConcode.CondSrcIndex != dst->DstRegisterExtConcode.CondSrcIndex ) {
-            TXT( "\nCondSrcIndex: " );
-            UID( dst->DstRegisterExtConcode.CondSrcIndex );
-         }
-         if( ignored ) {
-            TXT( "\nPadding     : " );
-            UIX( dst->DstRegisterExtConcode.Padding );
-            if( deflt || fd->DstRegisterExtConcode.Extended != dst->DstRegisterExtConcode.Extended ) {
-               TXT( "\nExtended    : " );
-               UID( dst->DstRegisterExtConcode.Extended );
-            }
-         }
-      }
-
       if( deflt || tgsi_compare_dst_register_ext_modulate( dst->DstRegisterExtModulate, fd->DstRegisterExtModulate ) ) {
          EOL();
          TXT( "\nType    : " );
@@ -553,52 +431,6 @@ dump_instruction_verbose(
          if( deflt || fs->SrcRegister.Extended != src->SrcRegister.Extended ) {
             TXT( "\nExtended : " );
             UID( src->SrcRegister.Extended );
-         }
-      }
-
-      if( deflt || tgsi_compare_src_register_ext_swz( src->SrcRegisterExtSwz, fs->SrcRegisterExtSwz ) ) {
-         EOL();
-         TXT( "\nType       : " );
-         ENM( src->SrcRegisterExtSwz.Type, TGSI_SRC_REGISTER_EXTS );
-         if( deflt || fs->SrcRegisterExtSwz.ExtSwizzleX != src->SrcRegisterExtSwz.ExtSwizzleX ) {
-            TXT( "\nExtSwizzleX: " );
-            ENM( src->SrcRegisterExtSwz.ExtSwizzleX, TGSI_EXTSWIZZLES );
-         }
-         if( deflt || fs->SrcRegisterExtSwz.ExtSwizzleY != src->SrcRegisterExtSwz.ExtSwizzleY ) {
-            TXT( "\nExtSwizzleY: " );
-            ENM( src->SrcRegisterExtSwz.ExtSwizzleY, TGSI_EXTSWIZZLES );
-         }
-         if( deflt || fs->SrcRegisterExtSwz.ExtSwizzleZ != src->SrcRegisterExtSwz.ExtSwizzleZ ) {
-            TXT( "\nExtSwizzleZ: " );
-            ENM( src->SrcRegisterExtSwz.ExtSwizzleZ, TGSI_EXTSWIZZLES );
-         }
-         if( deflt || fs->SrcRegisterExtSwz.ExtSwizzleW != src->SrcRegisterExtSwz.ExtSwizzleW ) {
-            TXT( "\nExtSwizzleW: " );
-            ENM( src->SrcRegisterExtSwz.ExtSwizzleW, TGSI_EXTSWIZZLES );
-         }
-         if( deflt || fs->SrcRegisterExtSwz.NegateX != src->SrcRegisterExtSwz.NegateX ) {
-            TXT( "\nNegateX   : " );
-            UID( src->SrcRegisterExtSwz.NegateX );
-         }
-         if( deflt || fs->SrcRegisterExtSwz.NegateY != src->SrcRegisterExtSwz.NegateY ) {
-            TXT( "\nNegateY   : " );
-            UID( src->SrcRegisterExtSwz.NegateY );
-         }
-         if( deflt || fs->SrcRegisterExtSwz.NegateZ != src->SrcRegisterExtSwz.NegateZ ) {
-            TXT( "\nNegateZ   : " );
-            UID( src->SrcRegisterExtSwz.NegateZ );
-         }
-         if( deflt || fs->SrcRegisterExtSwz.NegateW != src->SrcRegisterExtSwz.NegateW ) {
-            TXT( "\nNegateW   : " );
-            UID( src->SrcRegisterExtSwz.NegateW );
-         }
-         if( ignored ) {
-            TXT( "\nPadding   : " );
-            UIX( src->SrcRegisterExtSwz.Padding );
-            if( deflt || fs->SrcRegisterExtSwz.Extended != src->SrcRegisterExtSwz.Extended ) {
-               TXT( "\nExtended   : " );
-               UID( src->SrcRegisterExtSwz.Extended );
-            }
          }
       }
 

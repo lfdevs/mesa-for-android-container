@@ -33,7 +33,6 @@
  */
 
 #include "lp_context.h"
-#include "lp_prim_setup.h"
 #include "lp_quad.h"
 #include "lp_setup.h"
 #include "lp_state.h"
@@ -44,6 +43,7 @@
 #include "pipe/p_thread.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
+#include "lp_bld_debug.h"
 #include "lp_tile_cache.h"
 #include "lp_tile_soa.h"
 
@@ -89,6 +89,8 @@ struct setup_context {
    float oneoverarea;
    int facing;
 
+   float pixel_offset;
+
    struct quad_header quad[MAX_QUADS];
    struct quad_header *quad_ptrs[MAX_QUADS];
    unsigned count;
@@ -114,6 +116,7 @@ struct setup_context {
 /**
  * Execute fragment shader for the four fragments in the quad.
  */
+ALIGN_STACK
 static void
 shade_quads(struct llvmpipe_context *llvmpipe,
             struct quad_header *quads[],
@@ -123,7 +126,7 @@ shade_quads(struct llvmpipe_context *llvmpipe,
    struct quad_header *quad = quads[0];
    const unsigned x = quad->input.x0;
    const unsigned y = quad->input.y0;
-   uint8_t *tile = lp_get_cached_tile(llvmpipe->cbuf_cache[0], x, y);
+   uint8_t *tile;
    uint8_t *color;
    void *depth;
    uint32_t ALIGN16_ATTRIB mask[4][NUM_CHANNELS];
@@ -149,7 +152,13 @@ shade_quads(struct llvmpipe_context *llvmpipe,
          mask[q][chan_index] = quads[q]->inout.mask & (1 << chan_index) ? ~0 : 0;
 
    /* color buffer */
-   color = &TILE_PIXEL(tile, x & (TILE_SIZE-1), y & (TILE_SIZE-1), 0);
+   if(llvmpipe->framebuffer.nr_cbufs >= 1 &&
+      llvmpipe->framebuffer.cbufs[0]) {
+      tile = lp_get_cached_tile(llvmpipe->cbuf_cache[0], x, y);
+      color = &TILE_PIXEL(tile, x & (TILE_SIZE-1), y & (TILE_SIZE-1), 0);
+   }
+   else
+      color = NULL;
 
    /* depth buffer */
    if(llvmpipe->zsbuf_map) {
@@ -162,12 +171,12 @@ shade_quads(struct llvmpipe_context *llvmpipe,
    else
       depth = NULL;
 
-   /* TODO: blend color */
+   /* XXX: This will most likely fail on 32bit x86 without -mstackrealign */
+   assert(lp_check_alignment(mask, 16));
 
-   assert((((uintptr_t)mask) & 0xf) == 0);
-   assert((((uintptr_t)depth) & 0xf) == 0);
-   assert((((uintptr_t)color) & 0xf) == 0);
-   assert((((uintptr_t)llvmpipe->jit_context.blend_color) & 0xf) == 0);
+   assert(lp_check_alignment(depth, 16));
+   assert(lp_check_alignment(color, 16));
+   assert(lp_check_alignment(llvmpipe->jit_context.blend_color, 16));
 
    /* run shader */
    fs->current->jit_function( &llvmpipe->jit_context,
@@ -270,10 +279,12 @@ clip_emit_quad( struct setup_context *setup, struct quad_header *quad )
        * until we codegenerate single-quad variants of the fragment pipeline
        * we need this hack. */
       const unsigned nr_quads = TILE_VECTOR_HEIGHT*TILE_VECTOR_WIDTH/QUAD_SIZE;
-      struct quad_header quads[nr_quads];
-      struct quad_header *quad_ptrs[nr_quads];
+      struct quad_header quads[4];
+      struct quad_header *quad_ptrs[4];
       int x0 = block_x(quad->input.x0);
       unsigned i;
+
+      assert(nr_quads == 4);
 
       for(i = 0; i < nr_quads; ++i) {
          int x = x0 + 2*i;
@@ -473,6 +484,16 @@ static boolean setup_sort_vertices( struct setup_context *setup,
       ((det > 0.0) ^ 
        (setup->llvmpipe->rasterizer->front_winding == PIPE_WINDING_CW));
 
+   /* Prepare pixel offset for rasterisation:
+    *  - pixel center (0.5, 0.5) for GL, or
+    *  - assume (0.0, 0.0) for other APIs.
+    */
+   if (setup->llvmpipe->rasterizer->gl_rasterization_rules) {
+      setup->pixel_offset = 0.5f;
+   } else {
+      setup->pixel_offset = 0.0f;
+   }
+
    return TRUE;
 }
 
@@ -498,7 +519,7 @@ static void tri_pos_coeff( struct setup_context *setup,
 
    /* calculate a0 as the value which would be sampled for the
     * fragment at (0,0), taking into account that we want to sample at
-    * pixel centers, in other words (0.5, 0.5).
+    * pixel centers, in other words (pixel_offset, pixel_offset).
     *
     * this is neat but unfortunately not a good way to do things for
     * triangles with very large values of dadx or dady as it will
@@ -509,8 +530,8 @@ static void tri_pos_coeff( struct setup_context *setup,
     * instead - i'll switch to this later.
     */
    setup->coef.a0[0][i] = (setup->vmin[vertSlot][i] -
-                           (dadx * (setup->vmin[0][0] - 0.5f) +
-                            dady * (setup->vmin[0][1] - 0.5f)));
+                           (dadx * (setup->vmin[0][0] - setup->pixel_offset) +
+                            dady * (setup->vmin[0][1] - setup->pixel_offset)));
 
    /*
    debug_printf("attr[%d].%c: %f dx:%f dy:%f\n",
@@ -599,8 +620,8 @@ static void tri_linear_coeff( struct setup_context *setup,
        * instead - i'll switch to this later.
        */
       setup->coef.a0[1 + attrib][i] = (setup->vmin[vertSlot][i] -
-                     (dadx * (setup->vmin[0][0] - 0.5f) +
-                      dady * (setup->vmin[0][1] - 0.5f)));
+                     (dadx * (setup->vmin[0][0] - setup->pixel_offset) +
+                      dady * (setup->vmin[0][1] - setup->pixel_offset)));
 
       /*
       debug_printf("attr[%d].%c: %f dx:%f dy:%f\n",
@@ -651,8 +672,8 @@ static void tri_persp_coeff( struct setup_context *setup,
       setup->coef.dadx[1 + attrib][i] = dadx;
       setup->coef.dady[1 + attrib][i] = dady;
       setup->coef.a0[1 + attrib][i] = (mina -
-                     (dadx * (setup->vmin[0][0] - 0.5f) +
-                      dady * (setup->vmin[0][1] - 0.5f)));
+                     (dadx * (setup->vmin[0][0] - setup->pixel_offset) +
+                      dady * (setup->vmin[0][1] - setup->pixel_offset)));
    }
 }
 
@@ -736,12 +757,12 @@ static void setup_tri_coefficients( struct setup_context *setup )
 
 static void setup_tri_edges( struct setup_context *setup )
 {
-   float vmin_x = setup->vmin[0][0] + 0.5f;
-   float vmid_x = setup->vmid[0][0] + 0.5f;
+   float vmin_x = setup->vmin[0][0] + setup->pixel_offset;
+   float vmid_x = setup->vmid[0][0] + setup->pixel_offset;
 
-   float vmin_y = setup->vmin[0][1] - 0.5f;
-   float vmid_y = setup->vmid[0][1] - 0.5f;
-   float vmax_y = setup->vmax[0][1] - 0.5f;
+   float vmin_y = setup->vmin[0][1] - setup->pixel_offset;
+   float vmid_y = setup->vmid[0][1] - setup->pixel_offset;
+   float vmax_y = setup->vmax[0][1] - setup->pixel_offset;
 
    setup->emaj.sy = ceilf(vmin_y);
    setup->emaj.lines = (int) ceilf(vmax_y - setup->emaj.sy);
@@ -940,8 +961,8 @@ linear_pos_coeff(struct setup_context *setup,
    setup->coef.dadx[0][i] = dadx;
    setup->coef.dady[0][i] = dady;
    setup->coef.a0[0][i] = (setup->vmin[vertSlot][i] -
-                           (dadx * (setup->vmin[0][0] - 0.5f) +
-                            dady * (setup->vmin[0][1] - 0.5f)));
+                           (dadx * (setup->vmin[0][0] - setup->pixel_offset) +
+                            dady * (setup->vmin[0][1] - setup->pixel_offset)));
 }
 
 
@@ -962,8 +983,8 @@ line_linear_coeff(struct setup_context *setup,
       setup->coef.dadx[1 + attrib][i] = dadx;
       setup->coef.dady[1 + attrib][i] = dady;
       setup->coef.a0[1 + attrib][i] = (setup->vmin[vertSlot][i] -
-                     (dadx * (setup->vmin[0][0] - 0.5f) +
-                      dady * (setup->vmin[0][1] - 0.5f)));
+                     (dadx * (setup->vmin[0][0] - setup->pixel_offset) +
+                      dady * (setup->vmin[0][1] - setup->pixel_offset)));
    }
 }
 
@@ -988,8 +1009,8 @@ line_persp_coeff(struct setup_context *setup,
       setup->coef.dadx[1 + attrib][i] = dadx;
       setup->coef.dady[1 + attrib][i] = dady;
       setup->coef.a0[1 + attrib][i] = (setup->vmin[vertSlot][i] -
-                     (dadx * (setup->vmin[0][0] - 0.5f) +
-                      dady * (setup->vmin[0][1] - 0.5f)));
+                     (dadx * (setup->vmin[0][0] - setup->pixel_offset) +
+                      dady * (setup->vmin[0][1] - setup->pixel_offset)));
    }
 }
 

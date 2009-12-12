@@ -54,6 +54,7 @@ DRIVER_SOURCES = \
 		 r300_vertprog.c \
 		 r300_fragprog_common.c \
 		 r300_shader.c \
+		 radeon_mesa_to_rc.c \
 		 r300_emit.c \
 		 r300_swtcl.c \
 		 $(RADEON_COMMON_SOURCES) \
@@ -62,23 +63,18 @@ DRIVER_SOURCES = \
 
 C_SOURCES = $(COMMON_SOURCES) $(DRIVER_SOURCES)
 
-DRIVER_DEFINES = -DCOMPILE_R300 -DR200_MERGED=0 \
-	-DRADEON_COMMON=1 -DRADEON_COMMON_FOR_R300 \
+DRIVER_DEFINES = -DRADEON_R300
 #	-DRADEON_BO_TRACK \
 	-Wall
 
 DRI_LIB_DEPS += $(RADEON_LDFLAGS)
 
-PIPE_DRIVERS =  compiler/libr300compiler.a
+SUBDIRS = compiler
+
+EXTRA_MODULES = compiler/libr300compiler.a
+
 
 ##### TARGETS #####
 
 include ../Makefile.template
 
-symlinks:
-
-# Mark the archive phony so that we always check for recompilation
-.PHONY : compiler/libr300compiler.a
-
-compiler/libr300compiler.a:
-	cd compiler && $(MAKE)

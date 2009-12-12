@@ -178,6 +178,11 @@ void brw_wm_pass1( struct brw_wm_compile *c )
 	 read1 = writemask;
 	 break;
 
+      case OPCODE_DDX:
+      case OPCODE_DDY:
+	 read0 = writemask;
+	 break;
+
       case OPCODE_MAD:	
       case OPCODE_CMP:
       case OPCODE_LRP:
@@ -270,6 +275,7 @@ void brw_wm_pass1( struct brw_wm_compile *c )
 
       case OPCODE_DST:
       case WM_FRONTFACING:
+      case OPCODE_KIL_NV:
       default:
 	 break;
       }

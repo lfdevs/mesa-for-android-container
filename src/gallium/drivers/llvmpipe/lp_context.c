@@ -31,13 +31,13 @@
  */
 
 #include "draw/draw_context.h"
+#include "draw/draw_vbuf.h"
 #include "pipe/p_defines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "lp_clear.h"
 #include "lp_context.h"
 #include "lp_flush.h"
-#include "lp_prim_setup.h"
 #include "lp_prim_vbuf.h"
 #include "lp_state.h"
 #include "lp_surface.h"
@@ -107,11 +107,16 @@ static void llvmpipe_destroy( struct pipe_context *pipe )
    if (llvmpipe->draw)
       draw_destroy( llvmpipe->draw );
 
-   for (i = 0; i < PIPE_MAX_COLOR_BUFS; i++)
+   for (i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
       lp_destroy_tile_cache(llvmpipe->cbuf_cache[i]);
+      pipe_surface_reference(&llvmpipe->framebuffer.cbufs[i], NULL);
+   }
+   pipe_surface_reference(&llvmpipe->framebuffer.zsbuf, NULL);
 
-   for (i = 0; i < PIPE_MAX_SAMPLERS; i++)
+   for (i = 0; i < PIPE_MAX_SAMPLERS; i++) {
       lp_destroy_tex_tile_cache(llvmpipe->tex_cache[i]);
+      pipe_texture_reference(&llvmpipe->texture[i], NULL);
+   }
 
    for (i = 0; i < Elements(llvmpipe->constants); i++) {
       if (llvmpipe->constants[i].buffer) {
@@ -140,8 +145,6 @@ llvmpipe_is_texture_referenced( struct pipe_context *pipe,
          llvmpipe->framebuffer.zsbuf->texture == texture)
          return PIPE_REFERENCED_FOR_WRITE;
    }
-   
-   /* FIXME: we also need to do the same for the texture cache */
    
    return PIPE_UNREFERENCED;
 }
@@ -261,21 +264,21 @@ llvmpipe_create( struct pipe_screen *screen )
                          (struct tgsi_sampler **)
                             llvmpipe->tgsi.vert_samplers_list);
 
-   llvmpipe->setup = lp_draw_render_stage(llvmpipe);
-   if (!llvmpipe->setup)
-      goto fail;
-
    if (debug_get_bool_option( "LP_NO_RAST", FALSE ))
       llvmpipe->no_rast = TRUE;
 
-   if (debug_get_bool_option( "LP_NO_VBUF", FALSE )) {
-      /* Deprecated path -- vbuf is the intended interface to the draw module:
-       */
-      draw_set_rasterize_stage(llvmpipe->draw, llvmpipe->setup);
-   }
-   else {
-      lp_init_vbuf(llvmpipe);
-   }
+   llvmpipe->vbuf_backend = lp_create_vbuf_backend(llvmpipe);
+   if (!llvmpipe->vbuf_backend)
+      goto fail;
+
+   llvmpipe->vbuf = draw_vbuf_stage(llvmpipe->draw, llvmpipe->vbuf_backend);
+   if (!llvmpipe->vbuf)
+      goto fail;
+
+   draw_set_rasterize_stage(llvmpipe->draw, llvmpipe->vbuf);
+   draw_set_render(llvmpipe->draw, llvmpipe->vbuf_backend);
+
+
 
    /* plug in AA line/point stages */
    draw_install_aaline_stage(llvmpipe->draw, &llvmpipe->pipe);

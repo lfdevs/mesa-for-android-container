@@ -4,6 +4,7 @@
 #include "pipe/p_inlines.h"
 
 #include "pipe/p_shader_tokens.h"
+#include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
 
@@ -131,7 +132,7 @@ emit_src(struct nv30_fpc *fpc, int pos, struct nv30_sreg src)
 				sizeof(uint32_t) * 4);
 		}
 
-		sr |= (NV30_FP_REG_TYPE_CONST << NV30_FP_REG_TYPE_SHIFT);	
+		sr |= (NV30_FP_REG_TYPE_CONST << NV30_FP_REG_TYPE_SHIFT);
 		break;
 	case NV30SR_NONE:
 		sr |= (NV30_FP_REG_TYPE_INPUT << NV30_FP_REG_TYPE_SHIFT);
@@ -318,56 +319,29 @@ src_native_swz(struct nv30_fpc *fpc, const struct tgsi_full_src_register *fsrc,
 {
 	const struct nv30_sreg none = nv30_sr(NV30SR_NONE, 0);
 	struct nv30_sreg tgsi = tgsi_src(fpc, fsrc);
-	uint mask = 0, zero_mask = 0, one_mask = 0, neg_mask = 0;
-	uint neg[4] = { fsrc->SrcRegisterExtSwz.NegateX,
-			fsrc->SrcRegisterExtSwz.NegateY,
-			fsrc->SrcRegisterExtSwz.NegateZ,
-			fsrc->SrcRegisterExtSwz.NegateW };
+	uint mask = 0;
 	uint c;
 
 	for (c = 0; c < 4; c++) {
-		switch (tgsi_util_get_full_src_register_extswizzle(fsrc, c)) {
-		case TGSI_EXTSWIZZLE_X:
-		case TGSI_EXTSWIZZLE_Y:
-		case TGSI_EXTSWIZZLE_Z:
-		case TGSI_EXTSWIZZLE_W:
+		switch (tgsi_util_get_full_src_register_swizzle(fsrc, c)) {
+		case TGSI_SWIZZLE_X:
+		case TGSI_SWIZZLE_Y:
+		case TGSI_SWIZZLE_Z:
+		case TGSI_SWIZZLE_W:
 			mask |= (1 << c);
-			break;
-		case TGSI_EXTSWIZZLE_ZERO:
-			zero_mask |= (1 << c);
-			tgsi.swz[c] = SWZ_X;
-			break;
-		case TGSI_EXTSWIZZLE_ONE:
-			one_mask |= (1 << c);
-			tgsi.swz[c] = SWZ_X;
 			break;
 		default:
 			assert(0);
 		}
-
-		if (!tgsi.negate && neg[c])
-			neg_mask |= (1 << c);
 	}
 
-	if (mask == MASK_ALL && !neg_mask)
+	if (mask == MASK_ALL)
 		return TRUE;
 
 	*src = temp(fpc);
 
 	if (mask)
 		arith(fpc, 0, MOV, *src, mask, tgsi, none, none);
-
-	if (zero_mask)
-		arith(fpc, 0, SFL, *src, zero_mask, *src, none, none);
-
-	if (one_mask)
-		arith(fpc, 0, STR, *src, one_mask, *src, none, none);
-
-	if (neg_mask) {
-		struct nv30_sreg one = temp(fpc);
-		arith(fpc, 0, STR, one, neg_mask, one, none, none);
-		arith(fpc, 0, MUL, *src, neg_mask, *src, neg(one), none);
-	}
 
 	return FALSE;
 }
@@ -526,12 +500,6 @@ nv30_fragprog_parse_instruction(struct nv30_fpc *fpc,
 		break;
 	case TGSI_OPCODE_MUL:
 		arith(fpc, sat, MUL, dst, mask, src[0], src[1], none);
-		break;
-	case TGSI_OPCODE_NOISE1:
-	case TGSI_OPCODE_NOISE2:
-	case TGSI_OPCODE_NOISE3:
-	case TGSI_OPCODE_NOISE4:
-		arith(fpc, sat, SFL, dst, mask, none, none, none);
 		break;
 	case TGSI_OPCODE_POW:
 		arith(fpc, sat, POW, dst, mask, src[0], src[1], none);
@@ -699,7 +667,7 @@ nv30_fragprog_prepare(struct nv30_fpc *fpc)
 		{
 			struct tgsi_full_immediate *imm;
 			float vals[4];
-			
+
 			imm = &p.FullToken.FullImmediate;
 			assert(imm->Immediate.DataType == TGSI_IMM_FLOAT32);
 			assert(fpc->nr_imm < MAX_IMM);
@@ -787,7 +755,7 @@ nv30_fragprog_translate(struct nv30_context *nv30,
 	fp->insn[fpc->inst_offset + 1] = 0x00000000;
 	fp->insn[fpc->inst_offset + 2] = 0x00000000;
 	fp->insn[fpc->inst_offset + 3] = 0x00000000;
-	
+
 	fp->translated = TRUE;
 	fp->on_hw = FALSE;
 out_err:
@@ -871,7 +839,7 @@ nv30_fragprog_validate(struct nv30_context *nv30)
 update_constants:
 	if (fp->nr_consts) {
 		float *map;
-		
+
 		map = pipe_buffer_map(pscreen, constbuf,
 				      PIPE_BUFFER_USAGE_CPU_READ);
 		for (i = 0; i < fp->nr_consts; i++) {

@@ -38,7 +38,7 @@ struct pipe_screen* radeon_create_screen(struct drm_api* api,
 {
     struct radeon_winsys* winsys = radeon_pipe_winsys(drmFB);
 
-    if (getenv("RADEON_SOFTPIPE")) {
+    if (debug_get_bool_option("RADEON_SOFTPIPE", FALSE)) {
         return softpipe_create_screen((struct pipe_winsys*)winsys);
     } else {
         struct r300_winsys* r300 = radeon_create_r300_winsys(drmFB, winsys);
@@ -51,7 +51,7 @@ struct pipe_screen* radeon_create_screen(struct drm_api* api,
 struct pipe_context* radeon_create_context(struct drm_api* api,
                                            struct pipe_screen* screen)
 {
-    if (getenv("RADEON_SOFTPIPE")) {
+    if (debug_get_bool_option("RADEON_SOFTPIPE", FALSE)) {
         return radeon_create_softpipe(screen->winsys);
     } else {
         return r300_create_context(screen,
@@ -98,7 +98,7 @@ struct pipe_buffer* radeon_buffer_from_handle(struct drm_api* api,
     return &radeon_buffer->base;
 }
 
-struct pipe_texture*
+static struct pipe_texture*
 radeon_texture_from_shared_handle(struct drm_api *api,
                                   struct pipe_screen *screen,
                                   struct pipe_texture *templ,
@@ -107,29 +107,36 @@ radeon_texture_from_shared_handle(struct drm_api *api,
                                   unsigned handle)
 {
     struct pipe_buffer *buffer;
+    struct pipe_texture *blanket;
 
     buffer = radeon_buffer_from_handle(api, screen, name, handle);
     if (!buffer) {
         return NULL;
     }
 
-    return screen->texture_blanket(screen, templ, &stride, buffer);
+    blanket = screen->texture_blanket(screen, templ, &stride, buffer);
+
+    pipe_buffer_reference(&buffer, NULL);
+
+    return blanket;
 }
 
-boolean radeon_shared_handle_from_texture(struct drm_api *api,
-                                          struct pipe_screen *screen,
-                                          struct pipe_texture *texture,
-                                          unsigned *stride,
-                                          unsigned *handle)
+static boolean radeon_shared_handle_from_texture(struct drm_api *api,
+                                                 struct pipe_screen *screen,
+                                                 struct pipe_texture *texture,
+                                                 unsigned *stride,
+                                                 unsigned *handle)
 {
     int retval, fd;
     struct drm_gem_flink flink;
     struct radeon_pipe_buffer* radeon_buffer;
-    struct pipe_buffer* buffer = &radeon_buffer->base;
-    if (!radeon_buffer_from_texture(api, texture, buffer, stride)) {
+    struct pipe_buffer *buffer;
+
+    if (!radeon_buffer_from_texture(api, texture, &buffer, stride)) {
         return FALSE;
     }
 
+    radeon_buffer = (struct radeon_pipe_buffer*)buffer;
     if (!radeon_buffer->flinked) {
         fd = ((struct radeon_winsys*)screen->winsys)->priv->fd;
 
@@ -150,11 +157,11 @@ boolean radeon_shared_handle_from_texture(struct drm_api *api,
     return TRUE;
 }
 
-boolean radeon_local_handle_from_texture(struct drm_api *api,
-                                         struct pipe_screen *screen,
-                                         struct pipe_texture *texture,
-                                         unsigned *stride,
-                                         unsigned *handle)
+static boolean radeon_local_handle_from_texture(struct drm_api *api,
+                                                struct pipe_screen *screen,
+                                                struct pipe_texture *texture,
+                                                unsigned *stride,
+                                                unsigned *handle)
 {
     struct pipe_buffer *buffer;
     if (!radeon_buffer_from_texture(api, texture, &buffer, stride)) {

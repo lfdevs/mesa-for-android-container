@@ -21,10 +21,14 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include "r300_fs.h"
+#include "tgsi/tgsi_dump.h"
 
+#include "r300_context.h"
+#include "r300_screen.h"
+#include "r300_fs.h"
 #include "r300_tgsi_to_rc.h"
 
+#include "radeon_code.h"
 #include "radeon_compiler.h"
 
 static void find_output_registers(struct r300_fragment_program_compiler * compiler,
@@ -96,7 +100,7 @@ void r300_translate_fragment_shader(struct r300_context* r300,
 
     memset(&compiler, 0, sizeof(compiler));
     rc_init(&compiler.Base);
-    compiler.Base.Debug = 1;
+    compiler.Base.Debug = DBG_ON(r300, DBG_FP);
 
     compiler.code = &fs->code;
     compiler.is_r500 = r300_screen(r300->context.screen)->caps->is_r500;
@@ -126,9 +130,9 @@ void r300_translate_fragment_shader(struct r300_context* r300,
     /* Invoke the compiler */
     r3xx_compile_fragment_program(&compiler);
     if (compiler.Base.Error) {
-        /* Todo: Fail gracefully */
-        fprintf(stderr, "r300 FP: Compiler error\n");
-        abort();
+        /* XXX failover maybe? */
+        DBG(r300, DBG_FP, "r300: Error compiling fragment program: %s\n",
+            compiler.Base.ErrorMsg);
     }
 
     /* And, finally... */

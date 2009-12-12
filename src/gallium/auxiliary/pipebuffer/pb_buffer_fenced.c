@@ -42,7 +42,7 @@
 #endif
 
 #include "pipe/p_compiler.h"
-#include "pipe/p_error.h"
+#include "pipe/p_defines.h"
 #include "util/u_debug.h"
 #include "pipe/p_thread.h"
 #include "util/u_memory.h"
@@ -540,9 +540,9 @@ fenced_buffer_list_dump(struct fenced_buffer_list *fenced_list)
       fenced_buf = LIST_ENTRY(struct fenced_buffer, curr, head);
       assert(!fenced_buf->fence);
       debug_printf("%10p %7u %7u\n",
-                   fenced_buf,
+                   (void *) fenced_buf,
                    fenced_buf->base.base.size,
-                   fenced_buf->base.base.reference.count);
+                   p_atomic_read(&fenced_buf->base.base.reference.count));
       curr = next; 
       next = curr->next;
    }
@@ -554,10 +554,10 @@ fenced_buffer_list_dump(struct fenced_buffer_list *fenced_list)
       fenced_buf = LIST_ENTRY(struct fenced_buffer, curr, head);
       signaled = ops->fence_signalled(ops, fenced_buf->fence, 0);
       debug_printf("%10p %7u %7u %10p %s\n",
-                   fenced_buf,
+                   (void *) fenced_buf,
                    fenced_buf->base.base.size,
-                   fenced_buf->base.base.reference.count,
-                   fenced_buf->fence,
+                   p_atomic_read(&fenced_buf->base.base.reference.count),
+                   (void *) fenced_buf->fence,
                    signaled == 0 ? "y" : "n");
       curr = next; 
       next = curr->next;

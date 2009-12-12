@@ -40,7 +40,7 @@
 #include <llvm-c/Core.h>  
 
 
-union lp_type type;
+struct lp_type;
 struct lp_build_context;
 
 
@@ -67,9 +67,34 @@ lp_build_mul(struct lp_build_context *bld,
              LLVMValueRef b);
 
 LLVMValueRef
+lp_build_mul_imm(struct lp_build_context *bld,
+                 LLVMValueRef a,
+                 int b);
+
+LLVMValueRef
 lp_build_div(struct lp_build_context *bld,
              LLVMValueRef a,
              LLVMValueRef b);
+
+LLVMValueRef
+lp_build_lerp(struct lp_build_context *bld,
+              LLVMValueRef x,
+              LLVMValueRef v0,
+              LLVMValueRef v1);
+
+/**
+ * Bilinear interpolation.
+ *
+ * Values indices are in v_{yx}.
+ */
+LLVMValueRef
+lp_build_lerp_2d(struct lp_build_context *bld,
+                 LLVMValueRef x,
+                 LLVMValueRef y,
+                 LLVMValueRef v00,
+                 LLVMValueRef v01,
+                 LLVMValueRef v10,
+                 LLVMValueRef v11);
 
 LLVMValueRef
 lp_build_min(struct lp_build_context *bld,
@@ -84,6 +109,41 @@ lp_build_max(struct lp_build_context *bld,
 LLVMValueRef
 lp_build_abs(struct lp_build_context *bld,
              LLVMValueRef a);
+
+LLVMValueRef
+lp_build_sgn(struct lp_build_context *bld,
+             LLVMValueRef a);
+
+LLVMValueRef
+lp_build_round(struct lp_build_context *bld,
+               LLVMValueRef a);
+
+LLVMValueRef
+lp_build_floor(struct lp_build_context *bld,
+               LLVMValueRef a);
+
+LLVMValueRef
+lp_build_ceil(struct lp_build_context *bld,
+              LLVMValueRef a);
+
+LLVMValueRef
+lp_build_trunc(struct lp_build_context *bld,
+               LLVMValueRef a);
+
+LLVMValueRef
+lp_build_ifloor(struct lp_build_context *bld,
+                LLVMValueRef a);
+LLVMValueRef
+lp_build_iceil(struct lp_build_context *bld,
+               LLVMValueRef a);
+
+LLVMValueRef
+lp_build_iround(struct lp_build_context *bld,
+                LLVMValueRef a);
+
+LLVMValueRef
+lp_build_itrunc(struct lp_build_context *bld,
+                LLVMValueRef a);
 
 LLVMValueRef
 lp_build_sqrt(struct lp_build_context *bld,

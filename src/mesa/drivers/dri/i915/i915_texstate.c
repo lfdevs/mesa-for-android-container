@@ -27,7 +27,7 @@
 
 #include "main/mtypes.h"
 #include "main/enums.h"
-#include "main/texformat.h"
+#include "main/macros.h"
 
 #include "intel_mipmap_tree.h"
 #include "intel_tex.h"
@@ -37,7 +37,7 @@
 
 
 static GLuint
-translate_texture_format(GLuint mesa_format, GLuint internal_format,
+translate_texture_format(gl_format mesa_format, GLuint internal_format,
 			 GLenum DepthMode)
 {
    switch (mesa_format) {
@@ -56,10 +56,9 @@ translate_texture_format(GLuint mesa_format, GLuint internal_format,
    case MESA_FORMAT_ARGB4444:
       return MAPSURF_16BIT | MT_16BIT_ARGB4444;
    case MESA_FORMAT_ARGB8888:
-      if (internal_format == GL_RGB)
-	 return MAPSURF_32BIT | MT_32BIT_XRGB8888;
-      else
-	 return MAPSURF_32BIT | MT_32BIT_ARGB8888;
+      return MAPSURF_32BIT | MT_32BIT_ARGB8888;
+   case MESA_FORMAT_XRGB8888:
+      return MAPSURF_32BIT | MT_32BIT_XRGB8888;
    case MESA_FORMAT_YCBCR_REV:
       return (MAPSURF_422 | MT_422_YCRCB_NORMAL);
    case MESA_FORMAT_YCBCR:
@@ -82,7 +81,12 @@ translate_texture_format(GLuint mesa_format, GLuint internal_format,
    case MESA_FORMAT_RGBA_DXT5:
       return (MAPSURF_COMPRESSED | MT_COMPRESS_DXT4_5);
    case MESA_FORMAT_S8_Z24:
-      return (MAPSURF_32BIT | MT_32BIT_xI824);
+      if (DepthMode == GL_ALPHA)
+	 return (MAPSURF_32BIT | MT_32BIT_x8A24);
+      else if (DepthMode == GL_INTENSITY)
+	 return (MAPSURF_32BIT | MT_32BIT_x8I24);
+      else
+	 return (MAPSURF_32BIT | MT_32BIT_x8L24);
    default:
       fprintf(stderr, "%s: bad image format %x\n", __FUNCTION__, mesa_format);
       abort();
@@ -184,7 +188,7 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
       i915->state.tex_offset[unit] = (dst_x + dst_y * intelObj->mt->pitch) *
 	 intelObj->mt->cpp;
 
-      format = translate_texture_format(firstImage->TexFormat->MesaFormat, 
+      format = translate_texture_format(firstImage->TexFormat,
 					firstImage->InternalFormat,
 					tObj->DepthMode);
       pitch = intelObj->mt->pitch * intelObj->mt->cpp;
@@ -201,10 +205,10 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    }
 
    state[I915_TEXREG_MS4] =
-     ((((pitch / 4) - 1) << MS4_PITCH_SHIFT) | MS4_CUBE_FACE_ENA_MASK |
-       ((((intelObj->lastLevel - intelObj->firstLevel) * 4)) <<
-	MS4_MAX_LOD_SHIFT) | ((firstImage->Depth - 1) <<
-			      MS4_VOLUME_DEPTH_SHIFT));
+      ((((pitch / 4) - 1) << MS4_PITCH_SHIFT) |
+       MS4_CUBE_FACE_ENA_MASK |
+       (U_FIXED(CLAMP(tObj->MaxLod, 0.0, 11.0), 2) << MS4_MAX_LOD_SHIFT) |
+       ((firstImage->Depth - 1) << MS4_VOLUME_DEPTH_SHIFT));
 
 
    {
@@ -270,8 +274,8 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
 
       /* YUV conversion:
        */
-      if (firstImage->TexFormat->MesaFormat == MESA_FORMAT_YCBCR ||
-          firstImage->TexFormat->MesaFormat == MESA_FORMAT_YCBCR_REV)
+      if (firstImage->TexFormat == MESA_FORMAT_YCBCR ||
+          firstImage->TexFormat == MESA_FORMAT_YCBCR_REV)
          state[I915_TEXREG_SS2] |= SS2_COLORSPACE_CONVERSION;
 
       /* Shadow:
@@ -300,6 +304,12 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
       GLenum wt = tObj->WrapT;
       GLenum wr = tObj->WrapR;
 
+      /* We program 1D textures as 2D textures, so the 2D texcoord could
+       * result in sampling border values if we don't set the T wrap to
+       * repeat.
+       */
+      if (tObj->Target == GL_TEXTURE_1D)
+	 wt = GL_REPEAT;
 
       /* 3D textures don't seem to respect the border color.
        * Fallback if there's ever a danger that they might refer to
@@ -334,6 +344,9 @@ i915_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
           (translate_wrap_mode(wr) << SS3_TCZ_ADDR_MODE_SHIFT));
 
       state[I915_TEXREG_SS3] |= (unit << SS3_TEXTUREMAP_INDEX_SHIFT);
+      state[I915_TEXREG_SS3] |= (U_FIXED(CLAMP(tObj->MinLod, 0.0, 11.0), 4) <<
+				 SS3_MIN_LOD_SHIFT);
+
    }
 
    /* convert border color from float to ubyte */

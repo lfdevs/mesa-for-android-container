@@ -415,6 +415,15 @@ GLboolean assemble_vfetch_instruction(r700_AssemblerBase* pAsm,
 								GLuint number_of_elements,
                                 GLenum dataElementType,
 								VTX_FETCH_METHOD* pFetchMethod);
+GLboolean assemble_vfetch_instruction2(r700_AssemblerBase* pAsm,
+                                       GLuint              destination_register,								       
+                                       GLenum              type,
+                                       GLint               size,
+                                       GLubyte             element,
+                                       GLuint              _signed,
+                                       GLboolean           normalize,
+                                       VTX_FETCH_METHOD  * pFetchMethod);
+GLboolean cleanup_vfetch_instructions(r700_AssemblerBase* pAsm);
 GLuint gethelpr(r700_AssemblerBase* pAsm);
 void resethelpr(r700_AssemblerBase* pAsm);
 void checkop_init(r700_AssemblerBase* pAsm);
@@ -468,12 +477,14 @@ GLboolean assemble_COS(r700_AssemblerBase *pAsm);
 GLboolean assemble_DOT(r700_AssemblerBase *pAsm);
 GLboolean assemble_DST(r700_AssemblerBase *pAsm);
 GLboolean assemble_EX2(r700_AssemblerBase *pAsm);
+GLboolean assemble_EXP(r700_AssemblerBase *pAsm);
 GLboolean assemble_FLR(r700_AssemblerBase *pAsm);
 GLboolean assemble_FLR_INT(r700_AssemblerBase *pAsm);
 GLboolean assemble_FRC(r700_AssemblerBase *pAsm);
 GLboolean assemble_KIL(r700_AssemblerBase *pAsm);
 GLboolean assemble_LG2(r700_AssemblerBase *pAsm);
 GLboolean assemble_LRP(r700_AssemblerBase *pAsm);
+GLboolean assemble_LOG(r700_AssemblerBase *pAsm);
 GLboolean assemble_MAD(r700_AssemblerBase *pAsm);
 GLboolean assemble_LIT(r700_AssemblerBase *pAsm);
 GLboolean assemble_MAX(r700_AssemblerBase *pAsm);

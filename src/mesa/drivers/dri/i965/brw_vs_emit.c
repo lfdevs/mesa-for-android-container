@@ -147,7 +147,7 @@ static void brw_vs_alloc_regs( struct brw_vs_compile *c )
        mrf = 4;
 
    for (i = 0; i < VERT_RESULT_MAX; i++) {
-      if (c->prog_data.outputs_written & (1 << i)) {
+      if (c->prog_data.outputs_written & BITFIELD64_BIT(i)) {
 	 c->nr_outputs++;
          assert(i < Elements(c->regs[PROGRAM_OUTPUT]));
 	 if (i == VERT_RESULT_HPOS) {
@@ -1124,7 +1124,7 @@ static void emit_vertex_write( struct brw_vs_compile *c)
    /* Update the header for point size, user clipping flags, and -ve rhw
     * workaround.
     */
-   if ((c->prog_data.outputs_written & (1<<VERT_RESULT_PSIZ)) ||
+   if ((c->prog_data.outputs_written & BITFIELD64_BIT(VERT_RESULT_PSIZ)) ||
        c->key.nr_userclip || BRW_IS_965(p->brw))
    {
       struct brw_reg header1 = retype(get_tmp(c), BRW_REGISTER_TYPE_UD);
@@ -1134,7 +1134,7 @@ static void emit_vertex_write( struct brw_vs_compile *c)
 
       brw_set_access_mode(p, BRW_ALIGN_16);	
 
-      if (c->prog_data.outputs_written & (1<<VERT_RESULT_PSIZ)) {
+      if (c->prog_data.outputs_written & BITFIELD64_BIT(VERT_RESULT_PSIZ)) {
 	 struct brw_reg psiz = c->regs[PROGRAM_OUTPUT][VERT_RESULT_PSIZ];
 	 brw_MUL(p, brw_writemask(header1, WRITEMASK_W), brw_swizzle1(psiz, 0), brw_imm_f(1<<11));
 	 brw_AND(p, brw_writemask(header1, WRITEMASK_W), header1, brw_imm_ud(0x7ff<<8));
@@ -1210,7 +1210,7 @@ static void emit_vertex_write( struct brw_vs_compile *c)
 		 MIN2(c->nr_outputs + 1 + len_vertext_header, (BRW_MAX_MRF-1)), /* msg len */
 		 0,		/* response len */
 		 eot, 		/* eot */
-		 1, 		/* writes complete */
+		 eot, 		/* writes complete */
 		 0, 		/* urb destination offset */
 		 BRW_URB_SWIZZLE_INTERLEAVE);
 
@@ -1224,7 +1224,7 @@ static void emit_vertex_write( struct brw_vs_compile *c)
        */
       GLuint i, mrf = 0;
       for (i = c->first_overflow_output; i < VERT_RESULT_MAX; i++) {
-         if (c->prog_data.outputs_written & (1 << i)) {
+         if (c->prog_data.outputs_written & BITFIELD64_BIT(i)) {
             /* move from GRF to MRF */
             brw_MOV(p, brw_message_reg(4+mrf), c->regs[PROGRAM_OUTPUT][i]);
             mrf++;
@@ -1271,10 +1271,60 @@ post_vs_emit( struct brw_vs_compile *c,
    }
 }
 
-static uint32_t
-get_predicate(uint32_t swizzle)
+static GLboolean
+accumulator_contains(struct brw_vs_compile *c, struct brw_reg val)
 {
-   switch (swizzle) {
+   struct brw_compile *p = &c->func;
+   struct brw_instruction *prev_insn = &p->store[p->nr_insn - 1];
+
+   if (p->nr_insn == 0)
+      return GL_FALSE;
+
+   if (val.address_mode != BRW_ADDRESS_DIRECT)
+      return GL_FALSE;
+
+   switch (prev_insn->header.opcode) {
+   case BRW_OPCODE_MOV:
+   case BRW_OPCODE_MAC:
+   case BRW_OPCODE_MUL:
+      if (prev_insn->header.access_mode == BRW_ALIGN_16 &&
+	  prev_insn->header.execution_size == val.width &&
+	  prev_insn->bits1.da1.dest_reg_file == val.file &&
+	  prev_insn->bits1.da1.dest_reg_type == val.type &&
+	  prev_insn->bits1.da1.dest_address_mode == val.address_mode &&
+	  prev_insn->bits1.da1.dest_reg_nr == val.nr &&
+	  prev_insn->bits1.da16.dest_subreg_nr == val.subnr / 16 &&
+	  prev_insn->bits1.da16.dest_writemask == 0xf)
+	 return GL_TRUE;
+      else
+	 return GL_FALSE;
+   default:
+      return GL_FALSE;
+   }
+}
+
+static uint32_t
+get_predicate(const struct prog_instruction *inst)
+{
+   if (inst->DstReg.CondMask == COND_TR)
+      return BRW_PREDICATE_NONE;
+
+   /* All of GLSL only produces predicates for COND_NE and one channel per
+    * vector.  Fail badly if someone starts doing something else, as it might
+    * mean infinite looping or something.
+    *
+    * We'd like to support all the condition codes, but our hardware doesn't
+    * quite match the Mesa IR, which is modeled after the NV extensions.  For
+    * those, the instruction may update the condition codes or not, then any
+    * later instruction may use one of those condition codes.  For gen4, the
+    * instruction may update the flags register based on one of the condition
+    * codes output by the instruction, and then further instructions may
+    * predicate on that.  We can probably support this, but it won't
+    * necessarily be easy.
+    */
+   assert(inst->DstReg.CondMask == COND_NE);
+
+   switch (inst->DstReg.CondSwizzle) {
    case SWIZZLE_XXXX:
       return BRW_PREDICATE_ALIGN16_REPLICATE_X;
    case SWIZZLE_YYYY:
@@ -1284,7 +1334,8 @@ get_predicate(uint32_t swizzle)
    case SWIZZLE_WWWW:
       return BRW_PREDICATE_ALIGN16_REPLICATE_W;
    default:
-      _mesa_problem(NULL, "Unexpected predicate: 0x%08x\n", swizzle);
+      _mesa_problem(NULL, "Unexpected predicate: 0x%08x\n",
+		    inst->DstReg.CondMask);
       return BRW_PREDICATE_NORMAL;
    }
 }
@@ -1296,6 +1347,7 @@ void brw_vs_emit(struct brw_vs_compile *c )
 #define MAX_IF_DEPTH 32
 #define MAX_LOOP_DEPTH 32
    struct brw_compile *p = &c->func;
+   struct brw_context *brw = p->brw;
    const GLuint nr_insns = c->vp->program.Base.NumInstructions;
    GLuint insn, if_depth = 0, loop_depth = 0;
    GLuint end_offset = 0;
@@ -1429,7 +1481,8 @@ void brw_vs_emit(struct brw_vs_compile *c )
 	 unalias3(c, dst, args[0], args[1], args[2], emit_lrp_noalias);
 	 break;
       case OPCODE_MAD:
-	 brw_MOV(p, brw_acc_reg(), args[2]);
+	 if (!accumulator_contains(c, args[2]))
+	    brw_MOV(p, brw_acc_reg(), args[2]);
 	 brw_MAC(p, dst, args[0], args[1]);
 	 break;
       case OPCODE_MAX:
@@ -1494,8 +1547,8 @@ void brw_vs_emit(struct brw_vs_compile *c )
       case OPCODE_IF:
 	 assert(if_depth < MAX_IF_DEPTH);
 	 if_inst[if_depth] = brw_IF(p, BRW_EXECUTE_8);
-	 if_inst[if_depth]->header.predicate_control =
-	    get_predicate(inst->DstReg.CondSwizzle);
+	 /* Note that brw_IF smashes the predicate_control field. */
+	 if_inst[if_depth]->header.predicate_control = get_predicate(inst);
 	 if_depth++;
 	 break;
       case OPCODE_ELSE:
@@ -1505,45 +1558,48 @@ void brw_vs_emit(struct brw_vs_compile *c )
          assert(if_depth > 0);
 	 brw_ENDIF(p, if_inst[--if_depth]);
 	 break;			
-#if 0
       case OPCODE_BGNLOOP:
          loop_inst[loop_depth++] = brw_DO(p, BRW_EXECUTE_8);
          break;
       case OPCODE_BRK:
+	 brw_set_predicate_control(p, get_predicate(inst));
          brw_BREAK(p);
-         brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+	 brw_set_predicate_control(p, BRW_PREDICATE_NONE);
          break;
       case OPCODE_CONT:
+	 brw_set_predicate_control(p, get_predicate(inst));
          brw_CONT(p);
          brw_set_predicate_control(p, BRW_PREDICATE_NONE);
          break;
       case OPCODE_ENDLOOP: 
          {
             struct brw_instruction *inst0, *inst1;
+	    GLuint br = 1;
+
             loop_depth--;
+
+	    if (BRW_IS_IGDNG(brw))
+	       br = 2;
+
             inst0 = inst1 = brw_WHILE(p, loop_inst[loop_depth]);
             /* patch all the BREAK/CONT instructions from last BEGINLOOP */
             while (inst0 > loop_inst[loop_depth]) {
                inst0--;
                if (inst0->header.opcode == BRW_OPCODE_BREAK) {
-                  inst0->bits3.if_else.jump_count = inst1 - inst0 + 1;
+                  inst0->bits3.if_else.jump_count = br * (inst1 - inst0 + 1);
                   inst0->bits3.if_else.pop_count = 0;
                }
                else if (inst0->header.opcode == BRW_OPCODE_CONTINUE) {
-                  inst0->bits3.if_else.jump_count = inst1 - inst0;
+                  inst0->bits3.if_else.jump_count = br * (inst1 - inst0);
                   inst0->bits3.if_else.pop_count = 0;
                }
             }
          }
          break;
-#else
-         (void) loop_inst;
-         (void) loop_depth;
-#endif
       case OPCODE_BRA:
-         brw_set_predicate_control(p, BRW_PREDICATE_NORMAL);
+	 brw_set_predicate_control(p, get_predicate(inst));
          brw_ADD(p, brw_ip_reg(), brw_ip_reg(), brw_imm_d(1*16));
-         brw_set_predicate_control_flag_value(p, 0xff);
+	 brw_set_predicate_control(p, BRW_PREDICATE_NONE);
          break;
       case OPCODE_CAL:
 	 brw_set_access_mode(p, BRW_ALIGN_1);

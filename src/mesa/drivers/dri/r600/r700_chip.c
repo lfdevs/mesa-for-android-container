@@ -54,11 +54,15 @@ static void r700SendTexState(GLcontext *ctx, struct radeon_state_atom *atom)
 	for (i = 0; i < R700_TEXTURE_NUMBERUNITS; i++) {
 		if (ctx->Texture.Unit[i]._ReallyEnabled) {
 			radeonTexObj *t = r700->textures[i];
+			uint32_t offset;
 			if (t) {
-				if (!t->image_override)
+				if (!t->image_override) {
 					bo = t->mt->bo;
-				else
+					offset = get_base_teximage_offset(t);
+				} else {
 					bo = t->bo;
+					offset = 0;
+				}
 				if (bo) {
 
 					r700SyncSurf(context, bo,
@@ -77,7 +81,7 @@ static void r700SendTexState(GLcontext *ctx, struct radeon_state_atom *atom)
 					R600_OUT_BATCH(r700->textures[i]->SQ_TEX_RESOURCE6);
 					R600_OUT_BATCH_RELOC(r700->textures[i]->SQ_TEX_RESOURCE2,
 							     bo,
-							     0,
+							     offset,
 							     RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0, 0);
 					R600_OUT_BATCH_RELOC(r700->textures[i]->SQ_TEX_RESOURCE3,
 							     bo,
@@ -141,17 +145,15 @@ static void r700SendTexBorderColorState(GLcontext *ctx, struct radeon_state_atom
 	}
 }
 
+extern int getTypeSize(GLenum type);
 static void r700SetupVTXConstants(GLcontext  * ctx,
-				  unsigned int nStreamID,
 				  void *       pAos,
-				  unsigned int size,      /* number of elements in vector */
-				  unsigned int stride,
-				  unsigned int count)     /* number of vectors in stream */
+				  StreamDesc * pStreamDesc)
 {
     context_t *context = R700_CONTEXT(ctx);
     struct radeon_aos * paos = (struct radeon_aos *)pAos;
+    unsigned int nVBsize;
     BATCH_LOCALS(&context->radeon);
-    radeon_print(RADEON_STATE, RADEON_VERBOSE, "%s\n", __func__);
 
     unsigned int uSQ_VTX_CONSTANT_WORD0_0;
     unsigned int uSQ_VTX_CONSTANT_WORD1_0;
@@ -171,18 +173,40 @@ static void r700SetupVTXConstants(GLcontext  * ctx,
     else
 	    r700SyncSurf(context, paos->bo, RADEON_GEM_DOMAIN_GTT, 0, VC_ACTION_ENA_bit);
 
+    if(0 == pStreamDesc->stride)
+    {
+        nVBsize = paos->count * pStreamDesc->size * getTypeSize(pStreamDesc->type);
+    }
+    else
+    {
+        nVBsize = paos->count * pStreamDesc->stride;
+    }
+
     uSQ_VTX_CONSTANT_WORD0_0 = paos->offset;
-    uSQ_VTX_CONSTANT_WORD1_0 = count * (size * 4) - 1;
+    uSQ_VTX_CONSTANT_WORD1_0 = nVBsize - 1;
 
     SETfield(uSQ_VTX_CONSTANT_WORD2_0, 0, BASE_ADDRESS_HI_shift, BASE_ADDRESS_HI_mask); /* TODO */
-    SETfield(uSQ_VTX_CONSTANT_WORD2_0, stride, SQ_VTX_CONSTANT_WORD2_0__STRIDE_shift,
+    SETfield(uSQ_VTX_CONSTANT_WORD2_0, pStreamDesc->stride, SQ_VTX_CONSTANT_WORD2_0__STRIDE_shift,
 	     SQ_VTX_CONSTANT_WORD2_0__STRIDE_mask);
-    SETfield(uSQ_VTX_CONSTANT_WORD2_0, GetSurfaceFormat(GL_FLOAT, size, NULL),
+    SETfield(uSQ_VTX_CONSTANT_WORD2_0, GetSurfaceFormat(pStreamDesc->type, pStreamDesc->size, NULL),
 	     SQ_VTX_CONSTANT_WORD2_0__DATA_FORMAT_shift,
 	     SQ_VTX_CONSTANT_WORD2_0__DATA_FORMAT_mask); /* TODO : trace back api for initial data type, not only GL_FLOAT */
-    SETfield(uSQ_VTX_CONSTANT_WORD2_0, SQ_NUM_FORMAT_SCALED,
-	     SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_shift, SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_mask);
-    SETbit(uSQ_VTX_CONSTANT_WORD2_0, SQ_VTX_CONSTANT_WORD2_0__FORMAT_COMP_ALL_bit);
+    
+    if(GL_TRUE == pStreamDesc->normalize)
+    {
+        SETfield(uSQ_VTX_CONSTANT_WORD2_0, SQ_NUM_FORMAT_NORM,
+	             SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_shift, SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_mask);
+    }
+    //else
+    //{
+    //    SETfield(uSQ_VTX_CONSTANT_WORD2_0, SQ_NUM_FORMAT_INT,
+	//             SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_shift, SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_mask);
+    //}
+
+    if(1 == pStreamDesc->_signed)
+    {
+        SETbit(uSQ_VTX_CONSTANT_WORD2_0, SQ_VTX_CONSTANT_WORD2_0__FORMAT_COMP_ALL_bit);
+    }
 
     SETfield(uSQ_VTX_CONSTANT_WORD3_0, 1, MEM_REQUEST_SIZE_shift, MEM_REQUEST_SIZE_mask);
     SETfield(uSQ_VTX_CONSTANT_WORD6_0, SQ_TEX_VTX_VALID_BUFFER,
@@ -191,7 +215,7 @@ static void r700SetupVTXConstants(GLcontext  * ctx,
     BEGIN_BATCH_NO_AUTOSTATE(9 + 2);
 
     R600_OUT_BATCH(CP_PACKET3(R600_IT_SET_RESOURCE, 7));
-    R600_OUT_BATCH((nStreamID + SQ_FETCH_RESOURCE_VS_OFFSET) * FETCH_RESOURCE_STRIDE);
+    R600_OUT_BATCH((pStreamDesc->element + SQ_FETCH_RESOURCE_VS_OFFSET) * FETCH_RESOURCE_STRIDE);
     R600_OUT_BATCH(uSQ_VTX_CONSTANT_WORD0_0);
     R600_OUT_BATCH(uSQ_VTX_CONSTANT_WORD1_0);
     R600_OUT_BATCH(uSQ_VTX_CONSTANT_WORD2_0);
@@ -206,31 +230,6 @@ static void r700SetupVTXConstants(GLcontext  * ctx,
     END_BATCH();
     COMMIT_BATCH();
 
-}
-
-void r700SetupStreams(GLcontext *ctx)
-{
-    context_t         *context = R700_CONTEXT(ctx);
-    struct r700_vertex_program *vp = context->selected_vp;
-    TNLcontext *tnl = TNL_CONTEXT(ctx);
-    struct vertex_buffer *vb = &tnl->vb;
-    unsigned int i, j = 0;
-	radeon_print(RADEON_STATE, RADEON_VERBOSE, "%s\n", __func__);
-
-    R600_STATECHANGE(context, vtx);
-
-    for(i=0; i<VERT_ATTRIB_MAX; i++) {
-	    if(vp->mesa_program->Base.InputsRead & (1 << i)) {
-		    rcommon_emit_vector(ctx,
-					&context->radeon.tcl.aos[j],
-					vb->AttribPtr[i]->data,
-					vb->AttribPtr[i]->size,
-					vb->AttribPtr[i]->stride,
-					vb->Count);
-		    j++;
-	    }
-    }
-    context->radeon.tcl.aos_count = j;
 }
 
 static void r700SendVTXState(GLcontext *ctx, struct radeon_state_atom *atom)
@@ -256,15 +255,12 @@ static void r700SendVTXState(GLcontext *ctx, struct radeon_state_atom *atom)
     COMMIT_BATCH();
 
     for(i=0; i<VERT_ATTRIB_MAX; i++) {
-	    if(vp->mesa_program->Base.InputsRead & (1 << i)) {
-		    /* currently aos are packed */
-		    r700SetupVTXConstants(ctx,
-					  i,
-					  (void*)(&context->radeon.tcl.aos[j]),
-					  (unsigned int)context->radeon.tcl.aos[j].components,
-					  (unsigned int)context->radeon.tcl.aos[j].stride * 4,
-					  (unsigned int)context->radeon.tcl.aos[j].count);
-		    j++;
+	    if(vp->mesa_program->Base.InputsRead & (1 << i))
+	    {
+                r700SetupVTXConstants(ctx,
+				      (void*)(&context->radeon.tcl.aos[j]),
+				      &(context->stream_desc[j]));
+		j++;
 	    }
     }
 }
@@ -366,7 +362,6 @@ static void r700SendDepthTargetState(GLcontext *ctx, struct radeon_state_atom *a
 
 	rrb = radeon_get_depthbuffer(&context->radeon);
 	if (!rrb || !rrb->bo) {
-		fprintf(stderr, "no rrb\n");
 		return;
 	}
 
@@ -408,7 +403,6 @@ static void r700SendRenderTargetState(GLcontext *ctx, struct radeon_state_atom *
 
 	rrb = radeon_get_colorbuffer(&context->radeon);
 	if (!rrb || !rrb->bo) {
-		fprintf(stderr, "no rrb\n");
 		return;
 	}
 
@@ -1106,6 +1100,32 @@ static void r700SendVSConsts(GLcontext *ctx, struct radeon_state_atom *atom)
 	COMMIT_BATCH();
 }
 
+static void r700SendQueryBegin(GLcontext *ctx, struct radeon_state_atom *atom)
+{
+	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
+	struct radeon_query_object *query = radeon->query.current;
+	BATCH_LOCALS(radeon);
+	radeon_print(RADEON_STATE, RADEON_VERBOSE, "%s\n", __func__);
+
+	/* clear the buffer */
+	radeon_bo_map(query->bo, GL_FALSE);
+	memset(query->bo->ptr, 0, 4 * 2 * sizeof(uint64_t)); /* 4 DBs, 2 qwords each */
+	radeon_bo_unmap(query->bo);
+
+	radeon_cs_space_check_with_bo(radeon->cmdbuf.cs,
+				      query->bo,
+				      0, RADEON_GEM_DOMAIN_GTT);
+
+	BEGIN_BATCH_NO_AUTOSTATE(4 + 2);
+	R600_OUT_BATCH(CP_PACKET3(R600_IT_EVENT_WRITE, 2));
+	R600_OUT_BATCH(ZPASS_DONE);
+	R600_OUT_BATCH(query->curr_offset); /* hw writes qwords */
+	R600_OUT_BATCH(0x00000000);
+	R600_OUT_BATCH_RELOC(VGT_EVENT_INITIATOR, query->bo, 0, 0, RADEON_GEM_DOMAIN_GTT, 0);
+	END_BATCH();
+	query->emitted_begin = GL_TRUE;
+}
+
 static int check_always(GLcontext *ctx, struct radeon_state_atom *atom)
 {
 	return atom->cmd_size;
@@ -1218,6 +1238,20 @@ static int check_vs_consts(GLcontext *ctx, struct radeon_state_atom *atom)
 	return count;
 }
 
+static int check_queryobj(GLcontext *ctx, struct radeon_state_atom *atom)
+{
+	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
+	struct radeon_query_object *query = radeon->query.current;
+	int count;
+
+	if (!query || query->emitted_begin)
+		count = 0;
+	else
+		count = atom->cmd_size;
+	radeon_print(RADEON_STATE, RADEON_TRACE, "%s %d\n", __func__, count);
+	return count;
+}
+
 #define ALLOC_STATE( ATOM, CHK, SZ, EMIT )				\
 do {									\
 	context->atoms.ATOM.cmd_size = (SZ);				\
@@ -1230,6 +1264,19 @@ do {									\
 	context->radeon.hw.max_state_size += (SZ);			\
 	insert_at_tail(&context->radeon.hw.atomlist, &context->atoms.ATOM); \
 } while (0)
+
+static void r600_init_query_stateobj(radeonContextPtr radeon, int SZ)
+{
+	radeon->query.queryobj.cmd_size = (SZ);
+	radeon->query.queryobj.cmd = NULL;
+	radeon->query.queryobj.name = "queryobj";
+	radeon->query.queryobj.idx = 0;
+	radeon->query.queryobj.check = check_queryobj;
+	radeon->query.queryobj.dirty = GL_FALSE;
+	radeon->query.queryobj.emit = r700SendQueryBegin;
+	radeon->hw.max_state_size += (SZ);
+	insert_at_tail(&radeon->hw.atomlist, &radeon->query.queryobj);
+}
 
 void r600InitAtoms(context_t *context)
 {
@@ -1270,6 +1317,7 @@ void r600InitAtoms(context_t *context)
 	ALLOC_STATE(tx, tx, (R700_TEXTURE_NUMBERUNITS * 20), r700SendTexState);
 	ALLOC_STATE(tx_smplr, tx, (R700_TEXTURE_NUMBERUNITS * 5), r700SendTexSamplerState);
 	ALLOC_STATE(tx_brdr_clr, tx, (R700_TEXTURE_NUMBERUNITS * 6), r700SendTexBorderColorState);
+	r600_init_query_stateobj(&context->radeon, 6 * 2);
 
 	context->radeon.hw.is_dirty = GL_TRUE;
 	context->radeon.hw.all_dirty = GL_TRUE;

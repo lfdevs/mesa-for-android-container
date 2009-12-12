@@ -1100,8 +1100,6 @@ void radeonFlush(GLcontext *ctx)
 	if (radeon->dma.flush)
 		radeon->dma.flush( ctx );
 
-	radeonEmitState(radeon);
-
 	if (radeon->cmdbuf.cs->cdw)
 		rcommonFlushCmdBuf(radeon, __FUNCTION__);
 
@@ -1124,9 +1122,6 @@ void radeonFlush(GLcontext *ctx)
 			}
 		}
 	}
-
-	make_empty_list(&radeon->query.not_flushed_head);
-
 }
 
 /* Make sure all commands have been sent to the hardware and have
@@ -1321,5 +1316,5 @@ void rcommonBeginBatch(radeonContextPtr rmesa, int n,
 
 void radeonUserClear(GLcontext *ctx, GLuint mask)
 {
-   _mesa_meta_clear(ctx, mask);
+   _mesa_meta_Clear(ctx, mask);
 }

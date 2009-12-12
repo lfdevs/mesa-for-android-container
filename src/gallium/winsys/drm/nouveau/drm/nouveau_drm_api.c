@@ -21,8 +21,7 @@ dri_surface_from_handle(struct drm_api *api, struct pipe_screen *pscreen,
 	struct pipe_texture tmpl;
 
 	memset(&tmpl, 0, sizeof(tmpl));
-	tmpl.tex_usage = PIPE_TEXTURE_USAGE_PRIMARY |
-			 NOUVEAU_TEXTURE_USAGE_LINEAR;
+	tmpl.tex_usage = PIPE_TEXTURE_USAGE_PRIMARY;
 	tmpl.target = PIPE_TEXTURE_2D;
 	tmpl.last_level = 0;
 	tmpl.depth[0] = 1;
@@ -112,7 +111,7 @@ nouveau_drm_create_screen(struct drm_api *api, int fd,
 		return NULL;
 	}
 
-	if (arg->mode == DRM_CREATE_DRI1) {
+	if (arg && arg->mode == DRM_CREATE_DRI1) {
 		struct nouveau_dri *nvdri = dri1->ddx_info;
 		enum pipe_format format;
 
@@ -197,6 +196,7 @@ nouveau_drm_pt_from_name(struct drm_api *api, struct pipe_screen *pscreen,
 			 unsigned stride, unsigned handle)
 {
 	struct nouveau_device *dev = nouveau_screen(pscreen)->device;
+	struct pipe_texture *pt;
 	struct pipe_buffer *pb;
 	int ret;
 
@@ -218,7 +218,9 @@ nouveau_drm_pt_from_name(struct drm_api *api, struct pipe_screen *pscreen,
 	pb->usage = PIPE_BUFFER_USAGE_GPU_READ_WRITE |
 		    PIPE_BUFFER_USAGE_CPU_READ_WRITE;
 	pb->size = nouveau_bo(pb)->size;
-	return pscreen->texture_blanket(pscreen, templ, &stride, pb);
+	pt = pscreen->texture_blanket(pscreen, templ, &stride, pb);
+	pipe_buffer_reference(&pb, NULL);
+	return pt;
 }
 
 static boolean
@@ -245,6 +247,7 @@ nouveau_drm_handle_from_pt(struct drm_api *api, struct pipe_screen *pscreen,
 		return false;
 
 	*handle = mt->bo->handle;
+	*stride = mt->base.nblocksx[0] * mt->base.block.size;
 	return true;
 }
 

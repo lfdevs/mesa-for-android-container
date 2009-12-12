@@ -118,7 +118,7 @@ pipe_buffer_write(struct pipe_screen *screen,
                   unsigned offset, unsigned size,
                   const void *data)
 {
-   uint8_t *map;
+   void *map;
    
    assert(offset < buf->size);
    assert(offset + size <= buf->size);
@@ -129,7 +129,7 @@ pipe_buffer_write(struct pipe_screen *screen,
                                PIPE_BUFFER_USAGE_FLUSH_EXPLICIT);
    assert(map);
    if(map) {
-      memcpy(map + offset, data, size);
+      memcpy((uint8_t *)map + offset, data, size);
       pipe_buffer_flush_mapped_range(screen, buf, offset, size);
       pipe_buffer_unmap(screen, buf);
    }
@@ -141,7 +141,7 @@ pipe_buffer_read(struct pipe_screen *screen,
                  unsigned offset, unsigned size,
                  void *data)
 {
-   uint8_t *map;
+   void *map;
    
    assert(offset < buf->size);
    assert(offset + size <= buf->size);
@@ -150,11 +150,47 @@ pipe_buffer_read(struct pipe_screen *screen,
    map = pipe_buffer_map_range(screen, buf, offset, size, PIPE_BUFFER_USAGE_CPU_READ);
    assert(map);
    if(map) {
-      memcpy(data, map + offset, size);
+      memcpy(data, (const uint8_t *)map + offset, size);
       pipe_buffer_unmap(screen, buf);
    }
 }
 
+static INLINE void *
+pipe_transfer_map( struct pipe_transfer *transf )
+{
+   struct pipe_screen *screen = transf->texture->screen;
+   return screen->transfer_map(screen, transf);
+}
+
+static INLINE void
+pipe_transfer_unmap( struct pipe_transfer *transf )
+{
+   struct pipe_screen *screen = transf->texture->screen;
+   screen->transfer_unmap(screen, transf);
+}
+
+static INLINE void
+pipe_transfer_destroy( struct pipe_transfer *transf )
+{
+   struct pipe_screen *screen = transf->texture->screen;
+   screen->tex_transfer_destroy(transf);
+}
+
+static INLINE unsigned
+pipe_transfer_buffer_flags( struct pipe_transfer *transf )
+{
+   switch (transf->usage & PIPE_TRANSFER_READ_WRITE) {
+   case PIPE_TRANSFER_READ_WRITE:
+      return PIPE_BUFFER_USAGE_CPU_READ | PIPE_BUFFER_USAGE_CPU_WRITE;
+   case PIPE_TRANSFER_READ:
+      return PIPE_BUFFER_USAGE_CPU_READ;
+   case PIPE_TRANSFER_WRITE:
+      return PIPE_BUFFER_USAGE_CPU_WRITE;
+   default:
+      debug_assert(0);
+      return 0;
+   }
+}
 
 #ifdef __cplusplus
 }

@@ -26,13 +26,9 @@
  **************************************************************************/
 
 
-#include <stdio.h>
-#include <errno.h>
-
 #include "main/mtypes.h"
 #include "main/context.h"
 #include "main/enums.h"
-#include "main/texformat.h"
 #include "main/colormac.h"
 
 #include "intel_blit.h"
@@ -374,8 +370,6 @@ intelClearWithBlit(GLcontext *ctx, GLbitfield mask)
       skipBuffers = BUFFER_BIT_STENCIL;
    }
 
-   /* XXX Move this flush/lock into the following conditional? */
-   intelFlush(&intel->ctx);
    LOCK_HARDWARE(intel);
 
    intel_get_cliprects(intel, &cliprects, &num_cliprects, &x_off, &y_off);
@@ -502,8 +496,9 @@ intelClearWithBlit(GLcontext *ctx, GLbitfield mask)
 		  CLAMPED_FLOAT_TO_UBYTE(clear[2], color[2]);
 		  CLAMPED_FLOAT_TO_UBYTE(clear[3], color[3]);
 
-		  switch (irb->texformat->MesaFormat) {
+		  switch (irb->Base.Format) {
 		  case MESA_FORMAT_ARGB8888:
+		  case MESA_FORMAT_XRGB8888:
 		     clearVal = intel->ClearColor8888;
 		     break;
 		  case MESA_FORMAT_RGB565:
@@ -519,7 +514,7 @@ intelClearWithBlit(GLcontext *ctx, GLbitfield mask)
 		     break;
 		  default:
 		     _mesa_problem(ctx, "Unexpected renderbuffer format: %d\n",
-				   irb->texformat->MesaFormat);
+				   irb->Base.Format);
 		     clearVal = 0;
 		  }
 	       }

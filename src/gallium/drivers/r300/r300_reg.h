@@ -348,6 +348,27 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_WRITE_ENA_W                         8
 #       define R300_SWIZZLE1_SHIFT                      16
 
+#       define R300_VAP_SWIZZLE_X001 \
+        ((R300_SWIZZLE_SELECT_X << R300_SWIZZLE_SELECT_X_SHIFT) | \
+         (R300_SWIZZLE_SELECT_FP_ZERO << R300_SWIZZLE_SELECT_Y_SHIFT) | \
+         (R300_SWIZZLE_SELECT_FP_ZERO << R300_SWIZZLE_SELECT_Z_SHIFT) | \
+         (R300_SWIZZLE_SELECT_FP_ONE << R300_SWIZZLE_SELECT_W_SHIFT) | \
+         (0xf << R300_WRITE_ENA_SHIFT))
+
+#       define R300_VAP_SWIZZLE_XY01 \
+        ((R300_SWIZZLE_SELECT_X << R300_SWIZZLE_SELECT_X_SHIFT) | \
+         (R300_SWIZZLE_SELECT_Y << R300_SWIZZLE_SELECT_Y_SHIFT) | \
+         (R300_SWIZZLE_SELECT_FP_ZERO << R300_SWIZZLE_SELECT_Z_SHIFT) | \
+         (R300_SWIZZLE_SELECT_FP_ONE << R300_SWIZZLE_SELECT_W_SHIFT) | \
+         (0xf << R300_WRITE_ENA_SHIFT))
+
+#       define R300_VAP_SWIZZLE_XYZ1 \
+        ((R300_SWIZZLE_SELECT_X << R300_SWIZZLE_SELECT_X_SHIFT) | \
+         (R300_SWIZZLE_SELECT_Y << R300_SWIZZLE_SELECT_Y_SHIFT) | \
+         (R300_SWIZZLE_SELECT_Z << R300_SWIZZLE_SELECT_Z_SHIFT) | \
+         (R300_SWIZZLE_SELECT_FP_ONE << R300_SWIZZLE_SELECT_W_SHIFT) | \
+         (0xf << R300_WRITE_ENA_SHIFT))
+
 #       define R300_VAP_SWIZZLE_XYZW \
         ((R300_SWIZZLE_SELECT_X << R300_SWIZZLE_SELECT_X_SHIFT) | \
          (R300_SWIZZLE_SELECT_Y << R300_SWIZZLE_SELECT_Y_SHIFT) | \
@@ -841,10 +862,10 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_POINTSIZE_X_MASK          0xffff0000
 #       define R300_POINTSIZE_MAX             (R300_POINTSIZE_Y_MASK / 6)
 
-/* Blue fill color */
+/* Red fill color */
 #define R500_GA_FILL_R                                0x4220
 
-/* Blue fill color */
+/* Green fill color */
 #define R500_GA_FILL_G                                0x4224
 
 /* Blue fill color */
@@ -1172,6 +1193,13 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 /* SU Depth Offset value */
 #define R300_SU_DEPTH_OFFSET                0x42c4
 
+#define R300_SU_REG_DEST		    0x42c8
+#	define R300_RASTER_PIPE_SELECT_0	(1 << 0)
+#	define R300_RASTER_PIPE_SELECT_1	(1 << 1)
+#	define R300_RASTER_PIPE_SELECT_2	(1 << 2)
+#	define R300_RASTER_PIPE_SELECT_3	(1 << 3)
+#	define R300_RASTER_PIPE_SELECT_ALL	0xf
+
 
 /* BEGIN: Rasterization / Interpolators - many guesses */
 
@@ -1478,6 +1506,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_TX_PITCH_EN                  (1 << 31)
 #       define R300_TX_WIDTH(x)                  ((x) << 0)
 #       define R300_TX_HEIGHT(x)                 ((x) << 11)
+#       define R300_TX_DEPTH(x)                  ((x) << 22)
 #       define R300_TX_NUM_LEVELS(x)             ((x) << 26)
 
 #define R300_TX_FORMAT1_0                   0x44C0
@@ -1855,6 +1884,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_RGB_ADDR0(x)                ((x) << 0)
 #       define R300_RGB_ADDR1(x)                ((x) << 6)
 #       define R300_RGB_ADDR2(x)                ((x) << 12)
+#       define R300_RGB_TARGET(x)               ((x) << 29)
 
 #define R300_US_ALU_ALPHA_ADDR_0                 0x47C0
 #       define R300_ALU_SRC0A_SHIFT             0
@@ -1872,9 +1902,10 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_ALU_DSTA_REG                (1 << 23)
 #       define R300_ALU_DSTA_OUTPUT             (1 << 24)
 #		define R300_ALU_DSTA_DEPTH              (1 << 27)
-#       define R300_ALPHA_ADDR0(x)                ((x) << 0)
-#       define R300_ALPHA_ADDR1(x)                ((x) << 6)
-#       define R300_ALPHA_ADDR2(x)                ((x) << 12)
+#       define R300_ALPHA_ADDR0(x)              ((x) << 0)
+#       define R300_ALPHA_ADDR1(x)              ((x) << 6)
+#       define R300_ALPHA_ADDR2(x)              ((x) << 12)
+#       define R300_ALPHA_TARGET(x)             ((x) << 25)
 
 #define R300_US_ALU_RGB_INST_0                   0x48C0
 #       define R300_ALU_ARGC_SRC0C_XYZ          0
@@ -2094,6 +2125,10 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define R500_FG_ALPHA_VALUE                0x4be0
 #	define R500_FG_ALPHA_VALUE_MASK 0x0000ffff
 
+#define RV530_FG_ZBREG_DEST                 0x4be8
+#	define RV530_FG_ZBREG_DEST_PIPE_SELECT_0             (1 << 0)
+#	define RV530_FG_ZBREG_DEST_PIPE_SELECT_1             (1 << 1)
+#	define RV530_FG_ZBREG_DEST_PIPE_SELECT_ALL           (3 << 0)
 /* gap */
 
 /* Fragment program parameters in 7.16 floating point */
@@ -2383,6 +2418,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #	define R300_Z_WRITE_ENABLE		 (1 << 2)
 #	define R300_Z_SIGNED_COMPARE		 (1 << 3)
 #	define R300_STENCIL_FRONT_BACK		 (1 << 4)
+#   define R500_STENCIL_ZSIGNED_MAGNITUDE (1 << 5)
+#   define R500_STENCIL_REFMASK_FRONT_BACK (1 << 6)
 
 #define R300_ZB_ZSTENCILCNTL                   0x4f04
 	/* functions */
@@ -3311,10 +3348,6 @@ enum {
 #define RADEON_CP_PACKET3                           0xC0000000
 
 #define R200_3D_DRAW_IMMD_2      0xC0003500
-
-/* XXX Oh look, stuff not brought over from docs yet */
-
-#define R300_SU_REG_DEST                    0x42C8
 
 #endif /* _R300_REG_H */
 

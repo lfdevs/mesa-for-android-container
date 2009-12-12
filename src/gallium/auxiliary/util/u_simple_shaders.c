@@ -34,14 +34,8 @@
 
 
 #include "pipe/p_context.h"
-#include "util/u_debug.h"
-#include "pipe/p_defines.h"
-#include "pipe/p_screen.h"
 #include "pipe/p_shader_tokens.h"
-
-#include "util/u_memory.h"
 #include "util/u_simple_shaders.h"
-
 #include "tgsi/tgsi_ureg.h"
 
 
@@ -67,9 +61,7 @@ util_make_vertex_passthrough_shader(struct pipe_context *pipe,
       struct ureg_src src;
       struct ureg_dst dst;
 
-      src = ureg_DECL_vs_input( ureg,
-                                semantic_names[i],
-                                semantic_indexes[i]);
+      src = ureg_DECL_vs_input( ureg, i );
       
       dst = ureg_DECL_output( ureg,
                               semantic_names[i],
@@ -116,7 +108,15 @@ util_make_fragment_tex_shader_writemask(struct pipe_context *pipe,
                            TGSI_SEMANTIC_COLOR,
                            0 );
 
-   ureg_TEX( ureg, out, TGSI_TEXTURE_2D, tex, sampler );
+   if (writemask != TGSI_WRITEMASK_XYZW) {
+      struct ureg_src imm = ureg_imm4f( ureg, 0, 0, 0, 1 );
+
+      ureg_MOV( ureg, out, imm );
+   }
+
+   ureg_TEX( ureg, 
+             ureg_writemask(out, writemask),
+             TGSI_TEXTURE_2D, tex, sampler );
    ureg_END( ureg );
 
    return ureg_create_shader_and_destroy( ureg, pipe );

@@ -22,6 +22,17 @@
 
 #include "radeon_r300.h"
 
+static void radeon_r300_set_flush_cb(struct r300_winsys *winsys,
+				     void (*flush_cb)(void *),
+				     void *data)
+{
+    struct radeon_winsys_priv* priv =
+        (struct radeon_winsys_priv*)winsys->radeon_winsys;
+
+    radeon_cs_space_set_flush(priv->cs, flush_cb,
+			      data);
+}
+
 static boolean radeon_r300_add_buffer(struct r300_winsys* winsys,
                                       struct pipe_buffer* pbuffer,
                                       uint32_t rd,
@@ -95,6 +106,13 @@ static void radeon_r300_write_cs_reloc(struct r300_winsys* winsys,
     }
 }
 
+static void radeon_r300_reset_bos(struct r300_winsys *winsys)
+{
+    struct radeon_winsys_priv* priv =
+        (struct radeon_winsys_priv*)winsys->radeon_winsys;
+    radeon_cs_space_reset_bos(priv->cs);
+}
+
 static void radeon_r300_end_cs(struct r300_winsys* winsys,
                                const char* file,
                                const char* function,
@@ -119,9 +137,6 @@ static void radeon_r300_flush_cs(struct r300_winsys* winsys)
         radeon_cs_print(priv->cs, stderr);
     }
 
-    /* Clean out BOs. */
-    radeon_cs_space_reset_bos(priv->cs);
-
     /* Reset CS.
      * Someday, when we care about performance, we should really find a way
      * to rotate between two or three CS objects so that the GPU can be
@@ -137,7 +152,7 @@ static void do_ioctls(struct r300_winsys* winsys, int fd)
     int target = 0;
     int retval;
 
-    info.value = &target;
+    info.value = (unsigned long)&target;
 
     /* First, get the number of pixel pipes */
     info.request = RADEON_INFO_NUM_GB_PIPES;
@@ -148,6 +163,16 @@ static void do_ioctls(struct r300_winsys* winsys, int fd)
         exit(1);
     }
     winsys->gb_pipes = target;
+
+    /* get Z pipes */
+    info.request = RADEON_INFO_NUM_Z_PIPES;
+    retval = drmCommandWriteRead(fd, DRM_RADEON_INFO, &info, sizeof(info));
+    if (retval) {
+        fprintf(stderr, "%s: Failed to get GB pipe count, "
+                "error number %d\n", __FUNCTION__, retval);
+        exit(1);
+    }
+    winsys->z_pipes = target;
 
     /* Then, get PCI ID */
     info.request = RADEON_INFO_DEVICE_ID;
@@ -203,6 +228,8 @@ radeon_create_r300_winsys(int fd, struct radeon_winsys* old_winsys)
     winsys->write_cs_reloc = radeon_r300_write_cs_reloc;
     winsys->end_cs = radeon_r300_end_cs;
     winsys->flush_cs = radeon_r300_flush_cs;
+    winsys->reset_bos = radeon_r300_reset_bos;
+    winsys->set_flush_cb = radeon_r300_set_flush_cb;
 
     memcpy(winsys, old_winsys, sizeof(struct radeon_winsys));
 
