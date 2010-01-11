@@ -52,4 +52,4 @@ Index: mesa/progs/Makefile
 +	done
  
  clean:
- 	-@for dir in $(SUBDIRS) tests ; do \
+ 	@list='$(SUBDIRS)'; for dir in $$list tests ; do \

@@ -19,6 +19,7 @@ AC_CANONICAL_HOST
 
 dnl Versions for external dependencies
 LIBDRM_REQUIRED=2.4.15
+LIBDRM_RADEON_REQUIRED=2.4.17
 DRI2PROTO_REQUIRED=1.99.3
 
 dnl Check for progs
@@ -577,7 +578,7 @@ dri)
     GL_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED dri2proto >= $DRI2PROTO_REQUIRED"
     DRI_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED"
 
-    PKG_CHECK_MODULES([LIBDRM_RADEON], [libdrm_radeon], HAVE_LIBDRM_RADEON=yes, HAVE_LIBDRM_RADEON=no)
+    PKG_CHECK_MODULES([LIBDRM_RADEON], [libdrm_radeon libdrm >= $LIBDRM_RADEON_REQUIRED], HAVE_LIBDRM_RADEON=yes, HAVE_LIBDRM_RADEON=no)
 
     if test "$HAVE_LIBDRM_RADEON" = yes; then
 	RADEON_CFLAGS="-DHAVE_LIBDRM_RADEON=1 $LIBDRM_RADEON_CFLAGS"
@@ -1200,12 +1201,14 @@ dnl
 dnl Gallium SVGA configuration
 dnl
 AC_ARG_ENABLE([gallium-svga],
-    [AS_HELP_STRING([--disable-gallium-svga],
-        [build gallium SVGA @<:@default=enabled@:>@])],
+    [AS_HELP_STRING([--enable-gallium-svga],
+        [build gallium SVGA @<:@default=disabled@:>@])],
     [enable_gallium_svga="$enableval"],
-    [enable_gallium_svga=yes])
+    [enable_gallium_svga=auto])
 if test "x$enable_gallium_svga" = xyes; then
     GALLIUM_WINSYS_DRM_DIRS="$GALLIUM_WINSYS_DRM_DIRS vmware"
+    GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS svga"
+elif test "x$enable_gallium_svga" = xauto; then
     GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS svga"
 fi
 

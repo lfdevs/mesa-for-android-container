@@ -6,28 +6,11 @@ Subject: Fix build on GNU/Hurd
  src/glx/x11/dri2.c |    2 ++
  2 files changed, 16 insertions(+), 11 deletions(-)
 
-Index: mesa-7.6.1~rc2/src/glx/x11/dri2.c
+Index: mesa/configure.ac
 ===================================================================
---- mesa-7.6.1~rc2.orig/src/glx/x11/dri2.c	2009-12-05 23:51:01.000000000 +0100
-+++ mesa-7.6.1~rc2/src/glx/x11/dri2.c	2009-12-06 00:10:10.000000000 +0100
-@@ -30,6 +30,7 @@
-  *   Kristian Høgsberg (krh@redhat.com)
-  */
- 
-+#ifdef GLX_DIRECT_RENDERING
- 
- #define NEED_REPLIES
- #include <X11/Xlibint.h>
-@@ -377,3 +378,4 @@
-    UnlockDisplay(dpy);
-    SyncHandle();
- }
-+#endif
-Index: mesa-7.6.1~rc2/configure.ac
-===================================================================
---- mesa-7.6.1~rc2.orig/configure.ac	2009-12-05 23:50:57.000000000 +0100
-+++ mesa-7.6.1~rc2/configure.ac	2009-12-06 00:10:27.000000000 +0100
-@@ -538,6 +538,13 @@
+--- mesa.orig/configure.ac
++++ mesa/configure.ac
+@@ -539,6 +539,13 @@
      enable_xcb=no
  fi
  
@@ -41,7 +24,7 @@ Index: mesa-7.6.1~rc2/configure.ac
  dnl
  dnl libGL configuration per driver
  dnl
-@@ -571,11 +578,13 @@
+@@ -572,11 +579,13 @@
          AC_MSG_ERROR([Can't use static libraries for DRI drivers])
      fi
  
@@ -58,9 +41,9 @@ Index: mesa-7.6.1~rc2/configure.ac
 +        DRI_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED"
 +    fi
  
-     PKG_CHECK_MODULES([LIBDRM_RADEON], [libdrm_radeon], HAVE_LIBDRM_RADEON=yes, HAVE_LIBDRM_RADEON=no)
+     PKG_CHECK_MODULES([LIBDRM_RADEON], [libdrm_radeon libdrm >= $LIBDRM_RADEON_REQUIRED], HAVE_LIBDRM_RADEON=yes, HAVE_LIBDRM_RADEON=no)
  
-@@ -656,12 +665,6 @@
+@@ -657,12 +666,6 @@
      [DRI_DRIVER_SEARCH_DIR="$withval"],
      [DRI_DRIVER_SEARCH_DIR='${DRI_DRIVER_INSTALL_DIR}'])
  AC_SUBST([DRI_DRIVER_SEARCH_DIR])

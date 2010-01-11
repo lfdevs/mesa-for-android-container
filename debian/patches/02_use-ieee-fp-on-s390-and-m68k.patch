@@ -6,7 +6,7 @@ Index: mesa/src/mesa/main/compiler.h
 ===================================================================
 --- mesa.orig/src/mesa/main/compiler.h
 +++ mesa/src/mesa/main/compiler.h
-@@ -347,8 +347,9 @@
+@@ -351,8 +351,9 @@
   * USE_IEEE: Determine if we're using IEEE floating point
   */
  #if defined(__i386__) || defined(__386__) || defined(__sparc__) || \

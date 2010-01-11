@@ -8,11 +8,11 @@ http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=524690
  configure.ac |    2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-Index: mesa-7.6.1~rc2/configure.ac
+Index: mesa/configure.ac
 ===================================================================
---- mesa-7.6.1~rc2.orig/configure.ac	2009-12-06 00:10:10.000000000 +0100
-+++ mesa-7.6.1~rc2/configure.ac	2009-12-06 00:10:10.000000000 +0100
-@@ -745,7 +745,7 @@
+--- mesa.orig/configure.ac
++++ mesa/configure.ac
+@@ -746,7 +746,7 @@
              ;;
          esac
          ;;

@@ -1,9 +1,34 @@
+mesa (7.7-1) experimental; urgency=low
+
+  [ Brice Goglin ]
+  * Bump libdrm build dependency to 2.4.15, closes: #561058.
+  * New upstream release.
+  * Pull from upstream mesa_7_7_branch up to commit 6d6c9c66.
+
+  [ Julien Cristau ]
+  * Add freedesktop.org ftp to watch file since that's where newer upstream
+    tarballs are.
+  * Don't include GLUT sources since we don't use them.
+
+ -- Brice Goglin <bgoglin@debian.org>  Mon, 11 Jan 2010 17:52:31 +0100
+
 mesa (7.7~rc2-1) experimental; urgency=low
 
   * New upstream release candidate.
     + s3v and trident DRI drivers removed since they never worked.
 
  -- Brice Goglin <bgoglin@debian.org>  Sat, 12 Dec 2009 13:02:55 +0100
+
+mesa (7.6.1-1) unstable; urgency=low
+
+  * New upstream release
+    + Pull upstream mesa_7_6_branch up to commit da876fa3
+  * Bump linux-libc-dev build-dep to 2.6.31 for the r600 dri driver (fixes
+    ftbfs on mips).
+  * Drop hunk from 05_hurd-ftbfs.diff that was applied upstream.  Refresh
+    other patches.
+
+ -- Julien Cristau <jcristau@debian.org>  Tue, 29 Dec 2009 10:42:24 +0000
 
 mesa (7.6.1~rc3-1) unstable; urgency=low
 

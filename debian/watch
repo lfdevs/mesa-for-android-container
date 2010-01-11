@@ -1,3 +1,6 @@
 version=3
 opts="uversionmangle=s/-rc/~rc/" \
 http://sf.net/mesa3d/MesaLib-(.*)\.tar\.gz
+
+opts="uversionmangle=s/-rc/~rc/" \
+ftp://freedesktop.org/pub/mesa/([\d\.]*)/ MesaLib-(.*)\.tar\.gz

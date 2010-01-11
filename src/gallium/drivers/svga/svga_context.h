@@ -41,6 +41,7 @@
 struct draw_vertex_shader;
 struct svga_shader_result;
 struct SVGACmdMemory;
+struct util_bitmask;
 struct u_upload_mgr;
 
 
@@ -267,8 +268,6 @@ struct svga_hw_draw_state
    unsigned ts[16][TS_MAX];
    float cb[PIPE_SHADER_TYPES][CB_MAX][4];
 
-   unsigned shader_id[PIPE_SHADER_TYPES];
-   
    struct svga_shader_result *fs;
    struct svga_shader_result *vs;
    struct svga_hw_view_state views[PIPE_MAX_SAMPLERS];
@@ -321,12 +320,14 @@ struct svga_context
       boolean new_vdecl;
    } swtnl;
 
+   /* Bitmask of used shader IDs */
+   struct util_bitmask *fs_bm;
+   struct util_bitmask *vs_bm;
+
    struct {
       unsigned dirty[4];
 
       unsigned texture_timestamp;
-      unsigned next_fs_id;
-      unsigned next_vs_id;
 
       /* Internally generated shaders:
        */
