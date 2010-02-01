@@ -569,6 +569,9 @@ st_draw_vbo(GLcontext *ctx,
    /* sanity check for pointer arithmetic below */
    assert(sizeof(arrays[0]->Ptr[0]) == 1);
 
+   /* Mesa core state should have been validated already */
+   assert(ctx->NewState == 0x0);
+
    st_validate_state(ctx->st);
 
    /* must get these after state validation! */

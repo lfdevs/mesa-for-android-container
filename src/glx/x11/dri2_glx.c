@@ -437,8 +437,10 @@ dri2CreateScreen(__GLXscreenConfigs * psc, int screen,
    psc->ext_list_first_time = GL_TRUE;
 
    if (!DRI2Connect(psc->dpy, RootWindow(psc->dpy, screen),
-                    &driverName, &deviceName))
+                    &driverName, &deviceName)) {
+      XFree(psp);
       return NULL;
+   }
 
    psc->driver = driOpenDriver(driverName);
    if (psc->driver == NULL) {
@@ -467,17 +469,17 @@ dri2CreateScreen(__GLXscreenConfigs * psc, int screen,
    psc->fd = open(deviceName, O_RDWR);
    if (psc->fd < 0) {
       ErrorMessageF("failed to open drm device: %s\n", strerror(errno));
-      return NULL;
+      goto handle_error;
    }
 
    if (drmGetMagic(psc->fd, &magic)) {
       ErrorMessageF("failed to get magic\n");
-      return NULL;
+      goto handle_error;
    }
 
    if (!DRI2Authenticate(psc->dpy, RootWindow(psc->dpy, screen), magic)) {
       ErrorMessageF("failed to authenticate magic %d\n", magic);
-      return NULL;
+      goto handle_error;
    }
 
    /* If the server does not support the protocol for
@@ -491,7 +493,7 @@ dri2CreateScreen(__GLXscreenConfigs * psc, int screen,
 
    if (psc->__driScreen == NULL) {
       ErrorMessageF("failed to create dri screen\n");
-      return NULL;
+      goto handle_error;
    }
 
    driBindExtensions(psc, 1);
@@ -521,6 +523,7 @@ dri2CreateScreen(__GLXscreenConfigs * psc, int screen,
  handle_error:
    Xfree(driverName);
    Xfree(deviceName);
+   XFree(psp);
 
    /* FIXME: clean up here */
 

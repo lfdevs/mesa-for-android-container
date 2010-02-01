@@ -329,10 +329,6 @@ struct svga_context
 
       unsigned texture_timestamp;
 
-      /* Internally generated shaders:
-       */
-      unsigned white_fs_id;
-
       /* 
        */
       struct svga_sw_state          sw;

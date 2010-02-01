@@ -394,6 +394,9 @@ void _tnl_draw_prims( GLcontext *ctx,
    GLuint max_basevertex = prim->basevertex;
    GLuint i;
 
+   /* Mesa core state should have been validated already */
+   assert(ctx->NewState == 0x0);
+
    for (i = 1; i < nr_prims; i++)
       max_basevertex = MAX2(max_basevertex, prim[i].basevertex);
 

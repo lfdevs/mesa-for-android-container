@@ -25,41 +25,47 @@
  * 
  **************************************************************************/
 
-#include "pipe/p_defines.h"
-#include "util/u_memory.h"
-#include "sp_context.h"
-#include "sp_state.h"
-#include "draw/draw_context.h"
+
+#ifndef LP_DEBUG_H
+#define LP_DEBUG_H
+
+#include "pipe/p_compiler.h"
+#include "util/u_debug.h"
+
+extern void
+st_print_current(void);
 
 
+#define DEBUG_PIPE      0x1
+#define DEBUG_TGSI      0x2
+#define DEBUG_TEX       0x4
+#define DEBUG_ASM       0x8
+#define DEBUG_SETUP     0x10
+#define DEBUG_RAST      0x20
+#define DEBUG_QUERY     0x40
+#define DEBUG_SCREEN    0x80
+#define DEBUG_JIT       0x100
 
-void *
-softpipe_create_rasterizer_state(struct pipe_context *pipe,
-                                 const struct pipe_rasterizer_state *rast)
+#ifdef DEBUG
+extern int LP_DEBUG;
+#else
+#define LP_DEBUG 0
+#endif
+
+void st_debug_init( void );
+
+static INLINE void
+LP_DBG( unsigned flag, const char *fmt, ... )
 {
-   return mem_dup(rast, sizeof(*rast));
+    if (LP_DEBUG & flag)
+    {
+        va_list args;
+
+        va_start( args, fmt );
+        debug_vprintf( fmt, args );
+        va_end( args );
+    }
 }
 
-void softpipe_bind_rasterizer_state(struct pipe_context *pipe,
-                                    void *rasterizer)
-{
-   struct softpipe_context *softpipe = softpipe_context(pipe);
 
-   if (softpipe->rasterizer == rasterizer)
-      return;
-
-   /* pass-through to draw module */
-   draw_set_rasterizer_state(softpipe->draw, rasterizer);
-
-   softpipe->rasterizer = rasterizer;
-
-   softpipe->dirty |= SP_NEW_RASTERIZER;
-}
-
-void softpipe_delete_rasterizer_state(struct pipe_context *pipe,
-                                      void *rasterizer)
-{
-   FREE( rasterizer );
-}
-
-
+#endif /* LP_DEBUG_H */

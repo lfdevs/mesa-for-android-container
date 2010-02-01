@@ -1,3 +1,10 @@
+mesa (7.7-3) experimental; urgency=low
+
+  * Pull from upstream mesa_7_7_branch up to commit f5145a6e.
+  * Build against libdrm-radeon1 2.4.17 to get DRI2 support.
+
+ -- Brice Goglin <bgoglin@debian.org>  Mon, 01 Feb 2010 22:55:36 +0100
+
 mesa (7.7-2) experimental; urgency=low
 
   [ Julien Cristau ]

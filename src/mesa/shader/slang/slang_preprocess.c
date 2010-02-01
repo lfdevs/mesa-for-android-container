@@ -914,6 +914,35 @@ parse_if (slang_string *output, const byte *prod, GLuint *pi, GLint *result, pp_
 #define PRAGMA_PARAM     1
 
 
+/**
+ * Return the length of the given string, stopping at any C++-style comments.
+ * This step fixes bugs with macro definitions such as:
+ *   #define PI 3.14159 // this is pi
+ * The preprocessor includes the comment in the definition of PI so
+ * when we plug in PI somewhere, we get the comment too.
+ * This function effectively strips of the // comment from the given string.
+ * It might also be possible to fix this in the preprocessor grammar.
+ * This bug is not present in the new Mesa 7.8 preprocessor.
+ */
+static int
+strlen_without_comments(const char *s)
+{
+   char pred = 0;
+   int len = 0;
+   while (*s) {
+      if (*s == '/' && pred == '/') {
+         return len - 1;
+      }
+      pred = *s;
+      s++;
+      len++;
+   }
+   return len;
+}
+
+
+
+
 static GLboolean
 preprocess_source (slang_string *output, const char *source,
                    grammar pid, grammar eid,
@@ -1055,11 +1084,12 @@ preprocess_source (slang_string *output, const char *source,
                if (state.cond.top->effective) {
                   slang_string replacement;
                   expand_state es;
+                  int idlen2 = strlen_without_comments((char*)id);
 
                   pp_annotate (output, ") %s", id);
 
                   slang_string_init(&replacement);
-                  slang_string_pushs(&replacement, id, idlen);
+                  slang_string_pushs(&replacement, id, idlen2);
 
                   /* Expand macro replacement. */
                   es.output = &symbol->replacement;

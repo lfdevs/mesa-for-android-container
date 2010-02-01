@@ -49,6 +49,7 @@ struct svga_fs_compile_key
 {
    boolean light_twoside:1;
    boolean front_cw:1;
+   boolean white_fragments:1;
    ubyte num_textures;
    ubyte num_unnormalized_coords;
    struct {
