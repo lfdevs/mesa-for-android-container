@@ -889,7 +889,10 @@ void r200InitState( r200ContextPtr rmesa )
       }
    }
 
-   ALLOC_STATE( stp, always, STP_STATE_SIZE, "STP/stp", 0 );
+   if (rmesa->radeon.radeonScreen->kernel_mm)
+	   ALLOC_STATE( stp, always, STP_STATE_SIZE, "STP/stp", 0 );
+   else
+	   ALLOC_STATE( stp, never, STP_STATE_SIZE, "STP/stp", 0 );
 
    for (i = 0; i < 6; i++)
       if (rmesa->radeon.radeonScreen->kernel_mm)

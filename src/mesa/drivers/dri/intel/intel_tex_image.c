@@ -241,7 +241,8 @@ try_pbo_upload(struct intel_context *intel,
       if (!intelEmitCopyBlit(intel,
 			     intelImage->mt->cpp,
 			     src_stride, src_buffer, src_offset, GL_FALSE,
-			     dst_stride, dst_buffer, 0, GL_FALSE,
+			     dst_stride, dst_buffer, 0,
+			     intelImage->mt->region->tiling,
 			     0, 0, dst_x, dst_y, width, height,
 			     GL_COPY)) {
 	 UNLOCK_HARDWARE(intel);

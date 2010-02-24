@@ -101,6 +101,19 @@ static int emit_rss( struct svga_context *svga,
    }
 
 
+   if (dirty & SVGA_NEW_BLEND_COLOR) {
+      uint32 color;
+      uint32 r = float_to_ubyte(svga->curr.blend_color.color[0]);
+      uint32 g = float_to_ubyte(svga->curr.blend_color.color[1]);
+      uint32 b = float_to_ubyte(svga->curr.blend_color.color[2]);
+      uint32 a = float_to_ubyte(svga->curr.blend_color.color[3]);
+
+      color = (a << 24) | (r << 16) | (g << 8) | b;
+
+      EMIT_RS( svga, color, BLENDCOLOR, fail );
+   }
+
+
    if (dirty & (SVGA_NEW_DEPTH_STENCIL | SVGA_NEW_RAST)) {
       const struct svga_depth_stencil_state *curr = svga->curr.depth; 
       const struct svga_rasterizer_state *rast = svga->curr.rast; 
@@ -191,6 +204,7 @@ static int emit_rss( struct svga_context *svga,
       EMIT_RS( svga, curr->scissortestenable, SCISSORTESTENABLE, fail );
       EMIT_RS( svga, curr->multisampleantialias, MULTISAMPLEANTIALIAS, fail );
       EMIT_RS( svga, curr->lastpixel, LASTPIXEL, fail );
+      EMIT_RS( svga, curr->pointspriteenable, POINTSPRITEENABLE, fail );
       EMIT_RS( svga, curr->linepattern, LINEPATTERN, fail );
       EMIT_RS_FLOAT( svga, curr->pointsize, POINTSIZE, fail );
       EMIT_RS_FLOAT( svga, curr->pointsize_min, POINTSIZEMIN, fail );
@@ -230,12 +244,9 @@ static int emit_rss( struct svga_context *svga,
       memcpy( rs,
               queue.rs,
               queue.rs_count * sizeof queue.rs[0]);
-      
+
       SVGA_FIFOCommitAll( svga->swc );
    }
-
-   /* Also blend color:
-    */
 
    return 0;
 
@@ -256,6 +267,7 @@ struct svga_tracked_state svga_hw_rss =
    "hw rss state",
 
    (SVGA_NEW_BLEND |
+    SVGA_NEW_BLEND_COLOR |
     SVGA_NEW_DEPTH_STENCIL |
     SVGA_NEW_RAST |
     SVGA_NEW_FRAME_BUFFER |

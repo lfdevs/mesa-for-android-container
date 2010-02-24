@@ -216,6 +216,9 @@ iter_instruction(
          inst->FullDstRegisters[i].DstRegister.Index,
          "destination",
          FALSE );
+      if (!inst->FullDstRegisters[i].DstRegister.WriteMask) {
+         report_error(ctx, "Destination register has empty writemask");
+      }
    }
    for (i = 0; i < inst->Instruction.NumSrcRegs; i++) {
       check_register_usage(

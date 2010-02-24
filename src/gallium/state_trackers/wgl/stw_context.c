@@ -80,6 +80,9 @@ DrvCopyContext(
    struct stw_context *dst;
    BOOL ret = FALSE;
 
+   if (!stw_dev)
+      return FALSE;
+
    pipe_mutex_lock( stw_dev->ctx_mutex );
    
    src = stw_lookup_context_locked( dhrcSource );
@@ -107,13 +110,15 @@ DrvShareLists(
    struct stw_context *ctx2;
    BOOL ret = FALSE;
 
+   if (!stw_dev)
+      return FALSE;
+
    pipe_mutex_lock( stw_dev->ctx_mutex );
    
    ctx1 = stw_lookup_context_locked( dhglrc1 );
    ctx2 = stw_lookup_context_locked( dhglrc2 );
 
-   if (ctx1 && ctx2 &&
-       ctx1->iPixelFormat == ctx2->iPixelFormat) { 
+   if (ctx1 && ctx2) {
       ret = _mesa_share_state(ctx2->st->ctx, ctx1->st->ctx);
    }
 

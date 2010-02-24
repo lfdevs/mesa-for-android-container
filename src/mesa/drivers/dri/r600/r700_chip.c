@@ -176,7 +176,8 @@ static void r700SetupVTXConstants(GLcontext  * ctx,
     }
     else
     {
-        nVBsize = paos->count * pStreamDesc->stride;
+        nVBsize = (paos->count - 1) * pStreamDesc->stride
+                  + pStreamDesc->size * getTypeSize(pStreamDesc->type);
     }
 
     uSQ_VTX_CONSTANT_WORD0_0 = paos->offset;
@@ -194,11 +195,11 @@ static void r700SetupVTXConstants(GLcontext  * ctx,
         SETfield(uSQ_VTX_CONSTANT_WORD2_0, SQ_NUM_FORMAT_NORM,
 	             SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_shift, SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_mask);
     }
-    //else
-    //{
-    //    SETfield(uSQ_VTX_CONSTANT_WORD2_0, SQ_NUM_FORMAT_INT,
-	//             SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_shift, SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_mask);
-    //}
+    else
+    {
+        SETfield(uSQ_VTX_CONSTANT_WORD2_0, SQ_NUM_FORMAT_SCALED,
+	             SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_shift, SQ_VTX_CONSTANT_WORD2_0__NUM_FORMAT_ALL_mask);
+    }
 
     if(1 == pStreamDesc->_signed)
     {
@@ -427,13 +428,31 @@ static void r700SendRenderTargetState(GLcontext *ctx, struct radeon_state_atom *
 		R600_OUT_BATCH((2 << id));
 		END_BATCH();
 	}
+	/* Set CMASK & TILE buffer to the offset of color buffer as
+	 * we don't use those this shouldn't cause any issue and we
+	 * then have a valid cmd stream
+	 */
+	BEGIN_BATCH_NO_AUTOSTATE(3 + 2);
+	R600_OUT_BATCH_REGSEQ(CB_COLOR0_TILE + (4 * id), 1);
+	R600_OUT_BATCH(r700->render_target[id].CB_COLOR0_TILE.u32All);
+	R600_OUT_BATCH_RELOC(r700->render_target[id].CB_COLOR0_BASE.u32All,
+			     rrb->bo,
+			     r700->render_target[id].CB_COLOR0_BASE.u32All,
+			     0, RADEON_GEM_DOMAIN_VRAM, 0);
+	END_BATCH();
+	BEGIN_BATCH_NO_AUTOSTATE(3 + 2);
+	R600_OUT_BATCH_REGSEQ(CB_COLOR0_FRAG + (4 * id), 1);
+	R600_OUT_BATCH(r700->render_target[id].CB_COLOR0_FRAG.u32All);
+	R600_OUT_BATCH_RELOC(r700->render_target[id].CB_COLOR0_BASE.u32All,
+			     rrb->bo,
+			     r700->render_target[id].CB_COLOR0_BASE.u32All,
+			     0, RADEON_GEM_DOMAIN_VRAM, 0);
+        END_BATCH();
 
-        BEGIN_BATCH_NO_AUTOSTATE(18);
+        BEGIN_BATCH_NO_AUTOSTATE(12);
 	R600_OUT_BATCH_REGVAL(CB_COLOR0_SIZE + (4 * id), r700->render_target[id].CB_COLOR0_SIZE.u32All);
 	R600_OUT_BATCH_REGVAL(CB_COLOR0_VIEW + (4 * id), r700->render_target[id].CB_COLOR0_VIEW.u32All);
 	R600_OUT_BATCH_REGVAL(CB_COLOR0_INFO + (4 * id), r700->render_target[id].CB_COLOR0_INFO.u32All);
-	R600_OUT_BATCH_REGVAL(CB_COLOR0_TILE + (4 * id), r700->render_target[id].CB_COLOR0_TILE.u32All);
-	R600_OUT_BATCH_REGVAL(CB_COLOR0_FRAG + (4 * id), r700->render_target[id].CB_COLOR0_FRAG.u32All);
 	R600_OUT_BATCH_REGVAL(CB_COLOR0_MASK + (4 * id), r700->render_target[id].CB_COLOR0_MASK.u32All);
         END_BATCH();
 
@@ -1298,7 +1317,7 @@ void r600InitAtoms(context_t *context)
 	ALLOC_STATE(poly, always, 10, r700SendPolyState);
 	ALLOC_STATE(cb, cb, 18, r700SendCBState);
 	ALLOC_STATE(clrcmp, always, 6, r700SendCBCLRCMPState);
-	ALLOC_STATE(cb_target, always, 25, r700SendRenderTargetState);
+	ALLOC_STATE(cb_target, always, 29, r700SendRenderTargetState);
 	ALLOC_STATE(blnd, blnd, (6 + (R700_MAX_RENDER_TARGETS * 3)), r700SendCBBlendState);
 	ALLOC_STATE(blnd_clr, always, 6, r700SendCBBlendColorState);
 	ALLOC_STATE(sx, always, 9, r700SendSXState);

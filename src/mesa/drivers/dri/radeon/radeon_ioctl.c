@@ -107,6 +107,8 @@ void radeonSetUpAtomList( r100ContextPtr rmesa )
       insert_at_tail(&rmesa->radeon.hw.atomlist, &rmesa->hw.lit[i]);
    for (i = 0; i < 6; ++i)
       insert_at_tail(&rmesa->radeon.hw.atomlist, &rmesa->hw.ucp[i]);
+   if (rmesa->radeon.radeonScreen->kernel_mm)
+      insert_at_tail(&rmesa->radeon.hw.atomlist, &rmesa->hw.stp);
    insert_at_tail(&rmesa->radeon.hw.atomlist, &rmesa->hw.eye);
    insert_at_tail(&rmesa->radeon.hw.atomlist, &rmesa->hw.grd);
    insert_at_tail(&rmesa->radeon.hw.atomlist, &rmesa->hw.fog);
@@ -454,6 +456,8 @@ static void radeonKernelClear(GLcontext *ctx, GLuint flags)
    uint32_t clear;
    GLint ret, i;
    GLint cx, cy, cw, ch;
+
+   radeonEmitState(&rmesa->radeon);
 
    LOCK_HARDWARE( &rmesa->radeon );
 

@@ -1,3 +1,10 @@
+mesa (7.7-4) unstable; urgency=low
+
+  * Pull from upstream mesa_7_7_branch up to commit 293f4d51.
+    + r6xx/r7xx: emit relocation for FRAG & TILE buffer, closes: #569663.
+
+ -- Brice Goglin <bgoglin@debian.org>  Wed, 24 Feb 2010 22:44:11 +0100
+
 mesa (7.7-3) experimental; urgency=low
 
   * Pull from upstream mesa_7_7_branch up to commit f5145a6e.

@@ -139,6 +139,7 @@ struct svga_rasterizer_state {
    unsigned multisampleantialias:1;
    unsigned antialiasedlineenable:1;
    unsigned lastpixel:1;
+   unsigned pointspriteenable:1;
 
    unsigned linepattern;
 

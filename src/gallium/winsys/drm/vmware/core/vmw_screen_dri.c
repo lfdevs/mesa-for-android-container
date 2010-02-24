@@ -48,8 +48,9 @@ static struct dri1_api_version ddx_required = { 0, 1, 0 };
 static struct dri1_api_version ddx_compat = { 0, 0, 0 };
 static struct dri1_api_version dri_required = { 4, 0, 0 };
 static struct dri1_api_version dri_compat = { 4, 0, 0 };
-static struct dri1_api_version drm_required = { 0, 1, 0 };
-static struct dri1_api_version drm_compat = { 0, 0, 0 };
+static struct dri1_api_version drm_required = { 1, 0, 0 };
+static struct dri1_api_version drm_compat = { 1, 0, 0 };
+static struct dri1_api_version drm_scanout = { 0, 9, 0 };
 
 static boolean
 vmw_dri1_check_version(const struct dri1_api_version *cur,
@@ -84,6 +85,7 @@ vmw_drm_create_screen(struct drm_api *drm_api,
    struct vmw_winsys_screen *vws;
    struct pipe_screen *screen;
    struct dri1_create_screen_arg *dri1;
+   boolean use_old_scanout_flag = FALSE;
 
    if (!arg || arg->mode == DRM_CREATE_NORMAL) {
       struct dri1_api_version drm_ver;
@@ -95,11 +97,16 @@ vmw_drm_create_screen(struct drm_api *drm_api,
 
       drm_ver.major = ver->version_major;
       drm_ver.minor = ver->version_minor;
+      drm_ver.patch_level = 0; /* ??? */
 
       drmFreeVersion(ver);
       if (!vmw_dri1_check_version(&drm_ver, &drm_required,
 				  &drm_compat, "vmwgfx drm driver"))
 	 return NULL;
+
+      if (!vmw_dri1_check_version(&drm_ver, &drm_scanout,
+				  &drm_compat, "use old scanout field (not a error)"))
+         use_old_scanout_flag = TRUE;
    }
 
    if (arg != NULL) {
@@ -117,6 +124,9 @@ vmw_drm_create_screen(struct drm_api *drm_api,
 	 if (!vmw_dri1_check_version(&dri1->drm_version, &drm_required,
 				     &drm_compat, "vmwgfx drm driver"))
 	    return NULL;
+	 if (!vmw_dri1_check_version(&dri1->drm_version, &drm_scanout,
+				     &drm_compat, "use old scanout field (not a error)"))
+	    use_old_scanout_flag = TRUE;
 	 dri1->api = &dri1_api_hooks;
 	 break;
       default:
@@ -124,7 +134,7 @@ vmw_drm_create_screen(struct drm_api *drm_api,
       }
    }
 
-   vws = vmw_winsys_create( fd );
+   vws = vmw_winsys_create( fd, use_old_scanout_flag );
    if (!vws)
       goto out_no_vws;
 

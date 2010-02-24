@@ -1422,6 +1422,7 @@ struct gl_viewport_attrib
  */
 struct gl_buffer_object
 {
+   _glthread_Mutex Mutex;
    GLint RefCount;
    GLuint Name;
    GLenum Usage;        /**< GL_STREAM_DRAW_ARB, GL_STREAM_READ_ARB, etc. */

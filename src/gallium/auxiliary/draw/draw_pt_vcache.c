@@ -347,7 +347,8 @@ vcache_check_run( struct draw_pt_front_end *frontend,
                        draw_count);
       
    if (max_index == 0xffffffff ||
-       fetch_count > draw_count) {
+       fetch_count > draw_count ||
+       max_index != (max_index & ~DRAW_PIPE_FLAG_MASK)) {
       if (0) debug_printf("fail\n");
       goto fail;
    }

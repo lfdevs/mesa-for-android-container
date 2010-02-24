@@ -133,8 +133,7 @@ static const union tgsi_exec_channel ZeroVec =
    { { 0.0, 0.0, 0.0, 0.0 } };
 
 
-#ifdef DEBUG
-static void
+static INLINE void
 check_inf_or_nan(const union tgsi_exec_channel *chan)
 {
    assert(!util_is_inf_or_nan(chan->f[0]));
@@ -142,7 +141,6 @@ check_inf_or_nan(const union tgsi_exec_channel *chan)
    assert(!util_is_inf_or_nan(chan->f[2]));
    assert(!util_is_inf_or_nan(chan->f[3]));
 }
-#endif
 
 
 #ifdef DEBUG
@@ -338,7 +336,9 @@ tgsi_exec_machine_bind_shader(
             /* XXX we only handle SOA dependencies properly for MOV/SWZ
              * at this time!
              */
-            if (opcode != TGSI_OPCODE_MOV) {
+            if (opcode != TGSI_OPCODE_MOV &&
+                opcode != TGSI_OPCODE_MUL &&
+                opcode != TGSI_OPCODE_CMP) {
                debug_printf("Warning: SOA dependency in instruction"
                             " is not handled:\n");
                tgsi_dump_instruction(&parse.FullToken.FullInstruction,
@@ -1424,9 +1424,9 @@ store_dest(
    int offset = 0;  /* indirection offset */
    int index;
 
-#ifdef DEBUG
-   check_inf_or_nan(chan);
-#endif
+   if (0) {
+      check_inf_or_nan(chan);
+   }
 
    /* There is an extra source register that indirectly subscripts
     * a register file. The direct index now becomes an offset
@@ -1854,7 +1854,8 @@ exec_instruction(
    int *pc )
 {
    uint chan_index;
-   union tgsi_exec_channel r[10];
+   union tgsi_exec_channel r[3 * NUM_CHANNELS];
+   union tgsi_exec_channel d[8];
 
    (*pc)++;
 
@@ -1981,14 +1982,27 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_MUL:
-      FOR_EACH_ENABLED_CHANNEL( *inst, chan_index )
-      {
-         FETCH(&r[0], 0, chan_index);
-         FETCH(&r[1], 1, chan_index);
+      if (inst->Flags & SOA_DEPENDENCY_FLAG) {
+         FOR_EACH_ENABLED_CHANNEL( *inst, chan_index )
+         {
+            FETCH(&r[chan_index], 0, chan_index);
+            FETCH(&r[chan_index + NUM_CHANNELS], 1, chan_index);
+         }
+         FOR_EACH_ENABLED_CHANNEL( *inst, chan_index )
+         {
+            micro_mul( &r[chan_index], &r[chan_index], &r[chan_index + NUM_CHANNELS] );
+            STORE(&r[chan_index], 0, chan_index);
+         }
+      } else {
+         FOR_EACH_ENABLED_CHANNEL( *inst, chan_index )
+         {
+            FETCH(&r[0], 0, chan_index);
+            FETCH(&r[1], 1, chan_index);
 
-         micro_mul( &r[0], &r[0], &r[1] );
+            micro_mul( &r[0], &r[0], &r[1] );
 
-         STORE(&r[0], 0, chan_index);
+            STORE(&r[0], 0, chan_index);
+         }
       }
       break;
 
@@ -2255,11 +2269,7 @@ exec_instruction(
       FETCH(&r[4], 1, CHAN_Y);
 
       micro_mul( &r[5], &r[3], &r[4] );
-      micro_sub( &r[2], &r[2], &r[5] );
-
-      if (IS_CHANNEL_ENABLED( *inst, CHAN_X )) {
-         STORE( &r[2], 0, CHAN_X );
-      }
+      micro_sub(&d[CHAN_X], &r[2], &r[5]);
 
       FETCH(&r[2], 1, CHAN_X);
 
@@ -2268,26 +2278,27 @@ exec_instruction(
       FETCH(&r[5], 0, CHAN_X);
 
       micro_mul( &r[1], &r[1], &r[5] );
-      micro_sub( &r[3], &r[3], &r[1] );
-
-      if (IS_CHANNEL_ENABLED( *inst, CHAN_Y )) {
-         STORE( &r[3], 0, CHAN_Y );
-      }
+      micro_sub(&d[CHAN_Y], &r[3], &r[1]);
 
       micro_mul( &r[5], &r[5], &r[4] );
       micro_mul( &r[0], &r[0], &r[2] );
-      micro_sub( &r[5], &r[5], &r[0] );
+      micro_sub(&d[CHAN_Z], &r[5], &r[0]);
 
-      if (IS_CHANNEL_ENABLED( *inst, CHAN_Z )) {
-         STORE( &r[5], 0, CHAN_Z );
+      if (IS_CHANNEL_ENABLED(*inst, CHAN_X)) {
+         STORE(&d[CHAN_X], 0, CHAN_X);
       }
-
+      if (IS_CHANNEL_ENABLED(*inst, CHAN_Y)) {
+         STORE(&d[CHAN_Y], 0, CHAN_Y);
+      }
+      if (IS_CHANNEL_ENABLED(*inst, CHAN_Z)) {
+         STORE(&d[CHAN_Z], 0, CHAN_Z);
+      }
       if (IS_CHANNEL_ENABLED( *inst, CHAN_W )) {
          STORE( &mach->Temps[TEMP_1_I].xyzw[TEMP_1_C], 0, CHAN_W );
       }
       break;
 
-    case TGSI_OPCODE_ABS:
+   case TGSI_OPCODE_ABS:
        FOR_EACH_ENABLED_CHANNEL( *inst, chan_index ) {
           FETCH(&r[0], 0, chan_index);
 
@@ -2667,14 +2678,28 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_CMP:
-      FOR_EACH_ENABLED_CHANNEL( *inst, chan_index ) {
-         FETCH(&r[0], 0, chan_index);
-         FETCH(&r[1], 1, chan_index);
-         FETCH(&r[2], 2, chan_index);
+      if (inst->Flags & SOA_DEPENDENCY_FLAG) {
+         FOR_EACH_ENABLED_CHANNEL( *inst, chan_index ) {
+            FETCH(&r[chan_index], 0, chan_index);
+            FETCH(&r[chan_index + NUM_CHANNELS], 1, chan_index);
+            FETCH(&r[chan_index + 2 * NUM_CHANNELS], 2, chan_index);
+         }
+         FOR_EACH_ENABLED_CHANNEL( *inst, chan_index ) {
+            micro_lt( &r[chan_index], &r[chan_index],
+                      &mach->Temps[TEMP_0_I].xyzw[TEMP_0_C], &r[chan_index + NUM_CHANNELS],
+                      &r[chan_index + 2*NUM_CHANNELS] );
+            STORE(&r[chan_index], 0, chan_index);
+         }
+      } else {
+         FOR_EACH_ENABLED_CHANNEL( *inst, chan_index ) {
+            FETCH(&r[0], 0, chan_index);
+            FETCH(&r[1], 1, chan_index);
+            FETCH(&r[2], 2, chan_index);
 
-         micro_lt( &r[0], &r[0], &mach->Temps[TEMP_0_I].xyzw[TEMP_0_C], &r[1], &r[2] );
+            micro_lt( &r[0], &r[0], &mach->Temps[TEMP_0_I].xyzw[TEMP_0_C], &r[1], &r[2] );
 
-         STORE(&r[0], 0, chan_index);
+            STORE(&r[0], 0, chan_index);
+         }
       }
       break;
 

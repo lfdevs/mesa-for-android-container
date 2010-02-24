@@ -846,7 +846,7 @@ _mesa_initialize_context(GLcontext *ctx,
    _glthread_UNLOCK_MUTEX(shared->Mutex);
 
    if (!init_attrib_groups( ctx )) {
-      _mesa_free_shared_state(ctx, ctx->Shared);
+      _mesa_release_shared_state(ctx, ctx->Shared);
       return GL_FALSE;
    }
 
@@ -854,7 +854,7 @@ _mesa_initialize_context(GLcontext *ctx,
    ctx->Exec = alloc_dispatch_table();
    ctx->Save = alloc_dispatch_table();
    if (!ctx->Exec || !ctx->Save) {
-      _mesa_free_shared_state(ctx, ctx->Shared);
+      _mesa_release_shared_state(ctx, ctx->Shared);
       if (ctx->Exec)
          _mesa_free(ctx->Exec);
       return GL_FALSE;
@@ -944,8 +944,6 @@ _mesa_create_context(const GLvisual *visual,
 void
 _mesa_free_context_data( GLcontext *ctx )
 {
-   GLint RefCount;
-
    if (!_mesa_get_current_context()){
       /* No current context, but we may need one in order to delete
        * texture objs, etc.  So temporarily bind the context now.
@@ -968,6 +966,7 @@ _mesa_free_context_data( GLcontext *ctx )
    _mesa_reference_fragprog(ctx, &ctx->FragmentProgram._TexEnvProgram, NULL);
 
    _mesa_free_attrib_data(ctx);
+   _mesa_free_buffer_objects(ctx);
    _mesa_free_lighting_data( ctx );
    _mesa_free_eval_data( ctx );
    _mesa_free_texture_data( ctx );
@@ -987,6 +986,7 @@ _mesa_free_context_data( GLcontext *ctx )
 #if FEATURE_ARB_pixel_buffer_object
    _mesa_reference_buffer_object(ctx, &ctx->Pack.BufferObj, NULL);
    _mesa_reference_buffer_object(ctx, &ctx->Unpack.BufferObj, NULL);
+   _mesa_reference_buffer_object(ctx, &ctx->DefaultPacking.BufferObj, NULL);
 #endif
 
 #if FEATURE_ARB_vertex_buffer_object
@@ -999,14 +999,7 @@ _mesa_free_context_data( GLcontext *ctx )
    _mesa_free(ctx->Save);
 
    /* Shared context state (display lists, textures, etc) */
-   _glthread_LOCK_MUTEX(ctx->Shared->Mutex);
-   RefCount = --ctx->Shared->RefCount;
-   _glthread_UNLOCK_MUTEX(ctx->Shared->Mutex);
-   assert(RefCount >= 0);
-   if (RefCount == 0) {
-      /* free shared state */
-      _mesa_free_shared_state( ctx, ctx->Shared );
-   }
+   _mesa_release_shared_state( ctx, ctx->Shared );
 
    /* needs to be after freeing shared state */
    _mesa_free_display_list_data(ctx);
@@ -1403,7 +1396,6 @@ _mesa_share_state(GLcontext *ctx, GLcontext *ctxToShare)
 {
    if (ctx && ctxToShare && ctx->Shared && ctxToShare->Shared) {
       struct gl_shared_state *oldSharedState = ctx->Shared;
-      GLint RefCount;
 
       ctx->Shared = ctxToShare->Shared;
       
@@ -1413,13 +1405,7 @@ _mesa_share_state(GLcontext *ctx, GLcontext *ctxToShare)
 
       update_default_objects(ctx);
 
-      _glthread_LOCK_MUTEX(oldSharedState->Mutex);
-      RefCount = --oldSharedState->RefCount;
-      _glthread_UNLOCK_MUTEX(oldSharedState->Mutex);
-
-      if (RefCount == 0) {
-         _mesa_free_shared_state(ctx, oldSharedState);
-      }
+      _mesa_release_shared_state(ctx, oldSharedState);
 
       return GL_TRUE;
    }

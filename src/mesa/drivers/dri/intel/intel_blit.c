@@ -376,6 +376,7 @@ intelClearWithBlit(GLcontext *ctx, GLbitfield mask)
       GLint cx, cy, cw, ch;
       drm_clip_rect_t clear;
       int i;
+      drm_intel_bo *aper_array[2];
 
       /* Get clear bounds after locking */
       cx = fb->_Xmin;
@@ -525,6 +526,15 @@ intelClearWithBlit(GLcontext *ctx, GLbitfield mask)
 
                assert(x1 < x2);
                assert(y1 < y2);
+
+	       /* do space check before going any further */
+	       aper_array[0] = intel->batch->buf;
+	       aper_array[1] = write_buffer;
+
+	       if (drm_intel_bufmgr_check_aperture_space(aper_array,
+							 ARRAY_SIZE(aper_array)) != 0) {
+		  intel_batchbuffer_flush(intel->batch);
+	       }
 
                BEGIN_BATCH(6, REFERENCES_CLIPRECTS);
                OUT_BATCH(CMD);

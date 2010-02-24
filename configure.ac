@@ -20,6 +20,8 @@ AC_CANONICAL_HOST
 dnl Versions for external dependencies
 LIBDRM_REQUIRED=2.4.15
 LIBDRM_RADEON_REQUIRED=2.4.17
+LIBDRM_XORG_REQUIRED=2.4.17
+LIBKMS_XORG_REQUIRED=1.0.0
 DRI2PROTO_REQUIRED=1.99.3
 
 dnl Check for progs
@@ -90,6 +92,9 @@ linux*|*-gnu*|gnu*)
     ;;
 solaris*)
     DEFINES="$DEFINES -DPTHREADS -DSVR4"
+    ;;
+cygwin*)
+    DEFINES="$DEFINES -DPTHREADS"
     ;;
 esac
 
@@ -1149,7 +1154,7 @@ yes)
             GALLIUM_STATE_TRACKERS_DIRS="$GALLIUM_STATE_TRACKERS_DIRS egl"
         fi
         # Have only tested st/xorg on 1.6.0 servers
-        PKG_CHECK_MODULES(XORG, [xorg-server >= 1.6.0],
+        PKG_CHECK_MODULES(XORG, [xorg-server >= 1.6.0 libdrm >= $LIBDRM_XORG_REQUIRED libkms >= $LIBKMS_XORG_REQUIRED],
             HAVE_XORG="yes"; GALLIUM_STATE_TRACKERS_DIRS="$GALLIUM_STATE_TRACKERS_DIRS xorg",
             HAVE_XORG="no")
         ;;
@@ -1166,14 +1171,20 @@ yes)
             AC_MSG_ERROR([cannot build egl state tracker without EGL library])
         fi
         if test "$tracker" = xorg; then
-	    PKG_CHECK_MODULES(XEXT, [xextproto >= 7.0.99.1],
-                  HAVE_XEXTPROTO_71="yes"; DEFINES="$DEFINES -DHAVE_XEXTPROTO_71",
-                  HAVE_XEXTPROTO_71="no")
+            PKG_CHECK_MODULES([LIBDRM_XORG], [libdrm >= $LIBDRM_XORG_REQUIRED])
+            PKG_CHECK_MODULES([LIBKMS_XORG], [libkms >= $LIBKMS_XORG_REQUIRED])
+            HAVE_XORG="yes"
         fi
     done
     GALLIUM_STATE_TRACKERS_DIRS="$state_trackers"
     ;;
 esac
+
+if test "x$HAVE_XORG" = xyes; then
+    PKG_CHECK_MODULES(XEXT, [xextproto >= 7.0.99.1],
+        HAVE_XEXTPROTO_71="yes"; DEFINES="$DEFINES -DHAVE_XEXTPROTO_71",
+        HAVE_XEXTPROTO_71="no")
+fi
 
 AC_ARG_WITH([xorg-driver-dir],
     [AS_HELP_STRING([--with-xorg-driver-dir=DIR],

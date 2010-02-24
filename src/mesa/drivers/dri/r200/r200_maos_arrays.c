@@ -74,7 +74,7 @@ static void r200_emit_vecfog(GLcontext *ctx, struct radeon_aos *aos,
 			     GLvoid *data, int stride, int count)
 {
 	radeonContextPtr rmesa = RADEON_CONTEXT(ctx);
-	uint32_t *out;
+	GLfloat *out;
 	int i;
 	int size = 1;
 
@@ -90,7 +90,7 @@ static void r200_emit_vecfog(GLcontext *ctx, struct radeon_aos *aos,
 	aos->components = size;
 	aos->count = count;
 
-	out = (uint32_t*)((char*)aos->bo->ptr + aos->offset);
+	out = (GLfloat*)((char*)aos->bo->ptr + aos->offset);
 	for (i = 0; i < count; i++) {
 	  out[0] = r200ComputeFogBlendFactor( ctx, *(GLfloat *)data );
 	  out++;

@@ -447,6 +447,7 @@ typedef struct
    GLboolean else_allowed;    /* TRUE if in #if-#else section, FALSE if in #else-#endif section
                                * and for global context. */
    GLboolean endif_required;  /* FALSE for global context only. */
+   GLboolean had_true;        /* TRUE if any sibiling #if or #elif had condition value of TRUE. */
 } pp_cond_ctx;
 
 /* Should be enuff. */
@@ -612,6 +613,7 @@ pp_state_init (pp_state *self, slang_info_log *elog,
    self->cond.top->effective = GL_TRUE;
    self->cond.top->else_allowed = GL_FALSE;
    self->cond.top->endif_required = GL_FALSE;
+   self->cond.top->had_true = GL_TRUE;
 }
 
 static GLvoid
@@ -1135,6 +1137,7 @@ preprocess_source (slang_string *output, const char *source,
                state.cond.top->current = result ? GL_TRUE : GL_FALSE;
                state.cond.top->else_allowed = GL_TRUE;
                state.cond.top->endif_required = GL_TRUE;
+               state.cond.top->had_true = GL_FALSE;
                pp_cond_stack_reevaluate (&state.cond);
             }
             break;
@@ -1146,8 +1149,10 @@ preprocess_source (slang_string *output, const char *source,
                goto error;
             }
 
-            /* Negate current condition and reevaluate it. */
-            state.cond.top->current = !state.cond.top->current;
+            state.cond.top->had_true = state.cond.top->had_true || state.cond.top->current;
+
+            /* Update current condition and reevaluate it. */
+            state.cond.top->current = !(state.cond.top->had_true || state.cond.top->current);
             state.cond.top->else_allowed = GL_FALSE;
             pp_cond_stack_reevaluate (&state.cond);
             if (state.cond.top->effective)
@@ -1161,8 +1166,10 @@ preprocess_source (slang_string *output, const char *source,
                goto error;
             }
 
-            /* Negate current condition and reevaluate it. */
-            state.cond.top->current = !state.cond.top->current;
+            state.cond.top->had_true = state.cond.top->had_true || state.cond.top->current;
+
+            /* Update current condition and reevaluate it. */
+            state.cond.top->current = !(state.cond.top->had_true || state.cond.top->current);
             pp_cond_stack_reevaluate (&state.cond);
 
             if (state.cond.top->effective)
