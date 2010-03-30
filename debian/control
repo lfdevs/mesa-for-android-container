@@ -2,8 +2,8 @@ Source: mesa
 Section: graphics
 Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
-Uploaders: Thierry Reding <thierry@gilfi.de>, David Nusinow <dnusinow@debian.org>, Brice Goglin <bgoglin@debian.org>
-Standards-Version: 3.8.3
+Uploaders: David Nusinow <dnusinow@debian.org>, Brice Goglin <bgoglin@debian.org>
+Standards-Version: 3.8.4
 Build-Depends: debhelper (>= 6.0.7), quilt (>= 0.40), pkg-config,
  libdrm-dev (>= 2.4.15) [!hurd-i386], libx11-dev, xutils-dev,
  x11proto-gl-dev (>= 1.4.8), libxxf86vm-dev,

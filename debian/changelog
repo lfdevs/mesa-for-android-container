@@ -1,3 +1,14 @@
+mesa (7.7.1-1) unstable; urgency=low
+
+  [ Brice Goglin ]
+  * Remove Thierry Reding from Uploaders, closes: #572539.
+  * Bump Standards-Version to 3.8.4, no changes needed.
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+
+ -- Brice Goglin <bgoglin@debian.org>  Tue, 30 Mar 2010 17:15:09 +0200
+
 mesa (7.7-4) unstable; urgency=low
 
   * Pull from upstream mesa_7_7_branch up to commit 293f4d51.

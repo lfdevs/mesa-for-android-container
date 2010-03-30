@@ -39,6 +39,7 @@
 #include <xf86.h>
 #include <xf86i2c.h>
 #include <xf86Crtc.h>
+#include <cursorstr.h>
 #include "xorg_tracker.h"
 #include "xf86Modes.h"
 
@@ -146,6 +147,7 @@ crtc_gamma_set(xf86CrtcPtr crtc, CARD16 * red, CARD16 * green, CARD16 * blue,
     /* XXX: hockup */
 }
 
+#if 0 /* Implement and enable to enable rotation and reflection. */
 static void *
 crtc_shadow_allocate(xf86CrtcPtr crtc, int width, int height)
 {
@@ -167,6 +169,8 @@ crtc_shadow_destroy(xf86CrtcPtr crtc, PixmapPtr rotate_pixmap, void *data)
 {
     /* ScrnInfoPtr pScrn = crtc->scrn; */
 }
+
+#endif
 
 /*
  * Cursor functions
@@ -276,7 +280,21 @@ err_bo_destroy:
 static void
 crtc_load_cursor_argb(xf86CrtcPtr crtc, CARD32 * image)
 {
+    xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
     modesettingPtr ms = modesettingPTR(crtc->scrn);
+
+    /* Older X servers have cursor reference counting bugs leading to use of
+     * freed memory and consequently random crashes. Should be fixed as of
+     * xserver 1.8, but this workaround shouldn't hurt anyway.
+     */
+    if (config->cursor)
+       config->cursor->refcnt++;
+
+    if (ms->cursor)
+       FreeCursor(ms->cursor, None);
+
+    ms->cursor = config->cursor;
+
     if (ms->screen)
 	crtc_load_cursor_argb_ga3d(crtc, image);
 #ifdef HAVE_LIBKMS
@@ -348,9 +366,9 @@ static const xf86CrtcFuncsRec crtc_funcs = {
     .hide_cursor = crtc_hide_cursor,
     .load_cursor_argb = crtc_load_cursor_argb,
 
-    .shadow_create = crtc_shadow_create,
-    .shadow_allocate = crtc_shadow_allocate,
-    .shadow_destroy = crtc_shadow_destroy,
+    .shadow_create = NULL,
+    .shadow_allocate = NULL,
+    .shadow_destroy = NULL,
 
     .gamma_set = crtc_gamma_set,
     .destroy = crtc_destroy,

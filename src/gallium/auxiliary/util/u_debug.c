@@ -644,6 +644,57 @@ void debug_dump_image(const char *prefix,
    }
       
    EngUnmapFile(iFile);
+#elif defined(PIPE_OS_UNIX)
+   /* write a ppm file */
+   char filename[256];
+   FILE *f;
+
+   util_snprintf(filename, sizeof(filename), "%s.ppm", prefix);
+
+   f = fopen(filename, "w");
+   if (f) {
+      int i, x, y;
+      int r, g, b;
+      const uint8_t *ptr = (uint8_t *) data;
+
+      /* XXX this is a hack */
+      switch (format) {
+      case PIPE_FORMAT_B8G8R8A8_UNORM:
+         r = 2;
+         g = 1;
+         b = 0;
+         break;
+      case PIPE_FORMAT_A8R8G8B8_UNORM:
+         b = 0;
+         g = 1;
+         r = 2;
+         break;
+      default:
+         r = 0;
+         g = 1;
+         b = 2;
+      }
+
+      fprintf(f, "P6\n");
+      fprintf(f, "# ppm-file created by osdemo.c\n");
+      fprintf(f, "%i %i\n", width, height);
+      fprintf(f, "255\n");
+      fclose(f);
+
+      f = fopen(filename, "ab");  /* reopen in binary append mode */
+      for (y = 0; y < height; y++) {
+         for (x = 0; x < width; x++) {
+            i = y * stride + x * cpp;
+            fputc(ptr[i + r], f); /* write red */
+            fputc(ptr[i + g], f); /* write green */
+            fputc(ptr[i + b], f); /* write blue */
+         }
+      }
+      fclose(f);
+   }
+   else {
+      fprintf(stderr, "Can't open %s for writing\n", filename);
+   }
 #endif
 }
 

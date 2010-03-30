@@ -1035,6 +1035,7 @@ xorg_exa_init(ScrnInfoPtr pScrn, Bool accel)
    modesettingPtr ms = modesettingPTR(pScrn);
    struct exa_context *exa;
    ExaDriverPtr pExa;
+   CustomizerPtr cust = ms->cust;
 
    exa = xcalloc(1, sizeof(struct exa_context));
    if (!exa)
@@ -1093,6 +1094,8 @@ xorg_exa_init(ScrnInfoPtr pScrn, Bool accel)
    exa->pipe = ms->api->create_context(ms->api, exa->scrn);
    /* Share context with DRI */
    ms->ctx = exa->pipe;
+   if (cust && cust->winsys_context_throttle)
+       cust->winsys_context_throttle(cust, ms->ctx, THROTTLE_RENDER);
 
    exa->renderer = renderer_create(exa->pipe);
    exa->accel = accel;

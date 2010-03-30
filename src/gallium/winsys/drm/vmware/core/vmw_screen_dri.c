@@ -238,7 +238,7 @@ vmw_dri1_present_locked(struct pipe_context *locked_pipe,
 		   cmd.rect.y,
 		   cmd.rect.w, cmd.rect.h, cmd.rect.srcx, cmd.rect.srcy);
 
-      vmw_ioctl_command(vws, &cmd, sizeof cmd.header + cmd.header.size,
+      vmw_ioctl_command(vws, -1, 0, &cmd, sizeof cmd.header + cmd.header.size,
                         &fence_seq);
       visible = TRUE;
    }

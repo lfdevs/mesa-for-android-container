@@ -385,7 +385,8 @@ CreateDrawable(Display * dpy, const __GLcontextModes * fbconfig,
    req->glxwindow = (GLXWindow) XAllocID(dpy);
    req->numAttribs = (CARD32) i;
 
-   memcpy(data, attrib_list, 8 * i);
+   if (attrib_list)
+      memcpy(data, attrib_list, 8 * i);
 
    UnlockDisplay(dpy);
    SyncHandle();

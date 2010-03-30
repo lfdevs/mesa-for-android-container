@@ -45,6 +45,18 @@ static const struct {
    const char *name;
    int flag_offset;
 } default_extensions[] = {
+   /*
+    * TODO: Sort by year, to ensure that old extensions are listed first, so
+    * that old applications that truncate the extension string get the basic
+    * extensions, roughly corresponding to what existed then.
+    *
+    * The best example is quake3demo, which often misses
+    * GL_EXT_compiled_vertex_array because it gets truncated.
+    */
+   { ON,  "GL_EXT_compiled_vertex_array",      F(EXT_compiled_vertex_array) },
+   { OFF, "GL_EXT_texture_compression_s3tc",   F(EXT_texture_compression_s3tc) },
+   { OFF, "GL_EXT_texture_env_add",            F(EXT_texture_env_add) },
+
    { OFF, "GL_ARB_copy_buffer",                F(ARB_copy_buffer) },
    { OFF, "GL_ARB_depth_texture",              F(ARB_depth_texture) },
    { OFF, "GL_ARB_depth_clamp",                F(ARB_depth_clamp) },
@@ -99,7 +111,6 @@ static const struct {
    { OFF, "GL_EXT_blend_subtract",             F(EXT_blend_subtract) },
    { OFF, "GL_EXT_clip_volume_hint",           F(EXT_clip_volume_hint) },
    { OFF, "GL_EXT_cull_vertex",                F(EXT_cull_vertex) },
-   { ON,  "GL_EXT_compiled_vertex_array",      F(EXT_compiled_vertex_array) },
    { OFF, "GL_EXT_convolution",                F(EXT_convolution) },
    { ON,  "GL_EXT_copy_texture",               F(EXT_copy_texture) },
    { OFF, "GL_EXT_depth_bounds_test",          F(EXT_depth_bounds_test) },
@@ -128,10 +139,8 @@ static const struct {
    { ON,  "GL_EXT_subtexture",                 F(EXT_subtexture) },
    { ON,  "GL_EXT_texture",                    F(EXT_texture) },
    { ON,  "GL_EXT_texture3D",                  F(EXT_texture3D) },
-   { OFF, "GL_EXT_texture_compression_s3tc",   F(EXT_texture_compression_s3tc) },
    { OFF, "GL_EXT_texture_cube_map",           F(ARB_texture_cube_map) },
    { ON,  "GL_EXT_texture_edge_clamp",         F(SGIS_texture_edge_clamp) },
-   { OFF, "GL_EXT_texture_env_add",            F(EXT_texture_env_add) },
    { OFF, "GL_EXT_texture_env_combine",        F(EXT_texture_env_combine) },
    { OFF, "GL_EXT_texture_env_dot3",           F(EXT_texture_env_dot3) },
    { OFF, "GL_EXT_texture_filter_anisotropic", F(EXT_texture_filter_anisotropic) },
