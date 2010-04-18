@@ -32,7 +32,7 @@
 
 #include "main/mtypes.h"
 
-#include "pipe/p_thread.h"
+#include "os/os_thread.h"
 
 struct pipe_surface;
 struct stw_pixelformat_info;
@@ -45,7 +45,7 @@ struct stw_framebuffer
    /**
     * This mutex has two purposes:
     * - protect the access to the mutable data members below
-    * - prevent the the framebuffer from being deleted while being accessed.
+    * - prevent the framebuffer from being deleted while being accessed.
     * 
     * It is OK to lock this mutex while holding the stw_device::fb_mutex lock, 
     * but the opposite must never happen.

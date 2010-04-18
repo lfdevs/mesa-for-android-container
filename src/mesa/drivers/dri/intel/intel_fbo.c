@@ -70,14 +70,11 @@ intel_delete_renderbuffer(struct gl_renderbuffer *rb)
 
    ASSERT(irb);
 
-   if (irb->span_cache != NULL)
-      _mesa_free(irb->span_cache);
-
    if (intel && irb->region) {
       intel_region_release(&irb->region);
    }
 
-   _mesa_free(irb);
+   free(irb);
 }
 
 
@@ -107,7 +104,6 @@ intel_alloc_renderbuffer_storage(GLcontext * ctx, struct gl_renderbuffer *rb,
    struct intel_context *intel = intel_context(ctx);
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    int cpp;
-   GLuint pitch;
 
    ASSERT(rb->Name != 0);
 
@@ -179,15 +175,11 @@ intel_alloc_renderbuffer_storage(GLcontext * ctx, struct gl_renderbuffer *rb,
 
    /* allocate new memory region/renderbuffer */
 
-   /* Choose a pitch to match hardware requirements:
-    */
-   pitch = ((cpp * width + 63) & ~63) / cpp;
-
    /* alloc hardware renderbuffer */
-   DBG("Allocating %d x %d Intel RBO (pitch %d)\n", width, height, pitch);
+   DBG("Allocating %d x %d Intel RBO\n", width, height);
 
    irb->region = intel_region_alloc(intel, I915_TILING_NONE, cpp,
-				    width, height, pitch, GL_TRUE);
+				    width, height, GL_TRUE);
    if (!irb->region)
       return GL_FALSE;       /* out of memory? */
 
@@ -199,6 +191,38 @@ intel_alloc_renderbuffer_storage(GLcontext * ctx, struct gl_renderbuffer *rb,
    return GL_TRUE;
 }
 
+
+#if FEATURE_OES_EGL_image
+static void
+intel_image_target_renderbuffer_storage(GLcontext *ctx,
+					struct gl_renderbuffer *rb,
+					void *image_handle)
+{
+   struct intel_context *intel = intel_context(ctx);
+   struct intel_renderbuffer *irb;
+   __DRIscreen *screen;
+   __DRIimage *image;
+
+   screen = intel->intelScreen->driScrnPriv;
+   image = screen->dri2.image->lookupEGLImage(intel->driContext, image_handle,
+					      intel->driContext->loaderPrivate);
+   if (image == NULL)
+      return;
+
+   irb = intel_renderbuffer(rb);
+   if (irb->region)
+      intel_region_release(&irb->region);
+   intel_region_reference(&irb->region, image->region);
+
+   rb->InternalFormat = image->internal_format;
+   rb->Width = image->region->width;
+   rb->Height = image->region->height;
+   rb->Format = image->format;
+   rb->DataType = image->data_type;
+   rb->_BaseFormat = _mesa_base_fbo_format(&intel->ctx,
+					   image->internal_format);
+}
+#endif
 
 /**
  * Called for each hardware renderbuffer when a _window_ is resized.
@@ -222,7 +246,6 @@ static void
 intel_resize_buffers(GLcontext *ctx, struct gl_framebuffer *fb,
 		     GLuint width, GLuint height)
 {
-   struct intel_framebuffer *intel_fb = (struct intel_framebuffer*)fb;
    int i;
 
    _mesa_resize_framebuffer(ctx, fb, width, height);
@@ -233,9 +256,10 @@ intel_resize_buffers(GLcontext *ctx, struct gl_framebuffer *fb,
       return;
    }
 
+
    /* Make sure all window system renderbuffers are up to date */
-   for (i = 0; i < 2; i++) {
-      struct gl_renderbuffer *rb = &intel_fb->color_rb[i]->Base;
+   for (i = BUFFER_FRONT_LEFT; i <= BUFFER_BACK_RIGHT; i++) {
+      struct gl_renderbuffer *rb = fb->Attachment[i].Renderbuffer;
 
       /* only resize if size is changing */
       if (rb && (rb->Width != width || rb->Height != height)) {
@@ -316,7 +340,7 @@ intel_create_renderbuffer(gl_format format)
    default:
       _mesa_problem(NULL,
                     "Unexpected intFormat in intel_create_renderbuffer");
-      _mesa_free(irb);
+      free(irb);
       return NULL;
    }
 
@@ -398,8 +422,6 @@ static GLboolean
 intel_update_wrapper(GLcontext *ctx, struct intel_renderbuffer *irb, 
 		     struct gl_texture_image *texImage)
 {
-   gl_format texFormat;
-
    if (texImage->TexFormat == MESA_FORMAT_ARGB8888) {
       irb->Base.DataType = GL_UNSIGNED_BYTE;
       DBG("Render to RGBA8 texture OK\n");
@@ -429,13 +451,12 @@ intel_update_wrapper(GLcontext *ctx, struct intel_renderbuffer *irb,
       DBG("Render to DEPTH_STENCIL texture OK\n");
    }
    else {
-      DBG("Render to texture BAD FORMAT %d\n", texImage->TexFormat);
+      DBG("Render to texture BAD FORMAT %s\n",
+	  _mesa_get_format_name(texImage->TexFormat));
       return GL_FALSE;
    }
 
    irb->Base.Format = texImage->TexFormat;
-
-   texFormat = texImage->TexFormat;
 
    irb->Base.InternalFormat = texImage->InternalFormat;
    irb->Base._BaseFormat = _mesa_base_fbo_format(ctx, irb->Base.InternalFormat);
@@ -471,7 +492,7 @@ intel_wrap_texture(GLcontext * ctx, struct gl_texture_image *texImage)
    irb->Base.ClassID = INTEL_RB_CLASS;
 
    if (!intel_update_wrapper(ctx, irb, texImage)) {
-      _mesa_free(irb);
+      free(irb);
       return NULL;
    }
 
@@ -528,7 +549,7 @@ intel_render_texture(GLcontext * ctx,
        return;
    }
 
-   DBG("Begin render texture tid %x tex=%u w=%d h=%d refcount=%d\n",
+   DBG("Begin render texture tid %lx tex=%u w=%d h=%d refcount=%d\n",
        _glthread_GetID(),
        att->Texture->Name, newImage->Width, newImage->Height,
        irb->Base.RefCount);
@@ -594,11 +615,21 @@ intel_validate_framebuffer(GLcontext *ctx, struct gl_framebuffer *fb)
       intel_get_renderbuffer(fb, BUFFER_STENCIL);
    int i;
 
-   if (stencilRb && stencilRb != depthRb) {
-      /* we only support combined depth/stencil buffers, not separate
-       * stencil buffers.
-       */
-      fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
+   if (depthRb && stencilRb && stencilRb != depthRb) {
+      if (ctx->DrawBuffer->Attachment[BUFFER_DEPTH].Type == GL_TEXTURE &&
+	  ctx->DrawBuffer->Attachment[BUFFER_STENCIL].Type == GL_TEXTURE &&
+	  (ctx->DrawBuffer->Attachment[BUFFER_DEPTH].Texture->Name ==
+	   ctx->DrawBuffer->Attachment[BUFFER_STENCIL].Texture->Name)) {
+	 /* OK */
+      } else {
+	 /* we only support combined depth/stencil buffers, not separate
+	  * stencil buffers.
+	  */
+	 DBG("Only supports combined depth/stencil (found %s, %s)\n",
+	     depthRb ? _mesa_get_format_name(depthRb->Base.Format): "NULL",
+	     stencilRb ? _mesa_get_format_name(stencilRb->Base.Format): "NULL");
+	 fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
+      }
    }
 
    for (i = 0; i < ctx->Const.MaxDrawBuffers; i++) {
@@ -609,6 +640,7 @@ intel_validate_framebuffer(GLcontext *ctx, struct gl_framebuffer *fb)
 	 continue;
 
       if (irb == NULL) {
+	 DBG("software rendering renderbuffer\n");
 	 fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
 	 continue;
       }
@@ -643,4 +675,9 @@ intel_fbo_init(struct intel_context *intel)
    intel->ctx.Driver.ResizeBuffers = intel_resize_buffers;
    intel->ctx.Driver.ValidateFramebuffer = intel_validate_framebuffer;
    intel->ctx.Driver.BlitFramebuffer = _mesa_meta_BlitFramebuffer;
+
+#if FEATURE_OES_EGL_image
+   intel->ctx.Driver.EGLImageTargetRenderbufferStorage =
+      intel_image_target_renderbuffer_storage;
+#endif   
 }

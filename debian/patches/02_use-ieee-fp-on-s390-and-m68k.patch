@@ -2,11 +2,13 @@ Patch that fixes Debian bug #349437.
 
 This patch by David Nusinow.
 
-Index: mesa/src/mesa/main/compiler.h
-===================================================================
---- mesa.orig/src/mesa/main/compiler.h
-+++ mesa/src/mesa/main/compiler.h
-@@ -351,8 +351,9 @@
+---
+ src/mesa/main/compiler.h |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+--- a/src/mesa/main/compiler.h
++++ b/src/mesa/main/compiler.h
+@@ -353,8 +353,9 @@ static INLINE GLuint CPU_TO_LE32(GLuint
   * USE_IEEE: Determine if we're using IEEE floating point
   */
  #if defined(__i386__) || defined(__386__) || defined(__sparc__) || \

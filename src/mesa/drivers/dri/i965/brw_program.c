@@ -95,9 +95,17 @@ static void brwDeleteProgram( GLcontext *ctx,
 			      struct gl_program *prog )
 {
    if (prog->Target == GL_FRAGMENT_PROGRAM_ARB) {
-      struct gl_fragment_program *fprog = (struct gl_fragment_program *) prog;
-      struct brw_fragment_program *brw_fprog = brw_fragment_program(fprog);
-      dri_bo_unreference(brw_fprog->const_buffer);
+      struct gl_fragment_program *fp = (struct gl_fragment_program *) prog;
+      struct brw_fragment_program *brw_fp = brw_fragment_program(fp);
+
+      dri_bo_unreference(brw_fp->const_buffer);
+   }
+
+   if (prog->Target == GL_VERTEX_PROGRAM_ARB) {
+      struct gl_vertex_program *vp = (struct gl_vertex_program *) prog;
+      struct brw_vertex_program *brw_vp = brw_vertex_program(vp);
+
+      dri_bo_unreference(brw_vp->const_buffer);
    }
 
    _mesa_delete_program( ctx, prog );
@@ -111,9 +119,10 @@ static GLboolean brwIsProgramNative( GLcontext *ctx,
    return GL_TRUE;
 }
 
-static void brwProgramStringNotify( GLcontext *ctx,
-				    GLenum target,
-				    struct gl_program *prog )
+
+static GLboolean brwProgramStringNotify( GLcontext *ctx,
+                                         GLenum target,
+                                         struct gl_program *prog )
 {
    struct brw_context *brw = brw_context(ctx);
 
@@ -150,6 +159,9 @@ static void brwProgramStringNotify( GLcontext *ctx,
        */
       _tnl_program_string(ctx, target, prog);
    }
+
+   /* XXX check if program is legal, within limits */
+   return GL_TRUE;
 }
 
 void brwInitFragProgFuncs( struct dd_function_table *functions )

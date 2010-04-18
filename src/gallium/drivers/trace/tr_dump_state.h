@@ -35,10 +35,7 @@
 
 void trace_dump_format(enum pipe_format format);
 
-void trace_dump_block(const struct pipe_format_block *block);
-
 void trace_dump_template(const struct pipe_texture *templat);
-
 
 void trace_dump_rasterizer_state(const struct pipe_rasterizer_state *state);
 
@@ -50,8 +47,6 @@ void trace_dump_scissor_state(const struct pipe_scissor_state *state);
 
 void trace_dump_clip_state(const struct pipe_clip_state *state);
 
-void trace_dump_constant_buffer(const struct pipe_constant_buffer *state);
-
 void trace_dump_token(const struct tgsi_token *token);
 
 void trace_dump_shader_state(const struct pipe_shader_state *state);
@@ -61,6 +56,8 @@ void trace_dump_depth_stencil_alpha_state(const struct pipe_depth_stencil_alpha_
 void trace_dump_blend_state(const struct pipe_blend_state *state);
 
 void trace_dump_blend_color(const struct pipe_blend_color *state);
+
+void trace_dump_stencil_ref(const struct pipe_stencil_ref *state);
 
 void trace_dump_framebuffer_state(const struct pipe_framebuffer_state *state);
 

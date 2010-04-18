@@ -11,7 +11,7 @@ LIB_DEP = $(TOP)/$(LIB_DIR)/$(GL_LIB_NAME)
 # Add X11 and pthread libs to satisfy GNU gold.
 APP_LIB_DEPS += -lX11 -lpthread
 
-LIBS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) $(APP_LIB_DEPS)
+LIBS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) -L$(libdir) $(APP_LIB_DEPS)
 
 PROGS = \
 	corender \
@@ -29,8 +29,10 @@ PROGS = \
 	glxsnoop \
 	glxswapcontrol \
 	manywin \
+	msctest \
 	multictx \
 	offset \
+	omlsync \
 	overlay \
 	pbinfo \
 	pbdemo \
@@ -51,17 +53,18 @@ EXTRA_PROGS = \
 
 ##### RULES #####
 
-.SUFFIXES:
-.SUFFIXES: .c
+.o: $(LIB_DEP)
+	$(APP_CC) $(CFLAGS) $(LDFLAGS) $< $(LIBS) -o $@
 
-.c: $(LIB_DEP)
-	$(APP_CC) -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) $(LDFLAGS) $< $(LIBS) -o $@
+.c.o:
+	$(APP_CC) -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) $< -c -o $@
 
 
 ##### TARGETS #####
 
 default: $(PROGS)
 
+$(PROGS): $(PROGS:%=%.o)
 
 extra: $(EXTRA_PROGS)
 
@@ -72,45 +75,29 @@ clean:
 
 
 # special cases
+pbutil.o: pbutil.h
+pbinfo.o: pbutil.h
 pbinfo: pbinfo.o pbutil.o
 	$(APP_CC) $(CFLAGS) $(LDFLAGS) pbinfo.o pbutil.o $(LIBS) -o $@
 
+pbdemo.o: pbutil.h
 pbdemo: pbdemo.o pbutil.o
 	$(APP_CC) $(CFLAGS) $(LDFLAGS) pbdemo.o pbutil.o $(LIBS) -o $@
 
-pbinfo.o: pbinfo.c pbutil.h
-	$(APP_CC) -c -I. -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) pbinfo.c
-
-pbdemo.o: pbdemo.c pbutil.h
-	$(APP_CC) -c -I. -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) pbdemo.c
-
-pbutil.o: pbutil.c pbutil.h
-	$(APP_CC) -c -I. -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) pbutil.c
-
+glxgears_fbconfig.o: pbutil.h
 glxgears_fbconfig: glxgears_fbconfig.o pbutil.o
 	$(APP_CC) $(CFLAGS) $(LDFLAGS) glxgears_fbconfig.o pbutil.o $(LIBS) -o $@
 
-glxgears_fbconfig.o: glxgears_fbconfig.c pbutil.h
-	$(APP_CC) -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) -c -I. $(CFLAGS) glxgears_fbconfig.c
-
+xuserotfont.o: xuserotfont.h
+xrotfontdemo.o: xuserotfont.h
 xrotfontdemo: xrotfontdemo.o xuserotfont.o
 	$(APP_CC) $(CFLAGS) $(LDFLAGS) xrotfontdemo.o xuserotfont.o $(LIBS) -o $@
 
-xuserotfont.o: xuserotfont.c xuserotfont.h
-	$(APP_CC) -c -I. -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) xuserotfont.c
-
-xrotfontdemo.o: xrotfontdemo.c xuserotfont.h
-	$(APP_CC) -c -I. -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) xrotfontdemo.c
-
+ipc.o: ipc.h
+corender.o: ipc.h
 corender: corender.o ipc.o
 	$(APP_CC) $(CFLAGS) $(LDFLAGS) corender.o ipc.o $(LIBS) -o $@
 
-corender.o: corender.c ipc.h
-	$(APP_CC) -c -I. -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) corender.c
-
-ipc.o: ipc.c ipc.h
-	$(APP_CC) -c -I. -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) ipc.c
-
-yuvrect_client: yuvrect_client.c
-	$(APP_CC) -I$(INCDIR) $(X11_INCLUDES) $(CFLAGS) $< $(LDFLAGS) $(LIBS) -l$(GLU_LIB) -o $@
+yuvrect_client: yuvrect_client.o
+	$(APP_CC) $(CFLAGS) $< $(LDFLAGS) $(LIBS) -l$(GLU_LIB) -o $@
 

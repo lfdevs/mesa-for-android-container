@@ -40,13 +40,16 @@
 
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
-#include "pipe/p_inlines.h"
 #include "pipe/p_shader_tokens.h"
-#include "cso_cache/cso_context.h"
+#include "os/os_stream.h"
+#include "util/u_inlines.h"
 #include "util/u_draw_quad.h"
 #include "util/u_tile.h"
 #include "util/u_math.h"
+#include "util/u_format.h"
+#include "util/u_dump.h"
 #include "util/u_memory.h"
+#include "cso_cache/cso_context.h"
 #include "tgsi/tgsi_text.h"
 #include "tgsi/tgsi_dump.h"
 
@@ -75,12 +78,10 @@
 %rename(BlendColor) pipe_blend_color;
 %rename(Blend) pipe_blend_state;
 %rename(Clip) pipe_clip_state;
-%rename(ConstantBuffer) pipe_constant_buffer;
 %rename(Depth) pipe_depth_state;
 %rename(Stencil) pipe_stencil_state;
 %rename(Alpha) pipe_alpha_state;
 %rename(DepthStencilAlpha) pipe_depth_stencil_alpha_state;
-%rename(FormatBlock) pipe_format_block;
 %rename(Framebuffer) pipe_framebuffer_state;
 %rename(PolyStipple) pipe_poly_stipple;
 %rename(Rasterizer) pipe_rasterizer_state;
@@ -94,7 +95,7 @@
 
 %include "p_compiler.i"
 %include "p_defines.h";
-%include "p_format.i"
+%include "p_format.h"
 
 %include "p_device.i"
 %include "p_context.i"

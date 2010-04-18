@@ -29,6 +29,7 @@
 #include "tgsi/tgsi_scan.h"
 #include "tgsi/tgsi_util.h"
 
+#include "util/u_debug.h"
 
 static unsigned translate_opcode(unsigned opcode)
 {
@@ -120,7 +121,7 @@ static unsigned translate_opcode(unsigned opcode)
      /* case TGSI_OPCODE_NOT: return RC_OPCODE_NOT; */
      /* case TGSI_OPCODE_TRUNC: return RC_OPCODE_TRUNC; */
      /* case TGSI_OPCODE_SHL: return RC_OPCODE_SHL; */
-     /* case TGSI_OPCODE_SHR: return RC_OPCODE_SHR; */
+     /* case TGSI_OPCODE_ISHR: return RC_OPCODE_SHR; */
      /* case TGSI_OPCODE_AND: return RC_OPCODE_AND; */
      /* case TGSI_OPCODE_OR: return RC_OPCODE_OR; */
      /* case TGSI_OPCODE_MOD: return RC_OPCODE_MOD; */
@@ -144,7 +145,7 @@ static unsigned translate_opcode(unsigned opcode)
         case TGSI_OPCODE_KIL: return RC_OPCODE_KIL;
     }
 
-    fprintf(stderr, "Unknown opcode: %i\n", opcode);
+    debug_printf("r300: Unknown TGSI/RC opcode: %i\n", opcode);
     return RC_OPCODE_ILLEGAL_OPCODE;
 }
 
@@ -190,10 +191,10 @@ static void transform_dstreg(
     struct rc_dst_register * dst,
     struct tgsi_full_dst_register * src)
 {
-    dst->File = translate_register_file(src->DstRegister.File);
-    dst->Index = translate_register_index(ttr, src->DstRegister.File, src->DstRegister.Index);
-    dst->WriteMask = src->DstRegister.WriteMask;
-    dst->RelAddr = src->DstRegister.Indirect;
+    dst->File = translate_register_file(src->Register.File);
+    dst->Index = translate_register_index(ttr, src->Register.File, src->Register.Index);
+    dst->WriteMask = src->Register.WriteMask;
+    dst->RelAddr = src->Register.Indirect;
 }
 
 static void transform_srcreg(
@@ -201,18 +202,36 @@ static void transform_srcreg(
     struct rc_src_register * dst,
     struct tgsi_full_src_register * src)
 {
-    dst->File = translate_register_file(src->SrcRegister.File);
-    dst->Index = translate_register_index(ttr, src->SrcRegister.File, src->SrcRegister.Index);
-    dst->RelAddr = src->SrcRegister.Indirect;
+    unsigned i, j;
+
+    dst->File = translate_register_file(src->Register.File);
+    dst->Index = translate_register_index(ttr, src->Register.File, src->Register.Index);
+    dst->RelAddr = src->Register.Indirect;
     dst->Swizzle = tgsi_util_get_full_src_register_swizzle(src, 0);
     dst->Swizzle |= tgsi_util_get_full_src_register_swizzle(src, 1) << 3;
     dst->Swizzle |= tgsi_util_get_full_src_register_swizzle(src, 2) << 6;
     dst->Swizzle |= tgsi_util_get_full_src_register_swizzle(src, 3) << 9;
-    dst->Abs = src->SrcRegisterExtMod.Absolute;
-    dst->Negate = src->SrcRegister.Negate ? RC_MASK_XYZW : 0;
+    dst->Abs = src->Register.Absolute;
+    dst->Negate = src->Register.Negate ? RC_MASK_XYZW : 0;
+
+    if (src->Register.File == TGSI_FILE_IMMEDIATE) {
+        for (i = 0; i < ttr->imms_to_swizzle_count; i++) {
+            if (ttr->imms_to_swizzle[i].index == src->Register.Index) {
+                dst->File = RC_FILE_TEMPORARY;
+                dst->Index = 0;
+                dst->Swizzle = 0;
+                for (j = 0; j < 4; j++) {
+                    dst->Swizzle |= GET_SWZ(ttr->imms_to_swizzle[i].swizzle,
+                        tgsi_util_get_full_src_register_swizzle(src, j)) << (j * 3);
+                }
+                break;
+            }
+        }
+    }
 }
 
-static void transform_texture(struct rc_instruction * dst, struct tgsi_instruction_ext_texture src)
+static void transform_texture(struct rc_instruction * dst, struct tgsi_instruction_texture src,
+                              uint32_t *shadowSamplers)
 {
     switch(src.Texture) {
         case TGSI_TEXTURE_1D:
@@ -233,14 +252,17 @@ static void transform_texture(struct rc_instruction * dst, struct tgsi_instructi
         case TGSI_TEXTURE_SHADOW1D:
             dst->U.I.TexSrcTarget = RC_TEXTURE_1D;
             dst->U.I.TexShadow = 1;
+            *shadowSamplers |= 1 << dst->U.I.TexSrcUnit;
             break;
         case TGSI_TEXTURE_SHADOW2D:
             dst->U.I.TexSrcTarget = RC_TEXTURE_2D;
             dst->U.I.TexShadow = 1;
+            *shadowSamplers |= 1 << dst->U.I.TexSrcUnit;
             break;
         case TGSI_TEXTURE_SHADOWRECT:
             dst->U.I.TexSrcTarget = RC_TEXTURE_RECT;
             dst->U.I.TexShadow = 1;
+            *shadowSamplers |= 1 << dst->U.I.TexSrcUnit;
             break;
     }
 }
@@ -258,34 +280,61 @@ static void transform_instruction(struct tgsi_to_rc * ttr, struct tgsi_full_inst
     dst->U.I.SaturateMode = translate_saturate(src->Instruction.Saturate);
 
     if (src->Instruction.NumDstRegs)
-        transform_dstreg(ttr, &dst->U.I.DstReg, &src->FullDstRegisters[0]);
+        transform_dstreg(ttr, &dst->U.I.DstReg, &src->Dst[0]);
 
     for(i = 0; i < src->Instruction.NumSrcRegs; ++i) {
-        if (src->FullSrcRegisters[i].SrcRegister.File == TGSI_FILE_SAMPLER)
-            dst->U.I.TexSrcUnit = src->FullSrcRegisters[i].SrcRegister.Index;
+        if (src->Src[i].Register.File == TGSI_FILE_SAMPLER)
+            dst->U.I.TexSrcUnit = src->Src[i].Register.Index;
         else
-            transform_srcreg(ttr, &dst->U.I.SrcReg[i], &src->FullSrcRegisters[i]);
+            transform_srcreg(ttr, &dst->U.I.SrcReg[i], &src->Src[i]);
     }
 
     /* Texturing. */
-    transform_texture(dst, src->InstructionExtTexture);
+    if (src->Instruction.Texture)
+        transform_texture(dst, src->Texture,
+                          &ttr->compiler->Program.ShadowSamplers);
 }
 
-static void handle_immediate(struct tgsi_to_rc * ttr, struct tgsi_full_immediate * imm)
+static void handle_immediate(struct tgsi_to_rc * ttr,
+                             struct tgsi_full_immediate * imm,
+                             unsigned index)
 {
     struct rc_constant constant;
-    int i;
+    unsigned swizzle = 0;
+    boolean can_swizzle = TRUE;
+    unsigned i;
 
-    constant.Type = RC_CONSTANT_IMMEDIATE;
-    constant.Size = 4;
-    for(i = 0; i < 4; ++i)
-        constant.u.Immediate[i] = imm->u[i].Float;
-    rc_constants_add(&ttr->compiler->Program.Constants, &constant);
+    for (i = 0; i < 4; i++) {
+        if (imm->u[i].Float == 0.0f) {
+            swizzle |= RC_SWIZZLE_ZERO << (i * 3);
+        } else if (imm->u[i].Float == 0.5f && ttr->use_half_swizzles) {
+            swizzle |= RC_SWIZZLE_HALF << (i * 3);
+        } else if (imm->u[i].Float == 1.0f) {
+            swizzle |= RC_SWIZZLE_ONE << (i * 3);
+        } else {
+            can_swizzle = FALSE;
+            break;
+        }
+    }
+
+    if (can_swizzle) {
+        ttr->imms_to_swizzle[ttr->imms_to_swizzle_count].index = index;
+        ttr->imms_to_swizzle[ttr->imms_to_swizzle_count].swizzle = swizzle;
+        ttr->imms_to_swizzle_count++;
+    } else {
+        constant.Type = RC_CONSTANT_IMMEDIATE;
+        constant.Size = 4;
+        for(i = 0; i < 4; ++i)
+            constant.u.Immediate[i] = imm->u[i].Float;
+        rc_constants_add(&ttr->compiler->Program.Constants, &constant);
+    }
 }
 
-void r300_tgsi_to_rc(struct tgsi_to_rc * ttr, const struct tgsi_token * tokens)
+void r300_tgsi_to_rc(struct tgsi_to_rc * ttr,
+                     const struct tgsi_token * tokens)
 {
     struct tgsi_parse_context parser;
+    unsigned imm_index = 0;
     int i;
 
     /* Allocate constants placeholders.
@@ -302,6 +351,9 @@ void r300_tgsi_to_rc(struct tgsi_to_rc * ttr, const struct tgsi_token * tokens)
 
     ttr->immediate_offset = ttr->compiler->Program.Constants.Count;
 
+    ttr->imms_to_swizzle = malloc(ttr->info->immediate_count * sizeof(struct swizzled_imms));
+    ttr->imms_to_swizzle_count = 0;
+
     tgsi_parse_init(&parser, tokens);
 
     while (!tgsi_parse_end_of_tokens(&parser)) {
@@ -311,7 +363,8 @@ void r300_tgsi_to_rc(struct tgsi_to_rc * ttr, const struct tgsi_token * tokens)
             case TGSI_TOKEN_TYPE_DECLARATION:
                 break;
             case TGSI_TOKEN_TYPE_IMMEDIATE:
-                handle_immediate(ttr, &parser.FullToken.FullImmediate);
+                handle_immediate(ttr, &parser.FullToken.FullImmediate, imm_index);
+                imm_index++;
                 break;
             case TGSI_TOKEN_TYPE_INSTRUCTION:
                 transform_instruction(ttr, &parser.FullToken.FullInstruction);
@@ -320,6 +373,8 @@ void r300_tgsi_to_rc(struct tgsi_to_rc * ttr, const struct tgsi_token * tokens)
     }
 
     tgsi_parse_free(&parser);
+
+    free(ttr->imms_to_swizzle);
 
     rc_calculate_inputs_outputs(ttr->compiler);
 }

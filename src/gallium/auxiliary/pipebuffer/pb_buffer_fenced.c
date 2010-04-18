@@ -44,7 +44,7 @@
 #include "pipe/p_compiler.h"
 #include "pipe/p_defines.h"
 #include "util/u_debug.h"
-#include "pipe/p_thread.h"
+#include "os/os_thread.h"
 #include "util/u_memory.h"
 #include "util/u_double_list.h"
 
@@ -696,7 +696,7 @@ fenced_buffer_map(struct pb_buffer *buf,
        * Don't wait for the GPU to finish accessing it, if blocking is forbidden.
        */
       if((flags & PIPE_BUFFER_USAGE_DONTBLOCK) &&
-          ops->fence_signalled(ops, fenced_buf->fence, 0) == 0) {
+          ops->fence_signalled(ops, fenced_buf->fence, 0) != 0) {
          goto done;
       }
 

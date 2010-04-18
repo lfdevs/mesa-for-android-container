@@ -39,17 +39,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "drirenderbuffer.h"
 #include "drivers/common/meta.h"
 #include "main/context.h"
-#include "main/framebuffer.h"
 #include "main/renderbuffer.h"
 #include "main/state.h"
 #include "main/simple_list.h"
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
 #include "tnl/tnl.h"
-
-#if defined(RADEON_R600)
-#include "r600_context.h"
-#endif
 
 #define DRIVER_DATE "20090101"
 
@@ -181,10 +176,10 @@ static void radeonInitDriverFuncs(struct dd_function_table *functions)
 GLboolean radeonInitContext(radeonContextPtr radeon,
 			    struct dd_function_table* functions,
 			    const __GLcontextModes * glVisual,
-			    __DRIcontextPrivate * driContextPriv,
+			    __DRIcontext * driContextPriv,
 			    void *sharedContextPrivate)
 {
-	__DRIscreenPrivate *sPriv = driContextPriv->driScreenPriv;
+	__DRIscreen *sPriv = driContextPriv->driScreenPriv;
 	radeonScreenPtr screen = (radeonScreenPtr) (sPriv->private);
 	GLcontext* ctx;
 	GLcontext* shareCtx;
@@ -291,7 +286,7 @@ static void radeon_destroy_atom_list(radeonContextPtr radeon)
  * Cleanup common context fields.
  * Called by r200DestroyContext/r300DestroyContext
  */
-void radeonDestroyContext(__DRIcontextPrivate *driContextPriv )
+void radeonDestroyContext(__DRIcontext *driContextPriv )
 {
 #ifdef RADEON_BO_TRACK
 	FILE *track;
@@ -355,7 +350,7 @@ void radeonDestroyContext(__DRIcontextPrivate *driContextPriv )
 
 /* Force the context `c' to be unbound from its buffer.
  */
-GLboolean radeonUnbindContext(__DRIcontextPrivate * driContextPriv)
+GLboolean radeonUnbindContext(__DRIcontext * driContextPriv)
 {
 	radeonContextPtr radeon = (radeonContextPtr) driContextPriv->driverPrivate;
 
@@ -499,7 +494,8 @@ radeon_bits_per_pixel(const struct radeon_renderbuffer *rb)
 }
 
 void
-radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
+radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable,
+			    GLboolean front_only)
 {
 	unsigned int attachments[10];
 	__DRIbuffer *buffers = NULL;
@@ -525,7 +521,7 @@ radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
 		struct radeon_renderbuffer *stencil_rb;
 
 		i = 0;
-		if ((radeon->is_front_buffer_rendering ||
+		if ((front_only || radeon->is_front_buffer_rendering ||
 		     radeon->is_front_buffer_reading ||
 		     !draw->color_rb[1])
 		    && draw->color_rb[0]) {
@@ -533,23 +529,25 @@ radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
 			attachments[i++] = radeon_bits_per_pixel(draw->color_rb[0]);
 		}
 
-		if (draw->color_rb[1]) {
-			attachments[i++] = __DRI_BUFFER_BACK_LEFT;
-			attachments[i++] = radeon_bits_per_pixel(draw->color_rb[1]);
-		}
+		if (!front_only) {
+			if (draw->color_rb[1]) {
+				attachments[i++] = __DRI_BUFFER_BACK_LEFT;
+				attachments[i++] = radeon_bits_per_pixel(draw->color_rb[1]);
+			}
 
-		depth_rb = radeon_get_renderbuffer(&draw->base, BUFFER_DEPTH);
-		stencil_rb = radeon_get_renderbuffer(&draw->base, BUFFER_STENCIL);
+			depth_rb = radeon_get_renderbuffer(&draw->base, BUFFER_DEPTH);
+			stencil_rb = radeon_get_renderbuffer(&draw->base, BUFFER_STENCIL);
 
-		if ((depth_rb != NULL) && (stencil_rb != NULL)) {
-			attachments[i++] = __DRI_BUFFER_DEPTH_STENCIL;
-			attachments[i++] = radeon_bits_per_pixel(depth_rb);
-		} else if (depth_rb != NULL) {
-			attachments[i++] = __DRI_BUFFER_DEPTH;
-			attachments[i++] = radeon_bits_per_pixel(depth_rb);
-		} else if (stencil_rb != NULL) {
-			attachments[i++] = __DRI_BUFFER_STENCIL;
-			attachments[i++] = radeon_bits_per_pixel(stencil_rb);
+			if ((depth_rb != NULL) && (stencil_rb != NULL)) {
+				attachments[i++] = __DRI_BUFFER_DEPTH_STENCIL;
+				attachments[i++] = radeon_bits_per_pixel(depth_rb);
+			} else if (depth_rb != NULL) {
+				attachments[i++] = __DRI_BUFFER_DEPTH;
+				attachments[i++] = radeon_bits_per_pixel(depth_rb);
+			} else if (stencil_rb != NULL) {
+				attachments[i++] = __DRI_BUFFER_STENCIL;
+				attachments[i++] = radeon_bits_per_pixel(stencil_rb);
+			}
 		}
 
 		buffers = (*screen->dri2.loader->getBuffersWithFormat)(drawable,
@@ -562,12 +560,14 @@ radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
 		i = 0;
 		if (draw->color_rb[0])
 			attachments[i++] = __DRI_BUFFER_FRONT_LEFT;
-		if (draw->color_rb[1])
-			attachments[i++] = __DRI_BUFFER_BACK_LEFT;
-		if (radeon_get_renderbuffer(&draw->base, BUFFER_DEPTH))
-			attachments[i++] = __DRI_BUFFER_DEPTH;
-		if (radeon_get_renderbuffer(&draw->base, BUFFER_STENCIL))
-			attachments[i++] = __DRI_BUFFER_STENCIL;
+		if (!front_only) {
+			if (draw->color_rb[1])
+				attachments[i++] = __DRI_BUFFER_BACK_LEFT;
+			if (radeon_get_renderbuffer(&draw->base, BUFFER_DEPTH))
+				attachments[i++] = __DRI_BUFFER_DEPTH;
+			if (radeon_get_renderbuffer(&draw->base, BUFFER_STENCIL))
+				attachments[i++] = __DRI_BUFFER_STENCIL;
+		}
 
 		buffers = (*screen->dri2.loader->getBuffers)(drawable,
 								 &drawable->w,
@@ -715,9 +715,9 @@ radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
 /* Force the context `c' to be the current context and associate with it
  * buffer `b'.
  */
-GLboolean radeonMakeCurrent(__DRIcontextPrivate * driContextPriv,
-			    __DRIdrawablePrivate * driDrawPriv,
-			    __DRIdrawablePrivate * driReadPriv)
+GLboolean radeonMakeCurrent(__DRIcontext * driContextPriv,
+			    __DRIdrawable * driDrawPriv,
+			    __DRIdrawable * driReadPriv)
 {
 	radeonContextPtr radeon;
 	struct radeon_framebuffer *drfb;
@@ -735,9 +735,9 @@ GLboolean radeonMakeCurrent(__DRIcontextPrivate * driContextPriv,
 	readfb = driReadPriv->driverPrivate;
 
 	if (driContextPriv->driScreenPriv->dri2.enabled) {
-		radeon_update_renderbuffers(driContextPriv, driDrawPriv);
+		radeon_update_renderbuffers(driContextPriv, driDrawPriv, GL_FALSE);
 		if (driDrawPriv != driReadPriv)
-			radeon_update_renderbuffers(driContextPriv, driReadPriv);
+			radeon_update_renderbuffers(driContextPriv, driReadPriv, GL_FALSE);
 		_mesa_reference_renderbuffer(&radeon->state.color.rb,
 			&(radeon_get_renderbuffer(&drfb->base, BUFFER_BACK_LEFT)->base));
 		_mesa_reference_renderbuffer(&radeon->state.depth.rb,

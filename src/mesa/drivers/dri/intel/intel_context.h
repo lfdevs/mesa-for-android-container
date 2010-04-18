@@ -107,7 +107,6 @@ struct intel_context
       void (*finish_batch) (struct intel_context * intel);
       void (*new_batch) (struct intel_context * intel);
       void (*emit_invarient_state) (struct intel_context * intel);
-      void (*note_fence) (struct intel_context *intel, GLuint fence);
       void (*update_texture_state) (struct intel_context * intel);
 
       void (*render_start) (struct intel_context * intel);
@@ -124,48 +123,6 @@ struct intel_context
 				      GLuint expected);
       void (*invalidate_state) (struct intel_context *intel,
 				GLuint new_state);
-
-
-      /* Metaops: 
-       */
-      void (*install_meta_state) (struct intel_context * intel);
-      void (*leave_meta_state) (struct intel_context * intel);
-
-      void (*meta_draw_region) (struct intel_context * intel,
-                                struct intel_region * draw_region,
-                                struct intel_region * depth_region);
-
-      void (*meta_draw_quad)(struct intel_context *intel,
-			     GLfloat x0, GLfloat x1,
-			     GLfloat y0, GLfloat y1,
-			     GLfloat z,
-			     GLuint color, /* ARGB32 */
-			     GLfloat s0, GLfloat s1,
-			     GLfloat t0, GLfloat t1);
-
-      void (*meta_color_mask) (struct intel_context * intel, GLboolean);
-
-      void (*meta_stencil_replace) (struct intel_context * intel,
-                                    GLuint mask, GLuint clear);
-
-      void (*meta_depth_replace) (struct intel_context * intel);
-
-      void (*meta_texture_blend_replace) (struct intel_context * intel);
-
-      void (*meta_no_stencil_write) (struct intel_context * intel);
-      void (*meta_no_depth_write) (struct intel_context * intel);
-      void (*meta_no_texture) (struct intel_context * intel);
-
-      void (*meta_import_pixel_state) (struct intel_context * intel);
-      void (*meta_frame_buffer_texture) (struct intel_context *intel,
-					 GLint xoff, GLint yoff);
-
-      GLboolean(*meta_tex_rect_source) (struct intel_context * intel,
-					dri_bo * buffer,
-					GLuint offset,
-					GLuint pitch,
-					GLuint height,
-					GLenum format, GLenum type);
 
       void (*assert_not_dirty) (struct intel_context *intel);
 
@@ -184,20 +141,18 @@ struct intel_context
     * Generation number of the hardware: 2 is 8xx, 3 is 9xx pre-965, 4 is 965.
     */
    int gen;
+   GLboolean needs_ff_sync;
+   GLboolean is_ironlake;
+   GLboolean is_g4x;
+   GLboolean is_945;
+   GLboolean has_luminance_srgb;
 
-   struct intel_region *front_region;
-   struct intel_region *back_region;
-   struct intel_region *depth_region;
-
-   /**
-    * This value indicates that the kernel memory manager is being used
-    * instead of the fake client-side memory manager.
-    */
-   GLboolean ttm;
+   int urb_size;
 
    struct intel_batchbuffer *batch;
    drm_intel_bo *first_post_swapbuffers_batch;
    GLboolean no_batch_wrap;
+   GLboolean using_dri2_swapbuffers;
 
    struct
    {
@@ -217,10 +172,6 @@ struct intel_context
    char *prevLockFile;
    int prevLockLine;
 
-   GLuint ClearColor565;
-   GLuint ClearColor8888;
-
-
    /* Offsets of fields within the current vertex:
     */
    GLuint coloroffset;
@@ -237,6 +188,7 @@ struct intel_context
    GLboolean hw_stipple;
    GLboolean depth_buffer_is_float;
    GLboolean no_rast;
+   GLboolean no_hw;
    GLboolean always_flush_batch;
    GLboolean always_flush_cache;
 
@@ -260,19 +212,6 @@ struct intel_context
    intel_point_func draw_point;
    intel_line_func draw_line;
    intel_tri_func draw_tri;
-
-   /**
-    * Set to true if a single constant cliprect should be used in the
-    * batchbuffer.  Otherwise, cliprects must be calculated at batchbuffer
-    * flush time while the lock is held.
-    */
-   GLboolean constant_cliprect;
-
-   /**
-    * In !constant_cliprect mode, set to true if the front cliprects should be
-    * used instead of back.
-    */
-   GLboolean front_cliprects;
 
    /**
     * Set if rendering has occured to the drawable's front buffer.
@@ -300,49 +239,20 @@ struct intel_context
 
    GLboolean use_texture_tiling;
    GLboolean use_early_z;
-   drm_clip_rect_t fboRect;     /**< cliprect for FBO rendering */
 
-   int perf_boxes;
-
-   GLuint do_usleeps;
-   int do_irqs;
-   GLuint irqsEmitted;
-
-   GLboolean scissor;
-   drm_clip_rect_t draw_rect;
-   drm_clip_rect_t scissor_rect;
-
-   drm_context_t hHWContext;
-   drmLock *driHwLock;
    int driFd;
 
-   __DRIcontextPrivate *driContext;
-   __DRIdrawablePrivate *driDrawable;
-   __DRIdrawablePrivate *driReadDrawable;
-   __DRIscreenPrivate *driScreen;
-   intelScreenPrivate *intelScreen;
-   volatile drm_i915_sarea_t *sarea;
-
-   GLuint lastStamp;
-
-   GLboolean no_hw;
+   __DRIcontext *driContext;
+   __DRIdrawable *driDrawable;
+   __DRIdrawable *driReadDrawable;
+   __DRIscreen *driScreen;
+   struct intel_screen *intelScreen;
 
    /**
     * Configuration cache
     */
    driOptionCache optionCache;
-
-   int64_t swap_ust;
-   int64_t swap_missed_ust;
-
-   GLuint swap_count;
-   GLuint swap_missed_count;
 };
-
-/* These are functions now:
- */
-void LOCK_HARDWARE( struct intel_context *intel );
-void UNLOCK_HARDWARE( struct intel_context *intel );
 
 extern char *__progname;
 
@@ -372,29 +282,6 @@ do {						\
    if ((intel)->prim.flush)			\
       (intel)->prim.flush(intel);		\
 } while (0)
-
-/* ================================================================
- * Color packing:
- */
-
-#define INTEL_PACKCOLOR4444(r,g,b,a) \
-  ((((a) & 0xf0) << 8) | (((r) & 0xf0) << 4) | ((g) & 0xf0) | ((b) >> 4))
-
-#define INTEL_PACKCOLOR1555(r,g,b,a) \
-  ((((r) & 0xf8) << 7) | (((g) & 0xf8) << 2) | (((b) & 0xf8) >> 3) | \
-    ((a) ? 0x8000 : 0))
-
-#define INTEL_PACKCOLOR565(r,g,b) \
-  ((((r) & 0xf8) << 8) | (((g) & 0xfc) << 3) | (((b) & 0xf8) >> 3))
-
-#define INTEL_PACKCOLOR8888(r,g,b,a) \
-  ((a<<24) | (r<<16) | (g<<8) | b)
-
-#define INTEL_PACKCOLOR(format, r,  g,  b, a)		\
-(format == DV_PF_555 ? INTEL_PACKCOLOR1555(r,g,b,a) :	\
- (format == DV_PF_565 ? INTEL_PACKCOLOR565(r,g,b) :	\
-  (format == DV_PF_8888 ? INTEL_PACKCOLOR8888(r,g,b,a) :	\
-   0)))
 
 /* ================================================================
  * From linux kernel i386 header files, copes with odd sizes better
@@ -458,7 +345,7 @@ extern int INTEL_DEBUG;
 
 #define DBG(...) do {						\
 	if (INTEL_DEBUG & FILE_DEBUG_FLAG)			\
-		_mesa_printf(__VA_ARGS__);			\
+		printf(__VA_ARGS__);			\
 } while(0)
 
 #define PCI_CHIP_845_G			0x2562
@@ -481,14 +368,13 @@ extern int INTEL_DEBUG;
 
 extern GLboolean intelInitContext(struct intel_context *intel,
                                   const __GLcontextModes * mesaVis,
-                                  __DRIcontextPrivate * driContextPriv,
+                                  __DRIcontext * driContextPriv,
                                   void *sharedContextPrivate,
                                   struct dd_function_table *functions);
 
-extern void intelGetLock(struct intel_context *intel, GLuint flags);
-
 extern void intelFinish(GLcontext * ctx);
 extern void intelFlush(GLcontext * ctx);
+extern void intel_flush(GLcontext * ctx, GLboolean needs_mi_flush);
 
 extern void intelInitDriverFunctions(struct dd_function_table *functions);
 
@@ -568,6 +454,7 @@ void intel_viewport(GLcontext * ctx, GLint x, GLint y,
 
 void intel_update_renderbuffers(__DRIcontext *context,
 				__DRIdrawable *drawable);
+void intel_prepare_render(struct intel_context *intel);
 
 void i915_set_buf_info_for_region(uint32_t *state, struct intel_region *region,
 				  uint32_t buffer_id);
@@ -586,27 +473,6 @@ static INLINE GLboolean
 is_power_of_two(uint32_t value)
 {
    return (value & (value - 1)) == 0;
-}
-
-static INLINE void
-intel_bo_map_gtt_preferred(struct intel_context *intel,
-			   drm_intel_bo *bo,
-			   GLboolean write)
-{
-   if (intel->intelScreen->kernel_exec_fencing)
-      drm_intel_gem_bo_map_gtt(bo);
-   else
-      drm_intel_bo_map(bo, write);
-}
-
-static INLINE void
-intel_bo_unmap_gtt_preferred(struct intel_context *intel,
-			     drm_intel_bo *bo)
-{
-   if (intel->intelScreen->kernel_exec_fencing)
-      drm_intel_gem_bo_unmap_gtt(bo);
-   else
-      drm_intel_bo_unmap(bo);
 }
 
 #endif

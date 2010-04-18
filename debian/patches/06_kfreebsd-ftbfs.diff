@@ -8,11 +8,9 @@ http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=524690
  configure.ac |    2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-Index: mesa/configure.ac
-===================================================================
---- mesa.orig/configure.ac
-+++ mesa/configure.ac
-@@ -746,7 +746,7 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -770,7 +770,7 @@ if test "$mesa_driver" = dri; then
              ;;
          esac
          ;;

@@ -43,11 +43,11 @@
 
 
 
-boolean
+void
 llvmpipe_draw_arrays(struct pipe_context *pipe, unsigned mode,
                      unsigned start, unsigned count)
 {
-   return llvmpipe_draw_elements(pipe, NULL, 0, mode, start, count);
+   llvmpipe_draw_elements(pipe, NULL, 0, mode, start, count);
 }
 
 
@@ -56,7 +56,7 @@ llvmpipe_draw_arrays(struct pipe_context *pipe, unsigned mode,
  * Basically, map the vertex buffers (and drawing surfaces), then hand off
  * the drawing to the 'draw' module.
  */
-boolean
+void
 llvmpipe_draw_range_elements(struct pipe_context *pipe,
                              struct pipe_buffer *indexBuffer,
                              unsigned indexSize,
@@ -68,12 +68,8 @@ llvmpipe_draw_range_elements(struct pipe_context *pipe,
    struct draw_context *draw = lp->draw;
    unsigned i;
 
-   lp->reduced_api_prim = u_reduced_prim(mode);
-
    if (lp->dirty)
       llvmpipe_update_derived( lp );
-
-   llvmpipe_map_transfers(lp);
 
    /*
     * Map vertex buffers
@@ -116,31 +112,18 @@ llvmpipe_draw_range_elements(struct pipe_context *pipe,
     * internally when this condition is seen?)
     */
    draw_flush(draw);
-
-   /* Note: leave drawing surfaces mapped */
-
-   lp->dirty_render_cache = TRUE;
-   
-   return TRUE;
 }
 
 
-boolean
+void
 llvmpipe_draw_elements(struct pipe_context *pipe,
                        struct pipe_buffer *indexBuffer,
                        unsigned indexSize,
                        unsigned mode, unsigned start, unsigned count)
 {
-   return llvmpipe_draw_range_elements( pipe, indexBuffer,
-                                        indexSize,
-                                        0, 0xffffffff,
-                                        mode, start, count );
+   llvmpipe_draw_range_elements( pipe, indexBuffer,
+                                 indexSize,
+                                 0, 0xffffffff,
+                                 mode, start, count );
 }
 
-
-void
-llvmpipe_set_edgeflags(struct pipe_context *pipe, const unsigned *edgeflags)
-{
-   struct llvmpipe_context *lp = llvmpipe_context(pipe);
-   draw_set_edgeflags(lp->draw, edgeflags);
-}

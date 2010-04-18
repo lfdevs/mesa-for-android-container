@@ -40,7 +40,7 @@
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
 #include "util/u_tile.h"
 
 #include "st_debug.h"
@@ -101,14 +101,14 @@ st_read_stencil_pixels(GLcontext *ctx, GLint x, GLint y,
       }
 
       /* get stencil (and Z) values */
-      switch (pt->format) {
+      switch (pt->texture->format) {
       case PIPE_FORMAT_S8_UNORM:
          {
             const ubyte *src = stmap + srcY * pt->stride;
             memcpy(sValues, src, width);
          }
          break;
-      case PIPE_FORMAT_S8Z24_UNORM:
+      case PIPE_FORMAT_Z24S8_UNORM:
          if (format == GL_DEPTH_STENCIL) {
             const uint *src = (uint *) (stmap + srcY * pt->stride);
             const GLfloat scale = 1.0f / (0xffffff);
@@ -126,7 +126,7 @@ st_read_stencil_pixels(GLcontext *ctx, GLint x, GLint y,
             }
          }
          break;
-      case PIPE_FORMAT_Z24S8_UNORM:
+      case PIPE_FORMAT_S8Z24_UNORM:
          if (format == GL_DEPTH_STENCIL) {
             const uint *src = (uint *) (stmap + srcY * pt->stride);
             const GLfloat scale = 1.0f / (0xffffff);
@@ -214,15 +214,15 @@ st_fast_readpixels(GLcontext *ctx, struct st_renderbuffer *strb,
    if (ctx->_ImageTransferState)
       return GL_FALSE;
 
-   if (strb->format == PIPE_FORMAT_A8R8G8B8_UNORM &&
+   if (strb->format == PIPE_FORMAT_B8G8R8A8_UNORM &&
        format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
       combo = A8R8G8B8_UNORM_TO_RGBA_UBYTE;
    }
-   else if (strb->format == PIPE_FORMAT_A8R8G8B8_UNORM &&
+   else if (strb->format == PIPE_FORMAT_B8G8R8A8_UNORM &&
             format == GL_RGB && type == GL_UNSIGNED_BYTE) {
       combo = A8R8G8B8_UNORM_TO_RGB_UBYTE;
    }
-   else if (strb->format == PIPE_FORMAT_A8R8G8B8_UNORM &&
+   else if (strb->format == PIPE_FORMAT_B8G8R8A8_UNORM &&
             format == GL_BGRA && type == GL_UNSIGNED_INT_8_8_8_8_REV) {
       combo = A8R8G8B8_UNORM_TO_BGRA_UINT;
    }
@@ -241,7 +241,7 @@ st_fast_readpixels(GLcontext *ctx, struct st_renderbuffer *strb,
       GLint row, col, dy, dstStride;
 
       if (st_fb_orientation(ctx->ReadBuffer) == Y_0_TOP) {
-         y = strb->texture->height[0] - y - height;
+         y = strb->texture->height0 - y - height;
       }
 
       trans = st_cond_flush_get_tex_transfer(st_context(ctx), strb->texture,
@@ -429,8 +429,8 @@ st_readpixels(GLcontext *ctx, GLint x, GLint y, GLsizei width, GLsizei height,
       const GLint dstStride = _mesa_image_row_stride(&clippedPacking, width,
                                                      format, type);
 
-      if (trans->format == PIPE_FORMAT_S8Z24_UNORM ||
-          trans->format == PIPE_FORMAT_X8Z24_UNORM) {
+      if (trans->texture->format == PIPE_FORMAT_Z24S8_UNORM ||
+          trans->texture->format == PIPE_FORMAT_Z24X8_UNORM) {
          if (format == GL_DEPTH_COMPONENT) {
             for (i = 0; i < height; i++) {
                GLuint ztemp[MAX_WIDTH];
@@ -461,8 +461,8 @@ st_readpixels(GLcontext *ctx, GLint x, GLint y, GLsizei width, GLsizei height,
             }
          }
       }
-      else if (trans->format == PIPE_FORMAT_Z24S8_UNORM ||
-               trans->format == PIPE_FORMAT_Z24X8_UNORM) {
+      else if (trans->texture->format == PIPE_FORMAT_S8Z24_UNORM ||
+               trans->texture->format == PIPE_FORMAT_X8Z24_UNORM) {
          if (format == GL_DEPTH_COMPONENT) {
             for (i = 0; i < height; i++) {
                GLuint ztemp[MAX_WIDTH];
@@ -488,7 +488,7 @@ st_readpixels(GLcontext *ctx, GLint x, GLint y, GLsizei width, GLsizei height,
             }
          }
       }
-      else if (trans->format == PIPE_FORMAT_Z16_UNORM) {
+      else if (trans->texture->format == PIPE_FORMAT_Z16_UNORM) {
          for (i = 0; i < height; i++) {
             GLushort ztemp[MAX_WIDTH];
             GLfloat zfloat[MAX_WIDTH];
@@ -503,7 +503,7 @@ st_readpixels(GLcontext *ctx, GLint x, GLint y, GLsizei width, GLsizei height,
             dst += dstStride;
          }
       }
-      else if (trans->format == PIPE_FORMAT_Z32_UNORM) {
+      else if (trans->texture->format == PIPE_FORMAT_Z32_UNORM) {
          for (i = 0; i < height; i++) {
             GLuint ztemp[MAX_WIDTH];
             GLfloat zfloat[MAX_WIDTH];

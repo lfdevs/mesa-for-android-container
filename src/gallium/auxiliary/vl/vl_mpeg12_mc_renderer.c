@@ -28,7 +28,8 @@
 #include "vl_mpeg12_mc_renderer.h"
 #include <assert.h>
 #include <pipe/p_context.h>
-#include <pipe/p_inlines.h>
+#include <util/u_inlines.h>
+#include <util/u_format.h>
 #include <util/u_math.h>
 #include <util/u_memory.h>
 #include <tgsi/tgsi_parse.h>
@@ -115,12 +116,11 @@ create_intra_vert_shader(struct vl_mpeg12_mc_renderer *r)
    assert(r);
 
    tokens = (struct tgsi_token *) malloc(max_tokens * sizeof(struct tgsi_token));
-   *(struct tgsi_version *) &tokens[0] = tgsi_build_version();
-   header = (struct tgsi_header *) &tokens[1];
+   header = (struct tgsi_header *) &tokens[0];
    *header = tgsi_build_header();
-   *(struct tgsi_processor *) &tokens[2] = tgsi_build_processor(TGSI_PROCESSOR_VERTEX, header);
+   *(struct tgsi_processor *) &tokens[1] = tgsi_build_processor(TGSI_PROCESSOR_VERTEX, header);
 
-   ti = 3;
+   ti = 2;
 
    /*
     * decl i0              ; Vertex pos
@@ -185,12 +185,11 @@ create_intra_frag_shader(struct vl_mpeg12_mc_renderer *r)
    assert(r);
 
    tokens = (struct tgsi_token *) malloc(max_tokens * sizeof(struct tgsi_token));
-   *(struct tgsi_version *) &tokens[0] = tgsi_build_version();
-   header = (struct tgsi_header *) &tokens[1];
+   header = (struct tgsi_header *) &tokens[0];
    *header = tgsi_build_header();
-   *(struct tgsi_processor *) &tokens[2] = tgsi_build_processor(TGSI_PROCESSOR_FRAGMENT, header);
+   *(struct tgsi_processor *) &tokens[1] = tgsi_build_processor(TGSI_PROCESSOR_FRAGMENT, header);
 
-   ti = 3;
+   ti = 2;
 
    /*
     * decl i0                      ; Luma texcoords
@@ -237,10 +236,10 @@ create_intra_frag_shader(struct vl_mpeg12_mc_renderer *r)
       ti += tgsi_build_full_instruction(&inst, &tokens[ti], header, max_tokens - ti);
 
       inst = vl_inst2(TGSI_OPCODE_MOV, TGSI_FILE_TEMPORARY, 0, TGSI_FILE_TEMPORARY, 1);
-      inst.FullSrcRegisters[0].SrcRegister.SwizzleX = TGSI_SWIZZLE_X;
-      inst.FullSrcRegisters[0].SrcRegister.SwizzleY = TGSI_SWIZZLE_X;
-      inst.FullSrcRegisters[0].SrcRegister.SwizzleZ = TGSI_SWIZZLE_X;
-      inst.FullDstRegisters[0].DstRegister.WriteMask = TGSI_WRITEMASK_X << i;
+      inst.Src[0].Register.SwizzleX = TGSI_SWIZZLE_X;
+      inst.Src[0].Register.SwizzleY = TGSI_SWIZZLE_X;
+      inst.Src[0].Register.SwizzleZ = TGSI_SWIZZLE_X;
+      inst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_X << i;
       ti += tgsi_build_full_instruction(&inst, &tokens[ti], header, max_tokens - ti);
    }
 
@@ -278,12 +277,11 @@ create_frame_pred_vert_shader(struct vl_mpeg12_mc_renderer *r)
    assert(r);
 
    tokens = (struct tgsi_token *) malloc(max_tokens * sizeof(struct tgsi_token));
-   *(struct tgsi_version *) &tokens[0] = tgsi_build_version();
-   header = (struct tgsi_header *) &tokens[1];
+   header = (struct tgsi_header *) &tokens[0];
    *header = tgsi_build_header();
-   *(struct tgsi_processor *) &tokens[2] = tgsi_build_processor(TGSI_PROCESSOR_VERTEX, header);
+   *(struct tgsi_processor *) &tokens[1] = tgsi_build_processor(TGSI_PROCESSOR_VERTEX, header);
 
-   ti = 3;
+   ti = 2;
 
    /*
     * decl i0              ; Vertex pos
@@ -363,12 +361,11 @@ create_frame_pred_frag_shader(struct vl_mpeg12_mc_renderer *r)
    assert(r);
 
    tokens = (struct tgsi_token *) malloc(max_tokens * sizeof(struct tgsi_token));
-   *(struct tgsi_version *) &tokens[0] = tgsi_build_version();
-   header = (struct tgsi_header *) &tokens[1];
+   header = (struct tgsi_header *) &tokens[0];
    *header = tgsi_build_header();
-   *(struct tgsi_processor *) &tokens[2] = tgsi_build_processor(TGSI_PROCESSOR_FRAGMENT, header);
+   *(struct tgsi_processor *) &tokens[1] = tgsi_build_processor(TGSI_PROCESSOR_FRAGMENT, header);
 
-   ti = 3;
+   ti = 2;
 
    /*
     * decl i0                      ; Luma texcoords
@@ -417,10 +414,10 @@ create_frame_pred_frag_shader(struct vl_mpeg12_mc_renderer *r)
       ti += tgsi_build_full_instruction(&inst, &tokens[ti], header, max_tokens - ti);
 
       inst = vl_inst2(TGSI_OPCODE_MOV, TGSI_FILE_TEMPORARY, 0, TGSI_FILE_TEMPORARY, 1);
-      inst.FullSrcRegisters[0].SrcRegister.SwizzleX = TGSI_SWIZZLE_X;
-      inst.FullSrcRegisters[0].SrcRegister.SwizzleY = TGSI_SWIZZLE_X;
-      inst.FullSrcRegisters[0].SrcRegister.SwizzleZ = TGSI_SWIZZLE_X;
-      inst.FullDstRegisters[0].DstRegister.WriteMask = TGSI_WRITEMASK_X << i;
+      inst.Src[0].Register.SwizzleX = TGSI_SWIZZLE_X;
+      inst.Src[0].Register.SwizzleY = TGSI_SWIZZLE_X;
+      inst.Src[0].Register.SwizzleZ = TGSI_SWIZZLE_X;
+      inst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_X << i;
       ti += tgsi_build_full_instruction(&inst, &tokens[ti], header, max_tokens - ti);
    }
 
@@ -474,12 +471,11 @@ create_frame_bi_pred_vert_shader(struct vl_mpeg12_mc_renderer *r)
    assert(r);
 
    tokens = (struct tgsi_token *) malloc(max_tokens * sizeof(struct tgsi_token));
-   *(struct tgsi_version *) &tokens[0] = tgsi_build_version();
-   header = (struct tgsi_header *) &tokens[1];
+   header = (struct tgsi_header *) &tokens[0];
    *header = tgsi_build_header();
-   *(struct tgsi_processor *) &tokens[2] = tgsi_build_processor(TGSI_PROCESSOR_VERTEX, header);
+   *(struct tgsi_processor *) &tokens[1] = tgsi_build_processor(TGSI_PROCESSOR_VERTEX, header);
 
-   ti = 3;
+   ti = 2;
 
    /*
     * decl i0              ; Vertex pos
@@ -567,12 +563,11 @@ create_frame_bi_pred_frag_shader(struct vl_mpeg12_mc_renderer *r)
    assert(r);
 
    tokens = (struct tgsi_token *) malloc(max_tokens * sizeof(struct tgsi_token));
-   *(struct tgsi_version *) &tokens[0] = tgsi_build_version();
-   header = (struct tgsi_header *) &tokens[1];
+   header = (struct tgsi_header *) &tokens[0];
    *header = tgsi_build_header();
-   *(struct tgsi_processor *) &tokens[2] = tgsi_build_processor(TGSI_PROCESSOR_FRAGMENT, header);
+   *(struct tgsi_processor *) &tokens[1] = tgsi_build_processor(TGSI_PROCESSOR_FRAGMENT, header);
 
-   ti = 3;
+   ti = 2;
 
    /*
     * decl i0                      ; Luma texcoords
@@ -626,10 +621,10 @@ create_frame_bi_pred_frag_shader(struct vl_mpeg12_mc_renderer *r)
       ti += tgsi_build_full_instruction(&inst, &tokens[ti], header, max_tokens - ti);
 
       inst = vl_inst2(TGSI_OPCODE_MOV, TGSI_FILE_TEMPORARY, 0, TGSI_FILE_TEMPORARY, 1);
-      inst.FullSrcRegisters[0].SrcRegister.SwizzleX = TGSI_SWIZZLE_X;
-      inst.FullSrcRegisters[0].SrcRegister.SwizzleY = TGSI_SWIZZLE_X;
-      inst.FullSrcRegisters[0].SrcRegister.SwizzleZ = TGSI_SWIZZLE_X;
-      inst.FullDstRegisters[0].DstRegister.WriteMask = TGSI_WRITEMASK_X << i;
+      inst.Src[0].Register.SwizzleX = TGSI_SWIZZLE_X;
+      inst.Src[0].Register.SwizzleY = TGSI_SWIZZLE_X;
+      inst.Src[0].Register.SwizzleZ = TGSI_SWIZZLE_X;
+      inst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_X << i;
       ti += tgsi_build_full_instruction(&inst, &tokens[ti], header, max_tokens - ti);
    }
 
@@ -648,10 +643,10 @@ create_frame_bi_pred_frag_shader(struct vl_mpeg12_mc_renderer *r)
 
    /* lerp t1, c1.x, t1, t2        ; Blend past and future texels */
    inst = vl_inst4(TGSI_OPCODE_LRP, TGSI_FILE_TEMPORARY, 1, TGSI_FILE_CONSTANT, 1, TGSI_FILE_TEMPORARY, 1, TGSI_FILE_TEMPORARY, 2);
-   inst.FullSrcRegisters[0].SrcRegister.SwizzleX = TGSI_SWIZZLE_X;
-   inst.FullSrcRegisters[0].SrcRegister.SwizzleY = TGSI_SWIZZLE_X;
-   inst.FullSrcRegisters[0].SrcRegister.SwizzleZ = TGSI_SWIZZLE_X;
-   inst.FullSrcRegisters[0].SrcRegister.SwizzleW = TGSI_SWIZZLE_X;
+   inst.Src[0].Register.SwizzleX = TGSI_SWIZZLE_X;
+   inst.Src[0].Register.SwizzleY = TGSI_SWIZZLE_X;
+   inst.Src[0].Register.SwizzleZ = TGSI_SWIZZLE_X;
+   inst.Src[0].Register.SwizzleW = TGSI_SWIZZLE_X;
    ti += tgsi_build_full_instruction(&inst, &tokens[ti], header, max_tokens - ti);
 
    /* add o0, t0, t1               ; Add past/future ref and differential to form final output */
@@ -689,7 +684,7 @@ xfer_buffers_map(struct vl_mpeg12_mc_renderer *r)
       (
          r->pipe->screen, r->textures.all[i],
          0, 0, 0, PIPE_TRANSFER_WRITE, 0, 0,
-         r->textures.all[i]->width[0], r->textures.all[i]->height[0]
+         r->textures.all[i]->width0, r->textures.all[i]->height0
       );
 
       r->texels[i] = r->pipe->screen->transfer_map(r->pipe->screen, r->tex_transfer[i]);
@@ -767,7 +762,6 @@ init_pipe_state(struct vl_mpeg12_mc_renderer *r)
       sampler.compare_mode = PIPE_TEX_COMPARE_NONE;
       sampler.compare_func = PIPE_FUNC_ALWAYS;
       sampler.normalized_coords = 1;
-      /*sampler.prefilter = ; */
       /*sampler.shadow_ambient = ; */
       /*sampler.lod_bias = ; */
       sampler.min_lod = 0;
@@ -843,26 +837,25 @@ init_buffers(struct vl_mpeg12_mc_renderer *r)
    /* TODO: Accomodate HW that can't do this and also for cases when this isn't precise enough */
    template.format = PIPE_FORMAT_R16_SNORM;
    template.last_level = 0;
-   template.width[0] = r->pot_buffers ?
+   template.width0 = r->pot_buffers ?
       util_next_power_of_two(r->picture_width) : r->picture_width;
-   template.height[0] = r->pot_buffers ?
+   template.height0 = r->pot_buffers ?
       util_next_power_of_two(r->picture_height) : r->picture_height;
-   template.depth[0] = 1;
-   pf_get_block(template.format, &template.block);
+   template.depth0 = 1;
    template.tex_usage = PIPE_TEXTURE_USAGE_SAMPLER | PIPE_TEXTURE_USAGE_DYNAMIC;
 
    r->textures.individual.y = r->pipe->screen->texture_create(r->pipe->screen, &template);
 
    if (r->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420) {
-      template.width[0] = r->pot_buffers ?
+      template.width0 = r->pot_buffers ?
          util_next_power_of_two(r->picture_width / 2) :
          r->picture_width / 2;
-      template.height[0] = r->pot_buffers ?
+      template.height0 = r->pot_buffers ?
          util_next_power_of_two(r->picture_height / 2) :
          r->picture_height / 2;
    }
    else if (r->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_422)
-      template.height[0] = r->pot_buffers ?
+      template.height0 = r->pot_buffers ?
          util_next_power_of_two(r->picture_height / 2) :
          r->picture_height / 2;
 
@@ -897,53 +890,61 @@ init_buffers(struct vl_mpeg12_mc_renderer *r)
 
    /* Position element */
    r->vertex_elems[0].src_offset = 0;
+   r->vertex_elems[0].instance_divisor = 0;
    r->vertex_elems[0].vertex_buffer_index = 0;
    r->vertex_elems[0].nr_components = 2;
    r->vertex_elems[0].src_format = PIPE_FORMAT_R32G32_FLOAT;
 
    /* Luma, texcoord element */
    r->vertex_elems[1].src_offset = sizeof(struct vertex2f);
+   r->vertex_elems[1].instance_divisor = 0;
    r->vertex_elems[1].vertex_buffer_index = 0;
    r->vertex_elems[1].nr_components = 2;
    r->vertex_elems[1].src_format = PIPE_FORMAT_R32G32_FLOAT;
 
    /* Chroma Cr texcoord element */
    r->vertex_elems[2].src_offset = sizeof(struct vertex2f) * 2;
+   r->vertex_elems[2].instance_divisor = 0;
    r->vertex_elems[2].vertex_buffer_index = 0;
    r->vertex_elems[2].nr_components = 2;
    r->vertex_elems[2].src_format = PIPE_FORMAT_R32G32_FLOAT;
 
    /* Chroma Cb texcoord element */
    r->vertex_elems[3].src_offset = sizeof(struct vertex2f) * 3;
+   r->vertex_elems[3].instance_divisor = 0;
    r->vertex_elems[3].vertex_buffer_index = 0;
    r->vertex_elems[3].nr_components = 2;
    r->vertex_elems[3].src_format = PIPE_FORMAT_R32G32_FLOAT;
 
    /* First ref surface top field texcoord element */
    r->vertex_elems[4].src_offset = 0;
+   r->vertex_elems[4].instance_divisor = 0;
    r->vertex_elems[4].vertex_buffer_index = 1;
    r->vertex_elems[4].nr_components = 2;
    r->vertex_elems[4].src_format = PIPE_FORMAT_R32G32_FLOAT;
 
    /* First ref surface bottom field texcoord element */
    r->vertex_elems[5].src_offset = sizeof(struct vertex2f);
+   r->vertex_elems[5].instance_divisor = 0;
    r->vertex_elems[5].vertex_buffer_index = 1;
    r->vertex_elems[5].nr_components = 2;
    r->vertex_elems[5].src_format = PIPE_FORMAT_R32G32_FLOAT;
 
    /* Second ref surface top field texcoord element */
    r->vertex_elems[6].src_offset = 0;
+   r->vertex_elems[6].instance_divisor = 0;
    r->vertex_elems[6].vertex_buffer_index = 2;
    r->vertex_elems[6].nr_components = 2;
    r->vertex_elems[6].src_format = PIPE_FORMAT_R32G32_FLOAT;
 
    /* Second ref surface bottom field texcoord element */
    r->vertex_elems[7].src_offset = sizeof(struct vertex2f);
+   r->vertex_elems[7].instance_divisor = 0;
    r->vertex_elems[7].vertex_buffer_index = 2;
    r->vertex_elems[7].nr_components = 2;
    r->vertex_elems[7].src_format = PIPE_FORMAT_R32G32_FLOAT;
 
-   r->vs_const_buf.buffer = pipe_buffer_create
+   r->vs_const_buf = pipe_buffer_create
    (
       r->pipe->screen,
       DEFAULT_BUF_ALIGNMENT,
@@ -951,7 +952,7 @@ init_buffers(struct vl_mpeg12_mc_renderer *r)
       sizeof(struct vertex_shader_consts)
    );
 
-   r->fs_const_buf.buffer = pipe_buffer_create
+   r->fs_const_buf = pipe_buffer_create
    (
       r->pipe->screen,
       DEFAULT_BUF_ALIGNMENT,
@@ -960,11 +961,11 @@ init_buffers(struct vl_mpeg12_mc_renderer *r)
 
    memcpy
    (
-      pipe_buffer_map(r->pipe->screen, r->fs_const_buf.buffer, PIPE_BUFFER_USAGE_CPU_WRITE),
+      pipe_buffer_map(r->pipe->screen, r->fs_const_buf, PIPE_BUFFER_USAGE_CPU_WRITE),
       &fs_consts, sizeof(struct fragment_shader_consts)
    );
 
-   pipe_buffer_unmap(r->pipe->screen, r->fs_const_buf.buffer);
+   pipe_buffer_unmap(r->pipe->screen, r->fs_const_buf);
 
    return true;
 }
@@ -976,8 +977,8 @@ cleanup_buffers(struct vl_mpeg12_mc_renderer *r)
 
    assert(r);
 
-   pipe_buffer_reference(&r->vs_const_buf.buffer, NULL);
-   pipe_buffer_reference(&r->fs_const_buf.buffer, NULL);
+   pipe_buffer_reference(&r->vs_const_buf, NULL);
+   pipe_buffer_reference(&r->fs_const_buf, NULL);
 
    for (i = 0; i < 3; ++i)
       pipe_buffer_reference(&r->vertex_bufs.all[i].buffer, NULL);
@@ -1290,25 +1291,25 @@ flush(struct vl_mpeg12_mc_renderer *r)
 
    vs_consts = pipe_buffer_map
    (
-      r->pipe->screen, r->vs_const_buf.buffer,
+      r->pipe->screen, r->vs_const_buf,
       PIPE_BUFFER_USAGE_CPU_WRITE | PIPE_BUFFER_USAGE_DISCARD
    );
 
-   vs_consts->denorm.x = r->surface->width[0];
-   vs_consts->denorm.y = r->surface->height[0];
+   vs_consts->denorm.x = r->surface->width0;
+   vs_consts->denorm.y = r->surface->height0;
 
-   pipe_buffer_unmap(r->pipe->screen, r->vs_const_buf.buffer);
+   pipe_buffer_unmap(r->pipe->screen, r->vs_const_buf);
 
    r->pipe->set_constant_buffer(r->pipe, PIPE_SHADER_VERTEX, 0,
-                                &r->vs_const_buf);
+                                r->vs_const_buf);
    r->pipe->set_constant_buffer(r->pipe, PIPE_SHADER_FRAGMENT, 0,
-                                &r->fs_const_buf);
+                                r->fs_const_buf);
 
    if (num_macroblocks[MACROBLOCK_TYPE_INTRA] > 0) {
       r->pipe->set_vertex_buffers(r->pipe, 1, r->vertex_bufs.all);
       r->pipe->set_vertex_elements(r->pipe, 4, r->vertex_elems);
-      r->pipe->set_sampler_textures(r->pipe, 3, r->textures.all);
-      r->pipe->bind_sampler_states(r->pipe, 3, r->samplers.all);
+      r->pipe->set_fragment_sampler_textures(r->pipe, 3, r->textures.all);
+      r->pipe->bind_fragment_sampler_states(r->pipe, 3, r->samplers.all);
       r->pipe->bind_vs_state(r->pipe, r->i_vs);
       r->pipe->bind_fs_state(r->pipe, r->i_fs);
 
@@ -1321,8 +1322,8 @@ flush(struct vl_mpeg12_mc_renderer *r)
       r->pipe->set_vertex_buffers(r->pipe, 2, r->vertex_bufs.all);
       r->pipe->set_vertex_elements(r->pipe, 6, r->vertex_elems);
       r->textures.individual.ref[0] = r->past;
-      r->pipe->set_sampler_textures(r->pipe, 4, r->textures.all);
-      r->pipe->bind_sampler_states(r->pipe, 4, r->samplers.all);
+      r->pipe->set_fragment_sampler_textures(r->pipe, 4, r->textures.all);
+      r->pipe->bind_fragment_sampler_states(r->pipe, 4, r->samplers.all);
       r->pipe->bind_vs_state(r->pipe, r->p_vs[0]);
       r->pipe->bind_fs_state(r->pipe, r->p_fs[0]);
 
@@ -1335,8 +1336,8 @@ flush(struct vl_mpeg12_mc_renderer *r)
       r->pipe->set_vertex_buffers(r->pipe, 2, r->vertex_bufs.all);
       r->pipe->set_vertex_elements(r->pipe, 6, r->vertex_elems);
       r->textures.individual.ref[0] = r->past;
-      r->pipe->set_sampler_textures(r->pipe, 4, r->textures.all);
-      r->pipe->bind_sampler_states(r->pipe, 4, r->samplers.all);
+      r->pipe->set_fragment_sampler_textures(r->pipe, 4, r->textures.all);
+      r->pipe->bind_fragment_sampler_states(r->pipe, 4, r->samplers.all);
       r->pipe->bind_vs_state(r->pipe, r->p_vs[1]);
       r->pipe->bind_fs_state(r->pipe, r->p_fs[1]);
 
@@ -1349,8 +1350,8 @@ flush(struct vl_mpeg12_mc_renderer *r)
       r->pipe->set_vertex_buffers(r->pipe, 2, r->vertex_bufs.all);
       r->pipe->set_vertex_elements(r->pipe, 6, r->vertex_elems);
       r->textures.individual.ref[0] = r->future;
-      r->pipe->set_sampler_textures(r->pipe, 4, r->textures.all);
-      r->pipe->bind_sampler_states(r->pipe, 4, r->samplers.all);
+      r->pipe->set_fragment_sampler_textures(r->pipe, 4, r->textures.all);
+      r->pipe->bind_fragment_sampler_states(r->pipe, 4, r->samplers.all);
       r->pipe->bind_vs_state(r->pipe, r->p_vs[0]);
       r->pipe->bind_fs_state(r->pipe, r->p_fs[0]);
 
@@ -1363,8 +1364,8 @@ flush(struct vl_mpeg12_mc_renderer *r)
       r->pipe->set_vertex_buffers(r->pipe, 2, r->vertex_bufs.all);
       r->pipe->set_vertex_elements(r->pipe, 6, r->vertex_elems);
       r->textures.individual.ref[0] = r->future;
-      r->pipe->set_sampler_textures(r->pipe, 4, r->textures.all);
-      r->pipe->bind_sampler_states(r->pipe, 4, r->samplers.all);
+      r->pipe->set_fragment_sampler_textures(r->pipe, 4, r->textures.all);
+      r->pipe->bind_fragment_sampler_states(r->pipe, 4, r->samplers.all);
       r->pipe->bind_vs_state(r->pipe, r->p_vs[1]);
       r->pipe->bind_fs_state(r->pipe, r->p_fs[1]);
 
@@ -1378,8 +1379,8 @@ flush(struct vl_mpeg12_mc_renderer *r)
       r->pipe->set_vertex_elements(r->pipe, 8, r->vertex_elems);
       r->textures.individual.ref[0] = r->past;
       r->textures.individual.ref[1] = r->future;
-      r->pipe->set_sampler_textures(r->pipe, 5, r->textures.all);
-      r->pipe->bind_sampler_states(r->pipe, 5, r->samplers.all);
+      r->pipe->set_fragment_sampler_textures(r->pipe, 5, r->textures.all);
+      r->pipe->bind_fragment_sampler_states(r->pipe, 5, r->samplers.all);
       r->pipe->bind_vs_state(r->pipe, r->b_vs[0]);
       r->pipe->bind_fs_state(r->pipe, r->b_fs[0]);
 
@@ -1393,8 +1394,8 @@ flush(struct vl_mpeg12_mc_renderer *r)
       r->pipe->set_vertex_elements(r->pipe, 8, r->vertex_elems);
       r->textures.individual.ref[0] = r->past;
       r->textures.individual.ref[1] = r->future;
-      r->pipe->set_sampler_textures(r->pipe, 5, r->textures.all);
-      r->pipe->bind_sampler_states(r->pipe, 5, r->samplers.all);
+      r->pipe->set_fragment_sampler_textures(r->pipe, 5, r->textures.all);
+      r->pipe->bind_fragment_sampler_states(r->pipe, 5, r->samplers.all);
       r->pipe->bind_vs_state(r->pipe, r->b_vs[1]);
       r->pipe->bind_fs_state(r->pipe, r->b_fs[1]);
 
@@ -1461,7 +1462,7 @@ grab_blocks(struct vl_mpeg12_mc_renderer *r, unsigned mbx, unsigned mby,
    assert(r);
    assert(blocks);
 
-   tex_pitch = r->tex_transfer[0]->stride / r->tex_transfer[0]->block.size;
+   tex_pitch = r->tex_transfer[0]->stride / util_format_get_blocksize(r->tex_transfer[0]->texture->format);
    texels = r->texels[0] + mbpy * tex_pitch + mbpx;
 
    for (y = 0; y < 2; ++y) {
@@ -1500,7 +1501,7 @@ grab_blocks(struct vl_mpeg12_mc_renderer *r, unsigned mbx, unsigned mby,
    mbpy /= 2;
 
    for (tb = 0; tb < 2; ++tb) {
-      tex_pitch = r->tex_transfer[tb + 1]->stride / r->tex_transfer[tb + 1]->block.size;
+      tex_pitch = r->tex_transfer[tb + 1]->stride / util_format_get_blocksize(r->tex_transfer[tb + 1]->texture->format);
       texels = r->texels[tb + 1] + mbpy * tex_pitch + mbpx;
 
       if ((cbp >> (1 - tb)) & 1) {
@@ -1644,8 +1645,8 @@ vl_mpeg12_mc_renderer_render_macroblocks(struct vl_mpeg12_mc_renderer
       renderer->past = past;
       renderer->future = future;
       renderer->fence = fence;
-      renderer->surface_tex_inv_size.x = 1.0f / surface->width[0];
-      renderer->surface_tex_inv_size.y = 1.0f / surface->height[0];
+      renderer->surface_tex_inv_size.x = 1.0f / surface->width0;
+      renderer->surface_tex_inv_size.y = 1.0f / surface->height0;
    }
 
    while (num_macroblocks) {

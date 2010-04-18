@@ -1,8 +1,10 @@
-Index: mesa/src/mesa/drivers/osmesa/Makefile
-===================================================================
---- mesa.orig/src/mesa/drivers/osmesa/Makefile
-+++ mesa/src/mesa/drivers/osmesa/Makefile
-@@ -39,7 +39,7 @@
+---
+ src/mesa/drivers/osmesa/Makefile |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/src/mesa/drivers/osmesa/Makefile
++++ b/src/mesa/drivers/osmesa/Makefile
+@@ -43,7 +43,7 @@ default: $(TOP)/$(LIB_DIR)/$(OSMESA_LIB_
  # -DCHAN_BITS=16/32.
  $(TOP)/$(LIB_DIR)/$(OSMESA_LIB_NAME): $(OBJECTS) $(CORE_MESA)
  	$(MKLIB) -o $(OSMESA_LIB) -linker '$(CC)' -ldflags '$(LDFLAGS)' \

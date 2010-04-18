@@ -385,7 +385,7 @@ static void mach64UpdateClipping( GLcontext *ctx )
    mach64ScreenPtr mach64Screen = mmesa->mach64Screen;
 
    if ( mmesa->driDrawable ) {
-      __DRIdrawablePrivate *drawable = mmesa->driDrawable;
+      __DRIdrawable *drawable = mmesa->driDrawable;
       int x1 = 0;
       int y1 = 0;
       int x2 = drawable->w - 1;
@@ -524,10 +524,10 @@ static void mach64UpdateMasks( GLcontext *ctx )
    /* mach64 can't color mask with alpha blending enabled */
    if ( !ctx->Color.BlendEnabled ) {
       mask = mach64PackColor( mmesa->mach64Screen->cpp,
-			      ctx->Color.ColorMask[RCOMP],
-			      ctx->Color.ColorMask[GCOMP],
-			      ctx->Color.ColorMask[BCOMP],
-			      ctx->Color.ColorMask[ACOMP] );
+			      ctx->Color.ColorMask[0][RCOMP],
+			      ctx->Color.ColorMask[0][GCOMP],
+			      ctx->Color.ColorMask[0][BCOMP],
+			      ctx->Color.ColorMask[0][ACOMP] );
    }
 
    if ( mmesa->setup.dp_write_mask != mask ) {
@@ -686,7 +686,7 @@ static void mach64DDLogicOpCode( GLcontext *ctx, GLenum opcode )
 void mach64SetCliprects( GLcontext *ctx, GLenum mode )
 {
    mach64ContextPtr mmesa = MACH64_CONTEXT(ctx);
-   __DRIdrawablePrivate *dPriv = mmesa->driDrawable;
+   __DRIdrawable *dPriv = mmesa->driDrawable;
 
    switch ( mode ) {
    case GL_FRONT_LEFT:
@@ -1156,12 +1156,10 @@ void mach64DDInitStateFuncs( GLcontext *ctx )
 {
    ctx->Driver.UpdateState		= mach64DDInvalidateState;
 
-   ctx->Driver.ClearIndex		= NULL;
    ctx->Driver.ClearColor		= mach64DDClearColor;
    ctx->Driver.DrawBuffer		= mach64DDDrawBuffer;
    ctx->Driver.ReadBuffer		= mach64DDReadBuffer;
 
-   ctx->Driver.IndexMask		= NULL;
    ctx->Driver.ColorMask		= mach64DDColorMask;
    ctx->Driver.AlphaFunc		= mach64DDAlphaFunc;
    ctx->Driver.BlendEquationSeparate	= mach64DDBlendEquationSeparate;

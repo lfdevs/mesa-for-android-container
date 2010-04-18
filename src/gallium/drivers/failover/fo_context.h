@@ -51,9 +51,10 @@
 #define FO_NEW_VERTEX          0x2000
 #define FO_NEW_VERTEX_SHADER   0x4000
 #define FO_NEW_BLEND_COLOR     0x8000
-#define FO_NEW_CLEAR_COLOR     0x10000
-#define FO_NEW_VERTEX_BUFFER   0x20000
-#define FO_NEW_VERTEX_ELEMENT  0x40000
+#define FO_NEW_STENCIL_REF     0x10000
+#define FO_NEW_CLEAR_COLOR     0x20000
+#define FO_NEW_VERTEX_BUFFER   0x40000
+#define FO_NEW_VERTEX_ELEMENT  0x80000
 
 
 
@@ -72,17 +73,20 @@ struct failover_context {
     */
    const struct fo_state     *blend;
    const struct fo_state     *sampler[PIPE_MAX_SAMPLERS];
+   const struct fo_state     *vertex_samplers[PIPE_MAX_VERTEX_SAMPLERS];
    const struct fo_state     *depth_stencil;
    const struct fo_state     *rasterizer;
    const struct fo_state     *fragment_shader;
    const struct fo_state     *vertex_shader;
 
    struct pipe_blend_color blend_color;
+   struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
    struct pipe_framebuffer_state framebuffer;
    struct pipe_poly_stipple poly_stipple;
    struct pipe_scissor_state scissor;
    struct pipe_texture *texture[PIPE_MAX_SAMPLERS];
+   struct pipe_texture *vertex_textures[PIPE_MAX_VERTEX_SAMPLERS];
    struct pipe_viewport_state viewport;
    struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];
    struct pipe_vertex_element vertex_elements[PIPE_MAX_ATTRIBS];
@@ -92,11 +96,15 @@ struct failover_context {
 
    void *sw_sampler_state[PIPE_MAX_SAMPLERS];
    void *hw_sampler_state[PIPE_MAX_SAMPLERS];
+   void *sw_vertex_sampler_state[PIPE_MAX_VERTEX_SAMPLERS];
+   void *hw_vertex_sampler_state[PIPE_MAX_VERTEX_SAMPLERS];
 
    unsigned dirty;
 
    unsigned num_samplers;
+   unsigned num_vertex_samplers;
    unsigned num_textures;
+   unsigned num_vertex_textures;
 
    unsigned mode;
    struct pipe_context *hw;
@@ -119,7 +127,7 @@ failover_context( struct pipe_context *pipe )
 void
 failover_set_constant_buffer(struct pipe_context *pipe,
                              uint shader, uint index,
-                             const struct pipe_constant_buffer *buf);
+                             struct pipe_buffer *buf);
 
 
 #endif /* FO_CONTEXT_H */

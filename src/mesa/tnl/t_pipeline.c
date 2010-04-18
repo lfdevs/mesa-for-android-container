@@ -47,7 +47,7 @@ void _tnl_install_pipeline( GLcontext *ctx,
     */
    for (i = 0 ; i < MAX_PIPELINE_STAGES && stages[i] ; i++) {
       struct tnl_pipeline_stage *s = &tnl->pipeline.stages[i];
-      MEMCPY(s, stages[i], sizeof(*s));
+      memcpy(s, stages[i], sizeof(*s));
       if (s->create)
 	 s->create(ctx, s);
    }
@@ -84,10 +84,6 @@ static GLuint check_input_changes( GLcontext *ctx )
 	 tnl->pipeline.input_changes |= 1<<i;
       }
    }
-
-   if (tnl->pipeline.input_changes &&
-      tnl->Driver.NotifyInputChanges) 
-      tnl->Driver.NotifyInputChanges( ctx, tnl->pipeline.input_changes );
 
    return tnl->pipeline.input_changes;
 }

@@ -166,10 +166,9 @@ create_component_texture(struct pipe_context *pipe,
    templ.target = PIPE_TEXTURE_2D;
    templ.format = PIPE_FORMAT_L8_UNORM;
    templ.last_level = 0;
-   templ.width[0] = width;
-   templ.height[0] = height;
-   templ.depth[0] = 1;
-   pf_get_block(PIPE_FORMAT_L8_UNORM, &templ.block);
+   templ.width0 = width;
+   templ.height0 = height;
+   templ.depth0 = 1;
    templ.tex_usage = PIPE_TEXTURE_USAGE_SAMPLER;
 
    tex = screen->texture_create(screen, &templ);
@@ -182,18 +181,18 @@ check_yuv_textures(struct xorg_xv_port_priv *priv,  int width, int height)
 {
    struct pipe_texture **dst = priv->yuv[priv->current_set];
    if (!dst[0] ||
-       dst[0]->width[0] != width ||
-       dst[0]->height[0] != height) {
+       dst[0]->width0 != width ||
+       dst[0]->height0 != height) {
       pipe_texture_reference(&dst[0], NULL);
    }
    if (!dst[1] ||
-       dst[1]->width[0] != width ||
-       dst[1]->height[0] != height) {
+       dst[1]->width0 != width ||
+       dst[1]->height0 != height) {
       pipe_texture_reference(&dst[1], NULL);
    }
    if (!dst[2] ||
-       dst[2]->width[0] != width ||
-       dst[2]->height[0] != height) {
+       dst[2]->width0 != width ||
+       dst[2]->height0 != height) {
       pipe_texture_reference(&dst[2], NULL);
    }
 
@@ -384,7 +383,7 @@ setup_fs_video_constants(struct xorg_renderer *r, boolean hdtv)
 
 static void
 draw_yuv(struct xorg_xv_port_priv *port,
-         float src_x, float src_y, float src_w, float src_h,
+         int src_x, int src_y, int src_w, int src_h,
          int dst_x, int dst_y, int dst_w, int dst_h)
 {
    struct pipe_texture **textures = port->yuv[port->current_set];
@@ -404,14 +403,14 @@ bind_blend_state(struct xorg_xv_port_priv *port)
    struct pipe_blend_state blend;
 
    memset(&blend, 0, sizeof(struct pipe_blend_state));
-   blend.blend_enable = 1;
-   blend.colormask |= PIPE_MASK_RGBA;
+   blend.rt[0].blend_enable = 0;
+   blend.rt[0].colormask = PIPE_MASK_RGBA;
 
    /* porter&duff src */
-   blend.rgb_src_factor   = PIPE_BLENDFACTOR_ONE;
-   blend.alpha_src_factor = PIPE_BLENDFACTOR_ONE;
-   blend.rgb_dst_factor   = PIPE_BLENDFACTOR_ZERO;
-   blend.alpha_dst_factor = PIPE_BLENDFACTOR_ZERO;
+   blend.rt[0].rgb_src_factor   = PIPE_BLENDFACTOR_ONE;
+   blend.rt[0].alpha_src_factor = PIPE_BLENDFACTOR_ONE;
+   blend.rt[0].rgb_dst_factor   = PIPE_BLENDFACTOR_ZERO;
+   blend.rt[0].alpha_dst_factor = PIPE_BLENDFACTOR_ZERO;
 
    cso_set_blend(port->r->cso, &blend);
 }
@@ -533,10 +532,10 @@ display_video(ScrnInfoPtr pScrn, struct xorg_xv_port_priv *pPriv, int id,
       int box_y2 = pbox->y2;
       float diff_x = (float)src_w / (float)dst_w;
       float diff_y = (float)src_h / (float)dst_h;
-      float offset_x = box_x1 - dstX + pPixmap->screen_x;
-      float offset_y = box_y1 - dstY + pPixmap->screen_y;
-      float offset_w;
-      float offset_h;
+      int offset_x = box_x1 - dstX + pPixmap->screen_x;
+      int offset_y = box_y1 - dstY + pPixmap->screen_y;
+      int offset_w;
+      int offset_h;
 
       x = box_x1;
       y = box_y1;
@@ -547,8 +546,8 @@ display_video(ScrnInfoPtr pScrn, struct xorg_xv_port_priv *pPriv, int id,
       offset_h = dst_h - h;
 
       draw_yuv(pPriv,
-               (float) src_x + offset_x*diff_x, (float) src_y + offset_y*diff_y,
-               (float) src_w - offset_w*diff_x, (float) src_h - offset_h*diff_y,
+               src_x + offset_x*diff_x, src_y + offset_y*diff_y,
+               src_w - offset_w*diff_x, src_h - offset_h*diff_y,
                x, y, w, h);
 
       pbox++;

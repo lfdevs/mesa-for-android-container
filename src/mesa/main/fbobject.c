@@ -374,8 +374,8 @@ test_attachment_completeness(const GLcontext *ctx, GLenum format,
       }
       if (texImage->Width < 1 || texImage->Height < 1) {
          att_incomplete("teximage width/height=0");
-         _mesa_printf("texobj = %u\n", texObj->Name);
-         _mesa_printf("level = %d\n", att->TextureLevel);
+         printf("texobj = %u\n", texObj->Name);
+         printf("level = %d\n", att->TextureLevel);
          att->Complete = GL_FALSE;
          return;
       }
@@ -858,6 +858,9 @@ _mesa_GenRenderbuffersEXT(GLsizei n, GLuint *renderbuffers)
  *
  * \return one of GL_RGB, GL_RGBA, GL_STENCIL_INDEX, GL_DEPTH_COMPONENT
  *  GL_DEPTH_STENCIL_EXT or zero if error.
+ *
+ * XXX in the future when we support red-only and red-green formats
+ * we'll also return GL_RED and GL_RG.
  */
 GLenum
 _mesa_base_fbo_format(GLcontext *ctx, GLenum internalFormat)
@@ -951,7 +954,7 @@ renderbuffer_storage(GLenum target, GLenum internalFormat,
       /* NumSamples == 0 indicates non-multisampling */
       samples = 0;
    }
-   else if (samples > ctx->Const.MaxSamples) {
+   else if (samples > (GLsizei) ctx->Const.MaxSamples) {
       /* note: driver may choose to use more samples than what's requested */
       _mesa_error(ctx, GL_INVALID_VALUE, "%s(samples)", func);
       return;
@@ -984,7 +987,7 @@ renderbuffer_storage(GLenum target, GLenum internalFormat,
       assert(rb->Width == (GLuint) width);
       assert(rb->Height == (GLuint) height);
       rb->InternalFormat = internalFormat;
-      rb->_BaseFormat = _mesa_base_fbo_format(ctx, internalFormat);
+      rb->_BaseFormat = baseFormat;
       assert(rb->_BaseFormat != 0);
    }
    else {
@@ -1005,6 +1008,30 @@ renderbuffer_storage(GLenum target, GLenum internalFormat,
     */
 }
 
+#if FEATURE_OES_EGL_image
+void GLAPIENTRY
+_mesa_EGLImageTargetRenderbufferStorageOES (GLenum target, GLeglImageOES image)
+{
+   struct gl_renderbuffer *rb;
+   GET_CURRENT_CONTEXT(ctx);
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
+
+   if (target != GL_RENDERBUFFER) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "EGLImageTargetRenderbufferStorageOES");
+      return;
+   }
+
+   rb = ctx->CurrentRenderbuffer;
+   if (!rb) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "EGLImageTargetRenderbufferStorageOES");
+      return;
+   }
+
+   FLUSH_VERTICES(ctx, _NEW_BUFFERS);
+
+   ctx->Driver.EGLImageTargetRenderbufferStorage(ctx, rb, image);
+}
+#endif
 
 /**
  * Helper function for _mesa_GetRenderbufferParameterivEXT() and
@@ -2136,39 +2163,39 @@ _mesa_BlitFramebufferEXT(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
 
    /* Debug code */
    if (DEBUG_BLIT) {
-      _mesa_printf("glBlitFramebuffer(%d, %d, %d, %d,  %d, %d, %d, %d,"
-                   " 0x%x, 0x%x)\n",
-                   srcX0, srcY0, srcX1, srcY1,
-                   dstX0, dstY0, dstX1, dstY1,
-                   mask, filter);
+      printf("glBlitFramebuffer(%d, %d, %d, %d,  %d, %d, %d, %d,"
+	     " 0x%x, 0x%x)\n",
+	     srcX0, srcY0, srcX1, srcY1,
+	     dstX0, dstY0, dstX1, dstY1,
+	     mask, filter);
       if (colorReadRb) {
          const struct gl_renderbuffer_attachment *att;
 
          att = find_attachment(readFb, colorReadRb);
-         _mesa_printf("  Src FBO %u  RB %u (%dx%d)  ",
-                      readFb->Name, colorReadRb->Name,
-                      colorReadRb->Width, colorReadRb->Height);
+         printf("  Src FBO %u  RB %u (%dx%d)  ",
+		readFb->Name, colorReadRb->Name,
+		colorReadRb->Width, colorReadRb->Height);
          if (att && att->Texture) {
-            _mesa_printf("Tex %u  tgt 0x%x  level %u  face %u",
-                         att->Texture->Name,
-                         att->Texture->Target,
-                         att->TextureLevel,
-                         att->CubeMapFace);
+            printf("Tex %u  tgt 0x%x  level %u  face %u",
+		   att->Texture->Name,
+		   att->Texture->Target,
+		   att->TextureLevel,
+		   att->CubeMapFace);
          }
-         _mesa_printf("\n");
+         printf("\n");
 
          att = find_attachment(drawFb, colorDrawRb);
-         _mesa_printf("  Dst FBO %u  RB %u (%dx%d)  ",
-                      drawFb->Name, colorDrawRb->Name,
-                      colorDrawRb->Width, colorDrawRb->Height);
+         printf("  Dst FBO %u  RB %u (%dx%d)  ",
+		drawFb->Name, colorDrawRb->Name,
+		colorDrawRb->Width, colorDrawRb->Height);
          if (att && att->Texture) {
-            _mesa_printf("Tex %u  tgt 0x%x  level %u  face %u",
-                         att->Texture->Name,
-                         att->Texture->Target,
-                         att->TextureLevel,
-                         att->CubeMapFace);
+            printf("Tex %u  tgt 0x%x  level %u  face %u",
+		   att->Texture->Name,
+		   att->Texture->Target,
+		   att->TextureLevel,
+		   att->CubeMapFace);
          }
-         _mesa_printf("\n");
+         printf("\n");
       }
    }
 

@@ -65,7 +65,7 @@ static void
 intelClear(GLcontext *ctx, GLbitfield mask)
 {
    struct intel_context *intel = intel_context(ctx);
-   const GLuint colorMask = *((GLuint *) & ctx->Color.ColorMask);
+   const GLuint colorMask = *((GLuint *) & ctx->Color.ColorMask[0]);
    GLbitfield tri_mask = 0;
    GLbitfield blit_mask = 0;
    GLbitfield swrast_mask = 0;
@@ -89,6 +89,10 @@ intelClear(GLcontext *ctx, GLbitfield mask)
       /* glColorMask in effect */
       tri_mask |= (mask & (BUFFER_BIT_FRONT_LEFT | BUFFER_BIT_BACK_LEFT));
    }
+
+   /* Make sure we have up to date buffers before we start looking at
+    * the tiling bits to determine how to clear. */
+   intel_prepare_render(intel);
 
    /* HW stencil */
    if (mask & BUFFER_BIT_STENCIL) {
@@ -131,6 +135,12 @@ intelClear(GLcontext *ctx, GLbitfield mask)
 	 tri_mask |= blit_mask & (1 << (color_bit - 1));
 	 blit_mask &= ~(1 << (color_bit - 1));
       }
+   }
+
+   if (intel->gen >= 6) {
+      /* Blits are in a different ringbuffer so we don't use them. */
+      tri_mask |= blit_mask;
+      blit_mask = 0;
    }
 
    /* SW fallback clearing */

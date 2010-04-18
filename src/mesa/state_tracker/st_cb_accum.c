@@ -43,7 +43,7 @@
 #include "st_inlines.h"
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
 #include "util/u_tile.h"
 
 
@@ -143,7 +143,7 @@ accum_accum(struct st_context *st, GLfloat value,
 						PIPE_TRANSFER_READ, xpos, ypos,
 						width, height);
 
-   buf = (GLfloat *) _mesa_malloc(width * height * 4 * sizeof(GLfloat));
+   buf = (GLfloat *) malloc(width * height * 4 * sizeof(GLfloat));
 
    pipe_get_tile_rgba(color_trans, 0, 0, width, height, buf);
 
@@ -165,7 +165,7 @@ accum_accum(struct st_context *st, GLfloat value,
       _mesa_problem(NULL, "unexpected format in st_clear_accum_buffer()");
    }
 
-   _mesa_free(buf);
+   free(buf);
    screen->tex_transfer_destroy(color_trans);
 }
 
@@ -192,7 +192,7 @@ accum_load(struct st_context *st, GLfloat value,
 						PIPE_TRANSFER_READ, xpos, ypos,
 						width, height);
 
-   buf = (GLfloat *) _mesa_malloc(width * height * 4 * sizeof(GLfloat));
+   buf = (GLfloat *) malloc(width * height * 4 * sizeof(GLfloat));
 
    pipe_get_tile_rgba(color_trans, 0, 0, width, height, buf);
 
@@ -214,7 +214,7 @@ accum_load(struct st_context *st, GLfloat value,
       _mesa_problem(NULL, "unexpected format in st_clear_accum_buffer()");
    }
 
-   _mesa_free(buf);
+   free(buf);
    screen->tex_transfer_destroy(color_trans);
 }
 
@@ -227,7 +227,7 @@ accum_return(GLcontext *ctx, GLfloat value,
 {
    struct pipe_context *pipe = ctx->st->pipe;
    struct pipe_screen *screen = pipe->screen;
-   const GLubyte *colormask = ctx->Color.ColorMask;
+   const GLubyte *colormask = ctx->Color.ColorMask[0];
    enum pipe_transfer_usage usage;
    struct pipe_transfer *color_trans;
    size_t stride = acc_strb->stride;
@@ -237,7 +237,7 @@ accum_return(GLcontext *ctx, GLfloat value,
    if (ST_DEBUG & DEBUG_FALLBACK)
       debug_printf("%s: fallback processing\n", __FUNCTION__);
 
-   buf = (GLfloat *) _mesa_malloc(width * height * 4 * sizeof(GLfloat));
+   buf = (GLfloat *) malloc(width * height * 4 * sizeof(GLfloat));
 
    if (!colormask[0] || !colormask[1] || !colormask[2] || !colormask[3])
       usage = PIPE_TRANSFER_READ_WRITE;
@@ -282,7 +282,7 @@ accum_return(GLcontext *ctx, GLfloat value,
 
    pipe_put_tile_rgba(color_trans, 0, 0, width, height, buf);
 
-   _mesa_free(buf);
+   free(buf);
    screen->tex_transfer_destroy(color_trans);
 }
 

@@ -639,7 +639,7 @@ void radeonSetTexOffset(__DRIcontext * pDRICtx, GLint texname,
 	}
 }
 
-void radeonSetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint glx_texture_format,
+void radeonSetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_format,
 			 __DRIdrawable *dPriv)
 {
 	struct gl_texture_unit *texUnit;
@@ -656,7 +656,7 @@ void radeonSetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint glx_texture_
 
 	type = GL_BGRA;
 	format = GL_UNSIGNED_BYTE;
-	internalFormat = (glx_texture_format == GLX_TEXTURE_FORMAT_RGB_EXT ? 3 : 4);
+	internalFormat = (texture_format == __DRI_TEXTURE_FORMAT_RGB ? 3 : 4);
 
 	radeon = pDRICtx->driverPrivate;
 	rmesa = pDRICtx->driverPrivate;
@@ -672,24 +672,13 @@ void radeonSetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint glx_texture_
     	    return;
     	}
 
-	radeon_update_renderbuffers(pDRICtx, dPriv);
-	/* back & depth buffer are useless free them right away */
-	rb = (void*)rfb->base.Attachment[BUFFER_DEPTH].Renderbuffer;
-	if (rb && rb->bo) {
-		radeon_bo_unref(rb->bo);
-        rb->bo = NULL;
-	}
-	rb = (void*)rfb->base.Attachment[BUFFER_BACK_LEFT].Renderbuffer;
-	if (rb && rb->bo) {
-		radeon_bo_unref(rb->bo);
-		rb->bo = NULL;
-	}
+	radeon_update_renderbuffers(pDRICtx, dPriv, GL_TRUE);
 	rb = rfb->color_rb[0];
 	if (rb->bo == NULL) {
 		/* Failed to BO for the buffer */
 		return;
 	}
-	
+
 	_mesa_lock_texture(radeon->glCtx, texObj);
 	if (t->bo) {
 		radeon_bo_unref(t->bo);
@@ -716,7 +705,7 @@ void radeonSetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint glx_texture_
 	t->override_offset = 0;
 	switch (rb->cpp) {
 	case 4:
-		if (glx_texture_format == GLX_TEXTURE_FORMAT_RGB_EXT)
+		if (texture_format == __DRI_TEXTURE_FORMAT_RGB)
 			t->pp_txformat = tx_table[MESA_FORMAT_RGB888].format;
 		else
 			t->pp_txformat = tx_table[MESA_FORMAT_ARGB8888].format;
@@ -751,7 +740,7 @@ void radeonSetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint glx_texture_
 
 void radeonSetTexBuffer(__DRIcontext *pDRICtx, GLint target, __DRIdrawable *dPriv)
 {
-        radeonSetTexBuffer2(pDRICtx, target, GLX_TEXTURE_FORMAT_RGBA_EXT, dPriv);
+        radeonSetTexBuffer2(pDRICtx, target, __DRI_TEXTURE_FORMAT_RGBA, dPriv);
 }
 
 

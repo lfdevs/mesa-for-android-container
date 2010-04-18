@@ -10,20 +10,23 @@ Also remove references to GLU library since it is not required
 and we don't actually build it at this point.
 
 
-Index: mesa/progs/xdemos/Makefile
-===================================================================
---- mesa.orig/progs/xdemos/Makefile
-+++ mesa/progs/xdemos/Makefile
-@@ -10,7 +10,7 @@
+---
+ progs/Makefile        |    6 +++++-
+ progs/xdemos/Makefile |    7 ++++++-
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+
+--- a/progs/xdemos/Makefile
++++ b/progs/xdemos/Makefile
+@@ -13,7 +13,7 @@ APP_LIB_DEPS += -lX11 -lpthread
  
- LIBS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) $(APP_LIB_DEPS)
+ LIBS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) -L$(libdir) $(APP_LIB_DEPS)
  
 -PROGS = \
 +PROGS ?= \
  	corender \
  	glsync \
  	glthreads \
-@@ -63,6 +63,11 @@
+@@ -68,6 +68,11 @@ default: $(PROGS)
  extra: $(EXTRA_PROGS)
  
  
@@ -35,11 +38,9 @@ Index: mesa/progs/xdemos/Makefile
  clean:
  	-rm -f $(PROGS) $(EXTRA_PROGS)
  	-rm -f *.o *~
-Index: mesa/progs/Makefile
-===================================================================
---- mesa.orig/progs/Makefile
-+++ mesa/progs/Makefile
-@@ -21,8 +21,12 @@
+--- a/progs/Makefile
++++ b/progs/Makefile
+@@ -21,8 +21,12 @@ subdirs:
  		fi \
  	done
  

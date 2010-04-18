@@ -64,11 +64,11 @@ static void interp_extras( GLcontext *ctx,
 
    /*fprintf(stderr, "%s\n", __FUNCTION__);*/
 
-   if (VB->ColorPtr[1]) {
+   if (VB->BackfaceColorPtr) {
       INTERP_4F( t,
-		    GET_COLOR(VB->ColorPtr[1], dst),
-		    GET_COLOR(VB->ColorPtr[1], out),
-		    GET_COLOR(VB->ColorPtr[1], in) );
+		 GET_COLOR(VB->BackfaceColorPtr, dst),
+		 GET_COLOR(VB->BackfaceColorPtr, out),
+		 GET_COLOR(VB->BackfaceColorPtr, in) );
    }
 
    if (VB->EdgeFlag) {
@@ -83,9 +83,9 @@ static void copy_pv_extras( GLcontext *ctx, GLuint dst, GLuint src )
 {
    struct vertex_buffer *VB = &TNL_CONTEXT(ctx)->vb;
 
-   if (VB->ColorPtr[1]) {
-	 COPY_4FV( GET_COLOR(VB->ColorPtr[1], dst), 
-		     GET_COLOR(VB->ColorPtr[1], src) );
+   if (VB->BackfaceColorPtr) {
+      COPY_4FV( GET_COLOR(VB->BackfaceColorPtr, dst),
+		GET_COLOR(VB->BackfaceColorPtr, src) );
    }
 
    setup_tab[TDFX_CONTEXT(ctx)->SetupIndex].copy_pv(ctx, dst, src);
@@ -331,7 +331,7 @@ void tdfxInitVB( GLcontext *ctx )
       firsttime = 0;
    }
 
-   fxMesa->verts = ALIGN_MALLOC(size * sizeof(tdfxVertex), 32);
+   fxMesa->verts = _mesa_align_malloc(size * sizeof(tdfxVertex), 32);
    fxMesa->vertexFormat = TDFX_LAYOUT_TINY;
    fxMesa->SetupIndex = TDFX_XYZ_BIT|TDFX_RGBA_BIT;
 }
@@ -341,7 +341,7 @@ void tdfxFreeVB( GLcontext *ctx )
 {
    tdfxContextPtr fxMesa = TDFX_CONTEXT(ctx);
    if (fxMesa->verts) {
-      ALIGN_FREE(fxMesa->verts);
+      _mesa_align_free(fxMesa->verts);
       fxMesa->verts = 0;
    }
 }

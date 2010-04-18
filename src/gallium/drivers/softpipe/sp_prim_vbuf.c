@@ -543,7 +543,6 @@ sp_create_vbuf_backend(struct softpipe_context *sp)
 
    assert(sp->draw);
 
-
    cvbr->base.max_indices = SP_MAX_VBUF_INDEXES;
    cvbr->base.max_vertex_buffer_bytes = SP_MAX_VBUF_SIZE;
 

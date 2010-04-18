@@ -494,7 +494,7 @@ tdfx_readpixels_R5G6B5(GLcontext * ctx, GLint x, GLint y,
    {
       tdfxContextPtr fxMesa = TDFX_CONTEXT(ctx);
       GrLfbInfo_t info;
-      __DRIdrawablePrivate *const readable = fxMesa->driReadable;
+      __DRIdrawable *const readable = fxMesa->driReadable;
       const GLint winX = readable->x;
       const GLint winY = readable->y + readable->h - 1;
       const GLint scrX = winX + x;
@@ -519,7 +519,7 @@ tdfx_readpixels_R5G6B5(GLcontext * ctx, GLint x, GLint y,
 	 const GLint widthInBytes = width * 2;
 	 GLint row;
 	 for (row = 0; row < height; row++) {
-	    MEMCPY(dst, src, widthInBytes);
+	    memcpy(dst, src, widthInBytes);
 	    dst += dstStride;
 	    src -= srcStride;
 	 }
@@ -552,7 +552,7 @@ tdfx_readpixels_R8G8B8A8(GLcontext * ctx, GLint x, GLint y,
    {
       tdfxContextPtr fxMesa = TDFX_CONTEXT(ctx);
       GrLfbInfo_t info;
-      __DRIdrawablePrivate *const readable = fxMesa->driReadable;
+      __DRIdrawable *const readable = fxMesa->driReadable;
       const GLint winX = readable->x;
       const GLint winY = readable->y + readable->h - 1;
       const GLint scrX = winX + x;
@@ -578,7 +578,7 @@ tdfx_readpixels_R8G8B8A8(GLcontext * ctx, GLint x, GLint y,
 	 {
             GLint row;
             for (row = 0; row < height; row++) {
-               MEMCPY(dst, src, widthInBytes);
+               memcpy(dst, src, widthInBytes);
                dst += dstStride;
                src -= srcStride;
             }
@@ -610,10 +610,10 @@ tdfx_drawpixels_R8G8B8A8(GLcontext * ctx, GLint x, GLint y,
        ctx->Fog.Enabled ||
        ctx->Scissor.Enabled ||
        ctx->Stencil._Enabled ||
-       !ctx->Color.ColorMask[0] ||
-       !ctx->Color.ColorMask[1] ||
-       !ctx->Color.ColorMask[2] ||
-       !ctx->Color.ColorMask[3] ||
+       !ctx->Color.ColorMask[0][0] ||
+       !ctx->Color.ColorMask[0][1] ||
+       !ctx->Color.ColorMask[0][2] ||
+       !ctx->Color.ColorMask[0][3] ||
        ctx->Color.ColorLogicOpEnabled ||
        ctx->Texture._EnabledUnits ||
        fxMesa->Fallback)       
@@ -672,7 +672,7 @@ tdfx_drawpixels_R8G8B8A8(GLcontext * ctx, GLint x, GLint y,
              (format == GL_BGRA && type == GL_UNSIGNED_BYTE)) {
             GLint row;
             for (row = 0; row < height; row++) {
-               MEMCPY(dst, src, widthInBytes);
+               memcpy(dst, src, widthInBytes);
                dst -= dstStride;
                src += srcStride;
             }

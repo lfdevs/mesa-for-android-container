@@ -33,21 +33,16 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "r128_context.h"
-#include "r128_state.h"
 #include "r128_ioctl.h"
-#include "r128_tris.h"
 #include "r128_tex.h"
 #include "r128_texobj.h"
 
-#include "main/context.h"
-#include "main/macros.h"
 #include "main/simple_list.h"
 #include "main/enums.h"
 #include "main/texstore.h"
 #include "main/teximage.h"
 #include "main/texobj.h"
 #include "main/imports.h"
-#include "main/colormac.h"
 #include "main/texobj.h"
 
 #include "xmlpool.h"
@@ -169,7 +164,7 @@ static r128TexObjPtr r128AllocTexObj( struct gl_texture_object *texObj )
 
       r128SetTexWrap( t, texObj->WrapS, texObj->WrapT );
       r128SetTexFilter( t, texObj->MinFilter, texObj->MagFilter );
-      r128SetTexBorderColor( t, texObj->BorderColor );
+      r128SetTexBorderColor( t, texObj->BorderColor.f );
    }
 
    return t;
@@ -473,7 +468,7 @@ static void r128TexEnv( GLcontext *ctx, GLenum target,
 	  * certain point.  It is better than completely ignoring the LOD
 	  * bias.  Unfortunately there isn't much range in the bias, the
 	  * spec mentions strides that vary between 0.5 and 2.0 but these
-	  * numbers don't seem to relate the the GL LOD bias value at all.
+	  * numbers don't seem to relate to the GL LOD bias value at all.
 	  */
 	 if ( param[0] >= 1.0 ) {
 	    bias = -128;
@@ -535,7 +530,7 @@ static void r128TexParameter( GLcontext *ctx, GLenum target,
 
    case GL_TEXTURE_BORDER_COLOR:
       if ( t->base.bound ) FLUSH_BATCH( rmesa );
-      r128SetTexBorderColor( t, tObj->BorderColor );
+      r128SetTexBorderColor( t, tObj->BorderColor.f );
       break;
 
    case GL_TEXTURE_BASE_LEVEL:

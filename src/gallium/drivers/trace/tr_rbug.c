@@ -26,10 +26,13 @@
  **************************************************************************/
 
 
+#include "os/os_thread.h"
+#include "util/u_format.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_simple_list.h"
 #include "util/u_network.h"
+#include "os/os_time.h"
 
 #include "tgsi/tgsi_parse.h"
 
@@ -41,15 +44,6 @@
 #include "rbug/rbug.h"
 
 #include <errno.h>
-
-#if defined(PIPE_SUBSYSTEM_WINDOWS_USER)
-#  define sleep Sleep
-#elif defined(PIPE_OS_LINUX) || defined(PIPE_OS_APPLE)
-void usleep(int);
-#  define sleep usleep
-#else
-#  warning "No socket implementation"
-#endif
 
 #define U642VOID(x) ((void *)(unsigned long)(x))
 #define VOID2U64(x) ((uint64_t)(unsigned long)(x))
@@ -200,10 +194,12 @@ trace_rbug_texture_info(struct trace_rbug *tr_rbug, struct rbug_header *header, 
    t = tr_tex->texture;
    rbug_send_texture_info_reply(tr_rbug->con, serial,
                                t->target, t->format,
-                               t->width, t->last_level + 1,
-                               t->height, t->last_level + 1,
-                               t->depth, t->last_level + 1,
-                               t->block.width, t->block.height, t->block.size,
+                               &t->width0, 1,
+                               &t->height0, 1,
+                               &t->depth0, 1,
+                               util_format_get_blockwidth(t->format),
+                               util_format_get_blockheight(t->format),
+                               util_format_get_blocksize(t->format),
                                t->last_level,
                                t->nr_samples,
                                t->tex_usage,
@@ -251,9 +247,12 @@ trace_rbug_texture_read(struct trace_rbug *tr_rbug, struct rbug_header *header, 
    map = screen->transfer_map(screen, t);
 
    rbug_send_texture_read_reply(tr_rbug->con, serial,
-                                t->format,
-                                t->block.width, t->block.height, t->block.size,
-                                (uint8_t*)map, t->stride * t->nblocksy,
+                                t->texture->format,
+                                util_format_get_blockwidth(t->texture->format),
+                                util_format_get_blockheight(t->texture->format),
+                                util_format_get_blocksize(t->texture->format),
+                                (uint8_t*)map,
+                                t->stride * util_format_get_nblocksy(t->texture->format, t->height),
                                 t->stride,
                                 NULL);
 
@@ -799,7 +798,7 @@ PIPE_THREAD_ROUTINE(trace_rbug_thread, void_tr_rbug)
    debug_printf("trace_rbug - remote debugging listening on port %u\n", --port);
 
    while(tr_rbug->running) {
-      sleep(1);
+      os_time_sleep(1);
 
       c = u_socket_accept(s);
       if (c < 0)

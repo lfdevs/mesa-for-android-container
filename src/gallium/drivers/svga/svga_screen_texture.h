@@ -29,6 +29,7 @@
 
 #include "pipe/p_compiler.h"
 #include "pipe/p_state.h"
+#include "util/u_inlines.h"
 #include "svga_screen_cache.h"
 
 struct pipe_context;
@@ -171,8 +172,9 @@ svga_sampler_view_reference(struct svga_sampler_view **ptr, struct svga_sampler_
 {
    struct svga_sampler_view *old = *ptr;
 
-   if (pipe_reference((struct pipe_reference **)ptr, &v->reference))
+   if (pipe_reference(&(*ptr)->reference, &v->reference))
       svga_destroy_sampler_view_priv(old);
+   *ptr = v;
 }
 
 extern void

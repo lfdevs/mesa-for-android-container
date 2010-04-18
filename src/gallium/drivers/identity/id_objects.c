@@ -25,9 +25,9 @@
  *
  **************************************************************************/
 
+#include "util/u_inlines.h"
 #include "util/u_memory.h"
 
-#include "id_public.h"
 #include "id_screen.h"
 #include "id_objects.h"
 
@@ -179,4 +179,43 @@ identity_transfer_destroy(struct identity_transfer *id_transfer)
    pipe_texture_reference(&id_transfer->base.texture, NULL);
    screen->tex_transfer_destroy(id_transfer->transfer);
    FREE(id_transfer);
+}
+
+struct pipe_video_surface *
+identity_video_surface_create(struct identity_screen *id_screen,
+                              struct pipe_video_surface *video_surface)
+{
+   struct identity_video_surface *id_video_surface;
+
+   if (!video_surface) {
+      goto error;
+   }
+
+   assert(video_surface->screen == id_screen->screen);
+
+   id_video_surface = CALLOC_STRUCT(identity_video_surface);
+   if (!id_video_surface) {
+      goto error;
+   }
+
+   memcpy(&id_video_surface->base,
+          video_surface,
+          sizeof(struct pipe_video_surface));
+
+   pipe_reference_init(&id_video_surface->base.reference, 1);
+   id_video_surface->base.screen = &id_screen->base;
+   id_video_surface->video_surface = video_surface;
+
+   return &id_video_surface->base;
+
+error:
+   pipe_video_surface_reference(&video_surface, NULL);
+   return NULL;
+}
+
+void
+identity_video_surface_destroy(struct identity_video_surface *id_video_surface)
+{
+   pipe_video_surface_reference(&id_video_surface->video_surface, NULL);
+   FREE(id_video_surface);
 }

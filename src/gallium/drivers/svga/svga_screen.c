@@ -24,7 +24,7 @@
  **********************************************************/
 
 #include "util/u_memory.h"
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
 #include "util/u_string.h"
 #include "util/u_math.h"
 
@@ -101,7 +101,7 @@ svga_get_paramf(struct pipe_screen *screen, int param)
       /* Keep this to a reasonable size to avoid failures in
        * conform/pntaa.c:
        */
-      return 80.0;
+      return SVGA_MAX_POINTSIZE;
 
    case PIPE_CAP_MAX_TEXTURE_ANISOTROPY:
       if(!sws->get_cap(sws, SVGA3D_DEVCAP_MAX_TEXTURE_ANISOTROPY, &result))
@@ -112,6 +112,8 @@ svga_get_paramf(struct pipe_screen *screen, int param)
       return 16.0;
 
    case PIPE_CAP_MAX_TEXTURE_IMAGE_UNITS:
+      return 16;
+   case PIPE_CAP_MAX_COMBINED_SAMPLERS:
       return 16;
    case PIPE_CAP_NPOT_TEXTURES:
       return 1;
@@ -167,6 +169,13 @@ svga_get_paramf(struct pipe_screen *screen, int param)
    case PIPE_CAP_BLEND_EQUATION_SEPARATE: /* req. for GL 1.5 */
       return 1;
 
+   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
+   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+      return 1;
+   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
+   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+      return 0;
+
    default:
       return 0;
    }
@@ -187,23 +196,23 @@ svga_translate_format_cap(enum pipe_format format)
 {
    switch(format) {
    
-   case PIPE_FORMAT_A8R8G8B8_UNORM:
+   case PIPE_FORMAT_B8G8R8A8_UNORM:
       return SVGA3D_DEVCAP_SURFACEFMT_A8R8G8B8;
-   case PIPE_FORMAT_X8R8G8B8_UNORM:
+   case PIPE_FORMAT_B8G8R8X8_UNORM:
       return SVGA3D_DEVCAP_SURFACEFMT_X8R8G8B8;
 
-   case PIPE_FORMAT_R5G6B5_UNORM:
+   case PIPE_FORMAT_B5G6R5_UNORM:
       return SVGA3D_DEVCAP_SURFACEFMT_R5G6B5;
-   case PIPE_FORMAT_A1R5G5B5_UNORM:
+   case PIPE_FORMAT_B5G5R5A1_UNORM:
       return SVGA3D_DEVCAP_SURFACEFMT_A1R5G5B5;
-   case PIPE_FORMAT_A4R4G4B4_UNORM:
+   case PIPE_FORMAT_B4G4R4A4_UNORM:
       return SVGA3D_DEVCAP_SURFACEFMT_A4R4G4B4;
 
    case PIPE_FORMAT_Z16_UNORM:
       return SVGA3D_DEVCAP_SURFACEFMT_Z_D16;
-   case PIPE_FORMAT_Z24S8_UNORM:
+   case PIPE_FORMAT_S8Z24_UNORM:
       return SVGA3D_DEVCAP_SURFACEFMT_Z_D24S8;
-   case PIPE_FORMAT_Z24X8_UNORM:
+   case PIPE_FORMAT_X8Z24_UNORM:
       return SVGA3D_DEVCAP_SURFACEFMT_Z_D24X8;
 
    case PIPE_FORMAT_A8_UNORM:
@@ -245,8 +254,8 @@ svga_is_format_supported( struct pipe_screen *screen,
       /* Often unsupported/problematic. This means we end up with the same
        * visuals for all virtual hardware implementations.
        */
-      case PIPE_FORMAT_A4R4G4B4_UNORM:
-      case PIPE_FORMAT_A1R5G5B5_UNORM:
+      case PIPE_FORMAT_B4G4R4A4_UNORM:
+      case PIPE_FORMAT_B5G5R5A1_UNORM:
          return FALSE;
          
       /* Simulate ability to render into compressed textures */
@@ -382,6 +391,7 @@ svga_screen_create(struct svga_winsys_screen *sws)
    screen->get_param = svga_get_param;
    screen->get_paramf = svga_get_paramf;
    screen->is_format_supported = svga_is_format_supported;
+   screen->context_create = svga_context_create;
    screen->fence_reference = svga_fence_reference;
    screen->fence_signalled = svga_fence_signalled;
    screen->fence_finish = svga_fence_finish;

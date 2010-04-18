@@ -37,7 +37,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/api_arrayelt.h"
 #include "main/enums.h"
 #include "main/light.h"
-#include "main/state.h"
 #include "main/context.h"
 #include "main/framebuffer.h"
 #include "main/simple_list.h"
@@ -54,7 +53,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "radeon_tcl.h"
 #include "radeon_tex.h"
 #include "radeon_swtcl.h"
-#include "drirenderbuffer.h"
 
 static void radeonUpdateSpecular( GLcontext *ctx );
 
@@ -521,10 +519,10 @@ static void radeonColorMask( GLcontext *ctx,
      return;
 
    mask = radeonPackColor( rrb->cpp,
-			   ctx->Color.ColorMask[RCOMP],
-			   ctx->Color.ColorMask[GCOMP],
-			   ctx->Color.ColorMask[BCOMP],
-			   ctx->Color.ColorMask[ACOMP] );
+			   ctx->Color.ColorMask[0][RCOMP],
+			   ctx->Color.ColorMask[0][GCOMP],
+			   ctx->Color.ColorMask[0][BCOMP],
+			   ctx->Color.ColorMask[0][ACOMP] );
 
    if ( rmesa->hw.msk.cmd[MSK_RB3D_PLANEMASK] != mask ) {
       RADEON_STATECHANGE( rmesa, msk );
@@ -1400,7 +1398,7 @@ static void radeonClearStencil( GLcontext *ctx, GLint s )
 void radeonUpdateWindow( GLcontext *ctx )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
-   __DRIdrawablePrivate *dPriv = radeon_get_drawable(&rmesa->radeon);
+   __DRIdrawable *dPriv = radeon_get_drawable(&rmesa->radeon);
    GLfloat xoffset = dPriv ? (GLfloat) dPriv->x : 0;
    GLfloat yoffset = dPriv ? (GLfloat) dPriv->y + dPriv->h : 0;
    const GLfloat *v = ctx->Viewport._WindowMap.m;
@@ -1455,7 +1453,7 @@ static void radeonDepthRange( GLcontext *ctx, GLclampd nearval,
 void radeonUpdateViewportOffset( GLcontext *ctx )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
-   __DRIdrawablePrivate *dPriv = radeon_get_drawable(&rmesa->radeon);
+   __DRIdrawable *dPriv = radeon_get_drawable(&rmesa->radeon);
    GLfloat xoffset = (GLfloat)dPriv->x;
    GLfloat yoffset = (GLfloat)dPriv->y + dPriv->h;
    const GLfloat *v = ctx->Viewport._WindowMap.m;
@@ -1902,7 +1900,7 @@ void radeonUploadTexMatrix( r100ContextPtr rmesa,
    So: if we need the q coord in the end (solely determined by the texture
    target, i.e. 2d / 1d / texrect targets) we swap the third and 4th row.
    Additionally, if we don't have texgen but 4 tex coords submitted, we swap
-   column 3 and 4 (for the 2d / 1d / texrect targets) since the the q coord
+   column 3 and 4 (for the 2d / 1d / texrect targets) since the q coord
    will get submitted in the "wrong", i.e. 3rd, slot.
    If an app submits 3 coords for 2d targets, we assume it is saving on vertex
    size and using the texture matrix to swap the r and q coords around (ut2k3
@@ -2256,7 +2254,6 @@ void radeonInitStateFuncs( GLcontext *ctx , GLboolean dri2 )
    ctx->Driver.BlendFuncSeparate	= radeonBlendFuncSeparate;
    ctx->Driver.ClearColor		= radeonClearColor;
    ctx->Driver.ClearDepth		= radeonClearDepth;
-   ctx->Driver.ClearIndex		= NULL;
    ctx->Driver.ClearStencil		= radeonClearStencil;
    ctx->Driver.ClipPlane		= radeonClipPlane;
    ctx->Driver.ColorMask		= radeonColorMask;
@@ -2268,7 +2265,6 @@ void radeonInitStateFuncs( GLcontext *ctx , GLboolean dri2 )
    ctx->Driver.Fogfv			= radeonFogfv;
    ctx->Driver.FrontFace		= radeonFrontFace;
    ctx->Driver.Hint			= NULL;
-   ctx->Driver.IndexMask		= NULL;
    ctx->Driver.LightModelfv		= radeonLightModelfv;
    ctx->Driver.Lightfv			= radeonLightfv;
    ctx->Driver.LineStipple              = radeonLineStipple;

@@ -125,7 +125,7 @@ mach64AllocTexObj( struct gl_texture_object *texObj )
 
    mach64SetTexWrap( t, texObj->WrapS, texObj->WrapT );
    mach64SetTexFilter( t, texObj->MinFilter, texObj->MagFilter );
-   mach64SetTexBorderColor( t, texObj->BorderColor );
+   mach64SetTexBorderColor( t, texObj->BorderColor.f );
 
    return t;
 }
@@ -465,7 +465,7 @@ static void mach64DDTexParameter( GLcontext *ctx, GLenum target,
 
    case GL_TEXTURE_BORDER_COLOR:
       if ( t->base.bound ) FLUSH_BATCH( mmesa );
-      mach64SetTexBorderColor( t, tObj->BorderColor );
+      mach64SetTexBorderColor( t, tObj->BorderColor.f );
       break;
 
    case GL_TEXTURE_BASE_LEVEL:
@@ -560,7 +560,6 @@ void mach64InitTextureFuncs( struct dd_function_table *functions )
    functions->IsTextureResident		= driIsTextureResident;
 
    functions->UpdateTexturePalette	= NULL;
-   functions->ActiveTexture		= NULL;
 
    driInitTextureFormats();
 }

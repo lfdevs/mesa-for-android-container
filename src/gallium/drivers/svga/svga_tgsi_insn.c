@@ -94,24 +94,24 @@ translate_dst_register( struct svga_shader_emitter *emit,
                         const struct tgsi_full_instruction *insn,
                         unsigned idx )
 {
-   const struct tgsi_full_dst_register *reg = &insn->FullDstRegisters[idx];
+   const struct tgsi_full_dst_register *reg = &insn->Dst[idx];
    SVGA3dShaderDestToken dest;
 
-   switch (reg->DstRegister.File) {
+   switch (reg->Register.File) {
    case TGSI_FILE_OUTPUT:
       /* Output registers encode semantic information in their name.
        * Need to lookup a table built at decl time:
        */
-      dest = emit->output_map[reg->DstRegister.Index];
+      dest = emit->output_map[reg->Register.Index];
       break;
 
    default:
-      dest = dst_register( translate_file( reg->DstRegister.File ),
-                           reg->DstRegister.Index );
+      dest = dst_register( translate_file( reg->Register.File ),
+                           reg->Register.Index );
       break;
    }
 
-   dest.mask = reg->DstRegister.WriteMask;
+   dest.mask = reg->Register.WriteMask;
    assert(dest.mask);
 
    if (insn->Instruction.Saturate) 
@@ -175,33 +175,33 @@ translate_src_register( const struct svga_shader_emitter *emit,
 {
    struct src_register src;
 
-   switch (reg->SrcRegister.File) {
+   switch (reg->Register.File) {
    case TGSI_FILE_INPUT:
       /* Input registers are referred to by their semantic name rather
        * than by index.  Use the mapping build up from the decls:
        */
-      src = emit->input_map[reg->SrcRegister.Index];
+      src = emit->input_map[reg->Register.Index];
       break;
        
    case TGSI_FILE_IMMEDIATE:
       /* Immediates are appended after TGSI constants in the D3D
        * constant buffer.
        */
-      src = src_register( translate_file( reg->SrcRegister.File ),
-                          reg->SrcRegister.Index + 
+      src = src_register( translate_file( reg->Register.File ),
+                          reg->Register.Index + 
                           emit->imm_start );
       break;
 
    default:
-      src = src_register( translate_file( reg->SrcRegister.File ),
-                          reg->SrcRegister.Index );
+      src = src_register( translate_file( reg->Register.File ),
+                          reg->Register.Index );
 
       break;
    }
 
    /* Indirect addressing (for coninstant buffer lookups only)
     */
-   if (reg->SrcRegister.Indirect)
+   if (reg->Register.Indirect)
    {
       /* we shift the offset towards the minimum */
       if (svga_arl_needs_adjustment( emit )) {
@@ -212,28 +212,28 @@ translate_src_register( const struct svga_shader_emitter *emit,
       /* Not really sure what should go in the second token:
        */
       src.indirect = src_token( SVGA3DREG_ADDR,
-                                reg->SrcRegisterInd.Index );
+                                reg->Indirect.Index );
 
       src.indirect.swizzle = SWIZZLE_XXXX;
    }
 
    src = swizzle( src,
-                  reg->SrcRegister.SwizzleX,
-                  reg->SrcRegister.SwizzleY,
-                  reg->SrcRegister.SwizzleZ,
-                  reg->SrcRegister.SwizzleW );
+                  reg->Register.SwizzleX,
+                  reg->Register.SwizzleY,
+                  reg->Register.SwizzleZ,
+                  reg->Register.SwizzleW );
 
    /* src.mod isn't a bitfield, unfortunately:
     * See tgsi_util_get_full_src_register_sign_mode for implementation details.
     */
-   if (reg->SrcRegisterExtMod.Absolute) {
-      if (reg->SrcRegisterExtMod.Negate)
+   if (reg->Register.Absolute) {
+      if (reg->Register.Negate)
          src.base.srcMod = SVGA3DSRCMOD_ABSNEG;
       else
          src.base.srcMod = SVGA3DSRCMOD_ABS;
    }
    else {
-      if (reg->SrcRegister.Negate != reg->SrcRegisterExtMod.Negate)
+      if (reg->Register.Negate)
          src.base.srcMod = SVGA3DSRCMOD_NEG;
       else
          src.base.srcMod = SVGA3DSRCMOD_NONE;
@@ -526,6 +526,7 @@ static boolean emit_def_const( struct svga_shader_emitter *emit,
       break;
    default:
       assert(0);
+      opcode = inst_token( SVGA3DOP_NOP );
       break;
    }
 
@@ -710,7 +711,7 @@ static boolean emit_fake_arl(struct svga_shader_emitter *emit,
                              const struct tgsi_full_instruction *insn)
 {
    const struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    struct src_register src1 = get_fake_arl_const( emit );
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    SVGA3dShaderDestToken tmp = get_temp( emit );
@@ -734,7 +735,7 @@ static boolean emit_if(struct svga_shader_emitter *emit,
                        const struct tgsi_full_instruction *insn)
 {
    const struct src_register src = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    struct src_register zero = get_zero_immediate( emit );
    SVGA3dShaderInstToken if_token = inst_token( SVGA3DOP_IFC );
 
@@ -775,7 +776,7 @@ static boolean emit_floor(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    const struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    SVGA3dShaderDestToken temp = get_temp( emit );
 
    /* FRC  TMP, SRC */
@@ -801,11 +802,11 @@ static boolean emit_cmp(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    const struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    const struct src_register src1 = translate_src_register(
-      emit, &insn->FullSrcRegisters[1] );
+      emit, &insn->Src[1] );
    const struct src_register src2 = translate_src_register(
-      emit, &insn->FullSrcRegisters[2] );
+      emit, &insn->Src[2] );
 
    /* CMP  DST, SRC0, SRC2, SRC1 */
    return submit_op3( emit, inst_token( SVGA3DOP_CMP ), dst, src0, src2, src1);
@@ -825,9 +826,9 @@ static boolean emit_div(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    const struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    const struct src_register src1 = translate_src_register(
-      emit, &insn->FullSrcRegisters[1] );
+      emit, &insn->Src[1] );
    SVGA3dShaderDestToken temp = get_temp( emit );
    int i;
 
@@ -867,9 +868,9 @@ static boolean emit_dp2(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    const struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    const struct src_register src1 = translate_src_register(
-      emit, &insn->FullSrcRegisters[1] );
+      emit, &insn->Src[1] );
    SVGA3dShaderDestToken temp = get_temp( emit );
    struct src_register temp_src0, temp_src1;
 
@@ -900,9 +901,9 @@ static boolean emit_dph(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    const struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    struct src_register src1 = translate_src_register(
-      emit, &insn->FullSrcRegisters[1] );
+      emit, &insn->Src[1] );
    SVGA3dShaderDestToken temp = get_temp( emit );
 
    /* DP3  TMP, SRC1, SRC2 */
@@ -931,7 +932,7 @@ static boolean emit_nrm(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    const struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    SVGA3dShaderDestToken temp = get_temp( emit );
 
    /* DP3  TMP, SRC, SRC */
@@ -974,7 +975,7 @@ static boolean emit_sincos(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    SVGA3dShaderDestToken temp = get_temp( emit );
 
    /* SCS TMP SRC */
@@ -997,7 +998,7 @@ static boolean emit_sin(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    SVGA3dShaderDestToken temp = get_temp( emit );
 
    /* SCS TMP SRC */
@@ -1022,7 +1023,7 @@ static boolean emit_cos(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    SVGA3dShaderDestToken temp = get_temp( emit );
 
    /* SCS TMP SRC */
@@ -1047,9 +1048,9 @@ static boolean emit_sub(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    struct src_register src1 = translate_src_register(
-      emit, &insn->FullSrcRegisters[1] );
+      emit, &insn->Src[1] );
 
    src1 = negate(src1);
 
@@ -1065,19 +1066,19 @@ static boolean emit_kil(struct svga_shader_emitter *emit,
                         const struct tgsi_full_instruction *insn )
 {
    SVGA3dShaderInstToken inst;
-   const struct tgsi_full_src_register *reg = &insn->FullSrcRegisters[0];
+   const struct tgsi_full_src_register *reg = &insn->Src[0];
    struct src_register src0;
 
    inst = inst_token( SVGA3DOP_TEXKILL );
    src0 = translate_src_register( emit, reg );
 
-   if (reg->SrcRegisterExtMod.Absolute ||
-       reg->SrcRegister.Negate != reg->SrcRegisterExtMod.Negate ||
-       reg->SrcRegister.Indirect ||
-       reg->SrcRegister.SwizzleX != 0 ||
-       reg->SrcRegister.SwizzleY != 1 ||
-       reg->SrcRegister.SwizzleZ != 2 ||
-       reg->SrcRegister.File != TGSI_FILE_TEMPORARY)
+   if (reg->Register.Absolute ||
+       reg->Register.Negate ||
+       reg->Register.Indirect ||
+       reg->Register.SwizzleX != 0 ||
+       reg->Register.SwizzleY != 1 ||
+       reg->Register.SwizzleZ != 2 ||
+       reg->Register.File != TGSI_FILE_TEMPORARY)
    {
       SVGA3dShaderDestToken temp = get_temp( emit );
 
@@ -1239,9 +1240,9 @@ static boolean emit_select_op(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    struct src_register src1 = translate_src_register(
-      emit, &insn->FullSrcRegisters[1] );
+      emit, &insn->Src[1] );
       
    return emit_select( emit, compare, dst, src0, src1 );
 }
@@ -1280,8 +1281,8 @@ static boolean emit_tex2(struct svga_shader_emitter *emit,
       return FALSE;
    }
 
-   texcoord = translate_src_register( emit, &insn->FullSrcRegisters[0] );
-   sampler = translate_src_register( emit, &insn->FullSrcRegisters[1] );
+   texcoord = translate_src_register( emit, &insn->Src[0] );
+   sampler = translate_src_register( emit, &insn->Src[1] );
 
    if (emit->key.fkey.tex[sampler.base.num].unnormalized ||
        emit->dynamic_branching_level > 0)
@@ -1344,10 +1345,10 @@ static boolean emit_tex4(struct svga_shader_emitter *emit,
    struct src_register ddy;
    struct src_register sampler;
 
-   texcoord = translate_src_register( emit, &insn->FullSrcRegisters[0] );
-   ddx      = translate_src_register( emit, &insn->FullSrcRegisters[1] );
-   ddy      = translate_src_register( emit, &insn->FullSrcRegisters[2] );
-   sampler  = translate_src_register( emit, &insn->FullSrcRegisters[3] );
+   texcoord = translate_src_register( emit, &insn->Src[0] );
+   ddx      = translate_src_register( emit, &insn->Src[1] );
+   ddy      = translate_src_register( emit, &insn->Src[2] );
+   sampler  = translate_src_register( emit, &insn->Src[3] );
 
    inst.value = 0;
 
@@ -1370,9 +1371,9 @@ static boolean emit_tex(struct svga_shader_emitter *emit,
    SVGA3dShaderDestToken dst = 
       translate_dst_register( emit, insn, 0 );
    struct src_register src0 =
-      translate_src_register( emit, &insn->FullSrcRegisters[0] );
+      translate_src_register( emit, &insn->Src[0] );
    struct src_register src1 =
-      translate_src_register( emit, &insn->FullSrcRegisters[1] );
+      translate_src_register( emit, &insn->Src[1] );
 
    SVGA3dShaderDestToken tex_result;
 
@@ -1497,7 +1498,7 @@ static boolean emit_scalar_op1( struct svga_shader_emitter *emit,
 
    inst = inst_token( opcode );
    dst = translate_dst_register( emit, insn, 0 );
-   src = translate_src_register( emit, &insn->FullSrcRegisters[0] );
+   src = translate_src_register( emit, &insn->Src[0] );
    src = scalar( src, TGSI_SWIZZLE_X );
 
    return submit_op1( emit, inst, dst, src );
@@ -1508,7 +1509,7 @@ static boolean emit_simple_instruction(struct svga_shader_emitter *emit,
                                        unsigned opcode,
                                        const struct tgsi_full_instruction *insn )
 {
-   const struct tgsi_full_src_register *src = insn->FullSrcRegisters;
+   const struct tgsi_full_src_register *src = insn->Src;
    SVGA3dShaderInstToken inst;
    SVGA3dShaderDestToken dst;
 
@@ -1541,7 +1542,7 @@ static boolean emit_deriv(struct svga_shader_emitter *emit,
                           const struct tgsi_full_instruction *insn )
 {
    if (emit->dynamic_branching_level > 0 &&
-       insn->FullSrcRegisters[0].SrcRegister.File == TGSI_FILE_TEMPORARY) 
+       insn->Src[0].Register.File == TGSI_FILE_TEMPORARY) 
    {
       struct src_register zero = get_zero_immediate( emit );
       SVGA3dShaderDestToken dst = 
@@ -1606,13 +1607,13 @@ static boolean emit_pow(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    struct src_register src1 = translate_src_register(
-      emit, &insn->FullSrcRegisters[1] );
+      emit, &insn->Src[1] );
    boolean need_tmp = FALSE;
    
    /* POW can only output to a temporary */
-   if (insn->FullDstRegisters[0].DstRegister.File != TGSI_FILE_TEMPORARY)
+   if (insn->Dst[0].Register.File != TGSI_FILE_TEMPORARY)
       need_tmp = TRUE;
    
    /* POW src1 must not be the same register as dst */
@@ -1641,9 +1642,9 @@ static boolean emit_xpd(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    const struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    const struct src_register src1 = translate_src_register(
-      emit, &insn->FullSrcRegisters[1] );
+      emit, &insn->Src[1] );
    boolean need_dst_tmp = FALSE;
 
    /* XPD can only output to a temporary */
@@ -1695,11 +1696,11 @@ static boolean emit_lrp(struct svga_shader_emitter *emit,
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    SVGA3dShaderDestToken tmp;
    const struct src_register src0 = translate_src_register(
-      emit, &insn->FullSrcRegisters[0] );
+      emit, &insn->Src[0] );
    const struct src_register src1 = translate_src_register(
-      emit, &insn->FullSrcRegisters[1] );
+      emit, &insn->Src[1] );
    const struct src_register src2 = translate_src_register(
-      emit, &insn->FullSrcRegisters[2] );
+      emit, &insn->Src[2] );
    boolean need_dst_tmp = FALSE;
 
    /* The dst reg must not be the same as src0 or src2 */
@@ -1746,9 +1747,9 @@ static boolean emit_dst_insn(struct svga_shader_emitter *emit,
       SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
       SVGA3dShaderDestToken tmp;
       const struct src_register src0 = translate_src_register(
-         emit, &insn->FullSrcRegisters[0] );
+         emit, &insn->Src[0] );
       const struct src_register src1 = translate_src_register(
-         emit, &insn->FullSrcRegisters[1] );
+         emit, &insn->Src[1] );
       struct src_register zero = get_zero_immediate( emit );
       boolean need_tmp = FALSE;
 
@@ -1811,7 +1812,7 @@ static boolean emit_exp(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    struct src_register src0 =
-      translate_src_register( emit, &insn->FullSrcRegisters[0] );
+      translate_src_register( emit, &insn->Src[0] );
    struct src_register zero = get_zero_immediate( emit );
    SVGA3dShaderDestToken fraction;
 
@@ -1819,6 +1820,8 @@ static boolean emit_exp(struct svga_shader_emitter *emit,
       fraction = dst;
    else if (dst.mask & TGSI_WRITEMASK_X)
       fraction = get_temp( emit );
+   else
+      fraction.value = 0;
 
    /* If y is being written, fill it with src0 - floor(src0).
     */
@@ -1901,7 +1904,7 @@ static boolean emit_lit(struct svga_shader_emitter *emit,
       SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
       SVGA3dShaderDestToken tmp = get_temp( emit );
       const struct src_register src0 = translate_src_register(
-         emit, &insn->FullSrcRegisters[0] );
+         emit, &insn->Src[0] );
       struct src_register zero = get_zero_immediate( emit );
 
       /* tmp = pow(src.y, src.w)
@@ -1984,7 +1987,7 @@ static boolean emit_ex2( struct svga_shader_emitter *emit,
 
    inst = inst_token( SVGA3DOP_EXP );
    dst = translate_dst_register( emit, insn, 0 );
-   src0 = translate_src_register( emit, &insn->FullSrcRegisters[0] );
+   src0 = translate_src_register( emit, &insn->Src[0] );
    src0 = scalar( src0, TGSI_SWIZZLE_X );
 
    if (dst.mask != TGSI_WRITEMASK_XYZW) {
@@ -2007,16 +2010,20 @@ static boolean emit_log(struct svga_shader_emitter *emit,
 {
    SVGA3dShaderDestToken dst = translate_dst_register( emit, insn, 0 );
    struct src_register src0 =
-      translate_src_register( emit, &insn->FullSrcRegisters[0] );
+      translate_src_register( emit, &insn->Src[0] );
    struct src_register zero = get_zero_immediate( emit );
    SVGA3dShaderDestToken abs_tmp;
    struct src_register abs_src0;
    SVGA3dShaderDestToken log2_abs;
 
+   abs_tmp.value = 0;
+
    if (dst.mask & TGSI_WRITEMASK_Z)
       log2_abs = dst;
    else if (dst.mask & TGSI_WRITEMASK_XY)
       log2_abs = get_temp( emit );
+   else
+      log2_abs.value = 0;
 
    /* If z is being written, fill it with log2( abs( src0 ) ).
     */
@@ -2131,7 +2138,7 @@ static boolean emit_bgnsub( struct svga_shader_emitter *emit,
 static boolean emit_call( struct svga_shader_emitter *emit,
                            const struct tgsi_full_instruction *insn )
 {
-   unsigned position = insn->InstructionExtLabel.Label;
+   unsigned position = insn->Label.Label;
    unsigned i;
    
    for (i = 0; i < emit->nr_labels; i++) {
@@ -2291,7 +2298,7 @@ static boolean svga_emit_instruction( struct svga_shader_emitter *emit,
    case TGSI_OPCODE_I2F:
    case TGSI_OPCODE_NOT:
    case TGSI_OPCODE_SHL:
-   case TGSI_OPCODE_SHR:
+   case TGSI_OPCODE_ISHR:
    case TGSI_OPCODE_XOR:
       return FALSE;
 
@@ -2749,27 +2756,27 @@ pre_parse_instruction( struct svga_shader_emitter *emit,
                        const struct tgsi_full_instruction *insn,
                        int current_arl)
 {
-   if (insn->FullSrcRegisters[0].SrcRegister.Indirect &&
-       insn->FullSrcRegisters[0].SrcRegisterInd.File == TGSI_FILE_ADDRESS) {
-      const struct tgsi_full_src_register *reg = &insn->FullSrcRegisters[0];
-      if (reg->SrcRegister.Index < 0) {
-         pre_parse_add_indirect(emit, reg->SrcRegister.Index, current_arl);
+   if (insn->Src[0].Register.Indirect &&
+       insn->Src[0].Indirect.File == TGSI_FILE_ADDRESS) {
+      const struct tgsi_full_src_register *reg = &insn->Src[0];
+      if (reg->Register.Index < 0) {
+         pre_parse_add_indirect(emit, reg->Register.Index, current_arl);
       }
    }
 
-   if (insn->FullSrcRegisters[1].SrcRegister.Indirect &&
-       insn->FullSrcRegisters[1].SrcRegisterInd.File == TGSI_FILE_ADDRESS) {
-      const struct tgsi_full_src_register *reg = &insn->FullSrcRegisters[1];
-      if (reg->SrcRegister.Index < 0) {
-         pre_parse_add_indirect(emit, reg->SrcRegister.Index, current_arl);
+   if (insn->Src[1].Register.Indirect &&
+       insn->Src[1].Indirect.File == TGSI_FILE_ADDRESS) {
+      const struct tgsi_full_src_register *reg = &insn->Src[1];
+      if (reg->Register.Index < 0) {
+         pre_parse_add_indirect(emit, reg->Register.Index, current_arl);
       }
    }
 
-   if (insn->FullSrcRegisters[2].SrcRegister.Indirect &&
-       insn->FullSrcRegisters[2].SrcRegisterInd.File == TGSI_FILE_ADDRESS) {
-      const struct tgsi_full_src_register *reg = &insn->FullSrcRegisters[2];
-      if (reg->SrcRegister.Index < 0) {
-         pre_parse_add_indirect(emit, reg->SrcRegister.Index, current_arl);
+   if (insn->Src[2].Register.Indirect &&
+       insn->Src[2].Indirect.File == TGSI_FILE_ADDRESS) {
+      const struct tgsi_full_src_register *reg = &insn->Src[2];
+      if (reg->Register.Index < 0) {
+         pre_parse_add_indirect(emit, reg->Register.Index, current_arl);
       }
    }
 

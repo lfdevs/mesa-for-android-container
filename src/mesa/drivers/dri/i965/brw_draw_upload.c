@@ -55,6 +55,14 @@ static GLuint float_types[5] = {
    BRW_SURFACEFORMAT_R32G32B32A32_FLOAT
 };
 
+static GLuint half_float_types[5] = {
+   0,
+   BRW_SURFACEFORMAT_R16_FLOAT,
+   BRW_SURFACEFORMAT_R16G16_FLOAT,
+   0, /* can't seem to render this one */
+   BRW_SURFACEFORMAT_R16G16B16A16_FLOAT
+};
+
 static GLuint uint_types_norm[5] = {
    0,
    BRW_SURFACEFORMAT_R32_UNORM,
@@ -161,13 +169,14 @@ static GLuint get_surface_type( GLenum type, GLuint size,
                                 GLenum format, GLboolean normalized )
 {
    if (INTEL_DEBUG & DEBUG_VERTS)
-      _mesa_printf("type %s size %d normalized %d\n", 
+      printf("type %s size %d normalized %d\n", 
 		   _mesa_lookup_enum_by_nr(type), size, normalized);
 
    if (normalized) {
       switch (type) {
       case GL_DOUBLE: return double_types[size];
       case GL_FLOAT: return float_types[size];
+      case GL_HALF_FLOAT: return half_float_types[size];
       case GL_INT: return int_types_norm[size];
       case GL_SHORT: return short_types_norm[size];
       case GL_BYTE: return byte_types_norm[size];
@@ -190,6 +199,7 @@ static GLuint get_surface_type( GLenum type, GLuint size,
       switch (type) {
       case GL_DOUBLE: return double_types[size];
       case GL_FLOAT: return float_types[size];
+      case GL_HALF_FLOAT: return half_float_types[size];
       case GL_INT: return int_types_scale[size];
       case GL_SHORT: return short_types_scale[size];
       case GL_BYTE: return byte_types_scale[size];
@@ -207,6 +217,7 @@ static GLuint get_size( GLenum type )
    switch (type) {
    case GL_DOUBLE: return sizeof(GLdouble);
    case GL_FLOAT: return sizeof(GLfloat);
+   case GL_HALF_FLOAT: return sizeof(GLhalfARB);
    case GL_INT: return sizeof(GLint);
    case GL_SHORT: return sizeof(GLshort);
    case GL_BYTE: return sizeof(GLbyte);
@@ -239,16 +250,6 @@ static void wrap_buffers( struct brw_context *brw,
       dri_bo_unreference(brw->vb.upload.bo);
    brw->vb.upload.bo = dri_bo_alloc(brw->intel.bufmgr, "temporary VBO",
 				    size, 1);
-
-   /* Set the internal VBO\ to no-backing-store.  We only use them as a
-    * temporary within a brw_try_draw_prims while the lock is held.
-    */
-   /* DON'T DO THIS AS IF WE HAVE TO RE-ORG MEMORY WE NEED SOMEWHERE WITH
-      FAKE TO PUSH THIS STUFF */
-   /*
-   if (!brw->intel.ttm)
-      dri_bo_fake_disable_backing_store(brw->vb.upload.bo, NULL, NULL);
-    */
 }
 
 static void get_space( struct brw_context *brw,
@@ -275,7 +276,6 @@ copy_array_to_vbo_array( struct brw_context *brw,
 			 struct brw_vertex_element *element,
 			 GLuint dst_stride)
 {
-   struct intel_context *intel = &brw->intel;
    GLuint size = element->count * dst_stride;
 
    get_space(brw, size, &element->bo, &element->offset);
@@ -288,52 +288,26 @@ copy_array_to_vbo_array( struct brw_context *brw,
    }
 
    if (dst_stride == element->glarray->StrideB) {
-      if (intel->intelScreen->kernel_exec_fencing) {
-	 drm_intel_gem_bo_map_gtt(element->bo);
-	 memcpy((char *)element->bo->virtual + element->offset,
-		element->glarray->Ptr, size);
-	 drm_intel_gem_bo_unmap_gtt(element->bo);
-      } else {
-	 dri_bo_subdata(element->bo,
-			element->offset,
-			size,
-			element->glarray->Ptr);
-      }
+      drm_intel_gem_bo_map_gtt(element->bo);
+      memcpy((char *)element->bo->virtual + element->offset,
+	     element->glarray->Ptr, size);
+      drm_intel_gem_bo_unmap_gtt(element->bo);
    } else {
       char *dest;
       const unsigned char *src = element->glarray->Ptr;
       int i;
 
-      if (intel->intelScreen->kernel_exec_fencing) {
-	 drm_intel_gem_bo_map_gtt(element->bo);
-	 dest = element->bo->virtual;
-	 dest += element->offset;
+      drm_intel_gem_bo_map_gtt(element->bo);
+      dest = element->bo->virtual;
+      dest += element->offset;
 
-	 for (i = 0; i < element->count; i++) {
-	    memcpy(dest, src, dst_stride);
-	    src += element->glarray->StrideB;
-	    dest += dst_stride;
-	 }
-
-	 drm_intel_gem_bo_unmap_gtt(element->bo);
-      } else {
-	 void *data;
-
-	 data = _mesa_malloc(dst_stride * element->count);
-	 dest = data;
-	 for (i = 0; i < element->count; i++) {
-	    memcpy(dest, src, dst_stride);
-	    src += element->glarray->StrideB;
-	    dest += dst_stride;
-	 }
-
-	 dri_bo_subdata(element->bo,
-			element->offset,
-			size,
-			data);
-
-	 _mesa_free(data);
+      for (i = 0; i < element->count; i++) {
+	 memcpy(dest, src, dst_stride);
+	 src += element->glarray->StrideB;
+	 dest += dst_stride;
       }
+
+      drm_intel_gem_bo_unmap_gtt(element->bo);
    }
 }
 
@@ -354,7 +328,7 @@ static void brw_prepare_vertices(struct brw_context *brw)
    /* First build an array of pointers to ve's in vb.inputs_read
     */
    if (0)
-      _mesa_printf("%s %d..%d\n", __FUNCTION__, min_index, max_index);
+      printf("%s %d..%d\n", __FUNCTION__, min_index, max_index);
 
    /* Accumulate the list of enabled arrays. */
    brw->vb.nr_enabled = 0;
@@ -500,12 +474,19 @@ static void brw_emit_vertices(struct brw_context *brw)
     * a VE loads from them.
     */
    if (brw->vb.nr_enabled == 0) {
-      BEGIN_BATCH(3, IGNORE_CLIPRECTS);
+      BEGIN_BATCH(3);
       OUT_BATCH((CMD_VERTEX_ELEMENT << 16) | 1);
-      OUT_BATCH((0 << BRW_VE0_INDEX_SHIFT) |
-		BRW_VE0_VALID |
-		(BRW_SURFACEFORMAT_R32G32B32A32_FLOAT << BRW_VE0_FORMAT_SHIFT) |
-		(0 << BRW_VE0_SRC_OFFSET_SHIFT));
+      if (IS_GEN6(intel->intelScreen->deviceID)) {
+	 OUT_BATCH((0 << GEN6_VE0_INDEX_SHIFT) |
+		   GEN6_VE0_VALID |
+		   (BRW_SURFACEFORMAT_R32G32B32A32_FLOAT << BRW_VE0_FORMAT_SHIFT) |
+		   (0 << BRW_VE0_SRC_OFFSET_SHIFT));
+      } else {
+	 OUT_BATCH((0 << BRW_VE0_INDEX_SHIFT) |
+		   BRW_VE0_VALID |
+		   (BRW_SURFACEFORMAT_R32G32B32A32_FLOAT << BRW_VE0_FORMAT_SHIFT) |
+		   (0 << BRW_VE0_SRC_OFFSET_SHIFT));
+      }
       OUT_BATCH((BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_0_SHIFT) |
 		(BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
 		(BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
@@ -520,20 +501,28 @@ static void brw_emit_vertices(struct brw_context *brw)
     * are interleaved or from the same VBO.  TBD if this makes a
     * performance difference.
     */
-   BEGIN_BATCH(1 + brw->vb.nr_enabled * 4, IGNORE_CLIPRECTS);
+   BEGIN_BATCH(1 + brw->vb.nr_enabled * 4);
    OUT_BATCH((CMD_VERTEX_BUFFER << 16) |
 	     ((1 + brw->vb.nr_enabled * 4) - 2));
 
    for (i = 0; i < brw->vb.nr_enabled; i++) {
       struct brw_vertex_element *input = brw->vb.enabled[i];
+      uint32_t dw0;
 
-      OUT_BATCH((i << BRW_VB0_INDEX_SHIFT) |
-		BRW_VB0_ACCESS_VERTEXDATA |
+      if (intel->gen >= 6) {
+	 dw0 = GEN6_VB0_ACCESS_VERTEXDATA |
+	    (i << GEN6_VB0_INDEX_SHIFT);
+      } else {
+	 dw0 = BRW_VB0_ACCESS_VERTEXDATA |
+	    (i << BRW_VB0_INDEX_SHIFT);
+      }
+
+      OUT_BATCH(dw0 |
 		(input->stride << BRW_VB0_PITCH_SHIFT));
       OUT_RELOC(input->bo,
 		I915_GEM_DOMAIN_VERTEX, 0,
 		input->offset);
-      if (BRW_IS_IGDNG(brw)) {
+      if (intel->is_ironlake || intel->gen >= 6) {
 	 OUT_RELOC(input->bo,
 		   I915_GEM_DOMAIN_VERTEX, 0,
 		   input->bo->size - 1);
@@ -543,7 +532,7 @@ static void brw_emit_vertices(struct brw_context *brw)
    }
    ADVANCE_BATCH();
 
-   BEGIN_BATCH(1 + brw->vb.nr_enabled * 2, IGNORE_CLIPRECTS);
+   BEGIN_BATCH(1 + brw->vb.nr_enabled * 2);
    OUT_BATCH((CMD_VERTEX_ELEMENT << 16) | ((1 + brw->vb.nr_enabled * 2) - 2));
    for (i = 0; i < brw->vb.nr_enabled; i++) {
       struct brw_vertex_element *input = brw->vb.enabled[i];
@@ -564,12 +553,19 @@ static void brw_emit_vertices(struct brw_context *brw)
 	 break;
       }
 
-      OUT_BATCH((i << BRW_VE0_INDEX_SHIFT) |
-		BRW_VE0_VALID |
-		(format << BRW_VE0_FORMAT_SHIFT) |
-		(0 << BRW_VE0_SRC_OFFSET_SHIFT));
+      if (IS_GEN6(intel->intelScreen->deviceID)) {
+	 OUT_BATCH((i << GEN6_VE0_INDEX_SHIFT) |
+		   GEN6_VE0_VALID |
+		   (format << BRW_VE0_FORMAT_SHIFT) |
+		   (0 << BRW_VE0_SRC_OFFSET_SHIFT));
+      } else {
+	 OUT_BATCH((i << BRW_VE0_INDEX_SHIFT) |
+		   BRW_VE0_VALID |
+		   (format << BRW_VE0_FORMAT_SHIFT) |
+		   (0 << BRW_VE0_SRC_OFFSET_SHIFT));
+      }
 
-      if (BRW_IS_IGDNG(brw))
+      if (intel->is_ironlake || intel->gen >= 6)
           OUT_BATCH((comp0 << BRW_VE1_COMPONENT_0_SHIFT) |
                     (comp1 << BRW_VE1_COMPONENT_1_SHIFT) |
                     (comp2 << BRW_VE1_COMPONENT_2_SHIFT) |
@@ -623,13 +619,9 @@ static void brw_prepare_indices(struct brw_context *brw)
 
       /* Straight upload
        */
-      if (intel->intelScreen->kernel_exec_fencing) {
-	 drm_intel_gem_bo_map_gtt(bo);
-	 memcpy((char *)bo->virtual + offset, index_buffer->ptr, ib_size);
-	 drm_intel_gem_bo_unmap_gtt(bo);
-      } else {
-	 dri_bo_subdata(bo, offset, ib_size, index_buffer->ptr);
-      }
+      drm_intel_gem_bo_map_gtt(bo);
+      memcpy((char *)bo->virtual + offset, index_buffer->ptr, ib_size);
+      drm_intel_gem_bo_unmap_gtt(bo);
    } else {
       offset = (GLuint) (unsigned long) index_buffer->ptr;
       brw->ib.start_vertex_offset = 0;
@@ -710,7 +702,7 @@ static void brw_emit_index_buffer(struct brw_context *brw)
       ib.header.bits.index_format = get_index_type(index_buffer->type);
       ib.header.bits.cut_index_enable = 0;
 
-      BEGIN_BATCH(4, IGNORE_CLIPRECTS);
+      BEGIN_BATCH(4);
       OUT_BATCH( ib.header.dword );
       OUT_RELOC(brw->ib.bo,
 		I915_GEM_DOMAIN_VERTEX, 0,

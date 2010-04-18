@@ -26,7 +26,7 @@
 #include "svga_cmd.h"
 
 #include "pipe/p_defines.h"
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
 #include "util/u_bitmask.h"
@@ -126,7 +126,8 @@ svga_is_buffer_referenced( struct pipe_context *pipe,
 }
 
 
-struct pipe_context *svga_context_create( struct pipe_screen *screen )
+struct pipe_context *svga_context_create( struct pipe_screen *screen,
+					  void *priv )
 {
    struct svga_screen *svgascreen = svga_screen(screen);
    struct svga_context *svga = NULL;
@@ -138,6 +139,7 @@ struct pipe_context *svga_context_create( struct pipe_screen *screen )
 
    svga->pipe.winsys = screen->winsys;
    svga->pipe.screen = screen;
+   svga->pipe.priv = priv;
    svga->pipe.destroy = svga_destroy;
    svga->pipe.clear = svga_clear;
 
@@ -284,8 +286,3 @@ void svga_hwtnl_flush_retry( struct svga_context *svga )
    assert(ret == 0);
 }
 
-struct svga_winsys_context *
-svga_winsys_context( struct pipe_context *pipe )
-{
-   return svga_context( pipe )->swc;
-}

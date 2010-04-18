@@ -2,15 +2,12 @@ From: Samuel Thibault <samuel.thibault@ens-lyon.org>
 Subject: Fix build on GNU/Hurd
 
 ---
- configure.ac       |   25 ++++++++++++++-----------
- src/glx/x11/dri2.c |    2 ++
- 2 files changed, 16 insertions(+), 11 deletions(-)
+ configure.ac |   27 +++++++++++++++------------
+ 1 file changed, 15 insertions(+), 12 deletions(-)
 
-Index: mesa/configure.ac
-===================================================================
---- mesa.orig/configure.ac
-+++ mesa/configure.ac
-@@ -539,6 +539,13 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -578,6 +578,13 @@ else
      enable_xcb=no
  fi
  
@@ -24,26 +21,28 @@ Index: mesa/configure.ac
  dnl
  dnl libGL configuration per driver
  dnl
-@@ -572,11 +579,13 @@
+@@ -611,12 +618,14 @@ dri)
          AC_MSG_ERROR([Can't use static libraries for DRI drivers])
      fi
  
 -    # Check for libdrm
 -    PKG_CHECK_MODULES([LIBDRM], [libdrm >= $LIBDRM_REQUIRED])
 -    PKG_CHECK_MODULES([DRI2PROTO], [dri2proto >= $DRI2PROTO_REQUIRED])
--    GL_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED dri2proto >= $DRI2PROTO_REQUIRED"
+-    PKG_CHECK_MODULES([GLPROTO], [glproto >= $GLPROTO_REQUIRED])
+-    GL_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED dri2proto >= $DRI2PROTO_REQUIRED glproto >= $GLPROTO_REQUIRED"
 -    DRI_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED"
 +    if test x"$driglx_direct" = xyes; then
 +        # Check for libdrm
 +        PKG_CHECK_MODULES([LIBDRM], [libdrm >= $LIBDRM_REQUIRED])
 +        PKG_CHECK_MODULES([DRI2PROTO], [dri2proto >= $DRI2PROTO_REQUIRED])
-+        GL_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED dri2proto >= $DRI2PROTO_REQUIRED"
++        PKG_CHECK_MODULES([GLPROTO], [glproto >= $GLPROTO_REQUIRED])
++        GL_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED dri2proto >= $DRI2PROTO_REQUIRED glproto >= $GLPROTO_REQUIRED"
 +        DRI_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED"
 +    fi
  
-     PKG_CHECK_MODULES([LIBDRM_RADEON], [libdrm_radeon libdrm >= $LIBDRM_RADEON_REQUIRED], HAVE_LIBDRM_RADEON=yes, HAVE_LIBDRM_RADEON=no)
- 
-@@ -657,12 +666,6 @@
+     # find the DRI deps for libGL
+     if test "$x11_pkgconfig" = yes; then
+@@ -690,12 +699,6 @@ AC_ARG_WITH([dri-searchpath],
      [DRI_DRIVER_SEARCH_DIR="$withval"],
      [DRI_DRIVER_SEARCH_DIR='${DRI_DRIVER_INSTALL_DIR}'])
  AC_SUBST([DRI_DRIVER_SEARCH_DIR])

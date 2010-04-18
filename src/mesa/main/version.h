@@ -1,9 +1,9 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.7.1
+ * Version:  7.8
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
- * Copyright (C) 2009-2010  VMware, Inc.  All Rights Reserved.
+ * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,11 +28,14 @@
 #define VERSION_H
 
 
+#include "mtypes.h"
+
+
 /* Mesa version */
 #define MESA_MAJOR 7
-#define MESA_MINOR 7
+#define MESA_MINOR 8
 #define MESA_PATCH 1
-#define MESA_VERSION_STRING "7.7.1"
+#define MESA_VERSION_STRING "7.8.1"
 
 /* To make version comparison easy */
 #define MESA_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))
@@ -48,6 +51,10 @@
 /* To make version comparison easy */
 #define OPENGL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))
 #define OPENGL_VERSION_CODE OPENGL_VERSION(OPENGL_MAJOR, OPENGL_MINOR, OPENGL_PATCH)
+
+
+extern void
+_mesa_compute_version(GLcontext *ctx);
 
 
 #endif /* VERSION_H */

@@ -204,7 +204,7 @@ static void viaFillBuffer(struct via_context *vmesa,
 static void viaClear(GLcontext *ctx, GLbitfield mask)
 {
    struct via_context *vmesa = VIA_CONTEXT(ctx);
-   __DRIdrawablePrivate *dPriv = vmesa->driDrawable;
+   __DRIdrawable *dPriv = vmesa->driDrawable;
    struct via_renderbuffer *const vrb = 
      (struct via_renderbuffer *) dPriv->driverPrivate;
    int flag = 0;
@@ -506,12 +506,12 @@ void viaWaitIdleLocked( struct via_context *vmesa, GLboolean light )
  * except that WAIT_IDLE() will spin the CPU polling, while this is
  * IRQ driven.
  */
-static void viaWaitIdleVBlank(  __DRIdrawablePrivate *dPriv, 
+static void viaWaitIdleVBlank(  __DRIdrawable *dPriv, 
 			       struct via_context *vmesa,
 			       GLuint value )
 {
    GLboolean missed_target;
-   __DRIscreenPrivate *psp = dPriv->driScreenPriv;
+   __DRIscreen *psp = dPriv->driScreenPriv;
 
    VIA_FLUSH_DMA(vmesa); 
 
@@ -590,11 +590,11 @@ void viaResetPageFlippingLocked(struct via_context *vmesa)
 /*
  * Copy the back buffer to the front buffer. 
  */
-void viaCopyBuffer(__DRIdrawablePrivate *dPriv)
+void viaCopyBuffer(__DRIdrawable *dPriv)
 {
    struct via_context *vmesa = 
       (struct via_context *)dPriv->driContextPriv->driverPrivate;
-   __DRIscreenPrivate *psp = dPriv->driScreenPriv;
+   __DRIscreen *psp = dPriv->driScreenPriv;
 
    if (VIA_DEBUG & DEBUG_IOCTL)
       fprintf(stderr, 
@@ -634,12 +634,12 @@ void viaCopyBuffer(__DRIdrawablePrivate *dPriv)
 }
 
 
-void viaPageFlip(__DRIdrawablePrivate *dPriv)
+void viaPageFlip(__DRIdrawable *dPriv)
 {
     struct via_context *vmesa = 
        (struct via_context *)dPriv->driContextPriv->driverPrivate;
     struct via_renderbuffer buffer_tmp;
-    __DRIscreenPrivate *psp = dPriv->driScreenPriv;
+    __DRIscreen *psp = dPriv->driScreenPriv;
 
     VIA_FLUSH_DMA(vmesa);
    if (dPriv->vblFlags == VBLANK_FLAG_SYNC &&
@@ -756,6 +756,8 @@ static void via_emit_cliprect(struct via_context *vmesa,
 
    vb[0] = HC_HEADER2;
    vb[1] = (HC_ParaType_NotTex << 16);
+
+   assert(vmesa->driDrawable);
 
    if (vmesa->driDrawable->w == 0 || vmesa->driDrawable->h == 0) {
       vb[2] = (HC_SubA_HClipTB << 24) | 0x0;

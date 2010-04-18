@@ -1,3 +1,13 @@
+mesa (7.8.1-1) experimental; urgency=low
+
+  * New upstream release.
+    + Pull from upstream 7.8 branch up to commit db3b3421.
+  * Refresh patches.
+  * Bump build dependency to libdrm-dev 2.4.19, x11proto-gl-dev 1.4.11,
+    and x11proto-dri2-dev 2.1.
+
+ -- Brice Goglin <bgoglin@debian.org>  Sun, 18 Apr 2010 09:25:39 +0200
+
 mesa (7.7.1-1) unstable; urgency=low
 
   [ Brice Goglin ]

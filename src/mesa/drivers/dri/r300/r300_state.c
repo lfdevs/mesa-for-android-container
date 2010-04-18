@@ -366,7 +366,6 @@ static void r300ClipPlane( GLcontext *ctx, GLenum plane, const GLfloat *eq )
 	p = (GLint) plane - (GLint) GL_CLIP_PLANE0;
 	ip = (GLint *)ctx->Transform._ClipUserPlane[p];
 
-	R300_STATECHANGE( rmesa, vap_flush );
 	R300_STATECHANGE( rmesa, vpucp[p] );
 	rmesa->hw.vpucp[p].cmd[R300_VPUCP_X] = ip[0];
 	rmesa->hw.vpucp[p].cmd[R300_VPUCP_Y] = ip[1];
@@ -996,7 +995,7 @@ static void r300StencilOpSeparate(GLcontext * ctx, GLenum face,
 static void r300UpdateWindow(GLcontext * ctx)
 {
 	r300ContextPtr rmesa = R300_CONTEXT(ctx);
-	__DRIdrawablePrivate *dPriv = radeon_get_drawable(&rmesa->radeon);
+	__DRIdrawable *dPriv = radeon_get_drawable(&rmesa->radeon);
 	GLfloat xoffset = dPriv ? (GLfloat) dPriv->x : 0;
 	GLfloat yoffset = dPriv ? (GLfloat) dPriv->y + dPriv->h : 0;
 	const GLfloat *v = ctx->Viewport._WindowMap.m;
@@ -1049,7 +1048,7 @@ static void r300DepthRange(GLcontext * ctx, GLclampd nearval, GLclampd farval)
 void r300UpdateViewportOffset(GLcontext * ctx)
 {
 	r300ContextPtr rmesa = R300_CONTEXT(ctx);
-	__DRIdrawablePrivate *dPriv = radeon_get_drawable(&rmesa->radeon);
+	__DRIdrawable *dPriv = radeon_get_drawable(&rmesa->radeon);
 	GLfloat xoffset = (GLfloat) dPriv->x;
 	GLfloat yoffset = (GLfloat) dPriv->y + dPriv->h;
 	const GLfloat *v = ctx->Viewport._WindowMap.m;
@@ -1310,7 +1309,7 @@ static void r300SetupTextures(GLcontext * ctx)
 		fprintf(stderr,
 			"Aiiee ! mtu=%d is greater than R300_MAX_TEXTURE_UNITS=%d\n",
 			mtu, R300_MAX_TEXTURE_UNITS);
-		_mesa_exit(-1);
+		exit(-1);
 	}
 
 	/* We cannot let disabled tmu offsets pass DRM */
@@ -1765,9 +1764,10 @@ static void r300ResetHwState(r300ContextPtr r300)
 		fprintf(stderr, "%s\n", __FUNCTION__);
 
 	r300ColorMask(ctx,
-		      ctx->Color.ColorMask[RCOMP],
-		      ctx->Color.ColorMask[GCOMP],
-		      ctx->Color.ColorMask[BCOMP], ctx->Color.ColorMask[ACOMP]);
+		      ctx->Color.ColorMask[0][RCOMP],
+		      ctx->Color.ColorMask[0][GCOMP],
+		      ctx->Color.ColorMask[0][BCOMP],
+                      ctx->Color.ColorMask[0][ACOMP]);
 
 	r300Enable(ctx, GL_DEPTH_TEST, ctx->Depth.Test);
 	r300DepthMask(ctx, ctx->Depth.Mask);
@@ -1969,7 +1969,7 @@ void r300UpdateShaders(r300ContextPtr rmesa)
 	/* should only happenen once, just after context is created */
 	/* TODO: shouldn't we fallback to sw here? */
 	if (!ctx->FragmentProgram._Current) {
-		_mesa_fprintf(stderr, "No ctx->FragmentProgram._Current!!\n");
+		fprintf(stderr, "No ctx->FragmentProgram._Current!!\n");
 		return;
 	}
 
@@ -2019,7 +2019,7 @@ static const GLfloat *get_fragmentprogram_constant(GLcontext *ctx, GLuint index,
 		}
 
 		case RC_STATE_R300_WINDOW_DIMENSION: {
-			__DRIdrawablePrivate * drawable = radeon_get_drawable(&rmesa->radeon);
+			__DRIdrawable * drawable = radeon_get_drawable(&rmesa->radeon);
 			buffer[0] = drawable->w * 0.5f;	/* width*0.5 */
 			buffer[1] = drawable->h * 0.5f;	/* height*0.5 */
 			buffer[2] = 0.5F;	/* for moving range [-1 1] -> [0 1] */

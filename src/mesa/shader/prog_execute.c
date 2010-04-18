@@ -53,8 +53,18 @@
  * Set x to positive or negative infinity.
  */
 #if defined(USE_IEEE) || defined(_WIN32)
-#define SET_POS_INFINITY(x)  ( *((GLuint *) (void *)&x) = 0x7F800000 )
-#define SET_NEG_INFINITY(x)  ( *((GLuint *) (void *)&x) = 0xFF800000 )
+#define SET_POS_INFINITY(x)                  \
+   do {                                      \
+         fi_type fi;                         \
+         fi.i = 0x7F800000;                  \
+         x = fi.f;                           \
+   } while (0)
+#define SET_NEG_INFINITY(x)                  \
+   do {                                      \
+         fi_type fi;                         \
+         fi.i = 0xFF800000;                  \
+         x = fi.f;                           \
+   } while (0)
 #elif defined(VMS)
 #define SET_POS_INFINITY(x)  x = __MAXFLOAT
 #define SET_NEG_INFINITY(x)  x = -__MAXFLOAT
@@ -346,20 +356,7 @@ fetch_vector1ui(const struct prog_src_register *source,
                 const struct gl_program_machine *machine)
 {
    const GLuint *src = (GLuint *) get_src_register_pointer(source, machine);
-   GLuint result;
-
-   ASSERT(src);
-
-   result = src[GET_SWZ(source->Swizzle, 0)];
-
-   if (source->Abs) {
-      result = FABSF(result);
-   }
-   if (source->Negate) {
-      result = -result;
-   }
-
-   return result;
+   return src[GET_SWZ(source->Swizzle, 0)];
 }
 
 
@@ -589,13 +586,13 @@ store_vector4ui(const struct prog_instruction *inst,
 
    if (inst->CondUpdate) {
       if (writeMask & WRITEMASK_X)
-         machine->CondCodes[0] = generate_cc(value[0]);
+         machine->CondCodes[0] = generate_cc((float)value[0]);
       if (writeMask & WRITEMASK_Y)
-         machine->CondCodes[1] = generate_cc(value[1]);
+         machine->CondCodes[1] = generate_cc((float)value[1]);
       if (writeMask & WRITEMASK_Z)
-         machine->CondCodes[2] = generate_cc(value[2]);
+         machine->CondCodes[2] = generate_cc((float)value[2]);
       if (writeMask & WRITEMASK_W)
-         machine->CondCodes[3] = generate_cc(value[3]);
+         machine->CondCodes[3] = generate_cc((float)value[3]);
 #if DEBUG_PROG
       printf("CondCodes=(%s,%s,%s,%s) for:\n",
              _mesa_condcode_string(machine->CondCodes[0]),
@@ -691,13 +688,20 @@ _mesa_execute_program(GLcontext * ctx,
             GLfloat t[4];
             fetch_vector4(&inst->SrcReg[0], machine, t);
             machine->AddressReg[0][0] = IFLOOR(t[0]);
+            if (DEBUG_PROG) {
+               printf("ARL %d\n", machine->AddressReg[0][0]);
+            }
          }
          break;
       case OPCODE_BGNLOOP:
          /* no-op */
+         ASSERT(program->Instructions[inst->BranchTarget].Opcode
+                == OPCODE_ENDLOOP);
          break;
       case OPCODE_ENDLOOP:
          /* subtract 1 here since pc is incremented by for(pc) loop */
+         ASSERT(program->Instructions[inst->BranchTarget].Opcode
+                == OPCODE_BGNLOOP);
          pc = inst->BranchTarget - 1;   /* go to matching BNGLOOP */
          break;
       case OPCODE_BGNSUB:      /* begin subroutine */
@@ -705,12 +709,26 @@ _mesa_execute_program(GLcontext * ctx,
       case OPCODE_ENDSUB:      /* end subroutine */
          break;
       case OPCODE_BRA:         /* branch (conditional) */
-         /* fall-through */
-      case OPCODE_BRK:         /* break out of loop (conditional) */
-         /* fall-through */
-      case OPCODE_CONT:        /* continue loop (conditional) */
          if (eval_condition(machine, inst)) {
             /* take branch */
+            /* Subtract 1 here since we'll do pc++ below */
+            pc = inst->BranchTarget - 1;
+         }
+         break;
+      case OPCODE_BRK:         /* break out of loop (conditional) */
+         ASSERT(program->Instructions[inst->BranchTarget].Opcode
+                == OPCODE_ENDLOOP);
+         if (eval_condition(machine, inst)) {
+            /* break out of loop */
+            /* pc++ at end of for-loop will put us after the ENDLOOP inst */
+            pc = inst->BranchTarget;
+         }
+         break;
+      case OPCODE_CONT:        /* continue loop (conditional) */
+         ASSERT(program->Instructions[inst->BranchTarget].Opcode
+                == OPCODE_ENDLOOP);
+         if (eval_condition(machine, inst)) {
+            /* continue at ENDLOOP */
             /* Subtract 1 here since we'll do pc++ at end of for-loop */
             pc = inst->BranchTarget - 1;
          }
@@ -903,6 +921,10 @@ _mesa_execute_program(GLcontext * ctx,
       case OPCODE_IF:
          {
             GLboolean cond;
+            ASSERT(program->Instructions[inst->BranchTarget].Opcode
+                   == OPCODE_ELSE ||
+                   program->Instructions[inst->BranchTarget].Opcode
+                   == OPCODE_ENDIF);
             /* eval condition */
             if (inst->SrcReg[0].File != PROGRAM_UNDEFINED) {
                GLfloat a[4];
@@ -922,14 +944,16 @@ _mesa_execute_program(GLcontext * ctx,
             else {
                /* go to the instruction after ELSE or ENDIF */
                assert(inst->BranchTarget >= 0);
-               pc = inst->BranchTarget - 1;
+               pc = inst->BranchTarget;
             }
          }
          break;
       case OPCODE_ELSE:
          /* goto ENDIF */
+         ASSERT(program->Instructions[inst->BranchTarget].Opcode
+                == OPCODE_ENDIF);
          assert(inst->BranchTarget >= 0);
-         pc = inst->BranchTarget - 1;
+         pc = inst->BranchTarget;
          break;
       case OPCODE_ENDIF:
          /* nothing */
@@ -963,7 +987,7 @@ _mesa_execute_program(GLcontext * ctx,
                val = -FLT_MAX;
             }
             else {
-               val = log(a[0]) * 1.442695F;
+               val = (float)(log(a[0]) * 1.442695F);
             }
             result[0] = result[1] = result[2] = result[3] = val;
             store_vector4(inst, machine, result);
@@ -983,12 +1007,12 @@ _mesa_execute_program(GLcontext * ctx,
             /* XXX we could probably just use pow() here */
             if (a[0] > 0.0F) {
                if (a[1] == 0.0 && a[3] == 0.0)
-                  result[2] = 1.0;
+                  result[2] = 1.0F;
                else
                   result[2] = (GLfloat) _mesa_pow(a[1], a[3]);
             }
             else {
-               result[2] = 0.0;
+               result[2] = 0.0F;
             }
             result[3] = 1.0F;
             store_vector4(inst, machine, result);
@@ -1028,7 +1052,7 @@ _mesa_execute_program(GLcontext * ctx,
 		  /* The fast LOG2 macro doesn't meet the precision
 		   * requirements.
 		   */
-                  q[2] = (log(t[0]) * 1.442695F);
+                  q[2] = (float)(log(t[0]) * 1.442695F);
                }
             }
             else {
@@ -1657,7 +1681,7 @@ _mesa_execute_program(GLcontext * ctx,
          {
             const GLuint raw = fetch_vector1ui(&inst->SrcReg[0], machine);
             GLfloat result[4];
-            GLhalfNV hx, hy;
+            GLushort hx, hy;
             hx = raw & 0xffff;
             hy = raw >> 16;
             result[0] = result[2] = _mesa_half_to_float(hx);
@@ -1746,11 +1770,11 @@ _mesa_execute_program(GLcontext * ctx,
             if (inst->SrcReg[0].File != -1) {
                GLfloat a[4];
                fetch_vector4(&inst->SrcReg[0], machine, a);
-               _mesa_printf("%s%g, %g, %g, %g\n", (const char *) inst->Data,
+               printf("%s%g, %g, %g, %g\n", (const char *) inst->Data,
                             a[0], a[1], a[2], a[3]);
             }
             else {
-               _mesa_printf("%s\n", (const char *) inst->Data);
+               printf("%s\n", (const char *) inst->Data);
             }
          }
          break;

@@ -39,7 +39,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "swrast/swrast.h"
 #include "vbo/vbo.h"
-#include "tnl/tnl.h"
 #include "tnl/t_pipeline.h"
 #include "swrast_setup/swrast_setup.h"
 
@@ -48,9 +47,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r200_context.h"
 #include "r200_ioctl.h"
 #include "r200_state.h"
-#include "r200_tcl.h"
-#include "r200_tex.h"
-#include "r200_swtcl.h"
 #include "radeon_queryobj.h"
 
 #include "xmlpool.h"
@@ -349,6 +345,15 @@ static int check_rrb(GLcontext *ctx, struct radeon_state_atom *atom)
    if (!rrb || !rrb->bo)
       return 0;
    return atom->cmd_size;
+}
+
+static int check_polygon_stipple(GLcontext *ctx,
+		struct radeon_state_atom *atom)
+{
+   r200ContextPtr r200 = R200_CONTEXT(ctx);
+   if (r200->hw.set.cmd[SET_RE_CNTL] & R200_STIPPLE_ENABLE)
+	   return atom->cmd_size;
+   return 0;
 }
 
 static void mtl_emit(GLcontext *ctx, struct radeon_state_atom *atom)
@@ -890,7 +895,7 @@ void r200InitState( r200ContextPtr rmesa )
    }
 
    if (rmesa->radeon.radeonScreen->kernel_mm)
-	   ALLOC_STATE( stp, always, STP_STATE_SIZE, "STP/stp", 0 );
+	   ALLOC_STATE( stp, polygon_stipple, STP_STATE_SIZE, "STP/stp", 0 );
    else
 	   ALLOC_STATE( stp, never, STP_STATE_SIZE, "STP/stp", 0 );
 
@@ -1384,7 +1389,7 @@ void r200InitState( r200ContextPtr rmesa )
       rmesa->hw.tex[i].cmd[TEX_PP_BORDER_COLOR] = 0;
       rmesa->hw.tex[i].cmd[TEX_PP_TXFORMAT_X] =
          (/* R200_TEXCOORD_PROJ | */
-          0x100000);	/* Small default bias */
+          R200_LOD_BIAS_CORRECTION);	/* Small default bias */
       if (rmesa->radeon.radeonScreen->drmSupportsFragShader) {
 	 rmesa->hw.tex[i].cmd[TEX_PP_TXOFFSET_NEWDRM] =
 	     rmesa->radeon.radeonScreen->texOffset[RADEON_LOCAL_TEX_HEAP];

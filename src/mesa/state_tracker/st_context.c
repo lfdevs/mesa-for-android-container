@@ -38,11 +38,12 @@
 #include "st_cb_blit.h"
 #include "st_cb_bufferobjects.h"
 #include "st_cb_clear.h"
+#include "st_cb_condrender.h"
 #if FEATURE_drawpix
 #include "st_cb_drawpixels.h"
 #include "st_cb_rasterpos.h"
 #endif
-#ifdef FEATURE_OES_draw_texture
+#if FEATURE_OES_draw_texture
 #include "st_cb_drawtex.h"
 #endif
 #include "st_cb_fbo.h"
@@ -55,13 +56,13 @@
 #include "st_cb_texture.h"
 #include "st_cb_flush.h"
 #include "st_cb_strings.h"
-#include "st_cb_viewport.h"
 #include "st_atom.h"
 #include "st_draw.h"
 #include "st_extensions.h"
 #include "st_gen_mipmap.h"
 #include "st_program.h"
 #include "pipe/p_context.h"
+#include "util/u_inlines.h"
 #include "draw/draw_context.h"
 #include "cso_cache/cso_context.h"
 
@@ -202,7 +203,7 @@ static void st_destroy_context_priv( struct st_context *st )
    st_destroy_bitmap(st);
    st_destroy_drawpix(st);
 #endif
-#ifdef FEATURE_OES_draw_texture
+#if FEATURE_OES_draw_texture
    st_destroy_drawtex(st);
 #endif
 
@@ -211,8 +212,8 @@ static void st_destroy_context_priv( struct st_context *st )
    }
 
    for (i = 0; i < Elements(st->state.constants); i++) {
-      if (st->state.constants[i].buffer) {
-         pipe_buffer_reference(&st->state.constants[i].buffer, NULL);
+      if (st->state.constants[i]) {
+         pipe_buffer_reference(&st->state.constants[i], NULL);
       }
    }
 
@@ -221,7 +222,7 @@ static void st_destroy_context_priv( struct st_context *st )
       st->default_texture = NULL;
    }
 
-   _mesa_free( st );
+   free( st );
 }
 
  
@@ -256,7 +257,7 @@ void st_destroy_context( struct st_context *st )
 
    pipe->destroy( pipe );
 
-   _mesa_free(ctx);
+   free(ctx);
 }
 
 
@@ -323,6 +324,11 @@ void st_init_driver_functions(struct dd_function_table *functions)
    st_init_drawpixels_functions(functions);
    st_init_rasterpos_functions(functions);
 #endif
+
+#if FEATURE_OES_draw_texture
+   st_init_drawtex_functions(functions);
+#endif
+
    st_init_fbo_functions(functions);
 #if FEATURE_feedback
    st_init_feedback_functions(functions);
@@ -331,11 +337,11 @@ void st_init_driver_functions(struct dd_function_table *functions)
 #if FEATURE_queryobj
    st_init_query_functions(functions);
 #endif
+   st_init_cond_render_functions(functions);
    st_init_readpixels_functions(functions);
    st_init_texture_functions(functions);
    st_init_flush_functions(functions);
    st_init_string_functions(functions);
-   st_init_viewport_functions(functions);
 
    functions->UpdateState = st_invalidate_state;
 }

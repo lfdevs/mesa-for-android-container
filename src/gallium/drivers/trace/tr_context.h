@@ -40,6 +40,8 @@ extern "C" {
 #endif
 
 
+struct trace_screen;
+   
 struct trace_context
 {
    struct pipe_context base;
@@ -53,6 +55,9 @@ struct trace_context
 
       struct trace_texture *tex[PIPE_MAX_SAMPLERS];
       unsigned num_texs;
+
+      struct trace_texture *vert_tex[PIPE_MAX_VERTEX_SAMPLERS];
+      unsigned num_vert_texs;
 
       unsigned nr_cbufs;
       struct trace_texture *cbufs[PIPE_MAX_COLOR_BUFS];
@@ -92,9 +97,8 @@ trace_context(struct pipe_context *pipe)
 }
 
 
-
 struct pipe_context *
-trace_context_create(struct pipe_screen *screen,
+trace_context_create(struct trace_screen *tr_scr,
                      struct pipe_context *pipe);
 
 void

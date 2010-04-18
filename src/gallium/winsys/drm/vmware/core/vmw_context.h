@@ -52,11 +52,5 @@ struct pipe_screen;
 struct svga_winsys_context *
 vmw_svga_winsys_context_create(struct svga_winsys_screen *sws);
 
-struct pipe_context *
-vmw_svga_context_create(struct pipe_screen *screen);
-
-void
-vmw_svga_context_set_throttling(struct pipe_context *pipe,
-				uint32_t throttle_us);
 
 #endif /* VMW_CONTEXT_H_ */

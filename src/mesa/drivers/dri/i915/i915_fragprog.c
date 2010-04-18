@@ -663,7 +663,7 @@ upload_program(struct i915_fragment_program *p)
 			 A0_MOV,
 			 get_result_vector(p, inst),
 			 get_result_flags(inst), 0,
-			 swizzle(src0, ZERO, ZERO, ZERO, ZERO), 0, 0);
+			 swizzle(tmp, ZERO, ZERO, ZERO, ZERO), 0, 0);
 
       case OPCODE_POW:
          src0 = src_vector(p, &inst->SrcReg[0], program);
@@ -1205,7 +1205,7 @@ i915IsProgramNative(GLcontext * ctx, GLenum target, struct gl_program *prog)
       return GL_TRUE;
 }
 
-static void
+static GLboolean
 i915ProgramStringNotify(GLcontext * ctx,
                         GLenum target, struct gl_program *prog)
 {
@@ -1223,7 +1223,10 @@ i915ProgramStringNotify(GLcontext * ctx,
       }
    }
 
-   _tnl_program_string(ctx, target, prog);
+   (void) _tnl_program_string(ctx, target, prog);
+
+   /* XXX check if program is legal, within limits */
+   return GL_TRUE;
 }
 
 void
@@ -1301,7 +1304,7 @@ i915ValidateFragmentProgram(struct i915_context *i915)
 
    for (i = 0; i < p->ctx->Const.MaxTextureCoordUnits; i++) {
       if (inputsRead & FRAG_BIT_TEX(i)) {
-         int sz = VB->TexCoordPtr[i]->size;
+         int sz = VB->AttribPtr[_TNL_ATTRIB_TEX0 + i]->size;
 
          s2 &= ~S2_TEXCOORD_FMT(i, S2_TEXCOORD_FMT0_MASK);
          s2 |= S2_TEXCOORD_FMT(i, SZ_TO_HW(sz));

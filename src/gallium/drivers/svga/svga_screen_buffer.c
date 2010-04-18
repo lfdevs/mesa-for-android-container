@@ -27,8 +27,8 @@
 
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
-#include "pipe/p_inlines.h"
-#include "pipe/p_thread.h"
+#include "util/u_inlines.h"
+#include "os/os_thread.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
@@ -291,7 +291,8 @@ svga_buffer_upload_flush(struct svga_context *svga,
    sbuf->dma.boxes = NULL;
 
    /* Decrement reference count */
-   pipe_buffer_reference((struct pipe_buffer **)&sbuf, NULL);
+   pipe_reference(&(sbuf->base.reference), NULL);
+   sbuf = NULL;
 }
 
 

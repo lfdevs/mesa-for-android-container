@@ -15,11 +15,13 @@ PROGS = \
 	arbfplight \
 	arbfslight \
 	arbocclude \
+	arbocclude2 \
 	bounce \
 	clearspd \
 	copypix \
 	cubemap \
 	dinoshade \
+	dissolve \
 	drawpix \
 	engine \
 	fbo_firecube \

@@ -44,7 +44,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "swrast/s_context.h"
 #include "swrast/s_fog.h"
 #include "swrast_setup/swrast_setup.h"
-#include "math/m_translate.h"
 #include "tnl/tnl.h"
 #include "tnl/t_context.h"
 #include "tnl/t_pipeline.h"
@@ -168,7 +167,7 @@ static void r200SetVertexFormat( GLcontext *ctx )
 
       for (i = 0; i < ctx->Const.MaxTextureUnits; i++) {
 	 if (RENDERINPUTS_TEST( index_bitset, _TNL_ATTRIB_TEX(i) )) {
-	    GLuint sz = VB->TexCoordPtr[i]->size;
+	    GLuint sz = VB->AttribPtr[_TNL_ATTRIB_TEX0 + i]->size;
 
 	    fmt_1 |= sz << (3 * i);
 	    EMIT_ATTR( _TNL_ATTRIB_TEX0+i, EMIT_1F + sz - 1, 0 );
@@ -297,7 +296,7 @@ void r200_swtcl_flush(GLcontext *ctx, uint32_t current_offset)
    radeonEmitState(&rmesa->radeon);
    r200EmitVertexAOS( rmesa,
 		      rmesa->radeon.swtcl.vertex_size,
-		      first_elem(&rmesa->radeon.dma.reserved)->bo,
+		      rmesa->radeon.swtcl.bo,
 		      current_offset);
 
 
@@ -421,7 +420,6 @@ static struct {
 #define DO_POINTS    1
 #define DO_FULL_QUAD 1
 
-#define HAVE_RGBA   1
 #define HAVE_SPEC   1
 #define HAVE_BACK_COLORS  0
 #define HAVE_HW_FLATSHADE 1

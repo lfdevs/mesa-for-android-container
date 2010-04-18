@@ -37,6 +37,7 @@
 
 
 #define SVGA_TEX_UNITS 8
+#define SVGA_MAX_POINTSIZE 80.0
 
 struct draw_vertex_shader;
 struct svga_shader_result;
@@ -115,7 +116,6 @@ struct svga_depth_stencil_state {
    /* SVGA3D has one ref/mask/writemask triple shared between front &
     * back face stencil.  We really need two:
     */
-   unsigned stencil_ref:8;
    unsigned stencil_mask:8;
    unsigned stencil_writemask:8;
 
@@ -139,15 +139,12 @@ struct svga_rasterizer_state {
    unsigned multisampleantialias:1;
    unsigned antialiasedlineenable:1;
    unsigned lastpixel:1;
-   unsigned pointspriteenable:1;
 
    unsigned linepattern;
 
    float slopescaledepthbias;
    float depthbias;
    float pointsize;
-   float pointsize_min;
-   float pointsize_max;
    
    unsigned hw_unfilled:16;         /* PIPE_POLYGON_MODE_x */
    unsigned need_pipeline:16;    /* which prims do we need help for? */
@@ -201,10 +198,9 @@ struct svga_state
    struct pipe_poly_stipple poly_stipple;
    struct pipe_scissor_state scissor;
    struct pipe_blend_color blend_color;
+   struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
    struct pipe_viewport_state viewport;
-
-   const unsigned *edgeflags;
 
    unsigned num_samplers;
    unsigned num_textures;
@@ -367,7 +363,7 @@ struct svga_context
 #define SVGA_NEW_FRAME_BUFFER        0x800
 #define SVGA_NEW_STIPPLE             0x1000
 #define SVGA_NEW_SCISSOR             0x2000
-#define SVGA_NEW_BLEND_COLOR         0x5000
+#define SVGA_NEW_BLEND_COLOR         0x4000
 #define SVGA_NEW_CLIP                0x8000
 #define SVGA_NEW_VIEWPORT            0x10000
 #define SVGA_NEW_PRESCALE            0x20000
@@ -378,9 +374,9 @@ struct svga_context
 #define SVGA_NEW_NEED_SWTNL          0x400000
 #define SVGA_NEW_FS_RESULT           0x800000
 #define SVGA_NEW_VS_RESULT           0x1000000
-#define SVGA_NEW_EDGEFLAGS           0x2000000
-#define SVGA_NEW_ZERO_STRIDE         0x4000000
-#define SVGA_NEW_TEXTURE_FLAGS       0x8000000
+#define SVGA_NEW_ZERO_STRIDE         0x2000000
+#define SVGA_NEW_TEXTURE_FLAGS       0x4000000
+#define SVGA_NEW_STENCIL_REF         0x8000000
 
 
 
@@ -429,6 +425,10 @@ void svga_context_flush( struct svga_context *svga,
                          struct pipe_fence_handle **pfence );
 
 void svga_hwtnl_flush_retry( struct svga_context *svga );
+
+struct pipe_context *
+svga_context_create(struct pipe_screen *screen,
+		    void *priv);
 
 
 /***********************************************************************

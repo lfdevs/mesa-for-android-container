@@ -38,8 +38,9 @@
 #include "dri2.h"
 
 #include "pipe/p_state.h"
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
 
+#include "util/u_format.h"
 
 /* Make all the #if cases in the code esier to read */
 #ifndef DRI2INFOREC_VERSION
@@ -94,7 +95,7 @@ dri2_do_create_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer, unsigned int form
     case 9:
 #endif
 	if (exa_priv->depth_stencil_tex &&
-	    !pf_is_depth_stencil(exa_priv->depth_stencil_tex->format))
+	    !util_format_is_depth_or_stencil(exa_priv->depth_stencil_tex->format))
 	    exa_priv->depth_stencil_tex = NULL;
         /* Fall through */
     case DRI2BufferDepth:
@@ -115,17 +116,16 @@ dri2_do_create_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer, unsigned int form
                   break;
                default:
                   template.format = ms->ds_depth_bits_last ?
-                                    PIPE_FORMAT_X8Z24_UNORM : PIPE_FORMAT_Z24X8_UNORM;
+                                    PIPE_FORMAT_Z24X8_UNORM : PIPE_FORMAT_X8Z24_UNORM;
                   break;
                }
             } else {
                template.format = ms->ds_depth_bits_last ?
-                                 PIPE_FORMAT_S8Z24_UNORM : PIPE_FORMAT_Z24S8_UNORM;
+                                 PIPE_FORMAT_Z24S8_UNORM : PIPE_FORMAT_S8Z24_UNORM;
             }
-	    pf_get_block(template.format, &template.block);
-	    template.width[0] = pDraw->width;
-	    template.height[0] = pDraw->height;
-	    template.depth[0] = 1;
+	    template.width0 = pDraw->width;
+	    template.height0 = pDraw->height;
+	    template.depth0 = 1;
 	    template.last_level = 0;
 	    template.tex_usage = PIPE_TEXTURE_USAGE_DEPTH_STENCIL |
 		PIPE_TEXTURE_USAGE_DISPLAY_TARGET;
@@ -295,7 +295,6 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     GCPtr gc;
     RegionPtr copy_clip;
     Bool save_accel;
-    CustomizerPtr cust = ms->cust;
 
     /*
      * In driCreateBuffers we dewrap windows into the
@@ -349,8 +348,7 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     ValidateGC(dst_draw, gc);
 
     /* If this is a full buffer swap, throttle on the previous one */
-    if (ms->swapThrottling &&
-	dst_priv->fence && REGION_NUM_RECTS(pRegion) == 1) {
+    if (dst_priv->fence && REGION_NUM_RECTS(pRegion) == 1) {
 	BoxPtr extents = REGION_EXTENTS(pScreen, pRegion);
 
 	if (extents->x1 == 0 && extents->y1 == 0 &&
@@ -372,9 +370,6 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     DamageRegionAppend(src_draw, pRegion);
     DamageRegionProcessPending(src_draw);
 
-   if (cust && cust->winsys_context_throttle)
-       cust->winsys_context_throttle(cust, ms->ctx, THROTTLE_SWAP);
-
     (*gc->ops->CopyArea)(src_draw, dst_draw, gc,
 			 0, 0, pDraw->width, pDraw->height, 0, 0);
     ms->exa->accel = save_accel;
@@ -382,13 +377,8 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     FreeScratchGC(gc);
 
     ms->ctx->flush(ms->ctx, PIPE_FLUSH_SWAPBUFFERS,
-		   (pDestBuffer->attachment == DRI2BufferFrontLeft
-		    && ms->swapThrottling) ?
+		   pDestBuffer->attachment == DRI2BufferFrontLeft ?
 		   &dst_priv->fence : NULL);
-
-   if (cust && cust->winsys_context_throttle)
-       cust->winsys_context_throttle(cust, ms->ctx, THROTTLE_RENDER);
-
 }
 
 Bool
@@ -441,11 +431,11 @@ xorg_dri2_init(ScreenPtr pScreen)
     dri2info.Wait = NULL;
 
     ms->d_depth_bits_last =
-	 ms->screen->is_format_supported(ms->screen, PIPE_FORMAT_X8Z24_UNORM,
+	 ms->screen->is_format_supported(ms->screen, PIPE_FORMAT_Z24X8_UNORM,
 					 PIPE_TEXTURE_2D,
 					 PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0);
     ms->ds_depth_bits_last =
-	 ms->screen->is_format_supported(ms->screen, PIPE_FORMAT_S8Z24_UNORM,
+	 ms->screen->is_format_supported(ms->screen, PIPE_FORMAT_Z24S8_UNORM,
 					 PIPE_TEXTURE_2D,
 					 PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0);
 

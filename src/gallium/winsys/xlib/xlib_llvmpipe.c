@@ -40,10 +40,11 @@
 #undef ASSERT
 #undef Elements
 
-#include "pipe/internal/p_winsys_screen.h"
+#include "util/u_simple_screen.h"
 #include "pipe/p_format.h"
 #include "pipe/p_context.h"
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
+#include "util/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "llvmpipe/lp_winsys.h"
@@ -58,7 +59,6 @@
 struct xm_displaytarget
 {
    enum pipe_format format;
-   struct pipe_format_block block;
    unsigned width;
    unsigned height;
    unsigned stride;
@@ -262,10 +262,10 @@ xm_llvmpipe_display(struct xmesa_buffer *xm_buffer,
    {
       if (xm_dt->tempImage == NULL)
       {
-         assert(xm_dt->block.width == 1);
-         assert(xm_dt->block.height == 1);
+         assert(util_format_get_blockwidth(xm_dt->format) == 1);
+         assert(util_format_get_blockheight(xm_dt->format) == 1);
          alloc_shm_ximage(xm_dt, xm_buffer,
-                          xm_dt->stride / xm_dt->block.size,
+                          xm_dt->stride / util_format_get_blocksize(xm_dt->format),
                           xm_dt->height);
       }
 
@@ -321,7 +321,7 @@ xm_displaytarget_create(struct llvmpipe_winsys *winsys,
                         unsigned *stride)
 {
    struct xm_displaytarget *xm_dt = CALLOC_STRUCT(xm_displaytarget);
-   unsigned nblocksx, nblocksy, size;
+   unsigned nblocksy, size;
 
    xm_dt = CALLOC_STRUCT(xm_displaytarget);
    if(!xm_dt)
@@ -331,10 +331,8 @@ xm_displaytarget_create(struct llvmpipe_winsys *winsys,
    xm_dt->width = width;
    xm_dt->height = height;
 
-   pf_get_block(format, &xm_dt->block);
-   nblocksx = pf_get_nblocksx(&xm_dt->block, width);
-   nblocksy = pf_get_nblocksy(&xm_dt->block, height);
-   xm_dt->stride = align(nblocksx * xm_dt->block.size, alignment);
+   nblocksy = util_format_get_nblocksy(format, height);
+   xm_dt->stride = align(util_format_get_stride(format, width), alignment);
    size = xm_dt->stride * nblocksy;
 
 #ifdef USE_XSHM
@@ -421,25 +419,6 @@ fail:
 }
 
 
-static struct pipe_context *
-xlib_create_llvmpipe_context( struct pipe_screen *screen,
-                              void *context_private )
-{
-   struct pipe_context *pipe;
-   
-   pipe = llvmpipe_create(screen);
-   if (pipe == NULL)
-      goto fail;
-
-   pipe->priv = context_private;
-   return pipe;
-
-fail:
-   /* Free stuff here */
-   return NULL;
-}
-
-
 static void
 xlib_llvmpipe_display_surface(struct xmesa_buffer *xm_buffer,
                               struct pipe_surface *surf)
@@ -455,7 +434,6 @@ xlib_llvmpipe_display_surface(struct xmesa_buffer *xm_buffer,
 struct xm_driver xlib_llvmpipe_driver = 
 {
    .create_pipe_screen = xlib_create_llvmpipe_screen,
-   .create_pipe_context = xlib_create_llvmpipe_context,
    .display_surface = xlib_llvmpipe_display_surface
 };
 

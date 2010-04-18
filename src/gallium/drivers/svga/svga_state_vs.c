@@ -23,8 +23,9 @@
  *
  **********************************************************/
 
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
 #include "pipe/p_defines.h"
+#include "util/u_format.h"
 #include "util/u_math.h"
 #include "util/u_bitmask.h"
 #include "translate/translate.h"
@@ -201,10 +202,12 @@ static int update_zero_stride( struct svga_context *svga,
 
          key.output_stride = 4 * sizeof(float);
          key.nr_elements = 1;
+         key.element[0].type = TRANSLATE_ELEMENT_NORMAL;
          key.element[0].input_format = vel->src_format;
          key.element[0].output_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
          key.element[0].input_buffer = vel->vertex_buffer_index;
          key.element[0].input_offset = vel->src_offset;
+         key.element[0].instance_divisor = vel->instance_divisor;
          key.element[0].output_offset = const_idx * 4 * sizeof(float);
 
          translate_key_sanitize(&key);
@@ -218,12 +221,12 @@ static int update_zero_stride( struct svga_context *svga,
          mapped_buffer = pipe_buffer_map_range(svga->pipe.screen, 
                                                vbuffer->buffer,
                                                vel->src_offset,
-                                               pf_get_size(vel->src_format),
+                                               util_format_get_blocksize(vel->src_format),
                                                PIPE_BUFFER_USAGE_CPU_READ);
          translate->set_buffer(translate, vel->vertex_buffer_index,
                                mapped_buffer,
                                vbuffer->stride);
-         translate->run(translate, 0, 1,
+         translate->run(translate, 0, 1, 0,
                         svga->curr.zero_stride_constants);
 
          pipe_buffer_unmap(svga->pipe.screen,

@@ -35,7 +35,6 @@
 
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
-#include "pipe/p_inlines.h"
 #include "main/mtypes.h"
 #include "main/renderbuffer.h"
 #include "state_tracker/drm_api.h"
@@ -44,9 +43,11 @@
 #include "state_tracker/st_context.h"
 #include "state_tracker/st_cb_fbo.h"
 
+#include "util/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_rect.h"
-
+#include "util/u_inlines.h"
+ 
 static struct pipe_surface *
 dri_surface_from_handle(struct drm_api *api,
 			struct pipe_screen *screen,
@@ -62,11 +63,10 @@ dri_surface_from_handle(struct drm_api *api,
    templat.tex_usage |= PIPE_TEXTURE_USAGE_RENDER_TARGET;
    templat.target = PIPE_TEXTURE_2D;
    templat.last_level = 0;
-   templat.depth[0] = 1;
+   templat.depth0 = 1;
    templat.format = format;
-   templat.width[0] = width;
-   templat.height[0] = height;
-   pf_get_block(templat.format, &templat.block);
+   templat.width0 = width;
+   templat.height0 = height;
 
    texture = api->texture_from_shared_handle(api, screen, &templat,
                                              "dri2 buffer", pitch, handle);
@@ -118,7 +118,7 @@ dri2_check_if_pixmap(__DRIbuffer *buffers, int count)
  * This will be called a drawable is known to have been resized.
  */
 void
-dri_get_buffers(__DRIdrawablePrivate * dPriv)
+dri_get_buffers(__DRIdrawable * dPriv)
 {
 
    struct dri_drawable *drawable = dri_drawable(dPriv);
@@ -134,12 +134,13 @@ dri_get_buffers(__DRIdrawablePrivate * dPriv)
 
    if ((dri_screen->dri2.loader
         && (dri_screen->dri2.loader->base.version > 2)
-        && (dri_screen->dri2.loader->getBuffersWithFormat != NULL)))
+        && (dri_screen->dri2.loader->getBuffersWithFormat != NULL))) {
       buffers = (*dri_screen->dri2.loader->getBuffersWithFormat)
                 (dri_drawable, &dri_drawable->w, &dri_drawable->h,
                  drawable->attachments, drawable->num_attachments,
                  &count, dri_drawable->loaderPrivate);
-   else
+   } else {
+      assert(dri_screen->dri2.loader);
       buffers = (*dri_screen->dri2.loader->getBuffers) (dri_drawable,
                                                         &dri_drawable->w,
                                                         &dri_drawable->h,
@@ -148,6 +149,7 @@ dri_get_buffers(__DRIdrawablePrivate * dPriv)
                                                         num_attachments, &count,
                                                         dri_drawable->
                                                         loaderPrivate);
+   }
 
    if (buffers == NULL) {
       return;
@@ -276,7 +278,7 @@ void dri2_set_tex_buffer2(__DRIcontext *pDRICtx, GLint target,
 void dri2_set_tex_buffer(__DRIcontext *pDRICtx, GLint target,
                          __DRIdrawable *dPriv)
 {
-   dri2_set_tex_buffer2(pDRICtx, target, GLX_TEXTURE_FORMAT_RGBA_EXT, dPriv);
+   dri2_set_tex_buffer2(pDRICtx, target, __DRI_TEXTURE_FORMAT_RGBA, dPriv);
 }
 
 void
@@ -284,7 +286,18 @@ dri_update_buffer(struct pipe_screen *screen, void *context_private)
 {
    struct dri_context *ctx = (struct dri_context *)context_private;
 
+   if (ctx->d_stamp == *ctx->dPriv->pStamp &&
+       ctx->r_stamp == *ctx->rPriv->pStamp)
+      return;
+
+   ctx->d_stamp = *ctx->dPriv->pStamp;
+   ctx->r_stamp = *ctx->rPriv->pStamp;
+
+   /* Ask the X server for new renderbuffers. */
    dri_get_buffers(ctx->dPriv);
+   if (ctx->dPriv != ctx->rPriv)
+      dri_get_buffers(ctx->rPriv);
+
 }
 
 void
@@ -319,8 +332,8 @@ dri_flush_frontbuffer(struct pipe_screen *screen,
  * This is called when we need to set up GL rendering to a new X window.
  */
 boolean
-dri_create_buffer(__DRIscreenPrivate * sPriv,
-		  __DRIdrawablePrivate * dPriv,
+dri_create_buffer(__DRIscreen * sPriv,
+		  __DRIdrawable * dPriv,
 		  const __GLcontextModes * visual, boolean isPixmap)
 {
    struct dri_screen *screen = sPriv->private;
@@ -336,11 +349,11 @@ dri_create_buffer(__DRIscreenPrivate * sPriv,
 
    if (visual->redBits == 8) {
       if (visual->alphaBits == 8)
-         drawable->color_format = PIPE_FORMAT_A8R8G8B8_UNORM;
+         drawable->color_format = PIPE_FORMAT_B8G8R8A8_UNORM;
       else
-         drawable->color_format = PIPE_FORMAT_X8R8G8B8_UNORM;
+         drawable->color_format = PIPE_FORMAT_B8G8R8X8_UNORM;
    } else {
-      drawable->color_format = PIPE_FORMAT_R5G6B5_UNORM;
+      drawable->color_format = PIPE_FORMAT_B5G6R5_UNORM;
    }
 
    switch(visual->depthBits) {
@@ -354,12 +367,12 @@ dri_create_buffer(__DRIscreenPrivate * sPriv,
    case 24:
       if (visual->stencilBits == 0) {
 	 drawable->depth_stencil_format = (screen->d_depth_bits_last) ?
-                                          PIPE_FORMAT_X8Z24_UNORM:
-                                          PIPE_FORMAT_Z24X8_UNORM;
+                                          PIPE_FORMAT_Z24X8_UNORM:
+                                          PIPE_FORMAT_X8Z24_UNORM;
       } else {
 	 drawable->depth_stencil_format = (screen->sd_depth_bits_last) ?
-                                          PIPE_FORMAT_S8Z24_UNORM:
-                                          PIPE_FORMAT_Z24S8_UNORM;
+                                          PIPE_FORMAT_Z24S8_UNORM:
+                                          PIPE_FORMAT_S8Z24_UNORM;
       }
       break;
    case 32:
@@ -463,7 +476,7 @@ dri_swap_fences_push_back(struct dri_drawable *draw,
 }
 
 void
-dri_destroy_buffer(__DRIdrawablePrivate * dPriv)
+dri_destroy_buffer(__DRIdrawable * dPriv)
 {
    struct dri_drawable *drawable = dri_drawable(dPriv);
    struct pipe_fence_handle *fence;
@@ -481,8 +494,8 @@ dri_destroy_buffer(__DRIdrawablePrivate * dPriv)
 
 static void
 dri1_update_drawables_locked(struct dri_context *ctx,
-			     __DRIdrawablePrivate * driDrawPriv,
-			     __DRIdrawablePrivate * driReadPriv)
+			     __DRIdrawable * driDrawPriv,
+			     __DRIdrawable * driReadPriv)
 {
    if (ctx->stLostLock) {
       ctx->stLostLock = FALSE;
@@ -505,8 +518,8 @@ dri1_update_drawables_locked(struct dri_context *ctx,
 static void
 dri1_propagate_drawable_change(struct dri_context *ctx)
 {
-   __DRIdrawablePrivate *dPriv = ctx->dPriv;
-   __DRIdrawablePrivate *rPriv = ctx->rPriv;
+   __DRIdrawable *dPriv = ctx->dPriv;
+   __DRIdrawable *rPriv = ctx->rPriv;
    boolean flushed = FALSE;
 
    if (dPriv && ctx->d_stamp != dPriv->lastStamp) {
@@ -579,7 +592,7 @@ static void
 dri1_swap_copy(struct dri_context *ctx,
 	       struct pipe_surface *dst,
 	       struct pipe_surface *src,
-	       __DRIdrawablePrivate * dPriv, const struct drm_clip_rect *bbox)
+	       __DRIdrawable * dPriv, const struct drm_clip_rect *bbox)
 {
    struct pipe_context *pipe = ctx->pipe;
    struct drm_clip_rect clip;
@@ -610,7 +623,7 @@ dri1_swap_copy(struct dri_context *ctx,
 static void
 dri1_copy_to_front(struct dri_context *ctx,
 		   struct pipe_surface *surf,
-		   __DRIdrawablePrivate * dPriv,
+		   __DRIdrawable * dPriv,
 		   const struct drm_clip_rect *sub_box,
 		   struct pipe_fence_handle **fence)
 {
@@ -683,7 +696,7 @@ dri1_flush_frontbuffer(struct pipe_screen *screen,
 }
 
 void
-dri_swap_buffers(__DRIdrawablePrivate * dPriv)
+dri_swap_buffers(__DRIdrawable * dPriv)
 {
    struct dri_context *ctx;
    struct pipe_surface *back_surf;
@@ -715,7 +728,7 @@ dri_swap_buffers(__DRIdrawablePrivate * dPriv)
 }
 
 void
-dri_copy_sub_buffer(__DRIdrawablePrivate * dPriv, int x, int y, int w, int h)
+dri_copy_sub_buffer(__DRIdrawable * dPriv, int x, int y, int w, int h)
 {
    struct pipe_screen *screen = dri_screen(dPriv->driScreenPriv)->pipe_screen;
    struct drm_clip_rect sub_bbox;

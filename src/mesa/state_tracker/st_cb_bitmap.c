@@ -47,7 +47,7 @@
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
 #include "util/u_draw_quad.h"
 #include "util/u_simple_shaders.h"
 #include "shader/prog_instruction.h"
@@ -164,11 +164,6 @@ make_bitmap_fragment_program(GLcontext *ctx, GLuint samplerIndex)
    stfp = (struct st_fragment_program *) p;
    stfp->Base.UsesKill = GL_TRUE;
 
-   /* No need to send this incomplete program down to hardware:
-    *
-    * st_translate_fragment_program(ctx->st, stfp, NULL);
-    */
-
    return stfp;
 }
 
@@ -226,7 +221,7 @@ combined_bitmap_fragment_program(GLcontext *ctx)
 #endif
 
       /* translate to TGSI tokens */
-      st_translate_fragment_program(st, stfp->bitmap_program, NULL);
+      st_translate_fragment_program(st, stfp->bitmap_program);
    }
 
    return stfp->bitmap_program;
@@ -544,8 +539,28 @@ reset_cache(struct st_context *st)
                                       st->bitmap.tex_format, 0,
                                       BITMAP_CACHE_WIDTH, BITMAP_CACHE_HEIGHT,
                                       1, PIPE_TEXTURE_USAGE_SAMPLER);
-
 }
+
+
+/** Print bitmap image to stdout (debug) */
+static void
+print_cache(const struct bitmap_cache *cache)
+{
+   int i, j, k;
+
+   for (i = 0; i < BITMAP_CACHE_HEIGHT; i++) {
+      k = BITMAP_CACHE_WIDTH * (BITMAP_CACHE_HEIGHT - i - 1);
+      for (j = 0; j < BITMAP_CACHE_WIDTH; j++) {
+         if (cache->buffer[k])
+            printf("X");
+         else
+            printf(" ");
+         k++;
+      }
+      printf("\n");
+   }
+}
+
 
 static void
 create_cache_trans(struct st_context *st)
@@ -596,6 +611,8 @@ st_flush_bitmap_cache(struct st_context *st)
           * So unmap and release the texture transfer before drawing.
           */
          if (cache->trans) {
+            if (0)
+               print_cache(cache);
             screen->transfer_unmap(screen, cache->trans);
             cache->buffer = NULL;
 
@@ -645,7 +662,7 @@ accum_bitmap(struct st_context *st,
              const GLubyte *bitmap )
 {
    struct bitmap_cache *cache = st->bitmap.cache;
-   int px = -999, py;
+   int px = -999, py = -999;
    const GLfloat z = st->ctx->Current.RasterPos[2];
 
    if (width > BITMAP_CACHE_WIDTH ||
@@ -679,6 +696,7 @@ accum_bitmap(struct st_context *st,
    }
 
    assert(px != -999);
+   assert(py != -999);
 
    if (x < cache->xmin)
       cache->xmin = x;
@@ -822,7 +840,7 @@ st_destroy_bitmap(struct st_context *st)
          screen->tex_transfer_destroy(cache->trans);
       }
       pipe_texture_reference(&st->bitmap.cache->texture, NULL);
-      _mesa_free(st->bitmap.cache);
+      free(st->bitmap.cache);
       st->bitmap.cache = NULL;
    }
 }

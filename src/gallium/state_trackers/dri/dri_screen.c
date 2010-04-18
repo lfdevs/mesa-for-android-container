@@ -37,14 +37,12 @@
 #include "dri_context.h"
 #include "dri_drawable.h"
 
-#include "pipe/p_context.h"
 #include "pipe/p_screen.h"
-#include "pipe/p_inlines.h"
 #include "pipe/p_format.h"
 #include "state_tracker/drm_api.h"
 #include "state_tracker/dri1_api.h"
-#include "state_tracker/st_public.h"
-#include "state_tracker/st_cb_fbo.h"
+
+#include "util/u_debug.h"
 
 PUBLIC const char __driConfigOptions[] =
    DRI_CONF_BEGIN DRI_CONF_SECTION_PERFORMANCE
@@ -63,6 +61,17 @@ static const __DRItexBufferExtension dri2TexBufferExtension = {
    dri2_set_tex_buffer2,
 };
 
+static void
+dri2_flush_drawable(__DRIdrawable *draw)
+{
+}
+
+static const __DRI2flushExtension dri2FlushExtension = {
+    { __DRI2_FLUSH, __DRI2_FLUSH_VERSION },
+    dri2_flush_drawable,
+    dri2InvalidateDrawable,
+};
+
    static const __DRIextension *dri_screen_extensions[] = {
       &driReadDrawableExtension,
       &driCopySubBufferExtension.base,
@@ -70,6 +79,7 @@ static const __DRItexBufferExtension dri2TexBufferExtension = {
       &driFrameTrackingExtension.base,
       &driMediaStreamCounterExtension.base,
       &dri2TexBufferExtension.base,
+      &dri2FlushExtension.base,
       NULL
    };
 
@@ -86,7 +96,7 @@ dri_fill_in_modes(struct dri_screen *screen,
    unsigned num_modes;
    uint8_t depth_bits_array[5];
    uint8_t stencil_bits_array[5];
-   uint8_t msaa_samples_array[1];
+   uint8_t msaa_samples_array[2];
    unsigned depth_buffer_factor;
    unsigned back_buffer_factor;
    unsigned msaa_samples_factor;
@@ -102,25 +112,25 @@ dri_fill_in_modes(struct dri_screen *screen,
    stencil_bits_array[0] = 0;
    depth_buffer_factor = 1;
 
-   pf_x8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_X8Z24_UNORM,
+   pf_x8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24X8_UNORM,
 					    PIPE_TEXTURE_2D,
 					    PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0);
-   pf_z24x8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24X8_UNORM,
+   pf_z24x8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_X8Z24_UNORM,
 					    PIPE_TEXTURE_2D,
 					    PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0);
-   pf_s8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_S8Z24_UNORM,
+   pf_s8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24S8_UNORM,
 					    PIPE_TEXTURE_2D,
 					    PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0);
-   pf_z24s8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24S8_UNORM,
+   pf_z24s8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_S8Z24_UNORM,
 					    PIPE_TEXTURE_2D,
 					    PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0);
-   pf_a8r8g8b8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_A8R8G8B8_UNORM,
+   pf_a8r8g8b8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_B8G8R8A8_UNORM,
 					       PIPE_TEXTURE_2D,
 					       PIPE_TEXTURE_USAGE_RENDER_TARGET, 0);
-   pf_x8r8g8b8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_X8R8G8B8_UNORM,
+   pf_x8r8g8b8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_B8G8R8X8_UNORM,
 					       PIPE_TEXTURE_2D,
 					       PIPE_TEXTURE_USAGE_RENDER_TARGET, 0);
-   pf_r5g6b5 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_R5G6B5_UNORM,
+   pf_r5g6b5 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_B5G6R5_UNORM,
 					     PIPE_TEXTURE_2D,
 					     PIPE_TEXTURE_USAGE_RENDER_TARGET, 0);
 
@@ -159,8 +169,9 @@ dri_fill_in_modes(struct dri_screen *screen,
    }
 
    msaa_samples_array[0] = 0;
+   msaa_samples_array[1] = 4;
    back_buffer_factor = 3;
-   msaa_samples_factor = 1;
+   msaa_samples_factor = 2;
 
    num_modes =
       depth_buffer_factor * back_buffer_factor * msaa_samples_factor * 4;
@@ -170,7 +181,8 @@ dri_fill_in_modes(struct dri_screen *screen,
                                         depth_bits_array, stencil_bits_array,
                                         depth_buffer_factor, back_buffer_modes,
                                         back_buffer_factor,
-                                        msaa_samples_array, 1);
+                                        msaa_samples_array, msaa_samples_factor,
+                                        GL_TRUE);
 
    if (pf_a8r8g8b8)
       configs_a8r8g8b8 = driCreateConfigs(GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
@@ -179,7 +191,9 @@ dri_fill_in_modes(struct dri_screen *screen,
                                           depth_buffer_factor,
                                           back_buffer_modes,
                                           back_buffer_factor,
-                                          msaa_samples_array, 1);
+                                          msaa_samples_array,
+                                          msaa_samples_factor,
+                                          GL_TRUE);
 
    if (pf_x8r8g8b8)
       configs_x8r8g8b8 = driCreateConfigs(GL_BGR, GL_UNSIGNED_INT_8_8_8_8_REV,
@@ -188,7 +202,9 @@ dri_fill_in_modes(struct dri_screen *screen,
                                           depth_buffer_factor,
                                           back_buffer_modes,
                                           back_buffer_factor,
-                                          msaa_samples_array, 1);
+                                          msaa_samples_array,
+                                          msaa_samples_factor,
+                                          GL_TRUE);
 
    if (pixel_bits == 16) {
       configs = configs_r5g6b5;
@@ -209,14 +225,14 @@ dri_fill_in_modes(struct dri_screen *screen,
       return NULL;
    }
 
-   return (const const __DRIconfig **)configs;
+   return (const __DRIconfig **)configs;
 }
 
 /**
  * Get information about previous buffer swaps.
  */
 static int
-dri_get_swap_info(__DRIdrawablePrivate * dPriv, __DRIswapInfo * sInfo)
+dri_get_swap_info(__DRIdrawable * dPriv, __DRIswapInfo * sInfo)
 {
    if (dPriv == NULL || dPriv->driverPrivate == NULL || sInfo == NULL)
       return -1;
@@ -234,7 +250,7 @@ dri_copy_version(struct dri1_api_version *dst,
 }
 
 static const __DRIconfig **
-dri_init_screen(__DRIscreenPrivate * sPriv)
+dri_init_screen(__DRIscreen * sPriv)
 {
    struct dri_screen *screen;
    const __DRIconfig **configs;
@@ -299,7 +315,7 @@ dri_init_screen(__DRIscreenPrivate * sPriv)
  * Returns the __GLcontextModes supported by this driver.
  */
 static const __DRIconfig **
-dri_init_screen2(__DRIscreenPrivate * sPriv)
+dri_init_screen2(__DRIscreen * sPriv)
 {
    struct dri_screen *screen;
    struct drm_create_screen_arg arg;
@@ -339,7 +355,7 @@ dri_init_screen2(__DRIscreenPrivate * sPriv)
 }
 
 static void
-dri_destroy_screen(__DRIscreenPrivate * sPriv)
+dri_destroy_screen(__DRIscreen * sPriv)
 {
    struct dri_screen *screen = dri_screen(sPriv);
    int i;
@@ -374,6 +390,14 @@ PUBLIC const struct __DriverAPIRec driDriverAPI = {
    .CopySubBuffer = dri_copy_sub_buffer,
    .InitScreen = dri_init_screen,
    .InitScreen2 = dri_init_screen2,
+};
+
+/* This is the table of extensions that the loader will dlsym() for. */
+PUBLIC const __DRIextension *__driDriverExtensions[] = {
+    &driCoreExtension.base,
+    &driLegacyExtension.base,
+    &driDRI2Extension.base,
+    NULL
 };
 
 /* vim: set sw=3 ts=8 sts=3 expandtab: */

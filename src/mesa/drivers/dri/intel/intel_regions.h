@@ -52,7 +52,7 @@ struct intel_buffer_object;
  */
 struct intel_region
 {
-   dri_bo *buffer;  /**< buffer manager's buffer */
+   drm_intel_bo *buffer;  /**< buffer manager's buffer */
    GLuint refcount; /**< Reference count for region */
    GLuint cpp;      /**< bytes per pixel */
    GLuint width;    /**< in pixels */
@@ -65,9 +65,10 @@ struct intel_region
    GLuint draw_x, draw_y; /**< Offset of drawing within the region */
 
    uint32_t tiling; /**< Which tiling mode the region is in */
-   uint32_t bit_6_swizzle; /**< GEM flag for address swizzling requirement */
-   drmAddress classic_map; /**< drmMap of the region when not in GEM mode */
    struct intel_buffer_object *pbo;     /* zero-copy uploads */
+
+   uint32_t name; /**< Global name for the bo */
+   struct intel_screen *screen;
 };
 
 
@@ -77,7 +78,7 @@ struct intel_region
 struct intel_region *intel_region_alloc(struct intel_context *intel,
                                         uint32_t tiling,
 					GLuint cpp, GLuint width,
-                                        GLuint height, GLuint pitch,
+                                        GLuint height,
 					GLboolean expect_accelerated_upload);
 
 struct intel_region *
@@ -120,6 +121,7 @@ intel_region_copy(struct intel_context *intel,
 		  struct intel_region *src,
 		  GLuint src_offset,
 		  GLuint srcx, GLuint srcy, GLuint width, GLuint height,
+		  GLboolean flip,
 		  GLenum logicop);
 
 /* Helpers for zerocopy uploads, particularly texture image uploads:
@@ -145,5 +147,13 @@ void _mesa_copy_rect(GLubyte * dst,
                 GLuint height,
                 const GLubyte * src,
                 GLuint src_pitch, GLuint src_x, GLuint src_y);
+
+struct __DRIimageRec {
+   struct intel_region *region;
+   GLenum internal_format;
+   GLuint format;
+   GLenum data_type;
+   void *data;
+};
 
 #endif

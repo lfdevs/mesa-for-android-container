@@ -32,6 +32,7 @@
 
 #include "id_public.h"
 #include "id_screen.h"
+#include "id_context.h"
 #include "id_objects.h"
 
 
@@ -101,6 +102,20 @@ identity_screen_is_format_supported(struct pipe_screen *_screen,
                                       target,
                                       tex_usage,
                                       geom_flags);
+}
+
+static struct pipe_context *
+identity_screen_context_create(struct pipe_screen *_screen,
+                               void *priv)
+{
+   struct identity_screen *id_screen = identity_screen(_screen);
+   struct pipe_screen *screen = id_screen->screen;
+   struct pipe_context *result;
+
+   result = screen->context_create(screen, priv);
+   if (result)
+      return identity_context_create(_screen, result);
+   return NULL;
 }
 
 static struct pipe_texture *
@@ -379,6 +394,33 @@ identity_screen_buffer_destroy(struct pipe_buffer *_buffer)
    identity_buffer_destroy(identity_buffer(_buffer));
 }
 
+static struct pipe_video_surface *
+identity_screen_video_surface_create(struct pipe_screen *_screen,
+                                     enum pipe_video_chroma_format chroma_format,
+                                     unsigned width,
+                                     unsigned height)
+{
+   struct identity_screen *id_screen = identity_screen(_screen);
+   struct pipe_screen *screen = id_screen->screen;
+   struct pipe_video_surface *result;
+
+   result = screen->video_surface_create(screen,
+                                         chroma_format,
+                                         width,
+                                         height);
+
+   if (result) {
+      return identity_video_surface_create(id_screen, result);
+   }
+   return NULL;
+}
+
+static void
+identity_screen_video_surface_destroy(struct pipe_video_surface *_vsfc)
+{
+   identity_video_surface_destroy(identity_video_surface(_vsfc));
+}
+
 static void
 identity_screen_flush_frontbuffer(struct pipe_screen *_screen,
                                   struct pipe_surface *_surface,
@@ -451,6 +493,7 @@ identity_screen_create(struct pipe_screen *screen)
    id_screen->base.get_param = identity_screen_get_param;
    id_screen->base.get_paramf = identity_screen_get_paramf;
    id_screen->base.is_format_supported = identity_screen_is_format_supported;
+   id_screen->base.context_create = identity_screen_context_create;
    id_screen->base.texture_create = identity_screen_texture_create;
    id_screen->base.texture_blanket = identity_screen_texture_blanket;
    id_screen->base.texture_destroy = identity_screen_texture_destroy;
@@ -472,6 +515,12 @@ identity_screen_create(struct pipe_screen *screen)
    if (screen->buffer_unmap)
       id_screen->base.buffer_unmap = identity_screen_buffer_unmap;
    id_screen->base.buffer_destroy = identity_screen_buffer_destroy;
+   if (screen->video_surface_create) {
+      id_screen->base.video_surface_create = identity_screen_video_surface_create;
+   }
+   if (screen->video_surface_destroy) {
+      id_screen->base.video_surface_destroy = identity_screen_video_surface_destroy;
+   }
    id_screen->base.flush_frontbuffer = identity_screen_flush_frontbuffer;
    id_screen->base.fence_reference = identity_screen_fence_reference;
    id_screen->base.fence_signalled = identity_screen_fence_signalled;

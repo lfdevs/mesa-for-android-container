@@ -40,30 +40,6 @@
 
 
 
-#if FEATURE_EXT_texture_sRGB
-
-/**
- * Convert a float value from linear space to a
- * non-linear sRGB value in [0, 255].
- * Not terribly efficient.
- */
-static INLINE GLfloat
-linear_to_nonlinear(GLfloat cl)
-{
-   /* can't have values outside [0, 1] */
-   GLfloat cs;
-   if (cl < 0.0031308f) {
-      cs = 12.92f * cl;
-   }
-   else {
-      cs = (GLfloat)(1.055 * _mesa_pow(cl, 0.41666) - 0.055);
-   }
-   return cs;
-}
-
-#endif /* FEATURE_EXT_texture_sRGB */
-
-
 /**
  * Can the given type represent negative values?
  */
@@ -180,7 +156,7 @@ get_tex_depth_stencil(GLcontext *ctx, GLuint dimensions,
          void *dest = _mesa_image_address(dimensions, &ctx->Pack, pixels,
                                           width, height, format, type,
                                           img, row, 0);
-         _mesa_memcpy(dest, src, width * sizeof(GLuint));
+         memcpy(dest, src, width * sizeof(GLuint));
          if (ctx->Pack.SwapBytes) {
             _mesa_swap4((GLuint *) dest, width);
          }
@@ -211,7 +187,7 @@ get_tex_ycbcr(GLcontext *ctx, GLuint dimensions,
          void *dest = _mesa_image_address(dimensions, &ctx->Pack, pixels,
                                           width, height, format, type,
                                           img, row, 0);
-         _mesa_memcpy(dest, src, width * sizeof(GLushort));
+         memcpy(dest, src, width * sizeof(GLushort));
 
          /* check for byte swapping */
          if ((texImage->TexFormat == MESA_FORMAT_YCBCR
@@ -228,6 +204,29 @@ get_tex_ycbcr(GLcontext *ctx, GLuint dimensions,
          src += rowstride;
       }
    }
+}
+
+
+#if FEATURE_EXT_texture_sRGB
+
+
+/**
+ * Convert a float value from linear space to a
+ * non-linear sRGB value in [0, 255].
+ * Not terribly efficient.
+ */
+static INLINE GLfloat
+linear_to_nonlinear(GLfloat cl)
+{
+   /* can't have values outside [0, 1] */
+   GLfloat cs;
+   if (cl < 0.0031308f) {
+      cs = 12.92f * cl;
+   }
+   else {
+      cs = (GLfloat)(1.055 * _mesa_pow(cl, 0.41666) - 0.055);
+   }
+   return cs;
 }
 
 
@@ -280,6 +279,21 @@ get_tex_srgb(GLcontext *ctx, GLuint dimensions,
       }
    }
 }
+
+
+#else /* FEATURE_EXT_texture_sRGB */
+
+
+static INLINE void
+get_tex_srgb(GLcontext *ctx, GLuint dimensions,
+             GLenum format, GLenum type, GLvoid *pixels,
+             const struct gl_texture_image *texImage)
+{
+   ASSERT_NO_FEATURE();
+}
+
+
+#endif /* FEATURE_EXT_texture_sRGB */
 
 
 /**
@@ -546,14 +560,15 @@ _mesa_get_compressed_teximage(GLcontext *ctx, GLenum target, GLint level,
                                                   texImage->Width,
                                                   texImage->Height,
                                                   texImage->Depth);
-      _mesa_memcpy(img, texImage->Data, size);
+      memcpy(img, texImage->Data, size);
    }
    else {
       GLuint bw, bh;
       _mesa_get_format_block_size(texImage->TexFormat, &bw, &bh);
       for (i = 0; i < (texImage->Height + bh - 1) / bh; i++) {
          memcpy((GLubyte *)img + i * row_stride,
-                (GLubyte *)texImage->Data + i * row_stride_stored, row_stride);
+                (GLubyte *)texImage->Data + i * row_stride_stored,
+                row_stride);
       }
    }
 
@@ -575,7 +590,7 @@ getteximage_error_check(GLcontext *ctx, GLenum target, GLint level,
 {
    struct gl_texture_object *texObj;
    struct gl_texture_image *texImage;
-   const GLuint maxLevels = _mesa_max_texture_levels(ctx, target);
+   const GLint maxLevels = _mesa_max_texture_levels(ctx, target);
    GLenum baseFormat;
 
    if (maxLevels == 0) {
@@ -761,7 +776,7 @@ getcompressedteximage_error_check(GLcontext *ctx, GLenum target, GLint level,
 {
    struct gl_texture_object *texObj;
    struct gl_texture_image *texImage;
-   const GLuint maxLevels = _mesa_max_texture_levels(ctx, target);
+   const GLint maxLevels = _mesa_max_texture_levels(ctx, target);
 
    if (maxLevels == 0) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glGetCompressedTexImage(target=0x%x)",

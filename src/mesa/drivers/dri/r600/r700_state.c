@@ -26,7 +26,6 @@
 
 #include "main/glheader.h"
 #include "main/mtypes.h"
-#include "main/state.h"
 #include "main/imports.h"
 #include "main/enums.h"
 #include "main/macros.h"
@@ -36,11 +35,9 @@
 
 #include "tnl/tnl.h"
 #include "tnl/t_pipeline.h"
-#include "tnl/t_vp_build.h"
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
 #include "main/api_arrayelt.h"
-#include "main/state.h"
 #include "main/framebuffer.h"
 
 #include "shader/prog_parameter.h"
@@ -59,6 +56,7 @@ static void r700SetClipPlaneState(GLcontext * ctx, GLenum cap, GLboolean state);
 static void r700UpdatePolygonMode(GLcontext * ctx);
 static void r700SetPolygonOffsetState(GLcontext * ctx, GLboolean state);
 static void r700SetStencilState(GLcontext * ctx, GLboolean state);
+static void r700UpdateWindow(GLcontext * ctx, int id);
 
 void r700UpdateShaders(GLcontext * ctx)
 {
@@ -67,7 +65,7 @@ void r700UpdateShaders(GLcontext * ctx)
     /* should only happenen once, just after context is created */
     /* TODO: shouldn't we fallback to sw here? */
     if (!ctx->FragmentProgram._Current) {
-	    _mesa_fprintf(stderr, "No ctx->FragmentProgram._Current!!\n");
+	    fprintf(stderr, "No ctx->FragmentProgram._Current!!\n");
 	    return;
     }
 
@@ -85,7 +83,7 @@ void r700UpdateViewportOffset(GLcontext * ctx) //------------------
 {
 	context_t *context = R700_CONTEXT(ctx);
 	R700_CHIP_CONTEXT *r700 = (R700_CHIP_CONTEXT*)(&context->hw);
-	__DRIdrawablePrivate *dPriv = radeon_get_drawable(&context->radeon);
+	__DRIdrawable *dPriv = radeon_get_drawable(&context->radeon);
 	GLfloat xoffset = (GLfloat) dPriv->x;
 	GLfloat yoffset = (GLfloat) dPriv->y + dPriv->h;
 	const GLfloat *v = ctx->Viewport._WindowMap.m;
@@ -780,6 +778,9 @@ static void r700Enable(GLcontext * ctx, GLenum cap, GLboolean state) //---------
 	case GL_LINE_STIPPLE:
 		r700UpdateLineStipple(ctx);
 		break;
+	case GL_DEPTH_CLAMP:
+		r700UpdateWindow(ctx, 0);
+		break;
 	default:
 		break;
 	}
@@ -1073,7 +1074,7 @@ static void r700UpdateWindow(GLcontext * ctx, int id) //--------------------
 {
 	context_t *context = R700_CONTEXT(ctx);
 	R700_CHIP_CONTEXT *r700 = (R700_CHIP_CONTEXT*)(&context->hw);
-	__DRIdrawablePrivate *dPriv = radeon_get_drawable(&context->radeon);
+	__DRIdrawable *dPriv = radeon_get_drawable(&context->radeon);
 	GLfloat xoffset = dPriv ? (GLfloat) dPriv->x : 0;
 	GLfloat yoffset = dPriv ? (GLfloat) dPriv->y + dPriv->h : 0;
 	const GLfloat *v = ctx->Viewport._WindowMap.m;
@@ -1724,10 +1725,10 @@ void r700InitState(GLcontext * ctx) //-------------------
     r700InitSQConfig(ctx);
 
     r700ColorMask(ctx,
-		  ctx->Color.ColorMask[RCOMP],
-		  ctx->Color.ColorMask[GCOMP],
-		  ctx->Color.ColorMask[BCOMP],
-		  ctx->Color.ColorMask[ACOMP]);
+		  ctx->Color.ColorMask[0][RCOMP],
+		  ctx->Color.ColorMask[0][GCOMP],
+		  ctx->Color.ColorMask[0][BCOMP],
+		  ctx->Color.ColorMask[0][ACOMP]);
 
     r700Enable(ctx, GL_DEPTH_TEST, ctx->Depth.Test);
     r700DepthMask(ctx, ctx->Depth.Mask);

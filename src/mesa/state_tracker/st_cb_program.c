@@ -43,7 +43,6 @@
 
 #include "st_context.h"
 #include "st_program.h"
-#include "st_atom_shader.h"
 #include "st_mesa_to_tgsi.h"
 #include "st_cb_program.h"
 
@@ -137,24 +136,7 @@ st_delete_program(GLcontext *ctx, struct gl_program *prog)
    case GL_VERTEX_PROGRAM_ARB:
       {
          struct st_vertex_program *stvp = (struct st_vertex_program *) prog;
-
-         if (stvp->driver_shader) {
-            cso_delete_vertex_shader(st->cso_context, stvp->driver_shader);
-            stvp->driver_shader = NULL;
-         }
-
-         if (stvp->draw_shader) {
-#if FEATURE_feedback || FEATURE_drawpix
-            /* this would only have been allocated for the RasterPos path */
-            draw_delete_vertex_shader(st->draw, stvp->draw_shader);
-            stvp->draw_shader = NULL;
-#endif
-         }
-
-         if (stvp->state.tokens) {
-            st_free_tokens(stvp->state.tokens);
-            stvp->state.tokens = NULL;
-         }
+         st_vp_release_varients( st, stvp );
       }
       break;
    case GL_FRAGMENT_PROGRAM_ARB:
@@ -166,9 +148,9 @@ st_delete_program(GLcontext *ctx, struct gl_program *prog)
             stfp->driver_shader = NULL;
          }
          
-         if (stfp->state.tokens) {
-            st_free_tokens(stfp->state.tokens);
-            stfp->state.tokens = NULL;
+         if (stfp->tgsi.tokens) {
+            st_free_tokens(stfp->tgsi.tokens);
+            stfp->tgsi.tokens = NULL;
          }
 
          if (stfp->bitmap_program) {
@@ -176,8 +158,6 @@ st_delete_program(GLcontext *ctx, struct gl_program *prog)
             _mesa_reference_program(ctx, &prg, NULL);
             stfp->bitmap_program = NULL;
          }
-
-         st_free_translated_vertex_programs(st, stfp->vertex_programs);
       }
       break;
    default:
@@ -197,9 +177,9 @@ static GLboolean st_is_program_native( GLcontext *ctx,
 }
 
 
-static void st_program_string_notify( GLcontext *ctx,
-				      GLenum target,
-				      struct gl_program *prog )
+static GLboolean st_program_string_notify( GLcontext *ctx,
+                                           GLenum target,
+                                           struct gl_program *prog )
 {
    struct st_context *st = st_context(ctx);
 
@@ -213,12 +193,10 @@ static void st_program_string_notify( GLcontext *ctx,
          stfp->driver_shader = NULL;
       }
 
-      if (stfp->state.tokens) {
-         st_free_tokens(stfp->state.tokens);
-         stfp->state.tokens = NULL;
+      if (stfp->tgsi.tokens) {
+         st_free_tokens(stfp->tgsi.tokens);
+         stfp->tgsi.tokens = NULL;
       }
-
-      stfp->param_state = stfp->Base.Base.Parameters->StateFlags;
 
       if (st->fp == stfp)
 	 st->dirty.st |= ST_NEW_FRAGMENT_PROGRAM;
@@ -228,29 +206,14 @@ static void st_program_string_notify( GLcontext *ctx,
 
       stvp->serialNo++;
 
-      if (stvp->driver_shader) {
-         cso_delete_vertex_shader(st->cso_context, stvp->driver_shader);
-         stvp->driver_shader = NULL;
-      }
-
-      if (stvp->draw_shader) {
-#if FEATURE_feedback || FEATURE_drawpix
-         /* this would only have been allocated for the RasterPos path */
-         draw_delete_vertex_shader(st->draw, stvp->draw_shader);
-         stvp->draw_shader = NULL;
-#endif
-      }
-
-      if (stvp->state.tokens) {
-         st_free_tokens(stvp->state.tokens);
-         stvp->state.tokens = NULL;
-      }
-
-      stvp->param_state = stvp->Base.Base.Parameters->StateFlags;
+      st_vp_release_varients( st, stvp );
 
       if (st->vp == stvp)
 	 st->dirty.st |= ST_NEW_VERTEX_PROGRAM;
    }
+
+   /* XXX check if program is legal, within limits */
+   return GL_TRUE;
 }
 
 

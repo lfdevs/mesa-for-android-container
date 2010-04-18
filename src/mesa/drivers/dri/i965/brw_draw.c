@@ -82,7 +82,7 @@ static GLuint brw_set_prim(struct brw_context *brw, GLenum prim)
    GLcontext *ctx = &brw->intel.ctx;
 
    if (INTEL_DEBUG & DEBUG_PRIMS)
-      _mesa_printf("PRIM: %s\n", _mesa_lookup_enum_by_nr(prim));
+      printf("PRIM: %s\n", _mesa_lookup_enum_by_nr(prim));
    
    /* Slight optimization to avoid the GS program when not needed:
     */
@@ -125,7 +125,7 @@ static void brw_emit_prim(struct brw_context *brw,
    struct intel_context *intel = &brw->intel;
 
    if (INTEL_DEBUG & DEBUG_PRIMS)
-      _mesa_printf("PRIM: %s %d %d\n", _mesa_lookup_enum_by_nr(prim->mode), 
+      printf("PRIM: %s %d %d\n", _mesa_lookup_enum_by_nr(prim->mode), 
 		   prim->start, prim->count);
 
    prim_packet.header.opcode = CMD_3D_PRIM;
@@ -143,7 +143,7 @@ static void brw_emit_prim(struct brw_context *brw,
    prim_packet.base_vert_location = prim->basevertex;
 
    /* Can't wrap here, since we rely on the validated state. */
-   brw->no_batch_wrap = GL_TRUE;
+   intel->no_batch_wrap = GL_TRUE;
 
    /* If we're set to always flush, do it before and after the primitive emit.
     * We want to catch both missed flushes that hurt instruction/state cache
@@ -155,13 +155,13 @@ static void brw_emit_prim(struct brw_context *brw,
    }
    if (prim_packet.verts_per_instance) {
       intel_batchbuffer_data( brw->intel.batch, &prim_packet,
-			      sizeof(prim_packet), LOOP_CLIPRECTS);
+			      sizeof(prim_packet));
    }
    if (intel->always_flush_cache) {
       intel_batchbuffer_emit_mi_flush(intel->batch);
    }
 
-   brw->no_batch_wrap = GL_FALSE;
+   intel->no_batch_wrap = GL_FALSE;
 }
 
 static void brw_merge_inputs( struct brw_context *brw,
@@ -337,12 +337,7 @@ static GLboolean brw_try_draw_prims( GLcontext *ctx,
     * so can't access it earlier.
     */
 
-   LOCK_HARDWARE(intel);
-
-   if (!intel->constant_cliprect && intel->driDrawable->numClipRects == 0) {
-      UNLOCK_HARDWARE(intel);
-      return GL_TRUE;
-   }
+   intel_prepare_render(intel);
 
    for (i = 0; i < nr_prims; i++) {
       uint32_t hw_prim;
@@ -354,8 +349,7 @@ static GLboolean brw_try_draw_prims( GLcontext *ctx,
        * an upper bound of how much we might emit in a single
        * brw_try_draw_prims().
        */
-      intel_batchbuffer_require_space(intel->batch, intel->batch->size / 4,
-				      LOOP_CLIPRECTS);
+      intel_batchbuffer_require_space(intel->batch, intel->batch->size / 4);
 
       hw_prim = brw_set_prim(brw, prim[i].mode);
 
@@ -402,7 +396,6 @@ static GLboolean brw_try_draw_prims( GLcontext *ctx,
    if (intel->always_flush_batch)
       intel_batchbuffer_flush(intel->batch);
  out:
-   UNLOCK_HARDWARE(intel);
 
    brw_state_cache_check_size(brw);
 

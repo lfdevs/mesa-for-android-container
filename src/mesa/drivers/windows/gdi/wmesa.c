@@ -35,7 +35,7 @@ wmesa_new_framebuffer(HDC hdc, GLvisual *visual)
     WMesaFramebuffer pwfb
         = (WMesaFramebuffer) malloc(sizeof(struct wmesa_framebuffer));
     if (pwfb) {
-        _mesa_initialize_framebuffer(&pwfb->Base, visual);
+        _mesa_initialize_window_framebuffer(&pwfb->Base, visual);
         pwfb->hDC = hdc;
         /* insert at head of list */
         pwfb->next = FirstFramebuffer;
@@ -248,16 +248,6 @@ static void wmesa_flush(GLcontext *ctx)
  */
 
 /*
- * Set the color index used to clear the color buffer.
- */
-static void clear_index(GLcontext *ctx, GLuint index)
-{
-    WMesaContext pwc = wmesa_context(ctx);
-    /* Note that indexed mode is not supported yet */
-    pwc->clearColorRef = RGB(0,0,0);
-}
-
-/*
  * Set the color used to clear the color buffer.
  */
 static void clear_color(GLcontext *ctx, const GLfloat color[4])
@@ -301,10 +291,10 @@ static void clear(GLcontext *ctx, GLbitfield mask)
 
     /* Let swrast do all the work if the masks are not set to
      * clear all channels. */
-    if (ctx->Color.ColorMask[0] != 0xff ||
-	ctx->Color.ColorMask[1] != 0xff ||
-	ctx->Color.ColorMask[2] != 0xff ||
-	ctx->Color.ColorMask[3] != 0xff) {
+    if (!ctx->Color.ColorMask[0][0] ||
+	!ctx->Color.ColorMask[0][1] ||
+	!ctx->Color.ColorMask[0][2] ||
+	!ctx->Color.ColorMask[0][3]) {
 	_swrast_Clear(ctx, mask);
 	return;
     }
@@ -482,7 +472,7 @@ static void write_rgba_span_front(const GLcontext *ctx,
       };
    } BGRA;
    BGRA *bgra, c;
-   int i;
+   GLuint i;
 
    if (n < 16) {   // the value 16 is just guessed
       y=FLIP(y);
@@ -827,9 +817,9 @@ static void read_rgba_span_32(const GLcontext *ctx,
     lpdw = ((LPDWORD)(pwfb->pbPixels + pwfb->ScanWidth * y)) + x;
     for (i=0; i<n; i++) {
 	pixel = lpdw[i];
-	rgba[i][RCOMP] = (pixel & 0x00ff0000) >> 16;
-	rgba[i][GCOMP] = (pixel & 0x0000ff00) >> 8;
-	rgba[i][BCOMP] = (pixel & 0x000000ff);
+	rgba[i][RCOMP] = (GLubyte)((pixel & 0x00ff0000) >> 16);
+	rgba[i][GCOMP] = (GLubyte)((pixel & 0x0000ff00) >> 8);
+	rgba[i][BCOMP] = (GLubyte)(pixel & 0x000000ff);
 	rgba[i][ACOMP] = 255;
     }
 }
@@ -851,9 +841,9 @@ static void read_rgba_pixels_32(const GLcontext *ctx,
 	GLint y2 = FLIP(y[i]);
 	lpdw = ((LPDWORD)(pwfb->pbPixels + pwfb->ScanWidth * y2)) + x[i];
 	pixel = *lpdw;
-	rgba[i][RCOMP] = (pixel & 0x00ff0000) >> 16;
-	rgba[i][GCOMP] = (pixel & 0x0000ff00) >> 8;
-	rgba[i][BCOMP] = (pixel & 0x000000ff);
+	rgba[i][RCOMP] = (GLubyte)((pixel & 0x00ff0000) >> 16);
+	rgba[i][GCOMP] = (GLubyte)((pixel & 0x0000ff00) >> 8);
+	rgba[i][BCOMP] = (GLubyte)(pixel & 0x000000ff);
 	rgba[i][ACOMP] = 255;
   }
 }
@@ -1245,7 +1235,7 @@ static void read_rgba_pixels_16(const GLcontext *ctx,
 static void
 wmesa_delete_renderbuffer(struct gl_renderbuffer *rb)
 {
-    _mesa_free(rb);
+    free(rb);
 }
 
 
@@ -1271,7 +1261,7 @@ wmesa_renderbuffer_storage(GLcontext *ctx,
  * on if we're drawing to the front or back color buffer.
  */
 void wmesa_set_renderbuffer_funcs(struct gl_renderbuffer *rb, int pixelformat,
-                                  BYTE cColorBits, int double_buffer)
+                                  int cColorBits, int double_buffer)
 {
     if (double_buffer) {
         /* back buffer */
@@ -1461,12 +1451,10 @@ WMesaContext WMesaCreateContext(HDC hDC,
 	break;
     }
     /* Create visual based on flags */
-    visual = _mesa_create_visual(rgb_flag,
-                                 db_flag,    /* db_flag */
+    visual = _mesa_create_visual(db_flag,    /* db_flag */
                                  GL_FALSE,   /* stereo */
                                  red_bits, green_bits, blue_bits, /* color RGB */
                                  alpha_flag ? alpha_bits : 0, /* color A */
-                                 0,          /* index bits */
                                  DEFAULT_SOFTWARE_DEPTH_BITS, /* depth_bits */
                                  8,          /* stencil_bits */
                                  16,16,16,   /* accum RGB */
@@ -1474,7 +1462,7 @@ WMesaContext WMesaCreateContext(HDC hDC,
                                  1);         /* num samples */
     
     if (!visual) {
-	_mesa_free(c);
+	free(c);
 	return NULL;
     }
 
@@ -1485,7 +1473,6 @@ WMesaContext WMesaCreateContext(HDC hDC,
     functions.GetBufferSize = wmesa_get_buffer_size;
     functions.Flush = wmesa_flush;
     functions.Clear = clear;
-    functions.ClearIndex = clear_index;
     functions.ClearColor = clear_color;
     functions.ResizeBuffers = wmesa_resize_buffers;
     functions.Viewport = wmesa_viewport;
@@ -1512,7 +1499,7 @@ WMesaContext WMesaCreateContext(HDC hDC,
         !_tnl_CreateContext(ctx) ||
 	!_swsetup_CreateContext(ctx)) {
 	_mesa_free_context_data(ctx);
-	_mesa_free(c);
+	free(c);
 	return NULL;
     }
     _swsetup_Wakeup(ctx);
@@ -1557,7 +1544,7 @@ void WMesaDestroyContext( WMesaContext pwc )
     _swrast_DestroyContext(ctx);
     
     _mesa_free_context_data(ctx);
-    _mesa_free(pwc);
+    free(pwc);
 }
 
 

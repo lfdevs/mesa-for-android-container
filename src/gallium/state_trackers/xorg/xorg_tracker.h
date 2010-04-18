@@ -47,6 +47,8 @@
 #endif
 
 #include "pipe/p_screen.h"
+#include "util/u_inlines.h"
+#include "util/u_debug.h"
 #include "state_tracker/drm_api.h"
 
 #define DRV_ERROR(msg)	xf86DrvMsg(pScrn->scrnIndex, X_ERROR, msg);
@@ -65,22 +67,12 @@ typedef struct
 
 #define XORG_NR_FENCES 3
 
-enum xorg_throttling_reason {
-    THROTTLE_RENDER,
-    THROTTLE_SWAP
-};
-
 typedef struct _CustomizerRec
 {
-    Bool dirty_throttling;
-    Bool swap_throttling;
     Bool (*winsys_screen_init)(struct _CustomizerRec *cust, int fd);
     Bool (*winsys_screen_close)(struct _CustomizerRec *cust);
     Bool (*winsys_enter_vt)(struct _CustomizerRec *cust);
     Bool (*winsys_leave_vt)(struct _CustomizerRec *cust);
-    void (*winsys_context_throttle)(struct _CustomizerRec *cust,
-				    struct pipe_context *pipe,
-				    enum xorg_throttling_reason reason);
 } CustomizerRec, *CustomizerPtr;
 
 typedef struct _modesettingRec
@@ -99,8 +91,6 @@ typedef struct _modesettingRec
     Bool noAccel;
     Bool SWCursor;
     CursorPtr cursor;
-    Bool swapThrottling;
-    Bool dirtyThrottling;
     CloseScreenProcPtr CloseScreen;
 
     /* Broken-out options. */
@@ -154,9 +144,6 @@ Bool xorg_has_gallium(ScrnInfoPtr pScrn);
  */
 struct pipe_texture *
 xorg_exa_get_texture(PixmapPtr pPixmap);
-
-unsigned
-xorg_exa_get_pixmap_handle(PixmapPtr pPixmap, unsigned *stride);
 
 int
 xorg_exa_set_displayed_usage(PixmapPtr pPixmap);

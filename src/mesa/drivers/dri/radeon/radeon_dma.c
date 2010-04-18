@@ -151,6 +151,7 @@ void rcommon_emit_vector(GLcontext * ctx, struct radeon_aos *aos,
 	aos->components = size;
 	aos->count = count;
 
+	radeon_bo_map(aos->bo, 1);
 	out = (uint32_t*)((char*)aos->bo->ptr + aos->offset);
 	switch (size) {
 	case 1: radeonEmitVec4(out, data, stride, count); break;
@@ -161,6 +162,7 @@ void rcommon_emit_vector(GLcontext * ctx, struct radeon_aos *aos,
 		assert(0);
 		break;
 	}
+	radeon_bo_unmap(aos->bo);
 }
 
 void radeon_init_dma(radeonContextPtr rmesa)
@@ -181,11 +183,6 @@ void radeonRefillCurrentDmaRegion(radeonContextPtr rmesa, int size)
 
 	radeon_print(RADEON_DMA, RADEON_NORMAL, "%s size %d minimum_size %d\n",
 			__FUNCTION__, size, rmesa->dma.minimum_size);
-
-
-	/* unmap old reserved bo */
-	if (!is_empty_list(&rmesa->dma.reserved))
-		radeon_bo_unmap(first_elem(&rmesa->dma.reserved)->bo);
 
 	if (is_empty_list(&rmesa->dma.free)
 	      || last_elem(&rmesa->dma.free)->bo->size < size) {
@@ -213,7 +210,7 @@ again_alloc:
 
 	rmesa->dma.current_used = 0;
 	rmesa->dma.current_vertexptr = 0;
-	
+
 	if (radeon_cs_space_check_with_bo(rmesa->cmdbuf.cs,
 					  first_elem(&rmesa->dma.reserved)->bo,
 					  RADEON_GEM_DOMAIN_GTT, 0))
@@ -223,7 +220,6 @@ again_alloc:
         /* Cmd buff have been flushed in radeon_revalidate_bos */
 		goto again_alloc;
 	}
-
 	radeon_bo_map(first_elem(&rmesa->dma.reserved)->bo, 1);
 }
 
@@ -281,7 +277,6 @@ void radeonFreeDmaRegions(radeonContextPtr rmesa)
 
 	foreach_s(dma_bo, temp, &rmesa->dma.reserved) {
 		remove_from_list(dma_bo);
-		radeon_bo_unmap(dma_bo->bo);
 	        radeon_bo_unref(dma_bo->bo);
 		FREE(dma_bo);
 	}
@@ -337,6 +332,7 @@ void radeonReleaseDmaRegions(radeonContextPtr rmesa)
 		/* request updated cs processing information from kernel */
 		legacy_track_pending(rmesa->radeonScreen->bom, 0);
 	}
+
 	/* move waiting bos to free list.
 	   wait list provides gpu time to handle data before reuse */
 	foreach_s(dma_bo, temp, &rmesa->dma.wait) {
@@ -354,18 +350,19 @@ void radeonReleaseDmaRegions(radeonContextPtr rmesa)
 		   FREE(dma_bo);
 		   continue;
 		}
-		if (!radeon_bo_is_idle(dma_bo->bo))
+		if (!radeon_bo_is_idle(dma_bo->bo)) {
+			if (rmesa->radeonScreen->driScreen->dri2.enabled)
+				break;
 			continue;
+		}
 		remove_from_list(dma_bo);
 		dma_bo->expire_counter = expire_at;
 		insert_at_tail(&rmesa->dma.free, dma_bo);
 	}
 
-	/* unmap the last dma region */
-	if (!is_empty_list(&rmesa->dma.reserved))
-		radeon_bo_unmap(first_elem(&rmesa->dma.reserved)->bo);
 	/* move reserved to wait list */
 	foreach_s(dma_bo, temp, &rmesa->dma.reserved) {
+		radeon_bo_unmap(dma_bo->bo);
 		/* free objects that are too small to be used because of large request */
 		if (dma_bo->bo->size < rmesa->dma.minimum_size) {
 		   radeon_bo_unref(dma_bo->bo);
@@ -396,11 +393,12 @@ void rcommon_flush_last_swtcl_prim( GLcontext *ctx  )
 {
 	radeonContextPtr rmesa = RADEON_CONTEXT(ctx);
 	struct radeon_dma *dma = &rmesa->dma;
-		
 
 	if (RADEON_DEBUG & RADEON_IOCTL)
 		fprintf(stderr, "%s\n", __FUNCTION__);
 	dma->flush = NULL;
+
+	radeon_bo_unmap(rmesa->swtcl.bo);
 
 	if (!is_empty_list(&dma->reserved)) {
 	    GLuint current_offset = dma->current_used;
@@ -416,6 +414,8 @@ void rcommon_flush_last_swtcl_prim( GLcontext *ctx  )
 	    }
 	    rmesa->swtcl.numverts = 0;
 	}
+	radeon_bo_unref(rmesa->swtcl.bo);
+	rmesa->swtcl.bo = NULL;
 }
 /* Alloc space in the current dma region.
  */
@@ -426,6 +426,7 @@ rcommonAllocDmaLowVerts( radeonContextPtr rmesa, int nverts, int vsize )
 	void *head;
 	if (RADEON_DEBUG & RADEON_IOCTL)
 		fprintf(stderr, "%s\n", __FUNCTION__);
+
 	if(is_empty_list(&rmesa->dma.reserved)
 	      ||rmesa->dma.current_vertexptr + bytes > first_elem(&rmesa->dma.reserved)->bo->size) {
 		if (rmesa->dma.flush) {
@@ -449,7 +450,13 @@ rcommonAllocDmaLowVerts( radeonContextPtr rmesa, int nverts, int vsize )
                 rmesa->swtcl.numverts * rmesa->swtcl.vertex_size * 4 ==
                 rmesa->dma.current_vertexptr );
 
-	head = (first_elem(&rmesa->dma.reserved)->bo->ptr + rmesa->dma.current_vertexptr);
+	if (!rmesa->swtcl.bo) {
+		rmesa->swtcl.bo = first_elem(&rmesa->dma.reserved)->bo;
+		radeon_bo_ref(rmesa->swtcl.bo);
+		radeon_bo_map(rmesa->swtcl.bo, 1);
+	}
+
+	head = (rmesa->swtcl.bo->ptr + rmesa->dma.current_vertexptr);
 	rmesa->dma.current_vertexptr += bytes;
 	rmesa->swtcl.numverts += nverts;
 	return head;

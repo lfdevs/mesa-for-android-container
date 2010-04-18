@@ -37,7 +37,9 @@
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_shader_tokens.h"
+#include "util/u_inlines.h"
 
+#include "util/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
@@ -47,6 +49,9 @@
 #include "draw_context.h"
 #include "draw_pipe.h"
 
+
+/** Approx number of new tokens for instructions in pstip_transform_inst() */
+#define NUM_NEW_TOKENS 50
 
 
 /**
@@ -133,20 +138,20 @@ pstip_transform_decl(struct tgsi_transform_context *ctx,
 
    if (decl->Declaration.File == TGSI_FILE_SAMPLER) {
       uint i;
-      for (i = decl->DeclarationRange.First;
-           i <= decl->DeclarationRange.Last; i++) {
+      for (i = decl->Range.First;
+           i <= decl->Range.Last; i++) {
          pctx->samplersUsed |= 1 << i;
       }
    }
    else if (decl->Declaration.File == TGSI_FILE_INPUT) {
-      pctx->maxInput = MAX2(pctx->maxInput, (int) decl->DeclarationRange.Last);
-      if (decl->Semantic.SemanticName == TGSI_SEMANTIC_POSITION)
-         pctx->wincoordInput = (int) decl->DeclarationRange.First;
+      pctx->maxInput = MAX2(pctx->maxInput, (int) decl->Range.Last);
+      if (decl->Semantic.Name == TGSI_SEMANTIC_POSITION)
+         pctx->wincoordInput = (int) decl->Range.First;
    }
    else if (decl->Declaration.File == TGSI_FILE_TEMPORARY) {
       uint i;
-      for (i = decl->DeclarationRange.First;
-           i <= decl->DeclarationRange.Last; i++) {
+      for (i = decl->Range.First;
+           i <= decl->Range.Last; i++) {
          pctx->tempsUsed |= (1 << i);
       }
    }
@@ -170,12 +175,7 @@ pstip_transform_immed(struct tgsi_transform_context *ctx,
 static int
 free_bit(uint bitfield)
 {
-   int i;
-   for (i = 0; i < 32; i++) {
-      if ((bitfield & (1 << i)) == 0)
-         return i;
-   }
-   return -1;
+   return ffs(~bitfield) - 1;
 }
 
 
@@ -226,25 +226,25 @@ pstip_transform_inst(struct tgsi_transform_context *ctx,
          decl.Declaration.File = TGSI_FILE_INPUT;
          decl.Declaration.Interpolate = TGSI_INTERPOLATE_LINEAR; /* XXX? */
          decl.Declaration.Semantic = 1;
-         decl.Semantic.SemanticName = TGSI_SEMANTIC_POSITION;
-         decl.Semantic.SemanticIndex = 0;
-         decl.DeclarationRange.First = 
-            decl.DeclarationRange.Last = wincoordInput;
+         decl.Semantic.Name = TGSI_SEMANTIC_POSITION;
+         decl.Semantic.Index = 0;
+         decl.Range.First = 
+            decl.Range.Last = wincoordInput;
          ctx->emit_declaration(ctx, &decl);
       }
 
       /* declare new sampler */
       decl = tgsi_default_full_declaration();
       decl.Declaration.File = TGSI_FILE_SAMPLER;
-      decl.DeclarationRange.First = 
-      decl.DeclarationRange.Last = pctx->freeSampler;
+      decl.Range.First = 
+      decl.Range.Last = pctx->freeSampler;
       ctx->emit_declaration(ctx, &decl);
 
       /* declare new temp regs */
       decl = tgsi_default_full_declaration();
       decl.Declaration.File = TGSI_FILE_TEMPORARY;
-      decl.DeclarationRange.First = 
-      decl.DeclarationRange.Last = pctx->texTemp;
+      decl.Range.First = 
+      decl.Range.Last = pctx->texTemp;
       ctx->emit_declaration(ctx, &decl);
 
       /* emit immediate = {1/32, 1/32, 1, 1}
@@ -280,27 +280,28 @@ pstip_transform_inst(struct tgsi_transform_context *ctx,
       newInst = tgsi_default_full_instruction();
       newInst.Instruction.Opcode = TGSI_OPCODE_MUL;
       newInst.Instruction.NumDstRegs = 1;
-      newInst.FullDstRegisters[0].DstRegister.File = TGSI_FILE_TEMPORARY;
-      newInst.FullDstRegisters[0].DstRegister.Index = pctx->texTemp;
+      newInst.Dst[0].Register.File = TGSI_FILE_TEMPORARY;
+      newInst.Dst[0].Register.Index = pctx->texTemp;
       newInst.Instruction.NumSrcRegs = 2;
-      newInst.FullSrcRegisters[0].SrcRegister.File = TGSI_FILE_INPUT;
-      newInst.FullSrcRegisters[0].SrcRegister.Index = wincoordInput;
-      newInst.FullSrcRegisters[1].SrcRegister.File = TGSI_FILE_IMMEDIATE;
-      newInst.FullSrcRegisters[1].SrcRegister.Index = pctx->numImmed;
+      newInst.Src[0].Register.File = TGSI_FILE_INPUT;
+      newInst.Src[0].Register.Index = wincoordInput;
+      newInst.Src[1].Register.File = TGSI_FILE_IMMEDIATE;
+      newInst.Src[1].Register.Index = pctx->numImmed;
       ctx->emit_instruction(ctx, &newInst);
 
       /* TEX texTemp, texTemp, sampler; */
       newInst = tgsi_default_full_instruction();
       newInst.Instruction.Opcode = TGSI_OPCODE_TEX;
       newInst.Instruction.NumDstRegs = 1;
-      newInst.FullDstRegisters[0].DstRegister.File = TGSI_FILE_TEMPORARY;
-      newInst.FullDstRegisters[0].DstRegister.Index = pctx->texTemp;
+      newInst.Dst[0].Register.File = TGSI_FILE_TEMPORARY;
+      newInst.Dst[0].Register.Index = pctx->texTemp;
       newInst.Instruction.NumSrcRegs = 2;
-      newInst.InstructionExtTexture.Texture = TGSI_TEXTURE_2D;
-      newInst.FullSrcRegisters[0].SrcRegister.File = TGSI_FILE_TEMPORARY;
-      newInst.FullSrcRegisters[0].SrcRegister.Index = pctx->texTemp;
-      newInst.FullSrcRegisters[1].SrcRegister.File = TGSI_FILE_SAMPLER;
-      newInst.FullSrcRegisters[1].SrcRegister.Index = pctx->freeSampler;
+      newInst.Instruction.Texture = TRUE;
+      newInst.Texture.Texture = TGSI_TEXTURE_2D;
+      newInst.Src[0].Register.File = TGSI_FILE_TEMPORARY;
+      newInst.Src[0].Register.Index = pctx->texTemp;
+      newInst.Src[1].Register.File = TGSI_FILE_SAMPLER;
+      newInst.Src[1].Register.Index = pctx->freeSampler;
       ctx->emit_instruction(ctx, &newInst);
 
       /* KIL -texTemp;   # if -texTemp < 0, KILL fragment */
@@ -308,9 +309,9 @@ pstip_transform_inst(struct tgsi_transform_context *ctx,
       newInst.Instruction.Opcode = TGSI_OPCODE_KIL;
       newInst.Instruction.NumDstRegs = 0;
       newInst.Instruction.NumSrcRegs = 1;
-      newInst.FullSrcRegisters[0].SrcRegister.File = TGSI_FILE_TEMPORARY;
-      newInst.FullSrcRegisters[0].SrcRegister.Index = pctx->texTemp;
-      newInst.FullSrcRegisters[0].SrcRegister.Negate = 1;
+      newInst.Src[0].Register.File = TGSI_FILE_TEMPORARY;
+      newInst.Src[0].Register.Index = pctx->texTemp;
+      newInst.Src[0].Register.Negate = 1;
       ctx->emit_instruction(ctx, &newInst);
    }
 
@@ -330,11 +331,10 @@ generate_pstip_fs(struct pstip_stage *pstip)
    /*struct draw_context *draw = pstip->stage.draw;*/
    struct pipe_shader_state pstip_fs;
    struct pstip_transform_context transform;
-
-#define MAX 1000
+   const uint newLen = tgsi_num_tokens(orig_fs->tokens) + NUM_NEW_TOKENS;
 
    pstip_fs = *orig_fs; /* copy to init */
-   pstip_fs.tokens = MALLOC(sizeof(struct tgsi_token) * MAX);
+   pstip_fs.tokens = tgsi_alloc_tokens(newLen);
    if (pstip_fs.tokens == NULL)
       return FALSE;
 
@@ -349,7 +349,7 @@ generate_pstip_fs(struct pstip_stage *pstip)
 
    tgsi_transform_shader(orig_fs->tokens,
                          (struct tgsi_token *) pstip_fs.tokens,
-                         MAX, &transform.base);
+                         newLen, &transform.base);
 
 #if 0 /* DEBUG */
    tgsi_dump(orig_fs->tokens, 0);
@@ -427,10 +427,9 @@ pstip_create_texture(struct pstip_stage *pstip)
    texTemp.target = PIPE_TEXTURE_2D;
    texTemp.format = PIPE_FORMAT_A8_UNORM; /* XXX verify supported by driver! */
    texTemp.last_level = 0;
-   texTemp.width[0] = 32;
-   texTemp.height[0] = 32;
-   texTemp.depth[0] = 1;
-   pf_get_block(texTemp.format, &texTemp.block);
+   texTemp.width0 = 32;
+   texTemp.height0 = 32;
+   texTemp.depth0 = 1;
 
    pstip->texture = screen->texture_create(screen, &texTemp);
    if (pstip->texture == NULL)
@@ -754,8 +753,8 @@ draw_install_pstipple_stage(struct draw_context *draw,
    pstip->driver_bind_fs_state = pipe->bind_fs_state;
    pstip->driver_delete_fs_state = pipe->delete_fs_state;
 
-   pstip->driver_bind_sampler_states = pipe->bind_sampler_states;
-   pstip->driver_set_sampler_textures = pipe->set_sampler_textures;
+   pstip->driver_bind_sampler_states = pipe->bind_fragment_sampler_states;
+   pstip->driver_set_sampler_textures = pipe->set_fragment_sampler_textures;
    pstip->driver_set_polygon_stipple = pipe->set_polygon_stipple;
 
    /* override the driver's functions */
@@ -763,8 +762,8 @@ draw_install_pstipple_stage(struct draw_context *draw,
    pipe->bind_fs_state = pstip_bind_fs_state;
    pipe->delete_fs_state = pstip_delete_fs_state;
 
-   pipe->bind_sampler_states = pstip_bind_sampler_states;
-   pipe->set_sampler_textures = pstip_set_sampler_textures;
+   pipe->bind_fragment_sampler_states = pstip_bind_sampler_states;
+   pipe->set_fragment_sampler_textures = pstip_set_sampler_textures;
    pipe->set_polygon_stipple = pstip_set_polygon_stipple;
 
    return TRUE;

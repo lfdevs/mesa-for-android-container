@@ -40,7 +40,6 @@
 #include "main/imports.h"
 #include "main/context.h"
 #include "main/feedback.h"
-#include "main/macros.h"
 
 #include "vbo/vbo.h"
 
@@ -84,7 +83,6 @@ feedback_vertex(GLcontext *ctx, const struct draw_context *draw,
    const struct st_context *st = ctx->st;
    GLfloat win[4];
    const GLfloat *color, *texcoord;
-   const GLfloat ci = 0;
    GLuint slot;
 
    /* Recall that Y=0=Top of window for Gallium wincoords */
@@ -110,7 +108,7 @@ feedback_vertex(GLcontext *ctx, const struct draw_context *draw,
    else
       texcoord = ctx->Current.Attrib[VERT_ATTRIB_TEX0];
 
-   _mesa_feedback_vertex(ctx, win, color, ci, texcoord);
+   _mesa_feedback_vertex(ctx, win, color, texcoord);
 }
 
 

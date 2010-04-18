@@ -739,7 +739,6 @@ main(int ac, char **av)
       HEIGHT = atoi(av[3]);
    }
 
-   glutInitWindowPosition(0, 0);
    glutInitWindowSize(WIDTH, HEIGHT);
    glutInit(&ac, av);
 

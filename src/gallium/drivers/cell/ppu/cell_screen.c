@@ -28,11 +28,12 @@
 
 #include "util/u_memory.h"
 #include "util/u_simple_screen.h"
-#include "pipe/internal/p_winsys_screen.h"
+#include "util/u_simple_screen.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 
 #include "cell/common.h"
+#include "cell_context.h"
 #include "cell_screen.h"
 #include "cell_texture.h"
 #include "cell_winsys.h"
@@ -57,6 +58,8 @@ cell_get_param(struct pipe_screen *screen, int param)
 {
    switch (param) {
    case PIPE_CAP_MAX_TEXTURE_IMAGE_UNITS:
+      return CELL_MAX_SAMPLERS;
+   case PIPE_CAP_MAX_COMBINED_SAMPLERS:
       return CELL_MAX_SAMPLERS;
    case PIPE_CAP_NPOT_TEXTURES:
       return 1;
@@ -85,6 +88,14 @@ cell_get_param(struct pipe_screen *screen, int param)
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
       return 0; /* XXX to do */
    case PIPE_CAP_TGSI_CONT_SUPPORTED:
+      return 1;
+   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
+   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+      return 1;
+   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
+   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+      return 0;
+   case PIPE_CAP_BLEND_EQUATION_SEPARATE:
       return 1;
    default:
       return 0;
@@ -125,12 +136,16 @@ cell_is_format_supported( struct pipe_screen *screen,
                           unsigned tex_usage, 
                           unsigned geom_flags )
 {
-   /* cell supports most formats, XXX for now anyway */
-   if (format == PIPE_FORMAT_DXT5_RGBA ||
-       format == PIPE_FORMAT_R8G8B8A8_SRGB)
-      return FALSE;
-   else
+   /* only a few formats are known to work at this time */
+   switch (format) {
+   case PIPE_FORMAT_Z24S8_UNORM:
+   case PIPE_FORMAT_Z24X8_UNORM:
+   case PIPE_FORMAT_B8G8R8A8_UNORM:
+   case PIPE_FORMAT_I8_UNORM:
       return TRUE;
+   default:
+      return FALSE;
+   }
 }
 
 
@@ -168,6 +183,7 @@ cell_create_screen(struct pipe_winsys *winsys)
    screen->get_param = cell_get_param;
    screen->get_paramf = cell_get_paramf;
    screen->is_format_supported = cell_is_format_supported;
+   screen->context_create = cell_create_context;
 
    cell_init_screen_texture_funcs(screen);
    u_simple_screen_init(screen);

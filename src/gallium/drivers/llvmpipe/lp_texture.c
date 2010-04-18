@@ -32,52 +32,44 @@
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
+
+#include "util/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
 #include "lp_context.h"
-#include "lp_state.h"
-#include "lp_texture.h"
 #include "lp_screen.h"
+#include "lp_texture.h"
+#include "lp_tile_size.h"
 #include "lp_winsys.h"
 
 
-/* Simple, maximally packed layout.
- */
-
-
-/* Conventional allocation path for non-display textures:
+/**
+ * Conventional allocation path for non-display textures:
+ * Simple, maximally packed layout.
  */
 static boolean
 llvmpipe_texture_layout(struct llvmpipe_screen *screen,
-                        struct llvmpipe_texture * lpt)
+                        struct llvmpipe_texture *lpt)
 {
    struct pipe_texture *pt = &lpt->base;
    unsigned level;
-   unsigned width = pt->width[0];
-   unsigned height = pt->height[0];
-   unsigned depth = pt->depth[0];
-
+   unsigned width = pt->width0;
+   unsigned height = pt->height0;
+   unsigned depth = pt->depth0;
    unsigned buffer_size = 0;
-
-   pf_get_block(lpt->base.format, &lpt->base.block);
 
    for (level = 0; level <= pt->last_level; level++) {
       unsigned nblocksx, nblocksy;
 
-      pt->width[level] = width;
-      pt->height[level] = height;
-      pt->depth[level] = depth;
-      pt->nblocksx[level] = pf_get_nblocksx(&pt->block, width);  
-      pt->nblocksy[level] = pf_get_nblocksy(&pt->block, height);
-
       /* Allocate storage for whole quads. This is particularly important
-       * for depth surfaces, which are currently stored in a swizzled format. */
-      nblocksx = pf_get_nblocksx(&pt->block, align(width, 2));
-      nblocksy = pf_get_nblocksy(&pt->block, align(height, 2));
+       * for depth surfaces, which are currently stored in a swizzled format.
+       */
+      nblocksx = util_format_get_nblocksx(pt->format, align(width, TILE_SIZE));
+      nblocksy = util_format_get_nblocksy(pt->format, align(height, TILE_SIZE));
 
-      lpt->stride[level] = align(nblocksx*pt->block.size, 16);
+      lpt->stride[level] = align(nblocksx * util_format_get_blocksize(pt->format), 16);
 
       lpt->level_offset[level] = buffer_size;
 
@@ -85,9 +77,9 @@ llvmpipe_texture_layout(struct llvmpipe_screen *screen,
                       ((pt->target == PIPE_TEXTURE_CUBE) ? 6 : depth) *
                       lpt->stride[level]);
 
-      width  = minify(width);
-      height = minify(height);
-      depth = minify(depth);
+      width = u_minify(width, 1);
+      height = u_minify(height, 1);
+      depth = u_minify(depth, 1);
    }
 
    lpt->data = align_malloc(buffer_size, 16);
@@ -95,28 +87,28 @@ llvmpipe_texture_layout(struct llvmpipe_screen *screen,
    return lpt->data != NULL;
 }
 
+
+
 static boolean
 llvmpipe_displaytarget_layout(struct llvmpipe_screen *screen,
-                              struct llvmpipe_texture * lpt)
+                              struct llvmpipe_texture *lpt)
 {
    struct llvmpipe_winsys *winsys = screen->winsys;
 
-   pf_get_block(lpt->base.format, &lpt->base.block);
-   lpt->base.nblocksx[0] = pf_get_nblocksx(&lpt->base.block, lpt->base.width[0]);  
-   lpt->base.nblocksy[0] = pf_get_nblocksy(&lpt->base.block, lpt->base.height[0]);  
+   /* Round up the surface size to a multiple of the tile size to
+    * avoid tile clipping.
+    */
+   unsigned width = align(lpt->base.width0, TILE_SIZE);
+   unsigned height = align(lpt->base.height0, TILE_SIZE);
 
    lpt->dt = winsys->displaytarget_create(winsys,
                                           lpt->base.format,
-                                          lpt->base.width[0],
-                                          lpt->base.height[0],
+                                          width, height,
                                           16,
                                           &lpt->stride[0] );
 
    return lpt->dt != NULL;
 }
-
-
-
 
 
 static struct pipe_texture *
@@ -131,12 +123,6 @@ llvmpipe_texture_create(struct pipe_screen *_screen,
    lpt->base = *templat;
    pipe_reference_init(&lpt->base.reference, 1);
    lpt->base.screen = &screen->base;
-
-   /* XXX: The xlib state tracker is brain-dead and will request
-    * PIPE_FORMAT_Z16_UNORM no matter how much we tell it we don't support it.
-    */
-   if(lpt->base.format == PIPE_FORMAT_Z16_UNORM)
-      lpt->base.format = PIPE_FORMAT_Z32_UNORM;
 
    if (lpt->base.tex_usage & (PIPE_TEXTURE_USAGE_DISPLAY_TARGET |
                               PIPE_TEXTURE_USAGE_PRIMARY)) {
@@ -170,7 +156,7 @@ llvmpipe_texture_blanket(struct pipe_screen * screen,
    /* Only supports one type */
    if (base->target != PIPE_TEXTURE_2D ||
        base->last_level != 0 ||
-       base->depth[0] != 1) {
+       base->depth0 != 1) {
       return NULL;
    }
 
@@ -181,14 +167,13 @@ llvmpipe_texture_blanket(struct pipe_screen * screen,
    lpt->base = *base;
    pipe_reference_init(&lpt->base.reference, 1);
    lpt->base.screen = screen;
-   lpt->base.nblocksx[0] = pf_get_nblocksx(&lpt->base.block, lpt->base.width[0]);  
-   lpt->base.nblocksy[0] = pf_get_nblocksy(&lpt->base.block, lpt->base.height[0]);  
    lpt->stride[0] = stride[0];
 
    pipe_buffer_reference(&lpt->buffer, buffer);
 
    return &lpt->base;
 #else
+   debug_printf("llvmpipe_texture_blanket() not implemented!");
    return NULL;
 #endif
 }
@@ -200,12 +185,15 @@ llvmpipe_texture_destroy(struct pipe_texture *pt)
    struct llvmpipe_screen *screen = llvmpipe_screen(pt->screen);
    struct llvmpipe_texture *lpt = llvmpipe_texture(pt);
 
-   if(lpt->dt) {
+   if (lpt->dt) {
+      /* display target */
       struct llvmpipe_winsys *winsys = screen->winsys;
       winsys->displaytarget_destroy(winsys, lpt->dt);
    }
-   else
+   else {
+      /* regular texture */
       align_free(lpt->data);
+   }
 
    FREE(lpt);
 }
@@ -227,8 +215,8 @@ llvmpipe_get_tex_surface(struct pipe_screen *screen,
       pipe_reference_init(&ps->reference, 1);
       pipe_texture_reference(&ps->texture, pt);
       ps->format = pt->format;
-      ps->width = pt->width[level];
-      ps->height = pt->height[level];
+      ps->width = u_minify(pt->width0, level);
+      ps->height = u_minify(pt->height0, level);
       ps->offset = lpt->level_offset[level];
       ps->usage = usage;
 
@@ -247,7 +235,7 @@ llvmpipe_get_tex_surface(struct pipe_screen *screen,
 
       if (ps->usage & (PIPE_BUFFER_USAGE_CPU_WRITE |
                        PIPE_BUFFER_USAGE_GPU_WRITE)) {
-         /* Mark the surface as dirty.  The tile cache will look for this. */
+         /* Mark the surface as dirty. */
          lpt->timestamp++;
          llvmpipe_screen(screen)->timestamp++;
       }
@@ -256,11 +244,17 @@ llvmpipe_get_tex_surface(struct pipe_screen *screen,
       ps->level = level;
       ps->zslice = zslice;
 
+      /* XXX shouldn't that rather be
+         tex_height = align(ps->height, 2);
+         to account for alignment done in llvmpipe_texture_layout ?
+      */
       if (pt->target == PIPE_TEXTURE_CUBE) {
-         ps->offset += face * pt->nblocksy[level] * lpt->stride[level];
+         unsigned tex_height = ps->height;
+         ps->offset += face * util_format_get_nblocksy(pt->format, tex_height) * lpt->stride[level];
       }
       else if (pt->target == PIPE_TEXTURE_3D) {
-         ps->offset += zslice * pt->nblocksy[level] * lpt->stride[level];
+         unsigned tex_height = ps->height;
+         ps->offset += zslice * util_format_get_nblocksy(pt->format, tex_height) * lpt->stride[level];
       }
       else {
          assert(face == 0);
@@ -301,14 +295,10 @@ llvmpipe_get_tex_transfer(struct pipe_screen *screen,
    if (lpt) {
       struct pipe_transfer *pt = &lpt->base;
       pipe_texture_reference(&pt->texture, texture);
-      pt->format = texture->format;
-      pt->block = texture->block;
       pt->x = x;
       pt->y = y;
-      pt->width = w;
-      pt->height = h;
-      pt->nblocksx = texture->nblocksx[level];
-      pt->nblocksy = texture->nblocksy[level];
+      pt->width = align(w, TILE_SIZE);
+      pt->height = align(h, TILE_SIZE);
       pt->stride = lptex->stride[level];
       pt->usage = usage;
       pt->face = face;
@@ -317,11 +307,17 @@ llvmpipe_get_tex_transfer(struct pipe_screen *screen,
 
       lpt->offset = lptex->level_offset[level];
 
+      /* XXX shouldn't that rather be
+         tex_height = align(u_minify(texture->height0, level), 2)
+         to account for alignment done in llvmpipe_texture_layout ?
+      */
       if (texture->target == PIPE_TEXTURE_CUBE) {
-         lpt->offset += face * pt->nblocksy * pt->stride;
+         unsigned tex_height = u_minify(texture->height0, level);
+         lpt->offset += face *  util_format_get_nblocksy(texture->format, tex_height) * pt->stride;
       }
       else if (texture->target == PIPE_TEXTURE_3D) {
-         lpt->offset += zslice * pt->nblocksy * pt->stride;
+         unsigned tex_height = u_minify(texture->height0, level);
+         lpt->offset += zslice * util_format_get_nblocksy(texture->format, tex_height) * pt->stride;
       }
       else {
          assert(face == 0);
@@ -353,11 +349,14 @@ llvmpipe_transfer_map( struct pipe_screen *_screen,
    struct llvmpipe_screen *screen = llvmpipe_screen(_screen);
    ubyte *map, *xfer_map;
    struct llvmpipe_texture *lpt;
+   enum pipe_format format;
 
    assert(transfer->texture);
    lpt = llvmpipe_texture(transfer->texture);
+   format = lpt->base.format;
 
-   if(lpt->dt) {
+   if (lpt->dt) {
+      /* display target */
       struct llvmpipe_winsys *winsys = screen->winsys;
 
       map = winsys->displaytarget_map(winsys, lpt->dt,
@@ -365,48 +364,43 @@ llvmpipe_transfer_map( struct pipe_screen *_screen,
       if (map == NULL)
          return NULL;
    }
-   else
+   else {
+      /* regular texture */
       map = lpt->data;
+   }
 
    /* May want to different things here depending on read/write nature
     * of the map:
     */
-   if (transfer->texture && (transfer->usage & PIPE_TRANSFER_WRITE))
-   {
+   if (transfer->texture && (transfer->usage & PIPE_TRANSFER_WRITE)) {
       /* Do something to notify sharing contexts of a texture change.
-       * In llvmpipe, that would mean flushing the texture cache.
        */
       screen->timestamp++;
    }
    
    xfer_map = map + llvmpipe_transfer(transfer)->offset +
-      transfer->y / transfer->block.height * transfer->stride +
-      transfer->x / transfer->block.width * transfer->block.size;
+      transfer->y / util_format_get_blockheight(format) * transfer->stride +
+      transfer->x / util_format_get_blockwidth(format) * util_format_get_blocksize(format);
    /*printf("map = %p  xfer map = %p\n", map, xfer_map);*/
    return xfer_map;
 }
 
 
 static void
-llvmpipe_transfer_unmap(struct pipe_screen *_screen,
+llvmpipe_transfer_unmap(struct pipe_screen *screen,
                        struct pipe_transfer *transfer)
 {
-   struct llvmpipe_screen *screen = llvmpipe_screen(_screen);
+   struct llvmpipe_screen *lp_screen = llvmpipe_screen(screen);
    struct llvmpipe_texture *lpt;
 
    assert(transfer->texture);
    lpt = llvmpipe_texture(transfer->texture);
 
-   if(lpt->dt) {
-      struct llvmpipe_winsys *winsys = screen->winsys;
+   if (lpt->dt) {
+      /* display target */
+      struct llvmpipe_winsys *winsys = lp_screen->winsys;
       winsys->displaytarget_unmap(winsys, lpt->dt);
    }
-}
-
-
-void
-llvmpipe_init_texture_funcs(struct llvmpipe_context *lp)
-{
 }
 
 

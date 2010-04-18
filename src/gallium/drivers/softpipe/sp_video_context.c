@@ -25,11 +25,12 @@
  * 
  **************************************************************************/
 
+#include "util/u_inlines.h"
+#include "util/u_memory.h"
+
 #include "sp_video_context.h"
-#include <pipe/p_inlines.h>
-#include <util/u_memory.h>
-#include "softpipe/sp_winsys.h"
-#include "softpipe/sp_texture.h"
+#include "sp_texture.h"
+
 
 static void
 sp_mpeg12_destroy(struct pipe_video_context *vpipe)
@@ -167,7 +168,7 @@ init_pipe_state(struct sp_mpeg12_context *ctx)
    rast.scissor = 0;
    rast.poly_smooth = 0;
    rast.poly_stipple_enable = 0;
-   rast.point_sprite = 0;
+   rast.sprite_coord_enable = 0;
    rast.point_size_per_vertex = 0;
    rast.multisample = 0;
    rast.line_smooth = 0;
@@ -175,27 +176,27 @@ init_pipe_state(struct sp_mpeg12_context *ctx)
    rast.line_stipple_factor = 0;
    rast.line_stipple_pattern = 0;
    rast.line_last_pixel = 0;
-   rast.bypass_vs_clip_and_viewport = 0;
    rast.line_width = 1;
    rast.point_smooth = 0;
+   rast.point_quad_rasterization = 0;
    rast.point_size = 1;
    rast.offset_units = 1;
    rast.offset_scale = 1;
-   /*rast.sprite_coord_mode[i] = ;*/
    ctx->rast = ctx->pipe->create_rasterizer_state(ctx->pipe, &rast);
    ctx->pipe->bind_rasterizer_state(ctx->pipe, ctx->rast);
 
-   blend.blend_enable = 0;
-   blend.rgb_func = PIPE_BLEND_ADD;
-   blend.rgb_src_factor = PIPE_BLENDFACTOR_ONE;
-   blend.rgb_dst_factor = PIPE_BLENDFACTOR_ONE;
-   blend.alpha_func = PIPE_BLEND_ADD;
-   blend.alpha_src_factor = PIPE_BLENDFACTOR_ONE;
-   blend.alpha_dst_factor = PIPE_BLENDFACTOR_ONE;
+   blend.independent_blend_enable = 0;
+   blend.rt[0].blend_enable = 0;
+   blend.rt[0].rgb_func = PIPE_BLEND_ADD;
+   blend.rt[0].rgb_src_factor = PIPE_BLENDFACTOR_ONE;
+   blend.rt[0].rgb_dst_factor = PIPE_BLENDFACTOR_ONE;
+   blend.rt[0].alpha_func = PIPE_BLEND_ADD;
+   blend.rt[0].alpha_src_factor = PIPE_BLENDFACTOR_ONE;
+   blend.rt[0].alpha_dst_factor = PIPE_BLENDFACTOR_ONE;
    blend.logicop_enable = 0;
    blend.logicop_func = PIPE_LOGICOP_CLEAR;
    /* Needed to allow color writes to FB, even if blending disabled */
-   blend.colormask = PIPE_MASK_RGBA;
+   blend.rt[0].colormask = PIPE_MASK_RGBA;
    blend.dither = 0;
    ctx->blend = ctx->pipe->create_blend_state(ctx->pipe, &blend);
    ctx->pipe->bind_blend_state(ctx->pipe, ctx->blend);
@@ -209,7 +210,6 @@ init_pipe_state(struct sp_mpeg12_context *ctx)
       dsa.stencil[i].fail_op = PIPE_STENCIL_OP_KEEP;
       dsa.stencil[i].zpass_op = PIPE_STENCIL_OP_KEEP;
       dsa.stencil[i].zfail_op = PIPE_STENCIL_OP_KEEP;
-      dsa.stencil[i].ref_value = 0;
       dsa.stencil[i].valuemask = 0;
       dsa.stencil[i].writemask = 0;
    }
@@ -249,7 +249,7 @@ sp_mpeg12_create(struct pipe_screen *screen, enum pipe_video_profile profile,
    ctx->base.set_decode_target = sp_mpeg12_set_decode_target;
    ctx->base.set_csc_matrix = sp_mpeg12_set_csc_matrix;
 
-   ctx->pipe = softpipe_create(screen);
+   ctx->pipe = screen->context_create(screen, NULL);
    if (!ctx->pipe) {
       FREE(ctx);
       return NULL;

@@ -272,17 +272,11 @@ struct svga_winsys_screen
 };
 
 
-struct pipe_context *
-svga_context_create(struct pipe_screen *screen);
-
 struct pipe_screen *
 svga_screen_create(struct svga_winsys_screen *sws);
 
 struct svga_winsys_screen *
 svga_winsys_screen(struct pipe_screen *screen);
-
-struct svga_winsys_context *
-svga_winsys_context(struct pipe_context *context);
 
 struct pipe_buffer *
 svga_screen_buffer_wrap_surface(struct pipe_screen *screen,

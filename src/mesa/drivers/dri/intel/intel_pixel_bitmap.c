@@ -103,7 +103,7 @@ static void set_bit( GLubyte *dest, GLuint bit )
 }
 
 /* Extract a rectangle's worth of data from the bitmap.  Called
- * per-cliprect.
+ * per chunk of HW-sized bitmap.
  */
 static GLuint get_bitmap_rect(GLsizei width, GLsizei height,
 			      const struct gl_pixelstore_attrib *unpack,
@@ -123,7 +123,7 @@ static GLuint get_bitmap_rect(GLsizei width, GLsizei height,
    GLuint count = 0;
 
    if (INTEL_DEBUG & DEBUG_PIXEL)
-      _mesa_printf("%s %d,%d %dx%d bitmap %dx%d skip %d src_offset %d mask %d\n",
+      printf("%s %d,%d %dx%d bitmap %dx%d skip %d src_offset %d mask %d\n",
 		   __FUNCTION__, x,y,w,h,width,height,unpack->SkipPixels, src_offset, mask);
 
    if (invert) {
@@ -188,11 +188,12 @@ do_blit_bitmap( GLcontext *ctx,
    GLfloat tmpColor[4];
    GLubyte ubcolor[4];
    GLuint color;
-   unsigned int num_cliprects;
-   drm_clip_rect_t *cliprects;
-   int x_off, y_off;
    GLsizei bitmap_width = width;
    GLsizei bitmap_height = height;
+   GLint px, py;
+   GLuint stipple[32];
+   GLint orig_dstx = dstx;
+   GLint orig_dsty = dsty;
 
    /* Update draw buffer bounds */
    _mesa_update_state(ctx);
@@ -226,104 +227,72 @@ do_blit_bitmap( GLcontext *ctx,
    UNCLAMPED_FLOAT_TO_UBYTE(ubcolor[3], tmpColor[3]);
 
    if (dst->cpp == 2)
-      color = INTEL_PACKCOLOR565(ubcolor[0], ubcolor[1], ubcolor[2]);
+      color = PACK_COLOR_565(ubcolor[0], ubcolor[1], ubcolor[2]);
    else
-      color = INTEL_PACKCOLOR8888(ubcolor[0], ubcolor[1],
-				  ubcolor[2], ubcolor[3]);
+      color = PACK_COLOR_8888(ubcolor[3], ubcolor[0], ubcolor[1], ubcolor[2]);
 
    if (!intel_check_blit_fragment_ops(ctx, tmpColor[3] == 1.0F))
       return GL_FALSE;
 
-   LOCK_HARDWARE(intel);
+   intel_prepare_render(intel);
 
-   intel_get_cliprects(intel, &cliprects, &num_cliprects, &x_off, &y_off);
-   if (num_cliprects != 0) {
-      GLuint i;
-      GLint orig_dstx = dstx;
-      GLint orig_dsty = dsty;
+   /* Clip to buffer bounds and scissor. */
+   if (!_mesa_clip_to_region(fb->_Xmin, fb->_Ymin,
+			     fb->_Xmax, fb->_Ymax,
+			     &dstx, &dsty, &width, &height))
+      goto out;
 
-      /* Clip to buffer bounds and scissor. */
-      if (!_mesa_clip_to_region(fb->_Xmin, fb->_Ymin,
-				fb->_Xmax, fb->_Ymax,
-				&dstx, &dsty, &width, &height))
-            goto out;
-
-      dstx = x_off + dstx;
-      dsty = y_off + y_flip(fb, dsty, height);
-
-      for (i = 0; i < num_cliprects; i++) {
-	 int box_x, box_y, box_w, box_h;
-	 GLint px, py;
-	 GLuint stipple[32];  
-
-	 box_x = dstx;
-	 box_y = dsty;
-	 box_w = width;
-	 box_h = height;
-
-	 /* Clip to drawable cliprect */
-         if (!_mesa_clip_to_region(cliprects[i].x1,
-				   cliprects[i].y1,
-				   cliprects[i].x2,
-				   cliprects[i].y2,
-				   &box_x, &box_y, &box_w, &box_h))
-	    continue;
+   dsty = y_flip(fb, dsty, height);
 
 #define DY 32
 #define DX 32
 
-	 /* Then, finally, chop it all into chunks that can be
-	  * digested by hardware:
+   /* Chop it all into chunks that can be digested by hardware: */
+   for (py = 0; py < height; py += DY) {
+      for (px = 0; px < width; px += DX) {
+	 int h = MIN2(DY, height - py);
+	 int w = MIN2(DX, width - px);
+	 GLuint sz = ALIGN(ALIGN(w,8) * h, 64)/8;
+	 GLenum logic_op = ctx->Color.ColorLogicOpEnabled ?
+	    ctx->Color.LogicOp : GL_COPY;
+
+	 assert(sz <= sizeof(stipple));
+	 memset(stipple, 0, sz);
+
+	 /* May need to adjust this when padding has been introduced in
+	  * sz above:
+	  *
+	  * Have to translate destination coordinates back into source
+	  * coordinates.
 	  */
-	 for (py = 0; py < box_h; py += DY) { 
-	    for (px = 0; px < box_w; px += DX) { 
-	       int h = MIN2(DY, box_h - py);
-	       int w = MIN2(DX, box_w - px); 
-	       GLuint sz = ALIGN(ALIGN(w,8) * h, 64)/8;
-	       GLenum logic_op = ctx->Color.ColorLogicOpEnabled ?
-		  ctx->Color.LogicOp : GL_COPY;
+	 if (get_bitmap_rect(bitmap_width, bitmap_height, unpack,
+			     bitmap,
+			     -orig_dstx + (dstx + px),
+			     -orig_dsty + y_flip(fb, dsty + py, h),
+			     w, h,
+			     (GLubyte *)stipple,
+			     8,
+			     fb->Name == 0 ? GL_TRUE : GL_FALSE) == 0)
+	    continue;
 
-	       assert(sz <= sizeof(stipple));
-	       memset(stipple, 0, sz);
-
-	       /* May need to adjust this when padding has been introduced in
-		* sz above:
-		*
-		* Have to translate destination coordinates back into source
-		* coordinates.
-		*/
-	       if (get_bitmap_rect(bitmap_width, bitmap_height, unpack,
-				   bitmap,
-				   -orig_dstx + (box_x + px - x_off),
-				   -orig_dsty + y_flip(fb,
-						       box_y + py - y_off, h),
-				   w, h,
-				   (GLubyte *)stipple,
-				   8,
-				   fb->Name == 0 ? GL_TRUE : GL_FALSE) == 0)
-		  continue;
-
-	       if (!intelEmitImmediateColorExpandBlit(intel,
-						      dst->cpp,
-						      (GLubyte *)stipple,
-						      sz,
-						      color,
-						      dst->pitch,
-						      dst->buffer,
-						      0,
-						      dst->tiling,
-						      box_x + px,
-						      box_y + py,
-						      w, h,
-						      logic_op)) {
-		  return GL_FALSE;
-	       }
-	    } 
-	 } 
+	 if (!intelEmitImmediateColorExpandBlit(intel,
+						dst->cpp,
+						(GLubyte *)stipple,
+						sz,
+						color,
+						dst->pitch,
+						dst->buffer,
+						0,
+						dst->tiling,
+						dstx + px,
+						dsty + py,
+						w, h,
+						logic_op)) {
+	    return GL_FALSE;
+	 }
       }
    }
 out:
-   UNLOCK_HARDWARE(intel);
 
    if (INTEL_DEBUG & DEBUG_SYNC)
       intel_batchbuffer_flush(intel->batch);
@@ -426,7 +395,7 @@ intel_texture_bitmap(GLcontext * ctx,
    }
 
    /* Convert the A1 bitmap to an A8 format suitable for glTexImage */
-   a8_bitmap = _mesa_calloc(width * height);
+   a8_bitmap = calloc(1, width * height);
    _mesa_expand_bitmap(width, height, unpack, bitmap, a8_bitmap, width, 0xff);
 
    if (_mesa_is_bufferobj(unpack->BufferObj)) {
@@ -461,7 +430,7 @@ intel_texture_bitmap(GLcontext * ctx,
    _mesa_PixelStorei(GL_UNPACK_ALIGNMENT, 1);
    _mesa_TexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, width, height, 0,
 		    GL_ALPHA, GL_UNSIGNED_BYTE, a8_bitmap);
-   _mesa_free(a8_bitmap);
+   free(a8_bitmap);
 
    meta_set_fragment_program(&intel->meta, &intel->meta.bitmap_fp, fp);
    _mesa_ProgramLocalParameter4fvARB(GL_FRAGMENT_PROGRAM_ARB, 0,
@@ -502,6 +471,7 @@ intel_texture_bitmap(GLcontext * ctx,
    meta_restore_fragment_program(&intel->meta);
    meta_restore_vertex_program(&intel->meta);
 
+   _mesa_ActiveTextureARB(GL_TEXTURE0_ARB + old_active_texture);
    _mesa_PopClientAttrib();
    _mesa_PopAttrib();
 
@@ -546,7 +516,7 @@ intelBitmap(GLcontext * ctx,
       return;
 
    if (INTEL_DEBUG & DEBUG_PIXEL)
-      _mesa_printf("%s: fallback to swrast\n", __FUNCTION__);
+      printf("%s: fallback to swrast\n", __FUNCTION__);
 
    _swrast_Bitmap(ctx, x, y, width, height, unpack, pixels);
 }

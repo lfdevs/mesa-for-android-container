@@ -5,10 +5,10 @@ Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: David Nusinow <dnusinow@debian.org>, Brice Goglin <bgoglin@debian.org>
 Standards-Version: 3.8.4
 Build-Depends: debhelper (>= 6.0.7), quilt (>= 0.40), pkg-config,
- libdrm-dev (>= 2.4.15) [!hurd-i386], libx11-dev, xutils-dev,
- x11proto-gl-dev (>= 1.4.8), libxxf86vm-dev,
+ libdrm-dev (>= 2.4.19) [!hurd-i386], libx11-dev, xutils-dev,
+ x11proto-gl-dev (>= 1.4.11), libxxf86vm-dev,
  libexpat1-dev, lesstif2-dev, dpkg-dev (>= 1.13.19), libxfixes-dev,
- libxdamage-dev, libxext-dev, autoconf, automake, x11proto-dri2-dev (>= 1.99.3),
+ libxdamage-dev, libxext-dev, autoconf, automake, x11proto-dri2-dev (>= 2.1),
  linux-libc-dev (>= 2.6.31) [!hurd-i386 !kfreebsd-amd64 !kfreebsd-i386]
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git

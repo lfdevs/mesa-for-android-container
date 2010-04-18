@@ -32,11 +32,14 @@
   */
  
 
+#include "main/macros.h"
+
 #include "st_context.h"
 #include "st_atom.h"
 #include "st_texture.h"
 #include "st_cb_texture.h"
 #include "pipe/p_context.h"
+#include "util/u_inlines.h"
 #include "cso_cache/cso_context.h"
 
 
@@ -99,6 +102,12 @@ update_textures(struct st_context *st)
    cso_set_sampler_textures(st->cso_context,
                             st->state.num_textures,
                             st->state.sampler_texture);
+   if (st->ctx->Const.MaxVertexTextureImageUnits > 0) {
+      cso_set_vertex_sampler_textures(st->cso_context,
+                                      MIN2(st->state.num_textures,
+                                           st->ctx->Const.MaxVertexTextureImageUnits),
+                                      st->state.sampler_texture);
+   }
 }
 
 

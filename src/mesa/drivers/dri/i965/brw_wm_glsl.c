@@ -614,112 +614,6 @@ static void invoke_subroutine( struct brw_wm_compile *c,
     }
 }
 
-/* Workaround for using brw_wm_emit.c's emit functions, which expect
- * destination regs to be uniquely written.  Moves arguments out to
- * temporaries as necessary for instructions which use their destination as
- * a temporary.
- */
-static void
-unalias3(struct brw_wm_compile *c,
-	 void (*func)(struct brw_compile *c,
-		      const struct brw_reg *dst,
-		      GLuint mask,
-		      const struct brw_reg *arg0,
-		      const struct brw_reg *arg1,
-		      const struct brw_reg *arg2),
-	 const struct brw_reg *dst,
-	 GLuint mask,
-	 const struct brw_reg *arg0,
-	 const struct brw_reg *arg1,
-	 const struct brw_reg *arg2)
-{
-    struct brw_compile *p = &c->func;
-    struct brw_reg tmp_arg0[4], tmp_arg1[4], tmp_arg2[4];
-    int i, j;
-    int mark = mark_tmps(c);
-
-    for (j = 0; j < 4; j++) {
-	tmp_arg0[j] = arg0[j];
-	tmp_arg1[j] = arg1[j];
-	tmp_arg2[j] = arg2[j];
-    }
-
-    for (i = 0; i < 4; i++) {
-	if (mask & (1<<i)) {
-	    for (j = 0; j < 4; j++) {
-		if (arg0[j].file == dst[i].file &&
-		    dst[i].nr == arg0[j].nr) {
-		    tmp_arg0[j] = alloc_tmp(c);
-		    brw_MOV(p, tmp_arg0[j], arg0[j]);
-		}
-		if (arg1[j].file == dst[i].file &&
-		    dst[i].nr == arg1[j].nr) {
-		    tmp_arg1[j] = alloc_tmp(c);
-		    brw_MOV(p, tmp_arg1[j], arg1[j]);
-		}
-		if (arg2[j].file == dst[i].file &&
-		    dst[i].nr == arg2[j].nr) {
-		    tmp_arg2[j] = alloc_tmp(c);
-		    brw_MOV(p, tmp_arg2[j], arg2[j]);
-		}
-	    }
-	}
-    }
-
-    func(p, dst, mask, tmp_arg0, tmp_arg1, tmp_arg2);
-
-    release_tmps(c, mark);
-}
-
-/* Workaround for using brw_wm_emit.c's emit functions, which expect
- * destination regs to be uniquely written.  Moves arguments out to
- * temporaries as necessary for instructions which use their destination as
- * a temporary.
- */
-static void
-unalias2(struct brw_wm_compile *c,
-	 void (*func)(struct brw_compile *c,
-		      const struct brw_reg *dst,
-		      GLuint mask,
-		      const struct brw_reg *arg0,
-		      const struct brw_reg *arg1),
-	 const struct brw_reg *dst,
-	 GLuint mask,
-	 const struct brw_reg *arg0,
-	 const struct brw_reg *arg1)
-{
-    struct brw_compile *p = &c->func;
-    struct brw_reg tmp_arg0[4], tmp_arg1[4];
-    int i, j;
-    int mark = mark_tmps(c);
-
-    for (j = 0; j < 4; j++) {
-	tmp_arg0[j] = arg0[j];
-	tmp_arg1[j] = arg1[j];
-    }
-
-    for (i = 0; i < 4; i++) {
-	if (mask & (1<<i)) {
-	    for (j = 0; j < 4; j++) {
-		if (arg0[j].file == dst[i].file &&
-		    dst[i].nr == arg0[j].nr) {
-		    tmp_arg0[j] = alloc_tmp(c);
-		    brw_MOV(p, tmp_arg0[j], arg0[j]);
-		}
-		if (arg1[j].file == dst[i].file &&
-		    dst[i].nr == arg1[j].nr) {
-		    tmp_arg1[j] = alloc_tmp(c);
-		    brw_MOV(p, tmp_arg1[j], arg1[j]);
-		}
-	    }
-	}
-    }
-
-    func(p, dst, mask, tmp_arg0, tmp_arg1);
-
-    release_tmps(c, mark);
-}
-
 static void emit_arl(struct brw_wm_compile *c,
                      const struct prog_instruction *inst)
 {
@@ -1813,19 +1707,35 @@ static void
 get_argument_regs(struct brw_wm_compile *c,
 		  const struct prog_instruction *inst,
 		  int index,
+		  struct brw_reg *dst,
 		  struct brw_reg *regs,
 		  int mask)
 {
-    int i;
+    struct brw_compile *p = &c->func;
+    int i, j;
 
     for (i = 0; i < 4; i++) {
-	if (mask & (1 << i))
+	if (mask & (1 << i)) {
 	    regs[i] = get_src_reg(c, inst, index, i);
+
+	    /* Unalias destination registers from our sources. */
+	    if (regs[i].file == BRW_GENERAL_REGISTER_FILE) {
+	       for (j = 0; j < 4; j++) {
+		   if (memcmp(&regs[i], &dst[j], sizeof(regs[0])) == 0) {
+		       struct brw_reg tmp = alloc_tmp(c);
+		       brw_MOV(p, tmp, regs[i]);
+		       regs[i] = tmp;
+		       break;
+		   }
+	       }
+	    }
+	}
     }
 }
 
 static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 {
+   struct intel_context *intel = &brw->intel;
 #define MAX_IF_DEPTH 32
 #define MAX_LOOP_DEPTH 32
     struct brw_instruction *if_inst[MAX_IF_DEPTH], *loop_inst[MAX_LOOP_DEPTH];
@@ -1844,11 +1754,12 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 	int dst_flags;
 	struct brw_reg args[3][4], dst[4];
 	int j;
+	int mark = mark_tmps( c );
 
         c->cur_inst = i;
 
 #if 0
-        _mesa_printf("Inst %d: ", i);
+        printf("Inst %d: ", i);
         _mesa_print_instruction(inst);
 #endif
 
@@ -1865,7 +1776,7 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 	   }
 	}
 	for (j = 0; j < brw_wm_nr_args(inst->Opcode); j++)
-	    get_argument_regs(c, inst, j, args[j], WRITEMASK_XYZW);
+	    get_argument_regs(c, inst, j, dst, args[j], WRITEMASK_XYZW);
 
 	dst_flags = inst->DstReg.WriteMask;
 	if (inst->SaturateMode == SATURATE_ZERO_ONE)
@@ -1875,10 +1786,6 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 	    brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
 	else
 	    brw_set_conditionalmod(p, BRW_CONDITIONAL_NONE);
-
-	dst_flags = inst->DstReg.WriteMask;
-	if (inst->SaturateMode == SATURATE_ZERO_ONE)
-	    dst_flags |= SATURATE;
 
 	switch (inst->Opcode) {
 	    case WM_PIXELXY:
@@ -1923,8 +1830,7 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 		emit_alu1(p, brw_RNDD, dst, dst_flags, args[0]);
 		break;
 	    case OPCODE_LRP:
-		unalias3(c, emit_lrp,
-			 dst, dst_flags, args[0], args[1], args[2]);
+		emit_lrp(p, dst, dst_flags, args[0], args[1], args[2]);
 		break;
 	    case OPCODE_TRUNC:
 		emit_alu1(p, brw_RNDZ, dst, dst_flags, args[0]);
@@ -1963,11 +1869,14 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 	    case OPCODE_LG2:
 		emit_math1(c, BRW_MATH_FUNCTION_LOG, dst, dst_flags, args[0]);
 		break;
+	    case OPCODE_CMP:
+		emit_cmp(p, dst, dst_flags, args[0], args[1], args[2]);
+		break;
 	    case OPCODE_MIN:	
-		unalias2(c, emit_min, dst, dst_flags, args[0], args[1]);
+		emit_min(p, dst, dst_flags, args[0], args[1]);
 		break;
 	    case OPCODE_MAX:	
-		unalias2(c, emit_max, dst, dst_flags, args[0], args[1]);
+		emit_max(p, dst, dst_flags, args[0], args[1]);
 		break;
 	    case OPCODE_DDX:
 	    case OPCODE_DDY:
@@ -2043,6 +1952,7 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 		if_inst[if_depth++] = brw_IF(p, BRW_EXECUTE_8);
 		break;
 	    case OPCODE_ELSE:
+		assert(if_depth > 0);
 		if_inst[if_depth-1]  = brw_ELSE(p, if_inst[if_depth-1]);
 		break;
 	    case OPCODE_ENDIF:
@@ -2096,19 +2006,22 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
                   struct brw_instruction *inst0, *inst1;
                   GLuint br = 1;
 
-                  if (BRW_IS_IGDNG(brw))
+                  if (intel->is_ironlake)
                      br = 2;
- 
+
+		  assert(loop_depth > 0);
                   loop_depth--;
                   inst0 = inst1 = brw_WHILE(p, loop_inst[loop_depth]);
                   /* patch all the BREAK/CONT instructions from last BGNLOOP */
                   while (inst0 > loop_inst[loop_depth]) {
                      inst0--;
-                     if (inst0->header.opcode == BRW_OPCODE_BREAK) {
+                     if (inst0->header.opcode == BRW_OPCODE_BREAK &&
+			 inst0->bits3.if_else.jump_count == 0) {
 			inst0->bits3.if_else.jump_count = br * (inst1 - inst0 + 1);
 			inst0->bits3.if_else.pop_count = 0;
                      }
-                     else if (inst0->header.opcode == BRW_OPCODE_CONTINUE) {
+                     else if (inst0->header.opcode == BRW_OPCODE_CONTINUE &&
+			      inst0->bits3.if_else.jump_count == 0) {
                         inst0->bits3.if_else.jump_count = br * (inst1 - inst0);
                         inst0->bits3.if_else.pop_count = 0;
                      }
@@ -2116,9 +2029,12 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
                }
                break;
 	    default:
-		_mesa_printf("unsupported IR in fragment shader %d\n",
+		printf("unsupported IR in fragment shader %d\n",
 			inst->Opcode);
 	}
+
+	/* Release temporaries containing any unaliased source regs. */
+	release_tmps( c, mark );
 
 	if (inst->CondUpdate)
 	    brw_set_predicate_control(p, BRW_PREDICATE_NORMAL);
@@ -2128,10 +2044,10 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
     post_wm_emit(c);
 
     if (INTEL_DEBUG & DEBUG_WM) {
-      _mesa_printf("wm-native:\n");
+      printf("wm-native:\n");
       for (i = 0; i < p->nr_insn; i++)
 	 brw_disasm(stderr, &p->store[i]);
-      _mesa_printf("\n");
+      printf("\n");
     }
 }
 
@@ -2142,7 +2058,7 @@ static void brw_wm_emit_glsl(struct brw_context *brw, struct brw_wm_compile *c)
 void brw_wm_glsl_emit(struct brw_context *brw, struct brw_wm_compile *c)
 {
     if (INTEL_DEBUG & DEBUG_WM) {
-        _mesa_printf("brw_wm_glsl_emit:\n");
+        printf("brw_wm_glsl_emit:\n");
     }
 
     /* initial instruction translation/simplification */

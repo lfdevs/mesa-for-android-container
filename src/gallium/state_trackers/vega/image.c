@@ -37,8 +37,9 @@
 
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
-#include "pipe/p_inlines.h"
+#include "util/u_inlines.h"
 #include "util/u_blit.h"
+#include "util/u_format.h"
 #include "util/u_tile.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
@@ -47,16 +48,16 @@ static enum pipe_format vg_format_to_pipe(VGImageFormat format)
 {
    switch(format) {
    case VG_sRGB_565:
-      return PIPE_FORMAT_R5G6B5_UNORM;
+      return PIPE_FORMAT_B5G6R5_UNORM;
    case VG_sRGBA_5551:
-      return PIPE_FORMAT_A1R5G5B5_UNORM;
+      return PIPE_FORMAT_B5G5R5A1_UNORM;
    case VG_sRGBA_4444:
-      return PIPE_FORMAT_A4R4G4B4_UNORM;
+      return PIPE_FORMAT_B4G4R4A4_UNORM;
    case VG_sL_8:
    case VG_lL_8:
       return PIPE_FORMAT_L8_UNORM;
    case VG_BW_1:
-      return PIPE_FORMAT_A8R8G8B8_UNORM;
+      return PIPE_FORMAT_B8G8R8A8_UNORM;
    case VG_A_8:
       return PIPE_FORMAT_A8_UNORM;
 #ifdef OPENVG_VERSION_1_1
@@ -65,7 +66,7 @@ static enum pipe_format vg_format_to_pipe(VGImageFormat format)
       return PIPE_FORMAT_A8_UNORM;
 #endif
    default:
-      return PIPE_FORMAT_A8R8G8B8_UNORM;
+      return PIPE_FORMAT_B8G8R8A8_UNORM;
    }
 }
 
@@ -93,8 +94,8 @@ static void vg_copy_texture(struct vg_context *ctx,
    dst_loc[3] = height;
    dst_bounds[0] = 0.f;
    dst_bounds[1] = 0.f;
-   dst_bounds[2] = dst->width[0];
-   dst_bounds[3] = dst->height[0];
+   dst_bounds[2] = dst->width0;
+   dst_bounds[3] = dst->height0;
 
    src_loc[0] = sx;
    src_loc[1] = sy;
@@ -102,8 +103,8 @@ static void vg_copy_texture(struct vg_context *ctx,
    src_loc[3] = height;
    src_bounds[0] = 0.f;
    src_bounds[1] = 0.f;
-   src_bounds[2] = src->width[0];
-   src_bounds[3] = src->height[0];
+   src_bounds[2] = src->width0;
+   src_bounds[3] = src->height0;
 
    vg_bound_rect(src_loc, src_bounds, src_shift);
    vg_bound_rect(dst_loc, dst_bounds, dst_shift);
@@ -270,11 +271,10 @@ struct vg_image * image_create(VGImageFormat format,
    memset(&pt, 0, sizeof(pt));
    pt.target = PIPE_TEXTURE_2D;
    pt.format = pformat;
-   pf_get_block(pformat, &pt.block);
    pt.last_level = 0;
-   pt.width[0] = width;
-   pt.height[0] = height;
-   pt.depth[0] = 1;
+   pt.width0 = width;
+   pt.height0 = height;
+   pt.depth0 = 1;
    pt.tex_usage = PIPE_TEXTURE_USAGE_SAMPLER;
 
    newtex = screen->texture_create(screen, &pt);
@@ -414,7 +414,7 @@ void image_sub_data(struct vg_image *image,
    { /* upload color_data */
       struct pipe_transfer *transfer = screen->get_tex_transfer(
          screen, texture, 0, 0, 0,
-         PIPE_TRANSFER_WRITE, 0, 0, texture->width[0], texture->height[0]);
+         PIPE_TRANSFER_WRITE, 0, 0, texture->width0, texture->height0);
       src += (dataStride * yoffset);
       for (i = 0; i < height; i++) {
          _vega_unpack_float_span_rgba(ctx, width, xoffset, src, dataFormat, temp);
@@ -644,7 +644,7 @@ VGint image_sampler_filter(struct vg_context *ctx)
        return PIPE_TEX_FILTER_NEAREST;
        break;
     case VG_IMAGE_QUALITY_BETTER:
-       /*return PIPE_TEX_FILTER_ANISO;*/
+       /* possibly use anisotropic filtering */
        return PIPE_TEX_FILTER_LINEAR;
        break;
     default:
