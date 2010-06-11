@@ -1,0 +1,3 @@
+usr/glx/libGLESv2.so usr/lib
+usr/include/GLES2
+debian/glesv2.pc usr/lib/pkgconfig

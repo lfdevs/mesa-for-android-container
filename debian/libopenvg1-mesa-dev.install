@@ -1,0 +1,3 @@
+usr/glx/libOpenVG.so usr/lib
+usr/include/VG
+debian/vg.pc usr/lib/pkgconfig

@@ -1,0 +1,12 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=/usr/lib
+includedir=/usr/include
+
+Name: egl
+Description: Mesa EGL library
+Requires.private: libdrm >= 2.4.15 dri2proto >= 2.1 glproto >= 1.4.11 x11 xext xxf86vm xdamage xfixes
+Version: 7.8.1
+Libs: -L${libdir} -lEGL
+Libs.private: -lm -lpthread -ldl
+Cflags: -I${includedir} 

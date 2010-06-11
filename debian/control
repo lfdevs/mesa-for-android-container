@@ -4,12 +4,13 @@ Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: David Nusinow <dnusinow@debian.org>, Brice Goglin <bgoglin@debian.org>
 Standards-Version: 3.8.4
-Build-Depends: debhelper (>= 6.0.7), quilt (>= 0.40), pkg-config,
+Build-Depends: debhelper (>= 7.2.7), quilt (>= 0.40), pkg-config,
  libdrm-dev (>= 2.4.19) [!hurd-i386], libx11-dev, xutils-dev,
  x11proto-gl-dev (>= 1.4.11), libxxf86vm-dev,
- libexpat1-dev, lesstif2-dev, dpkg-dev (>= 1.13.19), libxfixes-dev,
+ libexpat1-dev, lesstif2-dev, dpkg-dev (>= 1.15.6), libxfixes-dev,
  libxdamage-dev, libxext-dev, autoconf, automake, x11proto-dri2-dev (>= 2.1),
- linux-libc-dev (>= 2.6.31) [!hurd-i386 !kfreebsd-amd64 !kfreebsd-i386]
+ linux-libc-dev (>= 2.6.31) [!hurd-i386 !kfreebsd-amd64 !kfreebsd-i386],
+ libx11-xcb-dev, libxcb-dri2-0-dev, libxcb-xfixes0-dev, python-libxml2,
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.sourceforge.net/
@@ -101,6 +102,224 @@ Description: A free implementation of the OpenGL API -- development files
  This library provides a pure software rasteriser; it does not provide
  a direct rendering-capable library, or one which uses GLX.  For that,
  please see libgl1-mesa-dev.
+
+Package: libegl1-mesa
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: libegl1-mesa-drivers-x11
+Description: A free implementation of the EGL API -- runtime
+ This package contains the EGL native platform graphics interface library.
+ EGL provides a platform-agnostic mechanism for creating rendering surfaces
+ for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ .
+ This package contains modules to interface with the existing system GLX or 
+ DRI2 drivers to provide OpenGL via EGL.  The libegl1-mesa-drivers-x11 package
+ provides drivers to provide hardware-accelerated OpenGL|ES and OpenVG support.
+
+Package: libegl1-mesa-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Depends: libegl1-mesa (= ${binary:Version}), ${misc:Depends}
+Description: A free implementation of the EGL API -- debugging symbols
+ This package contains the EGL native platform graphics interface library.
+ EGL provides a platform-agnostic mechanism for creating rendering surfaces
+ for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ .
+ This package contains the debugging symbols for the EGL library.
+
+Package: libegl1-mesa-dev
+Section: libdevel
+Architecture: any
+Depends: libegl1-mesa (= ${binary:Version}), ${misc:Depends}
+Description: A free implementation of the EGL API -- development files
+ This package contains the development environment required for compiling 
+ programs against EGL native platform graphics interface library.
+ EGL provides a platform-agnostic mechanism for creating rendering surfaces
+ for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ .
+ This package provides the development environment for compiling programs
+ against the EGL library.
+
+Package: libegl1-mesa-drivers-x11
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A free implementation of the EGL API -- X11 drivers
+ This package contains the EGL native platform graphics interface library.
+ EGL provides a platform-agnostic mechanism for creating rendering surfaces
+ for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ .
+ This package contains the drivers required for hardware accelerated rendering
+ of EGL-based graphics libraries, such as OpenGL|ES and OpenVG, in an X11
+ environment.
+
+Package: libegl1-mesa-drivers-x11-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Depends: libegl1-mesa-drivers-x11 (= ${binary:Version}), ${misc:Depends}
+Description: A free implementation of the EGL API -- X11 driver debugging symbols
+ This package contains the EGL native platform graphics interface library.
+ EGL provides a platform-agnostic mechanism for creating rendering surfaces
+ for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ .
+ This package contains the debugging symbols for the drivers required for 
+ hardware accelerated rendering of EGL-based graphics libraries, such as
+ OpenGL|ES and OpenVG, in an X11 environment.
+
+Package: libegl1-mesa-drivers-kms
+Section: libs
+Architecture: linux-any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A free implementation of the EGL API -- KMS drivers
+ This package contains the EGL native platform graphics interface library.
+ EGL provides a platform-agnostic mechanism for creating rendering surfaces
+ for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ .
+ This package contains the drivers required for hardware accelerated rendering
+ of EGL-based graphics libraries, such as OpenGL|ES and OpenVG in a raw
+ KMS-framebuffer environment.
+
+Package: libegl1-mesa-drivers-kms-dbg
+Section: libs
+Architecture: linux-any
+Depends: libegl1-mesa-drivers-kms (= ${binary:Version}), ${misc:Depends}
+Description: A free implementation of the EGL API -- KMS driver debugging symbols
+ This package contains the EGL native platform graphics interface library.
+ EGL provides a platform-agnostic mechanism for creating rendering surfaces
+ for use with other graphics libraries, such as OpenGL|ES and OpenVG.
+ .
+ This package contains the debugging symbols for the drivers required for 
+ hardware accelerated rendering of EGL-based graphics libraries, such as 
+ OpenGL|ES and OpenVG in a raw KMS-framebuffer environment.
+
+Package: libopenvg1-mesa
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A free implementation of the OpenVG API -- runtime
+ This package contains the mesa implementation of the OpenVG 2D acceleration
+ library.  OpenVG provides a device independent and vendor-neutral interface 
+ for sophisticated 2D graphical applications, while allowing device 
+ manufacturers to provide hardware acceleration on devices ranging from wrist 
+ watches to full microprocessor-based desktop and server machines. 
+
+Package: libopenvg1-mesa-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Depends: libopenvg1-mesa (= ${binary:Version}), ${misc:Depends}
+Description: A free implementation of the OpenVG API -- debugging symbols
+ This package contains the mesa implementation of the OpenVG 2D acceleration
+ library.  OpenVG provides a device independent and vendor-neutral interface 
+ for sophisticated 2D graphical applications, while allowing device 
+ manufacturers to provide hardware acceleration on devices ranging from wrist 
+ watches to full microprocessor-based desktop and server machines. 
+ .
+ This package contains the debugging symbols for the OpenVG library.
+
+Package: libopenvg1-mesa-dev
+Section: libdevel
+Architecture: any
+Depends: libopenvg1-mesa (= ${binary:Version}), libegl1-mesa-dev, ${misc:Depends}
+Description: A free implementation of the OpenVG API -- development files
+ This package contains the mesa implementation of the OpenVG 2D acceleration
+ library.  OpenVG provides a device independent and vendor-neutral interface 
+ for sophisticated 2D graphical applications, while allowing device 
+ manufacturers to provide hardware acceleration on devices ranging from wrist 
+ watches to full microprocessor-based desktop and server machines. 
+ .
+ This package contains the development environment required for compiling 
+ programs against the OpenVG 2D acceleration library.
+
+Package: libgles1-mesa
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A free implementation of the OpenGL|ES 1.x API -- runtime
+ OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on 
+ embedded systems - including consoles, phones, appliances and vehicles.
+ It contains a subset of OpenGL plus a number of extensions for the 
+ special needs of embedded systems.
+ .
+ OpenGL|ES 1.x provides an API for fixed-function hardware.
+
+Package: libgles1-mesa-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Depends: libgles1-mesa (= ${binary:Version}), ${misc:Depends}
+Description: A free implementation of the OpenGL|ES 1.x API -- debugging symbols
+ OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on 
+ embedded systems - including consoles, phones, appliances and vehicles.
+ It contains a subset of OpenGL plus a number of extensions for the 
+ special needs of embedded systems.
+ .
+ OpenGL|ES 1.x provides an API for fixed-function hardware.
+ .
+ This package contains the debugging symbols for the libGLESv1_CM library.
+
+Package: libgles1-mesa-dev
+Section: libdevel
+Architecture: any
+Depends: libgles1-mesa (= ${binary:Version}), libegl1-mesa-dev, ${misc:Depends}
+Description: A free implementation of the OpenGL|ES 1.x API -- development files
+ OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on 
+ embedded systems - including consoles, phones, appliances and vehicles.
+ It contains a subset of OpenGL plus a number of extensions for the 
+ special needs of embedded systems.
+ .
+ OpenGL|ES 1.x provides an API for fixed-function hardware.
+ .
+ This package provides a development environment for building programs using
+ the OpenGL|ES 1.x APIs.
+
+Package: libgles2-mesa
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A free implementation of the OpenGL|ES 2.x API -- runtime
+ OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on 
+ embedded systems - including consoles, phones, appliances and vehicles.
+ It contains a subset of OpenGL plus a number of extensions for the 
+ special needs of embedded systems.
+ .
+ OpenGL|ES 2.x provides an API for programmable hardware including vertex
+ and fragment shaders.
+
+Package: libgles2-mesa-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Depends: libgles2-mesa (= ${binary:Version}), ${misc:Depends}
+Description: A free implementation of the OpenGL|ES 2.x API -- debugging symbols
+ OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on 
+ embedded systems - including consoles, phones, appliances and vehicles.
+ It contains a subset of OpenGL plus a number of extensions for the 
+ special needs of embedded systems.
+ .
+ OpenGL|ES 2.x provides an API for programmable hardware including vertex
+ and fragment shaders.
+ .
+ This package contains the debugging symbols for the libGLESv2 library.
+
+Package: libgles2-mesa-dev
+Section: libdevel
+Architecture: any
+Depends: libgles2-mesa (= ${binary:Version}), libegl1-mesa-dev, ${misc:Depends}
+Description: A free implementation of the OpenGL|ES 2.x API -- development files
+ OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on 
+ embedded systems - including consoles, phones, appliances and vehicles.
+ It contains a subset of OpenGL plus a number of extensions for the 
+ special needs of embedded systems.
+ .
+ OpenGL|ES 2.x provides an API for programmable hardware including vertex
+ and fragment shaders.
+ .
+ This package provides a development environment for building applications 
+ using the OpenGL|ES 2.x APIs.
 
 Package: libgl1-mesa-glx
 Section: libs
@@ -200,6 +419,41 @@ Description: Debugging symbols for the Mesa DRI modules
  libgl1-mesa-swx11 package.
  .
  This package contains debugging symbols for the DRI modules.
+
+Package: libgl1-mesa-dri-experimental
+Section: libs
+Architecture: linux-any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A free implementation of the OpenGL API -- Extra DRI modules
+ This version of Mesa provides GLX and DRI capabilities: it is capable of
+ both direct and indirect rendering.  For direct rendering, it can use DRI
+ modules from the libgl1-mesa-dri package to accelerate drawing.
+ .
+ This package does not include the OpenGL library itself, only the DRI
+ modules for accelerating direct and indirect rendering.  The drivers
+ in this package may provide more features than the drivers in the
+ libgl1-mesa-dri at the cost of less stability.
+ .
+ For a complete description of Mesa, please look at the
+ libgl1-mesa-swx11 package.
+
+Package: libgl1-mesa-dri-experimental-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any
+Depends: libgl1-mesa-dri-experimental (= ${binary:Version}), ${misc:Depends}
+Description: Debugging symbols for the experimental Mesa DRI modules
+ This version of Mesa provides GLX and DRI capabilities: it is capable of
+ both direct and indirect rendering.  For direct rendering, it can use DRI
+ modules from the libgl1-mesa-dri package to accelerate drawing.
+ .
+ This package does not include the OpenGL library itself, only the DRI
+ modules for accelerating direct rendering.
+ .
+ For a complete description of Mesa, please look at the
+ libgl1-mesa-swx11 package.
+ .
+ This package contains debugging symbols for the Gallium DRI modules.
 
 #Package: libgl1-mesa-dri-i686
 #Section: libs

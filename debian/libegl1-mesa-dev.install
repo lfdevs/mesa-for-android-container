@@ -1,0 +1,4 @@
+usr/lib/glx/libEGL.so usr/lib
+usr/include/EGL
+usr/include/KHR
+debian/egl.pc usr/lib/pkgconfig

@@ -1,1 +1,1 @@
-usr/lib/dri/*.so
+build/dri/glx/*_dri.so  usr/lib/dri/

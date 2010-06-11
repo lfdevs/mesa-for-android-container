@@ -1,3 +1,60 @@
+mesa (7.8.1-2) experimental; urgency=low
+
+  [ Tormod Volden ]
+  * debian/rules: Do not strip the same packages twice
+
+  [ Julien Cristau ]
+  * Stop building the ffb dri driver on sparc, it no longer exists.
+  * Merge changes from 7.7.1-2.
+
+  [ Christopher James Halse Rogers ]
+  * debian/compat:
+    - Bump to v7 for dh_install search path behaviour
+  * debian/rules:
+    - Enable gallium for dri build.
+    - Enable egl for dri build.
+    - Build nouveau, radeon & swrast gallium drivers
+    - Build OpenVG, OpenGL|ES, dri, glx & egl state trackers
+  * debian/libegl1-mesa-dev.install:
+  * debian/libegl1-mesa.install:
+  * debian/libegl1-mesa.symbols:
+    - New libEGL package.
+  * debian/libgles1-mesa-dev.install:
+  * debian/libgles1-mesa.install:
+  * debian/libgles1-mesa.symbols:
+    - New OpenGL|ES v1.x package.
+  * debian/libgles2-mesa-dev.install:
+  * debian/libgles2-mesa.install:
+  * debian/libgles2-mesa.symbols:
+    - New OpenGL|ES v2.x package.
+  * debian/libopenvg1-mesa-dev.install:
+  * debian/libopenvg1-mesa.install:
+  * debian/libopenvg1-mesa.symbols:
+    - New OpenVG package.
+  * debian/libegl1-mesa-drivers-x11.install:
+    - New gallium EGL drivers package.
+  * debian/libegl1-mesa-drivers-kms.install:
+    - New gallium EGL kms driver package.
+  * debian/egl.pc:
+  * debian/vg.pc:
+  * debian/glesv1_cm.pc:
+  * debian/glesv2.pc:
+    - Pull pkg-config files from master and install them in the respective
+      -dev packages.
+  * debian/libgl1-mesa-dri-experimental.install:
+  * debian/libgl1-mesa-dri.install:
+    - “make install” puts classic and gallium drivers in the same path, but
+      builds gallium drivers in the gallium/ subdirectory.  Copy the drivers 
+      directly from the build path, rather than trying to separate them out 
+      post-hock.
+  * debian/control:
+    - Add new packages.
+    - Add new build-depends on libx11-xcb-dev, libxcb-dri2-0-dev, 
+      libxcb-xfixes0-dev and python-libxml2 for gallium.
+    - Bump build-depends on dpkg-dev for regex in symbols files.
+
+ -- Julien Cristau <jcristau@debian.org>  Fri, 11 Jun 2010 03:19:09 +0200
+
 mesa (7.8.1-1) experimental; urgency=low
 
   * New upstream release.
@@ -7,6 +64,15 @@ mesa (7.8.1-1) experimental; urgency=low
     and x11proto-dri2-dev 2.1.
 
  -- Brice Goglin <bgoglin@debian.org>  Sun, 18 Apr 2010 09:25:39 +0200
+
+mesa (7.7.1-2) unstable; urgency=low
+
+  * debian/rules: use DEB_HOST_ARCH_CPU instead of DEB_HOST_GNU_CPU.  Prompted
+    by Ubuntu which changed the latter to i686, breaking their packages on
+    i386.
+  * Pull from mesa_7_7_branch (commit 8ba378d).
+
+ -- Julien Cristau <jcristau@debian.org>  Thu, 20 May 2010 17:34:19 +0200
 
 mesa (7.7.1-1) unstable; urgency=low
 
