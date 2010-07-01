@@ -10,6 +10,9 @@ For more information see:
 
   http://www.mesa3d.org/
 
+The tarball was built by combining MesaLib and MesaDemos tarballs, and
+deleting the progs/objviewer/ directory.
+
 Copyright:
 
 Upstream Author: Brian Paul <brian.paul@tungstengraphics.com>

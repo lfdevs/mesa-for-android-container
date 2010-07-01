@@ -1,1 +1,1 @@
-usr/lib/glx/egl/egl_kms_*.so
+dri/usr/lib/egl/egl_kms_*.so usr/lib/egl

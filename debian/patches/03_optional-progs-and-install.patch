@@ -15,18 +15,20 @@ and we don't actually build it at this point.
  progs/xdemos/Makefile |    7 ++++++-
  2 files changed, 11 insertions(+), 2 deletions(-)
 
---- a/progs/xdemos/Makefile
-+++ b/progs/xdemos/Makefile
-@@ -13,7 +13,7 @@ APP_LIB_DEPS += -lX11 -lpthread
+Index: mesa/progs/xdemos/Makefile
+===================================================================
+--- mesa.orig/progs/xdemos/Makefile
++++ mesa/progs/xdemos/Makefile
+@@ -13,7 +13,7 @@
  
- LIBS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) -L$(libdir) $(APP_LIB_DEPS)
+ LIBS = -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) $(APP_LIB_DEPS)
  
 -PROGS = \
 +PROGS ?= \
  	corender \
  	glsync \
  	glthreads \
-@@ -68,6 +68,11 @@ default: $(PROGS)
+@@ -69,6 +69,11 @@
  extra: $(EXTRA_PROGS)
  
  
@@ -38,9 +40,11 @@ and we don't actually build it at this point.
  clean:
  	-rm -f $(PROGS) $(EXTRA_PROGS)
  	-rm -f *.o *~
---- a/progs/Makefile
-+++ b/progs/Makefile
-@@ -21,8 +21,12 @@ subdirs:
+Index: mesa/progs/Makefile
+===================================================================
+--- mesa.orig/progs/Makefile
++++ mesa/progs/Makefile
+@@ -21,8 +21,12 @@
  		fi \
  	done
  

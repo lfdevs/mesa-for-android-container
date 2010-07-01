@@ -30,7 +30,7 @@
  *   Kristian Høgsberg (krh@redhat.com)
  */
 
-#ifdef GLX_DIRECT_RENDERING
+#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
 
 #include <X11/Xlib.h>
 #include <X11/extensions/Xfixes.h>
@@ -175,6 +175,8 @@ dri2CreateDrawable(__GLXscreenConfigs * psc,
 {
    __GLXDRIdrawablePrivate *pdraw;
    __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) modes;
+   __GLXdisplayPrivate *dpyPriv;
+   __GLXDRIdisplayPrivate *pdp;
 
    pdraw = Xmalloc(sizeof(*pdraw));
    if (!pdraw)
@@ -185,10 +187,13 @@ dri2CreateDrawable(__GLXscreenConfigs * psc,
    pdraw->base.drawable = drawable;
    pdraw->base.psc = psc;
    pdraw->bufferCount = 0;
-   pdraw->swap_interval = 0;
+   pdraw->swap_interval = 1;
+   pdraw->have_back = 0;
 
    DRI2CreateDrawable(psc->dpy, xDrawable);
 
+   dpyPriv = __glXInitialize(psc->dpy);
+   pdp = (__GLXDRIdisplayPrivate *)dpyPriv->dri2Display;;
    /* Create a new drawable */
    pdraw->base.driDrawable =
       (*psc->dri2->createNewDrawable) (psc->__driScreen,
@@ -199,6 +204,15 @@ dri2CreateDrawable(__GLXscreenConfigs * psc,
       Xfree(pdraw);
       return NULL;
    }
+
+#ifdef X_DRI2SwapInterval
+   /*
+    * Make sure server has the same swap interval we do for the new
+    * drawable.
+    */
+   if (pdp->swapAvailable)
+      DRI2SwapInterval(psc->dpy, xDrawable, pdraw->swap_interval);
+#endif
 
    return &pdraw->base;
 }

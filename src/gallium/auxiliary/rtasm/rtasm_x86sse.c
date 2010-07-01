@@ -1757,6 +1757,8 @@ void (*x86_get_func( struct x86_function *p ))(void)
 
 #else
 
+void x86sse_dummy( void );
+
 void x86sse_dummy( void )
 {
 }

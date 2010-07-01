@@ -159,10 +159,10 @@ intelGetString(GLcontext * ctx, GLenum name)
          chipset = "Intel(R) B43";
          break;
       case PCI_CHIP_ILD_G:
-         chipset = "Intel(R) IGDNG_D";
+         chipset = "Intel(R) Ironlake Desktop";
          break;
       case PCI_CHIP_ILM_G:
-         chipset = "Intel(R) IGDNG_M";
+         chipset = "Intel(R) Ironlake Mobile";
          break;
       default:
          chipset = "Unknown Intel Chipset";
@@ -362,7 +362,7 @@ intel_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
        if (buffers[i].attachment == __DRI_BUFFER_DEPTH)
 	  depth_region = region;
 
-       intel_renderbuffer_set_region(rb, region);
+       intel_renderbuffer_set_region(intel, rb, region);
        intel_region_release(&region);
 
        if (buffers[i].attachment == __DRI_BUFFER_DEPTH_STENCIL) {
@@ -374,7 +374,7 @@ intel_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
 		   continue;
 
 	     intel_region_reference(&stencil_region, region);
-	     intel_renderbuffer_set_region(rb, stencil_region);
+	     intel_renderbuffer_set_region(intel, rb, stencil_region);
 	     intel_region_release(&stencil_region);
 	  }
        }
@@ -610,12 +610,21 @@ intelInitContext(struct intel_context *intel,
    intel->driContext = driContextPriv;
    intel->driFd = sPriv->fd;
 
+   intel->has_xrgb_textures = GL_TRUE;
    if (IS_GEN6(intel->intelScreen->deviceID)) {
       intel->gen = 6;
       intel->needs_ff_sync = GL_TRUE;
       intel->has_luminance_srgb = GL_TRUE;
+   } else if (IS_GEN5(intel->intelScreen->deviceID)) {
+      intel->gen = 5;
+      intel->needs_ff_sync = GL_TRUE;
+      intel->has_luminance_srgb = GL_TRUE;
    } else if (IS_965(intel->intelScreen->deviceID)) {
       intel->gen = 4;
+      if (IS_G4X(intel->intelScreen->deviceID)) {
+	  intel->has_luminance_srgb = GL_TRUE;
+	  intel->is_g4x = GL_TRUE;
+      }
    } else if (IS_9XX(intel->intelScreen->deviceID)) {
       intel->gen = 3;
       if (IS_945(intel->intelScreen->deviceID)) {
@@ -623,15 +632,10 @@ intelInitContext(struct intel_context *intel,
       }
    } else {
       intel->gen = 2;
-   }
-
-   if (IS_IGDNG(intel->intelScreen->deviceID)) {
-      intel->is_ironlake = GL_TRUE;
-      intel->needs_ff_sync = GL_TRUE;
-      intel->has_luminance_srgb = GL_TRUE;
-   } else if (IS_G4X(intel->intelScreen->deviceID)) {
-      intel->has_luminance_srgb = GL_TRUE;
-      intel->is_g4x = GL_TRUE;
+      if (intel->intelScreen->deviceID == PCI_CHIP_I830_M ||
+	  intel->intelScreen->deviceID == PCI_CHIP_845_G) {
+	 intel->has_xrgb_textures = GL_FALSE;
+      }
    }
 
    driParseConfigFiles(&intel->optionCache, &intelScreen->optionCache,

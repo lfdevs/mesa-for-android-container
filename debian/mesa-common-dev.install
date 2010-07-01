@@ -1,8 +1,8 @@
-usr/include/GL/gl.h
-usr/include/GL/glext.h
-usr/include/GL/gl_mangle.h
-usr/include/GL/glx.h
-usr/include/GL/glxext.h
-usr/include/GL/glx_mangle.h
-usr/include/GL/internal/dri_interface.h
-usr/lib/glx/pkgconfig/dri.pc usr/lib/pkgconfig/
+dri/usr/include/GL/gl.h usr/include/GL
+dri/usr/include/GL/glext.h usr/include/GL
+dri/usr/include/GL/gl_mangle.h usr/include/GL
+dri/usr/include/GL/glx.h usr/include/GL
+dri/usr/include/GL/glxext.h usr/include/GL
+dri/usr/include/GL/glx_mangle.h usr/include/GL
+dri/usr/include/GL/internal/dri_interface.h usr/include/GL/internal
+dri/usr/lib/pkgconfig/dri.pc usr/lib/pkgconfig/

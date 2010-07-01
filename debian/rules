@@ -56,11 +56,7 @@ confflags-common = \
 	CFLAGS="$(CFLAGS)"
 
 DRI_DRIVERS = swrast
-GALLIUM_DRIVERS = --enable-gallium-swrast
-# Mesa 7.8 doesn't build a gallium swrast DRI driver
-# This is built in git, and will be built in 7.9
-HAVE_GALLIUM_DRI_DRIVERS = no
-HAVE_KMS = no
+GALLIUM_DRIVERS = swrast
 EGL_DISPLAYS = x11
 
 # hurd doesn't do direct rendering
@@ -71,24 +67,23 @@ else
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 # Gallium drivers require libdrm-{nouveau,radeon}, only available on Linux
-	GALLIUM_DRIVERS += --enable-gallium-nouveau --enable-gallium-radeon
-	HAVE_GALLIUM_DRI_DRIVERS = yes
+	GALLIUM_DRIVERS += nouveau radeon
 # Although the KMS egl drivers will probably build on kfreebsd & hurd
 # only linux actually has KMS drivers implemented at this point.
-	HAVE_KMS = yes
+	EGL_DISPLAYS += kms
   endif
 
   ifeq ($(DEB_HOST_ARCH), lpia)
 	DRI_DRIVERS += i915 i965
-	GALLIUM_DRIVERS += --enable-gallium-intel
+	GALLIUM_DRIVERS += intel
   else ifneq ($(DEB_HOST_ARCH), s390)
 	DRI_DRIVERS += mach64 mga r128 r200 r300 r600 radeon savage tdfx
     ifeq ($(DEB_HOST_ARCH_CPU), i386)
 	DRI_DRIVERS += i810 i915 i965 sis unichrome
-	GALLIUM_DRIVERS += --enable-gallium-intel
+	GALLIUM_DRIVERS += intel
     else ifeq ($(DEB_HOST_ARCH_CPU), amd64)
 	DRI_DRIVERS += i915 i965 sis unichrome
-	GALLIUM_DRIVERS += --enable-gallium-intel
+	GALLIUM_DRIVERS += intel
     endif
   endif
 endif
@@ -101,11 +96,10 @@ confflags-dri = \
 	--with-driver=dri \
 	--with-dri-drivers="$(DRI_DRIVERS)" \
 	--with-demos=xdemos \
-	--libdir=/usr/lib/glx \
 	--with-dri-driverdir=/usr/lib/dri \
 	--with-egl-displays="$(EGL_DISPLAYS)" \
 	--enable-glx-tls \
-	$(GALLIUM_DRIVERS) \
+	$(addprefix --enable-gallium-,$(GALLIUM_DRIVERS)) \
 	--with-state-trackers=egl,es,glx,dri,vega \
 	$(DIRECT_RENDERING) \
 	$(confflags-common)
@@ -208,7 +202,25 @@ $(STAMP_DIR)/stamp:
 
 $(QUILT_STAMPFN): $(STAMP_DIR)/stamp
 
-build: $(BUILD_STAMPS)
+build: build-stamp
+
+build-stamp: $(BUILD_STAMPS)
+ifeq ($(findstring radeon, $(GALLIUM_DRIVERS)), radeon)
+	# Radeon searches for r{200,300,600}_dri only, but the gallium driver
+	# is (at the moment) radeong_dri.  Rename it to r300_dri, as it
+	# fails to support r600.
+	# We don't actually install radeong yet, although it will probably
+	# replace r300 classic soon.
+	mv build/dri/lib/gallium/radeong_dri.so \
+		build/dri/lib/gallium/r300_dri.so
+endif
+ifeq ($(findstring intel, $(GALLIUM_DRIVERS)), intel)
+	# Intel i965 Gallium appears to do nothing more than generate GPU 
+	# lockups.  Kill it with fire.  i915 is apparently useful.
+	rm build/dri/lib/gallium/i965_dri.so
+	rm build/dri/lib/egl_*_i965.so
+endif
+	>$@
 
 $(STAMP)-build-%: configure
 	dh_testdir
@@ -221,8 +233,7 @@ $(STAMP)-build-%: configure
 	             --infodir=\$${prefix}/share/info --sysconfdir=/etc \
 	             --localstatedir=/var $(confflags) $(confflags-$*)
 	cd $(DEB_BUILD_DIR)/$* && $(MAKE)
-
-	touch $@
+	>$@
 
 install: build
 	# Add here commands to install the package into debian/tmp
@@ -230,9 +241,10 @@ install: build
 	dh_testroot
 	dh_prep
 	dh_installdirs
-	set -e; for config in $(CONFIGS); do \
+	set -e; for config in $(filter-out dri, $(CONFIGS)); do \
 		$(MAKE) -C $(DEB_BUILD_DIR)/$$config DESTDIR=$(CURDIR)/debian/tmp install; \
 	done
+	$(MAKE) -C $(DEB_BUILD_DIR)/dri DESTDIR=$(CURDIR)/debian/tmp/dri install
 
 clean: unpatch
 	dh_testdir
@@ -254,27 +266,20 @@ clean: unpatch
 # Build architecture-independent files here.
 binary-indep: install
 
+
 # Build architecture-dependent files here.
 binary-arch: install
 	dh_testdir
 	dh_testroot
-	dh_installchangelogs -s -XChangeLog
-	dh_installchangelogs -pmesa-common-dev ChangeLog
+	dh_installchangelogs -s
+	dh_installchangelogs -pmesa-common-dev
 	dh_installdocs -s
 	dh_installexamples -s
+
 	# Classic DRI and Gallium DRI are mixed up together here
 	# Remove the whole tree to avoid false-positives in --list-missing, and
 	# install the right files manually.
-	rm -r debian/tmp/usr/lib/dri
-	# Radeon searches for r{200,300,600}_dri only, but the gallium driver
-	# is (at the moment) radeong_dri.  Rename it to r300_dri, as it
-	# fails to support r600.
-	mv build/dri/glx/gallium/radeong_dri.so \
-		build/dri/glx/gallium/r300_dri.so
-	# Intel i965 Gallium appears to do nothing more than generate GPU 
-	# lockups.  Kill it with fire.  i915 is apparently useful.
-	-rm build/dri/glx/gallium/i965_dri.so
-	-rm debian/tmp/usr/lib/glx/egl/egl_*_i965.so
+	rm -r debian/tmp/dri/usr/lib/dri
 
 	dh_install -s --list-missing
 	dh_installman -s
@@ -283,7 +288,9 @@ binary-arch: install
 	dh_strip -plibgl1-mesa-swx11 --dbg-package=libgl1-mesa-swx11-dbg
 	dh_strip -plibgl1-mesa-glx --dbg-package=libgl1-mesa-glx-dbg
 	dh_strip -plibgl1-mesa-dri --dbg-package=libgl1-mesa-dri-dbg
-ifeq ($(HAVE_GALLIUM_DRI_DRIVERS), yes)
+# Mesa 7.8 doesn't build a gallium swrast DRI driver
+# This is built in git, and will be built in 7.9
+ifneq ($(filter-out swrast, $(GALLIUM_DRIVERS)), )
 	dh_strip -plibgl1-mesa-dri-experimental --dbg-package=libgl1-mesa-dri-experimental-dbg
 endif
 	dh_strip -plibopenvg1-mesa --dbg-package=libopenvg1-mesa-dbg
@@ -291,7 +298,7 @@ endif
 	dh_strip -plibgles1-mesa --dbg-package=libgles1-mesa-dbg
 	dh_strip -plibgles2-mesa --dbg-package=libgles2-mesa-dbg	
 	dh_strip -plibegl1-mesa-drivers-x11 --dbg-package=libegl1-mesa-drivers-x11-dbg
-ifeq ($(HAVE_KMS), yes)
+ifeq ($(findstring kms, $(EGL_DISPLAYS)), kms)
 	dh_strip -plibegl1-mesa-drivers-kms --dbg-package=libegl1-mesa-drivers-kms-dbg
 endif
 	dh_strip -s --remaining-packages

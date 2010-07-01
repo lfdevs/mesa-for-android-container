@@ -706,7 +706,8 @@ dri2_initialize(_EGLDriver *drv, _EGLDisplay *disp,
    dri2_dpy->fd = open(dri2_dpy->device_name, O_RDWR);
    if (dri2_dpy->fd == -1) {
       _eglLog(_EGL_FATAL,
-	      "DRI2: could not open %s (%s)", path, strerror(errno));
+	      "DRI2: could not open %s (%s)", dri2_dpy->device_name,
+              strerror(errno));
       goto cleanup_driver;
    }
 
@@ -1330,6 +1331,7 @@ _eglMain(const char *args)
    if (!dri2_drv)
       return NULL;
 
+   memset(dri2_drv, 0, sizeof *dri2_drv);
    _eglInitDriverFallbacks(&dri2_drv->base);
    dri2_drv->base.API.Initialize = dri2_initialize;
    dri2_drv->base.API.Terminate = dri2_terminate;

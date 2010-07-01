@@ -1,1 +1,1 @@
-usr/lib/glx/egl/egl_x11_*.so
+dri/usr/lib/egl/egl_x11_*.so usr/lib/egl

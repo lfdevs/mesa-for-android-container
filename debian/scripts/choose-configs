@@ -23,23 +23,11 @@
 
 SWX11_GLU_CONFIGS := swx11+glu swx11+glu-static
 
-# and for the GLX/DRI-enabled libGL
-ifneq ($(wildcard configs/debian-indirect-$(DEB_BUILD_ARCH)),)
-	DRI_CONFIGS := debian-indirect-$(DEB_BUILD_ARCH)
-else
-  ifneq ($(wildcard configs/debian-dri-$(DEB_BUILD_ARCH)),)
-	DRI_CONFIGS := debian-dri-$(DEB_BUILD_ARCH)
-  else
-	DRI_CONFIGS := debian-dri-any
-  endif
-endif
-
 ##############################################################################
 ## CPU-optimized configurations ##############################################
 
-ifneq (,$(filter $(DEB_BUILD_ARCH), i386 kfreebsd-i386 hurd-i386)) 
+ifneq (,$(filter $(DEB_HOST_ARCH), i386 kfreebsd-i386 hurd-i386)) 
 	SWX11_GLU_CONFIGS += swx11+glu-i386-i686
-#	DRI_CONFIGS += debian-dri-i386-i686
 endif
 
 #ifeq ($(DEB_BUILD_ARCH), alpha)

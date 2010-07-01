@@ -1,3 +1,3 @@
-usr/glx/libOpenVG.so usr/lib
-usr/include/VG
+dri/usr/lib/libOpenVG.so usr/lib
+dri/usr/include/VG usr/include
 debian/vg.pc usr/lib/pkgconfig

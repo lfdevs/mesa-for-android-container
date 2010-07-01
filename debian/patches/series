@@ -3,3 +3,4 @@
 04_osmesa_version.diff
 05_hurd-ftbfs.diff
 06_kfreebsd-ftbfs.diff
+07-nouveau-update.diff

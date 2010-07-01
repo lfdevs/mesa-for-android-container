@@ -5,9 +5,11 @@ Subject: Fix build on GNU/Hurd
  configure.ac |   27 +++++++++++++++------------
  1 file changed, 15 insertions(+), 12 deletions(-)
 
---- a/configure.ac
-+++ b/configure.ac
-@@ -578,6 +578,13 @@ else
+Index: mesa/configure.ac
+===================================================================
+--- mesa.orig/configure.ac
++++ mesa/configure.ac
+@@ -584,6 +584,13 @@
      enable_xcb=no
  fi
  
@@ -21,7 +23,7 @@ Subject: Fix build on GNU/Hurd
  dnl
  dnl libGL configuration per driver
  dnl
-@@ -611,12 +618,14 @@ dri)
+@@ -617,12 +624,14 @@
          AC_MSG_ERROR([Can't use static libraries for DRI drivers])
      fi
  
@@ -42,7 +44,7 @@ Subject: Fix build on GNU/Hurd
  
      # find the DRI deps for libGL
      if test "$x11_pkgconfig" = yes; then
-@@ -690,12 +699,6 @@ AC_ARG_WITH([dri-searchpath],
+@@ -696,12 +705,6 @@
      [DRI_DRIVER_SEARCH_DIR="$withval"],
      [DRI_DRIVER_SEARCH_DIR='${DRI_DRIVER_INSTALL_DIR}'])
  AC_SUBST([DRI_DRIVER_SEARCH_DIR])

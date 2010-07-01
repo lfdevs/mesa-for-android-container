@@ -1,4 +1,4 @@
-usr/bin/glxdemo
-usr/bin/glxgears
-usr/bin/glxheads
-usr/bin/glxinfo
+dri/usr/bin/glxdemo usr/bin
+dri/usr/bin/glxgears usr/bin
+dri/usr/bin/glxheads usr/bin
+dri/usr/bin/glxinfo usr/bin

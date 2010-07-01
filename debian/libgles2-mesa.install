@@ -1,1 +1,1 @@
-usr/glx/libGLESv2.so.2* usr/lib
+dri/usr/lib/libGLESv2.so.2* usr/lib

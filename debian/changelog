@@ -1,3 +1,38 @@
+mesa (7.8.2-1) experimental; urgency=low
+
+  [ Robert Hooker ]
+  * Adjust the build system to install the dri target in a seperate
+    DESTDIR, no longer passing --libdir=/usr/lib/glx at configure time
+    messing with the .pc's since it is used for a majority of the 
+    packages now.
+  * Fix up the mesa-common-dev header install location.
+
+  [ Julien Cristau ]
+  * Add ${misc:Depends} to all packages.
+  * libc6-dev is build-essential, no need to depend on it.
+  * Replace nonsensical dependency of libglw1-mesa-dev on libxext6 with a
+    dependency on libxt-dev and lesstif2-dev.
+  * Add new lintian overrides for the package-name-doesnt-match-sonames stuff.
+  * Don't ship progs/objviewer in the tarball, it's insanely big and unused.
+  * New upstream release.
+  * Refresh patches.
+  * Stop shipping an upstream git log, it's unlikely to be useful to anyone,
+    and it's big.
+  * debian/scripts/choose-configs: use DEB_HOST_ARCH, not DEB_BUILD_ARCH
+    (closes: #451648).
+  * Rename radeong_dri.so to r300_dri.so in build, not binary.
+
+  [ Christopher James Halse Rogers ]
+  * debian/patches/07-nouveau-update.diff:
+    - Pull in nouveau_class.h header no longer shipped by libdrm 2.4.21 and 
+      update nouveau build to use it.  Fixes FTBFS against libdrm 2.4.21.
+  * debian/rules:
+    - Simplify selecting which gallium drivers are built.  Use this to only
+      act on gallium packages on archs where we're actually building them.
+      Part of the fix for FTBFS on Hurd and kFreeBSD.
+
+ -- Julien Cristau <jcristau@debian.org>  Thu, 01 Jul 2010 12:50:18 +0200
+
 mesa (7.8.1-2) experimental; urgency=low
 
   [ Tormod Volden ]

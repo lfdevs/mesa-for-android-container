@@ -4,7 +4,7 @@ TOP = ../..
 include $(TOP)/configs/current
 
 
-INCLUDE_DIRS = -I$(TOP)/include
+INCLUDE_DIRS = -I$(TOP)/include $(X11_CFLAGS)
 
 HEADERS = $(TOP)/include/GLES/egl.h
 LIB_DEP = $(TOP)/$(LIB_DIR)/libEGL.so
@@ -57,13 +57,13 @@ peglgears: peglgears.o $(HEADERS) $(LIB_DEP)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LIBS) $(LIBDRM_LIB) -lm
 
 xeglgears: xeglgears.o $(HEADERS) $(LIB_DEP)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LIBS) -lm -L$(libdir) -lX11
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LIBS) -lm $(X11_LIBS)
 
 xeglthreads: xeglthreads.o $(HEADERS) $(LIB_DEP)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LIBS) -lm -L$(libdir) -lX11
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LIBS) -lm $(X11_LIBS)
 
 xegl_tri: xegl_tri.o $(HEADERS) $(LIB_DEP)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LIBS) -lm -L$(libdir) -lX11
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LIBS) -lm $(X11_LIBS)
 
 clean:
 	-rm -f *.o *~
