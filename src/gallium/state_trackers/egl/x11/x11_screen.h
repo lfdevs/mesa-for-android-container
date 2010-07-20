@@ -68,19 +68,17 @@ void
 x11_screen_convert_visual(struct x11_screen *xscr, const XVisualInfo *visual,
                           __GLcontextModes *mode);
 
+uint
+x11_drawable_get_depth(struct x11_screen *xscr, Drawable drawable);
+
+#ifdef GLX_DIRECT_RENDERING
+
+/* GLX */
 const __GLcontextModes *
 x11_screen_get_glx_configs(struct x11_screen *xscr);
 
 const __GLcontextModes *
 x11_screen_get_glx_visuals(struct x11_screen *xscr);
-
-const char *
-x11_screen_probe_dri2(struct x11_screen *xscr, int *major, int *minor);
-
-int
-x11_screen_enable_dri2(struct x11_screen *xscr,
-                       x11_drawable_invalidate_buffers invalidate_buffers,
-                       void *user_data);
 
 __GLcontextModes *
 x11_context_modes_create(unsigned count);
@@ -90,6 +88,15 @@ x11_context_modes_destroy(__GLcontextModes *modes);
 
 unsigned
 x11_context_modes_count(const __GLcontextModes *modes);
+
+/* DRI2 */
+const char *
+x11_screen_probe_dri2(struct x11_screen *xscr, int *major, int *minor);
+
+int
+x11_screen_enable_dri2(struct x11_screen *xscr,
+                       x11_drawable_invalidate_buffers invalidate_buffers,
+                       void *user_data);
 
 void
 x11_drawable_enable_dri2(struct x11_screen *xscr,
@@ -105,7 +112,6 @@ x11_drawable_get_buffers(struct x11_screen *xscr, Drawable drawable,
                          int *width, int *height, unsigned int *attachments,
                          boolean with_format, int num_ins, int *num_outs);
 
-uint
-x11_drawable_get_depth(struct x11_screen *xscr, Drawable drawable);
+#endif /* GLX_DIRECT_RENDERING */
 
 #endif /* _X11_SCREEN_H_ */

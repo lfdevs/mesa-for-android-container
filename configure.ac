@@ -398,6 +398,7 @@ dnl Check to see if dlopen is in default libraries (like Solaris, which
 dnl has it in libc), or if libdl is needed to get it.
 AC_CHECK_FUNC([dlopen], [],
     [AC_CHECK_LIB([dl], [dlopen], [DLOPEN_LIBS="-ldl"])])
+AC_SUBST([DLOPEN_LIBS])
 
 dnl See if posix_memalign is available
 AC_CHECK_FUNC([posix_memalign], [DEFINES="$DEFINES -DHAVE_POSIX_MEMALIGN"])
@@ -699,7 +700,7 @@ AC_SUBST([DRI_DRIVER_SEARCH_DIR])
 dnl Direct rendering or just indirect rendering
 AC_ARG_ENABLE([driglx-direct],
     [AS_HELP_STRING([--disable-driglx-direct],
-        [enable direct rendering in GLX for DRI @<:@default=enabled@:>@])],
+        [enable direct rendering in GLX and EGL for DRI @<:@default=enabled@:>@])],
     [driglx_direct="$enableval"],
     [driglx_direct="yes"])
 dnl Which drivers to build - default is chosen by platform
@@ -1102,10 +1103,6 @@ fi
 
 if test "x$enable_glut" = xyes; then
     SRC_DIRS="$SRC_DIRS glut/glx"
-    GLUT_CFLAGS=""
-    if test "x$GCC" = xyes; then
-        GLUT_CFLAGS="-fexceptions"
-    fi
     if test "$x11_pkgconfig" = yes; then
         PKG_CHECK_MODULES([GLUT],[x11 xmu xi])
         GLUT_PC_REQ_PRIV="x11 xmu xi"
@@ -1115,6 +1112,9 @@ if test "x$enable_glut" = xyes; then
         GLUT_LIB_DEPS="$X_LIBS -lX11 -lXmu -lXi"
         GLUT_PC_LIB_PRIV="$GLUT_LIB_DEPS"
         GLUT_PC_CFLAGS="$X11_INCLUDES"
+    fi
+    if test "x$GCC" = xyes; then
+        GLUT_CFLAGS="$GLUT_CFLAGS -fexceptions"
     fi
     GLUT_LIB_DEPS="$GLUT_LIB_DEPS -lm"
     GLUT_PC_LIB_PRIV="$GLUT_PC_LIB_PRIV -lm"
@@ -1216,6 +1216,10 @@ yes)
         egl)
             if test "x$enable_egl" != xyes; then
                 AC_MSG_ERROR([cannot build egl state tracker without EGL library])
+            fi
+            # define GLX_DIRECT_RENDERING even when the driver is not dri
+            if test "x$mesa_driver" != xdri -a "x$driglx_direct" = xyes; then
+                DEFINES="$DEFINES -DGLX_DIRECT_RENDERING"
             fi
             ;;
         xorg)

@@ -9,21 +9,21 @@ Index: mesa/configure.ac
 ===================================================================
 --- mesa.orig/configure.ac
 +++ mesa/configure.ac
-@@ -584,6 +584,13 @@
+@@ -585,6 +585,13 @@
      enable_xcb=no
  fi
  
 +dnl Direct rendering or just indirect rendering
 +AC_ARG_ENABLE([driglx-direct],
 +    [AS_HELP_STRING([--disable-driglx-direct],
-+        [enable direct rendering in GLX for DRI @<:@default=enabled@:>@])],
++        [enable direct rendering in GLX and EGL for DRI @<:@default=enabled@:>@])],
 +    [driglx_direct="$enableval"],
 +    [driglx_direct="yes"])
 +
  dnl
  dnl libGL configuration per driver
  dnl
-@@ -617,12 +624,14 @@
+@@ -618,12 +625,14 @@
          AC_MSG_ERROR([Can't use static libraries for DRI drivers])
      fi
  
@@ -44,14 +44,14 @@ Index: mesa/configure.ac
  
      # find the DRI deps for libGL
      if test "$x11_pkgconfig" = yes; then
-@@ -696,12 +705,6 @@
+@@ -697,12 +706,6 @@
      [DRI_DRIVER_SEARCH_DIR="$withval"],
      [DRI_DRIVER_SEARCH_DIR='${DRI_DRIVER_INSTALL_DIR}'])
  AC_SUBST([DRI_DRIVER_SEARCH_DIR])
 -dnl Direct rendering or just indirect rendering
 -AC_ARG_ENABLE([driglx-direct],
 -    [AS_HELP_STRING([--disable-driglx-direct],
--        [enable direct rendering in GLX for DRI @<:@default=enabled@:>@])],
+-        [enable direct rendering in GLX and EGL for DRI @<:@default=enabled@:>@])],
 -    [driglx_direct="$enableval"],
 -    [driglx_direct="yes"])
  dnl Which drivers to build - default is chosen by platform

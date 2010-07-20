@@ -1,7 +1,19 @@
+mesa (7.8.2-2) experimental; urgency=low
+
+  * Add missing dependencies to libegl1-mesa-dev, thanks to Alexandros
+    Frantzis (LP: #600243).
+  * gallium: handle kfreebsd like freebsd, fixing FTBFS (closes: #585618)
+  * intel: Fix invalidate before initialisation (stolen from fdo bugzilla
+    #29091, fixes server 1.9rc crash when starting an app using GLX 1.3)
+  * Pull from 7.8-branch up to commit d06e011.
+  * Fixup hurd and kfreebsd patches to apply.
+
+ -- Julien Cristau <jcristau@debian.org>  Tue, 20 Jul 2010 15:57:31 +0200
+
 mesa (7.8.2-1) experimental; urgency=low
 
   [ Robert Hooker ]
-  * Adjust the build system to install the dri target in a seperate
+  * Adjust the build system to install the dri target in a separate
     DESTDIR, no longer passing --libdir=/usr/lib/glx at configure time
     messing with the .pc's since it is used for a majority of the 
     packages now.

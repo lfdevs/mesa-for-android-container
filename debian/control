@@ -151,6 +151,14 @@ Section: libdevel
 Architecture: any
 Depends:
  libegl1-mesa (= ${binary:Version}),
+ libdrm-dev (>= 2.4.19) [!hurd-i386],
+ x11proto-dri2-dev (>= 2.1),
+ x11proto-gl-dev (>= 1.4.11),
+ libx11-dev,
+ libxext-dev,
+ libxxf86vm-dev,
+ libxdamage-dev,
+ libxfixes-dev,
  ${misc:Depends},
 Description: A free implementation of the EGL API -- development files
  This package contains the development environment required for compiling 
