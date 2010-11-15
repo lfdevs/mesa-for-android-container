@@ -14,12 +14,13 @@
  * The above copyright notice and this permission notice shall be included
  * in all copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
  */
 
 #include "util/u_memory.h"
@@ -31,7 +32,7 @@
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
-#include "state_tracker/drm_api.h"
+#include "state_tracker/drm_driver.h"
 #include "egllog.h"
 
 #include "native_x11.h"
@@ -42,7 +43,6 @@
 enum dri2_surface_type {
    DRI2_SURFACE_TYPE_WINDOW,
    DRI2_SURFACE_TYPE_PIXMAP,
-   DRI2_SURFACE_TYPE_PBUFFER
 };
 
 struct dri2_display {
@@ -52,7 +52,6 @@ struct dri2_display {
 
    struct native_event_handler *event_handler;
 
-   struct drm_api *api;
    struct x11_screen *xscr;
    int xscr_number;
    const char *dri_driver;
@@ -74,7 +73,7 @@ struct dri2_surface {
    unsigned int server_stamp;
    unsigned int client_stamp;
    int width, height;
-   struct pipe_texture *textures[NUM_NATIVE_ATTACHMENTS];
+   struct pipe_resource *textures[NUM_NATIVE_ATTACHMENTS];
    uint valid_mask;
 
    boolean have_back, have_fake;
@@ -115,13 +114,14 @@ dri2_surface_process_drawable_buffers(struct native_surface *nsurf,
 {
    struct dri2_surface *dri2surf = dri2_surface(nsurf);
    struct dri2_display *dri2dpy = dri2surf->dri2dpy;
-   struct pipe_texture templ;
+   struct pipe_resource templ;
+   struct winsys_handle whandle;
    uint valid_mask;
    int i;
 
    /* free the old textures */
    for (i = 0; i < NUM_NATIVE_ATTACHMENTS; i++)
-      pipe_texture_reference(&dri2surf->textures[i], NULL);
+      pipe_resource_reference(&dri2surf->textures[i], NULL);
    dri2surf->valid_mask = 0x0;
 
    dri2surf->have_back = FALSE;
@@ -137,7 +137,7 @@ dri2_surface_process_drawable_buffers(struct native_surface *nsurf,
    templ.height0 = dri2surf->height;
    templ.depth0 = 1;
    templ.format = dri2surf->color_format;
-   templ.tex_usage = PIPE_TEXTURE_USAGE_RENDER_TARGET;
+   templ.bind = PIPE_BIND_RENDER_TARGET;
 
    valid_mask = 0x0;
    for (i = 0; i < num_xbufs; i++) {
@@ -173,9 +173,11 @@ dri2_surface_process_drawable_buffers(struct native_surface *nsurf,
          continue;
       }
 
-      dri2surf->textures[natt] =
-         dri2dpy->api->texture_from_shared_handle(dri2dpy->api,
-               dri2dpy->base.screen, &templ, desc, xbuf->pitch, xbuf->name);
+      memset(&whandle, 0, sizeof(whandle));
+      whandle.stride = xbuf->pitch;
+      whandle.handle = xbuf->name;
+      dri2surf->textures[natt] = dri2dpy->base.screen->resource_from_handle(
+         dri2dpy->base.screen, &templ, &whandle);
       if (dri2surf->textures[natt])
          valid_mask |= 1 << natt;
    }
@@ -191,9 +193,19 @@ dri2_surface_get_buffers(struct native_surface *nsurf, uint buffer_mask)
 {
    struct dri2_surface *dri2surf = dri2_surface(nsurf);
    struct dri2_display *dri2dpy = dri2surf->dri2dpy;
-   unsigned int dri2atts[NUM_NATIVE_ATTACHMENTS];
+   unsigned int dri2atts[NUM_NATIVE_ATTACHMENTS * 2];
    int num_ins, num_outs, att;
    struct x11_drawable_buffer *xbufs;
+   uint bpp = util_format_get_blocksizebits(dri2surf->color_format);
+   boolean with_format = FALSE; /* never ask for depth/stencil */
+
+   /* We must get the front on servers which doesn't support with format
+    * due to a silly bug in core dri2. You can't copy to/from a buffer
+    * that you haven't requested and you recive BadValue errors */
+   if (dri2surf->dri2dpy->dri_minor < 1) {
+      with_format = FALSE;
+      buffer_mask |= (1 << NATIVE_ATTACHMENT_FRONT_LEFT);
+   }
 
    /* prepare the attachments */
    num_ins = 0;
@@ -220,19 +232,22 @@ dri2_surface_get_buffers(struct native_surface *nsurf, uint buffer_mask)
             break;
          }
 
-         dri2atts[num_ins] = dri2att;
-         num_ins++;
+         dri2atts[num_ins++] = dri2att;
+         if (with_format)
+            dri2atts[num_ins++] = bpp;
       }
    }
+   if (with_format)
+      num_ins /= 2;
 
    xbufs = x11_drawable_get_buffers(dri2dpy->xscr, dri2surf->drawable,
                                     &dri2surf->width, &dri2surf->height,
-                                    dri2atts, FALSE, num_ins, &num_outs);
+                                    dri2atts, with_format, num_ins, &num_outs);
 
    /* we should be able to do better... */
    if (xbufs && dri2surf->last_num_xbufs == num_outs &&
        memcmp(dri2surf->last_xbufs, xbufs, sizeof(*xbufs) * num_outs) == 0) {
-      free(xbufs);
+      FREE(xbufs);
       dri2surf->client_stamp = dri2surf->server_stamp;
       return;
    }
@@ -243,7 +258,7 @@ dri2_surface_get_buffers(struct native_surface *nsurf, uint buffer_mask)
    dri2surf->client_stamp = dri2surf->server_stamp;
 
    if (dri2surf->last_xbufs)
-      free(dri2surf->last_xbufs);
+      FREE(dri2surf->last_xbufs);
    dri2surf->last_xbufs = xbufs;
    dri2surf->last_num_xbufs = num_outs;
 }
@@ -256,47 +271,8 @@ static boolean
 dri2_surface_update_buffers(struct native_surface *nsurf, uint buffer_mask)
 {
    struct dri2_surface *dri2surf = dri2_surface(nsurf);
-   struct dri2_display *dri2dpy = dri2surf->dri2dpy;
 
-   /* create textures for pbuffer */
-   if (dri2surf->type == DRI2_SURFACE_TYPE_PBUFFER) {
-      struct pipe_screen *screen = dri2dpy->base.screen;
-      struct pipe_texture templ;
-      uint new_valid = 0x0;
-      int att;
-
-      buffer_mask &= ~dri2surf->valid_mask;
-      if (!buffer_mask)
-         return TRUE;
-
-      memset(&templ, 0, sizeof(templ));
-      templ.target = PIPE_TEXTURE_2D;
-      templ.last_level = 0;
-      templ.width0 = dri2surf->width;
-      templ.height0 = dri2surf->height;
-      templ.depth0 = 1;
-      templ.format = dri2surf->color_format;
-      templ.tex_usage = PIPE_TEXTURE_USAGE_RENDER_TARGET;
-
-      for (att = 0; att < NUM_NATIVE_ATTACHMENTS; att++) {
-         if (native_attachment_mask_test(buffer_mask, att)) {
-            assert(!dri2surf->textures[att]);
-
-            dri2surf->textures[att] = screen->texture_create(screen, &templ);
-            if (!dri2surf->textures[att])
-               break;
-
-            new_valid |= 1 << att;
-            if (new_valid == buffer_mask)
-               break;
-         }
-      }
-      dri2surf->valid_mask |= new_valid;
-      /* no need to update the stamps */
-   }
-   else {
-      dri2_surface_get_buffers(&dri2surf->base, buffer_mask);
-   }
+   dri2_surface_get_buffers(&dri2surf->base, buffer_mask);
 
    return ((dri2surf->valid_mask & buffer_mask) == buffer_mask);
 }
@@ -316,10 +292,6 @@ dri2_surface_flush_frontbuffer(struct native_surface *nsurf)
 {
    struct dri2_surface *dri2surf = dri2_surface(nsurf);
    struct dri2_display *dri2dpy = dri2surf->dri2dpy;
-
-   /* pbuffer is private */
-   if (dri2surf->type == DRI2_SURFACE_TYPE_PBUFFER)
-      return TRUE;
 
    /* copy to real front buffer */
    if (dri2surf->have_fake)
@@ -342,10 +314,6 @@ dri2_surface_swap_buffers(struct native_surface *nsurf)
 {
    struct dri2_surface *dri2surf = dri2_surface(nsurf);
    struct dri2_display *dri2dpy = dri2surf->dri2dpy;
-
-   /* pbuffer is private */
-   if (dri2surf->type == DRI2_SURFACE_TYPE_PBUFFER)
-      return TRUE;
 
    /* copy to front buffer */
    if (dri2surf->have_back)
@@ -371,7 +339,7 @@ dri2_surface_swap_buffers(struct native_surface *nsurf)
 
 static boolean
 dri2_surface_validate(struct native_surface *nsurf, uint attachment_mask,
-                      unsigned int *seq_num, struct pipe_texture **textures,
+                      unsigned int *seq_num, struct pipe_resource **textures,
                       int *width, int *height)
 {
    struct dri2_surface *dri2surf = dri2_surface(nsurf);
@@ -389,10 +357,10 @@ dri2_surface_validate(struct native_surface *nsurf, uint attachment_mask,
       int att;
       for (att = 0; att < NUM_NATIVE_ATTACHMENTS; att++) {
          if (native_attachment_mask_test(attachment_mask, att)) {
-            struct pipe_texture *ptex = dri2surf->textures[att];
+            struct pipe_resource *ptex = dri2surf->textures[att];
 
             textures[att] = NULL;
-            pipe_texture_reference(&textures[att], ptex);
+            pipe_resource_reference(&textures[att], ptex);
          }
       }
    }
@@ -425,11 +393,11 @@ dri2_surface_destroy(struct native_surface *nsurf)
    int i;
 
    if (dri2surf->last_xbufs)
-      free(dri2surf->last_xbufs);
+      FREE(dri2surf->last_xbufs);
 
    for (i = 0; i < NUM_NATIVE_ATTACHMENTS; i++) {
-      struct pipe_texture *ptex = dri2surf->textures[i];
-      pipe_texture_reference(&ptex, NULL);
+      struct pipe_resource *ptex = dri2surf->textures[i];
+      pipe_resource_reference(&ptex, NULL);
    }
 
    if (dri2surf->drawable) {
@@ -439,7 +407,7 @@ dri2_surface_destroy(struct native_surface *nsurf)
       util_hash_table_remove(dri2surf->dri2dpy->surfaces,
             (void *) dri2surf->drawable);
    }
-   free(dri2surf);
+   FREE(dri2surf);
 }
 
 static struct dri2_surface *
@@ -503,22 +471,6 @@ dri2_display_create_pixmap_surface(struct native_display *ndpy,
    return (dri2surf) ? &dri2surf->base : NULL;
 }
 
-static struct native_surface *
-dri2_display_create_pbuffer_surface(struct native_display *ndpy,
-                                    const struct native_config *nconf,
-                                    uint width, uint height)
-{
-   struct dri2_surface *dri2surf;
-
-   dri2surf = dri2_display_create_surface(ndpy, DRI2_SURFACE_TYPE_PBUFFER,
-         (Drawable) None, nconf);
-   if (dri2surf) {
-      dri2surf->width = width;
-      dri2surf->height = height;
-   }
-   return (dri2surf) ? &dri2surf->base : NULL;
-}
-
 static int
 choose_color_format(const __GLcontextModes *mode, enum pipe_format formats[32])
 {
@@ -545,43 +497,13 @@ choose_color_format(const __GLcontextModes *mode, enum pipe_format formats[32])
    return count;
 }
 
-static int
-choose_depth_stencil_format(const __GLcontextModes *mode,
-                            enum pipe_format formats[32])
-{
-   int count = 0;
-
-   switch (mode->depthBits) {
-   case 32:
-      formats[count++] = PIPE_FORMAT_Z32_UNORM;
-      break;
-   case 24:
-      if (mode->stencilBits) {
-         formats[count++] = PIPE_FORMAT_Z24S8_UNORM;
-         formats[count++] = PIPE_FORMAT_S8Z24_UNORM;
-      }
-      else {
-         formats[count++] = PIPE_FORMAT_Z24X8_UNORM;
-         formats[count++] = PIPE_FORMAT_X8Z24_UNORM;
-      }
-      break;
-   case 16:
-      formats[count++] = PIPE_FORMAT_Z16_UNORM;
-      break;
-   default:
-      break;
-   }
-
-   return count;
-}
-
 static boolean
 is_format_supported(struct pipe_screen *screen,
-                    enum pipe_format fmt, boolean is_color)
+                    enum pipe_format fmt, unsigned sample_count, boolean is_color)
 {
-   return screen->is_format_supported(screen, fmt, PIPE_TEXTURE_2D,
-         (is_color) ? PIPE_TEXTURE_USAGE_RENDER_TARGET :
-         PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0);
+   return screen->is_format_supported(screen, fmt, PIPE_TEXTURE_2D, sample_count,
+         (is_color) ? PIPE_BIND_RENDER_TARGET :
+         PIPE_BIND_DEPTH_STENCIL, 0);
 }
 
 static boolean
@@ -591,6 +513,7 @@ dri2_display_convert_config(struct native_display *ndpy,
 {
    enum pipe_format formats[32];
    int num_formats, i;
+   int sample_count = 0;
 
    if (!(mode->renderType & GLX_RGBA_BIT) || !mode->rgbMode)
       return FALSE;
@@ -599,35 +522,23 @@ dri2_display_convert_config(struct native_display *ndpy,
    if (!mode->doubleBufferMode)
       return FALSE;
 
-   nconf->mode = *mode;
-   nconf->mode.renderType = GLX_RGBA_BIT;
-   nconf->mode.rgbMode = TRUE;
-   /* pbuffer is allocated locally and is always supported */
-   nconf->mode.drawableType |= GLX_PBUFFER_BIT;
-   /* the swap method is always copy */
-   nconf->mode.swapMethod = GLX_SWAP_COPY_OML;
+   /* only interested in native renderable configs */
+   if (!mode->xRenderable || !mode->drawableType)
+      return FALSE;
 
-   /* fix up */
-   nconf->mode.rgbBits =
-      nconf->mode.redBits + nconf->mode.greenBits +
-      nconf->mode.blueBits + nconf->mode.alphaBits;
-   if (!(nconf->mode.drawableType & GLX_WINDOW_BIT)) {
-      nconf->mode.visualID = 0;
-      nconf->mode.visualType = GLX_NONE;
+   nconf->buffer_mask = 1 << NATIVE_ATTACHMENT_FRONT_LEFT;
+   if (mode->doubleBufferMode)
+      nconf->buffer_mask |= 1 << NATIVE_ATTACHMENT_BACK_LEFT;
+   if (mode->stereoMode) {
+      nconf->buffer_mask |= 1 << NATIVE_ATTACHMENT_FRONT_RIGHT;
+      if (mode->doubleBufferMode)
+         nconf->buffer_mask |= 1 << NATIVE_ATTACHMENT_BACK_RIGHT;
    }
-   if (!(nconf->mode.drawableType & GLX_PBUFFER_BIT)) {
-      nconf->mode.bindToTextureRgb = FALSE;
-      nconf->mode.bindToTextureRgba = FALSE;
-   }
-
-   nconf->color_format = PIPE_FORMAT_NONE;
-   nconf->depth_format = PIPE_FORMAT_NONE;
-   nconf->stencil_format = PIPE_FORMAT_NONE;
 
    /* choose color format */
    num_formats = choose_color_format(mode, formats);
    for (i = 0; i < num_formats; i++) {
-      if (is_format_supported(ndpy->screen, formats[i], TRUE)) {
+      if (is_format_supported(ndpy->screen, formats[i], sample_count, TRUE)) {
          nconf->color_format = formats[i];
          break;
       }
@@ -635,18 +546,24 @@ dri2_display_convert_config(struct native_display *ndpy,
    if (nconf->color_format == PIPE_FORMAT_NONE)
       return FALSE;
 
-   /* choose depth/stencil format */
-   num_formats = choose_depth_stencil_format(mode, formats);
-   for (i = 0; i < num_formats; i++) {
-      if (is_format_supported(ndpy->screen, formats[i], FALSE)) {
-         nconf->depth_format = formats[i];
-         nconf->stencil_format = formats[i];
-         break;
-      }
+   if (mode->drawableType & GLX_WINDOW_BIT)
+      nconf->window_bit = TRUE;
+   if (mode->drawableType & GLX_PIXMAP_BIT)
+      nconf->pixmap_bit = TRUE;
+
+   nconf->native_visual_id = mode->visualID;
+   nconf->native_visual_type = mode->visualType;
+   nconf->level = mode->level;
+   nconf->samples = mode->samples;
+
+   nconf->slow_config = (mode->visualRating == GLX_SLOW_CONFIG);
+
+   if (mode->transparentPixel == GLX_TRANSPARENT_RGB) {
+      nconf->transparent_rgb = TRUE;
+      nconf->transparent_rgb_values[0] = mode->transparentRed;
+      nconf->transparent_rgb_values[1] = mode->transparentGreen;
+      nconf->transparent_rgb_values[2] = mode->transparentBlue;
    }
-   if ((nconf->mode.depthBits && nconf->depth_format == PIPE_FORMAT_NONE) ||
-       (nconf->mode.stencilBits && nconf->stencil_format == PIPE_FORMAT_NONE))
-      return FALSE;
 
    return TRUE;
 }
@@ -668,7 +585,7 @@ dri2_display_get_configs(struct native_display *ndpy, int *num_configs)
          return NULL;
       num_modes = x11_context_modes_count(modes);
 
-      dri2dpy->configs = calloc(num_modes, sizeof(*dri2dpy->configs));
+      dri2dpy->configs = CALLOC(num_modes, sizeof(*dri2dpy->configs));
       if (!dri2dpy->configs)
          return NULL;
 
@@ -683,7 +600,7 @@ dri2_display_get_configs(struct native_display *ndpy, int *num_configs)
       dri2dpy->num_configs = count;
    }
 
-   configs = malloc(dri2dpy->num_configs * sizeof(*configs));
+   configs = MALLOC(dri2dpy->num_configs * sizeof(*configs));
    if (configs) {
       for (i = 0; i < dri2dpy->num_configs; i++)
          configs[i] = (const struct native_config *) &dri2dpy->configs[i];
@@ -734,7 +651,7 @@ dri2_display_destroy(struct native_display *ndpy)
    struct dri2_display *dri2dpy = dri2_display(ndpy);
 
    if (dri2dpy->configs)
-      free(dri2dpy->configs);
+      FREE(dri2dpy->configs);
 
    if (dri2dpy->base.screen)
       dri2dpy->base.screen->destroy(dri2dpy->base.screen);
@@ -746,9 +663,7 @@ dri2_display_destroy(struct native_display *ndpy)
       x11_screen_destroy(dri2dpy->xscr);
    if (dri2dpy->own_dpy)
       XCloseDisplay(dri2dpy->dpy);
-   if (dri2dpy->api && dri2dpy->api->destroy)
-      dri2dpy->api->destroy(dri2dpy->api);
-   free(dri2dpy);
+   FREE(dri2dpy);
 }
 
 static void
@@ -779,8 +694,6 @@ static boolean
 dri2_display_init_screen(struct native_display *ndpy)
 {
    struct dri2_display *dri2dpy = dri2_display(ndpy);
-   const char *driver = dri2dpy->api->name;
-   struct drm_create_screen_arg arg;
    int fd;
 
    if (!x11_screen_support(dri2dpy->xscr, X11_SCREEN_EXTENSION_DRI2) ||
@@ -791,21 +704,15 @@ dri2_display_init_screen(struct native_display *ndpy)
 
    dri2dpy->dri_driver = x11_screen_probe_dri2(dri2dpy->xscr,
          &dri2dpy->dri_major, &dri2dpy->dri_minor);
-   if (!dri2dpy->dri_driver || !driver ||
-       strcmp(dri2dpy->dri_driver, driver) != 0) {
-      _eglLog(_EGL_WARNING, "Driver mismatch: %s != %s",
-            dri2dpy->dri_driver, dri2dpy->api->name);
-      return FALSE;
-   }
 
    fd = x11_screen_enable_dri2(dri2dpy->xscr,
          dri2_display_invalidate_buffers, &dri2dpy->base);
    if (fd < 0)
       return FALSE;
 
-   memset(&arg, 0, sizeof(arg));
-   arg.mode = DRM_CREATE_NORMAL;
-   dri2dpy->base.screen = dri2dpy->api->create_screen(dri2dpy->api, fd, &arg);
+   dri2dpy->base.screen =
+      dri2dpy->event_handler->new_drm_screen(&dri2dpy->base,
+            dri2dpy->dri_driver, fd);
    if (!dri2dpy->base.screen) {
       _eglLog(_EGL_WARNING, "failed to create DRM screen");
       return FALSE;
@@ -828,9 +735,9 @@ dri2_display_hash_table_compare(void *key1, void *key2)
 }
 
 struct native_display *
-x11_create_dri2_display(EGLNativeDisplayType dpy,
+x11_create_dri2_display(Display *dpy,
                         struct native_event_handler *event_handler,
-                        struct drm_api *api)
+                        void *user_data)
 {
    struct dri2_display *dri2dpy;
 
@@ -839,7 +746,7 @@ x11_create_dri2_display(EGLNativeDisplayType dpy,
       return NULL;
 
    dri2dpy->event_handler = event_handler;
-   dri2dpy->api = api;
+   dri2dpy->base.user_data = user_data;
 
    dri2dpy->dpy = dpy;
    if (!dri2dpy->dpy) {
@@ -876,7 +783,6 @@ x11_create_dri2_display(EGLNativeDisplayType dpy,
    dri2dpy->base.is_pixmap_supported = dri2_display_is_pixmap_supported;
    dri2dpy->base.create_window_surface = dri2_display_create_window_surface;
    dri2dpy->base.create_pixmap_surface = dri2_display_create_pixmap_surface;
-   dri2dpy->base.create_pbuffer_surface = dri2_display_create_pbuffer_surface;
 
    return &dri2dpy->base;
 }
@@ -884,9 +790,9 @@ x11_create_dri2_display(EGLNativeDisplayType dpy,
 #else /* GLX_DIRECT_RENDERING */
 
 struct native_display *
-x11_create_dri2_display(EGLNativeDisplayType dpy,
+x11_create_dri2_display(Display *dpy,
                         struct native_event_handler *event_handler,
-                        struct drm_api *api)
+                        void *user_data)
 {
    return NULL;
 }

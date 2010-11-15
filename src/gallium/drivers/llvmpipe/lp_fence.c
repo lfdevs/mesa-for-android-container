@@ -28,13 +28,23 @@
 
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
-#include "util/u_inlines.h"
+#include "lp_debug.h"
 #include "lp_fence.h"
 
 
+/**
+ * Create a new fence object.
+ *
+ * The rank will be the number of bins in the scene.  Whenever a rendering
+ * thread hits a fence command, it'll increment the fence counter.  When
+ * the counter == the rank, the fence is finished.
+ *
+ * \param rank  the expected finished value of the fence counter.
+ */
 struct lp_fence *
 lp_fence_create(unsigned rank)
 {
+   static int fence_id;
    struct lp_fence *fence = CALLOC_STRUCT(lp_fence);
 
    pipe_reference_init(&fence->reference, 1);
@@ -42,69 +52,73 @@ lp_fence_create(unsigned rank)
    pipe_mutex_init(fence->mutex);
    pipe_condvar_init(fence->signalled);
 
+   fence->id = fence_id++;
    fence->rank = rank;
+
+   if (LP_DEBUG & DEBUG_FENCE)
+      debug_printf("%s %d\n", __FUNCTION__, fence->id);
 
    return fence;
 }
 
 
-static void
+/** Destroy a fence.  Called when refcount hits zero. */
+void
 lp_fence_destroy(struct lp_fence *fence)
 {
+   if (LP_DEBUG & DEBUG_FENCE)
+      debug_printf("%s %d\n", __FUNCTION__, fence->id);
+
    pipe_mutex_destroy(fence->mutex);
    pipe_condvar_destroy(fence->signalled);
    FREE(fence);
 }
 
 
-static void
-llvmpipe_fence_reference(struct pipe_screen *screen,
-                         struct pipe_fence_handle **ptr,
-                         struct pipe_fence_handle *fence)
+/**
+ * Called by the rendering threads to increment the fence counter.
+ * When the counter == the rank, the fence is finished.
+ */
+void
+lp_fence_signal(struct lp_fence *fence)
 {
-   struct lp_fence *old = (struct lp_fence *) *ptr;
-   struct lp_fence *f = (struct lp_fence *) fence;
+   if (LP_DEBUG & DEBUG_FENCE)
+      debug_printf("%s %d\n", __FUNCTION__, fence->id);
 
-   if (pipe_reference(&old->reference, &f->reference)) {
-      lp_fence_destroy(old);
-   }
+   pipe_mutex_lock(fence->mutex);
+
+   fence->count++;
+   assert(fence->count <= fence->rank);
+
+   if (LP_DEBUG & DEBUG_FENCE)
+      debug_printf("%s count=%u rank=%u\n", __FUNCTION__,
+                   fence->count, fence->rank);
+
+   /* Wakeup all threads waiting on the mutex:
+    */
+   pipe_condvar_broadcast(fence->signalled);
+
+   pipe_mutex_unlock(fence->mutex);
 }
 
-
-static int
-llvmpipe_fence_signalled(struct pipe_screen *screen,
-                         struct pipe_fence_handle *fence,
-                         unsigned flag)
+boolean
+lp_fence_signalled(struct lp_fence *f)
 {
-   struct lp_fence *f = (struct lp_fence *) fence;
-
    return f->count == f->rank;
 }
 
-
-static int
-llvmpipe_fence_finish(struct pipe_screen *screen,
-                      struct pipe_fence_handle *fence_handle,
-                      unsigned flag)
-{
-   struct lp_fence *fence = (struct lp_fence *) fence_handle;
-
-   pipe_mutex_lock(fence->mutex);
-   while (fence->count < fence->rank) {
-      pipe_condvar_wait(fence->signalled, fence->mutex);
-   }
-   pipe_mutex_unlock(fence->mutex);
-
-   return 0;
-}
-
-
-
-
 void
-llvmpipe_init_screen_fence_funcs(struct pipe_screen *screen)
+lp_fence_wait(struct lp_fence *f)
 {
-   screen->fence_reference = llvmpipe_fence_reference;
-   screen->fence_signalled = llvmpipe_fence_signalled;
-   screen->fence_finish = llvmpipe_fence_finish;
+   if (LP_DEBUG & DEBUG_FENCE)
+      debug_printf("%s %d\n", __FUNCTION__, f->id);
+
+   pipe_mutex_lock(f->mutex);
+   assert(f->issued);
+   while (f->count < f->rank) {
+      pipe_condvar_wait(f->signalled, f->mutex);
+   }
+   pipe_mutex_unlock(f->mutex);
 }
+
+

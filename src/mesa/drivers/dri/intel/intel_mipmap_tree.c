@@ -29,10 +29,8 @@
 #include "intel_mipmap_tree.h"
 #include "intel_regions.h"
 #include "intel_tex_layout.h"
-#ifndef I915
-#include "brw_state.h"
-#endif
 #include "main/enums.h"
+#include "main/formats.h"
 
 #define FILE_DEBUG_FLAG DEBUG_MIPTREE
 
@@ -83,7 +81,6 @@ intel_miptree_create_internal(struct intel_context *intel,
    mt->cpp = compress_byte ? compress_byte : cpp;
    mt->compressed = compress_byte ? 1 : 0;
    mt->refcount = 1; 
-   mt->pitch = 0;
 
 #ifdef I915
    if (intel->is_945)
@@ -135,18 +132,17 @@ intel_miptree_create(struct intel_context *intel,
    /*
     * pitch == 0 || height == 0  indicates the null texture
     */
-   if (!mt || !mt->pitch || !mt->total_height) {
+   if (!mt || !mt->total_height) {
       free(mt);
       return NULL;
    }
 
-   mt->region = intel_region_alloc(intel,
+   mt->region = intel_region_alloc(intel->intelScreen,
 				   tiling,
 				   mt->cpp,
-				   mt->pitch,
+				   mt->total_width,
 				   mt->total_height,
 				   expect_accelerated_upload);
-   mt->pitch = mt->region->pitch;
 
    if (!mt->region) {
        free(mt);
@@ -177,70 +173,10 @@ intel_miptree_create_for_region(struct intel_context *intel,
    if (!mt)
       return mt;
 
-   /* The mipmap tree pitch is aligned to 64 bytes to make sure render
-    * to texture works, but we don't need that for texturing from a
-    * pixmap.  Just override it here. */
-   mt->pitch = region->pitch;
-
    intel_region_reference(&mt->region, region);
 
    return mt;
 }
-
-
-/**
- * intel_miptree_pitch_align:
- *
- * @intel: intel context pointer
- *
- * @mt: the miptree to compute pitch alignment for
- *
- * @pitch: the natural pitch value
- *
- * Given @pitch, compute a larger value which accounts for
- * any necessary alignment required by the device
- */
-int intel_miptree_pitch_align (struct intel_context *intel,
-			       struct intel_mipmap_tree *mt,
-			       uint32_t tiling,
-			       int pitch)
-{
-#ifdef I915
-   GLcontext *ctx = &intel->ctx;
-#endif
-
-   if (!mt->compressed) {
-      int pitch_align;
-
-      /* XXX: Align pitch to multiple of 64 bytes for now to allow
-       * render-to-texture to work in all cases. This should probably be
-       * replaced at some point by some scheme to only do this when really
-       * necessary.
-       */
-      pitch_align = 64;
-
-      if (tiling == I915_TILING_X)
-	 pitch_align = 512;
-      else if (tiling == I915_TILING_Y)
-	 pitch_align = 128;
-
-      pitch = ALIGN(pitch * mt->cpp, pitch_align);
-
-#ifdef I915
-      /* Do a little adjustment to linear allocations so that we avoid
-       * hitting the same channel of memory for 2 different pages when
-       * reading a 2x2 subspan or doing bilinear filtering.
-       */
-      if (tiling == I915_TILING_NONE && !(pitch & 511) &&
-	 (pitch + pitch_align) < (1 << ctx->Const.MaxTextureLevels))
-	 pitch += pitch_align;
-#endif
-
-      pitch /= mt->cpp;
-   }
-   return pitch;
-}
-
 
 void
 intel_miptree_reference(struct intel_mipmap_tree **dst,
@@ -264,19 +200,6 @@ intel_miptree_release(struct intel_context *intel,
       GLuint i;
 
       DBG("%s deleting %p\n", __FUNCTION__, *mt);
-
-#ifndef I915
-      /* Free up cached binding tables holding a reference on our buffer, to
-       * avoid excessive memory consumption.
-       *
-       * This isn't as aggressive as we could be, as we'd like to do
-       * it from any time we free the last ref on a region.  But intel_region.c
-       * is context-agnostic.  Perhaps our constant state cache should be, as
-       * well.
-       */
-      brw_state_cache_bo_delete(&brw_context(&intel->ctx)->surface_cache,
-				(*mt)->region->buffer);
-#endif
 
       intel_region_release(&((*mt)->region));
 
@@ -341,13 +264,12 @@ intel_miptree_set_level_info(struct intel_mipmap_tree *mt,
    mt->level[level].width = w;
    mt->level[level].height = h;
    mt->level[level].depth = d;
-   mt->level[level].level_offset = (x + y * mt->pitch) * mt->cpp;
    mt->level[level].level_x = x;
    mt->level[level].level_y = y;
    mt->level[level].nr_images = nr_images;
 
-   DBG("%s level %d size: %d,%d,%d offset %d,%d (0x%x)\n", __FUNCTION__,
-       level, w, h, d, x, y, mt->level[level].level_offset);
+   DBG("%s level %d size: %d,%d,%d offset %d,%d\n", __FUNCTION__,
+       level, w, h, d, x, y);
 
    assert(nr_images);
    assert(!mt->level[level].x_offset);
@@ -414,7 +336,7 @@ intel_miptree_image_map(struct intel_context * intel,
    DBG("%s \n", __FUNCTION__);
 
    if (row_stride)
-      *row_stride = mt->pitch * mt->cpp;
+      *row_stride = mt->region->pitch * mt->cpp;
 
    if (mt->target == GL_TEXTURE_3D) {
       int i;
@@ -423,7 +345,7 @@ intel_miptree_image_map(struct intel_context * intel,
 
 	 intel_miptree_get_image_offset(mt, level, face, i,
 					&x, &y);
-	 image_offsets[i] = x + y * mt->pitch;
+	 image_offsets[i] = x + y * mt->region->pitch;
       }
 
       return intel_region_map(intel, mt->region);
@@ -434,7 +356,7 @@ intel_miptree_image_map(struct intel_context * intel,
       image_offsets[0] = 0;
 
       return intel_region_map(intel, mt->region) +
-	 (x + y * mt->pitch) * mt->cpp;
+	 (x + y * mt->region->pitch) * mt->cpp;
    }
 }
 
@@ -526,13 +448,13 @@ intel_miptree_image_copy(struct intel_context *intel,
 	 src_ptr = intel_region_map(intel, src->region);
 	 dst_ptr = intel_region_map(intel, dst->region);
 
-	 _mesa_copy_rect(dst_ptr + dst->cpp * (dst_x + dst_y * dst->pitch),
+	 _mesa_copy_rect(dst_ptr,
 			 dst->cpp,
-			 dst->pitch,
-			 0, 0, width, height,
-			 src_ptr + src->cpp * (src_x + src_y * src->pitch),
-			 src->pitch,
-			 0, 0);
+			 dst->region->pitch,
+			 dst_x, dst_y, width, height,
+			 src_ptr,
+			 src->region->pitch,
+			 src_x, src_y);
 	 intel_region_unmap(intel, src->region);
 	 intel_region_unmap(intel, dst->region);
       }

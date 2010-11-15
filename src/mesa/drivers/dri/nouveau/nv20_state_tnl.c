@@ -32,6 +32,28 @@
 #include "nv10_driver.h"
 #include "nv20_driver.h"
 
+#define LIGHT_MODEL_AMBIENT_R(side)			\
+	((side) ? NV20TCL_LIGHT_MODEL_BACK_AMBIENT_R :	\
+	 NV20TCL_LIGHT_MODEL_FRONT_AMBIENT_R)
+#define LIGHT_AMBIENT_R(side, i)			\
+	((side) ? NV20TCL_LIGHT_BACK_AMBIENT_R(i) :	\
+	 NV20TCL_LIGHT_FRONT_AMBIENT_R(i))
+#define LIGHT_DIFFUSE_R(side, i)			\
+	((side) ? NV20TCL_LIGHT_BACK_DIFFUSE_R(i) :	\
+	 NV20TCL_LIGHT_FRONT_DIFFUSE_R(i))
+#define LIGHT_SPECULAR_R(side, i)			\
+	((side) ? NV20TCL_LIGHT_BACK_SPECULAR_R(i) :	\
+	 NV20TCL_LIGHT_FRONT_SPECULAR_R(i))
+#define MATERIAL_FACTOR_R(side)				\
+	((side) ? NV20TCL_MATERIAL_FACTOR_BACK_R :	\
+	 NV20TCL_MATERIAL_FACTOR_FRONT_R)
+#define MATERIAL_FACTOR_A(side)				\
+	((side) ? NV20TCL_MATERIAL_FACTOR_BACK_A :	\
+	 NV20TCL_MATERIAL_FACTOR_FRONT_A)
+#define MATERIAL_SHININESS(side)			\
+	((side) ? NV20TCL_BACK_MATERIAL_SHININESS(0) :	\
+	 NV20TCL_FRONT_MATERIAL_SHININESS(0))
+
 void
 nv20_emit_clip_plane(GLcontext *ctx, int emit)
 {
@@ -139,9 +161,7 @@ nv20_emit_fog(GLcontext *ctx, int emit)
 	OUT_RING(chan, pack_rgba_f(MESA_FORMAT_RGBA8888_REV, f->Color));
 
 	BEGIN_RING(chan, kelvin, NV20TCL_FOG_EQUATION_CONSTANT, 3);
-	OUT_RINGf(chan, k[0]);
-	OUT_RINGf(chan, k[1]);
-	OUT_RINGf(chan, k[2]);
+	OUT_RINGp(chan, k, 3);
 }
 
 void
@@ -158,7 +178,7 @@ nv20_emit_light_model(GLcontext *ctx, int emit)
 	OUT_RING(chan, ((m->LocalViewer ?
 			 NV20TCL_LIGHT_MODEL_VIEWER_LOCAL :
 			 NV20TCL_LIGHT_MODEL_VIEWER_NONLOCAL) |
-			(m->ColorControl == GL_SEPARATE_SPECULAR_COLOR ?
+			(NEED_SECONDARY_COLOR(ctx) ?
 			 NV20TCL_LIGHT_MODEL_SEPARATE_SPECULAR :
 			 0)));
 
@@ -176,9 +196,7 @@ nv20_emit_light_source(GLcontext *ctx, int emit)
 
 	if (l->_Flags & LIGHT_POSITIONAL) {
 		BEGIN_RING(chan, kelvin, NV20TCL_LIGHT_POSITION_X(i), 3);
-		OUT_RINGf(chan, l->_Position[0]);
-		OUT_RINGf(chan, l->_Position[1]);
-		OUT_RINGf(chan, l->_Position[2]);
+		OUT_RINGp(chan, l->_Position, 3);
 
 		BEGIN_RING(chan, kelvin, NV20TCL_LIGHT_ATTENUATION_CONSTANT(i), 3);
 		OUT_RINGf(chan, l->ConstantAttenuation);
@@ -187,14 +205,10 @@ nv20_emit_light_source(GLcontext *ctx, int emit)
 
 	} else {
 		BEGIN_RING(chan, kelvin, NV20TCL_LIGHT_DIRECTION_X(i), 3);
-		OUT_RINGf(chan, l->_VP_inf_norm[0]);
-		OUT_RINGf(chan, l->_VP_inf_norm[1]);
-		OUT_RINGf(chan, l->_VP_inf_norm[2]);
+		OUT_RINGp(chan, l->_VP_inf_norm, 3);
 
 		BEGIN_RING(chan, kelvin, NV20TCL_LIGHT_HALF_VECTOR_X(i), 3);
-		OUT_RINGf(chan, l->_h_inf_norm[0]);
-		OUT_RINGf(chan, l->_h_inf_norm[1]);
-		OUT_RINGf(chan, l->_h_inf_norm[2]);
+		OUT_RINGp(chan, l->_h_inf_norm, 3);
 	}
 
 	if (l->_Flags & LIGHT_SPOT) {
@@ -203,13 +217,7 @@ nv20_emit_light_source(GLcontext *ctx, int emit)
 		nv10_get_spot_coeff(l, k);
 
 		BEGIN_RING(chan, kelvin, NV20TCL_LIGHT_SPOT_CUTOFF_A(i), 7);
-		OUT_RINGf(chan, k[0]);
-		OUT_RINGf(chan, k[1]);
-		OUT_RINGf(chan, k[2]);
-		OUT_RINGf(chan, k[3]);
-		OUT_RINGf(chan, k[4]);
-		OUT_RINGf(chan, k[5]);
-		OUT_RINGf(chan, k[6]);
+		OUT_RINGp(chan, k, 7);
 	}
 }
 
@@ -224,10 +232,6 @@ nv20_emit_material_ambient(GLcontext *ctx, int emit)
 	struct nouveau_channel *chan = context_chan(ctx);
 	struct nouveau_grobj *kelvin = context_eng3d(ctx);
 	float (*mat)[4] = ctx->Light.Material.Attrib;
-	uint32_t m_scene[] = { NV20TCL_LIGHT_MODEL_FRONT_AMBIENT_R,
-			       NV20TCL_LIGHT_MODEL_BACK_AMBIENT_R };
-	uint32_t m_factor[] = { NV20TCL_MATERIAL_FACTOR_FRONT_R,
-			      NV20TCL_MATERIAL_FACTOR_BACK_R };
 	float c_scene[3], c_factor[3];
 	struct gl_light *l;
 
@@ -245,30 +249,22 @@ nv20_emit_material_ambient(GLcontext *ctx, int emit)
 		ZERO_3V(c_factor);
 	}
 
-	BEGIN_RING(chan, kelvin, m_scene[side], 3);
-	OUT_RINGf(chan, c_scene[0]);
-	OUT_RINGf(chan, c_scene[1]);
-	OUT_RINGf(chan, c_scene[2]);
+	BEGIN_RING(chan, kelvin, LIGHT_MODEL_AMBIENT_R(side), 3);
+	OUT_RINGp(chan, c_scene, 3);
 
 	if (ctx->Light.ColorMaterialEnabled) {
-		BEGIN_RING(chan, kelvin, m_factor[side], 3);
-		OUT_RINGf(chan, c_factor[0]);
-		OUT_RINGf(chan, c_factor[1]);
-		OUT_RINGf(chan, c_factor[2]);
+		BEGIN_RING(chan, kelvin, MATERIAL_FACTOR_R(side), 3);
+		OUT_RINGp(chan, c_factor, 3);
 	}
 
 	foreach(l, &ctx->Light.EnabledList) {
 		const int i = l - ctx->Light.Light;
-		uint32_t m_light[] = { NV20TCL_LIGHT_FRONT_AMBIENT_R(i),
-				      NV20TCL_LIGHT_BACK_AMBIENT_R(i) };
 		float *c_light = (USE_COLOR_MATERIAL(AMBIENT, side) ?
 				  l->Ambient :
 				  l->_MatAmbient[side]);
 
-		BEGIN_RING(chan, kelvin, m_light[side], 3);
-		OUT_RINGf(chan, c_light[0]);
-		OUT_RINGf(chan, c_light[1]);
-		OUT_RINGf(chan, c_light[2]);
+		BEGIN_RING(chan, kelvin, LIGHT_AMBIENT_R(side, i), 3);
+		OUT_RINGp(chan, c_light, 3);
 	}
 }
 
@@ -279,25 +275,19 @@ nv20_emit_material_diffuse(GLcontext *ctx, int emit)
 	struct nouveau_channel *chan = context_chan(ctx);
 	struct nouveau_grobj *kelvin = context_eng3d(ctx);
 	GLfloat (*mat)[4] = ctx->Light.Material.Attrib;
-	uint32_t m_factor[] = { NV20TCL_MATERIAL_FACTOR_FRONT_A,
-				NV20TCL_MATERIAL_FACTOR_BACK_A };
 	struct gl_light *l;
 
-	BEGIN_RING(chan, kelvin, m_factor[side], 1);
+	BEGIN_RING(chan, kelvin, MATERIAL_FACTOR_A(side), 1);
 	OUT_RINGf(chan, mat[MAT_ATTRIB_DIFFUSE(side)][3]);
 
 	foreach(l, &ctx->Light.EnabledList) {
 		const int i = l - ctx->Light.Light;
-		uint32_t m_light[] = { NV20TCL_LIGHT_FRONT_DIFFUSE_R(i),
-				       NV20TCL_LIGHT_BACK_DIFFUSE_R(i) };
 		float *c_light = (USE_COLOR_MATERIAL(DIFFUSE, side) ?
 				  l->Diffuse :
 				  l->_MatDiffuse[side]);
 
-		BEGIN_RING(chan, kelvin, m_light[side], 3);
-		OUT_RINGf(chan, c_light[0]);
-		OUT_RINGf(chan, c_light[1]);
-		OUT_RINGf(chan, c_light[2]);
+		BEGIN_RING(chan, kelvin, LIGHT_DIFFUSE_R(side, i), 3);
+		OUT_RINGp(chan, c_light, 3);
 	}
 }
 
@@ -311,16 +301,12 @@ nv20_emit_material_specular(GLcontext *ctx, int emit)
 
 	foreach(l, &ctx->Light.EnabledList) {
 		const int i = l - ctx->Light.Light;
-		uint32_t m_light[] = { NV20TCL_LIGHT_FRONT_SPECULAR_R(i),
-				       NV20TCL_LIGHT_BACK_SPECULAR_R(i) };
 		float *c_light = (USE_COLOR_MATERIAL(SPECULAR, side) ?
 				  l->Specular :
 				  l->_MatSpecular[side]);
 
-		BEGIN_RING(chan, kelvin, m_light[side], 3);
-		OUT_RINGf(chan, c_light[0]);
-		OUT_RINGf(chan, c_light[1]);
-		OUT_RINGf(chan, c_light[2]);
+		BEGIN_RING(chan, kelvin, LIGHT_SPECULAR_R(side, i), 3);
+		OUT_RINGp(chan, c_light, 3);
 	}
 }
 
@@ -331,21 +317,14 @@ nv20_emit_material_shininess(GLcontext *ctx, int emit)
 	struct nouveau_channel *chan = context_chan(ctx);
 	struct nouveau_grobj *kelvin = context_eng3d(ctx);
 	float (*mat)[4] = ctx->Light.Material.Attrib;
-	uint32_t mthd[] = { NV20TCL_FRONT_MATERIAL_SHININESS(0),
-			    NV20TCL_BACK_MATERIAL_SHININESS(0) };
 	float k[6];
 
 	nv10_get_shininess_coeff(
 		CLAMP(mat[MAT_ATTRIB_SHININESS(side)][0], 0, 1024),
 		k);
 
-	BEGIN_RING(chan, kelvin, mthd[side], 6);
-	OUT_RINGf(chan, k[0]);
-	OUT_RINGf(chan, k[1]);
-	OUT_RINGf(chan, k[2]);
-	OUT_RINGf(chan, k[3]);
-	OUT_RINGf(chan, k[4]);
-	OUT_RINGf(chan, k[5]);
+	BEGIN_RING(chan, kelvin, MATERIAL_SHININESS(side), 6);
+	OUT_RINGp(chan, k, 6);
 }
 
 void
@@ -359,12 +338,14 @@ nv20_emit_modelview(GLcontext *ctx, int emit)
 	if (nctx->fallback != HWTNL)
 		return;
 
-	if (ctx->Light._NeedEyeCoords || ctx->Fog.Enabled) {
+	if (ctx->Light._NeedEyeCoords || ctx->Fog.Enabled ||
+	    (ctx->Texture._GenFlags & TEXGEN_NEED_EYE_COORD)) {
 		BEGIN_RING(chan, kelvin, NV20TCL_MODELVIEW0_MATRIX(0), 16);
 		OUT_RINGm(chan, m->m);
 	}
 
-	if (ctx->Light.Enabled) {
+	if (ctx->Light.Enabled ||
+	    (ctx->Texture._GenFlags & TEXGEN_NEED_EYE_COORD)) {
 		int i, j;
 
 		BEGIN_RING(chan, kelvin,

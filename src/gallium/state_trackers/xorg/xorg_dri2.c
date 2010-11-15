@@ -42,6 +42,8 @@
 
 #include "util/u_format.h"
 
+#include "state_tracker/drm_driver.h"
+
 /* Make all the #if cases in the code esier to read */
 #ifndef DRI2INFOREC_VERSION
 #define DRI2INFOREC_VERSION 1
@@ -53,27 +55,28 @@ static Bool set_format_in_do_create_buffer;
 
 typedef struct {
     PixmapPtr pPixmap;
-    struct pipe_texture *tex;
+    struct pipe_resource *tex;
     struct pipe_fence_handle *fence;
 } *BufferPrivatePtr;
 
 static Bool
 dri2_do_create_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer, unsigned int format)
 {
-    struct pipe_texture *tex = NULL;
+    struct pipe_resource *tex = NULL;
     ScreenPtr pScreen = pDraw->pScreen;
     ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
     modesettingPtr ms = modesettingPTR(pScrn);
     struct exa_pixmap_priv *exa_priv;
     BufferPrivatePtr private = buffer->driverPrivate;
     PixmapPtr pPixmap;
-    unsigned stride, handle;
+    struct winsys_handle whandle;
 
     if (pDraw->type == DRAWABLE_PIXMAP)
 	pPixmap = (PixmapPtr) pDraw;
     else
 	pPixmap = (*pScreen->GetWindowPixmap)((WindowPtr) pDraw);
     exa_priv = exaGetPixmapDriverPrivate(pPixmap);
+
 
     switch (buffer->attachment) {
     default:
@@ -100,9 +103,9 @@ dri2_do_create_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer, unsigned int form
         /* Fall through */
     case DRI2BufferDepth:
 	if (exa_priv->depth_stencil_tex)
-	    pipe_texture_reference(&tex, exa_priv->depth_stencil_tex);
+	    pipe_resource_reference(&tex, exa_priv->depth_stencil_tex);
         else {
-	    struct pipe_texture template;
+	    struct pipe_resource template;
             unsigned depthBits = (format != 0) ? format : pDraw->depth;
 	    memset(&template, 0, sizeof(template));
 	    template.target = PIPE_TEXTURE_2D;
@@ -121,16 +124,16 @@ dri2_do_create_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer, unsigned int form
                }
             } else {
                template.format = ms->ds_depth_bits_last ?
-                                 PIPE_FORMAT_Z24S8_UNORM : PIPE_FORMAT_S8Z24_UNORM;
+                                 PIPE_FORMAT_Z24_UNORM_S8_USCALED : PIPE_FORMAT_S8_USCALED_Z24_UNORM;
             }
 	    template.width0 = pDraw->width;
 	    template.height0 = pDraw->height;
 	    template.depth0 = 1;
 	    template.last_level = 0;
-	    template.tex_usage = PIPE_TEXTURE_USAGE_DEPTH_STENCIL |
-		PIPE_TEXTURE_USAGE_DISPLAY_TARGET;
-	    tex = ms->screen->texture_create(ms->screen, &template);
-	    pipe_texture_reference(&exa_priv->depth_stencil_tex, tex);
+	    template.bind = PIPE_BIND_DEPTH_STENCIL |
+		PIPE_BIND_SHARED;
+	    tex = ms->screen->resource_create(ms->screen, &template);
+	    pipe_resource_reference(&exa_priv->depth_stencil_tex, tex);
 	}
 	break;
     }
@@ -153,10 +156,13 @@ dri2_do_create_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer, unsigned int form
     if (!tex)
 	FatalError("NO TEXTURE IN DRI2\n");
 
-    ms->api->shared_handle_from_texture(ms->api, ms->screen, tex, &stride, &handle);
+    memset(&whandle, 0, sizeof(whandle));
+    whandle.type = DRM_API_HANDLE_TYPE_SHARED;
 
-    buffer->name = handle;
-    buffer->pitch = stride;
+    ms->screen->resource_get_handle(ms->screen, tex, &whandle);
+
+    buffer->name = whandle.handle;
+    buffer->pitch = whandle.stride;
     buffer->cpp = 4;
     buffer->driverPrivate = private;
     buffer->flags = 0; /* not tiled */
@@ -181,9 +187,9 @@ dri2_do_destroy_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer)
     BufferPrivatePtr private = buffer->driverPrivate;
     struct exa_pixmap_priv *exa_priv = exaGetPixmapDriverPrivate(private->pPixmap);
 
-    pipe_texture_reference(&private->tex, NULL);
+    pipe_resource_reference(&private->tex, NULL);
     ms->screen->fence_reference(ms->screen, &private->fence, NULL);
-    pipe_texture_reference(&exa_priv->depth_stencil_tex, NULL);
+    pipe_resource_reference(&exa_priv->depth_stencil_tex, NULL);
     (*pScreen->DestroyPixmap)(private->pPixmap);
 }
 
@@ -195,11 +201,11 @@ dri2_create_buffer(DrawablePtr pDraw, unsigned int attachment, unsigned int form
     DRI2Buffer2Ptr buffer;
     BufferPrivatePtr private;
 
-    buffer = xcalloc(1, sizeof *buffer);
+    buffer = calloc(1, sizeof *buffer);
     if (!buffer)
 	return NULL;
 
-    private = xcalloc(1, sizeof *private);
+    private = calloc(1, sizeof *private);
     if (!private) {
 	goto fail;
     }
@@ -211,9 +217,9 @@ dri2_create_buffer(DrawablePtr pDraw, unsigned int attachment, unsigned int form
     if (dri2_do_create_buffer(pDraw, (DRI2BufferPtr)buffer, format))
 	return buffer;
 
-    xfree(private);
+    free(private);
 fail:
-    xfree(buffer);
+    free(buffer);
     return NULL;
 }
 
@@ -223,8 +229,8 @@ dri2_destroy_buffer(DrawablePtr pDraw, DRI2Buffer2Ptr buffer)
     /* So far it is safe to downcast a DRI2Buffer2Ptr to DRI2BufferPtr */
     dri2_do_destroy_buffer(pDraw, (DRI2BufferPtr)buffer);
 
-    xfree(buffer->driverPrivate);
-    xfree(buffer);
+    free(buffer->driverPrivate);
+    free(buffer);
 }
 
 #endif /* DRI2INFOREC_VERSION >= 2 */
@@ -238,11 +244,11 @@ dri2_create_buffers(DrawablePtr pDraw, unsigned int *attachments, int count)
     DRI2BufferPtr buffers;
     int i;
 
-    buffers = xcalloc(count, sizeof *buffers);
+    buffers = calloc(count, sizeof *buffers);
     if (!buffers)
 	goto fail_buffers;
 
-    privates = xcalloc(count, sizeof *privates);
+    privates = calloc(count, sizeof *privates);
     if (!privates)
 	goto fail_privates;
 
@@ -257,9 +263,9 @@ dri2_create_buffers(DrawablePtr pDraw, unsigned int *attachments, int count)
     return buffers;
 
 fail:
-    xfree(privates);
+    free(privates);
 fail_privates:
-    xfree(buffers);
+    free(buffers);
 fail_buffers:
     return NULL;
 }
@@ -274,8 +280,8 @@ dri2_destroy_buffers(DrawablePtr pDraw, DRI2BufferPtr buffers, int count)
     }
 
     if (buffers) {
-	xfree(buffers[0].driverPrivate);
-	xfree(buffers);
+	free(buffers[0].driverPrivate);
+	free(buffers);
     }
 }
 
@@ -295,6 +301,7 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     GCPtr gc;
     RegionPtr copy_clip;
     Bool save_accel;
+    CustomizerPtr cust = ms->cust;
 
     /*
      * In driCreateBuffers we dewrap windows into the
@@ -348,7 +355,8 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     ValidateGC(dst_draw, gc);
 
     /* If this is a full buffer swap, throttle on the previous one */
-    if (dst_priv->fence && REGION_NUM_RECTS(pRegion) == 1) {
+    if (ms->swapThrottling &&
+	dst_priv->fence && REGION_NUM_RECTS(pRegion) == 1) {
 	BoxPtr extents = REGION_EXTENTS(pScreen, pRegion);
 
 	if (extents->x1 == 0 && extents->y1 == 0 &&
@@ -370,6 +378,9 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     DamageRegionAppend(src_draw, pRegion);
     DamageRegionProcessPending(src_draw);
 
+   if (cust && cust->winsys_context_throttle)
+       cust->winsys_context_throttle(cust, ms->ctx, THROTTLE_SWAP);
+
     (*gc->ops->CopyArea)(src_draw, dst_draw, gc,
 			 0, 0, pDraw->width, pDraw->height, 0, 0);
     ms->exa->accel = save_accel;
@@ -377,8 +388,13 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     FreeScratchGC(gc);
 
     ms->ctx->flush(ms->ctx, PIPE_FLUSH_SWAPBUFFERS,
-		   pDestBuffer->attachment == DRI2BufferFrontLeft ?
+		   (pDestBuffer->attachment == DRI2BufferFrontLeft
+		    && ms->swapThrottling) ?
 		   &dst_priv->fence : NULL);
+
+   if (cust && cust->winsys_context_throttle)
+       cust->winsys_context_throttle(cust, ms->ctx, THROTTLE_RENDER);
+
 }
 
 Bool
@@ -399,7 +415,7 @@ xorg_dri2_init(ScreenPtr pScreen)
     }
 #endif
 
-    dri2info.version = DRI2INFOREC_VERSION;
+    dri2info.version = min(DRI2INFOREC_VERSION, 3);
     dri2info.fd = ms->fd;
 
     dri2info.driverName = pScrn->driverName;
@@ -433,11 +449,13 @@ xorg_dri2_init(ScreenPtr pScreen)
     ms->d_depth_bits_last =
 	 ms->screen->is_format_supported(ms->screen, PIPE_FORMAT_Z24X8_UNORM,
 					 PIPE_TEXTURE_2D,
-					 PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0);
+					 0,
+					 PIPE_BIND_DEPTH_STENCIL, 0);
     ms->ds_depth_bits_last =
-	 ms->screen->is_format_supported(ms->screen, PIPE_FORMAT_Z24S8_UNORM,
+	 ms->screen->is_format_supported(ms->screen, PIPE_FORMAT_Z24_UNORM_S8_USCALED,
 					 PIPE_TEXTURE_2D,
-					 PIPE_TEXTURE_USAGE_DEPTH_STENCIL, 0);
+					 0,
+					 PIPE_BIND_DEPTH_STENCIL, 0);
 
     return DRI2ScreenInit(pScreen, &dri2info);
 }

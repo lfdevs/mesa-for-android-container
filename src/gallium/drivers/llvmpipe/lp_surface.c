@@ -26,25 +26,145 @@
  **************************************************************************/
 
 #include "util/u_rect.h"
+#include "util/u_surface.h"
 #include "lp_context.h"
+#include "lp_flush.h"
+#include "lp_limits.h"
 #include "lp_surface.h"
+#include "lp_texture.h"
+
+
+/**
+ * Adjust x, y, width, height to lie on tile bounds.
+ */
+static void
+adjust_to_tile_bounds(unsigned x, unsigned y, unsigned width, unsigned height,
+                      unsigned *x_tile, unsigned *y_tile,
+                      unsigned *w_tile, unsigned *h_tile)
+{
+   *x_tile = x & ~(TILE_SIZE - 1);
+   *y_tile = y & ~(TILE_SIZE - 1);
+   *w_tile = ((x + width + TILE_SIZE - 1) & ~(TILE_SIZE - 1)) - *x_tile;
+   *h_tile = ((y + height + TILE_SIZE - 1) & ~(TILE_SIZE - 1)) - *y_tile;
+}
+
 
 
 static void
-lp_surface_copy(struct pipe_context *pipe,
-                struct pipe_surface *dest, unsigned destx, unsigned desty,
-                struct pipe_surface *src, unsigned srcx, unsigned srcy,
-                unsigned width, unsigned height)
+lp_resource_copy(struct pipe_context *pipe,
+                 struct pipe_resource *dst, struct pipe_subresource subdst,
+                 unsigned dstx, unsigned dsty, unsigned dstz,
+                 struct pipe_resource *src, struct pipe_subresource subsrc,
+                 unsigned srcx, unsigned srcy, unsigned srcz,
+                 unsigned width, unsigned height)
 {
-   util_surface_copy(pipe, FALSE,
-                     dest, destx, desty,
-                     src, srcx, srcy,
-                     width, height);
+   /* XXX what about the dstz/srcz parameters - zslice wasn't used... */
+   struct llvmpipe_resource *src_tex = llvmpipe_resource(src);
+   struct llvmpipe_resource *dst_tex = llvmpipe_resource(dst);
+   const enum pipe_format format = src_tex->base.format;
+
+   llvmpipe_flush_resource(pipe,
+                           dst, subdst.face, subdst.level,
+                           0, /* flush_flags */
+                           FALSE, /* read_only */
+                           TRUE, /* cpu_access */
+                           FALSE, /* do_not_block */
+                           "blit dest");
+
+   llvmpipe_flush_resource(pipe,
+                           src, subsrc.face, subsrc.level,
+                           0, /* flush_flags */
+                           TRUE, /* read_only */
+                           TRUE, /* cpu_access */
+                           FALSE, /* do_not_block */
+                           "blit src");
+
+   /*
+   printf("surface copy from %u to %u: %u,%u to %u,%u %u x %u\n",
+          src_tex->id, dst_tex->id,
+          srcx, srcy, dstx, dsty, width, height);
+   */
+
+   /* set src tiles to linear layout */
+   {
+      unsigned tx, ty, tw, th;
+      unsigned x, y;
+
+      adjust_to_tile_bounds(srcx, srcy, width, height, &tx, &ty, &tw, &th);
+
+      for (y = 0; y < th; y += TILE_SIZE) {
+         for (x = 0; x < tw; x += TILE_SIZE) {
+            (void) llvmpipe_get_texture_tile_linear(src_tex,
+                                                    subsrc.face, subsrc.level,
+                                                    LP_TEX_USAGE_READ,
+                                                    tx + x, ty + y);
+         }
+      }
+   }
+
+   /* set dst tiles to linear layout */
+   {
+      unsigned tx, ty, tw, th;
+      unsigned x, y;
+      enum lp_texture_usage usage;
+
+      adjust_to_tile_bounds(dstx, dsty, width, height, &tx, &ty, &tw, &th);
+
+      for (y = 0; y < th; y += TILE_SIZE) {
+         boolean contained_y = ty + y >= dsty &&
+                               ty + y + TILE_SIZE <= dsty + height ?
+                               TRUE : FALSE;
+
+         for (x = 0; x < tw; x += TILE_SIZE) {
+            boolean contained_x = tx + x >= dstx &&
+                                  tx + x + TILE_SIZE <= dstx + width ?
+                                  TRUE : FALSE;
+
+            /*
+             * Set the usage mode to WRITE_ALL for the tiles which are
+             * completely contained by the dest rectangle.
+             */
+            if (contained_y && contained_x)
+               usage = LP_TEX_USAGE_WRITE_ALL;
+            else
+               usage = LP_TEX_USAGE_READ_WRITE;
+
+            (void) llvmpipe_get_texture_tile_linear(dst_tex,
+                                                    subdst.face, subdst.level,
+                                                    usage,
+                                                    tx + x, ty + y);
+         }
+      }
+   }
+
+   /* copy */
+   {
+      const ubyte *src_linear_ptr
+         = llvmpipe_get_texture_image_address(src_tex, subsrc.face,
+                                              subsrc.level,
+                                              LP_TEX_LAYOUT_LINEAR);
+      ubyte *dst_linear_ptr
+         = llvmpipe_get_texture_image_address(dst_tex, subdst.face,
+                                              subdst.level,
+                                              LP_TEX_LAYOUT_LINEAR);
+
+      if (dst_linear_ptr && src_linear_ptr) {
+         util_copy_rect(dst_linear_ptr, format,
+                        llvmpipe_resource_stride(&dst_tex->base, subdst.level),
+                        dstx, dsty,
+                        width, height,
+                        src_linear_ptr,
+                        llvmpipe_resource_stride(&src_tex->base, subsrc.level),
+                        srcx, srcy);
+      }
+   }
 }
 
+
 void
-lp_init_surface_functions(struct llvmpipe_context *lp)
+llvmpipe_init_surface_functions(struct llvmpipe_context *lp)
 {
-   lp->pipe.surface_copy = lp_surface_copy;
-   lp->pipe.surface_fill = util_surface_fill;
+   lp->pipe.resource_copy_region = lp_resource_copy;
+   lp->pipe.clear_render_target = util_clear_render_target;
+   lp->pipe.clear_depth_stencil = util_clear_depth_stencil;
 }

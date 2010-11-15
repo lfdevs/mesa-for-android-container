@@ -55,11 +55,11 @@ upload_clip_state(struct brw_context *brw)
    OUT_BATCH(GEN6_CLIP_STATISTICS_ENABLE);
    OUT_BATCH(GEN6_CLIP_ENABLE |
 	     GEN6_CLIP_API_OGL |
-	     GEN6_CLIP_MODE_REJECT_ALL | /* XXX: debug: get VS working */
+	     GEN6_CLIP_MODE_NORMAL |
 	     GEN6_CLIP_XY_TEST |
 	     depth_clamp |
 	     provoking);
-   OUT_BATCH(0);
+   OUT_BATCH(GEN6_CLIP_FORCE_ZERO_RTAINDEX);
    ADVANCE_BATCH();
 
    intel_batchbuffer_emit_mi_flush(intel->batch);

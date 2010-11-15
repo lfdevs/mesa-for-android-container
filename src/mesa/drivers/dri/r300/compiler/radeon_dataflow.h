@@ -36,13 +36,22 @@ struct rc_swizzle_caps;
 
 
 /**
- * Help analyze the register accesses of instructions.
+ * Help analyze and modify the register accesses of instructions.
  */
 /*@{*/
-typedef void (*rc_read_write_fn)(void * userdata, struct rc_instruction * inst,
+typedef void (*rc_read_write_chan_fn)(void * userdata, struct rc_instruction * inst,
 			rc_register_file file, unsigned int index, unsigned int chan);
-void rc_for_all_reads(struct rc_instruction * inst, rc_read_write_fn cb, void * userdata);
-void rc_for_all_writes(struct rc_instruction * inst, rc_read_write_fn cb, void * userdata);
+void rc_for_all_reads_chan(struct rc_instruction * inst, rc_read_write_chan_fn cb, void * userdata);
+void rc_for_all_writes_chan(struct rc_instruction * inst, rc_read_write_chan_fn cb, void * userdata);
+
+typedef void (*rc_read_write_mask_fn)(void * userdata, struct rc_instruction * inst,
+			rc_register_file file, unsigned int index, unsigned int mask);
+void rc_for_all_reads_mask(struct rc_instruction * inst, rc_read_write_mask_fn cb, void * userdata);
+void rc_for_all_writes_mask(struct rc_instruction * inst, rc_read_write_mask_fn cb, void * userdata);
+
+typedef void (*rc_remap_register_fn)(void * userdata, struct rc_instruction * inst,
+			rc_register_file * pfile, unsigned int * pindex);
+void rc_remap_registers(struct rc_instruction * inst, rc_remap_register_fn cb, void * userdata);
 /*@}*/
 
 
@@ -52,8 +61,10 @@ void rc_for_all_writes(struct rc_instruction * inst, rc_read_write_fn cb, void *
 /*@{*/
 typedef void (*rc_dataflow_mark_outputs_fn)(void * userdata, void * data,
 			void (*mark_fn)(void * data, unsigned int index, unsigned int mask));
-void rc_dataflow_deadcode(struct radeon_compiler * c, rc_dataflow_mark_outputs_fn dce, void * userdata);
-void rc_dataflow_swizzles(struct radeon_compiler * c);
+void rc_dataflow_deadcode(struct radeon_compiler * c, void *user);
+void rc_dataflow_swizzles(struct radeon_compiler * c, void *user);
 /*@}*/
+
+void rc_optimize(struct radeon_compiler * c, void *user);
 
 #endif /* RADEON_DATAFLOW_H */

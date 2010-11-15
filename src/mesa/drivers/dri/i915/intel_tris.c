@@ -179,8 +179,8 @@ uint32_t *intel_get_prim_space(struct intel_context *intel, unsigned int count)
       /* Start a new VB */
       if (intel->prim.vb == NULL)
 	 intel->prim.vb = malloc(INTEL_VB_SIZE);
-      intel->prim.vb_bo = dri_bo_alloc(intel->bufmgr, "vb",
-				       INTEL_VB_SIZE, 4);
+      intel->prim.vb_bo = drm_intel_bo_alloc(intel->bufmgr, "vb",
+					     INTEL_VB_SIZE, 4);
       intel->prim.start_offset = 0;
       intel->prim.current_offset = 0;
    }
@@ -197,8 +197,8 @@ uint32_t *intel_get_prim_space(struct intel_context *intel, unsigned int count)
 /** Dispatches the accumulated primitive to the batchbuffer. */
 void intel_flush_prim(struct intel_context *intel)
 {
-   dri_bo *aper_array[2];
-   dri_bo *vb_bo;
+   drm_intel_bo *aper_array[2];
+   drm_intel_bo *vb_bo;
    unsigned int offset, count;
    BATCH_LOCALS;
 
@@ -212,7 +212,7 @@ void intel_flush_prim(struct intel_context *intel)
     * flush triggered by emit_state doesn't loop back to flush_prim again.
     */
    vb_bo = intel->prim.vb_bo;
-   dri_bo_reference(vb_bo);
+   drm_intel_bo_reference(vb_bo);
    count = intel->prim.count;
    intel->prim.count = 0;
    offset = intel->prim.start_offset;
@@ -296,7 +296,7 @@ void intel_flush_prim(struct intel_context *intel)
 
    intel->no_batch_wrap = GL_FALSE;
 
-   dri_bo_unreference(vb_bo);
+   drm_intel_bo_unreference(vb_bo);
 }
 
 /**
@@ -315,9 +315,9 @@ void intel_finish_vb(struct intel_context *intel)
    if (intel->prim.vb_bo == NULL)
       return;
 
-   dri_bo_subdata(intel->prim.vb_bo, 0, intel->prim.start_offset,
-		  intel->prim.vb);
-   dri_bo_unreference(intel->prim.vb_bo);
+   drm_intel_bo_subdata(intel->prim.vb_bo, 0, intel->prim.start_offset,
+			intel->prim.vb);
+   drm_intel_bo_unreference(intel->prim.vb_bo);
    intel->prim.vb_bo = NULL;
 }
 
@@ -488,9 +488,9 @@ intel_wpos_triangle(struct intel_context *intel,
    __memcpy(v1_wpos, v1, size);
    __memcpy(v2_wpos, v2, size);
 
-   v0_wpos[1] = -v0_wpos[1] + intel->driDrawable->h;
-   v1_wpos[1] = -v1_wpos[1] + intel->driDrawable->h;
-   v2_wpos[1] = -v2_wpos[1] + intel->driDrawable->h;
+   v0_wpos[1] = -v0_wpos[1] + intel->ctx.DrawBuffer->Height;
+   v1_wpos[1] = -v1_wpos[1] + intel->ctx.DrawBuffer->Height;
+   v2_wpos[1] = -v2_wpos[1] + intel->ctx.DrawBuffer->Height;
 
 
    intel_draw_triangle(intel, v0, v1, v2);
@@ -509,8 +509,8 @@ intel_wpos_line(struct intel_context *intel,
    __memcpy(v0_wpos, v0, size);
    __memcpy(v1_wpos, v1, size);
 
-   v0_wpos[1] = -v0_wpos[1] + intel->driDrawable->h;
-   v1_wpos[1] = -v1_wpos[1] + intel->driDrawable->h;
+   v0_wpos[1] = -v0_wpos[1] + intel->ctx.DrawBuffer->Height;
+   v1_wpos[1] = -v1_wpos[1] + intel->ctx.DrawBuffer->Height;
 
    intel_draw_line(intel, v0, v1);
 }
@@ -524,7 +524,7 @@ intel_wpos_point(struct intel_context *intel, intelVertexPtr v0)
    GLfloat *v0_wpos = (GLfloat *)((char *)v0 + offset);
 
    __memcpy(v0_wpos, v0, size);
-   v0_wpos[1] = -v0_wpos[1] + intel->driDrawable->h;
+   v0_wpos[1] = -v0_wpos[1] + intel->ctx.DrawBuffer->Height;
 
    intel_draw_point(intel, v0);
 }
@@ -1208,7 +1208,7 @@ intelFallback(struct intel_context *intel, GLbitfield bit, GLboolean mode)
    if (mode) {
       intel->Fallback |= bit;
       if (oldfallback == 0) {
-         intelFlush(ctx);
+         intel_flush(ctx);
          if (INTEL_DEBUG & DEBUG_FALLBACKS)
             fprintf(stderr, "ENTER FALLBACK %x: %s\n",
                     bit, getFallbackString(bit));

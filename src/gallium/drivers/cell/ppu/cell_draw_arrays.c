@@ -33,48 +33,18 @@
 
 #include "pipe/p_defines.h"
 #include "pipe/p_context.h"
-#include "util/u_simple_screen.h"
 #include "util/u_inlines.h"
 
 #include "cell_context.h"
 #include "cell_draw_arrays.h"
 #include "cell_state.h"
 #include "cell_flush.h"
+#include "cell_texture.h"
 
 #include "draw/draw_context.h"
 
 
 
-static void
-cell_map_constant_buffers(struct cell_context *sp)
-{
-   struct pipe_winsys *ws = sp->pipe.winsys;
-   uint i;
-   for (i = 0; i < 2; i++) {
-      if (sp->constants[i] && sp->constants[i]->size) {
-         sp->mapped_constants[i] = ws->buffer_map(ws, sp->constants[i],
-                                                   PIPE_BUFFER_USAGE_CPU_READ);
-         cell_flush_buffer_range(sp, sp->mapped_constants[i], 
-                                 sp->constants[i]->size);
-      }
-   }
-
-   draw_set_mapped_constant_buffer(sp->draw, PIPE_SHADER_VERTEX, 0,
-                                   sp->mapped_constants[PIPE_SHADER_VERTEX],
-                                   sp->constants[PIPE_SHADER_VERTEX]->size);
-}
-
-static void
-cell_unmap_constant_buffers(struct cell_context *sp)
-{
-   struct pipe_winsys *ws = sp->pipe.winsys;
-   uint i;
-   for (i = 0; i < 2; i++) {
-      if (sp->constants[i] && sp->constants[i]->size)
-         ws->buffer_unmap(ws, sp->constants[i]);
-      sp->mapped_constants[i] = NULL;
-   }
-}
 
 
 
@@ -86,94 +56,58 @@ cell_unmap_constant_buffers(struct cell_context *sp)
  * XXX should the element buffer be specified/bound with a separate function?
  */
 static void
-cell_draw_range_elements(struct pipe_context *pipe,
-                         struct pipe_buffer *indexBuffer,
-                         unsigned indexSize,
-                         unsigned min_index,
-                         unsigned max_index,
-                         unsigned mode, unsigned start, unsigned count)
+cell_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 {
-   struct cell_context *sp = cell_context(pipe);
-   struct draw_context *draw = sp->draw;
+   struct cell_context *cell = cell_context(pipe);
+   struct draw_context *draw = cell->draw;
+   void *mapped_indices = NULL;
    unsigned i;
 
-   if (sp->dirty)
-      cell_update_derived( sp );
+   if (cell->dirty)
+      cell_update_derived( cell );
 
 #if 0
-   cell_map_surfaces(sp);
+   cell_map_surfaces(cell);
 #endif
-   cell_map_constant_buffers(sp);
 
    /*
     * Map vertex buffers
     */
-   for (i = 0; i < sp->num_vertex_buffers; i++) {
-      void *buf = pipe_buffer_map(pipe->screen,
-                                           sp->vertex_buffer[i].buffer,
-                                           PIPE_BUFFER_USAGE_CPU_READ);
-      cell_flush_buffer_range(sp, buf, sp->vertex_buffer[i].buffer->size);
+   for (i = 0; i < cell->num_vertex_buffers; i++) {
+      void *buf = cell_resource(cell->vertex_buffer[i].buffer)->data;
       draw_set_mapped_vertex_buffer(draw, i, buf);
    }
    /* Map index buffer, if present */
-   if (indexBuffer) {
-      void *mapped_indexes = pipe_buffer_map(pipe->screen,
-                                                      indexBuffer,
-                                                      PIPE_BUFFER_USAGE_CPU_READ);
-      draw_set_mapped_element_buffer(draw, indexSize, mapped_indexes);
-   }
-   else {
-      /* no index/element buffer */
-      draw_set_mapped_element_buffer(draw, 0, NULL);
-   }
+   if (info->indexed && cell->index_buffer.buffer)
+      mapped_indices = cell_resource(cell->index_buffer.buffer)->data;
 
+   draw_set_mapped_index_buffer(draw, mapped_indices);
 
    /* draw! */
-   draw_arrays(draw, mode, start, count);
+   draw_vbo(draw, info);
 
    /*
     * unmap vertex/index buffers - will cause draw module to flush
     */
-   for (i = 0; i < sp->num_vertex_buffers; i++) {
+   for (i = 0; i < cell->num_vertex_buffers; i++) {
       draw_set_mapped_vertex_buffer(draw, i, NULL);
-      pipe_buffer_unmap(pipe->screen, sp->vertex_buffer[i].buffer);
    }
-   if (indexBuffer) {
-      draw_set_mapped_element_buffer(draw, 0, NULL);
-      pipe_buffer_unmap(pipe->screen, indexBuffer);
+   if (mapped_indices) {
+      draw_set_mapped_index_buffer(draw, NULL);
    }
 
-   /* Note: leave drawing surfaces mapped */
-   cell_unmap_constant_buffers(sp);
-}
-
-
-static void
-cell_draw_elements(struct pipe_context *pipe,
-                   struct pipe_buffer *indexBuffer,
-                   unsigned indexSize,
-                   unsigned mode, unsigned start, unsigned count)
-{
-   cell_draw_range_elements( pipe, indexBuffer,
-                             indexSize,
-                             0, 0xffffffff,
-                             mode, start, count );
-}
-
-
-static void
-cell_draw_arrays(struct pipe_context *pipe, unsigned mode,
-                     unsigned start, unsigned count)
-{
-   cell_draw_elements(pipe, NULL, 0, mode, start, count);
+   /*
+    * TODO: Flush only when a user vertex/index buffer is present
+    * (or even better, modify draw module to do this
+    * internally when this condition is seen?)
+    */
+   draw_flush(draw);
 }
 
 
 void
 cell_init_draw_functions(struct cell_context *cell)
 {
-   cell->pipe.draw_arrays = cell_draw_arrays;
-   cell->pipe.draw_elements = cell_draw_elements;
-   cell->pipe.draw_range_elements = cell_draw_range_elements;
+   cell->pipe.draw_vbo = cell_draw_vbo;
 }
 

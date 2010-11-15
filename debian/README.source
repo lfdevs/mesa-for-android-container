@@ -20,11 +20,7 @@ git.debian.org in the pkg-xorg subdirectory. Most upstream packages
 are actually maintained in git repositories as well, so they often
 just need to be pulled into git.debian.org in a "upstream-*" branch.
 
-The .orig.tar.gz upstream source file could be generated this
-"upstream-*" branch in the Debian git repository but it is actually
-generated from upstream tarballs directly.
-Upstream ships Mesa as 3 different tarballs (MesaLib, MesaGLUT and
-MesaDemos) which are re-bundled together into a single .orig.tar.gz.
+The .orig.tar.gz is upstream's MesaLib tarball.
 
 The Debian packaging is added by creating the "debian-*" git branch
 which contains the aforementioned "upstream-*" branch plus the debian/

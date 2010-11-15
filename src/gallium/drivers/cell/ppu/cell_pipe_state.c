@@ -125,6 +125,7 @@ cell_set_stencil_ref(struct pipe_context *pipe,
    cell->dirty |= CELL_NEW_DEPTH_STENCIL;
 }
 
+
 static void
 cell_set_clip_state(struct pipe_context *pipe,
                     const struct pipe_clip_state *clip)
@@ -135,6 +136,12 @@ cell_set_clip_state(struct pipe_context *pipe,
    draw_set_clip_state(cell->draw, clip);
 }
 
+
+static void
+cell_set_sample_mask(struct pipe_context *pipe,
+                     unsigned sample_mask)
+{
+}
 
 
 /* Called when driver state tracker notices changes to the viewport
@@ -257,8 +264,9 @@ cell_delete_sampler_state(struct pipe_context *pipe,
 
 
 static void
-cell_set_sampler_textures(struct pipe_context *pipe,
-                          unsigned num, struct pipe_texture **texture)
+cell_set_fragment_sampler_views(struct pipe_context *pipe,
+                                unsigned num,
+                                struct pipe_sampler_view **views)
 {
    struct cell_context *cell = cell_context(pipe);
    uint i, changed = 0x0;
@@ -266,12 +274,16 @@ cell_set_sampler_textures(struct pipe_context *pipe,
    assert(num <= CELL_MAX_SAMPLERS);
 
    for (i = 0; i < CELL_MAX_SAMPLERS; i++) {
-      struct cell_texture *new_tex = cell_texture(i < num ? texture[i] : NULL);
-      struct cell_texture *old_tex = cell->texture[i];
-      if (old_tex != new_tex) {
+      struct pipe_sampler_view *new_view = i < num ? views[i] : NULL;
+      struct pipe_sampler_view *old_view = cell->fragment_sampler_views[i];
 
-         pipe_texture_reference((struct pipe_texture **) &cell->texture[i],
-                                (struct pipe_texture *) new_tex);
+      if (old_view != new_view) {
+         struct pipe_resource *new_tex = new_view ? new_view->texture : NULL;
+
+         pipe_sampler_view_reference(&cell->fragment_sampler_views[i],
+                                     new_view);
+         pipe_resource_reference((struct pipe_resource **) &cell->texture[i],
+                                (struct pipe_resource *) new_tex);
 
          changed |= (1 << i);
       }
@@ -286,34 +298,72 @@ cell_set_sampler_textures(struct pipe_context *pipe,
 }
 
 
+static struct pipe_sampler_view *
+cell_create_sampler_view(struct pipe_context *pipe,
+                         struct pipe_resource *texture,
+                         const struct pipe_sampler_view *templ)
+{
+   struct pipe_sampler_view *view = CALLOC_STRUCT(pipe_sampler_view);
+
+   if (view) {
+      *view = *templ;
+      view->reference.count = 1;
+      view->texture = NULL;
+      pipe_resource_reference(&view->texture, texture);
+      view->context = pipe;
+   }
+
+   return view;
+}
+
+
+static void
+cell_sampler_view_destroy(struct pipe_context *pipe,
+                          struct pipe_sampler_view *view)
+{
+   pipe_resource_reference(&view->texture, NULL);
+   FREE(view);
+}
+
+
 /**
  * Map color and z/stencil framebuffer surfaces.
  */
 static void
 cell_map_surfaces(struct cell_context *cell)
 {
+#if 0
    struct pipe_screen *screen = cell->pipe.screen;
+#endif
    uint i;
 
    for (i = 0; i < 1; i++) {
       struct pipe_surface *ps = cell->framebuffer.cbufs[i];
       if (ps) {
-         struct cell_texture *ct = cell_texture(ps->texture);
+         struct cell_resource *ct = cell_resource(ps->texture);
+#if 0
          cell->cbuf_map[i] = screen->buffer_map(screen,
                                                 ct->buffer,
                                                 (PIPE_BUFFER_USAGE_GPU_READ |
                                                  PIPE_BUFFER_USAGE_GPU_WRITE));
+#else
+         cell->cbuf_map[i] = ct->data;
+#endif
       }
    }
 
    {
       struct pipe_surface *ps = cell->framebuffer.zsbuf;
       if (ps) {
-         struct cell_texture *ct = cell_texture(ps->texture);
+         struct cell_resource *ct = cell_resource(ps->texture);
+#if 0
          cell->zsbuf_map = screen->buffer_map(screen,
                                               ct->buffer,
                                               (PIPE_BUFFER_USAGE_GPU_READ |
                                                PIPE_BUFFER_USAGE_GPU_WRITE));
+#else
+         cell->zsbuf_map = ct->data;
+#endif
       }
    }
 }
@@ -325,17 +375,17 @@ cell_map_surfaces(struct cell_context *cell)
 static void
 cell_unmap_surfaces(struct cell_context *cell)
 {
-   struct pipe_screen *screen = cell->pipe.screen;
+   /*struct pipe_screen *screen = cell->pipe.screen;*/
    uint i;
 
    for (i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
       struct pipe_surface *ps = cell->framebuffer.cbufs[i];
       if (ps && cell->cbuf_map[i]) {
-         struct cell_texture *ct = cell_texture(ps->texture);
+         /*struct cell_resource *ct = cell_resource(ps->texture);*/
          assert(ps->texture);
-         assert(ct->buffer);
+         /*assert(ct->buffer);*/
 
-         screen->buffer_unmap(screen, ct->buffer);
+         /*screen->buffer_unmap(screen, ct->buffer);*/
          cell->cbuf_map[i] = NULL;
       }
    }
@@ -343,8 +393,8 @@ cell_unmap_surfaces(struct cell_context *cell)
    {
       struct pipe_surface *ps = cell->framebuffer.zsbuf;
       if (ps && cell->zsbuf_map) {
-         struct cell_texture *ct = cell_texture(ps->texture);
-         screen->buffer_unmap(screen, ct->buffer);
+         /*struct cell_resource *ct = cell_resource(ps->texture);*/
+         /*screen->buffer_unmap(screen, ct->buffer);*/
          cell->zsbuf_map = NULL;
       }
    }
@@ -387,7 +437,6 @@ cell_set_framebuffer_state(struct pipe_context *pipe,
 }
 
 
-
 void
 cell_init_state_functions(struct cell_context *cell)
 {
@@ -399,7 +448,9 @@ cell_init_state_functions(struct cell_context *cell)
    cell->pipe.bind_fragment_sampler_states = cell_bind_sampler_states;
    cell->pipe.delete_sampler_state = cell_delete_sampler_state;
 
-   cell->pipe.set_fragment_sampler_textures = cell_set_sampler_textures;
+   cell->pipe.set_fragment_sampler_views = cell_set_fragment_sampler_views;
+   cell->pipe.create_sampler_view = cell_create_sampler_view;
+   cell->pipe.sampler_view_destroy = cell_sampler_view_destroy;
 
    cell->pipe.create_depth_stencil_alpha_state = cell_create_depth_stencil_alpha_state;
    cell->pipe.bind_depth_stencil_alpha_state   = cell_bind_depth_stencil_alpha_state;
@@ -412,6 +463,7 @@ cell_init_state_functions(struct cell_context *cell)
    cell->pipe.set_blend_color = cell_set_blend_color;
    cell->pipe.set_stencil_ref = cell_set_stencil_ref;
    cell->pipe.set_clip_state = cell_set_clip_state;
+   cell->pipe.set_sample_mask = cell_set_sample_mask;
 
    cell->pipe.set_framebuffer_state = cell_set_framebuffer_state;
 

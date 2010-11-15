@@ -31,6 +31,8 @@
 #include "main/imports.h"
 #include "main/simple_list.h"
 
+#include <inttypes.h>
+
 static void radeonQueryGetResult(GLcontext *ctx, struct gl_query_object *q)
 {
 	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
@@ -54,7 +56,7 @@ static void radeonQueryGetResult(GLcontext *ctx, struct gl_query_object *q)
 		 * hw writes zpass end counts to qwords 1, 3, 5, 7.
 		 * then we substract. MSB is the valid bit.
 		 */
-		for (i = 0; i < 16; i += 4) {
+		for (i = 0; i < 32; i += 4) {
 			uint64_t start = (uint64_t)LE32_TO_CPU(result[i]) |
 					 (uint64_t)LE32_TO_CPU(result[i + 1]) << 32;
 			uint64_t end = (uint64_t)LE32_TO_CPU(result[i + 2]) |
@@ -65,7 +67,7 @@ static void radeonQueryGetResult(GLcontext *ctx, struct gl_query_object *q)
 
 			}
 			radeon_print(RADEON_STATE, RADEON_TRACE,
-				     "%d start: %llx, end: %llx %lld\n", i, start, end, end - start);
+				     "%d start: %" PRIu64 ", end: %" PRIu64 " %" PRIu64 "\n", i, start, end, end - start);
 		}
 	} else {
 		for (i = 0; i < query->curr_offset/sizeof(uint32_t); ++i) {

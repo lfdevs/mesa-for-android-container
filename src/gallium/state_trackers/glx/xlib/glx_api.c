@@ -34,13 +34,6 @@
 #include "GL/glx.h"
 
 #include "xm_api.h"
-#include "main/context.h"
-#include "main/config.h"
-#include "main/macros.h"
-#include "main/imports.h"
-#include "main/version.h"
-#include "state_tracker/st_context.h"
-#include "state_tracker/st_public.h"
 
 
 /* This indicates the client-side GLX API and GLX encoder version. */
@@ -606,8 +599,8 @@ destroy_visuals_on_display(Display *dpy)
 static int
 close_display_callback(Display *dpy, XExtCodes *codes)
 {
-   destroy_visuals_on_display(dpy);
    xmesa_destroy_buffers_on_display(dpy);
+   destroy_visuals_on_display(dpy);
    return 0;
 }
 
@@ -689,7 +682,7 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
    int desiredVisualID = -1;
    int numAux = 0;
 
-   xmesa_init();
+   xmesa_init( dpy );
 
    parselist = list;
 
@@ -1302,9 +1295,9 @@ glXCopyContext( Display *dpy, GLXContext src, GLXContext dst,
    XMesaContext xm_dst = dst->xmesaContext;
    (void) dpy;
    if (MakeCurrent_PrevContext == src) {
-      _mesa_Flush();
+      glFlush();
    }
-   st_copy_context_state( xm_src->st, xm_dst->st, (GLuint) mask );
+   XMesaCopyContext(xm_src, xm_dst, mask);
 }
 
 
@@ -1761,6 +1754,10 @@ glXGetFBConfigs( Display *dpy, int screen, int *nelements )
       }
       for (i = 0; i < *nelements; i++) {
          results[i] = create_glx_visual(dpy, visuals + i);
+         if (!results[i]) {
+            *nelements = i;
+            break;
+         }
       }
       return (GLXFBConfig *) results;
    }

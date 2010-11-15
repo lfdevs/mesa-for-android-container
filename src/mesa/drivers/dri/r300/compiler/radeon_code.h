@@ -108,6 +108,18 @@ typedef enum {
 } rc_compare_func;
 
 /**
+ * Coordinate wrapping modes.
+ *
+ * These are not quite the same as their GL counterparts yet.
+ */
+typedef enum {
+	RC_WRAP_NONE = 0,
+	RC_WRAP_REPEAT,
+	RC_WRAP_MIRRORED_REPEAT,
+	RC_WRAP_MIRRORED_CLAMP
+} rc_wrap_mode;
+
+/**
  * Stores state that influences the compilation of a fragment program.
  */
 struct r300_fragment_program_external_state {
@@ -120,18 +132,41 @@ struct r300_fragment_program_external_state {
 		 *  2 - GL_ALPHA
 		 * depending on the depth texture mode.
 		 */
-		unsigned depth_texture_mode : 2;
+		unsigned depth_texture_swizzle:12;
 
 		/**
 		 * If the sampler is used as a shadow sampler,
 		 * this field specifies the compare function.
 		 *
 		 * Otherwise, this field is \ref RC_COMPARE_FUNC_NEVER (aka 0).
-		 *
-		 * Otherwise, this field is 0.
 		 * \sa rc_compare_func
 		 */
 		unsigned texture_compare_func : 3;
+
+		/**
+		 * No matter what the sampler type is,
+		 * this field turns it into a shadow sampler.
+		 */
+		unsigned compare_mode_enabled : 1;
+
+		/**
+		 * If the sampler needs to fake NPOT, this field is set.
+		 */
+		unsigned fake_npot : 1;
+
+		/**
+		 * If the sampler will recieve non-normalized coords,
+		 * this field is set.
+		 */
+		unsigned non_normalized_coords : 1;
+
+		/**
+		 * This field specifies wrapping modes for the sampler.
+		 *
+		 * If this field is \ref RC_WRAP_NONE (aka 0), no wrapping maths
+		 * will be performed on the coordinates.
+		 */
+		unsigned wrap_mode : 2;
 	} unit[16];
 };
 
@@ -186,6 +221,9 @@ struct r500_fragment_program_code {
 	int max_temp_idx;
 
 	uint32_t us_fc_ctrl;
+
+	uint32_t int_constants[32];
+	uint32_t int_constant_count;
 };
 
 struct rX00_fragment_program_code {
@@ -197,11 +235,21 @@ struct rX00_fragment_program_code {
 	unsigned writes_depth:1;
 
 	struct rc_constant_list constants;
+	unsigned *constants_remap_table;
 };
 
 
-#define VSF_MAX_FRAGMENT_LENGTH (255*4)
-#define VSF_MAX_FRAGMENT_TEMPS (14)
+#define R300_VS_MAX_ALU		256
+#define R300_VS_MAX_ALU_DWORDS  (R300_VS_MAX_ALU * 4)
+#define R500_VS_MAX_ALU	        1024
+#define R500_VS_MAX_ALU_DWORDS  (R500_VS_MAX_ALU * 4)
+#define R300_VS_MAX_TEMPS	32
+/* This is the max for all chipsets (r300-r500) */
+#define R300_VS_MAX_FC_OPS 16
+/* The r500 maximum depth is not just for loops, but any combination of loops
+ * and subroutine jumps. */
+#define R500_VS_MAX_FC_DEPTH 8
+#define R300_VS_MAX_LOOP_DEPTH 1
 
 #define VSF_MAX_INPUTS 32
 #define VSF_MAX_OUTPUTS 32
@@ -209,8 +257,8 @@ struct rX00_fragment_program_code {
 struct r300_vertex_program_code {
 	int length;
 	union {
-		uint32_t d[VSF_MAX_FRAGMENT_LENGTH];
-		float f[VSF_MAX_FRAGMENT_LENGTH];
+		uint32_t d[R500_VS_MAX_ALU_DWORDS];
+		float f[R500_VS_MAX_ALU_DWORDS];
 	} body;
 
 	int pos_end;
@@ -219,12 +267,22 @@ struct r300_vertex_program_code {
 	int outputs[VSF_MAX_OUTPUTS];
 
 	struct rc_constant_list constants;
+	unsigned *constants_remap_table;
 
 	uint32_t InputsRead;
 	uint32_t OutputsWritten;
-};
 
-void r300_vertex_program_dump(struct r300_vertex_program_code * vs);
+	unsigned int num_fc_ops;
+	uint32_t fc_ops;
+	union {
+	        uint32_t r300[R300_VS_MAX_FC_OPS];
+		struct {
+			uint32_t lw;
+			uint32_t uw;
+		} r500[R300_VS_MAX_FC_OPS];
+	} fc_op_addrs;
+	int32_t fc_loop_index[R300_VS_MAX_FC_OPS];
+};
 
 #endif /* RADEON_CODE_H */
 

@@ -28,6 +28,7 @@
 
 #include "mask.h"
 #include "renderer.h"
+#include "api.h"
 
 #include "vg_context.h"
 #include "pipe/p_context.h"
@@ -36,7 +37,6 @@
 #include "util/u_pack_color.h"
 #include "util/u_draw_quad.h"
 #include "util/u_memory.h"
-
 
 #define DISABLE_1_1_MASKING 1
 
@@ -51,7 +51,7 @@ draw_clear_quad(struct vg_context *st,
                 const VGfloat color[4])
 {
    struct pipe_context *pipe = st->pipe;
-   struct pipe_buffer *buf;
+   struct pipe_resource *buf;
    VGuint i;
 
    /* positions */
@@ -81,17 +81,20 @@ draw_clear_quad(struct vg_context *st,
    /* put vertex data into vbuf */
    buf =  pipe_user_buffer_create(pipe->screen,
                                   st->clear.vertices,
-                                  sizeof(st->clear.vertices));
+                                  sizeof(st->clear.vertices),
+				  PIPE_BIND_VERTEX_BUFFER);
 
 
    /* draw */
    if (buf) {
+      cso_set_vertex_elements(st->cso_context, 2, st->velems);
+
       util_draw_vertex_buffer(pipe, buf, 0,
                               PIPE_PRIM_TRIANGLE_FAN,
                               4,  /* verts */
                               2); /* attribs/vert */
 
-      pipe_buffer_reference(&buf, NULL);
+      pipe_resource_reference(&buf, NULL);
    }
 }
 
@@ -114,10 +117,6 @@ clear_with_quad(struct vg_context *st, float x0, float y0,
      x0, y0,
      x1, y1);
    */
-
-   if (st->pipe->screen && st->pipe->screen->update_buffer)
-      st->pipe->screen->update_buffer( st->pipe->screen,
-                                       st->pipe->priv );
 
    cso_save_blend(st->cso_context);
    cso_save_rasterizer(st->cso_context);
@@ -152,9 +151,9 @@ clear_with_quad(struct vg_context *st, float x0, float y0,
 }
 
 
-void vgMask(VGHandle mask, VGMaskOperation operation,
-            VGint x, VGint y,
-            VGint width, VGint height)
+void vegaMask(VGHandle mask, VGMaskOperation operation,
+              VGint x, VGint y,
+              VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
 
@@ -190,8 +189,8 @@ void vgMask(VGHandle mask, VGMaskOperation operation,
    }
 }
 
-void vgClear(VGint x, VGint y,
-             VGint width, VGint height)
+void vegaClear(VGint x, VGint y,
+               VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct pipe_framebuffer_state *fb;
@@ -226,9 +225,9 @@ void vgClear(VGint x, VGint y,
 #ifdef OPENVG_VERSION_1_1
 
 
-void vgRenderToMask(VGPath path,
-                    VGbitfield paintModes,
-                    VGMaskOperation operation)
+void vegaRenderToMask(VGPath path,
+                      VGbitfield paintModes,
+                      VGMaskOperation operation)
 {
    struct vg_context *ctx = vg_current_context();
 
@@ -259,7 +258,7 @@ void vgRenderToMask(VGPath path,
    mask_render_to((struct path *)path, paintModes, operation);
 }
 
-VGMaskLayer vgCreateMaskLayer(VGint width, VGint height)
+VGMaskLayer vegaCreateMaskLayer(VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
 
@@ -273,7 +272,7 @@ VGMaskLayer vgCreateMaskLayer(VGint width, VGint height)
    return (VGMaskLayer)mask_layer_create(width, height);
 }
 
-void vgDestroyMaskLayer(VGMaskLayer maskLayer)
+void vegaDestroyMaskLayer(VGMaskLayer maskLayer)
 {
    struct vg_mask_layer *mask = 0;
    struct vg_context *ctx = vg_current_context();
@@ -291,10 +290,10 @@ void vgDestroyMaskLayer(VGMaskLayer maskLayer)
    mask_layer_destroy(mask);
 }
 
-void vgFillMaskLayer(VGMaskLayer maskLayer,
-                     VGint x, VGint y,
-                     VGint width, VGint height,
-                     VGfloat value)
+void vegaFillMaskLayer(VGMaskLayer maskLayer,
+                       VGint x, VGint y,
+                       VGint width, VGint height,
+                       VGfloat value)
 {
    struct vg_mask_layer *mask = 0;
    struct vg_context *ctx = vg_current_context();
@@ -337,10 +336,10 @@ void vgFillMaskLayer(VGMaskLayer maskLayer,
    mask_layer_fill(mask, x, y, width, height, value);
 }
 
-void vgCopyMask(VGMaskLayer maskLayer,
-                VGint sx, VGint sy,
-                VGint dx, VGint dy,
-                VGint width, VGint height)
+void vegaCopyMask(VGMaskLayer maskLayer,
+                  VGint sx, VGint sy,
+                  VGint dx, VGint dy,
+                  VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct vg_mask_layer *mask = 0;

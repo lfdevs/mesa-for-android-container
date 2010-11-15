@@ -30,7 +30,6 @@
 
 struct svga_context;
 struct pipe_context;
-struct pipe_buffer;
 struct vbuf_render;
 
 
@@ -39,14 +38,8 @@ void svga_destroy_swtnl( struct svga_context *svga );
 
 
 enum pipe_error
-svga_swtnl_draw_range_elements(struct svga_context *svga,
-                               struct pipe_buffer *indexBuffer,
-                               unsigned indexSize,
-                               unsigned min_index,
-                               unsigned max_index,
-                               unsigned prim, 
-                               unsigned start, 
-                               unsigned count);
+svga_swtnl_draw_vbo(struct svga_context *svga,
+                    const struct pipe_draw_info *info);
 
 
 #endif

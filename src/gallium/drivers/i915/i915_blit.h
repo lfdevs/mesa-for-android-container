@@ -31,13 +31,12 @@
 #include "i915_context.h"
 
 extern void i915_copy_blit(struct i915_context *i915,
-                           unsigned do_flip,
                            unsigned cpp,
                            unsigned short src_pitch,
-                           struct intel_buffer *src_buffer,
+                           struct i915_winsys_buffer *src_buffer,
                            unsigned src_offset,
                            unsigned short dst_pitch,
-                           struct intel_buffer *dst_buffer,
+                           struct i915_winsys_buffer *dst_buffer,
                            unsigned dst_offset,
                            short srcx, short srcy,
                            short dstx, short dsty,
@@ -45,8 +44,9 @@ extern void i915_copy_blit(struct i915_context *i915,
 
 extern void i915_fill_blit(struct i915_context *i915,
                            unsigned cpp,
+                           unsigned rgba_mask,
                            unsigned short dst_pitch,
-                           struct intel_buffer *dst_buffer,
+                           struct i915_winsys_buffer *dst_buffer,
                            unsigned dst_offset,
                            short x, short y,
                            short w, short h, unsigned color);

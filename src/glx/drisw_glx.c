@@ -28,40 +28,45 @@
 #include <dlfcn.h>
 #include "dri_common.h"
 
-typedef struct __GLXDRIdisplayPrivateRec __GLXDRIdisplayPrivate;
-typedef struct __GLXDRIcontextPrivateRec __GLXDRIcontextPrivate;
-typedef struct __GLXDRIdrawablePrivateRec __GLXDRIdrawablePrivate;
-
-struct __GLXDRIdisplayPrivateRec
+struct drisw_display
 {
    __GLXDRIdisplay base;
 };
 
-struct __GLXDRIcontextPrivateRec
+struct drisw_context
 {
-   __GLXDRIcontext base;
+   struct glx_context base;
    __DRIcontext *driContext;
-   __GLXscreenConfigs *psc;
+
 };
 
-struct __GLXDRIdrawablePrivateRec
+struct drisw_screen
+{
+   struct glx_screen base;
+
+   __DRIscreen *driScreen;
+   __GLXDRIscreen vtable;
+   const __DRIcoreExtension *core;
+   const __DRIswrastExtension *swrast;
+   const __DRIconfig **driver_configs;
+
+   void *driver;
+};
+
+struct drisw_drawable
 {
    __GLXDRIdrawable base;
 
    GC gc;
    GC swapgc;
 
+   __DRIdrawable *driDrawable;
    XVisualInfo *visinfo;
    XImage *ximage;
-   int bpp;
 };
 
-/**
- * swrast loader functions
- */
-
 static Bool
-XCreateDrawable(__GLXDRIdrawablePrivate * pdp,
+XCreateDrawable(struct drisw_drawable * pdp,
                 Display * dpy, XID drawable, int visualid)
 {
    XGCValues gcvalues;
@@ -79,26 +84,27 @@ XCreateDrawable(__GLXDRIdrawablePrivate * pdp,
    XChangeGC(dpy, pdp->swapgc, GCFunction, &gcvalues);
    XChangeGC(dpy, pdp->swapgc, GCGraphicsExposures, &gcvalues);
 
-   /* create XImage  */
+   /* visual */
    visTemp.screen = DefaultScreen(dpy);
    visTemp.visualid = visualid;
    visMask = (VisualScreenMask | VisualIDMask);
    pdp->visinfo = XGetVisualInfo(dpy, visMask, &visTemp, &num_visuals);
 
-   pdp->ximage = XCreateImage(dpy, pdp->visinfo->visual, pdp->visinfo->depth, ZPixmap, 0,       /* format, offset */
-                              NULL,     /* data */
-                              0, 0,     /* size */
-                              32,       /* bitmap_pad */
-                              0);       /* bytes_per_line */
-
-   /* get the true number of bits per pixel */
-   pdp->bpp = pdp->ximage->bits_per_pixel;
+   /* create XImage */
+   pdp->ximage = XCreateImage(dpy,
+                              pdp->visinfo->visual,
+                              pdp->visinfo->depth,
+                              ZPixmap, 0,             /* format, offset */
+                              NULL,                   /* data */
+                              0, 0,                   /* width, height */
+                              32,                     /* bitmap_pad */
+                              0);                     /* bytes_per_line */
 
    return True;
 }
 
 static void
-XDestroyDrawable(__GLXDRIdrawablePrivate * pdp, Display * dpy, XID drawable)
+XDestroyDrawable(struct drisw_drawable * pdp, Display * dpy, XID drawable)
 {
    XDestroyImage(pdp->ximage);
    XFree(pdp->visinfo);
@@ -107,39 +113,60 @@ XDestroyDrawable(__GLXDRIdrawablePrivate * pdp, Display * dpy, XID drawable)
    XFreeGC(dpy, pdp->swapgc);
 }
 
+/**
+ * swrast loader functions
+ */
+
 static void
 swrastGetDrawableInfo(__DRIdrawable * draw,
-                      int *x, int *y, int *w, int *h, void *loaderPrivate)
+                      int *x, int *y, int *w, int *h,
+                      void *loaderPrivate)
 {
-   __GLXDRIdrawablePrivate *pdp = loaderPrivate;
+   struct drisw_drawable *pdp = loaderPrivate;
    __GLXDRIdrawable *pdraw = &(pdp->base);
    Display *dpy = pdraw->psc->dpy;
    Drawable drawable;
 
    Window root;
    Status stat;
-   unsigned int bw, depth;
+   unsigned uw, uh, bw, depth;
 
    drawable = pdraw->xDrawable;
 
    stat = XGetGeometry(dpy, drawable, &root,
-                       x, y, (unsigned int *) w, (unsigned int *) h,
-                       &bw, &depth);
+                       x, y, &uw, &uh, &bw, &depth);
+   *w = uw;
+   *h = uh;
 }
 
+/**
+ * Align renderbuffer pitch.
+ *
+ * This should be chosen by the driver and the loader (libGL, xserver/glx)
+ * should use the driver provided pitch.
+ *
+ * It seems that the xorg loader (that is the xserver loading swrast_dri for
+ * indirect rendering, not client-side libGL) requires that the pitch is
+ * exactly the image width padded to 32 bits. XXX
+ *
+ * The above restriction can probably be overcome by using ScratchPixmap and
+ * CopyArea in the xserver, similar to ShmPutImage, and setting the width of
+ * the scratch pixmap to 'pitch / cpp'.
+ */
 static inline int
-bytes_per_line(int w, int bpp, unsigned mul)
+bytes_per_line(unsigned pitch_bits, unsigned mul)
 {
    unsigned mask = mul - 1;
 
-   return ((w * bpp + mask) & ~mask) / 8;
+   return ((pitch_bits + mask) & ~mask) / 8;
 }
 
 static void
 swrastPutImage(__DRIdrawable * draw, int op,
-               int x, int y, int w, int h, char *data, void *loaderPrivate)
+               int x, int y, int w, int h,
+               char *data, void *loaderPrivate)
 {
-   __GLXDRIdrawablePrivate *pdp = loaderPrivate;
+   struct drisw_drawable *pdp = loaderPrivate;
    __GLXDRIdrawable *pdraw = &(pdp->base);
    Display *dpy = pdraw->psc->dpy;
    Drawable drawable;
@@ -163,7 +190,7 @@ swrastPutImage(__DRIdrawable * draw, int op,
    ximage->data = data;
    ximage->width = w;
    ximage->height = h;
-   ximage->bytes_per_line = bytes_per_line(w, pdp->bpp, 32);
+   ximage->bytes_per_line = bytes_per_line(w * ximage->bits_per_pixel, 32);
 
    XPutImage(dpy, drawable, gc, ximage, 0, 0, x, y, w, h);
 
@@ -171,24 +198,25 @@ swrastPutImage(__DRIdrawable * draw, int op,
 }
 
 static void
-swrastGetImage(__DRIdrawable * draw,
-               int x, int y, int w, int h, char *data, void *loaderPrivate)
+swrastGetImage(__DRIdrawable * read,
+               int x, int y, int w, int h,
+               char *data, void *loaderPrivate)
 {
-   __GLXDRIdrawablePrivate *pdp = loaderPrivate;
-   __GLXDRIdrawable *pdraw = &(pdp->base);
-   Display *dpy = pdraw->psc->dpy;
-   Drawable drawable;
+   struct drisw_drawable *prp = loaderPrivate;
+   __GLXDRIdrawable *pread = &(prp->base);
+   Display *dpy = pread->psc->dpy;
+   Drawable readable;
    XImage *ximage;
 
-   drawable = pdraw->xDrawable;
+   readable = pread->xDrawable;
 
-   ximage = pdp->ximage;
+   ximage = prp->ximage;
    ximage->data = data;
    ximage->width = w;
    ximage->height = h;
-   ximage->bytes_per_line = bytes_per_line(w, pdp->bpp, 32);
+   ximage->bytes_per_line = bytes_per_line(w * ximage->bits_per_pixel, 32);
 
-   XGetSubImage(dpy, drawable, x, y, w, h, ~0L, ZPixmap, ximage, 0, 0);
+   XGetSubImage(dpy, readable, x, y, w, h, ~0L, ZPixmap, ximage, 0, 0);
 
    ximage->data = NULL;
 }
@@ -211,54 +239,80 @@ static const __DRIextension *loader_extensions[] = {
  */
 
 static void
-driDestroyContext(__GLXDRIcontext * context,
-                  __GLXscreenConfigs * psc, Display * dpy)
+drisw_destroy_context(struct glx_context *context)
 {
-   __GLXDRIcontextPrivate *pcp = (__GLXDRIcontextPrivate *) context;
-   const __DRIcoreExtension *core = pcp->psc->core;
+   struct drisw_context *pcp = (struct drisw_context *) context;
+   struct drisw_screen *psc = (struct drisw_screen *) context->psc;
 
-   (*core->destroyContext) (pcp->driContext);
+   if (context->xid)
+      glx_send_destroy_context(psc->base.dpy, context->xid);
+
+   if (context->extensions)
+      XFree((char *) context->extensions);
+
+   (*psc->core->destroyContext) (pcp->driContext);
 
    Xfree(pcp);
 }
 
-static Bool
-driBindContext(__GLXDRIcontext * context,
-               __GLXDRIdrawable * draw, __GLXDRIdrawable * read)
+static int
+drisw_bind_context(struct glx_context *context, struct glx_context *old,
+		   GLXDrawable draw, GLXDrawable read)
 {
-   __GLXDRIcontextPrivate *pcp = (__GLXDRIcontextPrivate *) context;
-   const __DRIcoreExtension *core = pcp->psc->core;
+   struct drisw_context *pcp = (struct drisw_context *) context;
+   struct drisw_screen *psc = (struct drisw_screen *) pcp->base.psc;
+   struct drisw_drawable *pdraw, *pread;
 
-   return (*core->bindContext) (pcp->driContext,
-                                draw->driDrawable, read->driDrawable);
+   pdraw = (struct drisw_drawable *) driFetchDrawable(context, draw);
+   pread = (struct drisw_drawable *) driFetchDrawable(context, read);
+
+   if (pdraw == NULL || pread == NULL)
+      return GLXBadDrawable;
+
+   if ((*psc->core->bindContext) (pcp->driContext,
+				  pdraw->driDrawable, pread->driDrawable))
+      return Success;
+
+   return GLXBadContext;
 }
 
 static void
-driUnbindContext(__GLXDRIcontext * context)
+drisw_unbind_context(struct glx_context *context, struct glx_context *new)
 {
-   __GLXDRIcontextPrivate *pcp = (__GLXDRIcontextPrivate *) context;
-   const __DRIcoreExtension *core = pcp->psc->core;
+   struct drisw_context *pcp = (struct drisw_context *) context;
+   struct drisw_screen *psc = (struct drisw_screen *) pcp->base.psc;
 
-   (*core->unbindContext) (pcp->driContext);
+   (*psc->core->unbindContext) (pcp->driContext);
+
+   driReleaseDrawables(&pcp->base);
 }
 
-static __GLXDRIcontext *
-driCreateContext(__GLXscreenConfigs * psc,
-                 const __GLcontextModes * mode,
-                 GLXContext gc, GLXContext shareList, int renderType)
+static const struct glx_context_vtable drisw_context_vtable = {
+   drisw_destroy_context,
+   drisw_bind_context,
+   drisw_unbind_context,
+   NULL,
+   NULL,
+   DRI_glXUseXFont,
+   NULL,
+   NULL,
+};
+
+static struct glx_context *
+drisw_create_context(struct glx_screen *base,
+		     struct glx_config *config_base,
+		     struct glx_context *shareList, int renderType)
 {
-   __GLXDRIcontextPrivate *pcp, *pcp_shared;
-   __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) mode;
-   const __DRIcoreExtension *core;
+   struct drisw_context *pcp, *pcp_shared;
+   __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) config_base;
+   struct drisw_screen *psc = (struct drisw_screen *) base;
    __DRIcontext *shared = NULL;
 
-   if (!psc || !psc->driScreen)
+   if (!psc->base.driScreen)
       return NULL;
 
-   core = psc->core;
-
    if (shareList) {
-      pcp_shared = (__GLXDRIcontextPrivate *) shareList->driContext;
+      pcp_shared = (struct drisw_context *) shareList;
       shared = pcp_shared->driContext;
    }
 
@@ -266,18 +320,21 @@ driCreateContext(__GLXscreenConfigs * psc,
    if (pcp == NULL)
       return NULL;
 
-   pcp->psc = psc;
+   memset(pcp, 0, sizeof *pcp);
+   if (!glx_context_init(&pcp->base, &psc->base, &config->base)) {
+      Xfree(pcp);
+      return NULL;
+   }
+
    pcp->driContext =
-      (*core->createNewContext) (psc->__driScreen,
-                                 config->driConfig, shared, pcp);
+      (*psc->core->createNewContext) (psc->driScreen,
+				      config->driConfig, shared, pcp);
    if (pcp->driContext == NULL) {
       Xfree(pcp);
       return NULL;
    }
 
-   pcp->base.destroyContext = driDestroyContext;
-   pcp->base.bindContext = driBindContext;
-   pcp->base.unbindContext = driUnbindContext;
+   pcp->base.vtable = &drisw_context_vtable;
 
    return &pcp->base;
 }
@@ -285,23 +342,23 @@ driCreateContext(__GLXscreenConfigs * psc,
 static void
 driDestroyDrawable(__GLXDRIdrawable * pdraw)
 {
-   __GLXDRIdrawablePrivate *pdp = (__GLXDRIdrawablePrivate *) pdraw;
-   const __DRIcoreExtension *core = pdraw->psc->core;
+   struct drisw_drawable *pdp = (struct drisw_drawable *) pdraw;
+   struct drisw_screen *psc = (struct drisw_screen *) pdp->base.psc;
 
-   (*core->destroyDrawable) (pdraw->driDrawable);
+   (*psc->core->destroyDrawable) (pdp->driDrawable);
 
    XDestroyDrawable(pdp, pdraw->psc->dpy, pdraw->drawable);
    Xfree(pdp);
 }
 
 static __GLXDRIdrawable *
-driCreateDrawable(__GLXscreenConfigs * psc,
-                  XID xDrawable,
-                  GLXDrawable drawable, const __GLcontextModes * modes)
+driCreateDrawable(struct glx_screen *base, XID xDrawable,
+		  GLXDrawable drawable, struct glx_config *modes)
 {
-   __GLXDRIdrawable *pdraw;
-   __GLXDRIdrawablePrivate *pdp;
+   struct drisw_drawable *pdp;
    __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) modes;
+   struct drisw_screen *psc = (struct drisw_screen *) base;
+
    const __DRIswrastExtension *swrast = psc->swrast;
 
    /* Old dri can't handle GLX 1.3+ drawable constructors. */
@@ -312,59 +369,93 @@ driCreateDrawable(__GLXscreenConfigs * psc,
    if (!pdp)
       return NULL;
 
-   pdraw = &(pdp->base);
-   pdraw->xDrawable = xDrawable;
-   pdraw->drawable = drawable;
-   pdraw->psc = psc;
+   memset(pdp, 0, sizeof *pdp);
+   pdp->base.xDrawable = xDrawable;
+   pdp->base.drawable = drawable;
+   pdp->base.psc = &psc->base;
 
-   XCreateDrawable(pdp, psc->dpy, xDrawable, modes->visualID);
+   XCreateDrawable(pdp, psc->base.dpy, xDrawable, modes->visualID);
 
    /* Create a new drawable */
-   pdraw->driDrawable =
-      (*swrast->createNewDrawable) (psc->__driScreen, config->driConfig, pdp);
+   pdp->driDrawable =
+      (*swrast->createNewDrawable) (psc->driScreen, config->driConfig, pdp);
 
-   if (!pdraw->driDrawable) {
-      XDestroyDrawable(pdp, psc->dpy, xDrawable);
+   if (!pdp->driDrawable) {
+      XDestroyDrawable(pdp, psc->base.dpy, xDrawable);
       Xfree(pdp);
       return NULL;
    }
 
-   pdraw->destroyDrawable = driDestroyDrawable;
+   pdp->base.destroyDrawable = driDestroyDrawable;
 
-   return pdraw;
+   return &pdp->base;
+}
+
+static int64_t
+driSwapBuffers(__GLXDRIdrawable * pdraw,
+               int64_t target_msc, int64_t divisor, int64_t remainder)
+{
+   struct drisw_drawable *pdp = (struct drisw_drawable *) pdraw;
+   struct drisw_screen *psc = (struct drisw_screen *) pdp->base.psc;
+
+   (void) target_msc;
+   (void) divisor;
+   (void) remainder;
+
+   (*psc->core->swapBuffers) (pdp->driDrawable);
+
+   return 0;
 }
 
 static void
-driSwapBuffers(__GLXDRIdrawable * pdraw)
+driDestroyScreen(struct glx_screen *base)
 {
-   (*pdraw->psc->core->swapBuffers) (pdraw->driDrawable);
-}
+   struct drisw_screen *psc = (struct drisw_screen *) base;
 
-static void
-driDestroyScreen(__GLXscreenConfigs * psc)
-{
    /* Free the direct rendering per screen data */
-   (*psc->core->destroyScreen) (psc->__driScreen);
-   psc->__driScreen = NULL;
+   (*psc->core->destroyScreen) (psc->driScreen);
+   driDestroyConfigs(psc->driver_configs);
+   psc->driScreen = NULL;
    if (psc->driver)
       dlclose(psc->driver);
 }
 
-static __GLXDRIscreen *
-driCreateScreen(__GLXscreenConfigs * psc, int screen,
-                __GLXdisplayPrivate * priv)
+static void *
+driOpenSwrast(void)
+{
+   void *driver = NULL;
+
+   if (driver == NULL)
+      driver = driOpenDriver("swrast");
+
+   if (driver == NULL)
+      driver = driOpenDriver("swrastg");
+
+   return driver;
+}
+
+static const struct glx_screen_vtable drisw_screen_vtable = {
+   drisw_create_context
+};
+
+static struct glx_screen *
+driCreateScreen(int screen, struct glx_display *priv)
 {
    __GLXDRIscreen *psp;
    const __DRIconfig **driver_configs;
    const __DRIextension **extensions;
-   const char *driverName = "swrast";
+   struct drisw_screen *psc;
    int i;
 
-   psp = Xcalloc(1, sizeof *psp);
-   if (psp == NULL)
+   psc = Xcalloc(1, sizeof *psc);
+   if (psc == NULL)
       return NULL;
 
-   psc->driver = driOpenDriver(driverName);
+   memset(psc, 0, sizeof *psc);
+   if (!glx_screen_init(&psc->base, screen, priv))
+       return NULL;
+
+   psc->driver = driOpenSwrast();
    if (psc->driver == NULL)
       goto handle_error;
 
@@ -376,9 +467,9 @@ driCreateScreen(__GLXscreenConfigs * psc, int screen,
 
    for (i = 0; extensions[i]; i++) {
       if (strcmp(extensions[i]->name, __DRI_CORE) == 0)
-         psc->core = (__DRIcoreExtension *) extensions[i];
+	 psc->core = (__DRIcoreExtension *) extensions[i];
       if (strcmp(extensions[i]->name, __DRI_SWRAST) == 0)
-         psc->swrast = (__DRIswrastExtension *) extensions[i];
+	 psc->swrast = (__DRIswrastExtension *) extensions[i];
    }
 
    if (psc->core == NULL || psc->swrast == NULL) {
@@ -386,36 +477,34 @@ driCreateScreen(__GLXscreenConfigs * psc, int screen,
       goto handle_error;
    }
 
-   psc->__driScreen =
-      psc->swrast->createNewScreen(screen,
-                                   loader_extensions, &driver_configs, psc);
-   if (psc->__driScreen == NULL) {
+   psc->driScreen =
+      psc->swrast->createNewScreen(screen, loader_extensions,
+				   &driver_configs, psc);
+   if (psc->driScreen == NULL) {
       ErrorMessageF("failed to create dri screen\n");
       goto handle_error;
    }
 
-   driBindExtensions(psc);
-   driBindCommonExtensions(psc);
-
-   psc->configs = driConvertConfigs(psc->core, psc->configs, driver_configs);
-   psc->visuals = driConvertConfigs(psc->core, psc->visuals, driver_configs);
+   psc->base.configs =
+      driConvertConfigs(psc->core, psc->base.configs, driver_configs);
+   psc->base.visuals =
+      driConvertConfigs(psc->core, psc->base.visuals, driver_configs);
 
    psc->driver_configs = driver_configs;
 
+   psc->base.vtable = &drisw_screen_vtable;
+   psp = &psc->vtable;
+   psc->base.driScreen = psp;
    psp->destroyScreen = driDestroyScreen;
-   psp->createContext = driCreateContext;
    psp->createDrawable = driCreateDrawable;
    psp->swapBuffers = driSwapBuffers;
-   psp->waitX = NULL;
-   psp->waitGL = NULL;
 
-   return psp;
+   return &psc->base;
 
  handle_error:
-   Xfree(psp);
-
    if (psc->driver)
       dlclose(psc->driver);
+   Xfree(psc);
 
    ErrorMessageF("reverting to indirect rendering\n");
 
@@ -438,7 +527,7 @@ driDestroyDisplay(__GLXDRIdisplay * dpy)
 _X_HIDDEN __GLXDRIdisplay *
 driswCreateDisplay(Display * dpy)
 {
-   __GLXDRIdisplayPrivate *pdpyp;
+   struct drisw_display *pdpyp;
 
    pdpyp = Xmalloc(sizeof *pdpyp);
    if (pdpyp == NULL)

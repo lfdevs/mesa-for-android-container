@@ -24,6 +24,8 @@
 
 #include "util/u_debug.h"
 
+#include <stdio.h>
+
 /* r300_chipset: A file all to itself for deducing the various properties of
  * Radeons. */
 
@@ -31,12 +33,13 @@
 void r300_parse_chipset(struct r300_capabilities* caps)
 {
     /* Reasonable defaults */
-    caps->num_vert_fpus = 4;
+    caps->num_vert_fpus = 2;
+    caps->num_tex_units = 16;
     caps->has_tcl = debug_get_bool_option("RADEON_NO_TCL", FALSE) ? FALSE : TRUE;
+    caps->hiz_ram = 0;
     caps->is_r400 = FALSE;
     caps->is_r500 = FALSE;
     caps->high_second_pipe = FALSE;
-
 
     /* Note: These are not ordered by PCI ID. I leave that task to GCC,
      * which will perform the ordering while collating jump tables. Instead,
@@ -45,6 +48,9 @@ void r300_parse_chipset(struct r300_capabilities* caps)
         case 0x4144:
             caps->family = CHIP_FAMILY_R300;
             caps->high_second_pipe = TRUE;
+            caps->num_vert_fpus = 4;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x4145:
@@ -56,6 +62,9 @@ void r300_parse_chipset(struct r300_capabilities* caps)
         case 0x4E47:
             caps->family = CHIP_FAMILY_R300;
             caps->high_second_pipe = TRUE;
+            caps->num_vert_fpus = 4;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x4150:
@@ -73,6 +82,7 @@ void r300_parse_chipset(struct r300_capabilities* caps)
         case 0x4E56:
             caps->family = CHIP_FAMILY_RV350;
             caps->high_second_pipe = TRUE;
+            caps->zmask_ram = RV3xx_ZMASK_SIZE;
             break;
 
         case 0x4148:
@@ -84,11 +94,17 @@ void r300_parse_chipset(struct r300_capabilities* caps)
         case 0x4E4B:
             caps->family = CHIP_FAMILY_R350;
             caps->high_second_pipe = TRUE;
+            caps->num_vert_fpus = 4;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x4E4A:
             caps->family = CHIP_FAMILY_R360;
             caps->high_second_pipe = TRUE;
+            caps->num_vert_fpus = 4;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x5460:
@@ -101,15 +117,19 @@ void r300_parse_chipset(struct r300_capabilities* caps)
         case 0x5B65:
             caps->family = CHIP_FAMILY_RV370;
             caps->high_second_pipe = TRUE;
+            caps->zmask_ram = RV3xx_ZMASK_SIZE;
             break;
 
         case 0x3150:
         case 0x3152:
         case 0x3154:
+        case 0x3155:
         case 0x3E50:
         case 0x3E54:
             caps->family = CHIP_FAMILY_RV380;
             caps->high_second_pipe = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = RV3xx_ZMASK_SIZE;
             break;
 
         case 0x4A48:
@@ -125,6 +145,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_R420;
             caps->num_vert_fpus = 6;
             caps->is_r400 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x5548:
@@ -139,6 +161,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_R423;
             caps->num_vert_fpus = 6;
             caps->is_r400 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x554C:
@@ -151,6 +175,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_R430;
             caps->num_vert_fpus = 6;
             caps->is_r400 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x5D4C:
@@ -162,6 +188,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_R480;
             caps->num_vert_fpus = 6;
             caps->is_r400 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x4B48:
@@ -172,6 +200,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_R481;
             caps->num_vert_fpus = 6;
             caps->is_r400 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x5E4C:
@@ -189,30 +219,36 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_RV410;
             caps->num_vert_fpus = 6;
             caps->is_r400 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x5954:
         case 0x5955:
             caps->family = CHIP_FAMILY_RS480;
             caps->has_tcl = FALSE;
+            caps->zmask_ram = RV3xx_ZMASK_SIZE;
             break;
 
         case 0x5974:
         case 0x5975:
             caps->family = CHIP_FAMILY_RS482;
             caps->has_tcl = FALSE;
+            caps->zmask_ram = RV3xx_ZMASK_SIZE;
             break;
 
         case 0x5A41:
         case 0x5A42:
             caps->family = CHIP_FAMILY_RS400;
             caps->has_tcl = FALSE;
+            caps->zmask_ram = RV3xx_ZMASK_SIZE;
             break;
 
         case 0x5A61:
         case 0x5A62:
             caps->family = CHIP_FAMILY_RC410;
             caps->has_tcl = FALSE;
+            caps->zmask_ram = RV3xx_ZMASK_SIZE;
             break;
 
         case 0x791E:
@@ -220,6 +256,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_RS690;
             caps->has_tcl = FALSE;
             caps->is_r400 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x793F:
@@ -228,6 +266,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_RS600;
             caps->has_tcl = FALSE;
             caps->is_r400 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x796C:
@@ -237,6 +277,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_RS740;
             caps->has_tcl = FALSE;
             caps->is_r400 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x7100:
@@ -256,6 +298,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_R520;
             caps->num_vert_fpus = 8;
             caps->is_r500 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x7140:
@@ -299,6 +343,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_RV515;
             caps->num_vert_fpus = 2;
             caps->is_r500 = TRUE;
+            caps->hiz_ram = R300_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x71C0:
@@ -320,6 +366,8 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_RV530;
             caps->num_vert_fpus = 5;
             caps->is_r500 = TRUE;
+            /*caps->hiz_ram = RV530_HIZ_LIMIT;*/
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x7240:
@@ -340,12 +388,16 @@ void r300_parse_chipset(struct r300_capabilities* caps)
             caps->family = CHIP_FAMILY_R580;
             caps->num_vert_fpus = 8;
             caps->is_r500 = TRUE;
+            caps->hiz_ram = RV530_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x7280:
             caps->family = CHIP_FAMILY_RV570;
-            caps->num_vert_fpus = 5;
+            caps->num_vert_fpus = 8;
             caps->is_r500 = TRUE;
+            caps->hiz_ram = RV530_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         case 0x7281:
@@ -360,13 +412,16 @@ void r300_parse_chipset(struct r300_capabilities* caps)
         case 0x7293:
         case 0x7297:
             caps->family = CHIP_FAMILY_RV560;
-            caps->num_vert_fpus = 5;
+            caps->num_vert_fpus = 8;
             caps->is_r500 = TRUE;
+            caps->hiz_ram = RV530_HIZ_LIMIT;
+            caps->zmask_ram = PIPE_ZMASK_SIZE;
             break;
 
         default:
-            debug_printf("r300: Warning: Unknown chipset 0x%x\n",
-                caps->pci_id);
-            break;
+            fprintf(stderr, "r300: Warning: Unknown chipset 0x%x\n",
+                    caps->pci_id);
     }
+
+    caps->is_rv350 = caps->family >= CHIP_FAMILY_RV350;
 }

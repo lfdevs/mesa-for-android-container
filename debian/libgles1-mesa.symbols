@@ -1,4 +1,4 @@
-libGLESv1_CM.so.1 libgles1-mesa #MINVER#
+libGLESv1_CM.so.1 libgles1-mesa #MINVER# | libgles1
 # _glapi_* are internal GL dispatch symbols.  They should probably be hidden
  (regex)"^_glapi_.*@Base$" 7.8.1
 # These are optimised assembly versions of functions, accessed through a 
@@ -238,28 +238,3 @@ libGLESv1_CM.so.1 libgles1-mesa #MINVER#
  glUnmapBufferOES@Base 7.8.1
  glVertexPointer@Base 7.8.1
  glViewport@Base 7.8.1
-# These are internal gallium statetracker symbols.  
-# They should probably be hidden
- st_api_OpenGL_ES1@Base 7.8.1
- st_bind_teximage@Base 7.8.1
- st_bind_texture_surface@Base 7.8.1
- st_copy_context_state@Base 7.8.1
- st_create_context@Base 7.8.1
- st_create_framebuffer@Base 7.8.1
- st_destroy_context@Base 7.8.1
- st_finish@Base 7.8.1
- st_flush@Base 7.8.1
- st_framebuffer_private@Base 7.8.1
- st_get_current@Base 7.8.1
- st_get_framebuffer_dimensions@Base 7.8.1
- st_get_framebuffer_surface@Base 7.8.1
- st_get_framebuffer_texture@Base 7.8.1
- st_get_proc_address@Base 7.8.1
- st_make_current@Base 7.8.1
- st_notify_swapbuffers@Base 7.8.1
- st_release_teximage@Base 7.8.1
- st_resize_framebuffer@Base 7.8.1
- st_set_framebuffer_surface@Base 7.8.1
- st_swapbuffers@Base 7.8.1
- st_unbind_texture_surface@Base 7.8.1
- st_unreference_framebuffer@Base 7.8.1

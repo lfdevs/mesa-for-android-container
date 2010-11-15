@@ -64,6 +64,24 @@ static GLuint translate_raster_op(GLenum logicop)
    }
 }
 
+static uint32_t
+br13_for_cpp(int cpp)
+{
+   switch (cpp) {
+   case 4:
+      return BR13_8888;
+      break;
+   case 2:
+      return BR13_565;
+      break;
+   case 1:
+      return BR13_8;
+      break;
+   default:
+      assert(0);
+      return 0;
+   }
+}
 
 /* Copy BitBlt
  */
@@ -71,11 +89,11 @@ GLboolean
 intelEmitCopyBlit(struct intel_context *intel,
 		  GLuint cpp,
 		  GLshort src_pitch,
-		  dri_bo *src_buffer,
+		  drm_intel_bo *src_buffer,
 		  GLuint src_offset,
 		  uint32_t src_tiling,
 		  GLshort dst_pitch,
-		  dri_bo *dst_buffer,
+		  drm_intel_bo *dst_buffer,
 		  GLuint dst_offset,
 		  uint32_t dst_tiling,
 		  GLshort src_x, GLshort src_y,
@@ -86,7 +104,7 @@ intelEmitCopyBlit(struct intel_context *intel,
    GLuint CMD, BR13, pass = 0;
    int dst_y2 = dst_y + h;
    int dst_x2 = dst_x + w;
-   dri_bo *aper_array[3];
+   drm_intel_bo *aper_array[3];
    BATCH_LOCALS;
 
    /* Blits are in a different ringbuffer so we don't use them. */
@@ -119,22 +137,8 @@ intelEmitCopyBlit(struct intel_context *intel,
            break;
    } while (pass < 2);
 
-   if (pass >= 2) {
-      drm_intel_gem_bo_map_gtt(dst_buffer);
-      drm_intel_gem_bo_map_gtt(src_buffer);
-      _mesa_copy_rect((GLubyte *)dst_buffer->virtual + dst_offset,
-		      cpp,
-		      dst_pitch,
-		      dst_x, dst_y,
-		      w, h,
-		      (GLubyte *)src_buffer->virtual + src_offset,
-		      src_pitch,
-		      src_x, src_y);
-      drm_intel_gem_bo_unmap_gtt(src_buffer);
-      drm_intel_gem_bo_unmap_gtt(dst_buffer);
-
-      return GL_TRUE;
-   }
+   if (pass >= 2)
+      return GL_FALSE;
 
    intel_batchbuffer_require_space(intel->batch, 8 * 4);
    DBG("%s src:buf(%p)/%d+%d %d,%d dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
@@ -145,18 +149,14 @@ intelEmitCopyBlit(struct intel_context *intel,
    src_pitch *= cpp;
    dst_pitch *= cpp;
 
-   BR13 = translate_raster_op(logic_op) << 16;
+   BR13 = br13_for_cpp(cpp) | translate_raster_op(logic_op) << 16;
 
    switch (cpp) {
    case 1:
-      CMD = XY_SRC_COPY_BLT_CMD;
-      break;
    case 2:
-      BR13 |= BR13_565;
       CMD = XY_SRC_COPY_BLT_CMD;
       break;
    case 4:
-      BR13 |= BR13_8888;
       CMD = XY_SRC_COPY_BLT_CMD | XY_BLT_WRITE_ALPHA | XY_BLT_WRITE_RGB;
       break;
    default:
@@ -279,12 +279,11 @@ intelClearWithBlit(GLcontext *ctx, GLbitfield mask)
 	  irb->region->buffer, (pitch * cpp),
 	  x1, y1, x2 - x1, y2 - y1);
 
-      BR13 = 0xf0 << 16;
+      BR13 = br13_for_cpp(cpp) | 0xf0 << 16;
       CMD = XY_COLOR_BLT_CMD;
 
       /* Setup the blit command */
       if (cpp == 4) {
-	 BR13 |= BR13_8888;
 	 if (buf == BUFFER_DEPTH || buf == BUFFER_STENCIL) {
 	    if (mask & BUFFER_BIT_DEPTH)
 	       CMD |= XY_BLT_WRITE_RGB;
@@ -294,9 +293,6 @@ intelClearWithBlit(GLcontext *ctx, GLbitfield mask)
 	    /* clearing RGBA */
 	    CMD |= XY_BLT_WRITE_ALPHA | XY_BLT_WRITE_RGB;
 	 }
-      } else {
-	 ASSERT(cpp == 2);
-	 BR13 |= BR13_565;
       }
 
       assert(irb->region->tiling != I915_TILING_Y);
@@ -337,6 +333,10 @@ intelClearWithBlit(GLcontext *ctx, GLbitfield mask)
 	    clear_val = PACK_COLOR_1555(clear[3], clear[0],
 					clear[1], clear[2]);
 	    break;
+	 case MESA_FORMAT_A8:
+	    clear_val = PACK_COLOR_8888(clear[3], clear[3],
+					clear[3], clear[3]);
+	    break;
 	 default:
 	    _mesa_problem(ctx, "Unexpected renderbuffer format: %d\n",
 			  irb->Base.Format);
@@ -367,6 +367,9 @@ intelClearWithBlit(GLcontext *ctx, GLbitfield mask)
       OUT_BATCH(clear_val);
       ADVANCE_BATCH();
 
+      if (intel->always_flush_cache)
+	 intel_batchbuffer_emit_mi_flush(intel->batch);
+
       if (buf == BUFFER_DEPTH || buf == BUFFER_STENCIL)
 	 mask &= ~(BUFFER_BIT_DEPTH | BUFFER_BIT_STENCIL);
       else
@@ -380,7 +383,7 @@ intelEmitImmediateColorExpandBlit(struct intel_context *intel,
 				  GLubyte *src_bits, GLuint src_size,
 				  GLuint fg_color,
 				  GLshort dst_pitch,
-				  dri_bo *dst_buffer,
+				  drm_intel_bo *dst_buffer,
 				  GLuint dst_offset,
 				  uint32_t dst_tiling,
 				  GLshort x, GLshort y,
@@ -430,10 +433,7 @@ intelEmitImmediateColorExpandBlit(struct intel_context *intel,
 #endif
 
    br13 = dst_pitch | (translate_raster_op(logic_op) << 16) | (1 << 29);
-   if (cpp == 2)
-      br13 |= BR13_565;
-   else
-      br13 |= BR13_8888;
+   br13 |= br13_for_cpp(cpp);
 
    blit_cmd = XY_TEXT_IMMEDIATE_BLIT_CMD | XY_TEXT_BYTE_PACKED; /* packing? */
    if (dst_tiling != I915_TILING_NONE)
@@ -478,6 +478,7 @@ intel_emit_linear_blit(struct intel_context *intel,
 		       unsigned int size)
 {
    GLuint pitch, height;
+   GLboolean ok;
 
    /* Blits are in a different ringbuffer so we don't use them. */
    assert(intel->gen < 6);
@@ -485,25 +486,27 @@ intel_emit_linear_blit(struct intel_context *intel,
    /* The pitch is a signed value. */
    pitch = MIN2(size, (1 << 15) - 1);
    height = size / pitch;
-   intelEmitCopyBlit(intel, 1,
-		     pitch, src_bo, src_offset, I915_TILING_NONE,
-		     pitch, dst_bo, dst_offset, I915_TILING_NONE,
-		     0, 0, /* src x/y */
-		     0, 0, /* dst x/y */
-		     pitch, height, /* w, h */
-		     GL_COPY);
+   ok = intelEmitCopyBlit(intel, 1,
+			  pitch, src_bo, src_offset, I915_TILING_NONE,
+			  pitch, dst_bo, dst_offset, I915_TILING_NONE,
+			  0, 0, /* src x/y */
+			  0, 0, /* dst x/y */
+			  pitch, height, /* w, h */
+			  GL_COPY);
+   assert(ok);
 
    src_offset += pitch * height;
    dst_offset += pitch * height;
    size -= pitch * height;
    assert (size < (1 << 15));
    if (size != 0) {
-      intelEmitCopyBlit(intel, 1,
-			size, src_bo, src_offset, I915_TILING_NONE,
-			size, dst_bo, dst_offset, I915_TILING_NONE,
-			0, 0, /* src x/y */
-			0, 0, /* dst x/y */
-			size, 1, /* w, h */
-			GL_COPY);
+      ok = intelEmitCopyBlit(intel, 1,
+			     size, src_bo, src_offset, I915_TILING_NONE,
+			     size, dst_bo, dst_offset, I915_TILING_NONE,
+			     0, 0, /* src x/y */
+			     0, 0, /* dst x/y */
+			     size, 1, /* w, h */
+			     GL_COPY);
+      assert(ok);
    }
 }

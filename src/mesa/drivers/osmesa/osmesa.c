@@ -1009,7 +1009,7 @@ new_osmesa_renderbuffer(GLcontext *ctx, GLenum format, GLenum type)
          rb->Format = MESA_FORMAT_RGBA8888;
          break;
       case GL_UNSIGNED_SHORT:
-         rb->Format = MESA_FORMAT_SIGNED_RGBA_16;
+         rb->Format = MESA_FORMAT_RGBA_16;
          break;
       case GL_FLOAT:
          rb->Format = MESA_FORMAT_RGBA_FLOAT32;
@@ -1061,7 +1061,6 @@ OSMesaCreateContextExt( GLenum format, GLint depthBits, GLint stencilBits,
    struct dd_function_table functions;
    GLint rind, gind, bind, aind;
    GLint redBits = 0, greenBits = 0, blueBits = 0, alphaBits =0;
-   GLenum type = CHAN_TYPE;
 
    rind = gind = bind = aind = 0;
    if (format==OSMESA_RGBA) {
@@ -1329,6 +1328,7 @@ OSMesaMakeCurrent( OSMesaContext osmesa, void *buffer, GLenum type,
     * size.
     */
    osmesa->rb = new_osmesa_renderbuffer(&osmesa->mesa, osmesa->format, type);
+   _mesa_remove_renderbuffer(osmesa->gl_buffer, BUFFER_FRONT_LEFT);
    _mesa_add_renderbuffer(osmesa->gl_buffer, BUFFER_FRONT_LEFT, osmesa->rb);
    assert(osmesa->rb->RefCount == 2);
 

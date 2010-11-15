@@ -28,14 +28,28 @@
 
 #include "r300_context.h"
 #include "r300_fs.h"
+#include "r300_hyperz.h"
 #include "r300_screen.h"
 #include "r300_shader_semantics.h"
 #include "r300_state_derived.h"
 #include "r300_state_inlines.h"
+#include "r300_texture.h"
 #include "r300_vs.h"
 
 /* r300_state_derived: Various bits of state which are dependent upon
  * currently bound CSO data. */
+
+enum r300_rs_swizzle {
+    SWIZ_XYZW = 0,
+    SWIZ_X001,
+    SWIZ_XY01,
+    SWIZ_0001,
+};
+
+enum r300_rs_col_write_type {
+    WRITE_COLOR = 0,
+    WRITE_FACE
+};
 
 static void r300_draw_emit_attrib(struct r300_context* r300,
                                   enum attrib_emit emit,
@@ -80,12 +94,21 @@ static void r300_draw_emit_all_attribs(struct r300_context* r300)
         }
     }
 
-    /* XXX Back-face colors. */
+    /* Back-face colors. */
+    for (i = 0; i < ATTR_COLOR_COUNT; i++) {
+        if (vs_outputs->bcolor[i] != ATTR_UNUSED) {
+            r300_draw_emit_attrib(r300, EMIT_4F, INTERP_LINEAR,
+                                  vs_outputs->bcolor[i]);
+        }
+    }
 
     /* Texture coordinates. */
+    /* Only 8 generic vertex attributes can be used. If there are more,
+     * they won't be rasterized. */
     gen_count = 0;
-    for (i = 0; i < ATTR_GENERIC_COUNT; i++) {
-        if (vs_outputs->generic[i] != ATTR_UNUSED) {
+    for (i = 0; i < ATTR_GENERIC_COUNT && gen_count < 8; i++) {
+        if (vs_outputs->generic[i] != ATTR_UNUSED &&
+            !(r300->sprite_coord_enable & (1 << i))) {
             r300_draw_emit_attrib(r300, EMIT_4F, INTERP_PERSPECTIVE,
                                   vs_outputs->generic[i]);
             gen_count++;
@@ -93,105 +116,59 @@ static void r300_draw_emit_all_attribs(struct r300_context* r300)
     }
 
     /* Fog coordinates. */
-    if (vs_outputs->fog != ATTR_UNUSED) {
+    if (gen_count < 8 && vs_outputs->fog != ATTR_UNUSED) {
         r300_draw_emit_attrib(r300, EMIT_4F, INTERP_PERSPECTIVE,
                               vs_outputs->fog);
         gen_count++;
     }
 
-    /* XXX magic */
-    assert(gen_count <= 8);
-}
-
-/* Update the PSC tables. */
-/* XXX move this function into r300_state.c after TCL-bypass gets removed
- * XXX because this one is dependent only on vertex elements. */
-static void r300_vertex_psc(struct r300_context* r300)
-{
-    struct r300_vertex_shader* vs = r300->vs_state.state;
-    struct r300_vertex_stream_state *vformat =
-        (struct r300_vertex_stream_state*)r300->vertex_stream_state.state;
-    uint16_t type, swizzle;
-    enum pipe_format format;
-    unsigned i;
-    int identity[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-    int* stream_tab;
-
-    memset(vformat, 0, sizeof(struct r300_vertex_stream_state));
-
-    stream_tab = identity;
-
-    /* Vertex shaders have no semantics on their inputs,
-     * so PSC should just route stuff based on the vertex elements,
-     * and not on attrib information. */
-    DBG(r300, DBG_DRAW, "r300: vs expects %d attribs, routing %d elements"
-            " in psc\n",
-            vs->info.num_inputs,
-            r300->vertex_element_count);
-
-    for (i = 0; i < r300->vertex_element_count; i++) {
-        format = r300->vertex_element[i].src_format;
-
-        type = r300_translate_vertex_data_type(format) |
-            (stream_tab[i] << R300_DST_VEC_LOC_SHIFT);
-        swizzle = r300_translate_vertex_data_swizzle(format);
-
-        if (i & 1) {
-            vformat->vap_prog_stream_cntl[i >> 1] |= type << 16;
-            vformat->vap_prog_stream_cntl_ext[i >> 1] |= swizzle << 16;
-        } else {
-            vformat->vap_prog_stream_cntl[i >> 1] |= type;
-            vformat->vap_prog_stream_cntl_ext[i >> 1] |= swizzle;
-        }
+    /* WPOS. */
+    if (r300_fs(r300)->shader->inputs.wpos != ATTR_UNUSED && gen_count < 8) {
+        DBG(r300, DBG_SWTCL, "draw_emit_attrib: WPOS, index: %i\n",
+            vs_outputs->wpos);
+        r300_draw_emit_attrib(r300, EMIT_4F, INTERP_PERSPECTIVE,
+                              vs_outputs->wpos);
     }
-
-    assert(i <= 15);
-
-    /* Set the last vector in the PSC. */
-    if (i) {
-        i -= 1;
-    }
-    vformat->vap_prog_stream_cntl[i >> 1] |=
-        (R300_LAST_VEC << (i & 1 ? 16 : 0));
-
-    vformat->count = (i >> 1) + 1;
-    r300->vertex_stream_state.size = (1 + vformat->count) * 2;
 }
 
 /* Update the PSC tables for SW TCL, using Draw. */
-static void r300_swtcl_vertex_psc(struct r300_context* r300)
+static void r300_swtcl_vertex_psc(struct r300_context *r300)
 {
-    struct r300_vertex_shader* vs = r300->vs_state.state;
-    struct r300_vertex_stream_state *vformat =
-        (struct r300_vertex_stream_state*)r300->vertex_stream_state.state;
-    struct vertex_info* vinfo = &r300->vertex_info;
+    struct r300_vertex_stream_state *vstream = r300->vertex_stream_state.state;
+    struct vertex_info *vinfo = &r300->vertex_info;
     uint16_t type, swizzle;
     enum pipe_format format;
     unsigned i, attrib_count;
-    int* vs_output_tab = vs->stream_loc_notcl;
+    int* vs_output_tab = r300->stream_loc_notcl;
 
-    memset(vformat, 0, sizeof(struct r300_vertex_stream_state));
+    memset(vstream, 0, sizeof(struct r300_vertex_stream_state));
 
     /* For each Draw attribute, route it to the fragment shader according
      * to the vs_output_tab. */
     attrib_count = vinfo->num_attribs;
-    DBG(r300, DBG_DRAW, "r300: attrib count: %d\n", attrib_count);
+    DBG(r300, DBG_SWTCL, "r300: attrib count: %d\n", attrib_count);
     for (i = 0; i < attrib_count; i++) {
-        DBG(r300, DBG_DRAW, "r300: attrib: offset %d, interp %d, size %d,"
-               " vs_output_tab %d\n", vinfo->attrib[i].src_index,
-               vinfo->attrib[i].interp_mode, vinfo->attrib[i].emit,
-               vs_output_tab[i]);
-    }
-
-    for (i = 0; i < attrib_count; i++) {
-        /* Make sure we have a proper destination for our attribute. */
-        assert(vs_output_tab[i] != -1);
+        if (vs_output_tab[i] == -1) {
+            assert(0);
+            abort();
+        }
 
         format = draw_translate_vinfo_format(vinfo->attrib[i].emit);
 
+        DBG(r300, DBG_SWTCL,
+            "r300: swtcl_vertex_psc [%i] <- %s\n",
+            vs_output_tab[i], util_format_short_name(format));
+
         /* Obtain the type of data in this attribute. */
-        type = r300_translate_vertex_data_type(format) |
-            vs_output_tab[i] << R300_DST_VEC_LOC_SHIFT;
+        type = r300_translate_vertex_data_type(format);
+        if (type == R300_INVALID_FORMAT) {
+            fprintf(stderr, "r300: Bad vertex format %s.\n",
+                    util_format_short_name(format));
+            assert(0);
+            abort();
+        }
+
+        type |= vs_output_tab[i] << R300_DST_VEC_LOC_SHIFT;
 
         /* Obtain the swizzle for this attribute. Note that the default
          * swizzle in the hardware is not XYZW! */
@@ -199,11 +176,11 @@ static void r300_swtcl_vertex_psc(struct r300_context* r300)
 
         /* Add the attribute to the PSC table. */
         if (i & 1) {
-            vformat->vap_prog_stream_cntl[i >> 1] |= type << 16;
-            vformat->vap_prog_stream_cntl_ext[i >> 1] |= swizzle << 16;
+            vstream->vap_prog_stream_cntl[i >> 1] |= type << 16;
+            vstream->vap_prog_stream_cntl_ext[i >> 1] |= swizzle << 16;
         } else {
-            vformat->vap_prog_stream_cntl[i >> 1] |= type;
-            vformat->vap_prog_stream_cntl_ext[i >> 1] |= swizzle;
+            vstream->vap_prog_stream_cntl[i >> 1] |= type;
+            vstream->vap_prog_stream_cntl_ext[i >> 1] |= swizzle;
         }
     }
 
@@ -211,18 +188,19 @@ static void r300_swtcl_vertex_psc(struct r300_context* r300)
     if (i) {
         i -= 1;
     }
-    vformat->vap_prog_stream_cntl[i >> 1] |=
+    vstream->vap_prog_stream_cntl[i >> 1] |=
         (R300_LAST_VEC << (i & 1 ? 16 : 0));
 
-    vformat->count = (i >> 1) + 1;
-    r300->vertex_stream_state.size = (1 + vformat->count) * 2;
+    vstream->count = (i >> 1) + 1;
+    r300->vertex_stream_state.dirty = TRUE;
+    r300->vertex_stream_state.size = (1 + vstream->count) * 2;
 }
 
 static void r300_rs_col(struct r300_rs_block* rs, int id, int ptr,
-                        boolean swizzle_0001)
+                        enum r300_rs_swizzle swiz)
 {
     rs->ip[id] |= R300_RS_COL_PTR(ptr);
-    if (swizzle_0001) {
+    if (swiz == SWIZ_0001) {
         rs->ip[id] |= R300_RS_COL_FMT(R300_RS_COL_FMT_0001);
     } else {
         rs->ip[id] |= R300_RS_COL_FMT(R300_RS_COL_FMT_RGBA);
@@ -230,23 +208,31 @@ static void r300_rs_col(struct r300_rs_block* rs, int id, int ptr,
     rs->inst[id] |= R300_RS_INST_COL_ID(id);
 }
 
-static void r300_rs_col_write(struct r300_rs_block* rs, int id, int fp_offset)
+static void r300_rs_col_write(struct r300_rs_block* rs, int id, int fp_offset,
+                              enum r300_rs_col_write_type type)
 {
+    assert(type == WRITE_COLOR);
     rs->inst[id] |= R300_RS_INST_COL_CN_WRITE |
                     R300_RS_INST_COL_ADDR(fp_offset);
 }
 
 static void r300_rs_tex(struct r300_rs_block* rs, int id, int ptr,
-                        boolean swizzle_X001)
+                        enum r300_rs_swizzle swiz)
 {
-    if (swizzle_X001) {
-        rs->ip[id] |= R300_RS_TEX_PTR(ptr*4) |
+    if (swiz == SWIZ_X001) {
+        rs->ip[id] |= R300_RS_TEX_PTR(ptr) |
                       R300_RS_SEL_S(R300_RS_SEL_C0) |
                       R300_RS_SEL_T(R300_RS_SEL_K0) |
                       R300_RS_SEL_R(R300_RS_SEL_K0) |
                       R300_RS_SEL_Q(R300_RS_SEL_K1);
+    } else if (swiz == SWIZ_XY01) {
+        rs->ip[id] |= R300_RS_TEX_PTR(ptr) |
+                      R300_RS_SEL_S(R300_RS_SEL_C0) |
+                      R300_RS_SEL_T(R300_RS_SEL_C1) |
+                      R300_RS_SEL_R(R300_RS_SEL_K0) |
+                      R300_RS_SEL_Q(R300_RS_SEL_K1);
     } else {
-        rs->ip[id] |= R300_RS_TEX_PTR(ptr*4) |
+        rs->ip[id] |= R300_RS_TEX_PTR(ptr) |
                       R300_RS_SEL_S(R300_RS_SEL_C0) |
                       R300_RS_SEL_T(R300_RS_SEL_C1) |
                       R300_RS_SEL_R(R300_RS_SEL_C2) |
@@ -262,10 +248,10 @@ static void r300_rs_tex_write(struct r300_rs_block* rs, int id, int fp_offset)
 }
 
 static void r500_rs_col(struct r300_rs_block* rs, int id, int ptr,
-                        boolean swizzle_0001)
+                        enum r300_rs_swizzle swiz)
 {
     rs->ip[id] |= R500_RS_COL_PTR(ptr);
-    if (swizzle_0001) {
+    if (swiz == SWIZ_0001) {
         rs->ip[id] |= R500_RS_COL_FMT(R300_RS_COL_FMT_0001);
     } else {
         rs->ip[id] |= R500_RS_COL_FMT(R300_RS_COL_FMT_RGBA);
@@ -273,27 +259,36 @@ static void r500_rs_col(struct r300_rs_block* rs, int id, int ptr,
     rs->inst[id] |= R500_RS_INST_COL_ID(id);
 }
 
-static void r500_rs_col_write(struct r300_rs_block* rs, int id, int fp_offset)
+static void r500_rs_col_write(struct r300_rs_block* rs, int id, int fp_offset,
+                              enum r300_rs_col_write_type type)
 {
-    rs->inst[id] |= R500_RS_INST_COL_CN_WRITE |
-                    R500_RS_INST_COL_ADDR(fp_offset);
+    if (type == WRITE_FACE)
+        rs->inst[id] |= R500_RS_INST_COL_CN_WRITE_BACKFACE |
+                        R500_RS_INST_COL_ADDR(fp_offset);
+    else
+        rs->inst[id] |= R500_RS_INST_COL_CN_WRITE |
+                        R500_RS_INST_COL_ADDR(fp_offset);
+
 }
 
 static void r500_rs_tex(struct r300_rs_block* rs, int id, int ptr,
-                        boolean swizzle_X001)
+			enum r300_rs_swizzle swiz)
 {
-    int rs_tex_comp = ptr*4;
-
-    if (swizzle_X001) {
-        rs->ip[id] |= R500_RS_SEL_S(rs_tex_comp) |
+    if (swiz == SWIZ_X001) {
+        rs->ip[id] |= R500_RS_SEL_S(ptr) |
                       R500_RS_SEL_T(R500_RS_IP_PTR_K0) |
                       R500_RS_SEL_R(R500_RS_IP_PTR_K0) |
                       R500_RS_SEL_Q(R500_RS_IP_PTR_K1);
+    } else if (swiz == SWIZ_XY01) {
+        rs->ip[id] |= R500_RS_SEL_S(ptr) |
+                      R500_RS_SEL_T(ptr + 1) |
+                      R500_RS_SEL_R(R500_RS_IP_PTR_K0) |
+                      R500_RS_SEL_Q(R500_RS_IP_PTR_K1);
     } else {
-        rs->ip[id] |= R500_RS_SEL_S(rs_tex_comp) |
-                      R500_RS_SEL_T(rs_tex_comp + 1) |
-                      R500_RS_SEL_R(rs_tex_comp + 2) |
-                      R500_RS_SEL_Q(rs_tex_comp + 3);
+        rs->ip[id] |= R500_RS_SEL_S(ptr) |
+                      R500_RS_SEL_T(ptr + 1) |
+                      R500_RS_SEL_R(ptr + 2) |
+                      R500_RS_SEL_Q(ptr + 3);
     }
     rs->inst[id] |= R500_RS_INST_TEX_ID(id);
 }
@@ -306,23 +301,31 @@ static void r500_rs_tex_write(struct r300_rs_block* rs, int id, int fp_offset)
 
 /* Set up the RS block.
  *
- * This is the part of the chipset that actually does the rasterization
- * of vertices into fragments. This is also the part of the chipset that
- * locks up if any part of it is even slightly wrong. */
-static void r300_update_rs_block(struct r300_context* r300,
-                                 struct r300_shader_semantics* vs_outputs,
-                                 struct r300_shader_semantics* fs_inputs)
+ * This is the part of the chipset that is responsible for linking vertex
+ * and fragment shaders and stuffed texture coordinates.
+ *
+ * The rasterizer reads data from VAP, which produces vertex shader outputs,
+ * and GA, which produces stuffed texture coordinates. VAP outputs have
+ * precedence over GA. All outputs must be rasterized otherwise it locks up.
+ * If there are more outputs rasterized than is set in VAP/GA, it locks up
+ * too. The funky part is that this info has been pretty much obtained by trial
+ * and error. */
+static void r300_update_rs_block(struct r300_context *r300)
 {
-    struct r300_rs_block rs = { { 0 } };
-    int i, col_count = 0, tex_count = 0, fp_offset = 0, count;
-    void (*rX00_rs_col)(struct r300_rs_block*, int, int, boolean);
-    void (*rX00_rs_col_write)(struct r300_rs_block*, int, int);
-    void (*rX00_rs_tex)(struct r300_rs_block*, int, int, boolean);
+    struct r300_vertex_shader *vs = r300->vs_state.state;
+    struct r300_shader_semantics *vs_outputs = &vs->outputs;
+    struct r300_shader_semantics *fs_inputs = &r300_fs(r300)->shader->inputs;
+    struct r300_rs_block rs = {0};
+    int i, col_count = 0, tex_count = 0, fp_offset = 0, count, loc = 0, tex_ptr = 0;
+    void (*rX00_rs_col)(struct r300_rs_block*, int, int, enum r300_rs_swizzle);
+    void (*rX00_rs_col_write)(struct r300_rs_block*, int, int, enum r300_rs_col_write_type);
+    void (*rX00_rs_tex)(struct r300_rs_block*, int, int, enum r300_rs_swizzle);
     void (*rX00_rs_tex_write)(struct r300_rs_block*, int, int);
     boolean any_bcolor_used = vs_outputs->bcolor[0] != ATTR_UNUSED ||
                               vs_outputs->bcolor[1] != ATTR_UNUSED;
+    int *stream_loc_notcl = r300->stream_loc_notcl;
 
-    if (r300_screen(r300->context.screen)->caps->is_r500) {
+    if (r300->screen->caps.is_r500) {
         rX00_rs_col       = r500_rs_col;
         rX00_rs_col_write = r500_rs_col_write;
         rX00_rs_tex       = r500_rs_tex;
@@ -334,18 +337,44 @@ static void r300_update_rs_block(struct r300_context* r300,
         rX00_rs_tex_write = r300_rs_tex_write;
     }
 
-    /* Rasterize colors. */
+    /* 0x5555 copied from classic, which means:
+     * Select user color 0 for COLOR0 up to COLOR7.
+     * What the hell does that mean? */
+    rs.vap_vtx_state_cntl = 0x5555;
+
+    /* The position is always present in VAP. */
+    rs.vap_vsm_vtx_assm |= R300_INPUT_CNTL_POS;
+    rs.vap_out_vtx_fmt[0] |= R300_VAP_OUTPUT_VTX_FMT_0__POS_PRESENT;
+    stream_loc_notcl[loc++] = 0;
+
+    /* Set up the point size in VAP. */
+    if (vs_outputs->psize != ATTR_UNUSED) {
+        rs.vap_out_vtx_fmt[0] |= R300_VAP_OUTPUT_VTX_FMT_0__PT_SIZE_PRESENT;
+        stream_loc_notcl[loc++] = 1;
+    }
+
+    /* Set up and rasterize colors. */
     for (i = 0; i < ATTR_COLOR_COUNT; i++) {
         if (vs_outputs->color[i] != ATTR_UNUSED || any_bcolor_used ||
             vs_outputs->color[1] != ATTR_UNUSED) {
-            /* Always rasterize if it's written by the VS,
-             * otherwise it locks up. */
-            rX00_rs_col(&rs, col_count, i, FALSE);
+            /* Set up the color in VAP. */
+            rs.vap_vsm_vtx_assm |= R300_INPUT_CNTL_COLOR;
+            rs.vap_out_vtx_fmt[0] |=
+                    R300_VAP_OUTPUT_VTX_FMT_0__COLOR_0_PRESENT << i;
+            stream_loc_notcl[loc++] = 2 + i;
 
-            /* Write it to the FS input register if it's used by the FS. */
+            /* Rasterize it. */
+            rX00_rs_col(&rs, col_count, col_count, SWIZ_XYZW);
+
+            /* Write it to the FS input register if it's needed by the FS. */
             if (fs_inputs->color[i] != ATTR_UNUSED) {
-                rX00_rs_col_write(&rs, col_count, fp_offset);
+                rX00_rs_col_write(&rs, col_count, fp_offset, WRITE_COLOR);
                 fp_offset++;
+
+                DBG(r300, DBG_RS,
+                    "r300: Rasterized color %i written to FS.\n", i);
+            } else {
+                DBG(r300, DBG_RS, "r300: Rasterized color %i unused.\n", i);
             }
             col_count++;
         } else {
@@ -353,69 +382,179 @@ static void r300_update_rs_block(struct r300_context* r300,
             /* If we try to set it to (0,0,0,1), it will lock up. */
             if (fs_inputs->color[i] != ATTR_UNUSED) {
                 fp_offset++;
+
+                DBG(r300, DBG_RS, "r300: FS input color %i unassigned%s.\n",
+                    i);
             }
         }
     }
 
-    /* Rasterize texture coordinates. */
-    for (i = 0; i < ATTR_GENERIC_COUNT; i++) {
-        if (vs_outputs->generic[i] != ATTR_UNUSED) {
-            /* Always rasterize if it's written by the VS,
-             * otherwise it locks up. */
-            rX00_rs_tex(&rs, tex_count, tex_count, FALSE);
+    /* Set up back-face colors. The rasterizer will do the color selection
+     * automatically. */
+    if (any_bcolor_used) {
+        if (r300->two_sided_color) {
+            /* Rasterize as back-face colors. */
+            for (i = 0; i < ATTR_COLOR_COUNT; i++) {
+                rs.vap_vsm_vtx_assm |= R300_INPUT_CNTL_COLOR;
+                rs.vap_out_vtx_fmt[0] |= R300_VAP_OUTPUT_VTX_FMT_0__COLOR_0_PRESENT << (2+i);
+                stream_loc_notcl[loc++] = 4 + i;
+            }
+        } else {
+            /* Rasterize two fake texcoords to prevent from the two-sided color
+             * selection. */
+            /* XXX Consider recompiling the vertex shader to save 2 RS units. */
+            for (i = 0; i < 2; i++) {
+                rs.vap_vsm_vtx_assm |= (R300_INPUT_CNTL_TC0 << tex_count);
+                rs.vap_out_vtx_fmt[1] |= (4 << (3 * tex_count));
+                stream_loc_notcl[loc++] = 6 + tex_count;
 
-            /* Write it to the FS input register if it's used by the FS. */
+                /* Rasterize it. */
+                rX00_rs_tex(&rs, tex_count, tex_ptr, SWIZ_XYZW);
+                tex_count++;
+                tex_ptr += 4;
+            }
+        }
+    }
+
+    /* gl_FrontFacing.
+     * Note that we can use either the two-sided color selection based on
+     * the front and back vertex shader colors, or gl_FrontFacing,
+     * but not both! It locks up otherwise.
+     *
+     * In Direct3D 9, the two-sided color selection can be used
+     * with shaders 2.0 only, while gl_FrontFacing can be used
+     * with shaders 3.0 only. The hardware apparently hasn't been designed
+     * to support both at the same time. */
+    if (r300->screen->caps.is_r500 && fs_inputs->face != ATTR_UNUSED &&
+        !(any_bcolor_used && r300->two_sided_color)) {
+        rX00_rs_col(&rs, col_count, col_count, SWIZ_XYZW);
+        rX00_rs_col_write(&rs, col_count, fp_offset, WRITE_FACE);
+        fp_offset++;
+        col_count++;
+        DBG(r300, DBG_RS, "r300: Rasterized FACE written to FS.\n");
+    }
+
+    /* Rasterize texture coordinates. */
+    for (i = 0; i < ATTR_GENERIC_COUNT && tex_count < 8; i++) {
+	bool sprite_coord = !!(r300->sprite_coord_enable & (1 << i));
+
+        if (vs_outputs->generic[i] != ATTR_UNUSED || sprite_coord) {
+            if (!sprite_coord) {
+                /* Set up the texture coordinates in VAP. */
+                rs.vap_vsm_vtx_assm |= (R300_INPUT_CNTL_TC0 << tex_count);
+                rs.vap_out_vtx_fmt[1] |= (4 << (3 * tex_count));
+                stream_loc_notcl[loc++] = 6 + tex_count;
+            }
+
+            /* Rasterize it. */
+            rX00_rs_tex(&rs, tex_count, tex_ptr,
+			sprite_coord ? SWIZ_XY01 : SWIZ_XYZW);
+
+            /* Write it to the FS input register if it's needed by the FS. */
             if (fs_inputs->generic[i] != ATTR_UNUSED) {
                 rX00_rs_tex_write(&rs, tex_count, fp_offset);
                 fp_offset++;
+
+                DBG(r300, DBG_RS,
+                    "r300: Rasterized generic %i written to FS%s.\n",
+                    i, sprite_coord ? " (sprite coord)" : "");
+            } else {
+                DBG(r300, DBG_RS,
+                    "r300: Rasterized generic %i unused%s.\n",
+                    i, sprite_coord ? " (sprite coord)" : "");
             }
             tex_count++;
+            tex_ptr += sprite_coord ? 2 : 4;
         } else {
             /* Skip the FS input register, leave it uninitialized. */
             /* If we try to set it to (0,0,0,1), it will lock up. */
             if (fs_inputs->generic[i] != ATTR_UNUSED) {
                 fp_offset++;
+
+                DBG(r300, DBG_RS, "r300: FS input generic %i unassigned%s.\n",
+                    i, sprite_coord ? " (sprite coord)" : "");
+            }
+        }
+    }
+
+    if (DBG_ON(r300, DBG_RS)) {
+        for (; i < ATTR_GENERIC_COUNT; i++) {
+            if (fs_inputs->generic[i] != ATTR_UNUSED) {
+                DBG(r300, DBG_RS,
+                    "r300: FS input generic %i unassigned.\n", i);
             }
         }
     }
 
     /* Rasterize fog coordinates. */
-    if (vs_outputs->fog != ATTR_UNUSED) {
-        /* Always rasterize if it's written by the VS,
-         * otherwise it locks up. */
-        rX00_rs_tex(&rs, tex_count, tex_count, TRUE);
+    if (vs_outputs->fog != ATTR_UNUSED && tex_count < 8) {
+        /* Set up the fog coordinates in VAP. */
+        rs.vap_vsm_vtx_assm |= (R300_INPUT_CNTL_TC0 << tex_count);
+        rs.vap_out_vtx_fmt[1] |= (4 << (3 * tex_count));
+        stream_loc_notcl[loc++] = 6 + tex_count;
 
-        /* Write it to the FS input register if it's used by the FS. */
+        /* Rasterize it. */
+        rX00_rs_tex(&rs, tex_count, tex_ptr, SWIZ_X001);
+
+        /* Write it to the FS input register if it's needed by the FS. */
         if (fs_inputs->fog != ATTR_UNUSED) {
             rX00_rs_tex_write(&rs, tex_count, fp_offset);
             fp_offset++;
+
+            DBG(r300, DBG_RS, "r300: Rasterized fog written to FS.\n");
+        } else {
+            DBG(r300, DBG_RS, "r300: Rasterized fog unused.\n");
         }
         tex_count++;
+        tex_ptr += 4;
     } else {
         /* Skip the FS input register, leave it uninitialized. */
         /* If we try to set it to (0,0,0,1), it will lock up. */
         if (fs_inputs->fog != ATTR_UNUSED) {
             fp_offset++;
+
+            DBG(r300, DBG_RS, "r300: FS input fog unassigned.\n");
         }
     }
 
     /* Rasterize WPOS. */
-    /* If the FS doesn't need it, it's not written by the VS. */
-    if (fs_inputs->wpos != ATTR_UNUSED) {
-        rX00_rs_tex(&rs, tex_count, tex_count, FALSE);
+    /* Don't set it in VAP if the FS doesn't need it. */
+    if (fs_inputs->wpos != ATTR_UNUSED && tex_count < 8) {
+        /* Set up the WPOS coordinates in VAP. */
+        rs.vap_vsm_vtx_assm |= (R300_INPUT_CNTL_TC0 << tex_count);
+        rs.vap_out_vtx_fmt[1] |= (4 << (3 * tex_count));
+        stream_loc_notcl[loc++] = 6 + tex_count;
+
+        /* Rasterize it. */
+        rX00_rs_tex(&rs, tex_count, tex_ptr, SWIZ_XYZW);
+
+        /* Write it to the FS input register. */
         rX00_rs_tex_write(&rs, tex_count, fp_offset);
+
+        DBG(r300, DBG_RS, "r300: Rasterized WPOS written to FS.\n");
 
         fp_offset++;
         tex_count++;
+        tex_ptr += 4;
+    }
+
+    /* Invalidate the rest of the no-TCL (GA) stream locations. */
+    for (; loc < 16;) {
+        stream_loc_notcl[loc++] = -1;
     }
 
     /* Rasterize at least one color, or bad things happen. */
     if (col_count == 0 && tex_count == 0) {
-        rX00_rs_col(&rs, 0, 0, TRUE);
+        rX00_rs_col(&rs, 0, 0, SWIZ_0001);
         col_count++;
+
+        DBG(r300, DBG_RS, "r300: Rasterized color 0 to prevent lockups.\n");
     }
 
-    rs.count = (tex_count*4) | (col_count << R300_IC_COUNT_SHIFT) |
+    DBG(r300, DBG_RS, "r300: --- Rasterizer status ---: colors: %i, "
+        "generics: %i.\n", col_count, tex_count);
+
+    rs.count = MIN2(tex_ptr, 32) | (col_count << R300_IC_COUNT_SHIFT) |
         R300_HIRES_EN;
 
     count = MAX3(col_count, tex_count, 1);
@@ -424,102 +563,60 @@ static void r300_update_rs_block(struct r300_context* r300,
     /* Now, after all that, see if we actually need to update the state. */
     if (memcmp(r300->rs_block_state.state, &rs, sizeof(struct r300_rs_block))) {
         memcpy(r300->rs_block_state.state, &rs, sizeof(struct r300_rs_block));
-        r300->rs_block_state.size = 5 + count*2;
+        r300->rs_block_state.size = 11 + count*2;
     }
 }
 
-/* Update the shader-dependant states. */
-static void r300_update_derived_shader_state(struct r300_context* r300)
+static uint32_t r300_get_border_color(enum pipe_format format,
+                                      const float border[4])
 {
-    struct r300_vertex_shader* vs = r300->vs_state.state;
-    struct r300_screen* r300screen = r300_screen(r300->context.screen);
-    struct r300_vap_output_state *vap_out =
-        (struct r300_vap_output_state*)r300->vap_output_state.state;
+    const struct util_format_description *desc;
+    float border_swizzled[4] = {
+        border[2],
+        border[1],
+        border[0],
+        border[3]
+    };
+    uint32_t r;
 
-    /* XXX Mmm, delicious hax */
-    memset(&r300->vertex_info, 0, sizeof(struct vertex_info));
-    memcpy(vap_out, vs->hwfmt, sizeof(uint)*4);
+    desc = util_format_description(format);
 
-    r300_update_rs_block(r300, &vs->outputs, &r300->fs->inputs);
+    /* We don't use util_pack_format because it does not handle the formats
+     * we want, e.g. R4G4B4A4 is non-existent in Gallium. */
+    switch (desc->channel[0].size) {
+        case 4:
+            r = ((float_to_ubyte(border_swizzled[0]) & 0xf0) >> 4) |
+                ((float_to_ubyte(border_swizzled[1]) & 0xf0) << 0) |
+                ((float_to_ubyte(border_swizzled[2]) & 0xf0) << 4) |
+                ((float_to_ubyte(border_swizzled[3]) & 0xf0) << 8);
+            break;
 
-    if (r300screen->caps->has_tcl) {
-        r300_vertex_psc(r300);
-    } else {
-        r300_draw_emit_all_attribs(r300);
-        draw_compute_vertex_size(&r300->vertex_info);
-        r300_swtcl_vertex_psc(r300);
-    }
-}
+        case 5:
+            if (desc->channel[1].size == 5) {
+                r = ((float_to_ubyte(border_swizzled[0]) & 0xf8) >> 3) |
+                    ((float_to_ubyte(border_swizzled[1]) & 0xf8) << 2) |
+                    ((float_to_ubyte(border_swizzled[2]) & 0xf8) << 7) |
+                    ((float_to_ubyte(border_swizzled[3]) & 0x80) << 8);
+            } else if (desc->channel[1].size == 6) {
+                r = ((float_to_ubyte(border_swizzled[0]) & 0xf8) >> 3) |
+                    ((float_to_ubyte(border_swizzled[1]) & 0xfc) << 3) |
+                    ((float_to_ubyte(border_swizzled[2]) & 0xf8) << 8);
+            } else {
+                assert(0);
+            }
+            break;
 
-static boolean r300_dsa_writes_depth_stencil(struct r300_dsa_state* dsa)
-{
-    /* We are interested only in the cases when a new depth or stencil value
-     * can be written and changed. */
-
-    /* We might optionally check for [Z func: never] and inspect the stencil
-     * state in a similar fashion, but it's not terribly important. */
-    return (dsa->z_buffer_control & R300_Z_WRITE_ENABLE) ||
-           (dsa->stencil_ref_mask & R300_STENCILWRITEMASK_MASK) ||
-           ((dsa->z_buffer_control & R500_STENCIL_REFMASK_FRONT_BACK) &&
-            (dsa->stencil_ref_bf & R300_STENCILWRITEMASK_MASK));
-}
-
-static boolean r300_dsa_alpha_test_enabled(struct r300_dsa_state* dsa)
-{
-    /* We are interested only in the cases when alpha testing can kill
-     * a fragment. */
-    uint32_t af = dsa->alpha_function;
-
-    return (af & R300_FG_ALPHA_FUNC_ENABLE) &&
-           (af & R300_FG_ALPHA_FUNC_ALWAYS) != R300_FG_ALPHA_FUNC_ALWAYS;
-}
-
-static void r300_update_ztop(struct r300_context* r300)
-{
-    struct r300_ztop_state* ztop_state =
-        (struct r300_ztop_state*)r300->ztop_state.state;
-
-    /* This is important enough that I felt it warranted a comment.
-     *
-     * According to the docs, these are the conditions where ZTOP must be
-     * disabled:
-     * 1) Alpha testing enabled
-     * 2) Texture kill instructions in fragment shader
-     * 3) Chroma key culling enabled
-     * 4) W-buffering enabled
-     *
-     * The docs claim that for the first three cases, if no ZS writes happen,
-     * then ZTOP can be used.
-     *
-     * (3) will never apply since we do not support chroma-keyed operations.
-     * (4) will need to be re-examined (and this comment updated) if/when
-     * Hyper-Z becomes supported.
-     *
-     * Additionally, the following conditions require disabled ZTOP:
-     * 5) Depth writes in fragment shader
-     * 6) Outstanding occlusion queries
-     *
-     * This register causes stalls all the way from SC to CB when changed,
-     * but it is buffered on-chip so it does not hurt to write it if it has
-     * not changed.
-     *
-     * ~C.
-     */
-
-    /* ZS writes */
-    if (r300_dsa_writes_depth_stencil(r300->dsa_state.state) &&
-           (r300_dsa_alpha_test_enabled(r300->dsa_state.state) ||/* (1) */
-            r300->fs->info.uses_kill)) {                         /* (2) */
-        ztop_state->z_buffer_top = R300_ZTOP_DISABLE;
-    } else if (r300_fragment_shader_writes_depth(r300->fs)) {    /* (5) */
-        ztop_state->z_buffer_top = R300_ZTOP_DISABLE;
-    } else if (r300->query_current) {                            /* (6) */
-        ztop_state->z_buffer_top = R300_ZTOP_DISABLE;
-    } else {
-        ztop_state->z_buffer_top = R300_ZTOP_ENABLE;
+        default:
+            /* I think the fat formats (16, 32) are specified
+             * as the 8-bit ones. I am not sure how compressed formats
+             * work here. */
+            r = ((float_to_ubyte(border_swizzled[0]) & 0xff) << 0) |
+                ((float_to_ubyte(border_swizzled[1]) & 0xff) << 8) |
+                ((float_to_ubyte(border_swizzled[2]) & 0xff) << 16) |
+                ((float_to_ubyte(border_swizzled[3]) & 0xff) << 24);
     }
 
-    r300->ztop_state.dirty = TRUE;
+    return r;
 }
 
 static void r300_merge_textures_and_samplers(struct r300_context* r300)
@@ -528,68 +625,224 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
         (struct r300_textures_state*)r300->textures_state.state;
     struct r300_texture_sampler_state *texstate;
     struct r300_sampler_state *sampler;
+    struct r300_sampler_view *view;
     struct r300_texture *tex;
-    unsigned min_level, max_level, i, size;
-    unsigned count = MIN2(state->texture_count, state->sampler_count);
+    unsigned min_level, max_level, i, j, size;
+    unsigned count = MIN2(state->sampler_view_count,
+                          state->sampler_state_count);
+
+    /* The KIL opcode fix, see below. */
+    if (!count && !r300->screen->caps.is_r500)
+        count = 1;
 
     state->tx_enable = 0;
+    state->count = 0;
     size = 2;
 
     for (i = 0; i < count; i++) {
-        if (state->textures[i] && state->sampler_states[i]) {
+        if (state->sampler_views[i] && state->sampler_states[i]) {
             state->tx_enable |= 1 << i;
 
-            tex = state->textures[i];
+            view = state->sampler_views[i];
+            tex = r300_texture(view->base.texture);
             sampler = state->sampler_states[i];
 
             texstate = &state->regs[i];
-            memcpy(texstate->format, &tex->state, sizeof(uint32_t)*3);
-            texstate->filter[0] = sampler->filter0;
-            texstate->filter[1] = sampler->filter1;
-            texstate->border_color = sampler->border_color;
-            texstate->tile_config = R300_TXO_MACRO_TILE(tex->macrotile) |
-                                    R300_TXO_MICRO_TILE(tex->microtile);
+            texstate->format = view->format;
+            texstate->filter0 = sampler->filter0;
+            texstate->filter1 = sampler->filter1;
+
+            /* Set the border color. */
+            texstate->border_color =
+                r300_get_border_color(view->base.format,
+                                      sampler->state.border_color);
+
+            /* determine min/max levels */
+            max_level = MIN3(sampler->max_lod + view->base.first_level,
+                             tex->desc.b.b.last_level, view->base.last_level);
+            min_level = MIN2(sampler->min_lod + view->base.first_level,
+                             max_level);
+
+            if (tex->desc.is_npot && min_level > 0) {
+                /* Even though we do not implement mipmapping for NPOT
+                 * textures, we should at least honor the minimum level
+                 * which is allowed to be displayed. We do this by setting up
+                 * an i-th mipmap level as the zero level. */
+                r300_texture_setup_format_state(r300->screen, &tex->desc,
+                                                min_level,
+                                                &texstate->format);
+                texstate->format.tile_config |=
+                        tex->desc.offset_in_bytes[min_level] & 0xffffffe0;
+                assert((tex->desc.offset_in_bytes[min_level] & 0x1f) == 0);
+            }
+
+            /* Assign a texture cache region. */
+            texstate->format.format1 |= view->texcache_region;
+
+            /* Depth textures are kinda special. */
+            if (util_format_is_depth_or_stencil(tex->desc.b.b.format)) {
+                unsigned char depth_swizzle[4];
+
+                if (!r300->screen->caps.is_r500 &&
+                    util_format_get_blocksizebits(tex->desc.b.b.format) == 32) {
+                    /* X24x8 is sampled as Y16X16 on r3xx-r4xx.
+                     * The depth here is at the Y component. */
+                    for (j = 0; j < 4; j++)
+                        depth_swizzle[j] = UTIL_FORMAT_SWIZZLE_Y;
+                } else {
+                    for (j = 0; j < 4; j++)
+                        depth_swizzle[j] = UTIL_FORMAT_SWIZZLE_X;
+                }
+
+                /* If compare mode is disabled, sampler view swizzles
+                 * are stored in the format.
+                 * Otherwise, the swizzles must be applied after the compare
+                 * mode in the fragment shader. */
+                if (sampler->state.compare_mode == PIPE_TEX_COMPARE_NONE) {
+                    texstate->format.format1 |=
+                        r300_get_swizzle_combined(depth_swizzle,
+                                                  view->swizzle);
+                } else {
+                    texstate->format.format1 |=
+                        r300_get_swizzle_combined(depth_swizzle, 0);
+                }
+            }
 
             /* to emulate 1D textures through 2D ones correctly */
-            if (tex->tex.target == PIPE_TEXTURE_1D) {
-                texstate->filter[0] &= ~R300_TX_WRAP_T_MASK;
-                texstate->filter[0] |= R300_TX_WRAP_T(R300_TX_CLAMP_TO_EDGE);
+            if (tex->desc.b.b.target == PIPE_TEXTURE_1D) {
+                texstate->filter0 &= ~R300_TX_WRAP_T_MASK;
+                texstate->filter0 |= R300_TX_WRAP_T(R300_TX_CLAMP_TO_EDGE);
             }
 
-            if (tex->is_npot) {
+            if (tex->desc.is_npot) {
                 /* NPOT textures don't support mip filter, unfortunately.
                  * This prevents incorrect rendering. */
-                texstate->filter[0] &= ~R300_TX_MIN_FILTER_MIP_MASK;
+                texstate->filter0 &= ~R300_TX_MIN_FILTER_MIP_MASK;
+
+                /* Mask out the mirrored flag. */
+                if (texstate->filter0 & R300_TX_WRAP_S(R300_TX_MIRRORED)) {
+                    texstate->filter0 &= ~R300_TX_WRAP_S(R300_TX_MIRRORED);
+                }
+                if (texstate->filter0 & R300_TX_WRAP_T(R300_TX_MIRRORED)) {
+                    texstate->filter0 &= ~R300_TX_WRAP_T(R300_TX_MIRRORED);
+                }
+
+                /* Change repeat to clamp-to-edge.
+                 * (the repeat bit has a value of 0, no masking needed). */
+                if ((texstate->filter0 & R300_TX_WRAP_S_MASK) ==
+                    R300_TX_WRAP_S(R300_TX_REPEAT)) {
+                    texstate->filter0 |= R300_TX_WRAP_S(R300_TX_CLAMP_TO_EDGE);
+                }
+                if ((texstate->filter0 & R300_TX_WRAP_T_MASK) ==
+                    R300_TX_WRAP_T(R300_TX_REPEAT)) {
+                    texstate->filter0 |= R300_TX_WRAP_T(R300_TX_CLAMP_TO_EDGE);
+                }
             } else {
-                /* determine min/max levels */
                 /* the MAX_MIP level is the largest (finest) one */
-                max_level = MIN2(sampler->max_lod, tex->tex.last_level);
-                min_level = MIN2(sampler->min_lod, max_level);
-                texstate->format[0] |= R300_TX_NUM_LEVELS(max_level);
-                texstate->filter[0] |= R300_TX_MAX_MIP_LEVEL(min_level);
+                texstate->format.format0 |= R300_TX_NUM_LEVELS(max_level);
+                texstate->filter0 |= R300_TX_MAX_MIP_LEVEL(min_level);
             }
 
-            texstate->filter[0] |= i << 28;
+            texstate->filter0 |= i << 28;
 
             size += 16;
             state->count = i+1;
+        } else {
+            /* For the KIL opcode to work on r3xx-r4xx, the texture unit
+             * assigned to this opcode (it's always the first one) must be
+             * enabled. Otherwise the opcode doesn't work.
+             *
+             * In order to not depend on the fragment shader, we just make
+             * the first unit enabled all the time. */
+            if (i == 0 && !r300->screen->caps.is_r500) {
+                pipe_sampler_view_reference(
+                        (struct pipe_sampler_view**)&state->sampler_views[i],
+                        &r300->texkill_sampler->base);
+
+                state->tx_enable |= 1 << i;
+
+                texstate = &state->regs[i];
+
+                /* Just set some valid state. */
+                texstate->format = r300->texkill_sampler->format;
+                texstate->filter0 =
+                        r300_translate_tex_filters(PIPE_TEX_FILTER_NEAREST,
+                                                   PIPE_TEX_FILTER_NEAREST,
+                                                   PIPE_TEX_FILTER_NEAREST,
+                                                   FALSE);
+                texstate->filter1 = 0;
+                texstate->border_color = 0;
+
+                texstate->filter0 |= i << 28;
+                size += 16;
+                state->count = i+1;
+            }
         }
     }
 
     r300->textures_state.size = size;
+
+    /* Pick a fragment shader based on either the texture compare state
+     * or the uses_pitch flag. */
+    if (r300->fs.state && count) {
+        if (r300_pick_fragment_shader(r300)) {
+            r300_mark_fs_code_dirty(r300);
+        }
+    }
+}
+
+/* We can't use compressed zbuffers as samplers. */
+static void r300_flush_depth_textures(struct r300_context *r300)
+{
+    struct r300_textures_state *state =
+        (struct r300_textures_state*)r300->textures_state.state;
+    unsigned i, level;
+    unsigned count = MIN2(state->sampler_view_count,
+                          state->sampler_state_count);
+
+    if (r300->z_decomp_rd)
+        return;
+
+    for (i = 0; i < count; i++)
+        if (state->sampler_views[i] && state->sampler_states[i]) {
+            struct pipe_resource *tex = state->sampler_views[i]->base.texture;
+
+            if (tex->target == PIPE_TEXTURE_3D ||
+                tex->target == PIPE_TEXTURE_CUBE)
+                continue;
+
+            /* Ignore non-depth textures.
+             * Also ignore reinterpreted depth textures, e.g. resource_copy. */
+            if (!util_format_is_depth_or_stencil(tex->format))
+                continue;
+
+            for (level = 0; level <= tex->last_level; level++)
+                if (r300_texture(tex)->zmask_in_use[level]) {
+                    /* We don't handle 3D textures and cubemaps yet. */
+                    r300_flush_depth_stencil(&r300->context, tex,
+                                             u_subresource(0, level), 0);
+                }
+        }
 }
 
 void r300_update_derived_state(struct r300_context* r300)
 {
-    if (r300->rs_block_state.dirty ||
-        r300->vertex_stream_state.dirty || /* XXX put updating this state out of this file */
-        r300->rs_state.dirty) {  /* XXX and remove this one (tcl_bypass dependency) */
-        r300_update_derived_shader_state(r300);
-    }
+    r300_flush_depth_textures(r300);
 
     if (r300->textures_state.dirty) {
         r300_merge_textures_and_samplers(r300);
     }
 
-    r300_update_ztop(r300);
+    if (r300->rs_block_state.dirty) {
+        r300_update_rs_block(r300);
+
+        if (r300->draw) {
+            memset(&r300->vertex_info, 0, sizeof(struct vertex_info));
+            r300_draw_emit_all_attribs(r300);
+            draw_compute_vertex_size(&r300->vertex_info);
+            r300_swtcl_vertex_psc(r300);
+        }
+    }
+
+    r300_update_hyperz_state(r300);
 }

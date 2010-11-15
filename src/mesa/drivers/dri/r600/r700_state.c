@@ -39,9 +39,10 @@
 #include "swrast_setup/swrast_setup.h"
 #include "main/api_arrayelt.h"
 #include "main/framebuffer.h"
+#include "drivers/common/meta.h"
 
-#include "shader/prog_parameter.h"
-#include "shader/prog_statevars.h"
+#include "program/prog_parameter.h"
+#include "program/prog_statevars.h"
 #include "vbo/vbo.h"
 
 #include "r600_context.h"
@@ -1579,7 +1580,16 @@ static void r700InitSQConfig(GLcontext * ctx)
 	    CLEARbit(r700->sq_config.SQ_CONFIG.u32All, VC_ENABLE_bit);
     else
 	    SETbit(r700->sq_config.SQ_CONFIG.u32All, VC_ENABLE_bit);
-    SETbit(r700->sq_config.SQ_CONFIG.u32All, DX9_CONSTS_bit);
+
+    if(GL_TRUE == r700->bShaderUseMemConstant)
+    {
+        CLEARbit(r700->sq_config.SQ_CONFIG.u32All, DX9_CONSTS_bit);
+    }
+    else
+    {
+        SETbit(r700->sq_config.SQ_CONFIG.u32All, DX9_CONSTS_bit);
+    }
+
     SETbit(r700->sq_config.SQ_CONFIG.u32All, ALU_INST_PREFER_VECTOR_bit);
     SETfield(r700->sq_config.SQ_CONFIG.u32All, ps_prio, PS_PRIO_shift, PS_PRIO_mask);
     SETfield(r700->sq_config.SQ_CONFIG.u32All, vs_prio, VS_PRIO_shift, VS_PRIO_mask);
@@ -1688,8 +1698,9 @@ void r700InitState(GLcontext * ctx) //-------------------
 	    SETbit(r700->PA_SC_MODE_CNTL.u32All, FORCE_EOV_CNTDWN_ENABLE_bit);
     }
 
-    /* Do scale XY and Z by 1/W0. */
-    r700->bEnablePerspective = GL_TRUE;
+    /* Do scale XY and Z by 1/W0. */   
+    r700->bEnablePerspective = GL_TRUE;    
+
     CLEARbit(r700->PA_CL_VTE_CNTL.u32All, VTX_XY_FMT_bit);
     CLEARbit(r700->PA_CL_VTE_CNTL.u32All, VTX_Z_FMT_bit);
     SETbit(r700->PA_CL_VTE_CNTL.u32All, VTX_W0_FMT_bit);
@@ -1819,7 +1830,7 @@ void r700InitState(GLcontext * ctx) //-------------------
 
 }
 
-void r700InitStateFuncs(struct dd_function_table *functions) //-----------------
+void r700InitStateFuncs(radeonContextPtr radeon, struct dd_function_table *functions)
 {
 	functions->UpdateState = r700InvalidateState;
 	functions->AlphaFunc = r700AlphaFunc;
@@ -1860,8 +1871,12 @@ void r700InitStateFuncs(struct dd_function_table *functions) //-----------------
 
 	functions->Scissor = radeonScissor;
 
-	functions->DrawBuffer		= radeonDrawBuffer;
-	functions->ReadBuffer		= radeonReadBuffer;
+	functions->DrawBuffer = radeonDrawBuffer;
+	functions->ReadBuffer = radeonReadBuffer;
 
+	functions->CopyPixels = _mesa_meta_CopyPixels;
+	functions->DrawPixels = _mesa_meta_DrawPixels;
+	if (radeon->radeonScreen->kernel_mm)
+		functions->ReadPixels = radeonReadPixels;
 }
 

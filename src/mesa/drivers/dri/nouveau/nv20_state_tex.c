@@ -32,6 +32,62 @@
 #include "nouveau_util.h"
 #include "nv20_driver.h"
 
+#define TX_GEN_MODE(i, j) (NV20TCL_TX_GEN_MODE_S(i) + 4 * (j))
+#define TX_GEN_COEFF(i, j) (NV20TCL_TX_GEN_COEFF_S_A(i) + 16 * (j))
+#define TX_MATRIX(i) (NV20TCL_TX0_MATRIX(0) + 64 * (i))
+
+void
+nv20_emit_tex_gen(GLcontext *ctx, int emit)
+{
+	const int i = emit - NOUVEAU_STATE_TEX_GEN0;
+	struct nouveau_context *nctx = to_nouveau_context(ctx);
+	struct nouveau_channel *chan = context_chan(ctx);
+	struct nouveau_grobj *kelvin = context_eng3d(ctx);
+	struct gl_texture_unit *unit = &ctx->Texture.Unit[i];
+	int j;
+
+	for (j = 0; j < 4; j++) {
+		if (nctx->fallback == HWTNL && (unit->TexGenEnabled & 1 << j)) {
+			struct gl_texgen *coord = get_texgen_coord(unit, j);
+			float *k = get_texgen_coeff(coord);
+
+			if (k) {
+				BEGIN_RING(chan, kelvin, TX_GEN_COEFF(i, j), 4);
+				OUT_RINGp(chan, k, 4);
+			}
+
+			BEGIN_RING(chan, kelvin, TX_GEN_MODE(i, j), 1);
+			OUT_RING(chan, nvgl_texgen_mode(coord->Mode));
+
+		} else {
+			BEGIN_RING(chan, kelvin, TX_GEN_MODE(i, j), 1);
+			OUT_RING(chan, 0);
+		}
+	}
+}
+
+void
+nv20_emit_tex_mat(GLcontext *ctx, int emit)
+{
+	const int i = emit - NOUVEAU_STATE_TEX_MAT0;
+	struct nouveau_context *nctx = to_nouveau_context(ctx);
+	struct nouveau_channel *chan = context_chan(ctx);
+	struct nouveau_grobj *kelvin = context_eng3d(ctx);
+
+	if (nctx->fallback == HWTNL &&
+	    (ctx->Texture._TexMatEnabled & 1 << i)) {
+		BEGIN_RING(chan, kelvin, NV20TCL_TX_MATRIX_ENABLE(i), 1);
+		OUT_RING(chan, 1);
+
+		BEGIN_RING(chan, kelvin, TX_MATRIX(i), 16);
+		OUT_RINGm(chan, ctx->TextureMatrixStack[i].Top->m);
+
+	} else {
+		BEGIN_RING(chan, kelvin, NV20TCL_TX_MATRIX_ENABLE(i), 1);
+		OUT_RING(chan, 0);
+	}
+}
+
 static uint32_t
 get_tex_format_pot(struct gl_texture_image *ti)
 {
@@ -138,7 +194,8 @@ nv20_emit_tex_obj(GLcontext *ctx, int emit)
 		| nvgl_wrap_mode(t->WrapS) << 0;
 
 	tx_filter = nvgl_filter_mode(t->MagFilter) << 24
-		| nvgl_filter_mode(t->MinFilter) << 16;
+		| nvgl_filter_mode(t->MinFilter) << 16
+		| 2 << 12;
 
 	tx_enable = NV20TCL_TX_ENABLE_ENABLE
 		| log2i(t->MaxAnisotropy) << 4;

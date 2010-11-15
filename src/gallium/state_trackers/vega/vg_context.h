@@ -33,6 +33,7 @@
 #include "pipe/p_state.h"
 #include "util/u_pointer.h"
 #include "util/u_math.h"
+#include "state_tracker/st_api.h"
 
 #include "cso_cache/cso_hash.h"
 #include "cso_cache/cso_context.h"
@@ -41,11 +42,12 @@ struct renderer;
 struct shaders_cache;
 struct shader;
 struct vg_shader;
+struct mapi_table;
 
 struct st_renderbuffer {
    enum pipe_format   format;
    struct pipe_surface *surface;
-   struct pipe_texture *texture;
+   struct pipe_resource *texture;
    VGint width, height;
 };
 
@@ -54,9 +56,13 @@ struct st_framebuffer {
    struct st_renderbuffer *strb;
    struct st_renderbuffer *dsrb;
 
-   struct pipe_texture *alpha_mask;
+   struct pipe_sampler_view *alpha_mask_view;
 
-   struct pipe_texture *blend_texture;
+   struct pipe_sampler_view *blend_texture_view;
+
+
+   struct st_framebuffer_iface *iface;
+   enum st_attachment_type strb_att;
 
    void *privateData;
 };
@@ -84,7 +90,11 @@ enum dirty_state {
 
 struct vg_context
 {
+   struct st_context_iface iface;
+   struct mapi_table *dispatch;
+
    struct pipe_context *pipe;
+   enum pipe_format ds_format;
 
    struct {
       struct vg_state vg;
@@ -101,6 +111,7 @@ struct vg_context
    VGErrorCode _error;
 
    struct st_framebuffer *draw_buffer;
+   int32_t draw_buffer_invalid;
 
    struct cso_hash *owned_objects[VG_OBJECT_LAST];
 
@@ -113,7 +124,7 @@ struct vg_context
    } clear;
 
    struct {
-      struct pipe_buffer *cbuf;
+      struct pipe_resource *cbuf;
       struct pipe_sampler_state sampler;
 
       struct vg_shader *union_fs;
@@ -126,7 +137,7 @@ struct vg_context
 
    struct cso_context *cso_context;
 
-   struct pipe_buffer *stencil_quad;
+   struct pipe_resource *stencil_quad;
    VGfloat stencil_vertices[4][2][4];
 
    struct renderer *renderer;
@@ -135,7 +146,7 @@ struct vg_context
 
    struct pipe_sampler_state blend_sampler;
    struct {
-      struct pipe_buffer *buffer;
+      struct pipe_resource *buffer;
       void *color_matrix_fs;
    } filter;
    struct vg_paint *default_paint;
@@ -145,7 +156,8 @@ struct vg_context
    struct vg_shader *plain_vs;
    struct vg_shader *clear_vs;
    struct vg_shader *texture_vs;
-   struct pipe_buffer *vs_const_buffer;
+   struct pipe_resource *vs_const_buffer;
+   struct pipe_vertex_element velems[2];
 };
 
 struct vg_object {

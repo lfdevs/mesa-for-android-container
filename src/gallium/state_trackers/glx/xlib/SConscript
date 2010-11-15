@@ -9,11 +9,10 @@ if env['platform'] == 'linux' \
     env = env.Clone()
 
     env.Append(CPPPATH = [
+        '#/src/mapi',
         '#/src/mesa',
         '#/src/mesa/main',
     ])
-
-    env.Append(CPPDEFINES = ['USE_XSHM'])
 
     st_xlib = env.ConvenienceLibrary(
 	target = 'st_xlib',
@@ -22,6 +21,7 @@ if env['platform'] == 'linux' \
 		'glx_getproc.c',
 		'glx_usefont.c',
 		'xm_api.c',
+		'xm_st.c',
 		]
     )
     Export('st_xlib')

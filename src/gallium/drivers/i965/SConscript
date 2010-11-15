@@ -2,6 +2,10 @@ Import('*')
 
 env = env.Clone()
 
+if msvc:
+	print 'warning: not building i965g'
+	Return();
+
 i965 = env.ConvenienceLibrary(
 	target = 'i965',
 	source = [
@@ -38,22 +42,22 @@ i965 = env.ConvenienceLibrary(
 		'brw_pipe_sampler.c',
 		'brw_pipe_shader.c',
 		'brw_pipe_vertex.c',
-		'brw_screen_buffers.c',
+		'brw_resource.c',
+		'brw_resource_buffer.c',
+		'brw_resource_texture.c',
+		'brw_resource_texture_layout.c',
 		'brw_screen.c',
 		'brw_screen_surface.c',
-		'brw_screen_tex_layout.c',
-		'brw_screen_texture.c',
 		'brw_structs_dump.c',
 		'brw_sf.c',
 		'brw_sf_emit.c',
 		'brw_sf_state.c',
 		'brw_state_batch.c',
 		'brw_state_cache.c',
-#		'brw_state_debug.c',
+		'brw_state_debug.c',
 		'brw_state_upload.c',
 		'brw_swtnl.c',
 		'brw_urb.c',
-		'brw_util.c',
 		'brw_vs.c',
 		'brw_vs_emit.c',
 		'brw_vs_state.c',

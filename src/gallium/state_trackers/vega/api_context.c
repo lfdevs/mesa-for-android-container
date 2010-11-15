@@ -26,12 +26,14 @@
 
 #include "VG/openvg.h"
 
+#include "vg_manager.h"
 #include "vg_context.h"
+#include "api.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 
-VGErrorCode vgGetError(void)
+VGErrorCode vegaGetError(void)
 {
    struct vg_context *ctx = vg_current_context();
    VGErrorCode error = VG_NO_CONTEXT_ERROR;
@@ -45,7 +47,7 @@ VGErrorCode vgGetError(void)
    return error;
 }
 
-void vgFlush(void)
+void vegaFlush(void)
 {
    struct vg_context *ctx = vg_current_context();
    struct pipe_context *pipe;
@@ -55,9 +57,11 @@ void vgFlush(void)
 
    pipe = ctx->pipe;
    pipe->flush(pipe, PIPE_FLUSH_RENDER_CACHE, NULL);
+
+   vg_manager_flush_frontbuffer(ctx);
 }
 
-void vgFinish(void)
+void vegaFinish(void)
 {
    struct vg_context *ctx = vg_current_context();
    struct pipe_fence_handle *fence = NULL;

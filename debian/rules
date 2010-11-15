@@ -67,40 +67,38 @@ else
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 # Gallium drivers require libdrm-{nouveau,radeon}, only available on Linux
-	GALLIUM_DRIVERS += nouveau radeon
+	GALLIUM_DRIVERS += nouveau radeon r600
 # Although the KMS egl drivers will probably build on kfreebsd & hurd
 # only linux actually has KMS drivers implemented at this point.
-	EGL_DISPLAYS += kms
+	EGL_DISPLAYS += drm
   endif
 
   ifeq ($(DEB_HOST_ARCH), lpia)
 	DRI_DRIVERS += i915 i965
-	GALLIUM_DRIVERS += intel
+	GALLIUM_DRIVERS += i915
   else ifneq ($(DEB_HOST_ARCH), s390)
-	DRI_DRIVERS += mach64 mga r128 r200 r300 r600 radeon savage tdfx
+	DRI_DRIVERS += mach64 mga r128 r200 r600 radeon savage tdfx
     ifeq ($(DEB_HOST_ARCH_CPU), i386)
 	DRI_DRIVERS += i810 i915 i965 sis unichrome
-	GALLIUM_DRIVERS += intel
+	GALLIUM_DRIVERS += i915
     else ifeq ($(DEB_HOST_ARCH_CPU), amd64)
 	DRI_DRIVERS += i915 i965 sis unichrome
-	GALLIUM_DRIVERS += intel
+	GALLIUM_DRIVERS += i915
     endif
   endif
-endif
-
-ifeq ($(HAVE_KMS), yes)
-	EGL_DISPLAYS += kms
 endif
 
 confflags-dri = \
 	--with-driver=dri \
 	--with-dri-drivers="$(DRI_DRIVERS)" \
-	--with-demos=xdemos \
 	--with-dri-driverdir=/usr/lib/dri \
-	--with-egl-displays="$(EGL_DISPLAYS)" \
+	--with-egl-platforms="$(EGL_DISPLAYS)" \
 	--enable-glx-tls \
 	$(addprefix --enable-gallium-,$(GALLIUM_DRIVERS)) \
-	--with-state-trackers=egl,es,glx,dri,vega \
+	--with-state-trackers=egl,glx,dri,vega \
+	--enable-gles-overlay \
+	--enable-gles1 \
+	--enable-gles2 \
 	$(DIRECT_RENDERING) \
 	$(confflags-common)
 
@@ -108,7 +106,6 @@ confflags-osmesa = \
 	--disable-egl \
 	--disable-gallium \
 	--with-driver=osmesa \
-	--with-demos= \
 	$(confflags-common)
 
 confflags-osmesa-static = \
@@ -116,7 +113,6 @@ confflags-osmesa-static = \
 	--disable-gallium \
 	--with-driver=osmesa \
 	--enable-static \
-	--with-demos= \
 	$(confflags-common)
 
 confflags-osmesa16 = \
@@ -124,7 +120,6 @@ confflags-osmesa16 = \
 	--disable-gallium \
 	--with-driver=osmesa \
 	--with-osmesa-bits=16 \
-	--with-demos= \
 	$(confflags-common)
 
 confflags-osmesa16-static = \
@@ -133,7 +128,6 @@ confflags-osmesa16-static = \
 	--with-driver=osmesa \
 	--with-osmesa-bits=16 \
 	--enable-static \
-	--with-demos= \
 	$(confflags-common)
 
 confflags-osmesa32 = \
@@ -141,7 +135,6 @@ confflags-osmesa32 = \
 	--disable-gallium \
 	--with-driver=osmesa \
 	--with-osmesa-bits=32 \
-	--with-demos= \
 	$(confflags-common)
 
 confflags-osmesa32-static = \
@@ -150,7 +143,6 @@ confflags-osmesa32-static = \
 	--with-driver=osmesa \
 	--with-osmesa-bits=32 \
 	--enable-static \
-	--with-demos= \
 	$(confflags-common)
 
 confflags-swx11+glu = \
@@ -158,7 +150,6 @@ confflags-swx11+glu = \
 	--disable-gallium \
 	--with-driver=xlib \
 	--disable-gl-osmesa \
-	--with-demos= \
 	--disable-egl \
 	--disable-glut \
 	--enable-motif \
@@ -170,7 +161,6 @@ confflags-swx11+glu-static = \
 	--with-driver=xlib \
 	--disable-gl-osmesa \
 	--enable-static \
-	--with-demos= \
 	--disable-egl \
 	--disable-glut \
 	--enable-motif \
@@ -181,7 +171,6 @@ confflags-swx11+glu-i386-i686 = \
 	--disable-gallium \
 	--with-driver=xlib \
 	--disable-gl-osmesa \
-	--with-demos= \
 	--disable-glut \
 	--disable-egl \
 	--enable-motif \
@@ -205,21 +194,11 @@ $(QUILT_STAMPFN): $(STAMP_DIR)/stamp
 build: build-stamp
 
 build-stamp: $(BUILD_STAMPS)
-ifeq ($(findstring radeon, $(GALLIUM_DRIVERS)), radeon)
-	# Radeon searches for r{200,300,600}_dri only, but the gallium driver
-	# is (at the moment) radeong_dri.  Rename it to r300_dri, as it
-	# fails to support r600.
-	# We don't actually install radeong yet, although it will probably
-	# replace r300 classic soon.
-	mv build/dri/lib/gallium/radeong_dri.so \
-		build/dri/lib/gallium/r300_dri.so
-endif
-ifeq ($(findstring intel, $(GALLIUM_DRIVERS)), intel)
-	# Intel i965 Gallium appears to do nothing more than generate GPU 
-	# lockups.  Kill it with fire.  i915 is apparently useful.
-	rm build/dri/lib/gallium/i965_dri.so
-	rm build/dri/lib/egl_*_i965.so
-endif
+# Remove gallium drivers which replace existing classic drivers.
+# Intel gallium is significantly behind the classic mesa drivers...
+	rm -f build/dri/lib/gallium/i915_dri.so
+# r600g is not yet in a fit state to ship
+	rm -f build/dri/lib/gallium/r600_dri.so
 	>$@
 
 $(STAMP)-build-%: configure
@@ -288,19 +267,12 @@ binary-arch: install
 	dh_strip -plibgl1-mesa-swx11 --dbg-package=libgl1-mesa-swx11-dbg
 	dh_strip -plibgl1-mesa-glx --dbg-package=libgl1-mesa-glx-dbg
 	dh_strip -plibgl1-mesa-dri --dbg-package=libgl1-mesa-dri-dbg
-# Mesa 7.8 doesn't build a gallium swrast DRI driver
-# This is built in git, and will be built in 7.9
-ifneq ($(filter-out swrast, $(GALLIUM_DRIVERS)), )
 	dh_strip -plibgl1-mesa-dri-experimental --dbg-package=libgl1-mesa-dri-experimental-dbg
-endif
 	dh_strip -plibopenvg1-mesa --dbg-package=libopenvg1-mesa-dbg
 	dh_strip -plibegl1-mesa --dbg-package=libegl1-mesa-dbg
 	dh_strip -plibgles1-mesa --dbg-package=libgles1-mesa-dbg
 	dh_strip -plibgles2-mesa --dbg-package=libgles2-mesa-dbg	
-	dh_strip -plibegl1-mesa-drivers-x11 --dbg-package=libegl1-mesa-drivers-x11-dbg
-ifeq ($(findstring kms, $(EGL_DISPLAYS)), kms)
-	dh_strip -plibegl1-mesa-drivers-kms --dbg-package=libegl1-mesa-drivers-kms-dbg
-endif
+	dh_strip -plibegl1-mesa-drivers --dbg-package=libegl1-mesa-drivers-dbg
 	dh_strip -s --remaining-packages
 	dh_compress -s
 	dh_fixperms -s

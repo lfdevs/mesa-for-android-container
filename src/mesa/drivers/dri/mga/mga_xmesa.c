@@ -182,7 +182,6 @@ mgaFillInModes( __DRIscreen *psp,
 const __DRIextension *mgaScreenExtensions[] = {
     &driReadDrawableExtension,
     &driSwapControlExtension.base,
-    &driFrameTrackingExtension.base,
     &driMediaStreamCounterExtension.base,
     NULL
 };
@@ -423,7 +422,8 @@ static const struct dri_debug_control debug_control[] =
 
 
 static GLboolean
-mgaCreateContext( const __GLcontextModes *mesaVis,
+mgaCreateContext( gl_api api,
+		  const __GLcontextModes *mesaVis,
                   __DRIcontext *driContextPriv,
                   void *sharedContextPrivate )
 {

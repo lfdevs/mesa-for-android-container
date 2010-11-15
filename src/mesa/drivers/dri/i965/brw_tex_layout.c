@@ -48,7 +48,7 @@ GLboolean brw_miptree_layout(struct intel_context *intel,
 
    switch (mt->target) {
    case GL_TEXTURE_CUBE_MAP:
-      if (intel->gen == 5) {
+      if (intel->gen >= 5) {
           GLuint align_h = 2;
           GLuint level;
           GLuint qpitch = 0;
@@ -91,10 +91,10 @@ GLboolean brw_miptree_layout(struct intel_context *intel,
       intel_get_texture_alignment_unit(mt->internal_format, &align_w, &align_h);
 
       if (mt->compressed) {
-          mt->pitch = ALIGN(width, align_w);
+          mt->total_width = ALIGN(width, align_w);
           pack_y_pitch = (height + 3) / 4;
       } else {
-	 mt->pitch = intel_miptree_pitch_align (intel, mt, tiling, mt->width0);
+	 mt->total_width = mt->width0;
 	 pack_y_pitch = ALIGN(mt->height0, align_h);
       }
 
@@ -138,7 +138,7 @@ GLboolean brw_miptree_layout(struct intel_context *intel,
 	    if (pack_x_pitch > 4) {
 	       pack_x_pitch >>= 1;
 	       pack_x_nr <<= 1;
-	       assert(pack_x_pitch * pack_x_nr <= mt->pitch);
+	       assert(pack_x_pitch * pack_x_nr <= mt->total_width);
 	    }
 
 	    if (pack_y_pitch > 2) {
@@ -165,11 +165,8 @@ GLboolean brw_miptree_layout(struct intel_context *intel,
       i945_miptree_layout_2d(intel, mt, tiling, 1);
       break;
    }
-   DBG("%s: %dx%dx%d - sz 0x%x\n", __FUNCTION__,
-		mt->pitch,
-		mt->total_height,
-		mt->cpp,
-		mt->pitch * mt->total_height * mt->cpp );
+   DBG("%s: %dx%dx%d\n", __FUNCTION__,
+       mt->total_width, mt->total_height, mt->cpp);
 
    return GL_TRUE;
 }

@@ -39,7 +39,7 @@
 #include "main/texstore.h"
 #include "main/teximage.h"
 #include "main/texobj.h"
-#include "main/texgetimage.h"
+#include "drivers/common/meta.h"
 
 #include "xmlpool.h"		/* for symbolic values of enum-type options */
 
@@ -295,9 +295,13 @@ void radeonGenerateMipmap(GLcontext* ctx, GLenum target, struct gl_texture_objec
 		radeon_firevertices(rmesa);
 	}
 
-	radeon_teximage_map(baseimage, GL_FALSE);
-	radeon_generate_mipmap(ctx, target, texObj);
-	radeon_teximage_unmap(baseimage);
+	if (_mesa_meta_check_generate_mipmap_fallback(ctx, target, texObj)) {
+		radeon_teximage_map(baseimage, GL_FALSE);
+		radeon_generate_mipmap(ctx, target, texObj);
+		radeon_teximage_unmap(baseimage);
+	} else {
+		_mesa_meta_GenerateMipmap(ctx, target, texObj);
+	}
 }
 
 
@@ -547,7 +551,7 @@ gl_format radeonChooseTextureFormat(GLcontext * ctx,
 	case GL_SRGB8_ALPHA8:
 	case GL_COMPRESSED_SRGB:
 	case GL_COMPRESSED_SRGB_ALPHA:
-		return MESA_FORMAT_SRGBA8;
+		return MESA_FORMAT_SARGB8;
 
 	case GL_SLUMINANCE:
 	case GL_SLUMINANCE8:
@@ -558,6 +562,15 @@ gl_format radeonChooseTextureFormat(GLcontext * ctx,
 	case GL_SLUMINANCE8_ALPHA8:
 	case GL_COMPRESSED_SLUMINANCE_ALPHA:
 		return MESA_FORMAT_SLA8;
+
+	case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
+		return MESA_FORMAT_SRGB_DXT1;
+	case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
+		return MESA_FORMAT_SRGBA_DXT1;
+	case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
+		return MESA_FORMAT_SRGBA_DXT3;
+	case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
+		return MESA_FORMAT_SRGBA_DXT5;
 
 	default:
 		_mesa_problem(ctx,
@@ -664,6 +677,7 @@ static void radeon_store_teximage(GLcontext* ctx, int dims,
 		struct gl_texture_image *texImage,
 		int compressed)
 {
+	radeonContextPtr rmesa = RADEON_CONTEXT(ctx);
 	radeonTexObj *t = radeon_tex_obj(texObj);
 	radeon_texture_image* image = get_radeon_texture_image(texImage);
 
@@ -678,8 +692,7 @@ static void radeon_store_teximage(GLcontext* ctx, int dims,
 		dstRowStride = image->mt->levels[image->mtlevel].rowstride;
 	} else if (t->bo) {
 		/* TFP case */
-		/* TODO */
-		assert(0);
+		dstRowStride = get_texture_image_row_stride(rmesa, texImage->TexFormat, width, 0);
 	} else {
 		dstRowStride = _mesa_format_row_stride(texImage->TexFormat, texImage->Width);
 	}
@@ -999,61 +1012,18 @@ void radeonTexSubImage3D(GLcontext * ctx, GLenum target, GLint level,
 		format, type, pixels, packing, texObj, texImage, 0);
 }
 
-/**
- * Need to map texture image into memory before copying image data,
- * then unmap it.
- */
-static void
-radeon_get_tex_image(GLcontext * ctx, GLenum target, GLint level,
-		     GLenum format, GLenum type, GLvoid * pixels,
-		     struct gl_texture_object *texObj,
-		     struct gl_texture_image *texImage, int compressed)
+unsigned radeonIsFormatRenderable(gl_format mesa_format)
 {
-	radeon_texture_image *image = get_radeon_texture_image(texImage);
+	if (mesa_format == _dri_texformat_argb8888 || mesa_format == _dri_texformat_rgb565 ||
+		mesa_format == _dri_texformat_argb1555 || mesa_format == _dri_texformat_argb4444)
+		return 1;
 
-	radeon_print(RADEON_TEXTURE, RADEON_NORMAL,
-			"%s(%p, tex %p, image %p) compressed %d.\n",
-			__func__, ctx, texObj, image, compressed);
-
-	if (image->mt) {
-		/* Map the texture image read-only */
-		radeon_teximage_map(image, GL_FALSE);
-	} else {
-		/* Image hasn't been uploaded to a miptree yet */
-		assert(image->base.Data);
+	switch (mesa_format)
+	{
+		case MESA_FORMAT_Z16:
+		case MESA_FORMAT_S8_Z24:
+			return 1;
+		default:
+			return 0;
 	}
-
-	if (compressed) {
-		/* FIXME: this can't work for small textures (mips) which
-		         use different hw stride */
-		_mesa_get_compressed_teximage(ctx, target, level, pixels,
-					      texObj, texImage);
-	} else {
-		_mesa_get_teximage(ctx, target, level, format, type, pixels,
-				   texObj, texImage);
-	}
-     
-	if (image->mt) {
-		radeon_teximage_unmap(image);
-	}
-}
-
-void
-radeonGetTexImage(GLcontext * ctx, GLenum target, GLint level,
-		  GLenum format, GLenum type, GLvoid * pixels,
-		  struct gl_texture_object *texObj,
-		  struct gl_texture_image *texImage)
-{
-	radeon_get_tex_image(ctx, target, level, format, type, pixels,
-			     texObj, texImage, 0);
-}
-
-void
-radeonGetCompressedTexImage(GLcontext *ctx, GLenum target, GLint level,
-			    GLvoid *pixels,
-			    struct gl_texture_object *texObj,
-			    struct gl_texture_image *texImage)
-{
-	radeon_get_tex_image(ctx, target, level, 0, 0, pixels,
-			     texObj, texImage, 1);
 }

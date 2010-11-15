@@ -1,0 +1,18 @@
+Documentation for the libegl1-x11, libgles1, libgles2, and libopenvg1 virtual
+packages.
+
+Although there are is no standardised linux ABI for GL|ES or OpenVG, there is
+a “strongly encouraged” set of standard headers, type and linkage definitions
+supplied by the Khronos group[1].  The mesa implementation provides this ABI.
+Any non-mesa implementation that wants to provide these packages should
+conform to the Khronos group's de-facto ABI.
+
+The case of EGL is similar; Khronos again supplies a de-facto linux ABI.  
+The EGL ABI is necessarily tied to the native windowing system by the 
+eglNativeDisplayType, eglNativeWindowType, and eglNativePixmapType typedefs.
+The EGL virtual package therefore includes the name of the x11 windowing
+system to leave room should further windowing ABIs be standardised.
+
+[1]: http://www.khronos.org/registry/implementers_guide.html#uncontrolled
+
+ -- Christopher James Halse Rogers <raof@ubuntu.com>, Fri, 30 Jul 2010 17:55:56 +1000

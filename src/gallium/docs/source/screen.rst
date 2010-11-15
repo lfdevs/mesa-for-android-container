@@ -1,18 +1,23 @@
+.. _screen:
+
 Screen
 ======
 
 A screen is an object representing the context-independent part of a device.
 
-Useful Flags
-------------
+Flags and enumerations
+----------------------
+
+XXX some of these don't belong in this section.
+
 
 .. _pipe_cap:
 
-PIPE_CAP
-^^^^^^^^
+PIPE_CAP_*
+^^^^^^^^^^
 
-Pipe capabilities help expose hardware functionality not explicitly required
-by Gallium. For floating-point values, use :ref:`get_paramf`, and for boolean
+Capability queries return information about the features and limits of the
+driver/GPU.  For floating-point values, use :ref:`get_paramf`, and for boolean
 or integer values, use :ref:`get_param`.
 
 The integer capabilities:
@@ -30,7 +35,10 @@ The integer capabilities:
 * ``MAX_RENDER_TARGETS``: The maximum number of render targets that may be
   bound.
 * ``OCCLUSION_QUERY``: Whether occlusion queries are available.
-* ``TEXTURE_SHADOW_MAP``: XXX
+* ``TIMER_QUERY``: Whether timer queries are available.
+* ``TEXTURE_SHADOW_MAP``: indicates whether the fragment shader hardware
+  can do the depth texture / Z comparison operation in TEX instructions
+  for shadow testing.
 * ``MAX_TEXTURE_2D_LEVELS``: The maximum number of mipmap levels available
   for a 2D texture.
 * ``MAX_TEXTURE_3D_LEVELS``: The maximum number of mipmap levels available
@@ -49,13 +57,32 @@ The integer capabilities:
   from color blend equations, in :ref:`Blend` state.
 * ``SM3``: Whether the vertex shader and fragment shader support equivalent
   opcodes to the Shader Model 3 specification. XXX oh god this is horrible
-* ``MAX_PREDICATE_REGISTERS``: XXX
+* ``MAX_PREDICATE_REGISTERS``: indicates the number of predicate registers
+  available.  Predicate register may be set as a side-effect of ALU
+  instructions to indicate less than, greater than or equal to zero.
+  Later instructions can use a predicate register to control writing to
+  each channel of destination registers.  NOTE: predicate registers have
+  not been fully implemented in Gallium at this time.  See the
+  GL_NV_fragment_program extension for more info (look for "condition codes").
 * ``MAX_COMBINED_SAMPLERS``: The total number of samplers accessible from
   the vertex and fragment shader, inclusive.
 * ``MAX_CONST_BUFFERS``: Maximum number of constant buffers that can be bound
   to any shader stage using ``set_constant_buffer``. If 0 or 1, the pipe will
   only permit binding one constant buffer per shader, and the shaders will
   not permit two-dimensional access to constants.
+
+If a value greater than 0 is returned, the driver can have multiple
+constant buffers bound to shader stages. The CONST register file can
+be accessed with two-dimensional indices, like in the example below.
+
+DCL CONST[0][0..7]       # declare first 8 vectors of constbuf 0
+DCL CONST[3][0]          # declare first vector of constbuf 3
+MOV OUT[0], CONST[0][3]  # copy vector 3 of constbuf 0
+
+For backwards compatibility, one-dimensional access to CONST register
+file is still supported. In that case, the constbuf index is assumed
+to be 0.
+
 * ``MAX_CONST_BUFFER_SIZE``: Maximum byte size of a single constant buffer.
 * ``INDEP_BLEND_ENABLE``: Whether per-rendertarget blend enabling and channel
   masks are supported. If 0, then the first rendertarget's blend mask is
@@ -85,77 +112,69 @@ The floating-point capabilities:
 * ``GUARD_BAND_LEFT``, ``GUARD_BAND_TOP``, ``GUARD_BAND_RIGHT``,
   ``GUARD_BAND_BOTTOM``: XXX
 
-XXX Is there a better home for this? vvv
+Fragment shader limits:
 
-If 0 is returned, the driver is not aware of multiple constant buffers,
-supports binding of only one constant buffer, and does not support
-two-dimensional CONST register file access in TGSI shaders.
+* ``PIPE_CAP_MAX_FS_INSTRUCTIONS``: The maximum number of instructions.
+* ``PIPE_CAP_MAX_FS_ALU_INSTRUCTIONS``: The maximum number of arithmetic instructions.
+* ``PIPE_CAP_MAX_FS_TEX_INSTRUCTIONS``: The maximum number of texture instructions.
+* ``PIPE_CAP_MAX_FS_TEX_INDIRECTIONS``: The maximum number of texture indirections.
+* ``PIPE_CAP_MAX_FS_CONTROL_FLOW_DEPTH``: The maximum nested control flow depth.
+* ``PIPE_CAP_MAX_FS_INPUTS``: The maximum number of input registers.
+* ``PIPE_CAP_MAX_FS_CONSTS``: The maximum number of constants.
+* ``PIPE_CAP_MAX_FS_TEMPS``: The maximum number of temporary registers.
+* ``PIPE_CAP_MAX_FS_ADDRS``: The maximum number of address registers.
+* ``PIPE_CAP_MAX_FS_PREDS``: The maximum number of predicate registers.
 
-If a value greater than 0 is returned, the driver can have multiple
-constant buffers bound to shader stages. The CONST register file can
-be accessed with two-dimensional indices, like in the example below.
+Vertex shader limits:
 
-DCL CONST[0][0..7]       # declare first 8 vectors of constbuf 0
-DCL CONST[3][0]          # declare first vector of constbuf 3
-MOV OUT[0], CONST[0][3]  # copy vector 3 of constbuf 0
+* ``PIPE_CAP_MAX_VS_*``: Identical to ``PIPE_CAP_MAX_FS_*``.
 
-For backwards compatibility, one-dimensional access to CONST register
-file is still supported. In that case, the constbuf index is assumed
-to be 0.
 
-.. _pipe_buffer_usage:
+.. _pipe_bind:
 
-PIPE_BUFFER_USAGE
-^^^^^^^^^^^^^^^^^
+PIPE_BIND_*
+^^^^^^^^^^^
 
-These flags control buffer creation. Buffers may only have one role, so
-care should be taken to not allocate a buffer with the wrong usage.
+These flags indicate how a resource will be used and are specified at resource
+creation time. Resources may be used in different roles
+during their lifecycle. Bind flags are cumulative and may be combined to create
+a resource which can be used for multiple things.
+Depending on the pipe driver's memory management and these bind flags,
+resources might be created and handled quite differently.
 
-* ``PIXEL``: This is the flag to use for all textures.
-* ``VERTEX``: A vertex buffer.
-* ``INDEX``: An element buffer.
-* ``CONSTANT``: A buffer of shader constants.
+* ``PIPE_BIND_RENDER_TARGET``: A color buffer or pixel buffer which will be
+  rendered to.  Any surface/resource attached to pipe_framebuffer_state::cbufs
+  must have this flag set.
+* ``PIPE_BIND_DEPTH_STENCIL``: A depth (Z) buffer and/or stencil buffer. Any
+  depth/stencil surface/resource attached to pipe_framebuffer_state::zsbuf must
+  have this flag set.
+* ``PIPE_BIND_DISPLAY_TARGET``: A surface that can be presented to screen. Arguments to
+  pipe_screen::flush_front_buffer must have this flag set.
+* ``PIPE_BIND_SAMPLER_VIEW``: A texture that may be sampled from in a fragment
+  or vertex shader.
+* ``PIPE_BIND_VERTEX_BUFFER``: A vertex buffer.
+* ``PIPE_BIND_INDEX_BUFFER``: An vertex index/element buffer.
+* ``PIPE_BIND_CONSTANT_BUFFER``: A buffer of shader constants.
+* ``PIPE_BIND_TRANSFER_WRITE``: A transfer object which will be written to.
+* ``PIPE_BIND_TRANSFER_READ``: A transfer object which will be read from.
+* ``PIPE_BIND_CUSTOM``:
+* ``PIPE_BIND_SCANOUT``: A front color buffer or scanout buffer.
+* ``PIPE_BIND_SHARED``: A sharable buffer that can be given to another
+  process.
 
-Buffers are inevitably abstracting the pipe's underlying memory management,
-so many of their usage flags can be used to direct the way the buffer is
-handled.
+.. _pipe_usage:
 
-* ``CPU_READ``, ``CPU_WRITE``: Whether the user will map and, in the case of
-  the latter, write to, the buffer. The convenience flag ``CPU_READ_WRITE`` is
-  available to signify a read/write buffer.
-* ``GPU_READ``, ``GPU_WRITE``: Whether the driver will internally need to
-  read from or write to the buffer. The latter will only happen if the buffer
-  is made into a render target.
-* ``DISCARD``: When set on a map, the contents of the map will be discarded
-  beforehand. Cannot be used with ``CPU_READ``.
-* ``DONTBLOCK``: When set on a map, the map will fail if the buffer cannot be
-  mapped immediately.
-* ``UNSYNCHRONIZED``: When set on a map, any outstanding operations on the
-  buffer will be ignored. The interaction of any writes to the map and any
-  operations pending with the buffer are undefined. Cannot be used with
-  ``CPU_READ``.
-* ``FLUSH_EXPLICIT``: When set on a map, written ranges of the map require
-  explicit flushes using :ref:`buffer_flush_mapped_range`. Requires
-  ``CPU_WRITE``.
+PIPE_USAGE_*
+^^^^^^^^^^^^
 
-.. _pipe_texture_usage:
+The PIPE_USAGE enums are hints about the expected usage pattern of a resource.
 
-PIPE_TEXTURE_USAGE
-^^^^^^^^^^^^^^^^^^
+* ``PIPE_USAGE_DEFAULT``: Expect many uploads to the resource, intermixed with draws.
+* ``PIPE_USAGE_DYNAMIC``: Expect many uploads to the resource, intermixed with draws.
+* ``PIPE_USAGE_STATIC``: Same as immutable (?)
+* ``PIPE_USAGE_IMMUTABLE``: Resource will not be changed after first upload.
+* ``PIPE_USAGE_STREAM``: Upload will be followed by draw, followed by upload, ...
 
-These flags determine the possible roles a texture may be used for during its
-lifetime. Texture usage flags are cumulative and may be combined to create a
-texture that can be used as multiple things.
-
-* ``RENDER_TARGET``: A color buffer or pixel buffer which will be rendered to.
-* ``DISPLAY_TARGET``: A sharable buffer that can be given to another process.
-* ``PRIMARY``: A front color buffer or scanout buffer.
-* ``DEPTH_STENCIL``: A depth (Z) buffer or stencil buffer.  Gallium does
-  not explicitly provide for stencil-only buffers, so any stencil buffer
-  validated here is implicitly also a depth buffer.
-* ``SAMPLER``: A texture that may be sampled from in a fragment or vertex
-  shader.
-* ``DYNAMIC``: A texture that will be mapped frequently.
 
 
 PIPE_TEXTURE_GEOM
@@ -174,7 +193,7 @@ For example, a compressed format might only be used for POT textures.
 Methods
 -------
 
-XXX moar; got bored
+XXX to-do
 
 get_name
 ^^^^^^^^
@@ -216,66 +235,53 @@ and/or front-buffer rendering.
 is_format_supported
 ^^^^^^^^^^^^^^^^^^^
 
-See if a format can be used in a specific manner.
+Determine if a resource in the given format can be used in a specific manner.
 
-**usage** is a bitmask of :ref:`PIPE_TEXTURE_USAGE` flags.
+**format** the resource format
+
+**target** one of the PIPE_TEXTURE_x flags
+
+**sample_count** the number of samples. 0 and 1 mean no multisampling,
+the maximum allowed legal value is 32.
+
+**bindings** is a bitmask of :ref:`PIPE_BIND` flags.
+
+**geom_flags** is a bitmask of PIPE_TEXTURE_GEOM_x flags.
 
 Returns TRUE if all usages can be satisfied.
 
-.. note::
+.. _resource_create:
 
-   ``PIPE_TEXTURE_USAGE_DYNAMIC`` is not a valid usage.
-
-.. _texture_create:
-
-texture_create
-^^^^^^^^^^^^^^
-
-Given a template of texture setup, create a buffer and texture.
-
-texture_blanket
+resource_create
 ^^^^^^^^^^^^^^^
 
-Like :ref:`texture_create`, but use a supplied buffer instead of creating a
-new one.
+Create a new resource from a template.
+The following fields of the pipe_resource must be specified in the template:
 
-texture_destroy
-^^^^^^^^^^^^^^^
+target
 
-Destroy a texture. The buffer backing the texture is destroyed if it has no
-more references.
+format
 
-buffer_map
-^^^^^^^^^^
+width0
 
-Map a buffer into memory.
+height0
 
-**usage** is a bitmask of :ref:`PIPE_BUFFER_USAGE` flags.
+depth0
 
-Returns a pointer to the map, or NULL if the mapping failed.
+last_level
 
-buffer_map_range
+nr_samples
+
+usage
+
+bind
+
+flags
+
+
+
+resource_destroy
 ^^^^^^^^^^^^^^^^
 
-Map a range of a buffer into memory.
+Destroy a resource. A resource is destroyed if it has no more references.
 
-The returned map is always relative to the beginning of the buffer, not the
-beginning of the mapped range.
-
-.. _buffer_flush_mapped_range:
-
-buffer_flush_mapped_range
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Flush a range of mapped memory into a buffer.
-
-The buffer must have been mapped with ``PIPE_BUFFER_USAGE_FLUSH_EXPLICIT``.
-
-**usage** is a bitmask of :ref:`PIPE_BUFFER_USAGE` flags.
-
-buffer_unmap
-^^^^^^^^^^^^
-
-Unmap a buffer from memory.
-
-Any pointers into the map should be considered invalid and discarded.

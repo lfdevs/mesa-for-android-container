@@ -29,11 +29,11 @@
 #include "main/macros.h"
 #include "main/enums.h"
 
-#include "shader/prog_instruction.h"
-#include "shader/prog_parameter.h"
-#include "shader/program.h"
-#include "shader/programopt.h"
-#include "shader/prog_print.h"
+#include "program/prog_instruction.h"
+#include "program/prog_parameter.h"
+#include "program/program.h"
+#include "program/programopt.h"
+#include "program/prog_print.h"
 
 #include "tnl/tnl.h"
 #include "tnl/t_context.h"
@@ -140,6 +140,20 @@ src_vector(struct i915_fragment_program *p,
       default:
          i915_program_error(p, "Bad source->Index: %d", source->Index);
          return 0;
+      }
+      break;
+
+   case PROGRAM_OUTPUT:
+      switch (source->Index) {
+      case FRAG_RESULT_COLOR:
+	 src = UREG(REG_TYPE_OC, 0);
+	 break;
+      case FRAG_RESULT_DEPTH:
+	 src = UREG(REG_TYPE_OD, 0);
+	 break;
+      default:
+	 i915_program_error(p, "Bad source->Index: %d", source->Index);
+	 return 0;
       }
       break;
 
@@ -255,8 +269,10 @@ translate_tex_src_target(struct i915_fragment_program *p, GLubyte bit)
 #define EMIT_TEX( OP )						\
 do {								\
    GLuint dim = translate_tex_src_target( p, inst->TexSrcTarget );	\
+   const struct gl_fragment_program *program = p->ctx->FragmentProgram._Current; \
+   GLuint unit = program->Base.SamplerUnits[inst->TexSrcUnit];	\
    GLuint sampler = i915_emit_decl(p, REG_TYPE_S,		\
-				  inst->TexSrcUnit, dim);	\
+				   unit, dim);			\
    GLuint coord = src_vector( p, &inst->SrcReg[0], program);	\
    /* Texel lookup */						\
 								\
@@ -357,9 +373,10 @@ upload_program(struct i915_fragment_program *p)
    }
 
    if (program->Base.NumInstructions > I915_MAX_INSN) {
-       i915_program_error( p, "Exceeded max instructions" );
-       return;
-    }
+      i915_program_error(p, "Exceeded max instructions (%d out of %d)",
+			 program->Base.NumInstructions, I915_MAX_INSN);
+      return;
+   }
 
    /* Not always needed:
     */
@@ -467,6 +484,18 @@ upload_program(struct i915_fragment_program *p)
 			 swizzle(consts1, W, W, W, W),
 			 swizzle(tmp, Y, Y, Y, Y),
 			 swizzle(tmp, X, X, X, X));
+         break;
+
+      case OPCODE_DP2:
+         src0 = src_vector(p, &inst->SrcReg[0], program);
+         src1 = src_vector(p, &inst->SrcReg[1], program);
+	 i915_emit_arith(p,
+			 A0_DP3,
+                         get_result_vector(p, inst),
+                         get_result_flags(inst), 0,
+			 swizzle(src0, X, Y, ZERO, ZERO),
+			 swizzle(src1, X, Y, ZERO, ZERO),
+			 0);
          break;
 
       case OPCODE_DP3:
@@ -650,20 +679,6 @@ upload_program(struct i915_fragment_program *p)
       case OPCODE_MUL:
          EMIT_2ARG_ARITH(A0_MUL);
          break;
-
-      case OPCODE_NOISE1:
-      case OPCODE_NOISE2:
-      case OPCODE_NOISE3:
-      case OPCODE_NOISE4:
-	 /* Don't implement noise because we just don't have the instructions
-	  * to spare.  We aren't the first vendor to do so.
-	  */
-	 i915_program_error(p, "Stubbed-out noise functions");
-	 i915_emit_arith(p,
-			 A0_MOV,
-			 get_result_vector(p, inst),
-			 get_result_flags(inst), 0,
-			 swizzle(tmp, ZERO, ZERO, ZERO, ZERO), 0, 0);
 
       case OPCODE_POW:
          src0 = src_vector(p, &inst->SrcReg[0], program);
@@ -953,6 +968,41 @@ upload_program(struct i915_fragment_program *p)
 			 0);
          break;
 
+      case OPCODE_SSG:
+	 dst = get_result_vector(p, inst);
+	 flags = get_result_flags(inst);
+         src0 = src_vector(p, &inst->SrcReg[0], program);
+	 tmp = i915_get_utemp(p);
+
+	 /* tmp = (src < 0.0) */
+	 i915_emit_arith(p,
+			 A0_SLT,
+			 tmp,
+			 flags, 0,
+			 src0,
+			 swizzle(src0, ZERO, ZERO, ZERO, ZERO),
+			 0);
+
+	 /* dst = (0.0 < src) */
+	 i915_emit_arith(p,
+			 A0_SLT,
+			 dst,
+			 flags, 0,
+			 swizzle(src0, ZERO, ZERO, ZERO, ZERO),
+			 src0,
+			 0);
+
+	 /* dst = (src > 0.0) - (src < 0.0) */
+	 i915_emit_arith(p,
+			 A0_ADD,
+			 dst,
+			 flags, 0,
+			 dst,
+			 negate(tmp, 1, 1, 1, 1),
+			 0);
+
+         break;
+
       case OPCODE_SUB:
          src0 = src_vector(p, &inst->SrcReg[0], program);
          src1 = src_vector(p, &inst->SrcReg[1], program);
@@ -1096,11 +1146,22 @@ translate_program(struct i915_fragment_program *p)
 {
    struct i915_context *i915 = I915_CONTEXT(p->ctx);
 
+   if (INTEL_DEBUG & DEBUG_WM) {
+      printf("fp:\n");
+      _mesa_print_program(&p->ctx->FragmentProgram._Current->Base);
+      printf("\n");
+   }
+
    i915_init_program(i915, p);
    check_wpos(p);
    upload_program(p);
    fixup_depth_write(p);
    i915_fini_program(p);
+
+   if (INTEL_DEBUG & DEBUG_WM) {
+      printf("i915:\n");
+      i915_disassemble_program(i915->state.Program, i915->state.ProgramSize);
+   }
 
    p->translated = 1;
 }

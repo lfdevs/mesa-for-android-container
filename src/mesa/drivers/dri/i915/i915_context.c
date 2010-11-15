@@ -94,7 +94,8 @@ i915InitDriverFunctions(struct dd_function_table *functions)
 extern const struct tnl_pipeline_stage *intel_pipeline[];
 
 GLboolean
-i915CreateContext(const __GLcontextModes * mesaVis,
+i915CreateContext(int api,
+		  const __GLcontextModes * mesaVis,
                   __DRIcontext * driContextPriv,
                   void *sharedContextPrivate)
 {
@@ -114,7 +115,7 @@ i915CreateContext(const __GLcontextModes * mesaVis,
 
    i915InitDriverFunctions(&functions);
 
-   if (!intelInitContext(intel, mesaVis, driContextPriv,
+   if (!intelInitContext(intel, api, mesaVis, driContextPriv,
                          sharedContextPrivate, &functions)) {
       FREE(i915);
       return GL_FALSE;
@@ -172,6 +173,13 @@ i915CreateContext(const __GLcontextModes * mesaVis,
 	   ctx->Const.FragmentProgram.MaxEnvParams);
 
    ctx->FragmentProgram._MaintainTexEnvProgram = GL_TRUE;
+
+   /* FINISHME: Are there other options that should be enabled for software
+    * FINISHME: vertex shaders?
+    */
+   ctx->ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitCondCodes = GL_TRUE;
+   ctx->ShaderCompilerOptions[MESA_SHADER_FRAGMENT].EmitNoIfs = GL_TRUE;
+   ctx->ShaderCompilerOptions[MESA_SHADER_FRAGMENT].EmitNoNoise = GL_TRUE;
 
    ctx->Const.MaxDrawBuffers = 1;
 

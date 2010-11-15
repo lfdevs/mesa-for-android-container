@@ -14,25 +14,25 @@
  * The above copyright notice and this permission notice shall be included
  * in all copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
  */
 
 #ifndef _NATIVE_H_
 #define _NATIVE_H_
 
 #include "EGL/egl.h"  /* for EGL native types */
-#include "GL/gl.h" /* for GL types needed by __GLcontextModes */
-#include "GL/internal/glcore.h"  /* for __GLcontextModes */
 
 #include "pipe/p_compiler.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
+#include "state_tracker/sw_winsys.h"
 
 #include "native_modeset.h"
 
@@ -55,27 +55,6 @@ enum native_param_type {
     * types.
     */
    NATIVE_PARAM_USE_NATIVE_BUFFER
-};
-
-/**
- * Enumerations for probe results.
- */
-enum native_probe_result {
-   NATIVE_PROBE_UNKNOWN,
-   NATIVE_PROBE_FALLBACK,
-   NATIVE_PROBE_SUPPORTED,
-   NATIVE_PROBE_EXACT,
-};
-
-/**
- * A probe object for display probe.
- */
-struct native_probe {
-   int magic;
-   EGLNativeDisplayType display;
-   void *data;
-
-   void (*destroy)(struct native_probe *nprobe);
 };
 
 struct native_surface {
@@ -112,7 +91,7 @@ struct native_surface {
     * behavior might change in the future.
     */
    boolean (*validate)(struct native_surface *nsurf, uint attachment_mask,
-                       unsigned int *seq_num, struct pipe_texture **textures,
+                       unsigned int *seq_num, struct pipe_resource **textures,
                        int *width, int *height);
 
    /**
@@ -121,15 +100,26 @@ struct native_surface {
    void (*wait)(struct native_surface *nsurf);
 };
 
+/**
+ * Describe a native display config.
+ */
 struct native_config {
-   /* __GLcontextModes should go away some day */
-   __GLcontextModes mode;
+   /* available buffers and their format */
+   uint buffer_mask;
    enum pipe_format color_format;
-   enum pipe_format depth_format;
-   enum pipe_format stencil_format;
 
-   /* treat it as an additional flag to mode.drawableType */
+   /* supported surface types */
+   boolean window_bit;
+   boolean pixmap_bit;
    boolean scanout_bit;
+
+   int native_visual_id;
+   int native_visual_type;
+   int level;
+   int samples;
+   boolean slow_config;
+   boolean transparent_rgb;
+   int transparent_rgb_values[3];
 };
 
 /**
@@ -140,9 +130,6 @@ struct native_config {
 struct native_display {
    /**
     * The pipe screen of the native display.
-    *
-    * Note that the "flush_frontbuffer" and "update_buffer" callbacks will be
-    * overridden.
     */
    struct pipe_screen *screen;
 
@@ -163,18 +150,14 @@ struct native_display {
 
    /**
     * Get the supported configs.  The configs are owned by the display, but
-    * the returned array should be free()ed.
-    *
-    * The configs will be converted to EGL config by
-    * _eglConfigFromContextModesRec and validated by _eglValidateConfig.
-    * Those failing to pass the test will be skipped.
+    * the returned array should be FREE()ed.
     */
    const struct native_config **(*get_configs)(struct native_display *ndpy,
                                                int *num_configs);
 
    /**
     * Test if a pixmap is supported by the given config.  Required unless no
-    * config has GLX_PIXMAP_BIT set.
+    * config has pixmap_bit set.
     *
     * This function is usually called to find a config that supports a given
     * pixmap.  Thus, it is usually called with the same pixmap in a row.
@@ -185,28 +168,18 @@ struct native_display {
 
 
    /**
-    * Create a window surface.  Required unless no config has GLX_WINDOW_BIT
-    * set.
+    * Create a window surface.  Required unless no config has window_bit set.
     */
    struct native_surface *(*create_window_surface)(struct native_display *ndpy,
                                                    EGLNativeWindowType win,
                                                    const struct native_config *nconf);
 
    /**
-    * Create a pixmap surface.  Required unless no config has GLX_PIXMAP_BIT
-    * set.
+    * Create a pixmap surface.  Required unless no config has pixmap_bit set.
     */
    struct native_surface *(*create_pixmap_surface)(struct native_display *ndpy,
                                                    EGLNativePixmapType pix,
                                                    const struct native_config *nconf);
-
-   /**
-    * Create a pbuffer surface.  Required unless no config has GLX_PBUFFER_BIT
-    * set.
-    */
-   struct native_surface *(*create_pbuffer_surface)(struct native_display *ndpy,
-                                                    const struct native_config *nconf,
-                                                    uint width, uint height);
 
    const struct native_display_modeset *modeset;
 };
@@ -223,6 +196,11 @@ struct native_event_handler {
    void (*invalid_surface)(struct native_display *ndpy,
                            struct native_surface *nsurf,
                            unsigned int seq_num);
+
+   struct pipe_screen *(*new_drm_screen)(struct native_display *ndpy,
+                                         const char *name, int fd);
+   struct pipe_screen *(*new_sw_screen)(struct native_display *ndpy,
+                                        struct sw_winsys *ws);
 };
 
 /**
@@ -234,27 +212,24 @@ native_attachment_mask_test(uint mask, enum native_attachment att)
    return !!(mask & (1 << att));
 }
 
-/**
- * Return a probe object for the given display.
- *
- * Note that the returned object may be cached and used by different native
- * display modules.  It allows fast probing when multiple modules probe the
- * same display.
- */
-struct native_probe *
-native_create_probe(EGLNativeDisplayType dpy);
+struct native_platform {
+   const char *name;
 
-/**
- * Probe the probe object.
- */
-enum native_probe_result
-native_get_probe_result(struct native_probe *nprobe);
+   struct native_display *(*create_display)(void *dpy,
+                                            struct native_event_handler *handler,
+                                            void *user_data);
+};
 
-const char *
-native_get_name(void);
+const struct native_platform *
+native_get_gdi_platform(void);
 
-struct native_display *
-native_create_display(EGLNativeDisplayType dpy,
-                      struct native_event_handler *handler);
+const struct native_platform *
+native_get_x11_platform(void);
+
+const struct native_platform *
+native_get_drm_platform(void);
+
+const struct native_platform *
+native_get_fbdev_platform(void);
 
 #endif /* _NATIVE_H_ */

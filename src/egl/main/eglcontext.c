@@ -83,15 +83,6 @@ _eglParseContextAttribList(_EGLContext *ctx, const EGLint *attrib_list)
       }
    }
 
-   if (err == EGL_SUCCESS) {
-      EGLint renderable_type, api_bit;
-
-      renderable_type = GET_CONFIG_ATTRIB(ctx->Config, EGL_RENDERABLE_TYPE);
-      api_bit = _eglGetContextAPIBit(ctx);
-      if (!(renderable_type & api_bit))
-         err = EGL_BAD_CONFIG;
-   }
-
    return err;
 }
 
@@ -121,6 +112,17 @@ _eglInitContext(_EGLContext *ctx, _EGLDisplay *dpy, _EGLConfig *conf,
    ctx->ClientVersion = 1; /* the default, per EGL spec */
 
    err = _eglParseContextAttribList(ctx, attrib_list);
+   if (err == EGL_SUCCESS && ctx->Config) {
+      EGLint renderable_type, api_bit;
+
+      renderable_type = GET_CONFIG_ATTRIB(ctx->Config, EGL_RENDERABLE_TYPE);
+      api_bit = _eglGetContextAPIBit(ctx);
+      if (!(renderable_type & api_bit)) {
+         _eglLog(_EGL_DEBUG, "context api is 0x%x while config supports 0x%x",
+               api_bit, renderable_type);
+         err = EGL_BAD_CONFIG;
+      }
+   }
    if (err != EGL_SUCCESS)
       return _eglError(err, "eglCreateContext");
 
@@ -203,35 +205,6 @@ _eglQueryContext(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *c,
 
 
 /**
- * Bind the context to the surfaces.  Return the surfaces that are "orphaned".
- * That is, when the context is not NULL, return the surfaces it previously
- * bound to;  when the context is NULL, the same surfaces are returned.
- */
-static void
-_eglBindContextToSurfaces(_EGLContext *ctx,
-                          _EGLSurface **draw, _EGLSurface **read)
-{
-   _EGLSurface *newDraw = *draw, *newRead = *read;
-
-   if (newDraw->CurrentContext)
-      newDraw->CurrentContext->DrawSurface = NULL;
-   newDraw->CurrentContext = ctx;
-
-   if (newRead->CurrentContext)
-      newRead->CurrentContext->ReadSurface = NULL;
-   newRead->CurrentContext = ctx;
-
-   if (ctx) {
-      *draw = ctx->DrawSurface;
-      ctx->DrawSurface = newDraw;
-
-      *read = ctx->ReadSurface;
-      ctx->ReadSurface = newRead;
-   }
-}
-
-
-/**
  * Bind the context to the thread and return the previous context.
  *
  * Note that the context may be NULL.
@@ -246,15 +219,14 @@ _eglBindContextToThread(_EGLContext *ctx, _EGLThreadInfo *t)
       _eglConvertApiToIndex(ctx->ClientAPI) : t->CurrentAPIIndex;
 
    oldCtx = t->CurrentContexts[apiIndex];
-   if (ctx == oldCtx)
-      return NULL;
+   if (ctx != oldCtx) {
+      if (oldCtx)
+         oldCtx->Binding = NULL;
+      if (ctx)
+         ctx->Binding = t;
 
-   if (oldCtx)
-      oldCtx->Binding = NULL;
-   if (ctx)
-      ctx->Binding = t;
-
-   t->CurrentContexts[apiIndex] = ctx;
+      t->CurrentContexts[apiIndex] = ctx;
+   }
 
    return oldCtx;
 }
@@ -267,7 +239,9 @@ static EGLBoolean
 _eglCheckMakeCurrent(_EGLContext *ctx, _EGLSurface *draw, _EGLSurface *read)
 {
    _EGLThreadInfo *t = _eglGetCurrentThread();
+   _EGLDisplay *dpy;
    EGLint conflict_api;
+   EGLBoolean surfaceless;
 
    if (_eglIsCurrentThreadDummy())
       return _eglError(EGL_BAD_ALLOC, "eglMakeCurrent");
@@ -279,8 +253,23 @@ _eglCheckMakeCurrent(_EGLContext *ctx, _EGLSurface *draw, _EGLSurface *read)
       return EGL_TRUE;
    }
 
-   /* ctx/draw/read must be all given */
-   if (draw == NULL || read == NULL)
+   dpy = ctx->Resource.Display;
+   switch (_eglGetContextAPIBit(ctx)) {
+   case EGL_OPENGL_ES_BIT:
+      surfaceless = dpy->Extensions.KHR_surfaceless_gles1;
+      break;
+   case EGL_OPENGL_ES2_BIT:
+      surfaceless = dpy->Extensions.KHR_surfaceless_gles2;
+      break;
+   case EGL_OPENGL_BIT:
+      surfaceless = dpy->Extensions.KHR_surfaceless_opengl;
+      break;
+   default:
+      surfaceless = EGL_FALSE;
+      break;
+   }
+
+   if (!surfaceless && (draw == NULL || read == NULL))
       return _eglError(EGL_BAD_MATCH, "eglMakeCurrent");
 
    /* context stealing from another thread is not allowed */
@@ -301,12 +290,13 @@ _eglCheckMakeCurrent(_EGLContext *ctx, _EGLSurface *draw, _EGLSurface *read)
     *
     * The latter is more restrictive so we can check only the latter case.
     */
-   if ((draw->CurrentContext && draw->CurrentContext != ctx) ||
-       (read->CurrentContext && read->CurrentContext != ctx))
+   if ((draw && draw->CurrentContext && draw->CurrentContext != ctx) ||
+       (read && read->CurrentContext && read->CurrentContext != ctx))
       return _eglError(EGL_BAD_ACCESS, "eglMakeCurrent");
 
    /* simply require the configs to be equal */
-   if (draw->Config != ctx->Config || read->Config != ctx->Config)
+   if ((draw && draw->Config != ctx->Config) ||
+       (read && read->Config != ctx->Config))
       return _eglError(EGL_BAD_MATCH, "eglMakeCurrent");
 
    switch (ctx->ClientAPI) {
@@ -333,40 +323,54 @@ _eglCheckMakeCurrent(_EGLContext *ctx, _EGLSurface *draw, _EGLSurface *read)
 
 /**
  * Bind the context to the current thread and given surfaces.  Return the
- * previously bound context and the surfaces it bound to.  Each argument is
- * both input and output.
+ * "orphaned" context and surfaces.  Each argument is both input and output.
  */
 EGLBoolean
 _eglBindContext(_EGLContext **ctx, _EGLSurface **draw, _EGLSurface **read)
 {
    _EGLThreadInfo *t = _eglGetCurrentThread();
    _EGLContext *newCtx = *ctx, *oldCtx;
+   _EGLSurface *newDraw = *draw, *newRead = *read;
 
-   if (!_eglCheckMakeCurrent(newCtx, *draw, *read))
+   if (!_eglCheckMakeCurrent(newCtx, newDraw, newRead))
       return EGL_FALSE;
 
    /* bind the new context */
    oldCtx = _eglBindContextToThread(newCtx, t);
-   *ctx = oldCtx;
-   if (newCtx)
-      _eglBindContextToSurfaces(newCtx, draw, read);
 
-   /* unbind the old context from its binding surfaces */
+   /* break old bindings */
    if (oldCtx) {
-      /*
-       * If the new context replaces some old context, the new one should not
-       * be current before the replacement and it should not be bound to any
-       * surface.
-       */
-      if (newCtx)
-         assert(!*draw && !*read);
-
+      *ctx = oldCtx;
       *draw = oldCtx->DrawSurface;
       *read = oldCtx->ReadSurface;
-      assert(*draw && *read);
 
-      _eglBindContextToSurfaces(NULL, draw, read);
+      if (*draw)
+         (*draw)->CurrentContext = NULL;
+      if (*read)
+         (*read)->CurrentContext = NULL;
+
+      oldCtx->DrawSurface = NULL;
+      oldCtx->ReadSurface = NULL;
    }
+
+   /* establish new bindings */
+   if (newCtx) {
+      if (newDraw)
+         newDraw->CurrentContext = newCtx;
+      if (newRead)
+         newRead->CurrentContext = newCtx;
+
+      newCtx->DrawSurface = newDraw;
+      newCtx->ReadSurface = newRead;
+   }
+
+   /* an old context or surface is not orphaned if it is still bound */
+   if (*ctx == newCtx)
+      *ctx = NULL;
+   if (*draw == newDraw || *draw == newRead)
+      *draw = NULL;
+   if (*read == newDraw || *read == newRead)
+      *read = NULL;
 
    return EGL_TRUE;
 }

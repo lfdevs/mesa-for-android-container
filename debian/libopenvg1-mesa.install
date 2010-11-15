@@ -1,1 +1,2 @@
 dri/usr/lib/libOpenVG.so.1* usr/lib
+dri/usr/lib/egl/st_OpenVG.so usr/lib/egl

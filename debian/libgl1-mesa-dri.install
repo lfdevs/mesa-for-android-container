@@ -1,1 +1,2 @@
-build/dri/lib/*_dri.so  usr/lib/dri/
+build/dri/lib/*_dri.so  usr/lib/dri
+build/dri/lib/gallium/r300_dri.so usr/lib/dri

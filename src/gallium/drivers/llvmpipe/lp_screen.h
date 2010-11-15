@@ -34,23 +34,22 @@
 #ifndef LP_SCREEN_H
 #define LP_SCREEN_H
 
-#include <llvm-c/Core.h>
-#include <llvm-c/Analysis.h>
-#include <llvm-c/Target.h>
+#include "gallivm/lp_bld.h"
 #include <llvm-c/ExecutionEngine.h>
 
+#include "os/os_thread.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_defines.h"
 
 
-struct llvmpipe_winsys;
+struct sw_winsys;
 
 
 struct llvmpipe_screen
 {
    struct pipe_screen base;
 
-   struct llvmpipe_winsys *winsys;
+   struct sw_winsys *winsys;
 
    LLVMModuleRef module;
    LLVMExecutionEngineRef engine;
@@ -60,10 +59,14 @@ struct llvmpipe_screen
 
    LLVMTypeRef context_ptr_type;
 
-   /* Increments whenever textures are modified.  Contexts can track
-    * this.
+   unsigned num_threads;
+
+   /* Increments whenever textures are modified.  Contexts can track this.
     */
-   unsigned timestamp;          
+   unsigned timestamp;
+
+   struct lp_rasterizer *rast;
+   pipe_mutex rast_mutex;
 };
 
 
@@ -74,6 +77,7 @@ llvmpipe_screen( struct pipe_screen *pipe )
 {
    return (struct llvmpipe_screen *)pipe;
 }
+
 
 
 #endif /* LP_SCREEN_H */

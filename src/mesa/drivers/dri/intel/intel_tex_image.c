@@ -213,9 +213,9 @@ try_pbo_upload(struct intel_context *intel,
    struct intel_buffer_object *pbo = intel_buffer_object(unpack->BufferObj);
    GLuint src_offset, src_stride;
    GLuint dst_x, dst_y, dst_stride;
-   dri_bo *dst_buffer = intel_region_buffer(intel,
-					    intelImage->mt->region,
-					    INTEL_WRITE_FULL);
+   drm_intel_bo *dst_buffer = intel_region_buffer(intel,
+						  intelImage->mt->region,
+						  INTEL_WRITE_FULL);
 
    if (!_mesa_is_bufferobj(unpack->BufferObj) ||
        intel->ctx._ImageTransferState ||
@@ -236,13 +236,13 @@ try_pbo_upload(struct intel_context *intel,
 				  intelImage->face, 0,
 				  &dst_x, &dst_y);
 
-   dst_stride = intelImage->mt->pitch;
+   dst_stride = intelImage->mt->region->pitch;
 
    if (drm_intel_bo_references(intel->batch->buf, dst_buffer))
-      intelFlush(&intel->ctx);
-   intel_prepare_render(intel);
+      intel_flush(&intel->ctx);
+
    {
-      dri_bo *src_buffer = intel_bufferobj_buffer(intel, pbo, INTEL_READ);
+      drm_intel_bo *src_buffer = intel_bufferobj_buffer(intel, pbo, INTEL_READ);
 
       if (!intelEmitCopyBlit(intel,
 			     intelImage->mt->cpp,
@@ -290,7 +290,7 @@ try_pbo_zcopy(struct intel_context *intel,
 				  intelImage->face, 0,
 				  &dst_x, &dst_y);
 
-   dst_stride = intelImage->mt->pitch;
+   dst_stride = intelImage->mt->region->pitch;
 
    if (src_stride != dst_stride || dst_x != 0 || dst_y != 0 ||
        src_offset != 0) {
@@ -473,14 +473,12 @@ intelTexImage(GLcontext * ctx,
 					   pixels, unpack, "glTexImage");
    }
 
-   intel_prepare_render(intel);
-
    if (intelImage->mt) {
       if (pixels != NULL) {
 	 /* Flush any queued rendering with the texture before mapping. */
 	 if (drm_intel_bo_references(intel->batch->buf,
 				     intelImage->mt->region->buffer)) {
-	    intelFlush(ctx);
+	    intel_flush(ctx);
 	 }
          texImage->Data = intel_miptree_image_map(intel,
                                                   intelImage->mt,
@@ -638,7 +636,7 @@ intel_get_tex_image(GLcontext * ctx, GLenum target, GLint level,
     * make sure rendering is complete.
     * We could probably predicate this on texObj->_RenderToTexture
     */
-   intelFlush(ctx);
+   intel_flush(ctx);
 
    /* Map */
    if (intelImage->mt) {
@@ -728,7 +726,8 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    if (!intelObj)
       return;
 
-   if (dPriv->lastStamp != dPriv->dri2.stamp)
+   if (dPriv->lastStamp != dPriv->dri2.stamp ||
+       !pDRICtx->driScreenPriv->dri2.useInvalidate)
       intel_update_renderbuffers(pDRICtx, dPriv);
 
    rb = intel_get_renderbuffer(fb, BUFFER_FRONT_LEFT);
@@ -806,8 +805,8 @@ intel_image_target_texture_2d(GLcontext *ctx, GLenum target,
    __DRIimage *image;
 
    screen = intel->intelScreen->driScrnPriv;
-   image = screen->dri2.image->lookupEGLImage(intel->driContext, image_handle,
-					      intel->driContext->loaderPrivate);
+   image = screen->dri2.image->lookupEGLImage(screen, image_handle,
+					      screen->loaderPrivate);
    if (image == NULL)
       return;
 

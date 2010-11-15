@@ -27,7 +27,7 @@
 #include "pipe/p_defines.h"
 #include "util/u_math.h"
 
-#include "svga_screen_texture.h"
+#include "svga_sampler_view.h"
 #include "svga_winsys.h"
 #include "svga_context.h"
 #include "svga_state.h"
@@ -37,15 +37,15 @@
 void svga_cleanup_tss_binding(struct svga_context *svga)
 {
    int i;
-   unsigned count = MAX2( svga->curr.num_textures,
+   unsigned count = MAX2( svga->curr.num_sampler_views,
                           svga->state.hw_draw.num_views );
 
    for (i = 0; i < count; i++) {
       struct svga_hw_view_state *view = &svga->state.hw_draw.views[i];
 
       svga_sampler_view_reference(&view->v, NULL);
-      pipe_texture_reference( &svga->curr.texture[i], NULL );
-      pipe_texture_reference( &view->texture, NULL );
+      pipe_sampler_view_reference( &svga->curr.sampler_views[i], NULL );
+      pipe_resource_reference( &view->texture, NULL );
 
       view->dirty = 1;
    }
@@ -56,8 +56,9 @@ static int
 update_tss_binding(struct svga_context *svga, 
                    unsigned dirty )
 {
+   boolean reemit = !!(dirty & SVGA_NEW_COMMAND_BUFFER);
    unsigned i;
-   unsigned count = MAX2( svga->curr.num_textures,
+   unsigned count = MAX2( svga->curr.num_sampler_views,
                           svga->state.hw_draw.num_views );
    unsigned min_lod;
    unsigned max_lod;
@@ -77,45 +78,53 @@ update_tss_binding(struct svga_context *svga,
    for (i = 0; i < count; i++) {
       const struct svga_sampler_state *s = svga->curr.sampler[i];
       struct svga_hw_view_state *view = &svga->state.hw_draw.views[i];
+      struct pipe_resource *texture = NULL;
 
       /* get min max lod */
-      if (svga->curr.texture[i]) {
+      if (svga->curr.sampler_views[i]) {
          min_lod = MAX2(s->view_min_lod, 0);
-         max_lod = MIN2(s->view_max_lod, svga->curr.texture[i]->last_level);
+         max_lod = MIN2(s->view_max_lod, svga->curr.sampler_views[i]->texture->last_level);
+         texture = svga->curr.sampler_views[i]->texture;
       } else {
          min_lod = 0;
          max_lod = 0;
       }
 
-      if (view->texture != svga->curr.texture[i] ||
+      if (view->texture != texture ||
           view->min_lod != min_lod ||
           view->max_lod != max_lod) {
 
          svga_sampler_view_reference(&view->v, NULL);
-         pipe_texture_reference( &view->texture, svga->curr.texture[i] );
+         pipe_resource_reference( &view->texture, texture );
 
          view->dirty = TRUE;
          view->min_lod = min_lod;
          view->max_lod = max_lod;
 
-         if (svga->curr.texture[i])
+         if (texture)
             view->v = svga_get_tex_sampler_view(&svga->pipe, 
-                                                svga->curr.texture[i], 
+                                                texture, 
                                                 min_lod,
                                                 max_lod);
       }
 
-      if (view->dirty) {
+      /*
+       * We need to reemit non-null texture bindings, even when they are not
+       * dirty, to ensure that the resources are paged in.
+       */
+
+      if (view->dirty ||
+          (reemit && view->v)) {
          queue.bind[queue.bind_count].unit = i;
          queue.bind[queue.bind_count].view = view;
          queue.bind_count++;
       } 
-      else if (view->v) {
+      if (!view->dirty && view->v) {
          svga_validate_sampler_view(svga, view->v);
       }
    }
 
-   svga->state.hw_draw.num_views = svga->curr.num_textures;
+   svga->state.hw_draw.num_views = svga->curr.num_sampler_views;
 
    if (queue.bind_count) {
       SVGA3dTextureState *ts;
@@ -126,18 +135,21 @@ update_tss_binding(struct svga_context *svga,
          goto fail;
 
       for (i = 0; i < queue.bind_count; i++) {
+         struct svga_winsys_surface *handle;
+
          ts[i].stage = queue.bind[i].unit;
          ts[i].name = SVGA3D_TS_BIND_TEXTURE;
 
          if (queue.bind[i].view->v) {
-            svga->swc->surface_relocation(svga->swc,
-                                          &ts[i].value,
-                                          queue.bind[i].view->v->handle,
-                                          PIPE_BUFFER_USAGE_GPU_READ);
+            handle = queue.bind[i].view->v->handle;
          }
          else {
-            ts[i].value = SVGA3D_INVALID_ID;
+            handle = NULL;
          }
+         svga->swc->surface_relocation(svga->swc,
+                                       &ts[i].value,
+                                       handle,
+                                       SVGA_RELOC_READ);
          
          queue.bind[i].view->dirty = FALSE;
       }
@@ -155,7 +167,8 @@ fail:
 struct svga_tracked_state svga_hw_tss_binding = {
    "texture binding emit",
    SVGA_NEW_TEXTURE_BINDING |
-   SVGA_NEW_SAMPLER,
+   SVGA_NEW_SAMPLER |
+   SVGA_NEW_COMMAND_BUFFER,
    update_tss_binding
 };
 

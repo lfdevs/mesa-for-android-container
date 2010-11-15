@@ -32,6 +32,7 @@
 #include "vg_translate.h"
 #include "api_consts.h"
 #include "image.h"
+#include "api.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
@@ -92,9 +93,9 @@ static INLINE VGboolean supported_image_format(VGImageFormat format)
    return VG_FALSE;
 }
 
-VGImage vgCreateImage(VGImageFormat format,
-                      VGint width, VGint height,
-                      VGbitfield allowedQuality)
+VGImage vegaCreateImage(VGImageFormat format,
+                        VGint width, VGint height,
+                        VGbitfield allowedQuality)
 {
    struct vg_context *ctx = vg_current_context();
 
@@ -126,7 +127,7 @@ VGImage vgCreateImage(VGImageFormat format,
    return (VGImage)image_create(format, width, height);
 }
 
-void vgDestroyImage(VGImage image)
+void vegaDestroyImage(VGImage image)
 {
    struct vg_context *ctx = vg_current_context();
    struct vg_image *img = (struct vg_image *)image;
@@ -142,9 +143,9 @@ void vgDestroyImage(VGImage image)
    image_destroy(img);
 }
 
-void vgClearImage(VGImage image,
-                  VGint x, VGint y,
-                  VGint width, VGint height)
+void vegaClearImage(VGImage image,
+                    VGint x, VGint y,
+                    VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct vg_image *img;
@@ -167,12 +168,12 @@ void vgClearImage(VGImage image,
 
 }
 
-void vgImageSubData(VGImage image,
-                    const void * data,
-                    VGint dataStride,
-                    VGImageFormat dataFormat,
-                    VGint x, VGint y,
-                    VGint width, VGint height)
+void vegaImageSubData(VGImage image,
+                      const void * data,
+                      VGint dataStride,
+                      VGImageFormat dataFormat,
+                      VGint x, VGint y,
+                      VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct vg_image *img;
@@ -195,12 +196,12 @@ void vgImageSubData(VGImage image,
                   x, y, width, height);
 }
 
-void vgGetImageSubData(VGImage image,
-                       void * data,
-                       VGint dataStride,
-                       VGImageFormat dataFormat,
-                       VGint x, VGint y,
-                       VGint width, VGint height)
+void vegaGetImageSubData(VGImage image,
+                         void * data,
+                         VGint dataStride,
+                         VGImageFormat dataFormat,
+                         VGint x, VGint y,
+                         VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct vg_image *img;
@@ -222,9 +223,9 @@ void vgGetImageSubData(VGImage image,
                       x, y, width, height);
 }
 
-VGImage vgChildImage(VGImage parent,
-                     VGint x, VGint y,
-                     VGint width, VGint height)
+VGImage vegaChildImage(VGImage parent,
+                       VGint x, VGint y,
+                       VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct vg_image *p;
@@ -252,7 +253,7 @@ VGImage vgChildImage(VGImage parent,
    return (VGImage)image_child_image(p, x, y, width, height);
 }
 
-VGImage vgGetParent(VGImage image)
+VGImage vegaGetParent(VGImage image)
 {
    struct vg_context *ctx = vg_current_context();
    struct vg_image *img;
@@ -269,10 +270,10 @@ VGImage vgGetParent(VGImage image)
       return image;
 }
 
-void vgCopyImage(VGImage dst, VGint dx, VGint dy,
-                 VGImage src, VGint sx, VGint sy,
-                 VGint width, VGint height,
-                 VGboolean dither)
+void vegaCopyImage(VGImage dst, VGint dx, VGint dy,
+                   VGImage src, VGint sx, VGint sy,
+                   VGint width, VGint height,
+                   VGboolean dither)
 {
    struct vg_context *ctx = vg_current_context();
 
@@ -291,7 +292,7 @@ void vgCopyImage(VGImage dst, VGint dx, VGint dy,
               width, height, dither);
 }
 
-void vgDrawImage(VGImage image)
+void vegaDrawImage(VGImage image)
 {
    struct vg_context *ctx = vg_current_context();
 
@@ -307,9 +308,9 @@ void vgDrawImage(VGImage image)
    image_draw((struct vg_image*)image);
 }
 
-void vgSetPixels(VGint dx, VGint dy,
-                 VGImage src, VGint sx, VGint sy,
-                 VGint width, VGint height)
+void vegaSetPixels(VGint dx, VGint dy,
+                   VGImage src, VGint sx, VGint sy,
+                   VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
 
@@ -327,9 +328,9 @@ void vgSetPixels(VGint dx, VGint dy,
                     height);
 }
 
-void vgGetPixels(VGImage dst, VGint dx, VGint dy,
-                 VGint sx, VGint sy,
-                 VGint width, VGint height)
+void vegaGetPixels(VGImage dst, VGint dx, VGint dy,
+                   VGint sx, VGint sy,
+                   VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct vg_image *img;
@@ -349,10 +350,10 @@ void vgGetPixels(VGImage dst, VGint dx, VGint dy,
                     sx, sy, width, height);
 }
 
-void vgWritePixels(const void * data, VGint dataStride,
-                   VGImageFormat dataFormat,
-                   VGint dx, VGint dy,
-                   VGint width, VGint height)
+void vegaWritePixels(const void * data, VGint dataStride,
+                     VGImageFormat dataFormat,
+                     VGint dx, VGint dy,
+                     VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct pipe_context *pipe = ctx->pipe;
@@ -390,14 +391,13 @@ void vgWritePixels(const void * data, VGint dataStride,
    pipe->flush(pipe, PIPE_FLUSH_RENDER_CACHE, NULL);
 }
 
-void vgReadPixels(void * data, VGint dataStride,
-                  VGImageFormat dataFormat,
-                  VGint sx, VGint sy,
-                  VGint width, VGint height)
+void vegaReadPixels(void * data, VGint dataStride,
+                    VGImageFormat dataFormat,
+                    VGint sx, VGint sy,
+                    VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct pipe_context *pipe = ctx->pipe;
-   struct pipe_screen *screen = pipe->screen;
 
    struct st_framebuffer *stfb = ctx->draw_buffer;
    struct st_renderbuffer *strb = stfb->strb;
@@ -442,29 +442,29 @@ void vgReadPixels(void * data, VGint dataStride,
    {
       struct pipe_transfer *transfer;
 
-      transfer = screen->get_tex_transfer(screen, strb->texture,  0, 0, 0,
-                                          PIPE_TRANSFER_READ,
-                                          0, 0, width, height);
+      transfer = pipe_get_transfer(pipe, strb->texture,  0, 0, 0,
+				   PIPE_TRANSFER_READ,
+				   0, 0, width, height);
 
       /* Do a row at a time to flip image data vertically */
       for (i = 0; i < height; i++) {
 #if 0
          debug_printf("%d-%d  == %d\n", sy, height, y);
 #endif
-         pipe_get_tile_rgba(transfer, sx, y, width, 1, df);
+         pipe_get_tile_rgba(pipe, transfer, sx, y, width, 1, df);
          y += yStep;
          _vega_pack_rgba_span_float(ctx, width, temp, dataFormat,
                                     dst + yoffset + xoffset);
          dst += dataStride;
       }
 
-      screen->tex_transfer_destroy(transfer);
+      pipe->transfer_destroy(pipe, transfer);
    }
 }
 
-void vgCopyPixels(VGint dx, VGint dy,
-                  VGint sx, VGint sy,
-                  VGint width, VGint height)
+void vegaCopyPixels(VGint dx, VGint dy,
+                    VGint sx, VGint sy,
+                    VGint width, VGint height)
 {
    struct vg_context *ctx = vg_current_context();
    struct pipe_framebuffer_state *fb = &ctx->state.g3d.fb;

@@ -31,170 +31,29 @@
 
 #include "../r300_reg.h"
 
-static struct rc_src_register shadow_ambient(struct radeon_compiler * c, int tmu)
+static void presub_string(char out[10], unsigned int inst)
 {
-	struct rc_src_register reg = { 0, };
-
-	reg.File = RC_FILE_CONSTANT;
-	reg.Index = rc_constants_add_state(&c->Program.Constants, RC_STATE_SHADOW_AMBIENT, tmu);
-	reg.Swizzle = RC_SWIZZLE_WWWW;
-	return reg;
-}
-
-/**
- * Transform TEX, TXP, TXB, and KIL instructions in the following way:
- *  - premultiply texture coordinates for RECT
- *  - extract operand swizzles
- *  - introduce a temporary register when write masks are needed
- */
-int r300_transform_TEX(
-	struct radeon_compiler * c,
-	struct rc_instruction* inst,
-	void* data)
-{
-	struct r300_fragment_program_compiler *compiler =
-		(struct r300_fragment_program_compiler*)data;
-
-	if (inst->U.I.Opcode != RC_OPCODE_TEX &&
-	    inst->U.I.Opcode != RC_OPCODE_TXB &&
-	    inst->U.I.Opcode != RC_OPCODE_TXP &&
-	    inst->U.I.Opcode != RC_OPCODE_KIL)
-		return 0;
-
-	/* ARB_shadow & EXT_shadow_funcs */
-	if (inst->U.I.Opcode != RC_OPCODE_KIL &&
-	    c->Program.ShadowSamplers & (1 << inst->U.I.TexSrcUnit)) {
-		rc_compare_func comparefunc = compiler->state.unit[inst->U.I.TexSrcUnit].texture_compare_func;
-
-		if (comparefunc == RC_COMPARE_FUNC_NEVER || comparefunc == RC_COMPARE_FUNC_ALWAYS) {
-			inst->U.I.Opcode = RC_OPCODE_MOV;
-
-			if (comparefunc == RC_COMPARE_FUNC_ALWAYS) {
-				inst->U.I.SrcReg[0].File = RC_FILE_NONE;
-				inst->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_1111;
-			} else {
-				inst->U.I.SrcReg[0] = shadow_ambient(c, inst->U.I.TexSrcUnit);
-			}
-
-			return 1;
-		} else {
-			rc_compare_func comparefunc = compiler->state.unit[inst->U.I.TexSrcUnit].texture_compare_func;
-			unsigned int depthmode = compiler->state.unit[inst->U.I.TexSrcUnit].depth_texture_mode;
-			struct rc_instruction * inst_rcp = rc_insert_new_instruction(c, inst);
-			struct rc_instruction * inst_mad = rc_insert_new_instruction(c, inst_rcp);
-			struct rc_instruction * inst_cmp = rc_insert_new_instruction(c, inst_mad);
-			int pass, fail;
-
-			inst_rcp->U.I.Opcode = RC_OPCODE_RCP;
-			inst_rcp->U.I.DstReg.File = RC_FILE_TEMPORARY;
-			inst_rcp->U.I.DstReg.Index = rc_find_free_temporary(c);
-			inst_rcp->U.I.DstReg.WriteMask = RC_MASK_W;
-			inst_rcp->U.I.SrcReg[0] = inst->U.I.SrcReg[0];
-			inst_rcp->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_WWWW;
-
-			inst_cmp->U.I.DstReg = inst->U.I.DstReg;
-			inst->U.I.DstReg.File = RC_FILE_TEMPORARY;
-			inst->U.I.DstReg.Index = rc_find_free_temporary(c);
-			inst->U.I.DstReg.WriteMask = RC_MASK_XYZW;
-
-			inst_mad->U.I.Opcode = RC_OPCODE_MAD;
-			inst_mad->U.I.DstReg.File = RC_FILE_TEMPORARY;
-			inst_mad->U.I.DstReg.Index = rc_find_free_temporary(c);
-			inst_mad->U.I.SrcReg[0] = inst->U.I.SrcReg[0];
-			inst_mad->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_ZZZZ;
-			inst_mad->U.I.SrcReg[1].File = RC_FILE_TEMPORARY;
-			inst_mad->U.I.SrcReg[1].Index = inst_rcp->U.I.DstReg.Index;
-			inst_mad->U.I.SrcReg[1].Swizzle = RC_SWIZZLE_WWWW;
-			inst_mad->U.I.SrcReg[2].File = RC_FILE_TEMPORARY;
-			inst_mad->U.I.SrcReg[2].Index = inst->U.I.DstReg.Index;
-			if (depthmode == 0) /* GL_LUMINANCE */
-				inst_mad->U.I.SrcReg[2].Swizzle = RC_MAKE_SWIZZLE(RC_SWIZZLE_X, RC_SWIZZLE_Y, RC_SWIZZLE_Z, RC_SWIZZLE_Z);
-			else if (depthmode == 2) /* GL_ALPHA */
-				inst_mad->U.I.SrcReg[2].Swizzle = RC_SWIZZLE_WWWW;
-
-			/* Recall that SrcReg[0] is tex, SrcReg[2] is r and:
-			 *   r  < tex  <=>      -tex+r < 0
-			 *   r >= tex  <=> not (-tex+r < 0 */
-			if (comparefunc == RC_COMPARE_FUNC_LESS || comparefunc == RC_COMPARE_FUNC_GEQUAL)
-				inst_mad->U.I.SrcReg[2].Negate = inst_mad->U.I.SrcReg[2].Negate ^ RC_MASK_XYZW;
-			else
-				inst_mad->U.I.SrcReg[0].Negate = inst_mad->U.I.SrcReg[0].Negate ^ RC_MASK_XYZW;
-
-			inst_cmp->U.I.Opcode = RC_OPCODE_CMP;
-			/* DstReg has been filled out above */
-			inst_cmp->U.I.SrcReg[0].File = RC_FILE_TEMPORARY;
-			inst_cmp->U.I.SrcReg[0].Index = inst_mad->U.I.DstReg.Index;
-
-			if (comparefunc == RC_COMPARE_FUNC_LESS || comparefunc == RC_COMPARE_FUNC_GREATER) {
-				pass = 1;
-				fail = 2;
-			} else {
-				pass = 2;
-				fail = 1;
-			}
-
-			inst_cmp->U.I.SrcReg[pass].File = RC_FILE_NONE;
-			inst_cmp->U.I.SrcReg[pass].Swizzle = RC_SWIZZLE_1111;
-			inst_cmp->U.I.SrcReg[fail] = shadow_ambient(c, inst->U.I.TexSrcUnit);
-		}
+	switch(inst & 0x600000){
+	case R300_ALU_SRCP_1_MINUS_2_SRC0:
+		sprintf(out, "bias");
+		break;
+	case R300_ALU_SRCP_SRC1_MINUS_SRC0:
+		sprintf(out, "sub");
+		break;
+	case R300_ALU_SRCP_SRC1_PLUS_SRC0:
+		sprintf(out, "add");
+		break;
+	case R300_ALU_SRCP_1_MINUS_SRC0:
+		sprintf(out, "inv ");
+		break;
 	}
-
-	/* Hardware uses [0..1]x[0..1] range for rectangle textures
-	 * instead of [0..Width]x[0..Height].
-	 * Add a scaling instruction.
-	 */
-	if (inst->U.I.Opcode != RC_OPCODE_KIL && inst->U.I.TexSrcTarget == RC_TEXTURE_RECT) {
-		struct rc_instruction * inst_mul = rc_insert_new_instruction(c, inst->Prev);
-
-		inst_mul->U.I.Opcode = RC_OPCODE_MUL;
-		inst_mul->U.I.DstReg.File = RC_FILE_TEMPORARY;
-		inst_mul->U.I.DstReg.Index = rc_find_free_temporary(c);
-		inst_mul->U.I.SrcReg[0] = inst->U.I.SrcReg[0];
-		inst_mul->U.I.SrcReg[1].File = RC_FILE_CONSTANT;
-		inst_mul->U.I.SrcReg[1].Index = rc_constants_add_state(&c->Program.Constants, RC_STATE_R300_TEXRECT_FACTOR, inst->U.I.TexSrcUnit);
-
-		reset_srcreg(&inst->U.I.SrcReg[0]);
-		inst->U.I.SrcReg[0].File = RC_FILE_TEMPORARY;
-		inst->U.I.SrcReg[0].Index = inst_mul->U.I.DstReg.Index;
-	}
-
-	/* Cannot write texture to output registers or with masks */
-	if (inst->U.I.Opcode != RC_OPCODE_KIL &&
-	    (inst->U.I.DstReg.File != RC_FILE_TEMPORARY || inst->U.I.DstReg.WriteMask != RC_MASK_XYZW)) {
-		struct rc_instruction * inst_mov = rc_insert_new_instruction(c, inst);
-
-		inst_mov->U.I.Opcode = RC_OPCODE_MOV;
-		inst_mov->U.I.DstReg = inst->U.I.DstReg;
-		inst_mov->U.I.SrcReg[0].File = RC_FILE_TEMPORARY;
-		inst_mov->U.I.SrcReg[0].Index = rc_find_free_temporary(c);
-
-		inst->U.I.DstReg.File = RC_FILE_TEMPORARY;
-		inst->U.I.DstReg.Index = inst_mov->U.I.SrcReg[0].Index;
-		inst->U.I.DstReg.WriteMask = RC_MASK_XYZW;
-	}
-
-
-	/* Cannot read texture coordinate from constants file */
-	if (inst->U.I.SrcReg[0].File != RC_FILE_TEMPORARY && inst->U.I.SrcReg[0].File != RC_FILE_INPUT) {
-		struct rc_instruction * inst_mov = rc_insert_new_instruction(c, inst->Prev);
-
-		inst_mov->U.I.Opcode = RC_OPCODE_MOV;
-		inst_mov->U.I.DstReg.File = RC_FILE_TEMPORARY;
-		inst_mov->U.I.DstReg.Index = rc_find_free_temporary(c);
-		inst_mov->U.I.SrcReg[0] = inst->U.I.SrcReg[0];
-
-		reset_srcreg(&inst->U.I.SrcReg[0]);
-		inst->U.I.SrcReg[0].File = RC_FILE_TEMPORARY;
-		inst->U.I.SrcReg[0].Index = inst_mov->U.I.DstReg.Index;
-	}
-
-	return 1;
 }
 
 /* just some random things... */
-void r300FragmentProgramDump(struct rX00_fragment_program_code *c)
+void r300FragmentProgramDump(struct radeon_compiler *c, void *user)
 {
-	struct r300_fragment_program_code *code = &c->code.r300;
+	struct r300_fragment_program_compiler *compiler = (struct r300_fragment_program_compiler*)c;
+	struct r300_fragment_program_code *code = &compiler->code->code.r300;
 	int n, i, j;
 	static int pc = 0;
 
@@ -257,8 +116,8 @@ void r300FragmentProgramDump(struct rX00_fragment_program_code *c)
 
 		for (i = alu_offset;
 		     i <= alu_offset + alu_end; ++i) {
-			char srcc[3][10], dstc[20];
-			char srca[3][10], dsta[20];
+			char srcc[4][10], dstc[20];
+			char srca[4][10], dsta[20];
 			char argc[3][20];
 			char arga[3][20];
 			char flags[5], tmp[10];
@@ -301,6 +160,9 @@ void r300FragmentProgramDump(struct rX00_fragment_program_code *c)
 					flags);
 				strcat(dstc, tmp);
 			}
+			/* Presub */
+			presub_string(srcc[3], code->alu.inst[i].rgb_inst);
+			presub_string(srca[3], code->alu.inst[i].alpha_inst);
 
 			dsta[0] = 0;
 			if (code->alu.inst[i].alpha_addr & R300_ALU_DSTA_REG) {
@@ -319,11 +181,12 @@ void r300FragmentProgramDump(struct rX00_fragment_program_code *c)
 			}
 
 			fprintf(stderr,
-				"%3i: xyz: %3s %3s %3s -> %-20s (%08x)\n"
-				"       w: %3s %3s %3s -> %-20s (%08x)\n", i,
-				srcc[0], srcc[1], srcc[2], dstc,
+				"%3i: xyz: %3s %3s %3s %5s-> %-20s (%08x)\n"
+				"       w: %3s %3s %3s %5s-> %-20s (%08x)\n", i,
+				srcc[0], srcc[1], srcc[2], srcc[3], dstc,
 				code->alu.inst[i].rgb_addr, srca[0], srca[1],
-				srca[2], dsta, code->alu.inst[i].alpha_addr);
+				srca[2], srca[3], dsta,
+				code->alu.inst[i].alpha_addr);
 
 			for (j = 0; j < 3; ++j) {
 				int regc = code->alu.inst[i].rgb_inst >> (j * 7);
@@ -353,6 +216,24 @@ void r300FragmentProgramDump(struct rX00_fragment_program_code *c)
 					}
 				} else if (d < 15) {
 					sprintf(buf, "%s.www", srca[d - 12]);
+				} else if (d < 20 ) {
+					switch(d) {
+					case R300_ALU_ARGC_SRCP_XYZ:
+						sprintf(buf, "srcp.xyz");
+						break;
+					case R300_ALU_ARGC_SRCP_XXX:
+						sprintf(buf, "srcp.xxx");
+						break;
+					case R300_ALU_ARGC_SRCP_YYY:
+						sprintf(buf, "srcp.yyy");
+						break;
+					case R300_ALU_ARGC_SRCP_ZZZ:
+						sprintf(buf, "srcp.zzz");
+						break;
+					case R300_ALU_ARGC_SRCP_WWW:
+						sprintf(buf, "srcp.www");
+						break;
+					}
 				} else if (d == 20) {
 					sprintf(buf, "0.0");
 				} else if (d == 21) {
@@ -390,6 +271,21 @@ void r300FragmentProgramDump(struct rX00_fragment_program_code *c)
 						'x' + (char)(d % 3));
 				} else if (d < 12) {
 					sprintf(buf, "%s.w", srca[d - 9]);
+				} else if (d < 16) {
+					switch(d) {
+					case R300_ALU_ARGA_SRCP_X:
+						sprintf(buf, "srcp.x");
+						break;
+					case R300_ALU_ARGA_SRCP_Y:
+						sprintf(buf, "srcp.y");
+						break;
+					case R300_ALU_ARGA_SRCP_Z:
+						sprintf(buf, "srcp.z");
+						break;
+					case R300_ALU_ARGA_SRCP_W:
+						sprintf(buf, "srcp.w");
+						break;
+					}
 				} else if (d == 16) {
 					sprintf(buf, "0.0");
 				} else if (d == 17) {
@@ -406,11 +302,14 @@ void r300FragmentProgramDump(struct rX00_fragment_program_code *c)
 					buf, (rega & 64) ? "|" : "");
 			}
 
-			fprintf(stderr, "     xyz: %8s %8s %8s    op: %08x\n"
+			fprintf(stderr, "     xyz: %8s %8s %8s    op: %08x %s\n"
 				"       w: %8s %8s %8s    op: %08x\n",
 				argc[0], argc[1], argc[2],
-				code->alu.inst[i].rgb_inst, arga[0], arga[1],
-				arga[2], code->alu.inst[i].alpha_inst);
+				code->alu.inst[i].rgb_inst,
+				code->alu.inst[i].rgb_inst & R300_ALU_INSERT_NOP ?
+				"NOP" : "",
+				arga[0], arga[1],arga[2],
+				code->alu.inst[i].alpha_inst);
 		}
 	}
 }

@@ -409,82 +409,51 @@ radeon_framebuffer_renderbuffer(GLcontext * ctx,
    radeon_draw_buffer(ctx, fb);
 }
 
-
-/* TODO: According to EXT_fbo spec internal format of texture image
- * once set during glTexImage call, should be preserved when
- * attaching image to renderbuffer. When HW doesn't support
- * rendering to format of attached image, set framebuffer
- * completeness accordingly in radeon_validate_framebuffer (issue #79).
- */
 static GLboolean
 radeon_update_wrapper(GLcontext *ctx, struct radeon_renderbuffer *rrb, 
 		     struct gl_texture_image *texImage)
 {
-	int retry = 0;
-	gl_format texFormat;
-
 	radeon_print(RADEON_TEXTURE, RADEON_TRACE,
-		"%s(%p, rrb %p, texImage %p) \n",
-		__func__, ctx, rrb, texImage);
+		"%s(%p, rrb %p, texImage %p, texFormat %s) \n",
+		__func__, ctx, rrb, texImage, _mesa_get_format_name(texImage->TexFormat));
 
-restart:
-	if (texImage->TexFormat == _dri_texformat_argb8888) {
-		rrb->base.DataType = GL_UNSIGNED_BYTE;
-		DBG("Render to RGBA8 texture OK\n");
+	switch (texImage->TexFormat) {
+		case MESA_FORMAT_RGBA8888:
+		case MESA_FORMAT_RGBA8888_REV:
+		case MESA_FORMAT_ARGB8888:
+		case MESA_FORMAT_ARGB8888_REV:
+		case MESA_FORMAT_XRGB8888:
+		case MESA_FORMAT_XRGB8888_REV:
+		case MESA_FORMAT_RGB565:
+		case MESA_FORMAT_RGB565_REV:
+		case MESA_FORMAT_RGBA5551:
+		case MESA_FORMAT_ARGB1555:
+		case MESA_FORMAT_ARGB1555_REV:
+		case MESA_FORMAT_ARGB4444:
+		case MESA_FORMAT_ARGB4444_REV:
+			rrb->base.DataType = GL_UNSIGNED_BYTE;
+			break;
+		case MESA_FORMAT_Z16:
+			rrb->base.DataType = GL_UNSIGNED_SHORT;
+			break;
+		case MESA_FORMAT_X8_Z24:
+			rrb->base.DataType = GL_UNSIGNED_INT;
+			break;
+		case MESA_FORMAT_S8_Z24:
+			rrb->base.DataType = GL_UNSIGNED_INT_24_8_EXT;
+			break;
 	}
-	else if (texImage->TexFormat == _dri_texformat_rgb565) {
-		rrb->base.DataType = GL_UNSIGNED_BYTE;
-		DBG("Render to RGB5 texture OK\n");
-	}
-	else if (texImage->TexFormat == _dri_texformat_argb1555) {
-		rrb->base.DataType = GL_UNSIGNED_BYTE;
-		DBG("Render to ARGB1555 texture OK\n");
-	}
-	else if (texImage->TexFormat == _dri_texformat_argb4444) {
-		rrb->base.DataType = GL_UNSIGNED_BYTE;
-		DBG("Render to ARGB4444 texture OK\n");
-	}
-	else if (texImage->TexFormat == MESA_FORMAT_Z16) {
-		rrb->base.DataType = GL_UNSIGNED_SHORT;
-		DBG("Render to DEPTH16 texture OK\n");
-	}
-	else if (texImage->TexFormat == MESA_FORMAT_S8_Z24) {
-		rrb->base.DataType = GL_UNSIGNED_INT_24_8_EXT;
-		DBG("Render to DEPTH_STENCIL texture OK\n");
-	}
-	else {
-		/* try redoing the FBO */
-		if (retry == 1) {
-			DBG("Render to texture BAD FORMAT %d\n",
-			    texImage->TexFormat);
-			return GL_FALSE;
-		}
-                /* XXX why is the tex format being set here?
-                 * I think this can be removed.
-                 */
-		texImage->TexFormat = radeonChooseTextureFormat(ctx, texImage->InternalFormat, 0,
-								_mesa_get_format_datatype(texImage->TexFormat),
-								1);
-
-		retry++;
-		goto restart;
-	}
-	
-	texFormat = texImage->TexFormat;
-
-	rrb->base.Format = texFormat;
-
-        rrb->cpp = _mesa_get_format_bytes(texFormat);
+		
+	rrb->cpp = _mesa_get_format_bytes(texImage->TexFormat);
 	rrb->pitch = texImage->Width * rrb->cpp;
+	rrb->base.Format = texImage->TexFormat;
 	rrb->base.InternalFormat = texImage->InternalFormat;
-        rrb->base._BaseFormat = _mesa_base_fbo_format(ctx, rrb->base.InternalFormat);
-
+	rrb->base._BaseFormat = _mesa_base_fbo_format(ctx, rrb->base.InternalFormat);
 	rrb->base.Width = texImage->Width;
 	rrb->base.Height = texImage->Height;
-	
 	rrb->base.Delete = radeon_delete_renderbuffer;
 	rrb->base.AllocStorage = radeon_nop_alloc_storage;
-	
+
 	return GL_TRUE;
 }
 
@@ -537,9 +506,10 @@ radeon_render_texture(GLcontext * ctx,
 
    ASSERT(newImage);
 
-   if (newImage->Border != 0) {
-      /* Fallback on drawing to a texture with a border, which won't have a
-       * miptree.
+   radeon_image = (radeon_texture_image *)newImage;
+
+   if (!radeon_image->mt || newImage->Border != 0) {
+      /* Fallback on drawing to a texture without a miptree.
        */
       _mesa_reference_renderbuffer(&att->Renderbuffer, NULL);
       _mesa_render_texture(ctx, fb, att);
@@ -570,7 +540,6 @@ radeon_render_texture(GLcontext * ctx,
        rrb->base.RefCount);
 
    /* point the renderbufer's region to the texture image region */
-   radeon_image = (radeon_texture_image *)newImage;
    if (rrb->bo != radeon_image->mt->bo) {
       if (rrb->bo)
   	radeon_bo_unref(rrb->bo);
@@ -607,10 +576,40 @@ radeon_finish_render_texture(GLcontext * ctx,
 static void
 radeon_validate_framebuffer(GLcontext *ctx, struct gl_framebuffer *fb)
 {
+	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
+	gl_format mesa_format;
+	int i;
+
+	for (i = -2; i < (GLint) ctx->Const.MaxColorAttachments; i++) {
+		struct gl_renderbuffer_attachment *att;
+		if (i == -2) {
+			att = &fb->Attachment[BUFFER_DEPTH];
+		} else if (i == -1) {
+			att = &fb->Attachment[BUFFER_STENCIL];
+		} else {
+			att = &fb->Attachment[BUFFER_COLOR0 + i];
+		}
+
+		if (att->Type == GL_TEXTURE) {
+			mesa_format = att->Texture->Image[att->CubeMapFace][att->TextureLevel]->TexFormat;
+		} else {
+			/* All renderbuffer formats are renderable, but not sampable */
+			continue;
+		}
+
+		if (!radeon->vtbl.is_format_renderable(mesa_format)){
+			fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED;
+			radeon_print(RADEON_TEXTURE, RADEON_TRACE,
+						"%s: HW doesn't support format %s as output format of attachment %d\n",
+						__FUNCTION__, _mesa_get_format_name(mesa_format), i);
+			return;
+		}
+	}
 }
 
 void radeon_fbo_init(struct radeon_context *radeon)
 {
+#if FEATURE_EXT_framebuffer_object
   radeon->glCtx->Driver.NewFramebuffer = radeon_new_framebuffer;
   radeon->glCtx->Driver.NewRenderbuffer = radeon_new_renderbuffer;
   radeon->glCtx->Driver.BindFramebuffer = radeon_bind_framebuffer;
@@ -619,7 +618,10 @@ void radeon_fbo_init(struct radeon_context *radeon)
   radeon->glCtx->Driver.FinishRenderTexture = radeon_finish_render_texture;
   radeon->glCtx->Driver.ResizeBuffers = radeon_resize_buffers;
   radeon->glCtx->Driver.ValidateFramebuffer = radeon_validate_framebuffer;
+#endif
+#if FEATURE_EXT_framebuffer_blit
   radeon->glCtx->Driver.BlitFramebuffer = _mesa_meta_BlitFramebuffer;
+#endif
 }
 
   

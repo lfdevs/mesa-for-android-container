@@ -1,7 +1,7 @@
 #include "intel_context.h"
 #include "intel_tex.h"
 #include "main/enums.h"
-
+#include "main/formats.h"
 
 /**
  * Choose hardware texture format given the user's glTexImage parameters.
@@ -19,7 +19,6 @@ intelChooseTextureFormat(GLcontext * ctx, GLint internalFormat,
                          GLenum format, GLenum type)
 {
    struct intel_context *intel = intel_context(ctx);
-   const GLboolean do32bpt = (intel->ctx.Visual.rgbBits >= 24);
 
 #if 0
    printf("%s intFmt=0x%x format=0x%x type=0x%x\n",
@@ -30,39 +29,28 @@ intelChooseTextureFormat(GLcontext * ctx, GLint internalFormat,
    case 4:
    case GL_RGBA:
    case GL_COMPRESSED_RGBA:
-      if (format == GL_BGRA) {
-         if (type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_INT_8_8_8_8_REV) {
-            return MESA_FORMAT_ARGB8888;
-         }
-         else if (type == GL_UNSIGNED_SHORT_4_4_4_4_REV) {
-            return MESA_FORMAT_ARGB4444;
-         }
-         else if (type == GL_UNSIGNED_SHORT_1_5_5_5_REV) {
-            return MESA_FORMAT_ARGB1555;
-         }
-      }
-      return do32bpt ? MESA_FORMAT_ARGB8888 : MESA_FORMAT_ARGB4444;
+      if (type == GL_UNSIGNED_SHORT_4_4_4_4_REV)
+	 return MESA_FORMAT_ARGB4444;
+      else if (type == GL_UNSIGNED_SHORT_1_5_5_5_REV)
+	 return MESA_FORMAT_ARGB1555;
+      else
+	 return MESA_FORMAT_ARGB8888;
 
    case 3:
    case GL_RGB:
    case GL_COMPRESSED_RGB:
-      if (format == GL_RGB && type == GL_UNSIGNED_SHORT_5_6_5) {
-         return MESA_FORMAT_RGB565;
-      }
-      if (do32bpt) {
-	 if (intel->has_xrgb_textures)
-	    return MESA_FORMAT_XRGB8888;
-	 else
-	    return MESA_FORMAT_ARGB8888;
-      } else {
+      if (type == GL_UNSIGNED_SHORT_5_6_5)
 	 return MESA_FORMAT_RGB565;
-      }
+      else if (intel->has_xrgb_textures)
+	 return MESA_FORMAT_XRGB8888;
+      else
+	 return MESA_FORMAT_ARGB8888;
 
    case GL_RGBA8:
    case GL_RGB10_A2:
    case GL_RGBA12:
    case GL_RGBA16:
-      return do32bpt ? MESA_FORMAT_ARGB8888 : MESA_FORMAT_ARGB4444;
+      return MESA_FORMAT_ARGB8888;
 
    case GL_RGBA4:
    case GL_RGBA2:
@@ -218,22 +206,11 @@ intelChooseTextureFormat(GLcontext * ctx, GLint internalFormat,
 
 int intel_compressed_num_bytes(GLuint mesaFormat)
 {
-   int bytes = 0;
-   switch(mesaFormat) {
-     
-   case MESA_FORMAT_RGB_FXT1:
-   case MESA_FORMAT_RGBA_FXT1:
-   case MESA_FORMAT_RGB_DXT1:
-   case MESA_FORMAT_RGBA_DXT1:
-     bytes = 2;
-     break;
-     
-   case MESA_FORMAT_RGBA_DXT3:
-   case MESA_FORMAT_RGBA_DXT5:
-     bytes = 4;
-   default:
-     break;
-   }
-   
-   return bytes;
+   GLuint bw, bh;
+   GLuint block_size;
+
+   block_size = _mesa_get_format_bytes(mesaFormat);
+   _mesa_get_format_block_size(mesaFormat, &bw, &bh);
+
+   return block_size / bw;
 }

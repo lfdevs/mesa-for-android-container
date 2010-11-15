@@ -47,7 +47,7 @@
 #define FO_NEW_ALPHA_TEST      0x100
 #define FO_NEW_DEPTH_STENCIL   0x200
 #define FO_NEW_SAMPLER         0x400
-#define FO_NEW_TEXTURE         0x800
+#define FO_NEW_SAMPLER_VIEW    0x800
 #define FO_NEW_VERTEX          0x2000
 #define FO_NEW_VERTEX_SHADER   0x4000
 #define FO_NEW_BLEND_COLOR     0x8000
@@ -55,6 +55,8 @@
 #define FO_NEW_CLEAR_COLOR     0x20000
 #define FO_NEW_VERTEX_BUFFER   0x40000
 #define FO_NEW_VERTEX_ELEMENT  0x80000
+#define FO_NEW_SAMPLE_MASK     0x100000
+#define FO_NEW_INDEX_BUFFER    0x200000
 
 
 
@@ -65,6 +67,13 @@ struct fo_state {
    void *sw_state;
    void *hw_state;
 };
+
+struct fo_sampler_view {
+   struct pipe_sampler_view base;
+   struct pipe_sampler_view *sw;
+   struct pipe_sampler_view *hw;
+};
+
 struct failover_context {
    struct pipe_context pipe;  /**< base class */
 
@@ -78,33 +87,35 @@ struct failover_context {
    const struct fo_state     *rasterizer;
    const struct fo_state     *fragment_shader;
    const struct fo_state     *vertex_shader;
+   const struct fo_state     *vertex_elements;
 
    struct pipe_blend_color blend_color;
    struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
+   unsigned sample_mask;
    struct pipe_framebuffer_state framebuffer;
    struct pipe_poly_stipple poly_stipple;
    struct pipe_scissor_state scissor;
-   struct pipe_texture *texture[PIPE_MAX_SAMPLERS];
-   struct pipe_texture *vertex_textures[PIPE_MAX_VERTEX_SAMPLERS];
    struct pipe_viewport_state viewport;
    struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];
-   struct pipe_vertex_element vertex_elements[PIPE_MAX_ATTRIBS];
+   struct pipe_index_buffer index_buffer;
 
    uint num_vertex_buffers;
-   uint num_vertex_elements;
 
    void *sw_sampler_state[PIPE_MAX_SAMPLERS];
    void *hw_sampler_state[PIPE_MAX_SAMPLERS];
    void *sw_vertex_sampler_state[PIPE_MAX_VERTEX_SAMPLERS];
    void *hw_vertex_sampler_state[PIPE_MAX_VERTEX_SAMPLERS];
 
+   struct fo_sampler_view *fragment_sampler_views[PIPE_MAX_SAMPLERS];
+   struct fo_sampler_view *vertex_sampler_views[PIPE_MAX_VERTEX_SAMPLERS];
+   unsigned num_fragment_sampler_views;
+   unsigned num_vertex_sampler_views;
+
    unsigned dirty;
 
    unsigned num_samplers;
    unsigned num_vertex_samplers;
-   unsigned num_textures;
-   unsigned num_vertex_textures;
 
    unsigned mode;
    struct pipe_context *hw;
@@ -127,7 +138,7 @@ failover_context( struct pipe_context *pipe )
 void
 failover_set_constant_buffer(struct pipe_context *pipe,
                              uint shader, uint index,
-                             struct pipe_buffer *buf);
+                             struct pipe_resource *resource);
 
 
 #endif /* FO_CONTEXT_H */

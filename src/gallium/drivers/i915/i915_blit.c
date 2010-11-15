@@ -31,13 +31,13 @@
 #include "i915_batch.h"
 #include "i915_debug.h"
 
-#define FILE_DEBUG_FLAG DEBUG_BLIT
 
 void
 i915_fill_blit(struct i915_context *i915,
                unsigned cpp,
+               unsigned rgba_mask,
                unsigned short dst_pitch,
-               struct intel_buffer *dst_buffer,
+               struct i915_winsys_buffer *dst_buffer,
                unsigned dst_offset,
                short x, short y, 
                short w, short h, 
@@ -46,10 +46,8 @@ i915_fill_blit(struct i915_context *i915,
    unsigned BR13, CMD;
 
 
-   I915_DBG(i915,
-      "%s dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
-      __FUNCTION__,
-      dst_buffer, dst_pitch, dst_offset, x, y, w, h);
+   I915_DBG(DBG_BLIT, "%s dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
+            __FUNCTION__, dst_buffer, dst_pitch, dst_offset, x, y, w, h);
 
    switch (cpp) {
    case 1:
@@ -62,8 +60,7 @@ i915_fill_blit(struct i915_context *i915,
    case 4:
       BR13 = (((int) dst_pitch) & 0xffff) |
          (0xF0 << 16) | (1 << 24) | (1 << 25);
-      CMD = (XY_COLOR_BLT_CMD | XY_COLOR_BLT_WRITE_ALPHA |
-             XY_COLOR_BLT_WRITE_RGB);
+      CMD = (XY_COLOR_BLT_CMD | rgba_mask);
       break;
    default:
       return;
@@ -77,20 +74,18 @@ i915_fill_blit(struct i915_context *i915,
    OUT_BATCH(BR13);
    OUT_BATCH((y << 16) | x);
    OUT_BATCH(((y + h) << 16) | (x + w));
-   OUT_RELOC(dst_buffer, INTEL_USAGE_2D_TARGET, dst_offset);
+   OUT_RELOC(dst_buffer, I915_USAGE_2D_TARGET, dst_offset);
    OUT_BATCH(color);
-   FLUSH_BATCH(NULL);
 }
 
 void
 i915_copy_blit(struct i915_context *i915,
-               unsigned do_flip,
                unsigned cpp,
                unsigned short src_pitch,
-               struct intel_buffer *src_buffer,
+               struct i915_winsys_buffer *src_buffer,
                unsigned src_offset,
                unsigned short dst_pitch,
-               struct intel_buffer *dst_buffer,
+               struct i915_winsys_buffer *dst_buffer,
                unsigned dst_offset,
                short src_x, short src_y,
                short dst_x, short dst_y, 
@@ -101,11 +96,11 @@ i915_copy_blit(struct i915_context *i915,
    int dst_x2 = dst_x + w;
 
 
-   I915_DBG(i915,
-      "%s src:buf(%p)/%d+%d %d,%d dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
-      __FUNCTION__,
-      src_buffer, src_pitch, src_offset, src_x, src_y,
-      dst_buffer, dst_pitch, dst_offset, dst_x, dst_y, w, h);
+   I915_DBG(DBG_BLIT,
+            "%s src:buf(%p)/%d+%d %d,%d dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
+            __FUNCTION__,
+            src_buffer, src_pitch, src_offset, src_x, src_y,
+            dst_buffer, dst_pitch, dst_offset, dst_x, dst_y, w, h);
 
    switch (cpp) {
    case 1:
@@ -143,9 +138,8 @@ i915_copy_blit(struct i915_context *i915,
    OUT_BATCH(BR13);
    OUT_BATCH((dst_y << 16) | dst_x);
    OUT_BATCH((dst_y2 << 16) | dst_x2);
-   OUT_RELOC(dst_buffer, INTEL_USAGE_2D_TARGET, dst_offset);
+   OUT_RELOC(dst_buffer, I915_USAGE_2D_TARGET, dst_offset);
    OUT_BATCH((src_y << 16) | src_x);
    OUT_BATCH(((int) src_pitch & 0xffff));
-   OUT_RELOC(src_buffer, INTEL_USAGE_2D_SOURCE, src_offset);
-   FLUSH_BATCH(NULL);
+   OUT_RELOC(src_buffer, I915_USAGE_2D_SOURCE, src_offset);
 }

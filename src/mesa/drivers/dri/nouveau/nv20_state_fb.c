@@ -67,12 +67,12 @@ nv20_emit_framebuffer(GLcontext *ctx, int emit)
 		return;
 
 	/* Render target */
-	if (fb->_NumColorDrawBuffers) {
+	if (fb->_ColorDrawBuffers[0]) {
 		s = &to_nouveau_renderbuffer(
 			fb->_ColorDrawBuffers[0])->surface;
 
 		rt_format |= get_rt_format(s->format);
-		zeta_pitch = rt_pitch = s->pitch;
+		rt_pitch = s->pitch;
 
 		nouveau_bo_markl(bctx, kelvin, NV20TCL_COLOR_OFFSET,
 				 s->bo, 0, bo_flags);
@@ -88,6 +88,9 @@ nv20_emit_framebuffer(GLcontext *ctx, int emit)
 
 		nouveau_bo_markl(bctx, kelvin, NV20TCL_ZETA_OFFSET,
 				 s->bo, 0, bo_flags);
+	} else {
+		rt_format |= get_rt_format(MESA_FORMAT_Z24_S8);
+		zeta_pitch = rt_pitch;
 	}
 
 	BEGIN_RING(chan, kelvin, NV20TCL_RT_FORMAT, 2);
@@ -106,13 +109,11 @@ nv20_emit_viewport(GLcontext *ctx, int emit)
 	struct nouveau_grobj *kelvin = context_eng3d(ctx);
 	struct gl_framebuffer *fb = ctx->DrawBuffer;
 	float a[4] = {};
-	int i;
 
 	get_viewport_translate(ctx, a);
 
 	BEGIN_RING(chan, kelvin, NV20TCL_VIEWPORT_TRANSLATE_X, 4);
-	for (i = 0; i < 4; i++)
-		OUT_RINGf(chan, a[i]);
+	OUT_RINGp(chan, a, 4);
 
 	BEGIN_RING(chan, kelvin, NV20TCL_VIEWPORT_CLIP_HORIZ(0), 1);
 	OUT_RING(chan, (fb->Width - 1) << 16);

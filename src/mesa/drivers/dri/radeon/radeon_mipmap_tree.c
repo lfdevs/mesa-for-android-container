@@ -36,6 +36,7 @@
 #include "main/texobj.h"
 #include "main/enums.h"
 #include "radeon_texture.h"
+#include "radeon_tile.h"
 
 static unsigned get_aligned_compressed_row_stride(
 		gl_format format,
@@ -69,16 +70,51 @@ static unsigned get_aligned_compressed_row_stride(
 	return stride;
 }
 
-static unsigned get_compressed_image_size(
+unsigned get_texture_image_size(
 		gl_format format,
 		unsigned rowStride,
-		unsigned height)
+		unsigned height,
+		unsigned depth,
+		unsigned tiling)
 {
-	unsigned blockWidth, blockHeight;
+	if (_mesa_is_format_compressed(format)) {
+		unsigned blockWidth, blockHeight;
 
-	_mesa_get_format_block_size(format, &blockWidth, &blockHeight);
+		_mesa_get_format_block_size(format, &blockWidth, &blockHeight);
 
-	return rowStride * ((height + blockHeight - 1) / blockHeight);
+		return rowStride * ((height + blockHeight - 1) / blockHeight) * depth;
+	} else if (tiling) {
+		/* Need to align height to tile height */
+		unsigned tileWidth, tileHeight;
+
+		get_tile_size(format, &tileWidth, &tileHeight);
+		tileHeight--;
+
+		height = (height + tileHeight) & ~tileHeight;
+	}
+
+	return rowStride * height * depth;
+}
+
+unsigned get_texture_image_row_stride(radeonContextPtr rmesa, gl_format format, unsigned width, unsigned tiling)
+{
+	if (_mesa_is_format_compressed(format)) {
+		return get_aligned_compressed_row_stride(format, width, rmesa->texture_compressed_row_align);
+	} else {
+		unsigned row_align;
+
+		if (!_mesa_is_pow_two(width)) {
+			row_align = rmesa->texture_rect_row_align - 1;
+		} else if (tiling) {
+			unsigned tileWidth, tileHeight;
+			get_tile_size(format, &tileWidth, &tileHeight);
+			row_align = tileWidth * _mesa_get_format_bytes(format) - 1;
+		} else {
+			row_align = rmesa->texture_row_align - 1;
+		}
+
+		return (_mesa_format_row_stride(format, width) + row_align) & ~row_align;
+	}
 }
 
 /**
@@ -92,34 +128,15 @@ static void compute_tex_image_offset(radeonContextPtr rmesa, radeon_mipmap_tree 
 	GLuint face, GLuint level, GLuint* curOffset)
 {
 	radeon_mipmap_level *lvl = &mt->levels[level];
-	uint32_t row_align;
 	GLuint height;
 
 	height = _mesa_next_pow_two_32(lvl->height);
 
-	/* Find image size in bytes */
-	if (_mesa_is_format_compressed(mt->mesaFormat)) {
-		lvl->rowstride = get_aligned_compressed_row_stride(mt->mesaFormat, lvl->width, rmesa->texture_compressed_row_align);
-		lvl->size = get_compressed_image_size(mt->mesaFormat, lvl->rowstride, height);
-	} else if (mt->target == GL_TEXTURE_RECTANGLE_NV) {
-		row_align = rmesa->texture_rect_row_align - 1;
-		lvl->rowstride = (_mesa_format_row_stride(mt->mesaFormat, lvl->width) + row_align) & ~row_align;
-		lvl->size = lvl->rowstride * height;
-	} else if (mt->tilebits & RADEON_TXO_MICRO_TILE) {
-		/* tile pattern is 16 bytes x2. mipmaps stay 32 byte aligned,
-		 * though the actual offset may be different (if texture is less than
-		 * 32 bytes width) to the untiled case */
-		lvl->rowstride = (_mesa_format_row_stride(mt->mesaFormat, lvl->width) * 2 + 31) & ~31;
-		lvl->size = lvl->rowstride * ((height + 1) / 2) * lvl->depth;
-	} else {
-		row_align = rmesa->texture_row_align - 1;
-		lvl->rowstride = (_mesa_format_row_stride(mt->mesaFormat, lvl->width) + row_align) & ~row_align;
-		lvl->size = lvl->rowstride * height * lvl->depth;
-	}
+	lvl->rowstride = get_texture_image_row_stride(rmesa, mt->mesaFormat, lvl->width, mt->tilebits);
+	lvl->size = get_texture_image_size(mt->mesaFormat, lvl->rowstride, height, lvl->depth, mt->tilebits);
+
 	assert(lvl->size > 0);
 
-	/* All images are aligned to a 32-byte offset */
-	*curOffset = (*curOffset + 0x1f) & ~0x1f;
 	lvl->faces[face].offset = *curOffset;
 	*curOffset += lvl->size;
 
@@ -182,10 +199,10 @@ static void calculate_miptree_layout_r300(radeonContextPtr rmesa, radeon_mipmap_
 
 		for(face = 0; face < mt->faces; face++)
 			compute_tex_image_offset(rmesa, mt, face, level, &curOffset);
-		/* r600 cube levels seems to be aligned to 8 faces but
-		 * we have separate register for 1'st level offset so add
+		/* from r700? cube levels seems to be aligned to 8 faces,
+		 * as we have separate register for 1'st level offset add
 		 * 2 image alignment after 1'st mip level */
-		if(rmesa->radeonScreen->chip_family >= CHIP_FAMILY_R600 &&
+		if(rmesa->radeonScreen->chip_family >= CHIP_FAMILY_RV770 &&
 		   mt->target == GL_TEXTURE_CUBE_MAP && level >= 1)
 			curOffset += 2 * mt->levels[level].size;
 	}
@@ -451,12 +468,9 @@ static void migrate_image_to_miptree(radeon_mipmap_tree *mt,
 
 		radeon_mipmap_level *srclvl = &image->mt->levels[image->mtlevel];
 
-		/* TODO: bring back these assertions once the FBOs are fixed */
-#if 0
 		assert(image->mtlevel == level);
 		assert(srclvl->size == dstlvl->size);
 		assert(srclvl->rowstride == dstlvl->rowstride);
-#endif
 
 		radeon_bo_map(image->mt->bo, GL_FALSE);
 
@@ -588,17 +602,17 @@ int radeon_validate_texture_miptree(GLcontext * ctx, struct gl_texture_object *t
 			__FUNCTION__, texObj ,t->minLod, t->maxLod);
 
 	radeon_mipmap_tree *dst_miptree;
-	dst_miptree = get_biggest_matching_miptree(t, t->minLod, t->maxLod);
+	dst_miptree = get_biggest_matching_miptree(t, t->base.BaseLevel, t->base.MaxLevel);
 
+	radeon_miptree_unreference(&t->mt);
 	if (!dst_miptree) {
-		radeon_miptree_unreference(&t->mt);
 		radeon_try_alloc_miptree(rmesa, t);
-		dst_miptree = t->mt;
 		radeon_print(RADEON_TEXTURE, RADEON_NORMAL,
 			"%s: No matching miptree found, allocated new one %p\n",
 			__FUNCTION__, t->mt);
 
 	} else {
+		radeon_miptree_reference(dst_miptree, &t->mt);
 		radeon_print(RADEON_TEXTURE, RADEON_NORMAL,
 			"%s: Using miptree %p\n", __FUNCTION__, t->mt);
 	}
@@ -615,7 +629,7 @@ int radeon_validate_texture_miptree(GLcontext * ctx, struct gl_texture_object *t
 				"Checking image level %d, face %d, mt %p ... ",
 				level, face, img->mt);
 			
-			if (img->mt != dst_miptree) {
+			if (img->mt != t->mt) {
 				radeon_print(RADEON_TEXTURE, RADEON_TRACE,
 					"MIGRATING\n");
 
@@ -623,7 +637,7 @@ int radeon_validate_texture_miptree(GLcontext * ctx, struct gl_texture_object *t
 				if (src_bo && radeon_bo_is_referenced_by_cs(src_bo, rmesa->cmdbuf.cs)) {
 					radeon_firevertices(rmesa);
 				}
-				migrate_image_to_miptree(dst_miptree, img, face, level);
+				migrate_image_to_miptree(t->mt, img, face, level);
 			} else
 				radeon_print(RADEON_TEXTURE, RADEON_TRACE, "OK\n");
 		}

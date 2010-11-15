@@ -32,7 +32,7 @@
 #include "radeon_opcodes.h"
 #include "radeon_program_constants.h"
 
-struct r300_fragment_program_compiler;
+struct radeon_compiler;
 
 
 /**
@@ -49,6 +49,11 @@ struct r300_fragment_program_compiler;
  * see \ref rc_pair_translate
  */
 
+/* For rgb and alpha instructions when arg[n].Source = RC_PAIR_PRESUB_SRC, then
+ * the presubtract value will be used, and
+ * {RGB,Alpha}.Src[RC_PAIR_PRESUB_SRC].File will be set to RC_FILE_PRESUB.
+ */
+#define RC_PAIR_PRESUB_SRC 3
 
 struct radeon_pair_instruction_source {
 	unsigned int Used:1;
@@ -64,7 +69,7 @@ struct radeon_pair_instruction_rgb {
 	unsigned int OutputWriteMask:3;
 	unsigned int Saturate:1;
 
-	struct radeon_pair_instruction_source Src[3];
+	struct radeon_pair_instruction_source Src[4];
 
 	struct {
 		unsigned int Source:2;
@@ -83,7 +88,7 @@ struct radeon_pair_instruction_alpha {
 	unsigned int DepthWriteMask:1;
 	unsigned int Saturate:1;
 
-	struct radeon_pair_instruction_source Src[3];
+	struct radeon_pair_instruction_source Src[4];
 
 	struct {
 		unsigned int Source:2;
@@ -99,8 +104,17 @@ struct rc_pair_instruction {
 
 	unsigned int WriteALUResult:2;
 	unsigned int ALUResultCompare:3;
+	unsigned int Nop:1;
 };
 
+typedef void (*rc_pair_foreach_src_fn)
+			(void *, struct radeon_pair_instruction_source *);
+
+typedef enum {
+	RC_PAIR_SOURCE_NONE = 0,
+	RC_PAIR_SOURCE_RGB,
+	RC_PAIR_SOURCE_ALPHA
+} rc_pair_source_type;
 
 /**
  * General helper functions for dealing with the paired instruction format.
@@ -109,6 +123,21 @@ struct rc_pair_instruction {
 int rc_pair_alloc_source(struct rc_pair_instruction *pair,
 	unsigned int rgb, unsigned int alpha,
 	rc_register_file file, unsigned int index);
+
+void rc_pair_foreach_source_that_alpha_reads(
+	struct rc_pair_instruction * pair,
+	void * data,
+	rc_pair_foreach_src_fn cb);
+
+void rc_pair_foreach_source_that_rgb_reads(
+	struct rc_pair_instruction * pair,
+	void * data,
+	rc_pair_foreach_src_fn cb);
+
+rc_pair_source_type rc_source_type_that_arg_reads(
+	unsigned int source,
+	unsigned int swizzle,
+	unsigned int channels);
 /*@}*/
 
 
@@ -118,9 +147,10 @@ int rc_pair_alloc_source(struct rc_pair_instruction *pair,
 /*@{*/
 struct radeon_pair_handler;
 
-void rc_pair_translate(struct r300_fragment_program_compiler *c);
-void rc_pair_schedule(struct r300_fragment_program_compiler *c);
-void rc_pair_regalloc(struct r300_fragment_program_compiler *c, unsigned maxtemps);
+void rc_pair_translate(struct radeon_compiler *cc, void *user);
+void rc_pair_schedule(struct radeon_compiler *cc, void *user);
+void rc_pair_regalloc(struct radeon_compiler *cc, void *user);
+void rc_pair_regalloc_inputs_only(struct radeon_compiler *cc, void *user);
 /*@}*/
 
 #endif /* __RADEON_PROGRAM_PAIR_H_ */

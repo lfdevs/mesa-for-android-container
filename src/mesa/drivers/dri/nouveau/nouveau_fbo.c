@@ -220,7 +220,7 @@ get_tex_format(struct gl_texture_image *ti)
 	case MESA_FORMAT_RGB565:
 		return GL_RGB5;
 	default:
-		assert(0);
+		return GL_NONE;
 	}
 }
 
@@ -231,12 +231,11 @@ nouveau_render_texture(GLcontext *ctx, struct gl_framebuffer *fb,
 	struct gl_renderbuffer *rb = att->Renderbuffer;
 	struct gl_texture_image *ti =
 		att->Texture->Image[att->CubeMapFace][att->TextureLevel];
-	int ret;
 
 	/* Allocate a renderbuffer object for the texture if we
 	 * haven't already done so. */
 	if (!rb) {
-		rb = nouveau_renderbuffer_new(ctx, 0);
+		rb = nouveau_renderbuffer_new(ctx, ~0);
 		assert(rb);
 
 		rb->AllocStorage = NULL;
@@ -244,9 +243,7 @@ nouveau_render_texture(GLcontext *ctx, struct gl_framebuffer *fb,
 	}
 
 	/* Update the renderbuffer fields from the texture. */
-	ret = set_renderbuffer_format(rb, get_tex_format(ti));
-	assert(ret);
-
+	set_renderbuffer_format(rb, get_tex_format(ti));
 	rb->Width = ti->Width;
 	rb->Height = ti->Height;
 	nouveau_surface_ref(&to_nouveau_teximage(ti)->surface,
@@ -259,20 +256,18 @@ static void
 nouveau_finish_render_texture(GLcontext *ctx,
 			      struct gl_renderbuffer_attachment *att)
 {
-	struct nouveau_renderbuffer *nrb
-		= to_nouveau_renderbuffer(att->Renderbuffer);
-
 	texture_dirty(att->Texture);
-	nouveau_surface_ref(NULL, &nrb->surface);
 }
 
 void
 nouveau_fbo_functions_init(struct dd_function_table *functions)
 {
+#if FEATURE_EXT_framebuffer_object
 	functions->NewFramebuffer = nouveau_framebuffer_new;
 	functions->NewRenderbuffer = nouveau_renderbuffer_new;
 	functions->BindFramebuffer = nouveau_bind_framebuffer;
 	functions->FramebufferRenderbuffer = nouveau_framebuffer_renderbuffer;
 	functions->RenderTexture = nouveau_render_texture;
 	functions->FinishRenderTexture = nouveau_finish_render_texture;
+#endif
 }

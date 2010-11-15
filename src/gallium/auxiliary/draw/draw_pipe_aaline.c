@@ -40,6 +40,7 @@
 #include "util/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
+#include "util/u_sampler.h"
 
 #include "tgsi/tgsi_transform.h"
 #include "tgsi/tgsi_dump.h"
@@ -87,9 +88,10 @@ struct aaline_stage
    uint pos_slot;
 
    void *sampler_cso;
-   struct pipe_texture *texture;
+   struct pipe_resource *texture;
+   struct pipe_sampler_view *sampler_view;
    uint num_samplers;
-   uint num_textures;
+   uint num_sampler_views;
 
 
    /*
@@ -98,7 +100,7 @@ struct aaline_stage
    struct aaline_fragment_shader *fs;
    struct {
       void *sampler[PIPE_MAX_SAMPLERS];
-      struct pipe_texture *texture[PIPE_MAX_SAMPLERS];
+      struct pipe_sampler_view *sampler_views[PIPE_MAX_SAMPLERS];
    } state;
 
    /*
@@ -111,8 +113,10 @@ struct aaline_stage
 
    void (*driver_bind_sampler_states)(struct pipe_context *, unsigned,
                                       void **);
-   void (*driver_set_sampler_textures)(struct pipe_context *, unsigned,
-                                       struct pipe_texture **);
+
+   void (*driver_set_sampler_views)(struct pipe_context *,
+                                    unsigned,
+                                    struct pipe_sampler_view **);
 };
 
 
@@ -369,8 +373,7 @@ generate_aaline_fs(struct aaline_stage *aaline)
 
    aaline->fs->sampler_unit = transform.freeSampler;
 
-   aaline->fs->aaline_fs
-      = aaline->driver_create_fs_state(pipe, &aaline_fs);
+   aaline->fs->aaline_fs = aaline->driver_create_fs_state(pipe, &aaline_fs);
    if (aaline->fs->aaline_fs == NULL)
       goto fail;
 
@@ -392,7 +395,8 @@ aaline_create_texture(struct aaline_stage *aaline)
 {
    struct pipe_context *pipe = aaline->stage.draw->pipe;
    struct pipe_screen *screen = pipe->screen;
-   struct pipe_texture texTemp;
+   struct pipe_resource texTemp;
+   struct pipe_sampler_view viewTempl;
    uint level;
 
    memset(&texTemp, 0, sizeof(texTemp));
@@ -402,28 +406,47 @@ aaline_create_texture(struct aaline_stage *aaline)
    texTemp.width0 = 1 << MAX_TEXTURE_LEVEL;
    texTemp.height0 = 1 << MAX_TEXTURE_LEVEL;
    texTemp.depth0 = 1;
+   texTemp.bind = PIPE_BIND_SAMPLER_VIEW;
 
-   aaline->texture = screen->texture_create(screen, &texTemp);
+   aaline->texture = screen->resource_create(screen, &texTemp);
    if (!aaline->texture)
       return FALSE;
 
+   u_sampler_view_default_template(&viewTempl,
+                                   aaline->texture,
+                                   aaline->texture->format);
+   aaline->sampler_view = pipe->create_sampler_view(pipe,
+                                                    aaline->texture,
+                                                    &viewTempl);
+   if (!aaline->sampler_view) {
+      return FALSE;
+   }
+
    /* Fill in mipmap images.
     * Basically each level is solid opaque, except for the outermost
-    * texels which are zero.  Special case the 1x1 and 2x2 levels.
+    * texels which are zero.  Special case the 1x1 and 2x2 levels
+    * (though, those levels shouldn't be used - see the max_lod setting).
     */
    for (level = 0; level <= MAX_TEXTURE_LEVEL; level++) {
       struct pipe_transfer *transfer;
+      struct pipe_box box;
       const uint size = u_minify(aaline->texture->width0, level);
       ubyte *data;
       uint i, j;
 
       assert(aaline->texture->width0 == aaline->texture->height0);
 
+      u_box_origin_2d( size, size, &box );
+
       /* This texture is new, no need to flush. 
        */
-      transfer = screen->get_tex_transfer(screen, aaline->texture, 0, level, 0,
-                                         PIPE_TRANSFER_WRITE, 0, 0, size, size);
-      data = screen->transfer_map(screen, transfer);
+      transfer = pipe->get_transfer(pipe,
+				    aaline->texture,
+				    u_subresource(0, level), 
+				    PIPE_TRANSFER_WRITE,
+				    &box);
+
+      data = pipe->transfer_map(pipe, transfer);
       if (data == NULL)
          return FALSE;
 
@@ -447,8 +470,8 @@ aaline_create_texture(struct aaline_stage *aaline)
       }
 
       /* unmap */
-      screen->transfer_unmap(screen, transfer);
-      screen->tex_transfer_destroy(transfer);
+      pipe->transfer_unmap(pipe, transfer);
+      pipe->transfer_destroy(pipe, transfer);
    }
    return TRUE;
 }
@@ -474,7 +497,8 @@ aaline_create_sampler(struct aaline_stage *aaline)
    sampler.mag_img_filter = PIPE_TEX_FILTER_LINEAR;
    sampler.normalized_coords = 1;
    sampler.min_lod = 0.0f;
-   sampler.max_lod = MAX_TEXTURE_LEVEL;
+   /* avoid using the 1x1 and 2x2 mipmap levels */
+   sampler.max_lod = MAX_TEXTURE_LEVEL - 2;
 
    aaline->sampler_cso = pipe->create_sampler_state(pipe, &sampler);
    if (aaline->sampler_cso == NULL)
@@ -646,8 +670,8 @@ aaline_first_line(struct draw_stage *stage, struct prim_header *header)
 
    assert(draw->rasterizer->line_smooth);
 
-   if (draw->rasterizer->line_width <= 3.0)
-      aaline->half_line_width = 1.5f;
+   if (draw->rasterizer->line_width <= 2.2)
+      aaline->half_line_width = 1.1f;
    else
       aaline->half_line_width = 0.5f * draw->rasterizer->line_width;
 
@@ -671,16 +695,16 @@ aaline_first_line(struct draw_stage *stage, struct prim_header *header)
 
    /* how many samplers? */
    /* we'll use sampler/texture[pstip->sampler_unit] for the stipple */
-   num_samplers = MAX2(aaline->num_textures, aaline->num_samplers);
+   num_samplers = MAX2(aaline->num_sampler_views, aaline->num_samplers);
    num_samplers = MAX2(num_samplers, aaline->fs->sampler_unit + 1);
 
    aaline->state.sampler[aaline->fs->sampler_unit] = aaline->sampler_cso;
-   pipe_texture_reference(&aaline->state.texture[aaline->fs->sampler_unit],
-                          aaline->texture);
+   pipe_sampler_view_reference(&aaline->state.sampler_views[aaline->fs->sampler_unit],
+                               aaline->sampler_view);
 
    draw->suspend_flushing = TRUE;
    aaline->driver_bind_sampler_states(pipe, num_samplers, aaline->state.sampler);
-   aaline->driver_set_sampler_textures(pipe, num_samplers, aaline->state.texture);
+   aaline->driver_set_sampler_views(pipe, num_samplers, aaline->state.sampler_views);
 
    /* Disable triangle culling, stippling, unfilled mode etc. */
    r = draw_get_rasterizer_no_cull(draw, rast->scissor, rast->flatshade);
@@ -709,8 +733,9 @@ aaline_flush(struct draw_stage *stage, unsigned flags)
    aaline->driver_bind_fs_state(pipe, aaline->fs->driver_fs);
    aaline->driver_bind_sampler_states(pipe, aaline->num_samplers,
                                       aaline->state.sampler);
-   aaline->driver_set_sampler_textures(pipe, aaline->num_textures,
-                                       aaline->state.texture);
+   aaline->driver_set_sampler_views(pipe,
+                                    aaline->num_sampler_views,
+                                    aaline->state.sampler_views);
 
    /* restore original rasterizer state */
    if (draw->rast_handle) {
@@ -738,14 +763,18 @@ aaline_destroy(struct draw_stage *stage)
    uint i;
 
    for (i = 0; i < PIPE_MAX_SAMPLERS; i++) {
-      pipe_texture_reference(&aaline->state.texture[i], NULL);
+      pipe_sampler_view_reference(&aaline->state.sampler_views[i], NULL);
    }
 
    if (aaline->sampler_cso)
       pipe->delete_sampler_state(pipe, aaline->sampler_cso);
 
    if (aaline->texture)
-      pipe_texture_reference(&aaline->texture, NULL);
+      pipe_resource_reference(&aaline->texture, NULL);
+
+   if (aaline->sampler_view) {
+      pipe_sampler_view_reference(&aaline->sampler_view, NULL);
+   }
 
    draw_free_temp_verts( stage );
 
@@ -760,9 +789,6 @@ draw_aaline_stage(struct draw_context *draw)
    if (aaline == NULL)
       return NULL;
 
-   if (!draw_alloc_temp_verts( &aaline->stage, 8 ))
-      goto fail;
-
    aaline->stage.draw = draw;
    aaline->stage.name = "aaline";
    aaline->stage.next = NULL;
@@ -773,11 +799,14 @@ draw_aaline_stage(struct draw_context *draw)
    aaline->stage.reset_stipple_counter = aaline_reset_stipple_counter;
    aaline->stage.destroy = aaline_destroy;
 
+   if (!draw_alloc_temp_verts( &aaline->stage, 8 ))
+      goto fail;
+
    return aaline;
 
  fail:
    if (aaline)
-      aaline_destroy(&aaline->stage);
+      aaline->stage.destroy(&aaline->stage);
 
    return NULL;
 }
@@ -859,23 +888,24 @@ aaline_bind_sampler_states(struct pipe_context *pipe,
 
 
 static void
-aaline_set_sampler_textures(struct pipe_context *pipe,
-                            unsigned num, struct pipe_texture **texture)
+aaline_set_sampler_views(struct pipe_context *pipe,
+                         unsigned num,
+                         struct pipe_sampler_view **views)
 {
    struct aaline_stage *aaline = aaline_stage_from_pipe(pipe);
    uint i;
 
    /* save current */
    for (i = 0; i < num; i++) {
-      pipe_texture_reference(&aaline->state.texture[i], texture[i]);
+      pipe_sampler_view_reference(&aaline->state.sampler_views[i], views[i]);
    }
    for ( ; i < PIPE_MAX_SAMPLERS; i++) {
-      pipe_texture_reference(&aaline->state.texture[i], NULL);
+      pipe_sampler_view_reference(&aaline->state.sampler_views[i], NULL);
    }
-   aaline->num_textures = num;
+   aaline->num_sampler_views = num;
 
    /* pass-through */
-   aaline->driver_set_sampler_textures(pipe, num, texture);
+   aaline->driver_set_sampler_views(pipe, num, views);
 }
 
 
@@ -911,7 +941,7 @@ draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
    aaline->driver_delete_fs_state = pipe->delete_fs_state;
 
    aaline->driver_bind_sampler_states = pipe->bind_fragment_sampler_states;
-   aaline->driver_set_sampler_textures = pipe->set_fragment_sampler_textures;
+   aaline->driver_set_sampler_views = pipe->set_fragment_sampler_views;
 
    /* override the driver's functions */
    pipe->create_fs_state = aaline_create_fs_state;
@@ -919,7 +949,7 @@ draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
    pipe->delete_fs_state = aaline_delete_fs_state;
 
    pipe->bind_fragment_sampler_states = aaline_bind_sampler_states;
-   pipe->set_fragment_sampler_textures = aaline_set_sampler_textures;
+   pipe->set_fragment_sampler_views = aaline_set_sampler_views;
    
    /* Install once everything is known to be OK:
     */

@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include "main/glheader.h"
+#include "main/arbprogram.h"
 #include "main/enums.h"
 #include "main/image.h"
 #include "main/colormac.h"
@@ -44,7 +45,7 @@
 #include "main/attrib.h"
 #include "main/enable.h"
 #include "main/viewport.h"
-#include "shader/arbprogram.h"
+#include "main/context.h"
 #include "swrast/swrast.h"
 
 #include "intel_screen.h"
@@ -507,9 +508,15 @@ intelBitmap(GLcontext * ctx,
 	    const struct gl_pixelstore_attrib *unpack,
 	    const GLubyte * pixels)
 {
+   struct intel_context *intel = intel_context(ctx);
+
    if (do_blit_bitmap(ctx, x, y, width, height,
                           unpack, pixels))
       return;
+
+   /* FIXME */
+   if (intel->gen == 6)
+       return _swrast_Bitmap(ctx, x, y, width, height, unpack, pixels);
 
    if (intel_texture_bitmap(ctx, x, y, width, height,
 			    unpack, pixels))

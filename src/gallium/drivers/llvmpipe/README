@@ -12,7 +12,11 @@ Done so far is:
    
    - depth testing
  
-   - texture sampling (not all state/formats are supported) 
+   - texture sampling
+     - 1D/2D/3D/cube maps supported
+     - all texture wrap modes supported
+     - all texture filtering modes supported
+     - perhaps not all texture formats yet supported
    
    - fragment shader TGSI translation
      - same level of support as the TGSI SSE2 exec machine, with the exception
@@ -37,8 +41,6 @@ To do (probably by this order):
 
  - code generate stipple and stencil testing
 
- - translate the remaining bits of texture sampling state
-
  - translate TGSI control flow instructions, and all other remaining opcodes
  
  - integrate with the draw module for VS code generation
@@ -57,7 +59,7 @@ Requirements
    
    See /proc/cpuinfo to know what your CPU supports.
  
- - LLVM 2.6.
+ - LLVM 2.6 (or later)
  
    For Linux, on a recent Debian based distribution do:
  
@@ -67,11 +69,23 @@ Requirements
    http://people.freedesktop.org/~jrfonseca/llvm/ and set the LLVM environment
    variable to the extracted path.
 
+   For MSVC there are two set of binaries: llvm-x.x-msvc32mt.7z and
+   llvm-x.x-msvc32mtd.7z .
+
+   You have to set the LLVM=/path/to/llvm-x.x-msvc32mtd env var when passing
+   debug=yes to scons, and LLVM=/path/to/llvm-x.x-msvc32mt when building with
+   debug=no. This is necessary as LLVM builds as static library so the chosen
+   MS CRT must match.
+
+   The version of LLVM from SVN ("2.7svn") from mid-March 2010 is pretty
+   stable and has some features not in version 2.6.
+
  - scons (optional)
 
- - udis86, http://udis86.sourceforge.net/ (optional):
+ - udis86, http://udis86.sourceforge.net/ (optional). My personal repository
+   supports more opcodes which haven't been merged upstream yet:
  
-     git clone git://udis86.git.sourceforge.net/gitroot/udis86/udis86
+     git clone git://anongit.freedesktop.org/~jrfonseca/udis86
      cd udis86
      ./autogen.sh
      ./configure --with-pic
@@ -140,11 +154,13 @@ Development Notes
   then skim through the lp_bld_* functions called in there, and the comments
   at the top of the lp_bld_*.c functions.  
 
-- All lp_bld_*.[ch] are isolated from the rest of the driver, and could/may be 
-  put in a stand-alone Gallium state -> LLVM IR translation module.
+- The driver-independent parts of the LLVM / Gallium code are found in
+  src/gallium/auxiliary/gallivm/.  The filenames and function prefixes
+  need to be renamed from "lp_bld_" to something else though.
 
 - We use LLVM-C bindings for now. They are not documented, but follow the C++
   interfaces very closely, and appear to be complete enough for code
   generation. See 
   http://npcontemplation.blogspot.com/2008/06/secret-of-llvm-c-bindings.html
   for a stand-alone example.
+  See the llvm-c/Core.h file for reference.

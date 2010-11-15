@@ -30,81 +30,48 @@
 
 #include "id_screen.h"
 #include "id_objects.h"
+#include "id_context.h"
 
-struct pipe_buffer *
-identity_buffer_create(struct identity_screen *id_screen,
-                       struct pipe_buffer *buffer)
+
+
+struct pipe_resource *
+identity_resource_create(struct identity_screen *id_screen,
+                        struct pipe_resource *resource)
 {
-   struct identity_buffer *id_buffer;
+   struct identity_resource *id_resource;
 
-   if(!buffer)
+   if(!resource)
       goto error;
 
-   assert(buffer->screen == id_screen->screen);
+   assert(resource->screen == id_screen->screen);
 
-   id_buffer = CALLOC_STRUCT(identity_buffer);
-   if(!id_buffer)
+   id_resource = CALLOC_STRUCT(identity_resource);
+   if(!id_resource)
       goto error;
 
-   memcpy(&id_buffer->base, buffer, sizeof(struct pipe_buffer));
+   memcpy(&id_resource->base, resource, sizeof(struct pipe_resource));
 
-   pipe_reference_init(&id_buffer->base.reference, 1);
-   id_buffer->base.screen = &id_screen->base;
-   id_buffer->buffer = buffer;
+   pipe_reference_init(&id_resource->base.reference, 1);
+   id_resource->base.screen = &id_screen->base;
+   id_resource->resource = resource;
 
-   return &id_buffer->base;
+   return &id_resource->base;
 
 error:
-   pipe_buffer_reference(&buffer, NULL);
+   pipe_resource_reference(&resource, NULL);
    return NULL;
 }
 
 void
-identity_buffer_destroy(struct identity_buffer *id_buffer)
+identity_resource_destroy(struct identity_resource *id_resource)
 {
-   pipe_buffer_reference(&id_buffer->buffer, NULL);
-   FREE(id_buffer);
-}
-
-
-struct pipe_texture *
-identity_texture_create(struct identity_screen *id_screen,
-                        struct pipe_texture *texture)
-{
-   struct identity_texture *id_texture;
-
-   if(!texture)
-      goto error;
-
-   assert(texture->screen == id_screen->screen);
-
-   id_texture = CALLOC_STRUCT(identity_texture);
-   if(!id_texture)
-      goto error;
-
-   memcpy(&id_texture->base, texture, sizeof(struct pipe_texture));
-
-   pipe_reference_init(&id_texture->base.reference, 1);
-   id_texture->base.screen = &id_screen->base;
-   id_texture->texture = texture;
-
-   return &id_texture->base;
-
-error:
-   pipe_texture_reference(&texture, NULL);
-   return NULL;
-}
-
-void
-identity_texture_destroy(struct identity_texture *id_texture)
-{
-   pipe_texture_reference(&id_texture->texture, NULL);
-   FREE(id_texture);
+   pipe_resource_reference(&id_resource->resource, NULL);
+   FREE(id_resource);
 }
 
 
 struct pipe_surface *
-identity_surface_create(struct identity_texture *id_texture,
+identity_surface_create(struct identity_resource *id_resource,
                         struct pipe_surface *surface)
 {
    struct identity_surface *id_surface;
@@ -112,7 +79,7 @@ identity_surface_create(struct identity_texture *id_texture,
    if(!surface)
       goto error;
 
-   assert(surface->texture == id_texture->texture);
+   assert(surface->texture == id_resource->resource);
 
    id_surface = CALLOC_STRUCT(identity_surface);
    if(!id_surface)
@@ -122,7 +89,7 @@ identity_surface_create(struct identity_texture *id_texture,
 
    pipe_reference_init(&id_surface->base.reference, 1);
    id_surface->base.texture = NULL;
-   pipe_texture_reference(&id_surface->base.texture, &id_texture->base);
+   pipe_resource_reference(&id_surface->base.texture, &id_resource->base);
    id_surface->surface = surface;
 
    return &id_surface->base;
@@ -135,14 +102,52 @@ error:
 void
 identity_surface_destroy(struct identity_surface *id_surface)
 {
-   pipe_texture_reference(&id_surface->base.texture, NULL);
+   pipe_resource_reference(&id_surface->base.texture, NULL);
    pipe_surface_reference(&id_surface->surface, NULL);
    FREE(id_surface);
 }
 
 
+struct pipe_sampler_view *
+identity_sampler_view_create(struct identity_context *id_context,
+                             struct identity_resource *id_resource,
+                             struct pipe_sampler_view *view)
+{
+   struct identity_sampler_view *id_view;
+
+   if (!view)
+      goto error;
+
+   assert(view->texture == id_resource->resource);
+
+   id_view = CALLOC_STRUCT(identity_sampler_view);
+
+   id_view->base = *view;
+   id_view->base.reference.count = 1;
+   id_view->base.texture = NULL;
+   pipe_resource_reference(&id_view->base.texture, id_resource->resource);
+   id_view->base.context = id_context->pipe;
+   id_view->sampler_view = view;
+
+   return &id_view->base;
+error:
+   return NULL;
+}
+
+void
+identity_sampler_view_destroy(struct identity_context *id_context,
+                              struct identity_sampler_view *id_view)
+{
+   pipe_resource_reference(&id_view->base.texture, NULL);
+   id_context->pipe->sampler_view_destroy(id_context->pipe,
+                                          id_view->sampler_view);
+   FREE(id_view);
+}
+
+
 struct pipe_transfer *
-identity_transfer_create(struct identity_texture *id_texture,
+identity_transfer_create(struct identity_context *id_context,
+                         struct identity_resource *id_resource,
                          struct pipe_transfer *transfer)
 {
    struct identity_transfer *id_transfer;
@@ -150,7 +155,7 @@ identity_transfer_create(struct identity_texture *id_texture,
    if(!transfer)
       goto error;
 
-   assert(transfer->texture == id_texture->texture);
+   assert(transfer->resource == id_resource->resource);
 
    id_transfer = CALLOC_STRUCT(identity_transfer);
    if(!id_transfer)
@@ -158,64 +163,26 @@ identity_transfer_create(struct identity_texture *id_texture,
 
    memcpy(&id_transfer->base, transfer, sizeof(struct pipe_transfer));
 
-   id_transfer->base.texture = NULL;
-   pipe_texture_reference(&id_transfer->base.texture, &id_texture->base);
+   id_transfer->base.resource = NULL;
    id_transfer->transfer = transfer;
-   assert(id_transfer->base.texture == &id_texture->base);
+
+   pipe_resource_reference(&id_transfer->base.resource, &id_resource->base);
+   assert(id_transfer->base.resource == &id_resource->base);
 
    return &id_transfer->base;
 
 error:
-   transfer->texture->screen->tex_transfer_destroy(transfer);
+   id_context->pipe->transfer_destroy(id_context->pipe, transfer);
    return NULL;
 }
 
 void
-identity_transfer_destroy(struct identity_transfer *id_transfer)
+identity_transfer_destroy(struct identity_context *id_context,
+                          struct identity_transfer *id_transfer)
 {
-   struct identity_screen *id_screen = identity_screen(id_transfer->base.texture->screen);
-   struct pipe_screen *screen = id_screen->screen;
-
-   pipe_texture_reference(&id_transfer->base.texture, NULL);
-   screen->tex_transfer_destroy(id_transfer->transfer);
+   pipe_resource_reference(&id_transfer->base.resource, NULL);
+   id_context->pipe->transfer_destroy(id_context->pipe,
+                                      id_transfer->transfer);
    FREE(id_transfer);
 }
 
-struct pipe_video_surface *
-identity_video_surface_create(struct identity_screen *id_screen,
-                              struct pipe_video_surface *video_surface)
-{
-   struct identity_video_surface *id_video_surface;
-
-   if (!video_surface) {
-      goto error;
-   }
-
-   assert(video_surface->screen == id_screen->screen);
-
-   id_video_surface = CALLOC_STRUCT(identity_video_surface);
-   if (!id_video_surface) {
-      goto error;
-   }
-
-   memcpy(&id_video_surface->base,
-          video_surface,
-          sizeof(struct pipe_video_surface));
-
-   pipe_reference_init(&id_video_surface->base.reference, 1);
-   id_video_surface->base.screen = &id_screen->base;
-   id_video_surface->video_surface = video_surface;
-
-   return &id_video_surface->base;
-
-error:
-   pipe_video_surface_reference(&video_surface, NULL);
-   return NULL;
-}
-
-void
-identity_video_surface_destroy(struct identity_video_surface *id_video_surface)
-{
-   pipe_video_surface_reference(&id_video_surface->video_surface, NULL);
-   FREE(id_video_surface);
-}

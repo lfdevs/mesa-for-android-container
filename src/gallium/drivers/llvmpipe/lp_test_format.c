@@ -28,66 +28,24 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <float.h>
 
-#include <llvm-c/Core.h>
+#include "gallivm/lp_bld.h"
+#include "gallivm/lp_bld_debug.h"
+#include "gallivm/lp_bld_init.h"
 #include <llvm-c/Analysis.h>
-#include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/Transforms/Scalar.h>
 
-#include "util/u_cpu_detect.h"
+#include "util/u_memory.h"
+#include "util/u_pointer.h"
+#include "util/u_string.h"
 #include "util/u_format.h"
+#include "util/u_format_tests.h"
+#include "util/u_format_s3tc.h"
 
 #include "gallivm/lp_bld_format.h"
 #include "lp_test.h"
-
-
-struct pixel_test_case
-{
-   enum pipe_format format;
-   uint32_t packed;
-   double unpacked[4];
-};
-
-
-struct pixel_test_case test_cases[] =
-{
-   {PIPE_FORMAT_B5G6R5_UNORM,   0x0000, {0.0, 0.0, 0.0, 1.0}},
-   {PIPE_FORMAT_B5G6R5_UNORM,   0x001f, {0.0, 0.0, 1.0, 1.0}},
-   {PIPE_FORMAT_B5G6R5_UNORM,   0x07e0, {0.0, 1.0, 0.0, 1.0}},
-   {PIPE_FORMAT_B5G6R5_UNORM,   0xf800, {1.0, 0.0, 0.0, 1.0}},
-   {PIPE_FORMAT_B5G6R5_UNORM,   0xffff, {1.0, 1.0, 1.0, 1.0}},
-
-   {PIPE_FORMAT_B5G5R5A1_UNORM, 0x0000, {0.0, 0.0, 0.0, 0.0}},
-   {PIPE_FORMAT_B5G5R5A1_UNORM, 0x001f, {0.0, 0.0, 1.0, 0.0}},
-   {PIPE_FORMAT_B5G5R5A1_UNORM, 0x03e0, {0.0, 1.0, 0.0, 0.0}},
-   {PIPE_FORMAT_B5G5R5A1_UNORM, 0x7c00, {1.0, 0.0, 0.0, 0.0}},
-   {PIPE_FORMAT_B5G5R5A1_UNORM, 0x8000, {0.0, 0.0, 0.0, 1.0}},
-   {PIPE_FORMAT_B5G5R5A1_UNORM, 0xffff, {1.0, 1.0, 1.0, 1.0}},
-
-   {PIPE_FORMAT_B8G8R8A8_UNORM, 0x00000000, {0.0, 0.0, 0.0, 0.0}},
-   {PIPE_FORMAT_B8G8R8A8_UNORM, 0x000000ff, {0.0, 0.0, 1.0, 0.0}},
-   {PIPE_FORMAT_B8G8R8A8_UNORM, 0x0000ff00, {0.0, 1.0, 0.0, 0.0}},
-   {PIPE_FORMAT_B8G8R8A8_UNORM, 0x00ff0000, {1.0, 0.0, 0.0, 0.0}},
-   {PIPE_FORMAT_B8G8R8A8_UNORM, 0xff000000, {0.0, 0.0, 0.0, 1.0}},
-   {PIPE_FORMAT_B8G8R8A8_UNORM, 0xffffffff, {1.0, 1.0, 1.0, 1.0}},
-
-#if 0
-   {PIPE_FORMAT_R8G8B8A8_UNORM, 0x00000000, {0.0, 0.0, 0.0, 0.0}},
-   {PIPE_FORMAT_R8G8B8A8_UNORM, 0x000000ff, {0.0, 0.0, 0.0, 1.0}},
-   {PIPE_FORMAT_R8G8B8A8_UNORM, 0x0000ff00, {0.0, 0.0, 1.0, 0.0}},
-   {PIPE_FORMAT_R8G8B8A8_UNORM, 0x00ff0000, {0.0, 1.0, 0.0, 0.0}},
-   {PIPE_FORMAT_R8G8B8A8_UNORM, 0xff000000, {1.0, 0.0, 0.0, 0.0}},
-   {PIPE_FORMAT_R8G8B8A8_UNORM, 0xffffffff, {1.0, 1.0, 1.0, 1.0}},
-#endif
-
-   {PIPE_FORMAT_A8R8G8B8_UNORM, 0x00000000, {0.0, 0.0, 0.0, 0.0}},
-   {PIPE_FORMAT_A8R8G8B8_UNORM, 0x000000ff, {0.0, 0.0, 0.0, 1.0}},
-   {PIPE_FORMAT_A8R8G8B8_UNORM, 0x0000ff00, {1.0, 0.0, 0.0, 0.0}},
-   {PIPE_FORMAT_A8R8G8B8_UNORM, 0x00ff0000, {0.0, 1.0, 0.0, 0.0}},
-   {PIPE_FORMAT_A8R8G8B8_UNORM, 0xff000000, {0.0, 0.0, 1.0, 0.0}},
-   {PIPE_FORMAT_A8R8G8B8_UNORM, 0xffffffff, {1.0, 1.0, 1.0, 1.0}},
-};
 
 
 void
@@ -114,177 +72,144 @@ write_tsv_row(FILE *fp,
 }
 
 
-typedef void (*load_ptr_t)(const uint32_t packed, float *);
+typedef void
+(*fetch_ptr_t)(void *unpacked, const void *packed,
+               unsigned i, unsigned j);
 
 
 static LLVMValueRef
-add_load_rgba_test(LLVMModuleRef module,
-                   const struct util_format_description *desc)
+add_fetch_rgba_test(unsigned verbose,
+                    const struct util_format_description *desc,
+                    struct lp_type type)
 {
-   LLVMTypeRef args[2];
+   char name[256];
+   LLVMTypeRef args[4];
    LLVMValueRef func;
-   LLVMValueRef packed;
+   LLVMValueRef packed_ptr;
+   LLVMValueRef offset = LLVMConstNull(LLVMInt32Type());
    LLVMValueRef rgba_ptr;
+   LLVMValueRef i;
+   LLVMValueRef j;
    LLVMBasicBlockRef block;
    LLVMBuilderRef builder;
    LLVMValueRef rgba;
 
-   args[0] = LLVMInt32Type();
-   args[1] = LLVMPointerType(LLVMVectorType(LLVMFloatType(), 4), 0);
+   util_snprintf(name, sizeof name, "fetch_%s_%s", desc->short_name,
+                 type.floating ? "float" : "unorm8");
 
-   func = LLVMAddFunction(module, "load", LLVMFunctionType(LLVMVoidType(), args, 2, 0));
+   args[0] = LLVMPointerType(lp_build_vec_type(type), 0);
+   args[1] = LLVMPointerType(LLVMInt8Type(), 0);
+   args[3] = args[2] = LLVMInt32Type();
+
+   func = LLVMAddFunction(lp_build_module, name,
+                          LLVMFunctionType(LLVMVoidType(), args, Elements(args), 0));
    LLVMSetFunctionCallConv(func, LLVMCCallConv);
-   packed = LLVMGetParam(func, 0);
-   rgba_ptr = LLVMGetParam(func, 1);
+   rgba_ptr = LLVMGetParam(func, 0);
+   packed_ptr = LLVMGetParam(func, 1);
+   i = LLVMGetParam(func, 2);
+   j = LLVMGetParam(func, 3);
 
    block = LLVMAppendBasicBlock(func, "entry");
    builder = LLVMCreateBuilder();
    LLVMPositionBuilderAtEnd(builder, block);
 
-   if(desc->block.bits < 32)
-      packed = LLVMBuildTrunc(builder, packed, LLVMIntType(desc->block.bits), "");
-
-   rgba = lp_build_unpack_rgba_aos(builder, desc, packed);
+   rgba = lp_build_fetch_rgba_aos(builder, desc, type,
+                                  packed_ptr, offset, i, j);
 
    LLVMBuildStore(builder, rgba, rgba_ptr);
 
    LLVMBuildRetVoid(builder);
 
    LLVMDisposeBuilder(builder);
-   return func;
-}
 
+   if (LLVMVerifyFunction(func, LLVMPrintMessageAction)) {
+      LLVMDumpValue(func);
+      abort();
+   }
 
-typedef void (*store_ptr_t)(uint32_t *, const float *);
+   LLVMRunFunctionPassManager(lp_build_pass, func);
 
+   if (verbose >= 1) {
+      LLVMDumpValue(func);
+   }
 
-static LLVMValueRef
-add_store_rgba_test(LLVMModuleRef module,
-                    const struct util_format_description *desc)
-{
-   LLVMTypeRef args[2];
-   LLVMValueRef func;
-   LLVMValueRef packed_ptr;
-   LLVMValueRef rgba_ptr;
-   LLVMBasicBlockRef block;
-   LLVMBuilderRef builder;
-   LLVMValueRef rgba;
-   LLVMValueRef packed;
-
-   args[0] = LLVMPointerType(LLVMInt32Type(), 0);
-   args[1] = LLVMPointerType(LLVMVectorType(LLVMFloatType(), 4), 0);
-
-   func = LLVMAddFunction(module, "store", LLVMFunctionType(LLVMVoidType(), args, 2, 0));
-   LLVMSetFunctionCallConv(func, LLVMCCallConv);
-   packed_ptr = LLVMGetParam(func, 0);
-   rgba_ptr = LLVMGetParam(func, 1);
-
-   block = LLVMAppendBasicBlock(func, "entry");
-   builder = LLVMCreateBuilder();
-   LLVMPositionBuilderAtEnd(builder, block);
-
-   rgba = LLVMBuildLoad(builder, rgba_ptr, "");
-
-   packed = lp_build_pack_rgba_aos(builder, desc, rgba);
-
-   if(desc->block.bits < 32)
-      packed = LLVMBuildZExt(builder, packed, LLVMInt32Type(), "");
-
-   LLVMBuildStore(builder, packed, packed_ptr);
-
-   LLVMBuildRetVoid(builder);
-
-   LLVMDisposeBuilder(builder);
    return func;
 }
 
 
 PIPE_ALIGN_STACK
 static boolean
-test_format(unsigned verbose, FILE *fp, const struct pixel_test_case *test)
+test_format_float(unsigned verbose, FILE *fp,
+                  const struct util_format_description *desc)
 {
-   LLVMModuleRef module = NULL;
-   LLVMValueRef load = NULL;
-   LLVMValueRef store = NULL;
-   LLVMExecutionEngineRef engine = NULL;
-   LLVMModuleProviderRef provider = NULL;
-   LLVMPassManagerRef pass = NULL;
-   char *error = NULL;
-   const struct util_format_description *desc;
-   load_ptr_t load_ptr;
-   store_ptr_t store_ptr;
-   float unpacked[4];
-   unsigned packed;
-   boolean success;
-   unsigned i;
+   LLVMValueRef fetch = NULL;
+   fetch_ptr_t fetch_ptr;
+   PIPE_ALIGN_VAR(16) float unpacked[4];
+   boolean first = TRUE;
+   boolean success = TRUE;
+   unsigned i, j, k, l;
+   void *f;
 
-   desc = util_format_description(test->format);
-   fprintf(stderr, "%s\n", desc->name);
+   fetch = add_fetch_rgba_test(verbose, desc, lp_float32_vec4_type());
 
-   module = LLVMModuleCreateWithName("test");
+   f = LLVMGetPointerToGlobal(lp_build_engine, fetch);
+   fetch_ptr = (fetch_ptr_t) pointer_to_func(f);
 
-   load = add_load_rgba_test(module, desc);
-   store = add_store_rgba_test(module, desc);
-
-   if(LLVMVerifyModule(module, LLVMPrintMessageAction, &error)) {
-      LLVMDumpModule(module);
-      abort();
-   }
-   LLVMDisposeMessage(error);
-
-   provider = LLVMCreateModuleProviderForExistingModule(module);
-   if (LLVMCreateJITCompiler(&engine, provider, 1, &error)) {
-      fprintf(stderr, "%s\n", error);
-      LLVMDisposeMessage(error);
-      abort();
+   if (verbose >= 2) {
+      lp_disassemble(f);
    }
 
-#if 0
-   pass = LLVMCreatePassManager();
-   LLVMAddTargetData(LLVMGetExecutionEngineTargetData(engine), pass);
-   /* These are the passes currently listed in llvm-c/Transforms/Scalar.h,
-    * but there are more on SVN. */
-   LLVMAddConstantPropagationPass(pass);
-   LLVMAddInstructionCombiningPass(pass);
-   LLVMAddPromoteMemoryToRegisterPass(pass);
-   LLVMAddGVNPass(pass);
-   LLVMAddCFGSimplificationPass(pass);
-   LLVMRunPassManager(pass, module);
-#else
-   (void)pass;
-#endif
+   for (l = 0; l < util_format_nr_test_cases; ++l) {
+      const struct util_format_test_case *test = &util_format_test_cases[l];
 
-   load_ptr  = (load_ptr_t) LLVMGetPointerToGlobal(engine, load);
-   store_ptr = (store_ptr_t)LLVMGetPointerToGlobal(engine, store);
+      if (test->format == desc->format) {
 
-   memset(unpacked, 0, sizeof unpacked);
-   packed = 0;
+         if (first) {
+            printf("Testing %s (float) ...\n",
+                   desc->name);
+            first = FALSE;
+         }
 
-   load_ptr(test->packed, unpacked);
-   store_ptr(&packed, unpacked);
+         for (i = 0; i < desc->block.height; ++i) {
+            for (j = 0; j < desc->block.width; ++j) {
+               boolean match;
 
-   success = TRUE;
-   if(test->packed != packed)
-      success = FALSE;
-   for(i = 0; i < 4; ++i)
-      if(test->unpacked[i] != unpacked[i])
-         success = FALSE;
+               memset(unpacked, 0, sizeof unpacked);
+
+               fetch_ptr(unpacked, test->packed, j, i);
+
+               match = TRUE;
+               for(k = 0; k < 4; ++k)
+                  if (fabs((float)test->unpacked[i][j][k] - unpacked[k]) > FLT_EPSILON)
+                     match = FALSE;
+
+               if (!match) {
+                  printf("FAILED\n");
+                  printf("  Packed: %02x %02x %02x %02x\n",
+                         test->packed[0], test->packed[1], test->packed[2], test->packed[3]);
+                  printf("  Unpacked (%u,%u): %f %f %f %f obtained\n",
+                         j, i,
+                         unpacked[0], unpacked[1], unpacked[2], unpacked[3]);
+                  printf("                  %f %f %f %f expected\n",
+                         test->unpacked[i][j][0],
+                         test->unpacked[i][j][1],
+                         test->unpacked[i][j][2],
+                         test->unpacked[i][j][3]);
+                  success = FALSE;
+               }
+            }
+         }
+      }
+   }
 
    if (!success) {
-      printf("FAILED\n");
-      printf("  Packed: %08x\n", test->packed);
-      printf("          %08x\n", packed);
-      printf("  Unpacked: %f %f %f %f\n", unpacked[0], unpacked[1], unpacked[2], unpacked[3]);
-      printf("            %f %f %f %f\n", test->unpacked[0], test->unpacked[1], test->unpacked[2], test->unpacked[3]);
-      LLVMDumpModule(module);
+      if (verbose < 1) {
+         LLVMDumpValue(fetch);
+      }
    }
 
-   LLVMFreeMachineCodeForFunction(engine, store);
-   LLVMFreeMachineCodeForFunction(engine, load);
-
-   LLVMDisposeExecutionEngine(engine);
-   if(pass)
-      LLVMDisposePassManager(pass);
+   LLVMFreeMachineCodeForFunction(lp_build_engine, fetch);
+   LLVMDeleteFunction(fetch);
 
    if(fp)
       write_tsv_row(fp, desc, success);
@@ -293,15 +218,141 @@ test_format(unsigned verbose, FILE *fp, const struct pixel_test_case *test)
 }
 
 
+PIPE_ALIGN_STACK
+static boolean
+test_format_unorm8(unsigned verbose, FILE *fp,
+                   const struct util_format_description *desc)
+{
+   LLVMValueRef fetch = NULL;
+   fetch_ptr_t fetch_ptr;
+   uint8_t unpacked[4];
+   boolean first = TRUE;
+   boolean success = TRUE;
+   unsigned i, j, k, l;
+   void *f;
+
+   fetch = add_fetch_rgba_test(verbose, desc, lp_unorm8_vec4_type());
+
+   f = LLVMGetPointerToGlobal(lp_build_engine, fetch);
+   fetch_ptr = (fetch_ptr_t) pointer_to_func(f);
+
+   if (verbose >= 2) {
+      lp_disassemble(f);
+   }
+
+   for (l = 0; l < util_format_nr_test_cases; ++l) {
+      const struct util_format_test_case *test = &util_format_test_cases[l];
+
+      if (test->format == desc->format) {
+
+         if (first) {
+            printf("Testing %s (unorm8) ...\n",
+                   desc->name);
+            first = FALSE;
+         }
+
+         for (i = 0; i < desc->block.height; ++i) {
+            for (j = 0; j < desc->block.width; ++j) {
+               boolean match;
+
+               memset(unpacked, 0, sizeof unpacked);
+
+               fetch_ptr(unpacked, test->packed, j, i);
+
+               match = TRUE;
+               for(k = 0; k < 4; ++k) {
+                  int error = float_to_ubyte(test->unpacked[i][j][k]) - unpacked[k];
+                  if (error < 0)
+                     error = -error;
+                  if (error > 1)
+                     match = FALSE;
+               }
+
+               if (!match) {
+                  printf("FAILED\n");
+                  printf("  Packed: %02x %02x %02x %02x\n",
+                         test->packed[0], test->packed[1], test->packed[2], test->packed[3]);
+                  printf("  Unpacked (%u,%u): %02x %02x %02x %02x obtained\n",
+                         j, i,
+                         unpacked[0], unpacked[1], unpacked[2], unpacked[3]);
+                  printf("                  %02x %02x %02x %02x expected\n",
+                         float_to_ubyte(test->unpacked[i][j][0]),
+                         float_to_ubyte(test->unpacked[i][j][1]),
+                         float_to_ubyte(test->unpacked[i][j][2]),
+                         float_to_ubyte(test->unpacked[i][j][3]));
+                  success = FALSE;
+               }
+            }
+         }
+      }
+   }
+
+   if (!success)
+      LLVMDumpValue(fetch);
+
+   LLVMFreeMachineCodeForFunction(lp_build_engine, fetch);
+   LLVMDeleteFunction(fetch);
+
+   if(fp)
+      write_tsv_row(fp, desc, success);
+
+   return success;
+}
+
+
+
+
+static boolean
+test_one(unsigned verbose, FILE *fp,
+         const struct util_format_description *format_desc)
+{
+   boolean success = TRUE;
+
+   if (!test_format_float(verbose, fp, format_desc)) {
+     success = FALSE;
+   }
+
+   if (!test_format_unorm8(verbose, fp, format_desc)) {
+     success = FALSE;
+   }
+
+   return success;
+}
+
+
 boolean
 test_all(unsigned verbose, FILE *fp)
 {
-   unsigned i;
-   bool success = TRUE;
+   enum pipe_format format;
+   boolean success = TRUE;
 
-   for (i = 0; i < sizeof(test_cases)/sizeof(test_cases[0]); ++i)
-      if(!test_format(verbose, fp, &test_cases[i]))
-        success = FALSE;
+   util_format_s3tc_init();
+
+   for (format = 1; format < PIPE_FORMAT_COUNT; ++format) {
+      const struct util_format_description *format_desc;
+
+      format_desc = util_format_description(format);
+      if (!format_desc) {
+         continue;
+      }
+
+      /*
+       * TODO: test more
+       */
+
+      if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {
+         continue;
+      }
+
+      if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC &&
+          !util_format_s3tc_enabled) {
+         continue;
+      }
+
+      if (!test_one(verbose, fp, format_desc)) {
+           success = FALSE;
+      }
+   }
 
    return success;
 }
@@ -311,4 +362,12 @@ boolean
 test_some(unsigned verbose, FILE *fp, unsigned long n)
 {
    return test_all(verbose, fp);
+}
+
+
+boolean
+test_single(unsigned verbose, FILE *fp)
+{
+   printf("no test_single()");
+   return TRUE;
 }

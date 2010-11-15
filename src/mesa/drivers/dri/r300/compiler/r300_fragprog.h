@@ -37,10 +37,8 @@
 #include "radeon_program.h"
 
 
-extern void r300BuildFragmentProgramHwCode(struct r300_fragment_program_compiler *compiler);
+extern void r300BuildFragmentProgramHwCode(struct radeon_compiler *c, void *user);
 
-extern void r300FragmentProgramDump(struct rX00_fragment_program_code *c);
-
-extern int r300_transform_TEX(struct radeon_compiler * c, struct rc_instruction* inst, void* data);
+extern void r300FragmentProgramDump(struct radeon_compiler *c, void *user);
 
 #endif

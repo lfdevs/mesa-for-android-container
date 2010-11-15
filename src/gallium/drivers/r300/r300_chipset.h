@@ -25,6 +25,14 @@
 
 #include "pipe/p_compiler.h"
 
+/* these are sizes in dwords */
+#define R300_HIZ_LIMIT 10240
+#define RV530_HIZ_LIMIT 15360
+
+/* rv3xx have only one pipe */
+#define PIPE_ZMASK_SIZE 4096
+#define RV3xx_ZMASK_SIZE 5120
+
 /* Structure containing all the possible information about a specific Radeon
  * in the R3xx, R4xx, and R5xx families. */
 struct r300_capabilities {
@@ -38,20 +46,36 @@ struct r300_capabilities {
     unsigned num_frag_pipes;
     /* The number of z pipes */
     unsigned num_z_pipes;
+    /* The number of texture units. */
+    unsigned num_tex_units;
     /* Whether or not TCL is physically present */
     boolean has_tcl;
-    /* Whether or not this is R400. The differences compared to their R3xx
+    /* Some chipsets do not have HiZ RAM - other have varying amounts . */
+    int hiz_ram;
+    /*  some chipsets have zmask ram per pipe some don't */
+    int zmask_ram;
+    /* Whether or not this is RV350 or newer, including all r400 and r500
+     * chipsets. The differences compared to the oldest r300 chips are:
+     * - Blend LTE/GTE thresholds
+     * - Better MACRO_SWITCH in texture tiling
+     * - Half float vertex
+     * - More HyperZ optimizations */
+    boolean is_rv350;
+    /* Whether or not this is R400. The differences compared their rv350
      * cousins are:
      * - Extended fragment shader registers
-     * - Blend LTE/GTE thresholds */
+     * - 3DC texture compression (RGTC2) */
     boolean is_r400;
     /* Whether or not this is an RV515 or newer; R500s have many differences
-     * that require extra consideration, compared to their R3xx cousins:
+     * that require extra consideration, compared to their rv350 cousins:
      * - Extra bit of width and height on texture sizes
      * - Blend color is split across two registers
-     * - Blend LTE/GTE thresholds
      * - Universal Shader (US) block used for fragment shaders
-     * - FP16 blending and multisampling */
+     * - FP16 blending and multisampling
+     * - Full RGTC texture compression
+     * - 24-bit depth textures
+     * - Stencil back-face reference value
+     * - Ability to render up to 2^24 - 1 vertices with signed index offset */
     boolean is_r500;
     /* Whether or not the second pixel pipe is accessed with the high bit */
     boolean high_second_pipe;

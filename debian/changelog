@@ -1,3 +1,51 @@
+mesa (7.9+repack-1) experimental; urgency=low
+
+  * Repack the upstream tarball to get rid of duplicate files which make dpkg
+    choke.  Thanks to Luca Falavigna for his help diagnosing this.
+
+ -- Julien Cristau <jcristau@debian.org>  Mon, 15 Nov 2010 23:04:45 +0100
+
+mesa (7.9-1) experimental; urgency=low
+
+  [ Christopher James Halse Rogers ]
+  * debian/control:
+    - Add EGL, GLESv1, GLESv2, and OpenVG virtual packages.  The Khronos group
+      specifies a de-facto linux ABI for these libraries.  We have a similar
+      package for libgl1.
+  * debian/README.Debian:
+    - Document the virtual packages above.
+
+  [ Sven Joachim ]
+  * Bump libdrm-dev build dependency to 2.4.21-2~, the Nouveau Gallium
+    driver does not build with squeeze's libdrm-nouveau1.
+
+  [ Julien Cristau ]
+  * New upstream release.
+  * Update patches:
+    - 03_optional-progs-and-install.patch dropped, demos moved to a separate
+      package
+    - 07-nouveau-update.diff and
+      09-intel-fix-invalidate-before-initialisation.diff dropped, they were
+      backports from upstream
+    - 04_osmesa_version.diff updated
+  * Add build-dep on talloc.
+  * Drop the mesa-utils package, demos were moved out of the mesa tree.
+  * Use --with-egl-platforms instead of --with-egl-displays, and replace kms
+    with drm.
+  * Merge some packaging changes from ubuntu:
+    - libegl1-mesa-drivers-x11,kms: There are no longer separate kms or x11
+      drivers for EGL, libegl1-mesa-drivers now contains a single driver that
+      provides both backends (Christopher James Halse Rogers)
+    - Remove pre-generated .pc's, use the ones generated at build time instead
+      (Robert Hooker)
+    - Build the r600 gallium driver
+    - Update symbols files
+  * README.source: we don't need to repack MesaLib.tar.gz anymore.
+  * Kill old sourceforge url from debian/watch.
+  * Ship the gallium r300 driver instead of the classic one.
+
+ -- Julien Cristau <jcristau@debian.org>  Sat, 13 Nov 2010 00:36:11 +0100
+
 mesa (7.8.2-2) experimental; urgency=low
 
   * Add missing dependencies to libegl1-mesa-dev, thanks to Alexandros

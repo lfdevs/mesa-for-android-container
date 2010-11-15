@@ -135,4 +135,10 @@ nouveau_driver_functions_init(struct dd_function_table *functions)
 	functions->Flush = nouveau_flush;
 	functions->Finish = nouveau_finish;
 	functions->Clear = nouveau_clear;
+	functions->DrawPixels = _mesa_meta_DrawPixels;
+	functions->CopyPixels = _mesa_meta_CopyPixels;
+	functions->Bitmap = _mesa_meta_Bitmap;
+#if FEATURE_EXT_framebuffer_blit
+	functions->BlitFramebuffer = _mesa_meta_BlitFramebuffer;
+#endif
 }

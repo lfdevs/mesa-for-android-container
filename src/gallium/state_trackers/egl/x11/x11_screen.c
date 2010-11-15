@@ -14,24 +14,24 @@
  * The above copyright notice and this permission notice shall be included
  * in all copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
  */
 
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <xf86drm.h>
 #include <X11/Xlibint.h>
 #include <X11/extensions/XShm.h>
+
 #include "util/u_memory.h"
-#include "util/u_math.h"
-#include "util/u_format.h"
-#include "xf86drm.h"
 #include "egllog.h"
 
 #include "x11_screen.h"
@@ -39,11 +39,6 @@
 #include "glxinit.h"
 
 struct x11_screen {
-#ifdef GLX_DIRECT_RENDERING
-   /* dummy base class */
-   struct __GLXDRIdisplayRec base;
-#endif
-
    Display *dpy;
    int number;
 
@@ -108,12 +103,12 @@ x11_screen_destroy(struct x11_screen *xscr)
 #ifdef GLX_DIRECT_RENDERING
    /* xscr->glx_dpy will be destroyed with the X display */
    if (xscr->glx_dpy)
-      xscr->glx_dpy->dri2Display = NULL;
+      xscr->glx_dpy->xscr = NULL;
 #endif
 
    if (xscr->visuals)
       XFree(xscr->visuals);
-   free(xscr);
+   FREE(xscr);
 }
 
 #ifdef GLX_DIRECT_RENDERING
@@ -186,63 +181,6 @@ x11_screen_get_visuals(struct x11_screen *xscr, int *num_visuals)
    return xscr->visuals;
 }
 
-void
-x11_screen_convert_visual(struct x11_screen *xscr, const XVisualInfo *visual,
-                          __GLcontextModes *mode)
-{
-   int r, g, b, a;
-   int visual_type;
-
-   r = util_bitcount(visual->red_mask);
-   g = util_bitcount(visual->green_mask);
-   b = util_bitcount(visual->blue_mask);
-   a = visual->depth - (r + g + b);
-#if defined(__cplusplus) || defined(c_plusplus)
-   visual_type = visual->c_class;
-#else
-   visual_type = visual->class;
-#endif
-
-   /* convert to GLX visual type */
-   switch (visual_type) {
-   case TrueColor:
-      visual_type = GLX_TRUE_COLOR;
-      break;
-   case DirectColor:
-      visual_type = GLX_DIRECT_COLOR;
-      break;
-   case PseudoColor:
-      visual_type = GLX_PSEUDO_COLOR;
-      break;
-   case StaticColor:
-      visual_type = GLX_STATIC_COLOR;
-      break;
-   case GrayScale:
-      visual_type = GLX_GRAY_SCALE;
-      break;
-   case StaticGray:
-      visual_type = GLX_STATIC_GRAY;
-      break;
-   default:
-      visual_type = GLX_NONE;
-      break;
-   }
-
-   mode->rgbBits = r + g + b + a;
-   mode->redBits = r;
-   mode->greenBits = g;
-   mode->blueBits = b;
-   mode->alphaBits = a;
-   mode->visualID = visual->visualid;
-   mode->visualType = visual_type;
-
-   /* sane defaults */
-   mode->renderType = GLX_RGBA_BIT;
-   mode->rgbMode = TRUE;
-   mode->visualRating = GLX_SLOW_CONFIG;
-   mode->xRenderable = TRUE;
-}
-
 /**
  * Return the depth of a drawable.
  *
@@ -283,18 +221,7 @@ const __GLcontextModes *
 x11_screen_get_glx_configs(struct x11_screen *xscr)
 {
    return (x11_screen_init_glx(xscr))
-      ? xscr->glx_dpy->screenConfigs[xscr->number].configs
-      : NULL;
-}
-
-/**
- * Return the GLX visuals.
- */
-const __GLcontextModes *
-x11_screen_get_glx_visuals(struct x11_screen *xscr)
-{
-   return (x11_screen_init_glx(xscr))
-      ? xscr->glx_dpy->screenConfigs[xscr->number].visuals
+      ? xscr->glx_dpy->screenConfigs[xscr->number]->configs
       : NULL;
 }
 
@@ -363,14 +290,14 @@ x11_screen_enable_dri2(struct x11_screen *xscr,
          close(fd);
          return -1;
       }
-      if (xscr->glx_dpy->dri2Display) {
+      if (xscr->glx_dpy->xscr) {
          _eglLog(_EGL_WARNING,
                "display is already managed by another x11 screen");
          close(fd);
          return -1;
       }
 
-      xscr->glx_dpy->dri2Display = (__GLXDRIdisplay *) xscr;
+      xscr->glx_dpy->xscr = xscr;
       xscr->dri_invalidate_buffers = invalidate_buffers;
       xscr->dri_user_data = user_data;
 
@@ -447,7 +374,7 @@ x11_context_modes_create(unsigned count)
 
    next = &base;
    for (i = 0; i < count; i++) {
-      *next = (__GLcontextModes *) calloc(1, size);
+      *next = (__GLcontextModes *) CALLOC(1, size);
       if (*next == NULL) {
          x11_context_modes_destroy(base);
          base = NULL;
@@ -467,7 +394,7 @@ x11_context_modes_destroy(__GLcontextModes *modes)
 {
    while (modes != NULL) {
       __GLcontextModes *next = modes->next;
-      free(modes);
+      FREE(modes);
       modes = next;
    }
 }
@@ -485,6 +412,9 @@ x11_context_modes_count(const __GLcontextModes *modes)
    return count;
 }
 
+extern void
+dri2InvalidateBuffers(Display *dpy, XID drawable);
+
 /**
  * This is called from src/glx/dri2.c.
  */
@@ -494,8 +424,8 @@ dri2InvalidateBuffers(Display *dpy, XID drawable)
    __GLXdisplayPrivate *priv = __glXInitialize(dpy);
    struct x11_screen *xscr = NULL;
 
-   if (priv && priv->dri2Display)
-      xscr = (struct x11_screen *) priv->dri2Display;
+   if (priv && priv->xscr)
+      xscr = priv->xscr;
    if (!xscr || !xscr->dri_invalidate_buffers)
       return;
 

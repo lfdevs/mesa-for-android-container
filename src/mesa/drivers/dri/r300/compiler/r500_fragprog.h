@@ -36,16 +36,11 @@
 #include "radeon_compiler.h"
 #include "radeon_swizzle.h"
 
-extern void r500BuildFragmentProgramHwCode(struct r300_fragment_program_compiler *compiler);
+extern void r500BuildFragmentProgramHwCode(struct radeon_compiler *c, void *user);
 
-extern void r500FragmentProgramDump(struct rX00_fragment_program_code *c);
+extern void r500FragmentProgramDump(struct radeon_compiler *c, void *user);
 
 extern struct rc_swizzle_caps r500_swizzle_caps;
-
-extern int r500_transform_TEX(
-	struct radeon_compiler * c,
-	struct rc_instruction * inst,
-	void* data);
 
 extern int r500_transform_IF(
 	struct radeon_compiler * c,

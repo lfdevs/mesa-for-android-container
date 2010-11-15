@@ -23,7 +23,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <getopt.h>
 #include <unistd.h>
 #include <stdarg.h>
 
@@ -240,7 +239,7 @@ char *imm_encoding[8] = {
     [2] = "UW",
     [3] = "W",
     [5] = "VF",
-    [5] = "V",
+    [6] = "V",
     [7] = "F"
 };
 

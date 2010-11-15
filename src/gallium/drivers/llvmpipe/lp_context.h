@@ -37,6 +37,8 @@
 
 #include "lp_tex_sample.h"
 #include "lp_jit.h"
+#include "lp_setup.h"
+#include "lp_state_fs.h"
 
 
 struct llvmpipe_vbuf_render;
@@ -45,7 +47,8 @@ struct draw_stage;
 struct lp_fragment_shader;
 struct lp_vertex_shader;
 struct lp_blend_state;
-struct setup_context;
+struct lp_setup_context;
+struct lp_velems_state;
 
 struct llvmpipe_context {
    struct pipe_context pipe;  /**< base class */
@@ -58,47 +61,56 @@ struct llvmpipe_context {
    const struct pipe_rasterizer_state *rasterizer;
    struct lp_fragment_shader *fs;
    const struct lp_vertex_shader *vs;
+   const struct lp_geometry_shader *gs;
+   const struct lp_velems_state *velems;
+   const struct lp_so_state *so;
 
    /** Other rendering state */
    struct pipe_blend_color blend_color;
    struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
-   struct pipe_buffer *constants[PIPE_SHADER_TYPES];
+   struct pipe_resource *constants[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
    struct pipe_framebuffer_state framebuffer;
    struct pipe_poly_stipple poly_stipple;
    struct pipe_scissor_state scissor;
-   struct pipe_texture *texture[PIPE_MAX_SAMPLERS];
-   struct pipe_texture *vertex_textures[PIPE_MAX_VERTEX_SAMPLERS];
+   struct pipe_sampler_view *fragment_sampler_views[PIPE_MAX_SAMPLERS];
+   struct pipe_sampler_view *vertex_sampler_views[PIPE_MAX_VERTEX_SAMPLERS];
    struct pipe_viewport_state viewport;
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
-   struct pipe_vertex_element vertex_element[PIPE_MAX_ATTRIBS];
+   struct pipe_index_buffer index_buffer;
+   struct {
+      struct llvmpipe_resource *buffer[PIPE_MAX_SO_BUFFERS];
+      int offset[PIPE_MAX_SO_BUFFERS];
+      int so_count[PIPE_MAX_SO_BUFFERS];
+      int num_buffers;
+   } so_target;
+   struct pipe_resource *mapped_vs_tex[PIPE_MAX_VERTEX_SAMPLERS];
 
    unsigned num_samplers;
-   unsigned num_textures;
+   unsigned num_fragment_sampler_views;
    unsigned num_vertex_samplers;
-   unsigned num_vertex_textures;
-   unsigned num_vertex_elements;
+   unsigned num_vertex_sampler_views;
    unsigned num_vertex_buffers;
 
    unsigned dirty; /**< Mask of LP_NEW_x flags */
 
-   /* Counter for occlusion queries.  Note this supports overlapping
-    * queries.
-    */
-   uint64_t occlusion_count;
-   unsigned active_query_count;
+   int active_query_count;
 
    /** Mapped vertex buffers */
    ubyte *mapped_vbuffer[PIPE_MAX_ATTRIBS];
    
    /** Vertex format */
    struct vertex_info vertex_info;
-
+   
    /** Which vertex shader output slot contains point size */
    int psize_slot;
 
+   /** Fragment shader input interpolation info */
+   unsigned num_inputs;
+   struct lp_shader_input inputs[PIPE_MAX_SHADER_INPUTS];
+
    /** The tiling engine */
-   struct setup_context *setup;
+   struct lp_setup_context *setup;
 
    /** The primitive drawing context */
    struct draw_context *draw;
@@ -106,6 +118,8 @@ struct llvmpipe_context {
    unsigned tex_timestamp;
    boolean no_rast;
 
+   struct lp_fs_variant_list_item fs_variants_list;
+   unsigned nr_fs_variants;
 };
 
 

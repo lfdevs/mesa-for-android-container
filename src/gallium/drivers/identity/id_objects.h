@@ -31,24 +31,25 @@
 
 #include "pipe/p_compiler.h"
 #include "pipe/p_state.h"
-#include "pipe/p_video_state.h"
 
 #include "id_screen.h"
 
+struct identity_context;
 
-struct identity_buffer
+
+struct identity_resource
 {
-   struct pipe_buffer base;
+   struct pipe_resource base;
 
-   struct pipe_buffer *buffer;
+   struct pipe_resource *resource;
 };
 
 
-struct identity_texture
+struct identity_sampler_view
 {
-   struct pipe_texture base;
+   struct pipe_sampler_view base;
 
-   struct pipe_texture *texture;
+   struct pipe_sampler_view *sampler_view;
 };
 
 
@@ -68,30 +69,22 @@ struct identity_transfer
 };
 
 
-struct identity_video_surface
+static INLINE struct identity_resource *
+identity_resource(struct pipe_resource *_resource)
 {
-   struct pipe_video_surface base;
-
-   struct pipe_video_surface *video_surface;
-};
-
-
-static INLINE struct identity_buffer *
-identity_buffer(struct pipe_buffer *_buffer)
-{
-   if(!_buffer)
+   if(!_resource)
       return NULL;
-   (void)identity_screen(_buffer->screen);
-   return (struct identity_buffer *)_buffer;
+   (void)identity_screen(_resource->screen);
+   return (struct identity_resource *)_resource;
 }
 
-static INLINE struct identity_texture *
-identity_texture(struct pipe_texture *_texture)
+static INLINE struct identity_sampler_view *
+identity_sampler_view(struct pipe_sampler_view *_sampler_view)
 {
-   if(!_texture)
+   if (!_sampler_view) {
       return NULL;
-   (void)identity_screen(_texture->screen);
-   return (struct identity_texture *)_texture;
+   }
+   return (struct identity_sampler_view *)_sampler_view;
 }
 
 static INLINE struct identity_surface *
@@ -99,7 +92,7 @@ identity_surface(struct pipe_surface *_surface)
 {
    if(!_surface)
       return NULL;
-   (void)identity_texture(_surface->texture);
+   (void)identity_resource(_surface->texture);
    return (struct identity_surface *)_surface;
 }
 
@@ -108,34 +101,25 @@ identity_transfer(struct pipe_transfer *_transfer)
 {
    if(!_transfer)
       return NULL;
-   (void)identity_texture(_transfer->texture);
+   (void)identity_resource(_transfer->resource);
    return (struct identity_transfer *)_transfer;
 }
 
-static INLINE struct identity_video_surface *
-identity_video_surface(struct pipe_video_surface *_video_surface)
+static INLINE struct pipe_resource *
+identity_resource_unwrap(struct pipe_resource *_resource)
 {
-   if (!_video_surface) {
+   if(!_resource)
+      return NULL;
+   return identity_resource(_resource)->resource;
+}
+
+static INLINE struct pipe_sampler_view *
+identity_sampler_view_unwrap(struct pipe_sampler_view *_sampler_view)
+{
+   if (!_sampler_view) {
       return NULL;
    }
-   (void)identity_screen(_video_surface->screen);
-   return (struct identity_video_surface *)_video_surface;
-}
-
-static INLINE struct pipe_buffer *
-identity_buffer_unwrap(struct pipe_buffer *_buffer)
-{
-   if(!_buffer)
-      return NULL;
-   return identity_buffer(_buffer)->buffer;
-}
-
-static INLINE struct pipe_texture *
-identity_texture_unwrap(struct pipe_texture *_texture)
-{
-   if(!_texture)
-      return NULL;
-   return identity_texture(_texture)->texture;
+   return identity_sampler_view(_sampler_view)->sampler_view;
 }
 
 static INLINE struct pipe_surface *
@@ -155,40 +139,37 @@ identity_transfer_unwrap(struct pipe_transfer *_transfer)
 }
 
 
-struct pipe_buffer *
-identity_buffer_create(struct identity_screen *id_screen,
-                       struct pipe_buffer *buffer);
+struct pipe_resource *
+identity_resource_create(struct identity_screen *id_screen,
+                         struct pipe_resource *resource);
 
 void
-identity_buffer_destroy(struct identity_buffer *id_buffer);
-
-struct pipe_texture *
-identity_texture_create(struct identity_screen *id_screen,
-                        struct pipe_texture *texture);
-
-void
-identity_texture_destroy(struct identity_texture *id_texture);
+identity_resource_destroy(struct identity_resource *id_resource);
 
 struct pipe_surface *
-identity_surface_create(struct identity_texture *id_texture,
+identity_surface_create(struct identity_resource *id_resource,
                         struct pipe_surface *surface);
 
 void
 identity_surface_destroy(struct identity_surface *id_surface);
 
+struct pipe_sampler_view *
+identity_sampler_view_create(struct identity_context *id_context,
+                             struct identity_resource *id_resource,
+                             struct pipe_sampler_view *view);
+
+void
+identity_sampler_view_destroy(struct identity_context *id_context,
+                              struct identity_sampler_view *id_sampler_view);
+
 struct pipe_transfer *
-identity_transfer_create(struct identity_texture *id_texture,
+identity_transfer_create(struct identity_context *id_context,
+                         struct identity_resource *id_resource,
                          struct pipe_transfer *transfer);
 
 void
-identity_transfer_destroy(struct identity_transfer *id_transfer);
-
-struct pipe_video_surface *
-identity_video_surface_create(struct identity_screen *id_screen,
-                              struct pipe_video_surface *video_surface);
-
-void
-identity_video_surface_destroy(struct identity_video_surface *id_video_surface);
+identity_transfer_destroy(struct identity_context *id_context,
+                          struct identity_transfer *id_transfer);
 
 
 #endif /* ID_OBJECTS_H */
