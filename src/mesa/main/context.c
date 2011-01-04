@@ -139,7 +139,7 @@
 #endif
 
 #include "glsl_parser_extras.h"
-
+#include <stdbool.h>
 
 
 #ifndef MESA_VERBOSE
@@ -1708,13 +1708,19 @@ _mesa_set_mvp_with_dp4( GLcontext *ctx,
 GLboolean
 _mesa_valid_to_render(GLcontext *ctx, const char *where)
 {
+   bool vert_from_glsl_shader = false;
+   bool geom_from_glsl_shader = false;
+   bool frag_from_glsl_shader = false;
+
    /* This depends on having up to date derived state (shaders) */
    if (ctx->NewState)
       _mesa_update_state(ctx);
 
    if (ctx->Shader.CurrentProgram) {
+      struct gl_shader_program *const prog = ctx->Shader.CurrentProgram;
+
       /* using shaders */
-      if (!ctx->Shader.CurrentProgram->LinkStatus) {
+      if (!prog->LinkStatus) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "%s(shader not linked)", where);
          return GL_FALSE;
@@ -1722,25 +1728,45 @@ _mesa_valid_to_render(GLcontext *ctx, const char *where)
 #if 0 /* not normally enabled */
       {
          char errMsg[100];
-         if (!_mesa_validate_shader_program(ctx, ctx->Shader.CurrentProgram,
-                                            errMsg)) {
+         if (!_mesa_validate_shader_program(ctx, prog, errMsg)) {
             _mesa_warning(ctx, "Shader program %u is invalid: %s",
-                          ctx->Shader.CurrentProgram->Name, errMsg);
+                          prog->Name, errMsg);
          }
       }
 #endif
+
+      /* Figure out which shader stages are provided by the GLSL program.  For
+       * any stages that are not provided, the corresponding assembly shader
+       * target will be validated below.
+       */
+      vert_from_glsl_shader =
+	 prog->_LinkedShaders[MESA_SHADER_VERTEX] != NULL;
+      geom_from_glsl_shader =
+	 prog->_LinkedShaders[MESA_SHADER_GEOMETRY] != NULL;
+      frag_from_glsl_shader =
+	 prog->_LinkedShaders[MESA_SHADER_FRAGMENT] != NULL;
    }
-   else {
-      if (ctx->VertexProgram.Enabled && !ctx->VertexProgram._Enabled) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "%s(vertex program not valid)", where);
-         return GL_FALSE;
-      }
-      if (ctx->FragmentProgram.Enabled && !ctx->FragmentProgram._Enabled) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "%s(fragment program not valid)", where);
-         return GL_FALSE;
-      }
+
+
+   /* Any shader stages that are not supplied by the GLSL shader and have
+    * assembly shaders enabled must now be validated.
+    */
+   if (!vert_from_glsl_shader
+       && ctx->VertexProgram.Enabled && !ctx->VertexProgram._Enabled) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+		  "%s(vertex program not valid)", where);
+      return GL_FALSE;
+   }
+
+   /* FINISHME: If GL_NV_geometry_program4 is ever supported, the current
+    * FINISHME: geometry program should validated here.
+    */
+
+   if (!frag_from_glsl_shader
+       && ctx->FragmentProgram.Enabled && !ctx->FragmentProgram._Enabled) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+		  "%s(fragment program not valid)", where);
+      return GL_FALSE;
    }
 
    if (ctx->DrawBuffer->_Status != GL_FRAMEBUFFER_COMPLETE_EXT) {

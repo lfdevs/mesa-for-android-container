@@ -47,7 +47,7 @@
 #include "program/prog_parameter.h"
 #include "program/prog_uniform.h"
 #include "talloc.h"
-
+#include <stdbool.h>
 
 /** Define this to enable shader substitution (see below) */
 #define SHADER_SUBST 0
@@ -199,6 +199,35 @@ _mesa_copy_string(GLchar *dst, GLsizei maxLength,
       *length = len;
 }
 
+
+
+/**
+ * Confirm that the a shader type is valid and supported by the implementation
+ *
+ * \param ctx   Current GL context
+ * \param type  Shader target
+ *
+ */
+static bool
+validate_shader_target(const GLcontext *ctx, GLenum type)
+{
+   switch (type) {
+#if FEATURE_ARB_fragment_shader
+   case GL_FRAGMENT_SHADER:
+      return ctx->Extensions.ARB_fragment_shader;
+#endif
+#if FEATURE_ARB_vertex_shader
+   case GL_VERTEX_SHADER:
+      return ctx->Extensions.ARB_vertex_shader;
+#endif
+#if FEATURE_ARB_geometry_shader4
+   case GL_GEOMETRY_SHADER_ARB:
+      return ctx->Extensions.ARB_geometry_shader4;
+#endif
+   default:
+      return false;
+   }
+}
 
 
 /**
@@ -376,19 +405,13 @@ create_shader(GLcontext *ctx, GLenum type)
    struct gl_shader *sh;
    GLuint name;
 
-   name = _mesa_HashFindFreeKeyBlock(ctx->Shared->ShaderObjects, 1);
-
-   switch (type) {
-   case GL_FRAGMENT_SHADER:
-   case GL_VERTEX_SHADER:
-   case GL_GEOMETRY_SHADER_ARB:
-      sh = ctx->Driver.NewShader(ctx, name, type);
-      break;
-   default:
+   if (!validate_shader_target(ctx, type)) {
       _mesa_error(ctx, GL_INVALID_ENUM, "CreateShader(type)");
       return 0;
    }
 
+   name = _mesa_HashFindFreeKeyBlock(ctx->Shared->ShaderObjects, 1);
+   sh = ctx->Driver.NewShader(ctx, name, type);
    _mesa_HashInsert(ctx->Shared->ShaderObjects, name, sh);
 
    return name;
@@ -888,42 +911,12 @@ print_shader_info(const struct gl_shader_program *shProg)
  * Use the named shader program for subsequent rendering.
  */
 void
-_mesa_use_program(GLcontext *ctx, GLuint program)
+_mesa_use_program(GLcontext *ctx, struct gl_shader_program *shProg)
 {
-   struct gl_shader_program *shProg;
-   struct gl_transform_feedback_object *obj =
-      ctx->TransformFeedback.CurrentObject;
-
-   if (obj->Active) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glUseProgram(transform feedback active)");
-      return;
-   }
-
    if (ctx->Shader.CurrentProgram &&
-       ctx->Shader.CurrentProgram->Name == program) {
+       ctx->Shader.CurrentProgram == shProg) {
       /* no-op */
       return;
-   }
-
-   if (program) {
-      shProg = _mesa_lookup_shader_program_err(ctx, program, "glUseProgram");
-      if (!shProg) {
-         return;
-      }
-      if (!shProg->LinkStatus) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "glUseProgram(program %u not linked)", program);
-         return;
-      }
-
-      /* debug code */
-      if (ctx->Shader.Flags & GLSL_USE_PROG) {
-         print_shader_info(shProg);
-      }
-   }
-   else {
-      shProg = NULL;
    }
 
    if (ctx->Shader.CurrentProgram != shProg) {
@@ -1479,8 +1472,39 @@ void GLAPIENTRY
 _mesa_UseProgramObjectARB(GLhandleARB program)
 {
    GET_CURRENT_CONTEXT(ctx);
+   struct gl_shader_program *shProg;
+   struct gl_transform_feedback_object *obj =
+      ctx->TransformFeedback.CurrentObject;
+
    FLUSH_VERTICES(ctx, _NEW_PROGRAM);
-   _mesa_use_program(ctx, program);
+
+   if (obj->Active) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "glUseProgram(transform feedback active)");
+      return;
+   }
+
+   if (program) {
+      shProg = _mesa_lookup_shader_program_err(ctx, program, "glUseProgram");
+      if (!shProg) {
+         return;
+      }
+      if (!shProg->LinkStatus) {
+         _mesa_error(ctx, GL_INVALID_OPERATION,
+                     "glUseProgram(program %u not linked)", program);
+         return;
+      }
+
+      /* debug code */
+      if (ctx->Shader.Flags & GLSL_USE_PROG) {
+         print_shader_info(shProg);
+      }
+   }
+   else {
+      shProg = NULL;
+   }
+
+   _mesa_use_program(ctx, shProg);
 }
 
 

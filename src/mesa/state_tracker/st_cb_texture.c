@@ -1523,6 +1523,9 @@ st_copy_texsubimage(GLcontext *ctx,
    if (texBaseFormat == GL_DEPTH_COMPONENT ||
        texBaseFormat == GL_DEPTH_STENCIL) {
       strb = st_renderbuffer(fb->_DepthBuffer);
+      if (strb->Base.Wrapped) {
+         strb = st_renderbuffer(strb->Base.Wrapped);
+      }
    }
    else {
       /* texBaseFormat == GL_RGB, GL_RGBA, GL_ALPHA, etc */
@@ -1852,8 +1855,9 @@ st_finalize_texture(GLcontext *ctx,
     * will match.
     */
    if (firstImage->pt &&
+       stObj->pt &&
        firstImage->pt != stObj->pt &&
-       firstImage->pt->last_level >= stObj->lastLevel) {
+       firstImage->pt->last_level >= stObj->pt->last_level) {
       pipe_resource_reference(&stObj->pt, firstImage->pt);
       pipe_sampler_view_reference(&stObj->sampler_view, NULL);
    }

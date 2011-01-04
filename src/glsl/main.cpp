@@ -40,8 +40,19 @@
 extern "C" struct gl_shader *
 _mesa_new_shader(GLcontext *ctx, GLuint name, GLenum type);
 
+extern "C" void
+_mesa_reference_shader(struct gl_context *ctx, struct gl_shader **ptr,
+                       struct gl_shader *sh);
+
 /* Copied from shader_api.c for the stand-alone compiler.
  */
+void
+_mesa_reference_shader(struct gl_context *ctx, struct gl_shader **ptr,
+                       struct gl_shader *sh)
+{
+   *ptr = sh;
+}
+
 struct gl_shader *
 _mesa_new_shader(GLcontext *ctx, GLuint name, GLenum type)
 {
@@ -197,26 +208,7 @@ compile_shader(GLcontext *ctx, struct gl_shader *shader)
    if (!state->error && !shader->ir->is_empty()) {
       bool progress;
       do {
-	 progress = false;
-
-	 progress = do_function_inlining(shader->ir) || progress;
-	 progress = do_if_simplification(shader->ir) || progress;
-	 progress = do_copy_propagation(shader->ir) || progress;
-	 progress = do_dead_code_local(shader->ir) || progress;
-	 progress = do_dead_code_unlinked(shader->ir) || progress;
-	 progress = do_tree_grafting(shader->ir) || progress;
-	 progress = do_constant_propagation(shader->ir) || progress;
-	 progress = do_constant_variable_unlinked(shader->ir) || progress;
-	 progress = do_constant_folding(shader->ir) || progress;
-	 progress = do_algebraic(shader->ir) || progress;
-	 progress = do_vec_index_to_swizzle(shader->ir) || progress;
-	 progress = do_vec_index_to_cond_assign(shader->ir) || progress;
-	 progress = do_swizzle_swizzle(shader->ir) || progress;
-
-	 loop_state *ls = analyze_loop_variables(shader->ir);
-	 progress = set_loop_controls(shader->ir, ls) || progress;
-	 progress = unroll_loops(shader->ir, ls, 32) || progress;
-	 delete ls;
+	 progress = do_common_optimization(shader->ir, false, 32);
       } while (progress);
 
       validate_ir_tree(shader->ir);
@@ -319,7 +311,7 @@ main(int argc, char **argv)
 	 printf("Info log for linking:\n%s\n", whole_program->InfoLog);
    }
 
-   for (unsigned i = 0; i < whole_program->_NumLinkedShaders; i++)
+   for (unsigned i = 0; i < MESA_SHADER_TYPES; i++)
       talloc_free(whole_program->_LinkedShaders[i]);
 
    talloc_free(whole_program);

@@ -16,6 +16,7 @@ GLCPP_SOURCES = \
 	glcpp/glcpp.c
 
 C_SOURCES = \
+	strtod.c \
 	$(LIBGLCPP_SOURCES)
 
 CXX_SOURCES = \
@@ -75,8 +76,10 @@ CXX_SOURCES = \
 	loop_analysis.cpp \
 	loop_controls.cpp \
 	loop_unroll.cpp \
+	lower_discard.cpp \
 	lower_noise.cpp \
 	lower_variable_index_to_cond_assign.cpp \
+	opt_discard_simplification.cpp \
 	opt_redundant_jumps.cpp \
 	s_expression.cpp
 

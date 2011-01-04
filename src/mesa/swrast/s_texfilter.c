@@ -1368,6 +1368,7 @@ opt_sample_rgb_2d(GLcontext *ctx,
       rgba[k][RCOMP] = UBYTE_TO_FLOAT(texel[2]);
       rgba[k][GCOMP] = UBYTE_TO_FLOAT(texel[1]);
       rgba[k][BCOMP] = UBYTE_TO_FLOAT(texel[0]);
+      rgba[k][ACOMP] = 1.0F;
    }
 }
 

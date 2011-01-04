@@ -25,6 +25,7 @@
 
 #include "util/u_math.h"
 #include "util/u_memory.h"
+#include "util/u_pack_color.h"
 
 #include "r300_context.h"
 #include "r300_fs.h"
@@ -568,55 +569,93 @@ static void r300_update_rs_block(struct r300_context *r300)
 }
 
 static uint32_t r300_get_border_color(enum pipe_format format,
-                                      const float border[4])
+                                      const float border[4],
+                                      boolean is_r500)
 {
     const struct util_format_description *desc;
-    float border_swizzled[4] = {
-        border[2],
-        border[1],
-        border[0],
-        border[3]
-    };
-    uint32_t r;
+    float border_swizzled[4] = {0};
+    unsigned i;
+    union util_color uc = {0};
 
     desc = util_format_description(format);
 
-    /* We don't use util_pack_format because it does not handle the formats
-     * we want, e.g. R4G4B4A4 is non-existent in Gallium. */
+    /* Do depth formats first. */
+    if (util_format_is_depth_or_stencil(format)) {
+        switch (format) {
+        case PIPE_FORMAT_Z16_UNORM:
+            return util_pack_z(PIPE_FORMAT_Z16_UNORM, border[0]);
+        case PIPE_FORMAT_X8Z24_UNORM:
+        case PIPE_FORMAT_S8_USCALED_Z24_UNORM:
+            if (is_r500) {
+                return util_pack_z(PIPE_FORMAT_X8Z24_UNORM, border[0]);
+            } else {
+                return util_pack_z(PIPE_FORMAT_Z16_UNORM, border[0]) << 16;
+            }
+        default:
+            assert(0);
+            return 0;
+        }
+    }
+
+    /* Apply inverse swizzle of the format. */
+    for (i = 0; i < 4; i++) {
+        switch (desc->swizzle[i]) {
+        case UTIL_FORMAT_SWIZZLE_X:
+            border_swizzled[2] = border[i];
+            break;
+        case UTIL_FORMAT_SWIZZLE_Y:
+            border_swizzled[1] = border[i];
+            break;
+        case UTIL_FORMAT_SWIZZLE_Z:
+            border_swizzled[0] = border[i];
+            break;
+        case UTIL_FORMAT_SWIZZLE_W:
+            border_swizzled[3] = border[i];
+            break;
+        }
+    }
+
+    /* Compressed formats. */
+    if (util_format_is_compressed(format)) {
+        util_pack_color(border_swizzled, PIPE_FORMAT_R8G8B8A8_UNORM, &uc);
+        return uc.ui;
+    }
+
     switch (desc->channel[0].size) {
         case 4:
-            r = ((float_to_ubyte(border_swizzled[0]) & 0xf0) >> 4) |
-                ((float_to_ubyte(border_swizzled[1]) & 0xf0) << 0) |
-                ((float_to_ubyte(border_swizzled[2]) & 0xf0) << 4) |
-                ((float_to_ubyte(border_swizzled[3]) & 0xf0) << 8);
+            util_pack_color(border_swizzled, PIPE_FORMAT_B4G4R4A4_UNORM, &uc);
             break;
 
         case 5:
             if (desc->channel[1].size == 5) {
-                r = ((float_to_ubyte(border_swizzled[0]) & 0xf8) >> 3) |
-                    ((float_to_ubyte(border_swizzled[1]) & 0xf8) << 2) |
-                    ((float_to_ubyte(border_swizzled[2]) & 0xf8) << 7) |
-                    ((float_to_ubyte(border_swizzled[3]) & 0x80) << 8);
+                util_pack_color(border_swizzled, PIPE_FORMAT_B5G5R5A1_UNORM, &uc);
             } else if (desc->channel[1].size == 6) {
-                r = ((float_to_ubyte(border_swizzled[0]) & 0xf8) >> 3) |
-                    ((float_to_ubyte(border_swizzled[1]) & 0xfc) << 3) |
-                    ((float_to_ubyte(border_swizzled[2]) & 0xf8) << 8);
+                util_pack_color(border_swizzled, PIPE_FORMAT_B5G6R5_UNORM, &uc);
             } else {
                 assert(0);
             }
             break;
 
         default:
-            /* I think the fat formats (16, 32) are specified
-             * as the 8-bit ones. I am not sure how compressed formats
-             * work here. */
-            r = ((float_to_ubyte(border_swizzled[0]) & 0xff) << 0) |
-                ((float_to_ubyte(border_swizzled[1]) & 0xff) << 8) |
-                ((float_to_ubyte(border_swizzled[2]) & 0xff) << 16) |
-                ((float_to_ubyte(border_swizzled[3]) & 0xff) << 24);
+        case 8:
+            util_pack_color(border_swizzled, PIPE_FORMAT_B8G8R8A8_UNORM, &uc);
+            break;
+
+        case 10:
+            util_pack_color(border_swizzled, PIPE_FORMAT_B10G10R10A2_UNORM, &uc);
+            break;
+
+        case 16:
+            if (desc->nr_channels <= 2) {
+                border_swizzled[0] = border_swizzled[2];
+                util_pack_color(border_swizzled, PIPE_FORMAT_R16G16_UNORM, &uc);
+            } else {
+                util_pack_color(border_swizzled, PIPE_FORMAT_B8G8R8A8_UNORM, &uc);
+            }
+            break;
     }
 
-    return r;
+    return uc.ui;
 }
 
 static void r300_merge_textures_and_samplers(struct r300_context* r300)
@@ -655,7 +694,8 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
             /* Set the border color. */
             texstate->border_color =
                 r300_get_border_color(view->base.format,
-                                      sampler->state.border_color);
+                                      sampler->state.border_color,
+                                      r300->screen->caps.is_r500);
 
             /* determine min/max levels */
             max_level = MIN3(sampler->max_lod + view->base.first_level,
@@ -701,11 +741,16 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
                 if (sampler->state.compare_mode == PIPE_TEX_COMPARE_NONE) {
                     texstate->format.format1 |=
                         r300_get_swizzle_combined(depth_swizzle,
-                                                  view->swizzle);
+                                                  view->swizzle, FALSE);
                 } else {
                     texstate->format.format1 |=
-                        r300_get_swizzle_combined(depth_swizzle, 0);
+                        r300_get_swizzle_combined(depth_swizzle, 0, FALSE);
                 }
+            }
+
+            if (r300->screen->caps.dxtc_swizzle &&
+                util_format_is_compressed(tex->desc.b.b.format)) {
+                texstate->filter1 |= R400_DXTC_SWIZZLE_ENABLE;
             }
 
             /* to emulate 1D textures through 2D ones correctly */

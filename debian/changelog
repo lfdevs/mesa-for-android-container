@@ -1,3 +1,25 @@
+mesa (7.9+repack-2) experimental; urgency=low
+
+  [ Cyril Brulebois ]
+  * Specify PASV in watch file, and mangle +repack.
+
+  [ Christopher James Halse Rogers ]
+  * debian/control:
+    - Add libudev-dev to build-depends.  This is required for the DRI2 EGL
+      driver to work with a drm display.
+
+  [ Sven Joachim ]
+  * Update for the latest libdrm-nouveau API:
+    - Cherry-pick commit c25fcf5a from Mesa master.
+    - Build-depend on libdrm-dev 2.4.23 or newer.
+  * Use linux-any for linux-libc-dev and libudev-dev build-depends.
+
+  [ Julien Cristau ]
+  * Update from upstream 7.9 branch, commit 0ff45dd.
+  * Refresh patches.
+
+ -- Julien Cristau <jcristau@debian.org>  Tue, 04 Jan 2011 12:46:59 +0100
+
 mesa (7.9+repack-1) experimental; urgency=low
 
   * Repack the upstream tarball to get rid of duplicate files which make dpkg

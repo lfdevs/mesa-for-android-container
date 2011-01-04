@@ -1313,29 +1313,27 @@ static void r300_set_fragment_sampler_views(struct pipe_context* pipe,
     }
 
     for (i = 0; i < count; i++) {
-        if (&state->sampler_views[i]->base != views[i]) {
-            pipe_sampler_view_reference(
-                    (struct pipe_sampler_view**)&state->sampler_views[i],
-                    views[i]);
+        pipe_sampler_view_reference(
+                (struct pipe_sampler_view**)&state->sampler_views[i],
+                views[i]);
 
-            if (!views[i]) {
-                continue;
-            }
-
-            /* A new sampler view (= texture)... */
-            dirty_tex = TRUE;
-
-            /* Set the texrect factor in the fragment shader.
-             * Needed for RECT and NPOT fallback. */
-            texture = r300_texture(views[i]->texture);
-            if (texture->desc.is_npot) {
-                r300->fs_rc_constant_state.dirty = TRUE;
-            }
-
-            state->sampler_views[i]->texcache_region =
-                r300_assign_texture_cache_region(view_index, real_num_views);
-            view_index++;
+        if (!views[i]) {
+            continue;
         }
+
+        /* A new sampler view (= texture)... */
+        dirty_tex = TRUE;
+
+        /* Set the texrect factor in the fragment shader.
+         * Needed for RECT and NPOT fallback. */
+        texture = r300_texture(views[i]->texture);
+        if (texture->desc.is_npot) {
+            r300->fs_rc_constant_state.dirty = TRUE;
+        }
+
+        state->sampler_views[i]->texcache_region =
+                r300_assign_texture_cache_region(view_index, real_num_views);
+        view_index++;
     }
 
     for (i = count; i < tex_units; i++) {
@@ -1363,6 +1361,7 @@ r300_create_sampler_view(struct pipe_context *pipe,
     struct r300_sampler_view *view = CALLOC_STRUCT(r300_sampler_view);
     struct r300_texture *tex = r300_texture(texture);
     boolean is_r500 = r300_screen(pipe->screen)->caps.is_r500;
+    boolean dxtc_swizzle = r300_screen(pipe->screen)->caps.dxtc_swizzle;
 
     if (view) {
         view->base = *templ;
@@ -1379,7 +1378,8 @@ r300_create_sampler_view(struct pipe_context *pipe,
         view->format = tex->tx_format;
         view->format.format1 |= r300_translate_texformat(templ->format,
                                                          view->swizzle,
-                                                         is_r500);
+                                                         is_r500,
+                                                         dxtc_swizzle);
         if (is_r500) {
             view->format.format2 |= r500_tx_format_msb_bit(templ->format);
         }
@@ -1464,6 +1464,15 @@ static void r300_set_vertex_buffers(struct pipe_context* pipe,
     struct pipe_vertex_buffer *vbo;
     unsigned i, max_index = (1 << 24) - 1;
     boolean any_user_buffer = FALSE;
+    struct pipe_vertex_buffer dummy_vb = {0};
+
+    /* There must be at least one vertex buffer set, otherwise it locks up. */
+    if (!count) {
+        dummy_vb.buffer = r300->dummy_vb;
+        dummy_vb.max_index = r300->dummy_vb->width0 / 4;
+        buffers = &dummy_vb;
+        count = 1;
+    }
 
     if (count == r300->vertex_buffer_count &&
         memcmp(r300->vertex_buffer, buffers,
@@ -1499,14 +1508,14 @@ static void r300_set_vertex_buffers(struct pipe_context* pipe,
                 any_user_buffer = TRUE;
             }
 
+            /* The stride of zero means we will be fetching only the first
+             * vertex, so don't care about max_index. */
+            if (!vbo->stride)
+                continue;
+
             if (vbo->max_index == ~0) {
-                /* if no VBO stride then only one vertex value so max index is 1 */
-                /* should think about converting to VS constants like svga does */
-                if (!vbo->stride)
-                    vbo->max_index = 1;
-                else
-                    vbo->max_index =
-                             (vbo->buffer->width0 - vbo->buffer_offset) / vbo->stride;
+                vbo->max_index =
+                        (vbo->buffer->width0 - vbo->buffer_offset) / vbo->stride;
             }
 
             max_index = MIN2(vbo->max_index, max_index);
@@ -1617,6 +1626,14 @@ static void* r300_create_vertex_elements_state(struct pipe_context* pipe,
     struct r300_vertex_element_state *velems;
     unsigned i;
     enum pipe_format *format;
+    struct pipe_vertex_element dummy_attrib = {0};
+
+    /* R300 Programmable Stream Control (PSC) doesn't support 0 vertex elements. */
+    if (!count) {
+        dummy_attrib.src_format = PIPE_FORMAT_R8G8B8A8_UNORM;
+        attribs = &dummy_attrib;
+        count = 1;
+    }
 
     assert(count <= PIPE_MAX_ATTRIBS);
     velems = CALLOC_STRUCT(r300_vertex_element_state);
@@ -1683,7 +1700,8 @@ static void* r300_create_vertex_elements_state(struct pipe_context* pipe,
              * swizzles are already set up.
              * Also compute the vertex size. */
             for (i = 0; i < count; i++) {
-                /* This is OK because we check for aligned strides too. */
+                /* This is OK because we check for aligned strides too
+                 * elsewhere. */
                 velems->hw_format_size[i] =
                     align(util_format_get_blocksize(velems->hw_format[i]), 4);
                 velems->vertex_size_dwords += velems->hw_format_size[i] / 4;

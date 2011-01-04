@@ -117,10 +117,9 @@ brw_link_shader(GLcontext *ctx, struct gl_shader_program *prog)
    if (using_new_fs == -1)
       using_new_fs = getenv("INTEL_NEW_FS") != NULL;
 
-   for (unsigned i = 0; i < prog->_NumLinkedShaders; i++) {
-      struct brw_shader *shader = (struct brw_shader *)prog->_LinkedShaders[i];
-
-      if (using_new_fs && shader->base.Type == GL_FRAGMENT_SHADER) {
+   struct brw_shader *shader =
+      (struct brw_shader *)prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
+   if (shader != NULL && using_new_fs) {
 	 void *mem_ctx = talloc_new(NULL);
 	 bool progress;
 
@@ -148,7 +147,6 @@ brw_link_shader(GLcontext *ctx, struct gl_shader_program *prog)
 
 	 reparent_ir(shader->ir, shader->ir);
 	 talloc_free(mem_ctx);
-      }
    }
 
    if (!_mesa_ir_link_shader(ctx, prog))
@@ -1835,7 +1833,6 @@ brw_wm_fs_emit(struct brw_context *brw, struct brw_wm_compile *c)
    struct brw_compile *p = &c->func;
    struct intel_context *intel = &brw->intel;
    GLcontext *ctx = &intel->ctx;
-   struct brw_shader *shader = NULL;
    struct gl_shader_program *prog = ctx->Shader.CurrentProgram;
 
    if (!prog)
@@ -1844,12 +1841,8 @@ brw_wm_fs_emit(struct brw_context *brw, struct brw_wm_compile *c)
    if (!using_new_fs)
       return GL_FALSE;
 
-   for (unsigned int i = 0; i < prog->_NumLinkedShaders; i++) {
-      if (prog->_LinkedShaders[i]->Type == GL_FRAGMENT_SHADER) {
-	 shader = (struct brw_shader *)prog->_LinkedShaders[i];
-	 break;
-      }
-   }
+   struct brw_shader *shader =
+     (brw_shader *) prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
    if (!shader)
       return GL_FALSE;
 

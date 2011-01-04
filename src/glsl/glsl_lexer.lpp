@@ -22,6 +22,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 #include <ctype.h>
+#include "strtod.h"
 #include "ast.h"
 #include "glsl_parser_extras.h"
 #include "glsl_parser.h"
@@ -243,7 +244,7 @@ layout		{
 \<\<=		return LEFT_ASSIGN;
 >>=		return RIGHT_ASSIGN;
 &=		return AND_ASSIGN;
-^=		return XOR_ASSIGN;
+"^="		return XOR_ASSIGN;
 \|=		return OR_ASSIGN;
 -=		return SUB_ASSIGN;
 
@@ -261,23 +262,23 @@ layout		{
 			}
 
 [0-9]+\.[0-9]+([eE][+-]?[0-9]+)?[fF]?	{
-			    yylval->real = strtod(yytext, NULL);
+			    yylval->real = glsl_strtod(yytext, NULL);
 			    return FLOATCONSTANT;
 			}
 \.[0-9]+([eE][+-]?[0-9]+)?[fF]?		{
-			    yylval->real = strtod(yytext, NULL);
+			    yylval->real = glsl_strtod(yytext, NULL);
 			    return FLOATCONSTANT;
 			}
 [0-9]+\.([eE][+-]?[0-9]+)?[fF]?		{
-			    yylval->real = strtod(yytext, NULL);
+			    yylval->real = glsl_strtod(yytext, NULL);
 			    return FLOATCONSTANT;
 			}
 [0-9]+[eE][+-]?[0-9]+[fF]?		{
-			    yylval->real = strtod(yytext, NULL);
+			    yylval->real = glsl_strtod(yytext, NULL);
 			    return FLOATCONSTANT;
 			}
 [0-9]+[fF]		{
-			    yylval->real = strtod(yytext, NULL);
+			    yylval->real = glsl_strtod(yytext, NULL);
 			    return FLOATCONSTANT;
 			}
 

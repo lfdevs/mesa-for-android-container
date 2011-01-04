@@ -36,7 +36,6 @@ enum jump_strength
    strength_continue,
    strength_break,
    strength_return,
-   strength_discard
 };
 
 struct block_record
@@ -202,8 +201,6 @@ struct ir_lower_jumps_visitor : public ir_control_flow_visitor {
 
    virtual void visit(class ir_discard * ir)
    {
-      truncate_after_instruction(ir);
-      this->block.min_strength = strength_discard;
    }
 
    enum jump_strength get_jump_strength(ir_instruction* ir)
@@ -217,8 +214,6 @@ struct ir_lower_jumps_visitor : public ir_control_flow_visitor {
             return strength_continue;
       } else if(ir->ir_type == ir_type_return)
          return strength_return;
-      else if(ir->ir_type == ir_type_discard)
-         return strength_discard;
       else
          return strength_none;
    }
@@ -252,9 +247,6 @@ struct ir_lower_jumps_visitor : public ir_control_flow_visitor {
             lower = lower_main_return;
          else
             lower = lower_sub_return;
-         break;
-      case strength_discard:
-         lower = false; /* probably nothing needs this lowered */
          break;
       }
       return lower;
@@ -313,9 +305,8 @@ retry: /* we get here if we put code after the if inside a branch */
             /* FINISHME: unify returns with identical expressions */
             else if(jump_strengths[0] == strength_return && this->function.signature->return_type->is_void())
                ir->insert_after(new(ir) ir_return(NULL));
-            /* FINISHME: unify discards */
-            else
-               unify = false;
+	    else
+	       unify = false;
 
             if(unify) {
                jumps[0]->remove();
@@ -490,7 +481,11 @@ lower_continue:
       if(this->loop.may_set_return_flag) {
          assert(this->function.return_flag);
          ir_if* return_if = new(ir) ir_if(new(ir) ir_dereference_variable(this->function.return_flag));
-         return_if->then_instructions.push_tail(new(ir) ir_loop_jump(saved_loop.loop ? ir_loop_jump::jump_break : ir_loop_jump::jump_continue));
+         saved_loop.may_set_return_flag = true;
+         if(saved_loop.loop)
+            return_if->then_instructions.push_tail(new(ir) ir_loop_jump(ir_loop_jump::jump_break));
+         else
+            move_outer_block_inside(ir, &return_if->else_instructions);
          ir->insert_after(return_if);
       }
 

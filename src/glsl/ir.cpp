@@ -177,8 +177,21 @@ ir_assignment::ir_assignment(ir_rvalue *lhs, ir_rvalue *rhs,
 
 
 ir_expression::ir_expression(int op, const struct glsl_type *type,
+			     ir_rvalue *op0)
+{
+   assert(get_num_operands(ir_expression_operation(op)) == 1);
+   this->ir_type = ir_type_expression;
+   this->type = type;
+   this->operation = ir_expression_operation(op);
+   this->operands[0] = op0;
+   this->operands[1] = NULL;
+}
+
+ir_expression::ir_expression(int op, const struct glsl_type *type,
 			     ir_rvalue *op0, ir_rvalue *op1)
 {
+   assert((op1 == NULL) && (get_num_operands(ir_expression_operation(op)) == 1)
+	  || (get_num_operands(ir_expression_operation(op)) == 2));
    this->ir_type = ir_type_expression;
    this->type = type;
    this->operation = ir_expression_operation(op);
@@ -186,81 +199,116 @@ ir_expression::ir_expression(int op, const struct glsl_type *type,
    this->operands[1] = op1;
 }
 
+ir_expression::ir_expression(int op, ir_rvalue *op0)
+{
+   this->ir_type = ir_type_expression;
+
+   this->operation = ir_expression_operation(op);
+   this->operands[0] = op0;
+   this->operands[1] = NULL;
+
+   assert(op <= ir_last_unop);
+
+   switch (this->operation) {
+   case ir_unop_bit_not:
+   case ir_unop_logic_not:
+   case ir_unop_neg:
+   case ir_unop_abs:
+   case ir_unop_sign:
+   case ir_unop_rcp:
+   case ir_unop_rsq:
+   case ir_unop_sqrt:
+   case ir_unop_exp:
+   case ir_unop_log:
+   case ir_unop_exp2:
+   case ir_unop_log2:
+   case ir_unop_trunc:
+   case ir_unop_ceil:
+   case ir_unop_floor:
+   case ir_unop_fract:
+   case ir_unop_cos:
+   case ir_unop_dFdx:
+   case ir_unop_dFdy:
+      this->type = op0->type;
+      break;
+
+   case ir_unop_any:
+      this->type = glsl_type::bool_type;
+      break;
+
+   default:
+      assert(!"not reached: missing automatic type setup for ir_expression");
+      this->type = op0->type;
+      break;
+   }
+}
+
+ir_expression::ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1)
+{
+   this->ir_type = ir_type_expression;
+
+   this->operation = ir_expression_operation(op);
+   this->operands[0] = op0;
+   this->operands[1] = op1;
+
+   assert(op > ir_last_unop);
+
+   switch (this->operation) {
+   case ir_binop_all_equal:
+   case ir_binop_any_nequal:
+      this->type = glsl_type::bool_type;
+      break;
+
+   case ir_binop_add:
+   case ir_binop_sub:
+   case ir_binop_min:
+   case ir_binop_max:
+   case ir_binop_pow:
+   case ir_binop_mul:
+      if (op0->type->is_scalar()) {
+	 this->type = op1->type;
+      } else if (op1->type->is_scalar()) {
+	 this->type = op0->type;
+      } else {
+	 /* FINISHME: matrix types */
+	 assert(!op0->type->is_matrix() && !op1->type->is_matrix());
+	 assert(op0->type == op1->type);
+	 this->type = op0->type;
+      }
+      break;
+
+   case ir_binop_logic_and:
+   case ir_binop_logic_or:
+      if (op0->type->is_scalar()) {
+	 this->type = op1->type;
+      } else if (op1->type->is_scalar()) {
+	 this->type = op0->type;
+      }
+      break;
+
+   case ir_binop_dot:
+      this->type = glsl_type::float_type;
+      break;
+
+   default:
+      assert(!"not reached: missing automatic type setup for ir_expression");
+      this->type = glsl_type::float_type;
+   }
+}
+
 unsigned int
 ir_expression::get_num_operands(ir_expression_operation op)
 {
-/* Update ir_print_visitor.cpp when updating this list. */
-   const int num_operands[] = {
-      1, /* ir_unop_bit_not */
-      1, /* ir_unop_logic_not */
-      1, /* ir_unop_neg */
-      1, /* ir_unop_abs */
-      1, /* ir_unop_sign */
-      1, /* ir_unop_rcp */
-      1, /* ir_unop_rsq */
-      1, /* ir_unop_sqrt */
-      1, /* ir_unop_exp */
-      1, /* ir_unop_log */
-      1, /* ir_unop_exp2 */
-      1, /* ir_unop_log2 */
-      1, /* ir_unop_f2i */
-      1, /* ir_unop_i2f */
-      1, /* ir_unop_f2b */
-      1, /* ir_unop_b2f */
-      1, /* ir_unop_i2b */
-      1, /* ir_unop_b2i */
-      1, /* ir_unop_u2f */
-      1, /* ir_unop_any */
+   assert(op <= ir_last_opcode);
 
-      1, /* ir_unop_trunc */
-      1, /* ir_unop_ceil */
-      1, /* ir_unop_floor */
-      1, /* ir_unop_fract */
+   if (op <= ir_last_unop)
+      return 1;
 
-      1, /* ir_unop_sin */
-      1, /* ir_unop_cos */
+   if (op <= ir_last_binop)
+      return 2;
 
-      1, /* ir_unop_dFdx */
-      1, /* ir_unop_dFdy */
-
-      1, /* ir_unop_noise */
-
-      2, /* ir_binop_add */
-      2, /* ir_binop_sub */
-      2, /* ir_binop_mul */
-      2, /* ir_binop_div */
-      2, /* ir_binop_mod */
-
-      2, /* ir_binop_less */
-      2, /* ir_binop_greater */
-      2, /* ir_binop_lequal */
-      2, /* ir_binop_gequal */
-      2, /* ir_binop_equal */
-      2, /* ir_binop_nequal */
-      2, /* ir_binop_all_equal */
-      2, /* ir_binop_any_nequal */
-
-      2, /* ir_binop_lshift */
-      2, /* ir_binop_rshift */
-      2, /* ir_binop_bit_and */
-      2, /* ir_binop_bit_xor */
-      2, /* ir_binop_bit_or */
-
-      2, /* ir_binop_logic_and */
-      2, /* ir_binop_logic_xor */
-      2, /* ir_binop_logic_or */
-
-      2, /* ir_binop_dot */
-      2, /* ir_binop_cross */
-      2, /* ir_binop_min */
-      2, /* ir_binop_max */
-
-      2, /* ir_binop_pow */
-   };
-
-   assert(sizeof(num_operands) / sizeof(num_operands[0]) == ir_binop_pow + 1);
-
-   return num_operands[op];
+   assert(false);
+   return 0;
 }
 
 static const char *const operator_strs[] = {
@@ -687,7 +735,7 @@ ir_constant::has_value(const ir_constant *c) const
 
    if (this->type->is_array()) {
       for (unsigned i = 0; i < this->type->length; i++) {
-	 if (this->array_elements[i]->has_value(c->array_elements[i]))
+	 if (!this->array_elements[i]->has_value(c->array_elements[i]))
 	    return false;
       }
       return true;

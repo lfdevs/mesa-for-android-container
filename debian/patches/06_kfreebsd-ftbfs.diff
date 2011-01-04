@@ -12,7 +12,7 @@ Index: mesa/configure.ac
 ===================================================================
 --- mesa.orig/configure.ac
 +++ mesa/configure.ac
-@@ -777,7 +777,7 @@
+@@ -851,7 +851,7 @@ if test "$mesa_driver" = dri; then
              ;;
          esac
          ;;

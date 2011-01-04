@@ -615,6 +615,94 @@ ast_node::hir(exec_list *instructions,
    return NULL;
 }
 
+static void
+mark_whole_array_access(ir_rvalue *access)
+{
+   ir_dereference_variable *deref = access->as_dereference_variable();
+
+   if (deref) {
+      deref->var->max_array_access = deref->type->length - 1;
+   }
+}
+
+static ir_rvalue *
+do_comparison(void *mem_ctx, int operation, ir_rvalue *op0, ir_rvalue *op1)
+{
+   int join_op;
+   ir_rvalue *cmp = NULL;
+
+   if (operation == ir_binop_all_equal)
+      join_op = ir_binop_logic_and;
+   else
+      join_op = ir_binop_logic_or;
+
+   switch (op0->type->base_type) {
+   case GLSL_TYPE_FLOAT:
+   case GLSL_TYPE_UINT:
+   case GLSL_TYPE_INT:
+   case GLSL_TYPE_BOOL:
+      return new(mem_ctx) ir_expression(operation, op0, op1);
+
+   case GLSL_TYPE_ARRAY: {
+      for (unsigned int i = 0; i < op0->type->length; i++) {
+	 ir_rvalue *e0, *e1, *result;
+
+	 e0 = new(mem_ctx) ir_dereference_array(op0->clone(mem_ctx, NULL),
+						new(mem_ctx) ir_constant(i));
+	 e1 = new(mem_ctx) ir_dereference_array(op1->clone(mem_ctx, NULL),
+						new(mem_ctx) ir_constant(i));
+	 result = do_comparison(mem_ctx, operation, e0, e1);
+
+	 if (cmp) {
+	    cmp = new(mem_ctx) ir_expression(join_op, cmp, result);
+	 } else {
+	    cmp = result;
+	 }
+      }
+
+      mark_whole_array_access(op0);
+      mark_whole_array_access(op1);
+      break;
+   }
+
+   case GLSL_TYPE_STRUCT: {
+      for (unsigned int i = 0; i < op0->type->length; i++) {
+	 ir_rvalue *e0, *e1, *result;
+	 const char *field_name = op0->type->fields.structure[i].name;
+
+	 e0 = new(mem_ctx) ir_dereference_record(op0->clone(mem_ctx, NULL),
+						 field_name);
+	 e1 = new(mem_ctx) ir_dereference_record(op1->clone(mem_ctx, NULL),
+						 field_name);
+	 result = do_comparison(mem_ctx, operation, e0, e1);
+
+	 if (cmp) {
+	    cmp = new(mem_ctx) ir_expression(join_op, cmp, result);
+	 } else {
+	    cmp = result;
+	 }
+      }
+      break;
+   }
+
+   case GLSL_TYPE_ERROR:
+   case GLSL_TYPE_VOID:
+   case GLSL_TYPE_SAMPLER:
+      /* I assume a comparison of a struct containing a sampler just
+       * ignores the sampler present in the type.
+       */
+      break;
+
+   default:
+      assert(!"Should not get here.");
+      break;
+   }
+
+   if (cmp == NULL)
+      cmp = new(mem_ctx) ir_constant(true);
+
+   return cmp;
+}
 
 ir_rvalue *
 ast_expression::hir(exec_list *instructions,
@@ -800,11 +888,10 @@ ast_expression::hir(exec_list *instructions,
 	 error_emitted = true;
       }
 
-      result = new(ctx) ir_expression(operations[this->oper], glsl_type::bool_type,
-				      op[0], op[1]);
+      result = do_comparison(ctx, operations[this->oper], op[0], op[1]);
       type = glsl_type::bool_type;
 
-      assert(result->type == glsl_type::bool_type);
+      assert(error_emitted || (result->type == glsl_type::bool_type));
       break;
 
    case ast_bit_and:
@@ -1954,10 +2041,37 @@ ast_declarator_list::hir(exec_list *instructions,
 
 	    /* Never emit code to initialize a uniform.
 	     */
-	    if (!this->type->qualifier.uniform)
+	    const glsl_type *initializer_type;
+	    if (!this->type->qualifier.uniform) {
 	       result = do_assignment(&initializer_instructions, state,
 				      lhs, rhs,
 				      this->get_location());
+	       initializer_type = result->type;
+	    } else
+	       initializer_type = rhs->type;
+
+	    /* If the declared variable is an unsized array, it must inherrit
+	     * its full type from the initializer.  A declaration such as
+	     *
+	     *     uniform float a[] = float[](1.0, 2.0, 3.0, 3.0);
+	     *
+	     * becomes
+	     *
+	     *     uniform float a[4] = float[](1.0, 2.0, 3.0, 3.0);
+	     *
+	     * The assignment generated in the if-statement (below) will also
+	     * automatically handle this case for non-uniforms.
+	     *
+	     * If the declared variable is not an array, the types must
+	     * already match exactly.  As a result, the type assignment
+	     * here can be done unconditionally.  For non-uniforms the call
+	     * to do_assignment can change the type of the initializer (via
+	     * the implicit conversion rules).  For uniforms the initializer
+	     * must be a constant expression, and the type of that expression
+	     * was validated above.
+	     */
+	    var->type = initializer_type;
+
 	    var->read_only = temp;
 	 }
       }
@@ -2021,7 +2135,7 @@ ast_declarator_list::hir(exec_list *instructions,
 	    earlier->type = var->type;
 	    delete var;
 	    var = NULL;
-	 } else if (state->extensions->ARB_fragment_coord_conventions
+	 } else if (state->ARB_fragment_coord_conventions_enable
 		    && strcmp(var->name, "gl_FragCoord") == 0
 		    && earlier->type == var->type
 		    && earlier->mode == var->mode) {
@@ -2447,8 +2561,7 @@ ast_jump_statement::hir(exec_list *instructions,
 			     state->current_function->function_name());
 	 }
 
-	 ir_expression *const ret = (ir_expression *)
-	    opt_return_value->hir(instructions, state);
+	 ir_rvalue *const ret = opt_return_value->hir(instructions, state);
 	 assert(ret != NULL);
 
 	 /* Implicit conversions are not allowed for return values. */

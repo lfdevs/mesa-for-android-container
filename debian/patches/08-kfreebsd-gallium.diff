@@ -15,7 +15,7 @@ Index: mesa/src/gallium/include/pipe/p_config.h
 ===================================================================
 --- mesa.orig/src/gallium/include/pipe/p_config.h
 +++ mesa/src/gallium/include/pipe/p_config.h
-@@ -128,7 +128,7 @@
+@@ -133,7 +133,7 @@
  #define PIPE_OS_UNIX
  #endif
  

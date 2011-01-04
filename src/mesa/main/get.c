@@ -288,7 +288,7 @@ EXTRA_EXT(ARB_shader_objects);
 EXTRA_EXT(EXT_provoking_vertex);
 EXTRA_EXT(ARB_fragment_shader);
 EXTRA_EXT(ARB_fragment_program);
-EXTRA_EXT(ARB_framebuffer_object);
+EXTRA_EXT2(ARB_framebuffer_object, EXT_framebuffer_multisample);
 EXTRA_EXT(EXT_framebuffer_object);
 EXTRA_EXT(APPLE_vertex_array_object);
 EXTRA_EXT(ARB_seamless_cube_map);
@@ -305,6 +305,7 @@ EXTRA_EXT2(ARB_vertex_program, NV_vertex_program);
 EXTRA_EXT2(ARB_vertex_program, ARB_fragment_program);
 EXTRA_EXT(ARB_vertex_buffer_object);
 EXTRA_EXT(ARB_geometry_shader4);
+EXTRA_EXT(ARB_copy_buffer);
 
 static const int
 extra_ARB_vertex_program_ARB_fragment_program_NV_vertex_program[] = {
@@ -453,6 +454,10 @@ static const struct value_desc values[] = {
    /* GL_WEIGHT_ARRAY_BUFFER_BINDING_ARB - not supported */
    { GL_ELEMENT_ARRAY_BUFFER_BINDING_ARB, LOC_CUSTOM, TYPE_INT, 0,
      extra_ARB_vertex_buffer_object },
+
+   /* GL_ARB_copy_buffer */
+   { GL_COPY_READ_BUFFER, LOC_CUSTOM, TYPE_INT, 0, extra_ARB_copy_buffer },
+   { GL_COPY_WRITE_BUFFER, LOC_CUSTOM, TYPE_INT, 0, extra_ARB_copy_buffer },
 
    /* GL_OES_read_format */
    { GL_IMPLEMENTATION_COLOR_READ_TYPE_OES, LOC_CUSTOM, TYPE_INT, 0,
@@ -685,12 +690,9 @@ static const struct value_desc values[] = {
 #if FEATURE_ES2
    /* Enums unique to OpenGL ES 2.0 */
    { 0, 0, TYPE_API_MASK, API_OPENGLES2_BIT, NO_EXTRA },
-   { GL_MAX_FRAGMENT_UNIFORM_VECTORS, LOC_CUSTOM, TYPE_INT,
-     offsetof(GLcontext, Const.FragmentProgram.MaxUniformComponents), NO_EXTRA },
-   { GL_MAX_VARYING_VECTORS, LOC_CUSTOM, TYPE_INT,
-     offsetof(GLcontext, Const.MaxVarying), NO_EXTRA },
-   { GL_MAX_VERTEX_UNIFORM_VECTORS, LOC_CUSTOM, TYPE_INT,
-     offsetof(GLcontext, Const.VertexProgram.MaxUniformComponents), NO_EXTRA },
+   { GL_MAX_FRAGMENT_UNIFORM_VECTORS, LOC_CUSTOM, TYPE_INT, 0, NO_EXTRA },
+   { GL_MAX_VARYING_VECTORS, CONTEXT_INT(Const.MaxVarying), NO_EXTRA },
+   { GL_MAX_VERTEX_UNIFORM_VECTORS, LOC_CUSTOM, TYPE_INT, 0, NO_EXTRA },
    { GL_SHADER_COMPILER, CONST(1), NO_EXTRA },
    /* OES_get_program_binary */
    { GL_NUM_SHADER_BINARY_FORMATS, CONST(0), NO_EXTRA },
@@ -1163,6 +1165,14 @@ static const struct value_desc values[] = {
      extra_valid_draw_buffer },
    { GL_DRAW_BUFFER3_ARB, BUFFER_ENUM(ColorDrawBuffer[3]),
      extra_valid_draw_buffer },
+   { GL_DRAW_BUFFER4_ARB, BUFFER_ENUM(ColorDrawBuffer[4]),
+     extra_valid_draw_buffer },
+   { GL_DRAW_BUFFER5_ARB, BUFFER_ENUM(ColorDrawBuffer[5]),
+     extra_valid_draw_buffer },
+   { GL_DRAW_BUFFER6_ARB, BUFFER_ENUM(ColorDrawBuffer[6]),
+     extra_valid_draw_buffer },
+   { GL_DRAW_BUFFER7_ARB, BUFFER_ENUM(ColorDrawBuffer[7]),
+     extra_valid_draw_buffer },
 
    /* GL_ATI_fragment_shader */
    { GL_NUM_FRAGMENT_REGISTERS_ATI, CONST(6), extra_ATI_fragment_shader },
@@ -1193,7 +1203,7 @@ static const struct value_desc values[] = {
 
    /* GL_ARB_framebuffer_object */
    { GL_MAX_SAMPLES, CONTEXT_INT(Const.MaxSamples),
-     extra_ARB_framebuffer_object },
+     extra_ARB_framebuffer_object_EXT_framebuffer_multisample },
 
    /* GL_APPLE_vertex_array_object */
    { GL_VERTEX_ARRAY_BINDING_APPLE, ARRAY_INT(Name),
@@ -1600,6 +1610,14 @@ find_custom_value(GLcontext *ctx, const struct value_desc *d, union value *v)
       v->value_int = ctx->Array.ElementArrayBufferObj->Name;
       break;
 
+   /* ARB_copy_buffer */
+   case GL_COPY_READ_BUFFER:
+      v->value_int = ctx->CopyReadBuffer->Name;
+      break;
+   case GL_COPY_WRITE_BUFFER:
+      v->value_int = ctx->CopyWriteBuffer->Name;
+      break;
+
    case GL_FRAGMENT_PROGRAM_BINDING_NV:
       v->value_int = 
 	 ctx->FragmentProgram.Current ? ctx->FragmentProgram.Current->Base.Id : 0;
@@ -1639,6 +1657,14 @@ find_custom_value(GLcontext *ctx, const struct value_desc *d, union value *v)
       break;
    case GL_POINT_SIZE_ARRAY_BUFFER_BINDING_OES:
       v->value_int = ctx->Array.ArrayObj->PointSize.BufferObj->Name;
+      break;
+
+   case GL_MAX_VERTEX_UNIFORM_VECTORS:
+      v->value_int = ctx->Const.VertexProgram.MaxUniformComponents / 4;
+      break;
+
+   case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
+      v->value_int = ctx->Const.FragmentProgram.MaxUniformComponents / 4;
       break;
    }   
 }
@@ -1769,16 +1795,18 @@ find_value(const char *func, GLenum pname, void **p, union value *v)
    hash = (pname * prime_factor);
    while (1) {
       d = &values[table[hash & mask]];
-      if (likely(d->pname == pname))
-	 break;
 
       /* If the enum isn't valid, the hash walk ends with index 0,
        * which is the API mask entry at the beginning of values[]. */
-      if (d->type == TYPE_API_MASK) {
+      if (unlikely(d->type == TYPE_API_MASK)) {
 	 _mesa_error(ctx, GL_INVALID_ENUM, "%s(pname=%s)", func,
                      _mesa_lookup_enum_by_nr(pname));
 	 return &error_value;
       }
+
+      if (likely(d->pname == pname))
+	 break;
+
       hash += prime_step;
    }
 

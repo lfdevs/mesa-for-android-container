@@ -1109,7 +1109,7 @@ case 4:
 /* rule 4 can match eol */
 YY_RULE_SETUP
 #line 85 "glcpp/glcpp-lex.l"
-{ yylineno++; yycolumn = 0; }
+{ yylineno++; yycolumn = 0; return NEWLINE; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
@@ -1120,7 +1120,7 @@ case 6:
 /* rule 6 can match eol */
 YY_RULE_SETUP
 #line 87 "glcpp/glcpp-lex.l"
-{ yylineno++; yycolumn = 0; }
+{ yylineno++; yycolumn = 0; return NEWLINE; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP

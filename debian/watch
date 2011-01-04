@@ -1,3 +1,4 @@
+#git=git://anongit.freedesktop.org/mesa/mesa
 version=3
-opts="uversionmangle=s/-rc/~rc/" \
+opts="uversionmangle=s/-rc/~rc/,dversionmangle=s/\+repack//,pasv" \
 ftp://freedesktop.org/pub/mesa/([\d\.]*)/ MesaLib-(.*)\.tar\.gz

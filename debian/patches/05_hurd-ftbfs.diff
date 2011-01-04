@@ -9,7 +9,7 @@ Index: mesa/configure.ac
 ===================================================================
 --- mesa.orig/configure.ac
 +++ mesa/configure.ac
-@@ -585,6 +585,13 @@
+@@ -591,6 +591,13 @@ else
      enable_xcb=no
  fi
  
@@ -23,7 +23,7 @@ Index: mesa/configure.ac
  dnl
  dnl libGL configuration per driver
  dnl
-@@ -618,12 +625,14 @@
+@@ -624,12 +631,14 @@ dri)
          AC_MSG_ERROR([Can't use static libraries for DRI drivers])
      fi
  
@@ -44,7 +44,7 @@ Index: mesa/configure.ac
  
      # find the DRI deps for libGL
      if test "$x11_pkgconfig" = yes; then
-@@ -697,12 +706,6 @@
+@@ -726,12 +735,6 @@ AC_ARG_WITH([dri-searchpath],
      [DRI_DRIVER_SEARCH_DIR="$withval"],
      [DRI_DRIVER_SEARCH_DIR='${DRI_DRIVER_INSTALL_DIR}'])
  AC_SUBST([DRI_DRIVER_SEARCH_DIR])
