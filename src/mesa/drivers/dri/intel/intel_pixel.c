@@ -55,7 +55,7 @@ effective_func(GLenum func, GLboolean src_alpha_is_one)
  * glDraw/CopyPixels.
  */
 GLboolean
-intel_check_blit_fragment_ops(GLcontext * ctx, GLboolean src_alpha_is_one)
+intel_check_blit_fragment_ops(struct gl_context * ctx, GLboolean src_alpha_is_one)
 {
    if (ctx->NewState)
       _mesa_update_state(ctx);
@@ -147,10 +147,9 @@ intel_check_blit_format(struct intel_region * region,
       return GL_TRUE;
    }
 
-   if (INTEL_DEBUG & DEBUG_PIXEL)
-      fprintf(stderr, "%s: bad format for blit (cpp %d, type %s format %s)\n",
-              __FUNCTION__, region->cpp,
-              _mesa_lookup_enum_by_nr(type), _mesa_lookup_enum_by_nr(format));
+   DBG("%s: bad format for blit (cpp %d, type %s format %s)\n",
+       __FUNCTION__, region->cpp,
+       _mesa_lookup_enum_by_nr(type), _mesa_lookup_enum_by_nr(format));
 
    return GL_FALSE;
 }

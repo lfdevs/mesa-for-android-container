@@ -193,7 +193,7 @@ static void r300_swtcl_vertex_psc(struct r300_context *r300)
         (R300_LAST_VEC << (i & 1 ? 16 : 0));
 
     vstream->count = (i >> 1) + 1;
-    r300->vertex_stream_state.dirty = TRUE;
+    r300_mark_atom_dirty(r300, &r300->vertex_stream_state);
     r300->vertex_stream_state.size = (1 + vstream->count) * 2;
 }
 
@@ -325,6 +325,7 @@ static void r300_update_rs_block(struct r300_context *r300)
     boolean any_bcolor_used = vs_outputs->bcolor[0] != ATTR_UNUSED ||
                               vs_outputs->bcolor[1] != ATTR_UNUSED;
     int *stream_loc_notcl = r300->stream_loc_notcl;
+    uint32_t stuffing_enable = 0;
 
     if (r300->screen->caps.is_r500) {
         rX00_rs_col       = r500_rs_col;
@@ -433,11 +434,17 @@ static void r300_update_rs_block(struct r300_context *r300)
         fp_offset++;
         col_count++;
         DBG(r300, DBG_RS, "r300: Rasterized FACE written to FS.\n");
+    } else if (fs_inputs->face != ATTR_UNUSED) {
+        fprintf(stderr, "r300: ERROR: FS input FACE unassigned.\n");
     }
 
     /* Rasterize texture coordinates. */
     for (i = 0; i < ATTR_GENERIC_COUNT && tex_count < 8; i++) {
-	bool sprite_coord = !!(r300->sprite_coord_enable & (1 << i));
+	bool sprite_coord = false;
+
+	if (fs_inputs->generic[i] != ATTR_UNUSED) {
+	    sprite_coord = !!(r300->sprite_coord_enable & (1 << i));
+	}
 
         if (vs_outputs->generic[i] != ATTR_UNUSED || sprite_coord) {
             if (!sprite_coord) {
@@ -445,7 +452,9 @@ static void r300_update_rs_block(struct r300_context *r300)
                 rs.vap_vsm_vtx_assm |= (R300_INPUT_CNTL_TC0 << tex_count);
                 rs.vap_out_vtx_fmt[1] |= (4 << (3 * tex_count));
                 stream_loc_notcl[loc++] = 6 + tex_count;
-            }
+            } else
+                stuffing_enable |=
+                    R300_GB_TEX_ST << (R300_GB_TEX0_SOURCE_SHIFT + (tex_count*2));
 
             /* Rasterize it. */
             rX00_rs_tex(&rs, tex_count, tex_ptr,
@@ -457,8 +466,8 @@ static void r300_update_rs_block(struct r300_context *r300)
                 fp_offset++;
 
                 DBG(r300, DBG_RS,
-                    "r300: Rasterized generic %i written to FS%s.\n",
-                    i, sprite_coord ? " (sprite coord)" : "");
+                    "r300: Rasterized generic %i written to FS%s in texcoord %d.\n",
+                    i, sprite_coord ? " (sprite coord)" : "", tex_count);
             } else {
                 DBG(r300, DBG_RS,
                     "r300: Rasterized generic %i unused%s.\n",
@@ -478,12 +487,10 @@ static void r300_update_rs_block(struct r300_context *r300)
         }
     }
 
-    if (DBG_ON(r300, DBG_RS)) {
-        for (; i < ATTR_GENERIC_COUNT; i++) {
-            if (fs_inputs->generic[i] != ATTR_UNUSED) {
-                DBG(r300, DBG_RS,
-                    "r300: FS input generic %i unassigned.\n", i);
-            }
+    for (; i < ATTR_GENERIC_COUNT; i++) {
+        if (fs_inputs->generic[i] != ATTR_UNUSED) {
+            fprintf(stderr, "r300: ERROR: FS input generic %i unassigned, "
+                    "not enough hardware slots.\n", i);
         }
     }
 
@@ -514,7 +521,12 @@ static void r300_update_rs_block(struct r300_context *r300)
         if (fs_inputs->fog != ATTR_UNUSED) {
             fp_offset++;
 
-            DBG(r300, DBG_RS, "r300: FS input fog unassigned.\n");
+            if (tex_count < 8) {
+                DBG(r300, DBG_RS, "r300: FS input fog unassigned.\n");
+            } else {
+                fprintf(stderr, "r300: ERROR: FS input fog unassigned, "
+                        "not enough hardware slots.\n");
+            }
         }
     }
 
@@ -537,6 +549,11 @@ static void r300_update_rs_block(struct r300_context *r300)
         fp_offset++;
         tex_count++;
         tex_ptr += 4;
+    } else {
+        if (fs_inputs->wpos != ATTR_UNUSED && tex_count >= 8) {
+            fprintf(stderr, "r300: ERROR: FS input WPOS unassigned, "
+                    "not enough hardware slots.\n");
+        }
     }
 
     /* Invalidate the rest of the no-TCL (GA) stream locations. */
@@ -561,10 +578,16 @@ static void r300_update_rs_block(struct r300_context *r300)
     count = MAX3(col_count, tex_count, 1);
     rs.inst_count = count - 1;
 
+    /* set the GB enable flags */
+    if (r300->sprite_coord_enable)
+	stuffing_enable |= R300_GB_POINT_STUFF_ENABLE;
+
+    rs.gb_enable = stuffing_enable;
+
     /* Now, after all that, see if we actually need to update the state. */
     if (memcmp(r300->rs_block_state.state, &rs, sizeof(struct r300_rs_block))) {
         memcpy(r300->rs_block_state.state, &rs, sizeof(struct r300_rs_block));
-        r300->rs_block_state.size = 11 + count*2;
+        r300->rs_block_state.size = 13 + count*2;
     }
 }
 
@@ -698,9 +721,9 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
                                       r300->screen->caps.is_r500);
 
             /* determine min/max levels */
-            max_level = MIN3(sampler->max_lod + view->base.first_level,
-                             tex->desc.b.b.last_level, view->base.last_level);
-            min_level = MIN2(sampler->min_lod + view->base.first_level,
+            max_level = MIN3(sampler->max_lod + view->base.u.tex.first_level,
+                             tex->desc.b.b.last_level, view->base.u.tex.last_level);
+            min_level = MIN2(sampler->min_lod + view->base.u.tex.first_level,
                              max_level);
 
             if (tex->desc.is_npot && min_level > 0) {
@@ -864,9 +887,8 @@ static void r300_flush_depth_textures(struct r300_context *r300)
             for (level = 0; level <= tex->last_level; level++)
                 if (r300_texture(tex)->zmask_in_use[level]) {
                     /* We don't handle 3D textures and cubemaps yet. */
-                    r300_flush_depth_stencil(&r300->context, tex,
-                                             u_subresource(0, level), 0);
-                }
+                    r300_flush_depth_stencil(&r300->context, tex, level, 0);
+                 }
         }
 }
 

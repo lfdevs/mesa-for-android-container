@@ -94,6 +94,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define need_GL_EXT_stencil_two_side
 #define need_GL_ATI_separate_stencil
 #define need_GL_NV_vertex_program
+#define need_GL_OES_EGL_image
 
 #include "main/remap_helper.h"
 
@@ -146,9 +147,11 @@ static const struct dri_extension card_extensions[] = {
   {"GL_MESAX_texture_float",		NULL},
   {"GL_NV_blend_square",		NULL},
   {"GL_NV_vertex_program",		GL_NV_vertex_program_functions},
-  {"GL_SGIS_generate_mipmap",		NULL},
   {"GL_ARB_pixel_buffer_object",        NULL},
   {"GL_ARB_draw_elements_base_vertex",	GL_ARB_draw_elements_base_vertex_functions },
+#if FEATURE_OES_EGL_image
+  {"GL_OES_EGL_image",			GL_OES_EGL_image_functions},
+#endif
   {NULL,				NULL}
   /* *INDENT-ON* */
 };
@@ -209,7 +212,7 @@ static void r600_vtbl_pre_emit_atoms(radeonContextPtr radeon)
 	r700Start3D((context_t *)radeon);
 }
 
-static void r600_fallback(GLcontext *ctx, GLuint bit, GLboolean mode)
+static void r600_fallback(struct gl_context *ctx, GLuint bit, GLboolean mode)
 {
 	context_t *context = R700_CONTEXT(ctx);
 	if (mode)
@@ -250,13 +253,13 @@ static void r600_init_vtbl(radeonContextPtr radeon)
 	radeon->vtbl.is_format_renderable = r600IsFormatRenderable;
 }
 
-static void r600InitConstValues(GLcontext *ctx, radeonScreenPtr screen)
+static void r600InitConstValues(struct gl_context *ctx, radeonScreenPtr screen)
 {
     context_t         *context = R700_CONTEXT(ctx);
     R700_CHIP_CONTEXT *r700    = (R700_CHIP_CONTEXT*)(&context->hw);
 
     if(  (context->radeon.radeonScreen->chip_family >= CHIP_FAMILY_CEDAR)
-       &&(context->radeon.radeonScreen->chip_family <= CHIP_FAMILY_HEMLOCK) )
+       &&(context->radeon.radeonScreen->chip_family <= CHIP_FAMILY_CAICOS) )
     {
         r700->bShaderUseMemConstant = GL_TRUE;
     }
@@ -282,8 +285,13 @@ static void r600InitConstValues(GLcontext *ctx, radeonScreenPtr screen)
 	ctx->Const.MaxTextureMaxAnisotropy = 16.0;
 	ctx->Const.MaxTextureLodBias = 16.0;
 
-	ctx->Const.MaxTextureLevels = 13; /* hw support 14 */
-	ctx->Const.MaxTextureRectSize = 4096; /* hw support 8192 */
+	if (screen->chip_family >= CHIP_FAMILY_CEDAR) {
+		ctx->Const.MaxTextureLevels = 15;
+		ctx->Const.MaxTextureRectSize = 16384;
+	} else {
+		ctx->Const.MaxTextureLevels = 14;
+		ctx->Const.MaxTextureRectSize = 8192;
+	}
 
 	ctx->Const.MinPointSize   = 0x0001 / 8.0;
 	ctx->Const.MinPointSizeAA = 0x0001 / 8.0;
@@ -336,7 +344,7 @@ static void r600ParseOptions(context_t *r600, radeonScreenPtr screen)
 
 }
 
-static void r600InitGLExtensions(GLcontext *ctx)
+static void r600InitGLExtensions(struct gl_context *ctx)
 {
 	context_t *r600 = R700_CONTEXT(ctx);
 #ifdef R600_ENABLE_GLSL_TEST
@@ -381,7 +389,7 @@ static void r600InitGLExtensions(GLcontext *ctx)
 /* Create the device specific rendering context.
  */
 GLboolean r600CreateContext(gl_api api,
-			    const __GLcontextModes * glVisual,
+			    const struct gl_config * glVisual,
 			    __DRIcontext * driContextPriv,
 			    void *sharedContextPrivate)
 {
@@ -389,7 +397,7 @@ GLboolean r600CreateContext(gl_api api,
 	radeonScreenPtr screen = (radeonScreenPtr) (sPriv->private);
 	struct dd_function_table functions;
 	context_t *r600;
-	GLcontext *ctx;
+	struct gl_context *ctx;
 
 	assert(glVisual);
 	assert(driContextPriv);

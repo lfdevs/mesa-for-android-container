@@ -30,7 +30,6 @@
 #include "indirect.h"
 #include "glxclient.h"
 #include "indirect_size.h"
-#include "glapidispatch.h"
 #include "glapi.h"
 #include "glthread.h"
 #include <GL/glxproto.h>
@@ -5200,7 +5199,7 @@ glDeleteTexturesEXT(GLsizei n, const GLuint * textures)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_DeleteTextures(GET_DISPATCH(), (n, textures));
+        GET_DISPATCH()->DeleteTextures(n, textures);
     } else
 #endif
     {
@@ -5271,7 +5270,7 @@ glGenTexturesEXT(GLsizei n, GLuint * textures)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GenTextures(GET_DISPATCH(), (n, textures));
+        GET_DISPATCH()->GenTextures(n, textures);
     } else
 #endif
     {
@@ -5336,7 +5335,7 @@ glIsTextureEXT(GLuint texture)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        return CALL_IsTexture(GET_DISPATCH(), (texture));
+        return GET_DISPATCH()->IsTexture(texture);
     } else
 #endif
     {
@@ -5652,7 +5651,7 @@ glGetColorTableEXT(GLenum target, GLenum format, GLenum type, GLvoid * table)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetColorTable(GET_DISPATCH(), (target, format, type, table));
+        GET_DISPATCH()->GetColorTable(target, format, type, table);
     } else
 #endif
     {
@@ -5728,8 +5727,7 @@ glGetColorTableParameterfvEXT(GLenum target, GLenum pname, GLfloat * params)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetColorTableParameterfv(GET_DISPATCH(),
-                                      (target, pname, params));
+        GET_DISPATCH()->GetColorTableParameterfv(target, pname, params);
     } else
 #endif
     {
@@ -5801,8 +5799,7 @@ glGetColorTableParameterivEXT(GLenum target, GLenum pname, GLint * params)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetColorTableParameteriv(GET_DISPATCH(),
-                                      (target, pname, params));
+        GET_DISPATCH()->GetColorTableParameteriv(target, pname, params);
     } else
 #endif
     {
@@ -6127,8 +6124,7 @@ gl_dispatch_stub_356(GLenum target, GLenum format, GLenum type,
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetConvolutionFilter(GET_DISPATCH(),
-                                  (target, format, type, image));
+        GET_DISPATCH()->GetConvolutionFilter(target, format, type, image);
     } else
 #endif
     {
@@ -6205,8 +6201,7 @@ gl_dispatch_stub_357(GLenum target, GLenum pname, GLfloat * params)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetConvolutionParameterfv(GET_DISPATCH(),
-                                       (target, pname, params));
+        GET_DISPATCH()->GetConvolutionParameterfv(target, pname, params);
     } else
 #endif
     {
@@ -6278,8 +6273,7 @@ gl_dispatch_stub_358(GLenum target, GLenum pname, GLint * params)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetConvolutionParameteriv(GET_DISPATCH(),
-                                       (target, pname, params));
+        GET_DISPATCH()->GetConvolutionParameteriv(target, pname, params);
     } else
 #endif
     {
@@ -6358,8 +6352,7 @@ gl_dispatch_stub_361(GLenum target, GLboolean reset, GLenum format,
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetHistogram(GET_DISPATCH(),
-                          (target, reset, format, type, values));
+        GET_DISPATCH()->GetHistogram(target, reset, format, type, values);
     } else
 #endif
     {
@@ -6435,7 +6428,7 @@ gl_dispatch_stub_362(GLenum target, GLenum pname, GLfloat * params)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetHistogramParameterfv(GET_DISPATCH(), (target, pname, params));
+        GET_DISPATCH()->GetHistogramParameterfv(target, pname, params);
     } else
 #endif
     {
@@ -6506,7 +6499,7 @@ gl_dispatch_stub_363(GLenum target, GLenum pname, GLint * params)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetHistogramParameteriv(GET_DISPATCH(), (target, pname, params));
+        GET_DISPATCH()->GetHistogramParameteriv(target, pname, params);
     } else
 #endif
     {
@@ -6581,7 +6574,7 @@ gl_dispatch_stub_364(GLenum target, GLboolean reset, GLenum format,
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetMinmax(GET_DISPATCH(), (target, reset, format, type, values));
+        GET_DISPATCH()->GetMinmax(target, reset, format, type, values);
     } else
 #endif
     {
@@ -6655,7 +6648,7 @@ gl_dispatch_stub_365(GLenum target, GLenum pname, GLfloat * params)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetMinmaxParameterfv(GET_DISPATCH(), (target, pname, params));
+        GET_DISPATCH()->GetMinmaxParameterfv(target, pname, params);
     } else
 #endif
     {
@@ -6723,7 +6716,7 @@ gl_dispatch_stub_366(GLenum target, GLenum pname, GLint * params)
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
     if (gc->isDirect) {
-        CALL_GetMinmaxParameteriv(GET_DISPATCH(), (target, pname, params));
+        GET_DISPATCH()->GetMinmaxParameteriv(target, pname, params);
     } else
 #endif
     {
@@ -9268,7 +9261,7 @@ __indirect_glLoadProgramNV(GLenum target, GLuint id, GLsizei len,
 
 #define X_GLrop_ProgramParameters4dvNV 4187
 void
-__indirect_glProgramParameters4dvNV(GLenum target, GLuint index, GLuint num,
+__indirect_glProgramParameters4dvNV(GLenum target, GLuint index, GLsizei num,
                                     const GLdouble * params)
 {
     struct glx_context *const gc = __glXGetCurrentContext();
@@ -9292,7 +9285,7 @@ __indirect_glProgramParameters4dvNV(GLenum target, GLuint index, GLuint num,
 
 #define X_GLrop_ProgramParameters4fvNV 4186
 void
-__indirect_glProgramParameters4fvNV(GLenum target, GLuint index, GLuint num,
+__indirect_glProgramParameters4fvNV(GLenum target, GLuint index, GLsizei num,
                                     const GLfloat * params)
 {
     struct glx_context *const gc = __glXGetCurrentContext();

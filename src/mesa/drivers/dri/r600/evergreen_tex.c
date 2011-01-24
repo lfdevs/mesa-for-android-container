@@ -31,9 +31,7 @@
 #include "main/enums.h"
 #include "main/image.h"
 #include "main/teximage.h"
-#include "main/mipmap.h"
 #include "main/simple_list.h"
-#include "main/texstore.h"
 #include "main/texobj.h"
 
 #include "texmem.h"
@@ -934,7 +932,7 @@ EG_S_FIXED(float value, uint32_t frac_bits)
    return value * (1 << frac_bits);
 }
 
-static GLboolean evergreen_setup_hardware_state(GLcontext * ctx, struct gl_texture_object *texObj, int unit)
+static GLboolean evergreen_setup_hardware_state(struct gl_context * ctx, struct gl_texture_object *texObj, int unit)
 {
 	context_t *context = EVERGREEN_CONTEXT(ctx);
 	radeonTexObj *t = radeon_tex_obj(texObj);
@@ -1152,6 +1150,7 @@ void evergreenSetTexBuffer(__DRIcontext *pDRICtx, GLint target, GLint glx_textur
 	radeonTexObjPtr t;
 	uint32_t pitch_val;
 	uint32_t internalFormat, type, format;
+	gl_format texFormat;
 
 	type = GL_BGRA;
 	format = GL_UNSIGNED_BYTE;
@@ -1191,10 +1190,6 @@ void evergreenSetTexBuffer(__DRIcontext *pDRICtx, GLint target, GLint glx_textur
 	radeon_miptree_unreference(&t->mt);
 	radeon_miptree_unreference(&rImage->mt);
 
-	_mesa_init_teximage_fields(radeon->glCtx, target, texImage,
-				   rb->base.Width, rb->base.Height, 1, 0, rb->cpp);
-	texImage->RowStride = rb->pitch / rb->cpp;
-
 	rImage->bo = rb->bo;
 	radeon_bo_ref(rImage->bo);
 	t->bo = rb->bo;
@@ -1205,6 +1200,7 @@ void evergreenSetTexBuffer(__DRIcontext *pDRICtx, GLint target, GLint glx_textur
 	switch (rb->cpp) {
 	case 4:
 		if (glx_texture_format == __DRI_TEXTURE_FORMAT_RGB) {
+			texFormat = MESA_FORMAT_RGB888;
 			SETfield(t->SQ_TEX_RESOURCE7, FMT_8_8_8_8,
 				     EG_SQ_TEX_RESOURCE_WORD7_0__DATA_FORMAT_shift, 
                      EG_SQ_TEX_RESOURCE_WORD7_0__DATA_FORMAT_mask);
@@ -1218,6 +1214,7 @@ void evergreenSetTexBuffer(__DRIcontext *pDRICtx, GLint target, GLint glx_textur
 			SETfield(t->SQ_TEX_RESOURCE4, SQ_SEL_1,
 				 SQ_TEX_RESOURCE_WORD4_0__DST_SEL_W_shift, SQ_TEX_RESOURCE_WORD4_0__DST_SEL_W_mask);
 		} else {
+			texFormat = MESA_FORMAT_ARGB8888;
 			SETfield(t->SQ_TEX_RESOURCE7, FMT_8_8_8_8,
 				     EG_SQ_TEX_RESOURCE_WORD7_0__DATA_FORMAT_shift, 
                      EG_SQ_TEX_RESOURCE_WORD7_0__DATA_FORMAT_mask);
@@ -1236,6 +1233,7 @@ void evergreenSetTexBuffer(__DRIcontext *pDRICtx, GLint target, GLint glx_textur
 	case 3:
 	default:
 		// FMT_8_8_8 ???
+		texFormat = MESA_FORMAT_RGB888;
 		SETfield(t->SQ_TEX_RESOURCE7, FMT_8_8_8_8,
 			     EG_SQ_TEX_RESOURCE_WORD7_0__DATA_FORMAT_shift, 
                  EG_SQ_TEX_RESOURCE_WORD7_0__DATA_FORMAT_mask);
@@ -1251,6 +1249,7 @@ void evergreenSetTexBuffer(__DRIcontext *pDRICtx, GLint target, GLint glx_textur
 		pitch_val /= 4;
 		break;
 	case 2:
+		texFormat = MESA_FORMAT_RGB565;
 		SETfield(t->SQ_TEX_RESOURCE7, FMT_5_6_5,
 			     EG_SQ_TEX_RESOURCE_WORD7_0__DATA_FORMAT_shift, 
                  EG_SQ_TEX_RESOURCE_WORD7_0__DATA_FORMAT_mask);
@@ -1266,6 +1265,11 @@ void evergreenSetTexBuffer(__DRIcontext *pDRICtx, GLint target, GLint glx_textur
 		pitch_val /= 2;
 		break;
 	}
+
+	_mesa_init_teximage_fields(radeon->glCtx, target, texImage,
+				   rb->base.Width, rb->base.Height, 1, 0,
+				   rb->cpp, texFormat);
+	texImage->RowStride = rb->pitch / rb->cpp;
 
 	pitch_val = (pitch_val + R700_TEXEL_PITCH_ALIGNMENT_MASK)
 		& ~R700_TEXEL_PITCH_ALIGNMENT_MASK;
@@ -1289,7 +1293,7 @@ void evergreenSetTexBuffer(__DRIcontext *pDRICtx, GLint target, GLint glx_textur
 	return;
 }
 
-void evergreenUpdateTextureState(GLcontext * ctx)
+void evergreenUpdateTextureState(struct gl_context * ctx)
 {
 	context_t *context = EVERGREEN_CONTEXT(ctx);
     EVERGREEN_CHIP_CONTEXT * evergreen = GET_EVERGREEN_CHIP(context);	
@@ -1311,7 +1315,7 @@ void evergreenUpdateTextureState(GLcontext * ctx)
 	}
 }
 
-static GLboolean evergreen_validate_texture(GLcontext * ctx, struct gl_texture_object *texObj, int unit)
+static GLboolean evergreen_validate_texture(struct gl_context * ctx, struct gl_texture_object *texObj, int unit)
 {
 	radeonTexObj *t = radeon_tex_obj(texObj);
 
@@ -1327,7 +1331,7 @@ static GLboolean evergreen_validate_texture(GLcontext * ctx, struct gl_texture_o
 	return GL_TRUE;
 }
 
-GLboolean evergreenValidateBuffers(GLcontext * ctx)
+GLboolean evergreenValidateBuffers(struct gl_context * ctx)
 {
 	context_t *rmesa = EVERGREEN_CONTEXT(ctx);
 	struct radeon_renderbuffer *rrb;
@@ -1403,7 +1407,7 @@ GLboolean evergreenValidateBuffers(GLcontext * ctx)
 	return GL_TRUE;
 }
 
-static struct gl_texture_object *evergreenNewTextureObject(GLcontext * ctx,
+static struct gl_texture_object *evergreenNewTextureObject(struct gl_context * ctx,
 						      GLuint name,
 						      GLenum target)
 {
@@ -1426,7 +1430,7 @@ static struct gl_texture_object *evergreenNewTextureObject(GLcontext * ctx,
 	return &t->base;
 }
 
-static void evergreenDeleteTexture(GLcontext * ctx, struct gl_texture_object *texObj)
+static void evergreenDeleteTexture(struct gl_context * ctx, struct gl_texture_object *texObj)
 {
 	context_t              * rmesa     = EVERGREEN_CONTEXT(ctx);
     EVERGREEN_CHIP_CONTEXT * evergreen = GET_EVERGREEN_CHIP(rmesa);
@@ -1456,7 +1460,7 @@ static void evergreenDeleteTexture(GLcontext * ctx, struct gl_texture_object *te
 	_mesa_delete_texture_object(ctx, texObj);
 }
 
-static void evergreenTexParameter(GLcontext * ctx, GLenum target,
+static void evergreenTexParameter(struct gl_context * ctx, GLenum target,
 			     struct gl_texture_object *texObj,
 			     GLenum pname, const GLfloat * params)
 {

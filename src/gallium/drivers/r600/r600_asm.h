@@ -23,11 +23,13 @@
 #ifndef R600_ASM_H
 #define R600_ASM_H
 
-#include "radeon.h"
 #include "util/u_double_list.h"
 
 #define NUM_OF_CYCLES 3
 #define NUM_OF_COMPONENTS 4
+
+struct r600_vertex_element;
+struct r600_pipe_context;
 
 struct r600_bc_alu_src {
 	unsigned			sel;
@@ -53,13 +55,13 @@ struct r600_bc_alu {
 	unsigned			inst;
 	unsigned			last;
 	unsigned			is_op3;
-	unsigned                        predicate;
+	unsigned			predicate;
 	unsigned			nliteral;
 	unsigned			literal_added;
-	unsigned                        bank_swizzle;
-  	unsigned                        bank_swizzle_force;
+	unsigned			bank_swizzle;
+	unsigned			bank_swizzle_force;
 	u32				value[4];
-	int hw_gpr[NUM_OF_CYCLES][NUM_OF_COMPONENTS];
+	int				hw_gpr[NUM_OF_CYCLES][NUM_OF_COMPONENTS];
 };
 
 struct r600_bc_tex {
@@ -102,6 +104,11 @@ struct r600_bc_vtx {
 	unsigned			dst_sel_y;
 	unsigned			dst_sel_z;
 	unsigned			dst_sel_w;
+	unsigned			use_const_fields;
+	unsigned			data_format;
+	unsigned			num_format_all;
+	unsigned			format_comp_all;
+	unsigned			srf_mode_all;
 };
 
 struct r600_bc_output {
@@ -124,61 +131,71 @@ struct r600_bc_cf {
 	unsigned			addr;
 	unsigned			ndw;
 	unsigned			id;
-	unsigned                        cond;
-	unsigned                        pop_count;
-	unsigned                        cf_addr; /* control flow addr */
-	unsigned                        kcache0_mode;
+	unsigned			cond;
+	unsigned			pop_count;
+	unsigned			cf_addr; /* control flow addr */
+	unsigned			kcache0_mode;
+	unsigned			kcache1_mode;
+	unsigned			kcache0_addr;
+	unsigned			kcache1_addr;
+	unsigned			kcache0_bank;
+	unsigned			kcache1_bank;
+	unsigned			r6xx_uses_waterfall;
 	struct list_head		alu;
 	struct list_head		tex;
 	struct list_head		vtx;
 	struct r600_bc_output		output;
-	struct r600_bc_alu *curr_bs_head;
+	struct r600_bc_alu		*curr_bs_head;
 };
 
-#define FC_NONE 0
-#define FC_IF 1
-#define FC_LOOP 2
-#define FC_REP 3
-#define FC_PUSH_VPM 4
-#define FC_PUSH_WQM 5
+#define FC_NONE				0
+#define FC_IF				1
+#define FC_LOOP				2
+#define FC_REP				3
+#define FC_PUSH_VPM			4
+#define FC_PUSH_WQM			5
 
 struct r600_cf_stack_entry {
-	int type;
-	struct r600_bc_cf *start;
-	struct r600_bc_cf **mid; /* used to store the else point */
-	int num_mid;
+	int				type;
+	struct r600_bc_cf		*start;
+	struct r600_bc_cf		**mid; /* used to store the else point */
+	int				num_mid;
 };
 
 #define SQ_MAX_CALL_DEPTH 0x00000020
 struct r600_cf_callstack {
-	unsigned fc_sp_before_entry;
-	int sub_desc_index;
-	int current;
-	int max;
+	unsigned			fc_sp_before_entry;
+	int				sub_desc_index;
+	int				current;
+	int				max;
 };
-	
+
 struct r600_bc {
 	enum radeon_family		family;
-	int chiprev; /* 0 - r600, 1 - r700, 2 - evergreen */
-	unsigned                        use_mem_constant; 
+	int				chiprev; /* 0 - r600, 1 - r700, 2 - evergreen */
+	int				type;
 	struct list_head		cf;
 	struct r600_bc_cf		*cf_last;
 	unsigned			ndw;
 	unsigned			ncf;
 	unsigned			ngpr;
-	unsigned                        nstack;
+	unsigned			nstack;
 	unsigned			nresource;
 	unsigned			force_add_cf;
 	u32				*bytecode;
-
-	u32 fc_sp;
-	struct r600_cf_stack_entry fc_stack[32];
-
-	unsigned call_sp;
-	struct r600_cf_callstack callstack[SQ_MAX_CALL_DEPTH];
+	u32				fc_sp;
+	struct r600_cf_stack_entry	fc_stack[32];
+	unsigned			call_sp;
+	struct r600_cf_callstack	callstack[SQ_MAX_CALL_DEPTH];
 };
 
+/* eg_asm.c */
+int eg_bc_cf_build(struct r600_bc *bc, struct r600_bc_cf *cf);
+void eg_cf_vtx(struct r600_vertex_element *ve, u32 *bytecode, unsigned count);
+
+/* r600_asm.c */
 int r600_bc_init(struct r600_bc *bc, enum radeon_family family);
+void r600_bc_clear(struct r600_bc *bc);
 int r600_bc_add_alu(struct r600_bc *bc, const struct r600_bc_alu *alu);
 int r600_bc_add_literal(struct r600_bc *bc, const u32 *value);
 int r600_bc_add_vtx(struct r600_bc *bc, const struct r600_bc_vtx *vtx);
@@ -187,4 +204,13 @@ int r600_bc_add_output(struct r600_bc *bc, const struct r600_bc_output *output);
 int r600_bc_build(struct r600_bc *bc);
 int r600_bc_add_cfinst(struct r600_bc *bc, int inst);
 int r600_bc_add_alu_type(struct r600_bc *bc, const struct r600_bc_alu *alu, int type);
+void r600_bc_dump(struct r600_bc *bc);
+void r600_cf_vtx(struct r600_vertex_element *ve, u32 *bytecode, unsigned count);
+void r600_cf_vtx_tc(struct r600_vertex_element *ve, u32 *bytecode, unsigned count);
+
+int r600_vertex_elements_build_fetch_shader(struct r600_pipe_context *rctx, struct r600_vertex_element *ve);
+
+/* r700_asm.c */
+int r700_bc_alu_build(struct r600_bc *bc, struct r600_bc_alu *alu, unsigned id);
+
 #endif

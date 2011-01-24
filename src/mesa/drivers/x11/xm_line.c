@@ -54,7 +54,7 @@
  */
 #if 000
 /* XXX don't use this, it doesn't dither correctly */
-static void draw_points_ANY_pixmap( GLcontext *ctx, const SWvertex *vert )
+static void draw_points_ANY_pixmap( struct gl_context *ctx, const SWvertex *vert )
 {
    XMesaContext xmesa = XMESA_CONTEXT(ctx);
    XMesaDisplay *dpy = xmesa->xm_visual->display;
@@ -89,7 +89,7 @@ static void draw_points_ANY_pixmap( GLcontext *ctx, const SWvertex *vert )
  * our internal point functions, otherwise fall back to the standard
  * swrast functions.
  */
-void xmesa_choose_point( GLcontext *ctx )
+void xmesa_choose_point( struct gl_context *ctx )
 {
 #if 0
    XMesaContext xmesa = XMESA_CONTEXT(ctx);
@@ -537,7 +537,6 @@ void xmesa_choose_point( GLcontext *ctx )
 
 
 
-#ifndef XFree86Server
 /**
  * Draw fast, XOR line with XDrawLine in front color buffer.
  * WARNING: this isn't fully OpenGL conformant because different pixels
@@ -546,7 +545,7 @@ void xmesa_choose_point( GLcontext *ctx )
  * for the XSetLineAttributes() function call.
  */
 static void
-xor_line(GLcontext *ctx, const SWvertex *vert0, const SWvertex *vert1)
+xor_line(struct gl_context *ctx, const SWvertex *vert0, const SWvertex *vert1)
 {
    XMesaContext xmesa = XMESA_CONTEXT(ctx);
    XMesaDisplay *dpy = xmesa->xm_visual->display;
@@ -567,7 +566,6 @@ xor_line(GLcontext *ctx, const SWvertex *vert0, const SWvertex *vert1)
    XDrawLine(dpy, xrb->pixmap, gc, x0, y0, x1, y1);
    XMesaSetFunction(dpy, gc, GXcopy);  /* this gc is used elsewhere */
 }
-#endif /* XFree86Server */
 
 
 #endif /* CHAN_BITS == 8 */
@@ -578,7 +576,7 @@ xor_line(GLcontext *ctx, const SWvertex *vert0, const SWvertex *vert1)
  * swrast fallback.
  */
 static swrast_line_func
-get_line_func(GLcontext *ctx)
+get_line_func(struct gl_context *ctx)
 {
 #if CHAN_BITS == 8
    SWcontext *swrast = SWRAST_CONTEXT(ctx);
@@ -660,7 +658,6 @@ get_line_func(GLcontext *ctx)
       }
    }
 
-#ifndef XFree86Server
    if (ctx->DrawBuffer->_NumColorDrawBuffers == 1
        && ctx->DrawBuffer->_ColorDrawBufferIndexes[0] == BUFFER_FRONT_LEFT
        && swrast->_RasterMask == LOGIC_OP_BIT
@@ -669,7 +666,6 @@ get_line_func(GLcontext *ctx)
        && !ctx->Line.SmoothFlag) {
       return xor_line;
    }
-#endif /* XFree86Server */
 
 #endif /* CHAN_BITS == 8 */
    return (swrast_line_func) NULL;
@@ -682,7 +678,7 @@ get_line_func(GLcontext *ctx)
  * standard swrast functions.
  */
 void
-xmesa_choose_line(GLcontext *ctx)
+xmesa_choose_line(struct gl_context *ctx)
 {
    SWcontext *swrast = SWRAST_CONTEXT(ctx);
 

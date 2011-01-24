@@ -89,6 +89,8 @@ static struct prog_src_register src_reg(GLuint file, GLuint idx)
    reg.Negate = NEGATE_NONE;
    reg.Abs = 0;
    reg.HasIndex2 = 0;
+   reg.RelAddr2 = 0;
+   reg.Index2 = 0;
    return reg;
 }
 
@@ -336,11 +338,13 @@ static struct prog_src_register get_delta_xy( struct brw_wm_compile *c )
 
 static struct prog_src_register get_pixel_w( struct brw_wm_compile *c )
 {
-   /* This is only called for producing 1/w in pre-gen6 interp.  for
-    * gen6, the interp opcodes don't use this argument.
+   /* This is called for producing 1/w in pre-gen6 interp.  for gen6,
+    * the interp opcodes don't use this argument.  But to keep the
+    * nr_args = 3 expectations of pinterp happy, just stuff delta_xy
+    * into the slot.
     */
    if (c->func.brw->intel.gen >= 6)
-      return src_undef();
+      return c->delta_xy;
 
    if (src_is_undef(c->pixel_w)) {
       struct prog_dst_register pixel_w = get_temp(c);
@@ -371,11 +375,7 @@ static void emit_interp( struct brw_wm_compile *c,
    struct prog_src_register interp = src_reg(PROGRAM_PAYLOAD, idx);
    struct prog_src_register deltas;
 
-   if (c->func.brw->intel.gen < 6) {
-      deltas = get_delta_xy(c);
-   } else {
-      deltas = src_undef();
-   }
+   deltas = get_delta_xy(c);
 
    /* Need to use PINTERP on attributes which have been
     * multiplied by 1/W in the SF program, and LINTERP on those
@@ -532,12 +532,6 @@ static struct prog_src_register search_or_add_param5(struct brw_wm_compile *c,
    tokens[2] = s2;
    tokens[3] = s3;
    tokens[4] = s4;
-   
-   for (idx = 0; idx < paramList->NumParameters; idx++) {
-      if (paramList->Parameters[idx].Type == PROGRAM_STATE_VAR &&
-	  memcmp(paramList->Parameters[idx].StateIndexes, tokens, sizeof(tokens)) == 0)
-	 return src_reg(PROGRAM_STATE_VAR, idx);
-   }
 
    idx = _mesa_add_state_reference( paramList, tokens );
 
@@ -555,28 +549,18 @@ static struct prog_src_register search_or_add_const4f( struct brw_wm_compile *c,
    GLfloat values[4];
    GLuint idx;
    GLuint swizzle;
+   struct prog_src_register reg;
 
    values[0] = s0;
    values[1] = s1;
    values[2] = s2;
    values[3] = s3;
 
-   /* Have to search, otherwise multiple compilations will each grow
-    * the parameter list.
-    */
-   for (idx = 0; idx < paramList->NumParameters; idx++) {
-      if (paramList->Parameters[idx].Type == PROGRAM_CONSTANT &&
-	  memcmp(paramList->ParameterValues[idx], values, sizeof(values)) == 0)
-
-	 /* XXX: this mimics the mesa bug which puts all constants and
-	  * parameters into the "PROGRAM_STATE_VAR" category:
-	  */
-	 return src_reg(PROGRAM_STATE_VAR, idx);
-   }
-   
    idx = _mesa_add_unnamed_constant( paramList, values, 4, &swizzle );
-   assert(swizzle == SWIZZLE_NOOP); /* Need to handle swizzle in reg setup */
-   return src_reg(PROGRAM_STATE_VAR, idx);
+   reg = src_reg(PROGRAM_STATE_VAR, idx);
+   reg.Swizzle = swizzle;
+
+   return reg;
 }
 
 
@@ -677,7 +661,7 @@ static void precalc_tex( struct brw_wm_compile *c,
 			 const struct prog_instruction *inst )
 {
    struct prog_src_register coord;
-   struct prog_dst_register tmpcoord;
+   struct prog_dst_register tmpcoord = { 0 };
    const GLuint unit = c->fp->program.Base.SamplerUnits[inst->TexSrcUnit];
 
    assert(unit < BRW_MAX_TEX_UNIT);
@@ -977,7 +961,7 @@ static void emit_render_target_writes( struct brw_wm_compile *c )
    struct prog_src_register outcolor;
    GLuint i;
 
-   struct prog_instruction *inst, *last_inst;
+   struct prog_instruction *inst, *last_inst = NULL;
 
    /* The inst->Aux field is used for FB write target and the EOT marker */
 
@@ -1072,7 +1056,7 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
    struct brw_fragment_program *fp = c->fp;
    GLuint insn;
 
-   if (INTEL_DEBUG & DEBUG_WM) {
+   if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
       printf("pre-fp:\n");
       _mesa_fprint_program_opt(stdout, &fp->program.Base, PROG_PRINT_DEBUG,
 			       GL_TRUE);
@@ -1147,6 +1131,11 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
 	 precalc_lit(c, inst);
 	 break;
 
+      case OPCODE_RSQ:
+	 out = emit_scalar_insn(c, inst);
+	 out->SrcReg[0].Abs = GL_TRUE;
+	 break;
+
       case OPCODE_TEX:
 	 precalc_tex(c, inst);
 	 break;
@@ -1188,7 +1177,7 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
       }
    }
 
-   if (INTEL_DEBUG & DEBUG_WM) {
+   if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
       printf("pass_fp:\n");
       print_insns( c->prog_instructions, c->nr_fp_insns );
       printf("\n");

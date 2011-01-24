@@ -57,7 +57,7 @@ and create a window, you must do the following to use the X/Mesa interface:
 #define XMESA_H
 
 
-#include "main/core.h" /* for GLvisual and MESA_VERSION_STRING */
+#include "main/core.h" /* for gl_config */
 #include "state_tracker/st_api.h"
 #include "os/os_thread.h"
 
@@ -280,7 +280,8 @@ XMesaCopyContext(XMesaContext src, XMesaContext dst, unsigned long mask);
  * Basically corresponds to an XVisualInfo.
  */
 struct xmesa_visual {
-   GLvisual mesa_visual;	/* Device independent visual parameters */
+   struct gl_config mesa_visual;/* Device independent visual parameters */
+   int screen, visualID, visualType;
    Display *display;	/* The X11 display */
    XVisualInfo * visinfo;	/* X's visual info (pointer to private copy) */
    XVisualInfo *vishandle;	/* Only used in fakeglx.c */
@@ -349,6 +350,9 @@ struct xmesa_buffer {
 };
 
 
+
+extern const char *
+xmesa_get_name(void);
 
 extern void
 xmesa_init(Display *dpy);

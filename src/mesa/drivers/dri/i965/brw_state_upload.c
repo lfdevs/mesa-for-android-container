@@ -128,7 +128,8 @@ const struct brw_tracked_state *gen6_atoms[] =
    &gen6_cc_state_pointers,
 
    &brw_vs_constants, /* Before vs_surfaces and constant_buffer */
-   &gen6_wm_constants, /* Before wm_surfaces and constant_buffer */
+   &brw_wm_constants, /* Before wm_surfaces and constant_buffer */
+   &gen6_wm_constants, /* Before wm_state */
 
    &brw_vs_surfaces,		/* must do before unit */
    &brw_wm_constant_surface,	/* must do before wm surfaces/bind bo */
@@ -232,7 +233,6 @@ static struct dirty_bit_map mesa_bits[] = {
    DEFINE_BIT(_NEW_MODELVIEW),
    DEFINE_BIT(_NEW_PROJECTION),
    DEFINE_BIT(_NEW_TEXTURE_MATRIX),
-   DEFINE_BIT(_NEW_COLOR_MATRIX),
    DEFINE_BIT(_NEW_ACCUM),
    DEFINE_BIT(_NEW_COLOR),
    DEFINE_BIT(_NEW_DEPTH),
@@ -337,7 +337,7 @@ brw_print_dirty_count(struct dirty_bit_map *bit_map, int32_t bits)
  */
 void brw_validate_state( struct brw_context *brw )
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    struct intel_context *intel = &brw->intel;
    struct brw_state_flags *state = &brw->state.dirty;
    GLuint i;
@@ -435,7 +435,7 @@ void brw_upload_state(struct brw_context *brw)
 
    brw_clear_validated_bos(brw);
 
-   if (INTEL_DEBUG) {
+   if (unlikely(INTEL_DEBUG)) {
       /* Debug version which enforces various sanity checks on the
        * state flags which are generated and checked to help ensure
        * state atoms are ordered correctly in the list.
@@ -487,7 +487,7 @@ void brw_upload_state(struct brw_context *brw)
       }
    }
 
-   if (INTEL_DEBUG & DEBUG_STATE) {
+   if (unlikely(INTEL_DEBUG & DEBUG_STATE)) {
       brw_update_dirty_count(mesa_bits, state->mesa);
       brw_update_dirty_count(brw_bits, state->brw);
       brw_update_dirty_count(cache_bits, state->cache);

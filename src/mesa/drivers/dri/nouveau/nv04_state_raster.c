@@ -27,7 +27,8 @@
 #include "nouveau_driver.h"
 #include "nouveau_context.h"
 #include "nouveau_util.h"
-#include "nouveau_class.h"
+#include "nv_object.xml.h"
+#include "nv04_3d.xml.h"
 #include "nv04_driver.h"
 
 static unsigned
@@ -127,13 +128,13 @@ get_blend_func(unsigned func)
 }
 
 void
-nv04_defer_control(GLcontext *ctx, int emit)
+nv04_defer_control(struct gl_context *ctx, int emit)
 {
 	context_dirty(ctx, CONTROL);
 }
 
 void
-nv04_emit_control(GLcontext *ctx, int emit)
+nv04_emit_control(struct gl_context *ctx, int emit)
 {
 	struct nouveau_channel *chan = context_chan(ctx);
 	struct nouveau_grobj *fahrenheit = nv04_context_engine(ctx);
@@ -142,7 +143,7 @@ nv04_emit_control(GLcontext *ctx, int emit)
 		int cull_mode = ctx->Polygon.CullFaceMode;
 		int front_face = ctx->Polygon.FrontFace;
 		uint32_t ctrl0 = 1 << 30 |
-			NV04_MULTITEX_TRIANGLE_CONTROL0_ORIGIN;
+			NV04_MULTITEX_TRIANGLE_CONTROL0_ORIGIN_CORNER;
 		uint32_t ctrl1 = 0, ctrl2 = 0;
 
 		/* Color mask. */
@@ -210,7 +211,7 @@ nv04_emit_control(GLcontext *ctx, int emit)
 		int cull_mode = ctx->Polygon.CullFaceMode;
 		int front_face = ctx->Polygon.FrontFace;
 		uint32_t ctrl = 1 << 30 |
-			NV04_TEXTURED_TRIANGLE_CONTROL_ORIGIN;
+			NV04_TEXTURED_TRIANGLE_CONTROL_ORIGIN_CORNER;
 
 		/* Dithering. */
 		if (ctx->Color.DitherFlag)
@@ -247,13 +248,13 @@ nv04_emit_control(GLcontext *ctx, int emit)
 }
 
 void
-nv04_defer_blend(GLcontext *ctx, int emit)
+nv04_defer_blend(struct gl_context *ctx, int emit)
 {
 	context_dirty(ctx, BLEND);
 }
 
 void
-nv04_emit_blend(GLcontext *ctx, int emit)
+nv04_emit_blend(struct gl_context *ctx, int emit)
 {
 	struct nouveau_channel *chan = context_chan(ctx);
 	struct nouveau_grobj *fahrenheit = nv04_context_engine(ctx);

@@ -163,11 +163,13 @@ dump_blend_type(FILE *fp,
 
 
 static LLVMValueRef
-add_blend_test(LLVMModuleRef module,
+add_blend_test(struct gallivm_state *gallivm,
                const struct pipe_blend_state *blend,
                enum vector_mode mode,
                struct lp_type type)
 {
+   LLVMModuleRef module = gallivm->module;
+   LLVMContextRef context = gallivm->context;
    LLVMTypeRef vec_type;
    LLVMTypeRef args[4];
    LLVMValueRef func;
@@ -179,18 +181,18 @@ add_blend_test(LLVMModuleRef module,
    LLVMBuilderRef builder;
    const unsigned rt = 0;
 
-   vec_type = lp_build_vec_type(type);
+   vec_type = lp_build_vec_type(gallivm, type);
 
    args[3] = args[2] = args[1] = args[0] = LLVMPointerType(vec_type, 0);
-   func = LLVMAddFunction(module, "test", LLVMFunctionType(LLVMVoidType(), args, 4, 0));
+   func = LLVMAddFunction(module, "test", LLVMFunctionType(LLVMVoidTypeInContext(context), args, 4, 0));
    LLVMSetFunctionCallConv(func, LLVMCCallConv);
    src_ptr = LLVMGetParam(func, 0);
    dst_ptr = LLVMGetParam(func, 1);
    const_ptr = LLVMGetParam(func, 2);
    res_ptr = LLVMGetParam(func, 3);
 
-   block = LLVMAppendBasicBlock(func, "entry");
-   builder = LLVMCreateBuilder();
+   block = LLVMAppendBasicBlockInContext(context, func, "entry");
+   builder = gallivm->builder;
    LLVMPositionBuilderAtEnd(builder, block);
 
    if (mode == AoS) {
@@ -203,7 +205,7 @@ add_blend_test(LLVMModuleRef module,
       dst = LLVMBuildLoad(builder, dst_ptr, "dst");
       con = LLVMBuildLoad(builder, const_ptr, "const");
 
-      res = lp_build_blend_aos(builder, blend, type, rt, src, dst, con, 3);
+      res = lp_build_blend_aos(gallivm, blend, type, rt, src, dst, con, 3);
 
       lp_build_name(res, "res");
 
@@ -218,7 +220,7 @@ add_blend_test(LLVMModuleRef module,
       unsigned i;
 
       for(i = 0; i < 4; ++i) {
-         LLVMValueRef index = LLVMConstInt(LLVMInt32Type(), i, 0);
+         LLVMValueRef index = LLVMConstInt(LLVMInt32TypeInContext(context), i, 0);
          src[i] = LLVMBuildLoad(builder, LLVMBuildGEP(builder, src_ptr, &index, 1, ""), "");
          dst[i] = LLVMBuildLoad(builder, LLVMBuildGEP(builder, dst_ptr, &index, 1, ""), "");
          con[i] = LLVMBuildLoad(builder, LLVMBuildGEP(builder, const_ptr, &index, 1, ""), "");
@@ -227,10 +229,10 @@ add_blend_test(LLVMModuleRef module,
          lp_build_name(dst[i], "dst.%c", "rgba"[i]);
       }
 
-      lp_build_blend_soa(builder, blend, type, rt, src, dst, con, res);
+      lp_build_blend_soa(gallivm, blend, type, rt, src, dst, con, res);
 
       for(i = 0; i < 4; ++i) {
-         LLVMValueRef index = LLVMConstInt(LLVMInt32Type(), i, 0);
+         LLVMValueRef index = LLVMConstInt(LLVMInt32TypeInContext(context), i, 0);
          lp_build_name(res[i], "res.%c", "rgba"[i]);
          LLVMBuildStore(builder, res[i], LLVMBuildGEP(builder, res_ptr, &index, 1, ""));
       }
@@ -238,22 +240,8 @@ add_blend_test(LLVMModuleRef module,
 
    LLVMBuildRetVoid(builder);;
 
-   LLVMDisposeBuilder(builder);
    return func;
 }
-
-
-/** Add and limit result to ceiling of 1.0 */
-#define ADD_SAT(R, A, B) \
-do { \
-   R = (A) + (B);  if (R > 1.0f) R = 1.0f; \
-} while (0)
-
-/** Subtract and limit result to floor of 0.0 */
-#define SUB_SAT(R, A, B) \
-do { \
-   R = (A) - (B);  if (R < 0.0f) R = 0.0f; \
-} while (0)
 
 
 static void
@@ -423,19 +411,19 @@ compute_blend_ref(const struct pipe_blend_state *blend,
     */
    switch (blend->rt[0].rgb_func) {
    case PIPE_BLEND_ADD:
-      ADD_SAT(res[0], src_term[0], dst_term[0]); /* R */
-      ADD_SAT(res[1], src_term[1], dst_term[1]); /* G */
-      ADD_SAT(res[2], src_term[2], dst_term[2]); /* B */
+      res[0] = src_term[0] + dst_term[0]; /* R */
+      res[1] = src_term[1] + dst_term[1]; /* G */
+      res[2] = src_term[2] + dst_term[2]; /* B */
       break;
    case PIPE_BLEND_SUBTRACT:
-      SUB_SAT(res[0], src_term[0], dst_term[0]); /* R */
-      SUB_SAT(res[1], src_term[1], dst_term[1]); /* G */
-      SUB_SAT(res[2], src_term[2], dst_term[2]); /* B */
+      res[0] = src_term[0] - dst_term[0]; /* R */
+      res[1] = src_term[1] - dst_term[1]; /* G */
+      res[2] = src_term[2] - dst_term[2]; /* B */
       break;
    case PIPE_BLEND_REVERSE_SUBTRACT:
-      SUB_SAT(res[0], dst_term[0], src_term[0]); /* R */
-      SUB_SAT(res[1], dst_term[1], src_term[1]); /* G */
-      SUB_SAT(res[2], dst_term[2], src_term[2]); /* B */
+      res[0] = dst_term[0] - src_term[0]; /* R */
+      res[1] = dst_term[1] - src_term[1]; /* G */
+      res[2] = dst_term[2] - src_term[2]; /* B */
       break;
    case PIPE_BLEND_MIN:
       res[0] = MIN2(src_term[0], dst_term[0]); /* R */
@@ -456,13 +444,13 @@ compute_blend_ref(const struct pipe_blend_state *blend,
     */
    switch (blend->rt[0].alpha_func) {
    case PIPE_BLEND_ADD:
-      ADD_SAT(res[3], src_term[3], dst_term[3]); /* A */
+      res[3] = src_term[3] + dst_term[3]; /* A */
       break;
    case PIPE_BLEND_SUBTRACT:
-      SUB_SAT(res[3], src_term[3], dst_term[3]); /* A */
+      res[3] = src_term[3] - dst_term[3]; /* A */
       break;
    case PIPE_BLEND_REVERSE_SUBTRACT:
-      SUB_SAT(res[3], dst_term[3], src_term[3]); /* A */
+      res[3] = dst_term[3] - src_term[3]; /* A */
       break;
    case PIPE_BLEND_MIN:
       res[3] = MIN2(src_term[3], dst_term[3]); /* A */
@@ -478,16 +466,16 @@ compute_blend_ref(const struct pipe_blend_state *blend,
 
 PIPE_ALIGN_STACK
 static boolean
-test_one(unsigned verbose,
+test_one(struct gallivm_state *gallivm,
+         unsigned verbose,
          FILE *fp,
          const struct pipe_blend_state *blend,
          enum vector_mode mode,
          struct lp_type type)
 {
-   LLVMModuleRef module = NULL;
+   LLVMModuleRef module = gallivm->module;
    LLVMValueRef func = NULL;
-   LLVMExecutionEngineRef engine = lp_build_engine;
-   LLVMPassManagerRef pass = NULL;
+   LLVMExecutionEngineRef engine = gallivm->engine;
    char *error = NULL;
    blend_test_ptr_t blend_test_ptr;
    boolean success;
@@ -500,33 +488,13 @@ test_one(unsigned verbose,
    if(verbose >= 1)
       dump_blend_type(stdout, blend, mode, type);
 
-   module = LLVMModuleCreateWithName("test");
-
-   func = add_blend_test(module, blend, mode, type);
+   func = add_blend_test(gallivm, blend, mode, type);
 
    if(LLVMVerifyModule(module, LLVMPrintMessageAction, &error)) {
       LLVMDumpModule(module);
       abort();
    }
    LLVMDisposeMessage(error);
-
-#if 0
-   pass = LLVMCreatePassManager();
-   LLVMAddTargetData(LLVMGetExecutionEngineTargetData(engine), pass);
-   /* These are the passes currently listed in llvm-c/Transforms/Scalar.h,
-    * but there are more on SVN. */
-   LLVMAddConstantPropagationPass(pass);
-   LLVMAddInstructionCombiningPass(pass);
-   LLVMAddPromoteMemoryToRegisterPass(pass);
-   LLVMAddGVNPass(pass);
-   LLVMAddCFGSimplificationPass(pass);
-   LLVMRunPassManager(pass, module);
-#else
-   (void)pass;
-#endif
-
-   if(verbose >= 2)
-      LLVMDumpModule(module);
 
    code = LLVMGetPointerToGlobal(engine, func);
    blend_test_ptr = voidptr_to_blend_test_ptr_t(code);
@@ -676,6 +644,8 @@ test_one(unsigned verbose,
                fprintf(stderr, "  Ref%c: ", channel);
                dump_vec(stderr, type, ref + j*stride);
                fprintf(stderr, "\n");
+
+               fprintf(stderr, "\n");
             }
          }
       }
@@ -726,9 +696,6 @@ test_one(unsigned verbose,
 
    LLVMFreeMachineCodeForFunction(engine, func);
 
-   if(pass)
-      LLVMDisposePassManager(pass);
-
    return success;
 }
 
@@ -773,7 +740,7 @@ blend_funcs[] = {
 
 const struct lp_type blend_types[] = {
    /* float, fixed,  sign,  norm, width, len */
-   {   TRUE, FALSE, FALSE,  TRUE,    32,   4 }, /* f32 x 4 */
+   {   TRUE, FALSE,  TRUE, FALSE,    32,   4 }, /* f32 x 4 */
    {  FALSE, FALSE, FALSE,  TRUE,     8,  16 }, /* u8n x 16 */
 };
 
@@ -784,7 +751,7 @@ const unsigned num_types = sizeof(blend_types)/sizeof(blend_types[0]);
 
 
 boolean
-test_all(unsigned verbose, FILE *fp)
+test_all(struct gallivm_state *gallivm, unsigned verbose, FILE *fp)
 {
    const unsigned *rgb_func;
    const unsigned *rgb_src_factor;
@@ -820,7 +787,7 @@ test_all(unsigned verbose, FILE *fp)
                            blend.rt[0].alpha_dst_factor  = *alpha_dst_factor;
                            blend.rt[0].colormask         = PIPE_MASK_RGBA;
 
-                           if(!test_one(verbose, fp, &blend, mode, *type))
+                           if(!test_one(gallivm, verbose, fp, &blend, mode, *type))
                              success = FALSE;
 
                         }
@@ -837,7 +804,8 @@ test_all(unsigned verbose, FILE *fp)
 
 
 boolean
-test_some(unsigned verbose, FILE *fp, unsigned long n)
+test_some(struct gallivm_state *gallivm, unsigned verbose, FILE *fp,
+          unsigned long n)
 {
    const unsigned *rgb_func;
    const unsigned *rgb_src_factor;
@@ -879,7 +847,7 @@ test_some(unsigned verbose, FILE *fp, unsigned long n)
       blend.rt[0].alpha_dst_factor  = *alpha_dst_factor;
       blend.rt[0].colormask         = PIPE_MASK_RGBA;
 
-      if(!test_one(verbose, fp, &blend, mode, *type))
+      if(!test_one(gallivm, verbose, fp, &blend, mode, *type))
         success = FALSE;
    }
 
@@ -888,7 +856,7 @@ test_some(unsigned verbose, FILE *fp, unsigned long n)
 
 
 boolean
-test_single(unsigned verbose, FILE *fp)
+test_single(struct gallivm_state *gallivm, unsigned verbose, FILE *fp)
 {
    printf("no test_single()");
    return TRUE;

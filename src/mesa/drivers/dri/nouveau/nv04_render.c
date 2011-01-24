@@ -27,7 +27,7 @@
 #include "nouveau_driver.h"
 #include "nouveau_context.h"
 #include "nouveau_util.h"
-#include "nouveau_class.h"
+#include "nv04_3d.xml.h"
 #include "nv04_driver.h"
 
 #include "tnl/tnl.h"
@@ -37,7 +37,7 @@
 #define NUM_VERTEX_ATTRS 6
 
 static void
-swtnl_update_viewport(GLcontext *ctx)
+swtnl_update_viewport(struct gl_context *ctx)
 {
 	float *viewport = to_nv04_context(ctx)->viewport;
 	struct gl_framebuffer *fb = ctx->DrawBuffer;
@@ -51,7 +51,7 @@ swtnl_update_viewport(GLcontext *ctx)
 }
 
 static void
-swtnl_emit_attr(GLcontext *ctx, struct tnl_attr_map *m, int attr, int emit)
+swtnl_emit_attr(struct gl_context *ctx, struct tnl_attr_map *m, int attr, int emit)
 {
 	TNLcontext *tnl = TNL_CONTEXT(ctx);
 
@@ -68,7 +68,7 @@ swtnl_emit_attr(GLcontext *ctx, struct tnl_attr_map *m, int attr, int emit)
 }
 
 static void
-swtnl_choose_attrs(GLcontext *ctx)
+swtnl_choose_attrs(struct gl_context *ctx)
 {
 	TNLcontext *tnl = TNL_CONTEXT(ctx);
 	struct nouveau_grobj *fahrenheit = nv04_context_engine(ctx);
@@ -94,24 +94,24 @@ swtnl_choose_attrs(GLcontext *ctx)
 /* TnL renderer entry points */
 
 static void
-swtnl_start(GLcontext *ctx)
+swtnl_start(struct gl_context *ctx)
 {
 	swtnl_choose_attrs(ctx);
 }
 
 static void
-swtnl_finish(GLcontext *ctx)
+swtnl_finish(struct gl_context *ctx)
 {
 	FIRE_RING(context_chan(ctx));
 }
 
 static void
-swtnl_primitive(GLcontext *ctx, GLenum mode)
+swtnl_primitive(struct gl_context *ctx, GLenum mode)
 {
 }
 
 static void
-swtnl_reset_stipple(GLcontext *ctx)
+swtnl_reset_stipple(struct gl_context *ctx)
 {
 }
 
@@ -146,39 +146,39 @@ swtnl_reset_stipple(GLcontext *ctx)
 	}
 
 static void
-swtnl_points(GLcontext *ctx, GLuint first, GLuint last)
+swtnl_points(struct gl_context *ctx, GLuint first, GLuint last)
 {
 }
 
 static void
-swtnl_line(GLcontext *ctx, GLuint v1, GLuint v2)
+swtnl_line(struct gl_context *ctx, GLuint v1, GLuint v2)
 {
 }
 
 static void
-swtnl_triangle(GLcontext *ctx, GLuint v1, GLuint v2, GLuint v3)
+swtnl_triangle(struct gl_context *ctx, GLuint v1, GLuint v2, GLuint v3)
 {
 	BEGIN_PRIMITIVE(3);
 	OUT_VERTEX(v1);
 	OUT_VERTEX(v2);
 	OUT_VERTEX(v3);
-	END_PRIMITIVE(0x210);
+	END_PRIMITIVE(0x102);
 }
 
 static void
-swtnl_quad(GLcontext *ctx, GLuint v1, GLuint v2, GLuint v3, GLuint v4)
+swtnl_quad(struct gl_context *ctx, GLuint v1, GLuint v2, GLuint v3, GLuint v4)
 {
 	BEGIN_PRIMITIVE(4);
 	OUT_VERTEX(v1);
 	OUT_VERTEX(v2);
 	OUT_VERTEX(v3);
 	OUT_VERTEX(v4);
-	END_PRIMITIVE(0x320210);
+	END_PRIMITIVE(0x213103);
 }
 
 /* TnL initialization. */
 void
-nv04_render_init(GLcontext *ctx)
+nv04_render_init(struct gl_context *ctx)
 {
 	TNLcontext *tnl = TNL_CONTEXT(ctx);
 
@@ -207,6 +207,6 @@ nv04_render_init(GLcontext *ctx)
 }
 
 void
-nv04_render_destroy(GLcontext *ctx)
+nv04_render_destroy(struct gl_context *ctx)
 {
 }

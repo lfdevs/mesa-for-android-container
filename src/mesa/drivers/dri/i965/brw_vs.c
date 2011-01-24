@@ -43,7 +43,7 @@ static void do_vs_prog( struct brw_context *brw,
 			struct brw_vertex_program *vp,
 			struct brw_vs_prog_key *key )
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    GLuint program_size;
    const GLuint *program;
    struct brw_vs_compile c;
@@ -96,10 +96,11 @@ static void do_vs_prog( struct brw_context *brw,
 	  sizeof(c.prog_data));
    assert(ctx->Const.VertexProgram.MaxNativeParameters ==
 	  ARRAY_SIZE(c.constant_map));
+   (void) ctx;
 
    aux_size = sizeof(c.prog_data);
-   if (c.vp->use_const_buffer)
-      aux_size += c.vp->program.Base.Parameters->NumParameters;
+   /* constant_map */
+   aux_size += c.vp->program.Base.Parameters->NumParameters;
 
    drm_intel_bo_unreference(brw->vs.prog_bo);
    brw->vs.prog_bo = brw_upload_cache_with_auxdata(&brw->cache, BRW_VS_PROG,
@@ -114,7 +115,7 @@ static void do_vs_prog( struct brw_context *brw,
 
 static void brw_upload_vs_prog(struct brw_context *brw)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    struct brw_vs_prog_key key;
    struct brw_vertex_program *vp = 
       (struct brw_vertex_program *)brw->vertex_program;
@@ -129,6 +130,7 @@ static void brw_upload_vs_prog(struct brw_context *brw)
    key.nr_userclip = brw_count_bits(ctx->Transform.ClipPlanesEnabled);
    key.copy_edgeflag = (ctx->Polygon.FrontMode != GL_FILL ||
 			ctx->Polygon.BackMode != GL_FILL);
+   key.two_side_color = (ctx->Light.Enabled && ctx->Light.Model.TwoSide);
 
    /* _NEW_POINT */
    if (ctx->Point.PointSprite) {
@@ -156,7 +158,7 @@ static void brw_upload_vs_prog(struct brw_context *brw)
  */
 const struct brw_tracked_state brw_vs_prog = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM | _NEW_POLYGON | _NEW_POINT,
+      .mesa  = _NEW_TRANSFORM | _NEW_POLYGON | _NEW_POINT | _NEW_LIGHT,
       .brw   = BRW_NEW_VERTEX_PROGRAM,
       .cache = 0
    },

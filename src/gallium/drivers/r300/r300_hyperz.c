@@ -44,10 +44,10 @@
 static bool r300_get_sc_hz_max(struct r300_context *r300)
 {
     struct r300_dsa_state *dsa_state = r300->dsa_state.state;
-    int func = dsa_state->z_stencil_control & 0x7;
+    int func = dsa_state->z_stencil_control & R300_ZS_MASK;
     int ret = R300_SC_HYPERZ_MIN;
 
-    if (func >= 4 && func <= 7)
+    if (func >= R300_ZS_GEQUAL && func <= R300_ZS_ALWAYS)
        ret = R300_SC_HYPERZ_MAX;
     return ret;
 }
@@ -55,23 +55,26 @@ static bool r300_get_sc_hz_max(struct r300_context *r300)
 static bool r300_zfunc_same_direction(int func1, int func2)
 {
     /* func1 is less/lessthan */
-    if (func1 == 1 || func1 == 2)
-        if (func2 == 3 || func2 == 4 || func2 == 5)
+    if ((func1 == R300_ZS_LESS || func1 == R300_ZS_LEQUAL) &&
+        (func2 == R300_ZS_EQUAL || func2 == R300_ZS_GEQUAL ||
+         func2 == R300_ZS_GREATER))
             return FALSE;
 
-    if (func2 == 1 || func2 == 2)
-        if (func1 == 4 || func1 == 5)
+    /* func1 is greater/greaterthan */
+    if ((func1 == R300_ZS_GEQUAL || func1 == R300_ZS_GREATER) &&
+        (func2 == R300_ZS_LESS || func2 == R300_ZS_LEQUAL))
             return FALSE;
+
     return TRUE;
 }
-    
+
 static int r300_get_hiz_min(struct r300_context *r300)
 {
     struct r300_dsa_state *dsa_state = r300->dsa_state.state;
-    int func = dsa_state->z_stencil_control & 0x7;
+    int func = dsa_state->z_stencil_control & R300_ZS_MASK;
     int ret = R300_HIZ_MIN;
 
-    if (func == 1 || func == 2)
+    if (func == R300_ZS_LESS || func == R300_ZS_LEQUAL)
        ret = R300_HIZ_MAX;
     return ret;
 }
@@ -112,13 +115,16 @@ static boolean r300_can_hiz(struct r300_context *r300)
     }
     /* depth comparison function - if just cleared save and return okay */
     if (z->current_func == -1) {
-        int func = dsa_state->z_stencil_control & 0x7;
+        int func = dsa_state->z_stencil_control & R300_ZS_MASK;
         if (func != 0 && func != 7)
-            z->current_func = dsa_state->z_stencil_control & 0x7;
+            z->current_func = dsa_state->z_stencil_control & R300_ZS_MASK;
     } else {
         /* simple don't change */
-        if (!r300_zfunc_same_direction(z->current_func, (dsa_state->z_stencil_control & 0x7))) {
-            DBG(r300, DBG_HYPERZ, "z func changed direction - disabling hyper-z %d -> %d\n", z->current_func, dsa_state->z_stencil_control);
+        if (!r300_zfunc_same_direction(z->current_func,
+                                       (dsa_state->z_stencil_control & R300_ZS_MASK))) {
+            DBG(r300, DBG_HYPERZ,
+                "z func changed direction - disabling hyper-z %d -> %d\n",
+                z->current_func, dsa_state->z_stencil_control);
             return FALSE;
         }
     }    
@@ -152,8 +158,8 @@ static void r300_update_hyperz(struct r300_context* r300)
     if (!r300->rws->get_value(r300->rws, R300_CAN_HYPERZ))
         return;
 
-    zmask_in_use = zstex->zmask_in_use[fb->zsbuf->level];
-    hiz_in_use = zstex->hiz_in_use[fb->zsbuf->level];
+    zmask_in_use = zstex->zmask_in_use[fb->zsbuf->u.tex.level];
+    hiz_in_use = zstex->hiz_in_use[fb->zsbuf->u.tex.level];
 
     /* Z fastfill. */
     if (zmask_in_use) {
@@ -276,7 +282,7 @@ static void r300_update_ztop(struct r300_context* r300)
         ztop_state->z_buffer_top = R300_ZTOP_ENABLE;
     }
     if (ztop_state->z_buffer_top != old_ztop)
-        r300->ztop_state.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->ztop_state);
 }
 
 #define ALIGN_DIVUP(x, y) (((x) + (y) - 1) / (y))
@@ -327,7 +333,7 @@ void r300_hiz_alloc_block(struct r300_context *r300, struct r300_surface *surf)
 {
     struct r300_texture *tex;
     uint32_t zsize, ndw;
-    int level = surf->base.level;
+    int level = surf->base.u.tex.level;
 
     tex = r300_texture(surf->base.texture);
 
@@ -346,7 +352,7 @@ void r300_zmask_alloc_block(struct r300_context *r300, struct r300_surface *surf
 {
     int bsize = 256;
     uint32_t zsize, ndw;
-    int level = surf->base.level;
+    int level = surf->base.u.tex.level;
     struct r300_texture *tex;
 
     tex = r300_texture(surf->base.texture);

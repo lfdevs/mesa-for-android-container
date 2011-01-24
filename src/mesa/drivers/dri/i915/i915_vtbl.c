@@ -217,7 +217,7 @@ i915_emit_invarient_state(struct intel_context *intel)
 
 
 #define emit(intel, state, size )		     \
-   intel_batchbuffer_data(intel->batch, state, size)
+   intel_batchbuffer_data(intel->batch, state, size, false)
 
 static GLuint
 get_dirty(struct i915_hw_state *state)
@@ -300,7 +300,8 @@ i915_emit_state(struct intel_context *intel)
     * batchbuffer fills up.
     */
    intel_batchbuffer_require_space(intel->batch,
-				   get_state_size(state) + INTEL_PRIM_EMIT_SIZE);
+				   get_state_size(state) + INTEL_PRIM_EMIT_SIZE,
+				   false);
    count = 0;
  again:
    aper_count = 0;
@@ -530,7 +531,7 @@ i915_set_draw_region(struct intel_context *intel,
 		     GLuint num_regions)
 {
    struct i915_context *i915 = i915_context(&intel->ctx);
-   GLcontext *ctx = &intel->ctx;
+   struct gl_context *ctx = &intel->ctx;
    struct gl_renderbuffer *rb = ctx->DrawBuffer->_ColorDrawBuffers[0];
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    GLuint value;
@@ -669,6 +670,7 @@ i915_assert_not_dirty( struct intel_context *intel )
    struct i915_context *i915 = i915_context(&intel->ctx);
    GLuint dirty = get_dirty(&i915->state);
    assert(!dirty);
+   (void) dirty;
 }
 
 void

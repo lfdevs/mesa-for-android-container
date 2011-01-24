@@ -76,7 +76,7 @@ copypix_src_region(struct intel_context *intel, GLenum type)
  * we allow Scissor.
  */
 static GLboolean
-intel_check_copypixel_blit_fragment_ops(GLcontext * ctx)
+intel_check_copypixel_blit_fragment_ops(struct gl_context * ctx)
 {
    if (ctx->NewState)
       _mesa_update_state(ctx);
@@ -102,7 +102,7 @@ intel_check_copypixel_blit_fragment_ops(GLcontext * ctx)
  * CopyPixels with the blitter.  Don't support zooming, pixel transfer, etc.
  */
 static GLboolean
-do_blit_copypixels(GLcontext * ctx,
+do_blit_copypixels(struct gl_context * ctx,
                    GLint srcx, GLint srcy,
                    GLsizei width, GLsizei height,
                    GLint dstx, GLint dsty, GLenum type)
@@ -119,8 +119,7 @@ do_blit_copypixels(GLcontext * ctx,
    GLboolean flip = GL_FALSE;
 
    if (type == GL_DEPTH || type == GL_STENCIL) {
-      if (INTEL_DEBUG & DEBUG_FALLBACKS)
-	 fprintf(stderr, "glCopyPixels() fallback: GL_DEPTH || GL_STENCIL\n");
+      fallback_debug("glCopyPixels() fallback: GL_DEPTH || GL_STENCIL\n");
       return GL_FALSE;
    }
 
@@ -198,13 +197,12 @@ out:
 
 
 void
-intelCopyPixels(GLcontext * ctx,
+intelCopyPixels(struct gl_context * ctx,
                 GLint srcx, GLint srcy,
                 GLsizei width, GLsizei height,
                 GLint destx, GLint desty, GLenum type)
 {
-   if (INTEL_DEBUG & DEBUG_PIXEL)
-      fprintf(stderr, "%s\n", __FUNCTION__);
+   DBG("%s\n", __FUNCTION__);
 
    if (do_blit_copypixels(ctx, srcx, srcy, width, height, destx, desty, type))
       return;

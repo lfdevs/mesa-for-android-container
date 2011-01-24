@@ -883,7 +883,7 @@ error_string( GLenum error )
  * previous errors which were accumulated.
  */
 static void
-flush_delayed_errors( GLcontext *ctx )
+flush_delayed_errors( struct gl_context *ctx )
 {
    char s[MAXSTRING];
 
@@ -907,7 +907,7 @@ flush_delayed_errors( GLcontext *ctx )
  * \param fmtString printf()-like format string.
  */
 void
-_mesa_warning( GLcontext *ctx, const char *fmtString, ... )
+_mesa_warning( struct gl_context *ctx, const char *fmtString, ... )
 {
    char str[MAXSTRING];
    va_list args;
@@ -930,7 +930,7 @@ _mesa_warning( GLcontext *ctx, const char *fmtString, ... )
  * \param fmtString problem description string.
  */
 void
-_mesa_problem( const GLcontext *ctx, const char *fmtString, ... )
+_mesa_problem( const struct gl_context *ctx, const char *fmtString, ... )
 {
    va_list args;
    char str[MAXSTRING];
@@ -958,7 +958,7 @@ _mesa_problem( const GLcontext *ctx, const char *fmtString, ... )
  * \param fmtString printf() style format string, followed by optional args
  */
 void
-_mesa_error( GLcontext *ctx, GLenum error, const char *fmtString, ... )
+_mesa_error( struct gl_context *ctx, GLenum error, const char *fmtString, ... )
 {
    static GLint debug = -1;
 
@@ -1015,7 +1015,7 @@ _mesa_error( GLcontext *ctx, GLenum error, const char *fmtString, ... )
  * \param fmtString printf()-style format string, followed by optional args.
  */
 void
-_mesa_debug( const GLcontext *ctx, const char *fmtString, ... )
+_mesa_debug( const struct gl_context *ctx, const char *fmtString, ... )
 {
 #ifdef DEBUG
    char s[MAXSTRING];

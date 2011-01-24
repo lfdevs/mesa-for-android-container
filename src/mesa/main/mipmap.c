@@ -1670,7 +1670,7 @@ next_mipmap_level_size(GLenum target, GLint border,
  * GL_TEXTURE_CUBE_MAP_POSITIVE/NEGATIVE_X/Y/Z; never GL_TEXTURE_CUBE_MAP.
  */
 void
-_mesa_generate_mipmap(GLcontext *ctx, GLenum target,
+_mesa_generate_mipmap(struct gl_context *ctx, GLenum target,
                       struct gl_texture_object *texObj)
 {
    const struct gl_texture_image *srcImage;
@@ -1790,9 +1790,9 @@ _mesa_generate_mipmap(GLcontext *ctx, GLenum target,
 
       /* initialize new image */
       _mesa_init_teximage_fields(ctx, target, dstImage, dstWidth, dstHeight,
-                                 dstDepth, border, srcImage->InternalFormat);
+                                 dstDepth, border, srcImage->InternalFormat,
+                                 srcImage->TexFormat);
       dstImage->DriverData = NULL;
-      dstImage->TexFormat = srcImage->TexFormat;
       dstImage->FetchTexelc = srcImage->FetchTexelc;
       dstImage->FetchTexelf = srcImage->FetchTexelf;
 

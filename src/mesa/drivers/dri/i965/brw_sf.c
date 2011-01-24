@@ -108,7 +108,7 @@ static void compile_sf_prog( struct brw_context *brw,
     */
    program = brw_get_program(&c.func, &program_size);
 
-   if (INTEL_DEBUG & DEBUG_SF) {
+   if (unlikely(INTEL_DEBUG & DEBUG_SF)) {
       printf("sf:\n");
       for (i = 0; i < program_size / sizeof(struct brw_instruction); i++)
 	 brw_disasm(stdout, &((struct brw_instruction *)program)[i],
@@ -132,7 +132,7 @@ static void compile_sf_prog( struct brw_context *brw,
  */
 static void upload_sf_prog(struct brw_context *brw)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    struct brw_sf_prog_key key;
 
    memset(&key, 0, sizeof(key));

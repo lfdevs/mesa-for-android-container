@@ -17,20 +17,24 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
 endif
 
 DEB_BUILD_ARCH     ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
-DEB_HOST_ARCH     ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
-DEB_HOST_ARCH_OS     ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
+DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
-DEB_HOST_ARCH_CPU ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
+DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 DEB_BUILD_DIR      ?= $(CURDIR)/build
 ifeq ($(DEB_BUILD_GNU_TYPE), $(DEB_HOST_GNU_TYPE))
-        confflags += --build=$(DEB_HOST_GNU_TYPE)
+	confflags += --build=$(DEB_HOST_GNU_TYPE)
 else
-        confflags += --build=$(DEB_BUILD_GNU_TYPE) --host=$(DEB_HOST_GNU_TYPE)
+	confflags += --build=$(DEB_BUILD_GNU_TYPE) --host=$(DEB_HOST_GNU_TYPE)
 endif
 
 # choose which configurations to build
 include debian/scripts/choose-configs
+
+# keep a list of files we don't install (yet), but since it's a bit
+# large, use an external file:
+include debian/not-installed
 
 # build the following configurations by default
 CONFIGS = $(SWX11_GLU_CONFIGS) \
@@ -229,7 +233,7 @@ clean: unpatch
 	dh_testdir
 	dh_testroot
 	rm -rf .pc
-	
+
 	rm -f config.cache config.log config.status
 	rm -f */config.cache */config.log */config.status
 	rm -f conftest* */conftest*
@@ -239,7 +243,7 @@ clean: unpatch
 	rm -rf $$(find -name Makefile.in)
 	rm -rf aclocal.m4 missing depcomp install-sh ltmain.sh
 	rm -rf $(STAMP_DIR)
-	
+
 	dh_clean
 
 # Build architecture-independent files here.
@@ -260,7 +264,11 @@ binary-arch: install
 	# install the right files manually.
 	rm -r debian/tmp/dri/usr/lib/dri
 
-	dh_install -s --list-missing
+	# Also get rid of other files which aren't installed. Do not
+	# use -f to ensure we notice disappearing files:
+	set -e; for file in $(NOT_INSTALLED); do rm debian/tmp/$$file; done
+
+	dh_install -s --fail-missing
 	dh_installman -s
 	dh_lintian -s
 	dh_link -s
@@ -271,12 +279,27 @@ binary-arch: install
 	dh_strip -plibopenvg1-mesa --dbg-package=libopenvg1-mesa-dbg
 	dh_strip -plibegl1-mesa --dbg-package=libegl1-mesa-dbg
 	dh_strip -plibgles1-mesa --dbg-package=libgles1-mesa-dbg
-	dh_strip -plibgles2-mesa --dbg-package=libgles2-mesa-dbg	
+	dh_strip -plibgles2-mesa --dbg-package=libgles2-mesa-dbg
 	dh_strip -plibegl1-mesa-drivers --dbg-package=libegl1-mesa-drivers-dbg
-	dh_strip -s --remaining-packages
+	# dh_strip -s --remaining-packages doesn't work with resumed
+	# builds (see changelog for mesa 7.10-1):
+	dh_strip \
+		-plibegl1-mesa-dev \
+		-plibgl1-mesa-dev \
+		-plibgl1-mesa-swx11-dev \
+		-plibgles1-mesa-dev \
+		-plibgles2-mesa-dev \
+		-plibglu1-mesa \
+		-plibglu1-mesa-dev \
+		-plibglw1-mesa \
+		-plibglw1-mesa-dev \
+		-plibopenvg1-mesa-dev \
+		-plibosmesa6 \
+		-plibosmesa6-dev \
+		-pmesa-common-dev
 	dh_compress -s
 	dh_fixperms -s
-	dh_makeshlibs -s
+	dh_makeshlibs -s -- -c4
 	dh_installdeb -s
 	dh_shlibdeps -s
 	dh_gencontrol -s

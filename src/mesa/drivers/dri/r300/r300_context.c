@@ -86,6 +86,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define need_GL_EXT_stencil_two_side
 #define need_GL_ATI_separate_stencil
 #define need_GL_NV_vertex_program
+#define need_GL_OES_EGL_image
 
 #include "main/remap_helper.h"
 
@@ -134,7 +135,9 @@ static const struct dri_extension card_extensions[] = {
   {"GL_MESAX_texture_float",		NULL},
   {"GL_NV_blend_square",		NULL},
   {"GL_NV_vertex_program",		GL_NV_vertex_program_functions},
-  {"GL_SGIS_generate_mipmap",		NULL},
+#if FEATURE_OES_EGL_image
+  {"GL_OES_EGL_image",                  GL_OES_EGL_image_functions },
+#endif
   {NULL,				NULL}
   /* *INDENT-ON* */
 };
@@ -220,7 +223,7 @@ static void r300_vtbl_pre_emit_atoms(radeonContextPtr radeon)
 	end_3d(radeon);
 }
 
-static void r300_fallback(GLcontext *ctx, GLuint bit, GLboolean mode)
+static void r300_fallback(struct gl_context *ctx, GLuint bit, GLboolean mode)
 {
 	r300ContextPtr r300 = R300_CONTEXT(ctx);
 	if (mode)
@@ -332,7 +335,7 @@ static void r300_init_vtbl(radeonContextPtr radeon)
 	}
 }
 
-static void r300InitConstValues(GLcontext *ctx, radeonScreenPtr screen)
+static void r300InitConstValues(struct gl_context *ctx, radeonScreenPtr screen)
 {
 	r300ContextPtr r300 = R300_CONTEXT(ctx);
 
@@ -440,7 +443,7 @@ static void r300ParseOptions(r300ContextPtr r300, radeonScreenPtr screen)
 	r300->options = options;
 }
 
-static void r300InitGLExtensions(GLcontext *ctx)
+static void r300InitGLExtensions(struct gl_context *ctx)
 {
 	r300ContextPtr r300 = R300_CONTEXT(ctx);
 
@@ -478,7 +481,7 @@ static void r300InitIoctlFuncs(struct dd_function_table *functions)
 /* Create the device specific rendering context.
  */
 GLboolean r300CreateContext(gl_api api,
-			    const __GLcontextModes * glVisual,
+			    const struct gl_config * glVisual,
 			    __DRIcontext * driContextPriv,
 			    void *sharedContextPrivate)
 {
@@ -486,7 +489,7 @@ GLboolean r300CreateContext(gl_api api,
 	radeonScreenPtr screen = (radeonScreenPtr) (sPriv->private);
 	struct dd_function_table functions;
 	r300ContextPtr r300;
-	GLcontext *ctx;
+	struct gl_context *ctx;
 
 	assert(glVisual);
 	assert(driContextPriv);

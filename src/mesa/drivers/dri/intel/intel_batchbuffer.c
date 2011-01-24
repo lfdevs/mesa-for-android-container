@@ -44,7 +44,9 @@ intel_batchbuffer_reset(struct intel_batchbuffer *batch)
 
    batch->buf = drm_intel_bo_alloc(intel->bufmgr, "batchbuffer",
 				   intel->maxBatchSize, 4096);
-   batch->map = batch->buffer;
+   drm_intel_gem_bo_map_gtt(batch->buf);
+   batch->map = batch->buf->virtual;
+
    batch->size = intel->maxBatchSize;
    batch->ptr = batch->map;
    batch->reserved_space = BATCH_RESERVED;
@@ -58,7 +60,6 @@ intel_batchbuffer_alloc(struct intel_context *intel)
    struct intel_batchbuffer *batch = calloc(sizeof(*batch), 1);
 
    batch->intel = intel;
-   batch->buffer = malloc(intel->maxBatchSize);
    intel_batchbuffer_reset(batch);
 
    return batch;
@@ -67,8 +68,11 @@ intel_batchbuffer_alloc(struct intel_context *intel)
 void
 intel_batchbuffer_free(struct intel_batchbuffer *batch)
 {
-   free (batch->buffer);
-   drm_intel_bo_unreference(batch->buf);
+   if (batch->map) {
+      drm_intel_gem_bo_unmap_gtt(batch->buf);
+      batch->map = NULL;
+   }
+   dri_bo_unreference(batch->buf);
    batch->buf = NULL;
    free(batch);
 }
@@ -84,22 +88,24 @@ do_flush_locked(struct intel_batchbuffer *batch, GLuint used)
    int ret = 0;
    int x_off = 0, y_off = 0;
 
-   drm_intel_bo_subdata(batch->buf, 0, used, batch->buffer);
-   if (batch->state_batch_offset != batch->size) {
-      drm_intel_bo_subdata(batch->buf,
-			   batch->state_batch_offset,
-			   batch->size - batch->state_batch_offset,
-			   batch->buffer + batch->state_batch_offset);
-   }
+   drm_intel_gem_bo_unmap_gtt(batch->buf);
 
    batch->ptr = NULL;
 
-   if (!intel->no_hw) {
-      drm_intel_bo_exec(batch->buf, used, NULL, 0,
-			(x_off & 0xffff) | (y_off << 16));
+   if (!intel->intelScreen->no_hw) {
+      int ring;
+
+      if (intel->gen < 6 || !intel->batch->is_blit) {
+	 ring = I915_EXEC_RENDER;
+      } else {
+	 ring = I915_EXEC_BLT;
+      }
+
+      drm_intel_bo_mrb_exec(batch->buf, used, NULL, 0,
+			    (x_off & 0xffff) | (y_off << 16), ring);
    }
 
-   if (INTEL_DEBUG & DEBUG_BATCH) {
+   if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
       drm_intel_bo_map(batch->buf, GL_FALSE);
       intel_decode(batch->buf->virtual, used / 4, batch->buf->offset,
 		   intel->intelScreen->deviceID, GL_TRUE);
@@ -130,7 +136,7 @@ _intel_batchbuffer_flush(struct intel_batchbuffer *batch, const char *file,
    if (used == 0)
       return;
 
-   if (INTEL_DEBUG & DEBUG_BATCH)
+   if (unlikely(INTEL_DEBUG & DEBUG_BATCH))
       fprintf(stderr, "%s:%d: Batchbuffer flush with %db used\n", file, line,
 	      used);
 
@@ -174,7 +180,7 @@ _intel_batchbuffer_flush(struct intel_batchbuffer *batch, const char *file,
 
    do_flush_locked(batch, used);
 
-   if (INTEL_DEBUG & DEBUG_SYNC) {
+   if (unlikely(INTEL_DEBUG & DEBUG_SYNC)) {
       fprintf(stderr, "waiting for idle\n");
       drm_intel_bo_map(batch->buf, GL_TRUE);
       drm_intel_bo_unmap(batch->buf);
@@ -244,10 +250,10 @@ intel_batchbuffer_emit_reloc_fenced(struct intel_batchbuffer *batch,
 
 void
 intel_batchbuffer_data(struct intel_batchbuffer *batch,
-                       const void *data, GLuint bytes)
+                       const void *data, GLuint bytes, bool is_blit)
 {
    assert((bytes & 3) == 0);
-   intel_batchbuffer_require_space(batch, bytes);
+   intel_batchbuffer_require_space(batch, bytes, is_blit);
    __memcpy(batch->ptr, data, bytes);
    batch->ptr += bytes;
 }
@@ -264,22 +270,32 @@ intel_batchbuffer_emit_mi_flush(struct intel_batchbuffer *batch)
    struct intel_context *intel = batch->intel;
 
    if (intel->gen >= 6) {
-      BEGIN_BATCH(8);
+      if (intel->batch->is_blit) {
+	 BEGIN_BATCH_BLT(4);
+	 OUT_BATCH(MI_FLUSH_DW);
+	 OUT_BATCH(0);
+	 OUT_BATCH(0);
+	 OUT_BATCH(0);
+	 ADVANCE_BATCH();
+      } else {
+	 BEGIN_BATCH(8);
+	 /* XXX workaround: issue any post sync != 0 before write
+	  * cache flush = 1
+	  */
+	 OUT_BATCH(_3DSTATE_PIPE_CONTROL);
+	 OUT_BATCH(PIPE_CONTROL_WRITE_IMMEDIATE);
+	 OUT_BATCH(0); /* write address */
+	 OUT_BATCH(0); /* write data */
 
-      /* XXX workaround: issue any post sync != 0 before write cache flush = 1 */
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL);
-      OUT_BATCH(PIPE_CONTROL_WRITE_IMMEDIATE);
-      OUT_BATCH(0); /* write address */
-      OUT_BATCH(0); /* write data */
-
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL);
-      OUT_BATCH(PIPE_CONTROL_INSTRUCTION_FLUSH |
-		PIPE_CONTROL_WRITE_FLUSH |
-		PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-		PIPE_CONTROL_NO_WRITE);
-      OUT_BATCH(0); /* write address */
-      OUT_BATCH(0); /* write data */
-      ADVANCE_BATCH();
+	 OUT_BATCH(_3DSTATE_PIPE_CONTROL);
+	 OUT_BATCH(PIPE_CONTROL_INSTRUCTION_FLUSH |
+		   PIPE_CONTROL_WRITE_FLUSH |
+		   PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+		   PIPE_CONTROL_NO_WRITE);
+	 OUT_BATCH(0); /* write address */
+	 OUT_BATCH(0); /* write data */
+	 ADVANCE_BATCH();
+      }
    } else if (intel->gen >= 4) {
       BEGIN_BATCH(4);
       OUT_BATCH(_3DSTATE_PIPE_CONTROL |

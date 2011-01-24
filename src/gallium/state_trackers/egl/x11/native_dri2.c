@@ -136,6 +136,7 @@ dri2_surface_process_drawable_buffers(struct native_surface *nsurf,
    templ.width0 = dri2surf->width;
    templ.height0 = dri2surf->height;
    templ.depth0 = 1;
+   templ.array_size = 1;
    templ.format = dri2surf->color_format;
    templ.bind = PIPE_BIND_RENDER_TARGET;
 
@@ -338,6 +339,32 @@ dri2_surface_swap_buffers(struct native_surface *nsurf)
 }
 
 static boolean
+dri2_surface_present(struct native_surface *nsurf,
+                     enum native_attachment natt,
+                     boolean preserve,
+                     uint swap_interval)
+{
+   boolean ret;
+
+   if (swap_interval)
+      return FALSE;
+
+   switch (natt) {
+   case NATIVE_ATTACHMENT_FRONT_LEFT:
+      ret = dri2_surface_flush_frontbuffer(nsurf);
+      break;
+   case NATIVE_ATTACHMENT_BACK_LEFT:
+      ret = dri2_surface_swap_buffers(nsurf);
+      break;
+   default:
+      ret = FALSE;
+      break;
+   }
+
+   return ret;
+}
+
+static boolean
 dri2_surface_validate(struct native_surface *nsurf, uint attachment_mask,
                       unsigned int *seq_num, struct pipe_resource **textures,
                       int *width, int *height)
@@ -430,8 +457,7 @@ dri2_display_create_surface(struct native_display *ndpy,
    dri2surf->color_format = dri2conf->base.color_format;
 
    dri2surf->base.destroy = dri2_surface_destroy;
-   dri2surf->base.swap_buffers = dri2_surface_swap_buffers;
-   dri2surf->base.flush_frontbuffer = dri2_surface_flush_frontbuffer;
+   dri2surf->base.present = dri2_surface_present;
    dri2surf->base.validate = dri2_surface_validate;
    dri2surf->base.wait = dri2_surface_wait;
 
@@ -518,12 +544,12 @@ dri2_display_convert_config(struct native_display *ndpy,
    if (!(mode->renderType & GLX_RGBA_BIT) || !mode->rgbMode)
       return FALSE;
 
-   /* skip single-buffered configs */
-   if (!mode->doubleBufferMode)
-      return FALSE;
-
    /* only interested in native renderable configs */
    if (!mode->xRenderable || !mode->drawableType)
+      return FALSE;
+
+   /* fast/slow configs are probably not relevant */
+   if (mode->visualRating == GLX_SLOW_CONFIG)
       return FALSE;
 
    nconf->buffer_mask = 1 << NATIVE_ATTACHMENT_FRONT_LEFT;
@@ -546,13 +572,32 @@ dri2_display_convert_config(struct native_display *ndpy,
    if (nconf->color_format == PIPE_FORMAT_NONE)
       return FALSE;
 
-   if (mode->drawableType & GLX_WINDOW_BIT)
+   if ((mode->drawableType & GLX_WINDOW_BIT) && mode->visualID)
       nconf->window_bit = TRUE;
    if (mode->drawableType & GLX_PIXMAP_BIT)
       nconf->pixmap_bit = TRUE;
 
    nconf->native_visual_id = mode->visualID;
-   nconf->native_visual_type = mode->visualType;
+   switch (mode->visualType) {
+   case GLX_TRUE_COLOR:
+      nconf->native_visual_type = TrueColor;
+      break;
+   case GLX_DIRECT_COLOR:
+      nconf->native_visual_type = DirectColor;
+      break;
+   case GLX_PSEUDO_COLOR:
+      nconf->native_visual_type = PseudoColor;
+      break;
+   case GLX_STATIC_COLOR:
+      nconf->native_visual_type = StaticColor;
+      break;
+   case GLX_GRAY_SCALE:
+      nconf->native_visual_type = GrayScale;
+      break;
+   case GLX_STATIC_GRAY:
+      nconf->native_visual_type = StaticGray;
+      break;
+   }
    nconf->level = mode->level;
    nconf->samples = mode->samples;
 
@@ -592,8 +637,17 @@ dri2_display_get_configs(struct native_display *ndpy, int *num_configs)
       count = 0;
       for (i = 0; i < num_modes; i++) {
          struct native_config *nconf = &dri2dpy->configs[count].base;
-         if (dri2_display_convert_config(&dri2dpy->base, modes, nconf))
-            count++;
+
+         if (dri2_display_convert_config(&dri2dpy->base, modes, nconf)) {
+            int j;
+            /* look for duplicates */
+            for (j = 0; j < count; j++) {
+               if (memcmp(&dri2dpy->configs[j], nconf, sizeof(*nconf)) == 0)
+                  break;
+            }
+            if (j == count)
+               count++;
+         }
          modes = modes->next;
       }
 
@@ -634,9 +688,14 @@ dri2_display_get_param(struct native_display *ndpy,
 
    switch (param) {
    case NATIVE_PARAM_USE_NATIVE_BUFFER:
-      /* DRI2GetBuffers use the native buffers */
+      /* DRI2GetBuffers uses the native buffers */
       val = TRUE;
       break;
+   case NATIVE_PARAM_PRESERVE_BUFFER:
+      /* DRI2CopyRegion is used */
+      val = TRUE;
+      break;
+   case NATIVE_PARAM_MAX_SWAP_INTERVAL:
    default:
       val = 0;
       break;

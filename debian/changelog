@@ -1,3 +1,30 @@
+mesa (7.10-1) experimental; urgency=low
+
+  * New upstream release.
+  * Add patch: 10-fix-talloc-linking.diff
+  * Use debian/not-installed to keep track of files which aren't getting
+    installed for now. Delete them before running dh_install. Use the list
+    of files appearing in the build logs for 7.9+repack-2.
+  * Switch from --list-missing to --fail-missing accordingly.
+  * Pass -c4 to dpkg-gensymbols through dh_makeshlibs to make sure
+    symbol-related changes are noticed and dealt with.
+  * Update symbols files with new symbols:
+    - libopenvg1-mesa.symbols
+  * Remove “mesa internal ASM optimized functions” lines from symbols
+    files, those seem to be gone, and with -c4 passed to dpkg-gensymbols,
+    any related issue will break the build:
+    - libgles1-mesa.symbols
+    - libgles2-mesa.symbols
+  * Stop using dh_strip -s --remaining-packages. When a build is resumed
+    (-nc), this dh_strip call is a no-op if it was previously written to
+    the debhelper log files. Specify all remaining packages instead.
+    That's boring, but avoid getting non-stripped packages.
+  * Add debian/git-cleanup.sh script to ease removing files in git which
+    aren't in the release tarballs, and make dpkg-source error out.
+  * Keep my eyes wide shut and add myself to Uploaders.
+
+ -- Cyril Brulebois <kibi@debian.org>  Tue, 25 Jan 2011 00:20:57 +0100
+
 mesa (7.9+repack-2) experimental; urgency=low
 
   [ Cyril Brulebois ]

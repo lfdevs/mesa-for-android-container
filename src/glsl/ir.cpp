@@ -31,6 +31,21 @@ ir_rvalue::ir_rvalue()
    this->type = glsl_type::error_type;
 }
 
+bool ir_rvalue::is_zero() const
+{
+   return false;
+}
+
+bool ir_rvalue::is_one() const
+{
+   return false;
+}
+
+bool ir_rvalue::is_negative_one() const
+{
+   return false;
+}
+
 /**
  * Modify the swizzle make to move one component to another
  *
@@ -185,18 +200,35 @@ ir_expression::ir_expression(int op, const struct glsl_type *type,
    this->operation = ir_expression_operation(op);
    this->operands[0] = op0;
    this->operands[1] = NULL;
+   this->operands[2] = NULL;
+   this->operands[3] = NULL;
 }
 
 ir_expression::ir_expression(int op, const struct glsl_type *type,
 			     ir_rvalue *op0, ir_rvalue *op1)
 {
-   assert((op1 == NULL) && (get_num_operands(ir_expression_operation(op)) == 1)
+   assert(((op1 == NULL) && (get_num_operands(ir_expression_operation(op)) == 1))
 	  || (get_num_operands(ir_expression_operation(op)) == 2));
    this->ir_type = ir_type_expression;
    this->type = type;
    this->operation = ir_expression_operation(op);
    this->operands[0] = op0;
    this->operands[1] = op1;
+   this->operands[2] = NULL;
+   this->operands[3] = NULL;
+}
+
+ir_expression::ir_expression(int op, const struct glsl_type *type,
+			     ir_rvalue *op0, ir_rvalue *op1,
+			     ir_rvalue *op2, ir_rvalue *op3)
+{
+   this->ir_type = ir_type_expression;
+   this->type = type;
+   this->operation = ir_expression_operation(op);
+   this->operands[0] = op0;
+   this->operands[1] = op1;
+   this->operands[2] = op2;
+   this->operands[3] = op3;
 }
 
 ir_expression::ir_expression(int op, ir_rvalue *op0)
@@ -206,6 +238,8 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
    this->operation = ir_expression_operation(op);
    this->operands[0] = op0;
    this->operands[1] = NULL;
+   this->operands[2] = NULL;
+   this->operands[3] = NULL;
 
    assert(op <= ir_last_unop);
 
@@ -226,6 +260,7 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
    case ir_unop_ceil:
    case ir_unop_floor:
    case ir_unop_fract:
+   case ir_unop_round_even:
    case ir_unop_cos:
    case ir_unop_dFdx:
    case ir_unop_dFdy:
@@ -250,6 +285,8 @@ ir_expression::ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1)
    this->operation = ir_expression_operation(op);
    this->operands[0] = op0;
    this->operands[1] = op1;
+   this->operands[2] = NULL;
+   this->operands[3] = NULL;
 
    assert(op > ir_last_unop);
 
@@ -307,6 +344,9 @@ ir_expression::get_num_operands(ir_expression_operation op)
    if (op <= ir_last_binop)
       return 2;
 
+   if (op == ir_quadop_vector)
+      return 4;
+
    assert(false);
    return 0;
 }
@@ -336,8 +376,11 @@ static const char *const operator_strs[] = {
    "ceil",
    "floor",
    "fract",
+   "round_even",
    "sin",
    "cos",
+   "sin_reduced",
+   "cos_reduced",
    "dFdx",
    "dFdy",
    "noise",
@@ -363,16 +406,16 @@ static const char *const operator_strs[] = {
    "^^",
    "||",
    "dot",
-   "cross",
    "min",
    "max",
    "pow",
+   "vector",
 };
 
 const char *ir_expression::operator_string(ir_expression_operation op)
 {
    assert((unsigned int) op < Elements(operator_strs));
-   assert(Elements(operator_strs) == (ir_binop_pow + 1));
+   assert(Elements(operator_strs) == (ir_quadop_vector + 1));
    return operator_strs[op];
 }
 
@@ -788,6 +831,115 @@ ir_constant::has_value(const ir_constant *c) const
    return true;
 }
 
+bool
+ir_constant::is_zero() const
+{
+   if (!this->type->is_scalar() && !this->type->is_vector())
+      return false;
+
+   for (unsigned c = 0; c < this->type->vector_elements; c++) {
+      switch (this->type->base_type) {
+      case GLSL_TYPE_FLOAT:
+	 if (this->value.f[c] != 0.0)
+	    return false;
+	 break;
+      case GLSL_TYPE_INT:
+	 if (this->value.i[c] != 0)
+	    return false;
+	 break;
+      case GLSL_TYPE_UINT:
+	 if (this->value.u[c] != 0)
+	    return false;
+	 break;
+      case GLSL_TYPE_BOOL:
+	 if (this->value.b[c] != false)
+	    return false;
+	 break;
+      default:
+	 /* The only other base types are structures, arrays, and samplers.
+	  * Samplers cannot be constants, and the others should have been
+	  * filtered out above.
+	  */
+	 assert(!"Should not get here.");
+	 return false;
+      }
+   }
+
+   return true;
+}
+
+bool
+ir_constant::is_one() const
+{
+   if (!this->type->is_scalar() && !this->type->is_vector())
+      return false;
+
+   for (unsigned c = 0; c < this->type->vector_elements; c++) {
+      switch (this->type->base_type) {
+      case GLSL_TYPE_FLOAT:
+	 if (this->value.f[c] != 1.0)
+	    return false;
+	 break;
+      case GLSL_TYPE_INT:
+	 if (this->value.i[c] != 1)
+	    return false;
+	 break;
+      case GLSL_TYPE_UINT:
+	 if (this->value.u[c] != 1)
+	    return false;
+	 break;
+      case GLSL_TYPE_BOOL:
+	 if (this->value.b[c] != true)
+	    return false;
+	 break;
+      default:
+	 /* The only other base types are structures, arrays, and samplers.
+	  * Samplers cannot be constants, and the others should have been
+	  * filtered out above.
+	  */
+	 assert(!"Should not get here.");
+	 return false;
+      }
+   }
+
+   return true;
+}
+
+bool
+ir_constant::is_negative_one() const
+{
+   if (!this->type->is_scalar() && !this->type->is_vector())
+      return false;
+
+   if (this->type->is_boolean())
+      return false;
+
+   for (unsigned c = 0; c < this->type->vector_elements; c++) {
+      switch (this->type->base_type) {
+      case GLSL_TYPE_FLOAT:
+	 if (this->value.f[c] != -1.0)
+	    return false;
+	 break;
+      case GLSL_TYPE_INT:
+	 if (this->value.i[c] != -1)
+	    return false;
+	 break;
+      case GLSL_TYPE_UINT:
+	 if (int(this->value.u[c]) != -1)
+	    return false;
+	 break;
+      default:
+	 /* The only other base types are structures, arrays, samplers, and
+	  * booleans.  Samplers cannot be constants, and the others should
+	  * have been filtered out above.
+	  */
+	 assert(!"Should not get here.");
+	 return false;
+      }
+   }
+
+   return true;
+}
 
 ir_loop::ir_loop()
 {
@@ -1119,6 +1271,7 @@ ir_variable::ir_variable(const struct glsl_type *type, const char *name,
    this->ir_type = ir_type_variable;
    this->type = type;
    this->name = talloc_strdup(this, name);
+   this->explicit_location = false;
    this->location = -1;
    this->warn_extension = NULL;
    this->constant_value = NULL;
@@ -1283,4 +1436,60 @@ reparent_ir(exec_list *list, void *mem_ctx)
    foreach_list(node, list) {
       visit_tree((ir_instruction *) node, steal_memory, mem_ctx);
    }
+}
+
+
+static ir_rvalue *
+try_min_one(ir_rvalue *ir)
+{
+   ir_expression *expr = ir->as_expression();
+
+   if (!expr || expr->operation != ir_binop_min)
+      return NULL;
+
+   if (expr->operands[0]->is_one())
+      return expr->operands[1];
+
+   if (expr->operands[1]->is_one())
+      return expr->operands[0];
+
+   return NULL;
+}
+
+static ir_rvalue *
+try_max_zero(ir_rvalue *ir)
+{
+   ir_expression *expr = ir->as_expression();
+
+   if (!expr || expr->operation != ir_binop_max)
+      return NULL;
+
+   if (expr->operands[0]->is_zero())
+      return expr->operands[1];
+
+   if (expr->operands[1]->is_zero())
+      return expr->operands[0];
+
+   return NULL;
+}
+
+ir_rvalue *
+ir_rvalue::as_rvalue_to_saturate()
+{
+   ir_expression *expr = this->as_expression();
+
+   if (!expr)
+      return NULL;
+
+   ir_rvalue *max_zero = try_max_zero(expr);
+   if (max_zero) {
+      return try_min_one(max_zero);
+   } else {
+      ir_rvalue *min_one = try_min_one(expr);
+      if (min_one) {
+	 return try_max_zero(min_one);
+      }
+   }
+
+   return NULL;
 }

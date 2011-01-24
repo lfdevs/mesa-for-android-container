@@ -1,9 +1,9 @@
-/* A Bison parser, made by GNU Bison 2.4.2.  */
+/* A Bison parser, made by GNU Bison 2.4.3.  */
 
 /* Skeleton interface for Bison's Yacc-like parsers in C
    
-      Copyright (C) 1984, 1989-1990, 2000-2006, 2009-2010 Free Software
-   Foundation, Inc.
+      Copyright (C) 1984, 1989, 1990, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+   2009, 2010 Free Software Foundation, Inc.
    
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -225,7 +225,9 @@
      IMAGEBUFFER = 442,
      IIMAGEBUFFER = 443,
      UIMAGEBUFFER = 444,
-     ROW_MAJOR = 445
+     IMAGE1DARRAYSHADOW = 445,
+     IMAGE2DARRAYSHADOW = 446,
+     ROW_MAJOR = 447
    };
 #endif
 
@@ -242,10 +244,7 @@ typedef union YYSTYPE
    float real;
    char *identifier;
 
-   union {
-      struct ast_type_qualifier q;
-      unsigned i;
-   } type_qualifier;
+   struct ast_type_qualifier type_qualifier;
 
    ast_node *node;
    ast_type_specifier *type_specifier;
@@ -272,7 +271,7 @@ typedef union YYSTYPE
 
 
 /* Line 1685 of yacc.c  */
-#line 276 "glsl_parser.h"
+#line 275 "glsl_parser.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */

@@ -39,7 +39,7 @@
 void
 brw_update_cc_vp(struct brw_context *brw)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    struct brw_cc_viewport ccv;
 
    memset(&ccv, 0, sizeof(ccv));
@@ -91,7 +91,7 @@ static void prepare_cc_unit(struct brw_context *brw)
 static void upload_cc_unit(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    struct brw_cc_unit_state cc;
    void *map;
 
@@ -204,7 +204,7 @@ static void upload_cc_unit(struct brw_context *brw)
       cc.cc2.depth_write_enable = ctx->Depth.Mask;
    }
 
-   if (intel->stats_wm || (INTEL_DEBUG & DEBUG_STATS))
+   if (intel->stats_wm || unlikely(INTEL_DEBUG & DEBUG_STATS))
       cc.cc5.statistics_enable = 1;
 
    /* CACHE_NEW_CC_VP */
@@ -231,4 +231,29 @@ const struct brw_tracked_state brw_cc_unit = {
    },
    .prepare = prepare_cc_unit,
    .emit = upload_cc_unit,
+};
+
+static void upload_blend_constant_color(struct brw_context *brw)
+{
+   struct gl_context *ctx = &brw->intel.ctx;
+   struct brw_blend_constant_color bcc;
+
+   memset(&bcc, 0, sizeof(bcc));
+   bcc.header.opcode = CMD_BLEND_CONSTANT_COLOR;
+   bcc.header.length = sizeof(bcc)/4-2;
+   bcc.blend_constant_color[0] = ctx->Color.BlendColor[0];
+   bcc.blend_constant_color[1] = ctx->Color.BlendColor[1];
+   bcc.blend_constant_color[2] = ctx->Color.BlendColor[2];
+   bcc.blend_constant_color[3] = ctx->Color.BlendColor[3];
+
+   BRW_CACHED_BATCH_STRUCT(brw, &bcc);
+}
+
+const struct brw_tracked_state brw_blend_constant_color = {
+   .dirty = {
+      .mesa = _NEW_COLOR,
+      .brw = BRW_NEW_CONTEXT,
+      .cache = 0
+   },
+   .emit = upload_blend_constant_color
 };

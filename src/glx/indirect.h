@@ -440,6 +440,7 @@ extern HIDDEN void __indirect_glGetConvolutionParameteriv(GLenum target, GLenum 
 extern HIDDEN void gl_dispatch_stub_358(GLenum target, GLenum pname, GLint * params);
 extern HIDDEN void __indirect_glGetSeparableFilter(GLenum target, GLenum format, GLenum type, GLvoid * row, GLvoid * column, GLvoid * span);
 extern HIDDEN void gl_dispatch_stub_359(GLenum target, GLenum format, GLenum type, GLvoid * row, GLvoid * column, GLvoid * span);
+#define gl_dispatch_stub_GetSeparableFilterEXT gl_dispatch_stub_359
 extern HIDDEN void __indirect_glSeparableFilter2D(GLenum target, GLenum internalformat, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid * row, const GLvoid * column);
 extern HIDDEN void __indirect_glGetHistogram(GLenum target, GLboolean reset, GLenum format, GLenum type, GLvoid * values);
 extern HIDDEN void gl_dispatch_stub_361(GLenum target, GLboolean reset, GLenum format, GLenum type, GLvoid * values);
@@ -640,8 +641,8 @@ extern HIDDEN void __indirect_glGetVertexAttribfvNV(GLuint index, GLenum pname, 
 extern HIDDEN void __indirect_glGetVertexAttribivNV(GLuint index, GLenum pname, GLint * params);
 extern HIDDEN GLboolean __indirect_glIsProgramNV(GLuint program);
 extern HIDDEN void __indirect_glLoadProgramNV(GLenum target, GLuint id, GLsizei len, const GLubyte * program);
-extern HIDDEN void __indirect_glProgramParameters4dvNV(GLenum target, GLuint index, GLuint num, const GLdouble * params);
-extern HIDDEN void __indirect_glProgramParameters4fvNV(GLenum target, GLuint index, GLuint num, const GLfloat * params);
+extern HIDDEN void __indirect_glProgramParameters4dvNV(GLenum target, GLuint index, GLsizei num, const GLdouble * params);
+extern HIDDEN void __indirect_glProgramParameters4fvNV(GLenum target, GLuint index, GLsizei num, const GLfloat * params);
 extern HIDDEN void __indirect_glRequestResidentProgramsNV(GLsizei n, const GLuint * ids);
 extern HIDDEN void __indirect_glTrackMatrixNV(GLenum target, GLuint address, GLenum matrix, GLenum transform);
 extern HIDDEN void __indirect_glVertexAttrib1dNV(GLuint index, GLdouble x);

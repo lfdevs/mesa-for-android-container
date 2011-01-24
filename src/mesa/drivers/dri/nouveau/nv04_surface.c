@@ -25,7 +25,10 @@
  */
 
 #include "nouveau_driver.h"
-#include "nouveau_class.h"
+#include "nv_object.xml.h"
+#include "nv_m2mf.xml.h"
+#include "nv01_2d.xml.h"
+#include "nv04_3d.xml.h"
 #include "nouveau_context.h"
 #include "nouveau_util.h"
 #include "nv04_driver.h"
@@ -191,7 +194,7 @@ sifm_format(gl_format format)
 }
 
 static void
-nv04_surface_copy_swizzle(GLcontext *ctx,
+nv04_surface_copy_swizzle(struct gl_context *ctx,
 			  struct nouveau_surface *dst,
 			  struct nouveau_surface *src,
 			  int dx, int dy, int sx, int sy,
@@ -213,11 +216,6 @@ nv04_surface_copy_swizzle(GLcontext *ctx,
         /* Swizzled surfaces must be POT  */
 	assert(_mesa_is_pow_two(dst->width) &&
 	       _mesa_is_pow_two(dst->height));
-
-        /* If area is too large to copy in one shot we must copy it in
-	 * POT chunks to meet alignment requirements */
-	assert(sub_w == w || _mesa_is_pow_two(w));
-	assert(sub_h == h || _mesa_is_pow_two(h));
 
 	nouveau_bo_marko(bctx, sifm, NV03_SCALED_IMAGE_FROM_MEMORY_DMA_IMAGE,
 			 src->bo, bo_flags | NOUVEAU_BO_RD);
@@ -255,7 +253,7 @@ nv04_surface_copy_swizzle(GLcontext *ctx,
 
 			BEGIN_RING(chan, sifm,
 				   NV03_SCALED_IMAGE_FROM_MEMORY_SIZE, 4);
-			OUT_RING(chan, sub_h << 16 | sub_w);
+			OUT_RING(chan, align(sub_h, 2) << 16 | align(sub_w, 2));
 			OUT_RING(chan, src->pitch  |
 				 NV03_SCALED_IMAGE_FROM_MEMORY_FORMAT_ORIGIN_CENTER |
 				 NV03_SCALED_IMAGE_FROM_MEMORY_FORMAT_FILTER_POINT_SAMPLE);
@@ -274,7 +272,7 @@ nv04_surface_copy_swizzle(GLcontext *ctx,
 }
 
 static void
-nv04_surface_copy_m2mf(GLcontext *ctx,
+nv04_surface_copy_m2mf(struct gl_context *ctx,
 		       struct nouveau_surface *dst,
 		       struct nouveau_surface *src,
 		       int dx, int dy, int sx, int sy,
@@ -288,9 +286,9 @@ nv04_surface_copy_m2mf(GLcontext *ctx,
 	unsigned dst_offset = dst->offset + dy * dst->pitch + dx * dst->cpp;
 	unsigned src_offset = src->offset + sy * src->pitch + sx * src->cpp;
 
-	nouveau_bo_marko(bctx, m2mf, NV04_MEMORY_TO_MEMORY_FORMAT_DMA_BUFFER_IN,
+	nouveau_bo_marko(bctx, m2mf, NV04_M2MF_DMA_BUFFER_IN,
 			 src->bo, bo_flags | NOUVEAU_BO_RD);
-	nouveau_bo_marko(bctx, m2mf, NV04_MEMORY_TO_MEMORY_FORMAT_DMA_BUFFER_OUT,
+	nouveau_bo_marko(bctx, m2mf, NV04_M2MF_DMA_BUFFER_OUT,
 			 dst->bo, bo_flags | NOUVEAU_BO_WR);
 
 	while (h) {
@@ -298,7 +296,7 @@ nv04_surface_copy_m2mf(GLcontext *ctx,
 
 		MARK_RING(chan, 9, 2);
 
-		BEGIN_RING(chan, m2mf, NV04_MEMORY_TO_MEMORY_FORMAT_OFFSET_IN, 8);
+		BEGIN_RING(chan, m2mf, NV04_M2MF_OFFSET_IN, 8);
 		OUT_RELOCl(chan, src->bo, src_offset,
 			   bo_flags | NOUVEAU_BO_RD);
 		OUT_RELOCl(chan, dst->bo, dst_offset,
@@ -367,7 +365,7 @@ get_swizzled_offset(struct nouveau_surface *s, unsigned x, unsigned y)
 }
 
 static void
-nv04_surface_copy_cpu(GLcontext *ctx,
+nv04_surface_copy_cpu(struct gl_context *ctx,
 		      struct nouveau_surface *dst,
 		      struct nouveau_surface *src,
 		      int dx, int dy, int sx, int sy,
@@ -398,7 +396,7 @@ nv04_surface_copy_cpu(GLcontext *ctx,
 }
 
 void
-nv04_surface_copy(GLcontext *ctx,
+nv04_surface_copy(struct gl_context *ctx,
 		  struct nouveau_surface *dst,
 		  struct nouveau_surface *src,
 		  int dx, int dy, int sx, int sy,
@@ -423,7 +421,7 @@ nv04_surface_copy(GLcontext *ctx,
 }
 
 void
-nv04_surface_fill(GLcontext *ctx,
+nv04_surface_fill(struct gl_context *ctx,
 		  struct nouveau_surface *dst,
 		  unsigned mask, unsigned value,
 		  int dx, int dy, int w, int h)
@@ -465,7 +463,7 @@ nv04_surface_fill(GLcontext *ctx,
 }
 
 void
-nv04_surface_takedown(GLcontext *ctx)
+nv04_surface_takedown(struct gl_context *ctx)
 {
 	struct nouveau_hw_state *hw = &to_nouveau_context(ctx)->hw;
 
@@ -480,7 +478,7 @@ nv04_surface_takedown(GLcontext *ctx)
 }
 
 GLboolean
-nv04_surface_init(GLcontext *ctx)
+nv04_surface_init(struct gl_context *ctx)
 {
 	struct nouveau_channel *chan = context_chan(ctx);
 	struct nouveau_hw_state *hw = &to_nouveau_context(ctx)->hw;
@@ -493,12 +491,11 @@ nv04_surface_init(GLcontext *ctx)
 		goto fail;
 
 	/* Memory to memory format. */
-	ret = nouveau_grobj_alloc(chan, handle++, NV04_MEMORY_TO_MEMORY_FORMAT,
-				  &hw->m2mf);
+	ret = nouveau_grobj_alloc(chan, handle++, NV04_M2MF, &hw->m2mf);
 	if (ret)
 		goto fail;
 
-	BEGIN_RING(chan, hw->m2mf, NV04_MEMORY_TO_MEMORY_FORMAT_DMA_NOTIFY, 1);
+	BEGIN_RING(chan, hw->m2mf, NV04_M2MF_DMA_NOTIFY, 1);
 	OUT_RING  (chan, hw->ntfy->handle);
 
 	/* Context surfaces 2D. */

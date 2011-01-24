@@ -35,7 +35,6 @@
 #include "pipe/p_screen.h"
 #include "draw/draw_context.h"
 
-#include "gallivm/lp_bld_limits.h"
 #include "lp_texture.h"
 #include "lp_fence.h"
 #include "lp_jit.h"
@@ -65,9 +64,23 @@ static const struct debug_named_value lp_debug_flags[] = {
    { "scene", DEBUG_SCENE, NULL },
    { "fence", DEBUG_FENCE, NULL },
    { "mem", DEBUG_MEM, NULL },
+   { "fs", DEBUG_FS, NULL },
    DEBUG_NAMED_VALUE_END
 };
 #endif
+
+int LP_PERF = 0;
+static const struct debug_named_value lp_perf_flags[] = {
+   { "texmem",         PERF_TEX_MEM, NULL },
+   { "no_mipmap",      PERF_NO_MIPMAPS, NULL },
+   { "no_linear",      PERF_NO_LINEAR, NULL },
+   { "no_mip_linear",  PERF_NO_MIP_LINEAR, NULL },
+   { "no_tex",         PERF_NO_TEX, NULL },
+   { "no_blend",       PERF_NO_BLEND, NULL },
+   { "no_depth",       PERF_NO_DEPTH, NULL },
+   { "no_alphatest",   PERF_NO_ALPHATEST, NULL },
+   DEBUG_NAMED_VALUE_END
+};
 
 
 static const char *
@@ -145,6 +158,8 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
       return 0;
+   case PIPE_CAP_PRIMITIVE_RESTART:
+      return 1;
    case PIPE_CAP_DEPTHSTENCIL_CLEAR_SEPARATE:
       return 1;
    case PIPE_CAP_DEPTH_CLAMP:
@@ -272,12 +287,13 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
 
 static void
 llvmpipe_flush_frontbuffer(struct pipe_screen *_screen,
-                           struct pipe_surface *surface,
+                           struct pipe_resource *resource,
+                           unsigned level, unsigned layer,
                            void *context_private)
 {
    struct llvmpipe_screen *screen = llvmpipe_screen(_screen);
    struct sw_winsys *winsys = screen->winsys;
-   struct llvmpipe_resource *texture = llvmpipe_resource(surface->texture);
+   struct llvmpipe_resource *texture = llvmpipe_resource(resource);
 
    assert(texture->dt);
    if (texture->dt)
@@ -373,6 +389,8 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    LP_DEBUG = debug_get_flags_option("LP_DEBUG", lp_debug_flags, 0 );
 #endif
 
+   LP_PERF = debug_get_flags_option("LP_PERF", lp_perf_flags, 0 );
+
    if (!screen)
       return NULL;
 
@@ -397,10 +415,9 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
 
    lp_jit_screen_init(screen);
 
+   screen->num_threads = util_cpu_caps.nr_cpus > 1 ? util_cpu_caps.nr_cpus : 0;
 #ifdef PIPE_OS_EMBEDDED
    screen->num_threads = 0;
-#else
-   screen->num_threads = util_cpu_caps.nr_cpus;
 #endif
    screen->num_threads = debug_get_num_option("LP_NUM_THREADS", screen->num_threads);
    screen->num_threads = MIN2(screen->num_threads, LP_MAX_THREADS);

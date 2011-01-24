@@ -20,13 +20,14 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include "r600_asm.h"
-#include "r600_context.h"
-#include "util/u_memory.h"
-#include "eg_sq.h"
-#include "r600_opcodes.h"
 #include <stdio.h>
 #include <errno.h>
+#include "util/u_memory.h"
+#include "r600_pipe.h"
+#include "r600_asm.h"
+#include "eg_sq.h"
+#include "r600_opcodes.h"
+#include "evergreend.h"
 
 int eg_bc_cf_build(struct r600_bc *bc, struct r600_bc_cf *cf)
 {
@@ -36,8 +37,13 @@ int eg_bc_cf_build(struct r600_bc *bc, struct r600_bc_cf *cf)
 	case (EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU << 3):
 	case (EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_PUSH_BEFORE << 3):
 		bc->bytecode[id++] = S_SQ_CF_ALU_WORD0_ADDR(cf->addr >> 1) |
-		  S_SQ_CF_ALU_WORD0_KCACHE_MODE0(cf->kcache0_mode);
+			S_SQ_CF_ALU_WORD0_KCACHE_MODE0(cf->kcache0_mode) |
+			S_SQ_CF_ALU_WORD0_KCACHE_BANK0(cf->kcache0_bank) |
+			S_SQ_CF_ALU_WORD0_KCACHE_BANK1(cf->kcache1_bank);
 		bc->bytecode[id++] = S_SQ_CF_ALU_WORD1_CF_INST(cf->inst >> 3) |
+			S_SQ_CF_ALU_WORD1_KCACHE_MODE1(cf->kcache1_mode) |
+			S_SQ_CF_ALU_WORD1_KCACHE_ADDR0(cf->kcache0_addr) |
+			S_SQ_CF_ALU_WORD1_KCACHE_ADDR1(cf->kcache1_addr) |
 					S_SQ_CF_ALU_WORD1_BARRIER(1) |
 					S_SQ_CF_ALU_WORD1_COUNT((cf->ndw / 2) - 1);
 		break;
@@ -69,11 +75,13 @@ int eg_bc_cf_build(struct r600_bc *bc, struct r600_bc_cf *cf)
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_END:
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_CONTINUE:
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_BREAK:
+	case EG_V_SQ_CF_WORD1_SQ_CF_INST_CALL_FS:
+	case EG_V_SQ_CF_WORD1_SQ_CF_INST_RETURN:
 		bc->bytecode[id++] = S_SQ_CF_WORD0_ADDR(cf->cf_addr >> 1);
 		bc->bytecode[id++] = S_SQ_CF_WORD1_CF_INST(cf->inst) |
 					S_SQ_CF_WORD1_BARRIER(1) |
-			                S_SQ_CF_WORD1_COND(cf->cond) |
-			                S_SQ_CF_WORD1_POP_COUNT(cf->pop_count);
+					S_SQ_CF_WORD1_COND(cf->cond) |
+					S_SQ_CF_WORD1_POP_COUNT(cf->pop_count);
 
 		break;
 	default:
@@ -81,4 +89,38 @@ int eg_bc_cf_build(struct r600_bc *bc, struct r600_bc_cf *cf)
 		return -EINVAL;
 	}
 	return 0;
+}
+
+void eg_cf_vtx(struct r600_vertex_element *ve, u32 *bytecode, unsigned count)
+{
+	struct r600_pipe_state *rstate;
+	unsigned i = 0;
+
+	if (count > 8) {
+		bytecode[i++] = S_SQ_CF_WORD0_ADDR(8 >> 1);
+		bytecode[i++] = S_SQ_CF_WORD1_CF_INST(EG_V_SQ_CF_WORD1_SQ_CF_INST_VTX) |
+				S_SQ_CF_WORD1_BARRIER(1) |
+				S_SQ_CF_WORD1_COUNT(8 - 1);
+		bytecode[i++] = S_SQ_CF_WORD0_ADDR(40 >> 1);
+		bytecode[i++] = S_SQ_CF_WORD1_CF_INST(EG_V_SQ_CF_WORD1_SQ_CF_INST_VTX) |
+				S_SQ_CF_WORD1_BARRIER(1) |
+				S_SQ_CF_WORD1_COUNT(count - 8 - 1);
+	} else {
+		bytecode[i++] = S_SQ_CF_WORD0_ADDR(8 >> 1);
+		bytecode[i++] = S_SQ_CF_WORD1_CF_INST(EG_V_SQ_CF_WORD1_SQ_CF_INST_VTX) |
+				S_SQ_CF_WORD1_BARRIER(1) |
+				S_SQ_CF_WORD1_COUNT(count - 1);
+	}
+	bytecode[i++] = S_SQ_CF_WORD0_ADDR(0);
+	bytecode[i++] = S_SQ_CF_WORD1_CF_INST(EG_V_SQ_CF_WORD1_SQ_CF_INST_RETURN) |
+			S_SQ_CF_WORD1_BARRIER(1);
+
+	rstate = &ve->rstate;
+	rstate->id = R600_PIPE_STATE_FETCH_SHADER;
+	rstate->nregs = 0;
+	r600_pipe_state_add_reg(rstate, R_0288A8_SQ_PGM_RESOURCES_FS,
+				0x00000000, 0xFFFFFFFF, NULL);
+	r600_pipe_state_add_reg(rstate, R_0288A4_SQ_PGM_START_FS,
+				(r600_bo_offset(ve->fetch_shader)) >> 8,
+				0xFFFFFFFF, ve->fetch_shader);
 }

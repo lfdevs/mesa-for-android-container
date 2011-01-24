@@ -38,45 +38,11 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 
-
-
-
-
-/***********************************************************************
- * Blend color
- */
-
-static void upload_blend_constant_color(struct brw_context *brw)
-{
-   GLcontext *ctx = &brw->intel.ctx;
-   struct brw_blend_constant_color bcc;
-
-   memset(&bcc, 0, sizeof(bcc));      
-   bcc.header.opcode = CMD_BLEND_CONSTANT_COLOR;
-   bcc.header.length = sizeof(bcc)/4-2;
-   bcc.blend_constant_color[0] = ctx->Color.BlendColor[0];
-   bcc.blend_constant_color[1] = ctx->Color.BlendColor[1];
-   bcc.blend_constant_color[2] = ctx->Color.BlendColor[2];
-   bcc.blend_constant_color[3] = ctx->Color.BlendColor[3];
-
-   BRW_CACHED_BATCH_STRUCT(brw, &bcc);
-}
-
-
-const struct brw_tracked_state brw_blend_constant_color = {
-   .dirty = {
-      .mesa = _NEW_COLOR,
-      .brw = BRW_NEW_CONTEXT,
-      .cache = 0
-   },
-   .emit = upload_blend_constant_color
-};
-
 /* Constant single cliprect for framebuffer object or DRI2 drawing */
 static void upload_drawing_rect(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
-   GLcontext *ctx = &intel->ctx;
+   struct gl_context *ctx = &intel->ctx;
 
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_DRAWRECT_INFO_I965);
@@ -335,9 +301,12 @@ const struct brw_tracked_state brw_depthbuffer = {
 
 static void upload_polygon_stipple(struct brw_context *brw)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    struct brw_polygon_stipple bps;
    GLuint i;
+
+   if (!ctx->Polygon.StippleFlag)
+      return;
 
    memset(&bps, 0, sizeof(bps));
    bps.header.opcode = CMD_POLY_STIPPLE_PATTERN;
@@ -378,8 +347,11 @@ const struct brw_tracked_state brw_polygon_stipple = {
 
 static void upload_polygon_stipple_offset(struct brw_context *brw)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    struct brw_polygon_stipple_offset bpso;
+
+   if (!ctx->Polygon.StippleFlag)
+      return;
 
    memset(&bpso, 0, sizeof(bpso));
    bpso.header.opcode = CMD_POLY_STIPPLE_OFFSET;
@@ -409,7 +381,7 @@ static void upload_polygon_stipple_offset(struct brw_context *brw)
 
 const struct brw_tracked_state brw_polygon_stipple_offset = {
    .dirty = {
-      .mesa = _NEW_WINDOW_POS,
+      .mesa = _NEW_WINDOW_POS | _NEW_POLYGONSTIPPLE,
       .brw = BRW_NEW_CONTEXT,
       .cache = 0
    },
@@ -421,9 +393,10 @@ const struct brw_tracked_state brw_polygon_stipple_offset = {
  */
 static void upload_aa_line_parameters(struct brw_context *brw)
 {
+   struct gl_context *ctx = &brw->intel.ctx;
    struct brw_aa_line_parameters balp;
 
-   if (!brw->has_aa_line_parameters)
+   if (!ctx->Line.SmoothFlag || !brw->has_aa_line_parameters)
       return;
 
    /* use legacy aa line coverage computation */
@@ -436,7 +409,7 @@ static void upload_aa_line_parameters(struct brw_context *brw)
 
 const struct brw_tracked_state brw_aa_line_parameters = {
    .dirty = {
-      .mesa = 0,
+      .mesa = _NEW_LINE,
       .brw = BRW_NEW_CONTEXT,
       .cache = 0
    },
@@ -449,10 +422,13 @@ const struct brw_tracked_state brw_aa_line_parameters = {
 
 static void upload_line_stipple(struct brw_context *brw)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    struct brw_line_stipple bls;
    GLfloat tmp;
    GLint tmpi;
+
+   if (!ctx->Line.StippleFlag)
+      return;
 
    memset(&bls, 0, sizeof(bls));
    bls.header.opcode = CMD_LINE_STIPPLE_PATTERN;
@@ -515,8 +491,6 @@ static void upload_invarient_state( struct brw_context *brw )
    if (intel->gen >= 6) {
       int i;
 
-      intel_batchbuffer_emit_mi_flush(intel->batch);
-
       BEGIN_BATCH(3);
       OUT_BATCH(CMD_3D_MULTISAMPLE << 16 | (3 - 2));
       OUT_BATCH(MS_PIXEL_LOCATION_CENTER |
@@ -557,7 +531,7 @@ static void upload_invarient_state( struct brw_context *brw )
       memset(&vfs, 0, sizeof(vfs));
 
       vfs.opcode = brw->CMD_VF_STATISTICS;
-      if (INTEL_DEBUG & DEBUG_STATS)
+      if (unlikely(INTEL_DEBUG & DEBUG_STATS))
 	 vfs.statistics_enable = 1; 
 
       BRW_BATCH_STRUCT(brw, &vfs);

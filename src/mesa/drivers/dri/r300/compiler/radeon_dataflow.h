@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2009 Nicolai Haehnle.
+ * Copyright 2010 Tom Stellard <tstellar@gmail.com>
  *
  * All Rights Reserved.
  *
@@ -33,6 +34,10 @@
 struct radeon_compiler;
 struct rc_instruction;
 struct rc_swizzle_caps;
+struct rc_src_register;
+struct rc_pair_instruction_arg;
+struct rc_pair_instruction_source;
+struct rc_compiler;
 
 
 /**
@@ -49,12 +54,51 @@ typedef void (*rc_read_write_mask_fn)(void * userdata, struct rc_instruction * i
 void rc_for_all_reads_mask(struct rc_instruction * inst, rc_read_write_mask_fn cb, void * userdata);
 void rc_for_all_writes_mask(struct rc_instruction * inst, rc_read_write_mask_fn cb, void * userdata);
 
+typedef void (*rc_read_src_fn)(void * userdata, struct rc_instruction * inst,
+			struct rc_src_register * src);
+void rc_for_all_reads_src(struct rc_instruction * inst, rc_read_src_fn cb,
+			void * userdata);
+
+typedef void (*rc_pair_read_arg_fn)(void * userdata,
+	struct rc_instruction * inst, struct rc_pair_instruction_arg * arg,
+	struct rc_pair_instruction_source * src);
+void rc_pair_for_all_reads_arg(struct rc_instruction * inst,
+					rc_pair_read_arg_fn cb, void * userdata);
+
 typedef void (*rc_remap_register_fn)(void * userdata, struct rc_instruction * inst,
 			rc_register_file * pfile, unsigned int * pindex);
 void rc_remap_registers(struct rc_instruction * inst, rc_remap_register_fn cb, void * userdata);
 /*@}*/
 
+struct rc_reader {
+	struct rc_instruction * Inst;
+	unsigned int WriteMask;
+	union {
+		struct rc_src_register * Src;
+		struct rc_pair_instruction_arg * Arg;
+	} U;
+};
 
+struct rc_reader_data {
+	unsigned int Abort;
+	unsigned int AbortOnRead;
+	unsigned int InElse;
+	struct rc_instruction * Writer;
+
+	unsigned int ReaderCount;
+	unsigned int ReadersReserved;
+	struct rc_reader * Readers;
+
+	void * CbData;
+};
+
+void rc_get_readers(
+	struct radeon_compiler * c,
+	struct rc_instruction * writer,
+	struct rc_reader_data * data,
+	rc_read_src_fn read_normal_cb,
+	rc_pair_read_arg_fn read_pair_cb,
+	rc_read_write_mask_fn write_cb);
 /**
  * Compiler passes based on dataflow analysis.
  */

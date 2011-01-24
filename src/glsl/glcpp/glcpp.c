@@ -34,7 +34,7 @@
 extern int yydebug;
 
 void
-_mesa_reference_shader(GLcontext *ctx, struct gl_shader **ptr,
+_mesa_reference_shader(struct gl_context *ctx, struct gl_shader **ptr,
                        struct gl_shader *sh)
 {
    *ptr = sh;

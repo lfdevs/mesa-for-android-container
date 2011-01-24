@@ -52,7 +52,7 @@
 #define UPDATE_STATE(cso, atom) \
     if (cso != atom.state) { \
         atom.state = cso;    \
-        atom.dirty = TRUE;   \
+        r300_mark_atom_dirty(r300, &(atom));   \
     }
 
 static boolean blend_discard_if_src_alpha_0(unsigned srcRGB, unsigned srcA,
@@ -417,7 +417,7 @@ static void r300_set_blend_color(struct pipe_context* pipe,
         END_CB;
     }
 
-    r300->blend_color_state.dirty = TRUE;
+    r300_mark_atom_dirty(r300, &r300->blend_color_state);
 }
 
 static void r300_set_clip_state(struct pipe_context* pipe,
@@ -446,7 +446,7 @@ static void r300_set_clip_state(struct pipe_context* pipe,
                 (state->depth_clamp ? R300_CLIP_DISABLE : 0));
         END_CB;
 
-        r300->clip_state.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->clip_state);
     } else {
         draw_set_clip_state(r300->draw, state);
     }
@@ -594,7 +594,7 @@ static void r300_bind_dsa_state(struct pipe_context* pipe,
 
     UPDATE_STATE(state, r300->dsa_state);
 
-    r300->hyperz_state.dirty = TRUE; /* Will be updated before the emission. */
+    r300_mark_atom_dirty(r300, &r300->hyperz_state); /* Will be updated before the emission. */
     r300_dsa_inject_stencilref(r300);
 }
 
@@ -613,7 +613,7 @@ static void r300_set_stencil_ref(struct pipe_context* pipe,
     r300->stencil_ref = *sr;
 
     r300_dsa_inject_stencilref(r300);
-    r300->dsa_state.dirty = TRUE;
+    r300_mark_atom_dirty(r300, &r300->dsa_state);
 }
 
 static void r300_tex_set_tiling_flags(struct r300_context *r300,
@@ -626,7 +626,7 @@ static void r300_tex_set_tiling_flags(struct r300_context *r300,
         /* Tiling determines how DRM treats the buffer data.
          * We must flush CS when changing it if the buffer is referenced. */
         if (r300->rws->cs_is_buffer_referenced(r300->cs,
-                                               tex->buffer, R300_REF_CS))
+                                               tex->cs_buffer, R300_REF_CS))
             r300->context.flush(&r300->context, 0, NULL);
 
         r300->rws->buffer_set_tiling(r300->rws, tex->buffer,
@@ -647,12 +647,12 @@ static void r300_fb_set_tiling_flags(struct r300_context *r300,
     for (i = 0; i < state->nr_cbufs; i++) {
         r300_tex_set_tiling_flags(r300,
                                   r300_texture(state->cbufs[i]->texture),
-                                  state->cbufs[i]->level);
+                                  state->cbufs[i]->u.tex.level);
     }
     if (state->zsbuf) {
         r300_tex_set_tiling_flags(r300,
                                   r300_texture(state->zsbuf->texture),
-                                  state->zsbuf->level);
+                                  state->zsbuf->u.tex.level);
     }
 }
 
@@ -663,14 +663,14 @@ static void r300_print_fb_surf_info(struct pipe_surface *surf, unsigned index,
     struct r300_texture *rtex = r300_texture(tex);
 
     fprintf(stderr,
-            "r300:   %s[%i] Dim: %ix%i, Offset: %i, ZSlice: %i, "
-            "Face: %i, Level: %i, Format: %s\n"
+            "r300:   %s[%i] Dim: %ix%i, Firstlayer: %i, "
+            "Lastlayer: %i, Level: %i, Format: %s\n"
 
             "r300:     TEX: Macro: %s, Micro: %s, Pitch: %i, "
             "Dim: %ix%ix%i, LastLevel: %i, Format: %s\n",
 
-            binding, index, surf->width, surf->height, surf->offset,
-            surf->zslice, surf->face, surf->level,
+            binding, index, surf->width, surf->height,
+            surf->u.tex.first_layer, surf->u.tex.last_layer, surf->u.tex.level,
             util_format_short_name(surf->format),
 
             rtex->desc.macrotile[0] ? "YES" : " NO",
@@ -684,16 +684,16 @@ void r300_mark_fb_state_dirty(struct r300_context *r300,
                               enum r300_fb_state_change change)
 {
     struct pipe_framebuffer_state *state = r300->fb_state.state;
-    boolean has_hyperz = r300->rws->get_value(r300->rws, R300_CAN_HYPERZ);
+    boolean can_hyperz = r300->rws->get_value(r300->rws, R300_CAN_HYPERZ);
 
     /* What is marked as dirty depends on the enum r300_fb_state_change. */
-    r300->gpu_flush.dirty = TRUE;
-    r300->fb_state.dirty = TRUE;
-    r300->hyperz_state.dirty = TRUE;
+    r300_mark_atom_dirty(r300, &r300->gpu_flush);
+    r300_mark_atom_dirty(r300, &r300->fb_state);
+    r300_mark_atom_dirty(r300, &r300->hyperz_state);
 
     if (change == R300_CHANGED_FB_STATE) {
-        r300->aa_state.dirty = TRUE;
-        r300->fb_state_pipelined.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->aa_state);
+        r300_mark_atom_dirty(r300, &r300->fb_state_pipelined);
     }
 
     /* Now compute the fb_state atom size. */
@@ -703,7 +703,7 @@ void r300_mark_fb_state_dirty(struct r300_context *r300,
         r300->fb_state.size += 10;
     else if (state->zsbuf) {
         r300->fb_state.size += 10;
-        if (has_hyperz)
+        if (can_hyperz)
             r300->fb_state.size += r300->screen->caps.hiz_ram ? 8 : 4;
     }
 
@@ -717,7 +717,7 @@ static void
     struct r300_context* r300 = r300_context(pipe);
     struct r300_aa_state *aa = (struct r300_aa_state*)r300->aa_state.state;
     struct pipe_framebuffer_state *old_state = r300->fb_state.state;
-    boolean has_hyperz = r300->rws->get_value(r300->rws, R300_CAN_HYPERZ);
+    boolean can_hyperz = r300->rws->get_value(r300->rws, R300_CAN_HYPERZ);
     unsigned max_width, max_height, i;
     uint32_t zbuffer_bpp = 0;
     int blocksize;
@@ -738,11 +738,11 @@ static void
 
     /* If nr_cbufs is changed from zero to non-zero or vice versa... */
     if (!!old_state->nr_cbufs != !!state->nr_cbufs) {
-        r300->blend_state.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->blend_state);
     }
     /* If zsbuf is set from NULL to non-NULL or vice versa.. */
     if (!!old_state->zsbuf != !!state->zsbuf) {
-        r300->dsa_state.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->dsa_state);
     }
 
     /* The tiling flags are dependent on the surface miplevel, unfortunately. */
@@ -751,6 +751,7 @@ static void
     util_copy_framebuffer_state(r300->fb_state.state, state);
 
     r300_mark_fb_state_dirty(r300, R300_CHANGED_FB_STATE);
+    r300->validate_buffers = TRUE;
 
     r300->z_compression = false;
     
@@ -764,11 +765,11 @@ static void
             zbuffer_bpp = 24;
             break;
         }
-        if (has_hyperz) {
+        if (can_hyperz) {
             struct r300_surface *zs_surf = r300_surface(state->zsbuf);
             struct r300_texture *tex;
             int compress = r300->screen->caps.is_rv350 ? RV350_Z_COMPRESS_88 : R300_Z_COMPRESS_44;
-            int level = zs_surf->base.level;
+            int level = zs_surf->base.u.tex.level;
 
             tex = r300_texture(zs_surf->base.texture);
 
@@ -795,7 +796,7 @@ static void
             r300->zbuffer_bpp = zbuffer_bpp;
 
             if (r300->polygon_offset_enabled)
-                r300->rs_state.dirty = TRUE;
+                r300_mark_atom_dirty(r300, &r300->rs_state);
         }
     }
 
@@ -853,9 +854,9 @@ void r300_mark_fs_code_dirty(struct r300_context *r300)
 {
     struct r300_fragment_shader* fs = r300_fs(r300);
 
-    r300->fs.dirty = TRUE;
-    r300->fs_rc_constant_state.dirty = TRUE;
-    r300->fs_constants.dirty = TRUE;
+    r300_mark_atom_dirty(r300, &r300->fs);
+    r300_mark_atom_dirty(r300, &r300->fs_rc_constant_state);
+    r300_mark_atom_dirty(r300, &r300->fs_constants);
     r300->fs.size = fs->shader->cb_code_size;
 
     if (r300->screen->caps.is_r500) {
@@ -885,7 +886,7 @@ static void r300_bind_fs_state(struct pipe_context* pipe, void* shader)
     r300_pick_fragment_shader(r300);
     r300_mark_fs_code_dirty(r300);
 
-    r300->rs_block_state.dirty = TRUE; /* Will be updated before the emission. */
+    r300_mark_atom_dirty(r300, &r300->rs_block_state); /* Will be updated before the emission. */
 }
 
 /* Delete fragment shader state. */
@@ -922,7 +923,6 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
                                   const struct pipe_rasterizer_state* state)
 {
     struct r300_rs_state* rs = CALLOC_STRUCT(r300_rs_state);
-    int i;
     float psiz;
     uint32_t vap_control_status;    /* R300_VAP_CNTL_STATUS: 0x2140 */
     uint32_t point_size;            /* R300_GA_POINT_SIZE: 0x421c */
@@ -935,10 +935,6 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
     uint32_t polygon_mode;          /* R300_GA_POLY_MODE: 0x4288 */
     uint32_t clip_rule;             /* R300_SC_CLIP_RULE: 0x43D0 */
 
-    /* Specifies top of Raster pipe specific enable controls,
-     * i.e. texture coordinates stuffing for points, lines, triangles */
-    uint32_t stuffing_enable;       /* R300_GB_ENABLE: 0x4008 */
-
     /* Point sprites texture coordinates, 0: lower left, 1: upper right */
     float point_texcoord_left = 0;  /* R300_GA_POINT_S0: 0x4200 */
     float point_texcoord_bottom = 0;/* R300_GA_POINT_T0: 0x4204 */
@@ -950,10 +946,8 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
     rs->rs = *state;
     rs->rs_draw = *state;
 
-    /* Generate point sprite texture coordinates in GENERIC0
-     * if point_quad_rasterization is TRUE. */
     rs->rs.sprite_coord_enable = state->point_quad_rasterization *
-                                 (state->sprite_coord_enable | 1);
+                                 state->sprite_coord_enable;
 
     /* Override some states for Draw. */
     rs->rs_draw.sprite_coord_enable = 0; /* We can do this in HW. */
@@ -1054,16 +1048,8 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
 
     clip_rule = state->scissor ? 0xAAAA : 0xFFFF;
 
-    /* Point sprites */
-    stuffing_enable = 0;
+    /* Point sprites coord mode */
     if (rs->rs.sprite_coord_enable) {
-        stuffing_enable = R300_GB_POINT_STUFF_ENABLE;
-        for (i = 0; i < 8; i++) {
-            if (rs->rs.sprite_coord_enable & (1 << i))
-                stuffing_enable |=
-                    R300_GB_TEX_ST << (R300_GB_TEX0_SOURCE_SHIFT + (i*2));
-        }
-
         switch (state->sprite_coord_mode) {
             case PIPE_SPRITE_COORD_UPPER_LEFT:
                 point_texcoord_top = 0.0f;
@@ -1077,7 +1063,7 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
     }
 
     /* Build the main command buffer. */
-    BEGIN_CB(rs->cb_main, 25);
+    BEGIN_CB(rs->cb_main, RS_STATE_MAIN_SIZE);
     OUT_CB_REG(R300_VAP_CNTL_STATUS, vap_control_status);
     OUT_CB_REG(R300_GA_POINT_SIZE, point_size);
     OUT_CB_REG_SEQ(R300_GA_POINT_MINMAX, 2);
@@ -1091,7 +1077,6 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
     OUT_CB_REG(R300_GA_LINE_STIPPLE_VALUE, line_stipple_value);
     OUT_CB_REG(R300_GA_POLY_MODE, polygon_mode);
     OUT_CB_REG(R300_SC_CLIP_RULE, clip_rule);
-    OUT_CB_REG(R300_GB_ENABLE, stuffing_enable);
     OUT_CB_REG_SEQ(R300_GA_POINT_S0, 4);
     OUT_CB_32F(point_texcoord_left);
     OUT_CB_32F(point_texcoord_bottom);
@@ -1149,11 +1134,11 @@ static void r300_bind_rs_state(struct pipe_context* pipe, void* state)
     }
 
     UPDATE_STATE(state, r300->rs_state);
-    r300->rs_state.size = 25 + (r300->polygon_offset_enabled ? 5 : 0);
+    r300->rs_state.size = RS_STATE_MAIN_SIZE + (r300->polygon_offset_enabled ? 5 : 0);
 
     if (last_sprite_coord_enable != r300->sprite_coord_enable ||
         last_two_sided_color != r300->two_sided_color) {
-        r300->rs_block_state.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->rs_block_state);
     }
 }
 
@@ -1251,7 +1236,7 @@ static void r300_bind_sampler_states(struct pipe_context* pipe,
     memcpy(state->sampler_states, states, sizeof(void*) * count);
     state->sampler_state_count = count;
 
-    r300->textures_state.dirty = TRUE;
+    r300_mark_atom_dirty(r300, &r300->textures_state);
 }
 
 static void r300_lacks_vertex_textures(struct pipe_context* pipe,
@@ -1325,10 +1310,10 @@ static void r300_set_fragment_sampler_views(struct pipe_context* pipe,
         dirty_tex = TRUE;
 
         /* Set the texrect factor in the fragment shader.
-         * Needed for RECT and NPOT fallback. */
+             * Needed for RECT and NPOT fallback. */
         texture = r300_texture(views[i]->texture);
         if (texture->desc.is_npot) {
-            r300->fs_rc_constant_state.dirty = TRUE;
+            r300_mark_atom_dirty(r300, &r300->fs_rc_constant_state);
         }
 
         state->sampler_views[i]->texcache_region =
@@ -1346,10 +1331,11 @@ static void r300_set_fragment_sampler_views(struct pipe_context* pipe,
 
     state->sampler_view_count = count;
 
-    r300->textures_state.dirty = TRUE;
+    r300_mark_atom_dirty(r300, &r300->textures_state);
+    r300->validate_buffers = TRUE;
 
     if (dirty_tex) {
-        r300->texture_cache_inval.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->texture_cache_inval);
     }
 }
 
@@ -1404,7 +1390,7 @@ static void r300_set_scissor_state(struct pipe_context* pipe,
     memcpy(r300->scissor_state.state, state,
         sizeof(struct pipe_scissor_state));
 
-    r300->scissor_state.dirty = TRUE;
+    r300_mark_atom_dirty(r300, &r300->scissor_state);
 }
 
 static void r300_set_viewport_state(struct pipe_context* pipe,
@@ -1450,9 +1436,9 @@ static void r300_set_viewport_state(struct pipe_context* pipe,
         viewport->vte_control |= R300_VPORT_Z_OFFSET_ENA;
     }
 
-    r300->viewport_state.dirty = TRUE;
+    r300_mark_atom_dirty(r300, &r300->viewport_state);
     if (r300->fs.state && r300_fs(r300)->shader->inputs.wpos != ATTR_UNUSED) {
-        r300->fs_rc_constant_state.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->fs_rc_constant_state);
     }
 }
 
@@ -1523,7 +1509,8 @@ static void r300_set_vertex_buffers(struct pipe_context* pipe,
 
         r300->any_user_vbs = any_user_buffer;
         r300->vertex_buffer_max_index = max_index;
-
+        r300->aos_dirty = TRUE;
+        r300->validate_buffers = TRUE;
     } else {
         /* SW TCL. */
         draw_set_vertex_buffers(r300->draw, count, buffers);
@@ -1559,10 +1546,10 @@ static void r300_set_index_buffer(struct pipe_context* pipe,
     }
 
     if (r300->screen->caps.has_tcl) {
-       /* TODO make this more like a state */
+        r300->validate_buffers = TRUE;
     }
     else {
-       draw_set_index_buffer(r300->draw, ib);
+        draw_set_index_buffer(r300->draw, ib);
     }
 }
 
@@ -1730,6 +1717,7 @@ static void r300_bind_vertex_elements_state(struct pipe_context *pipe,
 
     UPDATE_STATE(&velems->vertex_stream, r300->vertex_stream_state);
     r300->vertex_stream_state.size = (1 + velems->vertex_stream.count) * 2;
+    r300->aos_dirty = TRUE;
 }
 
 static void r300_delete_vertex_elements_state(struct pipe_context *pipe, void *state)
@@ -1772,27 +1760,25 @@ static void r300_bind_vs_state(struct pipe_context* pipe, void* shader)
     r300->vs_state.state = vs;
 
     /* The majority of the RS block bits is dependent on the vertex shader. */
-    r300->rs_block_state.dirty = TRUE; /* Will be updated before the emission. */
+    r300_mark_atom_dirty(r300, &r300->rs_block_state); /* Will be updated before the emission. */
 
     if (r300->screen->caps.has_tcl) {
         unsigned fc_op_dwords = r300->screen->caps.is_r500 ? 3 : 2;
-        r300->vs_state.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->vs_state);
         r300->vs_state.size =
                 vs->code.length + 9 +
-                (vs->immediates_count ? vs->immediates_count * 4 + 3 : 0) +
         (vs->code.num_fc_ops ? vs->code.num_fc_ops * fc_op_dwords + 4 : 0);
 
-        if (vs->externals_count) {
-            r300->vs_constants.dirty = TRUE;
-            r300->vs_constants.size = vs->externals_count * 4 + 3;
-        } else {
-            r300->vs_constants.size = 0;
-        }
+        r300_mark_atom_dirty(r300, &r300->vs_constants);
+        r300->vs_constants.size =
+                2 +
+                (vs->externals_count ? vs->externals_count * 4 + 3 : 0) +
+                (vs->immediates_count ? vs->immediates_count * 4 + 3 : 0);
 
         ((struct r300_constant_buffer*)r300->vs_constants.state)->remap_table =
                 vs->code.constants_remap_table;
 
-        r300->pvs_flush.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->pvs_flush);
     } else {
         draw_bind_vertex_shader(r300->draw,
                 (struct draw_vertex_shader*)vs->draw_vs);
@@ -1823,7 +1809,7 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
 {
     struct r300_context* r300 = r300_context(pipe);
     struct r300_constant_buffer *cbuf;
-    uint32_t *mapped = r300_buffer(buf)->user_buffer;
+    uint32_t *mapped;
 
     switch (shader) {
         case PIPE_SHADER_VERTEX:
@@ -1833,33 +1819,44 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
             cbuf = (struct r300_constant_buffer*)r300->fs_constants.state;
             break;
         default:
-            assert(0);
             return;
     }
 
     if (buf == NULL || buf->width0 == 0 ||
-        (mapped = r300_buffer(buf)->constant_buffer) == NULL) {
+        (mapped = (uint32_t*)r300_buffer(buf)->constant_buffer) == NULL) {
         return;
     }
 
     if (shader == PIPE_SHADER_FRAGMENT ||
         (shader == PIPE_SHADER_VERTEX && r300->screen->caps.has_tcl)) {
         assert((buf->width0 % (4 * sizeof(float))) == 0);
-        cbuf->ptr = mapped + index*4;
+        cbuf->ptr = mapped;
     }
 
     if (shader == PIPE_SHADER_VERTEX) {
         if (r300->screen->caps.has_tcl) {
-            if (r300->vs_constants.size) {
-                r300->vs_constants.dirty = TRUE;
+            struct r300_vertex_shader *vs =
+                    (struct r300_vertex_shader*)r300->vs_state.state;
+
+            if (!vs) {
+                cbuf->buffer_base = 0;
+                return;
             }
-            r300->pvs_flush.dirty = TRUE;
+
+            cbuf->buffer_base = r300->vs_const_base;
+            r300->vs_const_base += vs->code.constants.Count;
+            if (r300->vs_const_base > R500_MAX_PVS_CONST_VECS) {
+                r300->vs_const_base = vs->code.constants.Count;
+                cbuf->buffer_base = 0;
+                r300_mark_atom_dirty(r300, &r300->pvs_flush);
+            }
+            r300_mark_atom_dirty(r300, &r300->vs_constants);
         } else if (r300->draw) {
             draw_set_mapped_constant_buffer(r300->draw, PIPE_SHADER_VERTEX,
                 0, mapped, buf->width0);
         }
     } else if (shader == PIPE_SHADER_FRAGMENT) {
-        r300->fs_constants.dirty = TRUE;
+        r300_mark_atom_dirty(r300, &r300->fs_constants);
     }
 }
 

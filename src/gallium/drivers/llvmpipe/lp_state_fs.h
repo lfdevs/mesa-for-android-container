@@ -34,6 +34,8 @@
 #include "pipe/p_state.h"
 #include "tgsi/tgsi_scan.h" /* for tgsi_shader_info */
 #include "gallivm/lp_bld_sample.h" /* for struct lp_sampler_static_state */
+#include "gallivm/lp_bld_tgsi.h" /* for lp_tgsi_info */
+#include "lp_bld_interp.h" /* for struct lp_shader_input */
 
 
 struct tgsi_token;
@@ -67,11 +69,14 @@ struct lp_fragment_shader_variant_key
    struct lp_sampler_static_state sampler[PIPE_MAX_SAMPLERS];
 };
 
+
+/** doubly-linked list item */
 struct lp_fs_variant_list_item
 {
    struct lp_fragment_shader_variant *base;
    struct lp_fs_variant_list_item *next, *prev;
 };
+
 
 struct lp_fragment_shader_variant
 {
@@ -96,20 +101,29 @@ struct lp_fragment_shader
 {
    struct pipe_shader_state base;
 
-   struct tgsi_shader_info info;
+   struct lp_tgsi_info info;
 
    struct lp_fs_variant_list_item variants;
+
+   struct draw_fragment_shader *draw_data;
 
    /* For debugging/profiling purposes */
    unsigned variant_key_size;
    unsigned no;
    unsigned variants_created;
    unsigned variants_cached;
+
+   /** Fragment shader input interpolation info */
+   struct lp_shader_input inputs[PIPE_MAX_SHADER_INPUTS];
 };
 
 
 void
 lp_debug_fs_variant(const struct lp_fragment_shader_variant *variant);
+
+void
+llvmpipe_remove_shader_variant(struct llvmpipe_context *lp,
+                               struct lp_fragment_shader_variant *variant);
 
 
 #endif /* LP_STATE_FS_H_ */

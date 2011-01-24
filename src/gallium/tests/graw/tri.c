@@ -10,7 +10,6 @@
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
 
-#include "util/u_debug.h"       /* debug_dump_surface_bmp() */
 #include "util/u_memory.h"      /* Offset() */
 #include "util/u_draw_quad.h"
 
@@ -26,6 +25,7 @@ static const int HEIGHT = 300;
 static struct pipe_screen *screen = NULL;
 static struct pipe_context *ctx = NULL;
 static struct pipe_surface *surf = NULL;
+static struct pipe_resource *tex = NULL;
 static void *window = NULL;
 
 struct vertex {
@@ -143,26 +143,17 @@ static void draw( void )
    util_draw_arrays(ctx, PIPE_PRIM_TRIANGLES, 0, 3);
    ctx->flush(ctx, PIPE_FLUSH_RENDER_CACHE, NULL);
 
-#if 0
-   /* At the moment, libgraw leaks out/makes available some of the
-    * symbols from gallium/auxiliary, including these debug helpers.
-    * Will eventually want to bless some of these paths, and lock the
-    * others down so they aren't accessible from test programs.
-    *
-    * This currently just happens to work on debug builds - a release
-    * build will probably fail to link here:
-    */
-   debug_dump_surface_bmp(ctx, "result.bmp", surf);
-#endif
+   graw_save_surface_to_file(ctx, surf, NULL);
 
-   screen->flush_frontbuffer(screen, surf, window);
+   screen->flush_frontbuffer(screen, tex, 0, 0, window);
 }
 
 
 static void init( void )
 {
    struct pipe_framebuffer_state fb;
-   struct pipe_resource *tex, templat;
+   struct pipe_resource templat;
+   struct pipe_surface surf_tmpl;
    int i;
 
    /* It's hard to say whether window or screen should be created
@@ -191,6 +182,7 @@ static void init( void )
    templat.width0 = WIDTH;
    templat.height0 = HEIGHT;
    templat.depth0 = 1;
+   templat.array_size = 1;
    templat.last_level = 0;
    templat.nr_samples = 1;
    templat.bind = (PIPE_BIND_RENDER_TARGET |
@@ -203,11 +195,14 @@ static void init( void )
       exit(4);
    }
 
-   surf = screen->get_tex_surface(screen, tex, 0, 0, 0,
-                                  PIPE_BIND_RENDER_TARGET |
-                                  PIPE_BIND_DISPLAY_TARGET);
+   surf_tmpl.format = templat.format;
+   surf_tmpl.usage = PIPE_BIND_RENDER_TARGET;
+   surf_tmpl.u.tex.level = 0;
+   surf_tmpl.u.tex.first_layer = 0;
+   surf_tmpl.u.tex.last_layer = 0;
+   surf = ctx->create_surface(ctx, tex, &surf_tmpl);
    if (surf == NULL) {
-      fprintf(stderr, "Unable to get tex surface!\n");
+      fprintf(stderr, "Unable to create tex surface!\n");
       exit(5);
    }
 
@@ -252,9 +247,21 @@ static void init( void )
    set_fragment_shader();
 }
 
+static void args(int argc, char *argv[])
+{
+   int i;
+
+   for (i = 1; i < argc;) {
+      if (graw_parse_args(&i, argc, argv)) {
+         continue;
+      }
+      exit(1);
+   }
+}
 
 int main( int argc, char *argv[] )
 {
+   args(argc, argv);
    init();
 
    graw_set_display_func( draw );

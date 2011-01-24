@@ -42,7 +42,6 @@
  * generate BadMatch errors if the drawable isn't mapped.
  */
 
-#ifndef XFree86Server
 static int caught_xgetimage_error = 0;
 static int (*old_xerror_handler)( XMesaDisplay *dpy, XErrorEvent *ev );
 static unsigned long xgetimage_serial;
@@ -87,7 +86,6 @@ static int check_xgetimage_errors( void )
    /* return 0=no error, 1=error caught */
    return caught_xgetimage_error;
 }
-#endif
 
 
 /*
@@ -97,7 +95,6 @@ static unsigned long read_pixel( XMesaDisplay *dpy,
                                  XMesaDrawable d, int x, int y )
 {
    unsigned long p;
-#ifndef XFree86Server
    XMesaImage *pixel = NULL;
    int error;
 
@@ -113,9 +110,6 @@ static unsigned long read_pixel( XMesaDisplay *dpy,
    if (pixel) {
       XMesaDestroyImage( pixel );
    }
-#else
-   (*dpy->GetImage)(d, x, y, 1, 1, ZPixmap, ~0L, (pointer)&p);
-#endif
    return p;
 }
 
@@ -163,13 +157,13 @@ static unsigned long read_pixel( XMesaDisplay *dpy,
 
 
 #define PUT_ROW_ARGS \
-	GLcontext *ctx,					\
+	struct gl_context *ctx,					\
 	struct gl_renderbuffer *rb,			\
 	GLuint n, GLint x, GLint y,			\
 	const void *values, const GLubyte mask[]
 
 #define RGB_SPAN_ARGS \
-	GLcontext *ctx,					\
+	struct gl_context *ctx,					\
 	struct gl_renderbuffer *rb,			\
 	GLuint n, GLint x, GLint y,			\
 	const void *values, const GLubyte mask[]
@@ -2242,7 +2236,7 @@ static void put_row_rgb_GRAYSCALE8_ximage( RGB_SPAN_ARGS )
 
 
 #define PUT_VALUES_ARGS \
-	GLcontext *ctx, struct gl_renderbuffer *rb,	\
+	struct gl_context *ctx, struct gl_renderbuffer *rb,	\
 	GLuint n, const GLint x[], const GLint y[],	\
 	const void *values, const GLubyte mask[]
 
@@ -2829,7 +2823,7 @@ static void put_values_GRAYSCALE8_ximage( PUT_VALUES_ARGS )
 /**********************************************************************/
 
 #define PUT_MONO_ROW_ARGS \
-	GLcontext *ctx, struct gl_renderbuffer *rb,	\
+	struct gl_context *ctx, struct gl_renderbuffer *rb,	\
 	GLuint n, GLint x, GLint y, const void *value,	\
 	const GLubyte mask[]
 
@@ -3267,7 +3261,7 @@ static void put_mono_row_DITHER_5R6G5B_ximage( PUT_MONO_ROW_ARGS )
 /**********************************************************************/
 
 #define PUT_MONO_VALUES_ARGS \
-	GLcontext *ctx, struct gl_renderbuffer *rb,	\
+	struct gl_context *ctx, struct gl_renderbuffer *rb,	\
 	GLuint n, const GLint x[], const GLint y[],	\
 	const void *value, const GLubyte mask[]
 
@@ -3763,7 +3757,6 @@ static void put_values_ci_ximage( PUT_VALUES_ARGS )
 /*****                      Pixel reading                         *****/
 /**********************************************************************/
 
-#ifndef XFree86Server
 /**
  * Do clip testing prior to calling XGetImage.  If any of the region lies
  * outside the screen's bounds, XGetImage will return NULL.
@@ -3773,7 +3766,7 @@ static void put_values_ci_ximage( PUT_VALUES_ARGS )
  *          else return number of pixels to skip in the destination array.
  */
 static int
-clip_for_xgetimage(GLcontext *ctx, XMesaPixmap pixmap, GLuint *n, GLint *x, GLint *y)
+clip_for_xgetimage(struct gl_context *ctx, XMesaPixmap pixmap, GLuint *n, GLint *x, GLint *y)
 {
    XMesaContext xmesa = XMESA_CONTEXT(ctx);
    XMesaBuffer source = XMESA_BUFFER(ctx->DrawBuffer);
@@ -3806,14 +3799,13 @@ clip_for_xgetimage(GLcontext *ctx, XMesaPixmap pixmap, GLuint *n, GLint *x, GLin
    }
    return 0;
 }
-#endif
 
 
 /*
  * Read a horizontal span of color-index pixels.
  */
 static void
-get_row_ci(GLcontext *ctx, struct gl_renderbuffer *rb,
+get_row_ci(struct gl_context *ctx, struct gl_renderbuffer *rb,
            GLuint n, GLint x, GLint y, void *values)
 {
    GLuint *index = (GLuint *) values;
@@ -3824,7 +3816,6 @@ get_row_ci(GLcontext *ctx, struct gl_renderbuffer *rb,
    y = YFLIP(xrb, y);
 
    if (xrb->pixmap) {
-#ifndef XFree86Server
       XMesaImage *span = NULL;
       int error;
       int k = clip_for_xgetimage(ctx, xrb->pixmap, &n, &x, &y);
@@ -3850,11 +3841,6 @@ get_row_ci(GLcontext *ctx, struct gl_renderbuffer *rb,
       if (span) {
 	 XMesaDestroyImage( span );
       }
-#else
-      (*xmesa->display->GetImage)(xrb->drawable,
-				  x, y, n, 1, ZPixmap,
-				  ~0L, (pointer)index);
-#endif
    }
    else if (xrb->ximage) {
       XMesaImage *img = xrb->ximage;
@@ -3870,7 +3856,7 @@ get_row_ci(GLcontext *ctx, struct gl_renderbuffer *rb,
  * Read a horizontal span of color pixels.
  */
 static void
-get_row_rgba(GLcontext *ctx, struct gl_renderbuffer *rb,
+get_row_rgba(struct gl_context *ctx, struct gl_renderbuffer *rb,
              GLuint n, GLint x, GLint y, void *values)
 {
    GLubyte (*rgba)[4] = (GLubyte (*)[4]) values;
@@ -3882,14 +3868,6 @@ get_row_rgba(GLcontext *ctx, struct gl_renderbuffer *rb,
       /* Read from Pixmap or Window */
       XMesaImage *span = NULL;
       int error;
-#ifdef XFree86Server
-      span = XMesaCreateImage(xmesa->xm_visual->BitsPerPixel, n, 1, NULL);
-      span->data = (char *)MALLOC(span->height * span->bytes_per_line);
-      error = (!span->data);
-      (*xmesa->display->GetImage)(xrb->drawable,
-				  x, YFLIP(xrb, y), n, 1, ZPixmap,
-				  ~0L, (pointer)span->data);
-#else
       int k;
       y = YFLIP(xrb, y);
       k = clip_for_xgetimage(ctx, xrb->pixmap, &n, &x, &y);
@@ -3900,7 +3878,6 @@ get_row_rgba(GLcontext *ctx, struct gl_renderbuffer *rb,
       span = XGetImage( xmesa->display, xrb->pixmap,
 		        x, y, n, 1, AllPlanes, ZPixmap );
       error = check_xgetimage_errors();
-#endif
       if (span && !error) {
 	 switch (xmesa->pixelformat) {
 	    case PF_Truecolor:
@@ -4272,7 +4249,7 @@ get_row_rgba(GLcontext *ctx, struct gl_renderbuffer *rb,
  * Read an array of color index pixels.
  */
 static void
-get_values_ci(GLcontext *ctx, struct gl_renderbuffer *rb,
+get_values_ci(struct gl_context *ctx, struct gl_renderbuffer *rb,
               GLuint n, const GLint x[], const GLint y[], void *values)
 {
    GLuint *indx = (GLuint *) values;
@@ -4296,7 +4273,7 @@ get_values_ci(GLcontext *ctx, struct gl_renderbuffer *rb,
 
 
 static void
-get_values_rgba(GLcontext *ctx, struct gl_renderbuffer *rb,
+get_values_rgba(struct gl_context *ctx, struct gl_renderbuffer *rb,
                 GLuint n, const GLint x[], const GLint y[], void *values)
 {
    GLubyte (*rgba)[4] = (GLubyte (*)[4]) values;

@@ -89,6 +89,18 @@ static GLuint translate_tex_format( gl_format mesa_format,
    case MESA_FORMAT_AL1616:
       return BRW_SURFACEFORMAT_L16A16_UNORM;
 
+   case MESA_FORMAT_R8:
+      return BRW_SURFACEFORMAT_R8_UNORM;
+
+   case MESA_FORMAT_R16:
+      return BRW_SURFACEFORMAT_R16_UNORM;
+
+   case MESA_FORMAT_RG88:
+      return BRW_SURFACEFORMAT_R8G8_UNORM;
+
+   case MESA_FORMAT_RG1616:
+      return BRW_SURFACEFORMAT_R16G16_UNORM;
+
    case MESA_FORMAT_RGB888:
       assert(0);		/* not supported for sampling */
       return BRW_SURFACEFORMAT_R8G8B8_UNORM;      
@@ -127,6 +139,8 @@ static GLuint translate_tex_format( gl_format mesa_format,
 	  return BRW_SURFACEFORMAT_I16_UNORM;
       else if (depth_mode == GL_ALPHA)
 	  return BRW_SURFACEFORMAT_A16_UNORM;
+      else if (depth_mode == GL_RED)
+	  return BRW_SURFACEFORMAT_R16_UNORM;
       else
 	  return BRW_SURFACEFORMAT_L16_UNORM;
 
@@ -162,6 +176,8 @@ static GLuint translate_tex_format( gl_format mesa_format,
          return BRW_SURFACEFORMAT_I24X8_UNORM;
       else if (depth_mode == GL_ALPHA)
          return BRW_SURFACEFORMAT_A24X8_UNORM;
+      else if (depth_mode == GL_RED)
+         return BRW_SURFACEFORMAT_R24_UNORM_X8_TYPELESS;
       else
          return BRW_SURFACEFORMAT_L24X8_UNORM;
 
@@ -197,7 +213,7 @@ brw_set_surface_tiling(struct brw_surface_state *surf, uint32_t tiling)
 }
 
 static void
-brw_update_texture_surface( GLcontext *ctx, GLuint unit )
+brw_update_texture_surface( struct gl_context *ctx, GLuint unit )
 {
    struct brw_context *brw = brw_context(ctx);
    struct gl_texture_object *tObj = ctx->Texture.Unit[unit]._Current;
@@ -262,6 +278,7 @@ brw_create_constant_surface(struct brw_context *brw,
 			    drm_intel_bo **out_bo,
 			    uint32_t *out_offset)
 {
+   struct intel_context *intel = &brw->intel;
    const GLint w = width - 1;
    struct brw_surface_state surf;
    void *map;
@@ -271,6 +288,9 @@ brw_create_constant_surface(struct brw_context *brw,
    surf.ss0.mipmap_layout_mode = BRW_SURFACE_MIPMAPLAYOUT_BELOW;
    surf.ss0.surface_type = BRW_SURFACE_BUFFER;
    surf.ss0.surface_format = BRW_SURFACEFORMAT_R32G32B32A32_FLOAT;
+
+   if (intel->gen >= 6)
+      surf.ss0.render_cache_read_write = 1;
 
    assert(bo);
    surf.ss1.base_addr = bo->offset; /* reloc */
@@ -303,17 +323,18 @@ brw_create_constant_surface(struct brw_context *brw,
 static void
 prepare_wm_constants(struct brw_context *brw)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    struct intel_context *intel = &brw->intel;
    struct brw_fragment_program *fp =
       (struct brw_fragment_program *) brw->fragment_program;
-   const struct gl_program_parameter_list *params = fp->program.Base.Parameters;
-   const int size = params->NumParameters * 4 * sizeof(GLfloat);
+   const int size = brw->wm.prog_data->nr_pull_params * sizeof(float);
+   float *constants;
+   unsigned int i;
 
    _mesa_load_state_parameters(ctx, fp->program.Base.Parameters);
 
    /* BRW_NEW_FRAGMENT_PROGRAM */
-   if (!fp->use_const_buffer) {
+   if (brw->wm.prog_data->nr_pull_params == 0) {
       if (brw->wm.const_bo) {
 	 drm_intel_bo_unreference(brw->wm.const_bo);
 	 brw->wm.const_bo = NULL;
@@ -323,11 +344,19 @@ prepare_wm_constants(struct brw_context *brw)
    }
 
    drm_intel_bo_unreference(brw->wm.const_bo);
-   brw->wm.const_bo = drm_intel_bo_alloc(intel->bufmgr, "vp_const_buffer",
+   brw->wm.const_bo = drm_intel_bo_alloc(intel->bufmgr, "WM const bo",
 					 size, 64);
 
    /* _NEW_PROGRAM_CONSTANTS */
-   drm_intel_bo_subdata(brw->wm.const_bo, 0, size, params->ParameterValues);
+   drm_intel_gem_bo_map_gtt(brw->wm.const_bo);
+   constants = brw->wm.const_bo->virtual;
+   for (i = 0; i < brw->wm.prog_data->nr_pull_params; i++) {
+      constants[i] = convert_param(brw->wm.prog_data->pull_param_convert[i],
+				   *brw->wm.prog_data->pull_param[i]);
+   }
+   drm_intel_gem_bo_unmap_gtt(brw->wm.const_bo);
+
+   brw->state.dirty.brw |= BRW_NEW_WM_CONSTBUF;
 }
 
 const struct brw_tracked_state brw_wm_constants = {
@@ -395,7 +424,7 @@ brw_update_renderbuffer_surface(struct brw_context *brw,
 				unsigned int unit)
 {
    struct intel_context *intel = &brw->intel;
-   GLcontext *ctx = &intel->ctx;
+   struct gl_context *ctx = &intel->ctx;
    drm_intel_bo *region_bo = NULL;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct intel_region *region = irb ? irb->region : NULL;
@@ -443,6 +472,18 @@ brw_update_renderbuffer_surface(struct brw_context *brw,
 	 break;
       case MESA_FORMAT_A8:
 	 key.surface_format = BRW_SURFACEFORMAT_A8_UNORM;
+	 break;
+      case MESA_FORMAT_R8:
+	 key.surface_format = BRW_SURFACEFORMAT_R8_UNORM;
+	 break;
+      case MESA_FORMAT_R16:
+	 key.surface_format = BRW_SURFACEFORMAT_R16_UNORM;
+	 break;
+      case MESA_FORMAT_RG88:
+	 key.surface_format = BRW_SURFACEFORMAT_R8G8_UNORM;
+	 break;
+      case MESA_FORMAT_RG1616:
+	 key.surface_format = BRW_SURFACEFORMAT_R16G16_UNORM;
 	 break;
       default:
 	 _mesa_problem(ctx, "Bad renderbuffer format: %d\n", irb->Base.Format);
@@ -548,7 +589,7 @@ brw_update_renderbuffer_surface(struct brw_context *brw,
 static void
 prepare_wm_surfaces(struct brw_context *brw)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    int i;
    int nr_surfaces = 0;
 
@@ -595,7 +636,7 @@ prepare_wm_surfaces(struct brw_context *brw)
 static void
 upload_wm_surfaces(struct brw_context *brw)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    GLuint i;
 
    /* _NEW_BUFFERS | _NEW_COLOR */

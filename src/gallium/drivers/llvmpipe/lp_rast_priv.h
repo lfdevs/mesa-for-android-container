@@ -45,13 +45,16 @@
  */
 #ifdef DEBUG
 
+struct lp_rasterizer_task;
 extern int jit_line;
 extern const struct lp_rast_state *jit_state;
+extern const struct lp_rasterizer_task *jit_task;
 
-#define BEGIN_JIT_CALL(state) \
+#define BEGIN_JIT_CALL(state, task)                  \
    do { \
       jit_line = __LINE__; \
       jit_state = state; \
+      jit_task = task; \
    } while (0)
 
 #define END_JIT_CALL() \
@@ -62,7 +65,7 @@ extern const struct lp_rast_state *jit_state;
 
 #else
 
-#define BEGIN_JIT_CALL(X)
+#define BEGIN_JIT_CALL(X, Y)
 #define END_JIT_CALL()
 
 #endif
@@ -77,6 +80,7 @@ struct cmd_bin;
 struct lp_rasterizer_task
 {
    const struct cmd_bin *bin;
+   const struct lp_rast_state *state;
 
    struct lp_scene *scene;
    unsigned x, y;          /**< Pos of this tile in framebuffer, in pixels */
@@ -190,8 +194,8 @@ lp_rast_get_color_tile_pointer(struct lp_rasterizer_task *task,
 
       if (usage != LP_TEX_USAGE_WRITE_ALL) {
          llvmpipe_swizzle_cbuf_tile(lpt,
-                                    cbuf->face + cbuf->zslice,
-                                    cbuf->level,
+                                    cbuf->u.tex.first_layer,
+                                    cbuf->u.tex.level,
                                     task->x, task->y,
                                     task->color_tiles[buf]);
       }
@@ -244,7 +248,7 @@ lp_rast_shade_quads_all( struct lp_rasterizer_task *task,
                          unsigned x, unsigned y )
 {
    const struct lp_scene *scene = task->scene;
-   const struct lp_rast_state *state = inputs->state;
+   const struct lp_rast_state *state = task->state;
    struct lp_fragment_shader_variant *variant = state->variant;
    uint8_t *color[PIPE_MAX_COLOR_BUFS];
    void *depth;
@@ -257,13 +261,13 @@ lp_rast_shade_quads_all( struct lp_rasterizer_task *task,
    depth = lp_rast_get_depth_block_pointer(task, x, y);
 
    /* run shader on 4x4 block */
-   BEGIN_JIT_CALL(state);
+   BEGIN_JIT_CALL(state, task);
    variant->jit_function[RAST_WHOLE]( &state->jit_context,
                                       x, y,
-                                      inputs->facing,
-                                      inputs->a0,
-                                      inputs->dadx,
-                                      inputs->dady,
+                                      inputs->frontfacing,
+                                      GET_A0(inputs),
+                                      GET_DADX(inputs),
+                                      GET_DADY(inputs),
                                       color,
                                       depth,
                                       0xffff,
@@ -293,6 +297,14 @@ void lp_rast_triangle_3_4(struct lp_rasterizer_task *,
 
 void lp_rast_triangle_3_16( struct lp_rasterizer_task *, 
                             const union lp_rast_cmd_arg );
+
+void lp_rast_triangle_4_16( struct lp_rasterizer_task *, 
+                            const union lp_rast_cmd_arg );
+
+void
+lp_rast_set_state(struct lp_rasterizer_task *task,
+                  const union lp_rast_cmd_arg arg);
+ 
 void
 lp_debug_bin( const struct cmd_bin *bin );
 

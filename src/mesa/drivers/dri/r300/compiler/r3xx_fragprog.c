@@ -24,6 +24,7 @@
 
 #include <stdio.h>
 
+#include "radeon_compiler_util.h"
 #include "radeon_dataflow.h"
 #include "radeon_emulate_branches.h"
 #include "radeon_emulate_loops.h"
@@ -80,7 +81,6 @@ static void rc_rewrite_depth_out(struct radeon_compiler *cc, void *user)
 void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 {
 	int is_r500 = c->Base.is_r500;
-	int kill_consts = c->Base.remove_unused_constants;
 	int opt = !c->Base.disable_optimizations;
 
 	/* Lists of instruction transformations. */
@@ -120,11 +120,11 @@ void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 		{"emulate loops",		1, !is_r500,	rc_emulate_loops,		NULL},
 		{"dataflow optimize",		1, opt,		rc_optimize,			NULL},
 		{"dataflow swizzles",		1, 1,		rc_dataflow_swizzles,		NULL},
-		{"dead constants",		1, kill_consts, rc_remove_unused_constants,	&c->code->constants_remap_table},
+		{"dead constants",		1, 1,		rc_remove_unused_constants,	&c->code->constants_remap_table},
 		/* This pass makes it easier for the scheduler to group TEX
 		 * instructions and reduces the chances of creating too
 		 * many texture indirections.*/
-		{"register rename",		1, !is_r500,	rc_rename_regs,			NULL},
+		{"register rename",		1, !is_r500 || opt, rc_rename_regs,		NULL},
 		{"pair translate",		1, 1,		rc_pair_translate,		NULL},
 		{"pair scheduling",		1, 1,		rc_pair_schedule,		NULL},
 		{"register allocation",		1, opt,		rc_pair_regalloc,		NULL},
@@ -132,14 +132,15 @@ void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 		{"final code validation",	0, 1,		rc_validate_final_shader,	NULL},
 		{"machine code generation",	0, is_r500,	r500BuildFragmentProgramHwCode,	NULL},
 		{"machine code generation",	0, !is_r500,	r300BuildFragmentProgramHwCode,	NULL},
-		{"dump machine code",		0, is_r500  && c->Base.Debug, r500FragmentProgramDump, NULL},
-		{"dump machine code",		0, !is_r500 && c->Base.Debug, r300FragmentProgramDump, NULL},
+		{"dump machine code",		0, is_r500  && (c->Base.Debug & RC_DBG_LOG), r500FragmentProgramDump, NULL},
+		{"dump machine code",		0, !is_r500 && (c->Base.Debug & RC_DBG_LOG), r300FragmentProgramDump, NULL},
 		{NULL, 0, 0, NULL, NULL}
 	};
 
+	c->Base.type = RC_FRAGMENT_PROGRAM;
 	c->Base.SwizzleCaps = c->Base.is_r500 ? &r500_swizzle_caps : &r300_swizzle_caps;
 
-	rc_run_compiler(&c->Base, fs_list, "Fragment Program");
+	rc_run_compiler(&c->Base, fs_list);
 
 	rc_constants_copy(&c->code->constants, &c->Base.Program.Constants);
 }

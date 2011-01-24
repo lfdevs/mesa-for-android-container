@@ -33,7 +33,6 @@
 #include "xmlpool.h"
 
 #include "dri_screen.h"
-#include "dri_context.h"
 
 #include "util/u_inlines.h"
 #include "pipe/p_screen.h"
@@ -228,9 +227,12 @@ dri_fill_in_modes(struct dri_screen *screen,
  */
 void
 dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
-                   const __GLcontextModes *mode)
+                   const struct gl_config *mode)
 {
    memset(stvis, 0, sizeof(*stvis));
+
+   if (!mode)
+      return;
 
    stvis->samples = mode->samples;
    stvis->render_buffer = ST_ATTACHMENT_INVALID;
@@ -302,9 +304,8 @@ dri_get_egl_image(struct st_manager *smapi,
 
    stimg->texture = NULL;
    pipe_resource_reference(&stimg->texture, img->texture);
-   stimg->face = img->face;
    stimg->level = img->level;
-   stimg->zslice = img->zslice;
+   stimg->layer = img->layer;
 
    return TRUE;
 }

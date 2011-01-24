@@ -217,9 +217,9 @@ static void compute_live_intervals(struct radeon_compiler *c,
 		 * instruction is used as the end of the live interval and
 		 * the BGNLOOP instruction is used as the beginning. */
 		if (inst->U.I.Opcode == RC_OPCODE_BGNLOOP && s->EndLoop < 0) {
-			s->BeginLoop = inst->IP;
 			int loops = 1;
 			struct rc_instruction * tmp;
+			s->BeginLoop = inst->IP;
 			for(tmp = inst->Next;
 					tmp != &s->C->Program.Instructions;
 					tmp = tmp->Next) {
@@ -333,12 +333,13 @@ void rc_pair_regalloc_inputs_only(struct radeon_compiler *cc, void *user)
 {
 	struct r300_fragment_program_compiler *c = (struct r300_fragment_program_compiler*)cc;
 	struct regalloc_state s;
+	int temp_reg_offset;
 
 	compute_live_intervals(cc, &s);
 
 	c->AllocateHwInputs(c, &alloc_input, &s);
 
-	int temp_reg_offset = 0;
+	temp_reg_offset = 0;
 	for (unsigned i = 0; i < RC_REGISTER_MAX_INDEX; i++) {
 		if (s.Input[i].Allocated && temp_reg_offset <= s.Input[i].Index)
 			temp_reg_offset = s.Input[i].Index + 1;

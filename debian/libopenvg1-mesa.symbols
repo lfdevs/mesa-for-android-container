@@ -9,20 +9,29 @@ libOpenVG.so.1 libopenvg1-mesa #MINVER# | libopenvg1
  vgAppendPathData@Base 7.8.1
  vgChildImage@Base 7.8.1
  vgClear@Base 7.8.1
+ vgClearGlyph@Base 7.10
  vgClearImage@Base 7.8.1
  vgClearPath@Base 7.8.1
  vgColorMatrix@Base 7.8.1
  vgConvolve@Base 7.8.1
  vgCopyImage@Base 7.8.1
+ vgCopyMask@Base 7.10
  vgCopyPixels@Base 7.8.1
+ vgCreateFont@Base 7.10
  vgCreateImage@Base 7.8.1
+ vgCreateMaskLayer@Base 7.10
  vgCreatePaint@Base 7.8.1
  vgCreatePath@Base 7.8.1
+ vgDestroyFont@Base 7.10
  vgDestroyImage@Base 7.8.1
+ vgDestroyMaskLayer@Base 7.10
  vgDestroyPaint@Base 7.8.1
  vgDestroyPath@Base 7.8.1
+ vgDrawGlyph@Base 7.10
+ vgDrawGlyphs@Base 7.10
  vgDrawImage@Base 7.8.1
  vgDrawPath@Base 7.8.1
+ vgFillMaskLayer@Base 7.10
  vgFinish@Base 7.8.1
  vgFlush@Base 7.8.1
  vgGaussianBlur@Base 7.8.1
@@ -62,10 +71,13 @@ libOpenVG.so.1 libopenvg1-mesa #MINVER# | libopenvg1
  vgPointAlongPath@Base 7.8.1
  vgReadPixels@Base 7.8.1
  vgRemovePathCapabilities@Base 7.8.1
+ vgRenderToMask@Base 7.10
  vgRotate@Base 7.8.1
  vgScale@Base 7.8.1
  vgSeparableConvolve@Base 7.8.1
  vgSetColor@Base 7.8.1
+ vgSetGlyphToImage@Base 7.10
+ vgSetGlyphToPath@Base 7.10
  vgSetPaint@Base 7.8.1
  vgSetParameterf@Base 7.8.1
  vgSetParameterfv@Base 7.8.1

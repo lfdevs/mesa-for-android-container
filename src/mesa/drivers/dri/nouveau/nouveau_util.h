@@ -130,7 +130,7 @@ get_scissors(struct gl_framebuffer *fb, int *x, int *y, int *w, int *h)
 }
 
 static inline void
-get_viewport_scale(GLcontext *ctx, float a[16])
+get_viewport_scale(struct gl_context *ctx, float a[16])
 {
 	struct gl_viewport_attrib *vp = &ctx->Viewport;
 	struct gl_framebuffer *fb = ctx->DrawBuffer;
@@ -147,7 +147,7 @@ get_viewport_scale(GLcontext *ctx, float a[16])
 }
 
 static inline void
-get_viewport_translate(GLcontext *ctx, float a[4])
+get_viewport_translate(struct gl_context *ctx, float a[4])
 {
 	struct gl_viewport_attrib *vp = &ctx->Viewport;
 	struct gl_framebuffer *fb = ctx->DrawBuffer;
@@ -161,6 +161,12 @@ get_viewport_translate(GLcontext *ctx, float a[4])
 		a[1] = fb->Height - (float)vp->Height / 2 - vp->Y;
 
 	a[2] = fb->_DepthMaxF * (vp->Far + vp->Near) / 2;
+}
+
+static inline void
+OUT_RINGb(struct nouveau_channel *chan, GLboolean x)
+{
+	OUT_RING(chan, x ? 1 : 0);
 }
 
 static inline void

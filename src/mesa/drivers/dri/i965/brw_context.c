@@ -57,14 +57,14 @@ static void brwInitDriverFunctions( struct dd_function_table *functions )
 }
 
 GLboolean brwCreateContext( int api,
-			    const __GLcontextModes *mesaVis,
+			    const struct gl_config *mesaVis,
 			    __DRIcontext *driContextPriv,
 			    void *sharedContextPrivate)
 {
    struct dd_function_table functions;
    struct brw_context *brw = (struct brw_context *) CALLOC_STRUCT(brw_context);
    struct intel_context *intel = &brw->intel;
-   GLcontext *ctx = &intel->ctx;
+   struct gl_context *ctx = &intel->ctx;
    unsigned i;
 
    if (!brw) {
@@ -150,6 +150,13 @@ GLboolean brwCreateContext( int api,
    ctx->Const.FragmentProgram.MaxEnvParams =
       MIN2(ctx->Const.FragmentProgram.MaxNativeParameters,
 	   ctx->Const.FragmentProgram.MaxEnvParams);
+
+   /* Gen6 converts quads to polygon in beginning of 3D pipeline,
+      but we're not sure how it's actually done for vertex order,
+      that affect provoking vertex decision. Always use last vertex
+      convention for quad primitive which works as expected for now. */
+   if (intel->gen == 6)
+       ctx->Const.QuadsFollowProvokingVertexConvention = GL_FALSE;
 
    if (intel->is_g4x || intel->gen >= 5) {
       brw->CMD_VF_STATISTICS = CMD_VF_STATISTICS_GM45;

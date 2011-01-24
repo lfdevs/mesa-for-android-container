@@ -27,12 +27,13 @@
 #include "nouveau_driver.h"
 #include "nouveau_context.h"
 #include "nouveau_util.h"
-#include "nouveau_class.h"
+#include "nv_object.xml.h"
+#include "nv04_3d.xml.h"
 #include "nv04_driver.h"
 
 #define COMBINER_SHIFT(in)						\
-	(NV04_MULTITEX_TRIANGLE_COMBINE_COLOR_ARGUMENT##in##_SHIFT	\
-	 - NV04_MULTITEX_TRIANGLE_COMBINE_COLOR_ARGUMENT0_SHIFT)
+	(NV04_MULTITEX_TRIANGLE_COMBINE_COLOR_ARGUMENT##in##__SHIFT	\
+	 - NV04_MULTITEX_TRIANGLE_COMBINE_COLOR_ARGUMENT0__SHIFT)
 #define COMBINER_SOURCE(reg)					\
 	NV04_MULTITEX_TRIANGLE_COMBINE_COLOR_ARGUMENT0_##reg
 #define COMBINER_INVERT					\
@@ -41,7 +42,7 @@
 	NV04_MULTITEX_TRIANGLE_COMBINE_COLOR_ALPHA0
 
 struct combiner_state {
-	GLcontext *ctx;
+	struct gl_context *ctx;
 	int unit;
 	GLboolean alpha;
 	GLboolean premodulate;
@@ -234,7 +235,7 @@ setup_combiner(struct combiner_state *rc)
 }
 
 void
-nv04_emit_tex_env(GLcontext *ctx, int emit)
+nv04_emit_tex_env(struct gl_context *ctx, int emit)
 {
 	const int i = emit - NOUVEAU_STATE_TEX_ENV0;
 	struct nouveau_channel *chan = context_chan(ctx);

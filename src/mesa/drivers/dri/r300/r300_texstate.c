@@ -301,7 +301,7 @@ static void setup_hardware_state(r300ContextPtr rmesa, radeonTexObj *t)
  *
  * Mostly this means populating the texture object's mipmap tree.
  */
-static GLboolean r300_validate_texture(GLcontext * ctx, struct gl_texture_object *texObj)
+static GLboolean r300_validate_texture(struct gl_context * ctx, struct gl_texture_object *texObj)
 {
 	r300ContextPtr rmesa = R300_CONTEXT(ctx);
 	radeonTexObj *t = radeon_tex_obj(texObj);
@@ -320,7 +320,7 @@ static GLboolean r300_validate_texture(GLcontext * ctx, struct gl_texture_object
 /**
  * Ensure all enabled and complete textures are uploaded along with any buffers being used.
  */
-GLboolean r300ValidateBuffers(GLcontext * ctx)
+GLboolean r300ValidateBuffers(struct gl_context * ctx)
 {
 	r300ContextPtr rmesa = R300_CONTEXT(ctx);
 	struct radeon_renderbuffer *rrb;
@@ -428,6 +428,7 @@ void r300SetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_format
 	radeonTexObjPtr t;
 	uint32_t pitch_val;
 	uint32_t internalFormat, type, format;
+	gl_format texFormat;
 
 	type = GL_BGRA;
 	format = GL_UNSIGNED_BYTE;
@@ -467,9 +468,6 @@ void r300SetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_format
 	radeon_miptree_unreference(&t->mt);
 	radeon_miptree_unreference(&rImage->mt);
 
-	_mesa_init_teximage_fields(radeon->glCtx, target, texImage,
-				   rb->base.Width, rb->base.Height, 1, 0, rb->cpp);
-	texImage->RowStride = rb->pitch / rb->cpp;
 	rImage->bo = rb->bo;
 	radeon_bo_ref(rImage->bo);
 	t->bo = rb->bo;
@@ -481,22 +479,35 @@ void r300SetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_format
 	pitch_val = rb->pitch;
 	switch (rb->cpp) {
 	case 4:
-		if (texture_format == __DRI_TEXTURE_FORMAT_RGB)
+		if (texture_format == __DRI_TEXTURE_FORMAT_RGB) {
+			texFormat = MESA_FORMAT_RGB888;
 			t->pp_txformat = R300_EASY_TX_FORMAT(X, Y, Z, ONE, W8Z8Y8X8);
-		else
+		}
+		else {
+			texFormat = MESA_FORMAT_ARGB8888;
 			t->pp_txformat = R300_EASY_TX_FORMAT(X, Y, Z, W, W8Z8Y8X8);
+		}
 		pitch_val /= 4;
 		break;
 	case 3:
 	default:
+		texFormat = MESA_FORMAT_RGB888;
 		t->pp_txformat = R300_EASY_TX_FORMAT(X, Y, Z, ONE, W8Z8Y8X8);
 		pitch_val /= 4;
 		break;
 	case 2:
+		texFormat = MESA_FORMAT_RGB565;
 		t->pp_txformat = R300_EASY_TX_FORMAT(X, Y, Z, ONE, Z5Y6X5);
 		pitch_val /= 2;
 		break;
 	}
+
+	_mesa_init_teximage_fields(radeon->glCtx, target, texImage,
+				   rb->base.Width, rb->base.Height, 1, 0,
+				   rb->cpp, texFormat);
+	texImage->RowStride = rb->pitch / rb->cpp;
+
+
 	pitch_val--;
 	t->pp_txsize = (((R300_TX_WIDTHMASK_MASK & ((rb->base.Width - 1) << R300_TX_WIDTHMASK_SHIFT)))
 			| ((R300_TX_HEIGHTMASK_MASK & ((rb->base.Height - 1) << R300_TX_HEIGHTMASK_SHIFT))));

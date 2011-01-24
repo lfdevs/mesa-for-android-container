@@ -105,8 +105,6 @@ static int r300_swizzle_is_native(rc_opcode opcode, struct rc_src_register reg)
 	    opcode == RC_OPCODE_TEX ||
 	    opcode == RC_OPCODE_TXB ||
 	    opcode == RC_OPCODE_TXP) {
-		int j;
-
 		if (reg.Abs || reg.Negate)
 			return 0;
 
@@ -158,9 +156,10 @@ static void r300_swizzle_split(
 			unsigned int matchcount = 0;
 			unsigned int matchmask = 0;
 			for(comp = 0; comp < 3; ++comp) {
+				unsigned int swz;
 				if (!GET_BIT(mask, comp))
 					continue;
-				unsigned int swz = GET_SWZ(src.Swizzle, comp);
+				swz = GET_SWZ(src.Swizzle, comp);
 				if (swz == RC_SWIZZLE_UNUSED)
 					continue;
 				if (swz == GET_SWZ(sd->hash, comp)) {

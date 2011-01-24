@@ -62,6 +62,7 @@ static const char *es2_extensions[] = {
    "GL_EXT_blend_minmax",
    "GL_EXT_blend_subtract",
    "GL_EXT_stencil_wrap",
+   "GL_NV_blend_square",
 
    /* Optional GLES2 */
    "GL_ARB_framebuffer_object",
@@ -69,6 +70,7 @@ static const char *es2_extensions[] = {
    "GL_ARB_depth_texture",
    "GL_EXT_packed_depth_stencil",
    "GL_EXT_framebuffer_object",
+   "GL_EXT_texture_format_BGRA8888",
 
 #if FEATURE_OES_EGL_image
    "GL_OES_EGL_image",
@@ -82,7 +84,7 @@ static const char *es2_extensions[] = {
  * extensions for a context.
  */
 void
-intelInitExtensionsES2(GLcontext *ctx)
+intelInitExtensionsES2(struct gl_context *ctx)
 {
    int i;
 

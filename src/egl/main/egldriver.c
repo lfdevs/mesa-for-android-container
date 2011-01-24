@@ -9,19 +9,10 @@
 #include <stdlib.h>
 
 #include "eglstring.h"
-#include "eglconfig.h"
-#include "eglcontext.h"
 #include "egldefines.h"
 #include "egldisplay.h"
 #include "egldriver.h"
 #include "egllog.h"
-#include "eglmisc.h"
-#include "eglmode.h"
-#include "eglscreen.h"
-#include "eglstring.h"
-#include "eglsurface.h"
-#include "eglimage.h"
-#include "eglsync.h"
 #include "eglmutex.h"
 
 #if defined(_EGL_OS_UNIX)
@@ -404,35 +395,62 @@ _eglPreloadForEach(const char *search_path,
 static const char *
 _eglGetSearchPath(void)
 {
-   static const char *search_path;
+   static char search_path[1024];
 
 #if defined(_EGL_OS_UNIX) || defined(_EGL_OS_WINDOWS)
-   if (!search_path) {
-      static char buffer[1024];
-      const char *p;
+   if (search_path[0] == '\0') {
+      char *buf = search_path;
+      size_t len = sizeof(search_path);
+      EGLBoolean use_env;
+      char dir_sep;
       int ret;
 
-      p = getenv("EGL_DRIVERS_PATH");
 #if defined(_EGL_OS_UNIX)
-      if (p && (geteuid() != getuid() || getegid() != getgid())) {
+      use_env = (geteuid() == getuid() && getegid() == getgid());
+      dir_sep = '/';
+#else
+      use_env = EGL_TRUE;
+      dir_sep = '\\';
+#endif
+
+      if (use_env) {
+         char *p;
+
+         /* extract the dirname from EGL_DRIVER */
+         p = getenv("EGL_DRIVER");
+         if (p && strchr(p, dir_sep)) {
+            ret = _eglsnprintf(buf, len, "%s", p);
+            if (ret > 0 && ret < len) {
+               p = strrchr(buf, dir_sep);
+               *p++ = ':';
+
+               len -= p - buf;
+               buf = p;
+            }
+         }
+
+         /* append EGL_DRIVERS_PATH */
+         p = getenv("EGL_DRIVERS_PATH");
+         if (p) {
+            ret = _eglsnprintf(buf, len, "%s:", p);
+            if (ret > 0 && ret < len) {
+               buf += ret;
+               len -= ret;
+            }
+         }
+      }
+      else {
          _eglLog(_EGL_DEBUG,
                "ignore EGL_DRIVERS_PATH for setuid/setgid binaries");
-         p = NULL;
       }
-#endif /* _EGL_OS_UNIX */
 
-      if (p) {
-         ret = _eglsnprintf(buffer, sizeof(buffer),
-               "%s:%s", p, _EGL_DRIVER_SEARCH_DIR);
-         if (ret > 0 && ret < sizeof(buffer))
-            search_path = buffer;
-      }
+      ret = _eglsnprintf(buf, len, "%s", _EGL_DRIVER_SEARCH_DIR);
+      if (ret < 0 || ret >= len)
+         search_path[0] = '\0';
+
+      _eglLog(_EGL_DEBUG, "EGL search path is %s", search_path);
    }
-   if (!search_path)
-      search_path = _EGL_DRIVER_SEARCH_DIR;
-#else
-   search_path = "";
-#endif
+#endif /* defined(_EGL_OS_UNIX) || defined(_EGL_OS_WINDOWS) */
 
    return search_path;
 }
@@ -660,77 +678,6 @@ _eglUnloadDrivers(void)
 #endif
       _eglModules = NULL;
    }
-}
-
-
-/**
- * Plug all the available fallback routines into the given driver's
- * dispatch table.
- */
-void
-_eglInitDriverFallbacks(_EGLDriver *drv)
-{
-   /* If a pointer is set to NULL, then the device driver _really_ has
-    * to implement it.
-    */
-   drv->API.Initialize = NULL;
-   drv->API.Terminate = NULL;
-
-   drv->API.GetConfigs = _eglGetConfigs;
-   drv->API.ChooseConfig = _eglChooseConfig;
-   drv->API.GetConfigAttrib = _eglGetConfigAttrib;
-
-   drv->API.CreateContext = _eglCreateContext;
-   drv->API.DestroyContext = _eglDestroyContext;
-   drv->API.MakeCurrent = _eglMakeCurrent;
-   drv->API.QueryContext = _eglQueryContext;
-
-   drv->API.CreateWindowSurface = _eglCreateWindowSurface;
-   drv->API.CreatePixmapSurface = _eglCreatePixmapSurface;
-   drv->API.CreatePbufferSurface = _eglCreatePbufferSurface;
-   drv->API.DestroySurface = _eglDestroySurface;
-   drv->API.QuerySurface = _eglQuerySurface;
-   drv->API.SurfaceAttrib = _eglSurfaceAttrib;
-   drv->API.BindTexImage = _eglBindTexImage;
-   drv->API.ReleaseTexImage = _eglReleaseTexImage;
-   drv->API.SwapInterval = _eglSwapInterval;
-   drv->API.SwapBuffers = _eglSwapBuffers;
-   drv->API.CopyBuffers = _eglCopyBuffers;
-
-   drv->API.QueryString = _eglQueryString;
-   drv->API.WaitClient = _eglWaitClient;
-   drv->API.WaitNative = _eglWaitNative;
-
-#ifdef EGL_MESA_screen_surface
-   drv->API.ChooseModeMESA = _eglChooseModeMESA; 
-   drv->API.GetModesMESA = _eglGetModesMESA;
-   drv->API.GetModeAttribMESA = _eglGetModeAttribMESA;
-   drv->API.GetScreensMESA = _eglGetScreensMESA;
-   drv->API.CreateScreenSurfaceMESA = _eglCreateScreenSurfaceMESA;
-   drv->API.ShowScreenSurfaceMESA = _eglShowScreenSurfaceMESA;
-   drv->API.ScreenPositionMESA = _eglScreenPositionMESA;
-   drv->API.QueryScreenMESA = _eglQueryScreenMESA;
-   drv->API.QueryScreenSurfaceMESA = _eglQueryScreenSurfaceMESA;
-   drv->API.QueryScreenModeMESA = _eglQueryScreenModeMESA;
-   drv->API.QueryModeStringMESA = _eglQueryModeStringMESA;
-#endif /* EGL_MESA_screen_surface */
-
-#ifdef EGL_VERSION_1_2
-   drv->API.CreatePbufferFromClientBuffer = _eglCreatePbufferFromClientBuffer;
-#endif /* EGL_VERSION_1_2 */
-
-#ifdef EGL_KHR_image_base
-   drv->API.CreateImageKHR = _eglCreateImageKHR;
-   drv->API.DestroyImageKHR = _eglDestroyImageKHR;
-#endif /* EGL_KHR_image_base */
-
-#ifdef EGL_KHR_reusable_sync
-   drv->API.CreateSyncKHR = _eglCreateSyncKHR;
-   drv->API.DestroySyncKHR = _eglDestroySyncKHR;
-   drv->API.ClientWaitSyncKHR = _eglClientWaitSyncKHR;
-   drv->API.SignalSyncKHR = _eglSignalSyncKHR;
-   drv->API.GetSyncAttribKHR = _eglGetSyncAttribKHR;
-#endif /* EGL_KHR_reusable_sync */
 }
 
 

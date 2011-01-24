@@ -33,28 +33,6 @@
 struct draw_context;
 struct vertex_info;
 
-enum lp_interp {
-   LP_INTERP_CONSTANT,
-   LP_INTERP_LINEAR,
-   LP_INTERP_PERSPECTIVE,
-   LP_INTERP_POSITION,
-   LP_INTERP_FACING
-};
-
-
-/**
- * Describes how to compute the interpolation coefficients (a0, dadx, dady)
- * from the vertices passed into our triangle/line/point functions by the
- * draw module.
- *
- * Vertices are treated as an array of float[4] values, indexed by
- * src_index.
- */
-struct lp_shader_input {
-   enum lp_interp interp;       /* how to interpolate values */
-   unsigned src_index;          /* where to find values in incoming vertices */
-   unsigned usage_mask;         /* bitmask of TGSI_WRITEMASK_x flags */
-};
 
 struct pipe_resource;
 struct pipe_query;
@@ -66,7 +44,10 @@ struct lp_fragment_shader_variant;
 struct lp_jit_context;
 struct llvmpipe_query;
 struct pipe_fence_handle;
+struct lp_setup_variant;
+struct lp_setup_context;
 
+void lp_setup_reset( struct lp_setup_context *setup );
 
 struct lp_setup_context *
 lp_setup_create( struct pipe_context *pipe,
@@ -107,12 +88,12 @@ void
 lp_setup_set_point_state( struct lp_setup_context *setup,
                           float point_size,                          
                           boolean point_size_per_vertex,
-                          uint sprite);
+                          uint sprite_coord_enable,
+                          uint sprite_coord_origin);
 
 void
-lp_setup_set_fs_inputs( struct lp_setup_context *setup,
-                        const struct lp_shader_input *interp,
-                        unsigned nr );
+lp_setup_set_setup_variant( struct lp_setup_context *setup,
+			    const struct lp_setup_variant *variant );
 
 void
 lp_setup_set_fs_variant( struct lp_setup_context *setup,
@@ -143,6 +124,11 @@ void
 lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                                     unsigned num,
                                     struct pipe_sampler_view **views);
+
+void
+lp_setup_set_fragment_sampler_state(struct lp_setup_context *setup,
+                                    unsigned num,
+                                    const struct pipe_sampler_state **samplers);
 
 unsigned
 lp_setup_is_resource_referenced( const struct lp_setup_context *setup,

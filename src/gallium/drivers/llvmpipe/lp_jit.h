@@ -54,6 +54,11 @@ struct lp_jit_texture
    uint32_t row_stride[LP_MAX_TEXTURE_LEVELS];
    uint32_t img_stride[LP_MAX_TEXTURE_LEVELS];
    const void *data[LP_MAX_TEXTURE_LEVELS];
+   /* sampler state, actually */
+   float min_lod;
+   float max_lod;
+   float lod_bias;
+   float border_color[4];
 };
 
 
@@ -65,6 +70,10 @@ enum {
    LP_JIT_TEXTURE_ROW_STRIDE,
    LP_JIT_TEXTURE_IMG_STRIDE,
    LP_JIT_TEXTURE_DATA,
+   LP_JIT_TEXTURE_MIN_LOD,
+   LP_JIT_TEXTURE_MAX_LOD,
+   LP_JIT_TEXTURE_LOD_BIAS,
+   LP_JIT_TEXTURE_BORDER_COLOR,
    LP_JIT_TEXTURE_NUM_FIELDS  /* number of fields above */
 };
 
@@ -111,23 +120,23 @@ enum {
 };
 
 
-#define lp_jit_context_constants(_builder, _ptr) \
-   lp_build_struct_get(_builder, _ptr, LP_JIT_CTX_CONSTANTS, "constants")
+#define lp_jit_context_constants(_gallivm, _ptr) \
+   lp_build_struct_get(_gallivm, _ptr, LP_JIT_CTX_CONSTANTS, "constants")
 
-#define lp_jit_context_alpha_ref_value(_builder, _ptr) \
-   lp_build_struct_get(_builder, _ptr, LP_JIT_CTX_ALPHA_REF, "alpha_ref_value")
+#define lp_jit_context_alpha_ref_value(_gallivm, _ptr) \
+   lp_build_struct_get(_gallivm, _ptr, LP_JIT_CTX_ALPHA_REF, "alpha_ref_value")
 
-#define lp_jit_context_stencil_ref_front_value(_builder, _ptr) \
-   lp_build_struct_get(_builder, _ptr, LP_JIT_CTX_STENCIL_REF_FRONT, "stencil_ref_front")
+#define lp_jit_context_stencil_ref_front_value(_gallivm, _ptr) \
+   lp_build_struct_get(_gallivm, _ptr, LP_JIT_CTX_STENCIL_REF_FRONT, "stencil_ref_front")
 
-#define lp_jit_context_stencil_ref_back_value(_builder, _ptr) \
-   lp_build_struct_get(_builder, _ptr, LP_JIT_CTX_STENCIL_REF_BACK, "stencil_ref_back")
+#define lp_jit_context_stencil_ref_back_value(_gallivm, _ptr) \
+   lp_build_struct_get(_gallivm, _ptr, LP_JIT_CTX_STENCIL_REF_BACK, "stencil_ref_back")
 
-#define lp_jit_context_blend_color(_builder, _ptr) \
-   lp_build_struct_get(_builder, _ptr, LP_JIT_CTX_BLEND_COLOR, "blend_color")
+#define lp_jit_context_blend_color(_gallivm, _ptr) \
+   lp_build_struct_get(_gallivm, _ptr, LP_JIT_CTX_BLEND_COLOR, "blend_color")
 
-#define lp_jit_context_textures(_builder, _ptr) \
-   lp_build_struct_get_ptr(_builder, _ptr, LP_JIT_CTX_TEXTURES, "textures")
+#define lp_jit_context_textures(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_CTX_TEXTURES, "textures")
 
 
 
@@ -135,7 +144,7 @@ typedef void
 (*lp_jit_frag_func)(const struct lp_jit_context *context,
                     uint32_t x,
                     uint32_t y,
-                    float facing,
+                    uint32_t facing,
                     const void *a0,
                     const void *dadx,
                     const void *dady,
@@ -151,6 +160,10 @@ lp_jit_screen_cleanup(struct llvmpipe_screen *screen);
 
 void
 lp_jit_screen_init(struct llvmpipe_screen *screen);
+
+
+LLVMTypeRef
+lp_jit_get_context_type(struct llvmpipe_context *lp);
 
 
 #endif /* LP_JIT_H */

@@ -28,7 +28,7 @@
 #include "nouveau_context.h"
 #include "nouveau_fbo.h"
 #include "nouveau_util.h"
-#include "nouveau_class.h"
+#include "nv04_3d.xml.h"
 #include "nv04_driver.h"
 
 static inline unsigned
@@ -36,18 +36,18 @@ get_rt_format(gl_format format)
 {
 	switch (format) {
 	case MESA_FORMAT_XRGB8888:
-		return 0x05;
+		return NV04_CONTEXT_SURFACES_3D_FORMAT_COLOR_X8R8G8B8_X8R8G8B8;
 	case MESA_FORMAT_ARGB8888:
-		return 0x08;
+		return NV04_CONTEXT_SURFACES_3D_FORMAT_COLOR_A8R8G8B8;
 	case MESA_FORMAT_RGB565:
-		return 0x03;
+		return NV04_CONTEXT_SURFACES_3D_FORMAT_COLOR_R5G6B5;
 	default:
 		assert(0);
 	}
 }
 
 void
-nv04_emit_framebuffer(GLcontext *ctx, int emit)
+nv04_emit_framebuffer(struct gl_context *ctx, int emit)
 {
 	struct nouveau_channel *chan = context_chan(ctx);
 	struct nouveau_hw_state *hw = &to_nouveau_context(ctx)->hw;
@@ -97,7 +97,7 @@ nv04_emit_framebuffer(GLcontext *ctx, int emit)
 }
 
 void
-nv04_emit_scissor(GLcontext *ctx, int emit)
+nv04_emit_scissor(struct gl_context *ctx, int emit)
 {
 	struct nouveau_channel *chan = context_chan(ctx);
 	struct nouveau_hw_state *hw = &to_nouveau_context(ctx)->hw;
@@ -110,7 +110,11 @@ nv04_emit_scissor(GLcontext *ctx, int emit)
 	OUT_RING(chan, w << 16 | x);
 	OUT_RING(chan, h << 16 | y);
 
-	/* Messing with surf3d invalidates some engine state. */
+	/* Messing with surf3d invalidates the engine state. */
+	context_dirty_i(ctx, TEX_ENV, 0);
+	context_dirty_i(ctx, TEX_ENV, 1);
+	context_dirty_i(ctx, TEX_OBJ, 0);
+	context_dirty_i(ctx, TEX_OBJ, 1);
 	context_dirty(ctx, CONTROL);
 	context_dirty(ctx, BLEND);
 }

@@ -29,7 +29,7 @@
 #define INTELCONTEXT_INC
 
 
-
+#include <stdbool.h>
 #include "main/mtypes.h"
 #include "main/mm.h"
 #include "dri_metaops.h"
@@ -98,6 +98,16 @@ extern void intelFallback(struct intel_context *intel, GLbitfield bit,
 
 #define INTEL_MAX_FIXUP 64
 
+#ifndef likely
+#ifdef __GNUC__
+#define likely(expr) (__builtin_expect(expr, 1))
+#define unlikely(expr) (__builtin_expect(expr, 0))
+#else
+#define likely(expr) (expr)
+#define unlikely(expr) (expr)
+#endif
+#endif
+
 struct intel_sync_object {
    struct gl_sync_object Base;
 
@@ -106,11 +116,11 @@ struct intel_sync_object {
 };
 
 /**
- * intel_context is derived from Mesa's context class: GLcontext.
+ * intel_context is derived from Mesa's context class: struct gl_context.
  */
 struct intel_context
 {
-   GLcontext ctx;  /**< base class, must be first field */
+   struct gl_context ctx;  /**< base class, must be first field */
 
    struct
    {
@@ -180,9 +190,6 @@ struct intel_context
    } prim;
 
    GLuint stats_wm;
-   GLboolean locked;
-   char *prevLockFile;
-   int prevLockLine;
 
    /* Offsets of fields within the current vertex:
     */
@@ -200,7 +207,6 @@ struct intel_context
    GLboolean hw_stipple;
    GLboolean depth_buffer_is_float;
    GLboolean no_rast;
-   GLboolean no_hw;
    GLboolean always_flush_batch;
    GLboolean always_flush_cache;
 
@@ -256,7 +262,7 @@ struct intel_context
 
    __DRIcontext *driContext;
    struct intel_screen *intelScreen;
-   void (*saved_viewport)(GLcontext * ctx,
+   void (*saved_viewport)(struct gl_context * ctx,
 			  GLint x, GLint y, GLsizei width, GLsizei height);
 
    /**
@@ -355,12 +361,16 @@ extern int INTEL_DEBUG;
 #define DEBUG_WM        0x800000
 #define DEBUG_URB       0x1000000
 #define DEBUG_VS        0x2000000
-#define DEBUG_GLSL_FORCE 0x4000000
 #define DEBUG_CLIP      0x8000000
 
 #define DBG(...) do {						\
-	if (INTEL_DEBUG & FILE_DEBUG_FLAG)			\
+	if (unlikely(INTEL_DEBUG & FILE_DEBUG_FLAG))		\
 		printf(__VA_ARGS__);			\
+} while(0)
+
+#define fallback_debug(...) do {				\
+	if (unlikely(INTEL_DEBUG & DEBUG_FALLBACKS))		\
+		printf(__VA_ARGS__);				\
 } while(0)
 
 #define PCI_CHIP_845_G			0x2562
@@ -383,13 +393,13 @@ extern int INTEL_DEBUG;
 
 extern GLboolean intelInitContext(struct intel_context *intel,
 				  int api,
-                                  const __GLcontextModes * mesaVis,
+                                  const struct gl_config * mesaVis,
                                   __DRIcontext * driContextPriv,
                                   void *sharedContextPrivate,
                                   struct dd_function_table *functions);
 
-extern void intelFinish(GLcontext * ctx);
-extern void intel_flush(GLcontext * ctx);
+extern void intelFinish(struct gl_context * ctx);
+extern void intel_flush(struct gl_context * ctx);
 
 extern void intelInitDriverFunctions(struct dd_function_table *functions);
 
@@ -476,7 +486,7 @@ void i915_set_buf_info_for_region(uint32_t *state, struct intel_region *region,
  * These are better-typed than the macros used previously:
  */
 static INLINE struct intel_context *
-intel_context(GLcontext * ctx)
+intel_context(struct gl_context * ctx)
 {
    return (struct intel_context *) ctx;
 }

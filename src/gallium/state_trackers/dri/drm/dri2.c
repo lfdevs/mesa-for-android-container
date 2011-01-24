@@ -200,6 +200,7 @@ dri2_drawable_process_buffers(struct dri_drawable *drawable,
    templ.width0 = dri_drawable->w;
    templ.height0 = dri_drawable->h;
    templ.depth0 = 1;
+   templ.array_size = 1;
 
    memset(&whandle, 0, sizeof(whandle));
 
@@ -348,6 +349,7 @@ dri2_create_image_from_name(__DRIscreen *_screen,
    templ.width0 = width;
    templ.height0 = height;
    templ.depth0 = 1;
+   templ.array_size = 1;
 
    memset(&whandle, 0, sizeof(whandle));
    whandle.handle = name;
@@ -360,9 +362,8 @@ dri2_create_image_from_name(__DRIscreen *_screen,
       return NULL;
    }
 
-   img->face = 0;
    img->level = 0;
-   img->zslice = 0;
+   img->layer = 0;
    img->loader_private = loaderPrivate;
 
    return img;
@@ -430,9 +431,8 @@ dri2_create_image(__DRIscreen *_screen,
       return NULL;
    }
 
-   img->face = 0;
    img->level = 0;
-   img->zslice = 0;
+   img->layer = 0;
 
    img->loader_private = loaderPrivate;
    return img;
@@ -502,7 +502,7 @@ static const __DRIextension *dri_screen_extensions[] = {
 /**
  * This is the driver specific part of the createNewScreen entry point.
  *
- * Returns the __GLcontextModes supported by this driver.
+ * Returns the struct gl_config supported by this driver.
  */
 static const __DRIconfig **
 dri2_init_screen(__DRIscreen * sPriv)
@@ -548,7 +548,7 @@ fail:
 }
 
 static boolean
-dri2_create_context(gl_api api, const __GLcontextModes * visual,
+dri2_create_context(gl_api api, const struct gl_config * visual,
                     __DRIcontext * cPriv, void *sharedContextPrivate)
 {
    struct dri_context *ctx = NULL;
@@ -564,7 +564,7 @@ dri2_create_context(gl_api api, const __GLcontextModes * visual,
 static boolean
 dri2_create_buffer(__DRIscreen * sPriv,
                    __DRIdrawable * dPriv,
-                   const __GLcontextModes * visual, boolean isPixmap)
+                   const struct gl_config * visual, boolean isPixmap)
 {
    struct dri_drawable *drawable = NULL;
 

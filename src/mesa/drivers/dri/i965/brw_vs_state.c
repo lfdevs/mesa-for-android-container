@@ -51,7 +51,7 @@ struct brw_vs_unit_key {
 static void
 vs_unit_populate_key(struct brw_context *brw, struct brw_vs_unit_key *key)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
 
    memset(key, 0, sizeof(*key));
 
@@ -154,7 +154,7 @@ vs_unit_create_from_key(struct brw_context *brw, struct brw_vs_unit_key *key)
     */
    vs.vs5.sampler_count = 0;
 
-   if (INTEL_DEBUG & DEBUG_STATS)
+   if (unlikely(INTEL_DEBUG & DEBUG_STATS))
       vs.thread4.stats_enable = 1;
 
    /* Vertex program always enabled:

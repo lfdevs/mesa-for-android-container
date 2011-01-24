@@ -49,7 +49,7 @@ dri_init_extensions(struct dri_context *ctx)
 }
 
 GLboolean
-dri_create_context(gl_api api, const __GLcontextModes * visual,
+dri_create_context(gl_api api, const struct gl_config * visual,
 		   __DRIcontext * cPriv, void *sharedContextPrivate)
 {
    __DRIscreen *sPriv = cPriv->driScreenPriv;
@@ -178,7 +178,8 @@ dri_make_current(__DRIcontext * cPriv,
       read->texture_stamp = driReadPriv->lastStamp - 1;
    }
 
-   ctx->stapi->make_current(ctx->stapi, ctx->st, &draw->base, &read->base);
+   ctx->stapi->make_current(ctx->stapi, ctx->st,
+         (draw) ? &draw->base : NULL, (read) ? &read->base : NULL);
 
    return GL_TRUE;
 }

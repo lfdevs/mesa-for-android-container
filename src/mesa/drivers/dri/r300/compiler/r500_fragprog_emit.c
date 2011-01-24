@@ -45,9 +45,6 @@
 
 #include "radeon_program_pair.h"
 
-#define MAX_BRANCH_DEPTH_FULL 32
-#define MAX_BRANCH_DEPTH_PARTIAL 4
-
 #define PROG_CODE \
 	struct r500_fragment_program_code *code = &c->code->code.r500
 
@@ -198,7 +195,7 @@ static void use_temporary(struct r500_fragment_program_code* code, unsigned int 
 		code->max_temp_idx = index;
 }
 
-static unsigned int use_source(struct r500_fragment_program_code* code, struct radeon_pair_instruction_source src)
+static unsigned int use_source(struct r500_fragment_program_code* code, struct rc_pair_instruction_source src)
 {
 	if (!src.Used)
 		return 0;
@@ -230,6 +227,7 @@ static void alu_nop(struct r300_fragment_program_compiler *c, int ip)
  */
 static void emit_paired(struct r300_fragment_program_compiler *c, struct rc_pair_instruction *inst)
 {
+	int ip;
 	PROG_CODE;
 
 	if (code->inst_end >= c->Base.max_alu_insts-1) {
@@ -237,7 +235,7 @@ static void emit_paired(struct r300_fragment_program_compiler *c, struct rc_pair
 		return;
 	}
 
-	int ip = ++code->inst_end;
+	ip = ++code->inst_end;
 
 	/* Quirk: MDH/MDV (DDX/DDY) need a NOP on previous non-TEX instructions. */
 	if (inst->RGB.Opcode == RC_OPCODE_DDX || inst->Alpha.Opcode == RC_OPCODE_DDX ||
@@ -360,6 +358,7 @@ static unsigned int translate_strq_swizzle(unsigned int swizzle)
  */
 static int emit_tex(struct r300_fragment_program_compiler *c, struct rc_sub_instruction *inst)
 {
+	int ip;
 	PROG_CODE;
 
 	if (code->inst_end >= c->Base.max_alu_insts-1) {
@@ -367,7 +366,7 @@ static int emit_tex(struct r300_fragment_program_compiler *c, struct rc_sub_inst
 		return 0;
 	}
 
-	int ip = ++code->inst_end;
+	ip = ++code->inst_end;
 
 	code->inst[ip].inst0 = R500_INST_TYPE_TEX
 		| (inst->DstReg.WriteMask << 11)
@@ -410,12 +409,14 @@ static int emit_tex(struct r300_fragment_program_compiler *c, struct rc_sub_inst
 
 static void emit_flowcontrol(struct emit_state * s, struct rc_instruction * inst)
 {
+	unsigned int newip;
+
 	if (s->Code->inst_end >= s->C->max_alu_insts-1) {
 		rc_error(s->C, "emit_tex: Too many instructions");
 		return;
 	}
 
-	unsigned int newip = ++s->Code->inst_end;
+	newip = ++s->Code->inst_end;
 
 	/* Currently all loops use the same integer constant to intialize
 	 * the loop variables. */
@@ -505,7 +506,7 @@ static void emit_flowcontrol(struct emit_state * s, struct rc_instruction * inst
 		break;
 	}
 	case RC_OPCODE_IF:
-		if ( s->CurrentBranchDepth >= MAX_BRANCH_DEPTH_FULL) {
+		if ( s->CurrentBranchDepth >= R500_PFS_MAX_BRANCH_DEPTH_FULL) {
 			rc_error(s->C, "Branch depth exceeds hardware limit");
 			return;
 		}
@@ -626,6 +627,8 @@ void r500BuildFragmentProgramHwCode(struct radeon_compiler *c, void *user)
 
 	if (code->inst_end == -1 ||
 	    (code->inst[code->inst_end].inst0 & R500_INST_TYPE_MASK) != R500_INST_TYPE_OUT) {
+		int ip;
+
 		/* This may happen when dead-code elimination is disabled or
 		 * when most of the fragment program logic is leading to a KIL */
 		if (code->inst_end >= compiler->Base.max_alu_insts-1) {
@@ -633,7 +636,7 @@ void r500BuildFragmentProgramHwCode(struct radeon_compiler *c, void *user)
 			return;
 		}
 
-		int ip = ++code->inst_end;
+		ip = ++code->inst_end;
 		code->inst[ip].inst0 = R500_INST_TYPE_OUT | R500_INST_TEX_SEM_WAIT;
 	}
 

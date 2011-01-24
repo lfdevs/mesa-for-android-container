@@ -28,6 +28,7 @@
 #define __NV04_CONTEXT_H__
 
 #include "nouveau_context.h"
+#include "nv_object.xml.h"
 
 struct nv04_context {
 	struct nouveau_context base;
@@ -40,7 +41,7 @@ struct nv04_context {
 #define nv04_mtex_engine(obj) ((obj)->grclass == NV04_MULTITEX_TRIANGLE)
 
 struct nouveau_grobj *
-nv04_context_engine(GLcontext *ctx);
+nv04_context_engine(struct gl_context *ctx);
 
 extern const struct nouveau_driver nv04_driver;
 

@@ -30,6 +30,10 @@
 struct nouveau_teximage {
 	struct gl_texture_image base;
 	struct nouveau_surface surface;
+	struct {
+		struct nouveau_surface surface;
+		int x, y;
+	} transfer;
 };
 #define to_nouveau_teximage(x) ((struct nouveau_teximage *)(x))
 
@@ -49,9 +53,9 @@ nouveau_set_texbuffer(__DRIcontext *dri_ctx,
 		      __DRIdrawable *draw);
 
 GLboolean
-nouveau_texture_validate(GLcontext *ctx, struct gl_texture_object *t);
+nouveau_texture_validate(struct gl_context *ctx, struct gl_texture_object *t);
 
 void
-nouveau_texture_reallocate(GLcontext *ctx, struct gl_texture_object *t);
+nouveau_texture_reallocate(struct gl_context *ctx, struct gl_texture_object *t);
 
 #endif

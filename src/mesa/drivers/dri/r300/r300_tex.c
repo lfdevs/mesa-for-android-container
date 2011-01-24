@@ -185,7 +185,7 @@ static void r300SetTexBorderColor(radeonTexObjPtr t, const GLfloat color[4])
  * next UpdateTextureState
  */
 
-static void r300TexParameter(GLcontext * ctx, GLenum target,
+static void r300TexParameter(struct gl_context * ctx, GLenum target,
 			     struct gl_texture_object *texObj,
 			     GLenum pname, const GLfloat * params)
 {
@@ -243,7 +243,7 @@ static void r300TexParameter(GLcontext * ctx, GLenum target,
 	}
 }
 
-static void r300DeleteTexture(GLcontext * ctx, struct gl_texture_object *texObj)
+static void r300DeleteTexture(struct gl_context * ctx, struct gl_texture_object *texObj)
 {
 	r300ContextPtr rmesa = R300_CONTEXT(ctx);
 	radeonTexObj* t = radeon_tex_obj(texObj);
@@ -284,7 +284,7 @@ static void r300DeleteTexture(GLcontext * ctx, struct gl_texture_object *texObj)
  * allocate the default texture objects.
  * Fixup MaxAnisotropy according to user preference.
  */
-static struct gl_texture_object *r300NewTextureObject(GLcontext * ctx,
+static struct gl_texture_object *r300NewTextureObject(struct gl_context * ctx,
 						      GLuint name,
 						      GLenum target)
 {
@@ -381,6 +381,10 @@ void r300InitTextureFuncs(radeonContextPtr radeon, struct dd_function_table *fun
 	}
 
 	functions->GenerateMipmap = radeonGenerateMipmap;
+
+#if FEATURE_OES_EGL_image
+	functions->EGLImageTargetTexture2D = radeon_image_target_texture_2d;
+#endif
 
 	driInitTextureFormats();
 }

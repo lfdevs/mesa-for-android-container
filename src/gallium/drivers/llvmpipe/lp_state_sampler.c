@@ -37,6 +37,7 @@
 #include "lp_context.h"
 #include "lp_screen.h"
 #include "lp_state.h"
+#include "lp_debug.h"
 #include "state_tracker/sw_winsys.h"
 
 
@@ -44,7 +45,22 @@ static void *
 llvmpipe_create_sampler_state(struct pipe_context *pipe,
                               const struct pipe_sampler_state *sampler)
 {
-   return mem_dup(sampler, sizeof(*sampler));
+   struct pipe_sampler_state *state = mem_dup(sampler, sizeof *sampler);
+
+   if (LP_PERF & PERF_NO_MIP_LINEAR) {
+      if (state->min_mip_filter == PIPE_TEX_MIPFILTER_LINEAR)
+	 state->min_mip_filter = PIPE_TEX_MIPFILTER_NEAREST;
+   }
+
+   if (LP_PERF & PERF_NO_MIPMAPS)
+      state->min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
+
+   if (LP_PERF & PERF_NO_LINEAR) {
+      state->mag_img_filter = PIPE_TEX_FILTER_NEAREST;
+      state->min_img_filter = PIPE_TEX_FILTER_NEAREST;
+   }
+
+   return state;
 }
 
 
@@ -230,9 +246,9 @@ llvmpipe_prepare_vertex_sampling(struct llvmpipe_context *lp,
                                  struct pipe_sampler_view **views)
 {
    unsigned i;
-   uint32_t row_stride[DRAW_MAX_TEXTURE_LEVELS];
-   uint32_t img_stride[DRAW_MAX_TEXTURE_LEVELS];
-   const void *data[DRAW_MAX_TEXTURE_LEVELS];
+   uint32_t row_stride[PIPE_MAX_TEXTURE_LEVELS];
+   uint32_t img_stride[PIPE_MAX_TEXTURE_LEVELS];
+   const void *data[PIPE_MAX_TEXTURE_LEVELS];
 
    assert(num <= PIPE_MAX_VERTEX_SAMPLERS);
    if (!num)

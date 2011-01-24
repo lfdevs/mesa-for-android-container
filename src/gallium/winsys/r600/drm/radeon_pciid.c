@@ -24,7 +24,7 @@
  *      Jerome Glisse
  */
 #include <stdlib.h>
-#include "radeon_priv.h"
+#include "r600_priv.h"
 
 struct pci_id {
 	unsigned	vendor;
@@ -441,6 +441,46 @@ struct pci_id radeon_pci_id[] = {
 	{0x1002, 0x9713, CHIP_RS880},
 	{0x1002, 0x9714, CHIP_RS880},
 	{0x1002, 0x9715, CHIP_RS880},
+	{0x1002, 0x9802, CHIP_PALM},
+	{0x1002, 0x9803, CHIP_PALM},
+	{0x1002, 0x9804, CHIP_PALM},
+	{0x1002, 0x9805, CHIP_PALM},
+	{0x1002, 0x6720, CHIP_BARTS},
+	{0x1002, 0x6721, CHIP_BARTS},
+	{0x1002, 0x6722, CHIP_BARTS},
+	{0x1002, 0x6723, CHIP_BARTS},
+	{0x1002, 0x6724, CHIP_BARTS},
+	{0x1002, 0x6725, CHIP_BARTS},
+	{0x1002, 0x6726, CHIP_BARTS},
+	{0x1002, 0x6727, CHIP_BARTS},
+	{0x1002, 0x6728, CHIP_BARTS},
+	{0x1002, 0x6729, CHIP_BARTS},
+	{0x1002, 0x6738, CHIP_BARTS},
+	{0x1002, 0x6739, CHIP_BARTS},
+	{0x1002, 0x6740, CHIP_TURKS},
+	{0x1002, 0x6741, CHIP_TURKS},
+	{0x1002, 0x6742, CHIP_TURKS},
+	{0x1002, 0x6743, CHIP_TURKS},
+	{0x1002, 0x6744, CHIP_TURKS},
+	{0x1002, 0x6745, CHIP_TURKS},
+	{0x1002, 0x6746, CHIP_TURKS},
+	{0x1002, 0x6747, CHIP_TURKS},
+	{0x1002, 0x6748, CHIP_TURKS},
+	{0x1002, 0x6749, CHIP_TURKS},
+	{0x1002, 0x6750, CHIP_TURKS},
+	{0x1002, 0x6758, CHIP_TURKS},
+	{0x1002, 0x6759, CHIP_TURKS},
+	{0x1002, 0x6760, CHIP_CAICOS},
+	{0x1002, 0x6761, CHIP_CAICOS},
+	{0x1002, 0x6762, CHIP_CAICOS},
+	{0x1002, 0x6763, CHIP_CAICOS},
+	{0x1002, 0x6764, CHIP_CAICOS},
+	{0x1002, 0x6765, CHIP_CAICOS},
+	{0x1002, 0x6766, CHIP_CAICOS},
+	{0x1002, 0x6767, CHIP_CAICOS},
+	{0x1002, 0x6768, CHIP_CAICOS},
+	{0x1002, 0x6770, CHIP_CAICOS},
+	{0x1002, 0x6779, CHIP_CAICOS},
 	{0, 0},
 };
 
@@ -455,74 +495,4 @@ unsigned radeon_family_from_device(unsigned device)
 			return radeon_pci_id[i].family;
 	}
 	return CHIP_UNKNOWN;
-}
-
-int radeon_is_family_compatible(unsigned family1, unsigned family2)
-{
-	switch (family1) {
-	case CHIP_R600:
-	case CHIP_RV610:
-	case CHIP_RV630:
-	case CHIP_RV670:
-	case CHIP_RV620:
-	case CHIP_RV635:
-	case CHIP_RS780:
-	case CHIP_RS880:
-	case CHIP_RV770:
-	case CHIP_RV730:
-	case CHIP_RV710:
-	case CHIP_RV740:
-		switch (family2) {
-		case CHIP_R600:
-		case CHIP_RV610:
-		case CHIP_RV630:
-		case CHIP_RV670:
-		case CHIP_RV620:
-		case CHIP_RV635:
-		case CHIP_RS780:
-		case CHIP_RS880:
-		case CHIP_RV770:
-		case CHIP_RV730:
-		case CHIP_RV710:
-		case CHIP_RV740:
-			return 1;
-		default:
-			return 0;
-		}
-		break;
-	case CHIP_R100:
-	case CHIP_RV100:
-	case CHIP_RS100:
-	case CHIP_RV200:
-	case CHIP_RS200:
-	case CHIP_R200:
-	case CHIP_RV250:
-	case CHIP_RS300:
-	case CHIP_RV280:
-	case CHIP_R300:
-	case CHIP_R350:
-	case CHIP_RV350:
-	case CHIP_RV380:
-	case CHIP_R420:
-	case CHIP_R423:
-	case CHIP_RV410:
-	case CHIP_RS400:
-	case CHIP_RS480:
-	case CHIP_RS600:
-	case CHIP_RS690:
-	case CHIP_RS740:
-	case CHIP_RV515:
-	case CHIP_R520:
-	case CHIP_RV530:
-	case CHIP_RV560:
-	case CHIP_RV570:
-	case CHIP_R580:
-	case CHIP_CEDAR:
-	case CHIP_REDWOOD:
-	case CHIP_JUNIPER:
-	case CHIP_CYPRESS:
-	case CHIP_HEMLOCK:
-	default:
-		return 0;
-	}
 }

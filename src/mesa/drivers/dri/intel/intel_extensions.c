@@ -31,7 +31,6 @@
 #include "utils.h"
 
 
-#define need_GL_ARB_copy_buffer
 #define need_GL_ARB_draw_elements_base_vertex
 #define need_GL_ARB_framebuffer_object
 #define need_GL_ARB_map_buffer_range
@@ -47,7 +46,6 @@
 #define need_GL_EXT_blend_equation_separate
 #define need_GL_EXT_blend_func_separate
 #define need_GL_EXT_blend_minmax
-#define need_GL_EXT_cull_vertex
 #define need_GL_EXT_draw_buffers2
 #define need_GL_EXT_fog_coord
 #define need_GL_EXT_framebuffer_blit
@@ -57,6 +55,7 @@
 #define need_GL_EXT_point_parameters
 #define need_GL_EXT_provoking_vertex
 #define need_GL_EXT_secondary_color
+#define need_GL_EXT_separate_shader_objects
 #define need_GL_EXT_stencil_two_side
 #define need_GL_EXT_timer_query
 #define need_GL_APPLE_vertex_array_object
@@ -79,8 +78,8 @@
  * i965_dri.
  */
 static const struct dri_extension card_extensions[] = {
-   { "GL_ARB_copy_buffer",                GL_ARB_copy_buffer_functions },
    { "GL_ARB_draw_elements_base_vertex",  GL_ARB_draw_elements_base_vertex_functions },
+   { "GL_ARB_explicit_attrib_location",   NULL },
    { "GL_ARB_half_float_pixel",           NULL },
    { "GL_ARB_map_buffer_range",           GL_ARB_map_buffer_range_functions },
    { "GL_ARB_multitexture",               NULL },
@@ -108,7 +107,6 @@ static const struct dri_extension card_extensions[] = {
    { "GL_EXT_blend_minmax",               GL_EXT_blend_minmax_functions },
    { "GL_EXT_blend_logic_op",             NULL },
    { "GL_EXT_blend_subtract",             NULL },
-   { "GL_EXT_cull_vertex",                GL_EXT_cull_vertex_functions },
    { "GL_EXT_framebuffer_blit",         GL_EXT_framebuffer_blit_functions },
    { "GL_EXT_framebuffer_object",       GL_EXT_framebuffer_object_functions },
    { "GL_EXT_framebuffer_multisample",    GL_EXT_framebuffer_multisample_functions },
@@ -117,6 +115,7 @@ static const struct dri_extension card_extensions[] = {
    { "GL_EXT_packed_depth_stencil",       NULL },
    { "GL_EXT_provoking_vertex",           GL_EXT_provoking_vertex_functions },
    { "GL_EXT_secondary_color",            GL_EXT_secondary_color_functions },
+   { "GL_EXT_separate_shader_objects",    GL_EXT_separate_shader_objects_functions },
    { "GL_EXT_stencil_wrap",               NULL },
    { "GL_EXT_texture_edge_clamp",         NULL },
    { "GL_EXT_texture_env_combine",        NULL },
@@ -132,7 +131,6 @@ static const struct dri_extension card_extensions[] = {
    { "GL_NV_blend_square",                NULL },
    { "GL_NV_vertex_program",              GL_NV_vertex_program_functions },
    { "GL_NV_vertex_program1_1",           NULL },
-   { "GL_SGIS_generate_mipmap",           NULL },
 #if FEATURE_OES_EGL_image
    { "GL_OES_EGL_image",                  GL_OES_EGL_image_functions },
 #endif
@@ -171,6 +169,7 @@ static const struct dri_extension brw_extensions[] = {
    { "GL_ARB_shadow",                     NULL },
    { "GL_MESA_texture_signed_rgba",       NULL },
    { "GL_ARB_texture_non_power_of_two",   NULL },
+   { "GL_ARB_texture_rg",                 NULL },
    { "GL_EXT_draw_buffers2",              GL_EXT_draw_buffers2_functions },
    { "GL_EXT_shadow_funcs",               NULL },
    { "GL_EXT_stencil_two_side",           GL_EXT_stencil_two_side_functions },
@@ -200,20 +199,35 @@ static const struct dri_extension fragment_shader_extensions[] = {
 };
 
 /**
+ * \brief Get GLSL version from the environment.
+ *
+ * If the environment variable INTEL_GLSL_VERSION is set, convert its value
+ * to an integer and return it. Otherwise, return the default version, 120.
+ */
+static GLuint
+get_glsl_version()
+{
+    const char * s = getenv("INTEL_GLSL_VERSION");
+    if (s == NULL)
+        return 120;
+    else
+        return (GLuint) atoi(s);
+}
+
+/**
  * Initializes potential list of extensions if ctx == NULL, or actually enables
  * extensions for a context.
  */
 void
-intelInitExtensions(GLcontext *ctx)
+intelInitExtensions(struct gl_context *ctx)
 {
    struct intel_context *intel = intel_context(ctx);
 
-   /* Disable imaging extension until convolution is working in teximage paths.
-    */
    driInitExtensions(ctx, card_extensions, GL_FALSE);
 
    _mesa_map_function_array(GL_VERSION_2_1_functions);
-   ctx->Const.GLSLVersion = 120;
+
+   ctx->Const.GLSLVersion = get_glsl_version();
 
    if (intel->gen >= 5)
       driInitExtensions(ctx, ironlake_extensions, GL_FALSE);

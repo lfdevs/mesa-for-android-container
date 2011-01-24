@@ -38,7 +38,7 @@
 #include "loop_analysis.h"
 
 extern "C" struct gl_shader *
-_mesa_new_shader(GLcontext *ctx, GLuint name, GLenum type);
+_mesa_new_shader(struct gl_context *ctx, GLuint name, GLenum type);
 
 extern "C" void
 _mesa_reference_shader(struct gl_context *ctx, struct gl_shader **ptr,
@@ -54,7 +54,7 @@ _mesa_reference_shader(struct gl_context *ctx, struct gl_shader **ptr,
 }
 
 struct gl_shader *
-_mesa_new_shader(GLcontext *ctx, GLuint name, GLenum type)
+_mesa_new_shader(struct gl_context *ctx, GLuint name, GLenum type)
 {
    struct gl_shader *shader;
 
@@ -71,7 +71,7 @@ _mesa_new_shader(GLcontext *ctx, GLuint name, GLenum type)
 }
 
 static void
-initialize_context(GLcontext *ctx, gl_api api)
+initialize_context(struct gl_context *ctx, gl_api api)
 {
    memset(ctx, 0, sizeof(*ctx));
 
@@ -146,15 +146,6 @@ load_text_file(void *ctx, const char *file_name)
 	return text;
 }
 
-
-void
-usage_fail(const char *name)
-{
-      printf("%s <filename.frag|filename.vert>\n", name);
-      exit(EXIT_FAILURE);
-}
-
-
 int glsl_es = 0;
 int dump_ast = 0;
 int dump_hir = 0;
@@ -170,8 +161,27 @@ const struct option compiler_opts[] = {
    { NULL, 0, NULL, 0 }
 };
 
+/**
+ * \brief Print proper usage and exit with failure.
+ */
 void
-compile_shader(GLcontext *ctx, struct gl_shader *shader)
+usage_fail(const char *name)
+{
+
+   const char *header =
+      "usage: %s [options] <file.vert | file.geom | file.frag>\n"
+      "\n"
+      "Possible options are:\n";
+   printf(header, name, name);
+   for (const struct option *o = compiler_opts; o->name != 0; ++o) {
+      printf("    --%s\n", o->name);
+   }
+   exit(EXIT_FAILURE);
+}
+
+
+void
+compile_shader(struct gl_context *ctx, struct gl_shader *shader)
 {
    struct _mesa_glsl_parse_state *state =
       new(shader) _mesa_glsl_parse_state(ctx, shader->Type, shader);
@@ -244,8 +254,8 @@ int
 main(int argc, char **argv)
 {
    int status = EXIT_SUCCESS;
-   GLcontext local_ctx;
-   GLcontext *ctx = &local_ctx;
+   struct gl_context local_ctx;
+   struct gl_context *ctx = &local_ctx;
 
    int c;
    int idx = 0;

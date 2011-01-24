@@ -10,7 +10,7 @@ include $(TOP)/configs/current
 
 GL_MAJOR = 1
 GL_MINOR = 5
-GL_TINY = 0$(MESA_MAJOR)0$(MESA_MINOR)0$(MESA_TINY)
+GL_TINY = 0$(MESA_MAJOR)$(MESA_MINOR)0$(MESA_TINY)
 
 
 INCLUDE_DIRS = \
@@ -26,6 +26,8 @@ INCLUDE_DIRS = \
 
 DEFINES += \
 	-DGALLIUM_SOFTPIPE \
+	-DGALLIUM_RBUG \
+	-DGALLIUM_TRACE \
 	-DGALLIUM_GALAHAD
 #-DGALLIUM_CELL will be defined by the config */
 
@@ -44,7 +46,7 @@ LIBS = \
 	$(TOP)/src/gallium/winsys/sw/xlib/libws_xlib.a \
 	$(TOP)/src/gallium/drivers/trace/libtrace.a \
 	$(TOP)/src/gallium/drivers/rbug/librbug.a \
-	$(TOP)/src/gallium/drivers/identity/libidentity.a \
+	$(TOP)/src/gallium/drivers/galahad/libgalahad.a \
 	$(TOP)/src/mapi/glapi/libglapi.a \
 	$(TOP)/src/mesa/libmesagallium.a \
 	$(GALLIUM_AUXILIARIES) \

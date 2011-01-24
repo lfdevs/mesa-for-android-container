@@ -150,11 +150,15 @@ static void get_external_state(
     unsigned char *swizzle;
 
     for (i = 0; i < texstate->sampler_state_count; i++) {
-        struct r300_sampler_state* s = texstate->sampler_states[i];
+        struct r300_sampler_state *s = texstate->sampler_states[i];
+        struct r300_sampler_view *v = texstate->sampler_views[i];
+        struct r300_texture *t;
 
-        if (!s) {
+        if (!s || !v) {
             continue;
         }
+
+        t = r300_texture(texstate->sampler_views[i]->base.texture);
 
         if (s->state.compare_mode == PIPE_TEX_COMPARE_R_TO_TEXTURE) {
             state->unit[i].compare_mode_enabled = 1;
@@ -176,35 +180,29 @@ static void get_external_state(
 
         state->unit[i].non_normalized_coords = !s->state.normalized_coords;
 
-        if (texstate->sampler_views[i]) {
-            struct r300_texture *t;
-            t = (struct r300_texture*)texstate->sampler_views[i]->base.texture;
+        /* XXX this should probably take into account STR, not just S. */
+        if (t->desc.is_npot) {
+            switch (s->state.wrap_s) {
+            case PIPE_TEX_WRAP_REPEAT:
+                state->unit[i].wrap_mode = RC_WRAP_REPEAT;
+                break;
 
-            /* XXX this should probably take into account STR, not just S. */
-            if (t->desc.is_npot) {
-                switch (s->state.wrap_s) {
-                    case PIPE_TEX_WRAP_REPEAT:
-                        state->unit[i].wrap_mode = RC_WRAP_REPEAT;
-                        state->unit[i].fake_npot = TRUE;
-                        break;
+            case PIPE_TEX_WRAP_MIRROR_REPEAT:
+                state->unit[i].wrap_mode = RC_WRAP_MIRRORED_REPEAT;
+                break;
 
-                    case PIPE_TEX_WRAP_MIRROR_REPEAT:
-                        state->unit[i].wrap_mode = RC_WRAP_MIRRORED_REPEAT;
-                        state->unit[i].fake_npot = TRUE;
-                        break;
+            case PIPE_TEX_WRAP_MIRROR_CLAMP:
+            case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:
+            case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER:
+                state->unit[i].wrap_mode = RC_WRAP_MIRRORED_CLAMP;
+                break;
 
-                    case PIPE_TEX_WRAP_MIRROR_CLAMP:
-                    case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:
-                    case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER:
-                        state->unit[i].wrap_mode = RC_WRAP_MIRRORED_CLAMP;
-                        state->unit[i].fake_npot = TRUE;
-                        break;
-
-                    default:
-                        state->unit[i].wrap_mode = RC_WRAP_NONE;
-                        break;
-                }
+            default:
+                state->unit[i].wrap_mode = RC_WRAP_NONE;
             }
+
+            if (t->desc.b.b.target == PIPE_TEXTURE_3D)
+                state->unit[i].clamp_and_scale_before_fetch = TRUE;
         }
     }
 }
@@ -380,7 +378,8 @@ static void r300_translate_fragment_shader(
     /* Setup the compiler. */
     memset(&compiler, 0, sizeof(compiler));
     rc_init(&compiler.Base);
-    compiler.Base.Debug = DBG_ON(r300, DBG_FP);
+    DBG_ON(r300, DBG_FP) ? compiler.Base.Debug |= RC_DBG_LOG : 0;
+    DBG_ON(r300, DBG_P_STAT) ? compiler.Base.Debug |= RC_DBG_STATS : 0;
 
     compiler.code = &shader->code;
     compiler.state = shader->compare_state;
@@ -391,13 +390,12 @@ static void r300_translate_fragment_shader(
     compiler.Base.max_temp_regs = compiler.Base.is_r500 ? 128 : 32;
     compiler.Base.max_constants = compiler.Base.is_r500 ? 256 : 32;
     compiler.Base.max_alu_insts = compiler.Base.is_r500 ? 512 : 64;
-    compiler.Base.remove_unused_constants = TRUE;
     compiler.AllocateHwInputs = &allocate_hardware_inputs;
     compiler.UserData = &shader->inputs;
 
     find_output_registers(&compiler, shader);
 
-    if (compiler.Base.Debug) {
+    if (compiler.Base.Debug & RC_DBG_LOG) {
         DBG(r300, DBG_FP, "r300: Initial fragment program\n");
         tgsi_dump(tokens, 0);
     }
@@ -408,6 +406,11 @@ static void r300_translate_fragment_shader(
     ttr.use_half_swizzles = TRUE;
 
     r300_tgsi_to_rc(&ttr, tokens);
+
+    if (!r300->screen->caps.is_r500 ||
+        compiler.Base.Program.Constants.Count > 200) {
+        compiler.Base.remove_unused_constants = TRUE;
+    }
 
     /**
      * Transform the program to support WPOS.

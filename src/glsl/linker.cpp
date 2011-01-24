@@ -195,7 +195,7 @@ invalidate_variable_locations(gl_shader *sh, enum ir_variable_mode mode,
 
       /* Only assign locations for generic attributes / varyings / etc.
        */
-      if (var->location >= generic_base)
+      if ((var->location >= generic_base) && !var->explicit_location)
 	  var->location = -1;
    }
 }
@@ -376,6 +376,19 @@ cross_validate_globals(struct gl_shader_program *prog,
 	       }
 	    }
 
+	    if (var->explicit_location) {
+	       if (existing->explicit_location
+		   && (var->location != existing->location)) {
+		     linker_error_printf(prog, "explicit locations for %s "
+					 "`%s' have differing values\n",
+					 mode_string(var), var->name);
+		     return false;
+	       }
+
+	       existing->location = var->location;
+	       existing->explicit_location = true;
+	    }
+
 	    /* FINISHME: Handle non-constant initializers.
 	     */
 	    if (var->constant_value != NULL) {
@@ -410,7 +423,7 @@ cross_validate_globals(struct gl_shader_program *prog,
 	       return false;
 	    }
 	 } else
-	    variables.add_variable(var->name, var);
+	    variables.add_variable(var);
       }
    }
 
@@ -452,7 +465,7 @@ cross_validate_outputs_to_inputs(struct gl_shader_program *prog,
       if ((var == NULL) || (var->mode != ir_var_out))
 	 continue;
 
-      parameters.add_variable(var->name, var);
+      parameters.add_variable(var);
    }
 
 
@@ -565,9 +578,9 @@ populate_symbol_table(gl_shader *sh)
       ir_function *func;
 
       if ((func = inst->as_function()) != NULL) {
-	 sh->symbols->add_function(func->name, func);
+	 sh->symbols->add_function(func);
       } else if ((var = inst->as_variable()) != NULL) {
-	 sh->symbols->add_variable(var->name, var);
+	 sh->symbols->add_variable(var);
       }
    }
 }
@@ -624,7 +637,7 @@ remap_variables(ir_instruction *inst, struct gl_shader *target,
 	 else {
 	    ir_variable *copy = ir->var->clone(this->target, NULL);
 
-	    this->symbols->add_variable(copy->name, copy);
+	    this->symbols->add_variable(copy);
 	    this->instructions->push_head(copy);
 	    ir->var = copy;
 	 }
@@ -746,7 +759,7 @@ get_main_function_signature(gl_shader *sh)
  */
 static struct gl_shader *
 link_intrastage_shaders(void *mem_ctx,
-			GLcontext *ctx,
+			struct gl_context *ctx,
 			struct gl_shader_program *prog,
 			struct gl_shader **shader_list,
 			unsigned num_shaders)
@@ -1265,6 +1278,24 @@ assign_attribute_locations(gl_shader_program *prog, unsigned max_attribute_index
       if ((var == NULL) || (var->mode != ir_var_in))
 	 continue;
 
+      if (var->explicit_location) {
+	 const unsigned slots = count_attribute_slots(var->type);
+	 const unsigned use_mask = (1 << slots) - 1;
+	 const int attr = var->location - VERT_ATTRIB_GENERIC0;
+
+	 if ((var->location >= (int)(max_attribute_index + VERT_ATTRIB_GENERIC0))
+	     || (var->location < 0)) {
+	    linker_error_printf(prog,
+				"invalid explicit location %d specified for "
+				"`%s'\n",
+				(var->location < 0) ? var->location : attr,
+				var->name);
+	    return false;
+	 } else if (var->location >= VERT_ATTRIB_GENERIC0) {
+	    used_locations |= (use_mask << attr);
+	 }
+      }
+
       /* The location was explicitly assigned, nothing to do here.
        */
       if (var->location != -1)
@@ -1433,7 +1464,7 @@ assign_varying_locations(struct gl_shader_program *prog,
 
 
 void
-link_shaders(GLcontext *ctx, struct gl_shader_program *prog)
+link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 {
    void *mem_ctx = talloc_init("temporary linker context");
 
@@ -1512,7 +1543,7 @@ link_shaders(GLcontext *ctx, struct gl_shader_program *prog)
 	 goto done;
 
       if (!validate_vertex_shader_executable(prog, sh))
-	  goto done;
+	 goto done;
 
       _mesa_reference_shader(ctx, &prog->_LinkedShaders[MESA_SHADER_VERTEX],
 			     sh);
@@ -1527,7 +1558,7 @@ link_shaders(GLcontext *ctx, struct gl_shader_program *prog)
 	 goto done;
 
       if (!validate_fragment_shader_executable(prog, sh))
-	  goto done;
+	 goto done;
 
       _mesa_reference_shader(ctx, &prog->_LinkedShaders[MESA_SHADER_FRAGMENT],
 			     sh);
@@ -1585,8 +1616,10 @@ link_shaders(GLcontext *ctx, struct gl_shader_program *prog)
        * FINISHME: GL_MAX_VERTEX_ATTRIBS.  GL_MAX_VERTEX_ATTRIBS must be
        * FINISHME: at least 16, so hardcode 16 for now.
        */
-      if (!assign_attribute_locations(prog, 16))
+      if (!assign_attribute_locations(prog, 16)) {
+	 prog->LinkStatus = false;
 	 goto done;
+      }
    }
 
    unsigned prev;

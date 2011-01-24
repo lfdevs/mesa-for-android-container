@@ -49,7 +49,7 @@ struct brw_clip_unit_key {
 static void
 clip_unit_populate_key(struct brw_context *brw, struct brw_clip_unit_key *key)
 {
-   GLcontext *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->intel.ctx;
    memset(key, 0, sizeof(*key));
 
    /* CACHE_NEW_CLIP_PROG */
@@ -114,10 +114,10 @@ clip_unit_create_from_key(struct brw_context *brw,
       clip.thread4.max_threads = 1 - 1;
    }
 
-   if (INTEL_DEBUG & DEBUG_SINGLE_THREAD)
+   if (unlikely(INTEL_DEBUG & DEBUG_SINGLE_THREAD))
       clip.thread4.max_threads = 0;
 
-   if (INTEL_DEBUG & DEBUG_STATS)
+   if (unlikely(INTEL_DEBUG & DEBUG_STATS))
       clip.thread4.stats_enable = 1;
 
    clip.clip5.userclip_enable_flags = 0x7f;

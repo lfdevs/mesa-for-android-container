@@ -41,11 +41,7 @@
 
 #include <sys/time.h>
 #include "dri_util.h"
-#ifdef XFree86Server
-#include "GL/xf86glx.h"
-#else
 #include "main/glheader.h"
-#endif
 #if defined(__linux__)
 #include <signal.h>
 #endif
@@ -810,7 +806,7 @@ typedef void (*tdfx_point_func)( tdfxContextPtr, tdfxVertex * );
 struct tdfx_context {
    /* Set once and never changed:
     */
-   GLcontext *glCtx;			/* The core Mesa context */
+   struct gl_context *glCtx;			/* The core Mesa context */
 
    GLuint new_gl_state;
    GLuint new_state;
@@ -938,7 +934,7 @@ struct tdfx_context {
 
 extern GLboolean
 tdfxCreateContext( gl_api api,
-		   const __GLcontextModes *mesaVis,
+		   const struct gl_config *mesaVis,
                    __DRIcontext *driContextPriv,
                    void *sharedContextPrivate );
 
@@ -957,10 +953,10 @@ extern GLboolean
 tdfxInitGlide( tdfxContextPtr tmesa );
 
 extern void
-FX_grColorMaskv(GLcontext *ctx, const GLboolean rgba[4]);
+FX_grColorMaskv(struct gl_context *ctx, const GLboolean rgba[4]);
 
 extern void
-FX_grColorMaskv_NoLock(GLcontext *ctx, const GLboolean rgba[4]);
+FX_grColorMaskv_NoLock(struct gl_context *ctx, const GLboolean rgba[4]);
 
 
 /* Color packing utilities

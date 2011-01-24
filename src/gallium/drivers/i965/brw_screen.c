@@ -235,6 +235,13 @@ brw_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_shad
          return 0;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
          return 1;
+      case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
+      case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
+      case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
+      case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
+          return 1;
+      case PIPE_SHADER_CAP_SUBROUTINES:
+          return 1;
       default:
          assert(0);
          return 0;
@@ -463,7 +470,6 @@ brw_screen_create(struct brw_winsys_screen *sws)
    bscreen->base.fence_finish = brw_fence_finish;
 
    brw_init_screen_resource_functions(bscreen);
-   brw_screen_tex_surface_init(bscreen);
 
    bscreen->no_tiling = debug_get_option("BRW_NO_TILING", FALSE) != NULL;
    

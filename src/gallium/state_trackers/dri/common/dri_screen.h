@@ -83,9 +83,8 @@ dri_screen(__DRIscreen * sPriv)
 
 struct __DRIimageRec {
    struct pipe_resource *texture;
-   unsigned face;
    unsigned level;
-   unsigned zslice;
+   unsigned layer;
 
    void *loader_private;
 };
@@ -114,7 +113,7 @@ dri_with_format(__DRIscreen * sPriv)
 
 void
 dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
-                   const __GLcontextModes *mode);
+                   const struct gl_config *mode);
 
 const __DRIconfig **
 dri_init_screen_helper(struct dri_screen *screen,

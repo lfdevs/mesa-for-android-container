@@ -27,6 +27,9 @@
 
 #include "radeon_program_pair.h"
 
+#include "radeon_compiler_util.h"
+
+#include <stdlib.h>
 
 /**
  * Return the source slot where we installed the given register access,
@@ -204,36 +207,37 @@ void rc_pair_foreach_source_that_rgb_reads(
 	}
 }
 
-/*return 0 for rgb, 1 for alpha -1 for error. */
-
-rc_pair_source_type rc_source_type_that_arg_reads(
-	unsigned int source,
-	unsigned int swizzle,
-	unsigned int channels)
+struct rc_pair_instruction_source * rc_pair_get_src(
+	struct rc_pair_instruction * pair_inst,
+	struct rc_pair_instruction_arg * arg)
 {
-	unsigned int chan;
-	unsigned int swz = RC_SWIZZLE_UNUSED;
-	int isRGB = 0;
-	int isAlpha = 0;
-	/* Find a swizzle that is either X,Y,Z,or W.  We assume here
-	 * that if one channel swizzles X,Y, or Z, then none of the
-	 * other channels swizzle W, and vice-versa. */
-	for(chan = 0; chan < channels; chan++) {
-		swz = GET_SWZ(swizzle, chan);
-		if (swz == RC_SWIZZLE_W) {
-			isAlpha = 1;
-		} else if (swz == RC_SWIZZLE_X || swz == RC_SWIZZLE_Y
-						|| swz == RC_SWIZZLE_Z) {
-			isRGB = 1;
+	unsigned int i, type;
+	unsigned int channels = 0;
+
+	for(i = 0; i < 3; i++) {
+		if (arg == pair_inst->RGB.Arg + i) {
+			channels = 3;
+			break;
 		}
 	}
-	assert(!isRGB || !isAlpha);
 
-	if(!isRGB && !isAlpha)
-		return RC_PAIR_SOURCE_NONE;
+	if (channels == 0) {
+		for (i = 0; i < 3; i++) {
+			if (arg == pair_inst->Alpha.Arg + i) {
+				channels = 1;
+				break;
+			}
+		}
+	}
 
-	if (isRGB)
-		return RC_PAIR_SOURCE_RGB;
-	/*isAlpha*/
-	return RC_PAIR_SOURCE_ALPHA;
+	assert(channels > 0);
+	type = rc_source_type_swz(arg->Swizzle, channels);
+
+	if (type & RC_SOURCE_RGB) {
+		return &pair_inst->RGB.Src[arg->Source];
+	} else if (type & RC_SOURCE_ALPHA) {
+		return &pair_inst->Alpha.Src[arg->Source];
+	} else {
+		return NULL;
+	}
 }

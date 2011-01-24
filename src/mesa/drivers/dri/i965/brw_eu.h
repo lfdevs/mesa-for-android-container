@@ -33,6 +33,7 @@
 #ifndef BRW_EU_H
 #define BRW_EU_H
 
+#include <stdbool.h>
 #include "brw_structs.h"
 #include "brw_defines.h"
 #include "program/prog_instruction.h"
@@ -106,10 +107,12 @@ struct brw_compile {
    /* Allow clients to push/pop instruction state:
     */
    struct brw_instruction stack[BRW_EU_MAX_INSN_STACK];
+   bool compressed_stack[BRW_EU_MAX_INSN_STACK];
    struct brw_instruction *current;
 
    GLuint flag_value;
    GLboolean single_program_flow;
+   bool compressed;
    struct brw_context *brw;
 
    struct brw_glsl_label *first_label;  /**< linked list of labels */
@@ -789,6 +792,10 @@ struct brw_instruction *brw_##OP(struct brw_compile *p,	\
 	      struct brw_reg src0,			\
 	      struct brw_reg src1);
 
+#define ROUND(OP) \
+void brw_##OP(struct brw_compile *p, struct brw_reg dest, struct brw_reg src0);
+
+
 ALU1(MOV)
 ALU2(SEL)
 ALU1(NOT)
@@ -805,7 +812,6 @@ ALU2(ADD)
 ALU2(MUL)
 ALU1(FRC)
 ALU1(RNDD)
-ALU1(RNDZ)
 ALU2(MAC)
 ALU2(MACH)
 ALU1(LZD)
@@ -816,9 +822,12 @@ ALU2(DP2)
 ALU2(LINE)
 ALU2(PLN)
 
+ROUND(RNDZ)
+ROUND(RNDE)
+
 #undef ALU1
 #undef ALU2
-
+#undef ROUND
 
 
 /* Helpers for SEND instruction:
@@ -852,7 +861,8 @@ void brw_fb_WRITE(struct brw_compile *p,
 		   GLuint binding_table_index,
 		   GLuint msg_length,
 		   GLuint response_length,
-		   GLboolean eot);
+		   GLboolean eot,
+		   GLboolean header_present);
 
 void brw_SAMPLE(struct brw_compile *p,
 		struct brw_reg dest,
@@ -891,15 +901,27 @@ void brw_math2(struct brw_compile *p,
 	       struct brw_reg src0,
 	       struct brw_reg src1);
 
-void brw_dp_READ_16( struct brw_compile *p,
-		     struct brw_reg dest,
-		     GLuint scratch_offset );
+void brw_oword_block_read(struct brw_compile *p,
+			  struct brw_reg dest,
+			  struct brw_reg mrf,
+			  uint32_t offset,
+			  uint32_t bind_table_index);
 
-void brw_dp_READ_4( struct brw_compile *p,
-                    struct brw_reg dest,
-                    GLboolean relAddr,
-                    GLuint location,
-                    GLuint bind_table_index );
+void brw_oword_block_read_scratch(struct brw_compile *p,
+				  struct brw_reg dest,
+				  struct brw_reg mrf,
+				  int num_regs,
+				  GLuint offset);
+
+void brw_oword_block_write_scratch(struct brw_compile *p,
+				   struct brw_reg mrf,
+				   int num_regs,
+				   GLuint offset);
+
+void brw_dword_scattered_read(struct brw_compile *p,
+			      struct brw_reg dest,
+			      struct brw_reg mrf,
+			      uint32_t bind_table_index);
 
 void brw_dp_READ_4_vs( struct brw_compile *p,
                        struct brw_reg dest,
@@ -912,15 +934,13 @@ void brw_dp_READ_4_vs_relative(struct brw_compile *p,
 			       GLuint offset,
 			       GLuint bind_table_index);
 
-void brw_dp_WRITE_16( struct brw_compile *p,
-		      struct brw_reg src,
-		      GLuint scratch_offset );
-
 /* If/else/endif.  Works by manipulating the execution flags on each
  * channel.
  */
 struct brw_instruction *brw_IF(struct brw_compile *p, 
 			       GLuint execute_size);
+struct brw_instruction *brw_IF_gen6(struct brw_compile *p, uint32_t conditional,
+				    struct brw_reg src0, struct brw_reg src1);
 
 struct brw_instruction *brw_ELSE(struct brw_compile *p, 
 				 struct brw_instruction *if_insn);
@@ -938,6 +958,8 @@ struct brw_instruction *brw_WHILE(struct brw_compile *p,
 	       struct brw_instruction *patch_insn);
 
 struct brw_instruction *brw_BREAK(struct brw_compile *p, int pop_count);
+struct brw_instruction *brw_CONT_gen6(struct brw_compile *p,
+				      struct brw_instruction *do_insn);
 struct brw_instruction *brw_CONT(struct brw_compile *p, int pop_count);
 /* Forward jumps:
  */
@@ -993,6 +1015,7 @@ void brw_math_invert( struct brw_compile *p,
 void brw_set_src1( struct brw_instruction *insn,
                           struct brw_reg reg );
 
+void brw_set_uip_jip(struct brw_compile *p);
 
 /* brw_optimize.c */
 void brw_optimize(struct brw_compile *p);

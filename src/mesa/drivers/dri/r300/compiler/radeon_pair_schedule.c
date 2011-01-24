@@ -30,6 +30,7 @@
 #include <stdio.h>
 
 #include "radeon_compiler.h"
+#include "radeon_compiler_util.h"
 #include "radeon_dataflow.h"
 
 
@@ -54,6 +55,11 @@ struct schedule_instruction {
 	 * this instruction can be scheduled.
 	 */
 	unsigned int NumDependencies:5;
+
+	/** List of all readers (see rc_get_readers() for the definition of
+	 * "all readers"), even those outside the basic block this instruction
+	 * lives in. */
+	struct rc_reader_data GlobalReaders;
 };
 
 
@@ -92,6 +98,16 @@ struct reg_value {
 
 struct register_state {
 	struct reg_value * Values[4];
+};
+
+struct remap_reg {
+	struct rc_instruciont * Inst;
+	unsigned int OldIndex:(RC_REGISTER_INDEX_BITS+1);
+	unsigned int OldSwizzle:3;
+	unsigned int NewIndex:(RC_REGISTER_INDEX_BITS+1);
+	unsigned int NewSwizzle:3;
+	unsigned int OnlyTexReads:1;
+	struct remap_reg * Next;
 };
 
 struct schedule_state {
@@ -228,11 +244,12 @@ static void commit_alu_instruction(struct schedule_state * s, struct schedule_in
 static void emit_all_tex(struct schedule_state * s, struct rc_instruction * before)
 {
 	struct schedule_instruction *readytex;
+	struct rc_instruction * inst_begin;
 
 	assert(s->ReadyTEX);
 
 	/* Node marker for R300 */
-	struct rc_instruction * inst_begin = rc_insert_new_instruction(s->C, before->Prev);
+	inst_begin = rc_insert_new_instruction(s->C, before->Prev);
 	inst_begin->U.I.Opcode = RC_OPCODE_BEGIN_TEX;
 
 	/* Link texture instructions back in */
@@ -265,12 +282,116 @@ static void emit_all_tex(struct schedule_state * s, struct rc_instruction * befo
 	}
 }
 
+/* This is a helper function for destructive_merge_instructions().  It helps
+ * merge presubtract sources from two instructions and makes sure the
+ * presubtract sources end up in the correct spot.  This function assumes that
+ * dst_full is an rgb instruction, meaning that it has a vector instruction(rgb)
+ * but no scalar instruction (alpha).
+ * @return 0 if merging the presubtract sources fails.
+ * @retrun 1 if merging the presubtract sources succeeds.
+ */
+static int merge_presub_sources(
+	struct rc_pair_instruction * dst_full,
+	struct rc_pair_sub_instruction src,
+	unsigned int type)
+{
+	unsigned int srcp_src, srcp_regs, is_rgb, is_alpha;
+	struct rc_pair_sub_instruction * dst_sub;
+	const struct rc_opcode_info * info;
 
+	assert(dst_full->Alpha.Opcode == RC_OPCODE_NOP);
+
+	switch(type) {
+	case RC_SOURCE_RGB:
+		is_rgb = 1;
+		is_alpha = 0;
+		dst_sub = &dst_full->RGB;
+		break;
+	case RC_SOURCE_ALPHA:
+		is_rgb = 0;
+		is_alpha = 1;
+		dst_sub = &dst_full->Alpha;
+		break;
+	default:
+		assert(0);
+		return 0;
+	}
+
+	info = rc_get_opcode_info(dst_full->RGB.Opcode);
+
+	if (dst_sub->Src[RC_PAIR_PRESUB_SRC].Used)
+		return 0;
+
+	srcp_regs = rc_presubtract_src_reg_count(
+					src.Src[RC_PAIR_PRESUB_SRC].Index);
+	for(srcp_src = 0; srcp_src < srcp_regs; srcp_src++) {
+		unsigned int arg;
+		int free_source;
+		unsigned int one_way = 0;
+		struct rc_pair_instruction_source srcp = src.Src[srcp_src];
+		struct rc_pair_instruction_source temp;
+
+		free_source = rc_pair_alloc_source(dst_full, is_rgb, is_alpha,
+							srcp.File, srcp.Index);
+
+		/* If free_source < 0 then there are no free source
+		 * slots. */
+		if (free_source < 0)
+			return 0;
+
+		temp = dst_sub->Src[srcp_src];
+		dst_sub->Src[srcp_src] = dst_sub->Src[free_source];
+
+		/* srcp needs src0 and src1 to be the same */
+		if (free_source < srcp_src) {
+			if (!temp.Used)
+				continue;
+			free_source = rc_pair_alloc_source(dst_full, is_rgb,
+					is_alpha, temp.File, temp.Index);
+			if (free_source < 0)
+				return 0;
+			one_way = 1;
+		} else {
+			dst_sub->Src[free_source] = temp;
+		}
+
+		/* If free_source == srcp_src, then the presubtract
+		 * source is already in the correct place. */
+		if (free_source == srcp_src)
+			continue;
+
+		/* Shuffle the sources, so we can put the
+		 * presubtract source in the correct place. */
+		for(arg = 0; arg < info->NumSrcRegs; arg++) {
+			/*If this arg does not read from an rgb source,
+			 * do nothing. */
+			if (!(rc_source_type_swz(dst_full->RGB.Arg[arg].Swizzle,
+								3) & type)) {
+				continue;
+			}
+
+			if (dst_full->RGB.Arg[arg].Source == srcp_src)
+				dst_full->RGB.Arg[arg].Source = free_source;
+			/* We need to do this just in case register
+			 * is one of the sources already, but in the
+			 * wrong spot. */
+			else if(dst_full->RGB.Arg[arg].Source == free_source
+							&& !one_way) {
+				dst_full->RGB.Arg[arg].Source = srcp_src;
+			}
+		}
+	}
+	return 1;
+}
+
+
+/* This function assumes that rgb.Alpha and alpha.RGB are unused */
 static int destructive_merge_instructions(
 		struct rc_pair_instruction * rgb,
 		struct rc_pair_instruction * alpha)
 {
 	const struct rc_opcode_info * opcode;
+
 	assert(rgb->Alpha.Opcode == RC_OPCODE_NOP);
 	assert(alpha->RGB.Opcode == RC_OPCODE_NOP);
 
@@ -279,130 +400,15 @@ static int destructive_merge_instructions(
 	 * src1. */
 
 	/* Merge the rgb presubtract registers. */
-	const struct rc_opcode_info * rgb_info =
-					rc_get_opcode_info(rgb->RGB.Opcode);
 	if (alpha->RGB.Src[RC_PAIR_PRESUB_SRC].Used) {
-		unsigned int srcp_src;
-		unsigned int srcp_regs;
-		if (rgb->RGB.Src[RC_PAIR_PRESUB_SRC].Used)
+		if (!merge_presub_sources(rgb, alpha->RGB, RC_SOURCE_RGB)) {
 			return 0;
-		srcp_regs = rc_presubtract_src_reg_count(
-				alpha->RGB.Src[RC_PAIR_PRESUB_SRC].Index);
-		for(srcp_src = 0; srcp_src < srcp_regs; srcp_src++) {
-			unsigned int arg;
-			int free_source;
-			unsigned int one_way = 0;
-			struct radeon_pair_instruction_source srcp =
-						alpha->RGB.Src[srcp_src];
-			struct radeon_pair_instruction_source temp;
-			/* 2nd arg of 1 means this is an rgb source.
-			 * 3rd arg of 0 means this is not an alpha source. */
-			free_source = rc_pair_alloc_source(rgb, 1, 0,
-							srcp.File, srcp.Index);
-			/* If free_source < 0 then there are no free source
-			 * slots. */
-			if (free_source < 0)
-				return 0;
-
-			temp = rgb->RGB.Src[srcp_src];
-			rgb->RGB.Src[srcp_src] = rgb->RGB.Src[free_source];
-			/* srcp needs src0 and src1 to be the same */
-			if (free_source < srcp_src) {
-				if (!temp.Used)
-					continue;
-				free_source = rc_pair_alloc_source(rgb, 1, 0,
-							srcp.File, srcp.Index);
-				one_way = 1;
-			} else {
-				rgb->RGB.Src[free_source] = temp;
-			}
-			/* If free_source == srcp_src, then the presubtract
-			 * source is already in the correct place. */
-			if (free_source == srcp_src)
-				continue;
-			/* Shuffle the sources, so we can put the
-			 * presubtract source in the correct place. */
-			for (arg = 0; arg < rgb_info->NumSrcRegs; arg++) {
-				/*If this arg does not read from an rgb source,
-				 * do nothing. */
-				if (rc_source_type_that_arg_reads(
-					rgb->RGB.Arg[arg].Source,
-					rgb->RGB.Arg[arg].Swizzle, 3)
-							!= RC_PAIR_SOURCE_RGB) {
-					continue;
-				}
-				if (rgb->RGB.Arg[arg].Source == srcp_src)
-					rgb->RGB.Arg[arg].Source = free_source;
-				/* We need to do this just in case register
-				 * is one of the sources already, but in the
-				 * wrong spot. */
-				else if(rgb->RGB.Arg[arg].Source == free_source
-								&& !one_way) {
-					rgb->RGB.Arg[arg].Source = srcp_src;
-				}
-			}
 		}
 	}
-
 	/* Merge the alpha presubtract registers */
 	if (alpha->Alpha.Src[RC_PAIR_PRESUB_SRC].Used) {
-		unsigned int srcp_src;
-		unsigned int srcp_regs;
-		if(rgb->Alpha.Src[RC_PAIR_PRESUB_SRC].Used)
+		if(!merge_presub_sources(rgb,  alpha->Alpha, RC_SOURCE_ALPHA)){
 			return 0;
-
-		srcp_regs = rc_presubtract_src_reg_count(
-			alpha->Alpha.Src[RC_PAIR_PRESUB_SRC].Index);
-		for(srcp_src = 0; srcp_src < srcp_regs; srcp_src++) {
-			unsigned int arg;
-			int free_source;
-			unsigned int one_way = 0;
-			struct radeon_pair_instruction_source srcp =
-						alpha->Alpha.Src[srcp_src];
-			struct radeon_pair_instruction_source temp;
-			/* 2nd arg of 0 means this is not an rgb source.
-			 * 3rd arg of 1 means this is an alpha source. */
-			free_source = rc_pair_alloc_source(rgb, 0, 1,
-							srcp.File, srcp.Index);
-			/* If free_source < 0 then there are no free source
-			 * slots. */
-			if (free_source < 0)
-				return 0;
-
-			temp = rgb->Alpha.Src[srcp_src];
-			rgb->Alpha.Src[srcp_src] = rgb->Alpha.Src[free_source];
-			/* srcp needs src0 and src1 to be the same. */
-			if (free_source < srcp_src) {
-				if (!temp.Used)
-					continue;
-				free_source = rc_pair_alloc_source(rgb, 0, 1,
-							temp.File, temp.Index);
-				one_way = 1;
-			} else {
-				rgb->Alpha.Src[free_source] = temp;
-			}
-			/* If free_source == srcp_src, then the presubtract
-			 * source is already in the correct place. */
-			if (free_source == srcp_src)
-				continue;
-			/* Shuffle the sources, so we can put the
-			 * presubtract source in the correct place. */
-			for(arg = 0; arg < rgb_info->NumSrcRegs; arg++) {
-				/*If this arg does not read from an alpha
-				 * source, do nothing. */
-				if (rc_source_type_that_arg_reads(
-					rgb->RGB.Arg[arg].Source,
-					rgb->RGB.Arg[arg].Swizzle, 3)
-						!= RC_PAIR_SOURCE_ALPHA) {
-					continue;
-				}
-				if (rgb->RGB.Arg[arg].Source == srcp_src)
-					rgb->RGB.Arg[arg].Source = free_source;
-				else if (rgb->RGB.Arg[arg].Source == free_source
-								&& !one_way) {
-					rgb->RGB.Arg[arg].Source = srcp_src;
-				}
-			}
 		}
 	}
 
@@ -415,6 +421,7 @@ static int destructive_merge_instructions(
 		unsigned int oldsrc = alpha->Alpha.Arg[arg].Source;
 		rc_register_file file = 0;
 		unsigned int index = 0;
+		int source;
 
 		if (alpha->Alpha.Arg[arg].Swizzle < 3) {
 			srcrgb = 1;
@@ -426,7 +433,7 @@ static int destructive_merge_instructions(
 			index = alpha->Alpha.Src[oldsrc].Index;
 		}
 
-		int source = rc_pair_alloc_source(rgb, srcrgb, srcalpha, file, index);
+		source = rc_pair_alloc_source(rgb, srcrgb, srcalpha, file, index);
 		if (source < 0)
 			return 0;
 
@@ -527,6 +534,222 @@ static void presub_nop(struct rc_instruction * emitted) {
 		}
 	}
 }
+
+static void rgb_to_alpha_remap (
+	struct rc_instruction * inst,
+	struct rc_pair_instruction_arg * arg,
+	rc_register_file old_file,
+	rc_swizzle old_swz,
+	unsigned int new_index)
+{
+	int new_src_index;
+	unsigned int i;
+	struct rc_pair_instruction_source * old_src =
+					rc_pair_get_src(&inst->U.P, arg);
+	if (!old_src) {
+		return;
+	}
+
+	for (i = 0; i < 3; i++) {
+		if (get_swz(arg->Swizzle, i) == old_swz) {
+			SET_SWZ(arg->Swizzle, i, RC_SWIZZLE_W);
+		}
+	}
+	memset(old_src, 0, sizeof(struct rc_pair_instruction_source));
+	new_src_index = rc_pair_alloc_source(&inst->U.P, 0, 1,
+							old_file, new_index);
+	/* This conversion is not possible, we must have made a mistake in
+	 * is_rgb_to_alpha_possible. */
+	if (new_src_index < 0) {
+		assert(0);
+		return;
+	}
+
+	arg->Source = new_src_index;
+}
+
+static int can_remap(unsigned int opcode)
+{
+	switch(opcode) {
+	case RC_OPCODE_DDX:
+	case RC_OPCODE_DDY:
+		return 0;
+	default:
+		return 1;
+	}
+}
+
+static int can_convert_opcode_to_alpha(unsigned int opcode)
+{
+	switch(opcode) {
+	case RC_OPCODE_DDX:
+	case RC_OPCODE_DDY:
+	case RC_OPCODE_DP2:
+	case RC_OPCODE_DP3:
+	case RC_OPCODE_DP4:
+	case RC_OPCODE_DPH:
+		return 0;
+	default:
+		return 1;
+	}
+}
+
+static void is_rgb_to_alpha_possible(
+	void * userdata,
+	struct rc_instruction * inst,
+	struct rc_pair_instruction_arg * arg,
+	struct rc_pair_instruction_source * src)
+{
+	unsigned int chan_count = 0;
+	unsigned int alpha_sources = 0;
+	unsigned int i;
+	struct rc_reader_data * reader_data = userdata;
+
+	if (!can_remap(inst->U.P.RGB.Opcode)
+	    || !can_remap(inst->U.P.Alpha.Opcode)) {
+		reader_data->Abort = 1;
+		return;
+	}
+
+	if (!src)
+		return;
+
+	/* XXX There are some cases where we can still do the conversion if
+	 * a reader reads from a presubtract source, but for now we'll prevent
+	 * it. */
+	if (arg->Source == RC_PAIR_PRESUB_SRC) {
+		reader_data->Abort = 1;
+		return;
+	}
+
+	/* Make sure the source only reads from one component.
+	 * XXX We should allow the source to read from the same component twice.
+	 * XXX If the index we will be converting to is the same as the
+	 * current index, then it is OK to read from more than one component.
+	 */
+	for (i = 0; i < 3; i++) {
+		rc_swizzle swz = get_swz(arg->Swizzle, i);
+		switch(swz) {
+		case RC_SWIZZLE_X:
+		case RC_SWIZZLE_Y:
+		case RC_SWIZZLE_Z:
+		case RC_SWIZZLE_W:
+			chan_count++;
+			break;
+		default:
+			break;
+		}
+	}
+	if (chan_count > 1) {
+		reader_data->Abort = 1;
+		return;
+	}
+
+	/* Make sure there are enough alpha sources.
+	 * XXX If we know what register all the readers are going
+	 * to be remapped to, then in some situations we can still do
+	 * the subsitution, even if all 3 alpha sources are being used.*/
+	for (i = 0; i < 3; i++) {
+		if (inst->U.P.Alpha.Src[i].Used) {
+			alpha_sources++;
+		}
+	}
+	if (alpha_sources > 2) {
+		reader_data->Abort = 1;
+		return;
+	}
+}
+
+static int convert_rgb_to_alpha(
+	struct schedule_state * s,
+	struct schedule_instruction * sched_inst)
+{
+	struct rc_pair_instruction * pair_inst = &sched_inst->Instruction->U.P;
+	unsigned int old_mask = pair_inst->RGB.WriteMask;
+	unsigned int old_swz = rc_mask_to_swizzle(old_mask);
+	const struct rc_opcode_info * info =
+				rc_get_opcode_info(pair_inst->RGB.Opcode);
+	int new_index = -1;
+	unsigned int i;
+
+	if (sched_inst->GlobalReaders.Abort)
+		return 0;
+
+	if (!pair_inst->RGB.WriteMask)
+		return 0;
+
+	if (!can_convert_opcode_to_alpha(pair_inst->RGB.Opcode)
+	    || !can_convert_opcode_to_alpha(pair_inst->Alpha.Opcode)) {
+		return 0;
+	}
+
+	assert(sched_inst->NumWriteValues == 1);
+
+	if (!sched_inst->WriteValues[0]) {
+		assert(0);
+		return 0;
+	}
+
+	/* We start at the old index, because if we can reuse the same
+	 * register and just change the swizzle then it is more likely we
+	 * will be able to convert all the readers. */
+	for (i = pair_inst->RGB.DestIndex; i < RC_REGISTER_MAX_INDEX; i++) {
+		struct reg_value ** new_regvalp = get_reg_valuep(
+						s, RC_FILE_TEMPORARY, i, 3);
+		if (!*new_regvalp) {
+			struct reg_value ** old_regvalp =
+				get_reg_valuep(s,
+					RC_FILE_TEMPORARY,
+					pair_inst->RGB.DestIndex,
+					rc_mask_to_swizzle(old_mask));
+			new_index = i;
+			*new_regvalp = *old_regvalp;
+			*old_regvalp = NULL;
+			new_regvalp = get_reg_valuep(s, RC_FILE_TEMPORARY, i, 3);
+			break;
+		}
+	}
+	if (new_index < 0) {
+		return 0;
+	}
+
+	pair_inst->Alpha.Opcode = pair_inst->RGB.Opcode;
+	pair_inst->Alpha.DestIndex = new_index;
+	pair_inst->Alpha.WriteMask = 1;
+	pair_inst->Alpha.Target = pair_inst->RGB.Target;
+	pair_inst->Alpha.OutputWriteMask = pair_inst->RGB.OutputWriteMask;
+	pair_inst->Alpha.DepthWriteMask = pair_inst->RGB.DepthWriteMask;
+	pair_inst->Alpha.Saturate = pair_inst->RGB.Saturate;
+	memcpy(pair_inst->Alpha.Arg, pair_inst->RGB.Arg,
+						sizeof(pair_inst->Alpha.Arg));
+	/* Move the swizzles into the first chan */
+	for (i = 0; i < info->NumSrcRegs; i++) {
+		unsigned int j;
+		for (j = 0; j < 3; j++) {
+			unsigned int swz = get_swz(pair_inst->Alpha.Arg[i].Swizzle, j);
+			if (swz != RC_SWIZZLE_UNUSED) {
+				pair_inst->Alpha.Arg[i].Swizzle = swz;
+				break;
+			}
+		}
+	}
+	pair_inst->RGB.Opcode = RC_OPCODE_NOP;
+	pair_inst->RGB.DestIndex = 0;
+	pair_inst->RGB.WriteMask = 0;
+	pair_inst->RGB.Target = 0;
+	pair_inst->RGB.OutputWriteMask = 0;
+	pair_inst->RGB.DepthWriteMask = 0;
+	pair_inst->RGB.Saturate = 0;
+	memset(pair_inst->RGB.Arg, 0, sizeof(pair_inst->RGB.Arg));
+
+	for(i = 0; i < sched_inst->GlobalReaders.ReaderCount; i++) {
+		struct rc_reader reader = sched_inst->GlobalReaders.Readers[i];
+		rgb_to_alpha_remap(reader.Inst, reader.U.Arg,
+					RC_FILE_TEMPORARY, old_swz, new_index);
+	}
+	return 1;
+}
+
 /**
  * Find a good ALU instruction or pair of ALU instruction and emit it.
  *
@@ -538,24 +761,16 @@ static void emit_one_alu(struct schedule_state *s, struct rc_instruction * befor
 {
 	struct schedule_instruction * sinst;
 
-	if (s->ReadyFullALU || !(s->ReadyRGB && s->ReadyAlpha)) {
-		if (s->ReadyFullALU) {
-			sinst = s->ReadyFullALU;
-			s->ReadyFullALU = s->ReadyFullALU->NextReady;
-		} else if (s->ReadyRGB) {
-			sinst = s->ReadyRGB;
-			s->ReadyRGB = s->ReadyRGB->NextReady;
-		} else {
-			sinst = s->ReadyAlpha;
-			s->ReadyAlpha = s->ReadyAlpha->NextReady;
-		}
-
+	if (s->ReadyFullALU) {
+		sinst = s->ReadyFullALU;
+		s->ReadyFullALU = s->ReadyFullALU->NextReady;
 		rc_insert_instruction(before->Prev, sinst->Instruction);
 		commit_alu_instruction(s, sinst);
 	} else {
 		struct schedule_instruction **prgb;
 		struct schedule_instruction **palpha;
-
+		struct schedule_instruction *prev;
+pair:
 		/* Some pairings might fail because they require too
 		 * many source slots; try all possible pairings if necessary */
 		for(prgb = &s->ReadyRGB; *prgb; prgb = &(*prgb)->NextReady) {
@@ -574,10 +789,43 @@ static void emit_one_alu(struct schedule_state *s, struct rc_instruction * befor
 				goto success;
 			}
 		}
-
-		/* No success in pairing; just take the first RGB instruction */
-		sinst = s->ReadyRGB;
-		s->ReadyRGB = s->ReadyRGB->NextReady;
+		prev = NULL;
+		/* No success in pairing, now try to convert one of the RGB
+		 * instructions to an Alpha so we can pair it with another RGB.
+		 */
+		if (s->ReadyRGB && s->ReadyRGB->NextReady) {
+		for(prgb = &s->ReadyRGB; *prgb; prgb = &(*prgb)->NextReady) {
+			if ((*prgb)->NumWriteValues == 1) {
+				struct schedule_instruction * prgb_next;
+				if (!convert_rgb_to_alpha(s, *prgb))
+					goto cont_loop;
+				prgb_next = (*prgb)->NextReady;
+				/* Add instruction to the Alpha ready list. */
+				(*prgb)->NextReady = s->ReadyAlpha;
+				s->ReadyAlpha = *prgb;
+				/* Remove instruction from the RGB ready list.*/
+				if (prev)
+					prev->NextReady = prgb_next;
+				else
+					s->ReadyRGB = prgb_next;
+				goto pair;
+			}
+cont_loop:
+			prev = *prgb;
+		}
+		}
+		/* Still no success in pairing, just take the first RGB
+		 * or alpha instruction. */
+		if (s->ReadyRGB) {
+			sinst = s->ReadyRGB;
+			s->ReadyRGB = s->ReadyRGB->NextReady;
+		} else if (s->ReadyAlpha) {
+			sinst = s->ReadyAlpha;
+			s->ReadyAlpha = s->ReadyAlpha->NextReady;
+		} else {
+			/*XXX Something real bad has happened. */
+			assert(0);
+		}
 
 		rc_insert_instruction(before->Prev, sinst->Instruction);
 		commit_alu_instruction(s, sinst);
@@ -640,13 +888,14 @@ static void scan_write(void * data, struct rc_instruction * inst,
 {
 	struct schedule_state * s = data;
 	struct reg_value ** pv = get_reg_valuep(s, file, index, chan);
+	struct reg_value * newv;
 
 	if (!pv)
 		return;
 
 	DBG("%i: write %i[%i] chan %i\n", s->Current->Instruction->IP, file, index, chan);
 
-	struct reg_value * newv = memory_pool_malloc(&s->C->Pool, sizeof(*newv));
+	newv = memory_pool_malloc(&s->C->Pool, sizeof(*newv));
 	memset(newv, 0, sizeof(*newv));
 
 	newv->Writer = s->Current;
@@ -665,16 +914,27 @@ static void scan_write(void * data, struct rc_instruction * inst,
 	}
 }
 
+static void is_rgb_to_alpha_possible_normal(
+	void * userdata,
+	struct rc_instruction * inst,
+	struct rc_src_register * src)
+{
+	struct rc_reader_data * reader_data = userdata;
+	reader_data->Abort = 1;
+
+}
+
 static void schedule_block(struct r300_fragment_program_compiler * c,
 		struct rc_instruction * begin, struct rc_instruction * end)
 {
 	struct schedule_state s;
+	unsigned int ip;
 
 	memset(&s, 0, sizeof(s));
 	s.C = &c->Base;
 
 	/* Scan instructions for data dependencies */
-	unsigned int ip = 0;
+	ip = 0;
 	for(struct rc_instruction * inst = begin; inst != end; inst = inst->Next) {
 		s.Current = memory_pool_malloc(&c->Base.Pool, sizeof(*s.Current));
 		memset(s.Current, 0, sizeof(struct schedule_instruction));
@@ -695,6 +955,11 @@ static void schedule_block(struct r300_fragment_program_compiler * c,
 
 		if (!s.Current->NumDependencies)
 			instruction_ready(&s, s.Current);
+
+		/* Get global readers for possible RGB->Alpha conversion. */
+		rc_get_readers(s.C, inst, &s.Current->GlobalReaders,
+				is_rgb_to_alpha_possible_normal,
+				is_rgb_to_alpha_possible, NULL);
 	}
 
 	/* Temporarily unlink all instructions */
@@ -723,15 +988,22 @@ static int is_controlflow(struct rc_instruction * inst)
 
 void rc_pair_schedule(struct radeon_compiler *cc, void *user)
 {
+	struct schedule_state s;
+
 	struct r300_fragment_program_compiler *c = (struct r300_fragment_program_compiler*)cc;
 	struct rc_instruction * inst = c->Base.Program.Instructions.Next;
+
+	memset(&s, 0, sizeof(s));
+	s.C = &c->Base;
 	while(inst != &c->Base.Program.Instructions) {
+		struct rc_instruction * first;
+
 		if (is_controlflow(inst)) {
 			inst = inst->Next;
 			continue;
 		}
 
-		struct rc_instruction * first = inst;
+		first = inst;
 
 		while(inst != &c->Base.Program.Instructions && !is_controlflow(inst))
 			inst = inst->Next;
