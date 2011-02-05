@@ -1,3 +1,14 @@
+mesa (7.10-2) unstable; urgency=low
+
+  * Fix FTBFS on i386: Add some files to debian/not-installed, on a
+    per-architecture fashion (those are under /usr/lib/i686/cmov/).
+  * Work around FTBFS on sparc due to new symbols: pass -c1 to
+    dpkg-gensymbols instead of -c4 (on sparc only). Those symbols probably
+    shouldn't be exported, but let's make it possible to build xorg-server
+    1.9 in sid.
+
+ -- Cyril Brulebois <kibi@debian.org>  Sat, 05 Feb 2011 11:16:26 +0100
+
 mesa (7.10-1) experimental; urgency=low
 
   * New upstream release.
