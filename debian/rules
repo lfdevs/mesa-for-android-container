@@ -77,18 +77,15 @@ else
 	EGL_DISPLAYS += drm
   endif
 
-  ifeq ($(DEB_HOST_ARCH), lpia)
-	DRI_DRIVERS += i915 i965
-	GALLIUM_DRIVERS += i915
-  else ifneq ($(DEB_HOST_ARCH), s390)
+  ifneq ($(DEB_HOST_ARCH), s390)
 	DRI_DRIVERS += mach64 mga r128 r200 r600 radeon savage tdfx
-    ifeq ($(DEB_HOST_ARCH_CPU), i386)
+  endif
+  ifeq ($(DEB_HOST_ARCH_CPU), i386)
 	DRI_DRIVERS += i810 i915 i965 sis unichrome
 	GALLIUM_DRIVERS += i915
-    else ifeq ($(DEB_HOST_ARCH_CPU), amd64)
+  else ifeq ($(DEB_HOST_ARCH_CPU), amd64)
 	DRI_DRIVERS += i915 i965 sis unichrome
 	GALLIUM_DRIVERS += i915
-    endif
   endif
 endif
 
@@ -201,8 +198,6 @@ build-stamp: $(BUILD_STAMPS)
 # Remove gallium drivers which replace existing classic drivers.
 # Intel gallium is significantly behind the classic mesa drivers...
 	rm -f build/dri/lib/gallium/i915_dri.so
-# r600g is not yet in a fit state to ship
-	rm -f build/dri/lib/gallium/r600_dri.so
 	>$@
 
 $(STAMP)-build-%: configure

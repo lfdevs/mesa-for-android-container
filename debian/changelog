@@ -1,3 +1,22 @@
+mesa (7.10-3) unstable; urgency=low
+
+  [ Julien Cristau ]
+  * debian/rules: RIP lpia.
+
+  [ Cyril Brulebois ]
+  * Cherry-pick from upstream (thanks to Dave Airlie for the hint):
+    - radeon: fix build on non-KMS systems.
+    This fixes the FTBFS on GNU/kFreeBSD.
+  * Ship r300g (r300 gallium) on Linux only: Introduce Linux-specific
+    libgl1-mesa-dri.install.linux to that effect.
+  * According to Michel Dänzer, r600g (r600 gallium) is working well
+    enough to be shipped now. Let's ship it, then!
+  * Cherry-pick from upstream, fixing X's failure to start with UMS on
+    r300g (Closes: #612380):
+    - dri_util: fail driCreateNewScreen if InitScreen is NULL
+
+ -- Cyril Brulebois <kibi@debian.org>  Tue, 08 Feb 2011 16:06:38 +0100
+
 mesa (7.10-2) unstable; urgency=low
 
   * Fix FTBFS on i386: Add some files to debian/not-installed, on a
