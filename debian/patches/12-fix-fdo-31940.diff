@@ -1,0 +1,95 @@
+From: Jakob Bornecrantz <wallbraker@gmail.com>
+Description: [PATCH] st/dri: Track drawable context bindings
+ Needs to track this ourself since because we get into a race condition with
+ the dri_util.c code on make current when rendering to the front buffer.
+ .
+ This is what happens:
+ Old context is rendering to the front buffer.
+ .
+ App calls MakeCurrent with a new context. dri_util.c sets
+ drawable->driContextPriv to the new context and then calls the driver make
+ current. st/dri make current flushes the old context, which calls back into
+ st/dri via the flush frontbuffer hook. st/dri calls dri loader flush
+ frontbuffer, which calls invalidate buffer on the drawable into st/dri.
+ .
+ This is where things gets wrong. st/dri grabs the context from the dri
+ drawable (which now points to the new context) and calls invalidate
+ framebuffer to the new context which has not yet set the new drawable as its
+ framebuffers since we have not called make current yet, it asserts.
+Bug: https://bugs.freedesktop.org/show_bug.cgi?id=31940
+Origin: other, https://bugs.freedesktop.org/attachment.cgi?id=40689
+---
+ src/gallium/state_trackers/dri/common/dri_context.c  |   10 +++++++++-
+ src/gallium/state_trackers/dri/common/dri_drawable.c |    1 +
+ src/gallium/state_trackers/dri/common/dri_drawable.h |    3 +++
+ src/gallium/state_trackers/dri/drm/dri2.c            |    2 +-
+ 4 files changed, 14 insertions(+), 2 deletions(-)
+
+--- a/src/gallium/state_trackers/dri/common/dri_context.c
++++ b/src/gallium/state_trackers/dri/common/dri_context.c
+@@ -141,12 +141,18 @@ GLboolean
+ dri_unbind_context(__DRIcontext * cPriv)
+ {
+    /* dri_util.c ensures cPriv is not null */
++   struct dri_screen *screen = dri_screen(cPriv->driScreenPriv);
+    struct dri_context *ctx = dri_context(cPriv);
++   struct dri_drawable *draw = dri_drawable(ctx->dPriv);
++   struct dri_drawable *read = dri_drawable(ctx->rPriv);
++   struct st_api *stapi = screen->st_api;
+ 
+    if (--ctx->bind_count == 0) {
+       if (ctx->st == ctx->stapi->get_current(ctx->stapi)) {
+          ctx->st->flush(ctx->st, PIPE_FLUSH_RENDER_CACHE, NULL);
+-         ctx->stapi->make_current(ctx->stapi, NULL, NULL, NULL);
++         stapi->make_current(stapi, NULL, NULL, NULL);
++         draw->context = NULL;
++         read->context = NULL;
+       }
+    }
+ 
+@@ -169,10 +175,12 @@ dri_make_current(__DRIcontext * cPriv,
+ 
+    ++ctx->bind_count;
+ 
++   draw->context = ctx;
+    if (ctx->dPriv != driDrawPriv) {
+       ctx->dPriv = driDrawPriv;
+       draw->texture_stamp = driDrawPriv->lastStamp - 1;
+    }
++   read->context = ctx;
+    if (ctx->rPriv != driReadPriv) {
+       ctx->rPriv = driReadPriv;
+       read->texture_stamp = driReadPriv->lastStamp - 1;
+--- a/src/gallium/state_trackers/dri/common/dri_drawable.c
++++ b/src/gallium/state_trackers/dri/common/dri_drawable.c
+@@ -132,6 +132,7 @@ dri_create_buffer(__DRIscreen * sPriv,
+    drawable->base.validate = dri_st_framebuffer_validate;
+    drawable->base.st_manager_private = (void *) drawable;
+ 
++   drawable->screen = screen;
+    drawable->sPriv = sPriv;
+    drawable->dPriv = dPriv;
+    dPriv->driverPrivate = (void *)drawable;
+--- a/src/gallium/state_trackers/dri/common/dri_drawable.h
++++ b/src/gallium/state_trackers/dri/common/dri_drawable.h
+@@ -41,6 +41,9 @@ struct dri_drawable
+    struct st_framebuffer_iface base;
+    struct st_visual stvis;
+ 
++   struct dri_screen *screen;
++   struct dri_context *context;
++
+    /* dri */
+    __DRIdrawable *dPriv;
+    __DRIscreen *sPriv;
+--- a/src/gallium/state_trackers/dri/drm/dri2.c
++++ b/src/gallium/state_trackers/dri/drm/dri2.c
+@@ -51,7 +51,7 @@ static void
+ dri2_invalidate_drawable(__DRIdrawable *dPriv)
+ {
+    struct dri_drawable *drawable = dri_drawable(dPriv);
+-   struct dri_context *ctx = dri_context(dPriv->driContextPriv);
++   struct dri_context *ctx = drawable->context;
+ 
+    dri2InvalidateDrawable(dPriv);
+    drawable->dPriv->lastStamp = *drawable->dPriv->pStamp;

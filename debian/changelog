@@ -1,3 +1,35 @@
+mesa (7.10-4) unstable; urgency=low
+
+  * debian/not-installed: Ignore the same files on *i386.
+  * debian/local/control: Report-with: xserver-xorg{,-core}.
+  * debian/local/script: New bug script, calling glxinfo if available,
+    then the server's bug script.
+  * New patch, thanks to Pino Toscano, fixing FTBFS on GNU/Hurd:
+    - 11-hurd-ftbfs-again.diff
+  * Make a lot of binary packages linux-any kfreebsd-any:
+    - libegl1-mesa
+    - libegl1-mesa-dbg
+    - libegl1-mesa-dev
+    - libegl1-mesa-drivers
+    - libegl1-mesa-drivers-dbg
+    - libopenvg1-mesa
+    - libopenvg1-mesa-dbg
+    - libopenvg1-mesa-dev
+    - libgles1-mesa
+    - libgles1-mesa-dbg
+    - libgles1-mesa-dev
+    - libgles2-mesa
+    - libgles2-mesa-dbg
+    - libgles2-mesa-dev
+  * Disable EGL/Gallium/GLES/state trackers on GNU/Hurd.
+  * Fix FTBFS on sparc64, treat it the same way as sparc. Thanks, Aurélien
+    Jarno! (Closes: #613106).
+  * Add patch for a crash in dri2_invalidate_drawable, thanks to Kai
+    Wasserbäch (Closes: #612640):
+    - 12-fix-fdo-31940.diff
+
+ -- Cyril Brulebois <kibi@debian.org>  Wed, 16 Feb 2011 11:53:26 +0100
+
 mesa (7.10-3) unstable; urgency=low
 
   [ Julien Cristau ]

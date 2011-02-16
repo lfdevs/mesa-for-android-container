@@ -60,14 +60,16 @@ confflags-common = \
 	CFLAGS="$(CFLAGS)"
 
 DRI_DRIVERS = swrast
-GALLIUM_DRIVERS = swrast
-EGL_DISPLAYS = x11
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
-	DIRECT_RENDERING = --disable-driglx-direct
+	confflags_DIRECT_RENDERING = --disable-driglx-direct
+	confflags_EGL = --disable-egl
+	confflags_GALLIUM = --disable-gallium
 else
-	DIRECT_RENDERING = --enable-driglx-direct
+	EGL_DISPLAYS = x11
+	GALLIUM_DRIVERS = swrast
+	GALLIUM_STATE_TRACKERS = egl,glx,dri,vega
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 # Gallium drivers require libdrm-{nouveau,radeon}, only available on Linux
@@ -87,20 +89,24 @@ else
 	DRI_DRIVERS += i915 i965 sis unichrome
 	GALLIUM_DRIVERS += i915
   endif
+
+	confflags_DIRECT_RENDERING = --enable-driglx-direct
+	confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
+	confflags_GALLIUM = $(addprefix --enable-gallium-,$(GALLIUM_DRIVERS))
+	confflags_GLES = --enable-gles-overlay --enable-gles1 --enable-gles2
+	confflags_STATE_TRACKERS = --with-state-trackers="$(GALLIUM_STATE_TRACKERS)"
 endif
 
 confflags-dri = \
 	--with-driver=dri \
 	--with-dri-drivers="$(DRI_DRIVERS)" \
 	--with-dri-driverdir=/usr/lib/dri \
-	--with-egl-platforms="$(EGL_DISPLAYS)" \
 	--enable-glx-tls \
-	$(addprefix --enable-gallium-,$(GALLIUM_DRIVERS)) \
-	--with-state-trackers=egl,glx,dri,vega \
-	--enable-gles-overlay \
-	--enable-gles1 \
-	--enable-gles2 \
-	$(DIRECT_RENDERING) \
+	$(confflags_DIRECT_RENDERING) \
+	$(confflags_EGL) \
+	$(confflags_GALLIUM) \
+	$(confflags_GLES) \
+	$(confflags_STATE_TRACKERS) \
 	$(confflags-common)
 
 confflags-osmesa = \
@@ -267,6 +273,12 @@ binary-arch: install
 	dh_installman -s
 	dh_lintian -s
 	dh_link -s
+	# Install bug control and script:
+	set -e; for p in `dh_listpackages -s`; do \
+		install -d debian/$$p/usr/share/bug/$$p && \
+		install -m 644 debian/local/control debian/$$p/usr/share/bug/$$p && \
+		install -m 755 debian/local/script  debian/$$p/usr/share/bug/$$p; \
+	done
 	dh_strip -plibgl1-mesa-swx11 --dbg-package=libgl1-mesa-swx11-dbg
 	dh_strip -plibgl1-mesa-glx --dbg-package=libgl1-mesa-glx-dbg
 	dh_strip -plibgl1-mesa-dri --dbg-package=libgl1-mesa-dri-dbg
@@ -294,7 +306,7 @@ binary-arch: install
 		-pmesa-common-dev
 	dh_compress -s
 	dh_fixperms -s
-ifneq ($(DEB_HOST_ARCH), sparc)
+ifeq (,$(filter sparc sparc64,$(DEB_HOST_ARCH)))
 	dh_makeshlibs -s -- -c4
 else
 	# Temporarily work around FTBFS on sparc, ignore new symbols:

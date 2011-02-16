@@ -37,7 +37,11 @@ NOT_INSTALLED_i386 = \
 	usr/lib/i686/cmov/libGLw.so.1.* \
 	usr/lib/i686/cmov/pkgconfig/glw.pc \
 	usr/lib/i686/cmov/pkgconfig/glu.pc \
-	usr/lib/i686/cmov/pkgconfig/gl.pc \
+	usr/lib/i686/cmov/pkgconfig/gl.pc
+
+# Same for linux, kfreebsd, and hurd on i386:
+NOT_INSTALLED_kfreebsd-i386 = $(NOT_INSTALLED_i386)
+NOT_INSTALLED_hurd-i386     = $(NOT_INSTALLED_i386)
 
 # Detect the current architecture and add the files if any:
 DEB_HOST_ARCH ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)

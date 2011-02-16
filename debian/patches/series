@@ -4,3 +4,5 @@
 06_kfreebsd-ftbfs.diff
 08-kfreebsd-gallium.diff
 10-fix-talloc-linking.diff
+11-hurd-ftbfs-again.diff
+12-fix-fdo-31940.diff
