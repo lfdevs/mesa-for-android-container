@@ -2525,6 +2525,17 @@ struct gl_framebuffer
 
 
 /**
+ * Precision info for shader datatypes.  See glGetShaderPrecisionFormat().
+ */
+struct gl_precision
+{
+   GLushort RangeMin;   /**< min value exponent */
+   GLushort RangeMax;   /**< max value exponent */
+   GLushort Precision;  /**< number of mantissa bits */
+};
+
+
+/**
  * Limits for vertex and fragment programs/shaders.
  */
 struct gl_program_constants
@@ -2558,6 +2569,9 @@ struct gl_program_constants
    GLuint MaxGeometryUniformComponents;
    GLuint MaxGeometryOutputVertices;
    GLuint MaxGeometryTotalOutputComponents;
+   /* ES 2.0 and GL_ARB_ES2_compatibility */
+   struct gl_precision LowFloat, MediumFloat, HighFloat;
+   struct gl_precision LowInt, MediumInt, HighInt;
 };
 
 
@@ -2654,6 +2668,9 @@ struct gl_constants
 struct gl_extensions
 {
    GLboolean dummy;  /* don't remove this! */
+   GLboolean dummy_true;  /* Set true by _mesa_init_extensions(). */
+   GLboolean dummy_false; /* Set false by _mesa_init_extensions(). */
+   GLboolean ARB_ES2_compatibility;
    GLboolean ARB_blend_func_extended;
    GLboolean ARB_copy_buffer;
    GLboolean ARB_depth_buffer_float;
@@ -2769,6 +2786,7 @@ struct gl_extensions
    GLboolean EXT_vertex_array;
    GLboolean EXT_vertex_array_bgra;
    GLboolean EXT_vertex_array_set;
+   GLboolean OES_standard_derivatives;
    /* vendor extensions */
    GLboolean APPLE_client_storage;
    GLboolean APPLE_packed_pixels;
@@ -2808,6 +2826,7 @@ struct gl_extensions
    GLboolean OES_EGL_image;
    GLboolean OES_draw_texture;
    GLboolean EXT_texture_format_BGRA8888;
+   GLboolean extension_sentinel;
    /** The extension string */
    const GLubyte *String;
    /** Number of supported extensions */

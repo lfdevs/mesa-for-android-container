@@ -26,13 +26,10 @@
 #ifndef IR_H
 #define IR_H
 
-#include <cstdio>
-#include <cstdlib>
+#include <stdio.h>
+#include <stdlib.h>
 
-extern "C" {
-#include <talloc.h>
-}
-
+#include "ralloc.h"
 #include "glsl_types.h"
 #include "list.h"
 #include "ir_visitor.h"
@@ -293,6 +290,15 @@ public:
    unsigned read_only:1;
    unsigned centroid:1;
    unsigned invariant:1;
+
+   /**
+    * Has this variable been used for reading or writing?
+    *
+    * Several GLSL semantic checks require knowledge of whether or not a
+    * variable has been used.  For example, it is an error to redeclare a
+    * variable as invariant after it has been used.
+    */
+   unsigned used:1;
 
    /**
     * Storage class of the variable.
@@ -949,7 +955,7 @@ public:
    /**
     * Get a generic ir_call object when an error occurs
     *
-    * Any allocation will be performed with 'ctx' as talloc owner.
+    * Any allocation will be performed with 'ctx' as ralloc owner.
     */
    static ir_call *get_error_instruction(void *ctx);
 

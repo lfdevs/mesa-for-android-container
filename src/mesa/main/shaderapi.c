@@ -46,8 +46,9 @@
 #include "program/program.h"
 #include "program/prog_parameter.h"
 #include "program/prog_uniform.h"
-#include "talloc.h"
+#include "ralloc.h"
 #include <stdbool.h>
+#include "../glsl/glsl_parser_extras.h"
 
 /** Define this to enable shader substitution (see below) */
 #define SHADER_SUBST 0
@@ -1134,9 +1135,9 @@ validate_program(struct gl_context *ctx, GLuint program)
    if (!shProg->Validated) {
       /* update info log */
       if (shProg->InfoLog) {
-         talloc_free(shProg->InfoLog);
+         ralloc_free(shProg->InfoLog);
       }
-      shProg->InfoLog = talloc_strdup(shProg, errMsg);
+      shProg->InfoLog = ralloc_strdup(shProg, errMsg);
    }
 }
 
@@ -1625,20 +1626,58 @@ void GLAPIENTRY
 _mesa_GetShaderPrecisionFormat(GLenum shadertype, GLenum precisiontype,
                                GLint* range, GLint* precision)
 {
+   const struct gl_program_constants *limits;
+   const struct gl_precision *p;
    GET_CURRENT_CONTEXT(ctx);
-   (void) shadertype;
-   (void) precisiontype;
-   (void) range;
-   (void) precision;
-   _mesa_error(ctx, GL_INVALID_OPERATION, __FUNCTION__);
+
+   switch (shadertype) {
+   case GL_VERTEX_SHADER:
+      limits = &ctx->Const.VertexProgram;
+      break;
+   case GL_FRAGMENT_SHADER:
+      limits = &ctx->Const.FragmentProgram;
+      break;
+   default:
+      _mesa_error(ctx, GL_INVALID_ENUM,
+                  "glGetShaderPrecisionFormat(shadertype)");
+      return;
+   }
+
+   switch (precisiontype) {
+   case GL_LOW_FLOAT:
+      p = &limits->LowFloat;
+      break;
+   case GL_MEDIUM_FLOAT:
+      p = &limits->MediumFloat;
+      break;
+   case GL_HIGH_FLOAT:
+      p = &limits->HighFloat;
+      break;
+   case GL_LOW_INT:
+      p = &limits->LowInt;
+      break;
+   case GL_MEDIUM_INT:
+      p = &limits->MediumInt;
+      break;
+   case GL_HIGH_INT:
+      p = &limits->HighInt;
+      break;
+   default:
+      _mesa_error(ctx, GL_INVALID_ENUM,
+                  "glGetShaderPrecisionFormat(precisiontype)");
+      return;
+   }
+
+   range[0] = p->RangeMin;
+   range[1] = p->RangeMax;
+   precision[0] = p->Precision;
 }
 
 
 void GLAPIENTRY
 _mesa_ReleaseShaderCompiler(void)
 {
-   GET_CURRENT_CONTEXT(ctx);
-   _mesa_error(ctx, GL_INVALID_OPERATION, __FUNCTION__);
+   _mesa_destroy_shader_compiler_caches();
 }
 
 
@@ -1814,7 +1853,7 @@ _mesa_CreateShaderProgramEXT(GLenum type, const GLchar *string)
 #endif
 	 }
 
-	 shProg->InfoLog = talloc_strdup_append(shProg->InfoLog, sh->InfoLog);
+	 ralloc_strcat(&shProg->InfoLog, sh->InfoLog);
       }
 
       delete_shader(ctx, shader);
@@ -1880,6 +1919,10 @@ _mesa_init_shader_dispatch(struct _glapi_table *exec)
    /* GL_EXT_gpu_shader4 / GL 3.0 */
    SET_BindFragDataLocationEXT(exec, _mesa_BindFragDataLocation);
    SET_GetFragDataLocationEXT(exec, _mesa_GetFragDataLocation);
+
+   /* GL_ARB_ES2_compatibility */
+   SET_ReleaseShaderCompiler(exec, _mesa_ReleaseShaderCompiler);
+   SET_GetShaderPrecisionFormat(exec, _mesa_GetShaderPrecisionFormat);
 
 #endif /* FEATURE_GL */
 }

@@ -63,14 +63,10 @@
  *
  * \author Ian Romanick <ian.d.romanick@intel.com>
  */
-#include <cstdlib>
-#include <cstdio>
-#include <cstdarg>
-#include <climits>
-
-extern "C" {
-#include <talloc.h>
-}
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <limits.h>
 
 #include "main/core.h"
 #include "glsl_symbol_table.h"
@@ -176,9 +172,9 @@ linker_error_printf(gl_shader_program *prog, const char *fmt, ...)
 {
    va_list ap;
 
-   prog->InfoLog = talloc_strdup_append(prog->InfoLog, "error: ");
+   ralloc_strcat(&prog->InfoLog, "error: ");
    va_start(ap, fmt);
-   prog->InfoLog = talloc_vasprintf_append(prog->InfoLog, fmt, ap);
+   ralloc_vasprintf_append(&prog->InfoLog, fmt, ap);
    va_end(ap);
 }
 
@@ -360,11 +356,8 @@ cross_validate_globals(struct gl_shader_program *prog,
 		   && (var->type->fields.array == existing->type->fields.array)
 		   && ((var->type->length == 0)
 		       || (existing->type->length == 0))) {
-		  if (existing->type->length == 0) {
+		  if (var->type->length != 0) {
 		     existing->type = var->type;
-		     existing->max_array_access =
-			MAX2(existing->max_array_access,
-			     var->max_array_access);
 		  }
 	       } else {
 		  linker_error_printf(prog, "%s `%s' declared as type "
@@ -413,7 +406,7 @@ cross_validate_globals(struct gl_shader_program *prog,
 		   * FINISHME: will fail.
 		   */
 		  existing->constant_value =
-		     var->constant_value->clone(talloc_parent(existing), NULL);
+		     var->constant_value->clone(ralloc_parent(existing), NULL);
 	    }
 
 	    if (existing->invariant != var->invariant) {
@@ -422,6 +415,12 @@ cross_validate_globals(struct gl_shader_program *prog,
 	                           mode_string(var), var->name);
 	       return false;
 	    }
+            if (existing->centroid != var->centroid) {
+               linker_error_printf(prog, "declarations for %s `%s' have "
+                                   "mismatching centroid qualifiers\n",
+                                   mode_string(var), var->name);
+               return false;
+            }
 	 } else
 	    variables.add_variable(var);
       }
@@ -888,30 +887,29 @@ link_intrastage_shaders(void *mem_ctx,
 
    free(linking_shaders);
 
-   /* Make a pass over all global variables to ensure that arrays with
+   /* Make a pass over all variable declarations to ensure that arrays with
     * unspecified sizes have a size specified.  The size is inferred from the
     * max_array_access field.
     */
    if (linked != NULL) {
-      foreach_list(node, linked->ir) {
-	 ir_variable *const var = ((ir_instruction *) node)->as_variable();
+      class array_sizing_visitor : public ir_hierarchical_visitor {
+      public:
+	 virtual ir_visitor_status visit(ir_variable *var)
+	 {
+	    if (var->type->is_array() && (var->type->length == 0)) {
+	       const glsl_type *type =
+		  glsl_type::get_array_instance(var->type->fields.array,
+						var->max_array_access + 1);
 
-	 if (var == NULL)
-	    continue;
+	       assert(type != NULL);
+	       var->type = type;
+	    }
 
-	 if ((var->mode != ir_var_auto) && (var->mode != ir_var_temporary))
-	    continue;
+	    return visit_continue;
+	 }
+      } v;
 
-	 if (!var->type->is_array() || (var->type->length != 0))
-	    continue;
-
-	 const glsl_type *type =
-	    glsl_type::get_array_instance(var->type->fields.array,
-					  var->max_array_access);
-
-	 assert(type != NULL);
-	 var->type = type;
-      }
+      v.run(linked->ir);
    }
 
    return linked;
@@ -991,7 +989,7 @@ add_uniform(void *mem_ctx, exec_list *uniforms, struct hash_table *ht,
    if (type->is_record()) {
       for (unsigned int i = 0; i < type->length; i++) {
 	 const glsl_type *field_type = type->fields.structure[i].type;
-	 char *field_name = talloc_asprintf(mem_ctx, "%s.%s", name,
+	 char *field_name = ralloc_asprintf(mem_ctx, "%s.%s", name,
 					    type->fields.structure[i].name);
 
 	 add_uniform(mem_ctx, uniforms, ht, field_name, field_type,
@@ -1007,7 +1005,7 @@ add_uniform(void *mem_ctx, exec_list *uniforms, struct hash_table *ht,
 	 /* Array of structures. */
 	 if (array_elem_type->is_record()) {
 	    for (unsigned int i = 0; i < type->length; i++) {
-	       char *elem_name = talloc_asprintf(mem_ctx, "%s[%d]", name, i);
+	       char *elem_name = ralloc_asprintf(mem_ctx, "%s[%d]", name, i);
 	       add_uniform(mem_ctx, uniforms, ht, elem_name, array_elem_type,
 			   shader_type, next_shader_pos, total_uniforms);
 	    }
@@ -1069,7 +1067,7 @@ assign_uniform_locations(struct gl_shader_program *prog)
    unsigned total_uniforms = 0;
    hash_table *ht = hash_table_ctor(32, hash_table_string_hash,
 				    hash_table_string_compare);
-   void *mem_ctx = talloc_new(NULL);
+   void *mem_ctx = ralloc_context(NULL);
 
    for (unsigned i = 0; i < MESA_SHADER_TYPES; i++) {
       if (prog->_LinkedShaders[i] == NULL)
@@ -1098,7 +1096,7 @@ assign_uniform_locations(struct gl_shader_program *prog)
       }
    }
 
-   talloc_free(mem_ctx);
+   ralloc_free(mem_ctx);
 
    gl_uniform_list *ul = (gl_uniform_list *)
       calloc(1, sizeof(gl_uniform_list));
@@ -1466,16 +1464,16 @@ assign_varying_locations(struct gl_shader_program *prog,
 void
 link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 {
-   void *mem_ctx = talloc_init("temporary linker context");
+   void *mem_ctx = ralloc_context(NULL); // temporary linker context
 
    prog->LinkStatus = false;
    prog->Validated = false;
    prog->_Used = false;
 
    if (prog->InfoLog != NULL)
-      talloc_free(prog->InfoLog);
+      ralloc_free(prog->InfoLog);
 
-   prog->InfoLog = talloc_strdup(NULL, "");
+   prog->InfoLog = ralloc_strdup(NULL, "");
 
    /* Separate the shaders into groups based on their type.
     */
@@ -1657,6 +1655,20 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       demote_shader_inputs_and_outputs(sh, ir_var_in);
    }
 
+   /* OpenGL ES requires that a vertex shader and a fragment shader both be
+    * present in a linked program.  By checking for use of shading language
+    * version 1.00, we also catch the GL_ARB_ES2_compatibility case.
+    */
+   if (ctx->API == API_OPENGLES2 || prog->Version == 100) {
+      if (prog->_LinkedShaders[MESA_SHADER_VERTEX] == NULL) {
+	 linker_error_printf(prog, "program lacks a vertex shader\n");
+	 prog->LinkStatus = false;
+      } else if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT] == NULL) {
+	 linker_error_printf(prog, "program lacks a fragment shader\n");
+	 prog->LinkStatus = false;
+      }
+   }
+
    /* FINISHME: Assign fragment shader output locations. */
 
 done:
@@ -1670,5 +1682,5 @@ done:
       reparent_ir(prog->_LinkedShaders[i]->ir, prog->_LinkedShaders[i]->ir);
    }
 
-   talloc_free(mem_ctx);
+   ralloc_free(mem_ctx);
 }

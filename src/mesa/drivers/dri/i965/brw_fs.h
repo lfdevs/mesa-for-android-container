@@ -41,7 +41,6 @@ extern "C" {
 #include "brw_context.h"
 #include "brw_eu.h"
 #include "brw_wm.h"
-#include "talloc.h"
 }
 #include "../glsl/glsl_types.h"
 #include "../glsl/ir.h"
@@ -68,6 +67,7 @@ enum fs_opcodes {
    FS_OPCODE_COS,
    FS_OPCODE_DDX,
    FS_OPCODE_DDY,
+   FS_OPCODE_CINTERP,
    FS_OPCODE_LINTERP,
    FS_OPCODE_TEX,
    FS_OPCODE_TXB,
@@ -82,13 +82,13 @@ enum fs_opcodes {
 
 class fs_reg {
 public:
-   /* Callers of this talloc-based new need not call delete. It's
-    * easier to just talloc_free 'ctx' (or any of its ancestors). */
+   /* Callers of this ralloc-based new need not call delete. It's
+    * easier to just ralloc_free 'ctx' (or any of its ancestors). */
    static void* operator new(size_t size, void *ctx)
    {
       void *node;
 
-      node = talloc_size(ctx, size);
+      node = ralloc_size(ctx, size);
       assert(node != NULL);
 
       return node;
@@ -192,13 +192,13 @@ static const fs_reg reg_null_d(ARF, BRW_ARF_NULL, BRW_REGISTER_TYPE_D);
 
 class fs_inst : public exec_node {
 public:
-   /* Callers of this talloc-based new need not call delete. It's
-    * easier to just talloc_free 'ctx' (or any of its ancestors). */
+   /* Callers of this ralloc-based new need not call delete. It's
+    * easier to just ralloc_free 'ctx' (or any of its ancestors). */
    static void* operator new(size_t size, void *ctx)
    {
       void *node;
 
-      node = talloc_zero_size(ctx, size);
+      node = rzalloc_size(ctx, size);
       assert(node != NULL);
 
       return node;
@@ -305,6 +305,18 @@ public:
 	      offset == inst->offset);
    }
 
+   bool is_math()
+   {
+      return (opcode == FS_OPCODE_RCP ||
+	      opcode == FS_OPCODE_RSQ ||
+	      opcode == FS_OPCODE_SQRT ||
+	      opcode == FS_OPCODE_EXP2 ||
+	      opcode == FS_OPCODE_LOG2 ||
+	      opcode == FS_OPCODE_SIN ||
+	      opcode == FS_OPCODE_COS ||
+	      opcode == FS_OPCODE_POW);
+   }
+
    int opcode; /* BRW_OPCODE_* or FS_OPCODE_* */
    fs_reg dst;
    fs_reg src[3];
@@ -341,7 +353,7 @@ public:
       this->fp = brw->fragment_program;
       this->intel = &brw->intel;
       this->ctx = &intel->ctx;
-      this->mem_ctx = talloc_new(NULL);
+      this->mem_ctx = ralloc_context(NULL);
       this->shader = shader;
       this->fail = false;
       this->variable_ht = hash_table_ctor(0,
@@ -384,7 +396,7 @@ public:
 
    ~fs_visitor()
    {
-      talloc_free(this->mem_ctx);
+      ralloc_free(this->mem_ctx);
       hash_table_dtor(this->variable_ht);
    }
 
@@ -410,6 +422,7 @@ public:
    void visit(ir_function_signature *ir);
 
    fs_inst *emit(fs_inst inst);
+   void setup_paramvalues_refs();
    void assign_curb_setup();
    void calculate_urb_setup();
    void assign_urb_setup();
@@ -473,6 +486,12 @@ public:
    struct brw_shader *shader;
    void *mem_ctx;
    exec_list instructions;
+
+   /* Delayed setup of c->prog_data.params[] due to realloc of
+    * ParamValues[] during compile.
+    */
+   int param_index[MAX_UNIFORMS * 4];
+   int param_offset[MAX_UNIFORMS * 4];
 
    int *virtual_grf_sizes;
    int virtual_grf_next;

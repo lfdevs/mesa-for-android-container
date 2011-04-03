@@ -1426,11 +1426,10 @@ static struct brw_reg get_arg( struct brw_vs_compile *c,
 					  GET_SWZ(src->Swizzle, 1),
 					  GET_SWZ(src->Swizzle, 2),
 					  GET_SWZ(src->Swizzle, 3));
-   }
 
-   /* Note this is ok for non-swizzle instructions: 
-    */
-   reg.negate = src->Negate ? 1 : 0;   
+      /* Note this is ok for non-swizzle ARB_vp instructions */
+      reg.negate = src->Negate ? 1 : 0;
+   }
 
    return reg;
 }
@@ -1943,6 +1942,7 @@ void brw_vs_emit(struct brw_vs_compile *c )
 
       switch (inst->Opcode) {
       case OPCODE_ABS:
+	 args[0].negate = false;
 	 brw_MOV(p, dst, brw_abs(args[0]));
 	 break;
       case OPCODE_ADD:

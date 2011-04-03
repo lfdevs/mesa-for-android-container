@@ -1224,7 +1224,8 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    else {
       /* CPU-based fallback/conversion */
       struct pipe_transfer *ptRead =
-         pipe_get_transfer(st->pipe, rbRead->texture, 0, 0,
+         pipe_get_transfer(st->pipe, rbRead->texture,
+                           0, 0, /* level, layer */
                            PIPE_TRANSFER_READ,
                            readX, readY, readW, readH);
       struct pipe_transfer *ptTex;
@@ -1245,7 +1246,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       if (type == GL_COLOR) {
          /* alternate path using get/put_tile() */
          GLfloat *buf = (GLfloat *) malloc(width * height * 4 * sizeof(GLfloat));
-         pipe_get_tile_rgba(pipe, ptRead, readX, readY, readW, readH, buf);
+         pipe_get_tile_rgba(pipe, ptRead, 0, 0, readW, readH, buf);
          pipe_put_tile_rgba(pipe, ptTex, pack.SkipPixels, pack.SkipRows,
                             readW, readH, buf);
          free(buf);
@@ -1253,7 +1254,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       else {
          /* GL_DEPTH */
          GLuint *buf = (GLuint *) malloc(width * height * sizeof(GLuint));
-         pipe_get_tile_z(pipe, ptRead, readX, readY, readW, readH, buf);
+         pipe_get_tile_z(pipe, ptRead, 0, 0, readW, readH, buf);
          pipe_put_tile_z(pipe, ptTex, pack.SkipPixels, pack.SkipRows,
                          readW, readH, buf);
          free(buf);

@@ -30,7 +30,7 @@
  * Graph-coloring register allocator.
  */
 
-#include <talloc.h>
+#include <ralloc.h>
 
 #include "main/imports.h"
 #include "main/macros.h"
@@ -93,12 +93,12 @@ ra_alloc_reg_set(unsigned int count)
    unsigned int i;
    struct ra_regs *regs;
 
-   regs = talloc_zero(NULL, struct ra_regs);
+   regs = rzalloc(NULL, struct ra_regs);
    regs->count = count;
-   regs->regs = talloc_zero_array(regs, struct ra_reg, count);
+   regs->regs = rzalloc_array(regs, struct ra_reg, count);
 
    for (i = 0; i < count; i++) {
-      regs->regs[i].conflicts = talloc_zero_array(regs->regs, GLboolean, count);
+      regs->regs[i].conflicts = rzalloc_array(regs->regs, GLboolean, count);
       regs->regs[i].conflicts[i] = GL_TRUE;
    }
 
@@ -117,14 +117,13 @@ ra_alloc_reg_class(struct ra_regs *regs)
 {
    struct ra_class *class;
 
-   regs->classes = talloc_realloc(regs, regs->classes,
-				  struct ra_class *,
-				  regs->class_count + 1);
+   regs->classes = reralloc(regs->regs, regs->classes, struct ra_class *,
+			    regs->class_count + 1);
 
-   class = talloc_zero(regs, struct ra_class);
+   class = rzalloc(regs, struct ra_class);
    regs->classes[regs->class_count] = class;
 
-   class->regs = talloc_zero_array(class, GLboolean, regs->count);
+   class->regs = rzalloc_array(class, GLboolean, regs->count);
 
    return regs->class_count++;
 }
@@ -148,7 +147,7 @@ ra_set_finalize(struct ra_regs *regs)
    unsigned int b, c;
 
    for (b = 0; b < regs->class_count; b++) {
-      regs->classes[b]->q = talloc_array(regs, unsigned int, regs->class_count);
+      regs->classes[b]->q = ralloc_array(regs, unsigned int, regs->class_count);
    }
 
    /* Compute, for each class B and C, how many regs of B an
@@ -184,15 +183,15 @@ ra_alloc_interference_graph(struct ra_regs *regs, unsigned int count)
    struct ra_graph *g;
    unsigned int i;
 
-   g = talloc_zero(regs, struct ra_graph);
+   g = rzalloc(regs, struct ra_graph);
    g->regs = regs;
-   g->nodes = talloc_zero_array(g, struct ra_node, count);
+   g->nodes = rzalloc_array(g, struct ra_node, count);
    g->count = count;
 
-   g->stack = talloc_zero_array(g, unsigned int, count);
+   g->stack = rzalloc_array(g, unsigned int, count);
 
    for (i = 0; i < count; i++) {
-      g->nodes[i].adjacency = talloc_zero_array(g, GLboolean, count);
+      g->nodes[i].adjacency = rzalloc_array(g, GLboolean, count);
       g->nodes[i].adjacency[i] = GL_TRUE;
       g->nodes[i].reg = ~0;
    }

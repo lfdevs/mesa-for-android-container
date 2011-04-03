@@ -41,7 +41,6 @@ extern "C" {
 #include "brw_context.h"
 #include "brw_eu.h"
 #include "brw_wm.h"
-#include "talloc.h"
 }
 #include "brw_fs.h"
 #include "../glsl/glsl_types.h"
@@ -55,7 +54,7 @@ brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
 {
    struct brw_shader *shader;
 
-   shader = talloc_zero(NULL, struct brw_shader);
+   shader = rzalloc(NULL, struct brw_shader);
    if (shader) {
       shader->base.Type = type;
       shader->base.Name = name;
@@ -69,7 +68,7 @@ struct gl_shader_program *
 brw_new_shader_program(struct gl_context *ctx, GLuint name)
 {
    struct brw_shader_program *prog;
-   prog = talloc_zero(NULL, struct brw_shader_program);
+   prog = rzalloc(NULL, struct brw_shader_program);
    if (prog) {
       prog->base.Name = name;
       _mesa_init_shader_program(ctx, &prog->base);
@@ -95,11 +94,11 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
    struct brw_shader *shader =
       (struct brw_shader *)prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
    if (shader != NULL) {
-      void *mem_ctx = talloc_new(NULL);
+      void *mem_ctx = ralloc_context(NULL);
       bool progress;
 
       if (shader->ir)
-	 talloc_free(shader->ir);
+	 ralloc_free(shader->ir);
       shader->ir = new(shader) exec_list;
       clone_ir_list(mem_ctx, shader->ir, shader->base.ir);
 
@@ -149,7 +148,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       validate_ir_tree(shader->ir);
 
       reparent_ir(shader->ir, shader->ir);
-      talloc_free(mem_ctx);
+      ralloc_free(mem_ctx);
    }
 
    if (!_mesa_ir_link_shader(ctx, prog))
@@ -236,8 +235,8 @@ fs_visitor::virtual_grf_alloc(int size)
 	 virtual_grf_array_size = 16;
       else
 	 virtual_grf_array_size *= 2;
-      virtual_grf_sizes = talloc_realloc(mem_ctx, virtual_grf_sizes,
-					 int, virtual_grf_array_size);
+      virtual_grf_sizes = reralloc(mem_ctx, virtual_grf_sizes, int,
+				   virtual_grf_array_size);
 
       /* This slot is always unused. */
       virtual_grf_sizes[0] = 0;
@@ -315,7 +314,6 @@ int
 fs_visitor::setup_uniform_values(int loc, const glsl_type *type)
 {
    unsigned int offset = 0;
-   float *vec_values;
 
    if (type->is_matrix()) {
       const glsl_type *column = glsl_type::get_instance(GLSL_TYPE_FLOAT,
@@ -334,7 +332,6 @@ fs_visitor::setup_uniform_values(int loc, const glsl_type *type)
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_BOOL:
-      vec_values = fp->Base.Parameters->ParameterValues[loc];
       for (unsigned int i = 0; i < type->vector_elements; i++) {
 	 unsigned int param = c->prog_data.nr_params++;
 
@@ -358,8 +355,8 @@ fs_visitor::setup_uniform_values(int loc, const glsl_type *type)
 	    c->prog_data.param_convert[param] = PARAM_NO_CONVERT;
 	    break;
 	 }
-
-	 c->prog_data.param[param] = &vec_values[i];
+	 this->param_index[param] = loc;
+	 this->param_offset[param] = i;
       }
       return 1;
 
@@ -430,7 +427,6 @@ fs_visitor::setup_builtin_uniform_values(ir_variable *ir)
 	  */
 	 int index = _mesa_add_state_reference(this->fp->Base.Parameters,
 					       (gl_state_index *)tokens);
-	 float *vec_values = this->fp->Base.Parameters->ParameterValues[index];
 
 	 /* Add each of the unique swizzles of the element as a
 	  * parameter.  This'll end up matching the expected layout of
@@ -445,7 +441,9 @@ fs_visitor::setup_builtin_uniform_values(ir_variable *ir)
 
 	    c->prog_data.param_convert[c->prog_data.nr_params] =
 	       PARAM_NO_CONVERT;
-	    c->prog_data.param[c->prog_data.nr_params++] = &vec_values[swiz];
+	    this->param_index[c->prog_data.nr_params] = index;
+	    this->param_offset[c->prog_data.nr_params] = swiz;
+	    c->prog_data.nr_params++;
 	 }
       }
    }
@@ -534,24 +532,39 @@ fs_visitor::emit_general_interpolation(ir_variable *ir)
 	    continue;
 	 }
 
-	 for (unsigned int c = 0; c < type->vector_elements; c++) {
-	    struct brw_reg interp = interp_reg(location, c);
-	    emit(fs_inst(FS_OPCODE_LINTERP,
-			 attr,
-			 this->delta_x,
-			 this->delta_y,
-			 fs_reg(interp)));
-	    attr.reg_offset++;
-	 }
-
-	 if (intel->gen < 6) {
-	    attr.reg_offset -= type->vector_elements;
+	 if (c->key.flat_shade && (location == FRAG_ATTRIB_COL0 ||
+				   location == FRAG_ATTRIB_COL1)) {
+	    /* Constant interpolation (flat shading) case. The SF has
+	     * handed us defined values in only the constant offset
+	     * field of the setup reg.
+	     */
 	    for (unsigned int c = 0; c < type->vector_elements; c++) {
-	       emit(fs_inst(BRW_OPCODE_MUL,
-			    attr,
-			    attr,
-			    this->pixel_w));
+	       struct brw_reg interp = interp_reg(location, c);
+	       interp = suboffset(interp, 3);
+	       emit(fs_inst(FS_OPCODE_CINTERP, attr, fs_reg(interp)));
 	       attr.reg_offset++;
+	    }
+	 } else {
+	    /* Perspective interpolation case. */
+	    for (unsigned int c = 0; c < type->vector_elements; c++) {
+	       struct brw_reg interp = interp_reg(location, c);
+	       emit(fs_inst(FS_OPCODE_LINTERP,
+			    attr,
+			    this->delta_x,
+			    this->delta_y,
+			    fs_reg(interp)));
+	       attr.reg_offset++;
+	    }
+
+	    if (intel->gen < 6) {
+	       attr.reg_offset -= type->vector_elements;
+	       for (unsigned int c = 0; c < type->vector_elements; c++) {
+		  emit(fs_inst(BRW_OPCODE_MUL,
+			       attr,
+			       attr,
+			       this->pixel_w));
+		  attr.reg_offset++;
+	       }
 	    }
 	 }
 	 location++;
@@ -647,14 +660,18 @@ fs_visitor::emit_math(fs_opcodes opcode, fs_reg dst, fs_reg src0, fs_reg src1)
    assert(opcode == FS_OPCODE_POW);
 
    if (intel->gen >= 6) {
-      /* Can't do hstride == 0 args to gen6 math, so expand it out. */
-      if (src0.file == UNIFORM) {
+      /* Can't do hstride == 0 args to gen6 math, so expand it out.
+       *
+       * The hardware ignores source modifiers (negate and abs) on math
+       * instructions, so we also move to a temp to set those up.
+       */
+      if (src0.file == UNIFORM || src0.abs || src0.negate) {
 	 fs_reg expanded = fs_reg(this, glsl_type::float_type);
 	 emit(fs_inst(BRW_OPCODE_MOV, expanded, src0));
 	 src0 = expanded;
       }
 
-      if (src1.file == UNIFORM) {
+      if (src1.file == UNIFORM || src1.abs || src1.negate) {
 	 fs_reg expanded = fs_reg(this, glsl_type::float_type);
 	 emit(fs_inst(BRW_OPCODE_MOV, expanded, src1));
 	 src1 = expanded;
@@ -859,6 +876,7 @@ fs_visitor::visit(ir_expression *ir)
       break;
    case ir_unop_abs:
       op[0].abs = true;
+      op[0].negate = false;
       this->result = op[0];
       break;
    case ir_unop_sign:
@@ -1353,10 +1371,13 @@ fs_visitor::visit(ir_texture *ir)
       fs_reg scale_y = fs_reg(UNIFORM, c->prog_data.nr_params + 1);
       GLuint index = _mesa_add_state_reference(params,
 					       (gl_state_index *)tokens);
-      float *vec_values = this->fp->Base.Parameters->ParameterValues[index];
 
-      c->prog_data.param[c->prog_data.nr_params++] = &vec_values[0];
-      c->prog_data.param[c->prog_data.nr_params++] = &vec_values[1];
+      this->param_index[c->prog_data.nr_params] = index;
+      this->param_offset[c->prog_data.nr_params] = 0;
+      c->prog_data.nr_params++;
+      this->param_index[c->prog_data.nr_params] = index;
+      this->param_offset[c->prog_data.nr_params] = 1;
+      c->prog_data.nr_params++;
 
       fs_reg dst = fs_reg(this, ir->coordinate->type);
       fs_reg src = coordinate;
@@ -2047,7 +2068,7 @@ fs_visitor::emit_fb_writes()
    }
 
    for (int target = 0; target < c->key.nr_color_regions; target++) {
-      this->current_annotation = talloc_asprintf(this->mem_ctx,
+      this->current_annotation = ralloc_asprintf(this->mem_ctx,
 						 "FB write target %d",
 						 target);
       if (this->frag_color || this->frag_data) {
@@ -2483,6 +2504,22 @@ fs_visitor::generate_pull_constant_load(fs_inst *inst, struct brw_reg dst)
    }
 }
 
+/**
+ * To be called after the last _mesa_add_state_reference() call, to
+ * set up prog_data.param[] for assign_curb_setup() and
+ * setup_pull_constants().
+ */
+void
+fs_visitor::setup_paramvalues_refs()
+{
+   /* Set up the pointers to ParamValues now that that array is finalized. */
+   for (unsigned int i = 0; i < c->prog_data.nr_params; i++) {
+      c->prog_data.param[i] =
+	 fp->Base.Parameters->ParameterValues[this->param_index[i]] +
+	 this->param_offset[i];
+   }
+}
+
 void
 fs_visitor::assign_curb_setup()
 {
@@ -2556,12 +2593,15 @@ fs_visitor::assign_urb_setup()
    foreach_iter(exec_list_iterator, iter, this->instructions) {
       fs_inst *inst = (fs_inst *)iter.get();
 
-      if (inst->opcode != FS_OPCODE_LINTERP)
-	 continue;
+      if (inst->opcode == FS_OPCODE_LINTERP) {
+	 assert(inst->src[2].file == FIXED_HW_REG);
+	 inst->src[2].fixed_hw_reg.nr += urb_start;
+      }
 
-      assert(inst->src[2].file == FIXED_HW_REG);
-
-      inst->src[2].fixed_hw_reg.nr += urb_start;
+      if (inst->opcode == FS_OPCODE_CINTERP) {
+	 assert(inst->src[0].file == FIXED_HW_REG);
+	 inst->src[0].fixed_hw_reg.nr += urb_start;
+      }
    }
 
    this->first_non_payload_grf = urb_start + c->prog_data.urb_read_length;
@@ -2720,8 +2760,8 @@ void
 fs_visitor::calculate_live_intervals()
 {
    int num_vars = this->virtual_grf_next;
-   int *def = talloc_array(mem_ctx, int, num_vars);
-   int *use = talloc_array(mem_ctx, int, num_vars);
+   int *def = ralloc_array(mem_ctx, int, num_vars);
+   int *use = ralloc_array(mem_ctx, int, num_vars);
    int loop_depth = 0;
    int loop_start = 0;
    int bb_header_ip = 0;
@@ -2801,8 +2841,8 @@ fs_visitor::calculate_live_intervals()
       }
    }
 
-   talloc_free(this->virtual_grf_def);
-   talloc_free(this->virtual_grf_use);
+   ralloc_free(this->virtual_grf_def);
+   ralloc_free(this->virtual_grf_use);
    this->virtual_grf_def = def;
    this->virtual_grf_use = use;
 }
@@ -2940,6 +2980,8 @@ fs_visitor::register_coalesce()
 	  inst->dst.type != inst->src[0].type)
 	 continue;
 
+      bool has_source_modifiers = inst->src[0].abs || inst->src[0].negate;
+
       /* Found a move of a GRF to a GRF.  Let's see if we can coalesce
        * them: check for no writes to either one until the exit of the
        * program.
@@ -2971,6 +3013,14 @@ fs_visitor::register_coalesce()
 	       interfered = true;
 	       break;
 	    }
+	 }
+
+	 /* The gen6 MATH instruction can't handle source modifiers, so avoid
+	  * coalescing those for now.  We should do something more specific.
+	  */
+	 if (intel->gen == 6 && scan_inst->is_math() && has_source_modifiers) {
+	    interfered = true;
+	    break;
 	 }
       }
       if (interfered) {
@@ -3068,14 +3118,7 @@ fs_visitor::compute_to_mrf()
 	       /* gen6 math instructions must have the destination be
 		* GRF, so no compute-to-MRF for them.
 		*/
-	       if (scan_inst->opcode == FS_OPCODE_RCP ||
-		   scan_inst->opcode == FS_OPCODE_RSQ ||
-		   scan_inst->opcode == FS_OPCODE_SQRT ||
-		   scan_inst->opcode == FS_OPCODE_EXP2 ||
-		   scan_inst->opcode == FS_OPCODE_LOG2 ||
-		   scan_inst->opcode == FS_OPCODE_SIN ||
-		   scan_inst->opcode == FS_OPCODE_COS ||
-		   scan_inst->opcode == FS_OPCODE_POW) {
+	       if (scan_inst->is_math()) {
 		  break;
 	       }
 	    }
@@ -3097,6 +3140,7 @@ fs_visitor::compute_to_mrf()
 	  */
 	 if (scan_inst->opcode == BRW_OPCODE_DO ||
 	     scan_inst->opcode == BRW_OPCODE_WHILE ||
+	     scan_inst->opcode == BRW_OPCODE_ELSE ||
 	     scan_inst->opcode == BRW_OPCODE_ENDIF) {
 	    break;
 	 }
@@ -3293,20 +3337,25 @@ void
 fs_visitor::generate_code()
 {
    int last_native_inst = 0;
-   struct brw_instruction *if_stack[16], *loop_stack[16];
-   int if_stack_depth = 0, loop_stack_depth = 0;
-   int if_depth_in_loop[16];
    const char *last_annotation_string = NULL;
    ir_instruction *last_annotation_ir = NULL;
+
+   int if_stack_array_size = 16;
+   int loop_stack_array_size = 16;
+   int if_stack_depth = 0, loop_stack_depth = 0;
+   brw_instruction **if_stack =
+      rzalloc_array(this->mem_ctx, brw_instruction *, if_stack_array_size);
+   brw_instruction **loop_stack =
+      rzalloc_array(this->mem_ctx, brw_instruction *, loop_stack_array_size);
+   int *if_depth_in_loop =
+      rzalloc_array(this->mem_ctx, int, loop_stack_array_size);
+
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
       printf("Native code for fragment shader %d:\n",
 	     ctx->Shader.CurrentFragmentProgram->Name);
    }
 
-   if_depth_in_loop[loop_stack_depth] = 0;
-
-   memset(&if_stack, 0, sizeof(if_stack));
    foreach_iter(exec_list_iterator, iter, this->instructions) {
       fs_inst *inst = (fs_inst *)iter.get();
       struct brw_reg src[3], dst;
@@ -3390,7 +3439,6 @@ fs_visitor::generate_code()
 	 break;
 
       case BRW_OPCODE_IF:
-	 assert(if_stack_depth < 16);
 	 if (inst->src[0].file != BAD_FILE) {
 	    assert(intel->gen >= 6);
 	    if_stack[if_stack_depth] = brw_IF_gen6(p, inst->conditional_mod, src[0], src[1]);
@@ -3399,6 +3447,11 @@ fs_visitor::generate_code()
 	 }
 	 if_depth_in_loop[loop_stack_depth]++;
 	 if_stack_depth++;
+	 if (if_stack_array_size <= if_stack_depth) {
+	    if_stack_array_size *= 2;
+	    if_stack = reralloc(this->mem_ctx, if_stack, brw_instruction *,
+			        if_stack_array_size);
+	 }
 	 break;
 
       case BRW_OPCODE_ELSE:
@@ -3413,6 +3466,13 @@ fs_visitor::generate_code()
 
       case BRW_OPCODE_DO:
 	 loop_stack[loop_stack_depth++] = brw_DO(p, BRW_EXECUTE_8);
+	 if (loop_stack_array_size <= loop_stack_depth) {
+	    loop_stack_array_size *= 2;
+	    loop_stack = reralloc(this->mem_ctx, loop_stack, brw_instruction *,
+				  loop_stack_array_size);
+	    if_depth_in_loop = reralloc(this->mem_ctx, if_depth_in_loop, int,
+				        loop_stack_array_size);
+	 }
 	 if_depth_in_loop[loop_stack_depth] = 0;
 	 break;
 
@@ -3465,6 +3525,9 @@ fs_visitor::generate_code()
       case FS_OPCODE_SIN:
       case FS_OPCODE_COS:
 	 generate_math(inst, dst, src);
+	 break;
+      case FS_OPCODE_CINTERP:
+	 brw_MOV(p, dst, src[0]);
 	 break;
       case FS_OPCODE_LINTERP:
 	 generate_linterp(inst, dst, src);
@@ -3527,6 +3590,10 @@ fs_visitor::generate_code()
 
       last_native_inst = p->nr_insn;
    }
+
+   ralloc_free(if_stack);
+   ralloc_free(loop_stack);
+   ralloc_free(if_depth_in_loop);
 
    brw_set_uip_jip(p);
 
@@ -3603,8 +3670,9 @@ brw_wm_fs_emit(struct brw_context *brw, struct brw_wm_compile *c)
       v.emit_fb_writes();
 
       v.split_virtual_grfs();
-      v.setup_pull_constants();
 
+      v.setup_paramvalues_refs();
+      v.setup_pull_constants();
       v.assign_curb_setup();
       v.assign_urb_setup();
 

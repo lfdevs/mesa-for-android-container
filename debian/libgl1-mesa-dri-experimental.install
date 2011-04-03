@@ -1,1 +1,2 @@
 build/dri/lib/gallium/nouveau_dri.so usr/lib/dri
+build/dri/lib/gallium/nouveau_vieux_dri.so usr/lib/dri

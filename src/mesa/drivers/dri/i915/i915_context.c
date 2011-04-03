@@ -168,15 +168,37 @@ i915CreateContext(int api,
       MIN2(ctx->Const.FragmentProgram.MaxNativeParameters,
 	   ctx->Const.FragmentProgram.MaxEnvParams);
 
+   /* i915 stores all values in single-precision floats.  Values aren't set
+    * for other program targets because software is used for those targets.
+    */
+   ctx->Const.FragmentProgram.MediumFloat.RangeMin = 127;
+   ctx->Const.FragmentProgram.MediumFloat.RangeMax = 127;
+   ctx->Const.FragmentProgram.MediumFloat.Precision = 23;
+   ctx->Const.FragmentProgram.LowFloat = ctx->Const.FragmentProgram.HighFloat =
+      ctx->Const.FragmentProgram.MediumFloat;
+   ctx->Const.FragmentProgram.MediumInt.RangeMin = 24;
+   ctx->Const.FragmentProgram.MediumInt.RangeMax = 24;
+   ctx->Const.FragmentProgram.MediumInt.Precision = 0;
+   ctx->Const.FragmentProgram.LowInt = ctx->Const.FragmentProgram.HighInt =
+      ctx->Const.FragmentProgram.MediumInt;
+
    ctx->FragmentProgram._MaintainTexEnvProgram = GL_TRUE;
 
    /* FINISHME: Are there other options that should be enabled for software
     * FINISHME: vertex shaders?
     */
    ctx->ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitCondCodes = GL_TRUE;
-   ctx->ShaderCompilerOptions[MESA_SHADER_FRAGMENT].EmitNoIfs = GL_TRUE;
-   ctx->ShaderCompilerOptions[MESA_SHADER_FRAGMENT].EmitNoNoise = GL_TRUE;
-   ctx->ShaderCompilerOptions[MESA_SHADER_FRAGMENT].EmitNoPow = GL_TRUE;
+
+   struct gl_shader_compiler_options *const fs_options =
+      & ctx->ShaderCompilerOptions[MESA_SHADER_FRAGMENT];
+   fs_options->EmitNoIfs = GL_TRUE;
+   fs_options->EmitNoNoise = GL_TRUE;
+   fs_options->EmitNoPow = GL_TRUE;
+   fs_options->EmitNoMainReturn = GL_TRUE;
+   fs_options->EmitNoIndirectInput = GL_TRUE;
+   fs_options->EmitNoIndirectOutput = GL_TRUE;
+   fs_options->EmitNoIndirectUniform = GL_TRUE;
+   fs_options->EmitNoIndirectTemp = GL_TRUE;
 
    ctx->Const.MaxDrawBuffers = 1;
 

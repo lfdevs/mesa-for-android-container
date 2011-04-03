@@ -77,6 +77,8 @@ else
 # Although the KMS egl drivers will probably build on kfreebsd & hurd
 # only linux actually has KMS drivers implemented at this point.
 	EGL_DISPLAYS += drm
+# Nouveau requires KMS, so even the classic DRI driver only works on linux
+	DRI_DRIVERS += nouveau
   endif
 
   ifneq ($(DEB_HOST_ARCH), s390)
@@ -101,6 +103,7 @@ confflags-dri = \
 	--with-driver=dri \
 	--with-dri-drivers="$(DRI_DRIVERS)" \
 	--with-dri-driverdir=/usr/lib/dri \
+	--with-dri-searchpath='\$$$${ORIGIN}/dri' \
 	--enable-glx-tls \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_EGL) \
@@ -204,6 +207,12 @@ build-stamp: $(BUILD_STAMPS)
 # Remove gallium drivers which replace existing classic drivers.
 # Intel gallium is significantly behind the classic mesa drivers...
 	rm -f build/dri/lib/gallium/i915_dri.so
+# r600g is not yet in a fit state to ship
+	rm -f build/dri/lib/gallium/r600_dri.so
+# Move nouveau_vieux alongside nouveau to install in dri-experimental package
+ifneq (,$(filter nouveau,$(DRI_DRIVERS)))
+	mv build/dri/lib/nouveau_vieux_dri.so build/dri/lib/gallium/
+endif
 	>$@
 
 $(STAMP)-build-%: configure

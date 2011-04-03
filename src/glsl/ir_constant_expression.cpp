@@ -86,7 +86,7 @@ ir_expression::constant_expression_value()
       components = op[1]->type->components();
    }
 
-   void *ctx = talloc_parent(this);
+   void *ctx = ralloc_parent(this);
 
    /* Handle array operations here, rather than below. */
    if (op[0]->type->is_array()) {
@@ -514,10 +514,18 @@ ir_expression::constant_expression_value()
 
 	 switch (op[0]->type->base_type) {
 	 case GLSL_TYPE_UINT:
-	    data.u[c] = op[0]->value.u[c0] / op[1]->value.u[c1];
+	    if (op[1]->value.u[c1] == 0) {
+	       data.u[c] = 0;
+	    } else {
+	       data.u[c] = op[0]->value.u[c0] / op[1]->value.u[c1];
+	    }
 	    break;
 	 case GLSL_TYPE_INT:
-	    data.i[c] = op[0]->value.i[c0] / op[1]->value.i[c1];
+	    if (op[1]->value.i[c1] == 0) {
+	       data.i[c] = 0;
+	    } else {
+	       data.i[c] = op[0]->value.i[c0] / op[1]->value.i[c1];
+	    }
 	    break;
 	 case GLSL_TYPE_FLOAT:
 	    data.f[c] = op[0]->value.f[c0] / op[1]->value.f[c1];
@@ -536,10 +544,18 @@ ir_expression::constant_expression_value()
 
 	 switch (op[0]->type->base_type) {
 	 case GLSL_TYPE_UINT:
-	    data.u[c] = op[0]->value.u[c0] % op[1]->value.u[c1];
+	    if (op[1]->value.u[c1] == 0) {
+	       data.u[c] = 0;
+	    } else {
+	       data.u[c] = op[0]->value.u[c0] % op[1]->value.u[c1];
+	    }
 	    break;
 	 case GLSL_TYPE_INT:
-	    data.i[c] = op[0]->value.i[c0] % op[1]->value.i[c1];
+	    if (op[1]->value.i[c1] == 0) {
+	       data.i[c] = 0;
+	    } else {
+	       data.i[c] = op[0]->value.i[c0] % op[1]->value.i[c1];
+	    }
 	    break;
 	 case GLSL_TYPE_FLOAT:
 	    /* We don't use fmod because it rounds toward zero; GLSL specifies
@@ -845,7 +861,7 @@ ir_swizzle::constant_expression_value()
 	 }
       }
 
-      void *ctx = talloc_parent(this);
+      void *ctx = ralloc_parent(this);
       return new(ctx) ir_constant(this->type, &data);
    }
    return NULL;
@@ -868,7 +884,7 @@ ir_dereference_variable::constant_expression_value()
    if (!var->constant_value)
       return NULL;
 
-   return var->constant_value->clone(talloc_parent(var), NULL);
+   return var->constant_value->clone(ralloc_parent(var), NULL);
 }
 
 
@@ -879,7 +895,7 @@ ir_dereference_array::constant_expression_value()
    ir_constant *idx = this->array_index->constant_expression_value();
 
    if ((array != NULL) && (idx != NULL)) {
-      void *ctx = talloc_parent(this);
+      void *ctx = ralloc_parent(this);
       if (array->type->is_matrix()) {
 	 /* Array access of a matrix results in a vector.
 	  */
@@ -984,7 +1000,7 @@ ir_call::constant_expression_value()
     * - Fill "data" with appopriate constant data
     * - Return an ir_constant directly.
     */
-   void *mem_ctx = talloc_parent(this);
+   void *mem_ctx = ralloc_parent(this);
    ir_expression *expr = NULL;
 
    ir_constant_data data;

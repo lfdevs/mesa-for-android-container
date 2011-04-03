@@ -1,3 +1,28 @@
+mesa (7.10.1-1) experimental; urgency=low
+
+  [ Cyril Brulebois ]
+  * Revert to r600 classic, r600 gallium doesn't seem ready yet, after all
+    (Closes: #612609).
+
+  [ Julien Cristau ]
+  * Set the DRI driver search path to "${ORIGIN}/dri", allowing libGL to find
+    the drivers after being relocated to /usr/lib32 by ia32-libs
+    (closes: #466790).  Thanks to Javier Serrano Polo for the suggestion.
+
+  [ Christopher James Halse Rogers ]
+  * New upstream release
+    - Lots of intel bugfixes, mainly for Sandybridge.
+    - Lots of GLSL spec conformance fixes
+    - Drop 12-fix-fdo-31940.diff; included included in new release.
+  * Remove talloc from build-depends.  This has been re-implemented in-tree.
+  * Also drop patch fixing talloc linking.
+  * Cherry-pick fix from master for changed nouveau headers in libdrm 2.4.24.
+    - Also bump build-depend on libdrm to 2.4.24
+  * Build and install nouveau_vieux driver in libgl1-mesa-dri-experimental.
+    (Closes: #586062)
+
+ -- Cyril Brulebois <kibi@debian.org>  Sun, 03 Apr 2011 21:26:05 +0200
+
 mesa (7.10-4) unstable; urgency=low
 
   * debian/not-installed: Ignore the same files on *i386.

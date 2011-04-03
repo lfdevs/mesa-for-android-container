@@ -66,7 +66,7 @@ process_parameters(exec_list *instructions, exec_list *actual_parameters,
  *                    formal or actual parameter list.  Only the type is used.
  *
  * \return
- * A talloced string representing the prototype of the function.
+ * A ralloced string representing the prototype of the function.
  */
 char *
 prototype_string(const glsl_type *return_type, const char *name,
@@ -75,19 +75,19 @@ prototype_string(const glsl_type *return_type, const char *name,
    char *str = NULL;
 
    if (return_type != NULL)
-      str = talloc_asprintf(str, "%s ", return_type->name);
+      str = ralloc_asprintf(NULL, "%s ", return_type->name);
 
-   str = talloc_asprintf_append(str, "%s(", name);
+   ralloc_asprintf_append(&str, "%s(", name);
 
    const char *comma = "";
    foreach_list(node, parameters) {
       const ir_instruction *const param = (ir_instruction *) node;
 
-      str = talloc_asprintf_append(str, "%s%s", comma, param->type->name);
+      ralloc_asprintf_append(&str, "%s%s", comma, param->type->name);
       comma = ", ";
    }
 
-   str = talloc_strdup_append(str, ")");
+   ralloc_strcat(&str, ")");
    return str;
 }
 
@@ -173,7 +173,7 @@ match_function_by_name(exec_list *instructions, const char *name,
 	 ir_dereference_variable *deref;
 
 	 var = new(ctx) ir_variable(sig->return_type,
-				    talloc_asprintf(ctx, "%s_retval",
+				    ralloc_asprintf(ctx, "%s_retval",
 						    sig->function_name()),
 				    ir_var_temporary);
 	 instructions->push_tail(var);
@@ -195,7 +195,7 @@ match_function_by_name(exec_list *instructions, const char *name,
 
       _mesa_glsl_error(loc, state, "no matching function for call to `%s'",
 		       str);
-      talloc_free(str);
+      ralloc_free(str);
 
       const char *prefix = "candidates are: ";
 
@@ -211,7 +211,7 @@ match_function_by_name(exec_list *instructions, const char *name,
 
 	    str = prototype_string(sig->return_type, f->name, &sig->parameters);
 	    _mesa_glsl_error(loc, state, "%s%s\n", prefix, str);
-	    talloc_free(str);
+	    ralloc_free(str);
 
 	    prefix = "                ";
 	 }
@@ -232,7 +232,7 @@ match_function_by_name(exec_list *instructions, const char *name,
 static ir_rvalue *
 convert_component(ir_rvalue *src, const glsl_type *desired_type)
 {
-   void *ctx = talloc_parent(src);
+   void *ctx = ralloc_parent(src);
    const unsigned a = desired_type->base_type;
    const unsigned b = src->type->base_type;
    ir_expression *result = NULL;
@@ -295,7 +295,7 @@ convert_component(ir_rvalue *src, const glsl_type *desired_type)
 static ir_rvalue *
 dereference_component(ir_rvalue *src, unsigned component)
 {
-   void *ctx = talloc_parent(src);
+   void *ctx = ralloc_parent(src);
    assert(component < src->type->components());
 
    /* If the source is a constant, just create a new constant instead of a
@@ -993,6 +993,16 @@ ast_function_expression::hir(exec_list *instructions,
 
       const glsl_type *const constructor_type = type->glsl_type(& name, state);
 
+      /* constructor_type can be NULL if a variable with the same name as the
+       * structure has come into scope.
+       */
+      if (constructor_type == NULL) {
+	 _mesa_glsl_error(& loc, state, "unknown type `%s' (structure name "
+			  "may be shadowed by a variable with the same name)",
+			  type->type_name);
+	 return ir_call::get_error_instruction(ctx);
+      }
+
 
       /* Constructors for samplers are illegal.
        */
@@ -1022,6 +1032,57 @@ ast_function_expression::hir(exec_list *instructions,
        * correct order.  These constructors follow essentially the same type
        * matching rules as functions.
        */
+      if (constructor_type->is_record()) {
+	 exec_list actual_parameters;
+
+	 process_parameters(instructions, &actual_parameters,
+			    &this->expressions, state);
+
+	 exec_node *node = actual_parameters.head;
+	 for (unsigned i = 0; i < constructor_type->length; i++) {
+	    ir_rvalue *ir = (ir_rvalue *) node;
+
+	    if (node->is_tail_sentinel()) {
+	       _mesa_glsl_error(&loc, state,
+				"insufficient parameters to constructor "
+				"for `%s'",
+				constructor_type->name);
+	       return ir_call::get_error_instruction(ctx);
+	    }
+
+	    if (apply_implicit_conversion(constructor_type->fields.structure[i].type,
+					  ir, state)) {
+	       node->replace_with(ir);
+	    } else {
+	       _mesa_glsl_error(&loc, state,
+				"parameter type mismatch in constructor "
+				"for `%s.%s' (%s vs %s)",
+				constructor_type->name,
+				constructor_type->fields.structure[i].name,
+				ir->type->name,
+				constructor_type->fields.structure[i].type->name);
+	       return ir_call::get_error_instruction(ctx);;
+	    }
+
+	    node = node->next;
+	 }
+
+	 if (!node->is_tail_sentinel()) {
+	    _mesa_glsl_error(&loc, state, "too many parameters in constructor "
+			     "for `%s'", constructor_type->name);
+	    return ir_call::get_error_instruction(ctx);
+	 }
+
+	 ir_rvalue *const constant =
+	    constant_record_constructor(constructor_type, &actual_parameters,
+					state);
+
+	 return (constant != NULL)
+	    ? constant
+	    : emit_inline_record_constructor(constructor_type, instructions,
+					     &actual_parameters, state);
+      }
+
       if (!constructor_type->is_numeric() && !constructor_type->is_boolean())
 	 return ir_call::get_error_instruction(ctx);
 
@@ -1196,54 +1257,6 @@ ast_function_expression::hir(exec_list *instructions,
 
       process_parameters(instructions, &actual_parameters, &this->expressions,
 			 state);
-
-      const glsl_type *const type =
-	 state->symbols->get_type(id->primary_expression.identifier);
-
-      if ((type != NULL) && type->is_record()) {
-	 exec_node *node = actual_parameters.head;
-	 for (unsigned i = 0; i < type->length; i++) {
-	    ir_rvalue *ir = (ir_rvalue *) node;
-
-	    if (node->is_tail_sentinel()) {
-	       _mesa_glsl_error(&loc, state,
-				"insufficient parameters to constructor "
-				"for `%s'",
-				type->name);
-	       return ir_call::get_error_instruction(ctx);
-	    }
-
-	    if (apply_implicit_conversion(type->fields.structure[i].type, ir,
-					  state)) {
-	       node->replace_with(ir);
-	    } else {
-	       _mesa_glsl_error(&loc, state,
-				"parameter type mismatch in constructor "
-				"for `%s.%s' (%s vs %s)",
-				type->name,
-				type->fields.structure[i].name,
-				ir->type->name,
-				type->fields.structure[i].type->name);
-	       return ir_call::get_error_instruction(ctx);;
-	    }
-
-	    node = node->next;
-	 }
-
-	 if (!node->is_tail_sentinel()) {
-	    _mesa_glsl_error(&loc, state, "too many parameters in constructor "
-			     "for `%s'", type->name);
-	    return ir_call::get_error_instruction(ctx);
-	 }
-
-	 ir_rvalue *const constant =
-	    constant_record_constructor(type, &actual_parameters, state);
-
-	 return (constant != NULL)
-	    ? constant
-	    : emit_inline_record_constructor(type, instructions,
-					     &actual_parameters, state);
-      }
 
       return match_function_by_name(instructions, 
 				    id->primary_expression.identifier, & loc,
