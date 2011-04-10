@@ -156,6 +156,7 @@ get_tex_depth_stencil(struct gl_context *ctx, GLuint dimensions,
    const GLint width = texImage->Width;
    const GLint height = texImage->Height;
    const GLint depth = texImage->Depth;
+   const GLint rowstride = texImage->RowStride;
    const GLuint *src = (const GLuint *) texImage->Data;
    GLint img, row;
 
@@ -169,7 +170,7 @@ get_tex_depth_stencil(struct gl_context *ctx, GLuint dimensions,
             _mesa_swap4((GLuint *) dest, width);
          }
 
-         src += width * row + width * height * img;
+         src += rowstride;
       }
    }
 }

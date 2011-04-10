@@ -532,8 +532,10 @@ fs_visitor::emit_general_interpolation(ir_variable *ir)
 	    continue;
 	 }
 
-	 if (c->key.flat_shade && (location == FRAG_ATTRIB_COL0 ||
-				   location == FRAG_ATTRIB_COL1)) {
+	 bool is_gl_Color =
+	    location == FRAG_ATTRIB_COL0 || location == FRAG_ATTRIB_COL1;
+
+	 if (c->key.flat_shade && is_gl_Color) {
 	    /* Constant interpolation (flat shading) case. The SF has
 	     * handed us defined values in only the constant offset
 	     * field of the setup reg.
@@ -556,7 +558,7 @@ fs_visitor::emit_general_interpolation(ir_variable *ir)
 	       attr.reg_offset++;
 	    }
 
-	    if (intel->gen < 6) {
+	    if (intel->gen < 6 && !(is_gl_Color && c->key.linear_color)) {
 	       attr.reg_offset -= type->vector_elements;
 	       for (unsigned int c = 0; c < type->vector_elements; c++) {
 		  emit(fs_inst(BRW_OPCODE_MUL,
@@ -2094,6 +2096,17 @@ fs_visitor::emit_fb_writes()
    }
 
    if (c->key.nr_color_regions == 0) {
+      if (c->key.alpha_test && (this->frag_color || this->frag_data)) {
+	 /* If the alpha test is enabled but there's no color buffer,
+	  * we still need to send alpha out the pipeline to our null
+	  * renderbuffer.
+	  */
+	 color.reg_offset += 3;
+	 emit(fs_inst(BRW_OPCODE_MOV,
+		      fs_reg(MRF, color_mrf + 3),
+		      color));
+      }
+
       fs_inst *inst = emit(fs_inst(FS_OPCODE_FB_WRITE,
 				   reg_undef, reg_undef));
       inst->base_mrf = 0;

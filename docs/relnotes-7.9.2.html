@@ -10,13 +10,13 @@
 
 <body bgcolor="#eeeeee">
 
-<H1>Mesa 7.10.1 Release Notes / March 2, 2011</H1>
+<H1>Mesa 7.9.2 Release Notes / March 2, 2011</H1>
 
 <p>
-Mesa 7.10.1 is a bug fix release which fixes bugs found since the 7.10 release.
+Mesa 7.9.2 is a bug fix release which fixes bugs found since the 7.9.1 release.
 </p>
 <p>
-Mesa 7.10.1 implements the OpenGL 2.1 API, but the version reported by
+Mesa 7.9.2 implements the OpenGL 2.1 API, but the version reported by
 glGetString(GL_VERSION) depends on the particular driver being used.
 Some drivers don't support all the features required in OpenGL 2.1.
 </p>
@@ -28,12 +28,12 @@ for DRI hardware acceleration.
 
 <h2>MD5 checksums</h2>
 <pre>
-4b4cee19f3bf16eb78bd4cc278ccf812  MesaLib-7.10.1.tar.gz
-efe8da4d80c2a5d32a800770b8ce5dfa  MesaLib-7.10.1.tar.bz2
-0fd2b1a025934de3f8cecf9fb9b57f4c  MesaLib-7.10.1.zip
-42beb0f5188d544476c19496f725fa67  MesaGLUT-7.10.1.tar.gz
-637bb8a20fdad89f7382b4ea83f896e3  MesaGLUT-7.10.1.tar.bz2
-bdbf3ffb2606d6aa8afabb6c6243b91b  MesaGLUT-7.10.1.zip
+eb4ab8c1a03386def3ea34b1358e9cda  MesaLib-7.9.2.tar.gz
+8f6d1474912787ce13bd35f3bae9938a  MesaLib-7.9.2.tar.bz2
+427a81dd43ac97603768dc5c6af3df26  MesaLib-7.9.2.zip
+aacb8f4db997e346db40c6066942140a  MesaGLUT-7.9.2.tar.gz
+18abe6cff4fad8ad4752c7b7ab548e5d  MesaGLUT-7.9.2.tar.bz2
+3189e5732d636c71baf3d8bc23ce7b11  MesaGLUT-7.9.2.zip
 </pre>
 
 
@@ -46,6 +46,8 @@ bdbf3ffb2606d6aa8afabb6c6243b91b  MesaGLUT-7.10.1.zip
 <li>Fix an off-by-one bug in a vsplit assertion.</li>
 <li>Fix incorrect handling of <tt>layout</tt> qualifier
 with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
+
+<li>Fix an i965 GPU hang in GLSL shaders that contain an unconditional <tt>discard</tt> statement.</li>
 
 <li>Fix an i965 shader bug where the negative absolute value was generated instead of the absolute value of a negation.</li>
 
@@ -105,13 +107,9 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
 
 <li><a href="https://bugs.freedesktop.org/show_bug.cgi?id=33916">Bug 33916</a> - Compiler accepts reserved operators % and %=</li>
 
-<li><a href="https://bugs.freedesktop.org/show_bug.cgi?id=34030">Bug 34030</a> - [bisected] Starcraft 2: some effects are corrupted or too big</li>
-
 <li><a href="https://bugs.freedesktop.org/show_bug.cgi?id=34047">Bug 34047</a> - Assert in _tnl_import_array() when using GLfixed vertex datatypes with GLESv2</li>
 
 <li><a href="https://bugs.freedesktop.org/show_bug.cgi?id=34114">Bug 34114</a> - Sun Studio build fails due to standard library functions not being in global namespace</li>
-
-<li><a href="https://bugs.freedesktop.org/show_bug.cgi?id=34179">Bug 34179</a> - Nouveau 3D driver: nv50_pc_emit.c:863 assertion error kills Compiz</li>
 
 <li><a href="https://bugs.freedesktop.org/show_bug.cgi?id=34198">Bug 34198</a> - [GLSL] implicit sized array with index 0 used gets assertion</li>
 
@@ -128,7 +126,7 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
 <p>The full set of changes can be viewed by using the following GIT command:</p>
 
 <pre>
-  git log mesa-7.10..mesa-7.10.1
+  git log mesa-7.9.1..mesa-7.9.2
 </pre>
 
 <p>Alberto Milone (1):
@@ -136,13 +134,9 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>r600c: add evergreen ARL support.</li>
 </ul></p>
 
-<p>Brian Paul (21):
+<p>Brian Paul (19):
 <ul>
   <li>draw: Fix an off-by-one bug in a vsplit assertion.</li>
-  <li>docs: add links to 7.9.1 and 7.10 release notes</li>
-  <li>docs: added news item for 7.9.1 and 7.10 release</li>
-  <li>gallivm: work around LLVM 2.6 bug when calling C functions</li>
-  <li>gallivm: fix copy&amp;paste error from previous commit</li>
   <li>mesa: fix a few format table mistakes, assertions</li>
   <li>mesa: fix num_draw_buffers==0 in fixed-function fragment program generation</li>
   <li>mesa: don't assert in GetIntegerIndexed, etc</li>
@@ -151,12 +145,14 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>st/mesa: fix incorrect fragcoord.x translation</li>
   <li>softpipe: fix off-by-one error in setup_fragcoord_coeff()</li>
   <li>cso: fix loop bound in cso_set_vertex_samplers()</li>
-  <li>st/mesa: fix incorrect glCopyPixels position on fallback path</li>
   <li>st/mesa: set renderbuffer _BaseFormat in a few places</li>
   <li>st/mesa: fix the default case in st_format_datatype()</li>
   <li>st/mesa: need to translate clear color according to surface's base format</li>
   <li>docs: update 7.9.2 release notes with Brian's cherry-picks</li>
-  <li>docs: add link to 7.10.1 release notes</li>
+  <li>docs: add links to 7.9.1 and 7.9.2 release notes</li>
+  <li>mesa: include compiler.h for ASSERT macro</li>
+  <li>glsl: add ir_shader case in switch stmt to silence warning</li>
+  <li>glsl2: fix signed/unsigned comparison warning</li>
   <li>mesa: implement glGetShaderPrecisionFormat()</li>
   <li>docs: updated environment variable list</li>
 </ul></p>
@@ -166,7 +162,7 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>r300g: Null pointer check for buffer deref in gallium winsys</li>
 </ul></p>
 
-<p>Chad Versace (20):
+<p>Chad Versace (14):
 <ul>
   <li>glsl: At link-time, check that globals have matching centroid qualifiers</li>
   <li>glcpp: Fix segfault when validating macro redefinitions</li>
@@ -178,12 +174,6 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>glsl: Fix semantic checks on precision qualifiers</li>
   <li>glsl: Fix segfault due to missing printf argument</li>
   <li>glsl: Mark 'in' variables at global scope as read-only</li>
-  <li>mesa: Refactor handling of extension strings</li>
-  <li>mesa: Add/remove extensions in extension string</li>
-  <li>mesa: Change dependencies of some OES extension strings</li>
-  <li>mesa: Change OES_point_sprite to depend on ARB_point_sprite</li>
-  <li>mesa: Change OES_standard_derivatives to be stand-alone extension</li>
-  <li>i915: Disable extension OES_standard_derivatives</li>
   <li>glcpp: Raise error when modulus is zero</li>
   <li>glsl: Set operators '%' and '%=' to be reserved when GLSL &lt 1.30</li>
   <li>glsl: Reinstate constant-folding for division by zero</li>
@@ -195,9 +185,9 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>mesa: Add glDepthRangef and glClearDepthf to APIspec.xml.</li>
 </ul></p>
 
-<p>Christoph Bumiller (1):
+<p>Chris Wilson (1):
 <ul>
-  <li>nv50,nvc0: do not forget to apply sign mode to saved TGSI inputs</li>
+  <li>intel: Check for unsupported texture when finishing using as a render target</li>
 </ul></p>
 
 <p>Cyril Brulebois (1):
@@ -205,10 +195,9 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>Point to bugs.freedesktop.org rather than bugzilla.freedesktop.org</li>
 </ul></p>
 
-<p>Dave Airlie (3):
+<p>Dave Airlie (2):
 <ul>
   <li>radeon/r200: fix fbo-clearmipmap + gen-teximage</li>
-  <li>radeon: calculate complete texture state inside TFP function</li>
   <li>radeon: avoid segfault on 3D textures.</li>
 </ul></p>
 
@@ -220,34 +209,24 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>glapi: add @GOTPCREL relocation type</li>
 </ul></p>
 
-<p>Eric Anholt (16):
+<p>Eric Anholt (11):
 <ul>
-  <li>glsl: Fix the lowering of variable array indexing to not lose write_masks.</li>
-  <li>i965/fs: When producing ir_unop_abs of an operand, strip negate.</li>
-  <li>i965/vs: When MOVing to produce ABS, strip negate of the operand.</li>
-  <li>i965/fs: Do flat shading when appropriate.</li>
   <li>i965: Avoid double-negation of immediate values in the VS.</li>
-  <li>intel: Make renderbuffer tiling choice match texture tiling choice.</li>
-  <li>i965: Fix dead pointers to fp-&gt;Parameters-&gt;ParameterValues[] after realloc.</li>
   <li>docs: Add a relnote for the Civ IV on i965.</li>
+  <li>i965/vs: When MOVing to produce ABS, strip negate of the operand.</li>
+  <li>glsl: Fix the lowering of variable array indexing to not lose write_masks.</li>
+  <li>intel: Make renderbuffer tiling choice match texture tiling choice.</li>
   <li>glapi: Add entrypoints and enums for GL_ARB_ES2_compatibility.</li>
   <li>mesa: Add extension enable bit for GL_ARB_ES2_compatibility.</li>
   <li>mesa: Add actual support for glReleaseShaderCompiler from ES2.</li>
   <li>mesa: Add support for glDepthRangef and glClearDepthf.</li>
   <li>mesa: Add getters for ARB_ES2_compatibility MAX_*_VECTORS.</li>
   <li>mesa: Add getter for GL_SHADER_COMPILER with ARB_ES2_compatibility.</li>
-  <li>i965: Fix a bug in i965 compute-to-MRF.</li>
-  <li>i965/fs: Add a helper function for detecting math opcodes.</li>
-</ul></p>
-
-<p>Fredrik Höglund (1):
-<ul>
-  <li>st/mesa: fix a regression from cae2bb76</li>
 </ul></p>
 
 <p>Ian Romanick (42):
 <ul>
-  <li>docs: Add 7.10 md5sums</li>
+  <li>docs: Add 7.9.1 md5sums</li>
   <li>glsl: Support the 'invariant(all)' pragma</li>
   <li>glcpp: Generate an error for division by zero</li>
   <li>glsl: Add version_string containing properly formatted GLSL version</li>
@@ -255,21 +234,21 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>glsl: Disallow 'in' and 'out' on globals in GLSL 1.20</li>
   <li>glsl: Track variable usage, use that to enforce semantics</li>
   <li>glsl: Allow 'in' and 'out' when 'layout' is also available</li>
-  <li>docs: Initial bits of 7.10.1 release notes</li>
-  <li>mesa: bump version to 7.10.1-devel</li>
-  <li>doc: Update 7.10.1 release notes</li>
-  <li>glsl: Emit errors or warnings when 'layout' is used with 'attribute' or 'varying'</li>
-  <li>docs: Update 7.10.1 release notes</li>
+  <li>docs: Initial set of release notes for 7.9.2</li>
+  <li>mesa: bump version to 7.9.2-devel</li>
+  <li>docs: Update 7.9.2 release notes</li>
+  <li>i965: Make OPCODE_KIL_NV do its work in a temp, not the null reg!</li>
   <li>glsl: Refresh autogenerated lexer and parser files.</li>
   <li>glsl: Don't assert when the value returned by a function has no rvalue</li>
   <li>linker: Set sizes for non-global arrays as well</li>
   <li>linker: Propagate max_array_access while linking functions</li>
-  <li>docs: Update 7.10.1 release notes</li>
+  <li>docs: Update 7.9.2 release notes</li>
+  <li>Use C-style system headers in C++ code to avoid issues with std:: namespace</li>
   <li>mesa: glGetUniform only returns a single element of an array</li>
   <li>linker: Generate link errors when ES shaders are missing stages</li>
   <li>mesa: Fix error checks in GetVertexAttrib functions</li>
-  <li>Use C-style system headers in C++ code to avoid issues with std:: namespace</li>
-  <li>docs: Update 7.10.1 release notes</li>
+  <li>docs: Update 7.9.2 release notes</li>
+  <li>mesa: Remove unsupported OES extensions</li>
   <li>glapi: Regenerate for GL_ARB_ES2_compatibility.</li>
   <li>mesa: Connect glGetShaderPrecisionFormat into the dispatch table</li>
   <li>i965: Set correct values for range/precision of fragment shader types</li>
@@ -278,17 +257,17 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>glsl: Ensure that all GLSL versions are supported in the stand-alone compiler</li>
   <li>glsl: Reject shader versions not supported by the implementation</li>
   <li>mesa: Initial size for secondary color array is 3</li>
+  <li>glcpp: Regenerate files from recent cherry picks</li>
   <li>glsl: Finish out the reduce/reduce error fixes</li>
-  <li>glsl: Regenerate compiler and glcpp files from cherry picks</li>
+  <li>glsl: Regenerate compiler files from cherry picks</li>
   <li>linker: Fix off-by-one error implicit array sizing</li>
-  <li>docs: update 7.10.1 release notes with Ian's recent cherry picks</li>
   <li>i915: Only mark a register as available if all components are written</li>
   <li>i915: Calculate partial result to temp register first</li>
   <li>i915: Force lowering of all types of indirect array accesses in the FS</li>
-  <li>docs: Update 7.10.1 with (hopefully) the last of the cherry picks</li>
+  <li>docs: Update 7.9.2 release notes for recent cherry picks</li>
   <li>docs: Clean up bug fixes list</li>
   <li>intel: Remove driver date and related bits from renderer string</li>
-  <li>mesa: set version string to 7.10.1 (final)</li>
+  <li>mesa: set version string to 7.9.2 (final)</li>
 </ul></p>
 
 <p>Jian Zhao (1):
@@ -308,7 +287,7 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>glsl: Eliminate reduce/reduce conflicts in glsl grammar</li>
 </ul></p>
 
-<p>Kenneth Graunke (20):
+<p>Kenneth Graunke (12):
 <ul>
   <li>glsl: Expose a public glsl_type::void_type const pointer.</li>
   <li>glsl: Don't bother unsetting a destructor that was never set.</li>
@@ -321,20 +300,11 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>Remove talloc from the SCons build system.</li>
   <li>Remove the talloc sources from the Mesa repository.</li>
   <li>glsl: Fix use of uninitialized values in _mesa_glsl_parse_state ctor.</li>
-  <li>i965/fs: Apply source modifier workarounds to POW as well.</li>
-  <li>i965: Fix shaders that write to gl_PointSize on Sandybridge.</li>
-  <li>i965/fs: Avoid register coalescing away gen6 MATH workarounds.</li>
-  <li>i965/fs: Correctly set up gl_FragCoord.w on Sandybridge.</li>
-  <li>i965: Increase Sandybridge point size clamp.</li>
-  <li>i965/fs: Refactor control flow stack handling.</li>
-  <li>i965: Increase Sandybridge point size clamp in the clip state.</li>
   <li>glsl: Use reralloc instead of plain realloc.</li>
-  <li>Revert "i965/fs: Correctly set up gl_FragCoord.w on Sandybridge."</li>
 </ul></p>
 
-<p>Marek Olšák (4):
+<p>Marek Olšák (3):
 <ul>
-  <li>docs: fix messed up names with special characters in relnotes-7.10</li>
   <li>docs: fix messed up names with special characters in relnotes-7.9.1</li>
   <li>mesa: fix texture3D mipmap generation for UNSIGNED_BYTE_3_3_2</li>
   <li>st/dri: Track drawable context bindings</li>
@@ -351,29 +321,15 @@ with <tt>in</tt>, <tt>out</tt>, <tt>attribute</tt>, and <tt>varying</tt>.</li>
   <li>docs: fix glsl_compiler name</li>
 </ul></p>
 
-<p>Tom Fogal (1):
-<ul>
-  <li>Regenerate gl_mangle.h.</li>
-</ul></p>
-
-<p>Tom Stellard (2):
-<ul>
-  <li>r300/compiler: Disable register rename pass on r500</li>
-  <li>r300/compiler: Don't erase sources when converting RGB-&gt;Alpha</li>
-</ul></p>
-
-<p>Vinson Lee (3):
+<p>Vinson Lee (1):
 <ul>
   <li>ralloc: Add missing va_end following va_copy.</li>
-  <li>mesa: Move declaration before code in extensions.c.</li>
-  <li>mesa: Move loop variable declarations outside for loop in extensions.c.</li>
 </ul></p>
 
 <p>nobled (1):
 <ul>
   <li>glx: Put null check before use</li>
 </ul></p>
-
 </p>
 
 </body>
