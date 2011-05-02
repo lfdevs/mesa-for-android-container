@@ -209,10 +209,6 @@ build-stamp: $(BUILD_STAMPS)
 	rm -f build/dri/lib/gallium/i915_dri.so
 # r600g is not yet in a fit state to ship
 	rm -f build/dri/lib/gallium/r600_dri.so
-# Move nouveau_vieux alongside nouveau to install in dri-experimental package
-ifneq (,$(filter nouveau,$(DRI_DRIVERS)))
-	mv build/dri/lib/nouveau_vieux_dri.so build/dri/lib/gallium/
-endif
 	>$@
 
 $(STAMP)-build-%: configure
@@ -273,6 +269,11 @@ binary-arch: install
 	# Remove the whole tree to avoid false-positives in --list-missing, and
 	# install the right files manually.
 	rm -r debian/tmp/dri/usr/lib/dri
+
+	# Move nouveau_vieux alongside nouveau to install in dri-experimental package
+ifneq (,$(filter nouveau,$(DRI_DRIVERS)))
+	mv build/dri/lib/nouveau_vieux_dri.so build/dri/lib/gallium/
+endif
 
 	# Also get rid of other files which aren't installed. Do not
 	# use -f to ensure we notice disappearing files:
