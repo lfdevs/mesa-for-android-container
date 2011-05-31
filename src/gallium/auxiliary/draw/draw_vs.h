@@ -33,6 +33,7 @@
 
 #include "draw_context.h"
 #include "draw_private.h"
+#include "draw_vertex.h"
 
 
 struct draw_context;
@@ -48,7 +49,7 @@ struct draw_varient_input
 
 struct draw_varient_output
 {
-   enum pipe_format format;     /* output format */
+   enum attrib_emit format;     /* output format */
    unsigned vs_output:8;        /* which vertex shader output is this? */
    unsigned offset:24;          /* offset into output vertex */
 };

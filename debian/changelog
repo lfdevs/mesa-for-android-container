@@ -1,3 +1,10 @@
+mesa (7.10.2-3) unstable; urgency=low
+
+  * Merge upstream 7.10 branch up to eaadbacb5c.
+  * Ship r600g again, it should be more usable now.
+
+ -- Cyril Brulebois <kibi@debian.org>  Tue, 31 May 2011 17:48:47 +0200
+
 mesa (7.10.2-2) unstable; urgency=low
 
   [ Cyril Brulebois ]

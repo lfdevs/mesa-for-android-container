@@ -207,8 +207,6 @@ build-stamp: $(BUILD_STAMPS)
 # Remove gallium drivers which replace existing classic drivers.
 # Intel gallium is significantly behind the classic mesa drivers...
 	rm -f build/dri/lib/gallium/i915_dri.so
-# r600g is not yet in a fit state to ship
-	rm -f build/dri/lib/gallium/r600_dri.so
 	>$@
 
 $(STAMP)-build-%: configure
