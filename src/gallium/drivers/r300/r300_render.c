@@ -566,7 +566,12 @@ static void r300_draw_range_elements(struct pipe_context* pipe,
 				minIndex, maxIndex, mode, start, count);
     } else {
         do {
-            short_count = MIN2(count, 65534);
+            /* The maximum must be divisible by 4 and 3,
+             * so that quad and triangle lists are split correctly.
+             *
+             * Strips, loops, and fans won't work. */
+            short_count = MIN2(count, 65532);
+
             r300_emit_draw_elements(r300, indexBuffer, indexSize,
                                      minIndex, maxIndex,
                                      mode, start, short_count);
@@ -614,7 +619,11 @@ static void r300_draw_arrays(struct pipe_context* pipe, unsigned mode,
             r300_emit_draw_arrays(r300, mode, count);
         } else {
             do {
-                short_count = MIN2(count, 65535);
+                /* The maximum must be divisible by 4 and 3,
+                 * so that quad and triangle lists are split correctly.
+                 *
+                 * Strips, loops, and fans won't work. */
+                short_count = MIN2(count, 65532);
                 r300_emit_draw_arrays(r300, mode, short_count);
 
                 start += short_count;
@@ -1094,6 +1103,9 @@ static void r300_blitter_draw_rectangle(struct blitter_context *blitter,
                       (type == UTIL_BLITTER_ATTRIB_TEXCOORD ? 7 : 0);
     const float zeros[4] = {0, 0, 0, 0};
     CS_LOCALS(r300);
+
+    if (r300->skip_rendering)
+        return;
 
     r300->context.set_vertex_buffers(&r300->context, 0, NULL);
 

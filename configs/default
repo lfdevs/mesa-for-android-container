@@ -10,7 +10,7 @@ CONFIG_NAME = default
 # Version info
 MESA_MAJOR=7
 MESA_MINOR=10
-MESA_TINY=0
+MESA_TINY=3
 MESA_VERSION = $(MESA_MAJOR).$(MESA_MINOR).$(MESA_TINY)
 
 # external projects.  This should be useless now that we use libdrm.
@@ -37,6 +37,8 @@ MKLIB_OPTIONS =
 MKDEP = makedepend
 MKDEP_OPTIONS = -fdepend
 MAKE = make
+FLEX = flex
+BISON = bison
 
 # Use MINSTALL for installing libraries, INSTALL for everything else
 MINSTALL = $(SHELL) $(TOP)/bin/minstall

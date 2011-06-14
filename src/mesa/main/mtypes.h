@@ -2339,6 +2339,7 @@ struct gl_renderbuffer
    GLuint Name;
    GLint RefCount;
    GLuint Width, Height;
+   GLint RowStride;       /**< Padded width in units of pixels */
    GLboolean Purgeable;   /**< Is the buffer purgeable under memory pressure? */
 
    GLenum InternalFormat; /**< The user-specified format */
@@ -2350,6 +2351,8 @@ struct gl_renderbuffer
 
    GLenum DataType;      /**< Type of values passed to the Get/Put functions */
    GLvoid *Data;        /**< This may not be used by some kinds of RBs */
+
+   GLboolean AttachedAnytime; /**< TRUE if it was attached to a framebuffer */
 
    /* Used to wrap one renderbuffer around another: */
    struct gl_renderbuffer *Wrapped;

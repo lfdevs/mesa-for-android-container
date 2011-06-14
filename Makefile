@@ -180,7 +180,7 @@ ultrix-gcc:
 
 # Rules for making release tarballs
 
-VERSION=7.10.2
+VERSION=7.10.3
 DIRECTORY = Mesa-$(VERSION)
 LIB_NAME = MesaLib-$(VERSION)
 GLUT_NAME = MesaGLUT-$(VERSION)
@@ -226,6 +226,7 @@ MAIN_FILES = \
 	$(DIRECTORY)/include/GL/vms_x_fix.h				\
 	$(DIRECTORY)/include/GL/wglext.h				\
 	$(DIRECTORY)/include/GL/wmesa.h					\
+	$(DIRECTORY)/include/c99/*.h					\
 	$(DIRECTORY)/src/glsl/Makefile					\
 	$(DIRECTORY)/src/glsl/Makefile.template				\
 	$(DIRECTORY)/src/glsl/SConscript				\
@@ -353,12 +354,24 @@ GALLIUM_FILES = \
 	$(DIRECTORY)/src/gallium/*/*/*/*.[ch]				\
 	$(DIRECTORY)/src/gallium/*/*/*/*.py
 
+APPLE_DRI_FILES = \
+	$(DIRECTORY)/src/glx/apple/Makefile 				\
+	$(DIRECTORY)/src/glx/apple/*.[ch]				\
+	$(DIRECTORY)/src/glx/apple/*.tcl				\
+	$(DIRECTORY)/src/glx/apple/apple_exports.list			\
+	$(DIRECTORY)/src/glx/apple/GL_aliases				\
+	$(DIRECTORY)/src/glx/apple/GL_extensions			\
+	$(DIRECTORY)/src/glx/apple/GL_noop				\
+	$(DIRECTORY)/src/glx/apple/GL_promoted				\
+	$(DIRECTORY)/src/glx/apple/specs/*.spec				\
+	$(DIRECTORY)/src/glx/apple/specs/*.tm
 
 DRI_FILES = \
 	$(DIRECTORY)/include/GL/internal/dri_interface.h		\
 	$(DIRECTORY)/include/GL/internal/sarea.h			\
 	$(DIRECTORY)/src/glx/Makefile					\
 	$(DIRECTORY)/src/glx/*.[ch]					\
+	$(APPLE_DRI_FILES)						\
 	$(DIRECTORY)/src/mesa/drivers/dri/Makefile			\
 	$(DIRECTORY)/src/mesa/drivers/dri/Makefile.template		\
 	$(DIRECTORY)/src/mesa/drivers/dri/dri.pc.in			\

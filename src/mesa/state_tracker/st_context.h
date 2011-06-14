@@ -190,6 +190,10 @@ struct st_context
 
    int force_msaa;
    void *winsys_drawable_handle;
+
+   /* Active render condition. */
+   struct pipe_query *render_condition;
+   unsigned condition_mode;
 };
 
 

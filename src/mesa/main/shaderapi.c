@@ -1583,6 +1583,8 @@ _mesa_UseProgramObjectARB(GLhandleARB program)
    struct gl_transform_feedback_object *obj =
       ctx->TransformFeedback.CurrentObject;
 
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
+
    if (obj->Active) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glUseProgram(transform feedback active)");
@@ -1778,6 +1780,8 @@ _mesa_UseShaderProgramEXT(GLenum type, GLuint program)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader_program *shProg = NULL;
+
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (!validate_shader_target(ctx, type)) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glUseShaderProgramEXT(type)");

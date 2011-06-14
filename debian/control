@@ -28,6 +28,8 @@ Build-Depends:
  libxcb-xfixes0-dev,
  python-libxml2,
  libudev-dev [linux-any],
+ flex,
+ bison,
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.sourceforge.net/

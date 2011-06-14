@@ -1,3 +1,11 @@
+mesa (7.10.3-1) unstable; urgency=low
+
+  * New upstream release.
+  * Add flex and bison build-deps (even though the generated files are
+    stored in VCS, and shipped…).
+
+ -- Cyril Brulebois <kibi@debian.org>  Tue, 14 Jun 2011 15:37:41 +0200
+
 mesa (7.10.2-4) unstable; urgency=low
 
   [ Steve Langasek ]

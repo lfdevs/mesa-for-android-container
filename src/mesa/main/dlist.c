@@ -5255,7 +5255,7 @@ save_SetFragmentShaderConstantATI(GLuint dst, const GLfloat *value)
 }
 #endif
 
-static void
+static void GLAPIENTRY
 save_Attr1fNV(GLenum attr, GLfloat x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5276,7 +5276,7 @@ save_Attr1fNV(GLenum attr, GLfloat x)
    }
 }
 
-static void
+static void GLAPIENTRY
 save_Attr2fNV(GLenum attr, GLfloat x, GLfloat y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5298,7 +5298,7 @@ save_Attr2fNV(GLenum attr, GLfloat x, GLfloat y)
    }
 }
 
-static void
+static void GLAPIENTRY
 save_Attr3fNV(GLenum attr, GLfloat x, GLfloat y, GLfloat z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5321,7 +5321,7 @@ save_Attr3fNV(GLenum attr, GLfloat x, GLfloat y, GLfloat z)
    }
 }
 
-static void
+static void GLAPIENTRY
 save_Attr4fNV(GLenum attr, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5346,7 +5346,7 @@ save_Attr4fNV(GLenum attr, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 }
 
 
-static void
+static void GLAPIENTRY
 save_Attr1fARB(GLenum attr, GLfloat x)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5367,7 +5367,7 @@ save_Attr1fARB(GLenum attr, GLfloat x)
    }
 }
 
-static void
+static void GLAPIENTRY
 save_Attr2fARB(GLenum attr, GLfloat x, GLfloat y)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5389,7 +5389,7 @@ save_Attr2fARB(GLenum attr, GLfloat x, GLfloat y)
    }
 }
 
-static void
+static void GLAPIENTRY
 save_Attr3fARB(GLenum attr, GLfloat x, GLfloat y, GLfloat z)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -5412,7 +5412,7 @@ save_Attr3fARB(GLenum attr, GLfloat x, GLfloat y, GLfloat z)
    }
 }
 
-static void
+static void GLAPIENTRY
 save_Attr4fARB(GLenum attr, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
 {
    GET_CURRENT_CONTEXT(ctx);

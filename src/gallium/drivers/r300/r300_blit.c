@@ -31,14 +31,24 @@
 
 enum r300_blitter_op /* bitmask */
 {
-    R300_CLEAR         = 1,
-    R300_CLEAR_SURFACE = 2,
-    R300_COPY          = 4
+    R300_STOP_QUERY         = 1,
+    R300_SAVE_TEXTURES      = 2,
+    R300_SAVE_FRAMEBUFFER   = 4,
+    R300_IGNORE_RENDER_COND = 8,
+
+    R300_CLEAR         = R300_STOP_QUERY,
+
+    R300_CLEAR_SURFACE = R300_STOP_QUERY | R300_SAVE_FRAMEBUFFER,
+
+    R300_COPY          = R300_STOP_QUERY | R300_SAVE_FRAMEBUFFER |
+                         R300_SAVE_TEXTURES | R300_IGNORE_RENDER_COND,
+
+    R300_DECOMPRESS    = R300_STOP_QUERY | R300_IGNORE_RENDER_COND,
 };
 
 static void r300_blitter_begin(struct r300_context* r300, enum r300_blitter_op op)
 {
-    if (r300->query_current) {
+    if ((op & R300_STOP_QUERY) && r300->query_current) {
         r300->blitter_saved_query = r300->query_current;
         r300_stop_query(r300);
     }
@@ -58,10 +68,10 @@ static void r300_blitter_begin(struct r300_context* r300, enum r300_blitter_op o
     util_blitter_save_vertex_buffers(r300->blitter, r300->vertex_buffer_count,
                                      r300->vertex_buffer);
 
-    if (op & (R300_CLEAR_SURFACE | R300_COPY))
+    if (op & R300_SAVE_FRAMEBUFFER)
         util_blitter_save_framebuffer(r300->blitter, r300->fb_state.state);
 
-    if (op & R300_COPY) {
+    if (op & R300_SAVE_TEXTURES) {
         struct r300_textures_state* state =
             (struct r300_textures_state*)r300->textures_state.state;
 
@@ -73,6 +83,14 @@ static void r300_blitter_begin(struct r300_context* r300, enum r300_blitter_op o
             r300->blitter, state->sampler_view_count,
             (struct pipe_sampler_view**)state->sampler_views);
     }
+
+    if (op & R300_IGNORE_RENDER_COND) {
+        /* Save the flag. */
+        r300->blitter_saved_skip_rendering = r300->skip_rendering+1;
+        r300->skip_rendering = FALSE;
+    } else {
+        r300->blitter_saved_skip_rendering = 0;
+    }
 }
 
 static void r300_blitter_end(struct r300_context *r300)
@@ -80,6 +98,11 @@ static void r300_blitter_end(struct r300_context *r300)
     if (r300->blitter_saved_query) {
         r300_resume_query(r300, r300->blitter_saved_query);
         r300->blitter_saved_query = NULL;
+    }
+
+    if (r300->blitter_saved_skip_rendering) {
+        /* Restore the flag. */
+        r300->skip_rendering = r300->blitter_saved_skip_rendering-1;
     }
 }
 
@@ -320,7 +343,7 @@ void r300_flush_depth_stencil(struct pipe_context *pipe,
     dstsurf = pipe->create_surface(pipe, dst, &surf_tmpl);
 
     r300->z_decomp_rd = TRUE;
-    r300_blitter_begin(r300, R300_CLEAR_SURFACE);
+    r300_blitter_begin(r300, R300_DECOMPRESS);
     util_blitter_flush_depth_stencil(r300->blitter, dstsurf);
     r300_blitter_end(r300);
     r300->z_decomp_rd = FALSE;

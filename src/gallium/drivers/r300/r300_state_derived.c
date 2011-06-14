@@ -782,6 +782,12 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
                 texstate->filter0 |= R300_TX_WRAP_T(R300_TX_CLAMP_TO_EDGE);
             }
 
+            /* The hardware doesn't like CLAMP and CLAMP_TO_BORDER
+             * for the 3rd coordinate if the texture isn't 3D. */
+            if (tex->desc.b.b.target != PIPE_TEXTURE_3D) {
+                texstate->filter0 &= ~R300_TX_WRAP_R_MASK;
+            }
+
             if (tex->desc.is_npot) {
                 /* NPOT textures don't support mip filter, unfortunately.
                  * This prevents incorrect rendering. */

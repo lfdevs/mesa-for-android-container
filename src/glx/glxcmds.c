@@ -228,10 +228,14 @@ CreateContext(Display * dpy, int generic_id,
       return NULL;
 
    gc = NULL;
+#ifdef GLX_USE_APPLEGL
+   gc = applegl_create_context(psc, config, shareList, renderType);
+#else
    if (allowDirect && psc->vtable->create_context)
       gc = psc->vtable->create_context(psc, config, shareList, renderType);
    if (!gc)
       gc = indirect_create_context(psc, config, shareList, renderType);
+#endif
    if (!gc)
       return NULL;
 
@@ -606,7 +610,7 @@ glXCreateGLXPixmap(Display * dpy, XVisualInfo * vis, Pixmap pixmap)
    struct glx_screen *const psc = GetGLXScreenConfigs(dpy, screen);
    const struct glx_config *config;
 
-   config = _gl_context_modes_find_visual(psc->visuals, vis->visualid);
+   config = glx_config_find_visual(psc->visuals, vis->visualid);
    
    if(apple_glx_pixmap_create(dpy, vis->screen, pixmap, config))
       return None;
@@ -710,7 +714,7 @@ _X_EXPORT void
 glXSwapBuffers(Display * dpy, GLXDrawable drawable)
 {
 #ifdef GLX_USE_APPLEGL
-   GLXContext gc = glXGetCurrentContext();
+   struct glx_context * gc = __glXGetCurrentContext();
    if(gc && apple_glx_is_current_drawable(dpy, gc->driContext, drawable)) {
       apple_glx_swap_buffers(gc->driContext);
    } else {

@@ -160,11 +160,9 @@ _X_HIDDEN void
 __glXSetCurrentContextNull(void)
 {
    __glXSetCurrentContext(&dummyContext);
-#ifndef GLX_USE_APPLEGL
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
    _glapi_set_dispatch(NULL);   /* no-op functions */
    _glapi_set_context(NULL);
-#endif
 #endif
 }
 
@@ -234,6 +232,7 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
       return False;
    }
 
+#ifndef GLX_USE_APPLEGL
    _glapi_check_multithread();
 
    if (gc != NULL && gc->thread_id != 0 && gc->thread_id != _glthread_GetID()) {
@@ -241,6 +240,7 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
                          BadAccess, X_GLXMakeContextCurrent);
       return False;
    }
+#endif
 
    if (oldGC == gc &&
        gc->currentDrawable == draw && gc->currentReadable == read)
@@ -258,7 +258,9 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
       gc->currentDpy = dpy;
       gc->currentDrawable = draw;
       gc->currentReadable = read;
+#ifndef GLX_USE_APPLEGL
       gc->thread_id = _glthread_GetID();
+#endif
       __glXSetCurrentContext(gc);
       ret = gc->vtable->bind(gc, oldGC, draw, read);
    } else {

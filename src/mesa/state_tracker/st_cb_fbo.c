@@ -72,11 +72,15 @@ st_renderbuffer_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *r
    enum pipe_format format;
    struct pipe_surface surf_tmpl;
 
-   if (strb->format != PIPE_FORMAT_NONE)
-      format = strb->format;
-   else
-      format = st_choose_renderbuffer_format(screen, internalFormat, rb->NumSamples);
-      
+   if (strb->software && internalFormat == GL_RGBA16_SNORM) {
+      /* special case for software accum buffer */
+      format = PIPE_FORMAT_R16G16B16A16_SNORM;
+   }
+   else {
+      format = st_choose_renderbuffer_format(screen, internalFormat,
+                                             rb->NumSamples);
+   }
+
    if (format == PIPE_FORMAT_NONE) {
       return FALSE;
    }
@@ -87,6 +91,7 @@ st_renderbuffer_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *r
    strb->Base.Format = st_pipe_format_to_mesa_format(format);
    strb->Base._BaseFormat = _mesa_base_fbo_format(ctx, internalFormat);
    strb->Base.DataType = st_format_datatype(format);
+   strb->format = format;
 
    strb->defined = GL_FALSE;  /* undefined contents now */
 
@@ -269,7 +274,7 @@ st_new_renderbuffer_fb(enum pipe_format format, int samples, boolean sw)
       strb->Base.InternalFormat = GL_STENCIL_INDEX8_EXT;
       break;
    case PIPE_FORMAT_R16G16B16A16_SNORM:
-      strb->Base.InternalFormat = GL_RGBA16;
+      strb->Base.InternalFormat = GL_RGBA16_SNORM;
       break;
    case PIPE_FORMAT_R8_UNORM:
       strb->Base.InternalFormat = GL_R8;

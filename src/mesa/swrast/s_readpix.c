@@ -191,7 +191,10 @@ fast_read_rgba_pixels( struct gl_context *ctx,
    if (!rb)
       return GL_FALSE;
 
-   ASSERT(rb->_BaseFormat == GL_RGBA || rb->_BaseFormat == GL_RGB ||
+   ASSERT(rb->_BaseFormat == GL_RGBA ||
+	  rb->_BaseFormat == GL_RGB ||
+	  rb->_BaseFormat == GL_RG ||
+	  rb->_BaseFormat == GL_RED ||
 	  rb->_BaseFormat == GL_ALPHA);
 
    /* clipping should have already been done */
@@ -341,9 +344,9 @@ read_rgba_pixels( struct gl_context *ctx,
          _swrast_read_rgba_span(ctx, rb, width, x, y, GL_FLOAT, rgba);
 
          /* apply fudge factor for shallow color buffers */
-         if (fb->Visual.redBits < 8 ||
-             fb->Visual.greenBits < 8 ||
-             fb->Visual.blueBits < 8) {
+         if ((fb->Visual.redBits < 8 && fb->Visual.redBits != 0) ||
+             (fb->Visual.greenBits < 8 && fb->Visual.greenBits != 0) ||
+	     (fb->Visual.blueBits < 8 && fb->Visual.blueBits != 0)) {
             adjust_colors(fb, width, rgba);
          }
 

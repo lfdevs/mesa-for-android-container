@@ -162,16 +162,16 @@ glcpp/glcpp: $(GLCPP_OBJECTS) libglsl.a
 	$(CC) -c $(INCLUDES) $(CFLAGS) $(DEFINES) $< -o $@
 
 glsl_lexer.cpp: glsl_lexer.lpp
-	flex --nounistd -o$@  $<
+	$(FLEX) --nounistd -o$@  $<
 
 glsl_parser.cpp: glsl_parser.ypp
-	bison -v -o "$@" -p "_mesa_glsl_" --defines=glsl_parser.h $<
+	$(BISON) -v -o "$@" -p "_mesa_glsl_" --defines=glsl_parser.h $<
 
 glcpp/glcpp-lex.c: glcpp/glcpp-lex.l
-	flex --nounistd -o$@  $<
+	$(FLEX) --nounistd -o$@  $<
 
 glcpp/glcpp-parse.c: glcpp/glcpp-parse.y
-	bison -v -o "$@" --defines=glcpp/glcpp-parse.h $<
+	$(BISON) -v -o "$@" --defines=glcpp/glcpp-parse.h $<
 
 builtins: builtin_function.cpp builtins/profiles/* builtins/ir/* builtins/tools/generate_builtins.py builtins/tools/texture_builtins.py
 	@echo Bootstrapping the compiler...

@@ -285,10 +285,6 @@ st_texture_image_copy(struct pipe_context *pipe,
    struct pipe_box src_box;
    GLuint i;
 
-   assert(u_minify(src->width0, srcLevel) == width);
-   assert(u_minify(src->height0, srcLevel) == height);
-   assert(u_minify(src->depth0, srcLevel) == depth);
-
    src_box.x = 0;
    src_box.y = 0;
    src_box.width = width;
