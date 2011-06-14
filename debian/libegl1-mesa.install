@@ -1,4 +1,0 @@
-dri/usr/lib/libEGL.so.1* usr/lib
-dri/usr/lib/egl/egl_dri2.so usr/lib/egl
-dri/usr/lib/egl/egl_glx.so usr/lib/egl
-dri/usr/lib/egl/st_GL.so usr/lib/egl

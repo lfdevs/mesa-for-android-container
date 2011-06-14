@@ -1,3 +1,0 @@
-dri/usr/lib/libOpenVG.so usr/lib
-dri/usr/include/VG usr/include
-dri/usr/lib/pkgconfig/vg.pc usr/lib/pkgconfig

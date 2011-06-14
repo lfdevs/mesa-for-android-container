@@ -1,0 +1,3 @@
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libOpenVG.so usr/lib/${DEB_HOST_MULTIARCH}
+dri/usr/include/VG usr/include
+dri/usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/vg.pc usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig

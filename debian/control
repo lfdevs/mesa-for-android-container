@@ -2,15 +2,31 @@ Source: mesa
 Section: graphics
 Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
-Uploaders: David Nusinow <dnusinow@debian.org>, Brice Goglin <bgoglin@debian.org>, Cyril Brulebois <kibi@debian.org>
+Uploaders: Cyril Brulebois <kibi@debian.org>
 Standards-Version: 3.8.4
-Build-Depends: debhelper (>= 7.2.7), quilt (>= 0.40), pkg-config,
- libdrm-dev (>= 2.4.24) [!hurd-i386], libx11-dev, xutils-dev,
- x11proto-gl-dev (>= 1.4.11), libxxf86vm-dev,
- libexpat1-dev, lesstif2-dev, dpkg-dev (>= 1.15.6), libxfixes-dev,
- libxdamage-dev, libxext-dev, autoconf, automake, x11proto-dri2-dev (>= 2.1),
+Build-Depends:
+ debhelper (>= 8.1.3),
+ quilt (>= 0.40),
+ pkg-config,
+ libdrm-dev (>= 2.4.24) [!hurd-i386],
+ libx11-dev,
+ xutils-dev,
+ x11proto-gl-dev (>= 1.4.11),
+ libxxf86vm-dev,
+ libexpat1-dev,
+ lesstif2-dev,
+ dpkg-dev (>= 1.15.6),
+ libxfixes-dev,
+ libxdamage-dev,
+ libxext-dev,
+ autoconf,
+ automake,
+ x11proto-dri2-dev (>= 2.1),
  linux-libc-dev (>= 2.6.31) [linux-any],
- libx11-xcb-dev, libxcb-dri2-0-dev, libxcb-xfixes0-dev, python-libxml2,
+ libx11-xcb-dev,
+ libxcb-dri2-0-dev,
+ libxcb-xfixes0-dev,
+ python-libxml2,
  libudev-dev [linux-any],
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
@@ -27,6 +43,8 @@ Depends:
 Conflicts: mesag3-glide, mesag3-glide2, mesag3+ggi, libgl1, nvidia-glx, mesag3, libgl1-mesa-swrast
 Provides: libgl1, mesag3, libgl1-mesa-swrast
 Replaces: libgl1, mesag3, libgl1-mesa-swrast
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: free implementation of the OpenGL API -- runtime
  Mesa is a 3-D graphics library with an API which is very similar to
  that of OpenGL.  To the extent that Mesa utilizes the OpenGL command
@@ -51,6 +69,7 @@ Depends:
 Conflicts: libgl1-mesa-swrast-dbg
 Provides: libgl1-mesa-swrast-dbg
 Replaces: libgl1-mesa-swrast-dbg
+Multi-Arch: same
 Description: free implementation of the OpenGL API -- debugging symbols
  Mesa is a 3-D graphics library with an API which is very similar to
  that of OpenGL.  To the extent that Mesa utilizes the OpenGL command
@@ -76,6 +95,8 @@ Depends:
  libgl1-mesa-swx11 (= ${binary:Version}),
  ${shlibs:Depends},
  ${misc:Depends},
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: Mesa OpenGL runtime [i686 optimized]
  Mesa is a 3-D graphics library with an API which is very similar to
  that of OpenGL.  To the extent that Mesa utilizes the OpenGL command
@@ -127,6 +148,8 @@ Recommends: libegl1-mesa-drivers
 Provides: libegl1-x11
 Conflicts: libegl1-x11
 Replaces: libegl1-x11
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: free implementation of the EGL API -- runtime
  This package contains the EGL native platform graphics interface library.
  EGL provides a platform-agnostic mechanism for creating rendering surfaces
@@ -143,6 +166,7 @@ Architecture: linux-any kfreebsd-any
 Depends:
  libegl1-mesa (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the EGL API -- debugging symbols
  This package contains the EGL native platform graphics interface library.
  EGL provides a platform-agnostic mechanism for creating rendering surfaces
@@ -180,6 +204,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libegl1-mesa (= ${binary:Version}),
+Multi-Arch: same
 Description: free implementation of the EGL API -- hardware drivers
  This package contains the EGL native platform graphics interface library.
  EGL provides a platform-agnostic mechanism for creating rendering surfaces
@@ -195,6 +220,7 @@ Architecture: linux-any kfreebsd-any
 Depends:
  libegl1-mesa-drivers (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the EGL API -- driver debugging symbols
  This package contains the EGL native platform graphics interface library.
  EGL provides a platform-agnostic mechanism for creating rendering surfaces
@@ -212,6 +238,8 @@ Depends:
 Provides: libopenvg1
 Conflicts: libopenvg1
 Replaces: libopenvg1
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: free implementation of the OpenVG API -- runtime
  This package contains the mesa implementation of the OpenVG 2D acceleration
  library.  OpenVG provides a device independent and vendor-neutral interface
@@ -226,6 +254,7 @@ Architecture: linux-any kfreebsd-any
 Depends:
  libopenvg1-mesa (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the OpenVG API -- debugging symbols
  This package contains the mesa implementation of the OpenVG 2D acceleration
  library.  OpenVG provides a device independent and vendor-neutral interface
@@ -261,6 +290,8 @@ Depends:
 Provides: libgles1
 Conflicts: libgles1
 Replaces: libgles1
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: free implementation of the OpenGL|ES 1.x API -- runtime
  OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on
  embedded systems - including consoles, phones, appliances and vehicles.
@@ -276,6 +307,7 @@ Architecture: linux-any kfreebsd-any
 Depends:
  libgles1-mesa (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the OpenGL|ES 1.x API -- debugging symbols
  OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on
  embedded systems - including consoles, phones, appliances and vehicles.
@@ -313,6 +345,8 @@ Depends:
 Provides: libgles2
 Conflicts: libgles2
 Replaces: libgles2
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: free implementation of the OpenGL|ES 2.x API -- runtime
  OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on
  embedded systems - including consoles, phones, appliances and vehicles.
@@ -329,6 +363,7 @@ Architecture: linux-any kfreebsd-any
 Depends:
  libgles2-mesa (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: free implementation of the OpenGL|ES 2.x API -- debugging symbols
  OpenGL|ES is a cross-platform API for full-function 2D and 3D graphics on
  embedded systems - including consoles, phones, appliances and vehicles.
@@ -369,6 +404,8 @@ Recommends: libgl1-mesa-dri (>= 7.2)
 Conflicts: libgl1, libgl1-mesa-dri (<< 6.4.0)
 Replaces: libgl1, libgl1-mesa-dri (<< 6.4.0)
 Provides: libgl1
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: free implementation of the OpenGL API -- GLX runtime
  This version of Mesa provides GLX and DRI capabilities: it is capable of
  both direct and indirect rendering.  For direct rendering, it can use DRI
@@ -387,6 +424,7 @@ Architecture: any
 Depends:
  libgl1-mesa-glx (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: Debugging symbols for the Mesa GLX runtime
  This version of Mesa provides GLX and DRI capabilities: it is capable of
  both direct and indirect rendering.  For direct rendering, it can use DRI
@@ -432,7 +470,8 @@ Depends:
 Suggests: libglide3
 Conflicts: xlibmesa-dri (<< 1:7.0.0)
 Replaces: xlibmesa-dri (<< 1:7.0.0)
-Breaks: xserver-xorg-core (<< 2:1.5), libgl1-mesa-glx (<< 7.2)
+Breaks: xserver-xorg-core (<= 2:1.10.2-1), libgl1-mesa-glx (<< 7.10.2-4)
+Multi-Arch: same
 Description: free implementation of the OpenGL API -- DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
  both direct and indirect rendering.  For direct rendering, it can use DRI
@@ -453,6 +492,7 @@ Architecture: any
 Depends:
  libgl1-mesa-dri (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: Debugging symbols for the Mesa DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
  both direct and indirect rendering.  For direct rendering, it can use DRI
@@ -472,6 +512,8 @@ Architecture: linux-any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
+Breaks: xserver-xorg-core (<= 2:1.10.2-1), libgl1-mesa-glx (<< 7.10.2-4)
+Multi-Arch: same
 Description: free implementation of the OpenGL API -- Extra DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
  both direct and indirect rendering.  For direct rendering, it can use DRI
@@ -492,6 +534,7 @@ Architecture: linux-any
 Depends:
  libgl1-mesa-dri-experimental (= ${binary:Version}),
  ${misc:Depends},
+Multi-Arch: same
 Description: Debugging symbols for the experimental Mesa DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
  both direct and indirect rendering.  For direct rendering, it can use DRI
@@ -546,6 +589,8 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
 Replaces: libgl1-mesa-swx11 (<< 6.5.2)
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: Mesa Off-screen rendering extension
  OSmesa is a Mesa extension that allows programs to render to an
  off-screen buffer using the OpenGL API without having to create a
@@ -579,6 +624,8 @@ Depends:
 Provides: libglu1
 Conflicts: mesag3 (<< 5.0.0-1), xlibmesa3, libglu1
 Replaces: libglu1
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: The OpenGL utility library (GLU)
  GLU offers simple interfaces for building mipmaps; checking for the
  presence of extensions in the OpenGL (or other libraries which follow
@@ -616,6 +663,8 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
 Provides: libglw1
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
 Description: free implementation of the OpenGL API -- runtime
  Mesa is a 3-D graphics library with an API which is very similar to
  that of OpenGL.  To the extent that Mesa utilizes the OpenGL command

@@ -1,4 +1,0 @@
-dri/usr/lib/libEGL.so usr/lib
-dri/usr/include/EGL usr/include
-dri/usr/include/KHR usr/include
-dri/usr/lib/pkgconfig/egl.pc usr/lib/pkgconfig

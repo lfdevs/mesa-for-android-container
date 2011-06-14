@@ -1,2 +1,2 @@
-usr/lib/libGL.a
-usr/lib/libGL.so
+usr/lib/*/libGL.a
+usr/lib/*/libGL.so

@@ -1,0 +1,6 @@
+# Keep this part in sync with libgl1-mesa-dri.install:
+build/dri/${DEB_HOST_MULTIARCH}/*_dri.so  usr/lib/${DEB_HOST_MULTIARCH}/dri
+
+# This part is Linux-specific:
+build/dri/${DEB_HOST_MULTIARCH}/gallium/r300_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri
+build/dri/${DEB_HOST_MULTIARCH}/gallium/r600_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri

@@ -1,3 +1,19 @@
+mesa (7.10.2-4) unstable; urgency=low
+
+  [ Steve Langasek ]
+  * Build for multiarch.
+
+  [ Cyril Brulebois ]
+  * Explanation of the “Breaks: xserver-xorg-core” part for our users: the
+    server queries the DRI driver path at build time, which is getting
+    changed for multiarch, so the server needs be rebuilt; a binNMU will
+    take care of getting the server ready.
+  * Many thanks for multiarch, Steve!
+  * Update Uploaders list. Thanks, David and Brice!
+  * Wrap Build-Depends.
+
+ -- Cyril Brulebois <kibi@debian.org>  Tue, 14 Jun 2011 12:19:33 +0200
+
 mesa (7.10.2-3) unstable; urgency=low
 
   * Merge upstream 7.10 branch up to eaadbacb5c.

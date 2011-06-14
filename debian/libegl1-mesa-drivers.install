@@ -1,2 +1,0 @@
-dri/usr/lib/egl/egl_gallium.so usr/lib/egl
-dri/usr/lib/egl/pipe_*.so usr/lib/egl

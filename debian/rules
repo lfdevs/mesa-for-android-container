@@ -16,6 +16,7 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
 	MAKEFLAGS += -j$(NUMJOBS)
 endif
 
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 DEB_BUILD_ARCH     ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
 DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
@@ -102,8 +103,8 @@ endif
 confflags-dri = \
 	--with-driver=dri \
 	--with-dri-drivers="$(DRI_DRIVERS)" \
-	--with-dri-driverdir=/usr/lib/dri \
-	--with-dri-searchpath='\$$$${ORIGIN}/dri' \
+	--with-dri-driverdir=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
+	--with-dri-searchpath='\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	--enable-glx-tls \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_EGL) \
@@ -184,7 +185,7 @@ confflags-swx11+glu-i386-i686 = \
 	--disable-glut \
 	--disable-egl \
 	--enable-motif \
-	--libdir=/usr/lib/i686/cmov \
+	--libdir=/usr/lib/$(DEB_HOST_MULTIARCH)/i686/cmov \
 	CFLAGS="$(CFLAGS) -march=i686"
 
 configure: $(QUILT_STAMPFN) configure.ac
@@ -206,7 +207,7 @@ build: build-stamp
 build-stamp: $(BUILD_STAMPS)
 # Remove gallium drivers which replace existing classic drivers.
 # Intel gallium is significantly behind the classic mesa drivers...
-	rm -f build/dri/lib/gallium/i915_dri.so
+	rm -f build/dri/lib/$(DEB_HOST_MULTIARCH)/gallium/i915_dri.so
 	>$@
 
 $(STAMP)-build-%: configure
@@ -218,6 +219,7 @@ $(STAMP)-build-%: configure
 	cd $(DEB_BUILD_DIR)/$* && \
 	../../configure --prefix=/usr --mandir=\$${prefix}/share/man \
 	             --infodir=\$${prefix}/share/info --sysconfdir=/etc \
+	             --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
 	             --localstatedir=/var $(confflags) $(confflags-$*)
 	cd $(DEB_BUILD_DIR)/$* && $(MAKE)
 	>$@
@@ -232,6 +234,18 @@ install: build
 		$(MAKE) -C $(DEB_BUILD_DIR)/$$config DESTDIR=$(CURDIR)/debian/tmp install; \
 	done
 	$(MAKE) -C $(DEB_BUILD_DIR)/dri DESTDIR=$(CURDIR)/debian/tmp/dri install
+	for file in mesa-common-dev.install libopenvg1-mesa.install \
+	            libopenvg1-mesa-dev.install libgles2-mesa.install \
+	            libgles2-mesa-dev.install libgles1-mesa.install \
+	            libgles1-mesa-dev.install libgl1-mesa-glx.install \
+	            libgl1-mesa-glx-i686.install libgl1-mesa-dri.install \
+	            libgl1-mesa-dri.install.linux libegl1-mesa.install \
+	            libgl1-mesa-dri-experimental.install \
+	            libegl1-mesa-drivers.install libegl1-mesa-dev.install; \
+	do \
+		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
+			debian/$${file}.in > debian/$$file; \
+	done
 
 clean: unpatch
 	dh_testdir
@@ -266,11 +280,11 @@ binary-arch: install
 	# Classic DRI and Gallium DRI are mixed up together here
 	# Remove the whole tree to avoid false-positives in --list-missing, and
 	# install the right files manually.
-	rm -r debian/tmp/dri/usr/lib/dri
+	rm -r debian/tmp/dri/usr/lib/$(DEB_HOST_MULTIARCH)/dri
 
 	# Move nouveau_vieux alongside nouveau to install in dri-experimental package
 ifneq (,$(filter nouveau,$(DRI_DRIVERS)))
-	mv build/dri/lib/nouveau_vieux_dri.so build/dri/lib/gallium/
+	mv build/dri/$(DEB_HOST_MULTIARCH)/nouveau_vieux_dri.so build/dri/$(DEB_HOST_MULTIARCH)/gallium/
 endif
 
 	# Also get rid of other files which aren't installed. Do not

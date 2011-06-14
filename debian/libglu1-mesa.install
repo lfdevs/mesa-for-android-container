@@ -1,1 +1,1 @@
-usr/lib/libGLU.so.*
+usr/lib/*/libGLU.so.*

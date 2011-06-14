@@ -1,0 +1,2 @@
+# If this part gets modified, make sure to update .install.$os as well:
+build/dri/${DEB_HOST_MULTIARCH}/*_dri.so  usr/lib/${DEB_HOST_MULTIARCH}/dri

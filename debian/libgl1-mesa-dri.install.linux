@@ -1,6 +1,0 @@
-# Keep this part in sync with libgl1-mesa-dri.install:
-build/dri/lib/*_dri.so  usr/lib/dri
-
-# This part is Linux-specific:
-build/dri/lib/gallium/r300_dri.so usr/lib/dri
-build/dri/lib/gallium/r600_dri.so usr/lib/dri

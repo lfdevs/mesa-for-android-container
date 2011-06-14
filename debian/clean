@@ -1,0 +1,15 @@
+debian/mesa-common-dev.install
+debian/libopenvg1-mesa.install
+debian/libopenvg1-mesa-dev.install
+debian/libgles2-mesa.install
+debian/libgles2-mesa-dev.install
+debian/libgles1-mesa.install
+debian/libgles1-mesa-dev.install
+debian/libgl1-mesa-glx.install
+debian/libgl1-mesa-glx-i686.install
+debian/libgl1-mesa-dri.install
+debian/libgl1-mesa-dri.install.linux
+debian/libgl1-mesa-dri-experimental.install
+debian/libegl1-mesa.install
+debian/libegl1-mesa-drivers.install
+debian/libegl1-mesa-dev.install
