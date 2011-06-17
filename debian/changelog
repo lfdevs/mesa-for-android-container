@@ -1,3 +1,21 @@
+mesa (7.10.3-2) unstable; urgency=low
+
+  [ Cyril Brulebois ]
+  * Add Breaks against nvidia and fglrx packages, since they are also
+    affected by the multiarch changes, and need fixing. Until fixed
+    packages reach the archive, nvidia and fglrx users should stick to
+    mesa 7.10.2-3 packages, currently available in testing. Thanks to
+    Andreas and Patrick for the version strings (Closes: #630710).
+  * Set CXXFLAGS along with CFLAGS (Closes: #630602). Thanks for the
+    report and the patch, Fabio Pedretti!
+
+  [ Julien Cristau ]
+  * Prepend the multiarch dir to the dri driver search path.  ${ORIGIN}/dri
+    works for libGL, but not for egl_dri2.so (which lives in /usr/lib/*/egl/).
+    Thanks to Michel Dänzer for the heads-up!
+
+ -- Cyril Brulebois <kibi@debian.org>  Fri, 17 Jun 2011 11:46:20 +0200
+
 mesa (7.10.3-1) unstable; urgency=low
 
   * New upstream release.
