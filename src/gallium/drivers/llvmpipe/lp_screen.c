@@ -151,7 +151,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_INDEP_BLEND_ENABLE:
       return 1;
    case PIPE_CAP_INDEP_BLEND_FUNC:
-      return 0;
+      return 1;
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
       return 1;
@@ -164,6 +164,10 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_DEPTH_CLAMP:
       return 0;
+   case PIPE_CAP_TGSI_INSTANCEID:
+   case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
+   case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
+      return 1;
    default:
       return 0;
    }
@@ -222,8 +226,7 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
                               enum pipe_format format,
                               enum pipe_texture_target target,
                               unsigned sample_count,
-                              unsigned bind,
-                              unsigned geom_flags )
+                              unsigned bind)
 {
    struct llvmpipe_screen *screen = llvmpipe_screen(_screen);
    struct sw_winsys *winsys = screen->winsys;
@@ -274,6 +277,11 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
 
    if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC) {
       return util_format_s3tc_enabled;
+   }
+
+   /* u_format doesn't support RGTC yet */
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_RGTC) {
+      return FALSE;
    }
 
    /*
@@ -341,10 +349,9 @@ llvmpipe_fence_reference(struct pipe_screen *screen,
 /**
  * Has the fence been executed/finished?
  */
-static int
+static boolean
 llvmpipe_fence_signalled(struct pipe_screen *screen,
-                         struct pipe_fence_handle *fence,
-                         unsigned flag)
+                         struct pipe_fence_handle *fence)
 {
    struct lp_fence *f = (struct lp_fence *) fence;
    return lp_fence_signalled(f);
@@ -354,15 +361,15 @@ llvmpipe_fence_signalled(struct pipe_screen *screen,
 /**
  * Wait for the fence to finish.
  */
-static int
+static boolean
 llvmpipe_fence_finish(struct pipe_screen *screen,
                       struct pipe_fence_handle *fence_handle,
-                      unsigned flag)
+                      uint64_t timeout)
 {
    struct lp_fence *f = (struct lp_fence *) fence_handle;
 
    lp_fence_wait(f);
-   return 0;
+   return TRUE;
 }
 
 
@@ -416,7 +423,7 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    lp_jit_screen_init(screen);
 
    screen->num_threads = util_cpu_caps.nr_cpus > 1 ? util_cpu_caps.nr_cpus : 0;
-#ifdef PIPE_OS_EMBEDDED
+#ifdef PIPE_SUBSYSTEM_EMBEDDED
    screen->num_threads = 0;
 #endif
    screen->num_threads = debug_get_num_option("LP_NUM_THREADS", screen->num_threads);

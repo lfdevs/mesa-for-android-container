@@ -46,8 +46,13 @@ ifneq ($(findstring x11, $(EGL_PLATFORMS)),)
 egl_SYS += -lX11 -lXext -lXfixes $(LIBDRM_LIB)
 egl_LIBS += $(TOP)/src/gallium/winsys/sw/xlib/libws_xlib.a
 endif
+ifneq ($(findstring wayland, $(EGL_PLATFORMS)),)
+egl_SYS += $(WAYLAND_LIBS) $(LIBDRM_LIB)
+egl_LIBS += $(TOP)/src/gallium/winsys/sw/wayland/libws_wayland.a
+egl_LIBS += $(TOP)/src/egl/wayland/wayland-drm/libwayland-drm.a
+endif
 ifneq ($(findstring drm, $(EGL_PLATFORMS)),)
-egl_SYS += $(LIBDRM_LIB)
+egl_SYS += $(LIBUDEV_LIBS) $(LIBDRM_LIB)
 endif
 ifneq ($(findstring fbdev, $(EGL_PLATFORMS)),)
 egl_LIBS += $(TOP)/src/gallium/winsys/sw/fbdev/libfbdev.a
@@ -56,12 +61,6 @@ endif
 # EGL_RENDERABLE_TYPE is a compile time attribute
 ifneq ($(filter $(GL_LIB), $(EGL_CLIENT_APIS)),)
 egl_CPPFLAGS += $(API_DEFINES)
-endif
-ifneq ($(filter $(GLESv1_CM_LIB), $(EGL_CLIENT_APIS)),)
-egl_CPPFLAGS += -DFEATURE_ES1=1
-endif
-ifneq ($(filter $(GLESv2_LIB), $(EGL_CLIENT_APIS)),)
-egl_CPPFLAGS += -DFEATURE_ES2=1
 endif
 ifneq ($(filter $(VG_LIB), $(EGL_CLIENT_APIS)),)
 egl_CPPFLAGS += -DFEATURE_VG=1
@@ -80,7 +79,8 @@ i965_CPPFLAGS :=
 i965_SYS := -ldrm_intel
 i965_LIBS := \
 	$(TOP)/src/gallium/winsys/i965/drm/libi965drm.a \
-	$(TOP)/src/gallium/drivers/i965/libi965.a
+	$(TOP)/src/gallium/drivers/i965/libi965.a \
+	$(TOP)/src/gallium/winsys/sw/wrapper/libwsw.a
 
 # nouveau pipe driver
 nouveau_CPPFLAGS :=
@@ -89,11 +89,12 @@ nouveau_LIBS := \
 	$(TOP)/src/gallium/winsys/nouveau/drm/libnouveaudrm.a \
 	$(TOP)/src/gallium/drivers/nvfx/libnvfx.a \
 	$(TOP)/src/gallium/drivers/nv50/libnv50.a \
+	$(TOP)/src/gallium/drivers/nvc0/libnvc0.a \
 	$(TOP)/src/gallium/drivers/nouveau/libnouveau.a
 
 # r300 pipe driver
 r300_CPPFLAGS :=
-r300_SYS := -ldrm -ldrm_radeon
+r300_SYS := -ldrm
 r300_LIBS := \
 	$(TOP)/src/gallium/winsys/radeon/drm/libradeonwinsys.a \
 	$(TOP)/src/gallium/drivers/r300/libr300.a
@@ -127,19 +128,13 @@ endif
 
 # OpenGL state tracker
 GL_CPPFLAGS := -I$(TOP)/src/mesa $(API_DEFINES)
-# do not link to $(GL_LIB) as the it supports GLES too
+ifeq ($(SHARED_GLAPI),1)
+GL_SYS := $(DRI_LIB_DEPS) -l$(GLAPI_LIB)
+else
+# cannot link to $(GL_LIB) as the app might want GL or GLES
 GL_SYS := $(DRI_LIB_DEPS)
+endif
 GL_LIBS := $(TOP)/src/mesa/libmesagallium.a
-
-# OpenGL ES 1.x state tracker
-GLESv1_CM_CPPFLAGS := -I$(TOP)/src/mesa
-GLESv1_CM_SYS := $(DRI_LIB_DEPS) -l$(GLESv1_CM_LIB)
-GLESv1_CM_LIBS := $(TOP)/src/mesa/libes1gallium.a
-
-# OpenGL ES 2.x state tracker
-GLESv2_CPPFLAGS := -I$(TOP)/src/mesa
-GLESv2_SYS := $(DRI_LIB_DEPS) -l$(GLESv2_LIB)
-GLESv2_LIBS := $(TOP)/src/mesa/libes2gallium.a
 
 # OpenVG state tracker
 OpenVG_CPPFLAGS := -I$(TOP)/src/gallium/state_trackers/vega
@@ -224,12 +219,6 @@ $(OUTPUT_PATH)/$(PIPE_PREFIX)swrast.so: pipe_swrast.o $(swrast_LIBS)
 # state trackers
 $(OUTPUT_PATH)/$(ST_PREFIX)$(GL_LIB).so: st_GL.o $(GL_LIBS)
 	$(call mklib-cxx,GL)
-
-$(OUTPUT_PATH)/$(ST_PREFIX)$(GLESv1_CM_LIB).so: st_GLESv1_CM.o $(GLESv1_CM_LIBS)
-	$(call mklib-cxx,GLESv1_CM)
-
-$(OUTPUT_PATH)/$(ST_PREFIX)$(GLESv2_LIB).so: st_GLESv2.o $(GLESv2_LIBS)
-	$(call mklib-cxx,GLESv2)
 
 $(OUTPUT_PATH)/$(ST_PREFIX)$(VG_LIB).so: st_OpenVG.o $(OpenVG_LIBS)
 	$(call mklib,OpenVG)

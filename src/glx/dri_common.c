@@ -222,7 +222,9 @@ __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_RGB, bindToTextureRgb),
       __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_RGBA, bindToTextureRgba),
       __ATTRIB(__DRI_ATTRIB_BIND_TO_MIPMAP_TEXTURE,
                      bindToMipmapTexture),
-      __ATTRIB(__DRI_ATTRIB_YINVERTED, yInverted),};
+      __ATTRIB(__DRI_ATTRIB_YINVERTED, yInverted),
+      __ATTRIB(__DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE, sRGBCapable)
+};
 
 static int
 scalarEqual(struct glx_config *mode, unsigned int attrib, unsigned int value)
@@ -367,8 +369,10 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
    if (priv->drawHash == NULL)
       return NULL;
 
-   if (__glxHashLookup(priv->drawHash, glxDrawable, (void *) &pdraw) == 0)
+   if (__glxHashLookup(priv->drawHash, glxDrawable, (void *) &pdraw) == 0) {
+      pdraw->refcount ++;
       return pdraw;
+   }
 
    pdraw = psc->driScreen->createDrawable(psc, glxDrawable,
                                           glxDrawable, gc->config);
@@ -376,6 +380,7 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
       (*pdraw->destroyDrawable) (pdraw);
       return NULL;
    }
+   pdraw->refcount = 1;
 
    return pdraw;
 }
@@ -392,19 +397,28 @@ driReleaseDrawables(struct glx_context *gc)
    if (__glxHashLookup(priv->drawHash,
 		       gc->currentDrawable, (void *) &pdraw) == 0) {
       if (pdraw->drawable == pdraw->xDrawable) {
-	 (*pdraw->destroyDrawable)(pdraw);
-	 __glxHashDelete(priv->drawHash, gc->currentDrawable);
+	 pdraw->refcount --;
+	 if (pdraw->refcount == 0) {
+	    (*pdraw->destroyDrawable)(pdraw);
+	    __glxHashDelete(priv->drawHash, gc->currentDrawable);
+	 }
       }
    }
 
-   if (gc->currentDrawable != gc->currentReadable &&
-       __glxHashLookup(priv->drawHash,
+   if (__glxHashLookup(priv->drawHash,
 		       gc->currentReadable, (void *) &pdraw) == 0) {
       if (pdraw->drawable == pdraw->xDrawable) {
-	 (*pdraw->destroyDrawable)(pdraw);
-	 __glxHashDelete(priv->drawHash, gc->currentReadable);
+	 pdraw->refcount --;
+	 if (pdraw->refcount == 0) {
+	    (*pdraw->destroyDrawable)(pdraw);
+	    __glxHashDelete(priv->drawHash, gc->currentReadable);
+	 }
       }
    }
+
+   gc->currentDrawable = None;
+   gc->currentReadable = None;
+
 }
 
 #endif /* GLX_DIRECT_RENDERING */

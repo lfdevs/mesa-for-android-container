@@ -34,9 +34,7 @@
 #include "renderer.h"
 
 #include "pipe/p_context.h"
-#include "pipe/p_screen.h"
 #include "pipe/p_state.h"
-#include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
 #include "util/u_format.h"
@@ -136,6 +134,8 @@ static VGboolean blend_use_shader(struct vg_context *ctx)
    switch (ctx->state.vg.blend_mode) {
    case VG_BLEND_SRC_OVER:
       advanced_blending =
+         (!paint_is_opaque(ctx->state.vg.fill_paint) ||
+          !paint_is_opaque(ctx->state.vg.stroke_paint)) &&
          util_format_has_alpha(ctx->draw_buffer->strb->format);
       break;
    case VG_BLEND_DST_OVER:

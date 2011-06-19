@@ -507,6 +507,7 @@ ir_expression::constant_expression_value()
 
       break;
    case ir_binop_div:
+      /* FINISHME: Emit warning when division-by-zero is detected. */
       assert(op[0]->type == op[1]->type || op0_scalar || op1_scalar);
       for (unsigned c = 0, c0 = 0, c1 = 0;
 	   c < components;
@@ -537,6 +538,7 @@ ir_expression::constant_expression_value()
 
       break;
    case ir_binop_mod:
+      /* FINISHME: Emit warning when division-by-zero is detected. */
       assert(op[0]->type == op[1]->type || op0_scalar || op1_scalar);
       for (unsigned c = 0, c0 = 0, c1 = 0;
 	   c < components;

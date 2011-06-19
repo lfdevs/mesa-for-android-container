@@ -1,23 +1,18 @@
 From: Aurelien Jarno <aurel32@debian.org>
+From: Cyril Brulebois <kibi@debian.org>
     
 mesa fails to build on GNU/kFreeBSD, since some parts are not enabled.
-    
-http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=524690
 
----
- configure.ac |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+Debian bug: http://bugs.debian.org/524690
 
-Index: mesa/configure.ac
-===================================================================
---- mesa.orig/configure.ac
-+++ mesa/configure.ac
-@@ -851,7 +851,7 @@ if test "$mesa_driver" = dri; then
+--- a/configure.ac
++++ b/configure.ac
+@@ -1024,7 +1024,7 @@ if test "$mesa_driver" = dri -o "$mesa_driver" = no; then
              ;;
          esac
          ;;
--    freebsd* | dragonfly*)
-+    freebsd* | dragonfly* | kfreebsd*-gnu*)
+-    freebsd* | dragonfly* | *netbsd*)
++    freebsd* | dragonfly* | *netbsd* | kfreebsd*-gnu*)
          DEFINES="$DEFINES -DPTHREADS -DUSE_EXTERNAL_DXTN_LIB=1"
          DEFINES="$DEFINES -DIN_DRI_DRIVER -DHAVE_ALIAS"
          DEFINES="$DEFINES -DGLX_INDIRECT_RENDERING"

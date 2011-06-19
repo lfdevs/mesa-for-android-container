@@ -38,6 +38,14 @@
 #define unlikely(x)     !!(x)
 #endif
 
+#ifndef va_copy
+#ifdef __va_copy
+#define va_copy(dest, src) __va_copy((dest), (src))
+#else
+#define va_copy(dest, src) (dest) = (src)
+#endif
+#endif
+
 #define CANARY 0x5A1106
 
 struct ralloc_header
@@ -384,7 +392,15 @@ printf_length(const char *fmt, va_list untouched_args)
    va_list args;
    va_copy(args, untouched_args);
 
+#ifdef _MSC_VER
+   /* We need to use _vcsprintf to calculate the size as vsnprintf returns -1
+    * if the number of characters to write is greater than count.
+    */
+   size = _vscprintf(fmt, args);
+   (void)junk;
+#else
    size = vsnprintf(&junk, 1, fmt, args);
+#endif
    assert(size >= 0);
 
    va_end(args);

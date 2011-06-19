@@ -31,6 +31,9 @@
 #define R300_PFS_NUM_TEMP_REGS    32
 #define R300_PFS_NUM_CONST_REGS   32
 
+#define R400_PFS_MAX_ALU_INST     512
+#define R400_PFS_MAX_TEX_INST     512
+
 #define R500_PFS_MAX_INST         512
 #define R500_PFS_NUM_TEMP_REGS    128
 #define R500_PFS_NUM_CONST_REGS   256
@@ -129,10 +132,10 @@ typedef enum {
 struct r300_fragment_program_external_state {
 	struct {
 		/**
-		 * If the sampler is used as a shadow sampler,
-		 * this field contains swizzle depending on the depth texture mode.
+		 * This field contains swizzle for some lowering passes
+		 * (shadow comparison, unorm->snorm conversion)
 		 */
-		unsigned depth_texture_swizzle:12;
+		unsigned texture_swizzle:12;
 
 		/**
 		 * If the sampler is used as a shadow sampler,
@@ -169,7 +172,15 @@ struct r300_fragment_program_external_state {
 		 * and right before texture fetch. The scaling factor is given by
 		 * RC_STATE_R300_TEXSCALE_FACTOR. */
 		unsigned clamp_and_scale_before_fetch : 1;
+
+		/**
+		 * Fetch RGTC1_SNORM or LATC1_SNORM as UNORM and convert UNORM -> SNORM
+		 * in the shader.
+		 */
+		unsigned convert_unorm_to_snorm:1;
 	} unit[16];
+
+	unsigned frag_clamp:1;
 };
 
 
@@ -187,24 +198,29 @@ struct r300_fragment_program_node {
  */
 struct r300_fragment_program_code {
 	struct {
-		int length; /**< total # of texture instructions used */
-		uint32_t inst[R300_PFS_MAX_TEX_INST];
+		unsigned int length; /**< total # of texture instructions used */
+		uint32_t inst[R400_PFS_MAX_TEX_INST];
 	} tex;
 
 	struct {
-		int length; /**< total # of ALU instructions used */
+		unsigned int length; /**< total # of ALU instructions used */
 		struct {
 			uint32_t rgb_inst;
 			uint32_t rgb_addr;
 			uint32_t alpha_inst;
 			uint32_t alpha_addr;
-		} inst[R300_PFS_MAX_ALU_INST];
+			uint32_t r400_ext_addr;
+		} inst[R400_PFS_MAX_ALU_INST];
 	} alu;
 
 	uint32_t config; /* US_CONFIG */
 	uint32_t pixsize; /* US_PIXSIZE */
 	uint32_t code_offset; /* US_CODE_OFFSET */
+	uint32_t r400_code_offset_ext; /* US_CODE_EXT */
 	uint32_t code_addr[4]; /* US_CODE_ADDR */
+	/*US_CODE_BANK.R390_MODE: Enables 512 instructions and 64 temporaries
+	 * for r400 cards */
+	unsigned int r390_mode:1;
 };
 
 

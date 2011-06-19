@@ -21,7 +21,6 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <stdio.h>
 #include "ast.h"
 extern "C" {
 #include "program/symbol_table.h"
@@ -116,4 +115,24 @@ bool
 ast_fully_specified_type::has_qualifiers() const
 {
    return this->qualifier.flags.i != 0;
+}
+
+bool ast_type_qualifier::has_interpolation() const
+{
+   return this->flags.q.smooth
+          || this->flags.q.flat
+          || this->flags.q.noperspective;
+}
+
+const char*
+ast_type_qualifier::interpolation_string() const
+{
+   if (this->flags.q.smooth)
+      return "smooth";
+   else if (this->flags.q.flat)
+      return "flat";
+   else if (this->flags.q.noperspective)
+      return "noperspective";
+   else
+      return NULL;
 }

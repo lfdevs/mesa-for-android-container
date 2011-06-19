@@ -56,11 +56,7 @@ struct rc_src_register {
 
 struct rc_dst_register {
 	unsigned int File:3;
-
-	/** Negative values may be used for relative addressing. */
-	signed int Index:(RC_REGISTER_INDEX_BITS+1);
-	unsigned int RelAddr:1;
-
+	unsigned int Index:RC_REGISTER_INDEX_BITS;
 	unsigned int WriteMask:4;
 };
 
@@ -112,6 +108,9 @@ struct rc_sub_instruction {
 
 	/** True if tex instruction should do shadow comparison */
 	unsigned int TexShadow:1;
+
+	/**R500 Only.  How to swizzle the result of a TEX lookup*/
+	unsigned int TexSwizzle:12;
 	/*@}*/
 
 	/** This holds information about the presubtract operation used by

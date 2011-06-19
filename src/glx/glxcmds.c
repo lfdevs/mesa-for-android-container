@@ -36,6 +36,7 @@
 #include "glxclient.h"
 #include "glapi.h"
 #include "glxextensions.h"
+#include "indirect.h"
 
 #ifdef GLX_DIRECT_RENDERING
 #ifdef GLX_USE_APPLEGL
@@ -199,19 +200,14 @@ glx_context_init(struct glx_context *gc,
 
 
 /**
- * Create a new context.  Exactly one of \c vis and \c fbconfig should be
- * non-NULL.
+ * Create a new context.
  *
- * \param use_glx_1_3  For FBConfigs, should GLX 1.3 protocol or
- *                     SGIX_fbconfig protocol be used?
  * \param renderType   For FBConfigs, what is the rendering type?
  */
 
 static GLXContext
-CreateContext(Display * dpy, int generic_id,
-              struct glx_config *config,
-              GLXContext shareList_user,
-              Bool allowDirect,
+CreateContext(Display *dpy, int generic_id, struct glx_config *config,
+              GLXContext shareList_user, Bool allowDirect,
 	      unsigned code, int renderType, int screen)
 {
    struct glx_context *gc;
@@ -381,8 +377,7 @@ DestroyContext(Display * dpy, GLXContext ctx)
    }
    __glXUnlock();
 
-   if (gc->vtable->destroy)
-      gc->vtable->destroy(gc);
+   gc->vtable->destroy(gc);
 }
 
 _X_EXPORT void
@@ -652,13 +647,13 @@ glXCreateGLXPixmap(Display * dpy, XVisualInfo * vis, Pixmap pixmap)
       if (psc->driScreen == NULL)
          break;
       config = glx_config_find_visual(psc->visuals, vis->visualid);
-      pdraw = psc->driScreen->createDrawable(psc, pixmap, req->glxpixmap, config);
+      pdraw = psc->driScreen->createDrawable(psc, pixmap, xid, config);
       if (pdraw == NULL) {
          fprintf(stderr, "failed to create pixmap\n");
          break;
       }
 
-      if (__glxHashInsert(priv->drawHash, req->glxpixmap, pdraw)) {
+      if (__glxHashInsert(priv->drawHash, xid, pdraw)) {
          (*pdraw->destroyDrawable) (pdraw);
          return None;           /* FIXME: Check what we're supposed to do here... */
       }
@@ -730,11 +725,16 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
    xGLXSwapBuffersReq *req;
 #endif
 
+   gc = __glXGetCurrentContext();
+
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
    __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, drawable);
 
    if (pdraw != NULL) {
-      glFlush();
+      if (gc && drawable == gc->currentDrawable) {
+	 glFlush();
+      }
+
       (*pdraw->psc->driScreen->swapBuffers)(pdraw, 0, 0, 0);
       return;
    }
@@ -749,7 +749,6 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
     ** The calling thread may or may not have a current context.  If it
     ** does, send the context tag so the server can do a flush.
     */
-   gc = __glXGetCurrentContext();
    if ((gc != NULL) && (dpy == gc->currentDpy) &&
        ((drawable == gc->currentDrawable)
         || (drawable == gc->currentReadable))) {
@@ -1894,7 +1893,7 @@ glXGetFBConfigFromVisualSGIX(Display * dpy, XVisualInfo * vis)
    struct glx_display *priv;
    struct glx_screen *psc = NULL;
 
-   if ((GetGLXPrivScreenConfig(dpy, vis->screen, &priv, &psc) != Success)
+   if ((GetGLXPrivScreenConfig(dpy, vis->screen, &priv, &psc) == Success)
        && __glXExtensionBitIsEnabled(psc, SGIX_fbconfig_bit)
        && (psc->configs->fbconfigID != (int) GLX_DONT_CARE)) {
       return (GLXFBConfigSGIX) glx_config_find_visual(psc->configs,
@@ -2479,7 +2478,6 @@ static const struct name_address_pair GLX_functions[] = {
    {NULL, NULL}                 /* end of list */
 };
 
-#ifndef GLX_USE_APPLEGL
 static const GLvoid *
 get_glx_proc_address(const char *funcName)
 {
@@ -2493,7 +2491,6 @@ get_glx_proc_address(const char *funcName)
 
    return NULL;
 }
-#endif
 
 /**
  * Get the address of a named GL function.  This is the pre-GLX 1.4 name for
@@ -2516,15 +2513,15 @@ _X_EXPORT void (*glXGetProcAddressARB(const GLubyte * procName)) (void)
     * DRI based drivers from searching the core GL function table for
     * internal API functions.
     */
-#ifdef GLX_USE_APPLEGL
-   f = (gl_function) apple_glx_get_proc_address(procName);
-#else
    f = (gl_function) get_glx_proc_address((const char *) procName);
    if ((f == NULL) && (procName[0] == 'g') && (procName[1] == 'l')
        && (procName[2] != 'X')) {
-      f = (gl_function) _glapi_get_proc_address((const char *) procName);
-   }
+#ifdef GLX_SHARED_GLAPI
+      f = (gl_function) __indirect_get_proc_address((const char *) procName);
 #endif
+      if (!f)
+         f = (gl_function) _glapi_get_proc_address((const char *) procName);
+   }
    return f;
 }
 

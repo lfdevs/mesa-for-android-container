@@ -4,6 +4,7 @@
 
 #include "util/u_memory.h"
 #include "util/u_format.h"
+#include "util/u_transfer.h"
 
 
 static unsigned brw_translate_surface_format( unsigned id )
@@ -203,7 +204,7 @@ static void brw_translate_vertex_elements(struct brw_context *brw,
       brw_velems->ve[i].ve1.vfcomponent2 = comp2;
       brw_velems->ve[i].ve1.vfcomponent3 = comp3;
 
-      if (BRW_IS_IGDNG(brw))
+      if (brw->gen == 5)
          brw_velems->ve[i].ve1.dst_offset = 0;
       else
          brw_velems->ve[i].ve1.dst_offset = i * 4;
@@ -248,7 +249,6 @@ static void brw_set_vertex_buffers(struct pipe_context *pipe,
                                    const struct pipe_vertex_buffer *buffers)
 {
    struct brw_context *brw = brw_context(pipe);
-   unsigned i;
 
    /* Check for no change */
    if (count == brw->curr.num_vertex_buffers &&
@@ -257,18 +257,9 @@ static void brw_set_vertex_buffers(struct pipe_context *pipe,
               count * sizeof buffers[0]) == 0)
       return;
 
-   /* Adjust refcounts */
-   for (i = 0; i < count; i++) 
-      pipe_resource_reference(&brw->curr.vertex_buffer[i].buffer, 
-                            buffers[i].buffer);
-
-   for ( ; i < brw->curr.num_vertex_buffers; i++)
-      pipe_resource_reference(&brw->curr.vertex_buffer[i].buffer,
-                            NULL);
-
-   /* Copy remaining data */
-   memcpy(brw->curr.vertex_buffer, buffers, count * sizeof buffers[0]);
-   brw->curr.num_vertex_buffers = count;
+   util_copy_vertex_buffers(brw->curr.vertex_buffer,
+                            &brw->curr.num_vertex_buffers,
+                            buffers, count);
 
    brw->state.dirty.mesa |= PIPE_NEW_VERTEX_BUFFER;
 }
@@ -312,15 +303,20 @@ brw_pipe_vertex_init( struct brw_context *brw )
    brw->base.create_vertex_elements_state = brw_create_vertex_elements_state;
    brw->base.bind_vertex_elements_state = brw_bind_vertex_elements_state;
    brw->base.delete_vertex_elements_state = brw_delete_vertex_elements_state;
+   brw->base.redefine_user_buffer = u_default_redefine_user_buffer;
 }
 
 
 void 
 brw_pipe_vertex_cleanup( struct brw_context *brw )
 {
+   unsigned i;
 
    /* Release bound pipe vertex_buffers
     */
+   for (i = 0; i < brw->curr.num_vertex_buffers; i++) {
+      pipe_resource_reference(&brw->curr.vertex_buffer[i].buffer, NULL);
+   }
 
    /* Release some other stuff
     */

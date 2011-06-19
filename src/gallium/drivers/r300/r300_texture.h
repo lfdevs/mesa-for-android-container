@@ -32,8 +32,12 @@ struct pipe_resource;
 struct winsys_handle;
 struct r300_texture_format_state;
 struct r300_texture_desc;
-struct r300_texture;
+struct r300_resource;
 struct r300_screen;
+
+void util_format_combine_swizzles(unsigned char *dst,
+                                  const unsigned char *swz1,
+                                  const unsigned char *swz2);
 
 unsigned r300_get_swizzle_combined(const unsigned char *swizzle_format,
                                    const unsigned char *swizzle_view,
@@ -46,9 +50,10 @@ uint32_t r300_translate_texformat(enum pipe_format format,
 
 uint32_t r500_tx_format_msb_bit(enum pipe_format format);
 
-void r300_texture_reinterpret_format(struct pipe_screen *screen,
+boolean r300_resource_set_properties(struct pipe_screen *screen,
                                      struct pipe_resource *tex,
-                                     enum pipe_format new_format);
+                                     unsigned offset,
+                                     const struct pipe_resource *new_properties);
 
 boolean r300_is_colorbuffer_format_supported(enum pipe_format format);
 
@@ -57,9 +62,13 @@ boolean r300_is_zs_format_supported(enum pipe_format format);
 boolean r300_is_sampler_format_supported(enum pipe_format format);
 
 void r300_texture_setup_format_state(struct r300_screen *screen,
-                                     struct r300_texture_desc *desc,
+                                     struct r300_resource *tex,
                                      unsigned level,
                                      struct r300_texture_format_state *out);
+
+boolean r300_resource_get_handle(struct pipe_screen* screen,
+                                struct pipe_resource *texture,
+                                struct winsys_handle *whandle);
 
 struct pipe_resource*
 r300_texture_from_handle(struct pipe_screen* screen,

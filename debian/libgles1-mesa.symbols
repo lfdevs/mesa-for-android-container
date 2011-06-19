@@ -1,7 +1,4 @@
 libGLESv1_CM.so.1 libgles1-mesa #MINVER# | libgles1
-# _glapi_* are internal GL dispatch symbols.  They should probably be hidden
- (regex)"^_glapi_.*@Base$" 7.8.1
- _glthread_GetID@Base 7.8.1
  glActiveTexture@Base 7.8.1
  glAlphaFunc@Base 7.8.1
  glAlphaFuncx@Base 7.8.1

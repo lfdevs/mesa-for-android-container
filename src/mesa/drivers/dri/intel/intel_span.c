@@ -1,6 +1,7 @@
 /**************************************************************************
  * 
  * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2011 Intel Corporation
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -23,9 +24,13 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * 
+ * Authors:
+ *     Chad Versace <chad@chad-versace.us>
+ *
  **************************************************************************/
 
 #include <stdbool.h>
+#include <stdint.h>
 #include "main/glheader.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
@@ -50,28 +55,22 @@ intel_set_span_functions(struct intel_context *intel,
 
 #define LOCAL_VARS							\
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);		\
-   const GLint yScale = rb->Name ? 1 : -1;				\
-   const GLint yBias = rb->Name ? 0 : rb->Height - 1;			\
    int minx = 0, miny = 0;						\
    int maxx = rb->Width;						\
    int maxy = rb->Height;						\
-   int pitch = irb->region->pitch * irb->region->cpp;			\
-   void *buf = irb->region->buffer->virtual;				\
+   int pitch = rb->RowStride * irb->region->cpp;			\
+   void *buf = rb->Data;						\
    GLuint p;								\
-   (void) p;								\
-   (void)buf; (void)pitch; /* unused for non-gttmap. */			\
+   (void) p;
 
 #define HW_CLIPLOOP()
 #define HW_ENDCLIPLOOP()
 
-#define Y_FLIP(_y) ((_y) * yScale + yBias)
+#define Y_FLIP(_y) (_y)
 
 #define HW_LOCK()
 
 #define HW_UNLOCK()
-
-/* Convenience macros to avoid typing the address argument over and over */
-#define NO_TILE(_X, _Y) (((_Y) * irb->region->pitch + (_X)) * irb->region->cpp)
 
 /* r5g6b5 color span and pixel functions */
 #define SPANTMP_PIXEL_FMT GL_RGB
@@ -115,6 +114,64 @@ intel_set_span_functions(struct intel_context *intel,
 #define TAG2(x,y) intel_##x##y##_A8
 #include "spantmp2.h"
 
+/* ------------------------------------------------------------------------- */
+/* s8 stencil span and pixel functions                                       */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * HAVE_HW_STENCIL_SPANS determines if stencil buffer read/writes are done with
+ * memcpy or for loops. Since the stencil buffer is interleaved, memcpy won't
+ * work.
+ */
+#define HAVE_HW_STENCIL_SPANS 0
+
+#define LOCAL_STENCIL_VARS						\
+   (void) ctx;								\
+   int minx = 0;							\
+   int miny = 0;							\
+   int maxx = rb->Width;						\
+   int maxy = rb->Height;						\
+   int stride = rb->RowStride;						\
+   uint8_t *buf = rb->Data;						\
+
+/* Don't flip y. */
+#undef Y_FLIP
+#define Y_FLIP(y) y
+
+/**
+ * \brief Get pointer offset into stencil buffer.
+ *
+ * The stencil buffer interleaves two rows into one. Yay for crazy hardware.
+ * The table below demonstrates how the pointer arithmetic behaves for a buffer
+ * with positive stride (s=stride).
+ *
+ *     x    | y     | byte offset
+ *     --------------------------
+ *     0    | 0     | 0
+ *     0    | 1     | 1
+ *     1    | 0     | 2
+ *     1    | 1     | 3
+ *     ...  | ...   | ...
+ *     0    | 2     | s
+ *     0    | 3     | s + 1
+ *     1    | 2     | s + 2
+ *     1    | 3     | s + 3
+ *
+ *
+ */
+static inline intptr_t
+intel_offset_S8(int stride, GLint x, GLint y)
+{
+   return 2 * ((y / 2) * stride + x) + y % 2;
+}
+
+#define WRITE_STENCIL(x, y, src)  buf[intel_offset_S8(stride, x, y)] = src;
+#define READ_STENCIL(dest, x, y) dest = buf[intel_offset_S8(stride, x, y)]
+#define TAG(x) intel_##x##_S8
+#include "stenciltmp.h"
+
+/* ------------------------------------------------------------------------- */
+
 void
 intel_renderbuffer_map(struct intel_context *intel, struct gl_renderbuffer *rb)
 {
@@ -128,10 +185,16 @@ intel_renderbuffer_map(struct intel_context *intel, struct gl_renderbuffer *rb)
    rb->Data = irb->region->buffer->virtual;
    rb->RowStride = irb->region->pitch;
 
-   /* Flip orientation if it's the window system buffer */
    if (!rb->Name) {
+      /* Flip orientation of the window system buffer */
       rb->Data += rb->RowStride * (irb->region->height - 1) * irb->region->cpp;
       rb->RowStride = -rb->RowStride;
+   } else {
+      /* Adjust the base pointer of a texture image drawbuffer to the image
+       * within the miptree region (all else has draw_x/y = 0).
+       */
+      rb->Data += irb->draw_x * irb->region->cpp;
+      rb->Data += irb->draw_y * rb->RowStride * irb->region->cpp;
    }
 
    intel_set_span_functions(intel, rb);
@@ -154,71 +217,26 @@ intel_renderbuffer_unmap(struct intel_context *intel,
    rb->RowStride = 0;
 }
 
-/**
- * Map or unmap all the renderbuffers which we may need during
- * software rendering.
- * XXX in the future, we could probably convey extra information to
- * reduce the number of mappings needed.  I.e. if doing a glReadPixels
- * from the depth buffer, we really only need one mapping.
- *
- * XXX Rewrite this function someday.
- * We can probably just loop over all the renderbuffer attachments,
- * map/unmap all of them, and not worry about the _ColorDrawBuffers
- * _ColorReadBuffer, _DepthBuffer or _StencilBuffer fields.
- */
 static void
-intel_map_unmap_framebuffer(struct intel_context *intel,
-			    struct gl_framebuffer *fb,
-			    GLboolean map)
+intel_framebuffer_map(struct intel_context *intel, struct gl_framebuffer *fb)
 {
-   GLuint i;
+   int i;
 
-   /* color draw buffers */
-   for (i = 0; i < fb->_NumColorDrawBuffers; i++) {
-      if (map)
-         intel_renderbuffer_map(intel, fb->_ColorDrawBuffers[i]);
-      else
-         intel_renderbuffer_unmap(intel, fb->_ColorDrawBuffers[i]);
-   }
-
-   /* color read buffer */
-   if (map)
-      intel_renderbuffer_map(intel, fb->_ColorReadBuffer);
-   else
-      intel_renderbuffer_unmap(intel, fb->_ColorReadBuffer);
-
-   /* check for render to textures */
    for (i = 0; i < BUFFER_COUNT; i++) {
-      struct gl_renderbuffer_attachment *att =
-         fb->Attachment + i;
-      struct gl_texture_object *tex = att->Texture;
-      if (tex) {
-         /* render to texture */
-         ASSERT(att->Renderbuffer);
-         if (map)
-            intel_tex_map_images(intel, intel_texture_object(tex));
-         else
-            intel_tex_unmap_images(intel, intel_texture_object(tex));
-      }
-   }
-
-   /* depth buffer (Note wrapper!) */
-   if (fb->_DepthBuffer) {
-      if (map)
-         intel_renderbuffer_map(intel, fb->_DepthBuffer->Wrapped);
-      else
-         intel_renderbuffer_unmap(intel, fb->_DepthBuffer->Wrapped);
-   }
-
-   /* stencil buffer (Note wrapper!) */
-   if (fb->_StencilBuffer) {
-      if (map)
-         intel_renderbuffer_map(intel, fb->_StencilBuffer->Wrapped);
-      else
-         intel_renderbuffer_unmap(intel, fb->_StencilBuffer->Wrapped);
+      intel_renderbuffer_map(intel, fb->Attachment[i].Renderbuffer);
    }
 
    intel_check_front_buffer_rendering(intel);
+}
+
+static void
+intel_framebuffer_unmap(struct intel_context *intel, struct gl_framebuffer *fb)
+{
+   int i;
+
+   for (i = 0; i < BUFFER_COUNT; i++) {
+      intel_renderbuffer_unmap(intel, fb->Attachment[i].Renderbuffer);
+   }
 }
 
 /**
@@ -245,9 +263,10 @@ intelSpanRenderStart(struct gl_context * ctx)
       }
    }
 
-   intel_map_unmap_framebuffer(intel, ctx->DrawBuffer, GL_TRUE);
-   if (ctx->ReadBuffer != ctx->DrawBuffer)
-      intel_map_unmap_framebuffer(intel, ctx->ReadBuffer, GL_TRUE);
+   intel_framebuffer_map(intel, ctx->DrawBuffer);
+   if (ctx->ReadBuffer != ctx->DrawBuffer) {
+      intel_framebuffer_map(intel, ctx->ReadBuffer);
+   }
 }
 
 /**
@@ -269,9 +288,10 @@ intelSpanRenderFinish(struct gl_context * ctx)
       }
    }
 
-   intel_map_unmap_framebuffer(intel, ctx->DrawBuffer, GL_FALSE);
-   if (ctx->ReadBuffer != ctx->DrawBuffer)
-      intel_map_unmap_framebuffer(intel, ctx->ReadBuffer, GL_FALSE);
+   intel_framebuffer_unmap(intel, ctx->DrawBuffer);
+   if (ctx->ReadBuffer != ctx->DrawBuffer) {
+      intel_framebuffer_unmap(intel, ctx->ReadBuffer);
+   }
 }
 
 
@@ -335,10 +355,16 @@ static span_init_func intel_span_init_funcs[MESA_FORMAT_COUNT] =
    [MESA_FORMAT_Z16] = _mesa_set_renderbuffer_accessors,
    [MESA_FORMAT_X8_Z24] = _mesa_set_renderbuffer_accessors,
    [MESA_FORMAT_S8_Z24] = _mesa_set_renderbuffer_accessors,
+   [MESA_FORMAT_S8] = intel_InitStencilPointers_S8,
    [MESA_FORMAT_R8] = _mesa_set_renderbuffer_accessors,
    [MESA_FORMAT_RG88] = _mesa_set_renderbuffer_accessors,
    [MESA_FORMAT_R16] = _mesa_set_renderbuffer_accessors,
    [MESA_FORMAT_RG1616] = _mesa_set_renderbuffer_accessors,
+   [MESA_FORMAT_RGBA_FLOAT32] = _mesa_set_renderbuffer_accessors,
+   [MESA_FORMAT_RG_FLOAT32] = _mesa_set_renderbuffer_accessors,
+   [MESA_FORMAT_R_FLOAT32] = _mesa_set_renderbuffer_accessors,
+   [MESA_FORMAT_INTENSITY_FLOAT32] = _mesa_set_renderbuffer_accessors,
+   [MESA_FORMAT_LUMINANCE_FLOAT32] = _mesa_set_renderbuffer_accessors,
 };
 
 bool

@@ -28,6 +28,8 @@
 
 #include "main/glheader.h"
 #include "main/context.h"
+#include "main/condrender.h"
+#include "main/samplerobj.h"
 #include "main/state.h"
 #include "main/enums.h"
 #include "tnl/tnl.h"
@@ -129,25 +131,31 @@ static void brw_emit_prim(struct brw_context *brw,
 			  const struct _mesa_prim *prim,
 			  uint32_t hw_prim)
 {
-   struct brw_3d_primitive prim_packet;
    struct intel_context *intel = &brw->intel;
+   int verts_per_instance;
+   int vertex_access_type;
+   int start_vertex_location;
+   int base_vertex_location;
 
    DBG("PRIM: %s %d %d\n", _mesa_lookup_enum_by_nr(prim->mode),
        prim->start, prim->count);
 
-   prim_packet.header.opcode = CMD_3D_PRIM;
-   prim_packet.header.length = sizeof(prim_packet)/4 - 2;
-   prim_packet.header.pad = 0;
-   prim_packet.header.topology = hw_prim;
-   prim_packet.header.indexed = prim->indexed;
+   start_vertex_location = prim->start;
+   base_vertex_location = prim->basevertex;
+   if (prim->indexed) {
+      vertex_access_type = GEN4_3DPRIM_VERTEXBUFFER_ACCESS_RANDOM;
+      start_vertex_location += brw->ib.start_vertex_offset;
+      base_vertex_location += brw->vb.start_vertex_bias;
+   } else {
+      vertex_access_type = GEN4_3DPRIM_VERTEXBUFFER_ACCESS_SEQUENTIAL;
+      start_vertex_location += brw->vb.start_vertex_bias;
+   }
 
-   prim_packet.verts_per_instance = trim(prim->mode, prim->count);
-   prim_packet.start_vert_location = prim->start;
-   if (prim->indexed)
-      prim_packet.start_vert_location += brw->ib.start_vertex_offset;
-   prim_packet.instance_count = 1;
-   prim_packet.start_instance_location = 0;
-   prim_packet.base_vert_location = prim->basevertex;
+   verts_per_instance = trim(prim->mode, prim->count);
+
+   /* If nothing to emit, just return. */
+   if (verts_per_instance == 0)
+      return;
 
    /* If we're set to always flush, do it before and after the primitive emit.
     * We want to catch both missed flushes that hurt instruction/state cache
@@ -155,16 +163,79 @@ static void brw_emit_prim(struct brw_context *brw,
     * the besides the draw code.
     */
    if (intel->always_flush_cache) {
-      intel_batchbuffer_emit_mi_flush(intel->batch);
+      intel_batchbuffer_emit_mi_flush(intel);
    }
-   if (prim_packet.verts_per_instance) {
-      intel_batchbuffer_data( brw->intel.batch, &prim_packet,
-			      sizeof(prim_packet), false);
-   }
+
+   BEGIN_BATCH(6);
+   OUT_BATCH(CMD_3D_PRIM << 16 | (6 - 2) |
+	     hw_prim << GEN4_3DPRIM_TOPOLOGY_TYPE_SHIFT |
+	     vertex_access_type);
+   OUT_BATCH(verts_per_instance);
+   OUT_BATCH(start_vertex_location);
+   OUT_BATCH(1); // instance count
+   OUT_BATCH(0); // start instance location
+   OUT_BATCH(base_vertex_location);
+   ADVANCE_BATCH();
+
    if (intel->always_flush_cache) {
-      intel_batchbuffer_emit_mi_flush(intel->batch);
+      intel_batchbuffer_emit_mi_flush(intel);
    }
 }
+
+static void gen7_emit_prim(struct brw_context *brw,
+			   const struct _mesa_prim *prim,
+			   uint32_t hw_prim)
+{
+   struct intel_context *intel = &brw->intel;
+   int verts_per_instance;
+   int vertex_access_type;
+   int start_vertex_location;
+   int base_vertex_location;
+
+   DBG("PRIM: %s %d %d\n", _mesa_lookup_enum_by_nr(prim->mode),
+       prim->start, prim->count);
+
+   start_vertex_location = prim->start;
+   base_vertex_location = prim->basevertex;
+   if (prim->indexed) {
+      vertex_access_type = GEN7_3DPRIM_VERTEXBUFFER_ACCESS_RANDOM;
+      start_vertex_location += brw->ib.start_vertex_offset;
+      base_vertex_location += brw->vb.start_vertex_bias;
+   } else {
+      vertex_access_type = GEN7_3DPRIM_VERTEXBUFFER_ACCESS_SEQUENTIAL;
+      start_vertex_location += brw->vb.start_vertex_bias;
+   }
+
+   verts_per_instance = trim(prim->mode, prim->count);
+
+   /* If nothing to emit, just return. */
+   if (verts_per_instance == 0)
+      return;
+
+   /* If we're set to always flush, do it before and after the primitive emit.
+    * We want to catch both missed flushes that hurt instruction/state cache
+    * and missed flushes of the render cache as it heads to other parts of
+    * the besides the draw code.
+    */
+   if (intel->always_flush_cache) {
+      intel_batchbuffer_emit_mi_flush(intel);
+   }
+
+   BEGIN_BATCH(7);
+   OUT_BATCH(CMD_3D_PRIM << 16 | (7 - 2));
+   OUT_BATCH(hw_prim | vertex_access_type);
+   OUT_BATCH(verts_per_instance);
+   OUT_BATCH(start_vertex_location);
+   OUT_BATCH(1); // instance count
+   OUT_BATCH(0); // start instance location
+   OUT_BATCH(base_vertex_location);
+   ADVANCE_BATCH();
+
+   if (intel->always_flush_cache) {
+      intel_batchbuffer_emit_mi_flush(intel);
+   }
+}
+
 
 static void brw_merge_inputs( struct brw_context *brw,
 		       const struct gl_client_array *arrays[])
@@ -172,13 +243,16 @@ static void brw_merge_inputs( struct brw_context *brw,
    struct brw_vertex_info old = brw->vb.info;
    GLuint i;
 
-   for (i = 0; i < VERT_ATTRIB_MAX; i++)
-      drm_intel_bo_unreference(brw->vb.inputs[i].bo);
+   for (i = 0; i < brw->vb.nr_buffers; i++) {
+      drm_intel_bo_unreference(brw->vb.buffers[i].bo);
+      brw->vb.buffers[i].bo = NULL;
+   }
+   brw->vb.nr_buffers = 0;
 
-   memset(&brw->vb.inputs, 0, sizeof(brw->vb.inputs));
    memset(&brw->vb.info, 0, sizeof(brw->vb.info));
 
    for (i = 0; i < VERT_ATTRIB_MAX; i++) {
+      brw->vb.inputs[i].buffer = -1;
       brw->vb.inputs[i].glarray = arrays[i];
       brw->vb.inputs[i].attrib = (gl_vert_attrib) i;
 
@@ -190,102 +264,6 @@ static void brw_merge_inputs( struct brw_context *brw,
    /* Raise statechanges if input sizes have changed. */
    if (memcmp(brw->vb.info.sizes, old.sizes, sizeof(old.sizes)) != 0)
       brw->state.dirty.brw |= BRW_NEW_INPUT_DIMENSIONS;
-}
-
-/* XXX: could split the primitive list to fallback only on the
- * non-conformant primitives.
- */
-static GLboolean check_fallbacks( struct brw_context *brw,
-				  const struct _mesa_prim *prim,
-				  GLuint nr_prims )
-{
-   struct gl_context *ctx = &brw->intel.ctx;
-   GLuint i;
-
-   /* If we don't require strict OpenGL conformance, never 
-    * use fallbacks.  If we're forcing fallbacks, always
-    * use fallfacks.
-    */
-   if (brw->intel.conformance_mode == 0)
-      return GL_FALSE;
-
-   if (brw->intel.conformance_mode == 2)
-      return GL_TRUE;
-
-   if (ctx->Polygon.SmoothFlag) {
-      for (i = 0; i < nr_prims; i++)
-	 if (reduced_prim[prim[i].mode] == GL_TRIANGLES) 
-	    return GL_TRUE;
-   }
-
-   /* BRW hardware will do AA lines, but they are non-conformant it
-    * seems.  TBD whether we keep this fallback:
-    */
-   if (ctx->Line.SmoothFlag) {
-      for (i = 0; i < nr_prims; i++)
-	 if (reduced_prim[prim[i].mode] == GL_LINES) 
-	    return GL_TRUE;
-   }
-
-   /* Stipple -- these fallbacks could be resolved with a little
-    * bit of work?
-    */
-   if (ctx->Line.StippleFlag) {
-      for (i = 0; i < nr_prims; i++) {
-	 /* GS doesn't get enough information to know when to reset
-	  * the stipple counter?!?
-	  */
-	 if (prim[i].mode == GL_LINE_LOOP || prim[i].mode == GL_LINE_STRIP) 
-	    return GL_TRUE;
-	    
-	 if (prim[i].mode == GL_POLYGON &&
-	     (ctx->Polygon.FrontMode == GL_LINE ||
-	      ctx->Polygon.BackMode == GL_LINE))
-	    return GL_TRUE;
-      }
-   }
-
-   if (ctx->Point.SmoothFlag) {
-      for (i = 0; i < nr_prims; i++)
-	 if (prim[i].mode == GL_POINTS) 
-	    return GL_TRUE;
-   }
-
-   /* BRW hardware doesn't handle GL_CLAMP texturing correctly;
-    * brw_wm_sampler_state:translate_wrap_mode() treats GL_CLAMP
-    * as GL_CLAMP_TO_EDGE instead.  If we're using GL_CLAMP, and
-    * we want strict conformance, force the fallback.
-    * Right now, we only do this for 2D textures.
-    */
-   {
-      int u;
-      for (u = 0; u < ctx->Const.MaxTextureCoordUnits; u++) {
-         struct gl_texture_unit *texUnit = &ctx->Texture.Unit[u];
-         if (texUnit->Enabled) {
-            if (texUnit->Enabled & TEXTURE_1D_BIT) {
-               if (texUnit->CurrentTex[TEXTURE_1D_INDEX]->WrapS == GL_CLAMP) {
-                   return GL_TRUE;
-               }
-            }
-            if (texUnit->Enabled & TEXTURE_2D_BIT) {
-               if (texUnit->CurrentTex[TEXTURE_2D_INDEX]->WrapS == GL_CLAMP ||
-                   texUnit->CurrentTex[TEXTURE_2D_INDEX]->WrapT == GL_CLAMP) {
-                   return GL_TRUE;
-               }
-            }
-            if (texUnit->Enabled & TEXTURE_3D_BIT) {
-               if (texUnit->CurrentTex[TEXTURE_3D_INDEX]->WrapS == GL_CLAMP ||
-                   texUnit->CurrentTex[TEXTURE_3D_INDEX]->WrapT == GL_CLAMP ||
-                   texUnit->CurrentTex[TEXTURE_3D_INDEX]->WrapR == GL_CLAMP) {
-                   return GL_TRUE;
-               }
-            }
-         }
-      }
-   }
-      
-   /* Nothing stopping us from the fast path now */
-   return GL_FALSE;
 }
 
 /* May fail if out of video memory for texture or vbo upload, or on
@@ -303,7 +281,6 @@ static GLboolean brw_try_draw_prims( struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
    GLboolean retval = GL_FALSE;
    GLboolean warn = GL_FALSE;
-   GLboolean first_time = GL_TRUE;
    GLuint i;
 
    if (ctx->NewState)
@@ -317,9 +294,6 @@ static GLboolean brw_try_draw_prims( struct gl_context *ctx,
     * texture level other than level 0.
     */
    brw_validate_textures( brw );
-
-   if (check_fallbacks(brw, prim, nr_prims))
-      return GL_FALSE;
 
    /* Bind all inputs, derive varying and size information:
     */
@@ -343,22 +317,24 @@ static GLboolean brw_try_draw_prims( struct gl_context *ctx,
 
    for (i = 0; i < nr_prims; i++) {
       uint32_t hw_prim;
+      int estimated_max_prim_size;
+
+      estimated_max_prim_size = 512; /* batchbuffer commands */
+      estimated_max_prim_size += (BRW_MAX_TEX_UNIT *
+				  (sizeof(struct brw_sampler_state) +
+				   sizeof(struct gen5_sampler_default_color)));
+      estimated_max_prim_size += 1024; /* gen6 VS push constants */
+      estimated_max_prim_size += 1024; /* gen6 WM push constants */
+      estimated_max_prim_size += 512; /* misc. pad */
 
       /* Flush the batch if it's approaching full, so that we don't wrap while
        * we've got validated state that needs to be in the same batch as the
-       * primitives.  This fraction is just a guess (minimal full state plus
-       * a primitive is around 512 bytes), and would be better if we had
-       * an upper bound of how much we might emit in a single
-       * brw_try_draw_prims().
+       * primitives.
        */
-      intel_batchbuffer_require_space(intel->batch, intel->batch->size / 4,
-				      false);
+      intel_batchbuffer_require_space(intel, estimated_max_prim_size, false);
 
       hw_prim = brw_set_prim(brw, &prim[i]);
-
-      if (first_time || (brw->state.dirty.brw & BRW_NEW_PRIMITIVE)) {
-	 first_time = GL_FALSE;
-
+      if (brw->state.dirty.brw) {
 	 brw_validate_state(brw);
 
 	 /* Various fallback checks:  */
@@ -371,7 +347,7 @@ static GLboolean brw_try_draw_prims( struct gl_context *ctx,
 	 if (dri_bufmgr_check_aperture_space(brw->state.validated_bos,
 					     brw->state.validated_bo_count)) {
 	    static GLboolean warned;
-	    intel_batchbuffer_flush(intel->batch);
+	    intel_batchbuffer_flush(intel);
 
 	    /* Validate the state after we flushed the batch (which would have
 	     * changed the set of dirty state).  If we still fail to
@@ -392,7 +368,10 @@ static GLboolean brw_try_draw_prims( struct gl_context *ctx,
 	 brw_upload_state(brw);
       }
 
-      brw_emit_prim(brw, &prim[i], hw_prim);
+      if (intel->gen >= 7)
+	 gen7_emit_prim(brw, &prim[i], hw_prim);
+      else
+	 brw_emit_prim(brw, &prim[i], hw_prim);
 
       intel->no_batch_wrap = GL_FALSE;
 
@@ -400,7 +379,7 @@ static GLboolean brw_try_draw_prims( struct gl_context *ctx,
    }
 
    if (intel->always_flush_batch)
-      intel_batchbuffer_flush(intel->batch);
+      intel_batchbuffer_flush(intel);
  out:
 
    brw_state_cache_check_size(brw);
@@ -425,6 +404,9 @@ void brw_draw_prims( struct gl_context *ctx,
 		     GLuint max_index )
 {
    GLboolean retval;
+
+   if (!_mesa_check_conditional_render(ctx))
+      return;
 
    if (!vbo_all_varyings_in_vbos(arrays)) {
       if (!index_bounds_valid)
@@ -461,25 +443,32 @@ void brw_draw_init( struct brw_context *brw )
 {
    struct gl_context *ctx = &brw->intel.ctx;
    struct vbo_context *vbo = vbo_context(ctx);
+   int i;
 
    /* Register our drawing function: 
     */
    vbo->draw_prims = brw_draw_prims;
+
+   for (i = 0; i < VERT_ATTRIB_MAX; i++)
+      brw->vb.inputs[i].buffer = -1;
+   brw->vb.nr_buffers = 0;
+   brw->vb.nr_enabled = 0;
 }
 
 void brw_draw_destroy( struct brw_context *brw )
 {
    int i;
 
-   if (brw->vb.upload.bo != NULL) {
-      drm_intel_bo_unreference(brw->vb.upload.bo);
-      brw->vb.upload.bo = NULL;
+   for (i = 0; i < brw->vb.nr_buffers; i++) {
+      drm_intel_bo_unreference(brw->vb.buffers[i].bo);
+      brw->vb.buffers[i].bo = NULL;
    }
+   brw->vb.nr_buffers = 0;
 
-   for (i = 0; i < VERT_ATTRIB_MAX; i++) {
-      drm_intel_bo_unreference(brw->vb.inputs[i].bo);
-      brw->vb.inputs[i].bo = NULL;
+   for (i = 0; i < brw->vb.nr_enabled; i++) {
+      brw->vb.enabled[i]->buffer = -1;
    }
+   brw->vb.nr_enabled = 0;
 
    drm_intel_bo_unreference(brw->ib.bo);
    brw->ib.bo = NULL;

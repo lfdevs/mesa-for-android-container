@@ -138,6 +138,7 @@ struct __GLXDRIdrawableRec
    GLenum textureTarget;
    GLenum textureFormat;        /* EXT_texture_from_pixmap support */
    unsigned long eventMask;
+   int refcount;
 };
 
 /*
@@ -310,14 +311,6 @@ struct glx_context
    /*@} */
 
     /**
-     * This is \c GL_TRUE if the pixel unpack modes are such that an image
-     * can be unpacked from the clients memory by just copying.  It may
-     * still be true that the server will have to do some work.  This
-     * just promises that a straight copy will fetch the correct bytes.
-     */
-   GLboolean fastImageUnpack;
-
-    /**
      * Fill newImage with the unpacked form of \c oldImage getting it
      * ready for transport to the server.
      */
@@ -423,9 +416,9 @@ struct glx_context
    /*@} */
 
    /**
-    * Thread ID we're currently current in. Zero if none.
+    * Number of threads we're currently current in.
     */
-   unsigned long thread_id;
+   unsigned long thread_refcount;
 
    char gl_extension_bits[__GL_EXT_BYTES];
 };
@@ -589,6 +582,8 @@ struct glx_display
 extern int
 glx_screen_init(struct glx_screen *psc,
 		int screen, struct glx_display * priv);
+extern void
+glx_screen_cleanup(struct glx_screen *psc);
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
 extern __GLXDRIdrawable *

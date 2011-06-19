@@ -22,10 +22,8 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "r300_context.h"
-#include "r300_hyperz.h"
 #include "r300_reg.h"
 #include "r300_fs.h"
-#include "r300_winsys.h"
 
 #include "util/u_format.h"
 #include "util/u_mm.h"
@@ -41,93 +39,92 @@
 /* The HyperZ setup                                                          */
 /*****************************************************************************/
 
-static bool r300_get_sc_hz_max(struct r300_context *r300)
+static enum r300_hiz_func r300_get_hiz_func(struct r300_context *r300)
 {
-    struct r300_dsa_state *dsa_state = r300->dsa_state.state;
-    int func = dsa_state->z_stencil_control & R300_ZS_MASK;
-    int ret = R300_SC_HYPERZ_MIN;
+    struct r300_dsa_state *dsa = r300->dsa_state.state;
 
-    if (func >= R300_ZS_GEQUAL && func <= R300_ZS_ALWAYS)
-       ret = R300_SC_HYPERZ_MAX;
-    return ret;
+    switch (dsa->dsa.depth.func) {
+    case PIPE_FUNC_NEVER:
+    case PIPE_FUNC_EQUAL:
+    case PIPE_FUNC_NOTEQUAL:
+    case PIPE_FUNC_ALWAYS:
+    default:
+        /* Guess MAX for uncertain cases. */
+    case PIPE_FUNC_LESS:
+    case PIPE_FUNC_LEQUAL:
+        return HIZ_FUNC_MAX;
+
+    case PIPE_FUNC_GREATER:
+    case PIPE_FUNC_GEQUAL:
+        return HIZ_FUNC_MIN;
+    }
 }
 
-static bool r300_zfunc_same_direction(int func1, int func2)
+/* Return what's used for the depth test (either minimum or maximum). */
+static unsigned r300_get_sc_hz_max(struct r300_context *r300)
 {
+    struct r300_dsa_state *dsa = r300->dsa_state.state;
+    unsigned func = dsa->dsa.depth.func;
+
+    return func >= PIPE_FUNC_GREATER ? R300_SC_HYPERZ_MAX : R300_SC_HYPERZ_MIN;
+}
+
+static boolean r300_is_hiz_func_valid(struct r300_context *r300)
+{
+    struct r300_dsa_state *dsa = r300->dsa_state.state;
+    unsigned func = dsa->dsa.depth.func;
+
+    if (r300->hiz_func == HIZ_FUNC_NONE)
+        return TRUE;
+
     /* func1 is less/lessthan */
-    if ((func1 == R300_ZS_LESS || func1 == R300_ZS_LEQUAL) &&
-        (func2 == R300_ZS_EQUAL || func2 == R300_ZS_GEQUAL ||
-         func2 == R300_ZS_GREATER))
-            return FALSE;
+    if (r300->hiz_func == HIZ_FUNC_MAX &&
+        (func == PIPE_FUNC_GEQUAL || func == PIPE_FUNC_GREATER))
+        return FALSE;
 
     /* func1 is greater/greaterthan */
-    if ((func1 == R300_ZS_GEQUAL || func1 == R300_ZS_GREATER) &&
-        (func2 == R300_ZS_LESS || func2 == R300_ZS_LEQUAL))
-            return FALSE;
+    if (r300->hiz_func == HIZ_FUNC_MIN &&
+        (func == PIPE_FUNC_LESS   || func == PIPE_FUNC_LEQUAL))
+        return FALSE;
 
     return TRUE;
 }
 
-static int r300_get_hiz_min(struct r300_context *r300)
-{
-    struct r300_dsa_state *dsa_state = r300->dsa_state.state;
-    int func = dsa_state->z_stencil_control & R300_ZS_MASK;
-    int ret = R300_HIZ_MIN;
-
-    if (func == R300_ZS_LESS || func == R300_ZS_LEQUAL)
-       ret = R300_HIZ_MAX;
-    return ret;
-}
-
 static boolean r300_dsa_stencil_op_not_keep(struct pipe_stencil_state *s)
 {
-    if (s->enabled && (s->fail_op != PIPE_STENCIL_OP_KEEP ||
-                       s->zfail_op != PIPE_STENCIL_OP_KEEP))
-        return TRUE;
-    return FALSE;
+    return s->enabled && (s->fail_op != PIPE_STENCIL_OP_KEEP ||
+                          s->zfail_op != PIPE_STENCIL_OP_KEEP);
 }
 
-static boolean r300_can_hiz(struct r300_context *r300)
+static boolean r300_hiz_allowed(struct r300_context *r300)
 {
-    struct r300_dsa_state *dsa_state = r300->dsa_state.state;
-    struct pipe_depth_stencil_alpha_state *dsa = &dsa_state->dsa;
-    struct r300_screen* r300screen = r300->screen;
-    struct r300_hyperz_state *z = r300->hyperz_state.state;
+    struct r300_dsa_state *dsa = r300->dsa_state.state;
+    struct r300_screen *r300screen = r300->screen;
 
-    /* shader writes depth - no HiZ */
-    if (r300_fragment_shader_writes_depth(r300_fs(r300))) /* (5) */
+    if (r300_fragment_shader_writes_depth(r300_fs(r300)))
         return FALSE;
 
     if (r300->query_current)
         return FALSE;
-    /* if stencil fail/zfail op is not KEEP */
-    if (r300_dsa_stencil_op_not_keep(&dsa->stencil[0]) ||
-        r300_dsa_stencil_op_not_keep(&dsa->stencil[1]))
+
+    /* If the depth function is inverted, HiZ must be disabled. */
+    if (!r300_is_hiz_func_valid(r300))
         return FALSE;
 
-    if (dsa->depth.enabled) {
+    /* if stencil fail/zfail op is not KEEP */
+    if (r300_dsa_stencil_op_not_keep(&dsa->dsa.stencil[0]) ||
+        r300_dsa_stencil_op_not_keep(&dsa->dsa.stencil[1]))
+        return FALSE;
+
+    if (dsa->dsa.depth.enabled) {
         /* if depth func is EQUAL pre-r500 */
-        if (dsa->depth.func == PIPE_FUNC_EQUAL && !r300screen->caps.is_r500)
+        if (dsa->dsa.depth.func == PIPE_FUNC_EQUAL && !r300screen->caps.is_r500)
             return FALSE;
+
         /* if depth func is NOTEQUAL */
-        if (dsa->depth.func == PIPE_FUNC_NOTEQUAL)
+        if (dsa->dsa.depth.func == PIPE_FUNC_NOTEQUAL)
             return FALSE;
     }
-    /* depth comparison function - if just cleared save and return okay */
-    if (z->current_func == -1) {
-        int func = dsa_state->z_stencil_control & R300_ZS_MASK;
-        if (func != 0 && func != 7)
-            z->current_func = dsa_state->z_stencil_control & R300_ZS_MASK;
-    } else {
-        /* simple don't change */
-        if (!r300_zfunc_same_direction(z->current_func,
-                                       (dsa_state->z_stencil_control & R300_ZS_MASK))) {
-            DBG(r300, DBG_HYPERZ,
-                "z func changed direction - disabling hyper-z %d -> %d\n",
-                z->current_func, dsa_state->z_stencil_control);
-            return FALSE;
-        }
-    }    
     return TRUE;
 }
 
@@ -137,10 +134,9 @@ static void r300_update_hyperz(struct r300_context* r300)
         (struct r300_hyperz_state*)r300->hyperz_state.state;
     struct pipe_framebuffer_state *fb =
         (struct pipe_framebuffer_state*)r300->fb_state.state;
-    struct r300_texture *zstex =
-            fb->zsbuf ? r300_texture(fb->zsbuf->texture) : NULL;
-    boolean zmask_in_use = FALSE;
-    boolean hiz_in_use = FALSE;
+    struct r300_dsa_state *dsa = r300->dsa_state.state;
+    struct r300_resource *zstex =
+            fb->zsbuf ? r300_resource(fb->zsbuf->texture) : NULL;
 
     z->gb_z_peq_config = 0;
     z->zb_bw_cntl = 0;
@@ -152,48 +148,70 @@ static void r300_update_hyperz(struct r300_context* r300)
         return;
     }
 
-    if (!zstex)
+    if (!zstex || !r300->hyperz_enabled)
         return;
 
-    if (!r300->rws->get_value(r300->rws, R300_CAN_HYPERZ))
-        return;
-
-    zmask_in_use = zstex->zmask_in_use[fb->zsbuf->u.tex.level];
-    hiz_in_use = zstex->hiz_in_use[fb->zsbuf->u.tex.level];
-
-    /* Z fastfill. */
-    if (zmask_in_use) {
-        z->zb_bw_cntl |= R300_FAST_FILL_ENABLE; /*  | R300_FORCE_COMPRESSED_STENCIL_VALUE_ENABLE;*/
-    }
-
-    /* Zbuffer compression. */
-    if (zmask_in_use && r300->z_compression) {
-        z->zb_bw_cntl |= R300_RD_COMP_ENABLE;
-        if (r300->z_decomp_rd == false)
-            z->zb_bw_cntl |= R300_WR_COMP_ENABLE;
-    }
-    /* RV350 and up optimizations. */
-    /* The section 10.4.9 in the docs is a lie. */
-    if (r300->z_compression == RV350_Z_COMPRESS_88)
+    /* Set the size of ZMASK tiles. */
+    if (zstex->tex.zcomp8x8[fb->zsbuf->u.tex.level]) {
         z->gb_z_peq_config |= R300_GB_Z_PEQ_CONFIG_Z_PEQ_SIZE_8_8;
-
-    if (hiz_in_use) {
-        bool can_hiz = r300_can_hiz(r300);
-        if (can_hiz) {
-            z->zb_bw_cntl |= R300_HIZ_ENABLE;
-            z->sc_hyperz |= R300_SC_HYPERZ_ENABLE;
-            z->sc_hyperz |= r300_get_sc_hz_max(r300);
-            z->zb_bw_cntl |= r300_get_hiz_min(r300);
-        }
     }
 
     /* R500-specific features and optimizations. */
     if (r300->screen->caps.is_r500) {
-        z->zb_bw_cntl |= R500_HIZ_FP_EXP_BITS_3;
-        z->zb_bw_cntl |=
-                R500_HIZ_EQUAL_REJECT_ENABLE |
-                R500_PEQ_PACKING_ENABLE |
-                R500_COVERED_PTR_MASKING_ENABLE;
+        z->zb_bw_cntl |= R500_PEQ_PACKING_ENABLE |
+                         R500_COVERED_PTR_MASKING_ENABLE;
+    }
+
+    /* Setup decompression if needed. No other HyperZ setting is required. */
+    if (r300->zmask_decompress) {
+        z->zb_bw_cntl |= R300_FAST_FILL_ENABLE |
+                         R300_RD_COMP_ENABLE;
+        return;
+    }
+
+    /* Do not set anything if depth and stencil tests are off. */
+    if (!dsa->dsa.depth.enabled &&
+        !dsa->dsa.stencil[0].enabled &&
+        !dsa->dsa.stencil[1].enabled) {
+        assert(!dsa->dsa.depth.writemask);
+        return;
+    }
+
+    /* Zbuffer compression. */
+    if (r300->zmask_in_use && !r300->locked_zbuffer) {
+        z->zb_bw_cntl |= R300_FAST_FILL_ENABLE |
+                         R300_RD_COMP_ENABLE |
+                         R300_WR_COMP_ENABLE;
+    }
+
+    /* HiZ. */
+    if (r300->hiz_in_use && !r300->locked_zbuffer) {
+        /* HiZ cannot be used under some circumstances. */
+        if (!r300_hiz_allowed(r300)) {
+            /* If writemask is disabled, the HiZ memory will not be changed,
+             * so we can keep its content for later. */
+            if (dsa->dsa.depth.writemask) {
+                r300->hiz_in_use = FALSE;
+            }
+            return;
+        }
+        DBG(r300, DBG_HYPERZ, "r300: Z-func: %i\n", dsa->dsa.depth.func);
+
+        /* Set the HiZ function if needed. */
+        if (r300->hiz_func == HIZ_FUNC_NONE) {
+            r300->hiz_func = r300_get_hiz_func(r300);
+        }
+
+        /* Setup the HiZ bits. */
+        z->zb_bw_cntl |= R300_HIZ_ENABLE |
+                (r300->hiz_func == HIZ_FUNC_MIN ? R300_HIZ_MIN : R300_HIZ_MAX);
+
+        z->sc_hyperz |= R300_SC_HYPERZ_ENABLE |
+                        r300_get_sc_hz_max(r300);
+
+        if (r300->screen->caps.is_r500) {
+            z->zb_bw_cntl |= R500_HIZ_EQUAL_REJECT_ENABLE;
+        }
     }
 }
 
@@ -285,135 +303,11 @@ static void r300_update_ztop(struct r300_context* r300)
         r300_mark_atom_dirty(r300, &r300->ztop_state);
 }
 
-#define ALIGN_DIVUP(x, y) (((x) + (y) - 1) / (y))
-
-static void r300_update_hiz_clear(struct r300_context *r300)
-{
-    struct pipe_framebuffer_state *fb =
-        (struct pipe_framebuffer_state*)r300->fb_state.state;
-    uint32_t height;
-
-    height = ALIGN_DIVUP(fb->zsbuf->height, 4);
-    r300->hiz_clear.size = height * 4;
-}
-
-static void r300_update_zmask_clear(struct r300_context *r300)
-{
-    struct pipe_framebuffer_state *fb =
-        (struct pipe_framebuffer_state*)r300->fb_state.state;
-    uint32_t height;
-    int mult;
-
-    if (r300->z_compression == RV350_Z_COMPRESS_88)
-        mult = 8;
-    else
-        mult = 4;
-
-    height = ALIGN_DIVUP(fb->zsbuf->height, mult);
-
-    r300->zmask_clear.size = height * 4;
-}
-
 void r300_update_hyperz_state(struct r300_context* r300)
 {
     r300_update_ztop(r300);
+
     if (r300->hyperz_state.dirty) {
         r300_update_hyperz(r300);
     }
-
-    if (r300->hiz_clear.dirty) {
-       r300_update_hiz_clear(r300);
-    }
-    if (r300->zmask_clear.dirty) {
-       r300_update_zmask_clear(r300);
-    }
-}
-
-void r300_hiz_alloc_block(struct r300_context *r300, struct r300_surface *surf)
-{
-    struct r300_texture *tex;
-    uint32_t zsize, ndw;
-    int level = surf->base.u.tex.level;
-
-    tex = r300_texture(surf->base.texture);
-
-    if (tex->hiz_mem[level])
-        return;
-
-    zsize = tex->desc.layer_size_in_bytes[level];
-    zsize /= util_format_get_blocksize(tex->desc.b.b.format);
-    ndw = ALIGN_DIVUP(zsize, 64);
-
-    tex->hiz_mem[level] = u_mmAllocMem(r300->hiz_mm, ndw, 0, 0);
-    return;
-}
-
-void r300_zmask_alloc_block(struct r300_context *r300, struct r300_surface *surf, int compress)
-{
-    int bsize = 256;
-    uint32_t zsize, ndw;
-    int level = surf->base.u.tex.level;
-    struct r300_texture *tex;
-
-    tex = r300_texture(surf->base.texture);
-
-    /* We currently don't handle decompression for 3D textures and cubemaps
-     * correctly. */
-    if (tex->desc.b.b.target != PIPE_TEXTURE_1D &&
-        tex->desc.b.b.target != PIPE_TEXTURE_2D &&
-        tex->desc.b.b.target != PIPE_TEXTURE_RECT)
-        return;
-
-    /* Cannot flush zmask of 16-bit zbuffers. */
-    if (util_format_get_blocksizebits(tex->desc.b.b.format) == 16)
-        return;
-
-    if (tex->zmask_mem[level])
-        return;
-
-    zsize = tex->desc.layer_size_in_bytes[level];
-    zsize /= util_format_get_blocksize(tex->desc.b.b.format);
-
-    /* each zmask dword represents 16 4x4 blocks - which is 256 pixels
-       or 16 8x8 depending on the gb peq flag = 1024 pixels */
-    if (compress == RV350_Z_COMPRESS_88)
-        bsize = 1024;
-
-    ndw = ALIGN_DIVUP(zsize, bsize);
-    tex->zmask_mem[level] = u_mmAllocMem(r300->zmask_mm, ndw, 0, 0);
-    return;
-}
-
-boolean r300_hyperz_init_mm(struct r300_context *r300)
-{
-    struct r300_screen* r300screen = r300->screen;
-    int frag_pipes = r300screen->caps.num_frag_pipes;
-
-    r300->zmask_mm = u_mmInit(0, r300screen->caps.zmask_ram * frag_pipes);
-    if (!r300->zmask_mm)
-      return FALSE;
-
-    if (r300screen->caps.hiz_ram) {
-      r300->hiz_mm = u_mmInit(0, r300screen->caps.hiz_ram * frag_pipes);
-      if (!r300->hiz_mm) {
-        u_mmDestroy(r300->zmask_mm);
-        r300->zmask_mm = NULL;
-        return FALSE;
-      }
-    }
-
-    return TRUE;
-}
-
-void r300_hyperz_destroy_mm(struct r300_context *r300)
-{
-    struct r300_screen* r300screen = r300->screen;
-
-    if (r300screen->caps.hiz_ram) {
-      u_mmDestroy(r300->hiz_mm);
-      r300->hiz_mm = NULL;
-    }
-
-    u_mmDestroy(r300->zmask_mm);
-    r300->zmask_mm = NULL;
 }

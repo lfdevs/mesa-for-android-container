@@ -1,6 +1,7 @@
 
 #include "i915_sw_winsys.h"
 #include "i915/i915_batchbuffer.h"
+#include "i915/i915_debug.h"
 #include "util/u_memory.h"
 
 #define BATCH_RESERVED 16
@@ -48,7 +49,6 @@ i915_sw_batchbuffer_create(struct i915_winsys *iws)
    batch->base.size = 0;
 
    batch->base.relocs = 0;
-   batch->base.max_relocs = 300;/*INTEL_DEFAULT_RELOCS;*/
 
    batch->base.iws = iws;
 
@@ -57,16 +57,22 @@ i915_sw_batchbuffer_create(struct i915_winsys *iws)
    return &batch->base;
 }
 
+static boolean
+i915_sw_batchbuffer_validate_buffers(struct i915_winsys_batchbuffer *batch,
+				     struct i915_winsys_buffer **buffer,
+				     int num_of_buffers)
+{
+   return TRUE;
+}
+
 static int
 i915_sw_batchbuffer_reloc(struct i915_winsys_batchbuffer *ibatch,
                           struct i915_winsys_buffer *buffer,
                           enum i915_winsys_buffer_usage usage,
-                          unsigned pre_add, bool fenced)
+                          unsigned pre_add, boolean fenced)
 {
    struct i915_sw_batchbuffer *batch = i915_sw_batchbuffer(ibatch);
    int ret = 0;
-
-   assert(batch->base.relocs < batch->base.max_relocs);
 
    if (usage == I915_USAGE_SAMPLER) {
 
@@ -98,7 +104,6 @@ i915_sw_batchbuffer_flush(struct i915_winsys_batchbuffer *ibatch,
 {
    struct i915_sw_batchbuffer *batch = i915_sw_batchbuffer(ibatch);
    unsigned used = 0;
-   int i;
 
    assert(i915_winsys_batchbuffer_space(ibatch) >= 0);
 
@@ -107,27 +112,22 @@ i915_sw_batchbuffer_flush(struct i915_winsys_batchbuffer *ibatch,
 
 #ifdef INTEL_ALWAYS_FLUSH
    /* MI_FLUSH | FLUSH_MAP_CACHE */
-   i915_winsys_batchbuffer_dword(ibatch, (0x4<<23)|(1<<0));
+   i915_winsys_batchbuffer_dword_unchecked(ibatch, (0x4<<23)|(1<<0));
    used += 4;
 #endif
 
    if ((used & 4) == 0) {
       /* MI_NOOP */
-      i915_winsys_batchbuffer_dword(ibatch, 0);
+      i915_winsys_batchbuffer_dword_unchecked(ibatch, 0);
    }
    /* MI_BATCH_BUFFER_END */
-   i915_winsys_batchbuffer_dword(ibatch, (0xA<<23));
+   i915_winsys_batchbuffer_dword_unchecked(ibatch, (0xA<<23));
 
    used = batch->base.ptr - batch->base.map;
    assert((used & 4) == 0);
 
    if (i915_sw_winsys(ibatch->iws)->dump_cmd) {
-      unsigned *ptr = (unsigned *)batch->base.map;
-
-      debug_printf("%s:\n", __func__);
-      for (i = 0; i < used / 4; i++, ptr++) {
-         debug_printf("\t%08x:    %08x\n", i*4, *ptr);
-      }
+      i915_dump_batchbuffer(ibatch);
    }
 
    if (fence) {
@@ -151,6 +151,7 @@ i915_sw_batchbuffer_destroy(struct i915_winsys_batchbuffer *ibatch)
 void i915_sw_winsys_init_batchbuffer_functions(struct i915_sw_winsys *isws)
 {
    isws->base.batchbuffer_create = i915_sw_batchbuffer_create;
+   isws->base.validate_buffers = i915_sw_batchbuffer_validate_buffers;
    isws->base.batchbuffer_reloc = i915_sw_batchbuffer_reloc;
    isws->base.batchbuffer_flush = i915_sw_batchbuffer_flush;
    isws->base.batchbuffer_destroy = i915_sw_batchbuffer_destroy;

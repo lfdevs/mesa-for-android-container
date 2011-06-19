@@ -552,7 +552,7 @@ static void viaBlendFunc(struct gl_context *ctx, GLenum sfactor, GLenum dfactor)
     if (VIA_DEBUG & DEBUG_STATE) 
        fprintf(stderr, "%s in\n", __FUNCTION__);
 
-    switch (ctx->Color.BlendSrcRGB) {
+    switch (ctx->Color.Blend[0].SrcRGB) {
     case GL_SRC_ALPHA_SATURATE:  
     case GL_CONSTANT_COLOR:
     case GL_ONE_MINUS_CONSTANT_COLOR:
@@ -564,7 +564,7 @@ static void viaBlendFunc(struct gl_context *ctx, GLenum sfactor, GLenum dfactor)
         break;
     }
 
-    switch (ctx->Color.BlendDstRGB) {
+    switch (ctx->Color.Blend[0].DstRGB) {
     case GL_CONSTANT_COLOR:
     case GL_ONE_MINUS_CONSTANT_COLOR:
     case GL_CONSTANT_ALPHA:
@@ -757,14 +757,14 @@ void viaInitState(struct gl_context *ctx)
     */
 
    ctx->Driver.BlendEquationSeparate( ctx, 
-				      ctx->Color.BlendEquationRGB,
-				      ctx->Color.BlendEquationA);
+				      ctx->Color.Blend[0].EquationRGB,
+				      ctx->Color.Blend[0].EquationA);
 
    ctx->Driver.BlendFuncSeparate( ctx,
-				  ctx->Color.BlendSrcRGB,
-				  ctx->Color.BlendDstRGB,
-				  ctx->Color.BlendSrcA,
-				  ctx->Color.BlendDstA);
+				  ctx->Color.Blend[0].SrcRGB,
+				  ctx->Color.Blend[0].DstRGB,
+				  ctx->Color.Blend[0].SrcA,
+				  ctx->Color.Blend[0].DstA);
 
    ctx->Driver.Scissor( ctx, ctx->Scissor.X, ctx->Scissor.Y,
 			ctx->Scissor.Width, ctx->Scissor.Height );
@@ -877,21 +877,21 @@ static GLboolean viaChooseTextureState(struct gl_context *ctx)
         if (texUnit0->_ReallyEnabled) {
             struct gl_texture_object *texObj = texUnit0->_Current;
    
-	    vmesa->regHTXnTB[0] = get_minmag_filter( texObj->MinFilter,
-						    texObj->MagFilter );
+	    vmesa->regHTXnTB[0] = get_minmag_filter( texObj->Sampler.MinFilter,
+						    texObj->Sampler.MagFilter );
 
 	    vmesa->regHTXnMPMD[0] &= ~(HC_HTXnMPMD_SMASK | HC_HTXnMPMD_TMASK);
-	    vmesa->regHTXnMPMD[0] |= get_wrap_mode( texObj->WrapS,
-						   texObj->WrapT );
+	    vmesa->regHTXnMPMD[0] |= get_wrap_mode( texObj->Sampler.WrapS,
+						   texObj->Sampler.WrapT );
 
 	    vmesa->regHTXnTB[0] &= ~(HC_HTXnTB_TBC_S | HC_HTXnTB_TBC_T);
             if (texObj->Image[0][texObj->BaseLevel]->Border > 0) {
 	       vmesa->regHTXnTB[0] |= (HC_HTXnTB_TBC_S | HC_HTXnTB_TBC_T);
 	       vmesa->regHTXnTBC[0] = 
-		  PACK_COLOR_888(FLOAT_TO_UBYTE(texObj->BorderColor.f[0]),
-				 FLOAT_TO_UBYTE(texObj->BorderColor.f[1]),
-				 FLOAT_TO_UBYTE(texObj->BorderColor.f[2]));
-	       vmesa->regHTXnTRAH[0] = FLOAT_TO_UBYTE(texObj->BorderColor.f[3]);
+		  PACK_COLOR_888(FLOAT_TO_UBYTE(texObj->Sampler.BorderColor.f[0]),
+				 FLOAT_TO_UBYTE(texObj->Sampler.BorderColor.f[1]),
+				 FLOAT_TO_UBYTE(texObj->Sampler.BorderColor.f[2]));
+	       vmesa->regHTXnTRAH[0] = FLOAT_TO_UBYTE(texObj->Sampler.BorderColor.f[3]);
             }
 
 	    if (texUnit0->LodBias != 0.0f) {
@@ -911,20 +911,20 @@ static GLboolean viaChooseTextureState(struct gl_context *ctx)
         if (texUnit1->_ReallyEnabled) {
             struct gl_texture_object *texObj = texUnit1->_Current;
 
-	    vmesa->regHTXnTB[1] = get_minmag_filter( texObj->MinFilter,
-						    texObj->MagFilter );
+	    vmesa->regHTXnTB[1] = get_minmag_filter( texObj->Sampler.MinFilter,
+						    texObj->Sampler.MagFilter );
 	    vmesa->regHTXnMPMD[1] &= ~(HC_HTXnMPMD_SMASK | HC_HTXnMPMD_TMASK);
-	    vmesa->regHTXnMPMD[1] |= get_wrap_mode( texObj->WrapS,
-						   texObj->WrapT );
+	    vmesa->regHTXnMPMD[1] |= get_wrap_mode( texObj->Sampler.WrapS,
+						   texObj->Sampler.WrapT );
 
 	    vmesa->regHTXnTB[1] &= ~(HC_HTXnTB_TBC_S | HC_HTXnTB_TBC_T);
             if (texObj->Image[0][texObj->BaseLevel]->Border > 0) {
 	       vmesa->regHTXnTB[1] |= (HC_HTXnTB_TBC_S | HC_HTXnTB_TBC_T);
 	       vmesa->regHTXnTBC[1] = 
-		  PACK_COLOR_888(FLOAT_TO_UBYTE(texObj->BorderColor.f[0]),
-				 FLOAT_TO_UBYTE(texObj->BorderColor.f[1]),
-				 FLOAT_TO_UBYTE(texObj->BorderColor.f[2]));
-	       vmesa->regHTXnTRAH[1] = FLOAT_TO_UBYTE(texObj->BorderColor.f[3]);
+		  PACK_COLOR_888(FLOAT_TO_UBYTE(texObj->Sampler.BorderColor.f[0]),
+				 FLOAT_TO_UBYTE(texObj->Sampler.BorderColor.f[1]),
+				 FLOAT_TO_UBYTE(texObj->Sampler.BorderColor.f[2]));
+	       vmesa->regHTXnTRAH[1] = FLOAT_TO_UBYTE(texObj->Sampler.BorderColor.f[3]);
             }
 
 
@@ -953,8 +953,8 @@ static GLboolean viaChooseTextureState(struct gl_context *ctx)
 static void viaChooseColorState(struct gl_context *ctx) 
 {
     struct via_context *vmesa = VIA_CONTEXT(ctx);
-    GLenum s = ctx->Color.BlendSrcRGB;
-    GLenum d = ctx->Color.BlendDstRGB;
+    GLenum s = ctx->Color.Blend[0].SrcRGB;
+    GLenum d = ctx->Color.Blend[0].DstRGB;
 
     /* The HW's blending equation is:
      * (Ca * FCa + Cbias + Cb * FCb) << Cshift

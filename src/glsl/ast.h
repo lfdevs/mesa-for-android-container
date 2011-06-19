@@ -350,7 +350,19 @@ struct ast_type_qualifier {
 	  * qualifier is used.
 	  */
 	 unsigned explicit_location:1;
-      } q;
+
+         /** \name Layout qualifiers for GL_AMD_conservative_depth */
+         /** \{ */
+         unsigned depth_any:1;
+         unsigned depth_greater:1;
+         unsigned depth_less:1;
+         unsigned depth_unchanged:1;
+         /** \} */
+      }
+      /** \brief Set of flags, accessed by name. */
+      q;
+
+      /** \brief Set of flags, accessed as a bitmask. */
       unsigned i;
    } flags;
 
@@ -361,6 +373,23 @@ struct ast_type_qualifier {
     * This field is only valid if \c explicit_location is set.
     */
    unsigned location;
+
+   /**
+    * Return true if and only if an interpolation qualifier is present.
+    */
+   bool has_interpolation() const;
+
+   /**
+    * \brief Return string representation of interpolation qualifier.
+    *
+    * If an interpolation qualifier is present, then return that qualifier's
+    * string representation. Otherwise, return null. For example, if the
+    * noperspective bit is set, then this returns "noperspective".
+    *
+    * If multiple interpolation qualifiers are somehow present, then the
+    * returned string is undefined but not null.
+    */
+   const char *interpolation_string() const;
 };
 
 class ast_struct_specifier : public ast_node {
@@ -582,25 +611,6 @@ private:
    class ir_function_signature *signature;
 
    friend class ast_function_definition;
-};
-
-
-class ast_declaration_statement : public ast_node {
-public:
-   ast_declaration_statement(void);
-
-   enum {
-      ast_function,
-      ast_declaration,
-      ast_precision
-   } mode;
-
-   union {
-      class ast_function *function;
-      ast_declarator_list *declarator;
-      ast_type_specifier *type;
-      ast_node *node;
-   } declaration;
 };
 
 

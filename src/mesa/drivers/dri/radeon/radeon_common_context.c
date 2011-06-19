@@ -47,8 +47,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "swrast_setup/swrast_setup.h"
 #include "tnl/tnl.h"
 
-#define DRIVER_DATE "20090101"
-
 #ifndef RADEON_DEBUG
 int RADEON_DEBUG = (0);
 #endif
@@ -100,6 +98,8 @@ static const char* get_chip_family_name(int chip_family)
 	case CHIP_FAMILY_CYPRESS: return "CYPRESS";
 	case CHIP_FAMILY_HEMLOCK: return "HEMLOCK";
 	case CHIP_FAMILY_PALM: return "PALM";
+	case CHIP_FAMILY_SUMO: return "SUMO";
+	case CHIP_FAMILY_SUMO2: return "SUMO2";
 	case CHIP_FAMILY_BARTS: return "BARTS";
 	case CHIP_FAMILY_TURKS: return "TURKS";
 	case CHIP_FAMILY_CAICOS: return "CAICOS";
@@ -146,8 +146,7 @@ static const GLubyte *radeonGetString(struct gl_context * ctx, GLenum name)
 		        get_chip_family_name(radeon->radeonScreen->chip_family),
 		        radeon->radeonScreen->device_id);
 
-		offset = driGetRendererString(buffer, hardwarename, DRIVER_DATE,
-					      agp_mode);
+		offset = driGetRendererString(buffer, hardwarename, agp_mode);
 
 		if (IS_R600_CLASS(radeon->radeonScreen)) {
 			sprintf(&buffer[offset], " TCL");
@@ -204,15 +203,13 @@ GLboolean radeonInitContext(radeonContextPtr radeon,
 		shareCtx = ((radeonContextPtr)sharedContextPrivate)->glCtx;
 	else
 		shareCtx = NULL;
-	radeon->glCtx = _mesa_create_context(glVisual, shareCtx,
+	radeon->glCtx = _mesa_create_context(API_OPENGL, glVisual, shareCtx,
 					    functions, (void *)radeon);
 	if (!radeon->glCtx)
 		return GL_FALSE;
 
 	ctx = radeon->glCtx;
 	driContextPriv->driverPrivate = radeon;
-
-	meta_init_metaops(ctx, &radeon->meta);
 
 	_mesa_meta_init(ctx);
 
@@ -320,7 +317,6 @@ void radeonDestroyContext(__DRIcontext *driContextPriv )
 
 	radeonFreeDmaRegions(radeon);
 	radeonReleaseArrays(radeon->glCtx, ~0);
-	meta_destroy_metaops(&radeon->meta);
 	if (radeon->vtbl.free_context)
 		radeon->vtbl.free_context(radeon->glCtx);
 	_swsetup_DestroyContext( radeon->glCtx );
@@ -532,7 +528,7 @@ void radeon_prepare_render(radeonContextPtr radeon)
 
 	/* Intel driver does the equivalent of this, no clue if it is needed:*/
 	draw = drawable->driverPrivate;
-	radeon_draw_buffer(radeon->glCtx, &draw->base);
+	radeon_draw_buffer(radeon->glCtx, radeon->glCtx->DrawBuffer);
 
 	driContext->dri2.draw_stamp = drawable->dri2.stamp;
     }

@@ -128,7 +128,6 @@ static void translate_dstreg(struct rc_dst_register * dest, struct prog_dst_regi
 {
 	dest->File = translate_register_file(src->File);
 	dest->Index = src->Index;
-	dest->RelAddr = src->RelAddr;
 	dest->WriteMask = src->WriteMask;
 }
 
@@ -171,6 +170,7 @@ static void translate_instruction(struct radeon_compiler * c,
 		dest->U.I.TexSrcUnit = src->TexSrcUnit;
 		dest->U.I.TexSrcTarget = translate_tex_target(src->TexSrcTarget);
 		dest->U.I.TexShadow = src->TexShadow;
+		dest->U.I.TexSwizzle = RC_SWIZZLE_XYZW;
 	}
 }
 

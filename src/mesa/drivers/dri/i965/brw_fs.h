@@ -67,13 +67,15 @@ enum fs_opcodes {
    FS_OPCODE_COS,
    FS_OPCODE_DDX,
    FS_OPCODE_DDY,
+   FS_OPCODE_PIXEL_X,
+   FS_OPCODE_PIXEL_Y,
    FS_OPCODE_CINTERP,
    FS_OPCODE_LINTERP,
    FS_OPCODE_TEX,
    FS_OPCODE_TXB,
+   FS_OPCODE_TXD,
    FS_OPCODE_TXL,
-   FS_OPCODE_DISCARD_NOT,
-   FS_OPCODE_DISCARD_AND,
+   FS_OPCODE_DISCARD,
    FS_OPCODE_SPILL,
    FS_OPCODE_UNSPILL,
    FS_OPCODE_PULL_CONSTANT_LOAD,
@@ -175,6 +177,7 @@ public:
    int type;
    bool negate;
    bool abs;
+   bool sechalf;
    struct brw_reg fixed_hw_reg;
    int smear; /* -1, or a channel of the reg to smear to all channels. */
 
@@ -305,6 +308,14 @@ public:
 	      offset == inst->offset);
    }
 
+   bool is_tex()
+   {
+      return (opcode == FS_OPCODE_TEX ||
+	      opcode == FS_OPCODE_TXB ||
+	      opcode == FS_OPCODE_TXD ||
+	      opcode == FS_OPCODE_TXL);
+   }
+
    bool is_math()
    {
       return (opcode == FS_OPCODE_RCP ||
@@ -322,6 +333,7 @@ public:
    fs_reg src[3];
    bool saturate;
    bool predicated;
+   bool predicate_inverse;
    int conditional_mod; /**< BRW_CONDITIONAL_* */
 
    int mlen; /**< SEND message length */
@@ -331,6 +343,8 @@ public:
    bool eot;
    bool header_present;
    bool shadow_compare;
+   bool force_uncompressed;
+   bool force_sechalf;
    uint32_t offset; /* spill/unspill offset */
 
    /** @{
@@ -345,17 +359,19 @@ class fs_visitor : public ir_visitor
 {
 public:
 
-   fs_visitor(struct brw_wm_compile *c, struct brw_shader *shader)
+   fs_visitor(struct brw_wm_compile *c, struct gl_shader_program *prog,
+	      struct brw_shader *shader)
    {
       this->c = c;
       this->p = &c->func;
       this->brw = p->brw;
-      this->fp = brw->fragment_program;
+      this->fp = prog->FragmentProgram;
+      this->prog = prog;
       this->intel = &brw->intel;
       this->ctx = &intel->ctx;
       this->mem_ctx = ralloc_context(NULL);
       this->shader = shader;
-      this->fail = false;
+      this->failed = false;
       this->variable_ht = hash_table_ctor(0,
 					  hash_table_pointer_hash,
 					  hash_table_pointer_compare);
@@ -390,8 +406,11 @@ public:
       this->virtual_grf_array_size = 0;
       this->virtual_grf_def = NULL;
       this->virtual_grf_use = NULL;
+      this->live_intervals_valid = false;
 
       this->kill_emitted = false;
+      this->force_uncompressed_stack = 0;
+      this->force_sechalf_stack = 0;
    }
 
    ~fs_visitor()
@@ -402,6 +421,7 @@ public:
 
    fs_reg *variable_storage(ir_variable *var);
    int virtual_grf_alloc(int size);
+   void import_uniforms(struct hash_table *src_variable_ht);
 
    void visit(ir_variable *ir);
    void visit(ir_assignment *ir);
@@ -422,6 +442,35 @@ public:
    void visit(ir_function_signature *ir);
 
    fs_inst *emit(fs_inst inst);
+
+   fs_inst *emit(int opcode)
+   {
+      return emit(fs_inst(opcode));
+   }
+
+   fs_inst *emit(int opcode, fs_reg dst)
+   {
+      return emit(fs_inst(opcode, dst));
+   }
+
+   fs_inst *emit(int opcode, fs_reg dst, fs_reg src0)
+   {
+      return emit(fs_inst(opcode, dst, src0));
+   }
+
+   fs_inst *emit(int opcode, fs_reg dst, fs_reg src0, fs_reg src1)
+   {
+      return emit(fs_inst(opcode, dst, src0, src1));
+   }
+
+   fs_inst *emit(int opcode, fs_reg dst, fs_reg src0, fs_reg src1, fs_reg src2)
+   {
+      return emit(fs_inst(opcode, dst, src0, src1, src2));
+   }
+
+   int type_size(const struct glsl_type *type);
+
+   bool run();
    void setup_paramvalues_refs();
    void assign_curb_setup();
    void calculate_urb_setup();
@@ -439,14 +488,22 @@ public:
    bool dead_code_eliminate();
    bool remove_duplicate_mrf_writes();
    bool virtual_grf_interferes(int a, int b);
+   void schedule_instructions();
+   void fail(const char *msg, ...);
+
+   void push_force_uncompressed();
+   void pop_force_uncompressed();
+   void push_force_sechalf();
+   void pop_force_sechalf();
+
    void generate_code();
    void generate_fb_write(fs_inst *inst);
+   void generate_pixel_xy(struct brw_reg dst, bool is_x);
    void generate_linterp(fs_inst *inst, struct brw_reg dst,
 			 struct brw_reg *src);
-   void generate_tex(fs_inst *inst, struct brw_reg dst);
+   void generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src);
    void generate_math(fs_inst *inst, struct brw_reg dst, struct brw_reg *src);
-   void generate_discard_not(fs_inst *inst, struct brw_reg temp);
-   void generate_discard_and(fs_inst *inst, struct brw_reg temp);
+   void generate_discard(fs_inst *inst);
    void generate_ddx(fs_inst *inst, struct brw_reg dst, struct brw_reg src);
    void generate_ddy(fs_inst *inst, struct brw_reg dst, struct brw_reg src);
    void generate_spill(fs_inst *inst, struct brw_reg src);
@@ -459,8 +516,12 @@ public:
    fs_reg *emit_general_interpolation(ir_variable *ir);
    void emit_interpolation_setup_gen4();
    void emit_interpolation_setup_gen6();
-   fs_inst *emit_texture_gen4(ir_texture *ir, fs_reg dst, fs_reg coordinate);
-   fs_inst *emit_texture_gen5(ir_texture *ir, fs_reg dst, fs_reg coordinate);
+   fs_inst *emit_texture_gen4(ir_texture *ir, fs_reg dst, fs_reg coordinate,
+			      int sampler);
+   fs_inst *emit_texture_gen5(ir_texture *ir, fs_reg dst, fs_reg coordinate,
+			      int sampler);
+   fs_inst *emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
+			      int sampler);
    fs_inst *emit_math(fs_opcodes op, fs_reg dst, fs_reg src0);
    fs_inst *emit_math(fs_opcodes op, fs_reg dst, fs_reg src0, fs_reg src1);
    bool try_emit_saturate(ir_expression *ir);
@@ -468,6 +529,7 @@ public:
    void emit_if_gen6(ir_if *ir);
    void emit_unspill(fs_inst *inst, fs_reg reg, uint32_t spill_offset);
 
+   void emit_color_write(int index, int first_color_mrf, fs_reg color);
    void emit_fb_writes();
    void emit_assignment_writes(fs_reg &l, fs_reg &r,
 			       const glsl_type *type, bool predicated);
@@ -484,6 +546,7 @@ public:
    struct brw_wm_compile *c;
    struct brw_compile *p;
    struct brw_shader *shader;
+   struct gl_shader_program *prog;
    void *mem_ctx;
    exec_list instructions;
 
@@ -498,6 +561,7 @@ public:
    int virtual_grf_array_size;
    int *virtual_grf_def;
    int *virtual_grf_use;
+   bool live_intervals_valid;
 
    struct hash_table *variable_ht;
    ir_variable *frag_color, *frag_data, *frag_depth;
@@ -510,9 +574,13 @@ public:
    ir_instruction *base_ir;
    /** @} */
 
-   bool fail;
+   bool failed;
+   char *fail_msg;
 
-   /* Result of last visit() method. */
+   /* On entry to a visit() method, this is the storage for the
+    * result.  On exit, the visit() called may have changed it, in
+    * which case the parent must use the new storage instead.
+    */
    fs_reg result;
 
    fs_reg pixel_x;
@@ -524,7 +592,11 @@ public:
    fs_reg reg_null_cmp;
 
    int grf_used;
+
+   int force_uncompressed_stack;
+   int force_sechalf_stack;
 };
 
 GLboolean brw_do_channel_expressions(struct exec_list *instructions);
 GLboolean brw_do_vector_splitting(struct exec_list *instructions);
+bool brw_fs_precompile(struct gl_context *ctx, struct gl_shader_program *prog);

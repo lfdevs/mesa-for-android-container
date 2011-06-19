@@ -63,10 +63,6 @@
  *
  * \author Ian Romanick <ian.d.romanick@intel.com>
  */
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <limits.h>
 
 #include "main/core.h"
 #include "glsl_symbol_table.h"
@@ -299,6 +295,7 @@ mode_string(const ir_variable *var)
    case ir_var_out:     return "shader output";
    case ir_var_inout:   return "shader inout";
 
+   case ir_var_const_in:
    case ir_var_temporary:
    default:
       assert(!"Should not get here.");
@@ -381,6 +378,32 @@ cross_validate_globals(struct gl_shader_program *prog,
 	       existing->location = var->location;
 	       existing->explicit_location = true;
 	    }
+
+        /* Validate layout qualifiers for gl_FragDepth.
+         *
+         * From the AMD_conservative_depth spec:
+         *    "If gl_FragDepth is redeclared in any fragment shader in
+         *    a program, it must be redeclared in all fragment shaders in that
+         *    program that have static assignments to gl_FragDepth. All
+         *    redeclarations of gl_FragDepth in all fragment shaders in
+         *    a single program must have the same set of qualifiers."
+         */
+        if (strcmp(var->name, "gl_FragDepth") == 0) {
+           bool layout_declared = var->depth_layout != ir_depth_layout_none;
+           bool layout_differs = var->depth_layout != existing->depth_layout;
+           if (layout_declared && layout_differs) {
+              linker_error_printf(prog,
+                 "All redeclarations of gl_FragDepth in all fragment shaders "
+                 "in a single program must have the same set of qualifiers.");
+           }
+           if (var->used && layout_differs) {
+              linker_error_printf(prog,
+                    "If gl_FragDepth is redeclared with a layout qualifier in"
+                    "any fragment shader, it must be redeclared with the same"
+                    "layout qualifier in all fragment shaders that have"
+                    "assignments to gl_FragDepth");
+           }
+        }
 
 	    /* FINISHME: Handle non-constant initializers.
 	     */
@@ -487,7 +510,7 @@ cross_validate_outputs_to_inputs(struct gl_shader_program *prog,
 	  */
 	 if (input->type != output->type) {
 	    /* There is a bit of a special case for gl_TexCoord.  This
-	     * built-in is unsized by default.  Appliations that variable
+	     * built-in is unsized by default.  Applications that variable
 	     * access it must redeclare it with a size.  There is some
 	     * language in the GLSL spec that implies the fragment shader
 	     * and vertex shader do not have to agree on this size.  Other
@@ -971,6 +994,19 @@ update_array_sizes(struct gl_shader_program *prog)
 	 }
 
 	 if (size + 1 != var->type->fields.array->length) {
+	    /* If this is a built-in uniform (i.e., it's backed by some
+	     * fixed-function state), adjust the number of state slots to
+	     * match the new array size.  The number of slots per array entry
+	     * is not known.  It seems safe to assume that the total number of
+	     * slots is an integer multiple of the number of array elements.
+	     * Determine the number of slots per array element by dividing by
+	     * the old (total) size.
+	     */
+	    if (var->num_state_slots > 0) {
+	       var->num_state_slots = (size + 1)
+		  * (var->num_state_slots / var->type->length);
+	    }
+
 	    var->type = glsl_type::get_array_instance(var->type->fields.array,
 						      size + 1);
 	    /* FINISHME: We should update the types of array
@@ -1127,7 +1163,7 @@ assign_uniform_locations(struct gl_shader_program *prog)
 
 
 /**
- * Find a contiguous set of available bits in a bitmask
+ * Find a contiguous set of available bits in a bitmask.
  *
  * \param used_mask     Bits representing used (1) and unused (0) locations
  * \param needed_count  Number of contiguous bits needed.
@@ -1174,7 +1210,7 @@ assign_attribute_locations(gl_shader_program *prog, unsigned max_attribute_index
     * 1. Invalidate the location assignments for all vertex shader inputs.
     *
     * 2. Assign locations for inputs that have user-defined (via
-    *    glBindVertexAttribLocation) locatoins.
+    *    glBindVertexAttribLocation) locations.
     *
     * 3. Sort the attributes without assigned locations by number of slots
     *    required in decreasing order.  Fragmentation caused by attribute
@@ -1313,7 +1349,7 @@ assign_attribute_locations(gl_shader_program *prog, unsigned max_attribute_index
 
    qsort(to_assign, num_attr, sizeof(to_assign[0]), temp_attr::compare);
 
-   /* VERT_ATTRIB_GENERIC0 is a psdueo-alias for VERT_ATTRIB_POS.  It can only
+   /* VERT_ATTRIB_GENERIC0 is a pseudo-alias for VERT_ATTRIB_POS.  It can only
     * be explicitly assigned by via glBindAttribLocation.  Mark it as reserved
     * to prevent it from being automatically allocated below.
     */
@@ -1574,7 +1610,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 	    break;
       }
 
-      /* Validate the inputs of each stage with the output of the preceeding
+      /* Validate the inputs of each stage with the output of the preceding
        * stage.
        */
       for (unsigned i = prev + 1; i < MESA_SHADER_TYPES; i++) {

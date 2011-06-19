@@ -113,6 +113,23 @@ get_row_generic(struct gl_context *ctx, struct gl_renderbuffer *rb,
    memcpy(values, src, count * _mesa_get_format_bytes(rb->Format));
 }
 
+/* Only used for float textures currently, but might also be used for
+ * RGBA8888, RGBA16, etc.
+ */
+static void
+get_values_generic(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		   GLuint count, const GLint x[], const GLint y[], void *values)
+{
+   int format_bytes = _mesa_get_format_bytes(rb->Format) / sizeof(GLfloat);
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      const void *src = rb->GetPointer(ctx, rb, x[i], y[i]);
+      char *dst = (char *) values + i * format_bytes;
+      memcpy(dst, src, format_bytes);
+   }
+}
+
 /* For the GL_RED/GL_RG/GL_RGB format/DataType combinations (and
  * GL_LUMINANCE/GL_INTENSITY?), the Put functions are a matter of
  * storing those initial components of the value per pixel into the
@@ -1092,6 +1109,266 @@ get_values_rg1616(struct gl_context *ctx, struct gl_renderbuffer *rb,
    }
 }
 
+/**********************************************************************
+ * Functions for MESA_FORMAT_INTENSITY_FLOAT32.
+ */
+static void
+get_row_i_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		  GLuint count, GLint x, GLint y, void *values)
+{
+   const GLfloat *src = rb->GetPointer(ctx, rb, x, y);
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      dst[i * 4 + RCOMP] =
+      dst[i * 4 + GCOMP] =
+      dst[i * 4 + BCOMP] =
+      dst[i * 4 + ACOMP] = src[i];
+   }
+}
+
+static void
+get_values_i_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		     GLuint count, const GLint x[], const GLint y[],
+		     void *values)
+{
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      const GLfloat *src = rb->GetPointer(ctx, rb, x[i], y[i]);
+      dst[i * 4 + RCOMP] =
+      dst[i * 4 + GCOMP] =
+      dst[i * 4 + BCOMP] =
+      dst[i * 4 + ACOMP] = src[0];
+   }
+}
+
+/**********************************************************************
+ * Functions for MESA_FORMAT_LUMINANCE_FLOAT32.
+ */
+static void
+get_row_l_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		  GLuint count, GLint x, GLint y, void *values)
+{
+   const GLfloat *src = rb->GetPointer(ctx, rb, x, y);
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      dst[i * 4 + RCOMP] =
+      dst[i * 4 + GCOMP] =
+      dst[i * 4 + BCOMP] = src[i];
+      dst[i * 4 + ACOMP] = 1.0;
+   }
+}
+
+static void
+get_values_l_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		     GLuint count, const GLint x[], const GLint y[],
+		     void *values)
+{
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      const GLfloat *src = rb->GetPointer(ctx, rb, x[i], y[i]);
+      dst[i * 4 + RCOMP] =
+      dst[i * 4 + GCOMP] =
+      dst[i * 4 + BCOMP] = src[0];
+      dst[i * 4 + ACOMP] = 1.0;
+   }
+}
+
+/**********************************************************************
+ * Functions for MESA_FORMAT_ALPHA_FLOAT32.
+ */
+static void
+get_row_a_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		  GLuint count, GLint x, GLint y, void *values)
+{
+   const GLfloat *src = rb->GetPointer(ctx, rb, x, y);
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      dst[i * 4 + RCOMP] = 0.0;
+      dst[i * 4 + GCOMP] = 0.0;
+      dst[i * 4 + BCOMP] = 0.0;
+      dst[i * 4 + ACOMP] = src[i];
+   }
+}
+
+static void
+get_values_a_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		     GLuint count, const GLint x[], const GLint y[],
+		     void *values)
+{
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      const GLfloat *src = rb->GetPointer(ctx, rb, x[i], y[i]);
+      dst[i * 4 + RCOMP] = 0.0;
+      dst[i * 4 + GCOMP] = 0.0;
+      dst[i * 4 + BCOMP] = 0.0;
+      dst[i * 4 + ACOMP] = src[0];
+   }
+}
+
+static void
+put_row_a_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		  GLuint count, GLint x, GLint y,
+		  const void *values, const GLubyte *mask)
+{
+   float *dst = rb->GetPointer(ctx, rb, x, y);
+   const float *src = values;
+   unsigned int i;
+
+   if (mask) {
+      for (i = 0; i < count; i++) {
+         if (mask[i]) {
+	    dst[i] = src[i * 4 + ACOMP];
+         }
+      }
+   }
+   else {
+      for (i = 0; i < count; i++) {
+	 dst[i] = src[i * 4 + ACOMP];
+      }
+   }
+}
+
+static void
+put_mono_row_a_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		       GLuint count, GLint x, GLint y,
+		       const void *value, const GLubyte *mask)
+{
+   float *dst = rb->GetPointer(ctx, rb, x, y);
+   const float *src = value;
+   unsigned int i;
+
+   if (mask) {
+      for (i = 0; i < count; i++) {
+         if (mask[i]) {
+	    dst[i] = src[ACOMP];
+         }
+      }
+   }
+   else {
+      for (i = 0; i < count; i++) {
+	 dst[i] = src[ACOMP];
+      }
+   }
+}
+
+static void
+put_values_a_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		     GLuint count, const GLint x[], const GLint y[],
+		     const void *values, const GLubyte *mask)
+{
+   const float *src = values;
+   unsigned int i;
+
+   for (i = 0; i < count; i++) {
+      if (!mask || mask[i]) {
+	 float *dst = rb->GetPointer(ctx, rb, x[i], y[i]);
+
+	 *dst = src[i * 4 + ACOMP];
+      }
+   }
+}
+
+static void
+put_mono_values_a_float32(struct gl_context *ctx,
+			  struct gl_renderbuffer *rb,
+			  GLuint count, const GLint x[], const GLint y[],
+			  const void *value, const GLubyte *mask)
+{
+   const float *src = value;
+   unsigned int i;
+
+   for (i = 0; i < count; i++) {
+      if (!mask || mask[i]) {
+	 float *dst = rb->GetPointer(ctx, rb, x[i], y[i]);
+	 *dst = src[ACOMP];
+      }
+   }
+}
+
+/**********************************************************************
+ * Functions for MESA_FORMAT_R_FLOAT32.
+ */
+static void
+get_row_r_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		  GLuint count, GLint x, GLint y, void *values)
+{
+   const GLfloat *src = rb->GetPointer(ctx, rb, x, y);
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      dst[i * 4 + RCOMP] = src[i];
+      dst[i * 4 + GCOMP] = 0.0;
+      dst[i * 4 + BCOMP] = 0.0;
+      dst[i * 4 + ACOMP] = 1.0;
+   }
+}
+
+static void
+get_values_r_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		     GLuint count, const GLint x[], const GLint y[],
+		     void *values)
+{
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      const GLfloat *src = rb->GetPointer(ctx, rb, x[i], y[i]);
+      dst[i * 4 + RCOMP] = src[0];
+      dst[i * 4 + GCOMP] = 0.0;
+      dst[i * 4 + BCOMP] = 0.0;
+      dst[i * 4 + ACOMP] = 1.0;
+   }
+}
+
+/**********************************************************************
+ * Functions for MESA_FORMAT_RG_FLOAT32.
+ */
+static void
+get_row_rg_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		   GLuint count, GLint x, GLint y, void *values)
+{
+   const GLfloat *src = rb->GetPointer(ctx, rb, x, y);
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      dst[i * 4 + RCOMP] = src[i * 2 + 0];
+      dst[i * 4 + GCOMP] = src[i * 2 + 1];
+      dst[i * 4 + BCOMP] = 0.0;
+      dst[i * 4 + ACOMP] = 1.0;
+   }
+}
+
+static void
+get_values_rg_float32(struct gl_context *ctx, struct gl_renderbuffer *rb,
+		      GLuint count, const GLint x[], const GLint y[],
+		      void *values)
+{
+   GLfloat *dst = values;
+   GLuint i;
+
+   for (i = 0; i < count; i++) {
+      const GLfloat *src = rb->GetPointer(ctx, rb, x[i], y[i]);
+      dst[i * 4 + RCOMP] = src[0];
+      dst[i * 4 + GCOMP] = src[1];
+      dst[i * 4 + BCOMP] = 0.0;
+      dst[i * 4 + ACOMP] = 1.0;
+   }
+}
+
 /**
  * This is the default software fallback for gl_renderbuffer's span
  * access functions.
@@ -1238,6 +1515,66 @@ _mesa_set_renderbuffer_accessors(struct gl_renderbuffer *rb)
       rb->PutMonoValues = put_mono_values_uint;
       break;
 
+   case MESA_FORMAT_RGBA_FLOAT32:
+      rb->GetRow = get_row_generic;
+      rb->GetValues = get_values_generic;
+      rb->PutRow = put_row_generic;
+      rb->PutRowRGB = NULL;
+      rb->PutMonoRow = put_mono_row_generic;
+      rb->PutValues = put_values_generic;
+      rb->PutMonoValues = put_mono_values_generic;
+      break;
+
+   case MESA_FORMAT_INTENSITY_FLOAT32:
+      rb->GetRow = get_row_i_float32;
+      rb->GetValues = get_values_i_float32;
+      rb->PutRow = put_row_generic;
+      rb->PutRowRGB = NULL;
+      rb->PutMonoRow = put_mono_row_generic;
+      rb->PutValues = put_values_generic;
+      rb->PutMonoValues = put_mono_values_generic;
+      break;
+
+   case MESA_FORMAT_LUMINANCE_FLOAT32:
+      rb->GetRow = get_row_l_float32;
+      rb->GetValues = get_values_l_float32;
+      rb->PutRow = put_row_generic;
+      rb->PutRowRGB = NULL;
+      rb->PutMonoRow = put_mono_row_generic;
+      rb->PutValues = put_values_generic;
+      rb->PutMonoValues = put_mono_values_generic;
+      break;
+
+   case MESA_FORMAT_ALPHA_FLOAT32:
+      rb->GetRow = get_row_a_float32;
+      rb->GetValues = get_values_a_float32;
+      rb->PutRow = put_row_a_float32;
+      rb->PutRowRGB = NULL;
+      rb->PutMonoRow = put_mono_row_a_float32;
+      rb->PutValues = put_values_a_float32;
+      rb->PutMonoValues = put_mono_values_a_float32;
+      break;
+
+   case MESA_FORMAT_RG_FLOAT32:
+      rb->GetRow = get_row_rg_float32;
+      rb->GetValues = get_values_rg_float32;
+      rb->PutRow = put_row_generic;
+      rb->PutRowRGB = NULL;
+      rb->PutMonoRow = put_mono_row_generic;
+      rb->PutValues = put_values_generic;
+      rb->PutMonoValues = put_mono_values_generic;
+      break;
+
+   case MESA_FORMAT_R_FLOAT32:
+      rb->GetRow = get_row_r_float32;
+      rb->GetValues = get_values_r_float32;
+      rb->PutRow = put_row_generic;
+      rb->PutRowRGB = NULL;
+      rb->PutMonoRow = put_mono_row_generic;
+      rb->PutValues = put_values_generic;
+      rb->PutMonoValues = put_mono_values_generic;
+      break;
+
    default:
       break;
    }
@@ -1316,7 +1653,7 @@ _mesa_soft_renderbuffer_storage(struct gl_context *ctx, struct gl_renderbuffer *
       rb->Format = MESA_FORMAT_Z24_S8;
       break;
    default:
-      _mesa_problem(ctx, "Bad internalFormat in _mesa_soft_renderbuffer_storage");
+      /* unsupported format */
       return GL_FALSE;
    }
 
@@ -1357,7 +1694,20 @@ _mesa_soft_renderbuffer_storage(struct gl_context *ctx, struct gl_renderbuffer *
    rb->Width = width;
    rb->Height = height;
    rb->_BaseFormat = _mesa_base_fbo_format(ctx, internalFormat);
-   ASSERT(rb->_BaseFormat);
+
+   if (rb->Name == 0 &&
+       internalFormat == GL_RGBA16_SNORM &&
+       rb->_BaseFormat == 0) {
+      /* NOTE: This is a special case just for accumulation buffers.
+       * This is a very limited use case- there's no snorm texturing or
+       * rendering going on.
+       */
+      rb->_BaseFormat = GL_RGBA;
+   }
+   else {
+      /* the internalFormat should have been error checked long ago */
+      ASSERT(rb->_BaseFormat);
+   }
 
    return GL_TRUE;
 }
@@ -1619,7 +1969,6 @@ _mesa_init_renderbuffer(struct gl_renderbuffer *rb, GLuint name)
 {
    _glthread_INIT_MUTEX(rb->Mutex);
 
-   rb->Magic = RB_MAGIC;
    rb->ClassID = 0;
    rb->Name = name;
    rb->RefCount = 0;
@@ -1718,7 +2067,7 @@ _mesa_add_color_renderbuffers(struct gl_context *ctx, struct gl_framebuffer *fb,
                               GLboolean frontLeft, GLboolean backLeft,
                               GLboolean frontRight, GLboolean backRight)
 {
-   GLuint b;
+   gl_buffer_index b;
 
    if (rgbBits > 16 || alphaBits > 16) {
       _mesa_problem(ctx,
@@ -1782,7 +2131,7 @@ _mesa_add_alpha_renderbuffers(struct gl_context *ctx, struct gl_framebuffer *fb,
                               GLboolean frontLeft, GLboolean backLeft,
                               GLboolean frontRight, GLboolean backRight)
 {
-   GLuint b;
+   gl_buffer_index b;
 
    /* for window system framebuffers only! */
    assert(fb->Name == 0);
@@ -2120,10 +2469,11 @@ _mesa_add_soft_renderbuffers(struct gl_framebuffer *fb,
 
 /**
  * Attach a renderbuffer to a framebuffer.
+ * \param bufferName  one of the BUFFER_x tokens
  */
 void
 _mesa_add_renderbuffer(struct gl_framebuffer *fb,
-                       GLuint bufferName, struct gl_renderbuffer *rb)
+                       gl_buffer_index bufferName, struct gl_renderbuffer *rb)
 {
    assert(fb);
    assert(rb);
@@ -2153,9 +2503,11 @@ _mesa_add_renderbuffer(struct gl_framebuffer *fb,
 
 /**
  * Remove the named renderbuffer from the given framebuffer.
+ * \param bufferName  one of the BUFFER_x tokens
  */
 void
-_mesa_remove_renderbuffer(struct gl_framebuffer *fb, GLuint bufferName)
+_mesa_remove_renderbuffer(struct gl_framebuffer *fb,
+                          gl_buffer_index bufferName)
 {
    struct gl_renderbuffer *rb;
 
@@ -2191,9 +2543,7 @@ _mesa_reference_renderbuffer(struct gl_renderbuffer **ptr,
       GLboolean deleteFlag = GL_FALSE;
       struct gl_renderbuffer *oldRb = *ptr;
 
-      assert(oldRb->Magic == RB_MAGIC);
       _glthread_LOCK_MUTEX(oldRb->Mutex);
-      assert(oldRb->Magic == RB_MAGIC);
       ASSERT(oldRb->RefCount > 0);
       oldRb->RefCount--;
       /*printf("RB DECR %p (%d) to %d\n", (void*) oldRb, oldRb->Name, oldRb->RefCount);*/
@@ -2201,7 +2551,6 @@ _mesa_reference_renderbuffer(struct gl_renderbuffer **ptr,
       _glthread_UNLOCK_MUTEX(oldRb->Mutex);
 
       if (deleteFlag) {
-         oldRb->Magic = 0; /* now invalid memory! */
          oldRb->Delete(oldRb);
       }
 
@@ -2210,7 +2559,6 @@ _mesa_reference_renderbuffer(struct gl_renderbuffer **ptr,
    assert(!*ptr);
 
    if (rb) {
-      assert(rb->Magic == RB_MAGIC);
       /* reference new renderbuffer */
       _glthread_LOCK_MUTEX(rb->Mutex);
       rb->RefCount++;

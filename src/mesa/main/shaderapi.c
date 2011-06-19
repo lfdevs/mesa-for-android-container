@@ -41,6 +41,8 @@
 #include "main/dispatch.h"
 #include "main/enums.h"
 #include "main/hash.h"
+#include "main/mfeatures.h"
+#include "main/mtypes.h"
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"
 #include "program/program.h"
@@ -360,7 +362,7 @@ bind_attrib_location(struct gl_context *ctx, GLuint program, GLuint index,
 {
    struct gl_shader_program *shProg;
    const GLint size = -1; /* unknown size */
-   GLint i, oldIndex;
+   GLint i;
    GLenum datatype = GL_FLOAT_VEC4;
 
    shProg = _mesa_lookup_shader_program_err(ctx, program,
@@ -381,14 +383,6 @@ bind_attrib_location(struct gl_context *ctx, GLuint program, GLuint index,
    if (index >= ctx->Const.VertexProgram.MaxAttribs) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glBindAttribLocation(index)");
       return;
-   }
-
-   if (shProg->LinkStatus) {
-      /* get current index/location for the attribute */
-      oldIndex = get_attrib_location(ctx, program, name);
-   }
-   else {
-      oldIndex = -1;
    }
 
    /* this will replace the current value if it's already in the list */
@@ -931,6 +925,8 @@ print_shader_info(const struct gl_shader_program *shProg)
       printf("  vert prog %u\n", shProg->VertexProgram->Base.Id);
    if (shProg->FragmentProgram)
       printf("  frag prog %u\n", shProg->FragmentProgram->Base.Id);
+   if (shProg->GeometryProgram)
+      printf("  geom prog %u\n", shProg->GeometryProgram->Base.Id);
 }
 
 
@@ -1027,6 +1023,7 @@ static GLboolean
 validate_samplers(const struct gl_program *prog, char *errMsg)
 {
    static const char *targetName[] = {
+      "TEXTURE_BUFFER",
       "TEXTURE_2D_ARRAY",
       "TEXTURE_1D_ARRAY",
       "TEXTURE_CUBE",
@@ -1080,6 +1077,7 @@ validate_shader_program(const struct gl_shader_program *shProg,
                         char *errMsg)
 {
    const struct gl_vertex_program *vp = shProg->VertexProgram;
+   const struct gl_geometry_program *gp = shProg->GeometryProgram;
    const struct gl_fragment_program *fp = shProg->FragmentProgram;
 
    if (!shProg->LinkStatus) {
@@ -1107,6 +1105,9 @@ validate_shader_program(const struct gl_shader_program *shProg,
     * different types, but refer to the same texture image unit,
     */
    if (vp && !validate_samplers(&vp->Base, errMsg)) {
+      return GL_FALSE;
+   }
+   if (gp && !validate_samplers(&gp->Base, errMsg)) {
       return GL_FALSE;
    }
    if (fp && !validate_samplers(&fp->Base, errMsg)) {
@@ -1182,6 +1183,8 @@ void GLAPIENTRY
 _mesa_CompileShaderARB(GLhandleARB shaderObj)
 {
    GET_CURRENT_CONTEXT(ctx);
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glCompileShader %u\n", shaderObj);
    compile_shader(ctx, shaderObj);
 }
 
@@ -1190,6 +1193,8 @@ GLuint GLAPIENTRY
 _mesa_CreateShader(GLenum type)
 {
    GET_CURRENT_CONTEXT(ctx);
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glCreateShader %s\n", _mesa_lookup_enum_by_nr(type));
    return create_shader(ctx, type);
 }
 
@@ -1206,6 +1211,8 @@ GLuint GLAPIENTRY
 _mesa_CreateProgram(void)
 {
    GET_CURRENT_CONTEXT(ctx);
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "glCreateProgram\n");
    return create_shader_program(ctx);
 }
 
@@ -1221,8 +1228,14 @@ _mesa_CreateProgramObjectARB(void)
 void GLAPIENTRY
 _mesa_DeleteObjectARB(GLhandleARB obj)
 {
+   if (MESA_VERBOSE & VERBOSE_API) {
+      GET_CURRENT_CONTEXT(ctx);
+      _mesa_debug(ctx, "glDeleteObjectARB(%u)\n", obj);
+   }
+
    if (obj) {
       GET_CURRENT_CONTEXT(ctx);
+      FLUSH_VERTICES(ctx, 0);
       if (is_program(ctx, obj)) {
          delete_shader_program(ctx, obj);
       }
@@ -1241,6 +1254,7 @@ _mesa_DeleteProgram(GLuint name)
 {
    if (name) {
       GET_CURRENT_CONTEXT(ctx);
+      FLUSH_VERTICES(ctx, 0);
       delete_shader_program(ctx, name);
    }
 }
@@ -1251,6 +1265,7 @@ _mesa_DeleteShader(GLuint name)
 {
    if (name) {
       GET_CURRENT_CONTEXT(ctx);
+      FLUSH_VERTICES(ctx, 0);
       delete_shader(ctx, name);
    }
 }
@@ -1510,7 +1525,8 @@ _mesa_ShaderSourceARB(GLhandleARB shaderObj, GLsizei count,
    for (i = 0; i < count; i++) {
       if (string[i] == NULL) {
          free((GLvoid *) offsets);
-         _mesa_error(ctx, GL_INVALID_OPERATION, "glShaderSourceARB(null string)");
+         _mesa_error(ctx, GL_INVALID_OPERATION,
+                     "glShaderSourceARB(null string)");
          return;
       }
       if (length == NULL || length[i] < 0)
@@ -1561,7 +1577,7 @@ _mesa_ShaderSourceARB(GLhandleARB shaderObj, GLsizei count,
          free(source);
          source = newSource;
       }
-   }      
+   }
 
    shader_source(ctx, shaderObj, source);
 
@@ -1702,8 +1718,7 @@ _mesa_ShaderBinary(GLint n, const GLuint* shaders, GLenum binaryformat,
 #if FEATURE_ARB_geometry_shader4
 
 void GLAPIENTRY
-_mesa_ProgramParameteriARB(GLuint program, GLenum pname,
-                           GLint value)
+_mesa_ProgramParameteriARB(GLuint program, GLenum pname, GLint value)
 {
    struct gl_shader_program *shProg;
    GET_CURRENT_CONTEXT(ctx);
@@ -1718,7 +1733,7 @@ _mesa_ProgramParameteriARB(GLuint program, GLenum pname,
    switch (pname) {
    case GL_GEOMETRY_VERTICES_OUT_ARB:
       if (value < 1 ||
-          (unsigned) value > ctx->Const.GeometryProgram.MaxGeometryOutputVertices) {
+          (unsigned) value > ctx->Const.MaxGeometryOutputVertices) {
          _mesa_error(ctx, GL_INVALID_VALUE,
                      "glProgramParameteri(GL_GEOMETRY_VERTICES_OUT_ARB=%d",
                      value);

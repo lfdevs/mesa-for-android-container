@@ -35,7 +35,6 @@
 
 #include "native.h"
 #include "egl_g3d.h"
-#include "egl_g3d_api.h"
 #include "egl_g3d_image.h"
 
 /* for struct winsys_handle */
@@ -48,17 +47,11 @@ static struct pipe_resource *
 egl_g3d_reference_native_pixmap(_EGLDisplay *dpy, EGLNativePixmapType pix)
 {
    struct egl_g3d_display *gdpy = egl_g3d_display(dpy);
-   struct egl_g3d_config *gconf;
    struct native_surface *nsurf;
    struct pipe_resource *textures[NUM_NATIVE_ATTACHMENTS];
    enum native_attachment natt;
 
-   gconf = egl_g3d_config(egl_g3d_find_pixmap_config(dpy, pix));
-   if (!gconf)
-      return NULL;
-
-   nsurf = gdpy->native->create_pixmap_surface(gdpy->native,
-         pix, gconf->native);
+   nsurf = gdpy->native->create_pixmap_surface(gdpy->native, pix, NULL);
    if (!nsurf)
       return NULL;
 
@@ -104,7 +97,8 @@ egl_g3d_create_drm_buffer(_EGLDisplay *dpy, _EGLImage *img,
    }
 
    valid_use = EGL_DRM_BUFFER_USE_SCANOUT_MESA |
-               EGL_DRM_BUFFER_USE_SHARE_MESA;
+               EGL_DRM_BUFFER_USE_SHARE_MESA |
+               EGL_DRM_BUFFER_USE_CURSOR_MESA;
    if (attrs.DRMBufferUseMESA & ~valid_use) {
       _eglLog(_EGL_DEBUG, "bad image use bit 0x%04x",
             attrs.DRMBufferUseMESA);
@@ -118,6 +112,7 @@ egl_g3d_create_drm_buffer(_EGLDisplay *dpy, _EGLImage *img,
    templ.width0 = attrs.Width;
    templ.height0 = attrs.Height;
    templ.depth0 = 1;
+   templ.array_size = 1;
 
    /*
     * XXX fix apps (e.g. wayland) and pipe drivers (e.g. i915) and remove the
@@ -128,6 +123,11 @@ egl_g3d_create_drm_buffer(_EGLDisplay *dpy, _EGLImage *img,
       templ.bind |= PIPE_BIND_SCANOUT;
    if (attrs.DRMBufferUseMESA & EGL_DRM_BUFFER_USE_SHARE_MESA)
       templ.bind |= PIPE_BIND_SHARED;
+   if (attrs.DRMBufferUseMESA & EGL_DRM_BUFFER_USE_CURSOR_MESA) {
+      if (attrs.Width != 64 || attrs.Height != 64)
+         return NULL;
+      templ.bind |= PIPE_BIND_CURSOR;
+   }
 
    return screen->resource_create(screen, &templ);
 }
@@ -142,7 +142,7 @@ egl_g3d_reference_drm_buffer(_EGLDisplay *dpy, EGLint name,
    _EGLImageAttribs attrs;
    EGLint format;
 
-   if (dpy->Platform != _EGL_PLATFORM_DRM)
+   if (!dpy->Extensions.MESA_drm_image)
       return NULL;
 
    if (_eglParseImageAttribList(&attrs, dpy, attribs) != EGL_SUCCESS)
@@ -185,6 +185,27 @@ egl_g3d_reference_drm_buffer(_EGLDisplay *dpy, EGLint name,
 
 #endif /* EGL_MESA_drm_image */
 
+#ifdef EGL_WL_bind_wayland_display
+
+static struct pipe_resource *
+egl_g3d_reference_wl_buffer(_EGLDisplay *dpy, struct wl_buffer *buffer,
+                            _EGLImage *img, const EGLint *attribs)
+{
+   struct egl_g3d_display *gdpy = egl_g3d_display(dpy);
+   struct pipe_resource *resource = NULL, *tmp = NULL;
+
+   if (!gdpy->native->wayland_bufmgr)
+      return NULL;
+
+   tmp = gdpy->native->wayland_bufmgr->buffer_get_resource(gdpy->native, buffer);
+
+   pipe_resource_reference(&resource, tmp);
+
+   return resource;
+}
+
+#endif /* EGL_WL_bind_wayland_display */
+
 _EGLImage *
 egl_g3d_create_image(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx,
                      EGLenum target, EGLClientBuffer buffer,
@@ -214,6 +235,12 @@ egl_g3d_create_image(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx,
    case EGL_DRM_BUFFER_MESA:
       ptex = egl_g3d_reference_drm_buffer(dpy,
             (EGLint) buffer, &gimg->base, attribs);
+      break;
+#endif
+#ifdef EGL_WL_bind_wayland_display
+   case EGL_WAYLAND_BUFFER_WL:
+      ptex = egl_g3d_reference_wl_buffer(dpy,
+            (struct wl_buffer *) buffer, &gimg->base, attribs);
       break;
 #endif
    default:
@@ -302,7 +329,7 @@ egl_g3d_export_drm_image(_EGLDriver *drv, _EGLDisplay *dpy, _EGLImage *img,
    struct egl_g3d_image *gimg = egl_g3d_image(img);
    struct winsys_handle wsh;
 
-   if (dpy->Platform != _EGL_PLATFORM_DRM)
+   if (!dpy->Extensions.MESA_drm_image)
       return EGL_FALSE;
 
    /* get shared handle */

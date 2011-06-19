@@ -25,6 +25,7 @@
 
 typedef struct _egl_module {
    char *Path;
+   _EGLMain_t BuiltIn;
    void *Handle;
    _EGLDriver *Driver;
 } _EGLModule;
@@ -32,6 +33,21 @@ typedef struct _egl_module {
 static _EGL_DECLARE_MUTEX(_eglModuleMutex);
 static _EGLArray *_eglModules;
 
+const struct {
+   const char *name;
+   _EGLMain_t main;
+} _eglBuiltInDrivers[] = {
+#ifdef _EGL_BUILT_IN_DRIVER_GALLIUM
+   { "egl_gallium", _eglBuiltInDriverGALLIUM },
+#endif
+#ifdef _EGL_BUILT_IN_DRIVER_DRI2
+   { "egl_dri2", _eglBuiltInDriverDRI2 },
+#endif
+#ifdef _EGL_BUILT_IN_DRIVER_GLX
+   { "egl_glx", _eglBuiltInDriverGLX },
+#endif
+   { NULL, NULL }
+};
 
 /**
  * Wrappers for dlopen/dlclose()
@@ -128,9 +144,6 @@ _eglOpenLibrary(const char *driverPath, lib_handle *handle)
    if (!lib) {
       _eglLog(_EGL_WARNING, "Could not open driver %s (%s)",
               driverPath, error);
-      if (!getenv("EGL_DRIVER"))
-         _eglLog(_EGL_WARNING,
-                 "The driver can be overridden by setting EGL_DRIVER");
       return NULL;
    }
 
@@ -157,9 +170,18 @@ _eglLoadModule(_EGLModule *mod)
    lib_handle lib;
    _EGLDriver *drv;
 
-   mainFunc = _eglOpenLibrary(mod->Path, &lib);
-   if (!mainFunc)
-      return EGL_FALSE;
+   if (mod->Driver)
+      return EGL_TRUE;
+
+   if (mod->BuiltIn) {
+      lib = (lib_handle) NULL;
+      mainFunc = mod->BuiltIn;
+   }
+   else {
+      mainFunc = _eglOpenLibrary(mod->Path, &lib);
+      if (!mainFunc)
+         return EGL_FALSE;
+   }
 
    drv = mainFunc(NULL);
    if (!drv) {
@@ -186,11 +208,22 @@ _eglLoadModule(_EGLModule *mod)
 static void
 _eglUnloadModule(_EGLModule *mod)
 {
+#if defined(_EGL_OS_UNIX)
    /* destroy the driver */
    if (mod->Driver && mod->Driver->Unload)
       mod->Driver->Unload(mod->Driver);
+
+   /*
+    * XXX At this point (atexit), the module might be the last reference to
+    * libEGL.  Closing the module might unmap libEGL and give problems.
+    */
+#if 0
    if (mod->Handle)
       close_library(mod->Handle);
+#endif
+#elif defined(_EGL_OS_WINDOWS)
+   /* XXX Windows unloads DLLs before atexit */
+#endif
 
    mod->Driver = NULL;
    mod->Handle = NULL;
@@ -302,68 +335,6 @@ _eglLoaderFile(const char *dir, size_t len, void *loader_data)
 
 
 /**
- * A loader function for use with _eglPreloadForEach.  The loader data is the
- * pattern (prefix) of the files to look for.
- */
-static EGLBoolean
-_eglLoaderPattern(const char *dir, size_t len, void *loader_data)
-{
-#if defined(_EGL_OS_UNIX)
-   const char *prefix, *suffix;
-   size_t prefix_len, suffix_len;
-   DIR *dirp;
-   struct dirent *dirent;
-   char path[1024];
-
-   if (len + 2 > sizeof(path))
-      return EGL_TRUE;
-   if (len) {
-      memcpy(path, dir, len);
-      path[len++] = '/';
-   }
-   path[len] = '\0';
-
-   dirp = opendir(path);
-   if (!dirp)
-      return EGL_TRUE;
-
-   prefix = (const char *) loader_data;
-   prefix_len = strlen(prefix);
-   suffix = library_suffix();
-   suffix_len = (suffix) ? strlen(suffix) : 0;
-
-   while ((dirent = readdir(dirp))) {
-      size_t dirent_len = strlen(dirent->d_name);
-      const char *p;
-
-      /* match the prefix */
-      if (strncmp(dirent->d_name, prefix, prefix_len) != 0)
-         continue;
-      /* match the suffix */
-      if (suffix) {
-         p = dirent->d_name + dirent_len - suffix_len;
-         if (p < dirent->d_name || strcmp(p, suffix) != 0)
-            continue;
-      }
-
-      /* make a full path and add it to the module array */
-      if (len + dirent_len + 1 <= sizeof(path)) {
-         strcpy(path + len, dirent->d_name);
-         _eglAddModule(path);
-      }
-   }
-
-   closedir(dirp);
-
-   return EGL_TRUE;
-#else /* _EGL_OS_UNIX */
-   /* stop immediately */
-   return EGL_FALSE;
-#endif
-}
-
-
-/**
  * Run the callback function on each driver directory.
  *
  * The process may end prematurely if the callback function returns false.
@@ -461,11 +432,12 @@ _eglGetSearchPath(void)
  *
  * The user driver is specified by EGL_DRIVER.
  */
-static void
+static EGLBoolean
 _eglAddUserDriver(void)
 {
    const char *search_path = _eglGetSearchPath();
    char *env;
+   size_t name_len = 0;
 
    env = getenv("EGL_DRIVER");
 #if defined(_EGL_OS_UNIX)
@@ -477,35 +449,73 @@ _eglAddUserDriver(void)
          env = NULL;
       }
    }
-#endif /* _EGL_OS_UNIX */
+   else if (env) {
+      char *suffix = strchr(env, '.');
+      name_len = (suffix) ? suffix - env : strlen(env);
+   }
+#else
    if (env)
+      name_len = strlen(env);
+#endif /* _EGL_OS_UNIX */
+
+   /*
+    * Try built-in drivers first if we know the driver name.  This makes sure
+    * we do not load the outdated external driver that is still on the
+    * filesystem.
+    */
+   if (name_len) {
+      _EGLModule *mod;
+      EGLint i;
+
+      for (i = 0; _eglBuiltInDrivers[i].name; i++) {
+         if (strlen(_eglBuiltInDrivers[i].name) == name_len &&
+             !strncmp(_eglBuiltInDrivers[i].name, env, name_len)) {
+            mod = _eglAddModule(env);
+            if (mod)
+               mod->BuiltIn = _eglBuiltInDrivers[i].main;
+
+            return EGL_TRUE;
+         }
+      }
+   }
+
+   /* otherwise, treat env as a path */
+   if (env) {
       _eglPreloadForEach(search_path, _eglLoaderFile, (void *) env);
+
+      return EGL_TRUE;
+   }
+
+   return EGL_FALSE;
 }
 
 
 /**
- * Add default drivers to the module array.
+ * Add egl_gallium to the module array.
  */
 static void
-_eglAddDefaultDrivers(void)
+_eglAddGalliumDriver(void)
 {
-   const char *search_path = _eglGetSearchPath();
-   EGLint i;
-#if defined(_EGL_OS_WINDOWS)
-   const char *DefaultDriverNames[] = {
-      "egl_gallium"
-   };
-#elif defined(_EGL_OS_UNIX)
-   const char *DefaultDriverNames[] = {
-      "egl_gallium",
-      "egl_dri2",
-      "egl_glx"
-   };
+#ifndef _EGL_BUILT_IN_DRIVER_GALLIUM
+   void *external = (void *) "egl_gallium";
+   _eglPreloadForEach(_eglGetSearchPath(), _eglLoaderFile, external);
 #endif
+}
 
-   for (i = 0; i < ARRAY_SIZE(DefaultDriverNames); i++) {
-      void *name = (void *) DefaultDriverNames[i];
-      _eglPreloadForEach(search_path, _eglLoaderFile, name);
+
+/**
+ * Add built-in drivers to the module array.
+ */
+static void
+_eglAddBuiltInDrivers(void)
+{
+   _EGLModule *mod;
+   EGLint i;
+
+   for (i = 0; _eglBuiltInDrivers[i].name; i++) {
+      mod = _eglAddModule(_eglBuiltInDrivers[i].name);
+      if (mod)
+         mod->BuiltIn = _eglBuiltInDrivers[i].main;
    }
 }
 
@@ -520,113 +530,96 @@ _eglAddDrivers(void)
    if (_eglModules)
       return EGL_TRUE;
 
-   /* the order here decides the priorities of the drivers */
-   _eglAddUserDriver();
-   _eglAddDefaultDrivers();
-   _eglPreloadForEach(_eglGetSearchPath(), _eglLoaderPattern, (void *) "egl_");
+   if (!_eglAddUserDriver()) {
+      /*
+       * Add other drivers only when EGL_DRIVER is not set.  The order here
+       * decides the priorities.
+       */
+      _eglAddGalliumDriver();
+      _eglAddBuiltInDrivers();
+   }
 
    return (_eglModules != NULL);
 }
 
 
 /**
- * Match a display to a driver.  The display is initialized unless use_probe is
- * true.
- *
- * The matching is done by finding the first driver that can initialize the
- * display, or when use_probe is true, the driver with highest score.
+ * A helper function for _eglMatchDriver.  It finds the first driver that can
+ * initialize the display and return.
+ */
+static _EGLDriver *
+_eglMatchAndInitialize(_EGLDisplay *dpy)
+{
+   _EGLDriver *drv = NULL;
+   EGLint i = 0;
+
+   if (!_eglAddDrivers()) {
+      _eglLog(_EGL_WARNING, "failed to find any driver");
+      return NULL;
+   }
+
+   if (dpy->Driver) {
+      drv = dpy->Driver;
+      /* no re-matching? */
+      if (!drv->API.Initialize(drv, dpy))
+         drv = NULL;
+      return drv;
+   }
+
+   while (i < _eglModules->Size) {
+      _EGLModule *mod = (_EGLModule *) _eglModules->Elements[i];
+
+      if (!_eglLoadModule(mod)) {
+         /* remove invalid modules */
+         _eglEraseArray(_eglModules, i, _eglFreeModule);
+         continue;
+      }
+
+      if (mod->Driver->API.Initialize(mod->Driver, dpy)) {
+         drv = mod->Driver;
+         break;
+      }
+      else {
+         i++;
+      }
+   }
+
+   return drv;
+}
+
+
+/**
+ * Match a display to a driver.  The display is initialized unless test_only is
+ * true.  The matching is done by finding the first driver that can initialize
+ * the display.
  */
 _EGLDriver *
-_eglMatchDriver(_EGLDisplay *dpy, EGLBoolean use_probe)
+_eglMatchDriver(_EGLDisplay *dpy, EGLBoolean test_only)
 {
-   _EGLModule *mod;
-   _EGLDriver *best_drv = NULL;
-   EGLint best_score = 0;
-   EGLint major, minor, i;
+   _EGLDriver *best_drv;
+
+   assert(!dpy->Initialized);
 
    _eglLockMutex(&_eglModuleMutex);
 
-   if (!_eglAddDrivers()) {
-      _eglUnlockMutex(&_eglModuleMutex);
-      return EGL_FALSE;
-   }
+   /* set options */
+   dpy->Options.TestOnly = test_only;
+   dpy->Options.UseFallback = EGL_FALSE;
 
-   /* match the loaded modules */
-   for (i = 0; i < _eglModules->Size; i++) {
-      mod = (_EGLModule *) _eglModules->Elements[i];
-      if (!mod->Driver)
-         break;
-
-      if (use_probe) {
-         EGLint score = (mod->Driver->Probe) ?
-            mod->Driver->Probe(mod->Driver, dpy) : 1;
-         if (score > best_score) {
-            best_drv = mod->Driver;
-            best_score = score;
-         }
-      }
-      else {
-         if (mod->Driver->API.Initialize(mod->Driver, dpy, &major, &minor)) {
-            best_drv = mod->Driver;
-            best_score = 100;
-         }
-      }
-      /* perfect match */
-      if (best_score >= 100)
-         break;
-   }
-
-   /* load more modules */
+   best_drv = _eglMatchAndInitialize(dpy);
    if (!best_drv) {
-      EGLint first_unloaded = i;
-
-      while (i < _eglModules->Size) {
-         mod = (_EGLModule *) _eglModules->Elements[i];
-         assert(!mod->Driver);
-
-         if (!_eglLoadModule(mod)) {
-            /* remove invalid modules */
-            _eglEraseArray(_eglModules, i, _eglFreeModule);
-            continue;
-         }
-
-         if (use_probe) {
-            best_score = (mod->Driver->Probe) ?
-               mod->Driver->Probe(mod->Driver, dpy) : 1;
-         }
-         else {
-            if (mod->Driver->API.Initialize(mod->Driver, dpy, &major, &minor))
-               best_score = 100;
-         }
-
-         if (best_score > 0) {
-            best_drv = mod->Driver;
-            /* loaded modules come before unloaded ones */
-            if (first_unloaded != i) {
-               void *tmp = _eglModules->Elements[i];
-               _eglModules->Elements[i] =
-                  _eglModules->Elements[first_unloaded];
-               _eglModules->Elements[first_unloaded] = tmp;
-            }
-            break;
-         }
-         else {
-            _eglUnloadModule(mod);
-            i++;
-         }
-      }
+      dpy->Options.UseFallback = EGL_TRUE;
+      best_drv = _eglMatchAndInitialize(dpy);
    }
 
    _eglUnlockMutex(&_eglModuleMutex);
 
    if (best_drv) {
-      _eglLog(_EGL_DEBUG, "the best driver is %s (score %d)",
-            best_drv->Name, best_score);
-      if (!use_probe) {
+      _eglLog(_EGL_DEBUG, "the best driver is %s%s",
+            best_drv->Name, (test_only) ? " (test only) " : "");
+      if (!test_only) {
          dpy->Driver = best_drv;
          dpy->Initialized = EGL_TRUE;
-         dpy->APImajor = major;
-         dpy->APIminor = minor;
       }
    }
 
@@ -670,12 +663,7 @@ _eglUnloadDrivers(void)
 {
    /* this is called at atexit time */
    if (_eglModules) {
-#if defined(_EGL_OS_UNIX)
       _eglDestroyArray(_eglModules, _eglFreeModule);
-#elif defined(_EGL_OS_WINDOWS)
-      /* XXX Windows unloads DLLs before atexit */
-      _eglDestroyArray(_eglModules, NULL);
-#endif
       _eglModules = NULL;
    }
 }

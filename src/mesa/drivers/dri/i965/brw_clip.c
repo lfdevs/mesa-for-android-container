@@ -42,6 +42,8 @@
 #include "brw_state.h"
 #include "brw_clip.h"
 
+#include "../glsl/ralloc.h"
+
 #define FRONT_UNFILLED_BIT  0x1
 #define BACK_UNFILLED_BIT   0x2
 
@@ -52,16 +54,19 @@ static void compile_clip_prog( struct brw_context *brw,
    struct intel_context *intel = &brw->intel;
    struct brw_clip_compile c;
    const GLuint *program;
+   void *mem_ctx;
    GLuint program_size;
    GLuint delta;
    GLuint i;
    GLuint header_regs;
 
    memset(&c, 0, sizeof(c));
+
+   mem_ctx = ralloc_context(NULL);
    
    /* Begin the compilation:
     */
-   brw_init_compile(brw, &c.func);
+   brw_init_compile(brw, &c.func, mem_ctx);
 
    c.func.single_program_flow = 1;
 
@@ -144,14 +149,13 @@ static void compile_clip_prog( struct brw_context *brw,
    /* Upload
     */
    drm_intel_bo_unreference(brw->clip.prog_bo);
-   brw->clip.prog_bo = brw_upload_cache_with_auxdata(&brw->cache,
-						     BRW_CLIP_PROG,
-						     &c.key, sizeof(c.key),
-						     NULL, 0,
-						     program, program_size,
-						     &c.prog_data,
-						     sizeof(c.prog_data),
-						     &brw->clip.prog_data);
+   brw->clip.prog_bo = brw_upload_cache(&brw->cache,
+					BRW_CLIP_PROG,
+					&c.key, sizeof(c.key),
+					program, program_size,
+					&c.prog_data, sizeof(c.prog_data),
+					&brw->clip.prog_data);
+   ralloc_free(mem_ctx);
 }
 
 /* Calculate interpolants for triangle and line rasterization.
@@ -270,7 +274,6 @@ static void upload_clip_prog(struct brw_context *brw)
    drm_intel_bo_unreference(brw->clip.prog_bo);
    brw->clip.prog_bo = brw_search_cache(&brw->cache, BRW_CLIP_PROG,
 					&key, sizeof(key),
-					NULL, 0,
 					&brw->clip.prog_data);
    if (brw->clip.prog_bo == NULL)
       compile_clip_prog( brw, &key );

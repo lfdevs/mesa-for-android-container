@@ -33,7 +33,7 @@
 #include "xf86drm.h"
 #include "radeon_drm.h"
 
-static int radeon_bo_fixed_map(struct radeon *radeon, struct radeon_bo *bo)
+int radeon_bo_fixed_map(struct radeon *radeon, struct radeon_bo *bo)
 {
 	struct drm_radeon_gem_mmap args;
 	void *ptr;
@@ -64,16 +64,28 @@ static int radeon_bo_fixed_map(struct radeon *radeon, struct radeon_bo *bo)
 
 static void radeon_bo_fixed_unmap(struct radeon *radeon, struct radeon_bo *bo)
 {
-	munmap(bo->data, bo->size);
-	bo->data = NULL;
+	if (bo->data) {
+		munmap(bo->data, bo->size);
+		bo->data = NULL;
+	}
 }
 
 struct radeon_bo *radeon_bo(struct radeon *radeon, unsigned handle,
-			unsigned size, unsigned alignment)
+			    unsigned size, unsigned alignment, unsigned initial_domain)
 {
 	struct radeon_bo *bo;
 	int r;
 
+	if (handle) {
+		pipe_mutex_lock(radeon->bo_handles_mutex);
+		bo = util_hash_table_get(radeon->bo_handles,
+					 (void *)(uintptr_t)handle);
+		if (bo) {
+			struct radeon_bo *b = NULL;
+			radeon_bo_reference(radeon, &b, bo);
+			goto done;
+		}
+	}
 	bo = calloc(1, sizeof(*bo));
 	if (bo == NULL) {
 		return NULL;
@@ -94,15 +106,16 @@ struct radeon_bo *radeon_bo(struct radeon *radeon, unsigned handle,
 			free(bo);
 			return NULL;
 		}
+		bo->name = handle;
 		bo->handle = open_arg.handle;
 		bo->size = open_arg.size;
 		bo->shared = TRUE;
 	} else {
-		struct drm_radeon_gem_create args;
+		struct drm_radeon_gem_create args = {};
 
 		args.size = size;
 		args.alignment = alignment;
-		args.initial_domain = RADEON_GEM_DOMAIN_CPU;
+		args.initial_domain = initial_domain;
 		args.flags = 0;
 		args.handle = 0;
 		r = drmCommandWriteRead(radeon->fd, DRM_RADEON_GEM_CREATE,
@@ -116,11 +129,13 @@ struct radeon_bo *radeon_bo(struct radeon *radeon, unsigned handle,
 			return NULL;
 		}
 	}
-	if (radeon_bo_fixed_map(radeon, bo)) {
-		R600_ERR("failed to map bo\n");
-		radeon_bo_reference(radeon, &bo, NULL);
-		return bo;
-	}
+
+	if (handle)
+		util_hash_table_set(radeon->bo_handles, (void *)(uintptr_t)handle, bo);
+done:
+	if (handle)
+		pipe_mutex_unlock(radeon->bo_handles_mutex);
+
 	return bo;
 }
 
@@ -128,6 +143,12 @@ static void radeon_bo_destroy(struct radeon *radeon, struct radeon_bo *bo)
 {
 	struct drm_gem_close args;
 
+	if (bo->name) {
+		pipe_mutex_lock(radeon->bo_handles_mutex);
+		util_hash_table_remove(radeon->bo_handles,
+				       (void *)(uintptr_t)bo->name);
+		pipe_mutex_unlock(radeon->bo_handles_mutex);
+	}
 	LIST_DEL(&bo->fencedlist);
 	radeon_bo_fixed_unmap(radeon, bo);
 	memset(&args, 0, sizeof(args));
@@ -204,15 +225,15 @@ int radeon_bo_get_tiling_flags(struct radeon *radeon,
 			       uint32_t *tiling_flags,
 			       uint32_t *pitch)
 {
-	struct drm_radeon_gem_get_tiling args;
+	struct drm_radeon_gem_get_tiling args = {};
 	int ret;
-	
+
 	args.handle = bo->handle;
 	ret = drmCommandWriteRead(radeon->fd, DRM_RADEON_GEM_GET_TILING,
 				  &args, sizeof(args));
 	if (ret)
 		return ret;
-	
+
 	*tiling_flags = args.tiling_flags;
 	*pitch = args.pitch;
 	return ret;

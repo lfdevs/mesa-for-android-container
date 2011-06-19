@@ -46,10 +46,10 @@
  *      to have allocated the fifo space before converting.
  *
  * Results:
- *      id is filld out.
+ *      id is filled out.
  *
  * Side effects:
- *      One surface relocation is preformed for texture handle.
+ *      One surface relocation is performed for texture handle.
  *
  *----------------------------------------------------------------------
  */
@@ -224,7 +224,7 @@ SVGA3D_DestroyContext(struct svga_winsys_context *swc)  // IN
  *      containers for host VRAM objects like textures, vertex
  *      buffers, and depth/stencil buffers.
  *
- *      Surfaces are hierarchial:
+ *      Surfaces are hierarchical:
  *
  *        - Surface may have multiple faces (for cube maps)
  *
@@ -376,11 +376,9 @@ SVGA3D_DestroySurface(struct svga_winsys_context *swc,
 /*
  *----------------------------------------------------------------------
  *
- * SVGA3D_BeginSurfaceDMA--
+ * SVGA3D_SurfaceDMA--
  *
- *      Begin a SURFACE_DMA command. This reserves space for it in
- *      the FIFO, and returns a pointer to the command's box array.
- *      This function must be paired with SVGA_FIFOCommitAll().
+ *      Emit a SURFACE_DMA command.
  *
  *      When the SVGA3D device asynchronously processes this FIFO
  *      command, a DMA operation is performed between host VRAM and
@@ -422,7 +420,8 @@ SVGA3D_SurfaceDMA(struct svga_winsys_context *swc,
                   struct svga_transfer *st,         // IN
                   SVGA3dTransferType transfer,      // IN
                   const SVGA3dCopyBox *boxes,       // IN
-                  uint32 numBoxes)                  // IN
+                  uint32 numBoxes,                  // IN
+                  SVGA3dSurfaceDMAFlags flags)      // IN
 {
    struct svga_texture *texture = svga_texture(st->base.resource); 
    SVGA3dCmdSurfaceDMA *cmd;
@@ -465,7 +464,7 @@ SVGA3D_SurfaceDMA(struct svga_winsys_context *swc,
    pSuffix = (SVGA3dCmdSurfaceDMASuffix *)((uint8_t*)cmd + sizeof *cmd + boxesSize);
    pSuffix->suffixSize = sizeof *pSuffix;
    pSuffix->maximumOffset = st->hw_nblocksy*st->base.stride;
-   memset(&pSuffix->flags, 0, sizeof pSuffix->flags);
+   pSuffix->flags = flags;
 
    swc->commit(swc);
 

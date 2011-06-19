@@ -30,6 +30,7 @@
 #include "nouveau_fbo.h"
 #include "nouveau_util.h"
 
+#include "main/pbo.h"
 #include "main/texobj.h"
 #include "main/texstore.h"
 #include "main/texformat.h"
@@ -113,8 +114,10 @@ nouveau_teximage_map(struct gl_context *ctx, struct gl_texture_image *ti,
 			if (access & GL_MAP_WRITE_BIT)
 				flags |= NOUVEAU_BO_WR;
 
-			ret = nouveau_bo_map(s->bo, flags);
-			assert(!ret);
+			if (!s->bo->map) {
+				ret = nouveau_bo_map(s->bo, flags);
+				assert(!ret);
+			}
 
 			ti->Data = s->bo->map + y * s->pitch + x * s->cpp;
 		}
@@ -267,8 +270,8 @@ get_last_level(struct gl_texture_object *t)
 {
 	struct gl_texture_image *base = t->Image[0][t->BaseLevel];
 
-	if (t->MinFilter == GL_NEAREST ||
-	    t->MinFilter == GL_LINEAR || !base)
+	if (t->Sampler.MinFilter == GL_NEAREST ||
+	    t->Sampler.MinFilter == GL_LINEAR || !base)
 		return t->BaseLevel;
 	else
 		return MIN2(t->BaseLevel + base->MaxLog2, t->MaxLevel);
@@ -685,8 +688,10 @@ nouveau_generate_mipmap(struct gl_context *ctx, GLenum target,
 		_mesa_generate_mipmap(ctx, target, t);
 		nouveau_teximage_unmap(ctx, base);
 
-		store_mipmap(ctx, target, t->BaseLevel + 1,
-			     get_last_level(t), t);
+		if (!_mesa_is_format_compressed(base->TexFormat)) {
+			store_mipmap(ctx, target, t->BaseLevel + 1,
+				     get_last_level(t), t);
+		}
 
 	} else {
 		_mesa_meta_GenerateMipmap(ctx, target, t);

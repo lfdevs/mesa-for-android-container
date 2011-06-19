@@ -29,7 +29,6 @@
 #define I915CONTEXT_INC
 
 #include "intel_context.h"
-#include "i915_reg.h"
 
 #define I915_FALLBACK_TEXTURE		 0x1000
 #define I915_FALLBACK_COLORMASK		 0x2000
@@ -47,10 +46,10 @@
 #define I915_UPLOAD_STIPPLE          0x4
 #define I915_UPLOAD_PROGRAM          0x8
 #define I915_UPLOAD_CONSTANTS        0x10
-#define I915_UPLOAD_FOG              0x20
 #define I915_UPLOAD_INVARIENT        0x40
 #define I915_UPLOAD_DEFAULTS         0x80
 #define I915_UPLOAD_RASTER_RULES     0x100
+#define I915_UPLOAD_BLEND            0x200
 #define I915_UPLOAD_TEX(i)           (0x00010000<<(i))
 #define I915_UPLOAD_TEX_ALL          (0x00ff0000)
 #define I915_UPLOAD_TEX_0_SHIFT      16
@@ -77,24 +76,19 @@
 #define I915_DEST_SETUP_SIZE 18
 
 #define I915_CTXREG_STATE4		0
-#define I915_CTXREG_LI	        	1
-#define I915_CTXREG_LIS2		        2
-#define I915_CTXREG_LIS4	        	3
-#define I915_CTXREG_LIS5	        	4
-#define I915_CTXREG_LIS6	         	5
-#define I915_CTXREG_IAB   	 	6
-#define I915_CTXREG_BLENDCOLOR0		7
-#define I915_CTXREG_BLENDCOLOR1		8
-#define I915_CTXREG_BF_STENCIL_OPS	9
-#define I915_CTXREG_BF_STENCIL_MASKS	10
-#define I915_CTX_SETUP_SIZE		11
+#define I915_CTXREG_LI			1
+#define I915_CTXREG_LIS2		2
+#define I915_CTXREG_LIS4		3
+#define I915_CTXREG_LIS5		4
+#define I915_CTXREG_LIS6		5
+#define I915_CTXREG_BF_STENCIL_OPS	6
+#define I915_CTXREG_BF_STENCIL_MASKS	7
+#define I915_CTX_SETUP_SIZE		8
 
-#define I915_FOGREG_COLOR		0
-#define I915_FOGREG_MODE0		1
-#define I915_FOGREG_MODE1		2
-#define I915_FOGREG_MODE2		3
-#define I915_FOGREG_MODE3		4
-#define I915_FOG_SETUP_SIZE		5
+#define I915_BLENDREG_IAB		0
+#define I915_BLENDREG_BLENDCOLOR0	1
+#define I915_BLENDREG_BLENDCOLOR1	2
+#define I915_BLEND_SETUP_SIZE		3
 
 #define I915_STPREG_ST0        0
 #define I915_STPREG_ST1        1
@@ -122,6 +116,12 @@ enum {
 
 #define I915_MAX_CONSTANT      32
 #define I915_CONSTANT_SIZE     (2+(4*I915_MAX_CONSTANT))
+
+#define I915_MAX_TEX_INDIRECT 4
+#define I915_MAX_TEX_INSN     32
+#define I915_MAX_ALU_INSN     64
+#define I915_MAX_DECL_INSN    27
+#define I915_MAX_TEMPORARY    16
 
 #define I915_MAX_INSN          (I915_MAX_DECL_INSN + \
 				I915_MAX_TEX_INSN + \
@@ -216,9 +216,9 @@ struct i915_fragment_program
 struct i915_hw_state
 {
    GLuint Ctx[I915_CTX_SETUP_SIZE];
+   GLuint Blend[I915_BLEND_SETUP_SIZE];
    GLuint Buffer[I915_DEST_SETUP_SIZE];
    GLuint Stipple[I915_STP_SETUP_SIZE];
-   GLuint Fog[I915_FOG_SETUP_SIZE];
    GLuint Defaults[I915_DEF_SETUP_SIZE];
    GLuint RasterRules[I915_RASTER_RULES_SETUP_SIZE];
    GLuint Tex[I915_TEX_UNITS][I915_TEX_SETUP_SIZE];
@@ -245,23 +245,22 @@ struct i915_hw_state
    GLuint emitted;              /* I915_UPLOAD_* */
 };
 
-#define I915_FOG_PIXEL  2
-#define I915_FOG_VERTEX 1
-#define I915_FOG_NONE   0
-
 struct i915_context
 {
    struct intel_context intel;
 
    GLuint last_ReallyEnabled;
-   GLuint vertex_fog;
    GLuint lodbias_ss2[MAX_TEXTURE_UNITS];
 
 
    struct i915_fragment_program *current_program;
 
+   drm_intel_bo *current_vb_bo;
+   unsigned int current_vertex_size;
+
    struct i915_hw_state state;
    uint32_t last_draw_offset;
+   GLuint last_sampler;
 };
 
 
@@ -337,7 +336,6 @@ extern void i915_print_ureg(const char *msg, GLuint ureg);
  */
 extern void i915InitStateFunctions(struct dd_function_table *functions);
 extern void i915InitState(struct i915_context *i915);
-extern void i915_update_fog(struct gl_context * ctx);
 extern void i915_update_stencil(struct gl_context * ctx);
 extern void i915_update_provoking_vertex(struct gl_context *ctx);
 

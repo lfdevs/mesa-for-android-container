@@ -24,7 +24,6 @@
 
 
 #include "main/glheader.h"
-#include "main/bufferobj.h"
 #include "main/colormac.h"
 #include "main/feedback.h"
 #include "main/formats.h"
@@ -32,6 +31,7 @@
 #include "main/imports.h"
 #include "main/macros.h"
 #include "main/pack.h"
+#include "main/pbo.h"
 #include "main/state.h"
 
 #include "s_context.h"
@@ -195,6 +195,9 @@ fast_read_rgba_pixels( struct gl_context *ctx,
 	  rb->_BaseFormat == GL_RGB ||
 	  rb->_BaseFormat == GL_RG ||
 	  rb->_BaseFormat == GL_RED ||
+	  rb->_BaseFormat == GL_LUMINANCE ||
+	  rb->_BaseFormat == GL_INTENSITY ||
+	  rb->_BaseFormat == GL_LUMINANCE_ALPHA ||
 	  rb->_BaseFormat == GL_ALPHA);
 
    /* clipping should have already been done */
@@ -315,12 +318,12 @@ read_rgba_pixels( struct gl_context *ctx,
    if (!rb)
       return;
 
-   if (type == GL_FLOAT && ((ctx->Color.ClampReadColor == GL_TRUE) ||
-                            (ctx->Color.ClampReadColor == GL_FIXED_ONLY_ARB &&
-                             rb->DataType != GL_FLOAT)))
+   if ((ctx->Color._ClampReadColor == GL_TRUE || type != GL_FLOAT) &&
+       !_mesa_is_integer_format(format)) {
       transferOps |= IMAGE_CLAMP_BIT;
+   }
 
-   /* Try optimized path first */
+   /* Try the optimized path first. */
    if (fast_read_rgba_pixels(ctx, x, y, width, height,
                              format, type, pixels, packing, transferOps)) {
       return; /* done! */

@@ -76,7 +76,6 @@ struct i915_winsys_batchbuffer {
    size_t size;
 
    size_t relocs;
-   size_t max_relocs;
    /*@}*/
 };
 
@@ -95,6 +94,18 @@ struct i915_winsys {
       (*batchbuffer_create)(struct i915_winsys *iws);
 
    /**
+    * Validate buffers for usage in this batchbuffer.
+    * Does space-checking and asorted other book-keeping.
+    *
+    * @batch
+    * @buffers array to buffers to validate
+    * @num_of_buffers size of the passed array
+    */
+   boolean (*validate_buffers)(struct i915_winsys_batchbuffer *batch,
+	 		       struct i915_winsys_buffer **buffers,
+			       int num_of_buffers);
+
+   /**
     * Emit a relocation to a buffer.
     * Target position in batchbuffer is the same as ptr.
     *
@@ -103,11 +114,12 @@ struct i915_winsys {
     * @usage how is the hardware going to use the buffer.
     * @offset add this to the reloc buffers address
     * @target buffer where to write the address, null for batchbuffer.
+    * @fenced relocation needs a fence.
     */
    int (*batchbuffer_reloc)(struct i915_winsys_batchbuffer *batch,
                             struct i915_winsys_buffer *reloc,
                             enum i915_winsys_buffer_usage usage,
-                            unsigned offset, bool fenced);
+                            unsigned offset, boolean fenced);
 
    /**
     * Flush a bufferbatch.

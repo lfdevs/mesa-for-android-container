@@ -28,13 +28,14 @@
 
 #include "main/imports.h"
 #include "main/macros.h"
+#include "main/mfeatures.h"
 #include "main/mtypes.h"
 #include "main/enums.h"
 #include "main/fbobject.h"
 #include "main/framebuffer.h"
 #include "main/renderbuffer.h"
 #include "main/context.h"
-#include "main/texrender.h"
+#include "swrast/swrast.h"
 #include "drivers/common/meta.h"
 
 #include "radeon_common.h"
@@ -484,6 +485,8 @@ radeon_update_wrapper(struct gl_context *ctx, struct radeon_renderbuffer *rrb,
 		case MESA_FORMAT_S8_Z24:
 			rrb->base.DataType = GL_UNSIGNED_INT_24_8_EXT;
 			break;
+		default:
+			_mesa_problem(ctx, "Unexpected texture format in radeon_update_wrapper()");
 	}
 		
 	rrb->cpp = _mesa_get_format_bytes(texImage->TexFormat);
@@ -554,7 +557,7 @@ radeon_render_texture(struct gl_context * ctx,
       /* Fallback on drawing to a texture without a miptree.
        */
       _mesa_reference_renderbuffer(&att->Renderbuffer, NULL);
-      _mesa_render_texture(ctx, fb, att);
+      _swrast_render_texture(ctx, fb, att);
       return;
    }
    else if (!rrb) {
@@ -565,14 +568,14 @@ radeon_render_texture(struct gl_context * ctx,
       }
       else {
          /* fallback to software rendering */
-         _mesa_render_texture(ctx, fb, att);
+         _swrast_render_texture(ctx, fb, att);
          return;
       }
    }
 
    if (!radeon_update_wrapper(ctx, rrb, newImage)) {
        _mesa_reference_renderbuffer(&att->Renderbuffer, NULL);
-       _mesa_render_texture(ctx, fb, att);
+       _swrast_render_texture(ctx, fb, att);
        return;
    }
 

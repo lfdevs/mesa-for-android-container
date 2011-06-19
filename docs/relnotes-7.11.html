@@ -1,0 +1,86 @@
+<HTML>
+
+<head>
+<TITLE>Mesa Release Notes</TITLE>
+<link rel="stylesheet" type="text/css" href="mesa.css">
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+</head>
+
+<BODY>
+
+<body bgcolor="#eeeeee">
+
+<H1>Mesa 7.11 Release Notes / (release date TBD)</H1>
+
+<p>
+Mesa 7.11 is a new development release.
+People who are concerned with stability and reliability should stick
+with a previous release or wait for Mesa 7.11.1.
+</p>
+<p>
+Mesa 7.11 implements the OpenGL 2.1 API, but the version reported by
+glGetString(GL_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 2.1.
+</p>
+<p>
+See the <a href="install.html">Compiling/Installing page</a> for prerequisites
+for DRI hardware acceleration.
+</p>
+
+
+<h2>MD5 checksums</h2>
+<pre>
+tbd
+</pre>
+
+
+<h2>New features</h2>
+<ul>
+<li>GL_ARB_ES2_compatibility (gallium drivers)
+<li>GL_ARB_color_buffer_float (gallium drivers, i965)
+<li>GL_ARB_draw_buffers_blend (gallium)
+<li>GL_ARB_draw_instanced extension (gallium drivers, swrast)
+<li>GL_ARB_instanced_arrays extension (gallium drivers)
+<li>GL_ARB_occlusion_query2 (gallium drivers, swrast)
+<li>GL_ARB_robustness (all drivers)
+<li>GL_ARB_sampler_objects (gallium drivers)
+<li>GL_ARB_seamless_cube_map (gallium r600)
+<li>GL_ARB_shader_texture_lod (gallium drivers)
+<li>GL_ARB_sync (gallium drivers only, intel support was in 7.6)
+<li>GL_ARB_texture_compression_rgtc (gallium drivers, swrast, i965)
+<li>GL_ARB_texture_float (gallium, i965)
+<li>GL_EXT_packed_float (gallium r600)
+<li>GL_EXT_texture_compression_latc (gallium drivers, swrast)
+<li>GL_EXT_texture_compression_rgtc (gallium drivers, swrast, i965)
+<li>GL_EXT_texture_filter_anisotropic (swrast)
+<li>GL_EXT_texture_shared_exponent (gallium drivers, swrast)
+<li>GL_EXT_texture_sRGB_decode (gallium drivers, swrast, i965)
+<li>GL_EXT_texture_snorm (gallium drivers)
+<li>GL_AMD_draw_buffers_blend (alias of the ARB variant)
+<li>GL_AMD_seamless_cubemap_per_texture (gallium r600)
+<li>GL_AMD_shader_stencil_export (alias of the ARB variant)
+<li>GL_ATI_draw_buffers (all drivers)
+<li>GL_ATI_texture_compression_3dc (gallium drivers, swrast)
+<li>GL_ATI_texture_float (gallium, i965)
+<li>GL_NV_conditional_render (i965)
+<li>GL_NV_texture_barrier (gallium drivers)
+</ul>
+
+
+<h2>Bug fixes</h2>
+<ul>
+</ul>
+
+
+<h2>Changes</h2>
+<ul>
+<li>The Windows MSVC project files have been removed.
+They haven't been maintained in quite a while.
+Building with SCons is an alternative.
+<li>Removed GL_SGI_texture_color_table support from swrast driver - the only
+driver that implemented it.
+</ul>
+
+
+</body>
+</html>

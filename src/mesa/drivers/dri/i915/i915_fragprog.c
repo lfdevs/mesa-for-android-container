@@ -269,7 +269,7 @@ translate_tex_src_target(struct i915_fragment_program *p, GLubyte bit)
 #define EMIT_TEX( OP )						\
 do {								\
    GLuint dim = translate_tex_src_target( p, inst->TexSrcTarget );	\
-   const struct gl_fragment_program *program = p->ctx->FragmentProgram._Current; \
+   const struct gl_fragment_program *program = &p->FragProg;	\
    GLuint unit = program->Base.SamplerUnits[inst->TexSrcUnit];	\
    GLuint sampler = i915_emit_decl(p, REG_TYPE_S,		\
 				   unit, dim);			\
@@ -304,7 +304,7 @@ do {									\
  */
 static void calc_live_regs( struct i915_fragment_program *p )
 {
-    const struct gl_fragment_program *program = p->ctx->FragmentProgram._Current;
+    const struct gl_fragment_program *program = &p->FragProg;
     GLuint regsUsed = 0xffff0000;
     uint8_t live_components[16] = { 0, };
     GLint i;
@@ -344,7 +344,7 @@ static void calc_live_regs( struct i915_fragment_program *p )
 static GLuint get_live_regs( struct i915_fragment_program *p, 
                              const struct prog_instruction *inst )
 {
-    const struct gl_fragment_program *program = p->ctx->FragmentProgram._Current;
+    const struct gl_fragment_program *program = &p->FragProg;
     GLuint nr = inst - program->Base.Instructions;
 
     return p->usedRegs[nr];
@@ -365,8 +365,7 @@ static GLuint get_live_regs( struct i915_fragment_program *p,
 static void
 upload_program(struct i915_fragment_program *p)
 {
-   const struct gl_fragment_program *program =
-      p->ctx->FragmentProgram._Current;
+   const struct gl_fragment_program *program = &p->FragProg;
    const struct prog_instruction *inst = program->Base.Instructions;
 
    if (INTEL_DEBUG & DEBUG_WM)
@@ -1166,7 +1165,7 @@ translate_program(struct i915_fragment_program *p)
 
    if (INTEL_DEBUG & DEBUG_WM) {
       printf("fp:\n");
-      _mesa_print_program(&p->ctx->FragmentProgram._Current->Base);
+      _mesa_print_program(&p->FragProg.Base);
       printf("\n");
    }
 
@@ -1175,11 +1174,6 @@ translate_program(struct i915_fragment_program *p)
    upload_program(p);
    fixup_depth_write(p);
    i915_fini_program(p);
-
-   if (INTEL_DEBUG & DEBUG_WM) {
-      printf("i915:\n");
-      i915_disassemble_program(i915->state.Program, i915->state.ProgramSize);
-   }
 
    p->translated = 1;
 }
@@ -1291,15 +1285,6 @@ i915ProgramStringNotify(struct gl_context * ctx,
    if (target == GL_FRAGMENT_PROGRAM_ARB) {
       struct i915_fragment_program *p = (struct i915_fragment_program *) prog;
       p->translated = 0;
-
-      /* Hack: make sure fog is correctly enabled according to this
-       * fragment program's fog options.
-       */
-      if (p->FragProg.FogOption) {
-         /* add extra instructions to do fog, then turn off FogOption field */
-         _mesa_append_fog_code(ctx, &p->FragProg);
-         p->FragProg.FogOption = GL_NONE;
-      }
    }
 
    (void) _tnl_program_string(ctx, target, prog);
@@ -1377,7 +1362,7 @@ i915ValidateFragmentProgram(struct i915_context *i915)
        EMIT_ATTR(_TNL_ATTRIB_COLOR1, EMIT_4UB_4F_BGRA, S4_VFMT_SPEC_FOG, 4);
    }
 
-   if ((inputsRead & FRAG_BIT_FOGC) || i915->vertex_fog != I915_FOG_NONE) {
+   if ((inputsRead & FRAG_BIT_FOGC)) {
       EMIT_ATTR(_TNL_ATTRIB_FOG, EMIT_1F, S4_VFMT_FOG_PARAM, 4);
    }
 
@@ -1427,6 +1412,10 @@ i915ValidateFragmentProgram(struct i915_context *i915)
                                               intel->vertex_attr_count,
                                               intel->ViewportMatrix.m, 0);
 
+      assert(intel->prim.current_offset == intel->prim.start_offset);
+      intel->prim.start_offset = (intel->prim.current_offset + intel->vertex_size-1) / intel->vertex_size * intel->vertex_size;
+      intel->prim.current_offset = intel->prim.start_offset;
+
       intel->vertex_size >>= 2;
 
       i915->state.Ctx[I915_CTXREG_LIS2] = s2;
@@ -1441,6 +1430,11 @@ i915ValidateFragmentProgram(struct i915_context *i915)
 
    if (!p->on_hardware)
       i915_upload_program(i915, p);
+
+   if (INTEL_DEBUG & DEBUG_WM) {
+      printf("i915:\n");
+      i915_disassemble_program(i915->state.Program, i915->state.ProgramSize);
+   }
 }
 
 void

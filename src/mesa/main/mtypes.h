@@ -40,6 +40,7 @@
 #include "glapi/glapi.h"
 #include "math/m_matrix.h"	/* GLmatrix */
 #include "main/simple_list.h"	/* struct simple_node */
+#include "main/formats.h"       /* MESA_FORMAT_COUNT */
 
 
 /**
@@ -83,23 +84,8 @@
 /*@{*/
 typedef GLuint64 GLbitfield64;
 
-#define BITFIELD64_ONE         1ULL
-#define BITFIELD64_ALLONES     ~0ULL
-
 /** Set a single bit */
-#define BITFIELD64_BIT(b)      (BITFIELD64_ONE << (b))
-
-/** Set a mask of the least significant \c b bits */
-#define BITFIELD64_MASK(b)     (((b) >= 64) ? BITFIELD64_ALLONES : \
-				(BITFIELD64_BIT(b) - 1))
-
-/**
- * Set all bits from l (low bit) to h (high bit), inclusive.
- *
- * \note \C BITFIELD_64_RANGE(0, 63) return 64 set bits.
- */
-#define BITFIELD64_RANGE(l, h) (BITFIELD64_MASK((h) + 1) & ~BITFIELD64_MASK(l))
-/*@}*/
+#define BITFIELD64_BIT(b)      ((GLbitfield64)1 << (b))
 
 
 /**
@@ -119,6 +105,11 @@ struct gl_context;
 struct st_context;
 /*@}*/
 
+
+/** Extra draw modes beyond GL_POINTS, GL_TRIANGLE_FAN, etc */
+#define PRIM_OUTSIDE_BEGIN_END   (GL_POLYGON+1)
+#define PRIM_INSIDE_UNKNOWN_PRIM (GL_POLYGON+2)
+#define PRIM_UNKNOWN             (GL_POLYGON+3)
 
 
 /**
@@ -295,8 +286,8 @@ typedef enum
 /**
  * Indexes for geometry program result attributes
  */
-/*@{*/
-typedef enum {
+typedef enum
+{
    GEOM_RESULT_POS  = 0,
    GEOM_RESULT_COL0  = 1,
    GEOM_RESULT_COL1  = 2,
@@ -319,7 +310,7 @@ typedef enum {
    /* ### we need to -2 because var0 is 18 instead 16 like in the others */
    GEOM_RESULT_MAX  =  (GEOM_RESULT_VAR0 + MAX_VARYING - 2)
 } gl_geom_result;
-/*@}*/
+
 
 /**
  * Indexes for fragment program input attributes.
@@ -385,7 +376,15 @@ typedef enum
 {
    FRAG_RESULT_DEPTH = 0,
    FRAG_RESULT_STENCIL = 1,
+   /* If a single color should be written to all render targets, this
+    * register is written.  No FRAG_RESULT_DATAn will be written.
+    */
    FRAG_RESULT_COLOR = 2,
+
+   /* FRAG_RESULT_DATAn are the per-render-target (GLSL gl_FragData[n]
+    * or ARB_fragment_program fragment.color[n]) color results.  If
+    * any are written, FRAG_RESULT_COLOR will not be written.
+    */
    FRAG_RESULT_DATA0 = 3,
    FRAG_RESULT_MAX = (FRAG_RESULT_DATA0 + MAX_DRAW_BUFFERS)
 } gl_frag_result;
@@ -518,6 +517,9 @@ struct gl_config
    GLint bindToMipmapTexture;
    GLint bindToTextureTargets;
    GLint yInverted;
+
+   /* EXT_framebuffer_sRGB */
+   GLint sRGBCapable;
 };
 
 
@@ -697,7 +699,8 @@ struct gl_accum_attrib
 struct gl_colorbuffer_attrib
 {
    GLuint ClearIndex;			/**< Index to use for glClear */
-   GLclampf ClearColor[4];		/**< Color to use for glClear */
+   GLfloat ClearColorUnclamped[4];              /**< Color to use for glClear*/
+   GLclampf ClearColor[4];               /**< Color to use for glClear */
 
    GLuint IndexMask;			/**< Color index write mask */
    GLubyte ColorMask[MAX_DRAW_BUFFERS][4];/**< Each flag is 0xff or 0x0 */
@@ -710,6 +713,7 @@ struct gl_colorbuffer_attrib
    /*@{*/
    GLboolean AlphaEnabled;		/**< Alpha test enabled flag */
    GLenum AlphaFunc;			/**< Alpha test function */
+   GLfloat AlphaRefUnclamped;
    GLclampf AlphaRef;			/**< Alpha reference value */
    /*@}*/
 
@@ -718,13 +722,27 @@ struct gl_colorbuffer_attrib
     */
    /*@{*/
    GLbitfield BlendEnabled;		/**< Per-buffer blend enable flags */
-   GLenum BlendSrcRGB;			/**< Blending source operator */
-   GLenum BlendDstRGB;			/**< Blending destination operator */
-   GLenum BlendSrcA;			/**< GL_INGR_blend_func_separate */
-   GLenum BlendDstA;			/**< GL_INGR_blend_func_separate */
-   GLenum BlendEquationRGB;		/**< Blending equation */
-   GLenum BlendEquationA;		/**< GL_EXT_blend_equation_separate */
+
+   /* NOTE: this does _not_ depend on fragment clamping or any other clamping control,
+    * only on the fixed-pointness of the render target.
+    * The query does however depend on fragment color clamping.
+    */
+   GLfloat BlendColorUnclamped[4];               /**< Blending color */
    GLfloat BlendColor[4];		/**< Blending color */
+
+   struct
+   {
+      GLenum SrcRGB;             /**< RGB blend source term */
+      GLenum DstRGB;             /**< RGB blend dest term */
+      GLenum SrcA;               /**< Alpha blend source term */
+      GLenum DstA;               /**< Alpha blend dest term */
+      GLenum EquationRGB;        /**< GL_ADD, GL_SUBTRACT, etc. */
+      GLenum EquationA;          /**< GL_ADD, GL_SUBTRACT, etc. */
+   } Blend[MAX_DRAW_BUFFERS];
+   /** Are the blend func terms currently different for each buffer/target? */
+   GLboolean _BlendFuncPerBuffer;
+   /** Are the blend equations currently different for each buffer/target? */
+   GLboolean _BlendEquationPerBuffer;
    /*@}*/
 
    /** 
@@ -740,7 +758,11 @@ struct gl_colorbuffer_attrib
    GLboolean DitherFlag;		/**< Dither enable flag */
 
    GLenum ClampFragmentColor; /**< GL_TRUE, GL_FALSE or GL_FIXED_ONLY_ARB */
+   GLboolean _ClampFragmentColor; /** < with GL_FIXED_ONLY_ARB resolved */
    GLenum ClampReadColor;     /**< GL_TRUE, GL_FALSE or GL_FIXED_ONLY_ARB */
+   GLboolean _ClampReadColor;     /** < with GL_FIXED_ONLY_ARB resolved */
+
+   GLboolean sRGBEnabled;	/**< Framebuffer sRGB blending/updating requested */
 };
 
 
@@ -837,6 +859,7 @@ struct gl_eval_attrib
 struct gl_fog_attrib
 {
    GLboolean Enabled;		/**< Fog enabled flag */
+   GLfloat ColorUnclamped[4];            /**< Fog color */
    GLfloat Color[4];		/**< Fog color */
    GLfloat Density;		/**< Density >= 0.0 */
    GLfloat Start;		/**< Start distance in eye coords */
@@ -846,6 +869,23 @@ struct gl_fog_attrib
    GLboolean ColorSumEnabled;
    GLenum FogCoordinateSource;  /**< GL_EXT_fog_coord */
    GLfloat _Scale;		/**< (End == Start) ? 1.0 : 1.0 / (End - Start) */
+};
+
+
+/**
+ * \brief Layout qualifiers for gl_FragDepth.
+ *
+ * Extension AMD_conservative_depth allows gl_FragDepth to be redeclared with
+ * a layout qualifier.
+ *
+ * \see enum ir_depth_layout
+ */
+enum gl_frag_depth_layout {
+    FRAG_DEPTH_LAYOUT_NONE, /**< No layout is specified. */
+    FRAG_DEPTH_LAYOUT_ANY,
+    FRAG_DEPTH_LAYOUT_GREATER,
+    FRAG_DEPTH_LAYOUT_LESS,
+    FRAG_DEPTH_LAYOUT_UNCHANGED
 };
 
 
@@ -901,6 +941,7 @@ struct gl_light_attrib
    GLbitfield ColorMaterialBitmask;	/**< bitmask formed from Face and Mode */
    GLboolean ColorMaterialEnabled;
    GLenum ClampVertexColor;
+   GLboolean _ClampVertexColor;
 
    struct gl_light EnabledList;         /**< List sentinel */
 
@@ -1011,10 +1052,6 @@ struct gl_pixel_attrib
 
    /** glPixelZoom */
    GLfloat ZoomX, ZoomY;
-
-   /** GL_SGI_texture_color_table */
-   GLfloat TextureColorTableScale[4]; /**< RGBA */
-   GLfloat TextureColorTableBias[4];  /**< RGBA */
 };
 
 
@@ -1110,6 +1147,7 @@ struct gl_stencil_attrib
  */
 typedef enum
 {
+   TEXTURE_BUFFER_INDEX,
    TEXTURE_2D_ARRAY_INDEX,
    TEXTURE_1D_ARRAY_INDEX,
    TEXTURE_CUBE_INDEX,
@@ -1126,6 +1164,7 @@ typedef enum
  * Used for Texture.Unit[]._ReallyEnabled flags.
  */
 /*@{*/
+#define TEXTURE_BUFFER_BIT   (1 << TEXTURE_BUFFER_INDEX)
 #define TEXTURE_2D_ARRAY_BIT (1 << TEXTURE_2D_ARRAY_INDEX)
 #define TEXTURE_1D_ARRAY_BIT (1 << TEXTURE_1D_ARRAY_INDEX)
 #define TEXTURE_CUBE_BIT     (1 << TEXTURE_CUBE_INDEX)
@@ -1220,7 +1259,7 @@ struct gl_texture_image
 				 *   GL_DEPTH_COMPONENT or GL_DEPTH_STENCIL_EXT
                                  *   only. Used for choosing TexEnv arithmetic.
 				 */
-   GLuint TexFormat;            /**< The actual format: MESA_FORMAT_x */
+   gl_format TexFormat;         /**< The actual texture memory format */
 
    GLuint Border;		/**< 0 or 1 */
    GLuint Width;		/**< = 2^WidthLog2 + 2*Border */
@@ -1274,6 +1313,43 @@ typedef enum
 
 
 /**
+ * Sampler object state.  These objects are new with GL_ARB_sampler_objects
+ * and OpenGL 3.3.  Legacy texture objects also contain a sampler object.
+ */
+struct gl_sampler_object
+{
+   GLuint Name;
+   GLint RefCount;
+
+   GLenum WrapS;		/**< S-axis texture image wrap mode */
+   GLenum WrapT;		/**< T-axis texture image wrap mode */
+   GLenum WrapR;		/**< R-axis texture image wrap mode */
+   GLenum MinFilter;		/**< minification filter */
+   GLenum MagFilter;		/**< magnification filter */
+   union {
+      GLfloat f[4];
+      GLuint ui[4];
+      GLint i[4];
+   } BorderColor;               /**< Interpreted according to texture format */
+   GLfloat MinLod;		/**< min lambda, OpenGL 1.2 */
+   GLfloat MaxLod;		/**< max lambda, OpenGL 1.2 */
+   GLfloat LodBias;		/**< OpenGL 1.4 */
+   GLfloat MaxAnisotropy;	/**< GL_EXT_texture_filter_anisotropic */
+   GLenum CompareMode;		/**< GL_ARB_shadow */
+   GLenum CompareFunc;		/**< GL_ARB_shadow */
+   GLfloat CompareFailValue;    /**< GL_ARB_shadow_ambient */
+   GLenum sRGBDecode;           /**< GL_DECODE_EXT or GL_SKIP_DECODE_EXT */
+   GLboolean CubeMapSeamless;   /**< GL_AMD_seamless_cubemap_per_texture */
+
+   /* deprecated sampler state */
+   GLenum DepthMode;		/**< GL_ARB_depth_texture */
+
+   /** Is the texture object complete with respect to this sampler? */
+   GLboolean _CompleteTexture;
+};
+
+
+/**
  * Texture object state.  Contains the array of mipmap images, border color,
  * wrap modes, filter modes, shadow/texcompare state, and the per-texture
  * color palette.
@@ -1284,27 +1360,12 @@ struct gl_texture_object
    GLint RefCount;		/**< reference count */
    GLuint Name;			/**< the user-visible texture object ID */
    GLenum Target;               /**< GL_TEXTURE_1D, GL_TEXTURE_2D, etc. */
+
+   struct gl_sampler_object Sampler;
+
    GLfloat Priority;		/**< in [0,1] */
-   union {
-      GLfloat f[4];
-      GLuint ui[4];
-      GLint i[4];
-   } BorderColor;               /**< Interpreted according to texture format */
-   GLenum WrapS;		/**< S-axis texture image wrap mode */
-   GLenum WrapT;		/**< T-axis texture image wrap mode */
-   GLenum WrapR;		/**< R-axis texture image wrap mode */
-   GLenum MinFilter;		/**< minification filter */
-   GLenum MagFilter;		/**< magnification filter */
-   GLfloat MinLod;		/**< min lambda, OpenGL 1.2 */
-   GLfloat MaxLod;		/**< max lambda, OpenGL 1.2 */
-   GLfloat LodBias;		/**< OpenGL 1.4 */
    GLint BaseLevel;		/**< min mipmap level, OpenGL 1.2 */
    GLint MaxLevel;		/**< max mipmap level, OpenGL 1.2 */
-   GLfloat MaxAnisotropy;	/**< GL_EXT_texture_filter_anisotropic */
-   GLenum CompareMode;		/**< GL_ARB_shadow */
-   GLenum CompareFunc;		/**< GL_ARB_shadow */
-   GLfloat CompareFailValue;    /**< GL_ARB_shadow_ambient */
-   GLenum DepthMode;		/**< GL_ARB_depth_texture */
    GLint _MaxLevel;		/**< actual max mipmap level (q in the spec) */
    GLfloat _MaxLambda;		/**< = _MaxLevel - BaseLevel (q - b in spec) */
    GLint CropRect[4];           /**< GL_OES_draw_texture */
@@ -1317,6 +1378,10 @@ struct gl_texture_object
 
    /** Actual texture images, indexed by [cube face] and [mipmap level] */
    struct gl_texture_image *Image[MAX_FACES][MAX_TEXTURE_LEVELS];
+
+   /** GL_ARB_texture_buffer_object */
+   struct gl_buffer_object *BufferObject;
+   GLenum BufferObjectFormat;
 
    /** GL_EXT_paletted_texture */
    struct gl_color_table Palette;
@@ -1379,7 +1444,8 @@ struct gl_texture_unit
    GLbitfield _ReallyEnabled;   /**< 0 or exactly one of TEXTURE_*_BIT flags */
 
    GLenum EnvMode;              /**< GL_MODULATE, GL_DECAL, GL_BLEND, etc. */
-   GLfloat EnvColor[4];
+   GLclampf EnvColor[4];
+   GLfloat EnvColorUnclamped[4];
 
    struct gl_texgen GenS;
    struct gl_texgen GenT;
@@ -1391,6 +1457,9 @@ struct gl_texture_unit
    GLfloat LodBias;		/**< for biasing mipmap levels */
    GLenum BumpTarget;
    GLfloat RotMatrix[4]; /* 2x2 matrix */
+
+   /** Current sampler object (GL_ARB_sampler_objects) */
+   struct gl_sampler_object *Sampler;
 
    /** 
     * \name GL_EXT_texture_env_combine 
@@ -1414,13 +1483,6 @@ struct gl_texture_unit
 
    /** Points to highest priority, complete and enabled texture object */
    struct gl_texture_object *_Current;
-
-   /** GL_SGI_texture_color_table */
-   /*@{*/
-   struct gl_color_table ColorTable;
-   struct gl_color_table ProxyColorTable;
-   GLboolean ColorTableEnabled;
-   /*@}*/
 };
 
 
@@ -1433,6 +1495,9 @@ struct gl_texture_attrib
    struct gl_texture_unit Unit[MAX_COMBINED_TEXTURE_IMAGE_UNITS];
 
    struct gl_texture_object *ProxyTex[NUM_TEXTURE_TARGETS];
+
+   /** GL_ARB_texture_buffer_object */
+   struct gl_buffer_object *BufferObject;
 
    /** GL_ARB_seamless_cubemap */
    GLboolean CubeMapSeamless;
@@ -1545,6 +1610,7 @@ struct gl_client_array
    GLboolean Enabled;		/**< Enabled flag is a boolean */
    GLboolean Normalized;        /**< GL_ARB_vertex_program */
    GLboolean Integer;           /**< Integer-valued? */
+   GLuint InstanceDivisor;      /**< GL_ARB_instanced_arrays */
    GLuint _ElementSize;         /**< size of each element in bytes */
 
    struct gl_buffer_object *BufferObj;/**< GL_ARB_vertex_buffer_object */
@@ -1621,6 +1687,7 @@ struct gl_array_attrib
    GLuint RestartIndex;
 
    GLbitfield NewState;		/**< mask of _NEW_ARRAY_* values */
+   GLboolean RebindArrays; /**< whether the VBO module should rebind arrays */
 
    /* GL_ARB_vertex_buffer_object */
    struct gl_buffer_object *ArrayBufferObj;
@@ -1747,9 +1814,22 @@ typedef enum
    PROGRAM_WRITE_ONLY,  /**< A dummy, write-only register */
    PROGRAM_ADDRESS,     /**< machine->AddressReg */
    PROGRAM_SAMPLER,     /**< for shader samplers, compile-time only */
+   PROGRAM_SYSTEM_VALUE,/**< InstanceId, PrimitiveID, etc. */
    PROGRAM_UNDEFINED,   /**< Invalid/TBD value */
    PROGRAM_FILE_MAX
 } gl_register_file;
+
+
+/**
+ * If the register file is PROGRAM_SYSTEM_VALUE, the register index will be
+ * one of these values.
+ */
+typedef enum
+{
+   SYSTEM_VALUE_FRONT_FACE,  /**< Fragment shader only (not done yet) */
+   SYSTEM_VALUE_INSTANCE_ID, /**< Vertex shader only */
+   SYSTEM_VALUE_MAX          /**< Number of values */
+} gl_system_value;
 
 
 /** Vertex and fragment instructions */
@@ -1774,6 +1854,7 @@ struct gl_program
 
    GLbitfield InputsRead;     /**< Bitmask of which input regs are read */
    GLbitfield64 OutputsWritten; /**< Bitmask of which output regs are written */
+   GLbitfield SystemValuesRead;   /**< Bitmask of SYSTEM_VALUE_x inputs used */
    GLbitfield InputFlags[MAX_PROGRAM_INPUTS];   /**< PROG_PARAM_BIT_x flags */
    GLbitfield OutputFlags[MAX_PROGRAM_OUTPUTS]; /**< PROG_PARAM_BIT_x flags */
    GLbitfield TexturesUsed[MAX_TEXTURE_UNITS];  /**< TEXTURE_x_BIT bitmask */
@@ -1851,10 +1932,10 @@ struct gl_geometry_program
 struct gl_fragment_program
 {
    struct gl_program Base;   /**< base class */
-   GLenum FogOption;
    GLboolean UsesKill;          /**< shader uses KIL instruction */
    GLboolean OriginUpperLeft;
    GLboolean PixelCenterInteger;
+   enum gl_frag_depth_layout FragDepthLayout;
 };
 
 
@@ -2066,8 +2147,6 @@ struct gl_shader
    GLint RefCount;  /**< Reference count */
    GLboolean DeletePending;
    GLboolean CompileStatus;
-   GLboolean Main;  /**< shader defines main() */
-   GLboolean UnresolvedRefs;
    const GLchar *Source;  /**< Source code string */
    GLuint SourceChecksum;       /**< for debug/logging purposes */
    struct gl_program *Program;  /**< Post-compile assembly code */
@@ -2315,6 +2394,9 @@ struct gl_shared_state
    /* GL_ARB_sync */
    struct simple_node SyncObjects;
 
+   /** GL_ARB_sampler_objects */
+   struct _mesa_HashTable *SamplerObjects;
+
    void *DriverData;  /**< Device driver shared state */
 };
 
@@ -2332,8 +2414,6 @@ struct gl_shared_state
  */
 struct gl_renderbuffer
 {
-#define RB_MAGIC 0xaabbccdd
-   int Magic; /** XXX TEMPORARY DEBUG INFO */
    _glthread_Mutex Mutex;		   /**< for thread safety */
    GLuint ClassID;        /**< Useful for drivers */
    GLuint Name;
@@ -2342,17 +2422,17 @@ struct gl_renderbuffer
    GLint RowStride;       /**< Padded width in units of pixels */
    GLboolean Purgeable;   /**< Is the buffer purgeable under memory pressure? */
 
-   GLenum InternalFormat; /**< The user-specified format */
-   GLenum _BaseFormat;    /**< Either GL_RGB, GL_RGBA, GL_DEPTH_COMPONENT or
-                               GL_STENCIL_INDEX. */
-   GLuint Format;         /**< The actual format: MESA_FORMAT_x */
+   GLboolean AttachedAnytime; /**< TRUE if it was attached to a framebuffer */
 
    GLubyte NumSamples;
 
+   GLenum InternalFormat; /**< The user-specified format */
+   GLenum _BaseFormat;    /**< Either GL_RGB, GL_RGBA, GL_DEPTH_COMPONENT or
+                               GL_STENCIL_INDEX. */
+   gl_format Format;      /**< The actual renderbuffer memory format */
+
    GLenum DataType;      /**< Type of values passed to the Get/Put functions */
    GLvoid *Data;        /**< This may not be used by some kinds of RBs */
-
-   GLboolean AttachedAnytime; /**< TRUE if it was attached to a framebuffer */
 
    /* Used to wrap one renderbuffer around another: */
    struct gl_renderbuffer *Wrapped;
@@ -2539,7 +2619,7 @@ struct gl_precision
 
 
 /**
- * Limits for vertex and fragment programs/shaders.
+ * Limits for vertex, geometry and fragment programs/shaders.
  */
 struct gl_program_constants
 {
@@ -2551,6 +2631,7 @@ struct gl_program_constants
    GLuint MaxAttribs;
    GLuint MaxTemps;
    GLuint MaxAddressRegs;
+   GLuint MaxAddressOffset;  /**< [-MaxAddressOffset, MaxAddressOffset-1] */
    GLuint MaxParameters;
    GLuint MaxLocalParams;
    GLuint MaxEnvParams;
@@ -2564,14 +2645,7 @@ struct gl_program_constants
    GLuint MaxNativeAddressRegs;
    GLuint MaxNativeParameters;
    /* For shaders */
-   GLuint MaxUniformComponents;
-   /* GL_ARB_geometry_shader4 */
-   GLuint MaxGeometryTextureImageUnits;
-   GLuint MaxGeometryVaryingComponents;
-   GLuint MaxVertexVaryingComponents;
-   GLuint MaxGeometryUniformComponents;
-   GLuint MaxGeometryOutputVertices;
-   GLuint MaxGeometryTotalOutputComponents;
+   GLuint MaxUniformComponents;  /**< Usually == MaxParameters * 4 */
    /* ES 2.0 and GL_ARB_ES2_compatibility */
    struct gl_precision LowFloat, MediumFloat, HighFloat;
    struct gl_precision LowInt, MediumInt, HighInt;
@@ -2594,9 +2668,11 @@ struct gl_constants
    GLuint MaxTextureImageUnits;
    GLuint MaxVertexTextureImageUnits;
    GLuint MaxCombinedTextureImageUnits;
+   GLuint MaxGeometryTextureImageUnits;
    GLuint MaxTextureUnits;           /**< = MIN(CoordUnits, ImageUnits) */
    GLfloat MaxTextureMaxAnisotropy;  /**< GL_EXT_texture_filter_anisotropic */
    GLfloat MaxTextureLodBias;        /**< GL_EXT_texture_lod_bias */
+   GLuint MaxTextureBufferSize;      /**< GL_ARB_texture_buffer_object */
 
    GLuint MaxArrayLockSize;
 
@@ -2633,7 +2709,14 @@ struct gl_constants
    GLuint MaxRenderbufferSize;   /**< GL_EXT_framebuffer_object */
    GLuint MaxSamples;            /**< GL_ARB_framebuffer_object */
 
-   GLuint MaxVarying;  /**< Number of float[4] varying parameters */
+   /** Number of varying vectors between vertex and fragment shaders */
+   GLuint MaxVarying;
+   GLuint MaxVertexVaryingComponents;   /**< Between vert and geom shader */
+   GLuint MaxGeometryVaryingComponents; /**< Between geom and frag shader */
+
+   /** GL_ARB_geometry_shader4 */
+   GLuint MaxGeometryOutputVertices;
+   GLuint MaxGeometryTotalOutputComponents;
 
    GLuint GLSLVersion;  /**< GLSL version supported (ex: 120 = 1.20) */
 
@@ -2661,6 +2744,12 @@ struct gl_constants
 
    /** GL_EXT_gpu_shader4 */
    GLint MinProgramTexelOffset, MaxProgramTexelOffset;
+
+   /* GL_EXT_framebuffer_sRGB */
+   GLboolean sRGBCapable; /* can enable sRGB blend/update on FBOs */
+
+   /* GL_ARB_robustness */
+   GLenum ResetStrategy;
 };
 
 
@@ -2675,11 +2764,13 @@ struct gl_extensions
    GLboolean dummy_false; /* Set false by _mesa_init_extensions(). */
    GLboolean ARB_ES2_compatibility;
    GLboolean ARB_blend_func_extended;
+   GLboolean ARB_color_buffer_float;
    GLboolean ARB_copy_buffer;
    GLboolean ARB_depth_buffer_float;
    GLboolean ARB_depth_clamp;
    GLboolean ARB_depth_texture;
    GLboolean ARB_draw_buffers;
+   GLboolean ARB_draw_buffers_blend;
    GLboolean ARB_draw_elements_base_vertex;
    GLboolean ARB_draw_instanced;
    GLboolean ARB_fragment_coord_conventions;
@@ -2702,6 +2793,7 @@ struct gl_extensions
    GLboolean ARB_seamless_cube_map;
    GLboolean ARB_shader_objects;
    GLboolean ARB_shader_stencil_export;
+   GLboolean ARB_shader_texture_lod;
    GLboolean ARB_shading_language_100;
    GLboolean ARB_shadow;
    GLboolean ARB_shadow_ambient;
@@ -2773,6 +2865,7 @@ struct gl_extensions
    GLboolean EXT_texture_object;
    GLboolean EXT_texture3D;
    GLboolean EXT_texture_array;
+   GLboolean EXT_texture_compression_latc;
    GLboolean EXT_texture_compression_s3tc;
    GLboolean EXT_texture_env_add;
    GLboolean EXT_texture_env_combine;
@@ -2782,7 +2875,9 @@ struct gl_extensions
    GLboolean EXT_texture_lod_bias;
    GLboolean EXT_texture_mirror_clamp;
    GLboolean EXT_texture_shared_exponent;
+   GLboolean EXT_texture_snorm;
    GLboolean EXT_texture_sRGB;
+   GLboolean EXT_texture_sRGB_decode;
    GLboolean EXT_texture_swizzle;
    GLboolean EXT_transform_feedback;
    GLboolean EXT_timer_query;
@@ -2791,11 +2886,14 @@ struct gl_extensions
    GLboolean EXT_vertex_array_set;
    GLboolean OES_standard_derivatives;
    /* vendor extensions */
+   GLboolean AMD_conservative_depth;
+   GLboolean AMD_seamless_cubemap_per_texture;
    GLboolean APPLE_client_storage;
    GLboolean APPLE_packed_pixels;
    GLboolean APPLE_vertex_array_object;
    GLboolean APPLE_object_purgeable;
    GLboolean ATI_envmap_bumpmap;
+   GLboolean ATI_texture_compression_3dc;
    GLboolean ATI_texture_mirror_once;
    GLboolean ATI_texture_env_combine3;
    GLboolean ATI_fragment_shader;
@@ -2806,7 +2904,6 @@ struct gl_extensions
    GLboolean MESA_resize_buffers;
    GLboolean MESA_ycbcr_texture;
    GLboolean MESA_texture_array;
-   GLboolean MESA_texture_signed_rgba;
    GLboolean NV_blend_square;
    GLboolean NV_conditional_render;
    GLboolean NV_fragment_program;
@@ -2814,13 +2911,13 @@ struct gl_extensions
    GLboolean NV_light_max_exponent;
    GLboolean NV_point_sprite;
    GLboolean NV_primitive_restart;
+   GLboolean NV_texture_barrier;
    GLboolean NV_texgen_reflection;
    GLboolean NV_texture_env_combine4;
    GLboolean NV_texture_rectangle;
    GLboolean NV_vertex_program;
    GLboolean NV_vertex_program1_1;
    GLboolean OES_read_format;
-   GLboolean SGI_texture_color_table;
    GLboolean SGIS_generate_mipmap;
    GLboolean SGIS_texture_edge_clamp;
    GLboolean SGIS_texture_lod;
@@ -2868,40 +2965,38 @@ struct gl_matrix_stack
 
 /**
  * \name Bits to indicate what state has changed.  
- *
- * 4 unused flags.
  */
 /*@{*/
-#define _NEW_MODELVIEW		0x1        /**< __struct gl_contextRec::ModelView */
-#define _NEW_PROJECTION		0x2        /**< __struct gl_contextRec::Projection */
-#define _NEW_TEXTURE_MATRIX	0x4        /**< __struct gl_contextRec::TextureMatrix */
-#define _NEW_ACCUM		0x10       /**< __struct gl_contextRec::Accum */
-#define _NEW_COLOR		0x20       /**< __struct gl_contextRec::Color */
-#define _NEW_DEPTH		0x40       /**< __struct gl_contextRec::Depth */
-#define _NEW_EVAL		0x80       /**< __struct gl_contextRec::Eval, __struct gl_contextRec::EvalMap */
-#define _NEW_FOG		0x100      /**< __struct gl_contextRec::Fog */
-#define _NEW_HINT		0x200      /**< __struct gl_contextRec::Hint */
-#define _NEW_LIGHT		0x400      /**< __struct gl_contextRec::Light */
-#define _NEW_LINE		0x800      /**< __struct gl_contextRec::Line */
-#define _NEW_PIXEL		0x1000     /**< __struct gl_contextRec::Pixel */
-#define _NEW_POINT		0x2000     /**< __struct gl_contextRec::Point */
-#define _NEW_POLYGON		0x4000     /**< __struct gl_contextRec::Polygon */
-#define _NEW_POLYGONSTIPPLE	0x8000     /**< __struct gl_contextRec::PolygonStipple */
-#define _NEW_SCISSOR		0x10000    /**< __struct gl_contextRec::Scissor */
-#define _NEW_STENCIL		0x20000    /**< __struct gl_contextRec::Stencil */
-#define _NEW_TEXTURE		0x40000    /**< __struct gl_contextRec::Texture */
-#define _NEW_TRANSFORM		0x80000    /**< __struct gl_contextRec::Transform */
-#define _NEW_VIEWPORT		0x100000   /**< __struct gl_contextRec::Viewport */
-#define _NEW_PACKUNPACK		0x200000   /**< __struct gl_contextRec::Pack, __struct gl_contextRec::Unpack */
-#define _NEW_ARRAY	        0x400000   /**< __struct gl_contextRec::Array */
-#define _NEW_RENDERMODE		0x800000   /**< __struct gl_contextRec::RenderMode, __struct gl_contextRec::Feedback, __struct gl_contextRec::Select */
-#define _NEW_BUFFERS            0x1000000  /**< __struct gl_contextRec::Visual, __struct gl_contextRec::DrawBuffer, */
-#define _NEW_MULTISAMPLE        0x2000000  /**< __struct gl_contextRec::Multisample */
-#define _NEW_TRACK_MATRIX       0x4000000  /**< __struct gl_contextRec::VertexProgram */
-#define _NEW_PROGRAM            0x8000000  /**< __struct gl_contextRec::VertexProgram */
-#define _NEW_CURRENT_ATTRIB     0x10000000  /**< __struct gl_contextRec::Current */
-#define _NEW_PROGRAM_CONSTANTS  0x20000000
-#define _NEW_BUFFER_OBJECT      0x40000000
+#define _NEW_MODELVIEW         (1 << 0)   /**< gl_context::ModelView */
+#define _NEW_PROJECTION        (1 << 1)   /**< gl_context::Projection */
+#define _NEW_TEXTURE_MATRIX    (1 << 2)   /**< gl_context::TextureMatrix */
+#define _NEW_COLOR             (1 << 3)   /**< gl_context::Color */
+#define _NEW_DEPTH             (1 << 4)   /**< gl_context::Depth */
+#define _NEW_EVAL              (1 << 5)   /**< gl_context::Eval, EvalMap */
+#define _NEW_FOG               (1 << 6)   /**< gl_context::Fog */
+#define _NEW_HINT              (1 << 7)   /**< gl_context::Hint */
+#define _NEW_LIGHT             (1 << 8)   /**< gl_context::Light */
+#define _NEW_LINE              (1 << 9)   /**< gl_context::Line */
+#define _NEW_PIXEL             (1 << 10)  /**< gl_context::Pixel */
+#define _NEW_POINT             (1 << 11)  /**< gl_context::Point */
+#define _NEW_POLYGON           (1 << 12)  /**< gl_context::Polygon */
+#define _NEW_POLYGONSTIPPLE    (1 << 13)  /**< gl_context::PolygonStipple */
+#define _NEW_SCISSOR           (1 << 14)  /**< gl_context::Scissor */
+#define _NEW_STENCIL           (1 << 15)  /**< gl_context::Stencil */
+#define _NEW_TEXTURE           (1 << 16)  /**< gl_context::Texture */
+#define _NEW_TRANSFORM         (1 << 17)  /**< gl_context::Transform */
+#define _NEW_VIEWPORT          (1 << 18)  /**< gl_context::Viewport */
+#define _NEW_PACKUNPACK        (1 << 19)  /**< gl_context::Pack, Unpack */
+#define _NEW_ARRAY             (1 << 20)  /**< gl_context::Array */
+#define _NEW_RENDERMODE        (1 << 21)  /**< gl_context::RenderMode, etc */
+#define _NEW_BUFFERS           (1 << 22)  /**< gl_context::Visual, DrawBuffer, */
+#define _NEW_CURRENT_ATTRIB    (1 << 23)  /**< gl_context::Current */
+#define _NEW_MULTISAMPLE       (1 << 24)  /**< gl_context::Multisample */
+#define _NEW_TRACK_MATRIX      (1 << 25)  /**< gl_context::VertexProgram */
+#define _NEW_PROGRAM           (1 << 26)  /**< New program/shader state */
+#define _NEW_PROGRAM_CONSTANTS (1 << 27)
+#define _NEW_BUFFER_OBJECT     (1 << 28)
+#define _NEW_FRAG_CLAMP        (1 << 29)
 #define _NEW_ALL ~0
 /*@}*/
 
@@ -2991,11 +3086,6 @@ struct gl_matrix_stack
                                            _NEW_POINT |		\
                                            _NEW_PROGRAM |	\
                                            _NEW_MODELVIEW)
-
-#define _MESA_NEW_NEED_NORMALS            (_NEW_LIGHT |		\
-                                           _NEW_TEXTURE)
-
-#define _MESA_NEW_TRANSFER_STATE          (_NEW_PIXEL)
 /*@}*/
 
 
@@ -3065,14 +3155,17 @@ struct gl_dlist_state
    } Current;
 };
 
+
 /**
  * Enum for the OpenGL APIs we know about and may support.
  */
-typedef enum {
+typedef enum
+{
    API_OPENGL,
    API_OPENGLES,
    API_OPENGLES2
 } gl_api;
+
 
 /**
  * Mesa rendering context.
@@ -3218,6 +3311,9 @@ struct gl_context
 
    GLenum ErrorValue;        /**< Last error code */
 
+   /* GL_ARB_robustness */
+   GLenum ResetStatus;
+
    /**
     * Recognize and silence repeated error debug messages in buggy apps.
     */
@@ -3256,11 +3352,10 @@ struct gl_context
    GLboolean FirstTimeCurrent;
    /*@}*/
 
-   /** Dither disable via MESA_NO_DITHER env var */
-   GLboolean NoDither;
-
    /** software compression/decompression supported or not */
    GLboolean Mesa_DXTn;
+
+   GLboolean TextureFormatSupported[MESA_FORMAT_COUNT];
 
    /** 
     * Use dp4 (rather than mul/mad) instructions for position
@@ -3282,10 +3377,6 @@ struct gl_context
    void *aelt_context;
    /*@}*/
 };
-
-
-/** The string names for GL_POINT, GL_LINE_LOOP, etc */
-extern const char *_mesa_prim_name[GL_POLYGON+4];
 
 
 #ifdef DEBUG

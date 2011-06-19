@@ -59,9 +59,8 @@ svga_winsys_buffer_create( struct svga_context *svga,
    
    /* Just try */
    buf = sws->buffer_create(sws, alignment, usage, size);
-   if(!buf) {
-
-      SVGA_DBG(DEBUG_DMA|DEBUG_PERF, "flushing screen to find %d bytes GMR\n", 
+   if (!buf) {
+      SVGA_DBG(DEBUG_DMA|DEBUG_PERF, "flushing context to find %d bytes GMR\n",
                size); 
       
       /* Try flushing all pending DMAs */
@@ -121,6 +120,8 @@ enum pipe_error
 svga_buffer_create_host_surface(struct svga_screen *ss,
                                 struct svga_buffer *sbuf)
 {
+   assert(!sbuf->user);
+
    if(!sbuf->handle) {
       sbuf->key.flags = 0;
       
@@ -242,12 +243,17 @@ svga_buffer_upload_command(struct svga_context *svga,
  * Patch up the upload DMA command reserved by svga_buffer_upload_command
  * with the final ranges.
  */
-static void
+void
 svga_buffer_upload_flush(struct svga_context *svga,
                          struct svga_buffer *sbuf)
 {
    SVGA3dCopyBox *boxes;
    unsigned i;
+   struct pipe_resource *dummy;
+
+   if (!sbuf->dma.pending) {
+      return;
+   }
 
    assert(sbuf->handle); 
    assert(sbuf->hwbuf);
@@ -285,15 +291,16 @@ svga_buffer_upload_flush(struct svga_context *svga,
    sbuf->head.next = sbuf->head.prev = NULL; 
 #endif
    sbuf->dma.pending = FALSE;
+   sbuf->dma.flags.discard = FALSE;
+   sbuf->dma.flags.unsynchronized = FALSE;
 
    sbuf->dma.svga = NULL;
    sbuf->dma.boxes = NULL;
 
-   /* Decrement reference count */
-   pipe_reference(&(sbuf->b.b.reference), NULL);
-   sbuf = NULL;
+   /* Decrement reference count (and potentially destroy) */
+   dummy = &sbuf->b.b;
+   pipe_resource_reference(&dummy, NULL);
 }
-
 
 
 /**
@@ -326,12 +333,6 @@ svga_buffer_add_range(struct svga_buffer *sbuf,
 
    /*
     * Try to grow one of the ranges.
-    *
-    * Note that it is not this function task to care about overlapping ranges,
-    * as the GMR was already given so it is too late to do anything. Situations
-    * where overlapping ranges may pose a problem should be detected via
-    * pipe_context::is_resource_referenced and the context that refers to the
-    * buffer should be flushed.
     */
 
    for(i = 0; i < sbuf->map.num_ranges; ++i) {
@@ -346,6 +347,11 @@ svga_buffer_add_range(struct svga_buffer *sbuf,
       if (dist <= 0) {
          /*
           * Ranges are contiguous or overlapping -- extend this one and return.
+          *
+          * Note that it is not this function's task to prevent overlapping
+          * ranges, as the GMR was already given so it is too late to do
+          * anything.  If the ranges overlap here it must surely be because
+          * PIPE_TRANSFER_UNSYNCHRONIZED was set.
           */
 
          sbuf->map.ranges[i].start = MIN2(sbuf->map.ranges[i].start, start);
@@ -369,8 +375,7 @@ svga_buffer_add_range(struct svga_buffer *sbuf,
     * pending DMA upload and start clean.
     */
 
-   if(sbuf->dma.pending)
-      svga_buffer_upload_flush(sbuf->dma.svga, sbuf);
+   svga_buffer_upload_flush(sbuf->dma.svga, sbuf);
 
    assert(!sbuf->dma.pending);
    assert(!sbuf->dma.svga);
@@ -637,4 +642,38 @@ svga_context_flush_buffers(struct svga_context *svga)
       curr = next; 
       next = curr->next;
    }
+}
+
+
+void
+svga_redefine_user_buffer(struct pipe_context *pipe,
+                          struct pipe_resource *resource,
+                          unsigned offset,
+                          unsigned size)
+{
+   struct svga_screen *ss = svga_screen(pipe->screen);
+   struct svga_context *svga = svga_context(pipe);
+   struct svga_buffer *sbuf = svga_buffer(resource);
+
+   assert(sbuf->user);
+   assert(!sbuf->dma.pending);
+   assert(!sbuf->handle);
+   assert(!sbuf->hwbuf);
+
+   /*
+    * Release any uploaded user buffer.
+    *
+    * TODO: As an optimization, we could try to update the uploaded buffer
+    * instead.
+    */
+
+   pipe_resource_reference(&sbuf->uploaded.buffer, NULL);
+
+   pipe_mutex_lock(ss->swc_mutex);
+
+   sbuf->key.size.width = sbuf->b.b.width0 = offset + size;
+
+   pipe_mutex_unlock(ss->swc_mutex);
+
+   svga->dirty |= SVGA_NEW_VBUFFER | SVGA_NEW_VELEMENT;
 }

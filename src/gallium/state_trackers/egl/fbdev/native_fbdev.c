@@ -320,7 +320,7 @@ fbdev_display_destroy(struct native_display *ndpy)
 {
    struct fbdev_display *fbdpy = fbdev_display(ndpy);
 
-   fbdpy->base.screen->destroy(fbdpy->base.screen);
+   ndpy_uninit(&fbdpy->base);
    close(fbdpy->fd);
    FREE(fbdpy);
 }
@@ -422,7 +422,7 @@ fbdev_display_init(struct native_display *ndpy)
    if (fbdpy->base.screen) {
       if (!fbdpy->base.screen->is_format_supported(fbdpy->base.screen,
                fbdpy->config.color_format, PIPE_TEXTURE_2D, 0,
-               PIPE_BIND_RENDER_TARGET, 0)) {
+               PIPE_BIND_RENDER_TARGET)) {
          fbdpy->base.screen->destroy(fbdpy->base.screen);
          fbdpy->base.screen = NULL;
       }
@@ -459,9 +459,16 @@ fbdev_display_create(int fd, struct native_event_handler *event_handler,
    return &fbdpy->base;
 }
 
+static struct native_event_handler *fbdev_event_handler;
+
+static void
+native_set_event_handler(struct native_event_handler *event_handler)
+{
+   fbdev_event_handler = event_handler;
+}
+
 static struct native_display *
-native_create_display(void *dpy, struct native_event_handler *event_handler,
-                      void *user_data)
+native_create_display(void *dpy, boolean use_sw, void *user_data)
 {
    struct native_display *ndpy;
    int fd;
@@ -476,7 +483,7 @@ native_create_display(void *dpy, struct native_event_handler *event_handler,
    if (fd < 0)
       return NULL;
 
-   ndpy = fbdev_display_create(fd, event_handler, user_data);
+   ndpy = fbdev_display_create(fd, fbdev_event_handler, user_data);
    if (!ndpy)
       close(fd);
 
@@ -485,6 +492,7 @@ native_create_display(void *dpy, struct native_event_handler *event_handler,
 
 static const struct native_platform fbdev_platform = {
    "FBDEV", /* name */
+   native_set_event_handler,
    native_create_display
 };
 

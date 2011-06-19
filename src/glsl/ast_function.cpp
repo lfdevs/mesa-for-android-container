@@ -107,7 +107,11 @@ match_function_by_name(exec_list *instructions, const char *name,
     * FINISHME: matching signature but shader X + N contains an _exact_
     * FINISHME: matching signature.
     */
-   if (sig == NULL && (f == NULL || state->es_shader || !f->has_user_signature()) && state->symbols->get_type(name) == NULL && (state->language_version == 110 || state->symbols->get_variable(name) == NULL)) {
+   if (sig == NULL
+       && (f == NULL || state->es_shader || !f->has_user_signature())
+       && state->symbols->get_type(name) == NULL
+       && (state->language_version == 110
+	   || state->symbols->get_variable(name) == NULL)) {
       /* The current shader doesn't contain a matching function or signature.
        * Before giving up, look for the prototype in the built-in functions.
        */
@@ -132,6 +136,9 @@ match_function_by_name(exec_list *instructions, const char *name,
       /* Verify that 'out' and 'inout' actual parameters are lvalues.  This
        * isn't done in ir_function::matching_signature because that function
        * cannot generate the necessary diagnostics.
+       *
+       * Also, validate that 'const_in' formal parameters (an extension of our
+       * IR) correspond to ir_constant actual parameters.
        */
       exec_list_iterator actual_iter = actual_parameters->iterator();
       exec_list_iterator formal_iter = sig->parameters.iterator();
@@ -143,14 +150,35 @@ match_function_by_name(exec_list *instructions, const char *name,
 	 assert(actual != NULL);
 	 assert(formal != NULL);
 
+	 if (formal->mode == ir_var_const_in && !actual->as_constant()) {
+	    _mesa_glsl_error(loc, state,
+			     "parameter `%s' must be a constant expression",
+			     formal->name);
+	 }
+
 	 if ((formal->mode == ir_var_out)
 	     || (formal->mode == ir_var_inout)) {
-	    if (! actual->is_lvalue()) {
-	       /* FINISHME: Log a better diagnostic here.  There is no way
-		* FINISHME: to tell the user which parameter is invalid.
-		*/
-	       _mesa_glsl_error(loc, state, "`%s' parameter is not lvalue",
-				(formal->mode == ir_var_out) ? "out" : "inout");
+	    const char *mode = NULL;
+	    switch (formal->mode) {
+	    case ir_var_out:   mode = "out";   break;
+	    case ir_var_inout: mode = "inout"; break;
+	    default:           assert(false);  break;
+	    }
+            /* FIXME: 'loc' is incorrect (as of 2011-01-21). It is always
+             * FIXME: 0:0(0).
+             */
+	    if (actual->variable_referenced()
+	        && actual->variable_referenced()->read_only) {
+	       _mesa_glsl_error(loc, state,
+	                        "function parameter '%s %s' references the "
+	                        "read-only variable '%s'",
+	                        mode, formal->name,
+	                        actual->variable_referenced()->name);
+
+	    } else if (!actual->is_lvalue()) {
+               _mesa_glsl_error(loc, state,
+                                "function parameter '%s %s' is not an lvalue",
+                                mode, formal->name);
 	    }
 	 }
 
@@ -210,7 +238,7 @@ match_function_by_name(exec_list *instructions, const char *name,
 	    ir_function_signature *sig = (ir_function_signature *) node;
 
 	    str = prototype_string(sig->return_type, f->name, &sig->parameters);
-	    _mesa_glsl_error(loc, state, "%s%s\n", prefix, str);
+	    _mesa_glsl_error(loc, state, "%s%s", prefix, str);
 	    ralloc_free(str);
 
 	    prefix = "                ";

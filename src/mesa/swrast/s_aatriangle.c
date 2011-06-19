@@ -33,6 +33,7 @@
 #include "main/colormac.h"
 #include "main/macros.h"
 #include "main/imports.h"
+#include "main/state.h"
 #include "s_aatriangle.h"
 #include "s_context.h"
 #include "s_span.h"
@@ -214,12 +215,7 @@ compute_coveragef(const GLfloat v0[3], const GLfloat v1[3],
    GLint stop = 4, i;
    GLfloat insideCount = 16.0F;
 
-#ifdef DEBUG
-   {
-      const GLfloat area = dx0 * dy1 - dx1 * dy0;
-      ASSERT(area >= 0.0);
-   }
-#endif
+   ASSERT(dx0 * dy1 - dx1 * dy0 >= 0.0); /* area >= 0.0 */
 
    for (i = 0; i < stop; i++) {
       const GLfloat sx = x + samples[i][0];
@@ -305,7 +301,7 @@ _swrast_set_aa_triangle_function(struct gl_context *ctx)
    if (ctx->Texture._EnabledCoordUnits != 0
        || ctx->FragmentProgram._Current
        || swrast->_FogEnabled
-       || NEED_SECONDARY_COLOR(ctx)) {
+       || _mesa_need_secondary_color(ctx)) {
       SWRAST_CONTEXT(ctx)->Triangle = general_aa_tri;
    }
    else {

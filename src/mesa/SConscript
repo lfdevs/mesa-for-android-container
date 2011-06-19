@@ -12,11 +12,18 @@ env.Append(CPPPATH = [
     '#/src/mesa',
 ])
 
+env.Append(CPPDEFINES = [
+    'FEATURE_GL=1',
+])
+
 if env['platform'] == 'windows':
     env.Append(CPPDEFINES = [
         '_GDI32_', # prevent gl* being declared __declspec(dllimport) in MS headers
         'BUILD_GL32', # declare gl* as __declspec(dllexport) in Mesa headers
     ])
+    if not env['gles']:
+        # prevent _glapi_* from being declared __declspec(dllimport)
+        env.Append(CPPDEFINES = ['_GLAPI_NO_EXPORTS'])
 else:
     env.Append(CPPDEFINES = [
         'IN_DRI_DRIVER', # enable the remap table (for DRI drivers)
@@ -61,6 +68,7 @@ main_sources = [
     'main/extensions.c',
     'main/fbobject.c',
     'main/feedback.c',
+    'main/ff_fragment_shader.cpp',
     'main/ffvertex_prog.c',
     'main/fog.c',
     'main/formats.c',
@@ -80,6 +88,7 @@ main_sources = [
     'main/multisample.c',
     'main/nvprogram.c',
     'main/pack.c',
+    'main/pbo.c',
     'main/pixel.c',
     'main/pixelstore.c',
     'main/pixeltransfer.c',
@@ -91,6 +100,7 @@ main_sources = [
     'main/readpix.c',
     'main/remap.c',
     'main/renderbuffer.c',
+    'main/samplerobj.c',
     'main/scissor.c',
     'main/shaderapi.c',
     'main/shaderobj.c',
@@ -99,10 +109,10 @@ main_sources = [
     'main/stencil.c',
     'main/syncobj.c',
     'main/texcompress.c',
+    'main/texcompress_rgtc.c',
     'main/texcompress_s3tc.c',
     'main/texcompress_fxt1.c',
     'main/texenv.c',
-    'main/texenvprogram.c',
     'main/texfetch.c',
     'main/texformat.c',
     'main/texgen.c',
@@ -111,9 +121,9 @@ main_sources = [
     'main/texobj.c',
     'main/texpal.c',
     'main/texparam.c',
-    'main/texrender.c',
     'main/texstate.c',
     'main/texstore.c',
+    'main/texturebarrier.c',
     'main/transformfeedback.c',
     'main/uniforms.c',
     'main/varray.c',
@@ -133,6 +143,66 @@ math_sources = [
     'math/m_xform.c',
 ]
 
+math_xform_sources = [
+    'math/m_xform.c'
+]
+
+swrast_sources = [
+    'swrast/s_aaline.c',
+    'swrast/s_aatriangle.c',
+    'swrast/s_accum.c',
+    'swrast/s_alpha.c',
+    'swrast/s_atifragshader.c',
+    'swrast/s_bitmap.c',
+    'swrast/s_blend.c',
+    'swrast/s_blit.c',
+    'swrast/s_clear.c',
+    'swrast/s_copypix.c',
+    'swrast/s_context.c',
+    'swrast/s_depth.c',
+    'swrast/s_drawpix.c',
+    'swrast/s_feedback.c',
+    'swrast/s_fog.c',
+    'swrast/s_fragprog.c',
+    'swrast/s_lines.c',
+    'swrast/s_logic.c',
+    'swrast/s_masking.c',
+    'swrast/s_points.c',
+    'swrast/s_readpix.c',
+    'swrast/s_span.c',
+    'swrast/s_stencil.c',
+    'swrast/s_texcombine.c',
+    'swrast/s_texfilter.c',
+    'swrast/s_texrender.c',
+    'swrast/s_triangle.c',
+    'swrast/s_zoom.c',
+]
+
+swrast_setup_sources = [
+    'swrast_setup/ss_context.c',
+    'swrast_setup/ss_triangle.c',
+]
+
+tnl_sources = [
+    'tnl/t_context.c',
+    'tnl/t_pipeline.c',
+    'tnl/t_draw.c',
+    'tnl/t_rasterpos.c',
+    'tnl/t_vb_program.c',
+    'tnl/t_vb_render.c',
+    'tnl/t_vb_texgen.c',
+    'tnl/t_vb_texmat.c',
+    'tnl/t_vb_vertex.c',
+    'tnl/t_vb_fog.c',
+    'tnl/t_vb_light.c',
+    'tnl/t_vb_normals.c',
+    'tnl/t_vb_points.c',
+    'tnl/t_vp_build.c',
+    'tnl/t_vertex.c',
+    'tnl/t_vertex_sse.c',
+    'tnl/t_vertex_generic.c',
+]
+
 vbo_sources = [
     'vbo/vbo_context.c',
     'vbo/vbo_exec.c',
@@ -148,12 +218,6 @@ vbo_sources = [
     'vbo/vbo_save_api.c',
     'vbo/vbo_save_draw.c',
     'vbo/vbo_save_loopback.c',
-]
-
-vf_sources = [
-    'vf/vf.c',
-    'vf/vf_generic.c',
-    'vf/vf_sse.c',
 ]
 
 statetracker_sources = [
@@ -188,8 +252,10 @@ statetracker_sources = [
     'state_tracker/st_cb_queryobj.c',
     'state_tracker/st_cb_rasterpos.c',
     'state_tracker/st_cb_readpixels.c',
+    'state_tracker/st_cb_syncobj.c',
     'state_tracker/st_cb_strings.c',
     'state_tracker/st_cb_texture.c',
+    'state_tracker/st_cb_texturebarrier.c',
     'state_tracker/st_cb_viewport.c',
     'state_tracker/st_cb_xformfb.c',
     'state_tracker/st_context.c',
@@ -205,15 +271,21 @@ statetracker_sources = [
     'state_tracker/st_texture.c',
 ]
 
+env.Append(YACCFLAGS = '-d')
+program_lex = env.CFile('program/lex.yy.c', 'program/program_lexer.l')
+program_parse = env.CFile('program/program_parse.tab.c',
+                          'program/program_parse.y')
+
+# Make program/program_parse.tab.h reacheable from the include path
+env.Append(CPPPATH = [Dir('.').abspath])
+
 program_sources = [
     'program/arbprogparse.c',
     'program/hash_table.c',
     'program/ir_to_mesa.cpp',
-    'program/lex.yy.c',
     'program/nvfragparse.c',
     'program/nvvertparse.c',
     'program/program.c',
-    'program/program_parse.tab.c',
     'program/program_parse_extra.c',
     'program/prog_cache.c',
     'program/prog_execute.c',
@@ -228,16 +300,82 @@ program_sources = [
     'program/programopt.c',
     'program/sampler.cpp',
     'program/symbol_table.c',
+    program_lex,
+    program_parse[0],
+]
+
+common_driver_sources =	[
+    'drivers/common/driverfuncs.c',
+    'drivers/common/meta.c',
 ]
 
 mesa_sources = (
     main_sources +
     math_sources +
+    math_xform_sources +
     program_sources +
     vbo_sources +
-    vf_sources +
+    tnl_sources +
+    swrast_sources +
+    swrast_setup_sources +
+    common_driver_sources +
     statetracker_sources
 )
+
+if env['gles']:
+    from sys import executable as python_cmd
+
+    env.Append(CPPDEFINES = ['FEATURE_ES1=1', 'FEATURE_ES2=1'])
+
+    # generate GLES sources
+    gles_sources = []
+    gles_sources += env.CodeGenerate(
+        target = 'main/api_exec_es1.c',
+        script = 'main/es_generator.py',
+        source = 'main/APIspec.xml',
+        command = python_cmd + ' $SCRIPT -S $SOURCE -V GLES1.1 > $TARGET'
+    )
+    gles_sources += env.CodeGenerate(
+        target = 'main/api_exec_es2.c',
+        script = 'main/es_generator.py',
+        source = 'main/APIspec.xml',
+        command = python_cmd + ' $SCRIPT -S $SOURCE -V GLES2.0 > $TARGET'
+    )
+
+    # generate GLES headers
+    GLAPI = '#src/mapi/glapi/'
+    gles_headers = []
+    gles_headers += env.CodeGenerate(
+        target = 'es1api/main/dispatch.h',
+        script = GLAPI + 'gen/gl_table.py',
+        source = GLAPI + 'gen-es/es1_API.xml',
+        command = python_cmd + ' $SCRIPT -c -m remap_table -f $SOURCE > $TARGET',
+    )
+    gles_headers += env.CodeGenerate(
+        target = 'es1api/main/remap_helper.h',
+        script = GLAPI + 'gen/remap_helper.py',
+        source = GLAPI + 'gen-es/es1_API.xml',
+        command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET',
+    )
+    gles_headers += env.CodeGenerate(
+        target = 'es2api/main/dispatch.h',
+        script = GLAPI + 'gen/gl_table.py',
+        source = GLAPI + 'gen-es/es2_API.xml',
+        command = python_cmd + ' $SCRIPT -c -m remap_table -f $SOURCE > $TARGET',
+    )
+    gles_headers += env.CodeGenerate(
+        target = 'es2api/main/remap_helper.h',
+        script = GLAPI + 'gen/remap_helper.py',
+        source = GLAPI + 'gen-es/es2_API.xml',
+        command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET',
+    )
+
+    env.Depends(gles_sources, gles_headers)
+
+    # gles_sources #include gles_headers with full path
+    env.Append(CPPPATH = [gles_headers[0].dir.up().up()])
+
+    mesa_sources += gles_sources
 
 #
 # Assembly sources
@@ -315,6 +453,18 @@ if env['gcc'] and env['platform'] != 'windows':
         # build dir) to the include path
         env.Append(CPPPATH = [matypes[0].dir])
 
+
+# Create the git_sha1.h file if it doesn't exist already
+try:
+    f = open('main/git_sha1.h', 'r')
+    f.close()
+except IOError:
+    f = open('main/git_sha1.h', 'w')
+    f.close()
+# and update CPPPATH so the git_sha1.h header can be found
+env.Append(CPPPATH = ["#" + env['build_dir'] + "/mesa/main"])
+
+
 #
 # Libraries
 #
@@ -327,3 +477,5 @@ mesa = env.ConvenienceLibrary(
 env.Alias('mesa', mesa)
 
 Export('mesa')
+
+SConscript('drivers/SConscript')

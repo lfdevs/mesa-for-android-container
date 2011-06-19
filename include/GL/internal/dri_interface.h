@@ -251,6 +251,15 @@ struct __DRItexBufferExtensionRec {
 			  GLint target,
 			  GLint format,
 			  __DRIdrawable *pDraw);
+    /**
+     * Method to release texture buffer in case some special platform
+     * need this.
+     *
+     * For GLX_EXT_texture_from_pixmap with AIGLX.
+     */
+    void (*releaseTexBuffer)(__DRIcontext *pDRICtx,
+			GLint target,
+			__DRIdrawable *pDraw);
 };
 
 /**
@@ -490,6 +499,7 @@ struct __DRIuseInvalidateExtensionRec {
 #define __DRI_ATTRIB_BIND_TO_MIPMAP_TEXTURE	45
 #define __DRI_ATTRIB_BIND_TO_TEXTURE_TARGETS	46
 #define __DRI_ATTRIB_YINVERTED			47
+#define __DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE	48
 
 /* __DRI_ATTRIB_RENDER_TYPE */
 #define __DRI_ATTRIB_RGBA_BIT			0x01	
@@ -647,7 +657,7 @@ struct __DRIlegacyExtensionRec {
  * conjunction with the core extension.
  */
 #define __DRI_SWRAST "DRI_SWRast"
-#define __DRI_SWRAST_VERSION 1
+#define __DRI_SWRAST_VERSION 2
 
 struct __DRIswrastExtensionRec {
     __DRIextension base;
@@ -660,6 +670,13 @@ struct __DRIswrastExtensionRec {
     __DRIdrawable *(*createNewDrawable)(__DRIscreen *screen,
 					const __DRIconfig *config,
 					void *loaderPrivate);
+
+   /* Since version 2 */
+   __DRIcontext *(*createNewContextForAPI)(__DRIscreen *screen,
+                                           int api,
+                                           const __DRIconfig *config,
+                                           __DRIcontext *shared,
+                                           void *data);
 };
 
 /**
@@ -675,6 +692,7 @@ struct __DRIswrastExtensionRec {
 #define __DRI_BUFFER_FAKE_FRONT_LEFT	7
 #define __DRI_BUFFER_FAKE_FRONT_RIGHT	8
 #define __DRI_BUFFER_DEPTH_STENCIL	9  /**< Only available with DRI2 1.1 */
+#define __DRI_BUFFER_HIZ		10
 
 struct __DRIbufferRec {
     unsigned int attachment;
@@ -769,6 +787,14 @@ struct __DRIdri2ExtensionRec {
 					   const __DRIconfig *config,
 					   __DRIcontext *shared,
 					   void *data);
+
+   __DRIbuffer *(*allocateBuffer)(__DRIscreen *screen,
+				  unsigned int attachment,
+				  unsigned int format,
+				  int width,
+				  int height);
+   void (*releaseBuffer)(__DRIscreen *screen,
+			 __DRIbuffer *buffer);
 };
 
 
@@ -791,6 +817,7 @@ struct __DRIdri2ExtensionRec {
 
 #define __DRI_IMAGE_USE_SHARE		0x0001
 #define __DRI_IMAGE_USE_SCANOUT		0x0002
+#define __DRI_IMAGE_USE_CURSOR		0x0004
 
 /**
  * queryImage attributes

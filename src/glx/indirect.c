@@ -41,19 +41,19 @@
 
 #define __GLX_PAD(n) (((n) + 3) & ~3)
 
-#  if defined(__i386__) && defined(__GNUC__) && !defined(__CYGWIN__) && !defined(__MINGW32__)
-#    define FASTCALL __attribute__((fastcall))
-#  else
-#    define FASTCALL
-#  endif
-#  if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
-#    define NOINLINE __attribute__((noinline))
-#  else
-#    define NOINLINE
-#  endif
+#if defined(__i386__) && defined(__GNUC__) && !defined(__CYGWIN__) && !defined(__MINGW32__)
+#define FASTCALL __attribute__((fastcall))
+#else
+#define FASTCALL
+#endif
+#if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
+#define NOINLINE __attribute__((noinline))
+#else
+#define NOINLINE
+#endif
 
 #ifndef __GNUC__
-#  define __builtin_expect(x, y) x
+#define __builtin_expect(x, y) x
 #endif
 
 /* If the size and opcode values are known at compile-time, this will, on
@@ -8597,6 +8597,21 @@ __indirect_glDrawBuffersARB(GLsizei n, const GLenum * bufs)
     }
 }
 
+#define X_GLrop_ClampColorARB 234
+void
+__indirect_glClampColorARB(GLenum target, GLenum clamp)
+{
+    struct glx_context *const gc = __glXGetCurrentContext();
+    const GLuint cmdlen = 12;
+    emit_header(gc->pc, X_GLrop_ClampColorARB, cmdlen);
+    (void) memcpy((void *) (gc->pc + 4), (void *) (&target), 4);
+    (void) memcpy((void *) (gc->pc + 8), (void *) (&clamp), 4);
+    gc->pc += cmdlen;
+    if (__builtin_expect(gc->pc > gc->limit, 0)) {
+        (void) __glXFlushRenderBuffer(gc, gc->pc);
+    }
+}
+
 #define X_GLrop_RenderbufferStorageMultisample 4331
 void
 __indirect_glRenderbufferStorageMultisample(GLenum target, GLsizei samples,
@@ -10657,5 +10672,65 @@ __indirect_glFramebufferTextureLayerEXT(GLenum target, GLenum attachment,
 }
 
 
-#  undef FASTCALL
-#  undef NOINLINE
+#ifdef GLX_SHARED_GLAPI
+
+static const struct proc_pair {
+    const char *name;
+    _glapi_proc proc;
+} proc_pairs[20] = {
+    {
+    "AreTexturesResidentEXT", (_glapi_proc) glAreTexturesResidentEXT}, {
+    "DeleteTexturesEXT", (_glapi_proc) glDeleteTexturesEXT}, {
+    "GenTexturesEXT", (_glapi_proc) glGenTexturesEXT}, {
+    "GetColorTableEXT", (_glapi_proc) glGetColorTableEXT}, {
+    "GetColorTableParameterfvEXT",
+            (_glapi_proc) glGetColorTableParameterfvEXT}, {
+    "GetColorTableParameterfvSGI",
+            (_glapi_proc) glGetColorTableParameterfvEXT}, {
+    "GetColorTableParameterivEXT",
+            (_glapi_proc) glGetColorTableParameterivEXT}, {
+    "GetColorTableParameterivSGI",
+            (_glapi_proc) glGetColorTableParameterivEXT}, {
+    "GetColorTableSGI", (_glapi_proc) glGetColorTableEXT}, {
+    "GetConvolutionFilterEXT", (_glapi_proc) gl_dispatch_stub_356}, {
+    "GetConvolutionParameterfvEXT", (_glapi_proc) gl_dispatch_stub_357}, {
+    "GetConvolutionParameterivEXT", (_glapi_proc) gl_dispatch_stub_358}, {
+    "GetHistogramEXT", (_glapi_proc) gl_dispatch_stub_361}, {
+    "GetHistogramParameterfvEXT", (_glapi_proc) gl_dispatch_stub_362}, {
+    "GetHistogramParameterivEXT", (_glapi_proc) gl_dispatch_stub_363}, {
+    "GetMinmaxEXT", (_glapi_proc) gl_dispatch_stub_364}, {
+    "GetMinmaxParameterfvEXT", (_glapi_proc) gl_dispatch_stub_365}, {
+    "GetMinmaxParameterivEXT", (_glapi_proc) gl_dispatch_stub_366}, {
+    "GetSeparableFilterEXT", (_glapi_proc) gl_dispatch_stub_359}, {
+    "IsTextureEXT", (_glapi_proc) glIsTextureEXT}
+};
+
+static int
+__indirect_get_proc_compare(const void *key, const void *memb)
+{
+    const struct proc_pair *pair = (const struct proc_pair *) memb;
+    return strcmp((const char *) key, pair->name);
+}
+
+_glapi_proc
+__indirect_get_proc_address(const char *name)
+{
+    const struct proc_pair *pair;
+
+    /* skip "gl" */
+    name += 2;
+
+    pair = (const struct proc_pair *) bsearch((const void *) name,
+                                              (const void *) proc_pairs,
+                                              ARRAY_SIZE(proc_pairs),
+                                              sizeof(proc_pairs[0]),
+                                              __indirect_get_proc_compare);
+
+    return (pair) ? pair->proc : NULL;
+}
+
+#endif /* GLX_SHARED_GLAPI */
+
+
+#undef FASTCALL
+#undef NOINLINE

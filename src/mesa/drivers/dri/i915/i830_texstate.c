@@ -28,17 +28,19 @@
 #include "main/mtypes.h"
 #include "main/enums.h"
 #include "main/colormac.h"
+#include "main/macros.h"
+#include "main/samplerobj.h"
 
 #include "intel_mipmap_tree.h"
 #include "intel_tex.h"
 
 #include "i830_context.h"
 #include "i830_reg.h"
-
+#include "intel_chipset.h"
 
 
 static GLuint
-translate_texture_format(GLuint mesa_format, GLuint internal_format)
+translate_texture_format(GLuint mesa_format)
 {
    switch (mesa_format) {
    case MESA_FORMAT_L8:
@@ -119,6 +121,7 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    struct gl_texture_object *tObj = tUnit->_Current;
    struct intel_texture_object *intelObj = intel_texture_object(tObj);
    struct gl_texture_image *firstImage;
+   struct gl_sampler_object *sampler = _mesa_get_samplerobj(ctx, unit);
    GLuint *state = i830->state.Tex[unit], format, pitch;
    GLint lodbias;
    GLubyte border[4];
@@ -139,9 +142,9 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    /* Get first image here, since intelObj->firstLevel will get set in
     * the intel_finalize_mipmap_tree() call above.
     */
-   firstImage = tObj->Image[0][intelObj->firstLevel];
+   firstImage = tObj->Image[0][tObj->BaseLevel];
 
-   intel_miptree_get_image_offset(intelObj->mt, intelObj->firstLevel, 0, 0,
+   intel_miptree_get_image_offset(intelObj->mt, tObj->BaseLevel, 0, 0,
 				  &dst_x, &dst_y);
 
    drm_intel_bo_reference(intelObj->mt->region->buffer);
@@ -153,8 +156,7 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
     */
    i830->state.tex_offset[unit] = dst_x * intelObj->mt->cpp + dst_y * pitch;
 
-   format = translate_texture_format(firstImage->TexFormat,
-				     firstImage->InternalFormat);
+   format = translate_texture_format(firstImage->TexFormat);
 
    state[I830_TEXREG_TM0LI] = (_3DSTATE_LOAD_STATE_IMMEDIATE_2 |
                                (LOAD_TEXTURE_MAP0 << unit) | 4);
@@ -189,8 +191,10 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
 
    {
       GLuint minFilt, mipFilt, magFilt;
+      float maxlod;
+      uint32_t minlod_fixed, maxlod_fixed;
 
-      switch (tObj->MinFilter) {
+      switch (sampler->MinFilter) {
       case GL_NEAREST:
          minFilt = FILTER_NEAREST;
          mipFilt = MIPFILTER_NONE;
@@ -219,12 +223,12 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
          return GL_FALSE;
       }
 
-      if (tObj->MaxAnisotropy > 1.0) {
+      if (sampler->MaxAnisotropy > 1.0) {
          minFilt = FILTER_ANISOTROPIC;
          magFilt = FILTER_ANISOTROPIC;
       }
       else {
-         switch (tObj->MagFilter) {
+         switch (sampler->MagFilter) {
          case GL_NEAREST:
             magFilt = FILTER_NEAREST;
             break;
@@ -236,7 +240,7 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
          }
       }
 
-      lodbias = (int) ((tUnit->LodBias + tObj->LodBias) * 16.0);
+      lodbias = (int) ((tUnit->LodBias + sampler->LodBias) * 16.0);
       if (lodbias < -64)
           lodbias = -64;
       if (lodbias > 63)
@@ -252,18 +256,32 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
          state[I830_TEXREG_TM0S3] |= SS2_COLORSPACE_CONVERSION;
 #endif
 
-      state[I830_TEXREG_TM0S3] |= ((intelObj->lastLevel -
-                                    intelObj->firstLevel) *
-                                   4) << TM0S3_MIN_MIP_SHIFT;
-
+      /* We get one field with fraction bits for the maximum
+       * addressable (smallest resolution) LOD.  Use it to cover both
+       * MAX_LEVEL and MAX_LOD.
+       */
+      minlod_fixed = U_FIXED(CLAMP(sampler->MinLod, 0.0, 11), 4);
+      maxlod = MIN2(sampler->MaxLod, tObj->_MaxLevel - tObj->BaseLevel);
+      if (intel->intelScreen->deviceID == PCI_CHIP_I855_GM ||
+	  intel->intelScreen->deviceID == PCI_CHIP_I865_G) {
+	 maxlod_fixed = U_FIXED(CLAMP(maxlod, 0.0, 11.75), 2);
+	 maxlod_fixed = MAX2(maxlod_fixed, (minlod_fixed + 3) >> 2);
+	 state[I830_TEXREG_TM0S3] |= maxlod_fixed << TM0S3_MIN_MIP_SHIFT;
+	 state[I830_TEXREG_TM0S2] |= TM0S2_LOD_PRECLAMP;
+      } else {
+	 maxlod_fixed = U_FIXED(CLAMP(maxlod, 0.0, 11), 0);
+	 maxlod_fixed = MAX2(maxlod_fixed, (minlod_fixed + 15) >> 4);
+	 state[I830_TEXREG_TM0S3] |= maxlod_fixed << TM0S3_MIN_MIP_SHIFT_830;
+      }
+      state[I830_TEXREG_TM0S3] |= minlod_fixed << TM0S3_MAX_MIP_SHIFT;
       state[I830_TEXREG_TM0S3] |= ((minFilt << TM0S3_MIN_FILTER_SHIFT) |
                                    (mipFilt << TM0S3_MIP_FILTER_SHIFT) |
                                    (magFilt << TM0S3_MAG_FILTER_SHIFT));
    }
 
    {
-      GLenum ws = tObj->WrapS;
-      GLenum wt = tObj->WrapT;
+      GLenum ws = sampler->WrapS;
+      GLenum wt = sampler->WrapT;
 
 
       /* 3D textures not available on i830
@@ -283,10 +301,10 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    }
 
    /* convert border color from float to ubyte */
-   CLAMPED_FLOAT_TO_UBYTE(border[0], tObj->BorderColor.f[0]);
-   CLAMPED_FLOAT_TO_UBYTE(border[1], tObj->BorderColor.f[1]);
-   CLAMPED_FLOAT_TO_UBYTE(border[2], tObj->BorderColor.f[2]);
-   CLAMPED_FLOAT_TO_UBYTE(border[3], tObj->BorderColor.f[3]);
+   CLAMPED_FLOAT_TO_UBYTE(border[0], sampler->BorderColor.f[0]);
+   CLAMPED_FLOAT_TO_UBYTE(border[1], sampler->BorderColor.f[1]);
+   CLAMPED_FLOAT_TO_UBYTE(border[2], sampler->BorderColor.f[2]);
+   CLAMPED_FLOAT_TO_UBYTE(border[3], sampler->BorderColor.f[3]);
 
    state[I830_TEXREG_TM0S4] = PACK_COLOR_8888(border[3],
 					      border[0],

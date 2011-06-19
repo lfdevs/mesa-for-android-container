@@ -935,7 +935,7 @@ addrRegRelOffset:              { $$ = 0; }
 
 addrRegPosOffset: INTEGER
 	{
-	   if (($1 < 0) || ($1 > 4095)) {
+	   if (($1 < 0) || ($1 > (state->limits->MaxAddressOffset - 1))) {
               char s[100];
               _mesa_snprintf(s, sizeof(s),
                              "relative address offset too large (%d)", $1);
@@ -949,7 +949,7 @@ addrRegPosOffset: INTEGER
 
 addrRegNegOffset: INTEGER
 	{
-	   if (($1 < 0) || ($1 > 4096)) {
+	   if (($1 < 0) || ($1 > state->limits->MaxAddressOffset)) {
               char s[100];
               _mesa_snprintf(s, sizeof(s),
                              "relative address offset too large (%d)", $1);
@@ -1258,7 +1258,11 @@ optArraySize:
 	| INTEGER
         {
 	   if (($1 < 1) || ((unsigned) $1 > state->limits->MaxParameters)) {
-	      yyerror(& @1, state, "invalid parameter array size");
+              char msg[100];
+              _mesa_snprintf(msg, sizeof(msg),
+                             "invalid parameter array size (size=%d max=%u)",
+                             $1, state->limits->MaxParameters);
+	      yyerror(& @1, state, msg);
 	      YYERROR;
 	   } else {
 	      $$ = $1;
@@ -2060,9 +2064,14 @@ resultColBinding: COLOR optResultFaceType optResultColorType
 
 optResultFaceType:
 	{
-	   $$ = (state->mode == ARB_vertex)
-	      ? VERT_RESULT_COL0
-	      : FRAG_RESULT_COLOR;
+	   if (state->mode == ARB_vertex) {
+	      $$ = VERT_RESULT_COL0;
+	   } else {
+	      if (state->option.DrawBuffers)
+		 $$ = FRAG_RESULT_DATA0;
+	      else
+		 $$ = FRAG_RESULT_COLOR;
+	   }
 	}
 	| '[' INTEGER ']'
 	{

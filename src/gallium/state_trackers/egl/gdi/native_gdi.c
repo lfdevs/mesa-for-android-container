@@ -285,7 +285,7 @@ fill_color_formats(struct native_display *ndpy, enum pipe_format formats[8])
 
    for (i = 0; i < Elements(candidates); i++) {
       if (screen->is_format_supported(screen, candidates[i],
-               PIPE_TEXTURE_2D, 0, PIPE_BIND_RENDER_TARGET, 0))
+               PIPE_TEXTURE_2D, 0, PIPE_BIND_RENDER_TARGET))
          formats[count++] = candidates[i];
    }
 
@@ -319,7 +319,6 @@ gdi_display_get_configs(struct native_display *ndpy, int *num_configs)
          nconf->color_format = formats[i];
 
          nconf->window_bit = TRUE;
-         nconf->slow_config = TRUE;
       }
 
       gdpy->num_configs = count;
@@ -364,7 +363,7 @@ gdi_display_destroy(struct native_display *ndpy)
    if (gdpy->configs)
       FREE(gdpy->configs);
 
-   gdpy->base.screen->destroy(gdpy->base.screen);
+   ndpy_uninit(ndpy);
 
    FREE(gdpy);
 }
@@ -407,15 +406,23 @@ gdi_create_display(HDC hDC, struct native_event_handler *event_handler,
    return &gdpy->base;
 }
 
-static struct native_display *
-native_create_display(void *dpy, struct native_event_handler *event_handler,
-                      void *user_data)
+static struct native_event_handler *gdi_event_handler;
+
+static void
+native_set_event_handler(struct native_event_handler *event_handler)
 {
-   return gdi_create_display((HDC) dpy, event_handler, user_data);
+   gdi_event_handler = event_handler;
+}
+
+static struct native_display *
+native_create_display(void *dpy, boolean use_sw, void *user_data)
+{
+   return gdi_create_display((HDC) dpy, gdi_event_handler, user_data);
 }
 
 static const struct native_platform gdi_platform = {
    "GDI", /* name */
+   native_set_event_handler,
    native_create_display
 };
 

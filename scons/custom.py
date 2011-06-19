@@ -56,7 +56,10 @@ def quietCommandLines(env):
     env['SHLINKCOMSTR'] = "  Linking $TARGET ..."
     env['LDMODULECOMSTR'] = "  Linking $TARGET ..."
     env['SWIGCOMSTR'] = "  Generating $TARGET ..."
+    env['LEXCOMSTR'] = "  Generating $TARGET ..."
+    env['YACCCOMSTR'] = "  Generating $TARGET ..."
     env['CODEGENCOMSTR'] = "  Generating $TARGET ..."
+    env['INSTALLSTR'] = "  Installing $TARGET ..."
 
 
 def createConvenienceLibBuilder(env):
@@ -154,7 +157,8 @@ def createCodeGenerateMethod(env):
 def generate(env):
     """Common environment generation code"""
 
-    if env.get('quiet', True):
+    verbose = env.get('verbose', False) or not env.get('quiet', True)
+    if not verbose:
         quietCommandLines(env)
 
     # Custom builders and methods

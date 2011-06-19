@@ -32,7 +32,6 @@
 #include <stdbool.h>
 #include "main/mtypes.h"
 #include "main/mm.h"
-#include "dri_metaops.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -149,9 +148,12 @@ struct intel_context
       void (*assert_not_dirty) (struct intel_context *intel);
 
       void (*debug_batch)(struct intel_context *intel);
-   } vtbl;
+      bool (*render_target_supported)(gl_format format);
 
-   struct dri_metaops meta;
+      /** Can HiZ be enabled on a depthbuffer of the given format? */
+      bool (*is_hiz_depth_format)(struct intel_context *intel,
+	                          gl_format format);
+   } vtbl;
 
    GLbitfield Fallback;  /**< mask of INTEL_FALLBACK_x bits */
    GLuint NewGLState;
@@ -168,10 +170,29 @@ struct intel_context
    GLboolean is_945;
    GLboolean has_luminance_srgb;
    GLboolean has_xrgb_textures;
+   GLboolean has_separate_stencil;
+   GLboolean must_use_separate_stencil;
+   GLboolean has_hiz;
 
    int urb_size;
 
-   struct intel_batchbuffer *batch;
+   struct intel_batchbuffer {
+      /** Current batchbuffer being queued up. */
+      drm_intel_bo *bo;
+      /** Last BO submitted to the hardware.  Used for glFinish(). */
+      drm_intel_bo *last_bo;
+
+      struct cached_batch_item *cached_items;
+
+      uint16_t emit, total;
+      uint16_t used, reserved_space;
+      uint32_t map[8192];
+#define BATCH_SZ (8192*sizeof(uint32_t))
+
+      uint32_t state_batch_offset;
+      bool is_blit;
+   } batch;
+
    drm_intel_bo *first_post_swapbuffers_batch;
    GLboolean need_throttle;
    GLboolean no_batch_wrap;
@@ -179,15 +200,23 @@ struct intel_context
    struct
    {
       GLuint id;
+      uint32_t start_ptr; /**< for i8xx */
       uint32_t primitive;	/**< Current hardware primitive type */
       void (*flush) (struct intel_context *);
-      GLubyte *start_ptr; /**< for i8xx */
       drm_intel_bo *vb_bo;
       uint8_t *vb;
       unsigned int start_offset; /**< Byte offset of primitive sequence */
       unsigned int current_offset; /**< Byte offset of next vertex */
       unsigned int count;	/**< Number of vertices in current primitive */
    } prim;
+
+   struct {
+      drm_intel_bo *bo;
+      GLuint offset;
+      uint32_t buffer_len;
+      uint32_t buffer_offset;
+      char buffer[4096];
+   } upload;
 
    GLuint stats_wm;
 

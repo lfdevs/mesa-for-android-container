@@ -67,6 +67,10 @@
 #define PKT3_SET_CTL_CONST                     0x6F
 #define PKT3_SURFACE_BASE_UPDATE               0x73
 
+#define PREDICATION_OP_CLEAR 0x0
+#define PREDICATION_OP_ZPASS 0x1
+#define PREDICATION_OP_PRIMCOUNT 0x2
+
 #define PKT_TYPE_S(x)                   (((x) & 0x3) << 30)
 #define PKT_TYPE_G(x)                   (((x) >> 30) & 0x3)
 #define PKT_TYPE_C                      0x3FFFFFFF
@@ -248,6 +252,8 @@
 #define   S_0280A0_SOURCE_FORMAT(x)                    (((x) & 0x1) << 27)
 #define   G_0280A0_SOURCE_FORMAT(x)                    (((x) >> 27) & 0x1)
 #define   C_0280A0_SOURCE_FORMAT                       0xF7FFFFFF
+#define     V_0280A0_EXPORT_FULL                       0
+#define     V_0280A0_EXPORT_NORM                       1
 #define R_028060_CB_COLOR0_SIZE                      0x028060
 #define   S_028060_PITCH_TILE_MAX(x)                   (((x) & 0x3FF) << 0)
 #define   G_028060_PITCH_TILE_MAX(x)                   (((x) >> 0) & 0x3FF)
@@ -960,8 +966,8 @@
 #define   S_038010_SRF_MODE_ALL(x)                     (((x) & 0x1) << 10)
 #define   G_038010_SRF_MODE_ALL(x)                     (((x) >> 10) & 0x1)
 #define   C_038010_SRF_MODE_ALL                        0xFFFFFBFF
-#define     V_038010_SFR_MODE_ZERO_CLAMP_MINUS_ONE     0x00000000
-#define     V_038010_SFR_MODE_NO_ZERO                  0x00000001
+#define     V_038010_SRF_MODE_ZERO_CLAMP_MINUS_ONE     0x00000000
+#define     V_038010_SRF_MODE_NO_ZERO                  0x00000001
 #define   S_038010_FORCE_DEGAMMA(x)                    (((x) & 0x1) << 11)
 #define   G_038010_FORCE_DEGAMMA(x)                    (((x) >> 11) & 0x1)
 #define   C_038010_FORCE_DEGAMMA                       0xFFFFF7FF
@@ -1006,6 +1012,9 @@
 #define   S_038018_MPEG_CLAMP(x)                       (((x) & 0x3) << 0)
 #define   G_038018_MPEG_CLAMP(x)                       (((x) >> 0) & 0x3)
 #define   C_038018_MPEG_CLAMP                          0xFFFFFFFC
+#define   S_038018_MAX_ANISO(x)                        (((x) & 0x7) << 2)
+#define   G_038018_MAX_ANISO(x)                        (((x) >> 2) & 0x7)
+#define   C_038018_MAX_ANISO                           0xFFFFFFE3
 #define   S_038018_PERF_MODULATION(x)                  (((x) & 0x7) << 5)
 #define   G_038018_PERF_MODULATION(x)                  (((x) >> 5) & 0x7)
 #define   C_038018_PERF_MODULATION                     0xFFFFFF1F
@@ -1084,6 +1093,9 @@
 #define   S_03C000_MIP_FILTER(x)                       (((x) & 0x3) << 17)
 #define   G_03C000_MIP_FILTER(x)                       (((x) >> 17) & 0x3)
 #define   C_03C000_MIP_FILTER                          0xFFF9FFFF
+#define   S_03C000_MAX_ANISO(x)                        (((x) & 0x7) << 19)
+#define   G_03C000_MAX_ANISO(x)                        (((x) >> 19) & 0x7)
+#define   C_03C000_MAX_ANISO                           0xFFB7FFFF
 #define   S_03C000_BORDER_COLOR_TYPE(x)                (((x) & 0x3) << 22)
 #define   G_03C000_BORDER_COLOR_TYPE(x)                (((x) >> 22) & 0x3)
 #define   C_03C000_BORDER_COLOR_TYPE                   0xFF3FFFFF
@@ -1146,6 +1158,9 @@
 #define   S_03C008_PERF_Z(x)                           (((x) & 0x3) << 18)
 #define   G_03C008_PERF_Z(x)                           (((x) >> 18) & 0x3)
 #define   C_03C008_PERF_Z                              0xFFF3FFFF
+#define   S_03C008_ANISO_BIAS(x)                       (((x) & 0x3f) << 22)
+#define   G_03C008_ANISO_BIAS(x)                       (((x) >> 22) & 0x3f)
+#define   C_03C008_ANISO_BIAS                          (~(0x3f << 22))
 #define   S_03C008_FETCH_4(x)                          (((x) & 0x1) << 26)
 #define   G_03C008_FETCH_4(x)                          (((x) >> 26) & 0x1)
 #define   C_03C008_FETCH_4                             0xFBFFFFFF
@@ -2332,31 +2347,6 @@
 #define R_0280D4_CB_COLOR5_TILE                      0x0280D4
 #define R_0280D8_CB_COLOR6_TILE                      0x0280D8
 #define R_0280DC_CB_COLOR7_TILE                      0x0280DC
-#define R_028808_CB_COLOR_CONTROL                    0x028808
-#define   S_028808_FOG_ENABLE(x)                       (((x) & 0x1) << 0)
-#define   G_028808_FOG_ENABLE(x)                       (((x) >> 0) & 0x1)
-#define   C_028808_FOG_ENABLE                          0xFFFFFFFE
-#define   S_028808_MULTIWRITE_ENABLE(x)                (((x) & 0x1) << 1)
-#define   G_028808_MULTIWRITE_ENABLE(x)                (((x) >> 1) & 0x1)
-#define   C_028808_MULTIWRITE_ENABLE                   0xFFFFFFFD
-#define   S_028808_DITHER_ENABLE(x)                    (((x) & 0x1) << 2)
-#define   G_028808_DITHER_ENABLE(x)                    (((x) >> 2) & 0x1)
-#define   C_028808_DITHER_ENABLE                       0xFFFFFFFB
-#define   S_028808_DEGAMMA_ENABLE(x)                   (((x) & 0x1) << 3)
-#define   G_028808_DEGAMMA_ENABLE(x)                   (((x) >> 3) & 0x1)
-#define   C_028808_DEGAMMA_ENABLE                      0xFFFFFFF7
-#define   S_028808_SPECIAL_OP(x)                       (((x) & 0x7) << 4)
-#define   G_028808_SPECIAL_OP(x)                       (((x) >> 4) & 0x7)
-#define   C_028808_SPECIAL_OP                          0xFFFFFF8F
-#define   S_028808_PER_MRT_BLEND(x)                    (((x) & 0x1) << 7)
-#define   G_028808_PER_MRT_BLEND(x)                    (((x) >> 7) & 0x1)
-#define   C_028808_PER_MRT_BLEND                       0xFFFFFF7F
-#define   S_028808_TARGET_BLEND_ENABLE(x)              (((x) & 0xFF) << 8)
-#define   G_028808_TARGET_BLEND_ENABLE(x)              (((x) >> 8) & 0xFF)
-#define   C_028808_TARGET_BLEND_ENABLE                 0xFFFF00FF
-#define   S_028808_ROP3(x)                             (((x) & 0xFF) << 16)
-#define   G_028808_ROP3(x)                             (((x) >> 16) & 0xFF)
-#define   C_028808_ROP3                                0xFF00FFFF
 #define R_028614_SPI_VS_OUT_ID_0                     0x028614
 #define   S_028614_SEMANTIC_0(x)                       (((x) & 0xFF) << 0)
 #define   G_028614_SEMANTIC_0(x)                       (((x) >> 0) & 0xFF)
@@ -3475,8 +3465,14 @@
 #define SQ_TEX_INST_LD 0x03
 #define SQ_TEX_INST_GET_GRADIENTS_H 0x7
 #define SQ_TEX_INST_GET_GRADIENTS_V 0x8
+#define SQ_TEX_INST_SET_GRADIENTS_H 0xB
+#define SQ_TEX_INST_SET_GRADIENTS_V 0xC
 
 #define SQ_TEX_INST_SAMPLE 0x10
 #define SQ_TEX_INST_SAMPLE_L 0x11
+#define SQ_TEX_INST_SAMPLE_G 0x14
 #define SQ_TEX_INST_SAMPLE_C 0x18
+#define SQ_TEX_INST_SAMPLE_C_L 0x19
+#define SQ_TEX_INST_SAMPLE_C_G 0x1C
+
 #endif

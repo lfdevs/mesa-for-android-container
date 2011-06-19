@@ -39,33 +39,11 @@
 
 
 static void i915_flush_pipe( struct pipe_context *pipe,
-                             unsigned flags,
                              struct pipe_fence_handle **fence )
 {
    struct i915_context *i915 = i915_context(pipe);
 
    draw_flush(i915->draw);
-
-#if 0
-   /* Do we need to emit an MI_FLUSH command to flush the hardware
-    * caches?
-    */
-   if (flags & (PIPE_FLUSH_RENDER_CACHE | PIPE_FLUSH_TEXTURE_CACHE)) {
-      unsigned flush = MI_FLUSH;
-      
-      if (!(flags & PIPE_FLUSH_RENDER_CACHE))
-	 flush |= INHIBIT_FLUSH_RENDER_CACHE;
-
-      if (flags & PIPE_FLUSH_TEXTURE_CACHE)
-	 flush |= FLUSH_MAP_CACHE;
-
-      if (!BEGIN_BATCH(1, 0)) {
-	 FLUSH_BATCH(NULL);
-	 assert(BEGIN_BATCH(1, 0));
-      }
-      OUT_BATCH( flush );
-   }
-#endif
 
    if (i915->batch->map == i915->batch->ptr) {
       return;
@@ -74,7 +52,6 @@ static void i915_flush_pipe( struct pipe_context *pipe,
    /* If there are no flags, just flush pending commands to hardware:
     */
    FLUSH_BATCH(fence);
-   i915->vbo_flushed = 1;
 
    I915_DBG(DBG_FLUSH, "%s: #####\n", __FUNCTION__);
 }
@@ -93,5 +70,11 @@ void i915_flush(struct i915_context *i915, struct pipe_fence_handle **fence)
    struct i915_winsys_batchbuffer *batch = i915->batch;
 
    batch->iws->batchbuffer_flush(batch, fence);
+   i915->vbo_flushed = 1;
    i915->hardware_dirty = ~0;
+   i915->immediate_dirty = ~0;
+   i915->dynamic_dirty = ~0;
+   i915->static_dirty = ~0;
+   /* kernel emits flushes in between batchbuffers */
+   i915->flush_dirty = 0;
 }

@@ -1,7 +1,5 @@
-Index: mesa/src/gallium/auxiliary/rtasm/rtasm_execmem.c
-===================================================================
---- mesa.orig/src/gallium/auxiliary/rtasm/rtasm_execmem.c
-+++ mesa/src/gallium/auxiliary/rtasm/rtasm_execmem.c
+--- a/src/gallium/auxiliary/rtasm/rtasm_execmem.c
++++ b/src/gallium/auxiliary/rtasm/rtasm_execmem.c
 @@ -37,7 +37,7 @@
  
  #include "rtasm_execmem.h"
@@ -11,11 +9,9 @@ Index: mesa/src/gallium/auxiliary/rtasm/rtasm_execmem.c
  #define MAP_ANONYMOUS MAP_ANON
  #endif
  
-Index: mesa/src/gallium/include/pipe/p_config.h
-===================================================================
---- mesa.orig/src/gallium/include/pipe/p_config.h
-+++ mesa/src/gallium/include/pipe/p_config.h
-@@ -133,7 +133,7 @@
+--- a/src/gallium/include/pipe/p_config.h
++++ b/src/gallium/include/pipe/p_config.h
+@@ -147,7 +147,7 @@
  #define PIPE_OS_UNIX
  #endif
  

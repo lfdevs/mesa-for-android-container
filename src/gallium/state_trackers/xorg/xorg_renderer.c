@@ -73,7 +73,7 @@ renderer_draw(struct xorg_renderer *r)
    if (buf) {
       cso_set_vertex_elements(r->cso, r->attrs_per_vertex, r->velems);
 
-      util_draw_vertex_buffer(pipe, buf, 0,
+      util_draw_vertex_buffer(pipe, r->cso, buf, 0,
                               PIPE_PRIM_QUADS,
                               num_verts,  /* verts */
                               r->attrs_per_vertex); /* attribs/vert */
@@ -429,6 +429,7 @@ void renderer_set_constants(struct xorg_renderer *r,
    pipe_resource_reference(cbuf, NULL);
    *cbuf = pipe_buffer_create(r->pipe->screen,
                               PIPE_BIND_CONSTANT_BUFFER,
+                              PIPE_USAGE_STATIC,
                               param_bytes);
 
    if (*cbuf) {
@@ -449,8 +450,7 @@ void renderer_copy_prepare(struct xorg_renderer *r,
 
    assert(screen->is_format_supported(screen, dst_surface->format,
                                       PIPE_TEXTURE_2D, 0,
-                                      PIPE_BIND_RENDER_TARGET,
-                                      0));
+                                      PIPE_BIND_RENDER_TARGET));
    (void) screen;
 
 
@@ -518,14 +518,10 @@ renderer_clone_texture(struct xorg_renderer *r,
    struct pipe_resource *pt;
    struct pipe_resource templ;
 
-   if (pipe->is_resource_referenced(pipe, src, 0, 0) &
-       PIPE_REFERENCED_FOR_WRITE)
-      pipe->flush(pipe, PIPE_FLUSH_RENDER_CACHE, NULL);
-
    /* the coming in texture should already have that invariance */
    debug_assert(screen->is_format_supported(screen, src->format,
                                             PIPE_TEXTURE_2D, 0,
-                                            PIPE_BIND_SAMPLER_VIEW, 0));
+                                            PIPE_BIND_SAMPLER_VIEW));
 
    format = src->format;
 
@@ -616,7 +612,7 @@ void renderer_draw_yuv(struct xorg_renderer *r,
 
       cso_set_vertex_elements(r->cso, num_attribs, r->velems);
 
-      util_draw_vertex_buffer(pipe, buf, 0,
+      util_draw_vertex_buffer(pipe, r->cso, buf, 0,
                               PIPE_PRIM_QUADS,
                               4,  /* verts */
                               num_attribs); /* attribs/vert */

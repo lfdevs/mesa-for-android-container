@@ -1,6 +1,7 @@
 debian/mesa-common-dev.install
 debian/libopenvg1-mesa.install
 debian/libopenvg1-mesa-dev.install
+debian/libglapi-mesa.install
 debian/libgles2-mesa.install
 debian/libgles2-mesa-dev.install
 debian/libgles1-mesa.install

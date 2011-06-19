@@ -5,6 +5,7 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  (regex)"^_egl.*@Base$" 7.8.1
  eglBindAPI@Base 7.8.1
  eglBindTexImage@Base 7.8.1
+ eglBindWaylandDisplayWL@Base 7.11~0
  eglChooseConfig@Base 7.8.1
  eglChooseModeMESA@Base 7.8.1
  eglClientWaitSyncKHR@Base 7.9
@@ -57,6 +58,8 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  eglSwapBuffersRegionNOK@Base 7.9
  eglSwapInterval@Base 7.8.1
  eglTerminate@Base 7.8.1
+ eglUnbindWaylandDisplayWL@Base 7.11~0
  eglWaitClient@Base 7.8.1
  eglWaitGL@Base 7.8.1
  eglWaitNative@Base 7.8.1
+ wl_drm_interface@Base 7.11~0

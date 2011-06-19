@@ -44,16 +44,6 @@ struct _egl_driver
    const char *Name;  /**< name of this driver */
 
    /**
-    * Probe a display and return a score.
-    *
-    * Roughly,
-    *  50 means the driver supports the display;
-    *  90 means the driver can accelerate the display;
-    * 100 means a perfect match.
-    */
-   EGLint (*Probe)(_EGLDriver *drv, _EGLDisplay *dpy);
-
-   /**
     * Release the driver resource.
     *
     * It is called before dlclose().
@@ -64,12 +54,24 @@ struct _egl_driver
 };
 
 
+extern _EGLDriver *
+_eglBuiltInDriverGALLIUM(const char *args);
+
+
+extern _EGLDriver *
+_eglBuiltInDriverDRI2(const char *args);
+
+
+extern _EGLDriver *
+_eglBuiltInDriverGLX(const char *args);
+
+
 PUBLIC _EGLDriver *
 _eglMain(const char *args);
 
 
 extern _EGLDriver *
-_eglMatchDriver(_EGLDisplay *dpy, EGLBoolean probe_only);
+_eglMatchDriver(_EGLDisplay *dpy, EGLBoolean test_only);
 
 
 extern __eglMustCastToProperFunctionPointerType

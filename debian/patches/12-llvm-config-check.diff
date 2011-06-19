@@ -1,0 +1,39 @@
+From a51da020f1e746e9c288cf09214b552d7293f4eb Mon Sep 17 00:00:00 2001
+From: Cyril Brulebois <kibi@debian.org>
+Date: Wed, 15 Jun 2011 15:47:12 +0200
+Subject: [PATCH] configure.ac: Avoid running llvm-config when it hadn't been
+ checked for.
+
+If --disable-gallium is passed, llvm-config isn't checked for, so mark
+it explicitly as absent, through LLVM_CONFIG=no.
+
+Passing --disable-gallium would result in:
+| ../configure: line 9739: --version: command not found
+| ../configure: line 9740: --cppflags: command not found
+| ../configure: line 9741: --libs: command not found
+| ../configure: line 9743: --ldflags: command not found
+
+With this fix, one gets that instead:
+| configure: error: LLVM is required to build Gallium R300 on x86 and x86_64
+
+Signed-off-by: Cyril Brulebois <kibi@debian.org>
+---
+ configure.ac |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 69513c1..5d7288c 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1459,6 +1459,8 @@ fi
+ if test "x$enable_gallium" = xyes; then
+     SRC_DIRS="$SRC_DIRS gallium gallium/winsys gallium/targets"
+     AC_PATH_PROG([LLVM_CONFIG], [llvm-config], [no])
++else
++    LLVM_CONFIG=no
+ fi
+ 
+ AC_SUBST([LLVM_CFLAGS])
+-- 
+1.7.5.4
+

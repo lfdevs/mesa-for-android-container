@@ -40,6 +40,7 @@ extern "C" {
 
 #include "native_buffer.h"
 #include "native_modeset.h"
+#include "native_wayland_bufmgr.h"
 
 /**
  * Only color buffers are listed.  The others are allocated privately through,
@@ -126,8 +127,6 @@ struct native_config {
    int native_visual_id;
    int native_visual_type;
    int level;
-   int samples;
-   boolean slow_config;
    boolean transparent_rgb;
    int transparent_rgb_values[3];
 };
@@ -142,6 +141,11 @@ struct native_display {
     * The pipe screen of the native display.
     */
    struct pipe_screen *screen;
+
+   /**
+    * Context used for copy operations.
+    */
+   struct pipe_context *pipe;
 
    /**
     * Available for caller's use.
@@ -185,7 +189,9 @@ struct native_display {
                                                    const struct native_config *nconf);
 
    /**
-    * Create a pixmap surface.  Required unless no config has pixmap_bit set.
+    * Create a pixmap surface.  The native config may be NULL.  In that case, a
+    * "best config" will be picked.  Required unless no config has pixmap_bit
+    * set.
     */
    struct native_surface *(*create_pixmap_surface)(struct native_display *ndpy,
                                                    EGLNativePixmapType pix,
@@ -193,6 +199,7 @@ struct native_display {
 
    const struct native_display_buffer *buffer;
    const struct native_display_modeset *modeset;
+   const struct native_display_wayland_bufmgr *wayland_bufmgr;
 };
 
 /**
@@ -223,11 +230,35 @@ native_attachment_mask_test(uint mask, enum native_attachment att)
    return !!(mask & (1 << att));
 }
 
+/**
+ * Get the display copy context
+ */
+static INLINE struct pipe_context *
+ndpy_get_copy_context(struct native_display *ndpy)
+{
+   if (!ndpy->pipe)
+      ndpy->pipe = ndpy->screen->context_create(ndpy->screen, NULL);
+   return ndpy->pipe;
+}
+
+/**
+ * Free display screen and context resources
+ */
+static INLINE void
+ndpy_uninit(struct native_display *ndpy)
+{
+   if (ndpy->pipe)
+      ndpy->pipe->destroy(ndpy->pipe);
+   if (ndpy->screen)
+      ndpy->screen->destroy(ndpy->screen);
+}
+
 struct native_platform {
    const char *name;
 
+   void (*set_event_handler)(struct native_event_handler *handler);
    struct native_display *(*create_display)(void *dpy,
-                                            struct native_event_handler *handler,
+                                            boolean use_sw,
                                             void *user_data);
 };
 
@@ -236,6 +267,9 @@ native_get_gdi_platform(void);
 
 const struct native_platform *
 native_get_x11_platform(void);
+
+const struct native_platform *
+native_get_wayland_platform(void);
 
 const struct native_platform *
 native_get_drm_platform(void);

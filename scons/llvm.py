@@ -142,13 +142,11 @@ def generate(env):
 
         try:
             env.ParseConfig('llvm-config --cppflags')
-            env.ParseConfig('llvm-config --libs jit interpreter nativecodegen bitwriter')
+            env.ParseConfig('llvm-config --libs')
             env.ParseConfig('llvm-config --ldflags')
         except OSError:
             print 'scons: llvm-config version %s failed' % llvm_version
             return
-        else:
-            env['LINK'] = env['CXX']
 
     assert llvm_version is not None
     env['llvm'] = True

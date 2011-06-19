@@ -73,12 +73,6 @@ retry_draw_range_elements( struct svga_context *svga,
    if (ret)
       goto retry;
 
-   if (svga->curr.any_user_vertex_buffers) {
-      ret = svga_hwtnl_flush( svga->hwtnl );
-      if (ret)
-         goto retry;
-   }
-
    return PIPE_OK;
 
 retry:
@@ -122,12 +116,6 @@ retry_draw_arrays( struct svga_context *svga,
    if (ret)
       goto retry;
 
-   if (svga->curr.any_user_vertex_buffers) {
-      ret = svga_hwtnl_flush( svga->hwtnl );
-      if (ret)
-         goto retry;
-   }
-
    return 0;
 
 retry:
@@ -156,6 +144,14 @@ svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 
    if (!u_trim_pipe_prim( info->mode, &count ))
       return;
+
+   if (svga->state.sw.need_swtnl != svga->prev_draw_swtnl) {
+      /* We're switching between SW and HW drawing.  Do a flush to avoid
+       * mixing HW and SW rendering with the same vertex buffer.
+       */
+      pipe->flush(pipe, NULL);
+      svga->prev_draw_swtnl = svga->state.sw.need_swtnl;
+   }
 
    /*
     * Mark currently bound target surfaces as dirty

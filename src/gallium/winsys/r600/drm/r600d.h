@@ -90,6 +90,9 @@
 #define PKT3_SET_SAMPLER                       0x6E
 #define PKT3_SET_CTL_CONST                     0x6F
 #define PKT3_SURFACE_BASE_UPDATE               0x73
+#define		SURFACE_BASE_UPDATE_DEPTH      (1 << 0)
+#define		SURFACE_BASE_UPDATE_COLOR(x)   (2 << (x))
+#define		SURFACE_BASE_UPDATE_STRMOUT(x) (0x200 << (x))
 
 #define EVENT_TYPE_PS_PARTIAL_FLUSH            0x10
 #define EVENT_TYPE_CACHE_FLUSH_AND_INV_TS_EVENT 0x14
@@ -105,6 +108,18 @@
 		 * 5 - TS events
 		 */
 
+#define PREDICATION_OP_CLEAR 0x0
+#define PREDICATION_OP_ZPASS 0x1
+#define PREDICATION_OP_PRIMCOUNT 0x2
+
+#define PRED_OP(x) ((x) << 16)
+
+#define PREDICATION_HINT_WAIT (0 << 12)
+#define PREDICATION_HINT_NOWAIT_DRAW (1 << 12)
+
+#define PREDICATION_DRAW_NOT_VISIBLE (0 << 8)
+#define PREDICATION_DRAW_VISIBLE (1 << 8)
+
 #define PKT_TYPE_S(x)                   (((x) & 0x3) << 30)
 #define PKT_TYPE_G(x)                   (((x) >> 30) & 0x3)
 #define PKT_TYPE_C                      0x3FFFFFFF
@@ -117,8 +132,9 @@
 #define PKT3_IT_OPCODE_S(x)             (((x) & 0xFF) << 8)
 #define PKT3_IT_OPCODE_G(x)             (((x) >> 8) & 0xFF)
 #define PKT3_IT_OPCODE_C                0xFFFF00FF
+#define PKT3_PRED_S(x)               (((x) >> 0) & 0x1)
 #define PKT0(index, count) (PKT_TYPE_S(0) | PKT0_BASE_INDEX_S(index) | PKT_COUNT_S(count))
-#define PKT3(op, count) (PKT_TYPE_S(3) | PKT3_IT_OPCODE_S(op) | PKT_COUNT_S(count))
+#define PKT3(op, count, predicate) (PKT_TYPE_S(3) | PKT3_IT_OPCODE_S(op) | PKT_COUNT_S(count) | PKT3_PRED_S(predicate))
 
 /* Registers */
 #define R_0280A0_CB_COLOR0_INFO                      0x0280A0

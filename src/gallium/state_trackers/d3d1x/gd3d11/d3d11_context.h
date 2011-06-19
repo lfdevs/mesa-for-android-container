@@ -623,7 +623,6 @@ struct GalliumD3D10Device : public GalliumD3D10ScreenImpl<threadsafe>
 				vertex_buffers[start + i].buffer = buffer ? ((GalliumD3D11Buffer*)buffer)->resource : 0;
 				vertex_buffers[start + i].buffer_offset = new_offsets[i];
 				vertex_buffers[start + i].stride = new_strides[i];
-				vertex_buffers[start + i].max_index = ~0;
 				last_different = i;
 			}
 		}
@@ -1824,7 +1823,7 @@ changed:
 	virtual void STDMETHODCALLTYPE Flush(void)
 	{
 		SYNCHRONIZED;
-		pipe->flush(pipe, PIPE_FLUSH_FRAME, 0);
+                pipe->flush(pipe, 0);
 	}
 
 	/* In Direct3D 10, if the reference count of an object drops to 0, it is automatically

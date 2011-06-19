@@ -12,8 +12,10 @@
 #include <errno.h>
 
 #include "nouveau/nouveau_bo.h"
+#include "nouveau/nouveau_mm.h"
 #include "nouveau_winsys.h"
 #include "nouveau_screen.h"
+#include "nouveau_fence.h"
 
 /* XXX this should go away */
 #include "state_tracker/drm_driver.h"
@@ -150,23 +152,22 @@ nouveau_screen_fence_ref(struct pipe_screen *pscreen,
 			 struct pipe_fence_handle **ptr,
 			 struct pipe_fence_handle *pfence)
 {
-	*ptr = pfence;
+	nouveau_fence_ref(nouveau_fence(pfence), (struct nouveau_fence **)ptr);
 }
 
-static int
+static boolean
 nouveau_screen_fence_signalled(struct pipe_screen *screen,
-			       struct pipe_fence_handle *pfence,
-			       unsigned flags)
+                               struct pipe_fence_handle *pfence)
 {
-	return 0;
+        return nouveau_fence_signalled(nouveau_fence(pfence));
 }
 
-static int
+static boolean
 nouveau_screen_fence_finish(struct pipe_screen *screen,
 			    struct pipe_fence_handle *pfence,
-			    unsigned flags)
+                            uint64_t timeout)
 {
-	return 0;
+        return nouveau_fence_wait(nouveau_fence(pfence));
 }
 
 
@@ -209,26 +210,6 @@ nouveau_screen_bo_get_handle(struct pipe_screen *pscreen,
 	}
 }
 
-
-unsigned int
-nouveau_reference_flags(struct nouveau_bo *bo)
-{
-	uint32_t bo_flags;
-	int flags = 0;
-
-	bo_flags = nouveau_bo_pending(bo);
-	if (bo_flags & NOUVEAU_BO_RD)
-		flags |= PIPE_REFERENCED_FOR_READ;
-	if (bo_flags & NOUVEAU_BO_WR)
-		flags |= PIPE_REFERENCED_FOR_WRITE;
-
-	return flags;
-}
-
-
-
-
-
 int
 nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 {
@@ -250,6 +231,10 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 
 	util_format_s3tc_init();
 
+	screen->mm_GART = nouveau_mm_create(dev,
+					    NOUVEAU_BO_GART | NOUVEAU_BO_MAP,
+					    0x000);
+	screen->mm_VRAM = nouveau_mm_create(dev, NOUVEAU_BO_VRAM, 0x000);
 	return 0;
 }
 
@@ -257,7 +242,12 @@ void
 nouveau_screen_fini(struct nouveau_screen *screen)
 {
 	struct pipe_winsys *ws = screen->base.winsys;
+
+	nouveau_mm_destroy(screen->mm_GART);
+	nouveau_mm_destroy(screen->mm_VRAM);
+
 	nouveau_channel_free(&screen->channel);
+
 	if (ws)
 		ws->destroy(ws);
 }

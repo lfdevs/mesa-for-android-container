@@ -51,16 +51,6 @@ static GLboolean can_do_pln(struct intel_context *intel,
    return GL_TRUE;
 }
 
-/* Not quite sure how correct this is - need to understand horiz
- * vs. vertical strides a little better.
- */
-static INLINE struct brw_reg sechalf( struct brw_reg reg )
-{
-   if (reg.vstride)
-      reg.nr++;
-   return reg;
-}
-
 /* Return the SrcReg index of the channels that can be immediate float operands
  * instead of usage of PROGRAM_CONSTANT values through push/pull.
  */
@@ -1110,11 +1100,16 @@ void emit_tex(struct brw_wm_compile *c,
 
    /* Emit the texcoords. */
    for (i = 0; i < nr_texcoords; i++) {
+      if (c->key.gl_clamp_mask[i] & (1 << sampler))
+	 brw_set_saturate(p, true);
+
       if (emit & (1<<i))
 	 brw_MOV(p, brw_message_reg(cur_mrf), arg[i]);
       else
 	 brw_MOV(p, brw_message_reg(cur_mrf), brw_imm_f(0));
       cur_mrf += mrf_per_channel;
+
+      brw_set_saturate(p, false);
    }
 
    /* Fill in the shadow comparison reference value. */
@@ -1134,9 +1129,9 @@ void emit_tex(struct brw_wm_compile *c,
 
    if (intel->gen >= 5) {
       if (shadow)
-	 msg_type = BRW_SAMPLER_MESSAGE_SAMPLE_COMPARE_GEN5;
+	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_COMPARE;
       else
-	 msg_type = BRW_SAMPLER_MESSAGE_SAMPLE_GEN5;
+	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE;
    } else {
       /* Note that G45 and older determines shadow compare and dispatch width
        * from message length for most messages.
@@ -1186,14 +1181,14 @@ void emit_txb(struct brw_wm_compile *c,
     */
    if (c->dispatch_width == 16 || intel->gen < 5) {
       if (intel->gen >= 5)
-	 msg_type = BRW_SAMPLER_MESSAGE_SAMPLE_BIAS_GEN5;
+	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_BIAS;
       else
 	 msg_type = BRW_SAMPLER_MESSAGE_SIMD16_SAMPLE_BIAS;
       mrf_per_channel = 2;
       dst_retyped = retype(vec16(dst[0]), BRW_REGISTER_TYPE_UW);
       response_length = 8;
    } else {
-      msg_type = BRW_SAMPLER_MESSAGE_SAMPLE_BIAS_GEN5;
+      msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_BIAS;
       mrf_per_channel = 1;
       dst_retyped = retype(vec8(dst[0]), BRW_REGISTER_TYPE_UW);
       response_length = 4;
@@ -1325,17 +1320,13 @@ static void fire_fb_write( struct brw_wm_compile *c,
 {
    struct brw_compile *p = &c->func;
    struct intel_context *intel = &p->brw->intel;
-   struct brw_reg dst;
-
-   if (c->dispatch_width == 16)
-      dst = retype(vec16(brw_null_reg()), BRW_REGISTER_TYPE_UW);
-   else
-      dst = retype(vec8(brw_null_reg()), BRW_REGISTER_TYPE_UW);
 
    /* Pass through control information:
+    * 
+    * Gen6 has done m1 mov in emit_fb_write() for current SIMD16 case.
     */
 /*  mov (8) m1.0<1>:ud   r1.0<8;8,1>:ud   { Align1 NoMask } */
-   if (intel->gen < 6) /* gen6, use headerless for fb write */
+   if (intel->gen < 6)
    {
       brw_push_insn_state(p);
       brw_set_mask_control(p, BRW_MASK_DISABLE); /* ? */
@@ -1350,7 +1341,6 @@ static void fire_fb_write( struct brw_wm_compile *c,
 /*  send (16) null.0<1>:uw m0               r0.0<8;8,1>:uw   0x85a04000:ud    { Align1 EOT } */
    brw_fb_WRITE(p,
 		c->dispatch_width,
-		dst,
 		base_reg,
 		retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UW),
 		target,		
@@ -1406,6 +1396,9 @@ void emit_fb_write(struct brw_wm_compile *c,
     */
    brw_push_insn_state(p);
 
+   if (c->key.clamp_fragment_color)
+      brw_set_saturate(p, 1);
+
    for (channel = 0; channel < 4; channel++) {
       if (intel->gen >= 6) {
 	 /* gen6 SIMD16 single source DP write looks like:
@@ -1457,6 +1450,9 @@ void emit_fb_write(struct brw_wm_compile *c,
 	 }
       }
    }
+
+   brw_set_saturate(p, 0);
+
    /* skip over the regs populated above:
     */
    if (c->dispatch_width == 16)

@@ -148,6 +148,7 @@
 /* p161 */
 #define _3DSTATE_DST_BUF_VARS_CMD	(CMD_3D | (0x1d<<24) | (0x85<<16))
 /* Dword 1 */
+#define CLASSIC_EARLY_DEPTH             (1<<31)
 #define TEX_DEFAULT_COLOR_OGL           (0<<30)
 #define TEX_DEFAULT_COLOR_D3D           (1<<30)
 #define ZR_EARLY_DEPTH                  (1<<29)
@@ -169,6 +170,13 @@
 #define COLOR_BUF_RGB555 		(1<<8)
 #define COLOR_BUF_RGB565 		(2<<8)
 #define COLOR_BUF_ARGB8888		(3<<8)
+#define COLOR_BUF_YCRCB_SWAP		(4<<8)
+#define COLOR_BUF_YCRCB_NORMAL		(5<<8)
+#define COLOR_BUF_YCRCB_SWAPUV		(6<<8)
+#define COLOR_BUF_YCRCB_SWAPUVY		(7<<8)
+#define COLOR_BUF_ARGB4444		(8<<8)
+#define COLOR_BUF_ARGB1555		(9<<8)
+#define COLOR_BUF_ARGB2101010		(10<<8)
 #define DEPTH_FRMT_16_FIXED		0
 #define DEPTH_FRMT_16_FLOAT		(1<<2)
 #define DEPTH_FRMT_24_FIXED_8_OTHER	(2<<2)

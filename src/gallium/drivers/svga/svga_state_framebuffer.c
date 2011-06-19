@@ -43,7 +43,7 @@ static int emit_framebuffer( struct svga_context *svga,
 {
    const struct pipe_framebuffer_state *curr = &svga->curr.framebuffer;
    struct pipe_framebuffer_state *hw = &svga->state.hw_clear.framebuffer;
-   boolean reemit = !!(dirty & SVGA_NEW_COMMAND_BUFFER);
+   boolean reemit = svga->rebind.rendertargets;
    unsigned i;
    enum pipe_error ret;
 
@@ -88,16 +88,69 @@ static int emit_framebuffer( struct svga_context *svga,
       pipe_surface_reference(&hw->zsbuf, curr->zsbuf);
    }
 
+   svga->rebind.rendertargets = FALSE;
 
    return 0;
+}
+
+
+/*
+ * Rebind rendertargets.
+ *
+ * Similar to emit_framebuffer, but without any state checking/update.
+ *
+ * Called at the beginning of every new command buffer to ensure that
+ * non-dirty rendertargets are properly paged-in.
+ */
+enum pipe_error
+svga_reemit_framebuffer_bindings(struct svga_context *svga)
+{
+   struct pipe_framebuffer_state *hw = &svga->state.hw_clear.framebuffer;
+   unsigned i;
+   enum pipe_error ret;
+
+   assert(svga->rebind.rendertargets);
+
+   for (i = 0; i < MIN2(PIPE_MAX_COLOR_BUFS, 8); ++i) {
+      if (hw->cbufs[i]) {
+         ret = SVGA3D_SetRenderTarget(svga->swc, SVGA3D_RT_COLOR0 + i, hw->cbufs[i]);
+         if (ret != PIPE_OK) {
+            return ret;
+         }
+      }
+   }
+
+   if (hw->zsbuf) {
+      ret = SVGA3D_SetRenderTarget(svga->swc, SVGA3D_RT_DEPTH, hw->zsbuf);
+      if (ret != PIPE_OK) {
+         return ret;
+      }
+
+      if (hw->zsbuf &&
+          hw->zsbuf->format == PIPE_FORMAT_S8_USCALED_Z24_UNORM) {
+         ret = SVGA3D_SetRenderTarget(svga->swc, SVGA3D_RT_STENCIL, hw->zsbuf);
+         if (ret != PIPE_OK) {
+            return ret;
+         }
+      }
+      else {
+         ret = SVGA3D_SetRenderTarget(svga->swc, SVGA3D_RT_STENCIL, NULL);
+         if (ret != PIPE_OK) {
+            return ret;
+         }
+      }
+   }
+
+   svga->rebind.rendertargets = FALSE;
+
+   return PIPE_OK;
 }
 
 
 struct svga_tracked_state svga_hw_framebuffer = 
 {
    "hw framebuffer state",
-   SVGA_NEW_FRAME_BUFFER |
-   SVGA_NEW_COMMAND_BUFFER,
+   SVGA_NEW_FRAME_BUFFER,
    emit_framebuffer
 };
 
@@ -247,7 +300,7 @@ static int emit_viewport( struct svga_context *svga,
          break;
       case PIPE_PRIM_POINTS:
       case PIPE_PRIM_TRIANGLES:
-         adjust_x = -0.375;
+         adjust_x = -0.5;
          adjust_y = -0.5;
          break;
       }
@@ -421,9 +474,26 @@ static int emit_clip_planes( struct svga_context *svga,
    /* TODO: just emit directly from svga_set_clip_state()?
     */
    for (i = 0; i < svga->curr.clip.nr; i++) {
-      ret = SVGA3D_SetClipPlane( svga->swc,
-                                 i,
-                                 svga->curr.clip.ucp[i] );
+      /* need to express the plane in D3D-style coordinate space.
+       * GL coords get converted to D3D coords with the matrix:
+       * [ 1  0  0  0 ]
+       * [ 0 -1  0  0 ]
+       * [ 0  0  2  0 ]
+       * [ 0  0 -1  1 ]
+       * Apply that matrix to our plane equation, and invert Y.
+       */
+      float a = svga->curr.clip.ucp[i][0];
+      float b = svga->curr.clip.ucp[i][1];
+      float c = svga->curr.clip.ucp[i][2];
+      float d = svga->curr.clip.ucp[i][3];
+      float plane[4];
+
+      plane[0] = a;
+      plane[1] = b;
+      plane[2] = 2.0f * c;
+      plane[3] = d - c;
+
+      ret = SVGA3D_SetClipPlane(svga->swc, i, plane);
       if(ret != PIPE_OK)
          return ret;
    }

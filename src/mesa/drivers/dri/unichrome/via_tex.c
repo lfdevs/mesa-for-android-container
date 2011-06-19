@@ -34,6 +34,7 @@
 #include "main/context.h"
 #include "main/mipmap.h"
 #include "main/mm.h"
+#include "main/pbo.h"
 #include "main/simple_list.h"
 #include "main/texobj.h"
 #include "main/texstore.h"
@@ -195,18 +196,6 @@ viaChooseTexFormat( struct gl_context *ctx, GLint internalFormat,
    return MESA_FORMAT_NONE; /* never get here */
 }
 
-static int logbase2(int n)
-{
-   GLint i = 1;
-   GLint log2 = 0;
-
-   while (n > i) {
-      i *= 2;
-      log2++;
-   }
-
-   return log2;
-}
 
 static const char *get_memtype_name( GLint memType )
 {
@@ -494,13 +483,13 @@ static GLboolean viaSetTexImages(struct gl_context *ctx,
     * GL_TEXTURE_MAX_LOD, GL_TEXTURE_BASE_LEVEL, and GL_TEXTURE_MAX_LEVEL.
     * Yes, this looks overly complicated, but it's all needed.
     */
-   if (texObj->MinFilter == GL_LINEAR || texObj->MinFilter == GL_NEAREST) {
+   if (texObj->Sampler.MinFilter == GL_LINEAR || texObj->Sampler.MinFilter == GL_NEAREST) {
       firstLevel = lastLevel = texObj->BaseLevel;
    }
    else {
-      firstLevel = texObj->BaseLevel + (GLint)(texObj->MinLod + 0.5);
+      firstLevel = texObj->BaseLevel + (GLint)(texObj->Sampler.MinLod + 0.5);
       firstLevel = MAX2(firstLevel, texObj->BaseLevel);
-      lastLevel = texObj->BaseLevel + (GLint)(texObj->MaxLod + 0.5);
+      lastLevel = texObj->BaseLevel + (GLint)(texObj->Sampler.MaxLod + 0.5);
       lastLevel = MAX2(lastLevel, texObj->BaseLevel);
       lastLevel = MIN2(lastLevel, texObj->BaseLevel + baseImage->image.MaxLog2);
       lastLevel = MIN2(lastLevel, texObj->MaxLevel);
@@ -689,7 +678,7 @@ static void viaTexImage(struct gl_context *ctx,
    }
 
    assert(texImage->RowStride == postConvWidth);
-   viaImage->pitchLog2 = logbase2(postConvWidth * texelBytes);
+   viaImage->pitchLog2 = _mesa_logbase2(postConvWidth * texelBytes);
 
    /* allocate memory */
    if (_mesa_is_format_compressed(texImage->TexFormat))

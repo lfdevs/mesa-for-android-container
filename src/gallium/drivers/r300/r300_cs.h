@@ -29,43 +29,43 @@
 
 #include "r300_reg.h"
 #include "r300_context.h"
-#include "r300_winsys.h"
 
 /* Yes, I know macros are ugly. However, they are much prettier than the code
  * that they neatly hide away, and don't have the cost of function setup,so
  * we're going to use them. */
-
-#ifdef DEBUG
-#define CS_DEBUG(x) x
-#else
-#define CS_DEBUG(x)
-#endif
 
 /**
  * Command submission setup.
  */
 
 #define CS_LOCALS(context) \
-    struct r300_winsys_cs *cs_copy = (context)->cs; \
-    struct r300_winsys_screen *cs_winsys = (context)->rws; \
+    struct radeon_winsys_cs *cs_copy = (context)->cs; \
+    struct radeon_winsys *cs_winsys = (context)->rws; \
     int cs_count = 0; (void) cs_count; (void) cs_winsys;
 
+#ifdef DEBUG
+
 #define BEGIN_CS(size) do { \
-    assert(size <= (R300_MAX_CMDBUF_DWORDS - cs_copy->cdw)); \
-    CS_DEBUG(cs_count = size;) \
+    assert(size <= (RADEON_MAX_CMDBUF_DWORDS - cs_copy->cdw)); \
+    cs_count = size; \
 } while (0)
 
-#ifdef DEBUG
 #define END_CS do { \
     if (cs_count != 0) \
         debug_printf("r300: Warning: cs_count off by %d at (%s, %s:%i)\n", \
                      cs_count, __FUNCTION__, __FILE__, __LINE__); \
     cs_count = 0; \
 } while (0)
-#else
-#define END_CS
-#endif
 
+#define CS_USED_DW(x) cs_count -= (x)
+
+#else
+
+#define BEGIN_CS(size)
+#define END_CS
+#define CS_USED_DW(x)
+
+#endif
 
 /**
  * Writing pure DWORDs.
@@ -73,7 +73,7 @@
 
 #define OUT_CS(value) do { \
     cs_copy->buf[cs_copy->cdw++] = (value); \
-    CS_DEBUG(cs_count--;) \
+    CS_USED_DW(1); \
 } while (0)
 
 #define OUT_CS_32F(value) \
@@ -98,7 +98,7 @@
 #define OUT_CS_TABLE(values, count) do { \
     memcpy(cs_copy->buf + cs_copy->cdw, values, count * 4); \
     cs_copy->cdw += count; \
-    CS_DEBUG(cs_count -= count;) \
+    CS_USED_DW(count); \
 } while (0)
 
 
@@ -106,27 +106,11 @@
  * Writing relocations.
  */
 
-#define OUT_CS_RELOC(bo, offset, rd, wd) do { \
-    assert(bo); \
-    OUT_CS(offset); \
-    cs_winsys->cs_write_reloc(cs_copy, bo, rd, wd); \
-    CS_DEBUG(cs_count -= 2;) \
-} while (0)
-
-#define OUT_CS_BUF_RELOC(bo, offset, rd, wd) do { \
-    assert(bo); \
-    OUT_CS_RELOC(r300_buffer(bo)->cs_buf, offset, rd, wd); \
-} while (0)
-
-#define OUT_CS_TEX_RELOC(tex, offset, rd, wd) do { \
-    assert(tex); \
-    OUT_CS_RELOC(tex->cs_buffer, offset, rd, wd); \
-} while (0)
-
-#define OUT_CS_BUF_RELOC_NO_OFFSET(bo, rd, wd) do { \
-    assert(bo); \
-    cs_winsys->cs_write_reloc(cs_copy, r300_buffer(bo)->cs_buf, rd, wd); \
-    CS_DEBUG(cs_count -= 2;) \
+#define OUT_CS_RELOC(r) do { \
+    assert((r)); \
+    assert((r)->cs_buf); \
+    cs_winsys->cs_write_reloc(cs_copy, (r)->cs_buf); \
+    CS_USED_DW(2); \
 } while (0)
 
 
@@ -135,7 +119,7 @@
  */
 
 #define WRITE_CS_TABLE(values, count) do { \
-    CS_DEBUG(assert(cs_count == 0);) \
+    assert(cs_count == 0); \
     memcpy(cs_copy->buf + cs_copy->cdw, (values), (count) * 4); \
     cs_copy->cdw += (count); \
 } while (0)

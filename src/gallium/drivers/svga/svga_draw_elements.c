@@ -56,6 +56,7 @@ translate_indices( struct svga_hwtnl *hwtnl,
 
    dst = pipe_buffer_create( pipe->screen, 
 			     PIPE_BIND_INDEX_BUFFER, 
+			     PIPE_USAGE_STATIC,
 			     size );
    if (dst == NULL)
       goto fail;
@@ -72,18 +73,18 @@ translate_indices( struct svga_hwtnl *hwtnl,
               nr,
               dst_map );
 
-   pipe_buffer_unmap( pipe, src, src_transfer );
-   pipe_buffer_unmap( pipe, dst, dst_transfer );
+   pipe_buffer_unmap( pipe, src_transfer );
+   pipe_buffer_unmap( pipe, dst_transfer );
 
    *out_buf = dst;
    return PIPE_OK;
 
 fail:
    if (src_map)
-      pipe_buffer_unmap( pipe, src, src_transfer );
+      pipe_buffer_unmap( pipe, src_transfer );
 
    if (dst_map)
-      pipe_buffer_unmap( pipe, dst, dst_transfer );
+      pipe_buffer_unmap( pipe, dst_transfer );
 
    if (dst)
       pipe->screen->resource_destroy( pipe->screen, dst );
@@ -120,14 +121,17 @@ svga_hwtnl_simple_draw_range_elements( struct svga_hwtnl *hwtnl,
    if (index_buffer && 
        svga_buffer_is_user_buffer(index_buffer)) 
    {
+      boolean flushed;
       assert( index_buffer->width0 >= index_offset + count * index_size );
 
       ret = u_upload_buffer( hwtnl->upload_ib,
+                             0,
                              index_offset,
                              count * index_size,
                              index_buffer,
                              &index_offset,
-                             &upload_buffer );
+                             &upload_buffer,
+                             &flushed );
       if (ret)
          goto done;
 

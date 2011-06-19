@@ -3,13 +3,16 @@ Import('*')
 env = env.Clone()
 
 radeon_sources = [
-    'radeon_drm_buffer.c',
-    'radeon_drm_common.c',
-    'radeon_r300.c',
+    'radeon_drm_bo.c',
+    'radeon_drm_cs.c',
+    'radeon_drm_winsys.c',
 ]
 
-env.ParseConfig('pkg-config --cflags libdrm_radeon')
-env.Append(CPPPATH = '#/src/gallium/drivers/r300')
+try:
+    env.ParseConfig('pkg-config --cflags libdrm')
+except:
+    print 'warning: not building Gallium Radeon'
+    Return()
 
 radeonwinsys = env.ConvenienceLibrary(
     target ='radeonwinsys',

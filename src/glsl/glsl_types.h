@@ -70,7 +70,7 @@ struct glsl_type {
    GLenum gl_type;
    glsl_base_type base_type;
 
-   unsigned sampler_dimensionality:3;
+   unsigned sampler_dimensionality:3; /**< \see glsl_sampler_dim */
    unsigned sampler_shadow:1;
    unsigned sampler_array:1;
    unsigned sampler_type:2;    /**< Type of data returned using this sampler.
@@ -427,6 +427,7 @@ private:
    /*@{*/
    static const glsl_type _error_type;
    static const glsl_type _void_type;
+   static const glsl_type _sampler3D_type;
    static const glsl_type builtin_core_types[];
    static const glsl_type builtin_structure_types[];
    static const glsl_type builtin_110_deprecated_structure_types[];
@@ -453,6 +454,7 @@ private:
    static void generate_130_types(glsl_symbol_table *);
    static void generate_ARB_texture_rectangle_types(glsl_symbol_table *, bool);
    static void generate_EXT_texture_array_types(glsl_symbol_table *, bool);
+   static void generate_OES_texture_3D_types(glsl_symbol_table *, bool);
    /*@}*/
 
    /**

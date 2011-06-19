@@ -25,13 +25,9 @@
 #define R300_STATE_INLINES_H
 
 #include "draw/draw_vertex.h"
-
 #include "pipe/p_format.h"
-
 #include "util/u_format.h"
-
 #include "r300_reg.h"
-
 #include <stdio.h>
 
 /* Some maths. These should probably find their way to u_math, if needed. */
@@ -42,23 +38,24 @@ static INLINE int pack_float_16_6x(float f) {
 
 /* Blend state. */
 
-static INLINE uint32_t r300_translate_blend_function(int blend_func)
+static INLINE uint32_t r300_translate_blend_function(int blend_func,
+                                                     boolean clamp)
 {
     switch (blend_func) {
-        case PIPE_BLEND_ADD:
-            return R300_COMB_FCN_ADD_CLAMP;
-        case PIPE_BLEND_SUBTRACT:
-            return R300_COMB_FCN_SUB_CLAMP;
-        case PIPE_BLEND_REVERSE_SUBTRACT:
-            return R300_COMB_FCN_RSUB_CLAMP;
-        case PIPE_BLEND_MIN:
-            return R300_COMB_FCN_MIN;
-        case PIPE_BLEND_MAX:
-            return R300_COMB_FCN_MAX;
-        default:
-            fprintf(stderr, "r300: Unknown blend function %d\n", blend_func);
-            assert(0);
-            break;
+    case PIPE_BLEND_ADD:
+        return clamp ? R300_COMB_FCN_ADD_CLAMP : R300_COMB_FCN_ADD_NOCLAMP;
+    case PIPE_BLEND_SUBTRACT:
+        return clamp ? R300_COMB_FCN_SUB_CLAMP : R300_COMB_FCN_SUB_NOCLAMP;
+    case PIPE_BLEND_REVERSE_SUBTRACT:
+        return clamp ? R300_COMB_FCN_RSUB_CLAMP : R300_COMB_FCN_RSUB_NOCLAMP;
+    case PIPE_BLEND_MIN:
+        return R300_COMB_FCN_MIN;
+    case PIPE_BLEND_MAX:
+        return R300_COMB_FCN_MAX;
+    default:
+        fprintf(stderr, "r300: Unknown blend function %d\n", blend_func);
+        assert(0);
+        break;
     }
     return 0;
 }
@@ -264,51 +261,49 @@ static INLINE uint32_t r300_translate_wrap(int wrap)
 }
 
 static INLINE uint32_t r300_translate_tex_filters(int min, int mag, int mip,
-                                                  int is_anisotropic)
+                                                  boolean is_anisotropic)
 {
     uint32_t retval = 0;
-    if (is_anisotropic)
-        retval |= R300_TX_MIN_FILTER_ANISO | R300_TX_MAG_FILTER_ANISO;
-    else {
-        switch (min) {
-        case PIPE_TEX_FILTER_NEAREST:
-            retval |= R300_TX_MIN_FILTER_NEAREST;
-            break;
-        case PIPE_TEX_FILTER_LINEAR:
-            retval |= R300_TX_MIN_FILTER_LINEAR;
-            break;
-        default:
-            fprintf(stderr, "r300: Unknown texture filter %d\n", min);
-            assert(0);
-            break;
-        }
-        switch (mag) {
-        case PIPE_TEX_FILTER_NEAREST:
-            retval |= R300_TX_MAG_FILTER_NEAREST;
-            break;
-        case PIPE_TEX_FILTER_LINEAR:
-            retval |= R300_TX_MAG_FILTER_LINEAR;
-            break;
-        default:
-            fprintf(stderr, "r300: Unknown texture filter %d\n", mag);
-            assert(0);
-            break;
-        }
+
+    switch (min) {
+    case PIPE_TEX_FILTER_NEAREST:
+        retval |= R300_TX_MIN_FILTER_NEAREST;
+        break;
+    case PIPE_TEX_FILTER_LINEAR:
+        retval |= is_anisotropic ? R300_TX_MIN_FILTER_ANISO :
+                                   R300_TX_MIN_FILTER_LINEAR;
+        break;
+    default:
+        fprintf(stderr, "r300: Unknown texture filter %d\n", min);
+        assert(0);
     }
+
+    switch (mag) {
+    case PIPE_TEX_FILTER_NEAREST:
+        retval |= R300_TX_MAG_FILTER_NEAREST;
+        break;
+    case PIPE_TEX_FILTER_LINEAR:
+        retval |= is_anisotropic ? R300_TX_MAG_FILTER_ANISO :
+                                   R300_TX_MAG_FILTER_LINEAR;
+        break;
+    default:
+        fprintf(stderr, "r300: Unknown texture filter %d\n", mag);
+        assert(0);
+    }
+
     switch (mip) {
-        case PIPE_TEX_MIPFILTER_NONE:
-            retval |= R300_TX_MIN_FILTER_MIP_NONE;
-            break;
-        case PIPE_TEX_MIPFILTER_NEAREST:
-            retval |= R300_TX_MIN_FILTER_MIP_NEAREST;
-            break;
-        case PIPE_TEX_MIPFILTER_LINEAR:
-            retval |= R300_TX_MIN_FILTER_MIP_LINEAR;
-            break;
-        default:
-            fprintf(stderr, "r300: Unknown texture filter %d\n", mip);
-            assert(0);
-            break;
+    case PIPE_TEX_MIPFILTER_NONE:
+        retval |= R300_TX_MIN_FILTER_MIP_NONE;
+        break;
+    case PIPE_TEX_MIPFILTER_NEAREST:
+        retval |= R300_TX_MIN_FILTER_MIP_NEAREST;
+        break;
+    case PIPE_TEX_MIPFILTER_LINEAR:
+        retval |= R300_TX_MIN_FILTER_MIP_LINEAR;
+        break;
+    default:
+        fprintf(stderr, "r300: Unknown texture filter %d\n", mip);
+        assert(0);
     }
 
     return retval;
@@ -340,24 +335,6 @@ static INLINE uint32_t r500_anisotropy(unsigned max_aniso)
     return R500_TX_MAX_ANISO(MIN2((unsigned)(max_aniso*4.2001), 63)) |
            R500_TX_ANISO_HIGH_QUALITY;
 }
-
-/* Non-CSO state. (For now.) */
-
-static INLINE uint32_t r300_translate_gb_pipes(int pipe_count)
-{
-    switch (pipe_count) {
-        case 1:
-            return R300_GB_TILE_PIPE_COUNT_RV300;
-        case 2:
-            return R300_GB_TILE_PIPE_COUNT_R300;
-        case 3:
-            return R300_GB_TILE_PIPE_COUNT_R420_3P;
-        case 4:
-            return R300_GB_TILE_PIPE_COUNT_R420;
-    }
-    return 0;
-}
-
 
 /* Translate pipe_formats into PSC vertex types. */
 static INLINE uint16_t

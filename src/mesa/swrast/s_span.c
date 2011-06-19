@@ -299,7 +299,8 @@ interpolate_int_colors(struct gl_context *ctx, SWspan *span)
       interpolate_active_attribs(ctx, span, FRAG_BIT_COL0);
       break;
    default:
-      _mesa_problem(NULL, "bad datatype in interpolate_int_colors");
+      _mesa_problem(ctx, "bad datatype 0x%x in interpolate_int_colors",
+                    span->array->ChanType);
    }
    span->arrayMask |= SPAN_RGBA;
 }
@@ -489,8 +490,15 @@ interpolate_texcoords(struct gl_context *ctx, SWspan *span)
 
          if (obj) {
             const struct gl_texture_image *img = obj->Image[0][obj->BaseLevel];
-            needLambda = (obj->MinFilter != obj->MagFilter)
+            needLambda = (obj->Sampler.MinFilter != obj->Sampler.MagFilter)
                || ctx->FragmentProgram._Current;
+            /* LOD is calculated directly in the ansiotropic filter, we can
+             * skip the normal lambda function as the result is ignored.
+             */
+            if (obj->Sampler.MaxAnisotropy > 1.0 &&
+                obj->Sampler.MinFilter == GL_LINEAR_MIPMAP_LINEAR) {
+               needLambda = GL_FALSE;
+            }
             texW = img->WidthScale;
             texH = img->HeightScale;
          }
@@ -1351,6 +1359,9 @@ _swrast_read_rgba_span( struct gl_context *ctx, struct gl_renderbuffer *rb,
 	     rb->_BaseFormat == GL_RGB ||
 	     rb->_BaseFormat == GL_RG ||
 	     rb->_BaseFormat == GL_RED ||
+	     rb->_BaseFormat == GL_LUMINANCE ||
+	     rb->_BaseFormat == GL_INTENSITY ||
+	     rb->_BaseFormat == GL_LUMINANCE_ALPHA ||
 	     rb->_BaseFormat == GL_ALPHA);
 
       if (rb->DataType == dstType) {

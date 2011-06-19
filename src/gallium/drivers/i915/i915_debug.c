@@ -46,12 +46,18 @@ static const struct debug_named_value debug_options[] = {
 };
 
 unsigned i915_debug = 0;
-boolean i915_tiling = TRUE;
 
-void i915_debug_init(struct i915_screen *screen)
+DEBUG_GET_ONCE_FLAGS_OPTION(i915_debug, "I915_DEBUG", debug_options, 0)
+DEBUG_GET_ONCE_BOOL_OPTION(i915_no_tiling, "I915_NO_TILING", FALSE)
+DEBUG_GET_ONCE_BOOL_OPTION(i915_lie, "I915_LIE", FALSE)
+DEBUG_GET_ONCE_BOOL_OPTION(i915_use_blitter, "I915_USE_BLITTER", FALSE)
+
+void i915_debug_init(struct i915_screen *is)
 {
-   i915_debug = debug_get_flags_option("I915_DEBUG", debug_options, 0);
-   i915_tiling = !debug_get_bool_option("I915_NO_TILING", FALSE);
+   i915_debug = debug_get_option_i915_debug();
+   is->debug.tiling = !debug_get_option_i915_no_tiling();
+   is->debug.lie = debug_get_option_i915_lie();
+   is->debug.use_blitter = debug_get_option_i915_use_blitter();
 }
 
 
@@ -948,7 +954,8 @@ i915_dump_dirty(struct i915_context *i915, const char *func)
       {I915_NEW_DEPTH_STENCIL, "depth_stencil"},
       {I915_NEW_SAMPLER,       "sampler"},
       {I915_NEW_SAMPLER_VIEW,  "sampler_view"},
-      {I915_NEW_CONSTANTS,     "constants"},
+      {I915_NEW_VS_CONSTANTS,  "vs_const"},
+      {I915_NEW_FS_CONSTANTS,  "fs_const"},
       {I915_NEW_VBO,           "vbo"},
       {I915_NEW_VS,            "vs"},
       {0, NULL},
@@ -976,7 +983,7 @@ i915_dump_hardware_dirty(struct i915_context *i915, const char *func)
       {I915_HW_PROGRAM,   "program"},
       {I915_HW_CONSTANTS, "constants"},
       {I915_HW_IMMEDIATE, "immediate"},
-      {I915_HW_INVARIENT, "invarient"},
+      {I915_HW_INVARIANT, "invariant"},
       {0, NULL},
    };
    int i;

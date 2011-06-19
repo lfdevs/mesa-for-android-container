@@ -1,4 +1,2 @@
 dri/usr/lib/${DEB_HOST_MULTIARCH}/libEGL.so.1* usr/lib/${DEB_HOST_MULTIARCH}
-dri/usr/lib/${DEB_HOST_MULTIARCH}/egl/egl_dri2.so usr/lib/${DEB_HOST_MULTIARCH}/egl
-dri/usr/lib/${DEB_HOST_MULTIARCH}/egl/egl_glx.so usr/lib/${DEB_HOST_MULTIARCH}/egl
 dri/usr/lib/${DEB_HOST_MULTIARCH}/egl/st_GL.so usr/lib/${DEB_HOST_MULTIARCH}/egl

@@ -60,7 +60,7 @@ void
 _mesa_ast_to_hir(exec_list *instructions, struct _mesa_glsl_parse_state *state)
 {
    _mesa_glsl_initialize_variables(instructions, state);
-   _mesa_glsl_initialize_functions(instructions, state);
+   _mesa_glsl_initialize_functions(state);
 
    state->symbols->language_version = state->language_version;
 
@@ -606,17 +606,15 @@ validate_assignment(struct _mesa_glsl_parse_state *state,
 		    const glsl_type *lhs_type, ir_rvalue *rhs,
 		    bool is_initializer)
 {
-   const glsl_type *rhs_type = rhs->type;
-
    /* If there is already some error in the RHS, just return it.  Anything
     * else will lead to an avalanche of error message back to the user.
     */
-   if (rhs_type->is_error())
+   if (rhs->type->is_error())
       return rhs;
 
    /* If the types are identical, the assignment can trivially proceed.
     */
-   if (rhs_type == lhs_type)
+   if (rhs->type == lhs_type)
       return rhs;
 
    /* If the array element types are the same and the size of the LHS is zero,
@@ -634,8 +632,7 @@ validate_assignment(struct _mesa_glsl_parse_state *state,
 
    /* Check for implicit conversion in GLSL 1.20 */
    if (apply_implicit_conversion(lhs_type, rhs, state)) {
-      rhs_type = rhs->type;
-      if (rhs_type == lhs_type)
+      if (rhs->type == lhs_type)
 	 return rhs;
    }
 
@@ -651,7 +648,14 @@ do_assignment(exec_list *instructions, struct _mesa_glsl_parse_state *state,
    bool error_emitted = (lhs->type->is_error() || rhs->type->is_error());
 
    if (!error_emitted) {
-      if (!lhs->is_lvalue()) {
+      if (lhs->variable_referenced() != NULL
+          && lhs->variable_referenced()->read_only) {
+         _mesa_glsl_error(&lhs_loc, state,
+                          "assignment to read-only variable '%s'",
+                          lhs->variable_referenced()->name);
+         error_emitted = true;
+
+      } else if (!lhs->is_lvalue()) {
 	 _mesa_glsl_error(& lhs_loc, state, "non-lvalue in assignment");
 	 error_emitted = true;
       }
@@ -936,7 +940,7 @@ ast_expression::hir(exec_list *instructions,
    };
    ir_rvalue *result = NULL;
    ir_rvalue *op[3];
-   const struct glsl_type *type = glsl_type::error_type;
+   const struct glsl_type *type; /* a temporary variable for switch cases */
    bool error_emitted = false;
    YYLTYPE loc;
 
@@ -950,7 +954,6 @@ ast_expression::hir(exec_list *instructions,
       result = do_assignment(instructions, state, op[0], op[1], false,
 			     this->subexpressions[0]->get_location());
       error_emitted = result->type->is_error();
-      type = result->type;
       break;
    }
 
@@ -1074,9 +1077,7 @@ ast_expression::hir(exec_list *instructions,
       } else {
 	 result = do_comparison(ctx, operations[this->oper], op[0], op[1]);
 	 assert(result->type == glsl_type::bool_type);
-	 type = glsl_type::bool_type;
       }
-
       break;
 
    case ast_bit_and:
@@ -1205,7 +1206,6 @@ ast_expression::hir(exec_list *instructions,
 
       result = new(ctx) ir_expression(operations[this->oper], glsl_type::bool_type,
 				      op[0], op[1]);
-      type = glsl_type::bool_type;
       break;
 
    case ast_logic_not:
@@ -1214,7 +1214,6 @@ ast_expression::hir(exec_list *instructions,
 
       result = new(ctx) ir_expression(operations[this->oper], glsl_type::bool_type,
 				      op[0], NULL);
-      type = glsl_type::bool_type;
       break;
 
    case ast_mul_assign:
@@ -1234,7 +1233,6 @@ ast_expression::hir(exec_list *instructions,
       result = do_assignment(instructions, state,
 			     op[0]->clone(ctx, NULL), temp_rhs, false,
 			     this->subexpressions[0]->get_location());
-      type = result->type;
       error_emitted = (op[0]->type->is_error());
 
       /* GLSL 1.10 does not allow array assignment.  However, we don't have to
@@ -1260,7 +1258,6 @@ ast_expression::hir(exec_list *instructions,
       result = do_assignment(instructions, state,
 			     op[0]->clone(ctx, NULL), temp_rhs, false,
 			     this->subexpressions[0]->get_location());
-      type = result->type;
       error_emitted = type->is_error();
       break;
    }
@@ -1402,7 +1399,6 @@ ast_expression::hir(exec_list *instructions,
       result = do_assignment(instructions, state,
 			     op[0]->clone(ctx, NULL), temp_rhs, false,
 			     this->subexpressions[0]->get_location());
-      type = result->type;
       error_emitted = op[0]->type->is_error();
       break;
    }
@@ -1432,14 +1428,12 @@ ast_expression::hir(exec_list *instructions,
 			  op[0]->clone(ctx, NULL), temp_rhs, false,
 			  this->subexpressions[0]->get_location());
 
-      type = result->type;
       error_emitted = op[0]->type->is_error();
       break;
    }
 
    case ast_field_selection:
       result = _mesa_ast_field_selection_to_hir(this, instructions, state);
-      type = result->type;
       break;
 
    case ast_array_index: {
@@ -1596,7 +1590,6 @@ ast_expression::hir(exec_list *instructions,
       if (error_emitted)
 	 result->type = glsl_type::error_type;
 
-      type = result->type;
       break;
    }
 
@@ -1619,7 +1612,6 @@ ast_expression::hir(exec_list *instructions,
 
       if (var != NULL) {
 	 var->used = true;
-	 type = result->type;
       } else {
 	 _mesa_glsl_error(& loc, state, "`%s' undeclared",
 			  this->primary_expression.identifier);
@@ -1630,22 +1622,18 @@ ast_expression::hir(exec_list *instructions,
    }
 
    case ast_int_constant:
-      type = glsl_type::int_type;
       result = new(ctx) ir_constant(this->primary_expression.int_constant);
       break;
 
    case ast_uint_constant:
-      type = glsl_type::uint_type;
       result = new(ctx) ir_constant(this->primary_expression.uint_constant);
       break;
 
    case ast_float_constant:
-      type = glsl_type::float_type;
       result = new(ctx) ir_constant(this->primary_expression.float_constant);
       break;
 
    case ast_bool_constant:
-      type = glsl_type::bool_type;
       result = new(ctx) ir_constant(bool(this->primary_expression.bool_constant));
       break;
 
@@ -1660,10 +1648,42 @@ ast_expression::hir(exec_list *instructions,
        * therefore add instructions to the instruction list), they get dropped
        * on the floor.
        */
-      foreach_list_typed (ast_node, ast, link, &this->expressions)
-	 result = ast->hir(instructions, state);
+      exec_node *previous_tail_pred = NULL;
+      YYLTYPE previous_operand_loc = loc;
 
-      type = result->type;
+      foreach_list_typed (ast_node, ast, link, &this->expressions) {
+	 /* If one of the operands of comma operator does not generate any
+	  * code, we want to emit a warning.  At each pass through the loop
+	  * previous_tail_pred will point to the last instruction in the
+	  * stream *before* processing the previous operand.  Naturally,
+	  * instructions->tail_pred will point to the last instruction in the
+	  * stream *after* processing the previous operand.  If the two
+	  * pointers match, then the previous operand had no effect.
+	  *
+	  * The warning behavior here differs slightly from GCC.  GCC will
+	  * only emit a warning if none of the left-hand operands have an
+	  * effect.  However, it will emit a warning for each.  I believe that
+	  * there are some cases in C (especially with GCC extensions) where
+	  * it is useful to have an intermediate step in a sequence have no
+	  * effect, but I don't think these cases exist in GLSL.  Either way,
+	  * it would be a giant hassle to replicate that behavior.
+	  */
+	 if (previous_tail_pred == instructions->tail_pred) {
+	    _mesa_glsl_warning(&previous_operand_loc, state,
+			       "left-hand operand of comma expression has "
+			       "no effect");
+	 }
+
+	 /* tail_pred is directly accessed instead of using the get_tail()
+	  * method for performance reasons.  get_tail() has extra code to
+	  * return NULL when the list is empty.  We don't care about that
+	  * here, so using tail_pred directly is fine.
+	  */
+	 previous_tail_pred = instructions->tail_pred;
+	 previous_operand_loc = ast->get_location();
+
+	 result = ast->hir(instructions, state);
+      }
 
       /* Any errors should have already been emitted in the loop above.
        */
@@ -1671,8 +1691,10 @@ ast_expression::hir(exec_list *instructions,
       break;
    }
    }
+   type = NULL; /* use result->type, not type. */
+   assert(result != NULL);
 
-   if (type->is_error() && !error_emitted)
+   if (result->type->is_error() && !error_emitted)
       _mesa_glsl_error(& loc, state, "type mismatch");
 
    return result;
@@ -1997,6 +2019,40 @@ apply_type_qualifier_to_variable(const struct ast_type_qualifier *qual,
       }
    }
 
+   /* Layout qualifiers for gl_FragDepth, which are enabled by extension
+    * AMD_conservative_depth.
+    */
+   int depth_layout_count = qual->flags.q.depth_any
+      + qual->flags.q.depth_greater
+      + qual->flags.q.depth_less
+      + qual->flags.q.depth_unchanged;
+   if (depth_layout_count > 0
+       && !state->AMD_conservative_depth_enable) {
+       _mesa_glsl_error(loc, state,
+                        "extension GL_AMD_conservative_depth must be enabled "
+			"to use depth layout qualifiers");
+   } else if (depth_layout_count > 0
+              && strcmp(var->name, "gl_FragDepth") != 0) {
+       _mesa_glsl_error(loc, state,
+                        "depth layout qualifiers can be applied only to "
+                        "gl_FragDepth");
+   } else if (depth_layout_count > 1
+              && strcmp(var->name, "gl_FragDepth") == 0) {
+      _mesa_glsl_error(loc, state,
+                       "at most one depth layout qualifier can be applied to "
+                       "gl_FragDepth");
+   }
+   if (qual->flags.q.depth_any)
+      var->depth_layout = ir_depth_layout_any;
+   else if (qual->flags.q.depth_greater)
+      var->depth_layout = ir_depth_layout_greater;
+   else if (qual->flags.q.depth_less)
+      var->depth_layout = ir_depth_layout_less;
+   else if (qual->flags.q.depth_unchanged)
+       var->depth_layout = ir_depth_layout_unchanged;
+   else
+       var->depth_layout = ir_depth_layout_none;
+
    if (var->type->is_array() && state->language_version != 110) {
       var->array_lvalue = true;
    }
@@ -2076,6 +2132,57 @@ get_variable_being_redeclared(ir_variable *var, ast_declaration *decl,
        */
       earlier->origin_upper_left = var->origin_upper_left;
       earlier->pixel_center_integer = var->pixel_center_integer;
+
+      /* According to section 4.3.7 of the GLSL 1.30 spec,
+       * the following built-in varaibles can be redeclared with an
+       * interpolation qualifier:
+       *    * gl_FrontColor
+       *    * gl_BackColor
+       *    * gl_FrontSecondaryColor
+       *    * gl_BackSecondaryColor
+       *    * gl_Color
+       *    * gl_SecondaryColor
+       */
+   } else if (state->language_version >= 130
+	      && (strcmp(var->name, "gl_FrontColor") == 0
+		  || strcmp(var->name, "gl_BackColor") == 0
+		  || strcmp(var->name, "gl_FrontSecondaryColor") == 0
+		  || strcmp(var->name, "gl_BackSecondaryColor") == 0
+		  || strcmp(var->name, "gl_Color") == 0
+		  || strcmp(var->name, "gl_SecondaryColor") == 0)
+	      && earlier->type == var->type
+	      && earlier->mode == var->mode) {
+      earlier->interpolation = var->interpolation;
+
+      /* Layout qualifiers for gl_FragDepth. */
+   } else if (state->AMD_conservative_depth_enable
+	      && strcmp(var->name, "gl_FragDepth") == 0
+	      && earlier->type == var->type
+	      && earlier->mode == var->mode) {
+
+      /** From the AMD_conservative_depth spec:
+       *     Within any shader, the first redeclarations of gl_FragDepth
+       *     must appear before any use of gl_FragDepth.
+       */
+      if (earlier->used) {
+	 _mesa_glsl_error(&loc, state,
+			  "the first redeclaration of gl_FragDepth "
+			  "must appear before any use of gl_FragDepth");
+      }
+
+      /* Prevent inconsistent redeclaration of depth layout qualifier. */
+      if (earlier->depth_layout != ir_depth_layout_none
+	  && earlier->depth_layout != var->depth_layout) {
+	 _mesa_glsl_error(&loc, state,
+			  "gl_FragDepth: depth layout is declared here "
+			  "as '%s, but it was previously declared as "
+			  "'%s'",
+			  depth_layout_string(var->depth_layout),
+			  depth_layout_string(earlier->depth_layout));
+      }
+
+      earlier->depth_layout = var->depth_layout;
+
    } else {
       _mesa_glsl_error(&loc, state, "`%s' redeclared", decl->identifier);
    }
@@ -2456,6 +2563,99 @@ ast_declarator_list::hir(exec_list *instructions,
 	    }
 	 }
       }
+
+      /* Integer vertex outputs must be qualified with 'flat'.
+       *
+       * From section 4.3.6 of the GLSL 1.30 spec:
+       *    "If a vertex output is a signed or unsigned integer or integer
+       *    vector, then it must be qualified with the interpolation qualifier
+       *    flat."
+       */
+      if (state->language_version >= 130
+          && state->target == vertex_shader
+          && state->current_function == NULL
+          && var->type->is_integer()
+          && var->mode == ir_var_out
+          && var->interpolation != ir_var_flat) {
+
+         _mesa_glsl_error(&loc, state, "If a vertex output is an integer, "
+                          "then it must be qualified with 'flat'");
+      }
+
+
+      /* Interpolation qualifiers cannot be applied to 'centroid' and
+       * 'centroid varying'.
+       *
+       * From page 29 (page 35 of the PDF) of the GLSL 1.30 spec:
+       *    "interpolation qualifiers may only precede the qualifiers in,
+       *    centroid in, out, or centroid out in a declaration. They do not apply
+       *    to the deprecated storage qualifiers varying or centroid varying."
+       */
+      if (state->language_version >= 130
+          && this->type->qualifier.has_interpolation()
+          && this->type->qualifier.flags.q.varying) {
+
+         const char *i = this->type->qualifier.interpolation_string();
+         assert(i != NULL);
+         const char *s;
+         if (this->type->qualifier.flags.q.centroid)
+            s = "centroid varying";
+         else
+            s = "varying";
+
+         _mesa_glsl_error(&loc, state,
+                          "qualifier '%s' cannot be applied to the "
+                          "deprecated storage qualifier '%s'", i, s);
+      }
+
+
+      /* Interpolation qualifiers can only apply to vertex shader outputs and
+       * fragment shader inputs.
+       *
+       * From page 29 (page 35 of the PDF) of the GLSL 1.30 spec:
+       *    "Outputs from a vertex shader (out) and inputs to a fragment
+       *    shader (in) can be further qualified with one or more of these
+       *    interpolation qualifiers"
+       */
+      if (state->language_version >= 130
+          && this->type->qualifier.has_interpolation()) {
+
+         const char *i = this->type->qualifier.interpolation_string();
+         assert(i != NULL);
+
+         switch (state->target) {
+         case vertex_shader:
+            if (this->type->qualifier.flags.q.in) {
+               _mesa_glsl_error(&loc, state,
+                                "qualifier '%s' cannot be applied to vertex "
+                                "shader inputs", i);
+            }
+            break;
+         case fragment_shader:
+            if (this->type->qualifier.flags.q.out) {
+               _mesa_glsl_error(&loc, state,
+                                "qualifier '%s' cannot be applied to fragment "
+                                "shader outputs", i);
+            }
+            break;
+         default:
+            assert(0);
+         }
+      }
+
+
+      /* From section 4.3.4 of the GLSL 1.30 spec:
+       *    "It is an error to use centroid in in a vertex shader."
+       */
+      if (state->language_version >= 130
+          && this->type->qualifier.flags.q.centroid
+          && this->type->qualifier.flags.q.in
+          && state->target == vertex_shader) {
+
+         _mesa_glsl_error(&loc, state,
+                          "'centroid in' cannot be used in a vertex shader");
+      }
+
 
       /* Precision qualifiers exists only in GLSL versions 1.00 and >= 1.30.
        */

@@ -631,9 +631,9 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
 
          /* adjust texture lod (lambda) */
          if (span->arrayMask & SPAN_LAMBDA) {
-            if (texUnit->LodBias + curObj->LodBias != 0.0F) {
+            if (texUnit->LodBias + curObj->Sampler.LodBias != 0.0F) {
                /* apply LOD bias, but don't clamp yet */
-               const GLfloat bias = CLAMP(texUnit->LodBias + curObj->LodBias,
+               const GLfloat bias = CLAMP(texUnit->LodBias + curObj->Sampler.LodBias,
                                           -ctx->Const.MaxTextureLodBias,
                                           ctx->Const.MaxTextureLodBias);
                GLuint i;
@@ -642,10 +642,11 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
                }
             }
 
-            if (curObj->MinLod != -1000.0 || curObj->MaxLod != 1000.0) {
+            if (curObj->Sampler.MinLod != -1000.0 ||
+                curObj->Sampler.MaxLod != 1000.0) {
                /* apply LOD clamping to lambda */
-               const GLfloat min = curObj->MinLod;
-               const GLfloat max = curObj->MaxLod;
+               const GLfloat min = curObj->Sampler.MinLod;
+               const GLfloat max = curObj->Sampler.MaxLod;
                GLuint i;
                for (i = 0; i < span->end; i++) {
                   GLfloat l = lambda[i];
@@ -686,9 +687,9 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
 
          /* adjust texture lod (lambda) */
          if (span->arrayMask & SPAN_LAMBDA) {
-            if (texUnit->LodBias + curObj->LodBias != 0.0F) {
+            if (texUnit->LodBias + curObj->Sampler.LodBias != 0.0F) {
                /* apply LOD bias, but don't clamp yet */
-               const GLfloat bias = CLAMP(texUnit->LodBias + curObj->LodBias,
+               const GLfloat bias = CLAMP(texUnit->LodBias + curObj->Sampler.LodBias,
                                           -ctx->Const.MaxTextureLodBias,
                                           ctx->Const.MaxTextureLodBias);
                GLuint i;
@@ -697,10 +698,11 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
                }
             }
 
-            if (curObj->MinLod != -1000.0 || curObj->MaxLod != 1000.0) {
+            if (curObj->Sampler.MinLod != -1000.0 ||
+                curObj->Sampler.MaxLod != 1000.0) {
                /* apply LOD clamping to lambda */
-               const GLfloat min = curObj->MinLod;
-               const GLfloat max = curObj->MaxLod;
+               const GLfloat min = curObj->Sampler.MinLod;
+               const GLfloat max = curObj->Sampler.MaxLod;
                GLuint i;
                for (i = 0; i < span->end; i++) {
                   GLfloat l = lambda[i];
@@ -708,15 +710,22 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
                }
             }
          }
+         else if (curObj->Sampler.MaxAnisotropy > 1.0 &&
+                  curObj->Sampler.MinFilter == GL_LINEAR_MIPMAP_LINEAR) {
+            /* sample_lambda_2d_aniso is beeing used as texture_sample_func,
+             * it requires the current SWspan *span as an additional parameter.
+             * In order to keep the same function signature, the unused lambda
+             * parameter will be modified to actually contain the SWspan pointer.
+             * This is a Hack. To make it right, the texture_sample_func
+             * signature and all implementing functions need to be modified.
+             */
+            /* "hide" SWspan struct; cast to (GLfloat *) to suppress warning */
+            lambda = (GLfloat *)span;
+         }
 
          /* Sample the texture (span->end = number of fragments) */
          swrast->TextureSample[unit]( ctx, texUnit->_Current, span->end,
                                       texcoords, lambda, texels );
-
-         /* GL_SGI_texture_color_table */
-         if (texUnit->ColorTableEnabled) {
-            _mesa_lookup_rgba_float(&texUnit->ColorTable, span->end, texels);
-         }
 
          /* GL_EXT_texture_swizzle */
          if (curObj->_Swizzle != SWIZZLE_NOOP) {

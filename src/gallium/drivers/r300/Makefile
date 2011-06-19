@@ -30,7 +30,7 @@ C_SOURCES = \
 
 LIBRARY_INCLUDES = \
 	-I$(TOP)/src/mesa/drivers/dri/r300/compiler \
-	-I$(TOP)/src/gallium/winsys/drm/radeon/core
+	-I$(TOP)/include
 
 COMPILER_ARCHIVE = $(TOP)/src/mesa/drivers/dri/r300/compiler/libr300compiler.a
 

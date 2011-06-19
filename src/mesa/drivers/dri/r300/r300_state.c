@@ -214,18 +214,18 @@ static void r300SetBlendState(struct gl_context * ctx)
 	    (R300_BLEND_GL_ZERO << R300_DST_BLEND_SHIFT);
 	int eqnA = R300_COMB_FCN_ADD_CLAMP;
 
-	if (RGBA_LOGICOP_ENABLED(ctx) || !ctx->Color.BlendEnabled) {
+	if (_mesa_rgba_logicop_enabled(ctx) || !ctx->Color.BlendEnabled) {
 		r300SetBlendCntl(r300, func, eqn, 0, func, eqn);
 		return;
 	}
 
 	func =
-	    (blend_factor(ctx->Color.BlendSrcRGB, GL_TRUE) <<
-	     R300_SRC_BLEND_SHIFT) | (blend_factor(ctx->Color.BlendDstRGB,
+	    (blend_factor(ctx->Color.Blend[0].SrcRGB, GL_TRUE) <<
+	     R300_SRC_BLEND_SHIFT) | (blend_factor(ctx->Color.Blend[0].DstRGB,
 						   GL_FALSE) <<
 				      R300_DST_BLEND_SHIFT);
 
-	switch (ctx->Color.BlendEquationRGB) {
+	switch (ctx->Color.Blend[0].EquationRGB) {
 	case GL_FUNC_ADD:
 		eqn = R300_COMB_FCN_ADD_CLAMP;
 		break;
@@ -253,17 +253,17 @@ static void r300SetBlendState(struct gl_context * ctx)
 	default:
 		fprintf(stderr,
 			"[%s:%u] Invalid RGB blend equation (0x%04x).\n",
-			__FUNCTION__, __LINE__, ctx->Color.BlendEquationRGB);
+			__FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationRGB);
 		return;
 	}
 
 	funcA =
-	    (blend_factor(ctx->Color.BlendSrcA, GL_TRUE) <<
-	     R300_SRC_BLEND_SHIFT) | (blend_factor(ctx->Color.BlendDstA,
+	    (blend_factor(ctx->Color.Blend[0].SrcA, GL_TRUE) <<
+	     R300_SRC_BLEND_SHIFT) | (blend_factor(ctx->Color.Blend[0].DstA,
 						   GL_FALSE) <<
 				      R300_DST_BLEND_SHIFT);
 
-	switch (ctx->Color.BlendEquationA) {
+	switch (ctx->Color.Blend[0].EquationA) {
 	case GL_FUNC_ADD:
 		eqnA = R300_COMB_FCN_ADD_CLAMP;
 		break;
@@ -291,7 +291,7 @@ static void r300SetBlendState(struct gl_context * ctx)
 	default:
 		fprintf(stderr,
 			"[%s:%u] Invalid A blend equation (0x%04x).\n",
-			__FUNCTION__, __LINE__, ctx->Color.BlendEquationA);
+			__FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationA);
 		return;
 	}
 
@@ -335,7 +335,7 @@ static void r300SetLogicOpState(struct gl_context *ctx)
 {
 	r300ContextPtr r300 = R300_CONTEXT(ctx);
 	R300_STATECHANGE(r300, rop);
-	if (RGBA_LOGICOP_ENABLED(ctx)) {
+	if (_mesa_rgba_logicop_enabled(ctx)) {
 		r300->hw.rop.cmd[1] = R300_RB3D_ROPCNTL_ROP_ENABLE |
 			translate_logicop(ctx->Color.LogicOp);
 	} else {
@@ -349,7 +349,7 @@ static void r300SetLogicOpState(struct gl_context *ctx)
  */
 static void r300LogicOpcode(struct gl_context *ctx, GLenum logicop)
 {
-	if (RGBA_LOGICOP_ENABLED(ctx))
+	if (_mesa_rgba_logicop_enabled(ctx))
 		r300SetLogicOpState(ctx);
 }
 
@@ -1343,7 +1343,7 @@ static void r300SetupTextures(struct gl_context * ctx)
 			 */
 			r300->hw.tex.filter_1.cmd[R300_TEX_VALUE_0 + hw_tmu] =
 				t->pp_txfilter_1 |
-				translate_lod_bias(ctx->Texture.Unit[i].LodBias + t->base.LodBias);
+				translate_lod_bias(ctx->Texture.Unit[i].LodBias + t->base.Sampler.LodBias);
 			r300->hw.tex.size.cmd[R300_TEX_VALUE_0 + hw_tmu] =
 			    t->pp_txsize;
 			r300->hw.tex.format.cmd[R300_TEX_VALUE_0 +
@@ -1619,7 +1619,6 @@ static void r500SetupRSUnit(struct gl_context * ctx)
 		WARN_ONCE("Don't know how to satisfy InputsRead=0x%08x\n", InputsRead);
 }
 
-#define MIN3(a, b, c)	((a) < (b) ? MIN2(a, c) : MIN2(b, c))
 
 void r300VapCntl(r300ContextPtr rmesa, GLuint input_count,
 			GLuint output_count, GLuint temp_count)
@@ -2014,7 +2013,7 @@ static const GLfloat *get_fragmentprogram_constant(struct gl_context *ctx, GLuin
 				buffer[0] =
 				buffer[1] =
 				buffer[2] =
-				buffer[3] = texObj->CompareFailValue;
+				buffer[3] = texObj->Sampler.CompareFailValue;
 			}
 			return buffer;
 		}

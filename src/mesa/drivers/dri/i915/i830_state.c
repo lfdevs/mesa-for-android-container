@@ -31,6 +31,7 @@
 #include "main/macros.h"
 #include "main/enums.h"
 #include "main/dd.h"
+#include "main/state.h"
 
 #include "texmem.h"
 
@@ -234,7 +235,7 @@ i830EvalLogicOpBlendState(struct gl_context * ctx)
 
    I830_STATECHANGE(i830, I830_UPLOAD_CTX);
 
-   if (RGBA_LOGICOP_ENABLED(ctx)) {
+   if (_mesa_rgba_logicop_enabled(ctx)) {
       i830->state.Ctx[I830_CTXREG_ENABLES_1] &= ~(ENABLE_COLOR_BLEND |
                                                   ENABLE_LOGIC_OP_MASK);
       i830->state.Ctx[I830_CTXREG_ENABLES_1] |= (DISABLE_COLOR_BLEND |
@@ -291,10 +292,10 @@ i830_set_blend_state(struct gl_context * ctx)
 
 
    funcRGB =
-      SRC_BLND_FACT(intel_translate_blend_factor(ctx->Color.BlendSrcRGB))
-      | DST_BLND_FACT(intel_translate_blend_factor(ctx->Color.BlendDstRGB));
+      SRC_BLND_FACT(intel_translate_blend_factor(ctx->Color.Blend[0].SrcRGB))
+      | DST_BLND_FACT(intel_translate_blend_factor(ctx->Color.Blend[0].DstRGB));
 
-   switch (ctx->Color.BlendEquationRGB) {
+   switch (ctx->Color.Blend[0].EquationRGB) {
    case GL_FUNC_ADD:
       eqnRGB = BLENDFUNC_ADD;
       break;
@@ -314,15 +315,15 @@ i830_set_blend_state(struct gl_context * ctx)
       break;
    default:
       fprintf(stderr, "[%s:%u] Invalid RGB blend equation (0x%04x).\n",
-              __FUNCTION__, __LINE__, ctx->Color.BlendEquationRGB);
+              __FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationRGB);
       return;
    }
 
 
-   funcA = SRC_ABLEND_FACT(intel_translate_blend_factor(ctx->Color.BlendSrcA))
-      | DST_ABLEND_FACT(intel_translate_blend_factor(ctx->Color.BlendDstA));
+   funcA = SRC_ABLEND_FACT(intel_translate_blend_factor(ctx->Color.Blend[0].SrcA))
+      | DST_ABLEND_FACT(intel_translate_blend_factor(ctx->Color.Blend[0].DstA));
 
-   switch (ctx->Color.BlendEquationA) {
+   switch (ctx->Color.Blend[0].EquationA) {
    case GL_FUNC_ADD:
       eqnA = BLENDFUNC_ADD;
       break;
@@ -342,7 +343,7 @@ i830_set_blend_state(struct gl_context * ctx)
       break;
    default:
       fprintf(stderr, "[%s:%u] Invalid alpha blend equation (0x%04x).\n",
-              __FUNCTION__, __LINE__, ctx->Color.BlendEquationA);
+              __FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationA);
       return;
    }
 
@@ -679,7 +680,7 @@ update_specular(struct gl_context * ctx)
    I830_STATECHANGE(i830, I830_UPLOAD_CTX);
    i830->state.Ctx[I830_CTXREG_ENABLES_1] &= ~ENABLE_SPEC_ADD_MASK;
 
-   if (NEED_SECONDARY_COLOR(ctx))
+   if (_mesa_need_secondary_color(ctx))
       i830->state.Ctx[I830_CTXREG_ENABLES_1] |= ENABLE_SPEC_ADD;
    else
       i830->state.Ctx[I830_CTXREG_ENABLES_1] |= DISABLE_SPEC_ADD;

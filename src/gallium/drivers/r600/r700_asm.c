@@ -26,11 +26,18 @@
 #include "r600_asm.h"
 #include "r700_sq.h"
 
+void r700_bc_cf_vtx_build(uint32_t *bytecode, const struct r600_bc_cf *cf)
+{
+	unsigned count = (cf->ndw / 4) - 1;
+	*bytecode++ = S_SQ_CF_WORD0_ADDR(cf->addr >> 1);
+	*bytecode++ = S_SQ_CF_WORD1_CF_INST(cf->inst) |
+			S_SQ_CF_WORD1_BARRIER(1) |
+			S_SQ_CF_WORD1_COUNT(count) |
+			S_SQ_CF_WORD1_COUNT_3(count >> 3);
+}
 
 int r700_bc_alu_build(struct r600_bc *bc, struct r600_bc_alu *alu, unsigned id)
 {
-	unsigned i;
-
 	bc->bytecode[id++] = S_SQ_ALU_WORD0_SRC0_SEL(alu->src[0].sel) |
 		S_SQ_ALU_WORD0_SRC0_REL(alu->src[0].rel) |
 		S_SQ_ALU_WORD0_SRC0_CHAN(alu->src[0].chan) |
@@ -61,18 +68,11 @@ int r700_bc_alu_build(struct r600_bc *bc, struct r600_bc_alu *alu, unsigned id)
 					S_SQ_ALU_WORD1_OP2_SRC0_ABS(alu->src[0].abs) |
 					S_SQ_ALU_WORD1_OP2_SRC1_ABS(alu->src[1].abs) |
 					S_SQ_ALU_WORD1_OP2_WRITE_MASK(alu->dst.write) |
+					S_SQ_ALU_WORD1_OP2_OMOD(alu->omod) |
 					S_SQ_ALU_WORD1_OP2_ALU_INST(alu->inst) |
 					S_SQ_ALU_WORD1_BANK_SWIZZLE(alu->bank_swizzle) |
 			                S_SQ_ALU_WORD1_OP2_UPDATE_EXECUTE_MASK(alu->predicate) |
 		 	                S_SQ_ALU_WORD1_OP2_UPDATE_PRED(alu->predicate);
-	}
-	if (alu->last) {
-		if (alu->nliteral && !alu->literal_added) {
-			R600_ERR("Bug in ALU processing for instruction 0x%08x, literal not added correctly\n", alu->inst);
-		}
-		for (i = 0; i < alu->nliteral; i++) {
-			bc->bytecode[id++] = alu->value[i];
-		}
 	}
 	return 0;
 }

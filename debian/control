@@ -30,6 +30,8 @@ Build-Depends:
  libudev-dev [linux-any],
  flex,
  bison,
+ llvm-2.9-dev [amd64 i386],
+ libwayland-dev,
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.sourceforge.net/
@@ -206,6 +208,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libegl1-mesa (= ${binary:Version}),
+Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: free implementation of the EGL API -- hardware drivers
  This package contains the EGL native platform graphics interface library.
@@ -287,6 +290,7 @@ Package: libgles1-mesa
 Section: libs
 Architecture: linux-any kfreebsd-any
 Depends:
+ libglapi-mesa (= ${binary:Version}),
  ${shlibs:Depends},
  ${misc:Depends},
 Provides: libgles1
@@ -342,6 +346,7 @@ Package: libgles2-mesa
 Section: libs
 Architecture: linux-any kfreebsd-any
 Depends:
+ libglapi-mesa (= ${binary:Version}),
  ${shlibs:Depends},
  ${misc:Depends},
 Provides: libgles2
@@ -395,6 +400,34 @@ Description: free implementation of the OpenGL|ES 2.x API -- development files
  .
  This package provides a development environment for building applications
  using the OpenGL|ES 2.x APIs.
+
+Package: libglapi-mesa
+Section: libs
+Architecture: linux-any kfreebsd-any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: free implementation of the GL API -- shared library
+ The Mesa GL API module is responsible for dispatching all the gl*
+ functions. It is intended to be mainly used by both the libgles1-mesa
+ and libgles2-mesa packages.
+
+Package: libglapi-mesa-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any kfreebsd-any
+Depends:
+ libglapi-mesa (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: free implementation of the GL API -- debugging symbols
+ The Mesa GL API module is responsible for dispatching all the gl*
+ functions. It is intended to be mainly used by both the libgles1-mesa
+ and libgles2-mesa packages.
+ .
+ This package contains debugging symbols for the GL API library.
 
 Package: libgl1-mesa-glx
 Section: libs
@@ -631,7 +664,7 @@ Conflicts: mesag3 (<< 5.0.0-1), xlibmesa3, libglu1
 Replaces: libglu1
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
-Description: The OpenGL utility library (GLU)
+Description: Mesa OpenGL utility library (GLU)
  GLU offers simple interfaces for building mipmaps; checking for the
  presence of extensions in the OpenGL (or other libraries which follow
  the same conventions for advertising extensions); drawing
@@ -655,7 +688,7 @@ Depends:
 Provides: libglu-dev, xlibmesa-glu-dev
 Conflicts: mesag-dev (<< 5.0.0-1), mesa-glide2-dev (<< 5.0.0-1), mesag3+ggi-dev (<< 5.0.0-1), xlibmesa-dev
 Replaces: libglu-dev
-Description: The OpenGL utility library -- development files
+Description: Mesa OpenGL utility library -- development files
  Includes headers and static libraries for compiling programs with GLU.
  .
  For a complete description of GLU, please look at the libglu1-mesa

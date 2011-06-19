@@ -333,12 +333,8 @@ fail:
 }
 
 
-/**
- * \param flags  bitmask of PIPE_FLUSH_x flags
- */
 void
 lp_setup_flush( struct lp_setup_context *setup,
-                unsigned flags,
                 struct pipe_fence_handle **fence,
                 const char *reason)
 {
@@ -469,7 +465,7 @@ lp_setup_clear( struct lp_setup_context *setup,
                 unsigned flags )
 {
    if (!lp_setup_try_clear( setup, color, depth, stencil, flags )) {
-      lp_setup_flush(setup, 0, NULL, __FUNCTION__);
+      lp_setup_flush(setup, NULL, __FUNCTION__);
 
       if (!lp_setup_try_clear( setup, color, depth, stencil, flags ))
          assert(0);
@@ -657,6 +653,7 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
          jit_tex->width = tex->width0;
          jit_tex->height = tex->height0;
          jit_tex->depth = tex->depth0;
+         jit_tex->first_level = view->u.tex.first_level;
          jit_tex->last_level = tex->last_level;
 
          /* We're referencing the texture's internal data, so save a
@@ -667,7 +664,7 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
          if (!lp_tex->dt) {
             /* regular texture - setup array of mipmap level pointers */
             int j;
-            for (j = 0; j <= tex->last_level; j++) {
+            for (j = view->u.tex.first_level; j <= tex->last_level; j++) {
                jit_tex->data[j] =
                   llvmpipe_get_texture_image_all(lp_tex, j, LP_TEX_USAGE_READ,
                                                  LP_TEX_LAYOUT_LINEAR);
@@ -681,6 +678,7 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
                   jit_tex->width = TILE_SIZE/8;
                   jit_tex->height = TILE_SIZE/8;
                   jit_tex->depth = 1;
+                  jit_tex->first_level = 0;
                   jit_tex->last_level = 0;
                   jit_tex->row_stride[j] = 0;
                   jit_tex->img_stride[j] = 0;
@@ -753,20 +751,20 @@ lp_setup_is_resource_referenced( const struct lp_setup_context *setup,
    /* check the render targets */
    for (i = 0; i < setup->fb.nr_cbufs; i++) {
       if (setup->fb.cbufs[i]->texture == texture)
-         return PIPE_REFERENCED_FOR_READ | PIPE_REFERENCED_FOR_WRITE;
+         return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
    }
    if (setup->fb.zsbuf && setup->fb.zsbuf->texture == texture) {
-      return PIPE_REFERENCED_FOR_READ | PIPE_REFERENCED_FOR_WRITE;
+      return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
    }
 
    /* check textures referenced by the scene */
    for (i = 0; i < Elements(setup->scenes); i++) {
       if (lp_scene_is_resource_referenced(setup->scenes[i], texture)) {
-         return PIPE_REFERENCED_FOR_READ;
+         return LP_REFERENCED_FOR_READ;
       }
    }
 
-   return PIPE_UNREFERENCED;
+   return LP_UNREFERENCED;
 }
 
 
@@ -1067,6 +1065,8 @@ lp_setup_begin_query(struct lp_setup_context *setup,
 
    set_scene_state(setup, SETUP_ACTIVE, "begin_query");
    
+   setup->active_query = pq;
+
    if (setup->scene) {
       if (!lp_scene_bin_everywhere(setup->scene,
                                    LP_RAST_OP_BEGIN_QUERY,
@@ -1082,8 +1082,6 @@ lp_setup_begin_query(struct lp_setup_context *setup,
          }
       }
    }
-
-   setup->active_query = pq;
 }
 
 
@@ -1114,7 +1112,7 @@ lp_setup_end_query(struct lp_setup_context *setup, struct llvmpipe_query *pq)
       if (!lp_scene_bin_everywhere(setup->scene,
                                    LP_RAST_OP_END_QUERY,
                                    dummy)) {
-         lp_setup_flush(setup, 0, NULL, __FUNCTION__);
+         lp_setup_flush(setup, NULL, __FUNCTION__);
       }
    }
    else {

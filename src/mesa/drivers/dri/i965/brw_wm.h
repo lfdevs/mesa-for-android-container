@@ -59,24 +59,23 @@
 #define AA_ALWAYS    2
 
 struct brw_wm_prog_key {
+   uint8_t iz_lookup;
    GLuint stats_wm:1;
    GLuint flat_shade:1;
-   GLuint linear_color:1;  /**< linear interpolation vs perspective interp */
    GLuint nr_color_regions:5;
    GLuint render_to_fbo:1;
    GLuint alpha_test:1;
+   GLuint clamp_fragment_color:1;
+   GLuint line_aa:2;
 
    GLbitfield proj_attrib_mask; /**< one bit per fragment program attribute */
-   GLuint shadowtex_mask:16;
    GLuint yuvtex_mask:16;
    GLuint yuvtex_swap_mask:16;	/* UV swaped */
+   uint16_t gl_clamp_mask[3];
 
    GLushort tex_swizzles[BRW_MAX_TEX_UNIT];
-
    GLushort drawable_height;
    GLbitfield64 vp_outputs_written;
-   GLuint iz_lookup;
-   GLuint line_aa;
    GLuint program_string_id:32;
 };
 
@@ -200,11 +199,11 @@ struct brw_wm_compile {
       PASS2_DONE
    } state;
 
-   GLuint source_depth_reg:3;
-   GLuint source_w_reg:3;
-   GLuint aa_dest_stencil_reg:3;
-   GLuint dest_depth_reg:3;
-   GLuint nr_payload_regs:4;
+   uint8_t source_depth_reg;
+   uint8_t source_w_reg;
+   uint8_t aa_dest_stencil_reg;
+   uint8_t dest_depth_reg;
+   uint8_t nr_payload_regs;
    GLuint computes_depth:1;	/* could be derived from program string */
    GLuint source_depth_to_render_target:1;
    GLuint runtime_check_aads_emit:1;
@@ -217,7 +216,6 @@ struct brw_wm_compile {
    GLuint nr_fp_insns;
    GLuint fp_temp;
    GLuint fp_interp_emitted;
-   GLuint fp_fragcolor_emitted;
 
    struct prog_src_register pixel_xy;
    struct prog_src_register delta_xy;
@@ -314,7 +312,8 @@ void brw_wm_print_program( struct brw_wm_compile *c,
 void brw_wm_lookup_iz(struct intel_context *intel,
 		      struct brw_wm_compile *c);
 
-GLboolean brw_wm_fs_emit(struct brw_context *brw, struct brw_wm_compile *c);
+bool brw_wm_fs_emit(struct brw_context *brw, struct brw_wm_compile *c,
+		    struct gl_shader_program *prog);
 
 /* brw_wm_emit.c */
 void emit_alu1(struct brw_compile *p,
@@ -468,12 +467,17 @@ void emit_xpd(struct brw_compile *p,
 	      const struct brw_reg *arg0,
 	      const struct brw_reg *arg1);
 
-GLboolean brw_compile_shader(struct gl_context *ctx,
-			     struct gl_shader *shader);
 GLboolean brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog);
 struct gl_shader *brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type);
 struct gl_shader_program *brw_new_shader_program(struct gl_context *ctx, GLuint name);
 
 bool brw_color_buffer_write_enabled(struct brw_context *brw);
+bool brw_render_target_supported(gl_format format);
+void brw_wm_payload_setup(struct brw_context *brw,
+			  struct brw_wm_compile *c);
+bool do_wm_prog(struct brw_context *brw,
+		struct gl_shader_program *prog,
+		struct brw_fragment_program *fp,
+		struct brw_wm_prog_key *key);
 
 #endif

@@ -87,6 +87,18 @@ static const struct swizzle_data* lookup_native_swizzle(unsigned int swizzle)
 	return 0;
 }
 
+/**
+ * Determines if the given swizzle is valid for r300/r400.  In most situations
+ * it is better to use r300_swizzle_is_native() which can be accesed via
+ * struct radeon_compiler *c; c->SwizzleCaps->IsNative().
+ */
+int r300_swizzle_is_native_basic(unsigned int swizzle)
+{
+	if(lookup_native_swizzle(swizzle))
+		return 1;
+	else
+		return 0;
+}
 
 /**
  * Check whether the given instruction supports the swizzle and negate
@@ -140,7 +152,6 @@ static void r300_swizzle_split(
 	split->NumPhases = 0;
 
 	while(mask) {
-		const struct swizzle_data *best_swizzle = 0;
 		unsigned int best_matchcount = 0;
 		unsigned int best_matchmask = 0;
 		int i, comp;
@@ -167,7 +178,6 @@ static void r300_swizzle_split(
 				}
 			}
 			if (matchcount > best_matchcount) {
-				best_swizzle = sd;
 				best_matchcount = matchcount;
 				best_matchmask = matchmask;
 				if (matchmask == (mask & RC_MASK_XYZ))
@@ -216,13 +226,14 @@ unsigned int r300FPTranslateRGBSwizzle(unsigned int src, unsigned int swizzle)
  */
 unsigned int r300FPTranslateAlphaSwizzle(unsigned int src, unsigned int swizzle)
 {
+	unsigned int swz = GET_SWZ(swizzle, 0);
 	if (src == RC_PAIR_PRESUB_SRC) {
-		return R300_ALU_ARGA_SRCP_X + swizzle;
+		return R300_ALU_ARGA_SRCP_X + swz;
 	}
-	if (swizzle < 3)
-		return swizzle + 3*src;
+	if (swz < 3)
+		return swz + 3*src;
 
-	switch(swizzle) {
+	switch(swz) {
 	case RC_SWIZZLE_W: return R300_ALU_ARGA_SRC0A + src;
 	case RC_SWIZZLE_ONE: return R300_ALU_ARGA_ONE;
 	case RC_SWIZZLE_ZERO: return R300_ALU_ARGA_ZERO;

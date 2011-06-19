@@ -143,6 +143,8 @@ dri2_bind_context(struct glx_context *context, struct glx_context *old,
    pdraw = (struct dri2_drawable *) driFetchDrawable(context, draw);
    pread = (struct dri2_drawable *) driFetchDrawable(context, read);
 
+   driReleaseDrawables(&pcp->base);
+
    if (pdraw == NULL || pread == NULL)
       return GLXBadDrawable;
 
@@ -170,9 +172,6 @@ dri2_unbind_context(struct glx_context *context, struct glx_context *new)
    struct dri2_screen *psc = (struct dri2_screen *) pcp->base.psc;
 
    (*psc->core->unbindContext) (pcp->driContext);
-
-   if (context == new)
-      driReleaseDrawables(&pcp->base);
 }
 
 static struct glx_context *
@@ -457,6 +456,12 @@ static void
 dri2FlushFrontBuffer(__DRIdrawable *driDrawable, void *loaderPrivate)
 {
    struct dri2_drawable *pdraw = loaderPrivate;
+   if (!pdraw)
+      return;
+
+   if (!pdraw->base.psc)
+      return;
+
    struct glx_display *priv = __glXInitialize(pdraw->base.psc->dpy);
    struct dri2_display *pdp = (struct dri2_display *)priv->dri2Display;
    struct glx_context *gc = __glXGetCurrentContext();
@@ -535,8 +540,13 @@ dri2SwapBuffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
     CARD64 ret = 0;
 
 #ifdef __DRI2_FLUSH
-    if (psc->f)
-    	(*psc->f->flush)(priv->driDrawable);
+    if (psc->f) {
+       struct glx_context *gc = __glXGetCurrentContext();
+
+       if (gc) {
+	  (*psc->f->flush)(priv->driDrawable);
+       }
+    }
 #endif
 
     /* Old servers don't send invalidate events */
@@ -670,11 +680,16 @@ dri2InvalidateBuffers(Display *dpy, XID drawable)
 {
    __GLXDRIdrawable *pdraw =
       dri2GetGlxDrawableFromXDrawableId(dpy, drawable);
-   struct dri2_screen *psc = (struct dri2_screen *) pdraw->psc;
+   struct dri2_screen *psc;
    struct dri2_drawable *pdp = (struct dri2_drawable *) pdraw;
 
+   if (!pdraw)
+      return;
+
+   psc = (struct dri2_screen *) pdraw->psc;
+
 #if __DRI2_FLUSH_VERSION >= 3
-   if (pdraw && psc->f)
+   if (pdraw && psc->f && psc->f->base.version >= 3 && psc->f->invalidate)
        psc->f->invalidate(pdp->driDrawable);
 #endif
 }
@@ -697,7 +712,8 @@ dri2_bind_tex_image(Display * dpy,
       psc = (struct dri2_screen *) base->psc;
 
 #if __DRI2_FLUSH_VERSION >= 3
-      if (!pdp->invalidateAvailable && psc->f)
+      if (!pdp->invalidateAvailable && psc->f &&
+           psc->f->base.version >= 3 && psc->f->invalidate)
 	 psc->f->invalidate(pdraw->driDrawable);
 #endif
 
@@ -719,6 +735,27 @@ dri2_bind_tex_image(Display * dpy,
 static void
 dri2_release_tex_image(Display * dpy, GLXDrawable drawable, int buffer)
 {
+#if __DRI_TEX_BUFFER_VERSION >= 3
+   struct glx_context *gc = __glXGetCurrentContext();
+   struct dri2_context *pcp = (struct dri2_context *) gc;
+   __GLXDRIdrawable *base = GetGLXDRIDrawable(dpy, drawable);
+   struct glx_display *dpyPriv = __glXInitialize(dpy);
+   struct dri2_drawable *pdraw = (struct dri2_drawable *) base;
+   struct dri2_display *pdp =
+      (struct dri2_display *) dpyPriv->dri2Display;
+   struct dri2_screen *psc;
+
+   if (pdraw != NULL) {
+      psc = (struct dri2_screen *) base->psc;
+
+      if (psc->texBuffer->base.version >= 3 &&
+          psc->texBuffer->releaseTexBuffer != NULL) {
+         (*psc->texBuffer->releaseTexBuffer) (pcp->driContext,
+                                           pdraw->base.textureTarget,
+                                           pdraw->driDrawable);
+      }
+   }
+#endif
 }
 
 static const struct glx_context_vtable dri2_context_vtable = {
@@ -783,11 +820,16 @@ dri2CreateScreen(int screen, struct glx_display * priv)
       return NULL;
 
    memset(psc, 0, sizeof *psc);
-   if (!glx_screen_init(&psc->base, screen, priv))
-       return NULL;
+   psc->fd = -1;
+
+   if (!glx_screen_init(&psc->base, screen, priv)) {
+      Xfree(psc);
+      return NULL;
+   }
 
    if (!DRI2Connect(priv->dpy, RootWindow(priv->dpy, screen),
 		    &driverName, &deviceName)) {
+      glx_screen_cleanup(&psc->base);
       XFree(psc);
       return NULL;
    }
@@ -897,11 +939,14 @@ dri2CreateScreen(int screen, struct glx_display * priv)
    return &psc->base;
 
 handle_error:
+   if (psc->fd >= 0)
+      close(psc->fd);
+   if (psc->driver)
+      dlclose(psc->driver);
    Xfree(driverName);
    Xfree(deviceName);
+   glx_screen_cleanup(&psc->base);
    XFree(psc);
-
-   /* FIXME: clean up here */
 
    return NULL;
 }

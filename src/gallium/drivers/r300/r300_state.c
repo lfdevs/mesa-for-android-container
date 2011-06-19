@@ -24,10 +24,12 @@
 #include "draw/draw_context.h"
 
 #include "util/u_framebuffer.h"
+#include "util/u_half.h"
 #include "util/u_math.h"
 #include "util/u_mm.h"
 #include "util/u_memory.h"
 #include "util/u_pack_color.h"
+#include "util/u_transfer.h"
 
 #include "tgsi/tgsi_parse.h"
 
@@ -43,8 +45,6 @@
 #include "r300_fs.h"
 #include "r300_texture.h"
 #include "r300_vs.h"
-#include "r300_winsys.h"
-#include "r300_hyperz.h"
 
 /* r300_state: Functions used to intialize state context by translating
  * Gallium state objects into semi-native r300 state objects. */
@@ -187,11 +187,15 @@ static void* r300_create_blend_state(struct pipe_context* pipe,
     struct r300_screen* r300screen = r300_screen(pipe->screen);
     struct r300_blend_state* blend = CALLOC_STRUCT(r300_blend_state);
     uint32_t blend_control = 0;       /* R300_RB3D_CBLEND: 0x4e04 */
+    uint32_t blend_control_noclamp = 0;    /* R300_RB3D_CBLEND: 0x4e04 */
     uint32_t alpha_blend_control = 0; /* R300_RB3D_ABLEND: 0x4e08 */
+    uint32_t alpha_blend_control_noclamp = 0; /* R300_RB3D_ABLEND: 0x4e08 */
     uint32_t color_channel_mask = 0;  /* R300_RB3D_COLOR_CHANNEL_MASK: 0x4e0c */
     uint32_t rop = 0;                 /* R300_RB3D_ROPCNTL: 0x4e18 */
     uint32_t dither = 0;              /* R300_RB3D_DITHER_CTL: 0x4e50 */
     CB_LOCALS;
+
+    blend->state = *state;
 
     if (state->rt[0].blend_enable)
     {
@@ -205,10 +209,14 @@ static void* r300_create_blend_state(struct pipe_context* pipe,
 
         /* despite the name, ALPHA_BLEND_ENABLE has nothing to do with alpha,
          * this is just the crappy D3D naming */
-        blend_control = R300_ALPHA_BLEND_ENABLE |
-            r300_translate_blend_function(eqRGB) |
+        blend_control = blend_control_noclamp =
+            R300_ALPHA_BLEND_ENABLE |
             ( r300_translate_blend_factor(srcRGB) << R300_SRC_BLEND_SHIFT) |
             ( r300_translate_blend_factor(dstRGB) << R300_DST_BLEND_SHIFT);
+        blend_control |=
+            r300_translate_blend_function(eqRGB, TRUE);
+        blend_control_noclamp |=
+            r300_translate_blend_function(eqRGB, FALSE);
 
         /* Optimization: some operations do not require the destination color.
          *
@@ -230,6 +238,7 @@ static void* r300_create_blend_state(struct pipe_context* pipe,
             srcRGB == PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE) {
             /* Enable reading from the colorbuffer. */
             blend_control |= R300_READ_ENABLE;
+            blend_control_noclamp |= R300_READ_ENABLE;
 
             if (r300screen->caps.is_r500) {
                 /* Optimization: Depending on incoming pixels, we can
@@ -305,10 +314,14 @@ static void* r300_create_blend_state(struct pipe_context* pipe,
         /* separate alpha */
         if (srcA != srcRGB || dstA != dstRGB || eqA != eqRGB) {
             blend_control |= R300_SEPARATE_ALPHA_ENABLE;
-            alpha_blend_control =
-                r300_translate_blend_function(eqA) |
+            blend_control_noclamp |= R300_SEPARATE_ALPHA_ENABLE;
+            alpha_blend_control = alpha_blend_control_noclamp =
                 (r300_translate_blend_factor(srcA) << R300_SRC_BLEND_SHIFT) |
                 (r300_translate_blend_factor(dstA) << R300_DST_BLEND_SHIFT);
+            alpha_blend_control |=
+                r300_translate_blend_function(eqA, TRUE);
+            alpha_blend_control_noclamp |=
+                r300_translate_blend_function(eqA, FALSE);
         }
     }
 
@@ -345,11 +358,21 @@ static void* r300_create_blend_state(struct pipe_context* pipe,
     */
 
     /* Build a command buffer. */
-    BEGIN_CB(blend->cb, 8);
+    BEGIN_CB(blend->cb_clamp, 8);
     OUT_CB_REG(R300_RB3D_ROPCNTL, rop);
     OUT_CB_REG_SEQ(R300_RB3D_CBLEND, 3);
     OUT_CB(blend_control);
     OUT_CB(alpha_blend_control);
+    OUT_CB(color_channel_mask);
+    OUT_CB_REG(R300_RB3D_DITHER_CTL, dither);
+    END_CB;
+
+    /* Build a command buffer. */
+    BEGIN_CB(blend->cb_noclamp, 8);
+    OUT_CB_REG(R300_RB3D_ROPCNTL, rop);
+    OUT_CB_REG_SEQ(R300_RB3D_CBLEND, 3);
+    OUT_CB(blend_control_noclamp);
+    OUT_CB(alpha_blend_control_noclamp);
     OUT_CB(color_channel_mask);
     OUT_CB_REG(R300_RB3D_DITHER_CTL, dither);
     END_CB;
@@ -395,22 +418,64 @@ static void r300_set_blend_color(struct pipe_context* pipe,
                                  const struct pipe_blend_color* color)
 {
     struct r300_context* r300 = r300_context(pipe);
-    struct r300_blend_color_state* state =
+    struct pipe_framebuffer_state *fb = r300->fb_state.state;
+    struct r300_blend_color_state *state =
         (struct r300_blend_color_state*)r300->blend_color_state.state;
+    struct pipe_blend_color c;
+    enum pipe_format format = fb->nr_cbufs ? fb->cbufs[0]->format : 0;
     CB_LOCALS;
 
+    state->state = *color; /* Save it, so that we can reuse it in set_fb_state */
+    c = *color;
+
+    /* The blend color is dependent on the colorbuffer format. */
+    if (fb->nr_cbufs) {
+        switch (format) {
+        case PIPE_FORMAT_R8_UNORM:
+        case PIPE_FORMAT_L8_UNORM:
+        case PIPE_FORMAT_I8_UNORM:
+            c.color[1] = c.color[0];
+            break;
+
+        case PIPE_FORMAT_A8_UNORM:
+            c.color[1] = c.color[3];
+            break;
+
+        case PIPE_FORMAT_R8G8_UNORM:
+            c.color[2] = c.color[1];
+            break;
+
+        case PIPE_FORMAT_L8A8_UNORM:
+            c.color[2] = c.color[3];
+            break;
+
+        default:;
+        }
+    }
+
     if (r300->screen->caps.is_r500) {
-        /* XXX if FP16 blending is enabled, we should use the FP16 format */
         BEGIN_CB(state->cb, 3);
         OUT_CB_REG_SEQ(R500_RB3D_CONSTANT_COLOR_AR, 2);
-        OUT_CB(float_to_fixed10(color->color[0]) |
-               (float_to_fixed10(color->color[3]) << 16));
-        OUT_CB(float_to_fixed10(color->color[2]) |
-               (float_to_fixed10(color->color[1]) << 16));
+
+        switch (format) {
+        case PIPE_FORMAT_R16G16B16A16_FLOAT:
+            OUT_CB(util_float_to_half(c.color[2]) |
+                   (util_float_to_half(c.color[3]) << 16));
+            OUT_CB(util_float_to_half(c.color[0]) |
+                   (util_float_to_half(c.color[1]) << 16));
+            break;
+
+        default:
+            OUT_CB(float_to_fixed10(c.color[0]) |
+                   (float_to_fixed10(c.color[3]) << 16));
+            OUT_CB(float_to_fixed10(c.color[2]) |
+                   (float_to_fixed10(c.color[1]) << 16));
+        }
+
         END_CB;
     } else {
         union util_color uc;
-        util_pack_color(color->color, PIPE_FORMAT_B8G8R8A8_UNORM, &uc);
+        util_pack_color(c.color, PIPE_FORMAT_B8G8R8A8_UNORM, &uc);
 
         BEGIN_CB(state->cb, 2);
         OUT_CB_REG(R300_RB3D_BLEND_COLOR, uc.ui);
@@ -442,8 +507,7 @@ static void r300_set_clip_state(struct pipe_context* pipe,
            OUT_CB_TABLE(state->ucp, state->nr * 4);
         }
         OUT_CB_REG(R300_VAP_CLIP_CNTL, ((1 << state->nr) - 1) |
-                R300_PS_UCP_MODE_CLIP_AS_TRIFAN |
-                (state->depth_clamp ? R300_CLIP_DISABLE : 0));
+                   R300_PS_UCP_MODE_CLIP_AS_TRIFAN);
         END_CB;
 
         r300_mark_atom_dirty(r300, &r300->clip_state);
@@ -542,31 +606,56 @@ static void*
             r300_translate_alpha_function(state->alpha.func) |
             R300_FG_ALPHA_FUNC_ENABLE;
 
-        /* We could use 10bit alpha ref but who needs that? */
         dsa->alpha_function |= float_to_ubyte(state->alpha.ref_value);
+        dsa->alpha_value = util_float_to_half(state->alpha.ref_value);
 
-        if (caps->is_r500)
+        if (caps->is_r500) {
+            dsa->alpha_function_fp16 = dsa->alpha_function |
+                                       R500_FG_ALPHA_FUNC_FP16_ENABLE;
             dsa->alpha_function |= R500_FG_ALPHA_FUNC_8BIT;
+        }
     }
 
-    BEGIN_CB(&dsa->cb_begin, 8);
+    BEGIN_CB(&dsa->cb_begin, 10);
     OUT_CB_REG(R300_FG_ALPHA_FUNC, dsa->alpha_function);
     OUT_CB_REG_SEQ(R300_ZB_CNTL, 3);
     OUT_CB(dsa->z_buffer_control);
     OUT_CB(dsa->z_stencil_control);
     OUT_CB(dsa->stencil_ref_mask);
     OUT_CB_REG(R500_ZB_STENCILREFMASK_BF, dsa->stencil_ref_bf);
+    OUT_CB_REG(R500_FG_ALPHA_VALUE, dsa->alpha_value);
+    END_CB;
+
+    BEGIN_CB(&dsa->cb_begin_fp16, 10);
+    OUT_CB_REG(R300_FG_ALPHA_FUNC, dsa->alpha_function_fp16);
+    OUT_CB_REG_SEQ(R300_ZB_CNTL, 3);
+    OUT_CB(dsa->z_buffer_control);
+    OUT_CB(dsa->z_stencil_control);
+    OUT_CB(dsa->stencil_ref_mask);
+    OUT_CB_REG(R500_ZB_STENCILREFMASK_BF, dsa->stencil_ref_bf);
+    OUT_CB_REG(R500_FG_ALPHA_VALUE, dsa->alpha_value);
     END_CB;
 
     /* We must enable depth test, otherwise occlusion queries won't work.
      * We setup a dummy zbuffer to silent the CS checker, see emit_fb_state. */
-    BEGIN_CB(dsa->cb_no_readwrite, 8);
+    BEGIN_CB(dsa->cb_zb_no_readwrite, 10);
     OUT_CB_REG(R300_FG_ALPHA_FUNC, dsa->alpha_function);
     OUT_CB_REG_SEQ(R300_ZB_CNTL, 3);
     OUT_CB(R300_Z_ENABLE);
     OUT_CB(R300_ZS_ALWAYS);
     OUT_CB(0);
     OUT_CB_REG(R500_ZB_STENCILREFMASK_BF, 0);
+    OUT_CB_REG(R500_FG_ALPHA_VALUE, dsa->alpha_value);
+    END_CB;
+
+    BEGIN_CB(dsa->cb_fp16_zb_no_readwrite, 10);
+    OUT_CB_REG(R300_FG_ALPHA_FUNC, dsa->alpha_function_fp16);
+    OUT_CB_REG_SEQ(R300_ZB_CNTL, 3);
+    OUT_CB(R300_Z_ENABLE);
+    OUT_CB(R300_ZS_ALWAYS);
+    OUT_CB(0);
+    OUT_CB_REG(R500_ZB_STENCILREFMASK_BF, 0);
+    OUT_CB_REG(R500_FG_ALPHA_VALUE, dsa->alpha_value);
     END_CB;
 
     return (void*)dsa;
@@ -623,21 +712,16 @@ static void r300_set_stencil_ref(struct pipe_context* pipe,
 }
 
 static void r300_tex_set_tiling_flags(struct r300_context *r300,
-                                      struct r300_texture *tex, unsigned level)
+                                      struct r300_resource *tex,
+                                      unsigned level)
 {
     /* Check if the macrotile flag needs to be changed.
      * Skip changing the flags otherwise. */
-    if (tex->desc.macrotile[tex->surface_level] !=
-        tex->desc.macrotile[level]) {
-        /* Tiling determines how DRM treats the buffer data.
-         * We must flush CS when changing it if the buffer is referenced. */
-        if (r300->rws->cs_is_buffer_referenced(r300->cs,
-                                               tex->cs_buffer, R300_REF_CS))
-            r300->context.flush(&r300->context, 0, NULL);
-
-        r300->rws->buffer_set_tiling(r300->rws, tex->buffer,
-                tex->desc.microtile, tex->desc.macrotile[level],
-                tex->desc.stride_in_bytes[0]);
+    if (tex->tex.macrotile[tex->surface_level] !=
+        tex->tex.macrotile[level]) {
+        r300->rws->buffer_set_tiling(tex->buf, r300->cs,
+                tex->tex.microtile, tex->tex.macrotile[level],
+                tex->tex.stride_in_bytes[0]);
 
         tex->surface_level = level;
     }
@@ -652,12 +736,12 @@ static void r300_fb_set_tiling_flags(struct r300_context *r300,
     /* Set tiling flags for new surfaces. */
     for (i = 0; i < state->nr_cbufs; i++) {
         r300_tex_set_tiling_flags(r300,
-                                  r300_texture(state->cbufs[i]->texture),
+                                  r300_resource(state->cbufs[i]->texture),
                                   state->cbufs[i]->u.tex.level);
     }
     if (state->zsbuf) {
         r300_tex_set_tiling_flags(r300,
-                                  r300_texture(state->zsbuf->texture),
+                                  r300_resource(state->zsbuf->texture),
                                   state->zsbuf->u.tex.level);
     }
 }
@@ -666,7 +750,7 @@ static void r300_print_fb_surf_info(struct pipe_surface *surf, unsigned index,
                                     const char *binding)
 {
     struct pipe_resource *tex = surf->texture;
-    struct r300_texture *rtex = r300_texture(tex);
+    struct r300_resource *rtex = r300_resource(tex);
 
     fprintf(stderr,
             "r300:   %s[%i] Dim: %ix%i, Firstlayer: %i, "
@@ -679,9 +763,9 @@ static void r300_print_fb_surf_info(struct pipe_surface *surf, unsigned index,
             surf->u.tex.first_layer, surf->u.tex.last_layer, surf->u.tex.level,
             util_format_short_name(surf->format),
 
-            rtex->desc.macrotile[0] ? "YES" : " NO",
-            rtex->desc.microtile ? "YES" : " NO",
-            rtex->desc.stride_in_pixels[0],
+            rtex->tex.macrotile[0] ? "YES" : " NO",
+            rtex->tex.microtile ? "YES" : " NO",
+            rtex->tex.stride_in_pixels[0],
             tex->width0, tex->height0, tex->depth0,
             tex->last_level, util_format_short_name(tex->format));
 }
@@ -690,15 +774,24 @@ void r300_mark_fb_state_dirty(struct r300_context *r300,
                               enum r300_fb_state_change change)
 {
     struct pipe_framebuffer_state *state = r300->fb_state.state;
-    boolean can_hyperz = r300->rws->get_value(r300->rws, R300_CAN_HYPERZ);
 
-    /* What is marked as dirty depends on the enum r300_fb_state_change. */
     r300_mark_atom_dirty(r300, &r300->gpu_flush);
     r300_mark_atom_dirty(r300, &r300->fb_state);
-    r300_mark_atom_dirty(r300, &r300->hyperz_state);
 
+    /* What is marked as dirty depends on the enum r300_fb_state_change. */
     if (change == R300_CHANGED_FB_STATE) {
         r300_mark_atom_dirty(r300, &r300->aa_state);
+        r300_mark_atom_dirty(r300, &r300->dsa_state); /* for AlphaRef */
+        r300_set_blend_color(&r300->context, r300->blend_color_state.state);
+    }
+
+    if (change == R300_CHANGED_FB_STATE ||
+        change == R300_CHANGED_HYPERZ_FLAG) {
+        r300_mark_atom_dirty(r300, &r300->hyperz_state);
+    }
+
+    if (change == R300_CHANGED_FB_STATE ||
+        change == R300_CHANGED_MULTIWRITE) {
         r300_mark_atom_dirty(r300, &r300->fb_state_pipelined);
     }
 
@@ -709,8 +802,8 @@ void r300_mark_fb_state_dirty(struct r300_context *r300,
         r300->fb_state.size += 10;
     } else if (state->zsbuf) {
         r300->fb_state.size += 10;
-        if (can_hyperz)
-            r300->fb_state.size += r300->screen->caps.hiz_ram ? 8 : 4;
+        if (r300->hyperz_enabled)
+            r300->fb_state.size += 8;
     } else if (state->nr_cbufs) {
         r300->fb_state.size += 10;
     }
@@ -719,16 +812,15 @@ void r300_mark_fb_state_dirty(struct r300_context *r300,
 }
 
 static void
-    r300_set_framebuffer_state(struct pipe_context* pipe,
-                               const struct pipe_framebuffer_state* state)
+r300_set_framebuffer_state(struct pipe_context* pipe,
+                           const struct pipe_framebuffer_state* state)
 {
     struct r300_context* r300 = r300_context(pipe);
     struct r300_aa_state *aa = (struct r300_aa_state*)r300->aa_state.state;
     struct pipe_framebuffer_state *old_state = r300->fb_state.state;
-    boolean can_hyperz = r300->rws->get_value(r300->rws, R300_CAN_HYPERZ);
     unsigned max_width, max_height, i;
     uint32_t zbuffer_bpp = 0;
-    int blocksize;
+    boolean unlock_zbuffer = FALSE;
 
     if (r300->screen->caps.is_r500) {
         max_width = max_height = 4096;
@@ -744,10 +836,37 @@ static void
         return;
     }
 
-    /* If nr_cbufs is changed from zero to non-zero or vice versa... */
-    if (!!old_state->nr_cbufs != !!state->nr_cbufs) {
-        r300_mark_atom_dirty(r300, &r300->blend_state);
+    if (old_state->zsbuf && r300->zmask_in_use && !r300->locked_zbuffer) {
+        /* There is a zmask in use, what are we gonna do? */
+        if (state->zsbuf) {
+            if (!pipe_surface_equal(old_state->zsbuf, state->zsbuf)) {
+                /* Decompress the currently bound zbuffer before we bind another one. */
+                r300_decompress_zmask(r300);
+                r300->hiz_in_use = FALSE;
+            }
+        } else {
+            /* We don't bind another zbuffer, so lock the current one. */
+            pipe_surface_reference(&r300->locked_zbuffer, old_state->zsbuf);
+        }
+    } else if (r300->locked_zbuffer) {
+        /* We have a locked zbuffer now, what are we gonna do? */
+        if (state->zsbuf) {
+            if (!pipe_surface_equal(r300->locked_zbuffer, state->zsbuf)) {
+                /* We are binding some other zbuffer, so decompress the locked one,
+                 * it gets unlocked automatically. */
+                r300_decompress_zmask_locked_unsafe(r300);
+                r300->hiz_in_use = FALSE;
+            } else {
+                /* We are binding the locked zbuffer again, so unlock it. */
+                unlock_zbuffer = TRUE;
+            }
+        }
     }
+    assert(state->zsbuf || (r300->locked_zbuffer && !unlock_zbuffer) || !r300->zmask_in_use);
+
+    /* Need to reset clamping or colormask. */
+    r300_mark_atom_dirty(r300, &r300->blend_state);
+
     /* If zsbuf is set from NULL to non-NULL or vice versa.. */
     if (!!old_state->zsbuf != !!state->zsbuf) {
         r300_mark_atom_dirty(r300, &r300->dsa_state);
@@ -758,45 +877,20 @@ static void
 
     util_copy_framebuffer_state(r300->fb_state.state, state);
 
-    r300_mark_fb_state_dirty(r300, R300_CHANGED_FB_STATE);
-    r300->validate_buffers = TRUE;
+    if (unlock_zbuffer) {
+        pipe_surface_reference(&r300->locked_zbuffer, NULL);
+    }
 
-    r300->z_compression = false;
-    
+    r300_mark_fb_state_dirty(r300, R300_CHANGED_FB_STATE);
+
     if (state->zsbuf) {
-        blocksize = util_format_get_blocksize(state->zsbuf->texture->format);
-        switch (blocksize) {
+        switch (util_format_get_blocksize(state->zsbuf->texture->format)) {
         case 2:
             zbuffer_bpp = 16;
             break;
         case 4:
             zbuffer_bpp = 24;
             break;
-        }
-        if (can_hyperz) {
-            struct r300_surface *zs_surf = r300_surface(state->zsbuf);
-            struct r300_texture *tex;
-            int compress = r300->screen->caps.is_rv350 ? RV350_Z_COMPRESS_88 : R300_Z_COMPRESS_44;
-            int level = zs_surf->base.u.tex.level;
-
-            tex = r300_texture(zs_surf->base.texture);
-
-            /* work out whether we can support hiz on this buffer */
-            r300_hiz_alloc_block(r300, zs_surf);
-        
-            /* work out whether we can support zmask features on this buffer */
-            r300_zmask_alloc_block(r300, zs_surf, compress);
-
-            if (tex->zmask_mem[level]) {
-                /* compression causes hangs on 16-bit */
-                if (zbuffer_bpp == 24)
-                    r300->z_compression = compress;
-            }
-            DBG(r300, DBG_HYPERZ,
-                "hyper-z features: hiz: %d @ %08x z-compression: %d z-fastfill: %d @ %08x\n", tex->hiz_mem[level] ? 1 : 0,
-                tex->hiz_mem[level] ? tex->hiz_mem[level]->ofs : 0xdeadbeef,
-                r300->z_compression, tex->zmask_mem[level] ? 1 : 0,
-                tex->zmask_mem[level] ? tex->zmask_mem[level]->ofs : 0xdeadbeef);
         }
 
         /* Polygon offset depends on the zbuffer bit depth. */
@@ -809,27 +903,25 @@ static void
     }
 
     /* Set up AA config. */
-    if (r300->rws->get_value(r300->rws, R300_VID_DRM_2_3_0)) {
-        if (state->nr_cbufs && state->cbufs[0]->texture->nr_samples > 1) {
-            aa->aa_config = R300_GB_AA_CONFIG_AA_ENABLE;
+    if (state->nr_cbufs && state->cbufs[0]->texture->nr_samples > 1) {
+        aa->aa_config = R300_GB_AA_CONFIG_AA_ENABLE;
 
-            switch (state->cbufs[0]->texture->nr_samples) {
-                case 2:
-                    aa->aa_config |= R300_GB_AA_CONFIG_NUM_AA_SUBSAMPLES_2;
-                    break;
-                case 3:
-                    aa->aa_config |= R300_GB_AA_CONFIG_NUM_AA_SUBSAMPLES_3;
-                    break;
-                case 4:
-                    aa->aa_config |= R300_GB_AA_CONFIG_NUM_AA_SUBSAMPLES_4;
-                    break;
-                case 6:
-                    aa->aa_config |= R300_GB_AA_CONFIG_NUM_AA_SUBSAMPLES_6;
-                    break;
-            }
-        } else {
-            aa->aa_config = 0;
+        switch (state->cbufs[0]->texture->nr_samples) {
+        case 2:
+            aa->aa_config |= R300_GB_AA_CONFIG_NUM_AA_SUBSAMPLES_2;
+            break;
+        case 3:
+            aa->aa_config |= R300_GB_AA_CONFIG_NUM_AA_SUBSAMPLES_3;
+            break;
+        case 4:
+            aa->aa_config |= R300_GB_AA_CONFIG_NUM_AA_SUBSAMPLES_4;
+            break;
+        case 6:
+            aa->aa_config |= R300_GB_AA_CONFIG_NUM_AA_SUBSAMPLES_6;
+            break;
         }
+    } else {
+        aa->aa_config = 0;
     }
 
     if (DBG_ON(r300, DBG_FB)) {
@@ -891,8 +983,7 @@ static void r300_bind_fs_state(struct pipe_context* pipe, void* shader)
     }
 
     r300->fs.state = fs;
-    r300_pick_fragment_shader(r300);
-    r300_mark_fs_code_dirty(r300);
+    r300->fs_status = FRAGMENT_SHADER_DIRTY;
 
     r300_mark_atom_dirty(r300, &r300->rs_block_state); /* Will be updated before the emission. */
 }
@@ -942,12 +1033,14 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
     uint32_t line_stipple_value;    /* R300_GA_LINE_STIPPLE_VALUE: 0x4260 */
     uint32_t polygon_mode;          /* R300_GA_POLY_MODE: 0x4288 */
     uint32_t clip_rule;             /* R300_SC_CLIP_RULE: 0x43D0 */
+    uint32_t round_mode;            /* R300_GA_ROUND_MODE: 0x428c */
 
     /* Point sprites texture coordinates, 0: lower left, 1: upper right */
     float point_texcoord_left = 0;  /* R300_GA_POINT_S0: 0x4200 */
     float point_texcoord_bottom = 0;/* R300_GA_POINT_T0: 0x4204 */
     float point_texcoord_right = 1; /* R300_GA_POINT_S1: 0x4208 */
     float point_texcoord_top = 0;   /* R300_GA_POINT_T1: 0x420c */
+    boolean vclamp = state->clamp_vertex_color;
     CB_LOCALS;
 
     /* Copy rasterizer state. */
@@ -1070,6 +1163,12 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
         }
     }
 
+    /* Vertex color clamping. FP20 means no clamping. */
+    round_mode =
+      R300_GA_ROUND_MODE_GEOMETRY_ROUND_NEAREST |
+      (!vclamp ? (R300_GA_ROUND_MODE_RGB_CLAMP_FP20 |
+                  R300_GA_ROUND_MODE_ALPHA_CLAMP_FP20) : 0);
+
     /* Build the main command buffer. */
     BEGIN_CB(rs->cb_main, RS_STATE_MAIN_SIZE);
     OUT_CB_REG(R300_VAP_CNTL_STATUS, vap_control_status);
@@ -1084,6 +1183,7 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
     OUT_CB_REG(R300_GA_LINE_STIPPLE_CONFIG, line_stipple_config);
     OUT_CB_REG(R300_GA_LINE_STIPPLE_VALUE, line_stipple_value);
     OUT_CB_REG(R300_GA_POLY_MODE, polygon_mode);
+    OUT_CB_REG(R300_GA_ROUND_MODE, round_mode);
     OUT_CB_REG(R300_SC_CLIP_RULE, clip_rule);
     OUT_CB_REG_SEQ(R300_GA_POINT_S0, 4);
     OUT_CB_32F(point_texcoord_left);
@@ -1126,6 +1226,7 @@ static void r300_bind_rs_state(struct pipe_context* pipe, void* state)
     struct r300_rs_state* rs = (struct r300_rs_state*)state;
     int last_sprite_coord_enable = r300->sprite_coord_enable;
     boolean last_two_sided_color = r300->two_sided_color;
+    boolean last_frag_clamp = r300->frag_clamp;
 
     if (r300->draw && rs) {
         draw_set_rasterizer_state(r300->draw, &rs->rs_draw, state);
@@ -1135,10 +1236,12 @@ static void r300_bind_rs_state(struct pipe_context* pipe, void* state)
         r300->polygon_offset_enabled = rs->polygon_offset_enable;
         r300->sprite_coord_enable = rs->rs.sprite_coord_enable;
         r300->two_sided_color = rs->rs.light_twoside;
+        r300->frag_clamp = rs->rs.clamp_fragment_color;
     } else {
         r300->polygon_offset_enabled = FALSE;
         r300->sprite_coord_enable = 0;
         r300->two_sided_color = FALSE;
+        r300->frag_clamp = FALSE;
     }
 
     UPDATE_STATE(state, r300->rs_state);
@@ -1147,6 +1250,11 @@ static void r300_bind_rs_state(struct pipe_context* pipe, void* state)
     if (last_sprite_coord_enable != r300->sprite_coord_enable ||
         last_two_sided_color != r300->two_sided_color) {
         r300_mark_atom_dirty(r300, &r300->rs_block_state);
+    }
+
+    if (last_frag_clamp != r300->frag_clamp &&
+        r300->fs_status == FRAGMENT_SHADER_VALID) {
+        r300->fs_status = FRAGMENT_SHADER_MAYBE_DIRTY;
     }
 }
 
@@ -1199,7 +1307,7 @@ static void*
     sampler->filter0 |= r300_translate_tex_filters(state->min_img_filter,
                                                    state->mag_img_filter,
                                                    state->min_mip_filter,
-                                                   state->max_anisotropy > 0);
+                                                   state->max_anisotropy > 1);
 
     sampler->filter0 |= r300_anisotropy(state->max_anisotropy);
 
@@ -1290,7 +1398,7 @@ static void r300_set_fragment_sampler_views(struct pipe_context* pipe,
     struct r300_context* r300 = r300_context(pipe);
     struct r300_textures_state* state =
         (struct r300_textures_state*)r300->textures_state.state;
-    struct r300_texture *texture;
+    struct r300_resource *texture;
     unsigned i, real_num_views = 0, view_index = 0;
     unsigned tex_units = r300->screen->caps.num_tex_units;
     boolean dirty_tex = FALSE;
@@ -1319,8 +1427,8 @@ static void r300_set_fragment_sampler_views(struct pipe_context* pipe,
 
         /* Set the texrect factor in the fragment shader.
              * Needed for RECT and NPOT fallback. */
-        texture = r300_texture(views[i]->texture);
-        if (texture->desc.is_npot) {
+        texture = r300_resource(views[i]->texture);
+        if (texture->tex.is_npot) {
             r300_mark_atom_dirty(r300, &r300->fs_rc_constant_state);
         }
 
@@ -1340,7 +1448,6 @@ static void r300_set_fragment_sampler_views(struct pipe_context* pipe,
     state->sampler_view_count = count;
 
     r300_mark_atom_dirty(r300, &r300->textures_state);
-    r300->validate_buffers = TRUE;
 
     if (dirty_tex) {
         r300_mark_atom_dirty(r300, &r300->texture_cache_inval);
@@ -1353,11 +1460,13 @@ r300_create_sampler_view(struct pipe_context *pipe,
                          const struct pipe_sampler_view *templ)
 {
     struct r300_sampler_view *view = CALLOC_STRUCT(r300_sampler_view);
-    struct r300_texture *tex = r300_texture(texture);
+    struct r300_resource *tex = r300_resource(texture);
     boolean is_r500 = r300_screen(pipe->screen)->caps.is_r500;
     boolean dxtc_swizzle = r300_screen(pipe->screen)->caps.dxtc_swizzle;
 
     if (view) {
+        unsigned hwformat;
+
         view->base = *templ;
         view->base.reference.count = 1;
         view->base.context = pipe;
@@ -1369,11 +1478,19 @@ r300_create_sampler_view(struct pipe_context *pipe,
         view->swizzle[2] = templ->swizzle_b;
         view->swizzle[3] = templ->swizzle_a;
 
+        hwformat = r300_translate_texformat(templ->format,
+                                            view->swizzle,
+                                            is_r500,
+                                            dxtc_swizzle);
+
+        if (hwformat == ~0) {
+            fprintf(stderr, "r300: Ooops. Got unsupported format %s in %s.\n",
+                    util_format_short_name(templ->format), __func__);
+        }
+        assert(hwformat != ~0);
+
         view->format = tex->tx_format;
-        view->format.format1 |= r300_translate_texformat(templ->format,
-                                                         view->swizzle,
-                                                         is_r500,
-                                                         dxtc_swizzle);
+        view->format.format1 |= hwformat;
         if (is_r500) {
             view->format.format2 |= r500_tx_format_msb_bit(templ->format);
         }
@@ -1445,7 +1562,8 @@ static void r300_set_viewport_state(struct pipe_context* pipe,
     }
 
     r300_mark_atom_dirty(r300, &r300->viewport_state);
-    if (r300->fs.state && r300_fs(r300)->shader->inputs.wpos != ATTR_UNUSED) {
+    if (r300->fs.state && r300_fs(r300)->shader &&
+        r300_fs(r300)->shader->inputs.wpos != ATTR_UNUSED) {
         r300_mark_atom_dirty(r300, &r300->fs_rc_constant_state);
     }
 }
@@ -1455,88 +1573,30 @@ static void r300_set_vertex_buffers(struct pipe_context* pipe,
                                     const struct pipe_vertex_buffer* buffers)
 {
     struct r300_context* r300 = r300_context(pipe);
-    struct pipe_vertex_buffer *vbo;
-    unsigned i, max_index = (1 << 24) - 1;
-    boolean any_user_buffer = FALSE;
+    unsigned i;
     struct pipe_vertex_buffer dummy_vb = {0};
 
     /* There must be at least one vertex buffer set, otherwise it locks up. */
     if (!count) {
         dummy_vb.buffer = r300->dummy_vb;
-        dummy_vb.max_index = r300->dummy_vb->width0 / 4;
         buffers = &dummy_vb;
         count = 1;
     }
 
-    if (count == r300->vertex_buffer_count &&
-        memcmp(r300->vertex_buffer, buffers,
-            sizeof(struct pipe_vertex_buffer) * count) == 0) {
-        return;
-    }
+    u_vbuf_mgr_set_vertex_buffers(r300->vbuf_mgr, count, buffers);
 
     if (r300->screen->caps.has_tcl) {
         /* HW TCL. */
-        r300->incompatible_vb_layout = FALSE;
-
-        /* Check if the strides and offsets are aligned to the size of DWORD. */
         for (i = 0; i < count; i++) {
-            if (buffers[i].buffer) {
-                if (buffers[i].stride % 4 != 0 ||
-                    buffers[i].buffer_offset % 4 != 0) {
-                    r300->incompatible_vb_layout = TRUE;
-                    break;
-                }
+            if (buffers[i].buffer &&
+		!r300_resource(buffers[i].buffer)->b.user_ptr) {
             }
         }
-
-        for (i = 0; i < count; i++) {
-            /* Why, yes, I AM casting away constness. How did you know? */
-            vbo = (struct pipe_vertex_buffer*)&buffers[i];
-
-            /* Skip NULL buffers */
-            if (!buffers[i].buffer) {
-                continue;
-            }
-
-            if (r300_buffer_is_user_buffer(vbo->buffer)) {
-                any_user_buffer = TRUE;
-            }
-
-            /* The stride of zero means we will be fetching only the first
-             * vertex, so don't care about max_index. */
-            if (!vbo->stride)
-                continue;
-
-            if (vbo->max_index == ~0) {
-                vbo->max_index =
-                        (vbo->buffer->width0 - vbo->buffer_offset) / vbo->stride;
-            }
-
-            max_index = MIN2(vbo->max_index, max_index);
-        }
-
-        r300->any_user_vbs = any_user_buffer;
-        r300->vertex_buffer_max_index = max_index;
-        r300->aos_dirty = TRUE;
-        r300->validate_buffers = TRUE;
+        r300->vertex_arrays_dirty = TRUE;
     } else {
         /* SW TCL. */
         draw_set_vertex_buffers(r300->draw, count, buffers);
     }
-
-    /* Common code. */
-    for (i = 0; i < count; i++) {
-        /* Reference our buffer. */
-        pipe_resource_reference(&r300->vertex_buffer[i].buffer, buffers[i].buffer);
-    }
-    for (; i < r300->vertex_buffer_count; i++) {
-        /* Dereference any old buffers. */
-        pipe_resource_reference(&r300->vertex_buffer[i].buffer, NULL);
-    }
-
-    memcpy(r300->vertex_buffer, buffers,
-        sizeof(struct pipe_vertex_buffer) * count);
-    r300->vertex_buffer_count = count;
 }
 
 static void r300_set_index_buffer(struct pipe_context* pipe,
@@ -1544,19 +1604,19 @@ static void r300_set_index_buffer(struct pipe_context* pipe,
 {
     struct r300_context* r300 = r300_context(pipe);
 
-    if (ib) {
+    if (ib && ib->buffer) {
+        assert(ib->offset % ib->index_size == 0);
+
         pipe_resource_reference(&r300->index_buffer.buffer, ib->buffer);
         memcpy(&r300->index_buffer, ib, sizeof(r300->index_buffer));
+        r300->index_buffer.offset /= r300->index_buffer.index_size;
     }
     else {
         pipe_resource_reference(&r300->index_buffer.buffer, NULL);
         memset(&r300->index_buffer, 0, sizeof(r300->index_buffer));
     }
 
-    if (r300->screen->caps.has_tcl) {
-        r300->validate_buffers = TRUE;
-    }
-    else {
+    if (!r300->screen->caps.has_tcl) {
         draw_set_index_buffer(r300->draw, ib);
     }
 }
@@ -1569,17 +1629,11 @@ static void r300_vertex_psc(struct r300_vertex_element_state *velems)
     enum pipe_format format;
     unsigned i;
 
-    if (velems->count > 16) {
-        fprintf(stderr, "r300: More than 16 vertex elements are not supported,"
-                " requested %i, using 16.\n", velems->count);
-        velems->count = 16;
-    }
-
     /* Vertex shaders have no semantics on their inputs,
      * so PSC should just route stuff based on the vertex elements,
      * and not on attrib information. */
     for (i = 0; i < velems->count; i++) {
-        format = velems->hw_format[i];
+        format = velems->velem[i].src_format;
 
         type = r300_translate_vertex_data_type(format);
         if (type == R300_INVALID_FORMAT) {
@@ -1611,16 +1665,13 @@ static void r300_vertex_psc(struct r300_vertex_element_state *velems)
     vstream->count = (i >> 1) + 1;
 }
 
-#define FORMAT_REPLACE(what, withwhat) \
-    case PIPE_FORMAT_##what: *format = PIPE_FORMAT_##withwhat; break
-
 static void* r300_create_vertex_elements_state(struct pipe_context* pipe,
                                                unsigned count,
                                                const struct pipe_vertex_element* attribs)
 {
+    struct r300_context *r300 = r300_context(pipe);
     struct r300_vertex_element_state *velems;
     unsigned i;
-    enum pipe_format *format;
     struct pipe_vertex_element dummy_attrib = {0};
 
     /* R300 Programmable Stream Control (PSC) doesn't support 0 vertex elements. */
@@ -1628,81 +1679,33 @@ static void* r300_create_vertex_elements_state(struct pipe_context* pipe,
         dummy_attrib.src_format = PIPE_FORMAT_R8G8B8A8_UNORM;
         attribs = &dummy_attrib;
         count = 1;
+    } else if (count > 16) {
+        fprintf(stderr, "r300: More than 16 vertex elements are not supported,"
+                " requested %i, using 16.\n", count);
+        count = 16;
     }
 
-    assert(count <= PIPE_MAX_ATTRIBS);
     velems = CALLOC_STRUCT(r300_vertex_element_state);
-    if (velems != NULL) {
-        velems->count = count;
-        memcpy(velems->velem, attribs, sizeof(struct pipe_vertex_element) * count);
+    if (!velems)
+        return NULL;
 
-        if (r300_screen(pipe->screen)->caps.has_tcl) {
-            /* Set the best hw format in case the original format is not
-             * supported by hw. */
-            for (i = 0; i < count; i++) {
-                velems->hw_format[i] = velems->velem[i].src_format;
-                format = &velems->hw_format[i];
+    velems->count = count;
+    velems->vmgr_elements =
+        u_vbuf_mgr_create_vertex_elements(r300->vbuf_mgr, count, attribs,
+                                          velems->velem);
 
-                /* This is basically the list of unsupported formats.
-                 * For now we don't care about the alignment, that's going to
-                 * be sorted out after the PSC setup. */
-                switch (*format) {
-                    FORMAT_REPLACE(R64_FLOAT,           R32_FLOAT);
-                    FORMAT_REPLACE(R64G64_FLOAT,        R32G32_FLOAT);
-                    FORMAT_REPLACE(R64G64B64_FLOAT,     R32G32B32_FLOAT);
-                    FORMAT_REPLACE(R64G64B64A64_FLOAT,  R32G32B32A32_FLOAT);
+    if (r300_screen(pipe->screen)->caps.has_tcl) {
+        /* Setup PSC.
+         * The unused components will be replaced by (..., 0, 1). */
+        r300_vertex_psc(velems);
 
-                    FORMAT_REPLACE(R32_UNORM,           R32_FLOAT);
-                    FORMAT_REPLACE(R32G32_UNORM,        R32G32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32_UNORM,     R32G32B32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32A32_UNORM,  R32G32B32A32_FLOAT);
-
-                    FORMAT_REPLACE(R32_USCALED,         R32_FLOAT);
-                    FORMAT_REPLACE(R32G32_USCALED,      R32G32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32_USCALED,   R32G32B32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32A32_USCALED,R32G32B32A32_FLOAT);
-
-                    FORMAT_REPLACE(R32_SNORM,           R32_FLOAT);
-                    FORMAT_REPLACE(R32G32_SNORM,        R32G32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32_SNORM,     R32G32B32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32A32_SNORM,  R32G32B32A32_FLOAT);
-
-                    FORMAT_REPLACE(R32_SSCALED,         R32_FLOAT);
-                    FORMAT_REPLACE(R32G32_SSCALED,      R32G32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32_SSCALED,   R32G32B32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32A32_SSCALED,R32G32B32A32_FLOAT);
-
-                    FORMAT_REPLACE(R32_FIXED,           R32_FLOAT);
-                    FORMAT_REPLACE(R32G32_FIXED,        R32G32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32_FIXED,     R32G32B32_FLOAT);
-                    FORMAT_REPLACE(R32G32B32A32_FIXED,  R32G32B32A32_FLOAT);
-
-                    default:;
-                }
-
-                velems->incompatible_layout =
-                        velems->incompatible_layout ||
-                        velems->velem[i].src_format != velems->hw_format[i] ||
-                        velems->velem[i].src_offset % 4 != 0;
-            }
-
-            /* Now setup PSC.
-             * The unused components will be replaced by (..., 0, 1). */
-            r300_vertex_psc(velems);
-
-            /* Align the formats to the size of DWORD.
-             * We only care about the blocksizes of the formats since
-             * swizzles are already set up.
-             * Also compute the vertex size. */
-            for (i = 0; i < count; i++) {
-                /* This is OK because we check for aligned strides too
-                 * elsewhere. */
-                velems->hw_format_size[i] =
-                    align(util_format_get_blocksize(velems->hw_format[i]), 4);
-                velems->vertex_size_dwords += velems->hw_format_size[i] / 4;
-            }
+        for (i = 0; i < count; i++) {
+            velems->format_size[i] =
+                align(util_format_get_blocksize(velems->velem[i].src_format), 4);
+            velems->vertex_size_dwords += velems->format_size[i] / 4;
         }
     }
+
     return velems;
 }
 
@@ -1718,6 +1721,8 @@ static void r300_bind_vertex_elements_state(struct pipe_context *pipe,
 
     r300->velems = velems;
 
+    u_vbuf_mgr_bind_vertex_elements(r300->vbuf_mgr, state, velems->vmgr_elements);
+
     if (r300->draw) {
         draw_set_vertex_elements(r300->draw, velems->count, velems->velem);
         return;
@@ -1725,12 +1730,16 @@ static void r300_bind_vertex_elements_state(struct pipe_context *pipe,
 
     UPDATE_STATE(&velems->vertex_stream, r300->vertex_stream_state);
     r300->vertex_stream_state.size = (1 + velems->vertex_stream.count) * 2;
-    r300->aos_dirty = TRUE;
+    r300->vertex_arrays_dirty = TRUE;
 }
 
 static void r300_delete_vertex_elements_state(struct pipe_context *pipe, void *state)
 {
-   FREE(state);
+    struct r300_context *r300 = r300_context(pipe);
+    struct r300_vertex_element_state *velems = state;
+
+    u_vbuf_mgr_destroy_vertex_elements(r300->vbuf_mgr, velems->vmgr_elements);
+    FREE(state);
 }
 
 static void* r300_create_vs_state(struct pipe_context* pipe,
@@ -1817,6 +1826,7 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
 {
     struct r300_context* r300 = r300_context(pipe);
     struct r300_constant_buffer *cbuf;
+    struct r300_resource *rbuf = r300_resource(buf);
     uint32_t *mapped;
 
     switch (shader) {
@@ -1830,14 +1840,18 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
             return;
     }
 
-    if (buf == NULL || buf->width0 == 0 ||
-        (mapped = (uint32_t*)r300_buffer(buf)->constant_buffer) == NULL) {
+    if (buf == NULL || buf->width0 == 0)
         return;
-    }
+
+    if (rbuf->b.user_ptr)
+        mapped = (uint32_t*)rbuf->b.user_ptr;
+    else if (rbuf->constant_buffer)
+        mapped = (uint32_t*)rbuf->constant_buffer;
+    else
+        return;
 
     if (shader == PIPE_SHADER_FRAGMENT ||
         (shader == PIPE_SHADER_VERTEX && r300->screen->caps.has_tcl)) {
-        assert((buf->width0 % (4 * sizeof(float))) == 0);
         cbuf->ptr = mapped;
     }
 
@@ -1866,6 +1880,14 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
     } else if (shader == PIPE_SHADER_FRAGMENT) {
         r300_mark_atom_dirty(r300, &r300->fs_constants);
     }
+}
+
+static void r300_texture_barrier(struct pipe_context *pipe)
+{
+    struct r300_context *r300 = r300_context(pipe);
+
+    r300_mark_atom_dirty(r300, &r300->gpu_flush);
+    r300_mark_atom_dirty(r300, &r300->texture_cache_inval);
 }
 
 void r300_init_state_functions(struct r300_context* r300)
@@ -1914,6 +1936,7 @@ void r300_init_state_functions(struct r300_context* r300)
 
     r300->context.set_vertex_buffers = r300_set_vertex_buffers;
     r300->context.set_index_buffer = r300_set_index_buffer;
+    r300->context.redefine_user_buffer = u_default_redefine_user_buffer;
 
     r300->context.create_vertex_elements_state = r300_create_vertex_elements_state;
     r300->context.bind_vertex_elements_state = r300_bind_vertex_elements_state;
@@ -1922,4 +1945,6 @@ void r300_init_state_functions(struct r300_context* r300)
     r300->context.create_vs_state = r300_create_vs_state;
     r300->context.bind_vs_state = r300_bind_vs_state;
     r300->context.delete_vs_state = r300_delete_vs_state;
+
+    r300->context.texture_barrier = r300_texture_barrier;
 }

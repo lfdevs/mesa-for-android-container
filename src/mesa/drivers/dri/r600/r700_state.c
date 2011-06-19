@@ -32,6 +32,7 @@
 #include "main/context.h"
 #include "main/dd.h"
 #include "main/simple_list.h"
+#include "main/state.h"
 
 #include "tnl/tnl.h"
 #include "tnl/t_pipeline.h"
@@ -453,7 +454,7 @@ static void r700SetBlendState(struct gl_context * ctx)
 
 	R600_STATECHANGE(context, blnd);
 
-	if (RGBA_LOGICOP_ENABLED(ctx) || !ctx->Color.BlendEnabled) {
+	if (_mesa_rgba_logicop_enabled(ctx) || !ctx->Color.BlendEnabled) {
 		SETfield(blend_reg,
 			 BLEND_ONE, COLOR_SRCBLEND_shift, COLOR_SRCBLEND_mask);
 		SETfield(blend_reg,
@@ -474,13 +475,13 @@ static void r700SetBlendState(struct gl_context * ctx)
 	}
 
 	SETfield(blend_reg,
-		 blend_factor(ctx->Color.BlendSrcRGB, GL_TRUE),
+		 blend_factor(ctx->Color.Blend[0].SrcRGB, GL_TRUE),
 		 COLOR_SRCBLEND_shift, COLOR_SRCBLEND_mask);
 	SETfield(blend_reg,
-		 blend_factor(ctx->Color.BlendDstRGB, GL_FALSE),
+		 blend_factor(ctx->Color.Blend[0].DstRGB, GL_FALSE),
 		 COLOR_DESTBLEND_shift, COLOR_DESTBLEND_mask);
 
-	switch (ctx->Color.BlendEquationRGB) {
+	switch (ctx->Color.Blend[0].EquationRGB) {
 	case GL_FUNC_ADD:
 		eqn = COMB_DST_PLUS_SRC;
 		break;
@@ -512,20 +513,20 @@ static void r700SetBlendState(struct gl_context * ctx)
 	default:
 		fprintf(stderr,
 			"[%s:%u] Invalid RGB blend equation (0x%04x).\n",
-			__FUNCTION__, __LINE__, ctx->Color.BlendEquationRGB);
+			__FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationRGB);
 		return;
 	}
 	SETfield(blend_reg,
 		 eqn, COLOR_COMB_FCN_shift, COLOR_COMB_FCN_mask);
 
 	SETfield(blend_reg,
-		 blend_factor(ctx->Color.BlendSrcA, GL_TRUE),
+		 blend_factor(ctx->Color.Blend[0].SrcA, GL_TRUE),
 		 ALPHA_SRCBLEND_shift, ALPHA_SRCBLEND_mask);
 	SETfield(blend_reg,
-		 blend_factor(ctx->Color.BlendDstA, GL_FALSE),
+		 blend_factor(ctx->Color.Blend[0].DstA, GL_FALSE),
 		 ALPHA_DESTBLEND_shift, ALPHA_DESTBLEND_mask);
 
-	switch (ctx->Color.BlendEquationA) {
+	switch (ctx->Color.Blend[0].EquationA) {
 	case GL_FUNC_ADD:
 		eqnA = COMB_DST_PLUS_SRC;
 		break;
@@ -556,7 +557,7 @@ static void r700SetBlendState(struct gl_context * ctx)
 	default:
 		fprintf(stderr,
 			"[%s:%u] Invalid A blend equation (0x%04x).\n",
-			__FUNCTION__, __LINE__, ctx->Color.BlendEquationA);
+			__FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationA);
 		return;
 	}
 
@@ -644,7 +645,7 @@ static void r700SetLogicOpState(struct gl_context *ctx)
 
 	R600_STATECHANGE(context, blnd);
 
-	if (RGBA_LOGICOP_ENABLED(ctx))
+	if (_mesa_rgba_logicop_enabled(ctx))
 		SETfield(r700->CB_COLOR_CONTROL.u32All,
 			 translate_logicop(ctx->Color.LogicOp), ROP3_shift, ROP3_mask);
 	else
@@ -657,7 +658,7 @@ static void r700SetLogicOpState(struct gl_context *ctx)
  */
 static void r700LogicOpcode(struct gl_context *ctx, GLenum logicop)
 {
-	if (RGBA_LOGICOP_ENABLED(ctx))
+	if (_mesa_rgba_logicop_enabled(ctx))
 		r700SetLogicOpState(ctx);
 }
 

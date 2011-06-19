@@ -25,12 +25,15 @@
  * 
  **************************************************************************/
 
+#include "main/mfeatures.h"
+
 #include "intel_chipset.h"
 #include "intel_context.h"
 #include "intel_extensions.h"
 #include "utils.h"
 
 
+#define need_GL_ARB_ES2_compatibility
 #define need_GL_ARB_draw_elements_base_vertex
 #define need_GL_ARB_framebuffer_object
 #define need_GL_ARB_map_buffer_range
@@ -78,14 +81,17 @@
  * i965_dri.
  */
 static const struct dri_extension card_extensions[] = {
+   { "GL_ARB_ES2_compatibility",          GL_ARB_ES2_compatibility_functions },
    { "GL_ARB_draw_elements_base_vertex",  GL_ARB_draw_elements_base_vertex_functions },
    { "GL_ARB_explicit_attrib_location",   NULL },
+   { "GL_ARB_framebuffer_object",         GL_ARB_framebuffer_object_functions},
    { "GL_ARB_half_float_pixel",           NULL },
    { "GL_ARB_map_buffer_range",           GL_ARB_map_buffer_range_functions },
    { "GL_ARB_multitexture",               NULL },
    { "GL_ARB_pixel_buffer_object",      NULL },
    { "GL_ARB_point_parameters",           GL_ARB_point_parameters_functions },
    { "GL_ARB_point_sprite",               NULL },
+   { "GL_ARB_sampler_objects",            NULL },
    { "GL_ARB_shader_objects",             GL_ARB_shader_objects_functions },
    { "GL_ARB_shading_language_100",       GL_VERSION_2_0_functions },
    { "GL_ARB_sync",                       GL_ARB_sync_functions },
@@ -155,30 +161,37 @@ static const struct dri_extension i915_extensions[] = {
 
 /** i965-only extensions */
 static const struct dri_extension brw_extensions[] = {
+   { "GL_ARB_color_buffer_float",         NULL },
    { "GL_ARB_depth_clamp",                NULL },
    { "GL_ARB_depth_texture",              NULL },
    { "GL_ARB_fragment_coord_conventions", NULL },
    { "GL_ARB_fragment_program",           NULL },
    { "GL_ARB_fragment_program_shadow",    NULL },
    { "GL_ARB_fragment_shader",            NULL },
-   { "GL_ARB_framebuffer_object",         GL_ARB_framebuffer_object_functions},
    { "GL_ARB_half_float_vertex",          NULL },
    { "GL_ARB_occlusion_query",            GL_ARB_occlusion_query_functions },
    { "GL_ARB_point_sprite", 		  NULL },
    { "GL_ARB_seamless_cube_map",          NULL },
    { "GL_ARB_shadow",                     NULL },
+#ifdef TEXTURE_FLOAT_ENABLED
+   { "GL_ARB_texture_float",              NULL },
+#endif
    { "GL_MESA_texture_signed_rgba",       NULL },
+   { "GL_ARB_texture_compression_rgtc",   NULL },
    { "GL_ARB_texture_non_power_of_two",   NULL },
    { "GL_ARB_texture_rg",                 NULL },
    { "GL_EXT_draw_buffers2",              GL_EXT_draw_buffers2_functions },
+   { "GL_EXT_framebuffer_sRGB",           NULL },
    { "GL_EXT_shadow_funcs",               NULL },
    { "GL_EXT_stencil_two_side",           GL_EXT_stencil_two_side_functions },
    { "GL_EXT_texture_sRGB",		  NULL },
+   { "GL_EXT_texture_sRGB_decode",	  NULL },
    { "GL_EXT_texture_swizzle",		  NULL },
    { "GL_EXT_vertex_array_bgra",	  NULL },
    { "GL_ATI_envmap_bumpmap",             GL_ATI_envmap_bumpmap_functions },
    { "GL_ATI_separate_stencil",           GL_ATI_separate_stencil_functions },
    { "GL_ATI_texture_env_combine3",       NULL },
+   { "GL_NV_conditional_render",          NULL },
    { "GL_NV_texture_env_combine4",        NULL },
    { NULL,                                NULL }
 };

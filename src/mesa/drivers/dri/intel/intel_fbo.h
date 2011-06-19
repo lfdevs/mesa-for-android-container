@@ -28,6 +28,7 @@
 #ifndef INTEL_FBO_H
 #define INTEL_FBO_H
 
+#include <stdbool.h>
 #include "main/formats.h"
 #include "intel_screen.h"
 
@@ -40,6 +41,12 @@ struct intel_renderbuffer
 {
    struct gl_renderbuffer Base;
    struct intel_region *region;
+
+   /** Only used by depth renderbuffers for which HiZ is enabled. */
+   struct intel_region *hiz_region;
+
+   GLuint draw_offset; /**< Offset of drawing address within the region */
+   GLuint draw_x, draw_y; /**< Offset of drawing within the region */
 };
 
 
@@ -80,11 +87,39 @@ intel_get_renderbuffer(struct gl_framebuffer *fb, int attIndex)
       return NULL;
 }
 
+/**
+ * If the framebuffer has a depth buffer attached, then return its HiZ region.
+ * The HiZ region may be null.
+ */
+static INLINE struct intel_region*
+intel_framebuffer_get_hiz_region(struct gl_framebuffer *fb)
+{
+   struct intel_renderbuffer *rb = NULL;
+   if (fb)
+      rb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
+
+   if (rb)
+      return rb->hiz_region;
+   else
+      return NULL;
+}
+
+static INLINE bool
+intel_framebuffer_has_hiz(struct gl_framebuffer *fb)
+{
+   return intel_framebuffer_get_hiz_region(fb) != NULL;
+}
+
 
 extern void
 intel_renderbuffer_set_region(struct intel_context *intel,
 			      struct intel_renderbuffer *irb,
 			      struct intel_region *region);
+
+extern void
+intel_renderbuffer_set_hiz_region(struct intel_context *intel,
+				  struct intel_renderbuffer *rb,
+				  struct intel_region *region);
 
 
 extern struct intel_renderbuffer *
@@ -98,6 +133,10 @@ intel_fbo_init(struct intel_context *intel);
 extern void
 intel_flip_renderbuffers(struct gl_framebuffer *fb);
 
+uint32_t
+intel_renderbuffer_tile_offsets(struct intel_renderbuffer *irb,
+				uint32_t *tile_x,
+				uint32_t *tile_y);
 
 static INLINE struct intel_region *
 intel_get_rb_region(struct gl_framebuffer *fb, GLuint attIndex)
@@ -108,6 +147,5 @@ intel_get_rb_region(struct gl_framebuffer *fb, GLuint attIndex)
    else
       return NULL;
 }
-
 
 #endif /* INTEL_FBO_H */

@@ -26,7 +26,6 @@
 #include "r300_context.h"
 #include "r300_screen.h"
 #include "r300_emit.h"
-#include "r300_winsys.h"
 
 #include <stdio.h>
 
@@ -46,7 +45,7 @@ static struct pipe_query *r300_create_query(struct pipe_context *pipe,
         return NULL;
 
     q->type = query_type;
-    q->domain = R300_DOMAIN_GTT;
+    q->domain = RADEON_DOMAIN_GTT;
     q->buffer_size = 4096;
 
     if (r300screen->caps.family == CHIP_FAMILY_RV530)
@@ -57,10 +56,10 @@ static struct pipe_query *r300_create_query(struct pipe_context *pipe,
     insert_at_tail(&r300->query_list, q);
 
     /* Open up the occlusion query buffer. */
-    q->buffer = r300->rws->buffer_create(r300->rws, q->buffer_size, 4096,
+    q->buf = r300->rws->buffer_create(r300->rws, q->buffer_size, 4096,
                                          PIPE_BIND_CUSTOM, PIPE_USAGE_STREAM,
                                          q->domain);
-    q->cs_buffer = r300->rws->buffer_get_cs_handle(r300->rws, q->buffer);
+    q->cs_buf = r300->rws->buffer_get_cs_handle(q->buf);
 
     return (struct pipe_query*)q;
 }
@@ -68,10 +67,9 @@ static struct pipe_query *r300_create_query(struct pipe_context *pipe,
 static void r300_destroy_query(struct pipe_context* pipe,
                                struct pipe_query* query)
 {
-    struct r300_context *r300 = r300_context(pipe);
     struct r300_query* q = r300_query(query);
 
-    r300->rws->buffer_reference(r300->rws, &q->buffer, NULL);
+    pb_reference(&q->buf, NULL);
     remove_from_list(q);
     FREE(query);
 }
@@ -128,16 +126,12 @@ static boolean r300_get_query_result(struct pipe_context* pipe,
 {
     struct r300_context* r300 = r300_context(pipe);
     struct r300_query *q = r300_query(query);
-    unsigned flags, i;
+    unsigned i;
     uint32_t temp, *map;
-    uint64_t *result = (uint64_t*)vresult;
 
-    if (!q->flushed)
-        pipe->flush(pipe, 0, NULL);
-
-    flags = PIPE_TRANSFER_READ | (!wait ? PIPE_TRANSFER_DONTBLOCK : 0);
-
-    map = r300->rws->buffer_map(r300->rws, q->buffer, r300->cs, flags);
+    map = r300->rws->buffer_map(q->buf, r300->cs,
+                                PIPE_TRANSFER_READ |
+                                (!wait ? PIPE_TRANSFER_DONTBLOCK : 0));
     if (!map)
         return FALSE;
 
@@ -148,9 +142,9 @@ static boolean r300_get_query_result(struct pipe_context* pipe,
         map++;
     }
 
-    r300->rws->buffer_unmap(r300->rws, q->buffer);
+    r300->rws->buffer_unmap(q->buf);
 
-    *result = temp;
+    *((uint64_t*)vresult) = temp;
     return TRUE;
 }
 
@@ -162,75 +156,23 @@ static void r300_render_condition(struct pipe_context *pipe,
     uint64_t result = 0;
     boolean wait;
 
+    r300->skip_rendering = FALSE;
+
     if (query) {
         wait = mode == PIPE_RENDER_COND_WAIT ||
                mode == PIPE_RENDER_COND_BY_REGION_WAIT;
 
-        if (!r300_get_query_result(pipe, query, wait, &result)) {
-            r300->skip_rendering = FALSE;
-        } else {
+        if (r300_get_query_result(pipe, query, wait, &result)) {
             r300->skip_rendering = result == 0;
         }
-    } else {
-        r300->skip_rendering = FALSE;
     }
-}
-
-/***************************************************************************
- * Fake occlusion queries (for debugging)
- ***************************************************************************/
-
-static unsigned r300_fake_query;
-
-static struct pipe_query *r300_fake_create_query(struct pipe_context *pipe,
-                                                 unsigned query_type)
-{
-    return (struct pipe_query*)&r300_fake_query;
-}
-
-static void r300_fake_destroy_query(struct pipe_context* pipe,
-                                    struct pipe_query* query)
-{
-}
-
-static void r300_fake_begin_query(struct pipe_context* pipe,
-                                  struct pipe_query* query)
-{
-}
-
-static void r300_fake_end_query(struct pipe_context* pipe,
-                                struct pipe_query* query)
-{
-}
-
-static boolean r300_fake_get_query_result(struct pipe_context* pipe,
-                                          struct pipe_query* query,
-                                          boolean wait, void* vresult)
-{
-    uint64_t *result = (uint64_t*)vresult;
-    *result = 1000000;
-    return TRUE;
-}
-
-static void r300_fake_render_condition(struct pipe_context *pipe,
-                                       struct pipe_query *query, uint mode)
-{
 }
 
 void r300_init_query_functions(struct r300_context* r300) {
-    if (DBG_ON(r300, DBG_FAKE_OCC)) {
-        r300->context.create_query = r300_fake_create_query;
-        r300->context.destroy_query = r300_fake_destroy_query;
-        r300->context.begin_query = r300_fake_begin_query;
-        r300->context.end_query = r300_fake_end_query;
-        r300->context.get_query_result = r300_fake_get_query_result;
-        r300->context.render_condition = r300_fake_render_condition;
-    } else {
-        r300->context.create_query = r300_create_query;
-        r300->context.destroy_query = r300_destroy_query;
-        r300->context.begin_query = r300_begin_query;
-        r300->context.end_query = r300_end_query;
-        r300->context.get_query_result = r300_get_query_result;
-        r300->context.render_condition = r300_render_condition;
-    }
+    r300->context.create_query = r300_create_query;
+    r300->context.destroy_query = r300_destroy_query;
+    r300->context.begin_query = r300_begin_query;
+    r300->context.end_query = r300_end_query;
+    r300->context.get_query_result = r300_get_query_result;
+    r300->context.render_condition = r300_render_condition;
 }

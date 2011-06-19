@@ -41,6 +41,7 @@
 #include "main/image.h"
 #include "main/imports.h"
 #include "main/mtypes.h"
+#include "main/pbo.h"
 #include "main/state.h"
 #include "main/texobj.h"
 #include "main/teximage.h"
@@ -444,11 +445,11 @@ xmesa_DrawPixels_8R8G8B( struct gl_context *ctx,
       if (swrast->NewState)
          _swrast_validate_derived( ctx );
 
-      if (unpack->BufferObj->Name) {
+      if (_mesa_is_bufferobj(unpack->BufferObj)) {
          /* unpack from PBO */
          GLubyte *buf;
          if (!_mesa_validate_pbo_access(2, unpack, width, height, 1,
-                                        format, type, pixels)) {
+                                        format, type, INT_MAX, pixels)) {
             _mesa_error(ctx, GL_INVALID_OPERATION,
                         "glDrawPixels(invalid PBO access)");
             return;
@@ -506,7 +507,7 @@ xmesa_DrawPixels_8R8G8B( struct gl_context *ctx,
          XPutImage(dpy, xrb->pixmap, gc, &ximage, 0, 0, dstX, dstY, w, h);
       }
 
-      if (unpack->BufferObj->Name) {
+      if (_mesa_is_bufferobj(unpack->BufferObj)) {
          ctx->Driver.UnmapBuffer(ctx, GL_PIXEL_UNPACK_BUFFER_EXT,
                                  unpack->BufferObj);
       }
@@ -579,11 +580,11 @@ xmesa_DrawPixels_5R6G5B( struct gl_context *ctx,
       if (swrast->NewState)
          _swrast_validate_derived( ctx );
       
-      if (unpack->BufferObj->Name) {
+      if (_mesa_is_bufferobj(unpack->BufferObj)) {
          /* unpack from PBO */
          GLubyte *buf;
          if (!_mesa_validate_pbo_access(2, unpack, width, height, 1,
-                                        format, type, pixels)) {
+                                        format, type, INT_MAX, pixels)) {
             _mesa_error(ctx, GL_INVALID_OPERATION,
                         "glDrawPixels(invalid PBO access)");
             return;

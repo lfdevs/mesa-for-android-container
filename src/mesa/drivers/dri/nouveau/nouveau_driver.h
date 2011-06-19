@@ -31,6 +31,7 @@
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/formats.h"
+#include "main/state.h"
 #include "utils.h"
 #include "dri_util.h"
 
@@ -47,7 +48,6 @@
 #include "nouveau_surface.h"
 #include "nv04_pushbuf.h"
 
-#define DRIVER_DATE	"20091015"
 #define DRIVER_AUTHOR	"Nouveau"
 
 struct nouveau_driver {

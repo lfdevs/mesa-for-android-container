@@ -307,7 +307,7 @@ fi
 #
 case $ARCH in
 
-    'Linux' | 'OpenBSD' | 'DragonFly' | 'GNU' | GNU/*)
+    'Linux' | 'OpenBSD' | 'DragonFly' | 'GNU' | GNU/* | 'NetBSD')
 	# we assume gcc
 
 	if [ "x$LINK" = "x" ] ; then
@@ -574,20 +574,6 @@ case $ARCH in
 	fi
 	;;
 
-    'NetBSD')
-        if [ $STATIC = 1 ] ; then
-	    LIBNAME="lib${LIBNAME}_pic.a"
-	    echo "mklib: Making NetBSD PIC static library: " ${LIBNAME}
-	    FINAL_LIBS=`make_ar_static_lib cq 1 ${LIBNAME} ${OBJECTS}`
-	else
-	    LIBNAME="lib${LIBNAME}.so.${MAJOR}.${MINOR}"
-	    echo "mklib: Making NetBSD PIC shared library: " ${LIBNAME}
-	    rm -f ${LIBNAME}
-	    ld -x -Bshareable -Bforcearchive -o ${LIBNAME} ${OBJECTS}
-	    FINAL_LIBS=${LIBNAME}
-	fi
-	;;
-
     'IRIX' | 'IRIX64')
         if [ $STATIC = 1 ] ; then
 	    LIBNAME="lib${LIBNAME}.a"
@@ -781,9 +767,8 @@ case $ARCH in
                 OPTS="${OPTS} -exported_symbols_list ${EXPORTS}"
             fi
 
-            LINKNAME="lib${LIBNAME}.${MAJOR}.${LIBSUFFIX}"
-            LINKNAME2="lib${LIBNAME}.${LIBSUFFIX}"
-            LIBNAME="lib${LIBNAME}.${MAJOR}.${MINOR}.${LIBSUFFIX}"
+            LINKNAME="lib${LIBNAME}.${LIBSUFFIX}"
+            LIBNAME="lib${LIBNAME}.${MAJOR}.${LIBSUFFIX}"
 
 	    # examine first object to determine ABI
     	    set ${OBJECTS}
@@ -796,9 +781,6 @@ case $ARCH in
                 OPTS=${ALTOPTS}
             fi
 
-	    # XXX can we always add -isysroot /Developer/SDKs/MacOSX10.4u.sdk
-	    # to OPTS here?
-
 	    # determine linker
 	    if [ $CPLUSPLUS = 1 ] ; then
 		LINK="g++"
@@ -810,8 +792,7 @@ case $ARCH in
 
             ${LINK} ${OPTS} ${LDFLAGS} -o ${LIBNAME} ${OBJECTS} ${DEPS}
             ln -s ${LIBNAME} ${LINKNAME}
-            ln -s ${LIBNAME} ${LINKNAME2}
-            FINAL_LIBS="${LIBNAME} ${LINKNAME} ${LINKNAME2}"
+            FINAL_LIBS="${LIBNAME} ${LINKNAME}"
         fi
         ;;
 

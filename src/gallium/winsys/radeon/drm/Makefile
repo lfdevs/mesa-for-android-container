@@ -5,11 +5,11 @@ include $(TOP)/configs/current
 LIBNAME = radeonwinsys
 
 C_SOURCES = \
-	radeon_drm_buffer.c \
-	radeon_drm_common.c \
-	radeon_r300.c
+	radeon_drm_bo.c \
+	radeon_drm_cs.c \
+	radeon_drm_winsys.c
 
-LIBRARY_INCLUDES = -I$(TOP)/src/gallium/drivers/r300 \
+LIBRARY_INCLUDES = -I$(TOP)/include \
 		   $(shell pkg-config libdrm --cflags-only-I)
 
 include ../../../Makefile.template

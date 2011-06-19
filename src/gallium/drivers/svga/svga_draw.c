@@ -28,6 +28,7 @@
 #include "pipe/p_defines.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
+#include "util/u_upload_mgr.h"
 
 #include "svga_context.h"
 #include "svga_draw.h"
@@ -143,6 +144,9 @@ svga_hwtnl_flush( struct svga_hwtnl *hwtnl )
       SVGA3dPrimitiveRange *prim;
       unsigned i;
 
+      /* Unmap upload manager vertex buffers */
+      u_upload_flush(svga->upload_vb);
+
       for (i = 0; i < hwtnl->cmd.vdecl_count; i++) {
          handle = svga_buffer_handle(svga, hwtnl->cmd.vdecl_vb[i]);
          if (handle == NULL)
@@ -150,6 +154,9 @@ svga_hwtnl_flush( struct svga_hwtnl *hwtnl )
 
          vb_handle[i] = handle;
       }
+
+      /* Unmap upload manager index buffers */
+      u_upload_flush(svga->upload_ib);
 
       for (i = 0; i < hwtnl->cmd.prim_count; i++) {
          if (hwtnl->cmd.prim_ib[i]) {
@@ -161,6 +168,20 @@ svga_hwtnl_flush( struct svga_hwtnl *hwtnl )
             handle = NULL;
 
          ib_handle[i] = handle;
+      }
+
+      if (svga->rebind.rendertargets) {
+         ret = svga_reemit_framebuffer_bindings(svga);
+         if (ret != PIPE_OK) {
+            return ret;
+         }
+      }
+
+      if (svga->rebind.texture_samplers) {
+         ret = svga_reemit_tss_bindings(svga);
+         if (ret != PIPE_OK) {
+            return ret;
+         }
       }
 
       SVGA_DBG(DEBUG_DMA, "draw to sid %p, %d prims\n",
@@ -315,7 +336,6 @@ enum pipe_error svga_hwtnl_prim( struct svga_hwtnl *hwtnl,
             break;
          }
 
-         assert(!stride || width <= stride);
          if (max_index != ~0) {
             assert(offset + (index_bias + max_index) * stride + width <= size);
          }

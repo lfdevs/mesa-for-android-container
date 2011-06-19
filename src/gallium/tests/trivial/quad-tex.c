@@ -129,7 +129,8 @@ static void init_prog(struct program *p)
 			}
 		};
 
-		p->vbuf = pipe_buffer_create(p->screen, PIPE_BIND_VERTEX_BUFFER, sizeof(vertices));
+		p->vbuf = pipe_buffer_create(p->screen, PIPE_BIND_VERTEX_BUFFER,
+					     PIPE_USAGE_STATIC, sizeof(vertices));
 		pipe_buffer_write(p->pipe, p->vbuf, 0, sizeof(vertices), vertices);
 	}
 
@@ -334,7 +335,7 @@ static void draw(struct program *p)
 	                        4,  /* verts */
 	                        2); /* attribs/vert */
 
-	p->pipe->flush(p->pipe, PIPE_FLUSH_RENDER_CACHE, NULL);
+        p->pipe->flush(p->pipe, NULL);
 
 	debug_dump_surface_bmp(p->pipe, "result.bmp", p->framebuffer.cbufs[0]);
 }

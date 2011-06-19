@@ -37,7 +37,7 @@
  * \author Ian Romanick <idr@us.ibm.com>
  */
 
-#  if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590)) && defined(__ELF__)
+#  if (defined(__GNUC__) && !defined(__CYGWIN__) && !defined(__MINGW32__)) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590) && defined(__ELF__))
 #    define HIDDEN  __attribute__((visibility("hidden")))
 #  else
 #    define HIDDEN
@@ -573,6 +573,7 @@ extern HIDDEN void __indirect_glGetQueryObjectuivARB(GLuint id, GLenum pname, GL
 extern HIDDEN void __indirect_glGetQueryivARB(GLenum target, GLenum pname, GLint * params);
 extern HIDDEN GLboolean __indirect_glIsQueryARB(GLuint id);
 extern HIDDEN void __indirect_glDrawBuffersARB(GLsizei n, const GLenum * bufs);
+extern HIDDEN void __indirect_glClampColorARB(GLenum target, GLenum clamp);
 extern HIDDEN void __indirect_glRenderbufferStorageMultisample(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height);
 extern HIDDEN void __indirect_glSampleMaskSGIS(GLclampf value, GLboolean invert);
 extern HIDDEN void __indirect_glSamplePatternSGIS(GLenum pattern);
@@ -714,6 +715,10 @@ extern HIDDEN GLboolean __indirect_glIsRenderbufferEXT(GLuint renderbuffer);
 extern HIDDEN void __indirect_glRenderbufferStorageEXT(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
 extern HIDDEN void __indirect_glBlitFramebufferEXT(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
 extern HIDDEN void __indirect_glFramebufferTextureLayerEXT(GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer);
+
+#ifdef GLX_SHARED_GLAPI
+extern HIDDEN void (*__indirect_get_proc_address(const char *name))(void);
+#endif
 
 #  undef HIDDEN
 #  undef FASTCALL

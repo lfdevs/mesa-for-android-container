@@ -43,6 +43,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/enums.h"
 #include "main/colormac.h"
 #include "main/macros.h"
+#include "main/state.h"
 #include "swrast/swrast.h"
 #include "vbo/vbo.h"
 #include "tnl/tnl.h"
@@ -178,12 +179,12 @@ static void r128UpdateAlphaMode( struct gl_context *ctx )
 	     (R128_ALPHA_BLEND_MASK << R128_ALPHA_BLEND_DST_SHIFT)
 	     | R128_ALPHA_COMB_FCN_MASK);
 
-      a |= blend_factor( rmesa, ctx->Color.BlendSrcRGB, GL_TRUE ) 
+      a |= blend_factor( rmesa, ctx->Color.Blend[0].SrcRGB, GL_TRUE ) 
 	  << R128_ALPHA_BLEND_SRC_SHIFT;
-      a |= blend_factor( rmesa, ctx->Color.BlendDstRGB, GL_FALSE ) 
+      a |= blend_factor( rmesa, ctx->Color.Blend[0].DstRGB, GL_FALSE ) 
 	  << R128_ALPHA_BLEND_DST_SHIFT;
 
-      switch (ctx->Color.BlendEquationRGB) {
+      switch (ctx->Color.Blend[0].EquationRGB) {
       case GL_FUNC_ADD:
 	 a |= R128_ALPHA_COMB_ADD_CLAMP;
 	 break;
@@ -736,7 +737,7 @@ static void updateSpecularLighting( struct gl_context *ctx )
    r128ContextPtr rmesa = R128_CONTEXT(ctx);
    GLuint t = rmesa->setup.tex_cntl_c;
 
-   if ( NEED_SECONDARY_COLOR( ctx ) ) {
+   if ( _mesa_need_secondary_color( ctx ) ) {
       if (ctx->Light.ShadeModel == GL_FLAT) {
          /* R128 can't do flat-shaded separate specular */
          t &= ~R128_SPEC_LIGHT_ENABLE;

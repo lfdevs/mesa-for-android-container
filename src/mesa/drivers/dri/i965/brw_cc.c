@@ -35,28 +35,37 @@
 #include "brw_defines.h"
 #include "brw_util.h"
 #include "main/macros.h"
+#include "intel_batchbuffer.h"
 
-void
-brw_update_cc_vp(struct brw_context *brw)
+static void
+prepare_cc_vp(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->intel.ctx;
-   struct brw_cc_viewport ccv;
+   struct brw_cc_viewport *ccv;
 
-   memset(&ccv, 0, sizeof(ccv));
+   ccv = brw_state_batch(brw, sizeof(*ccv), 32, &brw->cc.vp_offset);
 
    /* _NEW_TRANSOFORM */
    if (ctx->Transform.DepthClamp) {
       /* _NEW_VIEWPORT */
-      ccv.min_depth = MIN2(ctx->Viewport.Near, ctx->Viewport.Far);
-      ccv.max_depth = MAX2(ctx->Viewport.Near, ctx->Viewport.Far);
+      ccv->min_depth = MIN2(ctx->Viewport.Near, ctx->Viewport.Far);
+      ccv->max_depth = MAX2(ctx->Viewport.Near, ctx->Viewport.Far);
    } else {
-      ccv.min_depth = 0.0;
-      ccv.max_depth = 1.0;
+      ccv->min_depth = 0.0;
+      ccv->max_depth = 1.0;
    }
 
-   drm_intel_bo_unreference(brw->cc.vp_bo);
-   brw->cc.vp_bo = brw_cache_data(&brw->cache, BRW_CC_VP, &ccv, sizeof(ccv));
+   brw->state.dirty.cache |= CACHE_NEW_CC_VP;
 }
+
+const struct brw_tracked_state brw_cc_vp = {
+   .dirty = {
+      .mesa = _NEW_VIEWPORT | _NEW_TRANSFORM,
+      .brw = BRW_NEW_BATCH,
+      .cache = 0
+   },
+   .prepare = prepare_cc_vp
+};
 
 /**
  * Modify blend function to force destination alpha to 1.0
@@ -80,11 +89,6 @@ fix_xRGB_alpha(GLenum function)
    return function;
 }
 
-static void prepare_cc_unit(struct brw_context *brw)
-{
-   brw_add_validated_bo(brw, brw->cc.vp_bo);
-}
-
 /**
  * Creates the state cache entry for the given CC unit key.
  */
@@ -92,61 +96,61 @@ static void upload_cc_unit(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &brw->intel.ctx;
-   struct brw_cc_unit_state cc;
-   void *map;
+   struct brw_cc_unit_state *cc;
 
-   memset(&cc, 0, sizeof(cc));
+   cc = brw_state_batch(brw, sizeof(*cc), 64, &brw->cc.state_offset);
+   memset(cc, 0, sizeof(*cc));
 
    /* _NEW_STENCIL */
    if (ctx->Stencil._Enabled) {
       const unsigned back = ctx->Stencil._BackFace;
 
-      cc.cc0.stencil_enable = 1;
-      cc.cc0.stencil_func =
+      cc->cc0.stencil_enable = 1;
+      cc->cc0.stencil_func =
 	 intel_translate_compare_func(ctx->Stencil.Function[0]);
-      cc.cc0.stencil_fail_op =
+      cc->cc0.stencil_fail_op =
 	 intel_translate_stencil_op(ctx->Stencil.FailFunc[0]);
-      cc.cc0.stencil_pass_depth_fail_op =
+      cc->cc0.stencil_pass_depth_fail_op =
 	 intel_translate_stencil_op(ctx->Stencil.ZFailFunc[0]);
-      cc.cc0.stencil_pass_depth_pass_op =
+      cc->cc0.stencil_pass_depth_pass_op =
 	 intel_translate_stencil_op(ctx->Stencil.ZPassFunc[0]);
-      cc.cc1.stencil_ref = ctx->Stencil.Ref[0];
-      cc.cc1.stencil_write_mask = ctx->Stencil.WriteMask[0];
-      cc.cc1.stencil_test_mask = ctx->Stencil.ValueMask[0];
+      cc->cc1.stencil_ref = ctx->Stencil.Ref[0];
+      cc->cc1.stencil_write_mask = ctx->Stencil.WriteMask[0];
+      cc->cc1.stencil_test_mask = ctx->Stencil.ValueMask[0];
 
       if (ctx->Stencil._TestTwoSide) {
-	 cc.cc0.bf_stencil_enable = 1;
-	 cc.cc0.bf_stencil_func =
+	 cc->cc0.bf_stencil_enable = 1;
+	 cc->cc0.bf_stencil_func =
 	    intel_translate_compare_func(ctx->Stencil.Function[back]);
-	 cc.cc0.bf_stencil_fail_op =
+	 cc->cc0.bf_stencil_fail_op =
 	    intel_translate_stencil_op(ctx->Stencil.FailFunc[back]);
-	 cc.cc0.bf_stencil_pass_depth_fail_op =
+	 cc->cc0.bf_stencil_pass_depth_fail_op =
 	    intel_translate_stencil_op(ctx->Stencil.ZFailFunc[back]);
-	 cc.cc0.bf_stencil_pass_depth_pass_op =
+	 cc->cc0.bf_stencil_pass_depth_pass_op =
 	    intel_translate_stencil_op(ctx->Stencil.ZPassFunc[back]);
-	 cc.cc1.bf_stencil_ref = ctx->Stencil.Ref[back];
-	 cc.cc2.bf_stencil_write_mask = ctx->Stencil.WriteMask[back];
-	 cc.cc2.bf_stencil_test_mask = ctx->Stencil.ValueMask[back];
+	 cc->cc1.bf_stencil_ref = ctx->Stencil.Ref[back];
+	 cc->cc2.bf_stencil_write_mask = ctx->Stencil.WriteMask[back];
+	 cc->cc2.bf_stencil_test_mask = ctx->Stencil.ValueMask[back];
       }
 
       /* Not really sure about this:
        */
       if (ctx->Stencil.WriteMask[0] ||
 	  (ctx->Stencil._TestTwoSide && ctx->Stencil.WriteMask[back]))
-	 cc.cc0.stencil_write_enable = 1;
+	 cc->cc0.stencil_write_enable = 1;
    }
 
    /* _NEW_COLOR */
    if (ctx->Color._LogicOpEnabled && ctx->Color.LogicOp != GL_COPY) {
-      cc.cc2.logicop_enable = 1;
-      cc.cc5.logicop_func = intel_translate_logic_op(ctx->Color.LogicOp);
+      cc->cc2.logicop_enable = 1;
+      cc->cc5.logicop_func = intel_translate_logic_op(ctx->Color.LogicOp);
    } else if (ctx->Color.BlendEnabled) {
-      GLenum eqRGB = ctx->Color.BlendEquationRGB;
-      GLenum eqA = ctx->Color.BlendEquationA;
-      GLenum srcRGB = ctx->Color.BlendSrcRGB;
-      GLenum dstRGB = ctx->Color.BlendDstRGB;
-      GLenum srcA = ctx->Color.BlendSrcA;
-      GLenum dstA = ctx->Color.BlendDstA;
+      GLenum eqRGB = ctx->Color.Blend[0].EquationRGB;
+      GLenum eqA = ctx->Color.Blend[0].EquationA;
+      GLenum srcRGB = ctx->Color.Blend[0].SrcRGB;
+      GLenum dstRGB = ctx->Color.Blend[0].DstRGB;
+      GLenum srcA = ctx->Color.Blend[0].SrcA;
+      GLenum dstA = ctx->Color.Blend[0].DstA;
 
       /* If the renderbuffer is XRGB, we have to frob the blend function to
        * force the destination alpha to 1.0.  This means replacing GL_DST_ALPHA
@@ -167,59 +171,57 @@ static void upload_cc_unit(struct brw_context *brw)
 	 srcA = dstA = GL_ONE;
       }
 
-      cc.cc6.dest_blend_factor = brw_translate_blend_factor(dstRGB);
-      cc.cc6.src_blend_factor = brw_translate_blend_factor(srcRGB);
-      cc.cc6.blend_function = brw_translate_blend_equation(eqRGB);
+      cc->cc6.dest_blend_factor = brw_translate_blend_factor(dstRGB);
+      cc->cc6.src_blend_factor = brw_translate_blend_factor(srcRGB);
+      cc->cc6.blend_function = brw_translate_blend_equation(eqRGB);
 
-      cc.cc5.ia_dest_blend_factor = brw_translate_blend_factor(dstA);
-      cc.cc5.ia_src_blend_factor = brw_translate_blend_factor(srcA);
-      cc.cc5.ia_blend_function = brw_translate_blend_equation(eqA);
+      cc->cc5.ia_dest_blend_factor = brw_translate_blend_factor(dstA);
+      cc->cc5.ia_src_blend_factor = brw_translate_blend_factor(srcA);
+      cc->cc5.ia_blend_function = brw_translate_blend_equation(eqA);
 
-      cc.cc3.blend_enable = 1;
-      cc.cc3.ia_blend_enable = (srcA != srcRGB ||
+      cc->cc3.blend_enable = 1;
+      cc->cc3.ia_blend_enable = (srcA != srcRGB ||
 				dstA != dstRGB ||
 				eqA != eqRGB);
    }
 
    if (ctx->Color.AlphaEnabled) {
-      cc.cc3.alpha_test = 1;
-      cc.cc3.alpha_test_func =
+      cc->cc3.alpha_test = 1;
+      cc->cc3.alpha_test_func =
 	 intel_translate_compare_func(ctx->Color.AlphaFunc);
-      cc.cc3.alpha_test_format = BRW_ALPHATEST_FORMAT_UNORM8;
+      cc->cc3.alpha_test_format = BRW_ALPHATEST_FORMAT_UNORM8;
 
-      UNCLAMPED_FLOAT_TO_UBYTE(cc.cc7.alpha_ref.ub[0], ctx->Color.AlphaRef);
+      UNCLAMPED_FLOAT_TO_UBYTE(cc->cc7.alpha_ref.ub[0], ctx->Color.AlphaRef);
    }
 
    if (ctx->Color.DitherFlag) {
-      cc.cc5.dither_enable = 1;
-      cc.cc6.y_dither_offset = 0;
-      cc.cc6.x_dither_offset = 0;
+      cc->cc5.dither_enable = 1;
+      cc->cc6.y_dither_offset = 0;
+      cc->cc6.x_dither_offset = 0;
    }
 
    /* _NEW_DEPTH */
    if (ctx->Depth.Test) {
-      cc.cc2.depth_test = 1;
-      cc.cc2.depth_test_function =
+      cc->cc2.depth_test = 1;
+      cc->cc2.depth_test_function =
 	 intel_translate_compare_func(ctx->Depth.Func);
-      cc.cc2.depth_write_enable = ctx->Depth.Mask;
+      cc->cc2.depth_write_enable = ctx->Depth.Mask;
    }
 
    if (intel->stats_wm || unlikely(INTEL_DEBUG & DEBUG_STATS))
-      cc.cc5.statistics_enable = 1;
+      cc->cc5.statistics_enable = 1;
 
    /* CACHE_NEW_CC_VP */
-   cc.cc4.cc_viewport_state_offset = brw->cc.vp_bo->offset >> 5; /* reloc */
+   cc->cc4.cc_viewport_state_offset = (intel->batch.bo->offset +
+				       brw->cc.vp_offset) >> 5; /* reloc */
 
-   map = brw_state_batch(brw, sizeof(cc), 64,
-			 &brw->cc.state_bo, &brw->cc.state_offset);
-   memcpy(map, &cc, sizeof(cc));
    brw->state.dirty.cache |= CACHE_NEW_CC_UNIT;
 
    /* Emit CC viewport relocation */
-   drm_intel_bo_emit_reloc(brw->cc.state_bo, (brw->cc.state_offset +
-					      offsetof(struct brw_cc_unit_state,
-						       cc4)),
-			   brw->cc.vp_bo, 0,
+   drm_intel_bo_emit_reloc(brw->intel.batch.bo,
+			   (brw->cc.state_offset +
+			    offsetof(struct brw_cc_unit_state, cc4)),
+			   intel->batch.bo, brw->cc.vp_offset,
 			   I915_GEM_DOMAIN_INSTRUCTION, 0);
 }
 
@@ -229,24 +231,21 @@ const struct brw_tracked_state brw_cc_unit = {
       .brw = BRW_NEW_BATCH,
       .cache = CACHE_NEW_CC_VP
    },
-   .prepare = prepare_cc_unit,
    .emit = upload_cc_unit,
 };
 
 static void upload_blend_constant_color(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->intel.ctx;
-   struct brw_blend_constant_color bcc;
+   struct intel_context *intel = &brw->intel;
+   struct gl_context *ctx = &intel->ctx;
 
-   memset(&bcc, 0, sizeof(bcc));
-   bcc.header.opcode = CMD_BLEND_CONSTANT_COLOR;
-   bcc.header.length = sizeof(bcc)/4-2;
-   bcc.blend_constant_color[0] = ctx->Color.BlendColor[0];
-   bcc.blend_constant_color[1] = ctx->Color.BlendColor[1];
-   bcc.blend_constant_color[2] = ctx->Color.BlendColor[2];
-   bcc.blend_constant_color[3] = ctx->Color.BlendColor[3];
-
-   BRW_CACHED_BATCH_STRUCT(brw, &bcc);
+   BEGIN_BATCH(5);
+   OUT_BATCH(_3DSTATE_BLEND_CONSTANT_COLOR << 16 | (5-2));
+   OUT_BATCH_F(ctx->Color.BlendColorUnclamped[0]);
+   OUT_BATCH_F(ctx->Color.BlendColorUnclamped[1]);
+   OUT_BATCH_F(ctx->Color.BlendColorUnclamped[2]);
+   OUT_BATCH_F(ctx->Color.BlendColorUnclamped[3]);
+   CACHED_BATCH();
 }
 
 const struct brw_tracked_state brw_blend_constant_color = {

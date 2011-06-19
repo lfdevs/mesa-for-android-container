@@ -80,25 +80,6 @@ struct brw_3d_control
    GLuint dword3;   
 };
 
-
-struct brw_3d_primitive
-{
-   struct
-   {
-      GLuint length:8; 
-      GLuint pad:2;
-      GLuint topology:5; 
-      GLuint indexed:1; 
-      GLuint opcode:16; 
-   } header;
-
-   GLuint verts_per_instance;  
-   GLuint start_vert_location;  
-   GLuint instance_count;  
-   GLuint start_instance_location;  
-   GLuint base_vert_location;  
-};
-
 /* These seem to be passed around as function args, so it works out
  * better to keep them as #defines:
  */
@@ -1017,7 +998,14 @@ struct brw_wm_unit_state
       GLuint enable_32_pix:1; 
       GLuint enable_con_32_pix:1;
       GLuint enable_con_64_pix:1;
-      GLuint pad0:5;
+      GLuint pad0:1;
+
+      /* These next four bits are for Ironlake+ */
+      GLuint fast_span_coverage_enable:1;
+      GLuint depth_buffer_clear:1;
+      GLuint depth_buffer_resolve_enable:1;
+      GLuint hierarchical_depth_buffer_resolve_enable:1;
+
       GLuint legacy_global_depth_bias:1; 
       GLuint line_stipple:1; 
       GLuint depth_offset:1; 
@@ -1123,6 +1111,54 @@ struct brw_sampler_state
    } ss3;
 };
 
+struct gen7_sampler_state
+{
+   struct
+   {
+      GLuint aniso_algorithm:1;
+      GLuint lod_bias:13;
+      GLuint min_filter:3;
+      GLuint mag_filter:3;
+      GLuint mip_filter:2;
+      GLuint base_level:5;
+      GLuint pad1:1;
+      GLuint lod_preclamp:1;
+      GLuint default_color_mode:1;
+      GLuint pad0:1;
+      GLuint disable:1;
+   } ss0;
+
+   struct
+   {
+      GLuint cube_control_mode:1;
+      GLuint shadow_function:3;
+      GLuint pad:4;
+      GLuint max_lod:12;
+      GLuint min_lod:12;
+   } ss1;
+
+   struct
+   {
+      GLuint pad:5;
+      GLuint default_color_pointer:27;
+   } ss2;
+
+   struct
+   {
+      GLuint r_wrap_mode:3;
+      GLuint t_wrap_mode:3;
+      GLuint s_wrap_mode:3;
+      GLuint pad:1;
+      GLuint non_normalized_coord:1;
+      GLuint trilinear_quality:2;
+      GLuint address_round:6;
+      GLuint max_aniso:3;
+      GLuint chroma_key_mode:1;
+      GLuint chroma_key_index:2;
+      GLuint chroma_key_enable:1;
+      GLuint pad0:6;
+   } ss3;
+};
 
 struct brw_clipper_viewport
 {
@@ -1167,101 +1203,102 @@ struct gen6_sf_viewport {
    GLfloat m32;
 };
 
-/* Documented in the subsystem/shared-functions/sampler chapter...
- */
-struct brw_surface_state
+struct gen7_sf_clip_viewport {
+   struct {
+      GLfloat m00;
+      GLfloat m11;
+      GLfloat m22;
+      GLfloat m30;
+      GLfloat m31;
+      GLfloat m32;
+   } viewport;
+
+   GLuint pad0[2];
+
+   struct {
+      GLfloat xmin;
+      GLfloat xmax;
+      GLfloat ymin;
+      GLfloat ymax;
+   } guardband;
+
+   GLfloat pad1[4];
+};
+
+/* volume 5c Shared Functions - 1.13.4.1.2 */
+struct gen7_surface_state
 {
    struct {
-      GLuint cube_pos_z:1; 
-      GLuint cube_neg_z:1; 
-      GLuint cube_pos_y:1; 
-      GLuint cube_neg_y:1; 
-      GLuint cube_pos_x:1; 
-      GLuint cube_neg_x:1; 
-      GLuint pad:2;
-      /* Required on gen6 for surfaces accessed through render cache messages.
-       */
+      GLuint cube_pos_z:1;
+      GLuint cube_neg_z:1;
+      GLuint cube_pos_y:1;
+      GLuint cube_neg_y:1;
+      GLuint cube_pos_x:1;
+      GLuint cube_neg_x:1;
+      GLuint pad2:2;
       GLuint render_cache_read_write:1;
-      /* Ironlake and newer: instead of replicating one of the texels */
-      GLuint cube_corner_average:1;
-      GLuint mipmap_layout_mode:1; 
-      GLuint vert_line_stride_ofs:1; 
-      GLuint vert_line_stride:1; 
-      GLuint color_blend:1; 
-      GLuint writedisable_blue:1; 
-      GLuint writedisable_green:1; 
-      GLuint writedisable_red:1; 
-      GLuint writedisable_alpha:1; 
+      GLuint pad1:1;
+      GLuint surface_array_spacing:1;
+      GLuint vert_line_stride_ofs:1;
+      GLuint vert_line_stride:1;
+      GLuint tile_walk:1;
+      GLuint tiled_surface:1;
+      GLuint horizontal_alignment:1;
+      GLuint vertical_alignment:2;
       GLuint surface_format:9;     /**< BRW_SURFACEFORMAT_x */
-      GLuint data_return_format:1; 
       GLuint pad0:1;
+      GLuint is_array:1;
       GLuint surface_type:3;       /**< BRW_SURFACE_1D/2D/3D/CUBE */
    } ss0;
-   
+
    struct {
-      GLuint base_addr;  
+      GLuint base_addr;
    } ss1;
-   
+
    struct {
-      GLuint pad:2;
-      GLuint mip_count:4; 
-      GLuint width:13; 
-      GLuint height:13; 
+      GLuint width:14;
+      GLuint pad1:2;
+      GLuint height:14;
+      GLuint pad0:2;
    } ss2;
 
    struct {
-      GLuint tile_walk:1; 
-      GLuint tiled_surface:1; 
-      GLuint pad:1; 
-      GLuint pitch:18; 
-      GLuint depth:11; 
+      GLuint pitch:18;
+      GLuint pad:3;
+      GLuint depth:11;
    } ss3;
-   
+
    struct {
       GLuint multisample_position_palette_index:3;
-      GLuint pad1:1;
       GLuint num_multisamples:3;
-      GLuint pad0:1;
-      GLuint render_target_view_extent:9;
+      GLuint multisampled_surface_storage_format:1;
+      GLuint render_target_view_extent:11;
       GLuint min_array_elt:11;
-      GLuint min_lod:4; 
+      GLuint rotation:2;
+      GLuint pad0:1;
    } ss4;
 
    struct {
-      GLuint pad1:16;
-      GLuint cache_control:2;
-      GLuint gfdt:1;
-      GLuint encrypt:1;
+      GLuint mip_count:4;
+      GLuint min_lod:4;
+      GLuint pad1:12;
       GLuint y_offset:4;
       GLuint pad0:1;
       GLuint x_offset:7;
-   } ss5;   /* New in G4X */
+   } ss5;
 
-};
-
-
-
-struct brw_vertex_buffer_state
-{
    struct {
-      GLuint pitch:11; 
-      GLuint pad:15;
-      GLuint access_type:1; 
-      GLuint vb_index:5; 
-   } vb0;
-   
-   GLuint start_addr; 
-   GLuint max_index;   
-#if 1
-   GLuint instance_data_step_rate; /* not included for sequential/random vertices? */
-#endif
-};
+      GLuint pad; /* Multisample Control Surface stuff */
+   } ss6;
 
-#define BRW_VBP_MAX 17
-
-struct brw_vb_array_state {
-   struct header header;
-   struct brw_vertex_buffer_state vb[BRW_VBP_MAX];
+   struct {
+      GLuint resource_min_lod:12;
+      GLuint pad0:16;
+      GLuint alpha_clear_color:1;
+      GLuint blue_clear_color:1;
+      GLuint green_clear_color:1;
+      GLuint red_clear_color:1;
+   } ss7;
 };
 
 
@@ -1553,6 +1590,7 @@ struct brw_instruction
 	 GLuint  pad0:12;
       } if_else;
 
+      /* This is also used for gen7 IF/ELSE instructions */
       struct
       {
 	 /* Signed jump distance to the ip to jump to if all channels
@@ -1633,6 +1671,18 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } sampler_gen5;
 
+      struct {
+	 GLuint binding_table_index:8;
+	 GLuint sampler:4;
+	 GLuint msg_type:5;
+	 GLuint simd_mode:2;
+	 GLuint header_present:1;
+	 GLuint response_length:5;
+	 GLuint msg_length:4;
+	 GLuint pad1:2;
+	 GLuint end_of_thread:1;
+      } sampler_gen7;
+
       struct brw_urb_immediate urb;
 
       struct {
@@ -1650,6 +1700,20 @@ struct brw_instruction
 	 GLuint pad1:2;
 	 GLuint end_of_thread:1;
       } urb_gen5;
+
+      struct {
+	 GLuint opcode:3;
+	 GLuint offset:11;
+	 GLuint swizzle_control:1;
+	 GLuint complete:1;
+	 GLuint per_slot_offset:1;
+	 GLuint pad0:2;
+	 GLuint header_present:1;
+	 GLuint response_length:5;
+	 GLuint msg_length:4;
+	 GLuint pad1:2;
+	 GLuint end_of_thread:1;
+      } urb_gen7;
 
       struct {
 	 GLuint binding_table_index:8;
@@ -1741,7 +1805,23 @@ struct brw_instruction
 	 GLuint msg_length:4;
 	 GLuint pad1:2;
 	 GLuint end_of_thread:1;
-      } dp_render_cache;
+      } gen6_dp;
+
+      /* See volume vol5c.2 sections 2.11.2.1.5 and 2.11.21.2.2. */
+      struct {
+	 GLuint binding_table_index:8;
+	 GLuint msg_control:3;
+	 GLuint slot_group_select:1;
+	 GLuint pixel_scoreboard_clear:1;
+	 GLuint pad0:1;
+	 GLuint msg_type:4;
+	 GLuint pad1:1;
+	 GLuint header_present:1;
+	 GLuint response_length:5;
+	 GLuint msg_length:4;
+	 GLuint pad2:2;
+	 GLuint end_of_thread:1;
+      } gen7_dp;
 
       struct {
 	 GLuint function_control:16;

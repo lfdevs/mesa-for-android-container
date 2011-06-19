@@ -905,7 +905,7 @@ void radeon_viewport(struct gl_context *ctx, GLint x, GLint y, GLsizei width, GL
 	if (!driContext->driScreenPriv->dri2.enabled)
 		return;
 
-	if (!radeon->meta.internal_viewport_call && ctx->DrawBuffer->Name == 0) {
+	if (ctx->DrawBuffer->Name == 0) {
 		if (radeon->is_front_buffer_rendering) {
 			ctx->Driver.Flush(ctx);
 		}
@@ -966,7 +966,7 @@ static void radeon_print_state_atom(radeonContextPtr radeon, struct radeon_state
 
 	fprintf(stderr, "  emit %s %d/%d\n", state->name, dwords, state->cmd_size);
 
-	if (radeon_is_debug_enabled(RADEON_STATE, RADEON_TRACE)) {
+	if (state->cmd && radeon_is_debug_enabled(RADEON_STATE, RADEON_TRACE)) {
 		if (dwords > state->cmd_size)
 			dwords = state->cmd_size;
 		for (i = 0; i < dwords;) {

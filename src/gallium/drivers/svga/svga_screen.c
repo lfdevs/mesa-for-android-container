@@ -35,7 +35,6 @@
 #include "svga_resource_texture.h"
 #include "svga_resource.h"
 #include "svga_debug.h"
-#include "svga_surface.h"
 
 #include "svga3d_shaderdefs.h"
 
@@ -182,6 +181,8 @@ svga_get_paramf(struct pipe_screen *screen, enum pipe_cap param)
 
    case PIPE_CAP_DEPTHSTENCIL_CLEAR_SEPARATE:
       return 1;
+   case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
+      return 0;
 
    default:
       return 0;
@@ -226,13 +227,18 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
             return svgascreen->use_ps30 ? 32 : 12;
          return result.u;
       case PIPE_SHADER_CAP_MAX_ADDRS:
-         return svgascreen->use_ps30 ? 1 : 0;
+      case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
+	 /* 
+	  * Although PS 3.0 has some addressing abilities it can only represent
+	  * loops that can be statically determined and unrolled. Given we can
+	  * only handle a subset of the cases that the state tracker already
+	  * does it is better to defer loop unrolling to the state tracker.
+	  */
+         return 0;
       case PIPE_SHADER_CAP_MAX_PREDS:
          return svgascreen->use_ps30 ? 1 : 0;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
          return 1;
-      case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
-         return svgascreen->use_ps30 ? 1 : 0;
       case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
       case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
       case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
@@ -338,8 +344,7 @@ svga_is_format_supported( struct pipe_screen *screen,
                           enum pipe_format format,
                           enum pipe_texture_target target,
                           unsigned sample_count,
-                          unsigned tex_usage,
-                          unsigned geom_flags )
+                          unsigned tex_usage)
 {
    struct svga_winsys_screen *sws = svga_screen(screen)->sws;
    SVGA3dDevCapIndex index;
@@ -361,13 +366,6 @@ svga_is_format_supported( struct pipe_screen *screen,
       case PIPE_FORMAT_B5G5R5A1_UNORM:
          return FALSE;
          
-      /* Simulate ability to render into compressed textures */
-      case PIPE_FORMAT_DXT1_RGB:
-      case PIPE_FORMAT_DXT1_RGBA:
-      case PIPE_FORMAT_DXT3_RGBA:
-      case PIPE_FORMAT_DXT5_RGBA:
-         return TRUE;
-
       default:
          break;
       }
@@ -415,27 +413,26 @@ svga_fence_reference(struct pipe_screen *screen,
 }
 
 
-static int
+static boolean
 svga_fence_signalled(struct pipe_screen *screen,
-                     struct pipe_fence_handle *fence,
-                     unsigned flag)
+                     struct pipe_fence_handle *fence)
 {
    struct svga_winsys_screen *sws = svga_screen(screen)->sws;
-   return sws->fence_signalled(sws, fence, flag);
+   return sws->fence_signalled(sws, fence, 0) == 0;
 }
 
 
-static int
+static boolean
 svga_fence_finish(struct pipe_screen *screen,
                   struct pipe_fence_handle *fence,
-                  unsigned flag)
+                  uint64_t timeout)
 {
    struct svga_winsys_screen *sws = svga_screen(screen)->sws;
 
    SVGA_DBG(DEBUG_DMA|DEBUG_PERF, "%s fence_ptr %p\n",
             __FUNCTION__, fence);
 
-   return sws->fence_finish(sws, fence, flag);
+   return sws->fence_finish(sws, fence, 0) == 0;
 }
 
 
@@ -500,6 +497,12 @@ svga_screen_create(struct svga_winsys_screen *sws)
    svgascreen->sws = sws;
 
    svga_init_screen_resource_functions(svgascreen);
+
+   if (sws->get_hw_version) {
+      svgascreen->hw_version = sws->get_hw_version(sws);
+   } else {
+      svgascreen->hw_version = SVGA3D_HWVERSION_WS65_B1;
+   }
 
    svgascreen->use_ps30 =
       sws->get_cap(sws, SVGA3D_DEVCAP_FRAGMENT_SHADER_VERSION, &result) &&

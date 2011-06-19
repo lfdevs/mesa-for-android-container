@@ -1,0 +1,30 @@
+Random list of problems with i915g:
+
+- Check if PIPE_CAP_BLEND_EQUATION_SEPARATE work, the code is there.
+  If not fix it! A simple task, good for beginners.
+
+- Add support for PIPE_CAP_POINT_SPRITE either via the draw module or directly
+  via the hardware, look at the classic driver, more advanced.
+
+- What does this button do? Figure out LIS7 with regards to depth offset.
+
+- Dies with BadDrawable on GLXFBconfig changes/destruction. Makes piglit totally
+  unusable :( Upgrading xserver helped here, it doesn't crash anymore. Still
+  broken, it doesn't update the viewport/get new buffers.
+
+- Kills the chip in 3D_PRIMITIVE LINELIST with mesa-demos/fbotexture in
+  wireframe mode. Changing the cullmode to cw from none mitigates the crash. As
+  does emitting only one line segment (2 indices) per 3D_PRIMITIVE command in
+  the batch.
+
+- Y-tiling is even more fun. i915c doesn't use it, maybe there's a reason?
+  Texture sampling from Y-tiled buffers seems to work, though (save above
+  problems).
+  RESOLVED: Y-tiling works with the render engine, but not with the blitter.
+  Use u_blitter and hw clears (PRIM3D_CLEAR_RECT).
+
+- src/xvmc/i915_structs.h in xf86-video-intel has a few more bits of various
+  commands defined. Scavenge them and see what's useful.
+
+Other bugs can be found here:
+https://bugs.freedesktop.org/buglist.cgi?bug_status=NEW&bug_status=ASSIGNED&bug_status=REOPENED&component=Drivers/Gallium/i915g

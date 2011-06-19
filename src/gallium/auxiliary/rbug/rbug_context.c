@@ -288,7 +288,6 @@ int rbug_send_context_draw_rule(struct rbug_connection *__con,
 
 int rbug_send_context_flush(struct rbug_connection *__con,
                             rbug_context_t context,
-                            int32_t flags,
                             uint32_t *__serial)
 {
 	uint32_t __len = 0;
@@ -298,7 +297,6 @@ int rbug_send_context_flush(struct rbug_connection *__con,
 
 	LEN(8); /* header */
 	LEN(8); /* context */
-	LEN(4); /* flags */
 
 	/* align */
 	PAD(__len, 8);
@@ -310,7 +308,6 @@ int rbug_send_context_flush(struct rbug_connection *__con,
 	WRITE(4, int32_t, ((int32_t)RBUG_OP_CONTEXT_FLUSH));
 	WRITE(4, uint32_t, ((uint32_t)(__len / 4)));
 	WRITE(8, rbug_context_t, context); /* context */
-	WRITE(4, int32_t, flags); /* flags */
 
 	/* final pad */
 	PAD(__pos, 8);
@@ -473,9 +470,6 @@ int rbug_send_context_draw_blocked(struct rbug_connection *__con,
 
 struct rbug_proto_context_list * rbug_demarshal_context_list(struct rbug_proto_header *header)
 {
-	uint32_t len = 0;
-	uint32_t pos = 0;
-	uint8_t *data =  NULL;
 	struct rbug_proto_context_list *ret;
 
 	if (!header)
@@ -483,16 +477,12 @@ struct rbug_proto_context_list * rbug_demarshal_context_list(struct rbug_proto_h
 	if (header->opcode != (int32_t)RBUG_OP_CONTEXT_LIST)
 		return NULL;
 
-	pos = 0;
-	len = header->length * 4;
-	data = (uint8_t*)&header[1];
 	ret = MALLOC(sizeof(*ret));
 	if (!ret)
 		return NULL;
 
 	ret->header.__message = header;
 	ret->header.opcode = header->opcode;
-
 
 	return ret;
 }
@@ -663,7 +653,6 @@ struct rbug_proto_context_flush * rbug_demarshal_context_flush(struct rbug_proto
 	ret->header.opcode = header->opcode;
 
 	READ(8, rbug_context_t, context); /* context */
-	READ(4, int32_t, flags); /* flags */
 
 	return ret;
 }

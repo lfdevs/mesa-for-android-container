@@ -29,6 +29,8 @@
 #include "svga_cmd.h"
 #include "svga_surface.h"
 
+#include "util/u_surface.h"
+
 #define FILE_DEBUG_FLAG DEBUG_BLIT
 
 
@@ -50,7 +52,16 @@ static void svga_surface_copy(struct pipe_context *pipe,
    struct pipe_surface *srcsurf, *dstsurf;*/
    unsigned dst_face, dst_z, src_face, src_z;
 
-   svga_hwtnl_flush_retry( svga );
+   /* Emit buffered drawing commands, and any back copies.
+    */
+   svga_surfaces_flush( svga );
+
+   /* Fallback for buffers. */
+   if (dst_tex->target == PIPE_BUFFER && src_tex->target == PIPE_BUFFER) {
+      util_resource_copy_region(pipe, dst_tex, dst_level, dstx, dsty, dstz,
+                                src_tex, src_level, src_box);
+      return;
+   }
 
 #if 0
    srcsurf = screen->get_tex_surface(screen, src_tex,

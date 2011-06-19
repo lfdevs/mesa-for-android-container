@@ -62,9 +62,6 @@ struct intel_region
    GLubyte *map;    /**< only non-NULL when region is actually mapped */
    GLuint map_refcount;  /**< Reference count for mapping */
 
-   GLuint draw_offset; /**< Offset of drawing address within the region */
-   GLuint draw_x, draw_y; /**< Offset of drawing within the region */
-
    uint32_t tiling; /**< Which tiling mode the region is in */
    struct intel_buffer_object *pbo;     /* zero-copy uploads */
 

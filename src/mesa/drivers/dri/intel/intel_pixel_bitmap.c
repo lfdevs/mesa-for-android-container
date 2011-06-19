@@ -29,8 +29,10 @@
 #include "main/enums.h"
 #include "main/image.h"
 #include "main/colormac.h"
+#include "main/condrender.h"
 #include "main/mtypes.h"
 #include "main/macros.h"
+#include "main/pbo.h"
 #include "main/bufferobj.h"
 #include "main/state.h"
 #include "main/texobj.h"
@@ -67,7 +69,7 @@ static const GLubyte *map_pbo( struct gl_context *ctx,
 
    if (!_mesa_validate_pbo_access(2, unpack, width, height, 1,
 				  GL_COLOR_INDEX, GL_BITMAP,
-				  (GLvoid *) bitmap)) {
+				  INT_MAX, (const GLvoid *) bitmap)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,"glBitmap(invalid PBO access)");
       return NULL;
    }
@@ -207,7 +209,7 @@ do_blit_bitmap( struct gl_context *ctx,
 
    COPY_4V(tmpColor, ctx->Current.RasterColor);
 
-   if (NEED_SECONDARY_COLOR(ctx)) {
+   if (_mesa_need_secondary_color(ctx)) {
        ADD_3V(tmpColor, tmpColor, ctx->Current.RasterSecondaryColor);
    }
 
@@ -285,7 +287,7 @@ do_blit_bitmap( struct gl_context *ctx,
 out:
 
    if (unlikely(INTEL_DEBUG & DEBUG_SYNC))
-      intel_batchbuffer_flush(intel->batch);
+      intel_batchbuffer_flush(intel);
 
    if (_mesa_is_bufferobj(unpack->BufferObj)) {
       /* done with PBO so unmap it now */
@@ -327,6 +329,9 @@ intelBitmap(struct gl_context * ctx,
 	    const GLubyte * pixels)
 {
    struct intel_context *intel = intel_context(ctx);
+
+   if (!_mesa_check_conditional_render(ctx))
+      return;
 
    if (do_blit_bitmap(ctx, x, y, width, height,
                           unpack, pixels))

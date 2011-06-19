@@ -83,6 +83,7 @@ static const struct extension_info known_glx_extensions[] = {
    { GLX(EXT_visual_info),             VER(0,0), Y, Y, N, N },
 #endif
    { GLX(EXT_visual_rating),           VER(0,0), Y, Y, N, N },
+   { GLX(EXT_framebuffer_sRGB),        VER(0,0), Y, Y, N, N },
 #ifdef GLX_USE_APPLEGL
    { GLX(MESA_agp_offset),             VER(0,0), N, N, N, N }, /* Deprecated */
    { GLX(MESA_copy_sub_buffer),        VER(0,0), N, N, N, N },
@@ -90,6 +91,7 @@ static const struct extension_info known_glx_extensions[] = {
    { GLX(MESA_agp_offset),             VER(0,0), N, N, N, Y }, /* Deprecated */
    { GLX(MESA_copy_sub_buffer),        VER(0,0), Y, N, N, N },
 #endif
+   { GLX(MESA_multithread_makecurrent),VER(0,0), Y, N, Y, N },
    { GLX(MESA_pixmap_colormap),        VER(0,0), N, N, N, N }, /* Deprecated */
    { GLX(MESA_release_buffers),        VER(0,0), N, N, N, N }, /* Deprecated */
 #ifdef GLX_USE_APPLEGL
@@ -189,6 +191,7 @@ static const struct extension_info known_gl_extensions[] = {
    { GL(EXT_framebuffer_blit),           VER(0,0), Y, N, N, N },
    { GL(EXT_framebuffer_multisample),    VER(0,0), Y, N, N, N },
    { GL(EXT_framebuffer_object),         VER(0,0), Y, N, N, N },
+   { GL(EXT_framebuffer_sRGB),           VER(0,0), Y, N, N, N },
    { GL(EXT_multi_draw_arrays),          VER(1,4), Y, N, Y, N },
    { GL(EXT_packed_depth_stencil),       VER(0,0), Y, N, N, N },
    { GL(EXT_packed_pixels),              VER(1,2), Y, N, N, N },

@@ -91,6 +91,8 @@ static void copy_propagate_scan_read(void * data, struct rc_instruction * inst,
 				(inst->U.I.Opcode == RC_OPCODE_TEX ||
 				inst->U.I.Opcode == RC_OPCODE_TXB ||
 				inst->U.I.Opcode == RC_OPCODE_TXP ||
+				inst->U.I.Opcode == RC_OPCODE_TXD ||
+				inst->U.I.Opcode == RC_OPCODE_TXL ||
 				inst->U.I.Opcode == RC_OPCODE_KIL)){
 		reader_data->Abort = 1;
 		return;
@@ -139,12 +141,12 @@ static void copy_propagate(struct radeon_compiler * c, struct rc_instruction * i
 	unsigned int i;
 
 	if (inst_mov->U.I.DstReg.File != RC_FILE_TEMPORARY ||
-	    inst_mov->U.I.DstReg.RelAddr ||
 	    inst_mov->U.I.WriteALUResult ||
 	    inst_mov->U.I.SaturateMode)
 		return;
 
 	/* Get a list of all the readers of this MOV instruction. */
+	reader_data.ExitOnAbort = 1;
 	rc_get_readers(c, inst_mov, &reader_data,
 		       copy_propagate_scan_read, NULL,
 		       is_src_clobbered_scan_write);
@@ -155,7 +157,7 @@ static void copy_propagate(struct radeon_compiler * c, struct rc_instruction * i
 	/* Propagate the MOV instruction. */
 	for (i = 0; i < reader_data.ReaderCount; i++) {
 		struct rc_instruction * inst = reader_data.Readers[i].Inst;
-		*reader_data.Readers[i].U.Src = chain_srcregs(*reader_data.Readers[i].U.Src, inst_mov->U.I.SrcReg[0]);
+		*reader_data.Readers[i].U.I.Src = chain_srcregs(*reader_data.Readers[i].U.I.Src, inst_mov->U.I.SrcReg[0]);
 
 		if (inst_mov->U.I.SrcReg[0].File == RC_FILE_PRESUB)
 			inst->U.I.PreSub = inst_mov->U.I.PreSub;
@@ -312,7 +314,18 @@ static void constant_folding(struct radeon_compiler * c, struct rc_instruction *
 		struct rc_constant * constant;
 		struct rc_src_register newsrc;
 		int have_real_reference;
+		unsigned int chan;
 
+		/* If there are only 0, 0.5, 1, or _ swizzles, mark the source as a constant. */
+		for (chan = 0; chan < 4; ++chan)
+			if (GET_SWZ(inst->U.I.SrcReg[src].Swizzle, chan) <= 3)
+				break;
+		if (chan == 4) {
+			inst->U.I.SrcReg[src].File = RC_FILE_NONE;
+			continue;
+		}
+
+		/* Convert immediates to swizzles. */
 		if (inst->U.I.SrcReg[src].File != RC_FILE_CONSTANT ||
 		    inst->U.I.SrcReg[src].RelAddr ||
 		    inst->U.I.SrcReg[src].Index >= c->Program.Constants.Count)
@@ -326,7 +339,7 @@ static void constant_folding(struct radeon_compiler * c, struct rc_instruction *
 
 		newsrc = inst->U.I.SrcReg[src];
 		have_real_reference = 0;
-		for(unsigned int chan = 0; chan < 4; ++chan) {
+		for (chan = 0; chan < 4; ++chan) {
 			unsigned int swz = GET_SWZ(newsrc.Swizzle, chan);
 			unsigned int newswz;
 			float imm;
@@ -443,6 +456,7 @@ static int presub_helper(
 	rc_presubtract_op cb_op = presub_opcode;
 
 	reader_data.CbData = &cb_op;
+	reader_data.ExitOnAbort = 1;
 	rc_get_readers(c, inst_add, &reader_data, presub_scan_read, NULL,
 						is_src_clobbered_scan_write);
 
@@ -456,7 +470,7 @@ static int presub_helper(
 				rc_get_opcode_info(reader.Inst->U.I.Opcode);
 
 		for (src_index = 0; src_index < info->NumSrcRegs; src_index++) {
-			if (&reader.Inst->U.I.SrcReg[src_index] == reader.U.Src)
+			if (&reader.Inst->U.I.SrcReg[src_index] == reader.U.I.Src)
 				presub_replace(inst_add, reader.Inst, src_index);
 		}
 	}
@@ -503,8 +517,11 @@ static int is_presub_candidate(
 
 	assert(inst->U.I.Opcode == RC_OPCODE_ADD);
 
-	if (inst->U.I.PreSub.Opcode != RC_PRESUB_NONE || inst->U.I.SaturateMode)
+	if (inst->U.I.PreSub.Opcode != RC_PRESUB_NONE
+			|| inst->U.I.SaturateMode
+			|| inst->U.I.WriteALUResult) {
 		return 0;
+	}
 
 	/* If both sources use a constant swizzle, then we can't convert it to
 	 * a presubtract operation.  In fact for the ADD and SUB presubtract
@@ -609,12 +626,10 @@ static int peephole_add_presub_inv(
 	struct radeon_compiler * c,
 	struct rc_instruction * inst_add)
 {
-	unsigned int i, swz, mask;
+	unsigned int i, swz;
 
 	if (!is_presub_candidate(c, inst_add))
 		return 0;
-
-	mask = inst_add->U.I.DstReg.WriteMask;
 
 	/* Check if src0 is 1. */
 	/* XXX It would be nice to use is_src_uniform_constant here, but that

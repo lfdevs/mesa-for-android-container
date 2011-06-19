@@ -24,19 +24,15 @@
 #include "util/u_format.h"
 #include "util/u_format_s3tc.h"
 #include "util/u_memory.h"
+#include "os/os_time.h"
 
 #include "r300_context.h"
 #include "r300_texture.h"
 #include "r300_screen_buffer.h"
 #include "r300_state_inlines.h"
-#include "r300_winsys.h"
 #include "r300_public.h"
 
 #include "draw/draw_context.h"
-
-#ifdef HAVE_LLVM
-#include "gallivm/lp_bld_init.h"
-#endif
 
 /* Return the identifier behind whom the brave coders responsible for this
  * amalgamation of code, sweat, and duct tape, routinely obscure their names.
@@ -52,20 +48,18 @@ static const char* r300_get_vendor(struct pipe_screen* pscreen)
 static const char* chip_families[] = {
     "ATI R300",
     "ATI R350",
-    "ATI R360",
     "ATI RV350",
     "ATI RV370",
     "ATI RV380",
+    "ATI RS400",
+    "ATI RC410",
+    "ATI RS480",
     "ATI R420",
     "ATI R423",
     "ATI R430",
     "ATI R480",
     "ATI R481",
     "ATI RV410",
-    "ATI RS400",
-    "ATI RC410",
-    "ATI RS480",
-    "ATI RS482",
     "ATI RS600",
     "ATI RS690",
     "ATI RS740",
@@ -87,11 +81,7 @@ static const char* r300_get_name(struct pipe_screen* pscreen)
 static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 {
     struct r300_screen* r300screen = r300_screen(pscreen);
-    boolean is_r400 = r300screen->caps.is_r400;
     boolean is_r500 = r300screen->caps.is_r500;
-
-    /* XXX extended shader capabilities of r400 unimplemented */
-    is_r400 = FALSE;
 
     switch (param) {
         /* Supported features (boolean caps). */
@@ -120,28 +110,47 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
         case PIPE_CAP_TEXTURE_MIRROR_REPEAT:
         case PIPE_CAP_BLEND_EQUATION_SEPARATE:
+        case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
+        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
+        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
             return 1;
+
+        /* r300 cannot do swizzling of compressed textures. Supported otherwise. */
         case PIPE_CAP_TEXTURE_SWIZZLE:
             return util_format_s3tc_enabled ? r300screen->caps.dxtc_swizzle : 1;
 
-        /* Unsupported features (boolean caps). */
+        /* Supported on r500 only. */
+        case PIPE_CAP_FRAGMENT_COLOR_CLAMP_CONTROL:
+        case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
+        case PIPE_CAP_SM3:
+            return is_r500 ? 1 : 0;
+
+        /* Unsupported features. */
         case PIPE_CAP_TIMER_QUERY:
         case PIPE_CAP_DUAL_SOURCE_BLEND:
         case PIPE_CAP_INDEP_BLEND_ENABLE:
         case PIPE_CAP_INDEP_BLEND_FUNC:
-        case PIPE_CAP_DEPTH_CLAMP: /* XXX implemented, but breaks Regnum Online */
+        case PIPE_CAP_DEPTH_CLAMP:
         case PIPE_CAP_DEPTHSTENCIL_CLEAR_SEPARATE:
         case PIPE_CAP_SHADER_STENCIL_EXPORT:
+        case PIPE_CAP_ARRAY_TEXTURES:
+        case PIPE_CAP_TGSI_INSTANCEID:
+        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
+        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+        case PIPE_CAP_MAX_VERTEX_TEXTURE_UNITS:
+        case PIPE_CAP_SEAMLESS_CUBE_MAP:
+        case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
+            return 0;
+
+        /* SWTCL-only features. */
         case PIPE_CAP_STREAM_OUTPUT:
         case PIPE_CAP_PRIMITIVE_RESTART:
-            return 0;
+            return !r300screen->caps.has_tcl;
 
         /* Texturing. */
         case PIPE_CAP_MAX_TEXTURE_IMAGE_UNITS:
         case PIPE_CAP_MAX_COMBINED_SAMPLERS:
             return r300screen->caps.num_tex_units;
-        case PIPE_CAP_MAX_VERTEX_TEXTURE_UNITS:
-            return 0;
         case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
         case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
         case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
@@ -152,16 +161,6 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_MAX_RENDER_TARGETS:
             return 4;
 
-        /* General shader limits and features. */
-        case PIPE_CAP_SM3:
-            return is_r500 ? 1 : 0;
-        /* Fragment coordinate conventions. */
-        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
-        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
-	    return 1;
-        case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
-        case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
-            return 0;
         default:
             debug_printf("r300: Warning: Unknown CAP %d in get_param.\n",
                          param);
@@ -174,9 +173,6 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
    struct r300_screen* r300screen = r300_screen(pscreen);
    boolean is_r400 = r300screen->caps.is_r400;
    boolean is_r500 = r300screen->caps.is_r500;
-
-   /* XXX extended shader capabilities of r400 unimplemented */
-   is_r400 = FALSE;
 
    switch (shader)
     {
@@ -310,10 +306,11 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                                         enum pipe_format format,
                                         enum pipe_texture_target target,
                                         unsigned sample_count,
-                                        unsigned usage,
-                                        unsigned geom_flags)
+                                        unsigned usage)
 {
+    struct radeon_winsys *rws = r300_screen(screen)->rws;
     uint32_t retval = 0;
+    boolean drm_2_8_0 = rws->get_value(rws, RADEON_VID_DRM_2_8_0);
     boolean is_r500 = r300_screen(screen)->caps.is_r500;
     boolean is_r400 = r300_screen(screen)->caps.is_r400;
     boolean is_color2101010 = format == PIPE_FORMAT_R10G10B10A2_UNORM ||
@@ -321,13 +318,26 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                               format == PIPE_FORMAT_B10G10R10A2_UNORM ||
                               format == PIPE_FORMAT_R10SG10SB10SA2U_NORM;
     boolean is_ati1n = format == PIPE_FORMAT_RGTC1_UNORM ||
-                       format == PIPE_FORMAT_RGTC1_SNORM;
+                       format == PIPE_FORMAT_RGTC1_SNORM ||
+                       format == PIPE_FORMAT_LATC1_UNORM ||
+                       format == PIPE_FORMAT_LATC1_SNORM;
     boolean is_ati2n = format == PIPE_FORMAT_RGTC2_UNORM ||
-                       format == PIPE_FORMAT_RGTC2_SNORM;
+                       format == PIPE_FORMAT_RGTC2_SNORM ||
+                       format == PIPE_FORMAT_LATC2_UNORM ||
+                       format == PIPE_FORMAT_LATC2_SNORM;
+    boolean is_x16f_xy16f = format == PIPE_FORMAT_R16_FLOAT ||
+                            format == PIPE_FORMAT_R16G16_FLOAT ||
+                            format == PIPE_FORMAT_A16_FLOAT ||
+                            format == PIPE_FORMAT_L16_FLOAT ||
+                            format == PIPE_FORMAT_L16A16_FLOAT ||
+                            format == PIPE_FORMAT_I16_FLOAT;
     boolean is_half_float = format == PIPE_FORMAT_R16_FLOAT ||
                             format == PIPE_FORMAT_R16G16_FLOAT ||
                             format == PIPE_FORMAT_R16G16B16_FLOAT ||
                             format == PIPE_FORMAT_R16G16B16A16_FLOAT;
+
+    if (!util_format_is_supported(format, usage))
+       return FALSE;
 
     /* Check multisampling support. */
     switch (sample_count) {
@@ -357,6 +367,8 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
         (is_r500 || !is_ati1n) &&
         /* ATI2N is supported on r4xx-r5xx. */
         (is_r400 || is_r500 || !is_ati2n) &&
+        /* R16F and RG16F texture support was added in as late as DRM 2.8.0 */
+        (drm_2_8_0 || !is_x16f_xy16f) &&
         r300_is_sampler_format_supported(format)) {
         retval |= PIPE_BIND_SAMPLER_VIEW;
     }
@@ -367,7 +379,7 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                   PIPE_BIND_SCANOUT |
                   PIPE_BIND_SHARED)) &&
         /* 2101010 cannot be rendered to on non-r5xx. */
-        (is_r500 || !is_color2101010) &&
+        (!is_color2101010 || (is_r500 && drm_2_8_0)) &&
         r300_is_colorbuffer_format_supported(format)) {
         retval |= usage &
             (PIPE_BIND_RENDER_TARGET |
@@ -402,9 +414,10 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
 static void r300_destroy_screen(struct pipe_screen* pscreen)
 {
     struct r300_screen* r300screen = r300_screen(pscreen);
-    struct r300_winsys_screen *rws = r300_winsys_screen(pscreen);
+    struct radeon_winsys *rws = radeon_winsys(pscreen);
 
     util_slab_destroy(&r300screen->pool_buffers);
+    pipe_mutex_destroy(r300screen->num_contexts_mutex);
 
     if (rws)
       rws->destroy(rws);
@@ -416,36 +429,47 @@ static void r300_fence_reference(struct pipe_screen *screen,
                                  struct pipe_fence_handle **ptr,
                                  struct pipe_fence_handle *fence)
 {
-    struct r300_fence **oldf = (struct r300_fence**)ptr;
-    struct r300_fence *newf = (struct r300_fence*)fence;
-
-    if (pipe_reference(&(*oldf)->reference, &newf->reference))
-        FREE(*oldf);
-
-    *ptr = fence;
+    pb_reference((struct pb_buffer**)ptr,
+                             (struct pb_buffer*)fence);
 }
 
-static int r300_fence_signalled(struct pipe_screen *screen,
-                                struct pipe_fence_handle *fence,
-                                unsigned flags)
+static boolean r300_fence_signalled(struct pipe_screen *screen,
+                                    struct pipe_fence_handle *fence)
 {
-    struct r300_fence *rfence = (struct r300_fence*)fence;
+    struct radeon_winsys *rws = r300_screen(screen)->rws;
+    struct pb_buffer *rfence = (struct pb_buffer*)fence;
 
-    return rfence->signalled ? 0 : 1; /* 0 == success */
+    return !rws->buffer_is_busy(rfence);
 }
 
-static int r300_fence_finish(struct pipe_screen *screen,
-                             struct pipe_fence_handle *fence,
-                             unsigned flags)
+static boolean r300_fence_finish(struct pipe_screen *screen,
+                                 struct pipe_fence_handle *fence,
+                                 uint64_t timeout)
 {
-    struct r300_fence *rfence = (struct r300_fence*)fence;
+    struct radeon_winsys *rws = r300_screen(screen)->rws;
+    struct pb_buffer *rfence = (struct pb_buffer*)fence;
 
-    r300_finish(rfence->ctx);
-    rfence->signalled = TRUE;
-    return 0; /* 0 == success */
+    if (timeout != PIPE_TIMEOUT_INFINITE) {
+        int64_t start_time = os_time_get();
+
+        /* Convert to microseconds. */
+        timeout /= 1000;
+
+        /* Wait in a loop. */
+        while (rws->buffer_is_busy(rfence)) {
+            if (os_time_get() - start_time >= timeout) {
+                return FALSE;
+            }
+            os_time_sleep(10);
+        }
+        return TRUE;
+    }
+
+    rws->buffer_wait(rfence);
+    return TRUE;
 }
 
-struct pipe_screen* r300_screen_create(struct r300_winsys_screen *rws)
+struct pipe_screen* r300_screen_create(struct radeon_winsys *rws)
 {
     struct r300_screen *r300screen = CALLOC_STRUCT(r300_screen);
 
@@ -454,19 +478,25 @@ struct pipe_screen* r300_screen_create(struct r300_winsys_screen *rws)
         return NULL;
     }
 
-    r300screen->caps.pci_id = rws->get_value(rws, R300_VID_PCI_ID);
-    r300screen->caps.num_frag_pipes = rws->get_value(rws, R300_VID_GB_PIPES);
-    r300screen->caps.num_z_pipes = rws->get_value(rws, R300_VID_Z_PIPES);
+    r300screen->caps.pci_id = rws->get_value(rws, RADEON_VID_PCI_ID);
+    r300screen->caps.num_frag_pipes = rws->get_value(rws, RADEON_VID_R300_GB_PIPES);
+    r300screen->caps.num_z_pipes = rws->get_value(rws, RADEON_VID_R300_Z_PIPES);
 
     r300_init_debug(r300screen);
     r300_parse_chipset(&r300screen->caps);
 
-    r300screen->caps.index_bias_supported =
-            r300screen->caps.is_r500 &&
-            rws->get_value(rws, R300_VID_DRM_2_3_0);
+    if (SCREEN_DBG_ON(r300screen, DBG_NO_ZMASK))
+        r300screen->caps.zmask_ram = 0;
+    if (SCREEN_DBG_ON(r300screen, DBG_NO_HIZ))
+        r300screen->caps.hiz_ram = 0;
+
+    if (!rws->get_value(rws, RADEON_VID_DRM_2_8_0))
+        r300screen->caps.has_us_format = FALSE;
+
+    pipe_mutex_init(r300screen->num_contexts_mutex);
 
     util_slab_create(&r300screen->pool_buffers,
-                     sizeof(struct r300_buffer), 64,
+                     sizeof(struct r300_resource), 64,
                      UTIL_SLAB_SINGLETHREADED);
 
     r300screen->rws = rws;
@@ -487,10 +517,6 @@ struct pipe_screen* r300_screen_create(struct r300_winsys_screen *rws)
     r300_init_screen_resource_functions(r300screen);
 
     util_format_s3tc_init();
-
-#ifdef HAVE_LLVM
-    lp_build_init();
-#endif
 
     return &r300screen->screen;
 }

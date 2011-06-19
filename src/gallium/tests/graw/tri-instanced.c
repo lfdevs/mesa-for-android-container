@@ -132,7 +132,6 @@ static void set_vertices( void )
 
    /* vertex data */
    vbuf[0].stride = sizeof( struct vertex );
-   vbuf[0].max_index = sizeof(vertices) / vbuf[0].stride;
    vbuf[0].buffer_offset = 0;
    vbuf[0].buffer = screen->user_buffer_create(screen,
                                                vertices,
@@ -141,7 +140,6 @@ static void set_vertices( void )
 
    /* instance data */
    vbuf[1].stride = sizeof( inst_data[0] );
-   vbuf[1].max_index = sizeof(inst_data) / vbuf[1].stride;
    vbuf[1].buffer_offset = 0;
    vbuf[1].buffer = screen->user_buffer_create(screen,
                                                inst_data,
@@ -213,7 +211,7 @@ static void draw( void )
 
    ctx->draw_vbo(ctx, &info);
 
-   ctx->flush(ctx, PIPE_FLUSH_RENDER_CACHE, NULL);
+   ctx->flush(ctx, NULL);
 
    graw_save_surface_to_file(ctx, surf, NULL);
 
@@ -234,13 +232,16 @@ static void init( void )
     * Also, no easy way of querying supported formats if the screen
     * cannot be created first.
     */
-   for (i = 0; 
-        window == NULL && formats[i] != PIPE_FORMAT_NONE;
-        i++) {
-      
-      screen = graw_create_window_and_screen(0,0,300,300,
+   for (i = 0; formats[i] != PIPE_FORMAT_NONE; i++) {
+      screen = graw_create_window_and_screen(0, 0, 300, 300,
                                              formats[i],
                                              &window);
+      if (window && screen)
+         break;
+   }
+   if (!screen || !window) {
+      fprintf(stderr, "Unable to create window\n");
+      exit(1);
    }
    
    ctx = screen->context_create(screen, NULL);

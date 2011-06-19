@@ -40,9 +40,12 @@
 
 /* Convert from PIPE_SHADER_* to SVGA3D_SHADERTYPE_*
  */
-static int svga_shader_type( int unit )
+static int svga_shader_type( int shader )
 {
-   return unit + 1;
+   assert(PIPE_SHADER_VERTEX + 1 == SVGA3D_SHADERTYPE_VS);
+   assert(PIPE_SHADER_FRAGMENT + 1 == SVGA3D_SHADERTYPE_PS);
+   assert(shader <= PIPE_SHADER_FRAGMENT);
+   return shader + 1;
 }
 
 
@@ -110,7 +113,7 @@ static int emit_consts( struct svga_context *svga,
 
 done:
    if (data)
-      pipe_buffer_unmap(&svga->pipe, svga->curr.cb[unit], transfer);
+      pipe_buffer_unmap(&svga->pipe, transfer);
 
    return ret;
 }

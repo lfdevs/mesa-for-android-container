@@ -26,6 +26,7 @@
  **************************************************************************/
 
 
+#include "util/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
@@ -97,7 +98,7 @@ brw_get_name(struct pipe_screen *screen)
    static char buffer[128];
    const char *chipset;
 
-   switch (brw_screen(screen)->chipset.pci_id) {
+   switch (brw_screen(screen)->pci_id) {
    case PCI_CHIP_I965_G:
       chipset = "I965_G";
       break;
@@ -278,8 +279,7 @@ brw_is_format_supported(struct pipe_screen *screen,
                          enum pipe_format format,
                          enum pipe_texture_target target,
                          unsigned sample_count,
-                         unsigned tex_usage,
-                         unsigned geom_flags)
+                         unsigned tex_usage)
 {
    static const enum pipe_format tex_supported[] = {
       PIPE_FORMAT_L8_UNORM,
@@ -334,6 +334,9 @@ brw_is_format_supported(struct pipe_screen *screen,
    const enum pipe_format *list;
    uint i;
 
+   if (!util_format_is_supported(format, tex_usage))
+      return FALSE;
+
    if (sample_count > 1)
       return FALSE;
 
@@ -365,20 +368,19 @@ brw_fence_reference(struct pipe_screen *screen,
 {
 }
 
-static int
+static boolean
 brw_fence_signalled(struct pipe_screen *screen,
-                     struct pipe_fence_handle *fence,
-                     unsigned flags)
+                     struct pipe_fence_handle *fence)
 {
-   return 0;                    /* XXX shouldn't this be a boolean? */
+   return TRUE;
 }
 
-static int
+static boolean
 brw_fence_finish(struct pipe_screen *screen,
                  struct pipe_fence_handle *fence,
-                 unsigned flags)
+                 uint64_t timeout)
 {
-   return 0;
+   return TRUE;
 }
 
 
@@ -405,8 +407,6 @@ struct pipe_screen *
 brw_screen_create(struct brw_winsys_screen *sws)
 {
    struct brw_screen *bscreen;
-   struct brw_chipset chipset;
-
 #ifdef DEBUG
    BRW_DEBUG = debug_get_flags_option("BRW_DEBUG", debug_names, 0);
    BRW_DEBUG |= debug_get_flags_option("INTEL_DEBUG", debug_names, 0);
@@ -415,46 +415,30 @@ brw_screen_create(struct brw_winsys_screen *sws)
    BRW_DUMP = debug_get_flags_option("BRW_DUMP", dump_names, 0);
 #endif
 
-   memset(&chipset, 0, sizeof chipset);
-
-   chipset.pci_id = sws->pci_id;
-
-   switch (chipset.pci_id) {
-   case PCI_CHIP_I965_G:
-   case PCI_CHIP_I965_Q:
-   case PCI_CHIP_I965_G_1:
-   case PCI_CHIP_I946_GZ:
-   case PCI_CHIP_I965_GM:
-   case PCI_CHIP_I965_GME:
-      chipset.is_965 = TRUE;
-      break;
-
-   case PCI_CHIP_GM45_GM:
-   case PCI_CHIP_IGD_E_G:
-   case PCI_CHIP_Q45_G:
-   case PCI_CHIP_G45_G:
-   case PCI_CHIP_G41_G:
-   case PCI_CHIP_B43_G:
-      chipset.is_g4x = TRUE;
-      break;
-
-   case PCI_CHIP_ILD_G:
-   case PCI_CHIP_ILM_G:
-      chipset.is_igdng = TRUE;
-      break;
-
-   default:
-      debug_printf("%s: unknown pci id 0x%x, cannot create screen\n", 
-                   __FUNCTION__, chipset.pci_id);
-      return NULL;
-   }
-
-
    bscreen = CALLOC_STRUCT(brw_screen);
    if (!bscreen)
       return NULL;
 
-   bscreen->chipset = chipset;
+   bscreen->pci_id = sws->pci_id;
+   if (IS_GEN6(sws->pci_id)) {
+       bscreen->gen = 6;
+       bscreen->needs_ff_sync = TRUE;
+   } else if (IS_GEN5(sws->pci_id)) {
+       bscreen->gen = 5;
+       bscreen->needs_ff_sync = TRUE;
+   } else if (IS_965(sws->pci_id)) {
+       bscreen->gen = 4;
+       if (IS_G4X(sws->pci_id)) {
+	   bscreen->is_g4x = true;
+       }
+   } else {
+      debug_printf("%s: unknown pci id 0x%x, cannot create screen\n", 
+                   __FUNCTION__, sws->pci_id);
+      free(bscreen);
+      return NULL;
+   }
+
+   sws->gen = bscreen->gen;
    bscreen->sws = sws;
    bscreen->base.winsys = NULL;
    bscreen->base.destroy = brw_destroy_screen;

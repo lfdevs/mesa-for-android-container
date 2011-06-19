@@ -33,6 +33,13 @@
 #define PIPE_ZMASK_SIZE 4096
 #define RV3xx_ZMASK_SIZE 5120
 
+/* The size of a compressed tile. Each compressed tile takes 2 bits
+ * in the ZMASK RAM, so there is always 16 tiles per one dword. */
+enum r300_zmask_compression {
+   R300_ZCOMP_4X4 = 4,
+   R300_ZCOMP_8X8 = 8
+};
+
 /* Structure containing all the possible information about a specific Radeon
  * in the R3xx, R4xx, and R5xx families. */
 struct r300_capabilities {
@@ -50,10 +57,12 @@ struct r300_capabilities {
     unsigned num_tex_units;
     /* Whether or not TCL is physically present */
     boolean has_tcl;
-    /* Some chipsets do not have HiZ RAM - other have varying amounts . */
+    /* Some chipsets do not have HiZ RAM - other have varying amounts. */
     int hiz_ram;
-    /*  some chipsets have zmask ram per pipe some don't */
+    /* Some chipsets have zmask ram per pipe some don't. */
     int zmask_ram;
+    /* Compression mode for ZMASK. */
+    enum r300_zmask_compression z_compress;
     /* Whether or not this is RV350 or newer, including all r400 and r500
      * chipsets. The differences compared to the oldest r300 chips are:
      * - Blend LTE/GTE thresholds
@@ -81,32 +90,30 @@ struct r300_capabilities {
     boolean high_second_pipe;
     /* DXTC texture swizzling. */
     boolean dxtc_swizzle;
-    /* Index bias (AKA index offset). */
-    boolean index_bias_supported;
+    /* Whether R500_US_FORMAT0_0 exists (R520-only and depends on DRM). */
+    boolean has_us_format;
 };
 
 /* Enumerations for legibility and telling which card we're running on. */
 enum {
-    CHIP_FAMILY_R300 = 0,
+    CHIP_FAMILY_R300 = 0, /* R3xx-based cores. */
     CHIP_FAMILY_R350,
-    CHIP_FAMILY_R360,
     CHIP_FAMILY_RV350,
     CHIP_FAMILY_RV370,
     CHIP_FAMILY_RV380,
-    CHIP_FAMILY_R420,
+    CHIP_FAMILY_RS400,
+    CHIP_FAMILY_RC410,
+    CHIP_FAMILY_RS480,
+    CHIP_FAMILY_R420,     /* R4xx-based cores. */
     CHIP_FAMILY_R423,
     CHIP_FAMILY_R430,
     CHIP_FAMILY_R480,
     CHIP_FAMILY_R481,
     CHIP_FAMILY_RV410,
-    CHIP_FAMILY_RS400,
-    CHIP_FAMILY_RC410,
-    CHIP_FAMILY_RS480,
-    CHIP_FAMILY_RS482,
     CHIP_FAMILY_RS600,
     CHIP_FAMILY_RS690,
     CHIP_FAMILY_RS740,
-    CHIP_FAMILY_RV515,
+    CHIP_FAMILY_RV515,    /* R5xx-based cores. */
     CHIP_FAMILY_R520,
     CHIP_FAMILY_RV530,
     CHIP_FAMILY_R580,

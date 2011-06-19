@@ -82,6 +82,15 @@ prepare_vs_constants(struct brw_context *brw)
 	     params->ParameterValues[i],
 	     4 * sizeof(float));
    }
+
+   if (0) {
+      for (i = 0; i < params->NumParameters; i++) {
+	 float *row = (float *)brw->vs.const_bo->virtual + i * 4;
+	 printf("vs const surface %3d: %4.3f %4.3f %4.3f %4.3f\n",
+		i, row[0], row[1], row[2], row[3]);
+      }
+   }
+
    drm_intel_gem_bo_unmap_gtt(brw->vs.const_bo);
    brw->state.dirty.brw |= BRW_NEW_VS_CONSTBUF;
 }
@@ -105,6 +114,7 @@ brw_update_vs_constant_surface( struct gl_context *ctx,
                                 GLuint surf)
 {
    struct brw_context *brw = brw_context(ctx);
+   struct intel_context *intel = &brw->intel;
    struct brw_vertex_program *vp =
       (struct brw_vertex_program *) brw->vertex_program;
    const struct gl_program_parameter_list *params = vp->program.Base.Parameters;
@@ -115,14 +125,17 @@ brw_update_vs_constant_surface( struct gl_context *ctx,
     * it.
     */
    if (brw->vs.const_bo == NULL) {
-      drm_intel_bo_unreference(brw->vs.surf_bo[surf]);
-      brw->vs.surf_bo[surf] = NULL;
+      brw->vs.surf_offset[surf] = 0;
       return;
    }
 
-   brw_create_constant_surface(brw, brw->vs.const_bo, params->NumParameters,
-			       &brw->vs.surf_bo[surf],
-			       &brw->vs.surf_offset[surf]);
+   if (intel->gen >= 7) {
+      gen7_create_constant_surface(brw, brw->vs.const_bo, params->NumParameters,
+				  &brw->vs.surf_offset[surf]);
+   } else {
+      brw_create_constant_surface(brw, brw->vs.const_bo, params->NumParameters,
+				  &brw->vs.surf_offset[surf]);
+   }
 }
 
 
@@ -157,11 +170,10 @@ static void upload_vs_surfaces(struct brw_context *brw)
 
    /* BRW_NEW_NR_VS_SURFACES */
    if (brw->vs.nr_surfaces == 0) {
-      if (brw->vs.bind_bo) {
-	 drm_intel_bo_unreference(brw->vs.bind_bo);
-	 brw->vs.bind_bo = NULL;
-	 brw->state.dirty.brw |= BRW_NEW_BINDING_TABLE;
+      if (brw->vs.bind_bo_offset) {
+	 brw->state.dirty.brw |= BRW_NEW_VS_BINDING_TABLE;
       }
+      brw->vs.bind_bo_offset = 0;
       return;
    }
 
@@ -171,18 +183,14 @@ static void upload_vs_surfaces(struct brw_context *brw)
     * space for the binding table. (once we have vs samplers)
     */
    bind = brw_state_batch(brw, sizeof(uint32_t) * BRW_VS_MAX_SURF,
-			  32, &brw->vs.bind_bo, &brw->vs.bind_bo_offset);
+			  32, &brw->vs.bind_bo_offset);
 
    for (i = 0; i < BRW_VS_MAX_SURF; i++) {
       /* BRW_NEW_VS_CONSTBUF */
-      if (brw->vs.surf_bo[i]) {
-	 bind[i] = brw->vs.surf_offset[i];
-      } else {
-	 bind[i] = 0;
-      }
+      bind[i] = brw->vs.surf_offset[i];
    }
 
-   brw->state.dirty.brw |= BRW_NEW_BINDING_TABLE;
+   brw->state.dirty.brw |= BRW_NEW_VS_BINDING_TABLE;
 }
 
 const struct brw_tracked_state brw_vs_surfaces = {

@@ -210,6 +210,14 @@ _mesa_glsl_process_extension(const char *name, YYLTYPE *name_locp,
 	 state->ARB_draw_buffers_enable = (ext_mode != extension_disable);
 	 state->ARB_draw_buffers_warn = (ext_mode == extension_warn);
       }
+   } else if (strcmp(name, "GL_ARB_draw_instanced") == 0) {
+      state->ARB_draw_instanced_enable = (ext_mode != extension_disable);
+      state->ARB_draw_instanced_warn = (ext_mode == extension_warn);
+
+      /* This extension is only supported in vertex shaders.
+       */
+      unsupported = (state->target != vertex_shader)
+	 ||  !state->extensions->ARB_draw_instanced;
    } else if (strcmp(name, "GL_ARB_explicit_attrib_location") == 0) {
       state->ARB_explicit_attrib_location_enable =
 	 (ext_mode != extension_disable);
@@ -232,14 +240,44 @@ _mesa_glsl_process_extension(const char *name, YYLTYPE *name_locp,
       state->EXT_texture_array_warn = (ext_mode == extension_warn);
 
       unsupported = !state->extensions->EXT_texture_array;
+   } else if (strcmp(name, "GL_ARB_shader_texture_lod") == 0) {
+      /* Force ARB_texture_rectangle to be on so sampler2DRects are defined */
+      state->ARB_texture_rectangle_enable = true;
+
+      state->ARB_shader_texture_lod_enable = (ext_mode != extension_disable);
+      state->ARB_shader_texture_lod_warn = (ext_mode == extension_warn);
+
+      unsupported = !state->extensions->ARB_shader_texture_lod;
    } else if (strcmp(name, "GL_ARB_shader_stencil_export") == 0) {
-      if (state->target != fragment_shader) {
-	 unsupported = true;
-      } else {
-	 state->ARB_shader_stencil_export_enable = (ext_mode != extension_disable);
-	 state->ARB_shader_stencil_export_warn = (ext_mode == extension_warn);
-	 unsupported = !state->extensions->ARB_shader_stencil_export;
-      }
+      state->ARB_shader_stencil_export_enable = (ext_mode != extension_disable);
+      state->ARB_shader_stencil_export_warn = (ext_mode == extension_warn);
+
+      /* This extension is only supported in fragment shaders.
+       */
+      unsupported = (state->target != fragment_shader)
+	 || !state->extensions->ARB_shader_stencil_export;
+   } else if (strcmp(name, "GL_AMD_conservative_depth") == 0) {
+      /* The AMD_conservative spec does not forbid requiring the extension in
+       * the vertex shader.
+       */
+      state->AMD_conservative_depth_enable = (ext_mode != extension_disable);
+      state->AMD_conservative_depth_warn = (ext_mode == extension_warn);
+      unsupported = !state->extensions->AMD_conservative_depth;
+   } else if (strcmp(name, "GL_AMD_shader_stencil_export") == 0) {
+      state->AMD_shader_stencil_export_enable = (ext_mode != extension_disable);
+      state->AMD_shader_stencil_export_warn = (ext_mode == extension_warn);
+
+      /* This extension is only supported in fragment shaders.
+       * Both the ARB and AMD variants share the same ARB flag
+       * in gl_extensions.
+       */
+      unsupported = (state->target != fragment_shader)
+	 || !state->extensions->ARB_shader_stencil_export;
+   } else if (strcmp(name, "GL_OES_texture_3D") == 0 && state->es_shader) {
+      state->OES_texture_3D_enable = (ext_mode != extension_disable);
+      state->OES_texture_3D_warn = (ext_mode == extension_warn);
+
+      unsupported = !state->extensions->EXT_texture3D;
    } else {
       unsupported = true;
    }
@@ -398,7 +436,7 @@ ast_expression::print(void) const
       printf("? ");
       subexpressions[1]->print();
       printf(": ");
-      subexpressions[1]->print();
+      subexpressions[2]->print();
       break;
 
    case ast_array_index:
@@ -748,6 +786,7 @@ do_common_optimization(exec_list *ir, bool linked, unsigned max_unroll_iteration
    progress = do_if_simplification(ir) || progress;
    progress = do_discard_simplification(ir) || progress;
    progress = do_copy_propagation(ir) || progress;
+   progress = do_copy_propagation_elements(ir) || progress;
    if (linked)
       progress = do_dead_code(ir) || progress;
    else
@@ -769,8 +808,10 @@ do_common_optimization(exec_list *ir, bool linked, unsigned max_unroll_iteration
    progress = optimize_redundant_jumps(ir) || progress;
 
    loop_state *ls = analyze_loop_variables(ir);
-   progress = set_loop_controls(ir, ls) || progress;
-   progress = unroll_loops(ir, ls, max_unroll_iterations) || progress;
+   if (ls->loop_found) {
+      progress = set_loop_controls(ir, ls) || progress;
+      progress = unroll_loops(ir, ls, max_unroll_iterations) || progress;
+   }
    delete ls;
 
    return progress;

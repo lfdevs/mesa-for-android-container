@@ -33,6 +33,7 @@
 #include "util/u_memory.h"
 #include "util/u_pack_color.h"
 #include "util/u_blitter.h"
+#include "util/u_surface.h"
 
 #include "nouveau/nouveau_winsys.h"
 #include "nouveau/nouveau_screen.h"
@@ -83,7 +84,7 @@ nvfx_region_set_format(struct nv04_region* rgn, enum pipe_format format)
 }
 
 static INLINE void
-nvfx_region_init_for_surface(struct nv04_region* rgn, struct nvfx_surface* surf, unsigned x, unsigned y, bool for_write)
+nvfx_region_init_for_surface(struct nv04_region* rgn, struct nvfx_surface* surf, unsigned x, unsigned y, boolean for_write)
 {
 	rgn->x = x;
 	rgn->y = y;
@@ -119,7 +120,7 @@ nvfx_region_init_for_surface(struct nv04_region* rgn, struct nvfx_surface* surf,
 }
 
 static INLINE void
-nvfx_region_init_for_subresource(struct nv04_region* rgn, struct pipe_resource* pt, unsigned level, unsigned x, unsigned y, unsigned z, bool for_write)
+nvfx_region_init_for_subresource(struct nv04_region* rgn, struct pipe_resource* pt, unsigned level, unsigned x, unsigned y, unsigned z, boolean for_write)
 {
 	if(pt->target != PIPE_BUFFER)
 	{
@@ -168,8 +169,8 @@ nvfx_get_blitter(struct pipe_context* pipe, int copy)
 	if(nvfx->query && !nvfx->blitters_in_use)
 	{
 		struct nouveau_channel* chan = nvfx->screen->base.channel;
-		WAIT_RING(chan, 2);
-		OUT_RING(chan, RING_3D(NV30_3D_QUERY_ENABLE, 1));
+		struct nouveau_grobj *eng3d = nvfx->screen->eng3d;
+		BEGIN_RING(chan, eng3d, NV30_3D_QUERY_ENABLE, 1);
 		OUT_RING(chan, 0);
 	}
 
@@ -209,8 +210,8 @@ nvfx_put_blitter(struct pipe_context* pipe, struct blitter_context* blitter)
 	if(nvfx->query && !nvfx->blitters_in_use)
 	{
 		struct nouveau_channel* chan = nvfx->screen->base.channel;
-		WAIT_RING(chan, 2);
-		OUT_RING(chan, RING_3D(NV30_3D_QUERY_ENABLE, 1));
+		struct nouveau_grobj *eng3d = nvfx->screen->eng3d;
+		BEGIN_RING(chan, eng3d, NV30_3D_QUERY_ENABLE, 1);
 		OUT_RING(chan, 1);
 	}
 }
@@ -251,6 +252,13 @@ nvfx_resource_copy_region(struct pipe_context *pipe,
 
 	if(!w || !h)
 		return;
+
+        /* Fallback for buffers. */
+        if (dstr->target == PIPE_BUFFER && srcr->target == PIPE_BUFFER) {
+                util_resource_copy_region(pipe, dstr, dst_level, dstx, dsty, dstz,
+                                          srcr, src_level, src_box);
+                return;
+        }
 
 	if(copy_threshold < 0)
 		copy_threshold = debug_get_num_option("NOUVEAU_COPY_THRESHOLD", 4);

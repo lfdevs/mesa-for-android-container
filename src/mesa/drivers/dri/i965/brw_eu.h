@@ -104,6 +104,8 @@ struct brw_compile {
    struct brw_instruction store[BRW_EU_MAX_INSN];
    GLuint nr_insn;
 
+   void *mem_ctx;
+
    /* Allow clients to push/pop instruction state:
     */
    struct brw_instruction stack[BRW_EU_MAX_INSN_STACK];
@@ -114,6 +116,14 @@ struct brw_compile {
    GLboolean single_program_flow;
    bool compressed;
    struct brw_context *brw;
+
+   /* Control flow stacks:
+    * - if_stack contains IF and ELSE instructions which must be patched
+    *   (and popped) once the matching ENDIF instruction is encountered.
+    */
+   struct brw_instruction **if_stack;
+   int if_stack_depth;
+   int if_stack_array_size;
 
    struct brw_glsl_label *first_label;  /**< linked list of labels */
    struct brw_glsl_call *first_call;    /**< linked list of CALs */
@@ -290,6 +300,14 @@ static INLINE struct brw_reg retype( struct brw_reg reg,
 				       GLuint type )
 {
    reg.type = type;
+   return reg;
+}
+
+static inline struct brw_reg
+sechalf(struct brw_reg reg)
+{
+   if (reg.vstride)
+      reg.nr++;
    return reg;
 }
 
@@ -772,10 +790,12 @@ void brw_set_access_mode( struct brw_compile *p, GLuint access_mode );
 void brw_set_compression_control( struct brw_compile *p, GLboolean control );
 void brw_set_predicate_control_flag_value( struct brw_compile *p, GLuint value );
 void brw_set_predicate_control( struct brw_compile *p, GLuint pc );
+void brw_set_predicate_inverse(struct brw_compile *p, bool predicate_inverse);
 void brw_set_conditionalmod( struct brw_compile *p, GLuint conditional );
 void brw_set_acc_write_control(struct brw_compile *p, GLuint value);
 
-void brw_init_compile( struct brw_context *, struct brw_compile *p );
+void brw_init_compile(struct brw_context *, struct brw_compile *p,
+		      void *mem_ctx);
 const GLuint *brw_get_program( struct brw_compile *p, GLuint *sz );
 
 
@@ -855,7 +875,6 @@ void brw_ff_sync(struct brw_compile *p,
 
 void brw_fb_WRITE(struct brw_compile *p,
 		  int dispatch_width,
-		   struct brw_reg dest,
 		   GLuint msg_reg_nr,
 		   struct brw_reg src0,
 		   GLuint binding_table_index,
@@ -939,15 +958,11 @@ void brw_dp_READ_4_vs_relative(struct brw_compile *p,
  */
 struct brw_instruction *brw_IF(struct brw_compile *p, 
 			       GLuint execute_size);
-struct brw_instruction *brw_IF_gen6(struct brw_compile *p, uint32_t conditional,
-				    struct brw_reg src0, struct brw_reg src1);
+struct brw_instruction *gen6_IF(struct brw_compile *p, uint32_t conditional,
+				struct brw_reg src0, struct brw_reg src1);
 
-struct brw_instruction *brw_ELSE(struct brw_compile *p, 
-				 struct brw_instruction *if_insn);
-
-void brw_ENDIF(struct brw_compile *p, 
-	       struct brw_instruction *if_or_else_insn);
-
+void brw_ELSE(struct brw_compile *p);
+void brw_ENDIF(struct brw_compile *p);
 
 /* DO/WHILE loops:
  */
@@ -958,9 +973,9 @@ struct brw_instruction *brw_WHILE(struct brw_compile *p,
 	       struct brw_instruction *patch_insn);
 
 struct brw_instruction *brw_BREAK(struct brw_compile *p, int pop_count);
-struct brw_instruction *brw_CONT_gen6(struct brw_compile *p,
-				      struct brw_instruction *do_insn);
 struct brw_instruction *brw_CONT(struct brw_compile *p, int pop_count);
+struct brw_instruction *gen6_CONT(struct brw_compile *p,
+				  struct brw_instruction *do_insn);
 /* Forward jumps:
  */
 void brw_land_fwd_jump(struct brw_compile *p, 
@@ -1012,10 +1027,13 @@ void brw_math_invert( struct brw_compile *p,
 		      struct brw_reg dst,
 		      struct brw_reg src);
 
-void brw_set_src1( struct brw_instruction *insn,
-                          struct brw_reg reg );
+void brw_set_src1(struct brw_compile *p,
+		  struct brw_instruction *insn,
+		  struct brw_reg reg);
 
 void brw_set_uip_jip(struct brw_compile *p);
+
+uint32_t brw_swap_cmod(uint32_t cmod);
 
 /* brw_optimize.c */
 void brw_optimize(struct brw_compile *p);

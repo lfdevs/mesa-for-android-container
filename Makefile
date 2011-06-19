@@ -5,7 +5,10 @@ TOP = .
 SUBDIRS = src
 
 
+# The git command below generates an empty string when we're not
+# building in a GIT tree (i.e., building from a release tarball).
 default: $(TOP)/configs/current
+	@$(TOP)/bin/extract_git_sha1
 	@for dir in $(SUBDIRS) ; do \
 		if [ -d $$dir ] ; then \
 			(cd $$dir && $(MAKE)) || exit 1 ; \
@@ -180,7 +183,7 @@ ultrix-gcc:
 
 # Rules for making release tarballs
 
-VERSION=7.10.3
+VERSION=7.11-devel
 DIRECTORY = Mesa-$(VERSION)
 LIB_NAME = MesaLib-$(VERSION)
 GLUT_NAME = MesaGLUT-$(VERSION)
@@ -202,6 +205,7 @@ MAIN_FILES = \
 	$(DIRECTORY)/scons/*py						\
 	$(DIRECTORY)/bin/config.guess					\
 	$(DIRECTORY)/bin/config.sub					\
+	$(DIRECTORY)/bin/extract_git_sha1				\
 	$(DIRECTORY)/bin/install-sh					\
 	$(DIRECTORY)/bin/mklib						\
 	$(DIRECTORY)/bin/minstall					\
@@ -226,15 +230,21 @@ MAIN_FILES = \
 	$(DIRECTORY)/include/GL/vms_x_fix.h				\
 	$(DIRECTORY)/include/GL/wglext.h				\
 	$(DIRECTORY)/include/GL/wmesa.h					\
+	$(DIRECTORY)/include/pci_ids/*.h				\
 	$(DIRECTORY)/include/c99/*.h					\
+	$(DIRECTORY)/src/getopt/SConscript				\
+	$(DIRECTORY)/src/getopt/getopt*.[ch]				\
 	$(DIRECTORY)/src/glsl/Makefile					\
 	$(DIRECTORY)/src/glsl/Makefile.template				\
 	$(DIRECTORY)/src/glsl/SConscript				\
 	$(DIRECTORY)/src/glsl/*.[ch]					\
+	$(DIRECTORY)/src/glsl/*.ll					\
+	$(DIRECTORY)/src/glsl/*.yy					\
 	$(DIRECTORY)/src/glsl/*.[cly]pp					\
 	$(DIRECTORY)/src/glsl/README					\
 	$(DIRECTORY)/src/glsl/glcpp/*.[chly]				\
 	$(DIRECTORY)/src/glsl/glcpp/README				\
+	$(DIRECTORY)/src/glsl/builtins					\
 	$(DIRECTORY)/src/Makefile					\
 	$(DIRECTORY)/src/SConscript					\
 	$(DIRECTORY)/src/mesa/Makefile*					\
@@ -246,12 +256,12 @@ MAIN_FILES = \
 	$(DIRECTORY)/src/mesa/depend					\
 	$(MAIN_ES_FILES)						\
 	$(DIRECTORY)/src/mesa/main/*.[chS]				\
+	$(DIRECTORY)/src/mesa/main/*.cpp				\
 	$(DIRECTORY)/src/mesa/main/descrip.mms				\
 	$(DIRECTORY)/src/mesa/math/*.[ch]				\
 	$(DIRECTORY)/src/mesa/math/descrip.mms				\
 	$(DIRECTORY)/src/mesa/program/*.[chly]				\
 	$(DIRECTORY)/src/mesa/program/*.cpp				\
-	$(DIRECTORY)/src/mesa/program/Makefile				\
 	$(DIRECTORY)/src/mesa/program/descrip.mms			\
 	$(DIRECTORY)/src/mesa/swrast/*.[ch]				\
 	$(DIRECTORY)/src/mesa/swrast/descrip.mms			\
@@ -264,7 +274,6 @@ MAIN_FILES = \
 	$(DIRECTORY)/src/mesa/tnl_dd/*.[ch]				\
 	$(DIRECTORY)/src/mesa/tnl_dd/imm/*.[ch]				\
 	$(DIRECTORY)/src/mesa/tnl_dd/imm/NOTES.imm			\
-	$(DIRECTORY)/src/mesa/vf/*.[ch]					\
 	$(DIRECTORY)/src/mesa/drivers/Makefile				\
 	$(DIRECTORY)/src/mesa/drivers/beos/*.cpp			\
 	$(DIRECTORY)/src/mesa/drivers/beos/Makefile			\
@@ -292,8 +301,7 @@ MAIN_FILES = \
 	$(DIRECTORY)/src/mesa/x86/*.S					\
 	$(DIRECTORY)/src/mesa/x86/rtasm/*.[ch]				\
 	$(DIRECTORY)/src/mesa/x86-64/*.[chS]				\
-	$(DIRECTORY)/src/mesa/x86-64/Makefile				\
-	$(DIRECTORY)/windows/VC8/
+	$(DIRECTORY)/src/mesa/x86-64/Makefile
 
 MAPI_FILES = \
 	$(DIRECTORY)/include/GLES/*.h					\
@@ -315,6 +323,8 @@ MAPI_FILES = \
 	$(DIRECTORY)/src/mapi/mapi/mapi_abi.py				\
 	$(DIRECTORY)/src/mapi/mapi/sources.mak				\
 	$(DIRECTORY)/src/mapi/mapi/*.[ch]				\
+	$(DIRECTORY)/src/mapi/shared-glapi/SConscript			\
+	$(DIRECTORY)/src/mapi/shared-glapi/Makefile			\
 	$(DIRECTORY)/src/mapi/vgapi/Makefile				\
 	$(DIRECTORY)/src/mapi/vgapi/SConscript				\
 	$(DIRECTORY)/src/mapi/vgapi/vgapi.csv				\
@@ -329,6 +339,8 @@ EGL_FILES = \
 	$(DIRECTORY)/src/egl/*/*.[ch]					\
 	$(DIRECTORY)/src/egl/*/*/Makefile				\
 	$(DIRECTORY)/src/egl/*/*/*.[ch]					\
+	$(DIRECTORY)/src/egl/wayland/wayland-drm/protocol/*.xml		\
+	$(DIRECTORY)/src/egl/wayland/wayland-egl/*.pc.in		\
 	$(DIRECTORY)/src/egl/main/SConscript				\
 	$(DIRECTORY)/src/egl/main/*.pc.in				\
 	$(DIRECTORY)/src/egl/main/*.def
@@ -356,15 +368,7 @@ GALLIUM_FILES = \
 
 APPLE_DRI_FILES = \
 	$(DIRECTORY)/src/glx/apple/Makefile 				\
-	$(DIRECTORY)/src/glx/apple/*.[ch]				\
-	$(DIRECTORY)/src/glx/apple/*.tcl				\
-	$(DIRECTORY)/src/glx/apple/apple_exports.list			\
-	$(DIRECTORY)/src/glx/apple/GL_aliases				\
-	$(DIRECTORY)/src/glx/apple/GL_extensions			\
-	$(DIRECTORY)/src/glx/apple/GL_noop				\
-	$(DIRECTORY)/src/glx/apple/GL_promoted				\
-	$(DIRECTORY)/src/glx/apple/specs/*.spec				\
-	$(DIRECTORY)/src/glx/apple/specs/*.tm
+	$(DIRECTORY)/src/glx/apple/*.[ch]
 
 DRI_FILES = \
 	$(DIRECTORY)/include/GL/internal/dri_interface.h		\
@@ -445,10 +449,22 @@ LIB_FILES = \
 	$(GLW_FILES)
 
 
-# Everything for new a Mesa release:
-tarballs: rm_depend configure aclocal.m4 lib_gz glut_gz \
-	lib_bz2 glut_bz2 lib_zip glut_zip md5
+parsers: configure
+	-@touch $(TOP)/configs/current
+	$(MAKE) -C src/glsl glsl_parser.cpp glsl_parser.h glsl_lexer.cpp
+	$(MAKE) -C src/glsl/glcpp glcpp-lex.c glcpp-parse.c glcpp-parse.h
+	$(MAKE) -C src/mesa/program lex.yy.c program_parse.tab.c program_parse.tab.h
 
+# Everything for new a Mesa release:
+ARCHIVES = $(LIB_NAME).tar.gz \
+	$(LIB_NAME).tar.bz2 \
+	$(LIB_NAME).zip \
+	$(GLUT_NAME).tar.gz \
+	$(GLUT_NAME).tar.bz2 \
+	$(GLUT_NAME).zip
+
+tarballs: md5
+	rm -f ../$(LIB_NAME).tar
 
 # Helper for autoconf builds
 ACLOCAL = aclocal
@@ -457,7 +473,7 @@ AUTOCONF = autoconf
 AC_FLAGS =
 aclocal.m4: configure.ac acinclude.m4
 	$(ACLOCAL) $(ACLOCAL_FLAGS)
-configure: configure.ac aclocal.m4 acinclude.m4
+configure: rm_depend configure.ac aclocal.m4 acinclude.m4
 	$(AUTOCONF) $(AC_FLAGS)
 
 rm_depend:
@@ -466,47 +482,41 @@ rm_depend:
 		touch $$dep ; \
 	done
 
-rm_config:
+rm_config: parsers
 	rm -f configs/current
 	rm -f configs/autoconf
 
-lib_gz: rm_config
-	cd .. ; \
-	tar -cf $(LIB_NAME).tar $(LIB_FILES) ; \
-	gzip $(LIB_NAME).tar ; \
-	mv $(LIB_NAME).tar.gz $(DIRECTORY)
+$(LIB_NAME).tar: rm_config
+	cd .. ; tar -cf $(DIRECTORY)/$(LIB_NAME).tar $(LIB_FILES)
 
-glut_gz:
-	cd .. ; \
-	tar -cf $(GLUT_NAME).tar $(GLUT_FILES) ; \
-	gzip $(GLUT_NAME).tar ; \
-	mv $(GLUT_NAME).tar.gz $(DIRECTORY)
+$(LIB_NAME).tar.gz: $(LIB_NAME).tar
+	gzip --stdout --best $(LIB_NAME).tar > $(LIB_NAME).tar.gz
 
-lib_bz2: rm_config
-	cd .. ; \
-	tar -cf $(LIB_NAME).tar $(LIB_FILES) ; \
-	bzip2 $(LIB_NAME).tar ; \
-	mv $(LIB_NAME).tar.bz2 $(DIRECTORY)
+$(GLUT_NAME).tar: rm_depend
+	cd .. ; tar -cf $(DIRECTORY)/$(GLUT_NAME).tar $(GLUT_FILES)
 
-glut_bz2:
-	cd .. ; \
-	tar -cf $(GLUT_NAME).tar $(GLUT_FILES) ; \
-	bzip2 $(GLUT_NAME).tar ; \
-	mv $(GLUT_NAME).tar.bz2 $(DIRECTORY)
+$(GLUT_NAME).tar.gz: $(GLUT_NAME).tar
+	gzip --stdout --best $(GLUT_NAME).tar > $(GLUT_NAME).tar.gz
 
-lib_zip: rm_config
+$(LIB_NAME).tar.bz2: $(LIB_NAME).tar
+	bzip2 --stdout --best $(LIB_NAME).tar > $(LIB_NAME).tar.bz2
+
+$(GLUT_NAME).tar.bz2: $(GLUT_NAME).tar
+	bzip2 --stdout --best $(GLUT_NAME).tar > $(GLUT_NAME).tar.bz2
+
+$(LIB_NAME).zip: rm_config
 	rm -f $(LIB_NAME).zip ; \
 	cd .. ; \
 	zip -qr $(LIB_NAME).zip $(LIB_FILES) ; \
 	mv $(LIB_NAME).zip $(DIRECTORY)
 
-glut_zip:
+$(GLUT_NAME).zip:
 	rm -f $(GLUT_NAME).zip ; \
 	cd .. ; \
 	zip -qr $(GLUT_NAME).zip $(GLUT_FILES) ; \
 	mv $(GLUT_NAME).zip $(DIRECTORY)
 
-md5:
+md5: $(ARCHIVES)
 	@-md5sum $(LIB_NAME).tar.gz
 	@-md5sum $(LIB_NAME).tar.bz2
 	@-md5sum $(LIB_NAME).zip
@@ -514,7 +524,4 @@ md5:
 	@-md5sum $(GLUT_NAME).tar.bz2
 	@-md5sum $(GLUT_NAME).zip
 
-.PHONY: tarballs rm_depend rm_config md5 \
-	lib_gz glut_gz \
-	lib_bz2 glut_bz2 \
-	lib_zip glut_zip
+.PHONY: tarballs rm_depend rm_config md5

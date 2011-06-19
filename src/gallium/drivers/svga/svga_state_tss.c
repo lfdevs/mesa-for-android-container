@@ -52,26 +52,28 @@ void svga_cleanup_tss_binding(struct svga_context *svga)
 }
 
 
+struct bind_queue {
+   struct {
+      unsigned unit;
+      struct svga_hw_view_state *view;
+   } bind[PIPE_MAX_SAMPLERS];
+
+   unsigned bind_count;
+};
+
+
 static int
 update_tss_binding(struct svga_context *svga, 
                    unsigned dirty )
 {
-   boolean reemit = !!(dirty & SVGA_NEW_COMMAND_BUFFER);
+   boolean reemit = svga->rebind.texture_samplers;
    unsigned i;
    unsigned count = MAX2( svga->curr.num_sampler_views,
                           svga->state.hw_draw.num_views );
    unsigned min_lod;
    unsigned max_lod;
 
-
-   struct {
-      struct {
-         unsigned unit;
-         struct svga_hw_view_state *view;
-      } bind[PIPE_MAX_SAMPLERS];
-
-      unsigned bind_count;
-   } queue;
+   struct bind_queue queue;
 
    queue.bind_count = 0;
    
@@ -157,6 +159,8 @@ update_tss_binding(struct svga_context *svga,
       SVGA_FIFOCommitAll( svga->swc );
    }
 
+   svga->rebind.texture_samplers = FALSE;
+
    return 0;
 
 fail:
@@ -164,11 +168,72 @@ fail:
 }
 
 
+/*
+ * Rebind textures.
+ *
+ * Similar to update_tss_binding, but without any state checking/update.
+ *
+ * Called at the beginning of every new command buffer to ensure that
+ * non-dirty textures are properly paged-in.
+ */
+enum pipe_error
+svga_reemit_tss_bindings(struct svga_context *svga)
+{
+   unsigned i;
+   enum pipe_error ret;
+   struct bind_queue queue;
+
+   assert(svga->rebind.texture_samplers);
+
+   queue.bind_count = 0;
+
+   for (i = 0; i < svga->state.hw_draw.num_views; i++) {
+      struct svga_hw_view_state *view = &svga->state.hw_draw.views[i];
+
+      if (view->v) {
+         queue.bind[queue.bind_count].unit = i;
+         queue.bind[queue.bind_count].view = view;
+         queue.bind_count++;
+      }
+   }
+
+   if (queue.bind_count) {
+      SVGA3dTextureState *ts;
+
+      ret = SVGA3D_BeginSetTextureState(svga->swc,
+                                        &ts,
+                                        queue.bind_count);
+      if (ret != PIPE_OK) {
+         return ret;
+      }
+
+      for (i = 0; i < queue.bind_count; i++) {
+         struct svga_winsys_surface *handle;
+
+         ts[i].stage = queue.bind[i].unit;
+         ts[i].name = SVGA3D_TS_BIND_TEXTURE;
+
+         assert(queue.bind[i].view->v);
+         handle = queue.bind[i].view->v->handle;
+         svga->swc->surface_relocation(svga->swc,
+                                       &ts[i].value,
+                                       handle,
+                                       SVGA_RELOC_READ);
+      }
+
+      SVGA_FIFOCommitAll(svga->swc);
+   }
+
+   svga->rebind.texture_samplers = FALSE;
+
+   return PIPE_OK;
+}
+
+
 struct svga_tracked_state svga_hw_tss_binding = {
    "texture binding emit",
    SVGA_NEW_TEXTURE_BINDING |
-   SVGA_NEW_SAMPLER |
-   SVGA_NEW_COMMAND_BUFFER,
+   SVGA_NEW_SAMPLER,
    update_tss_binding
 };
 

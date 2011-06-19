@@ -172,19 +172,21 @@ i915_texture_set_image_offset(struct i915_texture *tex,
 }
 
 static enum i915_winsys_buffer_tile
-i915_texture_tiling(struct pipe_resource *pt)
+i915_texture_tiling(struct i915_screen *is, struct i915_texture *tex)
 {
-   if (!i915_tiling)
+   if (!is->debug.tiling)
       return I915_TILE_NONE;
 
-   if (pt->target == PIPE_TEXTURE_1D)
+   if (tex->b.b.target == PIPE_TEXTURE_1D)
       return I915_TILE_NONE;
 
-   if (util_format_is_s3tc(pt->format))
-      /* XXX X-tiling might make sense */
-      return I915_TILE_NONE;
+   if (util_format_is_s3tc(tex->b.b.format))
+      return I915_TILE_X;
 
-   return I915_TILE_X;
+   if (is->debug.use_blitter)
+      return I915_TILE_X;
+   else
+      return I915_TILE_Y;
 }
 
 
@@ -401,11 +403,7 @@ i915_texture_layout_3d(struct i915_texture *tex)
 static boolean
 i915_texture_layout(struct i915_texture * tex)
 {
-   struct pipe_resource *pt = &tex->b.b;
-
-   tex->tiling = i915_texture_tiling(pt);
-
-   switch (pt->target) {
+   switch (tex->b.b.target) {
    case PIPE_TEXTURE_1D:
    case PIPE_TEXTURE_2D:
    case PIPE_TEXTURE_RECT:
@@ -649,11 +647,7 @@ i945_texture_layout_cube(struct i915_texture *tex)
 static boolean
 i945_texture_layout(struct i915_texture * tex)
 {
-   struct pipe_resource *pt = &tex->b.b;
-
-   tex->tiling = i915_texture_tiling(pt);
-
-   switch (pt->target) {
+   switch (tex->b.b.target) {
    case PIPE_TEXTURE_1D:
    case PIPE_TEXTURE_2D:
    case PIPE_TEXTURE_RECT:
@@ -664,7 +658,7 @@ i945_texture_layout(struct i915_texture * tex)
       i945_texture_layout_3d(tex);
       break;
    case PIPE_TEXTURE_CUBE:
-      if (!util_format_is_s3tc(pt->format))
+      if (!util_format_is_s3tc(tex->b.b.format))
          i9x5_texture_layout_cube(tex);
       else
          i945_texture_layout_cube(tex);
@@ -706,7 +700,8 @@ i915_texture_destroy(struct pipe_screen *screen,
    struct i915_winsys *iws = i915_screen(screen)->iws;
    uint i;
 
-   iws->buffer_destroy(iws, tex->buffer);
+   if (tex->buffer)
+      iws->buffer_destroy(iws, tex->buffer);
 
    for (i = 0; i < Elements(tex->image_offset); i++)
       if (tex->image_offset[i])
@@ -716,14 +711,16 @@ i915_texture_destroy(struct pipe_screen *screen,
 }
 
 static struct pipe_transfer * 
-i915_texture_get_transfer(struct pipe_context *context,
+i915_texture_get_transfer(struct pipe_context *pipe,
                           struct pipe_resource *resource,
                           unsigned level,
                           unsigned usage,
                           const struct pipe_box *box)
 {
+   struct i915_context *i915 = i915_context(pipe);
    struct i915_texture *tex = i915_texture(resource);
-   struct pipe_transfer *transfer = CALLOC_STRUCT(pipe_transfer);
+   struct pipe_transfer *transfer = util_slab_alloc(&i915->transfer_pool);
+
    if (transfer == NULL)
       return NULL;
 
@@ -735,6 +732,14 @@ i915_texture_get_transfer(struct pipe_context *context,
    /* FIXME: layer_stride */
 
    return transfer;
+}
+
+static void
+i915_transfer_destroy(struct pipe_context *pipe,
+                      struct pipe_transfer *transfer)
+{
+   struct i915_context *i915 = i915_context(pipe);
+   util_slab_free(&i915->transfer_pool, transfer);
 }
 
 static void *
@@ -753,6 +758,9 @@ i915_texture_transfer_map(struct pipe_context *pipe,
        resource->target != PIPE_TEXTURE_CUBE)
       assert(box->z == 0);
    offset = i915_texture_offset(tex, transfer->level, box->z);
+
+   /* TODO this is a sledgehammer */
+   pipe->flush(pipe, NULL);
 
    map = iws->buffer_map(iws, tex->buffer,
                          (transfer->usage & PIPE_TRANSFER_WRITE) ? TRUE : FALSE);
@@ -779,9 +787,8 @@ struct u_resource_vtbl i915_texture_vtbl =
 {
    i915_texture_get_handle,	      /* get_handle */
    i915_texture_destroy,	      /* resource_destroy */
-   NULL,			      /* is_resource_referenced */
    i915_texture_get_transfer,	      /* get_transfer */
-   u_default_transfer_destroy,	      /* transfer_destroy */
+   i915_transfer_destroy,	      /* transfer_destroy */
    i915_texture_transfer_map,	      /* transfer_map */
    u_default_transfer_flush_region,   /* transfer_flush_region */
    i915_texture_transfer_unmap,	      /* transfer_unmap */
@@ -807,6 +814,8 @@ i915_texture_create(struct pipe_screen *screen,
    tex->b.vtbl = &i915_texture_vtbl;
    pipe_reference_init(&tex->b.b.reference, 1);
    tex->b.b.screen = screen;
+
+   tex->tiling = i915_texture_tiling(is, tex);
 
    if (is->is_i945) {
       if (!i945_texture_layout(tex))

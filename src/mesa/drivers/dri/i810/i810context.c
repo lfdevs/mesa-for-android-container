@@ -67,8 +67,6 @@ int I810_DEBUG = (0);
 PUBLIC const char __driConfigOptions[] = { 0 };
 const GLuint __driNConfigOptions = 0;
 
-#define DRIVER_DATE                     "20050821"
-
 static const GLubyte *i810GetString( struct gl_context *ctx, GLenum name )
 {
    static char buffer[128];
@@ -88,7 +86,7 @@ static const GLubyte *i810GetString( struct gl_context *ctx, GLenum name )
       default:                  chipset = "Unknown i810-class Chipset"; break;
       }
 
-      (void) driGetRendererString( buffer, chipset, DRIVER_DATE, 0 );
+      (void) driGetRendererString( buffer, chipset, 0 );
       return (GLubyte *) buffer;
    }
    default:
@@ -204,7 +202,7 @@ i810CreateContext( gl_api api,
       shareCtx = ((i810ContextPtr) sharedContextPrivate)->glCtx;
    else
       shareCtx = NULL;
-   imesa->glCtx = _mesa_create_context(mesaVis, shareCtx,
+   imesa->glCtx = _mesa_create_context(API_OPENGL, mesaVis, shareCtx,
                                        &functions, (void*) imesa);
    if (!imesa->glCtx) {
       FREE(imesa);

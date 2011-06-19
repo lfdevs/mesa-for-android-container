@@ -37,6 +37,7 @@
 #include "pipe/p_format.h"
 #include "util/u_memory.h"
 #include "pipe/p_screen.h"
+#include "util/u_inlines.h"
 
 #include "draw/draw_context.h"
 #include "draw/draw_private.h"
@@ -61,6 +62,11 @@ static void
 cell_destroy_context( struct pipe_context *pipe )
 {
    struct cell_context *cell = cell_context(pipe);
+   unsigned i;
+
+   for (i = 0; i < cell->num_vertex_buffers; i++) {
+      pipe_resource_reference(&cell->vertex_buffer[i].buffer, NULL);
+   }
 
    util_delete_keymap(cell->fragment_ops_cache, NULL);
 
@@ -98,18 +104,6 @@ static const struct debug_named_value cell_debug_flags[] = {
    DEBUG_NAMED_VALUE_END
 };
 
-static unsigned int
-cell_is_resource_referenced( struct pipe_context *pipe,
-                             struct pipe_resource *texture,
-                             unsigned level, int layer)
-{
-   /**
-    * FIXME: Optimize.
-    */
-
-   return PIPE_REFERENCED_FOR_READ | PIPE_REFERENCED_FOR_WRITE;
-}
-
 
 struct pipe_context *
 cell_create_context(struct pipe_screen *screen,
@@ -133,8 +127,6 @@ cell_create_context(struct pipe_screen *screen,
 
    cell->pipe.clear = cell_clear;
    cell->pipe.flush = cell_flush;
-
-   cell->pipe.is_resource_referenced = cell_is_resource_referenced;
 
 #if 0
    cell->pipe.begin_query = cell_begin_query;

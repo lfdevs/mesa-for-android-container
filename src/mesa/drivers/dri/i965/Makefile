@@ -4,6 +4,8 @@ include $(TOP)/configs/current
 
 LIBNAME = i965_dri.so
 
+include ../Makefile.defines
+
 DRIVER_SOURCES = \
 	intel_batchbuffer.c \
 	intel_blit.c \
@@ -61,7 +63,6 @@ DRIVER_SOURCES = \
 	brw_sf.c \
 	brw_sf_emit.c \
 	brw_sf_state.c \
-	brw_state.c \
 	brw_state_batch.c \
 	brw_state_cache.c \
 	brw_state_dump.c \
@@ -97,7 +98,18 @@ DRIVER_SOURCES = \
 	gen6_urb.c \
 	gen6_viewport_state.c \
 	gen6_vs_state.c \
-	gen6_wm_state.c
+	gen6_wm_state.c \
+	gen7_cc_state.c \
+	gen7_clip_state.c \
+	gen7_disable.c \
+	gen7_misc_state.c \
+	gen7_sampler_state.c \
+	gen7_sf_state.c \
+	gen7_urb.c \
+	gen7_viewport_state.c \
+	gen7_vs_state.c \
+	gen7_wm_state.c \
+	gen7_wm_surface_state.c \
 
 C_SOURCES = \
 	$(COMMON_SOURCES) \
@@ -106,9 +118,13 @@ C_SOURCES = \
 CXX_SOURCES = \
 	brw_cubemap_normalize.cpp \
 	brw_fs.cpp \
+	brw_fs_emit.cpp \
+	brw_fs_visitor.cpp \
 	brw_fs_channel_expressions.cpp \
 	brw_fs_reg_allocate.cpp \
-	brw_fs_vector_splitting.cpp
+	brw_fs_schedule_instructions.cpp \
+	brw_fs_vector_splitting.cpp \
+	brw_shader.cpp
 
 ASM_SOURCES = 
 
@@ -117,7 +133,7 @@ DRIVER_DEFINES = -I../intel
 INCLUDES += $(INTEL_CFLAGS)
 DRI_LIB_DEPS += $(INTEL_LIBS)
 
-include ../Makefile.template
+include ../Makefile.targets
 
 intel_decode.o: ../intel/intel_decode.c
 intel_tex_layout.o: ../intel/intel_tex_layout.c

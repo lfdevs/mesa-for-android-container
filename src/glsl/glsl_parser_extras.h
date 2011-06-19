@@ -158,6 +158,8 @@ struct _mesa_glsl_parse_state {
    /*@{*/
    unsigned ARB_draw_buffers_enable:1;
    unsigned ARB_draw_buffers_warn:1;
+   unsigned ARB_draw_instanced_enable:1;
+   unsigned ARB_draw_instanced_warn:1;
    unsigned ARB_explicit_attrib_location_enable:1;
    unsigned ARB_explicit_attrib_location_warn:1;
    unsigned ARB_fragment_coord_conventions_enable:1;
@@ -166,8 +168,16 @@ struct _mesa_glsl_parse_state {
    unsigned ARB_texture_rectangle_warn:1;
    unsigned EXT_texture_array_enable:1;
    unsigned EXT_texture_array_warn:1;
+   unsigned ARB_shader_texture_lod_enable:1;
+   unsigned ARB_shader_texture_lod_warn:1;
    unsigned ARB_shader_stencil_export_enable:1;
    unsigned ARB_shader_stencil_export_warn:1;
+   unsigned AMD_conservative_depth_enable:1;
+   unsigned AMD_conservative_depth_warn:1;
+   unsigned AMD_shader_stencil_export_enable:1;
+   unsigned AMD_shader_stencil_export_warn:1;
+   unsigned OES_texture_3D_enable:1;
+   unsigned OES_texture_3D_warn:1;
    /*@}*/
 
    /** Extensions supported by the OpenGL implementation. */
@@ -262,8 +272,8 @@ extern "C" {
 extern int preprocess(void *ctx, const char **shader, char **info_log,
                       const struct gl_extensions *extensions, int api);
 
-extern void _mesa_destroy_shader_compiler();
-extern void _mesa_destroy_shader_compiler_caches();
+extern void _mesa_destroy_shader_compiler(void);
+extern void _mesa_destroy_shader_compiler_caches(void);
 
 #ifdef __cplusplus
 }

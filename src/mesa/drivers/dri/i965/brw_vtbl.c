@@ -46,6 +46,8 @@
 #include "brw_vs.h"
 #include "brw_wm.h"
 
+#include "../glsl/ralloc.h"
+
 static void
 dri_bo_release(drm_intel_bo **bo)
 {
@@ -60,53 +62,21 @@ dri_bo_release(drm_intel_bo **bo)
 static void brw_destroy_context( struct intel_context *intel )
 {
    struct brw_context *brw = brw_context(&intel->ctx);
-   int i;
 
    brw_destroy_state(brw);
    brw_draw_destroy( brw );
    brw_clear_validated_bos(brw);
-   if (brw->wm.compile_data) {
-      free(brw->wm.compile_data->instruction);
-      free(brw->wm.compile_data->vreg);
-      free(brw->wm.compile_data->refs);
-      free(brw->wm.compile_data->prog_instructions);
-      free(brw->wm.compile_data);
-   }
-
-   for (i = 0; i < brw->state.nr_color_regions; i++)
-      intel_region_release(&brw->state.color_regions[i]);
-   brw->state.nr_color_regions = 0;
-   intel_region_release(&brw->state.depth_region);
+   ralloc_free(brw->wm.compile_data);
 
    dri_bo_release(&brw->curbe.curbe_bo);
    dri_bo_release(&brw->vs.prog_bo);
-   dri_bo_release(&brw->vs.state_bo);
-   dri_bo_release(&brw->vs.bind_bo);
    dri_bo_release(&brw->vs.const_bo);
    dri_bo_release(&brw->gs.prog_bo);
-   dri_bo_release(&brw->gs.state_bo);
    dri_bo_release(&brw->clip.prog_bo);
-   dri_bo_release(&brw->clip.state_bo);
-   dri_bo_release(&brw->clip.vp_bo);
    dri_bo_release(&brw->sf.prog_bo);
-   dri_bo_release(&brw->sf.state_bo);
-   dri_bo_release(&brw->sf.vp_bo);
-   for (i = 0; i < BRW_MAX_TEX_UNIT; i++)
-      dri_bo_release(&brw->wm.sdc_bo[i]);
-   dri_bo_release(&brw->wm.bind_bo);
-   for (i = 0; i < BRW_WM_MAX_SURF; i++)
-      dri_bo_release(&brw->wm.surf_bo[i]);
-   dri_bo_release(&brw->wm.sampler_bo);
    dri_bo_release(&brw->wm.prog_bo);
-   dri_bo_release(&brw->wm.state_bo);
    dri_bo_release(&brw->wm.const_bo);
-   dri_bo_release(&brw->wm.push_const_bo);
    dri_bo_release(&brw->cc.prog_bo);
-   dri_bo_release(&brw->cc.state_bo);
-   dri_bo_release(&brw->cc.vp_bo);
-   dri_bo_release(&brw->cc.blend_state_bo);
-   dri_bo_release(&brw->cc.depth_stencil_state_bo);
-   dri_bo_release(&brw->cc.color_calc_state_bo);
 
    free(brw->curbe.last_buf);
    free(brw->curbe.next_buf);
@@ -121,21 +91,6 @@ static void brw_set_draw_region( struct intel_context *intel,
                                  struct intel_region *depth_region,
                                  GLuint num_color_regions)
 {
-   struct brw_context *brw = brw_context(&intel->ctx);
-   GLuint i;
-
-   /* release old color/depth regions */
-   if (brw->state.depth_region != depth_region)
-      brw->state.dirty.brw |= BRW_NEW_DEPTH_BUFFER;
-   for (i = 0; i < brw->state.nr_color_regions; i++)
-       intel_region_release(&brw->state.color_regions[i]);
-   intel_region_release(&brw->state.depth_region);
-
-   /* reference new color/depth regions */
-   for (i = 0; i < num_color_regions; i++)
-       intel_region_reference(&brw->state.color_regions[i], color_regions[i]);
-   intel_region_reference(&brw->state.depth_region, depth_region);
-   brw->state.nr_color_regions = num_color_regions;
 }
 
 
@@ -173,19 +128,22 @@ static void brw_new_batch( struct intel_context *intel )
    brw->state.dirty.brw |= ~0;
    brw->state.dirty.cache |= ~0;
 
-   /* Move to the end of the current upload buffer so that we'll force choosing
-    * a new buffer next time.
-    */
-   if (brw->vb.upload.bo != NULL) {
-      drm_intel_bo_unreference(brw->vb.upload.bo);
-      brw->vb.upload.bo = NULL;
-      brw->vb.upload.offset = 0;
-   }
+   brw->vb.nr_current_buffers = 0;
 }
 
 static void brw_invalidate_state( struct intel_context *intel, GLuint new_state )
 {
    /* nothing */
+}
+
+/**
+ * \see intel_context.vtbl.is_hiz_depth_format
+ */
+static bool brw_is_hiz_depth_format(struct intel_context *intel,
+                                    gl_format format)
+{
+   /* In the future, this will support Z_FLOAT32. */
+   return intel->has_hiz && (format == MESA_FORMAT_X8_Z24);
 }
 
 
@@ -203,4 +161,6 @@ void brwInitVtbl( struct brw_context *brw )
    brw->intel.vtbl.destroy = brw_destroy_context;
    brw->intel.vtbl.set_draw_region = brw_set_draw_region;
    brw->intel.vtbl.debug_batch = brw_debug_batch;
+   brw->intel.vtbl.render_target_supported = brw_render_target_supported;
+   brw->intel.vtbl.is_hiz_depth_format = brw_is_hiz_depth_format;
 }

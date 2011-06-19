@@ -47,6 +47,7 @@ brw_add_validated_bo(struct brw_context *brw, drm_intel_bo *bo)
 };
 
 extern const struct brw_tracked_state brw_blend_constant_color;
+extern const struct brw_tracked_state brw_cc_vp;
 extern const struct brw_tracked_state brw_cc_unit;
 extern const struct brw_tracked_state brw_check_fallback;
 extern const struct brw_tracked_state brw_clip_prog;
@@ -102,14 +103,34 @@ extern const struct brw_tracked_state gen6_depth_stencil_state;
 extern const struct brw_tracked_state gen6_gs_state;
 extern const struct brw_tracked_state gen6_sampler_state;
 extern const struct brw_tracked_state gen6_scissor_state;
-extern const struct brw_tracked_state gen6_scissor_state_pointers;
 extern const struct brw_tracked_state gen6_sf_state;
 extern const struct brw_tracked_state gen6_sf_vp;
 extern const struct brw_tracked_state gen6_urb;
 extern const struct brw_tracked_state gen6_viewport_state;
+extern const struct brw_tracked_state gen6_vs_constants;
 extern const struct brw_tracked_state gen6_vs_state;
 extern const struct brw_tracked_state gen6_wm_constants;
 extern const struct brw_tracked_state gen6_wm_state;
+extern const struct brw_tracked_state gen7_depthbuffer;
+extern const struct brw_tracked_state gen7_blend_state_pointer;
+extern const struct brw_tracked_state gen7_cc_state_pointer;
+extern const struct brw_tracked_state gen7_cc_viewport_state_pointer;
+extern const struct brw_tracked_state gen7_clip_state;
+extern const struct brw_tracked_state gen7_depth_stencil_state_pointer;
+extern const struct brw_tracked_state gen7_disable_stages;
+extern const struct brw_tracked_state gen7_ps_state;
+extern const struct brw_tracked_state gen7_samplers;
+extern const struct brw_tracked_state gen7_sbe_state;
+extern const struct brw_tracked_state gen7_sf_clip_viewport;
+extern const struct brw_tracked_state gen7_sf_clip_viewport_state_pointer;
+extern const struct brw_tracked_state gen7_sf_state;
+extern const struct brw_tracked_state gen7_sol_state;
+extern const struct brw_tracked_state gen7_urb;
+extern const struct brw_tracked_state gen7_vs_state;
+extern const struct brw_tracked_state gen7_wm_constants;
+extern const struct brw_tracked_state gen7_wm_constant_surface;
+extern const struct brw_tracked_state gen7_wm_state;
+extern const struct brw_tracked_state gen7_wm_surfaces;
 
 /***********************************************************************
  * brw_state.c
@@ -123,38 +144,21 @@ void brw_clear_validated_bos(struct brw_context *brw);
 /***********************************************************************
  * brw_state_cache.c
  */
-drm_intel_bo *brw_cache_data(struct brw_cache *cache,
-		       enum brw_cache_id cache_id,
-		       const void *data,
-		       GLuint size);
 
 drm_intel_bo *brw_upload_cache(struct brw_cache *cache,
 			       enum brw_cache_id cache_id,
 			       const void *key,
 			       GLuint key_sz,
-			       drm_intel_bo **reloc_bufs,
-			       GLuint nr_reloc_bufs,
 			       const void *data,
-			       GLuint data_sz);
-
-drm_intel_bo *brw_upload_cache_with_auxdata(struct brw_cache *cache,
-					    enum brw_cache_id cache_id,
-					    const void *key,
-					    GLuint key_sz,
-					    drm_intel_bo **reloc_bufs,
-					    GLuint nr_reloc_bufs,
-					    const void *data,
-					    GLuint data_sz,
-					    const void *aux,
-					    GLuint aux_sz,
-					    void *aux_return);
+			       GLuint data_sz,
+			       const void *aux,
+			       GLuint aux_sz,
+			       void *aux_return);
 
 drm_intel_bo *brw_search_cache( struct brw_cache *cache,
 			  enum brw_cache_id cache_id,
 			  const void *key,
 			  GLuint key_size,
-			  drm_intel_bo **reloc_bufs,
-			  GLuint nr_reloc_bufs,
 			  void *aux_return);
 void brw_state_cache_check_size( struct brw_context *brw );
 
@@ -164,26 +168,47 @@ void brw_destroy_caches( struct brw_context *brw );
 /***********************************************************************
  * brw_state_batch.c
  */
-#define BRW_BATCH_STRUCT(brw, s) intel_batchbuffer_data(brw->intel.batch, (s), \
+#define BRW_BATCH_STRUCT(brw, s) intel_batchbuffer_data(&brw->intel, (s), \
 							sizeof(*(s)), false)
-#define BRW_CACHED_BATCH_STRUCT(brw, s) brw_cached_batch_struct( brw, (s), sizeof(*(s)) )
 
-GLboolean brw_cached_batch_struct( struct brw_context *brw,
-				   const void *data,
-				   GLuint sz );
-void brw_destroy_batch_cache( struct brw_context *brw );
-void brw_clear_batch_cache( struct brw_context *brw );
 void *brw_state_batch(struct brw_context *brw,
 		      int size,
 		      int alignment,
-		      drm_intel_bo **out_bo,
 		      uint32_t *out_offset);
 
 /* brw_wm_surface_state.c */
 void brw_create_constant_surface(struct brw_context *brw,
 				 drm_intel_bo *bo,
 				 int width,
-				 drm_intel_bo **out_bo,
 				 uint32_t *out_offset);
+
+uint32_t brw_format_for_mesa_format(gl_format mesa_format);
+
+GLuint translate_tex_target(GLenum target);
+
+GLuint translate_tex_format(gl_format mesa_format,
+			    GLenum internal_format,
+			    GLenum depth_mode,
+			    GLenum srgb_decode);
+
+/* gen7_wm_surface_state.c */
+void gen7_create_constant_surface(struct brw_context *brw,
+				  drm_intel_bo *bo,
+				  int width,
+				  uint32_t *out_offset);
+
+/* brw_wm_sampler_state.c */
+uint32_t translate_wrap_mode(GLenum wrap, bool using_nearest);
+void upload_default_color(struct brw_context *brw,
+			  struct gl_sampler_object *sampler,
+			  int unit);
+
+/* gen6_sf_state.c */
+uint32_t
+get_attr_override(struct brw_context *brw, int fs_attr, int two_side_color);
+
+/* gen7_misc_state.c */
+unsigned int
+gen7_depth_format(struct brw_context *brw);
 
 #endif

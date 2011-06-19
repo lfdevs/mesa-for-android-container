@@ -1,0 +1,14 @@
+Several versions of llvm can coexist in the archive (at the time of this
+writing, 2.8 and 2.9), so pick a version. Let's assume the last version
+receives bug fixes quickly, so pick 2.9 for now.
+--- a/configure.ac
++++ b/configure.ac
+@@ -1458,7 +1458,7 @@ if test "x$enable_gallium" = xno -a "x$e
+ fi
+ if test "x$enable_gallium" = xyes; then
+     SRC_DIRS="$SRC_DIRS gallium gallium/winsys gallium/targets"
+-    AC_PATH_PROG([LLVM_CONFIG], [llvm-config], [no])
++    AC_PATH_PROG([LLVM_CONFIG], [llvm-config-2.9], [no])
+ else
+     LLVM_CONFIG=no
+ fi

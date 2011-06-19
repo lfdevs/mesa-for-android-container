@@ -261,10 +261,36 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
    case ir_unop_floor:
    case ir_unop_fract:
    case ir_unop_round_even:
+   case ir_unop_sin:
    case ir_unop_cos:
+   case ir_unop_sin_reduced:
+   case ir_unop_cos_reduced:
    case ir_unop_dFdx:
    case ir_unop_dFdy:
       this->type = op0->type;
+      break;
+
+   case ir_unop_f2i:
+   case ir_unop_b2i:
+      this->type = glsl_type::get_instance(GLSL_TYPE_INT,
+					   op0->type->vector_elements, 1);
+      break;
+
+   case ir_unop_b2f:
+   case ir_unop_i2f:
+   case ir_unop_u2f:
+      this->type = glsl_type::get_instance(GLSL_TYPE_FLOAT,
+					   op0->type->vector_elements, 1);
+      break;
+
+   case ir_unop_f2b:
+   case ir_unop_i2b:
+      this->type = glsl_type::get_instance(GLSL_TYPE_BOOL,
+					   op0->type->vector_elements, 1);
+      break;
+
+   case ir_unop_noise:
+      this->type = glsl_type::float_type;
       break;
 
    case ir_unop_any:
@@ -302,6 +328,8 @@ ir_expression::ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1)
    case ir_binop_max:
    case ir_binop_pow:
    case ir_binop_mul:
+   case ir_binop_div:
+   case ir_binop_mod:
       if (op0->type->is_scalar()) {
 	 this->type = op1->type;
       } else if (op1->type->is_scalar()) {
@@ -315,7 +343,11 @@ ir_expression::ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1)
       break;
 
    case ir_binop_logic_and:
+   case ir_binop_logic_xor:
    case ir_binop_logic_or:
+   case ir_binop_bit_and:
+   case ir_binop_bit_xor:
+   case ir_binop_bit_or:
       if (op0->type->is_scalar()) {
 	 this->type = op1->type;
       } else if (op1->type->is_scalar()) {
@@ -323,8 +355,24 @@ ir_expression::ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1)
       }
       break;
 
+   case ir_binop_equal:
+   case ir_binop_nequal:
+   case ir_binop_lequal:
+   case ir_binop_gequal:
+   case ir_binop_less:
+   case ir_binop_greater:
+      assert(op0->type == op1->type);
+      this->type = glsl_type::get_instance(GLSL_TYPE_BOOL,
+					   op0->type->vector_elements, 1);
+      break;
+
    case ir_binop_dot:
       this->type = glsl_type::float_type;
+      break;
+
+   case ir_binop_lshift:
+   case ir_binop_rshift:
+      this->type = op0->type;
       break;
 
    default:
@@ -422,6 +470,22 @@ const char *ir_expression::operator_string(ir_expression_operation op)
 const char *ir_expression::operator_string()
 {
    return operator_string(this->operation);
+}
+
+const char*
+depth_layout_string(ir_depth_layout layout)
+{
+   switch(layout) {
+   case ir_depth_layout_none:      return "";
+   case ir_depth_layout_any:       return "depth_any";
+   case ir_depth_layout_greater:   return "depth_greater";
+   case ir_depth_layout_less:      return "depth_less";
+   case ir_depth_layout_unchanged: return "depth_unchanged";
+
+   default:
+      assert(0);
+      return "";
+   }
 }
 
 ir_expression_operation
@@ -1086,22 +1150,18 @@ ir_texture::get_opcode(const char *str)
 
 
 void
-ir_texture::set_sampler(ir_dereference *sampler)
+ir_texture::set_sampler(ir_dereference *sampler, const glsl_type *type)
 {
    assert(sampler != NULL);
+   assert(type != NULL);
    this->sampler = sampler;
+   this->type = type;
 
-   switch (sampler->type->sampler_type) {
-   case GLSL_TYPE_FLOAT:
-      this->type = glsl_type::vec4_type;
-      break;
-   case GLSL_TYPE_INT:
-      this->type = glsl_type::ivec4_type;
-      break;
-   case GLSL_TYPE_UINT:
-      this->type = glsl_type::uvec4_type;
-      break;
-   }
+   assert(sampler->type->sampler_type == (int) type->base_type);
+   if (sampler->type->sampler_shadow)
+      assert(type->vector_elements == 4 || type->vector_elements == 1);
+   else
+      assert(type->vector_elements == 4);
 }
 
 
@@ -1277,6 +1337,7 @@ ir_variable::ir_variable(const struct glsl_type *type, const char *name,
    this->constant_value = NULL;
    this->origin_upper_left = false;
    this->pixel_center_integer = false;
+   this->depth_layout = ir_depth_layout_none;
    this->used = false;
 
    if (type && type->base_type == GLSL_TYPE_SAMPLER)
@@ -1314,6 +1375,21 @@ ir_function_signature::ir_function_signature(const glsl_type *return_type)
 }
 
 
+static bool
+modes_match(unsigned a, unsigned b)
+{
+   if (a == b)
+      return true;
+
+   /* Accept "in" vs. "const in" */
+   if ((a == ir_var_const_in && b == ir_var_in) ||
+       (b == ir_var_const_in && a == ir_var_in))
+      return true;
+
+   return false;
+}
+
+
 const char *
 ir_function_signature::qualifiers_match(exec_list *params)
 {
@@ -1326,7 +1402,7 @@ ir_function_signature::qualifiers_match(exec_list *params)
       ir_variable *b = (ir_variable *)iter_b.get();
 
       if (a->read_only != b->read_only ||
-	  a->mode != b->mode ||
+	  !modes_match(a->mode, b->mode) ||
 	  a->interpolation != b->interpolation ||
 	  a->centroid != b->centroid) {
 

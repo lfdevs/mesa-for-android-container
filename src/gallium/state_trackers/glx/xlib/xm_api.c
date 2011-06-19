@@ -376,8 +376,6 @@ choose_depth_stencil_format(XMesaDisplay xmdpy, int depth, int stencil)
 {
    const enum pipe_texture_target target = PIPE_TEXTURE_2D;
    const unsigned tex_usage = PIPE_BIND_DEPTH_STENCIL;
-   const unsigned geom_flags = (PIPE_TEXTURE_GEOM_NON_SQUARE |
-                                PIPE_TEXTURE_GEOM_NON_POWER_OF_TWO);
    const unsigned sample_count = 0;
    enum pipe_format formats[8], fmt;
    int count, i;
@@ -403,7 +401,7 @@ choose_depth_stencil_format(XMesaDisplay xmdpy, int depth, int stencil)
    for (i = 0; i < count; i++) {
       if (xmdpy->screen->is_format_supported(xmdpy->screen, formats[i],
                                              target, sample_count,
-                                             tex_usage, geom_flags)) {
+                                             tex_usage)) {
          fmt = formats[i];
          break;
       }
@@ -855,7 +853,9 @@ xmesa_init( Display *display )
  * \return an XMesaContext or NULL if error.
  */
 PUBLIC
-XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
+XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
+                                 GLuint major, GLuint minor,
+                                 GLuint profileMask, GLuint contextFlags)
 {
    XMesaDisplay xmdpy = xmesa_init_display(v->display);
    struct st_context_attribs attribs;
@@ -876,6 +876,18 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
    memset(&attribs, 0, sizeof(attribs));
    attribs.profile = ST_PROFILE_DEFAULT;
    attribs.visual = v->stvis;
+   attribs.major = major;
+   attribs.minor = minor;
+   if (contextFlags & GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB)
+      attribs.flags |= ST_CONTEXT_FLAG_FORWARD_COMPATIBLE;
+   if (contextFlags & GLX_CONTEXT_DEBUG_BIT_ARB)
+      attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
+   if (contextFlags & GLX_CONTEXT_ROBUST_ACCESS_BIT_ARB)
+      attribs.flags |= ST_CONTEXT_FLAG_ROBUST_ACCESS;
+   if (profileMask & GLX_CONTEXT_CORE_PROFILE_BIT_ARB)
+      attribs.flags |= ST_CONTEXT_FLAG_CORE_PROFILE;
+   if (profileMask & GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB)
+      attribs.flags |= ST_CONTEXT_FLAG_COMPATIBLE_PROFILE;
 
    c->st = stapi->create_context(stapi, xmdpy->smapi,
          &attribs, (share_list) ? share_list->st : NULL);
@@ -1195,11 +1207,7 @@ void XMesaSwapBuffers( XMesaBuffer b )
    XMesaContext xmctx = XMesaGetCurrentContext();
 
    if (xmctx && xmctx->xm_buffer == b) {
-      xmctx->st->flush( xmctx->st,
-            PIPE_FLUSH_RENDER_CACHE | 
-            PIPE_FLUSH_SWAPBUFFERS |
-            PIPE_FLUSH_FRAME,
-            NULL);
+      xmctx->st->flush( xmctx->st, ST_FLUSH_FRONT, NULL);
    }
 
    xmesa_swap_st_framebuffer(b->stfb);
@@ -1225,9 +1233,10 @@ void XMesaFlush( XMesaContext c )
       XMesaDisplay xmdpy = xmesa_init_display(c->xm_visual->display);
       struct pipe_fence_handle *fence = NULL;
 
-      c->st->flush(c->st, PIPE_FLUSH_RENDER_CACHE | PIPE_FLUSH_FRAME, &fence);
+      c->st->flush(c->st, ST_FLUSH_FRONT, &fence);
       if (fence) {
-         xmdpy->screen->fence_finish(xmdpy->screen, fence, 0);
+         xmdpy->screen->fence_finish(xmdpy->screen, fence,
+                                     PIPE_TIMEOUT_INFINITE);
          xmdpy->screen->fence_reference(xmdpy->screen, &fence, NULL);
       }
       XFlush( c->xm_visual->display );

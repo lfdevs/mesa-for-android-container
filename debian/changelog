@@ -1,3 +1,63 @@
+mesa (7.11~0-2) experimental; urgency=low
+
+  * Thank you sbuild for giving a green light when that's not actually the
+    case. Fix missing Pre-Depends for the libegl1-mesa-drivers package
+    (multiarch-support).
+
+ -- Cyril Brulebois <kibi@debian.org>  Sun, 19 Jun 2011 21:26:00 +0200
+
+mesa (7.11~0-1) experimental; urgency=low
+
+  * New upstream snapshot, from the master branch (up to 2fe39b46e7).
+  * Drop 05_hurd-ftbfs.diff, merged upstream (as 758561786c).
+  * Refresh 06_kfreebsd-ftbfs.diff (due to 8fd8de3995).
+  * Refresh 08-kfreebsd-gallium.diff (adjust offsets).
+  * Add 10-hurd-configure-tweaks.diff to enable x86 assembler on Hurd,
+    thanks to Pino Toscano.
+  * Refresh 11-hurd-ftbfs-again.diff (adjust offsets and drop the
+    src/gallium/auxiliary/os/os_time.c hunk, which should be OK since
+    PIPE_OS_UNIX is used there, and should happily replace the use of
+    PIPE_OS_HURD; and adapt for the removal of the PIPE_OS_EMBEDDED check).
+  * debian/libegl1-mesa.install.in: Stop trying to install egl_dri2.so and
+    egl_glx.so, since they are now built-in (since c98ea26e16).
+  * debian/libgles{1,2}-mesa.install.in: Stop trying to install
+    st_GLESv{1,2}_CM.so (respectively), which got removed. Quoting the
+    commit message: “Remove GLES overlay. With core mesa doing runtime API
+    checks, GLES overlay is no longer needed.” (12583174c5).
+  * Drop --enable-gles-overlay from debian/rules accordingly.
+  * Add 12-llvm-config-check.diff to handle --disable-gallium more
+    properly.
+  * Add 13-llvm-config-pick-a-version.diff, so that llvm-config-2.9 is
+    searched by configure, instead of unversioned llvm-config.
+  * Add a NOT_INSTALLED_EITHER variable to debian/not-installed. A few
+    files might have to be removed, but only if that's a git snapshot
+    (those files aren't in the released tarballs). Let's consider it's OK
+    to run “rm -f” on them: {,dri/}usr/include/GL/glut{,f90}.h
+  * Add libglapi-mesa{,-dbg} packages.
+  * Use a package-name-doesnt-match-sonames override accordingly.
+  * Update libegl1-mesa.symbols with new symbols.
+  * Update libgles{1,2}-mesa.symbols now that internal symbols (_glapi_*
+    and _glthread_GetID) moved to libglapi-mesa.
+  * Add a gentarball target, to generate tarballs for git snapshots.
+  * Replace “The OpenGL utility library…” with “Mesa OpenGL utility
+    library…” in the description of the libglu1-mesa* packages.
+  * Replace radeon with r300 in GALLIUM_DRIVERS to match upstream renaming
+    (5722286be2).
+  * Build r300 classic (through DRI_DRIVERS) everywhere, since r300g comes
+    with a few additional requirements: LLVM is needed for this driver,
+    and apparently only works fine on x86 platform. As a consequence, only
+    build r300g on amd and i386, and add llvm-2.9-dev build-dep on those
+    platforms accordingly. Disable it explicitly on other platforms.
+  * Stop building i915g at all, it's apparently never going to be a
+    suitable replacement for i915c.
+  * Add libwayland-dev build-dep.
+  * Add wayland to EGL_DISPLAYS on Linux.
+  * Ship wayland-egl.pc and libwayland-egl.so in libegl1-mesa-dev; and ship
+    libwayland-egl.so.1* in libegl1-mesa-drivers.
+  * Update libegl1-mesa.symbols with new wl_drm_interface symbol.
+
+ -- Cyril Brulebois <kibi@debian.org>  Sun, 19 Jun 2011 19:01:52 +0200
+
 mesa (7.10.3-3) unstable; urgency=low
 
   * Update the “Breaks: xserver-xorg-core” from “(<= 2:1.10.2-1)” to

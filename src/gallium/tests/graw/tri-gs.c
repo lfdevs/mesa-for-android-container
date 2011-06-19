@@ -2,6 +2,7 @@
  * any utility code, just the graw interface and gallium.
  */
 
+#include <stdio.h>
 #include "state_tracker/graw.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
@@ -88,7 +89,6 @@ static void set_vertices( void )
 
 
    vbuf.stride = sizeof( struct vertex );
-   vbuf.max_index = sizeof(vertices) / vbuf.stride;
    vbuf.buffer_offset = 0;
    vbuf.buffer = screen->user_buffer_create(screen,
                                             vertices,
@@ -163,7 +163,7 @@ static void draw( void )
 
    ctx->clear(ctx, PIPE_CLEAR_COLOR, clear_color, 0, 0);
    util_draw_arrays(ctx, PIPE_PRIM_TRIANGLES, 0, 3);
-   ctx->flush(ctx, PIPE_FLUSH_RENDER_CACHE, NULL);
+   ctx->flush(ctx, NULL);
 
    screen->flush_frontbuffer(screen, tex, 0, 0, window);
 }
@@ -182,13 +182,16 @@ static void init( void )
     * Also, no easy way of querying supported formats if the screen
     * cannot be created first.
     */
-   for (i = 0; 
-        window == NULL && formats[i] != PIPE_FORMAT_NONE;
-        i++) {
-      
-      screen = graw_create_window_and_screen(0,0,300,300,
+   for (i = 0; formats[i] != PIPE_FORMAT_NONE; i++) {
+      screen = graw_create_window_and_screen(0, 0, 300, 300,
                                              formats[i],
                                              &window);
+      if (window && screen)
+         break;
+   }
+   if (!screen || !window) {
+      fprintf(stderr, "Unable to create window\n");
+      exit(1);
    }
    
    ctx = screen->context_create(screen, NULL);

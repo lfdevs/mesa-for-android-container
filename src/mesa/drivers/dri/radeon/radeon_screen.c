@@ -401,12 +401,12 @@ static const struct __DRI2flushExtensionRec radeonFlushExtension = {
 };
 
 static __DRIimage *
-radeon_create_image_from_name(__DRIcontext *context,
+radeon_create_image_from_name(__DRIscreen *screen,
                               int width, int height, int format,
                               int name, int pitch, void *loaderPrivate)
 {
    __DRIimage *image;
-   radeonContextPtr radeon = context->driverPrivate;
+   radeonScreenPtr radeonScreen = screen->private;
 
    if (name == 0)
       return NULL;
@@ -442,7 +442,7 @@ radeon_create_image_from_name(__DRIcontext *context,
    image->pitch = pitch;
    image->height = height;
 
-   image->bo = radeon_bo_open(radeon->radeonScreen->bom,
+   image->bo = radeon_bo_open(radeonScreen->bom,
                               (uint32_t)name,
                               image->pitch * image->height * image->cpp,
                               0,
@@ -628,7 +628,6 @@ static int radeon_set_screen_flags(radeonScreenPtr screen, int device_id)
       break;
 
    case PCI_CHIP_R200_BB:
-   case PCI_CHIP_R200_BC:
    case PCI_CHIP_R200_QH:
    case PCI_CHIP_R200_QL:
    case PCI_CHIP_R200_QM:
@@ -1166,6 +1165,25 @@ static int radeon_set_screen_flags(radeonScreenPtr screen, int device_id)
     case PCI_CHIP_PALM_9806:
     case PCI_CHIP_PALM_9807:
        screen->chip_family = CHIP_FAMILY_PALM;
+       screen->chip_flags = RADEON_CHIPSET_TCL;
+       break;
+
+    case PCI_CHIP_SUMO_9640:
+    case PCI_CHIP_SUMO_9641:
+    case PCI_CHIP_SUMO_9647:
+    case PCI_CHIP_SUMO_9648:
+    case PCI_CHIP_SUMO_964A:
+    case PCI_CHIP_SUMO_964E:
+    case PCI_CHIP_SUMO_964F:
+       screen->chip_family = CHIP_FAMILY_SUMO;
+       screen->chip_flags = RADEON_CHIPSET_TCL;
+       break;
+
+    case PCI_CHIP_SUMO2_9642:
+    case PCI_CHIP_SUMO2_9643:
+    case PCI_CHIP_SUMO2_9644:
+    case PCI_CHIP_SUMO2_9645:
+       screen->chip_family = CHIP_FAMILY_SUMO2;
        screen->chip_flags = RADEON_CHIPSET_TCL;
        break;
 

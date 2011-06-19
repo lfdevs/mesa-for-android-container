@@ -40,6 +40,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/context.h"
 #include "main/framebuffer.h"
 #include "main/simple_list.h"
+#include "main/state.h"
 
 #include "vbo/vbo.h"
 #include "tnl/tnl.h"
@@ -136,7 +137,7 @@ static void radeonBlendEquationSeparate( struct gl_context *ctx,
       RADEON_STATECHANGE( rmesa, ctx );
       rmesa->hw.ctx.cmd[CTX_RB3D_BLENDCNTL] = b;
       if ( (ctx->Color.ColorLogicOpEnabled || (ctx->Color.BlendEnabled
-	    && ctx->Color.BlendEquationRGB == GL_LOGIC_OP)) ) {
+	    && ctx->Color.Blend[0].EquationRGB == GL_LOGIC_OP)) ) {
 	 rmesa->hw.ctx.cmd[CTX_RB3D_CNTL] |=  RADEON_ROP_ENABLE;
       } else {
 	 rmesa->hw.ctx.cmd[CTX_RB3D_CNTL] &= ~RADEON_ROP_ENABLE;
@@ -153,7 +154,7 @@ static void radeonBlendFuncSeparate( struct gl_context *ctx,
       ~(RADEON_SRC_BLEND_MASK | RADEON_DST_BLEND_MASK);
    GLboolean fallback = GL_FALSE;
 
-   switch ( ctx->Color.BlendSrcRGB ) {
+   switch ( ctx->Color.Blend[0].SrcRGB ) {
    case GL_ZERO:
       b |= RADEON_SRC_BLEND_GL_ZERO;
       break;
@@ -200,7 +201,7 @@ static void radeonBlendFuncSeparate( struct gl_context *ctx,
       break;
    }
 
-   switch ( ctx->Color.BlendDstRGB ) {
+   switch ( ctx->Color.Blend[0].DstRGB ) {
    case GL_ZERO:
       b |= RADEON_DST_BLEND_GL_ZERO;
       break;
@@ -661,7 +662,7 @@ static void radeonUpdateSpecular( struct gl_context *ctx )
 
    TCL_FALLBACK( ctx, RADEON_TCL_FALLBACK_FOGCOORDSPEC, flag);
 
-   if (NEED_SECONDARY_COLOR(ctx)) {
+   if (_mesa_need_secondary_color(ctx)) {
       assert( (p & RADEON_SPECULAR_ENABLE) != 0 );
    } else {
       assert( (p & RADEON_SPECULAR_ENABLE) == 0 );
@@ -1602,7 +1603,7 @@ static void radeonEnable( struct gl_context *ctx, GLenum cap, GLboolean state )
 	 rmesa->hw.ctx.cmd[CTX_RB3D_CNTL] &= ~RADEON_ALPHA_BLEND_ENABLE;
       }
       if ( (ctx->Color.ColorLogicOpEnabled || (ctx->Color.BlendEnabled
-	    && ctx->Color.BlendEquationRGB == GL_LOGIC_OP)) ) {
+	    && ctx->Color.Blend[0].EquationRGB == GL_LOGIC_OP)) ) {
 	 rmesa->hw.ctx.cmd[CTX_RB3D_CNTL] |=  RADEON_ROP_ENABLE;
       } else {
 	 rmesa->hw.ctx.cmd[CTX_RB3D_CNTL] &= ~RADEON_ROP_ENABLE;
@@ -1612,12 +1613,12 @@ static void radeonEnable( struct gl_context *ctx, GLenum cap, GLboolean state )
        */
       if (state) {
 	 ctx->Driver.BlendEquationSeparate( ctx,
-					    ctx->Color.BlendEquationRGB,
-					    ctx->Color.BlendEquationA );
-	 ctx->Driver.BlendFuncSeparate( ctx, ctx->Color.BlendSrcRGB,
-					ctx->Color.BlendDstRGB,
-					ctx->Color.BlendSrcA,
-					ctx->Color.BlendDstA );
+					    ctx->Color.Blend[0].EquationRGB,
+					    ctx->Color.Blend[0].EquationA );
+	 ctx->Driver.BlendFuncSeparate( ctx, ctx->Color.Blend[0].SrcRGB,
+					ctx->Color.Blend[0].DstRGB,
+					ctx->Color.Blend[0].SrcA,
+					ctx->Color.Blend[0].DstA );
       }
       else {
 	 FALLBACK( rmesa, RADEON_FALLBACK_BLEND_FUNC, GL_FALSE );
@@ -1741,7 +1742,7 @@ static void radeonEnable( struct gl_context *ctx, GLenum cap, GLboolean state )
    case GL_COLOR_LOGIC_OP:
       RADEON_STATECHANGE( rmesa, ctx );
       if ( (ctx->Color.ColorLogicOpEnabled || (ctx->Color.BlendEnabled
-	    && ctx->Color.BlendEquationRGB == GL_LOGIC_OP)) ) {
+	    && ctx->Color.Blend[0].EquationRGB == GL_LOGIC_OP)) ) {
 	 rmesa->hw.ctx.cmd[CTX_RB3D_CNTL] |=  RADEON_ROP_ENABLE;
       } else {
 	 rmesa->hw.ctx.cmd[CTX_RB3D_CNTL] &= ~RADEON_ROP_ENABLE;

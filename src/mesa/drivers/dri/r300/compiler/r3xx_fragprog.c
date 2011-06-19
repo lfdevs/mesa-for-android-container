@@ -78,19 +78,43 @@ static void rc_rewrite_depth_out(struct radeon_compiler *cc, void *user)
 	}
 }
 
+static int radeon_saturate_output(
+		struct radeon_compiler * c,
+		struct rc_instruction * inst,
+		void* data)
+{
+	const struct rc_opcode_info *info = rc_get_opcode_info(inst->U.I.Opcode);
+
+	if (!info->HasDstReg || inst->U.I.DstReg.File != RC_FILE_OUTPUT)
+		return 0;
+
+	inst->U.I.SaturateMode = RC_SATURATE_ZERO_ONE;
+	return 1;
+}
+
 void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 {
 	int is_r500 = c->Base.is_r500;
 	int opt = !c->Base.disable_optimizations;
+	int sat_out = c->state.frag_clamp;
 
 	/* Lists of instruction transformations. */
+	struct radeon_program_transformation saturate_output[] = {
+		{ &radeon_saturate_output, c },
+		{ 0, 0 }
+	};
+
 	struct radeon_program_transformation rewrite_tex[] = {
 		{ &radeonTransformTEX, c },
 		{ 0, 0 }
 	};
 
-	struct radeon_program_transformation native_rewrite_r500[] = {
+	struct radeon_program_transformation rewrite_if[] = {
 		{ &r500_transform_IF, 0 },
+		{0, 0}
+	};
+
+	struct radeon_program_transformation native_rewrite_r500[] = {
 		{ &radeonTransformALU, 0 },
 		{ &radeonTransformDeriv, 0 },
 		{ &radeonTransformTrigScale, 0 },
@@ -113,7 +137,9 @@ void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 		{"unroll loops",		1, is_r500,	rc_unroll_loops,		NULL},
 		{"transform loops",		1, !is_r500,	rc_transform_loops,		NULL},
 		{"emulate branches",		1, !is_r500,	rc_emulate_branches,		NULL},
+		{"saturate output writes",	1, sat_out,	rc_local_transform,		saturate_output},
 		{"transform TEX",		1, 1,		rc_local_transform,		rewrite_tex},
+		{"transform IF",		1, is_r500,	rc_local_transform,		rewrite_if},
 		{"native rewrite",		1, is_r500,	rc_local_transform,		native_rewrite_r500},
 		{"native rewrite",		1, !is_r500,	rc_local_transform,		native_rewrite_r300},
 		{"deadcode",			1, opt,		rc_dataflow_deadcode,		dataflow_outputs_mark_use},
@@ -127,8 +153,8 @@ void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 		{"register rename",		1, !is_r500,	rc_rename_regs,			NULL},
 		{"pair translate",		1, 1,		rc_pair_translate,		NULL},
 		{"pair scheduling",		1, 1,		rc_pair_schedule,		NULL},
-		{"register allocation",		1, opt,		rc_pair_regalloc,		NULL},
-		{"dumb register allocation",	1, !opt,	rc_pair_regalloc_inputs_only,	NULL},
+		{"dead sources",		1, 1,		rc_pair_remove_dead_sources, NULL},
+		{"register allocation",		1, 1,		rc_pair_regalloc,		&opt},
 		{"final code validation",	0, 1,		rc_validate_final_shader,	NULL},
 		{"machine code generation",	0, is_r500,	r500BuildFragmentProgramHwCode,	NULL},
 		{"machine code generation",	0, !is_r500,	r300BuildFragmentProgramHwCode,	NULL},

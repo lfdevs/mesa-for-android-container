@@ -21,6 +21,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #include "pipe/p_shader_tokens.h"
+#include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_scan.h"
 #include "tgsi/tgsi_dump.h"
@@ -28,59 +29,34 @@
 #include "r600_pipe.h"
 #include "r600_asm.h"
 #include "r600_sq.h"
+#include "r600_formats.h"
 #include "r600_opcodes.h"
 #include "r600d.h"
 #include <stdio.h>
 #include <errno.h>
+#include <byteswap.h>
 
-static void r600_pipe_shader_vs(struct pipe_context *ctx, struct r600_pipe_shader *shader)
-{
-	struct r600_pipe_state *rstate = &shader->rstate;
-	struct r600_shader *rshader = &shader->shader;
-	unsigned spi_vs_out_id[10];
-	unsigned i, tmp;
+/* CAYMAN notes 
+Why CAYMAN got loops for lots of instructions is explained here.
 
-	/* clear previous register */
-	rstate->nregs = 0;
+-These 8xx t-slot only ops are implemented in all vector slots.
+MUL_LIT, FLT_TO_UINT, INT_TO_FLT, UINT_TO_FLT
+These 8xx t-slot only opcodes become vector ops, with all four 
+slots expecting the arguments on sources a and b. Result is 
+broadcast to all channels.
+MULLO_INT, MULHI_INT, MULLO_UINT, MULHI_UINT
+These 8xx t-slot only opcodes become vector ops in the z, y, and 
+x slots.
+EXP_IEEE, LOG_IEEE/CLAMPED, RECIP_IEEE/CLAMPED/FF/INT/UINT/_64/CLAMPED_64
+RECIPSQRT_IEEE/CLAMPED/FF/_64/CLAMPED_64
+SQRT_IEEE/_64
+SIN/COS
+The w slot may have an independent co-issued operation, or if the 
+result is required to be in the w slot, the opcode above may be 
+issued in the w slot as well.
+The compiler must issue the source argument to slots z, y, and x
+*/
 
-	/* so far never got proper semantic id from tgsi */
-	/* FIXME better to move this in config things so they get emited
-	 * only one time per cs
-	 */
-	for (i = 0; i < 10; i++) {
-		spi_vs_out_id[i] = 0;
-	}
-	for (i = 0; i < 32; i++) {
-		tmp = i << ((i & 3) * 8);
-		spi_vs_out_id[i / 4] |= tmp;
-	}
-	for (i = 0; i < 10; i++) {
-		r600_pipe_state_add_reg(rstate,
-					R_028614_SPI_VS_OUT_ID_0 + i * 4,
-					spi_vs_out_id[i], 0xFFFFFFFF, NULL);
-	}
-
-	r600_pipe_state_add_reg(rstate,
-			R_0286C4_SPI_VS_OUT_CONFIG,
-			S_0286C4_VS_EXPORT_COUNT(rshader->noutput - 2),
-			0xFFFFFFFF, NULL);
-	r600_pipe_state_add_reg(rstate,
-			R_028868_SQ_PGM_RESOURCES_VS,
-			S_028868_NUM_GPRS(rshader->bc.ngpr) |
-			S_028868_STACK_SIZE(rshader->bc.nstack),
-			0xFFFFFFFF, NULL);
-	r600_pipe_state_add_reg(rstate,
-			R_0288D0_SQ_PGM_CF_OFFSET_VS,
-			0x00000000, 0xFFFFFFFF, NULL);
-	r600_pipe_state_add_reg(rstate,
-			R_028858_SQ_PGM_START_VS,
-			r600_bo_offset(shader->bo) >> 8, 0xFFFFFFFF, shader->bo);
-
-	r600_pipe_state_add_reg(rstate,
-				R_03E200_SQ_LOOP_CONST_0 + (32 * 4), 0x01000FFF,
-				0xFFFFFFFF, NULL);
-
-}
 
 int r600_find_vs_semantic_index(struct r600_shader *vs,
 				struct r600_shader *ps, int id)
@@ -96,111 +72,28 @@ int r600_find_vs_semantic_index(struct r600_shader *vs,
 	return 0;
 }
 
-static void r600_pipe_shader_ps(struct pipe_context *ctx, struct r600_pipe_shader *shader)
-{
-	struct r600_pipe_state *rstate = &shader->rstate;
-	struct r600_shader *rshader = &shader->shader;
-	unsigned i, exports_ps, num_cout, spi_ps_in_control_0, spi_input_z, spi_ps_in_control_1;
-	int pos_index = -1, face_index = -1;
-
-	rstate->nregs = 0;
-
-	for (i = 0; i < rshader->ninput; i++) {
-		if (rshader->input[i].name == TGSI_SEMANTIC_POSITION)
-			pos_index = i;
-		if (rshader->input[i].name == TGSI_SEMANTIC_FACE)
-			face_index = i;
-	}
-
-	for (i = 0; i < rshader->noutput; i++) {
-		if (rshader->output[i].name == TGSI_SEMANTIC_POSITION)
-			r600_pipe_state_add_reg(rstate,
-						R_02880C_DB_SHADER_CONTROL,
-						S_02880C_Z_EXPORT_ENABLE(1),
-						S_02880C_Z_EXPORT_ENABLE(1), NULL);
-		if (rshader->output[i].name == TGSI_SEMANTIC_STENCIL)
-			r600_pipe_state_add_reg(rstate,
-						R_02880C_DB_SHADER_CONTROL,
-						S_02880C_STENCIL_REF_EXPORT_ENABLE(1),
-						S_02880C_STENCIL_REF_EXPORT_ENABLE(1), NULL);
-	}
-
-	exports_ps = 0;
-	num_cout = 0;
-	for (i = 0; i < rshader->noutput; i++) {
-		if (rshader->output[i].name == TGSI_SEMANTIC_POSITION || rshader->output[i].name == TGSI_SEMANTIC_STENCIL)
-			exports_ps |= 1;
-		else if (rshader->output[i].name == TGSI_SEMANTIC_COLOR) {
-			num_cout++;
-		}
-	}
-	exports_ps |= S_028854_EXPORT_COLORS(num_cout);
-	if (!exports_ps) {
-		/* always at least export 1 component per pixel */
-		exports_ps = 2;
-	}
-
-	spi_ps_in_control_0 = S_0286CC_NUM_INTERP(rshader->ninput) |
-				S_0286CC_PERSP_GRADIENT_ENA(1);
-	spi_input_z = 0;
-	if (pos_index != -1) {
-		spi_ps_in_control_0 |= (S_0286CC_POSITION_ENA(1) |
-					S_0286CC_POSITION_CENTROID(rshader->input[pos_index].centroid) |
-					S_0286CC_POSITION_ADDR(rshader->input[pos_index].gpr) |
-					S_0286CC_BARYC_SAMPLE_CNTL(1));
-		spi_input_z |= 1;
-	}
-
-	spi_ps_in_control_1 = 0;
-	if (face_index != -1) {
-		spi_ps_in_control_1 |= S_0286D0_FRONT_FACE_ENA(1) |
-			S_0286D0_FRONT_FACE_ADDR(rshader->input[face_index].gpr);
-	}
-
-	r600_pipe_state_add_reg(rstate, R_0286CC_SPI_PS_IN_CONTROL_0, spi_ps_in_control_0, 0xFFFFFFFF, NULL);
-	r600_pipe_state_add_reg(rstate, R_0286D0_SPI_PS_IN_CONTROL_1, spi_ps_in_control_1, 0xFFFFFFFF, NULL);
-	r600_pipe_state_add_reg(rstate, R_0286D8_SPI_INPUT_Z, spi_input_z, 0xFFFFFFFF, NULL);
-	r600_pipe_state_add_reg(rstate,
-				R_028840_SQ_PGM_START_PS,
-				r600_bo_offset(shader->bo) >> 8, 0xFFFFFFFF, shader->bo);
-	r600_pipe_state_add_reg(rstate,
-				R_028850_SQ_PGM_RESOURCES_PS,
-				S_028868_NUM_GPRS(rshader->bc.ngpr) |
-				S_028868_STACK_SIZE(rshader->bc.nstack),
-				0xFFFFFFFF, NULL);
-	r600_pipe_state_add_reg(rstate,
-				R_028854_SQ_PGM_EXPORTS_PS,
-				exports_ps, 0xFFFFFFFF, NULL);
-	r600_pipe_state_add_reg(rstate,
-				R_0288CC_SQ_PGM_CF_OFFSET_PS,
-				0x00000000, 0xFFFFFFFF, NULL);
-
-	if (rshader->uses_kill) {
-		/* only set some bits here, the other bits are set in the dsa state */
-		r600_pipe_state_add_reg(rstate,
-					R_02880C_DB_SHADER_CONTROL,
-					S_02880C_KILL_ENABLE(1),
-					S_02880C_KILL_ENABLE(1), NULL);
-	}
-	r600_pipe_state_add_reg(rstate,
-				R_03E200_SQ_LOOP_CONST_0, 0x01000FFF,
-				0xFFFFFFFF, NULL);
-}
-
-int r600_pipe_shader(struct pipe_context *ctx, struct r600_pipe_shader *shader)
+static int r600_pipe_shader(struct pipe_context *ctx, struct r600_pipe_shader *shader)
 {
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
 	struct r600_shader *rshader = &shader->shader;
-	void *ptr;
+	uint32_t *ptr;
+	int	i;
 
 	/* copy new shader */
 	if (shader->bo == NULL) {
-		shader->bo = r600_bo(rctx->radeon, rshader->bc.ndw * 4, 4096, 0, 0);
+		/* use PIPE_BIND_VERTEX_BUFFER so we use the cache buffer manager */
+		shader->bo = r600_bo(rctx->radeon, rshader->bc.ndw * 4, 4096, PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_IMMUTABLE);
 		if (shader->bo == NULL) {
 			return -ENOMEM;
 		}
-		ptr = r600_bo_map(rctx->radeon, shader->bo, 0, NULL);
-		memcpy(ptr, rshader->bc.bytecode, rshader->bc.ndw * 4);
+		ptr = (uint32_t*)r600_bo_map(rctx->radeon, shader->bo, 0, NULL);
+		if (R600_BIG_ENDIAN) {
+			for (i = 0; i < rshader->bc.ndw; ++i) {
+				ptr[i] = bswap_32(rshader->bc.bytecode[i]);
+			}
+		} else {
+			memcpy(ptr, rshader->bc.bytecode, rshader->bc.ndw * sizeof(*ptr));
+		}
 		r600_bo_unmap(rctx->radeon, shader->bo);
 	}
 	/* build state */
@@ -225,14 +118,23 @@ int r600_pipe_shader(struct pipe_context *ctx, struct r600_pipe_shader *shader)
 	return 0;
 }
 
-int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *shader);
+static int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *shader);
+
 int r600_pipe_shader_create(struct pipe_context *ctx, struct r600_pipe_shader *shader, const struct tgsi_token *tokens)
 {
+	static int dump_shaders = -1;
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
 	int r;
 
-//fprintf(stderr, "--------------------------------------------------------------\n");
-//tgsi_dump(tokens, 0);
+	/* Would like some magic "get_bool_option_once" routine.
+	*/
+	if (dump_shaders == -1)
+		dump_shaders = debug_get_bool_option("R600_DUMP_SHADERS", FALSE);
+
+	if (dump_shaders) {
+		fprintf(stderr, "--------------------------------------------------------------\n");
+		tgsi_dump(tokens, 0);
+	}
 	shader->shader.family = r600_get_family(rctx->radeon);
 	r = r600_shader_from_tgsi(tokens, &shader->shader);
 	if (r) {
@@ -244,8 +146,10 @@ int r600_pipe_shader_create(struct pipe_context *ctx, struct r600_pipe_shader *s
 		R600_ERR("building bytecode failed !\n");
 		return r;
 	}
-//r600_bc_dump(&shader->shader.bc);
-//fprintf(stderr, "______________________________________________________________\n");
+	if (dump_shaders) {
+		r600_bc_dump(&shader->shader.bc);
+		fprintf(stderr, "______________________________________________________________\n");
+	}
 	return r600_pipe_shader(ctx, shader);
 }
 
@@ -262,6 +166,15 @@ void r600_pipe_shader_destroy(struct pipe_context *ctx, struct r600_pipe_shader 
  */
 struct r600_shader_tgsi_instruction;
 
+struct r600_shader_src {
+	unsigned				sel;
+	unsigned				swizzle[4];
+	unsigned				neg;
+	unsigned				abs;
+	unsigned				rel;
+	uint32_t				value[4];
+};
+
 struct r600_shader_ctx {
 	struct tgsi_shader_info			info;
 	struct tgsi_parse_context		parse;
@@ -269,10 +182,11 @@ struct r600_shader_ctx {
 	unsigned				type;
 	unsigned				file_offset[TGSI_FILE_COUNT];
 	unsigned				temp_reg;
+	unsigned				ar_reg;
 	struct r600_shader_tgsi_instruction	*inst_info;
 	struct r600_bc				*bc;
 	struct r600_shader			*shader;
-	u32					value[4];
+	struct r600_shader_src			src[4];
 	u32					*literals;
 	u32					nliterals;
 	u32					max_driver_temp_used;
@@ -290,7 +204,7 @@ struct r600_shader_tgsi_instruction {
 	int (*process)(struct r600_shader_ctx *ctx);
 };
 
-static struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[], eg_shader_tgsi_instruction[];
+static struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[], eg_shader_tgsi_instruction[], cm_shader_tgsi_instruction[];
 static int tgsi_helper_tempx_replicate(struct r600_shader_ctx *ctx);
 
 static int tgsi_is_supported(struct r600_shader_ctx *ctx)
@@ -391,6 +305,7 @@ static int tgsi_declaration(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_declaration *d = &ctx->parse.FullToken.FullDeclaration;
 	unsigned i;
+	int r;
 
 	switch (d->Declaration.File) {
 	case TGSI_FILE_INPUT:
@@ -400,7 +315,7 @@ static int tgsi_declaration(struct r600_shader_ctx *ctx)
 		ctx->shader->input[i].interpolate = d->Declaration.Interpolate;
 		ctx->shader->input[i].centroid = d->Declaration.Centroid;
 		ctx->shader->input[i].gpr = ctx->file_offset[TGSI_FILE_INPUT] + i;
-		if (ctx->type == TGSI_PROCESSOR_FRAGMENT && ctx->bc->chiprev == CHIPREV_EVERGREEN) {
+		if (ctx->type == TGSI_PROCESSOR_FRAGMENT && ctx->bc->chiprev >= CHIPREV_EVERGREEN) {
 			/* turn input into interpolate on EG */
 			if (ctx->shader->input[i].name != TGSI_SEMANTIC_POSITION) {
 				if (ctx->shader->input[i].interpolate > 0) {
@@ -422,6 +337,26 @@ static int tgsi_declaration(struct r600_shader_ctx *ctx)
 	case TGSI_FILE_SAMPLER:
 	case TGSI_FILE_ADDRESS:
 		break;
+
+	case TGSI_FILE_SYSTEM_VALUE:
+		if (d->Semantic.Name == TGSI_SEMANTIC_INSTANCEID) {
+			struct r600_bc_alu alu;
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_INT_TO_FLT);
+			alu.src[0].sel = 0;
+			alu.src[0].chan = 3;
+
+			alu.dst.sel = 0;
+			alu.dst.chan = 3;
+			alu.dst.write = 1;
+			alu.last = 1;
+
+			if ((r = r600_bc_add_alu(ctx->bc, &alu)))
+				return r;
+			break;
+		}
+
 	default:
 		R600_ERR("unsupported file %d declaration\n", d->Declaration.File);
 		return -EINVAL;
@@ -481,9 +416,188 @@ static int evergreen_gpr_count(struct r600_shader_ctx *ctx)
 	return ctx->num_interp_gpr;
 }
 
-int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *shader)
+static void tgsi_src(struct r600_shader_ctx *ctx,
+		     const struct tgsi_full_src_register *tgsi_src,
+		     struct r600_shader_src *r600_src)
+{
+	memset(r600_src, 0, sizeof(*r600_src));
+	r600_src->swizzle[0] = tgsi_src->Register.SwizzleX;
+	r600_src->swizzle[1] = tgsi_src->Register.SwizzleY;
+	r600_src->swizzle[2] = tgsi_src->Register.SwizzleZ;
+	r600_src->swizzle[3] = tgsi_src->Register.SwizzleW;
+	r600_src->neg = tgsi_src->Register.Negate;
+	r600_src->abs = tgsi_src->Register.Absolute;
+
+	if (tgsi_src->Register.File == TGSI_FILE_IMMEDIATE) {
+		int index;
+		if ((tgsi_src->Register.SwizzleX == tgsi_src->Register.SwizzleY) &&
+			(tgsi_src->Register.SwizzleX == tgsi_src->Register.SwizzleZ) &&
+			(tgsi_src->Register.SwizzleX == tgsi_src->Register.SwizzleW)) {
+
+			index = tgsi_src->Register.Index * 4 + tgsi_src->Register.SwizzleX;
+			r600_bc_special_constants(ctx->literals[index], &r600_src->sel, &r600_src->neg);
+			if (r600_src->sel != V_SQ_ALU_SRC_LITERAL)
+				return;
+		}
+		index = tgsi_src->Register.Index;
+		r600_src->sel = V_SQ_ALU_SRC_LITERAL;
+		memcpy(r600_src->value, ctx->literals + index * 4, sizeof(r600_src->value));
+	} else if (tgsi_src->Register.File == TGSI_FILE_SYSTEM_VALUE) {
+		/* assume we wan't TGSI_SEMANTIC_INSTANCEID here */
+		r600_src->swizzle[0] = 3;
+		r600_src->swizzle[1] = 3;
+		r600_src->swizzle[2] = 3;
+		r600_src->swizzle[3] = 3;
+		r600_src->sel = 0;
+	} else {
+		if (tgsi_src->Register.Indirect)
+			r600_src->rel = V_SQ_REL_RELATIVE;
+		r600_src->sel = tgsi_src->Register.Index;
+		r600_src->sel += ctx->file_offset[tgsi_src->Register.File];
+	}
+}
+
+static int tgsi_fetch_rel_const(struct r600_shader_ctx *ctx, unsigned int offset, unsigned int dst_reg)
+{
+	struct r600_bc_vtx vtx;
+	unsigned int ar_reg;
+	int r;
+
+	if (offset) {
+		struct r600_bc_alu alu;
+
+		memset(&alu, 0, sizeof(alu));
+
+		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_ADD_INT);
+		alu.src[0].sel = ctx->ar_reg;
+
+		alu.src[1].sel = V_SQ_ALU_SRC_LITERAL;
+		alu.src[1].value = offset;
+
+		alu.dst.sel = dst_reg;
+		alu.dst.write = 1;
+		alu.last = 1;
+
+		if ((r = r600_bc_add_alu(ctx->bc, &alu)))
+			return r;
+
+		ar_reg = dst_reg;
+	} else {
+		ar_reg = ctx->ar_reg;
+	}
+
+	memset(&vtx, 0, sizeof(vtx));
+	vtx.fetch_type = 2;		/* VTX_FETCH_NO_INDEX_OFFSET */
+	vtx.src_gpr = ar_reg;
+	vtx.mega_fetch_count = 16;
+	vtx.dst_gpr = dst_reg;
+	vtx.dst_sel_x = 0;		/* SEL_X */
+	vtx.dst_sel_y = 1;		/* SEL_Y */
+	vtx.dst_sel_z = 2;		/* SEL_Z */
+	vtx.dst_sel_w = 3;		/* SEL_W */
+	vtx.data_format = FMT_32_32_32_32_FLOAT;
+	vtx.num_format_all = 2;		/* NUM_FORMAT_SCALED */
+	vtx.format_comp_all = 1;	/* FORMAT_COMP_SIGNED */
+	vtx.srf_mode_all = 1;		/* SRF_MODE_NO_ZERO */
+	vtx.endian = r600_endian_swap(32);
+
+	if ((r = r600_bc_add_vtx(ctx->bc, &vtx)))
+		return r;
+
+	return 0;
+}
+
+static int tgsi_split_constant(struct r600_shader_ctx *ctx)
+{
+	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
+	struct r600_bc_alu alu;
+	int i, j, k, nconst, r;
+
+	for (i = 0, nconst = 0; i < inst->Instruction.NumSrcRegs; i++) {
+		if (inst->Src[i].Register.File == TGSI_FILE_CONSTANT) {
+			nconst++;
+		}
+		tgsi_src(ctx, &inst->Src[i], &ctx->src[i]);
+	}
+	for (i = 0, j = nconst - 1; i < inst->Instruction.NumSrcRegs; i++) {
+		if (inst->Src[i].Register.File != TGSI_FILE_CONSTANT) {
+			continue;
+		}
+
+		if (ctx->src[i].rel) {
+			int treg = r600_get_temp(ctx);
+			if ((r = tgsi_fetch_rel_const(ctx, ctx->src[i].sel - 512, treg)))
+				return r;
+
+			ctx->src[i].sel = treg;
+			ctx->src[i].rel = 0;
+			j--;
+		} else if (j > 0) {
+			int treg = r600_get_temp(ctx);
+			for (k = 0; k < 4; k++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
+				alu.src[0].sel = ctx->src[i].sel;
+				alu.src[0].chan = k;
+				alu.src[0].rel = ctx->src[i].rel;
+				alu.dst.sel = treg;
+				alu.dst.chan = k;
+				alu.dst.write = 1;
+				if (k == 3)
+					alu.last = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+			ctx->src[i].sel = treg;
+			ctx->src[i].rel =0;
+			j--;
+		}
+	}
+	return 0;
+}
+
+/* need to move any immediate into a temp - for trig functions which use literal for PI stuff */
+static int tgsi_split_literal_constant(struct r600_shader_ctx *ctx)
+{
+	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
+	struct r600_bc_alu alu;
+	int i, j, k, nliteral, r;
+
+	for (i = 0, nliteral = 0; i < inst->Instruction.NumSrcRegs; i++) {
+		if (ctx->src[i].sel == V_SQ_ALU_SRC_LITERAL) {
+			nliteral++;
+		}
+	}
+	for (i = 0, j = nliteral - 1; i < inst->Instruction.NumSrcRegs; i++) {
+		if (j > 0 && ctx->src[i].sel == V_SQ_ALU_SRC_LITERAL) {
+			int treg = r600_get_temp(ctx);
+			for (k = 0; k < 4; k++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
+				alu.src[0].sel = ctx->src[i].sel;
+				alu.src[0].chan = k;
+				alu.src[0].value = ctx->src[i].value[k];
+				alu.dst.sel = treg;
+				alu.dst.chan = k;
+				alu.dst.write = 1;
+				if (k == 3)
+					alu.last = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+			ctx->src[i].sel = treg;
+			j--;
+		}
+	}
+	return 0;
+}
+
+static int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *shader)
 {
 	struct tgsi_full_immediate *immediate;
+	struct tgsi_full_property *property;
 	struct r600_shader_ctx ctx;
 	struct r600_bc_output output[32];
 	unsigned output_done, noutput;
@@ -506,7 +620,9 @@ int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *s
 	/* Values [0,127] correspond to GPR[0..127].
 	 * Values [128,159] correspond to constant buffer bank 0
 	 * Values [160,191] correspond to constant buffer bank 1
-	 * Values [256,511] correspond to cfile constants c[0..255].
+	 * Values [256,511] correspond to cfile constants c[0..255]. (Gone on EG)
+	 * Values [256,287] correspond to constant buffer bank 2 (EG)
+	 * Values [288,319] correspond to constant buffer bank 3 (EG)
 	 * Other special values are shown in the list below.
 	 * 244  ALU_SRC_1_DBL_L: special constant 1.0 double-float, LSW. (RV670+)
 	 * 245  ALU_SRC_1_DBL_M: special constant 1.0 double-float, MSW. (RV670+)
@@ -526,13 +642,13 @@ int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *s
 	}
 	if (ctx.type == TGSI_PROCESSOR_VERTEX) {
 		ctx.file_offset[TGSI_FILE_INPUT] = 1;
-		if (ctx.bc->chiprev == CHIPREV_EVERGREEN) {
+		if (ctx.bc->chiprev >= CHIPREV_EVERGREEN) {
 			r600_bc_add_cfinst(ctx.bc, EG_V_SQ_CF_WORD1_SQ_CF_INST_CALL_FS);
 		} else {
 			r600_bc_add_cfinst(ctx.bc, V_SQ_CF_WORD1_SQ_CF_INST_CALL_FS);
 		}
 	}
-	if (ctx.type == TGSI_PROCESSOR_FRAGMENT && ctx.bc->chiprev == CHIPREV_EVERGREEN) {
+	if (ctx.type == TGSI_PROCESSOR_FRAGMENT && ctx.bc->chiprev >= CHIPREV_EVERGREEN) {
 		ctx.file_offset[TGSI_FILE_INPUT] = evergreen_gpr_count(&ctx);
 	}
 	ctx.file_offset[TGSI_FILE_OUTPUT] = ctx.file_offset[TGSI_FILE_INPUT] +
@@ -540,15 +656,18 @@ int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *s
 	ctx.file_offset[TGSI_FILE_TEMPORARY] = ctx.file_offset[TGSI_FILE_OUTPUT] +
 						ctx.info.file_count[TGSI_FILE_OUTPUT];
 
-	ctx.file_offset[TGSI_FILE_CONSTANT] = 128;
+	/* Outside the GPR range. This will be translated to one of the
+	 * kcache banks later. */
+	ctx.file_offset[TGSI_FILE_CONSTANT] = 512;
 
-	ctx.file_offset[TGSI_FILE_IMMEDIATE] = 253;
-	ctx.temp_reg = ctx.file_offset[TGSI_FILE_TEMPORARY] +
+	ctx.file_offset[TGSI_FILE_IMMEDIATE] = V_SQ_ALU_SRC_LITERAL;
+	ctx.ar_reg = ctx.file_offset[TGSI_FILE_TEMPORARY] +
 			ctx.info.file_count[TGSI_FILE_TEMPORARY];
+	ctx.temp_reg = ctx.ar_reg + 1;
 
 	ctx.nliterals = 0;
 	ctx.literals = NULL;
-
+	shader->fs_write_all = FALSE;
 	while (!tgsi_parse_end_of_tokens(&ctx.parse)) {
 		tgsi_parse_token(&ctx.parse);
 		switch (ctx.parse.FullToken.Token.Type) {
@@ -577,19 +696,28 @@ int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *s
 			ctx.max_driver_temp_used = 0;
 			/* reserve first tmp for everyone */
 			r600_get_temp(&ctx);
+
 			opcode = ctx.parse.FullToken.FullInstruction.Instruction.Opcode;
-			if (ctx.bc->chiprev == CHIPREV_EVERGREEN)
+			if ((r = tgsi_split_constant(&ctx)))
+				goto out_err;
+			if ((r = tgsi_split_literal_constant(&ctx)))
+				goto out_err;
+			if (ctx.bc->chiprev == CHIPREV_CAYMAN)
+				ctx.inst_info = &cm_shader_tgsi_instruction[opcode];
+			else if (ctx.bc->chiprev >= CHIPREV_EVERGREEN)
 				ctx.inst_info = &eg_shader_tgsi_instruction[opcode];
 			else
 				ctx.inst_info = &r600_shader_tgsi_instruction[opcode];
 			r = ctx.inst_info->process(&ctx);
 			if (r)
 				goto out_err;
-			r = r600_bc_add_literal(ctx.bc, ctx.value);
-			if (r)
-				goto out_err;
 			break;
 		case TGSI_TOKEN_TYPE_PROPERTY:
+			property = &ctx.parse.FullToken.FullProperty;
+			if (property->Property.PropertyName == TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS) {
+				if (property->u[0].Data == 1)
+					shader->fs_write_all = TRUE;
+			}
 			break;
 		default:
 			R600_ERR("unsupported token type %d\n", ctx.parse.FullToken.Token.Type);
@@ -607,6 +735,7 @@ int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *s
 		output[i].swizzle_y = 1;
 		output[i].swizzle_z = 2;
 		output[i].swizzle_w = 3;
+		output[i].burst_count = 1;
 		output[i].barrier = 1;
 		output[i].type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_PARAM;
 		output[i].array_base = i - pos0;
@@ -670,6 +799,7 @@ int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *s
 			output[i].swizzle_y = 1;
 			output[i].swizzle_z = 2;
 			output[i].swizzle_w = 3;
+			output[i].burst_count = 1;
 			output[i].barrier = 1;
 			output[i].type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_PARAM;
 			output[i].array_base = 0;
@@ -686,6 +816,7 @@ int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *s
 		output[0].swizzle_y = 7;
 		output[0].swizzle_z = 7;
 		output[0].swizzle_w = 7;
+		output[0].burst_count = 1;
 		output[0].barrier = 1;
 		output[0].type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_PIXEL;
 		output[0].array_base = 0;
@@ -694,8 +825,10 @@ int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *s
 	}
 	/* set export done on last export of each type */
 	for (i = noutput - 1, output_done = 0; i >= 0; i--) {
-		if (i == (noutput - 1)) {
-			output[i].end_of_program = 1;
+		if (ctx.bc->chiprev < CHIPREV_CAYMAN) {
+			if (i == (noutput - 1)) {
+				output[i].end_of_program = 1;
+			}
 		}
 		if (!(output_done & (1 << output[i].type))) {
 			output_done |= (1 << output[i].type);
@@ -708,6 +841,10 @@ int r600_shader_from_tgsi(const struct tgsi_token *tokens, struct r600_shader *s
 		if (r)
 			goto out_err;
 	}
+	/* add program end */
+	if (ctx.bc->chiprev == CHIPREV_CAYMAN)
+		cm_bc_add_cf_end(ctx.bc);
+
 	free(ctx.literals);
 	tgsi_parse_free(&ctx.parse);
 	return 0;
@@ -719,7 +856,8 @@ out_err:
 
 static int tgsi_unsupported(struct r600_shader_ctx *ctx)
 {
-	R600_ERR("%d tgsi opcode unsupported\n", ctx->inst_info->tgsi_opcode);
+	R600_ERR("%s tgsi opcode unsupported\n",
+		 tgsi_get_opcode_name(ctx->inst_info->tgsi_opcode));
 	return -EINVAL;
 }
 
@@ -728,33 +866,22 @@ static int tgsi_end(struct r600_shader_ctx *ctx)
 	return 0;
 }
 
-static int tgsi_src(struct r600_shader_ctx *ctx,
-			const struct tgsi_full_src_register *tgsi_src,
-			struct r600_bc_alu_src *r600_src)
+static void r600_bc_src(struct r600_bc_alu_src *bc_src,
+			const struct r600_shader_src *shader_src,
+			unsigned chan)
 {
-	int index;
-	memset(r600_src, 0, sizeof(struct r600_bc_alu_src));
-	r600_src->sel = tgsi_src->Register.Index;
-	if (tgsi_src->Register.File == TGSI_FILE_IMMEDIATE) {
-		r600_src->sel = 0;
-		index = tgsi_src->Register.Index;
-		ctx->value[0] = ctx->literals[index * 4 + 0];
-		ctx->value[1] = ctx->literals[index * 4 + 1];
-		ctx->value[2] = ctx->literals[index * 4 + 2];
-		ctx->value[3] = ctx->literals[index * 4 + 3];
-	}
-	if (tgsi_src->Register.Indirect)
-		r600_src->rel = V_SQ_REL_RELATIVE;
-	r600_src->neg = tgsi_src->Register.Negate;
-	r600_src->abs = tgsi_src->Register.Absolute;
-	r600_src->sel += ctx->file_offset[tgsi_src->Register.File];
-	return 0;
+	bc_src->sel = shader_src->sel;
+	bc_src->chan = shader_src->swizzle[chan];
+	bc_src->neg = shader_src->neg;
+	bc_src->abs = shader_src->abs;
+	bc_src->rel = shader_src->rel;
+	bc_src->value = shader_src->value[bc_src->chan];
 }
 
-static int tgsi_dst(struct r600_shader_ctx *ctx,
-			const struct tgsi_full_dst_register *tgsi_dst,
-			unsigned swizzle,
-			struct r600_bc_alu_dst *r600_dst)
+static void tgsi_dst(struct r600_shader_ctx *ctx,
+		     const struct tgsi_full_dst_register *tgsi_dst,
+		     unsigned swizzle,
+		     struct r600_bc_alu_dst *r600_dst)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 
@@ -767,146 +894,42 @@ static int tgsi_dst(struct r600_shader_ctx *ctx,
 	if (inst->Instruction.Saturate) {
 		r600_dst->clamp = 1;
 	}
-	return 0;
 }
 
-static unsigned tgsi_chan(const struct tgsi_full_src_register *tgsi_src, unsigned swizzle)
+static int tgsi_last_instruction(unsigned writemask)
 {
-	switch (swizzle) {
-	case 0:
-		return tgsi_src->Register.SwizzleX;
-	case 1:
-		return tgsi_src->Register.SwizzleY;
-	case 2:
-		return tgsi_src->Register.SwizzleZ;
-	case 3:
-		return tgsi_src->Register.SwizzleW;
-	default:
-		return 0;
-	}
-}
+	int i, lasti = 0;
 
-static int tgsi_split_constant(struct r600_shader_ctx *ctx, struct r600_bc_alu_src r600_src[3])
-{
-	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu alu;
-	int i, j, k, nconst, r;
-
-	for (i = 0, nconst = 0; i < inst->Instruction.NumSrcRegs; i++) {
-		if (inst->Src[i].Register.File == TGSI_FILE_CONSTANT) {
-			nconst++;
-		}
-		r = tgsi_src(ctx, &inst->Src[i], &r600_src[i]);
-		if (r) {
-			return r;
+	for (i = 0; i < 4; i++) {
+		if (writemask & (1 << i)) {
+			lasti = i;
 		}
 	}
-	for (i = 0, j = nconst - 1; i < inst->Instruction.NumSrcRegs; i++) {
-		if (j > 0 && inst->Src[i].Register.File == TGSI_FILE_CONSTANT) {
-			int treg = r600_get_temp(ctx);
-			for (k = 0; k < 4; k++) {
-				memset(&alu, 0, sizeof(struct r600_bc_alu));
-				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
-				alu.src[0].sel = r600_src[i].sel;
-				alu.src[0].chan = k;
-				alu.src[0].rel = r600_src[i].rel;
-				alu.dst.sel = treg;
-				alu.dst.chan = k;
-				alu.dst.write = 1;
-				if (k == 3)
-					alu.last = 1;
-				r = r600_bc_add_alu(ctx->bc, &alu);
-				if (r)
-					return r;
-			}
-			r600_src[i].sel = treg;
-			r600_src[i].rel =0;
-			j--;
-		}
-	}
-	return 0;
-}
-
-/* need to move any immediate into a temp - for trig functions which use literal for PI stuff */
-static int tgsi_split_literal_constant(struct r600_shader_ctx *ctx, struct r600_bc_alu_src r600_src[3])
-{
-	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu alu;
-	int i, j, k, nliteral, r;
-
-	for (i = 0, nliteral = 0; i < inst->Instruction.NumSrcRegs; i++) {
-		if (inst->Src[i].Register.File == TGSI_FILE_IMMEDIATE) {
-			nliteral++;
-		}
-	}
-	for (i = 0, j = nliteral - 1; i < inst->Instruction.NumSrcRegs; i++) {
-		if (j > 0 && inst->Src[i].Register.File == TGSI_FILE_IMMEDIATE) {
-			int treg = r600_get_temp(ctx);
-			for (k = 0; k < 4; k++) {
-				memset(&alu, 0, sizeof(struct r600_bc_alu));
-				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
-				alu.src[0].sel = r600_src[i].sel;
-				alu.src[0].chan = k;
-				alu.dst.sel = treg;
-				alu.dst.chan = k;
-				alu.dst.write = 1;
-				if (k == 3)
-					alu.last = 1;
-				r = r600_bc_add_alu(ctx->bc, &alu);
-				if (r)
-					return r;
-			}
-			r = r600_bc_add_literal(ctx->bc, &ctx->literals[inst->Src[i].Register.Index * 4]);
-			if (r)
-				return r;
-			r600_src[i].sel = treg;
-			j--;
-		}
-	}
-	return 0;
+	return lasti;
 }
 
 static int tgsi_op2_s(struct r600_shader_ctx *ctx, int swap)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu_src r600_src[3];
 	struct r600_bc_alu alu;
 	int i, j, r;
-	int lasti = 0;
+	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
 
-	for (i = 0; i < 4; i++) {
-		if (inst->Dst[0].Register.WriteMask & (1 << i)) {
-			lasti = i;
-		}
-	}
-
-	r = tgsi_split_constant(ctx, r600_src);
-	if (r)
-		return r;
-	r = tgsi_split_literal_constant(ctx, r600_src);
-	if (r)
-		return r;
 	for (i = 0; i < lasti + 1; i++) {
 		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
 			continue;
 
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
-		r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
-		if (r)
-			return r;
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 
 		alu.inst = ctx->inst_info->r600_opcode;
 		if (!swap) {
 			for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
-				alu.src[j] = r600_src[j];
-				alu.src[j].chan = tgsi_chan(&inst->Src[j], i);
+				r600_bc_src(&alu.src[j], &ctx->src[j], i);
 			}
 		} else {
-			alu.src[0] = r600_src[1];
-			alu.src[0].chan = tgsi_chan(&inst->Src[1], i);
-
-			alu.src[1] = r600_src[0];
-			alu.src[1].chan = tgsi_chan(&inst->Src[0], i);
+			r600_bc_src(&alu.src[0], &ctx->src[1], i);
+			r600_bc_src(&alu.src[1], &ctx->src[0], i);
 		}
 		/* handle some special cases */
 		switch (ctx->inst_info->tgsi_opcode) {
@@ -915,6 +938,8 @@ static int tgsi_op2_s(struct r600_shader_ctx *ctx, int swap)
 			break;
 		case TGSI_OPCODE_ABS:
 			alu.src[0].abs = 1;
+			if (alu.src[0].neg)
+			  alu.src[0].neg = 0;
 			break;
 		default:
 			break;
@@ -939,29 +964,44 @@ static int tgsi_op2_swap(struct r600_shader_ctx *ctx)
 	return tgsi_op2_s(ctx, 1);
 }
 
+static int cayman_emit_float_instr(struct r600_shader_ctx *ctx)
+{
+	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
+	int i, j, r;
+	struct r600_bc_alu alu;
+	int last_slot = (inst->Dst[0].Register.WriteMask & 0x8) ? 4 : 3;
+	
+	for (i = 0 ; i < last_slot; i++) {
+		memset(&alu, 0, sizeof(struct r600_bc_alu));
+		alu.inst = ctx->inst_info->r600_opcode;
+		for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
+			r600_bc_src(&alu.src[j], &ctx->src[j], 0);
+		}
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+		alu.dst.write = (inst->Dst[0].Register.WriteMask >> i) & 1;
+
+		if (i == last_slot - 1)
+			alu.last = 1;
+		r = r600_bc_add_alu(ctx->bc, &alu);
+		if (r)
+			return r;
+	}
+	return 0;
+}
+
 /*
  * r600 - trunc to -PI..PI range
  * r700 - normalize by dividing by 2PI
  * see fdo bug 27901
  */
-static int tgsi_setup_trig(struct r600_shader_ctx *ctx,
-			   struct r600_bc_alu_src r600_src[3])
+static int tgsi_setup_trig(struct r600_shader_ctx *ctx)
 {
-	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
+	static float half_inv_pi = 1.0 /(3.1415926535 * 2);
+	static float double_pi = 3.1415926535 * 2;
+	static float neg_pi = -3.1415926535;
+
 	int r;
-	uint32_t lit_vals[4];
 	struct r600_bc_alu alu;
-
-	memset(lit_vals, 0, 4*4);
-	r = tgsi_split_constant(ctx, r600_src);
-	if (r)
-		return r;
-	r = tgsi_split_literal_constant(ctx, r600_src);
-	if (r)
-		return r;
-
-	lit_vals[0] = fui(1.0 /(3.1415926535 * 2));
-	lit_vals[1] = fui(0.5f);
 
 	memset(&alu, 0, sizeof(struct r600_bc_alu));
 	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP3_SQ_OP3_INST_MULADD);
@@ -971,18 +1011,15 @@ static int tgsi_setup_trig(struct r600_shader_ctx *ctx,
 	alu.dst.sel = ctx->temp_reg;
 	alu.dst.write = 1;
 
-	alu.src[0] = r600_src[0];
-	alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+	r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
 	alu.src[1].sel = V_SQ_ALU_SRC_LITERAL;
 	alu.src[1].chan = 0;
-	alu.src[2].sel = V_SQ_ALU_SRC_LITERAL;
-	alu.src[2].chan = 1;
+	alu.src[1].value = *(uint32_t *)&half_inv_pi;
+	alu.src[2].sel = V_SQ_ALU_SRC_0_5;
+	alu.src[2].chan = 0;
 	alu.last = 1;
 	r = r600_bc_add_alu(ctx->bc, &alu);
-	if (r)
-		return r;
-	r = r600_bc_add_literal(ctx->bc, lit_vals);
 	if (r)
 		return r;
 
@@ -1000,14 +1037,6 @@ static int tgsi_setup_trig(struct r600_shader_ctx *ctx,
 	if (r)
 		return r;
 
-	if (ctx->bc->chiprev == CHIPREV_R600) {
-		lit_vals[0] = fui(3.1415926535897f * 2.0f);
-		lit_vals[1] = fui(-3.1415926535897f);
-	} else {
-		lit_vals[0] = fui(1.0f);
-		lit_vals[1] = fui(-0.5f);
-	}
-
 	memset(&alu, 0, sizeof(struct r600_bc_alu));
 	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP3_SQ_OP3_INST_MULADD);
 	alu.is_op3 = 1;
@@ -1022,26 +1051,63 @@ static int tgsi_setup_trig(struct r600_shader_ctx *ctx,
 	alu.src[1].sel = V_SQ_ALU_SRC_LITERAL;
 	alu.src[1].chan = 0;
 	alu.src[2].sel = V_SQ_ALU_SRC_LITERAL;
-	alu.src[2].chan = 1;
+	alu.src[2].chan = 0;
+
+	if (ctx->bc->chiprev == CHIPREV_R600) {
+		alu.src[1].value = *(uint32_t *)&double_pi;
+		alu.src[2].value = *(uint32_t *)&neg_pi;
+	} else {
+		alu.src[1].sel = V_SQ_ALU_SRC_1;
+		alu.src[2].sel = V_SQ_ALU_SRC_0_5;
+		alu.src[2].neg = 1;
+	}
+
 	alu.last = 1;
 	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
 		return r;
-	r = r600_bc_add_literal(ctx->bc, lit_vals);
+	return 0;
+}
+
+static int cayman_trig(struct r600_shader_ctx *ctx)
+{
+	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
+	struct r600_bc_alu alu;
+	int last_slot = (inst->Dst[0].Register.WriteMask & 0x8) ? 4 : 3;
+	int i, r;
+
+	r = tgsi_setup_trig(ctx);
 	if (r)
 		return r;
+
+
+	for (i = 0; i < last_slot; i++) {
+		memset(&alu, 0, sizeof(struct r600_bc_alu));
+		alu.inst = ctx->inst_info->r600_opcode;
+		alu.dst.chan = i;
+
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+		alu.dst.write = (inst->Dst[0].Register.WriteMask >> i) & 1;
+
+		alu.src[0].sel = ctx->temp_reg;
+		alu.src[0].chan = 0;
+		if (i == last_slot - 1)
+			alu.last = 1;
+		r = r600_bc_add_alu(ctx->bc, &alu);
+		if (r)
+			return r;
+	}
 	return 0;
 }
 
 static int tgsi_trig(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu_src r600_src[3];
 	struct r600_bc_alu alu;
 	int i, r;
-	int lasti = 0;
+	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
 
-	r = tgsi_setup_trig(ctx, r600_src);
+	r = tgsi_setup_trig(ctx);
 	if (r)
 		return r;
 
@@ -1059,10 +1125,6 @@ static int tgsi_trig(struct r600_shader_ctx *ctx)
 		return r;
 
 	/* replicate result */
-	for (i = 0; i < 4; i++) {
-		if (inst->Dst[0].Register.WriteMask & (1 << i))
-			lasti = i;
-	}
 	for (i = 0; i < lasti + 1; i++) {
 		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
 			continue;
@@ -1071,9 +1133,7 @@ static int tgsi_trig(struct r600_shader_ctx *ctx)
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
 
 		alu.src[0].sel = ctx->temp_reg;
-		r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
-		if (r)
-			return r;
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 		if (i == lasti)
 			alu.last = 1;
 		r = r600_bc_add_alu(ctx->bc, &alu);
@@ -1086,49 +1146,83 @@ static int tgsi_trig(struct r600_shader_ctx *ctx)
 static int tgsi_scs(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu_src r600_src[3];
 	struct r600_bc_alu alu;
-	int r;
+	int i, r;
 
 	/* We'll only need the trig stuff if we are going to write to the
 	 * X or Y components of the destination vector.
 	 */
 	if (likely(inst->Dst[0].Register.WriteMask & TGSI_WRITEMASK_XY)) {
-		r = tgsi_setup_trig(ctx, r600_src);
+		r = tgsi_setup_trig(ctx);
 		if (r)
 			return r;
 	}
 
 	/* dst.x = COS */
 	if (inst->Dst[0].Register.WriteMask & TGSI_WRITEMASK_X) {
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_COS);
-		r = tgsi_dst(ctx, &inst->Dst[0], 0, &alu.dst);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0 ; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_COS);
+				tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 
-		alu.src[0].sel = ctx->temp_reg;
-		alu.src[0].chan = 0;
-		alu.last = 1;
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
+				if (i == 0)
+					alu.dst.write = 1;
+				else
+					alu.dst.write = 0;
+				alu.src[0].sel = ctx->temp_reg;
+				alu.src[0].chan = 0;
+				if (i == 2)
+					alu.last = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_COS);
+			tgsi_dst(ctx, &inst->Dst[0], 0, &alu.dst);
+
+			alu.src[0].sel = ctx->temp_reg;
+			alu.src[0].chan = 0;
+			alu.last = 1;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 	}
 
 	/* dst.y = SIN */
 	if (inst->Dst[0].Register.WriteMask & TGSI_WRITEMASK_Y) {
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SIN);
-		r = tgsi_dst(ctx, &inst->Dst[0], 1, &alu.dst);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0 ; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SIN);
+				tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+				if (i == 1)
+					alu.dst.write = 1;
+				else
+					alu.dst.write = 0;
+				alu.src[0].sel = ctx->temp_reg;
+				alu.src[0].chan = 0;
+				if (i == 2)
+					alu.last = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SIN);
+			tgsi_dst(ctx, &inst->Dst[0], 1, &alu.dst);
 
-		alu.src[0].sel = ctx->temp_reg;
-		alu.src[0].chan = 0;
-		alu.last = 1;
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
+			alu.src[0].sel = ctx->temp_reg;
+			alu.src[0].chan = 0;
+			alu.last = 1;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 	}
 
 	/* dst.z = 0.0; */
@@ -1137,9 +1231,7 @@ static int tgsi_scs(struct r600_shader_ctx *ctx)
 
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
 
-		r = tgsi_dst(ctx, &inst->Dst[0], 2, &alu.dst);
-		if (r)
-			return r;
+		tgsi_dst(ctx, &inst->Dst[0], 2, &alu.dst);
 
 		alu.src[0].sel = V_SQ_ALU_SRC_0;
 		alu.src[0].chan = 0;
@@ -1147,10 +1239,6 @@ static int tgsi_scs(struct r600_shader_ctx *ctx)
 		alu.last = 1;
 
 		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
 		if (r)
 			return r;
 	}
@@ -1161,9 +1249,7 @@ static int tgsi_scs(struct r600_shader_ctx *ctx)
 
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
 
-		r = tgsi_dst(ctx, &inst->Dst[0], 3, &alu.dst);
-		if (r)
-			return r;
+		tgsi_dst(ctx, &inst->Dst[0], 3, &alu.dst);
 
 		alu.src[0].sel = V_SQ_ALU_SRC_1;
 		alu.src[0].chan = 0;
@@ -1173,10 +1259,6 @@ static int tgsi_scs(struct r600_shader_ctx *ctx)
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
 	}
 
 	return 0;
@@ -1184,7 +1266,6 @@ static int tgsi_scs(struct r600_shader_ctx *ctx)
 
 static int tgsi_kill(struct r600_shader_ctx *ctx)
 {
-	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bc_alu alu;
 	int i, r;
 
@@ -1200,10 +1281,7 @@ static int tgsi_kill(struct r600_shader_ctx *ctx)
 			alu.src[1].sel = V_SQ_ALU_SRC_1;
 			alu.src[1].neg = 1;
 		} else {
-			r = tgsi_src(ctx, &inst->Src[0], &alu.src[1]);
-			if (r)
-				return r;
-			alu.src[1].chan = tgsi_chan(&inst->Src[0], i);
+			r600_bc_src(&alu.src[1], &ctx->src[0], i);
 		}
 		if (i == 3) {
 			alu.last = 1;
@@ -1212,9 +1290,6 @@ static int tgsi_kill(struct r600_shader_ctx *ctx)
 		if (r)
 			return r;
 	}
-	r = r600_bc_add_literal(ctx->bc, ctx->value);
-	if (r)
-		return r;
 
 	/* kill must be last in ALU */
 	ctx->bc->force_add_cf = 1;
@@ -1226,24 +1301,14 @@ static int tgsi_lit(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bc_alu alu;
-	struct r600_bc_alu_src r600_src[3];
 	int r;
-
-	r = tgsi_split_constant(ctx, r600_src);
-	if (r)
-		return r;
-	r = tgsi_split_literal_constant(ctx, r600_src);
-	if (r)
-		return r;
 
 	/* dst.x, <- 1.0  */
 	memset(&alu, 0, sizeof(struct r600_bc_alu));
 	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
 	alu.src[0].sel  = V_SQ_ALU_SRC_1; /*1.0*/
 	alu.src[0].chan = 0;
-	r = tgsi_dst(ctx, &inst->Dst[0], 0, &alu.dst);
-	if (r)
-		return r;
+	tgsi_dst(ctx, &inst->Dst[0], 0, &alu.dst);
 	alu.dst.write = (inst->Dst[0].Register.WriteMask >> 0) & 1;
 	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
@@ -1252,12 +1317,10 @@ static int tgsi_lit(struct r600_shader_ctx *ctx)
 	/* dst.y = max(src.x, 0.0) */
 	memset(&alu, 0, sizeof(struct r600_bc_alu));
 	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MAX);
-	alu.src[0] = r600_src[0];
+	r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 	alu.src[1].sel  = V_SQ_ALU_SRC_0; /*0.0*/
 	alu.src[1].chan = 0;
-	r = tgsi_dst(ctx, &inst->Dst[0], 1, &alu.dst);
-	if (r)
-		return r;
+	tgsi_dst(ctx, &inst->Dst[0], 1, &alu.dst);
 	alu.dst.write = (inst->Dst[0].Register.WriteMask >> 1) & 1;
 	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
@@ -1268,16 +1331,10 @@ static int tgsi_lit(struct r600_shader_ctx *ctx)
 	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
 	alu.src[0].sel  = V_SQ_ALU_SRC_1;
 	alu.src[0].chan = 0;
-	r = tgsi_dst(ctx, &inst->Dst[0], 3, &alu.dst);
-	if (r)
-		return r;
+	tgsi_dst(ctx, &inst->Dst[0], 3, &alu.dst);
 	alu.dst.write = (inst->Dst[0].Register.WriteMask >> 3) & 1;
 	alu.last = 1;
 	r = r600_bc_add_alu(ctx->bc, &alu);
-	if (r)
-		return r;
-
-	r = r600_bc_add_literal(ctx->bc, ctx->value);
 	if (r)
 		return r;
 
@@ -1285,23 +1342,38 @@ static int tgsi_lit(struct r600_shader_ctx *ctx)
 	{
 		int chan;
 		int sel;
+		int i;
 
-		/* dst.z = log(src.y) */
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_CLAMPED);
-		alu.src[0] = r600_src[0];
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 1);
-		r = tgsi_dst(ctx, &inst->Dst[0], 2, &alu.dst);
-		if (r)
-			return r;
-		alu.last = 1;
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				/* dst.z = log(src.y) */
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_CLAMPED);
+				r600_bc_src(&alu.src[0], &ctx->src[0], 1);
+				tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+				if (i == 2) {
+					alu.dst.write = 1;
+					alu.last = 1;
+				} else
+					alu.dst.write = 0;
+				
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			/* dst.z = log(src.y) */
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_CLAMPED);
+			r600_bc_src(&alu.src[0], &ctx->src[0], 1);
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.chan = 2;
+			alu.dst.write = 1;
+			alu.last = 1;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 
 		chan = alu.dst.chan;
 		sel = alu.dst.sel;
@@ -1309,13 +1381,11 @@ static int tgsi_lit(struct r600_shader_ctx *ctx)
 		/* tmp.x = amd MUL_LIT(src.w, dst.z, src.x ) */
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP3_SQ_OP3_INST_MUL_LIT);
-		alu.src[0] = r600_src[0];
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 3);
+		r600_bc_src(&alu.src[0], &ctx->src[0], 3);
 		alu.src[1].sel  = sel;
 		alu.src[1].chan = chan;
 
-		alu.src[2] = r600_src[0];
-		alu.src[2].chan = tgsi_chan(&inst->Src[0], 0);
+		r600_bc_src(&alu.src[2], &ctx->src[0], 0);
 		alu.dst.sel = ctx->temp_reg;
 		alu.dst.chan = 0;
 		alu.dst.write = 1;
@@ -1325,21 +1395,35 @@ static int tgsi_lit(struct r600_shader_ctx *ctx)
 		if (r)
 			return r;
 
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
-		/* dst.z = exp(tmp.x) */
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
-		alu.src[0].sel = ctx->temp_reg;
-		alu.src[0].chan = 0;
-		r = tgsi_dst(ctx, &inst->Dst[0], 2, &alu.dst);
-		if (r)
-			return r;
-		alu.last = 1;
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				/* dst.z = exp(tmp.x) */
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
+				alu.src[0].sel = ctx->temp_reg;
+				alu.src[0].chan = 0;
+				tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+				if (i == 2) {
+					alu.dst.write = 1;
+					alu.last = 1;
+				} else
+					alu.dst.write = 0;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			/* dst.z = exp(tmp.x) */
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
+			alu.src[0].sel = ctx->temp_reg;
+			alu.src[0].chan = 0;
+			tgsi_dst(ctx, &inst->Dst[0], 2, &alu.dst);
+			alu.last = 1;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 	}
 	return 0;
 }
@@ -1359,19 +1443,13 @@ static int tgsi_rsq(struct r600_shader_ctx *ctx)
 	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIPSQRT_CLAMPED);
 
 	for (i = 0; i < inst->Instruction.NumSrcRegs; i++) {
-		r = tgsi_src(ctx, &inst->Src[i], &alu.src[i]);
-		if (r)
-			return r;
-		alu.src[i].chan = tgsi_chan(&inst->Src[i], 0);
+		r600_bc_src(&alu.src[i], &ctx->src[i], 0);
 		alu.src[i].abs = 1;
 	}
 	alu.dst.sel = ctx->temp_reg;
 	alu.dst.write = 1;
 	alu.last = 1;
 	r = r600_bc_add_alu(ctx->bc, &alu);
-	if (r)
-		return r;
-	r = r600_bc_add_literal(ctx->bc, ctx->value);
 	if (r)
 		return r;
 	/* replicate result */
@@ -1389,9 +1467,7 @@ static int tgsi_helper_tempx_replicate(struct r600_shader_ctx *ctx)
 		alu.src[0].sel = ctx->temp_reg;
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
 		alu.dst.chan = i;
-		r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
-		if (r)
-			return r;
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 		alu.dst.write = (inst->Dst[0].Register.WriteMask >> i) & 1;
 		if (i == 3)
 			alu.last = 1;
@@ -1411,10 +1487,7 @@ static int tgsi_trans_srcx_replicate(struct r600_shader_ctx *ctx)
 	memset(&alu, 0, sizeof(struct r600_bc_alu));
 	alu.inst = ctx->inst_info->r600_opcode;
 	for (i = 0; i < inst->Instruction.NumSrcRegs; i++) {
-		r = tgsi_src(ctx, &inst->Src[i], &alu.src[i]);
-		if (r)
-			return r;
-		alu.src[i].chan = tgsi_chan(&inst->Src[i], 0);
+		r600_bc_src(&alu.src[i], &ctx->src[i], 0);
 	}
 	alu.dst.sel = ctx->temp_reg;
 	alu.dst.write = 1;
@@ -1422,42 +1495,35 @@ static int tgsi_trans_srcx_replicate(struct r600_shader_ctx *ctx)
 	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
 		return r;
-	r = r600_bc_add_literal(ctx->bc, ctx->value);
-	if (r)
-		return r;
 	/* replicate result */
 	return tgsi_helper_tempx_replicate(ctx);
 }
 
-static int tgsi_pow(struct r600_shader_ctx *ctx)
+static int cayman_pow(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
+	int i, r;
 	struct r600_bc_alu alu;
-	int r;
+	int last_slot = (inst->Dst[0].Register.WriteMask & 0x8) ? 4 : 3;
 
-	/* LOG2(a) */
-	memset(&alu, 0, sizeof(struct r600_bc_alu));
-	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
-	r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-	if (r)
-		return r;
-	alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
-	alu.dst.sel = ctx->temp_reg;
-	alu.dst.write = 1;
-	alu.last = 1;
-	r = r600_bc_add_alu(ctx->bc, &alu);
-	if (r)
-		return r;
-	r = r600_bc_add_literal(ctx->bc,ctx->value);
-	if (r)
-		return r;
+	for (i = 0; i < 3; i++) {
+		memset(&alu, 0, sizeof(struct r600_bc_alu));
+		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
+		r600_bc_src(&alu.src[0], &ctx->src[0], 0);
+		alu.dst.sel = ctx->temp_reg;
+		alu.dst.chan = i;
+		alu.dst.write = 1;
+		if (i == 2)
+			alu.last = 1;
+		r = r600_bc_add_alu(ctx->bc, &alu);
+		if (r)
+			return r;
+	}
+
 	/* b * LOG2(a) */
 	memset(&alu, 0, sizeof(struct r600_bc_alu));
 	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MUL);
-	r = tgsi_src(ctx, &inst->Src[1], &alu.src[0]);
-	if (r)
-		return r;
-	alu.src[0].chan = tgsi_chan(&inst->Src[1], 0);
+	r600_bc_src(&alu.src[0], &ctx->src[1], 0);
 	alu.src[1].sel = ctx->temp_reg;
 	alu.dst.sel = ctx->temp_reg;
 	alu.dst.write = 1;
@@ -1465,7 +1531,48 @@ static int tgsi_pow(struct r600_shader_ctx *ctx)
 	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
 		return r;
-	r = r600_bc_add_literal(ctx->bc,ctx->value);
+
+	for (i = 0; i < last_slot; i++) {
+		/* POW(a,b) = EXP2(b * LOG2(a))*/
+		memset(&alu, 0, sizeof(struct r600_bc_alu));
+		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
+		alu.src[0].sel = ctx->temp_reg;
+
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+		alu.dst.write = (inst->Dst[0].Register.WriteMask >> i) & 1;
+		if (i == last_slot - 1)
+			alu.last = 1;
+		r = r600_bc_add_alu(ctx->bc, &alu);
+		if (r)
+			return r;
+	}
+	return 0;
+}
+
+static int tgsi_pow(struct r600_shader_ctx *ctx)
+{
+	struct r600_bc_alu alu;
+	int r;
+
+	/* LOG2(a) */
+	memset(&alu, 0, sizeof(struct r600_bc_alu));
+	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
+	r600_bc_src(&alu.src[0], &ctx->src[0], 0);
+	alu.dst.sel = ctx->temp_reg;
+	alu.dst.write = 1;
+	alu.last = 1;
+	r = r600_bc_add_alu(ctx->bc, &alu);
+	if (r)
+		return r;
+	/* b * LOG2(a) */
+	memset(&alu, 0, sizeof(struct r600_bc_alu));
+	alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MUL);
+	r600_bc_src(&alu.src[0], &ctx->src[1], 0);
+	alu.src[1].sel = ctx->temp_reg;
+	alu.dst.sel = ctx->temp_reg;
+	alu.dst.write = 1;
+	alu.last = 1;
+	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
 		return r;
 	/* POW(a,b) = EXP2(b * LOG2(a))*/
@@ -1478,9 +1585,6 @@ static int tgsi_pow(struct r600_shader_ctx *ctx)
 	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
 		return r;
-	r = r600_bc_add_literal(ctx->bc,ctx->value);
-	if (r)
-		return r;
 	return tgsi_helper_tempx_replicate(ctx);
 }
 
@@ -1488,15 +1592,7 @@ static int tgsi_ssg(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bc_alu alu;
-	struct r600_bc_alu_src r600_src[3];
 	int i, r;
-
-	r = tgsi_split_constant(ctx, r600_src);
-	if (r)
-		return r;
-	r = tgsi_split_literal_constant(ctx, r600_src);
-	if (r)
-		return r;
 
 	/* tmp = (src > 0 ? 1 : src) */
 	for (i = 0; i < 4; i++) {
@@ -1507,31 +1603,23 @@ static int tgsi_ssg(struct r600_shader_ctx *ctx)
 		alu.dst.sel = ctx->temp_reg;
 		alu.dst.chan = i;
 
-		alu.src[0] = r600_src[0];
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], i);
-
+		r600_bc_src(&alu.src[0], &ctx->src[0], i);
 		alu.src[1].sel = V_SQ_ALU_SRC_1;
+		r600_bc_src(&alu.src[2], &ctx->src[0], i);
 
-		alu.src[2] = r600_src[0];
-		alu.src[2].chan = tgsi_chan(&inst->Src[0], i);
 		if (i == 3)
 			alu.last = 1;
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
 	}
-	r = r600_bc_add_literal(ctx->bc, ctx->value);
-	if (r)
-		return r;
 
 	/* dst = (-tmp > 0 ? -1 : tmp) */
 	for (i = 0; i < 4; i++) {
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP3_SQ_OP3_INST_CNDGT);
 		alu.is_op3 = 1;
-		r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
-		if (r)
-			return r;
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 
 		alu.src[0].sel = ctx->temp_reg;
 		alu.src[0].chan = i;
@@ -1557,9 +1645,6 @@ static int tgsi_helper_copy(struct r600_shader_ctx *ctx, struct tgsi_full_instru
 	struct r600_bc_alu alu;
 	int i, r;
 
-	r = r600_bc_add_literal(ctx->bc, ctx->value);
-	if (r)
-		return r;
 	for (i = 0; i < 4; i++) {
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		if (!(inst->Dst[0].Register.WriteMask & (1 << i))) {
@@ -1567,9 +1652,7 @@ static int tgsi_helper_copy(struct r600_shader_ctx *ctx, struct tgsi_full_instru
 			alu.dst.chan = i;
 		} else {
 			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
-			r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
-			if (r)
-				return r;
+			tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 			alu.src[0].sel = ctx->temp_reg;
 			alu.src[0].chan = i;
 		}
@@ -1586,61 +1669,50 @@ static int tgsi_helper_copy(struct r600_shader_ctx *ctx, struct tgsi_full_instru
 static int tgsi_op3(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu_src r600_src[3];
 	struct r600_bc_alu alu;
 	int i, j, r;
+	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
 
-	r = tgsi_split_constant(ctx, r600_src);
-	if (r)
-		return r;
-	r = tgsi_split_literal_constant(ctx, r600_src);
-	if (r)
-		return r;
-	/* do it in 2 step as op3 doesn't support writemask */
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < lasti + 1; i++) {
+		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
+			continue;
+
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = ctx->inst_info->r600_opcode;
 		for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
-			alu.src[j] = r600_src[j];
-			alu.src[j].chan = tgsi_chan(&inst->Src[j], i);
+			r600_bc_src(&alu.src[j], &ctx->src[j], i);
 		}
-		alu.dst.sel = ctx->temp_reg;
+
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 		alu.dst.chan = i;
 		alu.dst.write = 1;
 		alu.is_op3 = 1;
-		if (i == 3) {
+		if (i == lasti) {
 			alu.last = 1;
 		}
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
 	}
-	return tgsi_helper_copy(ctx, inst);
+	return 0;
 }
 
 static int tgsi_dp(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu_src r600_src[3];
 	struct r600_bc_alu alu;
 	int i, j, r;
 
-	r = tgsi_split_constant(ctx, r600_src);
-	if (r)
-		return r;
-	r = tgsi_split_literal_constant(ctx, r600_src);
-	if (r)
-		return r;
 	for (i = 0; i < 4; i++) {
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = ctx->inst_info->r600_opcode;
 		for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
-			alu.src[j] = r600_src[j];
-			alu.src[j].chan = tgsi_chan(&inst->Src[j], i);
+			r600_bc_src(&alu.src[j], &ctx->src[j], i);
 		}
-		alu.dst.sel = ctx->temp_reg;
+
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 		alu.dst.chan = i;
-		alu.dst.write = 1;
+		alu.dst.write = (inst->Dst[0].Register.WriteMask >> i) & 1;
 		/* handle some special cases */
 		switch (ctx->inst_info->tgsi_opcode) {
 		case TGSI_OPCODE_DP2:
@@ -1672,48 +1744,137 @@ static int tgsi_dp(struct r600_shader_ctx *ctx)
 		if (r)
 			return r;
 	}
-	return tgsi_helper_copy(ctx, inst);
+	return 0;
+}
+
+static inline boolean tgsi_tex_src_requires_loading(struct r600_shader_ctx *ctx,
+						    unsigned index)
+{
+	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
+	return 	(inst->Src[index].Register.File != TGSI_FILE_TEMPORARY &&
+		inst->Src[index].Register.File != TGSI_FILE_INPUT) ||
+		ctx->src[index].neg || ctx->src[index].abs;
+}
+
+static inline unsigned tgsi_tex_get_src_gpr(struct r600_shader_ctx *ctx,
+					unsigned index)
+{
+	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
+	return ctx->file_offset[inst->Src[index].Register.File] + inst->Src[index].Register.Index;
 }
 
 static int tgsi_tex(struct r600_shader_ctx *ctx)
 {
+	static float one_point_five = 1.5f;
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bc_tex tex;
 	struct r600_bc_alu alu;
 	unsigned src_gpr;
-	int r, i;
+	int r, i, j;
 	int opcode;
-	boolean src_not_temp = inst->Src[0].Register.File != TGSI_FILE_TEMPORARY;
-	uint32_t lit_vals[4];
+	/* Texture fetch instructions can only use gprs as source.
+	 * Also they cannot negate the source or take the absolute value */
+	const boolean src_requires_loading = tgsi_tex_src_requires_loading(ctx, 0);
+	boolean src_loaded = FALSE;
+	unsigned sampler_src_reg = 1;
 
-	src_gpr = ctx->file_offset[inst->Src[0].Register.File] + inst->Src[0].Register.Index;
+	src_gpr = tgsi_tex_get_src_gpr(ctx, 0);
 
-	if (inst->Instruction.Opcode == TGSI_OPCODE_TXP) {
+	if (inst->Instruction.Opcode == TGSI_OPCODE_TXD) {
+		/* TGSI moves the sampler to src reg 3 for TXD */
+		sampler_src_reg = 3;
+
+		for (i = 1; i < 3; i++) {
+			/* set gradients h/v */
+			memset(&tex, 0, sizeof(struct r600_bc_tex));
+			tex.inst = (i == 1) ? SQ_TEX_INST_SET_GRADIENTS_H :
+				SQ_TEX_INST_SET_GRADIENTS_V;
+			tex.sampler_id = tgsi_tex_get_src_gpr(ctx, sampler_src_reg);
+			tex.resource_id = tex.sampler_id + R600_MAX_CONST_BUFFERS;
+
+			if (tgsi_tex_src_requires_loading(ctx, i)) {
+				tex.src_gpr = r600_get_temp(ctx);
+				tex.src_sel_x = 0;
+				tex.src_sel_y = 1;
+				tex.src_sel_z = 2;
+				tex.src_sel_w = 3;
+
+				for (j = 0; j < 4; j++) {
+					memset(&alu, 0, sizeof(struct r600_bc_alu));
+					alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
+                                        r600_bc_src(&alu.src[0], &ctx->src[i], j);
+                                        alu.dst.sel = tex.src_gpr;
+                                        alu.dst.chan = j;
+                                        if (j == 3)
+                                                alu.last = 1;
+                                        alu.dst.write = 1;
+                                        r = r600_bc_add_alu(ctx->bc, &alu);
+                                        if (r)
+                                                return r;
+				}
+
+			} else {
+				tex.src_gpr = tgsi_tex_get_src_gpr(ctx, i);
+				tex.src_sel_x = ctx->src[i].swizzle[0];
+				tex.src_sel_y = ctx->src[i].swizzle[1];
+				tex.src_sel_z = ctx->src[i].swizzle[2];
+				tex.src_sel_w = ctx->src[i].swizzle[3];
+				tex.src_rel = ctx->src[i].rel;
+			}
+			tex.dst_gpr = ctx->temp_reg; /* just to avoid confusing the asm scheduler */
+			tex.dst_sel_x = tex.dst_sel_y = tex.dst_sel_z = tex.dst_sel_w = 7;
+			if (inst->Texture.Texture != TGSI_TEXTURE_RECT) {
+				tex.coord_type_x = 1;
+				tex.coord_type_y = 1;
+				tex.coord_type_z = 1;
+				tex.coord_type_w = 1;
+			}
+			r = r600_bc_add_tex(ctx->bc, &tex);
+			if (r)
+				return r;
+		}
+	} else if (inst->Instruction.Opcode == TGSI_OPCODE_TXP) {
+		int out_chan;
 		/* Add perspective divide */
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE);
-		r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			out_chan = 2;
+			for (i = 0; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE);
+				r600_bc_src(&alu.src[0], &ctx->src[0], 3);
 
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 3);
-		alu.dst.sel = ctx->temp_reg;
-		alu.dst.chan = 3;
-		alu.last = 1;
-		alu.dst.write = 1;
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = i;
+				if (i == 2)
+					alu.last = 1;
+				if (out_chan == i)
+					alu.dst.write = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+
+		} else {
+			out_chan = 3;
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE);
+			r600_bc_src(&alu.src[0], &ctx->src[0], 3);
+
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.chan = out_chan;
+			alu.last = 1;
+			alu.dst.write = 1;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 
 		for (i = 0; i < 3; i++) {
 			memset(&alu, 0, sizeof(struct r600_bc_alu));
 			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MUL);
 			alu.src[0].sel = ctx->temp_reg;
-			alu.src[0].chan = 3;
-			r = tgsi_src(ctx, &inst->Src[0], &alu.src[1]);
-			if (r)
-				return r;
-			alu.src[1].chan = tgsi_chan(&inst->Src[0], i);
+			alu.src[0].chan = out_chan;
+			r600_bc_src(&alu.src[1], &ctx->src[0], i);
 			alu.dst.sel = ctx->temp_reg;
 			alu.dst.chan = i;
 			alu.dst.write = 1;
@@ -1732,48 +1893,20 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
-		src_not_temp = FALSE;
+		src_loaded = TRUE;
 		src_gpr = ctx->temp_reg;
 	}
 
 	if (inst->Texture.Texture == TGSI_TEXTURE_CUBE) {
-		int src_chan, src2_chan;
+		static const unsigned src0_swizzle[] = {2, 2, 0, 1};
+		static const unsigned src1_swizzle[] = {1, 0, 2, 2};
 
 		/* tmp1.xyzw = CUBE(R0.zzxy, R0.yxzz) */
 		for (i = 0; i < 4; i++) {
 			memset(&alu, 0, sizeof(struct r600_bc_alu));
 			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_CUBE);
-			switch (i) {
-			case 0:
-				src_chan = 2;
-				src2_chan = 1;
-				break;
-			case 1:
-				src_chan = 2;
-				src2_chan = 0;
-				break;
-			case 2:
-				src_chan = 0;
-				src2_chan = 2;
-				break;
-			case 3:
-				src_chan = 1;
-				src2_chan = 2;
-				break;
-			default:
-				assert(0);
-				src_chan = 0;
-				src2_chan = 0;
-				break;
-			}
-			r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-			if (r)
-				return r;
-			alu.src[0].chan = tgsi_chan(&inst->Src[0], src_chan);
-			r = tgsi_src(ctx, &inst->Src[0], &alu.src[1]);
-			if (r)
-				return r;
-			alu.src[1].chan = tgsi_chan(&inst->Src[0], src2_chan);
+			r600_bc_src(&alu.src[0], &ctx->src[0], src0_swizzle[i]);
+			r600_bc_src(&alu.src[1], &ctx->src[0], src1_swizzle[i]);
 			alu.dst.sel = ctx->temp_reg;
 			alu.dst.chan = i;
 			if (i == 3)
@@ -1785,18 +1918,37 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		}
 
 		/* tmp1.z = RCP_e(|tmp1.z|) */
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE);
-		alu.src[0].sel = ctx->temp_reg;
-		alu.src[0].chan = 2;
-		alu.src[0].abs = 1;
-		alu.dst.sel = ctx->temp_reg;
-		alu.dst.chan = 2;
-		alu.dst.write = 1;
-		alu.last = 1;
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE);
+				alu.src[0].sel = ctx->temp_reg;
+				alu.src[0].chan = 2;
+				alu.src[0].abs = 1;
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = i;
+				if (i == 2)
+					alu.dst.write = 1;
+				if (i == 2)
+					alu.last = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE);
+			alu.src[0].sel = ctx->temp_reg;
+			alu.src[0].chan = 2;
+			alu.src[0].abs = 1;
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.chan = 2;
+			alu.dst.write = 1;
+			alu.last = 1;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 
 		/* MULADD R0.x,  R0.x,  PS1,  (0x3FC00000, 1.5f).x
 		 * MULADD R0.y,  R0.y,  PS1,  (0x3FC00000, 1.5f).x
@@ -1813,6 +1965,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 
 		alu.src[2].sel = V_SQ_ALU_SRC_LITERAL;
 		alu.src[2].chan = 0;
+		alu.src[2].value = *(uint32_t *)&one_point_five;
 
 		alu.dst.sel = ctx->temp_reg;
 		alu.dst.chan = 0;
@@ -1833,6 +1986,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 
 		alu.src[2].sel = V_SQ_ALU_SRC_LITERAL;
 		alu.src[2].chan = 0;
+		alu.src[2].value = *(uint32_t *)&one_point_five;
 
 		alu.dst.sel = ctx->temp_reg;
 		alu.dst.chan = 1;
@@ -1843,21 +1997,15 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		if (r)
 			return r;
 
-		lit_vals[0] = fui(1.5f);
-
-		r = r600_bc_add_literal(ctx->bc, lit_vals);
-		if (r)
-			return r;
-		src_not_temp = FALSE;
+		src_loaded = TRUE;
 		src_gpr = ctx->temp_reg;
 	}
 
-	if (src_not_temp) {
+	if (src_requires_loading && !src_loaded) {
 		for (i = 0; i < 4; i++) {
 			memset(&alu, 0, sizeof(struct r600_bc_alu));
 			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV);
-			alu.src[0].sel = src_gpr;
-			alu.src[0].chan = tgsi_chan(&inst->Src[0], i);
+			r600_bc_src(&alu.src[0], &ctx->src[0], i);
 			alu.dst.sel = ctx->temp_reg;
 			alu.dst.chan = i;
 			if (i == 3)
@@ -1867,28 +2015,48 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 			if (r)
 				return r;
 		}
+		src_loaded = TRUE;
 		src_gpr = ctx->temp_reg;
 	}
 
 	opcode = ctx->inst_info->r600_opcode;
-	if (opcode == SQ_TEX_INST_SAMPLE &&
-	    (inst->Texture.Texture == TGSI_TEXTURE_SHADOW1D || inst->Texture.Texture == TGSI_TEXTURE_SHADOW2D))
-		opcode = SQ_TEX_INST_SAMPLE_C;
+	if (inst->Texture.Texture == TGSI_TEXTURE_SHADOW1D || inst->Texture.Texture == TGSI_TEXTURE_SHADOW2D) {
+		switch (opcode) {
+		case SQ_TEX_INST_SAMPLE:
+			opcode = SQ_TEX_INST_SAMPLE_C;
+			break;
+		case SQ_TEX_INST_SAMPLE_L:
+			opcode = SQ_TEX_INST_SAMPLE_C_L;
+			break;
+		case SQ_TEX_INST_SAMPLE_G:
+			opcode = SQ_TEX_INST_SAMPLE_C_G;
+			break;
+		}
+	}
 
 	memset(&tex, 0, sizeof(struct r600_bc_tex));
 	tex.inst = opcode;
-	tex.sampler_id = ctx->file_offset[inst->Src[1].Register.File] + inst->Src[1].Register.Index;
-	tex.resource_id = tex.sampler_id;
+
+	tex.sampler_id = tgsi_tex_get_src_gpr(ctx, sampler_src_reg);
+	tex.resource_id = tex.sampler_id + R600_MAX_CONST_BUFFERS;
 	tex.src_gpr = src_gpr;
 	tex.dst_gpr = ctx->file_offset[inst->Dst[0].Register.File] + inst->Dst[0].Register.Index;
 	tex.dst_sel_x = (inst->Dst[0].Register.WriteMask & 1) ? 0 : 7;
 	tex.dst_sel_y = (inst->Dst[0].Register.WriteMask & 2) ? 1 : 7;
 	tex.dst_sel_z = (inst->Dst[0].Register.WriteMask & 4) ? 2 : 7;
 	tex.dst_sel_w = (inst->Dst[0].Register.WriteMask & 8) ? 3 : 7;
-	tex.src_sel_x = 0;
-	tex.src_sel_y = 1;
-	tex.src_sel_z = 2;
-	tex.src_sel_w = 3;
+	if (src_loaded) {
+		tex.src_sel_x = 0;
+		tex.src_sel_y = 1;
+		tex.src_sel_z = 2;
+		tex.src_sel_w = 3;
+	} else {
+		tex.src_sel_x = ctx->src[0].swizzle[0];
+		tex.src_sel_y = ctx->src[0].swizzle[1];
+		tex.src_sel_z = ctx->src[0].swizzle[2];
+		tex.src_sel_w = ctx->src[0].swizzle[3];
+		tex.src_rel = ctx->src[0].rel;
+	}
 
 	if (inst->Texture.Texture == TGSI_TEXTURE_CUBE) {
 		tex.src_sel_x = 1;
@@ -1904,8 +2072,14 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		tex.coord_type_w = 1;
 	}
 
+	if (inst->Texture.Texture == TGSI_TEXTURE_1D_ARRAY) {
+		tex.coord_type_z = 0;
+		tex.src_sel_z = tex.src_sel_y;
+	} else if (inst->Texture.Texture == TGSI_TEXTURE_2D_ARRAY)
+		tex.coord_type_z = 0;
+
 	if (inst->Texture.Texture == TGSI_TEXTURE_SHADOW1D || inst->Texture.Texture == TGSI_TEXTURE_SHADOW2D)
-		tex.src_sel_w = 2;
+		tex.src_sel_w = tex.src_sel_z;
 
 	r = r600_bc_add_tex(ctx->bc, &tex);
 	if (r)
@@ -1918,29 +2092,48 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 static int tgsi_lrp(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu_src r600_src[3];
 	struct r600_bc_alu alu;
+	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
 	unsigned i;
 	int r;
 
-	r = tgsi_split_constant(ctx, r600_src);
-	if (r)
-		return r;
-	r = tgsi_split_literal_constant(ctx, r600_src);
-	if (r)
-		return r;
+	/* optimize if it's just an equal balance */
+	if (ctx->src[0].sel == V_SQ_ALU_SRC_0_5) {
+		for (i = 0; i < lasti + 1; i++) {
+			if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
+				continue;
+
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_ADD);
+			r600_bc_src(&alu.src[0], &ctx->src[1], i);
+			r600_bc_src(&alu.src[1], &ctx->src[2], i);
+			alu.omod = 3;
+			tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+			alu.dst.chan = i;
+			if (i == lasti) {
+				alu.last = 1;
+			}
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
+		return 0;
+	}
+
 	/* 1 - src0 */
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < lasti + 1; i++) {
+		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
+			continue;
+
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_ADD);
 		alu.src[0].sel = V_SQ_ALU_SRC_1;
 		alu.src[0].chan = 0;
-		alu.src[1] = r600_src[0];
-		alu.src[1].chan = tgsi_chan(&inst->Src[0], i);
+		r600_bc_src(&alu.src[1], &ctx->src[0], i);
 		alu.src[1].neg = 1;
 		alu.dst.sel = ctx->temp_reg;
 		alu.dst.chan = i;
-		if (i == 3) {
+		if (i == lasti) {
 			alu.last = 1;
 		}
 		alu.dst.write = 1;
@@ -1948,21 +2141,20 @@ static int tgsi_lrp(struct r600_shader_ctx *ctx)
 		if (r)
 			return r;
 	}
-	r = r600_bc_add_literal(ctx->bc, ctx->value);
-	if (r)
-		return r;
 
 	/* (1 - src0) * src2 */
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < lasti + 1; i++) {
+		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
+			continue;
+
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MUL);
 		alu.src[0].sel = ctx->temp_reg;
 		alu.src[0].chan = i;
-		alu.src[1] = r600_src[2];
-		alu.src[1].chan = tgsi_chan(&inst->Src[2], i);
+		r600_bc_src(&alu.src[1], &ctx->src[2], i);
 		alu.dst.sel = ctx->temp_reg;
 		alu.dst.chan = i;
-		if (i == 3) {
+		if (i == lasti) {
 			alu.last = 1;
 		}
 		alu.dst.write = 1;
@@ -1970,88 +2162,66 @@ static int tgsi_lrp(struct r600_shader_ctx *ctx)
 		if (r)
 			return r;
 	}
-	r = r600_bc_add_literal(ctx->bc, ctx->value);
-	if (r)
-		return r;
 
 	/* src0 * src1 + (1 - src0) * src2 */
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < lasti + 1; i++) {
+		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
+			continue;
+
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP3_SQ_OP3_INST_MULADD);
 		alu.is_op3 = 1;
-		alu.src[0] = r600_src[0];
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], i);
-		alu.src[1] = r600_src[1];
-		alu.src[1].chan = tgsi_chan(&inst->Src[1], i);
+		r600_bc_src(&alu.src[0], &ctx->src[0], i);
+		r600_bc_src(&alu.src[1], &ctx->src[1], i);
 		alu.src[2].sel = ctx->temp_reg;
 		alu.src[2].chan = i;
-		alu.dst.sel = ctx->temp_reg;
+
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 		alu.dst.chan = i;
-		if (i == 3) {
+		if (i == lasti) {
 			alu.last = 1;
 		}
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
 	}
-	return tgsi_helper_copy(ctx, inst);
+	return 0;
 }
 
 static int tgsi_cmp(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu_src r600_src[3];
 	struct r600_bc_alu alu;
-	int use_temp = 0;
 	int i, r;
+	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
 
-	r = tgsi_split_constant(ctx, r600_src);
-	if (r)
-		return r;
-	r = tgsi_split_literal_constant(ctx, r600_src);
-	if (r)
-		return r;
+	for (i = 0; i < lasti + 1; i++) {
+		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
+			continue;
 
-	if (inst->Dst[0].Register.WriteMask != 0xf)
-		use_temp = 1;
-
-	for (i = 0; i < 4; i++) {
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP3_SQ_OP3_INST_CNDGE);
-		alu.src[0] = r600_src[0];
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], i);
-
-		alu.src[1] = r600_src[2];
-		alu.src[1].chan = tgsi_chan(&inst->Src[2], i);
-
-		alu.src[2] = r600_src[1];
-		alu.src[2].chan = tgsi_chan(&inst->Src[1], i);
-
-		if (use_temp)
-			alu.dst.sel = ctx->temp_reg;
-		else {
-			r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
-			if (r)
-				return r;
-		}
+		r600_bc_src(&alu.src[0], &ctx->src[0], i);
+		r600_bc_src(&alu.src[1], &ctx->src[2], i);
+		r600_bc_src(&alu.src[2], &ctx->src[1], i);
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 		alu.dst.chan = i;
 		alu.dst.write = 1;
 		alu.is_op3 = 1;
-		if (i == 3)
+		if (i == lasti)
 			alu.last = 1;
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
 	}
-	if (use_temp)
-		return tgsi_helper_copy(ctx, inst);
 	return 0;
 }
 
 static int tgsi_xpd(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu_src r600_src[3];
+	static const unsigned int src0_swizzle[] = {2, 0, 1};
+	static const unsigned int src1_swizzle[] = {1, 2, 0};
 	struct r600_bc_alu alu;
 	uint32_t use_temp = 0;
 	int i, r;
@@ -2059,45 +2229,15 @@ static int tgsi_xpd(struct r600_shader_ctx *ctx)
 	if (inst->Dst[0].Register.WriteMask != 0xf)
 		use_temp = 1;
 
-	r = tgsi_split_constant(ctx, r600_src);
-	if (r)
-		return r;
-	r = tgsi_split_literal_constant(ctx, r600_src);
-	if (r)
-		return r;
-
 	for (i = 0; i < 4; i++) {
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MUL);
-
-		alu.src[0] = r600_src[0];
-		switch (i) {
-		case 0:
-			alu.src[0].chan = tgsi_chan(&inst->Src[0], 2);
-			break;
-		case 1:
-			alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
-			break;
-		case 2:
-			alu.src[0].chan = tgsi_chan(&inst->Src[0], 1);
-			break;
-		case 3:
+		if (i < 3) {
+			r600_bc_src(&alu.src[0], &ctx->src[0], src0_swizzle[i]);
+			r600_bc_src(&alu.src[1], &ctx->src[1], src1_swizzle[i]);
+		} else {
 			alu.src[0].sel = V_SQ_ALU_SRC_0;
 			alu.src[0].chan = i;
-		}
-
-		alu.src[1] = r600_src[1];
-		switch (i) {
-		case 0:
-			alu.src[1].chan = tgsi_chan(&inst->Src[1], 1);
-			break;
-		case 1:
-			alu.src[1].chan = tgsi_chan(&inst->Src[1], 2);
-			break;
-		case 2:
-			alu.src[1].chan = tgsi_chan(&inst->Src[1], 0);
-			break;
-		case 3:
 			alu.src[1].sel = V_SQ_ALU_SRC_0;
 			alu.src[1].chan = i;
 		}
@@ -2111,44 +2251,18 @@ static int tgsi_xpd(struct r600_shader_ctx *ctx)
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
 	}
 
 	for (i = 0; i < 4; i++) {
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP3_SQ_OP3_INST_MULADD);
 
-		alu.src[0] = r600_src[0];
-		switch (i) {
-		case 0:
-			alu.src[0].chan = tgsi_chan(&inst->Src[0], 1);
-			break;
-		case 1:
-			alu.src[0].chan = tgsi_chan(&inst->Src[0], 2);
-			break;
-		case 2:
-			alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
-			break;
-		case 3:
+		if (i < 3) {
+			r600_bc_src(&alu.src[0], &ctx->src[0], src1_swizzle[i]);
+			r600_bc_src(&alu.src[1], &ctx->src[1], src0_swizzle[i]);
+		} else {
 			alu.src[0].sel = V_SQ_ALU_SRC_0;
 			alu.src[0].chan = i;
-		}
-
-		alu.src[1] = r600_src[1];
-		switch (i) {
-		case 0:
-			alu.src[1].chan = tgsi_chan(&inst->Src[1], 2);
-			break;
-		case 1:
-			alu.src[1].chan = tgsi_chan(&inst->Src[1], 0);
-			break;
-		case 2:
-			alu.src[1].chan = tgsi_chan(&inst->Src[1], 1);
-			break;
-		case 3:
 			alu.src[1].sel = V_SQ_ALU_SRC_0;
 			alu.src[1].chan = i;
 		}
@@ -2159,21 +2273,14 @@ static int tgsi_xpd(struct r600_shader_ctx *ctx)
 
 		if (use_temp)
 			alu.dst.sel = ctx->temp_reg;
-		else {
-			r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
-			if (r)
-				return r;
-		}
+		else
+			tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 		alu.dst.chan = i;
 		alu.dst.write = 1;
 		alu.is_op3 = 1;
 		if (i == 3)
 			alu.last = 1;
 		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
 		if (r)
 			return r;
 	}
@@ -2185,20 +2292,16 @@ static int tgsi_xpd(struct r600_shader_ctx *ctx)
 static int tgsi_exp(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
-	struct r600_bc_alu_src r600_src[3] = { { 0 } };
 	struct r600_bc_alu alu;
 	int r;
+	int i;
 
 	/* result.x = 2^floor(src); */
 	if (inst->Dst[0].Register.WriteMask & 1) {
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_FLOOR);
-		r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-		if (r)
-			return r;
-
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+		r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
 		alu.dst.sel = ctx->temp_reg;
 		alu.dst.chan = 0;
@@ -2208,25 +2311,35 @@ static int tgsi_exp(struct r600_shader_ctx *ctx)
 		if (r)
 			return r;
 
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
+				alu.src[0].sel = ctx->temp_reg;
+				alu.src[0].chan = 0;
 
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
-		alu.src[0].sel = ctx->temp_reg;
-		alu.src[0].chan = 0;
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = i;
+				if (i == 0)
+					alu.dst.write = 1;
+				if (i == 2)
+					alu.last = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
+			alu.src[0].sel = ctx->temp_reg;
+			alu.src[0].chan = 0;
 
-		alu.dst.sel = ctx->temp_reg;
-		alu.dst.chan = 0;
-		alu.dst.write = 1;
-		alu.last = 1;
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.chan = 0;
+			alu.dst.write = 1;
+			alu.last = 1;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 	}
 
 	/* result.y = tmp - floor(tmp); */
@@ -2234,16 +2347,14 @@ static int tgsi_exp(struct r600_shader_ctx *ctx)
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_FRACT);
-		alu.src[0] = r600_src[0];
-		r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-		if (r)
-			return r;
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+		r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
 		alu.dst.sel = ctx->temp_reg;
-//		r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
-//		if (r)
-//			return r;
+#if 0
+		r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+		if (r)
+			return r;
+#endif
 		alu.dst.write = 1;
 		alu.dst.chan = 1;
 
@@ -2252,32 +2363,42 @@ static int tgsi_exp(struct r600_shader_ctx *ctx)
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
 	}
 
 	/* result.z = RoughApprox2ToX(tmp);*/
 	if ((inst->Dst[0].Register.WriteMask >> 2) & 0x1) {
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
-		r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-		if (r)
-			return r;
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
+				r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
-		alu.dst.sel = ctx->temp_reg;
-		alu.dst.write = 1;
-		alu.dst.chan = 2;
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = i;
+				if (i == 2) {
+					alu.dst.write = 1;
+					alu.last = 1;
+				}
 
-		alu.last = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
+			r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.write = 1;
+			alu.dst.chan = 2;
+
+			alu.last = 1;
+
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 	}
 
 	/* result.w = 1.0;*/
@@ -2295,9 +2416,6 @@ static int tgsi_exp(struct r600_shader_ctx *ctx)
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
 	}
 	return tgsi_helper_copy(ctx, inst);
 }
@@ -2307,29 +2425,42 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bc_alu alu;
 	int r;
+	int i;
 
 	/* result.x = floor(log2(src)); */
 	if (inst->Dst[0].Register.WriteMask & 1) {
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
 
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
-		r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-		if (r)
-			return r;
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
+				r600_bc_src(&alu.src[0], &ctx->src[0], 0);
+			
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = i;
+				if (i == 0) 
+					alu.dst.write = 1;
+				if (i == 2)
+					alu.last = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
 
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+		} else {
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
 
-		alu.dst.sel = ctx->temp_reg;
-		alu.dst.chan = 0;
-		alu.dst.write = 1;
-		alu.last = 1;
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
+			r600_bc_src(&alu.src[0], &ctx->src[0], 0);
+			
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.chan = 0;
+			alu.dst.write = 1;
+			alu.last = 1;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_FLOOR);
 		alu.src[0].sel = ctx->temp_reg;
@@ -2343,35 +2474,44 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
 	}
 
 	/* result.y = src.x / (2 ^ floor(log2(src.x))); */
 	if ((inst->Dst[0].Register.WriteMask >> 1) & 1) {
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
 
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
-		r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
 
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
+				r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
-		alu.dst.sel = ctx->temp_reg;
-		alu.dst.chan = 1;
-		alu.dst.write = 1;
-		alu.last = 1;
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = i;
+				if (i == 1)
+					alu.dst.write = 1;
+				if (i == 2)
+					alu.last = 1;
+				
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;	
+			}
+		} else {
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
 
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
+			r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.chan = 1;
+			alu.dst.write = 1;
+			alu.last = 1;
+
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 
@@ -2388,57 +2528,79 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 		if (r)
 			return r;
 
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
+				alu.src[0].sel = ctx->temp_reg;
+				alu.src[0].chan = 1;
 
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = i;
+				if (i == 1)
+					alu.dst.write = 1;
+				if (i == 2)
+					alu.last = 1;
 
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
-		alu.src[0].sel = ctx->temp_reg;
-		alu.src[0].chan = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE);
+			alu.src[0].sel = ctx->temp_reg;
+			alu.src[0].chan = 1;
 
-		alu.dst.sel = ctx->temp_reg;
-		alu.dst.chan = 1;
-		alu.dst.write = 1;
-		alu.last = 1;
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.chan = 1;
+			alu.dst.write = 1;
+			alu.last = 1;
 
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE);
+				alu.src[0].sel = ctx->temp_reg;
+				alu.src[0].chan = 1;
 
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = i;
+				if (i == 1)
+					alu.dst.write = 1;
+				if (i == 2)
+					alu.last = 1;
+				
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE);
+			alu.src[0].sel = ctx->temp_reg;
+			alu.src[0].chan = 1;
 
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE);
-		alu.src[0].sel = ctx->temp_reg;
-		alu.src[0].chan = 1;
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.chan = 1;
+			alu.dst.write = 1;
+			alu.last = 1;
 
-		alu.dst.sel = ctx->temp_reg;
-		alu.dst.chan = 1;
-		alu.dst.write = 1;
-		alu.last = 1;
-
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MUL);
 
-		r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-		if (r)
-			return r;
-
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+		r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
 		alu.src[1].sel = ctx->temp_reg;
 		alu.src[1].chan = 1;
@@ -2451,35 +2613,43 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
 	}
 
 	/* result.z = log2(src);*/
 	if ((inst->Dst[0].Register.WriteMask >> 2) & 1) {
-		memset(&alu, 0, sizeof(struct r600_bc_alu));
+		if (ctx->bc->chiprev == CHIPREV_CAYMAN) {
+			for (i = 0; i < 3; i++) {
+				memset(&alu, 0, sizeof(struct r600_bc_alu));
 
-		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
-		r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-		if (r)
-			return r;
+				alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
+				r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
-		alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+				alu.dst.sel = ctx->temp_reg;
+				if (i == 2)
+					alu.dst.write = 1;
+				alu.dst.chan = i;
+				if (i == 2)
+					alu.last = 1;
 
-		alu.dst.sel = ctx->temp_reg;
-		alu.dst.write = 1;
-		alu.dst.chan = 2;
-		alu.last = 1;
+				r = r600_bc_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+			}
+		} else {
+			memset(&alu, 0, sizeof(struct r600_bc_alu));
 
-		r = r600_bc_add_alu(ctx->bc, &alu);
-		if (r)
-			return r;
+			alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE);
+			r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.write = 1;
+			alu.dst.chan = 2;
+			alu.last = 1;
+
+			r = r600_bc_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 	}
 
 	/* result.w = 1.0; */
@@ -2498,10 +2668,6 @@ static int tgsi_log(struct r600_shader_ctx *ctx)
 		r = r600_bc_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
-
-		r = r600_bc_add_literal(ctx->bc, ctx->value);
-		if (r)
-			return r;
 	}
 
 	return tgsi_helper_copy(ctx, inst);
@@ -2512,6 +2678,7 @@ static int tgsi_eg_arl(struct r600_shader_ctx *ctx)
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bc_alu alu;
 	int r;
+
 	memset(&alu, 0, sizeof(struct r600_bc_alu));
 
 	switch (inst->Instruction.Opcode) {
@@ -2526,26 +2693,26 @@ static int tgsi_eg_arl(struct r600_shader_ctx *ctx)
 		return -1;
 	}
 
-	r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-	if (r)
-		return r;
-	alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+	r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 	alu.last = 1;
-	alu.dst.chan = 0;
-	alu.dst.sel = ctx->temp_reg;
+	alu.dst.sel = ctx->ar_reg;
 	alu.dst.write = 1;
-	r = r600_bc_add_alu_type(ctx->bc, &alu, CTX_INST(V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU));
+	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
 		return r;
+
+	/* TODO: Note that the MOVA can be avoided if we never use AR for
+	 * indexing non-CB registers in the current ALU clause. Similarly, we
+	 * need to load AR from ar_reg again if we started a new clause
+	 * between ARL and AR usage. The easy way to do that is to remove
+	 * the MOVA here, and load it for the first AR access after ar_reg
+	 * has been modified in each clause. */
 	memset(&alu, 0, sizeof(struct r600_bc_alu));
 	alu.inst = EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOVA_INT;
-	r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-	if (r)
-		return r;
-	alu.src[0].sel = ctx->temp_reg;
+	alu.src[0].sel = ctx->ar_reg;
 	alu.src[0].chan = 0;
 	alu.last = 1;
-	r = r600_bc_add_alu_type(ctx->bc, &alu, CTX_INST(V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU));
+	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
 		return r;
 	return 0;
@@ -2556,29 +2723,51 @@ static int tgsi_r600_arl(struct r600_shader_ctx *ctx)
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bc_alu alu;
 	int r;
-	memset(&alu, 0, sizeof(struct r600_bc_alu));
 
 	switch (inst->Instruction.Opcode) {
 	case TGSI_OPCODE_ARL:
-		alu.inst = V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOVA_FLOOR;
+		memset(&alu, 0, sizeof(alu));
+		alu.inst = V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_FLOOR;
+		r600_bc_src(&alu.src[0], &ctx->src[0], 0);
+		alu.dst.sel = ctx->ar_reg;
+		alu.dst.write = 1;
+		alu.last = 1;
+
+		if ((r = r600_bc_add_alu(ctx->bc, &alu)))
+			return r;
+
+		memset(&alu, 0, sizeof(alu));
+		alu.inst = V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_FLT_TO_INT;
+		alu.src[0].sel = ctx->ar_reg;
+		alu.dst.sel = ctx->ar_reg;
+		alu.dst.write = 1;
+		alu.last = 1;
+
+		if ((r = r600_bc_add_alu(ctx->bc, &alu)))
+			return r;
 		break;
 	case TGSI_OPCODE_ARR:
-		alu.inst = V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOVA;
+		memset(&alu, 0, sizeof(alu));
+		alu.inst = V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_FLT_TO_INT;
+		r600_bc_src(&alu.src[0], &ctx->src[0], 0);
+		alu.dst.sel = ctx->ar_reg;
+		alu.dst.write = 1;
+		alu.last = 1;
+
+		if ((r = r600_bc_add_alu(ctx->bc, &alu)))
+			return r;
 		break;
 	default:
 		assert(0);
 		return -1;
 	}
 
-
-	r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-	if (r)
-		return r;
-	alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
-
+	memset(&alu, 0, sizeof(alu));
+	alu.inst = V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOVA_INT;
+	alu.src[0].sel = ctx->ar_reg;
 	alu.last = 1;
 
-	r = r600_bc_add_alu_type(ctx->bc, &alu, CTX_INST(V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU));
+	r = r600_bc_add_alu(ctx->bc, &alu);
 	if (r)
 		return r;
 	ctx->bc->cf_last->r6xx_uses_waterfall = 1;
@@ -2595,26 +2784,18 @@ static int tgsi_opdst(struct r600_shader_ctx *ctx)
 		memset(&alu, 0, sizeof(struct r600_bc_alu));
 
 		alu.inst = CTX_INST(V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MUL);
-		r = tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
-		if (r)
-			return r;
+		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 
 		if (i == 0 || i == 3) {
 			alu.src[0].sel = V_SQ_ALU_SRC_1;
 		} else {
-			r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-			if (r)
-				return r;
-			alu.src[0].chan = tgsi_chan(&inst->Src[0], i);
+			r600_bc_src(&alu.src[0], &ctx->src[0], i);
 		}
 
-	        if (i == 0 || i == 2) {
+		if (i == 0 || i == 2) {
 			alu.src[1].sel = V_SQ_ALU_SRC_1;
 		} else {
-			r = tgsi_src(ctx, &inst->Src[1], &alu.src[1]);
-			if (r)
-				return r;
-			alu.src[1].chan = tgsi_chan(&inst->Src[1], i);
+			r600_bc_src(&alu.src[1], &ctx->src[1], i);
 		}
 		if (i == 3)
 			alu.last = 1;
@@ -2627,7 +2808,6 @@ static int tgsi_opdst(struct r600_shader_ctx *ctx)
 
 static int emit_logic_pred(struct r600_shader_ctx *ctx, int opcode)
 {
-	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bc_alu alu;
 	int r;
 
@@ -2639,10 +2819,7 @@ static int emit_logic_pred(struct r600_shader_ctx *ctx, int opcode)
 	alu.dst.write = 1;
 	alu.dst.chan = 0;
 
-	r = tgsi_src(ctx, &inst->Src[0], &alu.src[0]);
-	if (r)
-		return r;
-	alu.src[0].chan = tgsi_chan(&inst->Src[0], 0);
+	r600_bc_src(&alu.src[0], &ctx->src[0], 0);
 	alu.src[1].sel = V_SQ_ALU_SRC_0;
 	alu.src[1].chan = 0;
 
@@ -2656,9 +2833,25 @@ static int emit_logic_pred(struct r600_shader_ctx *ctx, int opcode)
 
 static int pops(struct r600_shader_ctx *ctx, int pops)
 {
-	r600_bc_add_cfinst(ctx->bc, CTX_INST(V_SQ_CF_WORD1_SQ_CF_INST_POP));
-	ctx->bc->cf_last->pop_count = pops;
-	ctx->bc->cf_last->cf_addr = ctx->bc->cf_last->id + 2;
+	int alu_pop = 3;
+	if (ctx->bc->cf_last) {
+		if (ctx->bc->cf_last->inst == CTX_INST(V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU) << 3)
+			alu_pop = 0;
+		else if (ctx->bc->cf_last->inst == CTX_INST(V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_POP_AFTER) << 3)
+			alu_pop = 1;
+	}
+	alu_pop += pops;
+	if (alu_pop == 1) {
+		ctx->bc->cf_last->inst = CTX_INST(V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_POP_AFTER) << 3;
+		ctx->bc->force_add_cf = 1;
+	} else if (alu_pop == 2) {
+		ctx->bc->cf_last->inst = CTX_INST(V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_POP2_AFTER) << 3;
+		ctx->bc->force_add_cf = 1;
+	} else {
+		r600_bc_add_cfinst(ctx->bc, CTX_INST(V_SQ_CF_WORD1_SQ_CF_INST_POP));
+		ctx->bc->cf_last->pop_count = pops;
+		ctx->bc->cf_last->cf_addr = ctx->bc->cf_last->id + 2;
+	}
 	return 0;
 }
 
@@ -2969,7 +3162,7 @@ static struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[] = {
 	{TGSI_OPCODE_SNE,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SETNE, tgsi_op2},
 	{TGSI_OPCODE_STR,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_TEX,	0, SQ_TEX_INST_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_TXD,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_TXD,	0, SQ_TEX_INST_SAMPLE_G, tgsi_tex},
 	{TGSI_OPCODE_TXP,	0, SQ_TEX_INST_SAMPLE, tgsi_tex},
 	{TGSI_OPCODE_UP2H,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_UP2US,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
@@ -3004,7 +3197,7 @@ static struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[] = {
 	{TGSI_OPCODE_CEIL,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_I2F,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_NOT,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TRUNC,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_TRUNC, tgsi_trans_srcx_replicate},
+	{TGSI_OPCODE_TRUNC,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_TRUNC, tgsi_op2},
 	{TGSI_OPCODE_SHL,	0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	/* gap */
 	{88,			0, V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
@@ -3075,9 +3268,9 @@ static struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = {
 	{TGSI_OPCODE_MOV,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV, tgsi_op2},
 	{TGSI_OPCODE_LIT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_lit},
 	{TGSI_OPCODE_RCP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE, tgsi_trans_srcx_replicate},
-	{TGSI_OPCODE_RSQ,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIPSQRT_IEEE, tgsi_trans_srcx_replicate},
+	{TGSI_OPCODE_RSQ,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIPSQRT_IEEE, tgsi_rsq},
 	{TGSI_OPCODE_EXP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_exp},
-	{TGSI_OPCODE_LOG,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_LOG,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_log},
 	{TGSI_OPCODE_MUL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MUL, tgsi_op2},
 	{TGSI_OPCODE_ADD,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_ADD, tgsi_op2},
 	{TGSI_OPCODE_DP3,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_DOT4, tgsi_dp},
@@ -3127,7 +3320,7 @@ static struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = {
 	{TGSI_OPCODE_SNE,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SETNE, tgsi_op2},
 	{TGSI_OPCODE_STR,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_TEX,	0, SQ_TEX_INST_SAMPLE, tgsi_tex},
-	{TGSI_OPCODE_TXD,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_TXD,	0, SQ_TEX_INST_SAMPLE_G, tgsi_tex},
 	{TGSI_OPCODE_TXP,	0, SQ_TEX_INST_SAMPLE, tgsi_tex},
 	{TGSI_OPCODE_UP2H,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_UP2US,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
@@ -3162,7 +3355,165 @@ static struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = {
 	{TGSI_OPCODE_CEIL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_I2F,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_NOT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
-	{TGSI_OPCODE_TRUNC,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_TRUNC, tgsi_trans_srcx_replicate},
+	{TGSI_OPCODE_TRUNC,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_TRUNC, tgsi_op2},
+	{TGSI_OPCODE_SHL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	/* gap */
+	{88,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_AND,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_OR,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_MOD,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_XOR,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_SAD,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_TXF,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_TXQ,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_CONT,	0, EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_CONTINUE, tgsi_loop_brk_cont},
+	{TGSI_OPCODE_EMIT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ENDPRIM,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_BGNLOOP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_bgnloop},
+	{TGSI_OPCODE_BGNSUB,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ENDLOOP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_endloop},
+	{TGSI_OPCODE_ENDSUB,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	/* gap */
+	{103,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{104,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{105,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{106,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_NOP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	/* gap */
+	{108,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{109,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{110,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{111,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_NRM4,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_CALLNZ,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_IFC,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_BREAKC,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_KIL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_KILLGT, tgsi_kill},  /* conditional kill */
+	{TGSI_OPCODE_END,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_end},  /* aka HALT */
+	/* gap */
+	{118,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_F2I,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_IDIV,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_IMAX,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_IMIN,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_INEG,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ISGE,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ISHR,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ISLT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_F2U,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_U2F,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UADD,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UDIV,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UMAD,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UMAX,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UMIN,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UMOD,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UMUL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_USEQ,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_USGE,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_USHR,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_USLT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_USNE,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_SWITCH,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_CASE,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_DEFAULT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ENDSWITCH,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_LAST,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+};
+
+static struct r600_shader_tgsi_instruction cm_shader_tgsi_instruction[] = {
+	{TGSI_OPCODE_ARL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_eg_arl},
+	{TGSI_OPCODE_MOV,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV, tgsi_op2},
+	{TGSI_OPCODE_LIT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_lit},
+	{TGSI_OPCODE_RCP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIP_IEEE, cayman_emit_float_instr},
+	{TGSI_OPCODE_RSQ,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_RECIPSQRT_IEEE, cayman_emit_float_instr},
+	{TGSI_OPCODE_EXP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_exp},
+	{TGSI_OPCODE_LOG,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_log},
+	{TGSI_OPCODE_MUL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MUL, tgsi_op2},
+	{TGSI_OPCODE_ADD,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_ADD, tgsi_op2},
+	{TGSI_OPCODE_DP3,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_DOT4, tgsi_dp},
+	{TGSI_OPCODE_DP4,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_DOT4, tgsi_dp},
+	{TGSI_OPCODE_DST,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_opdst},
+	{TGSI_OPCODE_MIN,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MIN, tgsi_op2},
+	{TGSI_OPCODE_MAX,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MAX, tgsi_op2},
+	{TGSI_OPCODE_SLT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SETGT, tgsi_op2_swap},
+	{TGSI_OPCODE_SGE,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SETGE, tgsi_op2},
+	{TGSI_OPCODE_MAD,	1, EG_V_SQ_ALU_WORD1_OP3_SQ_OP3_INST_MULADD, tgsi_op3},
+	{TGSI_OPCODE_SUB,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_ADD, tgsi_op2},
+	{TGSI_OPCODE_LRP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_lrp},
+	{TGSI_OPCODE_CND,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	/* gap */
+	{20,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_DP2A,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	/* gap */
+	{22,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{23,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_FRC,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_FRACT, tgsi_op2},
+	{TGSI_OPCODE_CLAMP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_FLR,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_FLOOR, tgsi_op2},
+	{TGSI_OPCODE_ROUND,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_EX2,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_EXP_IEEE, cayman_emit_float_instr},
+	{TGSI_OPCODE_LG2,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_LOG_IEEE, cayman_emit_float_instr},
+	{TGSI_OPCODE_POW,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, cayman_pow},
+	{TGSI_OPCODE_XPD,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_xpd},
+	/* gap */
+	{32,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ABS,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_MOV, tgsi_op2},
+	{TGSI_OPCODE_RCC,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_DPH,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_DOT4, tgsi_dp},
+	{TGSI_OPCODE_COS,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_COS, cayman_trig},
+	{TGSI_OPCODE_DDX,	0, SQ_TEX_INST_GET_GRADIENTS_H, tgsi_tex},
+	{TGSI_OPCODE_DDY,	0, SQ_TEX_INST_GET_GRADIENTS_V, tgsi_tex},
+	{TGSI_OPCODE_KILP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_KILLGT, tgsi_kill},  /* predicated kill */
+	{TGSI_OPCODE_PK2H,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_PK2US,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_PK4B,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_PK4UB,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_RFL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_SEQ,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SETE, tgsi_op2},
+	{TGSI_OPCODE_SFL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_SGT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SETGT, tgsi_op2},
+	{TGSI_OPCODE_SIN,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SIN, cayman_trig},
+	{TGSI_OPCODE_SLE,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SETGE, tgsi_op2_swap},
+	{TGSI_OPCODE_SNE,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_SETNE, tgsi_op2},
+	{TGSI_OPCODE_STR,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_TEX,	0, SQ_TEX_INST_SAMPLE, tgsi_tex},
+	{TGSI_OPCODE_TXD,	0, SQ_TEX_INST_SAMPLE_G, tgsi_tex},
+	{TGSI_OPCODE_TXP,	0, SQ_TEX_INST_SAMPLE, tgsi_tex},
+	{TGSI_OPCODE_UP2H,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UP2US,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UP4B,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_UP4UB,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_X2D,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ARA,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ARR,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_eg_arl},
+	{TGSI_OPCODE_BRA,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_CAL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_RET,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_SSG,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_ssg},
+	{TGSI_OPCODE_CMP,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_cmp},
+	{TGSI_OPCODE_SCS,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_scs},
+	{TGSI_OPCODE_TXB,	0, SQ_TEX_INST_SAMPLE_L, tgsi_tex},
+	{TGSI_OPCODE_NRM,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_DIV,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_DP2,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_DOT4, tgsi_dp},
+	{TGSI_OPCODE_TXL,	0, SQ_TEX_INST_SAMPLE_L, tgsi_tex},
+	{TGSI_OPCODE_BRK,	0, EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_BREAK, tgsi_loop_brk_cont},
+	{TGSI_OPCODE_IF,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_if},
+	/* gap */
+	{75,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{76,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_ELSE,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_else},
+	{TGSI_OPCODE_ENDIF,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_endif},
+	/* gap */
+	{79,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{80,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_PUSHA,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_POPA,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_CEIL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_I2F,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_NOT,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_TRUNC,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_TRUNC, tgsi_op2},
 	{TGSI_OPCODE_SHL,	0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},
 	/* gap */
 	{88,			0, EG_V_SQ_ALU_WORD1_OP2_SQ_OP2_INST_NOP, tgsi_unsupported},

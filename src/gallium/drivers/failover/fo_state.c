@@ -30,6 +30,7 @@
 
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
+#include "util/u_transfer.h"
 
 #include "fo_context.h"
 
@@ -574,10 +575,10 @@ failover_set_vertex_buffers(struct pipe_context *pipe,
 {
    struct failover_context *failover = failover_context(pipe);
 
-   memcpy(failover->vertex_buffers, vertex_buffers,
-          count * sizeof(vertex_buffers[0]));
+   util_copy_vertex_buffers(failover->vertex_buffers,
+                            &failover->num_vertex_buffers,
+                            vertex_buffers, count);
    failover->dirty |= FO_NEW_VERTEX_BUFFER;
-   failover->num_vertex_buffers = count;
    failover->sw->set_vertex_buffers( failover->sw, count, vertex_buffers );
    failover->hw->set_vertex_buffers( failover->hw, count, vertex_buffers );
 }
@@ -656,4 +657,5 @@ failover_init_state_functions( struct failover_context *failover )
    failover->pipe.set_constant_buffer = failover_set_constant_buffer;
    failover->pipe.create_sampler_view = failover_create_sampler_view;
    failover->pipe.sampler_view_destroy = failover_sampler_view_destroy;
+   failover->pipe.redefine_user_buffer = u_default_redefine_user_buffer;
 }

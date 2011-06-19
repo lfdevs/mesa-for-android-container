@@ -20,12 +20,15 @@ C_SOURCES = \
 		radeon_pair_translate.c \
 		radeon_pair_schedule.c \
 		radeon_pair_regalloc.c \
+		radeon_pair_dead_sources.c \
 		radeon_dataflow.c \
 		radeon_dataflow_deadcode.c \
 		radeon_dataflow_swizzles.c \
+		radeon_list.c \
 		radeon_optimize.c \
 		radeon_remove_constants.c \
 		radeon_rename_regs.c \
+		radeon_variable.c \
 		r3xx_fragprog.c \
 		r300_fragprog.c \
 		r300_fragprog_swizzle.c \
@@ -35,7 +38,9 @@ C_SOURCES = \
 		r3xx_vertprog.c \
 		r3xx_vertprog_dump.c \
 		\
-		memory_pool.c
+		memory_pool.c \
+		$(TOP)/src/glsl/ralloc.c \
+		$(TOP)/src/mesa/program/register_allocate.c
 
 
 ### Basic defines ###
@@ -48,6 +53,8 @@ INCLUDES = \
 	-I. \
 	-I$(TOP)/include \
 	-I$(TOP)/src/mesa \
+	-I$(TOP)/src/glsl \
+	-I$(TOP)/src/mapi
 
 
 ##### TARGETS #####
@@ -69,6 +76,9 @@ tags:
 # Remove .o and backup files
 clean:
 	rm -f $(OBJECTS) lib$(LIBNAME).a depend depend.bak
+
+test: default
+	@$(MAKE) -s -C tests/
 
 # Dummy target
 install:

@@ -46,11 +46,18 @@ try_clear(struct svga_context *svga,
    boolean restore_viewport = FALSE;
    SVGA3dClearFlag flags = 0;
    struct pipe_framebuffer_state *fb = &svga->curr.framebuffer;
-   union util_color uc;
+   union util_color uc = {0};
 
    ret = svga_update_state(svga, SVGA_STATE_HW_CLEAR);
    if (ret)
       return ret;
+
+   if (svga->rebind.rendertargets) {
+      ret = svga_reemit_framebuffer_bindings(svga);
+      if (ret != PIPE_OK) {
+         return ret;
+      }
+   }
 
    if ((buffers & PIPE_CLEAR_COLOR) && fb->cbufs[0]) {
       flags |= SVGA3D_CLEAR_COLOR;

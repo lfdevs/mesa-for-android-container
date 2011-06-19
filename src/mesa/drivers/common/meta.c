@@ -40,6 +40,7 @@
 #include "main/bufferobj.h"
 #include "main/buffers.h"
 #include "main/colortab.h"
+#include "main/condrender.h"
 #include "main/depth.h"
 #include "main/enable.h"
 #include "main/fbobject.h"
@@ -48,6 +49,7 @@
 #include "main/macros.h"
 #include "main/matrix.h"
 #include "main/mipmap.h"
+#include "main/pbo.h"
 #include "main/polygon.h"
 #include "main/readpix.h"
 #include "main/scissor.h"
@@ -91,6 +93,9 @@
 #define META_TEXTURE        0x1000
 #define META_VERTEX         0x2000
 #define META_VIEWPORT       0x4000
+#define META_CLAMP_FRAGMENT_COLOR 0x8000
+#define META_CLAMP_VERTEX_COLOR 0x10000
+#define META_CONDITIONAL_RENDER 0x20000
 /*@}*/
 
 
@@ -178,6 +183,16 @@ struct save_state
    /** META_VIEWPORT */
    GLint ViewportX, ViewportY, ViewportW, ViewportH;
    GLclampd DepthNear, DepthFar;
+
+   /** META_CLAMP_FRAGMENT_COLOR */
+   GLenum ClampFragmentColor;
+
+   /** META_CLAMP_VERTEX_COLOR */
+   GLenum ClampVertexColor;
+
+   /** META_CONDITIONAL_RENDER */
+   struct gl_query_object *CondRenderQuery;
+   GLenum CondRenderMode;
 
    /** Miscellaneous (always disabled) */
    GLboolean Lighting;
@@ -568,6 +583,34 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
       _mesa_DepthRange(0.0, 1.0);
    }
 
+   if (state & META_CLAMP_FRAGMENT_COLOR) {
+      save->ClampFragmentColor = ctx->Color.ClampFragmentColor;
+
+      /* Generally in here we want to do clamping according to whether
+       * it's for the pixel path (ClampFragmentColor is GL_TRUE),
+       * regardless of the internal implementation of the metaops.
+       */
+      if (ctx->Color.ClampFragmentColor != GL_TRUE)
+	 _mesa_ClampColorARB(GL_CLAMP_FRAGMENT_COLOR, GL_FALSE);
+   }
+
+   if (state & META_CLAMP_VERTEX_COLOR) {
+      save->ClampVertexColor = ctx->Light.ClampVertexColor;
+
+      /* Generally in here we never want vertex color clamping --
+       * result clamping is only dependent on fragment clamping.
+       */
+      _mesa_ClampColorARB(GL_CLAMP_VERTEX_COLOR, GL_FALSE);
+   }
+
+   if (state & META_CONDITIONAL_RENDER) {
+      save->CondRenderQuery = ctx->Query.CondRenderQuery;
+      save->CondRenderMode = ctx->Query.CondRenderMode;
+
+      if (ctx->Query.CondRenderQuery)
+	 _mesa_EndConditionalRender();
+   }
+
    /* misc */
    {
       save->Lighting = ctx->Light.Enabled;
@@ -830,6 +873,20 @@ _mesa_meta_end(struct gl_context *ctx)
                             save->ViewportW, save->ViewportH);
       }
       _mesa_DepthRange(save->DepthNear, save->DepthFar);
+   }
+
+   if (state & META_CLAMP_FRAGMENT_COLOR) {
+      _mesa_ClampColorARB(GL_CLAMP_FRAGMENT_COLOR, save->ClampFragmentColor);
+   }
+
+   if (state & META_CLAMP_VERTEX_COLOR) {
+      _mesa_ClampColorARB(GL_CLAMP_VERTEX_COLOR, save->ClampVertexColor);
+   }
+
+   if (state & META_CONDITIONAL_RENDER) {
+      if (save->CondRenderQuery)
+	 _mesa_BeginConditionalRender(save->CondRenderQuery->Id,
+				      save->CondRenderMode);
    }
 
    /* misc */
@@ -1123,12 +1180,14 @@ blitframebuffer_texture(struct gl_context *ctx,
       if (readAtt && readAtt->Texture) {
          const struct gl_texture_object *texObj = readAtt->Texture;
          const GLuint srcLevel = readAtt->TextureLevel;
-         const GLenum minFilterSave = texObj->MinFilter;
-         const GLenum magFilterSave = texObj->MagFilter;
+         const GLenum minFilterSave = texObj->Sampler.MinFilter;
+         const GLenum magFilterSave = texObj->Sampler.MagFilter;
          const GLint baseLevelSave = texObj->BaseLevel;
          const GLint maxLevelSave = texObj->MaxLevel;
-         const GLenum wrapSSave = texObj->WrapS;
-         const GLenum wrapTSave = texObj->WrapT;
+         const GLenum wrapSSave = texObj->Sampler.WrapS;
+         const GLenum wrapTSave = texObj->Sampler.WrapT;
+         const GLenum srgbSave = texObj->Sampler.sRGBDecode;
+         const GLenum fbo_srgb_save = ctx->Color.sRGBEnabled;
          const GLenum target = texObj->Target;
 
          if (drawAtt->Texture == readAtt->Texture) {
@@ -1160,6 +1219,14 @@ blitframebuffer_texture(struct gl_context *ctx,
          }
          _mesa_TexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
          _mesa_TexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	 /* Always do our blits with no sRGB decode or encode.*/
+	 if (ctx->Extensions.EXT_texture_sRGB_decode) {
+	    _mesa_TexParameteri(target, GL_TEXTURE_SRGB_DECODE_EXT,
+				GL_SKIP_DECODE_EXT);
+	 }
+	 _mesa_Disable(GL_FRAMEBUFFER_SRGB_EXT);
+
          _mesa_TexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
          _mesa_set_enable(ctx, target, GL_TRUE);
 
@@ -1221,6 +1288,12 @@ blitframebuffer_texture(struct gl_context *ctx,
          }
          _mesa_TexParameteri(target, GL_TEXTURE_WRAP_S, wrapSSave);
          _mesa_TexParameteri(target, GL_TEXTURE_WRAP_T, wrapTSave);
+	 if (ctx->Extensions.EXT_texture_sRGB_decode) {
+	    _mesa_TexParameteri(target, GL_TEXTURE_SRGB_DECODE_EXT, srgbSave);
+	 }
+	 if (ctx->Extensions.EXT_texture_sRGB_decode && fbo_srgb_save) {
+	    _mesa_Enable(GL_FRAMEBUFFER_SRGB_EXT);
+	 }
 
          /* Done with color buffer */
          mask &= ~GL_COLOR_BUFFER_BIT;
@@ -1405,7 +1478,10 @@ _mesa_meta_Clear(struct gl_context *ctx, GLbitfield buffers)
    };
    struct vertex verts[4];
    /* save all state but scissor, pixel pack/unpack */
-   GLbitfield metaSave = META_ALL - META_SCISSOR - META_PIXEL_STORE;
+   GLbitfield metaSave = (META_ALL -
+			  META_SCISSOR -
+			  META_PIXEL_STORE -
+			  META_CONDITIONAL_RENDER);
    const GLuint stencilMax = (1 << ctx->DrawBuffer->Visual.stencilBits) - 1;
 
    if (buffers & BUFFER_BITS_COLOR) {
@@ -1440,6 +1516,9 @@ _mesa_meta_Clear(struct gl_context *ctx, GLbitfield buffers)
    /* GL_COLOR_BUFFER_BIT */
    if (buffers & BUFFER_BITS_COLOR) {
       /* leave colormask, glDrawBuffer state as-is */
+
+      /* Clears never have the color clamped. */
+      _mesa_ClampColorARB(GL_CLAMP_FRAGMENT_COLOR, GL_FALSE);
    }
    else {
       ASSERT(metaSave & META_COLOR_MASK);
@@ -1493,10 +1572,10 @@ _mesa_meta_Clear(struct gl_context *ctx, GLbitfield buffers)
 
       /* vertex colors */
       for (i = 0; i < 4; i++) {
-         verts[i].r = ctx->Color.ClearColor[0];
-         verts[i].g = ctx->Color.ClearColor[1];
-         verts[i].b = ctx->Color.ClearColor[2];
-         verts[i].a = ctx->Color.ClearColor[3];
+         verts[i].r = ctx->Color.ClearColorUnclamped[0];
+         verts[i].g = ctx->Color.ClearColorUnclamped[1];
+         verts[i].b = ctx->Color.ClearColorUnclamped[2];
+         verts[i].a = ctx->Color.ClearColorUnclamped[3];
       }
 
       /* upload new vertex data */
@@ -1802,6 +1881,15 @@ _mesa_meta_DrawPixels(struct gl_context *ctx,
          texIntFormat = format;
       else
          texIntFormat = GL_RGBA;
+
+      /* If we're not supposed to clamp the resulting color, then just
+       * promote our texture to fully float.  We could do better by
+       * just going for the matching set of channels, in floating
+       * point.
+       */
+      if (ctx->Color.ClampFragmentColor != GL_TRUE &&
+	  ctx->Extensions.ARB_texture_float)
+	 texIntFormat = GL_RGBA32F;
    }
    else if (_mesa_is_stencil_format(format)) {
       if (ctx->Extensions.ARB_fragment_program &&
@@ -1860,6 +1948,7 @@ _mesa_meta_DrawPixels(struct gl_context *ctx,
                           META_TRANSFORM |
                           META_VERTEX |
                           META_VIEWPORT |
+			  META_CLAMP_FRAGMENT_COLOR |
                           metaExtraSave));
 
    newTex = alloc_texture(tex, width, height, texIntFormat);
@@ -2258,14 +2347,13 @@ _mesa_meta_GenerateMipmap(struct gl_context *ctx, GLenum target,
    struct vertex verts[4];
    const GLuint baseLevel = texObj->BaseLevel;
    const GLuint maxLevel = texObj->MaxLevel;
-   const GLenum minFilterSave = texObj->MinFilter;
-   const GLenum magFilterSave = texObj->MagFilter;
-   const GLint baseLevelSave = texObj->BaseLevel;
+   const GLenum minFilterSave = texObj->Sampler.MinFilter;
+   const GLenum magFilterSave = texObj->Sampler.MagFilter;
    const GLint maxLevelSave = texObj->MaxLevel;
    const GLboolean genMipmapSave = texObj->GenerateMipmap;
-   const GLenum wrapSSave = texObj->WrapS;
-   const GLenum wrapTSave = texObj->WrapT;
-   const GLenum wrapRSave = texObj->WrapR;
+   const GLenum wrapSSave = texObj->Sampler.WrapS;
+   const GLenum wrapTSave = texObj->Sampler.WrapT;
+   const GLenum wrapRSave = texObj->Sampler.WrapR;
    const GLuint fboSave = ctx->DrawBuffer->Name;
    const GLuint original_active_unit = ctx->Texture.CurrentUnit;
    GLenum faceTarget;
@@ -2320,7 +2408,7 @@ _mesa_meta_GenerateMipmap(struct gl_context *ctx, GLenum target,
    }
    _mesa_BindFramebufferEXT(GL_FRAMEBUFFER_EXT, mipmap->FBO);
 
-   _mesa_TexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+   _mesa_TexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
    _mesa_TexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
    _mesa_TexParameteri(target, GL_GENERATE_MIPMAP, GL_FALSE);
    _mesa_TexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -2496,8 +2584,7 @@ _mesa_meta_GenerateMipmap(struct gl_context *ctx, GLenum target,
          }
       }
 
-      /* limit sampling to src level */
-      _mesa_TexParameteri(target, GL_TEXTURE_BASE_LEVEL, srcLevel);
+      /* limit minification to src level */
       _mesa_TexParameteri(target, GL_TEXTURE_MAX_LEVEL, srcLevel);
 
       /* Set to draw into the current dstLevel */
@@ -2549,7 +2636,6 @@ _mesa_meta_GenerateMipmap(struct gl_context *ctx, GLenum target,
 
    _mesa_TexParameteri(target, GL_TEXTURE_MIN_FILTER, minFilterSave);
    _mesa_TexParameteri(target, GL_TEXTURE_MAG_FILTER, magFilterSave);
-   _mesa_TexParameteri(target, GL_TEXTURE_BASE_LEVEL, baseLevelSave);
    _mesa_TexParameteri(target, GL_TEXTURE_MAX_LEVEL, maxLevelSave);
    _mesa_TexParameteri(target, GL_GENERATE_MIPMAP, genMipmapSave);
    _mesa_TexParameteri(target, GL_TEXTURE_WRAP_S, wrapSSave);
@@ -2605,12 +2691,26 @@ copy_tex_image(struct gl_context *ctx, GLuint dims, GLenum target, GLint level,
    GLenum format, type;
    GLint bpp;
    void *buf;
+   struct gl_renderbuffer *read_rb = ctx->ReadBuffer->_ColorReadBuffer;
 
    texObj = _mesa_get_current_tex_object(ctx, target);
    texImage = _mesa_get_tex_image(ctx, texObj, target, level);
 
    /* Choose format/type for temporary image buffer */
    format = _mesa_base_tex_format(ctx, internalFormat);
+
+   if (format == GL_LUMINANCE &&
+       _mesa_get_format_base_format(read_rb->Format) != GL_LUMINANCE) {
+      /* The glReadPixels() path will convert RGB to luminance by
+       * summing R+G+B.  glCopyTexImage() is supposed to behave as
+       * glCopyPixels, which doesn't do that change, and instead
+       * leaves it up to glTexImage which converts RGB to luminance by
+       * just taking the R channel.  To avoid glReadPixels() trashing
+       * our data, use RGBA for our temporary image.
+       */
+      format = GL_RGBA;
+   }
+
    type = get_temp_image_type(ctx, format);
    bpp = _mesa_bytes_per_pixel(format, type);
    if (bpp <= 0) {

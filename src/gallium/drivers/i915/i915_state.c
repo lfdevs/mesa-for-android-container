@@ -33,6 +33,7 @@
 #include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
+#include "util/u_transfer.h"
 #include "tgsi/tgsi_parse.h"
 
 #include "i915_context.h"
@@ -57,10 +58,8 @@ translate_wrap_mode(unsigned wrap)
       return TEXCOORDMODE_CLAMP_EDGE;
    case PIPE_TEX_WRAP_CLAMP_TO_BORDER:
       return TEXCOORDMODE_CLAMP_BORDER;
-   /*         
-   case PIPE_TEX_WRAP_MIRRORED_REPEAT:
+   case PIPE_TEX_WRAP_MIRROR_REPEAT:
       return TEXCOORDMODE_MIRROR;
-    */
    default:
       return TEXCOORDMODE_WRAP;
    }
@@ -288,6 +287,17 @@ i915_create_sampler_state(struct pipe_context *pipe,
    return cso;
 }
 
+static void i915_fixup_bind_sampler_states(struct pipe_context *pipe,
+                                           unsigned num, void **sampler)
+{
+   struct i915_context *i915 = i915_context(pipe);
+
+   i915->saved_nr_samplers = num;
+   memcpy(&i915->saved_samplers, sampler, sizeof(void *) * num);
+
+   i915->saved_bind_sampler_states(pipe, num, sampler);
+}
+
 static void i915_bind_sampler_states(struct pipe_context *pipe,
                                      unsigned num, void **sampler)
 {
@@ -467,6 +477,17 @@ i915_create_fs_state(struct pipe_context *pipe,
 }
 
 static void
+i915_fixup_bind_fs_state(struct pipe_context *pipe, void *shader)
+{
+   struct i915_context *i915 = i915_context(pipe);
+   draw_flush(i915->draw);
+
+   i915->saved_fs = shader;
+
+   i915->saved_bind_fs_state(pipe, shader);
+}
+
+static void
 i915_bind_fs_state(struct pipe_context *pipe, void *shader)
 {
    struct i915_context *i915 = i915_context(pipe);
@@ -506,6 +527,8 @@ static void i915_bind_vs_state(struct pipe_context *pipe, void *shader)
 {
    struct i915_context *i915 = i915_context(pipe);
 
+   i915->saved_vs = shader;
+
    /* just pass-through to draw module */
    draw_bind_vertex_shader(i915->draw, (struct draw_vertex_shader *) shader);
 
@@ -525,31 +548,73 @@ static void i915_set_constant_buffer(struct pipe_context *pipe,
                                      struct pipe_resource *buf)
 {
    struct i915_context *i915 = i915_context(pipe);
-   draw_flush(i915->draw);
+   unsigned new_num = 0;
+   boolean diff = TRUE;
 
-   /* Make a copy of shader constants.
-    * During fragment program translation we may add additional
-    * constants to the array.
-    *
-    * We want to consider the situation where some user constants
-    * (ex: a material color) may change frequently but the shader program
-    * stays the same.  In that case we should only be updating the first
-    * N constants, leaving any extras from shader translation alone.
-    */
+
+   /* XXX don't support geom shaders now */
+   if (shader == PIPE_SHADER_GEOMETRY)
+      return;
+
+   /* if we have a new buffer compare it with the old one */
    if (buf) {
-      struct i915_buffer *ir = i915_buffer(buf);
-      memcpy(i915->current.constants[shader], ir->data, ir->b.b.width0);
-      i915->current.num_user_constants[shader] = (ir->b.b.width0 /
-						  4 * sizeof(float));
-   }
-   else {
-      i915->current.num_user_constants[shader] = 0;
+      struct i915_buffer *ibuf = i915_buffer(buf);
+      struct pipe_resource *old_buf = i915->constants[shader];
+      struct i915_buffer *old = old_buf ? i915_buffer(old_buf) : NULL;
+      unsigned old_num = i915->current.num_user_constants[shader];
+
+      new_num = ibuf->b.b.width0 / 4 * sizeof(float);
+
+      if (old_num == new_num) {
+         if (old_num == 0)
+            diff = FALSE;
+#if 0
+         /* XXX no point in running this code since st/mesa only uses user buffers */
+         /* Can't compare the buffer data since they are userbuffers */
+         else if (old && old->free_on_destroy)
+            diff = memcmp(old->data, ibuf->data, ibuf->b.b.width0);
+#else
+         (void)old;
+#endif
+      }
+   } else {
+      diff = i915->current.num_user_constants[shader] != 0;
    }
 
+   /*
+    * flush before updateing the state.
+    */
+   if (diff && shader == PIPE_SHADER_FRAGMENT)
+      draw_flush(i915->draw);
 
-   i915->dirty |= I915_NEW_CONSTANTS;
+   pipe_resource_reference(&i915->constants[shader], buf);
+   i915->current.num_user_constants[shader] = new_num;
+
+   if (diff)
+      i915->dirty |= shader == PIPE_SHADER_VERTEX ? I915_NEW_VS_CONSTANTS : I915_NEW_FS_CONSTANTS;
 }
 
+
+static void
+i915_fixup_set_fragment_sampler_views(struct pipe_context *pipe,
+                                      unsigned num,
+                                      struct pipe_sampler_view **views)
+{
+   struct i915_context *i915 = i915_context(pipe);
+   int i;
+
+   for (i = 0; i < num; i++)
+      pipe_sampler_view_reference(&i915->saved_sampler_views[i],
+                                  views[i]);
+
+   for (i = num; i < i915->saved_nr_sampler_views; i++)
+      pipe_sampler_view_reference(&i915->saved_sampler_views[i],
+                                  NULL);
+
+   i915->saved_nr_sampler_views = num;
+
+   i915->saved_set_sampler_views(pipe, num, views);
+}
 
 static void i915_set_fragment_sampler_views(struct pipe_context *pipe,
                                             unsigned num,
@@ -622,7 +687,8 @@ static void i915_set_framebuffer_state(struct pipe_context *pipe,
    i915->framebuffer.height = fb->height;
    i915->framebuffer.nr_cbufs = fb->nr_cbufs;
    for (i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
-      pipe_surface_reference(&i915->framebuffer.cbufs[i], fb->cbufs[i]);
+      pipe_surface_reference(&i915->framebuffer.cbufs[i],
+                             i < fb->nr_cbufs ? fb->cbufs[i] : NULL);
    }
    pipe_surface_reference(&i915->framebuffer.zsbuf, fb->zsbuf);
 
@@ -636,6 +702,8 @@ static void i915_set_clip_state( struct pipe_context *pipe,
 {
    struct i915_context *i915 = i915_context(pipe);
    draw_flush(i915->draw);
+
+   i915->saved_clip = *clip;
 
    draw_set_clip_state(i915->draw, clip);
 
@@ -667,7 +735,7 @@ i915_create_rasterizer_state(struct pipe_context *pipe,
 {
    struct i915_rasterizer_state *cso = CALLOC_STRUCT( i915_rasterizer_state );
 
-   cso->templ = rasterizer;
+   cso->templ = *rasterizer;
    cso->color_interp = rasterizer->flatshade ? INTERP_CONSTANT : INTERP_LINEAR;
    cso->light_twoside = rasterizer->light_twoside;
    cso->ds[0].u = _3DSTATE_DEPTH_OFFSET_SCALE;
@@ -738,7 +806,7 @@ static void i915_bind_rasterizer_state( struct pipe_context *pipe,
 
    /* pass-through to draw module */
    draw_set_rasterizer_state(i915->draw,
-                           (i915->rasterizer ? i915->rasterizer->templ : NULL),
+                           (i915->rasterizer ? &(i915->rasterizer->templ) : NULL),
                            raster);
 
    i915->dirty |= I915_NEW_RASTERIZER;
@@ -755,16 +823,28 @@ static void i915_set_vertex_buffers(struct pipe_context *pipe,
                                     const struct pipe_vertex_buffer *buffers)
 {
    struct i915_context *i915 = i915_context(pipe);
-   /* Because we change state before the draw_set_vertex_buffers call
-    * we need a flush here, just to be sure.
-    */
-   draw_flush(i915->draw);
+   struct draw_context *draw = i915->draw;
+   int i;
 
-   memcpy(i915->vertex_buffer, buffers, count * sizeof(buffers[0]));
-   i915->num_vertex_buffers = count;
+   util_copy_vertex_buffers(i915->saved_vertex_buffers,
+                            &i915->saved_nr_vertex_buffers,
+                            buffers, count);
+#if 0
+   /* XXX doesn't look like this is needed */
+   /* unmap old */
+   for (i = 0; i < i915->num_vertex_buffers; i++) {
+      draw_set_mapped_vertex_buffer(draw, i, NULL);
+   }
+#endif
 
    /* pass-through to draw module */
-   draw_set_vertex_buffers(i915->draw, count, buffers);
+   draw_set_vertex_buffers(draw, count, buffers);
+
+   /* map new */
+   for (i = 0; i < count; i++) {
+      void *buf = i915_buffer(buffers[i].buffer)->data;
+      draw_set_mapped_vertex_buffer(draw, i, buf);
+   }
 }
 
 static void *
@@ -789,10 +869,7 @@ i915_bind_vertex_elements_state(struct pipe_context *pipe,
    struct i915_context *i915 = i915_context(pipe);
    struct i915_velems_state *i915_velems = (struct i915_velems_state *) velems;
 
-   /* Because we change state before the draw_set_vertex_buffers call
-    * we need a flush here, just to be sure.
-    */
-   draw_flush(i915->draw);
+   i915->saved_velems = velems;
 
    /* pass-through to draw module */
    if (i915_velems) {
@@ -870,4 +947,16 @@ i915_init_state_functions( struct i915_context *i915 )
    i915->base.set_viewport_state = i915_set_viewport_state;
    i915->base.set_vertex_buffers = i915_set_vertex_buffers;
    i915->base.set_index_buffer = i915_set_index_buffer;
+   i915->base.redefine_user_buffer = u_default_redefine_user_buffer;
+}
+
+void
+i915_init_fixup_state_functions( struct i915_context *i915 )
+{
+   i915->saved_bind_fs_state = i915->base.bind_fs_state;
+   i915->base.bind_fs_state = i915_fixup_bind_fs_state;
+   i915->saved_bind_sampler_states = i915->base.bind_fragment_sampler_states;
+   i915->base.bind_fragment_sampler_states = i915_fixup_bind_sampler_states;
+   i915->saved_set_sampler_views = i915->base.set_fragment_sampler_views;
+   i915->base.set_fragment_sampler_views = i915_fixup_set_fragment_sampler_views;
 }

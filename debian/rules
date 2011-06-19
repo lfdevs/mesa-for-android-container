@@ -70,7 +70,7 @@ DRI_DRIVERS = swrast
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	confflags_DIRECT_RENDERING = --disable-driglx-direct
 	confflags_EGL = --disable-egl
-	confflags_GALLIUM = --disable-gallium
+	confflags_GALLIUM = --disable-gallium --disable-gallium-r300
 else
 	EGL_DISPLAYS = x11
 	GALLIUM_DRIVERS = swrast
@@ -78,29 +78,34 @@ else
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 # Gallium drivers require libdrm-{nouveau,radeon}, only available on Linux
-	GALLIUM_DRIVERS += nouveau radeon r600
+	GALLIUM_DRIVERS += nouveau r600
 # Although the KMS egl drivers will probably build on kfreebsd & hurd
 # only linux actually has KMS drivers implemented at this point.
-	EGL_DISPLAYS += drm
+	EGL_DISPLAYS += drm wayland
 # Nouveau requires KMS, so even the classic DRI driver only works on linux
 	DRI_DRIVERS += nouveau
   endif
 
   ifneq ($(DEB_HOST_ARCH), s390)
-	DRI_DRIVERS += mach64 mga r128 r200 r600 radeon savage tdfx
+	DRI_DRIVERS += mach64 mga r128 r200 r300 r600 radeon savage tdfx
   endif
   ifeq ($(DEB_HOST_ARCH_CPU), i386)
 	DRI_DRIVERS += i810 i915 i965 sis unichrome
-	GALLIUM_DRIVERS += i915
   else ifeq ($(DEB_HOST_ARCH_CPU), amd64)
 	DRI_DRIVERS += i915 i965 sis unichrome
-	GALLIUM_DRIVERS += i915
+  endif
+
+  # LLVM is required for r300g, and x86-ish:
+  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386))
+	GALLIUM_DRIVERS += r300
+  else
+	confflags_GALLIUM = --disable-gallium-r300
   endif
 
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
 	confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
-	confflags_GALLIUM = $(addprefix --enable-gallium-,$(GALLIUM_DRIVERS))
-	confflags_GLES = --enable-gles-overlay --enable-gles1 --enable-gles2
+	confflags_GALLIUM += $(addprefix --enable-gallium-,$(GALLIUM_DRIVERS))
+	confflags_GLES = --enable-gles1 --enable-gles2
 	confflags_STATE_TRACKERS = --with-state-trackers="$(GALLIUM_STATE_TRACKERS)"
 endif
 
@@ -212,9 +217,6 @@ $(QUILT_STAMPFN): $(STAMP_DIR)/stamp
 build: build-stamp
 
 build-stamp: $(BUILD_STAMPS)
-# Remove gallium drivers which replace existing classic drivers.
-# Intel gallium is significantly behind the classic mesa drivers...
-	rm -f build/dri/lib/$(DEB_HOST_MULTIARCH)/gallium/i915_dri.so
 	>$@
 
 $(STAMP)-build-%: configure
@@ -248,7 +250,8 @@ install: build
 	            libgl1-mesa-glx-i686.install libgl1-mesa-dri.install \
 	            libgl1-mesa-dri.install.linux libegl1-mesa.install \
 	            libgl1-mesa-dri-experimental.install \
-	            libegl1-mesa-drivers.install libegl1-mesa-dev.install; \
+	            libegl1-mesa-drivers.install libegl1-mesa-dev.install \
+	            libglapi-mesa.install; \
 	do \
 		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
 			debian/$${file}.in > debian/$$file; \
@@ -297,6 +300,10 @@ endif
 	# Also get rid of other files which aren't installed. Do not
 	# use -f to ensure we notice disappearing files:
 	set -e; for file in $(NOT_INSTALLED); do rm debian/tmp/$$file; done
+	# Files only in git, not in tarballs, OK to use rm -f here:
+	set -e; for file in $(NOT_INSTALLED_EITHER); do rm -f debian/tmp/$$file; done
+	# No need for this .so, libglapi is just a convenience library:
+	rm debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/libglapi.so
 
 	dh_install -s --fail-missing
 	dh_installman -s
@@ -314,6 +321,7 @@ endif
 	dh_strip -plibgl1-mesa-dri-experimental --dbg-package=libgl1-mesa-dri-experimental-dbg
 	dh_strip -plibopenvg1-mesa --dbg-package=libopenvg1-mesa-dbg
 	dh_strip -plibegl1-mesa --dbg-package=libegl1-mesa-dbg
+	dh_strip -plibglapi-mesa --dbg-package=libglapi-mesa-dbg
 	dh_strip -plibgles1-mesa --dbg-package=libgles1-mesa-dbg
 	dh_strip -plibgles2-mesa --dbg-package=libgles2-mesa-dbg
 	dh_strip -plibegl1-mesa-drivers --dbg-package=libegl1-mesa-drivers-dbg
@@ -349,3 +357,9 @@ endif
 
 binary: binary-indep binary-arch
 .PHONY: configs build clean binary-indep binary-arch binary install
+
+# For maintainer use only, generate a tarball:
+gentarball: SOURCE=mesa
+gentarball: UV=$(shell dpkg-parsechangelog|awk '/^Version:/ {print $$2}'|sed 's/-.*$$//')
+gentarball:
+	git archive --format=tar upstream-experimental --prefix=$(SOURCE)-$(UV)/ | gzip -9 > ../$(SOURCE)_$(UV).orig.tar.gz

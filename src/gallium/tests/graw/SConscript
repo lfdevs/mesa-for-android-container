@@ -8,7 +8,7 @@ env.Prepend(LIBPATH = [graw.dir])
 env.Prepend(LIBS = ['graw'])
     
 
-if env['platform'] in ('freebsd8', 'sunos5'):
+if env['platform'] in ('freebsd8', 'sunos'):
     env.Append(LIBS = ['m'])
 
 if env['platform'] == 'freebsd8':
@@ -24,6 +24,7 @@ progs = [
     'gs-test',
     'shader-leak',
     'tri-gs',
+    'quad-sample',
 ]
 
 for name in progs:

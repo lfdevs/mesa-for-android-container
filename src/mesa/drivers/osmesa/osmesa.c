@@ -515,11 +515,7 @@ do {								\
    PACK_RGBA(p, color[0], color[1], color[2], color[3]);	\
 } while (0)
 
-#ifdef WIN32
-#include "..\swrast\s_linetemp.h"
-#else
 #include "swrast/s_linetemp.h"
-#endif
 
 
 
@@ -544,11 +540,7 @@ do {							\
    }							\
 } while (0)
 
-#ifdef WIN32
-#include "..\swrast\s_linetemp.h"
-#else
 #include "swrast/s_linetemp.h"
-#endif
 
 
 
@@ -624,11 +616,7 @@ osmesa_choose_line_function( struct gl_context *ctx )
       span.z += span.zStep;					\
    }                                                            \
 }
-#ifdef WIN32
-#include "..\swrast\s_tritemp.h"
-#else
 #include "swrast/s_tritemp.h"
-#endif
 
 
 
@@ -656,11 +644,8 @@ osmesa_choose_line_function( struct gl_context *ctx )
       span.z += span.zStep;				\
    }                                                    \
 }
-#ifdef WIN32
-#include "..\swrast\s_tritemp.h"
-#else
+
 #include "swrast/s_tritemp.h"
-#endif
 
 
 
@@ -1155,6 +1140,7 @@ OSMesaCreateContextExt( GLenum format, GLint depthBits, GLint stencilBits,
       functions.GetBufferSize = NULL;
 
       if (!_mesa_initialize_context(&osmesa->mesa,
+                                    API_OPENGL,
                                     osmesa->gl_visual,
                                     sharelist ? &sharelist->mesa
                                               : (struct gl_context *) NULL,
@@ -1356,7 +1342,7 @@ OSMesaMakeCurrent( OSMesaContext osmesa, void *buffer, GLenum type,
 
 
    /* this updates the visual's red/green/blue/alphaBits fields */
-   _mesa_update_framebuffer_visual(osmesa->gl_buffer);
+   _mesa_update_framebuffer_visual(&osmesa->mesa, osmesa->gl_buffer);
 
    /* update the framebuffer size */
    _mesa_resize_framebuffer(&osmesa->mesa, osmesa->gl_buffer, width, height);

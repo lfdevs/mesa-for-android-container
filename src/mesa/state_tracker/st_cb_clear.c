@@ -63,26 +63,12 @@
 void
 st_init_clear(struct st_context *st)
 {
-   struct pipe_context *pipe = st->pipe;
    struct pipe_screen *pscreen = st->pipe->screen;
 
    memset(&st->clear, 0, sizeof(st->clear));
 
    st->clear.raster.gl_rasterization_rules = 1;
    st->clear.enable_ds_separate = pscreen->get_param(pscreen, PIPE_CAP_DEPTHSTENCIL_CLEAR_SEPARATE);
-
-   /* fragment shader state: color pass-through program */
-   st->clear.fs = util_make_fragment_passthrough_shader(pipe);
-
-   /* vertex shader state: color/position pass-through */
-   {
-      const uint semantic_names[] = { TGSI_SEMANTIC_POSITION,
-                                      TGSI_SEMANTIC_COLOR };
-      const uint semantic_indexes[] = { 0, 0 };
-      st->clear.vs = util_make_vertex_passthrough_shader(pipe, 2,
-                                                         semantic_names,
-                                                         semantic_indexes);
-   }
 }
 
 
@@ -104,6 +90,42 @@ st_destroy_clear(struct st_context *st)
       pipe_resource_reference(&st->clear.vbuf, NULL);
       st->clear.vbuf = NULL;
    }
+}
+
+
+/**
+ * Helper function to set the fragment shaders.
+ */
+static INLINE void
+set_fragment_shader(struct st_context *st)
+{
+   if (!st->clear.fs)
+      st->clear.fs = util_make_fragment_passthrough_shader(st->pipe);
+
+   cso_set_fragment_shader_handle(st->cso_context, st->clear.fs);
+}
+
+
+/**
+ * Helper function to set the vertex shader.
+ */
+static INLINE void
+set_vertex_shader(struct st_context *st)
+{
+   /* vertex shader - still required to provide the linkage between
+    * fragment shader input semantics and vertex_element/buffers.
+    */
+   if (!st->clear.vs)
+   {
+      const uint semantic_names[] = { TGSI_SEMANTIC_POSITION,
+                                      TGSI_SEMANTIC_COLOR };
+      const uint semantic_indexes[] = { 0, 0 };
+      st->clear.vs = util_make_vertex_passthrough_shader(st->pipe, 2,
+                                                         semantic_names,
+                                                         semantic_indexes);
+   }
+
+   cso_set_vertex_shader_handle(st->cso_context, st->clear.vs);
 }
 
 
@@ -139,6 +161,7 @@ draw_quad(struct st_context *st,
    if (!st->clear.vbuf) {
       st->clear.vbuf = pipe_buffer_create(pipe->screen,
                                           PIPE_BIND_VERTEX_BUFFER,
+                                          PIPE_USAGE_STREAM,
                                           max_slots * sizeof(st->clear.vertices));
    }
 
@@ -173,7 +196,8 @@ draw_quad(struct st_context *st,
                                            st->clear.vertices);
 
    /* draw */
-   util_draw_vertex_buffer(pipe, 
+   util_draw_vertex_buffer(pipe,
+                           st->cso_context,
                            st->clear.vbuf, 
                            st->clear.vbuf_slot * sizeof(st->clear.vertices),
                            PIPE_PRIM_TRIANGLE_FAN,
@@ -223,6 +247,7 @@ clear_with_quad(struct gl_context *ctx,
    cso_save_fragment_shader(st->cso_context);
    cso_save_vertex_shader(st->cso_context);
    cso_save_vertex_elements(st->cso_context);
+   cso_save_vertex_buffers(st->cso_context);
 
    /* blend state: RGBA masking */
    {
@@ -294,11 +319,11 @@ clear_with_quad(struct gl_context *ctx,
    }
 
    cso_set_clip(st->cso_context, &st->clear.clip);
-   cso_set_fragment_shader_handle(st->cso_context, st->clear.fs);
-   cso_set_vertex_shader_handle(st->cso_context, st->clear.vs);
+   set_fragment_shader(st);
+   set_vertex_shader(st);
 
    if (ctx->DrawBuffer->_ColorDrawBuffers[0]) {
-      st_translate_color(ctx->Color.ClearColor,
+      st_translate_color(ctx->Color.ClearColorUnclamped,
                          ctx->DrawBuffer->_ColorDrawBuffers[0]->_BaseFormat,
                          clearColor);
    }
@@ -316,6 +341,7 @@ clear_with_quad(struct gl_context *ctx,
    cso_restore_fragment_shader(st->cso_context);
    cso_restore_vertex_shader(st->cso_context);
    cso_restore_vertex_elements(st->cso_context);
+   cso_restore_vertex_buffers(st->cso_context);
 }
 
 
@@ -559,7 +585,7 @@ st_Clear(struct gl_context *ctx, GLbitfield mask)
                             clearColor);
       }
 
-      st->pipe->clear(st->pipe, clear_buffers, ctx->Color.ClearColor,
+      st->pipe->clear(st->pipe, clear_buffers, ctx->Color.ClearColorUnclamped,
                       ctx->Depth.Clear, ctx->Stencil.Clear);
    }
    if (mask & BUFFER_BIT_ACCUM)

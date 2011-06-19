@@ -30,6 +30,7 @@
 #include "main/bufferobj.h"
 #include "main/context.h"
 #include "main/imports.h"
+#include "main/mfeatures.h"
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/light.h"
@@ -89,6 +90,8 @@ _playback_copy_to_current(struct gl_context *ctx,
             memcpy(current, tmp, 4 * sizeof(GLfloat));
 
             vbo->currval[i].Size = node->attrsz[i];
+            assert(vbo->currval[i].Type == GL_FLOAT);
+            vbo->currval[i]._ElementSize = vbo->currval[i].Size * sizeof(GLfloat);
 
             if (i >= VBO_ATTRIB_FIRST_MATERIAL &&
                 i <= VBO_ATTRIB_LAST_MATERIAL)
@@ -192,6 +195,7 @@ static void vbo_bind_vertex_list(struct gl_context *ctx,
 	 arrays[attr].Type = GL_FLOAT;
          arrays[attr].Format = GL_RGBA;
 	 arrays[attr].Enabled = 1;
+         arrays[attr]._ElementSize = arrays[attr].Size * sizeof(GLfloat);
          _mesa_reference_buffer_object(ctx,
                                        &arrays[attr].BufferObj,
                                        node->vertex_store->bufferobj);
@@ -201,6 +205,7 @@ static void vbo_bind_vertex_list(struct gl_context *ctx,
 
 	 buffer_offset += node->attrsz[src] * sizeof(GLfloat);
          varying_inputs |= 1<<attr;
+         ctx->NewState |= _NEW_ARRAY;
       }
    }
 

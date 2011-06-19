@@ -364,7 +364,7 @@ i830_emit_invarient_state(struct intel_context *intel)
 
 
 #define emit( intel, state, size )			\
-   intel_batchbuffer_data(intel->batch, state, size, false)
+   intel_batchbuffer_data(intel, state, size, false)
 
 static GLuint
 get_dirty(struct i830_hw_state *state)
@@ -428,7 +428,7 @@ i830_emit_state(struct intel_context *intel)
     * scheduling is allowed, rather than assume that it is whenever a
     * batchbuffer fills up.
     */
-   intel_batchbuffer_require_space(intel->batch,
+   intel_batchbuffer_require_space(intel,
 				   get_state_size(state) + INTEL_PRIM_EMIT_SIZE,
 				   false);
    count = 0;
@@ -436,7 +436,7 @@ i830_emit_state(struct intel_context *intel)
    aper_count = 0;
    dirty = get_dirty(state);
 
-   aper_array[aper_count++] = intel->batch->buf;
+   aper_array[aper_count++] = intel->batch.bo;
    if (dirty & I830_UPLOAD_BUFFERS) {
       aper_array[aper_count++] = state->draw_region->buffer;
       if (state->depth_region)
@@ -453,7 +453,7 @@ i830_emit_state(struct intel_context *intel)
    if (dri_bufmgr_check_aperture_space(aper_array, aper_count)) {
        if (count == 0) {
 	   count++;
-	   intel_batchbuffer_flush(intel->batch);
+	   intel_batchbuffer_flush(intel);
 	   goto again;
        } else {
 	   _mesa_error(ctx, GL_OUT_OF_MEMORY, "i830 emit state");
@@ -535,14 +535,9 @@ i830_emit_state(struct intel_context *intel)
          BEGIN_BATCH(I830_TEX_SETUP_SIZE + 1);
          OUT_BATCH(state->Tex[i][I830_TEXREG_TM0LI]);
 
-         if (state->tex_buffer[i]) {
-            OUT_RELOC(state->tex_buffer[i],
-		      I915_GEM_DOMAIN_SAMPLER, 0,
-                      state->tex_offset[i]);
-         }
-	 else {
-	    OUT_BATCH(state->tex_offset[i]);
-	 }
+	 OUT_RELOC(state->tex_buffer[i],
+		   I915_GEM_DOMAIN_SAMPLER, 0,
+		   state->tex_offset[i]);
 
          OUT_BATCH(state->Tex[i][I830_TEXREG_TM0S1]);
          OUT_BATCH(state->Tex[i][I830_TEXREG_TM0S2]);
@@ -561,9 +556,7 @@ i830_emit_state(struct intel_context *intel)
       }
    }
 
-   intel->batch->dirty_state &= ~dirty;
    assert(get_dirty(state) == 0);
-   assert((intel->batch->dirty_state & (1<<1)) == 0);
 }
 
 static void
@@ -585,6 +578,27 @@ i830_destroy_context(struct intel_context *intel)
    _tnl_free_vertices(&intel->ctx);
 }
 
+static uint32_t i830_render_target_format_for_mesa_format[MESA_FORMAT_COUNT] =
+{
+   [MESA_FORMAT_ARGB8888] = DV_PF_8888,
+   [MESA_FORMAT_XRGB8888] = DV_PF_8888,
+   [MESA_FORMAT_RGB565] = DV_PF_565,
+   [MESA_FORMAT_ARGB1555] = DV_PF_1555,
+   [MESA_FORMAT_ARGB4444] = DV_PF_4444,
+};
+
+static bool
+i830_render_target_supported(gl_format format)
+{
+   if (format == MESA_FORMAT_S8_Z24 ||
+       format == MESA_FORMAT_X8_Z24 ||
+       format == MESA_FORMAT_Z16) {
+      return true;
+   }
+
+   return i830_render_target_format_for_mesa_format[format] != 0;
+}
+
 static void
 i830_set_draw_region(struct intel_context *intel,
                      struct intel_region *color_regions[],
@@ -595,6 +609,8 @@ i830_set_draw_region(struct intel_context *intel,
    struct gl_context *ctx = &intel->ctx;
    struct gl_renderbuffer *rb = ctx->DrawBuffer->_ColorDrawBuffers[0];
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
+   struct gl_renderbuffer *drb;
+   struct intel_renderbuffer *idrb = NULL;
    GLuint value;
    struct i830_hw_state *state = &i830->state;
    uint32_t draw_x, draw_y;
@@ -624,24 +640,7 @@ i830_set_draw_region(struct intel_context *intel,
             DSTORG_VERT_BIAS(0x8) | DEPTH_IS_Z);    /* .5 */
 
    if (irb != NULL) {
-      switch (irb->Base.Format) {
-      case MESA_FORMAT_ARGB8888:
-      case MESA_FORMAT_XRGB8888:
-	 value |= DV_PF_8888;
-	 break;
-      case MESA_FORMAT_RGB565:
-	 value |= DV_PF_565;
-	 break;
-      case MESA_FORMAT_ARGB1555:
-	 value |= DV_PF_1555;
-	 break;
-      case MESA_FORMAT_ARGB4444:
-	 value |= DV_PF_4444;
-	 break;
-      default:
-	 _mesa_problem(ctx, "Bad renderbuffer format: %d\n",
-		       irb->Base.Format);
-      }
+      value |= i830_render_target_format_for_mesa_format[irb->Base.Format];
    }
 
    if (depth_region && depth_region->cpp == 4) {
@@ -651,6 +650,13 @@ i830_set_draw_region(struct intel_context *intel,
       value |= DEPTH_FRMT_16_FIXED;
    }
    state->Buffer[I830_DESTREG_DV1] = value;
+
+   drb = ctx->DrawBuffer->Attachment[BUFFER_DEPTH].Renderbuffer;
+   if (!drb)
+      drb = ctx->DrawBuffer->Attachment[BUFFER_STENCIL].Renderbuffer;
+
+   if (drb)
+      idrb = intel_renderbuffer(drb);
 
    /* We set up the drawing rectangle to be offset into the color
     * region's location in the miptree.  If it doesn't match with
@@ -663,16 +669,15 @@ i830_set_draw_region(struct intel_context *intel,
     * can't do in general due to tiling)
     */
    FALLBACK(intel, I830_FALLBACK_DRAW_OFFSET,
-	    (depth_region && color_regions[0]) &&
-	    (depth_region->draw_x != color_regions[0]->draw_x ||
-	     depth_region->draw_y != color_regions[0]->draw_y));
+	    idrb && irb && (idrb->draw_x != irb->draw_x ||
+			    idrb->draw_y != irb->draw_y));
 
-   if (color_regions[0]) {
-      draw_x = color_regions[0]->draw_x;
-      draw_y = color_regions[0]->draw_y;
-   } else if (depth_region) {
-      draw_x = depth_region->draw_x;
-      draw_y = depth_region->draw_y;
+   if (irb) {
+      draw_x = irb->draw_x;
+      draw_y = irb->draw_y;
+   } else if (idrb) {
+      draw_x = idrb->draw_x;
+      draw_y = idrb->draw_y;
    } else {
       draw_x = 0;
       draw_y = 0;
@@ -729,4 +734,5 @@ i830InitVtbl(struct i830_context *i830)
    i830->intel.vtbl.assert_not_dirty = i830_assert_not_dirty;
    i830->intel.vtbl.finish_batch = intel_finish_vb;
    i830->intel.vtbl.invalidate_state = i830_invalidate_state;
+   i830->intel.vtbl.render_target_supported = i830_render_target_supported;
 }

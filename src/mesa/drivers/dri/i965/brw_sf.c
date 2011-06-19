@@ -43,20 +43,24 @@
 #include "brw_sf.h"
 #include "brw_state.h"
 
+#include "../glsl/ralloc.h"
+
 static void compile_sf_prog( struct brw_context *brw,
 			     struct brw_sf_prog_key *key )
 {
    struct intel_context *intel = &brw->intel;
    struct brw_sf_compile c;
    const GLuint *program;
+   void *mem_ctx;
    GLuint program_size;
    GLuint i, idx;
 
    memset(&c, 0, sizeof(c));
 
+   mem_ctx = ralloc_context(NULL);
    /* Begin the compilation:
     */
-   brw_init_compile(brw, &c.func);
+   brw_init_compile(brw, &c.func, mem_ctx);
 
    c.key = *key;
    c.nr_attrs = brw_count_bits(c.key.attrs);
@@ -119,13 +123,12 @@ static void compile_sf_prog( struct brw_context *brw,
    /* Upload
     */
    drm_intel_bo_unreference(brw->sf.prog_bo);
-   brw->sf.prog_bo = brw_upload_cache_with_auxdata(&brw->cache, BRW_SF_PROG,
-						   &c.key, sizeof(c.key),
-						   NULL, 0,
-						   program, program_size,
-						   &c.prog_data,
-						   sizeof(c.prog_data),
-						   &brw->sf.prog_data);
+   brw->sf.prog_bo = brw_upload_cache(&brw->cache, BRW_SF_PROG,
+				      &c.key, sizeof(c.key),
+				      program, program_size,
+				      &c.prog_data, sizeof(c.prog_data),
+				      &brw->sf.prog_data);
+   ralloc_free(mem_ctx);
 }
 
 /* Calculate interpolants for triangle and line rasterization.
@@ -178,9 +181,6 @@ static void upload_sf_prog(struct brw_context *brw)
    key.do_flat_shading = (ctx->Light.ShadeModel == GL_FLAT);
    key.do_twoside_color = (ctx->Light.Enabled && ctx->Light.Model.TwoSide);
 
-   /* _NEW_HINT */
-   key.linear_color = (ctx->Hint.PerspectiveCorrection == GL_FASTEST);
-
    /* _NEW_POLYGON */
    if (key.do_twoside_color) {
       /* If we're rendering to a FBO, we have to invert the polygon
@@ -194,7 +194,6 @@ static void upload_sf_prog(struct brw_context *brw)
    drm_intel_bo_unreference(brw->sf.prog_bo);
    brw->sf.prog_bo = brw_search_cache(&brw->cache, BRW_SF_PROG,
 				      &key, sizeof(key),
-				      NULL, 0,
 				      &brw->sf.prog_data);
    if (brw->sf.prog_bo == NULL)
       compile_sf_prog( brw, &key );

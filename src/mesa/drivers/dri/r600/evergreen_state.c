@@ -32,6 +32,7 @@
 #include "main/context.h"
 #include "main/dd.h"
 #include "main/simple_list.h"
+#include "main/state.h"
 
 #include "tnl/tnl.h"
 #include "tnl/t_pipeline.h"
@@ -342,7 +343,7 @@ static void evergreenSetBlendState(struct gl_context * ctx) //diff : CB_COLOR_CO
 
 	EVERGREEN_STATECHANGE(context, cb);
 
-	if (RGBA_LOGICOP_ENABLED(ctx) || !ctx->Color.BlendEnabled) {
+	if (_mesa_rgba_logicop_enabled(ctx) || !ctx->Color.BlendEnabled) {
 		SETfield(blend_reg,
 			 BLEND_ONE, COLOR_SRCBLEND_shift, COLOR_SRCBLEND_mask);
 		SETfield(blend_reg,
@@ -363,13 +364,13 @@ static void evergreenSetBlendState(struct gl_context * ctx) //diff : CB_COLOR_CO
 	}
 
 	SETfield(blend_reg,
-		 evergreenblend_factor(ctx->Color.BlendSrcRGB, GL_TRUE),
+		 evergreenblend_factor(ctx->Color.Blend[0].SrcRGB, GL_TRUE),
 		 COLOR_SRCBLEND_shift, COLOR_SRCBLEND_mask);
 	SETfield(blend_reg,
-		 evergreenblend_factor(ctx->Color.BlendDstRGB, GL_FALSE),
+		 evergreenblend_factor(ctx->Color.Blend[0].DstRGB, GL_FALSE),
 		 COLOR_DESTBLEND_shift, COLOR_DESTBLEND_mask);
 
-	switch (ctx->Color.BlendEquationRGB) {
+	switch (ctx->Color.Blend[0].EquationRGB) {
 	case GL_FUNC_ADD:
 		eqn = COMB_DST_PLUS_SRC;
 		break;
@@ -401,20 +402,20 @@ static void evergreenSetBlendState(struct gl_context * ctx) //diff : CB_COLOR_CO
 	default:
 		fprintf(stderr,
 			"[%s:%u] Invalid RGB blend equation (0x%04x).\n",
-			__FUNCTION__, __LINE__, ctx->Color.BlendEquationRGB);
+			__FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationRGB);
 		return;
 	}
 	SETfield(blend_reg,
 		 eqn, COLOR_COMB_FCN_shift, COLOR_COMB_FCN_mask);
 
 	SETfield(blend_reg,
-		 evergreenblend_factor(ctx->Color.BlendSrcA, GL_TRUE),
+		 evergreenblend_factor(ctx->Color.Blend[0].SrcA, GL_TRUE),
 		 ALPHA_SRCBLEND_shift, ALPHA_SRCBLEND_mask);
 	SETfield(blend_reg,
-		 evergreenblend_factor(ctx->Color.BlendDstA, GL_FALSE),
+		 evergreenblend_factor(ctx->Color.Blend[0].DstA, GL_FALSE),
 		 ALPHA_DESTBLEND_shift, ALPHA_DESTBLEND_mask);
 
-	switch (ctx->Color.BlendEquationA) {
+	switch (ctx->Color.Blend[0].EquationA) {
 	case GL_FUNC_ADD:
 		eqnA = COMB_DST_PLUS_SRC;
 		break;
@@ -445,7 +446,7 @@ static void evergreenSetBlendState(struct gl_context * ctx) //diff : CB_COLOR_CO
 	default:
 		fprintf(stderr,
 			"[%s:%u] Invalid A blend equation (0x%04x).\n",
-			__FUNCTION__, __LINE__, ctx->Color.BlendEquationA);
+			__FUNCTION__, __LINE__, ctx->Color.Blend[0].EquationA);
 		return;
 	}
 
@@ -520,7 +521,7 @@ static void evergreenSetLogicOpState(struct gl_context *ctx) //diff : CB_COLOR_C
 
 	EVERGREEN_STATECHANGE(context, cb);
 
-	if (RGBA_LOGICOP_ENABLED(ctx))
+	if (_mesa_rgba_logicop_enabled(ctx))
 		SETfield(evergreen->CB_COLOR_CONTROL.u32All,
 			 evergreen_translate_logicop(ctx->Color.LogicOp), 
              EG_CB_COLOR_CONTROL__ROP3_shift, 
@@ -1148,7 +1149,7 @@ static void evergreenShadeModel(struct gl_context * ctx, GLenum mode) //same
 
 static void evergreenLogicOpcode(struct gl_context *ctx, GLenum logicop) //diff
 {
-	if (RGBA_LOGICOP_ENABLED(ctx))
+	if (_mesa_rgba_logicop_enabled(ctx))
 		evergreenSetLogicOpState(ctx);
 }
 
@@ -1468,6 +1469,22 @@ static void evergreenInitSQConfig(struct gl_context * ctx)
         uPSThreadCount = 96;
         uMaxThreads = 192;
         uMaxStackEntries = 256;
+	    break;
+    case CHIP_FAMILY_SUMO:
+	    uSqNumCfInsts       = 2;
+        bVC_ENABLE = GL_FALSE;
+        uMaxGPRs = 256;
+        uPSThreadCount = 96;
+        uMaxThreads = 248;
+        uMaxStackEntries = 256;
+	    break;
+    case CHIP_FAMILY_SUMO2:
+	    uSqNumCfInsts       = 2;
+        bVC_ENABLE = GL_FALSE;
+        uMaxGPRs = 256;
+        uPSThreadCount = 96;
+        uMaxThreads = 248;
+        uMaxStackEntries = 512;
 	    break;
     case CHIP_FAMILY_BARTS:
 	    uSqNumCfInsts       = 2;
