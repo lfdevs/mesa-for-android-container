@@ -184,23 +184,22 @@ static boolean r300_reserve_cs_dwords(struct r300_context *r300,
                                    unsigned cs_dwords)
 {
     boolean flushed        = FALSE;
-    boolean first_draw     = flags & PREP_FIRST_DRAW;
-    boolean emit_aos       = flags & PREP_EMIT_AOS;
-    boolean emit_aos_swtcl = flags & PREP_EMIT_AOS_SWTCL;
+    boolean emit_states    = flags & PREP_FIRST_DRAW;
+    boolean emit_vertex_arrays       = flags & PREP_EMIT_AOS;
+    boolean emit_vertex_arrays_swtcl = flags & PREP_EMIT_AOS_SWTCL;
 
     /* Add dirty state, index offset, and AOS. */
-    if (first_draw) {
+    if (emit_states)
         cs_dwords += r300_get_num_dirty_dwords(r300);
 
-        if (r300->screen->caps.index_bias_supported)
-            cs_dwords += 2; /* emit_index_offset */
+    if (r300->screen->caps.index_bias_supported)
+        cs_dwords += 2; /* emit_index_offset */
 
-        if (emit_aos)
-            cs_dwords += 55; /* emit_aos */
+    if (emit_vertex_arrays)
+        cs_dwords += 55; /* emit_vertex_arrays */
 
-        if (emit_aos_swtcl)
-            cs_dwords += 7; /* emit_aos_swtcl */
-    }
+    if (emit_vertex_arrays_swtcl)
+        cs_dwords += 7; /* emit_vertex_arrays_swtcl */
 
     cs_dwords += r300_get_num_cs_end_dwords(r300);
 
@@ -228,14 +227,13 @@ static boolean r300_emit_states(struct r300_context *r300,
                                 int aos_offset,
                                 int index_bias)
 {
-    boolean first_draw     = flags & PREP_FIRST_DRAW;
-    boolean emit_aos       = flags & PREP_EMIT_AOS;
-    boolean emit_aos_swtcl = flags & PREP_EMIT_AOS_SWTCL;
+    boolean emit_states    = flags & PREP_FIRST_DRAW;
+    boolean emit_vertex_arrays       = flags & PREP_EMIT_AOS;
+    boolean emit_vertex_arrays_swtcl = flags & PREP_EMIT_AOS_SWTCL;
     boolean indexed        = flags & PREP_INDEXED;
     boolean validate_vbos  = flags & PREP_VALIDATE_VBOS;
 
-    /* Validate buffers and emit dirty state if needed. */
-    if (first_draw) {
+    if (emit_states) {
         /* upload buffers first */
         if (r300->screen->caps.has_tcl && r300->any_user_vbs) {
             r300_upload_user_buffers(r300);
@@ -257,19 +255,20 @@ static boolean r300_emit_states(struct r300_context *r300,
         }
 
         r300_emit_dirty_state(r300);
-        if (r300->screen->caps.index_bias_supported) {
-            if (r300->screen->caps.has_tcl)
-                r500_emit_index_bias(r300, index_bias);
-            else
-                r500_emit_index_bias(r300, 0);
-        }
-
-        if (emit_aos)
-            r300_emit_aos(r300, aos_offset, indexed);
-
-        if (emit_aos_swtcl)
-            r300_emit_aos_swtcl(r300, indexed);
     }
+
+    if (r300->screen->caps.index_bias_supported) {
+        if (r300->screen->caps.has_tcl)
+            r500_emit_index_bias(r300, index_bias);
+        else
+            r500_emit_index_bias(r300, 0);
+    }
+
+    if (emit_vertex_arrays)
+        r300_emit_aos(r300, aos_offset, indexed);
+
+    if (emit_vertex_arrays_swtcl)
+        r300_emit_aos_swtcl(r300, indexed);
 
     return TRUE;
 }
