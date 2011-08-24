@@ -1,0 +1,2 @@
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libgbm.so.1* usr/lib/${DEB_HOST_MULTIARCH}
+dri/usr/lib/${DEB_HOST_MULTIARCH}/gbm	       usr/lib/${DEB_HOST_MULTIARCH}

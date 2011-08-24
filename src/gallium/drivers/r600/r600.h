@@ -211,14 +211,21 @@ struct r600_reloc {
  */
 struct r600_query {
 	u64					result;
-	/* The kind of query. Currently only OQ is supported. */
+	/* The kind of query */
 	unsigned				type;
-	/* How many results have been written, in dwords. It's incremented
-	 * after end_query and flush. */
-	unsigned				num_results;
-	/* if we've flushed the query */
+	/* Offset of the first result for current query */
+	unsigned				results_start;
+	/* Offset of the next free result after current query data */
+	unsigned				results_end;
+	/* Size of the result */
+	unsigned				result_size;
+	/* Count of new queries started in one stream without flushing */
+	unsigned				queries_emitted;
+	/* State flags */
 	unsigned				state;
-	/* The buffer where query results are stored. */
+	/* The buffer where query results are stored. It's used as a ring,
+	 * data blocks for current query are stored sequentially from
+	 * results_start to results_end, with wrapping on the buffer end */
 	struct r600_bo			*buffer;
 	unsigned				buffer_size;
 	/* linked list of queries */
@@ -228,6 +235,7 @@ struct r600_query {
 #define R600_QUERY_STATE_STARTED	(1 << 0)
 #define R600_QUERY_STATE_ENDED		(1 << 1)
 #define R600_QUERY_STATE_SUSPENDED	(1 << 2)
+#define R600_QUERY_STATE_FLUSHED	(1 << 3)
 
 #define R600_CONTEXT_DRAW_PENDING	(1 << 0)
 #define R600_CONTEXT_DST_CACHES_DIRTY	(1 << 1)
@@ -245,6 +253,7 @@ struct r600_context {
 	unsigned		pm4_cdwords;
 	unsigned		pm4_dirty_cdwords;
 	unsigned		ctx_pm4_ndwords;
+	unsigned		init_dwords;
 	unsigned		nreloc;
 	unsigned		creloc;
 	struct r600_reloc	*reloc;
@@ -293,7 +302,7 @@ boolean r600_context_query_result(struct r600_context *ctx,
 void r600_query_begin(struct r600_context *ctx, struct r600_query *query);
 void r600_query_end(struct r600_context *ctx, struct r600_query *query);
 void r600_context_queries_suspend(struct r600_context *ctx);
-void r600_context_queries_resume(struct r600_context *ctx);
+void r600_context_queries_resume(struct r600_context *ctx, boolean flushed);
 void r600_query_predication(struct r600_context *ctx, struct r600_query *query, int operation,
 			    int flag_wait);
 void r600_context_emit_fence(struct r600_context *ctx, struct r600_bo *fence,

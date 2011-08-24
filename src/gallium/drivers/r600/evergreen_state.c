@@ -256,6 +256,8 @@ static void *evergreen_create_rs_state(struct pipe_context *ctx,
 	}
 
 	rstate = &rs->rstate;
+	rs->clamp_vertex_color = state->clamp_vertex_color;
+	rs->clamp_fragment_color = state->clamp_fragment_color;
 	rs->flatshade = state->flatshade;
 	rs->sprite_coord_enable = state->sprite_coord_enable;
 
@@ -883,6 +885,7 @@ static void evergreen_set_framebuffer_state(struct pipe_context *ctx,
 
 	/* build states */
 	rctx->have_depth_fb = 0;
+	rctx->nr_cbufs = state->nr_cbufs;
 	for (int i = 0; i < state->nr_cbufs; i++) {
 		evergreen_cb(rctx, rstate, state, i);
 	}
@@ -1451,6 +1454,11 @@ void evergreen_init_config(struct r600_pipe_context *rctx)
 	tmp |= S_008C28_NUM_LS_STACK_ENTRIES(num_ls_stack_entries);
 	r600_pipe_state_add_reg(rstate, R_008C28_SQ_STACK_RESOURCE_MGMT_3, tmp, 0xFFFFFFFF, NULL);
 
+	tmp = 0;
+	tmp |= S_008E2C_NUM_PS_LDS(0x1000);
+	tmp |= S_008E2C_NUM_LS_LDS(0x1000);
+	r600_pipe_state_add_reg(rstate, R_008E2C_SQ_LDS_RESOURCE_MGMT, tmp, 0xFFFFFFFF, NULL);
+
 	r600_pipe_state_add_reg(rstate, R_009100_SPI_CONFIG_CNTL, 0x0, 0xFFFFFFFF, NULL);
 	r600_pipe_state_add_reg(rstate, R_00913C_SPI_CONFIG_CNTL_1, S_00913C_VTX_DONE_DELAY(4), 0xFFFFFFFF, NULL);
 
@@ -1629,7 +1637,10 @@ void evergreen_pipe_shader_ps(struct pipe_context *ctx, struct r600_pipe_shader 
 		    rshader->output[i].name == TGSI_SEMANTIC_STENCIL)
 			exports_ps |= 1;
 		else if (rshader->output[i].name == TGSI_SEMANTIC_COLOR) {
-			num_cout++;
+			if (rshader->fs_write_all)
+				num_cout = rshader->nr_cbufs;
+			else
+				num_cout++;
 		}
 	}
 	exports_ps |= S_02884C_EXPORT_COLORS(num_cout);
@@ -1736,7 +1747,7 @@ void evergreen_pipe_shader_vs(struct pipe_context *ctx, struct r600_pipe_shader 
 
 	r600_pipe_state_add_reg(rstate,
 			R_0286C4_SPI_VS_OUT_CONFIG,
-			S_0286C4_VS_EXPORT_COUNT(rshader->noutput - 2),
+			S_0286C4_VS_EXPORT_COUNT(rshader->noutput - 1),
 			0xFFFFFFFF, NULL);
 	r600_pipe_state_add_reg(rstate,
 			R_028860_SQ_PGM_RESOURCES_VS,

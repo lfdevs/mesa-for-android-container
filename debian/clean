@@ -14,3 +14,5 @@ debian/libgl1-mesa-dri-experimental.install
 debian/libegl1-mesa.install
 debian/libegl1-mesa-drivers.install
 debian/libegl1-mesa-dev.install
+debian/libgbm1.install
+debian/libgbm-dev.install

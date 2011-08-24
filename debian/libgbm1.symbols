@@ -1,0 +1,16 @@
+libgbm.so.1 libgbm1 #MINVER#
+ _gbm_fd_get_device_name@Base 7.11~1
+ _gbm_log@Base 7.11~1
+ _gbm_mesa_get_device@Base 7.11~1
+ _gbm_udev_device_new_from_fd@Base 7.11~1
+ gbm_bo_create@Base 7.11~1
+ gbm_bo_create_from_egl_image@Base 7.11~1
+ gbm_bo_destroy@Base 7.11~1
+ gbm_bo_get_handle@Base 7.11~1
+ gbm_bo_get_height@Base 7.11~1
+ gbm_bo_get_pitch@Base 7.11~1
+ gbm_bo_get_width@Base 7.11~1
+ gbm_create_device@Base 7.11~1
+ gbm_device_destroy@Base 7.11~1
+ gbm_device_get_backend_name@Base 7.11~1
+ gbm_device_get_fd@Base 7.11~1

@@ -1,14 +1,16 @@
 Several versions of llvm can coexist in the archive (at the time of this
 writing, 2.8 and 2.9), so pick a version. Let's assume the last version
 receives bug fixes quickly, so pick 2.9 for now.
---- a/configure.ac
-+++ b/configure.ac
-@@ -1458,7 +1458,7 @@ if test "x$enable_gallium" = xno -a "x$e
+Index: mesa/configure.ac
+===================================================================
+--- mesa.orig/configure.ac	2011-08-01 17:04:54.000000000 +1000
++++ mesa/configure.ac	2011-08-01 17:05:08.080884291 +1000
+@@ -1731,7 +1731,7 @@
+     esac
  fi
- if test "x$enable_gallium" = xyes; then
-     SRC_DIRS="$SRC_DIRS gallium gallium/winsys gallium/targets"
+ if test "x$enable_gallium_llvm" = xyes; then
 -    AC_PATH_PROG([LLVM_CONFIG], [llvm-config], [no])
 +    AC_PATH_PROG([LLVM_CONFIG], [llvm-config-2.9], [no])
- else
-     LLVM_CONFIG=no
- fi
+ 
+     if test "x$LLVM_CONFIG" != xno; then
+ 	LLVM_VERSION=`$LLVM_CONFIG --version`

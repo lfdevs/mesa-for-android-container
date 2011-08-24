@@ -1556,7 +1556,7 @@ check_begin_texture_render(struct gl_context *ctx, struct gl_framebuffer *fb)
    GLuint i;
    ASSERT(ctx->Driver.RenderTexture);
 
-   if (is_winsys_fbo(fb));
+   if (is_winsys_fbo(fb))
       return; /* can't render to texture with winsys framebuffers */
 
    for (i = 0; i < BUFFER_COUNT; i++) {
@@ -1576,7 +1576,7 @@ check_begin_texture_render(struct gl_context *ctx, struct gl_framebuffer *fb)
 static void
 check_end_texture_render(struct gl_context *ctx, struct gl_framebuffer *fb)
 {
-   if (is_winsys_fbo(fb));
+   if (is_winsys_fbo(fb))
       return; /* can't render to texture with winsys framebuffers */
 
    if (ctx->Driver.FinishRenderTexture) {
@@ -2124,9 +2124,13 @@ _mesa_GetFramebufferAttachmentParameterivEXT(GLenum target, GLenum attachment,
 {
    const struct gl_renderbuffer_attachment *att;
    struct gl_framebuffer *buffer;
+   GLenum err;
    GET_CURRENT_CONTEXT(ctx);
 
    ASSERT_OUTSIDE_BEGIN_END(ctx);
+
+   /* The error differs in GL andd GLES. */
+   err = ctx->API == API_OPENGL ? GL_INVALID_OPERATION : GL_INVALID_ENUM;
 
    buffer = get_framebuffer_target(ctx, target);
    if (!buffer) {
@@ -2178,7 +2182,12 @@ _mesa_GetFramebufferAttachmentParameterivEXT(GLenum target, GLenum attachment,
       }
       else {
          assert(att->Type == GL_NONE);
-         *params = 0;
+         if (ctx->API == API_OPENGL) {
+            *params = 0;
+         } else {
+            _mesa_error(ctx, GL_INVALID_ENUM,
+                        "glGetFramebufferAttachmentParameterivEXT(pname)");
+         }
       }
       return;
    case GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL_EXT:
@@ -2186,7 +2195,7 @@ _mesa_GetFramebufferAttachmentParameterivEXT(GLenum target, GLenum attachment,
 	 *params = att->TextureLevel;
       }
       else if (att->Type == GL_NONE) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
+         _mesa_error(ctx, err,
                      "glGetFramebufferAttachmentParameterivEXT(pname)");
       }
       else {
@@ -2204,7 +2213,7 @@ _mesa_GetFramebufferAttachmentParameterivEXT(GLenum target, GLenum attachment,
          }
       }
       else if (att->Type == GL_NONE) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
+         _mesa_error(ctx, err,
                      "glGetFramebufferAttachmentParameterivEXT(pname)");
       }
       else {
@@ -2222,7 +2231,7 @@ _mesa_GetFramebufferAttachmentParameterivEXT(GLenum target, GLenum attachment,
          }
       }
       else if (att->Type == GL_NONE) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
+         _mesa_error(ctx, err,
                      "glGetFramebufferAttachmentParameterivEXT(pname)");
       }
       else {
@@ -2236,7 +2245,7 @@ _mesa_GetFramebufferAttachmentParameterivEXT(GLenum target, GLenum attachment,
                      "glGetFramebufferAttachmentParameterivEXT(pname)");
       }
       else if (att->Type == GL_NONE) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
+         _mesa_error(ctx, err,
                      "glGetFramebufferAttachmentParameterivEXT(pname)");
       }
       else {
@@ -2257,7 +2266,7 @@ _mesa_GetFramebufferAttachmentParameterivEXT(GLenum target, GLenum attachment,
          return;
       }
       else if (att->Type == GL_NONE) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
+         _mesa_error(ctx, err,
                      "glGetFramebufferAttachmentParameterivEXT(pname)");
       }
       else {
@@ -2282,7 +2291,7 @@ _mesa_GetFramebufferAttachmentParameterivEXT(GLenum target, GLenum attachment,
                      "glGetFramebufferAttachmentParameterivEXT(pname)");
       }
       else if (att->Type == GL_NONE) {
-         _mesa_error(ctx, GL_INVALID_OPERATION,
+         _mesa_error(ctx, err,
                      "glGetFramebufferAttachmentParameterivEXT(pname)");
       }
       else if (att->Texture) {
@@ -2582,6 +2591,10 @@ _mesa_BlitFramebufferEXT(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
          }
          printf("\n");
       }
+   }
+
+   if (!mask) {
+      return;
    }
 
    ASSERT(ctx->Driver.BlitFramebuffer);

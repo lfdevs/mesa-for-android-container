@@ -109,6 +109,7 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_ANISOTROPIC_FILTER:
    case PIPE_CAP_DEPTHSTENCIL_CLEAR_SEPARATE:
    case PIPE_CAP_NPOT_TEXTURES:
+   case PIPE_CAP_POINT_SPRITE:
    case PIPE_CAP_PRIMITIVE_RESTART: /* draw module */
    case PIPE_CAP_TEXTURE_MIRROR_REPEAT:
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
@@ -118,8 +119,6 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    /* Features that should be supported (boolean caps). */
    /* XXX: Just test the code */
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
-   /* XXX: No code but hw supports it */
-   case PIPE_CAP_POINT_SPRITE:
       /* Also lie about these when asked to (needed for GLSL / GL 2.0) */
       return is->debug.lie ? 1 : 0;
 
@@ -254,7 +253,7 @@ i915_get_paramf(struct pipe_screen *screen, enum pipe_cap cap)
    }
 }
 
-static boolean
+boolean
 i915_is_format_supported(struct pipe_screen *screen,
                          enum pipe_format format,
                          enum pipe_texture_target target,
@@ -264,6 +263,8 @@ i915_is_format_supported(struct pipe_screen *screen,
    static const enum pipe_format tex_supported[] = {
       PIPE_FORMAT_B8G8R8A8_UNORM,
       PIPE_FORMAT_B8G8R8X8_UNORM,
+      PIPE_FORMAT_R8G8B8A8_UNORM,
+      PIPE_FORMAT_R8G8B8X8_UNORM,
       PIPE_FORMAT_B5G6R5_UNORM,
       PIPE_FORMAT_L8_UNORM,
       PIPE_FORMAT_A8_UNORM,
@@ -283,7 +284,11 @@ i915_is_format_supported(struct pipe_screen *screen,
    };
    static const enum pipe_format render_supported[] = {
       PIPE_FORMAT_B8G8R8A8_UNORM,
+      PIPE_FORMAT_R8G8B8A8_UNORM,
       PIPE_FORMAT_B5G6R5_UNORM,
+      PIPE_FORMAT_L8_UNORM,
+      PIPE_FORMAT_A8_UNORM,
+      PIPE_FORMAT_I8_UNORM,
       PIPE_FORMAT_NONE  /* list terminator */
    };
    static const enum pipe_format depth_supported[] = {

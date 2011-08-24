@@ -1,4 +1,3 @@
 dri/usr/lib/${DEB_HOST_MULTIARCH}/egl/egl_gallium.so usr/lib/${DEB_HOST_MULTIARCH}/egl
-dri/usr/lib/${DEB_HOST_MULTIARCH}/egl/pipe_*.so usr/lib/${DEB_HOST_MULTIARCH}/egl
-dri/usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so.1 usr/lib/${DEB_HOST_MULTIARCH}
-dri/usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so.1.0 usr/lib/${DEB_HOST_MULTIARCH}
+#dri/usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so.1 usr/lib/${DEB_HOST_MULTIARCH}
+#dri/usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so.1.0 usr/lib/${DEB_HOST_MULTIARCH}

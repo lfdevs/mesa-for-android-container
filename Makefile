@@ -183,7 +183,7 @@ ultrix-gcc:
 
 # Rules for making release tarballs
 
-VERSION=7.11-devel
+VERSION=7.11
 DIRECTORY = Mesa-$(VERSION)
 LIB_NAME = MesaLib-$(VERSION)
 GLUT_NAME = MesaGLUT-$(VERSION)
@@ -253,7 +253,6 @@ MAIN_FILES = \
 	$(DIRECTORY)/src/mesa/descrip.mms				\
 	$(DIRECTORY)/src/mesa/gl.pc.in					\
 	$(DIRECTORY)/src/mesa/osmesa.pc.in				\
-	$(DIRECTORY)/src/mesa/depend					\
 	$(MAIN_ES_FILES)						\
 	$(DIRECTORY)/src/mesa/main/*.[chS]				\
 	$(DIRECTORY)/src/mesa/main/*.cpp				\
@@ -286,9 +285,6 @@ MAIN_FILES = \
 	$(DIRECTORY)/src/mesa/drivers/osmesa/descrip.mms		\
 	$(DIRECTORY)/src/mesa/drivers/osmesa/osmesa.def			\
 	$(DIRECTORY)/src/mesa/drivers/osmesa/*.[ch]			\
-	$(DIRECTORY)/src/mesa/drivers/dri/r300/compiler/*.[ch]		\
-	$(DIRECTORY)/src/mesa/drivers/dri/r300/compiler/Makefile	\
-	$(DIRECTORY)/src/mesa/drivers/dri/r300/compiler/SConscript	\
 	$(DIRECTORY)/src/mesa/drivers/windows/*/*.[ch]			\
 	$(DIRECTORY)/src/mesa/drivers/windows/*/*.def			\
 	$(DIRECTORY)/src/mesa/drivers/x11/Makefile			\
@@ -345,6 +341,16 @@ EGL_FILES = \
 	$(DIRECTORY)/src/egl/main/*.pc.in				\
 	$(DIRECTORY)/src/egl/main/*.def
 
+GBM_FILES = \
+	$(DIRECTORY)/src/gbm/Makefile					\
+	$(DIRECTORY)/src/gbm/main/*.pc.in				\
+	$(DIRECTORY)/src/gbm/main/*.[ch]				\
+	$(DIRECTORY)/src/gbm/main/Makefile				\
+	$(DIRECTORY)/src/gbm/backends/Makefile				\
+	$(DIRECTORY)/src/gbm/backends/Makefile.template			\
+	$(DIRECTORY)/src/gbm/backends/*/*.[ch]				\
+	$(DIRECTORY)/src/gbm/backends/*/Makefile			\
+
 GALLIUM_FILES = \
 	$(DIRECTORY)/src/mesa/state_tracker/*[ch]			\
 	$(DIRECTORY)/src/gallium/Makefile				\
@@ -376,8 +382,7 @@ DRI_FILES = \
 	$(DIRECTORY)/src/glx/Makefile					\
 	$(DIRECTORY)/src/glx/*.[ch]					\
 	$(APPLE_DRI_FILES)						\
-	$(DIRECTORY)/src/mesa/drivers/dri/Makefile			\
-	$(DIRECTORY)/src/mesa/drivers/dri/Makefile.template		\
+	$(DIRECTORY)/src/mesa/drivers/dri/Makefile*			\
 	$(DIRECTORY)/src/mesa/drivers/dri/dri.pc.in			\
 	$(DIRECTORY)/src/mesa/drivers/dri/common/xmlpool/*.po		\
 	$(DIRECTORY)/src/mesa/drivers/dri/*/*.[chS]			\
@@ -385,6 +390,7 @@ DRI_FILES = \
 	$(DIRECTORY)/src/mesa/drivers/dri/*/*/*.[chS]			\
 	$(DIRECTORY)/src/mesa/drivers/dri/*/Makefile			\
 	$(DIRECTORY)/src/mesa/drivers/dri/*/*/Makefile			\
+	$(DIRECTORY)/src/mesa/drivers/dri/*/*/SConscript		\
 	$(DIRECTORY)/src/mesa/drivers/dri/*/Doxyfile
 
 SGI_GLU_FILES = \
@@ -414,15 +420,13 @@ GLW_FILES = \
 	$(DIRECTORY)/src/glw/*.[ch]			\
 	$(DIRECTORY)/src/glw/Makefile*			\
 	$(DIRECTORY)/src/glw/README			\
-	$(DIRECTORY)/src/glw/glw.pc.in			\
-	$(DIRECTORY)/src/glw/depend
+	$(DIRECTORY)/src/glw/glw.pc.in
 
 GLUT_FILES = \
 	$(DIRECTORY)/include/GL/glut.h			\
 	$(DIRECTORY)/include/GL/glutf90.h		\
 	$(DIRECTORY)/src/glut/glx/Makefile*		\
 	$(DIRECTORY)/src/glut/glx/SConscript		\
-	$(DIRECTORY)/src/glut/glx/depend		\
 	$(DIRECTORY)/src/glut/glx/glut.pc.in		\
 	$(DIRECTORY)/src/glut/glx/*def			\
 	$(DIRECTORY)/src/glut/glx/*.[ch]		\
@@ -430,19 +434,13 @@ GLUT_FILES = \
 	$(DIRECTORY)/src/glut/beos/*.cpp		\
 	$(DIRECTORY)/src/glut/beos/Makefile
 
-DEPEND_FILES = \
-	$(TOP)/src/mesa/depend		\
-	$(TOP)/src/glx/depend		\
-	$(TOP)/src/glw/depend		\
-	$(TOP)/src/glut/glx/depend	\
-	$(TOP)/src/glu/sgi/depend
-
 
 LIB_FILES = \
 	$(MAIN_FILES)		\
 	$(MAPI_FILES)		\
 	$(ES_FILES)		\
 	$(EGL_FILES)		\
+	$(GBM_FILES)		\
 	$(GALLIUM_FILES)	\
 	$(DRI_FILES)		\
 	$(SGI_GLU_FILES)	\
@@ -453,7 +451,7 @@ parsers: configure
 	-@touch $(TOP)/configs/current
 	$(MAKE) -C src/glsl glsl_parser.cpp glsl_parser.h glsl_lexer.cpp
 	$(MAKE) -C src/glsl/glcpp glcpp-lex.c glcpp-parse.c glcpp-parse.h
-	$(MAKE) -C src/mesa/program lex.yy.c program_parse.tab.c program_parse.tab.h
+	$(MAKE) -C src/mesa program/lex.yy.c program/program_parse.tab.c program/program_parse.tab.h
 
 # Everything for new a Mesa release:
 ARCHIVES = $(LIB_NAME).tar.gz \
@@ -473,27 +471,21 @@ AUTOCONF = autoconf
 AC_FLAGS =
 aclocal.m4: configure.ac acinclude.m4
 	$(ACLOCAL) $(ACLOCAL_FLAGS)
-configure: rm_depend configure.ac aclocal.m4 acinclude.m4
+configure: configure.ac aclocal.m4 acinclude.m4
 	$(AUTOCONF) $(AC_FLAGS)
-
-rm_depend:
-	@for dep in $(DEPEND_FILES) ; do \
-		rm -f $$dep ; \
-		touch $$dep ; \
-	done
 
 rm_config: parsers
 	rm -f configs/current
 	rm -f configs/autoconf
 
 $(LIB_NAME).tar: rm_config
-	cd .. ; tar -cf $(DIRECTORY)/$(LIB_NAME).tar $(LIB_FILES)
+	cd .. ; tar --dereference -cf $(DIRECTORY)/$(LIB_NAME).tar $(LIB_FILES)
 
 $(LIB_NAME).tar.gz: $(LIB_NAME).tar
 	gzip --stdout --best $(LIB_NAME).tar > $(LIB_NAME).tar.gz
 
-$(GLUT_NAME).tar: rm_depend
-	cd .. ; tar -cf $(DIRECTORY)/$(GLUT_NAME).tar $(GLUT_FILES)
+$(GLUT_NAME).tar:
+	cd .. ; tar --dereference -cf $(DIRECTORY)/$(GLUT_NAME).tar $(GLUT_FILES)
 
 $(GLUT_NAME).tar.gz: $(GLUT_NAME).tar
 	gzip --stdout --best $(GLUT_NAME).tar > $(GLUT_NAME).tar.gz
@@ -524,4 +516,4 @@ md5: $(ARCHIVES)
 	@-md5sum $(GLUT_NAME).tar.bz2
 	@-md5sum $(GLUT_NAME).zip
 
-.PHONY: tarballs rm_depend rm_config md5
+.PHONY: tarballs rm_config md5

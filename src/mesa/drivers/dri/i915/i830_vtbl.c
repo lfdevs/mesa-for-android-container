@@ -31,8 +31,13 @@
 #include "intel_regions.h"
 #include "intel_tris.h"
 #include "intel_fbo.h"
+#include "intel_buffers.h"
+#include "tnl/tnl.h"
 #include "tnl/t_context.h"
 #include "tnl/t_vertex.h"
+#include "swrast_setup/swrast_setup.h"
+#include "main/renderbuffer.h"
+#include "main/framebuffer.h"
 
 #define FILE_DEBUG_FLAG DEBUG_STATE
 
@@ -695,6 +700,159 @@ i830_set_draw_region(struct intel_context *intel,
    I830_STATECHANGE(i830, I830_UPLOAD_BUFFERS);
 }
 
+/**
+ * Update the hardware state for drawing into a window or framebuffer object.
+ *
+ * Called by glDrawBuffer, glBindFramebufferEXT, MakeCurrent, and other
+ * places within the driver.
+ *
+ * Basically, this needs to be called any time the current framebuffer
+ * changes, the renderbuffers change, or we need to draw into different
+ * color buffers.
+ */
+static void
+i830_update_draw_buffer(struct intel_context *intel)
+{
+   struct gl_context *ctx = &intel->ctx;
+   struct gl_framebuffer *fb = ctx->DrawBuffer;
+   struct intel_region *colorRegions[MAX_DRAW_BUFFERS], *depthRegion = NULL;
+   struct intel_renderbuffer *irbDepth = NULL, *irbStencil = NULL;
+   bool fb_has_hiz = intel_framebuffer_has_hiz(fb);
+
+   if (!fb) {
+      /* this can happen during the initial context initialization */
+      return;
+   }
+
+   irbDepth = intel_get_renderbuffer(fb, BUFFER_DEPTH);
+   irbStencil = intel_get_renderbuffer(fb, BUFFER_STENCIL);
+
+   /* Do this here, not core Mesa, since this function is called from
+    * many places within the driver.
+    */
+   if (ctx->NewState & _NEW_BUFFERS) {
+      /* this updates the DrawBuffer->_NumColorDrawBuffers fields, etc */
+      _mesa_update_framebuffer(ctx);
+      /* this updates the DrawBuffer's Width/Height if it's a FBO */
+      _mesa_update_draw_buffer_bounds(ctx);
+   }
+
+   if (fb->_Status != GL_FRAMEBUFFER_COMPLETE_EXT) {
+      /* this may occur when we're called by glBindFrameBuffer() during
+       * the process of someone setting up renderbuffers, etc.
+       */
+      /*_mesa_debug(ctx, "DrawBuffer: incomplete user FBO\n");*/
+      return;
+   }
+
+   /* How many color buffers are we drawing into?
+    *
+    * If there are zero buffers or the buffer is too big, don't configure any
+    * regions for hardware drawing.  We'll fallback to software below.  Not
+    * having regions set makes some of the software fallback paths faster.
+    */
+   if ((fb->Width > ctx->Const.MaxRenderbufferSize)
+       || (fb->Height > ctx->Const.MaxRenderbufferSize)
+       || (fb->_NumColorDrawBuffers == 0)) {
+      /* writing to 0  */
+      colorRegions[0] = NULL;
+   }
+   else if (fb->_NumColorDrawBuffers > 1) {
+       int i;
+       struct intel_renderbuffer *irb;
+
+       for (i = 0; i < fb->_NumColorDrawBuffers; i++) {
+           irb = intel_renderbuffer(fb->_ColorDrawBuffers[i]);
+           colorRegions[i] = irb ? irb->region : NULL;
+       }
+   }
+   else {
+      /* Get the intel_renderbuffer for the single colorbuffer we're drawing
+       * into.
+       */
+      if (fb->Name == 0) {
+	 /* drawing to window system buffer */
+	 if (fb->_ColorDrawBufferIndexes[0] == BUFFER_FRONT_LEFT)
+	    colorRegions[0] = intel_get_rb_region(fb, BUFFER_FRONT_LEFT);
+	 else
+	    colorRegions[0] = intel_get_rb_region(fb, BUFFER_BACK_LEFT);
+      }
+      else {
+	 /* drawing to user-created FBO */
+	 struct intel_renderbuffer *irb;
+	 irb = intel_renderbuffer(fb->_ColorDrawBuffers[0]);
+	 colorRegions[0] = (irb && irb->region) ? irb->region : NULL;
+      }
+   }
+
+   if (!colorRegions[0]) {
+      FALLBACK(intel, INTEL_FALLBACK_DRAW_BUFFER, GL_TRUE);
+   }
+   else {
+      FALLBACK(intel, INTEL_FALLBACK_DRAW_BUFFER, GL_FALSE);
+   }
+
+   /* Check for depth fallback. */
+   if (irbDepth && irbDepth->region) {
+      assert(!fb_has_hiz || irbDepth->Base.Format != MESA_FORMAT_S8_Z24);
+      FALLBACK(intel, INTEL_FALLBACK_DEPTH_BUFFER, GL_FALSE);
+      depthRegion = irbDepth->region;
+   } else if (irbDepth && !irbDepth->region) {
+      FALLBACK(intel, INTEL_FALLBACK_DEPTH_BUFFER, GL_TRUE);
+      depthRegion = NULL;
+   } else { /* !irbDepth */
+      /* No fallback is needed because there is no depth buffer. */
+      FALLBACK(intel, INTEL_FALLBACK_DEPTH_BUFFER, GL_FALSE);
+      depthRegion = NULL;
+   }
+
+   /* Check for stencil fallback. */
+   if (irbStencil && irbStencil->region) {
+      assert(irbStencil->Base.Format == MESA_FORMAT_S8_Z24);
+      FALLBACK(intel, INTEL_FALLBACK_STENCIL_BUFFER, GL_FALSE);
+   } else if (irbStencil && !irbStencil->region) {
+      FALLBACK(intel, INTEL_FALLBACK_STENCIL_BUFFER, GL_TRUE);
+   } else { /* !irbStencil */
+      /* No fallback is needed because there is no stencil buffer. */
+      FALLBACK(intel, INTEL_FALLBACK_STENCIL_BUFFER, GL_FALSE);
+   }
+
+   /* If we have a (packed) stencil buffer attached but no depth buffer,
+    * we still need to set up the shared depth/stencil state so we can use it.
+    */
+   if (depthRegion == NULL && irbStencil && irbStencil->region
+       && irbStencil->Base.Format == MESA_FORMAT_S8_Z24) {
+      depthRegion = irbStencil->region;
+   }
+
+   /*
+    * Update depth and stencil test state
+    */
+   ctx->Driver.Enable(ctx, GL_DEPTH_TEST,
+		      (ctx->Depth.Test && fb->Visual.depthBits > 0));
+   ctx->Driver.Enable(ctx, GL_STENCIL_TEST,
+		      (ctx->Stencil.Enabled && fb->Visual.stencilBits > 0));
+
+   intel->vtbl.set_draw_region(intel, colorRegions, depthRegion,
+                               fb->_NumColorDrawBuffers);
+   intel->NewGLState |= _NEW_BUFFERS;
+
+   /* update viewport since it depends on window size */
+   intelCalcViewport(ctx);
+
+   /* Set state we know depends on drawable parameters:
+    */
+   ctx->Driver.Scissor(ctx, ctx->Scissor.X, ctx->Scissor.Y,
+		       ctx->Scissor.Width, ctx->Scissor.Height);
+
+   ctx->Driver.DepthRange(ctx, ctx->Viewport.Near, ctx->Viewport.Far);
+
+   /* Update culling direction which changes depending on the
+    * orientation of the buffer:
+    */
+   ctx->Driver.FrontFace(ctx, ctx->Polygon.FrontFace);
+}
+
 /* This isn't really handled at the moment.
  */
 static void
@@ -715,6 +873,12 @@ i830_assert_not_dirty( struct intel_context *intel )
 static void
 i830_invalidate_state(struct intel_context *intel, GLuint new_state)
 {
+   struct gl_context *ctx = &intel->ctx;
+
+   _swsetup_InvalidateState(ctx, new_state);
+   _tnl_InvalidateState(ctx, new_state);
+   _tnl_invalidate_vertex_state(ctx, new_state);
+
    if (new_state & _NEW_LIGHT)
       i830_update_provoking_vertex(&intel->ctx);
 }
@@ -728,6 +892,7 @@ i830InitVtbl(struct i830_context *i830)
    i830->intel.vtbl.new_batch = i830_new_batch;
    i830->intel.vtbl.reduced_primitive_state = i830_reduced_primitive_state;
    i830->intel.vtbl.set_draw_region = i830_set_draw_region;
+   i830->intel.vtbl.update_draw_buffer = i830_update_draw_buffer;
    i830->intel.vtbl.update_texture_state = i830UpdateTextureState;
    i830->intel.vtbl.render_start = i830_render_start;
    i830->intel.vtbl.render_prevalidate = i830_render_prevalidate;

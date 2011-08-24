@@ -1217,6 +1217,7 @@ static int radeon_set_screen_flags(radeonScreenPtr screen, int device_id)
    case PCI_CHIP_TURKS_6750:
    case PCI_CHIP_TURKS_6758:
    case PCI_CHIP_TURKS_6759:
+   case PCI_CHIP_TURKS_675F:
        screen->chip_family = CHIP_FAMILY_TURKS;
        screen->chip_flags = RADEON_CHIPSET_TCL;
        break;
@@ -1231,6 +1232,7 @@ static int radeon_set_screen_flags(radeonScreenPtr screen, int device_id)
    case PCI_CHIP_CAICOS_6767:
    case PCI_CHIP_CAICOS_6768:
    case PCI_CHIP_CAICOS_6770:
+   case PCI_CHIP_CAICOS_6778:
    case PCI_CHIP_CAICOS_6779:
        screen->chip_family = CHIP_FAMILY_CAICOS;
        screen->chip_flags = RADEON_CHIPSET_TCL;
@@ -1738,6 +1740,9 @@ radeonCreateScreen2(__DRIscreen *sPriv)
 				   break;
 			   case 1:
 				   screen->num_banks = 8;
+				   break;
+			   case 2:
+				   screen->num_banks = 16;
 				   break;
 			   default:
 				   fprintf(stderr, "bad banks\n");

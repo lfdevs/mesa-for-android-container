@@ -68,14 +68,26 @@ GLenum
 st_format_datatype(enum pipe_format format)
 {
    const struct util_format_description *desc;
+   int i;
 
    desc = util_format_description(format);
    assert(desc);
+
+   /* Find the first non-VOID channel. */
+   for (i = 0; i < 4; i++) {
+       if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
+           break;
+       }
+   }
 
    if (desc->layout == UTIL_FORMAT_LAYOUT_PLAIN) {
       if (format == PIPE_FORMAT_B5G5R5A1_UNORM ||
           format == PIPE_FORMAT_B5G6R5_UNORM) {
          return GL_UNSIGNED_SHORT;
+      }
+      else if (format == PIPE_FORMAT_R11G11B10_FLOAT ||
+               format == PIPE_FORMAT_R9G9B9E5_FLOAT) {
+         return GL_FLOAT;
       }
       else if (format == PIPE_FORMAT_Z24_UNORM_S8_USCALED ||
                format == PIPE_FORMAT_S8_USCALED_Z24_UNORM ||
@@ -85,24 +97,37 @@ st_format_datatype(enum pipe_format format)
       }
       else {
          const GLuint size = format_max_bits(format);
+
+         assert(i < 4);
+         if (i == 4)
+            return GL_NONE;
+
          if (size == 8) {
-            if (desc->channel[0].type == UTIL_FORMAT_TYPE_UNSIGNED)
+            if (desc->channel[i].type == UTIL_FORMAT_TYPE_UNSIGNED)
                return GL_UNSIGNED_BYTE;
             else
                return GL_BYTE;
          }
          else if (size == 16) {
-            if (desc->channel[0].type == UTIL_FORMAT_TYPE_UNSIGNED)
+            if (desc->channel[i].type == UTIL_FORMAT_TYPE_FLOAT)
+               return GL_HALF_FLOAT;
+            if (desc->channel[i].type == UTIL_FORMAT_TYPE_UNSIGNED)
                return GL_UNSIGNED_SHORT;
             else
                return GL_SHORT;
          }
-         else {
-            assert( size <= 32 );
-            if (desc->channel[0].type == UTIL_FORMAT_TYPE_UNSIGNED)
+         else if (size <= 32) {
+            if (desc->channel[i].type == UTIL_FORMAT_TYPE_FLOAT)
+               return GL_FLOAT;
+            if (desc->channel[i].type == UTIL_FORMAT_TYPE_UNSIGNED)
                return GL_UNSIGNED_INT;
             else
                return GL_INT;
+         }
+         else {
+            assert(size == 64);
+            assert(desc->channel[i].type == UTIL_FORMAT_TYPE_FLOAT);
+            return GL_DOUBLE;
          }
       }
    }
@@ -608,7 +633,7 @@ struct format_mapping
  * Multiple GL enums might map to multiple pipe_formats.
  * The first pipe format in the list that's supported is the one that's chosen.
  */
-static struct format_mapping format_map[] = {
+static const struct format_mapping format_map[] = {
    /* Basic RGB, RGBA formats */
    {
       { GL_RGB10, GL_RGB10_A2, 0 },
@@ -616,7 +641,7 @@ static struct format_mapping format_map[] = {
    },
    {
       { 4, GL_RGBA, GL_RGBA8, 0 },
-      { DEFAULT_RGBA_FORMATS, 0 }
+      { PIPE_FORMAT_R8G8B8A8_UNORM, DEFAULT_RGBA_FORMATS }
    },
    {
       { GL_BGRA, 0 },
@@ -624,7 +649,7 @@ static struct format_mapping format_map[] = {
    },
    {
       { 3, GL_RGB, GL_RGB8, 0 },
-      { DEFAULT_RGB_FORMATS, 0 }
+      { DEFAULT_RGB_FORMATS }
    },
    {
       { GL_RGB12, GL_RGB16, GL_RGBA12, GL_RGBA16, 0 },
@@ -1124,6 +1149,91 @@ find_supported_format(struct pipe_screen *screen,
    return PIPE_FORMAT_NONE;
 }
 
+struct exact_format_mapping
+{
+   GLenum format;
+   GLenum type;
+   enum pipe_format pformat;
+};
+
+static const struct exact_format_mapping rgba8888_tbl[] =
+{
+   { GL_RGBA,     GL_UNSIGNED_INT_8_8_8_8,        PIPE_FORMAT_A8B8G8R8_UNORM },
+   { GL_ABGR_EXT, GL_UNSIGNED_INT_8_8_8_8_REV,    PIPE_FORMAT_A8B8G8R8_UNORM },
+   { GL_RGBA,     GL_UNSIGNED_INT_8_8_8_8_REV,    PIPE_FORMAT_R8G8B8A8_UNORM },
+   { GL_ABGR_EXT, GL_UNSIGNED_INT_8_8_8_8,        PIPE_FORMAT_R8G8B8A8_UNORM },
+   { GL_BGRA,     GL_UNSIGNED_INT_8_8_8_8,        PIPE_FORMAT_A8R8G8B8_UNORM },
+   { GL_BGRA,     GL_UNSIGNED_INT_8_8_8_8_REV,    PIPE_FORMAT_B8G8R8A8_UNORM },
+   { GL_RGBA,     GL_UNSIGNED_BYTE,               PIPE_FORMAT_R8G8B8A8_UNORM },
+   { GL_ABGR_EXT, GL_UNSIGNED_BYTE,               PIPE_FORMAT_A8B8G8R8_UNORM },
+   { GL_BGRA,     GL_UNSIGNED_BYTE,               PIPE_FORMAT_B8G8R8A8_UNORM },
+   { 0,           0,                              0                          }
+};
+
+static const struct exact_format_mapping rgbx8888_tbl[] =
+{
+   { GL_BGRA,     GL_UNSIGNED_INT_8_8_8_8,        PIPE_FORMAT_X8R8G8B8_UNORM },
+   { GL_BGRA,     GL_UNSIGNED_INT_8_8_8_8_REV,    PIPE_FORMAT_B8G8R8X8_UNORM },
+   { GL_BGRA,     GL_UNSIGNED_BYTE,               PIPE_FORMAT_B8G8R8X8_UNORM },
+   /* No Mesa formats for these Gallium formats:
+   { GL_RGBA,     GL_UNSIGNED_INT_8_8_8_8,        PIPE_FORMAT_X8B8G8R8_UNORM },
+   { GL_ABGR_EXT, GL_UNSIGNED_INT_8_8_8_8_REV,    PIPE_FORMAT_X8B8G8R8_UNORM },
+   { GL_RGBA,     GL_UNSIGNED_INT_8_8_8_8_REV,    PIPE_FORMAT_R8G8B8X8_UNORM },
+   { GL_ABGR_EXT, GL_UNSIGNED_INT_8_8_8_8,        PIPE_FORMAT_R8G8B8X8_UNORM },
+   { GL_RGBA,     GL_UNSIGNED_BYTE,               PIPE_FORMAT_R8G8B8X8_UNORM },
+   { GL_ABGR_EXT, GL_UNSIGNED_BYTE,               PIPE_FORMAT_X8B8G8R8_UNORM },
+   */
+   { 0,           0,                              0                          }
+};
+
+static const struct exact_format_mapping rgba1010102_tbl[] =
+{
+   { GL_BGRA,     GL_UNSIGNED_INT_2_10_10_10_REV, PIPE_FORMAT_B10G10R10A2_UNORM },
+   /* No Mesa formats for these Gallium formats:
+   { GL_RGBA,     GL_UNSIGNED_INT_2_10_10_10_REV, PIPE_FORMAT_R10G10B10A2_UNORM },
+   { GL_ABGR_EXT, GL_UNSIGNED_INT_10_10_10_2,     PIPE_FORMAT_R10G10B10A2_UNORM },
+   { GL_ABGR_EXT, GL_UNSIGNED_INT,                PIPE_FORMAT_R10G10B10A2_UNORM },
+   */
+   { 0,           0,                              0                             }
+};
+
+/**
+ * If there is an exact pipe_format match for {internalFormat, format, type}
+ * return that, otherwise return PIPE_FORMAT_NONE so we can do fuzzy matching.
+ */
+static enum pipe_format
+find_exact_format(GLint internalFormat, GLenum format, GLenum type)
+{
+   uint i;
+   const struct exact_format_mapping* tbl;
+
+   if (format == GL_NONE || type == GL_NONE)
+      return PIPE_FORMAT_NONE;
+
+   switch (internalFormat) {
+   case 4:
+   case GL_RGBA:
+   case GL_RGBA8:
+      tbl = rgba8888_tbl;
+      break;
+   case 3:
+   case GL_RGB:
+   case GL_RGB8:
+      tbl = rgbx8888_tbl;
+      break;
+   case GL_RGB10_A2:
+      tbl = rgba1010102_tbl;
+      break;
+   default:
+      return PIPE_FORMAT_NONE;
+   }
+
+   for (i = 0; tbl[i].format; i++)
+      if (tbl[i].format == format && tbl[i].type == type)
+         return tbl[i].pformat;
+
+   return PIPE_FORMAT_NONE;
+}
 
 /**
  * Given an OpenGL internalFormat value for a texture or surface, return
@@ -1140,17 +1250,26 @@ find_supported_format(struct pipe_screen *screen,
  */
 enum pipe_format
 st_choose_format(struct pipe_screen *screen, GLenum internalFormat,
+                 GLenum format, GLenum type,
                  enum pipe_texture_target target, unsigned sample_count,
                  unsigned bindings)
 {
    GET_CURRENT_CONTEXT(ctx); /* XXX this should be a function parameter */
    int i, j;
+   enum pipe_format pf;
 
    /* can't render to compressed formats at this time */
    if (_mesa_is_compressed_format(ctx, internalFormat)
        && (bindings & ~PIPE_BIND_SAMPLER_VIEW)) {
       return PIPE_FORMAT_NONE;
    }
+
+   /* search for exact matches */
+   pf = find_exact_format(internalFormat, format, type);
+   if (pf != PIPE_FORMAT_NONE &&
+       screen->is_format_supported(screen, pf,
+                                   target, sample_count, bindings))
+      return pf;
 
    /* search table for internalFormat */
    for (i = 0; i < Elements(format_map); i++) {
@@ -1183,7 +1302,7 @@ st_choose_renderbuffer_format(struct pipe_screen *screen,
       usage = PIPE_BIND_DEPTH_STENCIL;
    else
       usage = PIPE_BIND_RENDER_TARGET;
-   return st_choose_format(screen, internalFormat, PIPE_TEXTURE_2D,
+   return st_choose_format(screen, internalFormat, GL_NONE, GL_NONE, PIPE_TEXTURE_2D,
                            sample_count, usage);
 }
 
@@ -1210,12 +1329,12 @@ st_ChooseTextureFormat_renderable(struct gl_context *ctx, GLint internalFormat,
 	 bindings |= PIPE_BIND_RENDER_TARGET;
    }
 
-   pFormat = st_choose_format(screen, internalFormat,
+   pFormat = st_choose_format(screen, internalFormat, format, type,
                               PIPE_TEXTURE_2D, 0, bindings);
 
    if (pFormat == PIPE_FORMAT_NONE) {
       /* try choosing format again, this time without render target bindings */
-      pFormat = st_choose_format(screen, internalFormat,
+      pFormat = st_choose_format(screen, internalFormat, format, type,
                                  PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW);
    }
 

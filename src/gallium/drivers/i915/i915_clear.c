@@ -66,7 +66,7 @@ i915_clear_emit(struct pipe_context *pipe, unsigned buffers, const float *rgba,
       else
          clear_color = (u_color.ui & 0xffff) | (u_color.ui << 16);
 
-      util_pack_color(rgba, PIPE_FORMAT_B8G8R8A8_UNORM, &u_color);
+      util_pack_color(rgba, cbuf->format, &u_color);
       clear_color8888 = u_color.ui;
    } else
       clear_color = clear_color8888 = 0;
@@ -120,6 +120,11 @@ i915_clear_emit(struct pipe_context *pipe, unsigned buffers, const float *rgba,
    OUT_BATCH_F(desty + height);
    OUT_BATCH_F(destx);
    OUT_BATCH_F(desty);
+
+   /* Flush after clear, its expected to be a costly operation.
+    * This is not required, just a heuristic
+    */
+   FLUSH_BATCH(NULL);
 }
 
 /**

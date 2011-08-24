@@ -70,18 +70,17 @@ DRI_DRIVERS = swrast
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	confflags_DIRECT_RENDERING = --disable-driglx-direct
 	confflags_EGL = --disable-egl
-	confflags_GALLIUM = --disable-gallium --disable-gallium-r300
+	confflags_GALLIUM = --with-gallium-drivers=
 else
 	EGL_DISPLAYS = x11
 	GALLIUM_DRIVERS = swrast
-	GALLIUM_STATE_TRACKERS = egl,glx,dri,vega
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 # Gallium drivers require libdrm-{nouveau,radeon}, only available on Linux
 	GALLIUM_DRIVERS += nouveau r600
 # Although the KMS egl drivers will probably build on kfreebsd & hurd
 # only linux actually has KMS drivers implemented at this point.
-	EGL_DISPLAYS += drm wayland
+	EGL_DISPLAYS += drm
 # Nouveau requires KMS, so even the classic DRI driver only works on linux
 	DRI_DRIVERS += nouveau
   endif
@@ -98,15 +97,14 @@ else
   # LLVM is required for r300g, and x86-ish:
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386))
 	GALLIUM_DRIVERS += r300
-  else
-	confflags_GALLIUM = --disable-gallium-r300
+	confflags_GALLIUM += --enable-gallium-llvm
   endif
 
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
 	confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
-	confflags_GALLIUM += $(addprefix --enable-gallium-,$(GALLIUM_DRIVERS))
+	confflags_GALLIUM += --with-gallium-drivers="$(GALLIUM_DRIVERS)"
 	confflags_GLES = --enable-gles1 --enable-gles2
-	confflags_STATE_TRACKERS = --with-state-trackers="$(GALLIUM_STATE_TRACKERS)"
+	confflags_OPENVG = --enable-openvg --enable-gallium-egl
 endif
 
 confflags-dri = \
@@ -115,36 +113,37 @@ confflags-dri = \
 	--with-dri-driverdir=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
 	--with-dri-searchpath='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	--enable-glx-tls \
+	--enable-shared-glapi \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_EGL) \
 	$(confflags_GALLIUM) \
 	$(confflags_GLES) \
-	$(confflags_STATE_TRACKERS) \
+	$(confflags_OPENVG) \
 	$(confflags-common)
 
 confflags-osmesa = \
 	--disable-egl \
-	--disable-gallium \
+	--with-gallium-drivers= \
 	--with-driver=osmesa \
 	$(confflags-common)
 
 confflags-osmesa-static = \
 	--disable-egl \
-	--disable-gallium \
+	--with-gallium-drivers= \
 	--with-driver=osmesa \
 	--enable-static \
 	$(confflags-common)
 
 confflags-osmesa16 = \
 	--disable-egl \
-	--disable-gallium \
+	--with-gallium-drivers= \
 	--with-driver=osmesa \
 	--with-osmesa-bits=16 \
 	$(confflags-common)
 
 confflags-osmesa16-static = \
 	--disable-egl \
-	--disable-gallium \
+	--with-gallium-drivers= \
 	--with-driver=osmesa \
 	--with-osmesa-bits=16 \
 	--enable-static \
@@ -152,14 +151,14 @@ confflags-osmesa16-static = \
 
 confflags-osmesa32 = \
 	--disable-egl \
-	--disable-gallium \
+	--with-gallium-drivers= \
 	--with-driver=osmesa \
 	--with-osmesa-bits=32 \
 	$(confflags-common)
 
 confflags-osmesa32-static = \
 	--disable-egl \
-	--disable-gallium \
+	--with-gallium-drivers= \
 	--with-driver=osmesa \
 	--with-osmesa-bits=32 \
 	--enable-static \
@@ -167,7 +166,7 @@ confflags-osmesa32-static = \
 
 confflags-swx11+glu = \
 	--disable-egl \
-	--disable-gallium \
+	--with-gallium-drivers= \
 	--with-driver=xlib \
 	--disable-gl-osmesa \
 	--disable-egl \
@@ -178,7 +177,7 @@ confflags-swx11+glu = \
 
 confflags-swx11+glu-static = \
 	--disable-egl \
-	--disable-gallium \
+	--with-gallium-drivers= \
 	--with-driver=xlib \
 	--disable-gl-osmesa \
 	--enable-static \
@@ -190,7 +189,7 @@ confflags-swx11+glu-static = \
 
 confflags-swx11+glu-i386-i686 = \
 	--disable-egl \
-	--disable-gallium \
+	--with-gallium-drivers= \
 	--with-driver=xlib \
 	--disable-gl-osmesa \
 	--disable-glut \
@@ -225,6 +224,7 @@ $(STAMP)-build-%: configure
 	mkdir -p $(DEB_BUILD_DIR)/$*
 	find $(CURDIR)/* -maxdepth 0 -not -path '$(DEB_BUILD_DIR)*' | \
 		xargs cp -rlf -t $(DEB_BUILD_DIR)/$*
+
 	cd $(DEB_BUILD_DIR)/$* && \
 	../../configure --prefix=/usr --mandir=\$${prefix}/share/man \
 	             --infodir=\$${prefix}/share/info --sysconfdir=/etc \
@@ -251,6 +251,7 @@ install: build
 	            libgl1-mesa-dri.install.linux libegl1-mesa.install \
 	            libgl1-mesa-dri-experimental.install \
 	            libegl1-mesa-drivers.install libegl1-mesa-dev.install \
+		    libgbm1.install libgbm-dev.install \
 	            libglapi-mesa.install; \
 	do \
 		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
@@ -259,7 +260,6 @@ install: build
 
 clean: unpatch
 	dh_testdir
-	dh_testroot
 	rm -rf .pc
 
 	rm -f config.cache config.log config.status
@@ -306,6 +306,9 @@ endif
 	rm debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/libglapi.so
 
 	dh_install -s --fail-missing
+ifneq (,$(filter r300,$(GALLIUM_DRIVERS)))
+	dh_install -plibgl1-mesa-dri build/dri/$(DEB_HOST_MULTIARCH)/gallium/r300_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri
+endif
 	dh_installman -s
 	dh_lintian -s
 	dh_link -s
@@ -320,6 +323,7 @@ endif
 	dh_strip -plibgl1-mesa-dri --dbg-package=libgl1-mesa-dri-dbg
 	dh_strip -plibgl1-mesa-dri-experimental --dbg-package=libgl1-mesa-dri-experimental-dbg
 	dh_strip -plibopenvg1-mesa --dbg-package=libopenvg1-mesa-dbg
+	dh_strip -plibgbm1 --dbg-package=libgbm1-dbg
 	dh_strip -plibegl1-mesa --dbg-package=libegl1-mesa-dbg
 	dh_strip -plibglapi-mesa --dbg-package=libglapi-mesa-dbg
 	dh_strip -plibgles1-mesa --dbg-package=libgles1-mesa-dbg
@@ -329,6 +333,7 @@ endif
 	# builds (see changelog for mesa 7.10-1):
 	dh_strip \
 		-plibegl1-mesa-dev \
+		-plibgbm-dev \
 		-plibgl1-mesa-dev \
 		-plibgl1-mesa-swx11-dev \
 		-plibgles1-mesa-dev \

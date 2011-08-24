@@ -1635,7 +1635,7 @@ static void emit_vertex_write( struct brw_vs_compile *c)
 	    else
 	       m = brw_message_reg(4);
 
-	    brw_DP4(p, brw_writemask(m, (1 << (i & 7))),pos, c->userplane[i]);
+	    brw_DP4(p, brw_writemask(m, (1 << (i & 3))),pos, c->userplane[i]);
 	 }
       }
    } else if ((c->prog_data.outputs_written &
@@ -1821,6 +1821,9 @@ accumulator_contains(struct brw_vs_compile *c, struct brw_reg val)
    if (val.address_mode != BRW_ADDRESS_DIRECT)
       return GL_FALSE;
 
+   if (val.negate || val.abs)
+      return GL_FALSE;
+
    switch (prev_insn->header.opcode) {
    case BRW_OPCODE_MOV:
    case BRW_OPCODE_MAC:
@@ -1980,9 +1983,22 @@ void brw_vs_emit(struct brw_vs_compile *c )
 	      const struct prog_src_register *src = &inst->SrcReg[i];
 	      index = src->Index;
 	      file = src->File;	
-	      if (file == PROGRAM_OUTPUT && c->output_regs[index].used_in_src)
-		  args[i] = c->output_regs[index].reg;
-	      else
+	      if (file == PROGRAM_OUTPUT && c->output_regs[index].used_in_src) {
+		 /* Can't just make get_arg "do the right thing" here because
+		  * other callers of get_arg and get_src_reg don't expect any
+		  * special behavior for the c->output_regs[index].used_in_src
+		  * case.
+		  */
+		 args[i] = c->output_regs[index].reg;
+		 args[i].dw1.bits.swizzle =
+		    BRW_SWIZZLE4(GET_SWZ(src->Swizzle, 0),
+				 GET_SWZ(src->Swizzle, 1),
+				 GET_SWZ(src->Swizzle, 2),
+				 GET_SWZ(src->Swizzle, 3));
+
+		 /* Note this is ok for non-swizzle ARB_vp instructions */
+		 args[i].negate = src->Negate ? 1 : 0;
+	      } else
                   args[i] = get_arg(c, inst, i);
 	  }
 
@@ -1993,7 +2009,11 @@ void brw_vs_emit(struct brw_vs_compile *c )
       index = inst->DstReg.Index;
       file = inst->DstReg.File;
       if (file == PROGRAM_OUTPUT && c->output_regs[index].used_in_src)
-	  dst = c->output_regs[index].reg;
+	 /* Can't just make get_dst "do the right thing" here because other
+	  * callers of get_dst don't expect any special behavior for the
+	  * c->output_regs[index].used_in_src case.
+	  */
+	 dst = brw_writemask(c->output_regs[index].reg, inst->DstReg.WriteMask);
       else
 	  dst = get_dst(c, inst->DstReg);
 

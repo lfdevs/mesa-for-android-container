@@ -168,6 +168,9 @@ nvc0_miptree_create(struct pipe_screen *pscreen,
       tile_flags = 0xf900; /* MSAA 4 */
       tile_flags = 0xfe00; /* NORMAL */
       break;
+   case PIPE_FORMAT_Z32_FLOAT:
+      tile_flags = 0x7b00;
+      break;
    case PIPE_FORMAT_Z32_FLOAT_S8X24_USCALED:
       tile_flags = 0xce00; /* COMPRESSED */
       tile_flags = 0xcf00; /* MSAA 2, COMPRESSED */

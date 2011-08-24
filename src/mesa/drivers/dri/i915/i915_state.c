@@ -375,6 +375,9 @@ i915DepthMask(struct gl_context * ctx, GLboolean flag)
 
    DBG("%s flag (%d)\n", __FUNCTION__, flag);
 
+   if (!ctx->DrawBuffer || !ctx->DrawBuffer->Visual.depthBits)
+      flag = false;
+
    dw = i915->state.Ctx[I915_CTXREG_LIS6];
    if (flag && ctx->Depth.Test)
       dw |= S6_DEPTH_WRITE_ENABLE;
@@ -398,31 +401,26 @@ void
 intelCalcViewport(struct gl_context * ctx)
 {
    struct intel_context *intel = intel_context(ctx);
-   const GLfloat *v = ctx->Viewport._WindowMap.m;
-   const GLfloat depthScale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
-   GLfloat *m = intel->ViewportMatrix.m;
-   GLfloat yScale, yBias;
 
-   if (ctx->DrawBuffer->Name) {
-      /* User created FBO */
-      /* y=0=bottom */
-      yScale = 1.0;
-      yBias = 0.0;
+   if (ctx->DrawBuffer->Name == 0) {
+      _math_matrix_viewport(&intel->ViewportMatrix,
+			    ctx->Viewport.X,
+			    ctx->DrawBuffer->Height - ctx->Viewport.Y,
+			    ctx->Viewport.Width,
+			    -ctx->Viewport.Height,
+			    ctx->Viewport.Near,
+			    ctx->Viewport.Far,
+			    1.0);
+   } else {
+      _math_matrix_viewport(&intel->ViewportMatrix,
+			    ctx->Viewport.X,
+			    ctx->Viewport.Y,
+			    ctx->Viewport.Width,
+			    ctx->Viewport.Height,
+			    ctx->Viewport.Near,
+			    ctx->Viewport.Far,
+			    1.0);
    }
-   else {
-      /* window buffer, y=0=top */
-      yScale = -1.0;
-      yBias = ctx->DrawBuffer->Height;
-   }
-
-   m[MAT_SX] = v[MAT_SX];
-   m[MAT_TX] = v[MAT_TX];
-
-   m[MAT_SY] = v[MAT_SY] * yScale;
-   m[MAT_TY] = v[MAT_TY] * yScale + yBias;
-
-   m[MAT_SZ] = v[MAT_SZ] * depthScale;
-   m[MAT_TZ] = v[MAT_TZ] * depthScale;
 }
 
 
@@ -797,6 +795,10 @@ i915Enable(struct gl_context * ctx, GLenum cap, GLboolean state)
 
    case GL_DEPTH_TEST:
       dw = i915->state.Ctx[I915_CTXREG_LIS6];
+
+      if (!ctx->DrawBuffer || !ctx->DrawBuffer->Visual.depthBits)
+	 state = false;
+
       if (state)
          dw |= S6_DEPTH_TEST_ENABLE;
       else
@@ -836,27 +838,17 @@ i915Enable(struct gl_context * ctx, GLenum cap, GLboolean state)
       break;
 
    case GL_STENCIL_TEST:
-      {
-         GLboolean hw_stencil = GL_FALSE;
-         if (ctx->DrawBuffer) {
-            struct intel_renderbuffer *irbStencil
-               = intel_get_renderbuffer(ctx->DrawBuffer, BUFFER_STENCIL);
-            hw_stencil = (irbStencil && irbStencil->region);
-         }
-         if (hw_stencil) {
-	    dw = i915->state.Ctx[I915_CTXREG_LIS5];
-            if (state)
-               dw |= (S5_STENCIL_TEST_ENABLE | S5_STENCIL_WRITE_ENABLE);
-            else
-               dw &= ~(S5_STENCIL_TEST_ENABLE | S5_STENCIL_WRITE_ENABLE);
-	    if (dw != i915->state.Ctx[I915_CTXREG_LIS5]) {
-	       i915->state.Ctx[I915_CTXREG_LIS5] = dw;
-	       I915_STATECHANGE(i915, I915_UPLOAD_CTX);
-	    }
-         }
-         else {
-            FALLBACK(&i915->intel, I915_FALLBACK_STENCIL, state);
-         }
+      if (!ctx->DrawBuffer || !ctx->DrawBuffer->Visual.stencilBits)
+	 state = false;
+
+      dw = i915->state.Ctx[I915_CTXREG_LIS5];
+      if (state)
+	 dw |= (S5_STENCIL_TEST_ENABLE | S5_STENCIL_WRITE_ENABLE);
+      else
+	 dw &= ~(S5_STENCIL_TEST_ENABLE | S5_STENCIL_WRITE_ENABLE);
+      if (dw != i915->state.Ctx[I915_CTXREG_LIS5]) {
+	 i915->state.Ctx[I915_CTXREG_LIS5] = dw;
+	 I915_STATECHANGE(i915, I915_UPLOAD_CTX);
       }
       break;
 

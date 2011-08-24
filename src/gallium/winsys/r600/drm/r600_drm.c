@@ -156,7 +156,20 @@ static int eg_interpret_tiling(struct radeon *radeon, uint32_t tiling_config)
 		return -EINVAL;
 	}
 
-	radeon->tiling_info.num_banks = (tiling_config & 0xf0) >> 4;
+	switch ((tiling_config & 0xf0) >> 4) {
+	case 0:
+		radeon->tiling_info.num_banks = 4;
+		break;
+	case 1:
+		radeon->tiling_info.num_banks = 8;
+		break;
+	case 2:
+		radeon->tiling_info.num_banks = 16;
+		break;
+	default:
+		return -EINVAL;
+
+	}
 
 	switch ((tiling_config & 0xf00) >> 8) {
 	case 0:
@@ -173,7 +186,7 @@ static int eg_interpret_tiling(struct radeon *radeon, uint32_t tiling_config)
 
 static int radeon_drm_get_tiling(struct radeon *radeon)
 {
-	struct drm_radeon_info info;
+	struct drm_radeon_info info = {};
 	int r;
 	uint32_t tiling_config = 0;
 
@@ -195,8 +208,8 @@ static int radeon_drm_get_tiling(struct radeon *radeon)
 
 static int radeon_get_clock_crystal_freq(struct radeon *radeon)
 {
-	struct drm_radeon_info info;
-	uint32_t clock_crystal_freq;
+	struct drm_radeon_info info = {};
+	uint32_t clock_crystal_freq = 0;
 	int r;
 
 	info.request = RADEON_INFO_CLOCK_CRYSTAL_FREQ;
@@ -213,8 +226,8 @@ static int radeon_get_clock_crystal_freq(struct radeon *radeon)
 
 static int radeon_get_num_backends(struct radeon *radeon)
 {
-	struct drm_radeon_info info;
-	uint32_t num_backends;
+	struct drm_radeon_info info = {};
+	uint32_t num_backends = 0;
 	int r;
 
 	info.request = RADEON_INFO_NUM_BACKENDS;

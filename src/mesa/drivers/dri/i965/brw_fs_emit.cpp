@@ -59,7 +59,8 @@ fs_visitor::generate_fb_write(fs_inst *inst)
 
 	 if (inst->target > 0) {
 	    /* Set the render target index for choosing BLEND_STATE. */
-	    brw_MOV(p, retype(brw_vec1_reg(BRW_MESSAGE_REGISTER_FILE, 0, 2),
+	    brw_MOV(p, retype(brw_vec1_reg(BRW_MESSAGE_REGISTER_FILE,
+					   inst->base_mrf, 2),
 			      BRW_REGISTER_TYPE_UD),
 		    brw_imm_ud(inst->target));
 	 }
@@ -273,7 +274,8 @@ fs_visitor::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src)
 	 }
 	 break;
       case FS_OPCODE_TXD:
-	 assert(!"TXD isn't supported on gen5+ yet.");
+	 /* There is no sample_d_c message; comparisons are done manually */
+	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_DERIVS;
 	 break;
       }
    } else {
@@ -311,7 +313,9 @@ fs_visitor::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src)
 	 }
 	 break;
       case FS_OPCODE_TXD:
-	 assert(!"TXD isn't supported on gen4 yet.");
+	 /* There is no sample_d_c message; comparisons are done manually */
+	 assert(inst->mlen == 7 || inst->mlen == 10);
+	 msg_type = BRW_SAMPLER_MESSAGE_SIMD8_SAMPLE_GRADIENTS;
 	 break;
       }
    }

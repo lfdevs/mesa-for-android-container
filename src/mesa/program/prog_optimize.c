@@ -1304,6 +1304,9 @@ _mesa_simplify_cmp(struct gl_program * program)
          assert(inst->DstReg.Index < REG_ALLOCATE_MAX_PROGRAM_TEMPS);
          prevWriteMask = tempWrites[inst->DstReg.Index];
          tempWrites[inst->DstReg.Index] |= inst->DstReg.WriteMask;
+      } else {
+         /* No other register type can be a destination register. */
+         continue;
       }
 
       /* For a CMP to be considered a conditional write, the destination
@@ -1316,6 +1319,15 @@ _mesa_simplify_cmp(struct gl_program * program)
 
          inst->Opcode = OPCODE_MOV;
          inst->SrcReg[0] = inst->SrcReg[1];
+
+	 /* Unused operands are expected to have the file set to
+	  * PROGRAM_UNDEFINED.  This is how _mesa_init_instructions initializes
+	  * all of the sources.
+	  */
+	 inst->SrcReg[1].File = PROGRAM_UNDEFINED;
+	 inst->SrcReg[1].Swizzle = SWIZZLE_NOOP;
+	 inst->SrcReg[2].File = PROGRAM_UNDEFINED;
+	 inst->SrcReg[2].Swizzle = SWIZZLE_NOOP;
       }
    }
    if (dbg) {

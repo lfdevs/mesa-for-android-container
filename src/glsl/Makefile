@@ -39,6 +39,7 @@ CXX_SOURCES = \
 	ir.cpp \
 	ir_expression_flattening.cpp \
 	ir_function_can_inline.cpp \
+	ir_function_detect_recursion.cpp \
 	ir_function.cpp \
 	ir_hierarchical_visitor.cpp \
 	ir_hv_accept.cpp \
@@ -154,7 +155,7 @@ clean: clean-dricore
 	-rm -f $(APPS)
 
 clean-dricore:
-	-rm -f $(DRICORE_OBJ_DIR) $(TOP)/$(LIB_DIR)/libglsl.so libglsl.so
+	-rm -f $(OBJECTS_DRICORE) $(TOP)/$(LIB_DIR)/libglsl.so libglsl.so
 
 ifneq (,$(DRICORE_GLSL_LIBS))
 DRICORE_INSTALL_TARGET = install-dricore

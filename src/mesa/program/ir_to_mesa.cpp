@@ -134,7 +134,7 @@ src_reg::src_reg(dst_reg reg)
    this->index = reg.index;
    this->swizzle = SWIZZLE_XYZW;
    this->negate = 0;
-   this->reladdr = NULL;
+   this->reladdr = reg.reladdr;
 }
 
 dst_reg::dst_reg(src_reg reg)
@@ -803,48 +803,44 @@ ir_to_mesa_visitor::visit(ir_loop *ir)
    ir_dereference_variable *counter = NULL;
 
    if (ir->counter != NULL)
-      counter = new(ir) ir_dereference_variable(ir->counter);
+      counter = new(mem_ctx) ir_dereference_variable(ir->counter);
 
    if (ir->from != NULL) {
       assert(ir->counter != NULL);
 
-      ir_assignment *a = new(ir) ir_assignment(counter, ir->from, NULL);
+      ir_assignment *a =
+	new(mem_ctx) ir_assignment(counter, ir->from, NULL);
 
       a->accept(this);
-      delete a;
    }
 
    emit(NULL, OPCODE_BGNLOOP);
 
    if (ir->to) {
       ir_expression *e =
-	 new(ir) ir_expression(ir->cmp, glsl_type::bool_type,
-			       counter, ir->to);
-      ir_if *if_stmt =  new(ir) ir_if(e);
+	 new(mem_ctx) ir_expression(ir->cmp, glsl_type::bool_type,
+					  counter, ir->to);
+      ir_if *if_stmt =  new(mem_ctx) ir_if(e);
 
-      ir_loop_jump *brk = new(ir) ir_loop_jump(ir_loop_jump::jump_break);
+      ir_loop_jump *brk =
+	new(mem_ctx) ir_loop_jump(ir_loop_jump::jump_break);
 
       if_stmt->then_instructions.push_tail(brk);
 
       if_stmt->accept(this);
-
-      delete if_stmt;
-      delete e;
-      delete brk;
    }
 
    visit_exec_list(&ir->body_instructions, this);
 
    if (ir->increment) {
       ir_expression *e =
-	 new(ir) ir_expression(ir_binop_add, counter->type,
-			       counter, ir->increment);
+	 new(mem_ctx) ir_expression(ir_binop_add, counter->type,
+					  counter, ir->increment);
 
-      ir_assignment *a = new(ir) ir_assignment(counter, e, NULL);
+      ir_assignment *a =
+	new(mem_ctx) ir_assignment(counter, e, NULL);
 
       a->accept(this);
-      delete a;
-      delete e;
    }
 
    emit(NULL, OPCODE_ENDLOOP);
@@ -1496,6 +1492,18 @@ ir_to_mesa_visitor::visit(ir_dereference_array *ir)
 
 	 emit(ir, OPCODE_MUL, dst_reg(index_reg),
 	      this->result, src_reg_for_float(element_size));
+      }
+
+      /* If there was already a relative address register involved, add the
+       * new and the old together to get the new offset.
+       */
+      if (src.reladdr != NULL)  {
+	 src_reg accum_reg = get_temp(glsl_type::float_type);
+
+	 emit(ir, OPCODE_ADD, dst_reg(accum_reg),
+	      index_reg, *src.reladdr);
+
+	 index_reg = accum_reg;
       }
 
       src.reladdr = ralloc(mem_ctx, src_reg);

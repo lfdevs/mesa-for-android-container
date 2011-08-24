@@ -484,28 +484,33 @@ intel_atten_point(struct intel_context *intel, intelVertexPtr v0)
  *                Fixup for I915 WPOS texture coordinate                *
  ***********************************************************************/
 
+static void
+intel_emit_fragcoord(struct intel_context *intel, intelVertexPtr v)
+{
+   struct gl_context *ctx = &intel->ctx;
+   struct gl_framebuffer *fb = ctx->DrawBuffer;
+   GLuint offset = intel->wpos_offset;
+   float *vertex_position = (float *)v;
+   float *fragcoord = (float *)((char *)v + offset);
 
+   fragcoord[0] = vertex_position[0];
+
+   if (fb->Name)
+      fragcoord[1] = vertex_position[1];
+   else
+      fragcoord[1] = fb->Height - vertex_position[1];
+
+   fragcoord[2] = vertex_position[2];
+   fragcoord[3] = vertex_position[3];
+}
 
 static void
 intel_wpos_triangle(struct intel_context *intel,
                     intelVertexPtr v0, intelVertexPtr v1, intelVertexPtr v2)
 {
-   const struct gl_framebuffer *fb = intel->ctx.DrawBuffer;
-   GLuint offset = intel->wpos_offset;
-   GLuint size = intel->wpos_size;
-   GLfloat *v0_wpos = (GLfloat *)((char *)v0 + offset);
-   GLfloat *v1_wpos = (GLfloat *)((char *)v1 + offset);
-   GLfloat *v2_wpos = (GLfloat *)((char *)v2 + offset);
-
-   __memcpy(v0_wpos, v0, size);
-   __memcpy(v1_wpos, v1, size);
-   __memcpy(v2_wpos, v2, size);
-
-   if (!fb->Name) {
-      v0_wpos[1] = -v0_wpos[1] + fb->Height;
-      v1_wpos[1] = -v1_wpos[1] + fb->Height;
-      v2_wpos[1] = -v2_wpos[1] + fb->Height;
-   }
+   intel_emit_fragcoord(intel, v0);
+   intel_emit_fragcoord(intel, v1);
+   intel_emit_fragcoord(intel, v2);
 
    intel_draw_triangle(intel, v0, v1, v2);
 }
@@ -515,20 +520,8 @@ static void
 intel_wpos_line(struct intel_context *intel,
                 intelVertexPtr v0, intelVertexPtr v1)
 {
-   const struct gl_framebuffer *fb = intel->ctx.DrawBuffer;
-   GLuint offset = intel->wpos_offset;
-   GLuint size = intel->wpos_size;
-   GLfloat *v0_wpos = (GLfloat *)((char *)v0 + offset);
-   GLfloat *v1_wpos = (GLfloat *)((char *)v1 + offset);
-
-   __memcpy(v0_wpos, v0, size);
-   __memcpy(v1_wpos, v1, size);
-
-   if (!fb->Name) {
-      v0_wpos[1] = -v0_wpos[1] + fb->Height;
-      v1_wpos[1] = -v1_wpos[1] + fb->Height;
-   }
-
+   intel_emit_fragcoord(intel, v0);
+   intel_emit_fragcoord(intel, v1);
    intel_draw_line(intel, v0, v1);
 }
 
@@ -536,16 +529,7 @@ intel_wpos_line(struct intel_context *intel,
 static void
 intel_wpos_point(struct intel_context *intel, intelVertexPtr v0)
 {
-   const struct gl_framebuffer *fb = intel->ctx.DrawBuffer;
-   GLuint offset = intel->wpos_offset;
-   GLuint size = intel->wpos_size;
-   GLfloat *v0_wpos = (GLfloat *)((char *)v0 + offset);
-
-   __memcpy(v0_wpos, v0, size);
-
-   if (!fb->Name)
-      v0_wpos[1] = -v0_wpos[1] + fb->Height;
-
+   intel_emit_fragcoord(intel, v0);
    intel_draw_point(intel, v0);
 }
 
@@ -1078,6 +1062,13 @@ intelRunPipeline(struct gl_context * ctx)
    if (ctx->NewState)
       _mesa_update_state_locked(ctx);
 
+   /* We need to get this done before we start the pipeline, or a
+    * change in the INTEL_FALLBACK() of its intel_draw_buffers() call
+    * while the pipeline is running will result in mismatched swrast
+    * map/unmaps, and later assertion failures.
+    */
+   intel_prepare_render(intel);
+
    if (intel->NewGLState) {
       if (intel->NewGLState & _NEW_TEXTURE) {
          intel->vtbl.update_texture_state(intel);
@@ -1092,7 +1083,9 @@ intelRunPipeline(struct gl_context * ctx)
    }
 
    intel_map_vertex_shader_textures(ctx);
+   intel->tnl_pipeline_running = true;
    _tnl_run_pipeline(ctx);
+   intel->tnl_pipeline_running = false;
    intel_unmap_vertex_shader_textures(ctx);
 
    _mesa_unlock_context_textures(ctx);
@@ -1228,6 +1221,8 @@ intelFallback(struct intel_context *intel, GLbitfield bit, GLboolean mode)
    if (mode) {
       intel->Fallback |= bit;
       if (oldfallback == 0) {
+	 assert(!intel->tnl_pipeline_running);
+
          intel_flush(ctx);
          if (INTEL_DEBUG & DEBUG_FALLBACKS)
             fprintf(stderr, "ENTER FALLBACK %x: %s\n",
@@ -1239,6 +1234,8 @@ intelFallback(struct intel_context *intel, GLbitfield bit, GLboolean mode)
    else {
       intel->Fallback &= ~bit;
       if (oldfallback == bit) {
+	 assert(!intel->tnl_pipeline_running);
+
          _swrast_flush(ctx);
          if (INTEL_DEBUG & DEBUG_FALLBACKS)
             fprintf(stderr, "LEAVE FALLBACK %s\n", getFallbackString(bit));

@@ -31,7 +31,7 @@ Build-Depends:
  flex,
  bison,
  llvm-2.9-dev [amd64 i386],
- libwayland-dev,
+# libwayland-dev,
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.sourceforge.net/
@@ -142,6 +142,52 @@ Description: free implementation of the OpenGL API -- development files
  a direct rendering-capable library, or one which uses GLX.  For that,
  please see libgl1-mesa-dev.
 
+Package: libgbm1
+Section: libs
+Architecture: linux-any kfreebsd-any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: generic buffer management API -- runtime
+ This package contains the GBM buffer management library.  It provides a
+ mechanism for allocating buffers for graphics rendering tied to Mesa.
+ .
+ GBM is intended to be used as a native platform for EGL on drm or openwfd.
+
+Package: libgbm1-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any kfreebsd-any
+Depends:
+ libgbm1 (= ${binary:Version}),
+ ${misc:Depends},
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: generic buffer management API -- debugging symbols
+ This package contains the GBM buffer management library.  It provides a
+ mechanism for allocating buffers for graphics rendering tied to Mesa.
+ .
+ GBM is intended to be used as a native platform for EGL on drm or openwfd.
+ .
+ This package contains the debugging symbols for the GBM library.
+
+Package: libgbm-dev
+Section: libdevel
+Architecture: linux-any kfreebsd-any
+Depends:
+ libgbm1 (= ${binary:Version}),
+ ${misc:Depends},
+Description: generic buffer management API -- development files
+ This package contains the GBM buffer management library.  It provides a
+ mechanism for allocating buffers for graphics rendering tied to Mesa.
+ .
+ GBM is intended to be used as a native platform for EGL on drm or openwfd.
+ .
+ This package provides the development environment for compiling programs
+ against the GBM library.
+
 Package: libegl1-mesa
 Section: libs
 Architecture: linux-any kfreebsd-any
@@ -208,6 +254,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  libegl1-mesa (= ${binary:Version}),
+ libglapi-mesa (= ${binary:Version}),
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: free implementation of the EGL API -- hardware drivers
@@ -434,6 +481,7 @@ Section: libs
 Architecture: any
 Depends:
  ${shlibs:Depends},
+ libglapi-mesa (= ${binary:Version}),
  ${misc:Depends}
 Recommends: libgl1-mesa-dri (>= 7.2)
 Conflicts: libgl1, libgl1-mesa-dri (<< 6.4.0)

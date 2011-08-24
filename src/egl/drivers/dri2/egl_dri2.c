@@ -244,7 +244,7 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
    return conf;
 }
 
-static __DRIimage *
+__DRIimage *
 dri2_lookup_egl_image(__DRIscreen *screen, void *image, void *data)
 {
    _EGLDisplay *disp = data;
@@ -433,41 +433,11 @@ dri2_load_driver_swrast(_EGLDisplay *disp)
    return EGL_TRUE;
 }
 
-EGLBoolean
-dri2_create_screen(_EGLDisplay *disp)
+void
+dri2_setup_screen(_EGLDisplay *disp)
 {
-   const __DRIextension **extensions;
-   struct dri2_egl_display *dri2_dpy;
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    unsigned int api_mask;
-
-   dri2_dpy = disp->DriverData;
-
-   if (dri2_dpy->dri2) {
-      dri2_dpy->dri_screen =
-         dri2_dpy->dri2->createNewScreen(0, dri2_dpy->fd, dri2_dpy->extensions,
-				         &dri2_dpy->driver_configs, disp);
-   } else {
-      assert(dri2_dpy->swrast);
-      dri2_dpy->dri_screen =
-         dri2_dpy->swrast->createNewScreen(0, dri2_dpy->extensions,
-                                           &dri2_dpy->driver_configs, disp);
-   }
-
-   if (dri2_dpy->dri_screen == NULL) {
-      _eglLog(_EGL_WARNING, "DRI2: failed to create dri screen");
-      return EGL_FALSE;
-   }
-
-   extensions = dri2_dpy->core->getExtensions(dri2_dpy->dri_screen);
-   
-   if (dri2_dpy->dri2) {
-      if (!dri2_bind_extensions(dri2_dpy, dri2_core_extensions, extensions))
-         goto cleanup_dri_screen;
-   } else {
-      assert(dri2_dpy->swrast);
-      if (!dri2_bind_extensions(dri2_dpy, swrast_core_extensions, extensions))
-         goto cleanup_dri_screen;
-   }
 
    if (dri2_dpy->dri2) {
       if (dri2_dpy->dri2->base.version >= 2)
@@ -510,6 +480,46 @@ dri2_create_screen(_EGLDisplay *disp)
       disp->Extensions.KHR_image_base = EGL_TRUE;
       disp->Extensions.KHR_gl_renderbuffer_image = EGL_TRUE;
    }
+}
+
+EGLBoolean
+dri2_create_screen(_EGLDisplay *disp)
+{
+   const __DRIextension **extensions;
+   struct dri2_egl_display *dri2_dpy;
+
+   dri2_dpy = disp->DriverData;
+
+   if (dri2_dpy->dri2) {
+      dri2_dpy->dri_screen =
+         dri2_dpy->dri2->createNewScreen(0, dri2_dpy->fd, dri2_dpy->extensions,
+				         &dri2_dpy->driver_configs, disp);
+   } else {
+      assert(dri2_dpy->swrast);
+      dri2_dpy->dri_screen =
+         dri2_dpy->swrast->createNewScreen(0, dri2_dpy->extensions,
+                                           &dri2_dpy->driver_configs, disp);
+   }
+
+   if (dri2_dpy->dri_screen == NULL) {
+      _eglLog(_EGL_WARNING, "DRI2: failed to create dri screen");
+      return EGL_FALSE;
+   }
+
+   dri2_dpy->own_dri_screen = 1;
+
+   extensions = dri2_dpy->core->getExtensions(dri2_dpy->dri_screen);
+   
+   if (dri2_dpy->dri2) {
+      if (!dri2_bind_extensions(dri2_dpy, dri2_core_extensions, extensions))
+         goto cleanup_dri_screen;
+   } else {
+      assert(dri2_dpy->swrast);
+      if (!dri2_bind_extensions(dri2_dpy, swrast_core_extensions, extensions))
+         goto cleanup_dri_screen;
+   }
+
+   dri2_setup_screen(disp);
 
    return EGL_TRUE;
 
@@ -538,10 +548,12 @@ dri2_initialize(_EGLDriver *drv, _EGLDisplay *disp)
 #endif
 
 #ifdef HAVE_LIBUDEV
+#ifdef HAVE_DRM_PLATFORM
    case _EGL_PLATFORM_DRM:
       if (disp->Options.TestOnly)
          return EGL_TRUE;
       return dri2_initialize_drm(drv, disp);
+#endif
 #ifdef HAVE_WAYLAND_PLATFORM
    case _EGL_PLATFORM_WAYLAND:
       if (disp->Options.TestOnly)
@@ -566,10 +578,12 @@ dri2_terminate(_EGLDriver *drv, _EGLDisplay *disp)
    _eglReleaseDisplayResources(drv, disp);
    _eglCleanupDisplay(disp);
 
-   dri2_dpy->core->destroyScreen(dri2_dpy->dri_screen);
+   if (dri2_dpy->own_dri_screen)
+      dri2_dpy->core->destroyScreen(dri2_dpy->dri_screen);
    if (dri2_dpy->fd)
       close(dri2_dpy->fd);
-   dlclose(dri2_dpy->driver);
+   if (dri2_dpy->driver)
+      dlclose(dri2_dpy->driver);
 
    if (disp->PlatformDisplay == NULL) {
       switch (disp->Platform) {

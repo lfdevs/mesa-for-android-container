@@ -299,6 +299,8 @@ static void *r600_create_rs_state(struct pipe_context *ctx,
 	}
 
 	rstate = &rs->rstate;
+	rs->clamp_vertex_color = state->clamp_vertex_color;
+	rs->clamp_fragment_color = state->clamp_fragment_color;
 	rs->flatshade = state->flatshade;
 	rs->sprite_coord_enable = state->sprite_coord_enable;
 
@@ -369,14 +371,17 @@ static void *r600_create_rs_state(struct pipe_context *ctx,
 static void *r600_create_sampler_state(struct pipe_context *ctx,
 					const struct pipe_sampler_state *state)
 {
-	struct r600_pipe_state *rstate = CALLOC_STRUCT(r600_pipe_state);
+	struct r600_pipe_sampler_state *ss = CALLOC_STRUCT(r600_pipe_sampler_state);
+	struct r600_pipe_state *rstate;
 	union util_color uc;
 	unsigned aniso_flag_offset = state->max_anisotropy > 1 ? 4 : 0;
 
-	if (rstate == NULL) {
+	if (ss == NULL) {
 		return NULL;
 	}
 
+	ss->seamless_cube_map = state->seamless_cube_map;
+	rstate = &ss->rstate;
 	rstate->id = R600_PIPE_STATE_SAMPLER;
 	util_pack_color(state->border_color, PIPE_FORMAT_B8G8R8A8_UNORM, &uc);
 	r600_pipe_state_add_reg_noblock(rstate, R_03C000_SQ_TEX_SAMPLER_WORD0_0,
@@ -559,27 +564,57 @@ static void r600_set_ps_sampler_view(struct pipe_context *ctx, unsigned count,
 	rctx->ps_samplers.n_views = count;
 }
 
+static void r600_set_seamless_cubemap(struct r600_pipe_context *rctx, boolean enable)
+{
+	struct r600_pipe_state *rstate = CALLOC_STRUCT(r600_pipe_state);
+	if (rstate == NULL)
+		return;
+
+	rstate->id = R600_PIPE_STATE_SEAMLESS_CUBEMAP;
+	r600_pipe_state_add_reg(rstate, R_009508_TA_CNTL_AUX,
+				(enable ? 0 : S_009508_DISABLE_CUBE_WRAP(1)),
+				1, NULL);
+
+	free(rctx->states[R600_PIPE_STATE_SEAMLESS_CUBEMAP]);
+	rctx->states[R600_PIPE_STATE_SEAMLESS_CUBEMAP] = rstate;
+	r600_context_pipe_state_set(&rctx->ctx, rstate);
+}
+
 static void r600_bind_ps_sampler(struct pipe_context *ctx, unsigned count, void **states)
 {
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
-	struct r600_pipe_state **rstates = (struct r600_pipe_state **)states;
+	struct r600_pipe_sampler_state **sstates = (struct r600_pipe_sampler_state **)states;
+	int seamless = -1;
 
 	memcpy(rctx->ps_samplers.samplers, states, sizeof(void*) * count);
 	rctx->ps_samplers.n_samplers = count;
 
 	for (int i = 0; i < count; i++) {
-		r600_context_pipe_state_set_ps_sampler(&rctx->ctx, rstates[i], i);
+		r600_context_pipe_state_set_ps_sampler(&rctx->ctx, &sstates[i]->rstate, i);
+
+		if (sstates[i])
+			seamless = sstates[i]->seamless_cube_map;
 	}
+
+	if (seamless != -1)
+		r600_set_seamless_cubemap(rctx, seamless);
 }
 
 static void r600_bind_vs_sampler(struct pipe_context *ctx, unsigned count, void **states)
 {
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
-	struct r600_pipe_state **rstates = (struct r600_pipe_state **)states;
+	struct r600_pipe_sampler_state **sstates = (struct r600_pipe_sampler_state **)states;
+	int seamless = -1;
 
 	for (int i = 0; i < count; i++) {
-		r600_context_pipe_state_set_vs_sampler(&rctx->ctx, rstates[i], i);
+		r600_context_pipe_state_set_vs_sampler(&rctx->ctx, &sstates[i]->rstate, i);
+
+		if (sstates[i])
+			seamless = sstates[i]->seamless_cube_map;
 	}
+
+	if (seamless != -1)
+		r600_set_seamless_cubemap(rctx, seamless);
 }
 
 static void r600_set_clip_state(struct pipe_context *ctx,
@@ -1290,14 +1325,22 @@ void r600_init_config(struct r600_pipe_context *rctx)
 
 	if (family >= CHIP_RV770) {
 		r600_pipe_state_add_reg(rstate, R_008D8C_SQ_DYN_GPR_CNTL_PS_FLUSH_REQ, 0x00004000, 0xFFFFFFFF, NULL);
-		r600_pipe_state_add_reg(rstate, R_009508_TA_CNTL_AUX, 0x07000002, 0xFFFFFFFF, NULL);
+		r600_pipe_state_add_reg(rstate, R_009508_TA_CNTL_AUX,
+					S_009508_DISABLE_CUBE_ANISO(1) |
+					S_009508_SYNC_GRADIENT(1) |
+					S_009508_SYNC_WALKER(1) |
+					S_009508_SYNC_ALIGNER(1), 0xFFFFFFFF, NULL);
 		r600_pipe_state_add_reg(rstate, R_009830_DB_DEBUG, 0x00000000, 0xFFFFFFFF, NULL);
 		r600_pipe_state_add_reg(rstate, R_009838_DB_WATERMARKS, 0x00420204, 0xFFFFFFFF, NULL);
 		r600_pipe_state_add_reg(rstate, R_0286C8_SPI_THREAD_GROUPING, 0x00000000, 0xFFFFFFFF, NULL);
 		r600_pipe_state_add_reg(rstate, R_028A4C_PA_SC_MODE_CNTL, 0x00514002, 0xFFFFFFFF, NULL);
 	} else {
 		r600_pipe_state_add_reg(rstate, R_008D8C_SQ_DYN_GPR_CNTL_PS_FLUSH_REQ, 0x00000000, 0xFFFFFFFF, NULL);
-		r600_pipe_state_add_reg(rstate, R_009508_TA_CNTL_AUX, 0x07000003, 0xFFFFFFFF, NULL);
+		r600_pipe_state_add_reg(rstate, R_009508_TA_CNTL_AUX,
+					S_009508_DISABLE_CUBE_ANISO(1) |
+					S_009508_SYNC_GRADIENT(1) |
+					S_009508_SYNC_WALKER(1) |
+					S_009508_SYNC_ALIGNER(1), 0xFFFFFFFF, NULL);
 		r600_pipe_state_add_reg(rstate, R_009830_DB_DEBUG, 0x82000000, 0xFFFFFFFF, NULL);
 		r600_pipe_state_add_reg(rstate, R_009838_DB_WATERMARKS, 0x01020204, 0xFFFFFFFF, NULL);
 		r600_pipe_state_add_reg(rstate, R_0286C8_SPI_THREAD_GROUPING, 0x00000001, 0xFFFFFFFF, NULL);
@@ -1462,7 +1505,7 @@ void r600_pipe_shader_vs(struct pipe_context *ctx, struct r600_pipe_shader *shad
 
 	r600_pipe_state_add_reg(rstate,
 			R_0286C4_SPI_VS_OUT_CONFIG,
-			S_0286C4_VS_EXPORT_COUNT(rshader->noutput - 2),
+			S_0286C4_VS_EXPORT_COUNT(rshader->noutput - 1),
 			0xFFFFFFFF, NULL);
 	r600_pipe_state_add_reg(rstate,
 			R_028868_SQ_PGM_RESOURCES_VS,

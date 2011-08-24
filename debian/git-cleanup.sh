@@ -5,13 +5,10 @@ set -e
 ### First phase, files known to make dpkg-source unhappy.
 
 # List broken symlinks:
-broken_symlinks=$(find -follow -type l)
+symlinks=$(find -type l)
 
 # Symlinks vs. directories:
-dirs_vs_symlinks='
-src/gallium/tests/graw/fragment-shader
-src/gallium/tests/graw/vertex-shader
-'
+dirs_vs_symlinks=''
 
 # Modified binaries:
 binaries='
@@ -33,7 +30,7 @@ esac
 # Readibility:
 echo
 
-for x in $broken_symlinks $dirs_vs_symlinks $binaries; do
+for x in $symlinks $dirs_vs_symlinks $binaries; do
   # Do not fail if the file went away already, only warn:
   if [ -e $x -o -L $x ]; then
     if [ $clean = 1 ]; then
