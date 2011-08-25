@@ -1,5 +1,6 @@
 02_use-ieee-fp-on-s390-and-m68k.patch
 04_osmesa_version.diff
+05_kfreebsd-egl-x11.diff
 06_kfreebsd-ftbfs.diff
 08-kfreebsd-gallium.diff
 10-hurd-configure-tweaks.diff

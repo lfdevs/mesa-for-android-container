@@ -1,3 +1,11 @@
+mesa (7.11-2) unstable; urgency=low
+
+  * Work around the lack of O_CLOEXEC on kfreebsd, fix FTBFS.
+  * Don't crash on BadRequest from DRI2Connect, just fall back to sw or
+    indirect.
+
+ -- Julien Cristau <jcristau@debian.org>  Thu, 25 Aug 2011 23:13:35 +0200
+
 mesa (7.11-1) unstable; urgency=low
 
   [ Christopher James Halse Rogers ]
