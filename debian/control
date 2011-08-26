@@ -144,7 +144,7 @@ Description: free implementation of the OpenGL API -- development files
 
 Package: libgbm1
 Section: libs
-Architecture: linux-any kfreebsd-any
+Architecture: linux-any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
