@@ -276,6 +276,11 @@ clean: unpatch
 # Build architecture-independent files here.
 binary-indep: install
 
+allpkg = $(shell dh_listpackages -s)
+dbgpkg = $(filter %-dbg, $(allpkg))
+otherpkg = $(filter-out %-dbg, $(allpkg))
+havedbgpkg = $(patsubst %-dbg,%,$(dbgpkg))
+nodbgpkg = $(filter-out $(havedbgpkg),$(otherpkg))
 
 # Build architecture-dependent files here.
 binary-arch: install
@@ -312,39 +317,17 @@ endif
 	dh_lintian -s
 	dh_link -s
 	# Install bug control and script:
-	set -e; for p in `dh_listpackages -s`; do \
+	set -e; for p in $(allpkg); do \
 		install -d debian/$$p/usr/share/bug/$$p && \
 		install -m 644 debian/local/control debian/$$p/usr/share/bug/$$p && \
 		install -m 755 debian/local/script  debian/$$p/usr/share/bug/$$p; \
 	done
-	dh_strip -plibgl1-mesa-swx11 --dbg-package=libgl1-mesa-swx11-dbg
-	dh_strip -plibgl1-mesa-glx --dbg-package=libgl1-mesa-glx-dbg
-	dh_strip -plibgl1-mesa-dri --dbg-package=libgl1-mesa-dri-dbg
-	dh_strip -plibgl1-mesa-dri-experimental --dbg-package=libgl1-mesa-dri-experimental-dbg
-	dh_strip -plibopenvg1-mesa --dbg-package=libopenvg1-mesa-dbg
-	dh_strip -plibgbm1 --dbg-package=libgbm1-dbg
-	dh_strip -plibegl1-mesa --dbg-package=libegl1-mesa-dbg
-	dh_strip -plibglapi-mesa --dbg-package=libglapi-mesa-dbg
-	dh_strip -plibgles1-mesa --dbg-package=libgles1-mesa-dbg
-	dh_strip -plibgles2-mesa --dbg-package=libgles2-mesa-dbg
-	dh_strip -plibegl1-mesa-drivers --dbg-package=libegl1-mesa-drivers-dbg
+	set -e; for p in $(havedbgpkg); do \
+		dh_strip -p$${p} --dbg-package=$${p}-dbg; \
+	done
 	# dh_strip -s --remaining-packages doesn't work with resumed
 	# builds (see changelog for mesa 7.10-1):
-	dh_strip \
-		-plibegl1-mesa-dev \
-		-plibgbm-dev \
-		-plibgl1-mesa-dev \
-		-plibgl1-mesa-swx11-dev \
-		-plibgles1-mesa-dev \
-		-plibgles2-mesa-dev \
-		-plibglu1-mesa \
-		-plibglu1-mesa-dev \
-		-plibglw1-mesa \
-		-plibglw1-mesa-dev \
-		-plibopenvg1-mesa-dev \
-		-plibosmesa6 \
-		-plibosmesa6-dev \
-		-pmesa-common-dev
+	dh_strip $(foreach p,$(nodbgpkg),-p$(p))
 	dh_compress -s
 	dh_fixperms -s
 ifeq (,$(filter sparc sparc64,$(DEB_HOST_ARCH)))
@@ -357,7 +340,8 @@ endif
 	dh_shlibdeps -s
 	dh_gencontrol -s
 	dh_md5sums -s
-	dh_builddeb -s
+	dh_builddeb $(foreach pkg,$(dbgpkg),-p$(pkg)) -- -Zxz
+	dh_builddeb $(foreach pkg,$(otherpkg),-p$(pkg))
 
 binary: binary-indep binary-arch
 .PHONY: configs build clean binary-indep binary-arch binary install

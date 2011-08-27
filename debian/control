@@ -175,7 +175,7 @@ Description: generic buffer management API -- debugging symbols
 
 Package: libgbm-dev
 Section: libdevel
-Architecture: linux-any kfreebsd-any
+Architecture: linux-any
 Depends:
  libgbm1 (= ${binary:Version}),
  ${misc:Depends},

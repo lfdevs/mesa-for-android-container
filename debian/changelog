@@ -1,3 +1,11 @@
+mesa (7.11-4) unstable; urgency=low
+
+  * Use xz compression for dbg packages.
+  * Simplify dh_strip calls a bit using make variables.
+  * libgbm-dev is also linux-only, not just libgbm1.
+
+ -- Julien Cristau <jcristau@debian.org>  Sat, 27 Aug 2011 12:02:42 +0200
+
 mesa (7.11-3) unstable; urgency=low
 
   * Don't build libgbm on kfreebsd, it needs KMS/udev.
