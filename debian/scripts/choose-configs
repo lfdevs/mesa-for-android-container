@@ -26,7 +26,7 @@ SWX11_GLU_CONFIGS := swx11+glu swx11+glu-static
 ##############################################################################
 ## CPU-optimized configurations ##############################################
 
-ifneq (,$(filter $(DEB_HOST_ARCH), i386 kfreebsd-i386 hurd-i386))
+ifeq ($(DEB_HOST_ARCH_CPU), i386)
 	SWX11_GLU_CONFIGS += swx11+glu-i386-i686
 endif
 

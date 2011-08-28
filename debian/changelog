@@ -1,3 +1,16 @@
+mesa (7.11-5) unstable; urgency=low
+
+  * Merge patch from Pino Tiscano (thanks!):
+    - Use hurd-any instead of: hurd-i386 (“wildcard archs are free”).
+    - Use any-i386 instead of: i386 kfreebsd-i386 hurd-i386.
+    - Rewrite a check in debian/rules to follow the same logic.
+    - Switch libgbm1-dbg to arch: linux-any. This fixes uninstallability
+      on kfreebsd-* by getting rid of this package there.
+    - Switch libglapi-mesa{,-dbg} arch: any. This fixes the FTBFS on
+      hurd-i386^Wany.
+
+ -- Cyril Brulebois <kibi@debian.org>  Sun, 28 Aug 2011 19:07:48 +0200
+
 mesa (7.11-4) unstable; urgency=low
 
   * Use xz compression for dbg packages.
