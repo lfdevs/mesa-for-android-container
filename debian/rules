@@ -20,7 +20,6 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
 endif
 
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
-DEB_BUILD_ARCH     ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH)
 DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
 DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
@@ -33,15 +32,13 @@ else
 	confflags += --build=$(DEB_BUILD_GNU_TYPE) --host=$(DEB_HOST_GNU_TYPE)
 endif
 
-# choose which configurations to build
-include debian/scripts/choose-configs
-
 # keep a list of files we don't install (yet), but since it's a bit
 # large, use an external file:
 include debian/not-installed
 
 # build the following configurations by default
-CONFIGS = $(SWX11_GLU_CONFIGS) \
+CONFIGS = swx11+glu \
+	  swx11+glu-static \
 	  dri \
 	  osmesa \
 	  osmesa-static \
@@ -49,6 +46,10 @@ CONFIGS = $(SWX11_GLU_CONFIGS) \
 	  osmesa16-static \
 	  osmesa32 \
 	  osmesa32-static
+
+ifeq ($(DEB_HOST_ARCH_CPU), i386)
+	CONFIGS += swx11+glu-i386-i686
+endif
 
 STAMP_DIR = debian/stamp
 STAMP = $(STAMP_DIR)/$(DEB_BUILD_GNU_TYPE)
@@ -113,6 +114,7 @@ confflags-dri = \
 	--with-dri-searchpath='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	--enable-glx-tls \
 	--enable-shared-glapi \
+	--enable-texture-float \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_EGL) \
 	$(confflags_GALLIUM) \
@@ -242,19 +244,10 @@ install: build
 		$(MAKE) -C $(DEB_BUILD_DIR)/$$config DESTDIR=$(CURDIR)/debian/tmp install; \
 	done
 	$(MAKE) -C $(DEB_BUILD_DIR)/dri DESTDIR=$(CURDIR)/debian/tmp/dri install
-	for file in mesa-common-dev.install libopenvg1-mesa.install \
-	            libopenvg1-mesa-dev.install libgles2-mesa.install \
-	            libgles2-mesa-dev.install libgles1-mesa.install \
-	            libgles1-mesa-dev.install libgl1-mesa-glx.install \
-	            libgl1-mesa-glx-i686.install libgl1-mesa-dri.install \
-	            libgl1-mesa-dri.install.linux libegl1-mesa.install \
-	            libgl1-mesa-dri-experimental.install \
-	            libegl1-mesa-drivers.install libegl1-mesa-dev.install \
-		    libgbm1.install libgbm-dev.install \
-	            libglapi-mesa.install; \
+	for file in debian/*.in; \
 	do \
 		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
-			debian/$${file}.in > debian/$$file; \
+			$${file} > $${file%%.in}; \
 	done
 
 clean: unpatch
@@ -270,6 +263,7 @@ clean: unpatch
 	rm -rf $$(find -name Makefile.in)
 	rm -rf aclocal.m4 missing depcomp install-sh ltmain.sh
 	rm -rf $(STAMP_DIR)
+	for file in debian/*.in; do rm -f $${file%%.in}; done
 
 	dh_clean
 

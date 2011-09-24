@@ -1,3 +1,18 @@
+mesa (7.11-6) unstable; urgency=low
+
+  [ Julien Cristau ]
+  * Inline what's left of debian/scripts/choose-configs in debian/rules.
+  * Enable texture-float for dri (closes: #635651).
+  * Update from upstream's 7.11 branch (commit e7794048)
+  * Merge changes from 7.10.3-4, including:
+    - Fix comments in libegl1-mesa.symbols to avoid impending FTBFS with the
+      upcoming dpkg-dev 1.16.1 (closes: #642690)
+
+  [ Cyril Brulebois ]
+  * Document the symlink dance in README.source.
+
+ -- Cyril Brulebois <kibi@debian.org>  Sat, 24 Sep 2011 20:32:55 +0200
+
 mesa (7.11-5) unstable; urgency=low
 
   * Merge patch from Pino Tiscano (thanks!):
@@ -122,6 +137,35 @@ mesa (7.11~0-1) experimental; urgency=low
   * Update libegl1-mesa.symbols with new wl_drm_interface symbol.
 
  -- Cyril Brulebois <kibi@debian.org>  Sun, 19 Jun 2011 19:01:52 +0200
+
+mesa (7.10.3-4) unstable; urgency=medium
+
+  [ Cyril Brulebois ]
+  * Accept libmotif-dev as an alternative to lesstif2-dev in
+    libglw1-mesa-dev's dependencies, as requested by Michael Hanke
+    (Closes: #631236).
+  * Merge upstream 7.10 branch up to e041956cb2.
+  * Wrap Breaks fields.
+  * Add Breaks: {xserver-xorg-core,libgl1-mesa-glx}-no-multiarch to
+    libgl1-mesa-dri* to handle upgrades from squeeze-backports (without
+    multiarch) to wheezy (with multiarch).
+  * Add lintian overrides for breaks-without-version accordingly, those
+    packages are only provided in squeeze-backports.
+  * Replace “The OpenGL utility library…” with “Mesa OpenGL utility
+    library…” in the description of the libglu1-mesa* packages.
+  * Rename all remaining *.install files as *.install.in and use
+    “${DEB_HOST_MULTIARCH}” instead of “*”.
+  * Use the sed substitution on all debian/*.in files accordingly.
+  * Remove debian/clean, and use the same for loop to remove the generated
+    files.
+  * Set urgency to “medium” to speed things up. Migration to testing is
+    a prerequisite for squeeze backports.
+
+  [ Sven Joachim ]
+  * Fix comments in libegl1-mesa.symbols to avoid impending FTBFS with
+    the upcoming dpkg-dev 1.16.1.
+
+ -- Cyril Brulebois <kibi@debian.org>  Sun, 07 Aug 2011 21:50:46 +0200
 
 mesa (7.10.3-3) unstable; urgency=low
 

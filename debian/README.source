@@ -22,6 +22,12 @@ just need to be pulled into git.debian.org in a "upstream-*" branch.
 
 The .orig.tar.gz is upstream's MesaLib tarball.
 
+While building from git, dpkg-source can complain about symlinks vs.
+normal files mismatches. To work around this issue, before uploading,
+and without committing:
+
+  find -type l | while read dest; do src=$(readlink -f $dest); rm $dest; cp $src $dest; done
+
 The Debian packaging is added by creating the "debian-*" git branch
 which contains the aforementioned "upstream-*" branch plus the debian/
 repository files.

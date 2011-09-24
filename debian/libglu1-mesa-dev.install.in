@@ -1,0 +1,5 @@
+usr/include/GL/glu.h
+usr/include/GL/glu_mangle.h
+usr/lib/${DEB_HOST_MULTIARCH}/libGLU.a
+usr/lib/${DEB_HOST_MULTIARCH}/libGLU.so
+usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/glu.pc

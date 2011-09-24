@@ -1,0 +1,8 @@
+usr/include/GL/osmesa.h
+usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa.a
+usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa.so
+usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa16.a
+usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa16.so
+usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa32.a
+usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa32.so
+usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/osmesa.pc

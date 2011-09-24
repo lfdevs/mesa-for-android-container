@@ -1,7 +1,7 @@
 libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
- # These are all internal symbols between libEGL and the
- # drivers.  Handle the dependency explicitly in the driver
- # package.
+# These are all internal symbols between libEGL and the
+# drivers.  Handle the dependency explicitly in the driver
+# package.
  (regex)"^_egl.*@Base$" 7.8.1
  eglBindAPI@Base 7.8.1
  eglBindTexImage@Base 7.8.1
