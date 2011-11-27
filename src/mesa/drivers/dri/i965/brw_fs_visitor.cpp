@@ -1451,7 +1451,7 @@ fs_visitor::visit(ir_if *ir)
 {
    fs_inst *inst;
 
-   if (intel->gen != 6 && c->dispatch_width == 16) {
+   if (intel->gen < 6 && c->dispatch_width == 16) {
       fail("Can't support (non-uniform) control flow on 16-wide\n");
    }
 
@@ -1737,8 +1737,9 @@ void
 fs_visitor::emit_color_write(int index, int first_color_mrf, fs_reg color)
 {
    int reg_width = c->dispatch_width / 8;
+   fs_inst *inst;
 
-   if (c->dispatch_width == 8 || intel->gen == 6) {
+   if (c->dispatch_width == 8 || intel->gen >= 6) {
       /* SIMD8 write looks like:
        * m + 0: r0
        * m + 1: r1
@@ -1755,8 +1756,10 @@ fs_visitor::emit_color_write(int index, int first_color_mrf, fs_reg color)
        * m + 6: a0
        * m + 7: a1
        */
-      emit(BRW_OPCODE_MOV, fs_reg(MRF, first_color_mrf + index * reg_width),
-	   color);
+      inst = emit(BRW_OPCODE_MOV,
+		  fs_reg(MRF, first_color_mrf + index * reg_width),
+		  color);
+      inst->saturate = c->key.clamp_fragment_color;
    } else {
       /* pre-gen6 SIMD16 single source DP write looks like:
        * m + 0: r0
@@ -1774,16 +1777,22 @@ fs_visitor::emit_color_write(int index, int first_color_mrf, fs_reg color)
 	  * usual destination + 1 for the second half we get
 	  * destination + 4.
 	  */
-	 emit(BRW_OPCODE_MOV,
-	      fs_reg(MRF, BRW_MRF_COMPR4 + first_color_mrf + index), color);
+	 inst = emit(BRW_OPCODE_MOV,
+		     fs_reg(MRF, BRW_MRF_COMPR4 + first_color_mrf + index),
+		     color);
+	 inst->saturate = c->key.clamp_fragment_color;
       } else {
 	 push_force_uncompressed();
-	 emit(BRW_OPCODE_MOV, fs_reg(MRF, first_color_mrf + index), color);
+	 inst = emit(BRW_OPCODE_MOV, fs_reg(MRF, first_color_mrf + index),
+		     color);
+	 inst->saturate = c->key.clamp_fragment_color;
 	 pop_force_uncompressed();
 
 	 push_force_sechalf();
 	 color.sechalf = true;
-	 emit(BRW_OPCODE_MOV, fs_reg(MRF, first_color_mrf + index + 4), color);
+	 inst = emit(BRW_OPCODE_MOV, fs_reg(MRF, first_color_mrf + index + 4),
+		     color);
+	 inst->saturate = c->key.clamp_fragment_color;
 	 pop_force_sechalf();
 	 color.sechalf = false;
       }

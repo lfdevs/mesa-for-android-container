@@ -95,8 +95,8 @@ else
 	DRI_DRIVERS += i915 i965 sis unichrome
   endif
 
-  # LLVM is required for r300g on x86:
-  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386))
+  # LLVM is required for r300g and recommended for swrastg on x86:
+  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386))
 	confflags_GALLIUM += --enable-gallium-llvm
   endif
 

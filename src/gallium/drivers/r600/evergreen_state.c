@@ -809,9 +809,7 @@ static void evergreen_db(struct r600_pipe_context *rctx, struct r600_pipe_state 
 	struct r600_resource_texture *rtex;
 	struct r600_resource *rbuffer;
 	struct r600_surface *surf;
-	unsigned level;
-	unsigned pitch, slice, format, stencil_format;
-	unsigned offset;
+	unsigned level, pitch, slice, format, stencil_format, offset, array_mode;
 
 	if (state->zsbuf == NULL)
 		return;
@@ -823,9 +821,13 @@ static void evergreen_db(struct r600_pipe_context *rctx, struct r600_pipe_state 
 
 	rbuffer = &rtex->resource;
 
-	/* XXX quite sure for dx10+ hw don't need any offset hacks */
 	offset = r600_texture_get_offset((struct r600_resource_texture *)state->zsbuf->texture,
 					 level, state->zsbuf->u.tex.first_layer);
+
+	/* XXX remove this once tiling is properly supported */
+	array_mode = rtex->array_mode[level] ? rtex->array_mode[level] :
+					       V_028C70_ARRAY_1D_TILED_THIN1;
+
 	pitch = rtex->pitch_in_blocks[level] / 8 - 1;
 	slice = rtex->pitch_in_blocks[level] * surf->aligned_height / 64 - 1;
 	format = r600_translate_dbformat(state->zsbuf->texture->format);
@@ -851,7 +853,7 @@ static void evergreen_db(struct r600_pipe_context *rctx, struct r600_pipe_state 
 				S_028044_FORMAT(stencil_format), 0xFFFFFFFF, rbuffer->bo);
 
 	r600_pipe_state_add_reg(rstate, R_028040_DB_Z_INFO,
-				S_028040_ARRAY_MODE(rtex->array_mode[level]) | S_028040_FORMAT(format),
+				S_028040_ARRAY_MODE(array_mode) | S_028040_FORMAT(format),
 				0xFFFFFFFF, rbuffer->bo);
 	r600_pipe_state_add_reg(rstate, R_028058_DB_DEPTH_SIZE,
 				S_028058_PITCH_TILE_MAX(pitch),
@@ -1726,7 +1728,7 @@ void evergreen_pipe_shader_vs(struct pipe_context *ctx, struct r600_pipe_shader 
 	struct r600_pipe_state *rstate = &shader->rstate;
 	struct r600_shader *rshader = &shader->shader;
 	unsigned spi_vs_out_id[10];
-	unsigned i, tmp;
+	unsigned i, tmp, nparams;
 
 	/* clear previous register */
 	rstate->nregs = 0;
@@ -1745,9 +1747,17 @@ void evergreen_pipe_shader_vs(struct pipe_context *ctx, struct r600_pipe_shader 
 					spi_vs_out_id[i], 0xFFFFFFFF, NULL);
 	}
 
+	/* Certain attributes (position, psize, etc.) don't count as params.
+	 * VS is required to export at least one param and r600_shader_from_tgsi()
+	 * takes care of adding a dummy export.
+	 */
+	nparams = rshader->noutput - rshader->npos;
+	if (nparams < 1)
+		nparams = 1;
+
 	r600_pipe_state_add_reg(rstate,
 			R_0286C4_SPI_VS_OUT_CONFIG,
-			S_0286C4_VS_EXPORT_COUNT(rshader->noutput - 1),
+			S_0286C4_VS_EXPORT_COUNT(nparams - 1),
 			0xFFFFFFFF, NULL);
 	r600_pipe_state_add_reg(rstate,
 			R_028860_SQ_PGM_RESOURCES_VS,

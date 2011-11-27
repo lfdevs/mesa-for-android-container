@@ -459,6 +459,10 @@ typedef enum
    /* GL_ARB_sync */
    OPCODE_WAIT_SYNC,
 
+   /* GL_NV_conditional_render */
+   OPCODE_BEGIN_CONDITIONAL_RENDER,
+   OPCODE_END_CONDITIONAL_RENDER,
+
    /* The following three are meta instructions */
    OPCODE_ERROR,                /* raise compiled-in error */
    OPCODE_CONTINUE,
@@ -870,8 +874,12 @@ translate_id(GLsizei n, GLenum type, const GLvoid * list)
 /**********************************************************************/
 
 /**
- * Wrapper for _mesa_unpack_image() that handles pixel buffer objects.
- * If we run out of memory, GL_OUT_OF_MEMORY will be recorded.
+ * Wrapper for _mesa_unpack_image/bitmap() that handles pixel buffer objects.
+ * If width < 0 or height < 0 or format or type are invalid we'll just
+ * return NULL.  We will not generate an error since OpenGL command
+ * arguments aren't error-checked until the command is actually executed
+ * (not when they're compiled).
+ * But if we run out of memory, GL_OUT_OF_MEMORY will be recorded.
  */
 static GLvoid *
 unpack_image(struct gl_context *ctx, GLuint dimensions,
@@ -879,10 +887,24 @@ unpack_image(struct gl_context *ctx, GLuint dimensions,
              GLenum format, GLenum type, const GLvoid * pixels,
              const struct gl_pixelstore_attrib *unpack)
 {
+   if (width <= 0 || height <= 0) {
+      return NULL;
+   }
+
+   if (_mesa_bytes_per_pixel(format, type) < 0) {
+      /* bad format and/or type */
+      return NULL;
+   }
+
    if (!_mesa_is_bufferobj(unpack->BufferObj)) {
       /* no PBO */
-      GLvoid *image = _mesa_unpack_image(dimensions, width, height, depth,
-                                         format, type, pixels, unpack);
+      GLvoid *image;
+
+      if (type == GL_BITMAP)
+         image = _mesa_unpack_bitmap(width, height, pixels, unpack);
+      else
+         image = _mesa_unpack_image(dimensions, width, height, depth,
+                                    format, type, pixels, unpack);
       if (pixels && !image) {
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "display list construction");
       }
@@ -903,8 +925,11 @@ unpack_image(struct gl_context *ctx, GLuint dimensions,
       }
 
       src = ADD_POINTERS(map, pixels);
-      image = _mesa_unpack_image(dimensions, width, height, depth,
-                                 format, type, src, unpack);
+      if (type == GL_BITMAP)
+         image = _mesa_unpack_bitmap(width, height, src, unpack);
+      else
+         image = _mesa_unpack_image(dimensions, width, height, depth,
+                                    format, type, src, unpack);
 
       ctx->Driver.UnmapBuffer(ctx, GL_PIXEL_UNPACK_BUFFER_EXT,
                               unpack->BufferObj);
@@ -914,10 +939,11 @@ unpack_image(struct gl_context *ctx, GLuint dimensions,
       }
       return image;
    }
+
    /* bad access! */
+   _mesa_error(ctx, GL_INVALID_OPERATION, "invalid PBO access");
    return NULL;
 }
-
 
 /**
  * Allocate space for a display list instruction (opcode + payload space).
@@ -1104,7 +1130,8 @@ save_Bitmap(GLsizei width, GLsizei height,
       n[4].f = yorig;
       n[5].f = xmove;
       n[6].f = ymove;
-      n[7].data = _mesa_unpack_bitmap(width, height, pixels, &ctx->Unpack);
+      n[7].data = unpack_image(ctx, 2, width, height, 1, GL_COLOR_INDEX,
+                               GL_BITMAP, pixels, &ctx->Unpack);
    }
    if (ctx->ExecuteFlag) {
       CALL_Bitmap(ctx->Exec, (width, height,
@@ -4492,6 +4519,24 @@ save_MultTransposeMatrixfARB(const GLfloat m[16])
    save_MultMatrixf(tm);
 }
 
+static GLvoid *copy_data(const GLvoid *data, GLsizei size, const char *func)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   GLvoid *image;
+
+   if (!data)
+      return NULL;
+
+   image = malloc(size);
+   if (!image) {
+      _mesa_error(ctx, GL_OUT_OF_MEMORY, func);
+      return NULL;
+   }
+   memcpy(image, data, size);
+
+   return image;
+}
+
 
 /* GL_ARB_texture_compression */
 static void GLAPIENTRY
@@ -4509,15 +4554,8 @@ save_CompressedTexImage1DARB(GLenum target, GLint level,
    }
    else {
       Node *n;
-      GLvoid *image;
       ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
-      /* make copy of image */
-      image = malloc(imageSize);
-      if (!image) {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glCompressedTexImage1DARB");
-         return;
-      }
-      memcpy(image, data, imageSize);
+
       n = alloc_instruction(ctx, OPCODE_COMPRESSED_TEX_IMAGE_1D, 7);
       if (n) {
          n[1].e = target;
@@ -4526,10 +4564,7 @@ save_CompressedTexImage1DARB(GLenum target, GLint level,
          n[4].i = (GLint) width;
          n[5].i = border;
          n[6].i = imageSize;
-         n[7].data = image;
-      }
-      else if (image) {
-         free(image);
+         n[7].data = copy_data(data, imageSize, "glCompressedTexImage1DARB");
       }
       if (ctx->ExecuteFlag) {
          CALL_CompressedTexImage1DARB(ctx->Exec,
@@ -4555,15 +4590,8 @@ save_CompressedTexImage2DARB(GLenum target, GLint level,
    }
    else {
       Node *n;
-      GLvoid *image;
       ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
-      /* make copy of image */
-      image = malloc(imageSize);
-      if (!image) {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glCompressedTexImage2DARB");
-         return;
-      }
-      memcpy(image, data, imageSize);
+
       n = alloc_instruction(ctx, OPCODE_COMPRESSED_TEX_IMAGE_2D, 8);
       if (n) {
          n[1].e = target;
@@ -4573,10 +4601,7 @@ save_CompressedTexImage2DARB(GLenum target, GLint level,
          n[5].i = (GLint) height;
          n[6].i = border;
          n[7].i = imageSize;
-         n[8].data = image;
-      }
-      else if (image) {
-         free(image);
+         n[8].data = copy_data(data, imageSize, "glCompressedTexImage2DARB");
       }
       if (ctx->ExecuteFlag) {
          CALL_CompressedTexImage2DARB(ctx->Exec,
@@ -4602,15 +4627,8 @@ save_CompressedTexImage3DARB(GLenum target, GLint level,
    }
    else {
       Node *n;
-      GLvoid *image;
       ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
-      /* make copy of image */
-      image = malloc(imageSize);
-      if (!image) {
-         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glCompressedTexImage3DARB");
-         return;
-      }
-      memcpy(image, data, imageSize);
+
       n = alloc_instruction(ctx, OPCODE_COMPRESSED_TEX_IMAGE_3D, 9);
       if (n) {
          n[1].e = target;
@@ -4621,10 +4639,7 @@ save_CompressedTexImage3DARB(GLenum target, GLint level,
          n[6].i = (GLint) depth;
          n[7].i = border;
          n[8].i = imageSize;
-         n[9].data = image;
-      }
-      else if (image) {
-         free(image);
+         n[9].data = copy_data(data, imageSize, "glCompressedTexImage3DARB");
       }
       if (ctx->ExecuteFlag) {
          CALL_CompressedTexImage3DARB(ctx->Exec,
@@ -4642,18 +4657,9 @@ save_CompressedTexSubImage1DARB(GLenum target, GLint level, GLint xoffset,
                                 GLsizei imageSize, const GLvoid * data)
 {
    Node *n;
-   GLvoid *image;
-
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
 
-   /* make copy of image */
-   image = malloc(imageSize);
-   if (!image) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glCompressedTexSubImage1DARB");
-      return;
-   }
-   memcpy(image, data, imageSize);
    n = alloc_instruction(ctx, OPCODE_COMPRESSED_TEX_SUB_IMAGE_1D, 7);
    if (n) {
       n[1].e = target;
@@ -4662,10 +4668,7 @@ save_CompressedTexSubImage1DARB(GLenum target, GLint level, GLint xoffset,
       n[4].i = (GLint) width;
       n[5].e = format;
       n[6].i = imageSize;
-      n[7].data = image;
-   }
-   else if (image) {
-      free(image);
+      n[7].data = copy_data(data, imageSize, "glCompressedTexSubImage1DARB");
    }
    if (ctx->ExecuteFlag) {
       CALL_CompressedTexSubImage1DARB(ctx->Exec, (target, level, xoffset,
@@ -4682,18 +4685,9 @@ save_CompressedTexSubImage2DARB(GLenum target, GLint level, GLint xoffset,
                                 const GLvoid * data)
 {
    Node *n;
-   GLvoid *image;
-
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
 
-   /* make copy of image */
-   image = malloc(imageSize);
-   if (!image) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glCompressedTexSubImage2DARB");
-      return;
-   }
-   memcpy(image, data, imageSize);
    n = alloc_instruction(ctx, OPCODE_COMPRESSED_TEX_SUB_IMAGE_2D, 9);
    if (n) {
       n[1].e = target;
@@ -4704,10 +4698,7 @@ save_CompressedTexSubImage2DARB(GLenum target, GLint level, GLint xoffset,
       n[6].i = (GLint) height;
       n[7].e = format;
       n[8].i = imageSize;
-      n[9].data = image;
-   }
-   else if (image) {
-      free(image);
+      n[9].data = copy_data(data, imageSize, "glCompressedTexSubImage2DARB");
    }
    if (ctx->ExecuteFlag) {
       CALL_CompressedTexSubImage2DARB(ctx->Exec,
@@ -4724,18 +4715,9 @@ save_CompressedTexSubImage3DARB(GLenum target, GLint level, GLint xoffset,
                                 GLsizei imageSize, const GLvoid * data)
 {
    Node *n;
-   GLvoid *image;
-
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
 
-   /* make copy of image */
-   image = malloc(imageSize);
-   if (!image) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glCompressedTexSubImage3DARB");
-      return;
-   }
-   memcpy(image, data, imageSize);
    n = alloc_instruction(ctx, OPCODE_COMPRESSED_TEX_SUB_IMAGE_3D, 11);
    if (n) {
       n[1].e = target;
@@ -4748,10 +4730,7 @@ save_CompressedTexSubImage3DARB(GLenum target, GLint level, GLint xoffset,
       n[8].i = (GLint) depth;
       n[9].e = format;
       n[10].i = imageSize;
-      n[11].data = image;
-   }
-   else if (image) {
-      free(image);
+      n[11].data = copy_data(data, imageSize, "glCompressedTexSubImage3DARB");
    }
    if (ctx->ExecuteFlag) {
       CALL_CompressedTexSubImage3DARB(ctx->Exec,
@@ -7372,6 +7351,35 @@ save_WaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout)
 }
 
 
+/** GL_NV_conditional_render */
+static void GLAPIENTRY
+save_BeginConditionalRender(GLuint queryId, GLenum mode)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   Node *n;
+   ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
+   n = alloc_instruction(ctx, OPCODE_BEGIN_CONDITIONAL_RENDER, 2);
+   if (n) {
+      n[1].i = queryId;
+      n[2].e = mode;
+   }
+   if (ctx->ExecuteFlag) {
+      CALL_BeginConditionalRenderNV(ctx->Exec, (queryId, mode));
+   }
+}
+
+static void GLAPIENTRY
+save_EndConditionalRender()
+{
+   GET_CURRENT_CONTEXT(ctx);
+   ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
+   alloc_instruction(ctx, OPCODE_END_CONDITIONAL_RENDER, 0);
+   if (ctx->ExecuteFlag) {
+      CALL_EndConditionalRenderNV(ctx->Exec, ());
+   }
+}
+
+
 /**
  * Save an error-generating command into display list.
  *
@@ -8635,6 +8643,14 @@ execute_list(struct gl_context *ctx, GLuint list)
                p.uint32[1] = n[4].ui;
                CALL_WaitSync(ctx->Exec, (n[1].data, n[2].bf, p.uint64));
             }
+            break;
+
+         /* GL_NV_conditional_render */
+         case OPCODE_BEGIN_CONDITIONAL_RENDER:
+            CALL_BeginConditionalRenderNV(ctx->Exec, (n[1].i, n[2].e));
+            break;
+         case OPCODE_END_CONDITIONAL_RENDER:
+            CALL_EndConditionalRenderNV(ctx->Exec, ());
             break;
 
          case OPCODE_CONTINUE:
@@ -10340,6 +10356,10 @@ _mesa_create_save_table(void)
    SET_ProgramParameteriARB(table, save_ProgramParameteri);
    SET_FramebufferTextureARB(table, save_FramebufferTexture);
    SET_FramebufferTextureFaceARB(table, save_FramebufferTextureFace);
+
+   /* GL_NV_conditional_render */
+   SET_BeginConditionalRenderNV(table, save_BeginConditionalRender);
+   SET_EndConditionalRenderNV(table, save_EndConditionalRender);
 
    /* GL_ARB_sync */
    _mesa_init_sync_dispatch(table);

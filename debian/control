@@ -30,7 +30,7 @@ Build-Depends:
  libudev-dev [linux-any],
  flex,
  bison,
- llvm-2.9-dev [amd64 i386],
+ llvm-2.9-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386],
 # libwayland-dev,
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
@@ -555,12 +555,13 @@ Depends:
  ${misc:Depends}
 Suggests: libglide3
 Conflicts: xlibmesa-dri (<< 1:7.0.0)
-Replaces: xlibmesa-dri (<< 1:7.0.0)
+Replaces: xlibmesa-dri (<< 1:7.0.0), libgl1-mesa-dri-experimental (<< 7.11.1)
 Breaks:
  xserver-xorg-core (<< 2:1.10.2-2),
  xserver-xorg-core-no-multiarch,
  libgl1-mesa-glx (<< 7.10.2-4),
  libgl1-mesa-glx-no-multiarch,
+ libgl1-mesa-dri-experimental (<< 7.11.1),
 Multi-Arch: same
 Description: free implementation of the OpenGL API -- DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
@@ -582,6 +583,7 @@ Architecture: any
 Depends:
  libgl1-mesa-dri (= ${binary:Version}),
  ${misc:Depends},
+Replaces: libgl1-mesa-dri-experimental-dbg (<< 7.11.1)
 Multi-Arch: same
 Description: Debugging symbols for the Mesa DRI modules
  This version of Mesa provides GLX and DRI capabilities: it is capable of
@@ -598,14 +600,15 @@ Description: Debugging symbols for the Mesa DRI modules
 
 Package: libgl1-mesa-dri-experimental
 Section: libs
-Architecture: linux-any
+Architecture: linux-any kfreebsd-any
 Depends:
  ${shlibs:Depends},
+ libgl1-mesa-dri (>= 7.11.1) [linux-any],
  ${misc:Depends},
 Breaks:
  xserver-xorg-core (<< 2:1.10.2-2),
  xserver-xorg-core-no-multiarch,
- libgl1-mesa-glx (<< 7.10.2-4),
+ libgl1-mesa-glx (<< 7.11.1),
  libgl1-mesa-glx-no-multiarch,
 Multi-Arch: same
 Description: free implementation of the OpenGL API -- Extra DRI modules

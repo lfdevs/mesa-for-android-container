@@ -3,3 +3,5 @@ build/dri/${DEB_HOST_MULTIARCH}/*_dri.so  usr/lib/${DEB_HOST_MULTIARCH}/dri
 
 # This part is Linux-specific:
 build/dri/${DEB_HOST_MULTIARCH}/gallium/r600_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri
+build/dri/${DEB_HOST_MULTIARCH}/gallium/nouveau_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri
+build/dri/${DEB_HOST_MULTIARCH}/gallium/nouveau_vieux_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri

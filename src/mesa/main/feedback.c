@@ -64,7 +64,7 @@ _mesa_FeedbackBuffer( GLsizei size, GLenum type, GLfloat *buffer )
       _mesa_error( ctx, GL_INVALID_VALUE, "glFeedbackBuffer(size<0)" );
       return;
    }
-   if (!buffer) {
+   if (!buffer && size > 0) {
       _mesa_error( ctx, GL_INVALID_VALUE, "glFeedbackBuffer(buffer==NULL)" );
       ctx->Feedback.BufferSize = 0;
       return;
@@ -167,6 +167,11 @@ _mesa_SelectBuffer( GLsizei size, GLuint *buffer )
 {
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_BEGIN_END(ctx);
+
+   if (size < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glSelectBuffer(size)");
+      return;
+   }
 
    if (ctx->RenderMode==GL_SELECT) {
       _mesa_error( ctx, GL_INVALID_OPERATION, "glSelectBuffer" );

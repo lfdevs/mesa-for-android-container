@@ -915,9 +915,23 @@ _mesa_GetTexLevelParameteriv( GLenum target, GLint level,
             *params = _mesa_compressed_format_to_glenum(ctx, texFormat);
          }
          else {
-            /* return the user's requested internal format */
-            *params = img->InternalFormat;
-         }
+	    /* If the true internal format is not compressed but the user
+	     * requested a generic compressed format, we have to return the
+	     * generic base format that matches.
+	     *
+	     * From page 119 (page 129 of the PDF) of the OpenGL 1.3 spec:
+	     *
+	     *     "If no specific compressed format is available,
+	     *     internalformat is instead replaced by the corresponding base
+	     *     internal format."
+	     *
+	     * Otherwise just return the user's requested internal format
+	     */
+	    const GLenum f =
+	       _mesa_gl_compressed_format_base_format(img->InternalFormat);
+
+	    *params = (f != 0) ? f : img->InternalFormat;
+	 }
          break;
       case GL_TEXTURE_BORDER:
          *params = img->Border;
@@ -1252,12 +1266,13 @@ _mesa_GetTexParameterfv( GLenum target, GLenum pname, GLfloat *params )
          break;
 
       case GL_TEXTURE_CUBE_MAP_SEAMLESS:
-      if (ctx->Extensions.AMD_seamless_cubemap_per_texture) {
-         *params = (GLfloat) obj->Sampler.CubeMapSeamless;
-      }
-      else {
-         error = GL_TRUE;
-      }
+         if (ctx->Extensions.AMD_seamless_cubemap_per_texture) {
+            *params = (GLfloat) obj->Sampler.CubeMapSeamless;
+         }
+         else {
+            error = GL_TRUE;
+         }
+         break;
 
       default:
 	 error = GL_TRUE;
@@ -1427,6 +1442,7 @@ _mesa_GetTexParameteriv( GLenum target, GLenum pname, GLint *params )
          else {
             error = GL_TRUE;
          }
+         break;
 
       default:
          ; /* silence warnings */

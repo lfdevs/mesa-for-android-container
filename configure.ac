@@ -17,6 +17,10 @@ AC_INIT([Mesa],[mesa_version],
 AC_CONFIG_AUX_DIR([bin])
 AC_CANONICAL_HOST
 
+dnl Save user CFLAGS and CXXFLAGS so one can override the default ones
+USER_CFLAGS="$CFLAGS"
+USER_CXXFLAGS="$CXXFLAGS"
+
 dnl Versions for external dependencies
 LIBDRM_REQUIRED=2.4.24
 LIBDRM_RADEON_REQUIRED=2.4.24
@@ -85,7 +89,7 @@ if test "x$GCC" = xyes -a "x$CLANG" = xno; then
     GCC_VERSION=`$CC -dumpversion`
     if test $? -eq 0; then
         major=`echo $GCC_VERSION | cut -d. -f1`
-        minor=`echo $GCC_VERSION | cut -d. -f1`
+        minor=`echo $GCC_VERSION | cut -d. -f2`
     fi
 
     if test $major -lt 3 -o $major -eq 3 -a $minor -lt 3 ; then
@@ -1806,6 +1810,11 @@ if test "x$with_gallium_drivers" != x; then
             gallium_check_st "nouveau/drm" "dri-nouveau" "xorg-nouveau"
             ;;
         xswrast)
+            GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS softpipe"
+            if test "x$MESA_LLVM" = x1; then
+                GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS llvmpipe"
+            fi
+
             if test "x$HAVE_ST_DRI" = xyes; then
                 GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS dri-swrast"
             fi
@@ -1823,6 +1832,10 @@ SRC_DIRS="$CORE_DIRS $SRC_DIRS"
 dnl Restore LDFLAGS and CPPFLAGS
 LDFLAGS="$_SAVE_LDFLAGS"
 CPPFLAGS="$_SAVE_CPPFLAGS"
+
+dnl Add user CFLAGS and CXXFLAGS
+CFLAGS="$CFLAGS $USER_CFLAGS"
+CXXFLAGS="$CXXFLAGS $USER_CXXFLAGS"
 
 dnl Substitute the config
 AC_CONFIG_FILES([configs/autoconf])

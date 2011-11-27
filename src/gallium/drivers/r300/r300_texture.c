@@ -824,10 +824,10 @@ static void r300_texture_setup_fb_state(struct r300_surface *surf)
     }
 }
 
-boolean r300_resource_set_properties(struct pipe_screen *screen,
-                                     struct pipe_resource *tex,
-                                     unsigned offset,
-                                     const struct pipe_resource *new_properties)
+void r300_resource_set_properties(struct pipe_screen *screen,
+                                  struct pipe_resource *tex,
+                                  unsigned offset,
+                                  const struct pipe_resource *new_properties)
 {
     struct r300_screen *rscreen = r300_screen(screen);
     struct r300_resource *res = r300_resource(tex);
@@ -837,14 +837,9 @@ boolean r300_resource_set_properties(struct pipe_screen *screen,
         util_format_short_name(tex->format),
         util_format_short_name(new_properties->format));
 
-    if (!r300_texture_desc_init(rscreen, res, new_properties)) {
-        fprintf(stderr, "r300: ERROR: Cannot set texture properties.\n");
-        return FALSE;
-    }
+    r300_texture_desc_init(rscreen, res, new_properties);
     res->tex_offset = offset;
     r300_texture_setup_format_state(rscreen, res, 0, &res->tx_format);
-
-    return TRUE;
 }
 
 static void r300_texture_destroy(struct pipe_screen *screen,
@@ -915,12 +910,7 @@ r300_texture_create_object(struct r300_screen *rscreen,
                   RADEON_DOMAIN_VRAM | RADEON_DOMAIN_GTT;
     tex->buf_size = max_buffer_size;
 
-    if (!r300_resource_set_properties(&rscreen->screen, &tex->b.b.b, 0, base)) {
-        if (buffer)
-            pb_reference(&buffer, NULL);
-        FREE(tex);
-        return NULL;
-    }
+    r300_resource_set_properties(&rscreen->screen, &tex->b.b.b, 0, base);
 
     /* Create the backing buffer if needed. */
     if (!buffer) {

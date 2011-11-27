@@ -661,7 +661,7 @@ intelInitContext(struct intel_context *intel,
 
    /* Depth and stencil */
    ctx->TextureFormatSupported[MESA_FORMAT_S8_Z24] = GL_TRUE;
-   ctx->TextureFormatSupported[MESA_FORMAT_X8_Z24] = intel->has_separate_stencil;
+   ctx->TextureFormatSupported[MESA_FORMAT_X8_Z24] = GL_TRUE;
    ctx->TextureFormatSupported[MESA_FORMAT_S8] = intel->has_separate_stencil;
 
    /*
@@ -841,6 +841,7 @@ intelInitContext(struct intel_context *intel,
       intelInitExtensions(ctx);
       break;
    case API_OPENGLES:
+      intelInitExtensionsES1(ctx);
       break;
    case API_OPENGLES2:
       intelInitExtensionsES2(ctx);

@@ -509,6 +509,7 @@ static const struct value_desc values[] = {
 #if FEATURE_GL || FEATURE_ES1
    /* Enums in OpenGL and GLES1 */
    { 0, 0, TYPE_API_MASK, API_OPENGL_BIT | API_OPENGLES_BIT, NO_EXTRA },
+   { GL_MAX_LIGHTS, CONTEXT_INT(Const.MaxLights), NO_EXTRA },
    { GL_LIGHT0, CONTEXT_BOOL(Light.Light[0].Enabled), NO_EXTRA },
    { GL_LIGHT1, CONTEXT_BOOL(Light.Light[1].Enabled), NO_EXTRA },
    { GL_LIGHT2, CONTEXT_BOOL(Light.Light[2].Enabled), NO_EXTRA },
@@ -677,8 +678,6 @@ static const struct value_desc values[] = {
 
 #if FEATURE_GL || FEATURE_ES2
    { 0, 0, TYPE_API_MASK, API_OPENGL_BIT | API_OPENGLES2_BIT, NO_EXTRA },
-   /* This entry isn't spec'ed for GLES 2, but is needed for Mesa's GLSL: */
-   { GL_MAX_LIGHTS, CONTEXT_INT(Const.MaxLights), NO_EXTRA },
    { GL_MAX_TEXTURE_COORDS_ARB, /* == GL_MAX_TEXTURE_COORDS_NV */
      CONTEXT_INT(Const.MaxTextureCoordUnits),
      extra_ARB_fragment_program_NV_fragment_program },
@@ -1569,11 +1568,11 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       break;
 
    case GL_NUM_COMPRESSED_TEXTURE_FORMATS_ARB:
-      v->value_int = _mesa_get_compressed_formats(ctx, NULL, GL_FALSE);
+      v->value_int = _mesa_get_compressed_formats(ctx, NULL);
       break;
    case GL_COMPRESSED_TEXTURE_FORMATS_ARB:
       v->value_int_n.n = 
-	 _mesa_get_compressed_formats(ctx, v->value_int_n.ints, GL_FALSE);
+	 _mesa_get_compressed_formats(ctx, v->value_int_n.ints);
       ASSERT(v->value_int_n.n <= 100);
       break;
 
@@ -1922,6 +1921,9 @@ _mesa_GetBooleanv(GLenum pname, GLboolean *params)
    GLmatrix *m;
    int shift, i;
    void *p;
+   GET_CURRENT_CONTEXT(ctx);
+
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    d = find_value("glGetBooleanv", pname, &p, &v);
    switch (d->type) {
@@ -2006,6 +2008,9 @@ _mesa_GetFloatv(GLenum pname, GLfloat *params)
    GLmatrix *m;
    int shift, i;
    void *p;
+   GET_CURRENT_CONTEXT(ctx);
+
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    d = find_value("glGetFloatv", pname, &p, &v);
    switch (d->type) {
@@ -2090,6 +2095,9 @@ _mesa_GetIntegerv(GLenum pname, GLint *params)
    GLmatrix *m;
    int shift, i;
    void *p;
+   GET_CURRENT_CONTEXT(ctx);
+
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    d = find_value("glGetIntegerv", pname, &p, &v);
    switch (d->type) {
@@ -2181,6 +2189,9 @@ _mesa_GetInteger64v(GLenum pname, GLint64 *params)
    GLmatrix *m;
    int shift, i;
    void *p;
+   GET_CURRENT_CONTEXT(ctx);
+
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    d = find_value("glGetInteger64v", pname, &p, &v);
    switch (d->type) {
@@ -2272,6 +2283,9 @@ _mesa_GetDoublev(GLenum pname, GLdouble *params)
    GLmatrix *m;
    int shift, i;
    void *p;
+   GET_CURRENT_CONTEXT(ctx);
+
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    d = find_value("glGetDoublev", pname, &p, &v);
    switch (d->type) {

@@ -1975,7 +1975,7 @@ _mesa_FramebufferTexture1DEXT(GLenum target, GLenum attachment,
    GET_CURRENT_CONTEXT(ctx);
 
    if ((texture != 0) && (textarget != GL_TEXTURE_1D)) {
-      _mesa_error(ctx, GL_INVALID_ENUM,
+      _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glFramebufferTexture1DEXT(textarget)");
       return;
    }
@@ -2013,7 +2013,7 @@ _mesa_FramebufferTexture3DEXT(GLenum target, GLenum attachment,
    GET_CURRENT_CONTEXT(ctx);
 
    if ((texture != 0) && (textarget != GL_TEXTURE_3D)) {
-      _mesa_error(ctx, GL_INVALID_ENUM,
+      _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glFramebufferTexture3DEXT(textarget)");
       return;
    }

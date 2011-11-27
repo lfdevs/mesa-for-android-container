@@ -595,9 +595,9 @@ intelTexImage(struct gl_context * ctx,
                                 format, type, pixels, unpack)) {
           _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTexImage");
        }
-   }
 
-   _mesa_unmap_teximage_pbo(ctx, unpack);
+       _mesa_unmap_teximage_pbo(ctx, unpack);
+   }
 
    if (intel->must_use_separate_stencil
        && texImage->TexFormat == MESA_FORMAT_S8_Z24) {

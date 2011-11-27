@@ -732,15 +732,19 @@ static int check_and_set_bank_swizzle(struct r600_bc *bc,
 {
 	struct alu_bank_swizzle bs;
 	int bank_swizzle[5];
-	int i, r = 0, forced = 0;
+	int i, r = 0, forced = 1;
 	boolean scalar_only = bc->chiprev == CHIPREV_CAYMAN ? false : true;
 	int max_slots = bc->chiprev == CHIPREV_CAYMAN ? 4 : 5;
 
 	for (i = 0; i < max_slots; i++) {
-		if (slots[i] && slots[i]->bank_swizzle_force) {
-			slots[i]->bank_swizzle = slots[i]->bank_swizzle_force;
-			forced = 1;
+		if (slots[i]) {
+			if (slots[i]->bank_swizzle_force) {
+				slots[i]->bank_swizzle = slots[i]->bank_swizzle_force;
+			} else {
+				forced = 0;
+			}
 		}
+
 		if (i < 4 && slots[i])
 			scalar_only = false;
 	}
@@ -750,7 +754,11 @@ static int check_and_set_bank_swizzle(struct r600_bc *bc,
 	/* Just check every possible combination of bank swizzle.
 	 * Not very efficent, but works on the first try in most of the cases. */
 	for (i = 0; i < 4; i++)
-		bank_swizzle[i] = SQ_ALU_VEC_012;
+		if (!slots[i] || !slots[i]->bank_swizzle_force)
+			bank_swizzle[i] = SQ_ALU_VEC_012;
+		else
+			bank_swizzle[i] = slots[i]->bank_swizzle;
+
 	bank_swizzle[4] = SQ_ALU_SCL_210;
 	while(bank_swizzle[4] <= SQ_ALU_SCL_221) {
 
@@ -787,11 +795,13 @@ static int check_and_set_bank_swizzle(struct r600_bc *bc,
 			bank_swizzle[4]++;
 		} else {
 			for (i = 0; i < max_slots; i++) {
-				bank_swizzle[i]++;
-				if (bank_swizzle[i] <= SQ_ALU_VEC_210)
-					break;
-				else
-					bank_swizzle[i] = SQ_ALU_VEC_012;
+				if (!slots[i] || !slots[i]->bank_swizzle_force) {
+					bank_swizzle[i]++;
+					if (bank_swizzle[i] <= SQ_ALU_VEC_210)
+						break;
+					else
+						bank_swizzle[i] = SQ_ALU_VEC_012;
+				}
 			}
 		}
 	}
@@ -813,7 +823,7 @@ static int replace_gpr_with_pv_ps(struct r600_bc *bc,
 		return r;
 
 	for (i = 0; i < max_slots; ++i) {
-		if(prev[i] && prev[i]->dst.write && !prev[i]->dst.rel) {
+		if (prev[i] && (prev[i]->dst.write || prev[i]->is_op3) && !prev[i]->dst.rel) {
 			gpr[i] = prev[i]->dst.sel;
 			/* cube writes more than PV.X */
 			if (!is_alu_cube_inst(bc, prev[i]) && is_alu_reduction_inst(bc, prev[i]))

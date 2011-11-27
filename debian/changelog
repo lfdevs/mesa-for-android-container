@@ -1,3 +1,17 @@
+mesa (7.11.1-1) unstable; urgency=low
+
+  [ Sven Joachim ]
+  * New upstream release.
+  * Move the Nouveau drivers to the libgl1-mesa-dri package
+    (Closes: #645239).
+  * Install the swrastg driver in the libgl1-mesa-dri-experimental package
+    (Closes: #605444).
+    - New patch 14-load-swrastg-before-swrast.diff to prefer swrastg over
+      swrast.
+    - Build-depend on llvm-2.9-dev also on kfreebsd-{amd64,i386}.
+
+ -- Cyril Brulebois <kibi@debian.org>  Sun, 27 Nov 2011 18:54:24 +0100
+
 mesa (7.11-6) unstable; urgency=low
 
   [ Julien Cristau ]

@@ -146,7 +146,7 @@ static void r300_emit_draw_init(struct r300_context *r300, unsigned mode,
 static void r300_split_index_bias(struct r300_context *r300, int index_bias,
                                   int *buffer_offset, int *index_offset)
 {
-    struct pipe_vertex_buffer *vb, *vbufs = r300->vbuf_mgr->vertex_buffer;
+    struct pipe_vertex_buffer *vb, *vbufs = r300->vbuf_mgr->real_vertex_buffer;
     struct pipe_vertex_element *velem = r300->velems->velem;
     unsigned i, size;
     int max_neg_bias;
@@ -338,7 +338,7 @@ static boolean immd_is_good_idea(struct r300_context *r300,
         vbi = velem->vertex_buffer_index;
 
         if (!checked[vbi]) {
-            buf = r300->vbuf_mgr->real_vertex_buffer[vbi];
+            buf = r300->vbuf_mgr->real_vertex_buffer[vbi].buffer;
 
             if ((r300_resource(buf)->domain != RADEON_DOMAIN_GTT)) {
                 return FALSE;
@@ -389,13 +389,13 @@ static void r300_draw_arrays_immediate(struct r300_context *r300,
         velem = &r300->velems->velem[i];
         size[i] = r300->velems->format_size[i] / 4;
         vbi = velem->vertex_buffer_index;
-        vbuf = &r300->vbuf_mgr->vertex_buffer[vbi];
+        vbuf = &r300->vbuf_mgr->real_vertex_buffer[vbi];
         stride[i] = vbuf->stride / 4;
 
         /* Map the buffer. */
         if (!map[vbi]) {
             map[vbi] = (uint32_t*)r300->rws->buffer_map(
-                r300_resource(r300->vbuf_mgr->real_vertex_buffer[vbi])->buf,
+                r300_resource(vbuf->buffer)->buf,
                 r300->cs, PIPE_TRANSFER_READ | PIPE_TRANSFER_UNSYNCHRONIZED);
             map[vbi] += (vbuf->buffer_offset / 4) + stride[i] * info->start;
         }
@@ -423,7 +423,7 @@ static void r300_draw_arrays_immediate(struct r300_context *r300,
         vbi = r300->velems->velem[i].vertex_buffer_index;
 
         if (map[vbi]) {
-            r300->rws->buffer_unmap(r300_resource(r300->vbuf_mgr->real_vertex_buffer[vbi])->buf);
+            r300->rws->buffer_unmap(r300_resource(r300->vbuf_mgr->real_vertex_buffer[vbi].buffer)->buf);
             map[vbi] = NULL;
         }
     }
@@ -779,7 +779,7 @@ static void r300_draw_vbo(struct pipe_context* pipe,
     r300_update_derived_state(r300);
 
     /* Start the vbuf manager and update buffers if needed. */
-    if (u_vbuf_mgr_draw_begin(r300->vbuf_mgr, &info) & U_VBUF_BUFFERS_UPDATED) {
+    if (u_vbuf_draw_begin(r300->vbuf_mgr, &info) & U_VBUF_BUFFERS_UPDATED) {
         r300->vertex_arrays_dirty = TRUE;
     }
 
@@ -810,7 +810,7 @@ static void r300_draw_vbo(struct pipe_context* pipe,
         }
     }
 
-    u_vbuf_mgr_draw_end(r300->vbuf_mgr);
+    u_vbuf_draw_end(r300->vbuf_mgr);
 }
 
 /****************************************************************************
@@ -825,16 +825,11 @@ static void r300_swtcl_draw_vbo(struct pipe_context* pipe,
     struct r300_context* r300 = r300_context(pipe);
     struct pipe_transfer *vb_transfer[PIPE_MAX_ATTRIBS];
     struct pipe_transfer *ib_transfer = NULL;
-    unsigned count = info->count;
     int i;
     void *indices = NULL;
     boolean indexed = info->indexed && r300->index_buffer.buffer;
 
     if (r300->skip_rendering) {
-        return;
-    }
-
-    if (!u_trim_pipe_prim(info->mode, &count)) {
         return;
     }
 

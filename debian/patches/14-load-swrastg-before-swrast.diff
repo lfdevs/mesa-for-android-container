@@ -1,0 +1,19 @@
+---
+ src/glx/drisw_glx.c |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+--- a/src/glx/drisw_glx.c
++++ b/src/glx/drisw_glx.c
+@@ -430,10 +430,10 @@
+    void *driver = NULL;
+ 
+    if (driver == NULL)
+-      driver = driOpenDriver("swrast");
++      driver = driOpenDriver("swrastg");
+ 
+    if (driver == NULL)
+-      driver = driOpenDriver("swrastg");
++      driver = driOpenDriver("swrast");
+ 
+    return driver;
+ }

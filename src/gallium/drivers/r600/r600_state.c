@@ -886,9 +886,7 @@ static void r600_db(struct r600_pipe_context *rctx, struct r600_pipe_state *rsta
 	struct r600_resource_texture *rtex;
 	struct r600_resource *rbuffer;
 	struct r600_surface *surf;
-	unsigned level;
-	unsigned pitch, slice, format;
-	unsigned offset;
+	unsigned level, pitch, slice, format, offset, array_mode;
 
 	if (state->zsbuf == NULL)
 		return;
@@ -899,6 +897,10 @@ static void r600_db(struct r600_pipe_context *rctx, struct r600_pipe_state *rsta
 	rtex = (struct r600_resource_texture*)state->zsbuf->texture;
 
 	rbuffer = &rtex->resource;
+
+	/* XXX remove this once tiling is properly supported */
+	array_mode = rtex->array_mode[level] ? rtex->array_mode[level] :
+					       V_0280A0_ARRAY_1D_TILED_THIN1;
 
 	/* XXX quite sure for dx10+ hw don't need any offset hacks */
 	offset = r600_texture_get_offset((struct r600_resource_texture *)state->zsbuf->texture,
@@ -914,7 +916,7 @@ static void r600_db(struct r600_pipe_context *rctx, struct r600_pipe_state *rsta
 				0xFFFFFFFF, NULL);
 	r600_pipe_state_add_reg(rstate, R_028004_DB_DEPTH_VIEW, 0x00000000, 0xFFFFFFFF, NULL);
 	r600_pipe_state_add_reg(rstate, R_028010_DB_DEPTH_INFO,
-				S_028010_ARRAY_MODE(rtex->array_mode[level]) | S_028010_FORMAT(format),
+				S_028010_ARRAY_MODE(array_mode) | S_028010_FORMAT(format),
 				0xFFFFFFFF, rbuffer->bo);
 	r600_pipe_state_add_reg(rstate, R_028D34_DB_PREFETCH_LIMIT,
 				(surf->aligned_height / 8) - 1, 0xFFFFFFFF, NULL);
@@ -1481,7 +1483,7 @@ void r600_pipe_shader_vs(struct pipe_context *ctx, struct r600_pipe_shader *shad
 	struct r600_pipe_state *rstate = &shader->rstate;
 	struct r600_shader *rshader = &shader->shader;
 	unsigned spi_vs_out_id[10];
-	unsigned i, tmp;
+	unsigned i, tmp, nparams;
 
 	/* clear previous register */
 	rstate->nregs = 0;
@@ -1503,9 +1505,17 @@ void r600_pipe_shader_vs(struct pipe_context *ctx, struct r600_pipe_shader *shad
 					spi_vs_out_id[i], 0xFFFFFFFF, NULL);
 	}
 
+	/* Certain attributes (position, psize, etc.) don't count as params.
+	 * VS is required to export at least one param and r600_shader_from_tgsi()
+	 * takes care of adding a dummy export.
+	 */
+	nparams = rshader->noutput - rshader->npos;
+	if (nparams < 1)
+		nparams = 1;
+
 	r600_pipe_state_add_reg(rstate,
 			R_0286C4_SPI_VS_OUT_CONFIG,
-			S_0286C4_VS_EXPORT_COUNT(rshader->noutput - 1),
+			S_0286C4_VS_EXPORT_COUNT(nparams - 1),
 			0xFFFFFFFF, NULL);
 	r600_pipe_state_add_reg(rstate,
 			R_028868_SQ_PGM_RESOURCES_VS,

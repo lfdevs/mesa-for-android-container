@@ -303,11 +303,11 @@ do {									\
 /* 
  * TODO: consider moving this into core 
  */
-static void calc_live_regs( struct i915_fragment_program *p )
+static bool calc_live_regs( struct i915_fragment_program *p )
 {
     const struct gl_fragment_program *program = &p->FragProg;
-    GLuint regsUsed = 0xffff0000;
-    uint8_t live_components[16] = { 0, };
+    GLuint regsUsed = ~((1 << I915_MAX_TEMPORARY) - 1);
+    uint8_t live_components[I915_MAX_TEMPORARY] = { 0, };
     GLint i;
    
     for (i = program->Base.NumInstructions - 1; i >= 0; i--) {
@@ -317,6 +317,9 @@ static void calc_live_regs( struct i915_fragment_program *p )
 
         /* Register is written to: unmark as live for this and preceeding ops */ 
         if (inst->DstReg.File == PROGRAM_TEMPORARY) {
+	    if (inst->DstReg.Index >= I915_MAX_TEMPORARY)
+	       return false;
+
             live_components[inst->DstReg.Index] &= ~inst->DstReg.WriteMask;
             if (live_components[inst->DstReg.Index] == 0)
                 regsUsed &= ~(1 << inst->DstReg.Index);
@@ -326,6 +329,9 @@ static void calc_live_regs( struct i915_fragment_program *p )
             /* Register is read from: mark as live for this and preceeding ops */ 
             if (inst->SrcReg[a].File == PROGRAM_TEMPORARY) {
                 unsigned c;
+
+		if (inst->SrcReg[a].Index >= I915_MAX_TEMPORARY)
+		   return false;
 
                 regsUsed |= 1 << inst->SrcReg[a].Index;
 
@@ -340,6 +346,8 @@ static void calc_live_regs( struct i915_fragment_program *p )
 
         p->usedRegs[i] = regsUsed;
     }
+
+    return true;
 }
 
 static GLuint get_live_regs( struct i915_fragment_program *p, 
@@ -394,7 +402,10 @@ upload_program(struct i915_fragment_program *p)
 
    /* Not always needed:
     */
-   calc_live_regs(p);
+   if (!calc_live_regs(p)) {
+      i915_program_error(p, "Could not allocate registers");
+      return;
+   }
 
    while (1) {
       GLuint src0, src1, src2, flags;
