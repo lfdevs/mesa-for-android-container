@@ -1,3 +1,10 @@
+mesa (7.11.2-1) unstable; urgency=low
+
+  * New upstream release:
+    - Fix a few intel bugs.
+
+ -- Cyril Brulebois <kibi@debian.org>  Sun, 11 Dec 2011 15:43:40 +0100
+
 mesa (7.11.1-1) unstable; urgency=low
 
   [ Sven Joachim ]
