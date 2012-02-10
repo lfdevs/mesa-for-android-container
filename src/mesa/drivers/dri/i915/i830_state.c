@@ -33,12 +33,11 @@
 #include "main/dd.h"
 #include "main/state.h"
 
-#include "texmem.h"
-
 #include "drivers/common/driverfuncs.h"
 
 #include "intel_screen.h"
 #include "intel_batchbuffer.h"
+#include "intel_mipmap_tree.h"
 #include "intel_fbo.h"
 #include "intel_buffers.h"
 
@@ -235,7 +234,7 @@ i830EvalLogicOpBlendState(struct gl_context * ctx)
 
    I830_STATECHANGE(i830, I830_UPLOAD_CTX);
 
-   if (_mesa_rgba_logicop_enabled(ctx)) {
+   if (ctx->Color.ColorLogicOpEnabled) {
       i830->state.Ctx[I830_CTXREG_ENABLES_1] &= ~(ENABLE_COLOR_BLEND |
                                                   ENABLE_LOGIC_OP_MASK);
       i830->state.Ctx[I830_CTXREG_ENABLES_1] |= (DISABLE_COLOR_BLEND |
@@ -846,11 +845,11 @@ i830Enable(struct gl_context * ctx, GLenum cap, GLboolean state)
 
    case GL_STENCIL_TEST:
       {
-         GLboolean hw_stencil = GL_FALSE;
+         bool hw_stencil = false;
          if (ctx->DrawBuffer) {
             struct intel_renderbuffer *irbStencil
                = intel_get_renderbuffer(ctx->DrawBuffer, BUFFER_STENCIL);
-            hw_stencil = (irbStencil && irbStencil->region);
+            hw_stencil = (irbStencil && irbStencil->mt->region);
          }
          if (hw_stencil) {
             I830_STATECHANGE(i830, I830_UPLOAD_CTX);

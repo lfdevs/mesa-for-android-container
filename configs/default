@@ -8,8 +8,8 @@
 CONFIG_NAME = default
 
 # Version info
-MESA_MAJOR=7
-MESA_MINOR=11
+MESA_MAJOR=8
+MESA_MINOR=0
 MESA_TINY=0
 MESA_VERSION = $(MESA_MAJOR).$(MESA_MINOR).$(MESA_TINY)
 
@@ -40,6 +40,7 @@ MKDEP_OPTIONS = -fdepend
 MAKE = make
 FLEX = flex
 BISON = bison
+PKG_CONFIG = pkg-config
 
 # Use MINSTALL for installing libraries, INSTALL for everything else
 MINSTALL = $(SHELL) $(TOP)/bin/minstall
@@ -54,7 +55,6 @@ INDENT_FLAGS = -i4 -nut -br -brs -npcs -ce -T GLubyte -T GLbyte -T Bool
 # Library names (base name)
 GL_LIB = GL
 GLU_LIB = GLU
-GLUT_LIB = glut
 GLW_LIB = GLw
 OSMESA_LIB = OSMesa
 EGL_LIB = EGL
@@ -68,7 +68,6 @@ GBM_LIB = gbm
 # Library names (actual file names)
 GL_LIB_NAME = lib$(GL_LIB).so
 GLU_LIB_NAME = lib$(GLU_LIB).so
-GLUT_LIB_NAME = lib$(GLUT_LIB).so
 GLW_LIB_NAME = lib$(GLW_LIB).so
 OSMESA_LIB_NAME = lib$(OSMESA_LIB).so
 EGL_LIB_NAME = lib$(EGL_LIB).so
@@ -82,7 +81,6 @@ GBM_LIB_NAME = lib$(GBM_LIB).so
 # globs used to install the lib and all symlinks
 GL_LIB_GLOB = $(GL_LIB_NAME)*
 GLU_LIB_GLOB = $(GLU_LIB_NAME)*
-GLUT_LIB_GLOB = $(GLUT_LIB_NAME)*
 GLW_LIB_GLOB = $(GLW_LIB_NAME)*
 OSMESA_LIB_GLOB = $(OSMESA_LIB_NAME)*
 EGL_LIB_GLOB = $(EGL_LIB_NAME)*
@@ -108,7 +106,7 @@ MOTIF_CFLAGS = -I/usr/include/Motif1.2
 # Directories to build
 LIB_DIR = lib
 SRC_DIRS = glsl mapi/glapi mapi/vgapi mesa \
-	gallium egl gallium/winsys gallium/targets glu glut/glx glw
+	gallium egl gallium/winsys gallium/targets glu
 GLU_DIRS = sgi
 DRIVER_DIRS = x11 osmesa
 
@@ -118,10 +116,10 @@ EGL_DRIVERS_DIRS = glx
 # gbm backends to build
 GBM_BACKEND_DIRS = dri
 
-# Gallium directories and 
+# Gallium directories and
 GALLIUM_DIRS = auxiliary drivers state_trackers
 GALLIUM_AUXILIARIES = $(TOP)/src/gallium/auxiliary/libgallium.a
-GALLIUM_DRIVERS_DIRS = softpipe trace rbug noop identity galahad i915 i965 svga r300 nvfx nv50 failover
+GALLIUM_DRIVERS_DIRS = softpipe trace rbug noop identity galahad i915 svga r300 nvfx nv50
 GALLIUM_DRIVERS = $(foreach DIR,$(GALLIUM_DRIVERS_DIRS),$(TOP)/src/gallium/drivers/$(DIR)/lib$(DIR).a)
 GALLIUM_WINSYS_DIRS = sw sw/xlib
 GALLIUM_TARGET_DIRS = libgl-xlib
@@ -137,9 +135,7 @@ GL_LIB_DEPS     = $(EXTRA_LIB_PATH) -lX11 -lXext -lm -lpthread
 EGL_LIB_DEPS    = $(EXTRA_LIB_PATH) -ldl -lpthread
 OSMESA_LIB_DEPS = $(EXTRA_LIB_PATH) -L$(TOP)/$(LIB_DIR) -l$(GL_LIB)
 GLU_LIB_DEPS    = $(EXTRA_LIB_PATH) -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) -lm
-GLUT_LIB_DEPS   = $(EXTRA_LIB_PATH) -L$(TOP)/$(LIB_DIR) -l$(GLU_LIB) -l$(GL_LIB) -lX11 -lXmu -lXi -lm
 GLW_LIB_DEPS    = $(EXTRA_LIB_PATH) -L$(TOP)/$(LIB_DIR) -l$(GL_LIB) -lXt -lX11
-APP_LIB_DEPS    = $(EXTRA_LIB_PATH) -L$(TOP)/$(LIB_DIR) -l$(GLUT_LIB) -l$(GLU_LIB) -l$(GL_LIB) -lm
 GLESv1_CM_LIB_DEPS = $(EXTRA_LIB_PATH) -lpthread
 GLESv2_LIB_DEPS = $(EXTRA_LIB_PATH) -lpthread
 VG_LIB_DEPS    = $(EXTRA_LIB_PATH) -lpthread
@@ -147,8 +143,7 @@ GLAPI_LIB_DEPS = $(EXTRA_LIB_PATH) -lpthread
 WAYLAND_EGL_LIB_DEPS = $(EXTRA_LIB_PATH) -lwayland-client -ldrm
 GBM_LIB_DEPS = $(EXTRA_LIB_PATH) -ludev -ldl
 
-# Program dependencies - specific GL/glut libraries added in Makefiles
-APP_LIB_DEPS = -lm
+# Program dependencies - specific GL libraries added in Makefiles
 X11_LIBS = -lX11
 
 DLOPEN_LIBS = -ldl
@@ -180,9 +175,6 @@ GLU_PC_REQ = gl
 GLU_PC_REQ_PRIV =
 GLU_PC_LIB_PRIV =
 GLU_PC_CFLAGS =
-GLUT_PC_REQ_PRIV =
-GLUT_PC_LIB_PRIV =
-GLUT_PC_CFLAGS =
 GLW_PC_REQ_PRIV =
 GLW_PC_LIB_PRIV =
 GLW_PC_CFLAGS =

@@ -28,9 +28,12 @@
 #ifndef _INTEL_TEX_OBJ_H
 #define _INTEL_TEX_OBJ_H
 
+#include "swrast/s_context.h"
+
+
 struct intel_texture_object
 {
-   struct gl_texture_object base;       /* The "parent" object */
+   struct gl_texture_object base;
 
    /* This is a mirror of base._MaxLevel, updated at validate time,
     * except that we don't bother with the non-base levels for
@@ -48,51 +51,21 @@ struct intel_texture_object
    struct intel_mipmap_tree *mt;
 };
 
+
+/**
+ * intel_texture_image is a subclass of swrast_texture_image because we
+ * sometimes fall back to using the swrast module for software rendering.
+ */
 struct intel_texture_image
 {
-   struct gl_texture_image base;
-
-   /* These aren't stored in gl_texture_image 
-    */
-   GLuint level;
-   GLuint face;
+   struct swrast_texture_image base;
 
    /* If intelImage->mt != NULL, image data is stored here.
-    * Else if intelImage->base.Data != NULL, image is stored there.
+    * Else if intelImage->base.Buffer != NULL, image is stored there.
     * Else there is no image data.
     */
    struct intel_mipmap_tree *mt;
-   GLboolean used_as_render_target;
-
-   /**
-    * \name Renderbuffers for faking packed depth/stencil
-    *
-    * These renderbuffers are non-null only if the intel_context is using
-    * separate stencil and this texture has a packed depth/stencil format. When
-    * glFramebufferTexture is called on this image, the resultant renderbuffer
-    * wrapper reuses these renderbuffers as its own.
-    *
-    * \see intel_wrap_texture
-    * \see intel_tex_image_s8z24_create_renderbuffers
-    * \see intel_tex_image_s8z24_scatter
-    * \see intel_tex_image_s8z24_gather
-    *
-    * \{
-    */
-
-   /**
-    * The depth buffer has format X8_Z24. The x8 bits are undefined unless
-    * intel_tex_image_s8z24_gather has been immediately called. The depth buffer
-    * resuses the image miptree's region and hiz_region as its own.
-    */
-   struct gl_renderbuffer *depth_rb;
-
-   /**
-    * The stencil buffer has format S8 and keeps its data in its own region.
-    */
-   struct gl_renderbuffer *stencil_rb;
-
-   /** \} */
+   bool used_as_render_target;
 };
 
 static INLINE struct intel_texture_object *

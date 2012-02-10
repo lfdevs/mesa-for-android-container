@@ -32,6 +32,7 @@
 
 #include "util/u_memory.h"
 #include "util/u_format.h"
+#include "util/u_half.h"
 #include "util/u_math.h"
 #include "pipe/p_state.h"
 #include "translate.h"
@@ -39,10 +40,10 @@
 
 #define DRAW_DBG 0
 
-typedef void (*fetch_func)(float *dst,
+typedef void (*fetch_func)(void *dst,
                            const uint8_t *src,
                            unsigned i, unsigned j);
-typedef void (*emit_func)(const float *attrib, void *ptr);
+typedef void (*emit_func)(const void *attrib, void *ptr);
 
 
 
@@ -84,27 +85,29 @@ static struct translate_generic *translate_generic( struct translate *translate 
 }
 
 /**
- * Fetch a float[4] vertex attribute from memory, doing format/type
+ * Fetch a dword[4] vertex attribute from memory, doing format/type
  * conversion as needed.
  *
  * This is probably needed/dupliocated elsewhere, eg format
  * conversion, texture sampling etc.
  */
-#define ATTRIB( NAME, SZ, TYPE, TO )	    	        \
+#define ATTRIB( NAME, SZ, SRCTYPE, DSTTYPE, TO )        \
 static void						\
-emit_##NAME(const float *attrib, void *ptr)		\
+emit_##NAME(const void *attrib, void *ptr)		\
 {  \
    unsigned i;						\
-   TYPE *out = (TYPE *)ptr;				\
+   SRCTYPE *in = (SRCTYPE *)attrib;                     \
+   DSTTYPE *out = (DSTTYPE *)ptr;			\
 							\
    for (i = 0; i < SZ; i++) {				\
-      out[i] = TO(attrib[i]);				\
+      out[i] = TO(in[i]);				\
    }							\
 }
 
 
 #define TO_64_FLOAT(x)   ((double) x)
 #define TO_32_FLOAT(x)   (x)
+#define TO_16_FLOAT(x)   util_float_to_half(x)
 
 #define TO_8_USCALED(x)  ((unsigned char) x)
 #define TO_16_USCALED(x) ((unsigned short) x)
@@ -124,99 +127,258 @@ emit_##NAME(const float *attrib, void *ptr)		\
 
 #define TO_32_FIXED(x)   ((int) (x * 65536.0f))
 
+#define TO_INT(x)        (x)
 
-ATTRIB( R64G64B64A64_FLOAT,   4, double, TO_64_FLOAT )
-ATTRIB( R64G64B64_FLOAT,      3, double, TO_64_FLOAT )
-ATTRIB( R64G64_FLOAT,         2, double, TO_64_FLOAT )
-ATTRIB( R64_FLOAT,            1, double, TO_64_FLOAT )
 
-ATTRIB( R32G32B32A32_FLOAT,   4, float, TO_32_FLOAT )
-ATTRIB( R32G32B32_FLOAT,      3, float, TO_32_FLOAT )
-ATTRIB( R32G32_FLOAT,         2, float, TO_32_FLOAT )
-ATTRIB( R32_FLOAT,            1, float, TO_32_FLOAT )
+ATTRIB( R64G64B64A64_FLOAT,   4, float, double, TO_64_FLOAT )
+ATTRIB( R64G64B64_FLOAT,      3, float, double, TO_64_FLOAT )
+ATTRIB( R64G64_FLOAT,         2, float, double, TO_64_FLOAT )
+ATTRIB( R64_FLOAT,            1, float, double, TO_64_FLOAT )
 
-ATTRIB( R32G32B32A32_USCALED, 4, unsigned, TO_32_USCALED )
-ATTRIB( R32G32B32_USCALED,    3, unsigned, TO_32_USCALED )
-ATTRIB( R32G32_USCALED,       2, unsigned, TO_32_USCALED )
-ATTRIB( R32_USCALED,          1, unsigned, TO_32_USCALED )
+ATTRIB( R32G32B32A32_FLOAT,   4, float, float, TO_32_FLOAT )
+ATTRIB( R32G32B32_FLOAT,      3, float, float, TO_32_FLOAT )
+ATTRIB( R32G32_FLOAT,         2, float, float, TO_32_FLOAT )
+ATTRIB( R32_FLOAT,            1, float, float, TO_32_FLOAT )
 
-ATTRIB( R32G32B32A32_SSCALED, 4, int, TO_32_SSCALED )
-ATTRIB( R32G32B32_SSCALED,    3, int, TO_32_SSCALED )
-ATTRIB( R32G32_SSCALED,       2, int, TO_32_SSCALED )
-ATTRIB( R32_SSCALED,          1, int, TO_32_SSCALED )
+ATTRIB( R16G16B16A16_FLOAT,   4, float, ushort, TO_16_FLOAT )
+ATTRIB( R16G16B16_FLOAT,      3, float, ushort, TO_16_FLOAT )
+ATTRIB( R16G16_FLOAT,         2, float, ushort, TO_16_FLOAT )
+ATTRIB( R16_FLOAT,            1, float, ushort, TO_16_FLOAT )
 
-ATTRIB( R32G32B32A32_UNORM, 4, unsigned, TO_32_UNORM )
-ATTRIB( R32G32B32_UNORM,    3, unsigned, TO_32_UNORM )
-ATTRIB( R32G32_UNORM,       2, unsigned, TO_32_UNORM )
-ATTRIB( R32_UNORM,          1, unsigned, TO_32_UNORM )
+ATTRIB( R32G32B32A32_USCALED, 4, float, unsigned, TO_32_USCALED )
+ATTRIB( R32G32B32_USCALED,    3, float, unsigned, TO_32_USCALED )
+ATTRIB( R32G32_USCALED,       2, float, unsigned, TO_32_USCALED )
+ATTRIB( R32_USCALED,          1, float, unsigned, TO_32_USCALED )
 
-ATTRIB( R32G32B32A32_SNORM, 4, int, TO_32_SNORM )
-ATTRIB( R32G32B32_SNORM,    3, int, TO_32_SNORM )
-ATTRIB( R32G32_SNORM,       2, int, TO_32_SNORM )
-ATTRIB( R32_SNORM,          1, int, TO_32_SNORM )
+ATTRIB( R32G32B32A32_SSCALED, 4, float, int, TO_32_SSCALED )
+ATTRIB( R32G32B32_SSCALED,    3, float, int, TO_32_SSCALED )
+ATTRIB( R32G32_SSCALED,       2, float, int, TO_32_SSCALED )
+ATTRIB( R32_SSCALED,          1, float, int, TO_32_SSCALED )
 
-ATTRIB( R16G16B16A16_USCALED, 4, ushort, TO_16_USCALED )
-ATTRIB( R16G16B16_USCALED,    3, ushort, TO_16_USCALED )
-ATTRIB( R16G16_USCALED,       2, ushort, TO_16_USCALED )
-ATTRIB( R16_USCALED,          1, ushort, TO_16_USCALED )
+ATTRIB( R32G32B32A32_UNORM, 4, float, unsigned, TO_32_UNORM )
+ATTRIB( R32G32B32_UNORM,    3, float, unsigned, TO_32_UNORM )
+ATTRIB( R32G32_UNORM,       2, float, unsigned, TO_32_UNORM )
+ATTRIB( R32_UNORM,          1, float, unsigned, TO_32_UNORM )
 
-ATTRIB( R16G16B16A16_SSCALED, 4, short, TO_16_SSCALED )
-ATTRIB( R16G16B16_SSCALED,    3, short, TO_16_SSCALED )
-ATTRIB( R16G16_SSCALED,       2, short, TO_16_SSCALED )
-ATTRIB( R16_SSCALED,          1, short, TO_16_SSCALED )
+ATTRIB( R32G32B32A32_SNORM, 4, float, int, TO_32_SNORM )
+ATTRIB( R32G32B32_SNORM,    3, float, int, TO_32_SNORM )
+ATTRIB( R32G32_SNORM,       2, float, int, TO_32_SNORM )
+ATTRIB( R32_SNORM,          1, float, int, TO_32_SNORM )
 
-ATTRIB( R16G16B16A16_UNORM, 4, ushort, TO_16_UNORM )
-ATTRIB( R16G16B16_UNORM,    3, ushort, TO_16_UNORM )
-ATTRIB( R16G16_UNORM,       2, ushort, TO_16_UNORM )
-ATTRIB( R16_UNORM,          1, ushort, TO_16_UNORM )
+ATTRIB( R16G16B16A16_USCALED, 4, float, ushort, TO_16_USCALED )
+ATTRIB( R16G16B16_USCALED,    3, float, ushort, TO_16_USCALED )
+ATTRIB( R16G16_USCALED,       2, float, ushort, TO_16_USCALED )
+ATTRIB( R16_USCALED,          1, float, ushort, TO_16_USCALED )
 
-ATTRIB( R16G16B16A16_SNORM, 4, short, TO_16_SNORM )
-ATTRIB( R16G16B16_SNORM,    3, short, TO_16_SNORM )
-ATTRIB( R16G16_SNORM,       2, short, TO_16_SNORM )
-ATTRIB( R16_SNORM,          1, short, TO_16_SNORM )
+ATTRIB( R16G16B16A16_SSCALED, 4, float, short, TO_16_SSCALED )
+ATTRIB( R16G16B16_SSCALED,    3, float, short, TO_16_SSCALED )
+ATTRIB( R16G16_SSCALED,       2, float, short, TO_16_SSCALED )
+ATTRIB( R16_SSCALED,          1, float, short, TO_16_SSCALED )
 
-ATTRIB( R8G8B8A8_USCALED,   4, ubyte, TO_8_USCALED )
-ATTRIB( R8G8B8_USCALED,     3, ubyte, TO_8_USCALED )
-ATTRIB( R8G8_USCALED,       2, ubyte, TO_8_USCALED )
-ATTRIB( R8_USCALED,         1, ubyte, TO_8_USCALED )
+ATTRIB( R16G16B16A16_UNORM, 4, float, ushort, TO_16_UNORM )
+ATTRIB( R16G16B16_UNORM,    3, float, ushort, TO_16_UNORM )
+ATTRIB( R16G16_UNORM,       2, float, ushort, TO_16_UNORM )
+ATTRIB( R16_UNORM,          1, float, ushort, TO_16_UNORM )
 
-ATTRIB( R8G8B8A8_SSCALED,  4, char, TO_8_SSCALED )
-ATTRIB( R8G8B8_SSCALED,    3, char, TO_8_SSCALED )
-ATTRIB( R8G8_SSCALED,      2, char, TO_8_SSCALED )
-ATTRIB( R8_SSCALED,        1, char, TO_8_SSCALED )
+ATTRIB( R16G16B16A16_SNORM, 4, float, short, TO_16_SNORM )
+ATTRIB( R16G16B16_SNORM,    3, float, short, TO_16_SNORM )
+ATTRIB( R16G16_SNORM,       2, float, short, TO_16_SNORM )
+ATTRIB( R16_SNORM,          1, float, short, TO_16_SNORM )
 
-ATTRIB( R8G8B8A8_UNORM,  4, ubyte, TO_8_UNORM )
-ATTRIB( R8G8B8_UNORM,    3, ubyte, TO_8_UNORM )
-ATTRIB( R8G8_UNORM,      2, ubyte, TO_8_UNORM )
-ATTRIB( R8_UNORM,        1, ubyte, TO_8_UNORM )
+ATTRIB( R8G8B8A8_USCALED,   4, float, ubyte, TO_8_USCALED )
+ATTRIB( R8G8B8_USCALED,     3, float, ubyte, TO_8_USCALED )
+ATTRIB( R8G8_USCALED,       2, float, ubyte, TO_8_USCALED )
+ATTRIB( R8_USCALED,         1, float, ubyte, TO_8_USCALED )
 
-ATTRIB( R8G8B8A8_SNORM,  4, char, TO_8_SNORM )
-ATTRIB( R8G8B8_SNORM,    3, char, TO_8_SNORM )
-ATTRIB( R8G8_SNORM,      2, char, TO_8_SNORM )
-ATTRIB( R8_SNORM,        1, char, TO_8_SNORM )
+ATTRIB( R8G8B8A8_SSCALED,  4, float, char, TO_8_SSCALED )
+ATTRIB( R8G8B8_SSCALED,    3, float, char, TO_8_SSCALED )
+ATTRIB( R8G8_SSCALED,      2, float, char, TO_8_SSCALED )
+ATTRIB( R8_SSCALED,        1, float, char, TO_8_SSCALED )
+
+ATTRIB( R8G8B8A8_UNORM,  4, float, ubyte, TO_8_UNORM )
+ATTRIB( R8G8B8_UNORM,    3, float, ubyte, TO_8_UNORM )
+ATTRIB( R8G8_UNORM,      2, float, ubyte, TO_8_UNORM )
+ATTRIB( R8_UNORM,        1, float, ubyte, TO_8_UNORM )
+
+ATTRIB( R8G8B8A8_SNORM,  4, float, char, TO_8_SNORM )
+ATTRIB( R8G8B8_SNORM,    3, float, char, TO_8_SNORM )
+ATTRIB( R8G8_SNORM,      2, float, char, TO_8_SNORM )
+ATTRIB( R8_SNORM,        1, float, char, TO_8_SNORM )
+
+ATTRIB( R32G32B32A32_UINT, 4, uint32_t, unsigned, TO_INT )
+ATTRIB( R32G32B32_UINT,    3, uint32_t, unsigned, TO_INT )
+ATTRIB( R32G32_UINT,       2, uint32_t, unsigned, TO_INT )
+ATTRIB( R32_UINT,          1, uint32_t, unsigned, TO_INT )
+
+ATTRIB( R16G16B16A16_UINT, 4, uint32_t, ushort, TO_INT )
+ATTRIB( R16G16B16_UINT,    3, uint32_t, ushort, TO_INT )
+ATTRIB( R16G16_UINT,       2, uint32_t, ushort, TO_INT )
+ATTRIB( R16_UINT,          1, uint32_t, ushort, TO_INT )
+
+ATTRIB( R8G8B8A8_UINT,   4, uint32_t, ubyte, TO_INT )
+ATTRIB( R8G8B8_UINT,     3, uint32_t, ubyte, TO_INT )
+ATTRIB( R8G8_UINT,       2, uint32_t, ubyte, TO_INT )
+ATTRIB( R8_UINT,         1, uint32_t, ubyte, TO_INT )
+
+ATTRIB( R32G32B32A32_SINT, 4, int32_t, int, TO_INT )
+ATTRIB( R32G32B32_SINT,    3, int32_t, int, TO_INT )
+ATTRIB( R32G32_SINT,       2, int32_t, int, TO_INT )
+ATTRIB( R32_SINT,          1, int32_t, int, TO_INT )
+
+ATTRIB( R16G16B16A16_SINT, 4, int32_t, short, TO_INT )
+ATTRIB( R16G16B16_SINT,    3, int32_t, short, TO_INT )
+ATTRIB( R16G16_SINT,       2, int32_t, short, TO_INT )
+ATTRIB( R16_SINT,          1, int32_t, short, TO_INT )
+
+ATTRIB( R8G8B8A8_SINT,   4, int32_t, char, TO_INT )
+ATTRIB( R8G8B8_SINT,     3, int32_t, char, TO_INT )
+ATTRIB( R8G8_SINT,       2, int32_t, char, TO_INT )
+ATTRIB( R8_SINT,         1, int32_t, char, TO_INT )
 
 static void
-emit_A8R8G8B8_UNORM( const float *attrib, void *ptr)
+emit_A8R8G8B8_UNORM( const void *attrib, void *ptr)
 {
+   float *in = (float *)attrib;
    ubyte *out = (ubyte *)ptr;
-   out[0] = TO_8_UNORM(attrib[3]);
-   out[1] = TO_8_UNORM(attrib[0]);
-   out[2] = TO_8_UNORM(attrib[1]);
-   out[3] = TO_8_UNORM(attrib[2]);
+   out[0] = TO_8_UNORM(in[3]);
+   out[1] = TO_8_UNORM(in[0]);
+   out[2] = TO_8_UNORM(in[1]);
+   out[3] = TO_8_UNORM(in[2]);
 }
 
 static void
-emit_B8G8R8A8_UNORM( const float *attrib, void *ptr)
+emit_B8G8R8A8_UNORM( const void *attrib, void *ptr)
 {
+   float *in = (float *)attrib;
    ubyte *out = (ubyte *)ptr;
-   out[2] = TO_8_UNORM(attrib[0]);
-   out[1] = TO_8_UNORM(attrib[1]);
-   out[0] = TO_8_UNORM(attrib[2]);
-   out[3] = TO_8_UNORM(attrib[3]);
+   out[2] = TO_8_UNORM(in[0]);
+   out[1] = TO_8_UNORM(in[1]);
+   out[0] = TO_8_UNORM(in[2]);
+   out[3] = TO_8_UNORM(in[3]);
+}
+
+static void
+emit_B10G10R10A2_UNORM( const void *attrib, void *ptr )
+{
+   float *src = (float *)ptr;
+   uint32_t value = 0;
+   value |= ((uint32_t)(CLAMP(src[2], 0, 1) * 0x3ff)) & 0x3ff;
+   value |= (((uint32_t)(CLAMP(src[1], 0, 1) * 0x3ff)) & 0x3ff) << 10;
+   value |= (((uint32_t)(CLAMP(src[0], 0, 1) * 0x3ff)) & 0x3ff) << 20;
+   value |= ((uint32_t)(CLAMP(src[3], 0, 1) * 0x3)) << 30;
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   value = util_bswap32(value);
+#endif
+   *(uint32_t *)attrib = value;
+}
+
+static void
+emit_B10G10R10A2_USCALED( const void *attrib, void *ptr )
+{
+   float *src = (float *)ptr;
+   uint32_t value = 0;
+   value |= ((uint32_t)CLAMP(src[2], 0, 1023)) & 0x3ff;
+   value |= (((uint32_t)CLAMP(src[1], 0, 1023)) & 0x3ff) << 10;
+   value |= (((uint32_t)CLAMP(src[0], 0, 1023)) & 0x3ff) << 20;
+   value |= ((uint32_t)CLAMP(src[3], 0, 3)) << 30;
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   value = util_bswap32(value);
+#endif
+   *(uint32_t *)attrib = value;
+}
+
+static void
+emit_B10G10R10A2_SNORM( const void *attrib, void *ptr )
+{
+   float *src = (float *)ptr;
+   uint32_t value = 0;
+   value |= (uint32_t)(((uint32_t)(CLAMP(src[2], -1, 1) * 0x1ff)) & 0x3ff) ;
+   value |= (uint32_t)((((uint32_t)(CLAMP(src[1], -1, 1) * 0x1ff)) & 0x3ff) << 10) ;
+   value |= (uint32_t)((((uint32_t)(CLAMP(src[0], -1, 1) * 0x1ff)) & 0x3ff) << 20) ;
+   value |= (uint32_t)(((uint32_t)(CLAMP(src[3], -1, 1) * 0x1)) << 30) ;
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   value = util_bswap32(value);
+#endif
+   *(uint32_t *)attrib = value;
+}
+
+static void
+emit_B10G10R10A2_SSCALED( const void *attrib, void *ptr )
+{
+   float *src = (float *)ptr;
+   uint32_t value = 0;
+   value |= (uint32_t)(((uint32_t)CLAMP(src[2], -512, 511)) & 0x3ff) ;
+   value |= (uint32_t)((((uint32_t)CLAMP(src[1], -512, 511)) & 0x3ff) << 10) ;
+   value |= (uint32_t)((((uint32_t)CLAMP(src[0], -512, 511)) & 0x3ff) << 20) ;
+   value |= (uint32_t)(((uint32_t)CLAMP(src[3], -2, 1)) << 30) ;
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   value = util_bswap32(value);
+#endif
+   *(uint32_t *)attrib = value;
+}
+
+static void
+emit_R10G10B10A2_UNORM( const void *attrib, void *ptr )
+{
+   float *src = (float *)ptr;
+   uint32_t value = 0;
+   value |= ((uint32_t)(CLAMP(src[0], 0, 1) * 0x3ff)) & 0x3ff;
+   value |= (((uint32_t)(CLAMP(src[1], 0, 1) * 0x3ff)) & 0x3ff) << 10;
+   value |= (((uint32_t)(CLAMP(src[2], 0, 1) * 0x3ff)) & 0x3ff) << 20;
+   value |= ((uint32_t)(CLAMP(src[3], 0, 1) * 0x3)) << 30;
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   value = util_bswap32(value);
+#endif
+   *(uint32_t *)attrib = value;
+}
+
+static void
+emit_R10G10B10A2_USCALED( const void *attrib, void *ptr )
+{
+   float *src = (float *)ptr;
+   uint32_t value = 0;
+   value |= ((uint32_t)CLAMP(src[0], 0, 1023)) & 0x3ff;
+   value |= (((uint32_t)CLAMP(src[1], 0, 1023)) & 0x3ff) << 10;
+   value |= (((uint32_t)CLAMP(src[2], 0, 1023)) & 0x3ff) << 20;
+   value |= ((uint32_t)CLAMP(src[3], 0, 3)) << 30;
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   value = util_bswap32(value);
+#endif
+   *(uint32_t *)attrib = value;
+}
+
+static void
+emit_R10G10B10A2_SNORM( const void *attrib, void *ptr )
+{
+   float *src = (float *)ptr;
+   uint32_t value = 0;
+   value |= (uint32_t)(((uint32_t)(CLAMP(src[0], -1, 1) * 0x1ff)) & 0x3ff) ;
+   value |= (uint32_t)((((uint32_t)(CLAMP(src[1], -1, 1) * 0x1ff)) & 0x3ff) << 10) ;
+   value |= (uint32_t)((((uint32_t)(CLAMP(src[2], -1, 1) * 0x1ff)) & 0x3ff) << 20) ;
+   value |= (uint32_t)(((uint32_t)(CLAMP(src[3], -1, 1) * 0x1)) << 30) ;
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   value = util_bswap32(value);
+#endif
+   *(uint32_t *)attrib = value;
+}
+
+static void
+emit_R10G10B10A2_SSCALED( const void *attrib, void *ptr)
+{
+   float *src = (float *)ptr;
+   uint32_t value = 0;
+   value |= (uint32_t)(((uint32_t)CLAMP(src[0], -512, 511)) & 0x3ff) ;
+   value |= (uint32_t)((((uint32_t)CLAMP(src[1], -512, 511)) & 0x3ff) << 10) ;
+   value |= (uint32_t)((((uint32_t)CLAMP(src[2], -512, 511)) & 0x3ff) << 20) ;
+   value |= (uint32_t)(((uint32_t)CLAMP(src[3], -2, 1)) << 30) ;
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   value = util_bswap32(value);
+#endif
+   *(uint32_t *)attrib = value;
 }
 
 static void 
-emit_NULL( const float *attrib, void *ptr )
+emit_NULL( const void *attrib, void *ptr )
 {
    /* do nothing is the only sensible option */
 }
@@ -241,6 +403,15 @@ static emit_func get_emit_func( enum pipe_format format )
       return &emit_R32G32B32_FLOAT;
    case PIPE_FORMAT_R32G32B32A32_FLOAT:
       return &emit_R32G32B32A32_FLOAT;
+
+   case PIPE_FORMAT_R16_FLOAT:
+      return &emit_R16_FLOAT;
+   case PIPE_FORMAT_R16G16_FLOAT:
+      return &emit_R16G16_FLOAT;
+   case PIPE_FORMAT_R16G16B16_FLOAT:
+      return &emit_R16G16B16_FLOAT;
+   case PIPE_FORMAT_R16G16B16A16_FLOAT:
+      return &emit_R16G16B16A16_FLOAT;
 
    case PIPE_FORMAT_R32_UNORM:
       return &emit_R32_UNORM;
@@ -355,6 +526,78 @@ static emit_func get_emit_func( enum pipe_format format )
 
    case PIPE_FORMAT_A8R8G8B8_UNORM:
       return &emit_A8R8G8B8_UNORM;
+
+   case PIPE_FORMAT_R32_UINT:
+      return &emit_R32_UINT;
+   case PIPE_FORMAT_R32G32_UINT:
+      return &emit_R32G32_UINT;
+   case PIPE_FORMAT_R32G32B32_UINT:
+      return &emit_R32G32B32_UINT;
+   case PIPE_FORMAT_R32G32B32A32_UINT:
+      return &emit_R32G32B32A32_UINT;
+
+   case PIPE_FORMAT_R16_UINT:
+      return &emit_R16_UINT;
+   case PIPE_FORMAT_R16G16_UINT:
+      return &emit_R16G16_UINT;
+   case PIPE_FORMAT_R16G16B16_UINT:
+      return &emit_R16G16B16_UINT;
+   case PIPE_FORMAT_R16G16B16A16_UINT:
+      return &emit_R16G16B16A16_UINT;
+
+   case PIPE_FORMAT_R8_UINT:
+      return &emit_R8_UINT;
+   case PIPE_FORMAT_R8G8_UINT:
+      return &emit_R8G8_UINT;
+   case PIPE_FORMAT_R8G8B8_UINT:
+      return &emit_R8G8B8_UINT;
+   case PIPE_FORMAT_R8G8B8A8_UINT:
+      return &emit_R8G8B8A8_UINT;
+
+   case PIPE_FORMAT_R32_SINT:
+      return &emit_R32_SINT;
+   case PIPE_FORMAT_R32G32_SINT:
+      return &emit_R32G32_SINT;
+   case PIPE_FORMAT_R32G32B32_SINT:
+      return &emit_R32G32B32_SINT;
+   case PIPE_FORMAT_R32G32B32A32_SINT:
+      return &emit_R32G32B32A32_SINT;
+
+   case PIPE_FORMAT_R16_SINT:
+      return &emit_R16_SINT;
+   case PIPE_FORMAT_R16G16_SINT:
+      return &emit_R16G16_SINT;
+   case PIPE_FORMAT_R16G16B16_SINT:
+      return &emit_R16G16B16_SINT;
+   case PIPE_FORMAT_R16G16B16A16_SINT:
+      return &emit_R16G16B16A16_SINT;
+
+   case PIPE_FORMAT_R8_SINT:
+      return &emit_R8_SINT;
+   case PIPE_FORMAT_R8G8_SINT:
+      return &emit_R8G8_SINT;
+   case PIPE_FORMAT_R8G8B8_SINT:
+      return &emit_R8G8B8_SINT;
+   case PIPE_FORMAT_R8G8B8A8_SINT:
+      return &emit_R8G8B8A8_SINT;
+
+   case PIPE_FORMAT_B10G10R10A2_UNORM:
+      return &emit_B10G10R10A2_UNORM;
+   case PIPE_FORMAT_B10G10R10A2_USCALED:
+      return &emit_B10G10R10A2_USCALED;
+   case PIPE_FORMAT_B10G10R10A2_SNORM:
+      return &emit_B10G10R10A2_SNORM;
+   case PIPE_FORMAT_B10G10R10A2_SSCALED:
+      return &emit_B10G10R10A2_SSCALED;
+
+   case PIPE_FORMAT_R10G10B10A2_UNORM:
+      return &emit_R10G10B10A2_UNORM;
+   case PIPE_FORMAT_R10G10B10A2_USCALED:
+      return &emit_R10G10B10A2_USCALED;
+   case PIPE_FORMAT_R10G10B10A2_SNORM:
+      return &emit_R10G10B10A2_SNORM;
+   case PIPE_FORMAT_R10G10B10A2_SSCALED:
+      return &emit_R10G10B10A2_SSCALED;
 
    default:
       assert(0); 
@@ -521,6 +764,27 @@ static void generic_release( struct translate *translate )
    FREE(translate);
 }
 
+static boolean
+is_legal_int_format_combo( const struct util_format_description *src,
+                           const struct util_format_description *dst )
+{
+   unsigned i;
+   unsigned nr = MIN2(src->nr_channels, dst->nr_channels);
+
+   for (i = 0; i < nr; i++) {
+      /* The signs must match. */
+      if (src->channel[i].type != src->channel[i].type) {
+         return FALSE;
+      }
+
+      /* Integers must not lose precision at any point in the pipeline. */
+      if (src->channel[i].size > dst->channel[i].size) {
+         return FALSE;
+      }
+   }
+   return TRUE;
+}
+
 struct translate *translate_generic_create( const struct translate_key *key )
 {
    struct translate_generic *tg = CALLOC_STRUCT(translate_generic);
@@ -546,7 +810,24 @@ struct translate *translate_generic_create( const struct translate_key *key )
 
       tg->attrib[i].type = key->element[i].type;
 
-      tg->attrib[i].fetch = format_desc->fetch_rgba_float;
+      if (format_desc->channel[0].pure_integer) {
+         const struct util_format_description *out_format_desc =
+               util_format_description(key->element[i].output_format);
+
+         if (!is_legal_int_format_combo(format_desc, out_format_desc)) {
+            FREE(tg);
+            return NULL;
+         }
+
+         if (format_desc->channel[0].type == UTIL_FORMAT_TYPE_SIGNED) {
+            tg->attrib[i].fetch = (fetch_func)format_desc->fetch_rgba_sint;
+         } else {
+            tg->attrib[i].fetch = (fetch_func)format_desc->fetch_rgba_uint;
+         }
+      } else {
+         tg->attrib[i].fetch = (fetch_func)format_desc->fetch_rgba_float;
+      }
+
       tg->attrib[i].buffer = key->element[i].input_buffer;
       tg->attrib[i].input_offset = key->element[i].input_offset;
       tg->attrib[i].instance_divisor = key->element[i].instance_divisor;
@@ -594,6 +875,11 @@ boolean translate_generic_is_output_format_supported(enum pipe_format format)
    case PIPE_FORMAT_R32G32B32_FLOAT: return TRUE;
    case PIPE_FORMAT_R32G32_FLOAT: return TRUE;
    case PIPE_FORMAT_R32_FLOAT: return TRUE;
+
+   case PIPE_FORMAT_R16G16B16A16_FLOAT: return TRUE;
+   case PIPE_FORMAT_R16G16B16_FLOAT: return TRUE;
+   case PIPE_FORMAT_R16G16_FLOAT: return TRUE;
+   case PIPE_FORMAT_R16_FLOAT: return TRUE;
 
    case PIPE_FORMAT_R32G32B32A32_USCALED: return TRUE;
    case PIPE_FORMAT_R32G32B32_USCALED: return TRUE;
@@ -657,6 +943,47 @@ boolean translate_generic_is_output_format_supported(enum pipe_format format)
 
    case PIPE_FORMAT_A8R8G8B8_UNORM: return TRUE;
    case PIPE_FORMAT_B8G8R8A8_UNORM: return TRUE;
+
+   case PIPE_FORMAT_R32G32B32A32_UINT: return TRUE;
+   case PIPE_FORMAT_R32G32B32_UINT: return TRUE;
+   case PIPE_FORMAT_R32G32_UINT: return TRUE;
+   case PIPE_FORMAT_R32_UINT: return TRUE;
+
+   case PIPE_FORMAT_R16G16B16A16_UINT: return TRUE;
+   case PIPE_FORMAT_R16G16B16_UINT: return TRUE;
+   case PIPE_FORMAT_R16G16_UINT: return TRUE;
+   case PIPE_FORMAT_R16_UINT: return TRUE;
+
+   case PIPE_FORMAT_R8G8B8A8_UINT: return TRUE;
+   case PIPE_FORMAT_R8G8B8_UINT: return TRUE;
+   case PIPE_FORMAT_R8G8_UINT: return TRUE;
+   case PIPE_FORMAT_R8_UINT: return TRUE;
+
+   case PIPE_FORMAT_R32G32B32A32_SINT: return TRUE;
+   case PIPE_FORMAT_R32G32B32_SINT: return TRUE;
+   case PIPE_FORMAT_R32G32_SINT: return TRUE;
+   case PIPE_FORMAT_R32_SINT: return TRUE;
+
+   case PIPE_FORMAT_R16G16B16A16_SINT: return TRUE;
+   case PIPE_FORMAT_R16G16B16_SINT: return TRUE;
+   case PIPE_FORMAT_R16G16_SINT: return TRUE;
+   case PIPE_FORMAT_R16_SINT: return TRUE;
+
+   case PIPE_FORMAT_R8G8B8A8_SINT: return TRUE;
+   case PIPE_FORMAT_R8G8B8_SINT: return TRUE;
+   case PIPE_FORMAT_R8G8_SINT: return TRUE;
+   case PIPE_FORMAT_R8_SINT: return TRUE;
+
+   case PIPE_FORMAT_B10G10R10A2_UNORM: return TRUE;
+   case PIPE_FORMAT_B10G10R10A2_USCALED: return TRUE;
+   case PIPE_FORMAT_B10G10R10A2_SNORM: return TRUE;
+   case PIPE_FORMAT_B10G10R10A2_SSCALED: return TRUE;
+
+   case PIPE_FORMAT_R10G10B10A2_UNORM: return TRUE;
+   case PIPE_FORMAT_R10G10B10A2_USCALED: return TRUE;
+   case PIPE_FORMAT_R10G10B10A2_SNORM: return TRUE;
+   case PIPE_FORMAT_R10G10B10A2_SSCALED: return TRUE;
+
    default: return FALSE;
    }
 }

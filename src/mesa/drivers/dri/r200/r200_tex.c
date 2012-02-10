@@ -39,7 +39,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/image.h"
 #include "main/mfeatures.h"
 #include "main/simple_list.h"
-#include "main/texstore.h"
 #include "main/teximage.h"
 #include "main/texobj.h"
 
@@ -313,7 +312,7 @@ static void r200TexEnv( struct gl_context *ctx, GLenum target,
    case GL_TEXTURE_ENV_COLOR: {
       GLubyte c[4];
       GLuint envColor;
-      UNCLAMPED_FLOAT_TO_RGBA_CHAN( c, texUnit->EnvColor );
+      _mesa_unclamped_float_rgba_to_ubyte(c, texUnit->EnvColor);
       envColor = radeonPackColor( 4, c[0], c[1], c[2], c[3] );
       if ( rmesa->hw.tf.cmd[TF_TFACTOR_0 + unit] != envColor ) {
 	 R200_STATECHANGE( rmesa, tf );
@@ -497,51 +496,14 @@ void r200InitTextureFuncs( radeonContextPtr radeon, struct dd_function_table *fu
    /* Note: we only plug in the functions we implement in the driver
     * since _mesa_init_driver_functions() was already called.
     */
-   functions->ChooseTextureFormat	= radeonChooseTextureFormat_mesa;
-   functions->TexImage1D		= radeonTexImage1D;
-   functions->TexImage2D		= radeonTexImage2D;
-#if ENABLE_HW_3D_TEXTURE
-   functions->TexImage3D		= radeonTexImage3D;
-#else
-   functions->TexImage3D		= _mesa_store_teximage3d;
-#endif
-   functions->TexSubImage1D		= radeonTexSubImage1D;
-   functions->TexSubImage2D		= radeonTexSubImage2D;
-#if ENABLE_HW_3D_TEXTURE
-   functions->TexSubImage3D		= radeonTexSubImage3D;
-#else
-   functions->TexSubImage3D		= _mesa_store_texsubimage3d;
-#endif
-   functions->GetTexImage               = radeonGetTexImage;
-   functions->GetCompressedTexImage     = radeonGetCompressedTexImage;
+
+   radeon_init_common_texture_funcs(radeon, functions);
+
    functions->NewTextureObject		= r200NewTextureObject;
    //   functions->BindTexture		= r200BindTexture;
    functions->DeleteTexture		= r200DeleteTexture;
-   functions->IsTextureResident		= driIsTextureResident;
 
    functions->TexEnv			= r200TexEnv;
    functions->TexParameter		= r200TexParameter;
    functions->TexGen			= r200TexGen;
-
-   functions->CompressedTexImage2D	= radeonCompressedTexImage2D;
-   functions->CompressedTexSubImage2D	= radeonCompressedTexSubImage2D;
-
-   if (radeon->radeonScreen->kernel_mm) {
-      functions->CopyTexImage2D = radeonCopyTexImage2D;
-      functions->CopyTexSubImage2D = radeonCopyTexSubImage2D;
-   }
-
-   functions->GenerateMipmap = radeonGenerateMipmap;
-
-   functions->NewTextureImage = radeonNewTextureImage;
-   functions->FreeTexImageData = radeonFreeTexImageData;
-   functions->MapTexture = radeonMapTexture;
-   functions->UnmapTexture = radeonUnmapTexture;
-
-#if FEATURE_OES_EGL_image
-   functions->EGLImageTargetTexture2D = radeon_image_target_texture_2d;
-#endif
-
-   driInitTextureFormats();
-
 }

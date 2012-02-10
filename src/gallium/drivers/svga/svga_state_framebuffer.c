@@ -38,8 +38,9 @@
  */
 
 
-static int emit_framebuffer( struct svga_context *svga,
-                             unsigned dirty )
+static enum pipe_error
+emit_framebuffer( struct svga_context *svga,
+                  unsigned dirty )
 {
    const struct pipe_framebuffer_state *curr = &svga->curr.framebuffer;
    struct pipe_framebuffer_state *hw = &svga->state.hw_clear.framebuffer;
@@ -74,7 +75,7 @@ static int emit_framebuffer( struct svga_context *svga,
          return ret;
 
       if (curr->zsbuf &&
-          curr->zsbuf->format == PIPE_FORMAT_S8_USCALED_Z24_UNORM) {
+          curr->zsbuf->format == PIPE_FORMAT_S8_UINT_Z24_UNORM) {
          ret = SVGA3D_SetRenderTarget(svga->swc, SVGA3D_RT_STENCIL, curr->zsbuf);
          if (ret != PIPE_OK)
             return ret;
@@ -127,7 +128,7 @@ svga_reemit_framebuffer_bindings(struct svga_context *svga)
       }
 
       if (hw->zsbuf &&
-          hw->zsbuf->format == PIPE_FORMAT_S8_USCALED_Z24_UNORM) {
+          hw->zsbuf->format == PIPE_FORMAT_S8_UINT_Z24_UNORM) {
          ret = SVGA3D_SetRenderTarget(svga->swc, SVGA3D_RT_STENCIL, hw->zsbuf);
          if (ret != PIPE_OK) {
             return ret;
@@ -160,8 +161,9 @@ struct svga_tracked_state svga_hw_framebuffer =
 /*********************************************************************** 
  */
 
-static int emit_viewport( struct svga_context *svga,
-                          unsigned dirty )
+static enum pipe_error
+emit_viewport( struct svga_context *svga,
+               unsigned dirty )
 {
    const struct pipe_viewport_state *viewport = &svga->curr.viewport;
    struct svga_prescale prescale;
@@ -438,8 +440,9 @@ struct svga_tracked_state svga_hw_viewport =
 /***********************************************************************
  * Scissor state
  */
-static int emit_scissor_rect( struct svga_context *svga,
-                              unsigned dirty )
+static enum pipe_error
+emit_scissor_rect( struct svga_context *svga,
+                   unsigned dirty )
 {
    const struct pipe_scissor_state *scissor = &svga->curr.scissor;
    SVGA3dRect rect;
@@ -465,15 +468,16 @@ struct svga_tracked_state svga_hw_scissor =
  * Userclip state
  */
 
-static int emit_clip_planes( struct svga_context *svga,
-                             unsigned dirty )
+static enum pipe_error
+emit_clip_planes( struct svga_context *svga,
+                  unsigned dirty )
 {
    unsigned i;
    enum pipe_error ret;
 
    /* TODO: just emit directly from svga_set_clip_state()?
     */
-   for (i = 0; i < svga->curr.clip.nr; i++) {
+   for (i = 0; i < SVGA3D_MAX_CLIP_PLANES; i++) {
       /* need to express the plane in D3D-style coordinate space.
        * GL coords get converted to D3D coords with the matrix:
        * [ 1  0  0  0 ]

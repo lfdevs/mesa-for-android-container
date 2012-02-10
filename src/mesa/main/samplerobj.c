@@ -251,7 +251,7 @@ _mesa_BindSampler(GLuint unit, GLuint sampler)
    struct gl_sampler_object *sampObj;
    GET_CURRENT_CONTEXT(ctx);
 
-   if (unit >= ctx->Const.MaxTextureImageUnits) {
+   if (unit >= ctx->Const.MaxCombinedTextureImageUnits) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glBindSampler(unit %u)", unit);
       return;
    }
@@ -294,11 +294,10 @@ validate_texture_wrap_mode(struct gl_context *ctx, GLenum wrap)
    case GL_CLAMP:
    case GL_CLAMP_TO_EDGE:
    case GL_REPEAT:
+   case GL_MIRRORED_REPEAT:
       return GL_TRUE;
    case GL_CLAMP_TO_BORDER:
       return e->ARB_texture_border_clamp;
-   case GL_MIRRORED_REPEAT:
-      return e->ARB_texture_mirrored_repeat;
    case GL_MIRROR_CLAMP_EXT:
       return e->ATI_texture_mirror_once || e->EXT_texture_mirror_clamp;
    case GL_MIRROR_CLAMP_TO_EDGE_EXT:
@@ -314,7 +313,7 @@ validate_texture_wrap_mode(struct gl_context *ctx, GLenum wrap)
 /**
  * This is called just prior to changing any sampler object state.
  */
-static INLINE void
+static inline void
 flush(struct gl_context *ctx)
 {
    FLUSH_VERTICES(ctx, _NEW_TEXTURE);

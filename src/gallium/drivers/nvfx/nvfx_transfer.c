@@ -26,6 +26,9 @@ nvfx_transfer_new(struct pipe_context *pipe,
 		  unsigned usage,
 		  const struct pipe_box *box)
 {
+        if (usage & PIPE_TRANSFER_MAP_PERMANENTLY) {
+                return NULL;
+        }
         if((usage & (PIPE_TRANSFER_UNSYNCHRONIZED | PIPE_TRANSFER_DONTBLOCK)) == PIPE_TRANSFER_DONTBLOCK)
         {
                 struct nouveau_bo* bo = ((struct nvfx_resource*)pt)->bo;
@@ -56,7 +59,7 @@ nvfx_transfer_new(struct pipe_context *pipe,
 	else
 	{
 	        struct nvfx_staging_transfer* tx;
-	        boolean direct = !nvfx_resource_on_gpu(pt) && pt->flags & NVFX_RESOURCE_FLAG_LINEAR;
+	        boolean direct = !nvfx_resource_on_gpu(pt) && pt->flags & NOUVEAU_RESOURCE_FLAG_LINEAR;
 
 	        tx = CALLOC_STRUCT(nvfx_staging_transfer);
 	        if(!tx)

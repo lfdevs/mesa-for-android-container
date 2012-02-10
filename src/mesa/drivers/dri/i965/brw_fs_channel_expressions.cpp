@@ -45,9 +45,9 @@ extern "C" {
 #include "main/core.h"
 #include "brw_wm.h"
 }
-#include "../glsl/ir.h"
-#include "../glsl/ir_expression_flattening.h"
-#include "../glsl/glsl_types.h"
+#include "glsl/ir.h"
+#include "glsl/ir_expression_flattening.h"
+#include "glsl/glsl_types.h"
 
 class ir_channel_expressions_visitor : public ir_hierarchical_visitor {
 public:
@@ -83,7 +83,7 @@ channel_expressions_predicate(ir_instruction *ir)
    return false;
 }
 
-GLboolean
+bool
 brw_do_channel_expressions(exec_list *instructions)
 {
    ir_channel_expressions_visitor v;
@@ -191,6 +191,8 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_log:
    case ir_unop_exp2:
    case ir_unop_log2:
+   case ir_unop_i2u:
+   case ir_unop_u2i:
    case ir_unop_f2i:
    case ir_unop_i2f:
    case ir_unop_f2b:

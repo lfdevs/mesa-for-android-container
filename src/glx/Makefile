@@ -10,11 +10,14 @@ EXTRA_DEFINES = $(EXTRA_DEFINES_XF86VIDMODE) -D_REENTRANT \
 
 SOURCES = \
 	  clientattrib.c \
+	  clientinfo.c \
 	  compsize.c \
+	  create_context.c \
 	  eval.c \
 	  glxconfig.c \
 	  glxcmds.c \
 	  glxcurrent.c \
+	  glx_error.c \
 	  glxext.c \
 	  glxextensions.c \
 	  indirect_glx.c \
@@ -80,8 +83,11 @@ INCLUDES = -I. \
 
 default: depend $(TOP)/$(LIB_DIR)/$(GL_LIB_NAME)
 
+libglx.a: $(OBJECTS)
+	$(MKLIB) -cplusplus -o glx -static $(OBJECTS)
+
 # Make libGL
-$(TOP)/$(LIB_DIR)/$(GL_LIB_NAME): $(OBJECTS) $(GLAPI_LIB) Makefile
+$(TOP)/$(LIB_DIR)/$(GL_LIB_NAME): libglx.a $(OBJECTS) $(GLAPI_LIB) Makefile
 	$(MKLIB) -o $(GL_LIB) -linker '$(CXX)' -ldflags '$(LDFLAGS)' \
 		-major 1 -minor 2 \
 		-cplusplus $(MKLIB_OPTIONS) \

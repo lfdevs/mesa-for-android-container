@@ -103,7 +103,8 @@ vs_exec_run_linear( struct draw_vertex_shader *shader,
    if (shader->info.uses_instanceid) {
       unsigned i = machine->SysSemanticToIndex[TGSI_SEMANTIC_INSTANCEID];
       assert(i < Elements(machine->SystemValue));
-      machine->SystemValue[i][0] = shader->draw->instance_id;
+      for (j = 0; j < QUAD_SIZE; j++)
+         machine->SystemValue[i].i[j] = shader->draw->instance_id;
    }
 
    for (i = 0; i < count; i += MAX_TGSI_VERTICES) {
@@ -122,6 +123,12 @@ vs_exec_run_linear( struct draw_vertex_shader *shader,
 			 input[slot][3]);
          }
 #endif
+
+         if (shader->info.uses_vertexid) {
+            unsigned vid = machine->SysSemanticToIndex[TGSI_SEMANTIC_VERTEXID];
+            assert(vid < Elements(machine->SystemValue));
+            machine->SystemValue[vid].i[j] = i + j;
+         }
 
          for (slot = 0; slot < shader->info.num_inputs; slot++) {
 #if 0
@@ -217,6 +224,7 @@ draw_create_vs_exec(struct draw_context *draw,
 
    tgsi_scan_shader(state->tokens, &vs->base.info);
 
+   vs->base.state.stream_output = state->stream_output;
    vs->base.draw = draw;
    vs->base.prepare = vs_exec_prepare;
    vs->base.run_linear = vs_exec_run_linear;

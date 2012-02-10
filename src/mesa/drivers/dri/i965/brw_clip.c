@@ -42,7 +42,7 @@
 #include "brw_state.h"
 #include "brw_clip.h"
 
-#include "../glsl/ralloc.h"
+#include "glsl/ralloc.h"
 
 #define FRONT_UNFILLED_BIT  0x1
 #define BACK_UNFILLED_BIT   0x2
@@ -56,9 +56,7 @@ static void compile_clip_prog( struct brw_context *brw,
    const GLuint *program;
    void *mem_ctx;
    GLuint program_size;
-   GLuint delta;
    GLuint i;
-   GLuint header_regs;
 
    memset(&c, 0, sizeof(c));
 
@@ -71,37 +69,14 @@ static void compile_clip_prog( struct brw_context *brw,
    c.func.single_program_flow = 1;
 
    c.key = *key;
+   brw_compute_vue_map(&c.vue_map, intel, c.key.nr_userclip > 0, c.key.attrs);
 
-   /* Need to locate the two positions present in vertex + header.
-    * These are currently hardcoded:
+   /* nr_regs is the number of registers filled by reading data from the VUE.
+    * This program accesses the entire VUE, so nr_regs needs to be the size of
+    * the VUE (measured in pairs, since two slots are stored in each
+    * register).
     */
-   c.header_position_offset = ATTR_SIZE;
-
-   if (intel->gen == 5)
-      header_regs = 3;
-   else
-      header_regs = 1;
-
-   delta = header_regs * REG_SIZE;
-
-   for (i = 0; i < VERT_RESULT_MAX; i++) {
-      if (c.key.attrs & BITFIELD64_BIT(i)) {
-	 c.offset[i] = delta;
-	 delta += ATTR_SIZE;
-
-	 c.idx_to_attr[c.nr_attrs] = i;
-	 c.nr_attrs++;
-      }
-   }
-
-   /* The vertex attributes start at a URB row-aligned offset after
-    * the 8-20 dword vertex header, and continue for a URB row-aligned
-    * length.  nr_regs determines the urb_read_length from the start
-    * of the header to the end of the vertex data.
-    */
-   c.nr_regs = header_regs + (c.nr_attrs + 1) / 2;
-
-   c.nr_bytes = c.nr_regs * REG_SIZE;
+   c.nr_regs = (c.vue_map.num_slots + 1)/2;
 
    c.prog_data.clip_mode = c.key.clip_mode; /* XXX */
 
@@ -157,7 +132,8 @@ static void compile_clip_prog( struct brw_context *brw,
 
 /* Calculate interpolants for triangle and line rasterization.
  */
-static void upload_clip_prog(struct brw_context *brw)
+static void
+brw_upload_clip_prog(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
@@ -175,7 +151,7 @@ static void upload_clip_prog(struct brw_context *brw)
    key.do_flat_shading = (ctx->Light.ShadeModel == GL_FLAT);
    key.pv_first = (ctx->Light.ProvokingVertex == GL_FIRST_VERTEX_CONVENTION);
    /* _NEW_TRANSFORM */
-   key.nr_userclip = brw_count_bits(ctx->Transform.ClipPlanesEnabled);
+   key.nr_userclip = _mesa_bitcount_64(ctx->Transform.ClipPlanesEnabled);
 
    if (intel->gen == 5)
        key.clip_mode = BRW_CLIPMODE_KERNEL_CLIP;
@@ -285,5 +261,5 @@ const struct brw_tracked_state brw_clip_prog = {
       .brw   = (BRW_NEW_REDUCED_PRIMITIVE),
       .cache = CACHE_NEW_VS_PROG
    },
-   .prepare = upload_clip_prog
+   .emit = brw_upload_clip_prog
 };

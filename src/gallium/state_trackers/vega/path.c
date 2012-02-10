@@ -192,7 +192,7 @@ struct path * path_create(VGPathDatatype dt, VGfloat scale, VGfloat bias,
 
    vg_init_object(&path->base, vg_current_context(), VG_OBJECT_PATH);
    path->caps = capabilities & VG_PATH_CAPABILITY_ALL;
-   vg_context_add_object(vg_current_context(), VG_OBJECT_PATH, path);
+   vg_context_add_object(vg_current_context(), &path->base);
 
    path->datatype = dt;
    path->scale = scale;
@@ -224,7 +224,7 @@ static void polygon_array_cleanup(struct polygon_array *polyarray)
 
 void path_destroy(struct path *p)
 {
-   vg_context_remove_object(vg_current_context(), VG_OBJECT_PATH, p);
+   vg_context_remove_object(vg_current_context(), &p->base);
 
    array_destroy(p->segments);
    array_destroy(p->control_points);
@@ -366,6 +366,8 @@ static struct polygon_array * path_get_fill_polygons(struct path *p, struct matr
    VGfloat data[8];
    void *coords = (VGfloat *)p->control_points->data;
    struct array *array;
+
+   memset(data, 0, sizeof(data));
 
    if (p->fill_polys.polygon_array.array)
    {

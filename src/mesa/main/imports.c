@@ -514,12 +514,25 @@ _mesa_ffsll(int64_t val)
 #endif
 
 #if !defined(__GNUC__) ||\
-   ((_GNUC__ == 3 && __GNUC_MINOR__ < 4) && __GNUC__ < 4)
+   ((__GNUC__ * 100 + __GNUC_MINOR__) < 304) /* Not gcc 3.4 or later */
 /**
  * Return number of bits set in given GLuint.
  */
 unsigned int
 _mesa_bitcount(unsigned int n)
+{
+   unsigned int bits;
+   for (bits = 0; n > 0; n = n >> 1) {
+      bits += (n & 1);
+   }
+   return bits;
+}
+
+/**
+ * Return number of bits set in given 64-bit uint.
+ */
+unsigned int
+_mesa_bitcount_64(uint64_t n)
 {
    unsigned int bits;
    for (bits = 0; n > 0; n = n >> 1) {
@@ -753,7 +766,8 @@ _mesa_strdup( const char *s )
 float
 _mesa_strtof( const char *s, char **end )
 {
-#if defined(_GNU_SOURCE) && !defined(__CYGWIN__) && !defined(__FreeBSD__)
+#if defined(_GNU_SOURCE) && !defined(__CYGWIN__) && !defined(__FreeBSD__) && \
+    !defined(ANDROID)
    static locale_t loc = NULL;
    if (!loc) {
       loc = newlocale(LC_CTYPE_MASK, "C", NULL);

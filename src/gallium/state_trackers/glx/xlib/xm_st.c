@@ -30,6 +30,7 @@
 #include "xm_st.h"
 
 #include "util/u_inlines.h"
+#include "util/u_atomic.h"
 
 struct xmesa_st_framebuffer {
    XMesaDisplay display;
@@ -96,13 +97,7 @@ xmesa_st_framebuffer_copy_textures(struct st_framebuffer_iface *stfbi,
    if (!src_ptex || !dst_ptex)
       return;
 
-   pipe = xstfb->display->pipe;
-   if (!pipe) {
-      pipe = xstfb->screen->context_create(xstfb->screen, NULL);
-      if (!pipe)
-         return;
-      xstfb->display->pipe = pipe;
-   }
+   pipe = xmesa_get_context(stfbi);
 
    u_box_2d(x, y, width, height, &src_box);
 
@@ -115,7 +110,7 @@ xmesa_st_framebuffer_copy_textures(struct st_framebuffer_iface *stfbi,
  * Remove outdated textures and create the requested ones.
  * This is a helper used during framebuffer validation.
  */
-static boolean
+boolean
 xmesa_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
                                        unsigned width, unsigned height,
                                        unsigned mask)
@@ -302,6 +297,7 @@ xmesa_create_st_framebuffer(XMesaDisplay xmdpy, XMesaBuffer b)
    stfbi->visual = &xstfb->stvis;
    stfbi->flush_front = xmesa_st_framebuffer_flush_front;
    stfbi->validate = xmesa_st_framebuffer_validate;
+   p_atomic_set(&stfbi->stamp, 1);
    stfbi->st_manager_private = (void *) xstfb;
 
    return stfbi;
@@ -360,3 +356,31 @@ xmesa_copy_st_framebuffer(struct st_framebuffer_iface *stfbi,
    if (dst == ST_ATTACHMENT_FRONT_LEFT)
       xmesa_st_framebuffer_display(stfbi, dst);
 }
+
+struct pipe_resource*
+xmesa_get_attachment(struct st_framebuffer_iface *stfbi,
+                     enum st_attachment_type st_attachment)
+{
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct pipe_resource* res;
+
+   res = xstfb->textures[st_attachment];
+   return res;
+}
+
+struct pipe_context*
+xmesa_get_context(struct st_framebuffer_iface* stfbi)
+{
+   struct pipe_context *pipe;
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+
+   pipe = xstfb->display->pipe;
+   if (!pipe) {
+      pipe = xstfb->screen->context_create(xstfb->screen, NULL);
+      if (!pipe)
+         return NULL;
+      xstfb->display->pipe = pipe;
+   }
+   return pipe;
+}
+

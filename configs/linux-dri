@@ -32,7 +32,6 @@ CFLAGS = -Wall -Wmissing-prototypes -std=c99 -ffast-math \
 
 CXXFLAGS = -Wall $(OPT_FLAGS) $(PIC_FLAGS) $(ARCH_FLAGS) $(DEFINES)
 
-GLUT_CFLAGS = -fexceptions
 
 # Work around aliasing bugs - developers should comment this out
 CFLAGS += -fno-strict-aliasing
@@ -45,8 +44,8 @@ EXTRA_LIB_PATH=-L/usr/X11R6/lib
 
 MESA_MODULES  = $(TOP)/src/mesa/libmesa.a
 
-LIBDRM_CFLAGS = $(shell pkg-config --cflags libdrm)
-LIBDRM_LIB = $(shell pkg-config --libs libdrm)
+LIBDRM_CFLAGS = $(shell $(PKG_CONFIG) --cflags libdrm)
+LIBDRM_LIB = $(shell $(PKG_CONFIG) --libs libdrm)
 DRI_LIB_DEPS  = $(MESA_MODULES) $(EXTRA_LIB_PATH) -lm -lpthread -lexpat -ldl $(LIBDRM_LIB)
 GL_LIB_DEPS   = $(EXTRA_LIB_PATH) -lX11 -lXext -lXxf86vm -lXdamage -lXfixes \
 		-lm -lpthread -ldl $(LIBDRM_LIB)
@@ -59,20 +58,18 @@ SRC_DIRS := glx egl $(SRC_DIRS)
 EGL_DRIVERS_DIRS = glx
 
 DRIVER_DIRS = dri
-GALLIUM_WINSYS_DIRS = sw sw/xlib drm/vmware drm/intel drm/i965
-GALLIUM_TARGET_DIRS = 
-GALLIUM_STATE_TRACKERS_DIRS = egl
+GALLIUM_WINSYS_DIRS = sw sw/xlib drm/vmware drm/intel svga/drm
+GALLIUM_TARGET_DIRS = dri-vmwgfx
+GALLIUM_STATE_TRACKERS_DIRS = egl dri
 
-DRI_DIRS = i810 i915 i965 mach64 mga nouveau r128 r200 r300 r600 radeon \
-	savage sis tdfx unichrome swrast
+DRI_DIRS = i915 i965 nouveau r200 radeon swrast
 
-INTEL_LIBS = $(shell pkg-config --libs libdrm_intel)
-INTEL_CFLAGS = $(shell pkg-config --cflags libdrm_intel)
+INTEL_LIBS = $(shell $(PKG_CONFIG) --libs libdrm_intel)
+INTEL_CFLAGS = $(shell $(PKG_CONFIG) --cflags libdrm_intel)
 
-NOUVEAU_LIBS = $(shell pkg-config --libs libdrm_nouveau)
-NOUVEAU_CFLAGS = $(shell pkg-config --cflags libdrm_nouveau)
+NOUVEAU_LIBS = $(shell $(PKG_CONFIG) --libs libdrm_nouveau)
+NOUVEAU_CFLAGS = $(shell $(PKG_CONFIG) --cflags libdrm_nouveau)
 
-LIBDRM_RADEON_LIBS = $(shell pkg-config --libs libdrm_radeon)
-LIBDRM_RADEON_CFLAGS = $(shell pkg-config --cflags libdrm_radeon)
-RADEON_CFLAGS = "-DHAVE_LIBDRM_RADEON=1 $(LIBDRM_RADEON_CFLAGS)"
+RADEON_LIBS = $(shell $(PKG_CONFIG) --libs libdrm_radeon)
+RADEON_CFLAGS = $(shell $(PKG_CONFIG) --cflags libdrm_radeon)
 RADEON_LDFLAGS = $(LIBDRM_RADEON_LIBS)

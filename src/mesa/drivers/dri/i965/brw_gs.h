@@ -41,10 +41,35 @@
 
 struct brw_gs_prog_key {
    GLbitfield64 attrs;
-   GLuint primitive:4;
+
+   /**
+    * Hardware primitive type being drawn, e.g. _3DPRIM_TRILIST.
+    */
+   GLuint primitive:8;
+
    GLuint pv_first:1;
    GLuint need_gs_prog:1;
-   GLuint pad:26;
+   GLuint userclip_active:1;
+   GLuint rasterizer_discard:1;
+
+   /**
+    * Number of varyings that are output to transform feedback.
+    */
+   GLuint num_transform_feedback_bindings:7; /* 0-BRW_MAX_SOL_BINDINGS */
+
+   /**
+    * Map from the index of a transform feedback binding table entry to the
+    * gl_vert_result that should be streamed out through that binding table
+    * entry.
+    */
+   unsigned char transform_feedback_bindings[BRW_MAX_SOL_BINDINGS];
+
+   /**
+    * Map from the index of a transform feedback binding table entry to the
+    * swizzles that should be used when streaming out data through that
+    * binding table entry.
+    */
+   unsigned char transform_feedback_swizzles[BRW_MAX_SOL_BINDINGS];
 };
 
 struct brw_gs_compile {
@@ -54,15 +79,29 @@ struct brw_gs_compile {
    
    struct {
       struct brw_reg R0;
+
+      /**
+       * Register holding streamed vertex buffer pointers -- see the Sandy
+       * Bridge PRM, volume 2 part 1, section 4.4.2 (GS Thread Payload
+       * [DevSNB]).  These pointers are delivered in GRF 1.
+       */
+      struct brw_reg SVBI;
+
       struct brw_reg vertex[MAX_GS_VERTS];
+      struct brw_reg header;
       struct brw_reg temp;
+
+      /**
+       * Register holding destination indices for streamed buffer writes.
+       * Only used for SOL programs.
+       */
+      struct brw_reg destination_indices;
    } reg;
 
-   /* 3 different ways of expressing vertex size:
-    */
-   GLuint nr_attrs;
+   /* Number of registers used to store vertex data */
    GLuint nr_regs;
-   GLuint nr_bytes;
+
+   struct brw_vue_map vue_map;
 };
 
 #define ATTR_SIZE  (4*4)
@@ -70,5 +109,7 @@ struct brw_gs_compile {
 void brw_gs_quads( struct brw_gs_compile *c, struct brw_gs_prog_key *key );
 void brw_gs_quad_strip( struct brw_gs_compile *c, struct brw_gs_prog_key *key );
 void brw_gs_lines( struct brw_gs_compile *c );
+void gen6_sol_program(struct brw_gs_compile *c, struct brw_gs_prog_key *key,
+                      unsigned num_verts, bool check_edge_flag);
 
 #endif

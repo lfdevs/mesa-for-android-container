@@ -60,7 +60,7 @@ nvc0_create_sampler_view(struct pipe_context *pipe,
    uint32_t swz[4];
    uint32_t depth;
    struct nv50_tic_entry *view;
-   struct nvc0_miptree *mt = nvc0_miptree(texture);
+   struct nv50_miptree *mt;
    boolean tex_int;
 
    view = MALLOC_STRUCT(nv50_tic_entry);
@@ -84,7 +84,7 @@ nvc0_create_sampler_view(struct pipe_context *pipe,
 
    tic[0] = nvc0_format_table[view->pipe.format].tic;
 
-   tex_int = FALSE; /* XXX: integer textures */
+   tex_int = util_format_is_pure_integer(view->pipe.format);
 
    swz[0] = nv50_tic_swizzle(tic[0], view->pipe.swizzle_r, tex_int);
    swz[1] = nv50_tic_swizzle(tic[0], view->pipe.swizzle_g, tex_int);
@@ -104,6 +104,32 @@ nvc0_create_sampler_view(struct pipe_context *pipe,
    if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)
       tic[2] |= NV50_TIC_2_COLORSPACE_SRGB;
 
+   /* check for linear storage type */
+   if (unlikely(!nouveau_bo_tile_layout(nv04_resource(texture)->bo))) {
+      if (texture->target == PIPE_BUFFER) {
+         tic[2] |= NV50_TIC_2_LINEAR | NV50_TIC_2_TARGET_BUFFER;
+         tic[1] = /* address offset */
+            view->pipe.u.buf.first_element * desc->block.bits / 8;
+         tic[3] = 0;
+         tic[4] = /* width */
+            view->pipe.u.buf.last_element - view->pipe.u.buf.first_element + 1;
+	 tic[5] = 0;
+      } else {
+         mt = nv50_miptree(texture);
+         /* must be 2D texture without mip maps */
+         tic[2] |= NV50_TIC_2_LINEAR | NV50_TIC_2_TARGET_RECT;
+         if (texture->target != PIPE_TEXTURE_RECT)
+            tic[2] |= NV50_TIC_2_NORMALIZED_COORDS;
+         tic[3] = mt->level[0].pitch;
+         tic[4] = mt->base.base.width0;
+         tic[5] = (1 << 16) | mt->base.base.height0;
+      }
+      tic[6] =
+      tic[7] = 0;
+      return &view->pipe;
+   }
+   mt = nv50_miptree(texture);
+
    if (mt->base.base.target != PIPE_TEXTURE_RECT)
       tic[2] |= NV50_TIC_2_NORMALIZED_COORDS;
 
@@ -113,8 +139,7 @@ nvc0_create_sampler_view(struct pipe_context *pipe,
 
    depth = MAX2(mt->base.base.array_size, mt->base.base.depth0);
 
-   if (mt->base.base.target == PIPE_TEXTURE_1D_ARRAY ||
-       mt->base.base.target == PIPE_TEXTURE_2D_ARRAY) {
+   if (mt->base.base.array_size > 1) {
       /* there doesn't seem to be a base layer field in TIC */
       tic[1] = view->pipe.u.tex.first_layer * mt->layer_stride;
       depth = view->pipe.u.tex.last_layer - view->pipe.u.tex.first_layer + 1;
@@ -124,6 +149,7 @@ nvc0_create_sampler_view(struct pipe_context *pipe,
    case PIPE_TEXTURE_1D:
       tic[2] |= NV50_TIC_2_TARGET_1D;
       break;
+/* case PIPE_TEXTURE_2D_MS: */
    case PIPE_TEXTURE_2D:
       tic[2] |= NV50_TIC_2_TARGET_2D;
       break;
@@ -143,11 +169,9 @@ nvc0_create_sampler_view(struct pipe_context *pipe,
    case PIPE_TEXTURE_1D_ARRAY:
       tic[2] |= NV50_TIC_2_TARGET_1D_ARRAY;
       break;
+/* case PIPE_TEXTURE_2D_ARRAY_MS: */
    case PIPE_TEXTURE_2D_ARRAY:
       tic[2] |= NV50_TIC_2_TARGET_2D_ARRAY;
-      break;
-   case PIPE_BUFFER:
-      tic[2] |= NV50_TIC_2_TARGET_BUFFER | NV50_TIC_2_LINEAR;
       break;
    default:
       NOUVEAU_ERR("invalid texture target: %d\n", mt->base.base.target);
@@ -159,15 +183,21 @@ nvc0_create_sampler_view(struct pipe_context *pipe,
    else
       tic[3] = 0x00300000;
 
-   tic[4] = (1 << 31) | mt->base.base.width0;
+   tic[4] = (1 << 31) | (mt->base.base.width0 << mt->ms_x);
 
-   tic[5] = mt->base.base.height0 & 0xffff;
+   tic[5] = (mt->base.base.height0 << mt->ms_y) & 0xffff;
    tic[5] |= depth << 16;
    tic[5] |= mt->base.base.last_level << 28;
 
-   tic[6] = 0x03000000;
+   tic[6] = (mt->ms_x > 1) ? 0x88000000 : 0x03000000; /* sampling points */
 
    tic[7] = (view->pipe.u.tex.last_level << 4) | view->pipe.u.tex.first_level;
+
+   /*
+   if (mt->base.base.target == PIPE_TEXTURE_2D_MS ||
+       mt->base.base.target == PIPE_TEXTURE_2D_ARRAY_MS)
+      tic[7] |= mt->ms_mode << 12;
+   */
 
    return &view->pipe;
 }
@@ -189,10 +219,10 @@ nvc0_validate_tic(struct nvc0_context *nvc0, int s)
          OUT_RING  (chan, (i << 1) | 0);
          continue;
       }
-      res = &nvc0_miptree(tic->pipe.texture)->base;
+      res = nv04_resource(tic->pipe.texture);
 
       if (tic->id < 0) {
-         uint32_t offset = tic->tic[1];
+         uint32_t offset = res->offset + tic->tic[1];
 
          tic->id = nvc0_screen_tic_alloc(nvc0->screen, tic);
 
@@ -207,8 +237,8 @@ nvc0_validate_tic(struct nvc0_context *nvc0, int s)
          OUT_RING  (chan, 0x100111);
          BEGIN_RING_NI(chan, RING_MF(DATA), 8);
          OUT_RING  (chan, tic->tic[0]);
-         OUT_RELOCl(chan, res->bo, offset, NOUVEAU_BO_VRAM | NOUVEAU_BO_RD);
-         OUT_RELOC (chan, res->bo, offset, NOUVEAU_BO_VRAM | NOUVEAU_BO_RD |
+         OUT_RELOCl(chan, res->bo, offset, res->domain | NOUVEAU_BO_RD);
+         OUT_RELOC (chan, res->bo, offset, res->domain | NOUVEAU_BO_RD |
                     NOUVEAU_BO_HIGH | NOUVEAU_BO_OR, tic->tic[2], tic->tic[2]);
          OUT_RINGp (chan, &tic->tic[3], 5);
 
@@ -224,7 +254,7 @@ nvc0_validate_tic(struct nvc0_context *nvc0, int s)
       res->status |=  NOUVEAU_BUFFER_STATUS_GPU_READING;
 
       nvc0_bufctx_add_resident(nvc0, NVC0_BUFCTX_TEXTURES, res,
-                               NOUVEAU_BO_VRAM | NOUVEAU_BO_RD);
+                               res->domain | NOUVEAU_BO_RD);
 
       BEGIN_RING(chan, RING_3D(BIND_TIC(s)), 1);
       OUT_RING  (chan, (tic->id << 9) | (i << 1) | 1);
@@ -243,6 +273,7 @@ void nvc0_validate_textures(struct nvc0_context *nvc0)
    boolean need_flush;
 
    need_flush  = nvc0_validate_tic(nvc0, 0);
+   need_flush |= nvc0_validate_tic(nvc0, 3);
    need_flush |= nvc0_validate_tic(nvc0, 4);
 
    if (need_flush) {
@@ -293,6 +324,7 @@ void nvc0_validate_samplers(struct nvc0_context *nvc0)
    boolean need_flush;
 
    need_flush  = nvc0_validate_tsc(nvc0, 0);
+   need_flush |= nvc0_validate_tsc(nvc0, 3);
    need_flush |= nvc0_validate_tsc(nvc0, 4);
 
    if (need_flush) {

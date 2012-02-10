@@ -71,8 +71,9 @@ svga_translate_vertex_format(enum pipe_format format)
 }
 
 
-static int update_need_swvfetch( struct svga_context *svga,
-                                 unsigned dirty )
+static enum pipe_error
+update_need_swvfetch( struct svga_context *svga,
+                      unsigned dirty )
 {
    unsigned i;
    boolean need_swvfetch = FALSE;
@@ -110,8 +111,9 @@ struct svga_tracked_state svga_update_need_swvfetch =
 /*********************************************************************** 
  */
 
-static int update_need_pipeline( struct svga_context *svga,
-                                 unsigned dirty )
+static enum pipe_error
+update_need_pipeline( struct svga_context *svga,
+                      unsigned dirty )
 {
    
    boolean need_pipeline = FALSE;
@@ -139,6 +141,27 @@ static int update_need_pipeline( struct svga_context *svga,
       need_pipeline = TRUE;
    }
 
+   /* SVGA_NEW_FS, SVGA_NEW_RAST, SVGA_NEW_REDUCED_PRIMITIVE
+    */
+   if (svga->curr.reduced_prim == PIPE_PRIM_POINTS) {
+      unsigned sprite_coord_gen = svga->curr.rast->templ.sprite_coord_enable;
+      unsigned generic_inputs = svga->curr.fs->generic_inputs;
+
+      if (sprite_coord_gen &&
+          (generic_inputs & ~sprite_coord_gen)) {
+         /* The fragment shader is using some generic inputs that are
+          * not being replaced by auto-generated point/sprite coords (and
+          * auto sprite coord generation is turned on).
+          * The SVGA3D interface does not support that: if we enable
+          * SVGA3D_RS_POINTSPRITEENABLE it gets enabled for _all_
+          * texture coordinate sets.
+          * To solve this, we have to use the draw-module's wide/sprite
+          * point stage.
+          */
+         need_pipeline = TRUE;
+      }
+   }
+
    if (need_pipeline != svga->state.sw.need_pipeline) {
       svga->state.sw.need_pipeline = need_pipeline;
       svga->dirty |= SVGA_NEW_NEED_PIPELINE;
@@ -156,6 +179,7 @@ struct svga_tracked_state svga_update_need_pipeline =
 {
    "need pipeline",
    (SVGA_NEW_RAST |
+    SVGA_NEW_FS |
     SVGA_NEW_VS |
     SVGA_NEW_REDUCED_PRIMITIVE),
    update_need_pipeline
@@ -165,8 +189,9 @@ struct svga_tracked_state svga_update_need_pipeline =
 /*********************************************************************** 
  */
 
-static int update_need_swtnl( struct svga_context *svga,
-                              unsigned dirty )
+static enum pipe_error
+update_need_swtnl( struct svga_context *svga,
+                   unsigned dirty )
 {
    boolean need_swtnl;
 
@@ -183,7 +208,7 @@ static int update_need_swtnl( struct svga_context *svga,
    }
 
    /*
-    * Some state changes the draw module does makes us belive we
+    * Some state changes the draw module does makes us believe we
     * we don't need swtnl. This causes the vdecl code to pickup
     * the wrong buffers and vertex formats. Try trivial/line-wide.
     */

@@ -89,8 +89,6 @@ struct vmw_svga_winsys_context
 
    struct pb_validate *validate;
 
-   uint32_t last_fence;
-
    /**
     * The amount of GMR that is referred by the commands currently batched
     * in the context.
@@ -103,9 +101,6 @@ struct vmw_svga_winsys_context
     * referred.
     */
    boolean preemptive_flush;
-
-   boolean throttle_set;
-   uint32_t throttle_us;
 };
 
 
@@ -138,7 +133,6 @@ vmw_swc_flush(struct svga_winsys_context *swc,
    struct pipe_fence_handle *fence = NULL;
    unsigned i;
    enum pipe_error ret;
-   uint32_t throttle_us;
 
    ret = pb_validate_validate(vswc->validate);
    assert(ret == PIPE_OK);
@@ -157,18 +151,13 @@ vmw_swc_flush(struct svga_winsys_context *swc,
          *reloc->where = ptr;
       }
 
-      throttle_us = vswc->throttle_set ?
-	 vswc->throttle_us : vswc->vws->default_throttle_us;
-
-      if (vswc->command.used)
+      if (vswc->command.used || pfence != NULL)
          vmw_ioctl_command(vswc->vws,
 			   vswc->base.cid,
-			   throttle_us,
+			   0,
                            vswc->command.buffer,
                            vswc->command.used,
-                           &vswc->last_fence);
-
-      fence = vmw_pipe_fence(vswc->last_fence);
+                           &fence);
 
       pb_validate_fence(vswc->validate, fence);
    }
@@ -200,7 +189,9 @@ vmw_swc_flush(struct svga_winsys_context *swc,
    vswc->seen_regions = 0;
 
    if(pfence)
-      *pfence = fence;
+      vmw_fence_reference(vswc->vws, pfence, fence);
+
+   vmw_fence_reference(vswc->vws, &fence, NULL);
 
    return ret;
 }
@@ -302,6 +293,7 @@ vmw_swc_region_relocation(struct svga_winsys_context *swc,
    ret = pb_validate_add_buffer(vswc->validate, reloc->buffer, translated_flags);
    /* TODO: Update pipebuffer to reserve buffers and not fail here */
    assert(ret == PIPE_OK);
+   (void)ret;
 
    /*
     * Flush preemptively the FIFO commands to keep the GMR working set within
@@ -319,7 +311,7 @@ vmw_swc_region_relocation(struct svga_winsys_context *swc,
     * SVGA virtual device it's not a performance issue since flushing commands
     * to the FIFO won't cause flushing in the host.
     */
-   vswc->seen_regions += reloc->buffer->base.size;
+   vswc->seen_regions += reloc->buffer->size;
    if(vswc->seen_regions >= VMW_GMR_POOL_SIZE/3)
       vswc->preemptive_flush = TRUE;
 }
@@ -401,16 +393,4 @@ vmw_svga_winsys_context_create(struct svga_winsys_screen *sws)
    }
 
    return &vswc->base;
-}
-
-
-void
-vmw_svga_context_set_throttling(struct pipe_context *pipe,
-				uint32_t throttle_us)
-{
-   struct svga_winsys_context *swc = svga_winsys_context(pipe);
-   struct vmw_svga_winsys_context *vswc = vmw_svga_winsys_context(swc);
-
-   vswc->throttle_us = throttle_us;
-   vswc->throttle_set = TRUE;
 }

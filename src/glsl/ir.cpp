@@ -272,6 +272,7 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
 
    case ir_unop_f2i:
    case ir_unop_b2i:
+   case ir_unop_u2i:
       this->type = glsl_type::get_instance(GLSL_TYPE_INT,
 					   op0->type->vector_elements, 1);
       break;
@@ -286,6 +287,11 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
    case ir_unop_f2b:
    case ir_unop_i2b:
       this->type = glsl_type::get_instance(GLSL_TYPE_BOOL,
+					   op0->type->vector_elements, 1);
+      break;
+
+   case ir_unop_i2u:
+      this->type = glsl_type::get_instance(GLSL_TYPE_UINT,
 					   op0->type->vector_elements, 1);
       break;
 
@@ -419,6 +425,8 @@ static const char *const operator_strs[] = {
    "i2b",
    "b2i",
    "u2f",
+   "i2u",
+   "u2i",
    "any",
    "trunc",
    "ceil",
@@ -1088,7 +1096,7 @@ ir_dereference_record::ir_dereference_record(ir_variable *var,
 }
 
 bool
-ir_dereference::is_lvalue()
+ir_dereference::is_lvalue() const
 {
    ir_variable *var = this->variable_referenced();
 
@@ -1110,7 +1118,7 @@ ir_dereference::is_lvalue()
 }
 
 
-const char *tex_opcode_strs[] = { "tex", "txb", "txl", "txd", "txf" };
+const char *tex_opcode_strs[] = { "tex", "txb", "txl", "txd", "txf", "txs" };
 
 const char *ir_texture::opcode_string()
 {
@@ -1139,11 +1147,15 @@ ir_texture::set_sampler(ir_dereference *sampler, const glsl_type *type)
    this->sampler = sampler;
    this->type = type;
 
-   assert(sampler->type->sampler_type == (int) type->base_type);
-   if (sampler->type->sampler_shadow)
-      assert(type->vector_elements == 4 || type->vector_elements == 1);
-   else
-      assert(type->vector_elements == 4);
+   if (this->op == ir_txs) {
+      assert(type->base_type == GLSL_TYPE_INT);
+   } else {
+      assert(sampler->type->sampler_type == (int) type->base_type);
+      if (sampler->type->sampler_shadow)
+	 assert(type->vector_elements == 4 || type->vector_elements == 1);
+      else
+	 assert(type->vector_elements == 4);
+   }
 }
 
 
@@ -1299,7 +1311,7 @@ ir_swizzle::create(ir_rvalue *val, const char *str, unsigned vector_length)
 #undef I
 
 ir_variable *
-ir_swizzle::variable_referenced()
+ir_swizzle::variable_referenced() const
 {
    return this->val->variable_referenced();
 }
@@ -1308,15 +1320,17 @@ ir_swizzle::variable_referenced()
 ir_variable::ir_variable(const struct glsl_type *type, const char *name,
 			 ir_variable_mode mode)
    : max_array_access(0), read_only(false), centroid(false), invariant(false),
-     mode(mode), interpolation(ir_var_smooth)
+     mode(mode), interpolation(INTERP_QUALIFIER_NONE)
 {
    this->ir_type = ir_type_variable;
    this->type = type;
    this->name = ralloc_strdup(this, name);
    this->explicit_location = false;
+   this->has_initializer = false;
    this->location = -1;
    this->warn_extension = NULL;
    this->constant_value = NULL;
+   this->constant_initializer = NULL;
    this->origin_upper_left = false;
    this->pixel_center_integer = false;
    this->depth_layout = ir_depth_layout_none;
@@ -1331,9 +1345,10 @@ const char *
 ir_variable::interpolation_string() const
 {
    switch (this->interpolation) {
-   case ir_var_smooth:        return "smooth";
-   case ir_var_flat:          return "flat";
-   case ir_var_noperspective: return "noperspective";
+   case INTERP_QUALIFIER_NONE:          return "no";
+   case INTERP_QUALIFIER_SMOOTH:        return "smooth";
+   case INTERP_QUALIFIER_FLAT:          return "flat";
+   case INTERP_QUALIFIER_NOPERSPECTIVE: return "noperspective";
    }
 
    assert(!"Should not get here.");
@@ -1341,11 +1356,18 @@ ir_variable::interpolation_string() const
 }
 
 
-unsigned
-ir_variable::component_slots() const
+glsl_interp_qualifier
+ir_variable::determine_interpolation_mode(bool flat_shade)
 {
-   /* FINISHME: Sparsely accessed arrays require fewer slots. */
-   return this->type->component_slots();
+   if (this->interpolation != INTERP_QUALIFIER_NONE)
+      return (glsl_interp_qualifier) this->interpolation;
+   int location = this->location;
+   bool is_gl_Color =
+      location == FRAG_ATTRIB_COL0 || location == FRAG_ATTRIB_COL1;
+   if (flat_shade && is_gl_Color)
+      return INTERP_QUALIFIER_FLAT;
+   else
+      return INTERP_QUALIFIER_SMOOTH;
 }
 
 
@@ -1468,6 +1490,9 @@ steal_memory(ir_instruction *ir, void *new_ctx)
    ir_constant *constant = ir->as_constant();
    if (var != NULL && var->constant_value != NULL)
       steal_memory(var->constant_value, ir);
+
+   if (var != NULL && var->constant_initializer != NULL)
+      steal_memory(var->constant_initializer, ir);
 
    /* The components of aggregate constants are not visited by the normal
     * visitor, so steal their values by hand.

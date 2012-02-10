@@ -26,13 +26,13 @@
 #include "u_format.h"
 #include "u_format_rgtc.h"
 
-static void u_format_unsigned_encode_rgtc_chan(uint8_t *blkaddr, uint8_t srccolors[4][4],
+static void u_format_unsigned_encode_rgtc_ubyte(uint8_t *blkaddr, uint8_t srccolors[4][4],
 					       int numxpixels, int numypixels);
 
 static void u_format_unsigned_fetch_texel_rgtc(unsigned srcRowStride, const uint8_t *pixdata,
 					       unsigned i, unsigned j, uint8_t *value, unsigned comps);
 
-static void u_format_signed_encode_rgtc_chan(int8_t *blkaddr, int8_t srccolors[4][4],
+static void u_format_signed_encode_rgtc_ubyte(int8_t *blkaddr, int8_t srccolors[4][4],
 					     int numxpixels, int numypixels);
 
 static void u_format_signed_fetch_texel_rgtc(unsigned srcRowStride, const int8_t *pixdata,
@@ -42,6 +42,9 @@ void
 util_format_rgtc1_unorm_fetch_rgba_8unorm(uint8_t *dst, const uint8_t *src, unsigned i, unsigned j)
 {
    u_format_unsigned_fetch_texel_rgtc(0, src, i, j, dst, 1);
+   dst[1] = 0;
+   dst[2] = 0;
+   dst[3] = 255;
 }
 
 void
@@ -58,6 +61,9 @@ util_format_rgtc1_unorm_unpack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride
             for(i = 0; i < bw; ++i) {
                uint8_t *dst = dst_row + (y + j)*dst_stride/sizeof(*dst_row) + (x + i)*comps;
 	       u_format_unsigned_fetch_texel_rgtc(0, src, i, j, dst, 1);
+	       dst[1] = 0;
+	       dst[2] = 0;
+	       dst[3] = 255;
 	    }
 	 }
 	 src += block_size;
@@ -82,7 +88,7 @@ util_format_rgtc1_unorm_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride, 
 	       tmp[j][i] = src_row[(y + j)*src_stride/sizeof(*src_row) + (x + i)*4];
             }
          }
-         u_format_unsigned_encode_rgtc_chan(dst, tmp, 4, 4);
+         u_format_unsigned_encode_rgtc_ubyte(dst, tmp, 4, 4);
          dst += bytes_per_block;
       }
       dst_row += dst_stride / sizeof(*dst_row);
@@ -129,7 +135,7 @@ util_format_rgtc1_unorm_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, c
 	       tmp[j][i] = float_to_ubyte(src_row[(y + j)*src_stride/sizeof(*src_row) + (x + i)*4]);
             }
          }
-         u_format_unsigned_encode_rgtc_chan(dst, tmp, 4, 4);
+         u_format_unsigned_encode_rgtc_ubyte(dst, tmp, 4, 4);
          dst += bytes_per_block;
       }
       dst_row += dst_stride / sizeof(*dst_row);
@@ -180,7 +186,7 @@ util_format_rgtc1_snorm_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, c
 	       tmp[j][i] = float_to_byte_tex(src_row[(y + j)*src_stride/sizeof(*src_row) + (x + i)*4]);
             }
          }
-         u_format_signed_encode_rgtc_chan(dst, tmp, 4, 4);
+         u_format_signed_encode_rgtc_ubyte(dst, tmp, 4, 4);
          dst += bytes_per_block;
       }
       dst_row += dst_stride / sizeof(*dst_row);
@@ -229,6 +235,8 @@ util_format_rgtc2_unorm_fetch_rgba_8unorm(uint8_t *dst, const uint8_t *src, unsi
 {
    u_format_unsigned_fetch_texel_rgtc(0, src, i, j, dst, 2);
    u_format_unsigned_fetch_texel_rgtc(0, src + 8, i, j, dst + 1, 2);
+   dst[2] = 0;
+   dst[3] = 255;
 }
 
 void
@@ -246,7 +254,8 @@ util_format_rgtc2_unorm_unpack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride
                uint8_t *dst = dst_row + (y + j)*dst_stride/sizeof(*dst_row) + (x + i)*comps;
 	       u_format_unsigned_fetch_texel_rgtc(0, src, i, j, dst, 2);
 	       u_format_unsigned_fetch_texel_rgtc(0, src + 8, i, j, dst + 1, 2);
-
+	       dst[2] = 0;
+	       dst[3] = 255;
 	    }
 	 }
 	 src += block_size;
@@ -272,8 +281,8 @@ util_format_rgtc2_unorm_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride, 
 	       tmp_g[j][i] = src_row[((y + j)*src_stride/sizeof(*src_row) + (x + i)*4) + 1];
             }
          }
-         u_format_unsigned_encode_rgtc_chan(dst, tmp_r, 4, 4);
-         u_format_unsigned_encode_rgtc_chan(dst + 8, tmp_g, 4, 4);
+         u_format_unsigned_encode_rgtc_ubyte(dst, tmp_r, 4, 4);
+         u_format_unsigned_encode_rgtc_ubyte(dst + 8, tmp_g, 4, 4);
          dst += bytes_per_block;
       }
       dst_row += dst_stride / sizeof(*dst_row);
@@ -297,8 +306,8 @@ util_format_rxtc2_unorm_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, c
                tmp_g[j][i] = float_to_ubyte(src_row[(y + j)*src_stride/sizeof(*src_row) + (x + i)*4 + chan2off]);
             }
          }
-         u_format_unsigned_encode_rgtc_chan(dst, tmp_r, 4, 4);
-         u_format_unsigned_encode_rgtc_chan(dst + 8, tmp_g, 4, 4);
+         u_format_unsigned_encode_rgtc_ubyte(dst, tmp_r, 4, 4);
+         u_format_unsigned_encode_rgtc_ubyte(dst + 8, tmp_g, 4, 4);
          dst += bytes_per_block;
       }
       dst_row += dst_stride / sizeof(*dst_row);
@@ -411,8 +420,8 @@ util_format_rxtc2_snorm_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, c
                tmp_g[j][i] = float_to_byte_tex(src_row[(y + j)*src_stride/sizeof(*src_row) + (x + i)*4 + chan2off]);
             }
          }
-         u_format_signed_encode_rgtc_chan(dst, tmp_r, 4, 4);
-         u_format_signed_encode_rgtc_chan(dst + 8, tmp_g, 4, 4);
+         u_format_signed_encode_rgtc_ubyte(dst, tmp_r, 4, 4);
+         u_format_signed_encode_rgtc_ubyte(dst + 8, tmp_g, 4, 4);
          dst += bytes_per_block;
       }
       dst_row += dst_stride / sizeof(*dst_row);

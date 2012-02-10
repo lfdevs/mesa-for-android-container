@@ -25,6 +25,8 @@
  *
  */
 
+#include "brw_shader.h"
+
 extern "C" {
 
 #include <sys/types.h>
@@ -42,45 +44,18 @@ extern "C" {
 #include "brw_eu.h"
 #include "brw_wm.h"
 }
-#include "../glsl/glsl_types.h"
-#include "../glsl/ir.h"
+#include "glsl/glsl_types.h"
+#include "glsl/ir.h"
 
 enum register_file {
-   ARF = BRW_ARCHITECTURE_REGISTER_FILE,
-   GRF = BRW_GENERAL_REGISTER_FILE,
-   MRF = BRW_MESSAGE_REGISTER_FILE,
-   IMM = BRW_IMMEDIATE_VALUE,
+   BAD_FILE,
+   ARF,
+   GRF,
+   MRF,
+   IMM,
    FIXED_HW_REG, /* a struct brw_reg */
-   UNIFORM, /* prog_data->params[hw_reg] */
-   BAD_FILE
+   UNIFORM, /* prog_data->params[reg] */
 };
-
-enum fs_opcodes {
-   FS_OPCODE_FB_WRITE = 256,
-   FS_OPCODE_RCP,
-   FS_OPCODE_RSQ,
-   FS_OPCODE_SQRT,
-   FS_OPCODE_EXP2,
-   FS_OPCODE_LOG2,
-   FS_OPCODE_POW,
-   FS_OPCODE_SIN,
-   FS_OPCODE_COS,
-   FS_OPCODE_DDX,
-   FS_OPCODE_DDY,
-   FS_OPCODE_PIXEL_X,
-   FS_OPCODE_PIXEL_Y,
-   FS_OPCODE_CINTERP,
-   FS_OPCODE_LINTERP,
-   FS_OPCODE_TEX,
-   FS_OPCODE_TXB,
-   FS_OPCODE_TXD,
-   FS_OPCODE_TXL,
-   FS_OPCODE_DISCARD,
-   FS_OPCODE_SPILL,
-   FS_OPCODE_UNSPILL,
-   FS_OPCODE_PULL_CONSTANT_LOAD,
-};
-
 
 class fs_reg {
 public:
@@ -99,7 +74,6 @@ public:
    void init()
    {
       memset(this, 0, sizeof(*this));
-      this->hw_reg = -1;
       this->smear = -1;
    }
 
@@ -146,8 +120,8 @@ public:
       this->type = fixed_hw_reg.type;
    }
 
-   fs_reg(enum register_file file, int hw_reg);
-   fs_reg(enum register_file file, int hw_reg, uint32_t type);
+   fs_reg(enum register_file file, int reg);
+   fs_reg(enum register_file file, int reg, uint32_t type);
    fs_reg(class fs_visitor *v, const struct glsl_type *type);
 
    bool equals(fs_reg *r)
@@ -155,7 +129,6 @@ public:
       return (file == r->file &&
 	      reg == r->reg &&
 	      reg_offset == r->reg_offset &&
-	      hw_reg == r->hw_reg &&
 	      type == r->type &&
 	      negate == r->negate &&
 	      abs == r->abs &&
@@ -167,12 +140,17 @@ public:
 
    /** Register file: ARF, GRF, MRF, IMM. */
    enum register_file file;
-   /** virtual register number.  0 = fixed hw reg */
+   /**
+    * Register number.  For ARF/MRF, it's the hardware register.  For
+    * GRF, it's a virtual register number until register allocation
+    */
    int reg;
-   /** Offset within the virtual register. */
+   /**
+    * For virtual registers, this is a hardware register offset from
+    * the start of the register block (for example, a constant index
+    * in an array access).
+    */
    int reg_offset;
-   /** HW register number.  Generally unset until register allocation. */
-   int hw_reg;
    /** Register type.  BRW_REGISTER_TYPE_* */
    int type;
    bool negate;
@@ -181,7 +159,7 @@ public:
    struct brw_reg fixed_hw_reg;
    int smear; /* -1, or a channel of the reg to smear to all channels. */
 
-   /** Value for file == BRW_IMMMEDIATE_FILE */
+   /** Value for file == IMM */
    union {
       int32_t i;
       uint32_t u;
@@ -224,13 +202,13 @@ public:
       init();
    }
 
-   fs_inst(int opcode)
+   fs_inst(enum opcode opcode)
    {
       init();
       this->opcode = opcode;
    }
 
-   fs_inst(int opcode, fs_reg dst)
+   fs_inst(enum opcode opcode, fs_reg dst)
    {
       init();
       this->opcode = opcode;
@@ -240,7 +218,7 @@ public:
 	 assert(dst.reg_offset >= 0);
    }
 
-   fs_inst(int opcode, fs_reg dst, fs_reg src0)
+   fs_inst(enum opcode opcode, fs_reg dst, fs_reg src0)
    {
       init();
       this->opcode = opcode;
@@ -253,7 +231,7 @@ public:
 	 assert(src[0].reg_offset >= 0);
    }
 
-   fs_inst(int opcode, fs_reg dst, fs_reg src0, fs_reg src1)
+   fs_inst(enum opcode opcode, fs_reg dst, fs_reg src0, fs_reg src1)
    {
       init();
       this->opcode = opcode;
@@ -269,7 +247,7 @@ public:
 	 assert(src[1].reg_offset >= 0);
    }
 
-   fs_inst(int opcode, fs_reg dst, fs_reg src0, fs_reg src1, fs_reg src2)
+   fs_inst(enum opcode opcode, fs_reg dst, fs_reg src0, fs_reg src1, fs_reg src2)
    {
       init();
       this->opcode = opcode;
@@ -310,25 +288,29 @@ public:
 
    bool is_tex()
    {
-      return (opcode == FS_OPCODE_TEX ||
+      return (opcode == SHADER_OPCODE_TEX ||
 	      opcode == FS_OPCODE_TXB ||
-	      opcode == FS_OPCODE_TXD ||
-	      opcode == FS_OPCODE_TXL);
+	      opcode == SHADER_OPCODE_TXD ||
+	      opcode == SHADER_OPCODE_TXF ||
+	      opcode == SHADER_OPCODE_TXL ||
+	      opcode == SHADER_OPCODE_TXS);
    }
 
    bool is_math()
    {
-      return (opcode == FS_OPCODE_RCP ||
-	      opcode == FS_OPCODE_RSQ ||
-	      opcode == FS_OPCODE_SQRT ||
-	      opcode == FS_OPCODE_EXP2 ||
-	      opcode == FS_OPCODE_LOG2 ||
-	      opcode == FS_OPCODE_SIN ||
-	      opcode == FS_OPCODE_COS ||
-	      opcode == FS_OPCODE_POW);
+      return (opcode == SHADER_OPCODE_RCP ||
+	      opcode == SHADER_OPCODE_RSQ ||
+	      opcode == SHADER_OPCODE_SQRT ||
+	      opcode == SHADER_OPCODE_EXP2 ||
+	      opcode == SHADER_OPCODE_LOG2 ||
+	      opcode == SHADER_OPCODE_SIN ||
+	      opcode == SHADER_OPCODE_COS ||
+	      opcode == SHADER_OPCODE_INT_QUOTIENT ||
+	      opcode == SHADER_OPCODE_INT_REMAINDER ||
+	      opcode == SHADER_OPCODE_POW);
    }
 
-   int opcode; /* BRW_OPCODE_* or FS_OPCODE_* */
+   enum opcode opcode; /* BRW_OPCODE_* or FS_OPCODE_* */
    fs_reg dst;
    fs_reg src[3];
    bool saturate;
@@ -365,7 +347,8 @@ public:
       this->c = c;
       this->p = &c->func;
       this->brw = p->brw;
-      this->fp = prog->FragmentProgram;
+      this->fp = (struct gl_fragment_program *)
+	 prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program;
       this->prog = prog;
       this->intel = &brw->intel;
       this->ctx = &intel->ctx;
@@ -393,16 +376,16 @@ public:
       else
 	 this->reg_null_cmp = reg_null_f;
 
-      this->frag_color = NULL;
-      this->frag_data = NULL;
       this->frag_depth = NULL;
+      memset(this->outputs, 0, sizeof(this->outputs));
       this->first_non_payload_grf = 0;
+      this->max_grf = intel->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
 
       this->current_annotation = NULL;
       this->base_ir = NULL;
 
       this->virtual_grf_sizes = NULL;
-      this->virtual_grf_next = 1;
+      this->virtual_grf_next = 0;
       this->virtual_grf_array_size = 0;
       this->virtual_grf_def = NULL;
       this->virtual_grf_use = NULL;
@@ -421,7 +404,7 @@ public:
 
    fs_reg *variable_storage(ir_variable *var);
    int virtual_grf_alloc(int size);
-   void import_uniforms(struct hash_table *src_variable_ht);
+   void import_uniforms(fs_visitor *v);
 
    void visit(ir_variable *ir);
    void visit(ir_assignment *ir);
@@ -445,27 +428,28 @@ public:
 
    fs_inst *emit(fs_inst inst);
 
-   fs_inst *emit(int opcode)
+   fs_inst *emit(enum opcode opcode)
    {
       return emit(fs_inst(opcode));
    }
 
-   fs_inst *emit(int opcode, fs_reg dst)
+   fs_inst *emit(enum opcode opcode, fs_reg dst)
    {
       return emit(fs_inst(opcode, dst));
    }
 
-   fs_inst *emit(int opcode, fs_reg dst, fs_reg src0)
+   fs_inst *emit(enum opcode opcode, fs_reg dst, fs_reg src0)
    {
       return emit(fs_inst(opcode, dst, src0));
    }
 
-   fs_inst *emit(int opcode, fs_reg dst, fs_reg src0, fs_reg src1)
+   fs_inst *emit(enum opcode opcode, fs_reg dst, fs_reg src0, fs_reg src1)
    {
       return emit(fs_inst(opcode, dst, src0, src1));
    }
 
-   fs_inst *emit(int opcode, fs_reg dst, fs_reg src0, fs_reg src1, fs_reg src2)
+   fs_inst *emit(enum opcode opcode, fs_reg dst,
+		 fs_reg src0, fs_reg src1, fs_reg src2)
    {
       return emit(fs_inst(opcode, dst, src0, src1, src2));
    }
@@ -485,9 +469,11 @@ public:
    void setup_pull_constants();
    void calculate_live_intervals();
    bool propagate_constants();
+   bool opt_algebraic();
    bool register_coalesce();
    bool compute_to_mrf();
    bool dead_code_eliminate();
+   bool remove_dead_constants();
    bool remove_duplicate_mrf_writes();
    bool virtual_grf_interferes(int a, int b);
    void schedule_instructions();
@@ -504,7 +490,23 @@ public:
    void generate_linterp(fs_inst *inst, struct brw_reg dst,
 			 struct brw_reg *src);
    void generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src);
-   void generate_math(fs_inst *inst, struct brw_reg dst, struct brw_reg *src);
+   void generate_math1_gen7(fs_inst *inst,
+			    struct brw_reg dst,
+			    struct brw_reg src);
+   void generate_math2_gen7(fs_inst *inst,
+			    struct brw_reg dst,
+			    struct brw_reg src0,
+			    struct brw_reg src1);
+   void generate_math1_gen6(fs_inst *inst,
+			    struct brw_reg dst,
+			    struct brw_reg src);
+   void generate_math2_gen6(fs_inst *inst,
+			    struct brw_reg dst,
+			    struct brw_reg src0,
+			    struct brw_reg src1);
+   void generate_math_gen4(fs_inst *inst,
+			   struct brw_reg dst,
+			   struct brw_reg src);
    void generate_discard(fs_inst *inst);
    void generate_ddx(fs_inst *inst, struct brw_reg dst, struct brw_reg src);
    void generate_ddy(fs_inst *inst, struct brw_reg dst, struct brw_reg src);
@@ -524,17 +526,23 @@ public:
 			      int sampler);
    fs_inst *emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
 			      int sampler);
-   fs_inst *emit_math(fs_opcodes op, fs_reg dst, fs_reg src0);
-   fs_inst *emit_math(fs_opcodes op, fs_reg dst, fs_reg src0, fs_reg src1);
+   fs_inst *emit_math(enum opcode op, fs_reg dst, fs_reg src0);
+   fs_inst *emit_math(enum opcode op, fs_reg dst, fs_reg src0, fs_reg src1);
    bool try_emit_saturate(ir_expression *ir);
    void emit_bool_to_cond_code(ir_rvalue *condition);
    void emit_if_gen6(ir_if *ir);
    void emit_unspill(fs_inst *inst, fs_reg reg, uint32_t spill_offset);
 
-   void emit_color_write(int index, int first_color_mrf, fs_reg color);
+   void emit_color_write(int target, int index, int first_color_mrf);
    void emit_fb_writes();
+   bool try_rewrite_rhs_to_dst(ir_assignment *ir,
+			       fs_reg dst,
+			       fs_reg src,
+			       fs_inst *pre_rhs_inst,
+			       fs_inst *last_rhs_inst);
    void emit_assignment_writes(fs_reg &l, fs_reg &r,
 			       const glsl_type *type, bool predicated);
+   void resolve_ud_negate(fs_reg *reg);
 
    struct brw_reg interp_reg(int location, int channel);
    int setup_uniform_values(int loc, const glsl_type *type);
@@ -565,9 +573,18 @@ public:
    int *virtual_grf_use;
    bool live_intervals_valid;
 
+   /* This is the map from UNIFORM hw_reg + reg_offset as generated by
+    * the visitor to the packed uniform number after
+    * remove_dead_constants() that represents the actual uploaded
+    * uniform index.
+    */
+   int *params_remap;
+
    struct hash_table *variable_ht;
-   ir_variable *frag_color, *frag_data, *frag_depth;
+   ir_variable *frag_depth;
+   fs_reg outputs[BRW_MAX_DRAW_BUFFERS];
    int first_non_payload_grf;
+   int max_grf;
    int urb_setup[FRAG_ATTRIB_MAX];
    bool kill_emitted;
 
@@ -579,18 +596,15 @@ public:
    bool failed;
    char *fail_msg;
 
-   /* On entry to a visit() method, this is the storage for the
-    * result.  On exit, the visit() called may have changed it, in
-    * which case the parent must use the new storage instead.
-    */
+   /* Result of last visit() method. */
    fs_reg result;
 
    fs_reg pixel_x;
    fs_reg pixel_y;
    fs_reg wpos_w;
    fs_reg pixel_w;
-   fs_reg delta_x;
-   fs_reg delta_y;
+   fs_reg delta_x[BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT];
+   fs_reg delta_y[BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT];
    fs_reg reg_null_cmp;
 
    int grf_used;
@@ -599,6 +613,6 @@ public:
    int force_sechalf_stack;
 };
 
-GLboolean brw_do_channel_expressions(struct exec_list *instructions);
-GLboolean brw_do_vector_splitting(struct exec_list *instructions);
+bool brw_do_channel_expressions(struct exec_list *instructions);
+bool brw_do_vector_splitting(struct exec_list *instructions);
 bool brw_fs_precompile(struct gl_context *ctx, struct gl_shader_program *prog);

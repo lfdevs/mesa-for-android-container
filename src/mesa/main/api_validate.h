@@ -29,15 +29,22 @@
 
 
 #include "glheader.h"
+#include "mfeatures.h"
 
 struct gl_buffer_object;
 struct gl_context;
+struct gl_transform_feedback_object;
 
 
 extern GLuint
 _mesa_max_buffer_index(struct gl_context *ctx, GLuint count, GLenum type,
                        const void *indices,
                        struct gl_buffer_object *elementBuf);
+
+
+extern GLboolean
+_mesa_valid_prim_mode(const struct gl_context *ctx, GLenum mode);
+
 
 extern GLboolean
 _mesa_validate_DrawArrays(struct gl_context *ctx,
@@ -65,5 +72,13 @@ _mesa_validate_DrawElementsInstanced(struct gl_context *ctx,
                                      const GLvoid *indices, GLsizei primcount,
                                      GLint basevertex);
 
+#if FEATURE_EXT_transform_feedback
+
+extern GLboolean
+_mesa_validate_DrawTransformFeedback(struct gl_context *ctx,
+                                     GLenum mode,
+                                     struct gl_transform_feedback_object *obj);
+
+#endif
 
 #endif

@@ -3,6 +3,9 @@
 
 
 Import('*')
+import filecmp
+import os
+import subprocess
 
 env = env.Clone()
 
@@ -37,7 +40,6 @@ main_sources = [
     'main/api_arrayelt.c',
     'main/api_exec.c',
     'main/api_loopback.c',
-    'main/api_noop.c',
     'main/api_validate.c',
     'main/accum.c',
     'main/arbprogram.c',
@@ -56,7 +58,6 @@ main_sources = [
     'main/cpuinfo.c',
     'main/debug.c',
     'main/depth.c',
-    'main/depthstencil.c',
     'main/dlist.c',
     'main/dlopen.c',
     'main/drawpix.c',
@@ -72,6 +73,8 @@ main_sources = [
     'main/ffvertex_prog.c',
     'main/fog.c',
     'main/formats.c',
+    'main/format_pack.c',
+    'main/format_unpack.c',
     'main/framebuffer.c',
     'main/get.c',
     'main/getstring.c',
@@ -104,6 +107,7 @@ main_sources = [
     'main/scissor.c',
     'main/shaderapi.c',
     'main/shaderobj.c',
+    'main/shader_query.cpp',
     'main/shared.c',
     'main/state.c',
     'main/stencil.c',
@@ -112,8 +116,8 @@ main_sources = [
     'main/texcompress_rgtc.c',
     'main/texcompress_s3tc.c',
     'main/texcompress_fxt1.c',
+    'main/texcompress_etc.c',
     'main/texenv.c',
-    'main/texfetch.c',
     'main/texformat.c',
     'main/texgen.c',
     'main/texgetimage.c',
@@ -122,9 +126,11 @@ main_sources = [
     'main/texpal.c',
     'main/texparam.c',
     'main/texstate.c',
+    'main/texstorage.c',
     'main/texstore.c',
     'main/texturebarrier.c',
     'main/transformfeedback.c',
+    'main/uniform_query.cpp',
     'main/uniforms.c',
     'main/varray.c',
     'main/version.c',
@@ -143,14 +149,9 @@ math_sources = [
     'math/m_xform.c',
 ]
 
-math_xform_sources = [
-    'math/m_xform.c'
-]
-
 swrast_sources = [
     'swrast/s_aaline.c',
     'swrast/s_aatriangle.c',
-    'swrast/s_accum.c',
     'swrast/s_alpha.c',
     'swrast/s_atifragshader.c',
     'swrast/s_bitmap.c',
@@ -168,12 +169,14 @@ swrast_sources = [
     'swrast/s_logic.c',
     'swrast/s_masking.c',
     'swrast/s_points.c',
-    'swrast/s_readpix.c',
+    'swrast/s_renderbuffer.c',
     'swrast/s_span.c',
     'swrast/s_stencil.c',
     'swrast/s_texcombine.c',
+    'swrast/s_texfetch.c',
     'swrast/s_texfilter.c',
     'swrast/s_texrender.c',
+    'swrast/s_texture.c',
     'swrast/s_triangle.c',
     'swrast/s_zoom.c',
 ]
@@ -210,6 +213,7 @@ vbo_sources = [
     'vbo/vbo_exec_array.c',
     'vbo/vbo_exec_draw.c',
     'vbo/vbo_exec_eval.c',
+    'vbo/vbo_noop.c',
     'vbo/vbo_rebase.c',
     'vbo/vbo_split.c',
     'vbo/vbo_split_copy.c',
@@ -236,7 +240,6 @@ statetracker_sources = [
     'state_tracker/st_atom_stipple.c',
     'state_tracker/st_atom_texture.c',
     'state_tracker/st_atom_viewport.c',
-    'state_tracker/st_cb_accum.c',
     'state_tracker/st_cb_bitmap.c',
     'state_tracker/st_cb_blit.c',
     'state_tracker/st_cb_bufferobjects.c',
@@ -264,6 +267,7 @@ statetracker_sources = [
     'state_tracker/st_draw_feedback.c',
     'state_tracker/st_extensions.c',
     'state_tracker/st_format.c',
+    'state_tracker/st_glsl_to_tgsi.cpp',
     'state_tracker/st_gen_mipmap.c',
     'state_tracker/st_manager.c',
     'state_tracker/st_mesa_to_tgsi.c',
@@ -292,14 +296,15 @@ program_sources = [
     'program/prog_instruction.c',
     'program/prog_noise.c',
     'program/prog_optimize.c',
+    'program/prog_opt_constant_fold.c',
     'program/prog_parameter.c',
     'program/prog_parameter_layout.c',
     'program/prog_print.c',
     'program/prog_statevars.c',
-    'program/prog_uniform.c',
     'program/programopt.c',
     'program/sampler.cpp',
     'program/symbol_table.c',
+    'program/string_to_uint_map.cpp',
     program_lex,
     program_parse[0],
 ]
@@ -312,7 +317,6 @@ common_driver_sources =	[
 mesa_sources = (
     main_sources +
     math_sources +
-    math_xform_sources +
     program_sources +
     vbo_sources +
     tnl_sources +
@@ -346,28 +350,28 @@ if env['gles']:
     GLAPI = '#src/mapi/glapi/'
     gles_headers = []
     gles_headers += env.CodeGenerate(
-        target = 'es1api/main/dispatch.h',
+        target = 'main/api_exec_es1_dispatch.h',
         script = GLAPI + 'gen/gl_table.py',
-        source = GLAPI + 'gen-es/es1_API.xml',
-        command = python_cmd + ' $SCRIPT -c -m remap_table -f $SOURCE > $TARGET',
+        source = GLAPI + 'gen/gl_and_es_API.xml',
+        command = python_cmd + ' $SCRIPT -c es1 -m remap_table -f $SOURCE > $TARGET',
     )
     gles_headers += env.CodeGenerate(
-        target = 'es1api/main/remap_helper.h',
+        target = 'main/api_exec_es1_remap_helper.h',
         script = GLAPI + 'gen/remap_helper.py',
-        source = GLAPI + 'gen-es/es1_API.xml',
-        command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET',
+        source = GLAPI + 'gen/gl_and_es_API.xml',
+        command = python_cmd + ' $SCRIPT -c es1 -f $SOURCE > $TARGET',
     )
     gles_headers += env.CodeGenerate(
-        target = 'es2api/main/dispatch.h',
+        target = 'main/api_exec_es2_dispatch.h',
         script = GLAPI + 'gen/gl_table.py',
-        source = GLAPI + 'gen-es/es2_API.xml',
-        command = python_cmd + ' $SCRIPT -c -m remap_table -f $SOURCE > $TARGET',
+        source = GLAPI + 'gen/gl_and_es_API.xml',
+        command = python_cmd + ' $SCRIPT -c es2 -m remap_table -f $SOURCE > $TARGET',
     )
     gles_headers += env.CodeGenerate(
-        target = 'es2api/main/remap_helper.h',
+        target = 'main/api_exec_es2_remap_helper.h',
         script = GLAPI + 'gen/remap_helper.py',
-        source = GLAPI + 'gen-es/es2_API.xml',
-        command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET',
+        source = GLAPI + 'gen/gl_and_es_API.xml',
+        command = python_cmd + ' $SCRIPT -c es2 -f $SOURCE > $TARGET',
     )
 
     env.Depends(gles_sources, gles_headers)
@@ -454,13 +458,41 @@ if env['gcc'] and env['platform'] != 'windows':
         env.Append(CPPPATH = [matypes[0].dir])
 
 
-# Create the git_sha1.h file if it doesn't exist already
-try:
-    f = open('main/git_sha1.h', 'r')
+
+
+def write_git_sha1_h_file(filename):
+    """Mesa looks for a git_sha1.h file at compile time in order to display
+    the current git hash id in the GL_VERSION string.  This function tries
+    to retrieve the git hashid and write the header file.  An empty file
+    will be created if anything goes wrong."""
+
+    args = [ 'git', 'log', '-n', '1', '--oneline' ]
+    try:
+        (commit, foo) = subprocess.Popen(args, stdout=subprocess.PIPE).communicate()
+    except:
+        # git log command didn't work
+        if not os.path.exists(filename):
+            # create an empty file if none already exists
+            f = open(filename, "w")
+            f.close()
+        return
+
+    commit = '#define MESA_GIT_SHA1 "git-%s"\n' % commit[0:7]
+    tempfile = "git_sha1.h.tmp"
+    f = open(tempfile, "w")
+    f.write(commit)
     f.close()
-except IOError:
-    f = open('main/git_sha1.h', 'w')
-    f.close()
+    if not os.path.exists(filename) or not filecmp.cmp(tempfile, filename):
+        # The filename does not exist or it's different from the new file,
+        # so replace old file with new.
+        if os.path.exists(filename):
+            os.remove(filename)
+        os.rename(tempfile, filename)
+    return
+
+
+# Create the git_sha1.h header file
+write_git_sha1_h_file("main/git_sha1.h")
 # and update CPPPATH so the git_sha1.h header can be found
 env.Append(CPPPATH = ["#" + env['build_dir'] + "/mesa/main"])
 

@@ -63,15 +63,18 @@ static const struct brw_tracked_state *gen4_atoms[] =
    &brw_cc_vp,
    &brw_cc_unit,
 
-   &brw_vs_constants, /* Before vs_surfaces and constant_buffer */
-   &brw_wm_constants, /* Before wm_surfaces and constant_buffer */
+   /* Surface state setup.  Must come before the VS/WM unit.  The binding
+    * table upload must be last.
+    */
+   &brw_vs_pull_constants,
+   &brw_wm_pull_constants,
+   &brw_renderbuffer_surfaces,
+   &brw_texture_surfaces,
+   &brw_binding_table,
 
-   &brw_vs_surfaces,		/* must do before unit */
-   &brw_wm_constant_surface,	/* must do before wm surfaces/bind bo */
-   &brw_wm_surfaces,		/* must do before samplers and unit */
-   &brw_wm_binding_table,
-   &brw_wm_samplers,
+   &brw_samplers,
 
+   /* These set up state for brw_psp_urb_cbs */
    &brw_wm_unit,
    &brw_sf_vp,
    &brw_sf_unit,
@@ -81,7 +84,7 @@ static const struct brw_tracked_state *gen4_atoms[] =
 
    /* Command packets:
     */
-   &brw_invarient_state,
+   &brw_invariant_state,
    &brw_state_base_address,
 
    &brw_binding_table_pointers,
@@ -118,7 +121,7 @@ static const struct brw_tracked_state *gen6_atoms[] =
    &gen6_sf_vp,
 
    /* Command packets: */
-   &brw_invarient_state,
+   &brw_invariant_state,
 
    /* must do before binding table pointers, cc state ptrs */
    &brw_state_base_address,
@@ -132,17 +135,20 @@ static const struct brw_tracked_state *gen6_atoms[] =
    &gen6_depth_stencil_state,	/* must do before cc unit */
    &gen6_cc_state_pointers,
 
-   &brw_vs_constants, /* Before vs_surfaces and constant_buffer */
-   &brw_wm_constants, /* Before wm_surfaces and constant_buffer */
-   &gen6_vs_constants, /* Before vs_state */
-   &gen6_wm_constants, /* Before wm_state */
+   &gen6_vs_push_constants, /* Before vs_state */
+   &gen6_wm_push_constants, /* Before wm_state */
 
-   &brw_vs_surfaces,		/* must do before unit */
-   &brw_wm_constant_surface,	/* must do before wm surfaces/bind bo */
-   &brw_wm_surfaces,		/* must do before samplers and unit */
-   &brw_wm_binding_table,
+   /* Surface state setup.  Must come before the VS/WM unit.  The binding
+    * table upload must be last.
+    */
+   &brw_vs_pull_constants,
+   &brw_wm_pull_constants,
+   &gen6_renderbuffer_surfaces,
+   &brw_texture_surfaces,
+   &gen6_sol_surface,
+   &brw_binding_table,
 
-   &brw_wm_samplers,
+   &brw_samplers,
    &gen6_sampler_state,
 
    &gen6_vs_state,
@@ -165,6 +171,7 @@ static const struct brw_tracked_state *gen6_atoms[] =
 
    &brw_drawing_rect,
 
+   &gen6_sol_indices,
    &brw_indices,
    &brw_index_buffer,
    &brw_vertices,
@@ -180,7 +187,8 @@ const struct brw_tracked_state *gen7_atoms[] =
    &brw_wm_prog,
 
    /* Command packets: */
-   &brw_invarient_state,
+   &brw_invariant_state,
+   &gen7_push_constant_alloc,
 
    /* must do before binding table pointers, cc state ptrs */
    &brw_state_base_address,
@@ -197,20 +205,23 @@ const struct brw_tracked_state *gen7_atoms[] =
    &gen7_cc_state_pointer,
    &gen7_depth_stencil_state_pointer,
 
-   &brw_vs_constants, /* Before vs_surfaces and constant_buffer */
-   &brw_wm_constants, /* Before wm_surfaces and constant_buffer */
-   &gen6_vs_constants, /* Before vs_state */
-   &gen7_wm_constants, /* Before wm_surfaces and constant_buffer */
+   &gen6_vs_push_constants, /* Before vs_state */
+   &gen6_wm_push_constants, /* Before wm_surfaces and constant_buffer */
 
-   &brw_vs_surfaces,		/* must do before unit */
-   &gen7_wm_constant_surface,	/* must do before wm surfaces/bind bo */
-   &gen7_wm_surfaces,		/* must do before samplers and unit */
-   &brw_wm_binding_table,
+   /* Surface state setup.  Must come before the VS/WM unit.  The binding
+    * table upload must be last.
+    */
+   &brw_vs_pull_constants,
+   &brw_wm_pull_constants,
+   &gen6_renderbuffer_surfaces,
+   &brw_texture_surfaces,
+   &brw_binding_table,
 
    &gen7_samplers,
 
    &gen7_disable_stages,
    &gen7_vs_state,
+   &gen7_sol_state,
    &gen7_clip_state,
    &gen7_sbe_state,
    &gen7_sf_state,
@@ -253,19 +264,16 @@ void brw_init_state( struct brw_context *brw )
       num_atoms = ARRAY_SIZE(gen4_atoms);
    }
 
+   brw->atoms = atoms;
+   brw->num_atoms = num_atoms;
+
    while (num_atoms--) {
       assert((*atoms)->dirty.mesa |
 	     (*atoms)->dirty.brw |
 	     (*atoms)->dirty.cache);
-
-      if ((*atoms)->prepare)
-	 brw->prepare_atoms[brw->num_prepare_atoms++] = **atoms;
-      if ((*atoms)->emit)
-	 brw->emit_atoms[brw->num_emit_atoms++] = **atoms;
+      assert((*atoms)->emit);
       atoms++;
    }
-   assert(brw->num_emit_atoms <= ARRAY_SIZE(brw->emit_atoms));
-   assert(brw->num_prepare_atoms <= ARRAY_SIZE(brw->prepare_atoms));
 }
 
 
@@ -301,19 +309,6 @@ static void xor_states( struct brw_state_flags *result,
    result->mesa = a->mesa ^ b->mesa;
    result->brw = a->brw ^ b->brw;
    result->cache = a->cache ^ b->cache;
-}
-
-void
-brw_clear_validated_bos(struct brw_context *brw)
-{
-   int i;
-
-   /* Clear the last round of validated bos */
-   for (i = 0; i < brw->state.validated_bo_count; i++) {
-      drm_intel_bo_unreference(brw->state.validated_bos[i]);
-      brw->state.validated_bos[i] = NULL;
-   }
-   brw->state.validated_bo_count = 0;
 }
 
 struct dirty_bit_map {
@@ -367,19 +362,17 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_WM_INPUT_DIMENSIONS),
    DEFINE_BIT(BRW_NEW_PROGRAM_CACHE),
    DEFINE_BIT(BRW_NEW_PSP),
-   DEFINE_BIT(BRW_NEW_WM_SURFACES),
+   DEFINE_BIT(BRW_NEW_SURFACES),
    DEFINE_BIT(BRW_NEW_INDICES),
    DEFINE_BIT(BRW_NEW_INDEX_BUFFER),
    DEFINE_BIT(BRW_NEW_VERTICES),
    DEFINE_BIT(BRW_NEW_BATCH),
-   DEFINE_BIT(BRW_NEW_NR_WM_SURFACES),
-   DEFINE_BIT(BRW_NEW_NR_VS_SURFACES),
    DEFINE_BIT(BRW_NEW_VS_CONSTBUF),
-   DEFINE_BIT(BRW_NEW_WM_CONSTBUF),
    DEFINE_BIT(BRW_NEW_VS_BINDING_TABLE),
    DEFINE_BIT(BRW_NEW_GS_BINDING_TABLE),
    DEFINE_BIT(BRW_NEW_PS_BINDING_TABLE),
    DEFINE_BIT(BRW_NEW_STATE_BASE_ADDRESS),
+   DEFINE_BIT(BRW_NEW_HIZ),
    {0, 0, 0}
 };
 
@@ -435,21 +428,16 @@ brw_print_dirty_count(struct dirty_bit_map *bit_map, int32_t bits)
 /***********************************************************************
  * Emit all state:
  */
-void brw_validate_state( struct brw_context *brw )
+void brw_upload_state(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->intel.ctx;
    struct intel_context *intel = &brw->intel;
    struct brw_state_flags *state = &brw->state.dirty;
-   const struct brw_tracked_state *atoms = brw->prepare_atoms;
-   int num_atoms = brw->num_prepare_atoms;
-   GLuint i;
-
-   brw_clear_validated_bos(brw);
+   int i;
+   static int dirty_count = 0;
 
    state->mesa |= brw->intel.NewGLState;
    brw->intel.NewGLState = 0;
-
-   brw_add_validated_bo(brw, intel->batch.bo);
 
    if (brw->emit_state_always) {
       state->mesa |= ~0;
@@ -470,46 +458,9 @@ void brw_validate_state( struct brw_context *brw )
    if ((state->mesa | state->cache | state->brw) == 0)
       return;
 
-   brw->intel.Fallback = GL_FALSE; /* boolean, not bitfield */
-
-   /* do prepare stage for all atoms */
-   for (i = 0; i < num_atoms; i++) {
-      const struct brw_tracked_state *atom = &atoms[i];
-
-      if (check_state(state, &atom->dirty)) {
-	 atom->prepare(brw);
-
-	 if (brw->intel.Fallback)
-	    break;
-      }
-   }
+   brw->intel.Fallback = false; /* boolean, not bitfield */
 
    intel_check_front_buffer_rendering(intel);
-
-   /* Make sure that the textures which are referenced by the current
-    * brw fragment program are actually present/valid.
-    * If this fails, we can experience GPU lock-ups.
-    */
-   {
-      const struct brw_fragment_program *fp;
-      fp = brw_fragment_program_const(brw->fragment_program);
-      if (fp) {
-         assert((fp->tex_units_used & ctx->Texture._EnabledUnits)
-                == fp->tex_units_used);
-      }
-   }
-}
-
-
-void brw_upload_state(struct brw_context *brw)
-{
-   struct brw_state_flags *state = &brw->state.dirty;
-   const struct brw_tracked_state *atoms = brw->emit_atoms;
-   int num_atoms = brw->num_emit_atoms;
-   int i;
-   static int dirty_count = 0;
-
-   brw_clear_validated_bos(brw);
 
    if (unlikely(INTEL_DEBUG)) {
       /* Debug version which enforces various sanity checks on the
@@ -520,8 +471,8 @@ void brw_upload_state(struct brw_context *brw)
       memset(&examined, 0, sizeof(examined));
       prev = *state;
 
-      for (i = 0; i < num_atoms; i++) {
-	 const struct brw_tracked_state *atom = &atoms[i];
+      for (i = 0; i < brw->num_atoms; i++) {
+	 const struct brw_tracked_state *atom = brw->atoms[i];
 	 struct brw_state_flags generated;
 
 	 if (brw->intel.Fallback)
@@ -543,8 +494,8 @@ void brw_upload_state(struct brw_context *brw)
       }
    }
    else {
-      for (i = 0; i < num_atoms; i++) {
-	 const struct brw_tracked_state *atom = &atoms[i];
+      for (i = 0; i < brw->num_atoms; i++) {
+	 const struct brw_tracked_state *atom = brw->atoms[i];
 
 	 if (brw->intel.Fallback)
 	    break;

@@ -33,6 +33,7 @@
 #include "tnl/t_pipeline.h"
 #include "intel_span.h"
 #include "intel_tris.h"
+#include "../glsl/ralloc.h"
 
 /***************************************
  * Mesa's Driver Functions
@@ -47,17 +48,17 @@ i830InitDriverFunctions(struct dd_function_table *functions)
 
 extern const struct tnl_pipeline_stage *intel_pipeline[];
 
-GLboolean
+bool
 i830CreateContext(const struct gl_config * mesaVis,
                   __DRIcontext * driContextPriv,
                   void *sharedContextPrivate)
 {
    struct dd_function_table functions;
-   struct i830_context *i830 = CALLOC_STRUCT(i830_context);
+   struct i830_context *i830 = rzalloc(NULL, struct i830_context);
    struct intel_context *intel = &i830->intel;
    struct gl_context *ctx = &intel->ctx;
    if (!i830)
-      return GL_FALSE;
+      return false;
 
    i830InitVtbl(i830);
    i830InitDriverFunctions(&functions);
@@ -65,8 +66,10 @@ i830CreateContext(const struct gl_config * mesaVis,
    if (!intelInitContext(intel, __DRI_API_OPENGL, mesaVis, driContextPriv,
                          sharedContextPrivate, &functions)) {
       FREE(i830);
-      return GL_FALSE;
+      return false;
    }
+
+   intel_init_texture_formats(ctx);
 
    _math_matrix_ctr(&intel->ViewportMatrix);
 
@@ -108,5 +111,5 @@ i830CreateContext(const struct gl_config * mesaVis,
    _tnl_allow_vertex_fog(ctx, 1);
    _tnl_allow_pixel_fog(ctx, 0);
 
-   return GL_TRUE;
+   return true;
 }

@@ -20,9 +20,9 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include <util/u_surface.h>
-#include <util/u_blitter.h>
-#include <util/u_format.h>
+#include "util/u_surface.h"
+#include "util/u_blitter.h"
+#include "util/u_format.h"
 #include "r600_pipe.h"
 
 enum r600_blitter_op /* bitmask */
@@ -45,7 +45,6 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 {
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
 
-	rctx->blit = true;
 	r600_context_queries_suspend(&rctx->ctx);
 
 	util_blitter_save_blend(rctx->blitter, rctx->states[R600_PIPE_STATE_BLEND]);
@@ -60,12 +59,11 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 	if (rctx->states[R600_PIPE_STATE_VIEWPORT]) {
 		util_blitter_save_viewport(rctx->blitter, &rctx->viewport);
 	}
-	if (rctx->states[R600_PIPE_STATE_CLIP]) {
-		util_blitter_save_clip(rctx->blitter, &rctx->clip);
-	}
 	util_blitter_save_vertex_buffers(rctx->blitter,
 					 rctx->vbuf_mgr->nr_vertex_buffers,
 					 rctx->vbuf_mgr->vertex_buffer);
+	util_blitter_save_so_targets(rctx->blitter, rctx->ctx.num_so_targets,
+				     (struct pipe_stream_output_target**)rctx->ctx.so_targets);
 
 	if (op & R600_SAVE_FRAMEBUFFER)
 		util_blitter_save_framebuffer(rctx->blitter, &rctx->framebuffer);
@@ -97,43 +95,65 @@ static void r600_blitter_end(struct pipe_context *ctx)
 					       rctx->saved_render_cond_mode);
 		rctx->saved_render_cond = NULL;
 	}
-	r600_context_queries_resume(&rctx->ctx, FALSE);
-	rctx->blit = false;
+	r600_context_queries_resume(&rctx->ctx);
+}
+
+static unsigned u_num_layers(struct pipe_resource *r, unsigned level)
+{
+	switch (r->target) {
+	case PIPE_TEXTURE_CUBE:
+		return 6;
+	case PIPE_TEXTURE_3D:
+		return u_minify(r->depth0, level);
+	case PIPE_TEXTURE_1D_ARRAY:
+		return r->array_size;
+	case PIPE_TEXTURE_2D_ARRAY:
+		return r->array_size;
+	default:
+		return 1;
+	}
 }
 
 void r600_blit_uncompress_depth(struct pipe_context *ctx, struct r600_resource_texture *texture)
 {
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
-	struct pipe_surface *zsurf, *cbsurf, surf_tmpl;
-	int level = 0;
+	unsigned layer, level;
 	float depth = 1.0f;
 
 	if (!texture->dirty_db)
 		return;
 
-	surf_tmpl.format = texture->resource.b.b.b.format;
-	surf_tmpl.u.tex.level = level;
-	surf_tmpl.u.tex.first_layer = 0;
-	surf_tmpl.u.tex.last_layer = 0;
-	surf_tmpl.usage = PIPE_BIND_DEPTH_STENCIL;
-
-	zsurf = ctx->create_surface(ctx, &texture->resource.b.b.b, &surf_tmpl);
-
-	surf_tmpl.format = ((struct pipe_resource*)texture->flushed_depth_texture)->format;
-	surf_tmpl.usage = PIPE_BIND_RENDER_TARGET;
-	cbsurf = ctx->create_surface(ctx,
-			(struct pipe_resource*)texture->flushed_depth_texture, &surf_tmpl);
-
 	if (rctx->family == CHIP_RV610 || rctx->family == CHIP_RV630 ||
 	    rctx->family == CHIP_RV620 || rctx->family == CHIP_RV635)
 		depth = 0.0f;
 
-	r600_blitter_begin(ctx, R600_DECOMPRESS);
-	util_blitter_custom_depth_stencil(rctx->blitter, zsurf, cbsurf, rctx->custom_dsa_flush, depth);
-	r600_blitter_end(ctx);
+	for (level = 0; level <= texture->resource.b.b.b.last_level; level++) {
+		unsigned num_layers = u_num_layers(&texture->resource.b.b.b, level);
 
-	pipe_surface_reference(&zsurf, NULL);
-	pipe_surface_reference(&cbsurf, NULL);
+		for (layer = 0; layer < num_layers; layer++) {
+			struct pipe_surface *zsurf, *cbsurf, surf_tmpl;
+
+			surf_tmpl.format = texture->real_format;
+			surf_tmpl.u.tex.level = level;
+			surf_tmpl.u.tex.first_layer = layer;
+			surf_tmpl.u.tex.last_layer = layer;
+			surf_tmpl.usage = PIPE_BIND_DEPTH_STENCIL;
+
+			zsurf = ctx->create_surface(ctx, &texture->resource.b.b.b, &surf_tmpl);
+
+			surf_tmpl.format = texture->flushed_depth_texture->real_format;
+			surf_tmpl.usage = PIPE_BIND_RENDER_TARGET;
+			cbsurf = ctx->create_surface(ctx,
+					(struct pipe_resource*)texture->flushed_depth_texture, &surf_tmpl);
+
+			r600_blitter_begin(ctx, R600_DECOMPRESS);
+			util_blitter_custom_depth_stencil(rctx->blitter, zsurf, cbsurf, rctx->custom_dsa_flush, depth);
+			r600_blitter_end(ctx);
+
+			pipe_surface_reference(&zsurf, NULL);
+			pipe_surface_reference(&cbsurf, NULL);
+		}
+	}
 
 	texture->dirty_db = FALSE;
 }
@@ -177,28 +197,29 @@ void r600_flush_depth_textures(struct r600_pipe_context *rctx)
 }
 
 static void r600_clear(struct pipe_context *ctx, unsigned buffers,
-			const float *rgba, double depth, unsigned stencil)
+		       const union pipe_color_union *color,
+		       double depth, unsigned stencil)
 {
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
 	struct pipe_framebuffer_state *fb = &rctx->framebuffer;
-
+	
 	r600_blitter_begin(ctx, R600_CLEAR);
 	util_blitter_clear(rctx->blitter, fb->width, fb->height,
-				fb->nr_cbufs, buffers, rgba, depth,
-				stencil);
+			   fb->nr_cbufs, buffers, fb->nr_cbufs ? fb->cbufs[0]->format : PIPE_FORMAT_NONE,
+			   color, depth, stencil);
 	r600_blitter_end(ctx);
 }
 
 static void r600_clear_render_target(struct pipe_context *ctx,
 				     struct pipe_surface *dst,
-				     const float *rgba,
+				     const union pipe_color_union *color,
 				     unsigned dstx, unsigned dsty,
 				     unsigned width, unsigned height)
 {
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
 
 	r600_blitter_begin(ctx, R600_CLEAR_SURFACE);
-	util_blitter_clear_render_target(rctx->blitter, dst, rgba,
+	util_blitter_clear_render_target(rctx->blitter, dst, color,
 					 dstx, dsty, width, height);
 	r600_blitter_end(ctx);
 }
@@ -233,8 +254,8 @@ static void r600_hw_copy_region(struct pipe_context *ctx,
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
 
 	r600_blitter_begin(ctx, R600_COPY);
-	util_blitter_copy_region(rctx->blitter, dst, dst_level, dstx, dsty, dstz,
-				 src, src_level, src_box, TRUE);
+	util_blitter_copy_texture(rctx->blitter, dst, dst_level, dstx, dsty, dstz,
+				  src, src_level, src_box, TRUE);
 	r600_blitter_end(ctx);
 }
 
@@ -249,7 +270,7 @@ static void r600_compressed_to_blittable(struct pipe_resource *tex,
 				   struct texture_orig_info *orig)
 {
 	struct r600_resource_texture *rtex = (struct r600_resource_texture*)tex;
-	unsigned pixsize = util_format_get_blocksize(tex->format);
+	unsigned pixsize = util_format_get_blocksize(rtex->real_format);
 	int new_format;
 	int new_height, new_width;
 
@@ -258,27 +279,21 @@ static void r600_compressed_to_blittable(struct pipe_resource *tex,
 	orig->height0 = tex->height0;
 
 	if (pixsize == 8)
-		new_format = PIPE_FORMAT_R16G16B16A16_UNORM; /* 64-bit block */
+		new_format = PIPE_FORMAT_R16G16B16A16_UINT; /* 64-bit block */
 	else
-		new_format = PIPE_FORMAT_R32G32B32A32_UNORM; /* 128-bit block */
+		new_format = PIPE_FORMAT_R32G32B32A32_UINT; /* 128-bit block */
 
 	new_width = util_format_get_nblocksx(tex->format, orig->width0);
 	new_height = util_format_get_nblocksy(tex->format, orig->height0);
 
-	rtex->force_int_type = true;
 	tex->width0 = new_width;
 	tex->height0 = new_height;
 	tex->format = new_format;
-
 }
 
 static void r600_reset_blittable_to_compressed(struct pipe_resource *tex,
-					 unsigned level,
-					 struct texture_orig_info *orig)
+					       struct texture_orig_info *orig)
 {
-	struct r600_resource_texture *rtex = (struct r600_resource_texture*)tex;
-	rtex->force_int_type = false;
-
 	tex->format = orig->format;
 	tex->width0 = orig->width0;
 	tex->height0 = orig->height0;
@@ -297,6 +312,8 @@ static void r600_resource_copy_region(struct pipe_context *ctx,
 	struct pipe_box sbox;
 	const struct pipe_box *psbox;
 	boolean restore_orig[2];
+
+	memset(orig_info, 0, sizeof(orig_info));
 
 	/* Fallback for buffers. */
 	if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
@@ -335,10 +352,10 @@ static void r600_resource_copy_region(struct pipe_context *ctx,
 			    src, src_level, psbox);
 
 	if (restore_orig[0])
-		r600_reset_blittable_to_compressed(src, src_level, &orig_info[0]);
+		r600_reset_blittable_to_compressed(src, &orig_info[0]);
 
 	if (restore_orig[1])
-		r600_reset_blittable_to_compressed(dst, dst_level, &orig_info[1]);
+		r600_reset_blittable_to_compressed(dst, &orig_info[1]);
 }
 
 void r600_init_blit_functions(struct r600_pipe_context *rctx)

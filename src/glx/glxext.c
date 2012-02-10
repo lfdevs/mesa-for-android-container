@@ -133,12 +133,20 @@ __glXWireToEvent(Display *dpy, XEvent *event, xEvent *wire)
    case GLX_BufferSwapComplete:
    {
       GLXBufferSwapComplete *aevent = (GLXBufferSwapComplete *)event;
-      xGLXBufferSwapComplete *awire = (xGLXBufferSwapComplete *)wire;
+      xGLXBufferSwapComplete2 *awire = (xGLXBufferSwapComplete2 *)wire;
+      struct glx_drawable *glxDraw = GetGLXDrawable(dpy, awire->drawable);
       aevent->event_type = awire->event_type;
       aevent->drawable = awire->drawable;
       aevent->ust = ((CARD64)awire->ust_hi << 32) | awire->ust_lo;
       aevent->msc = ((CARD64)awire->msc_hi << 32) | awire->msc_lo;
-      aevent->sbc = ((CARD64)awire->sbc_hi << 32) | awire->sbc_lo;
+
+      if (!glxDraw)
+	 return False;
+
+      if (awire->sbc < glxDraw->lastEventSbc)
+	 glxDraw->eventSbcWrap += 0x100000000;
+      glxDraw->lastEventSbc = awire->sbc;
+      aevent->sbc = awire->sbc + glxDraw->eventSbcWrap;
       return True;
    }
    default:
@@ -226,6 +234,8 @@ glx_display_free(struct glx_display *priv)
       Xfree((char *) priv->serverGLXvendor);
    if (priv->serverGLXversion)
       Xfree((char *) priv->serverGLXversion);
+
+   __glxHashDestroy(priv->glXDrawHash);
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
    __glxHashDestroy(priv->drawHash);
@@ -826,9 +836,12 @@ __glXInitialize(Display * dpy)
    dpyPriv->serverGLXvendor = 0x0;
    dpyPriv->serverGLXversion = 0x0;
 
-   /* See if the versions are compatible */
+   /* See if the versions are compatible.  This GLX implementation does not
+    * work with servers that only support GLX 1.0.
+    */
    if (!QueryVersion(dpy, dpyPriv->majorOpcode,
-		     &dpyPriv->majorVersion, &dpyPriv->minorVersion)) {
+		     &dpyPriv->majorVersion, &dpyPriv->minorVersion)
+       || (dpyPriv->majorVersion == 1 && dpyPriv->minorVersion < 1)) {
       Xfree(dpyPriv);
       _XUnlockMutex(_Xglobal_lock);
       return NULL;
@@ -841,6 +854,8 @@ __glXInitialize(Display * dpy)
 
    XESetCloseDisplay(dpy, dpyPriv->codes->extension, __glXCloseDisplay);
    XESetErrorString (dpy, dpyPriv->codes->extension,__glXErrorString);
+
+   dpyPriv->glXDrawHash = __glxHashCreate();
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
    glx_direct = (getenv("LIBGL_ALWAYS_INDIRECT") == NULL);
@@ -872,8 +887,11 @@ __glXInitialize(Display * dpy)
       return NULL;
    }
 
-   if (dpyPriv->majorVersion == 1 && dpyPriv->minorVersion >= 1)
-      __glXClientInfo(dpy, dpyPriv->majorOpcode);
+#ifdef USE_XCB
+   __glX_send_client_info(dpyPriv);
+#else
+   __glXClientInfo(dpy, dpyPriv->majorOpcode);
+#endif
 
    /* Grab the lock again and add the dispay private, unless somebody
     * beat us to initializing on this display in the meantime. */

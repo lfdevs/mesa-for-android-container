@@ -54,6 +54,7 @@ union tgsi_any_token {
    struct tgsi_instruction_predicate insn_predicate;
    struct tgsi_instruction_label insn_label;
    struct tgsi_instruction_texture insn_texture;
+   struct tgsi_texture_offset insn_texture_offset;
    struct tgsi_src_register src;
    struct tgsi_dimension dim;
    struct tgsi_dst_register dst;
@@ -121,6 +122,7 @@ struct ureg_program
    struct {
       unsigned semantic_name;
       unsigned semantic_index;
+      unsigned usage_mask; /* = TGSI_WRITEMASK_* */
    } output[UREG_MAX_OUTPUT];
    unsigned nr_outputs;
 
@@ -160,6 +162,7 @@ struct ureg_program
    unsigned char property_fs_coord_origin; /* = TGSI_FS_COORD_ORIGIN_* */
    unsigned char property_fs_coord_pixel_center; /* = TGSI_FS_COORD_PIXEL_CENTER_* */
    unsigned char property_fs_color0_writes_all_cbufs; /* = TGSI_FS_COLOR0_WRITES_ALL_CBUFS * */
+   unsigned char property_fs_depth_layout; /* TGSI_FS_DEPTH_LAYOUT */
 
    unsigned nr_addrs;
    unsigned nr_preds;
@@ -303,6 +306,13 @@ ureg_property_fs_color0_writes_all_cbufs(struct ureg_program *ureg,
    ureg->property_fs_color0_writes_all_cbufs = fs_color0_writes_all_cbufs;
 }
 
+void
+ureg_property_fs_depth_layout(struct ureg_program *ureg,
+                              unsigned fs_depth_layout)
+{
+   ureg->property_fs_depth_layout = fs_depth_layout;
+}
+
 struct ureg_src
 ureg_DECL_fs_input_cyl_centroid(struct ureg_program *ureg,
                        unsigned semantic_name,
@@ -387,21 +397,27 @@ ureg_DECL_system_value(struct ureg_program *ureg,
 
 
 struct ureg_dst 
-ureg_DECL_output( struct ureg_program *ureg,
-                  unsigned name,
-                  unsigned index )
+ureg_DECL_output_masked( struct ureg_program *ureg,
+                         unsigned name,
+                         unsigned index,
+                         unsigned usage_mask )
 {
    unsigned i;
 
+   assert(usage_mask != 0);
+
    for (i = 0; i < ureg->nr_outputs; i++) {
       if (ureg->output[i].semantic_name == name &&
-          ureg->output[i].semantic_index == index) 
+          ureg->output[i].semantic_index == index) { 
+         ureg->output[i].usage_mask |= usage_mask;
          goto out;
+      }
    }
 
    if (ureg->nr_outputs < UREG_MAX_OUTPUT) {
       ureg->output[i].semantic_name = name;
       ureg->output[i].semantic_index = index;
+      ureg->output[i].usage_mask = usage_mask;
       ureg->nr_outputs++;
    }
    else {
@@ -410,6 +426,15 @@ ureg_DECL_output( struct ureg_program *ureg,
 
 out:
    return ureg_dst_register( TGSI_FILE_OUTPUT, i );
+}
+
+
+struct ureg_dst 
+ureg_DECL_output( struct ureg_program *ureg,
+                  unsigned name,
+                  unsigned index )
+{
+   return ureg_DECL_output_masked(ureg, name, index, TGSI_WRITEMASK_XYZW);
 }
 
 
@@ -798,7 +823,6 @@ ureg_emit_src( struct ureg_program *ureg,
    unsigned n = 0;
 
    assert(src.File != TGSI_FILE_NULL);
-   assert(src.File != TGSI_FILE_OUTPUT);
    assert(src.File < TGSI_FILE_COUNT);
    
    out[n].value = 0;
@@ -997,7 +1021,7 @@ ureg_fixup_label(struct ureg_program *ureg,
 void
 ureg_emit_texture(struct ureg_program *ureg,
                   unsigned extended_token,
-                  unsigned target )
+                  unsigned target, unsigned num_offsets)
 {
    union tgsi_any_token *out, *insn;
 
@@ -1008,6 +1032,20 @@ ureg_emit_texture(struct ureg_program *ureg,
 
    out[0].value = 0;
    out[0].insn_texture.Texture = target;
+   out[0].insn_texture.NumOffsets = num_offsets;
+}
+
+void
+ureg_emit_texture_offset(struct ureg_program *ureg,
+                         const struct tgsi_texture_offset *offset)
+{
+   union tgsi_any_token *out;
+
+   out = get_tokens( ureg, DOMAIN_INSN, 1);
+
+   out[0].value = 0;
+   out[0].insn_texture_offset = *offset;
+   
 }
 
 
@@ -1074,6 +1112,8 @@ ureg_tex_insn(struct ureg_program *ureg,
               const struct ureg_dst *dst,
               unsigned nr_dst,
               unsigned target,
+              const struct tgsi_texture_offset *texoffsets,
+              unsigned nr_offset,
               const struct ureg_src *src,
               unsigned nr_src )
 {
@@ -1106,7 +1146,10 @@ ureg_tex_insn(struct ureg_program *ureg,
                          nr_dst,
                          nr_src);
 
-   ureg_emit_texture( ureg, insn.extended_token, target );
+   ureg_emit_texture( ureg, insn.extended_token, target, nr_offset );
+
+   for (i = 0; i < nr_offset; i++)
+      ureg_emit_texture_offset( ureg, &texoffsets[i]);
 
    for (i = 0; i < nr_dst; i++)
       ureg_emit_dst( ureg, dst[i] );
@@ -1154,7 +1197,8 @@ emit_decl_semantic(struct ureg_program *ureg,
                    unsigned file,
                    unsigned index,
                    unsigned semantic_name,
-                   unsigned semantic_index)
+                   unsigned semantic_index,
+                   unsigned usage_mask)
 {
    union tgsi_any_token *out = get_tokens(ureg, DOMAIN_DECL, 3);
 
@@ -1162,7 +1206,7 @@ emit_decl_semantic(struct ureg_program *ureg,
    out[0].decl.Type = TGSI_TOKEN_TYPE_DECLARATION;
    out[0].decl.NrTokens = 3;
    out[0].decl.File = file;
-   out[0].decl.UsageMask = TGSI_WRITEMASK_XYZW; /* FIXME! */
+   out[0].decl.UsageMask = usage_mask;
    out[0].decl.Semantic = 1;
 
    out[1].value = 0;
@@ -1369,6 +1413,14 @@ static void emit_decls( struct ureg_program *ureg )
                     ureg->property_fs_color0_writes_all_cbufs);
    }
 
+   if (ureg->property_fs_depth_layout) {
+      assert(ureg->processor == TGSI_PROCESSOR_FRAGMENT);
+
+      emit_property(ureg,
+                    TGSI_PROPERTY_FS_DEPTH_LAYOUT,
+                    ureg->property_fs_depth_layout);
+   }
+
    if (ureg->processor == TGSI_PROCESSOR_VERTEX) {
       for (i = 0; i < UREG_MAX_INPUT; i++) {
          if (ureg->vs_inputs[i/32] & (1 << (i%32))) {
@@ -1392,7 +1444,8 @@ static void emit_decls( struct ureg_program *ureg )
                             TGSI_FILE_INPUT,
                             ureg->gs_input[i].index,
                             ureg->gs_input[i].semantic_name,
-                            ureg->gs_input[i].semantic_index);
+                            ureg->gs_input[i].semantic_index,
+                            TGSI_WRITEMASK_XYZW);
       }
    }
 
@@ -1401,7 +1454,8 @@ static void emit_decls( struct ureg_program *ureg )
                          TGSI_FILE_SYSTEM_VALUE,
                          ureg->system_value[i].index,
                          ureg->system_value[i].semantic_name,
-                         ureg->system_value[i].semantic_index);
+                         ureg->system_value[i].semantic_index,
+                         TGSI_WRITEMASK_XYZW);
    }
 
    for (i = 0; i < ureg->nr_outputs; i++) {
@@ -1409,7 +1463,8 @@ static void emit_decls( struct ureg_program *ureg )
                          TGSI_FILE_OUTPUT,
                          i,
                          ureg->output[i].semantic_name,
-                         ureg->output[i].semantic_index);
+                         ureg->output[i].semantic_index,
+                         ureg->output[i].usage_mask);
    }
 
    for (i = 0; i < ureg->nr_samplers; i++) {
@@ -1555,13 +1610,19 @@ const struct tgsi_token *ureg_finalize( struct ureg_program *ureg )
 
 
 void *ureg_create_shader( struct ureg_program *ureg,
-                          struct pipe_context *pipe )
+                          struct pipe_context *pipe,
+                          const struct pipe_stream_output_info *so )
 {
    struct pipe_shader_state state;
 
    state.tokens = ureg_finalize(ureg);
    if(!state.tokens)
       return NULL;
+
+   if (so)
+      state.stream_output = *so;
+   else
+      memset(&state.stream_output, 0, sizeof(state.stream_output));
 
    if (ureg->processor == TGSI_PROCESSOR_VERTEX)
       return pipe->create_vs_state( pipe, &state );

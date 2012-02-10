@@ -45,12 +45,12 @@
  * No masking, no scissor (clear entire buffer).
  */
 void
-softpipe_clear(struct pipe_context *pipe, unsigned buffers, const float *rgba,
+softpipe_clear(struct pipe_context *pipe, unsigned buffers,
+               const union pipe_color_union *color,
                double depth, unsigned stencil)
 {
    struct softpipe_context *softpipe = softpipe_context(pipe);
-   union util_color uc;
-   unsigned cv;
+   uint64_t cv;
    uint i;
 
    if (softpipe->no_rast)
@@ -60,24 +60,21 @@ softpipe_clear(struct pipe_context *pipe, unsigned buffers, const float *rgba,
       return;
 
 #if 0
-   softpipe_update_derived(softpipe); /* not needed?? */
+   softpipe_update_derived(softpipe, PIPE_PRIM_TRIANGLES); /* not needed?? */
 #endif
 
    if (buffers & PIPE_CLEAR_COLOR) {
       for (i = 0; i < softpipe->framebuffer.nr_cbufs; i++) {
-         struct pipe_surface *ps = softpipe->framebuffer.cbufs[i];
-
-         util_pack_color(rgba, ps->format, &uc);
-         sp_tile_cache_clear(softpipe->cbuf_cache[i], rgba, uc.ui);
+         sp_tile_cache_clear(softpipe->cbuf_cache[i], color, 0);
       }
    }
 
    if (buffers & PIPE_CLEAR_DEPTHSTENCIL) {
-      static const float zero[4] = { 0.0F, 0.0F, 0.0F, 0.0F };
+      static const union pipe_color_union zero;
       struct pipe_surface *ps = softpipe->framebuffer.zsbuf;
 
-      cv = util_pack_z_stencil(ps->format, depth, stencil);
-      sp_tile_cache_clear(softpipe->zsbuf_cache, zero, cv);
+      cv = util_pack64_z_stencil(ps->format, depth, stencil);
+      sp_tile_cache_clear(softpipe->zsbuf_cache, &zero, cv);
    }
 
    softpipe->dirty_render_cache = TRUE;

@@ -189,6 +189,11 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 2, 0, 0, 0, 0, "RESINFO",     TGSI_OPCODE_RESINFO },
    { 1, 2, 0, 0, 0, 0, "SAMPLE_POS",  TGSI_OPCODE_SAMPLE_POS },
    { 1, 2, 0, 0, 0, 0, "SAMPLE_INFO", TGSI_OPCODE_SAMPLE_INFO },
+   
+   { 1, 1, 0, 0, 0, 0, "UARL", TGSI_OPCODE_UARL },
+   { 1, 3, 0, 0, 0, 0, "UCMP", TGSI_OPCODE_UCMP },
+   { 1, 1, 0, 0, 0, 0, "IABS", TGSI_OPCODE_IABS },
+   { 1, 1, 0, 0, 0, 0, "ISSG", TGSI_OPCODE_ISSG },
 };
 
 const struct tgsi_opcode_info *

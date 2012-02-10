@@ -33,6 +33,8 @@
 
 #include "main/glheader.h"
 #include "main/colormac.h"
+#include "main/format_pack.h"
+#include "main/format_unpack.h"
 #include "main/macros.h"
 #include "main/imports.h"
 #include "main/image.h"
@@ -50,6 +52,7 @@
 #include "s_stencil.h"
 #include "s_texcombine.h"
 
+#include <stdbool.h>
 
 /**
  * Set default fragment attributes for the span using the
@@ -136,7 +139,8 @@ _swrast_span_default_attribs(struct gl_context *ctx, SWspan *span)
       for (i = 0; i < ctx->Const.MaxTextureCoordUnits; i++) {
          const GLuint attr = FRAG_ATTRIB_TEX0 + i;
          const GLfloat *tc = ctx->Current.RasterTexCoords[i];
-         if (ctx->FragmentProgram._Current || ctx->ATIFragmentShader._Enabled) {
+         if (_swrast_use_fragment_program(ctx) ||
+             ctx->ATIFragmentShader._Enabled) {
             COPY_4V(span->attrStart[attr], tc);
          }
          else if (tc[3] > 0.0F) {
@@ -162,8 +166,9 @@ _swrast_span_default_attribs(struct gl_context *ctx, SWspan *span)
  * Perspective correction will be done.  The point/line/triangle function
  * should have computed attrStart/Step values for FRAG_ATTRIB_WPOS[3]!
  */
-static INLINE void
-interpolate_active_attribs(struct gl_context *ctx, SWspan *span, GLbitfield attrMask)
+static inline void
+interpolate_active_attribs(struct gl_context *ctx, SWspan *span,
+                           GLbitfield64 attrMask)
 {
    const SWcontext *swrast = SWRAST_CONTEXT(ctx);
 
@@ -174,7 +179,7 @@ interpolate_active_attribs(struct gl_context *ctx, SWspan *span, GLbitfield attr
    attrMask &= ~span->arrayAttribs;
 
    ATTRIB_LOOP_BEGIN
-      if (attrMask & (1 << attr)) {
+      if (attrMask & BITFIELD64_BIT(attr)) {
          const GLfloat dwdx = span->attrStepX[FRAG_ATTRIB_WPOS][3];
          GLfloat w = span->attrStart[FRAG_ATTRIB_WPOS][3];
          const GLfloat dv0dx = span->attrStepX[attr][0];
@@ -198,8 +203,8 @@ interpolate_active_attribs(struct gl_context *ctx, SWspan *span, GLbitfield attr
             v3 += dv3dx;
             w += dwdx;
          }
-         ASSERT((span->arrayAttribs & (1 << attr)) == 0);
-         span->arrayAttribs |= (1 << attr);
+         ASSERT((span->arrayAttribs & BITFIELD64_BIT(attr)) == 0);
+         span->arrayAttribs |= BITFIELD64_BIT(attr);
       }
    ATTRIB_LOOP_END
 }
@@ -209,13 +214,13 @@ interpolate_active_attribs(struct gl_context *ctx, SWspan *span, GLbitfield attr
  * Interpolate primary colors to fill in the span->array->rgba8 (or rgb16)
  * color array.
  */
-static INLINE void
+static inline void
 interpolate_int_colors(struct gl_context *ctx, SWspan *span)
 {
+#if CHAN_BITS != 32
    const GLuint n = span->end;
    GLuint i;
 
-#if CHAN_BITS != 32
    ASSERT(!(span->arrayMask & SPAN_RGBA));
 #endif
 
@@ -309,7 +314,7 @@ interpolate_int_colors(struct gl_context *ctx, SWspan *span)
 /**
  * Populate the FRAG_ATTRIB_COL0 array.
  */
-static INLINE void
+static inline void
 interpolate_float_colors(SWspan *span)
 {
    GLfloat (*col0)[4] = span->array->attribs[FRAG_ATTRIB_COL0];
@@ -490,8 +495,11 @@ interpolate_texcoords(struct gl_context *ctx, SWspan *span)
 
          if (obj) {
             const struct gl_texture_image *img = obj->Image[0][obj->BaseLevel];
+            const struct swrast_texture_image *swImg =
+               swrast_texture_image_const(img);
+
             needLambda = (obj->Sampler.MinFilter != obj->Sampler.MagFilter)
-               || ctx->FragmentProgram._Current;
+               || _swrast_use_fragment_program(ctx);
             /* LOD is calculated directly in the ansiotropic filter, we can
              * skip the normal lambda function as the result is ignored.
              */
@@ -499,8 +507,8 @@ interpolate_texcoords(struct gl_context *ctx, SWspan *span)
                 obj->Sampler.MinFilter == GL_LINEAR_MIPMAP_LINEAR) {
                needLambda = GL_FALSE;
             }
-            texW = img->WidthScale;
-            texH = img->HeightScale;
+            texW = swImg->WidthScale;
+            texH = swImg->HeightScale;
          }
          else {
             /* using a fragment program */
@@ -511,7 +519,7 @@ interpolate_texcoords(struct gl_context *ctx, SWspan *span)
 
          if (needLambda) {
             GLuint i;
-            if (ctx->FragmentProgram._Current
+            if (_swrast_use_fragment_program(ctx)
                 || ctx->ATIFragmentShader._Enabled) {
                /* do perspective correction but don't divide s, t, r by q */
                const GLfloat dwdx = span->attrStepX[FRAG_ATTRIB_WPOS][3];
@@ -552,7 +560,7 @@ interpolate_texcoords(struct gl_context *ctx, SWspan *span)
          }
          else {
             GLuint i;
-            if (ctx->FragmentProgram._Current ||
+            if (_swrast_use_fragment_program(ctx) ||
                 ctx->ATIFragmentShader._Enabled) {
                /* do perspective correction but don't divide s, t, r by q */
                const GLfloat dwdx = span->attrStepX[FRAG_ATTRIB_WPOS][3];
@@ -608,7 +616,7 @@ interpolate_texcoords(struct gl_context *ctx, SWspan *span)
 /**
  * Fill in the arrays->attribs[FRAG_ATTRIB_WPOS] array.
  */
-static INLINE void
+static inline void
 interpolate_wpos(struct gl_context *ctx, SWspan *span)
 {
    GLfloat (*wpos)[4] = span->array->attribs[FRAG_ATTRIB_WPOS];
@@ -642,7 +650,7 @@ interpolate_wpos(struct gl_context *ctx, SWspan *span)
 /**
  * Apply the current polygon stipple pattern to a span of pixels.
  */
-static INLINE void
+static inline void
 stipple_polygon_span(struct gl_context *ctx, SWspan *span)
 {
    GLubyte *mask = span->array->mask;
@@ -687,7 +695,7 @@ stipple_polygon_span(struct gl_context *ctx, SWspan *span)
  * Return:   GL_TRUE   some pixels still visible
  *           GL_FALSE  nothing visible
  */
-static INLINE GLuint
+static inline GLuint
 clip_span( struct gl_context *ctx, SWspan *span )
 {
    const GLint xmin = ctx->DrawBuffer->_Xmin;
@@ -704,11 +712,13 @@ clip_span( struct gl_context *ctx, SWspan *span )
       const GLint n = span->end;
       GLubyte *mask = span->array->mask;
       GLint i;
+      GLuint passed = 0;
       if (span->arrayMask & SPAN_MASK) {
          /* note: using & intead of && to reduce branches */
          for (i = 0; i < n; i++) {
             mask[i] &= (x[i] >= xmin) & (x[i] < xmax)
                      & (y[i] >= ymin) & (y[i] < ymax);
+            passed += mask[i];
          }
       }
       else {
@@ -716,9 +726,10 @@ clip_span( struct gl_context *ctx, SWspan *span )
          for (i = 0; i < n; i++) {
             mask[i] = (x[i] >= xmin) & (x[i] < xmax)
                     & (y[i] >= ymin) & (y[i] < ymax);
+            passed += mask[i];
          }
       }
-      return GL_TRUE;  /* some pixels visible */
+      return passed > 0;
    }
    else {
       /* horizontal span of pixels */
@@ -770,7 +781,7 @@ clip_span( struct gl_context *ctx, SWspan *span )
          span->intTex[1] += leftClip * span->intTexStep[1];
 
 #define SHIFT_ARRAY(ARRAY, SHIFT, LEN) \
-         memcpy(ARRAY, ARRAY + (SHIFT), (LEN) * sizeof(ARRAY[0]))
+         memmove(ARRAY, ARRAY + (SHIFT), (LEN) * sizeof(ARRAY[0]))
 
          for (i = 0; i < FRAG_ATTRIB_MAX; i++) {
             if (span->arrayAttribs & (1 << i)) {
@@ -814,7 +825,7 @@ clip_span( struct gl_context *ctx, SWspan *span )
  * Only called during fixed-function operation.
  * Result is float color array (FRAG_ATTRIB_COL0).
  */
-static INLINE void
+static inline void
 add_specular(struct gl_context *ctx, SWspan *span)
 {
    const SWcontext *swrast = SWRAST_CONTEXT(ctx);
@@ -823,7 +834,7 @@ add_specular(struct gl_context *ctx, SWspan *span)
    GLfloat (*col1)[4] = span->array->attribs[FRAG_ATTRIB_COL1];
    GLuint i;
 
-   ASSERT(!ctx->FragmentProgram._Current);
+   ASSERT(!_swrast_use_fragment_program(ctx));
    ASSERT(span->arrayMask & SPAN_RGBA);
    ASSERT(swrast->_ActiveAttribMask & FRAG_BIT_COL1);
    (void) swrast; /* silence warning */
@@ -863,7 +874,7 @@ add_specular(struct gl_context *ctx, SWspan *span)
 /**
  * Apply antialiasing coverage value to alpha values.
  */
-static INLINE void
+static inline void
 apply_aa_coverage(SWspan *span)
 {
    const GLfloat *coverage = span->array->coverage;
@@ -897,7 +908,7 @@ apply_aa_coverage(SWspan *span)
 /**
  * Clamp span's float colors to [0,1]
  */
-static INLINE void
+static inline void
 clamp_colors(SWspan *span)
 {
    GLfloat (*rgba)[4] = span->array->attribs[FRAG_ATTRIB_COL0];
@@ -918,7 +929,7 @@ clamp_colors(SWspan *span)
  * program that writes to gl_FragData[1] or higher.
  * \param output  which fragment program color output is being processed
  */
-static INLINE void
+static inline void
 convert_color_type(SWspan *span, GLenum newType, GLuint output)
 {
    GLvoid *src, *dst;
@@ -958,21 +969,10 @@ convert_color_type(SWspan *span, GLenum newType, GLuint output)
 /**
  * Apply fragment shader, fragment program or normal texturing to span.
  */
-static INLINE void
+static inline void
 shade_texture_span(struct gl_context *ctx, SWspan *span)
 {
-   GLbitfield inputsRead;
-
-   /* Determine which fragment attributes are actually needed */
-   if (ctx->FragmentProgram._Current) {
-      inputsRead = ctx->FragmentProgram._Current->Base.InputsRead;
-   }
-   else {
-      /* XXX we could be a bit smarter about this */
-      inputsRead = ~0;
-   }
-
-   if (ctx->FragmentProgram._Current ||
+   if (_swrast_use_fragment_program(ctx) ||
        ctx->ATIFragmentShader._Enabled) {
       /* programmable shading */
       if (span->primitive == GL_BITMAP && span->array->ChanType != GL_FLOAT) {
@@ -1001,7 +1001,7 @@ shade_texture_span(struct gl_context *ctx, SWspan *span)
          interpolate_wpos(ctx, span);
 
       /* Run fragment program/shader now */
-      if (ctx->FragmentProgram._Current) {
+      if (_swrast_use_fragment_program(ctx)) {
          _swrast_exec_fragment_program(ctx, span);
       }
       else {
@@ -1028,6 +1028,94 @@ shade_texture_span(struct gl_context *ctx, SWspan *span)
 }
 
 
+/** Put colors at x/y locations into a renderbuffer */
+static void
+put_values(struct gl_context *ctx, struct gl_renderbuffer *rb,
+           GLenum datatype,
+           GLuint count, const GLint x[], const GLint y[],
+           const void *values, const GLubyte *mask)
+{
+   gl_pack_ubyte_rgba_func pack_ubyte;
+   gl_pack_float_rgba_func pack_float;
+   GLuint i;
+
+   if (datatype == GL_UNSIGNED_BYTE)
+      pack_ubyte = _mesa_get_pack_ubyte_rgba_function(rb->Format);
+   else
+      pack_float = _mesa_get_pack_float_rgba_function(rb->Format);
+
+   for (i = 0; i < count; i++) {
+      if (mask[i]) {
+         GLubyte *dst = _swrast_pixel_address(rb, x[i], y[i]);
+
+         if (datatype == GL_UNSIGNED_BYTE) {
+            pack_ubyte((const GLubyte *) values + 4 * i, dst);
+         }
+         else {
+            assert(datatype == GL_FLOAT);
+            pack_float((const GLfloat *) values + 4 * i, dst);
+         }
+      }
+   }
+}
+
+
+/** Put row of colors into renderbuffer */
+void
+_swrast_put_row(struct gl_context *ctx, struct gl_renderbuffer *rb,
+                GLenum datatype,
+                GLuint count, GLint x, GLint y,
+                const void *values, const GLubyte *mask)
+{
+   GLubyte *dst = _swrast_pixel_address(rb, x, y);
+
+   if (!mask) {
+      if (datatype == GL_UNSIGNED_BYTE) {
+         _mesa_pack_ubyte_rgba_row(rb->Format, count,
+                                   (const GLubyte (*)[4]) values, dst);
+      }
+      else {
+         assert(datatype == GL_FLOAT);
+         _mesa_pack_float_rgba_row(rb->Format, count,
+                                   (const GLfloat (*)[4]) values, dst);
+      }
+   }
+   else {
+      const GLuint bpp = _mesa_get_format_bytes(rb->Format);
+      GLuint i, runLen, runStart;
+      /* We can't pass a 'mask' array to the _mesa_pack_rgba_row() functions
+       * so look for runs where mask=1...
+       */
+      runLen = runStart = 0;
+      for (i = 0; i < count; i++) {
+         if (mask[i]) {
+            if (runLen == 0)
+               runStart = i;
+            runLen++;
+         }
+
+         if (!mask[i] || i == count - 1) {
+            /* might be the end of a run of pixels */
+            if (runLen > 0) {
+               if (datatype == GL_UNSIGNED_BYTE) {
+                  _mesa_pack_ubyte_rgba_row(rb->Format, runLen,
+                                     (const GLubyte (*)[4]) values + runStart,
+                                     dst + runStart * bpp);
+               }
+               else {
+                  assert(datatype == GL_FLOAT);
+                  _mesa_pack_float_rgba_row(rb->Format, runLen,
+                                   (const GLfloat (*)[4]) values + runStart,
+                                   dst + runStart * bpp);
+               }
+               runLen = 0;
+            }
+         }
+      }
+   }
+}
+
+
 
 /**
  * Apply all the per-fragment operations to a span.
@@ -1043,10 +1131,10 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
    const GLuint *colorMask = (GLuint *) ctx->Color.ColorMask;
    const GLbitfield origInterpMask = span->interpMask;
    const GLbitfield origArrayMask = span->arrayMask;
-   const GLbitfield origArrayAttribs = span->arrayAttribs;
+   const GLbitfield64 origArrayAttribs = span->arrayAttribs;
    const GLenum origChanType = span->array->ChanType;
    void * const origRgba = span->array->rgba;
-   const GLboolean shader = (ctx->FragmentProgram._Current
+   const GLboolean shader = (_swrast_use_fragment_program(ctx)
                              || ctx->ATIFragmentShader._Enabled);
    const GLboolean shaderOrTexture = shader || ctx->Texture._EnabledCoordUnits;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
@@ -1221,7 +1309,8 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
       const GLuint numBuffers = fb->_NumColorDrawBuffers;
       const struct gl_fragment_program *fp = ctx->FragmentProgram._Current;
       const GLboolean multiFragOutputs = 
-         (fp && fp->Base.OutputsWritten >= (1 << FRAG_RESULT_DATA0));
+         _swrast_use_fragment_program(ctx)
+         && fp->Base.OutputsWritten >= (1 << FRAG_RESULT_DATA0);
       GLuint buf;
 
       for (buf = 0; buf < numBuffers; buf++) {
@@ -1231,18 +1320,19 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
 
          if (rb) {
             GLchan rgbaSave[MAX_WIDTH][4];
-            const GLuint fragOutput = multiFragOutputs ? buf : 0;
+
+	    GLenum datatype;
+	    GLuint comps;
+
+	    _mesa_format_to_type_and_comps(rb->Format, &datatype, &comps);
 
             /* set span->array->rgba to colors for render buffer's datatype */
-            if (rb->DataType != span->array->ChanType || fragOutput > 0) {
-               convert_color_type(span, rb->DataType, fragOutput);
+            if (datatype != span->array->ChanType) {
+               convert_color_type(span, datatype, 0);
             }
             else {
-               if (rb->DataType == GL_UNSIGNED_BYTE) {
+               if (span->array->ChanType == GL_UNSIGNED_BYTE) {
                   span->array->rgba = span->array->rgba8;
-               }
-               else if (rb->DataType == GL_UNSIGNED_SHORT) {
-                  span->array->rgba = (void *) span->array->rgba16;
                }
                else {
                   span->array->rgba = (void *)
@@ -1256,10 +1346,13 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
                       4 * span->end * sizeof(GLchan));
             }
 
-            ASSERT(rb->_BaseFormat == GL_RGBA || rb->_BaseFormat == GL_RGB ||
+            ASSERT(rb->_BaseFormat == GL_RGBA ||
+                   rb->_BaseFormat == GL_RGB ||
+                   rb->_BaseFormat == GL_RED ||
+                   rb->_BaseFormat == GL_RG ||
 		   rb->_BaseFormat == GL_ALPHA);
 
-            if (ctx->Color._LogicOpEnabled) {
+            if (ctx->Color.ColorLogicOpEnabled) {
                _swrast_logicop_rgba_span(ctx, rb, span);
             }
             else if ((ctx->Color.BlendEnabled >> buf) & 1) {
@@ -1272,17 +1365,18 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
 
             if (span->arrayMask & SPAN_XY) {
                /* array of pixel coords */
-               ASSERT(rb->PutValues);
-               rb->PutValues(ctx, rb, span->end,
-                             span->array->x, span->array->y,
-                             span->array->rgba, span->array->mask);
+               put_values(ctx, rb,
+                          span->array->ChanType, span->end,
+                          span->array->x, span->array->y,
+                          span->array->rgba, span->array->mask);
             }
             else {
                /* horizontal run of pixels */
-               ASSERT(rb->PutRow);
-               rb->PutRow(ctx, rb, span->end, span->x, span->y,
-                          span->array->rgba,
-                          span->writeAll ? NULL: span->array->mask);
+               _swrast_put_row(ctx, rb,
+                               span->array->ChanType,
+                               span->end, span->x, span->y,
+                               span->array->rgba,
+                               span->writeAll ? NULL: span->array->mask);
             }
 
             if (!multiFragOutputs && numBuffers > 1) {
@@ -1306,16 +1400,17 @@ end:
 
 
 /**
- * Read RGBA pixels from a renderbuffer.  Clipping will be done to prevent
- * reading ouside the buffer's boundaries.
- * \param dstType  datatype for returned colors
+ * Read float RGBA pixels from a renderbuffer.  Clipping will be done to
+ * prevent reading ouside the buffer's boundaries.
  * \param rgba  the returned colors
  */
 void
 _swrast_read_rgba_span( struct gl_context *ctx, struct gl_renderbuffer *rb,
-                        GLuint n, GLint x, GLint y, GLenum dstType,
+                        GLuint n, GLint x, GLint y,
                         GLvoid *rgba)
 {
+   struct swrast_renderbuffer *srb = swrast_renderbuffer(rb);
+   GLenum dstType = GL_FLOAT;
    const GLint bufWidth = (GLint) rb->Width;
    const GLint bufHeight = (GLint) rb->Height;
 
@@ -1326,6 +1421,8 @@ _swrast_read_rgba_span( struct gl_context *ctx, struct gl_renderbuffer *rb,
    }
    else {
       GLint skip, length;
+      GLubyte *src;
+
       if (x < 0) {
          /* left edge clipping */
          skip = -x;
@@ -1354,7 +1451,6 @@ _swrast_read_rgba_span( struct gl_context *ctx, struct gl_renderbuffer *rb,
       }
 
       ASSERT(rb);
-      ASSERT(rb->GetRow);
       ASSERT(rb->_BaseFormat == GL_RGBA ||
 	     rb->_BaseFormat == GL_RGB ||
 	     rb->_BaseFormat == GL_RG ||
@@ -1364,105 +1460,69 @@ _swrast_read_rgba_span( struct gl_context *ctx, struct gl_renderbuffer *rb,
 	     rb->_BaseFormat == GL_LUMINANCE_ALPHA ||
 	     rb->_BaseFormat == GL_ALPHA);
 
-      if (rb->DataType == dstType) {
-         rb->GetRow(ctx, rb, length, x + skip, y,
-                    (GLubyte *) rgba + skip * RGBA_PIXEL_SIZE(rb->DataType));
+      assert(srb->Map);
+
+      src = _swrast_pixel_address(rb, x + skip, y);
+
+      if (dstType == GL_UNSIGNED_BYTE) {
+         _mesa_unpack_ubyte_rgba_row(rb->Format, length, src,
+                                     (GLubyte (*)[4]) rgba + skip);
+      }
+      else if (dstType == GL_FLOAT) {
+         _mesa_unpack_rgba_row(rb->Format, length, src,
+                               (GLfloat (*)[4]) rgba + skip);
       }
       else {
-         GLuint temp[MAX_WIDTH * 4];
-         rb->GetRow(ctx, rb, length, x + skip, y, temp);
-         _mesa_convert_colors(rb->DataType, temp,
-                   dstType, (GLubyte *) rgba + skip * RGBA_PIXEL_SIZE(dstType),
-                   length, NULL);
+         _mesa_problem(ctx, "unexpected type in _swrast_read_rgba_span()");
       }
    }
 }
 
 
 /**
- * Wrapper for gl_renderbuffer::GetValues() which does clipping to avoid
- * reading values outside the buffer bounds.
- * We can use this for reading any format/type of renderbuffer.
- * \param valueSize is the size in bytes of each value (pixel) put into the
- *                  values array.
+ * Get colors at x/y positions with clipping.
+ * \param type  type of values to return
  */
-void
-_swrast_get_values(struct gl_context *ctx, struct gl_renderbuffer *rb,
-                   GLuint count, const GLint x[], const GLint y[],
-                   void *values, GLuint valueSize)
+static void
+get_values(struct gl_context *ctx, struct gl_renderbuffer *rb,
+           GLuint count, const GLint x[], const GLint y[],
+           void *values, GLenum type)
 {
-   GLuint i, inCount = 0, inStart = 0;
+   GLuint i;
 
    for (i = 0; i < count; i++) {
       if (x[i] >= 0 && y[i] >= 0 &&
 	  x[i] < (GLint) rb->Width && y[i] < (GLint) rb->Height) {
          /* inside */
-         if (inCount == 0)
-            inStart = i;
-         inCount++;
-      }
-      else {
-         if (inCount > 0) {
-            /* read [inStart, inStart + inCount) */
-            rb->GetValues(ctx, rb, inCount, x + inStart, y + inStart,
-                          (GLubyte *) values + inStart * valueSize);
-            inCount = 0;
+         const GLubyte *src = _swrast_pixel_address(rb, x[i], y[i]);
+
+         if (type == GL_UNSIGNED_BYTE) {
+            _mesa_unpack_ubyte_rgba_row(rb->Format, 1, src,
+                                        (GLubyte (*)[4]) values + i);
+         }
+         else if (type == GL_FLOAT) {
+            _mesa_unpack_rgba_row(rb->Format, 1, src,
+                                  (GLfloat (*)[4]) values + i);
+         }
+         else {
+            _mesa_problem(ctx, "unexpected type in get_values()");
          }
       }
    }
-   if (inCount > 0) {
-      /* read last values */
-      rb->GetValues(ctx, rb, inCount, x + inStart, y + inStart,
-                    (GLubyte *) values + inStart * valueSize);
-   }
 }
 
 
 /**
- * Wrapper for gl_renderbuffer::PutRow() which does clipping.
- * \param valueSize  size of each value (pixel) in bytes
+ * Get row of colors with clipping.
+ * \param type  type of values to return
  */
-void
-_swrast_put_row(struct gl_context *ctx, struct gl_renderbuffer *rb,
-                GLuint count, GLint x, GLint y,
-                const GLvoid *values, GLuint valueSize)
+static void
+get_row(struct gl_context *ctx, struct gl_renderbuffer *rb,
+        GLuint count, GLint x, GLint y,
+        GLvoid *values, GLenum type)
 {
    GLint skip = 0;
-
-   if (y < 0 || y >= (GLint) rb->Height)
-      return; /* above or below */
-
-   if (x + (GLint) count <= 0 || x >= (GLint) rb->Width)
-      return; /* entirely left or right */
-
-   if ((GLint) (x + count) > (GLint) rb->Width) {
-      /* right clip */
-      GLint clip = x + count - rb->Width;
-      count -= clip;
-   }
-
-   if (x < 0) {
-      /* left clip */
-      skip = -x;
-      x = 0;
-      count -= skip;
-   }
-
-   rb->PutRow(ctx, rb, count, x, y,
-              (const GLubyte *) values + skip * valueSize, NULL);
-}
-
-
-/**
- * Wrapper for gl_renderbuffer::GetRow() which does clipping.
- * \param valueSize  size of each value (pixel) in bytes
- */
-void
-_swrast_get_row(struct gl_context *ctx, struct gl_renderbuffer *rb,
-                GLuint count, GLint x, GLint y,
-                GLvoid *values, GLuint valueSize)
-{
-   GLint skip = 0;
+   GLubyte *src;
 
    if (y < 0 || y >= (GLint) rb->Height)
       return; /* above or below */
@@ -1483,7 +1543,19 @@ _swrast_get_row(struct gl_context *ctx, struct gl_renderbuffer *rb,
       count -= skip;
    }
 
-   rb->GetRow(ctx, rb, count, x, y, (GLubyte *) values + skip * valueSize);
+   src = _swrast_pixel_address(rb, x, y);
+
+   if (type == GL_UNSIGNED_BYTE) {
+      _mesa_unpack_ubyte_rgba_row(rb->Format, count, src,
+                                  (GLubyte (*)[4]) values + skip);
+   }
+   else if (type == GL_FLOAT) {
+      _mesa_unpack_rgba_row(rb->Format, count, src,
+                            (GLfloat (*)[4]) values + skip);
+   }
+   else {
+      _mesa_problem(ctx, "unexpected type in get_row()");
+   }
 }
 
 
@@ -1496,7 +1568,6 @@ void *
 _swrast_get_dest_rgba(struct gl_context *ctx, struct gl_renderbuffer *rb,
                       SWspan *span)
 {
-   const GLuint pixelSize = RGBA_PIXEL_SIZE(span->array->ChanType);
    void *rbPixels;
 
    /* Point rbPixels to a temporary space */
@@ -1504,12 +1575,12 @@ _swrast_get_dest_rgba(struct gl_context *ctx, struct gl_renderbuffer *rb,
 
    /* Get destination values from renderbuffer */
    if (span->arrayMask & SPAN_XY) {
-      _swrast_get_values(ctx, rb, span->end, span->array->x, span->array->y,
-                         rbPixels, pixelSize);
+      get_values(ctx, rb, span->end, span->array->x, span->array->y,
+                 rbPixels, span->array->ChanType);
    }
    else {
-      _swrast_get_row(ctx, rb, span->end, span->x, span->y,
-                      rbPixels, pixelSize);
+      get_row(ctx, rb, span->end, span->x, span->y,
+              rbPixels, span->array->ChanType);
    }
 
    return rbPixels;

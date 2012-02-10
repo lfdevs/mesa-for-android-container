@@ -41,11 +41,11 @@ extern "C" {
 #include "main/core.h"
 #include "intel_context.h"
 }
-#include "../glsl/ir.h"
-#include "../glsl/ir_visitor.h"
-#include "../glsl/ir_print_visitor.h"
-#include "../glsl/ir_rvalue_visitor.h"
-#include "../glsl/glsl_types.h"
+#include "glsl/ir.h"
+#include "glsl/ir_visitor.h"
+#include "glsl/ir_print_visitor.h"
+#include "glsl/ir_rvalue_visitor.h"
+#include "glsl/glsl_types.h"
 
 static bool debug = false;
 
@@ -122,8 +122,8 @@ ir_vector_reference_visitor::get_variable_entry(ir_variable *var)
       break;
    }
 
-   foreach_iter(exec_list_iterator, iter, this->variable_list) {
-      variable_entry *entry = (variable_entry *)iter.get();
+   foreach_list(node, &this->variable_list) {
+      variable_entry *entry = (variable_entry *)node;
       if (entry->var == var)
 	 return entry;
    }
@@ -209,12 +209,12 @@ public:
    virtual ir_visitor_status visit_leave(ir_assignment *);
 
    void handle_rvalue(ir_rvalue **rvalue);
-   struct variable_entry *get_splitting_entry(ir_variable *var);
+   variable_entry *get_splitting_entry(ir_variable *var);
 
    exec_list *variable_list;
 };
 
-struct variable_entry *
+variable_entry *
 ir_vector_splitting_visitor::get_splitting_entry(ir_variable *var)
 {
    assert(var);
@@ -222,8 +222,8 @@ ir_vector_splitting_visitor::get_splitting_entry(ir_variable *var)
    if (!var->type->is_vector())
       return NULL;
 
-   foreach_iter(exec_list_iterator, iter, *this->variable_list) {
-      variable_entry *entry = (variable_entry *)iter.get();
+   foreach_list(node, &*this->variable_list) {
+      variable_entry *entry = (variable_entry *)node;
       if (entry->var == var) {
 	 return entry;
       }
@@ -341,8 +341,8 @@ brw_do_vector_splitting(exec_list *instructions)
    visit_list_elements(&refs, instructions);
 
    /* Trim out variables we can't split. */
-   foreach_iter(exec_list_iterator, iter, refs.variable_list) {
-      variable_entry *entry = (variable_entry *)iter.get();
+   foreach_list_safe(node, &refs.variable_list) {
+      variable_entry *entry = (variable_entry *)node;
 
       if (debug) {
 	 printf("vector %s@%p: decl %d, whole_access %d\n",
@@ -363,8 +363,8 @@ brw_do_vector_splitting(exec_list *instructions)
    /* Replace the decls of the vectors to be split with their split
     * components.
     */
-   foreach_iter(exec_list_iterator, iter, refs.variable_list) {
-      variable_entry *entry = (variable_entry *)iter.get();
+   foreach_list(node, &refs.variable_list) {
+      variable_entry *entry = (variable_entry *)node;
       const struct glsl_type *type;
       type = glsl_type::get_instance(entry->var->type->base_type, 1, 1);
 

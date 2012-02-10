@@ -2078,18 +2078,19 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #       define R300_ALU_OUTC_D2A                (3 << 23)
 #       define R300_ALU_OUTC_MIN                (4 << 23)
 #       define R300_ALU_OUTC_MAX                (5 << 23)
-#       define R300_ALU_OUTC_CMPH               (7 << 23)
+#       define R300_ALU_OUTC_CND                (7 << 23)
 #       define R300_ALU_OUTC_CMP                (8 << 23)
 #       define R300_ALU_OUTC_FRC                (9 << 23)
 #       define R300_ALU_OUTC_REPL_ALPHA         (10 << 23)
 
-#       define R300_ALU_OUTC_MOD_NOP            (0 << 27)
-#       define R300_ALU_OUTC_MOD_MUL2           (1 << 27)
-#       define R300_ALU_OUTC_MOD_MUL4           (2 << 27)
-#       define R300_ALU_OUTC_MOD_MUL8           (3 << 27)
-#       define R300_ALU_OUTC_MOD_DIV2           (4 << 27)
-#       define R300_ALU_OUTC_MOD_DIV4           (5 << 27)
-#       define R300_ALU_OUTC_MOD_DIV8           (6 << 27)
+#	define R300_ALU_OUTC_MOD_SHIFT		27
+#       define R300_ALU_OUTC_MOD_NOP            (0 << R300_ALU_OUTC_MOD_SHIFT)
+#       define R300_ALU_OUTC_MOD_MUL2           (1 << R300_ALU_OUTC_MOD_SHIFT)
+#       define R300_ALU_OUTC_MOD_MUL4           (2 << R300_ALU_OUTC_MOD_SHIFT)
+#       define R300_ALU_OUTC_MOD_MUL8           (3 << R300_ALU_OUTC_MOD_SHIFT)
+#       define R300_ALU_OUTC_MOD_DIV2           (4 << R300_ALU_OUTC_MOD_SHIFT)
+#       define R300_ALU_OUTC_MOD_DIV4           (5 << R300_ALU_OUTC_MOD_SHIFT)
+#       define R300_ALU_OUTC_MOD_DIV8           (6 << R300_ALU_OUTC_MOD_SHIFT)
 
 #       define R300_ALU_OUTC_CLAMP              (1 << 30)
 #       define R300_ALU_INSERT_NOP              (1 << 31)
@@ -2944,6 +2945,23 @@ enum {
 
 /*\}*/
 
+#define PVS_OP_DST_OPERAND(opcode, math_inst, macro_inst, reg_index, reg_writemask, reg_class)	\
+	 (((opcode & PVS_DST_OPCODE_MASK) << PVS_DST_OPCODE_SHIFT)	\
+	 | ((math_inst & PVS_DST_MATH_INST_MASK) << PVS_DST_MATH_INST_SHIFT)	\
+	 | ((macro_inst & PVS_DST_MACRO_INST_MASK) << PVS_DST_MACRO_INST_SHIFT)	\
+	 | ((reg_index & PVS_DST_OFFSET_MASK) << PVS_DST_OFFSET_SHIFT)	\
+	 | ((reg_writemask & 0xf) << PVS_DST_WE_X_SHIFT)	/* X Y Z W */	\
+	 | ((reg_class & PVS_DST_REG_TYPE_MASK) << PVS_DST_REG_TYPE_SHIFT))
+
+#define PVS_SRC_OPERAND(in_reg_index, comp_x, comp_y, comp_z, comp_w, reg_class, negate)	\
+	(((in_reg_index & PVS_SRC_OFFSET_MASK) << PVS_SRC_OFFSET_SHIFT)				\
+	 | ((comp_x & PVS_SRC_SWIZZLE_X_MASK) << PVS_SRC_SWIZZLE_X_SHIFT)			\
+	 | ((comp_y & PVS_SRC_SWIZZLE_Y_MASK) << PVS_SRC_SWIZZLE_Y_SHIFT)			\
+	 | ((comp_z & PVS_SRC_SWIZZLE_Z_MASK) << PVS_SRC_SWIZZLE_Z_SHIFT)			\
+	 | ((comp_w & PVS_SRC_SWIZZLE_W_MASK) << PVS_SRC_SWIZZLE_W_SHIFT)			\
+	 | ((negate & 0xf) << PVS_SRC_MODIFIER_X_SHIFT)	/* X Y Z W */				\
+	 | ((reg_class & PVS_SRC_REG_TYPE_MASK) << PVS_SRC_REG_TYPE_SHIFT))
+
 /* BEGIN: Packet 3 commands */
 
 /* A primitive emission dword. */
@@ -3037,14 +3055,15 @@ enum {
 #   define R500_ALPHA_MOD_B_NEG				(1 << 24)
 #   define R500_ALPHA_MOD_B_ABS				(2 << 24)
 #   define R500_ALPHA_MOD_B_NAB				(3 << 24)
-#   define R500_ALPHA_OMOD_IDENTITY			(0 << 26)
-#   define R500_ALPHA_OMOD_MUL_2			(1 << 26)
-#   define R500_ALPHA_OMOD_MUL_4			(2 << 26)
-#   define R500_ALPHA_OMOD_MUL_8			(3 << 26)
-#   define R500_ALPHA_OMOD_DIV_2			(4 << 26)
-#   define R500_ALPHA_OMOD_DIV_4			(5 << 26)
-#   define R500_ALPHA_OMOD_DIV_8			(6 << 26)
-#   define R500_ALPHA_OMOD_DISABLE			(7 << 26)
+#   define R500_ALPHA_OMOD_SHIFT		26
+#   define R500_ALPHA_OMOD_IDENTITY		(0 << R500_ALPHA_OMOD_SHIFT)
+#   define R500_ALPHA_OMOD_MUL_2		(1 << R500_ALPHA_OMOD_SHIFT)
+#   define R500_ALPHA_OMOD_MUL_4		(2 << R500_ALPHA_OMOD_SHIFT)
+#   define R500_ALPHA_OMOD_MUL_8		(3 << R500_ALPHA_OMOD_SHIFT)
+#   define R500_ALPHA_OMOD_DIV_2		(4 << R500_ALPHA_OMOD_SHIFT)
+#   define R500_ALPHA_OMOD_DIV_4		(5 << R500_ALPHA_OMOD_SHIFT)
+#   define R500_ALPHA_OMOD_DIV_8		(6 << R500_ALPHA_OMOD_SHIFT)
+#   define R500_ALPHA_OMOD_DISABLE		(7 << R500_ALPHA_OMOD_SHIFT)
 #   define R500_ALPHA_TARGET(x)				((x) << 29)
 #   define R500_ALPHA_W_OMASK				(1 << 31)
 #define R500_US_ALU_ALPHA_ADDR_0			0x9800
@@ -3194,14 +3213,15 @@ enum {
 #   define R500_ALU_RGB_MOD_B_NEG			(1 << 24)
 #   define R500_ALU_RGB_MOD_B_ABS			(2 << 24)
 #   define R500_ALU_RGB_MOD_B_NAB			(3 << 24)
-#   define R500_ALU_RGB_OMOD_IDENTITY			(0 << 26)
-#   define R500_ALU_RGB_OMOD_MUL_2			(1 << 26)
-#   define R500_ALU_RGB_OMOD_MUL_4			(2 << 26)
-#   define R500_ALU_RGB_OMOD_MUL_8			(3 << 26)
-#   define R500_ALU_RGB_OMOD_DIV_2			(4 << 26)
-#   define R500_ALU_RGB_OMOD_DIV_4			(5 << 26)
-#   define R500_ALU_RGB_OMOD_DIV_8			(6 << 26)
-#   define R500_ALU_RGB_OMOD_DISABLE			(7 << 26)
+#   define R500_ALU_RGB_OMOD_SHIFT		26
+#   define R500_ALU_RGB_OMOD_IDENTITY		(0 << R500_ALU_RGB_OMOD_SHIFT)
+#   define R500_ALU_RGB_OMOD_MUL_2		(1 << R500_ALU_RGB_OMOD_SHIFT)
+#   define R500_ALU_RGB_OMOD_MUL_4		(2 << R500_ALU_RGB_OMOD_SHIFT)
+#   define R500_ALU_RGB_OMOD_MUL_8		(3 << R500_ALU_RGB_OMOD_SHIFT)
+#   define R500_ALU_RGB_OMOD_DIV_2		(4 << R500_ALU_RGB_OMOD_SHIFT)
+#   define R500_ALU_RGB_OMOD_DIV_4		(5 << R500_ALU_RGB_OMOD_SHIFT)
+#   define R500_ALU_RGB_OMOD_DIV_8		(6 << R500_ALU_RGB_OMOD_SHIFT)
+#   define R500_ALU_RGB_OMOD_DISABLE		(7 << R500_ALU_RGB_OMOD_SHIFT)
 #   define R500_ALU_RGB_TARGET(x)			((x) << 29)
 #   define R500_ALU_RGB_WMASK				(1 << 31)
 #define R500_US_ALU_RGB_ADDR_0				0x9000
@@ -3224,7 +3244,8 @@ enum {
 #   define R500_INST_TYPE_OUT				(1 << 0)
 #   define R500_INST_TYPE_FC				(2 << 0)
 #   define R500_INST_TYPE_TEX				(3 << 0)
-#   define R500_INST_TEX_SEM_WAIT			(1 << 2)
+#   define R500_INST_TEX_SEM_WAIT_SHIFT			2
+#   define R500_INST_TEX_SEM_WAIT			(1 << R500_INST_TEX_SEM_WAIT_SHIFT)
 #   define R500_INST_RGB_PRED_SEL_NONE			(0 << 3)
 #   define R500_INST_RGB_PRED_SEL_RGBA			(1 << 3)
 #   define R500_INST_RGB_PRED_SEL_RRRR			(2 << 3)
@@ -3249,6 +3270,8 @@ enum {
 #   define R500_INST_RGB_CLAMP				(1 << 19)
 #   define R500_INST_ALPHA_CLAMP			(1 << 20)
 #   define R500_INST_ALU_RESULT_SEL			(1 << 21)
+#   define R500_INST_ALU_RESULT_SEL_RED			(0 << 21)
+#   define R500_INST_ALU_RESULT_SEL_ALPHA		(1 << 21)
 #   define R500_INST_ALPHA_PRED_INV			(1 << 22)
 #   define R500_INST_ALU_RESULT_OP_EQ			(0 << 23)
 #   define R500_INST_ALU_RESULT_OP_LT			(1 << 23)
@@ -3404,7 +3427,8 @@ enum {
 #   define R500_TEX_INST_LODBIAS			(4 << 22)
 #   define R500_TEX_INST_LOD				(5 << 22)
 #   define R500_TEX_INST_DXDY				(6 << 22)
-#   define R500_TEX_SEM_ACQUIRE				(1 << 25)
+#   define R500_TEX_SEM_ACQUIRE_SHIFT			25
+#   define R500_TEX_SEM_ACQUIRE				(1 << R500_TEX_SEM_ACQUIRE_SHIFT)
 #   define R500_TEX_IGNORE_UNCOVERED			(1 << 26)
 #   define R500_TEX_UNSCALED				(1 << 27)
 #define R300_US_W_FMT					0x46b4

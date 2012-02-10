@@ -39,6 +39,25 @@
 #include "ir_visitor.h"
 #include "glsl_types.h"
 
+/* Using C99 rounding functions for roundToEven() implementation is
+ * difficult, because round(), rint, and nearbyint() are affected by
+ * fesetenv(), which the application may have done for its own
+ * purposes.  Mesa's IROUND macro is close to what we want, but it
+ * rounds away from 0 on n + 0.5.
+ */
+static int
+round_to_even(float val)
+{
+   int rounded = IROUND(val);
+
+   if (val - floor(val) == 0.5) {
+      if (rounded % 2 != 0)
+	 rounded += val > 0 ? -1 : 1;
+   }
+
+   return rounded;
+}
+
 static float
 dot(ir_constant *op0, ir_constant *op1)
 {
@@ -69,7 +88,9 @@ ir_expression::constant_expression_value()
    }
 
    if (op[1] != NULL)
-      assert(op[0]->type->base_type == op[1]->type->base_type);
+      assert(op[0]->type->base_type == op[1]->type->base_type ||
+	     this->operation == ir_binop_lshift ||
+	     this->operation == ir_binop_rshift);
 
    bool op0_scalar = op[0]->type->is_scalar();
    bool op1_scalar = op[1] != NULL && op[1]->type->is_scalar();
@@ -166,7 +187,18 @@ ir_expression::constant_expression_value()
 	 data.b[c] = op[0]->value.u[c] ? true : false;
       }
       break;
-
+   case ir_unop_u2i:
+      assert(op[0]->type->base_type == GLSL_TYPE_UINT);
+      for (unsigned c = 0; c < op[0]->type->components(); c++) {
+	 data.i[c] = op[0]->value.u[c];
+      }
+      break;
+   case ir_unop_i2u:
+      assert(op[0]->type->base_type == GLSL_TYPE_INT);
+      for (unsigned c = 0; c < op[0]->type->components(); c++) {
+	 data.u[c] = op[0]->value.i[c];
+      }
+      break;
    case ir_unop_any:
       assert(op[0]->type->is_boolean());
       data.b[0] = false;
@@ -180,6 +212,13 @@ ir_expression::constant_expression_value()
       assert(op[0]->type->base_type == GLSL_TYPE_FLOAT);
       for (unsigned c = 0; c < op[0]->type->components(); c++) {
 	 data.f[c] = truncf(op[0]->value.f[c]);
+      }
+      break;
+
+   case ir_unop_round_even:
+      assert(op[0]->type->base_type == GLSL_TYPE_FLOAT);
+      for (unsigned c = 0; c < op[0]->type->components(); c++) {
+	 data.f[c] = round_to_even(op[0]->value.f[c]);
       }
       break;
 
@@ -674,13 +713,16 @@ ir_expression::constant_expression_value()
 	 case GLSL_TYPE_FLOAT:
 	    data.b[c] = op[0]->value.f[c] == op[1]->value.f[c];
 	    break;
+	 case GLSL_TYPE_BOOL:
+	    data.b[c] = op[0]->value.b[c] == op[1]->value.b[c];
+	    break;
 	 default:
 	    assert(0);
 	 }
       }
       break;
    case ir_binop_nequal:
-      assert(op[0]->type != op[1]->type);
+      assert(op[0]->type == op[1]->type);
       for (unsigned c = 0; c < components; c++) {
 	 switch (op[0]->type->base_type) {
 	 case GLSL_TYPE_UINT:
@@ -691,6 +733,9 @@ ir_expression::constant_expression_value()
 	    break;
 	 case GLSL_TYPE_FLOAT:
 	    data.b[c] = op[0]->value.f[c] != op[1]->value.f[c];
+	    break;
+	 case GLSL_TYPE_BOOL:
+	    data.b[c] = op[0]->value.b[c] != op[1]->value.b[c];
 	    break;
 	 default:
 	    assert(0);
@@ -1311,6 +1356,9 @@ ir_call::constant_expression_value()
 			    * op[1]->value.f[c];
 	 }
       }
+   } else if (strcmp(callee, "round") == 0 ||
+	      strcmp(callee, "roundEven") == 0) {
+      expr = new(mem_ctx) ir_expression(ir_unop_round_even, op[0]);
    } else if (strcmp(callee, "sign") == 0) {
       expr = new(mem_ctx) ir_expression(ir_unop_sign, type, op[0], NULL);
    } else if (strcmp(callee, "sin") == 0) {
@@ -1360,6 +1408,8 @@ ir_call::constant_expression_value()
 	    data.f[m*i+j] += op[0]->value.f[i+n*j];
 	 }
       }
+   } else if (strcmp(callee, "trunc") == 0) {
+      expr = new(mem_ctx) ir_expression(ir_unop_trunc, op[0]);
    } else {
       /* Unsupported builtin - some are not allowed in constant expressions. */
       return NULL;

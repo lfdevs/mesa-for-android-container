@@ -34,6 +34,7 @@
 #include "main/bufferobj.h"
 #include "main/enums.h"
 #include "main/macros.h"
+#include "main/transformfeedback.h"
 
 #include "vbo_context.h"
 
@@ -74,6 +75,22 @@ vbo_check_buffers_are_unmapped(struct gl_context *ctx)
    assert(!_mesa_bufferobj_mapped(exec->vtx.bufferobj));
 }
 
+int
+vbo_sizeof_ib_type(GLenum type)
+{
+   switch (type) {
+   case GL_UNSIGNED_INT:
+      return sizeof(GLuint);
+   case GL_UNSIGNED_SHORT:
+      return sizeof(GLushort);
+   case GL_UNSIGNED_BYTE:
+      return sizeof(GLubyte);
+   default:
+      assert(!"unsupported index data type");
+      /* In case assert is turned off */
+      return 0;
+   }
+}
 
 
 /**
@@ -95,10 +112,9 @@ vbo_get_minmax_index(struct gl_context *ctx,
    GLuint i;
 
    if (_mesa_is_bufferobj(ib->obj)) {
-      const GLvoid *map =
-         ctx->Driver.MapBuffer(ctx, GL_ELEMENT_ARRAY_BUFFER_ARB,
-                               GL_READ_ONLY, ib->obj);
-      indices = ADD_POINTERS(map, ib->ptr);
+      indices = ctx->Driver.MapBufferRange(ctx, (GLsizeiptr) ib->ptr,
+                                           count * vbo_sizeof_ib_type(ib->type),
+					   GL_MAP_READ_BIT, ib->obj);
    } else {
       indices = ib->ptr;
    }
@@ -176,7 +192,7 @@ vbo_get_minmax_index(struct gl_context *ctx,
    }
 
    if (_mesa_is_bufferobj(ib->obj)) {
-      ctx->Driver.UnmapBuffer(ctx, GL_ELEMENT_ARRAY_BUFFER_ARB, ib->obj);
+      ctx->Driver.UnmapBuffer(ctx, ib->obj);
    }
 }
 
@@ -196,8 +212,8 @@ check_array_data(struct gl_context *ctx, struct gl_client_array *array,
          if (!array->BufferObj->Pointer) {
             /* need to map now */
             array->BufferObj->Pointer =
-               ctx->Driver.MapBuffer(ctx, GL_ARRAY_BUFFER_ARB,
-                                     GL_READ_ONLY, array->BufferObj);
+               ctx->Driver.MapBufferRange(ctx, 0, array->BufferObj->Size,
+					  GL_MAP_READ_BIT, array->BufferObj);
          }
          data = ADD_POINTERS(data, array->BufferObj->Pointer);
       }
@@ -238,7 +254,7 @@ unmap_array_buffer(struct gl_context *ctx, struct gl_client_array *array)
    if (array->Enabled &&
        _mesa_is_bufferobj(array->BufferObj) &&
        _mesa_bufferobj_mapped(array->BufferObj)) {
-      ctx->Driver.UnmapBuffer(ctx, GL_ARRAY_BUFFER_ARB, array->BufferObj);
+      ctx->Driver.UnmapBuffer(ctx, array->BufferObj);
    }
 }
 
@@ -255,11 +271,11 @@ check_draw_elements_data(struct gl_context *ctx, GLsizei count, GLenum elemType,
    const void *elemMap;
    GLint i, k;
 
-   if (_mesa_is_bufferobj(ctx->Array.ElementArrayBufferObj)) {
-      elemMap = ctx->Driver.MapBuffer(ctx,
-                                      GL_ELEMENT_ARRAY_BUFFER_ARB,
-                                      GL_READ_ONLY,
-                                      ctx->Array.ElementArrayBufferObj);
+   if (_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj)) {
+      elemMap = ctx->Driver.MapBufferRange(ctx, 0,
+					   ctx->Array.ArrayObj->ElementArrayBufferObj->Size,
+					   GL_MAP_READ_BIT,
+					   ctx->Array.ArrayObj->ElementArrayBufferObj);
       elements = ADD_POINTERS(elements, elemMap);
    }
 
@@ -282,30 +298,15 @@ check_draw_elements_data(struct gl_context *ctx, GLsizei count, GLenum elemType,
       }
 
       /* check element j of each enabled array */
-      check_array_data(ctx, &arrayObj->Vertex, VERT_ATTRIB_POS, j);
-      check_array_data(ctx, &arrayObj->Normal, VERT_ATTRIB_NORMAL, j);
-      check_array_data(ctx, &arrayObj->Color, VERT_ATTRIB_COLOR0, j);
-      check_array_data(ctx, &arrayObj->SecondaryColor, VERT_ATTRIB_COLOR1, j);
-      for (k = 0; k < Elements(arrayObj->TexCoord); k++) {
-         check_array_data(ctx, &arrayObj->TexCoord[k], VERT_ATTRIB_TEX0 + k, j);
-      }
       for (k = 0; k < Elements(arrayObj->VertexAttrib); k++) {
-         check_array_data(ctx, &arrayObj->VertexAttrib[k],
-                          VERT_ATTRIB_GENERIC0 + k, j);
+         check_array_data(ctx, &arrayObj->VertexAttrib[k], k, j);
       }
    }
 
-   if (_mesa_is_bufferobj(ctx->Array.ElementArrayBufferObj)) {
-      ctx->Driver.UnmapBuffer(ctx, GL_ELEMENT_ARRAY_BUFFER_ARB,
-			      ctx->Array.ElementArrayBufferObj);
+   if (_mesa_is_bufferobj(arrayObj->ElementArrayBufferObj)) {
+      ctx->Driver.UnmapBuffer(ctx, ctx->Array.ArrayObj->ElementArrayBufferObj);
    }
 
-   unmap_array_buffer(ctx, &arrayObj->Vertex);
-   unmap_array_buffer(ctx, &arrayObj->Normal);
-   unmap_array_buffer(ctx, &arrayObj->Color);
-   for (k = 0; k < Elements(arrayObj->TexCoord); k++) {
-      unmap_array_buffer(ctx, &arrayObj->TexCoord[k]);
-   }
    for (k = 0; k < Elements(arrayObj->VertexAttrib); k++) {
       unmap_array_buffer(ctx, &arrayObj->VertexAttrib[k]);
    }
@@ -331,6 +332,7 @@ print_draw_arrays(struct gl_context *ctx,
 {
    struct vbo_context *vbo = vbo_context(ctx);
    struct vbo_exec_context *exec = &vbo->exec;
+   struct gl_array_object *arrayObj = ctx->Array.ArrayObj;
    int i;
 
    printf("vbo_exec_DrawArrays(mode 0x%x, start %d, count %d):\n",
@@ -346,13 +348,13 @@ print_draw_arrays(struct gl_context *ctx,
 	     exec->array.inputs[i]->Size,
 	     stride,
 	     /*exec->array.inputs[i]->Enabled,*/
-	     exec->array.legacy_array[i]->Enabled,
+	     arrayObj->VertexAttrib[VERT_ATTRIB_FF(i)].Enabled,
 	     exec->array.inputs[i]->Ptr,
 	     bufName);
 
       if (bufName) {
-         GLubyte *p = ctx->Driver.MapBuffer(ctx, GL_ARRAY_BUFFER_ARB,
-                                            GL_READ_ONLY_ARB, bufObj);
+         GLubyte *p = ctx->Driver.MapBufferRange(ctx, 0, bufObj->Size,
+						 GL_MAP_READ_BIT, bufObj);
          int offset = (int) (GLintptr) exec->array.inputs[i]->Ptr;
          float *f = (float *) (p + offset);
          int *k = (int *) f;
@@ -364,52 +366,9 @@ print_draw_arrays(struct gl_context *ctx,
          for (i = 0; i < n; i++) {
             printf("    float[%d] = 0x%08x %f\n", i, k[i], f[i]);
          }
-         ctx->Driver.UnmapBuffer(ctx, GL_ARRAY_BUFFER_ARB, bufObj);
+         ctx->Driver.UnmapBuffer(ctx, bufObj);
       }
    }
-}
-
-
-/**
- * Bind the VBO executor to the current vertex array object prior
- * to drawing.
- *
- * Just translate the arrayobj into a sane layout.
- */
-static void
-bind_array_obj(struct gl_context *ctx)
-{
-   struct vbo_context *vbo = vbo_context(ctx);
-   struct vbo_exec_context *exec = &vbo->exec;
-   struct gl_array_object *arrayObj = ctx->Array.ArrayObj;
-   GLuint i;
-
-   /* TODO: Fix the ArrayObj struct to keep legacy arrays in an array
-    * rather than as individual named arrays.  Then this function can
-    * go away.
-    */
-   exec->array.legacy_array[VERT_ATTRIB_POS] = &arrayObj->Vertex;
-   exec->array.legacy_array[VERT_ATTRIB_WEIGHT] = &arrayObj->Weight;
-   exec->array.legacy_array[VERT_ATTRIB_NORMAL] = &arrayObj->Normal;
-   exec->array.legacy_array[VERT_ATTRIB_COLOR0] = &arrayObj->Color;
-   exec->array.legacy_array[VERT_ATTRIB_COLOR1] = &arrayObj->SecondaryColor;
-   exec->array.legacy_array[VERT_ATTRIB_FOG] = &arrayObj->FogCoord;
-   exec->array.legacy_array[VERT_ATTRIB_COLOR_INDEX] = &arrayObj->Index;
-   if (arrayObj->PointSize.Enabled) {
-      /* this aliases COLOR_INDEX */
-      exec->array.legacy_array[VERT_ATTRIB_POINT_SIZE] = &arrayObj->PointSize;
-   }
-   exec->array.legacy_array[VERT_ATTRIB_EDGEFLAG] = &arrayObj->EdgeFlag;
-
-   for (i = 0; i < Elements(arrayObj->TexCoord); i++)
-      exec->array.legacy_array[VERT_ATTRIB_TEX0 + i] = &arrayObj->TexCoord[i];
-
-   for (i = 0; i < Elements(arrayObj->VertexAttrib); i++) {
-      assert(i < Elements(exec->array.generic_array));
-      exec->array.generic_array[i] = &arrayObj->VertexAttrib[i];
-   }
-   
-   exec->array.array_obj = arrayObj->Name;
 }
 
 
@@ -426,40 +385,38 @@ recalculate_input_bindings(struct gl_context *ctx)
 {
    struct vbo_context *vbo = vbo_context(ctx);
    struct vbo_exec_context *exec = &vbo->exec;
+   struct gl_client_array *vertexAttrib = ctx->Array.ArrayObj->VertexAttrib;
    const struct gl_client_array **inputs = &exec->array.inputs[0];
-   GLbitfield const_inputs = 0x0;
+   GLbitfield64 const_inputs = 0x0;
    GLuint i;
 
-   exec->array.program_mode = get_program_mode(ctx);
-   exec->array.enabled_flags = ctx->Array.ArrayObj->_Enabled;
-
-   switch (exec->array.program_mode) {
+   switch (get_program_mode(ctx)) {
    case VP_NONE:
       /* When no vertex program is active (or the vertex program is generated
        * from fixed-function state).  We put the material values into the
        * generic slots.  This is the only situation where material values
        * are available as per-vertex attributes.
        */
-      for (i = 0; i <= VERT_ATTRIB_TEX7; i++) {
-	 if (exec->array.legacy_array[i]->Enabled)
-	    inputs[i] = exec->array.legacy_array[i];
+      for (i = 0; i < VERT_ATTRIB_FF_MAX; i++) {
+	 if (vertexAttrib[VERT_ATTRIB_FF(i)].Enabled)
+	    inputs[i] = &vertexAttrib[VERT_ATTRIB_FF(i)];
 	 else {
 	    inputs[i] = &vbo->legacy_currval[i];
-            const_inputs |= 1 << i;
+            const_inputs |= VERT_BIT(i);
          }
       }
 
       for (i = 0; i < MAT_ATTRIB_MAX; i++) {
-	 inputs[VERT_ATTRIB_GENERIC0 + i] = &vbo->mat_currval[i];
-         const_inputs |= 1 << (VERT_ATTRIB_GENERIC0 + i);
+	 inputs[VERT_ATTRIB_GENERIC(i)] = &vbo->mat_currval[i];
+         const_inputs |= VERT_BIT_GENERIC(i);
       }
 
       /* Could use just about anything, just to fill in the empty
        * slots:
        */
-      for (i = MAT_ATTRIB_MAX; i < VERT_ATTRIB_MAX - VERT_ATTRIB_GENERIC0; i++) {
-	 inputs[VERT_ATTRIB_GENERIC0 + i] = &vbo->generic_currval[i];
-         const_inputs |= 1 << (VERT_ATTRIB_GENERIC0 + i);
+      for (i = MAT_ATTRIB_MAX; i < VERT_ATTRIB_GENERIC_MAX; i++) {
+	 inputs[VERT_ATTRIB_GENERIC(i)] = &vbo->generic_currval[i];
+         const_inputs |= VERT_BIT_GENERIC(i);
       }
 
       /* There is no need to make _NEW_ARRAY dirty here for the TnL program,
@@ -476,23 +433,24 @@ recalculate_input_bindings(struct gl_context *ctx)
        * conventional, legacy arrays.  No materials, and the generic
        * slots are vacant.
        */
-      for (i = 0; i <= VERT_ATTRIB_TEX7; i++) {
-	 if (exec->array.generic_array[i]->Enabled)
-	    inputs[i] = exec->array.generic_array[i];
-	 else if (exec->array.legacy_array[i]->Enabled)
-	    inputs[i] = exec->array.legacy_array[i];
+      for (i = 0; i < VERT_ATTRIB_FF_MAX; i++) {
+	 if (i < VERT_ATTRIB_GENERIC_MAX
+             && vertexAttrib[VERT_ATTRIB_GENERIC(i)].Enabled)
+	    inputs[i] = &vertexAttrib[VERT_ATTRIB_GENERIC(i)];
+	 else if (vertexAttrib[VERT_ATTRIB_FF(i)].Enabled)
+	    inputs[i] = &vertexAttrib[VERT_ATTRIB_FF(i)];
 	 else {
 	    inputs[i] = &vbo->legacy_currval[i];
-            const_inputs |= 1 << i;
+            const_inputs |= VERT_BIT_FF(i);
          }
       }
 
       /* Could use just about anything, just to fill in the empty
        * slots:
        */
-      for (i = VERT_ATTRIB_GENERIC0; i < VERT_ATTRIB_MAX; i++) {
-	 inputs[i] = &vbo->generic_currval[i - VERT_ATTRIB_GENERIC0];
-         const_inputs |= 1 << i;
+      for (i = 0; i < VERT_ATTRIB_GENERIC_MAX; i++) {
+	 inputs[VERT_ATTRIB_GENERIC(i)] = &vbo->generic_currval[i];
+         const_inputs |= VERT_BIT_GENERIC(i);
       }
 
       ctx->NewState |= _NEW_ARRAY;
@@ -506,38 +464,39 @@ recalculate_input_bindings(struct gl_context *ctx)
        * generic attributes in the generic slots and materials are not
        * available as per-vertex attributes.
        */
-      if (exec->array.generic_array[0]->Enabled)
-	 inputs[0] = exec->array.generic_array[0];
-      else if (exec->array.legacy_array[0]->Enabled)
-	 inputs[0] = exec->array.legacy_array[0];
+      if (vertexAttrib[VERT_ATTRIB_GENERIC0].Enabled)
+	 inputs[0] = &vertexAttrib[VERT_ATTRIB_GENERIC0];
+      else if (vertexAttrib[VERT_ATTRIB_POS].Enabled)
+	 inputs[0] = &vertexAttrib[VERT_ATTRIB_POS];
       else {
 	 inputs[0] = &vbo->legacy_currval[0];
-         const_inputs |= 1 << 0;
+         const_inputs |= VERT_BIT_POS;
       }
 
-      for (i = 1; i <= VERT_ATTRIB_TEX7; i++) {
-	 if (exec->array.legacy_array[i]->Enabled)
-	    inputs[i] = exec->array.legacy_array[i];
+      for (i = 1; i < VERT_ATTRIB_FF_MAX; i++) {
+	 if (vertexAttrib[VERT_ATTRIB_FF(i)].Enabled)
+	    inputs[i] = &vertexAttrib[VERT_ATTRIB_FF(i)];
 	 else {
 	    inputs[i] = &vbo->legacy_currval[i];
-            const_inputs |= 1 << i;
+            const_inputs |= VERT_BIT_FF(i);
          }
       }
 
-      for (i = 0; i < MAX_VERTEX_GENERIC_ATTRIBS; i++) {
-	 if (exec->array.generic_array[i]->Enabled)
-	    inputs[VERT_ATTRIB_GENERIC0 + i] = exec->array.generic_array[i];
+      for (i = 1; i < VERT_ATTRIB_GENERIC_MAX; i++) {
+	 if (vertexAttrib[VERT_ATTRIB_GENERIC(i)].Enabled)
+	    inputs[VERT_ATTRIB_GENERIC(i)] = &vertexAttrib[VERT_ATTRIB_GENERIC(i)];
 	 else {
-	    inputs[VERT_ATTRIB_GENERIC0 + i] = &vbo->generic_currval[i];
-            const_inputs |= 1 << (VERT_ATTRIB_GENERIC0 + i);
+	    inputs[VERT_ATTRIB_GENERIC(i)] = &vbo->generic_currval[i];
+            const_inputs |= VERT_BIT_GENERIC(i);
          }
       }
 
+      inputs[VERT_ATTRIB_GENERIC0] = inputs[0];
       ctx->NewState |= _NEW_ARRAY;
       break;
    }
 
-   _mesa_set_varying_vp_inputs( ctx, ~const_inputs );
+   _mesa_set_varying_vp_inputs( ctx, VERT_BIT_ALL & (~const_inputs) );
 }
 
 
@@ -548,14 +507,13 @@ recalculate_input_bindings(struct gl_context *ctx)
  * Note that this might set the _NEW_ARRAY dirty flag so state validation
  * must be done after this call.
  */
-static void
-bind_arrays(struct gl_context *ctx)
+void
+vbo_bind_arrays(struct gl_context *ctx)
 {
    if (!ctx->Array.RebindArrays) {
       return;
    }
 
-   bind_array_obj(ctx);
    recalculate_input_bindings(ctx);
    ctx->Array.RebindArrays = GL_FALSE;
 }
@@ -575,7 +533,9 @@ vbo_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
    struct vbo_exec_context *exec = &vbo->exec;
    struct _mesa_prim prim[2];
 
-   bind_arrays(ctx);
+   vbo_bind_arrays(ctx);
+
+   vbo_draw_method(exec, DRAW_ARRAYS);
 
    /* Again... because we may have changed the bitmask of per-vertex varying
     * attributes.  If we regenerate the fixed-function vertex program now
@@ -628,7 +588,7 @@ vbo_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
          /* draw one or two prims */
          check_buffers_are_unmapped(exec->array.inputs);
          vbo->draw_prims(ctx, exec->array.inputs, prim, primCount, NULL,
-                         GL_TRUE, start, start + count - 1);
+                         GL_TRUE, start, start + count - 1, NULL);
       }
    }
    else {
@@ -638,7 +598,8 @@ vbo_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
 
       check_buffers_are_unmapped(exec->array.inputs);
       vbo->draw_prims(ctx, exec->array.inputs, prim, 1, NULL,
-                      GL_TRUE, start, start + count - 1);
+                      GL_TRUE, start, start + count - 1,
+                      NULL);
    }
 }
 
@@ -715,16 +676,17 @@ vbo_exec_DrawArraysInstanced(GLenum mode, GLint start, GLsizei count,
 static void
 dump_element_buffer(struct gl_context *ctx, GLenum type)
 {
-   const GLvoid *map = ctx->Driver.MapBuffer(ctx,
-                                             GL_ELEMENT_ARRAY_BUFFER_ARB,
-                                             GL_READ_ONLY,
-                                             ctx->Array.ElementArrayBufferObj);
+   const GLvoid *map =
+      ctx->Driver.MapBufferRange(ctx, 0,
+				 ctx->Array.ArrayObj->ElementArrayBufferObj->Size,
+				 GL_MAP_READ_BIT,
+				 ctx->Array.ArrayObj->ElementArrayBufferObj);
    switch (type) {
    case GL_UNSIGNED_BYTE:
       {
          const GLubyte *us = (const GLubyte *) map;
          GLint i;
-         for (i = 0; i < ctx->Array.ElementArrayBufferObj->Size; i++) {
+         for (i = 0; i < ctx->Array.ArrayObj->ElementArrayBufferObj->Size; i++) {
             printf("%02x ", us[i]);
             if (i % 32 == 31)
                printf("\n");
@@ -736,7 +698,7 @@ dump_element_buffer(struct gl_context *ctx, GLenum type)
       {
          const GLushort *us = (const GLushort *) map;
          GLint i;
-         for (i = 0; i < ctx->Array.ElementArrayBufferObj->Size / 2; i++) {
+         for (i = 0; i < ctx->Array.ArrayObj->ElementArrayBufferObj->Size / 2; i++) {
             printf("%04x ", us[i]);
             if (i % 16 == 15)
                printf("\n");
@@ -748,7 +710,7 @@ dump_element_buffer(struct gl_context *ctx, GLenum type)
       {
          const GLuint *us = (const GLuint *) map;
          GLint i;
-         for (i = 0; i < ctx->Array.ElementArrayBufferObj->Size / 4; i++) {
+         for (i = 0; i < ctx->Array.ArrayObj->ElementArrayBufferObj->Size / 4; i++) {
             printf("%08x ", us[i]);
             if (i % 8 == 7)
                printf("\n");
@@ -760,8 +722,7 @@ dump_element_buffer(struct gl_context *ctx, GLenum type)
       ;
    }
 
-   ctx->Driver.UnmapBuffer(ctx, GL_ELEMENT_ARRAY_BUFFER_ARB,
-                           ctx->Array.ElementArrayBufferObj);
+   ctx->Driver.UnmapBuffer(ctx, ctx->Array.ArrayObj->ElementArrayBufferObj);
 }
 
 
@@ -789,7 +750,9 @@ vbo_validated_drawrangeelements(struct gl_context *ctx, GLenum mode,
       return;
    }
 
-   bind_arrays( ctx );
+   vbo_bind_arrays( ctx );
+
+   vbo_draw_method(exec, DRAW_ARRAYS);
 
    /* check for dirty state again */
    if (ctx->NewState)
@@ -797,7 +760,7 @@ vbo_validated_drawrangeelements(struct gl_context *ctx, GLenum mode,
 
    ib.count = count;
    ib.type = type;
-   ib.obj = ctx->Array.ElementArrayBufferObj;
+   ib.obj = ctx->Array.ArrayObj->ElementArrayBufferObj;
    ib.ptr = indices;
 
    prim[0].begin = 1;
@@ -844,7 +807,7 @@ vbo_validated_drawrangeelements(struct gl_context *ctx, GLenum mode,
 
    check_buffers_are_unmapped(exec->array.inputs);
    vbo->draw_prims( ctx, exec->array.inputs, prim, 1, &ib,
-		    index_bounds_valid, start, end );
+		    index_bounds_valid, start, end, NULL );
 }
 
 
@@ -899,8 +862,8 @@ vbo_exec_DrawRangeElementsBaseVertex(GLenum mode,
                        "\tThis should probably be fixed in the application.",
                        start, end, count, type, indices,
                        ctx->Array.ArrayObj->_MaxElement - 1,
-                       ctx->Array.ElementArrayBufferObj->Name,
-                       (int) ctx->Array.ElementArrayBufferObj->Size);
+                       ctx->Array.ArrayObj->ElementArrayBufferObj->Name,
+                       (int) ctx->Array.ArrayObj->ElementArrayBufferObj->Size);
       }
 
       if (0)
@@ -914,7 +877,7 @@ vbo_exec_DrawRangeElementsBaseVertex(GLenum mode,
        */
       if (0) {
          GLuint max = _mesa_max_buffer_index(ctx, count, type, indices,
-                                             ctx->Array.ElementArrayBufferObj);
+                                             ctx->Array.ArrayObj->ElementArrayBufferObj);
          if (max >= ctx->Array.ArrayObj->_MaxElement) {
             if (warnCount < 10) {
                _mesa_warning(ctx, "glDraw[Range]Elements(start %u, end %u, "
@@ -924,8 +887,8 @@ vbo_exec_DrawRangeElementsBaseVertex(GLenum mode,
                              "\tSkipping the glDrawRangeElements() call",
                              start, end, count, type, indices, max,
                              ctx->Array.ArrayObj->_MaxElement - 1,
-                             ctx->Array.ElementArrayBufferObj->Name,
-                             (int) ctx->Array.ElementArrayBufferObj->Size);
+                             ctx->Array.ArrayObj->ElementArrayBufferObj->Name,
+                             (int) ctx->Array.ArrayObj->ElementArrayBufferObj->Size);
             }
          }
          /* XXX we could also find the min index and compare to 'start'
@@ -948,7 +911,7 @@ vbo_exec_DrawRangeElementsBaseVertex(GLenum mode,
 	     "(start %u, end %u, type 0x%x, count %d) ElemBuf %u, "
 	     "base %d\n",
 	     start, end, type, count,
-	     ctx->Array.ElementArrayBufferObj->Name,
+	     ctx->Array.ArrayObj->ElementArrayBufferObj->Name,
 	     basevertex);
    }
 
@@ -970,13 +933,13 @@ static void GLAPIENTRY
 vbo_exec_DrawRangeElements(GLenum mode, GLuint start, GLuint end,
                            GLsizei count, GLenum type, const GLvoid *indices)
 {
-   GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_DRAW)
+   if (MESA_VERBOSE & VERBOSE_DRAW) {
+      GET_CURRENT_CONTEXT(ctx);
       _mesa_debug(ctx,
                   "glDrawRangeElements(%s, %u, %u, %d, %s, %p)\n",
                   _mesa_lookup_enum_by_nr(mode), start, end, count,
                   _mesa_lookup_enum_by_nr(type), indices);
+   }
 
    vbo_exec_DrawRangeElementsBaseVertex(mode, start, end, count, type,
 					indices, 0);
@@ -1090,7 +1053,7 @@ vbo_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
    struct vbo_exec_context *exec = &vbo->exec;
    struct _mesa_index_buffer ib;
    struct _mesa_prim *prim;
-   unsigned int index_type_size = 0;
+   unsigned int index_type_size = vbo_sizeof_ib_type(type);
    uintptr_t min_index_ptr, max_index_ptr;
    GLboolean fallback = GL_FALSE;
    int i;
@@ -1114,25 +1077,11 @@ vbo_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
     * same index buffer, or if we have to reset the index pointer per
     * primitive.
     */
-   bind_arrays( ctx );
+   vbo_bind_arrays( ctx );
 
    /* check for dirty state again */
    if (ctx->NewState)
       _mesa_update_state( ctx );
-
-   switch (type) {
-   case GL_UNSIGNED_INT:
-      index_type_size = 4;
-      break;
-   case GL_UNSIGNED_SHORT:
-      index_type_size = 2;
-      break;
-   case GL_UNSIGNED_BYTE:
-      index_type_size = 1;
-      break;
-   default:
-      assert(0);
-   }
 
    min_index_ptr = (uintptr_t)indices[0];
    max_index_ptr = 0;
@@ -1161,13 +1110,13 @@ vbo_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
     * subranges of the index buffer as one large index buffer may lead to
     * us reading unmapped memory.
     */
-   if (!_mesa_is_bufferobj(ctx->Array.ElementArrayBufferObj))
+   if (!_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj))
       fallback = GL_TRUE;
 
    if (!fallback) {
       ib.count = (max_index_ptr - min_index_ptr) / index_type_size;
       ib.type = type;
-      ib.obj = ctx->Array.ElementArrayBufferObj;
+      ib.obj = ctx->Array.ArrayObj->ElementArrayBufferObj;
       ib.ptr = (void *)min_index_ptr;
 
       for (i = 0; i < primcount; i++) {
@@ -1188,13 +1137,13 @@ vbo_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
 
       check_buffers_are_unmapped(exec->array.inputs);
       vbo->draw_prims(ctx, exec->array.inputs, prim, primcount, &ib,
-		      GL_FALSE, ~0, ~0);
+		      GL_FALSE, ~0, ~0, NULL);
    } else {
       /* render one prim at a time */
       for (i = 0; i < primcount; i++) {
 	 ib.count = count[i];
 	 ib.type = type;
-	 ib.obj = ctx->Array.ElementArrayBufferObj;
+	 ib.obj = ctx->Array.ArrayObj->ElementArrayBufferObj;
 	 ib.ptr = indices[i];
 
 	 prim[0].begin = 1;
@@ -1213,7 +1162,7 @@ vbo_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
 
          check_buffers_are_unmapped(exec->array.inputs);
          vbo->draw_prims(ctx, exec->array.inputs, prim, 1, &ib,
-                         GL_FALSE, ~0, ~0);
+                         GL_FALSE, ~0, ~0, NULL);
       }
    }
 
@@ -1265,6 +1214,76 @@ vbo_exec_MultiDrawElementsBaseVertex(GLenum mode,
 				   basevertex);
 }
 
+#if FEATURE_EXT_transform_feedback
+
+static void
+vbo_draw_transform_feedback(struct gl_context *ctx, GLenum mode,
+                            struct gl_transform_feedback_object *obj,
+                            GLuint numInstances)
+{
+   struct vbo_context *vbo = vbo_context(ctx);
+   struct vbo_exec_context *exec = &vbo->exec;
+   struct _mesa_prim prim[2];
+
+   vbo_bind_arrays(ctx);
+
+   /* Again... because we may have changed the bitmask of per-vertex varying
+    * attributes.  If we regenerate the fixed-function vertex program now
+    * we may be able to prune down the number of vertex attributes which we
+    * need in the shader.
+    */
+   if (ctx->NewState)
+      _mesa_update_state(ctx);
+
+   /* init most fields to zero */
+   memset(prim, 0, sizeof(prim));
+   prim[0].begin = 1;
+   prim[0].end = 1;
+   prim[0].mode = mode;
+   prim[0].num_instances = numInstances;
+
+   /* Maybe we should do some primitive splitting for primitive restart
+    * (like in DrawArrays), but we have no way to know how many vertices
+    * will be rendered. */
+
+   check_buffers_are_unmapped(exec->array.inputs);
+   vbo->draw_prims(ctx, exec->array.inputs, prim, 1, NULL,
+                   GL_TRUE, 0, 0, obj);
+}
+
+/**
+ * Like DrawArrays, but take the count from a transform feedback object.
+ * \param mode  GL_POINTS, GL_LINES, GL_TRIANGLE_STRIP, etc.
+ * \param name  the transform feedback object
+ * User still has to setup of the vertex attribute info with
+ * glVertexPointer, glColorPointer, etc.
+ * Part of GL_ARB_transform_feedback2.
+ */
+static void GLAPIENTRY
+vbo_exec_DrawTransformFeedback(GLenum mode, GLuint name)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   struct gl_transform_feedback_object *obj =
+      _mesa_lookup_transform_feedback_object(ctx, name);
+
+   if (MESA_VERBOSE & VERBOSE_DRAW)
+      _mesa_debug(ctx, "glDrawTransformFeedback(%s, %d)\n",
+                  _mesa_lookup_enum_by_nr(mode), name);
+
+   if (!_mesa_validate_DrawTransformFeedback(ctx, mode, obj)) {
+      return;
+   }
+
+   FLUSH_CURRENT(ctx, 0);
+
+   if (!_mesa_valid_to_render(ctx, "glDrawTransformFeedback")) {
+      return;
+   }
+
+   vbo_draw_transform_feedback(ctx, mode, obj, 1);
+}
+
+#endif
 
 /**
  * Plug in the immediate-mode vertex array drawing commands into the
@@ -1283,6 +1302,9 @@ vbo_exec_array_init( struct vbo_exec_context *exec )
    exec->vtxfmt.DrawArraysInstanced = vbo_exec_DrawArraysInstanced;
    exec->vtxfmt.DrawElementsInstanced = vbo_exec_DrawElementsInstanced;
    exec->vtxfmt.DrawElementsInstancedBaseVertex = vbo_exec_DrawElementsInstancedBaseVertex;
+#if FEATURE_EXT_transform_feedback
+   exec->vtxfmt.DrawTransformFeedback = vbo_exec_DrawTransformFeedback;
+#endif
 }
 
 
@@ -1358,3 +1380,13 @@ _mesa_MultiDrawElementsBaseVertex(GLenum mode,
    vbo_exec_MultiDrawElementsBaseVertex(mode, count, type, indices,
 					primcount, basevertex);
 }
+
+#if FEATURE_EXT_transform_feedback
+
+void GLAPIENTRY
+_mesa_DrawTransformFeedback(GLenum mode, GLuint name)
+{
+   vbo_exec_DrawTransformFeedback(mode, name);
+}
+
+#endif

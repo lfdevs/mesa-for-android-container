@@ -2,17 +2,9 @@ Import('*')
 
 env = env.Clone()
 
-radeon_sources = [
-    'radeon_drm_bo.c',
-    'radeon_drm_cs.c',
-    'radeon_drm_winsys.c',
-]
+radeon_sources = env.ParseSourceList('Makefile.sources', 'C_SOURCES')
 
-try:
-    env.ParseConfig('pkg-config --cflags libdrm')
-except:
-    print 'warning: not building Gallium Radeon'
-    Return()
+env.PkgUseModules('DRM')
 
 radeonwinsys = env.ConvenienceLibrary(
     target ='radeonwinsys',

@@ -29,7 +29,6 @@ DEFINES += \
 	-DGALLIUM_RBUG \
 	-DGALLIUM_TRACE \
 	-DGALLIUM_GALAHAD
-#-DGALLIUM_CELL will be defined by the config */
 
 XLIB_TARGET_SOURCES = \
 	xlib.c
@@ -38,7 +37,6 @@ XLIB_TARGET_SOURCES = \
 XLIB_TARGET_OBJECTS = $(XLIB_TARGET_SOURCES:.c=.o)
 
 
-# Note: CELL_SPU_LIB is only defined for cell configs
 
 LIBS = \
 	$(GALLIUM_DRIVERS) \
@@ -50,11 +48,11 @@ LIBS = \
 	$(TOP)/src/mapi/glapi/libglapi.a \
 	$(TOP)/src/mesa/libmesagallium.a \
 	$(GALLIUM_AUXILIARIES) \
-	$(CELL_SPU_LIB) \
 
 
 # LLVM
 ifeq ($(MESA_LLVM),1)
+PIPE_DRIVERS += $(TOP)/src/gallium/drivers/llvmpipe/libllvmpipe.a
 DEFINES += -DGALLIUM_LLVMPIPE
 GL_LIB_DEPS += $(LLVM_LIBS) 
 LDFLAGS += $(LLVM_LDFLAGS)

@@ -2,10 +2,8 @@
 
 # Common list:
 NOT_INSTALLED := \
-	dri/usr/include/GL/glfbdev.h \
 	dri/usr/include/GL/glu.h \
 	dri/usr/include/GL/glu_mangle.h \
-	dri/usr/include/GL/mesa_wgl.h \
 	dri/usr/include/GL/osmesa.h \
 	dri/usr/include/GL/vms_x_fix.h \
 	dri/usr/include/GL/wglext.h \
@@ -13,15 +11,11 @@ NOT_INSTALLED := \
 	dri/usr/lib/*/libGL.so \
 	dri/usr/lib/*/pkgconfig/gl.pc \
 	usr/include/GL/glext.h \
-	usr/include/GL/glfbdev.h \
 	usr/include/GL/gl.h \
 	usr/include/GL/gl_mangle.h \
-	usr/include/GL/GLwDrawAP.h \
-	usr/include/GL/GLwMDrawAP.h \
 	usr/include/GL/glxext.h \
 	usr/include/GL/glx.h \
 	usr/include/GL/glx_mangle.h \
-	usr/include/GL/mesa_wgl.h \
 	usr/include/GL/vms_x_fix.h \
 	usr/include/GL/wglext.h \
 	usr/include/GL/wmesa.h
@@ -32,12 +26,12 @@ NOT_INSTALLED_i386 = \
 	usr/lib/*/i686/cmov/libGLU.so \
 	usr/lib/*/i686/cmov/libGLU.so.1 \
 	usr/lib/*/i686/cmov/libGLU.so.1.* \
-	usr/lib/*/i686/cmov/libGLw.so \
-	usr/lib/*/i686/cmov/libGLw.so.1 \
-	usr/lib/*/i686/cmov/libGLw.so.1.* \
-	usr/lib/*/i686/cmov/pkgconfig/glw.pc \
+	usr/lib/*/i686/cmov/libOSMesa.so \
+	usr/lib/*/i686/cmov/libOSMesa.so.6 \
+	usr/lib/*/i686/cmov/libOSMesa.so.6.* \
 	usr/lib/*/i686/cmov/pkgconfig/glu.pc \
-	usr/lib/*/i686/cmov/pkgconfig/gl.pc
+	usr/lib/*/i686/cmov/pkgconfig/gl.pc \
+	usr/lib/*/i686/cmov/pkgconfig/osmesa.pc
 
 # Same for linux, kfreebsd, and hurd on i386:
 NOT_INSTALLED_kfreebsd-i386 = $(NOT_INSTALLED_i386)

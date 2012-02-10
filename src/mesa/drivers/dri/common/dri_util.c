@@ -15,21 +15,8 @@
  */
 
 
-#include <assert.h>
-#include <stdarg.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <stdio.h>
-
-#ifndef MAP_FAILED
-#define MAP_FAILED ((void *)-1)
-#endif
-
-#include "main/imports.h"
-#define None 0
-
+#include <xf86drm.h>
 #include "dri_util.h"
-#include "drm_sarea.h"
 #include "utils.h"
 #include "xmlpool.h"
 #include "../glsl/glsl_parser_extras.h"
@@ -43,38 +30,305 @@ PUBLIC const char __dri2ConfigOptions[] =
 
 static const uint __dri2NConfigOptions = 1;
 
-#ifndef GLX_OML_sync_control
-typedef GLboolean ( * PFNGLXGETMSCRATEOMLPROC) (__DRIdrawable *drawable, int32_t *numerator, int32_t *denominator);
-#endif
+/*****************************************************************/
+/** \name Screen handling functions                              */
+/*****************************************************************/
+/*@{*/
 
-static void dri_get_drawable(__DRIdrawable *pdp);
-static void dri_put_drawable(__DRIdrawable *pdp);
+static void
+setupLoaderExtensions(__DRIscreen *psp,
+		      const __DRIextension **extensions)
+{
+    int i;
+
+    for (i = 0; extensions[i]; i++) {
+	if (strcmp(extensions[i]->name, __DRI_DRI2_LOADER) == 0)
+	    psp->dri2.loader = (__DRIdri2LoaderExtension *) extensions[i];
+	if (strcmp(extensions[i]->name, __DRI_IMAGE_LOOKUP) == 0)
+	    psp->dri2.image = (__DRIimageLookupExtension *) extensions[i];
+	if (strcmp(extensions[i]->name, __DRI_USE_INVALIDATE) == 0)
+	    psp->dri2.useInvalidate = (__DRIuseInvalidateExtension *) extensions[i];
+    }
+}
+
+static __DRIscreen *
+dri2CreateNewScreen(int scrn, int fd,
+		    const __DRIextension **extensions,
+		    const __DRIconfig ***driver_configs, void *data)
+{
+    static const __DRIextension *emptyExtensionList[] = { NULL };
+    __DRIscreen *psp;
+    drmVersionPtr version;
+
+    psp = calloc(1, sizeof(*psp));
+    if (!psp)
+	return NULL;
+
+    setupLoaderExtensions(psp, extensions);
+
+    version = drmGetVersion(fd);
+    if (version) {
+	psp->drm_version.major = version->version_major;
+	psp->drm_version.minor = version->version_minor;
+	psp->drm_version.patch = version->version_patchlevel;
+	drmFreeVersion(version);
+    }
+
+    psp->loaderPrivate = data;
+
+    psp->extensions = emptyExtensionList;
+    psp->fd = fd;
+    psp->myNum = scrn;
+
+    psp->api_mask = (1 << __DRI_API_OPENGL);
+
+    *driver_configs = driDriverAPI.InitScreen(psp);
+    if (*driver_configs == NULL) {
+	free(psp);
+	return NULL;
+    }
+
+    driParseOptionInfo(&psp->optionInfo, __dri2ConfigOptions, __dri2NConfigOptions);
+    driParseConfigFiles(&psp->optionCache, &psp->optionInfo, psp->myNum, "dri2");
+
+    return psp;
+}
 
 /**
- * This is just a token extension used to signal that the driver
- * supports setting a read drawable.
+ * Destroy the per-screen private information.
+ * 
+ * \internal
+ * This function calls __DriverAPIRec::DestroyScreen on \p screenPrivate, calls
+ * drmClose(), and finally frees \p screenPrivate.
  */
-const __DRIextension driReadDrawableExtension = {
-    __DRI_READ_DRAWABLE, __DRI_READ_DRAWABLE_VERSION
-};
-
-GLint
-driIntersectArea( drm_clip_rect_t rect1, drm_clip_rect_t rect2 )
+static void driDestroyScreen(__DRIscreen *psp)
 {
-   if (rect2.x1 > rect1.x1) rect1.x1 = rect2.x1;
-   if (rect2.x2 < rect1.x2) rect1.x2 = rect2.x2;
-   if (rect2.y1 > rect1.y1) rect1.y1 = rect2.y1;
-   if (rect2.y2 < rect1.y2) rect1.y2 = rect2.y2;
+    if (psp) {
+	/* No interaction with the X-server is possible at this point.  This
+	 * routine is called after XCloseDisplay, so there is no protocol
+	 * stream open to the X-server anymore.
+	 */
 
-   if (rect1.x1 > rect1.x2 || rect1.y1 > rect1.y2) return 0;
+       _mesa_destroy_shader_compiler();
 
-   return (rect1.x2 - rect1.x1) * (rect1.y2 - rect1.y1);
+	driDriverAPI.DestroyScreen(psp);
+
+	driDestroyOptionCache(&psp->optionCache);
+	driDestroyOptionInfo(&psp->optionInfo);
+
+	free(psp);
+    }
 }
+
+static const __DRIextension **driGetExtensions(__DRIscreen *psp)
+{
+    return psp->extensions;
+}
+
+/*@}*/
+
+
+/*****************************************************************/
+/** \name Context handling functions                             */
+/*****************************************************************/
+/*@{*/
+
+static __DRIcontext *
+dri2CreateContextAttribs(__DRIscreen *screen, int api,
+			 const __DRIconfig *config,
+			 __DRIcontext *shared,
+			 unsigned num_attribs,
+			 const uint32_t *attribs,
+			 unsigned *error,
+			 void *data)
+{
+    __DRIcontext *context;
+    const struct gl_config *modes = (config != NULL) ? &config->modes : NULL;
+    void *shareCtx = (shared != NULL) ? shared->driverPrivate : NULL;
+    gl_api mesa_api;
+    unsigned major_version = 1;
+    unsigned minor_version = 0;
+    uint32_t flags = 0;
+
+    assert((num_attribs == 0) || (attribs != NULL));
+
+    if (!(screen->api_mask & (1 << api))) {
+	*error = __DRI_CTX_ERROR_BAD_API;
+	return NULL;
+    }
+
+    switch (api) {
+    case __DRI_API_OPENGL:
+	mesa_api = API_OPENGL;
+	break;
+    case __DRI_API_GLES:
+	mesa_api = API_OPENGLES;
+	break;
+    case __DRI_API_GLES2:
+	mesa_api = API_OPENGLES2;
+	break;
+    case __DRI_API_OPENGL_CORE:
+    default:
+	*error = __DRI_CTX_ERROR_BAD_API;
+	return NULL;
+    }
+
+    if (mesa_api != API_OPENGL && num_attribs != 0) {
+	*error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+	assert(!"Should not get here.");
+	return NULL;
+    }
+
+    for (unsigned i = 0; i < num_attribs; i++) {
+	switch (attribs[i * 2]) {
+	case __DRI_CTX_ATTRIB_MAJOR_VERSION:
+	    major_version = attribs[i * 2 + 1];
+	    break;
+	case __DRI_CTX_ATTRIB_MINOR_VERSION:
+	    minor_version = attribs[i * 2 + 1];
+	    break;
+	case __DRI_CTX_ATTRIB_FLAGS:
+	    flags = attribs[i * 2 + 1];
+	    break;
+	default:
+	    /* We can't create a context that satisfies the requirements of an
+	     * attribute that we don't understand.  Return failure.
+	     */
+	    assert(!"Should not get here.");
+	    *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+	    return NULL;
+	}
+    }
+
+    /* There are no forward-compatible contexts before OpenGL 3.0.  The
+     * GLX_ARB_create_context spec says:
+     *
+     *     "Forward-compatible contexts are defined only for OpenGL versions
+     *     3.0 and later."
+     *
+     * Moreover, Mesa can't fulfill the requirements of a forward-looking
+     * context.  Return failure if a forward-looking context is requested.
+     *
+     * In Mesa, a debug context is the same as a regular context.
+     */
+    if ((flags & __DRI_CTX_FLAG_FORWARD_COMPATIBLE) != 0) {
+	*error = __DRI_CTX_ERROR_BAD_FLAG;
+	return NULL;
+    }
+
+    if ((flags & ~__DRI_CTX_FLAG_DEBUG) != 0) {
+	*error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
+	return NULL;
+    }
+
+    context = malloc(sizeof *context);
+    if (!context) {
+	*error = __DRI_CTX_ERROR_NO_MEMORY;
+	return NULL;
+    }
+
+    context->loaderPrivate = data;
+
+    context->driScreenPriv = screen;
+    context->driDrawablePriv = NULL;
+    context->driReadablePriv = NULL;
+
+    if (!driDriverAPI.CreateContext(mesa_api, modes, context,
+				    major_version, minor_version,
+				    flags, error, shareCtx) ) {
+        free(context);
+        return NULL;
+    }
+
+    *error = __DRI_CTX_ERROR_SUCCESS;
+    return context;
+}
+
+static __DRIcontext *
+dri2CreateNewContextForAPI(__DRIscreen *screen, int api,
+			   const __DRIconfig *config,
+			   __DRIcontext *shared, void *data)
+{
+    unsigned error;
+
+    return dri2CreateContextAttribs(screen, api, config, shared, 0, NULL,
+				    &error, data);
+}
+
+static __DRIcontext *
+dri2CreateNewContext(__DRIscreen *screen, const __DRIconfig *config,
+		      __DRIcontext *shared, void *data)
+{
+    return dri2CreateNewContextForAPI(screen, __DRI_API_OPENGL,
+				      config, shared, data);
+}
+
+/**
+ * Destroy the per-context private information.
+ * 
+ * \internal
+ * This function calls __DriverAPIRec::DestroyContext on \p contextPrivate, calls
+ * drmDestroyContext(), and finally frees \p contextPrivate.
+ */
+static void
+driDestroyContext(__DRIcontext *pcp)
+{
+    if (pcp) {
+	driDriverAPI.DestroyContext(pcp);
+	free(pcp);
+    }
+}
+
+static int
+driCopyContext(__DRIcontext *dest, __DRIcontext *src, unsigned long mask)
+{
+    (void) dest;
+    (void) src;
+    (void) mask;
+    return GL_FALSE;
+}
+
+/*@}*/
+
 
 /*****************************************************************/
 /** \name Context (un)binding functions                          */
 /*****************************************************************/
 /*@{*/
+
+static void dri_get_drawable(__DRIdrawable *pdp);
+static void dri_put_drawable(__DRIdrawable *pdp);
+
+/**
+ * This function takes both a read buffer and a draw buffer.  This is needed
+ * for \c glXMakeCurrentReadSGI or GLX 1.3's \c glXMakeContextCurrent
+ * function.
+ */
+static int driBindContext(__DRIcontext *pcp,
+			  __DRIdrawable *pdp,
+			  __DRIdrawable *prp)
+{
+    /*
+    ** Assume error checking is done properly in glXMakeCurrent before
+    ** calling driUnbindContext.
+    */
+
+    if (!pcp)
+	return GL_FALSE;
+
+    /* Bind the drawable to the context */
+    pcp->driDrawablePriv = pdp;
+    pcp->driReadablePriv = prp;
+    if (pdp) {
+	pdp->driContextPriv = pcp;
+	dri_get_drawable(pdp);
+    }
+    if (prp && pdp != prp) {
+	dri_get_drawable(prp);
+    }
+
+    return driDriverAPI.MakeCurrent(pcp, pdp, prp);
+}
 
 /**
  * Unbind context.
@@ -94,7 +348,6 @@ driIntersectArea( drm_clip_rect_t rect1, drm_clip_rect_t rect2 )
  */
 static int driUnbindContext(__DRIcontext *pcp)
 {
-    __DRIscreen *psp;
     __DRIdrawable *pdp;
     __DRIdrawable *prp;
 
@@ -104,17 +357,16 @@ static int driUnbindContext(__DRIcontext *pcp)
     */
 
     if (pcp == NULL)
-        return GL_FALSE;
+	return GL_FALSE;
 
-    psp = pcp->driScreenPriv;
     pdp = pcp->driDrawablePriv;
     prp = pcp->driReadablePriv;
 
     /* already unbound */
     if (!pdp && !prp)
-      return GL_TRUE;
-    /* Let driver unbind drawable from context */
-    (*psp->DriverAPI.UnbindContext)(pcp);
+	return GL_TRUE;
+
+    driDriverAPI.UnbindContext(pcp);
 
     assert(pdp);
     if (pdp->refcount == 0) {
@@ -125,360 +377,80 @@ static int driUnbindContext(__DRIcontext *pcp)
     dri_put_drawable(pdp);
 
     if (prp != pdp) {
-        if (prp->refcount == 0) {
+	if (prp->refcount == 0) {
 	    /* ERROR!!! */
 	    return GL_FALSE;
 	}
 
-    	dri_put_drawable(prp);
+	dri_put_drawable(prp);
     }
-
 
     /* XXX this is disabled so that if we call SwapBuffers on an unbound
      * window we can determine the last context bound to the window and
      * use that context's lock. (BrianP, 2-Dec-2000)
      */
-    pcp->driDrawablePriv = pcp->driReadablePriv = NULL;
+    pcp->driDrawablePriv = NULL;
+    pcp->driReadablePriv = NULL;
 
     return GL_TRUE;
 }
 
-/**
- * This function takes both a read buffer and a draw buffer.  This is needed
- * for \c glXMakeCurrentReadSGI or GLX 1.3's \c glXMakeContextCurrent
- * function.
- */
-static int driBindContext(__DRIcontext *pcp,
-			  __DRIdrawable *pdp,
-			  __DRIdrawable *prp)
+/*@}*/
+
+
+static void dri_get_drawable(__DRIdrawable *pdp)
 {
-    __DRIscreen *psp = NULL;
+    pdp->refcount++;
+}
 
-    /*
-    ** Assume error checking is done properly in glXMakeCurrent before
-    ** calling driUnbindContext.
-    */
-
-    if (!pcp)
-	return GL_FALSE;
-
-    /* Bind the drawable to the context */
-    psp = pcp->driScreenPriv;
-    pcp->driDrawablePriv = pdp;
-    pcp->driReadablePriv = prp;
+static void dri_put_drawable(__DRIdrawable *pdp)
+{
     if (pdp) {
-	pdp->driContextPriv = pcp;
-	dri_get_drawable(pdp);
-    }
-    if (prp && pdp != prp) {
-	dri_get_drawable(prp);
-    }
+	pdp->refcount--;
+	if (pdp->refcount)
+	    return;
 
-    /*
-    ** Now that we have a context associated with this drawable, we can
-    ** initialize the drawable information if has not been done before.
-    */
-
-    if (!psp->dri2.enabled) {
-	if (pdp && !pdp->pStamp) {
-	    DRM_SPINLOCK(&psp->pSAREA->drawable_lock, psp->drawLockID);
-	    __driUtilUpdateDrawableInfo(pdp);
-	    DRM_SPINUNLOCK(&psp->pSAREA->drawable_lock, psp->drawLockID);
-	}
-	if (prp && pdp != prp && !prp->pStamp) {
-	    DRM_SPINLOCK(&psp->pSAREA->drawable_lock, psp->drawLockID);
-	    __driUtilUpdateDrawableInfo(prp);
-	    DRM_SPINUNLOCK(&psp->pSAREA->drawable_lock, psp->drawLockID);
-        }
-    }
-
-    /* Call device-specific MakeCurrent */
-    return (*psp->DriverAPI.MakeCurrent)(pcp, pdp, prp);
-}
-
-/*@}*/
-
-
-/*****************************************************************/
-/** \name Drawable handling functions                            */
-/*****************************************************************/
-/*@{*/
-
-/**
- * Update private drawable information.
- *
- * \param pdp pointer to the private drawable information to update.
- * 
- * This function basically updates the __DRIdrawable struct's
- * cliprect information by calling \c __DRIinterfaceMethods::getDrawableInfo.
- * This is usually called by the DRI_VALIDATE_DRAWABLE_INFO macro which
- * compares the __DRIdrwablePrivate pStamp and lastStamp values.  If
- * the values are different that means we have to update the clipping
- * info.
- */
-void
-__driUtilUpdateDrawableInfo(__DRIdrawable *pdp)
-{
-    __DRIscreen *psp = pdp->driScreenPriv;
-    __DRIcontext *pcp = pdp->driContextPriv;
-    
-    if (!pcp 
-	|| ((pdp != pcp->driDrawablePriv) && (pdp != pcp->driReadablePriv))) {
-	/* ERROR!!! 
-	 * ...but we must ignore it. There can be many contexts bound to a
-	 * drawable.
-	 */
-    }
-
-    if (pdp->pClipRects) {
-	free(pdp->pClipRects); 
-	pdp->pClipRects = NULL;
-    }
-
-    if (pdp->pBackClipRects) {
-	free(pdp->pBackClipRects); 
-	pdp->pBackClipRects = NULL;
-    }
-
-    DRM_SPINUNLOCK(&psp->pSAREA->drawable_lock, psp->drawLockID);
-
-    if (! (*psp->getDrawableInfo->getDrawableInfo)(pdp,
-			  &pdp->index, &pdp->lastStamp,
-			  &pdp->x, &pdp->y, &pdp->w, &pdp->h,
-			  &pdp->numClipRects, &pdp->pClipRects,
-			  &pdp->backX,
-			  &pdp->backY,
-			  &pdp->numBackClipRects,
-			  &pdp->pBackClipRects,
-			  pdp->loaderPrivate)) {
-	/* Error -- eg the window may have been destroyed.  Keep going
-	 * with no cliprects.
-	 */
-        pdp->pStamp = &pdp->lastStamp; /* prevent endless loop */
-	pdp->numClipRects = 0;
-	pdp->pClipRects = NULL;
-	pdp->numBackClipRects = 0;
-	pdp->pBackClipRects = NULL;
-    }
-    else
-       pdp->pStamp = &(psp->pSAREA->drawableTable[pdp->index].stamp);
-
-    DRM_SPINLOCK(&psp->pSAREA->drawable_lock, psp->drawLockID);
-}
-
-/*@}*/
-
-/*****************************************************************/
-/** \name GLX callbacks                                          */
-/*****************************************************************/
-/*@{*/
-
-static void driReportDamage(__DRIdrawable *pdp,
-			    struct drm_clip_rect *pClipRects, int numClipRects)
-{
-    __DRIscreen *psp = pdp->driScreenPriv;
-
-    /* Check that we actually have the new damage report method */
-    if (psp->damage) {
-	/* Report the damage.  Currently, all our drivers draw
-	 * directly to the front buffer, so we report the damage there
-	 * rather than to the backing storein (if any).
-	 */
-	(*psp->damage->reportDamage)(pdp,
-				     pdp->x, pdp->y,
-				     pClipRects, numClipRects,
-				     GL_TRUE, pdp->loaderPrivate);
+	driDriverAPI.DestroyBuffer(pdp);
+	free(pdp);
     }
 }
-
-
-/**
- * Swap buffers.
- *
- * \param drawablePrivate opaque pointer to the per-drawable private info.
- * 
- * \internal
- * This function calls __DRIdrawable::swapBuffers.
- * 
- * Is called directly from glXSwapBuffers().
- */
-static void driSwapBuffers(__DRIdrawable *dPriv)
-{
-    __DRIscreen *psp = dPriv->driScreenPriv;
-    drm_clip_rect_t *rects;
-    int i;
-
-    psp->DriverAPI.SwapBuffers(dPriv);
-
-    if (!dPriv->numClipRects)
-        return;
-
-    rects = malloc(sizeof(*rects) * dPriv->numClipRects);
-
-    if (!rects)
-        return;
-
-    for (i = 0; i < dPriv->numClipRects; i++) {
-        rects[i].x1 = dPriv->pClipRects[i].x1 - dPriv->x;
-        rects[i].y1 = dPriv->pClipRects[i].y1 - dPriv->y;
-        rects[i].x2 = dPriv->pClipRects[i].x2 - dPriv->x;
-        rects[i].y2 = dPriv->pClipRects[i].y2 - dPriv->y;
-    }
-
-    driReportDamage(dPriv, rects, dPriv->numClipRects);
-    free(rects);
-}
-
-static int driDrawableGetMSC( __DRIscreen *sPriv, __DRIdrawable *dPriv,
-			      int64_t *msc )
-{
-    return sPriv->DriverAPI.GetDrawableMSC(sPriv, dPriv, msc);
-}
-
-
-static int driWaitForMSC(__DRIdrawable *dPriv, int64_t target_msc,
-			 int64_t divisor, int64_t remainder,
-			 int64_t * msc, int64_t * sbc)
-{
-    __DRIswapInfo  sInfo;
-    int  status;
-
-    status = dPriv->driScreenPriv->DriverAPI.WaitForMSC( dPriv, target_msc,
-                                                         divisor, remainder,
-                                                         msc );
-
-    /* GetSwapInfo() may not be provided by the driver if GLX_SGI_video_sync
-     * is supported but GLX_OML_sync_control is not.  Therefore, don't return
-     * an error value if GetSwapInfo() is not implemented.
-    */
-    if ( status == 0
-         && dPriv->driScreenPriv->DriverAPI.GetSwapInfo ) {
-        status = dPriv->driScreenPriv->DriverAPI.GetSwapInfo( dPriv, & sInfo );
-        *sbc = sInfo.swap_count;
-    }
-
-    return status;
-}
-
-
-const __DRImediaStreamCounterExtension driMediaStreamCounterExtension = {
-    { __DRI_MEDIA_STREAM_COUNTER, __DRI_MEDIA_STREAM_COUNTER_VERSION },
-    driWaitForMSC,
-    driDrawableGetMSC,
-};
-
-
-static void driCopySubBuffer(__DRIdrawable *dPriv,
-			      int x, int y, int w, int h)
-{
-    drm_clip_rect_t rect;
-
-    rect.x1 = x;
-    rect.y1 = dPriv->h - y - h;
-    rect.x2 = x + w;
-    rect.y2 = rect.y1 + h;
-    driReportDamage(dPriv, &rect, 1);
-
-    dPriv->driScreenPriv->DriverAPI.CopySubBuffer(dPriv, x, y, w, h);
-}
-
-const __DRIcopySubBufferExtension driCopySubBufferExtension = {
-    { __DRI_COPY_SUB_BUFFER, __DRI_COPY_SUB_BUFFER_VERSION },
-    driCopySubBuffer
-};
-
-static void driSetSwapInterval(__DRIdrawable *dPriv, unsigned int interval)
-{
-    dPriv->swap_interval = interval;
-}
-
-static unsigned int driGetSwapInterval(__DRIdrawable *dPriv)
-{
-    return dPriv->swap_interval;
-}
-
-const __DRIswapControlExtension driSwapControlExtension = {
-    { __DRI_SWAP_CONTROL, __DRI_SWAP_CONTROL_VERSION },
-    driSetSwapInterval,
-    driGetSwapInterval
-};
-
-
-/**
- * This is called via __DRIscreenRec's createNewDrawable pointer.
- */
-static __DRIdrawable *
-driCreateNewDrawable(__DRIscreen *psp, const __DRIconfig *config,
-		     drm_drawable_t hwDrawable, int renderType,
-		     const int *attrs, void *data)
-{
-    __DRIdrawable *pdp;
-
-    /* Since pbuffers are not yet supported, no drawable attributes are
-     * supported either.
-     */
-    (void) attrs;
-
-    pdp = malloc(sizeof *pdp);
-    if (!pdp) {
-	return NULL;
-    }
-
-    pdp->driContextPriv = NULL;
-    pdp->loaderPrivate = data;
-    pdp->hHWDrawable = hwDrawable;
-    pdp->refcount = 1;
-    pdp->pStamp = NULL;
-    pdp->lastStamp = 0;
-    pdp->index = 0;
-    pdp->x = 0;
-    pdp->y = 0;
-    pdp->w = 0;
-    pdp->h = 0;
-    pdp->numClipRects = 0;
-    pdp->numBackClipRects = 0;
-    pdp->pClipRects = NULL;
-    pdp->pBackClipRects = NULL;
-    pdp->vblSeq = 0;
-    pdp->vblFlags = 0;
-
-    pdp->driScreenPriv = psp;
-
-    if (!(*psp->DriverAPI.CreateBuffer)(psp, pdp, &config->modes, 0)) {
-       free(pdp);
-       return NULL;
-    }
-
-    pdp->msc_base = 0;
-
-    /* This special default value is replaced with the configured
-     * default value when the drawable is first bound to a direct
-     * rendering context. 
-     */
-    pdp->swap_interval = (unsigned)-1;
-
-    return pdp;
-}
-
 
 static __DRIdrawable *
 dri2CreateNewDrawable(__DRIscreen *screen,
 		      const __DRIconfig *config,
-		      void *loaderPrivate)
+		      void *data)
 {
     __DRIdrawable *pdraw;
 
-    pdraw = driCreateNewDrawable(screen, config, 0, 0, NULL, loaderPrivate);
+    pdraw = malloc(sizeof *pdraw);
     if (!pdraw)
-    	return NULL;
+	return NULL;
 
-    pdraw->pClipRects = &pdraw->dri2.clipRect;
-    pdraw->pBackClipRects = &pdraw->dri2.clipRect;
+    pdraw->loaderPrivate = data;
 
-    pdraw->pStamp = &pdraw->dri2.stamp;
-    *pdraw->pStamp = pdraw->lastStamp + 1;
+    pdraw->driScreenPriv = screen;
+    pdraw->driContextPriv = NULL;
+    pdraw->refcount = 0;
+    pdraw->lastStamp = 0;
+    pdraw->w = 0;
+    pdraw->h = 0;
+
+    dri_get_drawable(pdraw);
+
+    if (!driDriverAPI.CreateBuffer(screen, pdraw, &config->modes, GL_FALSE)) {
+       free(pdraw);
+       return NULL;
+    }
+
+    pdraw->dri2.stamp = pdraw->lastStamp + 1;
 
     return pdraw;
+}
+
+static void
+driDestroyDrawable(__DRIdrawable *pdp)
+{
+    dri_put_drawable(pdp);
 }
 
 static __DRIbuffer *
@@ -486,14 +458,14 @@ dri2AllocateBuffer(__DRIscreen *screen,
 		   unsigned int attachment, unsigned int format,
 		   int width, int height)
 {
-    return (*screen->DriverAPI.AllocateBuffer)(screen, attachment, format,
-					       width, height);
+    return driDriverAPI.AllocateBuffer(screen, attachment, format,
+				       width, height);
 }
 
 static void
 dri2ReleaseBuffer(__DRIscreen *screen, __DRIbuffer *buffer)
 {
-   (*screen->DriverAPI.ReleaseBuffer)(screen, buffer);
+    driDriverAPI.ReleaseBuffer(screen, buffer);
 }
 
 
@@ -531,387 +503,12 @@ dri2ConfigQueryf(__DRIscreen *screen, const char *var, GLfloat *val)
     return 0;
 }
 
-
-static void dri_get_drawable(__DRIdrawable *pdp)
-{
-    pdp->refcount++;
-}
-	
-static void dri_put_drawable(__DRIdrawable *pdp)
-{
-    __DRIscreen *psp;
-
-    if (pdp) {
-	pdp->refcount--;
-	if (pdp->refcount)
-	    return;
-
-	psp = pdp->driScreenPriv;
-        (*psp->DriverAPI.DestroyBuffer)(pdp);
-	if (pdp->pClipRects && pdp->pClipRects != &pdp->dri2.clipRect) {
-	    free(pdp->pClipRects);
-	    pdp->pClipRects = NULL;
-	}
-	if (pdp->pBackClipRects && pdp->pClipRects != &pdp->dri2.clipRect) {
-	    free(pdp->pBackClipRects);
-	    pdp->pBackClipRects = NULL;
-	}
-	free(pdp);
-    }
-}
-
-static void
-driDestroyDrawable(__DRIdrawable *pdp)
-{
-    dri_put_drawable(pdp);
-}
-
-/*@}*/
-
-
-/*****************************************************************/
-/** \name Context handling functions                             */
-/*****************************************************************/
-/*@{*/
-
-/**
- * Destroy the per-context private information.
- * 
- * \internal
- * This function calls __DriverAPIRec::DestroyContext on \p contextPrivate, calls
- * drmDestroyContext(), and finally frees \p contextPrivate.
- */
-static void
-driDestroyContext(__DRIcontext *pcp)
-{
-    if (pcp) {
-	(*pcp->driScreenPriv->DriverAPI.DestroyContext)(pcp);
-	free(pcp);
-    }
-}
-
-
-/**
- * Create the per-drawable private driver information.
- * 
- * \param render_type   Type of rendering target.  \c GLX_RGBA is the only
- *                      type likely to ever be supported for direct-rendering.
- * \param shared        Context with which to share textures, etc. or NULL
- *
- * \returns An opaque pointer to the per-context private information on
- *          success, or \c NULL on failure.
- * 
- * \internal
- * This function allocates and fills a __DRIcontextRec structure.  It
- * performs some device independent initialization and passes all the
- * relevent information to __DriverAPIRec::CreateContext to create the
- * context.
- *
- */
-static __DRIcontext *
-driCreateNewContext(__DRIscreen *psp, const __DRIconfig *config,
-		    int render_type, __DRIcontext *shared, 
-		    drm_context_t hwContext, void *data)
-{
-    __DRIcontext *pcp;
-    void * const shareCtx = (shared != NULL) ? shared->driverPrivate : NULL;
-
-    pcp = malloc(sizeof *pcp);
-    if (!pcp)
-	return NULL;
-
-    pcp->driScreenPriv = psp;
-    pcp->driDrawablePriv = NULL;
-    pcp->loaderPrivate = data;
-    
-    pcp->dri2.draw_stamp = 0;
-    pcp->dri2.read_stamp = 0;
-
-    pcp->hHWContext = hwContext;
-
-    if ( !(*psp->DriverAPI.CreateContext)(API_OPENGL,
-					  &config->modes, pcp, shareCtx) ) {
-        free(pcp);
-        return NULL;
-    }
-
-    return pcp;
-}
-
 static unsigned int
 dri2GetAPIMask(__DRIscreen *screen)
 {
     return screen->api_mask;
 }
 
-static __DRIcontext *
-dri2CreateNewContextForAPI(__DRIscreen *screen, int api,
-			   const __DRIconfig *config,
-			   __DRIcontext *shared, void *data)
-{
-    __DRIcontext *context;
-    const struct gl_config *modes = (config != NULL) ? &config->modes : NULL;
-    void *shareCtx = (shared != NULL) ? shared->driverPrivate : NULL;
-    gl_api mesa_api;
-
-    if (!(screen->api_mask & (1 << api)))
-	return NULL;
-
-    switch (api) {
-    case __DRI_API_OPENGL:
-	    mesa_api = API_OPENGL;
-	    break;
-    case __DRI_API_GLES:
-	    mesa_api = API_OPENGLES;
-	    break;
-    case __DRI_API_GLES2:
-	    mesa_api = API_OPENGLES2;
-	    break;
-    default:
-	    return NULL;
-    }
-
-    context = malloc(sizeof *context);
-    if (!context)
-	return NULL;
-
-    context->driScreenPriv = screen;
-    context->driDrawablePriv = NULL;
-    context->loaderPrivate = data;
-    
-    if (!(*screen->DriverAPI.CreateContext)(mesa_api, modes,
-					    context, shareCtx) ) {
-        free(context);
-        return NULL;
-    }
-
-    return context;
-}
-
-
-static __DRIcontext *
-dri2CreateNewContext(__DRIscreen *screen, const __DRIconfig *config,
-		      __DRIcontext *shared, void *data)
-{
-   return dri2CreateNewContextForAPI(screen, __DRI_API_OPENGL,
-				     config, shared, data);
-}
-
-static int
-driCopyContext(__DRIcontext *dest, __DRIcontext *src, unsigned long mask)
-{
-    return GL_FALSE;
-}
-
-/*@}*/
-
-
-/*****************************************************************/
-/** \name Screen handling functions                              */
-/*****************************************************************/
-/*@{*/
-
-/**
- * Destroy the per-screen private information.
- * 
- * \internal
- * This function calls __DriverAPIRec::DestroyScreen on \p screenPrivate, calls
- * drmClose(), and finally frees \p screenPrivate.
- */
-static void driDestroyScreen(__DRIscreen *psp)
-{
-    if (psp) {
-	/* No interaction with the X-server is possible at this point.  This
-	 * routine is called after XCloseDisplay, so there is no protocol
-	 * stream open to the X-server anymore.
-	 */
-
-       _mesa_destroy_shader_compiler();
-
-	if (psp->DriverAPI.DestroyScreen)
-	    (*psp->DriverAPI.DestroyScreen)(psp);
-
-	if (!psp->dri2.enabled) {
-	   (void)drmUnmap((drmAddress)psp->pSAREA, SAREA_MAX);
-	   (void)drmUnmap((drmAddress)psp->pFB, psp->fbSize);
-	   (void)drmCloseOnce(psp->fd);
-	} else {
-	   driDestroyOptionCache(&psp->optionCache);
-	   driDestroyOptionInfo(&psp->optionInfo);
-	}
-
-	free(psp);
-    }
-}
-
-static void
-setupLoaderExtensions(__DRIscreen *psp,
-		      const __DRIextension **extensions)
-{
-    int i;
-
-    for (i = 0; extensions[i]; i++) {
-	if (strcmp(extensions[i]->name, __DRI_GET_DRAWABLE_INFO) == 0)
-	    psp->getDrawableInfo = (__DRIgetDrawableInfoExtension *) extensions[i];
-	if (strcmp(extensions[i]->name, __DRI_DAMAGE) == 0)
-	    psp->damage = (__DRIdamageExtension *) extensions[i];
-	if (strcmp(extensions[i]->name, __DRI_SYSTEM_TIME) == 0)
-	    psp->systemTime = (__DRIsystemTimeExtension *) extensions[i];
-	if (strcmp(extensions[i]->name, __DRI_DRI2_LOADER) == 0)
-	    psp->dri2.loader = (__DRIdri2LoaderExtension *) extensions[i];
-	if (strcmp(extensions[i]->name, __DRI_IMAGE_LOOKUP) == 0)
-	    psp->dri2.image = (__DRIimageLookupExtension *) extensions[i];
-	if (strcmp(extensions[i]->name, __DRI_USE_INVALIDATE) == 0)
-	    psp->dri2.useInvalidate = (__DRIuseInvalidateExtension *) extensions[i];
-    }
-}
-
-/**
- * This is the bootstrap function for the driver.  libGL supplies all of the
- * requisite information about the system, and the driver initializes itself.
- * This routine also fills in the linked list pointed to by \c driver_modes
- * with the \c struct gl_config that the driver can support for windows or
- * pbuffers.
- *
- * For legacy DRI.
- * 
- * \param scrn  Index of the screen
- * \param ddx_version Version of the 2D DDX.  This may not be meaningful for
- *                    all drivers.
- * \param dri_version Version of the "server-side" DRI.
- * \param drm_version Version of the kernel DRM.
- * \param frame_buffer Data describing the location and layout of the
- *                     framebuffer.
- * \param pSAREA       Pointer to the SAREA.
- * \param fd           Device handle for the DRM.
- * \param extensions   ??
- * \param driver_modes  Returns modes suppoted by the driver
- * \param loaderPrivate  ??
- * 
- * \note There is no need to check the minimum API version in this
- * function.  Since the name of this function is versioned, it is
- * impossible for a loader that is too old to even load this driver.
- */
-static __DRIscreen *
-driCreateNewScreen(int scrn,
-		   const __DRIversion *ddx_version,
-		   const __DRIversion *dri_version,
-		   const __DRIversion *drm_version,
-		   const __DRIframebuffer *frame_buffer,
-		   drmAddress pSAREA, int fd, 
-		   const __DRIextension **extensions,
-		   const __DRIconfig ***driver_modes,
-		   void *loaderPrivate)
-{
-    static const __DRIextension *emptyExtensionList[] = { NULL };
-    __DRIscreen *psp;
-
-    if (driDriverAPI.InitScreen == NULL)
-	return NULL;
-
-    psp = calloc(1, sizeof *psp);
-    if (!psp)
-	return NULL;
-
-    setupLoaderExtensions(psp, extensions);
-
-    /*
-    ** NOT_DONE: This is used by the X server to detect when the client
-    ** has died while holding the drawable lock.  The client sets the
-    ** drawable lock to this value.
-    */
-    psp->drawLockID = 1;
-
-    psp->drm_version = *drm_version;
-    psp->ddx_version = *ddx_version;
-    psp->dri_version = *dri_version;
-
-    psp->pSAREA = pSAREA;
-    psp->lock = (drmLock *) &psp->pSAREA->lock;
-
-    psp->pFB = frame_buffer->base;
-    psp->fbSize = frame_buffer->size;
-    psp->fbStride = frame_buffer->stride;
-    psp->fbWidth = frame_buffer->width;
-    psp->fbHeight = frame_buffer->height;
-    psp->devPrivSize = frame_buffer->dev_priv_size;
-    psp->pDevPriv = frame_buffer->dev_priv;
-    psp->fbBPP = psp->fbStride * 8 / frame_buffer->width;
-
-    psp->extensions = emptyExtensionList;
-    psp->fd = fd;
-    psp->myNum = scrn;
-    psp->dri2.enabled = GL_FALSE;
-
-    psp->DriverAPI = driDriverAPI;
-    psp->api_mask = (1 << __DRI_API_OPENGL);
-
-    *driver_modes = driDriverAPI.InitScreen(psp);
-    if (*driver_modes == NULL) {
-	free(psp);
-	return NULL;
-    }
-
-    return psp;
-}
-
-/**
- * DRI2
- */
-static __DRIscreen *
-dri2CreateNewScreen(int scrn, int fd,
-		    const __DRIextension **extensions,
-		    const __DRIconfig ***driver_configs, void *data)
-{
-    static const __DRIextension *emptyExtensionList[] = { NULL };
-    __DRIscreen *psp;
-    drmVersionPtr version;
-
-    if (driDriverAPI.InitScreen2 == NULL)
-        return NULL;
-
-    psp = calloc(1, sizeof(*psp));
-    if (!psp)
-	return NULL;
-
-    setupLoaderExtensions(psp, extensions);
-
-    version = drmGetVersion(fd);
-    if (version) {
-	psp->drm_version.major = version->version_major;
-	psp->drm_version.minor = version->version_minor;
-	psp->drm_version.patch = version->version_patchlevel;
-	drmFreeVersion(version);
-    }
-
-    psp->extensions = emptyExtensionList;
-    psp->fd = fd;
-    psp->myNum = scrn;
-    psp->dri2.enabled = GL_TRUE;
-
-    psp->DriverAPI = driDriverAPI;
-    psp->api_mask = (1 << __DRI_API_OPENGL);
-    *driver_configs = driDriverAPI.InitScreen2(psp);
-    if (*driver_configs == NULL) {
-	free(psp);
-	return NULL;
-    }
-
-    psp->DriverAPI = driDriverAPI;
-    psp->loaderPrivate = data;
-
-    driParseOptionInfo(&psp->optionInfo, __dri2ConfigOptions,
-		       __dri2NConfigOptions);
-    driParseConfigFiles(&psp->optionCache, &psp->optionInfo, psp->myNum,
-			"dri2");
-
-    return psp;
-}
-
-static const __DRIextension **driGetExtensions(__DRIscreen *psp)
-{
-    return psp->extensions;
-}
 
 /** Core interface */
 const __DRIcoreExtension driCoreExtension = {
@@ -923,20 +520,12 @@ const __DRIcoreExtension driCoreExtension = {
     driIndexConfigAttrib,
     NULL,
     driDestroyDrawable,
-    driSwapBuffers,
+    NULL,
     NULL,
     driCopyContext,
     driDestroyContext,
     driBindContext,
     driUnbindContext
-};
-
-/** Legacy DRI interface */
-const __DRIlegacyExtension driLegacyExtension = {
-    { __DRI_LEGACY, __DRI_LEGACY_VERSION },
-    driCreateNewScreen,
-    driCreateNewDrawable,
-    driCreateNewContext,
 };
 
 /** DRI2 interface */
@@ -948,7 +537,8 @@ const __DRIdri2Extension driDRI2Extension = {
     dri2GetAPIMask,
     dri2CreateNewContextForAPI,
     dri2AllocateBuffer,
-    dri2ReleaseBuffer
+    dri2ReleaseBuffer,
+    dri2CreateContextAttribs
 };
 
 const __DRI2configQueryExtension dri2ConfigQueryExtension = {
@@ -958,73 +548,27 @@ const __DRI2configQueryExtension dri2ConfigQueryExtension = {
    dri2ConfigQueryf,
 };
 
-/**
- * Calculate amount of swap interval used between GLX buffer swaps.
- * 
- * The usage value, on the range [0,max], is the fraction of total swap
- * interval time used between GLX buffer swaps is calculated.
- *
- *            \f$p = t_d / (i * t_r)\f$
- * 
- * Where \f$t_d\f$ is the time since the last GLX buffer swap, \f$i\f$ is the
- * swap interval (as set by \c glXSwapIntervalSGI), and \f$t_r\f$ time
- * required for a single vertical refresh period (as returned by \c
- * glXGetMscRateOML).
- * 
- * See the documentation for the GLX_MESA_swap_frame_usage extension for more
- * details.
- *
- * \param   dPriv  Pointer to the private drawable structure.
- * \return  If less than a single swap interval time period was required
- *          between GLX buffer swaps, a number greater than 0 and less than
- *          1.0 is returned.  If exactly one swap interval time period is
- *          required, 1.0 is returned, and if more than one is required then
- *          a number greater than 1.0 will be returned.
- *
- * \sa glXSwapIntervalSGI glXGetMscRateOML
- * 
- * \todo Instead of caching the \c glXGetMscRateOML function pointer, would it
- *       be possible to cache the sync rate?
- */
-float
-driCalculateSwapUsage( __DRIdrawable *dPriv, int64_t last_swap_ust,
-		       int64_t current_ust )
-{
-   int32_t   n;
-   int32_t   d;
-   int       interval;
-   float     usage = 1.0;
-   __DRIscreen *psp = dPriv->driScreenPriv;
-
-   if ( (*psp->systemTime->getMSCRate)(dPriv, &n, &d, dPriv->loaderPrivate) ) {
-      interval = (dPriv->swap_interval != 0) ? dPriv->swap_interval : 1;
-
-
-      /* We want to calculate
-       * (current_UST - last_swap_UST) / (interval * us_per_refresh).  We get
-       * current_UST by calling __glXGetUST.  last_swap_UST is stored in
-       * dPriv->swap_ust.  interval has already been calculated.
-       *
-       * The only tricky part is us_per_refresh.  us_per_refresh is
-       * 1000000 / MSC_rate.  We know the MSC_rate is n / d.  We can flip it
-       * around and say us_per_refresh = 1000000 * d / n.  Since this goes in
-       * the denominator of the final calculation, we calculate
-       * (interval * 1000000 * d) and move n into the numerator.
-       */
-
-      usage = (current_ust - last_swap_ust);
-      usage *= n;
-      usage /= (interval * d);
-      usage /= 1000000.0;
-   }
-   
-   return usage;
-}
-
 void
 dri2InvalidateDrawable(__DRIdrawable *drawable)
 {
     drawable->dri2.stamp++;
 }
 
-/*@}*/
+/**
+ * Check that the gl_framebuffer associated with dPriv is the right size.
+ * Resize the gl_framebuffer if needed.
+ * It's expected that the dPriv->driverPrivate member points to a
+ * gl_framebuffer object.
+ */
+void
+driUpdateFramebufferSize(struct gl_context *ctx, const __DRIdrawable *dPriv)
+{
+   struct gl_framebuffer *fb = (struct gl_framebuffer *) dPriv->driverPrivate;
+   if (fb && (dPriv->w != fb->Width || dPriv->h != fb->Height)) {
+      ctx->Driver.ResizeBuffers(ctx, fb, dPriv->w, dPriv->h);
+      /* if the driver needs the hw lock for ResizeBuffers, the drawable
+         might have changed again by now */
+      assert(fb->Width == dPriv->w);
+      assert(fb->Height == dPriv->h);
+   }
+}

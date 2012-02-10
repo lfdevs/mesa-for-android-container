@@ -25,6 +25,7 @@
 
 #include "util/u_inlines.h"
 #include "pipe/p_defines.h"
+#include "util/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "tgsi/tgsi_parse.h"
@@ -112,10 +113,10 @@ svga_create_sampler_state(struct pipe_context *pipe,
    cso->compare_func = sampler->compare_func;
 
    {
-      uint32 r = float_to_ubyte(sampler->border_color[0]);
-      uint32 g = float_to_ubyte(sampler->border_color[1]);
-      uint32 b = float_to_ubyte(sampler->border_color[2]);
-      uint32 a = float_to_ubyte(sampler->border_color[3]);
+      uint32 r = float_to_ubyte(sampler->border_color.f[0]);
+      uint32 g = float_to_ubyte(sampler->border_color.f[1]);
+      uint32 b = float_to_ubyte(sampler->border_color.f[2]);
+      uint32 a = float_to_ubyte(sampler->border_color.f[3]);
 
       cso->bordercolor = (a << 24) | (r << 16) | (g << 8) | b;
    }
@@ -230,7 +231,7 @@ svga_set_fragment_sampler_views(struct pipe_context *pipe,
       if (!views[i])
          continue;
 
-      if (views[i]->texture->format == PIPE_FORMAT_B8G8R8A8_SRGB)
+      if (util_format_is_srgb(views[i]->format))
          flag_srgb |= 1 << i;
 
       if (views[i]->texture->target == PIPE_TEXTURE_1D)

@@ -38,14 +38,15 @@
 #include "intel_batchbuffer.h"
 
 static void
-prepare_cc_vp(struct brw_context *brw)
+brw_upload_cc_vp(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->intel.ctx;
    struct brw_cc_viewport *ccv;
 
-   ccv = brw_state_batch(brw, sizeof(*ccv), 32, &brw->cc.vp_offset);
+   ccv = brw_state_batch(brw, AUB_TRACE_CC_VP_STATE,
+			 sizeof(*ccv), 32, &brw->cc.vp_offset);
 
-   /* _NEW_TRANSOFORM */
+   /* _NEW_TRANSFORM */
    if (ctx->Transform.DepthClamp) {
       /* _NEW_VIEWPORT */
       ccv->min_depth = MIN2(ctx->Viewport.Near, ctx->Viewport.Far);
@@ -64,7 +65,7 @@ const struct brw_tracked_state brw_cc_vp = {
       .brw = BRW_NEW_BATCH,
       .cache = 0
    },
-   .prepare = prepare_cc_vp
+   .emit = brw_upload_cc_vp
 };
 
 /**
@@ -98,7 +99,8 @@ static void upload_cc_unit(struct brw_context *brw)
    struct gl_context *ctx = &brw->intel.ctx;
    struct brw_cc_unit_state *cc;
 
-   cc = brw_state_batch(brw, sizeof(*cc), 64, &brw->cc.state_offset);
+   cc = brw_state_batch(brw, AUB_TRACE_CC_STATE,
+			sizeof(*cc), 64, &brw->cc.state_offset);
    memset(cc, 0, sizeof(*cc));
 
    /* _NEW_STENCIL */
@@ -141,7 +143,7 @@ static void upload_cc_unit(struct brw_context *brw)
    }
 
    /* _NEW_COLOR */
-   if (ctx->Color._LogicOpEnabled && ctx->Color.LogicOp != GL_COPY) {
+   if (ctx->Color.ColorLogicOpEnabled && ctx->Color.LogicOp != GL_COPY) {
       cc->cc2.logicop_enable = 1;
       cc->cc5.logicop_func = intel_translate_logic_op(ctx->Color.LogicOp);
    } else if (ctx->Color.BlendEnabled) {

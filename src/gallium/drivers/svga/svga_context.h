@@ -36,12 +36,16 @@
 #include "tgsi/tgsi_scan.h"
 
 #include "svga_state.h"
+#include "svga_tgsi.h"
+#include "svga_hw_reg.h"
+#include "svga3d_shaderdefs.h"
 
 
 #define SVGA_TEX_UNITS 8
 #define SVGA_MAX_POINTSIZE 80.0
 
 struct draw_vertex_shader;
+struct draw_fragment_shader;
 struct svga_shader_result;
 struct SVGACmdMemory;
 struct util_bitmask;
@@ -64,6 +68,13 @@ struct svga_shader
 struct svga_fragment_shader
 {
    struct svga_shader base;
+
+   struct draw_fragment_shader *draw_shader;
+
+   /** Mask of which generic varying variables are read by this shader */
+   unsigned generic_inputs;
+   /** Table mapping original TGSI generic indexes to low integers */
+   int8_t generic_remap_table[MAX_GENERIC_VARYING];
 };
 
 struct svga_vertex_shader
@@ -141,6 +152,7 @@ struct svga_rasterizer_state {
    unsigned multisampleantialias:1;
    unsigned antialiasedlineenable:1;
    unsigned lastpixel:1;
+   unsigned pointsprite:1;
 
    unsigned linepattern;
 
@@ -235,10 +247,6 @@ struct svga_state
    float zero_stride_constants[PIPE_MAX_ATTRIBS*4];
 };
 
-#define RS_MAX 97
-#define TS_MAX 30
-#define CB_MAX 256
-
 struct svga_prescale {
    float translate[4];
    float scale[4];
@@ -275,9 +283,9 @@ struct svga_hw_view_state
  */
 struct svga_hw_draw_state
 {
-   unsigned rs[RS_MAX];
-   unsigned ts[16][TS_MAX];
-   float cb[PIPE_SHADER_TYPES][CB_MAX][4];
+   unsigned rs[SVGA3D_RS_MAX];
+   unsigned ts[SVGA3D_PIXEL_SAMPLERREG_MAX][SVGA3D_TS_MAX];
+   float cb[PIPE_SHADER_TYPES][SVGA3D_CONSTREG_MAX][4];
 
    struct svga_shader_result *fs;
    struct svga_shader_result *vs;
@@ -372,9 +380,6 @@ struct svga_context
 
    /** List of buffers with queued transfers */
    struct list_head dirty_buffers;
-
-   /** Was the previous draw done with the SW path? */
-   boolean prev_draw_swtnl;
 };
 
 /* A flag for each state_tracker state object:
@@ -417,7 +422,7 @@ struct svga_context
  */
 void svga_clear(struct pipe_context *pipe, 
                 unsigned buffers,
-                const float *rgba,
+                const union pipe_color_union *color,
                 double depth,
                 unsigned stencil);
 
@@ -456,6 +461,8 @@ void svga_context_flush( struct svga_context *svga,
                          struct pipe_fence_handle **pfence );
 
 void svga_hwtnl_flush_retry( struct svga_context *svga );
+void svga_hwtnl_flush_buffer( struct svga_context *svga,
+                              struct pipe_resource *buffer );
 
 void svga_surfaces_flush(struct svga_context *svga);
 

@@ -8,9 +8,9 @@ This patch by David Nusinow.
 
 Index: mesa/src/mesa/main/compiler.h
 ===================================================================
---- mesa.orig/src/mesa/main/compiler.h
-+++ mesa/src/mesa/main/compiler.h
-@@ -375,8 +375,9 @@ static INLINE GLuint CPU_TO_LE32(GLuint
+--- mesa.orig/src/mesa/main/compiler.h	2012-01-18 16:04:58.338654818 +0200
++++ mesa/src/mesa/main/compiler.h	2012-01-18 16:05:00.930732513 +0200
+@@ -369,8 +369,9 @@
   * USE_IEEE: Determine if we're using IEEE floating point
   */
  #if defined(__i386__) || defined(__386__) || defined(__sparc__) || \

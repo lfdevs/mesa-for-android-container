@@ -91,7 +91,7 @@ ErrorMessageF(const char *f, ...)
  * directories specified by the \c LIBGL_DRIVERS_PATH environment variable in
  * order to find the driver.
  *
- * \param driverName - a name like "tdfx", "i810", "mga", etc.
+ * \param driverName - a name like "i965", "radeon", "nouveau", etc.
  *
  * \returns
  * A handle from \c dlopen, or \c NULL if driver file not found.
@@ -340,8 +340,6 @@ driConvertConfigs(const __DRIcoreExtension * core,
       tail = tail->next;
    }
 
-   glx_config_destroy_list(configs);
-
    return head.next;
 }
 
@@ -419,6 +417,126 @@ driReleaseDrawables(struct glx_context *gc)
    gc->currentDrawable = None;
    gc->currentReadable = None;
 
+}
+
+_X_HIDDEN bool
+dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
+			 unsigned *major_ver, unsigned *minor_ver,
+			 uint32_t *flags, unsigned *api, unsigned *error)
+{
+   unsigned i;
+   bool got_profile = false;
+   uint32_t profile;
+   int render_type = GLX_RGBA_TYPE;
+
+   if (num_attribs == 0) {
+      *api = __DRI_API_OPENGL;
+      return true;
+   }
+
+   /* This is actually an internal error, but what the heck.
+    */
+   if (attribs == NULL) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+      return false;
+   }
+
+   *major_ver = 1;
+   *minor_ver = 0;
+
+   for (i = 0; i < num_attribs; i++) {
+      switch (attribs[i * 2]) {
+      case GLX_CONTEXT_MAJOR_VERSION_ARB:
+	 *major_ver = attribs[i * 2 + 1];
+	 break;
+      case GLX_CONTEXT_MINOR_VERSION_ARB:
+	 *minor_ver = attribs[i * 2 + 1];
+	 break;
+      case GLX_CONTEXT_FLAGS_ARB:
+	 *flags = attribs[i * 2 + 1];
+	 break;
+      case GLX_CONTEXT_PROFILE_MASK_ARB:
+	 profile = attribs[i * 2 + 1];
+	 got_profile = true;
+	 break;
+      case GLX_RENDER_TYPE:
+	 render_type = attribs[i * 2 + 1];
+	 break;
+      default:
+	 /* If an unknown attribute is received, fail.
+	  */
+	 *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+	 return false;
+      }
+   }
+
+   *api = __DRI_API_OPENGL;
+   if (!got_profile) {
+      if (*major_ver > 3 || (*major_ver == 3 && *minor_ver >= 2))
+	 *api = __DRI_API_OPENGL_CORE;
+   } else {
+      switch (profile) {
+      case GLX_CONTEXT_CORE_PROFILE_BIT_ARB:
+	 /* There are no profiles before OpenGL 3.2.  The
+	  * GLX_ARB_create_context_profile spec says:
+	  *
+	  *     "If the requested OpenGL version is less than 3.2,
+	  *     GLX_CONTEXT_PROFILE_MASK_ARB is ignored and the functionality
+	  *     of the context is determined solely by the requested version."
+	  */
+	 *api = (*major_ver > 3 || (*major_ver == 3 && *minor_ver >= 2))
+	    ? __DRI_API_OPENGL_CORE : __DRI_API_OPENGL;
+	 break;
+      case GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB:
+	 *api = __DRI_API_OPENGL;
+	 break;
+      case GLX_CONTEXT_ES2_PROFILE_BIT_EXT:
+	 *api = __DRI_API_GLES2;
+	 break;
+      default:
+	 *error = __DRI_CTX_ERROR_BAD_API;
+	 return false;
+      }
+   }
+
+   /* Unknown flag value.
+    */
+   if (*flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE)) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
+      return false;
+   }
+
+   /* There are no forward-compatible contexts before OpenGL 3.0.  The
+    * GLX_ARB_create_context spec says:
+    *
+    *     "Forward-compatible contexts are defined only for OpenGL versions
+    *     3.0 and later."
+    */
+   if (*major_ver < 3 && (*flags & __DRI_CTX_FLAG_FORWARD_COMPATIBLE) != 0) {
+      *error = __DRI_CTX_ERROR_BAD_FLAG;
+      return false;
+   }
+
+   if (*major_ver >= 3 && render_type == GLX_COLOR_INDEX_TYPE) {
+      *error = __DRI_CTX_ERROR_BAD_FLAG;
+      return false;
+   }
+
+   /* The GLX_EXT_create_context_es2_profile spec says:
+    *
+    *     "... If the version requested is 2.0, and the
+    *     GLX_CONTEXT_ES2_PROFILE_BIT_EXT bit is set in the
+    *     GLX_CONTEXT_PROFILE_MASK_ARB attribute (see below), then the context
+    *     returned will implement OpenGL ES 2.0. This is the only way in which
+    *     an implementation may request an OpenGL ES 2.0 context."
+    */
+   if (*api == __DRI_API_GLES2 && (*major_ver != 2 || *minor_ver != 0)) {
+      *error = __DRI_CTX_ERROR_BAD_API;
+      return false;
+   }
+
+   *error = __DRI_CTX_ERROR_SUCCESS;
+   return true;
 }
 
 #endif /* GLX_DIRECT_RENDERING */

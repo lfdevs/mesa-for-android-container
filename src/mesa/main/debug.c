@@ -50,7 +50,8 @@ tex_target_name(GLenum tgt)
       { GL_TEXTURE_CUBE_MAP, "GL_TEXTURE_CUBE_MAP" },
       { GL_TEXTURE_RECTANGLE, "GL_TEXTURE_RECTANGLE" },
       { GL_TEXTURE_1D_ARRAY_EXT, "GL_TEXTURE_1D_ARRAY" },
-      { GL_TEXTURE_2D_ARRAY_EXT, "GL_TEXTURE_2D_ARRAY" }
+      { GL_TEXTURE_2D_ARRAY_EXT, "GL_TEXTURE_2D_ARRAY" },
+      { GL_TEXTURE_EXTERNAL_OES, "GL_TEXTURE_EXTERNAL_OES" }
    };
    GLuint i;
    for (i = 0; i < Elements(tex_targets); i++) {
@@ -192,17 +193,6 @@ static void add_debug_flags( const char *debug )
    if (strstr(debug, "flush"))
       MESA_DEBUG_FLAGS |= DEBUG_ALWAYS_FLUSH;
 
-#if defined(_FPU_GETCW) && defined(_FPU_SETCW)
-   if (strstr(debug, "fpexceptions")) {
-      /* raise FP exceptions */
-      fpu_control_t mask;
-      _FPU_GETCW(mask);
-      mask &= ~(_FPU_MASK_IM | _FPU_MASK_DM | _FPU_MASK_ZM
-                | _FPU_MASK_OM | _FPU_MASK_UM);
-      _FPU_SETCW(mask);
-   }
-#endif
-
 #else
    (void) debug;
 #endif
@@ -279,9 +269,7 @@ write_texture_image(struct gl_texture_object *texObj,
       store = ctx->Pack; /* save */
       ctx->Pack = ctx->DefaultPacking;
 
-      ctx->Driver.GetTexImage(ctx, texObj->Target, level,
-                              GL_RGBA, GL_UNSIGNED_BYTE,
-                              buffer, texObj, img);
+      ctx->Driver.GetTexImage(ctx, GL_RGBA, GL_UNSIGNED_BYTE, buffer, img);
 
       /* make filename */
       _mesa_snprintf(s, sizeof(s), "/tmp/tex%u.l%u.f%u.ppm", texObj->Name, level, face);
@@ -364,11 +352,10 @@ dump_texture(struct gl_texture_object *texObj, GLuint writeImages)
       for (j = 0; j < numFaces; j++) {
          struct gl_texture_image *texImg = texObj->Image[j][i];
          if (texImg) {
-            printf("  Face %u level %u: %d x %d x %d, format %s at %p\n",
+            printf("  Face %u level %u: %d x %d x %d, format %s\n",
 		   j, i,
 		   texImg->Width, texImg->Height, texImg->Depth,
-		   _mesa_get_format_name(texImg->TexFormat),
-		   texImg->Data);
+		   _mesa_get_format_name(texImg->TexFormat));
             if (writeImages == WRITE_ALL ||
                 (writeImages == WRITE_ONE && !written)) {
                write_texture_image(texObj, j, i);
@@ -577,58 +564,62 @@ _mesa_dump_image(const char *filename, const void *image, GLuint w, GLuint h,
  * Quick and dirty function to "print" a texture to stdout.
  */
 void
-_mesa_print_texture(struct gl_context *ctx, const struct gl_texture_image *img)
+_mesa_print_texture(struct gl_context *ctx, struct gl_texture_image *img)
 {
-#if CHAN_TYPE != GL_UNSIGNED_BYTE
-   _mesa_problem(NULL, "PrintTexture not supported");
-#else
+   const GLint slice = 0;
+   GLint srcRowStride;
    GLuint i, j, c;
-   const GLubyte *data = (const GLubyte *) img->Data;
+   GLubyte *data;
+
+   ctx->Driver.MapTextureImage(ctx, img, slice,
+                               0, 0, img->Width, img->Height, GL_MAP_READ_BIT,
+                               &data, &srcRowStride);
 
    if (!data) {
       printf("No texture data\n");
-      return;
    }
-
-   /* XXX add more formats or make into a new format utility function */
-   switch (img->TexFormat) {
-      case MESA_FORMAT_A8:
-      case MESA_FORMAT_L8:
-      case MESA_FORMAT_I8:
-      case MESA_FORMAT_CI8:
-         c = 1;
-         break;
-      case MESA_FORMAT_AL88:
-      case MESA_FORMAT_AL88_REV:
-         c = 2;
-         break;
-      case MESA_FORMAT_RGB888:
-      case MESA_FORMAT_BGR888:
-         c = 3;
-         break;
-      case MESA_FORMAT_RGBA8888:
-      case MESA_FORMAT_ARGB8888:
-         c = 4;
-         break;
-      default:
-         _mesa_problem(NULL, "error in PrintTexture\n");
-         return;
-   }
-
-   for (i = 0; i < img->Height; i++) {
-      for (j = 0; j < img->Width; j++) {
-         if (c==1)
-            printf("%02x  ", data[0]);
-         else if (c==2)
-            printf("%02x%02x  ", data[0], data[1]);
-         else if (c==3)
-            printf("%02x%02x%02x  ", data[0], data[1], data[2]);
-         else if (c==4)
-            printf("%02x%02x%02x%02x  ", data[0], data[1], data[2], data[3]);
-         data += (img->RowStride - img->Width) * c;
+   else {
+      /* XXX add more formats or make into a new format utility function */
+      switch (img->TexFormat) {
+         case MESA_FORMAT_A8:
+         case MESA_FORMAT_L8:
+         case MESA_FORMAT_I8:
+            c = 1;
+            break;
+         case MESA_FORMAT_AL88:
+         case MESA_FORMAT_AL88_REV:
+            c = 2;
+            break;
+         case MESA_FORMAT_RGB888:
+         case MESA_FORMAT_BGR888:
+            c = 3;
+            break;
+         case MESA_FORMAT_RGBA8888:
+         case MESA_FORMAT_ARGB8888:
+            c = 4;
+            break;
+         default:
+            _mesa_problem(NULL, "error in PrintTexture\n");
+            return;
       }
-      /* XXX use img->ImageStride here */
-      printf("\n");
+
+      for (i = 0; i < img->Height; i++) {
+         for (j = 0; j < img->Width; j++) {
+            if (c==1)
+               printf("%02x  ", data[0]);
+            else if (c==2)
+               printf("%02x%02x  ", data[0], data[1]);
+            else if (c==3)
+               printf("%02x%02x%02x  ", data[0], data[1], data[2]);
+            else if (c==4)
+               printf("%02x%02x%02x%02x  ", data[0], data[1], data[2], data[3]);
+            data += (srcRowStride - img->Width) * c;
+         }
+         /* XXX use img->ImageStride here */
+         printf("\n");
+
+      }
    }
-#endif
+
+   ctx->Driver.UnmapTextureImage(ctx, img, slice);
 }

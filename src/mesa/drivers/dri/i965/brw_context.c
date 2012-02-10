@@ -31,53 +31,132 @@
 
 
 #include "main/imports.h"
-#include "main/api_noop.h"
 #include "main/macros.h"
 #include "main/simple_list.h"
+
+#include "vbo/vbo_context.h"
+
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_draw.h"
 #include "brw_state.h"
+
+#include "gen6_hiz.h"
+
+#include "intel_fbo.h"
+#include "intel_mipmap_tree.h"
+#include "intel_regions.h"
 #include "intel_span.h"
+#include "intel_tex.h"
+#include "intel_tex_obj.h"
+
 #include "tnl/t_pipeline.h"
+#include "glsl/ralloc.h"
 
 /***************************************
  * Mesa's Driver Functions
  ***************************************/
 
-static void brwInitDriverFunctions( struct dd_function_table *functions )
+/**
+ * \brief Prepare for entry into glBegin/glEnd block.
+ *
+ * Resolve buffers before entering a glBegin/glEnd block. This is
+ * necessary to prevent recursive calls to FLUSH_VERTICES.
+ *
+ * This resolves the depth buffer of each enabled depth texture and the HiZ
+ * buffer of the attached depth renderbuffer.
+ *
+ * Details
+ * -------
+ * When vertices are queued during a glBegin/glEnd block, those vertices must
+ * be drawn before any rendering state changes. To ensure this, Mesa calls
+ * FLUSH_VERTICES as a prehook to such state changes. Therefore,
+ * FLUSH_VERTICES itself cannot change rendering state without falling into a
+ * recursive trap.
+ *
+ * This precludes meta-ops, namely buffer resolves, from occurring while any
+ * vertices are queued. To prevent that situation, we resolve some buffers on
+ * entering a glBegin/glEnd
+ *
+ * \see brwCleanupExecEnd()
+ */
+static void brwPrepareExecBegin(struct gl_context *ctx)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct intel_context *intel = &brw->intel;
+   struct intel_renderbuffer *draw_irb;
+   struct intel_texture_object *tex_obj;
+
+   if (!intel->has_hiz) {
+      /* The context uses no feature that requires buffer resolves. */
+      return;
+   }
+
+   /* Resolve each enabled texture. */
+   for (int i = 0; i < ctx->Const.MaxTextureImageUnits; i++) {
+      if (!ctx->Texture.Unit[i]._ReallyEnabled)
+	 continue;
+      tex_obj = intel_texture_object(ctx->Texture.Unit[i]._Current);
+      if (!tex_obj || !tex_obj->mt)
+	 continue;
+      intel_miptree_all_slices_resolve_depth(intel, tex_obj->mt);
+   }
+
+   /* Resolve the attached depth buffer. */
+   draw_irb = intel_get_renderbuffer(ctx->DrawBuffer, BUFFER_DEPTH);
+   if (draw_irb) {
+      intel_renderbuffer_resolve_hiz(intel, draw_irb);
+   }
+}
+
+static void brwInitDriverFunctions(struct intel_screen *screen,
+				   struct dd_function_table *functions)
 {
    intelInitDriverFunctions( functions );
 
    brwInitFragProgFuncs( functions );
    brw_init_queryobj_functions(functions);
+
+   functions->PrepareExecBegin = brwPrepareExecBegin;
+   functions->BeginTransformFeedback = brw_begin_transform_feedback;
+
+   if (screen->gen >= 7)
+      functions->EndTransformFeedback = gen7_end_transform_feedback;
+   else
+      functions->EndTransformFeedback = brw_end_transform_feedback;
 }
 
-GLboolean brwCreateContext( int api,
-			    const struct gl_config *mesaVis,
-			    __DRIcontext *driContextPriv,
-			    void *sharedContextPrivate)
+bool
+brwCreateContext(int api,
+	         const struct gl_config *mesaVis,
+		 __DRIcontext *driContextPriv,
+	         void *sharedContextPrivate)
 {
+   __DRIscreen *sPriv = driContextPriv->driScreenPriv;
+   struct intel_screen *screen = sPriv->driverPrivate;
    struct dd_function_table functions;
-   struct brw_context *brw = (struct brw_context *) CALLOC_STRUCT(brw_context);
+   struct brw_context *brw = rzalloc(NULL, struct brw_context);
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
    unsigned i;
 
    if (!brw) {
       printf("%s: failed to alloc context\n", __FUNCTION__);
-      return GL_FALSE;
+      return false;
    }
 
-   brwInitVtbl( brw );
-   brwInitDriverFunctions( &functions );
+   brwInitDriverFunctions(screen, &functions);
 
    if (!intelInitContext( intel, api, mesaVis, driContextPriv,
 			  sharedContextPrivate, &functions )) {
       printf("%s: failed to init intel context\n", __FUNCTION__);
       FREE(brw);
-      return GL_FALSE;
+      return false;
    }
+
+   brwInitVtbl( brw );
+
+   brw_init_surface_formats(brw);
 
    /* Initialize swrast, tnl driver tables: */
    intelInitSpanFuncs(ctx);
@@ -89,7 +168,7 @@ GLboolean brwCreateContext( int api,
    ctx->Const.MaxTextureCoordUnits = 8; /* Mesa limit */
    ctx->Const.MaxTextureUnits = MIN2(ctx->Const.MaxTextureCoordUnits,
                                      ctx->Const.MaxTextureImageUnits);
-   ctx->Const.MaxVertexTextureImageUnits = 0; /* no vertex shader textures */
+   ctx->Const.MaxVertexTextureImageUnits = BRW_MAX_TEX_UNIT;
    ctx->Const.MaxCombinedTextureImageUnits =
       ctx->Const.MaxVertexTextureImageUnits +
       ctx->Const.MaxTextureImageUnits;
@@ -99,26 +178,62 @@ GLboolean brwCreateContext( int api,
 	   ctx->Const.MaxTextureLevels = MAX_TEXTURE_LEVELS;
    ctx->Const.Max3DTextureLevels = 9;
    ctx->Const.MaxCubeTextureLevels = 12;
+
+   if (intel->gen >= 7)
+      ctx->Const.MaxArrayTextureLayers = 2048;
+   else
+      ctx->Const.MaxArrayTextureLayers = 512;
+
    ctx->Const.MaxTextureRectSize = (1<<12);
    
    ctx->Const.MaxTextureMaxAnisotropy = 16.0;
+
+   /* Hardware only supports a limited number of transform feedback buffers.
+    * So we need to override the Mesa default (which is based only on software
+    * limits).
+    */
+   ctx->Const.MaxTransformFeedbackSeparateAttribs = BRW_MAX_SOL_BUFFERS;
+
+   /* On Gen6, in the worst case, we use up one binding table entry per
+    * transform feedback component (see comments above the definition of
+    * BRW_MAX_SOL_BINDINGS, in brw_context.h), so we need to advertise a value
+    * for MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS equal to
+    * BRW_MAX_SOL_BINDINGS.
+    *
+    * In "separate components" mode, we need to divide this value by
+    * BRW_MAX_SOL_BUFFERS, so that the total number of binding table entries
+    * used up by all buffers will not exceed BRW_MAX_SOL_BINDINGS.
+    */
+   ctx->Const.MaxTransformFeedbackInterleavedComponents = BRW_MAX_SOL_BINDINGS;
+   ctx->Const.MaxTransformFeedbackSeparateComponents =
+      BRW_MAX_SOL_BINDINGS / BRW_MAX_SOL_BUFFERS;
+
+   /* Claim to support 4 multisamples, even though we don't.  This is a
+    * requirement for GL 3.0 that we missed until the last minute.  Go ahead and
+    * claim the limit, so that usage of the 4 multisample-based API that is
+    * guaranteed in 3.0 succeeds, even though we only rasterize a single sample.
+    */
+   if (intel->gen >= 6)
+      ctx->Const.MaxSamples = 4;
 
    /* if conformance mode is set, swrast can handle any size AA point */
    ctx->Const.MaxPointSizeAA = 255.0;
 
    /* We want the GLSL compiler to emit code that uses condition codes */
    for (i = 0; i <= MESA_SHADER_FRAGMENT; i++) {
-      ctx->ShaderCompilerOptions[i].EmitCondCodes = GL_TRUE;
-      ctx->ShaderCompilerOptions[i].EmitNVTempInitialization = GL_TRUE;
-      ctx->ShaderCompilerOptions[i].EmitNoNoise = GL_TRUE;
-      ctx->ShaderCompilerOptions[i].EmitNoMainReturn = GL_TRUE;
-      ctx->ShaderCompilerOptions[i].EmitNoIndirectInput = GL_TRUE;
-      ctx->ShaderCompilerOptions[i].EmitNoIndirectOutput = GL_TRUE;
+      ctx->ShaderCompilerOptions[i].MaxIfDepth = intel->gen < 6 ? 16 : UINT_MAX;
+      ctx->ShaderCompilerOptions[i].EmitCondCodes = true;
+      ctx->ShaderCompilerOptions[i].EmitNVTempInitialization = true;
+      ctx->ShaderCompilerOptions[i].EmitNoNoise = true;
+      ctx->ShaderCompilerOptions[i].EmitNoMainReturn = true;
+      ctx->ShaderCompilerOptions[i].EmitNoIndirectInput = true;
+      ctx->ShaderCompilerOptions[i].EmitNoIndirectOutput = true;
 
       ctx->ShaderCompilerOptions[i].EmitNoIndirectUniform =
 	 (i == MESA_SHADER_FRAGMENT);
       ctx->ShaderCompilerOptions[i].EmitNoIndirectTemp =
 	 (i == MESA_SHADER_FRAGMENT);
+      ctx->ShaderCompilerOptions[i].LowerClipDistance = true;
    }
 
    ctx->Const.VertexProgram.MaxNativeInstructions = (16 * 1024);
@@ -162,32 +277,34 @@ GLboolean brwCreateContext( int api,
       that affect provoking vertex decision. Always use last vertex
       convention for quad primitive which works as expected for now. */
    if (intel->gen >= 6)
-       ctx->Const.QuadsFollowProvokingVertexConvention = GL_FALSE;
+       ctx->Const.QuadsFollowProvokingVertexConvention = false;
 
    if (intel->is_g4x || intel->gen >= 5) {
-      brw->CMD_VF_STATISTICS = CMD_VF_STATISTICS_GM45;
+      brw->CMD_VF_STATISTICS = GM45_3DSTATE_VF_STATISTICS;
       brw->CMD_PIPELINE_SELECT = CMD_PIPELINE_SELECT_GM45;
-      brw->has_surface_tile_offset = GL_TRUE;
+      brw->has_surface_tile_offset = true;
       if (intel->gen < 6)
-	  brw->has_compr4 = GL_TRUE;
-      brw->has_aa_line_parameters = GL_TRUE;
-      brw->has_pln = GL_TRUE;
+	  brw->has_compr4 = true;
+      brw->has_aa_line_parameters = true;
+      brw->has_pln = true;
   } else {
-      brw->CMD_VF_STATISTICS = CMD_VF_STATISTICS_965;
+      brw->CMD_VF_STATISTICS = GEN4_3DSTATE_VF_STATISTICS;
       brw->CMD_PIPELINE_SELECT = CMD_PIPELINE_SELECT_965;
    }
 
    /* WM maximum threads is number of EUs times number of threads per EU. */
    if (intel->gen >= 7) {
-      if (IS_IVB_GT1(intel->intelScreen->deviceID)) {
-	 brw->wm_max_threads = 86;
-	 brw->vs_max_threads = 36;
+      if (intel->gt == 1) {
+	 brw->max_wm_threads = 86;
+	 brw->max_vs_threads = 36;
+	 brw->max_gs_threads = 36;
 	 brw->urb.size = 128;
 	 brw->urb.max_vs_entries = 512;
 	 brw->urb.max_gs_entries = 192;
-      } else if (IS_IVB_GT2(intel->intelScreen->deviceID)) {
-	 brw->wm_max_threads = 86;
-	 brw->vs_max_threads = 128;
+      } else if (intel->gt == 2) {
+	 brw->max_wm_threads = 86;
+	 brw->max_vs_threads = 128;
+	 brw->max_gs_threads = 128;
 	 brw->urb.size = 256;
 	 brw->urb.max_vs_entries = 704;
 	 brw->urb.max_gs_entries = 320;
@@ -195,39 +312,42 @@ GLboolean brwCreateContext( int api,
 	 assert(!"Unknown gen7 device.");
       }
    } else if (intel->gen == 6) {
-      if (IS_SNB_GT2(intel->intelScreen->deviceID)) {
+      if (intel->gt == 2) {
 	 /* This could possibly be 80, but is supposed to require
 	  * disabling of WIZ hashing (bit 6 of GT_MODE, 0x20d0) and a
 	  * GPU reset to change.
 	  */
-	 brw->wm_max_threads = 40;
-	 brw->vs_max_threads = 60;
+	 brw->max_wm_threads = 40;
+	 brw->max_vs_threads = 60;
+	 brw->max_gs_threads = 60;
 	 brw->urb.size = 64;            /* volume 5c.5 section 5.1 */
 	 brw->urb.max_vs_entries = 256; /* volume 2a (see 3DSTATE_URB) */
+	 brw->urb.max_gs_entries = 256;
       } else {
-	 brw->wm_max_threads = 40;
-	 brw->vs_max_threads = 24;
+	 brw->max_wm_threads = 40;
+	 brw->max_vs_threads = 24;
+	 brw->max_gs_threads = 21; /* conservative; 24 if rendering disabled */
 	 brw->urb.size = 32;            /* volume 5c.5 section 5.1 */
 	 brw->urb.max_vs_entries = 128; /* volume 2a (see 3DSTATE_URB) */
+	 brw->urb.max_gs_entries = 256;
       }
+      brw->urb.gen6_gs_previously_active = false;
    } else if (intel->gen == 5) {
       brw->urb.size = 1024;
-      brw->vs_max_threads = 72;
-      brw->wm_max_threads = 12 * 6;
+      brw->max_vs_threads = 72;
+      brw->max_gs_threads = 32;
+      brw->max_wm_threads = 12 * 6;
    } else if (intel->is_g4x) {
       brw->urb.size = 384;
-      brw->vs_max_threads = 32;
-      brw->wm_max_threads = 10 * 5;
+      brw->max_vs_threads = 32;
+      brw->max_gs_threads = 2;
+      brw->max_wm_threads = 10 * 5;
    } else if (intel->gen < 6) {
       brw->urb.size = 256;
-      brw->vs_max_threads = 16;
-      brw->wm_max_threads = 8 * 4;
-      brw->has_negative_rhw_bug = GL_TRUE;
-   }
-
-   if (INTEL_DEBUG & DEBUG_SINGLE_THREAD) {
-      brw->vs_max_threads = 1;
-      brw->wm_max_threads = 1;
+      brw->max_vs_threads = 16;
+      brw->max_gs_threads = 2;
+      brw->max_wm_threads = 8 * 4;
+      brw->has_negative_rhw_bug = true;
    }
 
    brw_init_state( brw );
@@ -242,11 +362,18 @@ GLboolean brwCreateContext( int api,
 
    intel->batch.need_workaround_flush = true;
 
-   ctx->VertexProgram._MaintainTnlProgram = GL_TRUE;
-   ctx->FragmentProgram._MaintainTexEnvProgram = GL_TRUE;
+   ctx->VertexProgram._MaintainTnlProgram = true;
+   ctx->FragmentProgram._MaintainTexEnvProgram = true;
 
    brw_draw_init( brw );
 
-   return GL_TRUE;
+   brw->precompile = driQueryOptionb(&intel->optionCache, "shader_precompile");
+
+   ctx->Const.NativeIntegers = true;
+   ctx->Const.UniformBooleanTrue = 1;
+
+   ctx->Const.ForceGLSLExtensionsWarn = driQueryOptionb(&intel->optionCache, "force_glsl_extensions_warn");
+
+   return true;
 }
 

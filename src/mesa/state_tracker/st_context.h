@@ -75,6 +75,7 @@ struct st_context
    struct draw_stage *feedback_stage;  /**< For GL_FEEDBACK rendermode */
    struct draw_stage *selection_stage;  /**< For GL_SELECT rendermode */
    struct draw_stage *rastpos_stage;  /**< For glRasterPos */
+   GLboolean sw_primitive_restart;
 
 
    /* On old libGL's for linux we need to invalidate the drawables
@@ -166,7 +167,6 @@ struct st_context
    struct {
       struct pipe_rasterizer_state raster;
       struct pipe_viewport_state viewport;
-      struct pipe_clip_state clip;
       void *vs;
       void *fs;
       float vertices[4][2][4];  /**< vertex pos + color */
@@ -204,6 +204,9 @@ struct st_context
    /* Active render condition. */
    struct pipe_query *render_condition;
    unsigned condition_mode;
+
+   int32_t draw_stamp;
+   int32_t read_stamp;
 };
 
 
@@ -227,7 +230,8 @@ struct st_framebuffer
    struct st_framebuffer_iface *iface;
    enum st_attachment_type statts[ST_ATTACHMENT_COUNT];
    unsigned num_statts;
-   int32_t revalidate;
+   int32_t stamp;
+   int32_t iface_stamp;
 };
 
 

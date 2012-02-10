@@ -31,6 +31,7 @@
 #include "util/u_memory.h"
 #include "util/u_format.h"
 #include "util/u_string.h"
+#include "util/u_atomic.h"
 
 #include "egl_g3d.h"
 #include "egl_g3d_api.h"
@@ -45,15 +46,9 @@ egl_g3d_invalid_surface(struct native_display *ndpy,
 {
    /* XXX not thread safe? */
    struct egl_g3d_surface *gsurf = egl_g3d_surface(nsurf->user_data);
-   struct egl_g3d_context *gctx;
-   
-   /*
-    * Some functions such as egl_g3d_copy_buffers create a temporary native
-    * surface.  There is no gsurf associated with it.
-    */
-   gctx = (gsurf) ? egl_g3d_context(gsurf->base.CurrentContext) : NULL;
-   if (gctx)
-      gctx->stctxi->notify_invalid_framebuffer(gctx->stctxi, gsurf->stfbi);
+
+   if (gsurf && gsurf->stfbi)
+      p_atomic_inc(&gsurf->stfbi->stamp);
 }
 
 static struct pipe_screen *
@@ -135,6 +130,18 @@ egl_g3d_get_platform(_EGLDriver *drv, _EGLPlatformType plat)
          plat_name = "FBDEV";
 #ifdef HAVE_FBDEV_BACKEND
          nplat = native_get_fbdev_platform(&egl_g3d_native_event_handler);
+#endif
+         break;
+      case _EGL_PLATFORM_NULL:
+         plat_name = "NULL";
+#ifdef HAVE_NULL_BACKEND
+         nplat = native_get_null_platform(&egl_g3d_native_event_handler);
+#endif
+         break;
+      case _EGL_PLATFORM_ANDROID:
+         plat_name = "Android";
+#ifdef HAVE_ANDROID_BACKEND
+         nplat = native_get_android_platform(&egl_g3d_native_event_handler);
 #endif
          break;
       default:
@@ -219,7 +226,8 @@ egl_g3d_add_screens(_EGLDriver *drv, _EGLDisplay *dpy)
 static EGLBoolean
 init_config_attributes(_EGLConfig *conf, const struct native_config *nconf,
                        EGLint api_mask, enum pipe_format depth_stencil_format,
-                       EGLBoolean preserve_buffer, EGLint max_swap_interval)
+                       EGLint preserve_buffer, EGLint max_swap_interval,
+                       EGLBoolean pre_alpha)
 {
    uint rgba[4], depth_stencil[2], buffer_size;
    EGLint surface_type;
@@ -259,6 +267,15 @@ init_config_attributes(_EGLConfig *conf, const struct native_config *nconf,
          surface_type |= EGL_SCREEN_BIT_MESA;
 #endif
       surface_type |= EGL_PBUFFER_BIT;
+   }
+
+   if (preserve_buffer)
+      surface_type |= EGL_SWAP_BEHAVIOR_PRESERVED_BIT;
+
+   if (pre_alpha && rgba[3]) {
+      surface_type |= EGL_VG_ALPHA_FORMAT_PRE_BIT;
+      /* st/vega does not support premultiplied alpha yet */
+      api_mask &= ~EGL_OPENVG_BIT;
    }
 
    conf->Conformant = api_mask;
@@ -306,8 +323,6 @@ init_config_attributes(_EGLConfig *conf, const struct native_config *nconf,
 
    conf->MinSwapInterval = 0;
    conf->MaxSwapInterval = max_swap_interval;
-   if (preserve_buffer)
-      conf->SurfaceType |= EGL_SWAP_BEHAVIOR_PRESERVED_BIT;
 
    return _eglValidateConfig(conf, EGL_FALSE);
 }
@@ -319,7 +334,8 @@ static EGLBoolean
 egl_g3d_init_config(_EGLDriver *drv, _EGLDisplay *dpy,
                     _EGLConfig *conf, const struct native_config *nconf,
                     enum pipe_format depth_stencil_format,
-                    int preserve_buffer, int max_swap_interval)
+                    int preserve_buffer, int max_swap_interval,
+                    int pre_alpha)
 {
    struct egl_g3d_config *gconf = egl_g3d_config(conf);
    EGLint buffer_mask;
@@ -347,7 +363,7 @@ egl_g3d_init_config(_EGLDriver *drv, _EGLDisplay *dpy,
 
    valid = init_config_attributes(&gconf->base,
          nconf, dpy->ClientAPIs, depth_stencil_format,
-         preserve_buffer, max_swap_interval);
+         preserve_buffer, max_swap_interval, pre_alpha);
    if (!valid) {
       _eglLog(_EGL_DEBUG, "skip invalid config 0x%x", nconf->native_visual_id);
       return EGL_FALSE;
@@ -370,7 +386,7 @@ egl_g3d_fill_depth_stencil_formats(_EGLDisplay *dpy,
    const EGLint candidates[] = {
       1, PIPE_FORMAT_Z16_UNORM,
       1, PIPE_FORMAT_Z32_UNORM,
-      2, PIPE_FORMAT_Z24_UNORM_S8_USCALED, PIPE_FORMAT_S8_USCALED_Z24_UNORM,
+      2, PIPE_FORMAT_Z24_UNORM_S8_UINT, PIPE_FORMAT_S8_UINT_Z24_UNORM,
       2, PIPE_FORMAT_Z24X8_UNORM, PIPE_FORMAT_X8Z24_UNORM,
       0
    };
@@ -408,7 +424,7 @@ egl_g3d_add_configs(_EGLDriver *drv, _EGLDisplay *dpy, EGLint id)
    const struct native_config **native_configs;
    enum pipe_format depth_stencil_formats[8];
    int num_formats, num_configs, i, j;
-   int preserve_buffer, max_swap_interval;
+   int preserve_buffer, max_swap_interval, premultiplied_alpha;
 
    native_configs = gdpy->native->get_configs(gdpy->native, &num_configs);
    if (!num_configs) {
@@ -421,6 +437,8 @@ egl_g3d_add_configs(_EGLDriver *drv, _EGLDisplay *dpy, EGLint id)
       gdpy->native->get_param(gdpy->native, NATIVE_PARAM_PRESERVE_BUFFER);
    max_swap_interval =
       gdpy->native->get_param(gdpy->native, NATIVE_PARAM_MAX_SWAP_INTERVAL);
+   premultiplied_alpha =
+      gdpy->native->get_param(gdpy->native, NATIVE_PARAM_PREMULTIPLIED_ALPHA);
 
    num_formats = egl_g3d_fill_depth_stencil_formats(dpy,
          depth_stencil_formats);
@@ -434,7 +452,8 @@ egl_g3d_add_configs(_EGLDriver *drv, _EGLDisplay *dpy, EGLint id)
             _eglInitConfig(&gconf->base, dpy, id);
             if (!egl_g3d_init_config(drv, dpy, &gconf->base,
                      native_configs[i], depth_stencil_formats[j],
-                     preserve_buffer, max_swap_interval)) {
+                     preserve_buffer, max_swap_interval,
+                     premultiplied_alpha)) {
                FREE(gconf);
                break;
             }
@@ -577,10 +596,23 @@ egl_g3d_initialize(_EGLDriver *drv, _EGLDisplay *dpy)
    if (dpy->Platform == _EGL_PLATFORM_WAYLAND && gdpy->native->buffer)
       dpy->Extensions.MESA_drm_image = EGL_TRUE;
 
+#ifdef EGL_ANDROID_image_native_buffer
+   if (dpy->Platform == _EGL_PLATFORM_ANDROID && gdpy->native->buffer)
+      dpy->Extensions.ANDROID_image_native_buffer = EGL_TRUE;
+#endif
+
 #ifdef EGL_WL_bind_wayland_display
    if (gdpy->native->wayland_bufmgr)
       dpy->Extensions.WL_bind_wayland_display = EGL_TRUE;
 #endif
+
+   if (gdpy->native->get_param(gdpy->native, NATIVE_PARAM_PRESENT_REGION) &&
+       gdpy->native->get_param(gdpy->native, NATIVE_PARAM_PRESERVE_BUFFER)) {
+#ifdef EGL_NOK_swap_region
+      dpy->Extensions.NOK_swap_region = EGL_TRUE;
+#endif
+      dpy->Extensions.NV_post_sub_buffer = EGL_TRUE;
+   }
 
    if (egl_g3d_add_configs(drv, dpy, 1) == 1) {
       _eglError(EGL_NOT_INITIALIZED, "eglInitialize(unable to add configs)");

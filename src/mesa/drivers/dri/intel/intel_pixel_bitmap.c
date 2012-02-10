@@ -74,9 +74,9 @@ static const GLubyte *map_pbo( struct gl_context *ctx,
       return NULL;
    }
 
-   buf = (GLubyte *) ctx->Driver.MapBuffer(ctx, GL_PIXEL_UNPACK_BUFFER_EXT,
-					   GL_READ_ONLY_ARB,
-					   unpack->BufferObj);
+   buf = (GLubyte *) ctx->Driver.MapBufferRange(ctx, 0, unpack->BufferObj->Size,
+						GL_MAP_READ_BIT,
+						unpack->BufferObj);
    if (!buf) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "glBitmap(PBO is mapped)");
       return NULL;
@@ -85,7 +85,7 @@ static const GLubyte *map_pbo( struct gl_context *ctx,
    return ADD_POINTERS(buf, bitmap);
 }
 
-static GLboolean test_bit( const GLubyte *src, GLuint bit )
+static bool test_bit( const GLubyte *src, GLuint bit )
 {
    return (src[bit/8] & (1<<(bit % 8))) ? 1 : 0;
 }
@@ -105,7 +105,7 @@ static GLuint get_bitmap_rect(GLsizei width, GLsizei height,
 			      GLuint w, GLuint h,
 			      GLubyte *dest,
 			      GLuint row_align,
-			      GLboolean invert)
+			      bool invert)
 {
    GLuint src_offset = (x + unpack->SkipPixels) & 0x7;
    GLuint mask = unpack->LsbFirst ? 0 : 7;
@@ -167,7 +167,7 @@ y_flip(struct gl_framebuffer *fb, int y, int height)
 /*
  * Render a bitmap.
  */
-static GLboolean
+static bool
 do_blit_bitmap( struct gl_context *ctx, 
 		GLint dstx, GLint dsty,
 		GLsizei width, GLsizei height,
@@ -195,19 +195,19 @@ do_blit_bitmap( struct gl_context *ctx,
        * It seems the blit Z coord is always 1.0 (the far plane) so fragments
        * will likely be obscured by other, closer geometry.
        */
-      return GL_FALSE;
+      return false;
    }
 
    intel_prepare_render(intel);
    dst = intel_drawbuf_region(intel);
 
    if (!dst)
-       return GL_FALSE;
+       return false;
 
    if (_mesa_is_bufferobj(unpack->BufferObj)) {
       bitmap = map_pbo(ctx, width, height, unpack, bitmap);
       if (bitmap == NULL)
-	 return GL_TRUE;	/* even though this is an error, we're done */
+	 return true;	/* even though this is an error, we're done */
    }
 
    COPY_4V(tmpColor, ctx->Current.RasterColor);
@@ -227,7 +227,7 @@ do_blit_bitmap( struct gl_context *ctx,
       color = PACK_COLOR_8888(ubcolor[3], ubcolor[0], ubcolor[1], ubcolor[2]);
 
    if (!intel_check_blit_fragment_ops(ctx, tmpColor[3] == 1.0F))
-      return GL_FALSE;
+      return false;
 
    /* Clip to buffer bounds and scissor. */
    if (!_mesa_clip_to_region(fb->_Xmin, fb->_Ymin,
@@ -265,7 +265,7 @@ do_blit_bitmap( struct gl_context *ctx,
 			     w, h,
 			     (GLubyte *)stipple,
 			     8,
-			     fb->Name == 0 ? GL_TRUE : GL_FALSE) == 0)
+			     fb->Name == 0 ? true : false) == 0)
 	    continue;
 
 	 if (!intelEmitImmediateColorExpandBlit(intel,
@@ -274,14 +274,14 @@ do_blit_bitmap( struct gl_context *ctx,
 						sz,
 						color,
 						dst->pitch,
-						dst->buffer,
+						dst->bo,
 						0,
 						dst->tiling,
 						dstx + px,
 						dsty + py,
 						w, h,
 						logic_op)) {
-	    return GL_FALSE;
+	    return false;
 	 }
       }
    }
@@ -292,13 +292,12 @@ out:
 
    if (_mesa_is_bufferobj(unpack->BufferObj)) {
       /* done with PBO so unmap it now */
-      ctx->Driver.UnmapBuffer(ctx, GL_PIXEL_UNPACK_BUFFER_EXT,
-                              unpack->BufferObj);
+      ctx->Driver.UnmapBuffer(ctx, unpack->BufferObj);
    }
 
    intel_check_front_buffer_rendering(intel);
 
-   return GL_TRUE;
+   return true;
 }
 
 

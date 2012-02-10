@@ -42,7 +42,13 @@
 
 
 #define VMW_GMR_POOL_SIZE (16*1024*1024)
-
+#define VMW_QUERY_POOL_SIZE (8192)
+/*
+ * Something big, but arbitrary. The kernel reports an error if it can't
+ * handle this, and the svga driver will resort to multiple partial
+ * uploads.
+ */
+#define VMW_MAX_BUFFER_SIZE (512*1024*1024)
 
 struct pb_manager;
 struct vmw_region;
@@ -53,18 +59,22 @@ struct vmw_winsys_screen
    struct svga_winsys_screen base;
 
    boolean use_old_scanout_flag;
-   uint32_t default_throttle_us;
 
    struct {
-      volatile uint32_t *fifo_map;
-      uint64_t last_fence;
       int drm_fd;
+      uint32_t hwversion;
+      uint32_t *buffer;
    } ioctl;
 
    struct {
       struct pb_manager *gmr;
       struct pb_manager *gmr_mm;
       struct pb_manager *gmr_fenced;
+      struct pb_manager *gmr_slab;
+      struct pb_manager *gmr_slab_fenced;
+      struct pb_manager *query;
+      struct pb_manager *query_mm;
+      struct pb_manager *query_fenced;
    } pools;
 };
 
@@ -101,7 +111,7 @@ vmw_ioctl_command(struct vmw_winsys_screen *vws,
 		  uint32_t throttle_us,
 		  void *commands,
 		  uint32_t size,
-		  uint32_t *fence);
+		  struct pipe_fence_handle **fence);
 
 struct vmw_region *
 vmw_ioctl_region_create(struct vmw_winsys_screen *vws, uint32_t size);
@@ -120,17 +130,22 @@ vmw_ioctl_region_unmap(struct vmw_region *region);
 
 int
 vmw_ioctl_fence_finish(struct vmw_winsys_screen *vws,
-                       uint32_t fence);
+                       uint32_t handle, uint32_t flags);
 
 int
 vmw_ioctl_fence_signalled(struct vmw_winsys_screen *vws,
-                          uint32_t fence);
+                          uint32_t handle, uint32_t flags);
+
+void
+vmw_ioctl_fence_unref(struct vmw_winsys_screen *vws,
+		      uint32_t handle);
 
 
 /* Initialize parts of vmw_winsys_screen at startup:
  */
 boolean vmw_ioctl_init(struct vmw_winsys_screen *vws);
 boolean vmw_pools_init(struct vmw_winsys_screen *vws);
+boolean vmw_query_pools_init(struct vmw_winsys_screen *vws);
 boolean vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws);
 
 void vmw_ioctl_cleanup(struct vmw_winsys_screen *vws);

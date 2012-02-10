@@ -78,7 +78,7 @@ _mesa_init_program(struct gl_context *ctx)
    ASSERT(MAX_TEXTURE_UNITS <= (1 << 5));
 
    /* If this fails, increase prog_instruction::TexSrcTarget size */
-   ASSERT(NUM_TEXTURE_TARGETS <= (1 << 3));
+   ASSERT(NUM_TEXTURE_TARGETS <= (1 << 4));
 
    ctx->Program.ErrorPos = -1;
    ctx->Program.ErrorString = _mesa_strdup("");
@@ -140,7 +140,7 @@ _mesa_free_program_data(struct gl_context *ctx)
 #endif
 #if FEATURE_NV_fragment_program || FEATURE_ARB_fragment_program
    _mesa_reference_fragprog(ctx, &ctx->FragmentProgram.Current, NULL);
-   _mesa_delete_program_cache(ctx, ctx->FragmentProgram.Cache);
+   _mesa_delete_shader_cache(ctx, ctx->FragmentProgram.Cache);
 #endif
 #if FEATURE_ARB_geometry_shader4
    _mesa_reference_geomprog(ctx, &ctx->GeometryProgram.Current, NULL);
@@ -388,16 +388,11 @@ _mesa_delete_program(struct gl_context *ctx, struct gl_program *prog)
    if (prog->String)
       free(prog->String);
 
-   _mesa_free_instructions(prog->Instructions, prog->NumInstructions);
-
+   if (prog->Instructions) {
+      _mesa_free_instructions(prog->Instructions, prog->NumInstructions);
+   }
    if (prog->Parameters) {
       _mesa_free_parameter_list(prog->Parameters);
-   }
-   if (prog->Varying) {
-      _mesa_free_parameter_list(prog->Varying);
-   }
-   if (prog->Attributes) {
-      _mesa_free_parameter_list(prog->Attributes);
    }
 
    free(prog);
@@ -421,12 +416,15 @@ _mesa_lookup_program(struct gl_context *ctx, GLuint id)
 
 /**
  * Reference counting for vertex/fragment programs
+ * This is normally only called from the _mesa_reference_program() macro
+ * when there's a real pointer change.
  */
 void
-_mesa_reference_program(struct gl_context *ctx,
-                        struct gl_program **ptr,
-                        struct gl_program *prog)
+_mesa_reference_program_(struct gl_context *ctx,
+                         struct gl_program **ptr,
+                         struct gl_program *prog)
 {
+#ifndef NDEBUG
    assert(ptr);
    if (*ptr && prog) {
       /* sanity check */
@@ -438,9 +436,8 @@ _mesa_reference_program(struct gl_context *ctx,
       else if ((*ptr)->Target == MESA_GEOMETRY_PROGRAM)
          ASSERT(prog->Target == MESA_GEOMETRY_PROGRAM);
    }
-   if (*ptr == prog) {
-      return;  /* no change */
-   }
+#endif
+
    if (*ptr) {
       GLboolean deleteFlag;
 
@@ -519,10 +516,6 @@ _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog)
    if (prog->Parameters)
       clone->Parameters = _mesa_clone_parameter_list(prog->Parameters);
    memcpy(clone->LocalParams, prog->LocalParams, sizeof(clone->LocalParams));
-   if (prog->Varying)
-      clone->Varying = _mesa_clone_parameter_list(prog->Varying);
-   if (prog->Attributes)
-      clone->Attributes = _mesa_clone_parameter_list(prog->Attributes);
    memcpy(clone->LocalParams, prog->LocalParams, sizeof(clone->LocalParams));
    clone->IndirectRegisterFiles = prog->IndirectRegisterFiles;
    clone->NumInstructions = prog->NumInstructions;
@@ -1029,7 +1022,8 @@ _mesa_postprocess_program(struct gl_context *ctx, struct gl_program *prog)
    GLuint i;
    GLuint whiteSwizzle;
    GLint whiteIndex = _mesa_add_unnamed_constant(prog->Parameters,
-                                                 white, 4, &whiteSwizzle);
+                                                 (gl_constant_value *) white,
+                                                 4, &whiteSwizzle);
 
    (void) whiteIndex;
 

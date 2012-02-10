@@ -119,6 +119,7 @@ nv50_blend_state_create(struct pipe_context *pipe,
    struct nv50_blend_stateobj *so = CALLOC_STRUCT(nv50_blend_stateobj);
    int i;
    boolean emit_common_func = cso->rt[0].blend_enable;
+   uint32_t ms;
 
    if (nv50_context(pipe)->screen->tesla->grclass >= NVA3_3D) {
       SB_BEGIN_3D(so, BLEND_INDEPENDENT, 1);
@@ -190,6 +191,15 @@ nv50_blend_state_create(struct pipe_context *pipe,
       SB_DATA    (so, nv50_colormask(cso->rt[0].colormask));
    }
 
+   ms = 0;
+   if (cso->alpha_to_coverage)
+      ms |= NV50_3D_MULTISAMPLE_CTRL_ALPHA_TO_COVERAGE;
+   if (cso->alpha_to_one)
+      ms |= NV50_3D_MULTISAMPLE_CTRL_ALPHA_TO_ONE;
+
+   SB_BEGIN_3D(so, MULTISAMPLE_CTRL, 1);
+   SB_DATA    (so, ms);
+
    assert(so->size <= (sizeof(so->state) / sizeof(so->state[0])));
    return so;
 }
@@ -215,6 +225,7 @@ nv50_rasterizer_state_create(struct pipe_context *pipe,
                              const struct pipe_rasterizer_state *cso)
 {
    struct nv50_rasterizer_stateobj *so;
+   uint32_t reg;
 
    so = CALLOC_STRUCT(nv50_rasterizer_stateobj);
    if (!so)
@@ -236,6 +247,9 @@ nv50_rasterizer_state_create(struct pipe_context *pipe,
 
    SB_BEGIN_3D(so, FRAG_COLOR_CLAMP_EN, 1);
    SB_DATA    (so, cso->clamp_fragment_color ? 0x11111111 : 0x00000000);
+
+   SB_BEGIN_3D(so, MULTISAMPLE_ENABLE, 1);
+   SB_DATA    (so, cso->multisample);
 
    SB_BEGIN_3D(so, LINE_WIDTH, 1);
    SB_DATA    (so, fui(cso->line_width));
@@ -295,7 +309,25 @@ nv50_rasterizer_state_create(struct pipe_context *pipe,
       SB_DATA    (so, fui(cso->offset_scale));
       SB_BEGIN_3D(so, POLYGON_OFFSET_UNITS, 1);
       SB_DATA    (so, fui(cso->offset_units * 2.0f));
+      SB_BEGIN_3D(so, POLYGON_OFFSET_CLAMP, 1);
+      SB_DATA    (so, fui(cso->offset_clamp));
    }
+
+   if (cso->depth_clip) {
+      reg = 0;
+   } else {
+      reg =
+         NV50_3D_VIEW_VOLUME_CLIP_CTRL_DEPTH_CLAMP_NEAR |
+         NV50_3D_VIEW_VOLUME_CLIP_CTRL_DEPTH_CLAMP_FAR |
+         NV50_3D_VIEW_VOLUME_CLIP_CTRL_UNK12_UNK1;
+   }
+#ifndef NV50_SCISSORS_CLIPPING
+   reg |=
+      NV50_3D_VIEW_VOLUME_CLIP_CTRL_UNK7 |
+      NV50_3D_VIEW_VOLUME_CLIP_CTRL_UNK12_UNK1;
+#endif
+   SB_BEGIN_3D(so, VIEW_VOLUME_CLIP_CTRL, 1);
+   SB_DATA    (so, reg);
 
    assert(so->size <= (sizeof(so->state) / sizeof(so->state[0])));
    return (void *)so;
@@ -495,10 +527,10 @@ nv50_sampler_state_create(struct pipe_context *pipe,
    so->tsc[2] |=
       (((int)(f[1] * 256.0f) & 0xfff) << 12) | ((int)(f[0] * 256.0f) & 0xfff);
 
-   so->tsc[4] = fui(cso->border_color[0]);
-   so->tsc[5] = fui(cso->border_color[1]);
-   so->tsc[6] = fui(cso->border_color[2]);
-   so->tsc[7] = fui(cso->border_color[3]);
+   so->tsc[4] = fui(cso->border_color.f[0]);
+   so->tsc[5] = fui(cso->border_color.f[1]);
+   so->tsc[6] = fui(cso->border_color.f[2]);
+   so->tsc[7] = fui(cso->border_color.f[3]);
 
    return (void *)so;
 }
@@ -748,12 +780,8 @@ nv50_set_clip_state(struct pipe_context *pipe,
                     const struct pipe_clip_state *clip)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
-   const unsigned size = clip->nr * sizeof(clip->ucp[0]);
 
-   memcpy(&nv50->clip.ucp[0][0], &clip->ucp[0][0], size);
-   nv50->clip.nr = clip->nr;
-
-   nv50->clip.depth_clamp = clip->depth_clamp;
+   memcpy(nv50->clip.ucp, clip->ucp, sizeof(clip->ucp));
 
    nv50->dirty |= NV50_NEW_CLIP;
 }

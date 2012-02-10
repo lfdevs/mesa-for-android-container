@@ -1,4 +1,0 @@
-usr/include/GL/GLw*A.h
-usr/lib/${DEB_HOST_MULTIARCH}/libGLw.a
-usr/lib/${DEB_HOST_MULTIARCH}/libGLw.so
-usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/glw.pc

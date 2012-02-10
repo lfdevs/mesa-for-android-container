@@ -6,7 +6,7 @@ static inline boolean
 nvfx_surface_linear_renderable(struct pipe_surface* surf)
 {
 	/* TODO: precompute this in nvfx_surface creation */
-	return (surf->texture->flags & NVFX_RESOURCE_FLAG_LINEAR)
+	return (surf->texture->flags & NOUVEAU_RESOURCE_FLAG_LINEAR)
 		&& !(((struct nvfx_surface*)surf)->offset & 63)
 		&& !(((struct nvfx_surface*)surf)->pitch & 63);
 }
@@ -171,7 +171,7 @@ nvfx_framebuffer_validate(struct nvfx_context *nvfx, unsigned prepare_result)
 		case PIPE_FORMAT_Z16_UNORM:
 			rt_format |= NV30_3D_RT_FORMAT_ZETA_Z16;
 			break;
-		case PIPE_FORMAT_S8_USCALED_Z24_UNORM:
+		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
 		case PIPE_FORMAT_X8Z24_UNORM:
 		case 0:
 			rt_format |= NV30_3D_RT_FORMAT_ZETA_Z24S8;

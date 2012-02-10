@@ -45,10 +45,14 @@ typedef float (*float4_array)[4];
 /**
  * Return array of texels for given unit.
  */
-static INLINE float4_array
+static inline float4_array
 get_texel_array(SWcontext *swrast, GLuint unit)
 {
+#ifdef _OPENMP
+   return (float4_array) (swrast->TexelBuffer + unit * MAX_WIDTH * 4 * omp_get_num_threads() + (MAX_WIDTH * 4 * omp_get_thread_num()));
+#else
    return (float4_array) (swrast->TexelBuffer + unit * MAX_WIDTH * 4);
+#endif
 }
 
 
@@ -65,17 +69,18 @@ get_texel_array(SWcontext *swrast, GLuint unit)
  *
  * \param ctx          rendering context
  * \param unit         the texture combiner unit
- * \param n            number of fragments to process (span width)
  * \param primary_rgba incoming fragment color array
  * \param texelBuffer  pointer to texel colors for all texture units
  * 
- * \param rgba         incoming/result fragment colors
+ * \param span         two fields are used in this function:
+ *                       span->end: number of fragments to process
+ *                       span->array->rgba: incoming/result fragment colors
  */
 static void
-texture_combine( struct gl_context *ctx, GLuint unit, GLuint n,
+texture_combine( struct gl_context *ctx, GLuint unit,
                  const float4_array primary_rgba,
                  const GLfloat *texelBuffer,
-                 GLchan (*rgbaChan)[4] )
+                 SWspan *span )
 {
    SWcontext *swrast = SWRAST_CONTEXT(ctx);
    const struct gl_texture_unit *textureUnit = &(ctx->Texture.Unit[unit]);
@@ -88,6 +93,8 @@ texture_combine( struct gl_context *ctx, GLuint unit, GLuint n,
    const GLuint numArgsA = combine->_NumArgsA;
    float4_array ccolor[4], rgba;
    GLuint i, term;
+   GLuint n = span->end;
+   GLchan (*rgbaChan)[4] = span->array->rgba;
 
    /* alloc temp pixel buffers */
    rgba = (float4_array) malloc(4 * n * sizeof(GLfloat));
@@ -104,6 +111,7 @@ texture_combine( struct gl_context *ctx, GLuint unit, GLuint n,
             i--;
          }
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "texture_combine");
+         free(rgba);
          return;
       }
    }
@@ -537,6 +545,10 @@ texture_combine( struct gl_context *ctx, GLuint unit, GLuint n,
       UNCLAMPED_FLOAT_TO_CHAN(rgbaChan[i][BCOMP], rgba[i][BCOMP]);
       UNCLAMPED_FLOAT_TO_CHAN(rgbaChan[i][ACOMP], rgba[i][ACOMP]);
    }
+   /* The span->array->rgba values are of CHAN type so set
+    * span->array->ChanType field accordingly.
+    */
+   span->array->ChanType = CHAN_TYPE;
 
 end:
    for (i = 0; i < numArgsRGB || i < numArgsA; i++) {
@@ -585,6 +597,26 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
    SWcontext *swrast = SWRAST_CONTEXT(ctx);
    float4_array primary_rgba;
    GLuint unit;
+
+   if (!swrast->TexelBuffer) {
+#ifdef _OPENMP
+      const GLint maxThreads = omp_get_max_threads();
+#else
+      const GLint maxThreads = 1;
+#endif
+
+      /* TexelBuffer is also global and normally shared by all SWspan
+       * instances; when running with multiple threads, create one per
+       * thread.
+       */
+      swrast->TexelBuffer =
+	 (GLfloat *) MALLOC(ctx->Const.MaxTextureImageUnits * maxThreads *
+			    MAX_WIDTH * 4 * sizeof(GLfloat));
+      if (!swrast->TexelBuffer) {
+	 _mesa_error(ctx, GL_OUT_OF_MEMORY, "texture_combine");
+	 return;
+      }
+   }
 
    primary_rgba = (float4_array) malloc(span->end * 4 * sizeof(GLfloat));
 
@@ -739,12 +771,8 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
     * We modify the span->color.rgba values.
     */
    for (unit = 0; unit < ctx->Const.MaxTextureUnits; unit++) {
-      if (ctx->Texture.Unit[unit]._ReallyEnabled) {
-         texture_combine( ctx, unit, span->end,
-                          primary_rgba,
-                          swrast->TexelBuffer,
-                          span->array->rgba );
-      }
+      if (ctx->Texture.Unit[unit]._ReallyEnabled)
+         texture_combine(ctx, unit, primary_rgba, swrast->TexelBuffer, span);
    }
 
    free(primary_rgba);

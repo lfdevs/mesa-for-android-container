@@ -77,7 +77,7 @@ nvc0_context_unreference_resources(struct nvc0_context *nvc0)
    }
 
    for (i = 0; i < nvc0->num_tfbbufs; ++i)
-      pipe_resource_reference(&nvc0->tfbbuf[i], NULL);
+      pipe_so_target_reference(&nvc0->tfbbuf[i], NULL);
 }
 
 static void
@@ -89,10 +89,8 @@ nvc0_destroy(struct pipe_context *pipe)
 
    draw_destroy(nvc0->draw);
 
-   if (nvc0->screen->cur_ctx == nvc0) {
-      nvc0->screen->base.channel->user_private = NULL;
+   if (nvc0->screen->cur_ctx == nvc0)
       nvc0->screen->cur_ctx = NULL;
-   }
 
    FREE(nvc0);
 }
@@ -100,19 +98,18 @@ nvc0_destroy(struct pipe_context *pipe)
 void
 nvc0_default_flush_notify(struct nouveau_channel *chan)
 {
-   struct nvc0_context *nvc0 = chan->user_private;
+   struct nvc0_screen *screen = chan->user_private;
 
-   if (!nvc0)
+   if (!screen)
       return;
 
-   nouveau_fence_update(&nvc0->screen->base, TRUE);
-   nouveau_fence_next(&nvc0->screen->base);
+   nouveau_fence_update(&screen->base, TRUE);
+   nouveau_fence_next(&screen->base);
 }
 
 struct pipe_context *
 nvc0_create(struct pipe_screen *pscreen, void *priv)
 {
-   struct pipe_winsys *pipe_winsys = pscreen->winsys;
    struct nvc0_screen *screen = nvc0_screen(pscreen);
    struct nvc0_context *nvc0;
    struct pipe_context *pipe;
@@ -126,8 +123,8 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
    nvc0->base.screen    = &screen->base;
    nvc0->base.copy_data = nvc0_m2mf_copy_linear;
    nvc0->base.push_data = nvc0_m2mf_push_linear;
+   nvc0->base.push_cb = nvc0_cb_push;
 
-   pipe->winsys = pipe_winsys;
    pipe->screen = pscreen;
    pipe->priv = priv;
 
@@ -141,7 +138,6 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
 
    if (!screen->cur_ctx)
       screen->cur_ctx = nvc0;
-   screen->base.channel->user_private = nvc0;
    screen->base.channel->flush_notify = nvc0_default_flush_notify;
 
    nvc0_init_query_functions(nvc0);
@@ -152,6 +148,11 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
    nvc0->draw = draw_create(pipe);
    assert(nvc0->draw);
    draw_set_rasterize_stage(nvc0->draw, nvc0_draw_render_stage(nvc0));
+
+   nouveau_context_init_vdec(&nvc0->base);
+
+   /* shader builtin library is per-screen, but we need a context for m2mf */
+   nvc0_program_library_upload(nvc0);
 
    return pipe;
 }
@@ -207,7 +208,7 @@ nvc0_bufctx_emit_relocs(struct nvc0_context *nvc0)
    n  = nvc0->residents_size / sizeof(struct resident);
    n += NVC0_SCREEN_RESIDENT_BO_COUNT;
 
-   MARK_RING(nvc0->screen->base.channel, n, n);
+   MARK_RING(nvc0->screen->base.channel, 0, n);
 
    for (ctx = 0; ctx < NVC0_BUFCTX_COUNT; ++ctx) {
       array = &nvc0->residents[ctx];

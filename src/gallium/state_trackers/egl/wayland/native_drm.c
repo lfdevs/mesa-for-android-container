@@ -66,25 +66,6 @@ wayland_drm_display(const struct native_display *ndpy)
    return (struct wayland_drm_display *) ndpy;
 }
 
-static void
-sync_callback(void *data)
-{
-   int *done = data;
-
-   *done = 1;
-}
-
-static void
-force_roundtrip(struct wl_display *display)
-{
-   int done = 0;
-
-   wl_display_sync_callback(display, sync_callback, &done);
-   wl_display_iterate(display, WL_DISPLAY_WRITABLE);
-   while (!done)
-      wl_display_iterate(display, WL_DISPLAY_READABLE);
-}
-
 static void 
 wayland_drm_display_destroy(struct native_display *ndpy)
 {
@@ -96,8 +77,8 @@ wayland_drm_display_destroy(struct native_display *ndpy)
       wl_drm_destroy(drmdpy->wl_drm);
    if (drmdpy->device_name)
       FREE(drmdpy->device_name);
-   if (drmdpy->base.config)
-      FREE(drmdpy->base.config);
+   if (drmdpy->base.configs)
+      FREE(drmdpy->base.configs);
    if (drmdpy->base.own_dpy)
       wl_display_destroy(drmdpy->base.dpy);
 
@@ -116,7 +97,7 @@ wayland_create_drm_buffer(struct wayland_display *display,
    struct pipe_resource *resource;
    struct winsys_handle wsh;
    uint width, height;
-   struct wl_visual *visual;
+   enum wl_drm_format format;
 
    resource = resource_surface_get_single_resource(surface->rsurf, attachment);
    resource_surface_get_size(surface->rsurf, &width, &height);
@@ -126,19 +107,20 @@ wayland_create_drm_buffer(struct wayland_display *display,
 
    pipe_resource_reference(&resource, NULL);
 
-   switch (surface->type) {
-   case WL_WINDOW_SURFACE:
-      visual = surface->win->visual;
+   switch (surface->color_format) {
+   case PIPE_FORMAT_B8G8R8A8_UNORM:
+      format = WL_DRM_FORMAT_ARGB8888;
       break;
-   case WL_PIXMAP_SURFACE:
-      visual = surface->pix->visual;
+   case PIPE_FORMAT_B8G8R8X8_UNORM:
+      format = WL_DRM_FORMAT_XRGB8888;
       break;
    default:
       return NULL;
+      break;
    }
 
    return wl_drm_create_buffer(drmdpy->wl_drm, wsh.handle,
-                               width, height, wsh.stride, visual);
+                               width, height, wsh.stride, format);
 }
 
 static void
@@ -163,6 +145,21 @@ drm_handle_device(void *data, struct wl_drm *drm, const char *device)
 }
 
 static void
+drm_handle_format(void *data, struct wl_drm *drm, uint32_t format)
+{
+   struct wayland_drm_display *drmdpy = data;
+
+   switch (format) {
+   case WL_DRM_FORMAT_ARGB8888:
+      drmdpy->base.formats |= HAS_ARGB8888;
+      break;
+   case WL_DRM_FORMAT_XRGB8888:
+      drmdpy->base.formats |= HAS_XRGB8888;
+      break;
+   }
+}
+
+static void
 drm_handle_authenticated(void *data, struct wl_drm *drm)
 {
    struct wayland_drm_display *drmdpy = data;
@@ -172,6 +169,7 @@ drm_handle_authenticated(void *data, struct wl_drm *drm)
 
 static const struct wl_drm_listener drm_listener = {
    drm_handle_device,
+   drm_handle_format,
    drm_handle_authenticated
 };
 
@@ -183,22 +181,27 @@ wayland_drm_display_init_screen(struct native_display *ndpy)
 
    id = wl_display_get_global(drmdpy->base.dpy, "wl_drm", 1);
    if (id == 0)
-      force_roundtrip(drmdpy->base.dpy);
+      wl_display_roundtrip(drmdpy->base.dpy);
    id = wl_display_get_global(drmdpy->base.dpy, "wl_drm", 1);
    if (id == 0)
       return FALSE;
 
-   drmdpy->wl_drm = wl_drm_create(drmdpy->base.dpy, id, 1);
+   drmdpy->wl_drm = wl_display_bind(drmdpy->base.dpy, id, &wl_drm_interface);
    if (!drmdpy->wl_drm)
       return FALSE;
 
    wl_drm_add_listener(drmdpy->wl_drm, &drm_listener, drmdpy);
-   force_roundtrip(drmdpy->base.dpy);
+   wl_display_roundtrip(drmdpy->base.dpy);
    if (drmdpy->fd == -1)
       return FALSE;
 
-   force_roundtrip(drmdpy->base.dpy);
+   wl_display_roundtrip(drmdpy->base.dpy);
    if (!drmdpy->authenticated)
+      return FALSE;
+
+   if (drmdpy->base.formats == 0)
+      wl_display_roundtrip(drmdpy->base.dpy);
+   if (drmdpy->base.formats == 0)
       return FALSE;
 
    drmdpy->base.base.screen =
@@ -228,7 +231,7 @@ wayland_drm_display_authenticate(void *user_data, uint32_t magic)
    current_authenticate = drmdpy->authenticated;
 
    wl_drm_authenticate(drmdpy->wl_drm, magic);
-   force_roundtrip(drmdpy->base.dpy);
+   wl_display_roundtrip(drmdpy->base.dpy);
    authenticated = drmdpy->authenticated;
 
    drmdpy->authenticated = current_authenticate;

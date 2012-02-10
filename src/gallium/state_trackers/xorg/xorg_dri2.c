@@ -124,7 +124,7 @@ dri2_do_create_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer, unsigned int form
                }
             } else {
                template.format = ms->ds_depth_bits_last ?
-                                 PIPE_FORMAT_Z24_UNORM_S8_USCALED : PIPE_FORMAT_S8_USCALED_Z24_UNORM;
+                                 PIPE_FORMAT_Z24_UNORM_S8_UINT : PIPE_FORMAT_S8_UINT_Z24_UNORM;
             }
 	    template.width0 = pDraw->width;
 	    template.height0 = pDraw->height;
@@ -372,13 +372,15 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     save_accel = ms->exa->accel;
     ms->exa->accel = TRUE;
 
-    /* In case it won't be though, make sure the GPU copy contents of the
-     * source pixmap will be used for the software fallback - presumably the
-     * client modified them before calling in here.
-     */
-    exaMoveInPixmap(src_priv->pPixmap);
-    DamageRegionAppend(src_draw, pRegion);
-    DamageRegionProcessPending(src_draw);
+    if (pSrcBuffer->attachment != DRI2BufferFrontLeft) {
+	/* In case it won't be though, make sure the GPU copy contents of the
+	 * source pixmap will be used for the software fallback - presumably the
+	 * client modified them before calling in here.
+	 */
+	exaMoveInPixmap(src_priv->pPixmap);
+	DamageRegionAppend(src_draw, pRegion);
+	DamageRegionProcessPending(src_draw);
+    }
 
    if (cust && cust->winsys_context_throttle)
        cust->winsys_context_throttle(cust, ms->ctx, THROTTLE_SWAP);
@@ -454,7 +456,7 @@ xorg_dri2_init(ScreenPtr pScreen)
 					 0,
                                          PIPE_BIND_DEPTH_STENCIL);
     ms->ds_depth_bits_last =
-	 ms->screen->is_format_supported(ms->screen, PIPE_FORMAT_Z24_UNORM_S8_USCALED,
+	 ms->screen->is_format_supported(ms->screen, PIPE_FORMAT_Z24_UNORM_S8_UINT,
 					 PIPE_TEXTURE_2D,
 					 0,
                                          PIPE_BIND_DEPTH_STENCIL);

@@ -71,11 +71,11 @@ enum pipe_format {
    PIPE_FORMAT_Z16_UNORM               = 16,
    PIPE_FORMAT_Z32_UNORM               = 17,
    PIPE_FORMAT_Z32_FLOAT               = 18,
-   PIPE_FORMAT_Z24_UNORM_S8_USCALED    = 19,
-   PIPE_FORMAT_S8_USCALED_Z24_UNORM    = 20,
+   PIPE_FORMAT_Z24_UNORM_S8_UINT       = 19,
+   PIPE_FORMAT_S8_UINT_Z24_UNORM       = 20,
    PIPE_FORMAT_Z24X8_UNORM             = 21,
    PIPE_FORMAT_X8Z24_UNORM             = 22,
-   PIPE_FORMAT_S8_USCALED              = 23,   /**< ubyte stencil */
+   PIPE_FORMAT_S8_UINT                 = 23,   /**< ubyte stencil */
    PIPE_FORMAT_R64_FLOAT               = 24,
    PIPE_FORMAT_R64G64_FLOAT            = 25,
    PIPE_FORMAT_R64G64B64_FLOAT         = 26,
@@ -185,7 +185,7 @@ enum pipe_format {
    PIPE_FORMAT_R10G10B10A2_USCALED     = 123,
    PIPE_FORMAT_R11G11B10_FLOAT         = 124,
    PIPE_FORMAT_R9G9B9E5_FLOAT          = 125,
-   PIPE_FORMAT_Z32_FLOAT_S8X24_USCALED = 126,
+   PIPE_FORMAT_Z32_FLOAT_S8X24_UINT    = 126,
    PIPE_FORMAT_R1_UNORM                = 127,
    PIPE_FORMAT_R10G10B10X2_USCALED     = 128,
    PIPE_FORMAT_R10G10B10X2_SNORM       = 129,
@@ -197,9 +197,9 @@ enum pipe_format {
    PIPE_FORMAT_B4G4R4X4_UNORM          = 135,
 
    /* some stencil samplers formats */
-   PIPE_FORMAT_X24S8_USCALED           = 136,
-   PIPE_FORMAT_S8X24_USCALED           = 137,
-   PIPE_FORMAT_X32_S8X24_USCALED       = 138,
+   PIPE_FORMAT_X24S8_UINT              = 136,
+   PIPE_FORMAT_S8X24_UINT              = 137,
+   PIPE_FORMAT_X32_S8X24_UINT          = 138,
 
    PIPE_FORMAT_B2G3R3_UNORM            = 139,
    PIPE_FORMAT_L16A16_UNORM            = 140,
@@ -229,9 +229,101 @@ enum pipe_format {
    PIPE_FORMAT_L32A32_FLOAT            = 161,
    PIPE_FORMAT_I32_FLOAT               = 162,
 
+   PIPE_FORMAT_YV12                    = 163,
+   PIPE_FORMAT_YV16                    = 164,
+   PIPE_FORMAT_IYUV                    = 165,  /**< aka I420 */
+   PIPE_FORMAT_NV12                    = 166,
+   PIPE_FORMAT_NV21                    = 167,
+   PIPE_FORMAT_AYUV                    = PIPE_FORMAT_A8R8G8B8_UNORM,
+   PIPE_FORMAT_VUYA                    = PIPE_FORMAT_B8G8R8A8_UNORM,
+   PIPE_FORMAT_XYUV                    = PIPE_FORMAT_X8R8G8B8_UNORM,
+   PIPE_FORMAT_VUYX                    = PIPE_FORMAT_B8G8R8X8_UNORM,
+
+   PIPE_FORMAT_R4A4_UNORM              = 168,
+   PIPE_FORMAT_A4R4_UNORM              = 169,
+   PIPE_FORMAT_R8A8_UNORM              = 170,
+   PIPE_FORMAT_A8R8_UNORM              = 171,
+
+   PIPE_FORMAT_R10G10B10A2_SSCALED     = 172,
+   PIPE_FORMAT_R10G10B10A2_SNORM       = 173,
+
+   PIPE_FORMAT_B10G10R10A2_USCALED     = 174,
+   PIPE_FORMAT_B10G10R10A2_SSCALED     = 175,
+   PIPE_FORMAT_B10G10R10A2_SNORM       = 176,
+
+   PIPE_FORMAT_R8_UINT                 = 177,
+   PIPE_FORMAT_R8G8_UINT               = 178,
+   PIPE_FORMAT_R8G8B8_UINT             = 179,
+   PIPE_FORMAT_R8G8B8A8_UINT           = 180,
+
+   PIPE_FORMAT_R8_SINT                 = 181,
+   PIPE_FORMAT_R8G8_SINT               = 182,
+   PIPE_FORMAT_R8G8B8_SINT             = 183,
+   PIPE_FORMAT_R8G8B8A8_SINT           = 184,
+
+   PIPE_FORMAT_R16_UINT                = 185,
+   PIPE_FORMAT_R16G16_UINT             = 186,
+   PIPE_FORMAT_R16G16B16_UINT          = 187,
+   PIPE_FORMAT_R16G16B16A16_UINT       = 188,
+
+   PIPE_FORMAT_R16_SINT                = 189,
+   PIPE_FORMAT_R16G16_SINT             = 190,
+   PIPE_FORMAT_R16G16B16_SINT          = 191,
+   PIPE_FORMAT_R16G16B16A16_SINT       = 192,
+
+   PIPE_FORMAT_R32_UINT                = 193,
+   PIPE_FORMAT_R32G32_UINT             = 194,
+   PIPE_FORMAT_R32G32B32_UINT          = 195,
+   PIPE_FORMAT_R32G32B32A32_UINT       = 196,
+
+   PIPE_FORMAT_R32_SINT                = 197,
+   PIPE_FORMAT_R32G32_SINT             = 198,
+   PIPE_FORMAT_R32G32B32_SINT          = 199,
+   PIPE_FORMAT_R32G32B32A32_SINT       = 200,
+
+   PIPE_FORMAT_A8_UINT                 = 201,
+   PIPE_FORMAT_I8_UINT                 = 202,
+   PIPE_FORMAT_L8_UINT                 = 203,
+   PIPE_FORMAT_L8A8_UINT               = 204,
+
+   PIPE_FORMAT_A8_SINT                 = 205,
+   PIPE_FORMAT_I8_SINT                 = 206,
+   PIPE_FORMAT_L8_SINT                 = 207,
+   PIPE_FORMAT_L8A8_SINT               = 208,
+
+   PIPE_FORMAT_A16_UINT                = 209,
+   PIPE_FORMAT_I16_UINT                = 210,
+   PIPE_FORMAT_L16_UINT                = 211,
+   PIPE_FORMAT_L16A16_UINT             = 212,
+
+   PIPE_FORMAT_A16_SINT                = 213,
+   PIPE_FORMAT_I16_SINT                = 214,
+   PIPE_FORMAT_L16_SINT                = 215,
+   PIPE_FORMAT_L16A16_SINT             = 216,
+
+   PIPE_FORMAT_A32_UINT                = 217,
+   PIPE_FORMAT_I32_UINT                = 218,
+   PIPE_FORMAT_L32_UINT                = 219,
+   PIPE_FORMAT_L32A32_UINT             = 220,
+
+   PIPE_FORMAT_A32_SINT                = 221,
+   PIPE_FORMAT_I32_SINT                = 222,
+   PIPE_FORMAT_L32_SINT                = 223,
+   PIPE_FORMAT_L32A32_SINT             = 224,
+
+   PIPE_FORMAT_B10G10R10A2_UINT        = 225, 
+
+   PIPE_FORMAT_ETC1_RGB8               = 226,
+
    PIPE_FORMAT_COUNT
 };
 
+enum pipe_video_chroma_format
+{
+   PIPE_VIDEO_CHROMA_FORMAT_420,
+   PIPE_VIDEO_CHROMA_FORMAT_422,
+   PIPE_VIDEO_CHROMA_FORMAT_444
+};
 
 #ifdef __cplusplus
 }

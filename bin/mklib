@@ -260,7 +260,7 @@ if [ $STATIC = 1 ]; then
     NEWOBJECTS=""
     for OBJ in $OBJECTS ; do
 	case $OBJ in
-	    -Wl,*)
+	    -Wl,*|-L*|-l*)
 		echo "mklib: warning: ignoring $OBJ for static library"
 		;;
 	    *)
@@ -802,22 +802,6 @@ case $ARCH in
         FINAL_LIBS=`make_ar_static_lib -ru 0 ${LIBNAME} ${OBJECTS}`
 	;;
 
-    'BeOS')
-        if [ $STATIC = 1 ] ; then
-            LIBNAME="lib${LIBNAME}.a"
-            echo "mklib: Making BeOS static library: " ${LIBNAME}
-            FINAL_LIBS=`make_ar_static_lib -cru 0 ${LIBNAME} ${OBJECTS}`
-        else
-	    LIBNAME="lib${LIBNAME}.so"
-	    echo "mklib: Making BeOS shared library: " ${LIBNAME}
-	    gcc -nostart -Xlinker "-soname=${LIBNAME}" -L/Be/develop/lib/x86 -lbe ${DEPS} ${OBJECTS} -o "${LIBNAME}"
-	    mimeset -f "${LIBNAME}"
-	    # XXX remove the Mesa3D stuff here since mklib isn't mesa-specific.
-	    setversion "${LIBNAME}" -app ${MAJOR} ${MINOR} ${PATCH} -short "Powered by Mesa3D!" -long "Powered by Mesa3D!"
-	fi
-	FINAL_LIBS=${LIBNAME}
-	;;
-
     'QNX')
 	LIBNAME="lib${LIBNAME}.a"
 	echo "mklib: Making QNX library: " ${LIBNAME}
@@ -973,6 +957,43 @@ case $ARCH in
             FINAL_BINS="${CYGNAME}-${MAJOR}.dll"
         fi
         fi
+	;;
+
+	'Haiku')
+		if [ $STATIC = 1 ] ; then
+			LIBNAME="lib${LIBNAME}.a"
+			if [ "x$LINK" = "x" ] ; then
+				# -linker was not specified so set default link command now
+				if [ $CPLUSPLUS = 1 ] ; then
+					LINK=g++
+				else
+					LINK=gcc
+				fi
+			fi
+
+			OPTS="-ru"
+			if [ "${ALTOPTS}" ] ; then
+				OPTS=${ALTOPTS}
+			fi
+
+			echo "mklib: Making static library for Haiku: " ${LIBNAME}
+
+			# expand .a into .o files
+			NEW_OBJECTS=`expand_archives ${LIBNAME}.obj $OBJECTS`
+
+			# make static lib
+			FINAL_LIBS=`make_ar_static_lib ${OPTS} 1 ${LIBNAME} ${NEW_OBJECTS}`
+
+			# remove temporary extracted .o files
+			rm -rf ${LIBNAME}.obj
+		else
+			LIBNAME="lib${LIBNAME}.so"  # prefix with "lib", suffix with ".so"
+			OPTS="-shared"
+
+			echo "mklib: Making shared library for Haiku: " ${LIBNAME}
+			${LINK} ${OPTS} ${LDFLAGS} ${OBJECTS} ${DEPS} -o ${LIBNAME}
+			FINAL_LIBS="${LIBNAME}"
+		fi
 	;;
 
     'example')

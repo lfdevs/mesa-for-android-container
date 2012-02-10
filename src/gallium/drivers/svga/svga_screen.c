@@ -31,6 +31,7 @@
 #include "svga_winsys.h"
 #include "svga_public.h"
 #include "svga_context.h"
+#include "svga_format.h"
 #include "svga_screen.h"
 #include "svga_resource_texture.h"
 #include "svga_resource.h"
@@ -71,57 +72,76 @@ svga_get_vendor( struct pipe_screen *pscreen )
 static const char *
 svga_get_name( struct pipe_screen *pscreen )
 {
+   const char *build = "", *llvm = "", *mutex = "";
+   static char name[100];
 #ifdef DEBUG
    /* Only return internal details in the DEBUG version:
     */
-   return "SVGA3D; build: DEBUG; mutex: " PIPE_ATOMIC;
-#else
-   return "SVGA3D; build: RELEASE; ";
+   build = "build: DEBUG;";
+   mutex = "mutex: " PIPE_ATOMIC ";";
+#ifdef HAVE_LLVM
+   llvm = "LLVM;";
 #endif
+#else
+   build = "build: RELEASE;";
+#endif
+
+   util_snprintf(name, sizeof(name), "SVGA3D; %s %s %s", build, mutex, llvm);
+   return name;
 }
 
 
 
 
 static float
-svga_get_paramf(struct pipe_screen *screen, enum pipe_cap param)
+svga_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
 {
    struct svga_screen *svgascreen = svga_screen(screen);
    struct svga_winsys_screen *sws = svgascreen->sws;
    SVGA3dDevCapResult result;
 
    switch (param) {
-   case PIPE_CAP_MAX_LINE_WIDTH:
+   case PIPE_CAPF_MAX_LINE_WIDTH:
       /* fall-through */
-   case PIPE_CAP_MAX_LINE_WIDTH_AA:
+   case PIPE_CAPF_MAX_LINE_WIDTH_AA:
       return 7.0;
 
-   case PIPE_CAP_MAX_POINT_WIDTH:
+   case PIPE_CAPF_MAX_POINT_WIDTH:
       /* fall-through */
-   case PIPE_CAP_MAX_POINT_WIDTH_AA:
+   case PIPE_CAPF_MAX_POINT_WIDTH_AA:
       /* Keep this to a reasonable size to avoid failures in
        * conform/pntaa.c:
        */
       return SVGA_MAX_POINTSIZE;
 
-   case PIPE_CAP_MAX_TEXTURE_ANISOTROPY:
+   case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
       if(!sws->get_cap(sws, SVGA3D_DEVCAP_MAX_TEXTURE_ANISOTROPY, &result))
          return 4.0;
       return result.u;
 
-   case PIPE_CAP_MAX_TEXTURE_LOD_BIAS:
+   case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
       return 16.0;
 
-   case PIPE_CAP_MAX_TEXTURE_IMAGE_UNITS:
-      return 16;
+   default:
+      return 0;
+   }
+}
+
+
+static int
+svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
+{
+   struct svga_screen *svgascreen = svga_screen(screen);
+   struct svga_winsys_screen *sws = svgascreen->sws;
+   SVGA3dDevCapResult result;
+
+   switch (param) {
    case PIPE_CAP_MAX_COMBINED_SAMPLERS:
       return 16;
    case PIPE_CAP_NPOT_TEXTURES:
       return 1;
    case PIPE_CAP_TWO_SIDED_STENCIL:
       return 1;
-   case PIPE_CAP_GLSL:
-      return svgascreen->use_ps30 && svgascreen->use_vs30;
    case PIPE_CAP_ANISOTROPIC_FILTER:
       return 1;
    case PIPE_CAP_POINT_SPRITE:
@@ -137,6 +157,8 @@ svga_get_paramf(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TIMER_QUERY:
       return 0;
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
+      return 1;
+   case PIPE_CAP_TEXTURE_SWIZZLE:
       return 1;
 
    case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
@@ -163,11 +185,8 @@ svga_get_paramf(struct pipe_screen *screen, enum pipe_cap param)
        * No mechanism to query the host, and at least limited to 2048x2048 on
        * certain hardware.
        */
-      return MIN2(screen->get_paramf(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS),
-                  12.0 /* 2048x2048 */);
-
-   case PIPE_CAP_TEXTURE_MIRROR_REPEAT: /* req. for GL 1.4 */
-      return 1;
+      return MIN2(screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS),
+                  12 /* 2048x2048 */);
 
    case PIPE_CAP_BLEND_EQUATION_SEPARATE: /* req. for GL 1.5 */
       return 1;
@@ -189,15 +208,6 @@ svga_get_paramf(struct pipe_screen *screen, enum pipe_cap param)
    }
 }
 
-
-/* This is a fairly pointless interface
- */
-static int
-svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
-{
-   return (int) svga_get_paramf( screen, param );
-}
-
 static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_shader_cap param)
 {
    struct svga_screen *svgascreen = svga_screen(screen);
@@ -213,18 +223,18 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_MAX_ALU_INSTRUCTIONS:
       case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
       case PIPE_SHADER_CAP_MAX_TEX_INDIRECTIONS:
-         return svgascreen->use_ps30 ? 512 : 96;
+         return 512;
       case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
          return SVGA3D_MAX_NESTING_LEVEL;
       case PIPE_SHADER_CAP_MAX_INPUTS:
          return 10;
       case PIPE_SHADER_CAP_MAX_CONSTS:
-         return svgascreen->use_ps30 ? 224 : 16;
+         return 224;
       case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
          return 1;
       case PIPE_SHADER_CAP_MAX_TEMPS:
          if (!sws->get_cap(sws, SVGA3D_DEVCAP_MAX_FRAGMENT_SHADER_TEMPS, &result))
-            return svgascreen->use_ps30 ? 32 : 12;
+            return 32;
          return result.u;
       case PIPE_SHADER_CAP_MAX_ADDRS:
       case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -236,7 +246,7 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
 	  */
          return 0;
       case PIPE_SHADER_CAP_MAX_PREDS:
-         return svgascreen->use_ps30 ? 1 : 0;
+         return 1;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
          return 1;
       case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
@@ -244,6 +254,12 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
          return 0;
       case PIPE_SHADER_CAP_SUBROUTINES:
+         return 0;
+      case PIPE_SHADER_CAP_INTEGERS:
+         return 0;
+      case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+         return 16;
+      case PIPE_SHADER_CAP_OUTPUT_READ:
          return 0;
       }
       break;
@@ -253,7 +269,7 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_MAX_INSTRUCTIONS:
       case PIPE_SHADER_CAP_MAX_ALU_INSTRUCTIONS:
          if (!sws->get_cap(sws, SVGA3D_DEVCAP_MAX_VERTEX_SHADER_INSTRUCTIONS, &result))
-            return svgascreen->use_vs30 ? 512 : 256;
+            return 512;
          return result.u;
       case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
       case PIPE_SHADER_CAP_MAX_TEX_INDIRECTIONS:
@@ -269,22 +285,26 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
          return 1;
       case PIPE_SHADER_CAP_MAX_TEMPS:
          if (!sws->get_cap(sws, SVGA3D_DEVCAP_MAX_VERTEX_SHADER_TEMPS, &result))
-            return svgascreen->use_vs30 ? 32 : 12;
+            return 32;
          return result.u;
       case PIPE_SHADER_CAP_MAX_ADDRS:
-         return svgascreen->use_vs30 ? 1 : 0;
+         return 1;
       case PIPE_SHADER_CAP_MAX_PREDS:
-         return svgascreen->use_vs30 ? 1 : 0;
+         return 1;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
          return 1;
       case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
       case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
-         return svgascreen->use_vs30 ? 1 : 0;
+         return 1;
       case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
          return 0;
       case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
          return 1;
       case PIPE_SHADER_CAP_SUBROUTINES:
+         return 0;
+      case PIPE_SHADER_CAP_INTEGERS:
+         return 0;
+      case PIPE_SHADER_CAP_OUTPUT_READ:
          return 0;
       default:
          break;
@@ -296,48 +316,6 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
    return 0;
 }
 
-static INLINE SVGA3dDevCapIndex
-svga_translate_format_cap(enum pipe_format format)
-{
-   switch(format) {
-   
-   case PIPE_FORMAT_B8G8R8A8_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_A8R8G8B8;
-   case PIPE_FORMAT_B8G8R8X8_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_X8R8G8B8;
-
-   case PIPE_FORMAT_B5G6R5_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_R5G6B5;
-   case PIPE_FORMAT_B5G5R5A1_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_A1R5G5B5;
-   case PIPE_FORMAT_B4G4R4A4_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_A4R4G4B4;
-
-   case PIPE_FORMAT_Z16_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_Z_D16;
-   case PIPE_FORMAT_S8_USCALED_Z24_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_Z_D24S8;
-   case PIPE_FORMAT_X8Z24_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_Z_D24X8;
-
-   case PIPE_FORMAT_A8_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_ALPHA8;
-   case PIPE_FORMAT_L8_UNORM:
-      return SVGA3D_DEVCAP_SURFACEFMT_LUMINANCE8;
-
-   case PIPE_FORMAT_DXT1_RGB:
-   case PIPE_FORMAT_DXT1_RGBA:
-      return SVGA3D_DEVCAP_SURFACEFMT_DXT1;
-   case PIPE_FORMAT_DXT3_RGBA:
-      return SVGA3D_DEVCAP_SURFACEFMT_DXT3;
-   case PIPE_FORMAT_DXT5_RGBA:
-      return SVGA3D_DEVCAP_SURFACEFMT_DXT5;
-
-   default:
-      return SVGA3D_DEVCAP_MAX;
-   }
-}
-
 
 static boolean
 svga_is_format_supported( struct pipe_screen *screen,
@@ -346,18 +324,33 @@ svga_is_format_supported( struct pipe_screen *screen,
                           unsigned sample_count,
                           unsigned tex_usage)
 {
-   struct svga_winsys_screen *sws = svga_screen(screen)->sws;
-   SVGA3dDevCapIndex index;
-   SVGA3dDevCapResult result;
+   struct svga_screen *ss = svga_screen(screen);
+   SVGA3dSurfaceFormat svga_format;
+   SVGA3dSurfaceFormatCaps caps;
+   SVGA3dSurfaceFormatCaps mask;
 
    assert(tex_usage);
 
-   if (sample_count > 1)
+   if (sample_count > 1) {
       return FALSE;
+   }
 
-   /* Override host capabilities */
-   if (tex_usage & PIPE_BIND_RENDER_TARGET) {
-      switch(format) { 
+   svga_format = svga_translate_format(ss, format, tex_usage);
+   if (svga_format == SVGA3D_FORMAT_INVALID) {
+      return FALSE;
+   }
+
+   /*
+    * Override host capabilities, so that we end up with the same
+    * visuals for all virtual hardware implementations.
+    */
+
+   if (tex_usage & PIPE_BIND_DISPLAY_TARGET) {
+      switch (svga_format) {
+      case SVGA3D_A8R8G8B8:
+      case SVGA3D_X8R8G8B8:
+      case SVGA3D_R5G6B5:
+         break;
 
       /* Often unsupported/problematic. This means we end up with the same
        * visuals for all virtual hardware implementations.
@@ -367,39 +360,28 @@ svga_is_format_supported( struct pipe_screen *screen,
          return FALSE;
          
       default:
-         break;
+         return FALSE;
       }
    }
    
-   /* Try to query the host */
-   index = svga_translate_format_cap(format);
-   if( index < SVGA3D_DEVCAP_MAX && 
-       sws->get_cap(sws, index, &result) )
-   {
-      SVGA3dSurfaceFormatCaps mask;
-      
-      mask.value = 0;
-      if (tex_usage & PIPE_BIND_RENDER_TARGET)
-         mask.offscreenRenderTarget = 1;
-      if (tex_usage & PIPE_BIND_DEPTH_STENCIL)
-         mask.zStencil = 1;
-      if (tex_usage & PIPE_BIND_SAMPLER_VIEW)
-         mask.texture = 1;
+   /*
+    * Query the host capabilities.
+    */
 
-      if ((result.u & mask.value) == mask.value)
-         return TRUE;
-      else
-         return FALSE;
+   svga_get_format_cap(ss, svga_format, &caps);
+
+   mask.value = 0;
+   if (tex_usage & PIPE_BIND_RENDER_TARGET) {
+      mask.offscreenRenderTarget = 1;
+   }
+   if (tex_usage & PIPE_BIND_DEPTH_STENCIL) {
+      mask.zStencil = 1;
+   }
+   if (tex_usage & PIPE_BIND_SAMPLER_VIEW) {
+      mask.texture = 1;
    }
 
-   /* Use our translate functions directly rather than relying on a
-    * duplicated list of supported formats which is prone to getting
-    * out of sync:
-    */
-   if(tex_usage & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_DEPTH_STENCIL))
-      return svga_translate_format_render(format) != SVGA3D_FORMAT_INVALID;
-   else
-      return svga_translate_format(format) != SVGA3D_FORMAT_INVALID;
+   return (caps.value & mask.value) == mask.value;
 }
 
 
@@ -461,6 +443,7 @@ svga_screen_create(struct svga_winsys_screen *sws)
    struct svga_screen *svgascreen;
    struct pipe_screen *screen;
    SVGA3dDevCapResult result;
+   boolean use_vs30, use_ps30;
 
 #ifdef DEBUG
    SVGA_DEBUG = debug_get_flags_option("SVGA_DEBUG", svga_debug_flags, 0 );
@@ -504,22 +487,62 @@ svga_screen_create(struct svga_winsys_screen *sws)
       svgascreen->hw_version = SVGA3D_HWVERSION_WS65_B1;
    }
 
-   svgascreen->use_ps30 =
+   use_ps30 =
       sws->get_cap(sws, SVGA3D_DEVCAP_FRAGMENT_SHADER_VERSION, &result) &&
       result.u >= SVGA3DPSVERSION_30 ? TRUE : FALSE;
 
-   svgascreen->use_vs30 =
+   use_vs30 =
       sws->get_cap(sws, SVGA3D_DEVCAP_VERTEX_SHADER_VERSION, &result) &&
       result.u >= SVGA3DVSVERSION_30 ? TRUE : FALSE;
 
-#if 1
-   /* Shader model 2.0 is unsupported at the moment. */
-   if(!svgascreen->use_ps30 || !svgascreen->use_vs30)
+   /* we require Shader model 3.0 or later */
+   if (!use_ps30 || !use_vs30)
       goto error2;
-#else
-   if(debug_get_bool_option("SVGA_NO_SM30", FALSE))
-      svgascreen->use_vs30 = svgascreen->use_ps30 = FALSE;
-#endif
+
+   /*
+    * The D16, D24X8, and D24S8 formats always do an implicit shadow compare
+    * when sampled from, where as the DF16, DF24, and D24S8_INT do not.  So
+    * we prefer the later when available.
+    *
+    * This mimics hardware vendors extensions for D3D depth sampling. See also
+    * http://aras-p.info/texts/D3D9GPUHacks.html
+    */
+
+   {
+      boolean has_df16, has_df24, has_d24s8_int;
+      SVGA3dSurfaceFormatCaps caps;
+      SVGA3dSurfaceFormatCaps mask;
+      mask.value = 0;
+      mask.zStencil = 1;
+      mask.texture = 1;
+
+      svgascreen->depth.z16 = SVGA3D_Z_D16;
+      svgascreen->depth.x8z24 = SVGA3D_Z_D24X8;
+      svgascreen->depth.s8z24 = SVGA3D_Z_D24S8;
+
+      svga_get_format_cap(svgascreen, SVGA3D_Z_DF16, &caps);
+      has_df16 = (caps.value & mask.value) == mask.value;
+
+      svga_get_format_cap(svgascreen, SVGA3D_Z_DF24, &caps);
+      has_df24 = (caps.value & mask.value) == mask.value;
+
+      svga_get_format_cap(svgascreen, SVGA3D_Z_D24S8_INT, &caps);
+      has_d24s8_int = (caps.value & mask.value) == mask.value;
+
+      /* XXX: We might want some other logic here.
+       * Like if we only have d24s8_int we should
+       * emulate the other formats with that.
+       */
+      if (has_df16) {
+         svgascreen->depth.z16 = SVGA3D_Z_DF16;
+      }
+      if (has_df24) {
+         svgascreen->depth.x8z24 = SVGA3D_Z_DF24;
+      }
+      if (has_d24s8_int) {
+         svgascreen->depth.s8z24 = SVGA3D_Z_D24S8_INT;
+      }
+   }
 
    pipe_mutex_init(svgascreen->tex_mutex);
    pipe_mutex_init(svgascreen->swc_mutex);

@@ -43,6 +43,7 @@
 #include "pixel.h"
 #include "program/program.h"
 #include "program/prog_parameter.h"
+#include "shaderobj.h"
 #include "state.h"
 #include "stencil.h"
 #include "texenvprogram.h"
@@ -83,98 +84,101 @@ update_arrays( struct gl_context *ctx )
    struct gl_array_object *arrayObj = ctx->Array.ArrayObj;
    GLuint i, min = ~0;
 
-   /* find min of _MaxElement values for all enabled arrays */
+   /* find min of _MaxElement values for all enabled arrays.
+    * Note that the generic arrays always take precedence over
+    * the legacy arrays.
+    */
 
    /* 0 */
    if (ctx->VertexProgram._Current
-       && arrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled) {
-      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_POS]);
+       && arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC0].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC0]);
    }
-   else if (arrayObj->Vertex.Enabled) {
-      min = update_min(min, &arrayObj->Vertex);
+   else if (arrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_POS]);
    }
 
    /* 1 */
    if (ctx->VertexProgram._Enabled
-       && arrayObj->VertexAttrib[VERT_ATTRIB_WEIGHT].Enabled) {
-      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_WEIGHT]);
+       && arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC1].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC1]);
    }
    /* no conventional vertex weight array */
 
    /* 2 */
    if (ctx->VertexProgram._Enabled
-       && arrayObj->VertexAttrib[VERT_ATTRIB_NORMAL].Enabled) {
-      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_NORMAL]);
+       && arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC2].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC2]);
    }
-   else if (arrayObj->Normal.Enabled) {
-      min = update_min(min, &arrayObj->Normal);
+   else if (arrayObj->VertexAttrib[VERT_ATTRIB_NORMAL].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_NORMAL]);
    }
 
    /* 3 */
    if (ctx->VertexProgram._Enabled
-       && arrayObj->VertexAttrib[VERT_ATTRIB_COLOR0].Enabled) {
-      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR0]);
+       && arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC3].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC3]);
    }
-   else if (arrayObj->Color.Enabled) {
-      min = update_min(min, &arrayObj->Color);
+   else if (arrayObj->VertexAttrib[VERT_ATTRIB_COLOR0].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR0]);
    }
 
    /* 4 */
    if (ctx->VertexProgram._Enabled
-       && arrayObj->VertexAttrib[VERT_ATTRIB_COLOR1].Enabled) {
-      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR1]);
+       && arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC4].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC4]);
    }
-   else if (arrayObj->SecondaryColor.Enabled) {
-      min = update_min(min, &arrayObj->SecondaryColor);
+   else if (arrayObj->VertexAttrib[VERT_ATTRIB_COLOR1].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR1]);
    }
 
    /* 5 */
    if (ctx->VertexProgram._Enabled
-       && arrayObj->VertexAttrib[VERT_ATTRIB_FOG].Enabled) {
-      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_FOG]);
+       && arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC5].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC5]);
    }
-   else if (arrayObj->FogCoord.Enabled) {
-      min = update_min(min, &arrayObj->FogCoord);
+   else if (arrayObj->VertexAttrib[VERT_ATTRIB_FOG].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_FOG]);
    }
 
    /* 6 */
    if (ctx->VertexProgram._Enabled
-       && arrayObj->VertexAttrib[VERT_ATTRIB_COLOR_INDEX].Enabled) {
-      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR_INDEX]);
+       && arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC6].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC6]);
    }
-   else if (arrayObj->Index.Enabled) {
-      min = update_min(min, &arrayObj->Index);
+   else if (arrayObj->VertexAttrib[VERT_ATTRIB_COLOR_INDEX].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR_INDEX]);
    }
 
    /* 7 */
    if (ctx->VertexProgram._Enabled
-       && arrayObj->VertexAttrib[VERT_ATTRIB_EDGEFLAG].Enabled) {
-      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_EDGEFLAG]);
+       && arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC7].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC7]);
    }
 
    /* 8..15 */
-   for (i = VERT_ATTRIB_TEX0; i <= VERT_ATTRIB_TEX7; i++) {
+   for (i = 0; i < VERT_ATTRIB_TEX_MAX; i++) {
       if (ctx->VertexProgram._Enabled
-          && arrayObj->VertexAttrib[i].Enabled) {
-         min = update_min(min, &arrayObj->VertexAttrib[i]);
+          && arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC8 + i].Enabled) {
+         min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC8 + i]);
       }
-      else if (i - VERT_ATTRIB_TEX0 < ctx->Const.MaxTextureCoordUnits
-               && arrayObj->TexCoord[i - VERT_ATTRIB_TEX0].Enabled) {
-         min = update_min(min, &arrayObj->TexCoord[i - VERT_ATTRIB_TEX0]);
+      else if (i < ctx->Const.MaxTextureCoordUnits
+               && arrayObj->VertexAttrib[VERT_ATTRIB_TEX(i)].Enabled) {
+         min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_TEX(i)]);
       }
    }
 
    /* 16..31 */
    if (ctx->VertexProgram._Current) {
-      for (i = 0; i < Elements(arrayObj->VertexAttrib); i++) {
-         if (arrayObj->VertexAttrib[i].Enabled) {
-            min = update_min(min, &arrayObj->VertexAttrib[i]);
+      for (i = 0; i < VERT_ATTRIB_GENERIC_MAX; i++) {
+         if (arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(i)].Enabled) {
+            min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(i)]);
          }
       }
    }
 
-   if (arrayObj->EdgeFlag.Enabled) {
-      min = update_min(min, &arrayObj->EdgeFlag);
+   if (arrayObj->VertexAttrib[VERT_ATTRIB_EDGEFLAG].Enabled) {
+      min = update_min(min, &arrayObj->VertexAttrib[VERT_ATTRIB_EDGEFLAG]);
    }
 
    /* _MaxElement is one past the last legal array element */
@@ -224,7 +228,7 @@ update_program(struct gl_context *ctx)
 {
    const struct gl_shader_program *vsProg = ctx->Shader.CurrentVertexProgram;
    const struct gl_shader_program *gsProg = ctx->Shader.CurrentGeometryProgram;
-   const struct gl_shader_program *fsProg = ctx->Shader.CurrentFragmentProgram;
+   struct gl_shader_program *fsProg = ctx->Shader.CurrentFragmentProgram;
    const struct gl_vertex_program *prevVP = ctx->VertexProgram._Current;
    const struct gl_fragment_program *prevFP = ctx->FragmentProgram._Current;
    const struct gl_geometry_program *prevGP = ctx->GeometryProgram._Current;
@@ -246,32 +250,55 @@ update_program(struct gl_context *ctx)
     * come up, or matter.
     */
 
-   if (fsProg && fsProg->LinkStatus && fsProg->FragmentProgram) {
+   if (fsProg && fsProg->LinkStatus
+       && fsProg->_LinkedShaders[MESA_SHADER_FRAGMENT]) {
       /* Use GLSL fragment shader */
+      _mesa_reference_shader_program(ctx,
+				     &ctx->Shader._CurrentFragmentProgram,
+				     fsProg);
       _mesa_reference_fragprog(ctx, &ctx->FragmentProgram._Current,
-                               fsProg->FragmentProgram);
+			       (struct gl_fragment_program *)
+			       fsProg->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program);
+      _mesa_reference_fragprog(ctx, &ctx->FragmentProgram._TexEnvProgram,
+			       NULL);
    }
    else if (ctx->FragmentProgram._Enabled) {
       /* Use user-defined fragment program */
+      _mesa_reference_shader_program(ctx,
+				     &ctx->Shader._CurrentFragmentProgram,
+				     NULL);
       _mesa_reference_fragprog(ctx, &ctx->FragmentProgram._Current,
                                ctx->FragmentProgram.Current);
+      _mesa_reference_fragprog(ctx, &ctx->FragmentProgram._TexEnvProgram,
+			       NULL);
    }
    else if (ctx->FragmentProgram._MaintainTexEnvProgram) {
       /* Use fragment program generated from fixed-function state */
+      struct gl_shader_program *f = _mesa_get_fixed_func_fragment_program(ctx);
+
+      _mesa_reference_shader_program(ctx,
+				     &ctx->Shader._CurrentFragmentProgram,
+				     f);
       _mesa_reference_fragprog(ctx, &ctx->FragmentProgram._Current,
-                               _mesa_get_fixed_func_fragment_program(ctx));
+			       (struct gl_fragment_program *)
+                               f->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program);
       _mesa_reference_fragprog(ctx, &ctx->FragmentProgram._TexEnvProgram,
-                               ctx->FragmentProgram._Current);
+			       (struct gl_fragment_program *)
+                               f->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program);
    }
    else {
       /* No fragment program */
       _mesa_reference_fragprog(ctx, &ctx->FragmentProgram._Current, NULL);
+      _mesa_reference_fragprog(ctx, &ctx->FragmentProgram._TexEnvProgram,
+			       NULL);
    }
 
-   if (gsProg && gsProg->LinkStatus && gsProg->GeometryProgram) {
+   if (gsProg && gsProg->LinkStatus
+       && gsProg->_LinkedShaders[MESA_SHADER_GEOMETRY]) {
       /* Use GLSL geometry shader */
       _mesa_reference_geomprog(ctx, &ctx->GeometryProgram._Current,
-                               gsProg->GeometryProgram);
+			       (struct gl_geometry_program *)
+			       gsProg->_LinkedShaders[MESA_SHADER_GEOMETRY]->Program);
    } else {
       /* No geometry program */
       _mesa_reference_geomprog(ctx, &ctx->GeometryProgram._Current, NULL);
@@ -281,10 +308,12 @@ update_program(struct gl_context *ctx)
     * _mesa_get_fixed_func_vertex_program() needs to know active
     * fragprog inputs.
     */
-   if (vsProg && vsProg->LinkStatus && vsProg->VertexProgram) {
+   if (vsProg && vsProg->LinkStatus
+       && vsProg->_LinkedShaders[MESA_SHADER_VERTEX]) {
       /* Use GLSL vertex shader */
       _mesa_reference_vertprog(ctx, &ctx->VertexProgram._Current,
-                               vsProg->VertexProgram);
+			       (struct gl_vertex_program *)
+			       vsProg->_LinkedShaders[MESA_SHADER_VERTEX]->Program);
    }
    else if (ctx->VertexProgram._Enabled) {
       /* Use user-defined vertex program */
@@ -407,19 +436,6 @@ update_multisample(struct gl_context *ctx)
 
 
 /**
- * Update derived color/blend/logicop state.
- */
-static void
-update_color(struct gl_context *ctx)
-{
-   /* This is needed to support 1.1's RGB logic ops AND
-    * 1.0's blending logicops.
-    */
-   ctx->Color._LogicOpEnabled = _mesa_rgba_logicop_enabled(ctx);
-}
-
-
-/**
  * Update the ctx->Color._ClampFragmentColor field
  */
 static void
@@ -460,7 +476,20 @@ update_clamp_read_color(struct gl_context *ctx)
       ctx->Color._ClampReadColor = ctx->Color.ClampReadColor;
 }
 
-
+/**
+ * Update the ctx->VertexProgram._TwoSideEnabled flag.
+ */
+static void
+update_twoside(struct gl_context *ctx)
+{
+   if (ctx->Shader.CurrentVertexProgram ||
+       ctx->VertexProgram._Enabled) {
+      ctx->VertexProgram._TwoSideEnabled = ctx->VertexProgram.TwoSideEnabled;
+   } else {
+      ctx->VertexProgram._TwoSideEnabled = (ctx->Light.Enabled &&
+					    ctx->Light.Model.TwoSide);
+   }
+}
 
 
 /*
@@ -582,7 +611,7 @@ _mesa_update_state_locked( struct gl_context *ctx )
    if (ctx->FragmentProgram._MaintainTexEnvProgram) {
       prog_flags |= (_NEW_BUFFERS | _NEW_TEXTURE | _NEW_FOG |
 		     _NEW_ARRAY | _NEW_LIGHT | _NEW_POINT | _NEW_RENDERMODE |
-		     _NEW_PROGRAM | _NEW_FRAG_CLAMP);
+		     _NEW_PROGRAM | _NEW_FRAG_CLAMP | _NEW_COLOR);
    }
    if (ctx->VertexProgram._MaintainTnlProgram) {
       prog_flags |= (_NEW_ARRAY | _NEW_TEXTURE | _NEW_TEXTURE_MATRIX |
@@ -616,6 +645,9 @@ _mesa_update_state_locked( struct gl_context *ctx )
    if (new_state & _NEW_LIGHT)
       _mesa_update_lighting( ctx );
 
+   if (new_state & (_NEW_LIGHT | _NEW_PROGRAM))
+      update_twoside( ctx );
+
    if (new_state & (_NEW_LIGHT | _NEW_BUFFERS))
       update_clamp_vertex_color(ctx);
 
@@ -631,11 +663,8 @@ _mesa_update_state_locked( struct gl_context *ctx )
    if (new_state & (_NEW_BUFFERS | _NEW_VIEWPORT))
       update_viewport_matrix(ctx);
 
-   if (new_state & _NEW_MULTISAMPLE)
+   if (new_state & (_NEW_MULTISAMPLE | _NEW_BUFFERS))
       update_multisample( ctx );
-
-   if (new_state & _NEW_COLOR)
-      update_color( ctx );
 
    if (new_state & (_NEW_COLOR | _NEW_BUFFERS))
       update_clamp_read_color(ctx);
@@ -730,7 +759,7 @@ _mesa_update_state( struct gl_context *ctx )
  */
 void
 _mesa_set_varying_vp_inputs( struct gl_context *ctx,
-                             GLbitfield varying_inputs )
+                             GLbitfield64 varying_inputs )
 {
    if (ctx->varying_vp_inputs != varying_inputs) {
       ctx->varying_vp_inputs = varying_inputs;

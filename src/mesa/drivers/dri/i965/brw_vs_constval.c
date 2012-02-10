@@ -38,7 +38,7 @@
  * are promoted to [0,0,0,1] for the purposes of this analysis.
  */
 struct tracker {
-   GLboolean twoside;
+   bool twoside;
    GLubyte active[PROGRAM_OUTPUT+1][MAX_PROGRAM_TEMPS];
    GLbitfield size_masks[4];  /**< one bit per fragment program input attrib */
 };
@@ -144,14 +144,10 @@ static void calc_sizes( struct tracker *t )
     * which describes the fragment program input sizes.
     */
    for (vertRes = VERT_RESULT_TEX0; vertRes < VERT_RESULT_MAX; vertRes++) {
-      GLint fragAttrib;
 
       /* map vertex program output index to fragment program input index */
-      if (vertRes <= VERT_RESULT_TEX7)
-         fragAttrib = FRAG_ATTRIB_TEX0 + vertRes - VERT_RESULT_TEX0;
-      else if (vertRes >= VERT_RESULT_VAR0)
-         fragAttrib = FRAG_ATTRIB_VAR0 + vertRes - VERT_RESULT_VAR0;
-      else
+      GLint fragAttrib = _mesa_vert_result_to_frag_attrib(vertRes);
+      if (fragAttrib < 0)
          continue;
       assert(fragAttrib >= FRAG_ATTRIB_TEX0);
       assert(fragAttrib <= FRAG_ATTRIB_MAX);
@@ -194,27 +190,34 @@ static void calc_wm_input_sizes( struct brw_context *brw )
    /* BRW_NEW_VERTEX_PROGRAM */
    const struct brw_vertex_program *vp =
       brw_vertex_program_const(brw->vertex_program);
-   /* BRW_NEW_FRAGMENT_PROGRAM */
-   struct gl_shader_program *prog = ctx->Shader.CurrentFragmentProgram;
    /* BRW_NEW_INPUT_DIMENSIONS */
    struct tracker t;
    GLuint insn;
    GLuint i;
 
-   /* If we're going to go through brw_fs.cpp, we don't end up using
-    * brw->wm.input_size_masks.
+   /* Mesa IR is not generated for GLSL vertex shaders.  If there's no Mesa
+    * IR, the code below cannot determine which output components are
+    * written.  So, skip it and assume everything is written.  This
+    * circumvents some optimizations in the fragment shader, but it guarantees
+    * that correct code is generated.
     */
-   if (prog && prog->_LinkedShaders[MESA_SHADER_FRAGMENT])
+   if (vp->program.Base.NumInstructions == 0) {
+      brw->wm.input_size_masks[0] = ~0;
+      brw->wm.input_size_masks[1] = ~0;
+      brw->wm.input_size_masks[2] = ~0;
+      brw->wm.input_size_masks[3] = ~0;
       return;
+   }
+
 
    memset(&t, 0, sizeof(t));
 
-   /* _NEW_LIGHT */
-   if (ctx->Light.Model.TwoSide)
+   /* _NEW_LIGHT | _NEW_PROGRAM */
+   if (ctx->VertexProgram._TwoSideEnabled)
       t.twoside = 1;
 
    for (i = 0; i < VERT_ATTRIB_MAX; i++) 
-      if (vp->program.Base.InputsRead & (1<<i))
+      if (vp->program.Base.InputsRead & BITFIELD64_BIT(i))
 	 set_active_component(&t, PROGRAM_INPUT, i, 
 			      szflag[get_input_size(brw, i)]);
       
@@ -245,12 +248,10 @@ static void calc_wm_input_sizes( struct brw_context *brw )
 
 const struct brw_tracked_state brw_wm_input_sizes = {
    .dirty = {
-      .mesa  = _NEW_LIGHT,
-      .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
-		BRW_NEW_VERTEX_PROGRAM |
-		BRW_NEW_INPUT_DIMENSIONS),
+      .mesa  = _NEW_LIGHT | _NEW_PROGRAM,
+      .brw   = BRW_NEW_VERTEX_PROGRAM | BRW_NEW_INPUT_DIMENSIONS,
       .cache = 0
    },
-   .prepare = calc_wm_input_sizes
+   .emit = calc_wm_input_sizes
 };
 

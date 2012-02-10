@@ -1,5 +1,7 @@
---- a/src/gallium/auxiliary/rtasm/rtasm_execmem.c
-+++ b/src/gallium/auxiliary/rtasm/rtasm_execmem.c
+Index: mesa/src/gallium/auxiliary/rtasm/rtasm_execmem.c
+===================================================================
+--- mesa.orig/src/gallium/auxiliary/rtasm/rtasm_execmem.c	2012-01-18 16:04:58.230651581 +0200
++++ mesa/src/gallium/auxiliary/rtasm/rtasm_execmem.c	2012-01-18 16:06:09.872798989 +0200
 @@ -37,7 +37,7 @@
  
  #include "rtasm_execmem.h"
@@ -9,10 +11,12 @@
  #define MAP_ANONYMOUS MAP_ANON
  #endif
  
---- a/src/gallium/include/pipe/p_config.h
-+++ b/src/gallium/include/pipe/p_config.h
-@@ -147,7 +147,7 @@
- #define PIPE_OS_UNIX
+Index: mesa/src/gallium/include/pipe/p_config.h
+===================================================================
+--- mesa.orig/src/gallium/include/pipe/p_config.h	2012-01-18 16:04:58.238651821 +0200
++++ mesa/src/gallium/include/pipe/p_config.h	2012-01-18 16:06:09.872798989 +0200
+@@ -171,7 +171,7 @@
+ #define PIPE_OS_ANDROID
  #endif
  
 -#if defined(__FreeBSD__)

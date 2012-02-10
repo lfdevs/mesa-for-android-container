@@ -97,7 +97,7 @@ static const struct {
 };
 
 
-static GLboolean check_urb_layout( struct brw_context *brw )
+static bool check_urb_layout(struct brw_context *brw)
 {
    brw->urb.vs_start = 0;
    brw->urb.gs_start = brw->urb.nr_vs_entries * brw->urb.vsize;
@@ -216,7 +216,7 @@ const struct brw_tracked_state brw_recalculate_urb_fence = {
       .cache = (CACHE_NEW_VS_PROG |
 		CACHE_NEW_SF_PROG)
    },
-   .prepare = recalculate_urb_fence
+   .emit = recalculate_urb_fence
 };
 
 

@@ -62,6 +62,7 @@ static void update_map(struct i915_context *i915,
                        uint unit,
                        const struct i915_texture *tex,
                        const struct i915_sampler_state *sampler,
+                       const struct pipe_sampler_view* view,
                        uint state[2]);
 
 
@@ -161,9 +162,10 @@ static void update_samplers(struct i915_context *i915)
                         i915->current.sampler[unit]); /* the result */
          update_map(i915,
                     unit,
-                    texture,                        /* texture */
-                    i915->sampler[unit],            /* sampler state */
-                    i915->current.texbuffer[unit]); /* the result */
+                    texture,                             /* texture */
+                    i915->sampler[unit],                 /* sampler state */
+                    i915->fragment_sampler_views[unit],  /* sampler view */
+                    i915->current.texbuffer[unit]);      /* the result */
 
          i915->current.sampler_enable_nr++;
          i915->current.sampler_enable_flags |= (1 << unit);
@@ -180,13 +182,21 @@ struct i915_tracked_state i915_hw_samplers = {
 };
 
 
-
 /***********************************************************************
  * Sampler views
  */
 
-static uint translate_texture_format(enum pipe_format pipeFormat)
+static uint translate_texture_format(enum pipe_format pipeFormat,
+                                     const struct pipe_sampler_view* view)
 {
+   if ( (view->swizzle_r != PIPE_SWIZZLE_RED ||
+         view->swizzle_g != PIPE_SWIZZLE_GREEN ||
+         view->swizzle_b != PIPE_SWIZZLE_BLUE ||
+         view->swizzle_a != PIPE_SWIZZLE_ALPHA ) &&
+         pipeFormat != PIPE_FORMAT_Z24_UNORM_S8_UINT &&
+         pipeFormat != PIPE_FORMAT_Z24X8_UNORM )
+      debug_printf("i915: unsupported texture swizzle for format %d\n", pipeFormat);
+
    switch (pipeFormat) {
    case PIPE_FORMAT_L8_UNORM:
       return MAPSURF_8BIT | MT_8BIT_L8;
@@ -202,6 +212,8 @@ static uint translate_texture_format(enum pipe_format pipeFormat)
       return MAPSURF_16BIT | MT_16BIT_ARGB1555;
    case PIPE_FORMAT_B4G4R4A4_UNORM:
       return MAPSURF_16BIT | MT_16BIT_ARGB4444;
+   case PIPE_FORMAT_B10G10R10A2_UNORM:
+      return MAPSURF_32BIT | MT_32BIT_ARGB2101010;
    case PIPE_FORMAT_B8G8R8A8_UNORM:
       return MAPSURF_32BIT | MT_32BIT_ARGB8888;
    case PIPE_FORMAT_B8G8R8X8_UNORM:
@@ -228,9 +240,31 @@ static uint translate_texture_format(enum pipe_format pipeFormat)
       return (MAPSURF_COMPRESSED | MT_COMPRESS_DXT2_3);
    case PIPE_FORMAT_DXT5_RGBA:
       return (MAPSURF_COMPRESSED | MT_COMPRESS_DXT4_5);
-   case PIPE_FORMAT_Z24_UNORM_S8_USCALED:
+   case PIPE_FORMAT_Z24_UNORM_S8_UINT:
    case PIPE_FORMAT_Z24X8_UNORM:
-      return (MAPSURF_32BIT | MT_32BIT_xI824);
+      {
+         if ( view->swizzle_r == PIPE_SWIZZLE_RED &&
+              view->swizzle_g == PIPE_SWIZZLE_RED &&
+              view->swizzle_b == PIPE_SWIZZLE_RED &&
+              view->swizzle_a == PIPE_SWIZZLE_ONE)
+            return (MAPSURF_32BIT | MT_32BIT_xA824);
+         if ( view->swizzle_r == PIPE_SWIZZLE_RED &&
+              view->swizzle_g == PIPE_SWIZZLE_RED &&
+              view->swizzle_b == PIPE_SWIZZLE_RED &&
+              view->swizzle_a == PIPE_SWIZZLE_RED)
+            return (MAPSURF_32BIT | MT_32BIT_xI824);
+         if ( view->swizzle_r == PIPE_SWIZZLE_ZERO &&
+              view->swizzle_g == PIPE_SWIZZLE_ZERO &&
+              view->swizzle_b == PIPE_SWIZZLE_ZERO &&
+              view->swizzle_a == PIPE_SWIZZLE_RED)
+            return (MAPSURF_32BIT | MT_32BIT_xL824);
+         debug_printf("i915: unsupported depth swizzle %d %d %d %d\n",
+                      view->swizzle_r,
+                      view->swizzle_g,
+                      view->swizzle_b,
+                      view->swizzle_a);
+         return (MAPSURF_32BIT | MT_32BIT_xL824);
+      }
    default:
       debug_printf("i915: translate_texture_format() bad image format %x\n",
                    pipeFormat);
@@ -260,6 +294,7 @@ static void update_map(struct i915_context *i915,
                        uint unit,
                        const struct i915_texture *tex,
                        const struct i915_sampler_state *sampler,
+                       const struct pipe_sampler_view* view,
                        uint state[2])
 {
    const struct pipe_resource *pt = &tex->b.b;
@@ -273,7 +308,7 @@ static void update_map(struct i915_context *i915,
    assert(height);
    assert(depth);
 
-   format = translate_texture_format(pt->format);
+   format = translate_texture_format(pt->format, view);
    pitch = tex->stride;
 
    assert(format);
@@ -316,8 +351,9 @@ static void update_maps(struct i915_context *i915)
 
          update_map(i915,
                     unit,
-                    texture,                      /* texture */
-                    i915->sampler[unit],          /* sampler state */
+                    texture,                            /* texture */
+                    i915->sampler[unit],                /* sampler state */
+                    i915->fragment_sampler_views[unit], /* sampler view */
                     i915->current.texbuffer[unit]);
       }
    }

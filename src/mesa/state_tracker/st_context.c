@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include "main/imports.h"
+#include "main/accum.h"
 #include "main/context.h"
 #include "main/samplerobj.h"
 #include "main/shaderobj.h"
@@ -34,7 +35,6 @@
 #include "glapi/glapi.h"
 #include "st_context.h"
 #include "st_debug.h"
-#include "st_cb_accum.h"
 #include "st_cb_bitmap.h"
 #include "st_cb_blit.h"
 #include "st_cb_bufferobjects.h"
@@ -144,6 +144,10 @@ st_create_context_priv( struct gl_context *ctx, struct pipe_context *pipe )
    /* we want all vertex data to be placed in buffer objects */
    vbo_use_buffer_objects(ctx);
 
+
+   /* make sure that no VBOs are left mapped when we're drawing. */
+   vbo_always_unmap_buffers(ctx);
+
    /* Need these flags:
     */
    st->ctx->FragmentProgram._MaintainTexEnvProgram = GL_TRUE;
@@ -179,6 +183,9 @@ struct st_context *st_create_context(gl_api api, struct pipe_context *pipe,
    st_init_driver_functions(&funcs);
 
    ctx = _mesa_create_context(api, visual, shareCtx, &funcs, NULL);
+   if (!ctx) {
+      return NULL;
+   }
 
    /* XXX: need a capability bit in gallium to query if the pipe
     * driver prefers DP4 or MUL/MAD for vertex transformation.
@@ -269,7 +276,8 @@ void st_init_driver_functions(struct dd_function_table *functions)
    _mesa_init_shader_object_functions(functions);
    _mesa_init_sampler_object_functions(functions);
 
-   st_init_accum_functions(functions);
+   functions->Accum = _mesa_accum;
+
    st_init_blit_functions(functions);
    st_init_bufferobject_functions(functions);
    st_init_clear_functions(functions);

@@ -802,7 +802,7 @@ srcReg: USED_IDENTIFIER /* temporaryReg | progParamSingle */
 	      break;
 	   case at_attrib:
 	      set_src_reg(& $$, PROGRAM_INPUT, s->attrib_binding);
-	      state->prog->InputsRead |= (1U << $$.Base.Index);
+	      state->prog->InputsRead |= BITFIELD64_BIT($$.Base.Index);
 
 	      if (!validate_inputs(& @1, state)) {
 		 YYERROR;
@@ -817,7 +817,7 @@ srcReg: USED_IDENTIFIER /* temporaryReg | progParamSingle */
 	| attribBinding
 	{
 	   set_src_reg(& $$, PROGRAM_INPUT, $1);
-	   state->prog->InputsRead |= (1U << $$.Base.Index);
+	   state->prog->InputsRead |= BITFIELD64_BIT($$.Base.Index);
 
 	   if (!validate_inputs(& @1, state)) {
 	      YYERROR;
@@ -1110,7 +1110,7 @@ ATTRIB_statement: ATTRIB IDENTIFIER '=' attribBinding
 	      YYERROR;
 	   } else {
 	      s->attrib_binding = $4;
-	      state->InputsBound |= (1U << s->attrib_binding);
+	      state->InputsBound |= BITFIELD64_BIT(s->attrib_binding);
 
 	      if (!validate_inputs(& @4, state)) {
 		 YYERROR;
@@ -1854,64 +1854,64 @@ paramConstUse: paramConstScalarUse | paramConstVector;
 paramConstScalarDecl: signedFloatConstant
 	{
 	   $$.count = 4;
-	   $$.data[0] = $1;
-	   $$.data[1] = $1;
-	   $$.data[2] = $1;
-	   $$.data[3] = $1;
+	   $$.data[0].f = $1;
+	   $$.data[1].f = $1;
+	   $$.data[2].f = $1;
+	   $$.data[3].f = $1;
 	}
 	;
 
 paramConstScalarUse: REAL
 	{
 	   $$.count = 1;
-	   $$.data[0] = $1;
-	   $$.data[1] = $1;
-	   $$.data[2] = $1;
-	   $$.data[3] = $1;
+	   $$.data[0].f = $1;
+	   $$.data[1].f = $1;
+	   $$.data[2].f = $1;
+	   $$.data[3].f = $1;
 	}
 	| INTEGER
 	{
 	   $$.count = 1;
-	   $$.data[0] = (float) $1;
-	   $$.data[1] = (float) $1;
-	   $$.data[2] = (float) $1;
-	   $$.data[3] = (float) $1;
+	   $$.data[0].f = (float) $1;
+	   $$.data[1].f = (float) $1;
+	   $$.data[2].f = (float) $1;
+	   $$.data[3].f = (float) $1;
 	}
 	;
 
 paramConstVector: '{' signedFloatConstant '}'
 	{
 	   $$.count = 4;
-	   $$.data[0] = $2;
-	   $$.data[1] = 0.0f;
-	   $$.data[2] = 0.0f;
-	   $$.data[3] = 1.0f;
+	   $$.data[0].f = $2;
+	   $$.data[1].f = 0.0f;
+	   $$.data[2].f = 0.0f;
+	   $$.data[3].f = 1.0f;
 	}
 	| '{' signedFloatConstant ',' signedFloatConstant '}'
 	{
 	   $$.count = 4;
-	   $$.data[0] = $2;
-	   $$.data[1] = $4;
-	   $$.data[2] = 0.0f;
-	   $$.data[3] = 1.0f;
+	   $$.data[0].f = $2;
+	   $$.data[1].f = $4;
+	   $$.data[2].f = 0.0f;
+	   $$.data[3].f = 1.0f;
 	}
 	| '{' signedFloatConstant ',' signedFloatConstant ','
               signedFloatConstant '}'
 	{
 	   $$.count = 4;
-	   $$.data[0] = $2;
-	   $$.data[1] = $4;
-	   $$.data[2] = $6;
-	   $$.data[3] = 1.0f;
+	   $$.data[0].f = $2;
+	   $$.data[1].f = $4;
+	   $$.data[2].f = $6;
+	   $$.data[3].f = 1.0f;
 	}
 	| '{' signedFloatConstant ',' signedFloatConstant ','
               signedFloatConstant ',' signedFloatConstant '}'
 	{
 	   $$.count = 4;
-	   $$.data[0] = $2;
-	   $$.data[1] = $4;
-	   $$.data[2] = $6;
-	   $$.data[3] = $8;
+	   $$.data[0].f = $2;
+	   $$.data[1].f = $4;
+	   $$.data[2].f = $6;
+	   $$.data[3].f = $8;
 	}
 	;
 
@@ -2403,9 +2403,9 @@ set_src_reg_swz(struct asm_src_register *r, gl_register_file file, GLint index,
 int
 validate_inputs(struct YYLTYPE *locp, struct asm_parser_state *state)
 {
-   const int inputs = state->prog->InputsRead | state->InputsBound;
+   const GLbitfield64 inputs = state->prog->InputsRead | state->InputsBound;
 
-   if (((inputs & 0x0ffff) & (inputs >> 16)) != 0) {
+   if (((inputs & VERT_BIT_FF_ALL) & (inputs >> VERT_ATTRIB_GENERIC0)) != 0) {
       yyerror(locp, state, "illegal use of generic attribute and name attribute");
       return 0;
    }
@@ -2768,7 +2768,7 @@ _mesa_parse_arb_program(struct gl_context *ctx, GLenum target, const GLubyte *st
    state->prog->NumInstructions++;
 
    state->prog->NumParameters = state->prog->Parameters->NumParameters;
-   state->prog->NumAttributes = _mesa_bitcount(state->prog->InputsRead);
+   state->prog->NumAttributes = _mesa_bitcount_64(state->prog->InputsRead);
 
    /*
     * Initialize native counts to logical counts.  The device driver may

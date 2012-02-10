@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to create configure.
 
-AC_PREREQ([2.59])
+AC_PREREQ([2.60])
 
 dnl Versioning - scrape the version from configs/default
 m4_define([mesa_version],
@@ -16,6 +16,7 @@ AC_INIT([Mesa],[mesa_version],
     [https://bugs.freedesktop.org/enter_bug.cgi?product=Mesa])
 AC_CONFIG_AUX_DIR([bin])
 AC_CANONICAL_HOST
+AM_INIT_AUTOMAKE([foreign])
 
 dnl Save user CFLAGS and CXXFLAGS so one can override the default ones
 USER_CFLAGS="$CFLAGS"
@@ -24,10 +25,10 @@ USER_CXXFLAGS="$CXXFLAGS"
 dnl Versions for external dependencies
 LIBDRM_REQUIRED=2.4.24
 LIBDRM_RADEON_REQUIRED=2.4.24
-LIBDRM_INTEL_REQUIRED=2.4.24
+LIBDRM_INTEL_REQUIRED=2.4.30
 LIBDRM_NOUVEAU_REQUIRED=0.6
-DRI2PROTO_REQUIRED=2.1
-GLPROTO_REQUIRED=1.4.11
+DRI2PROTO_REQUIRED=2.6
+GLPROTO_REQUIRED=1.4.14
 LIBDRM_XORG_REQUIRED=2.4.24
 LIBKMS_XORG_REQUIRED=1.0.0
 
@@ -37,8 +38,8 @@ AC_PROG_CC
 AC_PROG_CXX
 AC_CHECK_PROGS([MAKE], [gmake make])
 AC_CHECK_PROGS([PYTHON2], [python2 python])
+AC_PROG_SED
 AC_PATH_PROG([MKDEP], [makedepend])
-AC_PATH_PROG([SED], [sed])
 
 if test "x$MKDEP" = "x"; then
     AC_MSG_ERROR([makedepend is required to build Mesa])
@@ -65,6 +66,18 @@ solaris*)
     ;;
 esac
 
+AC_PATH_PROG([GTESTCONFIG], [gtest-config])
+if test "x$GTESTCONFIG" != "x"; then
+    GTEST_CFLAGS=`gtest-config --cppflags --cxxflags`
+    GTEST_LIBS=`gtest-config --ldflags --libs`
+    AC_SUBST([GTEST_CFLAGS])
+    AC_SUBST([GTEST_LIBS])
+    HAVE_GTEST=yes
+else
+    HAVE_GTEST=no
+fi
+AM_CONDITIONAL(HAVE_GTEST, test x$HAVE_GTEST = xyes)
+
 dnl clang is mostly GCC-compatible, but its version is much lower,
 dnl so we have to check for it.
 AC_MSG_CHECKING([if compiling with clang])
@@ -75,13 +88,13 @@ AC_COMPILE_IFELSE(
        not clang
 #endif
 ]])],
-[CLANG=yes], [CLANG=no])
+[acv_mesa_CLANG=yes], [acv_mesa_CLANG=no])
 
-AC_MSG_RESULT([$CLANG])
+AC_MSG_RESULT([$acv_mesa_CLANG])
 
 dnl If we're using GCC, make sure that it is at least version 3.3.0.  Older
 dnl versions are explictly not supported.
-if test "x$GCC" = xyes -a "x$CLANG" = xno; then
+if test "x$GCC" = xyes -a "x$acv_mesa_CLANG" = xno; then
     AC_MSG_CHECKING([whether gcc version is sufficient])
     major=0
     minor=0
@@ -172,6 +185,10 @@ if test "x$GCC" = xyes; then
 
     # Work around aliasing bugs - developers should comment this out
     CFLAGS="$CFLAGS -fno-strict-aliasing"
+
+    # gcc's builtin memcmp is slower than glibc's
+    # http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43052
+    CFLAGS="$CFLAGS -fno-builtin-memcmp"
 fi
 if test "x$GXX" = xyes; then
     CXXFLAGS="$CXXFLAGS -Wall"
@@ -181,15 +198,30 @@ if test "x$GXX" = xyes; then
     AC_MSG_CHECKING([whether $CXX supports -fvisibility=hidden])
     VISIBILITY_CXXFLAGS="-fvisibility=hidden"
     CXXFLAGS="$CXXFLAGS $VISIBILITY_CXXFLAGS"
+    AC_LANG_PUSH([C++])
     AC_LINK_IFELSE([AC_LANG_PROGRAM()], AC_MSG_RESULT([yes]),
 		   [VISIBILITY_CXXFLAGS="" ; AC_MSG_RESULT([no])]);
+    AC_LANG_POP([C++])
 
     # Restore CXXFLAGS; VISIBILITY_CXXFLAGS are added to it where needed.
     CXXFLAGS=$save_CXXFLAGS
 
     # Work around aliasing bugs - developers should comment this out
     CXXFLAGS="$CXXFLAGS -fno-strict-aliasing"
+
+    # gcc's builtin memcmp is slower than glibc's
+    # http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43052
+    CXXFLAGS="$CXXFLAGS -fno-builtin-memcmp"
 fi
+
+dnl even if the compiler appears to support it, using visibility attributes isn't
+dnl going to do anything useful currently on cygwin apart from emit lots of warnings
+case "$host_os" in
+cygwin*)
+    VISIBILITY_CFLAGS=""
+    VISIBILITY_CXXFLAGS=""
+    ;;
+esac
 
 AC_SUBST([VISIBILITY_CFLAGS])
 AC_SUBST([VISIBILITY_CXXFLAGS])
@@ -331,6 +363,28 @@ else
 fi
 
 dnl
+dnl Mangled Mesa support
+dnl
+AC_ARG_ENABLE([mangling],
+  [AS_HELP_STRING([--enable-mangling],
+    [enable mangled symbols and library name @<:@default=disabled@:>@])],
+  [enable_mangling="${enableval}"],
+  [enable_mangling=no]
+)
+GL_LIB="GL"
+GLU_LIB="GLU"
+OSMESA_LIB="OSMesa"
+if test "x${enable_mangling}" = "xyes" ; then
+  DEFINES="${DEFINES} -DUSE_MGL_NAMESPACE"
+  GL_LIB="MangledGL"
+  GLU_LIB="MangledGLU"
+  OSMESA_LIB="MangledOSMesa"
+fi
+AC_SUBST([GL_LIB])
+AC_SUBST([GLU_LIB])
+AC_SUBST([OSMESA_LIB])
+
+dnl
 dnl potentially-infringing-but-nobody-knows-for-sure stuff
 dnl
 AC_ARG_ENABLE([texture-float],
@@ -347,8 +401,6 @@ fi
 
 GL_LIB_NAME='lib$(GL_LIB).'${LIB_EXTENSION}
 GLU_LIB_NAME='lib$(GLU_LIB).'${LIB_EXTENSION}
-GLUT_LIB_NAME='lib$(GLUT_LIB).'${LIB_EXTENSION}
-GLW_LIB_NAME='lib$(GLW_LIB).'${LIB_EXTENSION}
 OSMESA_LIB_NAME='lib$(OSMESA_LIB).'${LIB_EXTENSION}
 EGL_LIB_NAME='lib$(EGL_LIB).'${LIB_EXTENSION}
 GLESv1_CM_LIB_NAME='lib$(GLESv1_CM_LIB).'${LIB_EXTENSION}
@@ -360,8 +412,6 @@ GBM_LIB_NAME='lib$(GBM_LIB).'${LIB_EXTENSION}
 
 GL_LIB_GLOB=${LIB_PREFIX_GLOB}'$(GL_LIB)'${LIB_VERSION_SEPARATOR}'*'${LIB_EXTENSION}'*'
 GLU_LIB_GLOB=${LIB_PREFIX_GLOB}'$(GLU_LIB)'${LIB_VERSION_SEPARATOR}'*'${LIB_EXTENSION}'*'
-GLUT_LIB_GLOB=${LIB_PREFIX_GLOB}'$(GLUT_LIB)'${LIB_VERSION_SEPARATOR}'*'${LIB_EXTENSION}'*'
-GLW_LIB_GLOB=${LIB_PREFIX_GLOB}'$(GLW_LIB)'${LIB_VERSION_SEPARATOR}'*'${LIB_EXTENSION}'*'
 OSMESA_LIB_GLOB=${LIB_PREFIX_GLOB}'$(OSMESA_LIB)'${LIB_VERSION_SEPARATOR}'*'${LIB_EXTENSION}'*'
 EGL_LIB_GLOB=${LIB_PREFIX_GLOB}'$(EGL_LIB)'${LIB_VERSION_SEPARATOR}'*'${LIB_EXTENSION}'*'
 EGL_LIB_GLOB=${LIB_PREFIX_GLOB}'$(EGL_LIB)'${LIB_VERSION_SEPARATOR}'*'${LIB_EXTENSION}'*'
@@ -374,8 +424,6 @@ GBM_LIB_GLOB=${LIB_PREFIX_GLOB}'$(GBM_LIB)'${LIB_VERSION_SEPARATOR}'*'${LIB_EXTE
 
 AC_SUBST([GL_LIB_NAME])
 AC_SUBST([GLU_LIB_NAME])
-AC_SUBST([GLUT_LIB_NAME])
-AC_SUBST([GLW_LIB_NAME])
 AC_SUBST([OSMESA_LIB_NAME])
 AC_SUBST([EGL_LIB_NAME])
 AC_SUBST([GLESv1_CM_LIB_NAME])
@@ -387,8 +435,6 @@ AC_SUBST([GBM_LIB_NAME])
 
 AC_SUBST([GL_LIB_GLOB])
 AC_SUBST([GLU_LIB_GLOB])
-AC_SUBST([GLUT_LIB_GLOB])
-AC_SUBST([GLW_LIB_GLOB])
 AC_SUBST([OSMESA_LIB_GLOB])
 AC_SUBST([EGL_LIB_GLOB])
 AC_SUBST([GLESv1_CM_LIB_GLOB])
@@ -536,26 +582,70 @@ AC_ARG_ENABLE([openvg],
         [enable support for OpenVG API @<:@default=no@:>@])],
     [enable_openvg="$enableval"],
     [enable_openvg=no])
-AC_ARG_ENABLE([xorg],
-    [AS_HELP_STRING([--enable-xorg],
-        [enable support for X.Org DDX API @<:@default=no@:>@])],
-    [enable_xorg="$enableval"],
-    [enable_xorg=no])
-AC_ARG_ENABLE([d3d1x],
-    [AS_HELP_STRING([--enable-d3d1x],
-        [enable support for Direct3D 10 & 11 low-level API @<:@default=no@:>@])],
-    [enable_d3d1x="$enableval"],
-    [enable_d3d1x=no])
+
+AC_ARG_ENABLE([dri],
+    [AS_HELP_STRING([--enable-dri],
+        [enable DRI modules @<:@default=auto@:>@])],
+    [enable_dri="$enableval"],
+    [enable_dri=auto])
+AC_ARG_ENABLE([glx],
+    [AS_HELP_STRING([--enable-glx],
+        [enable GLX library @<:@default=auto@:>@])],
+    [enable_glx="$enableval"],
+    [enable_glx=auto])
+AC_ARG_ENABLE([osmesa],
+    [AS_HELP_STRING([--enable-osmesa],
+        [enable OSMesa library @<:@default=auto@:>@])],
+    [enable_osmesa="$enableval"],
+    [enable_osmesa=auto])
 AC_ARG_ENABLE([egl],
     [AS_HELP_STRING([--disable-egl],
         [disable EGL library @<:@default=enabled@:>@])],
     [enable_egl="$enableval"],
     [enable_egl=yes])
+
+AC_ARG_ENABLE([xorg],
+    [AS_HELP_STRING([--enable-xorg],
+        [enable support for X.Org DDX API @<:@default=no@:>@])],
+    [enable_xorg="$enableval"],
+    [enable_xorg=no])
+AC_ARG_ENABLE([xa],
+    [AS_HELP_STRING([--enable-xa],
+        [enable build of the XA X Acceleration API @<:@default=no@:>@])],
+    [enable_xa="$enableval"],
+    [enable_xa=no])
+AC_ARG_ENABLE([d3d1x],
+    [AS_HELP_STRING([--enable-d3d1x],
+        [enable support for Direct3D 10 & 11 low-level API @<:@default=no@:>@])],
+    [enable_d3d1x="$enableval"],
+    [enable_d3d1x=no])
 AC_ARG_ENABLE([gbm],
    [AS_HELP_STRING([--enable-gbm],
          [enable gbm library @<:@default=auto@:>@])],
    [enable_gbm="$enableval"],
    [enable_gbm=auto])
+
+AC_ARG_ENABLE([xvmc],
+   [AS_HELP_STRING([--enable-xvmc],
+         [enable xvmc library @<:@default=auto@:>@])],
+   [enable_xvmc="$enableval"],
+   [enable_xvmc=auto])
+AC_ARG_ENABLE([vdpau],
+   [AS_HELP_STRING([--enable-vdpau],
+         [enable vdpau library @<:@default=auto@:>@])],
+   [enable_vdpau="$enableval"],
+   [enable_vdpau=auto])
+AC_ARG_ENABLE([va],
+   [AS_HELP_STRING([--enable-va],
+         [enable va library @<:@default=auto@:>@])],
+   [enable_va="$enableval"],
+   [enable_va=auto])
+
+AC_ARG_ENABLE([xlib_glx],
+    [AS_HELP_STRING([--enable-xlib-glx],
+        [make GLX library Xlib-based instead of DRI-based @<:@default=disable@:>@])],
+    [enable_xlib_glx="$enableval"],
+    [enable_xlib_glx=auto])
 AC_ARG_ENABLE([gallium_egl],
     [AS_HELP_STRING([--enable-gallium-egl],
         [enable optional EGL state tracker (not required
@@ -572,12 +662,12 @@ AC_ARG_ENABLE([gallium_gbm],
     [enable_gallium_gbm=auto])
 
 # Option for Gallium drivers
-GALLIUM_DRIVERS_DEFAULT="r300,r600,swrast"
+GALLIUM_DRIVERS_DEFAULT="r300,r600,svga,swrast"
 
 AC_ARG_WITH([gallium-drivers],
     [AS_HELP_STRING([--with-gallium-drivers@<:@=DIRS...@:>@],
         [comma delimited Gallium drivers list, e.g.
-        "i915,i965,nouveau,r300,r600,svga,swrast"
+        "i915,nouveau,r300,r600,svga,swrast"
         @<:@default=r300,r600,swrast@:>@])],
     [with_gallium_drivers="$withval"],
     [with_gallium_drivers="$GALLIUM_DRIVERS_DEFAULT"])
@@ -594,7 +684,11 @@ if test "x$enable_opengl" = xno -a \
         "x$enable_gles2" = xno -a \
         "x$enable_openvg" = xno -a \
         "x$enable_xorg" = xno -a \
-        "x$enable_d3d1x" = xno; then
+        "x$enable_xa" = xno -a \
+        "x$enable_d3d1x" = xno -a \
+        "x$enable_xvmc" = xno -a \
+        "x$enable_vdpau" = xno -a \
+        "x$enable_va" = xno; then
     AC_MSG_ERROR([at least one API should be enabled])
 fi
 
@@ -648,23 +742,59 @@ if test "x$enable_opengl" = xno; then
 fi
 
 AC_ARG_WITH([driver],
-    [AS_HELP_STRING([--with-driver=DRIVER],
-        [driver for Mesa: xlib,dri,osmesa @<:@default=dri when available, or xlib@:>@])],
+    [AS_HELP_STRING([--with-driver=DRIVER], [DEPRECATED])],
     [mesa_driver="$withval"],
-    [mesa_driver="$default_driver"])
+    [mesa_driver=auto])
 dnl Check for valid option
 case "x$mesa_driver" in
-xxlib|xdri|xosmesa)
-    if test "x$enable_opengl" = xno; then
-        AC_MSG_ERROR([Driver '$mesa_driver' requires OpenGL enabled])
+xxlib|xdri|xosmesa|xno)
+    if test "x$enable_dri" != xauto -o \
+            "x$enable_glx" != xauto -o \
+            "x$enable_osmesa" != xauto -o \
+            "x$enable_xlib_glx" != xauto; then
+        AC_MSG_ERROR([--with-driver=$mesa_driver is deprecated])
     fi
     ;;
-xno)
+xauto)
+    mesa_driver="$default_driver"
     ;;
 *)
     AC_MSG_ERROR([Driver '$mesa_driver' is not a valid option])
     ;;
 esac
+
+# map $mesa_driver to APIs
+if test "x$enable_dri" = xauto; then
+    case "x$mesa_driver" in
+    xdri) enable_dri=yes ;;
+    *)    enable_dri=no ;;
+    esac
+fi
+
+if test "x$enable_glx" = xauto; then
+    case "x$mesa_driver" in
+    xdri|xxlib) enable_glx=yes ;;
+    *)          enable_glx=no ;;
+    esac
+fi
+
+if test "x$enable_osmesa" = xauto; then
+    case "x$mesa_driver" in
+    xxlib|xosmesa) enable_osmesa=yes ;;
+    *)             enable_osmesa=no ;;
+    esac
+fi
+
+if test "x$enable_xlib_glx" = xauto; then
+    case "x$mesa_driver" in
+    xxlib) enable_xlib_glx=yes ;;
+    *)     enable_xlib_glx=no ;;
+    esac
+fi
+
+if test "x$enable_glx" = xno; then
+    enable_xlib_glx=no
+fi
 
 dnl
 dnl Driver specific build directories
@@ -678,7 +808,7 @@ GLU_DIRS="sgi"
 GALLIUM_DIRS="auxiliary drivers state_trackers"
 GALLIUM_TARGET_DIRS=""
 GALLIUM_WINSYS_DIRS="sw"
-GALLIUM_DRIVERS_DIRS="softpipe failover galahad trace rbug noop identity"
+GALLIUM_DRIVERS_DIRS="galahad trace rbug noop identity"
 GALLIUM_STATE_TRACKERS_DIRS=""
 
 # build shared-glapi if enabled for OpenGL or if OpenGL ES is enabled
@@ -710,27 +840,37 @@ x*yes*)
     ;;
 esac
 
-case "$mesa_driver" in
-xlib)
-    DRIVER_DIRS="x11"
+case "x$enable_glx$enable_xlib_glx" in
+xyesyes)
+    DRIVER_DIRS="$DRIVER_DIRS x11"
     GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS sw/xlib"
     GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS libgl-xlib"
     GALLIUM_STATE_TRACKERS_DIRS="glx $GALLIUM_STATE_TRACKERS_DIRS"
+    HAVE_WINSYS_XLIB="yes"
     ;;
-dri)
+xyesno)
+    # DRI-based GLX
     SRC_DIRS="$SRC_DIRS glx"
-    DRIVER_DIRS="dri"
-    GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS sw/xlib sw/dri"
-    GALLIUM_STATE_TRACKERS_DIRS="dri $GALLIUM_STATE_TRACKERS_DIRS"
-    HAVE_ST_DRI="yes"
-    ;;
-osmesa)
-    DRIVER_DIRS="osmesa"
-    ;;
-no)
-    DRIVER_DRIS=""
     ;;
 esac
+
+if test "x$enable_dri" = xyes; then
+    DRIVER_DIRS="$DRIVER_DIRS dri"
+
+    GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS sw/dri"
+    GALLIUM_STATE_TRACKERS_DIRS="dri $GALLIUM_STATE_TRACKERS_DIRS"
+    HAVE_ST_DRI="yes"
+fi
+
+if test "x$enable_osmesa" = xyes; then
+    # the empty space matters for osmesa... (see src/mesa/Makefile)
+    if test -n "$DRIVER_DIRS"; then
+        DRIVER_DIRS="$DRIVER_DIRS osmesa"
+    else
+        DRIVER_DIRS="osmesa"
+    fi
+fi
+
 AC_SUBST([SRC_DIRS])
 AC_SUBST([GLU_DIRS])
 AC_SUBST([DRIVER_DIRS])
@@ -740,6 +880,22 @@ AC_SUBST([GALLIUM_WINSYS_DIRS])
 AC_SUBST([GALLIUM_DRIVERS_DIRS])
 AC_SUBST([GALLIUM_STATE_TRACKERS_DIRS])
 AC_SUBST([MESA_LLVM])
+
+# Check for libdrm
+PKG_CHECK_MODULES([LIBDRM], [libdrm >= $LIBDRM_REQUIRED],
+                  [have_libdrm=yes], [have_libdrm=no])
+
+if test "x$enable_dri" = xyes; then
+    # DRI must be shared, I think
+    if test "$enable_static" = yes; then
+        AC_MSG_ERROR([Can't use static libraries for DRI drivers])
+    fi
+
+    # not a hard requirement as swrast does not depend on it
+    if test "x$have_libdrm" = xyes; then
+        DRI_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED"
+    fi
+fi
 
 dnl
 dnl Find out if X is available. The variable have_x is set if libX11 is
@@ -775,24 +931,12 @@ m4_divert_once([HELP_BEGIN],
 pkg-config utility.])
 
 dnl We need X for xlib and dri, so bomb now if it's not found
-case "$mesa_driver" in
-xlib|dri)
-    if test "$no_x" = yes; then
-        AC_MSG_ERROR([X11 development libraries needed for $mesa_driver driver])
-    fi
-    ;;
-esac
+if test "x$enable_glx" = xyes -a "x$no_x" = xyes; then
+    AC_MSG_ERROR([X11 development libraries needed for GLX])
+fi
 
-dnl XCB - this is only used for GLX right now
-AC_ARG_ENABLE([xcb],
-    [AS_HELP_STRING([--enable-xcb],
-        [use XCB for GLX @<:@default=disabled@:>@])],
-    [enable_xcb="$enableval"],
-    [enable_xcb=no])
-if test "x$enable_xcb" = xyes; then
+if test "x$enable_glx" = xyes; then
     DEFINES="$DEFINES -DUSE_XCB"
-else
-    enable_xcb=no
 fi
 
 dnl Direct rendering or just indirect rendering
@@ -819,8 +963,9 @@ AC_ARG_ENABLE([driglx-direct],
 dnl
 dnl libGL configuration per driver
 dnl
-case "$mesa_driver" in
-xlib)
+case "x$enable_glx$enable_xlib_glx" in
+xyesyes)
+    # Xlib-based GLX
     if test "$x11_pkgconfig" = yes; then
         PKG_CHECK_MODULES([XLIBGL], [x11 xext])
         GL_PC_REQ_PRIV="x11 xext"
@@ -835,45 +980,27 @@ xlib)
     fi
     GL_LIB_DEPS="$GL_LIB_DEPS $SELINUX_LIBS -lm -lpthread $DLOPEN_LIBS"
     GL_PC_LIB_PRIV="$GL_PC_LIB_PRIV $SELINUX_LIBS -lm -lpthread"
-
-    # if static, move the external libraries to the programs
-    # and empty the libraries for libGL
-    if test "$enable_static" = yes; then
-        APP_LIB_DEPS="$APP_LIB_DEPS $GL_LIB_DEPS"
-        GL_LIB_DEPS=""
-    fi
     ;;
-dri|no) # these checks are still desired when there is no mesa_driver
-    # DRI must be shared, I think
-    if test "$enable_static" = yes; then
-        AC_MSG_ERROR([Can't use static libraries for DRI drivers])
-    fi
-
+xyesno)
+    # DRI-based GLX
     PKG_CHECK_MODULES([GLPROTO], [glproto >= $GLPROTO_REQUIRED])
     GL_PC_REQ_PRIV="glproto >= $GLPROTO_REQUIRED"
-    DRI_PC_REQ_PRIV=""
-
     if test x"$driglx_direct" = xyes; then
-        # Check for libdrm
-        PKG_CHECK_MODULES([LIBDRM], [libdrm >= $LIBDRM_REQUIRED])
+        if test "x$have_libdrm" != xyes; then
+            AC_MSG_ERROR([Direct rendering requires libdrm >= $LIBDRM_REQUIRED])
+        fi
         PKG_CHECK_MODULES([DRI2PROTO], [dri2proto >= $DRI2PROTO_REQUIRED])
         GL_PC_REQ_PRIV="$GL_PC_REQ_PRIV libdrm >= $LIBDRM_REQUIRED dri2proto >= $DRI2PROTO_REQUIRED"
-        DRI_PC_REQ_PRIV="libdrm >= $LIBDRM_REQUIRED"
     fi
 
     # find the DRI deps for libGL
     if test "$x11_pkgconfig" = yes; then
-        dri_modules="x11 xext xdamage xfixes"
+        dri_modules="x11 xext xdamage xfixes x11-xcb xcb-glx"
 
         # add xf86vidmode if available
         PKG_CHECK_MODULES([XF86VIDMODE], [xxf86vm], HAVE_XF86VIDMODE=yes, HAVE_XF86VIDMODE=no)
         if test "$HAVE_XF86VIDMODE" = yes ; then
             dri_modules="$dri_modules xxf86vm"
-        fi
-
-        # add xcb modules if necessary
-        if test "$enable_xcb" = yes; then
-            dri_modules="$dri_modules x11-xcb xcb-glx"
         fi
 
         PKG_CHECK_MODULES([DRIGL], [$dri_modules])
@@ -883,32 +1010,54 @@ dri|no) # these checks are still desired when there is no mesa_driver
     else
         # should check these...
         X11_INCLUDES="$X11_INCLUDES $X_CFLAGS"
-        GL_LIB_DEPS="$X_LIBS -lX11 -lXext -lXxf86vm -lXdamage -lXfixes"
+        if test "x$HAVE_XF86VIDMODE" == xyes; then
+           GL_LIB_DEPS="$X_LIBS -lX11 -lXext -lXxf86vm -lXdamage -lXfixes"
+	else
+           GL_LIB_DEPS="$X_LIBS -lX11 -lXext -lXdamage -lXfixes"
+	fi
         GL_PC_LIB_PRIV="$GL_LIB_DEPS"
         GL_PC_CFLAGS="$X11_INCLUDES"
 
         # XCB can only be used from pkg-config
-        if test "$enable_xcb" = yes; then
-            PKG_CHECK_MODULES([XCB],[x11-xcb xcb-glx])
-            GL_PC_REQ_PRIV="$GL_PC_REQ_PRIV x11-xcb xcb-glx"
-            X11_INCLUDES="$X11_INCLUDES $XCB_CFLAGS"
-            GL_LIB_DEPS="$GL_LIB_DEPS $XCB_LIBS"
-        fi
+        PKG_CHECK_MODULES([XCB],[x11-xcb xcb-glx])
+        GL_PC_REQ_PRIV="$GL_PC_REQ_PRIV x11-xcb xcb-glx"
+        X11_INCLUDES="$X11_INCLUDES $XCB_CFLAGS"
+        GL_LIB_DEPS="$GL_LIB_DEPS $XCB_LIBS"
+    fi
+
+    # Check to see if the xcb-glx library is new enough to support
+    # GLX_ARB_create_context.  This bit of hackery is necessary until XCB 1.8
+    # is released.
+    save_CPPFLAGS="$CPPFLAGS"
+    save_LDFLAGS="$LDFLAGS"
+    CPPFLAGS="$CPPFLAGS $X11_INCLUDES"
+    LDFLAGS="$LDFLAGS $GL_LIB_DEPS"
+    AC_CHECK_LIB(xcb-glx, xcb_glx_create_context_attribs_arb_checked,
+        [HAVE_XCB_GLX_CREATE_CONTEXT=yes],
+        [HAVE_XCB_GLX_CREATE_CONTEXT=no])
+    CPPFLAGS="$save_CPPFLAGS"
+    LDFLAGS="$save_LDFLAGS"
+
+    if test x$HAVE_XCB_GLX_CREATE_CONTEXT = xyes; then
+        X11_INCLUDES="$X11_INCLUDES -DHAVE_XCB_GLX_CREATE_CONTEXT"
     fi
 
     # need DRM libs, -lpthread, etc.
     GL_LIB_DEPS="$GL_LIB_DEPS $LIBDRM_LIBS -lm -lpthread $DLOPEN_LIBS"
     GL_PC_LIB_PRIV="-lm -lpthread $DLOPEN_LIBS"
-    GLESv1_CM_LIB_DEPS="$LIBDRM_LIBS -lm -lpthread $DLOPEN_LIBS"
-    GLESv1_CM_PC_LIB_PRIV="-lm -lpthread $DLOPEN_LIBS"
-    GLESv2_LIB_DEPS="$LIBDRM_LIBS -lm -lpthread $DLOPEN_LIBS"
-    GLESv2_PC_LIB_PRIV="-lm -lpthread $DLOPEN_LIBS"
-    ;;
-osmesa)
-    # No libGL for osmesa
-    GL_LIB_DEPS=""
     ;;
 esac
+
+# This is outside the case (above) so that it is invoked even for non-GLX
+# builds.
+AM_CONDITIONAL(HAVE_XCB_GLX_CREATE_CONTEXT,
+    test x$HAVE_XCB_GLX_CREATE_CONTEXT = xyes)
+
+GLESv1_CM_LIB_DEPS="$LIBDRM_LIBS -lm -lpthread $DLOPEN_LIBS"
+GLESv1_CM_PC_LIB_PRIV="-lm -lpthread $DLOPEN_LIBS"
+GLESv2_LIB_DEPS="$LIBDRM_LIBS -lm -lpthread $DLOPEN_LIBS"
+GLESv2_PC_LIB_PRIV="-lm -lpthread $DLOPEN_LIBS"
+
 AC_SUBST([GL_LIB_DEPS])
 AC_SUBST([GL_PC_REQ_PRIV])
 AC_SUBST([GL_PC_LIB_PRIV])
@@ -919,7 +1068,7 @@ AC_SUBST([GLESv1_CM_PC_LIB_PRIV])
 AC_SUBST([GLESv2_LIB_DEPS])
 AC_SUBST([GLESv2_PC_LIB_PRIV])
 
-GLAPI_LIB_DEPS="-lpthread"
+GLAPI_LIB_DEPS="-lpthread $SELINUX_LIBS"
 AC_SUBST([GLAPI_LIB_DEPS])
 
 
@@ -934,7 +1083,7 @@ AC_ARG_ENABLE([shared-dricore],
         [link DRI modules with shared core DRI routines @<:@default=disabled@:>@])],
     [enable_dricore="$enableval"],
     [enable_dricore=no])
-if test "$mesa_driver" = dri ; then
+if test "x$enable_dri" = xyes ; then
    if test "$enable_dricore" = yes ; then
       if test "$GCC$GXX" != yesyes ; then
       	 AC_MSG_WARN([Shared dricore requires GCC-compatible rpath handling.  Disabling shared dricore])
@@ -960,11 +1109,19 @@ AC_SUBST([MESA_MODULES])
 AC_SUBST([HAVE_XF86VIDMODE])
 
 dnl
-dnl More X11 setup
+dnl More GLX setup
 dnl
-if test "$mesa_driver" = xlib; then
+case "x$enable_glx$enable_xlib_glx" in
+xyesyes)
     DEFINES="$DEFINES -DUSE_XSHM"
-fi
+    ;;
+xyesno)
+    DEFINES="$DEFINES -DGLX_INDIRECT_RENDERING"
+    if test "x$driglx_direct" = xyes; then
+        DEFINES="$DEFINES -DGLX_DIRECT_RENDERING"
+    fi
+    ;;
+esac
 
 dnl
 dnl TLS detection
@@ -1014,7 +1171,10 @@ DRI_DIRS=""
 case "$with_dri_drivers" in
 no) ;;
 yes)
-    DRI_DIRS="yes"
+    # classic DRI drivers require FEATURE_GL to build
+    if test "x$enable_opengl" = xyes; then
+        DRI_DIRS="yes"
+    fi
     ;;
 *)
     # verify the requested driver directories exist
@@ -1024,41 +1184,36 @@ yes)
             AC_MSG_ERROR([DRI driver directory '$driver' doesn't exist])
     done
     DRI_DIRS="$dri_drivers"
+    if test -n "$DRI_DIRS" -a "x$enable_opengl" != xyes; then
+        AC_MSG_ERROR([--with-dri-drivers requires OpenGL])
+    fi
     ;;
 esac
 
 dnl Set DRI_DIRS, DEFINES and LIB_DEPS
-if test "$mesa_driver" = dri -o "$mesa_driver" = no; then
+if test "x$enable_dri" = xyes; then
     # Platform specific settings and drivers to build
     case "$host_os" in
     linux*)
         DEFINES="$DEFINES -DUSE_EXTERNAL_DXTN_LIB=1 -DIN_DRI_DRIVER"
-        if test "x$driglx_direct" = xyes; then
-            DEFINES="$DEFINES -DGLX_DIRECT_RENDERING"
-        fi
-        DEFINES="$DEFINES -DGLX_INDIRECT_RENDERING -DHAVE_ALIAS"
+        DEFINES="$DEFINES -DHAVE_ALIAS"
 
         case "$host_cpu" in
         x86_64)
-            # sis is missing because they have not be converted to use
-            # the new interface.  i810 are missing because there is no
-            # x86-64 system where they could *ever* be used.
             if test "x$DRI_DIRS" = "xyes"; then
-                DRI_DIRS="i915 i965 mach64 mga nouveau r128 r200 r300 r600 \
-                    radeon savage tdfx unichrome swrast"
+                DRI_DIRS="i915 i965 nouveau r200 radeon swrast"
             fi
             ;;
         powerpc*)
             # Build only the drivers for cards that exist on PowerPC.
-            # At some point MGA will be added, but not yet.
             if test "x$DRI_DIRS" = "xyes"; then
-                DRI_DIRS="mach64 r128 r200 r300 r600 radeon tdfx swrast"
+                DRI_DIRS="r200 radeon swrast"
             fi
             ;;
         sparc*)
-            # Build only the drivers for cards that exist on sparc`
+            # Build only the drivers for cards that exist on sparc
             if test "x$DRI_DIRS" = "xyes"; then
-                DRI_DIRS="mach64 r128 r200 r300 r600 radeon swrast"
+                DRI_DIRS="r200 radeon swrast"
             fi
             ;;
         esac
@@ -1066,33 +1221,20 @@ if test "$mesa_driver" = dri -o "$mesa_driver" = no; then
     freebsd* | dragonfly* | *netbsd*)
         DEFINES="$DEFINES -DPTHREADS -DUSE_EXTERNAL_DXTN_LIB=1"
         DEFINES="$DEFINES -DIN_DRI_DRIVER -DHAVE_ALIAS"
-        DEFINES="$DEFINES -DGLX_INDIRECT_RENDERING"
-        if test "x$driglx_direct" = xyes; then
-            DEFINES="$DEFINES -DGLX_DIRECT_RENDERING"
-        fi
 
         if test "x$DRI_DIRS" = "xyes"; then
-            DRI_DIRS="i810 i915 i965 mach64 mga nouveau r128 r200 r300 r600 \
-                radeon tdfx unichrome savage sis swrast"
+            DRI_DIRS="i915 i965 nouveau r200 radeon swrast"
         fi
         ;;
     gnu*)
         DEFINES="$DEFINES -DUSE_EXTERNAL_DXTN_LIB=1 -DIN_DRI_DRIVER"
-        DEFINES="$DEFINES -DGLX_INDIRECT_RENDERING -DHAVE_ALIAS"
+        DEFINES="$DEFINES -DHAVE_ALIAS"
 	;;
     solaris*)
         DEFINES="$DEFINES -DUSE_EXTERNAL_DXTN_LIB=1 -DIN_DRI_DRIVER"
-        DEFINES="$DEFINES -DGLX_INDIRECT_RENDERING"
-        if test "x$driglx_direct" = xyes; then
-            DEFINES="$DEFINES -DGLX_DIRECT_RENDERING"
-        fi
         ;;
     cygwin*)
         DEFINES="$DEFINES -DUSE_EXTERNAL_DXTN_LIB=1 -DIN_DRI_DRIVER"
-        DEFINES="$DEFINES -DGLX_INDIRECT_RENDERING"
-        if test "x$driglx_direct" = xyes; then
-            DEFINES="$DEFINES -DGLX_DIRECT_RENDERING"
-        fi
         if test "x$DRI_DIRS" = "xyes"; then
             DRI_DIRS="swrast"
         fi
@@ -1101,14 +1243,13 @@ if test "$mesa_driver" = dri -o "$mesa_driver" = no; then
 
     # default drivers
     if test "x$DRI_DIRS" = "xyes"; then
-        DRI_DIRS="i810 i915 i965 mach64 mga nouveau r128 r200 r300 r600 radeon \
-            savage sis tdfx unichrome swrast"
+        DRI_DIRS="i915 i965 nouveau r200 radeon swrast"
     fi
 
     DRI_DIRS=`echo "$DRI_DIRS" | $SED 's/  */ /g'`
 
     # Check for expat
-    if test "$mesa_driver" = dri; then
+    if test "x$enable_dri" = xyes; then
         EXPAT_INCLUDES=""
         EXPAT_LIB=-lexpat
         AC_ARG_WITH([expat],
@@ -1122,6 +1263,13 @@ if test "$mesa_driver" = dri -o "$mesa_driver" = no; then
         AC_CHECK_HEADER([expat.h],[],[AC_MSG_ERROR([Expat required for DRI.])])
         AC_CHECK_LIB([expat],[XML_ParserCreate],[],
             [AC_MSG_ERROR([Expat required for DRI.])])
+    fi
+
+    # libdrm is required for all except swrast
+    if test -n "$DRI_DIRS" -a x"$DRI_DIRS" != xswrast; then
+        if test "x$have_libdrm" != xyes; then
+            AC_MSG_ERROR([DRI drivers requires libdrm >= $LIBDRM_REQUIRED])
+        fi
     fi
 
     # put all the necessary libs together, including possibly libdricore
@@ -1144,45 +1292,15 @@ case $DRI_DIRS in
 esac
 
 case $DRI_DIRS in
-*radeon*|*r200*|*r300*|*r600*)
-    PKG_CHECK_MODULES([LIBDRM_RADEON],
-		      [libdrm_radeon >= $LIBDRM_RADEON_REQUIRED],
-		      HAVE_LIBDRM_RADEON=yes,
-		      HAVE_LIBDRM_RADEON=no)
-
-    if test "x$HAVE_LIBDRM_RADEON" = xyes; then
-	RADEON_CFLAGS="-DHAVE_LIBDRM_RADEON=1 $LIBDRM_RADEON_CFLAGS"
-	RADEON_LDFLAGS=$LIBDRM_RADEON_LIBS
-    fi
+*radeon*|*r200*)
+    PKG_CHECK_MODULES([RADEON], [libdrm_radeon >= $LIBDRM_RADEON_REQUIRED])
     ;;
 esac
-AC_SUBST([RADEON_CFLAGS])
-AC_SUBST([RADEON_LDFLAGS])
 
 
 dnl
 dnl OSMesa configuration
 dnl
-if test "$mesa_driver" = xlib; then
-    default_gl_osmesa=yes
-else
-    default_gl_osmesa=no
-fi
-AC_ARG_ENABLE([gl-osmesa],
-    [AS_HELP_STRING([--enable-gl-osmesa],
-        [enable OSMesa with libGL @<:@default=enabled for xlib driver@:>@])],
-    [gl_osmesa="$enableval"],
-    [gl_osmesa="$default_gl_osmesa"])
-if test "x$gl_osmesa" = xyes; then
-    if test "x$enable_opengl" = xno; then
-        AC_MSG_ERROR([OpenGL is not available for OSMesa driver])
-    fi
-    if test "$mesa_driver" = osmesa; then
-        AC_MSG_ERROR([libGL is not available for OSMesa driver])
-    else
-        DRIVER_DIRS="$DRIVER_DIRS osmesa"
-    fi
-fi
 
 dnl Configure the channel bits for OSMesa (libOSMesa, libOSMesa16, ...)
 AC_ARG_WITH([osmesa-bits],
@@ -1190,26 +1308,26 @@ AC_ARG_WITH([osmesa-bits],
         [OSMesa channel bits and library name: 8, 16, 32 @<:@default=8@:>@])],
     [osmesa_bits="$withval"],
     [osmesa_bits=8])
-if test "$mesa_driver" != osmesa && test "x$osmesa_bits" != x8; then
-    AC_MSG_WARN([Ignoring OSMesa channel bits for non-OSMesa driver])
-    osmesa_bits=8
+if test "x$osmesa_bits" != x8; then
+    if test "x$enable_dri" = xyes -o "x$enable_glx" = xyes; then
+        AC_MSG_WARN([Ignoring OSMesa channel bits because of non-OSMesa driver])
+        osmesa_bits=8
+    fi
 fi
 case "x$osmesa_bits" in
 x8)
-    OSMESA_LIB=OSMesa
+    OSMESA_LIB="${OSMESA_LIB}"
     ;;
 x16|x32)
-    OSMESA_LIB="OSMesa$osmesa_bits"
+    OSMESA_LIB="${OSMESA_LIB}$osmesa_bits"
     DEFINES="$DEFINES -DCHAN_BITS=$osmesa_bits -DDEFAULT_SOFTWARE_DEPTH_BITS=31"
     ;;
 *)
     AC_MSG_ERROR([OSMesa bits '$osmesa_bits' is not a valid option])
     ;;
 esac
-AC_SUBST([OSMESA_LIB])
 
-case "$DRIVER_DIRS" in
-*osmesa*)
+if test "x$enable_osmesa" = xyes; then
     # only link libraries with osmesa if shared
     if test "$enable_static" = no; then
         OSMESA_LIB_DEPS="-lm -lpthread $SELINUX_LIBS $DLOPEN_LIBS"
@@ -1218,8 +1336,7 @@ case "$DRIVER_DIRS" in
     fi
     OSMESA_MESA_DEPS=""
     OSMESA_PC_LIB_PRIV="-lm -lpthread $SELINUX_LIBS $DLOPEN_LIBS"
-    ;;
-esac
+fi
 AC_SUBST([OSMESA_LIB_DEPS])
 AC_SUBST([OSMESA_MESA_DEPS])
 AC_SUBST([OSMESA_PC_REQ])
@@ -1244,7 +1361,7 @@ if test "x$enable_gbm" = xyes; then
                       AC_MSG_ERROR([gbm needs udev]))
     GBM_LIB_DEPS="$DLOPEN_LIBS $LIBUDEV_LIBS"
 
-    if test "$mesa_driver" = dri; then
+    if test "x$enable_dri" = xyes; then
         GBM_BACKEND_DIRS="$GBM_BACKEND_DIRS dri"
         if test "$SHARED_GLAPI" -eq 0; then
             AC_MSG_ERROR([gbm_dri requires --enable-shared-glapi])
@@ -1265,19 +1382,16 @@ dnl EGL configuration
 dnl
 EGL_CLIENT_APIS=""
 
-if test "x$enable_egl" = xno; then
-    if test "x$mesa_driver" = xno; then
-        AC_MSG_ERROR([cannot disable EGL when there is no mesa driver])
-    fi
-fi
 if test "x$enable_egl" = xyes; then
     SRC_DIRS="$SRC_DIRS egl"
     EGL_LIB_DEPS="$DLOPEN_LIBS $SELINUX_LIBS -lpthread"
     EGL_DRIVERS_DIRS=""
 
+    AC_CHECK_FUNC(mincore, [DEFINES="$DEFINES -DHAVE_MINCORE"])
+
     if test "$enable_static" != yes; then
         # build egl_glx when libGL is built
-        if test "$mesa_driver" = xlib -o "$mesa_driver" = dri; then
+        if test "x$enable_glx" = xyes; then
             EGL_DRIVERS_DIRS="glx"
         fi
 
@@ -1286,7 +1400,7 @@ if test "x$enable_egl" = xyes; then
         if test "$have_libudev" = yes; then
             DEFINES="$DEFINES -DHAVE_LIBUDEV"
         fi
-        if test "$mesa_driver" = dri; then
+        if test "x$enable_dri" = xyes; then
             # build egl_dri2 when xcb-dri2 is available
             PKG_CHECK_MODULES([XCB_DRI2], [x11-xcb xcb-dri2 xcb-xfixes],
             		  [have_xcb_dri2=yes],[have_xcb_dri2=no])
@@ -1316,6 +1430,9 @@ if test "x$enable_gallium_egl" = xyes; then
     if test "x$enable_egl" = xno; then
         AC_MSG_ERROR([cannot enable egl_gallium without EGL])
     fi
+    if test "x$have_libdrm" != xyes; then
+        AC_MSG_ERROR([egl_gallium requires libdrm >= $LIBDRM_REQUIRED])
+    fi
 
     GALLIUM_STATE_TRACKERS_DIRS="egl $GALLIUM_STATE_TRACKERS_DIRS"
     GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS egl-static"
@@ -1326,8 +1443,8 @@ dnl
 dnl gbm Gallium configuration
 dnl
 if test "x$enable_gallium_gbm" = xauto; then
-    case "$enable_gbm$HAVE_ST_EGL$with_egl_platforms" in
-        yesyes*drm*)
+    case "$enable_gbm$HAVE_ST_EGL$enable_dri$with_egl_platforms" in
+        yesyesyes*drm*)
             enable_gallium_gbm=yes ;;
          *)
             enable_gallium_gbm=no ;;
@@ -1339,6 +1456,10 @@ if test "x$enable_gallium_gbm" = xyes; then
     fi
     if test "x$enable_gbm" = xno; then
         AC_MSG_ERROR([cannot enable gbm_gallium without gbm])
+    fi
+    # gbm_gallium abuses DRI_LIB_DEPS to link.  Make sure it is set.
+    if test "x$enable_dri" = xno; then
+        AC_MSG_ERROR([gbm_gallium requires --enable-dri to build])
     fi
 
     GALLIUM_STATE_TRACKERS_DIRS="gbm $GALLIUM_STATE_TRACKERS_DIRS"
@@ -1358,6 +1479,26 @@ if test "x$enable_xorg" = xyes; then
         HAVE_XEXTPROTO_71="no")
     GALLIUM_STATE_TRACKERS_DIRS="xorg $GALLIUM_STATE_TRACKERS_DIRS"
     HAVE_ST_XORG=yes
+fi
+
+dnl
+dnl XA configuration
+dnl
+if test "x$enable_xa" = xyes; then
+AC_PROG_AWK
+AC_PROG_GREP
+AC_CHECK_PROG(NM, nm, "nm")
+if test "x$AWK" = x || test "x$GREP" = x || test "x$NM" = x; then
+AC_MSG_WARN([Missing one of nm, grep or awk. Disabling xa.])
+enable_xa=no
+fi
+fi
+if test "x$enable_xa" = xyes; then
+    GALLIUM_STATE_TRACKERS_DIRS="xa $GALLIUM_STATE_TRACKERS_DIRS"
+    HAVE_ST_XA=yes
+    AC_SUBST(AWK)
+    AC_SUBST(GREP)
+    AC_SUBST(NM)
 fi
 
 dnl
@@ -1397,6 +1538,53 @@ if test "x$enable_d3d1x" = xyes; then
 fi
 
 dnl
+dnl Gallium G3DVL configuration
+dnl
+AC_ARG_ENABLE([gallium-g3dvl],
+    [AS_HELP_STRING([--enable-gallium-g3dvl],
+        [build gallium g3dvl @<:@default=disabled@:>@])],
+    [enable_gallium_g3dvl="$enableval"],
+    [enable_gallium_g3dvl=no])
+if test "x$enable_gallium_g3dvl" = xyes; then
+    if test "x$with_gallium_drivers" = x; then
+        AC_MSG_ERROR([cannot enable G3DVL without Gallium])
+    fi
+
+    if test "x$enable_xvmc" = xauto; then
+	PKG_CHECK_EXISTS([xvmc], [enable_xvmc=yes], [enable_xvmc=no])
+    fi
+
+    if test "x$enable_vdpau" = xauto; then
+	PKG_CHECK_EXISTS([vdpau], [enable_vdpau=yes], [enable_vdpau=no])
+    fi
+
+    if test "x$enable_va" = xauto; then
+	#don't enable vaapi state tracker even if package exists
+	#PKG_CHECK_EXISTS([libva], [enable_vdpau=yes], [enable_vdpau=no])
+        enable_va=no
+    fi
+fi
+
+if test "x$enable_xvmc" = xyes; then
+    PKG_CHECK_MODULES([XVMC], [xvmc >= 1.0.6])
+    GALLIUM_STATE_TRACKERS_DIRS="$GALLIUM_STATE_TRACKERS_DIRS xorg/xvmc"
+    HAVE_ST_XVMC="yes"
+fi
+
+if test "x$enable_vdpau" = xyes; then
+    PKG_CHECK_MODULES([VDPAU], [vdpau >= 0.4.1])
+    GALLIUM_STATE_TRACKERS_DIRS="$GALLIUM_STATE_TRACKERS_DIRS vdpau"
+    HAVE_ST_VDPAU="yes"
+fi
+
+if test "x$enable_va" = xyes; then
+    PKG_CHECK_MODULES([LIBVA], [libva = 0.31.1])
+    AC_MSG_WARN([vaapi state tracker currently unmaintained])
+    GALLIUM_STATE_TRACKERS_DIRS="$GALLIUM_STATE_TRACKERS_DIRS va"
+    HAVE_ST_VA="yes"
+fi
+
+dnl
 dnl GLU configuration
 dnl
 AC_ARG_ENABLE([glu],
@@ -1405,16 +1593,17 @@ AC_ARG_ENABLE([glu],
     [enable_glu="$enableval"],
     [enable_glu=yes])
 
-if test "x$enable_glu" = xyes -a "x$mesa_driver" = xno; then
-    AC_MSG_NOTICE([Disabling GLU since there is no OpenGL driver])
-    enable_glu=no
+if test "x$enable_glu" = xyes; then
+    if test "x$enable_glx" = xno -a "x$enable_osmesa" = xno; then
+        AC_MSG_NOTICE([Disabling GLU since there is no OpenGL driver])
+        enable_glu=no
+    fi
 fi
 
 if test "x$enable_glu" = xyes; then
     SRC_DIRS="$SRC_DIRS glu"
 
-    case "$mesa_driver" in
-    osmesa)
+    if test "x$enable_glx" = xno; then
         # Link libGLU to libOSMesa instead of libGL
         GLU_LIB_DEPS=""
         GLU_PC_REQ="osmesa"
@@ -1423,8 +1612,7 @@ if test "x$enable_glu" = xyes; then
         else
             GLU_MESA_DEPS=""
         fi
-        ;;
-    *)
+    else
         # If static, empty GLU_LIB_DEPS and add libs for programs to link
         GLU_PC_REQ="gl"
         GLU_PC_LIB_PRIV="-lm"
@@ -1434,10 +1622,8 @@ if test "x$enable_glu" = xyes; then
         else
             GLU_LIB_DEPS=""
             GLU_MESA_DEPS=""
-            APP_LIB_DEPS="$APP_LIB_DEPS -lstdc++"
         fi
-        ;;
-    esac
+    fi
 fi
 if test "$enable_static" = no; then
     GLU_LIB_DEPS="$GLU_LIB_DEPS $OS_CPLUSPLUS_LIBS"
@@ -1450,163 +1636,6 @@ AC_SUBST([GLU_PC_REQ_PRIV])
 AC_SUBST([GLU_PC_LIB_PRIV])
 AC_SUBST([GLU_PC_CFLAGS])
 
-dnl
-dnl GLw configuration
-dnl
-AC_ARG_ENABLE([glw],
-    [AS_HELP_STRING([--disable-glw],
-        [enable Xt/Motif widget library @<:@default=enabled@:>@])],
-    [enable_glw="$enableval"],
-    [enable_glw=yes])
-dnl Don't build GLw on osmesa
-if test "x$enable_glw" = xyes; then
-    case "$mesa_driver" in
-    osmesa|no)
-        AC_MSG_NOTICE([Disabling GLw since there is no OpenGL driver])
-        enable_glw=no
-        ;;
-    esac
-fi
-AC_ARG_ENABLE([motif],
-    [AS_HELP_STRING([--enable-motif],
-        [use Motif widgets in GLw @<:@default=disabled@:>@])],
-    [enable_motif="$enableval"],
-    [enable_motif=no])
-
-if test "x$enable_glw" = xyes; then
-    SRC_DIRS="$SRC_DIRS glw"
-    if test "$x11_pkgconfig" = yes; then
-        PKG_CHECK_MODULES([GLW],[x11 xt])
-        GLW_PC_REQ_PRIV="x11 xt"
-        GLW_LIB_DEPS="$GLW_LIBS"
-    else
-        # should check these...
-        GLW_LIB_DEPS="$X_LIBS -lXt -lX11"
-        GLW_PC_LIB_PRIV="$GLW_LIB_DEPS"
-        GLW_PC_CFLAGS="$X11_INCLUDES"
-    fi
-
-    GLW_SOURCES="GLwDrawA.c"
-    MOTIF_CFLAGS=
-    if test "x$enable_motif" = xyes; then
-        GLW_SOURCES="$GLW_SOURCES GLwMDrawA.c"
-        AC_PATH_PROG([MOTIF_CONFIG], [motif-config], [no])
-        if test "x$MOTIF_CONFIG" != xno; then
-            MOTIF_CFLAGS=`$MOTIF_CONFIG --cflags`
-            MOTIF_LIBS=`$MOTIF_CONFIG --libs`
-        else
-            AC_CHECK_HEADER([Xm/PrimitiveP.h], [],
-                [AC_MSG_ERROR([Can't locate Motif headers])])
-            AC_CHECK_LIB([Xm], [XmGetPixmap], [MOTIF_LIBS="-lXm"],
-                [AC_MSG_ERROR([Can't locate Motif Xm library])])
-        fi
-        # MOTIF_LIBS is prepended to GLW_LIB_DEPS since Xm needs Xt/X11
-        GLW_LIB_DEPS="$MOTIF_LIBS $GLW_LIB_DEPS"
-        GLW_PC_LIB_PRIV="$MOTIF_LIBS $GLW_PC_LIB_PRIV"
-        GLW_PC_CFLAGS="$MOTIF_CFLAGS $GLW_PC_CFLAGS"
-    fi
-
-    # If static, empty GLW_LIB_DEPS and add libs for programs to link
-    GLW_PC_LIB_PRIV="$GLW_PC_LIB_PRIV"
-    if test "$enable_static" = no; then
-        GLW_MESA_DEPS='-l$(GL_LIB)'
-        GLW_LIB_DEPS="$GLW_LIB_DEPS"
-    else
-        APP_LIB_DEPS="$APP_LIB_DEPS $GLW_LIB_DEPS"
-        GLW_LIB_DEPS=""
-        GLW_MESA_DEPS=""
-    fi
-fi
-AC_SUBST([GLW_LIB_DEPS])
-AC_SUBST([GLW_MESA_DEPS])
-AC_SUBST([GLW_SOURCES])
-AC_SUBST([MOTIF_CFLAGS])
-AC_SUBST([GLW_PC_REQ_PRIV])
-AC_SUBST([GLW_PC_LIB_PRIV])
-AC_SUBST([GLW_PC_CFLAGS])
-
-dnl
-dnl GLUT configuration
-dnl
-if test -f "$srcdir/include/GL/glut.h"; then
-    default_glut=yes
-else
-    default_glut=no
-fi
-AC_ARG_ENABLE([glut],
-    [AS_HELP_STRING([--disable-glut],
-        [enable GLUT library @<:@default=enabled if source available@:>@])],
-    [enable_glut="$enableval"],
-    [enable_glut="$default_glut"])
-
-dnl Don't build glut on osmesa
-if test "x$enable_glut" = xyes; then
-    case "$mesa_driver" in
-    osmesa|no)
-        AC_MSG_NOTICE([Disabling glut since there is no OpenGL driver])
-        enable_glut=no
-        ;;
-    esac
-fi
-dnl Can't build glut if GLU not available
-if test "x$enable_glu$enable_glut" = xnoyes; then
-    AC_MSG_WARN([Disabling glut since GLU is disabled])
-    enable_glut=no
-fi
-
-if test "x$enable_glut" = xyes; then
-    SRC_DIRS="$SRC_DIRS glut/glx"
-    if test "$x11_pkgconfig" = yes; then
-        PKG_CHECK_MODULES([GLUT],[x11 xmu xi])
-        GLUT_PC_REQ_PRIV="x11 xmu xi"
-        GLUT_LIB_DEPS="$GLUT_LIBS"
-    else
-        # should check these...
-        GLUT_LIB_DEPS="$X_LIBS -lX11 -lXmu -lXi"
-        GLUT_PC_LIB_PRIV="$GLUT_LIB_DEPS"
-        GLUT_PC_CFLAGS="$X11_INCLUDES"
-    fi
-    if test "x$GCC" = xyes; then
-        GLUT_CFLAGS="$GLUT_CFLAGS -fexceptions"
-    fi
-    GLUT_LIB_DEPS="$GLUT_LIB_DEPS -lm"
-    GLUT_PC_LIB_PRIV="$GLUT_PC_LIB_PRIV -lm"
-
-    # If static, empty GLUT_LIB_DEPS and add libs for programs to link
-    if test "$enable_static" = no; then
-        GLUT_MESA_DEPS='-l$(GLU_LIB) -l$(GL_LIB)'
-    else
-        APP_LIB_DEPS="$APP_LIB_DEPS $GLUT_LIB_DEPS"
-        GLUT_LIB_DEPS=""
-        GLUT_MESA_DEPS=""
-    fi
-fi
-AC_SUBST([GLUT_LIB_DEPS])
-AC_SUBST([GLUT_MESA_DEPS])
-AC_SUBST([GLUT_CFLAGS])
-AC_SUBST([GLUT_PC_REQ_PRIV])
-AC_SUBST([GLUT_PC_LIB_PRIV])
-AC_SUBST([GLUT_PC_CFLAGS])
-
-dnl
-dnl Program library dependencies
-dnl    Only libm is added here if necessary as the libraries should
-dnl    be pulled in by the linker
-dnl
-if test "x$APP_LIB_DEPS" = x; then
-    case "$host_os" in
-    solaris*)
-        APP_LIB_DEPS="-lX11 -lsocket -lnsl -lm"
-        ;;
-    cygwin*)
-        APP_LIB_DEPS="-lX11"
-        ;;
-    *)
-        APP_LIB_DEPS="-lm"
-        ;;
-    esac
-fi
-AC_SUBST([APP_LIB_DEPS])
 AC_SUBST([PROGRAM_DIRS])
 
 dnl
@@ -1620,8 +1649,6 @@ AC_SUBST([LLVM_CFLAGS])
 AC_SUBST([LLVM_LIBS])
 AC_SUBST([LLVM_LDFLAGS])
 AC_SUBST([LLVM_VERSION])
-
-
 
 case "x$enable_opengl$enable_gles1$enable_gles2" in
 x*yes*)
@@ -1644,7 +1671,7 @@ WAYLAND_EGL_LIB_DEPS=""
 
 case "$with_egl_platforms" in
 yes)
-    if test "x$enable_egl" = xyes && test "x$mesa_driver" != xosmesa; then
+    if test "x$enable_egl" = xyes; then
         EGL_PLATFORMS="x11"
     fi
     ;;
@@ -1659,6 +1686,9 @@ yes)
             AC_MSG_ERROR([EGL platform '$plat' doesn't exist])
         if test "$plat" = "fbdev"; then
                 GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS sw/fbdev"
+        fi
+        if test "$plat" = "null"; then
+                GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS sw/null"
         fi
 	if test "$plat" = "wayland"; then
 		PKG_CHECK_MODULES([WAYLAND], [wayland-client wayland-server],, \
@@ -1738,13 +1768,12 @@ if test "x$enable_gallium_llvm" = xyes; then
     AC_PATH_PROG([LLVM_CONFIG], [llvm-config], [no])
 
     if test "x$LLVM_CONFIG" != xno; then
-	LLVM_VERSION=`$LLVM_CONFIG --version`
-	LLVM_CFLAGS=`$LLVM_CONFIG --cppflags`
-	LLVM_LIBS="`$LLVM_CONFIG --libs` -lstdc++"
+	LLVM_VERSION=`$LLVM_CONFIG --version | sed 's/svn.*//g'`
+	LLVM_CFLAGS=`$LLVM_CONFIG --cppflags|sed -e 's/-DNDEBUG\>//g' -e 's/-pedantic//g'`
+	LLVM_LIBS="`$LLVM_CONFIG --libs`"
 
 	LLVM_LDFLAGS=`$LLVM_CONFIG --ldflags`
-	GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS llvmpipe"
-	DEFINES="$DEFINES -DGALLIUM_LLVMPIPE -D__STDC_CONSTANT_MACROS"
+	DEFINES="$DEFINES -D__STDC_CONSTANT_MACROS"
 	MESA_LLVM=1
     else
 	MESA_LLVM=0
@@ -1753,11 +1782,32 @@ else
     MESA_LLVM=0
 fi
 
+dnl Directory for VDPAU libs
+AC_ARG_WITH([vdpau-libdir],
+    [AS_HELP_STRING([--with-vdpau-libdir=DIR],
+        [directory for the VDPAU libraries @<:@default=${libdir}/vdpau@:>@])],
+    [VDPAU_LIB_INSTALL_DIR="$withval"],
+    [VDPAU_LIB_INSTALL_DIR='${libdir}/vdpau'])
+AC_SUBST([VDPAU_LIB_INSTALL_DIR])
+
+dnl Directory for VA libs
+AC_ARG_WITH([va-libdir],
+    [AS_HELP_STRING([--with-va-libdir=DIR],
+        [directory for the VA libraries @<:@default=${libdir}/va@:>@])],
+    [VA_LIB_INSTALL_DIR="$withval"],
+    [VA_LIB_INSTALL_DIR='${libdir}/va'])
+AC_SUBST([VA_LIB_INSTALL_DIR])
+
 dnl
 dnl Gallium helper functions
 dnl
 gallium_check_st() {
-    if test "x$HAVE_ST_DRI" = xyes || test "x$HAVE_ST_XORG" = xyes; then
+    if test "x$HAVE_ST_DRI" = xyes || test "x$HAVE_ST_XORG" = xyes ||
+	 test "x$HAVE_ST_XA" = xyes || test "x$HAVE_ST_XVMC" = xyes ||
+	 test "x$HAVE_ST_VDPAU" = xyes || test "x$HAVE_ST_VA" = xyes; then
+         if test "x$have_libdrm" != xyes; then
+            AC_MSG_ERROR([DRI or Xorg DDX requires libdrm >= $LIBDRM_REQUIRED])
+         fi
          GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS $1"
     fi
     if test "x$HAVE_ST_DRI" = xyes && test "x$2" != x; then
@@ -1765,6 +1815,21 @@ gallium_check_st() {
     fi
     if test "x$HAVE_ST_XORG" = xyes && test "x$3" != x; then
          GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS $3"
+    fi
+    if test "x$HAVE_ST_XA" = xyes && test "x$4" != x; then
+         GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS $4"
+    fi
+    if test "x$HAVE_ST_XVMC" = xyes && test "x$5" != x; then
+         GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS $5"
+         NEED_G3DVL_DRI="yes"
+    fi
+    if test "x$HAVE_ST_VDPAU" = xyes && test "x$6" != x; then
+         GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS $6"
+         NEED_G3DVL_DRI="yes"
+    fi
+    if test "x$HAVE_ST_VA" = xyes && test "x$7" != x; then
+         GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS $7"
+         NEED_G3DVL_DRI="yes"
     fi
 }
 
@@ -1777,37 +1842,37 @@ gallium_require_llvm() {
 }
 
 dnl Gallium drivers
+dnl Duplicates in GALLIUM_DRIVERS_DIRS are removed by sorting it after this block
 if test "x$with_gallium_drivers" != x; then
-    # This is for compile-testing
-    GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS i915 i965 r300 svga"
-    GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS i915/sw"
-
     gallium_drivers=`IFS=', '; echo $with_gallium_drivers`
     for driver in $gallium_drivers; do
         case "x$driver" in
         xsvga)
-            gallium_check_st "svga/drm" "dri-vmwgfx" "xorg-vmwgfx"
+            GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS svga softpipe"
+            gallium_check_st "svga/drm" "dri-vmwgfx" "" "xa-vmwgfx"
             ;;
         xi915)
             PKG_CHECK_MODULES([INTEL], [libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
+            GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS i915 softpipe"
+            if test "x$MESA_LLVM" = x1; then
+                GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS llvmpipe"
+            fi
+            GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS i915/sw"
             gallium_check_st "i915/drm" "dri-i915" "xorg-i915"
-            ;;
-        xi965)
-            PKG_CHECK_MODULES([INTEL], [libdrm_intel >= $LIBDRM_INTEL_REQUIRED])
-            gallium_check_st "i965/drm" "dri-i965" "xorg-i965"
             ;;
         xr300)
             gallium_require_llvm "Gallium R300"
-            gallium_check_st "radeon/drm" "dri-r300" "xorg-r300"
+            GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS r300"
+            gallium_check_st "radeon/drm" "dri-r300" "xorg-r300" "" "xvmc-r300" "vdpau-r300" "va-r300"
             ;;
         xr600)
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS r600"
-            gallium_check_st "r600/drm" "dri-r600"
+            gallium_check_st "radeon/drm" "dri-r600" "xorg-r600" "" "xvmc-r600" "vdpau-r600" "va-r600"
             ;;
         xnouveau)
             PKG_CHECK_MODULES([NOUVEAU], [libdrm_nouveau >= $LIBDRM_NOUVEAU_REQUIRED])
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS nouveau nvfx nv50 nvc0"
-            gallium_check_st "nouveau/drm" "dri-nouveau" "xorg-nouveau"
+            gallium_check_st "nouveau/drm" "dri-nouveau" "xorg-nouveau" "" "xvmc-nouveau" "vdpau-nouveau"
             ;;
         xswrast)
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS softpipe"
@@ -1818,12 +1883,32 @@ if test "x$with_gallium_drivers" != x; then
             if test "x$HAVE_ST_DRI" = xyes; then
                 GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS dri-swrast"
             fi
+            if test "x$HAVE_ST_VDPAU" = xyes; then
+                GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS vdpau-softpipe"
+            fi
+            if test "x$HAVE_ST_XVMC" = xyes; then
+                GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS xvmc-softpipe"
+            fi
+            if test "x$HAVE_ST_VA" = xyes; then
+                GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS va-softpipe"
+            fi
+            if test "x$HAVE_ST_VDPAU" = xyes ||
+               test "x$HAVE_ST_XVMC" = xyes ||
+               test "x$HAVE_ST_VA" = xyes; then
+               if test "x$HAVE_WINSYS_XLIB" != xyes; then
+                  GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS sw/xlib"
+               fi
+            fi
             ;;
         *)
             AC_MSG_ERROR([Unknown Gallium driver: $driver])
             ;;
         esac
     done
+fi
+
+if test "x$NEED_G3DVL_DRI" = xyes; then
+    GALLIUM_WINSYS_DIRS="$GALLIUM_WINSYS_DIRS g3dvl/dri"
 fi
 
 dnl prepend CORE_DIRS to SRC_DIRS
@@ -1838,7 +1923,9 @@ CFLAGS="$CFLAGS $USER_CFLAGS"
 CXXFLAGS="$CXXFLAGS $USER_CXXFLAGS"
 
 dnl Substitute the config
-AC_CONFIG_FILES([configs/autoconf])
+AC_CONFIG_FILES([configs/autoconf
+		tests/Makefile
+		tests/glx/Makefile])
 
 dnl Replace the configs/current symlink
 AC_CONFIG_COMMANDS([configs],[
@@ -1847,6 +1934,12 @@ if test -f configs/current || test -L configs/current; then
 fi
 ln -s autoconf configs/current
 ])
+
+dnl Sort the dirs alphabetically
+GALLIUM_TARGET_DIRS=`echo $GALLIUM_TARGET_DIRS|tr " " "\n"|sort -u|tr "\n" " "`
+GALLIUM_WINSYS_DIRS=`echo $GALLIUM_WINSYS_DIRS|tr " " "\n"|sort -u|tr "\n" " "`
+GALLIUM_DRIVERS_DIRS=`echo $GALLIUM_DRIVERS_DIRS|tr " " "\n"|sort -u|tr "\n" " "`
+GALLIUM_STATE_TRACKERS_DIRS=`echo $GALLIUM_STATE_TRACKERS_DIRS|tr " " "\n"|sort -u|tr "\n" " "`
 
 AC_OUTPUT
 
@@ -1866,14 +1959,13 @@ echo "        OpenVG:          $enable_openvg"
 
 dnl Driver info
 echo ""
-echo "        Driver:          $mesa_driver"
-if test "$mesa_driver" != no; then
-    if echo "$DRIVER_DIRS" | grep 'osmesa' >/dev/null 2>&1; then
+if test "x$enable_osmesa" != xno; then
         echo "        OSMesa:          lib$OSMESA_LIB"
-    else
+else
         echo "        OSMesa:          no"
-    fi
-    if test "$mesa_driver" = dri; then
+fi
+
+if test "x$enable_dri" != xno; then
         # cleanup the drivers var
         dri_dirs=`echo $DRI_DIRS | $SED 's/^ *//;s/  */ /;s/ *$//'`
         if test "x$DRI_DIRS" = x; then
@@ -1882,14 +1974,23 @@ if test "$mesa_driver" != no; then
             echo "        DRI drivers:     $dri_dirs"
         fi
         echo "        DRI driver dir:  $DRI_DRIVER_INSTALL_DIR"
-        echo "        Use XCB:         $enable_xcb"
         echo "        Shared dricore:  $enable_dricore"
-    fi
 fi
+
+case "x$enable_glx$enable_xlib_glx" in
+xyesyes)
+    echo "        GLX:             Xlib-based"
+    ;;
+xyesno)
+    echo "        GLX:             DRI-based"
+    ;;
+*)
+    echo "        GLX:             $enable_glx"
+    ;;
+esac
+
 echo ""
 echo "        GLU:             $enable_glu"
-echo "        GLw:             $enable_glw (Motif: $enable_motif)"
-echo "        glut:            $enable_glut"
 
 dnl EGL
 echo ""
@@ -1930,6 +2031,7 @@ if echo "$SRC_DIRS" | grep 'gallium' >/dev/null 2>&1; then
 else
     echo "        Gallium:         no"
 fi
+
 
 dnl Libraries
 echo ""

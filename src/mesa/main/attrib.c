@@ -47,6 +47,7 @@
 #include "multisample.h"
 #include "points.h"
 #include "polygon.h"
+#include "shared.h"
 #include "scissor.h"
 #include "stencil.h"
 #include "texenv.h"
@@ -58,6 +59,8 @@
 #include "viewport.h"
 #include "mtypes.h"
 #include "main/dispatch.h"
+#include "hash.h"
+#include <stdbool.h>
 
 
 /**
@@ -163,6 +166,13 @@ struct texture_state
     * deleted while saved in the attribute stack).
     */
    struct gl_texture_object *SavedTexRef[MAX_TEXTURE_UNITS][NUM_TEXTURE_TARGETS];
+
+   /* We need to keep a reference to the shared state.  That's where the
+    * default texture objects are kept.  We don't want that state to be
+    * freed while the attribute stack contains pointers to any default
+    * texture objects.
+    */
+   struct gl_shared_state *SharedRef;
 };
 
 
@@ -435,6 +445,8 @@ _mesa_PushAttrib(GLbitfield mask)
          }
       }
 
+      _mesa_reference_shared_state(ctx, &texstate->SharedRef, ctx->Shared);
+
       _mesa_unlock_context_textures(ctx);
 
       save_attrib_data(&head, GL_TEXTURE_BIT, texstate);
@@ -493,11 +505,11 @@ pop_enable_group(struct gl_context *ctx, const struct gl_enable_attrib *enable)
       }
    }
 
-   for (i=0;i<MAX_CLIP_PLANES;i++) {
+   for (i=0;i<ctx->Const.MaxClipPlanes;i++) {
       const GLuint mask = 1 << i;
       if ((ctx->Transform.ClipPlanesEnabled & mask) != (enable->ClipPlanes & mask))
 	  _mesa_set_enable(ctx, (GLenum) (GL_CLIP_PLANE0 + i),
-			   (GLboolean) ((enable->ClipPlanes & mask) ? GL_TRUE : GL_FALSE));
+			   !!(enable->ClipPlanes & mask));
    }
 
    TEST_AND_UPDATE(ctx->Light.ColorMaterialEnabled, enable->ColorMaterial,
@@ -620,38 +632,31 @@ pop_enable_group(struct gl_context *ctx, const struct gl_enable_attrib *enable)
       if (ctx->Texture.Unit[i].Enabled != enabled) {
          _mesa_ActiveTextureARB(GL_TEXTURE0 + i);
 
-         _mesa_set_enable(ctx, GL_TEXTURE_1D,
-                          (enabled & TEXTURE_1D_BIT) ? GL_TRUE : GL_FALSE);
-         _mesa_set_enable(ctx, GL_TEXTURE_2D,
-                          (enabled & TEXTURE_2D_BIT) ? GL_TRUE : GL_FALSE);
-         _mesa_set_enable(ctx, GL_TEXTURE_3D,
-                          (enabled & TEXTURE_3D_BIT) ? GL_TRUE : GL_FALSE);
+         _mesa_set_enable(ctx, GL_TEXTURE_1D, !!(enabled & TEXTURE_1D_BIT));
+         _mesa_set_enable(ctx, GL_TEXTURE_2D, !!(enabled & TEXTURE_2D_BIT));
+         _mesa_set_enable(ctx, GL_TEXTURE_3D, !!(enabled & TEXTURE_3D_BIT));
          if (ctx->Extensions.NV_texture_rectangle) {
             _mesa_set_enable(ctx, GL_TEXTURE_RECTANGLE_ARB,
-                             (enabled & TEXTURE_RECT_BIT) ? GL_TRUE : GL_FALSE);
+                             !!(enabled & TEXTURE_RECT_BIT));
          }
          if (ctx->Extensions.ARB_texture_cube_map) {
             _mesa_set_enable(ctx, GL_TEXTURE_CUBE_MAP,
-                             (enabled & TEXTURE_CUBE_BIT) ? GL_TRUE : GL_FALSE);
+                             !!(enabled & TEXTURE_CUBE_BIT));
          }
          if (ctx->Extensions.MESA_texture_array) {
             _mesa_set_enable(ctx, GL_TEXTURE_1D_ARRAY_EXT,
-                           (enabled & TEXTURE_1D_ARRAY_BIT) ? GL_TRUE : GL_FALSE);
+                             !!(enabled & TEXTURE_1D_ARRAY_BIT));
             _mesa_set_enable(ctx, GL_TEXTURE_2D_ARRAY_EXT,
-                           (enabled & TEXTURE_2D_ARRAY_BIT) ? GL_TRUE : GL_FALSE);
+                             !!(enabled & TEXTURE_2D_ARRAY_BIT));
          }
       }
 
       if (ctx->Texture.Unit[i].TexGenEnabled != genEnabled) {
          _mesa_ActiveTextureARB(GL_TEXTURE0 + i);
-         _mesa_set_enable(ctx, GL_TEXTURE_GEN_S,
-                          (genEnabled & S_BIT) ? GL_TRUE : GL_FALSE);
-         _mesa_set_enable(ctx, GL_TEXTURE_GEN_T,
-                          (genEnabled & T_BIT) ? GL_TRUE : GL_FALSE);
-         _mesa_set_enable(ctx, GL_TEXTURE_GEN_R,
-                          (genEnabled & R_BIT) ? GL_TRUE : GL_FALSE);
-         _mesa_set_enable(ctx, GL_TEXTURE_GEN_Q,
-                          (genEnabled & Q_BIT) ? GL_TRUE : GL_FALSE);
+         _mesa_set_enable(ctx, GL_TEXTURE_GEN_S, !!(genEnabled & S_BIT));
+         _mesa_set_enable(ctx, GL_TEXTURE_GEN_T, !!(genEnabled & T_BIT));
+         _mesa_set_enable(ctx, GL_TEXTURE_GEN_R, !!(genEnabled & R_BIT));
+         _mesa_set_enable(ctx, GL_TEXTURE_GEN_Q, !!(genEnabled & Q_BIT));
       }
    }
 
@@ -674,25 +679,22 @@ pop_texture_group(struct gl_context *ctx, struct texture_state *texstate)
       GLuint tgt;
 
       _mesa_ActiveTextureARB(GL_TEXTURE0_ARB + u);
-      _mesa_set_enable(ctx, GL_TEXTURE_1D,
-                       (unit->Enabled & TEXTURE_1D_BIT) ? GL_TRUE : GL_FALSE);
-      _mesa_set_enable(ctx, GL_TEXTURE_2D,
-                       (unit->Enabled & TEXTURE_2D_BIT) ? GL_TRUE : GL_FALSE);
-      _mesa_set_enable(ctx, GL_TEXTURE_3D,
-                       (unit->Enabled & TEXTURE_3D_BIT) ? GL_TRUE : GL_FALSE);
+      _mesa_set_enable(ctx, GL_TEXTURE_1D, !!(unit->Enabled & TEXTURE_1D_BIT));
+      _mesa_set_enable(ctx, GL_TEXTURE_2D, !!(unit->Enabled & TEXTURE_2D_BIT));
+      _mesa_set_enable(ctx, GL_TEXTURE_3D, !!(unit->Enabled & TEXTURE_3D_BIT));
       if (ctx->Extensions.ARB_texture_cube_map) {
          _mesa_set_enable(ctx, GL_TEXTURE_CUBE_MAP_ARB,
-                     (unit->Enabled & TEXTURE_CUBE_BIT) ? GL_TRUE : GL_FALSE);
+                          !!(unit->Enabled & TEXTURE_CUBE_BIT));
       }
       if (ctx->Extensions.NV_texture_rectangle) {
          _mesa_set_enable(ctx, GL_TEXTURE_RECTANGLE_NV,
-                     (unit->Enabled & TEXTURE_RECT_BIT) ? GL_TRUE : GL_FALSE);
+                          !!(unit->Enabled & TEXTURE_RECT_BIT));
       }
       if (ctx->Extensions.MESA_texture_array) {
          _mesa_set_enable(ctx, GL_TEXTURE_1D_ARRAY_EXT,
-                 (unit->Enabled & TEXTURE_1D_ARRAY_BIT) ? GL_TRUE : GL_FALSE);
+                          !!(unit->Enabled & TEXTURE_1D_ARRAY_BIT));
          _mesa_set_enable(ctx, GL_TEXTURE_2D_ARRAY_EXT,
-                 (unit->Enabled & TEXTURE_2D_ARRAY_BIT) ? GL_TRUE : GL_FALSE);
+                          !!(unit->Enabled & TEXTURE_2D_ARRAY_BIT));
       }
 
       _mesa_TexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, unit->EnvMode);
@@ -719,53 +721,34 @@ pop_texture_group(struct gl_context *ctx, struct texture_state *texstate)
             ctx->Driver.TexGen(ctx, GL_Q, GL_EYE_PLANE, unit->GenQ.EyePlane);
          }
       }
-      _mesa_set_enable(ctx, GL_TEXTURE_GEN_S,
-                       ((unit->TexGenEnabled & S_BIT) ? GL_TRUE : GL_FALSE));
-      _mesa_set_enable(ctx, GL_TEXTURE_GEN_T,
-                       ((unit->TexGenEnabled & T_BIT) ? GL_TRUE : GL_FALSE));
-      _mesa_set_enable(ctx, GL_TEXTURE_GEN_R,
-                       ((unit->TexGenEnabled & R_BIT) ? GL_TRUE : GL_FALSE));
-      _mesa_set_enable(ctx, GL_TEXTURE_GEN_Q,
-                       ((unit->TexGenEnabled & Q_BIT) ? GL_TRUE : GL_FALSE));
-      if (ctx->Extensions.EXT_texture_lod_bias) {
-         _mesa_TexEnvf(GL_TEXTURE_FILTER_CONTROL_EXT,
-                       GL_TEXTURE_LOD_BIAS_EXT, unit->LodBias);
+      _mesa_set_enable(ctx, GL_TEXTURE_GEN_S, !!(unit->TexGenEnabled & S_BIT));
+      _mesa_set_enable(ctx, GL_TEXTURE_GEN_T, !!(unit->TexGenEnabled & T_BIT));
+      _mesa_set_enable(ctx, GL_TEXTURE_GEN_R, !!(unit->TexGenEnabled & R_BIT));
+      _mesa_set_enable(ctx, GL_TEXTURE_GEN_Q, !!(unit->TexGenEnabled & Q_BIT));
+      _mesa_TexEnvf(GL_TEXTURE_FILTER_CONTROL, GL_TEXTURE_LOD_BIAS,
+		    unit->LodBias);
+      _mesa_TexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB,
+		    unit->Combine.ModeRGB);
+      _mesa_TexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA,
+		    unit->Combine.ModeA);
+      {
+         const GLuint n = ctx->Extensions.NV_texture_env_combine4 ? 4 : 3;
+         GLuint i;
+         for (i = 0; i < n; i++) {
+            _mesa_TexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB + i,
+                          unit->Combine.SourceRGB[i]);
+            _mesa_TexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA + i,
+                          unit->Combine.SourceA[i]);
+            _mesa_TexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB + i,
+                          unit->Combine.OperandRGB[i]);
+            _mesa_TexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA + i,
+                          unit->Combine.OperandA[i]);
+         }
       }
-      if (ctx->Extensions.EXT_texture_env_combine ||
-          ctx->Extensions.ARB_texture_env_combine) {
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB,
-                       unit->Combine.ModeRGB);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA,
-                       unit->Combine.ModeA);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB,
-                       unit->Combine.SourceRGB[0]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_RGB,
-                       unit->Combine.SourceRGB[1]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_SOURCE2_RGB,
-                       unit->Combine.SourceRGB[2]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA,
-                       unit->Combine.SourceA[0]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_ALPHA,
-                       unit->Combine.SourceA[1]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_SOURCE2_ALPHA,
-                       unit->Combine.SourceA[2]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB,
-                       unit->Combine.OperandRGB[0]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB,
-                       unit->Combine.OperandRGB[1]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_OPERAND2_RGB,
-                       unit->Combine.OperandRGB[2]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA,
-                       unit->Combine.OperandA[0]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA,
-                       unit->Combine.OperandA[1]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_OPERAND2_ALPHA,
-                       unit->Combine.OperandA[2]);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_RGB_SCALE,
-                       1 << unit->Combine.ScaleShiftRGB);
-         _mesa_TexEnvi(GL_TEXTURE_ENV, GL_ALPHA_SCALE,
-                       1 << unit->Combine.ScaleShiftA);
-      }
+      _mesa_TexEnvi(GL_TEXTURE_ENV, GL_RGB_SCALE,
+		    1 << unit->Combine.ScaleShiftRGB);
+      _mesa_TexEnvi(GL_TEXTURE_ENV, GL_ALPHA_SCALE,
+		    1 << unit->Combine.ScaleShiftA);
 
       /* Restore texture object state for each target */
       for (tgt = 0; tgt < NUM_TEXTURE_TARGETS; tgt++) {
@@ -792,6 +775,8 @@ pop_texture_group(struct gl_context *ctx, struct texture_state *texstate)
             continue;
          }
          else if (obj->Target == GL_TEXTURE_BUFFER)
+            continue;
+         else if (obj->Target == GL_TEXTURE_EXTERNAL_OES)
             continue;
 
          target = obj->Target;
@@ -830,6 +815,8 @@ pop_texture_group(struct gl_context *ctx, struct texture_state *texstate)
    }
 
    _mesa_ActiveTextureARB(GL_TEXTURE0_ARB + texstate->Texture.CurrentUnit);
+
+   _mesa_reference_shared_state(ctx, &texstate->SharedRef, NULL);
 
    _mesa_unlock_context_textures(ctx);
 }
@@ -884,10 +871,10 @@ _mesa_PopAttrib(void)
 
                color = (const struct gl_colorbuffer_attrib *) attr->data;
                _mesa_ClearIndex((GLfloat) color->ClearIndex);
-               _mesa_ClearColor(color->ClearColorUnclamped[0],
-                                color->ClearColorUnclamped[1],
-                                color->ClearColorUnclamped[2],
-                                color->ClearColorUnclamped[3]);
+               _mesa_ClearColor(color->ClearColor.f[0],
+                                color->ClearColor.f[1],
+                                color->ClearColor.f[2],
+                                color->ClearColor.f[3]);
                _mesa_IndexMask(color->IndexMask);
                if (!ctx->Extensions.EXT_draw_buffers2) {
                   _mesa_ColorMask((GLboolean) (color->ColorMask[0][0] != 0),
@@ -1095,7 +1082,7 @@ _mesa_PopAttrib(void)
                      p[0] = l->QuadraticAttenuation;
                      _mesa_light(ctx, i, GL_QUADRATIC_ATTENUATION, p);
                   }
-                }
+               }
                /* light model */
                _mesa_LightModelfv(GL_LIGHT_MODEL_AMBIENT,
                                   light->Model.Ambient);
@@ -1247,16 +1234,12 @@ _mesa_PopAttrib(void)
                   _math_matrix_analyse( ctx->ProjectionMatrixStack.Top );
 
                /* restore clip planes */
-               for (i = 0; i < MAX_CLIP_PLANES; i++) {
+               for (i = 0; i < ctx->Const.MaxClipPlanes; i++) {
                   const GLuint mask = 1 << i;
                   const GLfloat *eyePlane = xform->EyeUserPlane[i];
                   COPY_4V(ctx->Transform.EyeUserPlane[i], eyePlane);
-                  if (xform->ClipPlanesEnabled & mask) {
-                     _mesa_set_enable(ctx, GL_CLIP_PLANE0 + i, GL_TRUE);
-                  }
-                  else {
-                     _mesa_set_enable(ctx, GL_CLIP_PLANE0 + i, GL_FALSE);
-                  }
+                  _mesa_set_enable(ctx, GL_CLIP_PLANE0 + i,
+                                   !!(xform->ClipPlanesEnabled & mask));
                   if (ctx->Driver.ClipPlane)
                      ctx->Driver.ClipPlane( ctx, GL_CLIP_PLANE0 + i, eyePlane );
                }
@@ -1312,30 +1295,6 @@ _mesa_PopAttrib(void)
 
 
 /**
- * Helper for incrementing/decrementing vertex buffer object reference
- * counts when pushing/popping the GL_CLIENT_VERTEX_ARRAY_BIT attribute group.
- */
-static void
-adjust_buffer_object_ref_counts(struct gl_array_object *arrayObj, GLint step)
-{
-   GLuint i;
-
-   arrayObj->Vertex.BufferObj->RefCount += step;
-   arrayObj->Weight.BufferObj->RefCount += step;
-   arrayObj->Normal.BufferObj->RefCount += step;
-   arrayObj->Color.BufferObj->RefCount += step;
-   arrayObj->SecondaryColor.BufferObj->RefCount += step;
-   arrayObj->FogCoord.BufferObj->RefCount += step;
-   arrayObj->Index.BufferObj->RefCount += step;
-   arrayObj->EdgeFlag.BufferObj->RefCount += step;
-   for (i = 0; i < Elements(arrayObj->TexCoord); i++)
-      arrayObj->TexCoord[i].BufferObj->RefCount += step;
-   for (i = 0; i < Elements(arrayObj->VertexAttrib); i++)
-      arrayObj->VertexAttrib[i].BufferObj->RefCount += step;
-}
-
-
-/**
  * Copy gl_pixelstore_attrib from src to dst, updating buffer
  * object refcounts.
  */
@@ -1352,7 +1311,6 @@ copy_pixelstore(struct gl_context *ctx,
    dst->SkipImages = src->SkipImages;
    dst->SwapBytes = src->SwapBytes;
    dst->LsbFirst = src->LsbFirst;
-   dst->ClientStorage = src->ClientStorage;
    dst->Invert = src->Invert;
    _mesa_reference_buffer_object(ctx, &dst->BufferObj, src->BufferObj);
 }
@@ -1360,6 +1318,166 @@ copy_pixelstore(struct gl_context *ctx,
 
 #define GL_CLIENT_PACK_BIT (1<<20)
 #define GL_CLIENT_UNPACK_BIT (1<<21)
+
+/**
+ * Copy gl_array_object from src to dest.
+ * 'dest' must be in an initialized state.
+ */
+static void
+copy_array_object(struct gl_context *ctx,
+                  struct gl_array_object *dest,
+                  struct gl_array_object *src)
+{
+   GLuint i;
+
+   /* skip Name */
+   /* skip RefCount */
+
+   /* In theory must be the same anyway, but on recreate make sure it matches */
+   dest->ARBsemantics = src->ARBsemantics;
+
+   for (i = 0; i < Elements(src->VertexAttrib); i++)
+      _mesa_copy_client_array(ctx, &dest->VertexAttrib[i], &src->VertexAttrib[i]);
+
+   /* _Enabled must be the same than on push */
+   dest->_Enabled = src->_Enabled;
+   dest->_MaxElement = src->_MaxElement;
+}
+
+/**
+ * Copy gl_array_attrib from src to dest.
+ * 'dest' must be in an initialized state.
+ */
+static void
+copy_array_attrib(struct gl_context *ctx,
+                  struct gl_array_attrib *dest,
+                  struct gl_array_attrib *src,
+                  bool vbo_deleted)
+{
+   /* skip ArrayObj */
+   /* skip DefaultArrayObj, Objects */
+   dest->ActiveTexture = src->ActiveTexture;
+   dest->LockFirst = src->LockFirst;
+   dest->LockCount = src->LockCount;
+   dest->PrimitiveRestart = src->PrimitiveRestart;
+   dest->RestartIndex = src->RestartIndex;
+   /* skip NewState */
+   /* skip RebindArrays */
+
+   if (!vbo_deleted)
+      copy_array_object(ctx, dest->ArrayObj, src->ArrayObj);
+
+   /* skip ArrayBufferObj */
+   /* skip ElementArrayBufferObj */
+}
+
+/**
+ * Save the content of src to dest.
+ */
+static void
+save_array_attrib(struct gl_context *ctx,
+                  struct gl_array_attrib *dest,
+                  struct gl_array_attrib *src)
+{
+   /* Set the Name, needed for restore, but do never overwrite.
+    * Needs to match value in the object hash. */
+   dest->ArrayObj->Name = src->ArrayObj->Name;
+   /* And copy all of the rest. */
+   copy_array_attrib(ctx, dest, src, false);
+
+   /* Just reference them here */
+   _mesa_reference_buffer_object(ctx, &dest->ArrayBufferObj,
+                                 src->ArrayBufferObj);
+   _mesa_reference_buffer_object(ctx, &dest->ArrayObj->ElementArrayBufferObj,
+                                 src->ArrayObj->ElementArrayBufferObj);
+}
+
+/**
+ * Restore the content of src to dest.
+ */
+static void
+restore_array_attrib(struct gl_context *ctx,
+                     struct gl_array_attrib *dest,
+                     struct gl_array_attrib *src)
+{
+   /* The ARB_vertex_array_object spec says:
+    *
+    *     "BindVertexArray fails and an INVALID_OPERATION error is generated
+    *     if array is not a name returned from a previous call to
+    *     GenVertexArrays, or if such a name has since been deleted with
+    *     DeleteVertexArrays."
+    *
+    * Therefore popping a deleted VAO cannot magically recreate it.
+    *
+    * The semantics of objects created using APPLE_vertex_array_objects behave
+    * differently.  These objects expect to be recreated by pop.  Alas.
+    */
+   const bool arb_vao = (src->ArrayObj->Name != 0
+			 && src->ArrayObj->ARBsemantics);
+
+   if (arb_vao && !_mesa_IsVertexArrayAPPLE(src->ArrayObj->Name))
+      return;
+
+   _mesa_BindVertexArrayAPPLE(src->ArrayObj->Name);
+
+   /* Restore or recreate the buffer objects by the names ... */
+   if (!arb_vao
+       || src->ArrayBufferObj->Name == 0
+       || _mesa_IsBufferARB(src->ArrayBufferObj->Name)) {
+      /* ... and restore its content */
+      copy_array_attrib(ctx, dest, src, false);
+
+      _mesa_BindBufferARB(GL_ARRAY_BUFFER_ARB,
+			  src->ArrayBufferObj->Name);
+   } else {
+      copy_array_attrib(ctx, dest, src, true);
+   }
+
+   if (!arb_vao
+       || src->ArrayObj->ElementArrayBufferObj->Name == 0
+       || _mesa_IsBufferARB(src->ArrayObj->ElementArrayBufferObj->Name))
+      _mesa_BindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,
+			  src->ArrayObj->ElementArrayBufferObj->Name);
+
+   /* Better safe than sorry?! */
+   dest->RebindArrays = GL_TRUE;
+
+   /* FIXME: Should some bits in ctx->Array->NewState also be set
+    * FIXME: here?  It seems like it should be set to inclusive-or
+    * FIXME: of the old ArrayObj->_Enabled and the new _Enabled.
+    * ... just do it.
+    */
+   dest->NewState |= src->ArrayObj->_Enabled | dest->ArrayObj->_Enabled;
+}
+
+/**
+ * init/alloc the fields of 'attrib'.
+ * Needs to the init part matching free_array_attrib_data below.
+ */
+static void
+init_array_attrib_data(struct gl_context *ctx,
+                       struct gl_array_attrib *attrib)
+{
+   /* Get a non driver gl_array_object. */
+   attrib->ArrayObj = CALLOC_STRUCT( gl_array_object );
+   _mesa_initialize_array_object(ctx, attrib->ArrayObj, 0);
+}
+
+/**
+ * Free/unreference the fields of 'attrib' but don't delete it (that's
+ * done later in the calling code).
+ * Needs to the cleanup part matching init_array_attrib_data above.
+ */
+static void
+free_array_attrib_data(struct gl_context *ctx,
+                       struct gl_array_attrib *attrib)
+{
+   /* We use a non driver array object, so don't just unref since we would
+    * end up using the drivers DeleteArrayObject function for deletion. */
+   _mesa_delete_array_object(ctx, attrib->ArrayObj);
+   attrib->ArrayObj = 0;
+   _mesa_reference_buffer_object(ctx, &attrib->ArrayBufferObj, NULL);
+}
 
 
 void GLAPIENTRY
@@ -1394,26 +1512,10 @@ _mesa_PushClientAttrib(GLbitfield mask)
 
    if (mask & GL_CLIENT_VERTEX_ARRAY_BIT) {
       struct gl_array_attrib *attr;
-      struct gl_array_object *obj;
-
-      attr = MALLOC_STRUCT( gl_array_attrib );
-      obj = MALLOC_STRUCT( gl_array_object );
-
-#if FEATURE_ARB_vertex_buffer_object
-      /* increment ref counts since we're copying pointers to these objects */
-      ctx->Array.ArrayBufferObj->RefCount++;
-      ctx->Array.ElementArrayBufferObj->RefCount++;
-#endif
-
-      memcpy( attr, &ctx->Array, sizeof(struct gl_array_attrib) );
-      memcpy( obj, ctx->Array.ArrayObj, sizeof(struct gl_array_object) );
-
-      attr->ArrayObj = obj;
-
+      attr = CALLOC_STRUCT( gl_array_attrib );
+      init_array_attrib_data(ctx, attr);
+      save_array_attrib(ctx, attr, &ctx->Array);
       save_attrib_data(&head, GL_CLIENT_VERTEX_ARRAY_BIT, attr);
-
-      /* bump reference counts on buffer objects */
-      adjust_buffer_object_ref_counts(ctx->Array.ArrayObj, 1);
    }
 
    ctx->ClientAttribStack[ctx->ClientAttribStackDepth] = head;
@@ -1460,36 +1562,10 @@ _mesa_PopClientAttrib(void)
 	    ctx->NewState |= _NEW_PACKUNPACK;
             break;
          case GL_CLIENT_VERTEX_ARRAY_BIT: {
-	    struct gl_array_attrib * data =
+	    struct gl_array_attrib * attr =
 	      (struct gl_array_attrib *) node->data;
-
-            adjust_buffer_object_ref_counts(ctx->Array.ArrayObj, -1);
-	 
-            ctx->Array.ActiveTexture = data->ActiveTexture;
-	    if (data->LockCount != 0)
-	       _mesa_LockArraysEXT(data->LockFirst, data->LockCount);
-	    else if (ctx->Array.LockCount)
-	       _mesa_UnlockArraysEXT();
-
-	    _mesa_BindVertexArrayAPPLE( data->ArrayObj->Name );
-	    
-#if FEATURE_ARB_vertex_buffer_object
-            _mesa_BindBufferARB(GL_ARRAY_BUFFER_ARB,
-                                data->ArrayBufferObj->Name);
-            _mesa_BindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,
-                                data->ElementArrayBufferObj->Name);
-#endif
-
-	    memcpy( ctx->Array.ArrayObj, data->ArrayObj,
-		    sizeof( struct gl_array_object ) );
-
-	    FREE( data->ArrayObj );
-	    
-	    /* FIXME: Should some bits in ctx->Array->NewState also be set
-	     * FIXME: here?  It seems like it should be set to inclusive-or
-	     * FIXME: of the old ArrayObj->_Enabled and the new _Enabled.
-	     */
-
+            restore_array_attrib(ctx, &ctx->Array, attr);
+            free_array_attrib_data(ctx, attr);
 	    ctx->NewState |= _NEW_ARRAY;
             break;
 	 }
@@ -1541,6 +1617,7 @@ _mesa_free_attrib_data(struct gl_context *ctx)
                   _mesa_reference_texobj(&texstate->SavedTexRef[u][tgt], NULL);
                }
             }
+            _mesa_reference_shared_state(ctx, &texstate->SharedRef, NULL);
          }
          else {
             /* any other chunks of state that requires special handling? */

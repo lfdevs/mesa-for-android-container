@@ -199,7 +199,7 @@ struct vg_paint * paint_create(struct vg_context *ctx)
    const VGfloat def_ling[] = {0.0f, 0.0f, 1.0f, 0.0f};
    const VGfloat def_radg[] = {0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
    vg_init_object(&paint->base, ctx, VG_OBJECT_PAINT);
-   vg_context_add_object(ctx, VG_OBJECT_PAINT, paint);
+   vg_context_add_object(ctx, &paint->base);
 
    paint->type = VG_PAINT_TYPE_COLOR;
    memcpy(paint->solid.color, default_color,
@@ -230,7 +230,7 @@ void paint_destroy(struct vg_paint *paint)
    if (paint->pattern.sampler_view)
       pipe_sampler_view_reference(&paint->pattern.sampler_view, NULL);
    if (ctx)
-      vg_context_remove_object(ctx, VG_OBJECT_PAINT, paint);
+      vg_context_remove_object(ctx, &paint->base);
 
    free(paint->gradient.ramp_stopsi);
    free(paint->gradient.ramp_stops);
@@ -652,7 +652,7 @@ VGint paint_bind_samplers(struct vg_paint *paint, struct pipe_sampler_state **sa
    }
       break;
    case VG_PAINT_TYPE_PATTERN: {
-      memcpy(paint->pattern.sampler.border_color,
+      memcpy(paint->pattern.sampler.border_color.f,
              ctx->state.vg.tile_fill_color,
              sizeof(VGfloat) * 4);
       paint->pattern.sampler.min_img_filter = image_sampler_filter(ctx);

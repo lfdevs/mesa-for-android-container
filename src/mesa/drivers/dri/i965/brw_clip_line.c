@@ -132,8 +132,9 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
    struct brw_indirect newvtx0   = brw_indirect(2, 0);
    struct brw_indirect newvtx1   = brw_indirect(3, 0);
    struct brw_indirect plane_ptr = brw_indirect(4, 0);
-   struct brw_instruction *plane_loop;
    struct brw_reg v1_null_ud = retype(vec1(brw_null_reg()), BRW_REGISTER_TYPE_UD);
+   GLuint hpos_offset = brw_vert_result_to_offset(&c->vue_map,
+                                                  VERT_RESULT_HPOS);
 
    brw_MOV(p, get_addr_reg(vtx0),      brw_address(c->reg.vertex[0]));
    brw_MOV(p, get_addr_reg(vtx1),      brw_address(c->reg.vertex[1]));
@@ -158,7 +159,7 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
 
    brw_set_predicate_control(p, BRW_PREDICATE_NONE);
 
-   plane_loop = brw_DO(p, BRW_EXECUTE_1);
+   brw_DO(p, BRW_EXECUTE_1);
    {
       /* if (planemask & 1)
        */
@@ -174,12 +175,12 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
 
 	 /* dp = DP4(vtx->position, plane) 
 	  */
-	 brw_DP4(p, vec4(c->reg.dp0), deref_4f(vtx0, c->offset[VERT_RESULT_HPOS]), c->reg.plane_equation);
+	 brw_DP4(p, vec4(c->reg.dp0), deref_4f(vtx0, hpos_offset), c->reg.plane_equation);
 
 	 /* if (IS_NEGATIVE(dp1)) 
 	  */
 	 brw_set_conditionalmod(p, BRW_CONDITIONAL_L);
-	 brw_DP4(p, vec4(c->reg.dp1), deref_4f(vtx1, c->offset[VERT_RESULT_HPOS]), c->reg.plane_equation);
+	 brw_DP4(p, vec4(c->reg.dp1), deref_4f(vtx1, hpos_offset), c->reg.plane_equation);
 	 brw_IF(p, BRW_EXECUTE_1);
 	 {
              /*
@@ -243,17 +244,21 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
       brw_set_conditionalmod(p, BRW_CONDITIONAL_NZ);
       brw_SHR(p, c->reg.planemask, c->reg.planemask, brw_imm_ud(1));
    }
-   brw_WHILE(p, plane_loop);
+   brw_WHILE(p);
 
    brw_ADD(p, c->reg.t, c->reg.t0, c->reg.t1);
    brw_CMP(p, vec1(brw_null_reg()), BRW_CONDITIONAL_L, c->reg.t, brw_imm_f(1.0));
    brw_IF(p, BRW_EXECUTE_1);
    {
-      brw_clip_interp_vertex(c, newvtx0, vtx0, vtx1, c->reg.t0, GL_FALSE);
-      brw_clip_interp_vertex(c, newvtx1, vtx1, vtx0, c->reg.t1, GL_FALSE);
+      brw_clip_interp_vertex(c, newvtx0, vtx0, vtx1, c->reg.t0, false);
+      brw_clip_interp_vertex(c, newvtx1, vtx1, vtx0, c->reg.t1, false);
 
-      brw_clip_emit_vue(c, newvtx0, 1, 0, (_3DPRIM_LINESTRIP << 2) | R02_PRIM_START);
-      brw_clip_emit_vue(c, newvtx1, 0, 1, (_3DPRIM_LINESTRIP << 2) | R02_PRIM_END); 
+      brw_clip_emit_vue(c, newvtx0, 1, 0,
+                        (_3DPRIM_LINESTRIP << URB_WRITE_PRIM_TYPE_SHIFT)
+                        | URB_WRITE_PRIM_START);
+      brw_clip_emit_vue(c, newvtx1, 0, 1,
+                        (_3DPRIM_LINESTRIP << URB_WRITE_PRIM_TYPE_SHIFT)
+                        | URB_WRITE_PRIM_END);
    }
    brw_ENDIF(p);
    brw_clip_kill_thread(c);

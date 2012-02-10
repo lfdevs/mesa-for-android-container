@@ -159,7 +159,7 @@ struct pipe_context *svga_context_create( struct pipe_screen *screen,
       goto no_swtnl;
 
    ret = svga_emit_initial_state( svga );
-   if (ret)
+   if (ret != PIPE_OK)
       goto no_state;
    
    /* Avoid shortcircuiting state with initial value of zero.
@@ -207,6 +207,14 @@ void svga_context_flush( struct svga_context *svga,
 
    svga->curr.nr_fbs = 0;
 
+   /* Flush the upload managers to ensure recycling of upload buffers
+    * without throttling. This should really be conditioned on
+    * pipe_buffer_map_range not supporting PIPE_TRANSFER_UNSYNCHRONIZED.
+    */
+
+   u_upload_flush(svga->upload_vb);
+   u_upload_flush(svga->upload_ib);
+
    /* Ensure that texture dma uploads are processed
     * before submitting commands.
     */
@@ -231,9 +239,9 @@ void svga_context_flush( struct svga_context *svga,
    }
 
    if(pfence)
-      *pfence = fence;
-   else
-      svgascreen->sws->fence_reference(svgascreen->sws, &fence, NULL);
+      svgascreen->sws->fence_reference(svgascreen->sws, pfence, fence);
+
+   svgascreen->sws->fence_reference(svgascreen->sws, &fence, NULL);
 }
 
 
@@ -248,6 +256,20 @@ void svga_hwtnl_flush_retry( struct svga_context *svga )
    }
 
    assert(ret == 0);
+}
+
+
+/**
+ * Flush the primitive queue if this buffer is referred.
+ *
+ * Otherwise DMA commands on the referred buffer will be emitted too late.
+ */
+void svga_hwtnl_flush_buffer( struct svga_context *svga,
+                              struct pipe_resource *buffer )
+{
+   if (svga_hwtnl_is_buffer_referred(svga->hwtnl, buffer)) {
+      svga_hwtnl_flush_retry(svga);
+   }
 }
 
 

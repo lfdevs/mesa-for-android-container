@@ -15,7 +15,7 @@ GBM_INCLUDES = \
 	       -I$(TOP)/src/gallium/auxiliary \
 	       -I$(TOP)/src/gallium/include \
 
-GBM_LIBS = $(LIBUDEV_LIBS) $(LIBDRM_LIB) \
+GBM_LIBS = $(LIBUDEV_LIBS) $(LIBDRM_LIB) -lm \
 	   $(TOP)/src/gallium/state_trackers/gbm/libgbm.a \
 	   $(TOP)/src/gallium/drivers/identity/libidentity.a \
 	   $(TOP)/src/gallium/drivers/galahad/libgalahad.a \
@@ -59,13 +59,6 @@ i915_LIBS = \
 	$(TOP)/src/gallium/drivers/i915/libi915.a
 i915_SYS = -ldrm_intel
 
-# i965 pipe driver
-i965_LIBS = \
-	$(TOP)/src/gallium/winsys/i965/drm/libi965drm.a \
-	$(TOP)/src/gallium/drivers/i965/libi965.a \
-	$(TOP)/src/gallium/winsys/sw/wrapper/libwsw.a
-i965_SYS = -ldrm_intel
-
 # nouveau pipe driver
 nouveau_LIBS = \
 	$(TOP)/src/gallium/winsys/nouveau/drm/libnouveaudrm.a \
@@ -79,64 +72,74 @@ nouveau_SYS = -ldrm_nouveau
 r300_LIBS = \
 	$(TOP)/src/gallium/winsys/radeon/drm/libradeonwinsys.a \
 	$(TOP)/src/gallium/drivers/r300/libr300.a
-r300_SYS = -ldrm_radeon
 
 # r600 pipe driver
 r600_LIBS = \
-	$(TOP)/src/gallium/winsys/r600/drm/libr600winsys.a \
+	$(TOP)/src/gallium/winsys/radeon/drm/libradeonwinsys.a \
 	$(TOP)/src/gallium/drivers/r600/libr600.a
-r600_SYS = -ldrm_radeon
 
 # vmwgfx pipe driver
 vmwgfx_LIBS = \
 	$(TOP)/src/gallium/winsys/svga/drm/libsvgadrm.a \
 	$(TOP)/src/gallium/drivers/svga/libsvga.a
 
+
+
 # LLVM
 ifeq ($(MESA_LLVM),1)
-pipe_LIBS += $(TOP)/src/gallium/drivers/llvmpipe/libllvmpipe.a
 pipe_SYS += $(LLVM_LIBS)
 pipe_LDFLAGS += $(LLVM_LDFLAGS)
 endif
 
+ifneq ($(findstring llvmpipe,$(GALLIUM_DRIVERS_DIRS)),)
+pipe_LIBS += $(TOP)/src/gallium/drivers/llvmpipe/libllvmpipe.a
+endif
+
 # determine the targets/sources
-pipe_TARGETS =
+_pipe_TARGETS_CC =
+_pipe_TARGETS_CXX =
 pipe_SOURCES =
 
 ifneq ($(findstring i915/drm,$(GALLIUM_WINSYS_DIRS)),)
-pipe_TARGETS += $(PIPE_PREFIX)i915.so
+_pipe_TARGETS_CC += $(PIPE_PREFIX)i915.so
 pipe_SOURCES += pipe_i915.c
 endif
 
-ifneq ($(findstring i965/drm,$(GALLIUM_WINSYS_DIRS)),)
-pipe_TARGETS += $(PIPE_PREFIX)i965.so
-pipe_SOURCES += pipe_i965.c
-endif
-
 ifneq ($(findstring nouveau/drm,$(GALLIUM_WINSYS_DIRS)),)
-pipe_TARGETS += $(PIPE_PREFIX)nouveau.so
+_pipe_TARGETS_CXX += $(PIPE_PREFIX)nouveau.so
 pipe_SOURCES += pipe_nouveau.c
 endif
 
 ifneq ($(findstring radeon/drm,$(GALLIUM_WINSYS_DIRS)),)
-pipe_TARGETS += $(PIPE_PREFIX)r300.so
+ifneq ($(findstring r300,$(GALLIUM_DRIVERS_DIRS)),)
+_pipe_TARGETS_CC += $(PIPE_PREFIX)r300.so
 pipe_SOURCES += pipe_r300.c
 endif
+endif
 
-ifneq ($(findstring r600/drm,$(GALLIUM_WINSYS_DIRS)),)
-pipe_TARGETS += $(PIPE_PREFIX)r600.so
+ifneq ($(findstring radeon/drm,$(GALLIUM_WINSYS_DIRS)),)
+ifneq ($(findstring r600,$(GALLIUM_DRIVERS_DIRS)),)
+_pipe_TARGETS_CC += $(PIPE_PREFIX)r600.so
 pipe_SOURCES += pipe_r600.c
+endif
 endif
 
 ifneq ($(findstring svga/drm,$(GALLIUM_WINSYS_DIRS)),)
-pipe_TARGETS += $(PIPE_PREFIX)vmwgfx.so
+_pipe_TARGETS_CC += $(PIPE_PREFIX)vmwgfx.so
 pipe_SOURCES += pipe_vmwgfx.c
 endif
 
 pipe_OBJECTS = $(pipe_SOURCES:.c=.o)
 
+ifeq ($(MESA_LLVM),1)
+pipe_TARGETS_CXX = $(_pipe_TARGETS_CXX) $(_pipe_TARGETS_CC)
+pipe_TARGETS_CC =
+else
+pipe_TARGETS_CXX = $(_pipe_TARGETS_CXX)
+pipe_TARGETS_CC = $(_pipe_TARGETS_CC)
+endif
 
-GBM_EXTRA_TARGETS = $(addprefix $(TOP)/$(LIB_DIR)/gbm/, $(pipe_TARGETS))
+GBM_EXTRA_TARGETS = $(addprefix $(TOP)/$(LIB_DIR)/gbm/, $(pipe_TARGETS_CC)) $(addprefix $(TOP)/$(LIB_DIR)/gbm/, $(pipe_TARGETS_CXX))
 GBM_EXTRA_INSTALL = install-pipes
 GBM_EXTRA_CLEAN = clean-pipes
 GBM_EXTRA_SOURCES = $(pipe_SOURCES)
@@ -148,8 +151,15 @@ $(GBM_EXTRA_TARGETS): $(TOP)/$(LIB_DIR)/gbm/%: %
 	@$(INSTALL) -d $(dir $@)
 	$(INSTALL) $< $(dir $@)
 
-$(pipe_TARGETS): $(PIPE_PREFIX)%.so: pipe_%.o
+$(pipe_TARGETS_CC): $(PIPE_PREFIX)%.so: pipe_%.o $(pipe_LIBS) $($*_LIBS)
 	$(MKLIB) -o $@ -noprefix -linker '$(CC)' \
+		-ldflags '-L$(TOP)/$(LIB_DIR) $(pipe_LDFLAGS) $(LDFLAGS)' \
+		$(MKLIB_OPTIONS) $< \
+		-Wl,--start-group $(pipe_LIBS) $($*_LIBS) -Wl,--end-group \
+		$(pipe_SYS) $($*_SYS)
+
+$(pipe_TARGETS_CXX): $(PIPE_PREFIX)%.so: pipe_%.o $(pipe_LIBS) $($*_LIBS)
+	$(MKLIB) -o $@ -noprefix -linker '$(CXX)' \
 		-ldflags '-L$(TOP)/$(LIB_DIR) $(pipe_LDFLAGS) $(LDFLAGS)' \
 		$(MKLIB_OPTIONS) $< \
 		-Wl,--start-group $(pipe_LIBS) $($*_LIBS) -Wl,--end-group \

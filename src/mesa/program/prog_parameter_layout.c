@@ -138,6 +138,7 @@ _mesa_layout_parameters(struct asm_parser_state *state)
 		      inst->SrcReg[i].Symbol->param_binding_length);
 
 	       if (new_begin < 0) {
+		  _mesa_free_parameter_list(layout);
 		  return GL_FALSE;
 	       }
 
@@ -182,7 +183,7 @@ _mesa_layout_parameters(struct asm_parser_state *state)
 
 	 switch (p->Type) {
 	 case PROGRAM_CONSTANT: {
-	    const float *const v =
+	    const gl_constant_value *const v =
 	       state->prog->Parameters->ParameterValues[idx];
 
 	    inst->Base.SrcReg[i].Index =

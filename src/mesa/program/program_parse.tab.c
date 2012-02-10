@@ -2812,7 +2812,7 @@ yyreduce:
 	      break;
 	   case at_attrib:
 	      set_src_reg(& (yyval.src_reg), PROGRAM_INPUT, s->attrib_binding);
-	      state->prog->InputsRead |= (1U << (yyval.src_reg).Base.Index);
+	      state->prog->InputsRead |= BITFIELD64_BIT((yyval.src_reg).Base.Index);
 
 	      if (!validate_inputs(& (yylsp[(1) - (1)]), state)) {
 		 YYERROR;
@@ -2832,7 +2832,7 @@ yyreduce:
 #line 818 "program/program_parse.y"
     {
 	   set_src_reg(& (yyval.src_reg), PROGRAM_INPUT, (yyvsp[(1) - (1)].attrib));
-	   state->prog->InputsRead |= (1U << (yyval.src_reg).Base.Index);
+	   state->prog->InputsRead |= BITFIELD64_BIT((yyval.src_reg).Base.Index);
 
 	   if (!validate_inputs(& (yylsp[(1) - (1)]), state)) {
 	      YYERROR;
@@ -3203,7 +3203,7 @@ yyreduce:
 	      YYERROR;
 	   } else {
 	      s->attrib_binding = (yyvsp[(4) - (4)].attrib);
-	      state->InputsBound |= (1U << s->attrib_binding);
+	      state->InputsBound |= BITFIELD64_BIT(s->attrib_binding);
 
 	      if (!validate_inputs(& (yylsp[(4) - (4)]), state)) {
 		 YYERROR;
@@ -4401,10 +4401,10 @@ yyreduce:
 #line 1855 "program/program_parse.y"
     {
 	   (yyval.vector).count = 4;
-	   (yyval.vector).data[0] = (yyvsp[(1) - (1)].real);
-	   (yyval.vector).data[1] = (yyvsp[(1) - (1)].real);
-	   (yyval.vector).data[2] = (yyvsp[(1) - (1)].real);
-	   (yyval.vector).data[3] = (yyvsp[(1) - (1)].real);
+	   (yyval.vector).data[0].f = (yyvsp[(1) - (1)].real);
+	   (yyval.vector).data[1].f = (yyvsp[(1) - (1)].real);
+	   (yyval.vector).data[2].f = (yyvsp[(1) - (1)].real);
+	   (yyval.vector).data[3].f = (yyvsp[(1) - (1)].real);
 	;}
     break;
 
@@ -4414,10 +4414,10 @@ yyreduce:
 #line 1865 "program/program_parse.y"
     {
 	   (yyval.vector).count = 1;
-	   (yyval.vector).data[0] = (yyvsp[(1) - (1)].real);
-	   (yyval.vector).data[1] = (yyvsp[(1) - (1)].real);
-	   (yyval.vector).data[2] = (yyvsp[(1) - (1)].real);
-	   (yyval.vector).data[3] = (yyvsp[(1) - (1)].real);
+	   (yyval.vector).data[0].f = (yyvsp[(1) - (1)].real);
+	   (yyval.vector).data[1].f = (yyvsp[(1) - (1)].real);
+	   (yyval.vector).data[2].f = (yyvsp[(1) - (1)].real);
+	   (yyval.vector).data[3].f = (yyvsp[(1) - (1)].real);
 	;}
     break;
 
@@ -4427,10 +4427,10 @@ yyreduce:
 #line 1873 "program/program_parse.y"
     {
 	   (yyval.vector).count = 1;
-	   (yyval.vector).data[0] = (float) (yyvsp[(1) - (1)].integer);
-	   (yyval.vector).data[1] = (float) (yyvsp[(1) - (1)].integer);
-	   (yyval.vector).data[2] = (float) (yyvsp[(1) - (1)].integer);
-	   (yyval.vector).data[3] = (float) (yyvsp[(1) - (1)].integer);
+	   (yyval.vector).data[0].f = (float) (yyvsp[(1) - (1)].integer);
+	   (yyval.vector).data[1].f = (float) (yyvsp[(1) - (1)].integer);
+	   (yyval.vector).data[2].f = (float) (yyvsp[(1) - (1)].integer);
+	   (yyval.vector).data[3].f = (float) (yyvsp[(1) - (1)].integer);
 	;}
     break;
 
@@ -4440,10 +4440,10 @@ yyreduce:
 #line 1883 "program/program_parse.y"
     {
 	   (yyval.vector).count = 4;
-	   (yyval.vector).data[0] = (yyvsp[(2) - (3)].real);
-	   (yyval.vector).data[1] = 0.0f;
-	   (yyval.vector).data[2] = 0.0f;
-	   (yyval.vector).data[3] = 1.0f;
+	   (yyval.vector).data[0].f = (yyvsp[(2) - (3)].real);
+	   (yyval.vector).data[1].f = 0.0f;
+	   (yyval.vector).data[2].f = 0.0f;
+	   (yyval.vector).data[3].f = 1.0f;
 	;}
     break;
 
@@ -4453,10 +4453,10 @@ yyreduce:
 #line 1891 "program/program_parse.y"
     {
 	   (yyval.vector).count = 4;
-	   (yyval.vector).data[0] = (yyvsp[(2) - (5)].real);
-	   (yyval.vector).data[1] = (yyvsp[(4) - (5)].real);
-	   (yyval.vector).data[2] = 0.0f;
-	   (yyval.vector).data[3] = 1.0f;
+	   (yyval.vector).data[0].f = (yyvsp[(2) - (5)].real);
+	   (yyval.vector).data[1].f = (yyvsp[(4) - (5)].real);
+	   (yyval.vector).data[2].f = 0.0f;
+	   (yyval.vector).data[3].f = 1.0f;
 	;}
     break;
 
@@ -4466,10 +4466,10 @@ yyreduce:
 #line 1900 "program/program_parse.y"
     {
 	   (yyval.vector).count = 4;
-	   (yyval.vector).data[0] = (yyvsp[(2) - (7)].real);
-	   (yyval.vector).data[1] = (yyvsp[(4) - (7)].real);
-	   (yyval.vector).data[2] = (yyvsp[(6) - (7)].real);
-	   (yyval.vector).data[3] = 1.0f;
+	   (yyval.vector).data[0].f = (yyvsp[(2) - (7)].real);
+	   (yyval.vector).data[1].f = (yyvsp[(4) - (7)].real);
+	   (yyval.vector).data[2].f = (yyvsp[(6) - (7)].real);
+	   (yyval.vector).data[3].f = 1.0f;
 	;}
     break;
 
@@ -4479,10 +4479,10 @@ yyreduce:
 #line 1909 "program/program_parse.y"
     {
 	   (yyval.vector).count = 4;
-	   (yyval.vector).data[0] = (yyvsp[(2) - (9)].real);
-	   (yyval.vector).data[1] = (yyvsp[(4) - (9)].real);
-	   (yyval.vector).data[2] = (yyvsp[(6) - (9)].real);
-	   (yyval.vector).data[3] = (yyvsp[(8) - (9)].real);
+	   (yyval.vector).data[0].f = (yyvsp[(2) - (9)].real);
+	   (yyval.vector).data[1].f = (yyvsp[(4) - (9)].real);
+	   (yyval.vector).data[2].f = (yyvsp[(6) - (9)].real);
+	   (yyval.vector).data[3].f = (yyvsp[(8) - (9)].real);
 	;}
     break;
 
@@ -5380,9 +5380,9 @@ set_src_reg_swz(struct asm_src_register *r, gl_register_file file, GLint index,
 int
 validate_inputs(struct YYLTYPE *locp, struct asm_parser_state *state)
 {
-   const int inputs = state->prog->InputsRead | state->InputsBound;
+   const GLbitfield64 inputs = state->prog->InputsRead | state->InputsBound;
 
-   if (((inputs & 0x0ffff) & (inputs >> 16)) != 0) {
+   if (((inputs & VERT_BIT_FF_ALL) & (inputs >> VERT_ATTRIB_GENERIC0)) != 0) {
       yyerror(locp, state, "illegal use of generic attribute and name attribute");
       return 0;
    }
@@ -5745,7 +5745,7 @@ _mesa_parse_arb_program(struct gl_context *ctx, GLenum target, const GLubyte *st
    state->prog->NumInstructions++;
 
    state->prog->NumParameters = state->prog->Parameters->NumParameters;
-   state->prog->NumAttributes = _mesa_bitcount(state->prog->InputsRead);
+   state->prog->NumAttributes = _mesa_bitcount_64(state->prog->InputsRead);
 
    /*
     * Initialize native counts to logical counts.  The device driver may

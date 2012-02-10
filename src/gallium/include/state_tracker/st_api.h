@@ -57,10 +57,10 @@ enum st_api_type {
  */
 enum st_profile_type
 {
-   ST_PROFILE_DEFAULT,
-   ST_PROFILE_OPENGL_CORE,
-   ST_PROFILE_OPENGL_ES1,
-   ST_PROFILE_OPENGL_ES2
+   ST_PROFILE_DEFAULT,			/**< OpenGL compatibility profile */
+   ST_PROFILE_OPENGL_CORE,		/**< OpenGL 3.2+ core profile */
+   ST_PROFILE_OPENGL_ES1,		/**< OpenGL ES 1.x */
+   ST_PROFILE_OPENGL_ES2		/**< OpenGL ES 2.0 */
 };
 
 /* for profile_mask in st_api */
@@ -71,12 +71,26 @@ enum st_profile_type
 
 /**
  * New context flags for GL 3.0 and beyond.
+ *
+ * Profile information (core vs. compatibilty for OpenGL 3.2+) is communicated
+ * through the \c st_profile_type, not through flags.
  */
-#define ST_CONTEXT_FLAG_CORE_PROFILE        (1 << 0)
-#define ST_CONTEXT_FLAG_COMPATIBLE_PROFILE  (1 << 1)
-#define ST_CONTEXT_FLAG_FORWARD_COMPATIBLE  (1 << 2)
-#define ST_CONTEXT_FLAG_DEBUG               (1 << 3)
-#define ST_CONTEXT_FLAG_ROBUST_ACCESS       (1 << 4)
+#define ST_CONTEXT_FLAG_DEBUG               (1 << 0)
+#define ST_CONTEXT_FLAG_FORWARD_COMPATIBLE  (1 << 1)
+#define ST_CONTEXT_FLAG_ROBUST_ACCESS       (1 << 2)
+
+/**
+ * Reasons that context creation might fail.
+ */
+enum st_context_error {
+   ST_CONTEXT_SUCCESS = 0,
+   ST_CONTEXT_ERROR_NO_MEMORY,
+   ST_CONTEXT_ERROR_BAD_API,
+   ST_CONTEXT_ERROR_BAD_VERSION,
+   ST_CONTEXT_ERROR_BAD_FLAG,
+   ST_CONTEXT_ERROR_UNKNOWN_ATTRIBUTE,
+   ST_CONTEXT_ERROR_UNKNOWN_FLAG
+};
 
 /**
  * Used in st_context_iface->teximage.
@@ -253,6 +267,12 @@ struct st_context_attribs
 struct st_framebuffer_iface
 {
    /**
+    * Atomic stamp which changes when framebuffers need to be updated.
+    */
+
+   int32_t stamp;
+
+   /**
     * Available for the state tracker manager to use.
     */
    void *st_manager_private;
@@ -313,25 +333,6 @@ struct st_context_iface
     * Destroy the context.
     */
    void (*destroy)(struct st_context_iface *stctxi);
-
-   /**
-    * Invalidate the current textures that was taken from a framebuffer.
-    *
-    * The state tracker manager calls this function to let the rendering
-    * context know that it should update the textures it got from
-    * st_framebuffer_iface::validate.  It should do so at the latest time possible.
-    * Possible right before sending triangles to the pipe context.
-    *
-    * For certain platforms this function might be called from a thread other
-    * than the thread that the context is currently bound in, and must
-    * therefore be thread safe. But it is the state tracker manager's
-    * responsibility to make sure that the framebuffer is bound to the context
-    * and the API context is current for the duration of this call.
-    *
-    * Thus reducing the sync primitive needed to a single atomic flag.
-    */
-   void (*notify_invalid_framebuffer)(struct st_context_iface *stctxi,
-                                      struct st_framebuffer_iface *stfbi);
 
    /**
     * Flush all drawing from context to the pipe also flushes the pipe.
@@ -446,6 +447,7 @@ struct st_api
    struct st_context_iface *(*create_context)(struct st_api *stapi,
                                               struct st_manager *smapi,
                                               const struct st_context_attribs *attribs,
+                                              enum st_context_error *error,
                                               struct st_context_iface *stsharei);
 
    /**

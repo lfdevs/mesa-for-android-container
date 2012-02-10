@@ -42,17 +42,21 @@
 #include "util/u_surface.h"
 #include "util/u_pack_color.h"
 
+
+/**
+ * Initialize a pipe_surface object.  'view' is considered to have
+ * uninitialized contents.
+ */
 void
-u_surface_default_template(struct pipe_surface *view,
+u_surface_default_template(struct pipe_surface *surf,
                            const struct pipe_resource *texture,
                            unsigned bind)
 {
-   view->format = texture->format;
-   view->u.tex.level = 0;
-   view->u.tex.first_layer = 0;
-   view->u.tex.last_layer = 0;
+   memset(surf, 0, sizeof(*surf));
+
+   surf->format = texture->format;
    /* XXX should filter out all non-rt/ds bind flags ? */
-   view->usage = bind;
+   surf->usage = bind;
 }
 
 /**
@@ -108,7 +112,6 @@ util_create_rgba_surface(struct pipe_context *pipe,
       return FALSE;
 
    /* create surface */
-   memset(&surf_templ, 0, sizeof(surf_templ));
    u_surface_default_template(&surf_templ, *textureOut, bind);
    /* create surface / view into texture */
    *surfaceOut = pipe->create_surface(pipe,
@@ -228,7 +231,7 @@ util_resource_copy_region(struct pipe_context *pipe,
 void
 util_clear_render_target(struct pipe_context *pipe,
                          struct pipe_surface *dst,
-                         const float *rgba,
+                         const union pipe_color_union *color,
                          unsigned dstx, unsigned dsty,
                          unsigned width, unsigned height)
 {
@@ -254,7 +257,7 @@ util_clear_render_target(struct pipe_context *pipe,
    if (dst_map) {
       assert(dst_trans->stride > 0);
 
-      util_pack_color(rgba, dst->texture->format, &uc);
+      util_pack_color(color->f, dst->texture->format, &uc);
       util_fill_rect(dst_map, dst->texture->format,
                      dst_trans->stride,
                      0, 0, width, height, &uc);
@@ -311,7 +314,7 @@ util_clear_depth_stencil(struct pipe_context *pipe,
 
       switch (util_format_get_blocksize(dst->format)) {
       case 1:
-         assert(dst->format == PIPE_FORMAT_S8_USCALED);
+         assert(dst->format == PIPE_FORMAT_S8_UINT);
          if(dst_stride == width)
             memset(dst_map, (ubyte) zstencil, height * width);
          else {
@@ -341,10 +344,10 @@ util_clear_depth_stencil(struct pipe_context *pipe,
          }
          else {
             uint32_t dst_mask;
-            if (dst->format == PIPE_FORMAT_Z24_UNORM_S8_USCALED)
+            if (dst->format == PIPE_FORMAT_Z24_UNORM_S8_UINT)
                dst_mask = 0xffffff00;
             else {
-               assert(dst->format == PIPE_FORMAT_S8_USCALED_Z24_UNORM);
+               assert(dst->format == PIPE_FORMAT_S8_UINT_Z24_UNORM);
                dst_mask = 0xffffff;
             }
             if (clear_flags & PIPE_CLEAR_DEPTH)
@@ -358,8 +361,41 @@ util_clear_depth_stencil(struct pipe_context *pipe,
                dst_map += dst_stride;
             }
          }
-        break;
+         break;
       case 8:
+      {
+         uint64_t zstencil = util_pack64_z_stencil(dst->texture->format,
+                                                   depth, stencil);
+
+         assert(dst->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT);
+
+         if (!need_rmw) {
+            for (i = 0; i < height; i++) {
+               uint64_t *row = (uint64_t *)dst_map;
+               for (j = 0; j < width; j++)
+                  *row++ = zstencil;
+               dst_map += dst_stride;
+            }
+         }
+         else {
+            uint64_t src_mask;
+
+            if (clear_flags & PIPE_CLEAR_DEPTH)
+               src_mask = 0x00000000ffffffffull;
+            else
+               src_mask = 0x000000ff00000000ull;
+
+            for (i = 0; i < height; i++) {
+               uint64_t *row = (uint64_t *)dst_map;
+               for (j = 0; j < width; j++) {
+                  uint64_t tmp = *row & ~src_mask;
+                  *row++ = tmp | (zstencil & src_mask);
+               }
+               dst_map += dst_stride;
+            }
+         }
+         break;
+      }
       default:
          assert(0);
          break;

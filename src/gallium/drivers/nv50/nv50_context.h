@@ -18,6 +18,7 @@
 #include "nv50_screen.h"
 #include "nv50_program.h"
 #include "nv50_resource.h"
+#include "nv50_transfer.h"
 
 #include "nouveau/nouveau_context.h"
 #include "nouveau/nv_object.xml.h"
@@ -52,6 +53,7 @@
 #define NV50_BUFCTX_TEXTURES 3
 #define NV50_BUFCTX_COUNT    4
 
+#define NV50_CB_TMP 123
 /* fixed constant buffer binding points - low indices for user's constbufs */
 #define NV50_CB_PVP 124
 #define NV50_CB_PGP 126
@@ -130,20 +132,6 @@ nv50_context(struct pipe_context *pipe)
    return (struct nv50_context *)pipe;
 }
 
-struct nv50_surface {
-   struct pipe_surface base;
-   uint32_t offset;
-   uint32_t width;
-   uint16_t height;
-   uint16_t depth;
-};
-
-static INLINE struct nv50_surface *
-nv50_surface(struct pipe_surface *ps)
-{
-   return (struct nv50_surface *)ps;
-}
-
 /* nv50_context.c */
 struct pipe_context *nv50_create(struct pipe_screen *, void *);
 
@@ -166,6 +154,7 @@ extern struct draw_stage *nv50_draw_render_stage(struct nv50_context *);
 
 /* nv50_program.c */
 boolean nv50_program_translate(struct nv50_program *);
+boolean nv50_program_translate_new(struct nv50_program *);
 void nv50_program_destroy(struct nv50_context *, struct nv50_program *);
 
 /* nv50_query.c */
@@ -184,11 +173,14 @@ void nv50_validate_derived_rs(struct nv50_context *);
 extern void nv50_init_state_functions(struct nv50_context *);
 
 /* nv50_state_validate.c */
-extern boolean nv50_state_validate(struct nv50_context *);
+/* @words: check for space before emitting relocs */
+extern boolean nv50_state_validate(struct nv50_context *, uint32_t state_mask,
+                                   unsigned space_words);
 
 /* nv50_surface.c */
 extern void nv50_clear(struct pipe_context *, unsigned buffers,
-                       const float *rgba, double depth, unsigned stencil);
+                       const union pipe_color_union *color,
+                       double depth, unsigned stencil);
 extern void nv50_init_surface_functions(struct nv50_context *);
 
 /* nv50_tex.c */
@@ -202,14 +194,24 @@ nv50_create_sampler_view(struct pipe_context *,
 
 /* nv50_transfer.c */
 void
+nv50_m2mf_transfer_rect(struct pipe_screen *pscreen,
+                        const struct nv50_m2mf_rect *dst,
+                        const struct nv50_m2mf_rect *src,
+                        uint32_t nblocksx, uint32_t nblocksy);
+void
 nv50_sifc_linear_u8(struct nouveau_context *pipe,
                     struct nouveau_bo *dst, unsigned offset, unsigned domain,
-                    unsigned size, void *data);
+                    unsigned size, const void *data);
 void
 nv50_m2mf_copy_linear(struct nouveau_context *pipe,
                       struct nouveau_bo *dst, unsigned dstoff, unsigned dstdom,
                       struct nouveau_bo *src, unsigned srcoff, unsigned srcdom,
                       unsigned size);
+void
+nv50_cb_push(struct nouveau_context *nv,
+             struct nouveau_bo *bo, unsigned domain,
+             unsigned base, unsigned size,
+             unsigned offset, unsigned words, const uint32_t *data);
 
 /* nv50_vbo.c */
 void nv50_draw_vbo(struct pipe_context *, const struct pipe_draw_info *);

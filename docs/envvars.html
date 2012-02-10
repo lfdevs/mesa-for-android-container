@@ -58,6 +58,14 @@ copied into a fixed-size buffer without truncating.
 If the extension string is too long, the buffer overrun can cause the game
 to crash.
 This is a work-around for that.
+<li>MESA_GL_VERSION_OVERRIDE - changes the value returned by
+glGetString(GL_VERSION). Valid values are point-separated version numbers,
+such as "3.0". Mesa will not really implement all the features of the given
+version if it's higher than what's normally reported.
+<li>MESA_GLSL_VERSION_OVERRIDE - changes the value returned by
+glGetString(GL_SHADING_LANGUAGE_VERSION). Valid values are integers, such as
+"130".  Mesa will not really implement all the features of the given language version
+if it's higher than what's normally reported. (for developers only)
 <li>MESA_GLSL - <a href="shading.html#envvars">shading language compiler options</a>
 </ul>
 
@@ -76,8 +84,6 @@ See the <A HREF="xlibdriver.html">Xlib software driver page</A> for details.
 <li>MESA_GAMMA - gamma correction coefficients for red, green, blue channels
 <li>MESA_XSYNC - enable synchronous X behavior (for debugging only)
 <li>MESA_GLX_FORCE_CI - if set, force GLX to treat 8bpp visuals as CI visuals
-<li>MESA_GLX_FX - set to either "fullscreen" for full-screen rendering,
-  "window" to render into a window, or "disable" to disable the Glide driver.
 <li>MESA_GLX_FORCE_ALPHA - if set, forces RGB windows to have an alpha channel.
 <li>MESA_GLX_DEPTH_BITS - specifies default number of bits for depth buffer.
 <li>MESA_GLX_ALPHA_BITS - specifies default number of bits for alpha channel.
@@ -134,6 +140,8 @@ Mesa EGL supports different sets of environment variables.  See the
 <li>SOFTPIPE_DUMP_GS - if set, the softpipe driver will print geometry shaders
     to stderr
 <li>SOFTPIPE_NO_RAST - if set, rasterization is no-op'd.  For profiling purposes.
+<li>SOFTPIPE_USE_LLVM - if set, the softpipe driver will try to use LLVM JIT for
+    vertex shading procesing.
 </ul>
 
 

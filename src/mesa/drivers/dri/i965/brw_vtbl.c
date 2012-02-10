@@ -49,7 +49,9 @@
 #include "brw_vs.h"
 #include "brw_wm.h"
 
-#include "../glsl/ralloc.h"
+#include "gen6_hiz.h"
+
+#include "glsl/ralloc.h"
 
 static void
 dri_bo_release(drm_intel_bo **bo)
@@ -68,7 +70,6 @@ static void brw_destroy_context( struct intel_context *intel )
 
    brw_destroy_state(brw);
    brw_draw_destroy( brw );
-   brw_clear_validated_bos(brw);
    ralloc_free(brw->wm.compile_data);
 
    dri_bo_release(&brw->curbe.curbe_bo);
@@ -94,34 +95,10 @@ brw_update_draw_buffer(struct intel_context *intel)
 {
    struct gl_context *ctx = &intel->ctx;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
-   struct intel_renderbuffer *irbDepth = NULL, *irbStencil = NULL;
-   bool fb_has_hiz = intel_framebuffer_has_hiz(fb);
 
    if (!fb) {
       /* this can happen during the initial context initialization */
       return;
-   }
-
-   /*
-    * If intel_context is using separate stencil, but the depth attachment
-    * (gl_framebuffer.Attachment[BUFFER_DEPTH]) has a packed depth/stencil
-    * format, then we must install the real depth buffer at fb->_DepthBuffer
-    * and set fb->_DepthBuffer->Wrapped before calling _mesa_update_framebuffer.
-    * Otherwise, _mesa_update_framebuffer will create and install a swras
-    * depth wrapper instead.
-    *
-    * Ditto for stencil.
-    */
-   irbDepth = intel_get_renderbuffer(fb, BUFFER_DEPTH);
-   if (irbDepth && irbDepth->Base.Format == MESA_FORMAT_X8_Z24) {
-      _mesa_reference_renderbuffer(&fb->_DepthBuffer, &irbDepth->Base);
-      irbDepth->Base.Wrapped = fb->Attachment[BUFFER_DEPTH].Renderbuffer;
-   }
-
-   irbStencil = intel_get_renderbuffer(fb, BUFFER_STENCIL);
-   if (irbStencil && irbStencil->Base.Format == MESA_FORMAT_S8) {
-      _mesa_reference_renderbuffer(&fb->_StencilBuffer, &irbStencil->Base);
-      irbStencil->Base.Wrapped = fb->Attachment[BUFFER_STENCIL].Renderbuffer;
    }
 
    /* Do this here, not core Mesa, since this function is called from
@@ -140,18 +117,6 @@ brw_update_draw_buffer(struct intel_context *intel)
        */
       /*_mesa_debug(ctx, "DrawBuffer: incomplete user FBO\n");*/
       return;
-   }
-
-   /* Check some stencil invariants.  These should probably be in
-    * emit_depthbuffer().
-    */
-   if (irbStencil && irbStencil->region) {
-      if (!intel->has_separate_stencil)
-	 assert(irbStencil->Base.Format == MESA_FORMAT_S8_Z24);
-      if (fb_has_hiz || intel->must_use_separate_stencil)
-	 assert(irbStencil->Base.Format == MESA_FORMAT_S8);
-      if (irbStencil->Base.Format == MESA_FORMAT_S8)
-	 assert(intel->has_separate_stencil);
    }
 
    /* Mesa's Stencil._Enabled field is updated when
@@ -210,6 +175,14 @@ static void brw_new_batch( struct intel_context *intel )
     */
    intel->batch.need_workaround_flush = true;
 
+   brw->state_batch_count = 0;
+
+   /* Gen7 needs to track what the real transform feedback vertex count was at
+    * the start of the batch, since the kernel will be resetting the offset to
+    * 0.
+    */
+   brw->sol.offset_0_batch_start = brw->sol.svbi_0_starting_index;
+
    brw->vb.nr_current_buffers = 0;
    brw->ib.type = -1;
 
@@ -231,10 +204,19 @@ static void brw_invalidate_state( struct intel_context *intel, GLuint new_state 
 static bool brw_is_hiz_depth_format(struct intel_context *intel,
                                     gl_format format)
 {
-   /* In the future, this will support Z_FLOAT32. */
-   return intel->has_hiz && (format == MESA_FORMAT_X8_Z24);
-}
+   if (!intel->has_hiz)
+      return false;
 
+   switch (format) {
+   case MESA_FORMAT_Z32_FLOAT:
+   case MESA_FORMAT_Z32_FLOAT_X24S8:
+   case MESA_FORMAT_X8_Z24:
+   case MESA_FORMAT_S8_Z24:
+      return true;
+   default:
+      return false;
+   }
+}
 
 void brwInitVtbl( struct brw_context *brw )
 {
@@ -252,4 +234,15 @@ void brwInitVtbl( struct brw_context *brw )
    brw->intel.vtbl.debug_batch = brw_debug_batch;
    brw->intel.vtbl.render_target_supported = brw_render_target_supported;
    brw->intel.vtbl.is_hiz_depth_format = brw_is_hiz_depth_format;
+
+   if (brw->intel.has_hiz) {
+      brw->intel.vtbl.resolve_depth_slice = gen6_resolve_depth_slice;
+      brw->intel.vtbl.resolve_hiz_slice = gen6_resolve_hiz_slice;
+   }
+
+   if (brw->intel.gen >= 7) {
+      gen7_init_vtable_surface_functions(brw);
+   } else if (brw->intel.gen >= 4) {
+      gen4_init_vtable_surface_functions(brw);
+   }
 }

@@ -913,7 +913,6 @@ lp_build_cube_lookup(struct lp_build_sample_context *bld,
    LLVMValueRef arx_ge_ary, arx_ge_arz;
    LLVMValueRef ary_ge_arx, ary_ge_arz;
    LLVMValueRef arx_ge_ary_arz, ary_ge_arx_arz;
-   LLVMValueRef rx_pos, ry_pos, rz_pos;
 
    assert(bld->coord_bld.type.length == 4);
 
@@ -942,10 +941,6 @@ lp_build_cube_lookup(struct lp_build_sample_context *bld,
    arx_ge_ary_arz = LLVMBuildAnd(builder, arx_ge_ary, arx_ge_arz, "");
    ary_ge_arx_arz = LLVMBuildAnd(builder, ary_ge_arx, ary_ge_arz, "");
 
-   rx_pos = LLVMBuildFCmp(builder, LLVMRealUGE, rx, float_bld->zero, "");
-   ry_pos = LLVMBuildFCmp(builder, LLVMRealUGE, ry, float_bld->zero, "");
-   rz_pos = LLVMBuildFCmp(builder, LLVMRealUGE, rz, float_bld->zero, "");
-
    {
       struct lp_build_if_state if_ctx;
       LLVMValueRef face_s_var;
@@ -973,8 +968,6 @@ lp_build_cube_lookup(struct lp_build_sample_context *bld,
       lp_build_else(&if_ctx);
       {
          struct lp_build_if_state if_ctx2;
-
-         ary_ge_arx_arz = LLVMBuildAnd(builder, ary_ge_arx, ary_ge_arz, "");
 
          lp_build_if(&if_ctx2, bld->gallivm, ary_ge_arx_arz);
          {

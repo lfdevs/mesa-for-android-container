@@ -425,6 +425,66 @@ DRI_CONF_OPT_BEGIN(hyperz,bool,def) \
         DRI_CONF_DESC(sv,"Använd HyperZ för att maximera prestandan") \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_PP_CELSHADE(def) \
+DRI_CONF_OPT_BEGIN_V(pp_celshade,enum,def,"0:1") \
+        DRI_CONF_DESC(en,"A post-processing filter to cel-shade the output") \
+        DRI_CONF_DESC(de,"A post-processing filter to cel-shade the output") \
+        DRI_CONF_DESC(es,"A post-processing filter to cel-shade the output") \
+        DRI_CONF_DESC(nl,"A post-processing filter to cel-shade the output") \
+        DRI_CONF_DESC(fr,"A post-processing filter to cel-shade the output") \
+        DRI_CONF_DESC(sv,"A post-processing filter to cel-shade the output") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_PP_NORED(def) \
+DRI_CONF_OPT_BEGIN_V(pp_nored,enum,def,"0:1") \
+        DRI_CONF_DESC(en,"A post-processing filter to remove the red channel") \
+        DRI_CONF_DESC(de,"A post-processing filter to remove the red channel") \
+        DRI_CONF_DESC(es,"A post-processing filter to remove the red channel") \
+        DRI_CONF_DESC(nl,"A post-processing filter to remove the red channel") \
+        DRI_CONF_DESC(fr,"A post-processing filter to remove the red channel") \
+        DRI_CONF_DESC(sv,"A post-processing filter to remove the red channel") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_PP_NOGREEN(def) \
+DRI_CONF_OPT_BEGIN_V(pp_nogreen,enum,def,"0:1") \
+        DRI_CONF_DESC(en,"A post-processing filter to remove the green channel") \
+        DRI_CONF_DESC(de,"A post-processing filter to remove the green channel") \
+        DRI_CONF_DESC(es,"A post-processing filter to remove the green channel") \
+        DRI_CONF_DESC(nl,"A post-processing filter to remove the green channel") \
+        DRI_CONF_DESC(fr,"A post-processing filter to remove the green channel") \
+        DRI_CONF_DESC(sv,"A post-processing filter to remove the green channel") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_PP_NOBLUE(def) \
+DRI_CONF_OPT_BEGIN_V(pp_noblue,enum,def,"0:1") \
+        DRI_CONF_DESC(en,"A post-processing filter to remove the blue channel") \
+        DRI_CONF_DESC(de,"A post-processing filter to remove the blue channel") \
+        DRI_CONF_DESC(es,"A post-processing filter to remove the blue channel") \
+        DRI_CONF_DESC(nl,"A post-processing filter to remove the blue channel") \
+        DRI_CONF_DESC(fr,"A post-processing filter to remove the blue channel") \
+        DRI_CONF_DESC(sv,"A post-processing filter to remove the blue channel") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_PP_JIMENEZMLAA(def,min,max) \
+DRI_CONF_OPT_BEGIN_V(pp_jimenezmlaa,int,def, # min ":" # max ) \
+        DRI_CONF_DESC(en,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality") \
+        DRI_CONF_DESC(de,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality") \
+        DRI_CONF_DESC(es,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality") \
+        DRI_CONF_DESC(nl,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality") \
+        DRI_CONF_DESC(fr,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality") \
+        DRI_CONF_DESC(sv,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_PP_JIMENEZMLAA_COLOR(def,min,max) \
+DRI_CONF_OPT_BEGIN_V(pp_jimenezmlaa_color,int,def, # min ":" # max ) \
+        DRI_CONF_DESC(en,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality. Color version, usable with 2d GL apps") \
+        DRI_CONF_DESC(de,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality. Color version, usable with 2d GL apps") \
+        DRI_CONF_DESC(es,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality. Color version, usable with 2d GL apps") \
+        DRI_CONF_DESC(nl,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality. Color version, usable with 2d GL apps") \
+        DRI_CONF_DESC(fr,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality. Color version, usable with 2d GL apps") \
+        DRI_CONF_DESC(sv,"Morphological anti-aliasing based on Jimenez\' MLAA. 0 to disable, 8 for default quality. Color version, usable with 2d GL apps") \
+DRI_CONF_OPT_END
+
 #define DRI_CONF_MAX_TEXTURE_UNITS(def,min,max) \
 DRI_CONF_OPT_BEGIN_V(texture_units,int,def, # min ":" # max ) \
         DRI_CONF_DESC(en,"Number of texture units used") \
@@ -565,4 +625,14 @@ DRI_CONF_OPT_BEGIN(always_flush_cache,bool,def) \
         DRI_CONF_DESC(nl,"Enable flushing GPU caches with each draw call") \
         DRI_CONF_DESC(fr,"Enable flushing GPU caches with each draw call") \
         DRI_CONF_DESC(sv,"Enable flushing GPU caches with each draw call") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_FORCE_GLSL_EXTENSIONS_WARN(def) \
+DRI_CONF_OPT_BEGIN(force_glsl_extensions_warn,bool,def) \
+        DRI_CONF_DESC(en,"Force GLSL extension default behavior to 'warn'") \
+        DRI_CONF_DESC(de,"Force GLSL extension default behavior to 'warn'") \
+        DRI_CONF_DESC(es,"Force GLSL extension default behavior to 'warn'") \
+        DRI_CONF_DESC(nl,"Force GLSL extension default behavior to 'warn'") \
+        DRI_CONF_DESC(fr,"Force GLSL extension default behavior to 'warn'") \
+        DRI_CONF_DESC(sv,"Force GLSL extension default behavior to 'warn'") \
 DRI_CONF_OPT_END

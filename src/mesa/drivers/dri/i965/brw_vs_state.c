@@ -37,13 +37,14 @@
 #include "main/macros.h"
 
 static void
-brw_prepare_vs_unit(struct brw_context *brw)
+brw_upload_vs_unit(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
    struct brw_vs_unit_state *vs;
 
-   vs = brw_state_batch(brw, sizeof(*vs), 32, &brw->vs.state_offset);
+   vs = brw_state_batch(brw, AUB_TRACE_VS_STATE,
+			sizeof(*vs), 32, &brw->vs.state_offset);
    memset(vs, 0, sizeof(*vs));
 
    /* BRW_NEW_PROGRAM_CACHE | CACHE_NEW_VS_PROG */
@@ -61,7 +62,7 @@ brw_prepare_vs_unit(struct brw_context *brw)
     * and those dwords will be written to the second URB handle when we
     * brw_urb_WRITE() results.
     */
-   /* Disable single program flow on Ironlake.  We cannot reliably get
+   /* Force single program flow on Ironlake.  We cannot reliably get
     * all applications working without it.  See:
     * https://bugs.freedesktop.org/show_bug.cgi?id=29172
     *
@@ -70,19 +71,25 @@ brw_prepare_vs_unit(struct brw_context *brw)
    */
    vs->thread1.single_program_flow = (intel->gen == 5);
 
-   /* BRW_NEW_NR_VS_SURFACES */
-   if (intel->gen == 5)
-      vs->thread1.binding_table_entry_count = 0; /* hardware requirement */
-   else
-      vs->thread1.binding_table_entry_count = brw->vs.nr_surfaces;
+   vs->thread1.binding_table_entry_count = 0;
+
+   if (brw->vs.prog_data->total_scratch != 0) {
+      vs->thread2.scratch_space_base_pointer =
+	 brw->vs.scratch_bo->offset >> 10; /* reloc */
+      vs->thread2.per_thread_scratch_space =
+	 ffs(brw->vs.prog_data->total_scratch) - 11;
+   } else {
+      vs->thread2.scratch_space_base_pointer = 0;
+      vs->thread2.per_thread_scratch_space = 0;
+   }
 
    vs->thread3.urb_entry_read_length = brw->vs.prog_data->urb_read_length;
    vs->thread3.const_urb_entry_read_length = brw->vs.prog_data->curb_read_length;
    vs->thread3.dispatch_grf_start_reg = 1;
    vs->thread3.urb_entry_read_offset = 0;
 
-   /* BRW_NEW_CURBE_OFFSETS, _NEW_TRANSFORM */
-   if (ctx->Transform.ClipPlanesEnabled) {
+   /* BRW_NEW_CURBE_OFFSETS, _NEW_TRANSFORM, BRW_NEW_VERTEX_PROGRAM */
+   if (ctx->Transform.ClipPlanesEnabled && !brw->vs.prog_data->uses_new_param_layout) {
       /* Note that we read in the userclip planes as well, hence
        * clip_start:
        */
@@ -131,7 +138,7 @@ brw_prepare_vs_unit(struct brw_context *brw)
    vs->thread4.urb_entry_allocation_size = brw->urb.vsize - 1;
 
    vs->thread4.max_threads = CLAMP(brw->urb.nr_vs_entries / 2,
-				   1, brw->vs_max_threads) - 1;
+				   1, brw->max_vs_threads) - 1;
 
    /* No samplers for ARB_vp programs:
     */
@@ -146,6 +153,16 @@ brw_prepare_vs_unit(struct brw_context *brw)
     */
    vs->vs6.vs_enable = 1;
 
+   /* Emit scratch space relocation */
+   if (brw->vs.prog_data->total_scratch != 0) {
+      drm_intel_bo_emit_reloc(intel->batch.bo,
+			      brw->vs.state_offset +
+			      offsetof(struct brw_vs_unit_state, thread2),
+			      brw->vs.scratch_bo,
+			      vs->thread2.per_thread_scratch_space,
+			      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER);
+   }
+
    brw->state.dirty.cache |= CACHE_NEW_VS_UNIT;
 }
 
@@ -155,9 +172,9 @@ const struct brw_tracked_state brw_vs_unit = {
       .brw   = (BRW_NEW_BATCH |
 		BRW_NEW_PROGRAM_CACHE |
 		BRW_NEW_CURBE_OFFSETS |
-                BRW_NEW_NR_VS_SURFACES |
-		BRW_NEW_URB_FENCE),
+		BRW_NEW_URB_FENCE |
+                BRW_NEW_VERTEX_PROGRAM),
       .cache = CACHE_NEW_VS_PROG
    },
-   .prepare = brw_prepare_vs_unit,
+   .emit = brw_upload_vs_unit,
 };

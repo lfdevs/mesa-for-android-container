@@ -56,9 +56,13 @@
 #include "xm_api.h"
 #include "xm_st.h"
 
+#include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
-#include "pipe/p_context.h"
+#include "pipe/p_state.h"
+
+#include "util/u_atomic.h"
+#include "util/u_inlines.h"
 
 #include "xm_public.h"
 #include <GL/glx.h>
@@ -390,8 +394,8 @@ choose_depth_stencil_format(XMesaDisplay xmdpy, int depth, int stencil)
       formats[count++] = PIPE_FORMAT_Z24X8_UNORM;
    }
    if (depth <= 24 && stencil <= 8) {
-      formats[count++] = PIPE_FORMAT_S8_USCALED_Z24_UNORM;
-      formats[count++] = PIPE_FORMAT_Z24_UNORM_S8_USCALED;
+      formats[count++] = PIPE_FORMAT_S8_UINT_Z24_UNORM;
+      formats[count++] = PIPE_FORMAT_Z24_UNORM_S8_UINT;
    }
    if (depth <= 32 && stencil == 0) {
       formats[count++] = PIPE_FORMAT_Z32_UNORM;
@@ -859,6 +863,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
 {
    XMesaDisplay xmdpy = xmesa_init_display(v->display);
    struct st_context_attribs attribs;
+   enum st_context_error ctx_err = 0;
    XMesaContext c;
 
    if (!xmdpy)
@@ -874,7 +879,6 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
    c->xm_read_buffer = NULL;
 
    memset(&attribs, 0, sizeof(attribs));
-   attribs.profile = ST_PROFILE_DEFAULT;
    attribs.visual = v->stvis;
    attribs.major = major;
    attribs.minor = minor;
@@ -884,13 +888,26 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
       attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
    if (contextFlags & GLX_CONTEXT_ROBUST_ACCESS_BIT_ARB)
       attribs.flags |= ST_CONTEXT_FLAG_ROBUST_ACCESS;
-   if (profileMask & GLX_CONTEXT_CORE_PROFILE_BIT_ARB)
-      attribs.flags |= ST_CONTEXT_FLAG_CORE_PROFILE;
-   if (profileMask & GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB)
-      attribs.flags |= ST_CONTEXT_FLAG_COMPATIBLE_PROFILE;
 
-   c->st = stapi->create_context(stapi, xmdpy->smapi,
-         &attribs, (share_list) ? share_list->st : NULL);
+   /* There are no profiles before OpenGL 3.2.  The
+    * GLX_ARB_create_context_profile spec says:
+    *
+    *     "If the requested OpenGL version is less than 3.2,
+    *     GLX_CONTEXT_PROFILE_MASK_ARB is ignored and the functionality of the
+    *     context is determined solely by the requested version."
+    *
+    * The spec also says:
+    *
+    *     "The default value for GLX_CONTEXT_PROFILE_MASK_ARB is
+    *     GLX_CONTEXT_CORE_PROFILE_BIT_ARB."
+    */
+   attribs.profile = ST_PROFILE_DEFAULT;
+   if ((major > 3 || (major == 3 && minor >= 2))
+       && ((profileMask & GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB) == 0))
+      attribs.profile = ST_PROFILE_OPENGL_CORE;
+
+   c->st = stapi->create_context(stapi, xmdpy->smapi, &attribs,
+         &ctx_err, (share_list) ? share_list->st : NULL);
    if (c->st == NULL)
       goto fail;
 
@@ -1113,10 +1130,7 @@ XMesaDestroyBuffer(XMesaBuffer b)
 void
 xmesa_notify_invalid_buffer(XMesaBuffer b)
 {
-   XMesaContext xmctx = XMesaGetCurrentContext();
-
-   if (xmctx && xmctx->xm_buffer == b)
-      xmctx->st->notify_invalid_framebuffer(xmctx->st, b->stfb);
+   p_atomic_inc(&b->stfb->stamp);
 }
 
 
@@ -1126,11 +1140,18 @@ xmesa_notify_invalid_buffer(XMesaBuffer b)
 void
 xmesa_check_buffer_size(XMesaBuffer b)
 {
+   GLuint old_width, old_height;
+
    if (b->type == PBUFFER)
       return;
 
+   old_width = b->width;
+   old_height = b->height;
+
    xmesa_get_window_size(b->xm_visual->display, b, &b->width, &b->height);
-   xmesa_notify_invalid_buffer(b);
+
+   if (b->width != old_width || b->height != old_height)
+      xmesa_notify_invalid_buffer(b);
 }
 
 
@@ -1301,12 +1322,103 @@ void XMesaGarbageCollect( void )
 }
 
 
+static enum st_attachment_type xmesa_attachment_type(int glx_attachment)
+{
+   switch(glx_attachment) {
+      case GLX_FRONT_LEFT_EXT:
+         return ST_ATTACHMENT_FRONT_LEFT;
+      case GLX_FRONT_RIGHT_EXT:
+         return ST_ATTACHMENT_FRONT_RIGHT;
+      case GLX_BACK_LEFT_EXT:
+         return ST_ATTACHMENT_BACK_LEFT;
+      case GLX_BACK_RIGHT_EXT:
+         return ST_ATTACHMENT_BACK_RIGHT;
+      default:
+         assert(0);
+         return ST_ATTACHMENT_FRONT_LEFT;
+   }
+}
 
 
 PUBLIC void
 XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
                   const int *attrib_list)
 {
+   struct st_context_iface *st = stapi->get_current(stapi);
+   struct st_framebuffer_iface* stfbi = drawable->stfb;
+   struct pipe_resource *res;
+   int x, y, w, h;
+   enum st_attachment_type st_attachment = xmesa_attachment_type(buffer);
+
+   x = 0;
+   y = 0;
+   w = drawable->width;
+   h = drawable->height;
+
+   /* We need to validate our attachments before using them,
+    * in case the texture doesn't exist yet. */
+   xmesa_st_framebuffer_validate_textures(stfbi, w, h, 1 << st_attachment);
+   res = xmesa_get_attachment(stfbi, st_attachment);
+
+   if (res) {
+      struct pipe_context* pipe = xmesa_get_context(stfbi);
+      enum pipe_format internal_format = res->format;
+      struct pipe_transfer *tex_xfer;
+      char *map;
+      int line, ximage_stride;
+      XImage *img;
+
+      internal_format = choose_pixel_format(drawable->xm_visual);
+
+      tex_xfer = pipe_get_transfer(pipe, res,
+                                   0, 0,    /* level, layer */
+                                   PIPE_TRANSFER_WRITE,
+                                   x, y,
+                                   w, h);
+      if (!tex_xfer)
+         return;
+
+      /* Grab the XImage that we want to turn into a texture. */
+      img = XGetImage(dpy,
+                      drawable->ws.drawable,
+                      x, y,
+                      w, h,
+                      AllPlanes,
+                      ZPixmap);
+
+      if (!img) {
+         pipe_transfer_destroy(pipe, tex_xfer);
+         return;
+      }
+
+      map = pipe_transfer_map(pipe, tex_xfer);
+
+      if (!map) {
+         pipe_transfer_destroy(pipe, tex_xfer);
+         return;
+      }
+
+      /* The pipe transfer has a pitch rounded up to the nearest 64 pixels.
+         We assume 32 bit pixels. */
+      ximage_stride = w * 4;
+
+      for (line = 0; line < h; line++)
+         memcpy(&map[line * tex_xfer->stride],
+                &img->data[line * ximage_stride],
+                ximage_stride);
+
+      pipe_transfer_unmap(pipe, tex_xfer);
+
+      pipe_transfer_destroy(pipe, tex_xfer);
+
+      st->teximage(st,
+                   ST_TEXTURE_2D,
+                   0,    /* level */
+                   internal_format,
+                   res,
+                   FALSE /* no mipmap */);
+
+   }
 }
 
 

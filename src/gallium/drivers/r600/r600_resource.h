@@ -24,7 +24,7 @@
 #define R600_RESOURCE_H
 
 #include "util/u_transfer.h"
-#include "util/u_vbuf_mgr.h"
+#include "util/u_vbuf.h"
 
 /* flag to indicate a resource is to be used as a transfer so should not be tiled */
 #define R600_RESOURCE_FLAG_TRANSFER     PIPE_RESOURCE_FLAG_DRV_PRIV
@@ -39,19 +39,14 @@ struct r600_transfer {
 	struct pipe_resource		*staging_texture;
 };
 
-/* This gets further specialized into either buffer or texture
- * structures. Use the vtbl struct to choose between the two
- * underlying implementations.
- */
-struct r600_resource {
-	struct u_vbuf_resource		b;
-	struct r600_bo			*bo;
-	u32				size;
-	unsigned			bo_size;
-};
-
 struct r600_resource_texture {
 	struct r600_resource		resource;
+
+	/* If this resource is a depth-stencil buffer on evergreen, this contains
+	 * the depth part of the format. There is a separate stencil resource
+	 * for the stencil buffer below. */
+	enum pipe_format		real_format;
+
 	unsigned			offset[PIPE_MAX_TEXTURE_LEVELS];
 	unsigned			pitch_in_bytes[PIPE_MAX_TEXTURE_LEVELS];  /* transfer */
 	unsigned			pitch_in_blocks[PIPE_MAX_TEXTURE_LEVELS]; /* texture resource */
@@ -62,23 +57,12 @@ struct r600_resource_texture {
 	unsigned			tile_type;
 	unsigned			depth;
 	unsigned			dirty_db;
+	struct r600_resource_texture    *stencil; /* Stencil is in a separate buffer on Evergreen. */
 	struct r600_resource_texture	*flushed_depth_texture;
 	boolean				is_flushing_texture;
-
-	/* on some cards we have to use integer 64/128-bit types
-	   for s3tc blits, do this until gallium grows int formats */
-	boolean force_int_type;
 };
 
 #define R600_TEX_IS_TILED(tex, level) ((tex)->array_mode[level] != V_038000_ARRAY_LINEAR_GENERAL && (tex)->array_mode[level] != V_038000_ARRAY_LINEAR_ALIGNED)
-
-#define R600_BUFFER_MAGIC 0xabcd1600
-
-/* XXX this could be removed */
-struct r600_resource_buffer {
-	struct r600_resource		r;
-	uint32_t			magic;
-};
 
 struct r600_surface {
 	struct pipe_surface		base;
@@ -94,14 +78,9 @@ struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen,
 						const struct pipe_resource *base,
 						struct winsys_handle *whandle);
 
-/* r600_buffer */
-static INLINE struct r600_resource_buffer *r600_buffer(struct pipe_resource *buffer)
+static INLINE struct r600_resource *r600_resource(struct pipe_resource *r)
 {
-	if (buffer) {
-		assert(((struct r600_resource_buffer *)buffer)->magic == R600_BUFFER_MAGIC);
-		return (struct r600_resource_buffer *)buffer;
-	}
-	return NULL;
+	return (struct r600_resource*)r;
 }
 
 int r600_texture_depth_flush(struct pipe_context *ctx, struct pipe_resource *texture, boolean just_create);
@@ -121,6 +100,6 @@ void r600_texture_transfer_unmap(struct pipe_context *ctx,
 
 struct r600_pipe_context;
 
-void r600_upload_const_buffer(struct r600_pipe_context *rctx, struct r600_resource_buffer **rbuffer, uint32_t *offset);
+void r600_upload_const_buffer(struct r600_pipe_context *rctx, struct r600_resource **rbuffer, uint32_t *offset);
 
 #endif

@@ -73,6 +73,7 @@
 #include "main/teximage.h"
 #include "glapi/glthread.h"
 #include "swrast/swrast.h"
+#include "swrast/s_renderbuffer.h"
 #include "swrast_setup/swrast_setup.h"
 #include "vbo/vbo.h"
 #include "tnl/tnl.h"
@@ -85,68 +86,6 @@
  * Global X driver lock
  */
 _glthread_Mutex _xmesa_lock;
-
-
-
-/**
- * Lookup tables for HPCR pixel format:
- */
-static short hpcr_rgbTbl[3][256] = {
-{
- 16,  16,  17,  17,  18,  18,  19,  19,  20,  20,  21,  21,  22,  22,  23,  23,
- 24,  24,  25,  25,  26,  26,  27,  27,  28,  28,  29,  29,  30,  30,  31,  31,
- 32,  32,  33,  33,  34,  34,  35,  35,  36,  36,  37,  37,  38,  38,  39,  39,
- 32,  33,  34,  35,  36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  47,
- 48,  49,  50,  51,  52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  62,  63,
- 64,  65,  66,  67,  68,  69,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,
- 80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,  91,  92,  93,  94,  95,
- 96,  97,  98,  99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
-112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
-128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143,
-144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
-160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
-176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191,
-192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207,
-208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
-224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239
-},
-{
- 16,  16,  17,  17,  18,  18,  19,  19,  20,  20,  21,  21,  22,  22,  23,  23,
- 24,  24,  25,  25,  26,  26,  27,  27,  28,  28,  29,  29,  30,  30,  31,  31,
- 32,  32,  33,  33,  34,  34,  35,  35,  36,  36,  37,  37,  38,  38,  39,  39,
- 32,  33,  34,  35,  36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  47,
- 48,  49,  50,  51,  52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  62,  63,
- 64,  65,  66,  67,  68,  69,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,
- 80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,  91,  92,  93,  94,  95,
- 96,  97,  98,  99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
-112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
-128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143,
-144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
-160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
-176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191,
-192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207,
-208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
-224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239
-},
-{
- 32,  32,  33,  33,  34,  34,  35,  35,  36,  36,  37,  37,  38,  38,  39,  39,
- 40,  40,  41,  41,  42,  42,  43,  43,  44,  44,  45,  45,  46,  46,  47,  47,
- 48,  48,  49,  49,  50,  50,  51,  51,  52,  52,  53,  53,  54,  54,  55,  55,
- 56,  56,  57,  57,  58,  58,  59,  59,  60,  60,  61,  61,  62,  62,  63,  63,
- 64,  64,  65,  65,  66,  66,  67,  67,  68,  68,  69,  69,  70,  70,  71,  71,
- 72,  72,  73,  73,  74,  74,  75,  75,  76,  76,  77,  77,  78,  78,  79,  79,
- 80,  80,  81,  81,  82,  82,  83,  83,  84,  84,  85,  85,  86,  86,  87,  87,
- 80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,  91,  92,  93,  94,  95,
- 96,  97,  98,  99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
-112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
-128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143,
-144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
-160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
-176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191,
-192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207,
-208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223
-}
-};
 
 
 
@@ -175,16 +114,16 @@ static int host_byte_order( void )
 static int check_for_xshm( XMesaDisplay *display )
 {
 #if defined(USE_XSHM) 
-   int major, minor, ignore;
-   Bool pixmaps;
+   int ignore;
 
    if (XQueryExtension( display, "MIT-SHM", &ignore, &ignore, &ignore )) {
-      if (XShmQueryVersion( display, &major, &minor, &pixmaps )==True) {
-	 return (pixmaps==True) ? 2 : 1;
-      }
-      else {
-	 return 0;
-      }
+      /* Note: we're no longer calling XShmQueryVersion() here.  It seems
+       * to be flakey (triggers a spurious X protocol error when we close
+       * one display connection and start using a new one.  XShm has been
+       * around a long time and hasn't changed so if MIT_SHM is supported
+       * we assume we're good to go.
+       */
+      return 2;
    }
    else {
       return 0;
@@ -361,7 +300,7 @@ create_xmesa_buffer(XMesaDrawable d, BufferType type,
    /*
     * Front renderbuffer
     */
-   b->frontxrb = xmesa_new_renderbuffer(NULL, 0, &vis->mesa_visual, GL_FALSE);
+   b->frontxrb = xmesa_new_renderbuffer(NULL, 0, vis, GL_FALSE);
    if (!b->frontxrb) {
       free(b);
       return NULL;
@@ -370,13 +309,13 @@ create_xmesa_buffer(XMesaDrawable d, BufferType type,
    b->frontxrb->drawable = d;
    b->frontxrb->pixmap = (XMesaPixmap) d;
    _mesa_add_renderbuffer(&b->mesa_buffer, BUFFER_FRONT_LEFT,
-                          &b->frontxrb->Base);
+                          &b->frontxrb->Base.Base);
 
    /*
     * Back renderbuffer
     */
    if (vis->mesa_visual.doubleBufferMode) {
-      b->backxrb = xmesa_new_renderbuffer(NULL, 0, &vis->mesa_visual, GL_TRUE);
+      b->backxrb = xmesa_new_renderbuffer(NULL, 0, vis, GL_TRUE);
       if (!b->backxrb) {
          /* XXX free front xrb too */
          free(b);
@@ -387,34 +326,19 @@ create_xmesa_buffer(XMesaDrawable d, BufferType type,
       b->db_mode = vis->ximage_flag ? BACK_XIMAGE : BACK_PIXMAP;
       
       _mesa_add_renderbuffer(&b->mesa_buffer, BUFFER_BACK_LEFT,
-                             &b->backxrb->Base);
-   }
-
-   /*
-    * Software alpha planes
-    */
-   if (vis->mesa_visual.alphaBits > 0
-       && vis->undithered_pf != PF_8A8B8G8R
-       && vis->undithered_pf != PF_8A8R8G8B) {
-      /* Visual has alpha, but pixel format doesn't support it.
-       * We'll use an alpha renderbuffer wrapper.
-       */
-      b->swAlpha = GL_TRUE;
-   }
-   else {
-      b->swAlpha = GL_FALSE;
+                             &b->backxrb->Base.Base);
    }
 
    /*
     * Other renderbuffer (depth, stencil, etc)
     */
-   _mesa_add_soft_renderbuffers(&b->mesa_buffer,
-                                GL_FALSE,  /* color */
-                                vis->mesa_visual.haveDepthBuffer,
-                                vis->mesa_visual.haveStencilBuffer,
-                                vis->mesa_visual.haveAccumBuffer,
-                                b->swAlpha,
-                                vis->mesa_visual.numAuxBuffers > 0 );
+   _swrast_add_soft_renderbuffers(&b->mesa_buffer,
+                                  GL_FALSE,  /* color */
+                                  vis->mesa_visual.haveDepthBuffer,
+                                  vis->mesa_visual.haveStencilBuffer,
+                                  vis->mesa_visual.haveAccumBuffer,
+                                  GL_FALSE,  /* software alpha buffer */
+                                  vis->mesa_visual.numAuxBuffers > 0 );
 
    /* GLX_EXT_texture_from_pixmap */
    b->TextureTarget = 0;
@@ -485,345 +409,11 @@ xmesa_free_buffer(XMesaBuffer buffer)
 }
 
 
-/**
- * Copy X color table stuff from one XMesaBuffer to another.
- */
-static void
-copy_colortable_info(XMesaBuffer dst, const XMesaBuffer src)
-{
-   memcpy(dst->color_table, src->color_table, sizeof(src->color_table));
-   memcpy(dst->pixel_to_r, src->pixel_to_r, sizeof(src->pixel_to_r));
-   memcpy(dst->pixel_to_g, src->pixel_to_g, sizeof(src->pixel_to_g));
-   memcpy(dst->pixel_to_b, src->pixel_to_b, sizeof(src->pixel_to_b));
-   dst->num_alloced = src->num_alloced;
-   memcpy(dst->alloced_colors, src->alloced_colors,
-          sizeof(src->alloced_colors));
-}
-
 
 
 /**********************************************************************/
 /*****                   Misc Private Functions                   *****/
 /**********************************************************************/
-
-
-/**
- * A replacement for XAllocColor.  This function should never
- * fail to allocate a color.  When XAllocColor fails, we return
- * the nearest matching color.  If we have to allocate many colors
- * this function isn't too efficient; the XQueryColors() could be
- * done just once.
- * Written by Michael Pichler, Brian Paul, Mark Kilgard
- * Input:  dpy - X display
- *         cmap - X colormap
- *         cmapSize - size of colormap
- * In/Out: color - the XColor struct
- * Output:  exact - 1=exact color match, 0=closest match
- *          alloced - 1=XAlloc worked, 0=XAlloc failed
- */
-static void
-noFaultXAllocColor( int client,
-                    XMesaDisplay *dpy,
-                    XMesaColormap cmap,
-                    int cmapSize,
-                    XMesaColor *color,
-                    int *exact, int *alloced )
-{
-   /* we'll try to cache ctable for better remote display performance */
-   static Display *prevDisplay = NULL;
-   static XMesaColormap prevCmap = 0;
-   static int prevCmapSize = 0;
-   static XMesaColor *ctable = NULL;
-   XMesaColor subColor;
-   int i, bestmatch;
-   double mindist;       /* 3*2^16^2 exceeds long int precision. */
-
-   (void) client;
-
-   /* First try just using XAllocColor. */
-   if (XAllocColor(dpy, cmap, color))
-   {
-      *exact = 1;
-      *alloced = 1;
-      return;
-   }
-
-   /* Alloc failed, search for closest match */
-
-   /* Retrieve color table entries. */
-   /* XXX alloca candidate. */
-   if (prevDisplay != dpy || prevCmap != cmap
-       || prevCmapSize != cmapSize || !ctable) {
-      /* free previously cached color table */
-      if (ctable)
-         free(ctable);
-      /* Get the color table from X */
-      ctable = (XMesaColor *) MALLOC(cmapSize * sizeof(XMesaColor));
-      assert(ctable);
-      for (i = 0; i < cmapSize; i++) {
-         ctable[i].pixel = i;
-      }
-      XQueryColors(dpy, cmap, ctable, cmapSize);
-      prevDisplay = dpy;
-      prevCmap = cmap;
-      prevCmapSize = cmapSize;
-   }
-
-   /* Find best match. */
-   bestmatch = -1;
-   mindist = 0.0;
-   for (i = 0; i < cmapSize; i++) {
-      double dr = 0.30 * ((double) color->red - (double) ctable[i].red);
-      double dg = 0.59 * ((double) color->green - (double) ctable[i].green);
-      double db = 0.11 * ((double) color->blue - (double) ctable[i].blue);
-      double dist = dr * dr + dg * dg + db * db;
-      if (bestmatch < 0 || dist < mindist) {
-         bestmatch = i;
-         mindist = dist;
-      }
-   }
-
-   /* Return result. */
-   subColor.red   = ctable[bestmatch].red;
-   subColor.green = ctable[bestmatch].green;
-   subColor.blue  = ctable[bestmatch].blue;
-   /* Try to allocate the closest match color.  This should only
-    * fail if the cell is read/write.  Otherwise, we're incrementing
-    * the cell's reference count.
-    */
-   if (XAllocColor(dpy, cmap, &subColor)) {
-      *alloced = 1;
-   }
-   else {
-      /* do this to work around a problem reported by Frank Ortega */
-      subColor.pixel = (unsigned long) bestmatch;
-      subColor.red   = ctable[bestmatch].red;
-      subColor.green = ctable[bestmatch].green;
-      subColor.blue  = ctable[bestmatch].blue;
-      subColor.flags = DoRed | DoGreen | DoBlue;
-      *alloced = 0;
-   }
-   /* don't free table, save it for next time */
-
-   *color = subColor;
-   *exact = 0;
-}
-
-
-
-/**
- * Do setup for PF_GRAYSCALE pixel format.
- * Note that buffer may be NULL.
- */
-static GLboolean
-setup_grayscale(int client, XMesaVisual v,
-                XMesaBuffer buffer, XMesaColormap cmap)
-{
-   if (GET_VISUAL_DEPTH(v)<4 || GET_VISUAL_DEPTH(v)>16) {
-      return GL_FALSE;
-   }
-
-   if (buffer) {
-      XMesaBuffer prevBuffer;
-
-      if (!cmap) {
-         return GL_FALSE;
-      }
-
-      prevBuffer = xmesa_find_buffer(v->display, cmap, buffer);
-      if (prevBuffer) {
-         /* Copy colormap stuff from previous XMesaBuffer which uses same
-          * X colormap.  Do this to avoid time spent in noFaultXAllocColor.
-          */
-         copy_colortable_info(buffer, prevBuffer);
-      }
-      else {
-         /* Allocate 256 shades of gray */
-         int gray;
-         int colorsfailed = 0;
-         for (gray=0;gray<256;gray++) {
-            GLint r = gamma_adjust( v->RedGamma,   gray, 255 );
-            GLint g = gamma_adjust( v->GreenGamma, gray, 255 );
-            GLint b = gamma_adjust( v->BlueGamma,  gray, 255 );
-            int exact, alloced;
-            XMesaColor xcol;
-            xcol.red   = (r << 8) | r;
-            xcol.green = (g << 8) | g;
-            xcol.blue  = (b << 8) | b;
-            noFaultXAllocColor( client, v->display,
-                                cmap, GET_COLORMAP_SIZE(v),
-                                &xcol, &exact, &alloced );
-            if (!exact) {
-               colorsfailed++;
-            }
-            if (alloced) {
-               assert(buffer->num_alloced<256);
-               buffer->alloced_colors[buffer->num_alloced] = xcol.pixel;
-               buffer->num_alloced++;
-            }
-
-            /*OLD
-            assert(gray < 576);
-            buffer->color_table[gray*3+0] = xcol.pixel;
-            buffer->color_table[gray*3+1] = xcol.pixel;
-            buffer->color_table[gray*3+2] = xcol.pixel;
-            assert(xcol.pixel < 65536);
-            buffer->pixel_to_r[xcol.pixel] = gray * 30 / 100;
-            buffer->pixel_to_g[xcol.pixel] = gray * 59 / 100;
-            buffer->pixel_to_b[xcol.pixel] = gray * 11 / 100;
-            */
-            buffer->color_table[gray] = xcol.pixel;
-            assert(xcol.pixel < 65536);
-            buffer->pixel_to_r[xcol.pixel] = gray;
-            buffer->pixel_to_g[xcol.pixel] = gray;
-            buffer->pixel_to_b[xcol.pixel] = gray;
-         }
-
-         if (colorsfailed && _mesa_getenv("MESA_DEBUG")) {
-            _mesa_warning(NULL,
-                  "Note: %d out of 256 needed colors do not match exactly.\n",
-                  colorsfailed );
-         }
-      }
-   }
-
-   v->dithered_pf = PF_Grayscale;
-   v->undithered_pf = PF_Grayscale;
-   return GL_TRUE;
-}
-
-
-
-/**
- * Setup RGB rendering for a window with a PseudoColor, StaticColor,
- * or 8-bit TrueColor visual visual.  We try to allocate a palette of 225
- * colors (5 red, 9 green, 5 blue) and dither to approximate a 24-bit RGB
- * color.  While this function was originally designed just for 8-bit
- * visuals, it has also proven to work from 4-bit up to 16-bit visuals.
- * Dithering code contributed by Bob Mercier.
- */
-static GLboolean
-setup_dithered_color(int client, XMesaVisual v,
-                     XMesaBuffer buffer, XMesaColormap cmap)
-{
-   if (GET_VISUAL_DEPTH(v)<4 || GET_VISUAL_DEPTH(v)>16) {
-      return GL_FALSE;
-   }
-
-   if (buffer) {
-      XMesaBuffer prevBuffer;
-
-      if (!cmap) {
-         return GL_FALSE;
-      }
-
-      prevBuffer = xmesa_find_buffer(v->display, cmap, buffer);
-      if (prevBuffer) {
-         /* Copy colormap stuff from previous, matching XMesaBuffer.
-          * Do this to avoid time spent in noFaultXAllocColor.
-          */
-         copy_colortable_info(buffer, prevBuffer);
-      }
-      else {
-         /* Allocate X colors and initialize color_table[], red_table[], etc */
-         int r, g, b, i;
-         int colorsfailed = 0;
-         for (r = 0; r < DITH_R; r++) {
-            for (g = 0; g < DITH_G; g++) {
-               for (b = 0; b < DITH_B; b++) {
-                  XMesaColor xcol;
-                  int exact, alloced;
-                  xcol.red  =gamma_adjust(v->RedGamma,   r*65535/(DITH_R-1),65535);
-                  xcol.green=gamma_adjust(v->GreenGamma, g*65535/(DITH_G-1),65535);
-                  xcol.blue =gamma_adjust(v->BlueGamma,  b*65535/(DITH_B-1),65535);
-                  noFaultXAllocColor( client, v->display,
-                                      cmap, GET_COLORMAP_SIZE(v),
-                                      &xcol, &exact, &alloced );
-                  if (!exact) {
-                     colorsfailed++;
-                  }
-                  if (alloced) {
-                     assert(buffer->num_alloced<256);
-                     buffer->alloced_colors[buffer->num_alloced] = xcol.pixel;
-                     buffer->num_alloced++;
-                  }
-                  i = DITH_MIX( r, g, b );
-                  assert(i < 576);
-                  buffer->color_table[i] = xcol.pixel;
-                  assert(xcol.pixel < 65536);
-                  buffer->pixel_to_r[xcol.pixel] = r * 255 / (DITH_R-1);
-                  buffer->pixel_to_g[xcol.pixel] = g * 255 / (DITH_G-1);
-                  buffer->pixel_to_b[xcol.pixel] = b * 255 / (DITH_B-1);
-               }
-            }
-         }
-
-         if (colorsfailed && _mesa_getenv("MESA_DEBUG")) {
-            _mesa_warning(NULL,
-                  "Note: %d out of %d needed colors do not match exactly.\n",
-                  colorsfailed, DITH_R * DITH_G * DITH_B );
-         }
-      }
-   }
-
-   v->dithered_pf = PF_Dither;
-   v->undithered_pf = PF_Lookup;
-   return GL_TRUE;
-}
-
-
-/**
- * Setup for Hewlett Packard Color Recovery 8-bit TrueColor mode.
- * HPCR simulates 24-bit color fidelity with an 8-bit frame buffer.
- * Special dithering tables have to be initialized.
- */
-static void
-setup_8bit_hpcr(XMesaVisual v)
-{
-   /* HP Color Recovery contributed by:  Alex De Bruyn (ad@lms.be)
-    * To work properly, the atom _HP_RGB_SMOOTH_MAP_LIST must be defined
-    * on the root window AND the colormap obtainable by XGetRGBColormaps
-    * for that atom must be set on the window.  (see also tkInitWindow)
-    * If that colormap is not set, the output will look stripy.
-    */
-
-   /* Setup color tables with gamma correction */
-   int i;
-   double g;
-
-   g = 1.0 / v->RedGamma;
-   for (i=0; i<256; i++) {
-      GLint red = IROUND_POS(255.0 * pow( hpcr_rgbTbl[0][i]/255.0, g ));
-      v->hpcr_rgbTbl[0][i] = CLAMP( red, 16, 239 );
-   }
-
-   g = 1.0 / v->GreenGamma;
-   for (i=0; i<256; i++) {
-      GLint green = IROUND_POS(255.0 * pow( hpcr_rgbTbl[1][i]/255.0, g ));
-      v->hpcr_rgbTbl[1][i] = CLAMP( green, 16, 239 );
-   }
-
-   g = 1.0 / v->BlueGamma;
-   for (i=0; i<256; i++) {
-      GLint blue = IROUND_POS(255.0 * pow( hpcr_rgbTbl[2][i]/255.0, g ));
-      v->hpcr_rgbTbl[2][i] = CLAMP( blue, 32, 223 );
-   }
-   v->undithered_pf = PF_HPCR;  /* can't really disable dithering for now */
-   v->dithered_pf = PF_HPCR;
-
-   /* which method should I use to clear */
-   /* GL_FALSE: keep the ordinary method  */
-   /* GL_TRUE : clear with dither pattern */
-   v->hpcr_clear_flag = _mesa_getenv("MESA_HPCR_CLEAR") ? GL_TRUE : GL_FALSE;
-
-   if (v->hpcr_clear_flag) {
-      v->hpcr_clear_pixmap = XMesaCreatePixmap(v->display,
-                                               DefaultRootWindow(v->display),
-                                               16, 2, 8);
-      v->hpcr_clear_ximage = XGetImage(v->display, v->hpcr_clear_pixmap,
-                                       0, 0, 16, 2, AllPlanes, ZPixmap);
-   }
-}
 
 
 /**
@@ -951,29 +541,7 @@ setup_truecolor(XMesaVisual v, XMesaBuffer buffer, XMesaColormap cmap)
       v->undithered_pf = PF_5R6G5B;
       v->dithered_pf = PF_Dither_5R6G5B;
    }
-   else if (GET_REDMASK(v)  ==0xe0
-       &&   GET_GREENMASK(v)==0x1c
-       &&   GET_BLUEMASK(v) ==0x03
-       && CHECK_FOR_HPCR(v)) {
-      /* 8-bit HP color recovery */
-      setup_8bit_hpcr( v );
-   }
 }
-
-
-
-/**
- * Setup RGB rendering for a window with a monochrome visual.
- */
-static void
-setup_monochrome( XMesaVisual v, XMesaBuffer b )
-{
-   (void) b;
-   v->dithered_pf = v->undithered_pf = PF_1Bit;
-   /* if black=1 then we must flip pixel values */
-   v->bitFlip = (GET_BLACK_PIXEL(v) != 0);
-}
-
 
 
 /**
@@ -991,7 +559,6 @@ initialize_visual_and_buffer(XMesaVisual v, XMesaBuffer b,
                              XMesaDrawable window,
                              XMesaColormap cmap)
 {
-   int client = 0;
    const int xclass = v->visualType;
 
 
@@ -1006,20 +573,6 @@ initialize_visual_and_buffer(XMesaVisual v, XMesaBuffer b,
     */
    if (xclass == GLX_TRUE_COLOR || xclass == GLX_DIRECT_COLOR) {
       setup_truecolor( v, b, cmap );
-   }
-   else if (xclass == GLX_STATIC_GRAY && GET_VISUAL_DEPTH(v) == 1) {
-      setup_monochrome( v, b );
-   }
-   else if (xclass == GLX_GRAY_SCALE || xclass == GLX_STATIC_GRAY) {
-      if (!setup_grayscale( client, v, b, cmap )) {
-	 return GL_FALSE;
-      }
-   }
-   else if ((xclass == GLX_PSEUDO_COLOR || xclass == GLX_STATIC_COLOR)
-	    && GET_VISUAL_DEPTH(v)>=4 && GET_VISUAL_DEPTH(v)<=16) {
-      if (!setup_dithered_color( client, v, b, cmap )) {
-	 return GL_FALSE;
-      }
    }
    else {
       _mesa_warning(NULL, "XMesa: RGB mode rendering not supported in given visual.\n");
@@ -1047,8 +600,6 @@ initialize_visual_and_buffer(XMesaVisual v, XMesaBuffer b,
    }
 
    if (b && window) {
-      char *data;
-
       /* Do window-specific initializations */
 
       /* these should have been set in create_xmesa_buffer */
@@ -1080,36 +631,6 @@ initialize_visual_and_buffer(XMesaVisual v, XMesaBuffer b,
                                GCGraphicsExposures, &gcvalues);
       }
       XMesaSetFunction( v->display, b->swapgc, GXcopy );
-      /*
-       * Set fill style and tile pixmap once for all for HPCR stuff
-       * (instead of doing it each time in clear_color_HPCR_pixmap())
-       * Initialize whole stuff
-       * Patch contributed by Jacques Leroy March 8, 1998.
-       */
-      if (v->hpcr_clear_flag && b->backxrb && b->backxrb->pixmap) {
-         int i;
-         for (i = 0; i < 16; i++) {
-            XMesaPutPixel(v->hpcr_clear_ximage, i, 0, 0);
-            XMesaPutPixel(v->hpcr_clear_ximage, i, 1, 0);
-         }
-         XMesaPutImage(b->display, (XMesaDrawable) v->hpcr_clear_pixmap,
-                       b->cleargc, v->hpcr_clear_ximage, 0, 0, 0, 0, 16, 2);
-         XMesaSetFillStyle( v->display, b->cleargc, FillTiled);
-         XMesaSetTile( v->display, b->cleargc, v->hpcr_clear_pixmap );
-      }
-
-      /* Initialize the row buffer XImage for use in write_color_span() */
-      data = (char*) MALLOC(MAX_WIDTH*4);
-      b->rowimage = XCreateImage( v->display,
-                                  v->visinfo->visual,
-                                  v->visinfo->depth,
-                                  ZPixmap, 0,           /*format, offset*/
-                                  data,                 /*data*/
-                                  MAX_WIDTH, 1,         /*width, height*/
-                                  32,                   /*bitmap_pad*/
-                                  0                     /*bytes_per_line*/ );
-      if (!b->rowimage)
-         return GL_FALSE;
    }
 
    return GL_TRUE;
@@ -1127,8 +648,6 @@ xmesa_color_to_pixel(struct gl_context *ctx,
 {
    XMesaContext xmesa = XMESA_CONTEXT(ctx);
    switch (pixelFormat) {
-      case PF_Index:
-         return 0;
       case PF_Truecolor:
          {
             unsigned long p;
@@ -1145,23 +664,6 @@ xmesa_color_to_pixel(struct gl_context *ctx,
          return PACK_8R8G8B( r, g, b );
       case PF_5R6G5B:
          return PACK_5R6G5B( r, g, b );
-      case PF_Dither:
-         {
-            DITHER_SETUP;
-            return DITHER( 1, 0, r, g, b );
-         }
-      case PF_1Bit:
-         /* 382 = (3*255)/2 */
-         return ((r+g+b) > 382) ^ xmesa->xm_visual->bitFlip;
-      case PF_HPCR:
-         return DITHER_HPCR(1, 1, r, g, b);
-      case PF_Lookup:
-         {
-            LOOKUP_SETUP;
-            return LOOKUP( r, g, b );
-         }
-      case PF_Grayscale:
-         return GRAY_RGB( r, g, b );
       case PF_Dither_True:
          /* fall through */
       case PF_Dither_5R6G5B:
@@ -1468,10 +970,6 @@ void XMesaDestroyContext( XMesaContext c )
 {
    struct gl_context *mesaCtx = &c->mesa;
 
-#ifdef FX
-   FXdestroyContext( XMESA_BUFFER(mesaCtx->DrawBuffer) );
-#endif
-
    _mesa_meta_free( mesaCtx );
 
    _swsetup_DestroyContext( mesaCtx );
@@ -1719,11 +1217,6 @@ GLboolean XMesaMakeCurrent2( XMesaContext c, XMesaBuffer drawBuffer,
 
       c->xm_buffer = drawBuffer;
 
-#ifdef FX
-      if (FXmakeCurrent( drawBuffer ))
-         return GL_TRUE;
-#endif
-
       /* Call this periodically to detect when the user has begun using
        * GL rendering from multiple threads.
        */
@@ -1810,14 +1303,11 @@ XMesaBuffer XMesaGetCurrentReadBuffer( void )
 
 
 
-
-#ifndef FX
 GLboolean XMesaSetFXmode( GLint mode )
 {
    (void) mode;
    return GL_FALSE;
 }
-#endif
 
 
 
@@ -1842,10 +1332,6 @@ void XMesaSwapBuffers( XMesaBuffer b )
       _mesa_notifySwapBuffers(ctx);
 
    if (b->db_mode) {
-#ifdef FX
-      if (FXswapBuffers(b))
-         return;
-#endif
       if (b->backxrb->ximage) {
 	 /* Copy Ximage (back buf) from client memory to server window */
 #if defined(USE_XSHM) 
@@ -1881,9 +1367,6 @@ void XMesaSwapBuffers( XMesaBuffer b )
 		      );
          /*_glthread_UNLOCK_MUTEX(_xmesa_lock);*/
       }
-
-      if (b->swAlpha)
-         _mesa_copy_soft_alpha_renderbuffers(ctx, &b->mesa_buffer);
    }
    XSync( b->xm_visual->display, False );
 }
@@ -1910,10 +1393,6 @@ void XMesaCopySubBuffer( XMesaBuffer b, int x, int y, int width, int height )
 
    if (b->db_mode) {
       int yTop = b->mesa_buffer.Height - y - height;
-#ifdef FX
-      if (FXswapBuffers(b))
-         return;
-#endif
       if (b->backxrb->ximage) {
          /* Copy Ximage from host's memory to server's window */
 #if defined(USE_XSHM) 
@@ -1990,7 +1469,9 @@ GLboolean XMesaGetDepthBuffer( XMesaBuffer b, GLint *width, GLint *height,
 {
    struct gl_renderbuffer *rb
       = b->mesa_buffer.Attachment[BUFFER_DEPTH].Renderbuffer;
-   if (!rb || !rb->Data) {
+   struct xmesa_renderbuffer *xrb = xmesa_renderbuffer(rb);
+
+   if (!xrb || !xrb->Base.Buffer) {
       *width = 0;
       *height = 0;
       *bytesPerValue = 0;
@@ -2002,7 +1483,7 @@ GLboolean XMesaGetDepthBuffer( XMesaBuffer b, GLint *width, GLint *height,
       *height = b->mesa_buffer.Height;
       *bytesPerValue = b->mesa_buffer.Visual.depthBits <= 16
          ? sizeof(GLushort) : sizeof(GLuint);
-      *buffer = rb->Data;
+      *buffer = (void *) xrb->Base.Buffer;
       return GL_TRUE;
    }
 }
@@ -2084,15 +1565,12 @@ unsigned long XMesaDitherColor( XMesaContext xmesa, GLint x, GLint y,
                                 GLfloat red, GLfloat green,
                                 GLfloat blue, GLfloat alpha )
 {
-   struct gl_context *ctx = &xmesa->mesa;
    GLint r = (GLint) (red   * 255.0F);
    GLint g = (GLint) (green * 255.0F);
    GLint b = (GLint) (blue  * 255.0F);
    GLint a = (GLint) (alpha * 255.0F);
 
    switch (xmesa->pixelformat) {
-      case PF_Index:
-         return 0;
       case PF_Truecolor:
          {
             unsigned long p;
@@ -2107,23 +1585,6 @@ unsigned long XMesaDitherColor( XMesaContext xmesa, GLint x, GLint y,
          return PACK_8R8G8B( r, g, b );
       case PF_5R6G5B:
          return PACK_5R6G5B( r, g, b );
-      case PF_Dither:
-         {
-            DITHER_SETUP;
-            return DITHER( x, y, r, g, b );
-         }
-      case PF_1Bit:
-         /* 382 = (3*255)/2 */
-         return ((r+g+b) > 382) ^ xmesa->xm_visual->bitFlip;
-      case PF_HPCR:
-         return DITHER_HPCR(x, y, r, g, b);
-      case PF_Lookup:
-         {
-            LOOKUP_SETUP;
-            return LOOKUP( r, g, b );
-         }
-      case PF_Grayscale:
-         return GRAY_RGB( r, g, b );
       case PF_Dither_5R6G5B:
          /* fall through */
       case PF_Dither_True:

@@ -33,6 +33,7 @@
 #define SWRAST_H
 
 #include "main/mtypes.h"
+#include "swrast/s_chan.h"
 
 /**
  * \struct SWvertex
@@ -109,6 +110,11 @@ _swrast_CopyPixels( struct gl_context *ctx,
 		    GLsizei width, GLsizei height,
 		    GLenum type );
 
+extern GLboolean
+swrast_fast_copy_pixels(struct gl_context *ctx,
+			GLint srcX, GLint srcY, GLsizei width, GLsizei height,
+			GLint dstX, GLint dstY, GLenum type);
+
 extern void
 _swrast_DrawPixels( struct gl_context *ctx,
 		    GLint x, GLint y,
@@ -118,13 +124,6 @@ _swrast_DrawPixels( struct gl_context *ctx,
 		    const GLvoid *pixels );
 
 extern void
-_swrast_ReadPixels( struct gl_context *ctx,
-		    GLint x, GLint y, GLsizei width, GLsizei height,
-		    GLenum format, GLenum type,
-		    const struct gl_pixelstore_attrib *unpack,
-		    GLvoid *pixels );
-
-extern void
 _swrast_BlitFramebuffer(struct gl_context *ctx,
                         GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                         GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
@@ -132,9 +131,6 @@ _swrast_BlitFramebuffer(struct gl_context *ctx,
 
 extern void
 _swrast_Clear(struct gl_context *ctx, GLbitfield buffers);
-
-extern void
-_swrast_Accum(struct gl_context *ctx, GLenum op, GLfloat value);
 
 
 
@@ -182,6 +178,37 @@ _swrast_render_start( struct gl_context *ctx );
 extern void
 _swrast_render_finish( struct gl_context *ctx );
 
+extern struct gl_texture_image *
+_swrast_new_texture_image( struct gl_context *ctx );
+
+extern void
+_swrast_delete_texture_image(struct gl_context *ctx,
+                             struct gl_texture_image *texImage);
+
+extern GLboolean
+_swrast_alloc_texture_image_buffer(struct gl_context *ctx,
+                                   struct gl_texture_image *texImage,
+                                   gl_format format, GLsizei width,
+                                   GLsizei height, GLsizei depth);
+
+extern void
+_swrast_free_texture_image_buffer(struct gl_context *ctx,
+                                  struct gl_texture_image *texImage);
+
+extern void
+_swrast_map_teximage(struct gl_context *ctx,
+		     struct gl_texture_image *texImage,
+		     GLuint slice,
+		     GLuint x, GLuint y, GLuint w, GLuint h,
+		     GLbitfield mode,
+		     GLubyte **mapOut,
+		     GLint *rowStrideOut);
+
+extern void
+_swrast_unmap_teximage(struct gl_context *ctx,
+		       struct gl_texture_image *texImage,
+		       GLuint slice);
+
 /* Tell the software rasterizer about core state changes.
  */
 extern void
@@ -215,6 +242,13 @@ extern void
 _swrast_finish_render_texture(struct gl_context *ctx,
                               struct gl_renderbuffer_attachment *att);
 
+
+
+extern GLboolean
+_swrast_AllocTextureStorage(struct gl_context *ctx,
+                            struct gl_texture_object *texObj,
+                            GLsizei levels, GLsizei width,
+                            GLsizei height, GLsizei depth);
 
 
 /**

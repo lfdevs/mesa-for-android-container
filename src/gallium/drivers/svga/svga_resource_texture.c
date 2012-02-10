@@ -33,6 +33,7 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
+#include "svga_format.h"
 #include "svga_screen.h"
 #include "svga_context.h"
 #include "svga_resource_texture.h"
@@ -46,85 +47,6 @@
  * know about primary surfaces. Find a better way to accomplish this.
  */
 #define SVGA3D_SURFACE_HINT_SCANOUT (1 << 9)
-
-
-/*
- * Helper function and arrays
- */
-
-SVGA3dSurfaceFormat
-svga_translate_format(enum pipe_format format)
-{
-   switch(format) {
-   
-   case PIPE_FORMAT_B8G8R8A8_UNORM:
-      return SVGA3D_A8R8G8B8;
-   case PIPE_FORMAT_B8G8R8X8_UNORM:
-      return SVGA3D_X8R8G8B8;
-
-      /* Required for GL2.1:
-       */
-   case PIPE_FORMAT_B8G8R8A8_SRGB:
-      return SVGA3D_A8R8G8B8;
-
-   case PIPE_FORMAT_B5G6R5_UNORM:
-      return SVGA3D_R5G6B5;
-   case PIPE_FORMAT_B5G5R5A1_UNORM:
-      return SVGA3D_A1R5G5B5;
-   case PIPE_FORMAT_B4G4R4A4_UNORM:
-      return SVGA3D_A4R4G4B4;
-
-      
-   /* XXX: Doesn't seem to work properly.
-   case PIPE_FORMAT_Z32_UNORM:
-      return SVGA3D_Z_D32;
-    */
-   case PIPE_FORMAT_Z16_UNORM:
-      return SVGA3D_Z_D16;
-   case PIPE_FORMAT_S8_USCALED_Z24_UNORM:
-      return SVGA3D_Z_D24S8;
-   case PIPE_FORMAT_X8Z24_UNORM:
-      return SVGA3D_Z_D24X8;
-
-   case PIPE_FORMAT_A8_UNORM:
-      return SVGA3D_ALPHA8;
-   case PIPE_FORMAT_L8_UNORM:
-      return SVGA3D_LUMINANCE8;
-
-   case PIPE_FORMAT_DXT1_RGB:
-   case PIPE_FORMAT_DXT1_RGBA:
-      return SVGA3D_DXT1;
-   case PIPE_FORMAT_DXT3_RGBA:
-      return SVGA3D_DXT3;
-   case PIPE_FORMAT_DXT5_RGBA:
-      return SVGA3D_DXT5;
-
-   default:
-      return SVGA3D_FORMAT_INVALID;
-   }
-}
-
-
-SVGA3dSurfaceFormat
-svga_translate_format_render(enum pipe_format format)
-{
-   switch(format) { 
-   case PIPE_FORMAT_B8G8R8A8_UNORM:
-   case PIPE_FORMAT_B8G8R8X8_UNORM:
-   case PIPE_FORMAT_B5G5R5A1_UNORM:
-   case PIPE_FORMAT_B4G4R4A4_UNORM:
-   case PIPE_FORMAT_B5G6R5_UNORM:
-   case PIPE_FORMAT_S8_USCALED_Z24_UNORM:
-   case PIPE_FORMAT_X8Z24_UNORM:
-   case PIPE_FORMAT_Z32_UNORM:
-   case PIPE_FORMAT_Z16_UNORM:
-   case PIPE_FORMAT_L8_UNORM:
-      return svga_translate_format(format);
-
-   default:
-      return SVGA3D_FORMAT_INVALID;
-   }
-}
 
 
 static INLINE void
@@ -274,9 +196,6 @@ svga_transfer_dma(struct svga_context *svga,
 }
 
 
-
-
-
 static boolean 
 svga_texture_get_handle(struct pipe_screen *screen,
                                struct pipe_resource *texture,
@@ -314,11 +233,6 @@ svga_texture_destroy(struct pipe_screen *screen,
 }
 
 
-
-
-
-
-
 /* XXX: Still implementing this as if it was a screen function, but
  * can now modify it to queue transfers on the context.
  */
@@ -337,7 +251,7 @@ svga_texture_get_transfer(struct pipe_context *pipe,
    unsigned nblocksy = util_format_get_nblocksy(texture->format, box->height);
 
    /* We can't map texture storage directly */
-   if (usage & PIPE_TRANSFER_MAP_DIRECTLY)
+   if (usage & (PIPE_TRANSFER_MAP_DIRECTLY | PIPE_TRANSFER_MAP_PERMANENTLY))
       return NULL;
 
    assert(box->depth == 1);
@@ -474,9 +388,6 @@ svga_texture_transfer_destroy(struct pipe_context *pipe,
 }
 
 
-
-
-
 struct u_resource_vtbl svga_texture_vtbl = 
 {
    svga_texture_get_handle,	      /* get_handle */
@@ -488,8 +399,6 @@ struct u_resource_vtbl svga_texture_vtbl =
    svga_texture_transfer_unmap,	      /* transfer_unmap */
    u_default_transfer_inline_write    /* transfer_inline_write */
 };
-
-
 
 
 struct pipe_resource *
@@ -538,29 +447,33 @@ svga_texture_create(struct pipe_screen *screen,
       tex->key.cachable = 0;
    }
 
-   if (template->bind & PIPE_BIND_SCANOUT) {
+   if (template->bind & (PIPE_BIND_SCANOUT |
+                         PIPE_BIND_CURSOR)) {
       tex->key.flags |= SVGA3D_SURFACE_HINT_SCANOUT;
       tex->key.cachable = 0;
    }
-   
+
    /* 
-    * XXX: Never pass the SVGA3D_SURFACE_HINT_RENDERTARGET hint. Mesa cannot
+    * Note: Previously we never passed the
+    * SVGA3D_SURFACE_HINT_RENDERTARGET hint. Mesa cannot
     * know beforehand whether a texture will be used as a rendertarget or not
     * and it always requests PIPE_BIND_RENDER_TARGET, therefore
     * passing the SVGA3D_SURFACE_HINT_RENDERTARGET here defeats its purpose.
+    *
+    * However, this was changed since other state trackers
+    * (XA for example) uses it accurately and certain device versions
+    * relies on it in certain situations to render correctly.
     */
-#if 0
    if((template->bind & PIPE_BIND_RENDER_TARGET) &&
       !util_format_is_s3tc(template->format))
       tex->key.flags |= SVGA3D_SURFACE_HINT_RENDERTARGET;
-#endif
    
    if(template->bind & PIPE_BIND_DEPTH_STENCIL)
       tex->key.flags |= SVGA3D_SURFACE_HINT_DEPTHSTENCIL;
    
    tex->key.numMipLevels = template->last_level + 1;
    
-   tex->key.format = svga_translate_format(template->format);
+   tex->key.format = svga_translate_format(svgascreen, template->format, template->bind);
    if(tex->key.format == SVGA3D_FORMAT_INVALID)
       goto error2;
 
@@ -579,8 +492,6 @@ error2:
 error1:
    return NULL;
 }
-
-
 
 
 struct pipe_resource *
@@ -607,14 +518,15 @@ svga_texture_from_handle(struct pipe_screen *screen,
    if (!srf)
       return NULL;
 
-   if (svga_translate_format(template->format) != format) {
-      unsigned f1 = svga_translate_format(template->format);
+   if (svga_translate_format(svga_screen(screen), template->format, template->bind) != format) {
+      unsigned f1 = svga_translate_format(svga_screen(screen), template->format, template->bind);
       unsigned f2 = format;
 
       /* It's okay for XRGB and ARGB or depth with/out stencil to get mixed up */
       if ( !( (f1 == SVGA3D_X8R8G8B8 && f2 == SVGA3D_A8R8G8B8) ||
               (f1 == SVGA3D_A8R8G8B8 && f2 == SVGA3D_X8R8G8B8) ||
-              (f1 == SVGA3D_Z_D24X8 && f2 == SVGA3D_Z_D24S8) ) ) {
+              (f1 == SVGA3D_Z_D24X8 && f2 == SVGA3D_Z_D24S8) ||
+              (f1 == SVGA3D_Z_DF24 && f2 == SVGA3D_Z_D24S8_INT) ) ) {
          debug_printf("%s wrong format %u != %u\n", __FUNCTION__, f1, f2);
          return NULL;
       }
@@ -644,4 +556,3 @@ svga_texture_from_handle(struct pipe_screen *screen,
 
    return &tex->b.b;
 }
-

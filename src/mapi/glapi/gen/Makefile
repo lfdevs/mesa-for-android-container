@@ -41,21 +41,13 @@ MESA_OUTPUTS = \
 XORG_GLX_DIR = $(XORG_BASE)/glx
 XORG_GLAPI_DIR = $(XORG_BASE)/glx
 
-XORG_GLAPI_FILES = \
-	$(XORG_GLAPI_DIR)/glapi_getproc.c \
-	$(XORG_GLAPI_DIR)/glapi_nop.c \
-	$(XORG_GLAPI_DIR)/glthread.c \
-	$(XORG_GLAPI_DIR)/glthread.h
-
 XORG_GLAPI_OUTPUTS = \
 	$(XORG_GLAPI_DIR)/glprocs.h \
-	$(XORG_GLAPI_DIR)/glapioffsets.h \
 	$(XORG_GLAPI_DIR)/glapitable.h \
-	$(XORG_GLAPI_DIR)/glapidispatch.h \
+	$(XORG_GLAPI_DIR)/dispatch.h \
 	$(XORG_GLAPI_DIR)/glapi_gentable.c
 
 XORG_OUTPUTS = \
-	$(XORG_GLAPI_FILES) \
 	$(XORG_GLAPI_OUTPUTS) \
 	$(XORG_GLX_DIR)/indirect_dispatch.c \
 	$(XORG_GLX_DIR)/indirect_dispatch_swap.c \
@@ -87,8 +79,10 @@ API_XML = \
 	ARB_seamless_cube_map.xml \
 	ARB_sync.xml \
 	ARB_texture_buffer_object.xml \
+	ARB_texture_storage.xml \
 	ARB_vertex_array_object.xml \
 	AMD_draw_buffers_blend.xml \
+	ARB_vertex_type_2_10_10_10_rev.xml \
 	APPLE_object_purgeable.xml \
 	APPLE_vertex_array_object.xml \
 	EXT_draw_buffers2.xml \
@@ -146,6 +140,9 @@ clean:
 $(XORG_GLAPI_DIR)/%.c: $(MESA_GLAPI_DIR)/%.c
 	cp $< $@
 
+$(XORG_GLAPI_DIR)/dispatch.h: $(MESA_DIR)/main/dispatch.h
+	cp $< $@
+
 $(XORG_GLAPI_DIR)/%.h: $(MESA_GLAPI_DIR)/%.h
 	cp $< $@
 
@@ -180,10 +177,8 @@ $(MESA_GLAPI_DIR)/glapi_sparc.S: gl_SPARC_asm.py $(COMMON)
 
 ######################################################################
 
-$(MESA_DIR)/main/enums.c: gl_enums.py $(COMMON) $(ES_API)
-	$(PYTHON2) $(PYTHON_FLAGS) $< -f gl_API.xml \
-		-f $(MESA_GLAPI_DIR)/gen-es/es1_API.xml \
-		-f $(MESA_GLAPI_DIR)/gen-es/es2_API.xml > $@
+$(MESA_DIR)/main/enums.c: gl_enums.py $(COMMON_ES)
+	$(PYTHON2) $(PYTHON_FLAGS) $< -f gl_and_es_API.xml > $@
 
 $(MESA_DIR)/main/dispatch.h: gl_table.py $(COMMON)
 	$(PYTHON2) $(PYTHON_FLAGS) $< -m remap_table > $@

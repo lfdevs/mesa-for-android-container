@@ -54,7 +54,7 @@ extern "C" {
  * Implementation limits
  */
 #define PIPE_MAX_ATTRIBS          32
-#define PIPE_MAX_CLIP_PLANES       6
+#define PIPE_MAX_CLIP_PLANES       8
 #define PIPE_MAX_COLOR_BUFS        8
 #define PIPE_MAX_CONSTANT_BUFFERS 32
 #define PIPE_MAX_SAMPLERS         16
@@ -121,6 +121,28 @@ struct pipe_rasterizer_state
     */
    unsigned gl_rasterization_rules:1;
 
+   /**
+    * When true, rasterization is disabled and no pixels are written.
+    * This only makes sense with the Stream Out functionality.
+    */
+   unsigned rasterizer_discard:1;
+
+   /**
+    * When false, depth clipping is disabled and the depth value will be
+    * clamped later at the per-pixel level before depth testing.
+    * This depends on PIPE_CAP_DEPTH_CLIP_DISABLE.
+    */
+   unsigned depth_clip:1;
+
+   /**
+    * Enable bits for clipping half-spaces.
+    * This applies to both user clip planes and shader clip distances.
+    * Note that if the bound shader exports any clip distances, these
+    * replace all user clip planes, and clip half-spaces enabled here
+    * but not written by the shader count as disabled.
+    */
+   unsigned clip_plane_enable:PIPE_MAX_CLIP_PLANES;
+
    unsigned line_stipple_factor:8;  /**< [1..256] actually */
    unsigned line_stipple_pattern:16;
 
@@ -130,6 +152,7 @@ struct pipe_rasterizer_state
    float point_size;           /**< used when no per-vertex size */
    float offset_units;
    float offset_scale;
+   float offset_clamp;
 };
 
 
@@ -158,14 +181,33 @@ struct pipe_scissor_state
 struct pipe_clip_state
 {
    float ucp[PIPE_MAX_CLIP_PLANES][4];
-   unsigned nr;
-   unsigned depth_clamp:1;
+};
+
+
+/**
+ * Stream output for vertex transform feedback.
+ */
+struct pipe_stream_output_info
+{
+   unsigned num_outputs;
+   /** stride for an entire vertex, only used if all output_buffers are 0 */
+   unsigned stride;
+   /**
+    * Array of stream outputs, in the order they are to be written in.
+    * Selected components are tightly packed into the output buffer.
+    */
+   struct {
+      unsigned register_index:8; /**< 0 to PIPE_MAX_SHADER_OUTPUTS */
+      unsigned register_mask:4;  /**< TGSI_WRITEMASK_x */
+      unsigned output_buffer:4;  /**< 0 to PIPE_MAX_SO_BUFFERS */
+   } output[PIPE_MAX_SHADER_OUTPUTS];
 };
 
 
 struct pipe_shader_state
 {
    const struct tgsi_token *tokens;
+   struct pipe_stream_output_info stream_output;
 };
 
 
@@ -272,7 +314,7 @@ struct pipe_sampler_state
    unsigned seamless_cube_map:1;
    float lod_bias;               /**< LOD/lambda bias */
    float min_lod, max_lod;       /**< LOD clamp range, after bias */
-   float border_color[4];
+   union pipe_color_union border_color;
 };
 
 
@@ -374,24 +416,6 @@ struct pipe_resource
 
 
 /**
- * Stream output for vertex transform feedback.
- */
-struct pipe_stream_output_state
-{
-   /** number of the output buffer to insert each element into */
-   int output_buffer[PIPE_MAX_SHADER_OUTPUTS];
-   /** which register to grab each output from */
-   int register_index[PIPE_MAX_SHADER_OUTPUTS];
-   /** TGSI_WRITEMASK signifying which components to output */
-   ubyte register_mask[PIPE_MAX_SHADER_OUTPUTS];
-   /** number of outputs */
-   int num_outputs;
-   /** stride for an entire vertex, only used if all output_buffers are 0 */
-   unsigned stride;
-};
-
-
-/**
  * Transfer object.  For data transfer to/from a resource.
  */
 struct pipe_transfer
@@ -417,6 +441,30 @@ struct pipe_vertex_buffer
    unsigned stride;    /**< stride to same attrib in next vertex, in bytes */
    unsigned buffer_offset;  /**< offset to start of data in buffer, in bytes */
    struct pipe_resource *buffer;  /**< the actual buffer */
+};
+
+
+/**
+ * A stream output target. The structure specifies the range vertices can
+ * be written to.
+ *
+ * In addition to that, the structure should internally maintain the offset
+ * into the buffer, which should be incremented everytime something is written
+ * (appended) to it. The internal offset is buffer_offset + how many bytes
+ * have been written. The internal offset can be stored on the device
+ * and the CPU actually doesn't have to query it.
+ *
+ * Use PIPE_QUERY_SO_STATISTICS to know how many primitives have
+ * actually been written.
+ */
+struct pipe_stream_output_target
+{
+   struct pipe_reference reference;
+   struct pipe_resource *buffer; /**< buffer into which this is a target view */
+   struct pipe_context *context; /**< context this view belongs to */
+
+   unsigned buffer_offset;  /**< offset where data should be written, in bytes */
+   unsigned buffer_size;    /**< how much data is allowed to be written */
 };
 
 
@@ -480,6 +528,50 @@ struct pipe_draw_info
     */
    boolean primitive_restart;
    unsigned restart_index;
+
+   /**
+    * Stream output target. If not NULL, it's used to provide the 'count'
+    * parameter based on the number vertices captured by the stream output
+    * stage. (or generally, based on the number of bytes captured)
+    *
+    * Only 'mode', 'start_instance', and 'instance_count' are taken into
+    * account, all the other variables from pipe_draw_info are ignored.
+    *
+    * 'start' is implicitly 0 and 'count' is set as discussed above.
+    * The draw command is non-indexed.
+    *
+    * Note that this only provides the count. The vertex buffers must
+    * be set via set_vertex_buffers manually.
+    */
+   struct pipe_stream_output_target *count_from_stream_output;
+};
+
+
+/**
+ * Information to describe a resource_resolve call.
+ */
+struct pipe_resolve_info
+{
+   struct {
+      struct pipe_resource *res;
+      unsigned level;
+      unsigned layer;
+      int x0; /**< always left */
+      int y0; /**< always top */
+      int x1; /**< determines scale if PIPE_CAP_SCALED_RESOLVE is supported */
+      int y1; /**< determines scale if PIPE_CAP_SCALED_RESOLVE is supported */
+   } dst;
+
+   struct {
+      struct pipe_resource *res;
+      unsigned layer;
+      int x0;
+      int y0;
+      int x1; /**< may be < x0 only if PIPE_CAP_SCALED_RESOLVE is supported */
+      int y1; /**< may be < y1 even if PIPE_CAP_SCALED_RESOLVE not supported */
+   } src;
+
+   unsigned mask; /**< PIPE_MASK_RGBA, Z, S or ZS */
 };
 
 

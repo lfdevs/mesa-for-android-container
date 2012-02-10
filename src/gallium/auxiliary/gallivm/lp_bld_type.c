@@ -325,16 +325,18 @@ lp_typekind_name(LLVMTypeKind t)
       return "LLVMArrayTypeKind";
    case LLVMPointerTypeKind:
       return "LLVMPointerTypeKind";
+#if HAVE_LLVM < 0x0300
    case LLVMOpaqueTypeKind:
       return "LLVMOpaqueTypeKind";
+#endif
    case LLVMVectorTypeKind:
       return "LLVMVectorTypeKind";
    case LLVMMetadataTypeKind:
       return "LLVMMetadataTypeKind";
-   /* Only in LLVM 2.7 and later???
+#if HAVE_LLVM == 0x0207
    case LLVMUnionTypeKind:
       return "LLVMUnionTypeKind";
-   */
+#endif
    default:
       return "unknown LLVMTypeKind";
    }
@@ -408,4 +410,29 @@ lp_build_context_init(struct lp_build_context *bld,
    bld->undef = LLVMGetUndef(bld->vec_type);
    bld->zero = LLVMConstNull(bld->vec_type);
    bld->one = lp_build_one(gallivm, type);
+}
+
+
+/**
+ * Count the number of instructions in a function.
+ */
+unsigned
+lp_build_count_instructions(LLVMValueRef function)
+{
+   unsigned num_instrs = 0;
+   LLVMBasicBlockRef block;
+
+   block = LLVMGetFirstBasicBlock(function);
+   while (block) {
+      LLVMValueRef instr;
+      instr = LLVMGetFirstInstruction(block);
+      while (instr) {
+         ++num_instrs;
+
+         instr = LLVMGetNextInstruction(instr);
+      }
+      block = LLVMGetNextBasicBlock(block);
+   }
+
+   return num_instrs;
 }

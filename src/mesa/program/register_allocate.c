@@ -154,13 +154,19 @@ struct ra_graph {
    unsigned int stack_count;
 };
 
+/**
+ * Creates a set of registers for the allocator.
+ *
+ * mem_ctx is a ralloc context for the allocator.  The reg set may be freed
+ * using ralloc_free().
+ */
 struct ra_regs *
-ra_alloc_reg_set(unsigned int count)
+ra_alloc_reg_set(void *mem_ctx, unsigned int count)
 {
    unsigned int i;
    struct ra_regs *regs;
 
-   regs = rzalloc(NULL, struct ra_regs);
+   regs = rzalloc(mem_ctx, struct ra_regs);
    regs->count = count;
    regs->regs = rzalloc_array(regs, struct ra_reg, count);
 
@@ -197,6 +203,27 @@ ra_add_reg_conflict(struct ra_regs *regs, unsigned int r1, unsigned int r2)
    if (!regs->regs[r1].conflicts[r2]) {
       ra_add_conflict_list(regs, r1, r2);
       ra_add_conflict_list(regs, r2, r1);
+   }
+}
+
+/**
+ * Adds a conflict between base_reg and reg, and also between reg and
+ * anything that base_reg conflicts with.
+ *
+ * This can simplify code for setting up multiple register classes
+ * which are aggregates of some base hardware registers, compared to
+ * explicitly using ra_add_reg_conflict.
+ */
+void
+ra_add_transitive_reg_conflict(struct ra_regs *regs,
+			       unsigned int base_reg, unsigned int reg)
+{
+   int i;
+
+   ra_add_reg_conflict(regs, reg, base_reg);
+
+   for (i = 0; i < regs->regs[base_reg].num_conflicts; i++) {
+      ra_add_reg_conflict(regs, reg, regs->regs[base_reg].conflict_list[i]);
    }
 }
 

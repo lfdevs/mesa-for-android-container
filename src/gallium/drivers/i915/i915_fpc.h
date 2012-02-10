@@ -33,10 +33,15 @@
 #include "i915_context.h"
 #include "i915_reg.h"
 
+#include "pipe/p_shader_tokens.h"
 
+#include "tgsi/tgsi_parse.h"
 
 #define I915_PROGRAM_SIZE 192
 
+/* Use those indices for pos/face routing, must be >= num of inputs */
+#define I915_SEMANTIC_POS  100
+#define I915_SEMANTIC_FACE 101
 
 
 /**
@@ -67,13 +72,13 @@ struct i915_fp_compile {
    uint temp_flag;       /**< Tracks temporary regs which are in use */
    uint utemp_flag;      /**< Tracks TYPE_U temporary regs which are in use */
 
+   uint register_phases[16];
    uint nr_tex_indirect;
    uint nr_tex_insn;
    uint nr_alu_insn;
    uint nr_decl_insn;
 
    boolean error;      /**< Set if i915_program_error() is called */
-   uint wpos_tex;
    uint NumNativeInstructions;
    uint NumNativeAluInstructions;
    uint NumNativeTexInstructions;
@@ -164,7 +169,10 @@ extern void i915_release_utemps(struct i915_fp_compile *p);
 extern uint i915_emit_texld(struct i915_fp_compile *p,
                               uint dest,
                               uint destmask,
-                              uint sampler, uint coord, uint op);
+                              uint sampler,
+                              uint coord,
+                              uint op,
+                              uint num_coord);
 
 extern uint i915_emit_arith(struct i915_fp_compile *p,
                               uint op,
@@ -191,17 +199,97 @@ extern uint i915_emit_const4f(struct i915_fp_compile *p,
 
 
 /*======================================================================
- * i915_fpc_debug.c
- */
-extern void i915_disassemble_program(const uint * program, uint sz);
-
-
-/*======================================================================
  * i915_fpc_translate.c
  */
 
 extern void
 i915_program_error(struct i915_fp_compile *p, const char *msg, ...);
 
+
+/*======================================================================
+ * i915_fpc_optimize.c
+ */
+
+
+struct i915_src_register
+{
+   unsigned File        : 4;  /* TGSI_FILE_ */
+   unsigned Indirect    : 1;  /* BOOL */
+   unsigned Dimension   : 1;  /* BOOL */
+   int      Index       : 16; /* SINT */
+   unsigned SwizzleX    : 3;  /* TGSI_SWIZZLE_ */
+   unsigned SwizzleY    : 3;  /* TGSI_SWIZZLE_ */
+   unsigned SwizzleZ    : 3;  /* TGSI_SWIZZLE_ */
+   unsigned SwizzleW    : 3;  /* TGSI_SWIZZLE_ */
+   unsigned Absolute    : 1;    /* BOOL */
+   unsigned Negate      : 1;    /* BOOL */
+};
+
+/* Additional swizzle supported in i915 */
+#define TGSI_SWIZZLE_ZERO 4
+#define TGSI_SWIZZLE_ONE 5
+
+struct i915_dst_register
+{
+   unsigned File        : 4;  /* TGSI_FILE_ */
+   unsigned WriteMask   : 4;  /* TGSI_WRITEMASK_ */
+   unsigned Indirect    : 1;  /* BOOL */
+   unsigned Dimension   : 1;  /* BOOL */
+   int      Index       : 16; /* SINT */
+   unsigned Padding     : 6;
+};
+
+
+struct i915_full_dst_register
+{
+   struct i915_dst_register               Register;
+/*
+   struct tgsi_src_register               Indirect;
+   struct tgsi_dimension                  Dimension;
+   struct tgsi_src_register               DimIndirect;
+*/
+};
+
+struct i915_full_src_register
+{
+   struct i915_src_register         Register;
+/*
+   struct tgsi_src_register         Indirect;
+   struct tgsi_dimension            Dimension;
+   struct tgsi_src_register         DimIndirect;
+*/
+};
+
+struct i915_full_instruction
+{
+   struct tgsi_instruction             Instruction;
+/*
+   struct tgsi_instruction_predicate   Predicate;
+   struct tgsi_instruction_label       Label;
+*/
+   struct tgsi_instruction_texture     Texture;
+   struct i915_full_dst_register       Dst[1];
+   struct i915_full_src_register       Src[3];
+};
+
+
+union i915_full_token
+{
+   struct tgsi_token             Token;
+   struct tgsi_full_declaration  FullDeclaration;
+   struct tgsi_full_immediate    FullImmediate;
+   struct i915_full_instruction  FullInstruction;
+   struct tgsi_full_property     FullProperty;
+};
+
+struct i915_token_list
+{
+   union i915_full_token*     Tokens;
+   unsigned                   NumTokens;
+};
+
+extern struct i915_token_list* i915_optimize(const struct tgsi_token *tokens);
+
+extern void i915_optimize_free(struct i915_token_list* tokens);
 
 #endif

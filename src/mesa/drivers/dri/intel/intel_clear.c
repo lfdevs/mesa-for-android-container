@@ -93,7 +93,7 @@ intelClear(struct gl_context *ctx, GLbitfield mask)
       return;
 
    if (mask & (BUFFER_BIT_FRONT_LEFT | BUFFER_BIT_FRONT_RIGHT)) {
-      intel->front_buffer_dirty = GL_TRUE;
+      intel->front_buffer_dirty = true;
    }
 
    if (0)
@@ -116,14 +116,13 @@ intelClear(struct gl_context *ctx, GLbitfield mask)
    }
 
    /* HW color buffers (front, back, aux, generic FBO, etc) */
-   if (colorMask == ~0) {
+   if (intel->gen < 6 && colorMask == ~0) {
       /* clear all R,G,B,A */
-      /* XXX FBO: need to check if colorbuffers are software RBOs! */
       blit_mask |= (mask & BUFFER_BITS_COLOR);
    }
    else {
       /* glColorMask in effect */
-      tri_mask |= (mask & (BUFFER_BIT_FRONT_LEFT | BUFFER_BIT_BACK_LEFT));
+      tri_mask |= (mask & BUFFER_BITS_COLOR);
    }
 
    /* Make sure we have up to date buffers before we start looking at
@@ -189,7 +188,10 @@ intelClear(struct gl_context *ctx, GLbitfield mask)
 
    if (tri_mask) {
       debug_mask("tri", tri_mask);
-      _mesa_meta_Clear(&intel->ctx, tri_mask);
+      if (ctx->Extensions.ARB_fragment_shader)
+	 _mesa_meta_glsl_Clear(&intel->ctx, tri_mask);
+      else
+	 _mesa_meta_Clear(&intel->ctx, tri_mask);
    }
 }
 

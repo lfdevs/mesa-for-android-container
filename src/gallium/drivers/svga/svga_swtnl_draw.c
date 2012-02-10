@@ -55,7 +55,7 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
    svga->state.sw.in_swtnl_draw = TRUE;
 
    ret = svga_update_state(svga, SVGA_STATE_SWTNL_DRAW);
-   if (ret) {
+   if (ret != PIPE_OK) {
       svga_context_flush(svga, NULL);
       ret = svga_update_state(svga, SVGA_STATE_SWTNL_DRAW);
       svga->swtnl.new_vbuf = TRUE;
@@ -156,7 +156,7 @@ boolean svga_init_swtnl( struct svga_context *svga )
    draw_install_pstipple_stage(svga->swtnl.draw, &svga->pipe);
 
    if (debug_get_bool_option("SVGA_SWTNL_FSE", FALSE))
-      draw_set_driver_clipping(svga->swtnl.draw, TRUE, TRUE);
+      draw_set_driver_clipping(svga->swtnl.draw, TRUE, TRUE, TRUE);
 
    return TRUE;
 

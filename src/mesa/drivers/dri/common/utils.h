@@ -31,72 +31,17 @@
 #include <GL/gl.h>
 #include <GL/internal/dri_interface.h>
 #include "main/context.h"
-#include "main/remap.h"
-
-typedef struct __DRIutilversionRec2    __DRIutilversion2;
 
 struct dri_debug_control {
     const char * string;
     unsigned     flag;
 };
 
-/**
- * Description of the API for an extension to OpenGL.
- */
-struct dri_extension {
-    /**
-     * Name of the extension.
-     */
-    const char * name;
-    
-
-    /**
-     * Pointer to a list of \c dri_extension_function structures.  The list
-     * is terminated by a structure with a \c NULL
-     * \c dri_extension_function::strings pointer.
-     */
-    const struct gl_function_remap * functions;
-};
-
-/**
- * Used to store a version which includes a major range instead of a single
- * major version number.
- */
-struct __DRIutilversionRec2 {
-    int    major_min;    /** min allowed Major version number. */
-    int    major_max;    /** max allowed Major version number. */
-    int    minor;        /**< Minor version number. */
-    int    patch;        /**< Patch-level. */
-};
-
-extern void
-__driUtilMessage(const char *f, ...);
-
 extern unsigned driParseDebugString( const char * debug,
     const struct dri_debug_control * control );
 
 extern unsigned driGetRendererString( char * buffer,
     const char * hardware_name, GLuint agp_mode );
-
-extern void driInitExtensions( struct gl_context * ctx, 
-    const struct dri_extension * card_extensions, GLboolean enable_imaging );
-
-extern void driInitSingleExtension( struct gl_context * ctx,
-    const struct dri_extension * ext );
-
-extern GLboolean driCheckDriDdxDrmVersions2(const char * driver_name,
-    const __DRIversion * driActual, const __DRIversion * driExpected,
-    const __DRIversion * ddxActual, const __DRIversion * ddxExpected,
-    const __DRIversion * drmActual, const __DRIversion * drmExpected);
-
-extern GLboolean driCheckDriDdxDrmVersions3(const char * driver_name,
-    const __DRIversion * driActual, const __DRIversion * driExpected,
-    const __DRIversion * ddxActual, const __DRIutilversion2 * ddxExpected,
-    const __DRIversion * drmActual, const __DRIversion * drmExpected);
-
-extern GLboolean driClipRectToFramebuffer( const struct gl_framebuffer *buffer,
-					   GLint *x, GLint *y,
-					   GLsizei *width, GLsizei *height );
 
 struct __DRIconfigRec {
     struct gl_config modes;

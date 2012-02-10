@@ -31,8 +31,8 @@
 #include "main/macros.h"
 #include "main/image.h"
 #include "main/bufferobj.h"
+#include "main/readpix.h"
 #include "main/state.h"
-#include "swrast/swrast.h"
 
 #include "intel_screen.h"
 #include "intel_context.h"
@@ -66,7 +66,7 @@
  * any case.
  */
 
-static GLboolean
+static bool
 do_blit_readpixels(struct gl_context * ctx,
                    GLint x, GLint y, GLsizei width, GLsizei height,
                    GLenum format, GLenum type,
@@ -78,32 +78,32 @@ do_blit_readpixels(struct gl_context * ctx,
    GLuint dst_offset;
    GLuint rowLength;
    drm_intel_bo *dst_buffer;
-   GLboolean all;
+   bool all;
    GLint dst_x, dst_y;
    GLuint dirty;
 
    DBG("%s\n", __FUNCTION__);
 
    if (!src)
-      return GL_FALSE;
+      return false;
 
    if (!_mesa_is_bufferobj(pack->BufferObj)) {
       /* PBO only for now:
        */
       DBG("%s - not PBO\n", __FUNCTION__);
-      return GL_FALSE;
+      return false;
    }
 
 
    if (ctx->_ImageTransferState ||
        !intel_check_blit_format(src, format, type)) {
       DBG("%s - bad format for blit\n", __FUNCTION__);
-      return GL_FALSE;
+      return false;
    }
 
    if (pack->Alignment != 1 || pack->SwapBytes || pack->LsbFirst) {
       DBG("%s: bad packing params\n", __FUNCTION__);
-      return GL_FALSE;
+      return false;
    }
 
    if (pack->RowLength > 0)
@@ -113,21 +113,22 @@ do_blit_readpixels(struct gl_context * ctx,
 
    if (pack->Invert) {
       DBG("%s: MESA_PACK_INVERT not done yet\n", __FUNCTION__);
-      return GL_FALSE;
+      return false;
    }
    else {
       if (ctx->ReadBuffer->Name == 0)
 	 rowLength = -rowLength;
    }
 
-   dst_offset = (GLintptr) _mesa_image_address(2, pack, pixels, width, height,
-					       format, type, 0, 0, 0);
+   dst_offset = (GLintptr)pixels;
+   dst_offset += _mesa_image_offset(2, pack, width, height,
+				    format, type, 0, 0, 0);
 
    if (!_mesa_clip_copytexsubimage(ctx,
 				   &dst_x, &dst_y,
 				   &x, &y,
 				   &width, &height)) {
-      return GL_TRUE;
+      return true;
    }
 
    dirty = intel->front_buffer_dirty;
@@ -149,18 +150,18 @@ do_blit_readpixels(struct gl_context * ctx,
 
    if (!intelEmitCopyBlit(intel,
 			  src->cpp,
-			  src->pitch, src->buffer, 0, src->tiling,
-			  rowLength, dst_buffer, dst_offset, GL_FALSE,
+			  src->pitch, src->bo, 0, src->tiling,
+			  rowLength, dst_buffer, dst_offset, false,
 			  x, y,
 			  dst_x, dst_y,
 			  width, height,
 			  GL_COPY)) {
-      return GL_FALSE;
+      return false;
    }
 
    DBG("%s - DONE\n", __FUNCTION__);
 
-   return GL_TRUE;
+   return true;
 }
 
 void
@@ -170,15 +171,15 @@ intelReadPixels(struct gl_context * ctx,
                 const struct gl_pixelstore_attrib *pack, GLvoid * pixels)
 {
    struct intel_context *intel = intel_context(ctx);
-   GLboolean dirty;
+   bool dirty;
+
+   intel_flush_rendering_to_batch(ctx);
 
    DBG("%s\n", __FUNCTION__);
 
    if (do_blit_readpixels
        (ctx, x, y, width, height, format, type, pack, pixels))
       return;
-
-   intel_flush(ctx);
 
    /* glReadPixels() wont dirty the front buffer, so reset the dirty
     * flag after calling intel_prepare_render(). */
@@ -188,16 +189,15 @@ intelReadPixels(struct gl_context * ctx,
 
    fallback_debug("%s: fallback to swrast\n", __FUNCTION__);
 
-   /* Update Mesa state before calling down into _swrast_ReadPixels, as
-    * the spans code requires the computed buffer states to be up to date,
-    * but _swrast_ReadPixels only updates Mesa state after setting up
-    * the spans code.
+   /* Update Mesa state before calling _mesa_readpixels().
+    * XXX this may not be needed since ReadPixels no longer uses the
+    * span code.
     */
 
    if (ctx->NewState)
       _mesa_update_state(ctx);
 
-   _swrast_ReadPixels(ctx, x, y, width, height, format, type, pack, pixels);
+   _mesa_readpixels(ctx, x, y, width, height, format, type, pack, pixels);
 
    /* There's an intel_prepare_render() call in intelSpanRenderStart(). */
    intel->front_buffer_dirty = dirty;

@@ -58,10 +58,6 @@
 extern GLuint _mesa_evaluator_components( GLenum target );
 
 
-extern void gl_free_control_points( struct gl_context *ctx,
-                                    GLenum target, GLfloat *data );
-
-
 extern GLfloat *_mesa_copy_map_points1f( GLenum target,
                                       GLint ustride, GLint uorder,
                                       const GLfloat *points );
@@ -91,13 +87,13 @@ _mesa_init_eval_dispatch(struct _glapi_table *disp);
 
 #define _MESA_INIT_EVAL_VTXFMT(vfmt, impl) do { } while (0)
 
-static INLINE void
+static inline void
 _mesa_install_eval_vtxfmt(struct _glapi_table *disp,
                           const GLvertexformat *vfmt)
 {
 }
 
-static INLINE void
+static inline void
 _mesa_init_eval_dispatch(struct _glapi_table *disp)
 {
 }

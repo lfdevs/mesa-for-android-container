@@ -43,7 +43,7 @@
 #include "brw_sf.h"
 #include "brw_state.h"
 
-#include "../glsl/ralloc.h"
+#include "glsl/ralloc.h"
 
 static void compile_sf_prog( struct brw_context *brw,
 			     struct brw_sf_prog_key *key )
@@ -53,7 +53,7 @@ static void compile_sf_prog( struct brw_context *brw,
    const GLuint *program;
    void *mem_ctx;
    GLuint program_size;
-   GLuint i, idx;
+   GLuint i;
 
    memset(&c, 0, sizeof(c));
 
@@ -63,41 +63,31 @@ static void compile_sf_prog( struct brw_context *brw,
    brw_init_compile(brw, &c.func, mem_ctx);
 
    c.key = *key;
-   c.nr_attrs = brw_count_bits(c.key.attrs);
-   c.nr_attr_regs = (c.nr_attrs+1)/2;
-   c.nr_setup_attrs = brw_count_bits(c.key.attrs);
-   c.nr_setup_regs = (c.nr_setup_attrs+1)/2;
+   brw_compute_vue_map(&c.vue_map, intel, c.key.userclip_active, c.key.attrs);
+   c.urb_entry_read_offset = brw_sf_compute_urb_entry_read_offset(intel);
+   c.nr_attr_regs = (c.vue_map.num_slots + 1)/2 - c.urb_entry_read_offset;
+   c.nr_setup_regs = c.nr_attr_regs;
 
    c.prog_data.urb_read_length = c.nr_attr_regs;
    c.prog_data.urb_entry_size = c.nr_setup_regs * 2;
-
-   /* Construct map from attribute number to position in the vertex.
-    */
-   for (i = idx = 0; i < VERT_RESULT_MAX; i++) {
-      if (c.key.attrs & BITFIELD64_BIT(i)) {
-	 c.attr_to_idx[i] = idx;
-	 c.idx_to_attr[idx] = i;
-	 idx++;
-      }
-   }
 
    /* Which primitive?  Or all three? 
     */
    switch (key->primitive) {
    case SF_TRIANGLES:
       c.nr_verts = 3;
-      brw_emit_tri_setup( &c, GL_TRUE );
+      brw_emit_tri_setup( &c, true );
       break;
    case SF_LINES:
       c.nr_verts = 2;
-      brw_emit_line_setup( &c, GL_TRUE );
+      brw_emit_line_setup( &c, true );
       break;
    case SF_POINTS:
       c.nr_verts = 1;
       if (key->do_point_sprite)
-	  brw_emit_point_sprite_setup( &c, GL_TRUE );
+	  brw_emit_point_sprite_setup( &c, true );
       else
-	  brw_emit_point_setup( &c, GL_TRUE );
+	  brw_emit_point_setup( &c, true );
       break;
    case SF_UNFILLED_TRIS:
       c.nr_verts = 3;
@@ -130,7 +120,8 @@ static void compile_sf_prog( struct brw_context *brw,
 
 /* Calculate interpolants for triangle and line rasterization.
  */
-static void upload_sf_prog(struct brw_context *brw)
+static void
+brw_upload_sf_prog(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->intel.ctx;
    struct brw_sf_prog_key key;
@@ -162,6 +153,9 @@ static void upload_sf_prog(struct brw_context *brw)
       key.primitive = SF_POINTS; 
       break;
    }
+
+   /* _NEW_TRANSFORM */
+   key.userclip_active = (ctx->Transform.ClipPlanesEnabled != 0);
 
    /* _NEW_POINT */
    key.do_point_sprite = ctx->Point.PointSprite;
@@ -198,10 +192,10 @@ static void upload_sf_prog(struct brw_context *brw)
 
 const struct brw_tracked_state brw_sf_prog = {
    .dirty = {
-      .mesa  = (_NEW_HINT | _NEW_LIGHT | _NEW_POLYGON | _NEW_POINT),
+      .mesa  = (_NEW_HINT | _NEW_LIGHT | _NEW_POLYGON | _NEW_POINT | _NEW_TRANSFORM),
       .brw   = (BRW_NEW_REDUCED_PRIMITIVE),
       .cache = CACHE_NEW_VS_PROG
    },
-   .prepare = upload_sf_prog
+   .emit = brw_upload_sf_prog
 };
 

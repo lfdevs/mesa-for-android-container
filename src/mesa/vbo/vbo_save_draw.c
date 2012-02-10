@@ -70,7 +70,7 @@ _playback_copy_to_current(struct gl_context *ctx,
       else
          offset = node->buffer_offset;
 
-      ctx->Driver.GetBufferSubData( ctx, 0, offset, 
+      ctx->Driver.GetBufferSubData( ctx, offset,
                                     node->vertex_size * sizeof(GLfloat), 
                                     data, node->vertex_store->bufferobj );
 
@@ -137,7 +137,7 @@ static void vbo_bind_vertex_list(struct gl_context *ctx,
    const GLuint *map;
    GLuint attr;
    GLubyte node_attrsz[VBO_ATTRIB_MAX];  /* copy of node->attrsz[] */
-   GLbitfield varying_inputs = 0x0;
+   GLbitfield64 varying_inputs = 0x0;
 
    memcpy(node_attrsz, node->attrsz, sizeof(node->attrsz));
 
@@ -146,11 +146,11 @@ static void vbo_bind_vertex_list(struct gl_context *ctx,
     */
    switch (get_program_mode(ctx)) {
    case VP_NONE:
-      for (attr = 0; attr < 16; attr++) {
+      for (attr = 0; attr < VERT_ATTRIB_FF_MAX; attr++) {
          save->inputs[attr] = &vbo->legacy_currval[attr];
       }
       for (attr = 0; attr < MAT_ATTRIB_MAX; attr++) {
-         save->inputs[attr + 16] = &vbo->mat_currval[attr];
+         save->inputs[VERT_ATTRIB_GENERIC(attr)] = &vbo->mat_currval[attr];
       }
       map = vbo->map_vp_none;
       break;
@@ -160,9 +160,11 @@ static void vbo_bind_vertex_list(struct gl_context *ctx,
        * occurred.  NV vertex programs cannot access material values,
        * nor attributes greater than VERT_ATTRIB_TEX7.  
        */
-      for (attr = 0; attr < 16; attr++) {
+      for (attr = 0; attr < VERT_ATTRIB_FF_MAX; attr++) {
          save->inputs[attr] = &vbo->legacy_currval[attr];
-         save->inputs[attr + 16] = &vbo->generic_currval[attr];
+      }
+      for (attr = 0; attr < VERT_ATTRIB_GENERIC_MAX; attr++) {
+         save->inputs[VERT_ATTRIB_GENERIC(attr)] = &vbo->generic_currval[attr];
       }
       map = vbo->map_vp_arb;
 
@@ -172,8 +174,8 @@ static void vbo_bind_vertex_list(struct gl_context *ctx,
        */
       if ((ctx->VertexProgram._Current->Base.InputsRead & VERT_BIT_POS) == 0 &&
           (ctx->VertexProgram._Current->Base.InputsRead & VERT_BIT_GENERIC0)) {
-         save->inputs[16] = save->inputs[0];
-         node_attrsz[16] = node_attrsz[0];
+         save->inputs[VERT_ATTRIB_GENERIC0] = save->inputs[0];
+         node_attrsz[VERT_ATTRIB_GENERIC0] = node_attrsz[0];
          node_attrsz[0] = 0;
       }
       break;
@@ -204,7 +206,7 @@ static void vbo_bind_vertex_list(struct gl_context *ctx,
 	 assert(arrays[attr].BufferObj->Name);
 
 	 buffer_offset += node->attrsz[src] * sizeof(GLfloat);
-         varying_inputs |= 1<<attr;
+         varying_inputs |= VERT_BIT(attr);
          ctx->NewState |= _NEW_ARRAY;
       }
    }
@@ -217,10 +219,11 @@ static void
 vbo_save_loopback_vertex_list(struct gl_context *ctx,
                               const struct vbo_save_vertex_list *list)
 {
-   const char *buffer = ctx->Driver.MapBuffer(ctx, 
-					      GL_ARRAY_BUFFER_ARB, 
-					      GL_READ_ONLY, /* ? */
-                                              list->vertex_store->bufferobj);
+   const char *buffer =
+      ctx->Driver.MapBufferRange(ctx, 0,
+				 list->vertex_store->bufferobj->Size,
+				 GL_MAP_READ_BIT, /* ? */
+				 list->vertex_store->bufferobj);
 
    vbo_loopback_vertex_list(ctx,
                             (const GLfloat *)(buffer + list->buffer_offset),
@@ -230,8 +233,7 @@ vbo_save_loopback_vertex_list(struct gl_context *ctx,
                             list->wrap_count,
                             list->vertex_size);
 
-   ctx->Driver.UnmapBuffer(ctx, GL_ARRAY_BUFFER_ARB, 
-			   list->vertex_store->bufferobj);
+   ctx->Driver.UnmapBuffer(ctx, list->vertex_store->bufferobj);
 }
 
 
@@ -246,6 +248,7 @@ vbo_save_playback_vertex_list(struct gl_context *ctx, void *data)
    const struct vbo_save_vertex_list *node =
       (const struct vbo_save_vertex_list *) data;
    struct vbo_save_context *save = &vbo_context(ctx)->save;
+   struct vbo_exec_context *exec = &vbo_context(ctx)->exec;
 
    FLUSH_CURRENT(ctx, 0);
 
@@ -284,6 +287,8 @@ vbo_save_playback_vertex_list(struct gl_context *ctx, void *data)
 
       vbo_bind_vertex_list( ctx, node );
 
+      vbo_draw_method(exec, DRAW_DISPLAY_LIST);
+
       /* Again...
        */
       if (ctx->NewState)
@@ -297,7 +302,8 @@ vbo_save_playback_vertex_list(struct gl_context *ctx, void *data)
                                       NULL,
                                       GL_TRUE,
                                       0,    /* Node is a VBO, so this is ok */
-                                      node->count - 1);
+                                      node->count - 1,
+                                      NULL);
       }
    }
 

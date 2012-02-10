@@ -31,7 +31,6 @@
 #include "main/mtypes.h"
 
 struct intel_context;
-struct intel_region;
 struct gl_buffer_object;
 
 
@@ -47,17 +46,13 @@ struct intel_buffer_object
    /** System memory buffer data, if not using a BO to store the data. */
    void *sys_buffer;
 
-   struct intel_region *region; /* Is there a zero-copy texture
-                                   associated with this (pixel)
-                                   buffer object? */
-
    drm_intel_bo *range_map_bo;
    void *range_map_buffer;
    unsigned int range_map_offset;
    GLsizei range_map_size;
 
-   GLboolean mapped_gtt;
-   GLboolean source;
+   bool mapped_gtt;
+   bool source;
 };
 
 
@@ -89,25 +84,10 @@ void intel_upload_finish(struct intel_context *intel);
  */
 void intelInitBufferObjectFuncs(struct dd_function_table *functions);
 
-
-
-/* Are the obj->Name tests necessary?  Unfortunately yes, mesa
- * allocates a couple of gl_buffer_object structs statically, and
- * the Name == 0 test is the only way to identify them and avoid
- * casting them erroneously to our structs.
- */
-static INLINE struct intel_buffer_object *
+static inline struct intel_buffer_object *
 intel_buffer_object(struct gl_buffer_object *obj)
 {
    return (struct intel_buffer_object *) obj;
 }
-
-/* Helpers for zerocopy image uploads.  See also intel_regions.h:
- */
-void intel_bufferobj_cow(struct intel_context *intel,
-                         struct intel_buffer_object *intel_obj);
-void intel_bufferobj_release_region(struct intel_context *intel,
-                                    struct intel_buffer_object *intel_obj);
-
 
 #endif

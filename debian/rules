@@ -60,25 +60,24 @@ include /usr/share/quilt/quilt.make
 
 confflags-common = \
 	--disable-glu \
-	--disable-glut \
-	--disable-glw \
 	CFLAGS="$(CFLAGS)" \
 	CXXFLAGS="$(CXXFLAGS)"
 
-DRI_DRIVERS = swrast
+DRI_DRIVERS =
+GALLIUM_DRIVERS =
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	confflags_DIRECT_RENDERING = --disable-driglx-direct
 	confflags_EGL = --disable-egl
 	confflags_GALLIUM = --with-gallium-drivers=
+	DRI_DRIVERS += swrast
 else
 	EGL_DISPLAYS = x11
-	GALLIUM_DRIVERS = swrast
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 # Gallium drivers require libdrm-{nouveau,radeon}, only available on Linux
-	GALLIUM_DRIVERS += nouveau r600 r300
+	GALLIUM_DRIVERS += nouveau r600 r300 svga
 # Although the KMS egl drivers will probably build on kfreebsd & hurd
 # only linux actually has KMS drivers implemented at this point.
 	EGL_DISPLAYS += drm
@@ -87,12 +86,15 @@ else
   endif
 
   ifneq ($(DEB_HOST_ARCH), s390)
-	DRI_DRIVERS += mach64 mga r128 r200 r300 r600 radeon savage tdfx
+	DRI_DRIVERS += r200 radeon
   endif
-  ifeq ($(DEB_HOST_ARCH_CPU), i386)
-	DRI_DRIVERS += i810 i915 i965 sis unichrome
-  else ifeq ($(DEB_HOST_ARCH_CPU), amd64)
-	DRI_DRIVERS += i915 i965 sis unichrome
+
+# Build the llvmpipe driver only on amd64, i386 until it's tested elsewhere
+  ifeq (,$(filter $(DEB_HOST_ARCH_CPU), amd64 i386))
+	DRI_DRIVERS += swrast
+  else
+	GALLIUM_DRIVERS += swrast
+	DRI_DRIVERS += i915 i965
   endif
 
   # LLVM is required for r300g and recommended for swrastg on x86:
@@ -115,6 +117,7 @@ confflags-dri = \
 	--enable-glx-tls \
 	--enable-shared-glapi \
 	--enable-texture-float \
+	--enable-xa \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_EGL) \
 	$(confflags_GALLIUM) \
@@ -169,10 +172,7 @@ confflags-swx11+glu = \
 	--disable-egl \
 	--with-gallium-drivers= \
 	--with-driver=xlib \
-	--disable-gl-osmesa \
 	--disable-egl \
-	--disable-glut \
-	--enable-motif \
 	CFLAGS="$(CFLAGS)" \
 	CXXFLAGS="$(CXXFLAGS)"
 
@@ -180,11 +180,8 @@ confflags-swx11+glu-static = \
 	--disable-egl \
 	--with-gallium-drivers= \
 	--with-driver=xlib \
-	--disable-gl-osmesa \
 	--enable-static \
 	--disable-egl \
-	--disable-glut \
-	--enable-motif \
 	CFLAGS="$(CFLAGS)" \
 	CXXFLAGS="$(CXXFLAGS)"
 
@@ -192,10 +189,7 @@ confflags-swx11+glu-i386-i686 = \
 	--disable-egl \
 	--with-gallium-drivers= \
 	--with-driver=xlib \
-	--disable-gl-osmesa \
-	--disable-glut \
 	--disable-egl \
-	--enable-motif \
 	--libdir=/usr/lib/$(DEB_HOST_MULTIARCH)/i686/cmov \
 	CFLAGS="$(CFLAGS) -march=i686" \
 	CXXFLAGS="$(CXXFLAGS) -march=i686"
@@ -290,11 +284,6 @@ binary-arch: install
 	# install the right files manually.
 	rm -r debian/tmp/dri/usr/lib/$(DEB_HOST_MULTIARCH)/dri
 
-	# Move nouveau_vieux alongside nouveau to install in dri-experimental package
-ifneq (,$(filter nouveau,$(DRI_DRIVERS)))
-	mv build/dri/$(DEB_HOST_MULTIARCH)/nouveau_vieux_dri.so build/dri/$(DEB_HOST_MULTIARCH)/gallium/
-endif
-
 	# Also get rid of other files which aren't installed. Do not
 	# use -f to ensure we notice disappearing files:
 	set -e; for file in $(NOT_INSTALLED); do rm debian/tmp/$$file; done
@@ -304,9 +293,13 @@ endif
 	rm debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/libglapi.so
 
 	dh_install -s --fail-missing
-ifneq (,$(filter r300,$(GALLIUM_DRIVERS)))
-	dh_install -plibgl1-mesa-dri build/dri/$(DEB_HOST_MULTIARCH)/gallium/r300_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri
+
+# If the llvmpipe driver was built, copy it to the package dir
+ifneq (,$(filter swrast,$(GALLIUM_DRIVERS)))
+	dh_install -plibgl1-mesa-dri build/dri/$(DEB_HOST_MULTIARCH)/gallium/swrast_dri.so \
+		usr/lib/${DEB_HOST_MULTIARCH}/dri
 endif
+
 	dh_installman -s
 	dh_lintian -s
 	dh_link -s

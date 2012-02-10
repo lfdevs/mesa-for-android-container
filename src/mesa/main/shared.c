@@ -89,9 +89,7 @@ _mesa_alloc_shared_state(struct gl_context *ctx)
    shared->ShaderObjects = _mesa_NewHashTable();
 #endif
 
-#if FEATURE_ARB_vertex_buffer_object || FEATURE_ARB_pixel_buffer_object
    shared->BufferObjects = _mesa_NewHashTable();
-#endif
 
 #if FEATURE_ARB_sampler_objects
    /* GL_ARB_sampler_objects */
@@ -108,13 +106,14 @@ _mesa_alloc_shared_state(struct gl_context *ctx)
          GL_TEXTURE_BUFFER,
          GL_TEXTURE_2D_ARRAY_EXT,
          GL_TEXTURE_1D_ARRAY_EXT,
+         GL_TEXTURE_EXTERNAL_OES,
          GL_TEXTURE_CUBE_MAP,
          GL_TEXTURE_3D,
          GL_TEXTURE_RECTANGLE_NV,
          GL_TEXTURE_2D,
          GL_TEXTURE_1D
       };
-      assert(Elements(targets) == NUM_TEXTURE_TARGETS);
+      STATIC_ASSERT(Elements(targets) == NUM_TEXTURE_TARGETS);
       shared->DefaultTex[i] = ctx->Driver.NewTextureObject(ctx, 0, targets[i]);
    }
 
@@ -200,7 +199,7 @@ delete_bufferobj_cb(GLuint id, void *data, void *userData)
    struct gl_buffer_object *bufObj = (struct gl_buffer_object *) data;
    struct gl_context *ctx = (struct gl_context *) userData;
    if (_mesa_bufferobj_mapped(bufObj)) {
-      ctx->Driver.UnmapBuffer(ctx, 0, bufObj);
+      ctx->Driver.UnmapBuffer(ctx, bufObj);
       bufObj->Pointer = NULL;
    }
    _mesa_reference_buffer_object(ctx, &bufObj, NULL);
@@ -341,10 +340,8 @@ free_shared_state(struct gl_context *ctx, struct gl_shared_state *shared)
    _mesa_delete_ati_fragment_shader(ctx, shared->DefaultFragmentShader);
 #endif
 
-#if FEATURE_ARB_vertex_buffer_object || FEATURE_ARB_pixel_buffer_object
    _mesa_HashDeleteAll(shared->BufferObjects, delete_bufferobj_cb, ctx);
    _mesa_DeleteHashTable(shared->BufferObjects);
-#endif
 
 #if FEATURE_EXT_framebuffer_object
    _mesa_HashDeleteAll(shared->FrameBuffers, delete_framebuffer_cb, ctx);
@@ -353,9 +350,7 @@ free_shared_state(struct gl_context *ctx, struct gl_shared_state *shared)
    _mesa_DeleteHashTable(shared->RenderBuffers);
 #endif
 
-#if FEATURE_ARB_vertex_buffer_object
    _mesa_reference_buffer_object(ctx, &shared->NullBufferObj, NULL);
-#endif
 
    {
       struct simple_node *node;
@@ -393,28 +388,40 @@ free_shared_state(struct gl_context *ctx, struct gl_shared_state *shared)
 
 
 /**
- * Decrement shared state object reference count and potentially free it
- * and all children structures.
- *
- * \param ctx GL context.
- * \param shared shared state pointer.
- *
- * \sa free_shared_state().
+ * gl_shared_state objects are ref counted.
+ * If ptr's refcount goes to zero, free the shared state.
  */
 void
-_mesa_release_shared_state(struct gl_context *ctx,
-                           struct gl_shared_state *shared)
+_mesa_reference_shared_state(struct gl_context *ctx,
+                             struct gl_shared_state **ptr,
+                             struct gl_shared_state *state)
 {
-   GLint RefCount;
+   if (*ptr == state)
+      return;
 
-   _glthread_LOCK_MUTEX(shared->Mutex);
-   RefCount = --shared->RefCount;
-   _glthread_UNLOCK_MUTEX(shared->Mutex);
+   if (*ptr) {
+      /* unref old state */
+      struct gl_shared_state *old = *ptr;
+      GLboolean delete;
 
-   assert(RefCount >= 0);
+      _glthread_LOCK_MUTEX(old->Mutex);
+      assert(old->RefCount >= 1);
+      old->RefCount--;
+      delete = (old->RefCount == 0);
+      _glthread_UNLOCK_MUTEX(old->Mutex);
 
-   if (RefCount == 0) {
-      /* free shared state */
-      free_shared_state( ctx, shared );
+      if (delete) {
+         free_shared_state(ctx, old);
+      }
+
+      *ptr = NULL;
+   }
+
+   if (state) {
+      /* reference new state */
+      _glthread_LOCK_MUTEX(state->Mutex);
+      state->RefCount++;
+      *ptr = state;
+      _glthread_UNLOCK_MUTEX(state->Mutex);
    }
 }

@@ -93,211 +93,267 @@ prototype_string(const glsl_type *return_type, const char *name,
    return str;
 }
 
+/**
+ * If a function call is generated, \c call_ir will point to it on exit.
+ * Otherwise \c call_ir will be set to \c NULL.
+ */
+static ir_rvalue *
+generate_call(exec_list *instructions, ir_function_signature *sig,
+	      YYLTYPE *loc, exec_list *actual_parameters,
+	      ir_call **call_ir,
+	      struct _mesa_glsl_parse_state *state)
+{
+   void *ctx = state;
+   exec_list post_call_conversions;
+
+   *call_ir = NULL;
+
+   /* Verify that 'out' and 'inout' actual parameters are lvalues.  This
+    * isn't done in ir_function::matching_signature because that function
+    * cannot generate the necessary diagnostics.
+    *
+    * Also, validate that 'const_in' formal parameters (an extension of our
+    * IR) correspond to ir_constant actual parameters.
+    *
+    * Also, perform implicit conversion of arguments.  Note: to implicitly
+    * convert out parameters, we need to place them in a temporary
+    * variable, and do the conversion after the call takes place.  Since we
+    * haven't emitted the call yet, we'll place the post-call conversions
+    * in a temporary exec_list, and emit them later.
+    */
+   exec_list_iterator actual_iter = actual_parameters->iterator();
+   exec_list_iterator formal_iter = sig->parameters.iterator();
+
+   while (actual_iter.has_next()) {
+      ir_rvalue *actual = (ir_rvalue *) actual_iter.get();
+      ir_variable *formal = (ir_variable *) formal_iter.get();
+
+      assert(actual != NULL);
+      assert(formal != NULL);
+
+      if (formal->mode == ir_var_const_in && !actual->as_constant()) {
+	 _mesa_glsl_error(loc, state,
+			  "parameter `%s' must be a constant expression",
+			  formal->name);
+	 return ir_call::get_error_instruction(ctx);
+      }
+
+      if ((formal->mode == ir_var_out)
+	  || (formal->mode == ir_var_inout)) {
+	 const char *mode = NULL;
+	 switch (formal->mode) {
+	 case ir_var_out:   mode = "out";   break;
+	 case ir_var_inout: mode = "inout"; break;
+	 default:           assert(false);  break;
+	 }
+	 /* FIXME: 'loc' is incorrect (as of 2011-01-21). It is always
+	  * FIXME: 0:0(0).
+	  */
+	 if (actual->variable_referenced()
+	     && actual->variable_referenced()->read_only) {
+	    _mesa_glsl_error(loc, state,
+			     "function parameter '%s %s' references the "
+			     "read-only variable '%s'",
+			     mode, formal->name,
+			     actual->variable_referenced()->name);
+
+	 } else if (!actual->is_lvalue()) {
+	    _mesa_glsl_error(loc, state,
+			     "function parameter '%s %s' is not an lvalue",
+			     mode, formal->name);
+	 }
+      }
+
+      if (formal->type->is_numeric() || formal->type->is_boolean()) {
+	 switch (formal->mode) {
+	 case ir_var_const_in:
+	 case ir_var_in: {
+	    ir_rvalue *converted
+	       = convert_component(actual, formal->type);
+	    actual->replace_with(converted);
+	    break;
+	 }
+	 case ir_var_out:
+	    if (actual->type != formal->type) {
+	       /* To convert an out parameter, we need to create a
+		* temporary variable to hold the value before conversion,
+		* and then perform the conversion after the function call
+		* returns.
+		*
+		* This has the effect of transforming code like this:
+		*
+		*   void f(out int x);
+		*   float value;
+		*   f(value);
+		*
+		* Into IR that's equivalent to this:
+		*
+		*   void f(out int x);
+		*   float value;
+		*   int out_parameter_conversion;
+		*   f(out_parameter_conversion);
+		*   value = float(out_parameter_conversion);
+		*/
+	       ir_variable *tmp =
+		  new(ctx) ir_variable(formal->type,
+				       "out_parameter_conversion",
+				       ir_var_temporary);
+	       instructions->push_tail(tmp);
+	       ir_dereference_variable *deref_tmp_1
+		  = new(ctx) ir_dereference_variable(tmp);
+	       ir_dereference_variable *deref_tmp_2
+		  = new(ctx) ir_dereference_variable(tmp);
+	       ir_rvalue *converted_tmp
+		  = convert_component(deref_tmp_1, actual->type);
+	       ir_assignment *assignment
+		  = new(ctx) ir_assignment(actual, converted_tmp);
+	       post_call_conversions.push_tail(assignment);
+	       actual->replace_with(deref_tmp_2);
+	    }
+	    break;
+	 case ir_var_inout:
+	    /* Inout parameters should never require conversion, since that
+	     * would require an implicit conversion to exist both to and
+	     * from the formal parameter type, and there are no
+	     * bidirectional implicit conversions.
+	     */
+	    assert (actual->type == formal->type);
+	    break;
+	 default:
+	    assert (!"Illegal formal parameter mode");
+	    break;
+	 }
+      }
+
+      actual_iter.next();
+      formal_iter.next();
+   }
+
+   /* Always insert the call in the instruction stream, and return a deref
+    * of its return val if it returns a value, since we don't know if
+    * the rvalue is going to be assigned to anything or not.
+    *
+    * Also insert any out parameter conversions after the call.
+    */
+   ir_call *call = new(ctx) ir_call(sig, actual_parameters);
+   ir_dereference_variable *deref;
+   if (!sig->return_type->is_void()) {
+      /* If the function call is a constant expression, don't
+       * generate the instructions to call it; just generate an
+       * ir_constant representing the constant value.
+       *
+       * Function calls can only be constant expressions starting
+       * in GLSL 1.20.
+       */
+      if (state->language_version >= 120) {
+	 ir_constant *const_val = call->constant_expression_value();
+	 if (const_val) {
+	    return const_val;
+	 }
+      }
+
+      ir_variable *var;
+
+      var = new(ctx) ir_variable(sig->return_type,
+				 ralloc_asprintf(ctx, "%s_retval",
+						 sig->function_name()),
+				 ir_var_temporary);
+      instructions->push_tail(var);
+
+      deref = new(ctx) ir_dereference_variable(var);
+      ir_assignment *assign = new(ctx) ir_assignment(deref, call, NULL);
+      instructions->push_tail(assign);
+      *call_ir = call;
+
+      deref = new(ctx) ir_dereference_variable(var);
+   } else {
+      instructions->push_tail(call);
+      *call_ir = call;
+      deref = NULL;
+   }
+   instructions->append_list(&post_call_conversions);
+   return deref;
+}
 
 static ir_rvalue *
 match_function_by_name(exec_list *instructions, const char *name,
 		       YYLTYPE *loc, exec_list *actual_parameters,
+		       ir_call **call_ir,
 		       struct _mesa_glsl_parse_state *state)
 {
    void *ctx = state;
    ir_function *f = state->symbols->get_function(name);
-   ir_function_signature *sig;
+   ir_function_signature *local_sig = NULL;
+   ir_function_signature *sig = NULL;
 
-   sig = f ? f->matching_signature(actual_parameters) : NULL;
+   /* Is the function hidden by a record type constructor? */
+   if (state->symbols->get_type(name))
+      goto done; /* no match */
 
-   /* FINISHME: This doesn't handle the case where shader X contains a
-    * FINISHME: matching signature but shader X + N contains an _exact_
-    * FINISHME: matching signature.
-    */
-   if (sig == NULL
-       && (f == NULL || state->es_shader || !f->has_user_signature())
-       && state->symbols->get_type(name) == NULL
-       && (state->language_version == 110
-	   || state->symbols->get_variable(name) == NULL)) {
-      /* The current shader doesn't contain a matching function or signature.
-       * Before giving up, look for the prototype in the built-in functions.
-       */
-      for (unsigned i = 0; i < state->num_builtins_to_link; i++) {
-	 ir_function *builtin;
-	 builtin = state->builtins_to_link[i]->symbols->get_function(name);
-	 sig = builtin ? builtin->matching_signature(actual_parameters) : NULL;
-	 if (sig != NULL) {
-	    if (f == NULL) {
-	       f = new(ctx) ir_function(name);
-	       state->symbols->add_global_function(f);
-	       emit_function(state, f);
-	    }
+   /* Is the function hidden by a variable (impossible in 1.10)? */
+   if (state->language_version != 110 && state->symbols->get_variable(name))
+      goto done; /* no match */
 
-	    f->add_signature(sig->clone_prototype(f, NULL));
-	    break;
-	 }
+   if (f != NULL) {
+      /* Look for a match in the local shader.  If exact, we're done. */
+      bool is_exact = false;
+      sig = local_sig = f->matching_signature(actual_parameters, &is_exact);
+      if (is_exact)
+	 goto done;
+
+      if (!state->es_shader && f->has_user_signature()) {
+	 /* In desktop GL, the presence of a user-defined signature hides any
+	  * built-in signatures, so we must ignore them.  In contrast, in ES2
+	  * user-defined signatures add new overloads, so we must proceed.
+	  */
+	 goto done;
       }
    }
 
-   exec_list post_call_conversions;
+   /* Local shader has no exact candidates; check the built-ins. */
+   _mesa_glsl_initialize_functions(state);
+   for (unsigned i = 0; i < state->num_builtins_to_link; i++) {
+      ir_function *builtin =
+	 state->builtins_to_link[i]->symbols->get_function(name);
+      if (builtin == NULL)
+	 continue;
 
+      bool is_exact = false;
+      ir_function_signature *builtin_sig =
+	 builtin->matching_signature(actual_parameters, &is_exact);
+
+      if (builtin_sig == NULL)
+	 continue;
+
+      /* If the built-in signature is exact, we can stop. */
+      if (is_exact) {
+	 sig = builtin_sig;
+	 goto done;
+      }
+
+      if (sig == NULL) {
+	 /* We found an inexact match, which is better than nothing.  However,
+	  * we should keep searching for an exact match.
+	  */
+	 sig = builtin_sig;
+      }
+   }
+
+done:
    if (sig != NULL) {
-      /* Verify that 'out' and 'inout' actual parameters are lvalues.  This
-       * isn't done in ir_function::matching_signature because that function
-       * cannot generate the necessary diagnostics.
-       *
-       * Also, validate that 'const_in' formal parameters (an extension of our
-       * IR) correspond to ir_constant actual parameters.
-       *
-       * Also, perform implicit conversion of arguments.  Note: to implicitly
-       * convert out parameters, we need to place them in a temporary
-       * variable, and do the conversion after the call takes place.  Since we
-       * haven't emitted the call yet, we'll place the post-call conversions
-       * in a temporary exec_list, and emit them later.
-       */
-      exec_list_iterator actual_iter = actual_parameters->iterator();
-      exec_list_iterator formal_iter = sig->parameters.iterator();
-
-      while (actual_iter.has_next()) {
-	 ir_rvalue *actual = (ir_rvalue *) actual_iter.get();
-	 ir_variable *formal = (ir_variable *) formal_iter.get();
-
-	 assert(actual != NULL);
-	 assert(formal != NULL);
-
-	 if (formal->mode == ir_var_const_in && !actual->as_constant()) {
-	    _mesa_glsl_error(loc, state,
-			     "parameter `%s' must be a constant expression",
-			     formal->name);
+      /* If the match is from a linked built-in shader, import the prototype. */
+      if (sig != local_sig) {
+	 if (f == NULL) {
+	    f = new(ctx) ir_function(name);
+	    state->symbols->add_global_function(f);
+	    emit_function(state, f);
 	 }
-
-	 if ((formal->mode == ir_var_out)
-	     || (formal->mode == ir_var_inout)) {
-	    const char *mode = NULL;
-	    switch (formal->mode) {
-	    case ir_var_out:   mode = "out";   break;
-	    case ir_var_inout: mode = "inout"; break;
-	    default:           assert(false);  break;
-	    }
-            /* FIXME: 'loc' is incorrect (as of 2011-01-21). It is always
-             * FIXME: 0:0(0).
-             */
-	    if (actual->variable_referenced()
-	        && actual->variable_referenced()->read_only) {
-	       _mesa_glsl_error(loc, state,
-	                        "function parameter '%s %s' references the "
-	                        "read-only variable '%s'",
-	                        mode, formal->name,
-	                        actual->variable_referenced()->name);
-
-	    } else if (!actual->is_lvalue()) {
-               _mesa_glsl_error(loc, state,
-                                "function parameter '%s %s' is not an lvalue",
-                                mode, formal->name);
-	    }
-	 }
-
-	 if (formal->type->is_numeric() || formal->type->is_boolean()) {
-            switch (formal->mode) {
-            case ir_var_in: {
-               ir_rvalue *converted
-                  = convert_component(actual, formal->type);
-               actual->replace_with(converted);
-               break;
-            }
-            case ir_var_out:
-               if (actual->type != formal->type) {
-                  /* To convert an out parameter, we need to create a
-                   * temporary variable to hold the value before conversion,
-                   * and then perform the conversion after the function call
-                   * returns.
-                   *
-                   * This has the effect of transforming code like this:
-                   *
-                   *   void f(out int x);
-                   *   float value;
-                   *   f(value);
-                   *
-                   * Into IR that's equivalent to this:
-                   *
-                   *   void f(out int x);
-                   *   float value;
-                   *   int out_parameter_conversion;
-                   *   f(out_parameter_conversion);
-                   *   value = float(out_parameter_conversion);
-                   */
-                  ir_variable *tmp =
-                     new(ctx) ir_variable(formal->type,
-                                          "out_parameter_conversion",
-                                          ir_var_temporary);
-                  instructions->push_tail(tmp);
-                  ir_dereference_variable *deref_tmp_1
-                     = new(ctx) ir_dereference_variable(tmp);
-                  ir_dereference_variable *deref_tmp_2
-                     = new(ctx) ir_dereference_variable(tmp);
-                  ir_rvalue *converted_tmp
-                     = convert_component(deref_tmp_1, actual->type);
-                  ir_assignment *assignment
-                     = new(ctx) ir_assignment(actual, converted_tmp);
-                  post_call_conversions.push_tail(assignment);
-                  actual->replace_with(deref_tmp_2);
-               }
-               break;
-            case ir_var_inout:
-               /* Inout parameters should never require conversion, since that
-                * would require an implicit conversion to exist both to and
-                * from the formal parameter type, and there are no
-                * bidirectional implicit conversions.
-                */
-               assert (actual->type == formal->type);
-               break;
-            default:
-               assert (!"Illegal formal parameter mode");
-               break;
-            }
-	 }
-
-	 actual_iter.next();
-	 formal_iter.next();
+	 f->add_signature(sig->clone_prototype(f, NULL));
       }
 
-      /* Always insert the call in the instruction stream, and return a deref
-       * of its return val if it returns a value, since we don't know if
-       * the rvalue is going to be assigned to anything or not.
-       *
-       * Also insert any out parameter conversions after the call.
-       */
-      ir_call *call = new(ctx) ir_call(sig, actual_parameters);
-      ir_dereference_variable *deref;
-      if (!sig->return_type->is_void()) {
-         /* If the function call is a constant expression, don't
-          * generate the instructions to call it; just generate an
-          * ir_constant representing the constant value.
-          *
-          * Function calls can only be constant expressions starting
-          * in GLSL 1.20.
-          */
-         if (state->language_version >= 120) {
-            ir_constant *const_val = call->constant_expression_value();
-            if (const_val) {
-               return const_val;
-            }
-         }
-
-	 ir_variable *var;
-
-	 var = new(ctx) ir_variable(sig->return_type,
-				    ralloc_asprintf(ctx, "%s_retval",
-						    sig->function_name()),
-				    ir_var_temporary);
-	 instructions->push_tail(var);
-
-	 deref = new(ctx) ir_dereference_variable(var);
-	 ir_assignment *assign = new(ctx) ir_assignment(deref, call, NULL);
-	 instructions->push_tail(assign);
-
-	 deref = new(ctx) ir_dereference_variable(var);
-      } else {
-	 instructions->push_tail(call);
-	 deref = NULL;
-      }
-      instructions->append_list(&post_call_conversions);
-      return deref;
+      /* Finally, generate a call instruction. */
+      return generate_call(instructions, sig, loc, actual_parameters,
+			   call_ir, state);
    } else {
       char *str = prototype_string(NULL, name, actual_parameters);
 
@@ -351,17 +407,36 @@ convert_component(ir_rvalue *src, const glsl_type *desired_type)
    assert(a <= GLSL_TYPE_BOOL);
    assert(b <= GLSL_TYPE_BOOL);
 
-   if ((a == b) || (src->type->is_integer() && desired_type->is_integer()))
+   if (a == b)
       return src;
 
    switch (a) {
    case GLSL_TYPE_UINT:
+      switch (b) {
+      case GLSL_TYPE_INT:
+	 result = new(ctx) ir_expression(ir_unop_i2u, src);
+	 break;
+      case GLSL_TYPE_FLOAT:
+	 result = new(ctx) ir_expression(ir_unop_i2u,
+		  new(ctx) ir_expression(ir_unop_f2i, src));
+	 break;
+      case GLSL_TYPE_BOOL:
+	 result = new(ctx) ir_expression(ir_unop_i2u,
+		  new(ctx) ir_expression(ir_unop_b2i, src));
+	 break;
+      }
+      break;
    case GLSL_TYPE_INT:
-      if (b == GLSL_TYPE_FLOAT)
-	 result = new(ctx) ir_expression(ir_unop_f2i, desired_type, src, NULL);
-      else {
-	 assert(b == GLSL_TYPE_BOOL);
-	 result = new(ctx) ir_expression(ir_unop_b2i, desired_type, src, NULL);
+      switch (b) {
+      case GLSL_TYPE_UINT:
+	 result = new(ctx) ir_expression(ir_unop_u2i, src);
+	 break;
+      case GLSL_TYPE_FLOAT:
+	 result = new(ctx) ir_expression(ir_unop_f2i, src);
+	 break;
+      case GLSL_TYPE_BOOL:
+	 result = new(ctx) ir_expression(ir_unop_b2i, src);
+	 break;
       }
       break;
    case GLSL_TYPE_FLOAT:
@@ -380,6 +455,9 @@ convert_component(ir_rvalue *src, const glsl_type *desired_type)
    case GLSL_TYPE_BOOL:
       switch (b) {
       case GLSL_TYPE_UINT:
+	 result = new(ctx) ir_expression(ir_unop_i2b,
+		  new(ctx) ir_expression(ir_unop_u2i, src));
+	 break;
       case GLSL_TYPE_INT:
 	 result = new(ctx) ir_expression(ir_unop_i2b, desired_type, src, NULL);
 	 break;
@@ -391,6 +469,7 @@ convert_component(ir_rvalue *src, const glsl_type *desired_type)
    }
 
    assert(result != NULL);
+   assert(result->type == desired_type);
 
    /* Try constant folding; it may fold in the conversion we just added. */
    ir_constant *const constant = result->constant_expression_value();
@@ -1374,9 +1453,53 @@ ast_function_expression::hir(exec_list *instructions,
       process_parameters(instructions, &actual_parameters, &this->expressions,
 			 state);
 
-      return match_function_by_name(instructions, 
-				    id->primary_expression.identifier, & loc,
-				    &actual_parameters, state);
+      ir_call *call = NULL;
+      ir_rvalue *const value =
+	 match_function_by_name(instructions,
+				id->primary_expression.identifier,
+				&loc, &actual_parameters, &call, state);
+
+      if (call != NULL) {
+	 /* If a function was found, make sure that none of the 'out' or 'inout'
+	  * parameters violate the extra l-value rules.
+	  */
+	 ir_function_signature *f = call->get_callee();
+	 assert(f != NULL);
+
+	 exec_node *formal_node = f->parameters.head;
+
+	 foreach_list (actual_node, &this->expressions) {
+	    /* Both parameter lists had better be the same length!
+	     */
+	    assert(!actual_node->is_tail_sentinel());
+
+	    const ir_variable *const formal_parameter =
+	       (ir_variable *) formal_node;
+	    const ast_expression *const actual_parameter =
+	       exec_node_data(ast_expression, actual_node, link);
+
+	    if ((formal_parameter->mode == ir_var_out
+		 || formal_parameter->mode == ir_var_inout)
+		&& actual_parameter->non_lvalue_description != NULL) {
+	       YYLTYPE loc = actual_parameter->get_location();
+
+	       _mesa_glsl_error(&loc, state,
+				"function parameter '%s %s' references a %s",
+				(formal_parameter->mode == ir_var_out)
+				? "out" : "inout",
+				formal_parameter->name,
+				actual_parameter->non_lvalue_description);
+	       return ir_call::get_error_instruction(ctx);
+	    }
+
+	    /* Only advance the formal_node pointer here because the
+	     * foreach_list business already advances actual_node.
+	     */
+	    formal_node = formal_node->next;
+	 }
+      }
+
+      return value;
    }
 
    return ir_call::get_error_instruction(ctx);

@@ -31,6 +31,26 @@
 #include "brw_util.h"
 #include "intel_batchbuffer.h"
 
+/**
+ * Return true if at least one of the inputs used by the given fragment
+ * program has the GLSL "noperspective" interpolation qualifier.
+ */
+bool
+brw_fprog_uses_noperspective(const struct gl_fragment_program *fprog)
+{
+   int attr;
+   for (attr = 0; attr < FRAG_ATTRIB_MAX; ++attr) {
+      /* Ignore unused inputs. */
+      if (!(fprog->Base.InputsRead & BITFIELD64_BIT(attr)))
+         continue;
+
+      if (fprog->InterpQualifier[attr] == INTERP_QUALIFIER_NOPERSPECTIVE)
+         return true;
+   }
+   return false;
+}
+
+
 static void
 upload_clip_state(struct brw_context *brw)
 {
@@ -38,6 +58,31 @@ upload_clip_state(struct brw_context *brw)
    struct gl_context *ctx = &intel->ctx;
    uint32_t depth_clamp = 0;
    uint32_t provoking, userclip;
+   uint32_t nonperspective_barycentric_enable_flag = 0;
+   /* BRW_NEW_FRAGMENT_PROGRAM */
+   const struct gl_fragment_program *fprog = brw->fragment_program;
+
+   if (brw_fprog_uses_noperspective(fprog)) {
+      nonperspective_barycentric_enable_flag =
+         GEN6_CLIP_NON_PERSPECTIVE_BARYCENTRIC_ENABLE;
+   }
+
+   if (brw->hiz.op) {
+      /* HiZ operations emit a rectangle primitive, which requires clipping to
+       * be disabled. From page 10 of the Sandy Bridge PRM Volume 2 Part 1
+       * Section 1.3 3D Primitives Overview:
+       *    RECTLIST:
+       *    Either the CLIP unit should be DISABLED, or the CLIP unit's Clip
+       *    Mode should be set to a value other than CLIPMODE_NORMAL.
+       */
+      BEGIN_BATCH(4);
+      OUT_BATCH(_3DSTATE_CLIP << 16 | (4 - 2));
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      ADVANCE_BATCH();
+      return;
+   }
 
    if (!ctx->Transform.DepthClamp)
       depth_clamp = GEN6_CLIP_Z_TEST;
@@ -56,7 +101,7 @@ upload_clip_state(struct brw_context *brw)
    }
 
    /* _NEW_TRANSFORM */
-   userclip = (1 << brw_count_bits(ctx->Transform.ClipPlanesEnabled)) - 1;
+   userclip = ctx->Transform.ClipPlanesEnabled;
 
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_CLIP << 16 | (4 - 2));
@@ -64,6 +109,7 @@ upload_clip_state(struct brw_context *brw)
    OUT_BATCH(GEN6_CLIP_ENABLE |
 	     GEN6_CLIP_API_OGL |
 	     GEN6_CLIP_MODE_NORMAL |
+             nonperspective_barycentric_enable_flag |
 	     GEN6_CLIP_XY_TEST |
 	     userclip << GEN6_USER_CLIP_CLIP_DISTANCES_SHIFT |
 	     depth_clamp |
@@ -77,7 +123,9 @@ upload_clip_state(struct brw_context *brw)
 const struct brw_tracked_state gen6_clip_state = {
    .dirty = {
       .mesa  = _NEW_TRANSFORM | _NEW_LIGHT,
-      .brw   = BRW_NEW_CONTEXT,
+      .brw   = (BRW_NEW_CONTEXT |
+                BRW_NEW_FRAGMENT_PROGRAM |
+                BRW_NEW_HIZ),
       .cache = 0
    },
    .emit = upload_clip_state,

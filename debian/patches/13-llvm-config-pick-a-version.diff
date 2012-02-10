@@ -3,9 +3,9 @@ writing, 2.8 and 2.9), so pick a version. Let's assume the last version
 receives bug fixes quickly, so pick 2.9 for now.
 Index: mesa/configure.ac
 ===================================================================
---- mesa.orig/configure.ac	2011-08-01 17:04:54.000000000 +1000
-+++ mesa/configure.ac	2011-08-01 17:05:08.080884291 +1000
-@@ -1731,7 +1731,7 @@
+--- mesa.orig/configure.ac	2012-01-18 16:06:14.824947429 +0200
++++ mesa/configure.ac	2012-01-18 16:06:19.117076083 +0200
+@@ -1765,7 +1765,7 @@
      esac
  fi
  if test "x$enable_gallium_llvm" = xyes; then
@@ -13,4 +13,4 @@ Index: mesa/configure.ac
 +    AC_PATH_PROG([LLVM_CONFIG], [llvm-config-2.9], [no])
  
      if test "x$LLVM_CONFIG" != xno; then
- 	LLVM_VERSION=`$LLVM_CONFIG --version`
+ 	LLVM_VERSION=`$LLVM_CONFIG --version | sed 's/svn.*//g'`

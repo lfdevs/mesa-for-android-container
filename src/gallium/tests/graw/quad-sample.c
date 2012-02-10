@@ -146,9 +146,9 @@ static void set_fragment_shader( void )
 
 static void draw( void )
 {
-   float clear_color[4] = {.5,.5,.5,1};
+   union pipe_color_union clear_color = { {.5,.5,.5,1} };
 
-   ctx->clear(ctx, PIPE_CLEAR_COLOR, clear_color, 0, 0);
+   ctx->clear(ctx, PIPE_CLEAR_COLOR, &clear_color, 0, 0);
    util_draw_arrays(ctx, PIPE_PRIM_QUADS, 0, 4);
    ctx->flush(ctx, NULL);
 
@@ -377,6 +377,7 @@ static void init( void )
       memset(&rasterizer, 0, sizeof rasterizer);
       rasterizer.cull_face = PIPE_FACE_NONE;
       rasterizer.gl_rasterization_rules = 1;
+      rasterizer.depth_clip = 1;
       handle = ctx->create_rasterizer_state(ctx, &rasterizer);
       ctx->bind_rasterizer_state(ctx, handle);
    }

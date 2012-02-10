@@ -53,6 +53,8 @@
    "GLX_MESA_copy_sub_buffer " \
    "GLX_MESA_pixmap_colormap " \
    "GLX_MESA_release_buffers " \
+   "GLX_ARB_create_context " \
+   "GLX_ARB_create_context_profile " \
    "GLX_ARB_get_proc_address " \
    "GLX_EXT_texture_from_pixmap " \
    "GLX_EXT_visual_info " \
@@ -1259,7 +1261,7 @@ glXCreateGLXPixmap( Display *dpy, XVisualInfo *visinfo, Pixmap pixmap )
    if (!b) {
       return 0;
    }
-   return b->drawable;
+   return b->ws.drawable;
 }
 
 
@@ -1285,7 +1287,7 @@ glXCreateGLXPixmapMESA( Display *dpy, XVisualInfo *visinfo,
    if (!b) {
       return 0;
    }
-   return b->drawable;
+   return b->ws.drawable;
 }
 
 
@@ -1786,6 +1788,9 @@ glXChooseFBConfig(Display *dpy, int screen,
 {
    XMesaVisual xmvis;
 
+   /* register ourselves as an extension on this display */
+   register_with_display(dpy);
+
    if (!attribList || !attribList[0]) {
       /* return list of all configs (per GLX_SGIX_fbconfig spec) */
       return glXGetFBConfigs(dpy, screen, nitems);
@@ -2036,7 +2041,7 @@ glXCreatePbuffer(Display *dpy, GLXFBConfig config, const int *attribList)
    if (xmbuf) {
       xmbuf->largestPbuffer = useLargest;
       xmbuf->preservedContents = preserveContents;
-      return (GLXPbuffer) xmbuf->drawable;
+      return (GLXPbuffer) xmbuf->ws.drawable;
    }
    else {
       return 0;
@@ -2310,7 +2315,7 @@ glXCreateGLXPixmapWithConfigSGIX(Display *dpy, GLXFBConfigSGIX config,
 {
    XMesaVisual xmvis = (XMesaVisual) config;
    XMesaBuffer xmbuf = XMesaCreatePixmapBuffer(xmvis, pixmap, 0);
-   return xmbuf->drawable; /* need to return an X ID */
+   return xmbuf->ws.drawable; /* need to return an X ID */
 }
 
 
@@ -2390,7 +2395,7 @@ glXCreateGLXPbufferSGIX(Display *dpy, GLXFBConfigSGIX config,
    /* A GLXPbuffer handle must be an X Drawable because that's what
     * glXMakeCurrent takes.
     */
-   return (GLXPbuffer) xmbuf->drawable;
+   return (GLXPbuffer) xmbuf->ws.drawable;
 }
 
 
@@ -2663,7 +2668,7 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
                                 GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB);
 
    /* parse attrib_list */
-   for (i = 0; !done && attrib_list[i]; i++) {
+   for (i = 0; !done && attrib_list && attrib_list[i]; i++) {
       switch (attrib_list[i]) {
       case GLX_CONTEXT_MAJOR_VERSION_ARB:
          majorVersion = attrib_list[++i];

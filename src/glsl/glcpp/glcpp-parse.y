@@ -85,7 +85,6 @@ _token_create_ival (void *ctx, int type, int ival);
 static token_list_t *
 _token_list_create (void *ctx);
 
-/* Note: This function calls ralloc_steal on token. */
 static void
 _token_list_append (token_list_t *list, token_t *token);
 
@@ -763,8 +762,6 @@ _token_list_append (token_list_t *list, token_t *token)
 	node->token = token;
 	node->next = NULL;
 
-	ralloc_steal (list, token);
-
 	if (list->head == NULL) {
 		list->head = node;
 	} else {
@@ -1132,8 +1129,16 @@ glcpp_parser_create (const struct gl_extensions *extensions, int api)
 	   if (extensions->ARB_shader_texture_lod)
 	      add_builtin_define(parser, "GL_ARB_shader_texture_lod", 1);
 
-	   if (extensions->AMD_conservative_depth)
+	   if (extensions->ARB_draw_instanced)
+	      add_builtin_define(parser, "GL_ARB_draw_instanced", 1);
+
+	   if (extensions->ARB_conservative_depth) {
 	      add_builtin_define(parser, "GL_AMD_conservative_depth", 1);
+	      add_builtin_define(parser, "GL_ARB_conservative_depth", 1);
+	   }
+
+	   if (extensions->OES_EGL_image_external)
+	      add_builtin_define(parser, "GL_OES_EGL_image_external", 1);
 	}
 
 	language_version = 110;

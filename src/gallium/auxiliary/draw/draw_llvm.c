@@ -86,17 +86,15 @@ draw_llvm_garbage_collect_callback(void *cb_data)
 
 
 static void
-draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *var);
-
-static void
-draw_llvm_generate_elts(struct draw_llvm *llvm, struct draw_llvm_variant *var);
+draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *var,
+                   boolean elts);
 
 
 /**
  * Create LLVM type for struct draw_jit_texture
  */
 static LLVMTypeRef
-create_jit_texture_type(struct gallivm_state *gallivm)
+create_jit_texture_type(struct gallivm_state *gallivm, const char *struct_name)
 {
    LLVMTargetDataRef target = gallivm->target;
    LLVMTypeRef texture_type;
@@ -120,13 +118,21 @@ create_jit_texture_type(struct gallivm_state *gallivm)
    elem_types[DRAW_JIT_TEXTURE_BORDER_COLOR] = 
       LLVMArrayType(LLVMFloatTypeInContext(gallivm->context), 4);
 
+#if HAVE_LLVM >= 0x0300
+   texture_type = LLVMStructCreateNamed(gallivm->context, struct_name);
+   LLVMStructSetBody(texture_type, elem_types,
+                     Elements(elem_types), 0);
+#else
    texture_type = LLVMStructTypeInContext(gallivm->context, elem_types,
                                           Elements(elem_types), 0);
+
+   LLVMAddTypeName(gallivm->module, struct_name, texture_type);
 
    /* Make sure the target's struct layout cache doesn't return
     * stale/invalid data.
     */
    LLVMInvalidateStructLayout(gallivm->target, texture_type);
+#endif
 
    LP_CHECK_MEMBER_OFFSET(struct draw_jit_texture, width,
                           target, texture_type,
@@ -176,7 +182,7 @@ create_jit_texture_type(struct gallivm_state *gallivm)
  */
 static LLVMTypeRef
 create_jit_context_type(struct gallivm_state *gallivm,
-                        LLVMTypeRef texture_type)
+                        LLVMTypeRef texture_type, const char *struct_name)
 {
    LLVMTargetDataRef target = gallivm->target;
    LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
@@ -185,15 +191,22 @@ create_jit_context_type(struct gallivm_state *gallivm,
 
    elem_types[0] = LLVMPointerType(float_type, 0); /* vs_constants */
    elem_types[1] = LLVMPointerType(float_type, 0); /* gs_constants */
-   elem_types[2] = LLVMPointerType(LLVMArrayType(LLVMArrayType(float_type, 4), 12), 0); /* planes */
+   elem_types[2] = LLVMPointerType(LLVMArrayType(LLVMArrayType(float_type, 4),
+                                                 DRAW_TOTAL_CLIP_PLANES), 0);
    elem_types[3] = LLVMPointerType(float_type, 0); /* viewport */
    elem_types[4] = LLVMArrayType(texture_type,
                                  PIPE_MAX_VERTEX_SAMPLERS); /* textures */
-
+#if HAVE_LLVM >= 0x0300
+   context_type = LLVMStructCreateNamed(gallivm->context, struct_name);
+   LLVMStructSetBody(context_type, elem_types,
+                     Elements(elem_types), 0);
+#else
    context_type = LLVMStructTypeInContext(gallivm->context, elem_types,
                                           Elements(elem_types), 0);
+   LLVMAddTypeName(gallivm->module, struct_name, context_type);
 
    LLVMInvalidateStructLayout(gallivm->target, context_type);
+#endif
 
    LP_CHECK_MEMBER_OFFSET(struct draw_jit_context, vs_constants,
                           target, context_type, 0);
@@ -215,7 +228,7 @@ create_jit_context_type(struct gallivm_state *gallivm,
  * Create LLVM type for struct pipe_vertex_buffer
  */
 static LLVMTypeRef
-create_jit_vertex_buffer_type(struct gallivm_state *gallivm)
+create_jit_vertex_buffer_type(struct gallivm_state *gallivm, const char *struct_name)
 {
    LLVMTargetDataRef target = gallivm->target;
    LLVMTypeRef elem_types[3];
@@ -225,10 +238,17 @@ create_jit_vertex_buffer_type(struct gallivm_state *gallivm)
    elem_types[1] = LLVMInt32TypeInContext(gallivm->context);
    elem_types[2] = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0); /* vs_constants */
 
+#if HAVE_LLVM >= 0x0300
+   vb_type = LLVMStructCreateNamed(gallivm->context, struct_name);
+   LLVMStructSetBody(vb_type, elem_types,
+                     Elements(elem_types), 0);
+#else
    vb_type = LLVMStructTypeInContext(gallivm->context, elem_types,
                                      Elements(elem_types), 0);
+   LLVMAddTypeName(gallivm->module, struct_name, vb_type);
 
    LLVMInvalidateStructLayout(gallivm->target, vb_type);
+#endif
 
    LP_CHECK_MEMBER_OFFSET(struct pipe_vertex_buffer, stride,
                           target, vb_type, 0);
@@ -248,20 +268,28 @@ static LLVMTypeRef
 create_jit_vertex_header(struct gallivm_state *gallivm, int data_elems)
 {
    LLVMTargetDataRef target = gallivm->target;
-   LLVMTypeRef elem_types[3];
+   LLVMTypeRef elem_types[4];
    LLVMTypeRef vertex_header;
    char struct_name[24];
 
    util_snprintf(struct_name, 23, "vertex_header%d", data_elems);
 
-   elem_types[0]  = LLVMIntTypeInContext(gallivm->context, 32);
-   elem_types[1]  = LLVMArrayType(LLVMFloatTypeInContext(gallivm->context), 4);
-   elem_types[2]  = LLVMArrayType(elem_types[1], data_elems);
+   elem_types[DRAW_JIT_VERTEX_VERTEX_ID]  = LLVMIntTypeInContext(gallivm->context, 32);
+   elem_types[DRAW_JIT_VERTEX_CLIP]  = LLVMArrayType(LLVMFloatTypeInContext(gallivm->context), 4);
+   elem_types[DRAW_JIT_VERTEX_PRE_CLIP_POS]  = LLVMArrayType(LLVMFloatTypeInContext(gallivm->context), 4);
+   elem_types[DRAW_JIT_VERTEX_DATA]  = LLVMArrayType(elem_types[1], data_elems);
 
+#if HAVE_LLVM >= 0x0300
+   vertex_header = LLVMStructCreateNamed(gallivm->context, struct_name);
+   LLVMStructSetBody(vertex_header, elem_types,
+                     Elements(elem_types), 0);
+#else
    vertex_header = LLVMStructTypeInContext(gallivm->context, elem_types,
                                            Elements(elem_types), 0);
+   LLVMAddTypeName(gallivm->module, struct_name, vertex_header);
 
    LLVMInvalidateStructLayout(gallivm->target, vertex_header);
+#endif
 
    /* these are bit-fields and we can't take address of them
       LP_CHECK_MEMBER_OFFSET(struct vertex_header, clipmask,
@@ -280,11 +308,12 @@ create_jit_vertex_header(struct gallivm_state *gallivm, int data_elems)
    LP_CHECK_MEMBER_OFFSET(struct vertex_header, clip,
                           target, vertex_header,
                           DRAW_JIT_VERTEX_CLIP);
+   LP_CHECK_MEMBER_OFFSET(struct vertex_header, pre_clip_pos,
+                          target, vertex_header,
+                          DRAW_JIT_VERTEX_PRE_CLIP_POS);
    LP_CHECK_MEMBER_OFFSET(struct vertex_header, data,
                           target, vertex_header,
                           DRAW_JIT_VERTEX_DATA);
-
-   LLVMAddTypeName(gallivm->module, struct_name, vertex_header);
 
    return vertex_header;
 }
@@ -299,19 +328,15 @@ create_jit_types(struct draw_llvm *llvm)
    struct gallivm_state *gallivm = llvm->gallivm;
    LLVMTypeRef texture_type, context_type, buffer_type, vb_type;
 
-   texture_type = create_jit_texture_type(gallivm);
-   LLVMAddTypeName(gallivm->module, "texture", texture_type);
+   texture_type = create_jit_texture_type(gallivm, "texture");
 
-   context_type = create_jit_context_type(gallivm, texture_type);
-   LLVMAddTypeName(gallivm->module, "draw_jit_context", context_type);
+   context_type = create_jit_context_type(gallivm, texture_type, "draw_jit_context");
    llvm->context_ptr_type = LLVMPointerType(context_type, 0);
 
    buffer_type = LLVMPointerType(LLVMIntTypeInContext(gallivm->context, 8), 0);
-   LLVMAddTypeName(gallivm->module, "buffer", buffer_type);
    llvm->buffer_ptr_type = LLVMPointerType(buffer_type, 0);
 
-   vb_type = create_jit_vertex_buffer_type(gallivm);
-   LLVMAddTypeName(gallivm->module, "pipe_vertex_buffer", vb_type);
+   vb_type = create_jit_vertex_buffer_type(gallivm, "pipe_vertex_buffer");
    llvm->vb_ptr_type = LLVMPointerType(vb_type, 0);
 }
 
@@ -423,8 +448,8 @@ draw_llvm_create_variant(struct draw_llvm *llvm,
 
    llvm->vertex_header_ptr_type = LLVMPointerType(vertex_header, 0);
 
-   draw_llvm_generate(llvm, variant);
-   draw_llvm_generate_elts(llvm, variant);
+   draw_llvm_generate(llvm, variant, FALSE);  /* linear */
+   draw_llvm_generate(llvm, variant, TRUE);   /* elts */
 
    variant->shader = shader;
    variant->list_item_global.base = variant;
@@ -688,17 +713,21 @@ store_aos(struct gallivm_state *gallivm,
    LLVMValueRef id_ptr = draw_jit_header_id(gallivm, io_ptr);
    LLVMValueRef data_ptr = draw_jit_header_data(gallivm, io_ptr);
    LLVMValueRef indices[3];
-   LLVMValueRef val, shift;
+   LLVMValueRef val;
+   int vertex_id_pad_edgeflag;
 
    indices[0] = lp_build_const_int32(gallivm, 0);
    indices[1] = index;
    indices[2] = lp_build_const_int32(gallivm, 0);
 
-   /* initialize vertex id:16 = 0xffff, pad:3 = 0, edgeflag:1 = 1 */
-   val = lp_build_const_int32(gallivm, 0xffff1);
-   shift = lp_build_const_int32(gallivm, 12);
-   val = LLVMBuildShl(builder, val, shift, "");
-   /* add clipmask:12 */   
+   /* If this assertion fails, it means we need to update the bit twidding
+    * code here.  See struct vertex_header in draw_private.h.
+    */
+   assert(DRAW_TOTAL_CLIP_PLANES==14);
+   /* initialize vertex id:16 = 0xffff, pad:1 = 0, edgeflag:1 = 1 */
+   vertex_id_pad_edgeflag = (0xffff << 16) | (1 << DRAW_TOTAL_CLIP_PLANES);
+   val = lp_build_const_int32(gallivm, vertex_id_pad_edgeflag);
+   /* OR with the clipmask */
    val = LLVMBuildOr(builder, val, clipmask, "");               
 
    /* store vertex header */
@@ -856,7 +885,8 @@ convert_to_aos(struct gallivm_state *gallivm,
 static void
 store_clip(struct gallivm_state *gallivm,
            LLVMValueRef io_ptr,           
-           LLVMValueRef (*outputs)[NUM_CHANNELS])
+           LLVMValueRef (*outputs)[NUM_CHANNELS],
+           boolean pre_clip_pos)
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef out[4];
@@ -885,10 +915,18 @@ store_clip(struct gallivm_state *gallivm,
    io2_ptr = LLVMBuildGEP(builder, io_ptr, &ind2, 1, "");
    io3_ptr = LLVMBuildGEP(builder, io_ptr, &ind3, 1, "");
 
-   clip_ptr0 = draw_jit_header_clip(gallivm, io0_ptr);
-   clip_ptr1 = draw_jit_header_clip(gallivm, io1_ptr);
-   clip_ptr2 = draw_jit_header_clip(gallivm, io2_ptr);
-   clip_ptr3 = draw_jit_header_clip(gallivm, io3_ptr);
+   /* FIXME: this needs updating for clip vertex support */
+   if (!pre_clip_pos) {
+      clip_ptr0 = draw_jit_header_clip(gallivm, io0_ptr);
+      clip_ptr1 = draw_jit_header_clip(gallivm, io1_ptr);
+      clip_ptr2 = draw_jit_header_clip(gallivm, io2_ptr);
+      clip_ptr3 = draw_jit_header_clip(gallivm, io3_ptr);
+   } else {
+      clip_ptr0 = draw_jit_header_pre_clip_pos(gallivm, io0_ptr);
+      clip_ptr1 = draw_jit_header_pre_clip_pos(gallivm, io1_ptr);
+      clip_ptr2 = draw_jit_header_pre_clip_pos(gallivm, io2_ptr);
+      clip_ptr3 = draw_jit_header_pre_clip_pos(gallivm, io3_ptr);
+   }
 
    for (i = 0; i<4; i++) {
       clip0_ptr = LLVMBuildGEP(builder, clip_ptr0, indices, 2, ""); /* x0 */
@@ -996,7 +1034,7 @@ generate_clipmask(struct gallivm_state *gallivm,
                   boolean clip_z,
                   boolean clip_user,
                   boolean clip_halfz,
-                  unsigned nr,
+                  unsigned ucp_enable,
                   LLVMValueRef context_ptr)
 {
    LLVMBuilderRef builder = gallivm->builder;
@@ -1005,7 +1043,6 @@ generate_clipmask(struct gallivm_state *gallivm,
    LLVMValueRef zero, shift;
    LLVMValueRef pos_x, pos_y, pos_z, pos_w;
    LLVMValueRef plane1, planes, plane_ptr, sum;
-   unsigned i;
    struct lp_type f32_type = lp_type_float_vec(32); 
 
    mask = lp_build_const_int_vec(gallivm, lp_type_int_vec(32), 0);
@@ -1073,12 +1110,15 @@ generate_clipmask(struct gallivm_state *gallivm,
    if (clip_user) {
       LLVMValueRef planes_ptr = draw_jit_context_planes(gallivm, context_ptr);
       LLVMValueRef indices[3];
-      temp = lp_build_const_int_vec(gallivm, lp_type_int_vec(32), 32);
 
       /* userclip planes */
-      for (i = 6; i < nr; i++) {
+      while (ucp_enable) {
+         unsigned plane_idx = ffs(ucp_enable)-1;
+         ucp_enable &= ~(1 << plane_idx);
+         plane_idx += 6;
+
          indices[0] = lp_build_const_int32(gallivm, 0);
-         indices[1] = lp_build_const_int32(gallivm, i);
+         indices[1] = lp_build_const_int32(gallivm, plane_idx);
 
          indices[2] = lp_build_const_int32(gallivm, 0);
          plane_ptr = LLVMBuildGEP(builder, planes_ptr, indices, 3, "");
@@ -1108,8 +1148,8 @@ generate_clipmask(struct gallivm_state *gallivm,
          sum = LLVMBuildFAdd(builder, sum, test, "");
 
          test = lp_build_compare(gallivm, f32_type, PIPE_FUNC_GREATER, zero, sum);
-         temp = LLVMBuildShl(builder, temp, shift, "");
-         test = LLVMBuildAnd(builder, test, temp, ""); 
+         temp = lp_build_const_int_vec(gallivm, lp_type_int_vec(32), 1 << plane_idx);
+         test = LLVMBuildAnd(builder, test, temp, "");
          mask = LLVMBuildOr(builder, mask, test, "");
       }
    }
@@ -1142,7 +1182,8 @@ clipmask_bool(struct gallivm_state *gallivm,
 
 
 static void
-draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
+draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant,
+                   boolean elts)
 {
    struct gallivm_state *gallivm = llvm->gallivm;
    LLVMContextRef context = gallivm->context;
@@ -1152,213 +1193,14 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
    LLVMValueRef context_ptr;
    LLVMBasicBlockRef block;
    LLVMBuilderRef builder;
-   LLVMValueRef start, end, count, stride, step, io_itr;
+   LLVMValueRef end, start;
+   LLVMValueRef count, fetch_elts, fetch_count;
+   LLVMValueRef stride, step, io_itr;
    LLVMValueRef io_ptr, vbuffers_ptr, vb_ptr;
    LLVMValueRef instance_id;
    LLVMValueRef system_values_array;
-   struct draw_context *draw = llvm->draw;
-   const struct tgsi_shader_info *vs_info = &draw->vs.vertex_shader->info;
-   unsigned i, j;
-   struct lp_build_context bld;
-   struct lp_build_loop_state lp_loop;
-   const int max_vertices = 4;
-   LLVMValueRef outputs[PIPE_MAX_SHADER_OUTPUTS][NUM_CHANNELS];
-   void *code;
-   struct lp_build_sampler_soa *sampler = 0;
-   LLVMValueRef ret, ret_ptr;
-   boolean bypass_viewport = variant->key.bypass_viewport;
-   boolean enable_cliptest = variant->key.clip_xy || 
-                             variant->key.clip_z  ||
-                             variant->key.clip_user;
-   
-   arg_types[0] = get_context_ptr_type(llvm);       /* context */
-   arg_types[1] = get_vertex_header_ptr_type(llvm); /* vertex_header */
-   arg_types[2] = get_buffer_ptr_type(llvm);        /* vbuffers */
-   arg_types[3] = int32_type;                       /* start */
-   arg_types[4] = int32_type;                       /* count */
-   arg_types[5] = int32_type;                       /* stride */
-   arg_types[6] = get_vb_ptr_type(llvm);            /* pipe_vertex_buffer's */
-   arg_types[7] = int32_type;                       /* instance_id */
-
-   func_type = LLVMFunctionType(int32_type, arg_types, Elements(arg_types), 0);
-
-   variant->function = LLVMAddFunction(gallivm->module, "draw_llvm_shader",
-                                       func_type);
-   LLVMSetFunctionCallConv(variant->function, LLVMCCallConv);
-   for (i = 0; i < Elements(arg_types); ++i)
-      if (LLVMGetTypeKind(arg_types[i]) == LLVMPointerTypeKind)
-         LLVMAddAttribute(LLVMGetParam(variant->function, i), LLVMNoAliasAttribute);
-
-   context_ptr  = LLVMGetParam(variant->function, 0);
-   io_ptr       = LLVMGetParam(variant->function, 1);
-   vbuffers_ptr = LLVMGetParam(variant->function, 2);
-   start        = LLVMGetParam(variant->function, 3);
-   count        = LLVMGetParam(variant->function, 4);
-   stride       = LLVMGetParam(variant->function, 5);
-   vb_ptr       = LLVMGetParam(variant->function, 6);
-   instance_id  = LLVMGetParam(variant->function, 7);
-
-   lp_build_name(context_ptr, "context");
-   lp_build_name(io_ptr, "io");
-   lp_build_name(vbuffers_ptr, "vbuffers");
-   lp_build_name(start, "start");
-   lp_build_name(count, "count");
-   lp_build_name(stride, "stride");
-   lp_build_name(vb_ptr, "vb");
-   lp_build_name(instance_id, "instance_id");
-
-   /*
-    * Function body
-    */
-
-   block = LLVMAppendBasicBlockInContext(gallivm->context, variant->function, "entry");
-   builder = gallivm->builder;
-   assert(builder);
-   LLVMPositionBuilderAtEnd(builder, block);
-
-   lp_build_context_init(&bld, llvm->gallivm, lp_type_int(32));
-
-   system_values_array = lp_build_system_values_array(gallivm, vs_info,
-                                                      instance_id, NULL);
-
-   end = lp_build_add(&bld, start, count);
-
-   step = lp_build_const_int32(gallivm, max_vertices);
-
-   /* function will return non-zero i32 value if any clipped vertices */     
-   ret_ptr = lp_build_alloca(gallivm, int32_type, "");   
-   LLVMBuildStore(builder, lp_build_const_int32(gallivm, 0), ret_ptr);
-
-   /* code generated texture sampling */
-   sampler = draw_llvm_sampler_soa_create(
-      draw_llvm_variant_key_samplers(&variant->key),
-      context_ptr);
-
-#if DEBUG_STORE
-   lp_build_printf(builder, "start = %d, end = %d, step = %d\n",
-                   start, end, step);
-#endif
-   lp_build_loop_begin(&lp_loop, llvm->gallivm, start);
-   {
-      LLVMValueRef inputs[PIPE_MAX_SHADER_INPUTS][NUM_CHANNELS];
-      LLVMValueRef aos_attribs[PIPE_MAX_SHADER_INPUTS][NUM_CHANNELS] = { { 0 } };
-      LLVMValueRef io;
-      LLVMValueRef clipmask;   /* holds the clipmask value */
-      const LLVMValueRef (*ptr_aos)[NUM_CHANNELS];
-
-      io_itr = LLVMBuildSub(builder, lp_loop.counter, start, "");
-      io = LLVMBuildGEP(builder, io_ptr, &io_itr, 1, "");
-#if DEBUG_STORE
-      lp_build_printf(builder, " --- io %d = %p, loop counter %d\n",
-                      io_itr, io, lp_loop.counter);
-#endif
-      for (i = 0; i < NUM_CHANNELS; ++i) {
-         LLVMValueRef true_index = LLVMBuildAdd(
-            builder,
-            lp_loop.counter,
-            lp_build_const_int32(gallivm, i), "");
-         for (j = 0; j < draw->pt.nr_vertex_elements; ++j) {
-            struct pipe_vertex_element *velem = &draw->pt.vertex_element[j];
-            LLVMValueRef vb_index = lp_build_const_int32(gallivm, velem->vertex_buffer_index);
-            LLVMValueRef vb = LLVMBuildGEP(builder, vb_ptr,
-                                           &vb_index, 1, "");
-            generate_fetch(llvm->gallivm, vbuffers_ptr,
-                           &aos_attribs[j][i], velem, vb, true_index,
-                           instance_id);
-         }
-      }
-      convert_to_soa(gallivm, aos_attribs, inputs,
-                     draw->pt.nr_vertex_elements);
-
-      ptr_aos = (const LLVMValueRef (*)[NUM_CHANNELS]) inputs;
-      generate_vs(llvm,
-                  builder,
-                  outputs,
-                  ptr_aos,
-                  system_values_array,
-                  context_ptr,
-                  sampler,
-                  variant->key.clamp_vertex_color);
-
-      /* store original positions in clip before further manipulation */
-      store_clip(gallivm, io, outputs);
-
-      /* do cliptest */
-      if (enable_cliptest) {
-         /* allocate clipmask, assign it integer type */
-         clipmask = generate_clipmask(gallivm, outputs,
-                                      variant->key.clip_xy,
-                                      variant->key.clip_z, 
-                                      variant->key.clip_user,
-                                      variant->key.clip_halfz,
-                                      variant->key.nr_planes,
-                                      context_ptr);
-         /* return clipping boolean value for function */
-         clipmask_bool(gallivm, clipmask, ret_ptr);
-      }
-      else {
-         clipmask = lp_build_const_int_vec(gallivm, lp_type_int_vec(32), 0);    
-      }
-      
-      /* do viewport mapping */
-      if (!bypass_viewport) {
-         generate_viewport(llvm, builder, outputs, context_ptr);
-      }
-
-      /* store clipmask in vertex header and positions in data */
-      convert_to_aos(gallivm, io, outputs, clipmask,
-                     vs_info->num_outputs, max_vertices);
-   }
-
-   lp_build_loop_end_cond(&lp_loop, end, step, LLVMIntUGE);
-
-   sampler->destroy(sampler);
-
-   ret = LLVMBuildLoad(builder, ret_ptr,"");
-   LLVMBuildRet(builder, ret);
-      
-   /*
-    * Translate the LLVM IR into machine code.
-    */
-#ifdef DEBUG
-   if (LLVMVerifyFunction(variant->function, LLVMPrintMessageAction)) {
-      lp_debug_dump_value(variant->function);
-      assert(0);
-   }
-#endif
-
-   LLVMRunFunctionPassManager(gallivm->passmgr, variant->function);
-
-   if (gallivm_debug & GALLIVM_DEBUG_IR) {
-      lp_debug_dump_value(variant->function);
-      debug_printf("\n");
-   }
-
-   code = LLVMGetPointerToGlobal(gallivm->engine, variant->function);
-   variant->jit_func = (draw_jit_vert_func)pointer_to_func(code);
-
-   if (gallivm_debug & GALLIVM_DEBUG_ASM) {
-      lp_disassemble(code);
-   }
-   lp_func_delete_body(variant->function);
-}
-
-
-static void
-draw_llvm_generate_elts(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
-{
-   struct gallivm_state *gallivm = llvm->gallivm;
-   LLVMContextRef context = gallivm->context;
-   LLVMTypeRef int32_type = LLVMInt32TypeInContext(context);
-   LLVMTypeRef arg_types[8];
-   LLVMTypeRef func_type;
-   LLVMValueRef context_ptr;
-   LLVMBasicBlockRef block;
-   LLVMBuilderRef builder;
-   LLVMValueRef fetch_elts, fetch_count, stride, step, io_itr;
-   LLVMValueRef io_ptr, vbuffers_ptr, vb_ptr;
-   LLVMValueRef instance_id;
-   LLVMValueRef system_values_array;
+   LLVMValueRef zero = lp_build_const_int32(gallivm, 0);
+   LLVMValueRef one = lp_build_const_int32(gallivm, 1);
    struct draw_context *draw = llvm->draw;
    const struct tgsi_shader_info *vs_info = &draw->vs.vertex_shader->info;
    unsigned i, j;
@@ -1370,52 +1212,75 @@ draw_llvm_generate_elts(struct draw_llvm *llvm, struct draw_llvm_variant *varian
    void *code;
    struct lp_build_sampler_soa *sampler = 0;
    LLVMValueRef ret, ret_ptr;
-   boolean bypass_viewport = variant->key.bypass_viewport;
-   boolean enable_cliptest = variant->key.clip_xy || 
-                             variant->key.clip_z  ||
-                             variant->key.clip_user;
-   
-   arg_types[0] = get_context_ptr_type(llvm);           /* context */
-   arg_types[1] = get_vertex_header_ptr_type(llvm);     /* vertex_header */
-   arg_types[2] = get_buffer_ptr_type(llvm);            /* vbuffers */
-   arg_types[3] = LLVMPointerType(int32_type, 0);       /* fetch_elts * */
-   arg_types[4] = int32_type;                           /* fetch_count */
-   arg_types[5] = int32_type;                           /* stride */
-   arg_types[6] = get_vb_ptr_type(llvm);                /* pipe_vertex_buffer's */
-   arg_types[7] = int32_type;                           /* instance_id */
+   const boolean bypass_viewport = variant->key.bypass_viewport;
+   const boolean enable_cliptest = variant->key.clip_xy || 
+                                   variant->key.clip_z  ||
+                                   variant->key.clip_user;
+   LLVMValueRef variant_func;
+
+   arg_types[0] = get_context_ptr_type(llvm);       /* context */
+   arg_types[1] = get_vertex_header_ptr_type(llvm); /* vertex_header */
+   arg_types[2] = get_buffer_ptr_type(llvm);        /* vbuffers */
+   if (elts)
+      arg_types[3] = LLVMPointerType(int32_type, 0);/* fetch_elts * */
+   else
+      arg_types[3] = int32_type;                    /* start */
+   arg_types[4] = int32_type;                       /* fetch_count / count */
+   arg_types[5] = int32_type;                       /* stride */
+   arg_types[6] = get_vb_ptr_type(llvm);            /* pipe_vertex_buffer's */
+   arg_types[7] = int32_type;                       /* instance_id */
 
    func_type = LLVMFunctionType(int32_type, arg_types, Elements(arg_types), 0);
 
-   variant->function_elts = LLVMAddFunction(gallivm->module, "draw_llvm_shader_elts", func_type);
-   LLVMSetFunctionCallConv(variant->function_elts, LLVMCCallConv);
+   variant_func = LLVMAddFunction(gallivm->module,
+                                  elts ? "draw_llvm_shader_elts" : "draw_llvm_shader",
+                                  func_type);
+
+   if (elts)
+      variant->function_elts = variant_func;
+   else
+      variant->function = variant_func;
+
+   LLVMSetFunctionCallConv(variant_func, LLVMCCallConv);
    for (i = 0; i < Elements(arg_types); ++i)
       if (LLVMGetTypeKind(arg_types[i]) == LLVMPointerTypeKind)
-         LLVMAddAttribute(LLVMGetParam(variant->function_elts, i),
+         LLVMAddAttribute(LLVMGetParam(variant_func, i),
                           LLVMNoAliasAttribute);
 
-   context_ptr  = LLVMGetParam(variant->function_elts, 0);
-   io_ptr       = LLVMGetParam(variant->function_elts, 1);
-   vbuffers_ptr = LLVMGetParam(variant->function_elts, 2);
-   fetch_elts   = LLVMGetParam(variant->function_elts, 3);
-   fetch_count  = LLVMGetParam(variant->function_elts, 4);
-   stride       = LLVMGetParam(variant->function_elts, 5);
-   vb_ptr       = LLVMGetParam(variant->function_elts, 6);
-   instance_id  = LLVMGetParam(variant->function_elts, 7);
+   context_ptr  = LLVMGetParam(variant_func, 0);
+   io_ptr       = LLVMGetParam(variant_func, 1);
+   vbuffers_ptr = LLVMGetParam(variant_func, 2);
+   stride       = LLVMGetParam(variant_func, 5);
+   vb_ptr       = LLVMGetParam(variant_func, 6);
+   instance_id  = LLVMGetParam(variant_func, 7);
 
    lp_build_name(context_ptr, "context");
    lp_build_name(io_ptr, "io");
    lp_build_name(vbuffers_ptr, "vbuffers");
-   lp_build_name(fetch_elts, "fetch_elts");
-   lp_build_name(fetch_count, "fetch_count");
    lp_build_name(stride, "stride");
    lp_build_name(vb_ptr, "vb");
    lp_build_name(instance_id, "instance_id");
+
+   if (elts) {
+      fetch_elts   = LLVMGetParam(variant_func, 3);
+      fetch_count  = LLVMGetParam(variant_func, 4);
+      lp_build_name(fetch_elts, "fetch_elts");
+      lp_build_name(fetch_count, "fetch_count");
+      start = count = NULL;
+   }
+   else {
+      start        = LLVMGetParam(variant_func, 3);
+      count        = LLVMGetParam(variant_func, 4);
+      lp_build_name(start, "start");
+      lp_build_name(count, "count");
+      fetch_elts = fetch_count = NULL;
+   }
 
    /*
     * Function body
     */
 
-   block = LLVMAppendBasicBlockInContext(gallivm->context, variant->function_elts, "entry");
+   block = LLVMAppendBasicBlockInContext(gallivm->context, variant_func, "entry");
    builder = gallivm->builder;
    LLVMPositionBuilderAtEnd(builder, block);
 
@@ -1424,23 +1289,28 @@ draw_llvm_generate_elts(struct draw_llvm *llvm, struct draw_llvm_variant *varian
    system_values_array = lp_build_system_values_array(gallivm, vs_info,
                                                       instance_id, NULL);
 
-
-   step = lp_build_const_int32(gallivm, max_vertices);
+   /* function will return non-zero i32 value if any clipped vertices */
+   ret_ptr = lp_build_alloca(gallivm, int32_type, "");
+   LLVMBuildStore(builder, zero, ret_ptr);
 
    /* code generated texture sampling */
    sampler = draw_llvm_sampler_soa_create(
       draw_llvm_variant_key_samplers(&variant->key),
       context_ptr);
 
-   fetch_max = LLVMBuildSub(builder, fetch_count,
-                            lp_build_const_int32(gallivm, 1),
-                            "fetch_max");
+   if (elts) {
+      start = zero;
+      end = fetch_count;
+   }
+   else {
+      end = lp_build_add(&bld, start, count);
+   }
 
-   /* function returns non-zero i32 value if any clipped vertices */
-   ret_ptr = lp_build_alloca(gallivm, int32_type, ""); 
-   LLVMBuildStore(builder, lp_build_const_int32(gallivm, 0), ret_ptr);
+   step = lp_build_const_int32(gallivm, max_vertices);
 
-   lp_build_loop_begin(&lp_loop, gallivm, lp_build_const_int32(gallivm, 0));
+   fetch_max = LLVMBuildSub(builder, end, one, "fetch_max");
+
+   lp_build_loop_begin(&lp_loop, gallivm, start);
    {
       LLVMValueRef inputs[PIPE_MAX_SHADER_INPUTS][NUM_CHANNELS];
       LLVMValueRef aos_attribs[PIPE_MAX_SHADER_INPUTS][NUM_CHANNELS] = { { 0 } };
@@ -1448,32 +1318,39 @@ draw_llvm_generate_elts(struct draw_llvm *llvm, struct draw_llvm_variant *varian
       LLVMValueRef clipmask;   /* holds the clipmask value */
       const LLVMValueRef (*ptr_aos)[NUM_CHANNELS];
 
-      io_itr = lp_loop.counter;
+      if (elts)
+         io_itr = lp_loop.counter;
+      else
+         io_itr = LLVMBuildSub(builder, lp_loop.counter, start, "");
+
       io = LLVMBuildGEP(builder, io_ptr, &io_itr, 1, "");
 #if DEBUG_STORE
       lp_build_printf(builder, " --- io %d = %p, loop counter %d\n",
                       io_itr, io, lp_loop.counter);
 #endif
       for (i = 0; i < NUM_CHANNELS; ++i) {
-         LLVMValueRef true_index = LLVMBuildAdd(
-            builder,
-            lp_loop.counter,
-            lp_build_const_int32(gallivm, i), "");
-         LLVMValueRef fetch_ptr;
+         LLVMValueRef true_index =
+            LLVMBuildAdd(builder,
+                         lp_loop.counter,
+                         lp_build_const_int32(gallivm, i), "");
 
          /* make sure we're not out of bounds which can happen
           * if fetch_count % 4 != 0, because on the last iteration
           * a few of the 4 vertex fetches will be out of bounds */
          true_index = lp_build_min(&bld, true_index, fetch_max);
 
-         fetch_ptr = LLVMBuildGEP(builder, fetch_elts,
-                                  &true_index, 1, "");
-         true_index = LLVMBuildLoad(builder, fetch_ptr, "fetch_elt");
+         if (elts) {
+            LLVMValueRef fetch_ptr;
+            fetch_ptr = LLVMBuildGEP(builder, fetch_elts,
+                                     &true_index, 1, "");
+            true_index = LLVMBuildLoad(builder, fetch_ptr, "fetch_elt");
+         }
+
          for (j = 0; j < draw->pt.nr_vertex_elements; ++j) {
             struct pipe_vertex_element *velem = &draw->pt.vertex_element[j];
-            LLVMValueRef vb_index = lp_build_const_int32(gallivm, velem->vertex_buffer_index);
-            LLVMValueRef vb = LLVMBuildGEP(builder, vb_ptr,
-                                           &vb_index, 1, "");
+            LLVMValueRef vb_index =
+               lp_build_const_int32(gallivm, velem->vertex_buffer_index);
+            LLVMValueRef vb = LLVMBuildGEP(builder, vb_ptr, &vb_index, 1, "");
             generate_fetch(gallivm, vbuffers_ptr,
                            &aos_attribs[j][i], velem, vb, true_index,
                            instance_id);
@@ -1493,7 +1370,8 @@ draw_llvm_generate_elts(struct draw_llvm *llvm, struct draw_llvm_variant *varian
                   variant->key.clamp_vertex_color);
 
       /* store original positions in clip before further manipulation */
-      store_clip(gallivm, io, outputs);
+      store_clip(gallivm, io, outputs, 0);
+      store_clip(gallivm, io, outputs, 1);
 
       /* do cliptest */
       if (enable_cliptest) {
@@ -1503,7 +1381,7 @@ draw_llvm_generate_elts(struct draw_llvm *llvm, struct draw_llvm_variant *varian
                                       variant->key.clip_z, 
                                       variant->key.clip_user,
                                       variant->key.clip_halfz,
-                                      variant->key.nr_planes,
+                                      variant->key.ucp_enable,
                                       context_ptr);
          /* return clipping boolean value for function */
          clipmask_bool(gallivm, clipmask, ret_ptr);
@@ -1525,37 +1403,40 @@ draw_llvm_generate_elts(struct draw_llvm *llvm, struct draw_llvm_variant *varian
                      vs_info->num_outputs, max_vertices);
    }
 
-   lp_build_loop_end_cond(&lp_loop, fetch_count, step, LLVMIntUGE);
+   lp_build_loop_end_cond(&lp_loop, end, step, LLVMIntUGE);
 
    sampler->destroy(sampler);
 
-   ret = LLVMBuildLoad(builder, ret_ptr,"");   
+   ret = LLVMBuildLoad(builder, ret_ptr, "");
    LLVMBuildRet(builder, ret);
-   
+
    /*
     * Translate the LLVM IR into machine code.
     */
 #ifdef DEBUG
-   if (LLVMVerifyFunction(variant->function_elts, LLVMPrintMessageAction)) {
-      lp_debug_dump_value(variant->function_elts);
+   if (LLVMVerifyFunction(variant_func, LLVMPrintMessageAction)) {
+      lp_debug_dump_value(variant_func);
       assert(0);
    }
 #endif
 
-   LLVMRunFunctionPassManager(gallivm->passmgr, variant->function_elts);
+   LLVMRunFunctionPassManager(gallivm->passmgr, variant_func);
 
    if (gallivm_debug & GALLIVM_DEBUG_IR) {
-      lp_debug_dump_value(variant->function_elts);
+      lp_debug_dump_value(variant_func);
       debug_printf("\n");
    }
 
-   code = LLVMGetPointerToGlobal(gallivm->engine, variant->function_elts);
-   variant->jit_func_elts = (draw_jit_vert_func_elts)pointer_to_func(code);
+   code = LLVMGetPointerToGlobal(gallivm->engine, variant_func);
+   if (elts)
+      variant->jit_func_elts = (draw_jit_vert_func_elts) pointer_to_func(code);
+   else
+      variant->jit_func = (draw_jit_vert_func) pointer_to_func(code);
 
    if (gallivm_debug & GALLIVM_DEBUG_ASM) {
       lp_disassemble(code);
    }
-   lp_func_delete_body(variant->function_elts);
+   lp_func_delete_body(variant_func);
 }
 
 
@@ -1582,7 +1463,7 @@ draw_llvm_make_variant_key(struct draw_llvm *llvm, char *store)
    key->bypass_viewport = llvm->draw->identity_viewport;
    key->clip_halfz = !llvm->draw->rasterizer->gl_rasterization_rules;
    key->need_edgeflags = (llvm->draw->vs.edgeflag_output ? TRUE : FALSE);
-   key->nr_planes = llvm->draw->nr_planes;
+   key->ucp_enable = llvm->draw->rasterizer->clip_plane_enable;
    key->pad = 0;
 
    /* All variants of this shader will have the same value for
@@ -1651,7 +1532,7 @@ draw_llvm_set_sampler_state(struct draw_context *draw)
          jit_tex->min_lod = draw->samplers[i]->min_lod;
          jit_tex->max_lod = draw->samplers[i]->max_lod;
          jit_tex->lod_bias = draw->samplers[i]->lod_bias;
-         COPY_4V(jit_tex->border_color, draw->samplers[i]->border_color);
+         COPY_4V(jit_tex->border_color, draw->samplers[i]->border_color.f);
       }
    }
 }

@@ -72,9 +72,8 @@ st_texture_create(struct st_context *st,
    if (target == PIPE_TEXTURE_CUBE)
       assert(layers == 6);
 
-   DBG("%s target %s format %s last_level %d\n", __FUNCTION__,
-       _mesa_lookup_enum_by_nr(target),
-       _mesa_lookup_enum_by_nr(format), last_level);
+   DBG("%s target %d format %s last_level %d\n", __FUNCTION__,
+       (int) target, util_format_name(format), last_level);
 
    assert(format);
    assert(screen->is_format_supported(screen, format, target, 0,
@@ -134,6 +133,7 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
       break;
    case GL_TEXTURE_2D:
    case GL_TEXTURE_RECTANGLE:
+   case GL_TEXTURE_EXTERNAL_OES:
       assert(depthIn == 1);
       *widthOut = widthIn;
       *heightOut = heightIn;
@@ -171,8 +171,7 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
  */
 GLboolean
 st_texture_match_image(const struct pipe_resource *pt,
-                       const struct gl_texture_image *image,
-                       GLuint face, GLuint level)
+                       const struct gl_texture_image *image)
 {
    GLuint ptWidth, ptHeight, ptDepth, ptLayers;
 
@@ -193,9 +192,9 @@ st_texture_match_image(const struct pipe_resource *pt,
    /* Test if this image's size matches what's expected in the
     * established texture.
     */
-   if (ptWidth != u_minify(pt->width0, level) ||
-       ptHeight != u_minify(pt->height0, level) ||
-       ptDepth != u_minify(pt->depth0, level) ||
+   if (ptWidth != u_minify(pt->width0, image->Level) ||
+       ptHeight != u_minify(pt->height0, image->Level) ||
+       ptDepth != u_minify(pt->depth0, image->Level) ||
        ptLayers != pt->array_size)
       return GL_FALSE;
 
@@ -216,13 +215,20 @@ st_texture_image_map(struct st_context *st, struct st_texture_image *stImage,
                      GLuint zoffset, enum pipe_transfer_usage usage,
                      GLuint x, GLuint y, GLuint w, GLuint h)
 {
+   struct st_texture_object *stObj =
+      st_texture_object(stImage->base.TexObject);
    struct pipe_context *pipe = st->pipe;
-   struct pipe_resource *pt = stImage->pt;
+   GLuint level;
 
    DBG("%s \n", __FUNCTION__);
 
-   stImage->transfer = pipe_get_transfer(st->pipe, pt, stImage->level,
-                                         stImage->face + zoffset,
+   if (stObj->pt != stImage->pt)
+      level = 0;
+   else
+      level = stImage->base.Level;
+
+   stImage->transfer = pipe_get_transfer(st->pipe, stImage->pt, level,
+                                         stImage->base.Face + zoffset,
                                          usage, x, y, w, h);
 
    if (stImage->transfer)
@@ -243,6 +249,7 @@ st_texture_image_unmap(struct st_context *st,
    pipe_transfer_unmap(pipe, stImage->transfer);
 
    pipe->transfer_destroy(pipe, stImage->transfer);
+   stImage->transfer = NULL;
 }
 
 
@@ -400,5 +407,25 @@ st_texture_image_copy(struct pipe_context *pipe,
                                  srcLevel,
                                  &src_box);
    }
+}
+
+
+struct pipe_resource *
+st_create_color_map_texture(struct gl_context *ctx)
+{
+   struct st_context *st = st_context(ctx);
+   struct pipe_context *pipe = st->pipe;
+   struct pipe_resource *pt;
+   enum pipe_format format;
+   const uint texSize = 256; /* simple, and usually perfect */
+
+   /* find an RGBA texture format */
+   format = st_choose_format(pipe->screen, GL_RGBA, GL_NONE, GL_NONE,
+                             PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW);
+
+   /* create texture for color map/table */
+   pt = st_texture_create(st, PIPE_TEXTURE_2D, format, 0,
+                          texSize, texSize, 1, 1, PIPE_BIND_SAMPLER_VIEW);
+   return pt;
 }
 

@@ -5,7 +5,6 @@
 
 /*
  * Mesa 3-D graphics library
- * Version:  7.0.3
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -55,47 +54,47 @@ static void
 client_state(struct gl_context *ctx, GLenum cap, GLboolean state)
 {
    struct gl_array_object *arrayObj = ctx->Array.ArrayObj;
-   GLuint flag;
+   GLbitfield64 flag;
    GLboolean *var;
 
    switch (cap) {
       case GL_VERTEX_ARRAY:
-         var = &arrayObj->Vertex.Enabled;
-         flag = _NEW_ARRAY_VERTEX;
+         var = &arrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled;
+         flag = VERT_BIT_POS;
          break;
       case GL_NORMAL_ARRAY:
-         var = &arrayObj->Normal.Enabled;
-         flag = _NEW_ARRAY_NORMAL;
+         var = &arrayObj->VertexAttrib[VERT_ATTRIB_NORMAL].Enabled;
+         flag = VERT_BIT_NORMAL;
          break;
       case GL_COLOR_ARRAY:
-         var = &arrayObj->Color.Enabled;
-         flag = _NEW_ARRAY_COLOR0;
+         var = &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR0].Enabled;
+         flag = VERT_BIT_COLOR0;
          break;
       case GL_INDEX_ARRAY:
-         var = &arrayObj->Index.Enabled;
-         flag = _NEW_ARRAY_INDEX;
+         var = &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR_INDEX].Enabled;
+         flag = VERT_BIT_COLOR_INDEX;
          break;
       case GL_TEXTURE_COORD_ARRAY:
-         var = &arrayObj->TexCoord[ctx->Array.ActiveTexture].Enabled;
-         flag = _NEW_ARRAY_TEXCOORD(ctx->Array.ActiveTexture);
+         var = &arrayObj->VertexAttrib[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)].Enabled;
+         flag = VERT_BIT_TEX(ctx->Array.ActiveTexture);
          break;
       case GL_EDGE_FLAG_ARRAY:
-         var = &arrayObj->EdgeFlag.Enabled;
-         flag = _NEW_ARRAY_EDGEFLAG;
+         var = &arrayObj->VertexAttrib[VERT_ATTRIB_EDGEFLAG].Enabled;
+         flag = VERT_BIT_EDGEFLAG;
          break;
       case GL_FOG_COORDINATE_ARRAY_EXT:
-         var = &arrayObj->FogCoord.Enabled;
-         flag = _NEW_ARRAY_FOGCOORD;
+         var = &arrayObj->VertexAttrib[VERT_ATTRIB_FOG].Enabled;
+         flag = VERT_BIT_FOG;
          break;
       case GL_SECONDARY_COLOR_ARRAY_EXT:
-         var = &arrayObj->SecondaryColor.Enabled;
-         flag = _NEW_ARRAY_COLOR1;
+         var = &arrayObj->VertexAttrib[VERT_ATTRIB_COLOR1].Enabled;
+         flag = VERT_BIT_COLOR1;
          break;
 
 #if FEATURE_point_size_array
       case GL_POINT_SIZE_ARRAY_OES:
-         var = &arrayObj->PointSize.Enabled;
-         flag = _NEW_ARRAY_POINT_SIZE;
+         var = &arrayObj->VertexAttrib[VERT_ATTRIB_POINT_SIZE].Enabled;
+         flag = VERT_BIT_POINT_SIZE;
          break;
 #endif
 
@@ -119,9 +118,9 @@ client_state(struct gl_context *ctx, GLenum cap, GLboolean state)
          CHECK_EXTENSION(NV_vertex_program, cap);
          {
             GLint n = (GLint) cap - GL_VERTEX_ATTRIB_ARRAY0_NV;
-            ASSERT(n < Elements(ctx->Array.ArrayObj->VertexAttrib));
-            var = &arrayObj->VertexAttrib[n].Enabled;
-            flag = _NEW_ARRAY_ATTRIB(n);
+            ASSERT(VERT_ATTRIB_GENERIC(n) < Elements(ctx->Array.ArrayObj->VertexAttrib));
+            var = &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(n)].Enabled;
+            flag = VERT_BIT_GENERIC(n);
          }
          break;
 #endif /* FEATURE_NV_vertex_program */
@@ -296,14 +295,19 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
          }
          break;
 #if FEATURE_userclip
-      case GL_CLIP_PLANE0:
-      case GL_CLIP_PLANE1:
-      case GL_CLIP_PLANE2:
-      case GL_CLIP_PLANE3:
-      case GL_CLIP_PLANE4:
-      case GL_CLIP_PLANE5:
+      case GL_CLIP_DISTANCE0:
+      case GL_CLIP_DISTANCE1:
+      case GL_CLIP_DISTANCE2:
+      case GL_CLIP_DISTANCE3:
+      case GL_CLIP_DISTANCE4:
+      case GL_CLIP_DISTANCE5:
+      case GL_CLIP_DISTANCE6:
+      case GL_CLIP_DISTANCE7:
          {
-            const GLuint p = cap - GL_CLIP_PLANE0;
+            const GLuint p = cap - GL_CLIP_DISTANCE0;
+
+            if (p >= ctx->Const.MaxClipPlanes)
+               goto invalid_enum_error;
 
             if ((ctx->Transform.ClipPlanesEnabled & (1 << p))
                 == ((GLuint) state << p))
@@ -560,7 +564,6 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
          ctx->Polygon.OffsetLine = state;
          break;
       case GL_POLYGON_OFFSET_FILL:
-         /*case GL_POLYGON_OFFSET_EXT:*/
          if (ctx->Polygon.OffsetFill == state)
             return;
          FLUSH_VERTICES(ctx, _NEW_POLYGON);
@@ -577,12 +580,6 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
             return;
          FLUSH_VERTICES(ctx, _NEW_SCISSOR);
          ctx->Scissor.Enabled = state;
-         break;
-      case GL_SHARED_TEXTURE_PALETTE_EXT:
-         if (ctx->Texture.SharedPalette == state)
-            return;
-         FLUSH_VERTICES(ctx, _NEW_TEXTURE);
-         ctx->Texture.SharedPalette = state;
          break;
       case GL_STENCIL_TEST:
          if (ctx->Stencil.Enabled == state)
@@ -643,9 +640,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
          break;
 #endif
 
-      /*
-       * CLIENT STATE!!!
-       */
+      /* client-side state */
       case GL_VERTEX_ARRAY:
       case GL_NORMAL_ARRAY:
       case GL_COLOR_ARRAY:
@@ -894,9 +889,9 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
 #if FEATURE_EXT_transform_feedback
       case GL_RASTERIZER_DISCARD:
 	 CHECK_EXTENSION(EXT_transform_feedback, cap);
-         if (ctx->TransformFeedback.RasterDiscard != state) {
-            FLUSH_VERTICES(ctx, _NEW_TRANSFORM);
-            ctx->TransformFeedback.RasterDiscard = state;
+         if (ctx->RasterDiscard != state) {
+            FLUSH_VERTICES(ctx, _NEW_RASTERIZER_DISCARD);
+            ctx->RasterDiscard = state;
          }
          break;
 #endif
@@ -919,6 +914,14 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
          CHECK_EXTENSION(EXT_framebuffer_sRGB, cap);
          FLUSH_VERTICES(ctx, _NEW_BUFFERS);
          ctx->Color.sRGBEnabled = state;
+         break;
+
+      /* GL_OES_EGL_image_external */
+      case GL_TEXTURE_EXTERNAL_OES:
+         CHECK_EXTENSION(OES_EGL_image_external, cap);
+         if (!enable_texture(ctx, state, TEXTURE_EXTERNAL_BIT)) {
+            return;
+         }
          break;
 
       default:
@@ -1092,13 +1095,21 @@ _mesa_IsEnabled( GLenum cap )
 	 return ctx->Eval.AutoNormal;
       case GL_BLEND:
          return ctx->Color.BlendEnabled & 1;  /* return state for buffer[0] */
-      case GL_CLIP_PLANE0:
-      case GL_CLIP_PLANE1:
-      case GL_CLIP_PLANE2:
-      case GL_CLIP_PLANE3:
-      case GL_CLIP_PLANE4:
-      case GL_CLIP_PLANE5:
-	 return (ctx->Transform.ClipPlanesEnabled >> (cap - GL_CLIP_PLANE0)) & 1;
+      case GL_CLIP_DISTANCE0:
+      case GL_CLIP_DISTANCE1:
+      case GL_CLIP_DISTANCE2:
+      case GL_CLIP_DISTANCE3:
+      case GL_CLIP_DISTANCE4:
+      case GL_CLIP_DISTANCE5:
+      case GL_CLIP_DISTANCE6:
+      case GL_CLIP_DISTANCE7: {
+         const GLuint p = cap - GL_CLIP_DISTANCE0;
+
+         if (p >= ctx->Const.MaxClipPlanes)
+            goto invalid_enum_error;
+
+	 return (ctx->Transform.ClipPlanesEnabled >> p) & 1;
+      }
       case GL_COLOR_MATERIAL:
 	 return ctx->Light.ColorMaterialEnabled;
       case GL_CULL_FACE:
@@ -1177,14 +1188,11 @@ _mesa_IsEnabled( GLenum cap )
       case GL_POLYGON_OFFSET_LINE:
 	 return ctx->Polygon.OffsetLine;
       case GL_POLYGON_OFFSET_FILL:
-      /*case GL_POLYGON_OFFSET_EXT:*/
 	 return ctx->Polygon.OffsetFill;
       case GL_RESCALE_NORMAL_EXT:
          return ctx->Transform.RescaleNormals;
       case GL_SCISSOR_TEST:
 	 return ctx->Scissor.Enabled;
-      case GL_SHARED_TEXTURE_PALETTE_EXT:
-         return ctx->Texture.SharedPalette;
       case GL_STENCIL_TEST:
 	 return ctx->Stencil.Enabled;
       case GL_TEXTURE_1D:
@@ -1216,31 +1224,29 @@ _mesa_IsEnabled( GLenum cap )
          }
 #endif
 
-      /*
-       * CLIENT STATE!!!
-       */
+      /* client-side state */
       case GL_VERTEX_ARRAY:
-         return (ctx->Array.ArrayObj->Vertex.Enabled != 0);
+         return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled != 0);
       case GL_NORMAL_ARRAY:
-         return (ctx->Array.ArrayObj->Normal.Enabled != 0);
+         return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_NORMAL].Enabled != 0);
       case GL_COLOR_ARRAY:
-         return (ctx->Array.ArrayObj->Color.Enabled != 0);
+         return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_COLOR0].Enabled != 0);
       case GL_INDEX_ARRAY:
-         return (ctx->Array.ArrayObj->Index.Enabled != 0);
+         return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_COLOR_INDEX].Enabled != 0);
       case GL_TEXTURE_COORD_ARRAY:
-         return (ctx->Array.ArrayObj->TexCoord[ctx->Array.ActiveTexture]
+         return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_TEX(ctx->Array.ActiveTexture)]
                  .Enabled != 0);
       case GL_EDGE_FLAG_ARRAY:
-         return (ctx->Array.ArrayObj->EdgeFlag.Enabled != 0);
+         return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_EDGEFLAG].Enabled != 0);
       case GL_FOG_COORDINATE_ARRAY_EXT:
          CHECK_EXTENSION(EXT_fog_coord);
-         return (ctx->Array.ArrayObj->FogCoord.Enabled != 0);
+         return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_FOG].Enabled != 0);
       case GL_SECONDARY_COLOR_ARRAY_EXT:
          CHECK_EXTENSION(EXT_secondary_color);
-         return (ctx->Array.ArrayObj->SecondaryColor.Enabled != 0);
+         return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_COLOR1].Enabled != 0);
 #if FEATURE_point_size_array
       case GL_POINT_SIZE_ARRAY_OES:
-         return (ctx->Array.ArrayObj->PointSize.Enabled != 0);
+         return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_POINT_SIZE].Enabled != 0);
 #endif
 
       /* GL_ARB_texture_cube_map */
@@ -1306,8 +1312,8 @@ _mesa_IsEnabled( GLenum cap )
          CHECK_EXTENSION(NV_vertex_program);
          {
             GLint n = (GLint) cap - GL_VERTEX_ATTRIB_ARRAY0_NV;
-            ASSERT(n < Elements(ctx->Array.ArrayObj->VertexAttrib));
-            return (ctx->Array.ArrayObj->VertexAttrib[n].Enabled != 0);
+            ASSERT(VERT_ATTRIB_GENERIC(n) < Elements(ctx->Array.ArrayObj->VertexAttrib));
+            return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(n)].Enabled != 0);
          }
       case GL_MAP1_VERTEX_ATTRIB0_4_NV:
       case GL_MAP1_VERTEX_ATTRIB1_4_NV:
@@ -1397,7 +1403,7 @@ _mesa_IsEnabled( GLenum cap )
 #if FEATURE_EXT_transform_feedback
       case GL_RASTERIZER_DISCARD:
 	 CHECK_EXTENSION(EXT_transform_feedback);
-         return ctx->TransformFeedback.RasterDiscard;
+         return ctx->RasterDiscard;
 #endif
 
       /* GL_NV_primitive_restart */
@@ -1418,6 +1424,11 @@ _mesa_IsEnabled( GLenum cap )
       case GL_FRAMEBUFFER_SRGB_EXT:
 	 CHECK_EXTENSION(EXT_framebuffer_sRGB);
 	 return ctx->Color.sRGBEnabled;
+
+      /* GL_OES_EGL_image_external */
+      case GL_TEXTURE_EXTERNAL_OES:
+	 CHECK_EXTENSION(OES_EGL_image_external);
+         return is_texture_enabled(ctx, TEXTURE_EXTERNAL_BIT);
 
       default:
          goto invalid_enum_error;

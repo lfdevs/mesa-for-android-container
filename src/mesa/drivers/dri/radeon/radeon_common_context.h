@@ -4,7 +4,6 @@
 
 #include "main/mm.h"
 #include "math/m_vector.h"
-#include "texmem.h"
 #include "tnl/t_context.h"
 #include "main/colormac.h"
 
@@ -13,10 +12,12 @@
 #include "radeon_drm.h"
 #include "dri_util.h"
 #include "tnl/t_vertex.h"
+#include "swrast/s_context.h"
 
 struct radeon_context;
 
-#include "radeon_bocs_wrapper.h"
+#include "radeon_bo_gem.h"
+#include "radeon_cs_gem.h"
 
 /* This union is used to avoid warnings/miscompilation
    with float to uint32_t casts due to strict-aliasing */
@@ -79,26 +80,25 @@ typedef struct radeon_context *radeonContextPtr;
 
 struct radeon_renderbuffer
 {
-	struct gl_renderbuffer base;
+	struct swrast_renderbuffer base;
+
 	struct radeon_bo *bo;
 	unsigned int cpp;
 	/* unsigned int offset; */
 	unsigned int pitch;
+
+	struct radeon_bo *map_bo;
+	GLbitfield map_mode;
+	int map_x, map_y, map_w, map_h;
+	int map_pitch;
+	void *map_buffer;
 
 	uint32_t draw_offset; /* FBO */
 	/* boo Xorg 6.8.2 compat */
 	int has_surface;
 
 	GLuint pf_pending;  /**< sequence number of pending flip */
-	GLuint vbl_pending;   /**< vblank sequence number of pending flip */
 	__DRIdrawable *dPriv;
-
-	/* r6xx+ tiling */
-	GLuint tile_config;
-	GLint group_bytes;
-	GLint num_channels;
-	GLint num_banks;
-	GLint r7xx_bank_op;
 };
 
 struct radeon_framebuffer
@@ -106,21 +106,6 @@ struct radeon_framebuffer
 	struct gl_framebuffer base;
 
 	struct radeon_renderbuffer *color_rb[2];
-
-	GLuint vbl_waited;
-
-	/* buffer swap */
-	int64_t swap_ust;
-	int64_t swap_missed_ust;
-
-	GLuint swap_count;
-	GLuint swap_missed_count;
-
-	/* Drawable page flipping state */
-	GLboolean pf_active;
-	GLint pf_current_page;
-	GLint pf_num_pages;
-
 };
 
 
@@ -174,8 +159,13 @@ struct radeon_hw_state {
 /* Texture related */
 typedef struct _radeon_texture_image radeon_texture_image;
 
+
+/**
+ * This is a subclass of swrast_texture_image since we use swrast
+ * for software fallback rendering.
+ */
 struct _radeon_texture_image {
-	struct gl_texture_image base;
+	struct swrast_texture_image base;
 
 	/**
 	 * If mt != 0, the image is stored in hardware format in the
@@ -187,9 +177,7 @@ struct _radeon_texture_image {
 	 */
 	struct _radeon_mipmap_tree *mt;
 	struct radeon_bo *bo;
-
-	int mtlevel; /** if mt != 0, this is the image's level in the mipmap tree */
-	int mtface; /** if mt != 0, this is the image's face in the mipmap tree */
+	GLboolean used_as_render_target;
 };
 
 
@@ -232,31 +220,7 @@ struct radeon_tex_obj {
 	GLuint pp_border_color;
 	GLuint pp_cubic_faces;	/* cube face 1,2,3,4 log2 sizes */
 
-        GLuint pp_txfilter_1;	/*  r300 */
-
-	/* r700 texture states */
-	GLuint SQ_TEX_RESOURCE0;
-	GLuint SQ_TEX_RESOURCE1;
-	GLuint SQ_TEX_RESOURCE2;
-	GLuint SQ_TEX_RESOURCE3;
-	GLuint SQ_TEX_RESOURCE4;
-	GLuint SQ_TEX_RESOURCE5;
-	GLuint SQ_TEX_RESOURCE6;
-
-    GLuint SQ_TEX_RESOURCE7;
-
-	GLuint SQ_TEX_SAMPLER0;
-	GLuint SQ_TEX_SAMPLER1;
-	GLuint SQ_TEX_SAMPLER2;
-
-	GLuint TD_PS_SAMPLER0_BORDER_RED;
-	GLuint TD_PS_SAMPLER0_BORDER_GREEN;
-	GLuint TD_PS_SAMPLER0_BORDER_BLUE;
-	GLuint TD_PS_SAMPLER0_BORDER_ALPHA;
-
 	GLboolean border_fallback;
-
-
 };
 
 static INLINE radeonTexObj* radeon_tex_obj(struct gl_texture_object *texObj)
@@ -449,11 +413,9 @@ struct radeon_context {
    GLuint TclFallback;
    GLuint Fallback;
    GLuint NewGLState;
-   DECLARE_RENDERINPUTS(tnl_index_bitset);	/* index of bits for last tnl_install_attrs */
+   GLbitfield64 tnl_index_bitset;	/* index of bits for last tnl_install_attrs */
 
-   /* Drawable, cliprect and scissor information */
-   GLuint numClipRects;	/* Cliprects for the draw buffer */
-   drm_clip_rect_t *pClipRects;
+   /* Drawable information */
    unsigned int lastStamp;
    drm_radeon_sarea_t *sarea;	/* Private SAREA data */
 
@@ -480,7 +442,6 @@ struct radeon_context {
    struct radeon_debug debug;
 
   drm_clip_rect_t fboRect;
-  GLboolean constant_cliprect; /* use for FBO or DRI2 rendering */
   GLboolean front_cliprects;
 
    /**
@@ -524,7 +485,7 @@ struct radeon_context {
 	   void (*free_context)(struct gl_context *ctx);
 	   void (*emit_query_finish)(radeonContextPtr radeon);
 	   void (*update_scissor)(struct gl_context *ctx);
-	   unsigned (*check_blit)(gl_format mesa_format);
+	   unsigned (*check_blit)(gl_format mesa_format, uint32_t dst_pitch);
 	   unsigned (*blit)(struct gl_context *ctx,
                         struct radeon_bo *src_bo,
                         intptr_t src_offset,
@@ -559,51 +520,6 @@ static inline __DRIdrawable* radeon_get_drawable(radeonContextPtr radeon)
 static inline __DRIdrawable* radeon_get_readable(radeonContextPtr radeon)
 {
 	return radeon->dri.context->driReadablePriv;
-}
-
-/**
- * This function takes a float and packs it into a uint32_t
- */
-static INLINE uint32_t radeonPackFloat32(float fl)
-{
-	union {
-		float fl;
-		uint32_t u;
-	} u;
-
-	u.fl = fl;
-	return u.u;
-}
-
-/* This is probably wrong for some values, I need to test this
- * some more.  Range checking would be a good idea also..
- *
- * But it works for most things.  I'll fix it later if someone
- * else with a better clue doesn't
- */
-static INLINE uint32_t radeonPackFloat24(float f)
-{
-	float mantissa;
-	int exponent;
-	uint32_t float24 = 0;
-
-	if (f == 0.0)
-		return 0;
-
-	mantissa = frexpf(f, &exponent);
-
-	/* Handle -ve */
-	if (mantissa < 0) {
-		float24 |= (1 << 23);
-		mantissa = mantissa * -1.0;
-	}
-	/* Handle exponent, bias of 63 */
-	exponent += 62;
-	float24 |= (exponent << 16);
-	/* Kill 7 LSB of mantissa */
-	float24 |= (radeonPackFloat32(mantissa) & 0x7FFFFF) >> 7;
-
-	return float24;
 }
 
 GLboolean radeonInitContext(radeonContextPtr radeon,

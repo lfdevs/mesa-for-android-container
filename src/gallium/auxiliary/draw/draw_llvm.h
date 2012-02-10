@@ -80,6 +80,7 @@ enum {
 enum {
    DRAW_JIT_VERTEX_VERTEX_ID = 0,
    DRAW_JIT_VERTEX_CLIP,
+   DRAW_JIT_VERTEX_PRE_CLIP_POS,
    DRAW_JIT_VERTEX_DATA
 };
 
@@ -98,7 +99,7 @@ struct draw_jit_context
 {
    const float *vs_constants;
    const float *gs_constants;
-   float (*planes) [12][4];
+   float (*planes) [DRAW_TOTAL_CLIP_PLANES][4];
    float *viewport;
 
    struct draw_jit_texture textures[PIPE_MAX_VERTEX_SAMPLERS];
@@ -123,13 +124,16 @@ struct draw_jit_context
    lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_CTX_TEXTURES, "textures")
 
 #define draw_jit_header_id(_gallivm, _ptr)              \
-   lp_build_struct_get_ptr(_gallivm, _ptr, 0, "id")
+   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_VERTEX_ID, "id")
 
 #define draw_jit_header_clip(_gallivm, _ptr) \
-   lp_build_struct_get_ptr(_gallivm, _ptr, 1, "clip")
+   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_CLIP, "clip")
+
+#define draw_jit_header_pre_clip_pos(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_PRE_CLIP_POS, "pre_clip_pos")
 
 #define draw_jit_header_data(_gallivm, _ptr)            \
-   lp_build_struct_get_ptr(_gallivm, _ptr, 2, "data")
+   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_DATA, "data")
 
 
 #define draw_jit_vbuffer_stride(_gallivm, _ptr)         \
@@ -171,8 +175,8 @@ struct draw_llvm_variant_key
    unsigned clip_halfz:1;
    unsigned bypass_viewport:1;
    unsigned need_edgeflags:1;
-   unsigned nr_planes:4;
-   unsigned pad:5;
+   unsigned ucp_enable:PIPE_MAX_CLIP_PLANES;
+   unsigned pad:9-PIPE_MAX_CLIP_PLANES;
 
    /* Variable number of vertex elements:
     */

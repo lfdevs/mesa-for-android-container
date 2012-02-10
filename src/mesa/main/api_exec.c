@@ -39,9 +39,7 @@
 #include "atifragshader.h"
 #include "attrib.h"
 #include "blend.h"
-#if FEATURE_ARB_vertex_buffer_object
 #include "bufferobj.h"
-#endif
 #include "arrayobj.h"
 #if FEATURE_draw_read_buffer
 #include "buffers.h"
@@ -90,6 +88,7 @@
 #include "texobj.h"
 #include "texparam.h"
 #include "texstate.h"
+#include "texstorage.h"
 #include "texturebarrier.h"
 #include "transformfeedback.h"
 #include "mtypes.h"
@@ -469,6 +468,7 @@ _mesa_create_exec_table(void)
    SET_DepthBoundsEXT(exec, _mesa_DepthBoundsEXT);
 
    /* 352. GL_EXT_transform_feedback */
+   /* ARB 93. GL_ARB_transform_feedback2 */
    _mesa_init_transform_feedback_dispatch(exec);
 
    /* 364. GL_EXT_provoking_vertex */
@@ -578,7 +578,6 @@ _mesa_create_exec_table(void)
 #endif
 
    /* ARB 28. GL_ARB_vertex_buffer_object */
-#if FEATURE_ARB_vertex_buffer_object
    SET_BindBufferARB(exec, _mesa_BindBufferARB);
    SET_BufferDataARB(exec, _mesa_BufferDataARB);
    SET_BufferSubDataARB(exec, _mesa_BufferSubDataARB);
@@ -590,7 +589,6 @@ _mesa_create_exec_table(void)
    SET_IsBufferARB(exec, _mesa_IsBufferARB);
    SET_MapBufferARB(exec, _mesa_MapBufferARB);
    SET_UnmapBufferARB(exec, _mesa_UnmapBufferARB);
-#endif
 
    /* ARB 29. GL_ARB_occlusion_query */
    _mesa_init_queryobj_dispatch(exec);
@@ -740,6 +738,14 @@ _mesa_create_exec_table(void)
  
    /* GL_ARB_texture_buffer_object */
    SET_TexBufferARB(exec, _mesa_TexBuffer);
+
+   /* GL_ARB_texture_storage */
+   SET_TexStorage1D(exec, _mesa_TexStorage1D);
+   SET_TexStorage2D(exec, _mesa_TexStorage2D);
+   SET_TexStorage3D(exec, _mesa_TexStorage3D);
+   SET_TextureStorage1DEXT(exec, _mesa_TextureStorage1DEXT);
+   SET_TextureStorage2DEXT(exec, _mesa_TextureStorage2DEXT);
+   SET_TextureStorage3DEXT(exec, _mesa_TextureStorage3DEXT);
 
 #if FEATURE_ARB_sampler_objects
    _mesa_init_sampler_object_dispatch(exec);

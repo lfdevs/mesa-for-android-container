@@ -66,7 +66,7 @@ static void calculate_curbe_offsets( struct brw_context *brw )
 
    /* _NEW_TRANSFORM */
    if (ctx->Transform.ClipPlanesEnabled) {
-      GLuint nr_planes = 6 + brw_count_bits(ctx->Transform.ClipPlanesEnabled);
+      GLuint nr_planes = 6 + _mesa_bitcount_64(ctx->Transform.ClipPlanesEnabled);
       nr_clip_regs = (nr_planes * 4 + 15) / 16;
    }
 
@@ -133,7 +133,7 @@ const struct brw_tracked_state brw_curbe_offsets = {
       .brw  = BRW_NEW_VERTEX_PROGRAM | BRW_NEW_CONTEXT,
       .cache = CACHE_NEW_WM_PROG
    },
-   .prepare = calculate_curbe_offsets
+   .emit = calculate_curbe_offsets
 };
 
 
@@ -179,19 +179,22 @@ static GLfloat fixed_plane[6][4] = {
  * cache mechanism, but maybe would benefit from a comparison against
  * the current uploaded set of constants.
  */
-static void prepare_constant_buffer(struct brw_context *brw)
+static void
+brw_upload_constant_buffer(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->intel.ctx;
+   struct intel_context *intel = &brw->intel;
+   struct gl_context *ctx = &intel->ctx;
    const struct brw_vertex_program *vp =
       brw_vertex_program_const(brw->vertex_program);
    const GLuint sz = brw->curbe.total_size;
    const GLuint bufsz = sz * 16 * sizeof(GLfloat);
    GLfloat *buf;
    GLuint i;
+   gl_clip_plane *clip_planes;
 
    if (sz == 0) {
       brw->curbe.last_bufsz  = 0;
-      return;
+      goto emit;
    }
 
    buf = brw->curbe.next_buf;
@@ -203,13 +206,18 @@ static void prepare_constant_buffer(struct brw_context *brw)
       /* copy float constants */
       for (i = 0; i < brw->wm.prog_data->nr_params; i++) {
 	 buf[offset + i] = convert_param(brw->wm.prog_data->param_convert[i],
-					 *brw->wm.prog_data->param[i]);
+					 brw->wm.prog_data->param[i]);
       }
    }
 
 
-   /* The clipplanes are actually delivered to both CLIP and VS units.
-    * VS uses them to calculate the outcode bitmasks.
+   /* When using the old VS backend, the clipplanes are actually delivered to
+    * both CLIP and VS units.  VS uses them to calculate the outcode bitmasks.
+    *
+    * When using the new VS backend, it is responsible for setting up its own
+    * clipplane constants if it needs them.  This results in a slight waste of
+    * of curbe space, but the advantage is that the new VS backend can use its
+    * general-purpose uniform layout code to store the clipplanes.
     */
    if (brw->curbe.clip_size) {
       GLuint offset = brw->curbe.clip_start * 16;
@@ -227,13 +235,13 @@ static void prepare_constant_buffer(struct brw_context *brw)
       /* Clip planes: _NEW_TRANSFORM plus _NEW_PROJECTION to get to
        * clip-space:
        */
-      assert(MAX_CLIP_PLANES == 6);
+      clip_planes = brw_select_clip_planes(ctx);
       for (j = 0; j < MAX_CLIP_PLANES; j++) {
 	 if (ctx->Transform.ClipPlanesEnabled & (1<<j)) {
-	    buf[offset + i * 4 + 0] = ctx->Transform._ClipUserPlane[j][0];
-	    buf[offset + i * 4 + 1] = ctx->Transform._ClipUserPlane[j][1];
-	    buf[offset + i * 4 + 2] = ctx->Transform._ClipUserPlane[j][2];
-	    buf[offset + i * 4 + 3] = ctx->Transform._ClipUserPlane[j][3];
+	    buf[offset + i * 4 + 0] = clip_planes[j][0];
+	    buf[offset + i * 4 + 1] = clip_planes[j][1];
+	    buf[offset + i * 4 + 2] = clip_planes[j][2];
+	    buf[offset + i * 4 + 3] = clip_planes[j][3];
 	    i++;
 	 }
       }
@@ -244,15 +252,21 @@ static void prepare_constant_buffer(struct brw_context *brw)
       GLuint offset = brw->curbe.vs_start * 16;
       GLuint nr = brw->vs.prog_data->nr_params / 4;
 
-      /* Load the subset of push constants that will get used when
-       * we also have a pull constant buffer.
-       */
-      for (i = 0; i < vp->program.Base.Parameters->NumParameters; i++) {
-	 if (brw->vs.constant_map[i] != -1) {
-	    assert(brw->vs.constant_map[i] <= nr);
-	    memcpy(buf + offset + brw->vs.constant_map[i] * 4,
-		   vp->program.Base.Parameters->ParameterValues[i],
-		   4 * sizeof(float));
+      if (brw->vs.prog_data->uses_new_param_layout) {
+	 for (i = 0; i < brw->vs.prog_data->nr_params; i++) {
+	    buf[offset + i] = *brw->vs.prog_data->param[i];
+	 }
+      } else {
+	 /* Load the subset of push constants that will get used when
+	  * we also have a pull constant buffer.
+	  */
+	 for (i = 0; i < vp->program.Base.Parameters->NumParameters; i++) {
+	    if (brw->vs.constant_map[i] != -1) {
+	       assert(brw->vs.constant_map[i] <= nr);
+	       memcpy(buf + offset + brw->vs.constant_map[i] * 4,
+		      vp->program.Base.Parameters->ParameterValues[i],
+		      4 * sizeof(float));
+	    }
 	 }
       }
    }
@@ -310,8 +324,6 @@ static void prepare_constant_buffer(struct brw_context *brw)
 	     bufsz);
    }
 
-   brw_add_validated_bo(brw, brw->curbe.curbe_bo);
-
    /* Because this provokes an action (ie copy the constants into the
     * URB), it shouldn't be shortcircuited if identical to the
     * previous time - because eg. the urb destination may have
@@ -325,22 +337,17 @@ static void prepare_constant_buffer(struct brw_context *brw)
     * flushes as necessary when doublebuffering of CURBEs isn't
     * possible.
     */
-}
 
-static void emit_constant_buffer(struct brw_context *brw)
-{
-   struct intel_context *intel = &brw->intel;
-   GLuint sz = brw->curbe.total_size;
-
+emit:
    BEGIN_BATCH(2);
-   if (sz == 0) {
+   if (brw->curbe.total_size == 0) {
       OUT_BATCH((CMD_CONST_BUFFER << 16) | (2 - 2));
       OUT_BATCH(0);
    } else {
       OUT_BATCH((CMD_CONST_BUFFER << 16) | (1 << 8) | (2 - 2));
       OUT_RELOC(brw->curbe.curbe_bo,
 		I915_GEM_DOMAIN_INSTRUCTION, 0,
-		(sz - 1) + brw->curbe.curbe_offset);
+		(brw->curbe.total_size - 1) + brw->curbe.curbe_offset);
    }
    ADVANCE_BATCH();
 }
@@ -362,7 +369,6 @@ const struct brw_tracked_state brw_constant_buffer = {
 	       BRW_NEW_BATCH),
       .cache = (CACHE_NEW_WM_PROG) 
    },
-   .prepare = prepare_constant_buffer,
-   .emit = emit_constant_buffer,
+   .emit = brw_upload_constant_buffer,
 };
 

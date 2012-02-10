@@ -39,7 +39,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/image.h"
 #include "main/mfeatures.h"
 #include "main/simple_list.h"
-#include "main/texstore.h"
 #include "main/teximage.h"
 #include "main/texobj.h"
 
@@ -100,37 +99,39 @@ static void radeonSetTexWrap( radeonTexObjPtr t, GLenum swrap, GLenum twrap )
       _mesa_problem(NULL, "bad S wrap mode in %s", __FUNCTION__);
    }
 
-   switch ( twrap ) {
-   case GL_REPEAT:
-      t->pp_txfilter |= RADEON_CLAMP_T_WRAP;
-      break;
-   case GL_CLAMP:
-      t->pp_txfilter |= RADEON_CLAMP_T_CLAMP_GL;
-      is_clamp = GL_TRUE;
-      break;
-   case GL_CLAMP_TO_EDGE:
-      t->pp_txfilter |= RADEON_CLAMP_T_CLAMP_LAST;
-      break;
-   case GL_CLAMP_TO_BORDER:
-      t->pp_txfilter |= RADEON_CLAMP_T_CLAMP_GL;
-      is_clamp_to_border = GL_TRUE;
-      break;
-   case GL_MIRRORED_REPEAT:
-      t->pp_txfilter |= RADEON_CLAMP_T_MIRROR;
-      break;
-   case GL_MIRROR_CLAMP_EXT:
-      t->pp_txfilter |= RADEON_CLAMP_T_MIRROR_CLAMP_GL;
-      is_clamp = GL_TRUE;
-      break;
-   case GL_MIRROR_CLAMP_TO_EDGE_EXT:
-      t->pp_txfilter |= RADEON_CLAMP_T_MIRROR_CLAMP_LAST;
-      break;
-   case GL_MIRROR_CLAMP_TO_BORDER_EXT:
-      t->pp_txfilter |= RADEON_CLAMP_T_MIRROR_CLAMP_GL;
-      is_clamp_to_border = GL_TRUE;
-      break;
-   default:
-      _mesa_problem(NULL, "bad T wrap mode in %s", __FUNCTION__);
+   if (t->base.Target != GL_TEXTURE_1D) {
+      switch ( twrap ) {
+      case GL_REPEAT:
+	 t->pp_txfilter |= RADEON_CLAMP_T_WRAP;
+	 break;
+      case GL_CLAMP:
+	 t->pp_txfilter |= RADEON_CLAMP_T_CLAMP_GL;
+	 is_clamp = GL_TRUE;
+	 break;
+      case GL_CLAMP_TO_EDGE:
+	 t->pp_txfilter |= RADEON_CLAMP_T_CLAMP_LAST;
+	 break;
+      case GL_CLAMP_TO_BORDER:
+	 t->pp_txfilter |= RADEON_CLAMP_T_CLAMP_GL;
+	 is_clamp_to_border = GL_TRUE;
+	 break;
+      case GL_MIRRORED_REPEAT:
+	 t->pp_txfilter |= RADEON_CLAMP_T_MIRROR;
+	 break;
+      case GL_MIRROR_CLAMP_EXT:
+	 t->pp_txfilter |= RADEON_CLAMP_T_MIRROR_CLAMP_GL;
+	 is_clamp = GL_TRUE;
+	 break;
+      case GL_MIRROR_CLAMP_TO_EDGE_EXT:
+	 t->pp_txfilter |= RADEON_CLAMP_T_MIRROR_CLAMP_LAST;
+	 break;
+      case GL_MIRROR_CLAMP_TO_BORDER_EXT:
+	 t->pp_txfilter |= RADEON_CLAMP_T_MIRROR_CLAMP_GL;
+	 is_clamp_to_border = GL_TRUE;
+	 break;
+      default:
+	 _mesa_problem(NULL, "bad T wrap mode in %s", __FUNCTION__);
+      }
    }
 
    if ( is_clamp_to_border ) {
@@ -270,7 +271,7 @@ static void radeonTexEnv( struct gl_context *ctx, GLenum target,
    case GL_TEXTURE_ENV_COLOR: {
       GLubyte c[4];
       GLuint envColor;
-      UNCLAMPED_FLOAT_TO_RGBA_CHAN( c, texUnit->EnvColor );
+      _mesa_unclamped_float_rgba_to_ubyte(c, texUnit->EnvColor);
       envColor = radeonPackColor( 4, c[0], c[1], c[2], c[3] );
       if ( rmesa->hw.tex[unit].cmd[TEX_PP_TFACTOR] != envColor ) {
 	 RADEON_STATECHANGE( rmesa, tex[unit] );
@@ -435,13 +436,7 @@ radeonNewTextureObject( struct gl_context *ctx, GLuint name, GLenum target )
 
 void radeonInitTextureFuncs( radeonContextPtr radeon, struct dd_function_table *functions )
 {
-   functions->ChooseTextureFormat	= radeonChooseTextureFormat_mesa;
-   functions->TexImage1D		= radeonTexImage1D;
-   functions->TexImage2D		= radeonTexImage2D;
-   functions->TexSubImage1D		= radeonTexSubImage1D;
-   functions->TexSubImage2D		= radeonTexSubImage2D;
-   functions->GetTexImage               = radeonGetTexImage;
-   functions->GetCompressedTexImage     = radeonGetCompressedTexImage;
+   radeon_init_common_texture_funcs(radeon, functions);
 
    functions->NewTextureObject		= radeonNewTextureObject;
    //   functions->BindTexture		= radeonBindTexture;
@@ -450,25 +445,4 @@ void radeonInitTextureFuncs( radeonContextPtr radeon, struct dd_function_table *
    functions->TexEnv			= radeonTexEnv;
    functions->TexParameter		= radeonTexParameter;
    functions->TexGen			= radeonTexGen;
-
-   functions->CompressedTexImage2D	= radeonCompressedTexImage2D;
-   functions->CompressedTexSubImage2D	= radeonCompressedTexSubImage2D;
-
-   if (radeon->radeonScreen->kernel_mm) {
-      functions->CopyTexImage2D = radeonCopyTexImage2D;
-      functions->CopyTexSubImage2D = radeonCopyTexSubImage2D;
-   }
-
-   functions->GenerateMipmap = radeonGenerateMipmap;
-
-   functions->NewTextureImage = radeonNewTextureImage;
-   functions->FreeTexImageData = radeonFreeTexImageData;
-   functions->MapTexture = radeonMapTexture;
-   functions->UnmapTexture = radeonUnmapTexture;
-
-#if FEATURE_OES_EGL_image
-   functions->EGLImageTargetTexture2D = radeon_image_target_texture_2d;
-#endif
-
-   driInitTextureFormats();
 }

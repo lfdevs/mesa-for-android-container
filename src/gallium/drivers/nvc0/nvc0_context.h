@@ -19,6 +19,8 @@
 #include "nvc0_program.h"
 #include "nvc0_resource.h"
 
+#include "nv50/nv50_transfer.h"
+
 #include "nouveau/nouveau_context.h"
 
 #include "nvc0_3ddefs.xml.h"
@@ -47,14 +49,14 @@
 #define NVC0_NEW_CONSTBUF     (1 << 18)
 #define NVC0_NEW_TEXTURES     (1 << 19)
 #define NVC0_NEW_SAMPLERS     (1 << 20)
-#define NVC0_NEW_TFB          (1 << 21)
-#define NVC0_NEW_TFB_BUFFERS  (1 << 22)
+#define NVC0_NEW_TFB_TARGETS  (1 << 21)
 
 #define NVC0_BUFCTX_CONSTANT 0
 #define NVC0_BUFCTX_FRAME    1
 #define NVC0_BUFCTX_VERTEX   2
 #define NVC0_BUFCTX_TEXTURES 3
-#define NVC0_BUFCTX_COUNT    4
+#define NVC0_BUFCTX_TFB      4
+#define NVC0_BUFCTX_COUNT    5
 
 struct nvc0_context {
    struct nouveau_context base;
@@ -72,13 +74,18 @@ struct nvc0_context {
       int32_t index_bias;
       boolean prim_restart;
       boolean early_z;
+      uint16_t scissor;
+      boolean rasterizer_discard;
       uint8_t num_vtxbufs;
       uint8_t num_vtxelts;
       uint8_t num_textures[5];
       uint8_t num_samplers[5];
       uint8_t tls_required; /* bitmask of shader types using l[] */
-      uint16_t scissor;
+      uint8_t c14_bound; /* whether immediate array constbuf is bound */
+      uint8_t clip_enable;
+      uint32_t clip_mode;
       uint32_t uniform_buffer_bound[5];
+      struct nvc0_transform_feedback_state *tfb;
    } state;
 
    struct nvc0_blend_stateobj *blend;
@@ -120,35 +127,17 @@ struct nvc0_context {
 
    boolean vbo_push_hint;
 
-   struct nvc0_transform_feedback_state *tfb;
-   struct pipe_resource *tfbbuf[4];
+   uint8_t tfbbuf_dirty;
+   struct pipe_stream_output_target *tfbbuf[4];
    unsigned num_tfbbufs;
-   unsigned tfb_offset[4];
 
    struct draw_context *draw;
 };
-
-#define NVC0_USING_EDGEFLAG(ctx) \
-   ((ctx)->vertprog->vp.edgeflag < PIPE_MAX_ATTRIBS)
 
 static INLINE struct nvc0_context *
 nvc0_context(struct pipe_context *pipe)
 {
    return (struct nvc0_context *)pipe;
-}
-
-struct nvc0_surface {
-   struct pipe_surface base;
-   uint32_t offset;
-   uint32_t width;
-   uint16_t height;
-   uint16_t depth;
-};
-
-static INLINE struct nvc0_surface *
-nvc0_surface(struct pipe_surface *ps)
-{
-   return (struct nvc0_surface *)ps;
 }
 
 /* nvc0_context.c */
@@ -173,10 +162,20 @@ extern struct draw_stage *nvc0_draw_render_stage(struct nvc0_context *);
 
 /* nvc0_program.c */
 boolean nvc0_program_translate(struct nvc0_program *);
+boolean nvc0_program_upload_code(struct nvc0_context *, struct nvc0_program *);
 void nvc0_program_destroy(struct nvc0_context *, struct nvc0_program *);
+void nvc0_program_library_upload(struct nvc0_context *);
 
 /* nvc0_query.c */
 void nvc0_init_query_functions(struct nvc0_context *);
+void nvc0_query_pushbuf_submit(struct nouveau_channel *,
+                               struct pipe_query *, unsigned result_offset);
+void nvc0_query_fifo_wait(struct nouveau_channel *, struct pipe_query *);
+void nvc0_so_target_save_offset(struct pipe_context *,
+                                struct pipe_stream_output_target *, unsigned i,
+                                boolean *serialize);
+
+#define NVC0_QUERY_TFB_BUFFER_OFFSET (PIPE_QUERY_TYPES + 0)
 
 /* nvc0_shader_state.c */
 void nvc0_vertprog_validate(struct nvc0_context *);
@@ -191,11 +190,13 @@ void nvc0_tfb_validate(struct nvc0_context *);
 extern void nvc0_init_state_functions(struct nvc0_context *);
 
 /* nvc0_state_validate.c */
-extern boolean nvc0_state_validate(struct nvc0_context *);
+extern boolean nvc0_state_validate(struct nvc0_context *, uint32_t state_mask,
+                                   unsigned space_words);
 
 /* nvc0_surface.c */
 extern void nvc0_clear(struct pipe_context *, unsigned buffers,
-                       const float *rgba, double depth, unsigned stencil);
+                       const union pipe_color_union *color,
+                       double depth, unsigned stencil);
 extern void nvc0_init_surface_functions(struct nvc0_context *);
 
 /* nvc0_tex.c */
@@ -209,14 +210,24 @@ nvc0_create_sampler_view(struct pipe_context *,
 
 /* nvc0_transfer.c */
 void
+nvc0_m2mf_transfer_rect(struct pipe_screen *pscreen,
+                        const struct nv50_m2mf_rect *dst,
+                        const struct nv50_m2mf_rect *src,
+                        uint32_t nblocksx, uint32_t nblocksy);
+void
 nvc0_m2mf_push_linear(struct nouveau_context *nv,
-		      struct nouveau_bo *dst, unsigned offset, unsigned domain,
-		      unsigned size, void *data);
+                      struct nouveau_bo *dst, unsigned offset, unsigned domain,
+                      unsigned size, const void *data);
 void
 nvc0_m2mf_copy_linear(struct nouveau_context *nv,
 		      struct nouveau_bo *dst, unsigned dstoff, unsigned dstdom,
 		      struct nouveau_bo *src, unsigned srcoff, unsigned srcdom,
 		      unsigned size);
+void
+nvc0_cb_push(struct nouveau_context *,
+             struct nouveau_bo *bo, unsigned domain,
+             unsigned base, unsigned size,
+             unsigned offset, unsigned words, const uint32_t *data);
 
 /* nvc0_vbo.c */
 void nvc0_draw_vbo(struct pipe_context *, const struct pipe_draw_info *);

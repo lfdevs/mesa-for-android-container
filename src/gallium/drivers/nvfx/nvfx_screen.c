@@ -3,6 +3,8 @@
 #include "util/u_format.h"
 #include "util/u_format_s3tc.h"
 #include "util/u_simple_screen.h"
+#include "vl/vl_decoder.h"
+#include "vl/vl_video_buffer.h"
 
 #include "nouveau/nouveau_screen.h"
 #include "nouveau/nv_object.xml.h"
@@ -25,13 +27,9 @@ nvfx_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	struct nvfx_screen *screen = nvfx_screen(pscreen);
 
 	switch (param) {
-	case PIPE_CAP_MAX_TEXTURE_IMAGE_UNITS:
-		return 16;
 	case PIPE_CAP_NPOT_TEXTURES:
 		return screen->advertise_npot;
 	case PIPE_CAP_TWO_SIDED_STENCIL:
-		return 1;
-	case PIPE_CAP_GLSL:
 		return 1;
 	case PIPE_CAP_SM3:
 		/* TODO: >= nv4x support Shader Model 3.0 */
@@ -58,10 +56,6 @@ nvfx_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		return 13;
 	case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
 		return !!screen->use_nv4x;
-	case PIPE_CAP_TEXTURE_MIRROR_REPEAT:
-		return 1;
-	case PIPE_CAP_MAX_VERTEX_TEXTURE_UNITS:
-		return 0; /* We have 4 on nv40 - but unsupported currently */
 	case PIPE_CAP_BLEND_EQUATION_SEPARATE:
 		return screen->advertise_blend_equation_separate;
 	case PIPE_CAP_MAX_COMBINED_SAMPLERS:
@@ -79,18 +73,22 @@ nvfx_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
 	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
 		return 1;
-	case PIPE_CAP_DEPTH_CLAMP:
+	case PIPE_CAP_DEPTH_CLIP_DISABLE:
 		return 0; // TODO: implement depth clamp
 	case PIPE_CAP_PRIMITIVE_RESTART:
 		return 0; // TODO: implement primitive restart
-	case PIPE_CAP_ARRAY_TEXTURES:
+	case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
 	case PIPE_CAP_TGSI_INSTANCEID:
 	case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
 	case PIPE_CAP_FRAGMENT_COLOR_CLAMP_CONTROL:
 	case PIPE_CAP_SEAMLESS_CUBE_MAP:
 	case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
 	case PIPE_CAP_SHADER_STENCIL_EXPORT:
-		return 0;
+	case PIPE_CAP_MIN_TEXEL_OFFSET:
+	case PIPE_CAP_MAX_TEXEL_OFFSET:
+	case PIPE_CAP_CONDITIONAL_RENDER:
+	case PIPE_CAP_TEXTURE_BARRIER:
+                return 0;
 	case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
                 return 0;
 	default:
@@ -137,6 +135,8 @@ nvfx_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader, enum 
 			return 0;
 		case PIPE_SHADER_CAP_SUBROUTINES:
 			return screen->use_nv4x ? 1 : 0;
+		case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+			return 16;
 		default:
 			break;
 		}
@@ -177,6 +177,10 @@ nvfx_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader, enum 
 			return 1;
 		case PIPE_SHADER_CAP_SUBROUTINES:
 			return 1;
+		case PIPE_SHADER_CAP_INTEGERS:
+			return 0;
+		case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+			return 0; /* We have 4 on nv40 - but unsupported currently */
 		default:
 			break;
 		}
@@ -188,24 +192,42 @@ nvfx_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader, enum 
 }
 
 static float
-nvfx_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_cap param)
+nvfx_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 {
 	struct nvfx_screen *screen = nvfx_screen(pscreen);
 
 	switch (param) {
-	case PIPE_CAP_MAX_LINE_WIDTH:
-	case PIPE_CAP_MAX_LINE_WIDTH_AA:
+	case PIPE_CAPF_MAX_LINE_WIDTH:
+	case PIPE_CAPF_MAX_LINE_WIDTH_AA:
 		return 10.0;
-	case PIPE_CAP_MAX_POINT_WIDTH:
-	case PIPE_CAP_MAX_POINT_WIDTH_AA:
+	case PIPE_CAPF_MAX_POINT_WIDTH:
+	case PIPE_CAPF_MAX_POINT_WIDTH_AA:
 		return 64.0;
-	case PIPE_CAP_MAX_TEXTURE_ANISOTROPY:
+	case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
 		return screen->use_nv4x ? 16.0 : 8.0;
-	case PIPE_CAP_MAX_TEXTURE_LOD_BIAS:
+	case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
 		return 15.0;
 	default:
 		NOUVEAU_ERR("Unknown PIPE_CAP %d\n", param);
 		return 0.0;
+	}
+}
+
+static int
+nvfx_screen_get_video_param(struct pipe_screen *screen,
+				enum pipe_video_profile profile,
+				enum pipe_video_cap param)
+{
+	switch (param) {
+	case PIPE_VIDEO_CAP_SUPPORTED:
+		return vl_profile_supported(screen, profile);
+	case PIPE_VIDEO_CAP_NPOT_TEXTURES:
+		return 0;
+	case PIPE_VIDEO_CAP_MAX_WIDTH:
+	case PIPE_VIDEO_CAP_MAX_HEIGHT:
+		return vl_video_buffer_max_size(screen);
+	default:
+		return 0;
 	}
 }
 
@@ -247,7 +269,7 @@ nvfx_screen_is_format_supported(struct pipe_screen *pscreen,
 
 	if (bind & PIPE_BIND_DEPTH_STENCIL) {
 		switch (format) {
-		case PIPE_FORMAT_S8_USCALED_Z24_UNORM:
+		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
 		case PIPE_FORMAT_X8Z24_UNORM:
 		case PIPE_FORMAT_Z16_UNORM:
 			break;
@@ -440,7 +462,7 @@ static void nvfx_channel_flush_notify(struct nouveau_channel* chan)
 }
 
 struct pipe_screen *
-nvfx_screen_create(struct pipe_winsys *ws, struct nouveau_device *dev)
+nvfx_screen_create(struct nouveau_device *dev)
 {
 	static const unsigned query_sizes[] = {(4096 - 4 * 32) / 32, 3 * 1024 / 32, 2 * 1024 / 32, 1024 / 32};
 	struct nvfx_screen *screen = CALLOC_STRUCT(nvfx_screen);
@@ -464,12 +486,13 @@ nvfx_screen_create(struct pipe_winsys *ws, struct nouveau_device *dev)
 	chan->user_private = screen;
 	chan->flush_notify = nvfx_channel_flush_notify;
 
-	pscreen->winsys = ws;
 	pscreen->destroy = nvfx_screen_destroy;
 	pscreen->get_param = nvfx_screen_get_param;
 	pscreen->get_shader_param = nvfx_screen_get_shader_param;
 	pscreen->get_paramf = nvfx_screen_get_paramf;
+	pscreen->get_video_param = nvfx_screen_get_video_param;
 	pscreen->is_format_supported = nvfx_screen_is_format_supported;
+	pscreen->is_video_format_supported = vl_video_buffer_is_format_supported;
 	pscreen->context_create = nvfx_create;
 
 	ret = nouveau_bo_new(dev, NOUVEAU_BO_VRAM, 0, 4096, &screen->fence);

@@ -136,6 +136,18 @@ pipe_sampler_view_reference(struct pipe_sampler_view **ptr, struct pipe_sampler_
 }
 
 static INLINE void
+pipe_so_target_reference(struct pipe_stream_output_target **ptr,
+                         struct pipe_stream_output_target *target)
+{
+   struct pipe_stream_output_target *old = *ptr;
+
+   if (pipe_reference_described(&(*ptr)->reference, &target->reference,
+                     (debug_reference_descriptor)debug_describe_so_target))
+      old->context->stream_output_target_destroy(old->context, old);
+   *ptr = target;
+}
+
+static INLINE void
 pipe_surface_reset(struct pipe_context *ctx, struct pipe_surface* ps,
                    struct pipe_resource *pt, unsigned level, unsigned layer,
                    unsigned flags)
@@ -240,10 +252,7 @@ pipe_buffer_map_range(struct pipe_context *pipe,
       return NULL;
    }
 
-   /* Match old screen->buffer_map_range() behaviour, return pointer
-    * to where the beginning of the buffer would be:
-    */
-   return (void *)((char *)map - offset);
+   return map;
 }
 
 
@@ -362,7 +371,7 @@ pipe_buffer_read(struct pipe_context *pipe,
 					 &src_transfer);
 
    if (map)
-      memcpy(data, map + offset, size);
+      memcpy(data, map, size);
 
    pipe_buffer_unmap(pipe, src_transfer);
 }

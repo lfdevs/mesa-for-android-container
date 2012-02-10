@@ -112,7 +112,7 @@ svga_hwtnl_simple_draw_range_elements( struct svga_hwtnl *hwtnl,
    unsigned hw_prim;
    unsigned hw_count;
    unsigned index_offset = start * index_size;
-   int ret = PIPE_OK;
+   enum pipe_error ret = PIPE_OK;
 
    hw_prim = svga_translate_prim(prim, count, &hw_count);
    if (hw_count == 0)
@@ -121,7 +121,6 @@ svga_hwtnl_simple_draw_range_elements( struct svga_hwtnl *hwtnl,
    if (index_buffer && 
        svga_buffer_is_user_buffer(index_buffer)) 
    {
-      boolean flushed;
       assert( index_buffer->width0 >= index_offset + count * index_size );
 
       ret = u_upload_buffer( hwtnl->upload_ib,
@@ -130,9 +129,8 @@ svga_hwtnl_simple_draw_range_elements( struct svga_hwtnl *hwtnl,
                              count * index_size,
                              index_buffer,
                              &index_offset,
-                             &upload_buffer,
-                             &flushed );
-      if (ret)
+                             &upload_buffer);
+      if (ret != PIPE_OK)
          goto done;
 
       /* Don't need to worry about refcounting index_buffer as this is
@@ -150,7 +148,7 @@ svga_hwtnl_simple_draw_range_elements( struct svga_hwtnl *hwtnl,
    range.indexBias = index_bias;
       
    ret = svga_hwtnl_prim( hwtnl, &range, min_index, max_index, index_buffer );
-   if (ret)
+   if (ret != PIPE_OK)
       goto done;
 
 done:
@@ -230,7 +228,7 @@ svga_hwtnl_draw_range_elements( struct svga_hwtnl *hwtnl,
                                gen_size,
                                gen_func,
                                &gen_buf );
-      if (ret)
+      if (ret != PIPE_OK)
          goto done;
 
       ret = svga_hwtnl_simple_draw_range_elements( hwtnl,
@@ -242,7 +240,7 @@ svga_hwtnl_draw_range_elements( struct svga_hwtnl *hwtnl,
                                                    gen_prim,
                                                    0,
                                                    gen_nr );
-      if (ret)
+      if (ret != PIPE_OK)
          goto done;
 
    done:

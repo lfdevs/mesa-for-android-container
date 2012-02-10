@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,16 +22,19 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 
 #include "util/u_memory.h"
 #include "util/u_format.h"
 #include "util/u_format_s3tc.h"
+#include "util/u_video.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 #include "draw/draw_context.h"
+#include "vl/vl_decoder.h"
+#include "vl/vl_video_buffer.h"
 
 #include "state_tracker/sw_winsys.h"
 #include "tgsi/tgsi_exec.h"
@@ -42,6 +45,7 @@
 #include "sp_fence.h"
 #include "sp_public.h"
 
+DEBUG_GET_ONCE_BOOL_OPTION(use_llvm, "SOFTPIPE_USE_LLVM", FALSE)
 
 static const char *
 softpipe_get_vendor(struct pipe_screen *screen)
@@ -61,22 +65,11 @@ static int
 softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
 {
    switch (param) {
-   case PIPE_CAP_MAX_TEXTURE_IMAGE_UNITS:
-      return PIPE_MAX_SAMPLERS;
-   case PIPE_CAP_MAX_VERTEX_TEXTURE_UNITS:
-#ifdef HAVE_LLVM
-      /* Softpipe doesn't yet know how to tell draw/llvm about textures */
-      return 0;
-#else
-      return PIPE_MAX_VERTEX_SAMPLERS;
-#endif
    case PIPE_CAP_MAX_COMBINED_SAMPLERS:
       return PIPE_MAX_SAMPLERS + PIPE_MAX_VERTEX_SAMPLERS;
    case PIPE_CAP_NPOT_TEXTURES:
       return 1;
    case PIPE_CAP_TWO_SIDED_STENCIL:
-      return 1;
-   case PIPE_CAP_GLSL:
       return 1;
    case PIPE_CAP_SM3:
       return 1;
@@ -91,8 +84,6 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TIMER_QUERY:
       return 1;
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
-      return 1;
-   case PIPE_CAP_TEXTURE_MIRROR_REPEAT:
       return 1;
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
       return 1;
@@ -115,8 +106,11 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
       return 1;
-   case PIPE_CAP_STREAM_OUTPUT:
-      return 1;
+   case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
+      return PIPE_MAX_SO_BUFFERS;
+   case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
+   case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
+      return 16*4;
    case PIPE_CAP_PRIMITIVE_RESTART:
       return 1;
    case PIPE_CAP_DEPTHSTENCIL_CLEAR_SEPARATE:
@@ -126,7 +120,15 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_INSTANCEID:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
       return 1;
-   case PIPE_CAP_ARRAY_TEXTURES:
+   case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
+      return 256; /* for GL3 */
+   case PIPE_CAP_MIN_TEXEL_OFFSET:
+      return -8;
+   case PIPE_CAP_MAX_TEXEL_OFFSET:
+      return 7;
+   case PIPE_CAP_CONDITIONAL_RENDER:
+      return 1;
+   case PIPE_CAP_FRAGMENT_COLOR_CLAMP_CONTROL:
       return 1;
    default:
       return 0;
@@ -136,39 +138,75 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
 static int
 softpipe_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_shader_cap param)
 {
+#ifdef HAVE_LLVM
+   struct softpipe_screen *sp_screen = softpipe_screen(screen);
+#endif
    switch(shader)
    {
    case PIPE_SHADER_FRAGMENT:
       return tgsi_exec_get_shader_param(param);
    case PIPE_SHADER_VERTEX:
    case PIPE_SHADER_GEOMETRY:
-      return draw_get_shader_param(shader, param);
+      switch (param) {
+      case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+#ifdef HAVE_LLVM
+         if (sp_screen->use_llvm)
+            /* Softpipe doesn't yet know how to tell draw/llvm about textures */
+            return 0;
+#endif
+         return PIPE_MAX_VERTEX_SAMPLERS;
+      case PIPE_SHADER_CAP_INTEGERS:
+#ifdef HAVE_LLVM /* gallivm doesn't support integers yet */
+         if (sp_screen->use_llvm)
+            return 0;
+#endif
+         /* fallthrough */
+      default:
+         return draw_get_shader_param(shader, param);
+      }
    default:
       return 0;
    }
 }
 
 static float
-softpipe_get_paramf(struct pipe_screen *screen, enum pipe_cap param)
+softpipe_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
 {
    switch (param) {
-   case PIPE_CAP_MAX_LINE_WIDTH:
+   case PIPE_CAPF_MAX_LINE_WIDTH:
       /* fall-through */
-   case PIPE_CAP_MAX_LINE_WIDTH_AA:
+   case PIPE_CAPF_MAX_LINE_WIDTH_AA:
       return 255.0; /* arbitrary */
-   case PIPE_CAP_MAX_POINT_WIDTH:
+   case PIPE_CAPF_MAX_POINT_WIDTH:
       /* fall-through */
-   case PIPE_CAP_MAX_POINT_WIDTH_AA:
+   case PIPE_CAPF_MAX_POINT_WIDTH_AA:
       return 255.0; /* arbitrary */
-   case PIPE_CAP_MAX_TEXTURE_ANISOTROPY:
+   case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
       return 16.0;
-   case PIPE_CAP_MAX_TEXTURE_LOD_BIAS:
+   case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
       return 16.0; /* arbitrary */
    default:
       return 0;
    }
 }
 
+static int
+softpipe_get_video_param(struct pipe_screen *screen,
+                         enum pipe_video_profile profile,
+                         enum pipe_video_cap param)
+{
+   switch (param) {
+   case PIPE_VIDEO_CAP_SUPPORTED:
+       return vl_profile_supported(screen, profile);
+   case PIPE_VIDEO_CAP_NPOT_TEXTURES:
+      return 0;
+   case PIPE_VIDEO_CAP_MAX_WIDTH:
+   case PIPE_VIDEO_CAP_MAX_HEIGHT:
+      return vl_video_buffer_max_size(screen);
+   default:
+      return 0;
+   }
+}
 
 /**
  * Query format support for creating a texture, drawing surface, etc.
@@ -224,19 +262,6 @@ softpipe_is_format_supported( struct pipe_screen *screen,
 
    if (bind & PIPE_BIND_DEPTH_STENCIL) {
       if (format_desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS)
-         return FALSE;
-
-      /*
-       * TODO: Unfortunately we cannot render into anything more than 32 bits
-       * because we encode depth and stencil clear values into a 32bit word.
-       */
-      if (format_desc->block.bits > 32)
-         return FALSE;
-
-      /*
-       * TODO: eliminate this restriction
-       */
-      if (format == PIPE_FORMAT_Z32_FLOAT)
          return FALSE;
    }
 
@@ -307,9 +332,13 @@ softpipe_create_screen(struct sw_winsys *winsys)
    screen->base.get_param = softpipe_get_param;
    screen->base.get_shader_param = softpipe_get_shader_param;
    screen->base.get_paramf = softpipe_get_paramf;
+   screen->base.get_video_param = softpipe_get_video_param;
    screen->base.is_format_supported = softpipe_is_format_supported;
+   screen->base.is_video_format_supported = vl_video_buffer_is_format_supported;
    screen->base.context_create = softpipe_create_context;
    screen->base.flush_frontbuffer = softpipe_flush_frontbuffer;
+
+   screen->use_llvm = debug_get_option_use_llvm();
 
    util_format_s3tc_init();
 

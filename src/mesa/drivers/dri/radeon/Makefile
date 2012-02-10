@@ -8,27 +8,19 @@ LIBNAME = radeon_dri.so
 
 include ../Makefile.defines
 
-ifeq ($(RADEON_LDFLAGS),)
-CS_SOURCES = radeon_cs_space_drm.c radeon_bo.c radeon_cs.c
-endif
-
 RADEON_COMMON_SOURCES = \
-	radeon_bo_legacy.c \
 	radeon_buffer_objects.c \
 	radeon_common_context.c \
 	radeon_common.c \
-	radeon_cs_legacy.c \
 	radeon_dma.c \
 	radeon_debug.c \
 	radeon_fbo.c \
-	radeon_lock.c \
 	radeon_mipmap_tree.c \
 	radeon_pixel_read.c \
 	radeon_queryobj.c \
 	radeon_span.c \
 	radeon_texture.c \
 	radeon_tex_copy.c \
-	radeon_tex_getimage.c \
 	radeon_tile.c
 
 DRIVER_SOURCES = \
@@ -48,13 +40,12 @@ DRIVER_SOURCES = \
 
 C_SOURCES = \
 	$(COMMON_SOURCES) \
-	$(DRIVER_SOURCES) \
-	$(CS_SOURCES)
+	$(DRIVER_SOURCES)
 
 DRIVER_DEFINES = -DRADEON_R100
 
 INCLUDES += $(RADEON_CFLAGS)
-DRI_LIB_DEPS += $(RADEON_LDFLAGS)
+DRI_LIB_DEPS += $(RADEON_LIBS)
 
 X86_SOURCES = 
 

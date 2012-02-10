@@ -39,11 +39,12 @@
  * up in the guardband or not.
  */
 static void
-prepare_clip_vp(struct brw_context *brw)
+gen6_upload_clip_vp(struct brw_context *brw)
 {
    struct brw_clipper_viewport *vp;
 
-   vp = brw_state_batch(brw, sizeof(*vp), 32, &brw->clip.vp_offset);
+   vp = brw_state_batch(brw, AUB_TRACE_CLIP_VP_STATE,
+			sizeof(*vp), 32, &brw->clip.vp_offset);
 
    vp->xmin = -1.0;
    vp->xmax = 1.0;
@@ -59,20 +60,21 @@ const struct brw_tracked_state gen6_clip_vp = {
       .brw = BRW_NEW_BATCH,
       .cache = 0,
    },
-   .prepare = prepare_clip_vp,
+   .emit = gen6_upload_clip_vp,
 };
 
 static void
-prepare_sf_vp(struct brw_context *brw)
+gen6_upload_sf_vp(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->intel.ctx;
    const GLfloat depth_scale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
    struct brw_sf_viewport *sfv;
    GLfloat y_scale, y_bias;
-   const GLboolean render_to_fbo = (ctx->DrawBuffer->Name != 0);
+   const bool render_to_fbo = (ctx->DrawBuffer->Name != 0);
    const GLfloat *v = ctx->Viewport._WindowMap.m;
 
-   sfv = brw_state_batch(brw, sizeof(*sfv), 32, &brw->sf.vp_offset);
+   sfv = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
+			 sizeof(*sfv), 32, &brw->sf.vp_offset);
    memset(sfv, 0, sizeof(*sfv));
 
    /* _NEW_BUFFERS */
@@ -101,7 +103,7 @@ const struct brw_tracked_state gen6_sf_vp = {
       .brw = BRW_NEW_BATCH,
       .cache = 0,
    },
-   .prepare = prepare_sf_vp,
+   .emit = gen6_upload_sf_vp,
 };
 
 static void upload_viewport_state_pointers(struct brw_context *brw)

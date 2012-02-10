@@ -39,7 +39,7 @@
 
 
 /** Is the given buffer object currently mapped? */
-static INLINE GLboolean
+static inline GLboolean
 _mesa_bufferobj_mapped(const struct gl_buffer_object *obj)
 {
    return obj->Pointer != NULL;
@@ -50,10 +50,10 @@ _mesa_bufferobj_mapped(const struct gl_buffer_object *obj)
  * Mesa uses default buffer objects in several places.  Default buffers
  * always have Name==0.  User created buffers have Name!=0.
  */
-static INLINE GLboolean
+static inline GLboolean
 _mesa_is_bufferobj(const struct gl_buffer_object *obj)
 {
-   return obj->Name != 0;
+   return obj != NULL && obj->Name != 0;
 }
 
 
@@ -71,13 +71,24 @@ extern struct gl_buffer_object *
 _mesa_lookup_bufferobj(struct gl_context *ctx, GLuint buffer);
 
 extern void
-_mesa_initialize_buffer_object( struct gl_buffer_object *obj,
+_mesa_initialize_buffer_object( struct gl_context *ctx,
+				struct gl_buffer_object *obj,
 				GLuint name, GLenum target );
 
 extern void
+_mesa_reference_buffer_object_(struct gl_context *ctx,
+                               struct gl_buffer_object **ptr,
+                               struct gl_buffer_object *bufObj);
+
+static inline void
 _mesa_reference_buffer_object(struct gl_context *ctx,
                               struct gl_buffer_object **ptr,
-                              struct gl_buffer_object *bufObj);
+                              struct gl_buffer_object *bufObj)
+{
+   if (*ptr != bufObj)
+      _mesa_reference_buffer_object_(ctx, ptr, bufObj);
+}
+
 
 extern void
 _mesa_init_buffer_object_functions(struct dd_function_table *driver);

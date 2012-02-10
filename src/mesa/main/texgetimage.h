@@ -34,17 +34,15 @@ struct gl_texture_image;
 struct gl_texture_object;
 
 extern void
-_mesa_get_teximage(struct gl_context *ctx, GLenum target, GLint level,
+_mesa_get_teximage(struct gl_context *ctx,
                    GLenum format, GLenum type, GLvoid *pixels,
-                   struct gl_texture_object *texObj,
                    struct gl_texture_image *texImage);
 
 
 extern void
-_mesa_get_compressed_teximage(struct gl_context *ctx, GLenum target, GLint level,
-                              GLvoid *img,
-                              struct gl_texture_object *texObj,
-                              struct gl_texture_image *texImage);
+_mesa_get_compressed_teximage(struct gl_context *ctx,
+                              struct gl_texture_image *texImage,
+                              GLvoid *data);
 
 
 

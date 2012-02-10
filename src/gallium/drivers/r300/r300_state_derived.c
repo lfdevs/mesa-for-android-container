@@ -605,7 +605,6 @@ static uint32_t r300_get_border_color(enum pipe_format format,
 {
     const struct util_format_description *desc;
     float border_swizzled[4] = {0};
-    unsigned i;
     union util_color uc = {0};
 
     desc = util_format_description(format);
@@ -616,7 +615,7 @@ static uint32_t r300_get_border_color(enum pipe_format format,
         case PIPE_FORMAT_Z16_UNORM:
             return util_pack_z(PIPE_FORMAT_Z16_UNORM, border[0]);
         case PIPE_FORMAT_X8Z24_UNORM:
-        case PIPE_FORMAT_S8_USCALED_Z24_UNORM:
+        case PIPE_FORMAT_S8_UINT_Z24_UNORM:
             if (is_r500) {
                 return util_pack_z(PIPE_FORMAT_X8Z24_UNORM, border[0]);
             } else {
@@ -629,22 +628,7 @@ static uint32_t r300_get_border_color(enum pipe_format format,
     }
 
     /* Apply inverse swizzle of the format. */
-    for (i = 0; i < 4; i++) {
-        switch (desc->swizzle[i]) {
-        case UTIL_FORMAT_SWIZZLE_X:
-            border_swizzled[0] = border[i];
-            break;
-        case UTIL_FORMAT_SWIZZLE_Y:
-            border_swizzled[1] = border[i];
-            break;
-        case UTIL_FORMAT_SWIZZLE_Z:
-            border_swizzled[2] = border[i];
-            break;
-        case UTIL_FORMAT_SWIZZLE_W:
-            border_swizzled[3] = border[i];
-            break;
-        }
-    }
+    util_format_unswizzle_4f(border_swizzled, border, desc->swizzle);
 
     /* Compressed formats. */
     if (util_format_is_compressed(format)) {
@@ -778,7 +762,7 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
             /* Set the border color. */
             texstate->border_color =
                 r300_get_border_color(view->base.format,
-                                      sampler->state.border_color,
+                                      sampler->state.border_color.f,
                                       r300->screen->caps.is_r500);
 
             /* determine min/max levels */
@@ -798,28 +782,27 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
                      * an i-th mipmap level as the zero level. */
                     base_level += min_level;
                 }
-                offset = tex->tex_offset +
-                         tex->tex.offset_in_bytes[base_level];
+                offset = tex->tex.offset_in_bytes[base_level];
 
                 r300_texture_setup_format_state(r300->screen, tex,
+                                                view->base.format,
                                                 base_level,
+                                                view->width0_override,
+		                                view->height0_override,
                                                 &texstate->format);
                 texstate->format.tile_config |= offset & 0xffffffe0;
                 assert((offset & 0x1f) == 0);
-            } else {
-                texstate->format.tile_config |= tex->tex_offset & 0xffffffe0;
-                assert((tex->tex_offset & 0x1f) == 0);
             }
 
             /* Assign a texture cache region. */
             texstate->format.format1 |= view->texcache_region;
 
             /* Depth textures are kinda special. */
-            if (util_format_is_depth_or_stencil(tex->b.b.b.format)) {
+            if (util_format_is_depth_or_stencil(view->base.format)) {
                 unsigned char depth_swizzle[4];
 
                 if (!r300->screen->caps.is_r500 &&
-                    util_format_get_blocksizebits(tex->b.b.b.format) == 32) {
+                    util_format_get_blocksizebits(view->base.format) == 32) {
                     /* X24x8 is sampled as Y16X16 on r3xx-r4xx.
                      * The depth here is at the Y component. */
                     for (j = 0; j < 4; j++)
@@ -844,7 +827,7 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
             }
 
             if (r300->screen->caps.dxtc_swizzle &&
-                util_format_is_compressed(tex->b.b.b.format)) {
+                util_format_is_compressed(view->base.format)) {
                 texstate->filter1 |= R400_DXTC_SWIZZLE_ENABLE;
             }
 
@@ -890,7 +873,7 @@ static void r300_merge_textures_and_samplers(struct r300_context* r300)
             }
 
             /* Float textures only support nearest and mip-nearest filtering. */
-            if (util_format_is_float(tex->b.b.b.format)) {
+            if (util_format_is_float(view->base.format)) {
                 /* No MAG linear filtering. */
                 if ((texstate->filter0 & R300_TX_MAG_FILTER_MASK) ==
                     R300_TX_MAG_FILTER_LINEAR) {

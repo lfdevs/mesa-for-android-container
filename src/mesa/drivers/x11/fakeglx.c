@@ -1357,9 +1357,6 @@ Fake_glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
             /* Out of memory, or context/drawable depth mismatch */
             return False;
          }
-#ifdef FX
-         FXcreateContext( xmctx->xm_visual, draw, xmctx, drawBuffer );
-#endif
       }
 
       /* Find the XMesaBuffer which corresponds to the GLXDrawable 'read' */
@@ -1377,9 +1374,6 @@ Fake_glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
             /* Out of memory, or context/drawable depth mismatch */
             return False;
          }
-#ifdef FX
-         FXcreateContext( xmctx->xm_visual, read, xmctx, readBuffer );
-#endif
       }
 
       MakeCurrent_PrevContext = ctx;
@@ -1872,12 +1866,6 @@ Fake_glXWaitX( void )
 static const char *
 get_extensions( void )
 {
-#ifdef FX
-   const char *fx = _mesa_getenv("MESA_GLX_FX");
-   if (fx && fx[0] != 'd') {
-      return EXTENSIONS;
-   }
-#endif
    return EXTENSIONS + 23; /* skip "GLX_MESA_set_3dfx_mode" */
 }
 
@@ -1995,6 +1983,9 @@ Fake_glXChooseFBConfig( Display *dpy, int screen,
 {
    XMesaVisual xmvis;
 
+   /* register ourselves as an extension on this display */
+   register_with_display(dpy);
+
    if (!attribList || !attribList[0]) {
       /* return list of all configs (per GLX_SGIX_fbconfig spec) */
       return Fake_glXGetFBConfigs(dpy, screen, nitems);
@@ -2052,11 +2043,6 @@ Fake_glXCreateWindow( Display *dpy, GLXFBConfig config, Window win,
    xmbuf = XMesaCreateWindowBuffer(xmvis, win);
    if (!xmbuf)
       return 0;
-
-#ifdef FX
-   /* XXX this will segfault if actually called */
-   FXcreateContext(xmvis, win, NULL, xmbuf);
-#endif
 
    (void) dpy;
    (void) attribList;  /* Ignored in GLX 1.3 */

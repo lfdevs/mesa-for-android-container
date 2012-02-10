@@ -36,12 +36,21 @@
 
 struct wayland_surface;
 
+enum wayland_format_flag {
+   HAS_ARGB8888        = (1 << 0),
+   HAS_XRGB8888        = (1 << 1)
+};
+
 struct wayland_display {
    struct native_display base;
 
-   struct wayland_config *config;
    struct wl_display *dpy;
    boolean own_dpy;
+   /* supported formats */
+   uint32_t formats;
+
+   struct wayland_config *configs;
+   int num_configs;
 
    struct wl_buffer *(*create_buffer)(struct wayland_display *display,
                                       struct wayland_surface *surface,
@@ -77,6 +86,7 @@ struct wayland_surface {
    unsigned int attachment_mask;
 
    boolean block_swap_buffers;
+   boolean premultiplied_alpha;
 };
 
 struct wayland_config {

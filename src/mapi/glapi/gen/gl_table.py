@@ -92,7 +92,11 @@ class PrintRemapTable(gl_XML.gl_print_base):
  * named function in the specified dispatch table.
  */
 
+/* GLXEXT is defined when building the GLX extension in the xserver.
+ */
+#if !defined(GLXEXT)
 #include "main/mfeatures.h"
+#endif
 """
 		return
 
@@ -179,11 +183,11 @@ class PrintRemapTable(gl_XML.gl_print_base):
 			print 'typedef %s (GLAPIENTRYP _glptr_%s)(%s);' % (f.return_type, f.name, arg_string)
 			print '#define CALL_%s(disp, parameters) \\' % (f.name)
 			print '    (* GET_%s(disp)) parameters' % (f.name)
-			print 'static INLINE _glptr_%s GET_%s(struct _glapi_table *disp) {' % (f.name, f.name)
+			print 'static inline _glptr_%s GET_%s(struct _glapi_table *disp) {' % (f.name, f.name)
 			print '   return (_glptr_%s) (GET_by_offset(disp, _gloffset_%s));' % (f.name, f.name)
 			print '}'
 			print
-			print 'static INLINE void SET_%s(struct _glapi_table *disp, %s (GLAPIENTRYP fn)(%s)) {' % (f.name, f.return_type, arg_string)
+			print 'static inline void SET_%s(struct _glapi_table *disp, %s (GLAPIENTRYP fn)(%s)) {' % (f.name, f.return_type, arg_string)
 			print '   SET_by_offset(disp, _gloffset_%s, fn);' % (f.name)
 			print '}'
 			print
@@ -211,28 +215,28 @@ class PrintRemapTable(gl_XML.gl_print_base):
 
 
 def show_usage():
-	print "Usage: %s [-f input_file_name] [-m mode] [-c]" % sys.argv[0]
+	print "Usage: %s [-f input_file_name] [-m mode] [-c ver]" % sys.argv[0]
 	print "    -m mode   Mode can be 'table' or 'remap_table'."
-	print "    -c        Enable compatibility with OpenGL ES."
+	print "    -c ver    Version can be 'es1' or 'es2'."
 	sys.exit(1)
 
 if __name__ == '__main__':
 	file_name = "gl_API.xml"
     
 	try:
-		(args, trail) = getopt.getopt(sys.argv[1:], "f:m:c")
+		(args, trail) = getopt.getopt(sys.argv[1:], "f:m:c:")
 	except Exception,e:
 		show_usage()
 
 	mode = "table"
-	es = False
+	es = None
 	for (arg,val) in args:
 		if arg == "-f":
 			file_name = val
 		elif arg == "-m":
 			mode = val
 		elif arg == "-c":
-			es = True
+			es = val
 
 	if mode == "table":
 		printer = PrintGlTable(es)
@@ -242,5 +246,15 @@ if __name__ == '__main__':
 		show_usage()
 
 	api = gl_XML.parse_GL_API( file_name )
+
+	if es is not None:
+		import gles_api
+
+		api_map = {
+			'es1': gles_api.es1_api,
+			'es2': gles_api.es2_api,
+		}
+
+		api.filter_functions(api_map[es])
 
 	printer.Print( api )

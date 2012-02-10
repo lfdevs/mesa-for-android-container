@@ -76,7 +76,8 @@ translate_texture_format(GLuint mesa_format)
    case MESA_FORMAT_RGBA_DXT5:
       return (MAPSURF_COMPRESSED | MT_COMPRESS_DXT4_5);
    default:
-      fprintf(stderr, "%s: bad image format %x\n", __FUNCTION__, mesa_format);
+      fprintf(stderr, "%s: bad image format %s\n", __FUNCTION__,
+	      _mesa_get_format_name(mesa_format));
       abort();
       return 0;
    }
@@ -112,7 +113,7 @@ translate_wrap_mode(GLenum wrap)
  * efficient, but this has gotten complex enough that we need
  * something which is understandable and reliable.
  */
-static GLboolean
+static bool
 i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
 {
    struct gl_context *ctx = &intel->ctx;
@@ -137,7 +138,7 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    }
 
    if (!intel_finalize_mipmap_tree(intel, unit))
-      return GL_FALSE;
+      return false;
 
    /* Get first image here, since intelObj->firstLevel will get set in
     * the intel_finalize_mipmap_tree() call above.
@@ -147,8 +148,8 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
    intel_miptree_get_image_offset(intelObj->mt, tObj->BaseLevel, 0, 0,
 				  &dst_x, &dst_y);
 
-   drm_intel_bo_reference(intelObj->mt->region->buffer);
-   i830->state.tex_buffer[unit] = intelObj->mt->region->buffer;
+   drm_intel_bo_reference(intelObj->mt->region->bo);
+   i830->state.tex_buffer[unit] = intelObj->mt->region->bo;
    pitch = intelObj->mt->region->pitch * intelObj->mt->cpp;
 
    /* XXX: This calculation is probably broken for tiled images with
@@ -220,7 +221,7 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
          mipFilt = MIPFILTER_LINEAR;
          break;
       default:
-         return GL_FALSE;
+         return false;
       }
 
       if (sampler->MaxAnisotropy > 1.0) {
@@ -236,7 +237,7 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
             magFilt = FILTER_LINEAR;
             break;
          default:
-            return GL_FALSE;
+            return false;
          }
       }
 
@@ -287,7 +288,7 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
       /* 3D textures not available on i830
        */
       if (tObj->Target == GL_TEXTURE_3D)
-         return GL_FALSE;
+         return false;
 
       state[I830_TEXREG_MCS] = (_3DSTATE_MAP_COORD_SET_CMD |
                                 MAP_UNIT(unit) |
@@ -311,12 +312,12 @@ i830_update_tex_unit(struct intel_context *intel, GLuint unit, GLuint ss3)
 					      border[1],
 					      border[2]);
 
-   I830_ACTIVESTATE(i830, I830_UPLOAD_TEX(unit), GL_TRUE);
+   I830_ACTIVESTATE(i830, I830_UPLOAD_TEX(unit), true);
    /* memcmp was already disabled, but definitely won't work as the
     * region might now change and that wouldn't be detected:
     */
    I830_STATECHANGE(i830, I830_UPLOAD_TEX(unit));
-   return GL_TRUE;
+   return true;
 }
 
 
@@ -326,7 +327,7 @@ void
 i830UpdateTextureState(struct intel_context *intel)
 {
    struct i830_context *i830 = i830_context(&intel->ctx);
-   GLboolean ok = GL_TRUE;
+   bool ok = true;
    GLuint i;
 
    for (i = 0; i < I830_TEX_UNITS && ok; i++) {
@@ -342,7 +343,7 @@ i830UpdateTextureState(struct intel_context *intel)
       case 0:{
 	 struct i830_context *i830 = i830_context(&intel->ctx);
          if (i830->state.active & I830_UPLOAD_TEX(i)) 
-            I830_ACTIVESTATE(i830, I830_UPLOAD_TEX(i), GL_FALSE);
+            I830_ACTIVESTATE(i830, I830_UPLOAD_TEX(i), false);
 
 	 if (i830->state.tex_buffer[i] != NULL) {
 	    drm_intel_bo_unreference(i830->state.tex_buffer[i]);
@@ -352,7 +353,7 @@ i830UpdateTextureState(struct intel_context *intel)
       }
       case TEXTURE_3D_BIT:
       default:
-         ok = GL_FALSE;
+         ok = false;
          break;
       }
    }

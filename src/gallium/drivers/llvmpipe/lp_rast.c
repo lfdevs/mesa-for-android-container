@@ -334,8 +334,8 @@ lp_rast_shade_tile(struct lp_rasterizer_task *task,
 {
    const struct lp_scene *scene = task->scene;
    const struct lp_rast_shader_inputs *inputs = arg.shade_tile;
-   const struct lp_rast_state *state = task->state;
-   struct lp_fragment_shader_variant *variant = state->variant;
+   const struct lp_rast_state *state;
+   struct lp_fragment_shader_variant *variant;
    const unsigned tile_x = task->x, tile_y = task->y;
    unsigned x, y;
 
@@ -345,6 +345,13 @@ lp_rast_shade_tile(struct lp_rasterizer_task *task,
    }
 
    LP_DBG(DEBUG_RAST, "%s\n", __FUNCTION__);
+
+   state = task->state;
+   assert(state);
+   if (!state) {
+      return;
+   }
+   variant = state->variant;
 
    /* render the whole 64x64 tile in 4x4 chunks */
    for (y = 0; y < TILE_SIZE; y += 4){
@@ -393,6 +400,11 @@ lp_rast_shade_tile_opaque(struct lp_rasterizer_task *task,
 
    LP_DBG(DEBUG_RAST, "%s\n", __FUNCTION__);
 
+   assert(task->state);
+   if (!task->state) {
+      return;
+   }
+
    /* this will prevent converting the layout from tiled to linear */
    for (i = 0; i < scene->fb.nr_cbufs; i++) {
       (void)lp_rast_get_color_tile_pointer(task, i, LP_TEX_USAGE_WRITE_ALL);
@@ -424,6 +436,8 @@ lp_rast_shade_quads_mask(struct lp_rasterizer_task *task,
    assert(state);
 
    /* Sanity checks */
+   assert(x < scene->tiles_x * TILE_SIZE);
+   assert(y < scene->tiles_y * TILE_SIZE);
    assert(x % TILE_VECTOR_WIDTH == 0);
    assert(y % TILE_VECTOR_HEIGHT == 0);
 
@@ -865,10 +879,14 @@ lp_rast_create( unsigned num_threads )
    unsigned i;
 
    rast = CALLOC_STRUCT(lp_rasterizer);
-   if(!rast)
-      return NULL;
+   if (!rast) {
+      goto no_rast;
+   }
 
    rast->full_scenes = lp_scene_queue_create();
+   if (!rast->full_scenes) {
+      goto no_full_scenes;
+   }
 
    for (i = 0; i < Elements(rast->tasks); i++) {
       struct lp_rasterizer_task *task = &rast->tasks[i];
@@ -888,6 +906,11 @@ lp_rast_create( unsigned num_threads )
    memset(lp_dummy_tile, 0, sizeof lp_dummy_tile);
 
    return rast;
+
+no_full_scenes:
+   FREE(rast);
+no_rast:
+   return NULL;
 }
 
 

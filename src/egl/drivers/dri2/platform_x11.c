@@ -248,6 +248,9 @@ dri2_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       free(reply);
    }
 
+   /* we always copy the back buffer to front */
+   dri2_surf->base.PostSubBufferSupportedNV = EGL_TRUE;
+
    return &dri2_surf->base;
 
  cleanup_dri_drawable:
@@ -642,7 +645,7 @@ dri2_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
             config_attrs[3] = visuals[i]._class;
 
 	    dri2_add_config(disp, dri2_dpy->driver_configs[j], id++,
-			    d.data->depth, surface_type, config_attrs);
+			    d.data->depth, surface_type, config_attrs, NULL);
 	 }
       }
 
@@ -661,30 +664,18 @@ static EGLBoolean
 dri2_copy_region(_EGLDriver *drv, _EGLDisplay *disp,
 		 _EGLSurface *draw, xcb_xfixes_region_t region)
 {
-   struct dri2_egl_driver *dri2_drv = dri2_egl_driver(drv);
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
-   _EGLContext *ctx;
    enum xcb_dri2_attachment_t render_attachment;
    xcb_dri2_copy_region_cookie_t cookie;
 
-   if (dri2_drv->glFlush) {
-      ctx = _eglGetCurrentContext();
-      if (ctx && ctx->DrawSurface == &dri2_surf->base)
-         dri2_drv->glFlush();
-   }
+   /* No-op for a pixmap or pbuffer surface */
+   if (draw->Type == EGL_PIXMAP_BIT || draw->Type == EGL_PBUFFER_BIT)
+      return EGL_TRUE;
 
-   (*dri2_dpy->flush->flush)(dri2_surf->dri_drawable);
-
-#if 0
-   /* FIXME: Add support for dri swapbuffers, that'll give us swap
-    * interval and page flipping (at least for fullscreen windows) as
-    * well as the page flip event.  Unless surface->SwapBehavior is
-    * EGL_BUFFER_PRESERVED. */
-#if __DRI2_FLUSH_VERSION >= 2
-   if (pdraw->psc->f)
-      (*pdraw->psc->f->flushInvalidate)(pdraw->driDrawable);
-#endif
+#ifdef __DRI2_FLUSH
+   if (dri2_dpy->flush)
+      (*dri2_dpy->flush->flush)(dri2_surf->dri_drawable);
 #endif
 
    if (dri2_surf->have_fake_front)
@@ -702,17 +693,72 @@ dri2_copy_region(_EGLDriver *drv, _EGLDisplay *disp,
    return EGL_TRUE;
 }
 
+static int64_t
+dri2_swap_buffers_msc(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
+                      int64_t msc, int64_t divisor, int64_t remainder)
+{
+#if XCB_DRI2_MINOR_VERSION >= 3
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
+   uint32_t msc_hi = msc >> 32;
+   uint32_t msc_lo = msc & 0xffffffff;
+   uint32_t divisor_hi = divisor >> 32;
+   uint32_t divisor_lo = divisor & 0xffffffff;
+   uint32_t remainder_hi = remainder >> 32;
+   uint32_t remainder_lo = remainder & 0xffffffff;
+   xcb_dri2_swap_buffers_cookie_t cookie;
+   xcb_dri2_swap_buffers_reply_t *reply;
+   int64_t swap_count = -1;
+
+   /* No-op for a pixmap or pbuffer surface */
+   if (draw->Type == EGL_PIXMAP_BIT || draw->Type == EGL_PBUFFER_BIT)
+      return 0;
+
+   if (draw->SwapBehavior == EGL_BUFFER_PRESERVED || !dri2_dpy->swap_available)
+      return dri2_copy_region(drv, disp, draw, dri2_surf->region) ? 0 : -1;
+
+#ifdef __DRI2_FLUSH
+   if (dri2_dpy->flush)
+      (*dri2_dpy->flush->flush)(dri2_surf->dri_drawable);
+#endif
+
+   cookie = xcb_dri2_swap_buffers_unchecked(dri2_dpy->conn, dri2_surf->drawable,
+                  msc_hi, msc_lo, divisor_hi, divisor_lo, remainder_hi, remainder_lo);
+
+   reply = xcb_dri2_swap_buffers_reply(dri2_dpy->conn, cookie, NULL);
+
+   if (reply) {
+      swap_count = (((int64_t)reply->swap_hi) << 32) | reply->swap_lo;
+      free(reply);
+   }
+
+#if __DRI2_FLUSH_VERSION >= 3
+   /* If the server doesn't send invalidate events */
+   if (dri2_dpy->invalidate_available && dri2_dpy->flush &&
+       dri2_dpy->flush->base.version >= 3 && dri2_dpy->flush->invalidate)
+      (*dri2_dpy->flush->invalidate)(dri2_surf->dri_drawable);
+#endif
+
+   return swap_count;
+#else
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
+
+   return dri2_copy_region(drv, disp, draw, dri2_surf->region) ? 0 : -1;
+#endif /* XCB_DRI2_MINOR_VERSION >= 3 */
+
+}
+
 static EGLBoolean
 dri2_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
 
-   if (dri2_dpy->dri2) { 
-      return dri2_copy_region(drv, disp, draw, dri2_surf->region);
+   if (dri2_dpy->dri2) {
+      return dri2_swap_buffers_msc(drv, disp, draw, 0, 0, 0) != -1;
    } else {
       assert(dri2_dpy->swrast);
-     
+
       dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
       return EGL_TRUE;
    }
@@ -746,6 +792,43 @@ dri2_swap_buffers_region(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
    xcb_xfixes_destroy_region(dri2_dpy->conn, region);
 
    return ret;
+}
+
+static EGLBoolean
+dri2_post_sub_buffer(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
+		     EGLint x, EGLint y, EGLint width, EGLint height)
+{
+   const EGLint rect[4] = { x, draw->Height - y - height, width, height };
+
+   if (x < 0 || y < 0 || width < 0 || height < 0)
+      _eglError(EGL_BAD_PARAMETER, "eglPostSubBufferNV");
+
+   return dri2_swap_buffers_region(drv, disp, draw, 1, rect);
+}
+
+static EGLBoolean
+dri2_swap_interval(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint interval)
+{
+#if XCB_DRI2_MINOR_VERSION >= 3
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
+#endif
+
+   /* XXX Check vblank_mode here? */
+
+   if (interval > surf->Config->MaxSwapInterval)
+      interval = surf->Config->MaxSwapInterval;
+   else if (interval < surf->Config->MinSwapInterval)
+      interval = surf->Config->MinSwapInterval;
+
+#if XCB_DRI2_MINOR_VERSION >= 3
+   if (interval != surf->SwapInterval && dri2_dpy->swap_available)
+      xcb_dri2_swap_interval(dri2_dpy->conn, dri2_surf->drawable, interval);
+#endif
+
+   surf->SwapInterval = interval;
+
+   return EGL_TRUE;
 }
 
 static EGLBoolean
@@ -845,6 +928,7 @@ dri2_create_image_khr_pixmap(_EGLDisplay *disp, _EGLContext *ctx,
    if (!_eglInitImage(&dri2_img->base, disp)) {
       free(buffers_reply);
       free(geometry_reply);
+      free(dri2_img);
       return EGL_NO_IMAGE_KHR;
    }
 
@@ -970,6 +1054,8 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
    drv->API.CopyBuffers = dri2_copy_buffers;
    drv->API.CreateImageKHR = dri2_x11_create_image_khr;
    drv->API.SwapBuffersRegionNOK = dri2_swap_buffers_region;
+   drv->API.PostSubBufferNV = dri2_post_sub_buffer;
+   drv->API.SwapInterval = dri2_swap_interval;
 
    dri2_dpy = malloc(sizeof *dri2_dpy);
    if (!dri2_dpy)
@@ -1029,6 +1115,11 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
    dri2_dpy->extensions[1] = &image_lookup_extension.base;
    dri2_dpy->extensions[2] = NULL;
 
+#if XCB_DRI2_MINOR_VERSION >= 3
+   dri2_dpy->swap_available = (dri2_dpy->dri2_minor >= 2);
+   dri2_dpy->invalidate_available = (dri2_dpy->dri2_minor >= 3);
+#endif
+
    if (!dri2_create_screen(disp))
       goto cleanup_fd;
 
@@ -1040,6 +1131,7 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
    disp->Extensions.KHR_image_pixmap = EGL_TRUE;
    disp->Extensions.NOK_swap_region = EGL_TRUE;
    disp->Extensions.NOK_texture_from_pixmap = EGL_TRUE;
+   disp->Extensions.NV_post_sub_buffer = EGL_TRUE;
 
 #ifdef HAVE_WAYLAND_PLATFORM
    disp->Extensions.WL_bind_wayland_display = EGL_TRUE;

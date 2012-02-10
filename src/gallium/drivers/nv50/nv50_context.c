@@ -60,13 +60,13 @@ nv50_texture_barrier(struct pipe_context *pipe)
 void
 nv50_default_flush_notify(struct nouveau_channel *chan)
 {
-   struct nv50_context *nv50 = chan->user_private;
+   struct nv50_screen *screen = chan->user_private;
 
-   if (!nv50)
+   if (!screen)
       return;
 
-   nouveau_fence_update(&nv50->screen->base, TRUE);
-   nouveau_fence_next(&nv50->screen->base);
+   nouveau_fence_update(&screen->base, TRUE);
+   nouveau_fence_next(&screen->base);
 }
 
 static void
@@ -100,10 +100,8 @@ nv50_destroy(struct pipe_context *pipe)
 
    draw_destroy(nv50->draw);
 
-   if (nv50->screen->cur_ctx == nv50) {
-      nv50->screen->base.channel->user_private = NULL;
+   if (nv50->screen->cur_ctx == nv50)
       nv50->screen->cur_ctx = NULL;
-   }
 
    FREE(nv50);
 }
@@ -111,7 +109,6 @@ nv50_destroy(struct pipe_context *pipe)
 struct pipe_context *
 nv50_create(struct pipe_screen *pscreen, void *priv)
 {
-   struct pipe_winsys *pipe_winsys = pscreen->winsys;
    struct nv50_screen *screen = nv50_screen(pscreen);
    struct nv50_context *nv50;
    struct pipe_context *pipe;
@@ -126,7 +123,6 @@ nv50_create(struct pipe_screen *pscreen, void *priv)
    nv50->base.copy_data = nv50_m2mf_copy_linear;
    nv50->base.push_data = nv50_sifc_linear_u8;
 
-   pipe->winsys = pipe_winsys;
    pipe->screen = pscreen;
    pipe->priv = priv;
 
@@ -140,7 +136,6 @@ nv50_create(struct pipe_screen *pscreen, void *priv)
 
    if (!screen->cur_ctx)
       screen->cur_ctx = nv50;
-   screen->base.channel->user_private = nv50;
    screen->base.channel->flush_notify = nv50_default_flush_notify;
 
    nv50_init_query_functions(nv50);
@@ -151,6 +146,8 @@ nv50_create(struct pipe_screen *pscreen, void *priv)
    nv50->draw = draw_create(pipe);
    assert(nv50->draw);
    draw_set_rasterize_stage(nv50->draw, nv50_draw_render_stage(nv50));
+
+   nouveau_context_init_vdec(&nv50->base);
 
    return pipe;
 }
@@ -206,7 +203,7 @@ nv50_bufctx_emit_relocs(struct nv50_context *nv50)
    n  = nv50->residents_size / sizeof(struct resident);
    n += NV50_SCREEN_RESIDENT_BO_COUNT;
 
-   MARK_RING(nv50->screen->base.channel, n, n);
+   MARK_RING(nv50->screen->base.channel, 0, n);
 
    for (ctx = 0; ctx < NV50_BUFCTX_COUNT; ++ctx) {
       array = &nv50->residents[ctx];

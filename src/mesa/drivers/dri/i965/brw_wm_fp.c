@@ -104,7 +104,7 @@ static struct prog_src_register src_undef( void )
    return src_reg(PROGRAM_UNDEFINED, 0);
 }
 
-static GLboolean src_is_undef(struct prog_src_register src)
+static bool src_is_undef(struct prog_src_register src)
 {
    return src.File == PROGRAM_UNDEFINED;
 }
@@ -214,10 +214,6 @@ static struct prog_instruction * emit_tex_op(struct brw_wm_compile *c,
           tex_src_unit == TEX_UNIT_NONE);
    assert(tex_src_target < NUM_TEXTURE_TARGETS ||
           tex_src_target == TEX_TARGET_NONE);
-
-   /* update mask of which texture units are referenced by this program */
-   if (tex_src_unit != TEX_UNIT_NONE)
-      c->fp->tex_units_used |= (1 << tex_src_unit);
 
    memset(inst, 0, sizeof(*inst));
 
@@ -535,15 +531,15 @@ static struct prog_src_register search_or_add_const4f( struct brw_wm_compile *c,
 						     GLfloat s3)
 {
    struct gl_program_parameter_list *paramList = c->fp->program.Base.Parameters;
-   GLfloat values[4];
+   gl_constant_value values[4];
    GLuint idx;
    GLuint swizzle;
    struct prog_src_register reg;
 
-   values[0] = s0;
-   values[1] = s1;
-   values[2] = s2;
-   values[3] = s3;
+   values[0].f = s0;
+   values[1].f = s1;
+   values[2].f = s2;
+   values[3].f = s3;
 
    idx = _mesa_add_unnamed_constant( paramList, values, 4, &swizzle );
    reg = src_reg(PROGRAM_STATE_VAR, idx);
@@ -664,9 +660,22 @@ static void precalc_lit( struct brw_wm_compile *c,
 static void precalc_tex( struct brw_wm_compile *c,
 			 const struct prog_instruction *inst )
 {
+   struct brw_compile *p = &c->func;
+   struct intel_context *intel = &p->brw->intel;
    struct prog_src_register coord;
    struct prog_dst_register tmpcoord = { 0 };
    const GLuint unit = c->fp->program.Base.SamplerUnits[inst->TexSrcUnit];
+   struct prog_dst_register unswizzled_tmp;
+
+   /* If we are doing EXT_texture_swizzle, we need to write our result into a
+    * temporary, otherwise writemasking of the real dst could lose some of our
+    * channels.
+    */
+   if (c->key.tex.swizzles[unit] != SWIZZLE_NOOP) {
+      unswizzled_tmp = get_temp(c);
+   } else {
+      unswizzled_tmp = inst->DstReg;
+   }
 
    assert(unit < BRW_MAX_TEX_UNIT);
 
@@ -727,7 +736,7 @@ static void precalc_tex( struct brw_wm_compile *c,
        release_temp(c, tmp0);
        release_temp(c, tmp1);
    }
-   else if (inst->TexSrcTarget == TEXTURE_RECT_INDEX) {
+   else if (intel->gen < 6 && inst->TexSrcTarget == TEXTURE_RECT_INDEX) {
       struct prog_src_register scale = 
 	 search_or_add_param5( c, 
 			       STATE_INTERNAL, 
@@ -762,9 +771,9 @@ static void precalc_tex( struct brw_wm_compile *c,
     * conversion requires allocating a temporary variable which we
     * don't have the facility to do that late in the compilation.
     */
-   if (c->key.yuvtex_mask & (1 << unit)) {
+   if (c->key.tex.yuvtex_mask & (1 << unit)) {
       /* convert ycbcr to RGBA */
-      GLboolean  swap_uv = c->key.yuvtex_swap_mask & (1<<unit);
+      bool swap_uv = c->key.tex.yuvtex_swap_mask & (1 << unit);
 
       /* 
 	 CONST C0 = { -.5, -.0625,  -.5, 1.164 }
@@ -778,7 +787,6 @@ static void precalc_tex( struct brw_wm_compile *c,
 	    RGB.xyz = MAD UYV.xxz, C1,   UYV.y 
 	 RGB.y   = MAD UYV.z,   C1.w, RGB.y
       */
-      struct prog_dst_register dst = inst->DstReg;
       struct prog_dst_register tmp = get_temp(c);
       struct prog_src_register tmpsrc = src_reg_from_dst(tmp);
       struct prog_src_register C0 = search_or_add_const4f( c,  -.5, -.0625, -.5, 1.164 );
@@ -827,7 +835,7 @@ static void precalc_tex( struct brw_wm_compile *c,
 
       emit_op(c,
 	      OPCODE_MAD,
-	      dst_mask(dst, WRITEMASK_XYZ),
+	      dst_mask(unswizzled_tmp, WRITEMASK_XYZ),
 	      0,
 	      swap_uv?src_swizzle(tmpsrc, Z,Z,X,X):src_swizzle(tmpsrc, X,X,Z,Z),
 	      C1,
@@ -837,11 +845,11 @@ static void precalc_tex( struct brw_wm_compile *c,
        */
       emit_op(c,
 	      OPCODE_MAD,
-	      dst_mask(dst, WRITEMASK_Y),
+	      dst_mask(unswizzled_tmp, WRITEMASK_Y),
 	      0,
 	      src_swizzle1(tmpsrc, Z),
 	      src_swizzle1(C1, W),
-	      src_swizzle1(src_reg_from_dst(dst), Y));
+	      src_swizzle1(src_reg_from_dst(unswizzled_tmp), Y));
 
       release_temp(c, tmp);
    }
@@ -849,7 +857,7 @@ static void precalc_tex( struct brw_wm_compile *c,
       /* ordinary RGBA tex instruction */
       emit_tex_op(c, 
                   OPCODE_TEX,
-                  inst->DstReg,
+                  unswizzled_tmp,
                   inst->SaturateMode,
                   unit,
                   inst->TexSrcTarget,
@@ -860,13 +868,13 @@ static void precalc_tex( struct brw_wm_compile *c,
    }
 
    /* For GL_EXT_texture_swizzle: */
-   if (c->key.tex_swizzles[unit] != SWIZZLE_NOOP) {
+   if (c->key.tex.swizzles[unit] != SWIZZLE_NOOP) {
       /* swizzle the result of the TEX instruction */
-      struct prog_src_register tmpsrc = src_reg_from_dst(inst->DstReg);
+      struct prog_src_register tmpsrc = src_reg_from_dst(unswizzled_tmp);
       emit_op(c, OPCODE_SWZ,
               inst->DstReg,
               SATURATE_OFF, /* saturate already done above */
-              src_swizzle4(tmpsrc, c->key.tex_swizzles[unit]),
+              src_swizzle4(tmpsrc, c->key.tex.swizzles[unit]),
               src_undef(),
               src_undef());
    }
@@ -880,11 +888,11 @@ static void precalc_tex( struct brw_wm_compile *c,
 /**
  * Check if the given TXP instruction really needs the divide-by-W step.
  */
-static GLboolean projtex( struct brw_wm_compile *c,
-			  const struct prog_instruction *inst )
+static bool
+projtex(struct brw_wm_compile *c, const struct prog_instruction *inst)
 {
    const struct prog_src_register src = inst->SrcReg[0];
-   GLboolean retVal;
+   bool retVal;
 
    assert(inst->Opcode == OPCODE_TXP);
 
@@ -896,13 +904,13 @@ static GLboolean projtex( struct brw_wm_compile *c,
     * user-provided fragment programs anyway:
     */
    if (inst->TexSrcTarget == TEXTURE_CUBE_INDEX)
-      retVal = GL_FALSE;  /* ut2004 gun rendering !?! */
+      retVal = false;  /* ut2004 gun rendering !?! */
    else if (src.File == PROGRAM_INPUT && 
 	    GET_SWZ(src.Swizzle, W) == W &&
             (c->key.proj_attrib_mask & (1 << src.Index)) == 0)
-      retVal = GL_FALSE;
+      retVal = false;
    else
-      retVal = GL_TRUE;
+      retVal = true;
 
    return retVal;
 }
@@ -1049,7 +1057,7 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
    if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
       printf("pre-fp:\n");
       _mesa_fprint_program_opt(stdout, &fp->program.Base, PROG_PRINT_DEBUG,
-			       GL_TRUE);
+			       true);
       printf("\n");
    }
 
@@ -1064,7 +1072,6 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
    }
    c->pixel_w = src_undef();
    c->nr_fp_insns = 0;
-   c->fp->tex_units_used = 0x0;
 
    /* Emit preamble instructions.  This is where special instructions such as
     * WM_CINTERP, WM_LINTERP, WM_PINTERP and WM_WPOSXY are emitted to
@@ -1122,7 +1129,7 @@ void brw_wm_pass_fp( struct brw_wm_compile *c )
 
       case OPCODE_RSQ:
 	 out = emit_scalar_insn(c, inst);
-	 out->SrcReg[0].Abs = GL_TRUE;
+	 out->SrcReg[0].Abs = true;
 	 break;
 
       case OPCODE_TEX:

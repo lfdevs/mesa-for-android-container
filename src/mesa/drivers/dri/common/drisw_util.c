@@ -27,7 +27,7 @@
  * DRISW utility functions, i.e. dri_util.c stripped from drm-specific bits.
  */
 
-#include "drisw_util.h"
+#include "dri_util.h"
 #include "utils.h"
 
 
@@ -54,20 +54,19 @@ driCreateNewScreen(int scrn, const __DRIextension **extensions,
     static const __DRIextension *emptyExtensionList[] = { NULL };
     __DRIscreen *psp;
 
-    (void) data;
-
     psp = CALLOC_STRUCT(__DRIscreenRec);
     if (!psp)
 	return NULL;
 
     setupLoaderExtensions(psp, extensions);
 
+    psp->loaderPrivate = data;
+
     psp->extensions = emptyExtensionList;
     psp->fd = -1;
     psp->myNum = scrn;
 
     *driver_configs = driDriverAPI.InitScreen(psp);
-
     if (*driver_configs == NULL) {
 	FREE(psp);
 	return NULL;
@@ -80,7 +79,6 @@ static void driDestroyScreen(__DRIscreen *psp)
 {
     if (psp) {
 	driDriverAPI.DestroyScreen(psp);
-
 	FREE(psp);
     }
 }
@@ -96,39 +94,26 @@ static const __DRIextension **driGetExtensions(__DRIscreen *psp)
  */
 
 static __DRIcontext *
-driCreateNewContext(__DRIscreen *psp, const __DRIconfig *config,
-		    __DRIcontext *shared, void *data)
+driCreateContextAttribs(__DRIscreen *screen, int api,
+			const __DRIconfig *config,
+			__DRIcontext *shared,
+			unsigned num_attribs,
+			const uint32_t *attribs,
+			unsigned *error,
+			void *data)
 {
     __DRIcontext *pcp;
-    void * const shareCtx = (shared != NULL) ? shared->driverPrivate : NULL;
-
-    pcp = CALLOC_STRUCT(__DRIcontextRec);
-    if (!pcp)
-	return NULL;
-
-    pcp->loaderPrivate = data;
-
-    pcp->driScreenPriv = psp;
-    pcp->driDrawablePriv = NULL;
-    pcp->driReadablePriv = NULL;
-
-    if (!driDriverAPI.CreateContext(API_OPENGL,
-			    &config->modes, pcp, shareCtx)) {
-	FREE(pcp);
-	return NULL;
-    }
-
-    return pcp;
-}
-
-static __DRIcontext *
-driCreateNewContextForAPI(__DRIscreen *psp, int api,
-                          const __DRIconfig *config,
-                          __DRIcontext *shared, void *data)
-{
-    __DRIcontext *pcp;
+    const struct gl_config *modes = (config != NULL) ? &config->modes : NULL;
     void * const shareCtx = (shared != NULL) ? shared->driverPrivate : NULL;
     gl_api mesa_api;
+    unsigned major_version = 1;
+    unsigned minor_version = 0;
+    uint32_t flags = 0;
+
+    /* Either num_attribs is zero and attribs is NULL, or num_attribs is not
+     * zero and attribs is not NULL.
+     */
+    assert((num_attribs == 0) == (attribs == NULL));
 
     switch (api) {
     case __DRI_API_OPENGL:
@@ -140,8 +125,44 @@ driCreateNewContextForAPI(__DRIscreen *psp, int api,
     case __DRI_API_GLES2:
             mesa_api = API_OPENGLES2;
             break;
+    case __DRI_API_OPENGL_CORE:
     default:
             return NULL;
+    }
+
+    for (unsigned i = 0; i < num_attribs; i++) {
+	switch (attribs[i * 2]) {
+	case __DRI_CTX_ATTRIB_MAJOR_VERSION:
+	    major_version = attribs[i * 2 + 1];
+	    break;
+	case __DRI_CTX_ATTRIB_MINOR_VERSION:
+	    minor_version = attribs[i * 2 + 1];
+	    break;
+	case __DRI_CTX_ATTRIB_FLAGS:
+	    flags = attribs[i * 2 + 1];
+	    break;
+	default:
+	    /* We can't create a context that satisfies the requirements of an
+	     * attribute that we don't understand.  Return failure.
+	     */
+	    return NULL;
+	}
+    }
+
+    /* There are no forward-compatible contexts before OpenGL 3.0.  The
+     * GLX_ARB_create_context spec says:
+     *
+     *     "Forward-compatible contexts are defined only for OpenGL versions
+     *     3.0 and later."
+     *
+     * Moreover, Mesa can't fulfill the requirements of a forward-looking
+     * context.  Return failure if a forward-looking context is requested.
+     *
+     * In Mesa, a debug context is the same as a regular context.
+     */
+    if (major_version >= 3) {
+	if ((flags & ~__DRI_CTX_FLAG_DEBUG) != 0)
+	    return NULL;
     }
 
     pcp = CALLOC_STRUCT(__DRIcontextRec);
@@ -150,17 +171,37 @@ driCreateNewContextForAPI(__DRIscreen *psp, int api,
 
     pcp->loaderPrivate = data;
 
-    pcp->driScreenPriv = psp;
+    pcp->driScreenPriv = screen;
     pcp->driDrawablePriv = NULL;
     pcp->driReadablePriv = NULL;
 
-    if (!driDriverAPI.CreateContext(mesa_api,
-                            &config->modes, pcp, shareCtx)) {
+    if (!driDriverAPI.CreateContext(mesa_api, modes, pcp,
+				    major_version, minor_version,
+				    flags, error, shareCtx)) {
         FREE(pcp);
         return NULL;
     }
 
     return pcp;
+}
+
+static __DRIcontext *
+driCreateNewContextForAPI(__DRIscreen *psp, int api,
+                          const __DRIconfig *config,
+                          __DRIcontext *shared, void *data)
+{
+    unsigned error;
+
+    return driCreateContextAttribs(psp, api, config, shared, 0, NULL,
+				   &error, data);
+}
+
+static __DRIcontext *
+driCreateNewContext(__DRIscreen *psp, const __DRIconfig *config,
+		    __DRIcontext *shared, void *data)
+{
+    return driCreateNewContextForAPI(psp, __DRI_API_OPENGL,
+				     config, shared, data);
 }
 
 static void
@@ -193,7 +234,7 @@ static int driBindContext(__DRIcontext *pcp,
 	    pdp->driContextPriv = pcp;
 	    dri_get_drawable(pdp);
 	}
-	if ( prp && pdp != prp ) {
+	if (prp && pdp != prp) {
 	    dri_get_drawable(prp);
 	}
     }
@@ -248,7 +289,6 @@ static void dri_put_drawable(__DRIdrawable *pdp)
 	    return;
 
 	driDriverAPI.DestroyBuffer(pdp);
-
 	FREE(pdp);
     }
 }
@@ -312,5 +352,6 @@ const __DRIswrastExtension driSWRastExtension = {
     { __DRI_SWRAST, __DRI_SWRAST_VERSION },
     driCreateNewScreen,
     driCreateNewDrawable,
-    driCreateNewContextForAPI
+    driCreateNewContextForAPI,
+    driCreateContextAttribs
 };

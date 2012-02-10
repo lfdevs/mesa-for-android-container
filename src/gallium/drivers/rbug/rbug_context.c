@@ -873,7 +873,7 @@ rbug_resource_copy_region(struct pipe_context *_pipe,
 static void
 rbug_clear(struct pipe_context *_pipe,
            unsigned buffers,
-           const float *rgba,
+           const union pipe_color_union *color,
            double depth,
            unsigned stencil)
 {
@@ -883,7 +883,7 @@ rbug_clear(struct pipe_context *_pipe,
    pipe_mutex_lock(rb_pipe->call_mutex);
    pipe->clear(pipe,
                buffers,
-               rgba,
+               color,
                depth,
                stencil);
    pipe_mutex_unlock(rb_pipe->call_mutex);
@@ -892,7 +892,7 @@ rbug_clear(struct pipe_context *_pipe,
 static void
 rbug_clear_render_target(struct pipe_context *_pipe,
                          struct pipe_surface *_dst,
-                         const float *rgba,
+                         const union pipe_color_union *color,
                          unsigned dstx, unsigned dsty,
                          unsigned width, unsigned height)
 {
@@ -904,7 +904,7 @@ rbug_clear_render_target(struct pipe_context *_pipe,
    pipe_mutex_lock(rb_pipe->call_mutex);
    pipe->clear_render_target(pipe,
                              dst,
-                             rgba,
+                             color,
                              dstx,
                              dsty,
                              width,
@@ -1244,6 +1244,10 @@ rbug_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    rb_pipe->pipe = pipe;
 
    rbug_screen_add_to_list(rb_screen, contexts, rb_pipe);
+
+   if (debug_get_bool_option("GALLIUM_RBUG_START_BLOCKED", FALSE)) {
+      rb_pipe->draw_blocked = RBUG_BLOCK_BEFORE;
+   }
 
    return &rb_pipe->base;
 }

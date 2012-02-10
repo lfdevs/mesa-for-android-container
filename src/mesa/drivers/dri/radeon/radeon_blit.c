@@ -38,7 +38,7 @@ static inline uint32_t cmdpacket0(struct radeon_screen *rscrn,
 }
 
 /* common formats supported as both textures and render targets */
-unsigned r100_check_blit(gl_format mesa_format)
+unsigned r100_check_blit(gl_format mesa_format, uint32_t dst_pitch)
 {
     /* XXX others?  BE/LE? */
     switch (mesa_format) {
@@ -54,6 +54,12 @@ unsigned r100_check_blit(gl_format mesa_format)
     default:
 	    return 0;
     }
+
+    /* Rendering to small buffer doesn't work.
+     * Looks like a hw limitation.
+     */
+    if (dst_pitch < 32)
+        return 0;
 
     /* ??? */
     if (_mesa_get_format_bits(mesa_format, GL_DEPTH_BITS) > 0)
@@ -133,6 +139,11 @@ static void inline emit_tx_setup(struct r100_context *r100,
     default:
 	    break;
     }
+    
+    if (bo->flags & RADEON_BO_FLAGS_MACRO_TILE)
+       offset |= RADEON_TXO_MACRO_TILE;
+    if (bo->flags & RADEON_BO_FLAGS_MICRO_TILE)
+       offset |= RADEON_TXO_MICRO_TILE_X2;
 
     BEGIN_BATCH(18);
     OUT_BATCH_REGVAL(RADEON_PP_CNTL, RADEON_TEX_0_ENABLE | RADEON_TEX_BLEND_0_ENABLE);
@@ -156,7 +167,7 @@ static void inline emit_tx_setup(struct r100_context *r100,
     OUT_BATCH_REGVAL(RADEON_PP_TEX_PITCH_0, pitch * _mesa_get_format_bytes(mesa_format) - 32);
 
     OUT_BATCH_REGSEQ(RADEON_PP_TXOFFSET_0, 1);
-    OUT_BATCH_RELOC(0, bo, 0, RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0, 0);
+    OUT_BATCH_RELOC(offset, bo, offset, RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0, 0);
 
     END_BATCH();
 }
@@ -197,6 +208,12 @@ static inline void emit_cb_setup(struct r100_context *r100,
 	    break;
     }
 
+    if (bo->flags & RADEON_BO_FLAGS_MACRO_TILE)
+        dst_pitch |= RADEON_COLOR_TILE_ENABLE;
+
+    if (bo->flags & RADEON_BO_FLAGS_MICRO_TILE)
+        dst_pitch |= RADEON_COLOR_MICROTILE_ENABLE;
+
     BEGIN_BATCH_NO_AUTOSTATE(18);
     OUT_BATCH_REGVAL(RADEON_RE_TOP_LEFT, 0);
     OUT_BATCH_REGVAL(RADEON_RE_WIDTH_HEIGHT, ((width << RADEON_RE_WIDTH_SHIFT) |
@@ -206,7 +223,7 @@ static inline void emit_cb_setup(struct r100_context *r100,
     OUT_BATCH_REGVAL(RADEON_RB3D_CNTL, dst_format);
 
     OUT_BATCH_REGSEQ(RADEON_RB3D_COLOROFFSET, 1);
-    OUT_BATCH_RELOC(0, bo, 0, 0, RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0);
+    OUT_BATCH_RELOC(offset, bo, offset, 0, RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0);
     OUT_BATCH_REGSEQ(RADEON_RB3D_COLORPITCH, 1);
     OUT_BATCH_RELOC(dst_pitch, bo, dst_pitch, 0, RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0);
 
@@ -344,18 +361,12 @@ unsigned r100_blit(struct gl_context *ctx,
 {
     struct r100_context *r100 = R100_CONTEXT(ctx);
 
-    if (!r100_check_blit(dst_mesaformat))
+    if (!r100_check_blit(dst_mesaformat, dst_pitch))
         return GL_FALSE;
 
     /* Make sure that colorbuffer has even width - hw limitation */
     if (dst_pitch % 2 > 0)
         ++dst_pitch;
-
-    /* Rendering to small buffer doesn't work.
-     * Looks like a hw limitation.
-     */
-    if (dst_pitch < 32)
-        return GL_FALSE;
 
     /* Need to clamp the region size to make sure
      * we don't read outside of the source buffer
@@ -379,14 +390,14 @@ unsigned r100_blit(struct gl_context *ctx,
     }
 
     if (0) {
-        fprintf(stderr, "src: size [%d x %d], pitch %d, "
+        fprintf(stderr, "src: size [%d x %d], pitch %d, offset %d "
                 "offset [%d x %d], format %s, bo %p\n",
-                src_width, src_height, src_pitch,
+                src_width, src_height, src_pitch, src_offset,
                 src_x_offset, src_y_offset,
                 _mesa_get_format_name(src_mesaformat),
                 src_bo);
-        fprintf(stderr, "dst: pitch %d, offset[%d x %d], format %s, bo %p\n",
-                dst_pitch, dst_x_offset, dst_y_offset,
+        fprintf(stderr, "dst: pitch %d offset %d, offset[%d x %d], format %s, bo %p\n",
+                dst_pitch, dst_offset,  dst_x_offset, dst_y_offset,
                 _mesa_get_format_name(dst_mesaformat), dst_bo);
         fprintf(stderr, "region: %d x %d\n", reg_width, reg_height);
     }

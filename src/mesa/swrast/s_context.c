@@ -39,6 +39,7 @@
 #include "s_lines.h"
 #include "s_points.h"
 #include "s_span.h"
+#include "s_texfetch.h"
 #include "s_triangle.h"
 #include "s_texfilter.h"
 
@@ -71,7 +72,7 @@ _swrast_update_rasterflags( struct gl_context *ctx )
          break;
       }
    }
-   if (ctx->Color._LogicOpEnabled)     rasterMask |= LOGIC_OP_BIT;
+   if (ctx->Color.ColorLogicOpEnabled) rasterMask |= LOGIC_OP_BIT;
    if (ctx->Texture._EnabledUnits)     rasterMask |= TEXTURE_BIT;
    if (   ctx->Viewport.X < 0
        || ctx->Viewport.X + ctx->Viewport.Width > (GLint) ctx->DrawBuffer->Width
@@ -104,7 +105,7 @@ _swrast_update_rasterflags( struct gl_context *ctx )
    }
 
 
-   if (ctx->FragmentProgram._Current) {
+   if (_swrast_use_fragment_program(ctx)) {
       rasterMask |= FRAGPROG_BIT;
    }
 
@@ -169,7 +170,7 @@ _swrast_update_fog_hint( struct gl_context *ctx )
 {
    SWcontext *swrast = SWRAST_CONTEXT(ctx);
    swrast->_PreferPixelFog = (!swrast->AllowVertexFog ||
-                              ctx->FragmentProgram._Current ||
+			      _swrast_use_fragment_program(ctx) ||
 			      (ctx->Hint.Fog == GL_NICEST &&
 			       swrast->AllowPixelFog));
 }
@@ -219,13 +220,14 @@ _swrast_update_deferred_texture(struct gl_context *ctx)
       swrast->_DeferredTexture = GL_FALSE;
    }
    else {
+      GLboolean use_fprog = _swrast_use_fragment_program(ctx);
       const struct gl_fragment_program *fprog
          = ctx->FragmentProgram._Current;
-      if (fprog && (fprog->Base.OutputsWritten & (1 << FRAG_RESULT_DEPTH))) {
+      if (use_fprog && (fprog->Base.OutputsWritten & (1 << FRAG_RESULT_DEPTH))) {
          /* Z comes from fragment program/shader */
          swrast->_DeferredTexture = GL_FALSE;
       }
-      else if (fprog && fprog->UsesKill) {
+      else if (use_fprog && fprog->UsesKill) {
          swrast->_DeferredTexture = GL_FALSE;
       }
       else if (ctx->Query.CurrentOcclusionObject) {
@@ -248,10 +250,13 @@ _swrast_update_fog_state( struct gl_context *ctx )
    SWcontext *swrast = SWRAST_CONTEXT(ctx);
    const struct gl_fragment_program *fp = ctx->FragmentProgram._Current;
 
-   assert((fp == NULL) || (fp->Base.Target == GL_FRAGMENT_PROGRAM_ARB));
+   assert((fp == NULL) ||
+          (fp->Base.Target == GL_FRAGMENT_PROGRAM_ARB) ||
+          (fp->Base.Target == GL_FRAGMENT_PROGRAM_NV));
 
    /* determine if fog is needed, and if so, which fog mode */
-   swrast->_FogEnabled = (fp == NULL && ctx->Fog.Enabled);
+   swrast->_FogEnabled = (!_swrast_use_fragment_program(ctx) &&
+			  ctx->Fog.Enabled);
 }
 
 
@@ -262,10 +267,11 @@ _swrast_update_fog_state( struct gl_context *ctx )
 static void
 _swrast_update_fragment_program(struct gl_context *ctx, GLbitfield newState)
 {
-   const struct gl_fragment_program *fp = ctx->FragmentProgram._Current;
-   if (fp) {
-      _mesa_load_state_parameters(ctx, fp->Base.Parameters);
-   }
+   if (!_swrast_use_fragment_program(ctx))
+      return;
+
+   _mesa_load_state_parameters(ctx,
+                               ctx->FragmentProgram._Current->Base.Parameters);
 }
 
 
@@ -283,7 +289,7 @@ _swrast_update_specular_vertex_add(struct gl_context *ctx)
 
    swrast->SpecularVertexAdd = (separateSpecular
                                 && ctx->Texture._EnabledUnits == 0x0
-                                && !ctx->FragmentProgram._Current
+                                && !_swrast_use_fragment_program(ctx)
                                 && !ctx->ATIFragmentShader._Enabled);
 }
 
@@ -417,84 +423,6 @@ _swrast_validate_blend_func(struct gl_context *ctx, GLuint n, const GLubyte mask
    swrast->BlendFunc( ctx, n, mask, src, dst, chanType );
 }
 
-
-/**
- * Make sure we have texture image data for all the textures we may need
- * for subsequent rendering.
- */
-static void
-_swrast_validate_texture_images(struct gl_context *ctx)
-{
-   SWcontext *swrast = SWRAST_CONTEXT(ctx);
-   GLuint u;
-
-   if (!swrast->ValidateTextureImage || !ctx->Texture._EnabledUnits) {
-      /* no textures enabled, or no way to validate images! */
-      return;
-   }
-
-   for (u = 0; u < ctx->Const.MaxTextureImageUnits; u++) {
-      if (ctx->Texture.Unit[u]._ReallyEnabled) {
-         struct gl_texture_object *texObj = ctx->Texture.Unit[u]._Current;
-         ASSERT(texObj);
-         if (texObj) {
-            GLuint numFaces = (texObj->Target == GL_TEXTURE_CUBE_MAP) ? 6 : 1;
-            GLuint face;
-            for (face = 0; face < numFaces; face++) {
-               GLint lvl;
-               for (lvl = texObj->BaseLevel; lvl <= texObj->_MaxLevel; lvl++) {
-                  struct gl_texture_image *texImg = texObj->Image[face][lvl];
-                  if (texImg && !texImg->Data) {
-                     swrast->ValidateTextureImage(ctx, texObj, face, lvl);
-                     ASSERT(texObj->Image[face][lvl]->Data);
-                  }
-               }
-            }
-         }
-      }
-   }
-}
-
-
-/**
- * Free the texture image data attached to all currently enabled
- * textures.  Meant to be called by device drivers when transitioning
- * from software to hardware rendering.
- */
-void
-_swrast_eject_texture_images(struct gl_context *ctx)
-{
-   GLuint u;
-
-   if (!ctx->Texture._EnabledUnits) {
-      /* no textures enabled */
-      return;
-   }
-
-   for (u = 0; u < ctx->Const.MaxTextureImageUnits; u++) {
-      if (ctx->Texture.Unit[u]._ReallyEnabled) {
-         struct gl_texture_object *texObj = ctx->Texture.Unit[u]._Current;
-         ASSERT(texObj);
-         if (texObj) {
-            GLuint numFaces = (texObj->Target == GL_TEXTURE_CUBE_MAP) ? 6 : 1;
-            GLuint face;
-            for (face = 0; face < numFaces; face++) {
-               GLint lvl;
-               for (lvl = texObj->BaseLevel; lvl <= texObj->_MaxLevel; lvl++) {
-                  struct gl_texture_image *texImg = texObj->Image[face][lvl];
-                  if (texImg && texImg->Data) {
-                     _mesa_free_texmemory(texImg->Data);
-                     texImg->Data = NULL;
-                  }
-               }
-            }
-         }
-      }
-   }
-}
-
-
-
 static void
 _swrast_sleep( struct gl_context *ctx, GLbitfield new_state )
 {
@@ -547,10 +475,13 @@ _swrast_update_texture_samplers(struct gl_context *ctx)
       return; /* pipe hack */
 
    for (u = 0; u < ctx->Const.MaxTextureImageUnits; u++) {
-      const struct gl_texture_object *tObj = ctx->Texture.Unit[u]._Current;
+      struct gl_texture_object *tObj = ctx->Texture.Unit[u]._Current;
       /* Note: If tObj is NULL, the sample function will be a simple
        * function that just returns opaque black (0,0,0,1).
        */
+      if (tObj) {
+         _mesa_update_fetch_functions(tObj);
+      }
       swrast->TextureSample[u] = _swrast_choose_texture_sample_func(ctx, tObj);
    }
 }
@@ -564,12 +495,12 @@ static void
 _swrast_update_active_attribs(struct gl_context *ctx)
 {
    SWcontext *swrast = SWRAST_CONTEXT(ctx);
-   GLuint attribsMask;
+   GLbitfield64 attribsMask;
 
    /*
     * Compute _ActiveAttribsMask = which fragment attributes are needed.
     */
-   if (ctx->FragmentProgram._Current) {
+   if (_swrast_use_fragment_program(ctx)) {
       /* fragment program/shader */
       attribsMask = ctx->FragmentProgram._Current->Base.InputsRead;
       attribsMask &= ~FRAG_BIT_WPOS; /* WPOS is always handled specially */
@@ -603,7 +534,7 @@ _swrast_update_active_attribs(struct gl_context *ctx)
    {
       GLuint i, num = 0;
       for (i = 0; i < FRAG_ATTRIB_MAX; i++) {
-         if (attribsMask & (1 << i)) {
+         if (attribsMask & BITFIELD64_BIT(i)) {
             swrast->_ActiveAttribs[num++] = i;
             /* how should this attribute be interpolated? */
             if (i == FRAG_ATTRIB_COL0 || i == FRAG_ATTRIB_COL1)
@@ -640,7 +571,6 @@ _swrast_validate_derived( struct gl_context *ctx )
 
       if (swrast->NewState & (_NEW_TEXTURE | _NEW_PROGRAM)) {
          _swrast_update_texture_samplers( ctx );
-         _swrast_validate_texture_images(ctx);
       }
 
       if (swrast->NewState & (_NEW_COLOR | _NEW_PROGRAM))
@@ -670,7 +600,7 @@ _swrast_validate_derived( struct gl_context *ctx )
 
 #define SWRAST_DEBUG 0
 
-/* Public entrypoints:  See also s_accum.c, s_bitmap.c, etc.
+/* Public entrypoints:  See also s_bitmap.c, etc.
  */
 void
 _swrast_Quad( struct gl_context *ctx,
@@ -767,11 +697,34 @@ _swrast_allow_pixel_fog( struct gl_context *ctx, GLboolean value )
 }
 
 
+/**
+ * Initialize native program limits by copying the logical limits.
+ * See comments in init_program_limits() in context.c
+ */
+static void
+init_program_native_limits(struct gl_program_constants *prog)
+{
+   prog->MaxNativeInstructions = prog->MaxInstructions;
+   prog->MaxNativeAluInstructions = prog->MaxAluInstructions;
+   prog->MaxNativeTexInstructions = prog->MaxTexInstructions;
+   prog->MaxNativeTexIndirections = prog->MaxTexIndirections;
+   prog->MaxNativeAttribs = prog->MaxAttribs;
+   prog->MaxNativeTemps = prog->MaxTemps;
+   prog->MaxNativeAddressRegs = prog->MaxAddressRegs;
+   prog->MaxNativeParameters = prog->MaxParameters;
+}
+
+
 GLboolean
 _swrast_CreateContext( struct gl_context *ctx )
 {
    GLuint i;
    SWcontext *swrast = (SWcontext *)CALLOC(sizeof(SWcontext));
+#ifdef _OPENMP
+   const GLuint maxThreads = omp_get_max_threads();
+#else
+   const GLuint maxThreads = 1;
+#endif
 
    if (SWRAST_DEBUG) {
       _mesa_debug(ctx, "_swrast_CreateContext\n");
@@ -799,26 +752,31 @@ _swrast_CreateContext( struct gl_context *ctx )
    swrast->AllowVertexFog = GL_TRUE;
    swrast->AllowPixelFog = GL_TRUE;
 
-   /* Optimized Accum buffer */
-   swrast->_IntegerAccumMode = GL_FALSE;
-   swrast->_IntegerAccumScaler = 0.0;
+   swrast->Driver.SpanRenderStart = _swrast_span_render_start;
+   swrast->Driver.SpanRenderFinish = _swrast_span_render_finish;
 
    for (i = 0; i < MAX_TEXTURE_IMAGE_UNITS; i++)
       swrast->TextureSample[i] = NULL;
 
-   swrast->SpanArrays = MALLOC_STRUCT(sw_span_arrays);
+   /* SpanArrays is global and shared by all SWspan instances. However, when
+    * using multiple threads, it is necessary to have one SpanArrays instance
+    * per thread.
+    */
+   swrast->SpanArrays = (SWspanarrays *) MALLOC(maxThreads * sizeof(SWspanarrays));
    if (!swrast->SpanArrays) {
       FREE(swrast);
       return GL_FALSE;
    }
-   swrast->SpanArrays->ChanType = CHAN_TYPE;
+   for(i = 0; i < maxThreads; i++) {
+      swrast->SpanArrays[i].ChanType = CHAN_TYPE;
 #if CHAN_TYPE == GL_UNSIGNED_BYTE
-   swrast->SpanArrays->rgba = swrast->SpanArrays->rgba8;
+      swrast->SpanArrays[i].rgba = swrast->SpanArrays[i].rgba8;
 #elif CHAN_TYPE == GL_UNSIGNED_SHORT
-   swrast->SpanArrays->rgba = swrast->SpanArrays->rgba16;
+      swrast->SpanArrays[i].rgba = swrast->SpanArrays[i].rgba16;
 #else
-   swrast->SpanArrays->rgba = swrast->SpanArrays->attribs[FRAG_ATTRIB_COL0];
+      swrast->SpanArrays[i].rgba = swrast->SpanArrays[i].attribs[FRAG_ATTRIB_COL0];
 #endif
+   }
 
    /* init point span buffer */
    swrast->PointSpan.primitive = GL_POINT;
@@ -826,13 +784,9 @@ _swrast_CreateContext( struct gl_context *ctx )
    swrast->PointSpan.facing = 0;
    swrast->PointSpan.array = swrast->SpanArrays;
 
-   swrast->TexelBuffer = (GLfloat *) MALLOC(ctx->Const.MaxTextureImageUnits *
-                                           MAX_WIDTH * 4 * sizeof(GLfloat));
-   if (!swrast->TexelBuffer) {
-      FREE(swrast->SpanArrays);
-      FREE(swrast);
-      return GL_FALSE;
-   }
+   init_program_native_limits(&ctx->Const.VertexProgram);
+   init_program_native_limits(&ctx->Const.GeometryProgram);
+   init_program_native_limits(&ctx->Const.FragmentProgram);
 
    ctx->swrast_context = swrast;
 
@@ -887,6 +841,24 @@ _swrast_render_primitive( struct gl_context *ctx, GLenum prim )
 }
 
 
+/** called via swrast->Driver.SpanRenderStart() */
+void
+_swrast_span_render_start(struct gl_context *ctx)
+{
+   _swrast_map_textures(ctx);
+   _swrast_map_renderbuffers(ctx);
+}
+
+
+/** called via swrast->Driver.SpanRenderFinish() */
+void
+_swrast_span_render_finish(struct gl_context *ctx)
+{
+   _swrast_unmap_textures(ctx);
+   _swrast_unmap_renderbuffers(ctx);
+}
+
+
 void
 _swrast_render_start( struct gl_context *ctx )
 {
@@ -900,10 +872,11 @@ void
 _swrast_render_finish( struct gl_context *ctx )
 {
    SWcontext *swrast = SWRAST_CONTEXT(ctx);
-   if (swrast->Driver.SpanRenderFinish)
-      swrast->Driver.SpanRenderFinish( ctx );
 
    _swrast_flush(ctx);
+
+   if (swrast->Driver.SpanRenderFinish)
+      swrast->Driver.SpanRenderFinish( ctx );
 }
 
 

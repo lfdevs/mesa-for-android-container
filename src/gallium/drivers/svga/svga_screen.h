@@ -49,9 +49,6 @@ struct svga_screen
 
    SVGA3dHardwareVersion hw_version;
 
-   unsigned use_ps30;
-   unsigned use_vs30;
-   
    struct {
       boolean force_level_surface_view;
       boolean force_surface_view;
@@ -64,6 +61,14 @@ struct svga_screen
    pipe_mutex tex_mutex; 
 
    pipe_mutex swc_mutex; /* Used for buffer uploads */
+
+   /* which formats to translate depth formats into */
+   struct {
+     enum SVGA3dSurfaceFormat z16;
+     /* note gallium order */
+     enum SVGA3dSurfaceFormat x8z24;
+     enum SVGA3dSurfaceFormat s8z24;
+   } depth;
 
    struct svga_host_surface_cache cache;
 };

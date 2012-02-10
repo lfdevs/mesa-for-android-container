@@ -803,6 +803,7 @@ translate_opcode(uint opcode)
    case TGSI_OPCODE_CEIL: return NV_OP_CEIL;
    case TGSI_OPCODE_FLR: return NV_OP_FLOOR;
    case TGSI_OPCODE_TRUNC: return NV_OP_TRUNC;
+   case TGSI_OPCODE_ROUND: return NV_OP_ROUND;
    case TGSI_OPCODE_COS: return NV_OP_COS;
    case TGSI_OPCODE_SIN: return NV_OP_SIN;
    case TGSI_OPCODE_DDX: return NV_OP_DFDX;
@@ -846,6 +847,7 @@ translate_opcode(uint opcode)
    case TGSI_OPCODE_TXP: return NV_OP_TEX;
    case TGSI_OPCODE_TXB: return NV_OP_TXB;
    case TGSI_OPCODE_TXL: return NV_OP_TXL;
+   case TGSI_OPCODE_TXD: return NV_OP_TEX;
    case TGSI_OPCODE_XOR: return NV_OP_XOR;
    default:
       return NV_OP_NOP;
@@ -1819,6 +1821,7 @@ bld_instruction(struct bld_context *bld,
    case TGSI_OPCODE_CEIL:
    case TGSI_OPCODE_FLR:
    case TGSI_OPCODE_TRUNC:
+   case TGSI_OPCODE_ROUND:
    case TGSI_OPCODE_DDX:
    case TGSI_OPCODE_DDY:
       FOR_EACH_DST0_ENABLED_CHANNEL(c, insn) {
@@ -1958,6 +1961,7 @@ bld_instruction(struct bld_context *bld,
    case TGSI_OPCODE_TXB:
    case TGSI_OPCODE_TXL:
    case TGSI_OPCODE_TXP:
+   case TGSI_OPCODE_TXD: // fake
       bld_tex(bld, dst0, insn);
       break;
    case TGSI_OPCODE_XPD:

@@ -70,9 +70,14 @@ enum util_format_layout {
    UTIL_FORMAT_LAYOUT_RGTC = 5,
 
    /**
+    * Ericsson Texture Compression
+    */
+   UTIL_FORMAT_LAYOUT_ETC = 6,
+
+   /**
     * Everything else that doesn't fit in any of the above layouts.
     */
-   UTIL_FORMAT_LAYOUT_OTHER = 6
+   UTIL_FORMAT_LAYOUT_OTHER = 7
 };
 
 
@@ -105,7 +110,8 @@ enum util_format_swizzle {
    UTIL_FORMAT_SWIZZLE_W = 3,
    UTIL_FORMAT_SWIZZLE_0 = 4,
    UTIL_FORMAT_SWIZZLE_1 = 5,
-   UTIL_FORMAT_SWIZZLE_NONE = 6
+   UTIL_FORMAT_SWIZZLE_NONE = 6,
+   UTIL_FORMAT_SWIZZLE_MAX = 7  /**< Number of enums counter (must be last) */
 };
 
 
@@ -119,9 +125,10 @@ enum util_format_colorspace {
 
 struct util_format_channel_description
 {
-   unsigned type:6;
+   unsigned type:5;        /**< UTIL_FORMAT_TYPE_x */
    unsigned normalized:1;
-   unsigned size:9;
+   unsigned pure_integer:1;
+   unsigned size:9;        /**< bits per channel */
 };
 
 
@@ -247,7 +254,7 @@ struct util_format_description
    /**
     * Fetch a single pixel (i, j) from a block.
     *
-    * Only defined for non-depth-stencil formats.
+    * Only defined for non-depth-stencil and non-integer formats.
     */
    void
    (*fetch_rgba_float)(float *dst,
@@ -299,27 +306,78 @@ struct util_format_description
                    unsigned width, unsigned height);
 
    /**
-    * Unpack pixels to S8_USCALED.
+    * Unpack pixels to S8_UINT.
     * Note: strides are in bytes.
     *
     * Only defined for stencil formats.
     */
    void
-   (*unpack_s_8uscaled)(uint8_t *dst, unsigned dst_stride,
-                        const uint8_t *src, unsigned src_stride,
-                        unsigned width, unsigned height);
+   (*unpack_s_8uint)(uint8_t *dst, unsigned dst_stride,
+                     const uint8_t *src, unsigned src_stride,
+                     unsigned width, unsigned height);
 
    /**
-    * Pack pixels from S8_USCALED.
+    * Pack pixels from S8_UINT.
     * Note: strides are in bytes.
     *
     * Only defined for stencil formats.
     */
    void
-   (*pack_s_8uscaled)(uint8_t *dst, unsigned dst_stride,
-                      const uint8_t *src, unsigned src_stride,
-                      unsigned width, unsigned height);
+   (*pack_s_8uint)(uint8_t *dst, unsigned dst_stride,
+                   const uint8_t *src, unsigned src_stride,
+                   unsigned width, unsigned height);
 
+  /**
+    * Unpack pixel blocks to R32G32B32A32_UINT.
+    * Note: strides are in bytes.
+    *
+    * Only defined for INT formats.
+    */
+   void
+   (*unpack_rgba_uint)(unsigned *dst, unsigned dst_stride,
+                       const uint8_t *src, unsigned src_stride,
+                       unsigned width, unsigned height);
+
+   void
+   (*pack_rgba_uint)(uint8_t *dst, unsigned dst_stride,
+                     const unsigned *src, unsigned src_stride,
+                     unsigned width, unsigned height);
+
+  /**
+    * Unpack pixel blocks to R32G32B32A32_SINT.
+    * Note: strides are in bytes.
+    *
+    * Only defined for INT formats.
+    */
+   void
+   (*unpack_rgba_sint)(signed *dst, unsigned dst_stride,
+                       const uint8_t *src, unsigned src_stride,
+                       unsigned width, unsigned height);
+
+   void
+   (*pack_rgba_sint)(uint8_t *dst, unsigned dst_stride,
+                     const int *src, unsigned src_stride,
+                     unsigned width, unsigned height);
+
+   /**
+    * Fetch a single pixel (i, j) from a block.
+    *
+    * Only defined for unsigned (pure) integer formats.
+    */
+   void
+   (*fetch_rgba_uint)(uint32_t *dst,
+                      const uint8_t *src,
+                      unsigned i, unsigned j);
+
+   /**
+    * Fetch a single pixel (i, j) from a block.
+    *
+    * Only defined for signed (pure) integer formats.
+    */
+   void
+   (*fetch_rgba_sint)(int32_t *dst,
+                      const uint8_t *src,
+                      unsigned i, unsigned j);
 };
 
 
@@ -410,6 +468,27 @@ util_format_is_s3tc(enum pipe_format format)
 }
 
 static INLINE boolean 
+util_format_is_srgb(enum pipe_format format)
+{
+   const struct util_format_description *desc = util_format_description(format);
+   return desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB;
+}
+
+static INLINE boolean
+util_format_has_depth(const struct util_format_description *desc)
+{
+   return desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS &&
+          desc->swizzle[0] != UTIL_FORMAT_SWIZZLE_NONE;
+}
+
+static INLINE boolean
+util_format_has_stencil(const struct util_format_description *desc)
+{
+   return desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS &&
+          desc->swizzle[1] != UTIL_FORMAT_SWIZZLE_NONE;
+}
+
+static INLINE boolean
 util_format_is_depth_or_stencil(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -419,10 +498,11 @@ util_format_is_depth_or_stencil(enum pipe_format format)
       return FALSE;
    }
 
-   return desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS ? TRUE : FALSE;
+   return util_format_has_depth(desc) ||
+          util_format_has_stencil(desc);
 }
 
-static INLINE boolean 
+static INLINE boolean
 util_format_is_depth_and_stencil(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -432,12 +512,8 @@ util_format_is_depth_and_stencil(enum pipe_format format)
       return FALSE;
    }
 
-   if (desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS) {
-      return FALSE;
-   }
-
-   return (desc->swizzle[0] != UTIL_FORMAT_SWIZZLE_NONE &&
-           desc->swizzle[1] != UTIL_FORMAT_SWIZZLE_NONE) ? TRUE : FALSE;
+   return util_format_has_depth(desc) &&
+          util_format_has_stencil(desc);
 }
 
 
@@ -476,6 +552,30 @@ util_format_colormask(const struct util_format_description *desc)
 boolean
 util_format_is_float(enum pipe_format format);
 
+
+boolean
+util_format_is_rgb_no_alpha(enum pipe_format format);
+
+
+boolean
+util_format_is_luminance(enum pipe_format format);
+
+
+boolean
+util_format_is_luminance_alpha(enum pipe_format format);
+
+
+boolean
+util_format_is_intensity(enum pipe_format format);
+
+boolean
+util_format_is_pure_integer(enum pipe_format format);
+
+boolean
+util_format_is_pure_sint(enum pipe_format format);
+
+boolean
+util_format_is_pure_uint(enum pipe_format format);
 
 /**
  * Whether the src format can be blitted to destation format with a simple
@@ -771,6 +871,26 @@ util_format_get_nr_components(enum pipe_format format)
    return desc->nr_channels;
 }
 
+/**
+ * Return the index of the first non-void channel
+ * -1 if no non-void channels
+ */
+static INLINE int
+util_format_get_first_non_void_channel(enum pipe_format format)
+{
+   const struct util_format_description *desc = util_format_description(format);
+   int i;
+
+   for (i = 0; i < 4; i++)
+      if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID)
+         break;
+
+   if (i == 4)
+       return -1;
+
+   return i;
+}
+
 /*
  * Format access functions.
  */
@@ -799,6 +919,30 @@ util_format_write_4ub(enum pipe_format format,
                       void *dst, unsigned dst_stride, 
                       unsigned x, unsigned y, unsigned w, unsigned h);
 
+void
+util_format_read_4ui(enum pipe_format format,
+                     unsigned *dst, unsigned dst_stride,
+                     const void *src, unsigned src_stride,
+                     unsigned x, unsigned y, unsigned w, unsigned h);
+
+void
+util_format_write_4ui(enum pipe_format format,
+                      const unsigned int *src, unsigned src_stride,
+                      void *dst, unsigned dst_stride,
+                      unsigned x, unsigned y, unsigned w, unsigned h);
+
+void
+util_format_read_4i(enum pipe_format format,
+                    int *dst, unsigned dst_stride,
+                    const void *src, unsigned src_stride,
+                    unsigned x, unsigned y, unsigned w, unsigned h);
+
+void
+util_format_write_4i(enum pipe_format format,
+                     const int *src, unsigned src_stride,
+                     void *dst, unsigned dst_stride,
+                     unsigned x, unsigned y, unsigned w, unsigned h);
+
 /*
  * Generic format conversion;
  */
@@ -814,6 +958,25 @@ util_format_translate(enum pipe_format dst_format,
                       const void *src, unsigned src_stride,
                       unsigned src_x, unsigned src_y,
                       unsigned width, unsigned height);
+
+/*
+ * Swizzle operations.
+ */
+
+/* Compose two sets of swizzles.
+ * If V is a 4D vector and the function parameters represent functions that
+ * swizzle vector components, this holds:
+ *     swz2(swz1(V)) = dst(V)
+ */
+void util_format_compose_swizzles(const unsigned char swz1[4],
+                                  const unsigned char swz2[4],
+                                  unsigned char dst[4]);
+
+void util_format_swizzle_4f(float *dst, const float *src,
+                            const unsigned char swz[4]);
+
+void util_format_unswizzle_4f(float *dst, const float *src,
+                              const unsigned char swz[4]);
 
 #ifdef __cplusplus
 } // extern "C" {

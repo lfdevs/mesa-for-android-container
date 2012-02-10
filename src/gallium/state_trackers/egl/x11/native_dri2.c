@@ -38,6 +38,7 @@
 #include "native_x11.h"
 #include "x11_screen.h"
 
+#include "common/native_helper.h"
 #ifdef HAVE_WAYLAND_BACKEND
 #include "common/native_wayland_drm_bufmgr_helper.h"
 #endif
@@ -312,22 +313,35 @@ dri2_surface_flush_frontbuffer(struct native_surface *nsurf)
 }
 
 static boolean
-dri2_surface_swap_buffers(struct native_surface *nsurf)
+dri2_surface_swap_buffers(struct native_surface *nsurf, int num_rects,
+                          const int *rects)
 {
    struct dri2_surface *dri2surf = dri2_surface(nsurf);
    struct dri2_display *dri2dpy = dri2surf->dri2dpy;
 
    /* copy to front buffer */
-   if (dri2surf->have_back)
-      x11_drawable_copy_buffers(dri2dpy->xscr, dri2surf->drawable,
-            0, 0, dri2surf->width, dri2surf->height,
-            DRI2BufferBackLeft, DRI2BufferFrontLeft);
+   if (dri2surf->have_back) {
+      if (num_rects > 0)
+         x11_drawable_copy_buffers_region(dri2dpy->xscr, dri2surf->drawable,
+               num_rects, rects,
+               DRI2BufferBackLeft, DRI2BufferFrontLeft);
+      else
+         x11_drawable_copy_buffers(dri2dpy->xscr, dri2surf->drawable,
+               0, 0, dri2surf->width, dri2surf->height,
+               DRI2BufferBackLeft, DRI2BufferFrontLeft);
+   }
 
    /* and update fake front buffer */
-   if (dri2surf->have_fake)
-      x11_drawable_copy_buffers(dri2dpy->xscr, dri2surf->drawable,
-            0, 0, dri2surf->width, dri2surf->height,
-            DRI2BufferFrontLeft, DRI2BufferFakeFrontLeft);
+   if (dri2surf->have_fake) {
+      if (num_rects > 0)
+         x11_drawable_copy_buffers_region(dri2dpy->xscr, dri2surf->drawable,
+               num_rects, rects,
+               DRI2BufferFrontLeft, DRI2BufferFakeFrontLeft);
+      else
+         x11_drawable_copy_buffers(dri2dpy->xscr, dri2surf->drawable,
+               0, 0, dri2surf->width, dri2surf->height,
+               DRI2BufferFrontLeft, DRI2BufferFakeFrontLeft);
+   }
 
    /* force buffers to be updated in next validation call */
    if (!dri2_surface_receive_events(&dri2surf->base)) {
@@ -341,21 +355,19 @@ dri2_surface_swap_buffers(struct native_surface *nsurf)
 
 static boolean
 dri2_surface_present(struct native_surface *nsurf,
-                     enum native_attachment natt,
-                     boolean preserve,
-                     uint swap_interval)
+                     const struct native_present_control *ctrl)
 {
    boolean ret;
 
-   if (swap_interval)
+   if (ctrl->swap_interval)
       return FALSE;
 
-   switch (natt) {
+   switch (ctrl->natt) {
    case NATIVE_ATTACHMENT_FRONT_LEFT:
       ret = dri2_surface_flush_frontbuffer(nsurf);
       break;
    case NATIVE_ATTACHMENT_BACK_LEFT:
-      ret = dri2_surface_swap_buffers(nsurf);
+      ret = dri2_surface_swap_buffers(nsurf, ctrl->num_rects, ctrl->rects);
       break;
    default:
       ret = FALSE;
@@ -682,18 +694,30 @@ dri2_display_get_configs(struct native_display *ndpy, int *num_configs)
 }
 
 static boolean
-dri2_display_is_pixmap_supported(struct native_display *ndpy,
-                                 EGLNativePixmapType pix,
-                                 const struct native_config *nconf)
+dri2_display_get_pixmap_format(struct native_display *ndpy,
+                               EGLNativePixmapType pix,
+                               enum pipe_format *format)
 {
    struct dri2_display *dri2dpy = dri2_display(ndpy);
-   uint depth, nconf_depth;
+   boolean ret = EGL_TRUE;
+   uint depth;
 
    depth = x11_drawable_get_depth(dri2dpy->xscr, (Drawable) pix);
-   nconf_depth = util_format_get_blocksizebits(nconf->color_format);
+   switch (depth) {
+   case 32:
+   case 24:
+      *format = PIPE_FORMAT_B8G8R8A8_UNORM;
+      break;
+   case 16:
+      *format = PIPE_FORMAT_B5G6R5_UNORM;
+      break;
+   default:
+      *format = PIPE_FORMAT_NONE;
+      ret = EGL_FALSE;
+      break;
+   }
 
-   /* simple depth match for now */
-   return (depth == nconf_depth || (depth == 24 && depth + 8 == nconf_depth));
+   return ret;
 }
 
 static int
@@ -709,6 +733,9 @@ dri2_display_get_param(struct native_display *ndpy,
       break;
    case NATIVE_PARAM_PRESERVE_BUFFER:
       /* DRI2CopyRegion is used */
+      val = TRUE;
+      break;
+   case NATIVE_PARAM_PRESENT_REGION:
       val = TRUE;
       break;
    case NATIVE_PARAM_MAX_SWAP_INTERVAL:
@@ -809,6 +836,8 @@ dri2_display_hash_table_compare(void *key1, void *key2)
    return ((char *) key1 - (char *) key2);
 }
 
+#ifdef HAVE_WAYLAND_BACKEND
+
 static int
 dri2_display_authenticate(void *user_data, uint32_t magic)
 {
@@ -817,8 +846,6 @@ dri2_display_authenticate(void *user_data, uint32_t magic)
 
    return x11_screen_authenticate(dri2dpy->xscr, magic);
 }
-
-#ifdef HAVE_WAYLAND_BACKEND
 
 static struct wayland_drm_callbacks wl_drm_callbacks = {
    dri2_display_authenticate,
@@ -908,7 +935,8 @@ x11_create_dri2_display(Display *dpy,
    dri2dpy->base.destroy = dri2_display_destroy;
    dri2dpy->base.get_param = dri2_display_get_param;
    dri2dpy->base.get_configs = dri2_display_get_configs;
-   dri2dpy->base.is_pixmap_supported = dri2_display_is_pixmap_supported;
+   dri2dpy->base.get_pixmap_format = dri2_display_get_pixmap_format;
+   dri2dpy->base.copy_to_pixmap = native_display_copy_to_pixmap;
    dri2dpy->base.create_window_surface = dri2_display_create_window_surface;
    dri2dpy->base.create_pixmap_surface = dri2_display_create_pixmap_surface;
 #ifdef HAVE_WAYLAND_BACKEND

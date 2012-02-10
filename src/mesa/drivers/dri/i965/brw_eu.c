@@ -34,7 +34,7 @@
 #include "brw_defines.h"
 #include "brw_eu.h"
 
-#include "../glsl/ralloc.h"
+#include "glsl/ralloc.h"
 
 /* Returns the corresponding conditional mod for swapping src0 and
  * src1 in e.g. CMP.
@@ -99,7 +99,9 @@ void brw_set_access_mode( struct brw_compile *p, GLuint access_mode )
    p->current->header.access_mode = access_mode;
 }
 
-void brw_set_compression_control( struct brw_compile *p, GLboolean compression_control )
+void
+brw_set_compression_control(struct brw_compile *p,
+			    enum brw_compression compression_control)
 {
    p->compressed = (compression_control == BRW_COMPRESSION_COMPRESSED);
 
@@ -172,6 +174,13 @@ void
 brw_init_compile(struct brw_context *brw, struct brw_compile *p, void *mem_ctx)
 {
    p->brw = brw;
+   /*
+    * Set the initial instruction store array size to 1024, if found that
+    * isn't enough, then it will double the store size at brw_next_insn()
+    * until out of memory.
+    */
+   p->store_size = 1024;
+   p->store = rzalloc_array(mem_ctx, struct brw_instruction, p->store_size);
    p->nr_insn = 0;
    p->current = p->stack;
    p->compressed = false;
@@ -189,8 +198,12 @@ brw_init_compile(struct brw_context *brw, struct brw_compile *p, void *mem_ctx)
    /* Set up control flow stack */
    p->if_stack_depth = 0;
    p->if_stack_array_size = 16;
-   p->if_stack =
-      rzalloc_array(mem_ctx, struct brw_instruction *, p->if_stack_array_size);
+   p->if_stack = rzalloc_array(mem_ctx, int, p->if_stack_array_size);
+
+   p->loop_stack_depth = 0;
+   p->loop_stack_array_size = 16;
+   p->loop_stack = rzalloc_array(mem_ctx, int, p->loop_stack_array_size);
+   p->if_depth_in_loop = rzalloc_array(mem_ctx, int, p->loop_stack_array_size);
 }
 
 

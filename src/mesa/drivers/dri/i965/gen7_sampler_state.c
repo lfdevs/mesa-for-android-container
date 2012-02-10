@@ -157,6 +157,13 @@ gen7_update_sampler_state(struct brw_context *brw, int unit,
    sampler->ss1.max_lod = U_FIXED(CLAMP(gl_sampler->MaxLod, 0, 13), 8);
    sampler->ss1.min_lod = U_FIXED(CLAMP(gl_sampler->MinLod, 0, 13), 8);
 
+   /* The sampler can handle non-normalized texture rectangle coordinates
+    * natively
+    */
+   if (texObj->Target == GL_TEXTURE_RECTANGLE) {
+      sampler->ss3.non_normalized_coord = 1;
+   }
+
    upload_default_color(brw, gl_sampler, unit);
 
    sampler->ss2.default_color_pointer = brw->wm.sdc_offset[unit] >> 5;
@@ -177,26 +184,27 @@ gen7_update_sampler_state(struct brw_context *brw, int unit,
  * FIXME: simplify all the different new texture state flags.
  */
 static void
-gen7_prepare_samplers(struct brw_context *brw)
+gen7_upload_samplers(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->intel.ctx;
    struct gen7_sampler_state *samplers;
    int i;
 
-   brw->wm.sampler_count = 0;
+   brw->sampler.count = 0;
    for (i = 0; i < BRW_MAX_TEX_UNIT; i++) {
       if (ctx->Texture.Unit[i]._ReallyEnabled)
-	 brw->wm.sampler_count = i + 1;
+	 brw->sampler.count = i + 1;
    }
 
-   if (brw->wm.sampler_count == 0)
+   if (brw->sampler.count == 0)
       return;
 
-   samplers = brw_state_batch(brw, brw->wm.sampler_count * sizeof(*samplers),
-			      32, &brw->wm.sampler_offset);
-   memset(samplers, 0, brw->wm.sampler_count * sizeof(*samplers));
+   samplers = brw_state_batch(brw, AUB_TRACE_SAMPLER_STATE,
+			      brw->sampler.count * sizeof(*samplers),
+			      32, &brw->sampler.offset);
+   memset(samplers, 0, brw->sampler.count * sizeof(*samplers));
 
-   for (i = 0; i < brw->wm.sampler_count; i++) {
+   for (i = 0; i < brw->sampler.count; i++) {
       if (ctx->Texture.Unit[i]._ReallyEnabled)
 	 gen7_update_sampler_state(brw, i, &samplers[i]);
    }
@@ -210,5 +218,5 @@ const struct brw_tracked_state gen7_samplers = {
       .brw = BRW_NEW_BATCH,
       .cache = 0
    },
-   .prepare = gen7_prepare_samplers,
+   .emit = gen7_upload_samplers,
 };

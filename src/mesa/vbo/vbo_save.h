@@ -122,12 +122,15 @@ struct vbo_save_primitive_store {
 struct vbo_save_context {
    struct gl_context *ctx;
    GLvertexformat vtxfmt;
+   GLvertexformat vtxfmt_noop;  /**< Used if out_of_memory is true */
    struct gl_client_array arrays[VBO_ATTRIB_MAX];
    const struct gl_client_array *inputs[VBO_ATTRIB_MAX];
 
    GLubyte attrsz[VBO_ATTRIB_MAX];
    GLubyte active_sz[VBO_ATTRIB_MAX];
    GLuint vertex_size;
+
+   GLboolean out_of_memory;  /**< True if last VBO allocation failed */
 
    GLfloat *buffer;
    GLuint count;
@@ -146,7 +149,6 @@ struct vbo_save_context {
    GLuint vert_count;
    GLuint max_vert;
    GLboolean dangling_attr_ref;
-   GLboolean have_materials;
 
    GLuint opcode_vertex_list;
 
@@ -187,12 +189,12 @@ void vbo_save_api_init( struct vbo_save_context *save );
 
 #else /* FEATURE_dlist */
 
-static INLINE void
+static inline void
 vbo_save_init( struct gl_context *ctx )
 {
 }
 
-static INLINE void
+static inline void
 vbo_save_destroy( struct gl_context *ctx )
 {
 }

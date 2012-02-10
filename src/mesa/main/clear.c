@@ -83,16 +83,11 @@ _mesa_ClearColor( GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha )
    tmp[2] = blue;
    tmp[3] = alpha;
 
-   if (TEST_EQ_4V(tmp, ctx->Color.ClearColorUnclamped))
+   if (TEST_EQ_4V(tmp, ctx->Color.ClearColor.f))
       return; /* no change */
 
    FLUSH_VERTICES(ctx, _NEW_COLOR);
-   COPY_4V(ctx->Color.ClearColorUnclamped, tmp);
-
-   ctx->Color.ClearColor[0] = CLAMP(tmp[0], 0.0F, 1.0F);
-   ctx->Color.ClearColor[1] = CLAMP(tmp[1], 0.0F, 1.0F);
-   ctx->Color.ClearColor[2] = CLAMP(tmp[2], 0.0F, 1.0F);
-   ctx->Color.ClearColor[3] = CLAMP(tmp[3], 0.0F, 1.0F);
+   COPY_4V(ctx->Color.ClearColor.f, tmp);
 
    if (ctx->Driver.ClearColor) {
       /* it's OK to call glClearColor in CI mode but it should be a NOP */
@@ -110,25 +105,22 @@ _mesa_ClearColor( GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha )
 void GLAPIENTRY
 _mesa_ClearColorIiEXT(GLint r, GLint g, GLint b, GLint a)
 {
-   GLfloat tmp[4];
+   GLint tmp[4];
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_BEGIN_END(ctx);
 
-   tmp[0] = (GLfloat) r;
-   tmp[1] = (GLfloat) g;
-   tmp[2] = (GLfloat) b;
-   tmp[3] = (GLfloat) a;
+   tmp[0] = r;
+   tmp[1] = g;
+   tmp[2] = b;
+   tmp[3] = a;
 
-   if (TEST_EQ_4V(tmp, ctx->Color.ClearColor))
+   if (TEST_EQ_4V(tmp, ctx->Color.ClearColor.i))
       return; /* no change */
 
    FLUSH_VERTICES(ctx, _NEW_COLOR);
+   COPY_4V(ctx->Color.ClearColor.i, tmp);
 
-   /* XXX we should eventually have a float/int/uint union for
-    * the ctx->Color.ClearColor state.
-    */
-   COPY_4V(ctx->Color.ClearColor, tmp);
-
+   /* these should be NOP calls for drivers supporting EXT_texture_integer */
    if (ctx->Driver.ClearColor) {
       ctx->Driver.ClearColor(ctx, ctx->Color.ClearColor);
    }
@@ -141,25 +133,22 @@ _mesa_ClearColorIiEXT(GLint r, GLint g, GLint b, GLint a)
 void GLAPIENTRY
 _mesa_ClearColorIuiEXT(GLuint r, GLuint g, GLuint b, GLuint a)
 {
-   GLfloat tmp[4];
+   GLuint tmp[4];
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_BEGIN_END(ctx);
 
-   tmp[0] = (GLfloat) r;
-   tmp[1] = (GLfloat) g;
-   tmp[2] = (GLfloat) b;
-   tmp[3] = (GLfloat) a;
+   tmp[0] = r;
+   tmp[1] = g;
+   tmp[2] = b;
+   tmp[3] = a;
 
-   if (TEST_EQ_4V(tmp, ctx->Color.ClearColor))
+   if (TEST_EQ_4V(tmp, ctx->Color.ClearColor.ui))
       return; /* no change */
 
    FLUSH_VERTICES(ctx, _NEW_COLOR);
+   COPY_4V(ctx->Color.ClearColor.ui, tmp);
 
-   /* XXX we should eventually have a float/int/uint union for
-    * the ctx->Color.ClearColor state.
-    */
-   COPY_4V(ctx->Color.ClearColor, tmp);
-
+   /* these should be NOP calls for drivers supporting EXT_texture_integer */
    if (ctx->Driver.ClearColor) {
       ctx->Driver.ClearColor(ctx, ctx->Color.ClearColor);
    }
@@ -209,6 +198,9 @@ _mesa_Clear( GLbitfield mask )
    if (ctx->DrawBuffer->Width == 0 || ctx->DrawBuffer->Height == 0 ||
        ctx->DrawBuffer->_Xmin >= ctx->DrawBuffer->_Xmax ||
        ctx->DrawBuffer->_Ymin >= ctx->DrawBuffer->_Ymax)
+      return;
+
+   if (ctx->RasterDiscard)
       return;
 
    if (ctx->RenderMode == GL_RENDER) {
@@ -334,12 +326,19 @@ _mesa_ClearBufferiv(GLenum buffer, GLint drawbuffer, const GLint *value)
 
    switch (buffer) {
    case GL_STENCIL:
+      /* Page 264 (page 280 of the PDF) of the OpenGL 3.0 spec says:
+       *
+       *     "ClearBuffer generates an INVALID VALUE error if buffer is
+       *     COLOR and drawbuffer is less than zero, or greater than the
+       *     value of MAX DRAW BUFFERS minus one; or if buffer is DEPTH,
+       *     STENCIL, or DEPTH STENCIL and drawbuffer is not zero."
+       */
       if (drawbuffer != 0) {
          _mesa_error(ctx, GL_INVALID_VALUE, "glClearBufferiv(drawbuffer=%d)",
                      drawbuffer);
          return;
       }
-      else {
+      else if (ctx->DrawBuffer->Attachment[BUFFER_STENCIL].Renderbuffer && !ctx->RasterDiscard) {
          /* Save current stencil clear value, set to 'value', do the
           * stencil clear and restore the clear value.
           * XXX in the future we may have a new ctx->Driver.ClearBuffer()
@@ -363,27 +362,43 @@ _mesa_ClearBufferiv(GLenum buffer, GLint drawbuffer, const GLint *value)
                         drawbuffer);
             return;
          }
-         else if (mask) {
-            /* XXX note: we're putting the integer clear values into the
-             * floating point state var.  This will not always work.  We'll
-             * need a new ctx->Driver.ClearBuffer() hook....
-             */
-            GLclampf clearSave[4];
+         else if (mask && !ctx->RasterDiscard) {
+            union gl_color_union clearSave;
+
             /* save color */
-            COPY_4V(clearSave, ctx->Color.ClearColor);
+            clearSave = ctx->Color.ClearColor;
             /* set color */
-            COPY_4V_CAST(ctx->Color.ClearColor, value, GLclampf);
+            COPY_4V(ctx->Color.ClearColor.i, value);
             if (ctx->Driver.ClearColor)
                ctx->Driver.ClearColor(ctx, ctx->Color.ClearColor);
             /* clear buffer(s) */
             ctx->Driver.Clear(ctx, mask);
             /* restore color */
-            COPY_4V(ctx->Color.ClearColor, clearSave);
+            ctx->Color.ClearColor = clearSave;
             if (ctx->Driver.ClearColor)
                ctx->Driver.ClearColor(ctx, clearSave);
          }
       }
       break;
+   case GL_DEPTH:
+      /* Page 264 (page 280 of the PDF) of the OpenGL 3.0 spec says:
+       *
+       *     "The result of ClearBuffer is undefined if no conversion between
+       *     the type of the specified value and the type of the buffer being
+       *     cleared is defined (for example, if ClearBufferiv is called for a
+       *     fixed- or floating-point buffer, or if ClearBufferfv is called
+       *     for a signed or unsigned integer buffer). This is not an error."
+       *
+       * In this case we take "undefined" and "not an error" to mean "ignore."
+       * Note that we still need to generate an error for the invalid
+       * drawbuffer case (see the GL_STENCIL case above).
+       */
+      if (drawbuffer != 0) {
+         _mesa_error(ctx, GL_INVALID_VALUE, "glClearBufferiv(drawbuffer=%d)",
+                     drawbuffer);
+         return;
+      }
+      return;
    default:
       _mesa_error(ctx, GL_INVALID_ENUM, "glClearBufferiv(buffer=%s)",
                   _mesa_lookup_enum_by_nr(buffer));
@@ -417,27 +432,49 @@ _mesa_ClearBufferuiv(GLenum buffer, GLint drawbuffer, const GLuint *value)
                         drawbuffer);
             return;
          }
-         else if (mask) {
-            /* XXX note: we're putting the uint clear values into the
-             * floating point state var.  This will not always work.  We'll
-             * need a new ctx->Driver.ClearBuffer() hook....
-             */
-            GLclampf clearSave[4];
+         else if (mask && !ctx->RasterDiscard) {
+            union gl_color_union clearSave;
+
             /* save color */
-            COPY_4V(clearSave, ctx->Color.ClearColor);
+            clearSave = ctx->Color.ClearColor;
             /* set color */
-            COPY_4V_CAST(ctx->Color.ClearColor, value, GLclampf);
+            COPY_4V(ctx->Color.ClearColor.ui, value);
             if (ctx->Driver.ClearColor)
                ctx->Driver.ClearColor(ctx, ctx->Color.ClearColor);
             /* clear buffer(s) */
             ctx->Driver.Clear(ctx, mask);
             /* restore color */
-            COPY_4V(ctx->Color.ClearColor, clearSave);
+            ctx->Color.ClearColor = clearSave;
             if (ctx->Driver.ClearColor)
                ctx->Driver.ClearColor(ctx, clearSave);
          }
       }
       break;
+   case GL_DEPTH:
+   case GL_STENCIL:
+      /* Page 264 (page 280 of the PDF) of the OpenGL 3.0 spec says:
+       *
+       *     "The result of ClearBuffer is undefined if no conversion between
+       *     the type of the specified value and the type of the buffer being
+       *     cleared is defined (for example, if ClearBufferiv is called for a
+       *     fixed- or floating-point buffer, or if ClearBufferfv is called
+       *     for a signed or unsigned integer buffer). This is not an error."
+       *
+       * In this case we take "undefined" and "not an error" to mean "ignore."
+       * Even though we could do something sensible for GL_STENCIL, page 263
+       * (page 279 of the PDF) says:
+       *
+       *     "Only ClearBufferiv should be used to clear stencil buffers."
+       *
+       * Note that we still need to generate an error for the invalid
+       * drawbuffer case (see the GL_STENCIL case in _mesa_ClearBufferiv).
+       */
+      if (drawbuffer != 0) {
+         _mesa_error(ctx, GL_INVALID_VALUE, "glClearBufferuiv(drawbuffer=%d)",
+                     drawbuffer);
+         return;
+      }
+      return;
    default:
       _mesa_error(ctx, GL_INVALID_ENUM, "glClearBufferuiv(buffer=%s)",
                   _mesa_lookup_enum_by_nr(buffer));
@@ -464,12 +501,19 @@ _mesa_ClearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat *value)
 
    switch (buffer) {
    case GL_DEPTH:
+      /* Page 264 (page 280 of the PDF) of the OpenGL 3.0 spec says:
+       *
+       *     "ClearBuffer generates an INVALID VALUE error if buffer is
+       *     COLOR and drawbuffer is less than zero, or greater than the
+       *     value of MAX DRAW BUFFERS minus one; or if buffer is DEPTH,
+       *     STENCIL, or DEPTH STENCIL and drawbuffer is not zero."
+       */
       if (drawbuffer != 0) {
          _mesa_error(ctx, GL_INVALID_VALUE, "glClearBufferfv(drawbuffer=%d)",
                      drawbuffer);
          return;
       }
-      else {
+      else if (ctx->DrawBuffer->Attachment[BUFFER_DEPTH].Renderbuffer && !ctx->RasterDiscard) {
          /* Save current depth clear value, set to 'value', do the
           * depth clear and restore the clear value.
           * XXX in the future we may have a new ctx->Driver.ClearBuffer()
@@ -494,23 +538,43 @@ _mesa_ClearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat *value)
                         drawbuffer);
             return;
          }
-         else if (mask) {
-            GLclampf clearSave[4];
+         else if (mask && !ctx->RasterDiscard) {
+            union gl_color_union clearSave;
+
             /* save color */
-            COPY_4V(clearSave, ctx->Color.ClearColor);
+            clearSave = ctx->Color.ClearColor;
             /* set color */
-            COPY_4V_CAST(ctx->Color.ClearColor, value, GLclampf);
+            COPY_4V_CAST(ctx->Color.ClearColor.f, value, GLclampf);
             if (ctx->Driver.ClearColor)
                ctx->Driver.ClearColor(ctx, ctx->Color.ClearColor);
             /* clear buffer(s) */
             ctx->Driver.Clear(ctx, mask);
             /* restore color */
-            COPY_4V(ctx->Color.ClearColor, clearSave);
+            ctx->Color.ClearColor = clearSave;
             if (ctx->Driver.ClearColor)
                ctx->Driver.ClearColor(ctx, clearSave);
          }
       }
       break;
+   case GL_STENCIL:
+      /* Page 264 (page 280 of the PDF) of the OpenGL 3.0 spec says:
+       *
+       *     "The result of ClearBuffer is undefined if no conversion between
+       *     the type of the specified value and the type of the buffer being
+       *     cleared is defined (for example, if ClearBufferiv is called for a
+       *     fixed- or floating-point buffer, or if ClearBufferfv is called
+       *     for a signed or unsigned integer buffer). This is not an error."
+       *
+       * In this case we take "undefined" and "not an error" to mean "ignore."
+       * Note that we still need to generate an error for the invalid
+       * drawbuffer case (see the GL_DEPTH case above).
+       */
+      if (drawbuffer != 0) {
+         _mesa_error(ctx, GL_INVALID_VALUE, "glClearBufferfv(drawbuffer=%d)",
+                     drawbuffer);
+         return;
+      }
+      return;
    default:
       _mesa_error(ctx, GL_INVALID_ENUM, "glClearBufferfv(buffer=%s)",
                   _mesa_lookup_enum_by_nr(buffer));
@@ -528,6 +592,8 @@ _mesa_ClearBufferfi(GLenum buffer, GLint drawbuffer,
                     GLfloat depth, GLint stencil)
 {
    GET_CURRENT_CONTEXT(ctx);
+   GLbitfield mask = 0;
+
    ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
 
    FLUSH_CURRENT(ctx, 0);
@@ -538,17 +604,32 @@ _mesa_ClearBufferfi(GLenum buffer, GLint drawbuffer,
       return;
    }
 
+   /* Page 264 (page 280 of the PDF) of the OpenGL 3.0 spec says:
+    *
+    *     "ClearBuffer generates an INVALID VALUE error if buffer is
+    *     COLOR and drawbuffer is less than zero, or greater than the
+    *     value of MAX DRAW BUFFERS minus one; or if buffer is DEPTH,
+    *     STENCIL, or DEPTH STENCIL and drawbuffer is not zero."
+    */
    if (drawbuffer != 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glClearBufferfi(drawbuffer=%d)",
                   drawbuffer);
       return;
    }
 
+   if (ctx->RasterDiscard)
+      return;
+
    if (ctx->NewState) {
       _mesa_update_state( ctx );
    }
 
-   {
+   if (ctx->DrawBuffer->Attachment[BUFFER_DEPTH].Renderbuffer)
+      mask |= BUFFER_BIT_DEPTH;
+   if (ctx->DrawBuffer->Attachment[BUFFER_STENCIL].Renderbuffer)
+      mask |= BUFFER_BIT_STENCIL;
+
+   if (mask) {
       /* save current clear values */
       const GLclampd clearDepthSave = ctx->Depth.Clear;
       const GLuint clearStencilSave = ctx->Stencil.Clear;
@@ -562,7 +643,7 @@ _mesa_ClearBufferfi(GLenum buffer, GLint drawbuffer,
          ctx->Driver.ClearStencil(ctx, stencil);
 
       /* clear buffers */
-      ctx->Driver.Clear(ctx, BUFFER_BIT_DEPTH | BUFFER_BIT_STENCIL);
+      ctx->Driver.Clear(ctx, mask);
 
       /* restore */
       ctx->Depth.Clear = clearDepthSave;

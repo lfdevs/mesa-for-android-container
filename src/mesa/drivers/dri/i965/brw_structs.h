@@ -37,48 +37,19 @@
 /** Number of general purpose registers (VS, WM, etc) */
 #define BRW_MAX_GRF 128
 
+/**
+ * First GRF used for the MRF hack.
+ *
+ * On gen7, MRFs are no longer used, and contiguous GRFs are used instead.  We
+ * haven't converted our compiler to be aware of this, so it asks for MRFs and
+ * brw_eu_emit.c quietly converts them to be accesses of the top GRFs.  The
+ * register allocators have to be careful of this to avoid corrupting the "MRF"s
+ * with actual GRF allocations.
+ */
+#define GEN7_MRF_HACK_START 112.
+
 /** Number of message register file registers */
 #define BRW_MAX_MRF 16
-
-
-/* Command packets:
- */
-struct header 
-{
-   GLuint length:16; 
-   GLuint opcode:16; 
-};
-
-
-union header_union
-{
-   struct header bits;
-   GLuint dword;
-};
-
-struct brw_3d_control
-{   
-   struct 
-   {
-      GLuint length:8;
-      GLuint notify_enable:1;
-      GLuint pad:3;
-      GLuint wc_flush_enable:1; 
-      GLuint depth_stall_enable:1; 
-      GLuint operation:2; 
-      GLuint opcode:16; 
-   } header;
-   
-   struct
-   {
-      GLuint pad:2;
-      GLuint dest_addr_type:1; 
-      GLuint dest_addr:29; 
-   } dest;
-   
-   GLuint dword2;   
-   GLuint dword3;   
-};
 
 /* These seem to be passed around as function args, so it works out
  * better to keep them as #defines:
@@ -87,314 +58,6 @@ struct brw_3d_control
 #define BRW_FLUSH_STATE_CACHE          0x2
 #define BRW_INHIBIT_FLUSH_RENDER_CACHE 0x4
 #define BRW_FLUSH_SNAPSHOT_COUNTERS    0x8
-
-struct brw_mi_flush
-{
-   GLuint flags:4;
-   GLuint pad:12;
-   GLuint opcode:16;
-};
-
-struct brw_vf_statistics
-{
-   GLuint statistics_enable:1;
-   GLuint pad:15;
-   GLuint opcode:16;
-};
-
-
-
-struct brw_binding_table_pointers
-{
-   struct header header;
-   GLuint vs; 
-   GLuint gs; 
-   GLuint clp; 
-   GLuint sf; 
-   GLuint wm; 
-};
-
-
-struct brw_blend_constant_color
-{
-   struct header header;
-   GLfloat blend_constant_color[4];  
-};
-
-
-struct brw_depthbuffer
-{
-   union header_union header;
-   
-   union {
-      struct {
-	 GLuint pitch:18; 
-	 GLuint format:3; 
-	 GLuint pad:2;
-	 GLuint software_tiled_rendering_mode:2;
-	 GLuint depth_offset_disable:1; 
-	 GLuint tile_walk:1; 
-	 GLuint tiled_surface:1; 
-	 GLuint pad2:1;
-	 GLuint surface_type:3; 
-      } bits;
-      GLuint dword;
-   } dword1;
-   
-   GLuint dword2_base_addr; 
- 
-   union {
-      struct {
-	 GLuint pad:1;
-	 GLuint mipmap_layout:1; 
-	 GLuint lod:4; 
-	 GLuint width:13; 
-	 GLuint height:13; 
-      } bits;
-      GLuint dword;
-   } dword3;
-
-   union {
-      struct {
-	 GLuint pad:10;
-	 GLuint min_array_element:11; 
-	 GLuint depth:11; 
-      } bits;
-      GLuint dword;
-   } dword4;
-};
-
-struct brw_depthbuffer_g4x
-{
-   union header_union header;
-   
-   union {
-      struct {
-	 GLuint pitch:18; 
-	 GLuint format:3; 
-	 GLuint pad:2;
-	 GLuint software_tiled_rendering_mode:2;
-	 GLuint depth_offset_disable:1; 
-	 GLuint tile_walk:1; 
-	 GLuint tiled_surface:1; 
-	 GLuint pad2:1;
-	 GLuint surface_type:3; 
-      } bits;
-      GLuint dword;
-   } dword1;
-   
-   GLuint dword2_base_addr; 
- 
-   union {
-      struct {
-	 GLuint pad:1;
-	 GLuint mipmap_layout:1; 
-	 GLuint lod:4; 
-	 GLuint width:13; 
-	 GLuint height:13; 
-      } bits;
-      GLuint dword;
-   } dword3;
-
-   union {
-      struct {
-	 GLuint pad:10;
-	 GLuint min_array_element:11; 
-	 GLuint depth:11; 
-      } bits;
-      GLuint dword;
-   } dword4;
-
-   union {
-      struct {
-         GLuint xoffset:16;
-         GLuint yoffset:16;
-      } bits;
-      GLuint dword;
-   } dword5;   /* NEW in Integrated Graphics Device */
-};
-
-struct brw_drawrect
-{
-   struct header header;
-   GLuint xmin:16; 
-   GLuint ymin:16; 
-   GLuint xmax:16; 
-   GLuint ymax:16; 
-   GLuint xorg:16;  
-   GLuint yorg:16;  
-};
-
-
-
-
-struct brw_global_depth_offset_clamp
-{
-   struct header header;
-   GLfloat depth_offset_clamp;  
-};
-
-struct brw_indexbuffer
-{   
-   union {
-      struct
-      {
-	 GLuint length:8; 
-	 GLuint index_format:2; 
-	 GLuint cut_index_enable:1; 
-	 GLuint pad:5; 
-	 GLuint opcode:16; 
-      } bits;
-      GLuint dword;
-
-   } header;
-
-   GLuint buffer_start; 
-   GLuint buffer_end; 
-};
-
-/* NEW in Integrated Graphics Device */
-struct brw_aa_line_parameters
-{
-   struct header header;
-
-   struct {
-      GLuint aa_coverage_slope:8;
-      GLuint pad0:8;
-      GLuint aa_coverage_bias:8;
-      GLuint pad1:8;
-   } bits0;
-
-   struct {
-      GLuint aa_coverage_endcap_slope:8;
-      GLuint pad0:8;
-      GLuint aa_coverage_endcap_bias:8;
-      GLuint pad1:8;
-   } bits1;
-};
-
-struct brw_line_stipple
-{   
-   struct header header;
-  
-   struct
-   {
-      GLuint pattern:16; 
-      GLuint pad:16;
-   } bits0;
-   
-   struct
-   {
-      GLuint repeat_count:9; 
-      GLuint pad:7;
-      GLuint inverse_repeat_count:16; 
-   } bits1;
-};
-
-
-struct brw_pipelined_state_pointers
-{
-   struct header header;
-   
-   struct {
-      GLuint pad:5;
-      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
-   } vs;
-   
-   struct
-   {
-      GLuint enable:1;
-      GLuint pad:4;
-      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
-   } gs;
-   
-   struct
-   {
-      GLuint enable:1;
-      GLuint pad:4;
-      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
-   } clp;
-   
-   struct
-   {
-      GLuint pad:5;
-      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
-   } sf;
-
-   struct
-   {
-      GLuint pad:5;
-      GLuint offset:27; /* Offset from GENERAL_STATE_BASE */
-   } wm;
-   
-   struct
-   {
-      GLuint pad:5;
-      GLuint offset:27; /* Offset from GENERAL_STATE_BASE. KW: check me! */
-   } cc;
-};
-
-
-struct brw_polygon_stipple_offset
-{
-   struct header header;
-
-   struct {
-      GLuint y_offset:5; 
-      GLuint pad:3;
-      GLuint x_offset:5; 
-      GLuint pad0:19;
-   } bits0;
-};
-
-
-
-struct brw_polygon_stipple
-{
-   struct header header;
-   GLuint stipple[32];
-};
-
-
-
-struct brw_pipeline_select
-{
-   struct
-   {
-      GLuint pipeline_select:1;   
-      GLuint pad:15;
-      GLuint opcode:16;   
-   } header;
-};
-
-
-struct brw_pipe_control
-{
-   struct
-   {
-      GLuint length:8;
-      GLuint notify_enable:1;
-      GLuint texture_cache_flush_enable:1;
-      GLuint indirect_state_pointers_disable:1;
-      GLuint instruction_state_cache_flush_enable:1;
-      GLuint write_cache_flush_enable:1;
-      GLuint depth_stall_enable:1;
-      GLuint post_sync_operation:2;
-
-      GLuint opcode:16;
-   } header;
-
-   struct
-   {
-      GLuint pad:2;
-      GLuint dest_addr_type:1;
-      GLuint dest_addr:29;
-   } bits1;
-
-   GLuint data0;
-   GLuint data1;
-};
-
 
 struct brw_urb_fence
 {
@@ -427,102 +90,6 @@ struct brw_urb_fence
       GLuint pad:1;
    } bits1;
 };
-
-struct brw_cs_urb_state
-{
-   struct header header;
-
-   struct
-   {
-      GLuint nr_urb_entries:3;   
-      GLuint pad:1;
-      GLuint urb_entry_size:5;   
-      GLuint pad0:23;
-   } bits0;
-};
-
-struct brw_constant_buffer
-{
-   struct
-   {
-      GLuint length:8;   
-      GLuint valid:1;   
-      GLuint pad:7;
-      GLuint opcode:16;   
-   } header;
-
-   struct
-   {
-      GLuint buffer_length:6;   
-      GLuint buffer_address:26;  
-   } bits0;
-};
-
-struct brw_state_base_address
-{
-   struct header header;
-
-   struct
-   {
-      GLuint modify_enable:1;
-      GLuint pad:4;
-      GLuint general_state_address:27;  
-   } bits0;
-
-   struct
-   {
-      GLuint modify_enable:1;
-      GLuint pad:4;
-      GLuint surface_state_address:27;  
-   } bits1;
-
-   struct
-   {
-      GLuint modify_enable:1;
-      GLuint pad:4;
-      GLuint indirect_object_state_address:27;  
-   } bits2;
-
-   struct
-   {
-      GLuint modify_enable:1;
-      GLuint pad:11;
-      GLuint general_state_upper_bound:20;  
-   } bits3;
-
-   struct
-   {
-      GLuint modify_enable:1;
-      GLuint pad:11;
-      GLuint indirect_object_state_upper_bound:20;  
-   } bits4;
-};
-
-struct brw_state_prefetch
-{
-   struct header header;
-
-   struct
-   {
-      GLuint prefetch_count:3;   
-      GLuint pad:3;
-      GLuint prefetch_pointer:26;  
-   } bits0;
-};
-
-struct brw_system_instruction_pointer
-{
-   struct header header;
-
-   struct
-   {
-      GLuint pad:4;
-      GLuint system_instruction_pointer:28;  
-   } bits0;
-};
-
-
-
 
 /* State structs for the various fixed function units:
  */
@@ -1325,14 +892,6 @@ struct brw_vertex_element_state
    } ve1;
 };
 
-#define BRW_VEP_MAX 18
-
-struct brw_vertex_element_packet {
-   struct header header;
-   struct brw_vertex_element_state ve[BRW_VEP_MAX]; /* note: less than _TNL_ATTRIB_MAX */
-};
-
-
 struct brw_urb_immediate {
    GLuint opcode:4;
    GLuint offset:6;
@@ -1365,7 +924,11 @@ struct brw_instruction
       GLuint predicate_control:4;
       GLuint predicate_inverse:1;
       GLuint execution_size:3;
-      GLuint destreg__conditionalmod:4; /* destreg - send, conditionalmod - others */
+      /**
+       * Conditional Modifier for most instructions.  On Gen6+, this is also
+       * used for the SEND instruction's Message Target/SFID.
+       */
+      GLuint destreg__conditionalmod:4;
       GLuint acc_wr_control:1;
       GLuint cmpt_control:1;
       GLuint debug_control:1;
@@ -1510,6 +1073,11 @@ struct brw_instruction
 	 GLuint pad1:6;
       } ia16;
 
+      /* Extended Message Descriptor for Ironlake (Gen5) SEND instruction.
+       *
+       * Does not apply to Gen6+.  The SFID/message target moved to bits
+       * 27:24 of the header (destreg__conditionalmod); EOT is in bits3.
+       */
        struct 
        {
            GLuint pad:26;
@@ -1606,6 +1174,50 @@ struct brw_instruction
 	 int uip:16;
       } break_cont;
 
+      /**
+       * \defgroup SEND instructions / Message Descriptors
+       *
+       * @{
+       */
+
+      /**
+       * Generic Message Descriptor for Gen4 SEND instructions.  The structs
+       * below expand function_control to something specific for their
+       * message.  Due to struct packing issues, they duplicate these bits.
+       *
+       * See the G45 PRM, Volume 4, Table 14-15.
+       */
+      struct {
+	 GLuint function_control:16;
+	 GLuint response_length:4;
+	 GLuint msg_length:4;
+	 GLuint msg_target:4;
+	 GLuint pad1:3;
+	 GLuint end_of_thread:1;
+      } generic;
+
+      /**
+       * Generic Message Descriptor for Gen5-7 SEND instructions.
+       *
+       * See the Sandybridge PRM, Volume 2 Part 2, Table 8-15.  (Sadly, most
+       * of the information on the SEND instruction is missing from the public
+       * Ironlake PRM.)
+       *
+       * The table claims that bit 31 is reserved/MBZ on Gen6+, but it lies.
+       * According to the SEND instruction description:
+       * "The MSb of the message description, the EOT field, always comes from
+       *  bit 127 of the instruction word"...which is bit 31 of this field.
+       */
+      struct {
+	 GLuint function_control:19;
+	 GLuint header_present:1;
+	 GLuint response_length:5;
+	 GLuint msg_length:4;
+	 GLuint pad1:2;
+	 GLuint end_of_thread:1;
+      } generic_gen5;
+
+      /** G45 PRM, Volume 4, Section 6.1.1.1 */
       struct {
 	 GLuint function:4;
 	 GLuint int_type:1;
@@ -1620,6 +1232,7 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } math;
 
+      /** Ironlake PRM, Volume 4 Part 1, Section 6.1.1.1 */
       struct {
 	 GLuint function:4;
 	 GLuint int_type:1;
@@ -1635,6 +1248,7 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } math_gen5;
 
+      /** G45 PRM, Volume 4, Section 4.8.1.1.1 [DevBW] and [DevCL] */
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint sampler:4;
@@ -1647,6 +1261,7 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } sampler;
 
+      /** G45 PRM, Volume 4, Section 4.8.1.1.2 [DevCTG] */
       struct {
          GLuint binding_table_index:8;
          GLuint sampler:4;
@@ -1658,6 +1273,7 @@ struct brw_instruction
          GLuint end_of_thread:1;
       } sampler_g4x;
 
+      /** Ironlake PRM, Volume 4 Part 1, Section 4.11.1.1.3 */
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint sampler:4;
@@ -1715,6 +1331,7 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } urb_gen7;
 
+      /** 965 PRM, Volume 4, Section 5.10.1.1: Message Descriptor */
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint msg_control:4;  
@@ -1727,6 +1344,7 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } dp_read;
 
+      /** G45 PRM, Volume 4, Section 5.10.1.1.2 */
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint msg_control:3;
@@ -1739,6 +1357,7 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } dp_read_g4x;
 
+      /** Ironlake PRM, Volume 4 Part 1, Section 5.10.2.1.2. */
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint msg_control:3;  
@@ -1752,10 +1371,11 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } dp_read_gen5;
 
+      /** G45 PRM, Volume 4, Section 5.10.1.1.2.  For both Gen4 and G45. */
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint msg_control:3;
-	 GLuint pixel_scoreboard_clear:1;
+	 GLuint last_render_target:1;
 	 GLuint msg_type:3;    
 	 GLuint send_commit_msg:1;
 	 GLuint response_length:4;
@@ -1765,10 +1385,11 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } dp_write;
 
+      /** Ironlake PRM, Volume 4 Part 1, Section 5.10.2.1.2. */
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint msg_control:3;
-	 GLuint pixel_scoreboard_clear:1;
+	 GLuint last_render_target:1;
 	 GLuint msg_type:3;    
 	 GLuint send_commit_msg:1;
 	 GLuint pad0:3;
@@ -1779,7 +1400,11 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } dp_write_gen5;
 
-      /* Sandybridge DP for sample cache, constant cache, render cache */
+      /**
+       * Message for the Sandybridge Sampler Cache or Constant Cache Data Port.
+       *
+       * See the Sandybridge PRM, Volume 4 Part 1, Section 3.9.2.1.1.
+       **/
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint msg_control:5;
@@ -1790,13 +1415,23 @@ struct brw_instruction
 	 GLuint msg_length:4;
 	 GLuint pad1:2;
 	 GLuint end_of_thread:1;
-      } dp_sampler_const_cache;
+      } gen6_dp_sampler_const_cache;
 
+      /**
+       * Message for the Sandybridge Render Cache Data Port.
+       *
+       * Most fields are defined in the Sandybridge PRM, Volume 4 Part 1,
+       * Section 3.9.2.1.1: Message Descriptor.
+       *
+       * "Slot Group Select" and "Last Render Target" are part of the
+       * 5-bit message control for Render Target Write messages.  See
+       * Section 3.9.9.2.1 of the same volume.
+       */
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint msg_control:3;
 	 GLuint slot_group_select:1;
-	 GLuint pixel_scoreboard_clear:1;
+	 GLuint last_render_target:1;
 	 GLuint msg_type:4;
 	 GLuint send_commit_msg:1;
 	 GLuint pad0:1;
@@ -1807,13 +1442,20 @@ struct brw_instruction
 	 GLuint end_of_thread:1;
       } gen6_dp;
 
-      /* See volume vol5c.2 sections 2.11.2.1.5 and 2.11.21.2.2. */
+      /**
+       * Message for any of the Gen7 Data Port caches.
+       *
+       * Most fields are defined in BSpec volume 5c.2 Data Port / Messages /
+       * Data Port Messages / Message Descriptor.  Once again, "Slot Group
+       * Select" and "Last Render Target" are part of the 6-bit message
+       * control for Render Target Writes.
+       */
       struct {
 	 GLuint binding_table_index:8;
 	 GLuint msg_control:3;
 	 GLuint slot_group_select:1;
-	 GLuint pixel_scoreboard_clear:1;
-	 GLuint pad0:1;
+	 GLuint last_render_target:1;
+	 GLuint msg_control_pad:1;
 	 GLuint msg_type:4;
 	 GLuint pad1:1;
 	 GLuint header_present:1;
@@ -1822,25 +1464,7 @@ struct brw_instruction
 	 GLuint pad2:2;
 	 GLuint end_of_thread:1;
       } gen7_dp;
-
-      struct {
-	 GLuint function_control:16;
-	 GLuint response_length:4;
-	 GLuint msg_length:4;
-	 GLuint msg_target:4;
-	 GLuint pad1:3;
-	 GLuint end_of_thread:1;
-      } generic;
-
-      /* Of this struct, only end_of_thread is not present for gen6. */
-      struct {
-	 GLuint function_control:19;
-	 GLuint header_present:1;
-	 GLuint response_length:5;
-	 GLuint msg_length:4;
-	 GLuint pad1:2;
-	 GLuint end_of_thread:1;
-      } generic_gen5;
+      /** @} */
 
       GLint d;
       GLuint ud;

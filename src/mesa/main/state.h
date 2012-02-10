@@ -39,7 +39,7 @@ _mesa_update_state_locked(struct gl_context *ctx);
 
 
 extern void
-_mesa_set_varying_vp_inputs(struct gl_context *ctx, GLbitfield varying_inputs);
+_mesa_set_varying_vp_inputs(struct gl_context *ctx, GLbitfield64 varying_inputs);
 
 
 extern void
@@ -49,7 +49,7 @@ _mesa_set_vp_override(struct gl_context *ctx, GLboolean flag);
 /**
  * Is the secondary color needed?
  */
-static INLINE GLboolean
+static inline GLboolean
 _mesa_need_secondary_color(const struct gl_context *ctx)
 {
    if (ctx->Light.Enabled &&
@@ -71,18 +71,5 @@ _mesa_need_secondary_color(const struct gl_context *ctx)
 
    return GL_FALSE;
 }
-
-
-/**
- * Is RGBA LogicOp enabled?
- */
-static INLINE GLboolean
-_mesa_rgba_logicop_enabled(const struct gl_context *ctx)
-{
-   return ctx->Color.ColorLogicOpEnabled ||
-      (ctx->Color.BlendEnabled && ctx->Color.Blend[0].EquationRGB == GL_LOGIC_OP);
-}
-
-
 
 #endif

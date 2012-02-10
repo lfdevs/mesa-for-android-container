@@ -25,7 +25,7 @@ nvfx_sampler_state_create(struct pipe_context *pipe,
 		ps->wrap |= nvfx_tex_wrap_compare_mode(cso->compare_func);
 		ps->compare = TRUE;
 	}
-	ps->bcol = nvfx_tex_border_color(cso->border_color);
+	ps->bcol = nvfx_tex_border_color(cso->border_color.f);
 
 	if(nvfx->is_nv4x)
 		nv40_sampler_state_init(pipe, ps, cso);
@@ -345,7 +345,7 @@ nvfx_texture_formats[PIPE_FORMAT_COUNT] = {
 	_(DXT5_SRGBA,		DXT5,		T, T, T, T, X, Y, Z, W, UNORM, SRGB),
 
 	__(Z16_UNORM,		A8L8, Z16,	T, T, T, 1, W, W, W, W, UNORM, 0),
-	__(S8_USCALED_Z24_UNORM,HILO16,Z24,	T, T, T, 1, W, W, W, W, UNORM, 0),
+	__(S8_UINT_Z24_UNORM,HILO16,Z24,	T, T, T, 1, W, W, W, W, UNORM, 0),
 	__(X8Z24_UNORM,		HILO16,Z24,	T, T, T, 1, W, W, W, W, UNORM, 0),
 
 	_(R16_UNORM,		A16,		T, 0, 0, 1, X, X, X, X, UNORM, 0),

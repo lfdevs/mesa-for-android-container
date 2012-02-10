@@ -207,8 +207,8 @@ static void radeonEmitPrim( struct gl_context *ctx,
 #ifdef MESA_BIG_ENDIAN
 /* We could do without (most of) this ugliness if dest was always 32 bit word aligned... */
 #define EMIT_ELT(dest, offset, x) do {				\
-	int off = offset + ( ( (GLuint)dest & 0x2 ) >> 1 );	\
-	GLushort *des = (GLushort *)( (GLuint)dest & ~0x2 );	\
+	int off = offset + ( ( (uintptr_t)dest & 0x2 ) >> 1 );	\
+	GLushort *des = (GLushort *)( (uintptr_t)dest & ~0x2 );	\
 	(des)[ off + 1 - 2 * ( off & 1 ) ] = (GLushort)(x); 	\
 	(void)rmesa; } while (0)
 #else
@@ -401,8 +401,6 @@ static GLuint radeonEnsureEmitSize( struct gl_context * ctx , GLuint inputs )
     /* predict size for elements */
     for (i = 0; i < VB->PrimitiveCount; ++i)
     {
-      if (!VB->Primitive[i].count)
-	continue;
       /* If primitive.count is less than MAX_CONVERSION_SIZE
 	 rendering code may decide convert to elts.
 	 In that case we have to make pessimistic prediction.
@@ -410,6 +408,8 @@ static GLuint radeonEnsureEmitSize( struct gl_context * ctx , GLuint inputs )
       const GLuint elts = ELTS_BUFSZ(nr_aos);
       const GLuint index = INDEX_BUFSZ;
       const GLuint vbuf = VBUF_BUFSZ;
+      if (!VB->Primitive[i].count)
+	continue;
       if ( (!VB->Elts && VB->Primitive[i].count >= MAX_CONVERSION_SIZE)
 	  || vbuf > index + elts)
 	space_required += vbuf;
@@ -442,6 +442,7 @@ static GLboolean radeon_run_tcl_render( struct gl_context *ctx,
    struct vertex_buffer *VB = &tnl->vb;
    GLuint inputs = VERT_BIT_POS | VERT_BIT_COLOR0;
    GLuint i;
+   GLuint emit_end;
 
    /* TODO: separate this from the swtnl pipeline 
     */
@@ -477,7 +478,7 @@ static GLboolean radeon_run_tcl_render( struct gl_context *ctx,
    }
 
    radeonReleaseArrays( ctx, ~0 );
-   GLuint emit_end = radeonEnsureEmitSize( ctx, inputs )
+   emit_end = radeonEnsureEmitSize( ctx, inputs )
      + rmesa->radeon.cmdbuf.cs->cdw;
    radeonEmitArrays( ctx, inputs );
 

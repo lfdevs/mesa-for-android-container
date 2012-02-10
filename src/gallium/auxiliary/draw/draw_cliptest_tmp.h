@@ -35,11 +35,20 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
    const float *trans = pvs->draw->viewport.translate;
    /* const */ float (*plane)[4] = pvs->draw->plane;
    const unsigned pos = draw_current_shader_position_output(pvs->draw);
+   const unsigned cv = draw_current_shader_clipvertex_output(pvs->draw);
+   unsigned cd[2];
    const unsigned ef = pvs->draw->vs.edgeflag_output;
-   const unsigned nr = pvs->draw->nr_planes;
+   const unsigned ucp_enable = pvs->draw->rasterizer->clip_plane_enable;
    const unsigned flags = (FLAGS);
    unsigned need_pipeline = 0;
    unsigned j;
+   unsigned i;
+   bool have_cd = false;
+   cd[0] = draw_current_shader_clipdistance_output(pvs->draw, 0);
+   cd[1] = draw_current_shader_clipdistance_output(pvs->draw, 1);
+  
+   if (cd[0] != pos || cd[1] != pos)
+     have_cd = true;
 
    for (j = 0; j < info->count; j++) {
       float *position = out->data[pos];
@@ -47,15 +56,27 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
   
       initialize_vertex_header(out);
 
-      if (flags & (DO_CLIP_XY | DO_CLIP_FULL_Z | DO_CLIP_HALF_Z | DO_CLIP_USER)) {
-         out->clip[0] = position[0];
-         out->clip[1] = position[1];
-         out->clip[2] = position[2];
-         out->clip[3] = position[3];
+      if (flags & (DO_CLIP_XY | DO_CLIP_XY_GUARD_BAND |
+                   DO_CLIP_FULL_Z | DO_CLIP_HALF_Z | DO_CLIP_USER)) {
+         float *clipvertex = position;
+
+         if ((flags & DO_CLIP_USER) && cv != pos)
+            clipvertex = out->data[cv];
+
+         for (i = 0; i < 4; i++) {
+            out->clip[i] = clipvertex[i];
+            out->pre_clip_pos[i] = position[i];
+         }
 
          /* Do the hardwired planes first:
           */
-         if (flags & DO_CLIP_XY) {
+         if (flags & DO_CLIP_XY_GUARD_BAND) {
+            if (-0.50 * position[0] + position[3] < 0) mask |= (1<<0);
+            if ( 0.50 * position[0] + position[3] < 0) mask |= (1<<1);
+            if (-0.50 * position[1] + position[3] < 0) mask |= (1<<2);
+            if ( 0.50 * position[1] + position[3] < 0) mask |= (1<<3);
+         }
+         else if (flags & DO_CLIP_XY) {
             if (-position[0] + position[3] < 0) mask |= (1<<0);
             if ( position[0] + position[3] < 0) mask |= (1<<1);
             if (-position[1] + position[3] < 0) mask |= (1<<2);
@@ -74,10 +95,33 @@ static boolean TAG(do_cliptest)( struct pt_post_vs *pvs,
          }
 
          if (flags & DO_CLIP_USER) {
-            unsigned i;
-            for (i = 6; i < nr; i++) {
-               if (dot4(position, plane[i]) < 0) 
-                  mask |= (1<<i);
+            unsigned ucp_mask = ucp_enable;
+            int num_written_clipdistance = pvs->draw->vs.vertex_shader->info.num_written_clipdistance;
+            while (ucp_mask) {
+               unsigned plane_idx = ffs(ucp_mask)-1;
+               ucp_mask &= ~(1 << plane_idx);
+               plane_idx += 6;
+
+               /*
+                * for user clipping check if we have a clip distance output
+                * and the shader has written to it, otherwise use clipvertex
+                * to decide when the plane is clipping.
+                */
+               if (have_cd && num_written_clipdistance) {
+                  float clipdist;
+                  i = plane_idx - 6;
+                  out->have_clipdist = 1;
+                  /* first four clip distance in first vector etc. */
+                  if (i < 4)
+                     clipdist = out->data[cd[0]][i];
+                  else
+                     clipdist = out->data[cd[1]][i-4];
+                  if (clipdist < 0)
+                     mask |= 1 << plane_idx;
+               } else {
+                  if (dot4(clipvertex, plane[plane_idx]) < 0)
+                     mask |= 1 << plane_idx;
+               }
             }
          }
 

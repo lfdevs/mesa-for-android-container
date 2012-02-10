@@ -34,6 +34,7 @@
 
 #include "intel_context.h"
 #include "intel_buffers.h"
+#include "intel_mipmap_tree.h"
 #include "intel_regions.h"
 #include "intel_pixel.h"
 #include "intel_fbo.h"
@@ -45,7 +46,7 @@
  * glCopyPixels.  Differs from intel_check_blit_fragment_ops in that
  * we allow Scissor.
  */
-static GLboolean
+static bool
 intel_check_copypixel_blit_fragment_ops(struct gl_context * ctx)
 {
    if (ctx->NewState)
@@ -71,7 +72,7 @@ intel_check_copypixel_blit_fragment_ops(struct gl_context * ctx)
 /**
  * CopyPixels with the blitter.  Don't support zooming, pixel transfer, etc.
  */
-static GLboolean
+static bool
 do_blit_copypixels(struct gl_context * ctx,
                    GLint srcx, GLint srcy,
                    GLsizei width, GLsizei height,
@@ -84,9 +85,10 @@ do_blit_copypixels(struct gl_context * ctx,
    GLint orig_dsty;
    GLint orig_srcx;
    GLint orig_srcy;
-   GLboolean flip = GL_FALSE;
+   bool flip = false;
    struct intel_renderbuffer *draw_irb = NULL;
    struct intel_renderbuffer *read_irb = NULL;
+   gl_format read_format, draw_format;
 
    /* Update draw buffer bounds */
    _mesa_update_state(ctx);
@@ -95,7 +97,7 @@ do_blit_copypixels(struct gl_context * ctx,
    case GL_COLOR:
       if (fb->_NumColorDrawBuffers != 1) {
 	 fallback_debug("glCopyPixels() fallback: MRT\n");
-	 return GL_FALSE;
+	 return false;
       }
 
       draw_irb = intel_renderbuffer(fb->_ColorDrawBuffers[0]);
@@ -108,32 +110,35 @@ do_blit_copypixels(struct gl_context * ctx,
       break;
    case GL_DEPTH:
       fallback_debug("glCopyPixels() fallback: GL_DEPTH\n");
-      return GL_FALSE;
+      return false;
    case GL_STENCIL:
       fallback_debug("glCopyPixels() fallback: GL_STENCIL\n");
-      return GL_FALSE;
+      return false;
    default:
       fallback_debug("glCopyPixels(): Unknown type\n");
-      return GL_FALSE;
+      return false;
    }
 
    if (!draw_irb) {
       fallback_debug("glCopyPixels() fallback: missing draw buffer\n");
-      return GL_FALSE;
+      return false;
    }
 
    if (!read_irb) {
       fallback_debug("glCopyPixels() fallback: missing read buffer\n");
-      return GL_FALSE;
+      return false;
    }
 
-   if (draw_irb->Base.Format != read_irb->Base.Format &&
-       !(draw_irb->Base.Format == MESA_FORMAT_XRGB8888 &&
-	 read_irb->Base.Format == MESA_FORMAT_ARGB8888)) {
+   read_format = intel_rb_format(read_irb);
+   draw_format = intel_rb_format(draw_irb);
+
+   if (draw_format != read_format &&
+       !(draw_format == MESA_FORMAT_XRGB8888 &&
+	 read_format == MESA_FORMAT_ARGB8888)) {
       fallback_debug("glCopyPixels() fallback: mismatched formats (%s -> %s\n",
-		     _mesa_get_format_name(read_irb->Base.Format),
-		     _mesa_get_format_name(draw_irb->Base.Format));
-      return GL_FALSE;
+		     _mesa_get_format_name(read_format),
+                     _mesa_get_format_name(draw_format));
+      return false;
    }
 
    /* Copypixels can be more than a straight copy.  Ensure all the
@@ -141,7 +146,7 @@ do_blit_copypixels(struct gl_context * ctx,
     */
    if (!intel_check_copypixel_blit_fragment_ops(ctx) ||
        ctx->Pixel.ZoomX != 1.0F || ctx->Pixel.ZoomY != 1.0F)
-      return GL_FALSE;
+      return false;
 
    intel_prepare_render(intel);
 
@@ -188,20 +193,20 @@ do_blit_copypixels(struct gl_context * ctx,
    dsty += draw_irb->draw_y;
 
    if (!intel_region_copy(intel,
-			  draw_irb->region, 0, dstx, dsty,
-			  read_irb->region, 0, srcx, srcy,
+			  draw_irb->mt->region, 0, dstx, dsty,
+			  read_irb->mt->region, 0, srcx, srcy,
 			  width, height, flip,
 			  ctx->Color.ColorLogicOpEnabled ?
 			  ctx->Color.LogicOp : GL_COPY)) {
       DBG("%s: blit failure\n", __FUNCTION__);
-      return GL_FALSE;
+      return false;
    }
 
 out:
    intel_check_front_buffer_rendering(intel);
 
    DBG("%s: success\n", __FUNCTION__);
-   return GL_TRUE;
+   return true;
 }
 
 

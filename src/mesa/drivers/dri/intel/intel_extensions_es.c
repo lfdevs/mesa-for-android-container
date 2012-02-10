@@ -28,23 +28,16 @@
 #include "main/extensions.h"
 #include "main/mfeatures.h"
 
+#include "intel_context.h"
 #include "intel_extensions.h"
 
 static const char *common_extensions[] = {
    /* Used by mesa internally (cf all_mesa_extensions in ../common/utils.c) */
-   "GL_ARB_draw_buffers",
-   "GL_ARB_multisample",
-   "GL_ARB_texture_compression",
    "GL_ARB_transpose_matrix",
-   "GL_ARB_vertex_buffer_object",
    "GL_ARB_window_pos",
    "GL_EXT_blend_func_separate",
    "GL_EXT_compiled_vertex_array",
    "GL_EXT_framebuffer_blit",
-   "GL_EXT_multi_draw_arrays",
-   "GL_EXT_polygon_offset",
-   "GL_EXT_texture_object",
-   "GL_EXT_vertex_array",
    "GL_IBM_multimode_draw_arrays",
    "GL_MESA_window_pos",
    "GL_NV_vertex_program",
@@ -55,7 +48,6 @@ static const char *common_extensions[] = {
 #endif
    "GL_EXT_texture_filter_anisotropic",
    "GL_EXT_packed_depth_stencil",
-   "GL_EXT_texture_format_BGRA8888",
    "GL_EXT_blend_minmax",
 
    NULL
@@ -73,6 +65,7 @@ static const char *es1_extensions[] = {
    "GL_EXT_blend_equation_separate",
    "GL_EXT_blend_func_separate",
    "GL_EXT_blend_subtract",
+   "GL_OES_draw_texture",
    "GL_ARB_framebuffer_object",
    "GL_EXT_framebuffer_object",
    "GL_ARB_point_sprite",
@@ -89,17 +82,13 @@ static const char *es2_extensions[] = {
    /* Required by GLES2 */
    "GL_ARB_fragment_program",
    "GL_ARB_fragment_shader",
-   "GL_ARB_multitexture",
    "GL_ARB_shader_objects",
    "GL_ARB_texture_cube_map",
-   "GL_ARB_texture_mirrored_repeat",
    "GL_ARB_texture_non_power_of_two",
    "GL_ARB_vertex_shader",
    "GL_EXT_blend_color",
    "GL_EXT_blend_equation_separate",
    "GL_EXT_blend_minmax",
-   "GL_EXT_blend_subtract",
-   "GL_EXT_stencil_wrap",
    "GL_NV_blend_square",
 
    /* Optional GLES2 */
@@ -115,25 +104,11 @@ intelInitExtensionsES1(struct gl_context *ctx)
 {
    int i;
 
-   /* Can't use driInitExtensions() since it uses extensions from
-    * main/remap_helper.h when called the first time. */
-
    for (i = 0; common_extensions[i]; i++)
       _mesa_enable_extension(ctx, common_extensions[i]);
    for (i = 0; es1_extensions[i]; i++)
       _mesa_enable_extension(ctx, es1_extensions[i]);
 }
-
-/**
- * \brief Extensions to disable.
- *
- * These extensions must be manually disabled because they may have been
- * enabled by default.
- */
-static const char* es2_extensions_disabled[] = {
-   "GL_OES_standard_derivatives",
-   NULL,
-};
 
 /**
  * Initializes potential list of extensions if ctx == NULL, or actually enables
@@ -143,14 +118,17 @@ void
 intelInitExtensionsES2(struct gl_context *ctx)
 {
    int i;
-
-   /* Can't use driInitExtensions() since it uses extensions from
-    * main/remap_helper.h when called the first time. */
+   struct intel_context *intel = intel_context(ctx);
 
    for (i = 0; common_extensions[i]; i++)
       _mesa_enable_extension(ctx, common_extensions[i]);
    for (i = 0; es2_extensions[i]; i++)
       _mesa_enable_extension(ctx, es2_extensions[i]);
-   for (i = 0; es2_extensions_disabled[i]; i++)
-      _mesa_disable_extension(ctx, es2_extensions_disabled[i]);
+
+   /* This extension must be manually disabled on GEN3 because it may have
+    * been enabled by default.
+    */
+   if (intel->gen < 4) {
+      ctx->Extensions.OES_standard_derivatives = false;
+   }
 }

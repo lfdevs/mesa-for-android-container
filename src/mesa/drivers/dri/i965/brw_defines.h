@@ -458,10 +458,11 @@
 #define BRW_SURFACE_MIN_LOD_MASK	INTEL_MASK(31, 28)
 
 /* Surface state DW5 */
-#define BRW_SURFACE_X_OFFSET_SHIFT	25
-#define BRW_SURFACE_X_OFFSET_MASK	INTEL_MASK(31, 25)
-#define BRW_SURFACE_Y_OFFSET_SHIFT	20
-#define BRW_SURFACE_Y_OFFSET_MASK	INTEL_MASK(23, 20)
+#define BRW_SURFACE_X_OFFSET_SHIFT		25
+#define BRW_SURFACE_X_OFFSET_MASK		INTEL_MASK(31, 25)
+#define BRW_SURFACE_VERTICAL_ALIGN_ENABLE	(1 << 24)
+#define BRW_SURFACE_Y_OFFSET_SHIFT		20
+#define BRW_SURFACE_Y_OFFSET_MASK		INTEL_MASK(23, 20)
 
 #define BRW_TEXCOORDMODE_WRAP            0
 #define BRW_TEXCOORDMODE_MIRROR          1
@@ -493,9 +494,11 @@
 #define BRW_CHANNEL_Z     2
 #define BRW_CHANNEL_W     3
 
-#define BRW_COMPRESSION_NONE          0
-#define BRW_COMPRESSION_2NDHALF       1
-#define BRW_COMPRESSION_COMPRESSED    2
+enum brw_compression {
+   BRW_COMPRESSION_NONE       = 0,
+   BRW_COMPRESSION_2NDHALF    = 1,
+   BRW_COMPRESSION_COMPRESSED = 2,
+};
 
 #define GEN6_COMPRESSION_1Q		0
 #define GEN6_COMPRESSION_2Q		1
@@ -564,58 +567,99 @@
 #define BRW_WE_ALL		1
 /** @} */
 
-#define BRW_OPCODE_MOV        1
-#define BRW_OPCODE_SEL        2
-#define BRW_OPCODE_NOT        4
-#define BRW_OPCODE_AND        5
-#define BRW_OPCODE_OR         6
-#define BRW_OPCODE_XOR        7
-#define BRW_OPCODE_SHR        8
-#define BRW_OPCODE_SHL        9
-#define BRW_OPCODE_RSR        10
-#define BRW_OPCODE_RSL        11
-#define BRW_OPCODE_ASR        12
-#define BRW_OPCODE_CMP        16
-#define BRW_OPCODE_CMPN       17
-#define BRW_OPCODE_JMPI       32
-#define BRW_OPCODE_IF         34
-#define BRW_OPCODE_IFF        35
-#define BRW_OPCODE_ELSE       36
-#define BRW_OPCODE_ENDIF      37
-#define BRW_OPCODE_DO         38
-#define BRW_OPCODE_WHILE      39
-#define BRW_OPCODE_BREAK      40
-#define BRW_OPCODE_CONTINUE   41
-#define BRW_OPCODE_HALT       42
-#define BRW_OPCODE_MSAVE      44
-#define BRW_OPCODE_MRESTORE   45
-#define BRW_OPCODE_PUSH       46
-#define BRW_OPCODE_POP        47
-#define BRW_OPCODE_WAIT       48
-#define BRW_OPCODE_SEND       49
-#define BRW_OPCODE_SENDC      50
-#define BRW_OPCODE_MATH       56
-#define BRW_OPCODE_ADD        64
-#define BRW_OPCODE_MUL        65
-#define BRW_OPCODE_AVG        66
-#define BRW_OPCODE_FRC        67
-#define BRW_OPCODE_RNDU       68
-#define BRW_OPCODE_RNDD       69
-#define BRW_OPCODE_RNDE       70
-#define BRW_OPCODE_RNDZ       71
-#define BRW_OPCODE_MAC        72
-#define BRW_OPCODE_MACH       73
-#define BRW_OPCODE_LZD        74
-#define BRW_OPCODE_SAD2       80
-#define BRW_OPCODE_SADA2      81
-#define BRW_OPCODE_DP4        84
-#define BRW_OPCODE_DPH        85
-#define BRW_OPCODE_DP3        86
-#define BRW_OPCODE_DP2        87
-#define BRW_OPCODE_DPA2       88
-#define BRW_OPCODE_LINE       89
-#define BRW_OPCODE_PLN        90
-#define BRW_OPCODE_NOP        126
+enum opcode {
+   /* These are the actual hardware opcodes. */
+   BRW_OPCODE_MOV =	1,
+   BRW_OPCODE_SEL =	2,
+   BRW_OPCODE_NOT =	4,
+   BRW_OPCODE_AND =	5,
+   BRW_OPCODE_OR =	6,
+   BRW_OPCODE_XOR =	7,
+   BRW_OPCODE_SHR =	8,
+   BRW_OPCODE_SHL =	9,
+   BRW_OPCODE_RSR =	10,
+   BRW_OPCODE_RSL =	11,
+   BRW_OPCODE_ASR =	12,
+   BRW_OPCODE_CMP =	16,
+   BRW_OPCODE_CMPN =	17,
+   BRW_OPCODE_JMPI =	32,
+   BRW_OPCODE_IF =	34,
+   BRW_OPCODE_IFF =	35,
+   BRW_OPCODE_ELSE =	36,
+   BRW_OPCODE_ENDIF =	37,
+   BRW_OPCODE_DO =	38,
+   BRW_OPCODE_WHILE =	39,
+   BRW_OPCODE_BREAK =	40,
+   BRW_OPCODE_CONTINUE = 41,
+   BRW_OPCODE_HALT =	42,
+   BRW_OPCODE_MSAVE =	44,
+   BRW_OPCODE_MRESTORE = 45,
+   BRW_OPCODE_PUSH =	46,
+   BRW_OPCODE_POP =	47,
+   BRW_OPCODE_WAIT =	48,
+   BRW_OPCODE_SEND =	49,
+   BRW_OPCODE_SENDC =	50,
+   BRW_OPCODE_MATH =	56,
+   BRW_OPCODE_ADD =	64,
+   BRW_OPCODE_MUL =	65,
+   BRW_OPCODE_AVG =	66,
+   BRW_OPCODE_FRC =	67,
+   BRW_OPCODE_RNDU =	68,
+   BRW_OPCODE_RNDD =	69,
+   BRW_OPCODE_RNDE =	70,
+   BRW_OPCODE_RNDZ =	71,
+   BRW_OPCODE_MAC =	72,
+   BRW_OPCODE_MACH =	73,
+   BRW_OPCODE_LZD =	74,
+   BRW_OPCODE_SAD2 =	80,
+   BRW_OPCODE_SADA2 =	81,
+   BRW_OPCODE_DP4 =	84,
+   BRW_OPCODE_DPH =	85,
+   BRW_OPCODE_DP3 =	86,
+   BRW_OPCODE_DP2 =	87,
+   BRW_OPCODE_DPA2 =	88,
+   BRW_OPCODE_LINE =	89,
+   BRW_OPCODE_PLN =	90,
+   BRW_OPCODE_NOP =	126,
+
+   /* These are compiler backend opcodes that get translated into other
+    * instructions.
+    */
+   FS_OPCODE_FB_WRITE = 128,
+   SHADER_OPCODE_RCP,
+   SHADER_OPCODE_RSQ,
+   SHADER_OPCODE_SQRT,
+   SHADER_OPCODE_EXP2,
+   SHADER_OPCODE_LOG2,
+   SHADER_OPCODE_POW,
+   SHADER_OPCODE_INT_QUOTIENT,
+   SHADER_OPCODE_INT_REMAINDER,
+   SHADER_OPCODE_SIN,
+   SHADER_OPCODE_COS,
+
+   SHADER_OPCODE_TEX,
+   SHADER_OPCODE_TXD,
+   SHADER_OPCODE_TXF,
+   SHADER_OPCODE_TXL,
+   SHADER_OPCODE_TXS,
+   FS_OPCODE_TXB,
+
+   FS_OPCODE_DDX,
+   FS_OPCODE_DDY,
+   FS_OPCODE_PIXEL_X,
+   FS_OPCODE_PIXEL_Y,
+   FS_OPCODE_CINTERP,
+   FS_OPCODE_LINTERP,
+   FS_OPCODE_DISCARD,
+   FS_OPCODE_SPILL,
+   FS_OPCODE_UNSPILL,
+   FS_OPCODE_PULL_CONSTANT_LOAD,
+
+   VS_OPCODE_URB_WRITE,
+   VS_OPCODE_SCRATCH_READ,
+   VS_OPCODE_SCRATCH_WRITE,
+   VS_OPCODE_PULL_CONSTANT_LOAD,
+};
 
 #define BRW_PREDICATE_NONE             0
 #define BRW_PREDICATE_NORMAL           1
@@ -711,18 +755,34 @@
 #define BRW_POLYGON_FACING_FRONT      0
 #define BRW_POLYGON_FACING_BACK       1
 
-#define BRW_MESSAGE_TARGET_NULL               0
-#define BRW_MESSAGE_TARGET_MATH               1 /* reserved on GEN6 */
-#define BRW_MESSAGE_TARGET_SAMPLER            2
-#define BRW_MESSAGE_TARGET_GATEWAY            3
-#define BRW_MESSAGE_TARGET_DATAPORT_READ      4
-#define BRW_MESSAGE_TARGET_DATAPORT_WRITE     5
-#define BRW_MESSAGE_TARGET_URB                6
-#define BRW_MESSAGE_TARGET_THREAD_SPAWNER     7
+/**
+ * Message target: Shared Function ID for where to SEND a message.
+ *
+ * These are enumerated in the ISA reference under "send - Send Message".
+ * In particular, see the following tables:
+ * - G45 PRM, Volume 4, Table 14-15 "Message Descriptor Definition"
+ * - Sandybridge PRM, Volume 4 Part 2, Table 8-16 "Extended Message Descriptor"
+ * - BSpec, Volume 1a (GPU Overview) / Graphics Processing Engine (GPE) /
+ *   Overview / GPE Function IDs
+ */
+enum brw_message_target {
+   BRW_SFID_NULL                     = 0,
+   BRW_SFID_MATH                     = 1, /* Only valid on Gen4-5 */
+   BRW_SFID_SAMPLER                  = 2,
+   BRW_SFID_MESSAGE_GATEWAY          = 3,
+   BRW_SFID_DATAPORT_READ            = 4,
+   BRW_SFID_DATAPORT_WRITE           = 5,
+   BRW_SFID_URB                      = 6,
+   BRW_SFID_THREAD_SPAWNER           = 7,
 
-#define GEN6_MESSAGE_TARGET_DP_SAMPLER_CACHE  4
-#define GEN6_MESSAGE_TARGET_DP_RENDER_CACHE   5
-#define GEN6_MESSAGE_TARGET_DP_CONST_CACHE    9
+   GEN6_SFID_DATAPORT_SAMPLER_CACHE  = 4,
+   GEN6_SFID_DATAPORT_RENDER_CACHE   = 5,
+   GEN6_SFID_DATAPORT_CONSTANT_CACHE = 9,
+
+   GEN7_SFID_DATAPORT_DATA_CACHE     = 10,
+};
+
+#define GEN7_MESSAGE_TARGET_DP_DATA_CACHE     10
 
 #define BRW_SAMPLER_RETURN_FORMAT_FLOAT32     0
 #define BRW_SAMPLER_RETURN_FORMAT_UINT32      2
@@ -739,9 +799,9 @@
 #define BRW_SAMPLER_MESSAGE_SIMD4X2_SAMPLE_COMPARE    0
 #define BRW_SAMPLER_MESSAGE_SIMD16_SAMPLE_COMPARE     2
 #define BRW_SAMPLER_MESSAGE_SIMD8_SAMPLE_BIAS_COMPARE 0
+#define BRW_SAMPLER_MESSAGE_SIMD4X2_SAMPLE_LOD_COMPARE 1
 #define BRW_SAMPLER_MESSAGE_SIMD8_SAMPLE_LOD_COMPARE  1
 #define BRW_SAMPLER_MESSAGE_SIMD4X2_RESINFO           2
-#define BRW_SAMPLER_MESSAGE_SIMD8_RESINFO             2
 #define BRW_SAMPLER_MESSAGE_SIMD16_RESINFO            2
 #define BRW_SAMPLER_MESSAGE_SIMD4X2_LD                3
 #define BRW_SAMPLER_MESSAGE_SIMD8_LD                  3
@@ -754,6 +814,8 @@
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_DERIVS       4
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_BIAS_COMPARE 5
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_LOD_COMPARE  6
+#define GEN5_SAMPLER_MESSAGE_SAMPLE_LD           7
+#define GEN5_SAMPLER_MESSAGE_SAMPLE_RESINFO      10
 
 /* for GEN5 only */
 #define BRW_SAMPLER_SIMD_MODE_SIMD4X2                   0
@@ -820,6 +882,9 @@
 #define GEN6_DATAPORT_WRITE_MESSAGE_STREAMED_VB_WRITE               13
 #define GEN6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_UNORM_WRITE       14
 
+/* GEN7 */
+#define GEN7_DATAPORT_WRITE_MESSAGE_OWORD_DUAL_BLOCK_WRITE          10
+
 #define BRW_MATH_FUNCTION_INV                              1
 #define BRW_MATH_FUNCTION_LOG                              2
 #define BRW_MATH_FUNCTION_EXP                              3
@@ -874,7 +939,7 @@
 #define CMD_CONST_BUFFER              0x6002
 
 #define CMD_STATE_BASE_ADDRESS        0x6101
-#define CMD_STATE_INSN_POINTER        0x6102
+#define CMD_STATE_SIP                 0x6102
 #define CMD_PIPELINE_SELECT_965       0x6104
 #define CMD_PIPELINE_SELECT_GM45      0x6904
 
@@ -902,7 +967,7 @@
 #define _3DSTATE_SAMPLER_STATE_POINTERS_GS	0x782E /* GEN7+ */
 #define _3DSTATE_SAMPLER_STATE_POINTERS_PS	0x782F /* GEN7+ */
 
-#define CMD_VERTEX_BUFFER             0x7808
+#define _3DSTATE_VERTEX_BUFFERS       0x7808
 # define BRW_VB0_INDEX_SHIFT		27
 # define GEN6_VB0_INDEX_SHIFT		26
 # define BRW_VB0_ACCESS_VERTEXDATA	(0 << 26)
@@ -912,7 +977,7 @@
 # define GEN7_VB0_ADDRESS_MODIFYENABLE  (1 << 14)
 # define BRW_VB0_PITCH_SHIFT		0
 
-#define CMD_VERTEX_ELEMENT            0x7809
+#define _3DSTATE_VERTEX_ELEMENTS      0x7809
 # define BRW_VE0_INDEX_SHIFT		27
 # define GEN6_VE0_INDEX_SHIFT		26
 # define BRW_VE0_FORMAT_SHIFT		16
@@ -934,8 +999,8 @@
 # define BRW_VE1_DST_OFFSET_SHIFT	0
 
 #define CMD_INDEX_BUFFER              0x780a
-#define CMD_VF_STATISTICS_965          0x780b
-#define CMD_VF_STATISTICS_GM45        0x680b
+#define GEN4_3DSTATE_VF_STATISTICS		0x780b
+#define GM45_3DSTATE_VF_STATISTICS		0x680b
 #define _3DSTATE_CC_STATE_POINTERS		0x780e /* GEN6+ */
 #define _3DSTATE_BLEND_STATE_POINTERS		0x7824 /* GEN7+ */
 #define _3DSTATE_DEPTH_STENCIL_STATE_POINTERS	0x7825 /* GEN7+ */
@@ -991,6 +1056,8 @@
 # define GEN6_GS_VECTOR_MASK_ENABLE			(1 << 30)
 # define GEN6_GS_SAMPLER_COUNT_SHIFT			27
 # define GEN6_GS_BINDING_TABLE_ENTRY_COUNT_SHIFT	18
+# define GEN6_GS_FLOATING_POINT_MODE_IEEE_754		(0 << 16)
+# define GEN6_GS_FLOATING_POINT_MODE_ALT		(1 << 16)
 /* DW4 */
 # define GEN6_GS_URB_READ_LENGTH_SHIFT			11
 # define GEN7_GS_INCLUDE_VERTEX_HANDLES		        (1 << 10)
@@ -1003,7 +1070,16 @@
 # define GEN6_GS_RENDERING_ENABLE			(1 << 8)
 # define GEN7_GS_ENABLE					(1 << 0)
 /* DW6 */
+# define GEN6_GS_REORDER				(1 << 30)
+# define GEN6_GS_DISCARD_ADJACENCY			(1 << 29)
+# define GEN6_GS_SVBI_PAYLOAD_ENABLE			(1 << 28)
+# define GEN6_GS_SVBI_POSTINCREMENT_ENABLE		(1 << 27)
+# define GEN6_GS_SVBI_POSTINCREMENT_VALUE_SHIFT		16
+# define GEN6_GS_SVBI_POSTINCREMENT_VALUE_MASK		INTEL_MASK(25, 16)
 # define GEN6_GS_ENABLE					(1 << 15)
+
+# define BRW_GS_EDGE_INDICATOR_0			(1 << 8)
+# define BRW_GS_EDGE_INDICATOR_1			(1 << 9)
 
 #define _3DSTATE_HS                             0x781B /* GEN7+ */
 #define _3DSTATE_TE                             0x781C /* GEN7+ */
@@ -1039,7 +1115,7 @@
 # define GEN6_CLIP_MODE_REJECT_ALL			(3 << 13)
 # define GEN6_CLIP_MODE_ACCEPT_ALL			(4 << 13)
 # define GEN6_CLIP_PERSPECTIVE_DIVIDE_DISABLE		(1 << 9)
-# define GEN6_CLIP_BARYCENTRIC_ENABLE			(1 << 8)
+# define GEN6_CLIP_NON_PERSPECTIVE_BARYCENTRIC_ENABLE	(1 << 8)
 # define GEN6_CLIP_TRI_PROVOKE_SHIFT			4
 # define GEN6_CLIP_LINE_PROVOKE_SHIFT			2
 # define GEN6_CLIP_TRIFAN_PROVOKE_SHIFT			0
@@ -1052,6 +1128,7 @@
 /* DW1 (for gen6) */
 # define GEN6_SF_NUM_OUTPUTS_SHIFT			22
 # define GEN6_SF_SWIZZLE_ENABLE				(1 << 21)
+# define GEN6_SF_POINT_SPRITE_UPPERLEFT			(0 << 20)
 # define GEN6_SF_POINT_SPRITE_LOWERLEFT			(1 << 20)
 # define GEN6_SF_URB_ENTRY_READ_LENGTH_SHIFT		11
 # define GEN6_SF_URB_ENTRY_READ_OFFSET_SHIFT		4
@@ -1146,6 +1223,16 @@
 /* DW12: attr 0-7 wrap shortest enables */
 /* DW13: attr 8-16 wrap shortest enables */
 
+enum brw_wm_barycentric_interp_mode {
+   BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC		= 0,
+   BRW_WM_PERSPECTIVE_CENTROID_BARYCENTRIC	= 1,
+   BRW_WM_PERSPECTIVE_SAMPLE_BARYCENTRIC	= 2,
+   BRW_WM_NONPERSPECTIVE_PIXEL_BARYCENTRIC	= 3,
+   BRW_WM_NONPERSPECTIVE_CENTROID_BARYCENTRIC	= 4,
+   BRW_WM_NONPERSPECTIVE_SAMPLE_BARYCENTRIC	= 5,
+   BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT  = 6
+};
+
 #define _3DSTATE_WM				0x7814 /* GEN6+ */
 /* DW1: kernel pointer */
 /* DW2 */
@@ -1200,6 +1287,7 @@
 # define GEN6_WM_PERSPECTIVE_SAMPLE_BARYCENTRIC		(1 << 12)
 # define GEN6_WM_PERSPECTIVE_CENTROID_BARYCENTRIC	(1 << 11)
 # define GEN6_WM_PERSPECTIVE_PIXEL_BARYCENTRIC		(1 << 10)
+# define GEN6_WM_BARYCENTRIC_INTERPOLATION_MODE_SHIFT   10
 # define GEN6_WM_POINT_RASTRULE_UPPER_RIGHT		(1 << 9)
 # define GEN6_WM_MSRAST_OFF_PIXEL			(0 << 1)
 # define GEN6_WM_MSRAST_OFF_PATTERN			(1 << 1)
@@ -1220,12 +1308,45 @@
 #define _3DSTATE_CONSTANT_HS                  0x7819 /* GEN7+ */
 #define _3DSTATE_CONSTANT_DS                  0x781A /* GEN7+ */
 
+#define _3DSTATE_STREAMOUT                    0x781e /* GEN7+ */
+/* DW1 */
+# define SO_FUNCTION_ENABLE				(1 << 31)
+# define SO_RENDERING_DISABLE				(1 << 30)
+/* This selects which incoming rendering stream goes down the pipeline.  The
+ * rendering stream is 0 if not defined by special cases in the GS state.
+ */
+# define SO_RENDER_STREAM_SELECT_SHIFT			27
+# define SO_RENDER_STREAM_SELECT_MASK			INTEL_MASK(28, 27)
+/* Controls reordering of TRISTRIP_* elements in stream output (not rendering).
+ */
+# define SO_REORDER_TRAILING				(1 << 26)
+/* Controls SO_NUM_PRIMS_WRITTEN_* and SO_PRIM_STORAGE_* */
+# define SO_STATISTICS_ENABLE				(1 << 25)
+# define SO_BUFFER_ENABLE(n)				(1 << (8 + (n)))
+/* DW2 */
+# define SO_STREAM_3_VERTEX_READ_OFFSET_SHIFT		29
+# define SO_STREAM_3_VERTEX_READ_OFFSET_MASK		INTEL_MASK(29, 29)
+# define SO_STREAM_3_VERTEX_READ_LENGTH_SHIFT		24
+# define SO_STREAM_3_VERTEX_READ_LENGTH_MASK		INTEL_MASK(28, 24)
+# define SO_STREAM_2_VERTEX_READ_OFFSET_SHIFT		21
+# define SO_STREAM_2_VERTEX_READ_OFFSET_MASK		INTEL_MASK(21, 21)
+# define SO_STREAM_2_VERTEX_READ_LENGTH_SHIFT		16
+# define SO_STREAM_2_VERTEX_READ_LENGTH_MASK		INTEL_MASK(20, 16)
+# define SO_STREAM_1_VERTEX_READ_OFFSET_SHIFT		13
+# define SO_STREAM_1_VERTEX_READ_OFFSET_MASK		INTEL_MASK(13, 13)
+# define SO_STREAM_1_VERTEX_READ_LENGTH_SHIFT		8
+# define SO_STREAM_1_VERTEX_READ_LENGTH_MASK		INTEL_MASK(12, 8)
+# define SO_STREAM_0_VERTEX_READ_OFFSET_SHIFT		5
+# define SO_STREAM_0_VERTEX_READ_OFFSET_MASK		INTEL_MASK(5, 5)
+# define SO_STREAM_0_VERTEX_READ_LENGTH_SHIFT		0
+# define SO_STREAM_0_VERTEX_READ_LENGTH_MASK		INTEL_MASK(4, 0)
+
 /* 3DSTATE_WM for Gen7 */
 /* DW1 */
 # define GEN7_WM_STATISTICS_ENABLE			(1 << 31)
 # define GEN7_WM_DEPTH_CLEAR				(1 << 30)
 # define GEN7_WM_DISPATCH_ENABLE			(1 << 29)
-# define GEN6_WM_DEPTH_RESOLVE				(1 << 28)
+# define GEN7_WM_DEPTH_RESOLVE				(1 << 28)
 # define GEN7_WM_HIERARCHICAL_DEPTH_RESOLVE		(1 << 27)
 # define GEN7_WM_KILL_ENABLE				(1 << 25)
 # define GEN7_WM_PSCDEPTH_OFF			        (0 << 23)
@@ -1237,12 +1358,7 @@
 # define GEN7_WM_POSITION_ZW_PIXEL			(0 << 17)
 # define GEN7_WM_POSITION_ZW_CENTROID			(2 << 17)
 # define GEN7_WM_POSITION_ZW_SAMPLE			(3 << 17)
-# define GEN7_WM_NONPERSPECTIVE_SAMPLE_BARYCENTRIC	(1 << 16)
-# define GEN7_WM_NONPERSPECTIVE_CENTROID_BARYCENTRIC	(1 << 15)
-# define GEN7_WM_NONPERSPECTIVE_PIXEL_BARYCENTRIC	(1 << 14)
-# define GEN7_WM_PERSPECTIVE_SAMPLE_BARYCENTRIC		(1 << 13)
-# define GEN7_WM_PERSPECTIVE_CENTROID_BARYCENTRIC	(1 << 12)
-# define GEN7_WM_PERSPECTIVE_PIXEL_BARYCENTRIC		(1 << 11)
+# define GEN7_WM_BARYCENTRIC_INTERPOLATION_MODE_SHIFT   11
 # define GEN7_WM_USES_INPUT_COVERAGE_MASK	        (1 << 10)
 # define GEN7_WM_LINE_END_CAP_AA_WIDTH_0_5		(0 << 8)
 # define GEN7_WM_LINE_END_CAP_AA_WIDTH_1_0		(1 << 8)
@@ -1291,8 +1407,6 @@
 /* DW6: kernel 1 pointer */
 /* DW7: kernel 2 pointer */
 
-#define _3DSTATE_STREAMOUT                      0x781e /* GEN7+ */
-
 #define _3DSTATE_SAMPLE_MASK			0x7818 /* GEN6+ */
 
 #define _3DSTATE_DRAWING_RECTANGLE		0x7900
@@ -1332,15 +1446,59 @@
 # define DEPTH_CLEAR_VALID				(1 << 15)
 /* DW1: depth clear value */
 
+#define _3DSTATE_SO_DECL_LIST			0x7917 /* GEN7+ */
+/* DW1 */
+# define SO_STREAM_TO_BUFFER_SELECTS_3_SHIFT		12
+# define SO_STREAM_TO_BUFFER_SELECTS_3_MASK		INTEL_MASK(15, 12)
+# define SO_STREAM_TO_BUFFER_SELECTS_2_SHIFT		8
+# define SO_STREAM_TO_BUFFER_SELECTS_2_MASK		INTEL_MASK(11, 8)
+# define SO_STREAM_TO_BUFFER_SELECTS_1_SHIFT		4
+# define SO_STREAM_TO_BUFFER_SELECTS_1_MASK		INTEL_MASK(7, 4)
+# define SO_STREAM_TO_BUFFER_SELECTS_0_SHIFT		0
+# define SO_STREAM_TO_BUFFER_SELECTS_0_MASK		INTEL_MASK(3, 0)
+/* DW2 */
+# define SO_NUM_ENTRIES_3_SHIFT				24
+# define SO_NUM_ENTRIES_3_MASK				INTEL_MASK(31, 24)
+# define SO_NUM_ENTRIES_2_SHIFT				16
+# define SO_NUM_ENTRIES_2_MASK				INTEL_MASK(23, 16)
+# define SO_NUM_ENTRIES_1_SHIFT				8
+# define SO_NUM_ENTRIES_1_MASK				INTEL_MASK(15, 8)
+# define SO_NUM_ENTRIES_0_SHIFT				0
+# define SO_NUM_ENTRIES_0_MASK				INTEL_MASK(7, 0)
+
+/* SO_DECL DW0 */
+# define SO_DECL_OUTPUT_BUFFER_SLOT_SHIFT		12
+# define SO_DECL_OUTPUT_BUFFER_SLOT_MASK		INTEL_MASK(13, 12)
+# define SO_DECL_HOLE_FLAG				(1 << 11)
+# define SO_DECL_REGISTER_INDEX_SHIFT			4
+# define SO_DECL_REGISTER_INDEX_MASK			INTEL_MASK(9, 4)
+# define SO_DECL_COMPONENT_MASK_SHIFT			0
+# define SO_DECL_COMPONENT_MASK_MASK			INTEL_MASK(3, 0)
+
+#define _3DSTATE_SO_BUFFER                    0x7918 /* GEN7+ */
+/* DW1 */
+# define SO_BUFFER_INDEX_SHIFT				29
+# define SO_BUFFER_INDEX_MASK				INTEL_MASK(30, 29)
+# define SO_BUFFER_PITCH_SHIFT				0
+# define SO_BUFFER_PITCH_MASK				INTEL_MASK(11, 0)
+/* DW2: start address */
+/* DW3: end address. */
+
 #define CMD_PIPE_CONTROL              0x7a00
 
 #define CMD_MI_FLUSH                  0x0200
 
 
-/* Various values from the R0 vertex header:
+/* Bitfields for the URB_WRITE message, DW2 of message header: */
+#define URB_WRITE_PRIM_END		0x1
+#define URB_WRITE_PRIM_START		0x2
+#define URB_WRITE_PRIM_TYPE_SHIFT	2
+
+
+/* Maximum number of entries that can be addressed using a binding table
+ * pointer of type SURFTYPE_BUFFER
  */
-#define R02_PRIM_END    0x1
-#define R02_PRIM_START  0x2
+#define BRW_MAX_NUM_BUFFER_ENTRIES	(1 << 27)
 
 #include "intel_chipset.h"
 

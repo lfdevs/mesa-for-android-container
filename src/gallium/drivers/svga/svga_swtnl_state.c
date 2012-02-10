@@ -31,7 +31,7 @@
 #include "svga_context.h"
 #include "svga_swtnl.h"
 #include "svga_state.h"
-
+#include "svga_tgsi.h"
 #include "svga_swtnl_private.h"
 
 
@@ -83,14 +83,19 @@ static void set_draw_viewport( struct svga_context *svga )
    draw_set_viewport_state(svga->swtnl.draw, &vp);
 }
 
-static int update_swtnl_draw( struct svga_context *svga,
-                              unsigned dirty )
+static enum pipe_error
+update_swtnl_draw( struct svga_context *svga,
+                   unsigned dirty )
 {
    draw_flush( svga->swtnl.draw );
 
    if (dirty & SVGA_NEW_VS) 
       draw_bind_vertex_shader(svga->swtnl.draw,
                               svga->curr.vs->draw_shader);
+
+   if (dirty & SVGA_NEW_FS) 
+      draw_bind_fragment_shader(svga->swtnl.draw,
+                                svga->curr.fs->draw_shader);
 
    if (dirty & SVGA_NEW_VBUFFER)
       draw_set_vertex_buffers(svga->swtnl.draw, 
@@ -139,7 +144,8 @@ struct svga_tracked_state svga_update_swtnl_draw =
 };
 
 
-int svga_swtnl_update_vdecl( struct svga_context *svga )
+enum pipe_error
+svga_swtnl_update_vdecl( struct svga_context *svga )
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(svga->swtnl.backend);
    struct draw_context *draw = svga->swtnl.draw;
@@ -147,7 +153,7 @@ int svga_swtnl_update_vdecl( struct svga_context *svga )
    SVGA3dVertexDecl vdecl[PIPE_MAX_ATTRIBS];
    const enum interp_mode colorInterp =
       svga->curr.rast->templ.flatshade ? INTERP_CONSTANT : INTERP_LINEAR;
-   const struct svga_fragment_shader *fs = svga->curr.fs;
+   struct svga_fragment_shader *fs = svga->curr.fs;
    int offset = 0;
    int nr_decls = 0;
    int src, i;
@@ -167,13 +173,15 @@ int svga_swtnl_update_vdecl( struct svga_context *svga )
    nr_decls++;
 
    for (i = 0; i < fs->base.info.num_inputs; i++) {
-      unsigned name = fs->base.info.input_semantic_name[i];
-      unsigned index = fs->base.info.input_semantic_index[i];
-      src = draw_find_shader_output(draw, name, index);
-      vdecl[nr_decls].array.offset = offset;
-      vdecl[nr_decls].identity.usageIndex = fs->base.info.input_semantic_index[i];
+      const unsigned sem_name = fs->base.info.input_semantic_name[i];
+      const unsigned sem_index = fs->base.info.input_semantic_index[i];
 
-      switch (name) {
+      src = draw_find_shader_output(draw, sem_name, sem_index);
+
+      vdecl[nr_decls].array.offset = offset;
+      vdecl[nr_decls].identity.usageIndex = sem_index;
+
+      switch (sem_name) {
       case TGSI_SEMANTIC_COLOR:
          draw_emit_vertex_attr(vinfo, EMIT_4F, colorInterp, src);
          vdecl[nr_decls].identity.usage = SVGA3D_DECLUSAGE_COLOR;
@@ -185,7 +193,8 @@ int svga_swtnl_update_vdecl( struct svga_context *svga )
          draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_PERSPECTIVE, src);
          vdecl[nr_decls].identity.usage = SVGA3D_DECLUSAGE_TEXCOORD;
          vdecl[nr_decls].identity.type = SVGA3D_DECLTYPE_FLOAT4;
-         vdecl[nr_decls].identity.usageIndex += 1;
+         vdecl[nr_decls].identity.usageIndex =
+            svga_remap_generic_index(fs->generic_remap_table, sem_index);
          offset += 16;
          nr_decls++;
          break;
@@ -221,8 +230,9 @@ int svga_swtnl_update_vdecl( struct svga_context *svga )
 }
 
 
-static int update_swtnl_vdecl( struct svga_context *svga,
-                               unsigned dirty )
+static enum pipe_error
+update_swtnl_vdecl( struct svga_context *svga,
+                    unsigned dirty )
 {
    return svga_swtnl_update_vdecl( svga );
 }

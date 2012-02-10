@@ -331,7 +331,7 @@ static void radeonFogfv( struct gl_context *ctx, GLenum pname, const GLfloat *pa
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
    union { int i; float f; } c, d;
-   GLchan col[4];
+   GLubyte col[4];
 
    switch (pname) {
    case GL_FOG_MODE:
@@ -395,7 +395,7 @@ static void radeonFogfv( struct gl_context *ctx, GLenum pname, const GLfloat *pa
       break;
    case GL_FOG_COLOR:
       RADEON_STATECHANGE( rmesa, ctx );
-      UNCLAMPED_FLOAT_TO_RGB_CHAN( col, ctx->Fog.Color );
+      _mesa_unclamped_float_rgba_to_ubyte(col, ctx->Fog.Color );
       rmesa->hw.ctx.cmd[CTX_PP_FOG_COLOR] &= ~RADEON_FOG_COLOR_MASK;
       rmesa->hw.ctx.cmd[CTX_PP_FOG_COLOR] |=
 	 radeonPackColor( 4, col[0], col[1], col[2], 0 );
@@ -548,31 +548,6 @@ static void radeonPolygonOffset( struct gl_context *ctx,
    RADEON_STATECHANGE( rmesa, zbs );
    rmesa->hw.zbs.cmd[ZBS_SE_ZBIAS_FACTOR]   = factoru.ui32;
    rmesa->hw.zbs.cmd[ZBS_SE_ZBIAS_CONSTANT] = constant.ui32;
-}
-
-static void radeonPolygonStipplePreKMS( struct gl_context *ctx, const GLubyte *mask )
-{
-   r100ContextPtr rmesa = R100_CONTEXT(ctx);
-   GLuint i;
-   drm_radeon_stipple_t stipple;
-
-   /* Must flip pattern upside down.
-    */
-   for ( i = 0 ; i < 32 ; i++ ) {
-      rmesa->state.stipple.mask[31 - i] = ((GLuint *) mask)[i];
-   }
-
-   /* TODO: push this into cmd mechanism
-    */
-   radeon_firevertices(&rmesa->radeon);
-   LOCK_HARDWARE( &rmesa->radeon );
-
-   /* FIXME: Use window x,y offsets into stipple RAM.
-    */
-   stipple.mask = rmesa->state.stipple.mask;
-   drmCommandWrite( rmesa->radeon.dri.fd, DRM_RADEON_STIPPLE,
-		    &stipple, sizeof(drm_radeon_stipple_t) );
-   UNLOCK_HARDWARE( &rmesa->radeon );
 }
 
 static void radeonPolygonMode( struct gl_context *ctx, GLenum face, GLenum mode )
@@ -1401,8 +1376,8 @@ void radeonUpdateWindow( struct gl_context *ctx )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
    __DRIdrawable *dPriv = radeon_get_drawable(&rmesa->radeon);
-   GLfloat xoffset = dPriv ? (GLfloat) dPriv->x : 0;
-   GLfloat yoffset = dPriv ? (GLfloat) dPriv->y + dPriv->h : 0;
+   GLfloat xoffset = 0.0;
+   GLfloat yoffset = dPriv ? (GLfloat) dPriv->h : 0;
    const GLfloat *v = ctx->Viewport._WindowMap.m;
    const GLboolean render_to_fbo = (ctx->DrawBuffer ? (ctx->DrawBuffer->Name != 0) : 0);
    const GLfloat depthScale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
@@ -1456,8 +1431,8 @@ void radeonUpdateViewportOffset( struct gl_context *ctx )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
    __DRIdrawable *dPriv = radeon_get_drawable(&rmesa->radeon);
-   GLfloat xoffset = (GLfloat)dPriv->x;
-   GLfloat yoffset = (GLfloat)dPriv->y + dPriv->h;
+   GLfloat xoffset = 0.0;
+   GLfloat yoffset = (GLfloat)dPriv->h;
    const GLfloat *v = ctx->Viewport._WindowMap.m;
 
    float_ui32_type tx;
@@ -1485,8 +1460,8 @@ void radeonUpdateViewportOffset( struct gl_context *ctx )
                 RADEON_STIPPLE_Y_OFFSET_MASK);
 
          /* add magic offsets, then invert */
-         stx = 31 - ((dPriv->x - 1) & RADEON_STIPPLE_COORD_MASK);
-         sty = 31 - ((dPriv->y + dPriv->h - 1)
+         stx = 31 - ((-1) & RADEON_STIPPLE_COORD_MASK);
+         sty = 31 - ((dPriv->h - 1)
                      & RADEON_STIPPLE_COORD_MASK);
 
          m |= ((stx << RADEON_STIPPLE_X_OFFSET_SHIFT) |
@@ -1508,7 +1483,8 @@ void radeonUpdateViewportOffset( struct gl_context *ctx )
  * Miscellaneous
  */
 
-static void radeonClearColor( struct gl_context *ctx, const GLfloat color[4] )
+static void radeonClearColor( struct gl_context *ctx,
+                              const union gl_color_union color )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
    GLubyte c[4];
@@ -1518,10 +1494,7 @@ static void radeonClearColor( struct gl_context *ctx, const GLfloat color[4] )
    if (!rrb)
      return;
      
-   CLAMPED_FLOAT_TO_UBYTE(c[0], color[0]);
-   CLAMPED_FLOAT_TO_UBYTE(c[1], color[1]);
-   CLAMPED_FLOAT_TO_UBYTE(c[2], color[2]);
-   CLAMPED_FLOAT_TO_UBYTE(c[3], color[3]);
+   _mesa_unclamped_float_rgba_to_ubyte(c, color.f);
    rmesa->radeon.state.color.clear = radeonPackColor( rrb->cpp,
 					       c[0], c[1], c[2], c[3] );
 }
@@ -2246,7 +2219,7 @@ static void radeonPolygonStipple( struct gl_context *ctx, const GLubyte *mask )
  * Many of the ctx->Driver functions might have been initialized to
  * software defaults in the earlier _mesa_init_driver_functions() call.
  */
-void radeonInitStateFuncs( struct gl_context *ctx , GLboolean dri2 )
+void radeonInitStateFuncs( struct gl_context *ctx )
 {
    ctx->Driver.UpdateState		= radeonInvalidateState;
    ctx->Driver.LightingSpaceChange      = radeonLightingSpaceChange;
@@ -2255,8 +2228,7 @@ void radeonInitStateFuncs( struct gl_context *ctx , GLboolean dri2 )
    ctx->Driver.ReadBuffer		= radeonReadBuffer;
    ctx->Driver.CopyPixels               = _mesa_meta_CopyPixels;
    ctx->Driver.DrawPixels               = _mesa_meta_DrawPixels;
-   if (dri2)
-	   ctx->Driver.ReadPixels               = radeonReadPixels;
+   ctx->Driver.ReadPixels               = radeonReadPixels;
 
    ctx->Driver.AlphaFunc		= radeonAlphaFunc;
    ctx->Driver.BlendEquationSeparate	= radeonBlendEquationSeparate;
@@ -2281,10 +2253,7 @@ void radeonInitStateFuncs( struct gl_context *ctx , GLboolean dri2 )
    ctx->Driver.LogicOpcode		= radeonLogicOpCode;
    ctx->Driver.PolygonMode		= radeonPolygonMode;
    ctx->Driver.PolygonOffset		= radeonPolygonOffset;
-   if (dri2)
-      ctx->Driver.PolygonStipple		= radeonPolygonStipple;
-   else
-      ctx->Driver.PolygonStipple		= radeonPolygonStipplePreKMS;
+   ctx->Driver.PolygonStipple		= radeonPolygonStipple;
    ctx->Driver.RenderMode		= radeonRenderMode;
    ctx->Driver.Scissor			= radeonScissor;
    ctx->Driver.ShadeModel		= radeonShadeModel;

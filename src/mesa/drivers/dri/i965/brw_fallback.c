@@ -39,38 +39,23 @@
 
 #define FILE_DEBUG_FLAG DEBUG_FALLBACKS
 
-static GLboolean do_check_fallback(struct brw_context *brw)
+static bool do_check_fallback(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->intel.ctx;
-   GLuint i;
 
    if (brw->intel.no_rast) {
       DBG("FALLBACK: rasterization disabled\n");
-      return GL_TRUE;
+      return true;
    }
 
    /* _NEW_RENDERMODE
     */
    if (ctx->RenderMode != GL_RENDER) {
       DBG("FALLBACK: render mode\n");
-      return GL_TRUE;
+      return true;
    }
 
-   /* _NEW_TEXTURE:
-    */
-   for (i = 0; i < BRW_MAX_TEX_UNIT; i++) {
-      struct gl_texture_unit *texUnit = &ctx->Texture.Unit[i];
-      if (texUnit->_ReallyEnabled) {
-	 struct gl_texture_object *tex_obj = texUnit->_Current;
-	 struct gl_texture_image *texImage = tex_obj->Image[0][tex_obj->BaseLevel];
-	 if (texImage->Border) {
-	    DBG("FALLBACK: texture border\n");
-	    return GL_TRUE;
-	 }
-      }
-   }
-
-   return GL_FALSE;
+   return false;
 }
 
 static void check_fallback(struct brw_context *brw)
@@ -80,11 +65,11 @@ static void check_fallback(struct brw_context *brw)
 
 const struct brw_tracked_state brw_check_fallback = {
    .dirty = {
-      .mesa = _NEW_RENDERMODE | _NEW_TEXTURE | _NEW_STENCIL,
+      .mesa = _NEW_RENDERMODE | _NEW_STENCIL,
       .brw  = 0,
       .cache = 0
    },
-   .prepare = check_fallback
+   .emit = check_fallback
 };
 
 
@@ -96,7 +81,7 @@ const struct brw_tracked_state brw_check_fallback = {
  * field is treated as a boolean, not a bitmask.  It's only set in a
  * couple of places.
  */
-void intelFallback( struct intel_context *intel, GLuint bit, GLboolean mode )
+void intelFallback( struct intel_context *intel, GLuint bit, bool mode )
 {
 }
 

@@ -207,6 +207,7 @@ public:
       subexpressions[1] = NULL;
       subexpressions[2] = NULL;
       primary_expression.identifier = (char *) identifier;
+      this->non_lvalue_description = NULL;
    }
 
    static const char *operator_string(enum ast_operators op);
@@ -234,6 +235,18 @@ public:
     * \c ast_function_call
     */
    exec_list expressions;
+
+   /**
+    * For things that can't be l-values, this describes what it is.
+    *
+    * This text is used by the code that generates IR for assignments to
+    * detect and emit useful messages for assignments to some things that
+    * can't be l-values.  For example, pre- or post-incerement expressions.
+    *
+    * \note
+    * This pointer may be \c NULL.
+    */
+   const char *non_lvalue_description;
 };
 
 class ast_expression_bin : public ast_expression {
@@ -372,7 +385,7 @@ struct ast_type_qualifier {
     * \note
     * This field is only valid if \c explicit_location is set.
     */
-   unsigned location;
+   int location;
 
    /**
     * Return true if and only if an interpolation qualifier is present.
@@ -437,6 +450,7 @@ enum ast_types {
    ast_sampler2drect,
    ast_sampler3d,
    ast_samplercube,
+   ast_samplerexternaloes,
    ast_sampler1dshadow,
    ast_sampler2dshadow,
    ast_sampler2drectshadow,
@@ -628,12 +642,77 @@ public:
 
 class ast_case_label : public ast_node {
 public:
+   ast_case_label(ast_expression *test_value);
+   virtual void print(void) const;
+
+   virtual ir_rvalue *hir(exec_list *instructions,
+			  struct _mesa_glsl_parse_state *state);
 
    /**
-    * An expression of NULL means 'default'.
+    * An test value of NULL means 'default'.
     */
-   ast_expression *expression;
+   ast_expression *test_value;
 };
+
+
+class ast_case_label_list : public ast_node {
+public:
+   ast_case_label_list(void);
+   virtual void print(void) const;
+
+   virtual ir_rvalue *hir(exec_list *instructions,
+			  struct _mesa_glsl_parse_state *state);
+
+   /**
+    * A list of case labels.
+    */
+   exec_list labels;
+};
+
+
+class ast_case_statement : public ast_node {
+public:
+   ast_case_statement(ast_case_label_list *labels);
+   virtual void print(void) const;
+
+   virtual ir_rvalue *hir(exec_list *instructions,
+			  struct _mesa_glsl_parse_state *state);
+
+   ast_case_label_list *labels;
+
+   /**
+    * A list of statements.
+    */
+   exec_list stmts;
+};
+
+
+class ast_case_statement_list : public ast_node {
+public:
+   ast_case_statement_list(void);
+   virtual void print(void) const;
+
+   virtual ir_rvalue *hir(exec_list *instructions,
+			  struct _mesa_glsl_parse_state *state);
+
+   /**
+    * A list of cases.
+    */
+   exec_list cases;
+};
+
+
+class ast_switch_body : public ast_node {
+public:
+   ast_switch_body(ast_case_statement_list *stmts);
+   virtual void print(void) const;
+
+   virtual ir_rvalue *hir(exec_list *instructions,
+			  struct _mesa_glsl_parse_state *state);
+
+   ast_case_statement_list *stmts;
+};
+
 
 class ast_selection_statement : public ast_node {
 public:
@@ -653,8 +732,18 @@ public:
 
 class ast_switch_statement : public ast_node {
 public:
-   ast_expression *expression;
-   exec_list statements;
+   ast_switch_statement(ast_expression *test_expression,
+			ast_node *body);
+   virtual void print(void) const;
+
+   virtual ir_rvalue *hir(exec_list *instructions,
+			  struct _mesa_glsl_parse_state *state);
+
+   ast_expression *test_expression;
+   ast_node *body;
+
+protected:
+   void test_to_hir(exec_list *, struct _mesa_glsl_parse_state *);
 };
 
 class ast_iteration_statement : public ast_node {

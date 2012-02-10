@@ -1424,10 +1424,11 @@ _mesa_parse_nv_vertex_program(struct gl_context *ctx, GLenum dstTarget,
 	 index = _mesa_add_state_reference(program->Base.Parameters,
 					   state_tokens);
 	 assert(index == i);
+	 (void)index;
       }
       program->Base.NumParameters = program->Base.Parameters->NumParameters;
 
-      _mesa_setup_nv_temporary_count(ctx, &program->Base);
+      _mesa_setup_nv_temporary_count(&program->Base);
       _mesa_emit_nv_temp_initialization(ctx, &program->Base);
    }
    else {

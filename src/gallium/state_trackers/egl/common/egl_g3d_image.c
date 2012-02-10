@@ -37,9 +37,6 @@
 #include "egl_g3d.h"
 #include "egl_g3d_image.h"
 
-/* for struct winsys_handle */
-#include "state_tracker/drm_driver.h"
-
 /**
  * Reference and return the front left buffer of the native pixmap.
  */
@@ -205,6 +202,24 @@ egl_g3d_reference_wl_buffer(_EGLDisplay *dpy, struct wl_buffer *buffer,
 
 #endif /* EGL_WL_bind_wayland_display */
 
+#ifdef EGL_ANDROID_image_native_buffer
+
+static struct pipe_resource *
+egl_g3d_reference_android_native_buffer(_EGLDisplay *dpy,
+                                        struct ANativeWindowBuffer *buf)
+{
+   struct egl_g3d_display *gdpy = egl_g3d_display(dpy);
+   struct native_buffer nbuf;
+
+   memset(&nbuf, 0, sizeof(nbuf));
+   nbuf.type = NATIVE_BUFFER_ANDROID;
+   nbuf.u.android = buf;
+    
+   return gdpy->native->buffer->import_buffer(gdpy->native, &nbuf);
+}
+
+#endif /* EGL_ANDROID_image_native_buffer */
+
 _EGLImage *
 egl_g3d_create_image(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx,
                      EGLenum target, EGLClientBuffer buffer,
@@ -233,13 +248,19 @@ egl_g3d_create_image(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx,
 #ifdef EGL_MESA_drm_image
    case EGL_DRM_BUFFER_MESA:
       ptex = egl_g3d_reference_drm_buffer(dpy,
-            (EGLint) buffer, &gimg->base, attribs);
+            (EGLint) pointer_to_intptr(buffer), &gimg->base, attribs);
       break;
 #endif
 #ifdef EGL_WL_bind_wayland_display
    case EGL_WAYLAND_BUFFER_WL:
       ptex = egl_g3d_reference_wl_buffer(dpy,
             (struct wl_buffer *) buffer, &gimg->base, attribs);
+      break;
+#endif
+#ifdef EGL_ANDROID_image_native_buffer
+   case EGL_NATIVE_BUFFER_ANDROID:
+      ptex = egl_g3d_reference_android_native_buffer(dpy,
+            (struct ANativeWindowBuffer *) buffer);
       break;
 #endif
    default:

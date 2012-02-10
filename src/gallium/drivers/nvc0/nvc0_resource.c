@@ -21,10 +21,24 @@ nvc0_resource_from_handle(struct pipe_screen * screen,
                           const struct pipe_resource *templ,
                           struct winsys_handle *whandle)
 {
-   if (templ->target == PIPE_BUFFER)
+   if (templ->target == PIPE_BUFFER) {
       return NULL;
-   else
-      return nvc0_miptree_from_handle(screen, templ, whandle);
+   } else {
+      struct pipe_resource *res = nv50_miptree_from_handle(screen,
+                                                           templ, whandle);
+      nv04_resource(res)->vtbl = &nvc0_miptree_vtbl;
+      return res;
+   }
+}
+
+static struct pipe_surface *
+nvc0_surface_create(struct pipe_context *pipe,
+                    struct pipe_resource *pres,
+                    const struct pipe_surface *templ)
+{
+   if (unlikely(pres->target == PIPE_BUFFER))
+      return nv50_surface_from_buffer(pipe, pres, templ);
+   return nvc0_miptree_surface_new(pipe, pres, templ);
 }
 
 void
@@ -36,8 +50,8 @@ nvc0_init_resource_functions(struct pipe_context *pcontext)
    pcontext->transfer_unmap = u_transfer_unmap_vtbl;
    pcontext->transfer_destroy = u_transfer_destroy_vtbl;
    pcontext->transfer_inline_write = u_transfer_inline_write_vtbl;
-   pcontext->create_surface = nvc0_miptree_surface_new;
-   pcontext->surface_destroy = nvc0_miptree_surface_del;
+   pcontext->create_surface = nvc0_surface_create;
+   pcontext->surface_destroy = nv50_surface_destroy;
 }
 
 void

@@ -24,14 +24,19 @@ static INLINE boolean
 nouveau_buffer_allocate(struct nouveau_screen *screen,
                         struct nv04_resource *buf, unsigned domain)
 {
+   uint32_t size = buf->base.width0;
+
+   if (buf->base.bind & PIPE_BIND_CONSTANT_BUFFER)
+      size = align(size, 0x100);
+
    if (domain == NOUVEAU_BO_VRAM) {
-      buf->mm = nouveau_mm_allocate(screen->mm_VRAM, buf->base.width0,
+      buf->mm = nouveau_mm_allocate(screen->mm_VRAM, size,
                                     &buf->bo, &buf->offset);
       if (!buf->bo)
          return nouveau_buffer_allocate(screen, buf, NOUVEAU_BO_GART);
    } else
    if (domain == NOUVEAU_BO_GART) {
-      buf->mm = nouveau_mm_allocate(screen->mm_GART, buf->base.width0,
+      buf->mm = nouveau_mm_allocate(screen->mm_GART, size,
                                     &buf->bo, &buf->offset);
       if (!buf->bo)
          return FALSE;
@@ -129,8 +134,12 @@ nouveau_buffer_upload(struct nouveau_context *nv, struct nv04_resource *buf,
    uint32_t offset;
 
    if (size <= 192) {
-      nv->push_data(nv, buf->bo, buf->offset + start, buf->domain,
-                    size, buf->data + start);
+      if (buf->base.bind & PIPE_BIND_CONSTANT_BUFFER)
+         nv->push_cb(nv, buf->bo, buf->domain, buf->offset, buf->base.width0,
+                     start, size / 4, (const uint32_t *)(buf->data + start));
+      else
+         nv->push_data(nv, buf->bo, buf->offset + start, buf->domain,
+                       size, buf->data + start);
       return TRUE;
    }
 
@@ -163,7 +172,13 @@ nouveau_buffer_transfer_get(struct pipe_context *pipe,
 {
    struct nv04_resource *buf = nv04_resource(resource);
    struct nouveau_context *nv = nouveau_context(pipe);
-   struct nouveau_transfer *xfr = CALLOC_STRUCT(nouveau_transfer);
+   struct nouveau_transfer *xfr;
+
+   if (usage & PIPE_TRANSFER_MAP_PERMANENTLY) {
+      return NULL;
+   }
+
+   xfr = CALLOC_STRUCT(nouveau_transfer);
    if (!xfr)
       return NULL;
 
@@ -431,7 +446,8 @@ nouveau_buffer_migrate(struct nouveau_context *nv,
          /* keep a system memory copy of our data in case we hit a fallback */
          if (!nouveau_buffer_data_fetch(buf, buf->bo, buf->offset, size))
             return FALSE;
-         debug_printf("migrating %u KiB to VRAM\n", size / 1024);
+         if (nouveau_mesa_debug)
+            debug_printf("migrating %u KiB to VRAM\n", size / 1024);
       }
 
       offset = buf->offset;

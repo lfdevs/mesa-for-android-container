@@ -45,13 +45,13 @@ struct st_texture_image
 {
    struct gl_texture_image base;
 
-   /* These aren't stored in gl_texture_image 
+   /** Used to store texture data that doesn't fit in the patent
+    * object's mipmap buffer.
     */
-   GLuint level;
-   GLuint face;
+   GLubyte *TexData;
 
    /* If stImage->pt != NULL, image data is stored here.
-    * Else if stImage->base.Data != NULL, image is stored there.
+    * Else if stImage->TexData != NULL, image is stored there.
     * Else there is no image data.
     */
    struct pipe_resource *pt;
@@ -189,8 +189,7 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
  */
 extern GLboolean
 st_texture_match_image(const struct pipe_resource *pt,
-                       const struct gl_texture_image *image,
-                       GLuint face, GLuint level);
+                       const struct gl_texture_image *image);
 
 /* Return a pointer to an image within a texture.  Return image stride as
  * well.
@@ -231,5 +230,9 @@ st_texture_image_copy(struct pipe_context *pipe,
                       struct pipe_resource *dst, GLuint dstLevel,
                       struct pipe_resource *src, GLuint srcLevel,
                       GLuint face);
+
+
+extern struct pipe_resource *
+st_create_color_map_texture(struct gl_context *ctx);
 
 #endif

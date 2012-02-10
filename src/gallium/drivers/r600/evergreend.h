@@ -50,6 +50,8 @@
 #define EVENT_TYPE_PS_PARTIAL_FLUSH            0x10
 #define EVENT_TYPE_ZPASS_DONE                  0x15
 #define EVENT_TYPE_CACHE_FLUSH_AND_INV_EVENT   0x16
+#define EVENT_TYPE_SO_VGTSTREAMOUT_FLUSH	0x1f
+
 #define		EVENT_TYPE(x)                           ((x) << 0)
 #define		EVENT_INDEX(x)                          ((x) << 8)
                 /* 0 - any non-TS event
@@ -82,6 +84,7 @@
 #define PKT3_MEM_SEMAPHORE                     0x39
 #define PKT3_MPEG_INDEX                        0x3A
 #define PKT3_WAIT_REG_MEM                      0x3C
+#define		WAIT_REG_MEM_EQUAL		3
 #define PKT3_MEM_WRITE                         0x3D
 #define PKT3_INDIRECT_BUFFER                   0x32
 #define PKT3_CP_INTERRUPT                      0x40
@@ -118,6 +121,12 @@
 #define PKT3(op, count, predicate) (PKT_TYPE_S(3) | PKT3_IT_OPCODE_S(op) | PKT_COUNT_S(count) | PKT3_PREDICATE(predicate))
 
 /* Registers */
+#define R_0084FC_CP_STRMOUT_CNTL		     0x000084FC
+#define   S_0084FC_OFFSET_UPDATE_DONE(x)		(((x) & 0x1) << 0)
+#define R_008960_VGT_STRMOUT_BUFFER_FILLED_SIZE_0    0x008960 /* read-only */
+#define R_008964_VGT_STRMOUT_BUFFER_FILLED_SIZE_1    0x008964 /* read-only */
+#define R_008968_VGT_STRMOUT_BUFFER_FILLED_SIZE_2    0x008968 /* read-only */
+#define R_00896C_VGT_STRMOUT_BUFFER_FILLED_SIZE_3    0x00896C /* read-only */
 #define R_008C00_SQ_CONFIG                           0x00008C00
 #define   S_008C00_VC_ENABLE(x)                        (((x) & 0x1) << 0)
 #define   G_008C00_VC_ENABLE(x)                        (((x) >> 0) & 0x1)
@@ -666,13 +675,6 @@
 #define   G_028814_MULTI_PRIM_IB_ENA(x)                (((x) >> 21) & 0x1)
 #define   C_028814_MULTI_PRIM_IB_ENA                   0xFFDFFFFF
 
-#define R_028004_DB_DEPTH_VIEW                       0x028004
-#define   S_028004_SLICE_START(x)                      (((x) & 0x7FF) << 0)
-#define   G_028004_SLICE_START(x)                      (((x) >> 0) & 0x7FF)
-#define   C_028004_SLICE_START                         0xFFFFF800
-#define   S_028004_SLICE_MAX(x)                        (((x) & 0x7FF) << 13)
-#define   G_028004_SLICE_MAX(x)                        (((x) >> 13) & 0x7FF)
-#define   C_028004_SLICE_MAX                           0xFF001FFF
 #define R_028D24_DB_HTILE_SURFACE                    0x028D24
 #define   S_028D24_HTILE_WIDTH(x)                      (((x) & 0x1) << 0)
 #define   G_028D24_HTILE_WIDTH(x)                      (((x) >> 0) & 0x1)
@@ -729,6 +731,11 @@
 #define   S_028A00_WIDTH(x)                            (((x) & 0xFFFF) << 16)
 #define   G_028A00_WIDTH(x)                            (((x) >> 16) & 0xFFFF)
 #define   C_028A00_WIDTH                               0x0000FFFF
+#define R_028A0C_PA_SC_LINE_STIPPLE                  0x028A0C
+#define   S_028A0C_LINE_PATTERN(x)                     (((x) & 0xFFFF) << 0)
+#define   S_028A0C_REPEAT_COUNT(x)                     (((x) & 0xFF) << 16)
+#define   S_028A0C_PATTERN_BIT_ORDER(x)                (((x) & 0x1) << 28)
+#define   S_028A0C_AUTO_RESET_CNTL(x)                  (((x) & 0x3) << 29)
 #define R_028A40_VGT_GS_MODE                         0x028A40
 #define   S_028A40_MODE(x)                             (((x) & 0x3) << 0)
 #define   G_028A40_MODE(x)                             (((x) >> 0) & 0x3)
@@ -739,6 +746,16 @@
 #define   S_028A40_CUT_MODE(x)                         (((x) & 0x3) << 3)
 #define   G_028A40_CUT_MODE(x)                         (((x) >> 3) & 0x3)
 #define   C_028A40_CUT_MODE                            0xFFFFFFE7
+#define R_028AA8_IA_MULTI_VGT_PARAM                  0x028AA8
+#define   S_028AA8_PRIMGROUP_SIZE(x)                   (((x) & 0xFFFF) << 0)
+#define   G_028AA8_PRIMGROUP_SIZE(x)                   (((x) >> 0) & 0xFFFF)
+#define   C_028AA8_PRIMGROUP_SIZE                      0xFFFF0000
+#define   S_028AA8_PARTIAL_VS_WAVE_ON(x)               (((x) & 0x1) << 16)
+#define   G_028AA8_PARTIAL_VS_WAVE_ON(x)               (((x) >> 16) & 0x1)
+#define   C_028AA8_PARTIAL_VS_WAVE_ON                  0xFFFEFFFF
+#define   S_028AA8_SWITCH_ON_EOP(x)                    (((x) & 0x1) << 17)
+#define   G_028AA8_SWITCH_ON_EOP(x)                    (((x) >> 17) & 0x1)
+#define   C_028AA8_SWITCH_ON_EOP                       0xFFFDFFFF
 #define R_008040_WAIT_UNTIL                          0x008040
 #define   S_008040_WAIT_CP_DMA_IDLE(x)                 (((x) & 0x1) << 8)
 #define   G_008040_WAIT_CP_DMA_IDLE(x)                 (((x) >> 8) & 0x1)
@@ -1445,6 +1462,12 @@
 #define   S_028004_ZPASS_INCREMENT_DISABLE        (((x) & 0x1) << 0)
 #define   S_028004_PERFECT_ZPASS_COUNTS(x)        (((x) & 0x1) << 1)
 #define R_028008_DB_DEPTH_VIEW                       0x00028008
+#define   S_028008_SLICE_START(x)                      (((x) & 0x7FF) << 0)
+#define   G_028008_SLICE_START(x)                      (((x) >> 0) & 0x7FF)
+#define   C_028008_SLICE_START                         0xFFFFF800
+#define   S_028008_SLICE_MAX(x)                        (((x) & 0x7FF) << 13)
+#define   G_028008_SLICE_MAX(x)                        (((x) >> 13) & 0x7FF)
+#define   C_028008_SLICE_MAX                           0xFF001FFF
 #define R_02800C_DB_RENDER_OVERRIDE                  0x0002800C
 #define   V_02800C_FORCE_OFF                         0
 #define   V_02800C_FORCE_ENABLE                      1
@@ -1500,7 +1523,9 @@
 #define R_028050_DB_Z_WRITE_BASE                     0x00028050
 #define R_028054_DB_STENCIL_WRITE_BASE               0x00028054
 #define R_028140_ALU_CONST_BUFFER_SIZE_PS_0          0x00028140
+#define R_028144_ALU_CONST_BUFFER_SIZE_PS_1          0x00028144
 #define R_028180_ALU_CONST_BUFFER_SIZE_VS_0          0x00028180
+#define R_028184_ALU_CONST_BUFFER_SIZE_VS_1          0x00028184
 #define R_028200_PA_SC_WINDOW_OFFSET                 0x00028200
 #define R_02820C_PA_SC_CLIPRECT_RULE                 0x0002820C
 #define R_028210_PA_SC_CLIPRECT_0_TL                 0x00028210
@@ -1677,7 +1702,9 @@
 #define R_028924_SQ_GS_VERT_ITEMSIZE_2               0x00028924
 #define R_028928_SQ_GS_VERT_ITEMSIZE_3               0x00028928
 #define R_028940_ALU_CONST_CACHE_PS_0                0x00028940
+#define R_028944_ALU_CONST_CACHE_PS_1                0x00028944
 #define R_028980_ALU_CONST_CACHE_VS_0                0x00028980
+#define R_028984_ALU_CONST_CACHE_VS_1                0x00028984
 #define R_028A04_PA_SU_POINT_MINMAX                  0x00028A04
 #define R_028A08_PA_SU_LINE_CNTL                     0x00028A08
 #define   S_028A08_WIDTH(x)                            (((x) & 0xFFFF) << 0)
@@ -1696,13 +1723,45 @@
 #define R_028A38_VGT_GROUP_VECT_0_FMT_CNTL           0x00028A38
 #define R_028A3C_VGT_GROUP_VECT_1_FMT_CNTL           0x00028A3C
 #define R_028A48_PA_SC_MODE_CNTL_0                   0x00028A48
+#define   S_028A48_LINE_STIPPLE_ENABLE(x)              (((x) & 0x1) << 2)
 #define R_028A4C_PA_SC_MODE_CNTL_1                   0x00028A4C
+#define R_028A94_VGT_MULTI_PRIM_IB_RESET_EN          0x00028A94
+#define   S_028A94_RESET_EN(x)                         (((x) & 0x1) << 0)
+#define   G_028A94_RESET_EN(x)                         (((x) >> 0) & 0x1)
+#define   C_028A94_RESET_EN                            0xFFFFFFFE
 #define R_028AB4_VGT_REUSE_OFF                       0x00028AB4
 #define R_028AB8_VGT_VTX_CNT_EN                      0x00028AB8
 #define R_028ABC_DB_HTILE_SURFACE                    0x00028ABC
 #define R_028AC0_DB_SRESULTS_COMPARE_STATE0          0x00028AC0
 #define R_028AC4_DB_SRESULTS_COMPARE_STATE1          0x00028AC4
 #define R_028AC8_DB_PRELOAD_CONTROL                  0x00028AC8
+#define R_028AD0_VGT_STRMOUT_BUFFER_SIZE_0	     0x028AD0
+#define R_028AD4_VGT_STRMOUT_VTX_STRIDE_0	     0x028AD4
+#define R_028AD8_VGT_STRMOUT_BUFFER_BASE_0	     0x028AD8
+#define R_028ADC_VGT_STRMOUT_BUFFER_OFFSET_0	     0x028ADC
+#define R_028AE0_VGT_STRMOUT_BUFFER_SIZE_1	     0x028AE0
+#define R_028AE4_VGT_STRMOUT_VTX_STRIDE_1	     0x028AE4
+#define R_028AE8_VGT_STRMOUT_BUFFER_BASE_1	     0x028AE8
+#define R_028AEC_VGT_STRMOUT_BUFFER_OFFSET_1	     0x028AEC
+#define R_028AF0_VGT_STRMOUT_BUFFER_SIZE_2	     0x028AF0
+#define R_028AF4_VGT_STRMOUT_VTX_STRIDE_2	     0x028AF4
+#define R_028AF8_VGT_STRMOUT_BUFFER_BASE_2	     0x028AF8
+#define R_028AFC_VGT_STRMOUT_BUFFER_OFFSET_2	     0x028AFC
+#define R_028B00_VGT_STRMOUT_BUFFER_SIZE_3	     0x028B00
+#define R_028B04_VGT_STRMOUT_VTX_STRIDE_3	     0x028B04
+#define R_028B08_VGT_STRMOUT_BUFFER_BASE_3	     0x028B08
+#define R_028B0C_VGT_STRMOUT_BUFFER_OFFSET_3	     0x028B0C
+#define R_028B10_VGT_STRMOUT_BASE_OFFSET_0	     0x028B10
+#define R_028B14_VGT_STRMOUT_BASE_OFFSET_1	     0x028B14
+#define R_028B18_VGT_STRMOUT_BASE_OFFSET_2	     0x028B18
+#define R_028B1C_VGT_STRMOUT_BASE_OFFSET_3	     0x028B1C
+#define R_028B28_VGT_STRMOUT_DRAW_OPAQUE_OFFSET	     0x028B28
+#define R_028B2C_VGT_STRMOUT_DRAW_OPAQUE_BUFFER_FILLED_SIZE 0x028B2C
+#define R_028B30_VGT_STRMOUT_DRAW_OPAQUE_VERTEX_STRIDE 0x028B30
+#define R_028B44_VGT_STRMOUT_BASE_OFFSET_HI_0	     0x028B44
+#define R_028B48_VGT_STRMOUT_BASE_OFFSET_HI_1	     0x028B48
+#define R_028B4C_VGT_STRMOUT_BASE_OFFSET_HI_2	     0x028B4C
+#define R_028B50_VGT_STRMOUT_BASE_OFFSET_HI_3	     0x028B50
 #define R_028B54_VGT_SHADER_STAGES_EN                0x00028B54
 #define R_028B70_DB_ALPHA_TO_MASK                    0x00028B70
 #define R_028B78_PA_SU_POLY_OFFSET_DB_FMT_CNTL       0x00028B78
@@ -1730,7 +1789,16 @@
 #define   G_028B8C_OFFSET(x)                           (((x) >> 0) & 0xFFFFFFFF)
 #define   C_028B8C_OFFSET                              0x00000000
 #define R_028B94_VGT_STRMOUT_CONFIG                  0x00028B94
+#define   S_028B94_STREAMOUT_0_EN(x)			(((x) & 0x1) << 0)
+#define   S_028B94_STREAMOUT_1_EN(x)			(((x) & 0x1) << 1)
+#define   S_028B94_STREAMOUT_2_EN(x)			(((x) & 0x1) << 2)
+#define   S_028B94_STREAMOUT_3_EN(x)			(((x) & 0x1) << 3)
+#define   S_028B94_RAST_STREAM(x)			(((x) & 0x7) << 4)
 #define R_028B98_VGT_STRMOUT_BUFFER_CONFIG           0x00028B98
+#define   S_028B98_STREAM_0_BUFFER_EN(x)		(((x) & 0xf) << 0)
+#define   S_028B98_STREAM_1_BUFFER_EN(x)		(((x) & 0xf) << 4)
+#define   S_028B98_STREAM_2_BUFFER_EN(x)		(((x) & 0xf) << 8)
+#define   S_028B98_STREAM_3_BUFFER_EN(x)		(((x) & 0xf) << 12)
 #define R_028C00_PA_SC_LINE_CNTL                     0x00028C00
 #define R_028C04_PA_SC_AA_CONFIG                     0x00028C04
 #define R_028C08_PA_SU_VTX_CNTL                      0x00028C08

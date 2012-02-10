@@ -69,26 +69,30 @@ draw_vs_set_constants(struct draw_context *draw,
       if (size > draw->vs.const_storage_size[slot]) {
          if (draw->vs.aligned_constant_storage[slot]) {
             align_free((void *)draw->vs.aligned_constant_storage[slot]);
+            draw->vs.const_storage_size[slot] = 0;
          }
          draw->vs.aligned_constant_storage[slot] =
             align_malloc(size, alignment);
+         if (draw->vs.aligned_constant_storage[slot]) {
+            draw->vs.const_storage_size[slot] = size;
+         }
       }
       assert(constants);
-      memcpy((void *)draw->vs.aligned_constant_storage[slot],
-             constants,
-             size);
+      if (draw->vs.aligned_constant_storage[slot]) {
+         memcpy((void *)draw->vs.aligned_constant_storage[slot],
+                constants,
+                size);
+      }
       constants = draw->vs.aligned_constant_storage[slot];
    }
 
    draw->vs.aligned_constants[slot] = constants;
-   draw_vs_aos_machine_constants(draw->vs.aos_machine, slot, constants);
 }
 
 
 void draw_vs_set_viewport( struct draw_context *draw,
                            const struct pipe_viewport_state *viewport )
 {
-   draw_vs_aos_machine_viewport( draw->vs.aos_machine, viewport );
 }
 
 
@@ -103,22 +107,8 @@ draw_create_vertex_shader(struct draw_context *draw,
       tgsi_dump(shader->tokens, 0);
    }
 
-   if (!draw->pt.middle.llvm) {
-#if 0
-/* these paths don't support vertex clamping
- * TODO: either add it, or remove them completely
- * use LLVM instead if you want performance
- * use exec instead if you want debugging/more correctness
- */
-#if defined(PIPE_ARCH_X86)
-      vs = draw_create_vs_sse( draw, shader );
-#elif defined(PIPE_ARCH_PPC)
-      vs = draw_create_vs_ppc( draw, shader );
-#endif
-#endif
-   }
 #if HAVE_LLVM
-   else {
+   if (draw->pt.middle.llvm) {
       vs = draw_create_vs_llvm(draw, shader);
    }
 #endif
@@ -130,6 +120,7 @@ draw_create_vertex_shader(struct draw_context *draw,
    if (vs)
    {
       uint i;
+      bool found_clipvertex = FALSE;
       for (i = 0; i < vs->info.num_outputs; i++) {
          if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_POSITION &&
              vs->info.output_semantic_index[i] == 0)
@@ -137,7 +128,19 @@ draw_create_vertex_shader(struct draw_context *draw,
          else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_EDGEFLAG &&
              vs->info.output_semantic_index[i] == 0)
             vs->edgeflag_output = i;
+         else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_CLIPVERTEX &&
+                  vs->info.output_semantic_index[i] == 0) {
+            found_clipvertex = TRUE;
+            vs->clipvertex_output = i;
+         } else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_CLIPDIST) {
+            if (vs->info.output_semantic_index[i] == 0)
+               vs->clipdistance_output[0] = i;
+            else
+               vs->clipdistance_output[1] = i;
+         }
       }
+      if (!found_clipvertex)
+         vs->clipvertex_output = vs->position_output;
    }
 
    assert(vs);
@@ -157,6 +160,9 @@ draw_bind_vertex_shader(struct draw_context *draw,
       draw->vs.num_vs_outputs = dvs->info.num_outputs;
       draw->vs.position_output = dvs->position_output;
       draw->vs.edgeflag_output = dvs->edgeflag_output;
+      draw->vs.clipvertex_output = dvs->clipvertex_output;
+      draw->vs.clipdistance_output[0] = dvs->clipdistance_output[0];
+      draw->vs.clipdistance_output[1] = dvs->clipdistance_output[1];
       dvs->prepare( dvs, draw );
    }
    else {
@@ -199,12 +205,6 @@ draw_vs_init( struct draw_context *draw )
    if (!draw->vs.fetch_cache) 
       return FALSE;
 
-   draw->vs.aos_machine = draw_vs_aos_machine();
-#ifdef PIPE_ARCH_X86
-   if (!draw->vs.aos_machine)
-      return FALSE;
-#endif
-      
    return TRUE;
 }
 
@@ -218,9 +218,6 @@ draw_vs_destroy( struct draw_context *draw )
 
    if (draw->vs.emit_cache)
       translate_cache_destroy(draw->vs.emit_cache);
-
-   if (draw->vs.aos_machine)
-      draw_vs_aos_machine_destroy(draw->vs.aos_machine);
 
    for (i = 0; i < PIPE_MAX_CONSTANT_BUFFERS; i++) {
       if (draw->vs.aligned_constant_storage[i]) {

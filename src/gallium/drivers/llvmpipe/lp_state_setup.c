@@ -351,9 +351,9 @@ load_attribute(struct gallivm_state *gallivm,
    }
 
    if (key->twoside) {
-      if (vert_attr == key->color_slot && key->bcolor_slot != ~0)
+      if (vert_attr == key->color_slot && key->bcolor_slot >= 0)
          lp_twoside(gallivm, args, key, key->bcolor_slot);
-      else if (vert_attr == key->spec_slot && key->bspec_slot != ~0)
+      else if (vert_attr == key->spec_slot && key->bspec_slot >= 0)
          lp_twoside(gallivm, args, key, key->bspec_slot);
    }
 }
@@ -556,7 +556,7 @@ finalize_function(struct gallivm_state *gallivm,
 
    lp_func_delete_body(function);
 
-   return f;
+   return (lp_jit_setup_triangle) pointer_to_func(f);
 }
 
 /* XXX: Generic code:
@@ -771,10 +771,16 @@ lp_make_setup_variant_key(struct llvmpipe_context *lp,
    key->twoside = lp->rasterizer->light_twoside;
    key->size = Offset(struct lp_setup_variant_key,
 		      inputs[key->num_inputs]);
-   key->color_slot = lp->color_slot[0];
+
+   key->color_slot  = lp->color_slot [0];
    key->bcolor_slot = lp->bcolor_slot[0];
-   key->spec_slot = lp->color_slot[1];
-   key->bspec_slot = lp->bcolor_slot[1];
+   key->spec_slot   = lp->color_slot [1];
+   key->bspec_slot  = lp->bcolor_slot[1];
+   assert(key->color_slot  == lp->color_slot [0]);
+   assert(key->bcolor_slot == lp->bcolor_slot[0]);
+   assert(key->spec_slot   == lp->color_slot [1]);
+   assert(key->bspec_slot  == lp->bcolor_slot[1]);
+
    key->units = (float) (lp->rasterizer->offset_units * lp->mrd);
    key->scale = lp->rasterizer->offset_scale;
    key->pad = 0;
@@ -831,7 +837,13 @@ cull_setup_variants(struct llvmpipe_context *lp)
    llvmpipe_finish(pipe, __FUNCTION__);
 
    for (i = 0; i < LP_MAX_SETUP_VARIANTS / 4; i++) {
-      struct lp_setup_variant_list_item *item = last_elem(&lp->setup_variants_list);
+      struct lp_setup_variant_list_item *item;
+      if (is_empty_list(&lp->setup_variants_list)) {
+         break;
+      }
+      item = last_elem(&lp->setup_variants_list);
+      assert(item);
+      assert(item->base);
       remove_setup_variant(lp, item->base);
    }
 }
@@ -868,10 +880,11 @@ llvmpipe_update_setup(struct llvmpipe_context *lp)
       }
 
       variant = generate_setup_variant(lp->gallivm, key, lp);
-      insert_at_head(&lp->setup_variants_list, &variant->list_item_global);
-      lp->nr_setup_variants++;
-
-      llvmpipe_variant_count++;
+      if (variant) {
+         insert_at_head(&lp->setup_variants_list, &variant->list_item_global);
+         lp->nr_setup_variants++;
+         llvmpipe_variant_count++;
+      }
    }
 
    lp_setup_set_setup_variant(lp->setup,

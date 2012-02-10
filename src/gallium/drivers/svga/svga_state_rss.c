@@ -24,6 +24,7 @@
  **********************************************************/
 
 #include "util/u_inlines.h"
+#include "util/u_memory.h"
 #include "pipe/p_defines.h"
 #include "util/u_math.h"
 
@@ -40,6 +41,7 @@ struct rs_queue {
 
 #define EMIT_RS(svga, value, token, fail)                       \
 do {                                                            \
+   assert(SVGA3D_RS_##token < Elements(svga->state.hw_draw.rs)); \
    if (svga->state.hw_draw.rs[SVGA3D_RS_##token] != value) {    \
       svga_queue_rs( &queue, SVGA3D_RS_##token, value );        \
       svga->state.hw_draw.rs[SVGA3D_RS_##token] = value;        \
@@ -49,6 +51,7 @@ do {                                                            \
 #define EMIT_RS_FLOAT(svga, fvalue, token, fail)                \
 do {                                                            \
    unsigned value = fui(fvalue);                                \
+   assert(SVGA3D_RS_##token < Elements(svga->state.hw_draw.rs)); \
    if (svga->state.hw_draw.rs[SVGA3D_RS_##token] != value) {    \
       svga_queue_rs( &queue, SVGA3D_RS_##token, value );        \
       svga->state.hw_draw.rs[SVGA3D_RS_##token] = value;        \
@@ -217,6 +220,7 @@ static int emit_rss( struct svga_context *svga,
       /* XXX still need to set this? */
       EMIT_RS_FLOAT( svga, 0.0, POINTSIZEMIN, fail );
       EMIT_RS_FLOAT( svga, SVGA_MAX_POINTSIZE, POINTSIZEMAX, fail );
+      EMIT_RS( svga, curr->pointsprite, POINTSPRITEENABLE, fail);
    }
 
    if (dirty & (SVGA_NEW_RAST | SVGA_NEW_FRAME_BUFFER | SVGA_NEW_NEED_PIPELINE))
@@ -240,9 +244,9 @@ static int emit_rss( struct svga_context *svga,
       EMIT_RS_FLOAT( svga, bias, DEPTHBIAS, fail );
    }
 
-   if (dirty & SVGA_NEW_CLIP) {
-      /* the number of clip planes is how many planes to enable */
-      unsigned enabled = (1 << svga->curr.clip.nr) - 1;
+   if (dirty & SVGA_NEW_RAST) {
+      /* bitmask of the enabled clip planes */
+      unsigned enabled = svga->curr.rast->templ.clip_plane_enable;
       EMIT_RS( svga, enabled, CLIPPLANEENABLE, fail );
    }
 
@@ -281,7 +285,6 @@ struct svga_tracked_state svga_hw_rss =
 
    (SVGA_NEW_BLEND |
     SVGA_NEW_BLEND_COLOR |
-    SVGA_NEW_CLIP |
     SVGA_NEW_DEPTH_STENCIL |
     SVGA_NEW_STENCIL_REF |
     SVGA_NEW_RAST |

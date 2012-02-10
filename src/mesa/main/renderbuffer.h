@@ -42,60 +42,6 @@ _mesa_new_renderbuffer(struct gl_context *ctx, GLuint name);
 extern void
 _mesa_delete_renderbuffer(struct gl_renderbuffer *rb);
 
-
-extern struct gl_renderbuffer *
-_mesa_new_soft_renderbuffer(struct gl_context *ctx, GLuint name);
-
-extern void
-_mesa_set_renderbuffer_accessors(struct gl_renderbuffer *rb);
-
-extern GLboolean
-_mesa_soft_renderbuffer_storage(struct gl_context *ctx, struct gl_renderbuffer *rb,
-                                GLenum internalFormat,
-                                GLuint width, GLuint height);
-
-extern GLboolean
-_mesa_add_color_renderbuffers(struct gl_context *ctx, struct gl_framebuffer *fb,
-                              GLuint rgbBits, GLuint alphaBits,
-                              GLboolean frontLeft, GLboolean backLeft,
-                              GLboolean frontRight, GLboolean backRight);
-
-extern GLboolean
-_mesa_add_alpha_renderbuffers(struct gl_context *ctx, struct gl_framebuffer *fb,
-                              GLuint alphaBits,
-                              GLboolean frontLeft, GLboolean backLeft,
-                              GLboolean frontRight, GLboolean backRight);
-
-extern void
-_mesa_copy_soft_alpha_renderbuffers(struct gl_context *ctx, struct gl_framebuffer *fb);
-
-extern GLboolean
-_mesa_add_depth_renderbuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
-                             GLuint depthBits);
-
-extern GLboolean
-_mesa_add_stencil_renderbuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
-                               GLuint stencilBits);
-
-
-extern GLboolean
-_mesa_add_accum_renderbuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
-                             GLuint redBits, GLuint greenBits,
-                             GLuint blueBits, GLuint alphaBits);
-
-extern GLboolean
-_mesa_add_aux_renderbuffers(struct gl_context *ctx, struct gl_framebuffer *fb,
-                            GLuint bits, GLuint numBuffers);
-
-extern void
-_mesa_add_soft_renderbuffers(struct gl_framebuffer *fb,
-                             GLboolean color,
-                             GLboolean depth,
-                             GLboolean stencil,
-                             GLboolean accum,
-                             GLboolean alpha,
-                             GLboolean aux);
-
 extern void
 _mesa_add_renderbuffer(struct gl_framebuffer *fb,
                        gl_buffer_index bufferName, struct gl_renderbuffer *rb);
@@ -105,8 +51,17 @@ _mesa_remove_renderbuffer(struct gl_framebuffer *fb,
                           gl_buffer_index bufferName);
 
 extern void
+_mesa_reference_renderbuffer_(struct gl_renderbuffer **ptr,
+                              struct gl_renderbuffer *rb);
+
+static inline void
 _mesa_reference_renderbuffer(struct gl_renderbuffer **ptr,
-                             struct gl_renderbuffer *rb);
+                             struct gl_renderbuffer *rb)
+{
+   if (*ptr != rb)
+      _mesa_reference_renderbuffer_(ptr, rb);
+}
+      
 
 
 #endif /* RENDERBUFFER_H */

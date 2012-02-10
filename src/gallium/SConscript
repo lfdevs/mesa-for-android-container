@@ -11,21 +11,19 @@ SConscript('auxiliary/SConscript')
 #
 
 SConscript([
-    'drivers/failover/SConscript', 
     'drivers/galahad/SConscript',
-    'drivers/identity/SConscript', 
-    'drivers/llvmpipe/SConscript', 
+    'drivers/identity/SConscript',
+    'drivers/llvmpipe/SConscript',
     'drivers/rbug/SConscript',
     'drivers/softpipe/SConscript',
-    'drivers/svga/SConscript', 
-    'drivers/trace/SConscript', 
+    'drivers/svga/SConscript',
+    'drivers/trace/SConscript',
 ])
 
 if not env['msvc']:
     # These drivers do not build on MSVC compilers
     SConscript([
-        'drivers/i915/SConscript', 
-        'drivers/i965/SConscript',
+        'drivers/i915/SConscript',
         'drivers/r300/SConscript',
     ])
 
@@ -55,7 +53,8 @@ SConscript('winsys/sw/null/SConscript')
 
 if not env['embedded']:
     SConscript('state_trackers/vega/SConscript')
-    SConscript('state_trackers/egl/SConscript')
+    if env['platform'] not in ['darwin']:
+        SConscript('state_trackers/egl/SConscript')
 
     if env['x11']:
         SConscript('state_trackers/glx/xlib/SConscript')
@@ -84,9 +83,10 @@ SConscript([
 ])
 
 if not env['embedded']:
-    SConscript([
-        'targets/egl-static/SConscript'
-    ])
+    if env['platform'] not in ['darwin']:
+        SConscript([
+            'targets/egl-static/SConscript'
+        ])
 
     if env['x11']:
         SConscript([
@@ -110,7 +110,6 @@ if not env['embedded']:
         if env['drm_intel']:
             SConscript([
                 'targets/dri-i915/SConscript',
-                'targets/dri-i965/SConscript',
             ])
         if env['drm_radeon']:
             SConscript([
@@ -121,10 +120,8 @@ if not env['embedded']:
     if env['xorg'] and env['drm']:
         SConscript([
             #'targets/xorg-i915/SConscript',
-            #'targets/xorg-i965/SConscript',
             #'targets/xorg-nouveau/SConscript',
             #'targets/xorg-radeon/SConscript',
-            'targets/xorg-vmwgfx/SConscript',
         ])
 
 

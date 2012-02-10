@@ -90,6 +90,12 @@ struct tgsi_sampler
                        const float c0[QUAD_SIZE],
                        enum tgsi_sampler_control control,
                        float rgba[NUM_CHANNELS][QUAD_SIZE]);
+   void (*get_dims)(struct tgsi_sampler *sampler, int level,
+		    int dims[4]);
+   void (*get_texel)(struct tgsi_sampler *sampler, const int i[QUAD_SIZE],
+		     const int j[QUAD_SIZE], const int k[QUAD_SIZE],
+		     const int lod[QUAD_SIZE], const int8_t offset[3],
+		     float rgba[NUM_CHANNELS][QUAD_SIZE]);
 };
 
 #define TGSI_EXEC_NUM_TEMPS       128
@@ -233,7 +239,7 @@ struct tgsi_exec_machine
 
    /* System values */
    unsigned                      SysSemanticToIndex[TGSI_SEMANTIC_COUNT];
-   float                         SystemValue[TGSI_MAX_MISC_INPUTS][4];
+   union tgsi_exec_channel       SystemValue[TGSI_MAX_MISC_INPUTS];
 
    struct tgsi_exec_vector       *Addrs;
    struct tgsi_exec_vector       *Predicates;
@@ -257,7 +263,7 @@ struct tgsi_exec_machine
    const struct tgsi_interp_coef *InterpCoefs;
    struct tgsi_exec_vector       QuadPos;
    float                         Face;    /**< +1 if front facing, -1 if back facing */
-
+   bool                          flatshade_color;
    /* Conditional execution masks */
    uint CondMask;  /**< For IF/ELSE/ENDIF */
    uint LoopMask;  /**< For BGNLOOP/ENDLOOP */
@@ -400,6 +406,10 @@ tgsi_exec_get_shader_param(enum pipe_shader_cap param)
       return 1;
    case PIPE_SHADER_CAP_SUBROUTINES:
       return 1;
+   case PIPE_SHADER_CAP_INTEGERS:
+      return 1;
+   case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+      return PIPE_MAX_SAMPLERS;
    default:
       return 0;
    }

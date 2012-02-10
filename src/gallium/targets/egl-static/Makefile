@@ -63,6 +63,9 @@ endif
 ifneq ($(findstring fbdev, $(EGL_PLATFORMS)),)
 egl_LIBS += $(TOP)/src/gallium/winsys/sw/fbdev/libfbdev.a
 endif
+ifneq ($(findstring null, $(EGL_PLATFORMS)),)
+egl_LIBS += $(TOP)/src/gallium/winsys/sw/null/libws_null.a
+endif
 
 # st/mesa
 ifneq ($(filter $(GL_LIB), $(EGL_CLIENT_APIS)),)
@@ -93,16 +96,6 @@ egl_LIBS += \
 egl_SYS += -ldrm_intel
 endif
 
-# i965
-ifneq ($(findstring i965/drm,$(GALLIUM_WINSYS_DIRS)),)
-egl_CPPFLAGS += -D_EGL_PIPE_I995=1
-egl_LIBS += \
-	$(TOP)/src/gallium/winsys/i965/drm/libi965drm.a \
-	$(TOP)/src/gallium/drivers/i965/libi965.a \
-	$(TOP)/src/gallium/winsys/sw/wrapper/libwsw.a
-egl_SYS += -ldrm_intel
-endif
-
 # nouveau
 ifneq ($(findstring nouveau/drm,$(GALLIUM_WINSYS_DIRS)),)
 egl_CPPFLAGS += -D_EGL_PIPE_NOUVEAU=1
@@ -117,20 +110,22 @@ endif
 
 # r300
 ifneq ($(findstring radeon/drm,$(GALLIUM_WINSYS_DIRS)),)
+ifneq ($(findstring r300,$(GALLIUM_DRIVERS_DIRS)),)
 egl_CPPFLAGS += -D_EGL_PIPE_R300=1
 egl_LIBS += \
 	$(TOP)/src/gallium/winsys/radeon/drm/libradeonwinsys.a \
 	$(TOP)/src/gallium/drivers/r300/libr300.a
-egl_SYS += -ldrm_radeon
+endif
 endif
 
 # r600
-ifneq ($(findstring r600/drm,$(GALLIUM_WINSYS_DIRS)),)
+ifneq ($(findstring radeon/drm,$(GALLIUM_WINSYS_DIRS)),)
+ifneq ($(findstring r600,$(GALLIUM_DRIVERS_DIRS)),)
 egl_CPPFLAGS += -D_EGL_PIPE_R600=1
 egl_LIBS += \
-	$(TOP)/src/gallium/winsys/r600/drm/libr600winsys.a \
+	$(TOP)/src/gallium/winsys/radeon/drm/libradeonwinsys.a \
 	$(TOP)/src/gallium/drivers/r600/libr600.a
-egl_SYS += -ldrm_radeon
+endif
 endif
 
 # vmwgfx

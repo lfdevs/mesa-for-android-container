@@ -29,8 +29,8 @@
 #include "main/bufferobj.h"
 #include "main/enums.h"
 #include "main/image.h"
+#include "main/readpix.h"
 #include "main/state.h"
-#include "swrast/swrast.h"
 
 #include "radeon_buffer_objects.h"
 #include "radeon_common_context.h"
@@ -105,11 +105,11 @@ do_blit_readpixels(struct gl_context * ctx,
     }
 
     if (dst_format == MESA_FORMAT_NONE ||
-        !radeon->vtbl.check_blit(dst_format) || !radeon->vtbl.blit) {
+        !radeon->vtbl.check_blit(dst_format, rrb->pitch / rrb->cpp) || !radeon->vtbl.blit) {
         return GL_FALSE;
     }
 
-    if (ctx->_ImageTransferState || ctx->Color._LogicOpEnabled) {
+    if (ctx->_ImageTransferState || ctx->Color.ColorLogicOpEnabled) {
         return GL_FALSE;
     }
 
@@ -128,7 +128,7 @@ do_blit_readpixels(struct gl_context * ctx,
     }
     assert(x >= 0 && y >= 0);
 
-    aligned_rowstride = get_texture_image_row_stride(radeon, dst_format, dst_rowstride, 0);
+    aligned_rowstride = get_texture_image_row_stride(radeon, dst_format, dst_rowstride, 0, GL_TEXTURE_2D);
     dst_rowstride *= _mesa_get_format_bytes(dst_format);
     if (_mesa_is_bufferobj(pack->BufferObj) && aligned_rowstride != dst_rowstride)
         return GL_FALSE;
@@ -150,17 +150,17 @@ do_blit_readpixels(struct gl_context * ctx,
     /* Disable source Y flipping for FBOs */
     flip_y = (ctx->ReadBuffer->Name == 0);
     if (pack->Invert) {
-        y = rrb->base.Height - height - y;
+        y = rrb->base.Base.Height - height - y;
         flip_y = !flip_y;
     }
 
     if (radeon->vtbl.blit(ctx,
                           rrb->bo,
                           rrb->draw_offset,
-                          rrb->base.Format,
+                          rrb->base.Base.Format,
                           rrb->pitch / rrb->cpp,
-                          rrb->base.Width,
-                          rrb->base.Height,
+                          rrb->base.Base.Width,
+                          rrb->base.Base.Height,
                           x,
                           y,
                           dst_buffer,
@@ -205,12 +205,10 @@ radeonReadPixels(struct gl_context * ctx,
     if (do_blit_readpixels(ctx, x, y, width, height, format, type, pack, pixels))
         return;
 
-    /* Update Mesa state before calling down into _swrast_ReadPixels, as
-     * the spans code requires the computed buffer states to be up to date,
-     * but _swrast_ReadPixels only updates Mesa state after setting up
-     * the spans code.
+    /* Update Mesa state before calling _mesa_readpixels().
+     * XXX this may not be needed since ReadPixels no longer uses the
+     * span code.
      */
-
     radeon_print(RADEON_FALLBACKS, RADEON_NORMAL,
                  "Falling back to sw for ReadPixels (format %s, type %s)\n",
                  _mesa_lookup_enum_by_nr(format), _mesa_lookup_enum_by_nr(type));
@@ -218,5 +216,5 @@ radeonReadPixels(struct gl_context * ctx,
     if (ctx->NewState)
         _mesa_update_state(ctx);
 
-    _swrast_ReadPixels(ctx, x, y, width, height, format, type, pack, pixels);
+    _mesa_readpixels(ctx, x, y, width, height, format, type, pack, pixels);
 }

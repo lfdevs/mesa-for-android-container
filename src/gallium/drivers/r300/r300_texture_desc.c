@@ -206,8 +206,8 @@ static unsigned r300_texture_get_nblocksy(struct r300_resource *tex,
 }
 
 /* Get a width in pixels from a stride in bytes. */
-static unsigned stride_to_width(enum pipe_format format,
-                                unsigned stride_in_bytes)
+unsigned r300_stride_to_width(enum pipe_format format,
+                              unsigned stride_in_bytes)
 {
     return (stride_in_bytes / util_format_get_blocksize(format)) *
             util_format_get_blockwidth(format);
@@ -261,7 +261,6 @@ static void r300_setup_miptree(struct r300_screen *screen,
         tex->tex.size_in_bytes = tex->tex.offset_in_bytes[i] + size;
         tex->tex.layer_size_in_bytes[i] = layer_size;
         tex->tex.stride_in_bytes[i] = stride;
-        tex->tex.stride_in_pixels[i] = stride_to_width(tex->b.b.b.format, stride);
         tex->tex.cbzb_allowed[i] = tex->tex.cbzb_allowed[i] && aligned_for_cbzb;
 
         SCREEN_DBG(screen, DBG_TEXALLOC, "r300: Texture miptree: Level %d "
@@ -277,7 +276,7 @@ static void r300_setup_flags(struct r300_resource *tex)
     tex->tex.uses_stride_addressing =
         !util_is_power_of_two(tex->b.b.b.width0) ||
         (tex->tex.stride_in_bytes_override &&
-         stride_to_width(tex->b.b.b.format,
+         r300_stride_to_width(tex->b.b.b.format,
                          tex->tex.stride_in_bytes_override) != tex->b.b.b.width0);
 
     tex->tex.is_npot =
@@ -360,15 +359,17 @@ static void r300_setup_hyperz_properties(struct r300_screen *screen,
         unsigned i, pipes;
 
         if (screen->caps.family == CHIP_FAMILY_RV530) {
-            pipes = screen->caps.num_z_pipes;
+            pipes = screen->info.r300_num_z_pipes;
         } else {
-            pipes = screen->caps.num_frag_pipes;
+            pipes = screen->info.r300_num_gb_pipes;
         }
 
         for (i = 0; i <= tex->b.b.b.last_level; i++) {
             unsigned zcomp_numdw, zcompsize, hiz_numdw, stride, height;
 
-            stride = align(tex->tex.stride_in_pixels[i], 16);
+            stride = r300_stride_to_width(tex->b.b.b.format,
+                                          tex->tex.stride_in_bytes[i]);
+            stride = align(stride, 16);
             height = u_minify(tex->b.b.b.height0, i);
 
             /* The 8x8 compression mode needs macrotiling. */
@@ -467,7 +468,7 @@ static void r300_tex_print_info(struct r300_resource *tex,
             func,
             tex->tex.macrotile[0] ? "YES" : " NO",
             tex->tex.microtile ? "YES" : " NO",
-            tex->tex.stride_in_pixels[0],
+            r300_stride_to_width(tex->b.b.b.format, tex->tex.stride_in_bytes[0]),
             tex->b.b.b.width0, tex->b.b.b.height0, tex->b.b.b.depth0,
             tex->b.b.b.last_level, tex->tex.size_in_bytes,
             util_format_short_name(tex->b.b.b.format));
@@ -507,32 +508,26 @@ void r300_texture_desc_init(struct r300_screen *rscreen,
 
     /* Setup the miptree description. */
     r300_setup_miptree(rscreen, tex, TRUE);
-    /* If the required buffer size is larger the given max size,
+    /* If the required buffer size is larger than the given max size,
      * try again without the alignment for the CBZB clear. */
-    if (tex->buf_size && tex->tex.size_in_bytes > tex->buf_size) {
+    if (tex->buf && tex->tex.size_in_bytes > tex->buf->size) {
         r300_setup_miptree(rscreen, tex, FALSE);
-    }
 
-    r300_setup_hyperz_properties(rscreen, tex);
-
-    if (tex->buf_size) {
         /* Make sure the buffer we got is large enough. */
-        if (tex->tex.size_in_bytes > tex->buf_size) {
+        if (tex->tex.size_in_bytes > tex->buf->size) {
             fprintf(stderr,
                 "r300: I got a pre-allocated buffer to use it as a texture "
                 "storage, but the buffer is too small. I'll use the buffer "
                 "anyway, because I can't crash here, but it's dangerous. "
                 "This can be a DDX bug. Got: %iB, Need: %iB, Info:\n",
-                tex->buf_size, tex->tex.size_in_bytes);
+                tex->buf->size, tex->tex.size_in_bytes);
             r300_tex_print_info(tex, "texture_desc_init");
             /* Ooops, what now. Apps will break if we fail this,
              * so just pretend everything's okay. */
         }
-
-        tex->tex.buffer_size_in_bytes = tex->buf_size;
-    } else {
-        tex->tex.buffer_size_in_bytes = tex->tex.size_in_bytes;
     }
+
+    r300_setup_hyperz_properties(rscreen, tex);
 
     if (SCREEN_DBG_ON(rscreen, DBG_TEX))
         r300_tex_print_info(tex, "texture_desc_init");

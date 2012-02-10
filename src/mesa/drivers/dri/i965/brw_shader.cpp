@@ -24,10 +24,11 @@
 extern "C" {
 #include "main/macros.h"
 #include "brw_context.h"
+#include "brw_vs.h"
 }
 #include "brw_fs.h"
-#include "../glsl/ir_optimization.h"
-#include "../glsl/ir_print_visitor.h"
+#include "glsl/ir_optimization.h"
+#include "glsl/ir_print_visitor.h"
 
 struct gl_shader *
 brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
@@ -64,21 +65,75 @@ brw_new_shader_program(struct gl_context *ctx, GLuint name)
 bool
 brw_shader_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
 {
-   if (!brw_fs_precompile(ctx, prog))
+   struct brw_context *brw = brw_context(ctx);
+
+   if (brw->precompile && !brw_fs_precompile(ctx, prog))
+      return false;
+
+   if (!brw_vs_precompile(ctx, prog))
       return false;
 
    return true;
 }
 
 GLboolean
-brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
+brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 {
    struct brw_context *brw = brw_context(ctx);
    struct intel_context *intel = &brw->intel;
+   unsigned int stage;
 
-   struct brw_shader *shader =
-      (struct brw_shader *)prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
-   if (shader != NULL) {
+   for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {
+      struct brw_shader *shader =
+	 (struct brw_shader *)shProg->_LinkedShaders[stage];
+      static const GLenum targets[] = {
+	 GL_VERTEX_PROGRAM_ARB,
+	 GL_FRAGMENT_PROGRAM_ARB,
+	 GL_GEOMETRY_PROGRAM_NV
+      };
+
+      if (!shader)
+	 continue;
+
+      struct gl_program *prog =
+	 ctx->Driver.NewProgram(ctx, targets[stage], shader->base.Name);
+      if (!prog)
+	return NULL;
+      prog->Parameters = _mesa_new_parameter_list();
+
+      _mesa_generate_parameters_list_for_uniforms(shProg, &shader->base,
+						  prog->Parameters);
+
+      if (stage == 0) {
+	 struct gl_vertex_program *vp = (struct gl_vertex_program *) prog;
+	 vp->UsesClipDistance = shProg->Vert.UsesClipDistance;
+      }
+
+      if (stage == 1) {
+	 class uses_kill_visitor : public ir_hierarchical_visitor {
+	 public:
+	    uses_kill_visitor() : uses_kill(false)
+	    {
+	       /* empty */
+	    }
+
+	    virtual ir_visitor_status visit_enter(class ir_discard *ir)
+	    {
+	       this->uses_kill = true;
+	       return visit_stop;
+	    }
+
+	    bool uses_kill;
+	 };
+
+	 uses_kill_visitor v;
+
+	 v.run(shader->base.ir);
+
+	 struct gl_fragment_program *fp = (struct gl_fragment_program *) prog;
+	 fp->UsesKill = v.uses_kill;
+      }
+
       void *mem_ctx = ralloc_context(NULL);
       bool progress;
 
@@ -106,18 +161,22 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       brw_do_cubemap_normalize(shader->ir);
       lower_noise(shader->ir);
       lower_quadop_vector(shader->ir, false);
+
+      bool input = true;
+      bool output = stage == MESA_SHADER_FRAGMENT;
+      bool temp = stage == MESA_SHADER_FRAGMENT;
+      bool uniform = stage == MESA_SHADER_FRAGMENT;
+
       lower_variable_index_to_cond_assign(shader->ir,
-					  GL_TRUE, /* input */
-					  GL_TRUE, /* output */
-					  GL_TRUE, /* temp */
-					  GL_TRUE /* uniform */
-					  );
+					  input, output, temp, uniform);
 
       do {
 	 progress = false;
 
-	 brw_do_channel_expressions(shader->ir);
-	 brw_do_vector_splitting(shader->ir);
+	 if (stage == MESA_SHADER_FRAGMENT) {
+	    brw_do_channel_expressions(shader->ir);
+	    brw_do_vector_splitting(shader->ir);
+	 }
 
 	 progress = do_lower_jumps(shader->ir, true, true,
 				   true, /* main return */
@@ -125,22 +184,59 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 				   false /* loops */
 				   ) || progress;
 
-	 progress = do_common_optimization(shader->ir, true, 32) || progress;
+	 progress = do_common_optimization(shader->ir, true, true, 32)
+	   || progress;
       } while (progress);
+
+      /* Make a pass over the IR to add state references for any built-in
+       * uniforms that are used.  This has to be done now (during linking).
+       * Code generation doesn't happen until the first time this shader is
+       * used for rendering.  Waiting until then to generate the parameters is
+       * too late.  At that point, the values for the built-in informs won't
+       * get sent to the shader.
+       */
+      foreach_list(node, shader->ir) {
+	 ir_variable *var = ((ir_instruction *) node)->as_variable();
+
+	 if ((var == NULL) || (var->mode != ir_var_uniform)
+	     || (strncmp(var->name, "gl_", 3) != 0))
+	    continue;
+
+	 const ir_state_slot *const slots = var->state_slots;
+	 assert(var->state_slots != NULL);
+
+	 for (unsigned int i = 0; i < var->num_state_slots; i++) {
+	    _mesa_add_state_reference(prog->Parameters,
+				      (gl_state_index *) slots[i].tokens);
+	 }
+      }
 
       validate_ir_tree(shader->ir);
 
       reparent_ir(shader->ir, shader->ir);
       ralloc_free(mem_ctx);
+
+      do_set_program_inouts(shader->ir, prog,
+			    shader->base.Type == GL_FRAGMENT_SHADER);
+
+      prog->SamplersUsed = shader->base.active_samplers;
+      _mesa_update_shader_textures_used(shProg, prog);
+
+      _mesa_reference_program(ctx, &shader->base.Program, prog);
+
+      /* This has to be done last.  Any operation that can cause
+       * prog->ParameterValues to get reallocated (e.g., anything that adds a
+       * program constant) has to happen before creating this linkage.
+       */
+      _mesa_associate_uniform_storage(ctx, shProg, prog->Parameters);
+
+      _mesa_reference_program(ctx, &prog, NULL);
    }
 
-   if (!_mesa_ir_link_shader(ctx, prog))
-      return GL_FALSE;
+   if (!brw_shader_precompile(ctx, shProg))
+      return false;
 
-   if (!brw_shader_precompile(ctx, prog))
-      return GL_FALSE;
-
-   return GL_TRUE;
+   return true;
 }
 
 
@@ -156,6 +252,7 @@ brw_type_for_base_type(const struct glsl_type *type)
    case GLSL_TYPE_UINT:
       return BRW_REGISTER_TYPE_UD;
    case GLSL_TYPE_ARRAY:
+      return brw_type_for_base_type(type->fields.array);
    case GLSL_TYPE_STRUCT:
    case GLSL_TYPE_SAMPLER:
       /* These should be overridden with the type of the member when
@@ -191,4 +288,57 @@ brw_conditional_for_comparison(unsigned int op)
       assert(!"not reached: bad operation for comparison");
       return BRW_CONDITIONAL_NZ;
    }
+}
+
+uint32_t
+brw_math_function(enum opcode op)
+{
+   switch (op) {
+   case SHADER_OPCODE_RCP:
+      return BRW_MATH_FUNCTION_INV;
+   case SHADER_OPCODE_RSQ:
+      return BRW_MATH_FUNCTION_RSQ;
+   case SHADER_OPCODE_SQRT:
+      return BRW_MATH_FUNCTION_SQRT;
+   case SHADER_OPCODE_EXP2:
+      return BRW_MATH_FUNCTION_EXP;
+   case SHADER_OPCODE_LOG2:
+      return BRW_MATH_FUNCTION_LOG;
+   case SHADER_OPCODE_POW:
+      return BRW_MATH_FUNCTION_POW;
+   case SHADER_OPCODE_SIN:
+      return BRW_MATH_FUNCTION_SIN;
+   case SHADER_OPCODE_COS:
+      return BRW_MATH_FUNCTION_COS;
+   case SHADER_OPCODE_INT_QUOTIENT:
+      return BRW_MATH_FUNCTION_INT_DIV_QUOTIENT;
+   case SHADER_OPCODE_INT_REMAINDER:
+      return BRW_MATH_FUNCTION_INT_DIV_REMAINDER;
+   default:
+      assert(!"not reached: unknown math function");
+      return 0;
+   }
+}
+
+uint32_t
+brw_texture_offset(ir_constant *offset)
+{
+   assert(offset != NULL);
+
+   signed char offsets[3];
+   for (unsigned i = 0; i < offset->type->vector_elements; i++)
+      offsets[i] = (signed char) offset->value.i[i];
+
+   /* Combine all three offsets into a single unsigned dword:
+    *
+    *    bits 11:8 - U Offset (X component)
+    *    bits  7:4 - V Offset (Y component)
+    *    bits  3:0 - R Offset (Z component)
+    */
+   unsigned offset_bits = 0;
+   for (unsigned i = 0; i < offset->type->vector_elements; i++) {
+      const unsigned shift = 4 * (2 - i);
+      offset_bits |= (offsets[i] << shift) & (0xF << shift);
+   }
+   return offset_bits;
 }

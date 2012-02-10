@@ -37,6 +37,7 @@
 
 #include "lp_context.h"
 #include "lp_state.h"
+#include "lp_query.h"
 
 #include "draw/draw_context.h"
 
@@ -55,6 +56,9 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    struct draw_context *draw = lp->draw;
    void *mapped_indices = NULL;
    unsigned i;
+
+   if (!llvmpipe_check_render_cond(lp))
+      return;
 
    if (lp->dirty)
       llvmpipe_update_derived( lp );

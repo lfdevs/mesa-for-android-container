@@ -29,7 +29,7 @@ drienv.Replace(CPPPATH = [
     '#src/egl/drivers/dri',
 ])
 
-drienv.ParseConfig('pkg-config --cflags --libs libdrm')
+drienv.PkgUseModules('DRM')
 
 dri_common_utils = drienv.SharedObject(
     target = 'utils.o',
@@ -39,11 +39,6 @@ dri_common_utils = drienv.SharedObject(
 dri_common_xmlconfig = drienv.SharedObject(
     target = 'xmlconfig.o',
     source = '#src/mesa/drivers/dri/common/xmlconfig.c'
-)
-
-dri_common_vblank = drienv.SharedObject(
-    target = 'vblank.o',
-    source = '#src/mesa/drivers/dri/common/vblank.c'
 )
 
 dri_common_dri_util = drienv.SharedObject(
@@ -66,7 +61,6 @@ COMMON_DRI_SW_OBJECTS = [
 COMMON_DRI_DRM_OBJECTS = [
     dri_common_utils,
     dri_common_xmlconfig,
-    dri_common_vblank,
     dri_common_dri_util,
 ]
 

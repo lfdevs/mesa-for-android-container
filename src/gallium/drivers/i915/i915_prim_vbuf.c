@@ -322,7 +322,7 @@ i915_vbuf_ensure_index_bounds(struct vbuf_render *render,
    i915_vbuf_update_vbo_state(render);
 }
 
-static boolean
+static void
 i915_vbuf_render_set_primitive(struct vbuf_render *render, 
                                unsigned prim)
 {
@@ -333,46 +333,46 @@ i915_vbuf_render_set_primitive(struct vbuf_render *render,
    case PIPE_PRIM_POINTS:
       i915_render->hwprim = PRIM3D_POINTLIST;
       i915_render->fallback = 0;
-      return TRUE;
+      break;
    case PIPE_PRIM_LINES:
       i915_render->hwprim = PRIM3D_LINELIST;
       i915_render->fallback = 0;
-      return TRUE;
+      break;
    case PIPE_PRIM_LINE_LOOP:
       i915_render->hwprim = PRIM3D_LINELIST;
       i915_render->fallback = PIPE_PRIM_LINE_LOOP;
-      return TRUE;
+      break;
    case PIPE_PRIM_LINE_STRIP:
       i915_render->hwprim = PRIM3D_LINESTRIP;
       i915_render->fallback = 0;
-      return TRUE;
+      break;
    case PIPE_PRIM_TRIANGLES:
       i915_render->hwprim = PRIM3D_TRILIST;
       i915_render->fallback = 0;
-      return TRUE;
+      break;
    case PIPE_PRIM_TRIANGLE_STRIP:
       i915_render->hwprim = PRIM3D_TRISTRIP;
       i915_render->fallback = 0;
-      return TRUE;
+      break;
    case PIPE_PRIM_TRIANGLE_FAN:
       i915_render->hwprim = PRIM3D_TRIFAN;
       i915_render->fallback = 0;
-      return TRUE;
+      break;
    case PIPE_PRIM_QUADS:
       i915_render->hwprim = PRIM3D_TRILIST;
       i915_render->fallback = PIPE_PRIM_QUADS;
-      return TRUE;
+      break;
    case PIPE_PRIM_QUAD_STRIP:
       i915_render->hwprim = PRIM3D_TRILIST;
       i915_render->fallback = PIPE_PRIM_QUAD_STRIP;
-      return TRUE;
+      break;
    case PIPE_PRIM_POLYGON:
       i915_render->hwprim = PRIM3D_POLY;
       i915_render->fallback = 0;
-      return TRUE;
+      break;
    default:
       /* FIXME: Actually, can handle a lot more just fine... */
-      return FALSE;
+      assert(0 && "unexpected prim in i915_vbuf_render_set_primitive()");
    }
 }
 
@@ -400,8 +400,8 @@ draw_arrays_generate_indices(struct vbuf_render *render,
    case PIPE_PRIM_LINE_LOOP:
       if (nr >= 2) {
          for (i = start + 1; i < end; i++)
-            OUT_BATCH((i-0) | (i+0) << 16);
-         OUT_BATCH((i-0) | ( start) << 16);
+            OUT_BATCH((i-1) | (i+0) << 16);
+         OUT_BATCH((i-1) | ( start) << 16);
       }
       break;
    case PIPE_PRIM_QUADS:
@@ -487,7 +487,6 @@ draw_arrays_fallback(struct vbuf_render *render,
 
    draw_arrays_generate_indices(render, start, nr, i915_render->fallback);
 
-   i915_flush_heuristically(i915, nr_indices);
 out:
    return;
 }
@@ -535,7 +534,6 @@ i915_vbuf_render_draw_arrays(struct vbuf_render *render,
              nr);
    OUT_BATCH(start); /* Beginning vertex index */
 
-   i915_flush_heuristically(i915, nr);
 out:
    return;
 }
@@ -659,7 +657,6 @@ i915_vbuf_render_draw_elements(struct vbuf_render *render,
                          save_nr_indices,
                          i915_render->fallback);
 
-   i915_flush_heuristically(i915, nr_indices);
 out:
    return;
 }

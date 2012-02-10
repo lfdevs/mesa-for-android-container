@@ -24,9 +24,10 @@ compiler = argv[1]
 
 # Read the files in builtins/ir/*...add them to the supplied dictionary.
 def read_ir_files(fs):
-    for filename in glob(path.join(path.join(builtins_dir, 'ir'), '*')):
+    for filename in glob(path.join(path.join(builtins_dir, 'ir'), '*.ir')):
+        function_name = path.basename(filename).split('.')[0]
         with open(filename) as f:
-            fs[path.basename(filename)] = f.read()
+            fs[function_name] = f.read()
 
 # Return a dictionary containing all builtin definitions (even generated)
 def get_builtin_definitions():
@@ -103,8 +104,13 @@ def write_profiles():
         write_profile(filename, profile)
 
 def get_profile_list():
+    profile_files = []
+    for extension in ['frag', 'vert']:
+        path_glob = path.join(
+            path.join(builtins_dir, 'profiles'), '*.' + extension)
+        profile_files.extend(glob(path_glob))
     profiles = []
-    for pfile in sorted(glob(path.join(path.join(builtins_dir, 'profiles'), '*'))):
+    for pfile in sorted(profile_files):
         profiles.append((pfile, path.basename(pfile).replace('.', '_')))
     return profiles
 
@@ -158,6 +164,7 @@ read_builtins(GLenum target, const char *protos, const char **functions, unsigne
    st->symbols->language_version = 130;
    st->ARB_texture_rectangle_enable = true;
    st->EXT_texture_array_enable = true;
+   st->OES_EGL_image_external_enable = true;
    _mesa_glsl_initialize_types(st);
 
    sh->ir = new(sh) exec_list;
@@ -228,12 +235,14 @@ _mesa_read_profile(struct _mesa_glsl_parse_state *state,
 void
 _mesa_glsl_initialize_functions(struct _mesa_glsl_parse_state *state)
 {
+   /* If we've already initialized the built-ins, bail early. */
+   if (state->num_builtins_to_link > 0)
+      return;
+
    if (builtin_mem_ctx == NULL) {
       builtin_mem_ctx = ralloc_context(NULL); // "GLSL built-in functions"
       memset(&builtin_profiles, 0, sizeof(builtin_profiles));
    }
-
-   state->num_builtins_to_link = 0;
 """
 
     i = 0

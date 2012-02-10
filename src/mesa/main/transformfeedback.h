@@ -87,6 +87,9 @@ _mesa_GetTransformFeedbackVarying(GLuint program, GLuint index,
 
 /*** GL_ARB_transform_feedback2 ***/
 
+struct gl_transform_feedback_object *
+_mesa_lookup_transform_feedback_object(struct gl_context *ctx, GLuint name);
+
 extern void GLAPIENTRY
 _mesa_GenTransformFeedbacks(GLsizei n, GLuint *names);
 
@@ -105,29 +108,26 @@ _mesa_PauseTransformFeedback(void);
 extern void GLAPIENTRY
 _mesa_ResumeTransformFeedback(void);
 
-extern void GLAPIENTRY
-_mesa_DrawTransformFeedback(GLenum mode, GLuint name);
-
 #else /* FEATURE_EXT_transform_feedback */
 
-static INLINE GLboolean
+static inline GLboolean
 _mesa_validate_primitive_mode(struct gl_context *ctx, GLenum mode)
 {
    return GL_TRUE;
 }
 
-static INLINE GLboolean
+static inline GLboolean
 _mesa_validate_transform_feedback_buffers(struct gl_context *ctx)
 {
    return GL_TRUE;
 }
 
-static INLINE void
+static inline void
 _mesa_init_transform_feedback_functions(struct dd_function_table *driver)
 {
 }
 
-static INLINE void
+static inline void
 _mesa_init_transform_feedback_dispatch(struct _glapi_table *disp)
 {
 }

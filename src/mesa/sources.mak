@@ -9,7 +9,6 @@ MAIN_SOURCES = \
 	main/api_arrayelt.c \
 	main/api_exec.c \
 	main/api_loopback.c \
-	main/api_noop.c \
 	main/api_validate.c \
 	main/accum.c \
 	main/arbprogram.c \
@@ -28,7 +27,6 @@ MAIN_SOURCES = \
 	main/cpuinfo.c \
 	main/debug.c \
 	main/depth.c \
-	main/depthstencil.c \
 	main/dlist.c \
 	main/dlopen.c \
 	main/drawpix.c \
@@ -43,6 +41,8 @@ MAIN_SOURCES = \
 	main/ffvertex_prog.c \
 	main/fog.c \
 	main/formats.c \
+	main/format_pack.c \
+	main/format_unpack.c \
 	main/framebuffer.c \
 	main/get.c \
 	main/getstring.c \
@@ -83,8 +83,8 @@ MAIN_SOURCES = \
 	main/texcompress_rgtc.c \
 	main/texcompress_s3tc.c \
 	main/texcompress_fxt1.c \
+	main/texcompress_etc.c \
 	main/texenv.c \
-	main/texfetch.c \
 	main/texformat.c \
 	main/texgen.c \
 	main/texgetimage.c \
@@ -93,6 +93,7 @@ MAIN_SOURCES = \
 	main/texpal.c \
 	main/texparam.c \
 	main/texstate.c \
+	main/texstorage.c \
 	main/texstore.c \
 	main/texturebarrier.c \
 	main/transformfeedback.c \
@@ -104,7 +105,9 @@ MAIN_SOURCES = \
 	$(MAIN_ES_SOURCES)
 
 MAIN_CXX_SOURCES = \
-	main/ff_fragment_shader.cpp
+	main/ff_fragment_shader.cpp \
+	main/shader_query.cpp \
+	main/uniform_query.cpp
 
 MATH_SOURCES = \
 	math/m_debug_clip.c \
@@ -121,7 +124,6 @@ MATH_XFORM_SOURCES = \
 SWRAST_SOURCES = \
 	swrast/s_aaline.c \
 	swrast/s_aatriangle.c \
-	swrast/s_accum.c \
 	swrast/s_alpha.c \
 	swrast/s_atifragshader.c \
 	swrast/s_bitmap.c \
@@ -139,12 +141,14 @@ SWRAST_SOURCES = \
 	swrast/s_logic.c \
 	swrast/s_masking.c \
 	swrast/s_points.c \
-	swrast/s_readpix.c \
+	swrast/s_renderbuffer.c \
 	swrast/s_span.c \
 	swrast/s_stencil.c \
 	swrast/s_texcombine.c \
+	swrast/s_texfetch.c \
 	swrast/s_texfilter.c \
 	swrast/s_texrender.c \
+	swrast/s_texture.c \
 	swrast/s_triangle.c \
 	swrast/s_zoom.c
 
@@ -178,6 +182,7 @@ VBO_SOURCES = \
 	vbo/vbo_exec_array.c \
 	vbo/vbo_exec_draw.c \
 	vbo/vbo_exec_eval.c \
+	vbo/vbo_noop.c \
 	vbo/vbo_rebase.c \
 	vbo/vbo_split.c \
 	vbo/vbo_split_copy.c \
@@ -203,7 +208,6 @@ STATETRACKER_SOURCES = \
 	state_tracker/st_atom_stipple.c \
 	state_tracker/st_atom_texture.c \
 	state_tracker/st_atom_viewport.c \
-	state_tracker/st_cb_accum.c \
 	state_tracker/st_cb_bitmap.c \
 	state_tracker/st_cb_blit.c \
 	state_tracker/st_cb_bufferobjects.c \
@@ -251,11 +255,11 @@ PROGRAM_SOURCES = \
 	program/prog_instruction.c \
 	program/prog_noise.c \
 	program/prog_optimize.c \
+	program/prog_opt_constant_fold.c \
 	program/prog_parameter.c \
 	program/prog_parameter_layout.c \
 	program/prog_print.c \
 	program/prog_statevars.c \
-	program/prog_uniform.c \
 	program/programopt.c \
 	program/register_allocate.c \
 	program/symbol_table.c
@@ -263,7 +267,8 @@ PROGRAM_SOURCES = \
 
 SHADER_CXX_SOURCES = \
 	program/ir_to_mesa.cpp \
-	program/sampler.cpp
+	program/sampler.cpp \
+	program/string_to_uint_map.cpp
 
 ASM_C_SOURCES =	\
 	x86/common_x86.c \
@@ -335,13 +340,13 @@ MESA_GALLIUM_SOURCES = \
 	x86/common_x86.c
 
 MESA_GALLIUM_CXX_SOURCES = \
-	$(MAIN_CXX_SOURCES) \
-	$(SHADER_CXX_SOURCES)
+	$(MESA_CXX_SOURCES) \
+	state_tracker/st_glsl_to_tgsi.cpp
 
 # All the core C sources, for dependency checking
 ALL_SOURCES = \
 	$(MESA_SOURCES)		\
-	$(MESA_CXX_SOURCES)	\
+	$(MESA_GALLIUM_CXX_SOURCES) \
 	$(MESA_ASM_SOURCES)	\
 	$(STATETRACKER_SOURCES)
 

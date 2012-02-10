@@ -38,8 +38,11 @@
 #include "sp_quad_pipe.h"
 
 
-/** Do polygon stipple in the driver here, or in the draw module? */
-#define DO_PSTIPPLE_IN_DRAW_MODULE 1
+/** Do polygon stipple in the draw module? */
+#define DO_PSTIPPLE_IN_DRAW_MODULE 0
+
+/** Do polygon stipple with the util module? */
+#define DO_PSTIPPLE_IN_HELPER_MODULE 1
 
 
 struct softpipe_vbuf_render;
@@ -52,7 +55,6 @@ struct sp_vertex_shader;
 struct sp_velems_state;
 struct sp_so_state;
 
-
 struct softpipe_context {
    struct pipe_context pipe;  /**< base class */
 
@@ -64,6 +66,7 @@ struct softpipe_context {
    struct pipe_depth_stencil_alpha_state *depth_stencil;
    struct pipe_rasterizer_state *rasterizer;
    struct sp_fragment_shader *fs;
+   struct sp_fragment_shader_variant *fs_variant;
    struct sp_vertex_shader *vs;
    struct sp_geometry_shader *gs;
    struct sp_velems_state *velems;
@@ -71,6 +74,7 @@ struct softpipe_context {
 
    /** Other rendering state */
    struct pipe_blend_color blend_color;
+   struct pipe_blend_color blend_color_clamped;
    struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
    struct pipe_resource *constants[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
@@ -83,13 +87,12 @@ struct softpipe_context {
    struct pipe_viewport_state viewport;
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
    struct pipe_index_buffer index_buffer;
-   struct {
-      struct softpipe_resource *buffer[PIPE_MAX_SO_BUFFERS];
-      int offset[PIPE_MAX_SO_BUFFERS];
-      int so_count[PIPE_MAX_SO_BUFFERS];
-      int num_buffers;
-   } so_target;
+
+   struct draw_so_target *so_targets[PIPE_MAX_SO_BUFFERS];
+   int num_so_targets;
+   
    struct pipe_query_data_so_statistics so_stats;
+   unsigned num_primitives_generated;
 
    unsigned num_fragment_samplers;
    unsigned num_fragment_sampler_views;
@@ -143,6 +146,13 @@ struct softpipe_context {
    struct pipe_query *render_cond_query;
    uint render_cond_mode;
 
+   /** Polygon stipple items */
+   struct {
+      struct pipe_resource *texture;
+      struct pipe_sampler_state *sampler;
+      struct pipe_sampler_view *sampler_view;
+   } pstipple;
+
    /** Software quad rendering pipeline */
    struct {
       struct quad_stage *shade;
@@ -178,7 +188,6 @@ struct softpipe_context {
    struct softpipe_tex_tile_cache *vertex_tex_cache[PIPE_MAX_VERTEX_SAMPLERS];
    struct softpipe_tex_tile_cache *geometry_tex_cache[PIPE_MAX_GEOMETRY_SAMPLERS];
 
-   unsigned use_sse : 1;
    unsigned dump_fs : 1;
    unsigned dump_gs : 1;
    unsigned no_rast : 1;

@@ -54,13 +54,11 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    struct i915_context *i915 = i915_context(pipe);
    struct draw_context *draw = i915->draw;
    void *mapped_indices = NULL;
-   unsigned cbuf_dirty;
 
 
    /*
     * Ack vs contants here, helps ipers a lot.
     */
-   cbuf_dirty = i915->dirty & I915_NEW_VS_CONSTANTS;
    i915->dirty &= ~I915_NEW_VS_CONSTANTS;
 
    if (i915->dirty)
@@ -81,6 +79,9 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    else
       draw_set_mapped_constant_buffer(draw, PIPE_SHADER_VERTEX, 0, NULL, 0);
 
+   if (i915->num_vertex_sampler_views > 0)
+      i915_prepare_vertex_sampling(i915);
+
    /*
     * Do the drawing
     */
@@ -88,6 +89,16 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 
    if (mapped_indices)
       draw_set_mapped_index_buffer(draw, NULL);
+
+   if (i915->num_vertex_sampler_views > 0)
+      i915_cleanup_vertex_sampling(i915);
+
+   /*
+    * TODO: Flush only when a user vertex/index buffer is present
+    * (or even better, modify draw module to do this
+    * internally when this condition is seen?)
+    */
+   draw_flush(i915->draw);
 }
 
 
@@ -101,10 +112,10 @@ static void i915_destroy(struct pipe_context *pipe)
    struct i915_context *i915 = i915_context(pipe);
    int i;
 
-   draw_destroy(i915->draw);
-
    if (i915->blitter)
       util_blitter_destroy(i915->blitter);
+
+   draw_destroy(i915->draw);
 
    if(i915->batch)
       i915->iws->batchbuffer_destroy(i915->batch);

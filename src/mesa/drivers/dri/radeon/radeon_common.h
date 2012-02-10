@@ -11,15 +11,7 @@ void radeonSetCliprects(radeonContextPtr radeon);
 void radeonUpdateScissor( struct gl_context *ctx );
 void radeonScissor(struct gl_context* ctx, GLint x, GLint y, GLsizei w, GLsizei h);
 
-void radeonWaitForIdleLocked(radeonContextPtr radeon);
 extern uint32_t radeonGetAge(radeonContextPtr radeon);
-void radeonCopyBuffer( __DRIdrawable *dPriv,
-		       const drm_clip_rect_t	  *rect);
-void radeonSwapBuffers(__DRIdrawable * dPriv);
-void radeonCopySubBuffer(__DRIdrawable * dPriv,
-			 int x, int y, int w, int h );
-
-void radeonUpdatePageFlipping(radeonContextPtr rmesa);
 
 void radeonFlush(struct gl_context *ctx);
 void radeonFinish(struct gl_context * ctx);
@@ -33,10 +25,6 @@ void radeon_draw_buffer(struct gl_context *ctx, struct gl_framebuffer *fb);
 void radeonDrawBuffer( struct gl_context *ctx, GLenum mode );
 void radeonReadBuffer( struct gl_context *ctx, GLenum mode );
 void radeon_viewport(struct gl_context *ctx, GLint x, GLint y, GLsizei width, GLsizei height);
-void radeon_get_cliprects(radeonContextPtr radeon,
-			  struct drm_clip_rect **cliprects,
-			  unsigned int *num_cliprects,
-			  int *x_off, int *y_off);
 void radeon_fbo_init(struct radeon_context *radeon);
 void
 radeon_renderbuffer_set_bo(struct radeon_renderbuffer *rb,
@@ -56,8 +44,8 @@ static inline struct radeon_renderbuffer *radeon_renderbuffer(struct gl_renderbu
 	struct radeon_renderbuffer *rrb = (struct radeon_renderbuffer *)rb;
 	radeon_print(RADEON_MEMORY, RADEON_TRACE,
 		"%s(rb %p)\n",
-		__func__, rb);
-	if (rrb && rrb->base.ClassID == RADEON_RB_CLASS)
+		__func__, (void *) rb);
+	if (rrb && rrb->base.Base.ClassID == RADEON_RB_CLASS)
 		return rrb;
 	else
 		return NULL;
@@ -67,7 +55,7 @@ static inline struct radeon_renderbuffer *radeon_get_renderbuffer(struct gl_fram
 {
 	radeon_print(RADEON_MEMORY, RADEON_TRACE,
 		"%s(fb %p, index %d)\n",
-		__func__, fb, att_index);
+		__func__, (void *) fb, att_index);
 
 	if (att_index >= 0)
 		return radeon_renderbuffer(fb->Attachment[att_index].Renderbuffer);

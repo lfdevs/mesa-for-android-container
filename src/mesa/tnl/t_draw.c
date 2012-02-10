@@ -26,6 +26,7 @@
  */
 
 #include "main/glheader.h"
+#include "main/bufferobj.h"
 #include "main/condrender.h"
 #include "main/context.h"
 #include "main/imports.h"
@@ -280,10 +281,9 @@ static void bind_inputs( struct gl_context *ctx,
 	 if (!inputs[i]->BufferObj->Pointer) {
 	    bo[*nr_bo] = inputs[i]->BufferObj;
 	    (*nr_bo)++;
-	    ctx->Driver.MapBuffer(ctx, 
-				  GL_ARRAY_BUFFER,
-				  GL_READ_ONLY_ARB,
-				  inputs[i]->BufferObj);
+	    ctx->Driver.MapBufferRange(ctx, 0, inputs[i]->BufferObj->Size,
+				       GL_MAP_READ_BIT,
+				       inputs[i]->BufferObj);
 	    
 	    assert(inputs[i]->BufferObj->Pointer);
 	 }
@@ -340,25 +340,25 @@ static void bind_indices( struct gl_context *ctx,
    TNLcontext *tnl = TNL_CONTEXT(ctx);
    struct vertex_buffer *VB = &tnl->vb;
    GLuint i;
-   void *ptr;
+   const void *ptr;
 
    if (!ib) {
       VB->Elts = NULL;
       return;
    }
 
-   if (ib->obj->Name && !ib->obj->Pointer) {
+   if (_mesa_is_bufferobj(ib->obj) && !_mesa_bufferobj_mapped(ib->obj)) {
+      /* if the buffer object isn't mapped yet, map it now */
       bo[*nr_bo] = ib->obj;
       (*nr_bo)++;
-      ctx->Driver.MapBuffer(ctx, 
-			    GL_ELEMENT_ARRAY_BUFFER,
-			    GL_READ_ONLY_ARB,
-			    ib->obj);
-
+      ptr = ctx->Driver.MapBufferRange(ctx, (GLsizeiptr) ib->ptr,
+                                       ib->count * vbo_sizeof_ib_type(ib->type),
+				       GL_MAP_READ_BIT, ib->obj);
       assert(ib->obj->Pointer);
+   } else {
+      /* user-space elements, or buffer already mapped */
+      ptr = ADD_POINTERS(ib->obj->Pointer, ib->ptr);
    }
-
-   ptr = ADD_POINTERS(ib->obj->Pointer, ib->ptr);
 
    if (ib->type == GL_UNSIGNED_INT && VB->Primitive[0].basevertex == 0) {
       VB->Elts = (GLuint *) ptr;
@@ -402,9 +402,7 @@ static void unmap_vbos( struct gl_context *ctx,
 {
    GLuint i;
    for (i = 0; i < nr_bo; i++) { 
-      ctx->Driver.UnmapBuffer(ctx, 
-			      0, /* target -- I don't see why this would be needed */
-			      bo[i]);
+      ctx->Driver.UnmapBuffer(ctx, bo[i]);
    }
 }
 
@@ -416,7 +414,8 @@ void _tnl_vbo_draw_prims(struct gl_context *ctx,
 			 const struct _mesa_index_buffer *ib,
 			 GLboolean index_bounds_valid,
 			 GLuint min_index,
-			 GLuint max_index)
+			 GLuint max_index,
+			 struct gl_transform_feedback_object *tfb_vertcount)
 {
    if (!index_bounds_valid)
       vbo_get_minmax_index(ctx, prim, ib, &min_index, &max_index);

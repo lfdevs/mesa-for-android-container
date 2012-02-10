@@ -8,6 +8,7 @@ nv50_validate_fb(struct nv50_context *nv50)
    struct nouveau_channel *chan = nv50->screen->base.channel;
    struct pipe_framebuffer_state *fb = &nv50->framebuffer;
    unsigned i;
+   unsigned ms_mode = NV50_3D_MULTISAMPLE_MODE_MS1;
    boolean serialize = FALSE;
 
    nv50_bufctx_reset(nv50, NV50_BUFCTX_FRAME);
@@ -30,13 +31,28 @@ nv50_validate_fb(struct nv50_context *nv50)
       OUT_RELOCh(chan, bo, offset, NOUVEAU_BO_VRAM | NOUVEAU_BO_RDWR);
       OUT_RELOCl(chan, bo, offset, NOUVEAU_BO_VRAM | NOUVEAU_BO_RDWR);
       OUT_RING  (chan, nv50_format_table[sf->base.format].rt);
-      OUT_RING  (chan, mt->level[sf->base.u.tex.level].tile_mode << 4);
-      OUT_RING  (chan, mt->layer_stride >> 2);
-      BEGIN_RING(chan, RING_3D(RT_HORIZ(i)), 2);
-      OUT_RING  (chan, sf->width);
-      OUT_RING  (chan, sf->height);
-      BEGIN_RING(chan, RING_3D(RT_ARRAY_MODE), 1);
-      OUT_RING  (chan, sf->depth);
+      if (likely(nouveau_bo_tile_layout(bo))) {
+         OUT_RING  (chan, mt->level[sf->base.u.tex.level].tile_mode << 4);
+         OUT_RING  (chan, mt->layer_stride >> 2);
+         BEGIN_RING(chan, RING_3D(RT_HORIZ(i)), 2);
+         OUT_RING  (chan, sf->width);
+         OUT_RING  (chan, sf->height);
+         BEGIN_RING(chan, RING_3D(RT_ARRAY_MODE), 1);
+         OUT_RING  (chan, sf->depth);
+      } else {
+         OUT_RING  (chan, 0);
+         OUT_RING  (chan, 0);
+         BEGIN_RING(chan, RING_3D(RT_HORIZ(i)), 2);
+         OUT_RING  (chan, NV50_3D_RT_HORIZ_LINEAR | mt->level[0].pitch);
+         OUT_RING  (chan, sf->height);
+         BEGIN_RING(chan, RING_3D(RT_ARRAY_MODE), 1);
+         OUT_RING  (chan, 0);
+
+         assert(!fb->zsbuf);
+         assert(!mt->ms_mode);
+      }
+
+      ms_mode = mt->ms_mode;
 
       if (mt->base.status & NOUVEAU_BUFFER_STATUS_GPU_READING)
          serialize = TRUE;
@@ -69,6 +85,8 @@ nv50_validate_fb(struct nv50_context *nv50)
       OUT_RING  (chan, sf->height);
       OUT_RING  (chan, (unk << 16) | sf->depth);
 
+      ms_mode = mt->ms_mode;
+
       if (mt->base.status & NOUVEAU_BUFFER_STATUS_GPU_READING)
          serialize = TRUE;
       mt->base.status |= NOUVEAU_BUFFER_STATUS_GPU_WRITING;
@@ -80,6 +98,9 @@ nv50_validate_fb(struct nv50_context *nv50)
       BEGIN_RING(chan, RING_3D(ZETA_ENABLE), 1);
       OUT_RING  (chan, 0);
    }
+
+   BEGIN_RING(chan, RING_3D(MULTISAMPLE_MODE), 1);
+   OUT_RING  (chan, ms_mode);
 
    BEGIN_RING(chan, RING_3D(VIEWPORT_HORIZ(0)), 2);
    OUT_RING  (chan, fb->width << 16);
@@ -192,42 +213,49 @@ nv50_validate_viewport(struct nv50_context *nv50)
 #endif
 }
 
+static INLINE void
+nv50_check_program_ucps(struct nv50_context *nv50,
+                        struct nv50_program *vp, uint8_t mask)
+{
+   const unsigned n = util_logbase2(mask) + 1;
+
+   if (vp->vp.clpd_nr >= n)
+      return;
+   nv50_program_destroy(nv50, vp);
+
+   vp->vp.clpd_nr = n;
+   if (likely(vp == nv50->vertprog))
+      nv50_vertprog_validate(nv50);
+   else
+      nv50_gmtyprog_validate(nv50);
+   nv50_fp_linkage_validate(nv50);
+}
+
 static void
 nv50_validate_clip(struct nv50_context *nv50)
 {
    struct nouveau_channel *chan = nv50->screen->base.channel;
-   uint32_t clip;
+   struct nv50_program *vp;
+   uint8_t clip_enable;
 
-   if (nv50->clip.depth_clamp) {
-      clip =
-         NV50_3D_VIEW_VOLUME_CLIP_CTRL_DEPTH_CLAMP_NEAR |
-         NV50_3D_VIEW_VOLUME_CLIP_CTRL_DEPTH_CLAMP_FAR |
-         NV50_3D_VIEW_VOLUME_CLIP_CTRL_UNK12_UNK1;
-   } else {
-      clip = 0;
-   }
-
-#ifndef NV50_SCISSORS_CLIPPING
-   clip |=
-      NV50_3D_VIEW_VOLUME_CLIP_CTRL_UNK7 |
-      NV50_3D_VIEW_VOLUME_CLIP_CTRL_UNK12_UNK1;
-#endif
-
-   BEGIN_RING(chan, RING_3D(VIEW_VOLUME_CLIP_CTRL), 1);
-   OUT_RING  (chan, clip);
-
-   if (nv50->clip.nr) {
+   if (nv50->dirty & NV50_NEW_CLIP) {
       BEGIN_RING(chan, RING_3D(CB_ADDR), 1);
       OUT_RING  (chan, (0 << 8) | NV50_CB_AUX);
-      BEGIN_RING_NI(chan, RING_3D(CB_DATA(0)), nv50->clip.nr * 4);
-      OUT_RINGp (chan, &nv50->clip.ucp[0][0], nv50->clip.nr * 4);
+      BEGIN_RING_NI(chan, RING_3D(CB_DATA(0)), PIPE_MAX_CLIP_PLANES * 4);
+      OUT_RINGp (chan, &nv50->clip.ucp[0][0], PIPE_MAX_CLIP_PLANES * 4);
    }
 
-   BEGIN_RING(chan, RING_3D(VP_CLIP_DISTANCE_ENABLE), 1);
-   OUT_RING  (chan, (1 << nv50->clip.nr) - 1);
+   vp = nv50->gmtyprog;
+   if (likely(!vp))
+      vp = nv50->vertprog;
 
-   if (nv50->vertprog && nv50->clip.nr > nv50->vertprog->vp.clpd_nr)
-      nv50->dirty |= NV50_NEW_VERTPROG;
+   clip_enable = nv50->rast->pipe.clip_plane_enable;
+
+   BEGIN_RING(chan, RING_3D(VP_CLIP_DISTANCE_ENABLE), 1);
+   OUT_RING  (chan, clip_enable);
+
+   if (clip_enable)
+      nv50_check_program_ucps(nv50, vp, clip_enable);
 }
 
 static void
@@ -258,6 +286,26 @@ nv50_validate_rasterizer(struct nv50_context *nv50)
 }
 
 static void
+nv50_validate_sample_mask(struct nv50_context *nv50)
+{
+   struct nouveau_channel *chan = nv50->screen->base.channel;
+
+   unsigned mask[4] =
+   {
+      nv50->sample_mask & 0xffff,
+      nv50->sample_mask & 0xffff,
+      nv50->sample_mask & 0xffff,
+      nv50->sample_mask & 0xffff
+   };
+
+   BEGIN_RING(chan, RING_3D(MSAA_MASK(0)), 4);
+   OUT_RING  (chan, mask[0]);
+   OUT_RING  (chan, mask[1]);
+   OUT_RING  (chan, mask[2]);
+   OUT_RING  (chan, mask[3]);
+}
+
+static void
 nv50_switch_pipe_context(struct nv50_context *ctx_to)
 {
    struct nv50_context *ctx_from = ctx_to->screen->cur_ctx;
@@ -278,12 +326,15 @@ nv50_switch_pipe_context(struct nv50_context *ctx_to)
    if (!ctx_to->blend)
       ctx_to->dirty &= ~NV50_NEW_BLEND;
    if (!ctx_to->rast)
+#ifdef NV50_SCISSORS_CLIPPING
+      ctx_to->dirty &= ~(NV50_NEW_RASTERIZER | NV50_NEW_SCISSOR);
+#else
       ctx_to->dirty &= ~NV50_NEW_RASTERIZER;
+#endif
    if (!ctx_to->zsa)
       ctx_to->dirty &= ~NV50_NEW_ZSA;
 
-   ctx_to->screen->base.channel->user_private = ctx_to->screen->cur_ctx =
-      ctx_to;
+   ctx_to->screen->cur_ctx = ctx_to;
 }
 
 static struct state_validate {
@@ -293,6 +344,7 @@ static struct state_validate {
     { nv50_validate_fb,            NV50_NEW_FRAMEBUFFER },
     { nv50_validate_blend,         NV50_NEW_BLEND },
     { nv50_validate_zsa,           NV50_NEW_ZSA },
+    { nv50_validate_sample_mask,   NV50_NEW_SAMPLE_MASK },
     { nv50_validate_rasterizer,    NV50_NEW_RASTERIZER },
     { nv50_validate_blend_colour,  NV50_NEW_BLEND_COLOUR },
     { nv50_validate_stencil_ref,   NV50_NEW_STENCIL_REF },
@@ -305,7 +357,6 @@ static struct state_validate {
     { nv50_validate_scissor,       NV50_NEW_SCISSOR },
 #endif
     { nv50_validate_viewport,      NV50_NEW_VIEWPORT },
-    { nv50_validate_clip,          NV50_NEW_CLIP },
     { nv50_vertprog_validate,      NV50_NEW_VERTPROG },
     { nv50_gmtyprog_validate,      NV50_NEW_GMTYPROG },
     { nv50_fragprog_validate,      NV50_NEW_FRAGPROG },
@@ -313,6 +364,8 @@ static struct state_validate {
                                    NV50_NEW_GMTYPROG },
     { nv50_gp_linkage_validate,    NV50_NEW_GMTYPROG | NV50_NEW_VERTPROG },
     { nv50_validate_derived_rs,    NV50_NEW_FRAGPROG | NV50_NEW_RASTERIZER |
+                                   NV50_NEW_VERTPROG | NV50_NEW_GMTYPROG },
+    { nv50_validate_clip,          NV50_NEW_CLIP | NV50_NEW_RASTERIZER |
                                    NV50_NEW_VERTPROG | NV50_NEW_GMTYPROG },
     { nv50_constbufs_validate,     NV50_NEW_CONSTBUF },
     { nv50_validate_textures,      NV50_NEW_TEXTURES },
@@ -322,22 +375,27 @@ static struct state_validate {
 #define validate_list_len (sizeof(validate_list) / sizeof(validate_list[0]))
 
 boolean
-nv50_state_validate(struct nv50_context *nv50)
+nv50_state_validate(struct nv50_context *nv50, uint32_t mask, unsigned words)
 {
+   uint32_t state_mask;
    unsigned i;
 
    if (nv50->screen->cur_ctx != nv50)
       nv50_switch_pipe_context(nv50);
 
-   if (nv50->dirty) {
+   state_mask = nv50->dirty & mask;
+
+   if (state_mask) {
       for (i = 0; i < validate_list_len; ++i) {
          struct state_validate *validate = &validate_list[i];
 
-         if (nv50->dirty & validate->states)
+         if (state_mask & validate->states)
             validate->func(nv50);
       }
-      nv50->dirty = 0;
+      nv50->dirty &= ~state_mask;
    }
+
+   MARK_RING(nv50->screen->base.channel, words, 0);
 
    nv50_bufctx_emit_relocs(nv50);
 

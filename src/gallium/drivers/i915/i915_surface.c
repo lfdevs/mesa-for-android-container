@@ -66,7 +66,6 @@ i915_surface_copy_render(struct pipe_context *pipe,
    util_blitter_save_fragment_shader(i915->blitter, i915->saved_fs);
    util_blitter_save_vertex_shader(i915->blitter, i915->saved_vs);
    util_blitter_save_viewport(i915->blitter, &i915->viewport);
-   util_blitter_save_clip(i915->blitter, &i915->saved_clip);
    util_blitter_save_vertex_elements(i915->blitter, i915->saved_velems);
    util_blitter_save_vertex_buffers(i915->blitter, i915->saved_nr_vertex_buffers,
                                     i915->saved_vertex_buffers);
@@ -80,14 +79,14 @@ i915_surface_copy_render(struct pipe_context *pipe,
                                             i915->saved_nr_sampler_views,
                                             i915->saved_sampler_views);
 
-   util_blitter_copy_region(i915->blitter, dst, dst_level, dstx, dsty, dstz,
+   util_blitter_copy_texture(i915->blitter, dst, dst_level, dstx, dsty, dstz,
                             src, src_level, src_box, TRUE);
 }
 
 static void
 i915_clear_render_target_render(struct pipe_context *pipe,
                                 struct pipe_surface *dst,
-                                const float *rgba,
+                                const union pipe_color_union *color,
                                 unsigned dstx, unsigned dsty,
                                 unsigned width, unsigned height)
 {
@@ -106,7 +105,7 @@ i915_clear_render_target_render(struct pipe_context *pipe,
    if (i915->dirty)
       i915_update_derived(i915);
 
-   i915_clear_emit(pipe, PIPE_CLEAR_COLOR, rgba, 0.0, 0x0,
+   i915_clear_emit(pipe, PIPE_CLEAR_COLOR, color, 0.0, 0x0,
                    dstx, dsty, width, height);
 
    pipe->set_framebuffer_state(pipe, &i915->blitter->saved_fb_state);
@@ -202,7 +201,7 @@ i915_surface_copy_blitter(struct pipe_context *pipe,
 static void
 i915_clear_render_target_blitter(struct pipe_context *pipe,
                                  struct pipe_surface *dst,
-                                 const float *rgba,
+                                 const union pipe_color_union *color,
                                  unsigned dstx, unsigned dsty,
                                  unsigned width, unsigned height)
 {
@@ -214,7 +213,7 @@ i915_clear_render_target_blitter(struct pipe_context *pipe,
    assert(util_format_get_blockwidth(pt->format) == 1);
    assert(util_format_get_blockheight(pt->format) == 1);
 
-   util_pack_color(rgba, dst->format, &uc);
+   util_pack_color(color->f, dst->format, &uc);
    i915_fill_blit( i915_context(pipe),
                    util_format_get_blocksize(pt->format),
                    XY_COLOR_BLT_WRITE_ALPHA | XY_COLOR_BLT_WRITE_RGB,
@@ -251,7 +250,7 @@ i915_clear_depth_stencil_blitter(struct pipe_context *pipe,
       (otherwise this won't work anyway). Hence will only want to
       do it if really have stencil and it isn't cleared */
    if ((clear_flags & PIPE_CLEAR_STENCIL) ||
-       (dst->format != PIPE_FORMAT_Z24_UNORM_S8_USCALED))
+       (dst->format != PIPE_FORMAT_Z24_UNORM_S8_UINT))
       mask |= XY_COLOR_BLT_WRITE_ALPHA;
 
    i915_fill_blit( i915_context(pipe),

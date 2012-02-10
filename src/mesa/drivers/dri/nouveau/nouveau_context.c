@@ -24,6 +24,7 @@
  *
  */
 
+#include <stdbool.h>
 #include "nouveau_driver.h"
 #include "nouveau_context.h"
 #include "nouveau_bufferobj.h"
@@ -33,6 +34,7 @@
 #include "main/framebuffer.h"
 #include "main/light.h"
 #include "main/state.h"
+#include "main/version.h"
 #include "drivers/common/meta.h"
 #include "drivers/common/driverfuncs.h"
 #include "swrast/swrast.h"
@@ -40,30 +42,6 @@
 #include "vbo/vbo.h"
 #include "tnl/tnl.h"
 #include "tnl/t_context.h"
-
-#define need_GL_EXT_framebuffer_object
-#define need_GL_EXT_fog_coord
-#define need_GL_EXT_secondary_color
-
-#include "main/remap_helper.h"
-
-static const struct dri_extension nouveau_extensions[] = {
-	{ "GL_ARB_multitexture",	NULL },
-	{ "GL_ARB_texture_env_add",	NULL },
-	{ "GL_ARB_texture_mirrored_repeat", NULL },
-	{ "GL_EXT_fog_coord",		GL_EXT_fog_coord_functions },
-	{ "GL_EXT_framebuffer_blit",	NULL },
-	{ "GL_EXT_framebuffer_object",	GL_EXT_framebuffer_object_functions },
-	{ "GL_EXT_packed_depth_stencil", NULL},
-	{ "GL_EXT_secondary_color",	GL_EXT_secondary_color_functions },
-	{ "GL_EXT_stencil_wrap",	NULL },
-	{ "GL_EXT_texture_env_combine",	NULL },
-	{ "GL_EXT_texture_filter_anisotropic", NULL },
-	{ "GL_EXT_texture_lod_bias",	NULL },
-	{ "GL_NV_blend_square",         NULL },
-	{ "GL_NV_texture_env_combine4",	NULL },
-	{ NULL,				NULL }
-};
 
 static void
 nouveau_channel_flush_notify(struct nouveau_channel *chan)
@@ -78,21 +56,42 @@ nouveau_channel_flush_notify(struct nouveau_channel *chan)
 GLboolean
 nouveau_context_create(gl_api api,
 		       const struct gl_config *visual, __DRIcontext *dri_ctx,
+		       unsigned major_version,
+		       unsigned minor_version,
+		       uint32_t flags,
+		       unsigned *error,
 		       void *share_ctx)
 {
 	__DRIscreen *dri_screen = dri_ctx->driScreenPriv;
-	struct nouveau_screen *screen = dri_screen->private;
+	struct nouveau_screen *screen = dri_screen->driverPrivate;
 	struct nouveau_context *nctx;
 	struct gl_context *ctx;
 
+	/* API and flag filtering is handled in dri2CreateContextAttribs.
+	 */
+	(void) api;
+	(void) flags;
+
 	ctx = screen->driver->context_create(screen, visual, share_ctx);
-	if (!ctx)
+	if (!ctx) {
+		*error = __DRI_CTX_ERROR_NO_MEMORY;
 		return GL_FALSE;
+	}
 
 	nctx = to_nouveau_context(ctx);
 	nctx->dri_context = dri_ctx;
 	dri_ctx->driverPrivate = ctx;
 
+	_mesa_compute_version(ctx);
+	if (ctx->VersionMajor < major_version
+	    || (ctx->VersionMajor == major_version
+		&& ctx->VersionMinor < minor_version)) {
+	   nouveau_context_destroy(dri_ctx);
+	   *error = __DRI_CTX_ERROR_BAD_VERSION;
+	   return GL_FALSE;
+	}
+
+	*error = __DRI_CTX_ERROR_SUCCESS;
 	return GL_TRUE;
 }
 
@@ -140,7 +139,16 @@ nouveau_context_init(struct gl_context *ctx, struct nouveau_screen *screen,
 	nctx->hw.chan->user_private = nctx;
 
 	/* Enable any supported extensions. */
-	driInitExtensions(ctx, nouveau_extensions, GL_TRUE);
+	ctx->Extensions.EXT_blend_color = true;
+	ctx->Extensions.EXT_blend_minmax = true;
+	ctx->Extensions.EXT_fog_coord = true;
+	ctx->Extensions.EXT_framebuffer_blit = true;
+	ctx->Extensions.EXT_framebuffer_object = true;
+	ctx->Extensions.EXT_packed_depth_stencil = true;
+	ctx->Extensions.EXT_secondary_color = true;
+	ctx->Extensions.EXT_texture_filter_anisotropic = true;
+	ctx->Extensions.NV_blend_square = true;
+	ctx->Extensions.NV_texture_env_combine4 = true;
 
 	return GL_TRUE;
 }
@@ -191,9 +199,9 @@ nouveau_update_renderbuffers(__DRIcontext *dri_ctx, __DRIdrawable *draw)
 	__DRIbuffer *buffers = NULL;
 	int i = 0, count, ret;
 
-	if (draw->lastStamp == *draw->pStamp)
+	if (draw->lastStamp == draw->dri2.stamp)
 		return;
-	draw->lastStamp = *draw->pStamp;
+	draw->lastStamp = draw->dri2.stamp;
 
 	if (nfb->need_front)
 		attachments[i++] = __DRI_BUFFER_FRONT_LEFT;
@@ -271,7 +279,7 @@ update_framebuffer(__DRIcontext *dri_ctx, __DRIdrawable *draw,
 	struct gl_context *ctx = dri_ctx->driverPrivate;
 	struct gl_framebuffer *fb = draw->driverPrivate;
 
-	*stamp = *draw->pStamp;
+	*stamp = draw->dri2.stamp;
 
 	nouveau_update_renderbuffers(dri_ctx, draw);
 	_mesa_resize_framebuffer(ctx, fb, draw->w, draw->h);
@@ -351,7 +359,7 @@ validate_framebuffer(__DRIcontext *dri_ctx, __DRIdrawable *draw,
 		dri2InvalidateDrawable(draw);
 	}
 
-	if (*draw->pStamp != *stamp)
+	if (draw->dri2.stamp != *stamp)
 		update_framebuffer(dri_ctx, draw, stamp);
 }
 

@@ -28,6 +28,7 @@
 #include "intel_context.h"
 #include "intel_buffers.h"
 #include "intel_fbo.h"
+#include "intel_mipmap_tree.h"
 
 #include "main/framebuffer.h"
 #include "main/renderbuffer.h"
@@ -40,8 +41,8 @@ intel_drawbuf_region(struct intel_context *intel)
 {
    struct intel_renderbuffer *irbColor =
       intel_renderbuffer(intel->ctx.DrawBuffer->_ColorDrawBuffers[0]);
-   if (irbColor)
-      return irbColor->region;
+   if (irbColor && irbColor->mt)
+      return irbColor->mt->region;
    else
       return NULL;
 }
@@ -54,8 +55,8 @@ intel_readbuf_region(struct intel_context *intel)
 {
    struct intel_renderbuffer *irb
       = intel_renderbuffer(intel->ctx.ReadBuffer->_ColorReadBuffer);
-   if (irb)
-      return irb->region;
+   if (irb && irb->mt)
+      return irb->mt->region;
    else
       return NULL;
 }
@@ -72,7 +73,7 @@ intel_check_front_buffer_rendering(struct intel_context *intel)
       /* drawing to window system buffer */
       if (fb->_NumColorDrawBuffers > 0) {
          if (fb->_ColorDrawBufferIndexes[0] == BUFFER_FRONT_LEFT) {
-	    intel->front_buffer_dirty = GL_TRUE;
+	    intel->front_buffer_dirty = true;
 	 }
       }
    }
@@ -83,11 +84,11 @@ intelDrawBuffer(struct gl_context * ctx, GLenum mode)
 {
    if ((ctx->DrawBuffer != NULL) && (ctx->DrawBuffer->Name == 0)) {
       struct intel_context *const intel = intel_context(ctx);
-      const GLboolean was_front_buffer_rendering =
+      const bool was_front_buffer_rendering =
 	intel->is_front_buffer_rendering;
 
       intel->is_front_buffer_rendering = (mode == GL_FRONT_LEFT)
-	|| (mode == GL_FRONT);
+	|| (mode == GL_FRONT) || (mode == GL_FRONT_AND_BACK);
 
       /* If we weren't front-buffer rendering before but we are now,
        * invalidate our DRI drawable so we'll ask for new buffers
@@ -97,7 +98,7 @@ intelDrawBuffer(struct gl_context * ctx, GLenum mode)
 	 dri2InvalidateDrawable(intel->driContext->driDrawablePriv);
    }
 
-   intel_draw_buffer(ctx, ctx->DrawBuffer);
+   intel_draw_buffer(ctx);
 }
 
 
@@ -106,7 +107,7 @@ intelReadBuffer(struct gl_context * ctx, GLenum mode)
 {
    if ((ctx->DrawBuffer != NULL) && (ctx->DrawBuffer->Name == 0)) {
       struct intel_context *const intel = intel_context(ctx);
-      const GLboolean was_front_buffer_reading =
+      const bool was_front_buffer_reading =
 	intel->is_front_buffer_reading;
 
       intel->is_front_buffer_reading = (mode == GL_FRONT_LEFT)

@@ -31,6 +31,8 @@
 #include "main/config.h"
 #include "main/glheader.h"
 #include "main/mtypes.h"
+#include "swrast/s_chan.h"
+
 
 struct gl_context;
 struct gl_renderbuffer;
@@ -153,7 +155,8 @@ typedef struct sw_span
     */
    GLbitfield arrayMask;
 
-   GLbitfield arrayAttribs;
+   /** Mask of FRAG_BIT_x bits */
+   GLbitfield64 arrayAttribs;
 
    /**
     * We store the arrays of fragment values in a separate struct so
@@ -198,23 +201,13 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span);
 
 extern void
 _swrast_read_rgba_span(struct gl_context *ctx, struct gl_renderbuffer *rb,
-                       GLuint n, GLint x, GLint y, GLenum type, GLvoid *rgba);
-
-extern void
-_swrast_get_values(struct gl_context *ctx, struct gl_renderbuffer *rb,
-                   GLuint count, const GLint x[], const GLint y[],
-                   void *values, GLuint valueSize);
+                       GLuint n, GLint x, GLint y, GLvoid *rgba);
 
 extern void
 _swrast_put_row(struct gl_context *ctx, struct gl_renderbuffer *rb,
+                GLenum datatype,
                 GLuint count, GLint x, GLint y,
-                const GLvoid *values, GLuint valueSize);
-
-extern void
-_swrast_get_row(struct gl_context *ctx, struct gl_renderbuffer *rb,
-                GLuint count, GLint x, GLint y,
-                GLvoid *values, GLuint valueSize);
-
+                const void *values, const GLubyte *mask);
 
 extern void *
 _swrast_get_dest_rgba(struct gl_context *ctx, struct gl_renderbuffer *rb,

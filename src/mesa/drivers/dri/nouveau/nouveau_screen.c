@@ -35,6 +35,7 @@
 
 #include "main/framebuffer.h"
 #include "main/renderbuffer.h"
+#include "swrast/s_renderbuffer.h"
 
 static const __DRIextension *nouveau_screen_extensions[];
 
@@ -97,7 +98,7 @@ nouveau_init_screen2(__DRIscreen *dri_screen)
 	if (!screen)
 		return NULL;
 
-	dri_screen->private = screen;
+	dri_screen->driverPrivate = screen;
 	dri_screen->extensions = nouveau_screen_extensions;
 	screen->dri_screen = dri_screen;
 
@@ -138,7 +139,7 @@ fail:
 static void
 nouveau_destroy_screen(__DRIscreen *dri_screen)
 {
-	struct nouveau_screen *screen = dri_screen->private;
+	struct nouveau_screen *screen = dri_screen->driverPrivate;
 
 	if (!screen)
 		return;
@@ -147,7 +148,7 @@ nouveau_destroy_screen(__DRIscreen *dri_screen)
 		nouveau_device_close(&screen->device);
 
 	FREE(screen);
-	dri_screen->private = NULL;
+	dri_screen->driverPrivate = NULL;
 }
 
 static GLboolean
@@ -200,9 +201,9 @@ nouveau_create_buffer(__DRIscreen *dri_screen,
 	}
 
 	/* Software renderbuffers. */
-	_mesa_add_soft_renderbuffers(fb, GL_FALSE, GL_FALSE, GL_FALSE,
-				     visual->accumRedBits > 0,
-				     GL_FALSE, GL_FALSE);
+	_swrast_add_soft_renderbuffers(fb, GL_FALSE, GL_FALSE, GL_FALSE,
+                                       visual->accumRedBits > 0,
+                                       GL_FALSE, GL_FALSE);
 
 	drawable->driverPrivate = fb;
 
@@ -241,7 +242,7 @@ static const __DRIextension *nouveau_screen_extensions[] = {
 };
 
 const struct __DriverAPIRec driDriverAPI = {
-	.InitScreen2     = nouveau_init_screen2,
+	.InitScreen      = nouveau_init_screen2,
 	.DestroyScreen   = nouveau_destroy_screen,
 	.CreateBuffer    = nouveau_create_buffer,
 	.DestroyBuffer   = nouveau_destroy_buffer,

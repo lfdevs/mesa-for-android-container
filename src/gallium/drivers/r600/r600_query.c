@@ -42,16 +42,19 @@ static void r600_begin_query(struct pipe_context *ctx, struct pipe_query *query)
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
 	struct r600_query *rquery = (struct r600_query *)query;
 
-	rquery->result = 0;
+	memset(&rquery->result, 0, sizeof(rquery->result));
 	rquery->results_start = rquery->results_end;
 	r600_query_begin(&rctx->ctx, (struct r600_query *)query);
+	LIST_ADDTAIL(&rquery->list, &rctx->ctx.active_query_list);
 }
 
 static void r600_end_query(struct pipe_context *ctx, struct pipe_query *query)
 {
 	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
+	struct r600_query *rquery = (struct r600_query *)query;
 
-	r600_query_end(&rctx->ctx, (struct r600_query *)query);
+	r600_query_end(&rctx->ctx, rquery);
+	LIST_DELINIT(&rquery->list);
 }
 
 static boolean r600_get_query_result(struct pipe_context *ctx,
@@ -73,8 +76,12 @@ static void r600_render_condition(struct pipe_context *ctx,
 	int wait_flag = 0;
 
 	/* If we already have nonzero result, render unconditionally */
-	if (query != NULL && rquery->result != 0)
+	if (query != NULL && rquery->result.u64 != 0) {
+		if (rctx->current_render_cond) {
+			r600_render_condition(ctx, NULL, 0);
+		}
 		return;
+	}
 
 	rctx->current_render_cond = query;
 	rctx->current_render_cond_mode = mode;
@@ -93,7 +100,21 @@ static void r600_render_condition(struct pipe_context *ctx,
 	}
 
 	rctx->ctx.predicate_drawing = true;
-	r600_query_predication(&rctx->ctx, rquery, PREDICATION_OP_ZPASS, wait_flag);
+
+	switch (rquery->type) {
+	case PIPE_QUERY_OCCLUSION_COUNTER:
+	case PIPE_QUERY_OCCLUSION_PREDICATE:
+		r600_query_predication(&rctx->ctx, rquery, PREDICATION_OP_ZPASS, wait_flag);
+		break;
+	case PIPE_QUERY_PRIMITIVES_EMITTED:
+	case PIPE_QUERY_PRIMITIVES_GENERATED:
+	case PIPE_QUERY_SO_STATISTICS:
+	case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+		r600_query_predication(&rctx->ctx, rquery, PREDICATION_OP_PRIMCOUNT, wait_flag);
+		break;
+	default:
+		assert(0);
+	}
 }
 
 void r600_init_query_functions(struct r600_pipe_context *rctx)
@@ -104,6 +125,6 @@ void r600_init_query_functions(struct r600_pipe_context *rctx)
 	rctx->context.end_query = r600_end_query;
 	rctx->context.get_query_result = r600_get_query_result;
 
-	if (r600_get_num_backends(rctx->screen->radeon) > 0)
+	if (rctx->screen->info.r600_num_backends > 0)
 	    rctx->context.render_condition = r600_render_condition;
 }

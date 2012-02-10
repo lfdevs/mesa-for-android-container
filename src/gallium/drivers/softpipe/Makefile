@@ -5,7 +5,6 @@ LIBNAME = softpipe
 
 C_SOURCES = \
 	sp_fs_exec.c \
-	sp_fs_sse.c \
 	sp_clear.c \
 	sp_fence.c \
 	sp_flush.c \
@@ -19,7 +18,7 @@ C_SOURCES = \
 	sp_quad_fs.c \
 	sp_quad_blend.c \
 	sp_screen.c \
-        sp_setup.c \
+	sp_setup.c \
 	sp_state_blend.c \
 	sp_state_clip.c \
 	sp_state_derived.c \

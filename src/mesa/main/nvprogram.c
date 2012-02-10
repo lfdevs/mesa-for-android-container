@@ -365,7 +365,7 @@ _mesa_GetVertexAttribdvNV(GLuint index, GLenum pname, GLdouble *params)
       return;
    }
 
-   array = &ctx->Array.ArrayObj->VertexAttrib[index];
+   array = &ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(index)];
 
    switch (pname) {
       case GL_ATTRIB_ARRAY_SIZE_NV:
@@ -409,7 +409,7 @@ _mesa_GetVertexAttribfvNV(GLuint index, GLenum pname, GLfloat *params)
       return;
    }
 
-   array = &ctx->Array.ArrayObj->VertexAttrib[index];
+   array = &ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(index)];
 
    switch (pname) {
       case GL_ATTRIB_ARRAY_SIZE_NV:
@@ -453,7 +453,7 @@ _mesa_GetVertexAttribivNV(GLuint index, GLenum pname, GLint *params)
       return;
    }
 
-   array = &ctx->Array.ArrayObj->VertexAttrib[index];
+   array = &ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(index)];
 
    switch (pname) {
       case GL_ATTRIB_ARRAY_SIZE_NV:
@@ -508,7 +508,7 @@ _mesa_GetVertexAttribPointervNV(GLuint index, GLenum pname, GLvoid **pointer)
       return;
    }
 
-   *pointer = (GLvoid *) ctx->Array.ArrayObj->VertexAttrib[index].Ptr;
+   *pointer = (GLvoid *) ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(index)].Ptr;
 }
 
 void
@@ -560,7 +560,7 @@ _mesa_emit_nv_temp_initialization(struct gl_context *ctx,
 }
 
 void
-_mesa_setup_nv_temporary_count(struct gl_context *ctx, struct gl_program *program)
+_mesa_setup_nv_temporary_count(struct gl_program *program)
 {
    GLuint i;
 
@@ -812,7 +812,7 @@ _mesa_ProgramNamedParameter4fNV(GLuint id, GLsizei len, const GLubyte *name,
 {
    struct gl_program *prog;
    struct gl_fragment_program *fragProg;
-   GLfloat *v;
+   gl_constant_value *v;
 
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_BEGIN_END(ctx);
@@ -834,10 +834,10 @@ _mesa_ProgramNamedParameter4fNV(GLuint id, GLsizei len, const GLubyte *name,
    v = _mesa_lookup_parameter_value(fragProg->Base.Parameters, len,
                                     (char *) name);
    if (v) {
-      v[0] = x;
-      v[1] = y;
-      v[2] = z;
-      v[3] = w;
+      v[0].f = x;
+      v[1].f = y;
+      v[2].f = z;
+      v[3].f = w;
       return;
    }
 
@@ -878,7 +878,7 @@ _mesa_GetProgramNamedParameterfvNV(GLuint id, GLsizei len, const GLubyte *name,
 {
    struct gl_program *prog;
    struct gl_fragment_program *fragProg;
-   const GLfloat *v;
+   const gl_constant_value *v;
 
    GET_CURRENT_CONTEXT(ctx);
 
@@ -899,10 +899,10 @@ _mesa_GetProgramNamedParameterfvNV(GLuint id, GLsizei len, const GLubyte *name,
    v = _mesa_lookup_parameter_value(fragProg->Base.Parameters,
                                     len, (char *) name);
    if (v) {
-      params[0] = v[0];
-      params[1] = v[1];
-      params[2] = v[2];
-      params[3] = v[3];
+      params[0] = v[0].f;
+      params[1] = v[1].f;
+      params[2] = v[2].f;
+      params[3] = v[3].f;
       return;
    }
 

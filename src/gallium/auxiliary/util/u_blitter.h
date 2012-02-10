@@ -77,7 +77,7 @@ struct blitter_context
                           unsigned x1, unsigned y1, unsigned x2, unsigned y2,
                           float depth,
                           enum blitter_attrib_type type,
-                          const float attrib[4]);
+                          const union pipe_color_union *color);
 
    /* Whether the blitter is running. */
    boolean running;
@@ -89,12 +89,11 @@ struct blitter_context
    void *saved_dsa_state;     /**< depth stencil alpha state */
    void *saved_velem_state;   /**< vertex elements state */
    void *saved_rs_state;      /**< rasterizer state */
-   void *saved_fs, *saved_vs; /**< fragment shader, vertex shader */
+   void *saved_fs, *saved_vs, *saved_gs; /**< shaders */
 
    struct pipe_framebuffer_state saved_fb_state;  /**< framebuffer state */
    struct pipe_stencil_ref saved_stencil_ref;     /**< stencil ref */
    struct pipe_viewport_state saved_viewport;
-   struct pipe_clip_state saved_clip;
 
    int saved_num_sampler_states;
    void *saved_sampler_states[PIPE_MAX_SAMPLERS];
@@ -104,6 +103,9 @@ struct blitter_context
 
    int saved_num_vertex_buffers;
    struct pipe_vertex_buffer saved_vertex_buffers[PIPE_MAX_ATTRIBS];
+
+   int saved_num_so_targets;
+   struct pipe_stream_output_target *saved_so_targets[PIPE_MAX_SO_BUFFERS];
 };
 
 /**
@@ -126,22 +128,30 @@ struct pipe_context *util_blitter_get_pipe(struct blitter_context *blitter)
 }
 
 /*
- * These CSOs must be saved before any of the following functions is called:
- * - blend state
- * - depth stencil alpha state
- * - rasterizer state
+ * These states must be saved before any of the following functions are called:
+ * - vertex buffers
+ * - vertex elements
  * - vertex shader
- * - fragment shader
+ * - geometry shader (if supported)
+ * - stream output targets (if supported)
+ * - rasterizer state
  */
 
 /**
  * Clear a specified set of currently bound buffers to specified values.
+ *
+ * These states must be saved in the blitter in addition to the state objects
+ * already required to be saved:
+ * - fragment shader
+ * - depth stencil alpha state
+ * - blend state
  */
 void util_blitter_clear(struct blitter_context *blitter,
                         unsigned width, unsigned height,
                         unsigned num_cbufs,
                         unsigned clear_buffers,
-                        const float *rgba,
+                        enum pipe_format cbuf_format,
+                        const union pipe_color_union *color,
                         double depth, unsigned stencil);
 
 void util_blitter_clear_depth_custom(struct blitter_context *blitter,
@@ -152,7 +162,7 @@ void util_blitter_clear_depth_custom(struct blitter_context *blitter,
  * Copy a block of pixels from one surface to another.
  *
  * You can copy from any color format to any other color format provided
- * the former can be sampled and the latter can be rendered to. Otherwise,
+ * the former can be sampled from and the latter can be rendered to. Otherwise,
  * a software fallback path is taken and both surfaces must be of the same
  * format.
  *
@@ -160,34 +170,94 @@ void util_blitter_clear_depth_custom(struct blitter_context *blitter,
  * cannot be copied unless you set ignore_stencil to FALSE. In that case,
  * a software fallback path is taken and both surfaces must be of the same
  * format.
+ * XXX implement hw-accel stencil copy using shader stencil export.
  *
  * Use pipe_screen->is_format_supported to know your options.
  *
  * These states must be saved in the blitter in addition to the state objects
  * already required to be saved:
- * - framebuffer state
+ * - fragment shader
+ * - depth stencil alpha state
+ * - blend state
  * - fragment sampler states
  * - fragment sampler textures
+ * - framebuffer state
  */
-void util_blitter_copy_region(struct blitter_context *blitter,
+void util_blitter_copy_texture(struct blitter_context *blitter,
+                               struct pipe_resource *dst,
+                               unsigned dstlevel,
+                               unsigned dstx, unsigned dsty, unsigned dstz,
+                               struct pipe_resource *src,
+                               unsigned srclevel,
+                               const struct pipe_box *srcbox,
+                               boolean ignore_stencil);
+
+/**
+ * Same as util_blitter_copy_texture, but dst and src are pipe_surface and
+ * pipe_sampler_view, respectively. The mipmap level and dstz are part of
+ * the views.
+ *
+ * Drivers can use this to change resource properties (like format, width,
+ * height) by changing how the views interpret them, instead of changing
+ * pipe_resource directly. This is usually needed to accelerate copying of
+ * compressed formats.
+ *
+ * src_width0 and src_height0 are sampler_view-private properties that
+ * override pipe_resource. The blitter uses them for computation of texture
+ * coordinates. The dst dimensions are supplied through pipe_surface::width
+ * and height.
+ *
+ * NOTE: There are no checks whether the blit is actually supported.
+ */
+void util_blitter_copy_texture_view(struct blitter_context *blitter,
+                                    struct pipe_surface *dst,
+                                    unsigned dstx, unsigned dsty,
+                                    struct pipe_sampler_view *src,
+                                    const struct pipe_box *srcbox,
+                                    unsigned src_width0, unsigned src_height0);
+
+/**
+ * Helper function to initialize a view for copy_texture_view.
+ * The parameters must match copy_texture_view.
+ */
+void util_blitter_default_dst_texture(struct pipe_surface *dst_templ,
+                                      struct pipe_resource *dst,
+                                      unsigned dstlevel,
+                                      unsigned dstz,
+                                      const struct pipe_box *srcbox);
+
+/**
+ * Helper function to initialize a view for copy_texture_view.
+ * The parameters must match copy_texture_view.
+ */
+void util_blitter_default_src_texture(struct pipe_sampler_view *src_templ,
+                                      struct pipe_resource *src,
+                                      unsigned srclevel);
+
+/**
+ * Copy data from one buffer to another using the Stream Output functionality.
+ * Some alignment is required, otherwise software fallback is used.
+ */
+void util_blitter_copy_buffer(struct blitter_context *blitter,
                               struct pipe_resource *dst,
-                              unsigned dstlevel,
-                              unsigned dstx, unsigned dsty, unsigned dstz,
+                              unsigned dstx,
                               struct pipe_resource *src,
-                              unsigned srclevel,
-                              const struct pipe_box *srcbox,
-                              boolean ignore_stencil);
+                              unsigned srcx,
+                              unsigned size);
 
 /**
  * Clear a region of a (color) surface to a constant value.
  *
  * These states must be saved in the blitter in addition to the state objects
  * already required to be saved:
+ * - fragment shader
+ * - depth stencil alpha state
+ * - blend state
  * - framebuffer state
  */
 void util_blitter_clear_render_target(struct blitter_context *blitter,
                                       struct pipe_surface *dst,
-                                      const float *rgba,
+                                      const union pipe_color_union *color,
                                       unsigned dstx, unsigned dsty,
                                       unsigned width, unsigned height);
 
@@ -197,6 +267,9 @@ void util_blitter_clear_render_target(struct blitter_context *blitter,
  *
  * These states must be saved in the blitter in addition to the state objects
  * already required to be saved:
+ * - fragment shader
+ * - depth stencil alpha state
+ * - blend state
  * - framebuffer state
  */
 void util_blitter_clear_depth_stencil(struct blitter_context *blitter,
@@ -217,7 +290,7 @@ void util_blitter_custom_depth_stencil(struct blitter_context *blitter,
  * of the util_blitter_{clear, copy_region, fill_region} functions and then
  * forgotten.
  *
- * CSOs not listed here are not affected by util_blitter. */
+ * States not listed here are not affected by util_blitter. */
 
 static INLINE
 void util_blitter_save_blend(struct blitter_context *blitter,
@@ -269,6 +342,13 @@ void util_blitter_save_vertex_shader(struct blitter_context *blitter,
 }
 
 static INLINE
+void util_blitter_save_geometry_shader(struct blitter_context *blitter,
+                                       void *gs)
+{
+   blitter->saved_gs = gs;
+}
+
+static INLINE
 void util_blitter_save_framebuffer(struct blitter_context *blitter,
                                    const struct pipe_framebuffer_state *state)
 {
@@ -281,13 +361,6 @@ void util_blitter_save_viewport(struct blitter_context *blitter,
                                 struct pipe_viewport_state *state)
 {
    blitter->saved_viewport = *state;
-}
-
-static INLINE
-void util_blitter_save_clip(struct blitter_context *blitter,
-                            struct pipe_clip_state *state)
-{
-   blitter->saved_clip = *state;
 }
 
 static INLINE
@@ -319,8 +392,8 @@ util_blitter_save_fragment_sampler_views(struct blitter_context *blitter,
 
 static INLINE void
 util_blitter_save_vertex_buffers(struct blitter_context *blitter,
-                                         int num_vertex_buffers,
-                                         struct pipe_vertex_buffer *vertex_buffers)
+                                 int num_vertex_buffers,
+                                 struct pipe_vertex_buffer *vertex_buffers)
 {
    assert(num_vertex_buffers <= Elements(blitter->saved_vertex_buffers));
 
@@ -329,6 +402,20 @@ util_blitter_save_vertex_buffers(struct blitter_context *blitter,
                             (unsigned*)&blitter->saved_num_vertex_buffers,
                             vertex_buffers,
                             num_vertex_buffers);
+}
+
+static INLINE void
+util_blitter_save_so_targets(struct blitter_context *blitter,
+                             int num_targets,
+                             struct pipe_stream_output_target **targets)
+{
+   unsigned i;
+   assert(num_targets <= Elements(blitter->saved_so_targets));
+
+   blitter->saved_num_so_targets = num_targets;
+   for (i = 0; i < num_targets; i++)
+      pipe_so_target_reference(&blitter->saved_so_targets[i],
+                               targets[i]);
 }
 
 #ifdef __cplusplus

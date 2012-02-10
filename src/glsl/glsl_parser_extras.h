@@ -42,6 +42,20 @@ enum _mesa_glsl_parser_targets {
 
 struct gl_context;
 
+struct glsl_switch_state {
+   /** Temporary variables needed for switch statement. */
+   ir_variable *test_var;
+   ir_variable *is_fallthru_var;
+   ir_variable *is_break_var;
+   class ast_switch_statement *switch_nesting_ast;
+
+   /** Table of constant values already used in case labels */
+   struct hash_table *labels_ht;
+   class ast_case_label *previous_default;
+
+   bool is_switch_innermost; // if switch stmt is closest to break, ...
+};
+
 struct _mesa_glsl_parse_state {
    _mesa_glsl_parse_state(struct gl_context *ctx, GLenum target,
 			  void *mem_ctx);
@@ -149,8 +163,9 @@ struct _mesa_glsl_parse_state {
    bool all_invariant;
 
    /** Loop or switch statement containing the current instructions. */
-   class ir_instruction *loop_or_switch_nesting;
-   class ast_iteration_statement *loop_or_switch_nesting_ast;
+   class ast_iteration_statement *loop_nesting_ast;
+
+   struct glsl_switch_state switch_state;
 
    /** List of structures defined in user code. */
    const glsl_type **user_structures;
@@ -180,10 +195,14 @@ struct _mesa_glsl_parse_state {
    bool ARB_shader_stencil_export_warn;
    bool AMD_conservative_depth_enable;
    bool AMD_conservative_depth_warn;
+   bool ARB_conservative_depth_enable;
+   bool ARB_conservative_depth_warn;
    bool AMD_shader_stencil_export_enable;
    bool AMD_shader_stencil_export_warn;
    bool OES_texture_3D_enable;
    bool OES_texture_3D_warn;
+   bool OES_EGL_image_external_enable;
+   bool OES_EGL_image_external_warn;
    /*@}*/
 
    /** Extensions supported by the OpenGL implementation. */

@@ -65,6 +65,8 @@ struct st_framebuffer {
    enum st_attachment_type strb_att;
 
    void *privateData;
+   int32_t stamp;
+   int32_t iface_stamp;
 };
 
 enum vg_object_type {
@@ -105,7 +107,6 @@ struct vg_context
    VGErrorCode _error;
 
    struct st_framebuffer *draw_buffer;
-   int32_t draw_buffer_invalid;
 
    struct cso_hash *owned_objects[VG_OBJECT_LAST];
 
@@ -129,6 +130,8 @@ struct vg_context
    struct vg_paint *default_paint;
 
    struct blit_state *blit;
+
+   int32_t draw_stamp;
 };
 
 
@@ -158,11 +161,9 @@ VGboolean vg_context_is_object_valid(struct vg_context *ctx,
                                      enum vg_object_type type,
                                      VGHandle object);
 void vg_context_add_object(struct vg_context *ctx,
-                           enum vg_object_type type,
-                           void *ptr);
+                           struct vg_object *obj);
 void vg_context_remove_object(struct vg_context *ctx,
-                              enum vg_object_type type,
-                              void *ptr);
+                              struct vg_object *obj);
 
 void vg_validate_state(struct vg_context *ctx);
 

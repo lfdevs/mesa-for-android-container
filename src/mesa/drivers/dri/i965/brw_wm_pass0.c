@@ -203,16 +203,16 @@ static const struct brw_wm_ref *pass0_get_reg( struct brw_wm_compile *c,
 	 switch (plist->Parameters[idx].Type) {
 	 case PROGRAM_NAMED_PARAM:
 	 case PROGRAM_CONSTANT:
-	    /* These are invarient:
+	    /* These are invariant:
 	     */
-	    ref = get_const_ref(c, &plist->ParameterValues[idx][component]);
+	    ref = get_const_ref(c, &plist->ParameterValues[idx][component].f);
 	    break;
 
 	 case PROGRAM_STATE_VAR:
 	 case PROGRAM_UNIFORM:
 	    /* These may change from run to run:
 	     */
-	    ref = get_param_ref(c, &plist->ParameterValues[idx][component] );
+	    ref = get_param_ref(c, &plist->ParameterValues[idx][component].f );
 	    break;
 
 	 default:

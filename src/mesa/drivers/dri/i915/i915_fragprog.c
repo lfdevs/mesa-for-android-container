@@ -175,10 +175,8 @@ src_vector(struct i915_fragment_program *p,
    case PROGRAM_STATE_VAR:
    case PROGRAM_NAMED_PARAM:
    case PROGRAM_UNIFORM:
-      src =
-         i915_emit_param4fv(p,
-                            program->Base.Parameters->ParameterValues[source->
-                                                                      Index]);
+      src = i915_emit_param4fv(p,
+	 &program->Base.Parameters->ParameterValues[source->Index][0].f);
       break;
 
    default:
@@ -1150,7 +1148,7 @@ fixup_depth_write(struct i915_fragment_program *p)
 static void
 check_wpos(struct i915_fragment_program *p)
 {
-   GLuint inputs = p->FragProg.Base.InputsRead;
+   GLbitfield64 inputs = p->FragProg.Base.InputsRead;
    GLint i;
 
    p->wpos_tex = -1;
@@ -1287,7 +1285,7 @@ i915IsProgramNative(struct gl_context * ctx, GLenum target, struct gl_program *p
       return !p->error;
    }
    else
-      return GL_TRUE;
+      return true;
 }
 
 static GLboolean
@@ -1302,7 +1300,7 @@ i915ProgramStringNotify(struct gl_context * ctx,
    (void) _tnl_program_string(ctx, target, prog);
 
    /* XXX check if program is legal, within limits */
-   return GL_TRUE;
+   return true;
 }
 
 void
@@ -1339,7 +1337,7 @@ i915ValidateFragmentProgram(struct i915_context *i915)
    struct i915_fragment_program *p =
       (struct i915_fragment_program *) ctx->FragmentProgram._Current;
 
-   const GLuint inputsRead = p->FragProg.Base.InputsRead;
+   const GLbitfield64 inputsRead = p->FragProg.Base.InputsRead;
    GLuint s4 = i915->state.Ctx[I915_CTXREG_LIS4] & ~S4_VFMT_MASK;
    GLuint s2 = S2_TEXCOORD_NONE;
    int i, offset = 0;

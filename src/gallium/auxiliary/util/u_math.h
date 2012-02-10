@@ -48,73 +48,11 @@ extern "C" {
 #endif
 
 
-#if defined(PIPE_SUBSYSTEM_WINDOWS_MINIPORT)
-__inline double ceil(double val)
-{
-   double ceil_val;
-
-   if ((val - (long) val) == 0) {
-      ceil_val = val;
-   }
-   else {
-      if (val > 0) {
-         ceil_val = (long) val + 1;
-      }
-      else {
-         ceil_val = (long) val;
-      }
-   }
-
-   return ceil_val;
-}
-
-#ifndef PIPE_SUBSYSTEM_WINDOWS_CE_OGL
-__inline double floor(double val)
-{
-   double floor_val;
-
-   if ((val - (long) val) == 0) {
-      floor_val = val;
-   }
-   else {
-      if (val > 0) {
-         floor_val = (long) val;
-      }
-      else {
-         floor_val = (long) val - 1;
-      }
-   }
-
-   return floor_val;
-}
-#endif
-
-#pragma function(pow)
-__inline double __cdecl pow(double val, double exponent)
-{
-   /* XXX */
-   assert(0);
-   return 0;
-}
-
-#pragma function(log)
-__inline double __cdecl log(double val)
-{
-   /* XXX */
-   assert(0);
-   return 0;
-}
-
-#pragma function(atan2)
-__inline double __cdecl atan2(double val)
-{
-   /* XXX */
-   assert(0);
-   return 0;
-}
-#else
 #include <math.h>
 #include <stdarg.h>
+
+#ifdef PIPE_OS_UNIX
+#include <strings.h> /* for ffs */
 #endif
 
 
@@ -125,7 +63,7 @@ __inline double __cdecl atan2(double val)
 
 #if defined(_MSC_VER) 
 
-#if _MSC_VER < 1400 && !defined(__cplusplus) || defined(PIPE_SUBSYSTEM_WINDOWS_CE)
+#if _MSC_VER < 1400 && !defined(__cplusplus)
  
 static INLINE float cosf( float f ) 
 {
@@ -198,6 +136,27 @@ roundf(float x)
 
 #endif /* _MSC_VER */
 
+
+#ifdef PIPE_OS_ANDROID
+
+static INLINE
+double log2(double d)
+{
+   return log(d) * (1.0 / M_LN2);
+}
+
+/* workaround a conflict with main/imports.h */
+#ifdef log2f
+#undef log2f
+#endif
+
+static INLINE
+float log2f(float f)
+{
+   return logf(f) * (float) (1.0 / M_LN2);
+}
+
+#endif
 
 
 
@@ -409,9 +368,25 @@ unsigned ffs( unsigned u )
 
    return i;
 }
-#elif defined(__MINGW32__)
+#elif defined(__MINGW32__) || defined(PIPE_OS_ANDROID)
 #define ffs __builtin_ffs
 #endif
+
+
+/* Destructively loop over all of the bits in a mask as in:
+ *
+ * while (mymask) {
+ *   int i = u_bit_scan(&mymask);
+ *   ... process element i
+ * }
+ * 
+ */
+static INLINE int u_bit_scan(unsigned *mask)
+{
+   int i = ffs(*mask) - 1;
+   *mask &= ~(1 << i);
+   return i;
+}
 
 
 /**

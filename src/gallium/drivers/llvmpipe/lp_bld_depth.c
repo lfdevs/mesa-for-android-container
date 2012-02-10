@@ -141,7 +141,7 @@ lp_build_stencil_test(struct lp_build_context *bld,
    res = lp_build_stencil_test_single(bld, &stencil[0],
                                       stencilRefs[0], stencilVals);
 
-   if (stencil[1].enabled && front_facing) {
+   if (stencil[1].enabled && front_facing != NULL) {
       /* do back face test */
       LLVMValueRef back_res;
 
@@ -253,7 +253,7 @@ lp_build_stencil_op(struct lp_build_context *bld,
    res = lp_build_stencil_op_single(bld, &stencil[0], op,
                                      stencilRefs[0], stencilVals);
 
-   if (stencil[1].enabled && front_facing) {
+   if (stencil[1].enabled && front_facing != NULL) {
       /* do back face op */
       LLVMValueRef back_res;
 
@@ -263,10 +263,11 @@ lp_build_stencil_op(struct lp_build_context *bld,
       res = lp_build_select(bld, front_facing, res, back_res);
    }
 
-   if (stencil->writemask != 0xff) {
-      /* mask &= stencil->writemask */
+   /* XXX what about the back-face writemask? */
+   if (stencil[0].writemask != 0xff) {
+      /* mask &= stencil[0].writemask */
       LLVMValueRef writemask = lp_build_const_int_vec(bld->gallivm, bld->type,
-                                                      stencil->writemask);
+                                                      stencil[0].writemask);
       mask = LLVMBuildAnd(builder, mask, writemask, "");
       /* res = (res & mask) | (stencilVals & ~mask) */
       res = lp_build_select_bitwise(bld, mask, res, stencilVals);
@@ -521,8 +522,8 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
       assert(format_desc->block.height == 1);
 
       if (stencil[0].enabled) {
-         assert(format_desc->format == PIPE_FORMAT_Z24_UNORM_S8_USCALED ||
-                format_desc->format == PIPE_FORMAT_S8_USCALED_Z24_UNORM);
+         assert(format_desc->format == PIPE_FORMAT_Z24_UNORM_S8_UINT ||
+                format_desc->format == PIPE_FORMAT_S8_UINT_Z24_UNORM);
       }
 
       assert(z_swizzle < 4);

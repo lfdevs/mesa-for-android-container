@@ -1,0 +1,5 @@
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libxatracker.so usr/lib/${DEB_HOST_MULTIARCH}
+dri/usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/xatracker.pc usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig
+dri/usr/include/xa_composite.h usr/include
+dri/usr/include/xa_context.h usr/include
+dri/usr/include/xa_tracker.h usr/include

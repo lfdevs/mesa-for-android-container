@@ -27,6 +27,8 @@
 #include "util/u_simple_list.h"
 #include "util/u_upload_mgr.h"
 #include "os/os_time.h"
+#include "vl/vl_decoder.h"
+#include "vl/vl_video_buffer.h"
 
 #include "r300_cb.h"
 #include "r300_context.h"
@@ -60,7 +62,6 @@ static void r300_release_referenced_objects(struct r300_context *r300)
             (struct pipe_framebuffer_state*)r300->fb_state.state;
     struct r300_textures_state *textures =
             (struct r300_textures_state*)r300->textures_state.state;
-    struct r300_query *query, *temp;
     unsigned i;
 
     /* Framebuffer state. */
@@ -82,12 +83,6 @@ static void r300_release_referenced_objects(struct r300_context *r300)
     pipe_resource_reference(&r300->dummy_vb, NULL);
     pipe_resource_reference(&r300->vbo, NULL);
 
-    /* If there are any queries pending or not destroyed, remove them now. */
-    foreach_s(query, temp, &r300->query_list) {
-        remove_from_list(query);
-        FREE(query);
-    }
-
     r300->context.delete_depth_stencil_alpha_state(&r300->context,
                                                    r300->dsa_decompress_zmask);
 }
@@ -97,7 +92,7 @@ static void r300_destroy_context(struct pipe_context* context)
     struct r300_context* r300 = r300_context(context);
 
     if (r300->cs && r300->hyperz_enabled) {
-        r300->rws->cs_request_feature(r300->cs, RADEON_FID_HYPERZ_RAM_ACCESS, FALSE);
+        r300->rws->cs_request_feature(r300->cs, RADEON_FID_R300_HYPERZ_ACCESS, FALSE);
     }
 
     if (r300->blitter)
@@ -171,7 +166,7 @@ static boolean r300_setup_atoms(struct r300_context* r300)
     boolean is_rv350 = r300->screen->caps.is_rv350;
     boolean is_r500 = r300->screen->caps.is_r500;
     boolean has_tcl = r300->screen->caps.has_tcl;
-    boolean drm_2_6_0 = r300->rws->get_value(r300->rws, RADEON_VID_DRM_2_6_0);
+    boolean drm_2_6_0 = r300->screen->info.drm_minor >= 6;
 
     /* Create the actual atom list.
      *
@@ -209,7 +204,7 @@ static boolean r300_setup_atoms(struct r300_context* r300)
     R300_INIT_ATOM(vertex_stream_state, 0);
     R300_INIT_ATOM(vs_state, 0);
     R300_INIT_ATOM(vs_constants, 0);
-    R300_INIT_ATOM(clip_state, has_tcl ? 5 + (6 * 4) : 2);
+    R300_INIT_ATOM(clip_state, has_tcl ? 3 + (6 * 4) : 0);
     /* VAP, RS, GA, GB, SU, SC. */
     R300_INIT_ATOM(rs_block_state, 0);
     R300_INIT_ATOM(rs_state, 0);
@@ -282,8 +277,6 @@ static void r300_init_states(struct pipe_context *pipe)
     struct pipe_blend_color bc = {{0}};
     struct pipe_clip_state cs = {{{0}}};
     struct pipe_scissor_state ss = {0};
-    struct r300_clip_state *clip =
-            (struct r300_clip_state*)r300->clip_state.state;
     struct r300_gpu_flush *gpuflush =
             (struct r300_gpu_flush*)r300->gpu_flush.state;
     struct r300_vap_invariant_state *vap_invariant =
@@ -294,16 +287,8 @@ static void r300_init_states(struct pipe_context *pipe)
     CB_LOCALS;
 
     pipe->set_blend_color(pipe, &bc);
+    pipe->set_clip_state(pipe, &cs);
     pipe->set_scissor_state(pipe, &ss);
-
-    /* Initialize the clip state. */
-    if (r300->screen->caps.has_tcl) {
-        pipe->set_clip_state(pipe, &cs);
-    } else {
-        BEGIN_CB(clip->cb, 2);
-        OUT_CB_REG(R300_VAP_CLIP_CNTL, R300_CLIP_DISABLE);
-        END_CB;
-    }
 
     /* Initialize the GPU flush. */
     {
@@ -378,7 +363,7 @@ static void r300_init_states(struct pipe_context *pipe)
 
         if (r300->screen->caps.is_r500 ||
             (r300->screen->caps.is_rv350 &&
-             r300->rws->get_value(r300->rws, RADEON_VID_DRM_2_6_0))) {
+             r300->screen->info.drm_minor >= 6)) {
             OUT_CB_REG(R300_GB_Z_PEQ_CONFIG, 0);
         }
         END_CB;
@@ -405,8 +390,6 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
     r300->context.priv = priv;
 
     r300->context.destroy = r300_destroy_context;
-
-    make_empty_list(&r300->query_list);
 
     util_slab_create(&r300->pool_transfers,
                      sizeof(struct pipe_transfer), 64,
@@ -436,6 +419,9 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
     r300_init_query_functions(r300);
     r300_init_state_functions(r300);
     r300_init_resource_functions(r300);
+    
+    r300->context.create_video_decoder = vl_create_decoder;
+    r300->context.create_video_buffer = vl_video_buffer_create;
 
     r300->vbuf_mgr = u_vbuf_create(&r300->context, 1024 * 1024, 16,
                                        PIPE_BIND_VERTEX_BUFFER |
@@ -443,6 +429,7 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
                                        U_VERTEX_FETCH_DWORD_ALIGNED);
     if (!r300->vbuf_mgr)
         goto fail;
+    r300->vbuf_mgr->caps.format_fixed32 = 0;
 
     r300->blitter = util_blitter_create(&r300->context);
     if (r300->blitter == NULL)
@@ -452,7 +439,7 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
     r300_init_render_functions(r300);
     r300_init_states(&r300->context);
 
-    rws->cs_set_flush(r300->cs, r300_flush_callback, r300);
+    rws->cs_set_flush_callback(r300->cs, r300_flush_callback, r300);
 
     /* The KIL opcode needs the first texture unit to be enabled
      * on r3xx-r4xx. In order to calm down the CS checker, we bind this
@@ -515,15 +502,15 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
                 "r300: DRM version: %d.%d.%d, Name: %s, ID: 0x%04x, GB: %d, Z: %d\n"
                 "r300: GART size: %d MB, VRAM size: %d MB\n"
                 "r300: AA compression RAM: %s, Z compression RAM: %s, HiZ RAM: %s\n",
-                rws->get_value(rws, RADEON_VID_DRM_MAJOR),
-                rws->get_value(rws, RADEON_VID_DRM_MINOR),
-                rws->get_value(rws, RADEON_VID_DRM_PATCHLEVEL),
+                r300->screen->info.drm_major,
+                r300->screen->info.drm_minor,
+                r300->screen->info.drm_patchlevel,
                 screen->get_name(screen),
-                rws->get_value(rws, RADEON_VID_PCI_ID),
-                rws->get_value(rws, RADEON_VID_R300_GB_PIPES),
-                rws->get_value(rws, RADEON_VID_R300_Z_PIPES),
-                rws->get_value(rws, RADEON_VID_GART_SIZE) >> 20,
-                rws->get_value(rws, RADEON_VID_VRAM_SIZE) >> 20,
+                r300->screen->info.pci_id,
+                r300->screen->info.r300_num_gb_pipes,
+                r300->screen->info.r300_num_z_pipes,
+                r300->screen->info.gart_size >> 20,
+                r300->screen->info.vram_size >> 20,
                 "YES", /* XXX really? */
                 r300->screen->caps.zmask_ram ? "YES" : "NO",
                 r300->screen->caps.hiz_ram ? "YES" : "NO");

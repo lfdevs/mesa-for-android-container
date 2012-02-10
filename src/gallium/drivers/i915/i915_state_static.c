@@ -39,11 +39,18 @@ static unsigned translate_format(enum pipe_format format)
 {
    switch (format) {
    case PIPE_FORMAT_B8G8R8A8_UNORM:
+   case PIPE_FORMAT_B8G8R8X8_UNORM:
+   case PIPE_FORMAT_R8G8B8A8_UNORM:
+   case PIPE_FORMAT_R8G8B8X8_UNORM:
       return COLOR_BUF_ARGB8888;
    case PIPE_FORMAT_B5G6R5_UNORM:
       return COLOR_BUF_RGB565;
-   case PIPE_FORMAT_R8G8B8A8_UNORM:
-      return COLOR_BUF_ARGB8888;
+   case PIPE_FORMAT_B5G5R5A1_UNORM:
+      return COLOR_BUF_ARGB1555;
+   case PIPE_FORMAT_B4G4R4A4_UNORM:
+      return COLOR_BUF_ARGB4444;
+   case PIPE_FORMAT_B10G10R10A2_UNORM:
+      return COLOR_BUF_ARGB2101010;
    case PIPE_FORMAT_L8_UNORM:
    case PIPE_FORMAT_A8_UNORM:
    case PIPE_FORMAT_I8_UNORM:
@@ -58,7 +65,7 @@ static unsigned translate_depth_format(enum pipe_format zformat)
 {
    switch (zformat) {
    case PIPE_FORMAT_Z24X8_UNORM:
-   case PIPE_FORMAT_Z24_UNORM_S8_USCALED:
+   case PIPE_FORMAT_Z24_UNORM_S8_UINT:
       return DEPTH_FRMT_24_FIXED_8_OTHER;
    case PIPE_FORMAT_Z16_UNORM:
       return DEPTH_FRMT_16_FIXED;
@@ -119,7 +126,8 @@ static void update_framebuffer(struct i915_context *i915)
       unsigned offset = i915_texture_offset(tex, depth_surface->u.tex.level,
                                             depth_surface->u.tex.first_layer);
       assert(tex);
-      assert(offset == 0);
+      if (offset != 0)
+         debug_printf("Depth offset is %d\n",offset);
 
       i915->current.depth_bo = tex->buffer;
       i915->current.depth_flags = BUF_3D_ID_DEPTH |
@@ -156,12 +164,45 @@ struct i915_tracked_state i915_hw_framebuffer = {
    I915_NEW_FRAMEBUFFER
 };
 
+static const struct
+{
+   enum pipe_format format;
+   uint hw_swizzle;
+} fixup_formats[] = {
+   { PIPE_FORMAT_R8G8B8A8_UNORM, 0x21030000 /* BGRA */},
+   { PIPE_FORMAT_R8G8B8X8_UNORM, 0x21030000 /* BGRX */},
+   { PIPE_FORMAT_L8_UNORM,       0x00030000 /* RRRA */},
+   { PIPE_FORMAT_I8_UNORM,       0x00030000 /* RRRA */},
+   { PIPE_FORMAT_A8_UNORM,       0x33330000 /* AAAA */},
+   { PIPE_FORMAT_NONE,           0x00000000},
+};
+
+static uint need_target_fixup(struct pipe_surface* p, uint32_t *fixup)
+{
+   enum pipe_format f;
+   /* if we don't have a surface bound yet, we don't need to fixup the shader */
+   if (!p)
+      return 0;
+
+   f = p->format;
+   for(int i=0; fixup_formats[i].format != PIPE_FORMAT_NONE; i++)
+      if (fixup_formats[i].format == f) {
+         *fixup = fixup_formats[i].hw_swizzle;
+         return 1;
+      }
+
+   *fixup = 0;
+   return 0;
+}
+
 static void update_dst_buf_vars(struct i915_context *i915)
 {
    struct pipe_surface *cbuf_surface = i915->framebuffer.cbufs[0];
    struct pipe_surface *depth_surface = i915->framebuffer.zsbuf;
    uint32_t dst_buf_vars, cformat, zformat;
    uint32_t early_z = 0;
+   uint32_t fixup = 0;
+   int need_fixup;
 
    if (cbuf_surface)
       cformat = cbuf_surface->format;
@@ -196,6 +237,14 @@ static void update_dst_buf_vars(struct i915_context *i915)
       i915->current.dst_buf_vars = dst_buf_vars;
       i915->static_dirty |= I915_DST_VARS;
       i915->hardware_dirty |= I915_HW_STATIC;
+   }
+
+   need_fixup = need_target_fixup(cbuf_surface, &fixup);
+   if (i915->current.need_target_fixup != need_fixup ||
+         i915->current.fixup_swizzle != fixup) {
+      i915->current.need_target_fixup = need_fixup;
+      i915->current.fixup_swizzle = fixup;
+      i915->hardware_dirty |= I915_HW_PROGRAM;
    }
 }
 

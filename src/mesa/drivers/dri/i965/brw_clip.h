@@ -44,7 +44,7 @@
 struct brw_clip_prog_key {
    GLbitfield64 attrs;
    GLuint primitive:4;
-   GLuint nr_userclip:3;
+   GLuint nr_userclip:4;
    GLuint do_flat_shading:1;
    GLuint pv_first:1;
    GLuint do_unfilled:1;
@@ -55,7 +55,6 @@ struct brw_clip_prog_key {
    GLuint copy_bfc_cw:1;
    GLuint copy_bfc_ccw:1;
    GLuint clip_mode:3;
-   GLuint pad0:11;
 
    GLfloat offset_factor;
    GLfloat offset_units;
@@ -103,25 +102,27 @@ struct brw_clip_compile {
       struct brw_reg ff_sync;
    } reg;
 
-   /* 3 different ways of expressing vertex size:
-    */
-   GLuint nr_attrs;
+   /* Number of registers storing VUE data */
    GLuint nr_regs;
-   GLuint nr_bytes;
 
    GLuint first_tmp;
    GLuint last_tmp;
 
-   GLboolean need_direction;
+   bool need_direction;
 
-   GLuint header_position_offset;
-   /** Mapping from VERT_RESULT_* to offset within the VUE. */
-   GLuint offset[VERT_RESULT_MAX];
-   /** Mapping from attribute index to VERT_RESULT_* */
-   GLuint idx_to_attr[VERT_RESULT_MAX];
+   struct brw_vue_map vue_map;
 };
 
 #define ATTR_SIZE  (4*4)
+
+/**
+ * True if the given vert_result is one of the outputs of the vertex shader.
+ */
+static inline bool brw_clip_have_vert_result(struct brw_clip_compile *c,
+                                             GLuint vert_result)
+{
+   return (c->key.attrs & BITFIELD64_BIT(vert_result)) ? 1 : 0;
+}
 
 /* Points are only culled, so no need for a clip routine, however it
  * works out easier to have a dummy one.
@@ -149,14 +150,14 @@ void brw_clip_interp_vertex( struct brw_clip_compile *c,
 			     struct brw_indirect v0_ptr, /* from */
 			     struct brw_indirect v1_ptr, /* to */
 			     struct brw_reg t0,
-			     GLboolean force_edgeflag );
+			     bool force_edgeflag );
 
 void brw_clip_init_planes( struct brw_clip_compile *c );
 
 void brw_clip_emit_vue(struct brw_clip_compile *c, 
 		       struct brw_indirect vert,
-		       GLboolean allocate,
-		       GLboolean eot,
+		       bool allocate,
+		       bool eot,
 		       GLuint header);
 
 void brw_clip_kill_thread(struct brw_clip_compile *c);

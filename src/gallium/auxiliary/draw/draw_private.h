@@ -52,6 +52,10 @@ struct draw_llvm;
 #endif
 
 
+/** Sum of frustum planes and user-defined planes */
+#define DRAW_TOTAL_CLIP_PLANES (6 + PIPE_MAX_CLIP_PLANES)
+
+
 struct pipe_context;
 struct draw_vertex_shader;
 struct draw_context;
@@ -66,12 +70,13 @@ struct tgsi_sampler;
  * Carry some useful information around with the vertices in the prim pipe.  
  */
 struct vertex_header {
-   unsigned clipmask:12;
+   unsigned clipmask:DRAW_TOTAL_CLIP_PLANES;
    unsigned edgeflag:1;
-   unsigned pad:3;
+   unsigned have_clipdist:1;
    unsigned vertex_id:16;
 
    float clip[4];
+   float pre_clip_pos[4];
 
    /* This will probably become float (*data)[4] soon:
     */
@@ -83,7 +88,7 @@ struct vertex_header {
 
 
 /* maximum number of shader variants we can cache */
-#define DRAW_MAX_SHADER_VARIANTS 1024
+#define DRAW_MAX_SHADER_VARIANTS 128
 
 /**
  * Private context for the drawing module.
@@ -179,7 +184,7 @@ struct draw_context
          unsigned gs_constants_size[PIPE_MAX_CONSTANT_BUFFERS];
          
          /* pointer to planes */
-         float (*planes)[12][4]; 
+         float (*planes)[DRAW_TOTAL_CLIP_PLANES][4]; 
       } user;
 
       boolean test_fse;         /* enable FSE even though its not correct (eg for softpipe) */
@@ -189,6 +194,7 @@ struct draw_context
    struct {
       boolean bypass_clip_xy;
       boolean bypass_clip_z;
+      boolean guard_band_xy;
    } driver;
 
    boolean flushing;         /**< debugging/sanity */
@@ -200,6 +206,7 @@ struct draw_context
    boolean clip_xy;
    boolean clip_z;
    boolean clip_user;
+   boolean guard_band_xy;
 
    boolean force_passthrough; /**< never clip or shade */
 
@@ -224,16 +231,13 @@ struct draw_context
       uint num_vs_outputs;  /**< convenience, from vertex_shader */
       uint position_output;
       uint edgeflag_output;
-
+      uint clipvertex_output;
+      uint clipdistance_output[2];
       /** TGSI program interpreter runtime state */
       struct tgsi_exec_machine *machine;
 
       uint num_samplers;
       struct tgsi_sampler **samplers;
-
-      /* Here's another one:
-       */
-      struct aos_machine *aos_machine; 
 
 
       const void *aligned_constants[PIPE_MAX_CONSTANT_BUFFERS];
@@ -268,16 +272,14 @@ struct draw_context
 
    /** Stream output (vertex feedback) state */
    struct {
-      struct pipe_stream_output_state state;
-      void *buffers[PIPE_MAX_SO_BUFFERS];
-      uint num_buffers;
+      struct pipe_stream_output_info state;
+      struct draw_so_target *targets[PIPE_MAX_SO_BUFFERS];
+      uint num_targets;
    } so;
 
    /* Clip derived state:
     */
-   float plane[12][4];
-   unsigned nr_planes;
-   boolean depth_clamp;
+   float plane[DRAW_TOTAL_CLIP_PLANES][4];
 
    /* If a prim stage introduces new vertex attributes, they'll be stored here
     */
@@ -378,7 +380,8 @@ void draw_gs_destroy( struct draw_context *draw );
  */
 uint draw_current_shader_outputs(const struct draw_context *draw);
 uint draw_current_shader_position_output(const struct draw_context *draw);
-
+uint draw_current_shader_clipvertex_output(const struct draw_context *draw);
+uint draw_current_shader_clipdistance_output(const struct draw_context *draw, int index);
 int draw_alloc_extra_vertex_attrib(struct draw_context *draw,
                                    uint semantic_name, uint semantic_index);
 void draw_remove_extra_vertex_attribs(struct draw_context *draw);

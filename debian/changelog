@@ -1,3 +1,44 @@
+mesa (8.0-1) experimental; urgency=low
+
+  [ Cyril Brulebois ]
+  * New upstream release.
+  * Disable patch temporarily (needs a refresh):
+    - 11-hurd-ftbfs-again.diff
+  * Drop patch, no longer needed since swrastg was renamed to swrast:
+    - 14-load-swrastg-before-swrast.diff
+  * Update rules file to strop building DRI1 drivers, they went away
+    with the following upstream commit:
+    - dri: Remove all DRI1 drivers (e4344161bd).
+  * Update not-installed for removed files.
+  * Stop trying to ship swrastg through libgl1-mesa-dri-experimental,
+    it replaced the non-gallium variant.
+
+  [ Timo Aaltonen ]
+  * Refresh patches.
+  * control: Add libxcb-glx0-dev to build-depends.
+  * control: Drop libglw1-mesa, libglw1-mesa-dev, glw got moved to a
+    separate source package.
+  * libegl-mesa.symbols, libgles2-mesa.symbols: Add new symbols.
+  * rules: Drop obsolete configure options.
+  * Enable vmwgfx gallium driver & xatracker. (Closes: #652501).
+  * Build llvmpipe swrast only on non-hurd x86, traditional for the
+    rest.
+  * rules: No need to copy nouveau_vieux to the gallium dir, it's
+    installed in libgl1-mesa-dri now.
+  * rules: Handle installing r300_dri.so like other gallium drivers,
+    in libgl1-mesa-dri.install.linux.in.
+
+  [ Robert Hooker ]
+  * Bump libdrm build dep to 2.4.30, x11proto-gl-dev to 1.4.14, and
+    x11proto-dri2-dev to 2.6.
+  * Add libxatracker packaging.
+  * Add libxcb-glx0-dev to libegl1-mesa-dev depends.
+
+  [ Christopher James Halse Rogers ]
+  * debian/control: Add libx11-xcb-dev to libegl1-mesa-dev depends.
+
+ -- Cyril Brulebois <kibi@debian.org>  Fri, 10 Feb 2012 14:02:04 +0100
+
 mesa (7.11.2-1) unstable; urgency=low
 
   * New upstream release:

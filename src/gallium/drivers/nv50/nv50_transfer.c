@@ -2,7 +2,6 @@
 #include "util/u_format.h"
 
 #include "nv50_context.h"
-#include "nv50_transfer.h"
 
 #include "nv50_defs.xml.h"
 
@@ -13,7 +12,44 @@ struct nv50_transfer {
    uint32_t nblocksy;
 };
 
-static void
+void
+nv50_m2mf_rect_setup(struct nv50_m2mf_rect *rect,
+                     struct pipe_resource *restrict res, unsigned l,
+                     unsigned x, unsigned y, unsigned z)
+{
+   struct nv50_miptree *mt = nv50_miptree(res);
+   const unsigned w = u_minify(res->width0, l);
+   const unsigned h = u_minify(res->height0, l);
+
+   rect->bo = mt->base.bo;
+   rect->domain = mt->base.domain;
+   rect->base = mt->level[l].offset;
+   rect->pitch = mt->level[l].pitch;
+   if (util_format_is_plain(res->format)) {
+      rect->width = w << mt->ms_x;
+      rect->height = h << mt->ms_y;
+      rect->x = x << mt->ms_x;
+      rect->y = y << mt->ms_y;
+   } else {
+      rect->width = util_format_get_nblocksx(res->format, w);
+      rect->height = util_format_get_nblocksy(res->format, h);
+      rect->x = util_format_get_nblocksx(res->format, x);
+      rect->y = util_format_get_nblocksy(res->format, y);
+   }
+   rect->tile_mode = mt->level[l].tile_mode;
+   rect->cpp = util_format_get_blocksize(res->format);
+
+   if (mt->layout_3d) {
+      rect->z = z;
+      rect->depth = u_minify(res->depth0, l);
+   } else {
+      rect->base += z * mt->layer_stride;
+      rect->z = 0;
+      rect->depth = 1;
+   }
+}
+
+void
 nv50_m2mf_transfer_rect(struct pipe_screen *pscreen,
                         const struct nv50_m2mf_rect *dst,
                         const struct nv50_m2mf_rect *src,
@@ -104,7 +140,7 @@ nv50_m2mf_transfer_rect(struct pipe_screen *pscreen,
 void
 nv50_sifc_linear_u8(struct nouveau_context *nv,
                     struct nouveau_bo *dst, unsigned offset, unsigned domain,
-                    unsigned size, void *data)
+                    unsigned size, const void *data)
 {
    struct nouveau_channel *chan = nv->screen->channel;
    uint32_t *src = (uint32_t *)data;
@@ -202,25 +238,13 @@ nv50_miptree_transfer_new(struct pipe_context *pctx,
    struct nv50_context *nv50 = nv50_context(pctx);
    struct pipe_screen *pscreen = pctx->screen;
    struct nouveau_device *dev = nv50->screen->base.device;
-   struct nv50_miptree *mt = nv50_miptree(res);
-   struct nv50_miptree_level *lvl = &mt->level[level];
+   const struct nv50_miptree *mt = nv50_miptree(res);
    struct nv50_transfer *tx;
    uint32_t size;
-   uint32_t w, h, d, z, layer;
    int ret;
 
-   if (usage & PIPE_TRANSFER_MAP_DIRECTLY)
+   if (usage & (PIPE_TRANSFER_MAP_DIRECTLY | PIPE_TRANSFER_MAP_PERMANENTLY))
       return NULL;
-
-   if (mt->layout_3d) {
-      z = box->z;
-      d = u_minify(res->depth0, level);
-      layer = 0;
-   } else {
-      z = 0;
-      d = 1;
-      layer = box->z;
-   }
 
    tx = CALLOC_STRUCT(nv50_transfer);
    if (!tx)
@@ -232,28 +256,18 @@ nv50_miptree_transfer_new(struct pipe_context *pctx,
    tx->base.usage = usage;
    tx->base.box = *box;
 
-   tx->nblocksx = util_format_get_nblocksx(res->format, box->width);
-   tx->nblocksy = util_format_get_nblocksy(res->format, box->height);
+   if (util_format_is_plain(res->format)) {
+      tx->nblocksx = box->width << mt->ms_x;
+      tx->nblocksy = box->height << mt->ms_x;
+   } else {
+      tx->nblocksx = util_format_get_nblocksx(res->format, box->width);
+      tx->nblocksy = util_format_get_nblocksy(res->format, box->height);
+   }
 
    tx->base.stride = tx->nblocksx * util_format_get_blocksize(res->format);
    tx->base.layer_stride = tx->nblocksy * tx->base.stride;
 
-   w = u_minify(res->width0, level);
-   h = u_minify(res->height0, level);
-
-   tx->rect[0].cpp = tx->rect[1].cpp = util_format_get_blocksize(res->format);
-
-   tx->rect[0].bo = mt->base.bo;
-   tx->rect[0].base = lvl->offset + layer * mt->layer_stride;
-   tx->rect[0].tile_mode = lvl->tile_mode;
-   tx->rect[0].x = util_format_get_nblocksx(res->format, box->x);
-   tx->rect[0].y = util_format_get_nblocksy(res->format, box->y);
-   tx->rect[0].z = z;
-   tx->rect[0].width = util_format_get_nblocksx(res->format, w);
-   tx->rect[0].height = util_format_get_nblocksy(res->format, h);
-   tx->rect[0].depth = d;
-   tx->rect[0].pitch = lvl->pitch;
-   tx->rect[0].domain = NOUVEAU_BO_VRAM;
+   nv50_m2mf_rect_setup(&tx->rect[0], res, level, box->x, box->y, box->z);
 
    size = tx->base.layer_stride;
 
@@ -264,6 +278,7 @@ nv50_miptree_transfer_new(struct pipe_context *pctx,
       return NULL;
    }
 
+   tx->rect[1].cpp = tx->rect[0].cpp;
    tx->rect[1].width = tx->nblocksx;
    tx->rect[1].height = tx->nblocksy;
    tx->rect[1].depth = 1;
@@ -272,6 +287,7 @@ nv50_miptree_transfer_new(struct pipe_context *pctx,
 
    if (usage & PIPE_TRANSFER_READ) {
       unsigned base = tx->rect[0].base;
+      unsigned z = tx->rect[0].z;
       unsigned i;
       for (i = 0; i < box->depth; ++i) {
          nv50_m2mf_transfer_rect(pscreen, &tx->rect[1], &tx->rect[0],
@@ -348,3 +364,36 @@ nv50_miptree_transfer_unmap(struct pipe_context *pctx,
    nouveau_bo_unmap(tx->rect[1].bo);
 }
 
+void
+nv50_cb_push(struct nouveau_context *nv,
+             struct nouveau_bo *bo, unsigned domain,
+             unsigned base, unsigned size,
+             unsigned offset, unsigned words, const uint32_t *data)
+{
+   struct nouveau_channel *chan = nv->screen->channel;
+
+   assert(!(offset & 3));
+   size = align(size, 0x100);
+
+   while (words) {
+      unsigned nr;
+
+      MARK_RING(chan, 24, 2);
+      nr = AVAIL_RING(chan);
+      nr = MIN2(nr - 7, words);
+      nr = MIN2(nr, NV04_PFIFO_MAX_PACKET_LEN - 1);
+
+      BEGIN_RING(chan, RING_3D(CB_DEF_ADDRESS_HIGH), 3);
+      OUT_RELOCh(chan, bo, base, domain | NOUVEAU_BO_WR);
+      OUT_RELOCl(chan, bo, base, domain | NOUVEAU_BO_WR);
+      OUT_RING  (chan, (NV50_CB_TMP << 16) | (size & 0xffff));
+      BEGIN_RING(chan, RING_3D(CB_ADDR), 1);
+      OUT_RING  (chan, (offset << 6) | NV50_CB_TMP);
+      BEGIN_RING_NI(chan, RING_3D(CB_DATA(0)), nr);
+      OUT_RINGp (chan, data, nr);
+
+      words -= nr;
+      data += nr;
+      offset += nr * 4;
+   }
+}

@@ -23,133 +23,147 @@
  */
 
 #include "main/glheader.h"
-#include "main/colormac.h"
+#include "main/accum.h"
 #include "main/condrender.h"
+#include "main/format_pack.h"
 #include "main/macros.h"
 #include "main/imports.h"
 #include "main/mtypes.h"
 
-#include "s_accum.h"
 #include "s_context.h"
 #include "s_depth.h"
-#include "s_masking.h"
 #include "s_stencil.h"
 
 
+
 /**
- * Clear the color buffer when glColorMask is in effect.
+ * Clear an rgba color buffer with masking if needed.
  */
 static void
-clear_rgba_buffer_with_masking(struct gl_context *ctx, struct gl_renderbuffer *rb,
-                               GLuint buf)
+clear_rgba_buffer(struct gl_context *ctx, struct gl_renderbuffer *rb,
+                  const GLubyte colorMask[4])
 {
    const GLint x = ctx->DrawBuffer->_Xmin;
    const GLint y = ctx->DrawBuffer->_Ymin;
    const GLint height = ctx->DrawBuffer->_Ymax - ctx->DrawBuffer->_Ymin;
    const GLint width  = ctx->DrawBuffer->_Xmax - ctx->DrawBuffer->_Xmin;
-   SWspan span;
-   GLint i;
+   const GLuint pixelSize = _mesa_get_format_bytes(rb->Format);
+   const GLboolean doMasking = (colorMask[0] == 0 ||
+                                colorMask[1] == 0 ||
+                                colorMask[2] == 0 ||
+                                colorMask[3] == 0);
+   const GLfloat (*clearColor)[4] =
+      (const GLfloat (*)[4]) ctx->Color.ClearColor.f;
+   GLbitfield mapMode = GL_MAP_WRITE_BIT;
+   GLubyte *map;
+   GLint rowStride;
+   GLint i, j;
 
-   ASSERT(rb->PutRow);
-
-   /* Initialize color span with clear color */
-   /* XXX optimize for clearcolor == black/zero (bzero) */
-   INIT_SPAN(span, GL_BITMAP);
-   span.end = width;
-   span.arrayMask = SPAN_RGBA;
-   span.array->ChanType = rb->DataType;
-   if (span.array->ChanType == GL_UNSIGNED_BYTE) {
-      GLubyte clearColor[4];
-      UNCLAMPED_FLOAT_TO_UBYTE(clearColor[RCOMP], ctx->Color.ClearColor[0]);
-      UNCLAMPED_FLOAT_TO_UBYTE(clearColor[GCOMP], ctx->Color.ClearColor[1]);
-      UNCLAMPED_FLOAT_TO_UBYTE(clearColor[BCOMP], ctx->Color.ClearColor[2]);
-      UNCLAMPED_FLOAT_TO_UBYTE(clearColor[ACOMP], ctx->Color.ClearColor[3]);
-      for (i = 0; i < width; i++) {
-         COPY_4UBV(span.array->rgba[i], clearColor);
-      }
-   }
-   else if (span.array->ChanType == GL_UNSIGNED_SHORT) {
-      GLushort clearColor[4];
-      UNCLAMPED_FLOAT_TO_USHORT(clearColor[RCOMP], ctx->Color.ClearColor[0]);
-      UNCLAMPED_FLOAT_TO_USHORT(clearColor[GCOMP], ctx->Color.ClearColor[1]);
-      UNCLAMPED_FLOAT_TO_USHORT(clearColor[BCOMP], ctx->Color.ClearColor[2]);
-      UNCLAMPED_FLOAT_TO_USHORT(clearColor[ACOMP], ctx->Color.ClearColor[3]);
-      for (i = 0; i < width; i++) {
-         COPY_4V_CAST(span.array->rgba[i], clearColor, GLchan);
-      }
-   }
-   else {
-      ASSERT(span.array->ChanType == GL_FLOAT);
-      for (i = 0; i < width; i++) {
-         CLAMPED_FLOAT_TO_CHAN(span.array->rgba[i][0], ctx->Color.ClearColor[0]);
-         CLAMPED_FLOAT_TO_CHAN(span.array->rgba[i][1], ctx->Color.ClearColor[1]);
-         CLAMPED_FLOAT_TO_CHAN(span.array->rgba[i][2], ctx->Color.ClearColor[2]);
-         CLAMPED_FLOAT_TO_CHAN(span.array->rgba[i][3], ctx->Color.ClearColor[3]);
-      }
+   if (doMasking) {
+      /* we'll need to read buffer values too */
+      mapMode |= GL_MAP_READ_BIT;
    }
 
-   /* Note that masking will change the color values, but only the
-    * channels for which the write mask is GL_FALSE.  The channels
-    * which which are write-enabled won't get modified.
-    */
-   for (i = 0; i < height; i++) {
-      span.x = x;
-      span.y = y + i;
-      _swrast_mask_rgba_span(ctx, rb, &span, buf);
-      /* write masked row */
-      rb->PutRow(ctx, rb, width, x, y + i, span.array->rgba, NULL);
-   }
-}
-
-
-/**
- * Clear an rgba color buffer without channel masking.
- */
-static void
-clear_rgba_buffer(struct gl_context *ctx, struct gl_renderbuffer *rb, GLuint buf)
-{
-   const GLint x = ctx->DrawBuffer->_Xmin;
-   const GLint y = ctx->DrawBuffer->_Ymin;
-   const GLint height = ctx->DrawBuffer->_Ymax - ctx->DrawBuffer->_Ymin;
-   const GLint width  = ctx->DrawBuffer->_Xmax - ctx->DrawBuffer->_Xmin;
-   GLubyte clear8[4];
-   GLushort clear16[4];
-   GLvoid *clearVal;
-   GLint i;
-
-   ASSERT(ctx->Color.ColorMask[buf][0] &&
-          ctx->Color.ColorMask[buf][1] &&
-          ctx->Color.ColorMask[buf][2] &&
-          ctx->Color.ColorMask[buf][3]);             
-
-   ASSERT(rb->PutMonoRow);
-
-   switch (rb->DataType) {
-      case GL_UNSIGNED_BYTE:
-         UNCLAMPED_FLOAT_TO_UBYTE(clear8[0], ctx->Color.ClearColor[0]);
-         UNCLAMPED_FLOAT_TO_UBYTE(clear8[1], ctx->Color.ClearColor[1]);
-         UNCLAMPED_FLOAT_TO_UBYTE(clear8[2], ctx->Color.ClearColor[2]);
-         UNCLAMPED_FLOAT_TO_UBYTE(clear8[3], ctx->Color.ClearColor[3]);
-         clearVal = clear8;
-         break;
-      case GL_UNSIGNED_SHORT:
-         UNCLAMPED_FLOAT_TO_USHORT(clear16[0], ctx->Color.ClearColor[0]);
-         UNCLAMPED_FLOAT_TO_USHORT(clear16[1], ctx->Color.ClearColor[1]);
-         UNCLAMPED_FLOAT_TO_USHORT(clear16[2], ctx->Color.ClearColor[2]);
-         UNCLAMPED_FLOAT_TO_USHORT(clear16[3], ctx->Color.ClearColor[3]);
-         clearVal = clear16;
-         break;
-      case GL_FLOAT:
-         clearVal = ctx->Color.ClearColor;
-         break;
-      default:
-         _mesa_problem(ctx, "Bad rb DataType in clear_color_buffer");
-         return;
+   /* map dest buffer */
+   ctx->Driver.MapRenderbuffer(ctx, rb, x, y, width, height,
+                               mapMode, &map, &rowStride);
+   if (!map) {
+      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glClear(color)");
+      return;
    }
 
-   for (i = 0; i < height; i++) {
-      rb->PutMonoRow(ctx, rb, width, x, y + i, clearVal, NULL);
+   /* for 1, 2, 4-byte clearing */
+#define SIMPLE_TYPE_CLEAR(TYPE)                                         \
+   do {                                                                 \
+      TYPE pixel, pixelMask;                                            \
+      _mesa_pack_float_rgba_row(rb->Format, 1, clearColor, &pixel);     \
+      if (doMasking) {                                                  \
+         _mesa_pack_colormask(rb->Format, colorMask, &pixelMask);       \
+         pixel &= pixelMask;                                            \
+         pixelMask = ~pixelMask;                                        \
+      }                                                                 \
+      for (i = 0; i < height; i++) {                                    \
+         TYPE *row = (TYPE *) map;                                      \
+         if (doMasking) {                                               \
+            for (j = 0; j < width; j++) {                               \
+               row[j] = (row[j] & pixelMask) | pixel;                   \
+            }                                                           \
+         }                                                              \
+         else {                                                         \
+            for (j = 0; j < width; j++) {                               \
+               row[j] = pixel;                                          \
+            }                                                           \
+         }                                                              \
+         map += rowStride;                                              \
+      }                                                                 \
+   } while (0)
+
+
+   /* for 3, 6, 8, 12, 16-byte clearing */
+#define MULTI_WORD_CLEAR(TYPE, N)                                       \
+   do {                                                                 \
+      TYPE pixel[N], pixelMask[N];                                      \
+      GLuint k;                                                         \
+      _mesa_pack_float_rgba_row(rb->Format, 1, clearColor, pixel);      \
+      if (doMasking) {                                                  \
+         _mesa_pack_colormask(rb->Format, colorMask, pixelMask);        \
+         for (k = 0; k < N; k++) {                                      \
+            pixel[k] &= pixelMask[k];                                   \
+            pixelMask[k] = ~pixelMask[k];                               \
+         }                                                              \
+      }                                                                 \
+      for (i = 0; i < height; i++) {                                    \
+         TYPE *row = (TYPE *) map;                                      \
+         if (doMasking) {                                               \
+            for (j = 0; j < width; j++) {                               \
+               for (k = 0; k < N; k++) {                                \
+                  row[j * N + k] =                                      \
+                     (row[j * N + k] & pixelMask[k]) | pixel[k];        \
+               }                                                        \
+            }                                                           \
+         }                                                              \
+         else {                                                         \
+            for (j = 0; j < width; j++) {                               \
+               for (k = 0; k < N; k++) {                                \
+                  row[j * N + k] = pixel[k];                            \
+               }                                                        \
+            }                                                           \
+         }                                                              \
+         map += rowStride;                                              \
+      }                                                                 \
+   } while(0)
+
+   switch (pixelSize) {
+   case 1:
+      SIMPLE_TYPE_CLEAR(GLubyte);
+      break;
+   case 2:
+      SIMPLE_TYPE_CLEAR(GLushort);
+      break;
+   case 3:
+      MULTI_WORD_CLEAR(GLubyte, 3);
+      break;
+   case 4:
+      SIMPLE_TYPE_CLEAR(GLuint);
+      break;
+   case 6:
+      MULTI_WORD_CLEAR(GLushort, 3);
+      break;
+   case 8:
+      MULTI_WORD_CLEAR(GLuint, 2);
+      break;
+   case 12:
+      MULTI_WORD_CLEAR(GLuint, 3);
+      break;
+   case 16:
+      MULTI_WORD_CLEAR(GLuint, 4);
+      break;
+   default:
+      _mesa_problem(ctx, "bad pixel size in clear_rgba_buffer()");
    }
+
+   /* unmap buffer */
+   ctx->Driver.UnmapRenderbuffer(ctx, rb);
 }
 
 
@@ -173,15 +187,7 @@ clear_color_buffers(struct gl_context *ctx)
       if (rb == NULL)
 	 continue;
 
-      if (ctx->Color.ColorMask[buf][0] == 0 ||
-          ctx->Color.ColorMask[buf][1] == 0 ||
-          ctx->Color.ColorMask[buf][2] == 0 ||
-          ctx->Color.ColorMask[buf][3] == 0) {
-         clear_rgba_buffer_with_masking(ctx, rb, buf);
-      }
-      else {
-         clear_rgba_buffer(ctx, rb, buf);
-      }
+      clear_rgba_buffer(ctx, rb, ctx->Color.ColorMask[buf]);
    }
 }
 
@@ -196,6 +202,8 @@ clear_color_buffers(struct gl_context *ctx)
 void
 _swrast_Clear(struct gl_context *ctx, GLbitfield buffers)
 {
+   const GLbitfield BUFFER_DS = BUFFER_BIT_DEPTH | BUFFER_BIT_STENCIL;
+
 #ifdef DEBUG_FOO
    {
       const GLbitfield legalBits =
@@ -214,25 +222,36 @@ _swrast_Clear(struct gl_context *ctx, GLbitfield buffers)
    if (!_mesa_check_conditional_render(ctx))
       return; /* don't clear */
 
-   swrast_render_start(ctx);
+   if (SWRAST_CONTEXT(ctx)->NewState)
+      _swrast_validate_derived(ctx);
 
-   /* do software clearing here */
-   if (buffers) {
-      if ((buffers & BUFFER_BITS_COLOR)
-          && (ctx->DrawBuffer->_NumColorDrawBuffers > 0)) {
-         clear_color_buffers(ctx);
-      }
-      if (buffers & BUFFER_BIT_DEPTH) {
-         _swrast_clear_depth_buffer(ctx, ctx->DrawBuffer->_DepthBuffer);
-      }
-      if (buffers & BUFFER_BIT_ACCUM) {
-         _swrast_clear_accum_buffer(ctx,
-                       ctx->DrawBuffer->Attachment[BUFFER_ACCUM].Renderbuffer);
-      }
-      if (buffers & BUFFER_BIT_STENCIL) {
-         _swrast_clear_stencil_buffer(ctx, ctx->DrawBuffer->_StencilBuffer);
-      }
+   if ((buffers & BUFFER_BITS_COLOR)
+       && (ctx->DrawBuffer->_NumColorDrawBuffers > 0)) {
+      clear_color_buffers(ctx);
    }
 
-   swrast_render_finish(ctx);
+   if (buffers & BUFFER_BIT_ACCUM) {
+      _mesa_clear_accum_buffer(ctx);
+   }
+
+   if (buffers & BUFFER_DS) {
+      struct gl_renderbuffer *depthRb =
+         ctx->DrawBuffer->Attachment[BUFFER_DEPTH].Renderbuffer;
+      struct gl_renderbuffer *stencilRb =
+         ctx->DrawBuffer->Attachment[BUFFER_STENCIL].Renderbuffer;
+
+      if ((buffers & BUFFER_DS) == BUFFER_DS && depthRb == stencilRb) {
+         /* clear depth and stencil together */
+         _swrast_clear_depth_stencil_buffer(ctx);
+      }
+      else {
+         /* clear depth, stencil separately */
+         if (buffers & BUFFER_BIT_DEPTH) {
+            _swrast_clear_depth_buffer(ctx);
+         }
+         if (buffers & BUFFER_BIT_STENCIL) {
+            _swrast_clear_stencil_buffer(ctx);
+         }
+      }
+   }
 }

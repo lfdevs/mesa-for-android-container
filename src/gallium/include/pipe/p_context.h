@@ -29,6 +29,8 @@
 #define PIPE_CONTEXT_H
 
 #include "p_compiler.h"
+#include "p_format.h"
+#include "p_video_enums.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,17 +49,21 @@ struct pipe_index_buffer;
 struct pipe_query;
 struct pipe_poly_stipple;
 struct pipe_rasterizer_state;
+struct pipe_resolve_info;
 struct pipe_resource;
 struct pipe_sampler_state;
 struct pipe_sampler_view;
 struct pipe_scissor_state;
 struct pipe_shader_state;
 struct pipe_stencil_ref;
-struct pipe_stream_output_state;
+struct pipe_stream_output_target;
 struct pipe_surface;
 struct pipe_vertex_buffer;
 struct pipe_vertex_element;
+struct pipe_video_buffer;
+struct pipe_video_decoder;
 struct pipe_viewport_state;
+union pipe_color_union;
 
 /**
  * Gallium rendering context.  Basically:
@@ -80,11 +86,6 @@ struct pipe_context {
    /*@{*/
    void (*draw_vbo)( struct pipe_context *pipe,
                      const struct pipe_draw_info *info );
-
-   /**
-    * Draw the stream output buffer at index 0
-    */
-   void (*draw_stream_output)( struct pipe_context *pipe, unsigned mode );
    /*@}*/
 
    /**
@@ -173,11 +174,6 @@ struct pipe_context {
    void   (*bind_vertex_elements_state)(struct pipe_context *, void *);
    void   (*delete_vertex_elements_state)(struct pipe_context *, void *);
 
-   void * (*create_stream_output_state)(struct pipe_context *,
-                                        const struct pipe_stream_output_state *);
-   void   (*bind_stream_output_state)(struct pipe_context *, void *);
-   void   (*delete_stream_output_state)(struct pipe_context*, void*);
-
    /*@}*/
 
    /**
@@ -231,12 +227,26 @@ struct pipe_context {
    void (*set_index_buffer)( struct pipe_context *pipe,
                              const struct pipe_index_buffer * );
 
-   void (*set_stream_output_buffers)(struct pipe_context *,
-                                     struct pipe_resource **buffers,
-                                     int *offsets, /*array of offsets
-                                                     from the start of each
-                                                     of the buffers */
-                                     int num_buffers);
+   /*@}*/
+
+   /**
+    * Stream output functions.
+    */
+   /*@{*/
+
+   struct pipe_stream_output_target *(*create_stream_output_target)(
+                        struct pipe_context *,
+                        struct pipe_resource *,
+                        unsigned buffer_offset,
+                        unsigned buffer_size);
+
+   void (*stream_output_target_destroy)(struct pipe_context *,
+                                        struct pipe_stream_output_target *);
+
+   void (*set_stream_output_targets)(struct pipe_context *,
+                              unsigned num_targets,
+                              struct pipe_stream_output_target **targets,
+                              unsigned append_bitmask);
 
    /*@}*/
 
@@ -263,13 +273,10 @@ struct pipe_context {
 
    /**
     * Resolve a multisampled resource into a non-multisampled one.
-    * Source and destination must have the same size and same format.
+    * Source and destination must be of the same format.
     */
    void (*resource_resolve)(struct pipe_context *pipe,
-                            struct pipe_resource *dst,
-                            unsigned dst_layer,
-                            struct pipe_resource *src,
-                            unsigned src_layer);
+                            const struct pipe_resolve_info *info);
 
    /*@}*/
 
@@ -278,23 +285,23 @@ struct pipe_context {
     * The entire buffers are cleared (no scissor, no colormask, etc).
     *
     * \param buffers  bitfield of PIPE_CLEAR_* values.
-    * \param rgba  pointer to an array of one float for each of r, g, b, a.
+    * \param color  pointer to a union of fiu array for each of r, g, b, a.
     * \param depth  depth clear value in [0,1].
     * \param stencil  stencil clear value
     */
    void (*clear)(struct pipe_context *pipe,
                  unsigned buffers,
-                 const float *rgba,
+                 const union pipe_color_union *color,
                  double depth,
                  unsigned stencil);
 
    /**
     * Clear a color rendertarget surface.
-    * \param rgba  pointer to an array of one float for each of r, g, b, a.
+    * \param color  pointer to an union of fiu array for each of r, g, b, a.
     */
    void (*clear_render_target)(struct pipe_context *pipe,
                                struct pipe_surface *dst,
-                               const float *rgba,
+                               const union pipe_color_union *color,
                                unsigned dstx, unsigned dsty,
                                unsigned width, unsigned height);
 
@@ -395,6 +402,24 @@ struct pipe_context {
     * Flush any pending framebuffer writes and invalidate texture caches.
     */
    void (*texture_barrier)(struct pipe_context *);
+   
+   /**
+    * Creates a video decoder for a specific video codec/profile
+    */
+   struct pipe_video_decoder *(*create_video_decoder)( struct pipe_context *context,
+                                                       enum pipe_video_profile profile,
+                                                       enum pipe_video_entrypoint entrypoint,
+                                                       enum pipe_video_chroma_format chroma_format,
+                                                       unsigned width, unsigned height, unsigned max_references,
+                                                       bool expect_chunked_decode);
+
+   /**
+    * Creates a video buffer as decoding target
+    */
+   struct pipe_video_buffer *(*create_video_buffer)( struct pipe_context *context,
+                                                     enum pipe_format buffer_format,
+                                                     enum pipe_video_chroma_format chroma_format,
+                                                     unsigned width, unsigned height );
 };
 
 

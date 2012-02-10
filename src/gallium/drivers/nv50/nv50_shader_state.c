@@ -130,12 +130,13 @@ nv50_program_validate(struct nv50_context *nv50, struct nv50_program *prog)
    int ret;
    unsigned size;
 
-   if (prog->translated)
+   if (!prog->translated) {
+      prog->translated = nv50_program_translate(prog);
+      if (!prog->translated)
+         return FALSE;
+   } else
+   if (prog->res)
       return TRUE;
-
-   prog->translated = nv50_program_translate(prog);
-   if (!prog->translated)
-      return FALSE;
 
    if (prog->type == PIPE_SHADER_FRAGMENT) heap = nv50->screen->fp_code_heap;
    else
@@ -169,12 +170,6 @@ nv50_vertprog_validate(struct nv50_context *nv50)
 {
    struct nouveau_channel *chan = nv50->screen->base.channel;
    struct nv50_program *vp = nv50->vertprog;
-
-   if (nv50->clip.nr > vp->vp.clpd_nr) {
-      if (vp->translated)
-         nv50_program_destroy(nv50, vp);
-      vp->vp.clpd_nr = nv50->clip.nr;
-   }
 
    if (!nv50_program_validate(nv50, vp))
          return;

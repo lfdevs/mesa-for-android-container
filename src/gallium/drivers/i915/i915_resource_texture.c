@@ -720,9 +720,14 @@ i915_texture_get_transfer(struct pipe_context *pipe,
 {
    struct i915_context *i915 = i915_context(pipe);
    struct i915_texture *tex = i915_texture(resource);
-   struct i915_transfer *transfer = util_slab_alloc(&i915->texture_transfer_pool);
+   struct i915_transfer *transfer;
    boolean use_staging_texture = FALSE;
 
+   if (usage & PIPE_TRANSFER_MAP_PERMANENTLY) {
+      return NULL;
+   }
+
+   transfer = util_slab_alloc(&i915->texture_transfer_pool);
    if (transfer == NULL)
       return NULL;
 
@@ -736,7 +741,8 @@ i915_texture_get_transfer(struct pipe_context *pipe,
    transfer->b.layer_stride = 0;
    transfer->b.data = NULL;
 
-   /* only support textures we can render to, because we need that for u_blitter */
+   /* if we use staging transfers, only support textures we can render to,
+    * because we need that for u_blitter */
    if (i915->blitter &&
        i915_is_format_supported(NULL, /* screen */
                                 transfer->b.resource->format,
@@ -957,7 +963,7 @@ i915_texture_create(struct pipe_screen *screen,
    pipe_reference_init(&tex->b.b.reference, 1);
    tex->b.b.screen = screen;
 
-   if (force_untiled)
+   if ( (force_untiled) || (template->usage == PIPE_USAGE_STREAM) )
       tex->tiling = I915_TILE_NONE;
    else
       tex->tiling = i915_texture_tiling(is, tex);
@@ -980,11 +986,7 @@ i915_texture_create(struct pipe_screen *screen,
    else
       buf_usage = I915_NEW_TEXTURE;
 
-   if (tex->tiling == I915_TILE_NONE)
-      tex->buffer = iws->buffer_create(iws, tex->total_nblocksy * tex->stride,
-                                       buf_usage);
-   else
-      tex->buffer = iws->buffer_create_tiled(iws, &tex->stride, tex->total_nblocksy,
+   tex->buffer = iws->buffer_create_tiled(iws, &tex->stride, tex->total_nblocksy,
                                              &tex->tiling, buf_usage);
    if (!tex->buffer)
       goto fail;

@@ -87,9 +87,11 @@ r300_texture_get_transfer(struct pipe_context *ctx,
     struct r300_resource *tex = r300_resource(texture);
     struct r300_transfer *trans;
     struct pipe_resource base;
-    boolean referenced_cs, referenced_hw, blittable;
-    const struct util_format_description *desc =
-        util_format_description(texture->format);
+    boolean referenced_cs, referenced_hw;
+
+    if (usage & (PIPE_TRANSFER_MAP_DIRECTLY | PIPE_TRANSFER_MAP_PERMANENTLY)) {
+        return NULL;
+    }
 
     referenced_cs =
         r300->rws->cs_is_buffer_referenced(r300->cs, tex->cs_buf);
@@ -97,12 +99,8 @@ r300_texture_get_transfer(struct pipe_context *ctx,
         referenced_hw = TRUE;
     } else {
         referenced_hw =
-            r300->rws->buffer_is_busy(tex->buf);
+            r300->rws->buffer_is_busy(tex->buf, RADEON_USAGE_READWRITE);
     }
-
-    blittable = desc->layout == UTIL_FORMAT_LAYOUT_PLAIN ||
-                desc->layout == UTIL_FORMAT_LAYOUT_S3TC ||
-                desc->layout == UTIL_FORMAT_LAYOUT_RGTC;
 
     trans = CALLOC_STRUCT(r300_transfer);
     if (trans) {
@@ -116,7 +114,8 @@ r300_texture_get_transfer(struct pipe_context *ctx,
          * for this transfer.
          * Also make write transfers pipelined. */
         if (tex->tex.microtile || tex->tex.macrotile[level] ||
-            (referenced_hw && blittable && !(usage & PIPE_TRANSFER_READ))) {
+            (referenced_hw && !(usage & PIPE_TRANSFER_READ) &&
+             r300_is_blit_supported(texture->format))) {
             if (r300->blitter->running) {
                 fprintf(stderr, "r300: ERROR: Blitter recursion in texture_get_transfer.\n");
                 os_break();
@@ -130,8 +129,14 @@ r300_texture_get_transfer(struct pipe_context *ctx,
             base.array_size = 1;
             base.last_level = 0;
             base.nr_samples = 0;
-            base.usage = PIPE_USAGE_DYNAMIC;
+            base.usage = PIPE_USAGE_STAGING;
             base.bind = 0;
+            if (usage & PIPE_TRANSFER_READ) {
+                base.bind |= PIPE_BIND_SAMPLER_VIEW;
+            }
+            if (usage & PIPE_TRANSFER_WRITE) {
+                base.bind |= PIPE_BIND_RENDER_TARGET;
+            }
             base.flags = R300_RESOURCE_FLAG_TRANSFER;
 
             /* For texture reading, the temporary (detiled) texture is used as

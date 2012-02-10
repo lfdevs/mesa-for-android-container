@@ -32,6 +32,12 @@
 
 #define YYLEX_PARAM state->scanner
 
+#undef yyerror
+
+static void yyerror(YYLTYPE *loc, _mesa_glsl_parse_state *st, const char *msg)
+{
+   _mesa_glsl_error(loc, st, "%s", msg);
+}
 %}
 
 %pure-parser
@@ -67,6 +73,11 @@
    ast_declarator_list *declarator_list;
    ast_struct_specifier *struct_specifier;
    ast_declaration *declaration;
+   ast_switch_body *switch_body;
+   ast_case_label *case_label;
+   ast_case_label_list *case_label_list;
+   ast_case_statement *case_statement;
+   ast_case_statement_list *case_statement_list;
 
    struct {
       ast_node *cond;
@@ -92,6 +103,7 @@
 %token SAMPLER2DARRAYSHADOW ISAMPLER1D ISAMPLER2D ISAMPLER3D ISAMPLERCUBE
 %token ISAMPLER1DARRAY ISAMPLER2DARRAY USAMPLER1D USAMPLER2D USAMPLER3D
 %token USAMPLERCUBE USAMPLER1DARRAY USAMPLER2DARRAY
+%token SAMPLEREXTERNALOES
 %token STRUCT VOID_TOK WHILE
 %token <identifier> IDENTIFIER TYPE_IDENTIFIER NEW_IDENTIFIER
 %type <identifier> any_identifier
@@ -106,7 +118,7 @@
 %token INVARIANT
 %token LOWP MEDIUMP HIGHP SUPERP PRECISION
 
-%token VERSION EXTENSION LINE COLON EOL INTERFACE OUTPUT
+%token VERSION_TOK EXTENSION LINE COLON EOL INTERFACE OUTPUT
 %token PRAGMA_DEBUG_ON PRAGMA_DEBUG_OFF
 %token PRAGMA_OPTIMIZE_ON PRAGMA_OPTIMIZE_OFF
 %token PRAGMA_INVARIANT_ALL
@@ -206,6 +218,12 @@
 %type <declaration> struct_declarator_list
 %type <node> selection_statement
 %type <selection_rest_statement> selection_rest_statement
+%type <node> switch_statement
+%type <switch_body> switch_body
+%type <case_label_list> case_label_list
+%type <case_label> case_label
+%type <case_statement> case_statement
+%type <case_statement_list> case_statement_list
 %type <node> iteration_statement
 %type <node> condition
 %type <node> conditionopt
@@ -228,7 +246,7 @@ translation_unit:
 
 version_statement:
 	/* blank - no #version specified: defaults are already set */
-	| VERSION INTCONSTANT EOL
+	| VERSION_TOK INTCONSTANT EOL
 	{
 	   bool supported = false;
 
@@ -1111,8 +1129,10 @@ layout_qualifier_id:
 	      }
 	   }
 
-	   /* Layout qualifiers for AMD_conservative_depth. */
-	   if (!got_one && state->AMD_conservative_depth_enable) {
+	   /* Layout qualifiers for AMD/ARB_conservative_depth. */
+	   if (!got_one &&
+	       (state->AMD_conservative_depth_enable ||
+	        state->ARB_conservative_depth_enable)) {
 	      if (strcmp($1, "depth_any") == 0) {
 	         got_one = true;
 	         $$.flags.q.depth_any = 1;
@@ -1130,6 +1150,11 @@ layout_qualifier_id:
 	      if (got_one && state->AMD_conservative_depth_warn) {
 	         _mesa_glsl_warning(& @1, state,
 	                            "GL_AMD_conservative_depth "
+	                            "layout qualifier `%s' is used\n", $1);
+	      }
+	      if (got_one && state->ARB_conservative_depth_warn) {
+	         _mesa_glsl_warning(& @1, state,
+	                            "GL_ARB_conservative_depth "
 	                            "layout qualifier `%s' is used\n", $1);
 	      }
 	   }
@@ -1368,6 +1393,7 @@ basic_type_specifier_nonarray:
 	| SAMPLER2DRECT		{ $$ = ast_sampler2drect; }
 	| SAMPLER3D		{ $$ = ast_sampler3d; }
 	| SAMPLERCUBE		{ $$ = ast_samplercube; }
+	| SAMPLEREXTERNALOES	{ $$ = ast_samplerexternaloes; }
 	| SAMPLER1DSHADOW	{ $$ = ast_sampler1dshadow; }
 	| SAMPLER2DSHADOW	{ $$ = ast_sampler2dshadow; }
 	| SAMPLER2DRECTSHADOW	{ $$ = ast_sampler2drectshadow; }
@@ -1515,8 +1541,7 @@ simple_statement:
 	declaration_statement
 	| expression_statement
 	| selection_statement
-	| switch_statement		{ $$ = NULL; }
-	| case_label			{ $$ = NULL; }
+	| switch_statement
 	| iteration_statement
 	| jump_statement
 	;
@@ -1638,13 +1663,90 @@ condition:
 	}
 	;
 
+/*
+ * siwtch_statement grammar is based on the syntax described in the body
+ * of the GLSL spec, not in it's appendix!!!
+ */
 switch_statement:
-	SWITCH '(' expression ')' compound_statement
+	SWITCH '(' expression ')' switch_body
+	{
+	   $$ = new(state) ast_switch_statement($3, $5);
+	   $$->set_location(yylloc);
+	}
+	;
+
+switch_body:
+	'{' '}'
+	{
+	   $$ = new(state) ast_switch_body(NULL);
+	   $$->set_location(yylloc);
+	}
+	| '{' case_statement_list '}'
+	{
+	   $$ = new(state) ast_switch_body($2);
+	   $$->set_location(yylloc);
+	}
 	;
 
 case_label:
 	CASE expression ':'
+	{
+	   $$ = new(state) ast_case_label($2);
+	   $$->set_location(yylloc);
+	}
 	| DEFAULT ':'
+	{
+	   $$ = new(state) ast_case_label(NULL);
+	   $$->set_location(yylloc);
+	}
+	;
+
+case_label_list:
+	case_label
+	{
+	   ast_case_label_list *labels = new(state) ast_case_label_list();
+
+	   labels->labels.push_tail(& $1->link);
+	   $$ = labels;
+	   $$->set_location(yylloc);
+	}
+	| case_label_list case_label
+	{
+	   $$ = $1;
+	   $$->labels.push_tail(& $2->link);
+	}
+	;
+
+case_statement:
+	case_label_list statement
+	{
+	   ast_case_statement *stmts = new(state) ast_case_statement($1);
+	   stmts->set_location(yylloc);
+
+	   stmts->stmts.push_tail(& $2->link);
+	   $$ = stmts;
+	}
+	| case_statement statement
+	{
+	   $$ = $1;
+	   $$->stmts.push_tail(& $2->link);
+	}
+	;
+
+case_statement_list:
+	case_statement
+	{
+	   ast_case_statement_list *cases= new(state) ast_case_statement_list();
+	   cases->set_location(yylloc);
+
+	   cases->cases.push_tail(& $1->link);
+	   $$ = cases;
+	}
+	| case_statement_list case_statement
+	{
+	   $$ = $1;
+	   $$->cases.push_tail(& $2->link);
+	}
 	;
 
 iteration_statement:

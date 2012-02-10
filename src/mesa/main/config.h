@@ -61,8 +61,11 @@
 /** Maximum number of lights */
 #define MAX_LIGHTS 8
 
-/** Maximum user-defined clipping planes */
-#define MAX_CLIP_PLANES 6
+/**
+ * Maximum number of user-defined clipping planes supported by any driver in
+ * Mesa.  This is used to size arrays.
+ */
+#define MAX_CLIP_PLANES 8
 
 /** Maximum pixel map lookup table size */
 #define MAX_PIXEL_MAP_TABLE 256
@@ -203,8 +206,8 @@
  * per-program parameters.
  */
 /*@{*/
-#define MAX_PROGRAM_LOCAL_PARAMS       1024
-#define MAX_UNIFORMS                   1024
+#define MAX_PROGRAM_LOCAL_PARAMS       4096
+#define MAX_UNIFORMS                   4096
 /*@}*/
 
 /**
@@ -329,7 +332,7 @@
 
 
 /**
- * Bits per color channel:  8, 16 or 32
+ * For swrast, bits per color channel:  8, 16 or 32
  */
 #ifndef CHAN_BITS
 #define CHAN_BITS 8

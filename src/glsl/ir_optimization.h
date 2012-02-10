@@ -29,14 +29,17 @@
  */
 
 /* Operations for lower_instructions() */
-#define SUB_TO_ADD_NEG 0x01
-#define DIV_TO_MUL_RCP 0x02
-#define EXP_TO_EXP2    0x04
-#define POW_TO_EXP2    0x08
-#define LOG_TO_LOG2    0x10
-#define MOD_TO_FRACT   0x20
+#define SUB_TO_ADD_NEG     0x01
+#define DIV_TO_MUL_RCP     0x02
+#define EXP_TO_EXP2        0x04
+#define POW_TO_EXP2        0x08
+#define LOG_TO_LOG2        0x10
+#define MOD_TO_FRACT       0x20
+#define INT_DIV_TO_MUL_RCP 0x40
 
-bool do_common_optimization(exec_list *ir, bool linked, unsigned max_unroll_iterations);
+bool do_common_optimization(exec_list *ir, bool linked,
+			    bool uniform_locations_assigned,
+			    unsigned max_unroll_iterations);
 
 bool do_algebraic(exec_list *instructions);
 bool do_constant_folding(exec_list *instructions);
@@ -45,7 +48,7 @@ bool do_constant_variable_unlinked(exec_list *instructions);
 bool do_copy_propagation(exec_list *instructions);
 bool do_copy_propagation_elements(exec_list *instructions);
 bool do_constant_propagation(exec_list *instructions);
-bool do_dead_code(exec_list *instructions);
+bool do_dead_code(exec_list *instructions, bool uniform_locations_assigned);
 bool do_dead_code_local(exec_list *instructions);
 bool do_dead_code_unlinked(exec_list *instructions);
 bool do_dead_functions(exec_list *instructions);
@@ -56,10 +59,8 @@ bool do_if_simplification(exec_list *instructions);
 bool do_discard_simplification(exec_list *instructions);
 bool lower_if_to_cond_assign(exec_list *instructions, unsigned max_depth = 0);
 bool do_mat_op_to_vec(exec_list *instructions);
-bool do_mod_to_fract(exec_list *instructions);
 bool do_noop_swizzle(exec_list *instructions);
 bool do_structure_splitting(exec_list *instructions);
-bool do_sub_to_add_neg(exec_list *instructions);
 bool do_swizzle_swizzle(exec_list *instructions);
 bool do_tree_grafting(exec_list *instructions);
 bool do_vec_index_to_cond_assign(exec_list *instructions);
@@ -70,4 +71,10 @@ bool lower_noise(exec_list *instructions);
 bool lower_variable_index_to_cond_assign(exec_list *instructions,
     bool lower_input, bool lower_output, bool lower_temp, bool lower_uniform);
 bool lower_quadop_vector(exec_list *instructions, bool dont_lower_swz);
+bool lower_clip_distance(exec_list *instructions);
+void lower_output_reads(exec_list *instructions);
 bool optimize_redundant_jumps(exec_list *instructions);
+
+ir_rvalue *
+compare_index_block(exec_list *instructions, ir_variable *index,
+		    unsigned base, unsigned components, void *mem_ctx);

@@ -43,14 +43,14 @@
 
 extern "C"
 {
-#include <pipe/p_defines.h>
-#include <pipe/p_screen.h>
-#include <pipe/p_context.h>
-#include <util/u_inlines.h>
-#include <util/u_format.h>
-#include <util/u_caps.h>
-#include <util/u_debug.h>
-#include <os/os_thread.h>
+#include "pipe/p_defines.h"
+#include "pipe/p_screen.h"
+#include "pipe/p_context.h"
+#include "util/u_inlines.h"
+#include "util/u_format.h"
+#include "util/u_caps.h"
+#include "util/u_debug.h"
+#include "os/os_thread.h"
 }
 
 #include "galliumdxgi.h"
@@ -76,12 +76,14 @@ extern "C"
 #define D3D11_STAGE_CS 5
 #define D3D11_STAGES 6
 
+#define D3D10_BLEND_COUNT 20
 #define D3D11_BLEND_COUNT 20
 extern unsigned d3d11_to_pipe_blend[D3D11_BLEND_COUNT];
 
 #define D3D11_USAGE_COUNT 4
 extern unsigned d3d11_to_pipe_usage[D3D11_USAGE_COUNT];
 
+#define D3D10_STENCIL_OP_COUNT 9
 #define D3D11_STENCIL_OP_COUNT 9
 extern unsigned d3d11_to_pipe_stencil_op[D3D11_STENCIL_OP_COUNT];
 

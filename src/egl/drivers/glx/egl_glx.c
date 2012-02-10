@@ -713,6 +713,25 @@ GLX_eglCreateContext(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf,
    return &GLX_ctx->Base;
 }
 
+/**
+ * Called via eglDestroyContext(), drv->API.DestroyContext().
+ */
+static EGLBoolean
+GLX_eglDestroyContext(_EGLDriver *drv, _EGLDisplay *disp, _EGLContext *ctx)
+{
+   struct GLX_egl_driver *GLX_drv = GLX_egl_driver(drv);
+   struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
+   struct GLX_egl_context *GLX_ctx = GLX_egl_context(ctx);
+
+   if (_eglPutContext(ctx)) {
+      assert(GLX_ctx);
+      GLX_drv->glXDestroyContext(GLX_dpy->dpy, GLX_ctx->context);
+
+      free(GLX_ctx);
+   }
+
+   return EGL_TRUE;
+}
 
 /**
  * Destroy a surface.  The display is allowed to be uninitialized.
@@ -790,7 +809,7 @@ GLX_eglMakeCurrent(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
 
 /** Get size of given window */
 static Status
-get_drawable_size(Display *dpy, Drawable d, uint *width, uint *height)
+get_drawable_size(Display *dpy, Drawable d, unsigned *width, unsigned *height)
 {
    Window root;
    Status stat;
@@ -813,7 +832,7 @@ GLX_eglCreateWindowSurface(_EGLDriver *drv, _EGLDisplay *disp,
    struct GLX_egl_driver *GLX_drv = GLX_egl_driver(drv);
    struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
    struct GLX_egl_surface *GLX_surf;
-   uint width, height;
+   unsigned width, height;
 
    GLX_surf = CALLOC_STRUCT(GLX_egl_surface);
    if (!GLX_surf) {
@@ -861,7 +880,7 @@ GLX_eglCreatePixmapSurface(_EGLDriver *drv, _EGLDisplay *disp,
    struct GLX_egl_driver *GLX_drv = GLX_egl_driver(drv);
    struct GLX_egl_display *GLX_dpy = GLX_egl_display(disp);
    struct GLX_egl_surface *GLX_surf;
-   uint width, height;
+   unsigned width, height;
 
    GLX_surf = CALLOC_STRUCT(GLX_egl_surface);
    if (!GLX_surf) {
@@ -1051,17 +1070,22 @@ static EGLBoolean
 GLX_Load(_EGLDriver *drv)
 {
    struct GLX_egl_driver *GLX_drv = GLX_egl_driver(drv);
-   void *handle;
+   void *handle = NULL;
 
-   handle = dlopen("libGL.so", RTLD_LAZY | RTLD_LOCAL);
-   if (!handle)
-      goto fail;
+   GLX_drv->glXGetProcAddress = dlsym(RTLD_DEFAULT, "glXGetProcAddress");
+   if (!GLX_drv->glXGetProcAddress)
+      GLX_drv->glXGetProcAddress = dlsym(RTLD_DEFAULT, "glXGetProcAddressARB");
+   if (!GLX_drv->glXGetProcAddress) {
+      handle = dlopen("libGL.so", RTLD_LAZY | RTLD_LOCAL);
+      if (!handle)
+         goto fail;
 
-   GLX_drv->glXGetProcAddress = dlsym(handle, "glXGetProcAddress");
-   if (!GLX_drv->glXGetProcAddress)
-      GLX_drv->glXGetProcAddress = dlsym(handle, "glXGetProcAddressARB");
-   if (!GLX_drv->glXGetProcAddress)
-      goto fail;
+      GLX_drv->glXGetProcAddress = dlsym(handle, "glXGetProcAddress");
+      if (!GLX_drv->glXGetProcAddress)
+         GLX_drv->glXGetProcAddress = dlsym(handle, "glXGetProcAddressARB");
+      if (!GLX_drv->glXGetProcAddress)
+         goto fail;
+   }
 
 #define GET_PROC(proc_type, proc_name, check)                        \
    do {                                                              \
@@ -1142,6 +1166,7 @@ _EGL_MAIN(const char *args)
    GLX_drv->Base.API.Initialize = GLX_eglInitialize;
    GLX_drv->Base.API.Terminate = GLX_eglTerminate;
    GLX_drv->Base.API.CreateContext = GLX_eglCreateContext;
+   GLX_drv->Base.API.DestroyContext = GLX_eglDestroyContext;
    GLX_drv->Base.API.MakeCurrent = GLX_eglMakeCurrent;
    GLX_drv->Base.API.CreateWindowSurface = GLX_eglCreateWindowSurface;
    GLX_drv->Base.API.CreatePixmapSurface = GLX_eglCreatePixmapSurface;

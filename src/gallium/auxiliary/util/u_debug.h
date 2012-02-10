@@ -91,8 +91,11 @@ debug_printf(const char *format, ...)
    (void) format; /* silence warning */
 #endif
 }
+#else /* is Haiku */
+/* Haiku provides debug_printf in libroot with OS.h */
+#include <OS.h>
+#endif
 
-#endif /* !PIPE_OS_HAIKU */
 
 /*
  * ... isn't portable so we need to pass arguments in parentheses.
@@ -207,6 +210,25 @@ void _debug_assert_fail(const char *expr,
    _debug_printf("%s:%u:%s: warning: %s\n", __FILE__, __LINE__, __FUNCTION__, __msg)
 #else
 #define debug_warning(__msg) \
+   ((void)0) 
+#endif
+
+
+/**
+ * Emit a warning message, but only once.
+ */
+#ifdef DEBUG
+#define debug_warn_once(__msg) \
+   do { \
+      static bool warned = FALSE; \
+      if (!warned) { \
+         _debug_printf("%s:%u:%s: one time warning: %s\n", \
+                       __FILE__, __LINE__, __FUNCTION__, __msg); \
+         warned = TRUE; \
+      } \
+   } while (0)
+#else
+#define debug_warn_once(__msg) \
    ((void)0) 
 #endif
 

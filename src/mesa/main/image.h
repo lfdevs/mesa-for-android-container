@@ -61,9 +61,6 @@ extern GLboolean
 _mesa_is_color_format(GLenum format);
 
 extern GLboolean
-_mesa_is_index_format(GLenum format);
-
-extern GLboolean
 _mesa_is_depth_format(GLenum format);
 
 extern GLboolean
@@ -86,6 +83,16 @@ _mesa_is_integer_format(GLenum format);
 
 extern GLboolean
 _mesa_is_compressed_format(struct gl_context *ctx, GLenum format);
+
+extern GLboolean
+_mesa_base_format_has_channel(GLenum base_format, GLenum pname);
+
+extern GLintptr
+_mesa_image_offset( GLuint dimensions,
+                    const struct gl_pixelstore_attrib *packing,
+                    GLsizei width, GLsizei height,
+                    GLenum format, GLenum type,
+                    GLint img, GLint row, GLint column );
 
 extern GLvoid *
 _mesa_image_address( GLuint dimensions,

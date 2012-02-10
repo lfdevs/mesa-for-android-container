@@ -1,9 +1,11 @@
 Enable x86 assembler on Hurd.
 
 Thanks to Pino Toscano.
---- a/configure.ac
-+++ b/configure.ac
-@@ -419,7 +419,7 @@ if test "x$enable_asm" = xyes; then
+Index: mesa/configure.ac
+===================================================================
+--- mesa.orig/configure.ac	2012-01-18 16:05:57.376424418 +0200
++++ mesa/configure.ac	2012-01-18 16:06:14.824947429 +0200
+@@ -473,7 +473,7 @@
      case "$host_cpu" in
      i?86)
          case "$host_os" in

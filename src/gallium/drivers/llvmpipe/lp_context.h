@@ -129,6 +129,7 @@ struct llvmpipe_context {
    /** List of all fragment shader variants */
    struct lp_fs_variant_list_item fs_variants_list;
    unsigned nr_fs_variants;
+   unsigned nr_fs_instrs;
 
    /** JIT code generation */
    struct gallivm_state *gallivm;
@@ -136,6 +137,10 @@ struct llvmpipe_context {
 
    struct lp_setup_variant_list_item setup_variants_list;
    unsigned nr_setup_variants;
+
+   /** Conditional query object and mode */
+   struct pipe_query *render_cond_query;
+   uint render_cond_mode;
 };
 
 

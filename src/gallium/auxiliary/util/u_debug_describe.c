@@ -24,10 +24,10 @@
  *
  **************************************************************************/
 
-#include <pipe/p_state.h>
-#include <util/u_format.h>
-#include <util/u_debug_describe.h>
-#include <util/u_string.h>
+#include "pipe/p_state.h"
+#include "util/u_format.h"
+#include "util/u_debug_describe.h"
+#include "util/u_string.h"
 
 void
 debug_describe_reference(char* buf, const struct pipe_reference*ptr)
@@ -78,4 +78,14 @@ debug_describe_sampler_view(char* buf, const struct pipe_sampler_view *ptr)
    char res[128];
    debug_describe_resource(res, ptr->texture);
    util_sprintf(buf, "pipe_sampler_view<%s,%s>", res, util_format_short_name(ptr->format));
+}
+
+void
+debug_describe_so_target(char* buf,
+                         const struct pipe_stream_output_target *ptr)
+{
+   char res[128];
+   debug_describe_resource(res, ptr->buffer);
+   util_sprintf(buf, "pipe_stream_output_target<%s,%u,%u>", res,
+                ptr->buffer_offset, ptr->buffer_size);
 }

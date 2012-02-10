@@ -26,12 +26,28 @@
 
 /* The public winsys interface header for the radeon driver. */
 
+/* R300 features in DRM.
+ *
+ * 2.6.0:
+ * - Hyper-Z
+ * - GB_Z_PEQ_CONFIG on rv350->r4xx
+ * - R500 FG_ALPHA_VALUE
+ *
+ * 2.8.0:
+ * - R500 US_FORMAT regs
+ * - R500 ARGB2101010 colorbuffer
+ * - CMask and AA regs
+ * - R16F/RG16F
+ */
+
 #include "pipebuffer/pb_bufmgr.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
 
 #define RADEON_MAX_CMDBUF_DWORDS (16 * 1024)
-#define RADEON_FLUSH_ASYNC       (1 << 0)
+
+#define RADEON_FLUSH_ASYNC             (1 << 0)
+#define RADEON_FLUSH_KEEP_TILING_FLAGS (1 << 1) /* needs DRM 2.12.0 */
 
 /* Tiling flags. */
 enum radeon_bo_layout {
@@ -47,51 +63,51 @@ enum radeon_bo_domain { /* bitfield */
     RADEON_DOMAIN_VRAM = 4
 };
 
+enum radeon_bo_usage { /* bitfield */
+    RADEON_USAGE_READ = 2,
+    RADEON_USAGE_WRITE = 4,
+    RADEON_USAGE_READWRITE = RADEON_USAGE_READ | RADEON_USAGE_WRITE
+};
+
 struct winsys_handle;
-struct radeon_winsys_cs_handle;   /* for write_reloc etc. */
+
+struct radeon_winsys_cs_handle {   /* for write_reloc etc. */
+    struct {
+        struct pb_buffer base;
+    } _private;
+
+    unsigned last_flush;
+    unsigned binding;
+};
 
 struct radeon_winsys_cs {
     unsigned cdw;  /* Number of used dwords. */
     uint32_t *buf; /* The command buffer. */
 };
 
-enum radeon_value_id {
-    RADEON_VID_PCI_ID,
-    RADEON_VID_R300_GB_PIPES,
-    RADEON_VID_R300_Z_PIPES,
-    RADEON_VID_GART_SIZE,
-    RADEON_VID_VRAM_SIZE,
-    RADEON_VID_DRM_MAJOR,
-    RADEON_VID_DRM_MINOR,
-    RADEON_VID_DRM_PATCHLEVEL,
+struct radeon_info {
+    uint32_t pci_id;
+    uint32_t gart_size;
+    uint32_t vram_size;
 
-    /* These should probably go away: */
+    uint32_t drm_major; /* version */
+    uint32_t drm_minor;
+    uint32_t drm_patchlevel;
 
-    /* R300 features:
-     * - Hyper-Z
-     * - GB_Z_PEQ_CONFIG on rv350->r4xx
-     * - R500 FG_ALPHA_VALUE
-     *
-     * R600 features:
-     * - TBD
-     */
-    RADEON_VID_DRM_2_6_0,
+    uint32_t r300_num_gb_pipes;
+    uint32_t r300_num_z_pipes;
 
-    /* R300 features:
-     * - R500 US_FORMAT regs
-     * - R500 ARGB2101010 colorbuffer
-     * - CMask and AA regs
-     * - R16F/RG16F
-     *
-     * R600 features:
-     * - TBD
-     */
-    RADEON_VID_DRM_2_8_0,
+    uint32_t r600_num_backends;
+    uint32_t r600_clock_crystal_freq;
+    uint32_t r600_tiling_config;
+    uint32_t r600_num_tile_pipes;
+    uint32_t r600_backend_map;
+    boolean r600_backend_map_valid;
 };
 
 enum radeon_feature_id {
-    RADEON_FID_HYPERZ_RAM_ACCESS,     /* ZMask + HiZ */
-    RADEON_FID_CMASK_RAM_ACCESS,
+    RADEON_FID_R300_HYPERZ_ACCESS,     /* ZMask + HiZ */
+    RADEON_FID_R300_CMASK_ACCESS,
 };
 
 struct radeon_winsys {
@@ -103,13 +119,13 @@ struct radeon_winsys {
     void (*destroy)(struct radeon_winsys *ws);
 
     /**
-     * Query a system value from a winsys.
+     * Query an info structure from winsys.
      *
      * \param ws        The winsys this function is called from.
-     * \param vid       One of the RADEON_VID_* enums.
+     * \param info      Return structure
      */
-    uint32_t (*get_value)(struct radeon_winsys *ws,
-                          enum radeon_value_id vid);
+    void (*query_info)(struct radeon_winsys *ws,
+                       struct radeon_info *info);
 
     /**************************************************************************
      * Buffer management. Buffer attributes are mostly fixed over its lifetime.
@@ -126,7 +142,6 @@ struct radeon_winsys {
      * \param size      The size to allocate.
      * \param alignment An alignment of the buffer in memory.
      * \param bind      A bitmask of the PIPE_BIND_* flags.
-     * \param usage     A bitmask of the PIPE_USAGE_* flags.
      * \param domain    A bitmask of the RADEON_DOMAIN_* flags.
      * \return          The created buffer object.
      */
@@ -134,7 +149,6 @@ struct radeon_winsys {
                                        unsigned size,
                                        unsigned alignment,
                                        unsigned bind,
-                                       unsigned usage,
                                        enum radeon_bo_domain domain);
 
     struct radeon_winsys_cs_handle *(*buffer_get_cs_handle)(
@@ -164,8 +178,10 @@ struct radeon_winsys {
      * Return TRUE if a buffer object is being used by the GPU.
      *
      * \param buf       A winsys buffer object.
+     * \param usage     Only check whether the buffer is busy for the given usage.
      */
-    boolean (*buffer_is_busy)(struct pb_buffer *buf);
+    boolean (*buffer_is_busy)(struct pb_buffer *buf,
+                              enum radeon_bo_usage usage);
 
     /**
      * Wait for a buffer object until it is not used by a GPU. This is
@@ -173,8 +189,10 @@ struct radeon_winsys {
      * and synchronizing to the fence.
      *
      * \param buf       A winsys buffer object to wait for.
+     * \param usage     Only wait until the buffer is idle for the given usage,
+     *                  but may still be busy for some other usage.
      */
-    void (*buffer_wait)(struct pb_buffer *buf);
+    void (*buffer_wait)(struct pb_buffer *buf, enum radeon_bo_usage usage);
 
     /**
      * Return tiling flags describing a memory layout of a buffer object.
@@ -214,12 +232,10 @@ struct radeon_winsys {
      * \param whandle   A winsys handle pointer as was received from a state
      *                  tracker.
      * \param stride    The returned buffer stride in bytes.
-     * \param size      The returned buffer size.
      */
     struct pb_buffer *(*buffer_from_handle)(struct radeon_winsys *ws,
                                             struct winsys_handle *whandle,
-                                            unsigned *stride,
-                                            unsigned *size);
+                                            unsigned *stride);
 
     /**
      * Get a winsys handle from a winsys buffer. The internal structure
@@ -261,13 +277,14 @@ struct radeon_winsys {
      *
      * \param cs  A command stream to add buffer for validation against.
      * \param buf A winsys buffer to validate.
-     * \param rd  A read domain containing a bitmask of the RADEON_DOMAIN_* flags.
-     * \param wd  A write domain containing a bitmask of the RADEON_DOMAIN_* flags.
+     * \param usage   Whether the buffer is used for read and/or write.
+     * \param domain  Bitmask of the RADEON_DOMAIN_* flags.
+     * \return Relocation index.
      */
-    void (*cs_add_reloc)(struct radeon_winsys_cs *cs,
-                         struct radeon_winsys_cs_handle *buf,
-                         enum radeon_bo_domain rd,
-                         enum radeon_bo_domain wd);
+    unsigned (*cs_add_reloc)(struct radeon_winsys_cs *cs,
+                             struct radeon_winsys_cs_handle *buf,
+                             enum radeon_bo_usage usage,
+                             enum radeon_bo_domain domain);
 
     /**
      * Return TRUE if there is enough memory in VRAM and GTT for the relocs
@@ -284,8 +301,6 @@ struct radeon_winsys {
      *
      * \param cs        A command stream the relocation is written to.
      * \param buf       A winsys buffer to write the relocation for.
-     * \param rd        A read domain containing a bitmask of the RADEON_DOMAIN_* flags.
-     * \param wd        A write domain containing a bitmask of the RADEON_DOMAIN_* flags.
      */
     void (*cs_write_reloc)(struct radeon_winsys_cs *cs,
                            struct radeon_winsys_cs_handle *buf);
@@ -306,9 +321,9 @@ struct radeon_winsys {
      * \param flush     A flush callback function associated with the command stream.
      * \param user      A user pointer that will be passed to the flush callback.
      */
-    void (*cs_set_flush)(struct radeon_winsys_cs *cs,
-                         void (*flush)(void *ctx, unsigned flags),
-                         void *user);
+    void (*cs_set_flush_callback)(struct radeon_winsys_cs *cs,
+                                  void (*flush)(void *ctx, unsigned flags),
+                                  void *ctx);
 
     /**
      * Return TRUE if a buffer is referenced by a command stream.
@@ -323,7 +338,8 @@ struct radeon_winsys {
      * Request access to a feature for a command stream.
      *
      * \param cs        A command stream.
-     * \param fid       A winsys buffer.
+     * \param fid       Feature ID, one of RADEON_FID_*
+     * \param enable    Whether to enable or disable the feature.
      */
     boolean (*cs_request_feature)(struct radeon_winsys_cs *cs,
                                   enum radeon_feature_id fid,

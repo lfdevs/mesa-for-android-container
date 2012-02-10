@@ -42,15 +42,25 @@
 #include "util/u_debug.h"
 
 PUBLIC const char __driConfigOptions[] =
-   DRI_CONF_BEGIN DRI_CONF_SECTION_PERFORMANCE
-   DRI_CONF_FTHROTTLE_MODE(DRI_CONF_FTHROTTLE_IRQS)
-   DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_0)
-   DRI_CONF_SECTION_END DRI_CONF_SECTION_QUALITY
-/* DRI_CONF_FORCE_S3TC_ENABLE(false) */
-   DRI_CONF_ALLOW_LARGE_TEXTURES(1)
-   DRI_CONF_SECTION_END DRI_CONF_END;
+   DRI_CONF_BEGIN
+      DRI_CONF_SECTION_PERFORMANCE
+         DRI_CONF_FTHROTTLE_MODE(DRI_CONF_FTHROTTLE_IRQS)
+         DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_0)
+      DRI_CONF_SECTION_END
 
-static const uint __driNConfigOptions = 3;
+      DRI_CONF_SECTION_QUALITY
+/*       DRI_CONF_FORCE_S3TC_ENABLE(false) */
+         DRI_CONF_ALLOW_LARGE_TEXTURES(1)
+         DRI_CONF_PP_CELSHADE(0)
+         DRI_CONF_PP_NORED(0)
+         DRI_CONF_PP_NOGREEN(0)
+         DRI_CONF_PP_NOBLUE(0)
+         DRI_CONF_PP_JIMENEZMLAA(0, 0, 32)
+         DRI_CONF_PP_JIMENEZMLAA_COLOR(0, 0, 32)
+      DRI_CONF_SECTION_END
+   DRI_CONF_END;
+
+static const uint __driNConfigOptions = 9;
 
 static const __DRIconfig **
 dri_fill_in_modes(struct dri_screen *screen,
@@ -85,10 +95,10 @@ dri_fill_in_modes(struct dri_screen *screen,
    pf_z24x8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_X8Z24_UNORM,
 					    PIPE_TEXTURE_2D, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
-   pf_s8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24_UNORM_S8_USCALED,
+   pf_s8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24_UNORM_S8_UINT,
 					    PIPE_TEXTURE_2D, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
-   pf_z24s8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_S8_USCALED_Z24_UNORM,
+   pf_z24s8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_S8_UINT_Z24_UNORM,
 					    PIPE_TEXTURE_2D, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
    pf_a8r8g8b8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_B8G8R8A8_UNORM,
@@ -260,8 +270,8 @@ dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
                                           PIPE_FORMAT_X8Z24_UNORM;
       } else {
 	 stvis->depth_stencil_format = (screen->sd_depth_bits_last) ?
-                                          PIPE_FORMAT_Z24_UNORM_S8_USCALED:
-                                          PIPE_FORMAT_S8_USCALED_Z24_UNORM;
+                                          PIPE_FORMAT_Z24_UNORM_S8_UINT:
+                                          PIPE_FORMAT_S8_UINT_Z24_UNORM;
       }
       break;
    case 32:
@@ -362,7 +372,7 @@ dri_destroy_screen(__DRIscreen * sPriv)
    dri_destroy_screen_helper(screen);
 
    FREE(screen);
-   sPriv->private = NULL;
+   sPriv->driverPrivate = NULL;
    sPriv->extensions = NULL;
 }
 

@@ -45,11 +45,9 @@ struct softpipe_screen {
    /* Increments whenever textures are modified.  Contexts can track
     * this.
     */
-   unsigned timestamp;          
+   unsigned timestamp;
+   boolean use_llvm;
 };
-
-
-
 
 static INLINE struct softpipe_screen *
 softpipe_screen( struct pipe_screen *pipe )

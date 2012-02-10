@@ -37,6 +37,7 @@ extern "C" {
 #endif
    
 struct ureg_program;
+struct pipe_stream_output_info;
 
 /* Almost a tgsi_src_register, but we need to pull in the Absolute
  * flag from the _ext token.  Indirect flag always implies ADDR[0].
@@ -97,7 +98,8 @@ ureg_finalize( struct ureg_program * );
  */
 void *
 ureg_create_shader( struct ureg_program *,
-                    struct pipe_context *pipe );
+                    struct pipe_context *pipe,
+		    const struct pipe_stream_output_info *so );
 
 
 /* Alternately, return the built token stream and hand ownership of
@@ -120,12 +122,20 @@ ureg_destroy( struct ureg_program * );
  * Convenience routine:
  */
 static INLINE void *
+ureg_create_shader_with_so_and_destroy( struct ureg_program *p,
+			struct pipe_context *pipe,
+			const struct pipe_stream_output_info *so )
+{
+   void *result = ureg_create_shader( p, pipe, so );
+   ureg_destroy( p );
+   return result;
+}
+
+static INLINE void *
 ureg_create_shader_and_destroy( struct ureg_program *p,
                                 struct pipe_context *pipe )
 {
-   void *result = ureg_create_shader( p, pipe );
-   ureg_destroy( p );
-   return result;
+   return ureg_create_shader_with_so_and_destroy(p, pipe, NULL);
 }
 
 
@@ -156,6 +166,11 @@ ureg_property_fs_coord_pixel_center(struct ureg_program *ureg,
 void
 ureg_property_fs_color0_writes_all_cbufs(struct ureg_program *ureg,
                             unsigned fs_color0_writes_all_cbufs);
+
+void
+ureg_property_fs_depth_layout(struct ureg_program *ureg,
+                              unsigned fs_depth_layout);
+
 
 /***********************************************************************
  * Build shader declarations:
@@ -212,6 +227,12 @@ ureg_DECL_system_value(struct ureg_program *,
                        unsigned index,
                        unsigned semantic_name,
                        unsigned semantic_index);
+
+struct ureg_dst
+ureg_DECL_output_masked( struct ureg_program *,
+                         unsigned semantic_name,
+                         unsigned semantic_index,
+                         unsigned usage_mask );
 
 struct ureg_dst
 ureg_DECL_output( struct ureg_program *,
@@ -451,6 +472,8 @@ ureg_tex_insn(struct ureg_program *ureg,
               const struct ureg_dst *dst,
               unsigned nr_dst,
               unsigned target,
+              const struct tgsi_texture_offset *texoffsets,
+              unsigned nr_offset,
               const struct ureg_src *src,
               unsigned nr_src );
 
@@ -493,7 +516,11 @@ ureg_emit_label(struct ureg_program *ureg,
 void
 ureg_emit_texture(struct ureg_program *ureg,
                   unsigned insn_token,
-                  unsigned target );
+                  unsigned target, unsigned num_offsets);
+
+void
+ureg_emit_texture_offset(struct ureg_program *ureg,
+                         const struct tgsi_texture_offset *offset);
 
 void 
 ureg_emit_dst( struct ureg_program *ureg,
@@ -677,7 +704,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
                          dst.PredSwizzleW,                              \
                          1,                                             \
                          2);                                            \
-   ureg_emit_texture( ureg, insn.extended_token, target );              \
+   ureg_emit_texture( ureg, insn.extended_token, target, 0 );		\
    ureg_emit_dst( ureg, dst );                                          \
    ureg_emit_src( ureg, src0 );                                         \
    ureg_emit_src( ureg, src1 );                                         \
@@ -732,7 +759,7 @@ static INLINE void ureg_##op( struct ureg_program *ureg,                \
                          dst.PredSwizzleW,                              \
                          1,                                             \
                          4);                                            \
-   ureg_emit_texture( ureg, insn.extended_token, target );              \
+   ureg_emit_texture( ureg, insn.extended_token, target, 0 );		\
    ureg_emit_dst( ureg, dst );                                          \
    ureg_emit_src( ureg, src0 );                                         \
    ureg_emit_src( ureg, src1 );                                         \

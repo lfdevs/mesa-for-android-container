@@ -42,6 +42,7 @@ struct softpipe_query {
    uint64_t start;
    uint64_t end;
    struct pipe_query_data_so_statistics so;
+   unsigned num_primitives_generated;
 };
 
 
@@ -59,7 +60,10 @@ softpipe_create_query(struct pipe_context *pipe,
    assert(type == PIPE_QUERY_OCCLUSION_COUNTER ||
           type == PIPE_QUERY_TIME_ELAPSED ||
           type == PIPE_QUERY_SO_STATISTICS ||
+          type == PIPE_QUERY_PRIMITIVES_EMITTED ||
+          type == PIPE_QUERY_PRIMITIVES_GENERATED ||
           type == PIPE_QUERY_GPU_FINISHED ||
+          type == PIPE_QUERY_TIMESTAMP ||
           type == PIPE_QUERY_TIMESTAMP_DISJOINT);
    sq = CALLOC_STRUCT( softpipe_query );
    sq->type = type;
@@ -85,16 +89,23 @@ softpipe_begin_query(struct pipe_context *pipe, struct pipe_query *q)
    case PIPE_QUERY_OCCLUSION_COUNTER:
       sq->start = softpipe->occlusion_count;
       break;
+   case PIPE_QUERY_TIMESTAMP_DISJOINT:
    case PIPE_QUERY_TIME_ELAPSED:
       sq->start = 1000*os_time_get();
       break;
    case PIPE_QUERY_SO_STATISTICS:
-      sq->so.num_primitives_written = 0;
       sq->so.primitives_storage_needed = 0;
+   case PIPE_QUERY_PRIMITIVES_EMITTED:
+      sq->so.num_primitives_written = 0;
+      softpipe->so_stats.num_primitives_written = 0;
       break;
+   case PIPE_QUERY_PRIMITIVES_GENERATED:
+      sq->num_primitives_generated = 0;
+      softpipe->num_primitives_generated = 0;
+      break;
+   case PIPE_QUERY_TIMESTAMP:
    case PIPE_QUERY_GPU_FINISHED:
       break;
-   case PIPE_QUERY_TIMESTAMP_DISJOINT:
    default:
       assert(0);
       break;
@@ -115,17 +126,24 @@ softpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
    case PIPE_QUERY_OCCLUSION_COUNTER:
       sq->end = softpipe->occlusion_count;
       break;
+   case PIPE_QUERY_TIMESTAMP:
+      sq->start = 0;
+      /* fall through */
+   case PIPE_QUERY_TIMESTAMP_DISJOINT:
    case PIPE_QUERY_TIME_ELAPSED:
       sq->end = 1000*os_time_get();
       break;
    case PIPE_QUERY_SO_STATISTICS:
-      sq->so.num_primitives_written =
-         softpipe->so_stats.num_primitives_written;
       sq->so.primitives_storage_needed =
          softpipe->so_stats.primitives_storage_needed;
+   case PIPE_QUERY_PRIMITIVES_EMITTED:
+      sq->so.num_primitives_written =
+         softpipe->so_stats.num_primitives_written;
+      break;
+   case PIPE_QUERY_PRIMITIVES_GENERATED:
+      sq->num_primitives_generated = softpipe->num_primitives_generated;
       break;
    case PIPE_QUERY_GPU_FINISHED:
-   case PIPE_QUERY_TIMESTAMP_DISJOINT:
       break;
    default:
       assert(0);
@@ -156,10 +174,16 @@ softpipe_get_query_result(struct pipe_context *pipe,
       struct pipe_query_data_timestamp_disjoint td;
       /*os_get_time is in microseconds*/
       td.frequency = 1000000;
-      td.disjoint = FALSE;
-      memcpy(vresult, &sq->so,
+      td.disjoint = sq->end != sq->start;
+      memcpy(vresult, &td,
              sizeof(struct pipe_query_data_timestamp_disjoint));
    }
+      break;
+   case PIPE_QUERY_PRIMITIVES_EMITTED:
+      *result = sq->so.num_primitives_written;
+      break;
+   case PIPE_QUERY_PRIMITIVES_GENERATED:
+      *result = sq->num_primitives_generated;
       break;
    default:
       *result = sq->end - sq->start;

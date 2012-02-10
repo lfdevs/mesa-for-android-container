@@ -34,6 +34,8 @@
 #define __STDC_CONSTANT_MACROS
 #endif
 
+#include <stddef.h>
+
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm/Target/TargetOptions.h>
@@ -67,6 +69,7 @@ lp_register_oprofile_jit_event_listener(LLVMExecutionEngineRef EE)
 extern "C" void
 lp_set_target_options(void)
 {
+#if HAVE_LLVM <= 0x0300
 #if defined(DEBUG)
 #if HAVE_LLVM >= 0x0207
    llvm::JITEmitDebugInfo = true;
@@ -100,6 +103,7 @@ lp_set_target_options(void)
 #if 0
    llvm::UnsafeFPMath = true;
 #endif
+#endif  /* HAVE_LLVM <= 0x0300 */
 
 #if HAVE_LLVM < 0x0209
    /*

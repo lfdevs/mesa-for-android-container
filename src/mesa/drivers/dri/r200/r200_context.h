@@ -39,7 +39,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "drm.h"
 #include "radeon_drm.h"
 #include "dri_util.h"
-#include "texmem.h"
 
 #include "main/macros.h"
 #include "main/mtypes.h"
@@ -47,16 +46,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r200_reg.h"
 #include "r200_vertprog.h"
 
-#define ENABLE_HW_3D_TEXTURE 1  /* XXX this is temporary! */
-
 #ifndef R200_EMIT_VAP_PVS_CNTL
 #error This driver requires a newer libdrm to compile
 #endif
 
 #include "radeon_screen.h"
 #include "radeon_common.h"
-
-#include "radeon_lock.h"
 
 struct r200_context;
 typedef struct r200_context r200ContextRec;
@@ -640,6 +635,10 @@ extern void r200DestroyContext( __DRIcontext *driContextPriv );
 extern GLboolean r200CreateContext( gl_api api,
 				    const struct gl_config *glVisual,
 				    __DRIcontext *driContextPriv,
+				    unsigned major_version,
+				    unsigned minor_version,
+				    uint32_t flags,
+				    unsigned *error,
 				    void *sharedContextPrivate);
 extern GLboolean r200MakeCurrent( __DRIcontext *driContextPriv,
 				  __DRIdrawable *driDrawPriv,

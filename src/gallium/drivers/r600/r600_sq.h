@@ -114,6 +114,10 @@
 #define     V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_POS                 0x00000001
 #define     V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_PARAM               0x00000002
 #define     V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_SX                  0x00000003
+#define     V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE               0x00000000
+#define     V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_IND           0x00000001
+#define     V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_READ                0x00000002
+#define     V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_READ_IND            0x00000003
 #define   S_SQ_CF_ALLOC_EXPORT_WORD0_RW_GPR(x)                       (((x) & 0x7F) << 15)
 #define   G_SQ_CF_ALLOC_EXPORT_WORD0_RW_GPR(x)                       (((x) >> 15) & 0x7F)
 #define   C_SQ_CF_ALLOC_EXPORT_WORD0_RW_GPR                          0xFFC07FFF
@@ -467,4 +471,11 @@
 #define SQ_ALU_SCL_122                           0x00000001
 #define SQ_ALU_SCL_212                           0x00000002
 #define SQ_ALU_SCL_221                           0x00000003
+
+#define   INDEX_MODE_AR_X 0
+#define   INDEX_MODE_AR_Y 1
+#define   INDEX_MODE_AR_Z 2
+#define   INDEX_MODE_AR_W 3
+#define   INDEX_MODE_LOOP 4
+
 #endif

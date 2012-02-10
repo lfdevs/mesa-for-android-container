@@ -28,8 +28,8 @@
 #include "util/u_memory.h"
 #include "util/u_bitmask.h"
 #include "tgsi/tgsi_parse.h"
+#include "draw/draw_context.h"
 
-#include "svga_screen.h"
 #include "svga_context.h"
 #include "svga_tgsi.h"
 #include "svga_hw_reg.h"
@@ -46,7 +46,6 @@ svga_create_fs_state(struct pipe_context *pipe,
                      const struct pipe_shader_state *templ)
 {
    struct svga_context *svga = svga_context(pipe);
-   struct svga_screen *svgascreen = svga_screen(pipe->screen);
    struct svga_fragment_shader *fs;
 
    fs = CALLOC_STRUCT(svga_fragment_shader);
@@ -60,8 +59,13 @@ svga_create_fs_state(struct pipe_context *pipe,
    tgsi_scan_shader(fs->base.tokens, &fs->base.info);
 
    fs->base.id = svga->debug.shader_id++;
-   fs->base.use_sm30 = svgascreen->use_ps30;
    
+   fs->generic_inputs = svga_get_generic_inputs_mask(&fs->base.info);
+
+   svga_remap_generics(fs->generic_inputs, fs->generic_remap_table);
+
+   fs->draw_shader = draw_create_fragment_shader(svga->swtnl.draw, templ);
+
    if (SVGA_DEBUG & DEBUG_TGSI || 0) {
       debug_printf("%s id: %u, inputs: %u, outputs: %u\n",
                    __FUNCTION__, fs->base.id,
@@ -90,6 +94,8 @@ void svga_delete_fs_state(struct pipe_context *pipe, void *shader)
    enum pipe_error ret;
 
    svga_hwtnl_flush_retry( svga );
+
+   draw_delete_fragment_shader(svga->swtnl.draw, fs->draw_shader);
 
    for (result = fs->base.results; result; result = tmp ) {
       tmp = result->next;

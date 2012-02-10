@@ -51,8 +51,16 @@ extern void
 _mesa_free_framebuffer_data(struct gl_framebuffer *buffer);
 
 extern void
+_mesa_reference_framebuffer_(struct gl_framebuffer **ptr,
+                             struct gl_framebuffer *fb);
+
+static inline void
 _mesa_reference_framebuffer(struct gl_framebuffer **ptr,
-                            struct gl_framebuffer *fb);
+                            struct gl_framebuffer *fb)
+{
+   if (*ptr != fb)
+      _mesa_reference_framebuffer_(ptr, fb);
+}
 
 extern void
 _mesa_resize_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
@@ -72,14 +80,6 @@ _mesa_update_draw_buffer_bounds(struct gl_context *ctx);
 extern void
 _mesa_update_framebuffer_visual(struct gl_context *ctx,
 				struct gl_framebuffer *fb);
-
-extern void
-_mesa_update_depth_buffer(struct gl_context *ctx, struct gl_framebuffer *fb,
-                            GLuint attIndex);
-
-extern void
-_mesa_update_stencil_buffer(struct gl_context *ctx, struct gl_framebuffer *fb,
-                            GLuint attIndex);
 
 extern void
 _mesa_update_framebuffer(struct gl_context *ctx);

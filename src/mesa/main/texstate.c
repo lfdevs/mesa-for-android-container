@@ -75,7 +75,6 @@ _mesa_copy_texture_state( const struct gl_context *src, struct gl_context *dst )
    dst->Texture._GenFlags = src->Texture._GenFlags;
    dst->Texture._TexGenEnabled = src->Texture._TexGenEnabled;
    dst->Texture._TexMatEnabled = src->Texture._TexMatEnabled;
-   dst->Texture.SharedPalette = src->Texture.SharedPalette;
 
    /* per-unit state */
    for (u = 0; u < src->Const.MaxCombinedTextureImageUnits; u++) {
@@ -402,11 +401,8 @@ update_tex_combine(struct gl_context *ctx, struct gl_texture_unit *texUnit)
    else {
       const struct gl_texture_object *texObj = texUnit->_Current;
       GLenum format = texObj->Image[0][texObj->BaseLevel]->_BaseFormat;
-      if (format == GL_COLOR_INDEX) {
-         format = GL_RGBA;  /* a bit of a hack */
-      }
-      else if (format == GL_DEPTH_COMPONENT ||
-               format == GL_DEPTH_STENCIL_EXT) {
+
+      if (format == GL_DEPTH_COMPONENT || format == GL_DEPTH_STENCIL_EXT) {
          format = texObj->Sampler.DepthMode;
       }
       calculate_derived_texenv(&texUnit->_EnvMode, texUnit->EnvMode, format);
@@ -493,26 +489,26 @@ static void
 update_texture_state( struct gl_context *ctx )
 {
    GLuint unit;
-   struct gl_fragment_program *fprog = NULL;
-   struct gl_vertex_program *vprog = NULL;
+   struct gl_program *fprog = NULL;
+   struct gl_program *vprog = NULL;
    GLbitfield enabledFragUnits = 0x0;
 
    if (ctx->Shader.CurrentVertexProgram &&
        ctx->Shader.CurrentVertexProgram->LinkStatus) {
-      vprog = ctx->Shader.CurrentVertexProgram->VertexProgram;
+      vprog = ctx->Shader.CurrentVertexProgram->_LinkedShaders[MESA_SHADER_VERTEX]->Program;
    } else if (ctx->VertexProgram._Enabled) {
       /* XXX enable this if/when non-shader vertex programs get
        * texture fetches:
-       vprog = ctx->VertexProgram.Current;
+       vprog = &ctx->VertexProgram.Current->Base;
        */
    }
 
    if (ctx->Shader.CurrentFragmentProgram &&
        ctx->Shader.CurrentFragmentProgram->LinkStatus) {
-      fprog = ctx->Shader.CurrentFragmentProgram->FragmentProgram;
+      fprog = ctx->Shader.CurrentFragmentProgram->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program;
    }
    else if (ctx->FragmentProgram._Enabled) {
-      fprog = ctx->FragmentProgram.Current;
+      fprog = &ctx->FragmentProgram.Current->Base;
    }
 
    /* FINISHME: Geometry shader texture accesses should also be considered
@@ -544,11 +540,11 @@ update_texture_state( struct gl_context *ctx )
        * settle on the one with highest priority (see below).
        */
       if (vprog) {
-         enabledVertTargets |= vprog->Base.TexturesUsed[unit];
+         enabledVertTargets |= vprog->TexturesUsed[unit];
       }
 
       if (fprog) {
-         enabledFragTargets |= fprog->Base.TexturesUsed[unit];
+         enabledFragTargets |= fprog->TexturesUsed[unit];
       }
       else {
          /* fixed-function fragment program */
@@ -615,7 +611,7 @@ update_texture_state( struct gl_context *ctx )
    if (fprog) {
       const GLuint coordMask = (1 << MAX_TEXTURE_COORD_UNITS) - 1;
       ctx->Texture._EnabledCoordUnits
-         = (fprog->Base.InputsRead >> FRAG_ATTRIB_TEX0) & coordMask;
+         = (fprog->InputsRead >> FRAG_ATTRIB_TEX0) & coordMask;
    }
    else {
       ctx->Texture._EnabledCoordUnits = enabledFragUnits;
@@ -694,11 +690,12 @@ alloc_proxy_textures( struct gl_context *ctx )
       GL_TEXTURE_RECTANGLE_NV,
       GL_TEXTURE_1D_ARRAY_EXT,
       GL_TEXTURE_2D_ARRAY_EXT,
-      GL_TEXTURE_BUFFER
+      GL_TEXTURE_BUFFER,
+      GL_TEXTURE_EXTERNAL_OES
    };
    GLint tgt;
 
-   ASSERT(Elements(targets) == NUM_TEXTURE_TARGETS);
+   STATIC_ASSERT(Elements(targets) == NUM_TEXTURE_TARGETS);
 
    for (tgt = 0; tgt < NUM_TEXTURE_TARGETS; tgt++) {
       if (!(ctx->Texture.ProxyTex[tgt]
@@ -778,8 +775,6 @@ _mesa_init_texture(struct gl_context *ctx)
    /* Texture group */
    ctx->Texture.CurrentUnit = 0;      /* multitexture */
    ctx->Texture._EnabledUnits = 0x0;
-   ctx->Texture.SharedPalette = GL_FALSE;
-   _mesa_init_colortable(&ctx->Texture.Palette);
 
    for (u = 0; u < Elements(ctx->Texture.Unit); u++)
       init_texture_unit(ctx, u);

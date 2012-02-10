@@ -34,27 +34,27 @@
 #include "brw_context.h"
 #include "brw_wm.h"
 
-static GLboolean can_do_pln(struct intel_context *intel,
-			    const struct brw_reg *deltas)
+static bool
+can_do_pln(struct intel_context *intel, const struct brw_reg *deltas)
 {
    struct brw_context *brw = brw_context(&intel->ctx);
 
    if (!brw->has_pln)
-      return GL_FALSE;
+      return false;
 
    if (deltas[1].nr != deltas[0].nr + 1)
-      return GL_FALSE;
+      return false;
 
    if (intel->gen < 6 && ((deltas[0].nr & 1) != 0))
-      return GL_FALSE;
+      return false;
 
-   return GL_TRUE;
+   return true;
 }
 
 /* Return the SrcReg index of the channels that can be immediate float operands
  * instead of usage of PROGRAM_CONSTANT values through push/pull.
  */
-GLboolean
+bool
 brw_wm_arg_can_be_immediate(enum prog_opcode opcode, int arg)
 {
    int opcode_array[] = {
@@ -82,11 +82,11 @@ brw_wm_arg_can_be_immediate(enum prog_opcode opcode, int arg)
     */
    if (opcode == OPCODE_MAD || opcode == OPCODE_LRP) {
       if (arg == 1 || arg == 2)
-	 return GL_TRUE;
+	 return true;
    }
 
    if (opcode > ARRAY_SIZE(opcode_array))
-      return GL_FALSE;
+      return false;
 
    return arg == opcode_array[opcode] - 1;
 }
@@ -461,7 +461,7 @@ void emit_frontfacing(struct brw_compile *p,
 void emit_ddxy(struct brw_compile *p,
 	       const struct brw_reg *dst,
 	       GLuint mask,
-	       GLboolean is_ddx,
+	       bool is_ddx,
 	       const struct brw_reg *arg0)
 {
    int i;
@@ -888,6 +888,11 @@ void emit_math1(struct brw_wm_compile *c,
 		      BRW_MATH_SATURATE_NONE);
    struct brw_reg src;
 
+   if (!(mask & WRITEMASK_XYZW))
+      return; /* Do not emit dead code */
+
+   assert(is_power_of_two(mask & WRITEMASK_XYZW));
+
    if (intel->gen >= 6 && ((arg0[0].hstride == BRW_HORIZONTAL_STRIDE_0 ||
 			    arg0[0].file != BRW_GENERAL_REGISTER_FILE) ||
 			   arg0[0].negate || arg0[0].abs)) {
@@ -902,11 +907,6 @@ void emit_math1(struct brw_wm_compile *c,
    } else {
       src = arg0[0];
    }
-
-   if (!(mask & WRITEMASK_XYZW))
-      return; /* Do not emit dead code */
-
-   assert(is_power_of_two(mask & WRITEMASK_XYZW));
 
    /* Send two messages to perform all 16 operations:
     */
@@ -1044,7 +1044,7 @@ void emit_tex(struct brw_wm_compile *c,
 	      struct brw_reg depth_payload,
 	      GLuint tex_idx,
 	      GLuint sampler,
-	      GLboolean shadow)
+	      bool shadow)
 {
    struct brw_compile *p = &c->func;
    struct intel_context *intel = &p->brw->intel;
@@ -1076,11 +1076,14 @@ void emit_tex(struct brw_wm_compile *c,
       nr_texcoords = 1;
       break;
    case TEXTURE_2D_INDEX:
+   case TEXTURE_1D_ARRAY_INDEX:
    case TEXTURE_RECT_INDEX:
+   case TEXTURE_EXTERNAL_INDEX:
       emit = WRITEMASK_XY;
       nr_texcoords = 2;
       break;
    case TEXTURE_3D_INDEX:
+   case TEXTURE_2D_ARRAY_INDEX:
    case TEXTURE_CUBE_INDEX:
       emit = WRITEMASK_XYZ;
       nr_texcoords = 3;
@@ -1107,7 +1110,7 @@ void emit_tex(struct brw_wm_compile *c,
 
    /* Emit the texcoords. */
    for (i = 0; i < nr_texcoords; i++) {
-      if (c->key.gl_clamp_mask[i] & (1 << sampler))
+      if (c->key.tex.gl_clamp_mask[i] & (1 << sampler))
 	 brw_set_saturate(p, true);
 
       if (emit & (1<<i))
@@ -1159,9 +1162,9 @@ void emit_tex(struct brw_wm_compile *c,
 	      msg_type,
 	      response_length,
 	      cur_mrf - 1,
-	      0,
 	      1,
-	      simd_mode);
+	      simd_mode,
+	      BRW_SAMPLER_RETURN_FORMAT_FLOAT32);
 }
 
 
@@ -1210,6 +1213,7 @@ void emit_txb(struct brw_wm_compile *c,
       break;
    case TEXTURE_2D_INDEX:
    case TEXTURE_RECT_INDEX:
+   case TEXTURE_EXTERNAL_INDEX:
       brw_MOV(p, brw_message_reg(2 + 0 * mrf_per_channel), arg[0]);
       brw_MOV(p, brw_message_reg(2 + 1 * mrf_per_channel), arg[1]);
       brw_MOV(p, brw_message_reg(2 + 2 * mrf_per_channel), brw_imm_f(0));
@@ -1238,9 +1242,9 @@ void emit_txb(struct brw_wm_compile *c,
 	      msg_type,
 	      response_length,
 	      msgLength,
-	      0,	
 	      1,
-	      BRW_SAMPLER_SIMD_MODE_SIMD16);	
+	      BRW_SAMPLER_SIMD_MODE_SIMD16,
+	      BRW_SAMPLER_RETURN_FORMAT_FLOAT32);
 }
 
 
@@ -1354,7 +1358,7 @@ static void fire_fb_write( struct brw_wm_compile *c,
 		nr,
 		0, 
 		eot,
-		GL_TRUE);
+		true);
 }
 
 
@@ -1526,7 +1530,7 @@ void emit_fb_write(struct brw_wm_compile *c,
    else {
       struct brw_reg v1_null_ud = vec1(retype(brw_null_reg(), BRW_REGISTER_TYPE_UD));
       struct brw_reg ip = brw_ip_reg();
-      struct brw_instruction *jmp;
+      int jmp;
       
       brw_set_compression_control(p, BRW_COMPRESSION_NONE);
       brw_set_conditionalmod(p, BRW_CONDITIONAL_Z);
@@ -1535,7 +1539,7 @@ void emit_fb_write(struct brw_wm_compile *c,
 	      get_element_ud(brw_vec8_grf(1,0), 6), 
 	      brw_imm_ud(1<<26)); 
 
-      jmp = brw_JMPI(p, ip, ip, brw_imm_w(0));
+      jmp = brw_JMPI(p, ip, ip, brw_imm_w(0)) - p->store;
       {
 	 emit_aa(c, arg1, 2);
 	 fire_fb_write(c, 0, nr, target, eot);
@@ -1735,11 +1739,11 @@ void brw_wm_emit( struct brw_wm_compile *c )
 	 break;
 
       case OPCODE_DDX:
-	 emit_ddxy(p, dst, dst_flags, GL_TRUE, args[0]);
+	 emit_ddxy(p, dst, dst_flags, true, args[0]);
 	 break;
 
       case OPCODE_DDY:
-	 emit_ddxy(p, dst, dst_flags, GL_FALSE, args[0]);
+	 emit_ddxy(p, dst, dst_flags, false, args[0]);
 	 break;
 
       case OPCODE_DP2:

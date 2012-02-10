@@ -127,6 +127,35 @@ glsl_type::contains_sampler() const
    }
 }
 
+gl_texture_index
+glsl_type::sampler_index() const
+{
+   const glsl_type *const t = (this->is_array()) ? this->fields.array : this;
+
+   assert(t->is_sampler());
+
+   switch (t->sampler_dimensionality) {
+   case GLSL_SAMPLER_DIM_1D:
+      return (t->sampler_array) ? TEXTURE_1D_ARRAY_INDEX : TEXTURE_1D_INDEX;
+   case GLSL_SAMPLER_DIM_2D:
+      return (t->sampler_array) ? TEXTURE_2D_ARRAY_INDEX : TEXTURE_2D_INDEX;
+   case GLSL_SAMPLER_DIM_3D:
+      return TEXTURE_3D_INDEX;
+   case GLSL_SAMPLER_DIM_CUBE:
+      return TEXTURE_CUBE_INDEX;
+   case GLSL_SAMPLER_DIM_RECT:
+      return TEXTURE_RECT_INDEX;
+   case GLSL_SAMPLER_DIM_BUF:
+      assert(!"FINISHME: Implement ARB_texture_buffer_object");
+      return TEXTURE_BUFFER_INDEX;
+   case GLSL_SAMPLER_DIM_EXTERNAL:
+      return TEXTURE_EXTERNAL_INDEX;
+   default:
+      assert(!"Should not get here.");
+      return TEXTURE_BUFFER_INDEX;
+   }
+}
+
 void
 glsl_type::generate_100ES_types(glsl_symbol_table *symtab)
 {
@@ -203,6 +232,15 @@ glsl_type::generate_OES_texture_3D_types(glsl_symbol_table *symtab, bool warn)
 
 
 void
+glsl_type::generate_OES_EGL_image_external_types(glsl_symbol_table *symtab,
+						 bool warn)
+{
+   add_types_to_symbol_table(symtab, builtin_OES_EGL_image_external_types,
+			     Elements(builtin_OES_EGL_image_external_types),
+			     warn);
+}
+
+void
 _mesa_glsl_initialize_types(struct _mesa_glsl_parse_state *state)
 {
    switch (state->language_version) {
@@ -238,6 +276,15 @@ _mesa_glsl_initialize_types(struct _mesa_glsl_parse_state *state)
       glsl_type::generate_EXT_texture_array_types(state->symbols,
 				       state->EXT_texture_array_warn);
    }
+
+   /* We cannot check for language_version == 100 here because we need the
+    * types to support fixed-function program generation.  But this is fine
+    * since the extension is never enabled for OpenGL contexts.
+    */
+   if (state->OES_EGL_image_external_enable) {
+      glsl_type::generate_OES_EGL_image_external_types(state->symbols,
+					       state->OES_EGL_image_external_warn);
+   }
 }
 
 
@@ -254,6 +301,29 @@ const glsl_type *glsl_type::get_base_type() const
       return bool_type;
    default:
       return error_type;
+   }
+}
+
+
+const glsl_type *glsl_type::get_scalar_type() const
+{
+   const glsl_type *type = this;
+
+   /* Handle arrays */
+   while (type->base_type == GLSL_TYPE_ARRAY)
+      type = type->fields.array;
+
+   /* Handle vectors and matrices */
+   switch (type->base_type) {
+   case GLSL_TYPE_UINT:
+      return uint_type;
+   case GLSL_TYPE_INT:
+      return int_type;
+   case GLSL_TYPE_FLOAT:
+      return float_type;
+   default:
+      /* Handle everything else */
+      return type;
    }
 }
 

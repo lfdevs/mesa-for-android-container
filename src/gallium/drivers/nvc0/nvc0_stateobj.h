@@ -19,13 +19,13 @@
 struct nvc0_blend_stateobj {
    struct pipe_blend_state pipe;
    int size;
-   uint32_t state[70];
+   uint32_t state[72];
 };
 
 struct nvc0_rasterizer_stateobj {
    struct pipe_rasterizer_state pipe;
    int size;
-   uint32_t state[38];
+   uint32_t state[43];
 };
 
 struct nvc0_zsa_stateobj {
@@ -50,11 +50,17 @@ struct nvc0_vertex_stateobj {
    struct nvc0_vertex_element element[0];
 };
 
-/* will have to lookup index -> location qualifier from nvc0_program */
-struct nvc0_transform_feedback_state {
-   uint32_t stride[4];
-   uint8_t varying_count[4];
-   uint8_t varying_index[0];
+struct nvc0_so_target {
+   struct pipe_stream_output_target pipe;
+   struct pipe_query *pq;
+   unsigned stride;
+   boolean clean;
 };
+
+static INLINE struct nvc0_so_target *
+nvc0_so_target(struct pipe_stream_output_target *ptarg)
+{
+   return (struct nvc0_so_target *)ptarg;
+}
 
 #endif

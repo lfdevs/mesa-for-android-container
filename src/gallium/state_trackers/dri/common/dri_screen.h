@@ -32,7 +32,7 @@
 #ifndef DRI_SCREEN_H
 #define DRI_SCREEN_H
 
-#include "dri_wrapper.h"
+#include "dri_util.h"
 #include "xmlconfig.h"
 
 #include "pipe/p_compiler.h"
@@ -54,6 +54,7 @@ struct dri_screen
 
    /* dri */
    __DRIscreen *sPriv;
+   int default_throttle_frames;
 
    /**
     * Configuration cache with default values for all contexts
@@ -62,7 +63,6 @@ struct dri_screen
 
    /* drm */
    int fd;
-   drmLock *drmLock;
 
    /* gallium */
    boolean d_depth_bits_last;
@@ -78,7 +78,7 @@ struct dri_screen
 static INLINE struct dri_screen *
 dri_screen(__DRIscreen * sPriv)
 {
-   return (struct dri_screen *)sPriv->private;
+   return (struct dri_screen *)sPriv->driverPrivate;
 }
 
 struct __DRIimageRec {

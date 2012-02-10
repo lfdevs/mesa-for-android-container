@@ -783,20 +783,12 @@ emit_fetch(
       return bld->base.undef;
    }
 
-   switch( tgsi_util_get_full_src_register_sign_mode( reg, chan_index ) ) {
-   case TGSI_UTIL_SIGN_CLEAR:
+   if (reg->Register.Absolute) {
       res = lp_build_abs( &bld->base, res );
-      break;
+   }
 
-   case TGSI_UTIL_SIGN_SET:
-      res = lp_build_abs( &bld->base, res );
-      /* fall through */
-   case TGSI_UTIL_SIGN_TOGGLE:
+   if (reg->Register.Negate) {
       res = lp_build_negate( &bld->base, res );
-      break;
-
-   case TGSI_UTIL_SIGN_KEEP:
-      break;
    }
 
    return res;
@@ -1080,16 +1072,22 @@ emit_tex( struct lp_build_tgsi_soa_context *bld,
    case TGSI_TEXTURE_1D:
       num_coords = 1;
       break;
+   case TGSI_TEXTURE_1D_ARRAY:
    case TGSI_TEXTURE_2D:
    case TGSI_TEXTURE_RECT:
       num_coords = 2;
       break;
    case TGSI_TEXTURE_SHADOW1D:
+   case TGSI_TEXTURE_SHADOW1D_ARRAY:
    case TGSI_TEXTURE_SHADOW2D:
    case TGSI_TEXTURE_SHADOWRECT:
+   case TGSI_TEXTURE_2D_ARRAY:
    case TGSI_TEXTURE_3D:
    case TGSI_TEXTURE_CUBE:
       num_coords = 3;
+      break;
+   case TGSI_TEXTURE_SHADOW2D_ARRAY:
+      num_coords = 4;
       break;
    default:
       assert(0);

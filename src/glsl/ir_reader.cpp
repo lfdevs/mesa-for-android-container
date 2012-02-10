@@ -79,7 +79,8 @@ _mesa_glsl_read_ir(_mesa_glsl_parse_state *state, exec_list *instructions,
 void
 ir_reader::read(exec_list *instructions, const char *src, bool scan_for_protos)
 {
-   s_expression *expr = s_expression::read_expression(mem_ctx, src);
+   void *sx_mem_ctx = ralloc_context(NULL);
+   s_expression *expr = s_expression::read_expression(sx_mem_ctx, src);
    if (expr == NULL) {
       ir_read_error(NULL, "couldn't parse S-Expression.");
       return;
@@ -92,7 +93,7 @@ ir_reader::read(exec_list *instructions, const char *src, bool scan_for_protos)
    }
 
    read_instructions(instructions, expr, NULL);
-   ralloc_free(expr);
+   ralloc_free(sx_mem_ctx);
 
    if (debug)
       validate_ir_tree(instructions);
@@ -404,11 +405,11 @@ ir_reader::read_declaration(s_expression *expr)
       } else if (strcmp(qualifier->value(), "inout") == 0) {
 	 var->mode = ir_var_inout;
       } else if (strcmp(qualifier->value(), "smooth") == 0) {
-	 var->interpolation = ir_var_smooth;
+	 var->interpolation = INTERP_QUALIFIER_SMOOTH;
       } else if (strcmp(qualifier->value(), "flat") == 0) {
-	 var->interpolation = ir_var_flat;
+	 var->interpolation = INTERP_QUALIFIER_FLAT;
       } else if (strcmp(qualifier->value(), "noperspective") == 0) {
-	 var->interpolation = ir_var_noperspective;
+	 var->interpolation = INTERP_QUALIFIER_NOPERSPECTIVE;
       } else {
 	 ir_read_error(expr, "unknown qualifier: %s", qualifier->value());
 	 return NULL;
@@ -482,19 +483,21 @@ ir_reader::read_return(s_expression *expr)
 {
    s_expression *s_retval;
 
-   s_pattern pat[] = { "return", s_retval};
-   if (!MATCH(expr, pat)) {
-      ir_read_error(expr, "expected (return <rvalue>)");
+   s_pattern return_value_pat[] = { "return", s_retval};
+   s_pattern return_void_pat[] = { "return" };
+   if (MATCH(expr, return_value_pat)) {
+      ir_rvalue *retval = read_rvalue(s_retval);
+      if (retval == NULL) {
+         ir_read_error(NULL, "when reading return value");
+         return NULL;
+      }
+      return new(mem_ctx) ir_return(retval);
+   } else if (MATCH(expr, return_void_pat)) {
+      return new(mem_ctx) ir_return;
+   } else {
+      ir_read_error(expr, "expected (return <rvalue>) or (return)");
       return NULL;
    }
-
-   ir_rvalue *retval = read_rvalue(s_retval);
-   if (retval == NULL) {
-      ir_read_error(NULL, "when reading return value");
-      return NULL;
-   }
-
-   return new(mem_ctx) ir_return(retval);
 }
 
 
@@ -770,12 +773,10 @@ ir_reader::read_constant(s_expression *expr)
       return new(mem_ctx) ir_constant(type, &elements);
    }
 
-   const glsl_type *const base_type = type->get_base_type();
-
    ir_constant_data data = { { 0 } };
 
    // Read in list of values (at most 16).
-   int k = 0;
+   unsigned k = 0;
    foreach_iter(exec_list_iterator, it, values->subexpressions) {
       if (k >= 16) {
 	 ir_read_error(values, "expected at most 16 numbers");
@@ -784,7 +785,7 @@ ir_reader::read_constant(s_expression *expr)
 
       s_expression *expr = (s_expression*) it.get();
 
-      if (base_type->base_type == GLSL_TYPE_FLOAT) {
+      if (type->base_type == GLSL_TYPE_FLOAT) {
 	 s_number *value = SX_AS_NUMBER(expr);
 	 if (value == NULL) {
 	    ir_read_error(values, "expected numbers");
@@ -798,7 +799,7 @@ ir_reader::read_constant(s_expression *expr)
 	    return NULL;
 	 }
 
-	 switch (base_type->base_type) {
+	 switch (type->base_type) {
 	 case GLSL_TYPE_UINT: {
 	    data.u[k] = value->value();
 	    break;
@@ -817,6 +818,11 @@ ir_reader::read_constant(s_expression *expr)
 	 }
       }
       ++k;
+   }
+   if (k != type->components()) {
+      ir_read_error(values, "expected %u constant values, found %u",
+		    type->components(), k);
+      return NULL;
    }
 
    return new(mem_ctx) ir_constant(type, &data);
@@ -883,6 +889,8 @@ ir_reader::read_texture(s_expression *expr)
       { "tex", s_type, s_sampler, s_coord, s_offset, s_proj, s_shadow };
    s_pattern txf_pattern[] =
       { "txf", s_type, s_sampler, s_coord, s_offset, s_lod };
+   s_pattern txs_pattern[] =
+      { "txs", s_type, s_sampler, s_lod };
    s_pattern other_pattern[] =
       { tag, s_type, s_sampler, s_coord, s_offset, s_proj, s_shadow, s_lod };
 
@@ -890,6 +898,8 @@ ir_reader::read_texture(s_expression *expr)
       op = ir_tex;
    } else if (MATCH(expr, txf_pattern)) {
       op = ir_txf;
+   } else if (MATCH(expr, txs_pattern)) {
+      op = ir_txs;
    } else if (MATCH(expr, other_pattern)) {
       op = ir_texture::get_opcode(tag->value());
       if (op == -1)
@@ -918,25 +928,27 @@ ir_reader::read_texture(s_expression *expr)
    }
    tex->set_sampler(sampler, type);
 
-   // Read coordinate (any rvalue)
-   tex->coordinate = read_rvalue(s_coord);
-   if (tex->coordinate == NULL) {
-      ir_read_error(NULL, "when reading coordinate in (%s ...)",
-		    tex->opcode_string());
-      return NULL;
-   }
-
-   // Read texel offset - either 0 or an rvalue.
-   s_int *si_offset = SX_AS_INT(s_offset);
-   if (si_offset == NULL || si_offset->value() != 0) {
-      tex->offset = read_rvalue(s_offset);
-      if (tex->offset == NULL) {
-	 ir_read_error(s_offset, "expected 0 or an expression");
+   if (op != ir_txs) {
+      // Read coordinate (any rvalue)
+      tex->coordinate = read_rvalue(s_coord);
+      if (tex->coordinate == NULL) {
+	 ir_read_error(NULL, "when reading coordinate in (%s ...)",
+		       tex->opcode_string());
 	 return NULL;
+      }
+
+      // Read texel offset - either 0 or an rvalue.
+      s_int *si_offset = SX_AS_INT(s_offset);
+      if (si_offset == NULL || si_offset->value() != 0) {
+	 tex->offset = read_rvalue(s_offset);
+	 if (tex->offset == NULL) {
+	    ir_read_error(s_offset, "expected 0 or an expression");
+	    return NULL;
+	 }
       }
    }
 
-   if (op != ir_txf) {
+   if (op != ir_txf && op != ir_txs) {
       s_int *proj_as_int = SX_AS_INT(s_proj);
       if (proj_as_int && proj_as_int->value() == 1) {
 	 tex->projector = NULL;
@@ -971,6 +983,7 @@ ir_reader::read_texture(s_expression *expr)
       break;
    case ir_txl:
    case ir_txf:
+   case ir_txs:
       tex->lod_info.lod = read_rvalue(s_lod);
       if (tex->lod_info.lod == NULL) {
 	 ir_read_error(NULL, "when reading LOD in (%s ...)",

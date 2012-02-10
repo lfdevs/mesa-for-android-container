@@ -41,7 +41,8 @@
 #include "i915_state.h"
 
 void
-i915_clear_emit(struct pipe_context *pipe, unsigned buffers, const float *rgba,
+i915_clear_emit(struct pipe_context *pipe, unsigned buffers,
+                const union pipe_color_union *color,
                 double depth, unsigned stencil,
                 unsigned destx, unsigned desty, unsigned width, unsigned height)
 {
@@ -51,22 +52,32 @@ i915_clear_emit(struct pipe_context *pipe, unsigned buffers, const float *rgba,
    union util_color u_color;
    float f_depth = depth;
    struct i915_texture *cbuf_tex, *depth_tex;
+   int depth_clear_bbp, color_clear_bbp;
 
    cbuf_tex = depth_tex = NULL;
    clear_params = 0;
+   depth_clear_bbp = color_clear_bbp = 0;
 
    if (buffers & PIPE_CLEAR_COLOR) {
       struct pipe_surface *cbuf = i915->framebuffer.cbufs[0];
 
       clear_params |= CLEARPARAM_WRITE_COLOR;
       cbuf_tex = i915_texture(cbuf->texture);
-      util_pack_color(rgba, cbuf->format, &u_color);
-      if (util_format_get_blocksize(cbuf_tex->b.b.format) == 4)
-         clear_color = u_color.ui;
-      else
-         clear_color = (u_color.ui & 0xffff) | (u_color.ui << 16);
 
-      util_pack_color(rgba, cbuf->format, &u_color);
+      util_pack_color(color->f, cbuf->format, &u_color);
+      if (util_format_get_blocksize(cbuf_tex->b.b.format) == 4) {
+         clear_color = u_color.ui;
+         color_clear_bbp = 32;
+      } else {
+         clear_color = (u_color.ui & 0xffff) | (u_color.ui << 16);
+         color_clear_bbp = 16;
+      }
+
+      /* correctly swizzle clear value */
+      if (i915->current.need_target_fixup)
+         util_pack_color(color->f, cbuf->format, &u_color);
+      else
+         util_pack_color(color->f, PIPE_FORMAT_B8G8R8A8_UNORM, &u_color);
       clear_color8888 = u_color.ui;
    } else
       clear_color = clear_color8888 = 0;
@@ -82,49 +93,124 @@ i915_clear_emit(struct pipe_context *pipe, unsigned buffers, const float *rgba,
       if (util_format_get_blocksize(depth_tex->b.b.format) == 4) {
          /* Avoid read-modify-write if there's no stencil. */
          if (buffers & PIPE_CLEAR_STENCIL
-               || depth_tex->b.b.format != PIPE_FORMAT_Z24_UNORM_S8_USCALED) {
+               || depth_tex->b.b.format != PIPE_FORMAT_Z24_UNORM_S8_UINT) {
             clear_params |= CLEARPARAM_WRITE_STENCIL;
             clear_stencil = packed_z_stencil & 0xff;
             clear_depth = packed_z_stencil;
          } else
             clear_depth = packed_z_stencil & 0xffffff00;
+
+         depth_clear_bbp = 32;
       } else {
-         clear_depth = (clear_depth & 0xffff) | (clear_depth << 16);
+         clear_depth = (packed_z_stencil & 0xffff) | (packed_z_stencil << 16);
+         depth_clear_bbp = 16;
       }
+   } else if (buffers & PIPE_CLEAR_DEPTH) {
+      struct pipe_surface *zbuf = i915->framebuffer.zsbuf;
+
+      clear_params |= CLEARPARAM_WRITE_STENCIL;
+      depth_tex = i915_texture(zbuf->texture);
+      assert(depth_tex->b.b.format == PIPE_FORMAT_Z24_UNORM_S8_UINT);
+
+      packed_z_stencil = util_pack_z_stencil(depth_tex->b.b.format, depth, stencil);
+      depth_clear_bbp = 32;
+      clear_stencil = packed_z_stencil & 0xff;
    }
 
-   if (i915->hardware_dirty)
-      i915_emit_hardware_state(i915);
+   /* hw can't fastclear both depth and color if their bbp mismatch. */
+   if (color_clear_bbp && depth_clear_bbp
+         && color_clear_bbp != depth_clear_bbp) {
+      if (i915->hardware_dirty)
+         i915_emit_hardware_state(i915);
 
-   if (!BEGIN_BATCH(7 + 7)) {
-      FLUSH_BATCH(NULL);
+      if (!BEGIN_BATCH(1 + 2*(7 + 7))) {
+         FLUSH_BATCH(NULL);
 
-      i915_emit_hardware_state(i915);
-      i915->vbo_flushed = 1;
+         i915_emit_hardware_state(i915);
+         i915->vbo_flushed = 1;
 
-      assert(BEGIN_BATCH(7 + 7));
+         assert(BEGIN_BATCH(1 + 2*(7 + 7)));
+      }
+
+      OUT_BATCH(_3DSTATE_SCISSOR_ENABLE_CMD | DISABLE_SCISSOR_RECT);
+
+      OUT_BATCH(_3DSTATE_CLEAR_PARAMETERS);
+      OUT_BATCH(CLEARPARAM_WRITE_COLOR | CLEARPARAM_CLEAR_RECT);
+      /* Used for zone init prim */
+      OUT_BATCH(clear_color);
+      OUT_BATCH(clear_depth);
+      /* Used for clear rect prim */
+      OUT_BATCH(clear_color8888);
+      OUT_BATCH_F(f_depth);
+      OUT_BATCH(clear_stencil);
+
+      OUT_BATCH(_3DPRIMITIVE | PRIM3D_CLEAR_RECT | 5);
+      OUT_BATCH_F(destx + width);
+      OUT_BATCH_F(desty + height);
+      OUT_BATCH_F(destx);
+      OUT_BATCH_F(desty + height);
+      OUT_BATCH_F(destx);
+      OUT_BATCH_F(desty);
+
+      OUT_BATCH(_3DSTATE_CLEAR_PARAMETERS);
+      OUT_BATCH((clear_params & ~CLEARPARAM_WRITE_COLOR) |
+                CLEARPARAM_CLEAR_RECT);
+      /* Used for zone init prim */
+      OUT_BATCH(clear_color);
+      OUT_BATCH(clear_depth);
+      /* Used for clear rect prim */
+      OUT_BATCH(clear_color8888);
+      OUT_BATCH_F(f_depth);
+      OUT_BATCH(clear_stencil);
+
+      OUT_BATCH(_3DPRIMITIVE | PRIM3D_CLEAR_RECT | 5);
+      OUT_BATCH_F(destx + width);
+      OUT_BATCH_F(desty + height);
+      OUT_BATCH_F(destx);
+      OUT_BATCH_F(desty + height);
+      OUT_BATCH_F(destx);
+      OUT_BATCH_F(desty);
+   } else {
+      if (i915->hardware_dirty)
+         i915_emit_hardware_state(i915);
+
+      if (!BEGIN_BATCH(1 + 7 + 7)) {
+         FLUSH_BATCH(NULL);
+
+         i915_emit_hardware_state(i915);
+         i915->vbo_flushed = 1;
+
+         assert(BEGIN_BATCH(1 + 7 + 7));
+      }
+
+      OUT_BATCH(_3DSTATE_SCISSOR_ENABLE_CMD | DISABLE_SCISSOR_RECT);
+
+      OUT_BATCH(_3DSTATE_CLEAR_PARAMETERS);
+      OUT_BATCH(clear_params | CLEARPARAM_CLEAR_RECT);
+      /* Used for zone init prim */
+      OUT_BATCH(clear_color);
+      OUT_BATCH(clear_depth);
+      /* Used for clear rect prim */
+      OUT_BATCH(clear_color8888);
+      OUT_BATCH_F(f_depth);
+      OUT_BATCH(clear_stencil);
+
+      OUT_BATCH(_3DPRIMITIVE | PRIM3D_CLEAR_RECT | 5);
+      OUT_BATCH_F(destx + width);
+      OUT_BATCH_F(desty + height);
+      OUT_BATCH_F(destx);
+      OUT_BATCH_F(desty + height);
+      OUT_BATCH_F(destx);
+      OUT_BATCH_F(desty);
    }
-
-   OUT_BATCH(_3DSTATE_CLEAR_PARAMETERS);
-   OUT_BATCH(clear_params | CLEARPARAM_CLEAR_RECT);
-   OUT_BATCH(clear_color);
-   OUT_BATCH(clear_depth);
-   OUT_BATCH(clear_color8888);
-   OUT_BATCH_F(f_depth);
-   OUT_BATCH(clear_stencil);
-
-   OUT_BATCH(_3DPRIMITIVE | PRIM3D_CLEAR_RECT | 5);
-   OUT_BATCH_F(destx + width);
-   OUT_BATCH_F(desty + height);
-   OUT_BATCH_F(destx);
-   OUT_BATCH_F(desty + height);
-   OUT_BATCH_F(destx);
-   OUT_BATCH_F(desty);
 
    /* Flush after clear, its expected to be a costly operation.
-    * This is not required, just a heuristic
-    */
+    * This is not required, just a heuristic, but without the flush we'd need to
+    * clobber the SCISSOR_ENABLE dynamic state. */
    FLUSH_BATCH(NULL);
+
+   i915->last_fired_vertices = i915->fired_vertices;
+   i915->fired_vertices = 0;
 }
 
 /**
@@ -132,15 +218,17 @@ i915_clear_emit(struct pipe_context *pipe, unsigned buffers, const float *rgba,
  * No masking, no scissor (clear entire buffer).
  */
 void
-i915_clear_blitter(struct pipe_context *pipe, unsigned buffers, const float *rgba,
+i915_clear_blitter(struct pipe_context *pipe, unsigned buffers,
+                   const union pipe_color_union *color,
                    double depth, unsigned stencil)
 {
-   util_clear(pipe, &i915_context(pipe)->framebuffer, buffers, rgba, depth,
+   util_clear(pipe, &i915_context(pipe)->framebuffer, buffers, color, depth,
               stencil);
 }
 
 void
-i915_clear_render(struct pipe_context *pipe, unsigned buffers, const float *rgba,
+i915_clear_render(struct pipe_context *pipe, unsigned buffers,
+                  const union pipe_color_union *color,
                   double depth, unsigned stencil)
 {
    struct i915_context *i915 = i915_context(pipe);
@@ -148,6 +236,6 @@ i915_clear_render(struct pipe_context *pipe, unsigned buffers, const float *rgba
    if (i915->dirty)
       i915_update_derived(i915);
 
-   i915_clear_emit(pipe, buffers, rgba, depth, stencil,
+   i915_clear_emit(pipe, buffers, color, depth, stencil,
                    0, 0, i915->framebuffer.width, i915->framebuffer.height);
 }

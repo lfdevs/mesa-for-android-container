@@ -67,7 +67,9 @@ extern "C" {
 
 
 #if !defined(__HAIKU__) && !defined(__USE_MISC)
+#if !defined(PIPE_OS_ANDROID)
 typedef unsigned int       uint;
+#endif
 typedef unsigned short     ushort;
 #endif
 typedef unsigned char      ubyte;
@@ -89,26 +91,29 @@ typedef unsigned char boolean;
 #endif
 
 /* Function inlining */
-#ifndef INLINE
+#ifndef inline
 #  ifdef __cplusplus
-#    define INLINE inline
+     /* C++ supports inline keyword */
 #  elif defined(__GNUC__)
-#    define INLINE __inline__
+#    define inline __inline__
 #  elif defined(_MSC_VER)
-#    define INLINE __inline
+#    define inline __inline
 #  elif defined(__ICL)
-#    define INLINE __inline
+#    define inline __inline
 #  elif defined(__INTEL_COMPILER)
-#    define INLINE inline
+     /* Intel compiler supports inline keyword */
 #  elif defined(__WATCOMC__) && (__WATCOMC__ >= 1100)
-#    define INLINE __inline
+#    define inline __inline
 #  elif defined(__SUNPRO_C) && defined(__C99FEATURES__)
-#    define INLINE inline
-#  elif (__STDC_VERSION__ >= 199901L) /* C99 */
-#    define INLINE inline
+     /* C99 supports inline keyword */
+#  elif (__STDC_VERSION__ >= 199901L)
+     /* C99 supports inline keyword */
 #  else
-#    define INLINE
+#    define inline
 #  endif
+#endif
+#ifndef INLINE
+#  define INLINE inline
 #endif
 
 /* Forced function inlining */
@@ -301,6 +306,17 @@ void _ReadWriteBarrier(void);
 #    define unlikely(x) (x)
 #  endif
 #endif
+
+
+/**
+ * Static (compile-time) assertion.
+ * Basically, use COND to dimension an array.  If COND is false/zero the
+ * array size will be -1 and we'll get a compilation error.
+ */
+#define STATIC_ASSERT(COND) \
+   do { \
+      typedef int static_assertion_failed[(!!(COND))*2-1]; \
+   } while (0)
 
 
 #if defined(__cplusplus)

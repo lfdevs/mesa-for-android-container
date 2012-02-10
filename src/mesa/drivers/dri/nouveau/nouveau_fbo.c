@@ -46,26 +46,22 @@ set_renderbuffer_format(struct gl_renderbuffer *rb, GLenum internalFormat)
 	case GL_RGB8:
 		rb->_BaseFormat  = GL_RGB;
 		rb->Format = MESA_FORMAT_XRGB8888;
-		rb->DataType = GL_UNSIGNED_BYTE;
 		s->cpp = 4;
 		break;
 	case GL_RGBA:
 	case GL_RGBA8:
 		rb->_BaseFormat  = GL_RGBA;
 		rb->Format = MESA_FORMAT_ARGB8888;
-		rb->DataType = GL_UNSIGNED_BYTE;
 		s->cpp = 4;
 		break;
 	case GL_RGB5:
 		rb->_BaseFormat  = GL_RGB;
 		rb->Format = MESA_FORMAT_RGB565;
-		rb->DataType = GL_UNSIGNED_BYTE;
 		s->cpp = 2;
 		break;
 	case GL_DEPTH_COMPONENT16:
 		rb->_BaseFormat  = GL_DEPTH_COMPONENT;
 		rb->Format = MESA_FORMAT_Z16;
-		rb->DataType = GL_UNSIGNED_SHORT;
 		s->cpp = 2;
 		break;
 	case GL_DEPTH_COMPONENT:
@@ -74,7 +70,6 @@ set_renderbuffer_format(struct gl_renderbuffer *rb, GLenum internalFormat)
 	case GL_DEPTH24_STENCIL8_EXT:
 		rb->_BaseFormat  = GL_DEPTH_STENCIL;
 		rb->Format = MESA_FORMAT_Z24_S8;
-		rb->DataType = GL_UNSIGNED_INT_24_8_EXT;
 		s->cpp = 4;
 		break;
 	default:
@@ -131,6 +126,50 @@ nouveau_renderbuffer_new(struct gl_context *ctx, GLuint name)
 	rb->Delete = nouveau_renderbuffer_del;
 
 	return rb;
+}
+
+static void
+nouveau_renderbuffer_map(struct gl_context *ctx,
+			 struct gl_renderbuffer *rb,
+			 GLuint x, GLuint y, GLuint w, GLuint h,
+			 GLbitfield mode,
+			 GLubyte **out_map,
+			 GLint *out_stride)
+{
+	struct nouveau_surface *s = &to_nouveau_renderbuffer(rb)->surface;
+	GLubyte *map;
+	int stride;
+	int flags = 0;
+
+	if (mode & GL_MAP_READ_BIT)
+		flags |= NOUVEAU_BO_RD;
+	if (mode & GL_MAP_WRITE_BIT)
+		flags |= NOUVEAU_BO_WR;
+
+	nouveau_bo_map(s->bo, flags);
+
+	map = s->bo->map;
+	stride = s->pitch;
+
+	if (rb->Name == 0) {
+		map += stride * (rb->Height - 1);
+		stride = -stride;
+	}
+
+	map += x * s->cpp;
+	map += (int)y * stride;
+
+	*out_map = map;
+	*out_stride = stride;
+}
+
+static void
+nouveau_renderbuffer_unmap(struct gl_context *ctx,
+			   struct gl_renderbuffer *rb)
+{
+	struct nouveau_surface *s = &to_nouveau_renderbuffer(rb)->surface;
+
+	nouveau_bo_unmap(s->bo);
 }
 
 static GLboolean
@@ -268,6 +307,8 @@ nouveau_fbo_functions_init(struct dd_function_table *functions)
 #if FEATURE_EXT_framebuffer_object
 	functions->NewFramebuffer = nouveau_framebuffer_new;
 	functions->NewRenderbuffer = nouveau_renderbuffer_new;
+	functions->MapRenderbuffer = nouveau_renderbuffer_map;
+	functions->UnmapRenderbuffer = nouveau_renderbuffer_unmap;
 	functions->BindFramebuffer = nouveau_bind_framebuffer;
 	functions->FramebufferRenderbuffer = nouveau_framebuffer_renderbuffer;
 	functions->RenderTexture = nouveau_render_texture;

@@ -39,25 +39,6 @@
 #include "mtypes.h"
 
 
-/**
- * NOTE:
- * Normally, BYTE_TO_FLOAT(0) returns 0.00392  That causes problems when
- * we later convert the float to a packed integer value (such as for
- * GL_RGB5_A1) because we'll wind up with a non-zero value.
- *
- * We redefine the macros here so zero is handled correctly.
- */
-#undef BYTE_TO_FLOAT
-#define BYTE_TO_FLOAT(B)    ((B) == 0 ? 0.0F : ((2.0F * (B) + 1.0F) * (1.0F/255.0F)))
-
-#undef SHORT_TO_FLOAT
-#define SHORT_TO_FLOAT(S)   ((S) == 0 ? 0.0F : ((2.0F * (S) + 1.0F) * (1.0F/65535.0F)))
-
-
-
-/** Compute ceiling of integer quotient of A divided by B. */
-#define CEILING( A, B )  ( (A) % (B) == 0 ? (A)/(B) : (A)/(B)+1 )
-
 
 /**
  * \return GL_TRUE if type is packed pixel type, GL_FALSE otherwise.
@@ -84,6 +65,7 @@ _mesa_type_is_packed(GLenum type)
    case GL_UNSIGNED_INT_24_8_EXT:
    case GL_UNSIGNED_INT_5_9_9_9_REV:
    case GL_UNSIGNED_INT_10F_11F_11F_REV:
+   case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
       return GL_TRUE;
    }
 
@@ -194,40 +176,28 @@ _mesa_sizeof_packed_type( GLenum type )
       case GL_FLOAT:
 	 return sizeof(GLfloat);
       case GL_UNSIGNED_BYTE_3_3_2:
-         return sizeof(GLubyte);
       case GL_UNSIGNED_BYTE_2_3_3_REV:
-         return sizeof(GLubyte);
       case MESA_UNSIGNED_BYTE_4_4:
          return sizeof(GLubyte);
       case GL_UNSIGNED_SHORT_5_6_5:
-         return sizeof(GLushort);
       case GL_UNSIGNED_SHORT_5_6_5_REV:
-         return sizeof(GLushort);
       case GL_UNSIGNED_SHORT_4_4_4_4:
-         return sizeof(GLushort);
       case GL_UNSIGNED_SHORT_4_4_4_4_REV:
-         return sizeof(GLushort);
       case GL_UNSIGNED_SHORT_5_5_5_1:
-         return sizeof(GLushort);
       case GL_UNSIGNED_SHORT_1_5_5_5_REV:
-         return sizeof(GLushort);
-      case GL_UNSIGNED_INT_8_8_8_8:
-         return sizeof(GLuint);
-      case GL_UNSIGNED_INT_8_8_8_8_REV:
-         return sizeof(GLuint);
-      case GL_UNSIGNED_INT_10_10_10_2:
-         return sizeof(GLuint);
-      case GL_UNSIGNED_INT_2_10_10_10_REV:
-         return sizeof(GLuint);
       case GL_UNSIGNED_SHORT_8_8_MESA:
       case GL_UNSIGNED_SHORT_8_8_REV_MESA:
-         return sizeof(GLushort);      
+         return sizeof(GLushort);
+      case GL_UNSIGNED_INT_8_8_8_8:
+      case GL_UNSIGNED_INT_8_8_8_8_REV:
+      case GL_UNSIGNED_INT_10_10_10_2:
+      case GL_UNSIGNED_INT_2_10_10_10_REV:
       case GL_UNSIGNED_INT_24_8_EXT:
-         return sizeof(GLuint);
       case GL_UNSIGNED_INT_5_9_9_9_REV:
-         return sizeof(GLuint);
       case GL_UNSIGNED_INT_10F_11F_11F_REV:
          return sizeof(GLuint);
+      case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
+         return 8;
       default:
          return -1;
    }
@@ -246,12 +216,6 @@ _mesa_components_in_format( GLenum format )
 {
    switch (format) {
       case GL_COLOR_INDEX:
-      case GL_COLOR_INDEX1_EXT:
-      case GL_COLOR_INDEX2_EXT:
-      case GL_COLOR_INDEX4_EXT:
-      case GL_COLOR_INDEX8_EXT:
-      case GL_COLOR_INDEX12_EXT:
-      case GL_COLOR_INDEX16_EXT:
       case GL_STENCIL_INDEX:
       case GL_DEPTH_COMPONENT:
       case GL_RED:
@@ -266,29 +230,30 @@ _mesa_components_in_format( GLenum format )
       case GL_LUMINANCE_INTEGER_EXT:
       case GL_INTENSITY:
          return 1;
+
       case GL_LUMINANCE_ALPHA:
       case GL_LUMINANCE_ALPHA_INTEGER_EXT:
       case GL_RG:
-	 return 2;
-      case GL_RGB:
-      case GL_RGB_INTEGER_EXT:
-	 return 3;
-      case GL_RGBA:
-      case GL_RGBA_INTEGER_EXT:
-	 return 4;
-      case GL_BGR:
-	 return 3;
-      case GL_BGRA:
-	 return 4;
-      case GL_ABGR_EXT:
-         return 4;
       case GL_YCBCR_MESA:
-         return 2;
       case GL_DEPTH_STENCIL_EXT:
-         return 2;
       case GL_DUDV_ATI:
       case GL_DU8DV8_ATI:
-         return 2;
+      case GL_RG_INTEGER:
+	 return 2;
+
+      case GL_RGB:
+      case GL_BGR:
+      case GL_RGB_INTEGER_EXT:
+      case GL_BGR_INTEGER_EXT:
+	 return 3;
+
+      case GL_RGBA:
+      case GL_BGRA:
+      case GL_ABGR_EXT:
+      case GL_RGBA_INTEGER_EXT:
+      case GL_BGRA_INTEGER_EXT:
+         return 4;
+
       default:
          return -1;
    }
@@ -377,6 +342,11 @@ _mesa_bytes_per_pixel( GLenum format, GLenum type )
       case GL_UNSIGNED_INT_10F_11F_11F_REV:
          if (format == GL_RGB)
             return sizeof(GLuint);
+         else
+            return -1;
+      case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
+         if (format == GL_DEPTH_STENCIL)
+            return 8;
          else
             return -1;
       default:
@@ -531,8 +501,10 @@ _mesa_is_legal_format_and_type(const struct gl_context *ctx,
          else
             return GL_FALSE;
       case GL_DEPTH_STENCIL_EXT:
-         if (ctx->Extensions.EXT_packed_depth_stencil
-             && type == GL_UNSIGNED_INT_24_8_EXT)
+         if ((ctx->Extensions.EXT_packed_depth_stencil &&
+              type == GL_UNSIGNED_INT_24_8_EXT) ||
+             (ctx->Extensions.ARB_depth_buffer_float &&
+              type == GL_FLOAT_32_UNSIGNED_INT_24_8_REV))
             return GL_TRUE;
          else
             return GL_FALSE;
@@ -556,6 +528,7 @@ _mesa_is_legal_format_and_type(const struct gl_context *ctx,
       case GL_GREEN_INTEGER_EXT:
       case GL_BLUE_INTEGER_EXT:
       case GL_ALPHA_INTEGER_EXT:
+      case GL_RG_INTEGER:
          switch (type) {
             case GL_BYTE:
             case GL_UNSIGNED_BYTE:
@@ -576,11 +549,12 @@ _mesa_is_legal_format_and_type(const struct gl_context *ctx,
             case GL_UNSIGNED_SHORT:
             case GL_INT:
             case GL_UNSIGNED_INT:
+               return ctx->Extensions.EXT_texture_integer;
             case GL_UNSIGNED_BYTE_3_3_2:
             case GL_UNSIGNED_BYTE_2_3_3_REV:
             case GL_UNSIGNED_SHORT_5_6_5:
             case GL_UNSIGNED_SHORT_5_6_5_REV:
-               return ctx->Extensions.EXT_texture_integer;
+               return ctx->Extensions.ARB_texture_rgb10_a2ui;
             default:
                return GL_FALSE;
          }
@@ -608,6 +582,7 @@ _mesa_is_legal_format_and_type(const struct gl_context *ctx,
             case GL_UNSIGNED_SHORT:
             case GL_INT:
             case GL_UNSIGNED_INT:
+               return ctx->Extensions.EXT_texture_integer;
             case GL_UNSIGNED_SHORT_4_4_4_4:
             case GL_UNSIGNED_SHORT_4_4_4_4_REV:
             case GL_UNSIGNED_SHORT_5_5_5_1:
@@ -616,7 +591,7 @@ _mesa_is_legal_format_and_type(const struct gl_context *ctx,
             case GL_UNSIGNED_INT_8_8_8_8_REV:
             case GL_UNSIGNED_INT_10_10_10_2:
             case GL_UNSIGNED_INT_2_10_10_10_REV:
-               return ctx->Extensions.EXT_texture_integer;
+               return ctx->Extensions.ARB_texture_rgb10_a2ui;
             default:
                return GL_FALSE;
          }
@@ -768,6 +743,7 @@ _mesa_is_color_format(GLenum format)
       case GL_COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT:
       case GL_COMPRESSED_SIGNED_LUMINANCE_ALPHA_LATC2_EXT:
       case GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI:
+      case GL_ETC1_RGB8_OES:
       /* generic integer formats */
       case GL_RED_INTEGER_EXT:
       case GL_GREEN_INTEGER_EXT:
@@ -777,41 +753,54 @@ _mesa_is_color_format(GLenum format)
       case GL_RGBA_INTEGER_EXT:
       case GL_BGR_INTEGER_EXT:
       case GL_BGRA_INTEGER_EXT:
+      case GL_RG_INTEGER:
       case GL_LUMINANCE_INTEGER_EXT:
       case GL_LUMINANCE_ALPHA_INTEGER_EXT:
       /* sized integer formats */
       case GL_RGBA32UI_EXT:
       case GL_RGB32UI_EXT:
+      case GL_RG32UI:
+      case GL_R32UI:
       case GL_ALPHA32UI_EXT:
       case GL_INTENSITY32UI_EXT:
       case GL_LUMINANCE32UI_EXT:
       case GL_LUMINANCE_ALPHA32UI_EXT:
       case GL_RGBA16UI_EXT:
       case GL_RGB16UI_EXT:
+      case GL_RG16UI:
+      case GL_R16UI:
       case GL_ALPHA16UI_EXT:
       case GL_INTENSITY16UI_EXT:
       case GL_LUMINANCE16UI_EXT:
       case GL_LUMINANCE_ALPHA16UI_EXT:
       case GL_RGBA8UI_EXT:
       case GL_RGB8UI_EXT:
+      case GL_RG8UI:
+      case GL_R8UI:
       case GL_ALPHA8UI_EXT:
       case GL_INTENSITY8UI_EXT:
       case GL_LUMINANCE8UI_EXT:
       case GL_LUMINANCE_ALPHA8UI_EXT:
       case GL_RGBA32I_EXT:
       case GL_RGB32I_EXT:
+      case GL_RG32I:
+      case GL_R32I:
       case GL_ALPHA32I_EXT:
       case GL_INTENSITY32I_EXT:
       case GL_LUMINANCE32I_EXT:
       case GL_LUMINANCE_ALPHA32I_EXT:
       case GL_RGBA16I_EXT:
       case GL_RGB16I_EXT:
+      case GL_RG16I:
+      case GL_R16I:
       case GL_ALPHA16I_EXT:
       case GL_INTENSITY16I_EXT:
       case GL_LUMINANCE16I_EXT:
       case GL_LUMINANCE_ALPHA16I_EXT:
       case GL_RGBA8I_EXT:
       case GL_RGB8I_EXT:
+      case GL_RG8I:
+      case GL_R8I:
       case GL_ALPHA8I_EXT:
       case GL_INTENSITY8I_EXT:
       case GL_LUMINANCE8I_EXT:
@@ -843,30 +832,10 @@ _mesa_is_color_format(GLenum format)
       case GL_INTENSITY16_SNORM:
       case GL_RGB9_E5:
       case GL_R11F_G11F_B10F:
+      case GL_RGB10_A2UI:
          return GL_TRUE;
       case GL_YCBCR_MESA:  /* not considered to be RGB */
          /* fall-through */
-      default:
-         return GL_FALSE;
-   }
-}
-
-
-/**
- * Test if the given image format is a color index format.
- */
-GLboolean
-_mesa_is_index_format(GLenum format)
-{
-   switch (format) {
-      case GL_COLOR_INDEX:
-      case GL_COLOR_INDEX1_EXT:
-      case GL_COLOR_INDEX2_EXT:
-      case GL_COLOR_INDEX4_EXT:
-      case GL_COLOR_INDEX8_EXT:
-      case GL_COLOR_INDEX12_EXT:
-      case GL_COLOR_INDEX16_EXT:
-         return GL_TRUE;
       default:
          return GL_FALSE;
    }
@@ -884,6 +853,7 @@ _mesa_is_depth_format(GLenum format)
       case GL_DEPTH_COMPONENT16:
       case GL_DEPTH_COMPONENT24:
       case GL_DEPTH_COMPONENT32:
+      case GL_DEPTH_COMPONENT32F:
          return GL_TRUE;
       default:
          return GL_FALSE;
@@ -899,7 +869,6 @@ _mesa_is_stencil_format(GLenum format)
 {
    switch (format) {
       case GL_STENCIL_INDEX:
-      case GL_DEPTH_STENCIL:
          return GL_TRUE;
       default:
          return GL_FALSE;
@@ -931,6 +900,7 @@ _mesa_is_depthstencil_format(GLenum format)
    switch (format) {
       case GL_DEPTH24_STENCIL8_EXT:
       case GL_DEPTH_STENCIL_EXT:
+      case GL_DEPTH32F_STENCIL8:
          return GL_TRUE;
       default:
          return GL_FALSE;
@@ -956,6 +926,8 @@ _mesa_is_depth_or_stencil_format(GLenum format)
       case GL_STENCIL_INDEX16_EXT:
       case GL_DEPTH_STENCIL_EXT:
       case GL_DEPTH24_STENCIL8_EXT:
+      case GL_DEPTH_COMPONENT32F:
+      case GL_DEPTH32F_STENCIL8:
          return GL_TRUE;
       default:
          return GL_FALSE;
@@ -997,43 +969,57 @@ _mesa_is_integer_format(GLenum format)
    case GL_BGRA_INTEGER_EXT:
    case GL_LUMINANCE_INTEGER_EXT:
    case GL_LUMINANCE_ALPHA_INTEGER_EXT:
+   case GL_RG_INTEGER:
    /* specific integer formats */
    case GL_RGBA32UI_EXT:
    case GL_RGB32UI_EXT:
+   case GL_RG32UI:
+   case GL_R32UI:
    case GL_ALPHA32UI_EXT:
    case GL_INTENSITY32UI_EXT:
    case GL_LUMINANCE32UI_EXT:
    case GL_LUMINANCE_ALPHA32UI_EXT:
    case GL_RGBA16UI_EXT:
    case GL_RGB16UI_EXT:
+   case GL_RG16UI:
+   case GL_R16UI:
    case GL_ALPHA16UI_EXT:
    case GL_INTENSITY16UI_EXT:
    case GL_LUMINANCE16UI_EXT:
    case GL_LUMINANCE_ALPHA16UI_EXT:
    case GL_RGBA8UI_EXT:
    case GL_RGB8UI_EXT:
+   case GL_RG8UI:
+   case GL_R8UI:
    case GL_ALPHA8UI_EXT:
    case GL_INTENSITY8UI_EXT:
    case GL_LUMINANCE8UI_EXT:
    case GL_LUMINANCE_ALPHA8UI_EXT:
    case GL_RGBA32I_EXT:
    case GL_RGB32I_EXT:
+   case GL_RG32I:
+   case GL_R32I:
    case GL_ALPHA32I_EXT:
    case GL_INTENSITY32I_EXT:
    case GL_LUMINANCE32I_EXT:
    case GL_LUMINANCE_ALPHA32I_EXT:
    case GL_RGBA16I_EXT:
    case GL_RGB16I_EXT:
+   case GL_RG16I:
+   case GL_R16I:
    case GL_ALPHA16I_EXT:
    case GL_INTENSITY16I_EXT:
    case GL_LUMINANCE16I_EXT:
    case GL_LUMINANCE_ALPHA16I_EXT:
    case GL_RGBA8I_EXT:
    case GL_RGB8I_EXT:
+   case GL_RG8I:
+   case GL_R8I:
    case GL_ALPHA8I_EXT:
    case GL_INTENSITY8I_EXT:
    case GL_LUMINANCE8I_EXT:
    case GL_LUMINANCE_ALPHA8I_EXT:
+   case GL_RGB10_A2UI:
       return GL_TRUE;
    default:
       return GL_FALSE;
@@ -1081,6 +1067,8 @@ _mesa_is_compressed_format(struct gl_context *ctx, GLenum format)
       return ctx->Extensions.EXT_texture_compression_latc;
    case GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI:
       return ctx->Extensions.ATI_texture_compression_3dc;
+   case GL_ETC1_RGB8_OES:
+      return ctx->Extensions.OES_compressed_ETC1_RGB8_texture;
 #if FEATURE_ES
    case GL_PALETTE4_RGB8_OES:
    case GL_PALETTE4_RGBA8_OES:
@@ -1101,32 +1089,117 @@ _mesa_is_compressed_format(struct gl_context *ctx, GLenum format)
 
 
 /**
- * Return the address of a specific pixel in an image (1D, 2D or 3D).
+ * Does the given base texture/renderbuffer format have the channel
+ * named by 'pname'?
+ */
+GLboolean
+_mesa_base_format_has_channel(GLenum base_format, GLenum pname)
+{
+   switch (pname) {
+   case GL_TEXTURE_RED_SIZE:
+   case GL_TEXTURE_RED_TYPE:
+   case GL_RENDERBUFFER_RED_SIZE_EXT:
+   case GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE:
+      if (base_format == GL_RED ||
+	  base_format == GL_RG ||
+	  base_format == GL_RGB ||
+	  base_format == GL_RGBA) {
+	 return GL_TRUE;
+      }
+      return GL_FALSE;
+   case GL_TEXTURE_GREEN_SIZE:
+   case GL_TEXTURE_GREEN_TYPE:
+   case GL_RENDERBUFFER_GREEN_SIZE_EXT:
+   case GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE:
+      if (base_format == GL_RG ||
+	  base_format == GL_RGB ||
+	  base_format == GL_RGBA) {
+	 return GL_TRUE;
+      }
+      return GL_FALSE;
+   case GL_TEXTURE_BLUE_SIZE:
+   case GL_TEXTURE_BLUE_TYPE:
+   case GL_RENDERBUFFER_BLUE_SIZE_EXT:
+   case GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE:
+      if (base_format == GL_RGB ||
+	  base_format == GL_RGBA) {
+	 return GL_TRUE;
+      }
+      return GL_FALSE;
+   case GL_TEXTURE_ALPHA_SIZE:
+   case GL_TEXTURE_ALPHA_TYPE:
+   case GL_RENDERBUFFER_ALPHA_SIZE_EXT:
+   case GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE:
+      if (base_format == GL_RGBA ||
+	  base_format == GL_ALPHA ||
+	  base_format == GL_LUMINANCE_ALPHA) {
+	 return GL_TRUE;
+      }
+      return GL_FALSE;
+   case GL_TEXTURE_LUMINANCE_SIZE:
+   case GL_TEXTURE_LUMINANCE_TYPE:
+      if (base_format == GL_LUMINANCE ||
+	  base_format == GL_LUMINANCE_ALPHA) {
+	 return GL_TRUE;
+      }
+      return GL_FALSE;
+   case GL_TEXTURE_INTENSITY_SIZE:
+   case GL_TEXTURE_INTENSITY_TYPE:
+      if (base_format == GL_INTENSITY) {
+	 return GL_TRUE;
+      }
+      return GL_FALSE;
+   case GL_TEXTURE_DEPTH_SIZE:
+   case GL_TEXTURE_DEPTH_TYPE:
+   case GL_RENDERBUFFER_DEPTH_SIZE_EXT:
+   case GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE:
+      if (base_format == GL_DEPTH_STENCIL ||
+	  base_format == GL_DEPTH_COMPONENT) {
+	 return GL_TRUE;
+      }
+      return GL_FALSE;
+   case GL_RENDERBUFFER_STENCIL_SIZE_EXT:
+   case GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE:
+      if (base_format == GL_DEPTH_STENCIL ||
+	  base_format == GL_STENCIL_INDEX) {
+	 return GL_TRUE;
+      }
+      return GL_FALSE;
+   default:
+      _mesa_warning(NULL, "%s: Unexpected channel token 0x%x\n",
+		    __FUNCTION__, pname);
+      return GL_FALSE;
+   }
+
+   return GL_FALSE;
+}
+
+
+/**
+ * Return the byte offset of a specific pixel in an image (1D, 2D or 3D).
  *
  * Pixel unpacking/packing parameters are observed according to \p packing.
  *
  * \param dimensions either 1, 2 or 3 to indicate dimensionality of image
- * \param image  starting address of image data
- * \param width  the image width
- * \param height  theimage height
- * \param format  the pixel format
- * \param type  the pixel data type
  * \param packing  the pixelstore attributes
+ * \param width  the image width
+ * \param height  the image height
+ * \param format  the pixel format (must be validated beforehand)
+ * \param type  the pixel data type (must be validated beforehand)
  * \param img  which image in the volume (0 for 1D or 2D images)
  * \param row  row of pixel in the image (0 for 1D images)
  * \param column column of pixel in the image
- * 
- * \return address of pixel on success, or NULL on error.
+ *
+ * \return offset of pixel.
  *
  * \sa gl_pixelstore_attrib.
  */
-GLvoid *
-_mesa_image_address( GLuint dimensions,
-                     const struct gl_pixelstore_attrib *packing,
-                     const GLvoid *image,
-                     GLsizei width, GLsizei height,
-                     GLenum format, GLenum type,
-                     GLint img, GLint row, GLint column )
+GLintptr
+_mesa_image_offset( GLuint dimensions,
+                    const struct gl_pixelstore_attrib *packing,
+                    GLsizei width, GLsizei height,
+                    GLenum format, GLenum type,
+                    GLint img, GLint row, GLint column )
 {
    GLint alignment;        /* 1, 2 or 4 */
    GLint pixels_per_row;
@@ -1134,7 +1207,7 @@ _mesa_image_address( GLuint dimensions,
    GLint skiprows;
    GLint skippixels;
    GLint skipimages;       /* for 3-D volume images */
-   GLubyte *pixel_addr;
+   GLintptr offset;
 
    ASSERT(dimensions >= 1 && dimensions <= 3);
 
@@ -1160,30 +1233,20 @@ _mesa_image_address( GLuint dimensions,
 
    if (type == GL_BITMAP) {
       /* BITMAP data */
-      GLint comp_per_pixel;   /* components per pixel */
-      GLint bytes_per_comp;   /* bytes per component */
       GLint bytes_per_row;
       GLint bytes_per_image;
+      /* components per pixel for color or stencil index: */
+      const GLint comp_per_pixel = 1;
 
-      /* Compute bytes per component */
-      bytes_per_comp = _mesa_sizeof_packed_type( type );
-      if (bytes_per_comp < 0) {
-         return NULL;
-      }
-
-      /* Compute number of components per pixel */
-      comp_per_pixel = _mesa_components_in_format( format );
-      if (comp_per_pixel < 0) {
-         return NULL;
-      }
+      /* The pixel type and format should have been error checked earlier */
+      assert(format == GL_COLOR_INDEX || format == GL_STENCIL_INDEX);
 
       bytes_per_row = alignment
                     * CEILING( comp_per_pixel*pixels_per_row, 8*alignment );
 
       bytes_per_image = bytes_per_row * rows_per_image;
 
-      pixel_addr = (GLubyte *) image
-                 + (skipimages + img) * bytes_per_image
+      offset = (skipimages + img) * bytes_per_image
                  + (skiprows + row) * bytes_per_row
                  + (skippixels + column) / 8;
    }
@@ -1216,14 +1279,50 @@ _mesa_image_address( GLuint dimensions,
       }
 
       /* compute final pixel address */
-      pixel_addr = (GLubyte *) image
-                 + (skipimages + img) * bytes_per_image
+      offset = (skipimages + img) * bytes_per_image
                  + topOfImage
                  + (skiprows + row) * bytes_per_row
                  + (skippixels + column) * bytes_per_pixel;
    }
 
-   return (GLvoid *) pixel_addr;
+   return offset;
+}
+
+
+/**
+ * Return the address of a specific pixel in an image (1D, 2D or 3D).
+ *
+ * Pixel unpacking/packing parameters are observed according to \p packing.
+ *
+ * \param dimensions either 1, 2 or 3 to indicate dimensionality of image
+ * \param packing  the pixelstore attributes
+ * \param image  starting address of image data
+ * \param width  the image width
+ * \param height  the image height
+ * \param format  the pixel format (must be validated beforehand)
+ * \param type  the pixel data type (must be validated beforehand)
+ * \param img  which image in the volume (0 for 1D or 2D images)
+ * \param row  row of pixel in the image (0 for 1D images)
+ * \param column column of pixel in the image
+ *
+ * \return address of pixel.
+ *
+ * \sa gl_pixelstore_attrib.
+ */
+GLvoid *
+_mesa_image_address( GLuint dimensions,
+                     const struct gl_pixelstore_attrib *packing,
+                     const GLvoid *image,
+                     GLsizei width, GLsizei height,
+                     GLenum format, GLenum type,
+                     GLint img, GLint row, GLint column )
+{
+   const GLubyte *addr = (const GLubyte *) image;
+
+   addr += _mesa_image_offset(dimensions, packing, width, height,
+                              format, type, img, row, column);
+
+   return (GLvoid *) addr;
 }
 
 
@@ -1461,8 +1560,12 @@ _mesa_convert_colors(GLenum srcType, const GLvoid *src,
                      GLenum dstType, GLvoid *dst,
                      GLuint count, const GLubyte mask[])
 {
-   GLuint tempBuffer[MAX_WIDTH][4];
+   GLuint *tempBuffer;
    const GLboolean useTemp = (src == dst);
+
+   tempBuffer = malloc(count * MAX_PIXEL_BYTES);
+   if (!tempBuffer)
+      return;
 
    ASSERT(srcType != dstType);
 
@@ -1539,12 +1642,8 @@ _mesa_convert_colors(GLenum srcType, const GLvoid *src,
          GLubyte (*dst1)[4] = (GLubyte (*)[4]) (useTemp ? tempBuffer : dst);
          GLuint i;
          for (i = 0; i < count; i++) {
-            if (!mask || mask[i]) {
-               UNCLAMPED_FLOAT_TO_UBYTE(dst1[i][RCOMP], src4[i][RCOMP]);
-               UNCLAMPED_FLOAT_TO_UBYTE(dst1[i][GCOMP], src4[i][GCOMP]);
-               UNCLAMPED_FLOAT_TO_UBYTE(dst1[i][BCOMP], src4[i][BCOMP]);
-               UNCLAMPED_FLOAT_TO_UBYTE(dst1[i][ACOMP], src4[i][ACOMP]);
-            }
+            if (!mask || mask[i])
+               _mesa_unclamped_float_rgba_to_ubyte(dst1[i], src4[i]);
          }
          if (useTemp)
             memcpy(dst, tempBuffer, count * 4 * sizeof(GLubyte));
@@ -1569,6 +1668,8 @@ _mesa_convert_colors(GLenum srcType, const GLvoid *src,
    default:
       _mesa_problem(NULL, "Invalid datatype in _mesa_convert_colors");
    }
+
+   free(tempBuffer);
 }
 
 
@@ -1773,7 +1874,7 @@ _mesa_clip_to_region(GLint xmin, GLint ymin,
 /**
  * Clip dst coords against Xmax (or Ymax).
  */
-static INLINE void
+static inline void
 clip_right_or_top(GLint *srcX0, GLint *srcX1,
                   GLint *dstX0, GLint *dstX1,
                   GLint maxValue)
@@ -1806,7 +1907,7 @@ clip_right_or_top(GLint *srcX0, GLint *srcX1,
 /**
  * Clip dst coords against Xmin (or Ymin).
  */
-static INLINE void
+static inline void
 clip_left_or_bottom(GLint *srcX0, GLint *srcX1,
                     GLint *dstX0, GLint *dstX1,
                     GLint minValue)

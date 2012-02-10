@@ -34,19 +34,21 @@
 #include "api_arrayelt.h"
 #include "api_exec.h"
 #include "api_loopback.h"
+#include "api_validate.h"
 #if FEATURE_ATI_fragment_shader
 #include "atifragshader.h"
 #endif
 #include "config.h"
 #include "mfeatures.h"
-#if FEATURE_ARB_vertex_buffer_object
 #include "bufferobj.h"
-#endif
 #include "arrayobj.h"
 #include "context.h"
 #include "dlist.h"
 #include "enums.h"
 #include "eval.h"
+#if FEATURE_EXT_framebuffer_object
+#include "fbobject.h"
+#endif
 #include "framebuffer.h"
 #include "glapi/glapi.h"
 #include "hash.h"
@@ -60,6 +62,7 @@
 #include "shaderapi.h"
 #include "syncobj.h"
 #include "teximage.h"
+#include "texstorage.h"
 #include "mtypes.h"
 #include "varray.h"
 #if FEATURE_ARB_vertex_program || FEATURE_ARB_fragment_program
@@ -67,6 +70,9 @@
 #endif
 #if FEATURE_NV_vertex_program || FEATURE_NV_fragment_program
 #include "nvprogram.h"
+#endif
+#if FEATURE_EXT_transform_feedback
+#include "transformfeedback.h"
 #endif
 
 #include "math/m_matrix.h"
@@ -559,7 +565,7 @@ make_list(GLuint name, GLuint count)
 /**
  * Lookup function to just encapsulate casting.
  */
-static INLINE struct gl_display_list *
+static inline struct gl_display_list *
 lookup_list(struct gl_context *ctx, GLuint list)
 {
    return (struct gl_display_list *)
@@ -568,7 +574,7 @@ lookup_list(struct gl_context *ctx, GLuint list)
 
 
 /** Is the given opcode an extension code? */
-static INLINE GLboolean
+static inline GLboolean
 is_ext_opcode(OpCode opcode)
 {
    return (opcode >= OPCODE_EXT_0);
@@ -916,8 +922,8 @@ unpack_image(struct gl_context *ctx, GLuint dimensions,
       GLvoid *image;
 
       map = (GLubyte *)
-         ctx->Driver.MapBuffer(ctx, GL_PIXEL_UNPACK_BUFFER_EXT,
-                               GL_READ_ONLY_ARB, unpack->BufferObj);
+         ctx->Driver.MapBufferRange(ctx, 0, unpack->BufferObj->Size,
+				    GL_MAP_READ_BIT, unpack->BufferObj);
       if (!map) {
          /* unable to map src buffer! */
          _mesa_error(ctx, GL_INVALID_OPERATION, "unable to map PBO");
@@ -931,8 +937,7 @@ unpack_image(struct gl_context *ctx, GLuint dimensions,
          image = _mesa_unpack_image(dimensions, width, height, depth,
                                     format, type, src, unpack);
 
-      ctx->Driver.UnmapBuffer(ctx, GL_PIXEL_UNPACK_BUFFER_EXT,
-                              unpack->BufferObj);
+      ctx->Driver.UnmapBuffer(ctx, unpack->BufferObj);
 
       if (!image) {
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "display list construction");
@@ -1052,7 +1057,7 @@ _mesa_dlist_alloc_opcode(struct gl_context *ctx,
  * \param nparams  number of function parameters
  * \return  pointer to start of instruction space
  */
-static INLINE Node *
+static inline Node *
 alloc_instruction(struct gl_context *ctx, OpCode opcode, GLuint nparams)
 {
    return dlist_alloc(ctx, opcode, nparams * sizeof(Node));
@@ -1418,7 +1423,7 @@ save_ClearBufferiv(GLenum buffer, GLint drawbuffer, const GLint *value)
       }
    }
    if (ctx->ExecuteFlag) {
-      /*CALL_ClearBufferiv(ctx->Exec, (buffer, drawbuffer, value));*/
+      CALL_ClearBufferiv(ctx->Exec, (buffer, drawbuffer, value));
    }
 }
 
@@ -1446,7 +1451,7 @@ save_ClearBufferuiv(GLenum buffer, GLint drawbuffer, const GLuint *value)
       }
    }
    if (ctx->ExecuteFlag) {
-      /*CALL_ClearBufferuiv(ctx->Exec, (buffer, drawbuffer, value));*/
+      CALL_ClearBufferuiv(ctx->Exec, (buffer, drawbuffer, value));
    }
 }
 
@@ -1474,7 +1479,7 @@ save_ClearBufferfv(GLenum buffer, GLint drawbuffer, const GLfloat *value)
       }
    }
    if (ctx->ExecuteFlag) {
-      /*CALL_ClearBufferuiv(ctx->Exec, (buffer, drawbuffer, value));*/
+      CALL_ClearBufferfv(ctx->Exec, (buffer, drawbuffer, value));
    }
 }
 
@@ -1494,7 +1499,7 @@ save_ClearBufferfi(GLenum buffer, GLint drawbuffer,
       n[4].i = stencil;
    }
    if (ctx->ExecuteFlag) {
-      /*CALL_ClearBufferfi(ctx->Exec, (buffer, drawbuffer, depth, stencil));*/
+      CALL_ClearBufferfi(ctx->Exec, (buffer, drawbuffer, depth, stencil));
    }
 }
 
@@ -5634,7 +5639,7 @@ save_EdgeFlag(GLboolean x)
    save_Attr1fNV(VERT_ATTRIB_EDGEFLAG, x ? (GLfloat)1.0 : (GLfloat)0.0);
 }
 
-static INLINE GLboolean compare4fv( const GLfloat *a,
+static inline GLboolean compare4fv( const GLfloat *a,
                                     const GLfloat *b,
                                     GLuint count )
 {
@@ -5725,8 +5730,8 @@ save_Begin(GLenum mode)
    Node *n;
    GLboolean error = GL_FALSE;
 
-   if ( /*mode < GL_POINTS || */ mode > GL_POLYGON) {
-      _mesa_compile_error(ctx, GL_INVALID_ENUM, "Begin (mode)");
+   if (!_mesa_valid_prim_mode(ctx, mode)) {
+      _mesa_compile_error(ctx, GL_INVALID_ENUM, "glBegin(mode)");
       error = GL_TRUE;
    }
    else if (ctx->Driver.CurrentSavePrimitive == PRIM_UNKNOWN) {
@@ -6269,15 +6274,6 @@ save_EndTransformFeedback(void)
    if (ctx->ExecuteFlag) {
       CALL_EndTransformFeedbackEXT(ctx->Exec, ());
    }
-}
-
-static void GLAPIENTRY
-save_TransformFeedbackVaryings(GLuint program, GLsizei count,
-                               const GLchar **varyings, GLenum bufferMode)
-{
-   GET_CURRENT_CONTEXT(ctx);
-   _mesa_problem(ctx,
-                 "glTransformFeedbackVarying() display list support not done");
 }
 
 static void GLAPIENTRY
@@ -7369,7 +7365,7 @@ save_BeginConditionalRender(GLuint queryId, GLenum mode)
 }
 
 static void GLAPIENTRY
-save_EndConditionalRender()
+save_EndConditionalRender(void)
 {
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
@@ -7555,7 +7551,7 @@ execute_list(struct gl_context *ctx, GLuint list)
                value[1] = n[4].i;
                value[2] = n[5].i;
                value[3] = n[6].i;
-               /*CALL_ClearBufferiv(ctx->Exec, (n[1].e, n[2].i, value));*/
+               CALL_ClearBufferiv(ctx->Exec, (n[1].e, n[2].i, value));
             }
             break;
          case OPCODE_CLEAR_BUFFER_UIV:
@@ -7565,7 +7561,7 @@ execute_list(struct gl_context *ctx, GLuint list)
                value[1] = n[4].ui;
                value[2] = n[5].ui;
                value[3] = n[6].ui;
-               /*CALL_ClearBufferiv(ctx->Exec, (n[1].e, n[2].i, value));*/
+               CALL_ClearBufferuiv(ctx->Exec, (n[1].e, n[2].i, value));
             }
             break;
          case OPCODE_CLEAR_BUFFER_FV:
@@ -7575,11 +7571,11 @@ execute_list(struct gl_context *ctx, GLuint list)
                value[1] = n[4].f;
                value[2] = n[5].f;
                value[3] = n[6].f;
-               /*CALL_ClearBufferfv(ctx->Exec, (n[1].e, n[2].i, value));*/
+               CALL_ClearBufferfv(ctx->Exec, (n[1].e, n[2].i, value));
             }
             break;
          case OPCODE_CLEAR_BUFFER_FI:
-            /*CALL_ClearBufferfi(ctx->Exec, (n[1].e, n[2].i, n[3].f, n[4].i));*/
+            CALL_ClearBufferfi(ctx->Exec, (n[1].e, n[2].i, n[3].f, n[4].i));
             break;
          case OPCODE_CLEAR_COLOR:
             CALL_ClearColor(ctx->Exec, (n[1].f, n[2].f, n[3].f, n[4].f));
@@ -10119,6 +10115,24 @@ _mesa_create_save_table(void)
    SET_GenVertexArraysAPPLE(table, _mesa_GenVertexArraysAPPLE);
    SET_IsVertexArrayAPPLE(table, _mesa_IsVertexArrayAPPLE);
 
+   /* 310. GL_EXT_framebuffer_object */
+   SET_GenFramebuffersEXT(table, _mesa_GenFramebuffersEXT);
+   SET_BindFramebufferEXT(table, _mesa_BindFramebufferEXT);
+   SET_DeleteFramebuffersEXT(table, _mesa_DeleteFramebuffersEXT);
+   SET_CheckFramebufferStatusEXT(table, _mesa_CheckFramebufferStatusEXT);
+   SET_GenRenderbuffersEXT(table, _mesa_GenRenderbuffersEXT);
+   SET_BindRenderbufferEXT(table, _mesa_BindRenderbufferEXT);
+   SET_DeleteRenderbuffersEXT(table, _mesa_DeleteRenderbuffersEXT);
+   SET_RenderbufferStorageEXT(table, _mesa_RenderbufferStorageEXT);
+   SET_FramebufferTexture1DEXT(table, _mesa_FramebufferTexture1DEXT);
+   SET_FramebufferTexture2DEXT(table, _mesa_FramebufferTexture2DEXT);
+   SET_FramebufferTexture3DEXT(table, _mesa_FramebufferTexture3DEXT);
+   SET_FramebufferRenderbufferEXT(table, _mesa_FramebufferRenderbufferEXT);
+   SET_GenerateMipmapEXT(table, _mesa_GenerateMipmapEXT);
+
+   /* 317. GL_EXT_framebuffer_multisample */
+   SET_RenderbufferStorageMultisample(table, _mesa_RenderbufferStorageMultisample);
+
    /* GL_ARB_vertex_array_object */
    SET_BindVertexArray(table, _mesa_BindVertexArray);
    SET_GenVertexArrays(table, _mesa_GenVertexArrays);
@@ -10189,7 +10203,6 @@ _mesa_create_save_table(void)
 #endif
 
    /* ARB 28. GL_ARB_vertex_buffer_object */
-#if FEATURE_ARB_vertex_buffer_object
    /* None of the extension's functions get compiled */
    SET_BindBufferARB(table, _mesa_BindBufferARB);
    SET_BufferDataARB(table, _mesa_BufferDataARB);
@@ -10202,7 +10215,6 @@ _mesa_create_save_table(void)
    SET_IsBufferARB(table, _mesa_IsBufferARB);
    SET_MapBufferARB(table, _mesa_MapBufferARB);
    SET_UnmapBufferARB(table, _mesa_UnmapBufferARB);
-#endif
 
 #if FEATURE_queryobj
    _mesa_init_queryobj_dispatch(table); /* glGetQuery, etc */
@@ -10321,9 +10333,14 @@ _mesa_create_save_table(void)
 #endif
 
 #if FEATURE_EXT_transform_feedback
+   /* These are not compiled into display lists: */
+   SET_BindBufferBaseEXT(table, _mesa_BindBufferBase);
+   SET_BindBufferOffsetEXT(table, _mesa_BindBufferOffsetEXT);
+   SET_BindBufferRangeEXT(table, _mesa_BindBufferRange);
+   SET_TransformFeedbackVaryingsEXT(table, _mesa_TransformFeedbackVaryings);
+   /* These are: */
    SET_BeginTransformFeedbackEXT(table, save_BeginTransformFeedback);
    SET_EndTransformFeedbackEXT(table, save_EndTransformFeedback);
-   SET_TransformFeedbackVaryingsEXT(table, save_TransformFeedbackVaryings);
    SET_BindTransformFeedback(table, save_BindTransformFeedback);
    SET_PauseTransformFeedback(table, save_PauseTransformFeedback);
    SET_ResumeTransformFeedback(table, save_ResumeTransformFeedback);
@@ -10364,6 +10381,14 @@ _mesa_create_save_table(void)
    /* GL_ARB_sync */
    _mesa_init_sync_dispatch(table);
    SET_WaitSync(table, save_WaitSync);
+
+   /* GL_ARB_texture_storage (no dlist support) */
+   SET_TexStorage1D(table, _mesa_TexStorage1D);
+   SET_TexStorage2D(table, _mesa_TexStorage2D);
+   SET_TexStorage3D(table, _mesa_TexStorage3D);
+   SET_TextureStorage1DEXT(table, _mesa_TextureStorage1DEXT);
+   SET_TextureStorage2DEXT(table, _mesa_TextureStorage2DEXT);
+   SET_TextureStorage3DEXT(table, _mesa_TextureStorage3DEXT);
 
    return table;
 }

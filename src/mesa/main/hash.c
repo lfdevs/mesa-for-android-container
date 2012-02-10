@@ -123,7 +123,7 @@ _mesa_DeleteHashTable(struct _mesa_HashTable *table)
  * Lookup an entry in the hash table, without locking.
  * \sa _mesa_HashLookup
  */
-static INLINE void *
+static inline void *
 _mesa_HashLookup_unlocked(struct _mesa_HashTable *table, GLuint key)
 {
    GLuint pos;
@@ -478,6 +478,26 @@ _mesa_HashFindFreeKeyBlock(struct _mesa_HashTable *table, GLuint numKeys)
       return 0;
    }
 }
+
+
+/**
+ * Return the number of entries in the hash table.
+ */
+GLuint
+_mesa_HashNumEntries(const struct _mesa_HashTable *table)
+{
+   GLuint pos, count = 0;
+
+   for (pos = 0; pos < TABLE_SIZE; pos++) {
+      const struct HashEntry *entry;
+      for (entry = table->Table[pos]; entry; entry = entry->Next) {
+         count++;
+      }
+   }
+
+   return count;
+}
+
 
 
 #if 0 /* debug only */

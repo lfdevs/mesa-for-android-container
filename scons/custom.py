@@ -33,6 +33,8 @@ Custom builders and methods.
 import os
 import os.path
 import re
+import sys
+import subprocess
 
 import SCons.Action
 import SCons.Builder
@@ -40,6 +42,7 @@ import SCons.Scanner
 
 import fixes
 
+import source_list
 
 def quietCommandLines(env):
     # Quiet command lines
@@ -154,6 +157,111 @@ def createCodeGenerateMethod(env):
     env.AddMethod(code_generate, 'CodeGenerate')
 
 
+def _pkg_check_modules(env, name, modules):
+    '''Simple wrapper for pkg-config.'''
+
+    env['HAVE_' + name] = False
+
+    # For backwards compatability
+    env[name.lower()] = False
+
+    if env['platform'] == 'windows':
+        return
+
+    if not env.Detect('pkg-config'):
+        return
+
+    if subprocess.call(["pkg-config", "--exists", ' '.join(modules)]) != 0:
+        return
+
+    # Other flags may affect the compilation of unrelated targets, so store
+    # them with a prefix, (e.g., XXX_CFLAGS, XXX_LIBS, etc)
+    try:
+        flags = env.ParseFlags('!pkg-config --cflags --libs ' + ' '.join(modules))
+    except OSError:
+        return
+    prefix = name + '_'
+    for flag_name, flag_value in flags.iteritems():
+        assert '_' not in flag_name
+        env[prefix + flag_name] = flag_value
+
+    env['HAVE_' + name] = True
+
+def pkg_check_modules(env, name, modules):
+
+    sys.stdout.write('Checking for %s...' % name)
+    _pkg_check_modules(env, name, modules)
+    result = env['HAVE_' + name]
+    sys.stdout.write(' %s\n' % ['no', 'yes'][int(bool(result))])
+
+    # XXX: For backwards compatability
+    env[name.lower()] = result
+
+
+def pkg_use_modules(env, names):
+    '''Search for all environment flags that match NAME_FOO and append them to
+    the FOO environment variable.'''
+
+    names = env.Flatten(names)
+
+    for name in names:
+        prefix = name + '_'
+
+        if not 'HAVE_' + name in env:
+            raise Exception('Attempt to use unknown module %s' % name)
+
+        if not env['HAVE_' + name]:
+            raise Exception('Attempt to use unavailable module %s' % name)
+
+        flags = {}
+        for flag_name, flag_value in env.Dictionary().iteritems():
+            if flag_name.startswith(prefix):
+                flag_name = flag_name[len(prefix):]
+                if '_' not in flag_name:
+                    flags[flag_name] = flag_value
+        if flags:
+            env.MergeFlags(flags)
+
+
+def createPkgConfigMethods(env):
+    env.AddMethod(pkg_check_modules, 'PkgCheckModules')
+    env.AddMethod(pkg_use_modules, 'PkgUseModules')
+
+
+def parse_source_list(env, filename, names=None):
+    # parse the source list file
+    parser = source_list.SourceListParser()
+    src = env.File(filename).srcnode()
+    sym_table = parser.parse(src.abspath)
+
+    if names:
+        if isinstance(names, basestring):
+            names = [names]
+
+        symbols = names
+    else:
+        symbols = sym_table.keys()
+
+    # convert the symbol table to source lists
+    src_lists = {}
+    for sym in symbols:
+        val = sym_table[sym]
+        src_lists[sym] = [f for f in val.split(' ') if f]
+
+    # if names are given, concatenate the lists
+    if names:
+        srcs = []
+        for name in names:
+            srcs.extend(src_lists[name])
+
+        return srcs
+    else:
+        return src_lists
+
+def createParseSourceListMethod(env):
+    env.AddMethod(parse_source_list, 'ParseSourceList')
+
+
 def generate(env):
     """Common environment generation code"""
 
@@ -164,6 +272,8 @@ def generate(env):
     # Custom builders and methods
     createConvenienceLibBuilder(env)
     createCodeGenerateMethod(env)
+    createPkgConfigMethods(env)
+    createParseSourceListMethod(env)
 
     # for debugging
     #print env.Dump()

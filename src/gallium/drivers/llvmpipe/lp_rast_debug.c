@@ -2,13 +2,6 @@
 #include "lp_rast_priv.h"
 #include "lp_state_fs.h"
 
-static INLINE int u_bit_scan(unsigned *mask)
-{
-   int i = ffs(*mask) - 1;
-   *mask &= ~(1 << i);
-   return i;
-}
-
 struct tile {
    int coverage;
    int overdraw;
@@ -62,6 +55,9 @@ get_variant( const struct lp_rast_state *state,
              const struct cmd_block *block,
              int k )
 {
+   if (!state)
+      return NULL;
+
    if (block->cmd[k] == LP_RAST_OP_SHADE_TILE ||
        block->cmd[k] == LP_RAST_OP_SHADE_TILE_OPAQUE ||
        block->cmd[k] == LP_RAST_OP_TRIANGLE_1 ||
@@ -140,8 +136,13 @@ debug_shade_tile(int x, int y,
                  char val)
 {
    const struct lp_rast_shader_inputs *inputs = arg.shade_tile;
-   boolean blend = tile->state->variant->key.blend.rt[0].blend_enable;
+   boolean blend;
    unsigned i,j;
+
+   if (!tile->state)
+      return 0;
+
+   blend = tile->state->variant->key.blend.rt[0].blend_enable;
 
    if (inputs->disable)
       return 0;

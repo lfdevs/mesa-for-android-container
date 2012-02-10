@@ -95,7 +95,7 @@ struct vbuf_render {
     * the discretion of the driver, for the benefit of the passthrough
     * path.
     */
-   boolean (*set_primitive)( struct vbuf_render *, unsigned prim );
+   void (*set_primitive)( struct vbuf_render *, unsigned prim );
 
    /**
     * Draw indexed primitives.  Note that indices are ushort.  The driver
@@ -124,7 +124,8 @@ struct vbuf_render {
     */
    void (*set_stream_output_info)( struct vbuf_render *vbufr,
                                    unsigned primitive_count,
-                                   unsigned vertices_count );
+                                   unsigned vertices_count,
+                                   unsigned primitive_generated );
 };
 
 

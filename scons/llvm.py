@@ -92,7 +92,21 @@ def generate(env):
             'HAVE_STDINT_H',
         ])
         env.Prepend(LIBPATH = [os.path.join(llvm_dir, 'lib')])
-        if llvm_version >= distutils.version.LooseVersion('2.7'):
+        if llvm_version >= distutils.version.LooseVersion('2.9'):
+            # 2.9
+            env.Prepend(LIBS = [
+                'LLVMObject', 'LLVMMCJIT', 'LLVMMCDisassembler',
+                'LLVMLinker', 'LLVMipo', 'LLVMInterpreter',
+                'LLVMInstrumentation', 'LLVMJIT', 'LLVMExecutionEngine',
+                'LLVMBitWriter', 'LLVMX86Disassembler', 'LLVMX86AsmParser',
+                'LLVMMCParser', 'LLVMX86AsmPrinter', 'LLVMX86CodeGen',
+                'LLVMSelectionDAG', 'LLVMX86Utils', 'LLVMX86Info', 'LLVMAsmPrinter',
+                'LLVMCodeGen', 'LLVMScalarOpts', 'LLVMInstCombine',
+                'LLVMTransformUtils', 'LLVMipa', 'LLVMAsmParser',
+                'LLVMArchive', 'LLVMBitReader', 'LLVMAnalysis', 'LLVMTarget',
+                'LLVMCore', 'LLVMMC', 'LLVMSupport',
+            ])
+        elif llvm_version >= distutils.version.LooseVersion('2.7'):
             # 2.7
             env.Prepend(LIBS = [
                 'LLVMLinker', 'LLVMipo', 'LLVMInterpreter',
@@ -121,6 +135,8 @@ def generate(env):
         env.Append(LIBS = [
             'imagehlp',
             'psapi',
+            'shell32',
+            'advapi32'
         ])
         if env['msvc']:
             # Some of the LLVM C headers use the inline keyword without
@@ -141,7 +157,15 @@ def generate(env):
         llvm_version = distutils.version.LooseVersion(llvm_version)
 
         try:
-            env.ParseConfig('llvm-config --cppflags')
+            # Treat --cppflags specially to prevent NDEBUG from disabling
+            # assertion failures in debug builds.
+            cppflags = env.ParseFlags('!llvm-config --cppflags')
+            try:
+                cppflags['CPPDEFINES'].remove('NDEBUG')
+            except ValueError:
+                pass
+            env.MergeFlags(cppflags)
+
             env.ParseConfig('llvm-config --libs')
             env.ParseConfig('llvm-config --ldflags')
         except OSError:

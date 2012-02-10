@@ -420,6 +420,28 @@ static GLboolean checkValue (const driOptionValue *v, const driOptionInfo *info)
     return GL_FALSE;
 }
 
+/**
+ * Print message to \c stderr if the \c LIBGL_DEBUG environment variable
+ * is set. 
+ * 
+ * Is called from the drivers.
+ * 
+ * \param f \c printf like format string.
+ */
+static void
+__driUtilMessage(const char *f, ...)
+{
+    va_list args;
+
+    if (getenv("LIBGL_DEBUG")) {
+        fprintf(stderr, "libGL: ");
+        va_start(args, f);
+        vfprintf(stderr, f, args);
+        va_end(args);
+        fprintf(stderr, "\n");
+    }
+}
+
 /** \brief Output a warning message. */
 #define XML_WARNING1(msg) do {\
     __driUtilMessage ("Warning in %s line %d, column %d: "msg, data->name, \
@@ -567,7 +589,7 @@ static void parseOptInfoAttr (struct OptInfoData *data, const XML_Char **attr) {
     } else
 	defaultVal = attrVal[OA_DEFAULT];
     if (!parseValue (&cache->values[opt], cache->info[opt].type, defaultVal))
-	XML_FATAL ("illegal default value: %s.", defaultVal);
+	XML_FATAL ("illegal default value for %s: %s.", cache->info[opt].name, defaultVal);
 
     if (attrVal[OA_VALID]) {
 	if (cache->info[opt].type == DRI_BOOL)
@@ -765,9 +787,9 @@ static void parseDeviceAttr (struct OptConfData *data, const XML_Char **attr) {
 /** \brief Parse attributes of an application element. */
 static void parseAppAttr (struct OptConfData *data, const XML_Char **attr) {
     GLuint i;
-    const XML_Char *name = NULL, *exec = NULL;
+    const XML_Char *exec = NULL;
     for (i = 0; attr[i]; i += 2) {
-	if (!strcmp (attr[i], "name")) name = attr[i+1];
+	if (!strcmp (attr[i], "name")) /* not needed here */;
 	else if (!strcmp (attr[i], "executable")) exec = attr[i+1];
 	else XML_WARNING("unknown application attribute: %s.", attr[i]);
     }

@@ -62,7 +62,6 @@ struct blit_state
    struct pipe_rasterizer_state rasterizer;
    struct pipe_sampler_state sampler;
    struct pipe_viewport_state viewport;
-   struct pipe_clip_state clip;
    struct pipe_vertex_element velem[2];
    enum pipe_texture_target internal_target;
 
@@ -109,6 +108,7 @@ util_create_blit(struct pipe_context *pipe, struct cso_context *cso)
    memset(&ctx->rasterizer, 0, sizeof(ctx->rasterizer));
    ctx->rasterizer.cull_face = PIPE_FACE_NONE;
    ctx->rasterizer.gl_rasterization_rules = 1;
+   ctx->rasterizer.depth_clip = 1;
 
    /* samplers */
    memset(&ctx->sampler, 0, sizeof(ctx->sampler));
@@ -286,8 +286,10 @@ setup_vertex_data_tex(struct blit_state *ctx,
 
    offset = get_next_slot( ctx );
 
-   pipe_buffer_write_nooverlap(ctx->pipe, ctx->vbuf,
-                               offset, sizeof(ctx->vertices), ctx->vertices);
+   if (ctx->vbuf) {
+      pipe_buffer_write_nooverlap(ctx->pipe, ctx->vbuf,
+                                  offset, sizeof(ctx->vertices), ctx->vertices);
+   }
 
    return offset;
 }
@@ -527,11 +529,12 @@ util_blit_pixels_writemask(struct blit_state *ctx,
    cso_save_rasterizer(ctx->cso);
    cso_save_samplers(ctx->cso);
    cso_save_fragment_sampler_views(ctx->cso);
+   cso_save_stream_outputs(ctx->cso);
    cso_save_viewport(ctx->cso);
    cso_save_framebuffer(ctx->cso);
    cso_save_fragment_shader(ctx->cso);
    cso_save_vertex_shader(ctx->cso);
-   cso_save_clip(ctx->cso);
+   cso_save_geometry_shader(ctx->cso);
    cso_save_vertex_elements(ctx->cso);
    cso_save_vertex_buffers(ctx->cso);
 
@@ -541,8 +544,8 @@ util_blit_pixels_writemask(struct blit_state *ctx,
                                dst_is_depth ? &ctx->depthstencil_write :
                                               &ctx->depthstencil_keep);
    cso_set_rasterizer(ctx->cso, &ctx->rasterizer);
-   cso_set_clip(ctx->cso, &ctx->clip);
    cso_set_vertex_elements(ctx->cso, 2, ctx->velem);
+   cso_set_stream_outputs(ctx->cso, 0, NULL, 0);
 
    /* sampler */
    ctx->sampler.normalized_coords = normalized;
@@ -574,6 +577,7 @@ util_blit_pixels_writemask(struct blit_state *ctx,
       set_fragment_shader(ctx, writemask);
    }
    set_vertex_shader(ctx);
+   cso_set_geometry_shader_handle(ctx->cso, NULL);
 
    /* drawing dest */
    memset(&fb, 0, sizeof(fb));
@@ -597,10 +601,12 @@ util_blit_pixels_writemask(struct blit_state *ctx,
                                   s1, t1,
                                   z);
 
-   util_draw_vertex_buffer(ctx->pipe, ctx->cso, ctx->vbuf, offset,
-                           PIPE_PRIM_TRIANGLE_FAN,
-                           4,  /* verts */
-                           2); /* attribs/vert */
+   if (ctx->vbuf) {
+      util_draw_vertex_buffer(ctx->pipe, ctx->cso, ctx->vbuf, offset,
+                              PIPE_PRIM_TRIANGLE_FAN,
+                              4,  /* verts */
+                              2); /* attribs/vert */
+   }
 
    /* restore state we changed */
    cso_restore_blend(ctx->cso);
@@ -612,9 +618,10 @@ util_blit_pixels_writemask(struct blit_state *ctx,
    cso_restore_framebuffer(ctx->cso);
    cso_restore_fragment_shader(ctx->cso);
    cso_restore_vertex_shader(ctx->cso);
-   cso_restore_clip(ctx->cso);
+   cso_restore_geometry_shader(ctx->cso);
    cso_restore_vertex_elements(ctx->cso);
    cso_restore_vertex_buffers(ctx->cso);
+   cso_restore_stream_outputs(ctx->cso);
 
    pipe_sampler_view_reference(&sampler_view, NULL);
    if (dst_surface != dst)
@@ -660,8 +667,8 @@ void util_blit_flush( struct blit_state *ctx )
 
 /**
  * Copy pixel block from src texture to dst surface.
- *
- * XXX Should support selection of level.
+ * The sampler view's first_level field indicates the source
+ * mipmap level to use.
  * XXX need some control over blitting Z and/or stencil.
  */
 void
@@ -694,10 +701,14 @@ util_blit_pixels_tex(struct blit_state *ctx,
 
    if(normalized)
    {
-      s0 /= (float)tex->width0;
-      s1 /= (float)tex->width0;
-      t0 /= (float)tex->height0;
-      t1 /= (float)tex->height0;
+      /* normalize according to the mipmap level's size */
+      int level = src_sampler_view->u.tex.first_level;
+      float w = (float) u_minify(tex->width0, level);
+      float h = (float) u_minify(tex->height0, level);
+      s0 /= w;
+      s1 /= w;
+      t0 /= h;
+      t1 /= h;
    }
 
    assert(ctx->pipe->screen->is_format_supported(ctx->pipe->screen, dst->format,
@@ -711,11 +722,12 @@ util_blit_pixels_tex(struct blit_state *ctx,
    cso_save_rasterizer(ctx->cso);
    cso_save_samplers(ctx->cso);
    cso_save_fragment_sampler_views(ctx->cso);
+   cso_save_stream_outputs(ctx->cso);
    cso_save_viewport(ctx->cso);
    cso_save_framebuffer(ctx->cso);
    cso_save_fragment_shader(ctx->cso);
    cso_save_vertex_shader(ctx->cso);
-   cso_save_clip(ctx->cso);
+   cso_save_geometry_shader(ctx->cso);
    cso_save_vertex_elements(ctx->cso);
    cso_save_vertex_buffers(ctx->cso);
 
@@ -723,8 +735,8 @@ util_blit_pixels_tex(struct blit_state *ctx,
    cso_set_blend(ctx->cso, &ctx->blend);
    cso_set_depth_stencil_alpha(ctx->cso, &ctx->depthstencil_keep);
    cso_set_rasterizer(ctx->cso, &ctx->rasterizer);
-   cso_set_clip(ctx->cso, &ctx->clip);
    cso_set_vertex_elements(ctx->cso, 2, ctx->velem);
+   cso_set_stream_outputs(ctx->cso, 0, NULL, 0);
 
    /* sampler */
    ctx->sampler.normalized_coords = normalized;
@@ -750,6 +762,7 @@ util_blit_pixels_tex(struct blit_state *ctx,
    /* shaders */
    set_fragment_shader(ctx, TGSI_WRITEMASK_XYZW);
    set_vertex_shader(ctx);
+   cso_set_geometry_shader_handle(ctx->cso, NULL);
 
    /* drawing dest */
    memset(&fb, 0, sizeof(fb));
@@ -784,7 +797,8 @@ util_blit_pixels_tex(struct blit_state *ctx,
    cso_restore_framebuffer(ctx->cso);
    cso_restore_fragment_shader(ctx->cso);
    cso_restore_vertex_shader(ctx->cso);
-   cso_restore_clip(ctx->cso);
+   cso_restore_geometry_shader(ctx->cso);
    cso_restore_vertex_elements(ctx->cso);
    cso_restore_vertex_buffers(ctx->cso);
+   cso_restore_stream_outputs(ctx->cso);
 }

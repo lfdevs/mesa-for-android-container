@@ -351,6 +351,10 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
    for (; i < nv50->state.num_vtxelts; ++i) {
       BEGIN_RING(chan, RING_3D(VERTEX_ARRAY_ATTRIB(i)), 1);
       OUT_RING  (chan, NV50_3D_VERTEX_ATTRIB_INACTIVE);
+      if (unlikely(nv50->state.instance_elts & (1 << i))) {
+         BEGIN_RING(chan, RING_3D(VERTEX_ARRAY_PER_INSTANCE(i)), 1);
+         OUT_RING  (chan, 0);
+      }
       BEGIN_RING(chan, RING_3D(VERTEX_ARRAY_FETCH(i)), 1);
       OUT_RING  (chan, 0);
    }
@@ -389,11 +393,11 @@ nv50_prim_gl(unsigned prim)
 static void
 nv50_draw_vbo_flush_notify(struct nouveau_channel *chan)
 {
-   struct nv50_context *nv50 = chan->user_private;
+   struct nv50_screen *screen = chan->user_private;
 
-   nouveau_fence_update(&nv50->screen->base, TRUE);
+   nouveau_fence_update(&screen->base, TRUE);
 
-   nv50_bufctx_emit_relocs(nv50);
+   nv50_bufctx_emit_relocs(screen->cur_ctx);
 }
 
 static void
@@ -403,6 +407,12 @@ nv50_draw_arrays(struct nv50_context *nv50,
 {
    struct nouveau_channel *chan = nv50->screen->base.channel;
    unsigned prim;
+
+   if (nv50->state.index_bias) {
+      BEGIN_RING(chan, RING_3D(VB_ELEMENT_BASE), 1);
+      OUT_RING  (chan, 0);
+      nv50->state.index_bias = 0;
+   }
 
    prim = nv50_prim_gl(mode);
 
@@ -647,10 +657,9 @@ nv50_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    if (nv50->vbo_user && !(nv50->dirty & (NV50_NEW_VERTEX | NV50_NEW_ARRAYS)))
       nv50_update_user_vbufs(nv50);
 
-   nv50_state_validate(nv50);
+   nv50_state_validate(nv50, ~0, 8); /* 8 as minimum, we use flush_notify */
 
    chan->flush_notify = nv50_draw_vbo_flush_notify;
-   chan->user_private = nv50;
 
    if (nv50->vbo_fifo) {
       nv50_push_vbo(nv50, info);

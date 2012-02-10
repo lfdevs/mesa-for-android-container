@@ -65,8 +65,8 @@ _mesa_max_buffer_index(struct gl_context *ctx, GLuint count, GLenum type,
 
    if (_mesa_is_bufferobj(elementBuf)) {
       /* elements are in a user-defined buffer object.  need to map it */
-      map = ctx->Driver.MapBuffer(ctx, GL_ELEMENT_ARRAY_BUFFER,
-                                  GL_READ_ONLY, elementBuf);
+      map = ctx->Driver.MapBufferRange(ctx, 0, elementBuf->Size,
+				       GL_MAP_READ_BIT, elementBuf);
       /* Actual address is the sum of pointers */
       indices = (const GLvoid *) ADD_POINTERS(map, (const GLubyte *) indices);
    }
@@ -89,7 +89,7 @@ _mesa_max_buffer_index(struct gl_context *ctx, GLuint count, GLenum type,
    }
 
    if (map) {
-      ctx->Driver.UnmapBuffer(ctx, GL_ELEMENT_ARRAY_BUFFER_ARB, elementBuf);
+      ctx->Driver.UnmapBuffer(ctx, elementBuf);
    }
 
    return max;
@@ -120,7 +120,7 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
    case API_OPENGLES:
       /* For OpenGL ES, only draw if we have vertex positions
        */
-      if (!ctx->Array.ArrayObj->Vertex.Enabled)
+      if (!ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled)
 	 return GL_FALSE;
       break;
 #endif
@@ -142,8 +142,8 @@ check_valid_to_render(struct gl_context *ctx, const char *function)
             /* Draw if we have vertex positions (GL_VERTEX_ARRAY or generic
              * array [0]).
              */
-            return (ctx->Array.ArrayObj->Vertex.Enabled ||
-                    ctx->Array.ArrayObj->VertexAttrib[0].Enabled);
+            return (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_POS].Enabled ||
+                    ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_GENERIC0].Enabled);
          }
       }
       break;
@@ -182,7 +182,7 @@ check_index_bounds(struct gl_context *ctx, GLsizei count, GLenum type,
    memset(&ib, 0, sizeof(ib));
    ib.type = type;
    ib.ptr = indices;
-   ib.obj = ctx->Array.ElementArrayBufferObj;
+   ib.obj = ctx->Array.ArrayObj->ElementArrayBufferObj;
 
    vbo_get_minmax_index(ctx, &prim, &ib, &min, &max);
 
@@ -195,6 +195,27 @@ check_index_bounds(struct gl_context *ctx, GLsizei count, GLenum type,
    }
 
    return GL_TRUE;
+}
+
+
+/**
+ * Is 'mode' a valid value for glBegin(), glDrawArrays(), glDrawElements(),
+ * etc?  The set of legal values depends on whether geometry shaders/programs
+ * are supported.
+ */
+GLboolean
+_mesa_valid_prim_mode(const struct gl_context *ctx, GLenum mode)
+{
+   if (ctx->Extensions.ARB_geometry_shader4 &&
+       mode > GL_TRIANGLE_STRIP_ADJACENCY_ARB) {
+      return GL_FALSE;
+   }
+   else if (mode > GL_POLYGON) {
+      return GL_FALSE;
+   }
+   else {
+      return GL_TRUE;
+   }
 }
 
 
@@ -216,7 +237,7 @@ _mesa_validate_DrawElements(struct gl_context *ctx,
       return GL_FALSE;
    }
 
-   if (mode > GL_TRIANGLE_STRIP_ADJACENCY_ARB) {
+   if (!_mesa_valid_prim_mode(ctx, mode)) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glDrawElements(mode)" );
       return GL_FALSE;
    }
@@ -233,10 +254,10 @@ _mesa_validate_DrawElements(struct gl_context *ctx,
       return GL_FALSE;
 
    /* Vertex buffer object tests */
-   if (_mesa_is_bufferobj(ctx->Array.ElementArrayBufferObj)) {
+   if (_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj)) {
       /* use indices in the buffer object */
       /* make sure count doesn't go outside buffer bounds */
-      if (index_bytes(type, count) > ctx->Array.ElementArrayBufferObj->Size) {
+      if (index_bytes(type, count) > ctx->Array.ArrayObj->ElementArrayBufferObj->Size) {
          _mesa_warning(ctx, "glDrawElements index out of buffer bounds");
          return GL_FALSE;
       }
@@ -273,7 +294,7 @@ _mesa_validate_DrawRangeElements(struct gl_context *ctx, GLenum mode,
       return GL_FALSE;
    }
 
-   if (mode > GL_TRIANGLE_STRIP_ADJACENCY_ARB) {
+   if (!_mesa_valid_prim_mode(ctx, mode)) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glDrawRangeElements(mode)" );
       return GL_FALSE;
    }
@@ -294,10 +315,10 @@ _mesa_validate_DrawRangeElements(struct gl_context *ctx, GLenum mode,
       return GL_FALSE;
 
    /* Vertex buffer object tests */
-   if (_mesa_is_bufferobj(ctx->Array.ElementArrayBufferObj)) {
+   if (_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj)) {
       /* use indices in the buffer object */
       /* make sure count doesn't go outside buffer bounds */
-      if (index_bytes(type, count) > ctx->Array.ElementArrayBufferObj->Size) {
+      if (index_bytes(type, count) > ctx->Array.ArrayObj->ElementArrayBufferObj->Size) {
          _mesa_warning(ctx, "glDrawRangeElements index out of buffer bounds");
          return GL_FALSE;
       }
@@ -332,7 +353,7 @@ _mesa_validate_DrawArrays(struct gl_context *ctx,
       return GL_FALSE;
    }
 
-   if (mode > GL_TRIANGLE_STRIP_ADJACENCY_ARB) {
+   if (!_mesa_valid_prim_mode(ctx, mode)) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glDrawArrays(mode)" );
       return GL_FALSE;
    }
@@ -362,7 +383,7 @@ _mesa_validate_DrawArraysInstanced(struct gl_context *ctx, GLenum mode, GLint fi
       return GL_FALSE;
    }
 
-   if (mode > GL_TRIANGLE_STRIP_ADJACENCY_ARB) {
+   if (!_mesa_valid_prim_mode(ctx, mode)) {
       _mesa_error(ctx, GL_INVALID_ENUM,
                   "glDrawArraysInstanced(mode=0x%x)", mode);
       return GL_FALSE;
@@ -408,7 +429,7 @@ _mesa_validate_DrawElementsInstanced(struct gl_context *ctx,
       return GL_FALSE;
    }
 
-   if (mode > GL_TRIANGLE_STRIP_ADJACENCY_ARB) {
+   if (!_mesa_valid_prim_mode(ctx, mode)) {
       _mesa_error(ctx, GL_INVALID_ENUM,
                   "glDrawElementsInstanced(mode = 0x%x)", mode);
       return GL_FALSE;
@@ -433,10 +454,10 @@ _mesa_validate_DrawElementsInstanced(struct gl_context *ctx,
       return GL_FALSE;
 
    /* Vertex buffer object tests */
-   if (_mesa_is_bufferobj(ctx->Array.ElementArrayBufferObj)) {
+   if (_mesa_is_bufferobj(ctx->Array.ArrayObj->ElementArrayBufferObj)) {
       /* use indices in the buffer object */
       /* make sure count doesn't go outside buffer bounds */
-      if (index_bytes(type, count) > ctx->Array.ElementArrayBufferObj->Size) {
+      if (index_bytes(type, count) > ctx->Array.ArrayObj->ElementArrayBufferObj->Size) {
          _mesa_warning(ctx,
                        "glDrawElementsInstanced index out of buffer bounds");
          return GL_FALSE;
@@ -453,3 +474,37 @@ _mesa_validate_DrawElementsInstanced(struct gl_context *ctx,
 
    return GL_TRUE;
 }
+
+
+#if FEATURE_EXT_transform_feedback
+
+GLboolean
+_mesa_validate_DrawTransformFeedback(struct gl_context *ctx,
+                                     GLenum mode,
+                                     struct gl_transform_feedback_object *obj)
+{
+   ASSERT_OUTSIDE_BEGIN_END_WITH_RETVAL(ctx, GL_FALSE);
+
+   if (!_mesa_valid_prim_mode(ctx, mode)) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "glDrawTransformFeedback(mode)");
+      return GL_FALSE;
+   }
+
+   if (!obj) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glDrawTransformFeedback(name)");
+      return GL_FALSE;
+   }
+
+   if (!obj->EndedAnytime) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "glDrawTransformFeedback");
+      return GL_FALSE;
+   }
+
+   if (!check_valid_to_render(ctx, "glDrawTransformFeedback")) {
+      return GL_FALSE;
+   }
+
+   return GL_TRUE;
+}
+
+#endif

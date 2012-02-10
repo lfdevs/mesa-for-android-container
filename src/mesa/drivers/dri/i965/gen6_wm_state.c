@@ -35,7 +35,7 @@
 #include "intel_batchbuffer.h"
 
 static void
-gen6_prepare_wm_push_constants(struct brw_context *brw)
+gen6_upload_wm_push_constants(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
@@ -49,19 +49,19 @@ gen6_prepare_wm_push_constants(struct brw_context *brw)
    /* XXX: Should this happen somewhere before to get our state flag set? */
    _mesa_load_state_parameters(ctx, fp->program.Base.Parameters);
 
-   /* CACHE_NEW_VS_PROG */
+   /* CACHE_NEW_WM_PROG */
    if (brw->wm.prog_data->nr_params != 0) {
       float *constants;
       unsigned int i;
 
-      constants = brw_state_batch(brw,
+      constants = brw_state_batch(brw, AUB_TRACE_WM_CONSTANTS,
 				  brw->wm.prog_data->nr_params *
 				  sizeof(float),
 				  32, &brw->wm.push_const_offset);
 
       for (i = 0; i < brw->wm.prog_data->nr_params; i++) {
 	 constants[i] = convert_param(brw->wm.prog_data->param_convert[i],
-				      *brw->wm.prog_data->param[i]);
+				      brw->wm.prog_data->param[i]);
       }
 
       if (0) {
@@ -80,14 +80,14 @@ gen6_prepare_wm_push_constants(struct brw_context *brw)
    }
 }
 
-const struct brw_tracked_state gen6_wm_constants = {
+const struct brw_tracked_state gen6_wm_push_constants = {
    .dirty = {
       .mesa  = _NEW_PROGRAM_CONSTANTS,
       .brw   = (BRW_NEW_BATCH |
 		BRW_NEW_FRAGMENT_PROGRAM),
-      .cache = CACHE_NEW_VS_PROG,
+      .cache = CACHE_NEW_WM_PROG,
    },
-   .prepare = gen6_prepare_wm_push_constants,
+   .emit = gen6_upload_wm_push_constants,
 };
 
 static void
@@ -98,6 +98,9 @@ upload_wm_state(struct brw_context *brw)
    const struct brw_fragment_program *fp =
       brw_fragment_program_const(brw->fragment_program);
    uint32_t dw2, dw4, dw5, dw6;
+
+   /* _NEW_LIGHT */
+   bool flat_shade = (ctx->Light.ShadeModel == GL_FLAT);
 
     /* CACHE_NEW_WM_PROG */
    if (brw->wm.prog_data->nr_params == 0) {
@@ -115,7 +118,7 @@ upload_wm_state(struct brw_context *brw)
 		GEN6_CONSTANT_BUFFER_0_ENABLE |
 		(5 - 2));
       /* Pointer to the WM constant buffer.  Covered by the set of
-       * state flags from gen6_prepare_wm_constants
+       * state flags from gen6_upload_wm_push_constants.
        */
       OUT_BATCH(brw->wm.push_const_offset +
 		ALIGN(brw->wm.prog_data->nr_params,
@@ -131,20 +134,39 @@ upload_wm_state(struct brw_context *brw)
    dw5 |= GEN6_WM_LINE_AA_WIDTH_1_0;
    dw5 |= GEN6_WM_LINE_END_CAP_AA_WIDTH_0_5;
 
-   /* OpenGL non-ieee floating point mode */
-   dw2 |= GEN6_WM_FLOATING_POINT_MODE_ALT;
-
-   /* BRW_NEW_NR_WM_SURFACES */
-   dw2 |= brw->wm.nr_surfaces << GEN6_WM_BINDING_TABLE_ENTRY_COUNT_SHIFT;
+   /* Use ALT floating point mode for ARB fragment programs, because they
+    * require 0^0 == 1.  Even though _CurrentFragmentProgram is used for
+    * rendering, CurrentFragmentProgram is used for this check to
+    * differentiate between the GLSL and non-GLSL cases.
+    */
+   if (ctx->Shader.CurrentFragmentProgram == NULL)
+      dw2 |= GEN6_WM_FLOATING_POINT_MODE_ALT;
 
    /* CACHE_NEW_SAMPLER */
-   dw2 |= (ALIGN(brw->wm.sampler_count, 4) / 4) << GEN6_WM_SAMPLER_COUNT_SHIFT;
+   dw2 |= (ALIGN(brw->sampler.count, 4) / 4) << GEN6_WM_SAMPLER_COUNT_SHIFT;
    dw4 |= (brw->wm.prog_data->first_curbe_grf <<
 	   GEN6_WM_DISPATCH_START_GRF_SHIFT_0);
    dw4 |= (brw->wm.prog_data->first_curbe_grf_16 <<
 	   GEN6_WM_DISPATCH_START_GRF_SHIFT_2);
 
-   dw5 |= (brw->wm_max_threads - 1) << GEN6_WM_MAX_THREADS_SHIFT;
+   switch (brw->hiz.op) {
+   case BRW_HIZ_OP_NONE:
+      break;
+   case BRW_HIZ_OP_DEPTH_CLEAR:
+      dw4 |= GEN6_WM_DEPTH_CLEAR;
+      break;
+   case BRW_HIZ_OP_DEPTH_RESOLVE:
+      dw4 |= GEN6_WM_DEPTH_RESOLVE;
+      break;
+   case BRW_HIZ_OP_HIZ_RESOLVE:
+      dw4 |= GEN6_WM_HIERARCHICAL_DEPTH_RESOLVE;
+      break;
+   default:
+      assert(0);
+      break;
+   }
+
+   dw5 |= (brw->max_wm_threads - 1) << GEN6_WM_MAX_THREADS_SHIFT;
 
    /* CACHE_NEW_WM_PROG */
    if (brw->wm.prog_data->dispatch_width == 8) {
@@ -164,10 +186,12 @@ upload_wm_state(struct brw_context *brw)
       dw5 |= GEN6_WM_POLYGON_STIPPLE_ENABLE;
 
    /* BRW_NEW_FRAGMENT_PROGRAM */
-   if (fp->program.Base.InputsRead & (1 << FRAG_ATTRIB_WPOS))
+   if (fp->program.Base.InputsRead & FRAG_BIT_WPOS)
       dw5 |= GEN6_WM_USES_SOURCE_DEPTH | GEN6_WM_USES_SOURCE_W;
    if (fp->program.Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
       dw5 |= GEN6_WM_COMPUTED_DEPTH;
+   dw6 |= brw_compute_barycentric_interp_modes(flat_shade, &fp->program) <<
+      GEN6_WM_BARYCENTRIC_INTERPOLATION_MODE_SHIFT;
 
    /* _NEW_COLOR */
    if (fp->program.UsesKill || ctx->Color.AlphaEnabled)
@@ -178,9 +202,7 @@ upload_wm_state(struct brw_context *brw)
       dw5 |= GEN6_WM_DISPATCH_ENABLE;
    }
 
-   dw6 |= GEN6_WM_PERSPECTIVE_PIXEL_BARYCENTRIC;
-
-   dw6 |= brw_count_bits(brw->fragment_program->Base.InputsRead) <<
+   dw6 |= _mesa_bitcount_64(brw->fragment_program->Base.InputsRead) <<
       GEN6_WM_NUM_SF_OUTPUTS_SHIFT;
 
    BEGIN_BATCH(9);
@@ -205,14 +227,14 @@ upload_wm_state(struct brw_context *brw)
 const struct brw_tracked_state gen6_wm_state = {
    .dirty = {
       .mesa  = (_NEW_LINE |
+                _NEW_LIGHT |
 		_NEW_COLOR |
 		_NEW_BUFFERS |
 		_NEW_PROGRAM_CONSTANTS |
 		_NEW_POLYGON),
       .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
-                BRW_NEW_NR_WM_SURFACES |
-		BRW_NEW_URB_FENCE |
-		BRW_NEW_BATCH),
+		BRW_NEW_BATCH |
+		BRW_NEW_HIZ),
       .cache = (CACHE_NEW_SAMPLER |
 		CACHE_NEW_WM_PROG)
    },

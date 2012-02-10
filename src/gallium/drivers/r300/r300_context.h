@@ -30,7 +30,7 @@
 #include "pipe/p_context.h"
 #include "util/u_inlines.h"
 #include "util/u_transfer.h"
-#include "util/u_vbuf_mgr.h"
+#include "util/u_vbuf.h"
 
 #include "r300_defines.h"
 #include "r300_screen.h"
@@ -78,8 +78,6 @@ struct r300_blend_color_state {
 };
 
 struct r300_clip_state {
-    struct pipe_clip_state clip;
-
     uint32_t cb[29];
 };
 
@@ -139,7 +137,7 @@ struct r300_gpu_flush {
     uint32_t cb_flush_clean[6];
 };
 
-#define RS_STATE_MAIN_SIZE 25
+#define RS_STATE_MAIN_SIZE 27
 
 struct r300_rs_state {
     /* Original rasterizer state. */
@@ -195,6 +193,10 @@ struct r300_texture_format_state {
 
 struct r300_sampler_view {
     struct pipe_sampler_view base;
+
+    /* For resource_copy_region. */
+    unsigned width0_override;
+    unsigned height0_override;
 
     /* Swizzles in the UTIL_FORMAT_SWIZZLE_* representation,
      * derived from base. */
@@ -293,14 +295,6 @@ struct r300_query {
     /* The buffer where query results are stored. */
     struct pb_buffer *buf;
     struct radeon_winsys_cs_handle *cs_buf;
-    /* The size of the buffer. */
-    unsigned buffer_size;
-    /* The domain of the buffer. */
-    enum radeon_bo_domain domain;
-
-    /* Linked list members. */
-    struct r300_query* prev;
-    struct r300_query* next;
 };
 
 struct r300_surface {
@@ -347,7 +341,6 @@ struct r300_texture_desc {
     unsigned offset_in_bytes[R300_MAX_TEXTURE_LEVELS];
 
     /* Strides for each mip-level. */
-    unsigned stride_in_pixels[R300_MAX_TEXTURE_LEVELS];
     unsigned stride_in_bytes[R300_MAX_TEXTURE_LEVELS];
 
     /* Size of one zslice or face or 2D image based on the texture target. */
@@ -356,10 +349,6 @@ struct r300_texture_desc {
     /* Total size of this texture, in bytes,
      * derived from the texture properties. */
     unsigned size_in_bytes;
-
-    /* Total size of the buffer backing this texture, in bytes.
-     * It must be >= size. */
-    unsigned buffer_size_in_bytes;
 
     /**
      * If non-zero, override the natural texture layout with
@@ -400,20 +389,12 @@ struct r300_resource
     struct pb_buffer *buf;
     struct radeon_winsys_cs_handle *cs_buf;
     enum radeon_bo_domain domain;
-    unsigned buf_size;
 
     /* Constant buffers are in user memory. */
     uint8_t *constant_buffer;
 
     /* Texture description (addressing, layout, special features). */
     struct r300_texture_desc tex;
-
-    /* Registers carrying texture format data. */
-    /* Only format-independent bits should be filled in. */
-    struct r300_texture_format_state tx_format;
-
-    /* Where the texture starts in the buffer. */
-    unsigned tex_offset;
 
     /* This is the level tiling flags were last time set for.
      * It's used to prevent redundant tiling-flags changes from happening.*/
@@ -565,8 +546,6 @@ struct r300_context {
     /* Vertex elements for Gallium. */
     struct r300_vertex_element_state *velems;
 
-    struct pipe_index_buffer index_buffer;
-
     /* Vertex info for Draw. */
     struct vertex_info vertex_info;
 
@@ -601,7 +580,7 @@ struct r300_context {
 
     void *dsa_decompress_zmask;
 
-    struct u_vbuf_mgr *vbuf_mgr;
+    struct u_vbuf *vbuf_mgr;
 
     struct util_slab_mempool pool_transfers;
 
@@ -698,6 +677,7 @@ void r300_init_resource_functions(struct r300_context* r300);
 void r300_decompress_zmask(struct r300_context *r300);
 void r300_decompress_zmask_locked_unsafe(struct r300_context *r300);
 void r300_decompress_zmask_locked(struct r300_context *r300);
+bool r300_is_blit_supported(enum pipe_format format);
 
 /* r300_flush.c */
 void r300_flush(struct pipe_context *pipe,
@@ -735,6 +715,13 @@ enum r300_fb_state_change {
 void r300_mark_fb_state_dirty(struct r300_context *r300,
                               enum r300_fb_state_change change);
 void r300_mark_fs_code_dirty(struct r300_context *r300);
+
+struct pipe_sampler_view *
+r300_create_sampler_view_custom(struct pipe_context *pipe,
+                         struct pipe_resource *texture,
+                         const struct pipe_sampler_view *templ,
+                         unsigned width0_override,
+                         unsigned height0_override);
 
 /* r300_state_derived.c */
 void r300_update_derived_state(struct r300_context* r300);

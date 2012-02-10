@@ -170,6 +170,18 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
          }
          surf->RenderBuffer = val;
          break;
+      case EGL_POST_SUB_BUFFER_SUPPORTED_NV:
+         if (!dpy->Extensions.NV_post_sub_buffer ||
+             type != EGL_WINDOW_BIT) {
+            err = EGL_BAD_ATTRIBUTE;
+            break;
+         }
+         if (val != EGL_TRUE && val != EGL_FALSE) {
+            err = EGL_BAD_PARAMETER;
+            break;
+         }
+         surf->PostSubBufferSupportedNV = val;
+         break;
       /* pbuffer surface attributes */
       case EGL_WIDTH:
          if (type != EGL_PBUFFER_BIT) {
@@ -269,11 +281,13 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
 {
    const char *func;
    EGLint renderBuffer = EGL_BACK_BUFFER;
+   EGLint swapBehavior = EGL_BUFFER_PRESERVED;
    EGLint err;
 
    switch (type) {
    case EGL_WINDOW_BIT:
       func = "eglCreateWindowSurface";
+      swapBehavior = EGL_BUFFER_DESTROYED;
       break;
    case EGL_PIXMAP_BIT:
       func = "eglCreatePixmapSurface";
@@ -315,11 +329,13 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
 
    surf->MipmapLevel = 0;
    surf->MultisampleResolve = EGL_MULTISAMPLE_RESOLVE_DEFAULT;
-   surf->SwapBehavior = EGL_BUFFER_DESTROYED;
+   surf->SwapBehavior = swapBehavior;
 
    surf->HorizontalResolution = EGL_UNKNOWN;
    surf->VerticalResolution = EGL_UNKNOWN;
    surf->AspectRatio = EGL_UNKNOWN;
+
+   surf->PostSubBufferSupportedNV = EGL_FALSE;
 
    /* the default swap interval is 1 */
    _eglClampSwapInterval(surf, 1);
@@ -389,6 +405,9 @@ _eglQuerySurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface,
       break;
    case EGL_VG_COLORSPACE:
       *value = surface->VGColorspace;
+      break;
+   case EGL_POST_SUB_BUFFER_SUPPORTED_NV:
+      *value = surface->PostSubBufferSupportedNV;
       break;
    default:
       _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");

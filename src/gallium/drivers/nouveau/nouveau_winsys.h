@@ -2,6 +2,8 @@
 #define NOUVEAU_WINSYS_H
 
 #include <stdint.h>
+#include <inttypes.h>
+
 #include "pipe/p_defines.h"
 
 #include "nouveau/nouveau_bo.h"
@@ -17,6 +19,9 @@
 #define NV04_PFIFO_MAX_PACKET_LEN 2047
 #endif
 
+#define NOUVEAU_RESOURCE_FLAG_LINEAR   (PIPE_RESOURCE_FLAG_DRV_PRIV << 0)
+#define NOUVEAU_RESOURCE_FLAG_DRV_PRIV (PIPE_RESOURCE_FLAG_DRV_PRIV << 1)
+
 static INLINE uint32_t
 nouveau_screen_transfer_flags(unsigned pipe)
 {
@@ -26,7 +31,7 @@ nouveau_screen_transfer_flags(unsigned pipe)
 		flags |= NOUVEAU_BO_RD;
 	if (pipe & PIPE_TRANSFER_WRITE)
 		flags |= NOUVEAU_BO_WR;
-	if (pipe & PIPE_TRANSFER_DISCARD)
+	if (pipe & PIPE_TRANSFER_DISCARD_RANGE)
 		flags |= NOUVEAU_BO_INVAL;
 	if (pipe & PIPE_TRANSFER_UNSYNCHRONIZED)
 		flags |= NOUVEAU_BO_NOSYNC;
@@ -37,12 +42,12 @@ nouveau_screen_transfer_flags(unsigned pipe)
 }
 
 extern struct pipe_screen *
-nvfx_screen_create(struct pipe_winsys *ws, struct nouveau_device *);
+nvfx_screen_create(struct nouveau_device *);
 
 extern struct pipe_screen *
-nv50_screen_create(struct pipe_winsys *ws, struct nouveau_device *);
+nv50_screen_create(struct nouveau_device *);
 
 extern struct pipe_screen *
-nvc0_screen_create(struct pipe_winsys *ws, struct nouveau_device *);
+nvc0_screen_create(struct nouveau_device *);
 
 #endif

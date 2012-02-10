@@ -30,12 +30,24 @@
 #include "s_fragprog.h"
 #include "s_span.h"
 
+/**
+ * \brief Should swrast use a fragment program?
+ *
+ * \return true if the current fragment program exists and is not the fixed
+ *         function fragment program
+ */
+GLboolean
+_swrast_use_fragment_program(struct gl_context *ctx)
+{
+   struct gl_fragment_program *fp = ctx->FragmentProgram._Current;
+   return fp && fp != ctx->FragmentProgram._TexEnvProgram;
+}
 
 /**
  * Apply texture object's swizzle (X/Y/Z/W/0/1) to incoming 'texel'
  * and return results in 'colorOut'.
  */
-static INLINE void
+static inline void
 swizzle_texel(const GLfloat texel[4], GLfloat colorOut[4], GLuint swizzle)
 {
    if (swizzle == SWIZZLE_NOOP) {
@@ -103,8 +115,10 @@ fetch_texel_deriv( struct gl_context *ctx, const GLfloat texcoord[4],
    if (texObj) {
       const struct gl_texture_image *texImg =
          texObj->Image[0][texObj->BaseLevel];
-      const GLfloat texW = (GLfloat) texImg->WidthScale;
-      const GLfloat texH = (GLfloat) texImg->HeightScale;
+      const struct swrast_texture_image *swImg =
+         swrast_texture_image_const(texImg);
+      const GLfloat texW = (GLfloat) swImg->WidthScale;
+      const GLfloat texH = (GLfloat) swImg->HeightScale;
       GLfloat lambda;
       GLfloat rgba[4];
 
@@ -235,7 +249,8 @@ run_program(struct gl_context *ctx, SWspan *span, GLuint start, GLuint end)
                else if (depth >= 1.0)
                   span->array->z[i] = ctx->DrawBuffer->_DepthMax;
                else
-                  span->array->z[i] = IROUND(depth * ctx->DrawBuffer->_DepthMaxF);
+                  span->array->z[i] =
+                     (GLuint) (depth * ctx->DrawBuffer->_DepthMaxF + 0.5F);
             }
          }
          else {

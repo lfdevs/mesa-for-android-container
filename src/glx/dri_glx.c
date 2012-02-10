@@ -94,7 +94,7 @@ static const struct glx_context_vtable dri_context_vtable;
 
 /*
  * Given a display pointer and screen number, determine the name of
- * the DRI driver for the screen. (I.e. "r128", "tdfx", etc).
+ * the DRI driver for the screen (i.e., "i965", "radeon", "nouveau", etc).
  * Return True for success, False for failure.
  */
 static Bool
@@ -336,7 +336,7 @@ CallCreateNewScreen(Display *dpy, int scrn, struct dri_screen *psc,
    drm_handle_t hFB;
    int junk;
    const __DRIconfig **driver_configs;
-   struct glx_config *visual;
+   struct glx_config *visual, *configs = NULL, *visuals = NULL;
 
    /* DRI protocol version. */
    dri_version.major = driDpy->driMajor;
@@ -384,7 +384,7 @@ CallCreateNewScreen(Display *dpy, int scrn, struct dri_screen *psc,
       goto handle_error;
    }
 
-   /* Get device name (like "tdfx") and the ddx version numbers.
+   /* Get device name (like "radeon") and the ddx version numbers.
     * We'll check the version in each DRI driver's "createNewScreen"
     * function. */
    if (!XF86DRIGetClientDriverName(dpy, scrn,
@@ -446,10 +446,16 @@ CallCreateNewScreen(Display *dpy, int scrn, struct dri_screen *psc,
       goto handle_error;
    }
 
-   psc->base.configs =
-      driConvertConfigs(psc->core, psc->base.configs, driver_configs);
-   psc->base.visuals =
-      driConvertConfigs(psc->core, psc->base.visuals, driver_configs);
+   configs = driConvertConfigs(psc->core, psc->base.configs, driver_configs);
+   visuals = driConvertConfigs(psc->core, psc->base.visuals, driver_configs);
+
+   if (!configs || !visuals)
+       goto handle_error;
+
+   glx_config_destroy_list(psc->base.configs);
+   psc->base.configs = configs;
+   glx_config_destroy_list(psc->base.visuals);
+   psc->base.visuals = visuals;
 
    psc->driver_configs = driver_configs;
 
@@ -478,6 +484,11 @@ CallCreateNewScreen(Display *dpy, int scrn, struct dri_screen *psc,
    return psp;
 
  handle_error:
+   if (configs)
+       glx_config_destroy_list(configs);
+   if (visuals)
+       glx_config_destroy_list(visuals);
+
    if (pSAREA != MAP_FAILED)
       drmUnmap(pSAREA, SAREA_MAX);
 
@@ -504,9 +515,6 @@ dri_destroy_context(struct glx_context * context)
    struct dri_screen *psc = (struct dri_screen *) context->psc;
 
    driReleaseDrawables(&pcp->base);
-
-   if (context->xid)
-      glx_send_destroy_context(psc->base.dpy, context->xid);
 
    if (context->extensions)
       XFree((char *) context->extensions);
@@ -576,6 +584,13 @@ dri_create_context(struct glx_screen *base,
       return NULL;
 
    if (shareList) {
+      /* If the shareList context is not a DRI context, we cannot possibly
+       * create a DRI context that shares it.
+       */
+      if (shareList->vtable->destroy != dri_destroy_context) {
+	 return NULL;
+      }
+
       pcp_shared = (struct dri_context *) shareList;
       shared = pcp_shared->driContext;
    }
@@ -821,7 +836,8 @@ driBindExtensions(struct dri_screen *psc, const __DRIextension **extensions)
 }
 
 static const struct glx_screen_vtable dri_screen_vtable = {
-   dri_create_context
+   dri_create_context,
+   NULL
 };
 
 static struct glx_screen *

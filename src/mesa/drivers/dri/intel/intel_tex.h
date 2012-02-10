@@ -32,6 +32,8 @@
 #include "main/formats.h"
 #include "intel_context.h"
 
+struct intel_renderbuffer;
+
 void intelInitTextureFuncs(struct dd_function_table *functions);
 
 void intelInitTextureImageFuncs(struct dd_function_table *functions);
@@ -47,30 +49,40 @@ void intelSetTexBuffer(__DRIcontext *pDRICtx,
 void intelSetTexBuffer2(__DRIcontext *pDRICtx,
 			GLint target, GLint format, __DRIdrawable *pDraw);
 
+struct intel_mipmap_tree *
+intel_miptree_create_for_teximage(struct intel_context *intel,
+				  struct intel_texture_object *intelObj,
+				  struct intel_texture_image *intelImage,
+				  bool expect_accelerated_upload);
+
 GLuint intel_finalize_mipmap_tree(struct intel_context *intel, GLuint unit);
 
 void intel_tex_map_level_images(struct intel_context *intel,
 				struct intel_texture_object *intelObj,
-				int level);
+				int level,
+				GLbitfield mode);
 
 void intel_tex_unmap_level_images(struct intel_context *intel,
 				  struct intel_texture_object *intelObj,
 				  int level);
 
 void intel_tex_map_images(struct intel_context *intel,
-                          struct intel_texture_object *intelObj);
+                          struct intel_texture_object *intelObj,
+                          GLbitfield mode);
 
 void intel_tex_unmap_images(struct intel_context *intel,
                             struct intel_texture_object *intelObj);
+bool
+intel_tex_image_s8z24_create_renderbuffers(struct intel_context *intel,
+					   struct intel_texture_image *image);
 
 int intel_compressed_num_bytes(GLuint mesaFormat);
 
-GLboolean intel_copy_texsubimage(struct intel_context *intel,
-                                 GLenum target,
-                                 struct intel_texture_image *intelImage,
-                                 GLenum internalFormat,
-                                 GLint dstx, GLint dsty,
-                                 GLint x, GLint y,
-                                 GLsizei width, GLsizei height);
+bool intel_copy_texsubimage(struct intel_context *intel,
+                            struct intel_texture_image *intelImage,
+                            GLint dstx, GLint dsty,
+                            struct intel_renderbuffer *irb,
+                            GLint x, GLint y,
+                            GLsizei width, GLsizei height);
 
 #endif

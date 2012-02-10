@@ -25,9 +25,7 @@
 #include "main/compiler.h"
 #include "ir.h"
 #include "glsl_types.h"
-extern "C" {
 #include "program/hash_table.h"
-}
 
 /**
  * Duplicate an IR variable
@@ -52,6 +50,8 @@ ir_variable::clone(void *mem_ctx, struct hash_table *ht) const
    var->origin_upper_left = this->origin_upper_left;
    var->pixel_center_integer = this->pixel_center_integer;
    var->explicit_location = this->explicit_location;
+   var->has_initializer = this->has_initializer;
+   var->depth_layout = this->depth_layout;
 
    var->num_state_slots = this->num_state_slots;
    if (this->state_slots) {
@@ -69,6 +69,10 @@ ir_variable::clone(void *mem_ctx, struct hash_table *ht) const
 
    if (this->constant_value)
       var->constant_value = this->constant_value->clone(mem_ctx, ht);
+
+   if (this->constant_initializer)
+      var->constant_initializer =
+	 this->constant_initializer->clone(mem_ctx, ht);
 
    if (ht) {
       hash_table_insert(ht, var, (void *)const_cast<ir_variable *>(this));
@@ -221,7 +225,8 @@ ir_texture::clone(void *mem_ctx, struct hash_table *ht) const
    new_tex->type = this->type;
 
    new_tex->sampler = this->sampler->clone(mem_ctx, ht);
-   new_tex->coordinate = this->coordinate->clone(mem_ctx, ht);
+   if (this->coordinate)
+      new_tex->coordinate = this->coordinate->clone(mem_ctx, ht);
    if (this->projector)
       new_tex->projector = this->projector->clone(mem_ctx, ht);
    if (this->shadow_comparitor) {
@@ -239,6 +244,7 @@ ir_texture::clone(void *mem_ctx, struct hash_table *ht) const
       break;
    case ir_txl:
    case ir_txf:
+   case ir_txs:
       new_tex->lod_info.lod = this->lod_info.lod->clone(mem_ctx, ht);
       break;
    case ir_txd:

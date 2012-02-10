@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 Chrsitoph Bumiller
+ * Copyright 2010 Christoph Bumiller
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,6 +28,8 @@
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
 #include "tgsi/tgsi_dump.h"
+
+#include "codegen/nv50_ir_driver.h"
 
 static INLINE unsigned
 bitcount4(const uint32_t val)
@@ -625,6 +627,17 @@ nv50_prog_scan(struct nv50_translation_info *ti)
    return ret;
 }
 
+/* Temporary, need a reference to nv50_ir_generate_code in libnv50 or
+ * it "gets disappeared" and cannot be used in libnvc0 ...
+ */
+boolean
+nv50_program_translate_new(struct nv50_program *p)
+{
+   struct nv50_ir_prog_info info;
+
+   return nv50_ir_generate_code(&info);
+}
+
 boolean
 nv50_program_translate(struct nv50_program *p)
 {
@@ -664,6 +677,9 @@ out:
 void
 nv50_program_destroy(struct nv50_context *nv50, struct nv50_program *p)
 {
+   const struct pipe_shader_state pipe = p->pipe;
+   const ubyte type = p->type;
+
    if (p->res)
       nouveau_resource_free(&p->res);
 
@@ -673,5 +689,8 @@ nv50_program_destroy(struct nv50_context *nv50, struct nv50_program *p)
    if (p->fixups)
       FREE(p->fixups);
 
-   p->translated = FALSE;
+   memset(p, 0, sizeof(*p));
+
+   p->pipe = pipe;
+   p->type = type;
 }

@@ -38,6 +38,7 @@
 #include "program/prog_instruction.h"
 #include "brw_context.h"
 #include "brw_eu.h"
+#include "brw_program.h"
 
 #define SATURATE (1<<5)
 
@@ -68,27 +69,13 @@ struct brw_wm_prog_key {
    GLuint clamp_fragment_color:1;
    GLuint line_aa:2;
 
-   /**
-    * Per-sampler comparison functions:
-    *
-    * If comparison mode is GL_COMPARE_R_TO_TEXTURE, then this is set to one
-    * of GL_NEVER, GL_LESS, GL_EQUAL, GL_LEQUAL, GL_GREATER, GL_NOTEQUAL,
-    * GL_GEQUAL, or GL_ALWAYS.  Otherwise (comparison mode is GL_NONE), this
-    * field is irrelevant so it's left as GL_NONE (0).
-    *
-    * While this is a GLenum, all possible values fit in 16-bits.
-    */
-   uint16_t compare_funcs[BRW_MAX_TEX_UNIT];
-
    GLbitfield proj_attrib_mask; /**< one bit per fragment program attribute */
-   GLuint yuvtex_mask:16;
-   GLuint yuvtex_swap_mask:16;	/* UV swaped */
-   uint16_t gl_clamp_mask[3];
 
-   GLushort tex_swizzles[BRW_MAX_TEX_UNIT];
    GLushort drawable_height;
    GLbitfield64 vp_outputs_written;
    GLuint program_string_id:32;
+
+   struct brw_sampler_prog_key_data tex;
 };
 
 
@@ -156,7 +143,7 @@ struct brw_wm_instruction {
    GLuint saturate:1;
    GLuint writemask:4;
    GLuint tex_unit:4;   /* texture unit for TEX, TXD, TXP instructions */
-   GLuint tex_idx:3;    /* TEXTURE_1D,2D,3D,CUBE,RECT_INDEX source target */
+   GLuint tex_idx:4;    /* TEXTURE_1D,2D,3D,CUBE,RECT_INDEX source target */
    GLuint tex_shadow:1; /* do shadow comparison? */
    GLuint eot:1;    	/* End of thread indicator for FB_WRITE*/
    GLuint target:10;    /* target binding table index for FB_WRITE*/
@@ -215,6 +202,7 @@ struct brw_wm_compile {
    uint8_t source_w_reg;
    uint8_t aa_dest_stencil_reg;
    uint8_t dest_depth_reg;
+   uint8_t barycentric_coord_reg[BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT];
    uint8_t nr_payload_regs;
    GLuint computes_depth:1;	/* could be derived from program string */
    GLuint source_depth_to_render_target:1;
@@ -268,15 +256,15 @@ struct brw_wm_compile {
 
    GLuint cur_inst;  /**< index of current instruction */
 
-   GLboolean out_of_regs;  /**< ran out of GRF registers? */
+   bool out_of_regs;  /**< ran out of GRF registers? */
 
    /** Mapping from Mesa registers to hardware registers */
    struct {
-      GLboolean inited;
+      bool inited;
       struct brw_reg reg;
    } wm_regs[NUM_FILES][256][4];
 
-   GLboolean used_grf[BRW_WM_MAX_GRF];
+   bool used_grf[BRW_WM_MAX_GRF];
    GLuint first_free_grf;
    struct brw_reg stack;
    struct brw_reg emit_mask_reg;
@@ -308,7 +296,7 @@ void brw_wm_pass0( struct brw_wm_compile *c );
 void brw_wm_pass1( struct brw_wm_compile *c );
 void brw_wm_pass2( struct brw_wm_compile *c );
 void brw_wm_emit( struct brw_wm_compile *c );
-GLboolean brw_wm_arg_can_be_immediate(enum prog_opcode, int arg);
+bool brw_wm_arg_can_be_immediate(enum prog_opcode, int arg);
 void brw_wm_print_value( struct brw_wm_compile *c,
 			 struct brw_wm_value *value );
 
@@ -357,7 +345,7 @@ void emit_cmp(struct brw_compile *p,
 void emit_ddxy(struct brw_compile *p,
 	       const struct brw_reg *dst,
 	       GLuint mask,
-	       GLboolean is_ddx,
+	       bool is_ddx,
 	       const struct brw_reg *arg0);
 void emit_delta_xy(struct brw_compile *p,
 		   const struct brw_reg *dst,
@@ -461,7 +449,7 @@ void emit_tex(struct brw_wm_compile *c,
 	      struct brw_reg depth_payload,
 	      GLuint tex_idx,
 	      GLuint sampler,
-	      GLboolean shadow);
+	      bool shadow);
 void emit_txb(struct brw_wm_compile *c,
 	      struct brw_reg *dst,
 	      GLuint dst_flags,
@@ -484,7 +472,8 @@ struct gl_shader *brw_new_shader(struct gl_context *ctx, GLuint name, GLuint typ
 struct gl_shader_program *brw_new_shader_program(struct gl_context *ctx, GLuint name);
 
 bool brw_color_buffer_write_enabled(struct brw_context *brw);
-bool brw_render_target_supported(gl_format format);
+bool brw_render_target_supported(struct intel_context *intel,
+				 struct gl_renderbuffer *rb);
 void brw_wm_payload_setup(struct brw_context *brw,
 			  struct brw_wm_compile *c);
 bool do_wm_prog(struct brw_context *brw,

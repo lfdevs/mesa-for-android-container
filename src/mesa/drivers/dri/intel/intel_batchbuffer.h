@@ -12,9 +12,11 @@
 void intel_batchbuffer_init(struct intel_context *intel);
 void intel_batchbuffer_reset(struct intel_context *intel);
 void intel_batchbuffer_free(struct intel_context *intel);
+void intel_batchbuffer_save_state(struct intel_context *intel);
+void intel_batchbuffer_reset_to_saved(struct intel_context *intel);
 
-void _intel_batchbuffer_flush(struct intel_context *intel,
-			      const char *file, int line);
+int _intel_batchbuffer_flush(struct intel_context *intel,
+			     const char *file, int line);
 
 #define intel_batchbuffer_flush(intel) \
 	_intel_batchbuffer_flush(intel, __FILE__, __LINE__)
@@ -28,18 +30,19 @@ void _intel_batchbuffer_flush(struct intel_context *intel,
 void intel_batchbuffer_data(struct intel_context *intel,
                             const void *data, GLuint bytes, bool is_blit);
 
-GLboolean intel_batchbuffer_emit_reloc(struct intel_context *intel,
+bool intel_batchbuffer_emit_reloc(struct intel_context *intel,
                                        drm_intel_bo *buffer,
 				       uint32_t read_domains,
 				       uint32_t write_domain,
 				       uint32_t offset);
-GLboolean intel_batchbuffer_emit_reloc_fenced(struct intel_context *intel,
+bool intel_batchbuffer_emit_reloc_fenced(struct intel_context *intel,
 					      drm_intel_bo *buffer,
 					      uint32_t read_domains,
 					      uint32_t write_domain,
 					      uint32_t offset);
 void intel_batchbuffer_emit_mi_flush(struct intel_context *intel);
 void intel_emit_post_sync_nonzero_flush(struct intel_context *intel);
+void intel_emit_depth_stall_flushes(struct intel_context *intel);
 
 static INLINE uint32_t float_as_int(float f)
 {
@@ -57,10 +60,11 @@ static INLINE uint32_t float_as_int(float f)
  * be passed as structs rather than dwords, but that's a little bit of
  * work...
  */
-static INLINE GLint
+static INLINE unsigned
 intel_batchbuffer_space(struct intel_context *intel)
 {
-   return (intel->batch.state_batch_offset - intel->batch.reserved_space) - intel->batch.used*4;
+   return (intel->batch.state_batch_offset - intel->batch.reserved_space)
+      - intel->batch.used*4;
 }
 
 

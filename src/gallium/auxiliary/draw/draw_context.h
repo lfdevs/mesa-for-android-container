@@ -50,9 +50,22 @@ struct draw_fragment_shader;
 struct tgsi_sampler;
 struct gallivm_state;
 
-
+/*
+ * structure to contain driver internal information 
+ * for stream out support. mapping stores the pointer
+ * to the buffer contents, and internal offset stores
+ * stores an internal counter to how much of the stream
+ * out buffer is used (in bytes).
+ */
+struct draw_so_target {
+   struct pipe_stream_output_target target;
+   void *mapping;
+   int internal_offset;
+};
 
 struct draw_context *draw_create( struct pipe_context *pipe );
+
+struct draw_context *draw_create_no_llvm(struct pipe_context *pipe);
 
 struct draw_context *
 draw_create_gallivm(struct pipe_context *pipe, struct gallivm_state *gallivm);
@@ -95,6 +108,9 @@ draw_install_aapoint_stage(struct draw_context *draw, struct pipe_context *pipe)
 boolean
 draw_install_pstipple_stage(struct draw_context *draw, struct pipe_context *pipe);
 
+
+struct tgsi_shader_info *
+draw_get_shader_info(const struct draw_context *draw);
 
 int
 draw_find_shader_output(const struct draw_context *draw,
@@ -197,9 +213,15 @@ void
 draw_set_mapped_so_buffers(struct draw_context *draw,
                            void *buffers[PIPE_MAX_SO_BUFFERS],
                            unsigned num_buffers);
+
+void
+draw_set_mapped_so_targets(struct draw_context *draw,
+                           int num_targets,
+                           struct draw_so_target *targets[PIPE_MAX_SO_BUFFERS]);
+
 void
 draw_set_so_state(struct draw_context *draw,
-                  struct pipe_stream_output_state *state);
+                  struct pipe_stream_output_info *state);
 
 
 /***********************************************************************
@@ -230,7 +252,8 @@ void draw_set_render( struct draw_context *draw,
 
 void draw_set_driver_clipping( struct draw_context *draw,
                                boolean bypass_clip_xy,
-                               boolean bypass_clip_z );
+                               boolean bypass_clip_z,
+                               boolean guard_band_xy);
 
 void draw_set_force_passthrough( struct draw_context *draw, 
                                  boolean enable );

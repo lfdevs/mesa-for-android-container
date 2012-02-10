@@ -109,13 +109,17 @@ static void brw_clip_project_vertex( struct brw_clip_compile *c,
 {
    struct brw_compile *p = &c->func;
    struct brw_reg tmp = get_tmp(c);
+   GLuint hpos_offset = brw_vert_result_to_offset(&c->vue_map,
+                                                  VERT_RESULT_HPOS);
+   GLuint ndc_offset = brw_vert_result_to_offset(&c->vue_map,
+                                                 BRW_VERT_RESULT_NDC);
 
    /* Fixup position.  Extract from the original vertex and re-project
     * to screen space:
     */
-   brw_MOV(p, tmp, deref_4f(vert_addr, c->offset[VERT_RESULT_HPOS]));
+   brw_MOV(p, tmp, deref_4f(vert_addr, hpos_offset));
    brw_clip_project_position(c, tmp);
-   brw_MOV(p, deref_4f(vert_addr, c->header_position_offset), tmp);
+   brw_MOV(p, deref_4f(vert_addr, ndc_offset), tmp);
 	 
    release_tmp(c, tmp);
 }
@@ -131,11 +135,11 @@ void brw_clip_interp_vertex( struct brw_clip_compile *c,
 			     struct brw_indirect v0_ptr, /* from */
 			     struct brw_indirect v1_ptr, /* to */
 			     struct brw_reg t0,
-			     GLboolean force_edgeflag)
+			     bool force_edgeflag)
 {
    struct brw_compile *p = &c->func;
    struct brw_reg tmp = get_tmp(c);
-   GLuint i;
+   GLuint slot;
 
    /* Just copy the vertex header:
     */
@@ -147,17 +151,26 @@ void brw_clip_interp_vertex( struct brw_clip_compile *c,
       
    /* Iterate over each attribute (could be done in pairs?)
     */
-   for (i = 0; i < c->nr_attrs; i++) {
-      GLuint delta = c->offset[c->idx_to_attr[i]];
+   for (slot = 0; slot < c->vue_map.num_slots; slot++) {
+      int vert_result = c->vue_map.slot_to_vert_result[slot];
+      GLuint delta = brw_vue_slot_to_offset(slot);
 
-      if (c->idx_to_attr[i] == VERT_RESULT_EDGE) {
+      if (vert_result == VERT_RESULT_EDGE) {
 	 if (force_edgeflag) 
 	    brw_MOV(p, deref_4f(dest_ptr, delta), brw_imm_f(1));
 	 else
 	    brw_MOV(p, deref_4f(dest_ptr, delta), deref_4f(v0_ptr, delta));
-      }
-      else {
-	 /* Interpolate: 
+      } else if (vert_result == VERT_RESULT_PSIZ ||
+                 vert_result == VERT_RESULT_CLIP_DIST0 ||
+                 vert_result == VERT_RESULT_CLIP_DIST1) {
+	 /* PSIZ doesn't need interpolation because it isn't used by the
+          * fragment shader.  CLIP_DIST0 and CLIP_DIST1 don't need
+          * intepolation because on pre-GEN6, these are just placeholder VUE
+          * slots that don't perform any action.
+          */
+      } else if (vert_result < VERT_RESULT_MAX) {
+	 /* This is a true vertex result (and not a special value for the VUE
+	  * header), so interpolate:
 	  *
 	  *        New = attr0 + t*attr1 - t*attr0
 	  */
@@ -178,8 +191,8 @@ void brw_clip_interp_vertex( struct brw_clip_compile *c,
       }
    }
 
-   if (i & 1) {
-      GLuint delta = c->offset[c->idx_to_attr[c->nr_attrs - 1]] + ATTR_SIZE;
+   if (c->vue_map.num_slots % 2) {
+      GLuint delta = brw_vue_slot_to_offset(c->vue_map.num_slots);
 
       brw_MOV(p, deref_4f(dest_ptr, delta), brw_imm_f(0));
    }
@@ -194,8 +207,8 @@ void brw_clip_interp_vertex( struct brw_clip_compile *c,
 
 void brw_clip_emit_vue(struct brw_clip_compile *c, 
 		       struct brw_indirect vert,
-		       GLboolean allocate,
-		       GLboolean eot,
+		       bool allocate,
+		       bool eot,
 		       GLuint header)
 {
    struct brw_compile *p = &c->func;
@@ -286,25 +299,41 @@ void brw_clip_copy_colors( struct brw_clip_compile *c,
 {
    struct brw_compile *p = &c->func;
 
-   if (c->offset[VERT_RESULT_COL0])
+   if (brw_clip_have_vert_result(c, VERT_RESULT_COL0))
       brw_MOV(p, 
-	      byte_offset(c->reg.vertex[to], c->offset[VERT_RESULT_COL0]),
-	      byte_offset(c->reg.vertex[from], c->offset[VERT_RESULT_COL0]));
+	      byte_offset(c->reg.vertex[to],
+                          brw_vert_result_to_offset(&c->vue_map,
+                                                    VERT_RESULT_COL0)),
+	      byte_offset(c->reg.vertex[from],
+                          brw_vert_result_to_offset(&c->vue_map,
+                                                    VERT_RESULT_COL0)));
 
-   if (c->offset[VERT_RESULT_COL1])
+   if (brw_clip_have_vert_result(c, VERT_RESULT_COL1))
       brw_MOV(p, 
-	      byte_offset(c->reg.vertex[to], c->offset[VERT_RESULT_COL1]),
-	      byte_offset(c->reg.vertex[from], c->offset[VERT_RESULT_COL1]));
+	      byte_offset(c->reg.vertex[to],
+                          brw_vert_result_to_offset(&c->vue_map,
+                                                    VERT_RESULT_COL1)),
+	      byte_offset(c->reg.vertex[from],
+                          brw_vert_result_to_offset(&c->vue_map,
+                                                    VERT_RESULT_COL1)));
 
-   if (c->offset[VERT_RESULT_BFC0])
+   if (brw_clip_have_vert_result(c, VERT_RESULT_BFC0))
       brw_MOV(p, 
-	      byte_offset(c->reg.vertex[to], c->offset[VERT_RESULT_BFC0]),
-	      byte_offset(c->reg.vertex[from], c->offset[VERT_RESULT_BFC0]));
+	      byte_offset(c->reg.vertex[to],
+                          brw_vert_result_to_offset(&c->vue_map,
+                                                    VERT_RESULT_BFC0)),
+	      byte_offset(c->reg.vertex[from],
+                          brw_vert_result_to_offset(&c->vue_map,
+                                                    VERT_RESULT_BFC0)));
 
-   if (c->offset[VERT_RESULT_BFC1])
+   if (brw_clip_have_vert_result(c, VERT_RESULT_BFC1))
       brw_MOV(p, 
-	      byte_offset(c->reg.vertex[to], c->offset[VERT_RESULT_BFC1]),
-	      byte_offset(c->reg.vertex[from], c->offset[VERT_RESULT_BFC1]));
+	      byte_offset(c->reg.vertex[to],
+                          brw_vert_result_to_offset(&c->vue_map,
+                                                    VERT_RESULT_BFC1)),
+	      byte_offset(c->reg.vertex[from],
+                          brw_vert_result_to_offset(&c->vue_map,
+                                                    VERT_RESULT_BFC1)));
 }
 
 

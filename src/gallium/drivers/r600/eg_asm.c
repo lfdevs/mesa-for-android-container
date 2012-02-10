@@ -29,20 +29,37 @@
 #include "r600_opcodes.h"
 #include "evergreend.h"
 
-int eg_bc_cf_build(struct r600_bc *bc, struct r600_bc_cf *cf)
+int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf)
 {
 	unsigned id = cf->id;
 
 	switch (cf->inst) {
-	case (EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU << 3):
-	case (EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_POP_AFTER << 3):
-	case (EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_POP2_AFTER << 3):
-	case (EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_PUSH_BEFORE << 3):
+	case EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU:
+	case EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_POP_AFTER:
+	case EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_POP2_AFTER:
+	case EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_ALU_PUSH_BEFORE:
+		/* prepend ALU_EXTENDED if we need more than 2 kcache sets */
+		if (cf->eg_alu_extended) {
+			bc->bytecode[id++] =
+				S_SQ_CF_ALU_WORD0_EXT_KCACHE_BANK_INDEX_MODE0(V_SQ_CF_INDEX_NONE) |
+				S_SQ_CF_ALU_WORD0_EXT_KCACHE_BANK_INDEX_MODE1(V_SQ_CF_INDEX_NONE) |
+				S_SQ_CF_ALU_WORD0_EXT_KCACHE_BANK_INDEX_MODE2(V_SQ_CF_INDEX_NONE) |
+				S_SQ_CF_ALU_WORD0_EXT_KCACHE_BANK_INDEX_MODE3(V_SQ_CF_INDEX_NONE) |
+				S_SQ_CF_ALU_WORD0_EXT_KCACHE_BANK2(cf->kcache[2].bank) |
+				S_SQ_CF_ALU_WORD0_EXT_KCACHE_BANK3(cf->kcache[3].bank) |
+				S_SQ_CF_ALU_WORD0_EXT_KCACHE_MODE2(cf->kcache[2].mode);
+			bc->bytecode[id++] = EG_V_SQ_CF_ALU_WORD1_SQ_CF_INST_EXTENDED |
+				S_SQ_CF_ALU_WORD1_EXT_KCACHE_MODE3(cf->kcache[3].mode) |
+				S_SQ_CF_ALU_WORD1_EXT_KCACHE_ADDR2(cf->kcache[2].addr) |
+				S_SQ_CF_ALU_WORD1_EXT_KCACHE_ADDR3(cf->kcache[3].addr) |
+				S_SQ_CF_ALU_WORD1_EXT_BARRIER(1);
+		}
+
 		bc->bytecode[id++] = S_SQ_CF_ALU_WORD0_ADDR(cf->addr >> 1) |
 			S_SQ_CF_ALU_WORD0_KCACHE_MODE0(cf->kcache[0].mode) |
 			S_SQ_CF_ALU_WORD0_KCACHE_BANK0(cf->kcache[0].bank) |
 			S_SQ_CF_ALU_WORD0_KCACHE_BANK1(cf->kcache[1].bank);
-		bc->bytecode[id++] = S_SQ_CF_ALU_WORD1_CF_INST(cf->inst >> 3) |
+		bc->bytecode[id++] = cf->inst |
 			S_SQ_CF_ALU_WORD1_KCACHE_MODE1(cf->kcache[1].mode) |
 			S_SQ_CF_ALU_WORD1_KCACHE_ADDR0(cf->kcache[0].addr) |
 			S_SQ_CF_ALU_WORD1_KCACHE_ADDR1(cf->kcache[1].addr) |
@@ -52,7 +69,7 @@ int eg_bc_cf_build(struct r600_bc *bc, struct r600_bc_cf *cf)
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_TEX:
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_VTX:
 		bc->bytecode[id++] = S_SQ_CF_WORD0_ADDR(cf->addr >> 1);
-		bc->bytecode[id++] = S_SQ_CF_WORD1_CF_INST(cf->inst) |
+		bc->bytecode[id++] = cf->inst |
 					S_SQ_CF_WORD1_BARRIER(1) |
 					S_SQ_CF_WORD1_COUNT((cf->ndw / 4) - 1);
 		break;
@@ -68,11 +85,39 @@ int eg_bc_cf_build(struct r600_bc *bc, struct r600_bc_cf *cf)
 			S_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_Z(cf->output.swizzle_z) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_W(cf->output.swizzle_w) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_BARRIER(cf->output.barrier) |
-			S_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(cf->output.inst);
-		if (bc->chiprev == CHIPREV_EVERGREEN) /* no EOP on cayman */
+			cf->output.inst;
+		if (bc->chip_class == EVERGREEN) /* no EOP on cayman */
 			bc->bytecode[id] |= S_SQ_CF_ALLOC_EXPORT_WORD1_END_OF_PROGRAM(cf->output.end_of_program);
 		id++;
-
+		break;
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM0_BUF0:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM0_BUF1:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM0_BUF2:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM0_BUF3:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM1_BUF0:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM1_BUF1:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM1_BUF2:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM1_BUF3:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM2_BUF0:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM2_BUF1:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM2_BUF2:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM2_BUF3:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM3_BUF0:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM3_BUF1:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM3_BUF2:
+	case EG_V_SQ_CF_ALLOC_EXPORT_WORD1_SQ_CF_INST_MEM_STREAM3_BUF3:
+		bc->bytecode[id++] = S_SQ_CF_ALLOC_EXPORT_WORD0_RW_GPR(cf->output.gpr) |
+			S_SQ_CF_ALLOC_EXPORT_WORD0_ELEM_SIZE(cf->output.elem_size) |
+			S_SQ_CF_ALLOC_EXPORT_WORD0_ARRAY_BASE(cf->output.array_base) |
+			S_SQ_CF_ALLOC_EXPORT_WORD0_TYPE(cf->output.type);
+		bc->bytecode[id] = S_SQ_CF_ALLOC_EXPORT_WORD1_BURST_COUNT(cf->output.burst_count - 1) |
+			S_SQ_CF_ALLOC_EXPORT_WORD1_BARRIER(cf->output.barrier) |
+			cf->output.inst |
+			S_SQ_CF_ALLOC_EXPORT_WORD1_BUF_COMP_MASK(cf->output.comp_mask) |
+			S_SQ_CF_ALLOC_EXPORT_WORD1_BUF_ARRAY_SIZE(cf->output.array_size);
+		if (bc->chip_class == EVERGREEN) /* no EOP on cayman */
+			bc->bytecode[id] |= S_SQ_CF_ALLOC_EXPORT_WORD1_END_OF_PROGRAM(cf->output.end_of_program);
+		id++;
 		break;
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_JUMP:
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_ELSE:
@@ -85,11 +130,10 @@ int eg_bc_cf_build(struct r600_bc *bc, struct r600_bc_cf *cf)
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_RETURN:
 	case CM_V_SQ_CF_WORD1_SQ_CF_INST_END:
 		bc->bytecode[id++] = S_SQ_CF_WORD0_ADDR(cf->cf_addr >> 1);
-		bc->bytecode[id++] = S_SQ_CF_WORD1_CF_INST(cf->inst) |
+		bc->bytecode[id++] = cf->inst |
 					S_SQ_CF_WORD1_BARRIER(1) |
 					S_SQ_CF_WORD1_COND(cf->cond) |
 					S_SQ_CF_WORD1_POP_COUNT(cf->pop_count);
-
 		break;
 	default:
 		R600_ERR("unsupported CF instruction (0x%X)\n", cf->inst);

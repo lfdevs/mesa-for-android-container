@@ -38,7 +38,6 @@ void r300_upload_index_buffer(struct r300_context *r300,
 			      unsigned count, uint8_t *ptr)
 {
     unsigned index_offset;
-    boolean flushed;
 
     *index_buffer = NULL;
 
@@ -46,7 +45,7 @@ void r300_upload_index_buffer(struct r300_context *r300,
                   0, count * index_size,
                   ptr + (*start * index_size),
                   &index_offset,
-                  index_buffer, &flushed);
+                  index_buffer);
 
     *start = index_offset / index_size;
 }
@@ -107,13 +106,21 @@ r300_buffer_transfer_map( struct pipe_context *pipe,
     struct radeon_winsys *rws = r300screen->rws;
     struct r300_resource *rbuf = r300_resource(transfer->resource);
     uint8_t *map;
+    enum pipe_transfer_usage usage;
 
     if (rbuf->b.user_ptr)
         return (uint8_t *) rbuf->b.user_ptr + transfer->box.x;
     if (rbuf->constant_buffer)
         return (uint8_t *) rbuf->constant_buffer + transfer->box.x;
 
-    map = rws->buffer_map(rbuf->buf, r300->cs, transfer->usage);
+    /* Buffers are never used for write, therefore mapping for read can be
+     * unsynchronized. */
+    usage = transfer->usage;
+    if (!(usage & PIPE_TRANSFER_WRITE)) {
+       usage |= PIPE_TRANSFER_UNSYNCHRONIZED;
+    }
+
+    map = rws->buffer_map(rbuf->buf, r300->cs, usage);
 
     if (map == NULL)
         return NULL;
@@ -154,7 +161,7 @@ static void r300_buffer_transfer_inline_write(struct pipe_context *pipe,
     assert(rbuf->b.user_ptr == NULL);
 
     map = rws->buffer_map(rbuf->buf, r300->cs,
-                          PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD | usage);
+                          PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_RANGE | usage);
 
     memcpy(map + box->x, data, box->width);
 
@@ -189,7 +196,6 @@ struct pipe_resource *r300_buffer_create(struct pipe_screen *screen,
     rbuf->b.user_ptr = NULL;
     rbuf->domain = RADEON_DOMAIN_GTT;
     rbuf->buf = NULL;
-    rbuf->buf_size = templ->width0;
     rbuf->constant_buffer = NULL;
 
     /* Alloc constant buffers in RAM. */
@@ -201,8 +207,7 @@ struct pipe_resource *r300_buffer_create(struct pipe_screen *screen,
     rbuf->buf =
         r300screen->rws->buffer_create(r300screen->rws,
                                        rbuf->b.b.b.width0, alignment,
-                                       rbuf->b.b.b.bind, rbuf->b.b.b.usage,
-                                       rbuf->domain);
+                                       rbuf->b.b.b.bind, rbuf->domain);
     if (!rbuf->buf) {
         util_slab_free(&r300screen->pool_buffers, rbuf);
         return NULL;
@@ -238,7 +243,6 @@ struct pipe_resource *r300_user_buffer_create(struct pipe_screen *screen,
     rbuf->b.user_ptr = ptr;
     rbuf->domain = RADEON_DOMAIN_GTT;
     rbuf->buf = NULL;
-    rbuf->buf_size = size;
     rbuf->constant_buffer = NULL;
     return &rbuf->b.b.b;
 }

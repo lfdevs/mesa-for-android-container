@@ -142,6 +142,17 @@ do_flush( struct pipe_context *pipe,
 }
 
 
+static void
+llvmpipe_render_condition ( struct pipe_context *pipe,
+                            struct pipe_query *query,
+                            uint mode )
+{
+   struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
+
+   llvmpipe->render_cond_query = query;
+   llvmpipe->render_cond_mode = mode;
+}
+
 struct pipe_context *
 llvmpipe_create_context( struct pipe_screen *screen, void *priv )
 {
@@ -169,6 +180,8 @@ llvmpipe_create_context( struct pipe_screen *screen, void *priv )
    llvmpipe->pipe.set_framebuffer_state = llvmpipe_set_framebuffer_state;
    llvmpipe->pipe.clear = llvmpipe_clear;
    llvmpipe->pipe.flush = do_flush;
+
+   llvmpipe->pipe.render_condition = llvmpipe_render_condition;
 
    llvmpipe_init_blend_funcs(llvmpipe);
    llvmpipe_init_clip_funcs(llvmpipe);
@@ -215,11 +228,6 @@ llvmpipe_create_context( struct pipe_screen *screen, void *priv )
    draw_enable_point_sprites(llvmpipe->draw, FALSE);
    draw_wide_point_threshold(llvmpipe->draw, 10000.0);
    draw_wide_line_threshold(llvmpipe->draw, 10000.0);
-
-#if USE_DRAW_STAGE_PSTIPPLE
-   /* Do polygon stipple w/ texture map + frag prog? */
-   draw_install_pstipple_stage(llvmpipe->draw, &llvmpipe->pipe);
-#endif
 
    lp_reset_counters();
 

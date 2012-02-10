@@ -33,10 +33,17 @@ static void
 upload_vs_state(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
+   uint32_t floating_point_mode = 0;
 
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS_VS << 16 | (2 - 2));
-   OUT_BATCH(brw->vs.bind_bo_offset);
+   OUT_BATCH(brw->bind.bo_offset);
+   ADVANCE_BATCH();
+
+   /* CACHE_NEW_SAMPLER */
+   BEGIN_BATCH(2);
+   OUT_BATCH(_3DSTATE_SAMPLER_STATE_POINTERS_VS << 16 | (2 - 2));
+   OUT_BATCH(brw->sampler.offset);
    ADVANCE_BATCH();
 
    if (brw->vs.push_const_size == 0) {
@@ -65,18 +72,31 @@ upload_vs_state(struct brw_context *brw)
       ADVANCE_BATCH();
    }
 
+   /* Use ALT floating point mode for ARB vertex programs, because they
+    * require 0^0 == 1.
+    */
+   if (intel->ctx.Shader.CurrentVertexProgram == NULL)
+      floating_point_mode = GEN6_VS_FLOATING_POINT_MODE_ALT;
+
    BEGIN_BATCH(6);
    OUT_BATCH(_3DSTATE_VS << 16 | (6 - 2));
    OUT_BATCH(brw->vs.prog_offset);
-   OUT_BATCH((0 << GEN6_VS_SAMPLER_COUNT_SHIFT) |
-	     GEN6_VS_FLOATING_POINT_MODE_ALT |
-	     (brw->vs.nr_surfaces << GEN6_VS_BINDING_TABLE_ENTRY_COUNT_SHIFT));
-   OUT_BATCH(0); /* scratch space base offset */
+   OUT_BATCH(floating_point_mode |
+	     ((ALIGN(brw->sampler.count, 4)/4) << GEN6_VS_SAMPLER_COUNT_SHIFT));
+
+   if (brw->vs.prog_data->total_scratch) {
+      OUT_RELOC(brw->vs.scratch_bo,
+		I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
+		ffs(brw->vs.prog_data->total_scratch) - 11);
+   } else {
+      OUT_BATCH(0);
+   }
+
    OUT_BATCH((1 << GEN6_VS_DISPATCH_START_GRF_SHIFT) |
 	     (brw->vs.prog_data->urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
 	     (0 << GEN6_VS_URB_ENTRY_READ_OFFSET_SHIFT));
 
-   OUT_BATCH(((brw->vs_max_threads - 1) << GEN6_VS_MAX_THREADS_SHIFT) |
+   OUT_BATCH(((brw->max_vs_threads - 1) << GEN6_VS_MAX_THREADS_SHIFT) |
 	     GEN6_VS_STATISTICS_ENABLE |
 	     GEN6_VS_ENABLE);
    ADVANCE_BATCH();
@@ -85,14 +105,11 @@ upload_vs_state(struct brw_context *brw)
 const struct brw_tracked_state gen7_vs_state = {
    .dirty = {
       .mesa  = _NEW_TRANSFORM | _NEW_PROGRAM_CONSTANTS,
-      .brw   = (BRW_NEW_CURBE_OFFSETS |
-                BRW_NEW_NR_VS_SURFACES |
-		BRW_NEW_URB_FENCE |
-		BRW_NEW_CONTEXT |
+      .brw   = (BRW_NEW_CONTEXT |
 		BRW_NEW_VERTEX_PROGRAM |
 		BRW_NEW_VS_BINDING_TABLE |
 		BRW_NEW_BATCH),
-      .cache = CACHE_NEW_VS_PROG
+      .cache = CACHE_NEW_VS_PROG | CACHE_NEW_SAMPLER
    },
    .emit = upload_vs_state,
 };

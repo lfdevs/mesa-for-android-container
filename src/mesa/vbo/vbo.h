@@ -36,6 +36,7 @@
 
 struct gl_client_array;
 struct gl_context;
+struct gl_transform_feedback_object;
 
 struct _mesa_prim {
    GLuint mode:8;    /**< GL_POINTS, GL_LINES, GL_QUAD_STRIP, etc */
@@ -77,7 +78,8 @@ typedef void (*vbo_draw_func)( struct gl_context *ctx,
 			       const struct _mesa_index_buffer *ib,
 			       GLboolean index_bounds_valid,
 			       GLuint min_index,
-			       GLuint max_index );
+			       GLuint max_index,
+			       struct gl_transform_feedback_object *tfb_vertcount );
 
 
 
@@ -120,6 +122,10 @@ void vbo_rebase_prims( struct gl_context *ctx,
 		       GLuint min_index,
 		       GLuint max_index,
 		       vbo_draw_func draw );
+
+int
+vbo_sizeof_ib_type(GLenum type);
+
 void
 vbo_get_minmax_index(struct gl_context *ctx, const struct _mesa_prim *prim,
 		     const struct _mesa_index_buffer *ib,
@@ -133,6 +139,10 @@ void vbo_set_draw_func(struct gl_context *ctx, vbo_draw_func func);
 
 void vbo_check_buffers_are_unmapped(struct gl_context *ctx);
 
+void vbo_bind_arrays(struct gl_context *ctx);
+
+size_t
+count_tessellated_primitives(const struct _mesa_prim *prim);
 
 void GLAPIENTRY
 _es_Color4f(GLfloat r, GLfloat g, GLfloat b, GLfloat a);

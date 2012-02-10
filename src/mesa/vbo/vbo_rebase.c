@@ -78,7 +78,8 @@ GLboolean vbo_all_varyings_in_vbos( const struct gl_client_array *arrays[] )
    GLuint i;
    
    for (i = 0; i < VERT_ATTRIB_MAX; i++)
-      if (arrays[i]->BufferObj->Name == 0)
+      if (arrays[i]->StrideB &&
+	  arrays[i]->BufferObj->Name == 0)
 	 return GL_FALSE;
 
    return GL_TRUE;
@@ -159,10 +160,8 @@ void vbo_rebase_prims( struct gl_context *ctx,
       void *ptr;
 
       if (map_ib) 
-	 ctx->Driver.MapBuffer(ctx, 
-			       GL_ELEMENT_ARRAY_BUFFER,
-			       GL_READ_ONLY_ARB,
-			       ib->obj);
+	 ctx->Driver.MapBufferRange(ctx, 0, ib->obj->Size, GL_MAP_READ_BIT,
+				    ib->obj);
 
 
       ptr = ADD_POINTERS(ib->obj->Pointer, ib->ptr);
@@ -183,9 +182,7 @@ void vbo_rebase_prims( struct gl_context *ctx,
       }      
 
       if (map_ib) 
-	 ctx->Driver.UnmapBuffer(ctx, 
-				 GL_ELEMENT_ARRAY_BUFFER,
-				 ib->obj);
+	 ctx->Driver.UnmapBuffer(ctx, ib->obj);
 
       tmp_ib.obj = ctx->Shared->NullBufferObj;
       tmp_ib.ptr = tmp_indices;
@@ -236,7 +233,8 @@ void vbo_rebase_prims( struct gl_context *ctx,
 	 ib, 
 	 GL_TRUE,
 	 0, 
-	 max_index - min_index );
+	 max_index - min_index,
+	 NULL );
    
    if (tmp_indices)
       free(tmp_indices);

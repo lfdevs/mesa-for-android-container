@@ -34,12 +34,12 @@
   */
 
 #include "main/glheader.h"
+#include "main/accum.h"
 #include "main/formats.h"
 #include "main/macros.h"
 #include "program/prog_instruction.h"
 #include "st_context.h"
 #include "st_atom.h"
-#include "st_cb_accum.h"
 #include "st_cb_clear.h"
 #include "st_cb_fbo.h"
 #include "st_format.h"
@@ -68,6 +68,7 @@ st_init_clear(struct st_context *st)
    memset(&st->clear, 0, sizeof(st->clear));
 
    st->clear.raster.gl_rasterization_rules = 1;
+   st->clear.raster.depth_clip = 1;
    st->clear.enable_ds_separate = pscreen->get_param(pscreen, PIPE_CAP_DEPTHSTENCIL_CLEAR_SEPARATE);
 }
 
@@ -136,7 +137,7 @@ set_vertex_shader(struct st_context *st)
 static void
 draw_quad(struct st_context *st,
           float x0, float y0, float x1, float y1, GLfloat z,
-          const GLfloat color[4])
+          const union pipe_color_union *color)
 {
    struct pipe_context *pipe = st->pipe;
 
@@ -165,6 +166,11 @@ draw_quad(struct st_context *st,
                                           max_slots * sizeof(st->clear.vertices));
    }
 
+   if (!st->clear.vbuf) {
+      /* ran out of memory */
+      return;
+   }
+
    /* positions */
    st->clear.vertices[0][0][0] = x0;
    st->clear.vertices[0][0][1] = y0;
@@ -182,10 +188,10 @@ draw_quad(struct st_context *st,
    for (i = 0; i < 4; i++) {
       st->clear.vertices[i][0][2] = z;
       st->clear.vertices[i][0][3] = 1.0;
-      st->clear.vertices[i][1][0] = color[0];
-      st->clear.vertices[i][1][1] = color[1];
-      st->clear.vertices[i][1][2] = color[2];
-      st->clear.vertices[i][1][3] = color[3];
+      st->clear.vertices[i][1][0] = color->f[0];
+      st->clear.vertices[i][1][1] = color->f[1];
+      st->clear.vertices[i][1][2] = color->f[2];
+      st->clear.vertices[i][1][3] = color->f[3];
    }
 
    /* put vertex data into vbuf */
@@ -227,7 +233,7 @@ clear_with_quad(struct gl_context *ctx,
    const GLfloat x1 = (GLfloat) ctx->DrawBuffer->_Xmax / fb_width * 2.0f - 1.0f;
    const GLfloat y0 = (GLfloat) ctx->DrawBuffer->_Ymin / fb_height * 2.0f - 1.0f;
    const GLfloat y1 = (GLfloat) ctx->DrawBuffer->_Ymax / fb_height * 2.0f - 1.0f;
-   float clearColor[4];
+   union pipe_color_union clearColor;
 
    /*
    printf("%s %s%s%s %f,%f %f,%f\n", __FUNCTION__, 
@@ -243,9 +249,10 @@ clear_with_quad(struct gl_context *ctx,
    cso_save_depth_stencil_alpha(st->cso_context);
    cso_save_rasterizer(st->cso_context);
    cso_save_viewport(st->cso_context);
-   cso_save_clip(st->cso_context);
    cso_save_fragment_shader(st->cso_context);
+   cso_save_stream_outputs(st->cso_context);
    cso_save_vertex_shader(st->cso_context);
+   cso_save_geometry_shader(st->cso_context);
    cso_save_vertex_elements(st->cso_context);
    cso_save_vertex_buffers(st->cso_context);
 
@@ -300,6 +307,7 @@ clear_with_quad(struct gl_context *ctx,
    }
 
    cso_set_vertex_elements(st->cso_context, 2, st->velems_util_draw);
+   cso_set_stream_outputs(st->cso_context, 0, NULL, 0);
 
    cso_set_rasterizer(st->cso_context, &st->clear.raster);
 
@@ -318,18 +326,18 @@ clear_with_quad(struct gl_context *ctx,
       cso_set_viewport(st->cso_context, &vp);
    }
 
-   cso_set_clip(st->cso_context, &st->clear.clip);
    set_fragment_shader(st);
    set_vertex_shader(st);
+   cso_set_geometry_shader_handle(st->cso_context, NULL);
 
    if (ctx->DrawBuffer->_ColorDrawBuffers[0]) {
-      st_translate_color(ctx->Color.ClearColorUnclamped,
-                         ctx->DrawBuffer->_ColorDrawBuffers[0]->_BaseFormat,
-                         clearColor);
+      st_translate_color(ctx->Color.ClearColor.f,
+                               ctx->DrawBuffer->_ColorDrawBuffers[0]->_BaseFormat,
+                               clearColor.f);
    }
 
    /* draw quad matching scissor rect */
-   draw_quad(st, x0, y0, x1, y1, (GLfloat) ctx->Depth.Clear, clearColor);
+   draw_quad(st, x0, y0, x1, y1, (GLfloat) ctx->Depth.Clear, &clearColor);
 
    /* Restore pipe state */
    cso_restore_blend(st->cso_context);
@@ -337,11 +345,12 @@ clear_with_quad(struct gl_context *ctx,
    cso_restore_depth_stencil_alpha(st->cso_context);
    cso_restore_rasterizer(st->cso_context);
    cso_restore_viewport(st->cso_context);
-   cso_restore_clip(st->cso_context);
    cso_restore_fragment_shader(st->cso_context);
    cso_restore_vertex_shader(st->cso_context);
+   cso_restore_geometry_shader(st->cso_context);
    cso_restore_vertex_elements(st->cso_context);
    cso_restore_vertex_buffers(st->cso_context);
+   cso_restore_stream_outputs(st->cso_context);
 }
 
 
@@ -381,7 +390,8 @@ check_clear_depth_stencil_with_quad(struct gl_context *ctx, struct gl_renderbuff
 
    assert(rb->Format == MESA_FORMAT_S8 ||
           rb->Format == MESA_FORMAT_Z24_S8 ||
-          rb->Format == MESA_FORMAT_S8_Z24);
+          rb->Format == MESA_FORMAT_S8_Z24 ||
+          rb->Format == MESA_FORMAT_Z32_FLOAT_X24S8);
 
    if (ctx->Scissor.Enabled &&
        (ctx->Scissor.X != 0 ||
@@ -436,7 +446,8 @@ check_clear_stencil_with_quad(struct gl_context *ctx, struct gl_renderbuffer *rb
 
    assert(rb->Format == MESA_FORMAT_S8 ||
           rb->Format == MESA_FORMAT_Z24_S8 ||
-          rb->Format == MESA_FORMAT_S8_Z24);
+          rb->Format == MESA_FORMAT_S8_Z24 ||
+          rb->Format == MESA_FORMAT_Z32_FLOAT_X24S8);
 
    if (maskStencil) 
       return GL_TRUE;
@@ -570,7 +581,7 @@ st_Clear(struct gl_context *ctx, GLbitfield mask)
        * required from the visual. Hence fix this up to avoid potential
        * read-modify-write in the driver.
        */
-      float clearColor[4];
+      union pipe_color_union clearColor;
 
       if ((clear_buffers & PIPE_CLEAR_DEPTHSTENCIL) &&
           ((clear_buffers & PIPE_CLEAR_DEPTHSTENCIL) != PIPE_CLEAR_DEPTHSTENCIL) &&
@@ -580,17 +591,16 @@ st_Clear(struct gl_context *ctx, GLbitfield mask)
          clear_buffers |= PIPE_CLEAR_DEPTHSTENCIL;
 
       if (ctx->DrawBuffer->_ColorDrawBuffers[0]) {
-         st_translate_color(ctx->Color.ClearColor,
-                            ctx->DrawBuffer->_ColorDrawBuffers[0]->_BaseFormat,
-                            clearColor);
+         st_translate_color(ctx->Color.ClearColor.f,
+			    ctx->DrawBuffer->_ColorDrawBuffers[0]->_BaseFormat,
+			    clearColor.f);
       }
 
-      st->pipe->clear(st->pipe, clear_buffers, ctx->Color.ClearColorUnclamped,
+      st->pipe->clear(st->pipe, clear_buffers, &clearColor,
                       ctx->Depth.Clear, ctx->Stencil.Clear);
    }
    if (mask & BUFFER_BIT_ACCUM)
-      st_clear_accum_buffer(ctx,
-                            ctx->DrawBuffer->Attachment[BUFFER_ACCUM].Renderbuffer);
+      _mesa_clear_accum_buffer(ctx);
 }
 
 

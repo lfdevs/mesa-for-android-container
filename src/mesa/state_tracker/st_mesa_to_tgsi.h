@@ -64,6 +64,9 @@ st_translate_mesa_program(
 void
 st_free_tokens(const struct tgsi_token *tokens);
 
+unsigned
+st_translate_texture_target(GLuint textarget, GLboolean shadow);
+
 
 #if defined __cplusplus
 } /* extern "C" */

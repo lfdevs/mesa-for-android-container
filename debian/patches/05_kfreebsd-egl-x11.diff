@@ -8,11 +8,11 @@ Not that dri2 is going to work there, but well.
  src/egl/drivers/dri2/platform_x11.c |    6 ++++++
  1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/src/egl/drivers/dri2/platform_x11.c b/src/egl/drivers/dri2/platform_x11.c
-index 4e00c95..f38d6c0 100644
---- a/src/egl/drivers/dri2/platform_x11.c
-+++ b/src/egl/drivers/dri2/platform_x11.c
-@@ -997,7 +997,13 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
+Index: mesa/src/egl/drivers/dri2/platform_x11.c
+===================================================================
+--- mesa.orig/src/egl/drivers/dri2/platform_x11.c	2012-01-18 16:04:58.294653499 +0200
++++ mesa/src/egl/drivers/dri2/platform_x11.c	2012-01-18 16:05:08.790968112 +0200
+@@ -1083,7 +1083,13 @@
     if (!dri2_load_driver(disp))
        goto cleanup_conn;
  
@@ -26,6 +26,3 @@ index 4e00c95..f38d6c0 100644
     if (dri2_dpy->fd == -1) {
        _eglLog(_EGL_WARNING,
  	      "DRI2: could not open %s (%s)", dri2_dpy->device_name,
--- 
-1.7.2.5
-

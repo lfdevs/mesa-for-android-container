@@ -36,20 +36,27 @@
 #include "pipebuffer/pb_bufmgr.h"
 #include "os/os_thread.h"
 
-#define RADEON_PB_USAGE_DOMAIN_GTT  (1 << 29)
-#define RADEON_PB_USAGE_DOMAIN_VRAM (1 << 30)
-
 struct radeon_bomgr;
+
+struct radeon_bo_desc {
+    struct pb_desc base;
+
+    unsigned initial_domains;
+};
 
 struct radeon_bo {
     struct pb_buffer base;
+
+    /* Don't move these! */
+    unsigned last_flush;
+    unsigned binding;
+
     struct radeon_bomgr *mgr;
     struct radeon_drm_winsys *rws;
 
     void *ptr;
     pipe_mutex map_mutex;
 
-    uint32_t size;
     uint32_t handle;
     uint32_t name;
 
@@ -59,13 +66,6 @@ struct radeon_bo {
     /* how many command streams, which are being emitted in a separate
      * thread, is this bo referenced in? */
     int num_active_ioctls;
-
-    /* Whether the buffer has been relocated for write and is busy since then.
-     * This field is updated in:
-     * - radeon_drm_cs_flush (to TRUE if it's relocated for write)
-     * - radeon_bo_is_busy (to FALSE if it's not busy)
-     * - radeon_bo_wait (to FALSE) */
-    boolean busy_for_write;
 
     boolean flinked;
     uint32_t flink;
@@ -78,12 +78,6 @@ static INLINE
 void radeon_bo_reference(struct radeon_bo **dst, struct radeon_bo *src)
 {
     pb_reference((struct pb_buffer**)dst, (struct pb_buffer*)src);
-}
-
-static INLINE struct pb_buffer *
-pb_buffer(struct pb_buffer *buffer)
-{
-    return (struct pb_buffer *)buffer;
 }
 
 #endif

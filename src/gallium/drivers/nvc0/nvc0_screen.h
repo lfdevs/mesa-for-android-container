@@ -4,6 +4,7 @@
 #define NOUVEAU_NVC0
 #include "nouveau/nouveau_screen.h"
 #include "nouveau/nouveau_mm.h"
+#include "nouveau/nouveau_fence.h"
 #undef NOUVEAU_NVC0
 #include "nvc0_winsys.h"
 #include "nvc0_stateobj.h"
@@ -18,11 +19,14 @@ struct nvc0_context;
 
 #define NVC0_SCREEN_RESIDENT_BO_COUNT 5
 
+struct nvc0_blitctx;
+
 struct nvc0_screen {
    struct nouveau_screen base;
-   struct nouveau_winsys *nvws;
 
    struct nvc0_context *cur_ctx;
+
+   int num_occlusion_queries_active;
 
    struct nouveau_bo *text;
    struct nouveau_bo *uniforms;
@@ -33,6 +37,9 @@ struct nvc0_screen {
    uint64_t tls_size;
 
    struct nouveau_resource *text_heap;
+   struct nouveau_resource *lib_code; /* allocated from text_heap */
+
+   struct nvc0_blitctx *blitctx;
 
    struct {
       struct nouveau_bo *bo[NVC0_SCRATCH_NR_BUFFERS];
@@ -70,6 +77,8 @@ nvc0_screen(struct pipe_screen *screen)
 {
    return (struct nvc0_screen *)screen;
 }
+
+boolean nvc0_blitctx_create(struct nvc0_screen *);
 
 void nvc0_screen_make_buffers_resident(struct nvc0_screen *);
 

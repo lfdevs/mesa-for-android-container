@@ -89,11 +89,20 @@ extern struct gl_program *
 _mesa_lookup_program(struct gl_context *ctx, GLuint id);
 
 extern void
+_mesa_reference_program_(struct gl_context *ctx,
+                         struct gl_program **ptr,
+                         struct gl_program *prog);
+
+static inline void
 _mesa_reference_program(struct gl_context *ctx,
                         struct gl_program **ptr,
-                        struct gl_program *prog);
+                        struct gl_program *prog)
+{
+   if (*ptr != prog)
+      _mesa_reference_program_(ctx, ptr, prog);
+}
 
-static INLINE void
+static inline void
 _mesa_reference_vertprog(struct gl_context *ctx,
                          struct gl_vertex_program **ptr,
                          struct gl_vertex_program *prog)
@@ -102,7 +111,7 @@ _mesa_reference_vertprog(struct gl_context *ctx,
                            (struct gl_program *) prog);
 }
 
-static INLINE void
+static inline void
 _mesa_reference_fragprog(struct gl_context *ctx,
                          struct gl_fragment_program **ptr,
                          struct gl_fragment_program *prog)
@@ -111,7 +120,7 @@ _mesa_reference_fragprog(struct gl_context *ctx,
                            (struct gl_program *) prog);
 }
 
-static INLINE void
+static inline void
 _mesa_reference_geomprog(struct gl_context *ctx,
                          struct gl_geometry_program **ptr,
                          struct gl_geometry_program *prog)
@@ -123,21 +132,21 @@ _mesa_reference_geomprog(struct gl_context *ctx,
 extern struct gl_program *
 _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog);
 
-static INLINE struct gl_vertex_program *
+static inline struct gl_vertex_program *
 _mesa_clone_vertex_program(struct gl_context *ctx,
                            const struct gl_vertex_program *prog)
 {
    return (struct gl_vertex_program *) _mesa_clone_program(ctx, &prog->Base);
 }
 
-static INLINE struct gl_geometry_program *
+static inline struct gl_geometry_program *
 _mesa_clone_geometry_program(struct gl_context *ctx,
                              const struct gl_geometry_program *prog)
 {
    return (struct gl_geometry_program *) _mesa_clone_program(ctx, &prog->Base);
 }
 
-static INLINE struct gl_fragment_program *
+static inline struct gl_fragment_program *
 _mesa_clone_fragment_program(struct gl_context *ctx,
                              const struct gl_fragment_program *prog)
 {
@@ -176,7 +185,7 @@ _mesa_postprocess_program(struct gl_context *ctx, struct gl_program *prog);
 
 /* keep these in the same order as TGSI_PROCESSOR_* */
 
-static INLINE GLuint
+static inline GLuint
 _mesa_program_target_to_index(GLenum v)
 {
    switch(v)
@@ -193,7 +202,7 @@ _mesa_program_target_to_index(GLenum v)
    }
 }
 
-static INLINE GLenum
+static inline GLenum
 _mesa_program_index_to_target(GLuint i)
 {
    GLenum enums[MESA_SHADER_TYPES] = {

@@ -68,8 +68,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define HAVE_ELTS        1
 
 
-#define HW_POINTS           (((R200_CONTEXT(ctx))->radeon.radeonScreen->drmSupportsPointSprites && \
-			      !(ctx->_TriangleCaps & DD_POINT_SMOOTH)) ? \
+#define HW_POINTS           ((!(ctx->_TriangleCaps & DD_POINT_SMOOTH)) ? \
 				R200_VF_PRIM_POINT_SPRITES : R200_VF_PRIM_POINTS)
 #define HW_LINES            R200_VF_PRIM_LINES
 #define HW_LINE_LOOP        0
@@ -219,8 +218,8 @@ static void r200EmitPrim( struct gl_context *ctx,
 #ifdef MESA_BIG_ENDIAN
 /* We could do without (most of) this ugliness if dest was always 32 bit word aligned... */
 #define EMIT_ELT(dest, offset, x) do {                          \
-        int off = offset + ( ( (GLuint)dest & 0x2 ) >> 1 );     \
-        GLushort *des = (GLushort *)( (GLuint)dest & ~0x2 );    \
+        int off = offset + ( ( (uintptr_t)dest & 0x2 ) >> 1 );     \
+        GLushort *des = (GLushort *)( (uintptr_t)dest & ~0x2 );    \
         (des)[ off + 1 - 2 * ( off & 1 ) ] = (GLushort)(x);	\
 	(void)rmesa; } while (0)
 #else

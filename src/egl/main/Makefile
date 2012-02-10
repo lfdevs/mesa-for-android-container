@@ -61,21 +61,23 @@ LOCAL_LIBS += $(TOP)/src/egl/drivers/dri2/libegl_dri2.a
 ifneq ($(findstring x11, $(EGL_PLATFORMS)),)
 EGL_LIB_DEPS += $(XCB_DRI2_LIBS)
 endif
-ifneq ($(findstring drm, $(EGL_PLATFORMS)),)
-EGL_LIB_DEPS += -lgbm
+EGL_LIB_DEPS += $(LIBUDEV_LIBS) $(DLOPEN_LIBS) $(LIBDRM_LIB)
 endif
-EGL_LIB_DEPS += $(LIBUDEV_LIBS) $(DLOPEN_LIBS) $(LIBDRM_LIB) $(WAYLAND_LIBS)
-endif
-
-
-ifneq ($(findstring wayland, $(EGL_PLATFORMS)),)
-LOCAL_LIBS += $(TOP)/src/egl/wayland/wayland-drm/libwayland-drm.a
-endif
-
 ifeq ($(filter glx, $(EGL_DRIVERS_DIRS)),glx)
 LOCAL_CFLAGS += -D_EGL_BUILT_IN_DRIVER_GLX
 LOCAL_LIBS += $(TOP)/src/egl/drivers/glx/libegl_glx.a
 EGL_LIB_DEPS += $(X11_LIBS) $(DLOPEN_LIBS)
+endif
+
+# libs/cflags for display type autodetection
+ifneq ($(findstring wayland, $(EGL_PLATFORMS)),)
+LOCAL_LIBS += $(TOP)/src/egl/wayland/wayland-drm/libwayland-drm.a
+EGL_LIB_DEPS += $(WAYLAND_LIBS)
+INCLUDE_DIRS += $(WAYLAND_CFLAGS)
+endif
+ifneq ($(findstring drm, $(EGL_PLATFORMS)),)
+EGL_LIB_DEPS += -lgbm
+INCLUDE_DIRS += -I$(TOP)/src/gbm/main
 endif
 
 # translate --with-egl-platforms to _EGLPlatformType
@@ -91,6 +93,25 @@ EGL_NATIVE_PLATFORM=_EGL_PLATFORM_DRM
 endif
 ifeq ($(firstword $(EGL_PLATFORMS)),fbdev)
 EGL_NATIVE_PLATFORM=_EGL_PLATFORM_FBDEV
+endif
+ifeq ($(firstword $(EGL_PLATFORMS)),null)
+EGL_NATIVE_PLATFORM=_EGL_PLATFORM_NULL
+endif
+
+ifneq ($(findstring x11, $(EGL_PLATFORMS)),)
+LOCAL_CFLAGS += -DHAVE_X11_PLATFORM
+endif
+ifneq ($(findstring wayland, $(EGL_PLATFORMS)),)
+LOCAL_CFLAGS += -DHAVE_WAYLAND_PLATFORM
+endif
+ifneq ($(findstring drm, $(EGL_PLATFORMS)),)
+LOCAL_CFLAGS += -DHAVE_DRM_PLATFORM
+endif
+ifneq ($(findstring fbdev, $(EGL_PLATFORMS)),)
+LOCAL_CFLAGS += -DHAVE_FBDEV_PLATFORM
+endif
+ifneq ($(findstring null, $(EGL_PLATFORMS)),)
+LOCAL_CFLAGS += -DHAVE_NULL_PLATFORM
 endif
 
 LOCAL_CFLAGS += \

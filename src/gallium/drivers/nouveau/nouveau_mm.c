@@ -1,4 +1,6 @@
 
+#include <inttypes.h>
+
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_double_list.h"
@@ -143,8 +145,9 @@ mm_slab_new(struct nouveau_mman *cache, int chunk_order)
 
    cache->allocated += size;
 
-   debug_printf("MM: new slab, total memory = %llu KiB\n",
-                cache->allocated / 1024);
+   if (nouveau_mesa_debug)
+      debug_printf("MM: new slab, total memory = %"PRIu64" KiB\n",
+                   cache->allocated / 1024);
 
    return PIPE_OK;
 }
@@ -210,13 +213,13 @@ nouveau_mm_free(struct nouveau_mm_allocation *alloc)
 
    mm_slab_free(slab, alloc->offset >> slab->order);
 
+   if (slab->free == slab->count) {
+      LIST_DEL(&slab->head);
+      LIST_ADDTAIL(&slab->head, &bucket->free);
+   } else
    if (slab->free == 1) {
       LIST_DEL(&slab->head);
-
-      if (slab->count > 1)
-         LIST_ADDTAIL(&slab->head, &bucket->used);
-      else
-         LIST_ADDTAIL(&slab->head, &bucket->free);
+      LIST_ADDTAIL(&slab->head, &bucket->used);
    }
 
    FREE(alloc);

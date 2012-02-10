@@ -5,6 +5,8 @@
 #include "util/u_memory.h"
 typedef uint32_t u32;
 
+extern int nouveau_mesa_debug;
+
 struct nouveau_bo;
 
 struct nouveau_screen {
@@ -76,6 +78,7 @@ nouveau_screen_bo_from_handle(struct pipe_screen *pscreen,
 int nouveau_screen_init(struct nouveau_screen *, struct nouveau_device *);
 void nouveau_screen_fini(struct nouveau_screen *);
 
+void nouveau_screen_init_vdec(struct nouveau_screen *);
 
 
 #ifndef NOUVEAU_NVC0

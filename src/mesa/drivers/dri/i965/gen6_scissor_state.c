@@ -35,11 +35,12 @@ gen6_upload_scissor_state(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
-   const GLboolean render_to_fbo = (ctx->DrawBuffer->Name != 0);
+   const bool render_to_fbo = (ctx->DrawBuffer->Name != 0);
    struct gen6_scissor_rect *scissor;
    uint32_t scissor_state_offset;
 
-   scissor = brw_state_batch(brw, sizeof(*scissor), 32, &scissor_state_offset);
+   scissor = brw_state_batch(brw, AUB_TRACE_SCISSOR_STATE,
+			     sizeof(*scissor), 32, &scissor_state_offset);
 
    /* _NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT */
 

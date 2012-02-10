@@ -33,6 +33,9 @@
 
 #if FEATURE_feedback
 
+extern GLint GLAPIENTRY
+_mesa_RenderMode( GLenum mode );
+
 extern void
 _mesa_feedback_vertex( struct gl_context *ctx,
                        const GLfloat win[4],
@@ -40,7 +43,7 @@ _mesa_feedback_vertex( struct gl_context *ctx,
                        const GLfloat texcoord[4] );
 
 
-static INLINE void
+static inline void
 _mesa_feedback_token( struct gl_context *ctx, GLfloat token )
 {
    if (ctx->Feedback.Count < ctx->Feedback.BufferSize) {
@@ -61,7 +64,7 @@ _mesa_init_feedback_dispatch(struct _glapi_table *disp);
 
 #include "main/compiler.h"
 
-static INLINE void
+static inline void
 _mesa_feedback_vertex( struct gl_context *ctx,
                        const GLfloat win[4],
                        const GLfloat color[4],
@@ -72,21 +75,21 @@ _mesa_feedback_vertex( struct gl_context *ctx,
 }
 
 
-static INLINE void
+static inline void
 _mesa_feedback_token( struct gl_context *ctx, GLfloat token )
 {
    /* render mode is always GL_RENDER */
    ASSERT_NO_FEATURE();
 }
 
-static INLINE void
+static inline void
 _mesa_update_hitflag( struct gl_context *ctx, GLfloat z )
 {
    /* render mode is always GL_RENDER */
    ASSERT_NO_FEATURE();
 }
 
-static INLINE void
+static inline void
 _mesa_init_feedback_dispatch(struct _glapi_table *disp)
 {
 }

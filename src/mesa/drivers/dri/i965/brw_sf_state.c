@@ -35,6 +35,7 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 #include "main/macros.h"
+#include "brw_sf.h"
 
 static void upload_sf_vp(struct brw_context *brw)
 {
@@ -43,10 +44,11 @@ static void upload_sf_vp(struct brw_context *brw)
    const GLfloat depth_scale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
    struct brw_sf_viewport *sfv;
    GLfloat y_scale, y_bias;
-   const GLboolean render_to_fbo = (ctx->DrawBuffer->Name != 0);
+   const bool render_to_fbo = (ctx->DrawBuffer->Name != 0);
    const GLfloat *v = ctx->Viewport._WindowMap.m;
 
-   sfv = brw_state_batch(brw, sizeof(*sfv), 32, &brw->sf.vp_offset);
+   sfv = brw_state_batch(brw, AUB_TRACE_SF_VP_STATE,
+			 sizeof(*sfv), 32, &brw->sf.vp_offset);
    memset(sfv, 0, sizeof(*sfv));
 
    if (render_to_fbo) {
@@ -117,8 +119,21 @@ const struct brw_tracked_state brw_sf_vp = {
       .brw   = BRW_NEW_BATCH,
       .cache = 0
    },
-   .prepare = upload_sf_vp
+   .emit = upload_sf_vp
 };
+
+/**
+ * Compute the offset within the URB (expressed in 256-bit register
+ * increments) that should be used to read the VUE in th efragment shader.
+ */
+int
+brw_sf_compute_urb_entry_read_offset(struct intel_context *intel)
+{
+   if (intel->gen == 5)
+      return 3;
+   else
+      return 1;
+}
 
 static void upload_sf_unit( struct brw_context *brw )
 {
@@ -129,7 +144,8 @@ static void upload_sf_unit( struct brw_context *brw )
    int chipset_max_threads;
    bool render_to_fbo = brw->intel.ctx.DrawBuffer->Name != 0;
 
-   sf = brw_state_batch(brw, sizeof(*sf), 64, &brw->sf.state_offset);
+   sf = brw_state_batch(brw, AUB_TRACE_SF_STATE,
+			sizeof(*sf), 64, &brw->sf.state_offset);
 
    memset(sf, 0, sizeof(*sf));
 
@@ -146,10 +162,8 @@ static void upload_sf_unit( struct brw_context *brw )
 
    sf->thread3.dispatch_grf_start_reg = 3;
 
-   if (intel->gen == 5)
-       sf->thread3.urb_entry_read_offset = 3;
-   else
-       sf->thread3.urb_entry_read_offset = 1;
+   sf->thread3.urb_entry_read_offset =
+      brw_sf_compute_urb_entry_read_offset(intel);
 
    /* CACHE_NEW_SF_PROG */
    sf->thread3.urb_entry_read_length = brw->sf.prog_data->urb_read_length;
@@ -169,9 +183,6 @@ static void upload_sf_unit( struct brw_context *brw )
    /* BRW_NEW_URB_FENCE */
    sf->thread4.max_threads = MIN2(chipset_max_threads,
 				  brw->urb.nr_sf_entries) - 1;
-
-   if (unlikely(INTEL_DEBUG & DEBUG_SINGLE_THREAD))
-      sf->thread4.max_threads = 0;
 
    if (unlikely(INTEL_DEBUG & DEBUG_STATS))
       sf->thread4.stats_enable = 1;
@@ -261,6 +272,7 @@ static void upload_sf_unit( struct brw_context *brw )
    sf->sf7.point_size = CLAMP(rint(CLAMP(ctx->Point.Size,
 					 ctx->Point.MinSize,
 					 ctx->Point.MaxSize)), 1, 255) * (1<<3);
+   /* _NEW_PROGRAM | _NEW_POINT */
    sf->sf7.use_point_size_state = !(ctx->VertexProgram.PointSizeEnabled ||
 				    ctx->Point._Attenuated);
    sf->sf7.aa_line_distance_mode = 0;
@@ -302,6 +314,7 @@ static void upload_sf_unit( struct brw_context *brw )
 const struct brw_tracked_state brw_sf_unit = {
    .dirty = {
       .mesa  = (_NEW_POLYGON | 
+		_NEW_PROGRAM |
 		_NEW_LIGHT |
 		_NEW_LINE | 
 		_NEW_POINT | 
@@ -313,5 +326,5 @@ const struct brw_tracked_state brw_sf_unit = {
       .cache = (CACHE_NEW_SF_VP |
 		CACHE_NEW_SF_PROG)
    },
-   .prepare = upload_sf_unit,
+   .emit = upload_sf_unit,
 };

@@ -25,17 +25,15 @@
  *      Corbin Simpson
  */
 #include <errno.h>
-#include <pipe/p_screen.h>
-#include <util/u_format.h>
-#include <util/u_format_s3tc.h>
-#include <util/u_math.h>
-#include <util/u_inlines.h>
-#include <util/u_memory.h>
-#include "state_tracker/drm_driver.h"
+#include "pipe/p_screen.h"
+#include "util/u_format.h"
+#include "util/u_format_s3tc.h"
+#include "util/u_math.h"
+#include "util/u_inlines.h"
+#include "util/u_memory.h"
 #include "pipebuffer/pb_buffer.h"
 #include "r600_pipe.h"
 #include "r600_resource.h"
-#include "r600_state_inlines.h"
 #include "r600d.h"
 #include "r600_formats.h"
 
@@ -67,8 +65,6 @@ static void r600_copy_from_staging_texture(struct pipe_context *ctx, struct r600
 				  transfer->box.x, transfer->box.y, transfer->box.z,
 				  rtransfer->staging_texture,
 				  0, &sbox);
-
-        ctx->flush(ctx, NULL);
 }
 
 unsigned r600_texture_get_offset(struct r600_resource_texture *rtex,
@@ -95,19 +91,19 @@ static unsigned r600_get_block_alignment(struct pipe_screen *screen,
 	switch(array_mode) {
 	case V_038000_ARRAY_1D_TILED_THIN1:
 		p_align = MAX2(8,
-			       ((rscreen->tiling_info->group_bytes / 8 / pixsize)));
+			       ((rscreen->tiling_info.group_bytes / 8 / pixsize)));
 		break;
 	case V_038000_ARRAY_2D_TILED_THIN1:
-		p_align = MAX2(rscreen->tiling_info->num_banks,
-			       (((rscreen->tiling_info->group_bytes / 8 / pixsize)) *
-				rscreen->tiling_info->num_banks)) * 8;
+		p_align = MAX2(rscreen->tiling_info.num_banks,
+			       (((rscreen->tiling_info.group_bytes / 8 / pixsize)) *
+				rscreen->tiling_info.num_banks)) * 8;
 		break;
 	case V_038000_ARRAY_LINEAR_ALIGNED:
-		p_align = MAX2(64, rscreen->tiling_info->group_bytes / pixsize);
+		p_align = MAX2(64, rscreen->tiling_info.group_bytes / pixsize);
 		break;
 	case V_038000_ARRAY_LINEAR_GENERAL:
 	default:
-		p_align = rscreen->tiling_info->group_bytes / pixsize;
+		p_align = rscreen->tiling_info.group_bytes / pixsize;
 		break;
 	}
 	return p_align;
@@ -121,7 +117,7 @@ static unsigned r600_get_height_alignment(struct pipe_screen *screen,
 
 	switch (array_mode) {
 	case V_038000_ARRAY_2D_TILED_THIN1:
-		h_align = rscreen->tiling_info->num_channels * 8;
+		h_align = rscreen->tiling_info.num_channels * 8;
 		break;
 	case V_038000_ARRAY_1D_TILED_THIN1:
 	case V_038000_ARRAY_LINEAR_ALIGNED:
@@ -147,14 +143,14 @@ static unsigned r600_get_base_alignment(struct pipe_screen *screen,
 
 	switch (array_mode) {
 	case V_038000_ARRAY_2D_TILED_THIN1:
-		b_align = MAX2(rscreen->tiling_info->num_banks * rscreen->tiling_info->num_channels * 8 * 8 * pixsize,
+		b_align = MAX2(rscreen->tiling_info.num_banks * rscreen->tiling_info.num_channels * 8 * 8 * pixsize,
 			       p_align * pixsize * h_align);
 		break;
 	case V_038000_ARRAY_1D_TILED_THIN1:
 	case V_038000_ARRAY_LINEAR_ALIGNED:
 	case V_038000_ARRAY_LINEAR_GENERAL:
 	default:
-		b_align = rscreen->tiling_info->group_bytes;
+		b_align = rscreen->tiling_info.group_bytes;
 		break;
 	}
 	return b_align;
@@ -175,15 +171,15 @@ static unsigned r600_texture_get_nblocksx(struct pipe_screen *screen,
 {
 	struct pipe_resource *ptex = &rtex->resource.b.b.b;
 	unsigned nblocksx, block_align, width;
-	unsigned blocksize = util_format_get_blocksize(ptex->format);
+	unsigned blocksize = util_format_get_blocksize(rtex->real_format);
 
 	if (rtex->pitch_override)
 		return rtex->pitch_override / blocksize;
 
 	width = mip_minify(ptex->width0, level);
-	nblocksx = util_format_get_nblocksx(ptex->format, width);
+	nblocksx = util_format_get_nblocksx(rtex->real_format, width);
 
-	block_align = r600_get_block_alignment(screen, ptex->format,
+	block_align = r600_get_block_alignment(screen, rtex->real_format,
 					      rtex->array_mode[level]);
 	nblocksx = align(nblocksx, block_align);
 	return nblocksx;
@@ -197,9 +193,19 @@ static unsigned r600_texture_get_nblocksy(struct pipe_screen *screen,
 	unsigned height, tile_height;
 
 	height = mip_minify(ptex->height0, level);
-	height = util_format_get_nblocksy(ptex->format, height);
+	height = util_format_get_nblocksy(rtex->real_format, height);
 	tile_height = r600_get_height_alignment(screen,
 						rtex->array_mode[level]);
+
+	/* XXX Hack around an alignment issue. Less tests fail with this.
+	 *
+	 * The thing is depth-stencil buffers should be tiled, i.e.
+	 * the alignment should be >=8. If I make them tiled, stencil starts
+	 * working because it no longer overlaps with the depth buffer
+	 * in memory, but texturing like drawpix-stencil breaks. */
+	if (util_format_is_depth_or_stencil(rtex->real_format) && tile_height < 8)
+		tile_height = 8;
+
 	height = align(height, tile_height);
 	return height;
 }
@@ -222,7 +228,7 @@ static void r600_texture_set_array_mode(struct pipe_screen *screen,
 		unsigned w, h, tile_height, tile_width;
 
 		tile_height = r600_get_height_alignment(screen, array_mode);
-		tile_width = r600_get_block_alignment(screen, ptex->format, array_mode);
+		tile_width = r600_get_block_alignment(screen, rtex->real_format, array_mode);
 
 		w = mip_minify(ptex->width0, level);
 		h = mip_minify(ptex->height0, level);
@@ -240,21 +246,24 @@ static void r600_setup_miptree(struct pipe_screen *screen,
 			       unsigned array_mode)
 {
 	struct pipe_resource *ptex = &rtex->resource.b.b.b;
-	struct radeon *radeon = (struct radeon *)screen->winsys;
-	enum chip_class chipc = r600_get_family_class(radeon);
+	enum chip_class chipc = ((struct r600_screen*)screen)->chip_class;
 	unsigned size, layer_size, i, offset;
-	unsigned nblocksx, nblocksy, extra_size = 0;
+	unsigned nblocksx, nblocksy;
 
 	for (i = 0, offset = 0; i <= ptex->last_level; i++) {
-		unsigned blocksize = util_format_get_blocksize(ptex->format);
-		unsigned base_align = r600_get_base_alignment(screen, ptex->format, array_mode);
+		unsigned blocksize = util_format_get_blocksize(rtex->real_format);
+		unsigned base_align = r600_get_base_alignment(screen, rtex->real_format, array_mode);
 
 		r600_texture_set_array_mode(screen, rtex, i, array_mode);
 
 		nblocksx = r600_texture_get_nblocksx(screen, rtex, i);
 		nblocksy = r600_texture_get_nblocksy(screen, rtex, i);
 
-		layer_size = nblocksx * nblocksy * blocksize;
+		if (chipc >= EVERGREEN && array_mode == V_038000_ARRAY_LINEAR_GENERAL)
+			layer_size = align(nblocksx, 64) * nblocksy * blocksize;
+		else
+			layer_size = nblocksx * nblocksy * blocksize;
+
 		if (ptex->target == PIPE_TEXTURE_CUBE) {
 			if (chipc >= R700)
 				size = layer_size * 8;
@@ -266,10 +275,6 @@ static void r600_setup_miptree(struct pipe_screen *screen,
 		else
 			size = layer_size * ptex->array_size;
 
-		/* evergreen stores depth and stencil separately */
-		if ((chipc >= EVERGREEN) && util_format_is_depth_or_stencil(ptex->format))
-			extra_size = align(extra_size + (nblocksx * nblocksy * 1), base_align);
-
 		/* align base image and start of miptree */
 		if ((i == 0) || (i == 1))
 			offset = align(offset, base_align);
@@ -280,7 +285,7 @@ static void r600_setup_miptree(struct pipe_screen *screen,
 
 		offset += size;
 	}
-	rtex->size = offset + extra_size;
+	rtex->size = offset;
 }
 
 /* Figure out whether u_blitter will fallback to a transfer operation.
@@ -314,7 +319,14 @@ static boolean permit_hardware_blit(struct pipe_screen *screen,
                                 PIPE_BIND_SAMPLER_VIEW))
 		return FALSE;
 
-	return TRUE;
+	switch (res->usage) {
+	case PIPE_USAGE_STREAM:
+	case PIPE_USAGE_STAGING:
+		return FALSE;
+
+	default:
+		return TRUE;
+	}
 }
 
 static boolean r600_texture_get_handle(struct pipe_screen* screen,
@@ -323,10 +335,10 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 {
 	struct r600_resource_texture *rtex = (struct r600_resource_texture*)ptex;
 	struct r600_resource *resource = &rtex->resource;
-	struct radeon *radeon = (struct radeon *)screen->winsys;
+	struct r600_screen *rscreen = (struct r600_screen*)screen;
 
-	return r600_bo_get_winsys_handle(radeon, resource->bo,
-			rtex->pitch_in_bytes[0], whandle);
+	return rscreen->ws->buffer_get_handle(resource->buf,
+					      rtex->pitch_in_bytes[0], whandle);
 }
 
 static void r600_texture_destroy(struct pipe_screen *screen,
@@ -334,14 +346,14 @@ static void r600_texture_destroy(struct pipe_screen *screen,
 {
 	struct r600_resource_texture *rtex = (struct r600_resource_texture*)ptex;
 	struct r600_resource *resource = &rtex->resource;
-	struct radeon *radeon = (struct radeon *)screen->winsys;
 
 	if (rtex->flushed_depth_texture)
 		pipe_resource_reference((struct pipe_resource **)&rtex->flushed_depth_texture, NULL);
 
-	if (resource->bo) {
-		r600_bo_reference(radeon, &resource->bo, NULL);
-	}
+	if (rtex->stencil)
+		pipe_resource_reference((struct pipe_resource **)&rtex->stencil, NULL);
+
+	pb_reference(&resource->buf, NULL);
 	FREE(rtex);
 }
 
@@ -363,11 +375,12 @@ r600_texture_create_object(struct pipe_screen *screen,
 			   unsigned array_mode,
 			   unsigned pitch_in_bytes_override,
 			   unsigned max_buffer_size,
-			   struct r600_bo *bo)
+			   struct pb_buffer *buf,
+			   boolean alloc_bo)
 {
 	struct r600_resource_texture *rtex;
 	struct r600_resource *resource;
-	struct radeon *radeon = (struct radeon *)screen->winsys;
+	struct r600_screen *rscreen = (struct r600_screen*)screen;
 
 	rtex = CALLOC_STRUCT(r600_resource_texture);
 	if (rtex == NULL)
@@ -378,61 +391,117 @@ r600_texture_create_object(struct pipe_screen *screen,
 	resource->b.b.vtbl = &r600_texture_vtbl;
 	pipe_reference_init(&resource->b.b.b.reference, 1);
 	resource->b.b.b.screen = screen;
-	resource->bo = bo;
 	rtex->pitch_override = pitch_in_bytes_override;
+	rtex->real_format = base->format;
+
+	/* We must split depth and stencil into two separate buffers on Evergreen. */
+	if (!(base->flags & R600_RESOURCE_FLAG_TRANSFER) &&
+	    ((struct r600_screen*)screen)->chip_class >= EVERGREEN &&
+	    util_format_is_depth_and_stencil(base->format)) {
+		struct pipe_resource stencil;
+		unsigned stencil_pitch_override = 0;
+
+		switch (base->format) {
+		case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+			rtex->real_format = PIPE_FORMAT_Z24X8_UNORM;
+			break;
+		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+			rtex->real_format = PIPE_FORMAT_X8Z24_UNORM;
+			break;
+		case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+			rtex->real_format = PIPE_FORMAT_Z32_FLOAT;
+			break;
+		default:
+			assert(0);
+			FREE(rtex);
+			return NULL;
+		}
+
+		/* Divide the pitch in bytes by 4 for stencil, because it has a smaller pixel size. */
+		if (pitch_in_bytes_override) {
+			assert(base->format == PIPE_FORMAT_Z24_UNORM_S8_UINT ||
+			       base->format == PIPE_FORMAT_S8_UINT_Z24_UNORM);
+			stencil_pitch_override = pitch_in_bytes_override / 4;
+		}
+
+		/* Allocate the stencil buffer. */
+		stencil = *base;
+		stencil.format = PIPE_FORMAT_S8_UINT;
+		rtex->stencil = r600_texture_create_object(screen, &stencil, array_mode,
+							   stencil_pitch_override,
+							   max_buffer_size, NULL, FALSE);
+		if (!rtex->stencil) {
+			FREE(rtex);
+			return NULL;
+		}
+		/* Proceed in creating the depth buffer. */
+	}
+
 	/* only mark depth textures the HW can hit as depth textures */
-	if (util_format_is_depth_or_stencil(base->format) && permit_hardware_blit(screen, base))
+	if (util_format_is_depth_or_stencil(rtex->real_format) && permit_hardware_blit(screen, base))
 		rtex->depth = 1;
 
 	r600_setup_miptree(screen, rtex, array_mode);
 
-	resource->size = rtex->size;
+	/* If we initialized separate stencil for Evergreen. place it after depth. */
+	if (rtex->stencil) {
+		unsigned stencil_align, stencil_offset;
 
-	if (!resource->bo) {
+		stencil_align = r600_get_base_alignment(screen, rtex->stencil->real_format, array_mode);
+		stencil_offset = align(rtex->size, stencil_align);
+
+		for (unsigned i = 0; i <= rtex->stencil->resource.b.b.b.last_level; i++)
+			rtex->stencil->offset[i] += stencil_offset;
+
+		rtex->size = stencil_offset + rtex->stencil->size;
+	}
+
+	/* Now create the backing buffer. */
+	if (!buf && alloc_bo) {
 		struct pipe_resource *ptex = &rtex->resource.b.b.b;
-		int base_align = r600_get_base_alignment(screen, ptex->format, array_mode);
+		unsigned base_align = r600_get_base_alignment(screen, ptex->format, array_mode);
 
-		resource->bo = r600_bo(radeon, rtex->size, base_align, base->bind, base->usage);
-		if (!resource->bo) {
+		if (!r600_init_resource(rscreen, resource, rtex->size, base_align, base->bind, base->usage)) {
+			pipe_resource_reference((struct pipe_resource**)&rtex->stencil, NULL);
 			FREE(rtex);
 			return NULL;
 		}
+	} else if (buf) {
+		resource->buf = buf;
+		resource->cs_buf = rscreen->ws->buffer_get_cs_handle(buf);
+		resource->domains = RADEON_DOMAIN_GTT | RADEON_DOMAIN_VRAM;
+	}
+
+	if (rtex->stencil) {
+		pb_reference(&rtex->stencil->resource.buf, rtex->resource.buf);
+		rtex->stencil->resource.cs_buf = rtex->resource.cs_buf;
+		rtex->stencil->resource.domains = rtex->resource.domains;
 	}
 	return rtex;
 }
 
+DEBUG_GET_ONCE_BOOL_OPTION(tiling_enabled, "R600_TILING", FALSE);
+
 struct pipe_resource *r600_texture_create(struct pipe_screen *screen,
 						const struct pipe_resource *templ)
 {
+	struct r600_screen *rscreen = (struct r600_screen*)screen;
 	unsigned array_mode = 0;
-	static int force_tiling = -1;
 
-	/* Would like some magic "get_bool_option_once" routine.
-	 */
-	if (force_tiling == -1) {
-#if 0
-		/* reenable when 2D tiling is fixed better */
-		struct r600_screen *rscreen = (struct r600_screen *)screen;
-		if (r600_get_minor_version(rscreen->radeon) >= 9)
-			force_tiling = debug_get_bool_option("R600_TILING", TRUE);
-#endif
-		force_tiling = debug_get_bool_option("R600_TILING", FALSE);
-	}
-
-	if (force_tiling && permit_hardware_blit(screen, templ)) {
-		if (!(templ->flags & R600_RESOURCE_FLAG_TRANSFER) &&
-		    !(templ->bind & PIPE_BIND_SCANOUT)) {
+	if (!(templ->flags & R600_RESOURCE_FLAG_TRANSFER) &&
+	    !(templ->bind & PIPE_BIND_SCANOUT)) {
+		if (util_format_is_compressed(templ->format)) {
+			array_mode = V_038000_ARRAY_1D_TILED_THIN1;
+		}
+		else if (debug_get_option_tiling_enabled() &&
+			 rscreen->info.drm_minor >= 9 &&
+			 permit_hardware_blit(screen, templ)) {
 			array_mode = V_038000_ARRAY_2D_TILED_THIN1;
 		}
 	}
 
-	if (!(templ->flags & R600_RESOURCE_FLAG_TRANSFER) &&
-	    util_format_is_compressed(templ->format))
-		array_mode = V_038000_ARRAY_1D_TILED_THIN1;
-
 	return (struct pipe_resource *)r600_texture_create_object(screen, templ, array_mode,
-								  0, 0, NULL);
-
+								  0, 0, NULL, TRUE);
 }
 
 static struct pipe_surface *r600_create_surface(struct pipe_context *pipe,
@@ -472,29 +541,36 @@ static void r600_surface_destroy(struct pipe_context *pipe,
 	FREE(surface);
 }
 
-
 struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen,
 					       const struct pipe_resource *templ,
 					       struct winsys_handle *whandle)
 {
-	struct radeon *rw = (struct radeon*)screen->winsys;
-	struct r600_bo *bo = NULL;
+	struct r600_screen *rscreen = (struct r600_screen*)screen;
+	struct pb_buffer *buf = NULL;
+	unsigned stride = 0;
 	unsigned array_mode = 0;
+	enum radeon_bo_layout micro, macro;
 
 	/* Support only 2D textures without mipmaps */
 	if ((templ->target != PIPE_TEXTURE_2D && templ->target != PIPE_TEXTURE_RECT) ||
 	      templ->depth0 != 1 || templ->last_level != 0)
 		return NULL;
 
-	bo = r600_bo_handle(rw, whandle->handle, &array_mode);
-	if (bo == NULL) {
+	buf = rscreen->ws->buffer_from_handle(rscreen->ws, whandle, &stride);
+	if (!buf)
 		return NULL;
-	}
+
+	rscreen->ws->buffer_get_tiling(buf, &micro, &macro);
+
+	if (macro == RADEON_LAYOUT_TILED)
+		array_mode = V_0280A0_ARRAY_2D_TILED_THIN1;
+	else if (micro == RADEON_LAYOUT_TILED)
+		array_mode = V_0280A0_ARRAY_1D_TILED_THIN1;
+	else
+		array_mode = 0;
 
 	return (struct pipe_resource *)r600_texture_create_object(screen, templ, array_mode,
-								  whandle->stride,
-								  0,
-								  bo);
+								  stride, 0, buf, FALSE);
 }
 
 int r600_texture_depth_flush(struct pipe_context *ctx,
@@ -506,19 +582,17 @@ int r600_texture_depth_flush(struct pipe_context *ctx,
 	if (rtex->flushed_depth_texture)
 		goto out;
 
-	resource.target = PIPE_TEXTURE_2D;
+	resource.target = texture->target;
 	resource.format = texture->format;
 	resource.width0 = texture->width0;
 	resource.height0 = texture->height0;
-	resource.depth0 = 1;
-	resource.array_size = 1;
+	resource.depth0 = texture->depth0;
+	resource.array_size = texture->array_size;
 	resource.last_level = texture->last_level;
-	resource.nr_samples = 0;
+	resource.nr_samples = texture->nr_samples;
 	resource.usage = PIPE_USAGE_DYNAMIC;
-	resource.bind = 0;
-	resource.flags = R600_RESOURCE_FLAG_TRANSFER;
-
-	resource.bind |= PIPE_BIND_DEPTH_STENCIL;
+	resource.bind = texture->bind | PIPE_BIND_DEPTH_STENCIL;
+	resource.flags = R600_RESOURCE_FLAG_TRANSFER | texture->flags;
 
 	rtex->flushed_depth_texture = (struct r600_resource_texture *)ctx->screen->resource_create(ctx->screen, &resource);
 	if (rtex->flushed_depth_texture == NULL) {
@@ -556,6 +630,10 @@ struct pipe_transfer* r600_texture_get_transfer(struct pipe_context *ctx,
 	int r;
 	boolean use_staging_texture = FALSE;
 
+	if (usage & PIPE_TRANSFER_MAP_PERMANENTLY) {
+	   return NULL;
+	}
+
 	/* We cannot map a tiled texture directly because the data is
 	 * in a different order, therefore we do detiling using a blit.
 	 *
@@ -583,6 +661,9 @@ struct pipe_transfer* r600_texture_get_transfer(struct pipe_context *ctx,
 	if (!permit_hardware_blit(ctx->screen, texture) ||
 		(texture->flags & R600_RESOURCE_FLAG_TRANSFER))
 		use_staging_texture = FALSE;
+
+	if (use_staging_texture && (usage & PIPE_TRANSFER_MAP_DIRECTLY))
+		return NULL;
 
 	trans = CALLOC_STRUCT(r600_transfer);
 	if (trans == NULL)
@@ -642,7 +723,7 @@ struct pipe_transfer* r600_texture_get_transfer(struct pipe_context *ctx,
 		if (usage & PIPE_TRANSFER_READ) {
 			r600_copy_to_staging_texture(ctx, trans);
 			/* Always referenced in the blit. */
-                        ctx->flush(ctx, NULL);
+			r600_flush(ctx, NULL, 0);
 		}
 		return &trans->transfer;
 	}
@@ -678,53 +759,29 @@ void r600_texture_transfer_destroy(struct pipe_context *ctx,
 void* r600_texture_transfer_map(struct pipe_context *ctx,
 				struct pipe_transfer* transfer)
 {
+	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
 	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
-	struct r600_bo *bo;
+	struct pb_buffer *buf;
 	enum pipe_format format = transfer->resource->format;
-	struct radeon *radeon = (struct radeon *)ctx->screen->winsys;
 	unsigned offset = 0;
-	unsigned usage = 0;
 	char *map;
 
 	if (rtransfer->staging_texture) {
-		bo = ((struct r600_resource *)rtransfer->staging_texture)->bo;
+		buf = ((struct r600_resource *)rtransfer->staging_texture)->buf;
 	} else {
 		struct r600_resource_texture *rtex = (struct r600_resource_texture*)transfer->resource;
 
 		if (rtex->flushed_depth_texture)
-			bo = ((struct r600_resource *)rtex->flushed_depth_texture)->bo;
+			buf = ((struct r600_resource *)rtex->flushed_depth_texture)->buf;
 		else
-			bo = ((struct r600_resource *)transfer->resource)->bo;
+			buf = ((struct r600_resource *)transfer->resource)->buf;
 
 		offset = rtransfer->offset +
 			transfer->box.y / util_format_get_blockheight(format) * transfer->stride +
 			transfer->box.x / util_format_get_blockwidth(format) * util_format_get_blocksize(format);
 	}
 
-	if (transfer->usage & PIPE_TRANSFER_WRITE) {
-		usage |= PB_USAGE_CPU_WRITE;
-
-		if (transfer->usage & PIPE_TRANSFER_DISCARD) {
-		}
-
-		if (transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT) {
-		}
-	}
-
-	if (transfer->usage & PIPE_TRANSFER_READ) {
-		usage |= PB_USAGE_CPU_READ;
-	}
-
-	if (transfer->usage & PIPE_TRANSFER_DONTBLOCK) {
-		usage |= PB_USAGE_DONTBLOCK;
-	}
-
-	if (transfer->usage & PIPE_TRANSFER_UNSYNCHRONIZED) {
-		usage |= PB_USAGE_UNSYNCHRONIZED;
-	}
-
-	map = r600_bo_map(radeon, bo, usage, ctx);
-	if (!map) {
+	if (!(map = rctx->ws->buffer_map(buf, rctx->ctx.cs, transfer->usage))) {
 		return NULL;
 	}
 
@@ -735,21 +792,21 @@ void r600_texture_transfer_unmap(struct pipe_context *ctx,
 				 struct pipe_transfer* transfer)
 {
 	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
-	struct radeon *radeon = (struct radeon *)ctx->screen->winsys;
-	struct r600_bo *bo;
+	struct r600_pipe_context *rctx = (struct r600_pipe_context*)ctx;
+	struct pb_buffer *buf;
 
 	if (rtransfer->staging_texture) {
-		bo = ((struct r600_resource *)rtransfer->staging_texture)->bo;
+		buf = ((struct r600_resource *)rtransfer->staging_texture)->buf;
 	} else {
 		struct r600_resource_texture *rtex = (struct r600_resource_texture*)transfer->resource;
 
 		if (rtex->flushed_depth_texture) {
-			bo = ((struct r600_resource *)rtex->flushed_depth_texture)->bo;
+			buf = ((struct r600_resource *)rtex->flushed_depth_texture)->buf;
 		} else {
-			bo = ((struct r600_resource *)transfer->resource)->bo;
+			buf = ((struct r600_resource *)transfer->resource)->buf;
 		}
 	}
-	r600_bo_unmap(radeon, bo);
+	rctx->ws->buffer_unmap(buf);
 }
 
 void r600_init_surface_functions(struct r600_pipe_context *r600)
@@ -772,11 +829,7 @@ static unsigned r600_get_swizzle_combined(const unsigned char *swizzle_format,
 	};
 
 	if (swizzle_view) {
-		/* Combine two sets of swizzles. */
-		for (i = 0; i < 4; i++) {
-			swizzle[i] = swizzle_view[i] <= UTIL_FORMAT_SWIZZLE_W ?
-				swizzle_format[swizzle_view[i]] : swizzle_view[i];
-		}
+		util_format_compose_swizzles(swizzle_format, swizzle_view, swizzle);
 	} else {
 		memcpy(swizzle, swizzle_format, 4);
 	}
@@ -816,6 +869,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 	const struct util_format_description *desc;
 	boolean uniform = TRUE;
 	static int r600_enable_s3tc = -1;
+	bool is_srgb_valid = FALSE;
 
 	int i;
 	const uint32_t sign_bit[4] = {
@@ -836,21 +890,27 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 		case PIPE_FORMAT_Z16_UNORM:
 			result = FMT_16;
 			goto out_word4;
-		case PIPE_FORMAT_X24S8_USCALED:
+		case PIPE_FORMAT_X24S8_UINT:
 			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
 		case PIPE_FORMAT_Z24X8_UNORM:
-		case PIPE_FORMAT_Z24_UNORM_S8_USCALED:
+		case PIPE_FORMAT_Z24_UNORM_S8_UINT:
 			result = FMT_8_24;
 			goto out_word4;
-		case PIPE_FORMAT_S8X24_USCALED:
+		case PIPE_FORMAT_S8X24_UINT:
 			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
 		case PIPE_FORMAT_X8Z24_UNORM:
-		case PIPE_FORMAT_S8_USCALED_Z24_UNORM:
+		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
 			result = FMT_24_8;
 			goto out_word4;
-		case PIPE_FORMAT_S8_USCALED:
+		case PIPE_FORMAT_S8_UINT:
 			result = FMT_8;
 			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
+			goto out_word4;
+		case PIPE_FORMAT_Z32_FLOAT:
+			result = FMT_32_FLOAT;
+			goto out_word4;
+		case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+			result = FMT_X24_8_32_FLOAT;
 			goto out_word4;
 		default:
 			goto out_unknown;
@@ -876,7 +936,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 
 	if (r600_enable_s3tc == -1) {
 		struct r600_screen *rscreen = (struct r600_screen *)screen;
-		if (r600_get_minor_version(rscreen->radeon) >= 9)
+		if (rscreen->info.drm_minor >= 9)
 			r600_enable_s3tc = 1;
 		else
 			r600_enable_s3tc = debug_get_bool_option("R600_ENABLE_S3TC", FALSE);
@@ -921,14 +981,17 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 		case PIPE_FORMAT_DXT1_SRGB:
 		case PIPE_FORMAT_DXT1_SRGBA:
 			result = FMT_BC1;
+			is_srgb_valid = TRUE;
 			goto out_word4;
 		case PIPE_FORMAT_DXT3_RGBA:
 		case PIPE_FORMAT_DXT3_SRGBA:
 			result = FMT_BC2;
+			is_srgb_valid = TRUE;
 			goto out_word4;
 		case PIPE_FORMAT_DXT5_RGBA:
 		case PIPE_FORMAT_DXT5_SRGBA:
 			result = FMT_BC3;
+			is_srgb_valid = TRUE;
 			goto out_word4;
 		default:
 			goto out_unknown;
@@ -959,6 +1022,9 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 
 	/* Non-uniform formats. */
 	if (!uniform) {
+		if (desc->colorspace != UTIL_FORMAT_COLORSPACE_SRGB &&
+		    desc->channel[0].pure_integer)
+			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
 		switch(desc->nr_channels) {
 		case 3:
 			if (desc->channel[0].size == 5 &&
@@ -1002,10 +1068,15 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 	switch (desc->channel[i].type) {
 	case UTIL_FORMAT_TYPE_UNSIGNED:
 	case UTIL_FORMAT_TYPE_SIGNED:
+#if 0
 		if (!desc->channel[i].normalized &&
 		    desc->colorspace != UTIL_FORMAT_COLORSPACE_SRGB) {
 			goto out_unknown;
 		}
+#endif
+		if (desc->colorspace != UTIL_FORMAT_COLORSPACE_SRGB &&
+		    desc->channel[i].pure_integer)
+			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
 
 		switch (desc->channel[i].size) {
 		case 4:
@@ -1028,6 +1099,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 				goto out_word4;
 			case 4:
 				result = FMT_8_8_8_8;
+				is_srgb_valid = TRUE;
 				goto out_word4;
 			}
 			goto out_unknown;
@@ -1091,6 +1163,9 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 	}
 
 out_word4:
+
+	if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB && !is_srgb_valid)
+		return ~0;
 	if (word4_p)
 		*word4_p = word4;
 	if (yuv_format_p)

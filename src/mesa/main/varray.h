@@ -41,7 +41,7 @@ struct gl_context;
  * The array->_MaxElement field will be updated.
  * Later in glDrawArrays/Elements/etc we can do some bounds checking.
  */
-static INLINE void
+static inline void
 _mesa_update_array_max_element(struct gl_client_array *array)
 {
    assert(array->Enabled);
@@ -244,6 +244,13 @@ _mesa_DrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint end,
 				  GLsizei count, GLenum type,
 				  const GLvoid *indices,
 				  GLint basevertex);
+
+#if FEATURE_EXT_transform_feedback
+
+extern void GLAPIENTRY
+_mesa_DrawTransformFeedback(GLenum mode, GLuint name);
+
+#endif
 
 extern void GLAPIENTRY
 _mesa_PrimitiveRestartIndex(GLuint index);

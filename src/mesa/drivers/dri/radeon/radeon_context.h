@@ -47,7 +47,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "dri_util.h"
 #include "drm.h"
 #include "radeon_drm.h"
-#include "texmem.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
 #include "main/colormac.h"
@@ -59,8 +58,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 struct r100_context;
 typedef struct r100_context r100ContextRec;
 typedef struct r100_context *r100ContextPtr;
-
-#include "radeon_lock.h"
 
 
 
@@ -453,6 +450,10 @@ struct r100_context {
 extern GLboolean r100CreateContext( gl_api api,
 				    const struct gl_config *glVisual,
 				    __DRIcontext *driContextPriv,
+				    unsigned major_version,
+				    unsigned minor_version,
+				    uint32_t flags,
+				    unsigned *error,
 				    void *sharedContextPrivate);
 
 

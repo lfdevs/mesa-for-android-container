@@ -6,7 +6,7 @@ env.Append(CPPDEFINES = ['GALLIUM_RBUG', 'GALLIUM_TRACE'])
 
 env.Prepend(LIBS = [
     st_dri,
-    r600winsys,
+    radeonwinsys,
     r600,
     trace,
     rbug,

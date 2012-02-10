@@ -86,79 +86,59 @@ egl_g3d_choose_st(_EGLDriver *drv, _EGLContext *ctx,
    return stapi;
 }
 
+struct egl_g3d_choose_config_data {
+   _EGLConfig criteria;
+   enum pipe_format format;
+};
+
 static int
 egl_g3d_compare_config(const _EGLConfig *conf1, const _EGLConfig *conf2,
                        void *priv_data)
 {
-   const _EGLConfig *criteria = (const _EGLConfig *) priv_data;
+   struct egl_g3d_choose_config_data *data =
+      (struct egl_g3d_choose_config_data *) priv_data;
+   const _EGLConfig *criteria = &data->criteria;;
 
    /* EGL_NATIVE_VISUAL_TYPE ignored? */
    return _eglCompareConfigs(conf1, conf2, criteria, EGL_TRUE);
 }
 
 static EGLBoolean
-egl_g3d_match_config(const _EGLConfig *conf, const _EGLConfig *criteria)
+egl_g3d_match_config(const _EGLConfig *conf, void *priv_data)
 {
-   if (!_eglMatchConfig(conf, criteria))
+   struct egl_g3d_choose_config_data *data =
+      (struct egl_g3d_choose_config_data *) priv_data;
+   struct egl_g3d_config *gconf = egl_g3d_config(conf);
+
+   if (data->format != PIPE_FORMAT_NONE &&
+       data->format != gconf->native->color_format)
       return EGL_FALSE;
 
-   if (criteria->MatchNativePixmap != EGL_NONE &&
-       criteria->MatchNativePixmap != EGL_DONT_CARE) {
-      struct egl_g3d_display *gdpy = egl_g3d_display(conf->Display);
-      struct egl_g3d_config *gconf = egl_g3d_config(conf);
-      EGLNativePixmapType pix =
-         (EGLNativePixmapType) criteria->MatchNativePixmap;
-
-      if (!gdpy->native->is_pixmap_supported(gdpy->native, pix, gconf->native))
-         return EGL_FALSE;
-   }
-
-   return EGL_TRUE;
+   return _eglMatchConfig(conf, &data->criteria);
 }
 
 static EGLBoolean
 egl_g3d_choose_config(_EGLDriver *drv, _EGLDisplay *dpy, const EGLint *attribs,
                       EGLConfig *configs, EGLint size, EGLint *num_configs)
 {
-   _EGLConfig **tmp_configs, criteria;
-   EGLint tmp_size, i;
+   struct egl_g3d_choose_config_data data;
 
-   if (!num_configs)
-      return _eglError(EGL_BAD_PARAMETER, "eglChooseConfigs");
-
-   if (!_eglParseConfigAttribList(&criteria, dpy, attribs))
+   if (!_eglParseConfigAttribList(&data.criteria, dpy, attribs))
       return _eglError(EGL_BAD_ATTRIBUTE, "eglChooseConfig");
 
-   /* get the number of matched configs */
-   tmp_size = _eglFilterArray(dpy->Configs, NULL, 0,
-         (_EGLArrayForEach) egl_g3d_match_config, (void *) &criteria);
-   if (!tmp_size) {
-      *num_configs = tmp_size;
-      return EGL_TRUE;
+   data.format = PIPE_FORMAT_NONE;
+   if (data.criteria.MatchNativePixmap != EGL_NONE &&
+       data.criteria.MatchNativePixmap != EGL_DONT_CARE) {
+      struct egl_g3d_display *gdpy = egl_g3d_display(dpy);
+
+      if (!gdpy->native->get_pixmap_format(gdpy->native,
+               (EGLNativePixmapType) data.criteria.MatchNativePixmap,
+               &data.format))
+         return _eglError(EGL_BAD_NATIVE_PIXMAP, "eglChooseConfig");
    }
 
-   tmp_configs = MALLOC(sizeof(tmp_configs[0]) * tmp_size);
-   if (!tmp_configs)
-      return _eglError(EGL_BAD_ALLOC, "eglChooseConfig(out of memory)");
-
-   /* get the matched configs */
-   _eglFilterArray(dpy->Configs, (void **) tmp_configs, tmp_size,
-         (_EGLArrayForEach) egl_g3d_match_config, (void *) &criteria);
-
-   /* perform sorting of configs */
-   if (configs && tmp_size) {
-      _eglSortConfigs((const _EGLConfig **) tmp_configs, tmp_size,
-            egl_g3d_compare_config, (void *) &criteria);
-      tmp_size = MIN2(tmp_size, size);
-      for (i = 0; i < tmp_size; i++)
-         configs[i] = _eglGetConfigHandle(tmp_configs[i]);
-   }
-
-   FREE(tmp_configs);
-
-   *num_configs = tmp_size;
-
-   return EGL_TRUE;
+   return _eglFilterConfigArray(dpy->Configs, configs, size, num_configs,
+         egl_g3d_match_config, egl_g3d_compare_config, &data);
 }
 
 static _EGLContext *
@@ -170,6 +150,7 @@ egl_g3d_create_context(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf,
    struct egl_g3d_config *gconf = egl_g3d_config(conf);
    struct egl_g3d_context *gctx;
    struct st_context_attribs stattribs;
+   enum st_context_error ctx_err = 0;
 
    gctx = CALLOC_STRUCT(egl_g3d_context);
    if (!gctx) {
@@ -192,8 +173,8 @@ egl_g3d_create_context(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf,
       return NULL;
    }
 
-   gctx->stctxi = gctx->stapi->create_context(gctx->stapi, gdpy->smapi,
-         &stattribs, (gshare) ? gshare->stctxi : NULL);
+   gctx->stctxi = gctx->stapi->create_context(gctx->stapi, gdpy->smapi, 
+         &stattribs, &ctx_err, (gshare) ? gshare->stctxi : NULL);
    if (!gctx->stctxi) {
       FREE(gctx);
       return NULL;
@@ -315,6 +296,10 @@ egl_g3d_create_surface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf,
    if (gsurf->base.RenderBuffer == EGL_SINGLE_BUFFER &&
        gconf->stvis.buffer_mask & ST_ATTACHMENT_FRONT_LEFT_MASK)
       gsurf->stvis.render_buffer = ST_ATTACHMENT_FRONT_LEFT;
+
+   /* surfaces can always be posted when the display supports it */
+   if (dpy->Extensions.NV_post_sub_buffer)
+      gsurf->base.PostSubBufferSupportedNV = EGL_TRUE;
 
    gsurf->stfbi = egl_g3d_create_st_framebuffer(&gsurf->base);
    if (!gsurf->stfbi) {
@@ -524,18 +509,11 @@ egl_g3d_make_current(_EGLDriver *drv, _EGLDisplay *dpy,
             (gdraw) ? gdraw->stfbi : NULL, (gread) ? gread->stfbi : NULL);
       if (ok) {
          if (gdraw) {
-            gctx->stctxi->notify_invalid_framebuffer(gctx->stctxi,
-                  gdraw->stfbi);
-
             if (gdraw->base.Type == EGL_WINDOW_BIT) {
                gctx->base.WindowRenderBuffer =
                   (gdraw->stvis.render_buffer == ST_ATTACHMENT_FRONT_LEFT) ?
                   EGL_SINGLE_BUFFER : EGL_BACK_BUFFER;
             }
-         }
-         if (gread && gread != gdraw) {
-            gctx->stctxi->notify_invalid_framebuffer(gctx->stctxi,
-                  gread->stfbi);
          }
       }
    }
@@ -573,11 +551,13 @@ egl_g3d_make_current(_EGLDriver *drv, _EGLDisplay *dpy,
 }
 
 static EGLBoolean
-egl_g3d_swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
+swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
+             EGLint num_rects, const EGLint *rects, EGLBoolean preserve)
 {
    struct egl_g3d_surface *gsurf = egl_g3d_surface(surf);
    _EGLContext *ctx = _eglGetCurrentContext();
    struct egl_g3d_context *gctx = NULL;
+   struct native_present_control ctrl;
 
    /* no-op for pixmap or pbuffer surface */
    if (gsurf->base.Type == EGL_PIXMAP_BIT ||
@@ -596,25 +576,61 @@ egl_g3d_swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
       gctx->stctxi->flush(gctx->stctxi, ST_FLUSH_FRONT, NULL);
    }
 
-   return gsurf->native->present(gsurf->native,
-         NATIVE_ATTACHMENT_BACK_LEFT,
-         gsurf->base.SwapBehavior == EGL_BUFFER_PRESERVED,
-         gsurf->base.SwapInterval);
+   memset(&ctrl, 0, sizeof(ctrl));
+   ctrl.natt = NATIVE_ATTACHMENT_BACK_LEFT;
+   ctrl.preserve = preserve;
+   ctrl.swap_interval = gsurf->base.SwapInterval;
+   ctrl.premultiplied_alpha = (gsurf->base.VGAlphaFormat == EGL_VG_ALPHA_FORMAT_PRE);
+   ctrl.num_rects = num_rects;
+   ctrl.rects = rects;
+
+   return gsurf->native->present(gsurf->native, &ctrl);
 }
 
-/**
- * Get the pipe surface of the given attachment of the native surface.
- */
-static struct pipe_resource *
-get_pipe_resource(struct native_display *ndpy, struct native_surface *nsurf,
-                  enum native_attachment natt)
+static EGLBoolean
+egl_g3d_swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
 {
-   struct pipe_resource *textures[NUM_NATIVE_ATTACHMENTS];
+   struct egl_g3d_surface *gsurf = egl_g3d_surface(surf);
 
-   textures[natt] = NULL;
-   nsurf->validate(nsurf, 1 << natt, NULL, textures, NULL, NULL);
+   return swap_buffers(drv, dpy, surf, 0, NULL,
+                       (gsurf->base.SwapBehavior == EGL_BUFFER_PRESERVED));
+}
 
-   return textures[natt];
+#ifdef EGL_NOK_swap_region
+static EGLBoolean
+egl_g3d_swap_buffers_region(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
+                            EGLint num_rects, const EGLint *rects)
+{
+   /* Note: y=0=top */
+   return swap_buffers(drv, dpy, surf, num_rects, rects, EGL_TRUE);
+}
+#endif /* EGL_NOK_swap_region */
+
+static EGLBoolean
+egl_g3d_post_sub_buffer(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
+                        EGLint x, EGLint y, EGLint width, EGLint height)
+{
+   EGLint rect[4];
+
+   if (x < 0 || y < 0 || width < 0 || height < 0)
+      return _eglError(EGL_BAD_PARAMETER, "eglPostSubBufferNV");
+
+   /* clamp */
+   if (x + width > surf->Width)
+      width = surf->Width - x;
+   if (y + height > surf->Height)
+      height = surf->Height - y;
+
+   if (width <= 0 || height <= 0)
+      return EGL_TRUE;
+
+   rect[0] = x;
+   /* Note: y=0=bottom */
+   rect[1] = surf->Height - y - height;
+   rect[2] = width;
+   rect[3] = height;
+
+   return swap_buffers(drv, dpy, surf, 1, rect, EGL_TRUE);
 }
 
 static EGLBoolean
@@ -624,16 +640,9 @@ egl_g3d_copy_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
    struct egl_g3d_display *gdpy = egl_g3d_display(dpy);
    struct egl_g3d_surface *gsurf = egl_g3d_surface(surf);
    _EGLContext *ctx = _eglGetCurrentContext();
-   struct native_surface *nsurf;
-   struct pipe_resource *ptex;
-   struct pipe_context *pipe;
 
    if (!gsurf->render_texture)
       return EGL_TRUE;
-
-   nsurf = gdpy->native->create_pixmap_surface(gdpy->native, target, NULL);
-   if (!nsurf)
-      return _eglError(EGL_BAD_NATIVE_PIXMAP, "eglCopyBuffers");
 
    /* flush if the surface is current */
    if (ctx && ctx->DrawSurface == &gsurf->base) {
@@ -641,26 +650,8 @@ egl_g3d_copy_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
       gctx->stctxi->flush(gctx->stctxi, ST_FLUSH_FRONT, NULL);
    }
 
-   pipe = ndpy_get_copy_context(gdpy->native);
-   if (!pipe)
-      return EGL_FALSE;
-
-   ptex = get_pipe_resource(gdpy->native, nsurf, NATIVE_ATTACHMENT_FRONT_LEFT);
-   if (ptex) {
-      struct pipe_box src_box;
-
-      u_box_origin_2d(ptex->width0, ptex->height0, &src_box);
-      pipe->resource_copy_region(pipe, ptex, 0, 0, 0, 0,
-            gsurf->render_texture, 0, &src_box);
-      pipe->flush(pipe, NULL);
-      nsurf->present(nsurf, NATIVE_ATTACHMENT_FRONT_LEFT, FALSE, 0);
-
-      pipe_resource_reference(&ptex, NULL);
-   }
-
-   nsurf->destroy(nsurf);
-
-   return EGL_TRUE;
+   return gdpy->native->copy_to_pixmap(gdpy->native,
+         target, gsurf->render_texture);
 }
 
 static EGLBoolean
@@ -919,15 +910,19 @@ egl_g3d_init_driver_api(_EGLDriver *drv)
 
 #endif
 
-#ifdef EGL_KHR_reusable_sync
    drv->API.CreateSyncKHR = egl_g3d_create_sync;
    drv->API.DestroySyncKHR = egl_g3d_destroy_sync;
    drv->API.ClientWaitSyncKHR = egl_g3d_client_wait_sync;
    drv->API.SignalSyncKHR = egl_g3d_signal_sync;
-#endif
 
 #ifdef EGL_MESA_screen_surface
    drv->API.CreateScreenSurfaceMESA = egl_g3d_create_screen_surface;
    drv->API.ShowScreenSurfaceMESA = egl_g3d_show_screen_surface;
 #endif
+
+#ifdef EGL_NOK_swap_region
+   drv->API.SwapBuffersRegionNOK = egl_g3d_swap_buffers_region;
+#endif
+
+   drv->API.PostSubBufferNV = egl_g3d_post_sub_buffer;
 }

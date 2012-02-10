@@ -39,13 +39,14 @@ SOURCES = \
 	../compsize.c \
 	../glxconfig.c \
 	glx_empty.c \
-	glx_error.c \
+	../glx_error.c \
 	../glx_pbuffer.c \
 	../glx_query.c \
 	../glxcmds.c \
 	../glxcurrent.c \
 	../glxext.c \
 	../glxextensions.c \
+	../glxhash.c \
 	glxreply.c \
 	../pixel.c \
 	../xfont.c \

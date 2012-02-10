@@ -34,13 +34,14 @@
 #include "brw_defines.h"
 
 static void
-brw_prepare_clip_unit(struct brw_context *brw)
+brw_upload_clip_unit(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
    struct brw_clip_unit_state *clip;
 
-   clip = brw_state_batch(brw, sizeof(*clip), 32, &brw->clip.state_offset);
+   clip = brw_state_batch(brw, AUB_TRACE_CLIP_STATE,
+			  sizeof(*clip), 32, &brw->clip.state_offset);
    memset(clip, 0, sizeof(*clip));
 
    /* BRW_NEW_PROGRAM_CACHE | CACHE_NEW_CLIP_PROG */
@@ -88,16 +89,13 @@ brw_prepare_clip_unit(struct brw_context *brw)
       clip->thread4.max_threads = 1 - 1;
    }
 
-   if (unlikely(INTEL_DEBUG & DEBUG_SINGLE_THREAD))
-      clip->thread4.max_threads = 0;
-
    if (unlikely(INTEL_DEBUG & DEBUG_STATS))
       clip->thread4.stats_enable = 1;
 
    clip->clip5.userclip_enable_flags = 0x7f;
    clip->clip5.userclip_must_clip = 1;
    clip->clip5.guard_band_enable = 0;
-   /* _NEW_TRANSOFORM */
+   /* _NEW_TRANSFORM */
    if (!ctx->Transform.DepthClamp)
       clip->clip5.viewport_z_clip_enable = 1;
    clip->clip5.viewport_xy_clip_enable = 1;
@@ -126,5 +124,5 @@ const struct brw_tracked_state brw_clip_unit = {
 		BRW_NEW_URB_FENCE),
       .cache = CACHE_NEW_CLIP_PROG
    },
-   .prepare = brw_prepare_clip_unit,
+   .emit = brw_upload_clip_unit,
 };

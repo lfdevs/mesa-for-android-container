@@ -37,11 +37,11 @@
 static enum pipe_error
 try_clear(struct svga_context *svga, 
           unsigned buffers,
-          const float *rgba,
+          const union pipe_color_union *color,
           double depth,
           unsigned stencil)
 {
-   int ret = PIPE_OK;
+   enum pipe_error ret = PIPE_OK;
    SVGA3dRect rect = { 0, 0, 0, 0 };
    boolean restore_viewport = FALSE;
    SVGA3dClearFlag flags = 0;
@@ -49,7 +49,7 @@ try_clear(struct svga_context *svga,
    union util_color uc = {0};
 
    ret = svga_update_state(svga, SVGA_STATE_HW_CLEAR);
-   if (ret)
+   if (ret != PIPE_OK)
       return ret;
 
    if (svga->rebind.rendertargets) {
@@ -61,7 +61,7 @@ try_clear(struct svga_context *svga,
 
    if ((buffers & PIPE_CLEAR_COLOR) && fb->cbufs[0]) {
       flags |= SVGA3D_CLEAR_COLOR;
-      util_pack_color(rgba, PIPE_FORMAT_B8G8R8A8_UNORM, &uc);
+      util_pack_color(color->f, PIPE_FORMAT_B8G8R8A8_UNORM, &uc);
 
       rect.w = fb->cbufs[0]->width;
       rect.h = fb->cbufs[0]->height;
@@ -71,7 +71,7 @@ try_clear(struct svga_context *svga,
       if (buffers & PIPE_CLEAR_DEPTH)
          flags |= SVGA3D_CLEAR_DEPTH;
 
-      if ((svga->curr.framebuffer.zsbuf->format == PIPE_FORMAT_S8_USCALED_Z24_UNORM) &&
+      if ((svga->curr.framebuffer.zsbuf->format == PIPE_FORMAT_S8_UINT_Z24_UNORM) &&
           (buffers & PIPE_CLEAR_STENCIL))
          flags |= SVGA3D_CLEAR_STENCIL;
 
@@ -82,7 +82,7 @@ try_clear(struct svga_context *svga,
    if (memcmp(&rect, &svga->state.hw_clear.viewport, sizeof(rect)) != 0) {
       restore_viewport = TRUE;
       ret = SVGA3D_SetViewport(svga->swc, &rect);
-      if (ret)
+      if (ret != PIPE_OK)
          return ret;
    }
 
@@ -104,24 +104,25 @@ try_clear(struct svga_context *svga,
  * No masking, no scissor (clear entire buffer).
  */
 void
-svga_clear(struct pipe_context *pipe, unsigned buffers, const float *rgba,
+svga_clear(struct pipe_context *pipe, unsigned buffers,
+           const union pipe_color_union *color,
 	   double depth, unsigned stencil)
 {
    struct svga_context *svga = svga_context( pipe );
-   int ret;
+   enum pipe_error ret;
 
    if (buffers & PIPE_CLEAR_COLOR)
       SVGA_DBG(DEBUG_DMA, "clear sid %p\n",
                svga_surface(svga->curr.framebuffer.cbufs[0])->handle);
 
-   ret = try_clear( svga, buffers, rgba, depth, stencil );
+   ret = try_clear( svga, buffers, color, depth, stencil );
 
    if (ret == PIPE_ERROR_OUT_OF_MEMORY) {
       /* Flush command buffer and retry:
        */
       svga_context_flush( svga, NULL );
 
-      ret = try_clear( svga, buffers, rgba, depth, stencil );
+      ret = try_clear( svga, buffers, color, depth, stencil );
    }
 
    /*

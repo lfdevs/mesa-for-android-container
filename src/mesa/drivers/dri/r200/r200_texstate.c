@@ -97,7 +97,6 @@ static const struct tx_table tx_table_be[] =
    _ALPHA(A8),
    _COLOR(L8),
    _ALPHA(I8),
-   _INVALID(CI8),
    _YUV(YCBCR),
    _YUV(YCBCR_REV),
    _INVALID(RGB_FXT1),
@@ -126,7 +125,6 @@ static const struct tx_table tx_table_le[] =
    _ALPHA(A8),
    _COLOR(L8),
    _ALPHA(I8),
-   _INVALID(CI8),
    _YUV(YCBCR),
    _YUV(YCBCR_REV),
    _INVALID(RGB_FXT1),
@@ -727,43 +725,6 @@ static GLboolean r200UpdateTextureEnv( struct gl_context *ctx, int unit, int slo
    return GL_TRUE;
 }
 
-void r200SetTexOffset(__DRIcontext * pDRICtx, GLint texname,
-		      unsigned long long offset, GLint depth, GLuint pitch)
-{
-	r200ContextPtr rmesa = pDRICtx->driverPrivate;
-	struct gl_texture_object *tObj =
-	    _mesa_lookup_texture(rmesa->radeon.glCtx, texname);
-	radeonTexObjPtr t = radeon_tex_obj(tObj);
-
-	if (!tObj)
-		return;
-
-	t->image_override = GL_TRUE;
-
-	if (!offset)
-		return;
-
-	t->bo = NULL;
-	t->override_offset = offset;
-	t->pp_txpitch = pitch - 32;
-
-	switch (depth) {
-	case 32:
-		t->pp_txformat = tx_table_le[MESA_FORMAT_ARGB8888].format;
-		t->pp_txfilter |= tx_table_le[MESA_FORMAT_ARGB8888].filter;
-		break;
-	case 24:
-	default:
-		t->pp_txformat = tx_table_le[MESA_FORMAT_RGB888].format;
-		t->pp_txfilter |= tx_table_le[MESA_FORMAT_RGB888].filter;
-		break;
-	case 16:
-		t->pp_txformat = tx_table_le[MESA_FORMAT_RGB565].format;
-		t->pp_txfilter |= tx_table_le[MESA_FORMAT_RGB565].filter;
-		break;
-	}
-}
-
 void r200SetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_format,
 		       __DRIdrawable *dPriv)
 {
@@ -773,18 +734,12 @@ void r200SetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_format
 	struct radeon_renderbuffer *rb;
 	radeon_texture_image *rImage;
 	radeonContextPtr radeon;
-	r200ContextPtr rmesa;
 	struct radeon_framebuffer *rfb;
 	radeonTexObjPtr t;
 	uint32_t pitch_val;
-	uint32_t internalFormat, format;
 	gl_format texFormat;
 
-	format = GL_UNSIGNED_BYTE;
-	internalFormat = (texture_format == __DRI_TEXTURE_FORMAT_RGB ? 3 : 4);
-
 	radeon = pDRICtx->driverPrivate;
-	rmesa = pDRICtx->driverPrivate;
 
 	rfb = dPriv->driverPrivate;
         texUnit = &radeon->glCtx->Texture.Unit[radeon->glCtx->Texture.CurrentUnit];
@@ -851,14 +806,15 @@ void r200SetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_format
 		break;
 	}
 
-	_mesa_init_teximage_fields(radeon->glCtx, target, texImage,
-				   rb->base.Width, rb->base.Height, 1, 0,
+	_mesa_init_teximage_fields(radeon->glCtx, texImage,
+				   rb->base.Base.Width, rb->base.Base.Height,
+				   1, 0,
 				   rb->cpp, texFormat);
-	texImage->RowStride = rb->pitch / rb->cpp;
+	rImage->base.RowStride = rb->pitch / rb->cpp;
 
 
-        t->pp_txsize = ((rb->base.Width - 1) << RADEON_TEX_USIZE_SHIFT)
-		   | ((rb->base.Height - 1) << RADEON_TEX_VSIZE_SHIFT);
+        t->pp_txsize = ((rb->base.Base.Width - 1) << RADEON_TEX_USIZE_SHIFT)
+		   | ((rb->base.Base.Height - 1) << RADEON_TEX_VSIZE_SHIFT);
 
 	if (target == GL_TEXTURE_RECTANGLE_NV) {
 		t->pp_txformat |= R200_TXFORMAT_NON_POWER2;
@@ -1135,11 +1091,9 @@ static void import_tex_obj_state( r200ContextPtr rmesa,
 
       R200_STATECHANGE( rmesa, cube[unit] );
       cube_cmd[CUBE_PP_CUBIC_FACES] = texobj->pp_cubic_faces;
-      if (rmesa->radeon.radeonScreen->drmSupportsFragShader) {
-	 /* that value is submitted twice. could change cube atom
-	    to not include that command when new drm is used */
-	 cmd[TEX_PP_CUBIC_FACES] = texobj->pp_cubic_faces;
-      }
+      /* that value is submitted twice. could change cube atom
+         to not include that command when new drm is used */
+      cmd[TEX_PP_CUBIC_FACES] = texobj->pp_cubic_faces;
    }
 
 }
