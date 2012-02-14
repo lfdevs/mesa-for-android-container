@@ -81,20 +81,22 @@ else
 # Although the KMS egl drivers will probably build on kfreebsd & hurd
 # only linux actually has KMS drivers implemented at this point.
 	EGL_DISPLAYS += drm
-# Nouveau requires KMS, so even the classic DRI driver only works on linux
-	DRI_DRIVERS += nouveau
+# Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
+	EGL_DISPLAYS += wayland
+    ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
+	DRI_DRIVERS += r200 radeon nouveau
+    endif
+    ifneq (,$(filter $(DEB_HOST_ARCH_CPU), amd64 i386))
+	DRI_DRIVERS += i915 i965
+    endif
   endif
 
-  ifneq ($(DEB_HOST_ARCH), s390)
-	DRI_DRIVERS += r200 radeon
-  endif
 
 # Build the llvmpipe driver only on amd64, i386 until it's tested elsewhere
   ifeq (,$(filter $(DEB_HOST_ARCH_CPU), amd64 i386))
 	DRI_DRIVERS += swrast
   else
 	GALLIUM_DRIVERS += swrast
-	DRI_DRIVERS += i915 i965
   endif
 
   # LLVM is required for r300g and recommended for swrastg on x86:
@@ -194,7 +196,10 @@ confflags-swx11+glu-i386-i686 = \
 	CFLAGS="$(CFLAGS) -march=i686" \
 	CXXFLAGS="$(CXXFLAGS) -march=i686"
 
+autotools_files = bin/config.guess bin/config.sub
+
 configure: $(QUILT_STAMPFN) configure.ac
+	for file in $(autotools_files); do cp $$file $$file.pristine; done
 	autoreconf -vfi
 
 # list the configurations that will built
@@ -258,6 +263,9 @@ clean: unpatch
 	rm -rf aclocal.m4 missing depcomp install-sh ltmain.sh
 	rm -rf $(STAMP_DIR)
 	for file in debian/*.in; do rm -f $${file%%.in}; done
+	# Those are auto-updated, grr:
+	for file in $(autotools_files); do if [ -f $$file.pristine ]; then mv -f $$file.pristine $$file; fi; done
+	ln -sf minstall bin/install-sh
 
 	dh_clean
 

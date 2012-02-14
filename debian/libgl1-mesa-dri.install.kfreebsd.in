@@ -1,0 +1,6 @@
+# Keep this part in sync with libgl1-mesa-dri.install:
+# But there's no such file for kfreebsd-* any longer, so comment it out entirely:
+# build/dri/${DEB_HOST_MULTIARCH}/*_dri.so  usr/lib/${DEB_HOST_MULTIARCH}/dri
+
+# This part is GNU/kFreeBSD-specific:
+build/dri/${DEB_HOST_MULTIARCH}/gallium/swrast_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri

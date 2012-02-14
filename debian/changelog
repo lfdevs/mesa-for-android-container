@@ -1,3 +1,30 @@
+mesa (8.0-2) experimental; urgency=low
+
+  [ Julien Cristau ]
+  * Only build the radeon, r200, i915 and i965 dri drivers on Linux.  They
+    require KMS.
+
+  [ Cyril Brulebois ]
+  * Fix FTBFS on GNU/kFreeBSD with libgl1-mesa-dri.install.kfreebsd.in:
+    there's no *_dri.so file left in the top directory, only swrast is
+    built and shipped under gallium/. So mention it explicitly, in the
+    same way as it is done in the libgl1-mesa-dri.install.linux.in file.
+  * Enable wayland support again, but only on Linux. Wayland needs some
+    porting (it uses *CLOEXEC flags and epoll). For that, add those files
+    since EGL packages are also shipped on GNU/kFreeBSD, and we need to
+    add a few files for Wayland, but only for Linux:
+    - libegl1-mesa-dev.install.linux.in
+    - libegl1-mesa-drivers.install.linux.in
+  * Limit the wl_drm_interface symbol to arch=linux-any accordingly,
+    and bump the version.
+  * Limit the build-dependency on libwayland-dev to linux-any too, and
+    bump it.
+  * Automatically revert changes to bin/{config.{guess,sub},install-sh} in
+    the clean target. The first two are modified, the last one needs to be
+    turned back into a symlink.
+
+ -- Cyril Brulebois <kibi@debian.org>  Tue, 14 Feb 2012 16:18:14 +0100
+
 mesa (8.0-1) experimental; urgency=low
 
   [ Cyril Brulebois ]

@@ -63,4 +63,4 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  eglWaitClient@Base 7.8.1
  eglWaitGL@Base 7.8.1
  eglWaitNative@Base 7.8.1
-# wl_drm_interface@Base 7.11~0
+ (arch=linux-any)wl_drm_interface@Base 8.0-2~
