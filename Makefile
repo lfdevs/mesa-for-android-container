@@ -184,7 +184,7 @@ ultrix-gcc:
 
 # Rules for making release tarballs
 
-PACKAGE_VERSION=8.0
+PACKAGE_VERSION=8.0.2
 PACKAGE_DIR = Mesa-$(PACKAGE_VERSION)
 PACKAGE_NAME = MesaLib-$(PACKAGE_VERSION)
 
@@ -199,6 +199,12 @@ EXTRA_FILES = \
 	src/glsl/glcpp/glcpp-lex.c			\
 	src/glsl/glcpp/glcpp-parse.c			\
 	src/glsl/glcpp/glcpp-parse.h			\
+	src/mesa/main/api_exec_es1.c			\
+	src/mesa/main/api_exec_es1_dispatch.h		\
+	src/mesa/main/api_exec_es1_remap_helper.h	\
+	src/mesa/main/api_exec_es2.c			\
+	src/mesa/main/api_exec_es2_dispatch.h		\
+	src/mesa/main/api_exec_es2_remap_helper.h	\
 	src/mesa/program/lex.yy.c			\
 	src/mesa/program/program_parse.tab.c		\
 	src/mesa/program/program_parse.tab.h

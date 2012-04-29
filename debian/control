@@ -224,6 +224,7 @@ Section: libdevel
 Architecture: linux-any
 Depends:
  libgbm1 (= ${binary:Version}),
+ libudev-dev,
  ${misc:Depends},
 Description: generic buffer management API -- development files
  This package contains the GBM buffer management library.  It provides a
@@ -275,6 +276,7 @@ Section: libdevel
 Architecture: linux-any kfreebsd-any
 Depends:
  libegl1-mesa (= ${binary:Version}),
+ libegl1-mesa-drivers (= ${binary:Version}),
  libdrm-dev (>= 2.4.19) [!hurd-any],
  x11proto-dri2-dev (>= 2.1),
  x11proto-gl-dev (>= 1.4.11),

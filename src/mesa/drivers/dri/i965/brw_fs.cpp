@@ -710,6 +710,15 @@ fs_visitor::calculate_urb_setup()
 	       urb_setup[fp_index] = urb_next++;
 	 }
       }
+
+      /*
+       * It's a FS only attribute, and we did interpolation for this attribute
+       * in SF thread. So, count it here, too.
+       *
+       * See compile_sf_prog() for more info.
+       */
+      if (brw->fragment_program->Base.InputsRead & BITFIELD64_BIT(FRAG_ATTRIB_PNTC))
+         urb_setup[FRAG_ATTRIB_PNTC] = urb_next++;
    }
 
    /* Each attribute is 4 setup channels, each of which is half a reg. */
@@ -1843,6 +1852,9 @@ brw_wm_fs_emit(struct brw_context *brw, struct brw_wm_compile *c,
    if (!v.run()) {
       prog->LinkStatus = false;
       ralloc_strcat(&prog->InfoLog, v.fail_msg);
+
+      _mesa_problem(NULL, "Failed to compile fragment shader: %s\n",
+		    v.fail_msg);
 
       return false;
    }

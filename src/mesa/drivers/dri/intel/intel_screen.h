@@ -116,6 +116,9 @@ struct intel_screen
 
    bool kernel_has_gen7_sol_reset;
 
+   bool hw_has_llc;
+   bool hw_has_swizzling;
+
    bool no_vbo;
    dri_bufmgr *bufmgr;
    struct _mesa_HashTable *named_regions;

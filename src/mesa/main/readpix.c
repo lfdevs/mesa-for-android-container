@@ -218,6 +218,16 @@ fast_read_rgba_pixels_memcpy( struct gl_context *ctx,
       return GL_FALSE;
    }
 
+   /* If the format is unsigned normalized then we can ignore clamping
+    * because the values are already in the range [0,1] so it won't
+    * have any effect anyway.
+    */
+   if (_mesa_get_format_datatype(rb->Format) == GL_UNSIGNED_NORMALIZED)
+      transferOps &= ~IMAGE_CLAMP_BIT;
+
+   if (transferOps)
+      return GL_FALSE;
+
    dstStride = _mesa_image_row_stride(packing, width, format, type);
    dst = (GLubyte *) _mesa_image_address2d(packing, pixels, width, height,
 					   format, type, 0, 0);
@@ -274,10 +284,14 @@ slow_read_rgba_pixels( struct gl_context *ctx,
    for (j = 0; j < height; j++) {
       if (_mesa_is_integer_format(format)) {
 	 _mesa_unpack_uint_rgba_row(rbFormat, width, map, (GLuint (*)[4]) rgba);
+         _mesa_rebase_rgba_uint(width, (GLuint (*)[4]) rgba,
+                                rb->_BaseFormat);
 	 _mesa_pack_rgba_span_int(ctx, width, (GLuint (*)[4]) rgba, format,
                                   type, dst);
       } else {
 	 _mesa_unpack_rgba_row(rbFormat, width, map, (GLfloat (*)[4]) rgba);
+         _mesa_rebase_rgba_float(width, (GLfloat (*)[4]) rgba,
+                                 rb->_BaseFormat);
 	 _mesa_pack_rgba_span_float(ctx, width, (GLfloat (*)[4]) rgba, format,
                                     type, dst, packing, transferOps);
       }
@@ -313,13 +327,11 @@ read_rgba_pixels( struct gl_context *ctx,
       transferOps |= IMAGE_CLAMP_BIT;
    }
 
-   if (!transferOps) {
-      /* Try the optimized paths first. */
-      if (fast_read_rgba_pixels_memcpy(ctx, x, y, width, height,
-				       format, type, pixels, packing,
-				       transferOps)) {
-	 return;
-      }
+   /* Try the optimized paths first. */
+   if (fast_read_rgba_pixels_memcpy(ctx, x, y, width, height,
+                                    format, type, pixels, packing,
+                                    transferOps)) {
+      return;
    }
 
    slow_read_rgba_pixels(ctx, x, y, width, height,

@@ -13,8 +13,8 @@
 
 m4_ifndef([AC_AUTOCONF_VERSION],
   [m4_copy([m4_PACKAGE_VERSION], [AC_AUTOCONF_VERSION])])dnl
-m4_if(m4_defn([AC_AUTOCONF_VERSION]), [2.68],,
-[m4_warning([this file was generated for autoconf 2.68.
+m4_if(m4_defn([AC_AUTOCONF_VERSION]), [2.67],,
+[m4_warning([this file was generated for autoconf 2.67.
 You have another version of autoconf.  It may work, but is not guaranteed to.
 If you have problems, you may need to regenerate the build system entirely.
 To do so, use the procedure documented by the package, typically `autoreconf'.])])
@@ -156,7 +156,7 @@ $$1_PKG_ERRORS
 Consider adjusting the PKG_CONFIG_PATH environment variable if you
 installed software in a non-standard prefix.
 
-_PKG_TEXT])
+_PKG_TEXT])dnl
         ])
 elif test $pkg_failed = untried; then
      	AC_MSG_RESULT([no])
@@ -167,7 +167,7 @@ path to pkg-config.
 
 _PKG_TEXT
 
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.])
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.])dnl
         ])
 else
 	$1[]_CFLAGS=$pkg_cv_[]$1[]_CFLAGS

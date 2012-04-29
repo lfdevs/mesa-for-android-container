@@ -3,7 +3,6 @@ dri/usr/lib/${DEB_HOST_MULTIARCH}/libEGL.so usr/lib/${DEB_HOST_MULTIARCH}
 dri/usr/include/EGL usr/include
 dri/usr/include/KHR usr/include
 dri/usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/egl.pc usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig
-dri/usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/wayland-egl.pc usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig
 
 # Wayland support, only on Linux:
 dri/usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so usr/lib/${DEB_HOST_MULTIARCH}

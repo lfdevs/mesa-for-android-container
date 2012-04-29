@@ -275,13 +275,8 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
 
    if (baseFormat == GL_LUMINANCE ||
        baseFormat == GL_LUMINANCE_ALPHA) {
-      /* Set green and blue to zero since the pack function here will
-       * compute L=R+G+B.
-       */
-      GLuint i;
-      for (i = 0; i < width * height; i++) {
-         tempImage[i * 4 + GCOMP] = tempImage[i * 4 + BCOMP] = 0.0f;
-      }
+      _mesa_rebase_rgba_float(width * height, (GLfloat (*)[4]) tempImage,
+                              baseFormat);
    }
 
    srcRow = tempImage;
@@ -312,6 +307,8 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
    const gl_format texFormat =
       _mesa_get_srgb_format_linear(texImage->TexFormat);
    const GLuint width = texImage->Width;
+   const GLenum destBaseFormat = _mesa_base_tex_format(ctx, format);
+   GLenum rebaseFormat = GL_NONE;
    GLuint height = texImage->Height;
    GLuint depth = texImage->Depth;
    GLuint img, row;
@@ -332,6 +329,28 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
       height = 1;
    }
 
+   if (texImage->_BaseFormat == GL_LUMINANCE ||
+       texImage->_BaseFormat == GL_INTENSITY ||
+       texImage->_BaseFormat == GL_LUMINANCE_ALPHA) {
+      /* If a luminance (or intensity) texture is read back as RGB(A), the
+       * returned value should be (L,0,0,1), not (L,L,L,1).  Set rebaseFormat
+       * here to get G=B=0.
+       */
+      rebaseFormat = texImage->_BaseFormat;
+   }
+   else if ((texImage->_BaseFormat == GL_RGBA ||
+             texImage->_BaseFormat == GL_RGB) &&
+            (destBaseFormat == GL_LUMINANCE ||
+             destBaseFormat == GL_LUMINANCE_ALPHA ||
+             destBaseFormat == GL_LUMINANCE_INTEGER_EXT ||
+             destBaseFormat == GL_LUMINANCE_ALPHA_INTEGER_EXT)) {
+      /* If we're reading back an RGB(A) texture as luminance then we need
+       * to return L=tex(R).  Note, that's different from glReadPixels which
+       * returns L=R+G+B.
+       */
+      rebaseFormat = GL_LUMINANCE_ALPHA; /* this covers GL_LUMINANCE too */
+   }
+
    for (img = 0; img < depth; img++) {
       GLubyte *srcMap;
       GLint rowstride;
@@ -349,76 +368,14 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
 
 	    if (is_integer) {
 	       _mesa_unpack_uint_rgba_row(texFormat, width, src, rgba_uint);
-
-	       if (texImage->_BaseFormat == GL_ALPHA) {
-		  GLint col;
-		  for (col = 0; col < width; col++) {
-		     rgba_uint[col][RCOMP] = 0;
-		     rgba_uint[col][GCOMP] = 0;
-		     rgba_uint[col][BCOMP] = 0;
-		  }
-	       }
-	       else if (texImage->_BaseFormat == GL_LUMINANCE) {
-		  GLint col;
-		  for (col = 0; col < width; col++) {
-		     rgba_uint[col][GCOMP] = 0;
-		     rgba_uint[col][BCOMP] = 0;
-		     rgba_uint[col][ACOMP] = 1;
-		  }
-	       }
-	       else if (texImage->_BaseFormat == GL_LUMINANCE_ALPHA) {
-		  GLint col;
-		  for (col = 0; col < width; col++) {
-		     rgba_uint[col][GCOMP] = 0;
-		     rgba_uint[col][BCOMP] = 0;
-		  }
-	       }
-	       else if (texImage->_BaseFormat == GL_INTENSITY) {
-		  GLint col;
-		  for (col = 0; col < width; col++) {
-		     rgba_uint[col][GCOMP] = 0;
-		     rgba_uint[col][BCOMP] = 0;
-		     rgba_uint[col][ACOMP] = 1;
-		  }
-	       }
-
+               if (rebaseFormat)
+                  _mesa_rebase_rgba_uint(width, rgba_uint, rebaseFormat);
 	       _mesa_pack_rgba_span_int(ctx, width, rgba_uint,
 					format, type, dest);
 	    } else {
 	       _mesa_unpack_rgba_row(texFormat, width, src, rgba);
-
-	       if (texImage->_BaseFormat == GL_ALPHA) {
-		  GLint col;
-		  for (col = 0; col < width; col++) {
-		     rgba[col][RCOMP] = 0.0F;
-		     rgba[col][GCOMP] = 0.0F;
-		     rgba[col][BCOMP] = 0.0F;
-		  }
-	       }
-	       else if (texImage->_BaseFormat == GL_LUMINANCE) {
-		  GLint col;
-		  for (col = 0; col < width; col++) {
-		     rgba[col][GCOMP] = 0.0F;
-		     rgba[col][BCOMP] = 0.0F;
-		     rgba[col][ACOMP] = 1.0F;
-		  }
-	       }
-	       else if (texImage->_BaseFormat == GL_LUMINANCE_ALPHA) {
-		  GLint col;
-		  for (col = 0; col < width; col++) {
-		     rgba[col][GCOMP] = 0.0F;
-		     rgba[col][BCOMP] = 0.0F;
-		  }
-	       }
-	       else if (texImage->_BaseFormat == GL_INTENSITY) {
-		  GLint col;
-		  for (col = 0; col < width; col++) {
-		     rgba[col][GCOMP] = 0.0F;
-		     rgba[col][BCOMP] = 0.0F;
-		     rgba[col][ACOMP] = 1.0F;
-		  }
-	       }
-
+               if (rebaseFormat)
+                  _mesa_rebase_rgba_float(width, rgba, rebaseFormat);
 	       _mesa_pack_rgba_span_float(ctx, width, (GLfloat (*)[4]) rgba,
 					  format, type, dest,
 					  &ctx->Pack, transferOps);

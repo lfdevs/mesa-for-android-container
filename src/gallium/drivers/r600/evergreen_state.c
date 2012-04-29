@@ -1046,6 +1046,7 @@ static struct pipe_sampler_view *evergreen_create_sampler_view(struct pipe_conte
 							struct pipe_resource *texture,
 							const struct pipe_sampler_view *state)
 {
+	struct r600_pipe_context *rctx = (struct r600_pipe_context *)ctx;
 	struct r600_pipe_sampler_view *view = CALLOC_STRUCT(r600_pipe_sampler_view);
 	struct r600_pipe_resource_state *rstate;
 	struct r600_resource_texture *tmp = (struct r600_resource_texture*)texture;
@@ -1092,6 +1093,11 @@ static struct pipe_sampler_view *evergreen_create_sampler_view(struct pipe_conte
 		      util_format_get_blockwidth(state->format), 8);
 	array_mode = tmp->array_mode[0];
 	tile_type = tmp->tile_type;
+	/* 128 bit formats require tile type = 1 */
+	if (rctx->chip_class == CAYMAN) {
+		if (util_format_get_blocksize(state->format) >= 16)
+			tile_type = 1;
+	}
 
 	if (texture->target == PIPE_TEXTURE_1D_ARRAY) {
 	        height = 1;
@@ -1107,8 +1113,11 @@ static struct pipe_sampler_view *evergreen_create_sampler_view(struct pipe_conte
 
 	rstate->val[0] = (S_030000_DIM(r600_tex_dim(texture->target)) |
 			  S_030000_PITCH((pitch / 8) - 1) |
-			  S_030000_NON_DISP_TILING_ORDER(tile_type) |
 			  S_030000_TEX_WIDTH(texture->width0 - 1));
+	if (rctx->chip_class == CAYMAN)
+		rstate->val[0] |= CM_S_030000_NON_DISP_TILING_ORDER(tile_type);
+	else
+		rstate->val[0] |= S_030000_NON_DISP_TILING_ORDER(tile_type);
 	rstate->val[1] = (S_030004_TEX_HEIGHT(height - 1) |
 			  S_030004_TEX_DEPTH(depth - 1) |
 			  S_030004_ARRAY_MODE(array_mode));
@@ -1457,6 +1466,11 @@ static void evergreen_cb(struct r600_pipe_context *rctx, struct r600_pipe_state 
 		tile_type = rtex->tile_type;
 	} else /* workaround for linear buffers */
 		tile_type = 1;
+	/* 128 bit formats require tile type = 1 */
+	if (rctx->chip_class == CAYMAN) {
+		if (util_format_get_blocksize(surf->base.format) >= 16)
+			tile_type = 1;
+	}
 
 	/* FIXME handle enabling of CB beyond BASE8 which has different offset */
 	r600_pipe_state_add_reg(rstate,
