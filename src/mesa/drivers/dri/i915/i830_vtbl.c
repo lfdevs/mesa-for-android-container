@@ -692,8 +692,8 @@ i830_set_draw_region(struct intel_context *intel,
    state->Buffer[I830_DESTREG_DRAWRECT1] = 0;
    state->Buffer[I830_DESTREG_DRAWRECT2] = (draw_y << 16) | draw_x;
    state->Buffer[I830_DESTREG_DRAWRECT3] =
-      ((ctx->DrawBuffer->Width + draw_x) & 0xffff) |
-      ((ctx->DrawBuffer->Height + draw_y) << 16);
+      ((ctx->DrawBuffer->Width + draw_x - 1) & 0xffff) |
+      ((ctx->DrawBuffer->Height + draw_y - 1) << 16);
    state->Buffer[I830_DESTREG_DRAWRECT4] = (draw_y << 16) | draw_x;
    state->Buffer[I830_DESTREG_DRAWRECT5] = MI_NOOP;
 
@@ -826,8 +826,7 @@ i830_update_draw_buffer(struct intel_context *intel)
    /*
     * Update depth and stencil test state
     */
-   ctx->Driver.Enable(ctx, GL_DEPTH_TEST,
-		      (ctx->Depth.Test && fb->Visual.depthBits > 0));
+   ctx->Driver.Enable(ctx, GL_DEPTH_TEST, ctx->Depth.Test);
    ctx->Driver.Enable(ctx, GL_STENCIL_TEST,
 		      (ctx->Stencil.Enabled && fb->Visual.stencilBits > 0));
 

@@ -196,6 +196,11 @@ read_stencil_pixels( struct gl_context *ctx,
    ctx->Driver.UnmapRenderbuffer(ctx, rb);
 }
 
+
+/**
+ * Try to do glReadPixels of RGBA data using a simple memcpy or swizzle.
+ * \return GL_TRUE if successful, GL_FALSE otherwise (use the slow path)
+ */
 static GLboolean
 fast_read_rgba_pixels_memcpy( struct gl_context *ctx,
 			      GLint x, GLint y,
@@ -208,13 +213,24 @@ fast_read_rgba_pixels_memcpy( struct gl_context *ctx,
    struct gl_renderbuffer *rb = ctx->ReadBuffer->_ColorReadBuffer;
    GLubyte *dst, *map;
    int dstStride, stride, j, texelBytes;
+   GLboolean swizzle_rb = GL_FALSE, copy_xrgb = GL_FALSE;
 
-   if (!_mesa_format_matches_format_and_type(rb->Format, format, type))
+   /* XXX we could check for other swizzle/special cases here as needed */
+   if (rb->Format == MESA_FORMAT_RGBA8888_REV &&
+       format == GL_BGRA &&
+       type == GL_UNSIGNED_INT_8_8_8_8_REV) {
+      swizzle_rb = GL_TRUE;
+   }
+   else if (rb->Format == MESA_FORMAT_XRGB8888 &&
+            format == GL_BGRA &&
+            type == GL_UNSIGNED_INT_8_8_8_8_REV) {
+      copy_xrgb = GL_TRUE;
+   }
+   else if (!_mesa_format_matches_format_and_type(rb->Format, format, type))
       return GL_FALSE;
 
    /* check for things we can't handle here */
-   if (packing->SwapBytes ||
-       packing->LsbFirst) {
+   if (packing->SwapBytes) {
       return GL_FALSE;
    }
 
@@ -240,10 +256,39 @@ fast_read_rgba_pixels_memcpy( struct gl_context *ctx,
    }
 
    texelBytes = _mesa_get_format_bytes(rb->Format);
-   for (j = 0; j < height; j++) {
-      memcpy(dst, map, width * texelBytes);
-      dst += dstStride;
-      map += stride;
+
+   if (swizzle_rb) {
+      /* swap R/B */
+      for (j = 0; j < height; j++) {
+         int i;
+         for (i = 0; i < width; i++) {
+            GLuint *dst4 = (GLuint *) dst, *map4 = (GLuint *) map;
+            GLuint pixel = map4[i];
+            dst4[i] = (pixel & 0xff00ff00)
+                   | ((pixel & 0x00ff0000) >> 16)
+                   | ((pixel & 0x000000ff) << 16);
+         }
+         dst += dstStride;
+         map += stride;
+      }
+   } else if (copy_xrgb) {
+      /* convert xrgb -> argb */
+      for (j = 0; j < height; j++) {
+         GLuint *dst4 = (GLuint *) dst, *map4 = (GLuint *) map;
+         int i;
+         for (i = 0; i < width; i++) {
+            dst4[i] = map4[i] | 0xff000000;  /* set A=0xff */
+         }
+         dst += dstStride;
+         map += stride;
+      }
+   } else {
+      /* just memcpy */
+      for (j = 0; j < height; j++) {
+         memcpy(dst, map, width * texelBytes);
+         dst += dstStride;
+         map += stride;
+      }
    }
 
    ctx->Driver.UnmapRenderbuffer(ctx, rb);
@@ -774,6 +819,12 @@ _mesa_ReadnPixelsARB( GLint x, GLint y, GLsizei width, GLsizei height,
       return;
    }
 
+   if (ctx->ReadBuffer->_Status != GL_FRAMEBUFFER_COMPLETE_EXT) {
+      _mesa_error(ctx, GL_INVALID_FRAMEBUFFER_OPERATION_EXT,
+                  "glReadPixels(incomplete framebuffer)" );
+      return;
+   }
+
    /* Check that the destination format and source buffer are both
     * integer-valued or both non-integer-valued.
     */
@@ -786,12 +837,6 @@ _mesa_ReadnPixelsARB( GLint x, GLint y, GLsizei width, GLsizei height,
                      "glReadPixels(integer / non-integer format mismatch");
          return;
       }
-   }
-
-   if (ctx->ReadBuffer->_Status != GL_FRAMEBUFFER_COMPLETE_EXT) {
-      _mesa_error(ctx, GL_INVALID_FRAMEBUFFER_OPERATION_EXT,
-                  "glReadPixels(incomplete framebuffer)" );
-      return;
    }
 
    if (ctx->ReadBuffer->Name != 0 && ctx->ReadBuffer->Visual.samples > 0) {

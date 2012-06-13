@@ -3,9 +3,9 @@ writing, 2.8 and 2.9), so pick a version. Let's assume the last version
 receives bug fixes quickly, so pick 2.9 for now.
 Index: mesa/configure.ac
 ===================================================================
---- mesa.orig/configure.ac	2012-01-18 16:06:14.824947429 +0200
-+++ mesa/configure.ac	2012-01-18 16:06:19.117076083 +0200
-@@ -1765,7 +1765,7 @@
+--- mesa.orig/configure.ac	2012-05-21 18:19:43.639922922 -0400
++++ mesa/configure.ac	2012-05-21 18:19:43.947922933 -0400
+@@ -1762,7 +1762,7 @@
      esac
  fi
  if test "x$enable_gallium_llvm" = xyes; then

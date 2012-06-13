@@ -183,6 +183,7 @@ intelGetString(struct gl_context * ctx, GLenum name)
 	 chipset = "Intel(R) Ivybridge Mobile";
 	 break;
       case PCI_CHIP_IVYBRIDGE_S_GT1:
+      case PCI_CHIP_IVYBRIDGE_S_GT2:
 	 chipset = "Intel(R) Ivybridge Server";
 	 break;
       default:
@@ -1225,6 +1226,10 @@ intel_process_dri2_buffer_with_separate_stencil(struct intel_context *intel,
    if (!rb)
       return;
 
+   /* Check if we failed to allocate the depth miptree earlier. */
+   if (buffer->attachment == __DRI_BUFFER_HIZ && rb->mt == NULL)
+     return;
+
    /* If the renderbuffer's and DRIbuffer's regions match, then continue. */
    if ((buffer->attachment != __DRI_BUFFER_HIZ &&
 	rb->mt &&
@@ -1266,6 +1271,7 @@ intel_process_dri2_buffer_with_separate_stencil(struct intel_context *intel,
     * due to failure to allocate new storage.
     */
    if (buffer->attachment == __DRI_BUFFER_HIZ) {
+      assert(rb->mt);
       intel_miptree_release(&rb->mt->hiz_mt);
    } else {
       intel_miptree_release(&rb->mt);
@@ -1291,6 +1297,7 @@ intel_process_dri2_buffer_with_separate_stencil(struct intel_context *intel,
 
    /* Associate buffer with new storage. */
    if (buffer->attachment == __DRI_BUFFER_HIZ) {
+      assert(rb->mt);
       rb->mt->hiz_mt = mt;
    } else {
       rb->mt = mt;

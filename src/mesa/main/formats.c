@@ -2568,10 +2568,10 @@ _mesa_format_matches_format_and_type(gl_format gl_format,
       return GL_FALSE;
 
    case MESA_FORMAT_RGB888:
-      return format == GL_RGB && type == GL_UNSIGNED_BYTE && littleEndian;
+      return format == GL_BGR && type == GL_UNSIGNED_BYTE && littleEndian;
 
    case MESA_FORMAT_BGR888:
-      return GL_FALSE;
+      return format == GL_RGB && type == GL_UNSIGNED_BYTE && littleEndian;
 
    case MESA_FORMAT_RGB565:
       return format == GL_RGB && type == GL_UNSIGNED_SHORT_5_6_5;

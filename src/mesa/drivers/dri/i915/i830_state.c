@@ -436,7 +436,10 @@ i830DepthMask(struct gl_context * ctx, GLboolean flag)
    struct i830_context *i830 = i830_context(ctx);
 
    DBG("%s flag (%d)\n", __FUNCTION__, flag);
-   
+
+   if (!ctx->DrawBuffer || !ctx->DrawBuffer->Visual.depthBits)
+      flag = false;
+
    I830_STATECHANGE(i830, I830_UPLOAD_CTX);
 
    i830->state.Ctx[I830_CTXREG_ENABLES_2] &= ~ENABLE_DIS_DEPTH_WRITE_MASK;
@@ -473,7 +476,7 @@ static void
 i830PolygonStipple(struct gl_context * ctx, const GLubyte * mask)
 {
    struct i830_context *i830 = i830_context(ctx);
-   const GLubyte *m = mask;
+   const GLubyte *m;
    GLubyte p[4];
    int i, j, k;
    int active = (ctx->Polygon.StippleFlag &&
@@ -484,6 +487,12 @@ i830PolygonStipple(struct gl_context * ctx, const GLubyte * mask)
       I830_STATECHANGE(i830, I830_UPLOAD_STIPPLE);
       i830->state.Stipple[I830_STPREG_ST1] &= ~ST1_ENABLE;
    }
+
+   /* Use the already unpacked stipple data from the context rather than the
+    * uninterpreted mask passed in.
+    */
+   mask = (const GLubyte *)ctx->PolygonStipple;
+   m = mask;
 
    p[0] = mask[12] & 0xf;
    p[0] |= p[0] << 4;
@@ -794,6 +803,9 @@ i830Enable(struct gl_context * ctx, GLenum cap, GLboolean state)
    case GL_DEPTH_TEST:
       I830_STATECHANGE(i830, I830_UPLOAD_CTX);
       i830->state.Ctx[I830_CTXREG_ENABLES_1] &= ~ENABLE_DIS_DEPTH_TEST_MASK;
+
+      if (!ctx->DrawBuffer || !ctx->DrawBuffer->Visual.depthBits)
+	 state = false;
 
       if (state)
          i830->state.Ctx[I830_CTXREG_ENABLES_1] |= ENABLE_DEPTH_TEST;

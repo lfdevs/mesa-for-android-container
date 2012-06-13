@@ -46,6 +46,8 @@ _mesa_GetActiveUniformARB(GLhandleARB program, GLuint index,
    struct gl_shader_program *shProg =
       _mesa_lookup_shader_program_err(ctx, program, "glGetActiveUniform");
 
+   ASSERT_OUTSIDE_BEGIN_END(ctx);
+
    if (!shProg)
       return;
 
@@ -905,8 +907,10 @@ _mesa_get_uniform_location(struct gl_context *ctx,
       name_copy[i-1] = '\0';
 
       offset = strtol(&name[i], NULL, 10);
-      if (offset < 0)
+      if (offset < 0) {
+	 free(name_copy);
 	 return -1;
+      }
 
       array_lookup = true;
    } else {

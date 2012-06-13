@@ -1048,6 +1048,10 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
 
     /* Override some states for Draw. */
     rs->rs_draw.sprite_coord_enable = 0; /* We can do this in HW. */
+    rs->rs_draw.offset_point = 0;
+    rs->rs_draw.offset_line = 0;
+    rs->rs_draw.offset_tri = 0;
+    rs->rs_draw.offset_clamp = 0;
 
 #ifdef PIPE_ARCH_LITTLE_ENDIAN
     vap_control_status = R300_VC_NO_SWAP;
@@ -1595,7 +1599,6 @@ static void r300_set_vertex_buffers(struct pipe_context* pipe,
                                     const struct pipe_vertex_buffer* buffers)
 {
     struct r300_context* r300 = r300_context(pipe);
-    unsigned i;
     struct pipe_vertex_buffer dummy_vb = {0};
 
     /* There must be at least one vertex buffer set, otherwise it locks up. */
@@ -1605,18 +1608,13 @@ static void r300_set_vertex_buffers(struct pipe_context* pipe,
         count = 1;
     }
 
-    u_vbuf_set_vertex_buffers(r300->vbuf_mgr, count, buffers);
-
     if (r300->screen->caps.has_tcl) {
-        /* HW TCL. */
-        for (i = 0; i < count; i++) {
-            if (buffers[i].buffer &&
-		!r300_resource(buffers[i].buffer)->b.user_ptr) {
-            }
-        }
+        u_vbuf_set_vertex_buffers(r300->vbuf_mgr, count, buffers);
         r300->vertex_arrays_dirty = TRUE;
     } else {
-        /* SW TCL. */
+        util_copy_vertex_buffers(r300->swtcl_vertex_buffer,
+                                 &r300->swtcl_nr_vertex_buffers,
+                                 buffers, count);
         draw_set_vertex_buffers(r300->draw, count, buffers);
     }
 }
@@ -1626,9 +1624,15 @@ static void r300_set_index_buffer(struct pipe_context* pipe,
 {
     struct r300_context* r300 = r300_context(pipe);
 
-    u_vbuf_set_index_buffer(r300->vbuf_mgr, ib);
-
-    if (!r300->screen->caps.has_tcl) {
+    if (r300->screen->caps.has_tcl) {
+        u_vbuf_set_index_buffer(r300->vbuf_mgr, ib);
+    } else {
+        if (ib) {
+            pipe_resource_reference(&r300->swtcl_index_buffer.buffer, ib->buffer);
+            memcpy(&r300->swtcl_index_buffer, ib, sizeof(*ib));
+        } else {
+            pipe_resource_reference(&r300->swtcl_index_buffer.buffer, NULL);
+        }
         draw_set_index_buffer(r300->draw, ib);
     }
 }
@@ -1702,11 +1706,11 @@ static void* r300_create_vertex_elements_state(struct pipe_context* pipe,
         return NULL;
 
     velems->count = count;
-    velems->vmgr_elements =
-        u_vbuf_create_vertex_elements(r300->vbuf_mgr, count, attribs,
-                                          velems->velem);
 
     if (r300_screen(pipe->screen)->caps.has_tcl) {
+        velems->vmgr_elements =
+            u_vbuf_create_vertex_elements(r300->vbuf_mgr, count, attribs,
+                                          velems->velem);
         /* Setup PSC.
          * The unused components will be replaced by (..., 0, 1). */
         r300_vertex_psc(velems);
@@ -1716,6 +1720,8 @@ static void* r300_create_vertex_elements_state(struct pipe_context* pipe,
                 align(util_format_get_blocksize(velems->velem[i].src_format), 4);
             velems->vertex_size_dwords += velems->format_size[i] / 4;
         }
+    } else {
+        memcpy(velems->velem, attribs, count * sizeof(struct pipe_vertex_element));
     }
 
     return velems;
@@ -1733,9 +1739,9 @@ static void r300_bind_vertex_elements_state(struct pipe_context *pipe,
 
     r300->velems = velems;
 
-    u_vbuf_bind_vertex_elements(r300->vbuf_mgr, state, velems->vmgr_elements);
-
-    if (r300->draw) {
+    if (r300->screen->caps.has_tcl) {
+        u_vbuf_bind_vertex_elements(r300->vbuf_mgr, state, velems->vmgr_elements);
+    } else {
         draw_set_vertex_elements(r300->draw, velems->count, velems->velem);
         return;
     }
@@ -1750,7 +1756,9 @@ static void r300_delete_vertex_elements_state(struct pipe_context *pipe, void *s
     struct r300_context *r300 = r300_context(pipe);
     struct r300_vertex_element_state *velems = state;
 
-    u_vbuf_destroy_vertex_elements(r300->vbuf_mgr, velems->vmgr_elements);
+    if (r300->screen->caps.has_tcl) {
+        u_vbuf_destroy_vertex_elements(r300->vbuf_mgr, velems->vmgr_elements);
+    }
     FREE(state);
 }
 
@@ -1765,10 +1773,10 @@ static void* r300_create_vs_state(struct pipe_context* pipe,
     vs->state.tokens = tgsi_dup_tokens(shader->tokens);
 
     if (r300->screen->caps.has_tcl) {
-        r300_init_vs_outputs(vs);
+        r300_init_vs_outputs(r300, vs);
         r300_translate_vertex_shader(r300, vs);
     } else {
-        r300_draw_init_vertex_shader(r300->draw, vs);
+        r300_draw_init_vertex_shader(r300, vs);
     }
 
     return vs;
@@ -1794,9 +1802,8 @@ static void r300_bind_vs_state(struct pipe_context* pipe, void* shader)
     if (r300->screen->caps.has_tcl) {
         unsigned fc_op_dwords = r300->screen->caps.is_r500 ? 3 : 2;
         r300_mark_atom_dirty(r300, &r300->vs_state);
-        r300->vs_state.size =
-                vs->code.length + 9 +
-        (vs->code.num_fc_ops ? vs->code.num_fc_ops * fc_op_dwords + 4 : 0);
+        r300->vs_state.size = vs->code.length + 9 +
+			(R300_VS_MAX_FC_OPS * fc_op_dwords + 4);
 
         r300_mark_atom_dirty(r300, &r300->vs_constants);
         r300->vs_constants.size =

@@ -1198,6 +1198,7 @@ static char *fallbackStrings[] = {
    [19] = "Smooth point",
    [20] = "point sprite coord origin",
    [21] = "depth/color drawing offset",
+   [22] = "coord replace(SPRITE POINT ENABLE)",
 };
 
 

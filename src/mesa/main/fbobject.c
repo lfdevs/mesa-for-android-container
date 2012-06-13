@@ -1934,6 +1934,7 @@ framebuffer_texture(struct gl_context *ctx, const char *caller, GLenum target,
    struct gl_renderbuffer_attachment *att;
    struct gl_texture_object *texObj = NULL;
    struct gl_framebuffer *fb;
+   GLenum maxLevelsTarget;
 
    ASSERT_OUTSIDE_BEGIN_END(ctx);
 
@@ -2003,8 +2004,9 @@ framebuffer_texture(struct gl_context *ctx, const char *caller, GLenum target,
          }
       }
 
+      maxLevelsTarget = textarget ? textarget : texObj->Target;
       if ((level < 0) ||
-          (level >= _mesa_max_texture_levels(ctx, texObj->Target))) {
+          (level >= _mesa_max_texture_levels(ctx, maxLevelsTarget))) {
          _mesa_error(ctx, GL_INVALID_VALUE,
                      "glFramebufferTexture%sEXT(level)", caller);
          return;

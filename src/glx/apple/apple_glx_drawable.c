@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <pthread.h>
+#include <string.h>
 #include "apple_glx.h"
 #include "apple_glx_context.h"
 #include "apple_glx_drawable.h"
@@ -48,8 +49,8 @@ lock_drawables_list(void)
    err = pthread_mutex_lock(&drawables_lock);
 
    if (err) {
-      fprintf(stderr, "pthread_mutex_lock failure in %s: %d\n",
-              __func__, err);
+      fprintf(stderr, "pthread_mutex_lock failure in %s: %s\n",
+              __func__, strerror(err));
       abort();
    }
 }
@@ -62,8 +63,8 @@ unlock_drawables_list(void)
    err = pthread_mutex_unlock(&drawables_lock);
 
    if (err) {
-      fprintf(stderr, "pthread_mutex_unlock failure in %s: %d\n",
-              __func__, err);
+      fprintf(stderr, "pthread_mutex_unlock failure in %s: %s\n",
+              __func__, strerror(err));
       abort();
    }
 }
@@ -95,7 +96,7 @@ drawable_lock(struct apple_glx_drawable *agd)
    err = pthread_mutex_lock(&agd->mutex);
 
    if (err) {
-      fprintf(stderr, "pthread_mutex_lock error: %d\n", err);
+      fprintf(stderr, "pthread_mutex_lock error: %s\n", strerror(err));
       abort();
    }
 }
@@ -108,7 +109,7 @@ drawable_unlock(struct apple_glx_drawable *d)
    err = pthread_mutex_unlock(&d->mutex);
 
    if (err) {
-      fprintf(stderr, "pthread_mutex_unlock error: %d\n", err);
+      fprintf(stderr, "pthread_mutex_unlock error: %s\n", strerror(err));
       abort();
    }
 }
@@ -135,6 +136,7 @@ release_drawable(struct apple_glx_drawable *d)
 static bool
 destroy_drawable(struct apple_glx_drawable *d)
 {
+   int err;
 
    d->lock(d);
 
@@ -172,6 +174,15 @@ destroy_drawable(struct apple_glx_drawable *d)
 
    apple_glx_diagnostic("%s: freeing %p\n", __func__, (void *) d);
 
+   /* Stupid recursive locks */
+   while (pthread_mutex_unlock(&d->mutex) == 0);
+
+   err = pthread_mutex_destroy(&d->mutex);
+   if (err) {
+      fprintf(stderr, "pthread_mutex_destroy error: %s\n", strerror(err));
+      abort();
+   }
+   
    free(d);
 
    /* So that the locks are balanced and the caller correctly unlocks. */
@@ -238,7 +249,7 @@ common_init(Display * dpy, GLXDrawable drawable, struct apple_glx_drawable *d)
    err = pthread_mutexattr_init(&attr);
 
    if (err) {
-      fprintf(stderr, "pthread_mutexattr_init error: %d\n", err);
+      fprintf(stderr, "pthread_mutexattr_init error: %s\n", strerror(err));
       abort();
    }
 
@@ -250,14 +261,14 @@ common_init(Display * dpy, GLXDrawable drawable, struct apple_glx_drawable *d)
    err = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
 
    if (err) {
-      fprintf(stderr, "error: setting pthread mutex type: %d\n", err);
+      fprintf(stderr, "error: setting pthread mutex type: %s\n", strerror(err));
       abort();
    }
 
    err = pthread_mutex_init(&d->mutex, &attr);
 
    if (err) {
-      fprintf(stderr, "pthread_mutex_init error: %d\n", err);
+      fprintf(stderr, "pthread_mutex_init error: %s\n", strerror(err));
       abort();
    }
 

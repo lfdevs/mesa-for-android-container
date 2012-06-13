@@ -36,6 +36,7 @@
 #include "swrast.h"
 #include "s_blend.h"
 #include "s_context.h"
+#include "s_fragprog.h"
 #include "s_lines.h"
 #include "s_points.h"
 #include "s_span.h"

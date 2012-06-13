@@ -206,6 +206,7 @@ apple_glx_surface_destroy(unsigned int uid)
    if (d) {
       d->types.surface.pending_destroy = true;
       d->release(d);
+
       /* 
        * We release 2 references to the surface.  One was acquired by
        * the find, and the other was leftover from a context, or 
@@ -216,8 +217,9 @@ apple_glx_surface_destroy(unsigned int uid)
        * to actually destroy it when the pending_destroy is processed
        * by a glViewport callback (see apple_glx_context_update()).
        */
-      d->destroy(d);
-
-      d->unlock(d);
+      if (!d->destroy(d)) {
+          /* apple_glx_drawable_find_by_uid returns a locked drawable */
+          d->unlock(d);
+      }
    }
 }

@@ -243,39 +243,9 @@ static void wmesa_flush(struct gl_context *ctx)
 /*****                   CLEAR Functions                          *****/
 /**********************************************************************/
 
-/* If we do not implement these, Mesa clears the buffers via the pixel
- * span writing interface, which is very slow for a clear operation.
- */
-
-/*
- * Set the color used to clear the color buffer.
- */
-static void clear_color(struct gl_context *ctx,
-                        const union gl_color_union color)
-{
-    WMesaContext pwc = wmesa_context(ctx);
-    GLubyte col[3];
-
-    UNCLAMPED_FLOAT_TO_UBYTE(col[0], color.f[0]);
-    UNCLAMPED_FLOAT_TO_UBYTE(col[1], color.f[1]);
-    UNCLAMPED_FLOAT_TO_UBYTE(col[2], color.f[2]);
-    pwc->clearColorRef = RGB(col[0], col[1], col[2]);
-    DeleteObject(pwc->clearPen);
-    DeleteObject(pwc->clearBrush);
-    pwc->clearPen = CreatePen(PS_SOLID, 1, pwc->clearColorRef); 
-    pwc->clearBrush = CreateSolidBrush(pwc->clearColorRef); 
-}
-
-
 /* 
- * Clear the specified region of the color buffer using the clear color 
- * or index as specified by one of the two functions above. 
- * 
- * This procedure clears either the front and/or the back COLOR buffers. 
- * Only the "left" buffer is cleared since we are not stereo. 
- * Clearing of the other non-color buffers is left to the swrast. 
+ * Clear the color/depth/stencil buffers.
  */ 
-
 static void clear(struct gl_context *ctx, GLbitfield mask)
 {
 #define FLIP(Y)  (ctx->DrawBuffer->Height - (Y) - 1)
@@ -296,6 +266,20 @@ static void clear(struct gl_context *ctx, GLbitfield mask)
 	!ctx->Color.ColorMask[0][3]) {
 	_swrast_Clear(ctx, mask);
 	return;
+    }
+
+    if (mask & BUFFER_BITS_COLOR) {
+       /* setup the clearing color */
+       const union gl_color_union color = ctx->Color.ClearColor;
+       GLubyte col[3];
+       UNCLAMPED_FLOAT_TO_UBYTE(col[0], color.f[0]);
+       UNCLAMPED_FLOAT_TO_UBYTE(col[1], color.f[1]);
+       UNCLAMPED_FLOAT_TO_UBYTE(col[2], color.f[2]);
+       pwc->clearColorRef = RGB(col[0], col[1], col[2]);
+       DeleteObject(pwc->clearPen);
+       DeleteObject(pwc->clearBrush);
+       pwc->clearPen = CreatePen(PS_SOLID, 1, pwc->clearColorRef); 
+       pwc->clearBrush = CreateSolidBrush(pwc->clearColorRef); 
     }
 
     /* Back buffer */
@@ -940,54 +924,6 @@ wmesa_renderbuffer_storage(struct gl_context *ctx,
 
 
 /**
- * Plug in the Get/PutRow/Values functions for a renderbuffer depending
- * on if we're drawing to the front or back color buffer.
- */
-static void
-wmesa_set_renderbuffer_funcs(struct gl_renderbuffer *rb, int pixelformat,
-                             int cColorBits, int double_buffer)
-{
-    if (double_buffer) {
-        /* back buffer */
-	/* Picking the correct span functions is important because
-	 * the DIB was allocated with the indicated depth. */
-	switch(pixelformat) {
-	case PF_5R6G5B:
-	    rb->PutRow = write_rgba_span_16;
-	    rb->PutValues = write_rgba_pixels_16;
-	    rb->GetRow = read_rgba_span_16;
-	    rb->GetValues = read_rgba_pixels_16;
-	    break;
-	case PF_8R8G8B:
-		if (cColorBits == 24)
-		{
-		    rb->PutRow = write_rgba_span_24;
-		    rb->PutValues = write_rgba_pixels_24;
-		    rb->GetRow = read_rgba_span_24;
-		    rb->GetValues = read_rgba_pixels_24;
-		}
-		else
-		{
-                    rb->PutRow = write_rgba_span_32;
-                    rb->PutValues = write_rgba_pixels_32;
-                    rb->GetRow = read_rgba_span_32;
-                    rb->GetValues = read_rgba_pixels_32;
-		}
-	    break;
-	default:
-	    break;
-	}
-    }
-    else {
-        /* front buffer (actual Windows window) */
-	rb->PutRow = write_rgba_span_front;
-	rb->PutValues = write_rgba_pixels_front;
-	rb->GetRow = read_rgba_span_front;
-	rb->GetValues = read_rgba_pixels_front;
-    }
-}
-
-/**
  * Called by ctx->Driver.ResizeBuffers()
  * Resize the front/back colorbuffers to match the latest window size.
  */
@@ -1143,7 +1079,6 @@ WMesaContext WMesaCreateContext(HDC hDC,
     functions.GetBufferSize = wmesa_get_buffer_size;
     functions.Flush = wmesa_flush;
     functions.Clear = clear;
-    functions.ClearColor = clear_color;
     functions.ResizeBuffers = wmesa_resize_buffers;
     functions.Viewport = wmesa_viewport;
 
@@ -1275,11 +1210,9 @@ void WMesaMakeCurrent(WMesaContext c, HDC hdc)
         if (visual->doubleBufferMode == 1) {
             rb = wmesa_new_renderbuffer();
             _mesa_add_renderbuffer(&pwfb->Base, BUFFER_BACK_LEFT, rb);
-            wmesa_set_renderbuffer_funcs(rb, pwfb->pixelformat, pwfb->cColorBits, 1);
 	}
         rb = wmesa_new_renderbuffer();
         _mesa_add_renderbuffer(&pwfb->Base, BUFFER_FRONT_LEFT, rb);
-        wmesa_set_renderbuffer_funcs(rb, pwfb->pixelformat, pwfb->cColorBits, 0);
 
 	/* Let Mesa own the Depth, Stencil, and Accum buffers */
         _swrast_add_soft_renderbuffers(&pwfb->Base,

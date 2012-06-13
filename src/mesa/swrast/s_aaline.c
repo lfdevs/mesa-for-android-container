@@ -29,6 +29,7 @@
 #include "main/mtypes.h"
 #include "swrast/s_aaline.h"
 #include "swrast/s_context.h"
+#include "swrast/s_fragprog.h"
 #include "swrast/s_span.h"
 #include "swrast/swrast.h"
 
