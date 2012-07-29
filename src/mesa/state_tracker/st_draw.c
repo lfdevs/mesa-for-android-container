@@ -979,6 +979,7 @@ st_draw_vbo(struct gl_context *ctx,
    struct pipe_index_buffer ibuffer;
    struct pipe_draw_info info;
    unsigned i, num_instances = 1;
+   unsigned max_index_plus_base;
    GLboolean new_array =
       st->dirty.st &&
       (st->dirty.mesa & (_NEW_ARRAY | _NEW_PROGRAM | _NEW_BUFFER_OBJECT)) != 0;
@@ -987,6 +988,8 @@ st_draw_vbo(struct gl_context *ctx,
    assert(ctx->NewState == 0x0);
 
    if (ib) {
+      int max_base_vertex = 0;
+
       /* Gallium probably doesn't want this in some cases. */
       if (!index_bounds_valid)
          if (!all_varyings_in_vbos(arrays))
@@ -994,7 +997,16 @@ st_draw_vbo(struct gl_context *ctx,
 
       for (i = 0; i < nr_prims; i++) {
          num_instances = MAX2(num_instances, prims[i].num_instances);
+         max_base_vertex = MAX2(max_base_vertex, prims[i].basevertex);
       }
+
+      /* Compute the sum of max_index and max_base_vertex.  That's the value
+       * we need to use when creating buffers.
+       */
+      if (max_index == ~0)
+         max_index_plus_base = max_index;
+      else
+         max_index_plus_base = max_index + max_base_vertex;
    }
    else {
       /* Get min/max index for non-indexed drawing. */
@@ -1006,6 +1018,9 @@ st_draw_vbo(struct gl_context *ctx,
          max_index = MAX2(max_index, prims[i].start + prims[i].count - 1);
          num_instances = MAX2(num_instances, prims[i].num_instances);
       }
+
+      /* The base vertex offset only applies to indexed drawing */
+      max_index_plus_base = max_index;
    }
 
    /* Validate state. */
@@ -1025,7 +1040,8 @@ st_draw_vbo(struct gl_context *ctx,
       st_validate_state(st);
 
       if (new_array) {
-         if (!st_validate_varrays(ctx, arrays, max_index, num_instances)) {
+         if (!st_validate_varrays(ctx, arrays, max_index_plus_base,
+                                  num_instances)) {
             /* probably out of memory, no-op the draw call */
             return;
          }
@@ -1049,7 +1065,7 @@ st_draw_vbo(struct gl_context *ctx,
             unsigned element_size = st->user_attrib[i].element_size;
             unsigned stride = st->user_attrib[i].stride;
             unsigned min_offset = min_index * stride;
-            unsigned max_offset = max_index * stride + element_size;
+            unsigned max_offset = max_index_plus_base * stride + element_size;
 
             assert(max_offset > min_offset);
 

@@ -42,6 +42,7 @@
 #include "mfeatures.h"
 #include "mtypes.h"
 #include "texobj.h"
+#include "transformfeedback.h"
 
 
 /* Debug flags */
@@ -524,7 +525,7 @@ _mesa_copy_buffer_subdata(struct gl_context *ctx,
                           GLintptr readOffset, GLintptr writeOffset,
                           GLsizeiptr size)
 {
-   void *srcPtr, *dstPtr;
+   GLubyte *srcPtr, *dstPtr;
 
    /* the buffers should not be mapped */
    assert(!_mesa_bufferobj_mapped(src));
@@ -789,6 +790,24 @@ _mesa_DeleteBuffersARB(GLsizei n, const GLuint *ids)
          }
          if (arrayObj->ElementArrayBufferObj == bufObj) {
             _mesa_BindBufferARB( GL_ELEMENT_ARRAY_BUFFER_ARB, 0 );
+         }
+
+         /* unbind ARB_copy_buffer binding points */
+         if (ctx->CopyReadBuffer == bufObj) {
+            _mesa_BindBufferARB( GL_COPY_READ_BUFFER, 0 );
+         }
+         if (ctx->CopyWriteBuffer == bufObj) {
+            _mesa_BindBufferARB( GL_COPY_WRITE_BUFFER, 0 );
+         }
+
+         /* unbind transform feedback binding points */
+         if (ctx->TransformFeedback.CurrentBuffer == bufObj) {
+            _mesa_BindBufferARB( GL_TRANSFORM_FEEDBACK_BUFFER, 0 );
+         }
+         for (j = 0; j < MAX_FEEDBACK_ATTRIBS; j++) {
+            if (ctx->TransformFeedback.CurrentObject->Buffers[j] == bufObj) {
+               _mesa_BindBufferBase( GL_TRANSFORM_FEEDBACK_BUFFER, j, 0 );
+            }
          }
 
          /* unbind any pixel pack/unpack pointers bound to this buffer */
@@ -1308,6 +1327,12 @@ _mesa_CopyBufferSubData(GLenum readTarget, GLenum writeTarget,
    if (writeOffset < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "glCopyBuffserSubData(writeOffset = %d)", (int) writeOffset);
+      return;
+   }
+
+   if (size < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "glCopyBufferSubData(writeOffset = %d)", (int) size);
       return;
    }
 

@@ -142,7 +142,12 @@ st_renderbuffer_alloc_storage(struct gl_context * ctx,
       if (util_format_is_depth_or_stencil(format)) {
          template.bind = PIPE_BIND_DEPTH_STENCIL;
       }
+      else if (strb->Base.Name != 0) {
+         /* this is a user-created renderbuffer */
+         template.bind = PIPE_BIND_RENDER_TARGET;
+      }
       else {
+         /* this is a window-system buffer */
          template.bind = (PIPE_BIND_DISPLAY_TARGET |
                           PIPE_BIND_RENDER_TARGET);
       }
@@ -203,6 +208,7 @@ st_new_renderbuffer(struct gl_context *ctx, GLuint name)
 {
    struct st_renderbuffer *strb = ST_CALLOC_STRUCT(st_renderbuffer);
    if (strb) {
+      assert(name != 0);
       _mesa_init_renderbuffer(&strb->Base, name);
       strb->Base.Delete = st_renderbuffer_delete;
       strb->Base.AllocStorage = st_renderbuffer_alloc_storage;
@@ -666,6 +672,8 @@ st_MapRenderbuffer(struct gl_context *ctx,
       usage |= PIPE_TRANSFER_READ;
    if (mode & GL_MAP_WRITE_BIT)
       usage |= PIPE_TRANSFER_WRITE;
+   if (mode & GL_MAP_INVALIDATE_RANGE_BIT)
+      usage |= PIPE_TRANSFER_DISCARD_RANGE;
 
    /* Note: y=0=bottom of buffer while y2=0=top of buffer.
     * 'invert' will be true for window-system buffers and false for

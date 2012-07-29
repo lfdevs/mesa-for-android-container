@@ -650,6 +650,7 @@ _mesa_error_check_format_type(struct gl_context *ctx, GLenum format,
 {
    const char *readDraw = drawing ? "Draw" : "Read";
    const GLboolean reading = !drawing;
+   GLenum err;
 
    /* state validation should have already been done */
    ASSERT(ctx->NewState == 0x0);
@@ -671,9 +672,9 @@ _mesa_error_check_format_type(struct gl_context *ctx, GLenum format,
    }
 
    /* basic combinations test */
-   if (!_mesa_is_legal_format_and_type(ctx, format, type)) {
-      _mesa_error(ctx, GL_INVALID_ENUM,
-                  "gl%sPixels(format or type)", readDraw);
+   err = _mesa_error_check_format_and_type(ctx, format, type);
+   if (err != GL_NO_ERROR) {
+      _mesa_error(ctx, err, "gl%sPixels(format or type)", readDraw);
       return GL_TRUE;
    }
 
@@ -777,7 +778,7 @@ _mesa_error_check_format_type(struct gl_context *ctx, GLenum format,
       }
       break;
    default:
-      /* this should have been caught in _mesa_is_legal_format_type() */
+      /* this should have been caught in _mesa_error_check_format_type() */
       _mesa_problem(ctx, "unexpected format in _mesa_%sPixels", readDraw);
       return GL_TRUE;
    }

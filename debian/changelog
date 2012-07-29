@@ -1,3 +1,12 @@
+mesa (8.0.4-1) unstable; urgency=low
+
+  [ Sven Joachim ]
+  * New upstream stable release (Closes: #682703).
+  * Cherry-pick commit fbf86c7f0f (i965/gen7: Reduce GT1 WM thread count
+    according to updated BSpec.) from upstream.
+
+ -- Cyril Brulebois <kibi@debian.org>  Sun, 29 Jul 2012 13:17:06 +0200
+
 mesa (8.0.3-1) unstable; urgency=low
 
   [ Robert Hooker ]

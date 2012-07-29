@@ -189,6 +189,8 @@ st_MapTextureImage(struct gl_context *ctx,
       pipeMode |= PIPE_TRANSFER_READ;
    if (mode & GL_MAP_WRITE_BIT)
       pipeMode |= PIPE_TRANSFER_WRITE;
+   if (mode & GL_MAP_INVALIDATE_RANGE_BIT)
+      pipeMode |= PIPE_TRANSFER_DISCARD_RANGE;
 
    map = st_texture_image_map(st, stImage, slice, pipeMode, x, y, w, h);
    if (map) {
@@ -406,6 +408,8 @@ guess_and_alloc_texture(struct st_context *st,
                                  ptLayers,
                                  bindings);
 
+   stObj->lastLevel = lastLevel;
+
    DBG("%s returning %d\n", __FUNCTION__, (stObj->pt != NULL));
 
    return stObj->pt != NULL;
@@ -607,8 +611,7 @@ decompress_with_blit(struct gl_context * ctx,
    struct pipe_context *pipe = st->pipe;
    struct st_texture_image *stImage = st_texture_image(texImage);
    struct st_texture_object *stObj = st_texture_object(texImage->TexObject);
-   struct pipe_sampler_view *src_view =
-      st_get_texture_sampler_view(stObj, pipe);
+   struct pipe_sampler_view *src_view;
    const GLuint width = texImage->Width;
    const GLuint height = texImage->Height;
    struct pipe_surface *dst_surface;
@@ -630,8 +633,22 @@ decompress_with_blit(struct gl_context * ctx,
       pipe->render_condition(pipe, NULL, 0);
    }
 
-   /* Choose the source mipmap level */
-   src_view->u.tex.first_level = src_view->u.tex.last_level = texImage->Level;
+   /* Create sampler view that limits fetches to the source mipmap level */
+   {
+      struct pipe_sampler_view sv_temp;
+
+      u_sampler_view_default_template(&sv_temp, stObj->pt, stObj->pt->format);
+
+      sv_temp.format = util_format_linear(sv_temp.format);
+      sv_temp.u.tex.first_level =
+      sv_temp.u.tex.last_level = texImage->Level;
+
+      src_view = pipe->create_sampler_view(pipe, stObj->pt, &sv_temp);
+      if (!src_view) {
+         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage");
+         return;
+      }
+   }
 
    /* blit/render/decompress */
    util_blit_pixels_tex(st->blit,
@@ -700,6 +717,8 @@ decompress_with_blit(struct gl_context * ctx,
 
    /* destroy the temp / dest surface */
    util_destroy_rgba_surface(dst_texture, dst_surface);
+
+   pipe_sampler_view_reference(&src_view, NULL);
 }
 
 

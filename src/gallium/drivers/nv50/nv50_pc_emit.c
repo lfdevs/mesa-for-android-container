@@ -865,8 +865,10 @@ emit_flop(struct nv_pc *pc, struct nv_instruction *i)
    assert(SFILE(i, 0) == NV_FILE_GPR);
 
    if (!i->is_long) {
+      assert(i->opcode == NV_OP_RCP);
       emit_form_MUL(pc, i);
-      assert(i->opcode == NV_OP_RCP && !src0->mod);
+      if (src0->mod & NV_MOD_NEG) pc->emit[0] |= 0x00400000;
+      if (src0->mod & NV_MOD_ABS) pc->emit[0] |= 0x00008000;
       return;
    }
 

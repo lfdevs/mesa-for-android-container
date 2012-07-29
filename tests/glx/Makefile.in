@@ -335,10 +335,10 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-AM_CFLAGS = -I$(top_builddir)/src/glx -I$(top_builddir)/src/mapi \
+AM_CFLAGS = -I$(top_builddir)/src/glx -I$(top_builddir)/src/mapi -I$(top_builddir)/include \
 	$(X11_CFLAGS) $(GTEST_CFLAGS)
 
-AM_CXXFLAGS = -I$(top_builddir)/src/glx -I$(top_builddir)/src/mapi \
+AM_CXXFLAGS = -I$(top_builddir)/src/glx -I$(top_builddir)/src/mapi -I$(top_builddir)/include \
 	$(X11_CFLAGS) $(GTEST_CFLAGS)
 
 @HAVE_GTEST_TRUE@@HAVE_XCB_GLX_CREATE_CONTEXT_TRUE@glx_unittest_SOURCES = \

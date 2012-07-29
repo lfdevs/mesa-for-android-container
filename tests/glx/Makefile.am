@@ -1,6 +1,6 @@
-AM_CFLAGS = -I$(top_builddir)/src/glx -I$(top_builddir)/src/mapi \
+AM_CFLAGS = -I$(top_builddir)/src/glx -I$(top_builddir)/src/mapi -I$(top_builddir)/include \
 	$(X11_CFLAGS) $(GTEST_CFLAGS)
-AM_CXXFLAGS = -I$(top_builddir)/src/glx -I$(top_builddir)/src/mapi \
+AM_CXXFLAGS = -I$(top_builddir)/src/glx -I$(top_builddir)/src/mapi -I$(top_builddir)/include \
 	$(X11_CFLAGS) $(GTEST_CFLAGS)
 
 if HAVE_GTEST

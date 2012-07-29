@@ -76,6 +76,7 @@ fs_visitor::visit(ir_variable *ir)
 	 /* Writing gl_FragColor outputs to all color regions. */
 	 for (int i = 0; i < MAX2(c->key.nr_color_regions, 1); i++) {
 	    this->outputs[i] = *reg;
+	    this->output_components[i] = 4;
 	 }
       } else if (ir->location == FRAG_RESULT_DEPTH) {
 	 this->frag_depth = ir;
@@ -84,11 +85,16 @@ fs_visitor::visit(ir_variable *ir)
 	 assert(ir->location >= FRAG_RESULT_DATA0 &&
 		ir->location < FRAG_RESULT_DATA0 + BRW_MAX_DRAW_BUFFERS);
 
+	 int vector_elements =
+	    ir->type->is_array() ? ir->type->fields.array->vector_elements
+				 : ir->type->vector_elements;
+
 	 /* General color output. */
 	 for (unsigned int i = 0; i < MAX2(1, ir->type->length); i++) {
 	    int output = ir->location - FRAG_RESULT_DATA0 + i;
 	    this->outputs[output] = *reg;
-	    this->outputs[output].reg_offset += 4 * i;
+	    this->outputs[output].reg_offset += vector_elements * i;
+	    this->output_components[output] = vector_elements;
 	 }
       }
    } else if (ir->mode == ir_var_uniform) {
@@ -820,20 +826,36 @@ fs_visitor::emit_texture_gen5(ir_texture *ir, fs_reg dst, fs_reg coordinate,
    const int vector_elements =
       ir->coordinate ? ir->coordinate->type->vector_elements : 0;
 
-   if (ir->offset) {
-      /* The offsets set up by the ir_texture visitor are in the
-       * m1 header, so we can't go headerless.
+   if (ir->offset != NULL && ir->op == ir_txf) {
+      /* It appears that the ld instruction used for txf does its
+       * address bounds check before adding in the offset.  To work
+       * around this, just add the integer offset to the integer texel
+       * coordinate, and don't put the offset in the header.
        */
-      header_present = true;
-      mlen++;
-      base_mrf--;
-   }
+      ir_constant *offset = ir->offset->as_constant();
+      for (int i = 0; i < vector_elements; i++) {
+	 emit(BRW_OPCODE_ADD,
+	      fs_reg(MRF, base_mrf + mlen + i * reg_width, coordinate.type),
+	      coordinate,
+	      offset->value.i[i]);
+	 coordinate.reg_offset++;
+      }
+   } else {
+      if (ir->offset) {
+	 /* The offsets set up by the ir_texture visitor are in the
+	  * m1 header, so we can't go headerless.
+	  */
+	 header_present = true;
+	 mlen++;
+	 base_mrf--;
+      }
 
-   for (int i = 0; i < vector_elements; i++) {
-      emit(BRW_OPCODE_MOV,
-	   fs_reg(MRF, base_mrf + mlen + i * reg_width, coordinate.type),
-	   coordinate);
-      coordinate.reg_offset++;
+      for (int i = 0; i < vector_elements; i++) {
+	 emit(BRW_OPCODE_MOV,
+	      fs_reg(MRF, base_mrf + mlen + i * reg_width, coordinate.type),
+	      coordinate);
+	 coordinate.reg_offset++;
+      }
    }
    mlen += vector_elements * reg_width;
 
@@ -2027,7 +2049,7 @@ fs_visitor::emit_fb_writes()
       this->current_annotation = ralloc_asprintf(this->mem_ctx,
 						 "FB write target %d",
 						 target);
-      for (int i = 0; i < 4; i++)
+      for (unsigned i = 0; i < this->output_components[target]; i++)
 	 emit_color_write(target, i, color_mrf);
 
       fs_inst *inst = emit(FS_OPCODE_FB_WRITE);
