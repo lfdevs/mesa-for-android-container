@@ -335,8 +335,7 @@ endif
 	dh_shlibdeps -s
 	dh_gencontrol -s
 	dh_md5sums -s
-	dh_builddeb $(foreach pkg,$(dbgpkg),-p$(pkg)) -- -Zxz
-	dh_builddeb $(foreach pkg,$(otherpkg),-p$(pkg))
+	dh_builddeb -s -- -Zxz
 
 binary: binary-indep binary-arch
 .PHONY: configs build clean binary-indep binary-arch binary install

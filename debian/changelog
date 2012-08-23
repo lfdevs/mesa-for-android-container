@@ -1,3 +1,11 @@
+mesa (8.0.4-2) unstable; urgency=high
+
+  * Use xz for all binary packages not just *-dbg.
+  * glsl/linker: Avoid buffer over-run in
+    parcel_out_uniform_storage::visit_field (CVE-2012-2864; closes: #685667).
+
+ -- Julien Cristau <jcristau@debian.org>  Fri, 24 Aug 2012 00:09:47 +0200
+
 mesa (8.0.4-1) unstable; urgency=low
 
   [ Sven Joachim ]
