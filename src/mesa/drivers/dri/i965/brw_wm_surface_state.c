@@ -428,7 +428,7 @@ brw_format_for_mesa_format(gl_format mesa_format)
       [MESA_FORMAT_SIGNED_R16] = BRW_SURFACEFORMAT_R16_SNORM,
       [MESA_FORMAT_SIGNED_GR1616] = BRW_SURFACEFORMAT_R16G16_SNORM,
       [MESA_FORMAT_SIGNED_RGB_16] = 0,
-      [MESA_FORMAT_SIGNED_RGBA_16] = 0,
+      [MESA_FORMAT_SIGNED_RGBA_16] = BRW_SURFACEFORMAT_R16G16B16A16_SNORM,
       [MESA_FORMAT_RGBA_16] = BRW_SURFACEFORMAT_R16G16B16A16_UNORM,
 
       [MESA_FORMAT_RED_RGTC1] = BRW_SURFACEFORMAT_BC4_UNORM,
@@ -583,6 +583,9 @@ translate_tex_format(gl_format mesa_format,
 		     GLenum depth_mode,
 		     GLenum srgb_decode)
 {
+   if (srgb_decode == GL_SKIP_DECODE_EXT)
+      mesa_format = _mesa_get_srgb_format_linear(mesa_format);
+
    switch( mesa_format ) {
 
    case MESA_FORMAT_Z16:
@@ -597,14 +600,6 @@ translate_tex_format(gl_format mesa_format,
 
    case MESA_FORMAT_Z32_FLOAT_X24S8:
       return BRW_SURFACEFORMAT_R32G32_FLOAT;
-
-   case MESA_FORMAT_SARGB8:
-   case MESA_FORMAT_SLA8:
-   case MESA_FORMAT_SL8:
-      if (srgb_decode == GL_DECODE_EXT)
-	 return brw_format_for_mesa_format(mesa_format);
-      else if (srgb_decode == GL_SKIP_DECODE_EXT)
-	 return brw_format_for_mesa_format(_mesa_get_srgb_format_linear(mesa_format));
 
    case MESA_FORMAT_RGBA8888_REV:
       /* This format is not renderable? */

@@ -4003,7 +4003,7 @@ dst_register(struct st_translate *t,
 static struct ureg_src
 src_register(struct st_translate *t,
              gl_register_file file,
-             GLuint index)
+             GLint index)
 {
    switch(file) {
    case PROGRAM_UNDEFINED:

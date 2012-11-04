@@ -930,7 +930,7 @@ int evergreen_context_init(struct r600_context *ctx, struct r600_screen *screen)
 	}
 
 	/* add blocks */
-	if (ctx->screen->family == CHIP_CAYMAN)
+	if (ctx->screen->family >= CHIP_CAYMAN)
 		r = r600_context_add_block(ctx, cayman_config_reg_list,
 					   Elements(cayman_config_reg_list), PKT3_SET_CONFIG_REG, EVERGREEN_CONFIG_REG_OFFSET);
 	else
@@ -938,7 +938,7 @@ int evergreen_context_init(struct r600_context *ctx, struct r600_screen *screen)
 					   Elements(evergreen_config_reg_list), PKT3_SET_CONFIG_REG, EVERGREEN_CONFIG_REG_OFFSET);
 	if (r)
 		goto out_err;
-	if (ctx->screen->family == CHIP_CAYMAN)
+	if (ctx->screen->family >= CHIP_CAYMAN)
 		r = r600_context_add_block(ctx, cayman_context_reg_list,
 					   Elements(cayman_context_reg_list), PKT3_SET_CONTEXT_REG, EVERGREEN_CONTEXT_REG_OFFSET);
 	else

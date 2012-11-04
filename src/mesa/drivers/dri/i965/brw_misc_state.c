@@ -40,6 +40,8 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 
+#include "main/fbobject.h"
+
 /* Constant single cliprect for framebuffer object or DRI2 drawing */
 static void upload_drawing_rect(struct brw_context *brw)
 {
@@ -376,6 +378,26 @@ static void emit_depthbuffer(struct brw_context *brw)
       assert(intel->gen < 6 || region->tiling == I915_TILING_Y);
       assert(!hiz_region || region->tiling == I915_TILING_Y);
 
+      /* According to the Sandy Bridge PRM, volume 2 part 1, pp326-327
+       * (3DSTATE_DEPTH_BUFFER dw5), in the documentation for "Depth
+       * Coordinate Offset X/Y":
+       *
+       *   "The 3 LSBs of both offsets must be zero to ensure correct
+       *   alignment"
+       *
+       * We have no guarantee that tile_x and tile_y are correctly aligned,
+       * since they are determined by the mipmap layout, which is only aligned
+       * to multiples of 4.
+       *
+       * So, to avoid hanging the GPU, just smash the low order 3 bits of
+       * tile_x and tile_y to 0.  This is a temporary workaround until we come
+       * up with a better solution.
+       */
+      if (intel->gen >= 6) {
+	 tile_x &= ~7;
+	 tile_y &= ~7;
+      }
+
       BEGIN_BATCH(len);
       OUT_BATCH(_3DSTATE_DEPTH_BUFFER << 16 | (len - 2));
       OUT_BATCH(((region->pitch * region->cpp) - 1) |
@@ -506,7 +528,7 @@ static void upload_polygon_stipple(struct brw_context *brw)
     * to a FBO (i.e. any named frame buffer object), we *don't*
     * need to invert - we already match the layout.
     */
-   if (ctx->DrawBuffer->Name == 0) {
+   if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
       for (i = 0; i < 32; i++)
 	  OUT_BATCH(ctx->PolygonStipple[31 - i]); /* invert */
    }
@@ -549,15 +571,13 @@ static void upload_polygon_stipple_offset(struct brw_context *brw)
 
    /* _NEW_BUFFERS
     *
-    * If we're drawing to a system window (ctx->DrawBuffer->Name == 0),
-    * we have to invert the Y axis in order to match the OpenGL
-    * pixel coordinate system, and our offset must be matched
-    * to the window position.  If we're drawing to a FBO
-    * (ctx->DrawBuffer->Name != 0), then our native pixel coordinate
-    * system works just fine, and there's no window system to
-    * worry about.
+    * If we're drawing to a system window we have to invert the Y axis
+    * in order to match the OpenGL pixel coordinate system, and our
+    * offset must be matched to the window position.  If we're drawing
+    * to a user-created FBO then our native pixel coordinate system
+    * works just fine, and there's no window system to worry about.
     */
-   if (brw->intel.ctx.DrawBuffer->Name == 0)
+   if (_mesa_is_winsys_fbo(brw->intel.ctx.DrawBuffer))
       OUT_BATCH((32 - (ctx->DrawBuffer->Height & 31)) & 31);
    else
       OUT_BATCH(0);

@@ -206,7 +206,7 @@ intel_flush_front(struct gl_context *ctx)
     __DRIcontext *driContext = intel->driContext;
     __DRIscreen *const screen = intel->intelScreen->driScrnPriv;
 
-   if ((ctx->DrawBuffer->Name == 0) && intel->front_buffer_dirty) {
+    if (_mesa_is_winsys_fbo(ctx->DrawBuffer) && intel->front_buffer_dirty) {
       if (screen->dri2.loader &&
           (screen->dri2.loader->base.version >= 2)
 	  && (screen->dri2.loader->flushFrontBuffer != NULL) &&
@@ -445,7 +445,7 @@ intel_viewport(struct gl_context *ctx, GLint x, GLint y, GLsizei w, GLsizei h)
     if (intel->saved_viewport)
 	intel->saved_viewport(ctx, x, y, w, h);
 
-    if (ctx->DrawBuffer->Name == 0) {
+    if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
        dri2InvalidateDrawable(driContext->driDrawablePriv);
        dri2InvalidateDrawable(driContext->driReadablePriv);
     }

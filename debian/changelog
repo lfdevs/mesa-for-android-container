@@ -1,3 +1,13 @@
+mesa (8.0.5-1) unstable; urgency=low
+
+  * New upstream stable release
+  * Pull a couple more fixes from upstream's 8.0 branch, including:
+    - nvfx: handle some unknown PIPE_CAPs (closes: 674965)
+  * Install drirc in libgl1-mesa-dri package with some settings for i965
+    (closes: #671747).
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 04 Nov 2012 16:55:17 +0100
+
 mesa (8.0.4-2) unstable; urgency=high
 
   * Use xz for all binary packages not just *-dbg.

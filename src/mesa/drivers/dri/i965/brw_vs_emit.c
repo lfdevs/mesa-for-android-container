@@ -677,7 +677,6 @@ static void emit_math1_gen4(struct brw_vs_compile *c,
    brw_math(p, 
 	    tmp,
 	    function,
-	    BRW_MATH_SATURATE_NONE,
 	    2,
 	    arg0,
 	    BRW_MATH_DATA_SCALAR,
@@ -712,7 +711,6 @@ emit_math1_gen6(struct brw_vs_compile *c,
    brw_math(p,
 	    tmp_dst,
 	    function,
-	    BRW_MATH_SATURATE_NONE,
 	    2,
 	    tmp_src,
 	    BRW_MATH_DATA_SCALAR,
@@ -764,7 +762,6 @@ static void emit_math2_gen4( struct brw_vs_compile *c,
    brw_math(p, 
 	    tmp,
 	    function,
-	    BRW_MATH_SATURATE_NONE,
 	    2,
  	    arg0,
 	    BRW_MATH_DATA_SCALAR,
@@ -1753,7 +1750,7 @@ accumulator_contains(struct brw_vs_compile *c, struct brw_reg val)
    if (val.address_mode != BRW_ADDRESS_DIRECT)
       return false;
 
-   if (val.negate || val.abs)
+   if (val.negate || val.abs || val.dw1.bits.swizzle != BRW_SWIZZLE_XYZW)
       return false;
 
    switch (prev_insn->header.opcode) {

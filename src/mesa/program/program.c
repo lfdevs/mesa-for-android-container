@@ -551,6 +551,7 @@ _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog)
             = (const struct gl_fragment_program *) prog;
          struct gl_fragment_program *fpc = (struct gl_fragment_program *) clone;
          fpc->UsesKill = fp->UsesKill;
+         fpc->UsesDFdy = fp->UsesDFdy;
          fpc->OriginUpperLeft = fp->OriginUpperLeft;
          fpc->PixelCenterInteger = fp->PixelCenterInteger;
       }
@@ -772,6 +773,7 @@ _mesa_combine_programs(struct gl_context *ctx,
       newFprog = (struct gl_fragment_program *) newProg;
 
       newFprog->UsesKill = fprogA->UsesKill || fprogB->UsesKill;
+      newFprog->UsesDFdy = fprogA->UsesDFdy || fprogB->UsesDFdy;
 
       /* We'll do a search and replace for instances
        * of progB_colorFile/progB_colorIndex below...

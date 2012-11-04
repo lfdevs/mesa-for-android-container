@@ -410,6 +410,7 @@ public:
 
       this->frag_depth = NULL;
       memset(this->outputs, 0, sizeof(this->outputs));
+      memset(this->output_components, 0, sizeof(this->output_components));
       this->first_non_payload_grf = 0;
       this->max_grf = intel->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
 
@@ -542,7 +543,8 @@ public:
 			   struct brw_reg src);
    void generate_discard(fs_inst *inst);
    void generate_ddx(fs_inst *inst, struct brw_reg dst, struct brw_reg src);
-   void generate_ddy(fs_inst *inst, struct brw_reg dst, struct brw_reg src);
+   void generate_ddy(fs_inst *inst, struct brw_reg dst, struct brw_reg src,
+                     bool negate_value);
    void generate_spill(fs_inst *inst, struct brw_reg src);
    void generate_unspill(fs_inst *inst, struct brw_reg dst);
    void generate_pull_constant_load(fs_inst *inst, struct brw_reg dst);

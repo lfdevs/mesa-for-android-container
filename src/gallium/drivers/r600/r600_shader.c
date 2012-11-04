@@ -1461,6 +1461,11 @@ static int cayman_emit_float_instr(struct r600_shader_ctx *ctx)
 		alu.inst = ctx->inst_info->r600_opcode;
 		for (j = 0; j < inst->Instruction.NumSrcRegs; j++) {
 			r600_bytecode_src(&alu.src[j], &ctx->src[j], 0);
+
+			/* RSQ should take the absolute value of src */
+			if (ctx->inst_info->tgsi_opcode == TGSI_OPCODE_RSQ) {
+				r600_bytecode_src_set_abs(&alu.src[j]);
+			}
 		}
 		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 		alu.dst.write = (inst->Dst[0].Register.WriteMask >> i) & 1;
@@ -2864,10 +2869,8 @@ static int tgsi_exp(struct r600_shader_ctx *ctx)
 
 				alu.dst.sel = ctx->temp_reg;
 				alu.dst.chan = i;
-				if (i == 0)
-					alu.dst.write = 1;
-				if (i == 2)
-					alu.last = 1;
+				alu.dst.write = i == 0;
+				alu.last = i == 2;
 				r = r600_bytecode_add_alu(ctx->bc, &alu);
 				if (r)
 					return r;

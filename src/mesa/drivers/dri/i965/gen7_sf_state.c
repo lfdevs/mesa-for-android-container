@@ -26,6 +26,7 @@
 #include "brw_defines.h"
 #include "brw_util.h"
 #include "main/macros.h"
+#include "main/fbobject.h"
 #include "intel_batchbuffer.h"
 
 static void
@@ -49,7 +50,7 @@ upload_sbe_state(struct brw_context *brw)
    bool userclip_active = (ctx->Transform.ClipPlanesEnabled != 0);
    uint16_t attr_overrides[FRAG_ATTRIB_MAX];
    /* _NEW_BUFFERS */
-   bool render_to_fbo = ctx->DrawBuffer->Name != 0;
+   bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
    uint32_t point_sprite_origin;
 
    brw_compute_vue_map(&vue_map, intel, userclip_active, vs_outputs_written);
@@ -163,7 +164,7 @@ upload_sf_state(struct brw_context *brw)
    uint32_t dw1, dw2, dw3;
    float point_size;
    /* _NEW_BUFFERS */
-   bool render_to_fbo = brw->intel.ctx.DrawBuffer->Name != 0;
+   bool render_to_fbo = _mesa_is_user_fbo(brw->intel.ctx.DrawBuffer);
 
    dw1 = GEN6_SF_STATISTICS_ENABLE |
          GEN6_SF_VIEWPORT_TRANSFORM_ENABLE;

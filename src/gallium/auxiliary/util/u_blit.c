@@ -370,7 +370,7 @@ util_blit_pixels_writemask(struct blit_state *ctx,
                       dstX0, dstY0, dstX1, dstY1);
 
    src_format = util_format_linear(src_tex->format);
-   dst_format = util_format_linear(dst->format);
+   dst_format = util_format_linear(dst->texture->format);
 
    /*
     * Check for simple case:  no format conversion, no flipping, no stretching,

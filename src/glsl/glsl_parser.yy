@@ -292,7 +292,7 @@ pragma_statement:
 	| PRAGMA_OPTIMIZE_OFF EOL
 	| PRAGMA_INVARIANT_ALL EOL
 	{
-	   if (state->language_version < 120) {
+	   if (state->language_version == 110) {
 	      _mesa_glsl_warning(& @1, state,
 				 "pragma `invariant(all)' not supported in %s",
 				 state->version_string);

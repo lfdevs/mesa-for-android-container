@@ -33,6 +33,7 @@
 #include "brw_wm.h"
 #include "brw_state.h"
 #include "main/formats.h"
+#include "main/fbobject.h"
 #include "main/samplerobj.h"
 #include "program/prog_parameter.h"
 
@@ -417,6 +418,13 @@ static void brw_wm_populate_key( struct brw_context *brw,
    GLuint line_aa;
    GLuint i;
 
+   /* As a temporary measure we assume that all programs use dFdy() (and hence
+    * need to be compiled differently depending on whether we're rendering to
+    * an FBO).  FIXME: set this bool correctly based on the contents of the
+    * program.
+    */
+   bool program_uses_dfdy = true;
+
    memset(key, 0, sizeof(*key));
 
    /* Build the index for table lookup
@@ -515,7 +523,10 @@ static void brw_wm_populate_key( struct brw_context *brw,
     */
    if (fp->program.Base.InputsRead & FRAG_BIT_WPOS) {
       key->drawable_height = ctx->DrawBuffer->Height;
-      key->render_to_fbo = ctx->DrawBuffer->Name != 0;
+   }
+
+   if ((fp->program.Base.InputsRead & FRAG_BIT_WPOS) || program_uses_dfdy) {
+      key->render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
    }
 
    /* _NEW_BUFFERS */

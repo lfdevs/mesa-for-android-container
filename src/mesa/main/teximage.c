@@ -1251,10 +1251,11 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target, GLint level,
 
    switch (target) {
    case GL_PROXY_TEXTURE_1D:
-      maxSize = 1 << (ctx->Const.MaxTextureLevels - 1);
-      if (width < 2 * border || width > 2 * border + maxSize)
-         return GL_FALSE;
       if (level >= ctx->Const.MaxTextureLevels)
+         return GL_FALSE;
+      maxSize = 1 << (ctx->Const.MaxTextureLevels - 1); /* level zero size */
+      maxSize >>= level;  /* level size */
+      if (width < 2 * border || width > 2 * border + maxSize)
          return GL_FALSE;
       if (!ctx->Extensions.ARB_texture_non_power_of_two) {
          if (width > 0 && !_mesa_is_pow_two(width - 2 * border))
@@ -1263,12 +1264,13 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target, GLint level,
       return GL_TRUE;
 
    case GL_PROXY_TEXTURE_2D:
+      if (level >= ctx->Const.MaxTextureLevels)
+         return GL_FALSE;
       maxSize = 1 << (ctx->Const.MaxTextureLevels - 1);
+      maxSize >>= level;
       if (width < 2 * border || width > 2 * border + maxSize)
          return GL_FALSE;
       if (height < 2 * border || height > 2 * border + maxSize)
-         return GL_FALSE;
-      if (level >= ctx->Const.MaxTextureLevels)
          return GL_FALSE;
       if (!ctx->Extensions.ARB_texture_non_power_of_two) {
          if (width > 0 && !_mesa_is_pow_two(width - 2 * border))
@@ -1279,14 +1281,15 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target, GLint level,
       return GL_TRUE;
 
    case GL_PROXY_TEXTURE_3D:
+      if (level >= ctx->Const.Max3DTextureLevels)
+         return GL_FALSE;
       maxSize = 1 << (ctx->Const.Max3DTextureLevels - 1);
+      maxSize >>= level;
       if (width < 2 * border || width > 2 * border + maxSize)
          return GL_FALSE;
       if (height < 2 * border || height > 2 * border + maxSize)
          return GL_FALSE;
       if (depth < 2 * border || depth > 2 * border + maxSize)
-         return GL_FALSE;
-      if (level >= ctx->Const.Max3DTextureLevels)
          return GL_FALSE;
       if (!ctx->Extensions.ARB_texture_non_power_of_two) {
          if (width > 0 && !_mesa_is_pow_two(width - 2 * border))
@@ -1299,22 +1302,23 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target, GLint level,
       return GL_TRUE;
 
    case GL_PROXY_TEXTURE_RECTANGLE_NV:
+      if (level != 0)
+         return GL_FALSE;
       maxSize = ctx->Const.MaxTextureRectSize;
       if (width < 0 || width > maxSize)
          return GL_FALSE;
       if (height < 0 || height > maxSize)
          return GL_FALSE;
-      if (level != 0)
-         return GL_FALSE;
       return GL_TRUE;
 
    case GL_PROXY_TEXTURE_CUBE_MAP_ARB:
+      if (level >= ctx->Const.MaxCubeTextureLevels)
+         return GL_FALSE;
       maxSize = 1 << (ctx->Const.MaxCubeTextureLevels - 1);
+      maxSize >>= level;
       if (width < 2 * border || width > 2 * border + maxSize)
          return GL_FALSE;
       if (height < 2 * border || height > 2 * border + maxSize)
-         return GL_FALSE;
-      if (level >= ctx->Const.MaxCubeTextureLevels)
          return GL_FALSE;
       if (!ctx->Extensions.ARB_texture_non_power_of_two) {
          if (width > 0 && !_mesa_is_pow_two(width - 2 * border))
@@ -1325,12 +1329,13 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target, GLint level,
       return GL_TRUE;
 
    case GL_PROXY_TEXTURE_1D_ARRAY_EXT:
+      if (level >= ctx->Const.MaxTextureLevels)
+         return GL_FALSE;
       maxSize = 1 << (ctx->Const.MaxTextureLevels - 1);
+      maxSize >>= level;
       if (width < 2 * border || width > 2 * border + maxSize)
          return GL_FALSE;
       if (height < 1 || height > ctx->Const.MaxArrayTextureLayers)
-         return GL_FALSE;
-      if (level >= ctx->Const.MaxTextureLevels)
          return GL_FALSE;
       if (!ctx->Extensions.ARB_texture_non_power_of_two) {
          if (width > 0 && !_mesa_is_pow_two(width - 2 * border))
@@ -1339,14 +1344,15 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target, GLint level,
       return GL_TRUE;
 
    case GL_PROXY_TEXTURE_2D_ARRAY_EXT:
+      if (level >= ctx->Const.MaxTextureLevels)
+         return GL_FALSE;
       maxSize = 1 << (ctx->Const.MaxTextureLevels - 1);
+      maxSize >>= level;
       if (width < 2 * border || width > 2 * border + maxSize)
          return GL_FALSE;
       if (height < 2 * border || height > 2 * border + maxSize)
          return GL_FALSE;
       if (depth < 1 || depth > ctx->Const.MaxArrayTextureLayers)
-         return GL_FALSE;
-      if (level >= ctx->Const.MaxTextureLevels)
          return GL_FALSE;
       if (!ctx->Extensions.ARB_texture_non_power_of_two) {
          if (width > 0 && !_mesa_is_pow_two(width - 2 * border))
@@ -1603,7 +1609,8 @@ texture_error_check( struct gl_context *ctx,
 
    /* Check border */
    if (border < 0 || border > 1 ||
-       ((target == GL_TEXTURE_RECTANGLE_NV ||
+       ((ctx->API != API_OPENGL ||
+         target == GL_TEXTURE_RECTANGLE_NV ||
          target == GL_PROXY_TEXTURE_RECTANGLE_NV) && border != 0)) {
       if (!isProxy) {
          _mesa_error(ctx, GL_INVALID_VALUE,
@@ -1984,7 +1991,7 @@ copytexture_error_check( struct gl_context *ctx, GLuint dimensions,
    }
 
    /* Check that the source buffer is complete */
-   if (ctx->ReadBuffer->Name) {
+   if (_mesa_is_user_fbo(ctx->ReadBuffer)) {
       if (ctx->ReadBuffer->_Status == 0) {
          _mesa_test_framebuffer_completeness(ctx, ctx->ReadBuffer);
       }
@@ -2004,8 +2011,11 @@ copytexture_error_check( struct gl_context *ctx, GLuint dimensions,
 
    /* Check border */
    if (border < 0 || border > 1 ||
-       ((target == GL_TEXTURE_RECTANGLE_NV ||
+       ((ctx->API != API_OPENGL ||
+         target == GL_TEXTURE_RECTANGLE_NV ||
          target == GL_PROXY_TEXTURE_RECTANGLE_NV) && border != 0)) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "glCopyTexImage%dD(border=%d)", dimensions, border);
       return GL_TRUE;
    }
 
@@ -2109,7 +2119,7 @@ copytexsubimage_error_check1( struct gl_context *ctx, GLuint dimensions,
                               GLenum target, GLint level)
 {
    /* Check that the source buffer is complete */
-   if (ctx->ReadBuffer->Name) {
+   if (_mesa_is_user_fbo(ctx->ReadBuffer)) {
       if (ctx->ReadBuffer->_Status == 0) {
          _mesa_test_framebuffer_completeness(ctx, ctx->ReadBuffer);
       }
@@ -2301,7 +2311,7 @@ check_rtt_cb(GLuint key, void *data, void *userData)
    const GLuint level = info->level, face = info->face;
 
    /* If this is a user-created FBO */
-   if (fb->Name) {
+   if (_mesa_is_user_fbo(fb)) {
       GLuint i;
       /* check if any of the FBO's attachments point to 'texObj' */
       for (i = 0; i < BUFFER_COUNT; i++) {
@@ -3399,13 +3409,13 @@ compressed_subtexture_error_check(struct gl_context *ctx, GLint dimensions,
    get_compressed_block_size(format, &bw, &bh);
 
    if ((xoffset % bw != 0) || (yoffset % bh != 0))
-      return GL_INVALID_VALUE;
+      return GL_INVALID_OPERATION;
 
    if ((width % bw != 0) && width != 2 && width != 1)
-      return GL_INVALID_VALUE;
+      return GL_INVALID_OPERATION;
 
    if ((height % bh != 0) && height != 2 && height != 1)
-      return GL_INVALID_VALUE;
+      return GL_INVALID_OPERATION;
 
    expectedSize = compressed_tex_size(width, height, depth, format);
    if (expectedSize != imageSize)

@@ -26,6 +26,7 @@
 #include "brw_defines.h"
 #include "brw_util.h"
 #include "intel_batchbuffer.h"
+#include "main/fbobject.h"
 
 static void
 upload_clip_state(struct brw_context *brw)
@@ -40,7 +41,7 @@ upload_clip_state(struct brw_context *brw)
    const struct gl_fragment_program *fprog = brw->fragment_program;
 
    /* _NEW_BUFFERS */
-   bool render_to_fbo = brw->intel.ctx.DrawBuffer->Name != 0;
+   bool render_to_fbo = _mesa_is_user_fbo(brw->intel.ctx.DrawBuffer);
 
    if (brw_fprog_uses_noperspective(fprog)) {
       nonperspective_barycentric_enable_flag =
