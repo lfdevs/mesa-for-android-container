@@ -1,3 +1,11 @@
+mesa (8.0.5-2) unstable; urgency=low
+
+  * Fix regression in 8.0.5 (spurious GL_INVALID_ENUM errors):
+    mesa: test for GL_EXT_framebuffer_sRGB in glPopAttrib().
+    Thanks to Simon Chopin for the report.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 28 Nov 2012 22:09:14 +0100
+
 mesa (8.0.5-1) unstable; urgency=low
 
   * New upstream stable release
