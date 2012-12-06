@@ -1,3 +1,9 @@
+mesa (8.0.5-3) unstable; urgency=high
+
+  * mesa: add bounds checking for uniform array access (CVE-2012-5129).
+
+ -- Julien Cristau <jcristau@debian.org>  Thu, 06 Dec 2012 10:20:40 +0100
+
 mesa (8.0.5-2) unstable; urgency=low
 
   * Fix regression in 8.0.5 (spurious GL_INVALID_ENUM errors):
