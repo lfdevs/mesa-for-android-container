@@ -1,3 +1,10 @@
+mesa (8.0.5-4) unstable; urgency=low
+
+  * Cherry-pick commit 17f1cb1d99 (dri/nouveau: fix crash in
+    nouveau_flush) from upstream master branch.
+
+ -- Sven Joachim <svenjoac@gmx.de>  Wed, 13 Mar 2013 17:52:18 +0100
+
 mesa (8.0.5-3) unstable; urgency=high
 
   * mesa: add bounds checking for uniform array access (CVE-2012-5129).
