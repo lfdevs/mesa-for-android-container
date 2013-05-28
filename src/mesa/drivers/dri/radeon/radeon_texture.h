@@ -49,13 +49,16 @@ void radeonFreeTextureImageBuffer(struct gl_context *ctx, struct gl_texture_imag
 
 void radeon_teximage_map(radeon_texture_image *image, GLboolean write_enable);
 void radeon_teximage_unmap(radeon_texture_image *image);
-int radeon_validate_texture_miptree(struct gl_context * ctx, struct gl_texture_object *texObj);
+int radeon_validate_texture_miptree(struct gl_context * ctx,
+				    struct gl_sampler_object *samp,
+				    struct gl_texture_object *texObj);
 
 
 void radeon_swrast_map_texture_images(struct gl_context *ctx, struct gl_texture_object *texObj);
 void radeon_swrast_unmap_texture_images(struct gl_context *ctx, struct gl_texture_object *texObj);
 
 gl_format radeonChooseTextureFormat_mesa(struct gl_context * ctx,
+                                         GLenum target,
                                          GLint internalFormat,
                                          GLenum format,
                                          GLenum type);
@@ -65,21 +68,19 @@ gl_format radeonChooseTextureFormat(struct gl_context * ctx,
                                     GLenum format,
                                     GLenum type, GLboolean fbo);
 
-void radeonCopyTexSubImage2D(struct gl_context *ctx,
-                             struct gl_texture_image *texImage,
-                             GLint xoffset, GLint yoffset,
-                             struct gl_renderbuffer *rb,
-                             GLint x, GLint y,
-                             GLsizei width, GLsizei height);
+void radeonCopyTexSubImage(struct gl_context *ctx, GLuint dims,
+                           struct gl_texture_image *texImage,
+                           GLint xoffset, GLint yoffset, GLint zoffset,
+                           struct gl_renderbuffer *rb,
+                           GLint x, GLint y,
+                           GLsizei width, GLsizei height);
 
 unsigned radeonIsFormatRenderable(gl_format mesa_format);
 
-#if FEATURE_OES_EGL_image
 void radeon_image_target_texture_2d(struct gl_context *ctx, GLenum target,
 				    struct gl_texture_object *texObj,
 				    struct gl_texture_image *texImage,
 				    GLeglImageOES image_handle);
-#endif
 
 void
 radeon_init_common_texture_funcs(radeonContextPtr radeon,

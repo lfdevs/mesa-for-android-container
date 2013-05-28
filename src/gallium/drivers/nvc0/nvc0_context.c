@@ -20,39 +20,40 @@
  * SOFTWARE.
  */
 
-#include "draw/draw_context.h"
 #include "pipe/p_defines.h"
+#include "util/u_framebuffer.h"
+
+#ifdef NVC0_WITH_DRAW_MODULE
+#include "draw/draw_context.h"
+#endif
 
 #include "nvc0_context.h"
 #include "nvc0_screen.h"
 #include "nvc0_resource.h"
 
-#include "nouveau/nouveau_reloc.h"
-
 static void
 nvc0_flush(struct pipe_context *pipe,
-           struct pipe_fence_handle **fence)
+           struct pipe_fence_handle **fence,
+           enum pipe_flush_flags flags)
 {
-   struct nouveau_screen *screen = &nvc0_context(pipe)->screen->base;
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nouveau_screen *screen = &nvc0->screen->base;
 
    if (fence)
       nouveau_fence_ref(screen->fence.current, (struct nouveau_fence **)fence);
 
-   /* Try to emit before firing to avoid having to flush again right after
-    * in case we have to wait on this fence.
-    */
-   nouveau_fence_emit(screen->fence.current);
+   PUSH_KICK(nvc0->base.pushbuf); /* fencing handled in kick_notify */
 
-   FIRE_RING(screen->channel);
+   nouveau_context_update_frame_stats(&nvc0->base);
 }
 
 static void
 nvc0_texture_barrier(struct pipe_context *pipe)
 {
-   struct nouveau_channel *chan = nvc0_context(pipe)->screen->base.channel;
+   struct nouveau_pushbuf *push = nvc0_context(pipe)->base.pushbuf;
 
-   IMMED_RING(chan, RING_3D(SERIALIZE), 0);
-   IMMED_RING(chan, RING_3D(TEX_CACHE_CTL), 0);
+   IMMED_NVC0(push, NVC0_3D(SERIALIZE), 0);
+   IMMED_NVC0(push, NVC0_3D(TEX_CACHE_CTL), 0);
 }
 
 static void
@@ -60,8 +61,10 @@ nvc0_context_unreference_resources(struct nvc0_context *nvc0)
 {
    unsigned s, i;
 
-   for (i = 0; i < NVC0_BUFCTX_COUNT; ++i)
-      nvc0_bufctx_reset(nvc0, i);
+   nouveau_bufctx_del(&nvc0->bufctx_3d);
+   nouveau_bufctx_del(&nvc0->bufctx);
+
+   util_unreference_framebuffer_state(&nvc0->framebuffer);
 
    for (i = 0; i < nvc0->num_vtxbufs; ++i)
       pipe_resource_reference(&nvc0->vtxbuf[i].buffer, NULL);
@@ -72,8 +75,9 @@ nvc0_context_unreference_resources(struct nvc0_context *nvc0)
       for (i = 0; i < nvc0->num_textures[s]; ++i)
          pipe_sampler_view_reference(&nvc0->textures[s][i], NULL);
 
-      for (i = 0; i < 16; ++i)
-         pipe_resource_reference(&nvc0->constbuf[s][i], NULL);
+      for (i = 0; i < NVC0_MAX_PIPE_CONSTBUFS; ++i)
+         if (!nvc0->constbuf[s][i].user)
+            pipe_resource_reference(&nvc0->constbuf[s][i].u.buf, NULL);
    }
 
    for (i = 0; i < nvc0->num_tfbbufs; ++i)
@@ -85,26 +89,114 @@ nvc0_destroy(struct pipe_context *pipe)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
 
+   if (nvc0->screen->cur_ctx == nvc0) {
+      nvc0->base.pushbuf->kick_notify = NULL;
+      nvc0->screen->cur_ctx = NULL;
+      nouveau_pushbuf_bufctx(nvc0->base.pushbuf, NULL);
+   }
+   nouveau_pushbuf_kick(nvc0->base.pushbuf, nvc0->base.pushbuf->channel);
+
    nvc0_context_unreference_resources(nvc0);
 
+#ifdef NVC0_WITH_DRAW_MODULE
    draw_destroy(nvc0->draw);
+#endif
 
-   if (nvc0->screen->cur_ctx == nvc0)
-      nvc0->screen->cur_ctx = NULL;
-
-   FREE(nvc0);
+   nouveau_context_destroy(&nvc0->base);
 }
 
 void
-nvc0_default_flush_notify(struct nouveau_channel *chan)
+nvc0_default_kick_notify(struct nouveau_pushbuf *push)
 {
-   struct nvc0_screen *screen = chan->user_private;
+   struct nvc0_screen *screen = push->user_priv;
 
-   if (!screen)
-      return;
+   if (screen) {
+      nouveau_fence_next(&screen->base);
+      nouveau_fence_update(&screen->base, TRUE);
+      if (screen->cur_ctx)
+         screen->cur_ctx->state.flushed = TRUE;
+   }
+}
 
-   nouveau_fence_update(&screen->base, TRUE);
-   nouveau_fence_next(&screen->base);
+static int
+nvc0_invalidate_resource_storage(struct nouveau_context *ctx,
+                                 struct pipe_resource *res,
+                                 int ref)
+{
+   struct nvc0_context *nvc0 = nvc0_context(&ctx->pipe);
+   unsigned s, i;
+
+   if (res->bind & PIPE_BIND_RENDER_TARGET) {
+      for (i = 0; i < nvc0->framebuffer.nr_cbufs; ++i) {
+         if (nvc0->framebuffer.cbufs[i] &&
+             nvc0->framebuffer.cbufs[i]->texture == res) {
+            nvc0->dirty |= NVC0_NEW_FRAMEBUFFER;
+            nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_FB);
+            if (!--ref)
+               return ref;
+         }
+      }
+   }
+   if (res->bind & PIPE_BIND_DEPTH_STENCIL) {
+      if (nvc0->framebuffer.zsbuf &&
+          nvc0->framebuffer.zsbuf->texture == res) {
+         nvc0->dirty |= NVC0_NEW_FRAMEBUFFER;
+         nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_FB);
+         if (!--ref)
+            return ref;
+      }
+   }
+
+   if (res->bind & PIPE_BIND_VERTEX_BUFFER) {
+      for (i = 0; i < nvc0->num_vtxbufs; ++i) {
+         if (nvc0->vtxbuf[i].buffer == res) {
+            nvc0->dirty |= NVC0_NEW_ARRAYS;
+            nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_VTX);
+            if (!--ref)
+               return ref;
+         }
+      }
+   }
+   if (res->bind & PIPE_BIND_INDEX_BUFFER) {
+      if (nvc0->idxbuf.buffer == res) {
+         nvc0->dirty |= NVC0_NEW_IDXBUF;
+         nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_IDX);
+         if (!--ref)
+            return ref;
+      }
+   }
+
+   if (res->bind & PIPE_BIND_SAMPLER_VIEW) {
+      for (s = 0; s < 5; ++s) {
+      for (i = 0; i < nvc0->num_textures[s]; ++i) {
+         if (nvc0->textures[s][i] &&
+             nvc0->textures[s][i]->texture == res) {
+            nvc0->textures_dirty[s] |= 1 << i;
+            nvc0->dirty |= NVC0_NEW_TEXTURES;
+            nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(s, i));
+            if (!--ref)
+               return ref;
+         }
+      }
+      }
+   }
+
+   if (res->bind & PIPE_BIND_CONSTANT_BUFFER) {
+      for (s = 0; s < 5; ++s) {
+      for (i = 0; i < nvc0->num_vtxbufs; ++i) {
+         if (!nvc0->constbuf[s][i].user &&
+             nvc0->constbuf[s][i].u.buf == res) {
+            nvc0->dirty |= NVC0_NEW_CONSTBUF;
+            nvc0->constbuf_dirty[s] |= 1 << i;
+            nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_CB(s, i));
+            if (!--ref)
+               return ref;
+         }
+      }
+      }
+   }
+
+   return ref;
 }
 
 struct pipe_context *
@@ -113,17 +205,29 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
    struct nvc0_screen *screen = nvc0_screen(pscreen);
    struct nvc0_context *nvc0;
    struct pipe_context *pipe;
+   int ret;
+   uint32_t flags;
 
    nvc0 = CALLOC_STRUCT(nvc0_context);
    if (!nvc0)
       return NULL;
    pipe = &nvc0->base.pipe;
 
+   if (!nvc0_blitctx_create(nvc0))
+      goto out_err;
+
+   nvc0->base.pushbuf = screen->base.pushbuf;
+   nvc0->base.client = screen->base.client;
+
+   ret = nouveau_bufctx_new(screen->base.client, NVC0_BIND_COUNT,
+                            &nvc0->bufctx_3d);
+   if (!ret)
+      nouveau_bufctx_new(screen->base.client, 2, &nvc0->bufctx);
+   if (ret)
+      goto out_err;
+
    nvc0->screen = screen;
-   nvc0->base.screen    = &screen->base;
-   nvc0->base.copy_data = nvc0_m2mf_copy_linear;
-   nvc0->base.push_data = nvc0_m2mf_push_linear;
-   nvc0->base.push_cb = nvc0_cb_push;
+   nvc0->base.screen = &screen->base;
 
    pipe->screen = pscreen;
    pipe->priv = priv;
@@ -136,90 +240,77 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
    pipe->flush = nvc0_flush;
    pipe->texture_barrier = nvc0_texture_barrier;
 
-   if (!screen->cur_ctx)
+   if (!screen->cur_ctx) {
       screen->cur_ctx = nvc0;
-   screen->base.channel->flush_notify = nvc0_default_flush_notify;
+      nouveau_pushbuf_bufctx(screen->base.pushbuf, nvc0->bufctx);
+   }
+   screen->base.pushbuf->kick_notify = nvc0_default_kick_notify;
 
    nvc0_init_query_functions(nvc0);
    nvc0_init_surface_functions(nvc0);
    nvc0_init_state_functions(nvc0);
+   nvc0_init_transfer_functions(nvc0);
    nvc0_init_resource_functions(pipe);
 
+   nvc0->base.invalidate_resource_storage = nvc0_invalidate_resource_storage;
+
+#ifdef NVC0_WITH_DRAW_MODULE
+   /* no software fallbacks implemented */
    nvc0->draw = draw_create(pipe);
    assert(nvc0->draw);
    draw_set_rasterize_stage(nvc0->draw, nvc0_draw_render_stage(nvc0));
+#endif
 
-   nouveau_context_init_vdec(&nvc0->base);
+   pipe->create_video_decoder = nvc0_create_decoder;
+   pipe->create_video_buffer = nvc0_video_buffer_create;
 
    /* shader builtin library is per-screen, but we need a context for m2mf */
    nvc0_program_library_upload(nvc0);
 
+   /* add permanently resident buffers to bufctxts */
+
+   flags = NOUVEAU_BO_VRAM | NOUVEAU_BO_RD;
+
+   BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->text);
+   BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->uniform_bo);
+   BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->txc);
+   BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->poly_cache);
+
+   flags = NOUVEAU_BO_GART | NOUVEAU_BO_WR;
+
+   BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->fence.bo);
+   BCTX_REFN_bo(nvc0->bufctx, FENCE, flags, screen->fence.bo);
+
+   nvc0->base.scratch.bo_size = 2 << 20;
+
+   memset(nvc0->tex_handles, ~0, sizeof(nvc0->tex_handles));
+
    return pipe;
-}
 
-struct resident {
-   struct nv04_resource *res;
-   uint32_t flags;
-};
-
-void
-nvc0_bufctx_add_resident(struct nvc0_context *nvc0, int ctx,
-                         struct nv04_resource *resource, uint32_t flags)
-{
-   struct resident rsd = { resource, flags };
-
-   if (!resource->bo)
-      return;
-   nvc0->residents_size += sizeof(struct resident);
-
-   /* We don't need to reference the resource here, it will be referenced
-    * in the context/state, and bufctx will be reset when state changes.
-    */
-   util_dynarray_append(&nvc0->residents[ctx], struct resident, rsd);
-}
-
-void
-nvc0_bufctx_del_resident(struct nvc0_context *nvc0, int ctx,
-                         struct nv04_resource *resource)
-{
-   struct resident *rsd, *top;
-   unsigned i;
-
-   for (i = 0; i < nvc0->residents[ctx].size / sizeof(struct resident); ++i) {
-      rsd = util_dynarray_element(&nvc0->residents[ctx], struct resident, i);
-
-      if (rsd->res == resource) {
-         top = util_dynarray_pop_ptr(&nvc0->residents[ctx], struct resident);
-         if (rsd != top)
-            *rsd = *top;
-         nvc0->residents_size -= sizeof(struct resident);
-         break;
-      }
+out_err:
+   if (nvc0) {
+      if (nvc0->bufctx_3d)
+         nouveau_bufctx_del(&nvc0->bufctx_3d);
+      if (nvc0->bufctx)
+         nouveau_bufctx_del(&nvc0->bufctx);
+      if (nvc0->blit)
+         FREE(nvc0->blit);
+      FREE(nvc0);
    }
+   return NULL;
 }
 
 void
-nvc0_bufctx_emit_relocs(struct nvc0_context *nvc0)
+nvc0_bufctx_fence(struct nvc0_context *nvc0, struct nouveau_bufctx *bufctx,
+                  boolean on_flush)
 {
-   struct resident *rsd;
-   struct util_dynarray *array;
-   unsigned ctx, i, n;
+   struct nouveau_list *list = on_flush ? &bufctx->current : &bufctx->pending;
+   struct nouveau_list *it;
 
-   n  = nvc0->residents_size / sizeof(struct resident);
-   n += NVC0_SCREEN_RESIDENT_BO_COUNT;
-
-   MARK_RING(nvc0->screen->base.channel, 0, n);
-
-   for (ctx = 0; ctx < NVC0_BUFCTX_COUNT; ++ctx) {
-      array = &nvc0->residents[ctx];
-
-      n = array->size / sizeof(struct resident);
-      for (i = 0; i < n; ++i) {
-         rsd = util_dynarray_element(array, struct resident, i);
-
-         nvc0_resource_validate(rsd->res, rsd->flags);
-      }
+   for (it = list->next; it != list; it = it->next) {
+      struct nouveau_bufref *ref = (struct nouveau_bufref *)it;
+      struct nv04_resource *res = ref->priv;
+      if (res)
+         nvc0_resource_validate(res, (unsigned)ref->priv_data);
    }
-
-   nvc0_screen_make_buffers_resident(nvc0->screen);
 }

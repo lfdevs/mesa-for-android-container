@@ -35,6 +35,34 @@
 #include "main/mtypes.h"
 #include "swrast/s_chan.h"
 
+
+/**
+ * If non-zero use GLdouble for walking triangle edges, for better accuracy.
+ */
+#define TRIANGLE_WALK_DOUBLE 0
+
+
+/**
+ * Bits per depth buffer value (max is 32).
+ */
+#ifndef DEFAULT_SOFTWARE_DEPTH_BITS
+#define DEFAULT_SOFTWARE_DEPTH_BITS 16
+#endif
+/** Depth buffer data type */
+#if DEFAULT_SOFTWARE_DEPTH_BITS <= 16
+#define DEFAULT_SOFTWARE_DEPTH_TYPE GLushort
+#else
+#define DEFAULT_SOFTWARE_DEPTH_TYPE GLuint
+#endif
+
+
+/**
+ * Max image/surface/texture size.
+ */
+#define SWRAST_MAX_WIDTH 16384
+#define SWRAST_MAX_HEIGHT 16384
+
+
 /**
  * \struct SWvertex
  * \brief Data-structure to handle vertices in the software rasterizer.
@@ -187,13 +215,10 @@ _swrast_delete_texture_image(struct gl_context *ctx,
 
 extern GLboolean
 _swrast_alloc_texture_image_buffer(struct gl_context *ctx,
-                                   struct gl_texture_image *texImage,
-                                   gl_format format, GLsizei width,
-                                   GLsizei height, GLsizei depth);
+                                   struct gl_texture_image *texImage);
 
 extern void
-_swrast_init_texture_image(struct gl_texture_image *texImage, GLsizei width,
-                           GLsizei height, GLsizei depth);
+_swrast_init_texture_image(struct gl_texture_image *texImage);
 
 extern void
 _swrast_free_texture_image_buffer(struct gl_context *ctx,

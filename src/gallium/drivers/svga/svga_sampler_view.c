@@ -65,7 +65,6 @@ svga_get_tex_sampler_view(struct pipe_context *pipe,
    boolean view = TRUE;
 
    assert(pt);
-   assert(min_lod >= 0);
    assert(min_lod <= max_lod);
    assert(max_lod <= pt->last_level);
 
@@ -172,7 +171,8 @@ svga_validate_sampler_view(struct svga_context *svga, struct svga_sampler_view *
    struct svga_texture *tex = svga_texture(v->texture);
    unsigned numFaces;
    unsigned age = 0;
-   int i, k;
+   int i;
+   unsigned k;
 
    assert(svga);
 

@@ -34,20 +34,20 @@ LOCAL_C_INCLUDES += \
 	$(MESA_TOP)/include
 
 # define ANDROID_VERSION (e.g., 4.0.x => 0x0400)
-major := $(word 1, $(subst ., , $(PLATFORM_VERSION)))
-minor := $(word 2, $(subst ., , $(PLATFORM_VERSION)))
 LOCAL_CFLAGS += \
-	-DANDROID_VERSION=0x0$(major)0$(minor)
+	-DANDROID_VERSION=0x0$(MESA_ANDROID_MAJOR_VERSION)0$(MESA_ANDROID_MINOR_VERSION)
 
 LOCAL_CFLAGS += \
-	-DPTHREADS \
+	-DHAVE_PTHREAD=1 \
 	-fvisibility=hidden \
 	-Wno-sign-compare
 
 ifeq ($(strip $(MESA_ENABLE_ASM)),true)
 ifeq ($(TARGET_ARCH),x86)
 LOCAL_CFLAGS += \
-	-DUSE_X86_ASM
+	-DUSE_X86_ASM \
+	-DHAVE_DLOPEN \
+
 endif
 endif
 

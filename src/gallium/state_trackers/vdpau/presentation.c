@@ -26,9 +26,6 @@
  **************************************************************************/
 
 #include <stdio.h>
-#include <time.h>
-#include <sys/timeb.h>
-
 #include <vdpau/vdpau.h>
 
 #include "util/u_debug.h"
@@ -46,8 +43,6 @@ vlVdpPresentationQueueCreate(VdpDevice device,
 {
    vlVdpPresentationQueue *pq = NULL;
    VdpStatus ret;
-
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Creating PresentationQueue\n");
 
    if (!presentation_queue)
       return VDP_STATUS_INVALID_POINTER;
@@ -70,12 +65,13 @@ vlVdpPresentationQueueCreate(VdpDevice device,
    pq->device = dev;
    pq->drawable = pqt->drawable;
 
-   if (!vl_compositor_init(&pq->compositor, dev->context->pipe)) {
+   pipe_mutex_lock(dev->mutex);
+   if (!vl_compositor_init_state(&pq->cstate, dev->context)) {
+      pipe_mutex_unlock(dev->mutex);
       ret = VDP_STATUS_ERROR;
       goto no_compositor;
    }
-
-   vl_compositor_reset_dirty_area(&pq->dirty_area);
+   pipe_mutex_unlock(dev->mutex);
 
    *presentation_queue = vlAddDataHTAB(pq);
    if (*presentation_queue == 0) {
@@ -99,13 +95,13 @@ vlVdpPresentationQueueDestroy(VdpPresentationQueue presentation_queue)
 {
    vlVdpPresentationQueue *pq;
 
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Destroying PresentationQueue\n");
-
    pq = vlGetDataHTAB(presentation_queue);
    if (!pq)
       return VDP_STATUS_INVALID_HANDLE;
 
-   vl_compositor_cleanup(&pq->compositor);
+   pipe_mutex_lock(pq->device->mutex);
+   vl_compositor_cleanup_state(&pq->cstate);
+   pipe_mutex_unlock(pq->device->mutex);
 
    vlRemoveDataHTAB(presentation_queue);
    FREE(pq);
@@ -123,8 +119,6 @@ vlVdpPresentationQueueSetBackgroundColor(VdpPresentationQueue presentation_queue
    vlVdpPresentationQueue *pq;
    union pipe_color_union color;
 
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Setting background color\n");
-
    if (!background_color)
       return VDP_STATUS_INVALID_POINTER;
 
@@ -137,7 +131,9 @@ vlVdpPresentationQueueSetBackgroundColor(VdpPresentationQueue presentation_queue
    color.f[2] = background_color->blue;
    color.f[3] = background_color->alpha;
 
-   vl_compositor_set_clear_color(&pq->compositor, &color);
+   pipe_mutex_lock(pq->device->mutex);
+   vl_compositor_set_clear_color(&pq->cstate, &color);
+   pipe_mutex_unlock(pq->device->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -152,8 +148,6 @@ vlVdpPresentationQueueGetBackgroundColor(VdpPresentationQueue presentation_queue
    vlVdpPresentationQueue *pq;
    union pipe_color_union color;
 
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Getting background color\n");
-
    if (!background_color)
       return VDP_STATUS_INVALID_POINTER;
 
@@ -161,7 +155,9 @@ vlVdpPresentationQueueGetBackgroundColor(VdpPresentationQueue presentation_queue
    if (!pq)
       return VDP_STATUS_INVALID_HANDLE;
 
-   vl_compositor_get_clear_color(&pq->compositor, &color);
+   pipe_mutex_lock(pq->device->mutex);
+   vl_compositor_get_clear_color(&pq->cstate, &color);
+   pipe_mutex_unlock(pq->device->mutex);
 
    background_color->red = color.f[0];
    background_color->green = color.f[1];
@@ -179,9 +175,6 @@ vlVdpPresentationQueueGetTime(VdpPresentationQueue presentation_queue,
                               VdpTime *current_time)
 {
    vlVdpPresentationQueue *pq;
-   struct timespec ts;
-
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Getting queue time\n");
 
    if (!current_time)
       return VDP_STATUS_INVALID_POINTER;
@@ -190,8 +183,9 @@ vlVdpPresentationQueueGetTime(VdpPresentationQueue presentation_queue,
    if (!pq)
       return VDP_STATUS_INVALID_HANDLE;
 
-   clock_gettime(CLOCK_REALTIME, &ts);
-   *current_time = (uint64_t)ts.tv_sec * 1000000000LL + (uint64_t)ts.tv_nsec;
+   pipe_mutex_lock(pq->device->mutex);
+   *current_time = vl_screen_get_timestamp(pq->device->vscreen, pq->drawable);
+   pipe_mutex_unlock(pq->device->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -212,49 +206,76 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
    vlVdpOutputSurface *surf;
 
    struct pipe_context *pipe;
-   struct pipe_surface *drawable_surface;
-   struct pipe_video_rect src_rect, dst_clip;
+   struct pipe_resource *tex;
+   struct pipe_surface surf_templ, *surf_draw;
+   struct u_rect src_rect, dst_clip, *dirty_area;
+
+   struct vl_compositor *compositor;
+   struct vl_compositor_state *cstate;
 
    pq = vlGetDataHTAB(presentation_queue);
    if (!pq)
-      return VDP_STATUS_INVALID_HANDLE;
-
-   drawable_surface = vl_drawable_surface_get(pq->device->context, pq->drawable);
-   if (!drawable_surface)
       return VDP_STATUS_INVALID_HANDLE;
 
    surf = vlGetDataHTAB(surface);
    if (!surf)
       return VDP_STATUS_INVALID_HANDLE;
 
+   pipe = pq->device->context;
+   compositor = &pq->device->compositor;
+   cstate = &pq->cstate;
+
+   pipe_mutex_lock(pq->device->mutex);
+   tex = vl_screen_texture_from_drawable(pq->device->vscreen, pq->drawable);
+   if (!tex) {
+      pipe_mutex_unlock(pq->device->mutex);
+      return VDP_STATUS_INVALID_HANDLE;
+   }
+
+   dirty_area = vl_screen_get_dirty_area(pq->device->vscreen);
+
+   memset(&surf_templ, 0, sizeof(surf_templ));
+   surf_templ.format = tex->format;
+   surf_draw = pipe->create_surface(pipe, tex, &surf_templ);
+
    surf->timestamp = (vlVdpTime)earliest_presentation_time;
 
-   src_rect.x = 0;
-   src_rect.y = 0;
-   src_rect.w = drawable_surface->width;
-   src_rect.h = drawable_surface->height;
+   dst_clip.x0 = 0;
+   dst_clip.y0 = 0;
+   dst_clip.x1 = clip_width ? clip_width : surf_draw->width;
+   dst_clip.y1 = clip_height ? clip_height : surf_draw->height;
 
-   dst_clip.x = 0;
-   dst_clip.y = 0;
-   dst_clip.w = clip_width;
-   dst_clip.h = clip_height;
+   if (pq->device->delayed_rendering.surface == surface &&
+       dst_clip.x1 == surf_draw->width && dst_clip.y1 == surf_draw->height) {
 
-   vl_compositor_clear_layers(&pq->compositor);
-   vl_compositor_set_rgba_layer(&pq->compositor, 0, surf->sampler_view, &src_rect, NULL);
-   vl_compositor_render(&pq->compositor, drawable_surface, NULL, &dst_clip, &pq->dirty_area);
+      // TODO: we correctly support the clipping here, but not the pq background color in the clipped area....
+      cstate = pq->device->delayed_rendering.cstate;
+      vl_compositor_set_dst_clip(cstate, &dst_clip);
+      vlVdpResolveDelayedRendering(pq->device, surf_draw, dirty_area);
 
-   pipe = pq->device->context->pipe;
+   } else {
+      vlVdpResolveDelayedRendering(pq->device, NULL, NULL);
 
+      src_rect.x0 = 0;
+      src_rect.y0 = 0;
+      src_rect.x1 = surf_draw->width;
+      src_rect.y1 = surf_draw->height;
+
+      vl_compositor_clear_layers(cstate);
+      vl_compositor_set_rgba_layer(cstate, compositor, 0, surf->sampler_view, &src_rect, NULL, NULL);
+      vl_compositor_set_dst_clip(cstate, &dst_clip);
+      vl_compositor_render(cstate, compositor, surf_draw, dirty_area);
+   }
+
+   vl_screen_set_next_timestamp(pq->device->vscreen, earliest_presentation_time);
    pipe->screen->flush_frontbuffer
    (
-      pipe->screen,
-      drawable_surface->texture,
-      0, 0,
-      vl_contextprivate_get(pq->device->context, drawable_surface)
+      pipe->screen, tex, 0, 0,
+      vl_screen_get_private(pq->device->vscreen)
    );
 
    pipe->screen->fence_reference(pipe->screen, &surf->fence, NULL);
-   pipe->flush(pipe, &surf->fence);
+   pipe->flush(pipe, &surf->fence, 0);
 
    if (dump_window == -1) {
       dump_window = debug_get_num_option("VDPAU_DUMP", 0);
@@ -264,12 +285,17 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
       static unsigned int framenum = 0;
       char cmd[256];
 
-      sprintf(cmd, "xwd -id %d -out vdpau_frame_%08d.xwd", (int)pq->drawable, ++framenum);
-      if (system(cmd) != 0)
-         VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Dumping surface %d failed.\n", surface);
+      if (framenum) {
+         sprintf(cmd, "xwd -id %d -silent -out vdpau_frame_%08d.xwd", (int)pq->drawable, framenum);
+         if (system(cmd) != 0)
+            VDPAU_MSG(VDPAU_ERR, "[VDPAU] Dumping surface %d failed.\n", surface);
+      }
+      framenum++;
    }
 
-   pipe_surface_reference(&drawable_surface, NULL);
+   pipe_resource_reference(&tex, NULL);
+   pipe_surface_reference(&surf_draw, NULL);
+   pipe_mutex_unlock(pq->device->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -297,15 +323,14 @@ vlVdpPresentationQueueBlockUntilSurfaceIdle(VdpPresentationQueue presentation_qu
    if (!surf)
       return VDP_STATUS_INVALID_HANDLE;
 
+   pipe_mutex_lock(pq->device->mutex);
    if (surf->fence) {
-      screen = pq->device->context->pipe->screen;
+      screen = pq->device->vscreen->pscreen;
       screen->fence_finish(screen, surf->fence, 0);
    }
+   pipe_mutex_unlock(pq->device->mutex);
 
-   // We actually need to query the timestamp of the last VSYNC event from the hardware
-   vlVdpPresentationQueueGetTime(presentation_queue, first_presentation_time);
-
-   return VDP_STATUS_OK;
+   return vlVdpPresentationQueueGetTime(presentation_queue, first_presentation_time);
 }
 
 /**
@@ -337,16 +362,19 @@ vlVdpPresentationQueueQuerySurfaceStatus(VdpPresentationQueue presentation_queue
    if (!surf->fence) {
       *status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
    } else {
-      screen = pq->device->context->pipe->screen;
+      pipe_mutex_lock(pq->device->mutex);
+      screen = pq->device->vscreen->pscreen;
       if (screen->fence_signalled(screen, surf->fence)) {
          screen->fence_reference(screen, &surf->fence, NULL);
          *status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
+         pipe_mutex_unlock(pq->device->mutex);
 
          // We actually need to query the timestamp of the last VSYNC event from the hardware
          vlVdpPresentationQueueGetTime(presentation_queue, first_presentation_time);
          *first_presentation_time += 1;
       } else {
          *status = VDP_PRESENTATION_QUEUE_STATUS_QUEUED;
+         pipe_mutex_unlock(pq->device->mutex);
       }
    }
 

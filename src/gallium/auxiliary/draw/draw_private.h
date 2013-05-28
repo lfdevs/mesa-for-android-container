@@ -47,8 +47,8 @@
 #include "tgsi/tgsi_scan.h"
 
 #ifdef HAVE_LLVM
-#include <llvm-c/ExecutionEngine.h>
 struct draw_llvm;
+struct gallivm_state;
 #endif
 
 
@@ -63,6 +63,7 @@ struct draw_stage;
 struct vbuf_render;
 struct tgsi_exec_machine;
 struct tgsi_sampler;
+struct draw_pt_front_end;
 
 
 /**
@@ -137,6 +138,14 @@ struct draw_context
    /* Support prototype passthrough path:
     */
    struct {
+      /* Current active frontend */
+      struct draw_pt_front_end *frontend;
+      unsigned prim;
+      unsigned opt;     /**< bitmask of PT_x flags */
+      unsigned eltSize; /* saved eltSize for flushing */
+
+      boolean rebind_parameters;
+
       struct {
          struct draw_pt_middle_end *fetch_emit;
          struct draw_pt_middle_end *fetch_shade_emit;
@@ -162,13 +171,12 @@ struct draw_context
       struct pipe_vertex_element vertex_element[PIPE_MAX_ATTRIBS];
       unsigned nr_vertex_elements;
 
-      struct pipe_index_buffer index_buffer;
-
       /* user-space vertex data, buffers */
       struct {
          /** vertex element/index buffer (ex: glDrawElements) */
          const void *elts;
          /** bytes per index (0, 1, 2 or 4) */
+         unsigned eltSizeIB;
          unsigned eltSize;
          int eltBias;
          unsigned min_index;
@@ -196,6 +204,8 @@ struct draw_context
       boolean bypass_clip_z;
       boolean guard_band_xy;
    } driver;
+
+   boolean quads_always_flatshade_last;
 
    boolean flushing;         /**< debugging/sanity */
    boolean suspend_flushing; /**< internally set */
@@ -233,18 +243,14 @@ struct draw_context
       uint edgeflag_output;
       uint clipvertex_output;
       uint clipdistance_output[2];
-      /** TGSI program interpreter runtime state */
-      struct tgsi_exec_machine *machine;
 
-      uint num_samplers;
-      struct tgsi_sampler **samplers;
+      /** Fields for TGSI interpreter / execution */
+      struct {
+         struct tgsi_exec_machine *machine;
 
-
-      const void *aligned_constants[PIPE_MAX_CONSTANT_BUFFERS];
-
-      const void *aligned_constant_storage[PIPE_MAX_CONSTANT_BUFFERS];
-      unsigned const_storage_size[PIPE_MAX_CONSTANT_BUFFERS];
-
+         struct tgsi_sampler **samplers;
+         uint num_samplers;
+      } tgsi;
 
       struct translate *fetch;
       struct translate_cache *fetch_cache;
@@ -258,11 +264,14 @@ struct draw_context
       uint num_gs_outputs;  /**< convenience, from geometry_shader */
       uint position_output;
 
-      /** TGSI program interpreter runtime state */
-      struct tgsi_exec_machine *machine;
+      /** Fields for TGSI interpreter / execution */
+      struct {
+         struct tgsi_exec_machine *machine;
 
-      uint num_samplers;
-      struct tgsi_sampler **samplers;
+         struct tgsi_sampler **samplers;
+         uint num_samplers;
+      } tgsi;
+
    } gs;
 
    /** Fragment shader state */
@@ -290,19 +299,21 @@ struct draw_context
       uint slot[10];
    } extra_shader_outputs;
 
-   unsigned reduced_prim;
-
    unsigned instance_id;
 
 #ifdef HAVE_LLVM
    struct draw_llvm *llvm;
-   struct gallivm_state *own_gallivm;
 #endif
 
-   struct pipe_sampler_view *sampler_views[PIPE_MAX_VERTEX_SAMPLERS];
-   unsigned num_sampler_views;
-   const struct pipe_sampler_state *samplers[PIPE_MAX_VERTEX_SAMPLERS];
-   unsigned num_samplers;
+   /** Texture sampler and sampler view state.
+    * Note that we have arrays indexed by shader type.  At this time
+    * we only handle vertex and geometry shaders in the draw module, but
+    * there may be more in the future (ex: hull and tessellation).
+    */
+   struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   unsigned num_sampler_views[PIPE_SHADER_TYPES];
+   const struct pipe_sampler_state *samplers[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
+   unsigned num_samplers[PIPE_SHADER_TYPES];
 
    void *driver_private;
 };
@@ -354,24 +365,12 @@ void draw_vs_destroy( struct draw_context *draw );
 void draw_vs_set_viewport( struct draw_context *, 
                            const struct pipe_viewport_state * );
 
-void
-draw_vs_set_constants(struct draw_context *,
-                      unsigned slot,
-                      const void *constants,
-                      unsigned size);
-
-
 
 /*******************************************************************************
  * Geometry shading code:
  */
 boolean draw_gs_init( struct draw_context *draw );
 
-void
-draw_gs_set_constants(struct draw_context *,
-                      unsigned slot,
-                      const void *constants,
-                      unsigned size);
 
 void draw_gs_destroy( struct draw_context *draw );
 
@@ -393,6 +392,7 @@ void draw_remove_extra_vertex_attribs(struct draw_context *draw);
 boolean draw_pt_init( struct draw_context *draw );
 void draw_pt_destroy( struct draw_context *draw );
 void draw_pt_reset_vertex_ids( struct draw_context *draw );
+void draw_pt_flush( struct draw_context *draw, unsigned flags );
 
 
 /*******************************************************************************
@@ -436,8 +436,9 @@ void draw_pipeline_flush( struct draw_context *draw,
  * Flushing 
  */
 
-#define DRAW_FLUSH_STATE_CHANGE              0x8
-#define DRAW_FLUSH_BACKEND                   0x10
+#define DRAW_FLUSH_PARAMETER_CHANGE 0x1  /**< Constants, viewport, etc */
+#define DRAW_FLUSH_STATE_CHANGE     0x2  /**< Other/heavy state changes */
+#define DRAW_FLUSH_BACKEND          0x4  /**< Flush the output buffer */
 
 
 void draw_do_flush( struct draw_context *draw, unsigned flags );

@@ -35,6 +35,7 @@ enum
 {
    ARB_create_context_bit = 0,
    ARB_create_context_profile_bit,
+   ARB_create_context_robustness_bit,
    ARB_get_proc_address_bit,
    ARB_multisample_bit,
    ATI_pixel_format_float_bit,
@@ -63,6 +64,11 @@ enum
    EXT_texture_from_pixmap_bit,
    INTEL_swap_event_bit,
 };
+
+/* From the GLX perspective, the ARB and EXT extensions are identical.  Use a
+ * single bit for both.
+ */
+#define ARB_framebuffer_sRGB_bit EXT_framebuffer_sRGB_bit
 
 enum
 {

@@ -77,14 +77,6 @@ struct vl_mpeg12_decoder
 
    unsigned current_buffer;
    struct vl_mpeg12_buffer *dec_buffers[4];
-
-   struct pipe_mpeg12_picture_desc picture_desc;
-   uint8_t intra_matrix[64];
-   uint8_t non_intra_matrix[64];
-   struct pipe_sampler_view *ref_frames[VL_MAX_REF_FRAMES][VL_MAX_PLANES];
-
-   struct pipe_video_buffer *target;
-   struct pipe_surface *target_surfaces[VL_MAX_PLANES];
 };
 
 struct vl_mpeg12_buffer
@@ -97,14 +89,14 @@ struct vl_mpeg12_buffer
    struct pipe_sampler_view *zscan_source;
 
    struct vl_mpg12_bs bs;
-   struct vl_zscan_buffer zscan[VL_MAX_PLANES];
-   struct vl_idct_buffer idct[VL_MAX_PLANES];
-   struct vl_mc_buffer mc[VL_MAX_PLANES];
+   struct vl_zscan_buffer zscan[VL_NUM_COMPONENTS];
+   struct vl_idct_buffer idct[VL_NUM_COMPONENTS];
+   struct vl_mc_buffer mc[VL_NUM_COMPONENTS];
 
    struct pipe_transfer *tex_transfer;
    short *texels;
 
-   struct vl_ycbcr_block *ycbcr_stream[VL_MAX_PLANES];
+   struct vl_ycbcr_block *ycbcr_stream[VL_NUM_COMPONENTS];
    struct vl_motionvector *mv_stream[VL_MAX_REF_FRAMES];
 };
 

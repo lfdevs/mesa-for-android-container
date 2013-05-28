@@ -38,25 +38,7 @@
 #include "ir.h"
 #include "ir_visitor.h"
 #include "glsl_types.h"
-
-/* Using C99 rounding functions for roundToEven() implementation is
- * difficult, because round(), rint, and nearbyint() are affected by
- * fesetenv(), which the application may have done for its own
- * purposes.  Mesa's IROUND macro is close to what we want, but it
- * rounds away from 0 on n + 0.5.
- */
-static int
-round_to_even(float val)
-{
-   int rounded = IROUND(val);
-
-   if (val - floor(val) == 0.5) {
-      if (rounded % 2 != 0)
-	 rounded += val > 0 ? -1 : 1;
-   }
-
-   return rounded;
-}
+#include "program/hash_table.h"
 
 static float
 dot(ir_constant *op0, ir_constant *op1)
@@ -70,8 +52,329 @@ dot(ir_constant *op0, ir_constant *op1)
    return result;
 }
 
+/* This method is the only one supported by gcc.  Unions in particular
+ * are iffy, and read-through-converted-pointer is killed by strict
+ * aliasing.  OTOH, the compiler sees through the memcpy, so the
+ * resulting asm is reasonable.
+ */
+static float
+bitcast_u2f(unsigned int u)
+{
+   assert(sizeof(float) == sizeof(unsigned int));
+   float f;
+   memcpy(&f, &u, sizeof(f));
+   return f;
+}
+
+static unsigned int
+bitcast_f2u(float f)
+{
+   assert(sizeof(float) == sizeof(unsigned int));
+   unsigned int u;
+   memcpy(&u, &f, sizeof(f));
+   return u;
+}
+
+/**
+ * Evaluate one component of a floating-point 4x8 unpacking function.
+ */
+typedef uint8_t
+(*pack_1x8_func_t)(float);
+
+/**
+ * Evaluate one component of a floating-point 2x16 unpacking function.
+ */
+typedef uint16_t
+(*pack_1x16_func_t)(float);
+
+/**
+ * Evaluate one component of a floating-point 4x8 unpacking function.
+ */
+typedef float
+(*unpack_1x8_func_t)(uint8_t);
+
+/**
+ * Evaluate one component of a floating-point 2x16 unpacking function.
+ */
+typedef float
+(*unpack_1x16_func_t)(uint16_t);
+
+/**
+ * Evaluate a 2x16 floating-point packing function.
+ */
+static uint32_t
+pack_2x16(pack_1x16_func_t pack_1x16,
+          float x, float y)
+{
+   /* From section 8.4 of the GLSL ES 3.00 spec:
+    *
+    *    packSnorm2x16
+    *    -------------
+    *    The first component of the vector will be written to the least
+    *    significant bits of the output; the last component will be written to
+    *    the most significant bits.
+    *
+    * The specifications for the other packing functions contain similar
+    * language.
+    */
+   uint32_t u = 0;
+   u |= ((uint32_t) pack_1x16(x) << 0);
+   u |= ((uint32_t) pack_1x16(y) << 16);
+   return u;
+}
+
+/**
+ * Evaluate a 4x8 floating-point packing function.
+ */
+static uint32_t
+pack_4x8(pack_1x8_func_t pack_1x8,
+         float x, float y, float z, float w)
+{
+   /* From section 8.4 of the GLSL 4.30 spec:
+    *
+    *    packSnorm4x8
+    *    ------------
+    *    The first component of the vector will be written to the least
+    *    significant bits of the output; the last component will be written to
+    *    the most significant bits.
+    *
+    * The specifications for the other packing functions contain similar
+    * language.
+    */
+   uint32_t u = 0;
+   u |= ((uint32_t) pack_1x8(x) << 0);
+   u |= ((uint32_t) pack_1x8(y) << 8);
+   u |= ((uint32_t) pack_1x8(z) << 16);
+   u |= ((uint32_t) pack_1x8(w) << 24);
+   return u;
+}
+
+/**
+ * Evaluate a 2x16 floating-point unpacking function.
+ */
+static void
+unpack_2x16(unpack_1x16_func_t unpack_1x16,
+            uint32_t u,
+            float *x, float *y)
+{
+    /* From section 8.4 of the GLSL ES 3.00 spec:
+     *
+     *    unpackSnorm2x16
+     *    ---------------
+     *    The first component of the returned vector will be extracted from
+     *    the least significant bits of the input; the last component will be
+     *    extracted from the most significant bits.
+     *
+     * The specifications for the other unpacking functions contain similar
+     * language.
+     */
+   *x = unpack_1x16((uint16_t) (u & 0xffff));
+   *y = unpack_1x16((uint16_t) (u >> 16));
+}
+
+/**
+ * Evaluate a 4x8 floating-point unpacking function.
+ */
+static void
+unpack_4x8(unpack_1x8_func_t unpack_1x8, uint32_t u,
+           float *x, float *y, float *z, float *w)
+{
+    /* From section 8.4 of the GLSL 4.30 spec:
+     *
+     *    unpackSnorm4x8
+     *    --------------
+     *    The first component of the returned vector will be extracted from
+     *    the least significant bits of the input; the last component will be
+     *    extracted from the most significant bits.
+     *
+     * The specifications for the other unpacking functions contain similar
+     * language.
+     */
+   *x = unpack_1x8((uint8_t) (u & 0xff));
+   *y = unpack_1x8((uint8_t) (u >> 8));
+   *z = unpack_1x8((uint8_t) (u >> 16));
+   *w = unpack_1x8((uint8_t) (u >> 24));
+}
+
+/**
+ * Evaluate one component of packSnorm4x8.
+ */
+static uint8_t
+pack_snorm_1x8(float x)
+{
+    /* From section 8.4 of the GLSL 4.30 spec:
+     *
+     *    packSnorm4x8
+     *    ------------
+     *    The conversion for component c of v to fixed point is done as
+     *    follows:
+     *
+     *      packSnorm4x8: round(clamp(c, -1, +1) * 127.0)
+     *
+     * We must first cast the float to an int, because casting a negative
+     * float to a uint is undefined.
+     */
+   return (uint8_t) (int8_t)
+          _mesa_round_to_even(CLAMP(x, -1.0f, +1.0f) * 127.0f);
+}
+
+/**
+ * Evaluate one component of packSnorm2x16.
+ */
+static uint16_t
+pack_snorm_1x16(float x)
+{
+    /* From section 8.4 of the GLSL ES 3.00 spec:
+     *
+     *    packSnorm2x16
+     *    -------------
+     *    The conversion for component c of v to fixed point is done as
+     *    follows:
+     *
+     *      packSnorm2x16: round(clamp(c, -1, +1) * 32767.0)
+     *
+     * We must first cast the float to an int, because casting a negative
+     * float to a uint is undefined.
+     */
+   return (uint16_t) (int16_t)
+          _mesa_round_to_even(CLAMP(x, -1.0f, +1.0f) * 32767.0f);
+}
+
+/**
+ * Evaluate one component of unpackSnorm4x8.
+ */
+static float
+unpack_snorm_1x8(uint8_t u)
+{
+    /* From section 8.4 of the GLSL 4.30 spec:
+     *
+     *    unpackSnorm4x8
+     *    --------------
+     *    The conversion for unpacked fixed-point value f to floating point is
+     *    done as follows:
+     *
+     *       unpackSnorm4x8: clamp(f / 127.0, -1, +1)
+     */
+   return CLAMP((int8_t) u / 127.0f, -1.0f, +1.0f);
+}
+
+/**
+ * Evaluate one component of unpackSnorm2x16.
+ */
+static float
+unpack_snorm_1x16(uint16_t u)
+{
+    /* From section 8.4 of the GLSL ES 3.00 spec:
+     *
+     *    unpackSnorm2x16
+     *    ---------------
+     *    The conversion for unpacked fixed-point value f to floating point is
+     *    done as follows:
+     *
+     *       unpackSnorm2x16: clamp(f / 32767.0, -1, +1)
+     */
+   return CLAMP((int16_t) u / 32767.0f, -1.0f, +1.0f);
+}
+
+/**
+ * Evaluate one component packUnorm4x8.
+ */
+static uint8_t
+pack_unorm_1x8(float x)
+{
+    /* From section 8.4 of the GLSL 4.30 spec:
+     *
+     *    packUnorm4x8
+     *    ------------
+     *    The conversion for component c of v to fixed point is done as
+     *    follows:
+     *
+     *       packUnorm4x8: round(clamp(c, 0, +1) * 255.0)
+     */
+   return (uint8_t) _mesa_round_to_even(CLAMP(x, 0.0f, 1.0f) * 255.0f);
+}
+
+/**
+ * Evaluate one component packUnorm2x16.
+ */
+static uint16_t
+pack_unorm_1x16(float x)
+{
+    /* From section 8.4 of the GLSL ES 3.00 spec:
+     *
+     *    packUnorm2x16
+     *    -------------
+     *    The conversion for component c of v to fixed point is done as
+     *    follows:
+     *
+     *       packUnorm2x16: round(clamp(c, 0, +1) * 65535.0)
+     */
+   return (uint16_t) _mesa_round_to_even(CLAMP(x, 0.0f, 1.0f) * 65535.0f);
+}
+
+/**
+ * Evaluate one component of unpackUnorm4x8.
+ */
+static float
+unpack_unorm_1x8(uint8_t u)
+{
+    /* From section 8.4 of the GLSL 4.30 spec:
+     *
+     *    unpackUnorm4x8
+     *    --------------
+     *    The conversion for unpacked fixed-point value f to floating point is
+     *    done as follows:
+     *
+     *       unpackUnorm4x8: f / 255.0
+     */
+   return (float) u / 255.0f;
+}
+
+/**
+ * Evaluate one component of unpackUnorm2x16.
+ */
+static float
+unpack_unorm_1x16(uint16_t u)
+{
+    /* From section 8.4 of the GLSL ES 3.00 spec:
+     *
+     *    unpackUnorm2x16
+     *    ---------------
+     *    The conversion for unpacked fixed-point value f to floating point is
+     *    done as follows:
+     *
+     *       unpackUnorm2x16: f / 65535.0
+     */
+   return (float) u / 65535.0f;
+}
+
+/**
+ * Evaluate one component of packHalf2x16.
+ */
+static uint16_t
+pack_half_1x16(float x)
+{
+   return _mesa_float_to_half(x);
+}
+
+/**
+ * Evaluate one component of unpackHalf2x16.
+ */
+static float
+unpack_half_1x16(uint16_t u)
+{
+   return _mesa_half_to_float(u);
+}
+
 ir_constant *
-ir_expression::constant_expression_value()
+ir_rvalue::constant_expression_value(struct hash_table *variable_context)
+{
+   assert(this->type->is_error());
+   return NULL;
+}
+
+ir_constant *
+ir_expression::constant_expression_value(struct hash_table *variable_context)
 {
    if (this->type->is_error())
       return NULL;
@@ -82,7 +385,7 @@ ir_expression::constant_expression_value()
    memset(&data, 0, sizeof(data));
 
    for (unsigned operand = 0; operand < this->get_num_operands(); operand++) {
-      op[operand] = this->operands[operand]->constant_expression_value();
+      op[operand] = this->operands[operand]->constant_expression_value(variable_context);
       if (!op[operand])
 	 return NULL;
    }
@@ -151,6 +454,12 @@ ir_expression::constant_expression_value()
 	 data.i[c] = (int) op[0]->value.f[c];
       }
       break;
+   case ir_unop_f2u:
+      assert(op[0]->type->base_type == GLSL_TYPE_FLOAT);
+      for (unsigned c = 0; c < op[0]->type->components(); c++) {
+         data.i[c] = (unsigned) op[0]->value.f[c];
+      }
+      break;
    case ir_unop_i2f:
       assert(op[0]->type->base_type == GLSL_TYPE_INT);
       for (unsigned c = 0; c < op[0]->type->components(); c++) {
@@ -199,6 +508,30 @@ ir_expression::constant_expression_value()
 	 data.u[c] = op[0]->value.i[c];
       }
       break;
+   case ir_unop_bitcast_i2f:
+      assert(op[0]->type->base_type == GLSL_TYPE_INT);
+      for (unsigned c = 0; c < op[0]->type->components(); c++) {
+	 data.f[c] = bitcast_u2f(op[0]->value.i[c]);
+      }
+      break;
+   case ir_unop_bitcast_f2i:
+      assert(op[0]->type->base_type == GLSL_TYPE_FLOAT);
+      for (unsigned c = 0; c < op[0]->type->components(); c++) {
+	 data.i[c] = bitcast_f2u(op[0]->value.f[c]);
+      }
+      break;
+   case ir_unop_bitcast_u2f:
+      assert(op[0]->type->base_type == GLSL_TYPE_UINT);
+      for (unsigned c = 0; c < op[0]->type->components(); c++) {
+	 data.f[c] = bitcast_u2f(op[0]->value.u[c]);
+      }
+      break;
+   case ir_unop_bitcast_f2u:
+      assert(op[0]->type->base_type == GLSL_TYPE_FLOAT);
+      for (unsigned c = 0; c < op[0]->type->components(); c++) {
+	 data.u[c] = bitcast_f2u(op[0]->value.f[c]);
+      }
+      break;
    case ir_unop_any:
       assert(op[0]->type->is_boolean());
       data.b[0] = false;
@@ -218,7 +551,7 @@ ir_expression::constant_expression_value()
    case ir_unop_round_even:
       assert(op[0]->type->base_type == GLSL_TYPE_FLOAT);
       for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 data.f[c] = round_to_even(op[0]->value.f[c]);
+	 data.f[c] = _mesa_round_to_even(op[0]->value.f[c]);
       }
       break;
 
@@ -398,6 +731,70 @@ ir_expression::constant_expression_value()
       }
       break;
 
+   case ir_unop_pack_snorm_2x16:
+      assert(op[0]->type == glsl_type::vec2_type);
+      data.u[0] = pack_2x16(pack_snorm_1x16,
+                            op[0]->value.f[0],
+                            op[0]->value.f[1]);
+      break;
+   case ir_unop_pack_snorm_4x8:
+      assert(op[0]->type == glsl_type::vec4_type);
+      data.u[0] = pack_4x8(pack_snorm_1x8,
+                           op[0]->value.f[0],
+                           op[0]->value.f[1],
+                           op[0]->value.f[2],
+                           op[0]->value.f[3]);
+      break;
+   case ir_unop_unpack_snorm_2x16:
+      assert(op[0]->type == glsl_type::uint_type);
+      unpack_2x16(unpack_snorm_1x16,
+                  op[0]->value.u[0],
+                  &data.f[0], &data.f[1]);
+      break;
+   case ir_unop_unpack_snorm_4x8:
+      assert(op[0]->type == glsl_type::uint_type);
+      unpack_4x8(unpack_snorm_1x8,
+                 op[0]->value.u[0],
+                 &data.f[0], &data.f[1], &data.f[2], &data.f[3]);
+      break;
+   case ir_unop_pack_unorm_2x16:
+      assert(op[0]->type == glsl_type::vec2_type);
+      data.u[0] = pack_2x16(pack_unorm_1x16,
+                            op[0]->value.f[0],
+                            op[0]->value.f[1]);
+      break;
+   case ir_unop_pack_unorm_4x8:
+      assert(op[0]->type == glsl_type::vec4_type);
+      data.u[0] = pack_4x8(pack_unorm_1x8,
+                           op[0]->value.f[0],
+                           op[0]->value.f[1],
+                           op[0]->value.f[2],
+                           op[0]->value.f[3]);
+      break;
+   case ir_unop_unpack_unorm_2x16:
+      assert(op[0]->type == glsl_type::uint_type);
+      unpack_2x16(unpack_unorm_1x16,
+                  op[0]->value.u[0],
+                  &data.f[0], &data.f[1]);
+      break;
+   case ir_unop_unpack_unorm_4x8:
+      assert(op[0]->type == glsl_type::uint_type);
+      unpack_4x8(unpack_unorm_1x8,
+                 op[0]->value.u[0],
+                 &data.f[0], &data.f[1], &data.f[2], &data.f[3]);
+      break;
+   case ir_unop_pack_half_2x16:
+      assert(op[0]->type == glsl_type::vec2_type);
+      data.u[0] = pack_2x16(pack_half_1x16,
+                            op[0]->value.f[0],
+                            op[0]->value.f[1]);
+      break;
+   case ir_unop_unpack_half_2x16:
+      assert(op[0]->type == glsl_type::uint_type);
+      unpack_2x16(unpack_half_1x16,
+                  op[0]->value.u[0],
+                  &data.f[0], &data.f[1]);
+      break;
    case ir_binop_pow:
       assert(op[0]->type->base_type == GLSL_TYPE_FLOAT);
       for (unsigned c = 0; c < op[0]->type->components(); c++) {
@@ -879,7 +1276,7 @@ ir_expression::constant_expression_value()
 
 
 ir_constant *
-ir_texture::constant_expression_value()
+ir_texture::constant_expression_value(struct hash_table *variable_context)
 {
    /* texture lookups aren't constant expressions */
    return NULL;
@@ -887,9 +1284,9 @@ ir_texture::constant_expression_value()
 
 
 ir_constant *
-ir_swizzle::constant_expression_value()
+ir_swizzle::constant_expression_value(struct hash_table *variable_context)
 {
-   ir_constant *v = this->val->constant_expression_value();
+   ir_constant *v = this->val->constant_expression_value(variable_context);
 
    if (v != NULL) {
       ir_constant_data data = { { 0 } };
@@ -915,12 +1312,32 @@ ir_swizzle::constant_expression_value()
 }
 
 
+void
+ir_dereference_variable::constant_referenced(struct hash_table *variable_context,
+					     ir_constant *&store, int &offset) const
+{
+   if (variable_context) {
+      store = (ir_constant *)hash_table_find(variable_context, var);
+      offset = 0;
+   } else {
+      store = NULL;
+      offset = 0;
+   }
+}
+
 ir_constant *
-ir_dereference_variable::constant_expression_value()
+ir_dereference_variable::constant_expression_value(struct hash_table *variable_context)
 {
    /* This may occur during compile and var->type is glsl_type::error_type */
    if (!var)
       return NULL;
+
+   /* Give priority to the context hashtable, if it exists */
+   if (variable_context) {
+      ir_constant *value = (ir_constant *)hash_table_find(variable_context, var);
+      if(value)
+	 return value;
+   }
 
    /* The constant_value of a uniform variable is its initializer,
     * not the lifetime constant value of the uniform.
@@ -935,11 +1352,65 @@ ir_dereference_variable::constant_expression_value()
 }
 
 
-ir_constant *
-ir_dereference_array::constant_expression_value()
+void
+ir_dereference_array::constant_referenced(struct hash_table *variable_context,
+					  ir_constant *&store, int &offset) const
 {
-   ir_constant *array = this->array->constant_expression_value();
-   ir_constant *idx = this->array_index->constant_expression_value();
+   ir_constant *index_c = array_index->constant_expression_value(variable_context);
+
+   if (!index_c || !index_c->type->is_scalar() || !index_c->type->is_integer()) {
+      store = 0;
+      offset = 0;
+      return;
+   }
+
+   int index = index_c->type->base_type == GLSL_TYPE_INT ?
+      index_c->get_int_component(0) :
+      index_c->get_uint_component(0);
+
+   ir_constant *substore;
+   int suboffset;
+   const ir_dereference *deref = array->as_dereference();
+   if (!deref) {
+      store = 0;
+      offset = 0;
+      return;
+   }
+
+   deref->constant_referenced(variable_context, substore, suboffset);
+
+   if (!substore) {
+      store = 0;
+      offset = 0;
+      return;
+   }
+
+   const glsl_type *vt = array->type;
+   if (vt->is_array()) {
+      store = substore->get_array_element(index);
+      offset = 0;
+      return;
+   }
+   if (vt->is_matrix()) {
+      store = substore;
+      offset = index * vt->vector_elements;
+      return;
+   }
+   if (vt->is_vector()) {
+      store = substore;
+      offset = suboffset + index;
+      return;
+   }
+
+   store = 0;
+   offset = 0;
+}
+
+ir_constant *
+ir_dereference_array::constant_expression_value(struct hash_table *variable_context)
+{
+   ir_constant *array = this->array->constant_expression_value(variable_context);
+   ir_constant *idx = this->array_index->constant_expression_value(variable_context);
 
    if ((array != NULL) && (idx != NULL)) {
       void *ctx = ralloc_parent(this);
@@ -990,8 +1461,33 @@ ir_dereference_array::constant_expression_value()
 }
 
 
+void
+ir_dereference_record::constant_referenced(struct hash_table *variable_context,
+					   ir_constant *&store, int &offset) const
+{
+   ir_constant *substore;
+   int suboffset;
+   const ir_dereference *deref = record->as_dereference();
+   if (!deref) {
+      store = 0;
+      offset = 0;
+      return;
+   }
+
+   deref->constant_referenced(variable_context, substore, suboffset);
+
+   if (!substore) {
+      store = 0;
+      offset = 0;
+      return;
+   }
+
+   store = substore->get_record_field(field);
+   offset = 0;
+}
+
 ir_constant *
-ir_dereference_record::constant_expression_value()
+ir_dereference_record::constant_expression_value(struct hash_table *variable_context)
 {
    ir_constant *v = this->record->constant_expression_value();
 
@@ -1000,7 +1496,7 @@ ir_dereference_record::constant_expression_value()
 
 
 ir_constant *
-ir_assignment::constant_expression_value()
+ir_assignment::constant_expression_value(struct hash_table *variable_context)
 {
    /* FINISHME: Handle CEs involving assignment (return RHS) */
    return NULL;
@@ -1008,415 +1504,187 @@ ir_assignment::constant_expression_value()
 
 
 ir_constant *
-ir_constant::constant_expression_value()
+ir_constant::constant_expression_value(struct hash_table *variable_context)
 {
    return this;
 }
 
 
 ir_constant *
-ir_call::constant_expression_value()
+ir_call::constant_expression_value(struct hash_table *variable_context)
 {
-   if (this->type == glsl_type::error_type)
+   return this->callee->constant_expression_value(&this->actual_parameters, variable_context);
+}
+
+
+bool ir_function_signature::constant_expression_evaluate_expression_list(const struct exec_list &body,
+									 struct hash_table *variable_context,
+									 ir_constant **result)
+{
+   foreach_list(n, &body) {
+      ir_instruction *inst = (ir_instruction *)n;
+      switch(inst->ir_type) {
+
+	 /* (declare () type symbol) */
+      case ir_type_variable: {
+	 ir_variable *var = inst->as_variable();
+	 hash_table_insert(variable_context, ir_constant::zero(this, var->type), var);
+	 break;
+      }
+
+	 /* (assign [condition] (write-mask) (ref) (value)) */
+      case ir_type_assignment: {
+	 ir_assignment *asg = inst->as_assignment();
+	 if (asg->condition) {
+	    ir_constant *cond = asg->condition->constant_expression_value(variable_context);
+	    if (!cond)
+	       return false;
+	    if (!cond->get_bool_component(0))
+	       break;
+	 }
+
+	 ir_constant *store = NULL;
+	 int offset = 0;
+	 asg->lhs->constant_referenced(variable_context, store, offset);
+
+	 if (!store)
+	    return false;
+
+	 ir_constant *value = asg->rhs->constant_expression_value(variable_context);
+
+	 if (!value)
+	    return false;
+
+	 store->copy_masked_offset(value, offset, asg->write_mask);
+	 break;
+      }
+
+	 /* (return (expression)) */
+      case ir_type_return:
+	 assert (result);
+	 *result = inst->as_return()->value->constant_expression_value(variable_context);
+	 return *result != NULL;
+
+	 /* (call name (ref) (params))*/
+      case ir_type_call: {
+	 ir_call *call = inst->as_call();
+
+	 /* Just say no to void functions in constant expressions.  We
+	  * don't need them at that point.
+	  */
+
+	 if (!call->return_deref)
+	    return false;
+
+	 ir_constant *store = NULL;
+	 int offset = 0;
+	 call->return_deref->constant_referenced(variable_context, store, offset);
+
+	 if (!store)
+	    return false;
+
+	 ir_constant *value = call->constant_expression_value(variable_context);
+
+	 if(!value)
+	    return false;
+
+	 store->copy_offset(value, offset);
+	 break;
+      }
+
+	 /* (if condition (then-instructions) (else-instructions)) */
+      case ir_type_if: {
+	 ir_if *iif = inst->as_if();
+
+	 ir_constant *cond = iif->condition->constant_expression_value(variable_context);
+	 if (!cond || !cond->type->is_boolean())
+	    return false;
+
+	 exec_list &branch = cond->get_bool_component(0) ? iif->then_instructions : iif->else_instructions;
+
+	 *result = NULL;
+	 if (!constant_expression_evaluate_expression_list(branch, variable_context, result))
+	    return false;
+
+	 /* If there was a return in the branch chosen, drop out now. */
+	 if (*result)
+	    return true;
+
+	 break;
+      }
+
+	 /* Every other expression type, we drop out. */
+      default:
+	 return false;
+      }
+   }
+
+   /* Reaching the end of the block is not an error condition */
+   if (result)
+      *result = NULL;
+
+   return true;
+}
+
+ir_constant *
+ir_function_signature::constant_expression_value(exec_list *actual_parameters, struct hash_table *variable_context)
+{
+   const glsl_type *type = this->return_type;
+   if (type == glsl_type::void_type)
       return NULL;
 
    /* From the GLSL 1.20 spec, page 23:
     * "Function calls to user-defined functions (non-built-in functions)
     *  cannot be used to form constant expressions."
     */
-   if (!this->callee->is_builtin)
+   if (!this->is_builtin)
       return NULL;
 
-   unsigned num_parameters = 0;
-
-   /* Check if all parameters are constant */
-   ir_constant *op[3];
-   foreach_list(n, &this->actual_parameters) {
-      ir_constant *constant = ((ir_rvalue *) n)->constant_expression_value();
-      if (constant == NULL)
-	 return NULL;
-
-      op[num_parameters] = constant;
-
-      assert(num_parameters < 3);
-      num_parameters++;
-   }
-
-   /* Individual cases below can either:
-    * - Assign "expr" a new ir_expression to evaluate (for basic opcodes)
-    * - Fill "data" with appopriate constant data
-    * - Return an ir_constant directly.
+   /*
+    * Of the builtin functions, only the texture lookups and the noise
+    * ones must not be used in constant expressions.  They all include
+    * specific opcodes so they don't need to be special-cased at this
+    * point.
     */
-   void *mem_ctx = ralloc_parent(this);
-   ir_expression *expr = NULL;
 
-   ir_constant_data data;
-   memset(&data, 0, sizeof(data));
+   /* Initialize the table of dereferencable names with the function
+    * parameters.  Verify their const-ness on the way.
+    *
+    * We expect the correctness of the number of parameters to have
+    * been checked earlier.
+    */
+   hash_table *deref_hash = hash_table_ctor(8, hash_table_pointer_hash,
+					    hash_table_pointer_compare);
 
-   const char *callee = this->callee_name();
-   if (strcmp(callee, "abs") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_abs, type, op[0], NULL);
-   } else if (strcmp(callee, "all") == 0) {
-      assert(op[0]->type->is_boolean());
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 if (!op[0]->value.b[c])
-	    return new(mem_ctx) ir_constant(false);
-      }
-      return new(mem_ctx) ir_constant(true);
-   } else if (strcmp(callee, "any") == 0) {
-      assert(op[0]->type->is_boolean());
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 if (op[0]->value.b[c])
-	    return new(mem_ctx) ir_constant(true);
-      }
-      return new(mem_ctx) ir_constant(false);
-   } else if (strcmp(callee, "acos") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = acosf(op[0]->value.f[c]);
-   } else if (strcmp(callee, "acosh") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = acoshf(op[0]->value.f[c]);
-   } else if (strcmp(callee, "asin") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = asinf(op[0]->value.f[c]);
-   } else if (strcmp(callee, "asinh") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = asinhf(op[0]->value.f[c]);
-   } else if (strcmp(callee, "atan") == 0) {
-      assert(op[0]->type->is_float());
-      if (num_parameters == 2) {
-	 assert(op[1]->type->is_float());
-	 for (unsigned c = 0; c < op[0]->type->components(); c++)
-	    data.f[c] = atan2f(op[0]->value.f[c], op[1]->value.f[c]);
-      } else {
-	 for (unsigned c = 0; c < op[0]->type->components(); c++)
-	    data.f[c] = atanf(op[0]->value.f[c]);
-      }
-   } else if (strcmp(callee, "atanh") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = atanhf(op[0]->value.f[c]);
-   } else if (strcmp(callee, "dFdx") == 0 || strcmp(callee, "dFdy") == 0) {
-      return ir_constant::zero(mem_ctx, this->type);
-   } else if (strcmp(callee, "ceil") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_ceil, type, op[0], NULL);
-   } else if (strcmp(callee, "clamp") == 0) {
-      assert(num_parameters == 3);
-      unsigned c1_inc = op[1]->type->is_scalar() ? 0 : 1;
-      unsigned c2_inc = op[2]->type->is_scalar() ? 0 : 1;
-      for (unsigned c = 0, c1 = 0, c2 = 0;
-	   c < op[0]->type->components();
-	   c1 += c1_inc, c2 += c2_inc, c++) {
+   /* If "origin" is non-NULL, then the function body is there.  So we
+    * have to use the variable objects from the object with the body,
+    * but the parameter instanciation on the current object.
+    */
+   const exec_node *parameter_info = origin ? origin->parameters.head : parameters.head;
 
-	 switch (op[0]->type->base_type) {
-	 case GLSL_TYPE_UINT:
-	    data.u[c] = CLAMP(op[0]->value.u[c], op[1]->value.u[c1],
-			      op[2]->value.u[c2]);
-	    break;
-	 case GLSL_TYPE_INT:
-	    data.i[c] = CLAMP(op[0]->value.i[c], op[1]->value.i[c1],
-			      op[2]->value.i[c2]);
-	    break;
-	 case GLSL_TYPE_FLOAT:
-	    data.f[c] = CLAMP(op[0]->value.f[c], op[1]->value.f[c1],
-			      op[2]->value.f[c2]);
-	    break;
-	 default:
-	    assert(!"Should not get here.");
-	 }
+   foreach_list(n, actual_parameters) {
+      ir_constant *constant = ((ir_rvalue *) n)->constant_expression_value(variable_context);
+      if (constant == NULL) {
+         hash_table_dtor(deref_hash);
+         return NULL;
       }
-   } else if (strcmp(callee, "cos") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_cos, type, op[0], NULL);
-   } else if (strcmp(callee, "cosh") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = coshf(op[0]->value.f[c]);
-   } else if (strcmp(callee, "cross") == 0) {
-      assert(op[0]->type == glsl_type::vec3_type);
-      assert(op[1]->type == glsl_type::vec3_type);
-      data.f[0] = (op[0]->value.f[1] * op[1]->value.f[2] -
-		   op[1]->value.f[1] * op[0]->value.f[2]);
-      data.f[1] = (op[0]->value.f[2] * op[1]->value.f[0] -
-		   op[1]->value.f[2] * op[0]->value.f[0]);
-      data.f[2] = (op[0]->value.f[0] * op[1]->value.f[1] -
-		   op[1]->value.f[0] * op[0]->value.f[1]);
-   } else if (strcmp(callee, "degrees") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = 180.0F / M_PI * op[0]->value.f[c];
-   } else if (strcmp(callee, "distance") == 0) {
-      assert(op[0]->type->is_float() && op[1]->type->is_float());
-      float length_squared = 0.0;
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 float t = op[0]->value.f[c] - op[1]->value.f[c];
-	 length_squared += t * t;
-      }
-      return new(mem_ctx) ir_constant(sqrtf(length_squared));
-   } else if (strcmp(callee, "dot") == 0) {
-      return new(mem_ctx) ir_constant(dot(op[0], op[1]));
-   } else if (strcmp(callee, "equal") == 0) {
-      assert(op[0]->type->is_vector() && op[1] && op[1]->type->is_vector());
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 switch (op[0]->type->base_type) {
-	 case GLSL_TYPE_UINT:
-	    data.b[c] = op[0]->value.u[c] == op[1]->value.u[c];
-	    break;
-	 case GLSL_TYPE_INT:
-	    data.b[c] = op[0]->value.i[c] == op[1]->value.i[c];
-	    break;
-	 case GLSL_TYPE_FLOAT:
-	    data.b[c] = op[0]->value.f[c] == op[1]->value.f[c];
-	    break;
-	 case GLSL_TYPE_BOOL:
-	    data.b[c] = op[0]->value.b[c] == op[1]->value.b[c];
-	    break;
-	 default:
-	    assert(!"Should not get here.");
-	 }
-      }
-   } else if (strcmp(callee, "exp") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_exp, type, op[0], NULL);
-   } else if (strcmp(callee, "exp2") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_exp2, type, op[0], NULL);
-   } else if (strcmp(callee, "faceforward") == 0) {
-      if (dot(op[2], op[1]) < 0)
-	 return op[0];
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = -op[0]->value.f[c];
-   } else if (strcmp(callee, "floor") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_floor, type, op[0], NULL);
-   } else if (strcmp(callee, "fract") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_fract, type, op[0], NULL);
-   } else if (strcmp(callee, "fwidth") == 0) {
-      return ir_constant::zero(mem_ctx, this->type);
-   } else if (strcmp(callee, "greaterThan") == 0) {
-      assert(op[0]->type->is_vector() && op[1] && op[1]->type->is_vector());
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 switch (op[0]->type->base_type) {
-	 case GLSL_TYPE_UINT:
-	    data.b[c] = op[0]->value.u[c] > op[1]->value.u[c];
-	    break;
-	 case GLSL_TYPE_INT:
-	    data.b[c] = op[0]->value.i[c] > op[1]->value.i[c];
-	    break;
-	 case GLSL_TYPE_FLOAT:
-	    data.b[c] = op[0]->value.f[c] > op[1]->value.f[c];
-	    break;
-	 default:
-	    assert(!"Should not get here.");
-	 }
-      }
-   } else if (strcmp(callee, "greaterThanEqual") == 0) {
-      assert(op[0]->type->is_vector() && op[1] && op[1]->type->is_vector());
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 switch (op[0]->type->base_type) {
-	 case GLSL_TYPE_UINT:
-	    data.b[c] = op[0]->value.u[c] >= op[1]->value.u[c];
-	    break;
-	 case GLSL_TYPE_INT:
-	    data.b[c] = op[0]->value.i[c] >= op[1]->value.i[c];
-	    break;
-	 case GLSL_TYPE_FLOAT:
-	    data.b[c] = op[0]->value.f[c] >= op[1]->value.f[c];
-	    break;
-	 default:
-	    assert(!"Should not get here.");
-	 }
-      }
-   } else if (strcmp(callee, "inversesqrt") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_rsq, type, op[0], NULL);
-   } else if (strcmp(callee, "length") == 0) {
-      return new(mem_ctx) ir_constant(sqrtf(dot(op[0], op[0])));
-   } else if (strcmp(callee, "lessThan") == 0) {
-      assert(op[0]->type->is_vector() && op[1] && op[1]->type->is_vector());
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 switch (op[0]->type->base_type) {
-	 case GLSL_TYPE_UINT:
-	    data.b[c] = op[0]->value.u[c] < op[1]->value.u[c];
-	    break;
-	 case GLSL_TYPE_INT:
-	    data.b[c] = op[0]->value.i[c] < op[1]->value.i[c];
-	    break;
-	 case GLSL_TYPE_FLOAT:
-	    data.b[c] = op[0]->value.f[c] < op[1]->value.f[c];
-	    break;
-	 default:
-	    assert(!"Should not get here.");
-	 }
-      }
-   } else if (strcmp(callee, "lessThanEqual") == 0) {
-      assert(op[0]->type->is_vector() && op[1] && op[1]->type->is_vector());
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 switch (op[0]->type->base_type) {
-	 case GLSL_TYPE_UINT:
-	    data.b[c] = op[0]->value.u[c] <= op[1]->value.u[c];
-	    break;
-	 case GLSL_TYPE_INT:
-	    data.b[c] = op[0]->value.i[c] <= op[1]->value.i[c];
-	    break;
-	 case GLSL_TYPE_FLOAT:
-	    data.b[c] = op[0]->value.f[c] <= op[1]->value.f[c];
-	    break;
-	 default:
-	    assert(!"Should not get here.");
-	 }
-      }
-   } else if (strcmp(callee, "log") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_log, type, op[0], NULL);
-   } else if (strcmp(callee, "log2") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_log2, type, op[0], NULL);
-   } else if (strcmp(callee, "matrixCompMult") == 0) {
-      assert(op[0]->type->is_float() && op[1]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = op[0]->value.f[c] * op[1]->value.f[c];
-   } else if (strcmp(callee, "max") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_binop_max, type, op[0], op[1]);
-   } else if (strcmp(callee, "min") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_binop_min, type, op[0], op[1]);
-   } else if (strcmp(callee, "mix") == 0) {
-      assert(op[0]->type->is_float() && op[1]->type->is_float());
-      if (op[2]->type->is_float()) {
-	 unsigned c2_inc = op[2]->type->is_scalar() ? 0 : 1;
-	 unsigned components = op[0]->type->components();
-	 for (unsigned c = 0, c2 = 0; c < components; c2 += c2_inc, c++) {
-	    data.f[c] = op[0]->value.f[c] * (1 - op[2]->value.f[c2]) +
-			op[1]->value.f[c] * op[2]->value.f[c2];
-	 }
-      } else {
-	 assert(op[2]->type->is_boolean());
-	 for (unsigned c = 0; c < op[0]->type->components(); c++)
-	    data.f[c] = op[op[2]->value.b[c] ? 1 : 0]->value.f[c];
-      }
-   } else if (strcmp(callee, "mod") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_binop_mod, type, op[0], op[1]);
-   } else if (strcmp(callee, "normalize") == 0) {
-      assert(op[0]->type->is_float());
-      float length = sqrtf(dot(op[0], op[0]));
 
-      if (length == 0)
-	 return ir_constant::zero(mem_ctx, this->type);
 
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = op[0]->value.f[c] / length;
-   } else if (strcmp(callee, "not") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_logic_not, type, op[0], NULL);
-   } else if (strcmp(callee, "notEqual") == 0) {
-      assert(op[0]->type->is_vector() && op[1] && op[1]->type->is_vector());
-      for (unsigned c = 0; c < op[0]->type->components(); c++) {
-	 switch (op[0]->type->base_type) {
-	 case GLSL_TYPE_UINT:
-	    data.b[c] = op[0]->value.u[c] != op[1]->value.u[c];
-	    break;
-	 case GLSL_TYPE_INT:
-	    data.b[c] = op[0]->value.i[c] != op[1]->value.i[c];
-	    break;
-	 case GLSL_TYPE_FLOAT:
-	    data.b[c] = op[0]->value.f[c] != op[1]->value.f[c];
-	    break;
-	 case GLSL_TYPE_BOOL:
-	    data.b[c] = op[0]->value.b[c] != op[1]->value.b[c];
-	    break;
-	 default:
-	    assert(!"Should not get here.");
-	 }
-      }
-   } else if (strcmp(callee, "outerProduct") == 0) {
-      assert(op[0]->type->is_vector() && op[1]->type->is_vector());
-      const unsigned m = op[0]->type->vector_elements;
-      const unsigned n = op[1]->type->vector_elements;
-      for (unsigned j = 0; j < n; j++) {
-	 for (unsigned i = 0; i < m; i++) {
-	    data.f[i+m*j] = op[0]->value.f[i] * op[1]->value.f[j];
-	 }
-      }
-   } else if (strcmp(callee, "pow") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_binop_pow, type, op[0], op[1]);
-   } else if (strcmp(callee, "radians") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = M_PI / 180.0F * op[0]->value.f[c];
-   } else if (strcmp(callee, "reflect") == 0) {
-      assert(op[0]->type->is_float());
-      float dot_NI = dot(op[1], op[0]);
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = op[0]->value.f[c] - 2 * dot_NI * op[1]->value.f[c];
-   } else if (strcmp(callee, "refract") == 0) {
-      const float eta = op[2]->value.f[0];
-      const float dot_NI = dot(op[1], op[0]);
-      const float k = 1.0F - eta * eta * (1.0F - dot_NI * dot_NI);
-      if (k < 0.0) {
-	 return ir_constant::zero(mem_ctx, this->type);
-      } else {
-	 for (unsigned c = 0; c < type->components(); c++) {
-	    data.f[c] = eta * op[0]->value.f[c] - (eta * dot_NI + sqrtf(k))
-			    * op[1]->value.f[c];
-	 }
-      }
-   } else if (strcmp(callee, "round") == 0 ||
-	      strcmp(callee, "roundEven") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_round_even, op[0]);
-   } else if (strcmp(callee, "sign") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_sign, type, op[0], NULL);
-   } else if (strcmp(callee, "sin") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_sin, type, op[0], NULL);
-   } else if (strcmp(callee, "sinh") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = sinhf(op[0]->value.f[c]);
-   } else if (strcmp(callee, "smoothstep") == 0) {
-      assert(num_parameters == 3);
-      assert(op[1]->type == op[0]->type);
-      unsigned edge_inc = op[0]->type->is_scalar() ? 0 : 1;
-      for (unsigned c = 0, e = 0; c < type->components(); e += edge_inc, c++) {
-	 const float edge0 = op[0]->value.f[e];
-	 const float edge1 = op[1]->value.f[e];
-	 if (edge0 == edge1) {
-	    data.f[c] = 0.0; /* Avoid a crash - results are undefined anyway */
-	 } else {
-	    const float numerator = op[2]->value.f[c] - edge0;
-	    const float denominator = edge1 - edge0;
-	    const float t = CLAMP(numerator/denominator, 0, 1);
-	    data.f[c] = t * t * (3 - 2 * t);
-	 }
-      }
-   } else if (strcmp(callee, "sqrt") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_sqrt, type, op[0], NULL);
-   } else if (strcmp(callee, "step") == 0) {
-      assert(op[0]->type->is_float() && op[1]->type->is_float());
-      /* op[0] (edge) may be either a scalar or a vector */
-      const unsigned c0_inc = op[0]->type->is_scalar() ? 0 : 1;
-      for (unsigned c = 0, c0 = 0; c < type->components(); c0 += c0_inc, c++)
-	 data.f[c] = (op[1]->value.f[c] < op[0]->value.f[c0]) ? 0.0F : 1.0F;
-   } else if (strcmp(callee, "tan") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = tanf(op[0]->value.f[c]);
-   } else if (strcmp(callee, "tanh") == 0) {
-      assert(op[0]->type->is_float());
-      for (unsigned c = 0; c < op[0]->type->components(); c++)
-	 data.f[c] = tanhf(op[0]->value.f[c]);
-   } else if (strcmp(callee, "transpose") == 0) {
-      assert(op[0]->type->is_matrix());
-      const unsigned n = op[0]->type->vector_elements;
-      const unsigned m = op[0]->type->matrix_columns;
-      for (unsigned j = 0; j < m; j++) {
-	 for (unsigned i = 0; i < n; i++) {
-	    data.f[m*i+j] += op[0]->value.f[i+n*j];
-	 }
-      }
-   } else if (strcmp(callee, "trunc") == 0) {
-      expr = new(mem_ctx) ir_expression(ir_unop_trunc, op[0]);
-   } else {
-      /* Unsupported builtin - some are not allowed in constant expressions. */
-      return NULL;
+      ir_variable *var = (ir_variable *)parameter_info;
+      hash_table_insert(deref_hash, constant, var);
+
+      parameter_info = parameter_info->next;
    }
 
-   if (expr != NULL)
-      return expr->constant_expression_value();
+   ir_constant *result = NULL;
 
-   return new(mem_ctx) ir_constant(this->type, &data);
+   /* Now run the builtin function until something non-constant
+    * happens or we get the result.
+    */
+   if (constant_expression_evaluate_expression_list(origin ? origin->body : body, deref_hash, &result) && result)
+      result = result->clone(ralloc_parent(this), NULL);
+
+   hash_table_dtor(deref_hash);
+
+   return result;
 }

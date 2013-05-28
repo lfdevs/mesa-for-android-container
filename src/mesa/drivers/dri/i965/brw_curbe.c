@@ -184,8 +184,6 @@ brw_upload_constant_buffer(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
-   const struct brw_vertex_program *vp =
-      brw_vertex_program_const(brw->vertex_program);
    const GLuint sz = brw->curbe.total_size;
    const GLuint bufsz = sz * 16 * sizeof(GLfloat);
    GLfloat *buf;
@@ -205,20 +203,11 @@ brw_upload_constant_buffer(struct brw_context *brw)
 
       /* copy float constants */
       for (i = 0; i < brw->wm.prog_data->nr_params; i++) {
-	 buf[offset + i] = convert_param(brw->wm.prog_data->param_convert[i],
-					 brw->wm.prog_data->param[i]);
+	 buf[offset + i] = *brw->wm.prog_data->param[i];
       }
    }
 
-
-   /* When using the old VS backend, the clipplanes are actually delivered to
-    * both CLIP and VS units.  VS uses them to calculate the outcode bitmasks.
-    *
-    * When using the new VS backend, it is responsible for setting up its own
-    * clipplane constants if it needs them.  This results in a slight waste of
-    * of curbe space, but the advantage is that the new VS backend can use its
-    * general-purpose uniform layout code to store the clipplanes.
-    */
+   /* clipper constants */
    if (brw->curbe.clip_size) {
       GLuint offset = brw->curbe.clip_start * 16;
       GLuint j;
@@ -250,24 +239,9 @@ brw_upload_constant_buffer(struct brw_context *brw)
    /* vertex shader constants */
    if (brw->curbe.vs_size) {
       GLuint offset = brw->curbe.vs_start * 16;
-      GLuint nr = brw->vs.prog_data->nr_params / 4;
 
-      if (brw->vs.prog_data->uses_new_param_layout) {
-	 for (i = 0; i < brw->vs.prog_data->nr_params; i++) {
-	    buf[offset + i] = *brw->vs.prog_data->param[i];
-	 }
-      } else {
-	 /* Load the subset of push constants that will get used when
-	  * we also have a pull constant buffer.
-	  */
-	 for (i = 0; i < vp->program.Base.Parameters->NumParameters; i++) {
-	    if (brw->vs.constant_map[i] != -1) {
-	       assert(brw->vs.constant_map[i] <= nr);
-	       memcpy(buf + offset + brw->vs.constant_map[i] * 4,
-		      vp->program.Base.Parameters->ParameterValues[i],
-		      4 * sizeof(float));
-	    }
-	 }
+      for (i = 0; i < brw->vs.prog_data->nr_params; i++) {
+         buf[offset + i] = *brw->vs.prog_data->param[i];
       }
    }
 

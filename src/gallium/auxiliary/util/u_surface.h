@@ -32,6 +32,8 @@
 #include "pipe/p_compiler.h"
 #include "pipe/p_state.h"
 
+#include "util/u_pack_color.h"
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,20 +42,28 @@ extern "C" {
 
 extern void
 u_surface_default_template(struct pipe_surface *view,
-                           const struct pipe_resource *texture,
-                           unsigned bind);
-
-extern boolean
-util_create_rgba_surface(struct pipe_context *ctx,
-                         uint width, uint height, uint bind,
-                         struct pipe_resource **textureOut,
-                         struct pipe_surface **surfaceOut);
-
+                           const struct pipe_resource *texture);
 
 extern void
-util_destroy_rgba_surface(struct pipe_resource *texture,
-                          struct pipe_surface *surface);
+util_copy_rect(ubyte * dst, enum pipe_format format,
+               unsigned dst_stride, unsigned dst_x, unsigned dst_y,
+               unsigned width, unsigned height, const ubyte * src,
+               int src_stride, unsigned src_x, unsigned src_y);
 
+extern void
+util_copy_box(ubyte * dst,
+              enum pipe_format format,
+              unsigned dst_stride, unsigned dst_slice_stride,
+              unsigned dst_x, unsigned dst_y, unsigned dst_z,
+              unsigned width, unsigned height, unsigned depth,
+              const ubyte * src,
+              int src_stride, unsigned src_slice_stride,
+              unsigned src_x, unsigned src_y, unsigned src_z);
+
+extern void
+util_fill_rect(ubyte * dst, enum pipe_format format,
+               unsigned dst_stride, unsigned dst_x, unsigned dst_y,
+               unsigned width, unsigned height, union util_color *uc);
 
 
 extern void
@@ -80,6 +90,10 @@ util_clear_depth_stencil(struct pipe_context *pipe,
                          unsigned stencil,
                          unsigned dstx, unsigned dsty,
                          unsigned width, unsigned height);
+
+extern boolean
+util_try_blit_via_copy_region(struct pipe_context *ctx,
+                              const struct pipe_blit_info *blit);
 
 
 #ifdef __cplusplus

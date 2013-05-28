@@ -38,6 +38,7 @@
 #include "main/texobj.h"
 #include "main/state.h"
 #include "main/dd.h"
+#include "main/fbobject.h"
 
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
@@ -503,7 +504,7 @@ intel_emit_fragcoord(struct intel_context *intel, intelVertexPtr v)
 
    fragcoord[0] = vertex_position[0];
 
-   if (fb->Name)
+   if (_mesa_is_user_fbo(fb))
       fragcoord[1] = vertex_position[1];
    else
       fragcoord[1] = fb->Height - vertex_position[1];
@@ -944,7 +945,7 @@ intelFastRenderClippedPoly(struct gl_context * ctx, const GLuint * elts, GLuint 
 
 
 
-#define ANY_FALLBACK_FLAGS (DD_LINE_STIPPLE | DD_TRI_STIPPLE | DD_POINT_ATTEN | DD_POINT_SMOOTH | DD_TRI_SMOOTH)
+#define ANY_FALLBACK_FLAGS (DD_LINE_STIPPLE | DD_TRI_STIPPLE | DD_POINT_ATTEN)
 #define ANY_RASTER_FLAGS (DD_TRI_LIGHT_TWOSIDE | DD_TRI_OFFSET | DD_TRI_UNFILLED)
 
 void
@@ -995,20 +996,10 @@ intelChooseRenderState(struct gl_context * ctx)
          if ((flags & DD_TRI_STIPPLE) && !intel->hw_stipple)
             intel->draw_tri = intel_fallback_tri;
 
-         if (flags & DD_TRI_SMOOTH) {
-	    if (intel->conformance_mode > 0)
-	       intel->draw_tri = intel_fallback_tri;
-	 }
-
          if (flags & DD_POINT_ATTEN) {
 	    if (0)
 	       intel->draw_point = intel_atten_point;
 	    else
-	       intel->draw_point = intel_fallback_point;
-	 }
-
-	 if (flags & DD_POINT_SMOOTH) {
-	    if (intel->conformance_mode > 0)
 	       intel->draw_point = intel_fallback_point;
 	 }
 
@@ -1232,7 +1223,7 @@ intelFallback(struct intel_context *intel, GLbitfield bit, bool mode)
 	 assert(!intel->tnl_pipeline_running);
 
          intel_flush(ctx);
-         if (INTEL_DEBUG & DEBUG_FALLBACKS)
+         if (INTEL_DEBUG & DEBUG_PERF)
             fprintf(stderr, "ENTER FALLBACK %x: %s\n",
                     bit, getFallbackString(bit));
          _swsetup_Wakeup(ctx);
@@ -1245,7 +1236,7 @@ intelFallback(struct intel_context *intel, GLbitfield bit, bool mode)
 	 assert(!intel->tnl_pipeline_running);
 
          _swrast_flush(ctx);
-         if (INTEL_DEBUG & DEBUG_FALLBACKS)
+         if (INTEL_DEBUG & DEBUG_PERF)
             fprintf(stderr, "LEAVE FALLBACK %s\n", getFallbackString(bit));
          tnl->Driver.Render.Start = intelRenderStart;
          tnl->Driver.Render.PrimitiveNotify = intelRenderPrimitive;

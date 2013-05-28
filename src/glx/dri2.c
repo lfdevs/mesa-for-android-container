@@ -277,7 +277,22 @@ DRI2Connect(Display * dpy, XID window, char **driverName, char **deviceName)
    req->reqType = info->codes->major_opcode;
    req->dri2ReqType = X_DRI2Connect;
    req->window = window;
+
    req->driverType = DRI2DriverDRI;
+#ifdef DRI2DriverPrimeShift
+   {
+      char *prime = getenv("DRI_PRIME");
+      if (prime) {
+         uint32_t primeid;
+         errno = 0;
+         primeid = strtoul(prime, NULL, 0);
+         if (errno == 0)
+            req->driverType |=
+               ((primeid & DRI2DriverPrimeMask) << DRI2DriverPrimeShift);
+      }
+   }
+#endif
+
    if (!_XReply(dpy, (xReply *) & rep, 0, xFalse)) {
       UnlockDisplay(dpy);
       SyncHandle();
@@ -290,7 +305,7 @@ DRI2Connect(Display * dpy, XID window, char **driverName, char **deviceName)
       return False;
    }
 
-   *driverName = Xmalloc(rep.driverNameLength + 1);
+   *driverName = malloc(rep.driverNameLength + 1);
    if (*driverName == NULL) {
       _XEatData(dpy,
                 ((rep.driverNameLength + 3) & ~3) +
@@ -302,9 +317,9 @@ DRI2Connect(Display * dpy, XID window, char **driverName, char **deviceName)
    _XReadPad(dpy, *driverName, rep.driverNameLength);
    (*driverName)[rep.driverNameLength] = '\0';
 
-   *deviceName = Xmalloc(rep.deviceNameLength + 1);
+   *deviceName = malloc(rep.deviceNameLength + 1);
    if (*deviceName == NULL) {
-      Xfree(*driverName);
+      free(*driverName);
       _XEatData(dpy, ((rep.deviceNameLength + 3) & ~3));
       UnlockDisplay(dpy);
       SyncHandle();
@@ -418,7 +433,7 @@ DRI2GetBuffers(Display * dpy, XID drawable,
    *height = rep.height;
    *outCount = rep.count;
 
-   buffers = Xmalloc(rep.count * sizeof buffers[0]);
+   buffers = malloc(rep.count * sizeof buffers[0]);
    if (buffers == NULL) {
       _XEatData(dpy, rep.count * sizeof repBuffer);
       UnlockDisplay(dpy);
@@ -477,7 +492,7 @@ DRI2GetBuffersWithFormat(Display * dpy, XID drawable,
    *height = rep.height;
    *outCount = rep.count;
 
-   buffers = Xmalloc(rep.count * sizeof buffers[0]);
+   buffers = malloc(rep.count * sizeof buffers[0]);
    if (buffers == NULL) {
       _XEatData(dpy, rep.count * sizeof repBuffer);
       UnlockDisplay(dpy);
@@ -525,188 +540,5 @@ DRI2CopyRegion(Display * dpy, XID drawable, XserverRegion region,
    UnlockDisplay(dpy);
    SyncHandle();
 }
-
-#ifdef X_DRI2SwapBuffers
-static void
-load_swap_req(xDRI2SwapBuffersReq *req, CARD64 target, CARD64 divisor,
-	     CARD64 remainder)
-{
-    req->target_msc_hi = target >> 32;
-    req->target_msc_lo = target & 0xffffffff;
-    req->divisor_hi = divisor >> 32;
-    req->divisor_lo = divisor & 0xffffffff;
-    req->remainder_hi = remainder >> 32;
-    req->remainder_lo = remainder & 0xffffffff;
-}
-
-static CARD64
-vals_to_card64(CARD32 lo, CARD32 hi)
-{
-    return (CARD64)hi << 32 | lo;
-}
-
-void DRI2SwapBuffers(Display *dpy, XID drawable, CARD64 target_msc,
-		     CARD64 divisor, CARD64 remainder, CARD64 *count)
-{
-    XExtDisplayInfo *info = DRI2FindDisplay(dpy);
-    xDRI2SwapBuffersReq *req;
-    xDRI2SwapBuffersReply rep;
-
-    XextSimpleCheckExtension (dpy, info, dri2ExtensionName);
-
-    LockDisplay(dpy);
-    GetReq(DRI2SwapBuffers, req);
-    req->reqType = info->codes->major_opcode;
-    req->dri2ReqType = X_DRI2SwapBuffers;
-    req->drawable = drawable;
-    load_swap_req(req, target_msc, divisor, remainder);
-
-    _XReply(dpy, (xReply *)&rep, 0, xFalse);
-
-    *count = vals_to_card64(rep.swap_lo, rep.swap_hi);
-
-    UnlockDisplay(dpy);
-    SyncHandle();
-}
-#endif
-
-#ifdef X_DRI2GetMSC
-Bool DRI2GetMSC(Display *dpy, XID drawable, CARD64 *ust, CARD64 *msc,
-		CARD64 *sbc)
-{
-    XExtDisplayInfo *info = DRI2FindDisplay(dpy);
-    xDRI2GetMSCReq *req;
-    xDRI2MSCReply rep;
-
-    XextCheckExtension (dpy, info, dri2ExtensionName, False);
-
-    LockDisplay(dpy);
-    GetReq(DRI2GetMSC, req);
-    req->reqType = info->codes->major_opcode;
-    req->dri2ReqType = X_DRI2GetMSC;
-    req->drawable = drawable;
-
-    if (!_XReply(dpy, (xReply *)&rep, 0, xFalse)) {
-	UnlockDisplay(dpy);
-	SyncHandle();
-	return False;
-    }
-
-    *ust = vals_to_card64(rep.ust_lo, rep.ust_hi);
-    *msc = vals_to_card64(rep.msc_lo, rep.msc_hi);
-    *sbc = vals_to_card64(rep.sbc_lo, rep.sbc_hi);
-
-    UnlockDisplay(dpy);
-    SyncHandle();
-
-    return True;
-}
-#endif
-
-#ifdef X_DRI2WaitMSC
-static void
-load_msc_req(xDRI2WaitMSCReq *req, CARD64 target, CARD64 divisor,
-	     CARD64 remainder)
-{
-    req->target_msc_hi = target >> 32;
-    req->target_msc_lo = target & 0xffffffff;
-    req->divisor_hi = divisor >> 32;
-    req->divisor_lo = divisor & 0xffffffff;
-    req->remainder_hi = remainder >> 32;
-    req->remainder_lo = remainder & 0xffffffff;
-}
-
-Bool DRI2WaitMSC(Display *dpy, XID drawable, CARD64 target_msc, CARD64 divisor,
-		 CARD64 remainder, CARD64 *ust, CARD64 *msc, CARD64 *sbc)
-{
-    XExtDisplayInfo *info = DRI2FindDisplay(dpy);
-    xDRI2WaitMSCReq *req;
-    xDRI2MSCReply rep;
-
-    XextCheckExtension (dpy, info, dri2ExtensionName, False);
-
-    LockDisplay(dpy);
-    GetReq(DRI2WaitMSC, req);
-    req->reqType = info->codes->major_opcode;
-    req->dri2ReqType = X_DRI2WaitMSC;
-    req->drawable = drawable;
-    load_msc_req(req, target_msc, divisor, remainder);
-
-    if (!_XReply(dpy, (xReply *)&rep, 0, xFalse)) {
-	UnlockDisplay(dpy);
-	SyncHandle();
-	return False;
-    }
-
-    *ust = ((CARD64)rep.ust_hi << 32) | (CARD64)rep.ust_lo;
-    *msc = ((CARD64)rep.msc_hi << 32) | (CARD64)rep.msc_lo;
-    *sbc = ((CARD64)rep.sbc_hi << 32) | (CARD64)rep.sbc_lo;
-
-    UnlockDisplay(dpy);
-    SyncHandle();
-
-    return True;
-}
-#endif
-
-#ifdef X_DRI2WaitSBC
-static void
-load_sbc_req(xDRI2WaitSBCReq *req, CARD64 target)
-{
-    req->target_sbc_hi = target >> 32;
-    req->target_sbc_lo = target & 0xffffffff;
-}
-
-Bool DRI2WaitSBC(Display *dpy, XID drawable, CARD64 target_sbc, CARD64 *ust,
-		 CARD64 *msc, CARD64 *sbc)
-{
-    XExtDisplayInfo *info = DRI2FindDisplay(dpy);
-    xDRI2WaitSBCReq *req;
-    xDRI2MSCReply rep;
-
-    XextCheckExtension (dpy, info, dri2ExtensionName, False);
-
-    LockDisplay(dpy);
-    GetReq(DRI2WaitSBC, req);
-    req->reqType = info->codes->major_opcode;
-    req->dri2ReqType = X_DRI2WaitSBC;
-    req->drawable = drawable;
-    load_sbc_req(req, target_sbc);
-
-    if (!_XReply(dpy, (xReply *)&rep, 0, xFalse)) {
-	UnlockDisplay(dpy);
-	SyncHandle();
-	return False;
-    }
-
-    *ust = ((CARD64)rep.ust_hi << 32) | rep.ust_lo;
-    *msc = ((CARD64)rep.msc_hi << 32) | rep.msc_lo;
-    *sbc = ((CARD64)rep.sbc_hi << 32) | rep.sbc_lo;
-
-    UnlockDisplay(dpy);
-    SyncHandle();
-
-    return True;
-}
-#endif
-
-#ifdef X_DRI2SwapInterval
-void DRI2SwapInterval(Display *dpy, XID drawable, int interval)
-{
-    XExtDisplayInfo *info = DRI2FindDisplay(dpy);
-    xDRI2SwapIntervalReq *req;
-
-    XextSimpleCheckExtension (dpy, info, dri2ExtensionName);
-
-    LockDisplay(dpy);
-    GetReq(DRI2SwapInterval, req);
-    req->reqType = info->codes->major_opcode;
-    req->dri2ReqType = X_DRI2SwapInterval;
-    req->drawable = drawable;
-    req->interval = interval;
-    UnlockDisplay(dpy);
-    SyncHandle();
-}
-#endif
 
 #endif /* GLX_DIRECT_RENDERING */

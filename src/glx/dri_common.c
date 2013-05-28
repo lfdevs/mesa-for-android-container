@@ -48,6 +48,10 @@
 #define RTLD_GLOBAL 0
 #endif
 
+/**
+ * Print informational message to stderr if LIBGL_DEBUG is set to
+ * "verbose".
+ */
 _X_HIDDEN void
 InfoMessageF(const char *f, ...)
 {
@@ -63,7 +67,8 @@ InfoMessageF(const char *f, ...)
 }
 
 /**
- * Print error to stderr, unless LIBGL_DEBUG=="quiet".
+ * Print error message to stderr if LIBGL_DEBUG is set to anything but
+ * "quiet", (do nothing if LIBGL_DEBUG is unset).
  */
 _X_HIDDEN void
 ErrorMessageF(const char *f, ...)
@@ -76,6 +81,30 @@ ErrorMessageF(const char *f, ...)
       va_start(args, f);
       vfprintf(stderr, f, args);
       va_end(args);
+   }
+}
+
+/**
+ * Print error message unless LIBGL_DEBUG is set to "quiet".
+ *
+ * The distinction between CriticalErrorMessageF and ErrorMessageF is
+ * that critcial errors will be printed by default, (even when
+ * LIBGL_DEBUG is unset).
+ */
+_X_HIDDEN void
+CriticalErrorMessageF(const char *f, ...)
+{
+   va_list args;
+   const char *env;
+
+   if (!(env = getenv("LIBGL_DEBUG")) || !strstr(env, "quiet")) {
+      fprintf(stderr, "libGL error: ");
+      va_start(args, f);
+      vfprintf(stderr, f, args);
+      va_end(args);
+
+      if (!env || !strstr(env, "verbose"))
+         fprintf(stderr, "libGL error: Try again with LIBGL_DEBUG=verbose for more details.\n");
    }
 }
 
@@ -311,7 +340,7 @@ createDriMode(const __DRIcoreExtension * core,
    if (driConfigs[i] == NULL)
       return NULL;
 
-   driConfig = Xmalloc(sizeof *driConfig);
+   driConfig = malloc(sizeof *driConfig);
    if (driConfig == NULL)
       return NULL;
 
@@ -374,6 +403,12 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
 
    pdraw = psc->driScreen->createDrawable(psc, glxDrawable,
                                           glxDrawable, gc->config);
+
+   if (pdraw == NULL) {
+      ErrorMessageF("failed to create drawable\n");
+      return NULL;
+   }
+
    if (__glxHashInsert(priv->drawHash, glxDrawable, pdraw)) {
       (*pdraw->destroyDrawable) (pdraw);
       return NULL;
@@ -422,7 +457,8 @@ driReleaseDrawables(struct glx_context *gc)
 _X_HIDDEN bool
 dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
 			 unsigned *major_ver, unsigned *minor_ver,
-			 uint32_t *flags, unsigned *api, unsigned *error)
+			 uint32_t *flags, unsigned *api, int *reset,
+                         unsigned *error)
 {
    unsigned i;
    bool got_profile = false;
@@ -443,6 +479,7 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
 
    *major_ver = 1;
    *minor_ver = 0;
+   *reset = __DRI_CTX_RESET_NO_NOTIFICATION;
 
    for (i = 0; i < num_attribs; i++) {
       switch (attribs[i * 2]) {
@@ -462,6 +499,19 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
       case GLX_RENDER_TYPE:
 	 render_type = attribs[i * 2 + 1];
 	 break;
+      case GLX_CONTEXT_RESET_NOTIFICATION_STRATEGY_ARB:
+         switch (attribs[i * 2 + 1]) {
+         case GLX_NO_RESET_NOTIFICATION_ARB:
+            *reset = __DRI_CTX_RESET_NO_NOTIFICATION;
+            break;
+         case GLX_LOSE_CONTEXT_ON_RESET_ARB:
+            *reset = __DRI_CTX_RESET_LOSE_CONTEXT;
+            break;
+         default:
+            *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+            return false;
+         }
+         break;
       default:
 	 /* If an unknown attribute is received, fail.
 	  */
@@ -501,7 +551,8 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
 
    /* Unknown flag value.
     */
-   if (*flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE)) {
+   if (*flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE
+                  | __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS)) {
       *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
       return false;
    }

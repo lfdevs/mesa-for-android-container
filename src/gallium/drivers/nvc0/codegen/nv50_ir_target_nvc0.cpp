@@ -29,7 +29,7 @@ Target *getTargetNVC0(unsigned int chipset)
    return new TargetNVC0(chipset);
 }
 
-TargetNVC0::TargetNVC0(unsigned int card)
+TargetNVC0::TargetNVC0(unsigned int card) : Target(false, card >= 0xe4)
 {
    chipset = card;
    initOpInfo();
@@ -42,6 +42,7 @@ TargetNVC0::TargetNVC0(unsigned int card)
 // Will probably make this nicer once we support subroutines properly,
 // i.e. when we have an input IR that provides function declarations.
 
+// TODO: separate version for nve4+ which doesn't like the 4-byte insn formats
 static const uint32_t nvc0_builtin_code[] =
 {
 // DIV U32: slow unsigned integer division
@@ -57,11 +58,11 @@ static const uint32_t nvc0_builtin_code[] =
 //
 #if 1
    0x04009c03, 0x78000000,
-   0x7c209cdd,
-   0x0010dd18,
+   0x7c209c82, 0x38000000, // 0x7c209cdd,
+   0x0400dde2, 0x18000000, // 0x0010dd18,
    0x08309c03, 0x60000000,
-   0x05605c18,
-   0x0810dc2a,
+   0x05205d04, 0x1c000000, // 0x05605c18,
+   0x0810dc03, 0x50000000, // 0x0810dc2a,
    0x0c209c43, 0x20040000,
    0x0810dc03, 0x50000000,
    0x0c209c43, 0x20040000,
@@ -73,15 +74,15 @@ static const uint32_t nvc0_builtin_code[] =
    0x0c209c43, 0x20040000,
    0x0000dde4, 0x28000000,
    0x08001c43, 0x50000000,
-   0x05609c18,
-   0x0010430d,
+   0x05209d04, 0x1c000000, // 0x05609c18,
+   0x00105c03, 0x20060000, // 0x0010430d,
    0x0811dc03, 0x1b0e0000,
    0x08104103, 0x48000000,
    0x04000002, 0x08000000,
    0x0811c003, 0x1b0e0000,
    0x08104103, 0x48000000,
-   0x040000ac,
-   0x90001dff,
+   0x04000002, 0x08000000, // 0x040000ac,
+   0x00001de7, 0x90000000, // 0x90001dff,
 #else
    0x0401dc03, 0x1b0e0000,
    0x00008003, 0x78000000,
@@ -111,27 +112,27 @@ static const uint32_t nvc0_builtin_code[] =
 //
    0xfc05dc23, 0x188e0000,
    0xfc17dc23, 0x18c40000,
-   0x03301e18,
-   0x07305e18,
+   0x01201ec4, 0x1c000000, // 0x03301e18,
+   0x05205ec4, 0x1c000000, // 0x07305e18,
    0x0401dc03, 0x1b0e0000,
    0x00008003, 0x78000000,
    0x0400c003, 0x78000000,
    0x0c20c103, 0x48000000,
    0x0c108003, 0x60000000,
-   0x00005c28,
-   0x00001d18,
+   0x00005de4, 0x28000000, // 0x00005c28,
+   0x00001de2, 0x18000000, // 0x00001d18,
    0x0031c023, 0x1b0ec000,
-   0xb000a1e7, 0x40000000,
+   0xe000a1e7, 0x40000000, // 0xb000a1e7, 0x40000000,
    0x04000003, 0x6000c000,
    0x0813dc03, 0x1b000000,
-   0x0420446c,
-   0x040004bd,
+   0x04204603, 0x48000000, // 0x0420446c,
+   0x04000442, 0x38000000, // 0x040004bd,
    0x04208003, 0x5800c000,
    0x0430c103, 0x4800c000,
-   0x0ffc5dff,
-   0x01700e18,
-   0x05704a18,
-   0x90001dff,
+   0xe0001de7, 0x4003fffe, // 0x0ffc5dff,
+   0x01200f84, 0x1c000000, // 0x01700e18,
+   0x05204b84, 0x1c000000, // 0x05704a18,
+   0x00001de7, 0x90000000, // 0x90001dff,
 
 // RCP F64: Newton Raphson reciprocal(x): r_{i+1} = r_i * (2.0 - x * r_i)
 //
@@ -180,9 +181,9 @@ static const uint32_t nvc0_builtin_code[] =
 static const uint16_t nvc0_builtin_offsets[NVC0_BUILTIN_COUNT] =
 {
    0,
-   8 * (22),
-   8 * (22 + 18),
-   8 * (22 + 18 + 9)
+   8 * (26),
+   8 * (26 + 23),
+   8 * (26 + 23 + 9)
 };
 
 void
@@ -222,6 +223,9 @@ static const struct opProperties _initProps[] =
    { OP_ABS,    0x0, 0x0, 0x0, 0x0, 0x1, 0x0 },
    { OP_NEG,    0x0, 0x1, 0x0, 0x0, 0x1, 0x0 },
    { OP_CVT,    0x1, 0x1, 0x0, 0x8, 0x1, 0x0 },
+   { OP_CEIL,   0x1, 0x1, 0x0, 0x8, 0x1, 0x0 },
+   { OP_FLOOR,  0x1, 0x1, 0x0, 0x8, 0x1, 0x0 },
+   { OP_TRUNC,  0x1, 0x1, 0x0, 0x8, 0x1, 0x0 },
    { OP_AND,    0x0, 0x0, 0x3, 0x0, 0x2, 0x2 | 0x8 },
    { OP_OR,     0x0, 0x0, 0x3, 0x0, 0x2, 0x2 | 0x8 },
    { OP_XOR,    0x0, 0x0, 0x3, 0x0, 0x2, 0x2 | 0x8 },
@@ -270,10 +274,8 @@ void TargetNVC0::initOpInfo()
       OP_STORE, OP_WRSV, OP_EXPORT, OP_BRA, OP_CALL, OP_RET, OP_EXIT,
       OP_DISCARD, OP_CONT, OP_BREAK, OP_PRECONT, OP_PREBREAK, OP_PRERET,
       OP_JOIN, OP_JOINAT, OP_BRKPT, OP_MEMBAR, OP_EMIT, OP_RESTART,
-      OP_QUADON, OP_QUADPOP
+      OP_QUADON, OP_QUADPOP, OP_TEXBAR
    };
-
-   joinAnterior = false;
 
    for (i = 0; i < DATA_FILE_COUNT; ++i)
       nativeFileMap[i] = (DataFile)i;
@@ -332,7 +334,7 @@ TargetNVC0::getFileSize(DataFile file) const
 {
    switch (file) {
    case FILE_NULL:          return 0;
-   case FILE_GPR:           return 63;
+   case FILE_GPR:           return (chipset >= NVISA_GK110_CHIPSET) ? 255 : 63;
    case FILE_PREDICATE:     return 7;
    case FILE_FLAGS:         return 1;
    case FILE_ADDRESS:       return 0;
@@ -388,28 +390,28 @@ bool
 TargetNVC0::insnCanLoad(const Instruction *i, int s,
                         const Instruction *ld) const
 {
-   DataFile sf = ld->src[0].getFile();
+   DataFile sf = ld->src(0).getFile();
 
-   // immediate 0 can be represented by GPR $r63
+   // immediate 0 can be represented by GPR $r63/$r255
    if (sf == FILE_IMMEDIATE && ld->getSrc(0)->reg.data.u64 == 0)
       return (!i->asTex() && i->op != OP_EXPORT && i->op != OP_STORE);
 
-   if (s > opInfo[i->op].srcNr)
+   if (s >= opInfo[i->op].srcNr)
       return false;
    if (!(opInfo[i->op].srcFiles[s] & (1 << (int)sf)))
       return false;
 
    // indirect loads can only be done by OP_LOAD/VFETCH/INTERP on nvc0
-   if (ld->src[0].isIndirect(0))
+   if (ld->src(0).isIndirect(0))
       return false;
 
    for (int k = 0; i->srcExists(k); ++k) {
-      if (i->src[k].getFile() == FILE_IMMEDIATE) {
+      if (i->src(k).getFile() == FILE_IMMEDIATE) {
          if (i->getSrc(k)->reg.data.u64 != 0)
             return false;
       } else
-      if (i->src[k].getFile() != FILE_GPR &&
-          i->src[k].getFile() != FILE_PREDICATE) {
+      if (i->src(k).getFile() != FILE_GPR &&
+          i->src(k).getFile() != FILE_PREDICATE) {
          return false;
       }
    }
@@ -441,11 +443,23 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
 }
 
 bool
+TargetNVC0::isAccessSupported(DataFile file, DataType ty) const
+{
+   if (ty == TYPE_NONE)
+      return false;
+   if (file == FILE_MEMORY_CONST && getChipset() >= 0xe0) // wrong encoding ?
+      return typeSizeof(ty) <= 8;
+   if (ty == TYPE_B96)
+      return (file == FILE_SHADER_INPUT) || (file == FILE_SHADER_OUTPUT);
+   return true;
+}
+
+bool
 TargetNVC0::isOpSupported(operation op, DataType ty) const
 {
    if ((op == OP_MAD || op == OP_FMA) && (ty != TYPE_F32))
       return false;
-   if (op == OP_SAD && ty != TYPE_S32)
+   if (op == OP_SAD && ty != TYPE_S32 && ty != TYPE_U32)
       return false;
    if (op == OP_POW || op == OP_SQRT || op == OP_DIV || op == OP_MOD)
       return false;
@@ -467,13 +481,19 @@ TargetNVC0::isModSupported(const Instruction *insn, int s, Modifier mod) const
       case OP_OR:
       case OP_XOR:
          break;
+      case OP_SET:
+         if (insn->sType != TYPE_F32)
+            return false;
+         break;
       case OP_ADD:
-         if (insn->src[s ? 0 : 1].mod.neg())
+         if (mod.abs())
+            return false;
+         if (insn->src(s ? 0 : 1).mod.neg())
             return false;
          break;
       case OP_SUB:
          if (s == 0)
-            return insn->src[1].mod.neg() ? false : true;
+            return insn->src(1).mod.neg() ? false : true;
          break;
       default:
          return false;
@@ -506,15 +526,52 @@ TargetNVC0::isSatSupported(const Instruction *insn) const
    return insn->dType == TYPE_F32;
 }
 
+bool
+TargetNVC0::isPostMultiplySupported(operation op, float f, int& e) const
+{
+   if (op != OP_MUL)
+      return false;
+   f = fabsf(f);
+   e = static_cast<int>(log2f(f));
+   if (e < -3 || e > 3)
+      return false;
+   return f == exp2f(static_cast<float>(e));
+}
+
 // TODO: better values
+// this could be more precise, e.g. depending on the issue-to-read/write delay
+// of the depending instruction, but it's good enough
 int TargetNVC0::getLatency(const Instruction *i) const
 {
-   if (i->op == OP_LOAD) {
-      if (i->cache == CACHE_CV)
-         return 700;
-      return 48;
+   if (chipset >= 0xe4) {
+      if (i->dType == TYPE_F64 || i->sType == TYPE_F64)
+         return 20;
+      switch (i->op) {
+      case OP_LINTERP:
+      case OP_PINTERP:
+         return 15;
+      case OP_LOAD:
+         if (i->src(0).getFile() == FILE_MEMORY_CONST)
+            return 9;
+         // fall through
+      case OP_VFETCH:
+         return 24;
+      default:
+         if (Target::getOpClass(i->op) == OPCLASS_TEXTURE)
+            return 17;
+         if (i->op == OP_MUL && i->dType != TYPE_F32)
+            return 15;
+         return 9;
+      }
+   } else {
+      if (i->op == OP_LOAD) {
+         if (i->cache == CACHE_CV)
+            return 700;
+         return 48;
+      }
+      return 24;
    }
-   return 24;
+   return 32;
 }
 
 // These are "inverse" throughput values, i.e. the number of cycles required
@@ -583,6 +640,44 @@ int TargetNVC0::getThroughput(const Instruction *i) const
       return 2;
    } else {
       return 1;
+   }
+}
+
+bool TargetNVC0::canDualIssue(const Instruction *a, const Instruction *b) const
+{
+   const OpClass clA = operationClass[a->op];
+   const OpClass clB = operationClass[b->op];
+
+   if (getChipset() >= 0xe4) {
+      // not texturing
+      // not if the 2nd instruction isn't necessarily executed
+      if (clA == OPCLASS_TEXTURE || clA == OPCLASS_FLOW)
+         return false;
+      // anything with MOV
+      if (a->op == OP_MOV || b->op == OP_MOV)
+         return true;
+      if (clA == clB) {
+         // only F32 arith or integer additions
+         if (clA != OPCLASS_ARITH)
+            return false;
+         return (a->dType == TYPE_F32 || a->op == OP_ADD ||
+                 b->dType == TYPE_F32 || b->op == OP_ADD);
+      }
+      // nothing with TEXBAR
+      if (a->op == OP_TEXBAR || b->op == OP_TEXBAR)
+         return false;
+      // no loads and stores accessing the the same space
+      if ((clA == OPCLASS_LOAD && clB == OPCLASS_STORE) ||
+          (clB == OPCLASS_LOAD && clA == OPCLASS_STORE))
+         if (a->src(0).getFile() == b->src(0).getFile())
+            return false;
+      // no > 32-bit ops
+      if (typeSizeof(a->dType) > 4 || typeSizeof(b->dType) > 4 ||
+          typeSizeof(a->sType) > 4 || typeSizeof(b->sType) > 4)
+         return false;
+      return true;
+   } else {
+      return false; // info not needed (yet)
    }
 }
 

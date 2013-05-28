@@ -49,7 +49,6 @@
 #define PROGRAM_ANY_CONST ((1 << PROGRAM_LOCAL_PARAM) |  \
                            (1 << PROGRAM_ENV_PARAM) |    \
                            (1 << PROGRAM_STATE_VAR) |    \
-                           (1 << PROGRAM_NAMED_PARAM) |  \
                            (1 << PROGRAM_CONSTANT) |     \
                            (1 << PROGRAM_UNIFORM))
 
@@ -73,12 +72,6 @@ struct st_translate {
    struct ureg_dst address[1];
    struct ureg_src samplers[PIPE_MAX_SAMPLERS];
    struct ureg_src systemValues[SYSTEM_VALUE_MAX];
-
-   /* Extra info for handling point size clamping in vertex shader */
-   struct ureg_dst pointSizeResult; /**< Actual point size output register */
-   struct ureg_src pointSizeConst;  /**< Point size range constant register */
-   GLint pointSizeOutIndex;         /**< Temp point size output register */
-   GLboolean prevInstWrotePointSize;
 
    const GLuint *inputMapping;
    const GLuint *outputMapping;
@@ -125,11 +118,8 @@ static unsigned *get_label( struct st_translate *t,
    unsigned i;
 
    if (t->labels_count + 1 >= t->labels_size) {
-      unsigned old_size = t->labels_size;
       t->labels_size = 1 << (util_logbase2(t->labels_size) + 1);
-      t->labels = REALLOC( t->labels, 
-                           old_size * sizeof t->labels[0], 
-                           t->labels_size * sizeof t->labels[0] );
+      t->labels = realloc(t->labels, t->labels_size * sizeof t->labels[0]);
       if (t->labels == NULL) {
          static unsigned dummy;
          t->error = TRUE;
@@ -153,11 +143,8 @@ static void set_insn_start( struct st_translate *t,
                             unsigned start )
 {
    if (t->insn_count + 1 >= t->insn_size) {
-      unsigned old_size = t->insn_size;
       t->insn_size = 1 << (util_logbase2(t->insn_size) + 1);
-      t->insn = REALLOC( t->insn, 
-                         old_size * sizeof t->insn[0], 
-                         t->insn_size * sizeof t->insn[0] );
+      t->insn = realloc(t->insn, t->insn_size * sizeof t->insn[0]);
       if (t->insn == NULL) {
          t->error = TRUE;
          return;
@@ -187,9 +174,6 @@ dst_register( struct st_translate *t,
       return t->temps[index];
 
    case PROGRAM_OUTPUT:
-      if (t->procType == TGSI_PROCESSOR_VERTEX && index == VERT_RESULT_PSIZ)
-         t->prevInstWrotePointSize = GL_TRUE;
-
       if (t->procType == TGSI_PROCESSOR_VERTEX)
          assert(index < VERT_RESULT_MAX);
       else if (t->procType == TGSI_PROCESSOR_FRAGMENT)
@@ -230,7 +214,6 @@ src_register( struct st_translate *t,
          t->temps[index] = ureg_DECL_temporary( t->ureg );
       return ureg_src(t->temps[index]);
 
-   case PROGRAM_NAMED_PARAM:
    case PROGRAM_ENV_PARAM:
    case PROGRAM_LOCAL_PARAM:
    case PROGRAM_UNIFORM:
@@ -280,15 +263,18 @@ st_translate_texture_target( GLuint textarget,
       case TEXTURE_1D_ARRAY_INDEX: return TGSI_TEXTURE_SHADOW1D_ARRAY;
       case TEXTURE_2D_ARRAY_INDEX: return TGSI_TEXTURE_SHADOW2D_ARRAY;
       case TEXTURE_CUBE_INDEX: return TGSI_TEXTURE_SHADOWCUBE;
+      case TEXTURE_CUBE_ARRAY_INDEX: return TGSI_TEXTURE_SHADOWCUBE_ARRAY;
       default: break;
       }
    }
 
    switch( textarget ) {
+   case TEXTURE_BUFFER_INDEX: return TGSI_TEXTURE_BUFFER;
    case TEXTURE_1D_INDEX:   return TGSI_TEXTURE_1D;
    case TEXTURE_2D_INDEX:   return TGSI_TEXTURE_2D;
    case TEXTURE_3D_INDEX:   return TGSI_TEXTURE_3D;
    case TEXTURE_CUBE_INDEX: return TGSI_TEXTURE_CUBE;
+   case TEXTURE_CUBE_ARRAY_INDEX: return TGSI_TEXTURE_CUBE_ARRAY;
    case TEXTURE_RECT_INDEX: return TGSI_TEXTURE_RECT;
    case TEXTURE_1D_ARRAY_INDEX:   return TGSI_TEXTURE_1D_ARRAY;
    case TEXTURE_2D_ARRAY_INDEX:   return TGSI_TEXTURE_2D_ARRAY;
@@ -306,7 +292,8 @@ st_translate_texture_target( GLuint textarget,
 static struct ureg_dst
 translate_dst( struct st_translate *t,
                const struct prog_dst_register *DstReg,
-               boolean saturate )
+               boolean saturate,
+               boolean clamp_color)
 {
    struct ureg_dst dst = dst_register( t, 
                                        DstReg->File,
@@ -317,6 +304,27 @@ translate_dst( struct st_translate *t,
    
    if (saturate)
       dst = ureg_saturate( dst );
+   else if (clamp_color && DstReg->File == PROGRAM_OUTPUT) {
+      /* Clamp colors for ARB_color_buffer_float. */
+      switch (t->procType) {
+      case TGSI_PROCESSOR_VERTEX:
+         /* XXX if the geometry shader is present, this must be done there
+          * instead of here. */
+         if (DstReg->Index == VERT_RESULT_COL0 ||
+             DstReg->Index == VERT_RESULT_COL1 ||
+             DstReg->Index == VERT_RESULT_BFC0 ||
+             DstReg->Index == VERT_RESULT_BFC1) {
+            dst = ureg_saturate(dst);
+         }
+         break;
+
+      case TGSI_PROCESSOR_FRAGMENT:
+         if (DstReg->Index >= FRAG_RESULT_COLOR) {
+            dst = ureg_saturate(dst);
+         }
+         break;
+      }
+   }
 
    if (DstReg->RelAddr)
       dst = ureg_dst_indirect( dst, ureg_src(t->address[0]) );
@@ -530,8 +538,6 @@ translate_opcode( unsigned op )
       return TGSI_OPCODE_BGNLOOP;
    case OPCODE_BGNSUB:
       return TGSI_OPCODE_BGNSUB;
-   case OPCODE_BRA:
-      return TGSI_OPCODE_BRA;
    case OPCODE_BRK:
       return TGSI_OPCODE_BRK;
    case OPCODE_CAL:
@@ -560,10 +566,6 @@ translate_opcode( unsigned op )
       return TGSI_OPCODE_DST;
    case OPCODE_ELSE:
       return TGSI_OPCODE_ELSE;
-   case OPCODE_EMIT_VERTEX:
-      return TGSI_OPCODE_EMIT;
-   case OPCODE_END_PRIMITIVE:
-      return TGSI_OPCODE_ENDPRIM;
    case OPCODE_ENDIF:
       return TGSI_OPCODE_ENDIF;
    case OPCODE_ENDLOOP:
@@ -662,11 +664,12 @@ translate_opcode( unsigned op )
 static void
 compile_instruction(
    struct st_translate *t,
-   const struct prog_instruction *inst )
+   const struct prog_instruction *inst,
+   boolean clamp_dst_color_output)
 {
    struct ureg_program *ureg = t->ureg;
    GLuint i;
-   struct ureg_dst dst[1];
+   struct ureg_dst dst[1] = { { 0 } };
    struct ureg_src src[4];
    unsigned num_dst;
    unsigned num_src;
@@ -677,7 +680,8 @@ compile_instruction(
    if (num_dst) 
       dst[0] = translate_dst( t, 
                               &inst->DstReg,
-                              inst->SaturateMode );
+                              inst->SaturateMode,
+                              clamp_dst_color_output);
 
    for (i = 0; i < num_src; i++) 
       src[i] = translate_src( t, &inst->SrcReg[i] );
@@ -1016,7 +1020,8 @@ st_translate_mesa_program(
    const GLuint outputMapping[],
    const ubyte outputSemanticName[],
    const ubyte outputSemanticIndex[],
-   boolean passthrough_edgeflags )
+   boolean passthrough_edgeflags,
+   boolean clamp_color)
 {
    struct st_translate translate, *t;
    unsigned i;
@@ -1032,8 +1037,6 @@ st_translate_mesa_program(
    t->inputMapping = inputMapping;
    t->outputMapping = outputMapping;
    t->ureg = ureg;
-   t->pointSizeOutIndex = -1;
-   t->prevInstWrotePointSize = GL_FALSE;
 
    /*_mesa_print_program(program);*/
 
@@ -1042,19 +1045,10 @@ st_translate_mesa_program(
     */
    if (procType == TGSI_PROCESSOR_FRAGMENT) {
       for (i = 0; i < numInputs; i++) {
-         if (program->InputFlags[0] & PROG_PARAM_BIT_CYL_WRAP) {
-            t->inputs[i] = ureg_DECL_fs_input_cyl(ureg,
-                                                  inputSemanticName[i],
-                                                  inputSemanticIndex[i],
-                                                  interpMode[i],
-                                                  TGSI_CYLINDRICAL_WRAP_X);
-         }
-         else {
-            t->inputs[i] = ureg_DECL_fs_input(ureg,
-                                              inputSemanticName[i],
-                                              inputSemanticIndex[i],
-                                              interpMode[i]);
-         }
+         t->inputs[i] = ureg_DECL_fs_input(ureg,
+                                           inputSemanticName[i],
+                                           inputSemanticIndex[i],
+                                           interpMode[i]);
       }
 
       if (program->InputsRead & FRAG_BIT_WPOS) {
@@ -1124,25 +1118,6 @@ st_translate_mesa_program(
          t->outputs[i] = ureg_DECL_output( ureg,
                                            outputSemanticName[i],
                                            outputSemanticIndex[i] );
-         if ((outputSemanticName[i] == TGSI_SEMANTIC_PSIZE) && program->Id) {
-            /* Writing to the point size result register requires special
-             * handling to implement clamping.
-             */
-            static const gl_state_index pointSizeClampState[STATE_LENGTH]
-               = { STATE_INTERNAL, STATE_POINT_SIZE_IMPL_CLAMP, 0, 0, 0 };
-               /* XXX: note we are modifying the incoming shader here!  Need to
-               * do this before emitting the constant decls below, or this
-               * will be missed:
-               */
-            unsigned pointSizeClampConst =
-               _mesa_add_state_reference(program->Parameters,
-                                         pointSizeClampState);
-            struct ureg_dst psizregtemp = ureg_DECL_temporary( ureg );
-            t->pointSizeConst = ureg_DECL_constant( ureg, pointSizeClampConst );
-            t->pointSizeResult = t->outputs[i];
-            t->pointSizeOutIndex = i;
-            t->outputs[i] = psizregtemp;
-         }
       }
       if (passthrough_edgeflags)
          emit_edgeflags( t, program );
@@ -1164,6 +1139,26 @@ st_translate_mesa_program(
          if (sysInputs & (1 << i)) {
             unsigned semName = mesa_sysval_to_semantic[i];
             t->systemValues[i] = ureg_DECL_system_value(ureg, numSys, semName, 0);
+            if (semName == TGSI_SEMANTIC_INSTANCEID ||
+                semName == TGSI_SEMANTIC_VERTEXID) {
+               /* From Gallium perspective, these system values are always
+                * integer, and require native integer support.  However, if
+                * native integer is supported on the vertex stage but not the
+                * pixel stage (e.g, i915g + draw), Mesa will generate IR that
+                * assumes these system values are floats. To resolve the
+                * inconsistency, we insert a U2F.
+                */
+               struct st_context *st = st_context(ctx);
+               struct pipe_screen *pscreen = st->pipe->screen;
+               assert(procType == TGSI_PROCESSOR_VERTEX);
+               assert(pscreen->get_shader_param(pscreen, PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_INTEGERS));
+               (void) pscreen;  /* silence non-debug build warnings */
+               if (!ctx->Const.NativeIntegers) {
+                  struct ureg_dst temp = ureg_DECL_local_temporary(t->ureg);
+                  ureg_U2F( t->ureg, ureg_writemask(temp, TGSI_WRITEMASK_X), t->systemValues[i]);
+                  t->systemValues[i] = ureg_scalar(ureg_src(temp), 0);
+               }
+            }
             numSys++;
             sysInputs &= ~(1 << i);
          }
@@ -1196,7 +1191,6 @@ st_translate_mesa_program(
          case PROGRAM_ENV_PARAM:
          case PROGRAM_LOCAL_PARAM:
          case PROGRAM_STATE_VAR:
-         case PROGRAM_NAMED_PARAM:
          case PROGRAM_UNIFORM:
             t->constants[i] = ureg_DECL_constant( ureg, i );
             break;
@@ -1233,26 +1227,7 @@ st_translate_mesa_program(
     */
    for (i = 0; i < program->NumInstructions; i++) {
       set_insn_start( t, ureg_get_instruction_number( ureg ));
-      compile_instruction( t, &program->Instructions[i] );
-
-      if (t->prevInstWrotePointSize && program->Id) {
-         /* The previous instruction wrote to the (fake) vertex point size
-          * result register.  Now we need to clamp that value to the min/max
-          * point size range, putting the result into the real point size
-          * register.
-          * Note that we can't do this easily at the end of program due to
-          * possible early return.
-          */
-         set_insn_start( t, ureg_get_instruction_number( ureg ));
-         ureg_MAX( t->ureg,
-                   ureg_writemask(t->outputs[t->pointSizeOutIndex], WRITEMASK_X),
-                   ureg_src(t->outputs[t->pointSizeOutIndex]),
-                   ureg_swizzle(t->pointSizeConst, 1,1,1,1));
-         ureg_MIN( t->ureg, ureg_writemask(t->pointSizeResult, WRITEMASK_X),
-                   ureg_src(t->outputs[t->pointSizeOutIndex]),
-                   ureg_swizzle(t->pointSizeConst, 2,2,2,2));
-      }
-      t->prevInstWrotePointSize = GL_FALSE;
+      compile_instruction( t, &program->Instructions[i], clamp_color );
    }
 
    /* Fix up all emitted labels:
@@ -1264,9 +1239,9 @@ st_translate_mesa_program(
    }
 
 out:
-   FREE(t->insn);
-   FREE(t->labels);
-   FREE(t->constants);
+   free(t->insn);
+   free(t->labels);
+   free(t->constants);
 
    if (t->error) {
       debug_printf("%s: translate error flag set\n", __FUNCTION__);
@@ -1283,5 +1258,5 @@ out:
 void
 st_free_tokens(const struct tgsi_token *tokens)
 {
-   FREE((void *)tokens);
+   ureg_free_tokens(tokens);
 }

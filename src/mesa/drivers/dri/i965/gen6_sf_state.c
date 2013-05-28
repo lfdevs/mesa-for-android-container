@@ -54,9 +54,8 @@
  */
 uint32_t
 get_attr_override(struct brw_vue_map *vue_map, int urb_entry_read_offset,
-                  int fs_attr, bool two_side_color)
+                  int fs_attr, bool two_side_color, uint32_t *max_source_attr)
 {
-   int attr_override, slot;
    int vs_attr = _mesa_frag_attrib_to_vert_result(fs_attr);
    if (vs_attr < 0 || vs_attr == VERT_RESULT_HPOS) {
       /* These attributes will be overwritten by the fragment shader's
@@ -67,7 +66,7 @@ get_attr_override(struct brw_vue_map *vue_map, int urb_entry_read_offset,
    }
 
    /* Find the VUE slot for this attribute. */
-   slot = vue_map->vert_result_to_slot[vs_attr];
+   int slot = vue_map->vert_result_to_slot[vs_attr];
 
    /* If there was only a back color written but not front, use back
     * as the color instead of undefined
@@ -89,23 +88,29 @@ get_attr_override(struct brw_vue_map *vue_map, int urb_entry_read_offset,
     * Each increment of urb_entry_read_offset represents a 256-bit value, so
     * it counts for two 128-bit VUE slots.
     */
-   attr_override = slot - 2 * urb_entry_read_offset;
-   assert (attr_override >= 0 && attr_override < 32);
+   int source_attr = slot - 2 * urb_entry_read_offset;
+   assert(source_attr >= 0 && source_attr < 32);
 
    /* If we are doing two-sided color, and the VUE slot following this one
     * represents a back-facing color, then we need to instruct the SF unit to
     * do back-facing swizzling.
     */
-   if (two_side_color) {
-      if (vue_map->slot_to_vert_result[slot] == VERT_RESULT_COL0 &&
-          vue_map->slot_to_vert_result[slot+1] == VERT_RESULT_BFC0)
-         attr_override |= (ATTRIBUTE_SWIZZLE_INPUTATTR_FACING << ATTRIBUTE_SWIZZLE_SHIFT);
-      else if (vue_map->slot_to_vert_result[slot] == VERT_RESULT_COL1 &&
-               vue_map->slot_to_vert_result[slot+1] == VERT_RESULT_BFC1)
-         attr_override |= (ATTRIBUTE_SWIZZLE_INPUTATTR_FACING << ATTRIBUTE_SWIZZLE_SHIFT);
+   bool swizzling = two_side_color &&
+      ((vue_map->slot_to_vert_result[slot] == VERT_RESULT_COL0 &&
+        vue_map->slot_to_vert_result[slot+1] == VERT_RESULT_BFC0) ||
+       (vue_map->slot_to_vert_result[slot] == VERT_RESULT_COL1 &&
+        vue_map->slot_to_vert_result[slot+1] == VERT_RESULT_BFC1));
+
+   /* Update max_source_attr.  If swizzling, the SF will read this slot + 1. */
+   if (*max_source_attr < source_attr + swizzling)
+      *max_source_attr = source_attr + swizzling;
+
+   if (swizzling) {
+      return source_attr |
+         (ATTRIBUTE_SWIZZLE_INPUTATTR_FACING << ATTRIBUTE_SWIZZLE_SHIFT);
    }
 
-   return attr_override;
+   return source_attr;
 }
 
 static void
@@ -113,10 +118,6 @@ upload_sf_state(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
-   struct brw_vue_map vue_map;
-   uint32_t urb_entry_read_length;
-   /* CACHE_NEW_VS_PROG */
-   GLbitfield64 vs_outputs_written = brw->vs.prog_data->outputs_written;
    /* BRW_NEW_FRAGMENT_PROGRAM */
    uint32_t num_outputs = _mesa_bitcount_64(brw->fragment_program->Base.InputsRead);
    /* _NEW_LIGHT */
@@ -125,30 +126,15 @@ upload_sf_state(struct brw_context *brw)
    int i;
    /* _NEW_BUFFER */
    bool render_to_fbo = _mesa_is_user_fbo(brw->intel.ctx.DrawBuffer);
+   bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
+
    int attr = 0, input_index = 0;
    int urb_entry_read_offset = 1;
    float point_size;
    uint16_t attr_overrides[FRAG_ATTRIB_MAX];
-   bool userclip_active;
    uint32_t point_sprite_origin;
 
-   /* _NEW_TRANSFORM */
-   userclip_active = (ctx->Transform.ClipPlanesEnabled != 0);
-
-   brw_compute_vue_map(&vue_map, intel, userclip_active, vs_outputs_written);
-   urb_entry_read_length = (vue_map.num_slots + 1)/2 - urb_entry_read_offset;
-   if (urb_entry_read_length == 0) {
-      /* Setting the URB entry read length to 0 causes undefined behavior, so
-       * if we have no URB data to read, set it to 1.
-       */
-      urb_entry_read_length = 1;
-   }
-
-   dw1 =
-      GEN6_SF_SWIZZLE_ENABLE |
-      num_outputs << GEN6_SF_NUM_OUTPUTS_SHIFT |
-      urb_entry_read_length << GEN6_SF_URB_ENTRY_READ_LENGTH_SHIFT |
-      urb_entry_read_offset << GEN6_SF_URB_ENTRY_READ_OFFSET_SHIFT;
+   dw1 = GEN6_SF_SWIZZLE_ENABLE | num_outputs << GEN6_SF_NUM_OUTPUTS_SHIFT;
 
    dw2 = GEN6_SF_STATISTICS_ENABLE |
          GEN6_SF_VIEWPORT_TRANSFORM_ENABLE;
@@ -232,13 +218,21 @@ upload_sf_state(struct brw_context *brw)
    }
 
    /* _NEW_LINE */
-   dw3 |= U_FIXED(CLAMP(ctx->Line.Width, 0.0, 7.99), 7) <<
-      GEN6_SF_LINE_WIDTH_SHIFT;
+   {
+      uint32_t line_width_u3_7 = U_FIXED(CLAMP(ctx->Line.Width, 0.0, 7.99), 7);
+      /* TODO: line width of 0 is not allowed when MSAA enabled */
+      if (line_width_u3_7 == 0)
+         line_width_u3_7 = 1;
+      dw3 |= line_width_u3_7 << GEN6_SF_LINE_WIDTH_SHIFT;
+   }
    if (ctx->Line.SmoothFlag) {
       dw3 |= GEN6_SF_LINE_AA_ENABLE;
       dw3 |= GEN6_SF_LINE_AA_MODE_TRUE;
       dw3 |= GEN6_SF_LINE_END_CAP_WIDTH_1_0;
    }
+   /* _NEW_MULTISAMPLE */
+   if (multisampled_fbo && ctx->Multisample.Enabled)
+      dw3 |= GEN6_SF_MSRAST_ON_PATTERN;
 
    /* _NEW_PROGRAM | _NEW_POINT */
    if (!(ctx->VertexProgram.PointSizeEnabled ||
@@ -276,6 +270,7 @@ upload_sf_state(struct brw_context *brw)
    /* Create the mapping from the FS inputs we produce to the VS outputs
     * they source from.
     */
+   uint32_t max_source_attr = 0;
    for (; attr < FRAG_ATTRIB_MAX; attr++) {
       enum glsl_interp_qualifier interp_qualifier =
          brw->fragment_program->InterpQualifier[attr];
@@ -307,14 +302,33 @@ upload_sf_state(struct brw_context *brw)
        */
       assert(input_index < 16 || attr == input_index);
 
-      /* _NEW_LIGHT | _NEW_PROGRAM */
+      /* CACHE_NEW_VS_PROG | _NEW_LIGHT | _NEW_PROGRAM */
       attr_overrides[input_index++] =
-         get_attr_override(&vue_map, urb_entry_read_offset, attr,
-                           ctx->VertexProgram._TwoSideEnabled);
+         get_attr_override(&brw->vs.prog_data->vue_map,
+			   urb_entry_read_offset, attr,
+                           ctx->VertexProgram._TwoSideEnabled,
+                           &max_source_attr);
    }
 
    for (; input_index < FRAG_ATTRIB_MAX; input_index++)
       attr_overrides[input_index] = 0;
+
+   /* From the Sandy Bridge PRM, Volume 2, Part 1, documentation for
+    * 3DSTATE_SF DWord 1 bits 15:11, "Vertex URB Entry Read Length":
+    *
+    * "This field should be set to the minimum length required to read the
+    *  maximum source attribute.  The maximum source attribute is indicated
+    *  by the maximum value of the enabled Attribute # Source Attribute if
+    *  Attribute Swizzle Enable is set, Number of Output Attributes-1 if
+    *  enable is not set.
+    *  read_length = ceiling((max_source_attr + 1) / 2)
+    *
+    *  [errata] Corruption/Hang possible if length programmed larger than
+    *  recommended"
+    */
+   uint32_t urb_entry_read_length = ALIGN(max_source_attr + 1, 2) / 2;
+      dw1 |= urb_entry_read_length << GEN6_SF_URB_ENTRY_READ_LENGTH_SHIFT |
+             urb_entry_read_offset << GEN6_SF_URB_ENTRY_READ_OFFSET_SHIFT;
 
    BEGIN_BATCH(20);
    OUT_BATCH(_3DSTATE_SF << 16 | (20 - 2));
@@ -344,7 +358,7 @@ const struct brw_tracked_state gen6_sf_state = {
 		_NEW_SCISSOR |
 		_NEW_BUFFERS |
 		_NEW_POINT |
-		_NEW_TRANSFORM),
+                _NEW_MULTISAMPLE),
       .brw   = (BRW_NEW_CONTEXT |
 		BRW_NEW_FRAGMENT_PROGRAM),
       .cache = CACHE_NEW_VS_PROG

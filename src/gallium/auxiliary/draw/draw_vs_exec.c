@@ -69,8 +69,8 @@ vs_exec_prepare( struct draw_vertex_shader *shader,
    if (evs->machine->Tokens != shader->state.tokens) {
       tgsi_exec_machine_bind_shader(evs->machine,
                                     shader->state.tokens,
-                                    draw->vs.num_samplers,
-                                    draw->vs.samplers);
+                                    draw->vs.tgsi.num_samplers,
+                                    draw->vs.tgsi.samplers);
    }
 }
 
@@ -103,7 +103,7 @@ vs_exec_run_linear( struct draw_vertex_shader *shader,
    if (shader->info.uses_instanceid) {
       unsigned i = machine->SysSemanticToIndex[TGSI_SEMANTIC_INSTANCEID];
       assert(i < Elements(machine->SystemValue));
-      for (j = 0; j < QUAD_SIZE; j++)
+      for (j = 0; j < TGSI_QUAD_SIZE; j++)
          machine->SystemValue[i].i[j] = shader->draw->instance_id;
    }
 
@@ -168,7 +168,12 @@ vs_exec_run_linear( struct draw_vertex_shader *shader,
                output[slot][2] = CLAMP(machine->Outputs[slot].xyzw[2].f[j], 0.0f, 1.0f);
                output[slot][3] = CLAMP(machine->Outputs[slot].xyzw[3].f[j], 0.0f, 1.0f);
             }
-            else
+            else if (name == TGSI_SEMANTIC_FOG) {
+               output[slot][0] = machine->Outputs[slot].xyzw[0].f[j];
+               output[slot][1] = 0;
+               output[slot][2] = 0;
+               output[slot][3] = 1;
+	    } else
             {
                output[slot][0] = machine->Outputs[slot].xyzw[0].f[j];
                output[slot][1] = machine->Outputs[slot].xyzw[1].f[j];
@@ -230,7 +235,7 @@ draw_create_vs_exec(struct draw_context *draw,
    vs->base.run_linear = vs_exec_run_linear;
    vs->base.delete = vs_exec_delete;
    vs->base.create_variant = draw_vs_create_variant_generic;
-   vs->machine = draw->vs.machine;
+   vs->machine = draw->vs.tgsi.machine;
 
    return &vs->base;
 }

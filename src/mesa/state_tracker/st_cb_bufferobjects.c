@@ -38,6 +38,7 @@
 
 #include "st_context.h"
 #include "st_cb_bufferobjects.h"
+#include "st_debug.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
@@ -195,6 +196,15 @@ st_bufferobj_data(struct gl_context *ctx,
    case GL_ELEMENT_ARRAY_BUFFER_ARB:
       bind = PIPE_BIND_INDEX_BUFFER;
       break;
+   case GL_TEXTURE_BUFFER:
+      bind = PIPE_BIND_SAMPLER_VIEW;
+      break;
+   case GL_TRANSFORM_FEEDBACK_BUFFER:
+      bind = PIPE_BIND_STREAM_OUTPUT;
+      break;
+   case GL_UNIFORM_BUFFER:
+      bind = PIPE_BIND_CONSTANT_BUFFER;
+      break;
    default:
       bind = 0;
    }
@@ -220,6 +230,10 @@ st_bufferobj_data(struct gl_context *ctx,
    }
 
    pipe_resource_reference( &st_obj->buffer, NULL );
+
+   if (ST_DEBUG & DEBUG_BUFFER) {
+      debug_printf("Create buffer size %lu bind 0x%x\n", size, bind);
+   }
 
    if (size != 0) {
       st_obj->buffer = pipe_buffer_create(pipe->screen, bind,
@@ -294,6 +308,9 @@ st_bufferobj_map_range(struct gl_context *ctx,
       obj->Offset = offset;
       obj->Length = length;
       obj->AccessFlags = access;
+   }
+   else {
+      st_obj->transfer = NULL;
    }
 
    return obj->Pointer;

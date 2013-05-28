@@ -63,6 +63,7 @@ struct vbo_save_copied_vtx {
  */
 struct vbo_save_vertex_list {
    GLubyte attrsz[VBO_ATTRIB_MAX];
+   GLenum attrtype[VBO_ATTRIB_MAX];
    GLuint vertex_size;
 
    /* Copy of the final vertex from node->vertex_store->bufferobj.
@@ -127,6 +128,7 @@ struct vbo_save_context {
    const struct gl_client_array *inputs[VBO_ATTRIB_MAX];
 
    GLubyte attrsz[VBO_ATTRIB_MAX];
+   GLenum attrtype[VBO_ATTRIB_MAX];
    GLubyte active_sz[VBO_ATTRIB_MAX];
    GLuint vertex_size;
 
@@ -158,8 +160,6 @@ struct vbo_save_context {
    GLubyte *currentsz[VBO_ATTRIB_MAX];
 };
 
-#if FEATURE_dlist
-
 void vbo_save_init( struct gl_context *ctx );
 void vbo_save_destroy( struct gl_context *ctx );
 void vbo_save_fallback( struct gl_context *ctx, GLboolean fallback );
@@ -187,18 +187,12 @@ void vbo_save_playback_vertex_list( struct gl_context *ctx, void *data );
 
 void vbo_save_api_init( struct vbo_save_context *save );
 
-#else /* FEATURE_dlist */
+GLfloat *
+vbo_save_map_vertex_store(struct gl_context *ctx,
+                          struct vbo_save_vertex_store *vertex_store);
 
-static inline void
-vbo_save_init( struct gl_context *ctx )
-{
-}
-
-static inline void
-vbo_save_destroy( struct gl_context *ctx )
-{
-}
-
-#endif /* FEATURE_dlist */
+void
+vbo_save_unmap_vertex_store(struct gl_context *ctx,
+                            struct vbo_save_vertex_store *vertex_store);
 
 #endif /* VBO_SAVE_H */

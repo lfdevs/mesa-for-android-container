@@ -87,6 +87,17 @@ struct nv50_ir_varying
 
 #define NV50_PRIM_PATCHES PIPE_PRIM_MAX
 
+struct nv50_ir_prog_symbol
+{
+   uint32_t label;
+   uint32_t offset;
+};
+
+#define NVISA_GF100_CHIPSET_C0 0xc0
+#define NVISA_GF100_CHIPSET_D0 0xd0
+#define NVISA_GK104_CHIPSET    0xe0
+#define NVISA_GK110_CHIPSET    0xf0
+
 struct nv50_ir_prog_info
 {
    uint16_t target; /* chipset (0x50, 0x84, 0xc0, ...) */
@@ -105,6 +116,8 @@ struct nv50_ir_prog_info
       uint8_t sourceRep;  /* NV50_PROGRAM_IR */
       const void *source;
       void *relocData;
+      struct nv50_ir_prog_symbol *syms;
+      uint16_t numSyms;
    } bin;
 
    struct nv50_ir_varying sv[PIPE_MAX_SHADER_INPUTS];
@@ -155,7 +168,10 @@ struct nv50_ir_prog_info
       uint8_t clipDistanceMask;  /* mask of clip distances defined */
       uint8_t cullDistanceMask;  /* clip distance mode (1 bit per output) */
       int8_t genUserClip;        /* request user clip planes for ClipVertex */
+      uint16_t ucpBase;          /* base address for UCPs */
+      uint8_t ucpBinding;        /* constant buffer index of UCP data */
       uint8_t pointSize;         /* output index for PointSize */
+      uint8_t instanceId;        /* system value index of InstanceID */
       uint8_t vertexId;          /* system value index of VertexID */
       uint8_t edgeFlagIn;
       uint8_t edgeFlagOut;
@@ -167,6 +183,8 @@ struct nv50_ir_prog_info
 
    /* driver callback to assign input/output locations */
    int (*assignSlots)(struct nv50_ir_prog_info *);
+
+   void *driverPriv;
 };
 
 #ifdef __cplusplus

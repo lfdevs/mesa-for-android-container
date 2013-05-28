@@ -36,7 +36,6 @@
 #include "main/state.h"
 #include "s_aatriangle.h"
 #include "s_context.h"
-#include "s_fragprog.h"
 #include "s_span.h"
 
 

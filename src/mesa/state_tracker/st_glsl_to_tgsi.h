@@ -45,11 +45,13 @@ enum pipe_error st_translate_program(
    const ubyte inputSemanticName[],
    const ubyte inputSemanticIndex[],
    const GLuint interpMode[],
+   const GLboolean is_centroid[],
    GLuint numOutputs,
    const GLuint outputMapping[],
    const ubyte outputSemanticName[],
    const ubyte outputSemanticIndex[],
-   boolean passthrough_edgeflags);
+   boolean passthrough_edgeflags,
+   boolean clamp_color);
 
 void free_glsl_to_tgsi_visitor(struct glsl_to_tgsi_visitor *v);
 void get_pixel_transfer_visitor(struct st_fragment_program *fp,

@@ -174,6 +174,9 @@ def _pkg_check_modules(env, name, modules):
     if subprocess.call(["pkg-config", "--exists", ' '.join(modules)]) != 0:
         return
 
+    # Strip version expressions from modules
+    modules = [module.split(' ', 1)[0] for module in modules]
+
     # Other flags may affect the compilation of unrelated targets, so store
     # them with a prefix, (e.g., XXX_CFLAGS, XXX_LIBS, etc)
     try:
@@ -189,7 +192,7 @@ def _pkg_check_modules(env, name, modules):
 
 def pkg_check_modules(env, name, modules):
 
-    sys.stdout.write('Checking for %s...' % name)
+    sys.stdout.write('Checking for %s (%s)...' % (name, ' '.join(modules)))
     _pkg_check_modules(env, name, modules)
     result = env['HAVE_' + name]
     sys.stdout.write(' %s\n' % ['no', 'yes'][int(bool(result))])
@@ -232,6 +235,20 @@ def parse_source_list(env, filename, names=None):
     # parse the source list file
     parser = source_list.SourceListParser()
     src = env.File(filename).srcnode()
+
+    cur_srcdir = env.Dir('.').srcnode().abspath
+    top_srcdir = env.Dir('#').abspath
+    top_builddir = os.path.join(top_srcdir, env['build_dir'])
+
+    # Normalize everything to / slashes
+    cur_srcdir = cur_srcdir.replace('\\', '/')
+    top_srcdir = top_srcdir.replace('\\', '/')
+    top_builddir = top_builddir.replace('\\', '/')
+
+    # Populate the symbol table of the Makefile parser.
+    parser.add_symbol('top_srcdir', top_srcdir)
+    parser.add_symbol('top_builddir', top_builddir)
+
     sym_table = parser.parse(src.abspath)
 
     if names:
@@ -246,7 +263,21 @@ def parse_source_list(env, filename, names=None):
     src_lists = {}
     for sym in symbols:
         val = sym_table[sym]
-        src_lists[sym] = [f for f in val.split(' ') if f]
+        srcs = []
+        for f in val.split():
+            if f:
+                # Process source paths
+                if f.startswith(top_builddir + '/src'):
+                    # Automake puts build output on a `src` subdirectory, but
+                    # SCons does not, so strip it here.
+                    f = top_builddir + f[len(top_builddir + '/src'):]
+                if f.startswith(cur_srcdir + '/'):
+                    # Prefer relative source paths, as absolute files tend to
+                    # cause duplicate actions.
+                    f = f[len(cur_srcdir + '/'):]
+                srcs.append(f)
+
+        src_lists[sym] = srcs
 
     # if names are given, concatenate the lists
     if names:

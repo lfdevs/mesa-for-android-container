@@ -108,7 +108,16 @@ lp_build_const_aos(struct gallivm_state *gallivm, struct lp_type type,
 LLVMValueRef
 lp_build_const_mask_aos(struct gallivm_state *gallivm,
                         struct lp_type type,
-                        unsigned mask);
+                        unsigned mask,
+                        unsigned channels);
+
+
+LLVMValueRef
+lp_build_const_mask_aos_swizzled(struct gallivm_state *gallivm,
+                                 struct lp_type type,
+                                 unsigned mask,
+                                 unsigned channels,
+                                 const unsigned char *swizzle);
 
 
 static INLINE LLVMValueRef
@@ -141,6 +150,19 @@ lp_build_const_int_pointer(struct gallivm_state *gallivm, const void *ptr)
    return v;
 }
 
+
+LLVMValueRef
+lp_build_const_string(struct gallivm_state *gallivm,
+                      const char *str);
+
+
+LLVMValueRef
+lp_build_const_func_pointer(struct gallivm_state *gallivm,
+                            const void *ptr,
+                            LLVMTypeRef ret_type,
+                            LLVMTypeRef *arg_types,
+                            unsigned num_args,
+                            const char *name);
 
 
 #endif /* !LP_BLD_CONST_H */

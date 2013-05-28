@@ -125,11 +125,8 @@ DRI_CONF_BEGIN
     DRI_CONF_SECTION_DEBUG
         DRI_CONF_NO_RAST(false)
     DRI_CONF_SECTION_END
-    DRI_CONF_SECTION_SOFTWARE
-        DRI_CONF_NV_VERTEX_PROGRAM(false)
-    DRI_CONF_SECTION_END
 DRI_CONF_END;
-static const GLuint __driNConfigOptions = 17;
+static const GLuint __driNConfigOptions = 16;
 
 #endif
 
@@ -192,11 +189,11 @@ radeonDRI2Flush(__DRIdrawable *drawable)
     radeonContextPtr rmesa;
 
     rmesa = (radeonContextPtr) drawable->driContextPriv->driverPrivate;
-    radeonFlush(rmesa->glCtx);
+    radeonFlush(&rmesa->glCtx);
 }
 
 static const struct __DRI2flushExtensionRec radeonFlushExtension = {
-    { __DRI2_FLUSH, __DRI2_FLUSH_VERSION },
+    { __DRI2_FLUSH, 3 },
     radeonDRI2Flush,
     dri2InvalidateDrawable,
 };
@@ -212,7 +209,7 @@ radeon_create_image_from_name(__DRIscreen *screen,
    if (name == 0)
       return NULL;
 
-   image = CALLOC(sizeof *image);
+   image = calloc(1, sizeof *image);
    if (image == NULL)
       return NULL;
 
@@ -251,7 +248,7 @@ radeon_create_image_from_name(__DRIscreen *screen,
                               0);
 
    if (image->bo == NULL) {
-      FREE(image);
+      free(image);
       return NULL;
    }
 
@@ -267,15 +264,15 @@ radeon_create_image_from_renderbuffer(__DRIcontext *context,
    struct gl_renderbuffer *rb;
    struct radeon_renderbuffer *rrb;
 
-   rb = _mesa_lookup_renderbuffer(radeon->glCtx, renderbuffer);
+   rb = _mesa_lookup_renderbuffer(&radeon->glCtx, renderbuffer);
    if (!rb) {
-      _mesa_error(radeon->glCtx,
+      _mesa_error(&radeon->glCtx,
                   GL_INVALID_OPERATION, "glRenderbufferExternalMESA");
       return NULL;
    }
 
    rrb = radeon_renderbuffer(rb);
-   image = CALLOC(sizeof *image);
+   image = calloc(1, sizeof *image);
    if (image == NULL)
       return NULL;
 
@@ -298,7 +295,7 @@ static void
 radeon_destroy_image(__DRIimage *image)
 {
    radeon_bo_unref(image->bo);
-   FREE(image);
+   free(image);
 }
 
 static __DRIimage *
@@ -310,9 +307,11 @@ radeon_create_image(__DRIscreen *screen,
    __DRIimage *image;
    radeonScreenPtr radeonScreen = screen->driverPrivate;
 
-   image = CALLOC(sizeof *image);
+   image = calloc(1, sizeof *image);
    if (image == NULL)
       return NULL;
+
+   image->dri_format = format;
 
    switch (format) {
    case __DRI_IMAGE_FORMAT_RGB565:
@@ -349,7 +348,7 @@ radeon_create_image(__DRIscreen *screen,
                               0);
 
    if (image->bo == NULL) {
-      FREE(image);
+      free(image);
       return NULL;
    }
 
@@ -375,7 +374,7 @@ radeon_query_image(__DRIimage *image, int attrib, int *value)
 }
 
 static struct __DRIimageExtensionRec radeonImageExtension = {
-    { __DRI_IMAGE, __DRI_IMAGE_VERSION },
+    { __DRI_IMAGE, 1 },
    radeon_create_image_from_name,
    radeon_create_image_from_renderbuffer,
    radeon_destroy_image,
@@ -486,7 +485,7 @@ radeonCreateScreen2(__DRIscreen *sPriv)
    uint32_t device_id = 0;
 
    /* Allocate the private area */
-   screen = (radeonScreenPtr) CALLOC( sizeof(*screen) );
+   screen = calloc(1, sizeof(*screen));
    if ( !screen ) {
       fprintf(stderr, "%s: Could not allocate memory for screen structure", __FUNCTION__);
       fprintf(stderr, "leaving here\n");
@@ -505,16 +504,18 @@ radeonCreateScreen2(__DRIscreen *sPriv)
 
    ret = radeonGetParam(sPriv, RADEON_PARAM_DEVICE_ID, &device_id);
    if (ret) {
-     FREE( screen );
+     free( screen );
      fprintf(stderr, "drm_radeon_getparam_t (RADEON_PARAM_DEVICE_ID): %d\n", ret);
      return NULL;
    }
 
    ret = radeon_set_screen_flags(screen, device_id);
-   if (ret == -1)
+   if (ret == -1) {
+     free(screen);
      return NULL;
+   }
 
-   if (getenv("R300_NO_TCL"))
+   if (getenv("RADEON_NO_TCL"))
 	   screen->chip_flags &= ~RADEON_CHIPSET_TCL;
 
    i = 0;
@@ -559,7 +560,7 @@ radeonDestroyScreen( __DRIscreen *sPriv )
     /* free all option information */
     driDestroyOptionInfo (&screen->optionCache);
 
-    FREE( screen );
+    free( screen );
     sPriv->driverPrivate = NULL;
 }
 
@@ -711,8 +712,11 @@ radeonDestroyBuffer(__DRIdrawable *driDrawPriv)
 static const
 __DRIconfig **radeonInitScreen2(__DRIscreen *psp)
 {
-   GLenum fb_format[3];
-   GLenum fb_type[3];
+   static const gl_format formats[3] = {
+      MESA_FORMAT_RGB565,
+      MESA_FORMAT_XRGB8888,
+      MESA_FORMAT_ARGB8888
+   };
    /* GLX_SWAP_COPY_OML is only supported because the Intel driver doesn't
     * support pageflipping at all.
     */
@@ -737,19 +741,10 @@ __DRIconfig **radeonInitScreen2(__DRIscreen *psp)
 
    msaa_samples_array[0] = 0;
 
-   fb_format[0] = GL_RGB;
-   fb_type[0] = GL_UNSIGNED_SHORT_5_6_5;
-
-   fb_format[1] = GL_BGR;
-   fb_type[1] = GL_UNSIGNED_INT_8_8_8_8_REV;
-
-   fb_format[2] = GL_BGRA;
-   fb_type[2] = GL_UNSIGNED_INT_8_8_8_8_REV;
-
-   for (color = 0; color < ARRAY_SIZE(fb_format); color++) {
+   for (color = 0; color < ARRAY_SIZE(formats); color++) {
       __DRIconfig **new_configs;
 
-      new_configs = driCreateConfigs(fb_format[color], fb_type[color],
+      new_configs = driCreateConfigs(formats[color],
 				     depth_bits,
 				     stencil_bits,
 				     ARRAY_SIZE(depth_bits),
@@ -758,10 +753,7 @@ __DRIconfig **radeonInitScreen2(__DRIscreen *psp)
 				     msaa_samples_array,
 				     ARRAY_SIZE(msaa_samples_array),
 				     GL_TRUE);
-      if (configs == NULL)
-	 configs = new_configs;
-      else
-	 configs = driConcatConfigs(configs, new_configs);
+      configs = driConcatConfigs(configs, new_configs);
    }
 
    if (configs == NULL) {

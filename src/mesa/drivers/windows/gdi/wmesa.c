@@ -8,10 +8,13 @@
 #include "GL/wmesa.h"
 #include <winuser.h>
 #include "main/context.h"
+#include "main/api_exec.h"
 #include "main/extensions.h"
 #include "main/framebuffer.h"
 #include "main/renderbuffer.h"
 #include "main/macros.h"
+#include "main/version.h"
+#include "main/vtxfmt.h"
 #include "drivers/common/driverfuncs.h"
 #include "drivers/common/meta.h"
 #include "vbo/vbo.h"
@@ -35,7 +38,7 @@ static WMesaFramebuffer
 wmesa_new_framebuffer(HDC hdc, struct gl_config *visual)
 {
     WMesaFramebuffer pwfb
-        = (WMesaFramebuffer) malloc(sizeof(struct wmesa_framebuffer));
+        = malloc(sizeof(struct wmesa_framebuffer));
     if (pwfb) {
         _mesa_initialize_window_framebuffer(&pwfb->Base, visual);
         pwfb->hDC = hdc;
@@ -417,480 +420,6 @@ static void clear(struct gl_context *ctx, GLbitfield mask)
 } 
 
 
-/**********************************************************************/
-/*****                   PIXEL Functions                          *****/
-/**********************************************************************/
-
-#define FLIP(Y)  (rb->Height - (Y) - 1)
-
-
-/**
- ** Front Buffer reading/writing
- ** These are slow, but work with all non-indexed visual types.
- **/
-
-/* Write a horizontal span of RGBA color pixels with a boolean mask. */
-static void write_rgba_span_front(struct gl_context *ctx, 
-				  struct gl_renderbuffer *rb, 
-				  GLuint n, GLint x, GLint y,
-				  const void *values, 
-				  const GLubyte *mask)
-{
-   const GLubyte (*rgba)[4] = (const GLubyte (*)[4])values;
-   WMesaContext pwc = wmesa_context(ctx);
-   WMesaFramebuffer pwfb = wmesa_lookup_framebuffer(pwc->hDC);
-   HBITMAP bmp=0;
-   HDC mdc=0;
-   typedef union
-   {
-      unsigned i;
-      struct {
-         unsigned b:8, g:8, r:8, a:8;
-      };
-   } BGRA;
-   BGRA *bgra, c;
-   GLuint i;
-
-   if (n < 16) {   // the value 16 is just guessed
-      y=FLIP(y);
-      if (mask) {
-         for (i=0; i<n; i++)
-            if (mask[i])
-               SetPixel(pwc->hDC, x+i, y,
-                        RGB(rgba[i][RCOMP], rgba[i][GCOMP], rgba[i][BCOMP]));
-      }
-      else {
-         for (i=0; i<n; i++)
-            SetPixel(pwc->hDC, x+i, y,
-                     RGB(rgba[i][RCOMP], rgba[i][GCOMP], rgba[i][BCOMP]));
-      }
-   }
-   else {
-      if (!pwfb) {
-         _mesa_problem(NULL, "wmesa: write_rgba_span_front on unknown hdc");
-         return;
-      }
-      bgra=malloc(n*sizeof(BGRA));
-      if (!bgra) {
-         _mesa_problem(NULL, "wmesa: write_rgba_span_front: out of memory");
-         return;
-      }
-      c.a=0;
-      if (mask) {
-         for (i=0; i<n; i++) {
-            if (mask[i]) {
-               c.r=rgba[i][RCOMP];
-               c.g=rgba[i][GCOMP];
-               c.b=rgba[i][BCOMP];
-               c.a=rgba[i][ACOMP];
-               bgra[i]=c;
-            }
-            else
-               bgra[i].i=0;
-         }
-      }
-      else {
-         for (i=0; i<n; i++) {
-            c.r=rgba[i][RCOMP];
-            c.g=rgba[i][GCOMP];
-            c.b=rgba[i][BCOMP];
-            c.a=rgba[i][ACOMP];
-            bgra[i]=c;
-         }
-      }
-      bmp=CreateBitmap(n, 1,  1, 32, bgra);
-      mdc=CreateCompatibleDC(pwfb->hDC);
-      SelectObject(mdc, bmp);
-      y=FLIP(y);
-      BitBlt(pwfb->hDC, x, y, n, 1, mdc, 0, 0, SRCCOPY);
-      SelectObject(mdc, 0);
-      DeleteObject(bmp);
-      DeleteDC(mdc);
-      free(bgra);
-   }
-}
-
-
-/* Write an array of RGBA pixels with a boolean mask. */
-static void write_rgba_pixels_front(struct gl_context *ctx, 
-                                    struct gl_renderbuffer *rb,
-                                    GLuint n, 
-                                    const GLint x[], const GLint y[],
-                                    const void *values, 
-                                    const GLubyte *mask)
-{
-    const GLubyte (*rgba)[4] = (const GLubyte (*)[4])values;
-    GLuint i;
-    WMesaContext pwc = wmesa_context(ctx);
-    (void) ctx;
-    for (i=0; i<n; i++)
-	if (mask[i])
-	    SetPixel(pwc->hDC, x[i], FLIP(y[i]), 
-		     RGB(rgba[i][RCOMP], rgba[i][GCOMP], 
-			 rgba[i][BCOMP]));
-}
-
-
-
-/* Read a horizontal span of color pixels. */
-static void read_rgba_span_front(struct gl_context *ctx, 
-                                 struct gl_renderbuffer *rb,
-                                 GLuint n, GLint x, GLint y,
-                                 void *values)
-{
-    GLubyte (*rgba)[4] = (GLubyte (*)[4])values;
-    WMesaContext pwc = wmesa_context(ctx);
-    GLuint i;
-    COLORREF Color;
-    y = FLIP(y);
-    for (i=0; i<n; i++) {
-	Color = GetPixel(pwc->hDC, x+i, y);
-	rgba[i][RCOMP] = GetRValue(Color);
-	rgba[i][GCOMP] = GetGValue(Color);
-	rgba[i][BCOMP] = GetBValue(Color);
-	rgba[i][ACOMP] = 255;
-    }
-}
-
-
-/* Read an array of color pixels. */
-static void read_rgba_pixels_front(struct gl_context *ctx, 
-                                   struct gl_renderbuffer *rb,
-                                   GLuint n, const GLint x[], const GLint y[],
-                                   void *values)
-{
-    GLubyte (*rgba)[4] = (GLubyte (*)[4])values;
-    WMesaContext pwc = wmesa_context(ctx);
-    GLuint i;
-    COLORREF Color;
-    for (i=0; i<n; i++) {
-        GLint y2 = FLIP(y[i]);
-        Color = GetPixel(pwc->hDC, x[i], y2);
-        rgba[i][RCOMP] = GetRValue(Color);
-        rgba[i][GCOMP] = GetGValue(Color);
-        rgba[i][BCOMP] = GetBValue(Color);
-        rgba[i][ACOMP] = 255;
-    }
-}
-
-/*********************************************************************/
-
-/* DOUBLE BUFFER 32-bit */
-
-#define WMSETPIXEL32(pwc, y, x, r, g, b) { \
-LPDWORD lpdw = ((LPDWORD)((pwc)->pbPixels + (pwc)->ScanWidth * (y)) + (x)); \
-*lpdw = BGR32((r),(g),(b)); }
-
-
-
-/* Write a horizontal span of RGBA color pixels with a boolean mask. */
-static void write_rgba_span_32(struct gl_context *ctx, 
-			       struct gl_renderbuffer *rb, 
-			       GLuint n, GLint x, GLint y,
-			       const void *values, 
-			       const GLubyte *mask)
-{
-    const GLubyte (*rgba)[4] = (const GLubyte (*)[4])values;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-    GLuint i;
-    LPDWORD lpdw;
-
-    (void) ctx;
-    
-    y=FLIP(y);
-    lpdw = ((LPDWORD)(pwfb->pbPixels + pwfb->ScanWidth * y)) + x;
-    if (mask) {
-	for (i=0; i<n; i++)
-	    if (mask[i])
-                lpdw[i] = BGR32(rgba[i][RCOMP], rgba[i][GCOMP], 
-				rgba[i][BCOMP]);
-    }
-    else {
-	for (i=0; i<n; i++)
-                *lpdw++ = BGR32(rgba[i][RCOMP], rgba[i][GCOMP], 
-				rgba[i][BCOMP]);
-    }
-}
-
-
-/* Write an array of RGBA pixels with a boolean mask. */
-static void write_rgba_pixels_32(struct gl_context *ctx, 
-				 struct gl_renderbuffer *rb,
-				 GLuint n, const GLint x[], const GLint y[],
-				 const void *values, 
-				 const GLubyte *mask)
-{
-    const GLubyte (*rgba)[4] = (const GLubyte (*)[4])values;
-    GLuint i;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-    for (i=0; i<n; i++)
-	if (mask[i])
-	    WMSETPIXEL32(pwfb, FLIP(y[i]), x[i],
-			 rgba[i][RCOMP], rgba[i][GCOMP], rgba[i][BCOMP]);
-}
-
-
-/* Read a horizontal span of color pixels. */
-static void read_rgba_span_32(struct gl_context *ctx, 
-			      struct gl_renderbuffer *rb,
-			      GLuint n, GLint x, GLint y,
-			      void *values)
-{
-    GLubyte (*rgba)[4] = (GLubyte (*)[4])values;
-    GLuint i;
-    DWORD pixel;
-    LPDWORD lpdw;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-    
-    y = FLIP(y);
-    lpdw = ((LPDWORD)(pwfb->pbPixels + pwfb->ScanWidth * y)) + x;
-    for (i=0; i<n; i++) {
-	pixel = lpdw[i];
-	rgba[i][RCOMP] = (GLubyte)((pixel & 0x00ff0000) >> 16);
-	rgba[i][GCOMP] = (GLubyte)((pixel & 0x0000ff00) >> 8);
-	rgba[i][BCOMP] = (GLubyte)(pixel & 0x000000ff);
-	rgba[i][ACOMP] = 255;
-    }
-}
-
-
-/* Read an array of color pixels. */
-static void read_rgba_pixels_32(struct gl_context *ctx, 
-				struct gl_renderbuffer *rb,
-				GLuint n, const GLint x[], const GLint y[],
-				void *values)
-{
-    GLubyte (*rgba)[4] = (GLubyte (*)[4])values;
-    GLuint i;
-    DWORD pixel;
-    LPDWORD lpdw;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-
-    for (i=0; i<n; i++) {
-	GLint y2 = FLIP(y[i]);
-	lpdw = ((LPDWORD)(pwfb->pbPixels + pwfb->ScanWidth * y2)) + x[i];
-	pixel = *lpdw;
-	rgba[i][RCOMP] = (GLubyte)((pixel & 0x00ff0000) >> 16);
-	rgba[i][GCOMP] = (GLubyte)((pixel & 0x0000ff00) >> 8);
-	rgba[i][BCOMP] = (GLubyte)(pixel & 0x000000ff);
-	rgba[i][ACOMP] = 255;
-  }
-}
-
-
-/*********************************************************************/
-
-/* DOUBLE BUFFER 24-bit */
-
-#define WMSETPIXEL24(pwc, y, x, r, g, b) { \
-LPBYTE lpb = ((LPBYTE)((pwc)->pbPixels + (pwc)->ScanWidth * (y)) + (3 * x)); \
-lpb[0] = (b); \
-lpb[1] = (g); \
-lpb[2] = (r); }
-
-/* Write a horizontal span of RGBA color pixels with a boolean mask. */
-static void write_rgba_span_24(struct gl_context *ctx, 
-			       struct gl_renderbuffer *rb, 
-			       GLuint n, GLint x, GLint y,
-			       const void *values, 
-			       const GLubyte *mask)
-{
-    const GLubyte (*rgba)[4] = (const GLubyte (*)[4])values;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-    GLuint i;
-    LPBYTE lpb;
-
-    (void) ctx;
-    
-    y=FLIP(y);
-    lpb = ((LPBYTE)(pwfb->pbPixels + pwfb->ScanWidth * y)) + (3 * x);
-    if (mask) {
-	for (i=0; i<n; i++)
-	    if (mask[i]) {
-                lpb[3*i] = rgba[i][BCOMP];
-                lpb[3*i+1] = rgba[i][GCOMP];
-                lpb[3*i+2] = rgba[i][RCOMP];
-	    }
-    }
-    else {
-	    for (i=0; i<n; i++) {
-            *lpb++ = rgba[i][BCOMP];
-            *lpb++ = rgba[i][GCOMP];
-            *lpb++ = rgba[i][RCOMP];
-	    }
-    }
-}
-
-
-/* Write an array of RGBA pixels with a boolean mask. */
-static void write_rgba_pixels_24(struct gl_context *ctx, 
-				 struct gl_renderbuffer *rb,
-				 GLuint n, const GLint x[], const GLint y[],
-				 const void *values, 
-				 const GLubyte *mask)
-{
-    const GLubyte (*rgba)[4] = (const GLubyte (*)[4])values;
-    GLuint i;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-    for (i=0; i<n; i++)
-	if (mask[i])
-	    WMSETPIXEL24(pwfb, FLIP(y[i]), x[i],
-			 rgba[i][RCOMP], rgba[i][GCOMP], rgba[i][BCOMP]);
-}
-
-
-/* Read a horizontal span of color pixels. */
-static void read_rgba_span_24(struct gl_context *ctx, 
-			      struct gl_renderbuffer *rb,
-			      GLuint n, GLint x, GLint y,
-			      void *values)
-{
-    GLubyte (*rgba)[4] = (GLubyte (*)[4])values;
-    GLuint i;
-    LPBYTE lpb;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-    
-    y = FLIP(y);
-    lpb = ((LPBYTE)(pwfb->pbPixels + pwfb->ScanWidth * y)) + (3 * x);
-    for (i=0; i<n; i++) {
-	rgba[i][RCOMP] = lpb[3*i+2];
-	rgba[i][GCOMP] = lpb[3*i+1];
-	rgba[i][BCOMP] = lpb[3*i];
-	rgba[i][ACOMP] = 255;
-    }
-}
-
-
-/* Read an array of color pixels. */
-static void read_rgba_pixels_24(struct gl_context *ctx, 
-				struct gl_renderbuffer *rb,
-				GLuint n, const GLint x[], const GLint y[],
-				void *values)
-{
-    GLubyte (*rgba)[4] = (GLubyte (*)[4])values;
-    GLuint i;
-    LPBYTE lpb;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-
-    for (i=0; i<n; i++) {
-	GLint y2 = FLIP(y[i]);
-	lpb = ((LPBYTE)(pwfb->pbPixels + pwfb->ScanWidth * y2)) + (3 * x[i]);
-	rgba[i][RCOMP] = lpb[3*i+2];
-	rgba[i][GCOMP] = lpb[3*i+1];
-	rgba[i][BCOMP] = lpb[3*i];
-	rgba[i][ACOMP] = 255;
-  }
-}
-
-
-/*********************************************************************/
-
-/* DOUBLE BUFFER 16-bit */
-
-#define WMSETPIXEL16(pwc, y, x, r, g, b) { \
-LPWORD lpw = ((LPWORD)((pwc)->pbPixels + (pwc)->ScanWidth * (y)) + (x)); \
-*lpw = BGR16((r),(g),(b)); }
-
-
-
-/* Write a horizontal span of RGBA color pixels with a boolean mask. */
-static void write_rgba_span_16(struct gl_context *ctx, 
-			       struct gl_renderbuffer *rb, 
-			       GLuint n, GLint x, GLint y,
-			       const void *values, 
-			       const GLubyte *mask)
-{
-    const GLubyte (*rgba)[4] = (const GLubyte (*)[4])values;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-    GLuint i;
-    LPWORD lpw;
-
-    (void) ctx;
-    
-    y=FLIP(y);
-    lpw = ((LPWORD)(pwfb->pbPixels + pwfb->ScanWidth * y)) + x;
-    if (mask) {
-	for (i=0; i<n; i++)
-	    if (mask[i])
-                lpw[i] = BGR16(rgba[i][RCOMP], rgba[i][GCOMP], 
-			       rgba[i][BCOMP]);
-    }
-    else {
-	for (i=0; i<n; i++)
-                *lpw++ = BGR16(rgba[i][RCOMP], rgba[i][GCOMP], 
-			       rgba[i][BCOMP]);
-    }
-}
-
-
-
-/* Write an array of RGBA pixels with a boolean mask. */
-static void write_rgba_pixels_16(struct gl_context *ctx, 
-				 struct gl_renderbuffer *rb,
-				 GLuint n, const GLint x[], const GLint y[],
-				 const void *values, 
-				 const GLubyte *mask)
-{
-    const GLubyte (*rgba)[4] = (const GLubyte (*)[4])values;
-    GLuint i;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-    (void) ctx;
-    for (i=0; i<n; i++)
-	if (mask[i])
-	    WMSETPIXEL16(pwfb, FLIP(y[i]), x[i],
-			 rgba[i][RCOMP], rgba[i][GCOMP], rgba[i][BCOMP]);
-}
-
-
-/* Read a horizontal span of color pixels. */
-static void read_rgba_span_16(struct gl_context *ctx, 
-			      struct gl_renderbuffer *rb,
-			      GLuint n, GLint x, GLint y,
-			      void *values)
-{
-    GLubyte (*rgba)[4] = (GLubyte (*)[4])values;
-    GLuint i, pixel;
-    LPWORD lpw;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-    
-    y = FLIP(y);
-    lpw = ((LPWORD)(pwfb->pbPixels + pwfb->ScanWidth * y)) + x;
-    for (i=0; i<n; i++) {
-	pixel = lpw[i];
-	/* Windows uses 5,5,5 for 16-bit */
-	rgba[i][RCOMP] = (pixel & 0x7c00) >> 7;
-	rgba[i][GCOMP] = (pixel & 0x03e0) >> 2;
-	rgba[i][BCOMP] = (pixel & 0x001f) << 3;
-	rgba[i][ACOMP] = 255;
-    }
-}
-
-
-/* Read an array of color pixels. */
-static void read_rgba_pixels_16(struct gl_context *ctx, 
-				struct gl_renderbuffer *rb,
-				GLuint n, const GLint x[], const GLint y[],
-				void *values)
-{
-    GLubyte (*rgba)[4] = (GLubyte (*)[4])values;
-    GLuint i, pixel;
-    LPWORD lpw;
-    WMesaFramebuffer pwfb = wmesa_framebuffer(ctx->DrawBuffer);
-
-    for (i=0; i<n; i++) {
-	GLint y2 = FLIP(y[i]);
-	lpw = ((LPWORD)(pwfb->pbPixels + pwfb->ScanWidth * y2)) + x[i];
-	pixel = *lpw;
-	/* Windows uses 5,5,5 for 16-bit */
-	rgba[i][RCOMP] = (pixel & 0x7c00) >> 7;
-	rgba[i][GCOMP] = (pixel & 0x03e0) >> 2;
-	rgba[i][BCOMP] = (pixel & 0x001f) << 3;
-	rgba[i][ACOMP] = 255;
-  }
-}
-
-
-
 
 /**********************************************************************/
 /*****                   BUFFER Functions                         *****/
@@ -900,9 +429,9 @@ static void read_rgba_pixels_16(struct gl_context *ctx,
 
 
 static void
-wmesa_delete_renderbuffer(struct gl_renderbuffer *rb)
+wmesa_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
-    free(rb);
+    _mesa_delete_renderbuffer(ctx, rb);
 }
 
 
@@ -1084,8 +613,8 @@ WMesaContext WMesaCreateContext(HDC hDC,
 
     /* initialize the Mesa context data */
     ctx = &c->gl_ctx;
-    _mesa_initialize_context(ctx, API_OPENGL, visual,
-                             NULL, &functions, (void *)c);
+    _mesa_initialize_context(ctx, API_OPENGL_COMPAT, visual,
+                             NULL, &functions);
 
     /* visual no longer needed - it was copied by _mesa_initialize_context() */
     _mesa_destroy_visual(visual);
@@ -1110,6 +639,12 @@ WMesaContext WMesaCreateContext(HDC hDC,
     }
     _swsetup_Wakeup(ctx);
     TNL_CONTEXT(ctx)->Driver.RunPipeline = _tnl_run_pipeline;
+
+    _mesa_compute_version(ctx);
+
+    /* Exec table initialization requires the version to be computed */
+    _mesa_initialize_dispatch_tables(ctx);
+    _mesa_initialize_vbo_vtxfmt(ctx);
 
     return c;
 }

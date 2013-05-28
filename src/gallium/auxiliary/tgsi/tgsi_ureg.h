@@ -272,6 +272,14 @@ ureg_DECL_constant( struct ureg_program *,
 struct ureg_dst
 ureg_DECL_temporary( struct ureg_program * );
 
+/**
+ * Emit a temporary with the LOCAL declaration flag set.  For use when
+ * the register value is not required to be preserved across
+ * subroutine boundaries.
+ */
+struct ureg_dst
+ureg_DECL_local_temporary( struct ureg_program * );
+
 void 
 ureg_release_temporary( struct ureg_program *ureg,
                         struct ureg_dst tmp );
@@ -292,13 +300,13 @@ ureg_DECL_sampler( struct ureg_program *,
                    unsigned index );
 
 struct ureg_src
-ureg_DECL_resource(struct ureg_program *,
-                   unsigned index,
-                   unsigned target,
-                   unsigned return_type_x,
-                   unsigned return_type_y,
-                   unsigned return_type_z,
-                   unsigned return_type_w );
+ureg_DECL_sampler_view(struct ureg_program *,
+                       unsigned index,
+                       unsigned target,
+                       unsigned return_type_x,
+                       unsigned return_type_y,
+                       unsigned return_type_z,
+                       unsigned return_type_w );
 
 
 static INLINE struct ureg_src

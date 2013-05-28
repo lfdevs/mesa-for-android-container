@@ -83,9 +83,6 @@ typedef struct {
 #define NUM_TYPES 8
 
 
-#if FEATURE_arrayelt
-
-
 static const int ColorFuncs[2][NUM_TYPES] = {
    {
       _gloffset_Color3bv,
@@ -1071,25 +1068,25 @@ VertexAttrib4fvARB(GLuint index, const GLfloat *v)
 static void GLAPIENTRY
 VertexAttrib1dvARB(GLuint index, const GLdouble *v)
 {
-   CALL_VertexAttrib1dvARB(GET_DISPATCH(), (index, v));
+   CALL_VertexAttrib1dv(GET_DISPATCH(), (index, v));
 }
 
 static void GLAPIENTRY
 VertexAttrib2dvARB(GLuint index, const GLdouble *v)
 {
-   CALL_VertexAttrib2dvARB(GET_DISPATCH(), (index, v));
+   CALL_VertexAttrib2dv(GET_DISPATCH(), (index, v));
 }
 
 static void GLAPIENTRY
 VertexAttrib3dvARB(GLuint index, const GLdouble *v)
 {
-   CALL_VertexAttrib3dvARB(GET_DISPATCH(), (index, v));
+   CALL_VertexAttrib3dv(GET_DISPATCH(), (index, v));
 }
 
 static void GLAPIENTRY
 VertexAttrib4dvARB(GLuint index, const GLdouble *v)
 {
-   CALL_VertexAttrib4dvARB(GET_DISPATCH(), (index, v));
+   CALL_VertexAttrib4dv(GET_DISPATCH(), (index, v));
 }
 
 
@@ -1117,7 +1114,7 @@ VertexAttribI3bv(GLuint index, const GLbyte *v)
 static void GLAPIENTRY
 VertexAttribI4bv(GLuint index, const GLbyte *v)
 {
-   CALL_VertexAttribI4bvEXT(GET_DISPATCH(), (index, v));
+   CALL_VertexAttribI4bv(GET_DISPATCH(), (index, v));
 }
 
 
@@ -1142,7 +1139,7 @@ VertexAttribI3ubv(GLuint index, const GLubyte *v)
 static void GLAPIENTRY
 VertexAttribI4ubv(GLuint index, const GLubyte *v)
 {
-   CALL_VertexAttribI4ubvEXT(GET_DISPATCH(), (index, v));
+   CALL_VertexAttribI4ubv(GET_DISPATCH(), (index, v));
 }
 
 
@@ -1168,7 +1165,7 @@ VertexAttribI3sv(GLuint index, const GLshort *v)
 static void GLAPIENTRY
 VertexAttribI4sv(GLuint index, const GLshort *v)
 {
-   CALL_VertexAttribI4svEXT(GET_DISPATCH(), (index, v));
+   CALL_VertexAttribI4sv(GET_DISPATCH(), (index, v));
 }
 
 
@@ -1193,7 +1190,7 @@ VertexAttribI3usv(GLuint index, const GLushort *v)
 static void GLAPIENTRY
 VertexAttribI4usv(GLuint index, const GLushort *v)
 {
-   CALL_VertexAttribI4usvEXT(GET_DISPATCH(), (index, v));
+   CALL_VertexAttribI4usv(GET_DISPATCH(), (index, v));
 }
 
 
@@ -1408,14 +1405,14 @@ GLboolean _ae_create_context( struct gl_context *ctx )
       return GL_TRUE;
 
    /* These _gloffset_* values may not be compile-time constants */
-   SecondaryColorFuncs[0] = _gloffset_SecondaryColor3bvEXT;
-   SecondaryColorFuncs[1] = _gloffset_SecondaryColor3ubvEXT;
-   SecondaryColorFuncs[2] = _gloffset_SecondaryColor3svEXT;
-   SecondaryColorFuncs[3] = _gloffset_SecondaryColor3usvEXT;
-   SecondaryColorFuncs[4] = _gloffset_SecondaryColor3ivEXT;
-   SecondaryColorFuncs[5] = _gloffset_SecondaryColor3uivEXT;
+   SecondaryColorFuncs[0] = _gloffset_SecondaryColor3bv;
+   SecondaryColorFuncs[1] = _gloffset_SecondaryColor3ubv;
+   SecondaryColorFuncs[2] = _gloffset_SecondaryColor3sv;
+   SecondaryColorFuncs[3] = _gloffset_SecondaryColor3usv;
+   SecondaryColorFuncs[4] = _gloffset_SecondaryColor3iv;
+   SecondaryColorFuncs[5] = _gloffset_SecondaryColor3uiv;
    SecondaryColorFuncs[6] = _gloffset_SecondaryColor3fvEXT;
-   SecondaryColorFuncs[7] = _gloffset_SecondaryColor3dvEXT;
+   SecondaryColorFuncs[7] = _gloffset_SecondaryColor3dv;
 
    FogCoordFuncs[0] = -1;
    FogCoordFuncs[1] = -1;
@@ -1424,9 +1421,9 @@ GLboolean _ae_create_context( struct gl_context *ctx )
    FogCoordFuncs[4] = -1;
    FogCoordFuncs[5] = -1;
    FogCoordFuncs[6] = _gloffset_FogCoordfvEXT;
-   FogCoordFuncs[7] = _gloffset_FogCoorddvEXT;
+   FogCoordFuncs[7] = _gloffset_FogCoorddv;
 
-   ctx->aelt_context = CALLOC( sizeof(AEcontext) );
+   ctx->aelt_context = calloc(1, sizeof(AEcontext));
    if (!ctx->aelt_context)
       return GL_FALSE;
 
@@ -1438,7 +1435,7 @@ GLboolean _ae_create_context( struct gl_context *ctx )
 void _ae_destroy_context( struct gl_context *ctx )
 {
    if ( AE_CONTEXT( ctx ) ) {
-      FREE( ctx->aelt_context );
+      free(ctx->aelt_context);
       ctx->aelt_context = NULL;
    }
 }
@@ -1531,31 +1528,24 @@ static void _ae_update_state( struct gl_context *ctx )
    for (i = 1; i < VERT_ATTRIB_GENERIC_MAX; i++) {  /* skip zero! */
       struct gl_client_array *attribArray = &arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(i)];
       if (attribArray->Enabled) {
+         GLint intOrNorm;
          at->array = attribArray;
          /* Note: we can't grab the _glapi_Dispatch->VertexAttrib1fvNV
           * function pointer here (for float arrays) since the pointer may
           * change from one execution of _ae_ArrayElement() to
           * the next.  Doing so caused UT to break.
           */
-         if (ctx->VertexProgram._Enabled
-             && ctx->VertexProgram.Current->IsNVProgram) {
-            at->func = AttribFuncsNV[at->array->Normalized]
-                                    [at->array->Size-1]
-                                    [TYPE_IDX(at->array->Type)];
-         }
-         else {
-            GLint intOrNorm;
-            if (at->array->Integer)
-               intOrNorm = 2;
-            else if (at->array->Normalized)
-               intOrNorm = 1;
-            else
-               intOrNorm = 0;
+         if (at->array->Integer)
+            intOrNorm = 2;
+         else if (at->array->Normalized)
+            intOrNorm = 1;
+         else
+            intOrNorm = 0;
 
-            at->func = AttribFuncsARB[intOrNorm]
-                                     [at->array->Size-1]
-                                     [TYPE_IDX(at->array->Type)];
-         }
+         at->func = AttribFuncsARB[intOrNorm]
+            [at->array->Size-1]
+            [TYPE_IDX(at->array->Type)];
+
          at->index = i;
 	 check_vbo(actx, at->array->BufferObj);
          at++;
@@ -1646,7 +1636,7 @@ void GLAPIENTRY _ae_ArrayElement( GLint elt )
    /* If PrimitiveRestart is enabled and the index is the RestartIndex
     * then we call PrimitiveRestartNV and return.
     */
-   if (ctx->Array.PrimitiveRestart && (elt == ctx->Array.RestartIndex)) {
+   if (ctx->Array._PrimitiveRestart && (elt == ctx->Array._RestartIndex)) {
       CALL_PrimitiveRestartNV((struct _glapi_table *)disp, ());
       return;
    }
@@ -1711,6 +1701,3 @@ void _mesa_install_arrayelt_vtxfmt(struct _glapi_table *disp,
 {
    SET_ArrayElement(disp, vfmt->ArrayElement);
 }
-
-
-#endif /* FEATURE_arrayelt */

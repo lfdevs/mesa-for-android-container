@@ -41,18 +41,35 @@
 
 struct _glapi_table;
 
-#if FEATURE_histogram
+void GLAPIENTRY
+_mesa_GetnMinmaxARB(GLenum target, GLboolean reset, GLenum format,
+                    GLenum type, GLsizei bufSize, GLvoid *values);
+void GLAPIENTRY
+_mesa_GetMinmax(GLenum target, GLboolean reset, GLenum format, GLenum type,
+                GLvoid *values);
+void GLAPIENTRY
+_mesa_GetnHistogramARB(GLenum target, GLboolean reset, GLenum format,
+                       GLenum type, GLsizei bufSize, GLvoid *values);
+void GLAPIENTRY
+_mesa_GetHistogram(GLenum target, GLboolean reset, GLenum format, GLenum type,
+                   GLvoid *values);
+void GLAPIENTRY
+_mesa_GetHistogramParameterfv(GLenum target, GLenum pname, GLfloat *params);
+void GLAPIENTRY
+_mesa_GetHistogramParameteriv(GLenum target, GLenum pname, GLint *params);
+void GLAPIENTRY
+_mesa_GetMinmaxParameterfv(GLenum target, GLenum pname, GLfloat *params);
+void GLAPIENTRY
+_mesa_GetMinmaxParameteriv(GLenum target, GLenum pname, GLint *params);
+void GLAPIENTRY
+_mesa_Histogram(GLenum target, GLsizei width, GLenum internalFormat,
+                GLboolean sink);
+void GLAPIENTRY
+_mesa_Minmax(GLenum target, GLenum internalFormat, GLboolean sink);
+void GLAPIENTRY
+_mesa_ResetHistogram(GLenum target);
+void GLAPIENTRY
+_mesa_ResetMinmax(GLenum target);
 
-extern void
-_mesa_init_histogram_dispatch(struct _glapi_table *disp);
-
-#else /* FEATURE_histogram */
-
-static inline void
-_mesa_init_histogram_dispatch(struct _glapi_table *disp)
-{
-}
-
-#endif /* FEATURE_histogram */
 
 #endif /* HISTOGRAM_H */

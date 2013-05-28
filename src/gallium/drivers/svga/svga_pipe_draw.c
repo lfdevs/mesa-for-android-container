@@ -23,15 +23,16 @@
  *
  **********************************************************/
 
-#include "svga_cmd.h"
 
 #include "util/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_prim.h"
 #include "util/u_time.h"
+#include "util/u_upload_mgr.h"
 #include "indices/u_indices.h"
 
 #include "svga_hw_reg.h"
+#include "svga_cmd.h"
 #include "svga_context.h"
 #include "svga_screen.h"
 #include "svga_draw.h"
@@ -39,7 +40,7 @@
 #include "svga_swtnl.h"
 #include "svga_debug.h"
 #include "svga_resource_buffer.h"
-#include "util/u_upload_mgr.h"
+
 
 /**
  * Determine the ranges to upload for the user-buffers referenced
@@ -51,7 +52,6 @@
  * may be uploaded to different hardware buffers chosen by the utility
  * upload manager.
  */
-
 static void
 svga_user_buffer_range(struct svga_context *svga,
                        unsigned start,
@@ -59,7 +59,7 @@ svga_user_buffer_range(struct svga_context *svga,
                        unsigned instance_count)
 {
    const struct pipe_vertex_element *ve = svga->curr.velems->velem;
-   int i;
+   unsigned i;
 
    /*
     * Release old uploaded range (if not done already) and
@@ -95,16 +95,9 @@ svga_user_buffer_range(struct svga_context *svga,
             first = ve[i].src_offset;
             count = (instance_count + instance_div - 1) / instance_div;
             size = vb->stride * (count - 1) + elemSize;
-         } else if (vb->stride) {
+         } else {
             first = vb->stride * start + ve[i].src_offset;
             size = vb->stride * (count - 1) + elemSize;
-         } else {
-            /* Only a single vertex!
-             * Upload with the largest vertex size the hw supports,
-             * if possible.
-             */
-            first = ve[i].src_offset;
-            size = MIN2(16, vb->buffer->width0);
          }
 
          buffer->uploaded.start = MIN2(buffer->uploaded.start, first);
@@ -113,13 +106,13 @@ svga_user_buffer_range(struct svga_context *svga,
    }
 }
 
+
 /**
  * svga_upload_user_buffers - upload parts of user buffers
  *
  * This function streams a part of a user buffer to hw and fills
  * svga_buffer::uploaded with information on the upload.
  */
-
 static int
 svga_upload_user_buffers(struct svga_context *svga,
                          unsigned start,
@@ -175,6 +168,7 @@ svga_upload_user_buffers(struct svga_context *svga,
    return PIPE_OK;
 }
 
+
 /**
  * svga_release_user_upl_buffers - release uploaded parts of user buffers
  *
@@ -186,7 +180,6 @@ svga_upload_user_buffers(struct svga_context *svga,
  * svga_buffer::source_offset is set to 0, and svga_buffer::uploaded::buffer
  * is set to 0.
  */
-
 static void
 svga_release_user_upl_buffers(struct svga_context *svga)
 {
@@ -229,8 +222,8 @@ retry_draw_range_elements( struct svga_context *svga,
                            int index_bias,
                            unsigned min_index,
                            unsigned max_index,
-                           unsigned prim, 
-                           unsigned start, 
+                           unsigned prim,
+                           unsigned start,
                            unsigned count,
                            unsigned instance_count,
                            boolean do_retry )
@@ -280,8 +273,8 @@ retry:
 
 static enum pipe_error
 retry_draw_arrays( struct svga_context *svga,
-                   unsigned prim, 
-                   unsigned start, 
+                   unsigned prim,
+                   unsigned start,
                    unsigned count,
                    unsigned instance_count,
                    boolean do_retry )
@@ -309,10 +302,10 @@ retry_draw_arrays( struct svga_context *svga,
    if (ret != PIPE_OK)
       goto retry;
 
-   return 0;
+   return PIPE_OK;
 
 retry:
-   if (ret == PIPE_ERROR_OUT_OF_MEMORY && do_retry) 
+   if (ret == PIPE_ERROR_OUT_OF_MEMORY && do_retry)
    {
       svga_context_flush( svga, NULL );
 
@@ -353,7 +346,7 @@ svga_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       svga->curr.reduced_prim = reduced_prim;
       svga->dirty |= SVGA_NEW_REDUCED_PRIMITIVE;
    }
-   
+
    needed_swtnl = svga->state.sw.need_swtnl;
 
    svga_update_state_retry( svga, SVGA_STATE_NEED_SWTNL );

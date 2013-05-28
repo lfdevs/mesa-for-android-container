@@ -71,13 +71,10 @@ struct extension_info
 
 /* *INDENT-OFF* */
 static const struct extension_info known_glx_extensions[] = {
-#ifdef HAVE_XCB_GLX_CREATE_CONTEXT
    { GLX(ARB_create_context),          VER(0,0), Y, N, N, N },
    { GLX(ARB_create_context_profile),  VER(0,0), Y, N, N, N },
-#else
-   { GLX(ARB_create_context),          VER(0,0), N, N, N, N },
-   { GLX(ARB_create_context_profile),  VER(0,0), N, N, N, N },
-#endif
+   { GLX(ARB_create_context_robustness), VER(0,0), Y, N, N, N },
+   { GLX(ARB_framebuffer_sRGB),        VER(0,0), Y, Y, N, N },
    { GLX(ARB_get_proc_address),        VER(1,4), Y, N, Y, N },
    { GLX(ARB_multisample),             VER(1,4), Y, Y, N, N },
    { GLX(ATI_pixel_format_float),      VER(0,0), N, N, N, N },
@@ -85,11 +82,7 @@ static const struct extension_info known_glx_extensions[] = {
    { GLX(EXT_visual_info),             VER(0,0), Y, Y, N, N },
    { GLX(EXT_visual_rating),           VER(0,0), Y, Y, N, N },
    { GLX(EXT_framebuffer_sRGB),        VER(0,0), Y, Y, N, N },
-#ifdef HAVE_XCB_GLX_CREATE_CONTEXT
    { GLX(EXT_create_context_es2_profile), VER(0,0), Y, N, N, Y },
-#else
-   { GLX(EXT_create_context_es2_profile), VER(0,0), N, N, N, N },
-#endif
    { GLX(MESA_copy_sub_buffer),        VER(0,0), Y, N, N, N },
    { GLX(MESA_multithread_makecurrent),VER(0,0), Y, N, Y, N },
    { GLX(MESA_swap_control),           VER(0,0), Y, N, N, Y },
@@ -517,7 +510,7 @@ __glXGetStringFromTable(const struct extension_info *ext,
       }
    }
 
-   ext_str = Xmalloc(ext_str_len + 1);
+   ext_str = malloc(ext_str_len + 1);
    if (ext_str != NULL) {
       point = ext_str;
 

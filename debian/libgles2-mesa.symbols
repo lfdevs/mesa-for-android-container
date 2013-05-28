@@ -1,31 +1,49 @@
 libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glActiveTexture@Base 7.8.1
  glAttachShader@Base 7.8.1
+ glBeginQuery@Base 9.1~
+ glBeginTransformFeedback@Base 9.1~
  glBindAttribLocation@Base 7.8.1
  glBindBuffer@Base 7.8.1
+ glBindBufferBase@Base 9.1~
+ glBindBufferRange@Base 9.1~
  glBindFramebuffer@Base 7.8.1
  glBindRenderbuffer@Base 7.8.1
+ glBindSampler@Base 9.1~
  glBindTexture@Base 7.8.1
+ glBindTransformFeedback@Base 9.1~
+ glBindVertexArray@Base 9.1~
+ glBindVertexArrayOES@Base 9.0~0
  glBlendColor@Base 7.8.1
  glBlendEquation@Base 7.8.1
  glBlendEquationSeparate@Base 7.8.1
  glBlendFunc@Base 7.8.1
  glBlendFuncSeparate@Base 7.8.1
+ glBlitFramebuffer@Base 9.1~
  glBufferData@Base 7.8.1
  glBufferSubData@Base 7.8.1
  glCheckFramebufferStatus@Base 7.8.1
  glClear@Base 7.8.1
+ glClearBufferfi@Base 9.1~
+ glClearBufferfv@Base 9.1~
+ glClearBufferiv@Base 9.1~
+ glClearBufferuiv@Base 9.1~
  glClearColor@Base 7.8.1
  glClearDepthf@Base 7.8.1
  glClearStencil@Base 7.8.1
+ glClientWaitSync@Base 9.1~
  glColorMask@Base 7.8.1
  glCompileShader@Base 7.8.1
  glCompressedTexImage2D@Base 7.8.1
+ glCompressedTexImage3D@Base 9.1~
  glCompressedTexImage3DOES@Base 7.8.1
  glCompressedTexSubImage2D@Base 7.8.1
+ glCompressedTexSubImage3D@Base 9.1~
  glCompressedTexSubImage3DOES@Base 7.8.1
+ glCopyBufferSubData@Base 9.1~
  glCopyTexImage2D@Base 7.8.1
  glCopyTexSubImage2D@Base 7.8.1
+ glCopyTexSubImage3D@Base 9.1~
  glCopyTexSubImage3DOES@Base 7.8.1
  glCreateProgram@Base 7.8.1
  glCreateShader@Base 7.8.1
@@ -33,9 +51,15 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glDeleteBuffers@Base 7.8.1
  glDeleteFramebuffers@Base 7.8.1
  glDeleteProgram@Base 7.8.1
+ glDeleteQueries@Base 9.1~
  glDeleteRenderbuffers@Base 7.8.1
+ glDeleteSamplers@Base 9.1~
  glDeleteShader@Base 7.8.1
+ glDeleteSync@Base 9.1~
  glDeleteTextures@Base 7.8.1
+ glDeleteTransformFeedbacks@Base 9.1~
+ glDeleteVertexArrays@Base 9.1~
+ glDeleteVertexArraysOES@Base 9.0~0
  glDepthFunc@Base 7.8.1
  glDepthMask@Base 7.8.1
  glDepthRangef@Base 7.8.1
@@ -43,71 +67,130 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glDisable@Base 7.8.1
  glDisableVertexAttribArray@Base 7.8.1
  glDrawArrays@Base 7.8.1
+ glDrawArraysInstanced@Base 9.1~
+ glDrawBuffers@Base 9.1~
  glDrawBuffersNV@Base 8.0~rc1
  glDrawElements@Base 7.8.1
+ glDrawElementsInstanced@Base 9.1~
+ glDrawRangeElements@Base 9.1~
  glEGLImageTargetRenderbufferStorageOES@Base 7.8.1
  glEGLImageTargetTexture2DOES@Base 7.8.1
  glEnable@Base 7.8.1
  glEnableVertexAttribArray@Base 7.8.1
+ glEndQuery@Base 9.1~
+ glEndTransformFeedback@Base 9.1~
+ glFenceSync@Base 9.1~
  glFinish@Base 7.8.1
  glFlush@Base 7.8.1
+ glFlushMappedBufferRange@Base 9.1~
+ glFlushMappedBufferRangeEXT@Base 9.1~
  glFramebufferRenderbuffer@Base 7.8.1
  glFramebufferTexture2D@Base 7.8.1
  glFramebufferTexture3DOES@Base 7.8.1
+ glFramebufferTextureLayer@Base 9.1~
  glFrontFace@Base 7.8.1
  glGenBuffers@Base 7.8.1
  glGenFramebuffers@Base 7.8.1
+ glGenQueries@Base 9.1~
  glGenRenderbuffers@Base 7.8.1
+ glGenSamplers@Base 9.1~
  glGenTextures@Base 7.8.1
+ glGenTransformFeedbacks@Base 9.1~
+ glGenVertexArrays@Base 9.1~
+ glGenVertexArraysOES@Base 9.0~0
  glGenerateMipmap@Base 7.8.1
  glGetActiveAttrib@Base 7.8.1
  glGetActiveUniform@Base 7.8.1
+ glGetActiveUniformBlockName@Base 9.1~
+ glGetActiveUniformBlockiv@Base 9.1~
+ glGetActiveUniformsiv@Base 9.1~
  glGetAttachedShaders@Base 7.8.1
  glGetAttribLocation@Base 7.8.1
  glGetBooleanv@Base 7.8.1
+ glGetBufferParameteri64v@Base 9.1~
  glGetBufferParameteriv@Base 7.8.1
+ glGetBufferPointerv@Base 9.1~
  glGetBufferPointervOES@Base 7.8.1
  glGetError@Base 7.8.1
  glGetFloatv@Base 7.8.1
+ glGetFragDataLocation@Base 9.1~
  glGetFramebufferAttachmentParameteriv@Base 7.8.1
+ glGetInteger64i_v@Base 9.1~
+ glGetInteger64v@Base 9.1~
+ glGetIntegeri_v@Base 9.1~
  glGetIntegerv@Base 7.8.1
+ glGetInternalformativ@Base 9.1~
+ glGetProgramBinary@Base 9.1~
  glGetProgramBinaryOES@Base 7.8.1
  glGetProgramInfoLog@Base 7.8.1
  glGetProgramiv@Base 7.8.1
+ glGetQueryObjectuiv@Base 9.1~
+ glGetQueryiv@Base 9.1~
  glGetRenderbufferParameteriv@Base 7.8.1
+ glGetSamplerParameterfv@Base 9.1~
+ glGetSamplerParameteriv@Base 9.1~
  glGetShaderInfoLog@Base 7.8.1
  glGetShaderPrecisionFormat@Base 7.8.1
  glGetShaderSource@Base 7.8.1
  glGetShaderiv@Base 7.8.1
  glGetString@Base 7.8.1
+ glGetStringi@Base 9.1~
+ glGetSynciv@Base 9.1~
  glGetTexParameterfv@Base 7.8.1
  glGetTexParameteriv@Base 7.8.1
+ glGetTransformFeedbackVarying@Base 9.1~
+ glGetUniformBlockIndex@Base 9.1~
+ glGetUniformIndices@Base 9.1~
  glGetUniformLocation@Base 7.8.1
  glGetUniformfv@Base 7.8.1
  glGetUniformiv@Base 7.8.1
+ glGetUniformuiv@Base 9.1~
+ glGetVertexAttribIiv@Base 9.1~
+ glGetVertexAttribIuiv@Base 9.1~
  glGetVertexAttribPointerv@Base 7.8.1
  glGetVertexAttribfv@Base 7.8.1
  glGetVertexAttribiv@Base 7.8.1
  glHint@Base 7.8.1
+ glInvalidateFramebuffer@Base 9.1~
+ glInvalidateSubFramebuffer@Base 9.1~
  glIsBuffer@Base 7.8.1
  glIsEnabled@Base 7.8.1
  glIsFramebuffer@Base 7.8.1
  glIsProgram@Base 7.8.1
+ glIsQuery@Base 9.1~
  glIsRenderbuffer@Base 7.8.1
+ glIsSampler@Base 9.1~
  glIsShader@Base 7.8.1
+ glIsSync@Base 9.1~
  glIsTexture@Base 7.8.1
+ glIsTransformFeedback@Base 9.1~
+ glIsVertexArray@Base 9.1~
+ glIsVertexArrayOES@Base 9.0~0
  glLineWidth@Base 7.8.1
  glLinkProgram@Base 7.8.1
  glMapBufferOES@Base 7.8.1
+ glMapBufferRange@Base 9.1~
+ glMapBufferRangeEXT@Base 9.1~
  glMultiDrawArraysEXT@Base 7.8.1
  glMultiDrawElementsEXT@Base 7.8.1
+ glPauseTransformFeedback@Base 9.1~
  glPixelStorei@Base 7.8.1
  glPolygonOffset@Base 7.8.1
+ glProgramBinary@Base 9.1~
  glProgramBinaryOES@Base 7.8.1
+ glProgramParameteri@Base 9.1~
+ glReadBuffer@Base 9.1~
+ glReadBufferNV@Base 8.1~0
  glReadPixels@Base 7.8.1
  glReleaseShaderCompiler@Base 7.8.1
  glRenderbufferStorage@Base 7.8.1
+ glRenderbufferStorageMultisample@Base 9.1~
+ glResumeTransformFeedback@Base 9.1~
  glSampleCoverage@Base 7.8.1
+ glSamplerParameterf@Base 9.1~
+ glSamplerParameterfv@Base 9.1~
+ glSamplerParameteri@Base 9.1~
+ glSamplerParameteriv@Base 9.1~
  glScissor@Base 7.8.1
  glShaderBinary@Base 7.8.1
  glShaderSource@Base 7.8.1
@@ -118,32 +201,53 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glStencilOp@Base 7.8.1
  glStencilOpSeparate@Base 7.8.1
  glTexImage2D@Base 7.8.1
+ glTexImage3D@Base 9.1~
  glTexImage3DOES@Base 7.8.1
  glTexParameterf@Base 7.8.1
  glTexParameterfv@Base 7.8.1
  glTexParameteri@Base 7.8.1
  glTexParameteriv@Base 7.8.1
+ glTexStorage2D@Base 9.1~
+ glTexStorage3D@Base 9.1~
  glTexSubImage2D@Base 7.8.1
+ glTexSubImage3D@Base 9.1~
  glTexSubImage3DOES@Base 7.8.1
+ glTransformFeedbackVaryings@Base 9.1~
  glUniform1f@Base 7.8.1
  glUniform1fv@Base 7.8.1
  glUniform1i@Base 7.8.1
  glUniform1iv@Base 7.8.1
+ glUniform1ui@Base 9.1~
+ glUniform1uiv@Base 9.1~
  glUniform2f@Base 7.8.1
  glUniform2fv@Base 7.8.1
  glUniform2i@Base 7.8.1
  glUniform2iv@Base 7.8.1
+ glUniform2ui@Base 9.1~
+ glUniform2uiv@Base 9.1~
  glUniform3f@Base 7.8.1
  glUniform3fv@Base 7.8.1
  glUniform3i@Base 7.8.1
  glUniform3iv@Base 7.8.1
+ glUniform3ui@Base 9.1~
+ glUniform3uiv@Base 9.1~
  glUniform4f@Base 7.8.1
  glUniform4fv@Base 7.8.1
  glUniform4i@Base 7.8.1
  glUniform4iv@Base 7.8.1
+ glUniform4ui@Base 9.1~
+ glUniform4uiv@Base 9.1~
+ glUniformBlockBinding@Base 9.1~
  glUniformMatrix2fv@Base 7.8.1
+ glUniformMatrix2x3fv@Base 9.1~
+ glUniformMatrix2x4fv@Base 9.1~
  glUniformMatrix3fv@Base 7.8.1
+ glUniformMatrix3x2fv@Base 9.1~
+ glUniformMatrix3x4fv@Base 9.1~
  glUniformMatrix4fv@Base 7.8.1
+ glUniformMatrix4x2fv@Base 9.1~
+ glUniformMatrix4x3fv@Base 9.1~
+ glUnmapBuffer@Base 9.1~
  glUnmapBufferOES@Base 7.8.1
  glUseProgram@Base 7.8.1
  glValidateProgram@Base 7.8.1
@@ -155,5 +259,12 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glVertexAttrib3fv@Base 7.8.1
  glVertexAttrib4f@Base 7.8.1
  glVertexAttrib4fv@Base 7.8.1
+ glVertexAttribDivisor@Base 9.1~
+ glVertexAttribI4i@Base 9.1~
+ glVertexAttribI4iv@Base 9.1~
+ glVertexAttribI4ui@Base 9.1~
+ glVertexAttribI4uiv@Base 9.1~
+ glVertexAttribIPointer@Base 9.1~
  glVertexAttribPointer@Base 7.8.1
  glViewport@Base 7.8.1
+ glWaitSync@Base 9.1~

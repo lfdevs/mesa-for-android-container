@@ -26,6 +26,12 @@
 #include <new>
 #include <assert.h>
 #include <stdio.h>
+#include <memory>
+#include <map>
+
+#ifndef NDEBUG
+# include <typeinfo>
+#endif
 
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
@@ -81,10 +87,14 @@ namespace nv50_ir {
 class Iterator
 {
 public:
+   virtual ~Iterator() { };
    virtual void next() = 0;
    virtual void *get() const = 0;
    virtual bool end() const = 0; // if true, get will return 0
+   virtual void reset() { assert(0); } // only for graph iterators
 };
+
+typedef std::auto_ptr<Iterator> IteratorRef;
 
 class ManipIterator : public Iterator
 {
@@ -127,6 +137,8 @@ public:
       (__listB)->prev = (__listA)->prev;        \
       (__listA)->prev = prevB;                  \
    } while(0)
+
+#define DLLIST_EMPTY(__list) ((__list)->next == (__list))
 
 #define DLLIST_FOR_EACH(list, it) \
    for (DLList::Iterator (it) = (list)->iterator(); !(it).end(); (it).next())
@@ -328,6 +340,13 @@ public:
       data = (Item *)REALLOC(data, oldSize, size * sizeof(Item));
    }
 
+   void clear()
+   {
+      FREE(data);
+      data = NULL;
+      size = 0;
+   }
+
 private:
    Item *data;
    unsigned int size;
@@ -383,6 +402,13 @@ public:
 
    Iterator iterator() const { return Iterator(this); }
 
+   void clear()
+   {
+      data.clear();
+      ids.clear(true);
+      size = 0;
+   }
+
 private:
    DynArray data;
    Stack ids;
@@ -393,17 +419,22 @@ class Interval
 {
 public:
    Interval() : head(0), tail(0) { }
+   Interval(const Interval&);
    ~Interval();
 
    bool extend(int, int);
+   void insert(const Interval&);
    void unify(Interval&); // clears source interval
    void clear();
 
-   inline int begin() { return head ? head->bgn : -1; }
-   inline int end() { checkTail(); return tail ? tail->end : -1; }
+   inline int begin() const { return head ? head->bgn : -1; }
+   inline int end() const { checkTail(); return tail ? tail->end : -1; }
    inline bool isEmpty() const { return !head; }
    bool overlaps(const Interval&) const;
-   bool contains(int pos);
+   bool contains(int pos) const;
+
+   inline int extent() const { return end() - begin(); }
+   int length() const;
 
    void print() const;
 
@@ -454,6 +485,7 @@ public:
    }
 
    bool allocate(unsigned int nBits, bool zero);
+   bool resize(unsigned int nBits); // keep old data, zero additional bits
 
    inline unsigned int getSize() const { return size; }
 
@@ -466,11 +498,28 @@ public:
       assert(i < size);
       data[i / 32] |= 1 << (i % 32);
    }
+   // NOTE: range may not cross 32 bit boundary (implies n <= 32)
+   inline void setRange(unsigned int i, unsigned int n)
+   {
+      assert((i + n) <= size && (((i % 32) + n) <= 32));
+      data[i / 32] |= ((1 << n) - 1) << (i % 32);
+   }
+   inline void setMask(unsigned int i, uint32_t m)
+   {
+      assert(i < size);
+      data[i / 32] |= m;
+   }
 
    inline void clr(unsigned int i)
    {
       assert(i < size);
       data[i / 32] &= ~(1 << (i % 32));
+   }
+   // NOTE: range may not cross 32 bit boundary (implies n <= 32)
+   inline void clrRange(unsigned int i, unsigned int n)
+   {
+      assert((i + n) <= size && (((i % 32) + n) <= 32));
+      data[i / 32] &= ~(((1 << n) - 1) << (i % 32));
    }
 
    inline bool test(unsigned int i) const
@@ -478,6 +527,15 @@ public:
       assert(i < size);
       return data[i / 32] & (1 << (i % 32));
    }
+   // NOTE: range may not cross 32 bit boundary (implies n <= 32)
+   inline bool testRange(unsigned int i, unsigned int n)
+   {
+      assert((i + n) <= size && (((i % 32) + n) <= 32));
+      return data[i / 32] & (((1 << n) - 1) << (i % 32));
+   }
+
+   // Find a range of size (<= 32) clear bits aligned to roundup_pow2(size).
+   int findFreeRange(unsigned int size) const;
 
    BitSet& operator|=(const BitSet&);
 
@@ -490,6 +548,13 @@ public:
    }
 
    void andNot(const BitSet&);
+
+   // bits = (bits | setMask) & ~clrMask
+   inline void periodicMask32(uint32_t setMask, uint32_t clrMask)
+   {
+      for (unsigned int i = 0; i < (size + 31) / 32; ++i)
+         data[i] = (data[i] | setMask) & ~clrMask;
+   }
 
    unsigned int popCount() const;
 
@@ -599,6 +664,123 @@ private:
 
    const unsigned int objSize;
    const unsigned int objStepLog2;
+};
+
+/**
+ *  Composite object cloning policy.
+ *
+ *  Encapsulates how sub-objects are to be handled (if at all) when a
+ *  composite object is being cloned.
+ */
+template<typename C>
+class ClonePolicy
+{
+protected:
+   C *c;
+
+public:
+   ClonePolicy(C *c) : c(c) {}
+
+   C *context() { return c; }
+
+   template<typename T> T *get(T *obj)
+   {
+      void *clone = lookup(obj);
+      if (!clone)
+         clone = obj->clone(*this);
+      return reinterpret_cast<T *>(clone);
+   }
+
+   template<typename T> void set(const T *obj, T *clone)
+   {
+      insert(obj, clone);
+   }
+
+protected:
+   virtual void *lookup(void *obj) = 0;
+   virtual void insert(const void *obj, void *clone) = 0;
+};
+
+/**
+ *  Shallow non-recursive cloning policy.
+ *
+ *  Objects cloned with the "shallow" policy don't clone their
+ *  children recursively, instead, the new copy shares its children
+ *  with the original object.
+ */
+template<typename C>
+class ShallowClonePolicy : public ClonePolicy<C>
+{
+public:
+   ShallowClonePolicy(C *c) : ClonePolicy<C>(c) {}
+
+protected:
+   virtual void *lookup(void *obj)
+   {
+      return obj;
+   }
+
+   virtual void insert(const void *obj, void *clone)
+   {
+   }
+};
+
+template<typename C, typename T>
+inline T *cloneShallow(C *c, T *obj)
+{
+   ShallowClonePolicy<C> pol(c);
+   return obj->clone(pol);
+}
+
+/**
+ *  Recursive cloning policy.
+ *
+ *  Objects cloned with the "deep" policy clone their children
+ *  recursively, keeping track of what has already been cloned to
+ *  avoid making several new copies of the same object.
+ */
+template<typename C>
+class DeepClonePolicy : public ClonePolicy<C>
+{
+public:
+   DeepClonePolicy(C *c) : ClonePolicy<C>(c) {}
+
+private:
+   std::map<const void *, void *> map;
+
+protected:
+   virtual void *lookup(void *obj)
+   {
+      return map[obj];
+   }
+
+   virtual void insert(const void *obj, void *clone)
+   {
+      map[obj] = clone;
+   }
+};
+
+template<typename S, typename T>
+struct bimap
+{
+   std::map<S, T> forth;
+   std::map<T, S> back;
+
+public:
+   bimap() : l(back), r(forth) { }
+   bimap(const bimap<S, T> &m)
+      : forth(m.forth), back(m.back), l(back), r(forth) { }
+
+   void insert(const S &s, const T &t)
+   {
+      forth.insert(std::make_pair(s, t));
+      back.insert(std::make_pair(t, s));
+   }
+
+   typedef typename std::map<T, S>::const_iterator l_iterator;
+   const std::map<T, S> &l;
+   typedef typename std::map<S, T>::const_iterator r_iterator;
+   const std::map<S, T> &r;
 };
 
 } // namespace nv50_ir

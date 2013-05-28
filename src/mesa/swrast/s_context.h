@@ -45,6 +45,7 @@
 
 #include "main/compiler.h"
 #include "main/mtypes.h"
+#include "main/texcompress.h"
 #include "program/prog_execute.h"
 #include "swrast.h"
 #include "s_fragprog.h"
@@ -52,6 +53,7 @@
 
 
 typedef void (*texture_sample_func)(struct gl_context *ctx,
+                                    const struct gl_sampler_object *samp,
                                     const struct gl_texture_object *tObj,
                                     GLuint n, const GLfloat texcoords[][4],
                                     const GLfloat lambda[], GLfloat rgba[][4]);
@@ -145,6 +147,9 @@ struct swrast_texture_image
    GLubyte *Buffer;
 
    FetchTexelFunc FetchTexel;
+
+   /** For fetching texels from compressed textures */
+   compressed_fetch_func FetchCompressedTexel;
 };
 
 
@@ -305,6 +310,13 @@ typedef struct
 
    /** State used during execution of fragment programs */
    struct gl_program_machine FragProgMachine;
+
+   /** Temporary arrays for stencil operations.  To avoid large stack
+    * allocations.
+    */
+   struct {
+      GLubyte *buf1, *buf2, *buf3, *buf4;
+   } stencil_temp;
 
 } SWcontext;
 

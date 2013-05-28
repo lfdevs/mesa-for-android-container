@@ -44,8 +44,6 @@
  */
 static const struct brw_tracked_state *gen4_atoms[] =
 {
-   &brw_check_fallback,
-
    &brw_wm_input_sizes,
    &brw_vs_prog, /* must do before GS prog, state base address. */
    &brw_gs_prog, /* must do before state base address */
@@ -70,7 +68,8 @@ static const struct brw_tracked_state *gen4_atoms[] =
    &brw_wm_pull_constants,
    &brw_renderbuffer_surfaces,
    &brw_texture_surfaces,
-   &brw_binding_table,
+   &brw_vs_binding_table,
+   &brw_wm_binding_table,
 
    &brw_samplers,
 
@@ -110,8 +109,6 @@ static const struct brw_tracked_state *gen4_atoms[] =
 
 static const struct brw_tracked_state *gen6_atoms[] =
 {
-   &brw_check_fallback,
-
    &brw_wm_input_sizes,
    &brw_vs_prog, /* must do before state base address */
    &brw_gs_prog, /* must do before state base address */
@@ -142,14 +139,19 @@ static const struct brw_tracked_state *gen6_atoms[] =
     * table upload must be last.
     */
    &brw_vs_pull_constants,
+   &brw_vs_ubo_surfaces,
    &brw_wm_pull_constants,
+   &brw_wm_ubo_surfaces,
    &gen6_renderbuffer_surfaces,
    &brw_texture_surfaces,
    &gen6_sol_surface,
-   &brw_binding_table,
+   &brw_vs_binding_table,
+   &gen6_gs_binding_table,
+   &brw_wm_binding_table,
 
    &brw_samplers,
    &gen6_sampler_state,
+   &gen6_multisample_state,
 
    &gen6_vs_state,
    &gen6_gs_state,
@@ -177,13 +179,10 @@ static const struct brw_tracked_state *gen6_atoms[] =
    &brw_vertices,
 };
 
-const struct brw_tracked_state *gen7_atoms[] =
+static const struct brw_tracked_state *gen7_atoms[] =
 {
-   &brw_check_fallback,
-
    &brw_wm_input_sizes,
    &brw_vs_prog,
-   &brw_gs_prog,
    &brw_wm_prog,
 
    /* Command packets: */
@@ -212,12 +211,16 @@ const struct brw_tracked_state *gen7_atoms[] =
     * table upload must be last.
     */
    &brw_vs_pull_constants,
+   &brw_vs_ubo_surfaces,
    &brw_wm_pull_constants,
+   &brw_wm_ubo_surfaces,
    &gen6_renderbuffer_surfaces,
    &brw_texture_surfaces,
-   &brw_binding_table,
+   &brw_vs_binding_table,
+   &brw_wm_binding_table,
 
    &gen7_samplers,
+   &gen6_multisample_state,
 
    &gen7_disable_stages,
    &gen7_vs_state,
@@ -243,6 +246,8 @@ const struct brw_tracked_state *gen7_atoms[] =
    &brw_indices,
    &brw_index_buffer,
    &brw_vertices,
+
+   &haswell_cut_index,
 };
 
 
@@ -457,8 +462,6 @@ void brw_upload_state(struct brw_context *brw)
    if ((state->mesa | state->cache | state->brw) == 0)
       return;
 
-   brw->intel.Fallback = false; /* boolean, not bitfield */
-
    intel_check_front_buffer_rendering(intel);
 
    if (unlikely(INTEL_DEBUG)) {
@@ -473,9 +476,6 @@ void brw_upload_state(struct brw_context *brw)
       for (i = 0; i < brw->num_atoms; i++) {
 	 const struct brw_tracked_state *atom = brw->atoms[i];
 	 struct brw_state_flags generated;
-
-	 if (brw->intel.Fallback)
-	    break;
 
 	 if (check_state(state, &atom->dirty)) {
 	    atom->emit(brw);
@@ -496,9 +496,6 @@ void brw_upload_state(struct brw_context *brw)
       for (i = 0; i < brw->num_atoms; i++) {
 	 const struct brw_tracked_state *atom = brw->atoms[i];
 
-	 if (brw->intel.Fallback)
-	    break;
-
 	 if (check_state(state, &atom->dirty)) {
 	    atom->emit(brw);
 	 }
@@ -517,6 +514,5 @@ void brw_upload_state(struct brw_context *brw)
       }
    }
 
-   if (!brw->intel.Fallback)
-      memset(state, 0, sizeof(*state));
+   memset(state, 0, sizeof(*state));
 }

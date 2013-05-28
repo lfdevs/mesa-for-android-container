@@ -145,13 +145,14 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
       compute_vertex_info( llvmpipe );
 
    if (llvmpipe->dirty & (LP_NEW_FS |
+                          LP_NEW_FRAMEBUFFER |
                           LP_NEW_BLEND |
                           LP_NEW_SCISSOR |
                           LP_NEW_DEPTH_STENCIL_ALPHA |
                           LP_NEW_RASTERIZER |
                           LP_NEW_SAMPLER |
                           LP_NEW_SAMPLER_VIEW |
-                          LP_NEW_QUERY))
+                          LP_NEW_OCCLUSION_QUERY))
       llvmpipe_update_fs( llvmpipe );
 
    if (llvmpipe->dirty & (LP_NEW_FS |
@@ -173,18 +174,19 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
    }
 
    if (llvmpipe->dirty & LP_NEW_CONSTANTS)
-      lp_setup_set_fs_constants(llvmpipe->setup, 
-                                llvmpipe->constants[PIPE_SHADER_FRAGMENT][0]);
+      lp_setup_set_fs_constants(llvmpipe->setup,
+                                Elements(llvmpipe->constants[PIPE_SHADER_FRAGMENT]),
+                                llvmpipe->constants[PIPE_SHADER_FRAGMENT]);
 
    if (llvmpipe->dirty & (LP_NEW_SAMPLER_VIEW))
       lp_setup_set_fragment_sampler_views(llvmpipe->setup,
-                                          llvmpipe->num_fragment_sampler_views,
-                                          llvmpipe->fragment_sampler_views);
+                                          llvmpipe->num_sampler_views[PIPE_SHADER_FRAGMENT],
+                                          llvmpipe->sampler_views[PIPE_SHADER_FRAGMENT]);
 
    if (llvmpipe->dirty & (LP_NEW_SAMPLER))
       lp_setup_set_fragment_sampler_state(llvmpipe->setup,
-                                          llvmpipe->num_samplers,
-                                          llvmpipe->sampler);
+                                          llvmpipe->num_samplers[PIPE_SHADER_FRAGMENT],
+                                          llvmpipe->samplers[PIPE_SHADER_FRAGMENT]);
 
    llvmpipe->dirty = 0;
 }

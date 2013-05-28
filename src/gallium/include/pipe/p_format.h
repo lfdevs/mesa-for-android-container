@@ -234,10 +234,6 @@ enum pipe_format {
    PIPE_FORMAT_IYUV                    = 165,  /**< aka I420 */
    PIPE_FORMAT_NV12                    = 166,
    PIPE_FORMAT_NV21                    = 167,
-   PIPE_FORMAT_AYUV                    = PIPE_FORMAT_A8R8G8B8_UNORM,
-   PIPE_FORMAT_VUYA                    = PIPE_FORMAT_B8G8R8A8_UNORM,
-   PIPE_FORMAT_XYUV                    = PIPE_FORMAT_X8R8G8B8_UNORM,
-   PIPE_FORMAT_VUYX                    = PIPE_FORMAT_B8G8R8X8_UNORM,
 
    PIPE_FORMAT_R4A4_UNORM              = 168,
    PIPE_FORMAT_A4R4_UNORM              = 169,
@@ -314,6 +310,9 @@ enum pipe_format {
    PIPE_FORMAT_B10G10R10A2_UINT        = 225, 
 
    PIPE_FORMAT_ETC1_RGB8               = 226,
+
+   PIPE_FORMAT_R8G8_R8B8_UNORM         = 227,
+   PIPE_FORMAT_G8R8_B8R8_UNORM         = 228,
 
    PIPE_FORMAT_COUNT
 };

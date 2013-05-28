@@ -25,22 +25,17 @@
 
 #include "util/u_inlines.h"
 #include "pipe/p_state.h"
-
-
 #include "svga_context.h"
 #include "svga_state.h"
 #include "svga_debug.h"
 #include "svga_hw_reg.h"
-
-/***********************************************************************
- */
 
 
 /**
  * Given a gallium vertex element format, return the corresponding SVGA3D
  * format.  Return SVGA3D_DECLTYPE_MAX for unsupported gallium formats.
  */
-static INLINE SVGA3dDeclType 
+static INLINE SVGA3dDeclType
 svga_translate_vertex_format(enum pipe_format format)
 {
    switch (format) {
@@ -72,8 +67,7 @@ svga_translate_vertex_format(enum pipe_format format)
 
 
 static enum pipe_error
-update_need_swvfetch( struct svga_context *svga,
-                      unsigned dirty )
+update_need_swvfetch(struct svga_context *svga, unsigned dirty)
 {
    unsigned i;
    boolean need_swvfetch = FALSE;
@@ -96,11 +90,11 @@ update_need_swvfetch( struct svga_context *svga,
       svga->state.sw.need_swvfetch = need_swvfetch;
       svga->dirty |= SVGA_NEW_NEED_SWVFETCH;
    }
-   
-   return 0;
+
+   return PIPE_OK;
 }
 
-struct svga_tracked_state svga_update_need_swvfetch = 
+struct svga_tracked_state svga_update_need_swvfetch =
 {
    "update need_swvfetch",
    ( SVGA_NEW_VELEMENT ),
@@ -108,14 +102,10 @@ struct svga_tracked_state svga_update_need_swvfetch =
 };
 
 
-/*********************************************************************** 
- */
 
 static enum pipe_error
-update_need_pipeline( struct svga_context *svga,
-                      unsigned dirty )
+update_need_pipeline(struct svga_context *svga, unsigned dirty)
 {
-   
    boolean need_pipeline = FALSE;
    struct svga_vertex_shader *vs = svga->curr.vs;
 
@@ -172,11 +162,11 @@ update_need_pipeline( struct svga_context *svga,
    if (0 && svga->state.sw.need_pipeline)
       debug_printf("sw.need_pipeline = %d\n", svga->state.sw.need_pipeline);
 
-   return 0;
+   return PIPE_OK;
 }
 
 
-struct svga_tracked_state svga_update_need_pipeline = 
+struct svga_tracked_state svga_update_need_pipeline =
 {
    "need pipeline",
    (SVGA_NEW_RAST |
@@ -187,12 +177,8 @@ struct svga_tracked_state svga_update_need_pipeline =
 };
 
 
-/*********************************************************************** 
- */
-
 static enum pipe_error
-update_need_swtnl( struct svga_context *svga,
-                   unsigned dirty )
+update_need_swtnl(struct svga_context *svga, unsigned dirty)
 {
    boolean need_swtnl;
 
@@ -227,8 +213,8 @@ update_need_swtnl( struct svga_context *svga,
       svga->dirty |= SVGA_NEW_NEED_SWTNL;
       svga->swtnl.new_vdecl = TRUE;
    }
-  
-   return 0;
+
+   return PIPE_OK;
 }
 
 

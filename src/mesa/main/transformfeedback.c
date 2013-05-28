@@ -34,6 +34,7 @@
 #include "bufferobj.h"
 #include "context.h"
 #include "hash.h"
+#include "macros.h"
 #include "mfeatures.h"
 #include "mtypes.h"
 #include "transformfeedback.h"
@@ -42,9 +43,6 @@
 #include "main/dispatch.h"
 
 #include "program/prog_parameter.h"
-
-
-#if FEATURE_EXT_transform_feedback
 
 
 /**
@@ -82,36 +80,10 @@ reference_transform_feedback_object(struct gl_transform_feedback_object **ptr,
       }
       else {
          obj->RefCount++;
+         obj->EverBound = GL_TRUE;
          *ptr = obj;
       }
    }
-}
-
-
-/**
- * Check if the given primitive mode (as in glBegin(mode)) is compatible
- * with the current transform feedback mode (if it's enabled).
- * This is to be called from glBegin(), glDrawArrays(), glDrawElements(), etc.
- *
- * \return GL_TRUE if the mode is OK, GL_FALSE otherwise.
- */
-GLboolean
-_mesa_validate_primitive_mode(struct gl_context *ctx, GLenum mode)
-{
-   if (ctx->TransformFeedback.CurrentObject->Active &&
-       !ctx->TransformFeedback.CurrentObject->Paused) {
-      switch (mode) {
-      case GL_POINTS:
-         return ctx->TransformFeedback.Mode == GL_POINTS;
-      case GL_LINES:
-      case GL_LINE_STRIP:
-      case GL_LINE_LOOP:
-         return ctx->TransformFeedback.Mode == GL_LINES;
-      default:
-         return ctx->TransformFeedback.Mode == GL_TRIANGLES;
-      }
-   }
-   return GL_TRUE;
 }
 
 
@@ -198,40 +170,6 @@ _mesa_free_transform_feedback(struct gl_context *ctx)
 }
 
 
-#else /* FEATURE_EXT_transform_feedback */
-
-/* forward declarations */
-static struct gl_transform_feedback_object *
-new_transform_feedback(struct gl_context *ctx, GLuint name);
-
-static void
-delete_transform_feedback(struct gl_context *ctx,
-                          struct gl_transform_feedback_object *obj);
-
-/* dummy per-context init/clean-up for transform feedback */
-void
-_mesa_init_transform_feedback(struct gl_context *ctx)
-{
-   ctx->TransformFeedback.DefaultObject = new_transform_feedback(ctx, 0);
-   ctx->TransformFeedback.CurrentObject = ctx->TransformFeedback.DefaultObject;
-   _mesa_reference_buffer_object(ctx,
-                                 &ctx->TransformFeedback.CurrentBuffer,
-                                 ctx->Shared->NullBufferObj);
-}
-
-void
-_mesa_free_transform_feedback(struct gl_context *ctx)
-{
-   _mesa_reference_buffer_object(ctx,
-                                 &ctx->TransformFeedback.CurrentBuffer,
-                                 NULL);
-   ctx->TransformFeedback.CurrentObject = NULL;
-   delete_transform_feedback(ctx, ctx->TransformFeedback.DefaultObject);
-}
-
-#endif /* FEATURE_EXT_transform_feedback */
-
-
 /** Default fallback for ctx->Driver.NewTransformFeedback() */
 static struct gl_transform_feedback_object *
 new_transform_feedback(struct gl_context *ctx, GLuint name)
@@ -241,6 +179,7 @@ new_transform_feedback(struct gl_context *ctx, GLuint name)
    if (obj) {
       obj->Name = name;
       obj->RefCount = 1;
+      obj->EverBound = GL_FALSE;
    }
    return obj;
 }
@@ -258,9 +197,6 @@ delete_transform_feedback(struct gl_context *ctx,
 
    free(obj);
 }
-
-
-#if FEATURE_EXT_transform_feedback
 
 
 /** Default fallback for ctx->Driver.BeginTransformFeedback() */
@@ -312,24 +248,80 @@ _mesa_init_transform_feedback_functions(struct dd_function_table *driver)
 }
 
 
-void
-_mesa_init_transform_feedback_dispatch(struct _glapi_table *disp)
+/**
+ * Fill in the correct Size value for each buffer in \c obj.
+ *
+ * From the GL 4.3 spec, section 6.1.1 ("Binding Buffer Objects to Indexed
+ * Targets"):
+ *
+ *   BindBufferBase binds the entire buffer, even when the size of the buffer
+ *   is changed after the binding is established. It is equivalent to calling
+ *   BindBufferRange with offset zero, while size is determined by the size of
+ *   the bound buffer at the time the binding is used.
+ *
+ *   Regardless of the size specified with BindBufferRange, or indirectly with
+ *   BindBufferBase, the GL will never read or write beyond the end of a bound
+ *   buffer. In some cases this constraint may result in visibly different
+ *   behavior when a buffer overflow would otherwise result, such as described
+ *   for transform feedback operations in section 13.2.2.
+ */
+static void
+compute_transform_feedback_buffer_sizes(
+      struct gl_transform_feedback_object *obj)
 {
-   /* EXT_transform_feedback */
-   SET_BeginTransformFeedbackEXT(disp, _mesa_BeginTransformFeedback);
-   SET_EndTransformFeedbackEXT(disp, _mesa_EndTransformFeedback);
-   SET_BindBufferRangeEXT(disp, _mesa_BindBufferRange);
-   SET_BindBufferBaseEXT(disp, _mesa_BindBufferBase);
-   SET_BindBufferOffsetEXT(disp, _mesa_BindBufferOffsetEXT);
-   SET_TransformFeedbackVaryingsEXT(disp, _mesa_TransformFeedbackVaryings);
-   SET_GetTransformFeedbackVaryingEXT(disp, _mesa_GetTransformFeedbackVarying);
-   /* ARB_transform_feedback2 */
-   SET_BindTransformFeedback(disp, _mesa_BindTransformFeedback);
-   SET_DeleteTransformFeedbacks(disp, _mesa_DeleteTransformFeedbacks);
-   SET_GenTransformFeedbacks(disp, _mesa_GenTransformFeedbacks);
-   SET_IsTransformFeedback(disp, _mesa_IsTransformFeedback);
-   SET_PauseTransformFeedback(disp, _mesa_PauseTransformFeedback);
-   SET_ResumeTransformFeedback(disp, _mesa_ResumeTransformFeedback);
+   unsigned i = 0;
+   for (i = 0; i < MAX_FEEDBACK_BUFFERS; ++i) {
+      GLintptr offset = obj->Offset[i];
+      GLsizeiptr buffer_size
+         = obj->Buffers[i] == NULL ? 0 : obj->Buffers[i]->Size;
+      GLsizeiptr available_space
+         = buffer_size <= offset ? 0 : buffer_size - offset;
+      GLsizeiptr computed_size;
+      if (obj->RequestedSize[i] == 0) {
+         /* No size was specified at the time the buffer was bound, so allow
+          * writing to all available space in the buffer.
+          */
+         computed_size = available_space;
+      } else {
+         /* A size was specified at the time the buffer was bound, however
+          * it's possible that the buffer has shrunk since then.  So only
+          * allow writing to the minimum of the specified size and the space
+          * available.
+          */
+         computed_size = MIN2(available_space, obj->RequestedSize[i]);
+      }
+
+      /* Legal sizes must be multiples of four, so round down if necessary. */
+      obj->Size[i] = computed_size & ~0x3;
+   }
+}
+
+
+/**
+ * Compute the maximum number of vertices that can be written to the currently
+ * enabled transform feedback buffers without overflowing any of them.
+ */
+unsigned
+_mesa_compute_max_transform_feedback_vertices(
+      const struct gl_transform_feedback_object *obj,
+      const struct gl_transform_feedback_info *info)
+{
+   unsigned max_index = 0xffffffff;
+   unsigned i;
+
+   for (i = 0; i < info->NumBuffers; ++i) {
+      unsigned stride = info->BufferStride[i];
+      unsigned max_for_this_buffer;
+
+      /* Skip any inactive buffers, which have a stride of 0. */
+      if (stride == 0)
+	 continue;
+
+      max_for_this_buffer = obj->Size[i] / (4 * stride);
+      max_index = MIN2(max_index, max_for_this_buffer);
+   }
+
+   return max_index;
 }
 
 
@@ -343,7 +335,8 @@ _mesa_BeginTransformFeedback(GLenum mode)
 {
    struct gl_transform_feedback_object *obj;
    struct gl_transform_feedback_info *info;
-   int i;
+   GLuint i;
+   unsigned vertices_per_prim;
    GET_CURRENT_CONTEXT(ctx);
 
    obj = ctx->TransformFeedback.CurrentObject;
@@ -364,9 +357,13 @@ _mesa_BeginTransformFeedback(GLenum mode)
 
    switch (mode) {
    case GL_POINTS:
+      vertices_per_prim = 1;
+      break;
    case GL_LINES:
+      vertices_per_prim = 2;
+      break;
    case GL_TRIANGLES:
-      /* legal */
+      vertices_per_prim = 3;
       break;
    default:
       _mesa_error(ctx, GL_INVALID_ENUM, "glBeginTransformFeedback(mode)");
@@ -391,6 +388,20 @@ _mesa_BeginTransformFeedback(GLenum mode)
    FLUSH_VERTICES(ctx, _NEW_TRANSFORM_FEEDBACK);
    obj->Active = GL_TRUE;
    ctx->TransformFeedback.Mode = mode;
+
+   compute_transform_feedback_buffer_sizes(obj);
+
+   if (_mesa_is_gles3(ctx)) {
+      /* In GLES3, we are required to track the usage of the transform
+       * feedback buffer and report INVALID_OPERATION if a draw call tries to
+       * exceed it.  So compute the maximum number of vertices that we can
+       * write without overflowing any of the buffers currently being used for
+       * feedback.
+       */
+      unsigned max_vertices
+         = _mesa_compute_max_transform_feedback_vertices(obj, info);
+      obj->GlesRemainingPrims = max_vertices / vertices_per_prim;
+   }
 
    assert(ctx->Driver.BeginTransformFeedback);
    ctx->Driver.BeginTransformFeedback(ctx, mode, obj);
@@ -450,26 +461,23 @@ bind_buffer_range(struct gl_context *ctx, GLuint index,
    obj->BufferNames[index] = bufObj->Name;
 
    obj->Offset[index] = offset;
-   obj->Size[index] = size;
+   obj->RequestedSize[index] = size;
 }
 
 
 /**
  * Specify a buffer object to receive vertex shader results.  Plus,
  * specify the starting offset to place the results, and max size.
+ * Called from the glBindBufferRange() function.
  */
-void GLAPIENTRY
-_mesa_BindBufferRange(GLenum target, GLuint index,
-                      GLuint buffer, GLintptr offset, GLsizeiptr size)
+void
+_mesa_bind_buffer_range_transform_feedback(struct gl_context *ctx,
+					   GLuint index,
+					   struct gl_buffer_object *bufObj,
+					   GLintptr offset,
+					   GLsizeiptr size)
 {
    struct gl_transform_feedback_object *obj;
-   struct gl_buffer_object *bufObj;
-   GET_CURRENT_CONTEXT(ctx);
-
-   if (target != GL_TRANSFORM_FEEDBACK_BUFFER) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glBindBufferRange(target)");
-      return;
-   }
 
    obj = ctx->TransformFeedback.CurrentObject;
 
@@ -479,13 +487,13 @@ _mesa_BindBufferRange(GLenum target, GLuint index,
       return;
    }
 
-   if (index >= ctx->Const.MaxTransformFeedbackSeparateAttribs) {
+   if (index >= ctx->Const.MaxTransformFeedbackBuffers) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glBindBufferRange(index=%d)", index);
       return;
    }
 
-   if ((size <= 0) || (size & 0x3)) {
-      /* must be positive and multiple of four */
+   if (size & 0x3) {
+      /* must a multiple of four */
       _mesa_error(ctx, GL_INVALID_VALUE, "glBindBufferRange(size=%d)", (int) size);
       return;
    }  
@@ -497,25 +505,6 @@ _mesa_BindBufferRange(GLenum target, GLuint index,
       return;
    }  
 
-   if (buffer == 0) {
-      bufObj = ctx->Shared->NullBufferObj;
-   } else {
-      bufObj = _mesa_lookup_bufferobj(ctx, buffer);
-   }
-
-   if (!bufObj) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glBindBufferRange(invalid buffer=%u)", buffer);
-      return;
-   }
-
-   if (offset + size > bufObj->Size) {
-      _mesa_error(ctx, GL_INVALID_VALUE,
-                  "glBindBufferRange(offset + size %d > buffer size %d)",
-		  (int) (offset + size), (int) (bufObj->Size));
-      return;
-   }  
-
    bind_buffer_range(ctx, index, bufObj, offset, size);
 }
 
@@ -523,19 +512,14 @@ _mesa_BindBufferRange(GLenum target, GLuint index,
 /**
  * Specify a buffer object to receive vertex shader results.
  * As above, but start at offset = 0.
+ * Called from the glBindBufferBase() function.
  */
-void GLAPIENTRY
-_mesa_BindBufferBase(GLenum target, GLuint index, GLuint buffer)
+void
+_mesa_bind_buffer_base_transform_feedback(struct gl_context *ctx,
+					  GLuint index,
+					  struct gl_buffer_object *bufObj)
 {
    struct gl_transform_feedback_object *obj;
-   struct gl_buffer_object *bufObj;
-   GLsizeiptr size;
-   GET_CURRENT_CONTEXT(ctx);
-
-   if (target != GL_TRANSFORM_FEEDBACK_BUFFER) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glBindBufferBase(target)");
-      return;
-   }
 
    obj = ctx->TransformFeedback.CurrentObject;
 
@@ -545,29 +529,12 @@ _mesa_BindBufferBase(GLenum target, GLuint index, GLuint buffer)
       return;
    }
 
-   if (index >= ctx->Const.MaxTransformFeedbackSeparateAttribs) {
+   if (index >= ctx->Const.MaxTransformFeedbackBuffers) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glBindBufferBase(index=%d)", index);
       return;
    }
 
-   if (buffer == 0) {
-      bufObj = ctx->Shared->NullBufferObj;
-   } else {
-      bufObj = _mesa_lookup_bufferobj(ctx, buffer);
-   }
-
-   if (!bufObj) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glBindBufferBase(invalid buffer=%u)", buffer);
-      return;
-   }
-
-   /* default size is the buffer size rounded down to nearest
-    * multiple of four.
-    */
-   size = bufObj->Size & ~0x3;
-
-   bind_buffer_range(ctx, index, bufObj, 0, size);
+   bind_buffer_range(ctx, index, bufObj, 0, 0);
 }
 
 
@@ -583,7 +550,6 @@ _mesa_BindBufferOffsetEXT(GLenum target, GLuint index, GLuint buffer,
    struct gl_transform_feedback_object *obj;
    struct gl_buffer_object *bufObj;
    GET_CURRENT_CONTEXT(ctx);
-   GLsizeiptr size;
 
    if (target != GL_TRANSFORM_FEEDBACK_BUFFER) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glBindBufferOffsetEXT(target)");
@@ -598,7 +564,7 @@ _mesa_BindBufferOffsetEXT(GLenum target, GLuint index, GLuint buffer,
       return;
    }
 
-   if (index >= ctx->Const.MaxTransformFeedbackSeparateAttribs) {
+   if (index >= ctx->Const.MaxTransformFeedbackBuffers) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "glBindBufferOffsetEXT(index=%d)", index);
       return;
@@ -623,12 +589,7 @@ _mesa_BindBufferOffsetEXT(GLenum target, GLuint index, GLuint buffer,
       return;
    }
 
-   /* default size is the buffer size rounded down to nearest
-    * multiple of four.
-    */
-   size = (bufObj->Size - offset) & ~0x3;
-
-   bind_buffer_range(ctx, index, bufObj, offset, size);
+   bind_buffer_range(ctx, index, bufObj, offset, 0);
 }
 
 
@@ -638,10 +599,11 @@ _mesa_BindBufferOffsetEXT(GLenum target, GLuint index, GLuint buffer,
  */
 void GLAPIENTRY
 _mesa_TransformFeedbackVaryings(GLuint program, GLsizei count,
-                                const GLchar **varyings, GLenum bufferMode)
+                                const GLchar * const *varyings,
+                                GLenum bufferMode)
 {
    struct gl_shader_program *shProg;
-   GLuint i;
+   GLint i;
    GET_CURRENT_CONTEXT(ctx);
 
    switch (bufferMode) {
@@ -657,7 +619,7 @@ _mesa_TransformFeedbackVaryings(GLuint program, GLsizei count,
 
    if (count < 0 ||
        (bufferMode == GL_SEPARATE_ATTRIBS &&
-        (GLuint) count > ctx->Const.MaxTransformFeedbackSeparateAttribs)) {
+        (GLuint) count > ctx->Const.MaxTransformFeedbackBuffers)) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "glTransformFeedbackVaryings(count=%d)", count);
       return;
@@ -670,15 +632,47 @@ _mesa_TransformFeedbackVaryings(GLuint program, GLsizei count,
       return;
    }
 
+   if (ctx->Extensions.ARB_transform_feedback3) {
+      if (bufferMode == GL_INTERLEAVED_ATTRIBS) {
+         unsigned buffers = 1;
+
+         for (i = 0; i < count; i++) {
+            if (strcmp(varyings[i], "gl_NextBuffer") == 0)
+               buffers++;
+         }
+
+         if (buffers > ctx->Const.MaxTransformFeedbackBuffers) {
+            _mesa_error(ctx, GL_INVALID_OPERATION,
+                        "glTransformFeedbackVaryings(too many gl_NextBuffer "
+                        "occurences)");
+            return;
+         }
+      } else {
+         for (i = 0; i < count; i++) {
+            if (strcmp(varyings[i], "gl_NextBuffer") == 0 ||
+                strcmp(varyings[i], "gl_SkipComponents1") == 0 ||
+                strcmp(varyings[i], "gl_SkipComponents2") == 0 ||
+                strcmp(varyings[i], "gl_SkipComponents3") == 0 ||
+                strcmp(varyings[i], "gl_SkipComponents4") == 0) {
+               _mesa_error(ctx, GL_INVALID_OPERATION,
+                           "glTransformFeedbackVaryings(SEPARATE_ATTRIBS,"
+                           "varying=%s)",
+                           varyings[i]);
+               return;
+            }
+         }
+      }
+   }
+
    /* free existing varyings, if any */
-   for (i = 0; i < shProg->TransformFeedback.NumVarying; i++) {
+   for (i = 0; i < (GLint) shProg->TransformFeedback.NumVarying; i++) {
       free(shProg->TransformFeedback.VaryingNames[i]);
    }
    free(shProg->TransformFeedback.VaryingNames);
 
    /* allocate new memory for varying names */
    shProg->TransformFeedback.VaryingNames =
-      (GLchar **) malloc(count * sizeof(GLchar *));
+      malloc(count * sizeof(GLchar *));
 
    if (!shProg->TransformFeedback.VaryingNames) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTransformFeedbackVaryings()");
@@ -686,7 +680,7 @@ _mesa_TransformFeedbackVaryings(GLuint program, GLsizei count,
    }
 
    /* Save the new names and the count */
-   for (i = 0; i < (GLuint) count; i++) {
+   for (i = 0; i < count; i++) {
       shProg->TransformFeedback.VaryingNames[i] = _mesa_strdup(varyings[i]);
    }
    shProg->TransformFeedback.NumVarying = count;
@@ -715,14 +709,14 @@ _mesa_GetTransformFeedbackVarying(GLuint program, GLuint index,
    shProg = _mesa_lookup_shader_program(ctx, program);
    if (!shProg) {
       _mesa_error(ctx, GL_INVALID_VALUE,
-                  "glGetTransformFeedbackVaryings(program=%u)", program);
+                  "glGetTransformFeedbackVarying(program=%u)", program);
       return;
    }
 
    linked_xfb_info = &shProg->LinkedTransformFeedback;
-   if (index >= linked_xfb_info->NumVarying) {
+   if (index >= (GLuint) linked_xfb_info->NumVarying) {
       _mesa_error(ctx, GL_INVALID_VALUE,
-                  "glGetTransformFeedbackVaryings(index=%u)", index);
+                  "glGetTransformFeedbackVarying(index=%u)", index);
       return;
    }
 
@@ -763,8 +757,6 @@ _mesa_GenTransformFeedbacks(GLsizei n, GLuint *names)
    GLuint first;
    GET_CURRENT_CONTEXT(ctx);
 
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
-
    if (n < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glGenTransformFeedbacks(n < 0)");
       return;
@@ -801,14 +793,19 @@ _mesa_GenTransformFeedbacks(GLsizei n, GLuint *names)
 GLboolean GLAPIENTRY
 _mesa_IsTransformFeedback(GLuint name)
 {
+   struct gl_transform_feedback_object *obj;
    GET_CURRENT_CONTEXT(ctx);
 
    ASSERT_OUTSIDE_BEGIN_END_WITH_RETVAL(ctx, GL_FALSE);
 
-   if (name && _mesa_lookup_transform_feedback_object(ctx, name))
-      return GL_TRUE;
-   else
+   if (name == 0)
       return GL_FALSE;
+
+   obj = _mesa_lookup_transform_feedback_object(ctx, name);
+   if (obj == NULL)
+      return GL_FALSE;
+
+   return obj->EverBound;
 }
 
 
@@ -827,8 +824,7 @@ _mesa_BindTransformFeedback(GLenum target, GLuint name)
       return;
    }
 
-   if (ctx->TransformFeedback.CurrentObject->Active &&
-       !ctx->TransformFeedback.CurrentObject->Paused) {
+   if (_mesa_is_xfb_active_and_unpaused(ctx)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
               "glBindTransformFeedback(transform is active, or not paused)");
       return;
@@ -855,8 +851,6 @@ _mesa_DeleteTransformFeedbacks(GLsizei n, const GLuint *names)
 {
    GLint i;
    GET_CURRENT_CONTEXT(ctx);
-
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (n < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glDeleteTransformFeedbacks(n < 0)");
@@ -898,7 +892,7 @@ _mesa_PauseTransformFeedback(void)
 
    obj = ctx->TransformFeedback.CurrentObject;
 
-   if (!obj->Active || obj->Paused) {
+   if (!_mesa_is_xfb_active_and_unpaused(ctx)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
            "glPauseTransformFeedback(feedback not active or already paused)");
       return;
@@ -936,5 +930,3 @@ _mesa_ResumeTransformFeedback(void)
    assert(ctx->Driver.ResumeTransformFeedback);
    ctx->Driver.ResumeTransformFeedback(ctx, obj);
 }
-
-#endif /* FEATURE_EXT_transform_feedback */

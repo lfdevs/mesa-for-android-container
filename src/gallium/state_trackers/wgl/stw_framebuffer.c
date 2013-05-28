@@ -92,8 +92,6 @@ stw_framebuffer_destroy_locked(
 
    stw_st_destroy_framebuffer_locked(fb->stfb);
    
-   ReleaseDC(fb->hWnd, fb->hDC);
-
    pipe_mutex_unlock( fb->mutex );
 
    pipe_mutex_destroy( fb->mutex );
@@ -254,15 +252,16 @@ stw_framebuffer_create(
    if (fb == NULL)
       return NULL;
 
-   /* Applications use, create, destroy device contexts, so the hdc passed is.  We create our own DC
-    * because we need one for single buffered visuals.
-    */
-   fb->hDC = GetDC(hWnd);
-
    fb->hWnd = hWnd;
    fb->iPixelFormat = iPixelFormat;
 
-   fb->pfi = pfi = stw_pixelformat_get_info( iPixelFormat - 1 );
+   /*
+    * We often need a displayable pixel format to make GDI happy. Set it here (always 1, i.e.,
+    * out first pixel format) where appropriat.
+    */
+   fb->iDisplayablePixelFormat = iPixelFormat <= stw_dev->pixelformat_count ? iPixelFormat : 1;
+
+   fb->pfi = pfi = stw_pixelformat_get_info( iPixelFormat );
    fb->stfb = stw_st_create_framebuffer( fb );
    if (!fb->stfb) {
       FREE( fb );
@@ -445,15 +444,21 @@ DrvSetPixelFormat(
       return FALSE;
 
    index = (uint) iPixelFormat - 1;
-   count = stw_pixelformat_get_extended_count();
+   count = stw_pixelformat_get_count();
    if (index >= count)
       return FALSE;
 
    fb = stw_framebuffer_from_hdc_locked(hdc);
    if(fb) {
-      /* SetPixelFormat must be called only once */
+      /*
+       * SetPixelFormat must be called only once.  However ignore 
+       * pbuffers, for which the framebuffer object is created first.
+       */
+      boolean bPbuffer = fb->bPbuffer;
+
       stw_framebuffer_release( fb );
-      return FALSE;
+
+      return bPbuffer;
    }
 
    fb = stw_framebuffer_create(hdc, iPixelFormat);
@@ -467,7 +472,8 @@ DrvSetPixelFormat(
     * function instead of SetPixelFormat, so we call SetPixelFormat here to 
     * avoid opengl32.dll's wglCreateContext to fail */
    if (GetPixelFormat(hdc) == 0) {
-        SetPixelFormat(hdc, iPixelFormat, NULL);
+      BOOL bRet = SetPixelFormat(hdc, iPixelFormat, NULL);
+      assert(bRet);
    }
    
    return TRUE;

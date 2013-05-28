@@ -52,8 +52,8 @@
  *
  *    select <4 x i1> %C, %A, %B
  *
- * is valid IR (e.g. llvm/test/Assembler/vector-select.ll), but it is not
- * supported on any backend.
+ * is valid IR (e.g. llvm/test/Assembler/vector-select.ll), but it is only
+ * supported on some backends (x86) starting with llvm 3.1.
  *
  * Expanding the boolean vector to full SIMD register width, as in
  *
@@ -458,8 +458,37 @@ lp_build_select(struct lp_build_context *bld,
       mask = LLVMBuildTrunc(builder, mask, LLVMInt1TypeInContext(lc), "");
       res = LLVMBuildSelect(builder, mask, a, b, "");
    }
-   else if (util_cpu_caps.has_sse4_1 &&
-            type.width * type.length == 128 &&
+   else if (0) {
+      /* Generate a vector select.
+       *
+       * XXX: Using vector selects would avoid emitting intrinsics, but they aren't
+       * properly supported yet.
+       *
+       * LLVM 3.0 includes experimental support provided the -promote-elements
+       * options is passed to LLVM's command line (e.g., via
+       * llvm::cl::ParseCommandLineOptions), but resulting code quality is much
+       * worse, probably because some optimization passes don't know how to
+       * handle vector selects.
+       *
+       * See also:
+       * - http://lists.cs.uiuc.edu/pipermail/llvmdev/2011-October/043659.html
+       */
+
+      /* Convert the mask to a vector of booleans.
+       * XXX: There are two ways to do this. Decide what's best.
+       */
+      if (1) {
+         LLVMTypeRef bool_vec_type = LLVMVectorType(LLVMInt1TypeInContext(lc), type.length);
+         mask = LLVMBuildTrunc(builder, mask, bool_vec_type, "");
+      } else {
+         mask = LLVMBuildICmp(builder, LLVMIntNE, mask, LLVMConstNull(bld->int_vec_type), "");
+      }
+      res = LLVMBuildSelect(builder, mask, a, b, "");
+   }
+   else if (((util_cpu_caps.has_sse4_1 &&
+              type.width * type.length == 128) ||
+             (util_cpu_caps.has_avx &&
+              type.width * type.length == 256 && type.width >= 32)) &&
             !LLVMIsConstant(a) &&
             !LLVMIsConstant(b) &&
             !LLVMIsConstant(mask)) {
@@ -467,8 +496,22 @@ lp_build_select(struct lp_build_context *bld,
       LLVMTypeRef arg_type;
       LLVMValueRef args[3];
 
-      if (type.floating &&
-          type.width == 64) {
+      /*
+       *  There's only float blend in AVX but can just cast i32/i64
+       *  to float.
+       */
+      if (type.width * type.length == 256) {
+         if (type.width == 64) {
+           intrinsic = "llvm.x86.avx.blendv.pd.256";
+           arg_type = LLVMVectorType(LLVMDoubleTypeInContext(lc), 4);
+         }
+         else {
+            intrinsic = "llvm.x86.avx.blendv.ps.256";
+            arg_type = LLVMVectorType(LLVMFloatTypeInContext(lc), 8);
+         }
+      }
+      else if (type.floating &&
+               type.width == 64) {
          intrinsic = "llvm.x86.sse41.blendvpd";
          arg_type = LLVMVectorType(LLVMDoubleTypeInContext(lc), 2);
       } else if (type.floating &&
@@ -517,7 +560,8 @@ LLVMValueRef
 lp_build_select_aos(struct lp_build_context *bld,
                     unsigned mask,
                     LLVMValueRef a,
-                    LLVMValueRef b)
+                    LLVMValueRef b,
+                    unsigned num_channels)
 {
    LLVMBuilderRef builder = bld->gallivm->builder;
    const struct lp_type type = bld->type;
@@ -538,13 +582,11 @@ lp_build_select_aos(struct lp_build_context *bld,
       return bld->undef;
 
    /*
-    * There are three major ways of accomplishing this:
-    * - with a shuffle,
-    * - with a select,
-    * - or with a bit mask.
+    * There are two major ways of accomplishing this:
+    * - with a shuffle
+    * - with a select
     *
-    * Select isn't supported for vector types yet.
-    * The flip between these is empirical and might need to be.
+    * The flip between these is empirical and might need to be adjusted.
     */
    if (n <= 4) {
       /*
@@ -553,8 +595,8 @@ lp_build_select_aos(struct lp_build_context *bld,
       LLVMTypeRef elem_type = LLVMInt32TypeInContext(bld->gallivm->context);
       LLVMValueRef shuffles[LP_MAX_VECTOR_LENGTH];
 
-      for(j = 0; j < n; j += 4)
-         for(i = 0; i < 4; ++i)
+      for(j = 0; j < n; j += num_channels)
+         for(i = 0; i < num_channels; ++i)
             shuffles[j + i] = LLVMConstInt(elem_type,
                                            (mask & (1 << i) ? 0 : n) + j + i,
                                            0);
@@ -562,21 +604,39 @@ lp_build_select_aos(struct lp_build_context *bld,
       return LLVMBuildShuffleVector(builder, a, b, LLVMConstVector(shuffles, n), "");
    }
    else {
-#if 0
-      /* XXX: Unfortunately select of vectors do not work */
-      /* Use a select */
-      LLVMTypeRef elem_type = LLVMInt1Type();
-      LLVMValueRef cond_vec[LP_MAX_VECTOR_LENGTH];
-
-      for(j = 0; j < n; j += 4)
-         for(i = 0; i < 4; ++i)
-            cond_vec[j + i] = LLVMConstInt(elem_type,
-                                           mask & (1 << i) ? 1 : 0, 0);
-
-      return LLVMBuildSelect(builder, LLVMConstVector(cond_vec, n), a, b, "");
-#else
-      LLVMValueRef mask_vec = lp_build_const_mask_aos(bld->gallivm, type, mask);
+      LLVMValueRef mask_vec = lp_build_const_mask_aos(bld->gallivm, type, mask, num_channels);
       return lp_build_select(bld, mask_vec, a, b);
-#endif
    }
+}
+
+
+/**
+ * Return (scalar-cast)val ? true : false;
+ */
+LLVMValueRef
+lp_build_any_true_range(struct lp_build_context *bld,
+                        unsigned real_length,
+                        LLVMValueRef val)
+{
+   LLVMBuilderRef builder = bld->gallivm->builder;
+   LLVMTypeRef scalar_type;
+   LLVMTypeRef true_type;
+
+   assert(real_length <= bld->type.length);
+
+   true_type = LLVMIntTypeInContext(bld->gallivm->context,
+                                    bld->type.width * real_length);
+   scalar_type = LLVMIntTypeInContext(bld->gallivm->context,
+                                      bld->type.width * bld->type.length);
+   val = LLVMBuildBitCast(builder, val, scalar_type, "");
+   /*
+    * We're using always native types so we can use intrinsics.
+    * However, if we don't do per-element calculations, we must ensure
+    * the excess elements aren't used since they may contain garbage.
+    */
+   if (real_length < bld->type.length) {
+      val = LLVMBuildTrunc(builder, val, true_type, "");
+   }
+   return LLVMBuildICmp(builder, LLVMIntNE,
+                        val, LLVMConstNull(true_type), "");
 }

@@ -39,6 +39,10 @@ struct st_query_object
 {
    struct gl_query_object base;
    struct pipe_query *pq;
+
+   /* Begin TIMESTAMP query for GL_TIME_ELAPSED_EXT queries */
+   struct pipe_query *pq_begin;
+
    unsigned type;  /**< PIPE_QUERY_x */
 };
 
@@ -53,18 +57,8 @@ st_query_object(struct gl_query_object *q)
 }
 
 
-#if FEATURE_queryobj
-
 extern void
 st_init_query_functions(struct dd_function_table *functions);
 
-#else
-
-static INLINE void
-st_init_query_functions(struct dd_function_table *functions)
-{
-}
-
-#endif /* FEATURE_queryobj */
 
 #endif

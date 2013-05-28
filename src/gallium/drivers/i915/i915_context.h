@@ -104,6 +104,9 @@ struct i915_fragment_shader
 
    struct draw_fragment_shader *draw_data;
 
+   uint *decl;
+   uint decl_len;
+
    uint *program;
    uint program_len;
 
@@ -167,7 +170,7 @@ struct i915_state
    unsigned dst_buf_vars;
    uint32_t draw_offset;
    uint32_t draw_size;
-   unsigned need_target_fixup;
+   uint32_t target_fixup_format;
    uint32_t fixup_swizzle;
 
    unsigned id;			/* track lost context events */
@@ -225,11 +228,17 @@ struct i915_context {
     */
    const struct i915_blend_state           *blend;
    const struct i915_sampler_state         *sampler[PIPE_MAX_SAMPLERS];
-   struct pipe_sampler_state *vertex_samplers[PIPE_MAX_VERTEX_SAMPLERS];
+   struct pipe_sampler_state *vertex_samplers[PIPE_MAX_SAMPLERS];
    const struct i915_depth_stencil_state   *depth_stencil;
    const struct i915_rasterizer_state      *rasterizer;
 
    struct i915_fragment_shader *fs;
+
+   void *vs;
+
+   struct i915_velems_state *velems;
+   unsigned nr_vertex_buffers;
+   struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];
 
    struct pipe_blend_color blend_color;
    struct pipe_stencil_ref stencil_ref;
@@ -245,8 +254,8 @@ struct i915_context {
 
    unsigned dirty;
 
-   struct pipe_resource *mapped_vs_tex[PIPE_MAX_VERTEX_SAMPLERS];
-   struct i915_winsys_buffer* mapped_vs_tex_buffer[PIPE_MAX_VERTEX_SAMPLERS];
+   struct pipe_resource *mapped_vs_tex[PIPE_MAX_SAMPLERS];
+   struct i915_winsys_buffer* mapped_vs_tex_buffer[PIPE_MAX_SAMPLERS];
 
    unsigned num_samplers;
    unsigned num_fragment_sampler_views;
@@ -280,23 +289,6 @@ struct i915_context {
 
    /** blitter/hw-clear */
    struct blitter_context* blitter;
-
-   /** State tracking needed by u_blitter for save/restore. */
-   void *saved_fs;
-   void (*saved_bind_fs_state)(struct pipe_context *pipe, void *shader);
-   void *saved_vs;
-   struct pipe_clip_state saved_clip;
-   struct i915_velems_state *saved_velems;
-   unsigned saved_nr_vertex_buffers;
-   struct pipe_vertex_buffer saved_vertex_buffers[PIPE_MAX_ATTRIBS];
-   unsigned saved_nr_samplers;
-   void *saved_samplers[PIPE_MAX_SAMPLERS];
-   void (*saved_bind_sampler_states)(struct pipe_context *pipe,
-                                     unsigned num, void **sampler);
-   unsigned saved_nr_sampler_views;
-   struct pipe_sampler_view *saved_sampler_views[PIPE_MAX_SAMPLERS];
-   void (*saved_set_sampler_views)(struct pipe_context *pipe,
-                                   unsigned num, struct pipe_sampler_view **views);
 };
 
 /* A flag for each state_tracker state object:
@@ -401,7 +393,6 @@ void i915_clear_emit(struct pipe_context *pipe, unsigned buffers,
  * 
  */
 void i915_init_state_functions( struct i915_context *i915 );
-void i915_init_fixup_state_functions( struct i915_context *i915 );
 void i915_init_flush_functions( struct i915_context *i915 );
 void i915_init_string_functions( struct i915_context *i915 );
 

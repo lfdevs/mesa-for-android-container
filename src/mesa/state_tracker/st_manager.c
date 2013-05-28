@@ -26,16 +26,6 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
-#include "state_tracker/st_gl_api.h"
-
-#include "pipe/p_context.h"
-#include "pipe/p_screen.h"
-#include "util/u_format.h"
-#include "util/u_pointer.h"
-#include "util/u_inlines.h"
-#include "util/u_atomic.h"
-#include "util/u_surface.h"
-
 #include "main/mtypes.h"
 #include "main/context.h"
 #include "main/mfeatures.h"
@@ -54,6 +44,16 @@
 #include "st_cb_flush.h"
 #include "st_manager.h"
 
+#include "state_tracker/st_gl_api.h"
+
+#include "pipe/p_context.h"
+#include "pipe/p_screen.h"
+#include "util/u_format.h"
+#include "util/u_pointer.h"
+#include "util/u_inlines.h"
+#include "util/u_atomic.h"
+#include "util/u_surface.h"
+
 /**
  * Cast wrapper to convert a struct gl_framebuffer to an st_framebuffer.
  * Return NULL if the struct gl_framebuffer is a user-created framebuffer.
@@ -64,7 +64,9 @@ static INLINE struct st_framebuffer *
 st_ws_framebuffer(struct gl_framebuffer *fb)
 {
    /* FBO cannot be casted.  See st_new_framebuffer */
-   return (struct st_framebuffer *) ((fb && !fb->Name) ? fb : NULL);
+   if (fb && _mesa_is_winsys_fbo(fb))
+      return (struct st_framebuffer *) fb;
+   return NULL;
 }
 
 /**
@@ -222,8 +224,7 @@ st_framebuffer_validate(struct st_framebuffer *stfb,
          continue;
       }
 
-      u_surface_default_template(&surf_tmpl, textures[i],
-                                 PIPE_BIND_RENDER_TARGET);
+      u_surface_default_template(&surf_tmpl, textures[i]);
       ps = st->pipe->create_surface(st->pipe, textures[i], &surf_tmpl);
       if (ps) {
          pipe_surface_reference(&strb->surface, ps);
@@ -283,7 +284,6 @@ st_framebuffer_add_renderbuffer(struct st_framebuffer *stfb,
 {
    struct gl_renderbuffer *rb;
    enum pipe_format format;
-   int samples;
    boolean sw;
 
    if (!stfb->iface)
@@ -311,11 +311,7 @@ st_framebuffer_add_renderbuffer(struct st_framebuffer *stfb,
    if (format == PIPE_FORMAT_NONE)
       return FALSE;
 
-   samples = stfb->iface->visual->samples;
-   if (!samples)
-      samples = st_get_msaa();
-
-   rb = st_new_renderbuffer_fb(format, samples, sw);
+   rb = st_new_renderbuffer_fb(format, stfb->iface->visual->samples, sw);
    if (!rb)
       return FALSE;
 
@@ -396,7 +392,7 @@ st_visual_to_context_mode(const struct st_visual *visual,
                UTIL_FORMAT_COLORSPACE_RGB, 3);
    }
 
-   if (visual->samples) {
+   if (visual->samples > 1) {
       mode->sampleBuffers = 1;
       mode->samples = visual->samples;
    }
@@ -428,7 +424,7 @@ st_framebuffer_create(struct st_framebuffer_iface *stfbi)
    /* add the color buffer */
    idx = stfb->Base._ColorDrawBufferIndexes[0];
    if (!st_framebuffer_add_renderbuffer(stfb, idx)) {
-      FREE(stfb);
+      free(stfb);
       return NULL;
    }
 
@@ -459,14 +455,20 @@ st_context_flush(struct st_context_iface *stctxi, unsigned flags,
                  struct pipe_fence_handle **fence)
 {
    struct st_context *st = (struct st_context *) stctxi;
-   st_flush(st, fence);
+   enum pipe_flush_flags pipe_flags = 0;
+
+   if (flags & ST_FLUSH_END_OF_FRAME) {
+      pipe_flags |= PIPE_FLUSH_END_OF_FRAME;
+   }
+
+   st_flush(st, fence, pipe_flags);
    if (flags & ST_FLUSH_FRONT)
       st_manager_flush_frontbuffer(st);
 }
 
 static boolean
 st_context_teximage(struct st_context_iface *stctxi,
-                    enum st_texture_type target,
+                    enum st_texture_type tex_type,
                     int level, enum pipe_format internal_format,
                     struct pipe_resource *tex, boolean mipmap)
 {
@@ -479,8 +481,9 @@ st_context_teximage(struct st_context_iface *stctxi,
    struct st_texture_image *stImage;
    GLenum internalFormat;
    GLuint width, height, depth;
+   GLenum target;
 
-   switch (target) {
+   switch (tex_type) {
    case ST_TEXTURE_1D:
       target = GL_TEXTURE_1D;
       break;
@@ -495,7 +498,6 @@ st_context_teximage(struct st_context_iface *stctxi,
       break;
    default:
       return FALSE;
-      break;
    }
 
    texObj = _mesa_select_tex_object(ctx, texUnit, target);
@@ -531,7 +533,7 @@ st_context_teximage(struct st_context_iface *stctxi,
       else
          internalFormat = GL_RGB;
 
-      texFormat = st_ChooseTextureFormat(ctx, internalFormat,
+      texFormat = st_ChooseTextureFormat(ctx, target, internalFormat,
                                          GL_BGRA, GL_UNSIGNED_BYTE);
 
       _mesa_init_teximage_fields(ctx, texImage,
@@ -613,7 +615,7 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
 
    switch (attribs->profile) {
    case ST_PROFILE_DEFAULT:
-      api = API_OPENGL;
+      api = API_OPENGL_COMPAT;
       break;
    case ST_PROFILE_OPENGL_ES1:
       api = API_OPENGLES;
@@ -622,6 +624,8 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
       api = API_OPENGLES2;
       break;
    case ST_PROFILE_OPENGL_CORE:
+      api = API_OPENGL_CORE;
+      break;
    default:
       *error = ST_CONTEXT_ERROR_BAD_API;
       return NULL;
@@ -635,24 +639,23 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    }
 
    st_visual_to_context_mode(&attribs->visual, &mode);
-   st = st_create_context(api, pipe, &mode, shared_ctx);
+   st = st_create_context(api, pipe, &mode, shared_ctx, &attribs->options);
    if (!st) {
       *error = ST_CONTEXT_ERROR_NO_MEMORY;
       pipe->destroy(pipe);
       return NULL;
    }
 
+   if (attribs->flags & ST_CONTEXT_FLAG_DEBUG)
+      st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_DEBUG_BIT;
+   if (attribs->flags & ST_CONTEXT_FLAG_FORWARD_COMPATIBLE)
+      st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
+
    /* need to perform version check */
    if (attribs->major > 1 || attribs->minor > 0) {
-      _mesa_compute_version(st->ctx);
-
-      /* Is the actual version less than the requested version?  Mesa can't
-       * yet enforce the added restrictions of a forward-looking context, so
-       * fail that too.
+      /* Is the actual version less than the requested version?
        */
-      if (st->ctx->VersionMajor * 10 + st->ctx->VersionMinor <
-          attribs->major * 10 + attribs->minor
-	  || (attribs->flags & ~ST_CONTEXT_FLAG_DEBUG) != 0) {
+      if (st->ctx->Version < attribs->major * 10 + attribs->minor) {
 	 *error = ST_CONTEXT_ERROR_BAD_VERSION;
          st_destroy_context(st);
          return NULL;
@@ -668,6 +671,8 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
    st->iface.copy = st_context_copy;
    st->iface.share = st_context_share;
    st->iface.st_context_private = (void *) smapi;
+   st->iface.cso_context = st->cso_context;
+   st->iface.pipe = st->pipe;
 
    *error = ST_CONTEXT_SUCCESS;
    return &st->iface;
@@ -782,7 +787,7 @@ st_manager_flush_frontbuffer(struct st_context *st)
 
    /* never a dummy fb */
    assert(&stfb->Base != _mesa_get_incomplete_framebuffer());
-   stfb->iface->flush_front(stfb->iface, ST_ATTACHMENT_FRONT_LEFT);
+   stfb->iface->flush_front(&st->iface, stfb->iface, ST_ATTACHMENT_FRONT_LEFT);
 }
 
 /**
@@ -790,8 +795,7 @@ st_manager_flush_frontbuffer(struct st_context *st)
  * FIXME: I think this should operate on resources, not surfaces
  */
 struct pipe_surface *
-st_manager_get_egl_image_surface(struct st_context *st,
-                                 void *eglimg, unsigned usage)
+st_manager_get_egl_image_surface(struct st_context *st, void *eglimg)
 {
    struct st_manager *smapi =
       (struct st_manager *) st->iface.st_context_private;
@@ -805,9 +809,7 @@ st_manager_get_egl_image_surface(struct st_context *st,
    if (!smapi->get_egl_image(smapi, eglimg, &stimg))
       return NULL;
 
-   memset(&surf_tmpl, 0, sizeof(surf_tmpl));
-   surf_tmpl.format = stimg.texture->format;
-   surf_tmpl.usage = usage;
+   u_surface_default_template(&surf_tmpl, stimg.texture);
    surf_tmpl.u.tex.level = stimg.level;
    surf_tmpl.u.tex.first_layer = stimg.layer;
    surf_tmpl.u.tex.last_layer = stimg.layer;
@@ -885,6 +887,7 @@ static const struct st_api st_gl_api = {
    ST_API_OPENGL,
 #if FEATURE_GL
    ST_PROFILE_DEFAULT_MASK |
+   ST_PROFILE_OPENGL_CORE_MASK |
 #endif
 #if FEATURE_ES1
    ST_PROFILE_OPENGL_ES1_MASK |
@@ -893,6 +896,7 @@ static const struct st_api st_gl_api = {
    ST_PROFILE_OPENGL_ES2_MASK |
 #endif
    0,
+   ST_API_FEATURE_MS_VISUALS_MASK,
    st_api_destroy,
    st_api_get_proc_address,
    st_api_create_context,

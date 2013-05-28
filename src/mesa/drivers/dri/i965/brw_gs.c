@@ -32,6 +32,7 @@
 #include "main/glheader.h"
 #include "main/macros.h"
 #include "main/enums.h"
+#include "main/transformfeedback.h"
 
 #include "intel_batchbuffer.h"
 
@@ -56,11 +57,10 @@ static void compile_gs_prog( struct brw_context *brw,
    memset(&c, 0, sizeof(c));
    
    c.key = *key;
-   /* The geometry shader needs to access the entire VUE. */
-   brw_compute_vue_map(&c.vue_map, intel, c.key.userclip_active, c.key.attrs);
+   c.vue_map = brw->vs.prog_data->vue_map;
    c.nr_regs = (c.vue_map.num_slots + 1)/2;
 
-   mem_ctx = NULL;
+   mem_ctx = ralloc_context(NULL);
    
    /* Begin the compilation:
     */
@@ -166,7 +166,7 @@ static void populate_key( struct brw_context *brw,
 
    memset(key, 0, sizeof(*key));
 
-   /* CACHE_NEW_VS_PROG */
+   /* CACHE_NEW_VS_PROG (part of VUE map) */
    key->attrs = brw->vs.prog_data->outputs_written;
 
    /* BRW_NEW_PRIMITIVE */
@@ -181,8 +181,8 @@ static void populate_key( struct brw_context *brw,
       key->pv_first = true;
    }
 
-   /* _NEW_TRANSFORM */
-   key->userclip_active = (ctx->Transform.ClipPlanesEnabled != 0);
+   /* CACHE_NEW_VS_PROG (part of VUE map)*/
+   key->userclip_active = brw->vs.prog_data->userclip;
 
    if (intel->gen >= 7) {
       /* On Gen7 and later, we don't use GS (yet). */
@@ -190,8 +190,7 @@ static void populate_key( struct brw_context *brw,
    } else if (intel->gen == 6) {
       /* On Gen6, GS is used for transform feedback. */
       /* _NEW_TRANSFORM_FEEDBACK */
-      if (ctx->TransformFeedback.CurrentObject->Active &&
-          !ctx->TransformFeedback.CurrentObject->Paused) {
+      if (_mesa_is_xfb_active_and_unpaused(ctx)) {
          const struct gl_shader_program *shaderprog =
             ctx->Shader.CurrentVertexProgram;
          const struct gl_transform_feedback_info *linked_xfb_info =
@@ -232,11 +231,6 @@ static void populate_key( struct brw_context *brw,
                            brw->primitive == _3DPRIM_QUADSTRIP ||
                            brw->primitive == _3DPRIM_LINELOOP);
    }
-   /* For testing, the environment variable INTEL_FORCE_GS can be used to
-    * force a GS program to be used, even if it's not necessary.
-    */
-   if (getenv("INTEL_FORCE_GS"))
-      key->need_gs_prog = true;
 }
 
 /* Calculate interpolants for triangle and line rasterization.
@@ -267,7 +261,6 @@ brw_upload_gs_prog(struct brw_context *brw)
 const struct brw_tracked_state brw_gs_prog = {
    .dirty = {
       .mesa  = (_NEW_LIGHT |
-                _NEW_TRANSFORM |
                 _NEW_TRANSFORM_FEEDBACK |
                 _NEW_RASTERIZER_DISCARD),
       .brw   = BRW_NEW_PRIMITIVE,

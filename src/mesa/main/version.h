@@ -32,10 +32,10 @@ struct gl_context;
 
 
 /* Mesa version */
-#define MESA_MAJOR 8
-#define MESA_MINOR 0
-#define MESA_PATCH 5
-#define MESA_VERSION_STRING "8.0.5"
+#define MESA_MAJOR 9
+#define MESA_MINOR 1
+#define MESA_PATCH 3
+#define MESA_VERSION_STRING "9.1.3"
 
 /* To make version comparison easy */
 #define MESA_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))
@@ -44,6 +44,9 @@ struct gl_context;
 
 extern void
 _mesa_compute_version(struct gl_context *ctx);
+
+extern void
+_mesa_override_gl_version(struct gl_context *ctx);
 
 extern void
 _mesa_override_glsl_version(struct gl_context *ctx);

@@ -117,7 +117,7 @@ compare_index_block(exec_list *instructions, ir_variable *index,
 }
 
 static inline bool
-is_array_or_matrix(const ir_instruction *ir)
+is_array_or_matrix(const ir_rvalue *ir)
 {
    return (ir->type->is_array() || ir->type->is_matrix());
 }
@@ -364,12 +364,16 @@ public:
 	 return this->lower_temps;
       case ir_var_uniform:
 	 return this->lower_uniforms;
-      case ir_var_in:
+      case ir_var_function_in:
       case ir_var_const_in:
-	 return (var->location == -1) ? this->lower_temps : this->lower_inputs;
-      case ir_var_out:
-	 return (var->location == -1) ? this->lower_temps : this->lower_outputs;
-      case ir_var_inout:
+         return this->lower_temps;
+      case ir_var_shader_in:
+         return this->lower_inputs;
+      case ir_var_function_out:
+         return this->lower_temps;
+      case ir_var_shader_out:
+         return this->lower_outputs;
+      case ir_var_function_inout:
 	 return this->lower_temps;
       }
 

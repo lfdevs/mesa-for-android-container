@@ -40,7 +40,6 @@
 
 
 #include "pipe/p_compiler.h"
-#include "util/u_debug.h"
 
 
 #ifdef __cplusplus
@@ -180,6 +179,13 @@ union fi {
    float f;
    int32_t i;
    uint32_t ui;
+};
+
+
+union di {
+   double d;
+   int64_t i;
+   uint64_t ui;
 };
 
 
@@ -325,14 +331,107 @@ util_is_approx(float a, float b, float tol)
 
 
 /**
- * Test if x is NaN or +/- infinity.
+ * util_is_X_inf_or_nan = test if x is NaN or +/- Inf
+ * util_is_X_nan        = test if x is NaN
+ * util_X_inf_sign      = return +1 for +Inf, -1 for -Inf, or 0 for not Inf
+ *
+ * NaN can be checked with x != x, however this fails with the fast math flag
+ **/
+
+
+/**
+ * Single-float
  */
 static INLINE boolean
 util_is_inf_or_nan(float x)
 {
    union fi tmp;
    tmp.f = x;
-   return !(int)((unsigned int)((tmp.i & 0x7fffffff)-0x7f800000) >> 31);
+   return (tmp.ui & 0x7f800000) == 0x7f800000;
+}
+
+
+static INLINE boolean
+util_is_nan(float x)
+{
+   union fi tmp;
+   tmp.f = x;
+   return (tmp.ui & 0x7fffffff) > 0x7f800000;
+}
+
+
+static INLINE int
+util_inf_sign(float x)
+{
+   union fi tmp;
+   tmp.f = x;
+   if ((tmp.ui & 0x7fffffff) != 0x7f800000) {
+      return 0;
+   }
+
+   return (x < 0) ? -1 : 1;
+}
+
+
+/**
+ * Double-float
+ */
+static INLINE boolean
+util_is_double_inf_or_nan(double x)
+{
+   union di tmp;
+   tmp.d = x;
+   return (tmp.ui & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL;
+}
+
+
+static INLINE boolean
+util_is_double_nan(double x)
+{
+   union di tmp;
+   tmp.d = x;
+   return (tmp.ui & 0x7fffffffffffffffULL) > 0x7ff0000000000000ULL;
+}
+
+
+static INLINE int
+util_double_inf_sign(double x)
+{
+   union di tmp;
+   tmp.d = x;
+   if ((tmp.ui & 0x7fffffffffffffffULL) != 0x7ff0000000000000ULL) {
+      return 0;
+   }
+
+   return (x < 0) ? -1 : 1;
+}
+
+
+/**
+ * Half-float
+ */
+static INLINE boolean
+util_is_half_inf_or_nan(int16_t x)
+{
+   return (x & 0x7c00) == 0x7c00;
+}
+
+
+static INLINE boolean
+util_is_half_nan(int16_t x)
+{
+   return (x & 0x7fff) > 0x7c00;
+}
+
+
+static INLINE int
+util_half_inf_sign(int16_t x)
+{
+   if ((x & 0x7fff) != 0x7c00) {
+      return 0;
+   }
+
+   return (x < 0) ? -1 : 1;
 }
 
 
@@ -340,6 +439,9 @@ util_is_inf_or_nan(float x)
  * Find first bit set in word.  Least significant bit is 1.
  * Return 0 if no bits set.
  */
+#ifndef FFS_DEFINED
+#define FFS_DEFINED 1
+
 #if defined(_MSC_VER) && _MSC_VER >= 1300 && (_M_IX86 || _M_AMD64 || _M_IA64)
 unsigned char _BitScanForward(unsigned long* Index, unsigned long Mask);
 #pragma intrinsic(_BitScanForward)
@@ -371,6 +473,26 @@ unsigned ffs( unsigned u )
 #elif defined(__MINGW32__) || defined(PIPE_OS_ANDROID)
 #define ffs __builtin_ffs
 #endif
+
+#endif /* FFS_DEFINED */
+
+/**
+ * Find last bit set in a word.  The least significant bit is 1.
+ * Return 0 if no bits are set.
+ */
+static INLINE unsigned util_last_bit(unsigned u)
+{
+#if defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 304)
+   return u == 0 ? 0 : 32 - __builtin_clz(u);
+#else
+   unsigned r = 0;
+   while (u) {
+       r++;
+       u >>= 1;
+   }
+   return r;
+#endif
+}
 
 
 /* Destructively loop over all of the bits in a mask as in:

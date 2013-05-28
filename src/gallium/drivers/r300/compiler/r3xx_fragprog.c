@@ -78,29 +78,15 @@ static void rc_rewrite_depth_out(struct radeon_compiler *cc, void *user)
 	}
 }
 
-static int radeon_saturate_output(
-		struct radeon_compiler * c,
-		struct rc_instruction * inst,
-		void* data)
-{
-	const struct rc_opcode_info *info = rc_get_opcode_info(inst->U.I.Opcode);
-
-	if (!info->HasDstReg || inst->U.I.DstReg.File != RC_FILE_OUTPUT)
-		return 0;
-
-	inst->U.I.SaturateMode = RC_SATURATE_ZERO_ONE;
-	return 1;
-}
-
 void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 {
 	int is_r500 = c->Base.is_r500;
 	int opt = !c->Base.disable_optimizations;
-	int sat_out = c->state.frag_clamp;
+	int alpha2one = c->state.alpha_to_one;
 
 	/* Lists of instruction transformations. */
-	struct radeon_program_transformation saturate_output[] = {
-		{ &radeon_saturate_output, c },
+	struct radeon_program_transformation force_alpha_to_one[] = {
+		{ &rc_force_output_alpha_to_one, c },
 		{ 0, 0 }
 	};
 
@@ -137,7 +123,7 @@ void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 		{"unroll loops",		1, is_r500,	rc_unroll_loops,		NULL},
 		{"transform loops",		1, !is_r500,	rc_transform_loops,		NULL},
 		{"emulate branches",		1, !is_r500,	rc_emulate_branches,		NULL},
-		{"saturate output writes",	1, sat_out,	rc_local_transform,		saturate_output},
+		{"force alpha to one",		1, alpha2one,	rc_local_transform,		force_alpha_to_one},
 		{"transform TEX",		1, 1,		rc_local_transform,		rewrite_tex},
 		{"transform IF",		1, is_r500,	rc_local_transform,		rewrite_if},
 		{"native rewrite",		1, is_r500,	rc_local_transform,		native_rewrite_r500},
@@ -146,6 +132,7 @@ void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 		{"emulate loops",		1, !is_r500,	rc_emulate_loops,		NULL},
 		{"register rename",		1, !is_r500 || opt,		rc_rename_regs,			NULL},
 		{"dataflow optimize",		1, opt,		rc_optimize,			NULL},
+		{"inline literals",		1, is_r500 && opt,		rc_inline_literals,			NULL},
 		{"dataflow swizzles",		1, 1,		rc_dataflow_swizzles,		NULL},
 		{"dead constants",		1, 1,		rc_remove_unused_constants,	&c->code->constants_remap_table},
 		{"pair translate",		1, 1,		rc_pair_translate,		NULL},

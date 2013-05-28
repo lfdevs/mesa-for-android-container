@@ -23,8 +23,6 @@
   <enum name="CONTEXT_FLAGS"                    value="0x821E"/>
   <enum name="DEPTH_BUFFER"                     value="0x8223"/>
   <enum name="STENCIL_BUFFER"                   value="0x8224"/>
-  <enum name="COMPRESSED_RED"                   value="0x8225"/>
-  <enum name="COMPRESSED_RG"                    value="0x8226"/>
   <enum name="CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT"  value="0x0001"/>
   <enum name="RGBA32F"                          value="0x8814"/>
   <enum name="RGB32F"                           value="0x8815"/>
@@ -34,9 +32,18 @@
   <enum name="MAX_ARRAY_TEXTURE_LAYERS"         value="0x88FF"/>
   <enum name="MIN_PROGRAM_TEXEL_OFFSET"         value="0x8904"/>
   <enum name="MAX_PROGRAM_TEXEL_OFFSET"         value="0x8905"/>
+  <enum name="CLAMP_VERTEX_COLOR"               value="0x891A"/>
+  <enum name="CLAMP_FRAGMENT_COLOR"             value="0x891B"/>
   <enum name="CLAMP_READ_COLOR"                 value="0x891C"/>
   <enum name="FIXED_ONLY"                       value="0x891D"/>
   <enum name="MAX_VARYING_COMPONENTS"           value="0x8B4B"/>
+  <enum name="TEXTURE_RED_TYPE"                 value="0x8C10"/>
+  <enum name="TEXTURE_GREEN_TYPE"               value="0x8C11"/>
+  <enum name="TEXTURE_BLUE_TYPE"                value="0x8C12"/>
+  <enum name="TEXTURE_ALPHA_TYPE"               value="0x8C13"/>
+  <enum name="TEXTURE_LUMINANCE_TYPE"           value="0x8C14"/>
+  <enum name="TEXTURE_INTENSITY_TYPE"           value="0x8C15"/>
+  <enum name="TEXTURE_DEPTH_TYPE"               value="0x8C16"/>
   <enum name="TEXTURE_1D_ARRAY"                 value="0x8C18"/>
   <enum name="PROXY_TEXTURE_1D_ARRAY"           value="0x8C19"/>
   <enum name="TEXTURE_2D_ARRAY"                 value="0x8C1A"/>
@@ -112,32 +119,32 @@
 
   <!-- These functions are unique to GL3 -->
 
-  <function name="ClearBufferiv" offset="assign">
+  <function name="ClearBufferiv" offset="assign" es2="3.0">
     <param name="buffer" type="GLenum"/>
     <param name="drawbuffer" type="GLint"/>
     <param name="value" type="const GLint *"/>
   </function>
 
-  <function name="ClearBufferuiv" offset="assign">
+  <function name="ClearBufferuiv" offset="assign" es2="3.0">
     <param name="buffer" type="GLenum"/>
     <param name="drawbuffer" type="GLint"/>
     <param name="value" type="const GLuint *"/>
   </function>
 
-  <function name="ClearBufferfv" offset="assign">
+  <function name="ClearBufferfv" offset="assign" es2="3.0">
     <param name="buffer" type="GLenum"/>
     <param name="drawbuffer" type="GLint"/>
     <param name="value" type="const GLfloat *"/>
   </function>
 
-  <function name="ClearBufferfi" offset="assign">
+  <function name="ClearBufferfi" offset="assign" es2="3.0">
     <param name="buffer" type="GLenum"/>
     <param name="drawbuffer" type="GLint"/>
     <param name="depth" type="GLfloat"/>
     <param name="stencil" type="GLint"/>
   </function>
 
-  <function name="GetStringi" offset="assign">
+  <function name="GetStringi" offset="assign" es2="3.0">
     <param name="name" type="GLenum"/>
     <param name="index" type="GLuint"/>
       <return type="const GLubyte *"/>
@@ -146,11 +153,12 @@
   <function name="ClampColor" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="clamp" type="GLenum"/>
+    <glx rop="234"/>
   </function>
 
   <!-- These functions alias ones form GL_ARB_draw_buffers2 -->
 
-  <function name="ColorMaski" alias="ColorMaskIndexedEXT">
+  <function name="ColorMaski" offset="assign">
     <param name="buf" type="GLuint"/>
     <param name="r" type="GLboolean"/>
     <param name="g" type="GLboolean"/>
@@ -158,29 +166,29 @@
     <param name="a" type="GLboolean"/>
   </function>
 
-  <function name="GetBooleani_v" alias="GetBooleanIndexedvEXT">
+  <function name="GetBooleani_v" offset="assign">
     <param name="value" type="GLenum"/>
     <param name="index" type="GLuint"/>
     <param name="data" type="GLboolean *"/>
   </function>
 
-  <function name="GetIntegeri_v" alias="GetIntegerIndexedvEXT">
+  <function name="GetIntegeri_v" es2="3.0" offset="assign">
     <param name="value" type="GLenum"/>
     <param name="index" type="GLuint"/>
     <param name="data" type="GLint *"/>
   </function>
 
-  <function name="Enablei" alias="EnableIndexedEXT">
+  <function name="Enablei" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="index" type="GLuint"/>
   </function>
 
-  <function name="Disablei" alias="DisableIndexedEXT">
+  <function name="Disablei" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="index" type="GLuint"/>
   </function>
 
-  <function name="IsEnabledi" alias="IsEnabledIndexedEXT">
+  <function name="IsEnabledi" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="index" type="GLuint"/>
       <return type="GLboolean"/>
@@ -188,26 +196,26 @@
 
   <!-- These functions alias ones form GL_EXT_transform_feedback -->
 
-  <function name="GetFragDataLocation" alias="GetFragDataLocationEXT">
+  <function name="GetFragDataLocation" es2="3.0" offset="assign">
     <param name="program" type="GLuint"/>
     <param name="name" type="const GLchar *"/>
       <return type="GLint"/>
   </function>
 
-  <function name="BindFragDataLocation" alias="BindFragDataLocationEXT">
+  <function name="BindFragDataLocation" offset="assign">
     <param name="program" type="GLuint"/>
     <param name="colorNumber" type="GLuint"/>
     <param name="name" type="const GLchar *"/>
   </function>
 
-  <function name="BeginTransformFeedback" alias="BeginTransformFeedbackEXT">
+  <function name="BeginTransformFeedback" es2="3.0" offset="assign">
     <param name="mode" type="GLenum"/>
   </function>
 
-  <function name="EndTransformFeedback" alias="EndTransformFeedbackEXT">
+  <function name="EndTransformFeedback" es2="3.0" offset="assign">
   </function>
 
-  <function name="BindBufferRange" alias="BindBufferRangeEXT">
+  <function name="BindBufferRange" es2="3.0" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="index" type="GLuint"/>
     <param name="buffer" type="GLuint"/>
@@ -215,20 +223,20 @@
     <param name="size" type="GLsizeiptr"/>
   </function>
 
-  <function name="BindBufferBase" alias="BindBufferBaseEXT">
+  <function name="BindBufferBase" es2="3.0" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="index" type="GLuint"/>
     <param name="buffer" type="GLuint"/>
   </function>
 
-  <function name="TransformFeedbackVaryings" alias="TransformFeedbackVaryingsEXT">
+  <function name="TransformFeedbackVaryings" es2="3.0" offset="assign">
     <param name="program" type="GLuint"/>
     <param name="count" type="GLsizei"/>
-    <param name="varyings" type="const GLchar* *"/>
+    <param name="varyings" type="const GLchar * const *"/>
     <param name="bufferMode" type="GLenum"/>
   </function>
 
-  <function name="GetTransformFeedbackVarying" alias="GetTransformFeedbackVaryingEXT">
+  <function name="GetTransformFeedbackVarying" es2="3.0" offset="assign">
     <param name="program" type="GLuint"/>
     <param name="index" type="GLuint"/>
     <param name="bufSize" type="GLsizei"/>
@@ -240,17 +248,17 @@
 
   <!-- These functions alias ones from GL_NV_conditional_render -->
 
-  <function name="BeginConditionalRender" alias="BeginConditionalRenderNV">
+  <function name="BeginConditionalRender" offset="assign">
     <param name="query" type="GLuint"/>
     <param name="mode" type="GLenum"/>
   </function>
 
-  <function name="EndConditionalRender" alias="EndConditionalRenderNV">
+  <function name="EndConditionalRender" offset="assign">
   </function>
 
   <!-- These functions alias ones from GL_EXT_gpu_shader4 -->
 
-  <function name="VertexAttribIPointer" alias="VertexAttribIPointerEXT">
+  <function name="VertexAttribIPointer" es2="3.0" offset="assign">
     <param name="index" type="GLuint"/>
     <param name="size" type="GLint"/>
     <param name="type" type="GLenum"/>
@@ -258,13 +266,13 @@
     <param name="pointer" type="const GLvoid *"/>
   </function>
 
-  <function name="GetVertexAttribIiv" alias="GetVertexAttribIivEXT">
+  <function name="GetVertexAttribIiv" es2="3.0" offset="assign">
     <param name="index" type="GLuint"/>
     <param name="pname" type="GLenum"/>
     <param name="params" type="GLint *"/>
   </function>
 
-  <function name="GetVertexAttribIuiv" alias="GetVertexAttribIuivEXT">
+  <function name="GetVertexAttribIuiv" es2="3.0" offset="assign">
     <param name="index" type="GLuint"/>
     <param name="pname" type="GLenum"/>
     <param name="params" type="GLuint *"/>
@@ -288,7 +296,7 @@
     <param name="z" type="GLint"/>
   </function>
 
-  <function name="VertexAttribI4i" alias="VertexAttribI4iEXT">
+  <function name="VertexAttribI4i" alias="VertexAttribI4iEXT" es2="3.0">
     <param name="index" type="GLuint"/>
     <param name="x" type="GLint"/>
     <param name="y" type="GLint"/>
@@ -314,7 +322,7 @@
     <param name="z" type="GLuint"/>
   </function>
 
-  <function name="VertexAttribI4ui" alias="VertexAttribI4uiEXT">
+  <function name="VertexAttribI4ui" alias="VertexAttribI4uiEXT" es2="3.0">
     <param name="index" type="GLuint"/>
     <param name="x" type="GLuint"/>
     <param name="y" type="GLuint"/>
@@ -322,7 +330,7 @@
     <param name="w" type="GLuint"/>
   </function>
 
-  <function name="VertexAttribI1iv" alias="VertexAttribI1ivEXT">
+  <function name="VertexAttribI1iv" offset="assign">
     <param name="index" type="GLuint"/>
     <param name="v" type="const GLint *"/>
   </function>
@@ -337,12 +345,12 @@
     <param name="v" type="const GLint *"/>
   </function>
 
-  <function name="VertexAttribI4iv" alias="VertexAttribI4ivEXT">
+  <function name="VertexAttribI4iv" alias="VertexAttribI4ivEXT" es2="3.0">
     <param name="index" type="GLuint"/>
     <param name="v" type="const GLint *"/>
   </function>
 
-  <function name="VertexAttribI1uiv" alias="VertexAttribI1uivEXT">
+  <function name="VertexAttribI1uiv" offset="assign">
     <param name="index" type="GLuint"/>
     <param name="v" type="const GLuint *"/>
   </function>
@@ -357,56 +365,56 @@
     <param name="v" type="const GLuint *"/>
   </function>
 
-  <function name="VertexAttribI4uiv" alias="VertexAttribI4uivEXT">
+  <function name="VertexAttribI4uiv" alias="VertexAttribI4uivEXT" es2="3.0">
     <param name="index" type="GLuint"/>
     <param name="v" type="const GLuint *"/>
   </function>
 
-  <function name="VertexAttribI4bv" alias="VertexAttribI4bvEXT">
+  <function name="VertexAttribI4bv" offset="assign">
     <param name="index" type="GLuint"/>
     <param name="v" type="const GLbyte *"/>
   </function>
 
-  <function name="VertexAttribI4sv" alias="VertexAttribI4svEXT">
+  <function name="VertexAttribI4sv" offset="assign">
     <param name="index" type="GLuint"/>
     <param name="v" type="const GLshort *"/>
   </function>
 
-  <function name="VertexAttribI4ubv" alias="VertexAttribI4ubvEXT">
+  <function name="VertexAttribI4ubv" offset="assign">
     <param name="index" type="GLuint"/>
     <param name="v" type="const GLubyte *"/>
   </function>
 
-  <function name="VertexAttribI4usv" alias="VertexAttribI4usvEXT">
+  <function name="VertexAttribI4usv" offset="assign">
     <param name="index" type="GLuint"/>
     <param name="v" type="const GLushort *"/>
   </function>
 
-  <function name="GetUniformuiv" alias="GetUniformuivEXT">
+  <function name="GetUniformuiv" es2="3.0" offset="assign">
     <param name="program" type="GLuint"/>
     <param name="location" type="GLint"/>
     <param name="params" type="GLuint *"/>
   </function>
 
-  <function name="Uniform1ui" alias="Uniform1uiEXT">
+  <function name="Uniform1ui" es2="3.0" offset="assign">
     <param name="location" type="GLint"/>
     <param name="x" type="GLuint"/>
   </function>
 
-  <function name="Uniform2ui" alias="Uniform2uiEXT">
+  <function name="Uniform2ui" es2="3.0" offset="assign">
     <param name="location" type="GLint"/>
     <param name="x" type="GLuint"/>
     <param name="y" type="GLuint"/>
   </function>
 
-  <function name="Uniform3ui" alias="Uniform3uiEXT">
+  <function name="Uniform3ui" es2="3.0" offset="assign">
     <param name="location" type="GLint"/>
     <param name="x" type="GLuint"/>
     <param name="y" type="GLuint"/>
     <param name="z" type="GLuint"/>
   </function>
 
-  <function name="Uniform4ui" alias="Uniform4uiEXT">
+  <function name="Uniform4ui" es2="3.0" offset="assign">
     <param name="location" type="GLint"/>
     <param name="x" type="GLuint"/>
     <param name="y" type="GLuint"/>
@@ -414,25 +422,25 @@
     <param name="w" type="GLuint"/>
   </function>
 
-  <function name="Uniform1uiv" alias="Uniform1uivEXT">
+  <function name="Uniform1uiv" es2="3.0" offset="assign">
     <param name="location" type="GLint"/>
     <param name="count" type="GLsizei"/>
     <param name="value" type="const GLuint *"/>
   </function>
 
-  <function name="Uniform2uiv" alias="Uniform2uivEXT">
+  <function name="Uniform2uiv" es2="3.0" offset="assign">
     <param name="location" type="GLint"/>
     <param name="count" type="GLsizei"/>
     <param name="value" type="const GLuint *"/>
   </function>
 
-  <function name="Uniform3uiv" alias="Uniform3uivEXT">
+  <function name="Uniform3uiv" es2="3.0" offset="assign">
     <param name="location" type="GLint"/>
     <param name="count" type="GLsizei"/>
     <param name="value" type="const GLuint *"/>
   </function>
 
-  <function name="Uniform4uiv" alias="Uniform4uivEXT">
+  <function name="Uniform4uiv" es2="3.0" offset="assign">
     <param name="location" type="GLint"/>
     <param name="count" type="GLsizei"/>
     <param name="value" type="const GLuint *"/>
@@ -440,25 +448,25 @@
 
   <!-- These functions alias ones from GL_EXT_texture_integer -->
 
-  <function name="TexParameterIiv" alias="TexParameterIivEXT">
+  <function name="TexParameterIiv" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="pname" type="GLenum"/>
     <param name="params" type="const GLint *"/>
   </function>
 
-  <function name="TexParameterIuiv" alias="TexParameterIuivEXT">
+  <function name="TexParameterIuiv" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="pname" type="GLenum"/>
     <param name="params" type="const GLuint *"/>
   </function>
 
-  <function name="GetTexParameterIiv" alias="GetTexParameterIivEXT">
+  <function name="GetTexParameterIiv" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="pname" type="GLenum"/>
     <param name="params" type="GLint *"/>
   </function>
 
-  <function name="GetTexParameterIuiv" alias="GetTexParameterIuivEXT">
+  <function name="GetTexParameterIuiv" offset="assign">
     <param name="target" type="GLenum"/>
     <param name="pname" type="GLenum"/>
     <param name="params" type="GLuint *"/>
@@ -469,8 +477,41 @@
 
 <category name="3.1">
 
+  <enum name="UNIFORM_BUFFER"                 value="0x8A11"/>
+  <enum name="UNIFORM_BUFFER_BINDING"         value="0x8A28"/>
+  <enum name="UNIFORM_BUFFER_START"           value="0x8A29"/>
+  <enum name="UNIFORM_BUFFER_SIZE"            value="0x8A2A"/>
+  <enum name="MAX_VERTEX_UNIFORM_BLOCKS"      value="0x8A2B"/>
+  <enum name="MAX_GEOMETRY_UNIFORM_BLOCKS"    value="0x8A2C"/>
+  <enum name="MAX_FRAGMENT_UNIFORM_BLOCKS"    value="0x8A2D"/>
+  <enum name="MAX_COMBINED_UNIFORM_BLOCKS"    value="0x8A2E"/>
+  <enum name="MAX_UNIFORM_BUFFER_BINDINGS"    value="0x8A2F"/>
+  <enum name="MAX_UNIFORM_BLOCK_SIZE"         value="0x8A30"/>
+  <enum name="MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS" value="0x8A31"/>
+  <enum name="MAX_COMBINED_GEOMETRY_UNIFORM_COMPONENTS" value="0x8A32"/>
+  <enum name="MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS" value="0x8A33"/>
+  <enum name="UNIFORM_BUFFER_OFFSET_ALIGNMENT" value="0x8A34"/>
+  <enum name="ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH" value="0x8A35"/>
+  <enum name="ACTIVE_UNIFORM_BLOCKS"          value="0x8A36"/>
+  <enum name="UNIFORM_TYPE"                   value="0x8A37"/>
+  <enum name="UNIFORM_SIZE"                   value="0x8A38"/>
+  <enum name="UNIFORM_NAME_LENGTH"            value="0x8A39"/>
+  <enum name="UNIFORM_BLOCK_INDEX"            value="0x8A3A"/>
+  <enum name="UNIFORM_OFFSET"                 value="0x8A3B"/>
+  <enum name="UNIFORM_ARRAY_STRIDE"           value="0x8A3C"/>
+  <enum name="UNIFORM_MATRIX_STRIDE"          value="0x8A3D"/>
+  <enum name="UNIFORM_IS_ROW_MAJOR"           value="0x8A3E"/>
+  <enum name="UNIFORM_BLOCK_BINDING"          value="0x8A3F"/>
+  <enum name="UNIFORM_BLOCK_DATA_SIZE"        value="0x8A40"/>
+  <enum name="UNIFORM_BLOCK_NAME_LENGTH"      value="0x8A41"/>
+  <enum name="UNIFORM_BLOCK_ACTIVE_UNIFORMS"  value="0x8A42"/>
+  <enum name="UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES" value="0x8A43"/>
+  <enum name="UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER" value="0x8A44"/>
+  <enum name="UNIFORM_BLOCK_REFERENCED_BY_GEOMETRY_SHADER" value="0x8A45"/>
+  <enum name="UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER" value="0x8A46"/>
   <enum name="SAMPLER_2D_RECT"                value="0x8B63"/>
   <enum name="SAMPLER_2D_RECT_SHADOW"         value="0x8B64"/>
+  <enum name="FRAMEBUFFER_SRGB"               value="0x8DB9"/>
   <enum name="SAMPLER_BUFFER"                 value="0x8DC2"/>
   <enum name="INT_SAMPLER_2D_RECT"            value="0x8DCD"/>
   <enum name="INT_SAMPLER_BUFFER"             value="0x8DD0"/>
@@ -501,14 +542,14 @@
   <enum name="PRIMITIVE_RESTART"              value="0x8F9D"/>
   <enum name="PRIMITIVE_RESTART_INDEX"        value="0x8F9E"/>
 
-  <function name="DrawArraysInstanced" alias="DrawArraysInstancedARB">
+  <function name="DrawArraysInstanced" alias="DrawArraysInstancedARB" es2="3.0">
     <param name="mode" type="GLenum"/>
     <param name="first" type="GLint"/>
     <param name="count" type="GLsizei"/>
     <param name="primcount" type="GLsizei"/>
   </function>
 
-  <function name="DrawElementsInstanced" alias="DrawElementsInstancedARB">
+  <function name="DrawElementsInstanced" alias="DrawElementsInstancedARB" es2="3.0">
     <param name="mode" type="GLenum"/>
     <param name="count" type="GLsizei"/>
     <param name="type" type="GLenum"/>
@@ -522,7 +563,7 @@
     <param name="buffer" type="GLuint"/>
   </function>
 
-  <function name="PrimitiveRestartIndex" alias="PrimitiveRestartIndexNV">
+  <function name="PrimitiveRestartIndex" offset="assign">
     <param name="index" type="GLuint"/>
   </function>
 
@@ -554,19 +595,19 @@
   <enum name="MAX_FRAGMENT_INPUT_COMPONENTS"        value="0x9125"/>
   <enum name="CONTEXT_PROFILE_MASK"                 value="0x9126"/>
 
-  <function name="GetInteger64i_v" offset="assign">
+  <function name="GetInteger64i_v" offset="assign" es2="3.0">
     <param name="cap" type="GLenum"/>
     <param name="index" type="GLuint"/>
     <param name="data" type="GLint64 *"/>
   </function>
 
-  <function name="GetBufferParameteri64v" offset="assign">
+  <function name="GetBufferParameteri64v" offset="assign" es2="3.0">
     <param name="target" type="GLenum"/>
     <param name="pname" type="GLenum"/>
     <param name="params" type="GLint64 *"/>
   </function>
 
-  <function name="FramebufferTexture" offset="assign">
+  <function name="FramebufferTexture" offset="assign" exec="skip">
     <param name="target" type="GLenum"/>
     <param name="attachment" type="GLenum"/>
     <param name="texture" type="GLuint"/>
@@ -578,8 +619,13 @@
 
 <category name="3.3">
   <!-- There are other new functions and tokens defined by other extensions -->
+  <enum name="TEXTURE_SWIZZLE_R"                value="0x8E42"/>
+  <enum name="TEXTURE_SWIZZLE_G"                value="0x8E43"/>
+  <enum name="TEXTURE_SWIZZLE_B"                value="0x8E44"/>
+  <enum name="TEXTURE_SWIZZLE_A"                value="0x8E45"/>
+  <enum name="TEXTURE_SWIZZLE_RGBA"             value="0x8E46"/>
 
-  <function name="VertexAttribDivisor" offset="assign">
+  <function name="VertexAttribDivisor" offset="assign" es2="3.0">
     <param name="index" type="GLuint"/>
     <param name="divisor" type="GLuint"/>
   </function>

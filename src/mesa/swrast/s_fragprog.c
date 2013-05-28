@@ -24,6 +24,7 @@
 
 #include "main/glheader.h"
 #include "main/colormac.h"
+#include "main/samplerobj.h"
 #include "program/prog_instruction.h"
 
 #include "s_context.h"
@@ -83,11 +84,12 @@ fetch_texel_lod( struct gl_context *ctx, const GLfloat texcoord[4], GLfloat lamb
    if (texObj) {
       SWcontext *swrast = SWRAST_CONTEXT(ctx);
       GLfloat rgba[4];
+      const struct gl_sampler_object *samp = _mesa_get_samplerobj(ctx, unit);
 
-      lambda = CLAMP(lambda, texObj->Sampler.MinLod, texObj->Sampler.MaxLod);
+      lambda = CLAMP(lambda, samp->MinLod, samp->MaxLod);
 
-      swrast->TextureSample[unit](ctx, texObj, 1,
-                                  (const GLfloat (*)[4]) texcoord,
+      swrast->TextureSample[unit](ctx, samp, ctx->Texture.Unit[unit]._Current,
+                                  1, (const GLfloat (*)[4]) texcoord,
                                   &lambda, &rgba);
       swizzle_texel(rgba, color, texObj->_Swizzle);
    }
@@ -118,6 +120,7 @@ fetch_texel_deriv( struct gl_context *ctx, const GLfloat texcoord[4],
          texObj->Image[0][texObj->BaseLevel];
       const struct swrast_texture_image *swImg =
          swrast_texture_image_const(texImg);
+      const struct gl_sampler_object *samp = _mesa_get_samplerobj(ctx, unit);
       const GLfloat texW = (GLfloat) swImg->WidthScale;
       const GLfloat texH = (GLfloat) swImg->HeightScale;
       GLfloat lambda;
@@ -130,12 +133,12 @@ fetch_texel_deriv( struct gl_context *ctx, const GLfloat texcoord[4],
                                       texcoord[0], texcoord[1], texcoord[3],
                                       1.0F / texcoord[3]);
 
-      lambda += lodBias + texUnit->LodBias + texObj->Sampler.LodBias;
+      lambda += lodBias + texUnit->LodBias + samp->LodBias;
 
-      lambda = CLAMP(lambda, texObj->Sampler.MinLod, texObj->Sampler.MaxLod);
+      lambda = CLAMP(lambda, samp->MinLod, samp->MaxLod);
 
-      swrast->TextureSample[unit](ctx, texObj, 1,
-                                  (const GLfloat (*)[4]) texcoord,
+      swrast->TextureSample[unit](ctx, samp, ctx->Texture.Unit[unit]._Current,
+                                  1, (const GLfloat (*)[4]) texcoord,
                                   &lambda, &rgba);
       swizzle_texel(rgba, color, texObj->_Swizzle);
    }
@@ -160,11 +163,6 @@ init_machine(struct gl_context *ctx, struct gl_program_machine *machine,
              const SWspan *span, GLuint col)
 {
    GLfloat *wpos = span->array->attribs[FRAG_ATTRIB_WPOS][col];
-
-   if (program->Base.Target == GL_FRAGMENT_PROGRAM_NV) {
-      /* Clear temporary registers (undefined for ARB_f_p) */
-      memset(machine->Temporaries, 0, MAX_PROGRAM_TEMPS * 4 * sizeof(GLfloat));
-   }
 
    /* ARB_fragment_coord_conventions */
    if (program->OriginUpperLeft)

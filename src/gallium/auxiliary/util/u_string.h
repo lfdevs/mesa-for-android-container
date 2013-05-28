@@ -35,7 +35,7 @@
 #ifndef U_STRING_H_
 #define U_STRING_H_
 
-#if !defined(WIN32) && !defined(XF86_LIBC_H)
+#if !defined(_MSC_VER) && !defined(XF86_LIBC_H)
 #include <stdio.h>
 #endif
 #include <stddef.h>
@@ -48,8 +48,23 @@
 extern "C" {
 #endif
 
+#ifdef _GNU_SOURCE
 
-#ifdef WIN32
+#define util_strchrnul strchrnul
+
+#else
+
+static INLINE char *
+util_strchrnul(const char *s, char c)
+{
+   for (; *s && *s != c; ++s);
+
+   return (char *)s;
+}
+
+#endif
+
+#ifdef _MSC_VER
 
 int util_vsnprintf(char *, size_t, const char *, va_list);
 int util_snprintf(char *str, size_t size, const char *format, ...);
@@ -72,12 +87,9 @@ util_sprintf(char *str, const char *format, ...)
 static INLINE char *
 util_strchr(const char *s, char c)
 {
-   while(*s) {
-      if(*s == c)
-	 return (char *)s;
-      ++s;
-   }
-   return NULL;
+   char *p = util_strchrnul(s, c);
+
+   return *p ? p : NULL;
 }
 
 static INLINE char*

@@ -38,13 +38,14 @@
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"
+#include "util/u_upload_mgr.h"
 
 #include "st_debug.h"
 #include "st_context.h"
 #include "st_atom.h"
 #include "st_atom_constbuf.h"
 #include "st_program.h"
-
+#include "st_cb_bufferobjects.h"
 
 /**
  * Pass the given program parameters to the graphics pipe as a
@@ -55,15 +56,13 @@ void st_upload_constants( struct st_context *st,
                           struct gl_program_parameter_list *params,
                           unsigned shader_type)
 {
-   struct pipe_context *pipe = st->pipe;
-
    assert(shader_type == PIPE_SHADER_VERTEX ||
           shader_type == PIPE_SHADER_FRAGMENT ||
           shader_type == PIPE_SHADER_GEOMETRY);
 
    /* update constants */
    if (params && params->NumParameters) {
-      struct pipe_resource *cbuf;
+      struct pipe_constant_buffer cb;
       const uint paramBytes = params->NumParameters * sizeof(GLfloat) * 4;
 
       /* Update the constants which come from fixed-function state, such as
@@ -77,20 +76,28 @@ void st_upload_constants( struct st_context *st,
        * avoid gratuitous rendering synchronization.
        * Let's use a user buffer to avoid an unnecessary copy.
        */
-      cbuf = pipe_user_buffer_create(pipe->screen,
-                                     params->ParameterValues,
-                                     paramBytes,
-                                     PIPE_BIND_CONSTANT_BUFFER);
+      if (st->constbuf_uploader) {
+         cb.buffer = NULL;
+         cb.user_buffer = NULL;
+         u_upload_data(st->constbuf_uploader, 0, paramBytes,
+                       params->ParameterValues, &cb.buffer_offset, &cb.buffer);
+         u_upload_unmap(st->constbuf_uploader);
+      } else {
+         cb.buffer = NULL;
+         cb.user_buffer = params->ParameterValues;
+         cb.buffer_offset = 0;
+      }
+      cb.buffer_size = paramBytes;
 
       if (ST_DEBUG & DEBUG_CONSTANTS) {
-	 debug_printf("%s(shader=%d, numParams=%d, stateFlags=0x%x)\n", 
+         debug_printf("%s(shader=%d, numParams=%d, stateFlags=0x%x)\n",
                       __FUNCTION__, shader_type, params->NumParameters,
                       params->StateFlags);
          _mesa_print_parameter_list(params);
       }
 
-      st->pipe->set_constant_buffer(st->pipe, shader_type, 0, cbuf);
-      pipe_resource_reference(&cbuf, NULL);
+      st->pipe->set_constant_buffer(st->pipe, shader_type, 0, &cb);
+      pipe_resource_reference(&cb.buffer, NULL);
 
       st->state.constants[shader_type].ptr = params->ParameterValues;
       st->state.constants[shader_type].size = paramBytes;
@@ -118,7 +125,7 @@ static void update_vs_constants(struct st_context *st )
 const struct st_tracked_state st_update_vs_constants = {
    "st_update_vs_constants",				/* name */
    {							/* dirty */
-      (_NEW_PROGRAM | _NEW_PROGRAM_CONSTANTS),          /* mesa */
+      _NEW_PROGRAM_CONSTANTS,                           /* mesa */
       ST_NEW_VERTEX_PROGRAM,				/* st */
    },
    update_vs_constants					/* update */
@@ -141,7 +148,7 @@ static void update_fs_constants(struct st_context *st )
 const struct st_tracked_state st_update_fs_constants = {
    "st_update_fs_constants",				/* name */
    {							/* dirty */
-      (_NEW_PROGRAM | _NEW_PROGRAM_CONSTANTS),          /* mesa */
+      _NEW_PROGRAM_CONSTANTS,                           /* mesa */
       ST_NEW_FRAGMENT_PROGRAM,				/* st */
    },
    update_fs_constants					/* update */
@@ -163,8 +170,75 @@ static void update_gs_constants(struct st_context *st )
 const struct st_tracked_state st_update_gs_constants = {
    "st_update_gs_constants",				/* name */
    {							/* dirty */
-      (_NEW_PROGRAM | _NEW_PROGRAM_CONSTANTS),          /* mesa */
+      _NEW_PROGRAM_CONSTANTS,                           /* mesa */
       ST_NEW_GEOMETRY_PROGRAM,				/* st */
    },
    update_gs_constants					/* update */
 };
+
+static void st_bind_ubos(struct st_context *st,
+                           struct gl_shader *shader,
+                           unsigned shader_type)
+{
+   unsigned i;
+   struct pipe_constant_buffer cb = { 0 };
+
+   if (!shader)
+      return;
+
+   for (i = 0; i < shader->NumUniformBlocks; i++) {
+      struct gl_uniform_buffer_binding *binding;
+      struct st_buffer_object *st_obj;
+
+      binding = &st->ctx->UniformBufferBindings[shader->UniformBlocks[i].Binding];
+      st_obj = st_buffer_object(binding->BufferObject);
+      pipe_resource_reference(&cb.buffer, st_obj->buffer);
+
+      cb.buffer_size = st_obj->buffer->width0 - binding->Offset;
+      cb.buffer_offset = binding->Offset;
+
+      st->pipe->set_constant_buffer(st->pipe, shader_type, 1 + i, &cb);
+      pipe_resource_reference(&cb.buffer, NULL);
+   }
+}
+
+static void bind_vs_ubos(struct st_context *st)
+{
+   struct gl_shader_program *prog = st->ctx->Shader.CurrentVertexProgram;
+
+   if (!prog)
+      return;
+
+   st_bind_ubos(st, prog->_LinkedShaders[MESA_SHADER_VERTEX], PIPE_SHADER_VERTEX);
+}
+
+const struct st_tracked_state st_bind_vs_ubos = {
+   "st_bind_vs_ubos",
+   {
+      (_NEW_PROGRAM | _NEW_BUFFER_OBJECT),
+      ST_NEW_VERTEX_PROGRAM,
+   },
+   bind_vs_ubos
+};
+
+static void bind_fs_ubos(struct st_context *st)
+{
+   struct gl_shader_program *prog = st->ctx->Shader.CurrentFragmentProgram;
+
+   if (!prog)
+      return;
+
+   st_bind_ubos(st, prog->_LinkedShaders[MESA_SHADER_FRAGMENT], PIPE_SHADER_FRAGMENT);
+
+}
+
+const struct st_tracked_state st_bind_fs_ubos = {
+   "st_bind_fs_ubos",
+   {
+      (_NEW_PROGRAM | _NEW_BUFFER_OBJECT),
+      ST_NEW_FRAGMENT_PROGRAM,
+   },
+   bind_fs_ubos
+};
+
+

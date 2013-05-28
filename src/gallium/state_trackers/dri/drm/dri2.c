@@ -46,17 +46,7 @@
 static void
 dri2_flush_drawable(__DRIdrawable *dPriv)
 {
-   struct dri_context *ctx = dri_get_current(dPriv->driScreenPriv);
-   struct dri_drawable *drawable = dri_drawable(dPriv);
-
-   struct pipe_resource *ptex = drawable->textures[ST_ATTACHMENT_BACK_LEFT];
-
-   if (ctx) {
-      if (ptex && ctx->pp && drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL])
-         pp_run(ctx->pp, ptex, ptex, drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL]);
-
-      ctx->st->flush(ctx->st, 0, NULL);
-   }
+   dri_flush(dPriv->driContextPriv, dPriv, __DRI2_FLUSH_DRAWABLE, 0);
 }
 
 static void
@@ -74,6 +64,7 @@ static const __DRI2flushExtension dri2FlushExtension = {
     { __DRI2_FLUSH, __DRI2_FLUSH_VERSION },
     dri2_flush_drawable,
     dri2_invalidate_drawable,
+    dri_flush,
 };
 
 /**
@@ -81,7 +72,7 @@ static const __DRI2flushExtension dri2FlushExtension = {
  */
 static __DRIbuffer *
 dri2_drawable_get_buffers(struct dri_drawable *drawable,
-                          const enum st_attachment_type *statts,
+                          const enum st_attachment_type *atts,
                           unsigned *count)
 {
    __DRIdrawable *dri_drawable = drawable->dPriv;
@@ -106,11 +97,11 @@ dri2_drawable_get_buffers(struct dri_drawable *drawable,
       unsigned bind;
       int att, depth;
 
-      dri_drawable_get_format(drawable, statts[i], &format, &bind);
+      dri_drawable_get_format(drawable, atts[i], &format, &bind);
       if (format == PIPE_FORMAT_NONE)
          continue;
 
-      switch (statts[i]) {
+      switch (atts[i]) {
       case ST_ATTACHMENT_FRONT_LEFT:
          /* already added */
          if (!with_format)
@@ -126,18 +117,13 @@ dri2_drawable_get_buffers(struct dri_drawable *drawable,
       case ST_ATTACHMENT_BACK_RIGHT:
          att = __DRI_BUFFER_BACK_RIGHT;
          break;
-      case ST_ATTACHMENT_DEPTH_STENCIL:
-         att = __DRI_BUFFER_DEPTH_STENCIL;
-         break;
       default:
-         att = -1;
-         break;
+         continue;
       }
 
       /*
        * In this switch statement we must support all formats that
-       * may occur as the stvis->color_format or
-       * stvis->depth_stencil_format.
+       * may occur as the stvis->color_format.
        */
       switch(format) {
       case PIPE_FORMAT_B8G8R8A8_UNORM:
@@ -149,33 +135,14 @@ dri2_drawable_get_buffers(struct dri_drawable *drawable,
       case PIPE_FORMAT_B5G6R5_UNORM:
 	 depth = 16;
 	 break;
-      case PIPE_FORMAT_Z16_UNORM:
-	 att = __DRI_BUFFER_DEPTH;
-	 depth = 16;
-	 break;
-      case PIPE_FORMAT_Z24X8_UNORM:
-      case PIPE_FORMAT_X8Z24_UNORM:
-	 att = __DRI_BUFFER_DEPTH;
-	 depth = 24;
-	 break;
-      case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-      case PIPE_FORMAT_S8_UINT_Z24_UNORM:
-	 depth = 32;
-	 break;
-      case PIPE_FORMAT_Z32_UNORM:
-	 att = __DRI_BUFFER_DEPTH;
-	 depth = 32;
-	 break;
       default:
 	 depth = util_format_get_blocksizebits(format);
 	 assert(!"Unexpected format in dri2_drawable_get_buffers()");
       }
 
-      if (att >= 0) {
-         attachments[num_attachments++] = att;
-         if (with_format) {
-            attachments[num_attachments++] = depth;
-         }
+      attachments[num_attachments++] = att;
+      if (with_format) {
+         attachments[num_attachments++] = depth;
       }
    }
 
@@ -204,23 +171,27 @@ dri2_drawable_get_buffers(struct dri_drawable *drawable,
  */
 static void
 dri2_drawable_process_buffers(struct dri_drawable *drawable,
-                              __DRIbuffer *buffers, unsigned count)
+                              __DRIbuffer *buffers, unsigned buffer_count,
+                              const enum st_attachment_type *atts,
+                              unsigned att_count)
 {
    struct dri_screen *screen = dri_screen(drawable->sPriv);
    __DRIdrawable *dri_drawable = drawable->dPriv;
    struct pipe_resource templ;
    struct winsys_handle whandle;
-   boolean have_depth = FALSE;
+   boolean alloc_depthstencil = FALSE;
    unsigned i, bind;
 
-   if (drawable->old_num == count &&
+   if (drawable->old_num == buffer_count &&
        drawable->old_w == dri_drawable->w &&
        drawable->old_h == dri_drawable->h &&
-       memcmp(drawable->old, buffers, sizeof(__DRIbuffer) * count) == 0)
+       memcmp(drawable->old, buffers, sizeof(__DRIbuffer) * buffer_count) == 0)
       return;
 
    for (i = 0; i < ST_ATTACHMENT_COUNT; i++)
       pipe_resource_reference(&drawable->textures[i], NULL);
+   for (i = 0; i < ST_ATTACHMENT_COUNT; i++)
+      pipe_resource_reference(&drawable->msaa_textures[i], NULL);
 
    memset(&templ, 0, sizeof(templ));
    templ.target = screen->target;
@@ -232,7 +203,8 @@ dri2_drawable_process_buffers(struct dri_drawable *drawable,
 
    memset(&whandle, 0, sizeof(whandle));
 
-   for (i = 0; i < count; i++) {
+   /* Process DRI-provided buffers and get pipe_resources. */
+   for (i = 0; i < buffer_count; i++) {
       __DRIbuffer *buf = &buffers[i];
       enum st_attachment_type statt;
       enum pipe_format format;
@@ -240,8 +212,7 @@ dri2_drawable_process_buffers(struct dri_drawable *drawable,
       switch (buf->attachment) {
       case __DRI_BUFFER_FRONT_LEFT:
          if (!screen->auto_fake_front) {
-            statt = ST_ATTACHMENT_INVALID;
-            break;
+            continue; /* invalid attachment */
          }
          /* fallthrough */
       case __DRI_BUFFER_FAKE_FRONT_LEFT:
@@ -250,25 +221,12 @@ dri2_drawable_process_buffers(struct dri_drawable *drawable,
       case __DRI_BUFFER_BACK_LEFT:
          statt = ST_ATTACHMENT_BACK_LEFT;
          break;
-      case __DRI_BUFFER_DEPTH:
-      case __DRI_BUFFER_DEPTH_STENCIL:
-      case __DRI_BUFFER_STENCIL:
-         /* use only the first depth/stencil buffer */
-         if (!have_depth) {
-            have_depth = TRUE;
-            statt = ST_ATTACHMENT_DEPTH_STENCIL;
-         }
-         else {
-            statt = ST_ATTACHMENT_INVALID;
-         }
-         break;
       default:
-         statt = ST_ATTACHMENT_INVALID;
-         break;
+         continue; /* invalid attachment */
       }
 
       dri_drawable_get_format(drawable, statt, &format, &bind);
-      if (statt == ST_ATTACHMENT_INVALID || format == PIPE_FORMAT_NONE)
+      if (format == PIPE_FORMAT_NONE)
          continue;
 
       templ.format = format;
@@ -279,12 +237,67 @@ dri2_drawable_process_buffers(struct dri_drawable *drawable,
       drawable->textures[statt] =
          screen->base.screen->resource_from_handle(screen->base.screen,
                &templ, &whandle);
+      assert(drawable->textures[statt]);
    }
 
-   drawable->old_num = count;
+   /* Allocate private MSAA colorbuffers. */
+   if (drawable->stvis.samples > 1) {
+      for (i = 0; i < att_count; i++) {
+         enum st_attachment_type att = atts[i];
+
+         if (drawable->textures[att]) {
+            templ.format = drawable->textures[att]->format;
+            templ.bind = drawable->textures[att]->bind;
+            templ.nr_samples = drawable->stvis.samples;
+
+            drawable->msaa_textures[att] =
+               screen->base.screen->resource_create(screen->base.screen,
+                                                    &templ);
+            assert(drawable->msaa_textures[att]);
+         }
+      }
+   }
+
+   /* See if we need a depth-stencil buffer. */
+   for (i = 0; i < att_count; i++) {
+      if (atts[i] == ST_ATTACHMENT_DEPTH_STENCIL) {
+         alloc_depthstencil = TRUE;
+         break;
+      }
+   }
+
+   /* Allocate a private depth-stencil buffer. */
+   if (alloc_depthstencil) {
+      enum pipe_format format;
+      unsigned bind;
+
+      dri_drawable_get_format(drawable, ST_ATTACHMENT_DEPTH_STENCIL,
+                              &format, &bind);
+      if (format) {
+         templ.format = format;
+         templ.bind = bind;
+
+         if (drawable->stvis.samples > 1) {
+            templ.nr_samples = drawable->stvis.samples;
+            drawable->msaa_textures[ST_ATTACHMENT_DEPTH_STENCIL] =
+               screen->base.screen->resource_create(screen->base.screen,
+                                                    &templ);
+            assert(drawable->msaa_textures[ST_ATTACHMENT_DEPTH_STENCIL]);
+         }
+         else {
+            templ.nr_samples = 0;
+            drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL] =
+               screen->base.screen->resource_create(screen->base.screen,
+                                                    &templ);
+            assert(drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL]);
+         }
+      }
+   }
+
+   drawable->old_num = buffer_count;
    drawable->old_w = dri_drawable->w;
    drawable->old_h = dri_drawable->h;
-   memcpy(drawable->old, buffers, sizeof(__DRIbuffer) * count);
+   memcpy(drawable->old, buffers, sizeof(__DRIbuffer) * buffer_count);
 }
 
 static __DRIbuffer *
@@ -313,6 +326,9 @@ dri2_allocate_buffer(__DRIscreen *sPriv,
             bind = PIPE_BIND_DEPTH_STENCIL; /* XXX sampler? */
          break;
    }
+
+   /* because we get the handle and stride */
+   bind |= PIPE_BIND_SHARED;
 
    switch (format) {
       case 32:
@@ -378,27 +394,36 @@ dri2_release_buffer(__DRIscreen *sPriv, __DRIbuffer *bPriv)
 static void
 dri2_allocate_textures(struct dri_drawable *drawable,
                        const enum st_attachment_type *statts,
-                       unsigned count)
+                       unsigned statts_count)
 {
    __DRIbuffer *buffers;
-   unsigned num_buffers = count;
+   unsigned num_buffers = statts_count;
 
    buffers = dri2_drawable_get_buffers(drawable, statts, &num_buffers);
    if (buffers)
-      dri2_drawable_process_buffers(drawable, buffers, num_buffers);
+      dri2_drawable_process_buffers(drawable, buffers, num_buffers,
+                                    statts, statts_count);
 }
 
 static void
-dri2_flush_frontbuffer(struct dri_drawable *drawable,
+dri2_flush_frontbuffer(struct dri_context *ctx,
+                       struct dri_drawable *drawable,
                        enum st_attachment_type statt)
 {
    __DRIdrawable *dri_drawable = drawable->dPriv;
    struct __DRIdri2LoaderExtensionRec *loader = drawable->sPriv->dri2.loader;
 
-   if (loader->flushFrontBuffer == NULL)
+   if (statt != ST_ATTACHMENT_FRONT_LEFT)
       return;
 
-   if (statt == ST_ATTACHMENT_FRONT_LEFT) {
+   if (drawable->stvis.samples > 1) {
+      struct pipe_context *pipe = ctx->st->pipe;
+
+      dri_msaa_resolve(ctx, drawable, ST_ATTACHMENT_FRONT_LEFT);
+      pipe->flush(pipe, NULL, 0);
+   }
+
+   if (loader->flushFrontBuffer) {
       loader->flushFrontBuffer(dri_drawable, dri_drawable->loaderPrivate);
    }
 }
@@ -487,6 +512,7 @@ dri2_create_image_from_name(__DRIscreen *_screen,
 
    img->level = 0;
    img->layer = 0;
+   img->dri_format = format;
    img->loader_private = loaderPrivate;
 
    return img;
@@ -569,6 +595,8 @@ dri2_create_image(__DRIscreen *_screen,
 
    img->level = 0;
    img->layer = 0;
+   img->dri_format = format;
+   img->dri_components = 0;
 
    img->loader_private = loaderPrivate;
    return img;
@@ -598,6 +626,20 @@ dri2_query_image(__DRIimage *image, int attrib, int *value)
          image->texture, &whandle);
       *value = whandle.handle;
       return GL_TRUE;
+   case __DRI_IMAGE_ATTRIB_FORMAT:
+      *value = image->dri_format;
+      return GL_TRUE;
+   case __DRI_IMAGE_ATTRIB_WIDTH:
+      *value = image->texture->width0;
+      return GL_TRUE;
+   case __DRI_IMAGE_ATTRIB_HEIGHT:
+      *value = image->texture->height0;
+      return GL_TRUE;
+   case __DRI_IMAGE_ATTRIB_COMPONENTS:
+      if (image->dri_components == 0)
+         return GL_FALSE;
+      *value = image->dri_components;
+      return GL_TRUE;
    default:
       return GL_FALSE;
    }
@@ -616,8 +658,94 @@ dri2_dup_image(__DRIimage *image, void *loaderPrivate)
    pipe_resource_reference(&img->texture, image->texture);
    img->level = image->level;
    img->layer = image->layer;
+   /* This should be 0 for sub images, but dup is also used for base images. */
+   img->dri_components = image->dri_components;
    img->loader_private = loaderPrivate;
 
+   return img;
+}
+
+static GLboolean
+dri2_validate_usage(__DRIimage *image, unsigned int use)
+{
+   /*
+    * Gallium drivers are bad at adding usages to the resources
+    * once opened again in another process, which is the main use
+    * case for this, so we have to lie.
+    */
+   if (image != NULL)
+      return GL_TRUE;
+   else
+      return GL_FALSE;
+}
+
+static __DRIimage *
+dri2_from_names(__DRIscreen *screen, int width, int height, int format,
+                int *names, int num_names, int *strides, int *offsets,
+                void *loaderPrivate)
+{
+   __DRIimage *img;
+   int stride, dri_components;
+
+   if (num_names != 1)
+      return NULL;
+   if (offsets[0] != 0)
+      return NULL;
+
+   switch(format) {
+   case __DRI_IMAGE_FOURCC_RGB565:
+      format = __DRI_IMAGE_FORMAT_RGB565;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
+      break;
+   case __DRI_IMAGE_FOURCC_ARGB8888:
+      format = __DRI_IMAGE_FORMAT_ARGB8888;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGBA;
+      break;
+   case __DRI_IMAGE_FOURCC_XRGB8888:
+      format = __DRI_IMAGE_FORMAT_XRGB8888;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
+      break;
+   case __DRI_IMAGE_FOURCC_ABGR8888:
+      format = __DRI_IMAGE_FORMAT_ABGR8888;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGBA;
+      break;
+   case __DRI_IMAGE_FOURCC_XBGR8888:
+      format = __DRI_IMAGE_FORMAT_XBGR8888;
+      dri_components = __DRI_IMAGE_COMPONENTS_RGB;
+      break;
+   default:
+      return NULL;
+   }
+
+   /* Strides are in bytes not pixels. */
+   stride = strides[0] /4;
+
+   img = dri2_create_image_from_name(screen, width, height, format,
+                                     names[0], stride, loaderPrivate);
+   if (img == NULL)
+      return NULL;
+
+   img->dri_components = dri_components;
+   return img;
+}
+
+static __DRIimage *
+dri2_from_planar(__DRIimage *image, int plane, void *loaderPrivate)
+{
+   __DRIimage *img;
+
+   if (plane != 0)
+      return NULL;
+
+   if (image->dri_components == 0)
+      return NULL;
+
+   img = dri2_dup_image(image, loaderPrivate);
+   if (img == NULL)
+      return NULL;
+
+   /* set this to 0 for sub images. */
+   img->dri_components = 0;
    return img;
 }
 
@@ -629,13 +757,16 @@ dri2_destroy_image(__DRIimage *img)
 }
 
 static struct __DRIimageExtensionRec dri2ImageExtension = {
-    { __DRI_IMAGE, __DRI_IMAGE_VERSION },
+    { __DRI_IMAGE, 5 },
     dri2_create_image_from_name,
     dri2_create_image_from_renderbuffer,
     dri2_destroy_image,
     dri2_create_image,
     dri2_query_image,
     dri2_dup_image,
+    dri2_validate_usage,
+    dri2_from_names,
+    dri2_from_planar,
 };
 
 /*
@@ -643,14 +774,6 @@ static struct __DRIimageExtensionRec dri2ImageExtension = {
  */
 
 static const __DRIextension *dri_screen_extensions[] = {
-   &driTexBufferExtension.base,
-   &dri2FlushExtension.base,
-   &dri2ImageExtension.base,
-   &dri2ConfigQueryExtension.base,
-   NULL
-};
-
-static const __DRIextension *dri_screen_extensions_throttle[] = {
    &driTexBufferExtension.base,
    &dri2FlushExtension.base,
    &dri2ImageExtension.base,
@@ -686,14 +809,15 @@ dri2_init_screen(__DRIscreen * sPriv)
       throttle_ret = driver_descriptor.configuration(DRM_CONF_THROTTLE);
 
    if (throttle_ret && throttle_ret->val.val_int != -1) {
-      sPriv->extensions = dri_screen_extensions_throttle;
+      screen->throttling_enabled = TRUE;
       screen->default_throttle_frames = throttle_ret->val.val_int;
-   } else
-      sPriv->extensions = dri_screen_extensions;
+   }
+
+   sPriv->extensions = dri_screen_extensions;
 
    /* dri_init_screen_helper checks pscreen for us */
 
-   configs = dri_init_screen_helper(screen, pscreen, 32);
+   configs = dri_init_screen_helper(screen, pscreen);
    if (!configs)
       goto fail;
 

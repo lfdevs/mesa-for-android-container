@@ -27,7 +27,12 @@ static struct pipe_resource *r600_resource_create(struct pipe_screen *screen,
 						const struct pipe_resource *templ)
 {
 	if (templ->target == PIPE_BUFFER) {
-		return r600_buffer_create(screen, templ);
+		if (templ->bind & PIPE_BIND_GLOBAL) {
+		    return r600_compute_global_buffer_create(screen, templ);
+		}
+		else {
+		    return r600_buffer_create(screen, templ, 4096);
+		}
 	} else {
 		return r600_texture_create(screen, templ);
 	}
@@ -44,21 +49,27 @@ static struct pipe_resource *r600_resource_from_handle(struct pipe_screen * scre
 	}
 }
 
+void r600_resource_destroy(struct pipe_screen *screen, struct pipe_resource *res)
+{
+	if (res->target == PIPE_BUFFER && (res->bind & PIPE_BIND_GLOBAL)) {
+		r600_compute_global_buffer_destroy(screen, res);
+	} else {
+		u_resource_destroy_vtbl(screen, res);
+	}
+}
+
 void r600_init_screen_resource_functions(struct pipe_screen *screen)
 {
 	screen->resource_create = r600_resource_create;
 	screen->resource_from_handle = r600_resource_from_handle;
 	screen->resource_get_handle = u_resource_get_handle_vtbl;
-	screen->resource_destroy = u_resource_destroy_vtbl;
-	screen->user_buffer_create = r600_user_buffer_create;
+	screen->resource_destroy = r600_resource_destroy;
 }
 
-void r600_init_context_resource_functions(struct r600_pipe_context *r600)
+void r600_init_context_resource_functions(struct r600_context *r600)
 {
-	r600->context.get_transfer = u_get_transfer_vtbl;
 	r600->context.transfer_map = u_transfer_map_vtbl;
-	r600->context.transfer_flush_region = u_transfer_flush_region_vtbl;
+	r600->context.transfer_flush_region = u_default_transfer_flush_region;
 	r600->context.transfer_unmap = u_transfer_unmap_vtbl;
-	r600->context.transfer_destroy = u_transfer_destroy_vtbl;
-	r600->context.transfer_inline_write = u_transfer_inline_write_vtbl;
+	r600->context.transfer_inline_write = u_default_transfer_inline_write;
 }

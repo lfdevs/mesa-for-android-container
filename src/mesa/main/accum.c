@@ -36,15 +36,11 @@
 #include "main/dispatch.h"
 
 
-#if FEATURE_accum
-
-
 void GLAPIENTRY
 _mesa_ClearAccum( GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha )
 {
    GLfloat tmp[4];
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    tmp[0] = CLAMP( red,   -1.0F, 1.0F );
    tmp[1] = CLAMP( green, -1.0F, 1.0F );
@@ -58,11 +54,11 @@ _mesa_ClearAccum( GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha )
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_Accum( GLenum op, GLfloat value )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+   FLUSH_VERTICES(ctx, 0);
 
    switch (op) {
    case GL_ADD:
@@ -106,14 +102,6 @@ _mesa_Accum( GLenum op, GLfloat value )
    if (ctx->RenderMode == GL_RENDER) {
       _mesa_accum(ctx, op, value);
    }
-}
-
-
-void
-_mesa_init_accum_dispatch(struct _glapi_table *disp)
-{
-   SET_Accum(disp, _mesa_Accum);
-   SET_ClearAccum(disp, _mesa_ClearAccum);
 }
 
 
@@ -208,7 +196,7 @@ accum_scale_or_bias(struct gl_context *ctx, GLfloat value,
 
    if (accRb->Format == MESA_FORMAT_SIGNED_RGBA_16) {
       const GLshort incr = (GLshort) (value * 32767.0f);
-      GLuint i, j;
+      GLint i, j;
       if (bias) {
          for (j = 0; j < height; j++) {
             GLshort *acc = (GLshort *) accMap;
@@ -286,10 +274,10 @@ accum_or_load(struct gl_context *ctx, GLfloat value,
 
    if (accRb->Format == MESA_FORMAT_SIGNED_RGBA_16) {
       const GLfloat scale = value * 32767.0f;
-      GLuint i, j;
+      GLint i, j;
       GLfloat (*rgba)[4];
 
-      rgba = (GLfloat (*)[4]) malloc(width * 4 * sizeof(GLfloat));
+      rgba = malloc(width * 4 * sizeof(GLfloat));
       if (rgba) {
          for (j = 0; j < height; j++) {
             GLshort *acc = (GLshort *) accMap;
@@ -381,8 +369,8 @@ accum_return(struct gl_context *ctx, GLfloat value,
          GLint i, j;
          GLfloat (*rgba)[4], (*dest)[4];
 
-         rgba = (GLfloat (*)[4]) malloc(width * 4 * sizeof(GLfloat));
-         dest = (GLfloat (*)[4]) malloc(width * 4 * sizeof(GLfloat));
+         rgba = malloc(width * 4 * sizeof(GLfloat));
+         dest = malloc(width * 4 * sizeof(GLfloat));
 
          if (rgba && dest) {
             for (j = 0; j < height; j++) {
@@ -494,9 +482,6 @@ _mesa_accum(struct gl_context *ctx, GLenum op, GLfloat value)
       break;
    }
 }
-
-
-#endif /* FEATURE_accum */
 
 
 void 

@@ -134,12 +134,12 @@ applegl_create_context(struct glx_screen *psc,
    /* TODO: Integrate this with apple_glx_create_context and make
     * struct apple_glx_context inherit from struct glx_context. */
 
-   gc = Xcalloc(1, sizeof (*gc));
+   gc = calloc(1, sizeof(*gc));
    if (gc == NULL)
       return NULL;
 
    if (!glx_context_init(gc, psc, config)) {
-      Xfree(gc);
+      free(gc);
       return NULL;
    }
 
@@ -173,11 +173,10 @@ applegl_create_screen(int screen, struct glx_display * priv)
 {
    struct glx_screen *psc;
 
-   psc = Xmalloc(sizeof *psc);
+   psc = calloc(1, sizeof *psc);
    if (psc == NULL)
       return NULL;
 
-   memset(psc, 0, sizeof *psc);
    glx_screen_init(psc, screen, priv);
    psc->vtable = &applegl_screen_vtable;
 

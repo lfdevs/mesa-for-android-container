@@ -139,6 +139,9 @@ def generate(env):
 
     env['gcc'] = 'gcc' in os.path.basename(env['CC']).split('-')
     env['msvc'] = env['CC'] == 'cl'
+    env['suncc'] = env['platform'] == 'sunos' and os.path.basename(env['CC']) == 'cc'
+    env['clang'] = env['CC'] == 'clang'
+    env['icc'] = 'icc' == os.path.basename(env['CC'])
 
     if env['msvc'] and env['toolchain'] == 'default' and env['machine'] == 'x86_64':
         # MSVC x64 support is broken in earlier versions of scons
@@ -151,6 +154,8 @@ def generate(env):
     ppc = env['machine'] == 'ppc'
     gcc = env['gcc']
     msvc = env['msvc']
+    suncc = env['suncc']
+    icc = env['icc']
 
     # Determine whether we are cross compiling; in particular, whether we need
     # to compile code generators with a different compiler as the target code.
@@ -246,7 +251,7 @@ def generate(env):
             '_SVID_SOURCE',
             '_BSD_SOURCE',
             '_GNU_SOURCE',
-            'PTHREADS',
+            'HAVE_PTHREAD',
             'HAVE_POSIX_MEMALIGN',
         ]
         if env['platform'] == 'darwin':
@@ -284,13 +289,20 @@ def generate(env):
                 '_CRT_SECURE_NO_DEPRECATE',
                 '_SCL_SECURE_NO_WARNINGS',
                 '_SCL_SECURE_NO_DEPRECATE',
+                '_ALLOW_KEYWORD_MACROS',
             ]
         if env['build'] in ('debug', 'checked'):
             cppdefines += ['_DEBUG']
     if platform == 'windows':
         cppdefines += ['PIPE_SUBSYSTEM_WINDOWS_USER']
+    if platform == 'haiku':
+        cppdefines += ['BEOS_THREADS']
     if env['embedded']:
         cppdefines += ['PIPE_SUBSYSTEM_EMBEDDED']
+    if env['texture_float']:
+        print 'warning: Floating-point textures enabled.'
+        print 'warning: Please consult docs/patents.txt with your lawyer before building Mesa.'
+        cppdefines += ['TEXTURE_FLOAT_ENABLED']
     env.Append(CPPDEFINES = cppdefines)
 
     # C compiler options
@@ -325,7 +337,8 @@ def generate(env):
                 #'-march=pentium4',
             ]
             if distutils.version.LooseVersion(ccversion) >= distutils.version.LooseVersion('4.2') \
-               and (platform != 'windows' or env['build'] == 'debug' or True):
+               and (platform != 'windows' or env['build'] == 'debug' or True) \
+               and platform != 'haiku':
                 # NOTE: We need to ensure stack is realigned given that we
                 # produce shared objects, and have no control over the stack
                 # alignment policy of the application. Therefore we need
@@ -344,28 +357,30 @@ def generate(env):
             if platform in ['windows', 'darwin']:
                 # Workaround http://gcc.gnu.org/bugzilla/show_bug.cgi?id=37216
                 ccflags += ['-fno-common']
+            if platform in ['haiku']:
+                # Make optimizations compatible with Pentium or higher on Haiku
+                ccflags += [
+                    '-mstackrealign', # ensure stack is aligned
+                    '-march=i586', # Haiku target is Pentium
+                    '-mtune=i686' # use i686 where we can
+                ]
         if env['machine'] == 'x86_64':
             ccflags += ['-m64']
             if platform == 'darwin':
                 ccflags += ['-fno-common']
-        if env['platform'] != 'windows':
+        if env['platform'] not in ('cygwin', 'haiku', 'windows'):
             ccflags += ['-fvisibility=hidden']
         # See also:
         # - http://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html
         ccflags += [
             '-Wall',
             '-Wno-long-long',
-            '-ffast-math',
             '-fmessage-length=0', # be nice to Eclipse
         ]
         cflags += [
             '-Wmissing-prototypes',
             '-std=gnu99',
         ]
-        if distutils.version.LooseVersion(ccversion) >= distutils.version.LooseVersion('4.0'):
-            ccflags += [
-                '-Wmissing-field-initializers',
-            ]
         if distutils.version.LooseVersion(ccversion) >= distutils.version.LooseVersion('4.2'):
             ccflags += [
                 '-Wpointer-arith',
@@ -373,6 +388,10 @@ def generate(env):
             cflags += [
                 '-Wdeclaration-after-statement',
             ]
+    if icc:
+        cflags += [
+            '-std=gnu99',
+        ]
     if msvc:
         # See also:
         # - http://msdn.microsoft.com/en-us/library/19z1t1wy.aspx
@@ -381,9 +400,10 @@ def generate(env):
             ccflags += [
               '/Od', # disable optimizations
               '/Oi', # enable intrinsic functions
-              '/Oy-', # disable frame pointer omission
             ]
         else:
+            if distutils.version.LooseVersion(env['MSVC_VERSION']) < distutils.version.LooseVersion('11.0'):
+                print 'scons: warning: Visual Studio versions prior to 2012 are known to produce incorrect code when optimizations are enabled ( https://bugs.freedesktop.org/show_bug.cgi?id=58718 )'
             ccflags += [
                 '/O2', # optimize for speed
             ]
@@ -393,10 +413,10 @@ def generate(env):
             ]
         else:
             ccflags += [
+                '/Oy-', # disable frame pointer omission
                 '/GL-', # disable whole program optimization
             ]
         ccflags += [
-            '/fp:fast', # fast floating point 
             '/W3', # warning level
             #'/Wp64', # enable 64 bit porting warnings
             '/wd4996', # disable deprecated POSIX name warnings
@@ -475,13 +495,15 @@ def generate(env):
     env.Append(SHLINKFLAGS = shlinkflags)
 
     # We have C++ in several libraries, so always link with the C++ compiler
-    if env['gcc']:
+    if env['gcc'] or env['clang']:
         env['LINK'] = env['CXX']
 
     # Default libs
     libs = []
-    if env['platform'] in ('posix', 'linux', 'freebsd', 'darwin'):
+    if env['platform'] in ('darwin', 'freebsd', 'linux', 'posix', 'sunos'):
         libs += ['m', 'pthread', 'dl']
+    if env['platform'] in ('linux',):
+        libs += ['rt']
     env.Append(LIBS = libs)
 
     # OpenMP
@@ -507,14 +529,14 @@ def generate(env):
     createInstallMethods(env)
 
     env.PkgCheckModules('X11', ['x11', 'xext', 'xdamage', 'xfixes'])
-    env.PkgCheckModules('XCB', ['x11-xcb', 'xcb-glx'])
+    env.PkgCheckModules('XCB', ['x11-xcb', 'xcb-glx >= 1.8.1'])
     env.PkgCheckModules('XF86VIDMODE', ['xxf86vm'])
-    env.PkgCheckModules('DRM', ['libdrm'])
-    env.PkgCheckModules('DRM_INTEL', ['libdrm_intel'])
-    env.PkgCheckModules('DRM_RADEON', ['libdrm_radeon'])
-    env.PkgCheckModules('XORG', ['xorg-server'])
-    env.PkgCheckModules('KMS', ['libkms'])
-    env.PkgCheckModules('UDEV', ['libudev'])
+    env.PkgCheckModules('DRM', ['libdrm >= 2.4.24'])
+    env.PkgCheckModules('DRM_INTEL', ['libdrm_intel >= 2.4.30'])
+    env.PkgCheckModules('DRM_RADEON', ['libdrm_radeon >= 2.4.42'])
+    env.PkgCheckModules('XORG', ['xorg-server >= 1.6.0'])
+    env.PkgCheckModules('KMS', ['libkms >= 2.4.24'])
+    env.PkgCheckModules('UDEV', ['libudev > 150'])
 
     env['dri'] = env['x11'] and env['drm']
 

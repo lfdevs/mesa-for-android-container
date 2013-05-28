@@ -43,11 +43,25 @@ gen7_upload_sf_clip_viewport(struct brw_context *brw)
    /* Also assign to clip.vp_offset in case something uses it. */
    brw->clip.vp_offset = brw->sf.vp_offset;
 
-   /* Disable guardband clipping (see gen6_viewport_state.c for rationale). */
-   vp->guardband.xmin = -1.0;
-   vp->guardband.xmax = 1.0;
-   vp->guardband.ymin = -1.0;
-   vp->guardband.ymax = 1.0;
+   /* According to the "Vertex X,Y Clamping and Quantization" section of the
+    * Strips and Fans documentation, objects must not have a screen-space
+    * extents of over 8192 pixels, or they may be mis-rasterized.  The maximum
+    * screen space coordinates of a small object may larger, but we have no
+    * way to enforce the object size other than through clipping.
+    *
+    * If you're surprised that we set clip to -gbx to +gbx and it seems like
+    * we'll end up with 16384 wide, note that for a 8192-wide render target,
+    * we'll end up with a normal (-1, 1) clip volume that just covers the
+    * drawable.
+    */
+   const float maximum_guardband_extent = 8192;
+   float gbx = maximum_guardband_extent / (float) ctx->Viewport.Width;
+   float gby = maximum_guardband_extent / (float) ctx->Viewport.Height;
+
+   vp->guardband.xmin = -gbx;
+   vp->guardband.xmax = gbx;
+   vp->guardband.ymin = -gby;
+   vp->guardband.ymax = gby;
 
    /* _NEW_BUFFERS */
    if (render_to_fbo) {

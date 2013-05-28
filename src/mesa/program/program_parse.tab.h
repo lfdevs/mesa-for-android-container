@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 2.5.  */
+/* A Bison parser, made by GNU Bison 2.6.1.  */
 
 /* Bison interface for Yacc-like parsers in C
    
-      Copyright (C) 1984, 1989-1990, 2000-2011 Free Software Foundation, Inc.
+      Copyright (C) 1984, 1989-1990, 2000-2012 Free Software Foundation, Inc.
    
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -30,6 +30,15 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
+#ifndef _MESA_PROGRAM_PROGRAM_PARSE_TAB_H
+# define _MESA_PROGRAM_PROGRAM_PARSE_TAB_H
+/* Enabling traces.  */
+#ifndef YYDEBUG
+# define YYDEBUG 0
+#endif
+#if YYDEBUG
+extern int _mesa_program_debug;
+#endif
 
 /* Tokens.  */
 #ifndef YYTOKENTYPE
@@ -146,13 +155,11 @@
 #endif
 
 
-
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
 {
-
-/* Line 2068 of yacc.c  */
-#line 126 "program/program_parse.y"
+/* Line 2049 of yacc.c  */
+#line 126 "program_parse.y"
 
    struct asm_instruction *inst;
    struct asm_symbol *sym;
@@ -179,16 +186,13 @@ typedef union YYSTYPE
    } ext_swizzle;
 
 
-
-/* Line 2068 of yacc.c  */
-#line 185 "program/program_parse.tab.h"
+/* Line 2049 of yacc.c  */
+#line 191 "program_parse.tab.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 #endif
-
-
 
 #if ! defined YYLTYPE && ! defined YYLTYPE_IS_DECLARED
 typedef struct YYLTYPE
@@ -204,4 +208,18 @@ typedef struct YYLTYPE
 #endif
 
 
+#ifdef YYPARSE_PARAM
+#if defined __STDC__ || defined __cplusplus
+int _mesa_program_parse (void *YYPARSE_PARAM);
+#else
+int _mesa_program_parse ();
+#endif
+#else /* ! YYPARSE_PARAM */
+#if defined __STDC__ || defined __cplusplus
+int _mesa_program_parse (struct asm_parser_state *state);
+#else
+int _mesa_program_parse ();
+#endif
+#endif /* ! YYPARSE_PARAM */
 
+#endif /* !_MESA_PROGRAM_PROGRAM_PARSE_TAB_H  */

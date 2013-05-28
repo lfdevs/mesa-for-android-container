@@ -58,32 +58,34 @@
 #include "vbo_save.h"
 
 
+/** Used to signal when transitioning from one kind of drawing method
+ * to another.
+ */
+enum draw_method
+{
+   DRAW_NONE,          /**< Initial value only */
+   DRAW_BEGIN_END,
+   DRAW_DISPLAY_LIST,
+   DRAW_ARRAYS
+};
+
+
 struct vbo_context {
    struct gl_client_array currval[VBO_ATTRIB_MAX];
    
-   /* These point into the above.  TODO: remove. 
-    */
-   struct gl_client_array *legacy_currval;
-   struct gl_client_array *generic_currval;
-   struct gl_client_array *mat_currval;
-
    /** Map VERT_ATTRIB_x to VBO_ATTRIB_y */
    GLuint map_vp_none[VERT_ATTRIB_MAX];
    GLuint map_vp_arb[VERT_ATTRIB_MAX];
 
-   GLfloat *current[VBO_ATTRIB_MAX]; /* points into ctx->Current, ctx->Light.Material */
-   GLfloat CurrentFloatEdgeFlag;
-
-
    struct vbo_exec_context exec;
-#if FEATURE_dlist
    struct vbo_save_context save;
-#endif
 
    /* Callback into the driver.  This must always succeed, the driver
     * is responsible for initiating any fallback actions required:
     */
    vbo_draw_func draw_prims;
+
+   enum draw_method last_draw_method;
 };
 
 
@@ -104,11 +106,88 @@ get_program_mode( struct gl_context *ctx )
       return VP_NONE;
    else if (ctx->VertexProgram._Current == ctx->VertexProgram._TnlProgram)
       return VP_NONE;
-   else if (ctx->VertexProgram._Current->IsNVProgram)
-      return VP_NV;
    else
       return VP_ARB;
 }
 
+
+/**
+ * This is called by glBegin, glDrawArrays and glDrawElements (and
+ * variations of those calls).  When we transition from immediate mode
+ * drawing to array drawing we need to invalidate the array state.
+ *
+ * glBegin/End builds vertex arrays.  Those arrays may look identical
+ * to glDrawArrays arrays except that the position of the elements may
+ * be different.  For example, arrays of (position3v, normal3f) vs. arrays
+ * of (normal3f, position3f).  So we need to make sure we notify drivers
+ * that arrays may be changing.
+ */
+static inline void
+vbo_draw_method(struct vbo_context *vbo, enum draw_method method)
+{
+   if (vbo->last_draw_method != method) {
+      struct gl_context *ctx = vbo->exec.ctx;
+
+      switch (method) {
+      case DRAW_ARRAYS:
+         ctx->Array._DrawArrays = vbo->exec.array.inputs;
+         break;
+      case DRAW_BEGIN_END:
+         ctx->Array._DrawArrays = vbo->exec.vtx.inputs;
+         break;
+      case DRAW_DISPLAY_LIST:
+         ctx->Array._DrawArrays = vbo->save.inputs;
+         break;
+      default:
+         ASSERT(0);
+      }
+
+      ctx->NewDriverState |= ctx->DriverFlags.NewArray;
+      vbo->last_draw_method = method;
+   }
+}
+
+/**
+ * Return if format is integer. The immediate mode commands only emit floats
+ * for non-integer types, thus everything else is integer.
+ */
+static inline GLboolean
+vbo_attrtype_to_integer_flag(GLenum format)
+{
+   switch (format) {
+   case GL_FLOAT:
+      return GL_FALSE;
+   case GL_INT:
+   case GL_UNSIGNED_INT:
+      return GL_TRUE;
+   default:
+      ASSERT(0);
+      return GL_FALSE;
+   }
+}
+
+
+/**
+ * Return default component values for the given format.
+ * The return type is an array of floats, because that's how we declare
+ * the vertex storage despite the fact we sometimes store integers in there.
+ */
+static inline const GLfloat *
+vbo_get_default_vals_as_float(GLenum format)
+{
+   static const GLfloat default_float[4] = { 0, 0, 0, 1 };
+   static const GLint default_int[4] = { 0, 0, 0, 1 };
+
+   switch (format) {
+   case GL_FLOAT:
+      return default_float;
+   case GL_INT:
+   case GL_UNSIGNED_INT:
+      return (const GLfloat*)default_int;
+   default:
+      ASSERT(0);
+      return NULL;
+   }
+}
 
 #endif

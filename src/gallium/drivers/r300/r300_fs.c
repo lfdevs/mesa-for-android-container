@@ -147,10 +147,9 @@ static void get_external_state(
     struct r300_fragment_program_external_state* state)
 {
     struct r300_textures_state *texstate = r300->textures_state.state;
-    struct r300_rs_state *rs = r300->rs_state.state;
     unsigned i;
 
-    state->frag_clamp = rs ? rs->rs.clamp_fragment_color : 0;
+    state->alpha_to_one = r300->alpha_to_one && r300->msaa_enable;
 
     for (i = 0; i < texstate->sampler_state_count; i++) {
         struct r300_sampler_state *s = texstate->sampler_states[i];
@@ -215,7 +214,7 @@ static void get_external_state(
                 state->unit[i].wrap_mode = RC_WRAP_NONE;
             }
 
-            if (t->b.b.b.target == PIPE_TEXTURE_3D)
+            if (t->b.b.target == PIPE_TEXTURE_3D)
                 state->unit[i].clamp_and_scale_before_fetch = TRUE;
         }
     }
@@ -445,7 +444,7 @@ static void r300_translate_fragment_shader(
 
     /* Setup the compiler. */
     memset(&compiler, 0, sizeof(compiler));
-    rc_init(&compiler.Base);
+    rc_init(&compiler.Base, &r300->fs_regalloc_state);
     DBG_ON(r300, DBG_FP) ? compiler.Base.Debug |= RC_DBG_LOG : 0;
     DBG_ON(r300, DBG_P_STAT) ? compiler.Base.Debug |= RC_DBG_STATS : 0;
 

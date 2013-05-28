@@ -55,6 +55,7 @@
  * \author Ian Romanick <ian.d.romanick@intel.com>
  */
 
+#include <inttypes.h>
 #include "glheader.h"
 #include "imports.h"
 #include "context.h"
@@ -63,8 +64,9 @@
 #include "get.h"
 #include "dispatch.h"
 #include "mtypes.h"
+#include "set.h"
+#include "hash_table.h"
 
-#if FEATURE_ARB_sync
 #include "syncobj.h"
 
 static struct gl_sync_object *
@@ -139,20 +141,6 @@ _mesa_init_sync_object_functions(struct dd_function_table *driver)
    driver->ServerWaitSync = _mesa_wait_sync;
 }
 
-
-void
-_mesa_init_sync_dispatch(struct _glapi_table *disp)
-{
-   SET_IsSync(disp, _mesa_IsSync);
-   SET_DeleteSync(disp, _mesa_DeleteSync);
-   SET_FenceSync(disp, _mesa_FenceSync);
-   SET_ClientWaitSync(disp, _mesa_ClientWaitSync);
-   SET_WaitSync(disp, _mesa_WaitSync);
-   SET_GetInteger64v(disp, _mesa_GetInteger64v);
-   SET_GetSynciv(disp, _mesa_GetSynciv);
-}
-
-
 /**
  * Allocate/init the context state related to sync objects.
  */
@@ -174,9 +162,12 @@ _mesa_free_sync_data(struct gl_context *ctx)
 
 
 static int
-_mesa_validate_sync(struct gl_sync_object *syncObj)
+_mesa_validate_sync(struct gl_context *ctx, struct gl_sync_object *syncObj)
 {
    return (syncObj != NULL)
+      && _mesa_set_search(ctx->Shared->SyncObjects,
+                          _mesa_hash_pointer(syncObj),
+                          syncObj) != NULL
       && (syncObj->Type == GL_SYNC_FENCE)
       && !syncObj->DeletePending;
 }
@@ -194,10 +185,16 @@ _mesa_ref_sync_object(struct gl_context *ctx, struct gl_sync_object *syncObj)
 void
 _mesa_unref_sync_object(struct gl_context *ctx, struct gl_sync_object *syncObj)
 {
+   struct set_entry *entry;
+
    _glthread_LOCK_MUTEX(ctx->Shared->Mutex);
    syncObj->RefCount--;
    if (syncObj->RefCount == 0) {
-      remove_from_list(& syncObj->link);
+      entry = _mesa_set_search(ctx->Shared->SyncObjects,
+                               _mesa_hash_pointer(syncObj),
+                               syncObj);
+      assert (entry != NULL);
+      _mesa_set_remove(ctx->Shared->SyncObjects, entry);
       _glthread_UNLOCK_MUTEX(ctx->Shared->Mutex);
 
       ctx->Driver.DeleteSyncObject(ctx, syncObj);
@@ -214,7 +211,7 @@ _mesa_IsSync(GLsync sync)
    struct gl_sync_object *const syncObj = (struct gl_sync_object *) sync;
    ASSERT_OUTSIDE_BEGIN_END_WITH_RETVAL(ctx, GL_FALSE);
 
-   return _mesa_validate_sync(syncObj) ? GL_TRUE : GL_FALSE;
+   return _mesa_validate_sync(ctx, syncObj) ? GL_TRUE : GL_FALSE;
 }
 
 
@@ -223,7 +220,6 @@ _mesa_DeleteSync(GLsync sync)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_sync_object *const syncObj = (struct gl_sync_object *) sync;
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    /* From the GL_ARB_sync spec:
     *
@@ -235,8 +231,8 @@ _mesa_DeleteSync(GLsync sync)
       return;
    }
 
-   if (!_mesa_validate_sync(syncObj)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "glDeleteSync");
+   if (!_mesa_validate_sync(ctx, syncObj)) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glDeleteSync (not a valid sync object)");
       return;
    }
 
@@ -285,7 +281,9 @@ _mesa_FenceSync(GLenum condition, GLbitfield flags)
       ctx->Driver.FenceSync(ctx, syncObj, condition, flags);
 
       _glthread_LOCK_MUTEX(ctx->Shared->Mutex);
-      insert_at_tail(& ctx->Shared->SyncObjects, & syncObj->link);
+      _mesa_set_add(ctx->Shared->SyncObjects,
+                    _mesa_hash_pointer(syncObj),
+                    syncObj);
       _glthread_UNLOCK_MUTEX(ctx->Shared->Mutex);
 
       return (GLsync) syncObj;
@@ -303,13 +301,13 @@ _mesa_ClientWaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout)
    GLenum ret;
    ASSERT_OUTSIDE_BEGIN_END_WITH_RETVAL(ctx, GL_WAIT_FAILED);
 
-   if (!_mesa_validate_sync(syncObj)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "glClientWaitSync");
+   if (!_mesa_validate_sync(ctx, syncObj)) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glClientWaitSync (not a valid sync object)");
       return GL_WAIT_FAILED;
    }
 
    if ((flags & ~GL_SYNC_FLUSH_COMMANDS_BIT) != 0) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glClientWaitSync(flags=0x%x)", flags);
+      _mesa_error(ctx, GL_INVALID_VALUE, "glClientWaitSync(flags=0x%x)", flags);
       return GL_WAIT_FAILED;
    }
 
@@ -326,9 +324,13 @@ _mesa_ClientWaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout)
    if (syncObj->StatusFlag) {
       ret = GL_ALREADY_SIGNALED;
    } else {
-      ctx->Driver.ClientWaitSync(ctx, syncObj, flags, timeout);
+      if (timeout == 0) {
+         ret = GL_TIMEOUT_EXPIRED;
+      } else {
+         ctx->Driver.ClientWaitSync(ctx, syncObj, flags, timeout);
 
-      ret = syncObj->StatusFlag ? GL_CONDITION_SATISFIED : GL_TIMEOUT_EXPIRED;
+         ret = syncObj->StatusFlag ? GL_CONDITION_SATISFIED : GL_TIMEOUT_EXPIRED;
+      }
    }
 
    _mesa_unref_sync_object(ctx, syncObj);
@@ -341,23 +343,20 @@ _mesa_WaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_sync_object *const syncObj = (struct gl_sync_object *) sync;
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
-   if (!_mesa_validate_sync(syncObj)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "glWaitSync");
+   if (!_mesa_validate_sync(ctx, syncObj)) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glWaitSync (not a valid sync object)");
       return;
    }
 
    if (flags != 0) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glWaitSync(flags=0x%x)", flags);
+      _mesa_error(ctx, GL_INVALID_VALUE, "glWaitSync(flags=0x%x)", flags);
       return;
    }
 
-   /* From the GL_ARB_sync spec:
-    *
-    *     If the value of <timeout> is zero, then WaitSync does nothing.
-    */
-   if (timeout == 0) {
+   if (timeout != GL_TIMEOUT_IGNORED) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glWaitSync(timeout=0x%" PRIx64 ")",
+                  (uint64_t) timeout);
       return;
    }
 
@@ -373,10 +372,9 @@ _mesa_GetSynciv(GLsync sync, GLenum pname, GLsizei bufSize, GLsizei *length,
    struct gl_sync_object *const syncObj = (struct gl_sync_object *) sync;
    GLsizei size = 0;
    GLint v[1];
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
-   if (!_mesa_validate_sync(syncObj)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "glGetSynciv");
+   if (!_mesa_validate_sync(ctx, syncObj)) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glGetSynciv (not a valid sync object)");
       return;
    }
 
@@ -422,5 +420,3 @@ _mesa_GetSynciv(GLsync sync, GLenum pname, GLsizei bufSize, GLsizei *length,
       *length = size;
    }
 }
-
-#endif /* FEATURE_ARB_sync */

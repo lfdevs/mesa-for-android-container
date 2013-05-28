@@ -38,22 +38,22 @@
 
 /** Initialize the internal details */
 struct program *
-pp_init_prog(struct pp_queue_t *ppq, struct pipe_screen *pscreen)
+pp_init_prog(struct pp_queue_t *ppq, struct pipe_context *pipe,
+             struct cso_context *cso)
 {
-
    struct program *p;
 
    pp_debug("Initializing program\n");
-   if (!pscreen)
+   if (!pipe)
       return NULL;
 
    p = CALLOC(1, sizeof(struct program));
    if (!p)
       return NULL;
 
-   p->screen = pscreen;
-   p->pipe = pscreen->context_create(pscreen, NULL);
-   p->cso = cso_create_context(p->pipe);
+   p->screen = pipe->screen;
+   p->pipe = pipe;
+   p->cso = cso;
 
    {
       static const float verts[4][2][4] = {
@@ -75,7 +75,7 @@ pp_init_prog(struct pp_queue_t *ppq, struct pipe_screen *pscreen)
           }
       };
 
-      p->vbuf = pipe_buffer_create(pscreen, PIPE_BIND_VERTEX_BUFFER,
+      p->vbuf = pipe_buffer_create(pipe->screen, PIPE_BIND_VERTEX_BUFFER,
                                    PIPE_USAGE_STATIC, sizeof(verts));
       pipe_buffer_write(p->pipe, p->vbuf, 0, sizeof(verts), verts);
    }
@@ -133,10 +133,7 @@ pp_init_prog(struct pp_queue_t *ppq, struct pipe_screen *pscreen)
 
    p->framebuffer.nr_cbufs = 1;
 
-   p->surf.usage = PIPE_BIND_RENDER_TARGET;
    p->surf.format = PIPE_FORMAT_B8G8R8A8_UNORM;
-
-   p->pipe->set_sample_mask(p->pipe, ~0);
 
    return p;
 }

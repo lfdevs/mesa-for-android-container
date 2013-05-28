@@ -31,12 +31,15 @@
  * The back-buffer is allocated by the driver and is private.
  */
 
+#include "main/api_exec.h"
 #include "main/context.h"
 #include "main/extensions.h"
 #include "main/formats.h"
 #include "main/framebuffer.h"
 #include "main/imports.h"
 #include "main/renderbuffer.h"
+#include "main/version.h"
+#include "main/vtxfmt.h"
 #include "swrast/swrast.h"
 #include "swrast/s_renderbuffer.h"
 #include "swrast_setup/swrast_setup.h"
@@ -125,8 +128,7 @@ swrastFillInModes(__DRIscreen *psp,
     __DRIconfig **configs;
     unsigned depth_buffer_factor;
     unsigned back_buffer_factor;
-    GLenum fb_format;
-    GLenum fb_type;
+    gl_format format;
 
     /* GLX_SWAP_COPY_OML is only supported because the Intel driver doesn't
      * support pageflipping at all.
@@ -161,21 +163,14 @@ swrastFillInModes(__DRIscreen *psp,
     back_buffer_factor = 2;
 
     switch (pixel_bits) {
-    case 8:
-	fb_format = GL_RGB;
-	fb_type = GL_UNSIGNED_BYTE_2_3_3_REV;
-	break;
     case 16:
-	fb_format = GL_RGB;
-	fb_type = GL_UNSIGNED_SHORT_5_6_5;
+	format = MESA_FORMAT_RGB565;
 	break;
     case 24:
-	fb_format = GL_BGR;
-	fb_type = GL_UNSIGNED_INT_8_8_8_8_REV;
+        format = MESA_FORMAT_XRGB8888;
 	break;
     case 32:
-	fb_format = GL_BGRA;
-	fb_type = GL_UNSIGNED_INT_8_8_8_8_REV;
+	format = MESA_FORMAT_ARGB8888;
 	break;
     default:
 	fprintf(stderr, "[%s:%u] bad depth %d\n", __func__, __LINE__,
@@ -183,7 +178,7 @@ swrastFillInModes(__DRIscreen *psp,
 	return NULL;
     }
 
-    configs = driCreateConfigs(fb_format, fb_type,
+    configs = driCreateConfigs(format,
 			       depth_bits_array, stencil_bits_array,
 			       depth_buffer_factor, back_buffer_modes,
 			       back_buffer_factor, msaa_samples_array, 1,
@@ -200,18 +195,16 @@ swrastFillInModes(__DRIscreen *psp,
 static const __DRIconfig **
 dri_init_screen(__DRIscreen * psp)
 {
-    __DRIconfig **configs8, **configs16, **configs24, **configs32;
+    __DRIconfig **configs16, **configs24, **configs32;
 
     TRACE;
 
     psp->extensions = dri_screen_extensions;
 
-    configs8  = swrastFillInModes(psp,  8,  8, 0, 1);
     configs16 = swrastFillInModes(psp, 16, 16, 0, 1);
     configs24 = swrastFillInModes(psp, 24, 24, 8, 1);
     configs32 = swrastFillInModes(psp, 32, 24, 8, 1);
 
-    configs16 = driConcatConfigs(configs8, configs16);
     configs24 = driConcatConfigs(configs16, configs24);
     configs32 = driConcatConfigs(configs24, configs32);
 
@@ -261,14 +254,14 @@ choose_pixel_format(const struct gl_config *v)
 }
 
 static void
-swrast_delete_renderbuffer(struct gl_renderbuffer *rb)
+swrast_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
     struct dri_swrast_renderbuffer *xrb = dri_swrast_renderbuffer(rb);
 
     TRACE;
 
     free(xrb->Base.Buffer);
-    free(xrb);
+    _mesa_delete_renderbuffer(ctx, rb);
 }
 
 /* see bytes_per_line in libGL */
@@ -469,7 +462,7 @@ dri_create_buffer(__DRIscreen * sPriv,
     dPriv->driverPrivate = drawable;
     drawable->dPriv = dPriv;
 
-    drawable->row = malloc(MAX_WIDTH * 4);
+    drawable->row = malloc(SWRAST_MAX_WIDTH * 4);
     if (drawable->row == NULL)
 	goto drawable_fail;
 
@@ -504,7 +497,7 @@ drawable_fail:
     if (drawable)
 	free(drawable->row);
 
-    FREE(drawable);
+    free(drawable);
 
     return GL_FALSE;
 }
@@ -632,13 +625,14 @@ viewport(struct gl_context *ctx, GLint x, GLint y, GLsizei w, GLsizei h)
 }
 
 static gl_format swrastChooseTextureFormat(struct gl_context * ctx,
+                                           GLenum target,
 					   GLint internalFormat,
 					   GLenum format,
 					   GLenum type)
 {
     if (internalFormat == GL_RGB)
 	return MESA_FORMAT_XRGB8888;
-    return _mesa_choose_tex_format(ctx, internalFormat, format, type);
+    return _mesa_choose_tex_format(ctx, target, internalFormat, format, type);
 }
 
 static void
@@ -655,14 +649,9 @@ swrast_init_driver_functions(struct dd_function_table *driver)
 
 static const char *es2_extensions[] = {
    /* Used by mesa internally (cf all_mesa_extensions in ../common/utils.c) */
-   "GL_ARB_transpose_matrix",
-   "GL_ARB_window_pos",
    "GL_EXT_blend_func_separate",
-   "GL_EXT_compiled_vertex_array",
    "GL_EXT_framebuffer_blit",
-   "GL_IBM_multimode_draw_arrays",
    "GL_MESA_window_pos",
-   "GL_NV_vertex_program",
 
    /* Required by GLES2 */
    "GL_ARB_fragment_program",
@@ -719,11 +708,20 @@ dri_create_context(gl_api api,
      */
     (void) flags;
 
-    if (api == API_OPENGL
-	&& (major_version > 2
-	    || (major_version == 2 && minor_version > 1))) {
-       *error = __DRI_CTX_ERROR_BAD_VERSION;
-       goto context_fail;
+    switch (api) {
+    case API_OPENGL_COMPAT:
+        if (major_version > 2
+	    || (major_version == 2 && minor_version > 1)) {
+            *error = __DRI_CTX_ERROR_BAD_VERSION;
+            return GL_FALSE;
+        }
+        break;
+    case API_OPENGLES:
+    case API_OPENGLES2:
+        break;
+    case API_OPENGL_CORE:
+        *error = __DRI_CTX_ERROR_BAD_API;
+        return GL_FALSE;
     }
 
     ctx = CALLOC_STRUCT(dri_context);
@@ -746,7 +744,7 @@ dri_create_context(gl_api api,
     mesaCtx = &ctx->Base;
 
     /* basic context setup */
-    if (!_mesa_initialize_context(mesaCtx, api, visual, sharedCtx, &functions, (void *) cPriv)) {
+    if (!_mesa_initialize_context(mesaCtx, api, visual, sharedCtx, &functions)) {
 	*error = __DRI_CTX_ERROR_NO_MEMORY;
 	goto context_fail;
     }
@@ -771,7 +769,9 @@ dri_create_context(gl_api api,
     _mesa_enable_sw_extensions(mesaCtx);
 
     switch (api) {
-    case API_OPENGL:
+    case API_OPENGL_CORE:
+        /* XXX fix me, fall-through for now */
+    case API_OPENGL_COMPAT:
         _mesa_enable_1_3_extensions(mesaCtx);
         _mesa_enable_1_4_extensions(mesaCtx);
         _mesa_enable_1_5_extensions(mesaCtx);
@@ -789,12 +789,17 @@ dri_create_context(gl_api api,
         break;
     }
 
+    _mesa_compute_version(mesaCtx);
+
+    _mesa_initialize_dispatch_tables(mesaCtx);
+    _mesa_initialize_vbo_vtxfmt(mesaCtx);
+
     *error = __DRI_CTX_ERROR_SUCCESS;
     return GL_TRUE;
 
 context_fail:
 
-    FREE(ctx);
+    free(ctx);
 
     return GL_FALSE;
 }

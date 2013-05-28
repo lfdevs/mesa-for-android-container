@@ -52,8 +52,6 @@ struct gl_program _mesa_DummyProgram;
 void
 _mesa_init_program(struct gl_context *ctx)
 {
-   GLuint i;
-
    /*
     * If this assertion fails, we need to increase the field
     * size for register indexes (see INST_INDEX_BITS).
@@ -83,48 +81,32 @@ _mesa_init_program(struct gl_context *ctx)
    ctx->Program.ErrorPos = -1;
    ctx->Program.ErrorString = _mesa_strdup("");
 
-#if FEATURE_NV_vertex_program || FEATURE_ARB_vertex_program
    ctx->VertexProgram.Enabled = GL_FALSE;
-#if FEATURE_es2_glsl
    ctx->VertexProgram.PointSizeEnabled =
       (ctx->API == API_OPENGLES2) ? GL_TRUE : GL_FALSE;
-#else
-   ctx->VertexProgram.PointSizeEnabled = GL_FALSE;
-#endif
    ctx->VertexProgram.TwoSideEnabled = GL_FALSE;
    _mesa_reference_vertprog(ctx, &ctx->VertexProgram.Current,
                             ctx->Shared->DefaultVertexProgram);
    assert(ctx->VertexProgram.Current);
-   for (i = 0; i < MAX_NV_VERTEX_PROGRAM_PARAMS / 4; i++) {
-      ctx->VertexProgram.TrackMatrix[i] = GL_NONE;
-      ctx->VertexProgram.TrackMatrixTransform[i] = GL_IDENTITY_NV;
-   }
    ctx->VertexProgram.Cache = _mesa_new_program_cache();
-#endif
 
-#if FEATURE_NV_fragment_program || FEATURE_ARB_fragment_program
    ctx->FragmentProgram.Enabled = GL_FALSE;
    _mesa_reference_fragprog(ctx, &ctx->FragmentProgram.Current,
                             ctx->Shared->DefaultFragmentProgram);
    assert(ctx->FragmentProgram.Current);
    ctx->FragmentProgram.Cache = _mesa_new_program_cache();
-#endif
 
-#if FEATURE_ARB_geometry_shader4
    ctx->GeometryProgram.Enabled = GL_FALSE;
    /* right now by default we don't have a geometry program */
    _mesa_reference_geomprog(ctx, &ctx->GeometryProgram.Current,
                             NULL);
    ctx->GeometryProgram.Cache = _mesa_new_program_cache();
-#endif
 
    /* XXX probably move this stuff */
-#if FEATURE_ATI_fragment_shader
    ctx->ATIFragmentShader.Enabled = GL_FALSE;
    ctx->ATIFragmentShader.Current = ctx->Shared->DefaultFragmentShader;
    assert(ctx->ATIFragmentShader.Current);
    ctx->ATIFragmentShader.Current->RefCount++;
-#endif
 }
 
 
@@ -134,27 +116,21 @@ _mesa_init_program(struct gl_context *ctx)
 void
 _mesa_free_program_data(struct gl_context *ctx)
 {
-#if FEATURE_NV_vertex_program || FEATURE_ARB_vertex_program
    _mesa_reference_vertprog(ctx, &ctx->VertexProgram.Current, NULL);
    _mesa_delete_program_cache(ctx, ctx->VertexProgram.Cache);
-#endif
-#if FEATURE_NV_fragment_program || FEATURE_ARB_fragment_program
    _mesa_reference_fragprog(ctx, &ctx->FragmentProgram.Current, NULL);
    _mesa_delete_shader_cache(ctx, ctx->FragmentProgram.Cache);
-#endif
-#if FEATURE_ARB_geometry_shader4
    _mesa_reference_geomprog(ctx, &ctx->GeometryProgram.Current, NULL);
    _mesa_delete_program_cache(ctx, ctx->GeometryProgram.Cache);
-#endif
+
    /* XXX probably move this stuff */
-#if FEATURE_ATI_fragment_shader
    if (ctx->ATIFragmentShader.Current) {
       ctx->ATIFragmentShader.Current->RefCount--;
       if (ctx->ATIFragmentShader.Current->RefCount <= 0) {
          free(ctx->ATIFragmentShader.Current);
       }
    }
-#endif
+
    free((void *) ctx->Program.ErrorString);
 }
 
@@ -167,28 +143,18 @@ _mesa_free_program_data(struct gl_context *ctx)
 void
 _mesa_update_default_objects_program(struct gl_context *ctx)
 {
-#if FEATURE_NV_vertex_program || FEATURE_ARB_vertex_program
    _mesa_reference_vertprog(ctx, &ctx->VertexProgram.Current,
-                            (struct gl_vertex_program *)
                             ctx->Shared->DefaultVertexProgram);
    assert(ctx->VertexProgram.Current);
-#endif
 
-#if FEATURE_NV_fragment_program || FEATURE_ARB_fragment_program
    _mesa_reference_fragprog(ctx, &ctx->FragmentProgram.Current,
-                            (struct gl_fragment_program *)
                             ctx->Shared->DefaultFragmentProgram);
    assert(ctx->FragmentProgram.Current);
-#endif
 
-#if FEATURE_ARB_geometry_shader4
    _mesa_reference_geomprog(ctx, &ctx->GeometryProgram.Current,
-                            (struct gl_geometry_program *)
-                            ctx->Shared->DefaultGeometryProgram);
-#endif
+                      ctx->Shared->DefaultGeometryProgram);
 
    /* XXX probably move this stuff */
-#if FEATURE_ATI_fragment_shader
    if (ctx->ATIFragmentShader.Current) {
       ctx->ATIFragmentShader.Current->RefCount--;
       if (ctx->ATIFragmentShader.Current->RefCount <= 0) {
@@ -198,7 +164,6 @@ _mesa_update_default_objects_program(struct gl_context *ctx)
    ctx->ATIFragmentShader.Current = (struct ati_fragment_shader *) ctx->Shared->DefaultFragmentShader;
    assert(ctx->ATIFragmentShader.Current);
    ctx->ATIFragmentShader.Current->RefCount++;
-#endif
 }
 
 
@@ -252,7 +217,7 @@ _mesa_find_line_column(const GLubyte *string, const GLubyte *pos,
    while (*p != 0 && *p != '\n')
       p++;
    len = p - lineStart;
-   s = (GLubyte *) malloc(len + 1);
+   s = malloc(len + 1);
    memcpy(s, lineStart, len);
    s[len] = 0;
 
@@ -273,7 +238,6 @@ _mesa_init_program_struct( struct gl_context *ctx, struct gl_program *prog,
       memset(prog, 0, sizeof(*prog));
       prog->Id = id;
       prog->Target = target;
-      prog->Resident = GL_TRUE;
       prog->RefCount = 1;
       prog->Format = GL_PROGRAM_FORMAT_ASCII_ARB;
 
@@ -346,7 +310,6 @@ _mesa_new_program(struct gl_context *ctx, GLenum target, GLuint id)
    struct gl_program *prog;
    switch (target) {
    case GL_VERTEX_PROGRAM_ARB: /* == GL_VERTEX_PROGRAM_NV */
-   case GL_VERTEX_STATE_PROGRAM_NV:
       prog = _mesa_init_vertex_program(ctx, CALLOC_STRUCT(gl_vertex_program),
                                        target, id );
       break;
@@ -385,8 +348,7 @@ _mesa_delete_program(struct gl_context *ctx, struct gl_program *prog)
    if (prog == &_mesa_DummyProgram)
       return;
 
-   if (prog->String)
-      free(prog->String);
+   free(prog->String);
 
    if (prog->Instructions) {
       _mesa_free_instructions(prog->Instructions, prog->NumInstructions);
@@ -538,18 +500,15 @@ _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog)
    switch (prog->Target) {
    case GL_VERTEX_PROGRAM_ARB:
       {
-         const struct gl_vertex_program *vp
-            = (const struct gl_vertex_program *) prog;
-         struct gl_vertex_program *vpc = (struct gl_vertex_program *) clone;
+         const struct gl_vertex_program *vp = gl_vertex_program_const(prog);
+         struct gl_vertex_program *vpc = gl_vertex_program(clone);
          vpc->IsPositionInvariant = vp->IsPositionInvariant;
-         vpc->IsNVProgram = vp->IsNVProgram;
       }
       break;
    case GL_FRAGMENT_PROGRAM_ARB:
       {
-         const struct gl_fragment_program *fp
-            = (const struct gl_fragment_program *) prog;
-         struct gl_fragment_program *fpc = (struct gl_fragment_program *) clone;
+         const struct gl_fragment_program *fp = gl_fragment_program_const(prog);
+         struct gl_fragment_program *fpc = gl_fragment_program(clone);
          fpc->UsesKill = fp->UsesKill;
          fpc->UsesDFdy = fp->UsesDFdy;
          fpc->OriginUpperLeft = fp->OriginUpperLeft;
@@ -558,9 +517,8 @@ _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog)
       break;
    case MESA_GEOMETRY_PROGRAM:
       {
-         const struct gl_geometry_program *gp
-            = (const struct gl_geometry_program *) prog;
-         struct gl_geometry_program *gpc = (struct gl_geometry_program *) clone;
+         const struct gl_geometry_program *gp = gl_geometry_program_const(prog);
+         struct gl_geometry_program *gpc = gl_geometry_program(clone);
          gpc->VerticesOut = gp->VerticesOut;
          gpc->InputType = gp->InputType;
          gpc->OutputType = gp->OutputType;
@@ -738,7 +696,7 @@ _mesa_combine_programs(struct gl_context *ctx,
    const GLuint newLength = lenA + lenB;
    GLboolean usedTemps[MAX_PROGRAM_TEMPS];
    GLuint firstTemp = 0;
-   GLbitfield inputsB;
+   GLbitfield64 inputsB;
    GLuint i;
 
    ASSERT(progA->Target == progB->Target);
@@ -764,13 +722,14 @@ _mesa_combine_programs(struct gl_context *ctx,
                              usedTemps, MAX_PROGRAM_TEMPS);
 
    if (newProg->Target == GL_FRAGMENT_PROGRAM_ARB) {
-      struct gl_fragment_program *fprogA, *fprogB, *newFprog;
-      GLbitfield progB_inputsRead = progB->InputsRead;
+      const struct gl_fragment_program *fprogA, *fprogB;
+      struct gl_fragment_program *newFprog;
+      GLbitfield64 progB_inputsRead = progB->InputsRead;
       GLint progB_colorFile, progB_colorIndex;
 
-      fprogA = (struct gl_fragment_program *) progA;
-      fprogB = (struct gl_fragment_program *) progB;
-      newFprog = (struct gl_fragment_program *) newProg;
+      fprogA = gl_fragment_program_const(progA);
+      fprogB = gl_fragment_program_const(progB);
+      newFprog = gl_fragment_program(newProg);
 
       newFprog->UsesKill = fprogA->UsesKill || fprogB->UsesKill;
       newFprog->UsesDFdy = fprogA->UsesDFdy || fprogB->UsesDFdy;
@@ -881,8 +840,8 @@ _mesa_find_used_registers(const struct gl_program *prog,
 
       for (j = 0; j < n; j++) {
          if (inst->SrcReg[j].File == file) {
-            ASSERT(inst->SrcReg[j].Index < usedSize);
-            if(inst->SrcReg[j].Index < usedSize)
+            ASSERT(inst->SrcReg[j].Index < (GLint) usedSize);
+            if (inst->SrcReg[j].Index < (GLint) usedSize)
                used[inst->SrcReg[j].Index] = GL_TRUE;
          }
       }
@@ -949,26 +908,23 @@ _mesa_valid_register_index(const struct gl_context *ctx,
       return GL_TRUE;  /* XXX or maybe false? */
 
    case PROGRAM_TEMPORARY:
-      return index >= 0 && index < c->MaxTemps;
+      return index >= 0 && index < (GLint) c->MaxTemps;
 
    case PROGRAM_ENV_PARAM:
-      return index >= 0 && index < c->MaxEnvParams;
+      return index >= 0 && index < (GLint) c->MaxEnvParams;
 
    case PROGRAM_LOCAL_PARAM:
-      return index >= 0 && index < c->MaxLocalParams;
-
-   case PROGRAM_NAMED_PARAM:
-      return index >= 0 && index < c->MaxParameters;
+      return index >= 0 && index < (GLint) c->MaxLocalParams;
 
    case PROGRAM_UNIFORM:
    case PROGRAM_STATE_VAR:
       /* aka constant buffer */
-      return index >= 0 && index < c->MaxUniformComponents / 4;
+      return index >= 0 && index < (GLint) c->MaxUniformComponents / 4;
 
    case PROGRAM_CONSTANT:
       /* constant buffer w/ possible relative negative addressing */
       return (index > (int) c->MaxUniformComponents / -4 &&
-              index < c->MaxUniformComponents / 4);
+              index < (int) c->MaxUniformComponents / 4);
 
    case PROGRAM_INPUT:
       if (index < 0)
@@ -976,11 +932,11 @@ _mesa_valid_register_index(const struct gl_context *ctx,
 
       switch (shaderType) {
       case MESA_SHADER_VERTEX:
-         return index < VERT_ATTRIB_GENERIC0 + c->MaxAttribs;
+         return index < VERT_ATTRIB_GENERIC0 + (GLint) c->MaxAttribs;
       case MESA_SHADER_FRAGMENT:
-         return index < FRAG_ATTRIB_VAR0 + ctx->Const.MaxVarying;
+         return index < FRAG_ATTRIB_VAR0 + (GLint) ctx->Const.MaxVarying;
       case MESA_SHADER_GEOMETRY:
-         return index < GEOM_ATTRIB_VAR0 + ctx->Const.MaxVarying;
+         return index < GEOM_ATTRIB_VAR0 + (GLint) ctx->Const.MaxVarying;
       default:
          return GL_FALSE;
       }
@@ -991,17 +947,17 @@ _mesa_valid_register_index(const struct gl_context *ctx,
 
       switch (shaderType) {
       case MESA_SHADER_VERTEX:
-         return index < VERT_RESULT_VAR0 + ctx->Const.MaxVarying;
+         return index < VERT_RESULT_VAR0 + (GLint) ctx->Const.MaxVarying;
       case MESA_SHADER_FRAGMENT:
-         return index < FRAG_RESULT_DATA0 + ctx->Const.MaxDrawBuffers;
+         return index < FRAG_RESULT_DATA0 + (GLint) ctx->Const.MaxDrawBuffers;
       case MESA_SHADER_GEOMETRY:
-         return index < GEOM_RESULT_VAR0 + ctx->Const.MaxVarying;
+         return index < GEOM_RESULT_VAR0 + (GLint) ctx->Const.MaxVarying;
       default:
          return GL_FALSE;
       }
 
    case PROGRAM_ADDRESS:
-      return index >= 0 && index < c->MaxAddressRegs;
+      return index >= 0 && index < (GLint) c->MaxAddressRegs;
 
    default:
       _mesa_problem(ctx,

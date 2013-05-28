@@ -30,7 +30,6 @@
 #include "s_aaline.h"
 #include "s_context.h"
 #include "s_feedback.h"
-#include "s_fragprog.h"
 #include "s_lines.h"
 #include "s_span.h"
 
@@ -68,7 +67,7 @@ draw_wide_line( struct gl_context *ctx, SWspan *span, GLboolean xMajor )
                                      ctx->Const.MaxLineWidth);
    GLint start;
 
-   ASSERT(span->end < MAX_WIDTH);
+   ASSERT(span->end < SWRAST_MAX_WIDTH);
 
    if (width & 1)
       start = width / 2;
@@ -189,8 +188,8 @@ _swrast_add_spec_terms_line(struct gl_context *ctx,
    /* draw */
    SWRAST_CONTEXT(ctx)->SpecLine( ctx, ncv0, ncv1 );
    /* restore original colors */
-   COPY_CHAN4( ncv0->attrib[FRAG_ATTRIB_COL0], cSave[0] );
-   COPY_CHAN4( ncv1->attrib[FRAG_ATTRIB_COL0], cSave[1] );
+   COPY_CHAN4(ncv0->color, cSave[0]);
+   COPY_CHAN4(ncv1->color, cSave[1]);
 }
 
 

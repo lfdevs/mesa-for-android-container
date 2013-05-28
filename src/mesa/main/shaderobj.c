@@ -124,8 +124,7 @@ _mesa_new_shader(struct gl_context *ctx, GLuint name, GLenum type)
 static void
 _mesa_delete_shader(struct gl_context *ctx, struct gl_shader *sh)
 {
-   if (sh->Source)
-      free((void *) sh->Source);
+   free((void *)sh->Source);
    _mesa_reference_program(ctx, &sh->Program, NULL);
    ralloc_free(sh);
 }
@@ -242,12 +241,13 @@ _mesa_init_shader_program(struct gl_context *ctx, struct gl_shader_program *prog
 
    prog->AttributeBindings = string_to_uint_map_ctor();
    prog->FragDataBindings = string_to_uint_map_ctor();
+   prog->FragDataIndexBindings = string_to_uint_map_ctor();
 
-#if FEATURE_ARB_geometry_shader4
    prog->Geom.VerticesOut = 0;
    prog->Geom.InputType = GL_TRIANGLES;
    prog->Geom.OutputType = GL_TRIANGLE_STRIP;
-#endif
+
+   prog->TransformFeedback.BufferMode = GL_INTERLEAVED_ATTRIBS;
 
    prog->InfoLog = ralloc_strdup(prog, "");
 }
@@ -277,7 +277,8 @@ _mesa_clear_shader_program_data(struct gl_context *ctx,
                                 struct gl_shader_program *shProg)
 {
    if (shProg->UniformStorage) {
-      for (unsigned i = 0; i < shProg->NumUserUniformStorage; ++i)
+      unsigned i;
+      for (i = 0; i < shProg->NumUserUniformStorage; ++i)
          _mesa_uniform_detach_all_driver_storage(&shProg->UniformStorage[i]);
       ralloc_free(shProg->UniformStorage);
       shProg->NumUserUniformStorage = 0;
@@ -320,16 +321,19 @@ _mesa_free_shader_program_data(struct gl_context *ctx,
       shProg->FragDataBindings = NULL;
    }
 
+   if (shProg->FragDataIndexBindings) {
+      string_to_uint_map_dtor(shProg->FragDataIndexBindings);
+      shProg->FragDataIndexBindings = NULL;
+   }
+
    /* detach shaders */
    for (i = 0; i < shProg->NumShaders; i++) {
       _mesa_reference_shader(ctx, &shProg->Shaders[i], NULL);
    }
    shProg->NumShaders = 0;
 
-   if (shProg->Shaders) {
-      free(shProg->Shaders);
-      shProg->Shaders = NULL;
-   }
+   free(shProg->Shaders);
+   shProg->Shaders = NULL;
 
    /* Transform feedback varying vars */
    for (i = 0; i < shProg->TransformFeedback.NumVarying; i++) {

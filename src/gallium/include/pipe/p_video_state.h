@@ -38,11 +38,6 @@
 extern "C" {
 #endif
 
-struct pipe_video_rect
-{
-   unsigned x, y, w, h;
-};
-
 /*
  * see table 6-12 in the spec
  */
@@ -138,14 +133,11 @@ struct pipe_mpeg12_picture_desc
    unsigned full_pel_forward_vector;
    unsigned full_pel_backward_vector;
    unsigned num_slices;
-};
-
-struct pipe_mpeg12_quant_matrix
-{
-   struct pipe_quant_matrix base;
 
    const uint8_t *intra_matrix;
    const uint8_t *non_intra_matrix;
+
+   struct pipe_video_buffer *ref[2];
 };
 
 struct pipe_mpeg12_macroblock
@@ -191,6 +183,7 @@ struct pipe_mpeg12_macroblock
 struct pipe_mpeg4_picture_desc
 {
    struct pipe_picture_desc base;
+
    int32_t trd[2];
    int32_t trb[2];
    uint16_t vop_time_increment_resolution;
@@ -205,19 +198,17 @@ struct pipe_mpeg4_picture_desc
    uint8_t rounding_control;
    uint8_t alternate_vertical_scan_flag;
    uint8_t top_field_first;
-};
-
-struct pipe_mpeg4_quant_matrix
-{
-   struct pipe_quant_matrix base;
 
    const uint8_t *intra_matrix;
    const uint8_t *non_intra_matrix;
+
+   struct pipe_video_buffer *ref[2];
 };
 
 struct pipe_vc1_picture_desc
 {
    struct pipe_picture_desc base;
+
    uint32_t slice_count;
    uint8_t picture_type;
    uint8_t frame_coding_mode;
@@ -247,6 +238,51 @@ struct pipe_vc1_picture_desc
    uint8_t maxbframes;
    uint8_t deblockEnable;
    uint8_t pquant;
+
+   struct pipe_video_buffer *ref[2];
+};
+
+struct pipe_h264_picture_desc
+{
+   struct pipe_picture_desc base;
+
+   uint32_t slice_count;
+   int32_t  field_order_cnt[2];
+   bool     is_reference;
+   uint32_t frame_num;
+   uint8_t  field_pic_flag;
+   uint8_t  bottom_field_flag;
+   uint8_t  num_ref_frames;
+   uint8_t  mb_adaptive_frame_field_flag;
+   uint8_t  constrained_intra_pred_flag;
+   uint8_t  weighted_pred_flag;
+   uint8_t  weighted_bipred_idc;
+   uint8_t  frame_mbs_only_flag;
+   uint8_t  transform_8x8_mode_flag;
+   int8_t   chroma_qp_index_offset;
+   int8_t   second_chroma_qp_index_offset;
+   int8_t   pic_init_qp_minus26;
+   uint8_t  num_ref_idx_l0_active_minus1;
+   uint8_t  num_ref_idx_l1_active_minus1;
+   uint8_t  log2_max_frame_num_minus4;
+   uint8_t  pic_order_cnt_type;
+   uint8_t  log2_max_pic_order_cnt_lsb_minus4;
+   uint8_t  delta_pic_order_always_zero_flag;
+   uint8_t  direct_8x8_inference_flag;
+   uint8_t  entropy_coding_mode_flag;
+   uint8_t  pic_order_present_flag;
+   uint8_t  deblocking_filter_control_present_flag;
+   uint8_t  redundant_pic_cnt_present_flag;
+   uint8_t  scaling_lists_4x4[6][16];
+   uint8_t  scaling_lists_8x8[2][64];
+
+   bool     is_long_term[16];
+   bool     top_is_reference[16];
+   bool     bottom_is_reference[16];
+   uint32_t field_order_cnt_list[16][2];
+   uint32_t frame_num_list[16];
+
+   struct pipe_video_buffer *ref[16];
 };
 
 #ifdef __cplusplus

@@ -28,18 +28,15 @@
 
 
 struct _glapi_table;
+struct gl_context;
 
 extern struct _glapi_table *
-_mesa_alloc_dispatch_table(int size);
+_mesa_alloc_dispatch_table(void);
 
-extern struct _glapi_table *
-_mesa_create_exec_table(void);
+extern void
+_mesa_initialize_exec_table(struct gl_context *ctx);
 
-extern struct _glapi_table *
-_mesa_create_exec_table_es1(void);
-
-extern struct _glapi_table *
-_mesa_create_exec_table_es2(void);
-
+extern void
+_mesa_initialize_dispatch_tables(struct gl_context *ctx);
 
 #endif

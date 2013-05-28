@@ -655,10 +655,8 @@ GLX_eglTerminate(_EGLDriver *drv, _EGLDisplay *disp)
    _eglReleaseDisplayResources(drv, disp);
    _eglCleanupDisplay(disp);
 
-   if (GLX_dpy->visuals)
-      XFree(GLX_dpy->visuals);
-   if (GLX_dpy->fbconfigs)
-      XFree(GLX_dpy->fbconfigs);
+   free(GLX_dpy->visuals);
+   free(GLX_dpy->fbconfigs);
 
    if (!disp->PlatformDisplay)
       XCloseDisplay(GLX_dpy->dpy);
@@ -909,7 +907,7 @@ GLX_eglCreatePixmapSurface(_EGLDriver *drv, _EGLDisplay *disp,
       if (vinfo) {
          GLX_surf->glx_drawable = GLX_drv->glXCreateGLXPixmap(GLX_dpy->dpy,
                vinfo, GLX_surf->drawable);
-         XFree(vinfo);
+         free(vinfo);
       }
    }
    else {
@@ -1147,7 +1145,7 @@ fail:
  * Create a new _EGLDriver object and init its dispatch table.
  */
 _EGLDriver *
-_EGL_MAIN(const char *args)
+_eglBuiltInDriverGLX(const char *args)
 {
    struct GLX_egl_driver *GLX_drv = CALLOC_STRUCT(GLX_egl_driver);
 

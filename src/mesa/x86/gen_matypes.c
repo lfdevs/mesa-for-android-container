@@ -93,17 +93,15 @@ int main( int argc, char **argv )
     */
    OFFSET_HEADER( "struct gl_context" );
 
-   OFFSET( "CTX_DRIVER_CTX              ", struct gl_context, DriverCtx );
    printf( "\n" );
    OFFSET( "CTX_LIGHT_ENABLED           ", struct gl_context, Light.Enabled );
    OFFSET( "CTX_LIGHT_SHADE_MODEL       ", struct gl_context, Light.ShadeModel );
    OFFSET( "CTX_LIGHT_COLOR_MAT_FACE    ", struct gl_context, Light.ColorMaterialFace );
    OFFSET( "CTX_LIGHT_COLOR_MAT_MODE    ", struct gl_context, Light.ColorMaterialMode );
-   OFFSET( "CTX_LIGHT_COLOR_MAT_MASK    ", struct gl_context, Light.ColorMaterialBitmask );
+   OFFSET( "CTX_LIGHT_COLOR_MAT_MASK    ", struct gl_context, Light._ColorMaterialBitmask );
    OFFSET( "CTX_LIGHT_COLOR_MAT_ENABLED ", struct gl_context, Light.ColorMaterialEnabled );
    OFFSET( "CTX_LIGHT_ENABLED_LIST      ", struct gl_context, Light.EnabledList );
    OFFSET( "CTX_LIGHT_NEED_VERTS        ", struct gl_context, Light._NeedVertices );
-   OFFSET( "CTX_LIGHT_FLAGS             ", struct gl_context, Light._Flags );
    OFFSET( "CTX_LIGHT_BASE_COLOR        ", struct gl_context, Light._BaseColor );
 
 
@@ -209,7 +207,6 @@ int main( int argc, char **argv )
    OFFSET( "LIGHT_NORM_DIRECTION    ", struct gl_light, _NormSpotDirection );
    OFFSET( "LIGHT_VP_INF_SPOT_ATTEN ", struct gl_light, _VP_inf_spot_attenuation );
    printf( "\n" );
-   OFFSET( "LIGHT_SPOT_EXP_TABLE    ", struct gl_light, _SpotExpTable );
    OFFSET( "LIGHT_MAT_AMBIENT       ", struct gl_light, _MatAmbient );
    OFFSET( "LIGHT_MAT_DIFFUSE       ", struct gl_light, _MatDiffuse );
    OFFSET( "LIGHT_MAT_SPECULAR      ", struct gl_light, _MatSpecular );

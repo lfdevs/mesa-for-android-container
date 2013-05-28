@@ -59,15 +59,6 @@
 static struct gl_renderbuffer *
 intel_new_renderbuffer(struct gl_context * ctx, GLuint name);
 
-bool
-intel_framebuffer_has_hiz(struct gl_framebuffer *fb)
-{
-   struct intel_renderbuffer *rb = NULL;
-   if (fb)
-      rb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
-   return rb && rb->mt && rb->mt->hiz_mt;
-}
-
 struct intel_region*
 intel_get_rb_region(struct gl_framebuffer *fb, GLuint attIndex)
 {
@@ -96,7 +87,7 @@ intel_new_framebuffer(struct gl_context * ctx, GLuint name)
 
 /** Called by gl_renderbuffer::Delete() */
 static void
-intel_delete_renderbuffer(struct gl_renderbuffer *rb)
+intel_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
 
@@ -104,7 +95,7 @@ intel_delete_renderbuffer(struct gl_renderbuffer *rb)
 
    intel_miptree_release(&irb->mt);
 
-   free(irb);
+   _mesa_delete_renderbuffer(ctx, rb);
 }
 
 /**
@@ -189,18 +180,55 @@ intel_unmap_renderbuffer(struct gl_context *ctx,
 
 
 /**
+ * Round up the requested multisample count to the next supported sample size.
+ */
+unsigned
+intel_quantize_num_samples(struct intel_screen *intel, unsigned num_samples)
+{
+   switch (intel->gen) {
+   case 6:
+      /* Gen6 supports only 4x multisampling. */
+      if (num_samples > 0)
+         return 4;
+      else
+         return 0;
+   case 7:
+      /* Gen7 supports 4x and 8x multisampling. */
+      if (num_samples > 4)
+         return 8;
+      else if (num_samples > 0)
+         return 4;
+      else
+         return 0;
+      return 0;
+   default:
+      /* MSAA unsupported.  However, a careful reading of
+       * EXT_framebuffer_multisample reveals that we need to permit
+       * num_samples to be 1 (since num_samples is permitted to be as high as
+       * GL_MAX_SAMPLES, and GL_MAX_SAMPLES must be at least 1).  Since
+       * platforms before Gen6 don't support MSAA, this is safe, because
+       * multisampling won't happen anyhow.
+       */
+      if (num_samples > 0)
+         return 1;
+      return 0;
+   }
+}
+
+
+/**
  * Called via glRenderbufferStorageEXT() to set the format and allocate
  * storage for a user-created renderbuffer.
  */
-GLboolean
+static GLboolean
 intel_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
                                  GLenum internalFormat,
                                  GLuint width, GLuint height)
 {
    struct intel_context *intel = intel_context(ctx);
+   struct intel_screen *screen = intel->intelScreen;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
-
-   ASSERT(rb->Name != 0);
+   rb->NumSamples = intel_quantize_num_samples(screen, rb->NumSamples);
 
    switch (internalFormat) {
    default:
@@ -209,7 +237,8 @@ intel_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer
        * except they're less useful because you can't texture with
        * them.
        */
-      rb->Format = intel->ctx.Driver.ChooseTextureFormat(ctx, internalFormat,
+      rb->Format = intel->ctx.Driver.ChooseTextureFormat(ctx, GL_TEXTURE_2D,
+							 internalFormat,
 							 GL_NONE, GL_NONE);
       break;
    case GL_STENCIL_INDEX:
@@ -241,23 +270,15 @@ intel_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer
       return true;
 
    irb->mt = intel_miptree_create_for_renderbuffer(intel, rb->Format,
-						   width, height);
+						   width, height,
+                                                   rb->NumSamples);
    if (!irb->mt)
       return false;
-
-   if (intel->vtbl.is_hiz_depth_format(intel, rb->Format)) {
-      bool ok = intel_miptree_alloc_hiz(intel, irb->mt);
-      if (!ok) {
-	 intel_miptree_release(&irb->mt);
-	 return false;
-      }
-   }
 
    return true;
 }
 
 
-#if FEATURE_OES_EGL_image
 static void
 intel_image_target_renderbuffer_storage(struct gl_context *ctx,
 					struct gl_renderbuffer *rb,
@@ -301,7 +322,6 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
    rb->_BaseFormat = _mesa_base_fbo_format(&intel->ctx,
 					   image->internal_format);
 }
-#endif
 
 /**
  * Called for each hardware renderbuffer when a _window_ is resized.
@@ -331,7 +351,7 @@ intel_resize_buffers(struct gl_context *ctx, struct gl_framebuffer *fb,
 
    fb->Initialized = true; /* XXX remove someday */
 
-   if (fb->Name != 0) {
+   if (_mesa_is_user_fbo(fb)) {
       return;
    }
 
@@ -360,9 +380,11 @@ intel_nop_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
 /**
  * Create a new intel_renderbuffer which corresponds to an on-screen window,
  * not a user-created renderbuffer.
+ *
+ * \param num_samples must be quantized.
  */
 struct intel_renderbuffer *
-intel_create_renderbuffer(gl_format format)
+intel_create_renderbuffer(gl_format format, unsigned num_samples)
 {
    struct intel_renderbuffer *irb;
    struct gl_renderbuffer *rb;
@@ -382,10 +404,30 @@ intel_create_renderbuffer(gl_format format)
    rb->_BaseFormat = _mesa_get_format_base_format(format);
    rb->Format = format;
    rb->InternalFormat = rb->_BaseFormat;
+   rb->NumSamples = num_samples;
 
    /* intel-specific methods */
    rb->Delete = intel_delete_renderbuffer;
    rb->AllocStorage = intel_alloc_window_storage;
+
+   return irb;
+}
+
+/**
+ * Private window-system buffers (as opposed to ones shared with the display
+ * server created with intel_create_renderbuffer()) are most similar in their
+ * handling to user-created renderbuffers, but they have a resize handler that
+ * may be called at intel_update_renderbuffers() time.
+ *
+ * \param num_samples must be quantized.
+ */
+struct intel_renderbuffer *
+intel_create_private_renderbuffer(gl_format format, unsigned num_samples)
+{
+   struct intel_renderbuffer *irb;
+
+   irb = intel_create_renderbuffer(format, num_samples);
+   irb->Base.Base.AllocStorage = intel_alloc_renderbuffer_storage;
 
    return irb;
 }
@@ -451,20 +493,6 @@ intel_framebuffer_renderbuffer(struct gl_context * ctx,
    intel_draw_buffer(ctx);
 }
 
-/**
- * \par Special case for separate stencil
- *
- *     When wrapping a depthstencil texture that uses separate stencil, this
- *     function is recursively called twice: once to create \c
- *     irb->wrapped_depth and again to create \c irb->wrapped_stencil.  On the
- *     call to create \c irb->wrapped_depth, the \c format and \c
- *     internal_format parameters do not match \c mt->format. In that case, \c
- *     mt->format is MESA_FORMAT_S8_Z24 and \c format is \c
- *     MESA_FORMAT_X8_Z24.
- *
- * @return true on success
- */
-
 static bool
 intel_renderbuffer_update_wrapper(struct intel_context *intel,
                                   struct intel_renderbuffer *irb,
@@ -495,12 +523,42 @@ intel_renderbuffer_update_wrapper(struct intel_context *intel,
 
    if (mt->hiz_mt == NULL &&
        intel->vtbl.is_hiz_depth_format(intel, rb->Format)) {
-      intel_miptree_alloc_hiz(intel, mt);
+      intel_miptree_alloc_hiz(intel, mt, 0 /* num_samples */);
       if (!mt->hiz_mt)
 	 return false;
    }
 
    return true;
+}
+
+/**
+ * Create a fake intel_renderbuffer that wraps a gl_texture_image.
+ */
+struct intel_renderbuffer *
+intel_create_fake_renderbuffer_wrapper(struct intel_context *intel,
+                                       struct gl_texture_image *image)
+{
+   struct gl_context *ctx = &intel->ctx;
+   struct intel_renderbuffer *irb;
+   struct gl_renderbuffer *rb;
+
+   irb = CALLOC_STRUCT(intel_renderbuffer);
+   if (!irb) {
+      _mesa_error(ctx, GL_OUT_OF_MEMORY, "creating renderbuffer");
+      return NULL;
+   }
+
+   rb = &irb->Base.Base;
+
+   _mesa_init_renderbuffer(rb, 0);
+   rb->ClassID = INTEL_RB_CLASS;
+
+   if (!intel_renderbuffer_update_wrapper(intel, irb, image, image->Face)) {
+      intel_delete_renderbuffer(ctx, rb);
+      return NULL;
+   }
+
+   return irb;
 }
 
 void
@@ -511,7 +569,6 @@ intel_renderbuffer_set_draw_offset(struct intel_renderbuffer *irb)
    /* compute offset of the particular 2D image within the texture region */
    intel_miptree_get_image_offset(irb->mt,
 				  irb->mt_level,
-				  0, /* face, which we ignore */
 				  irb->mt_layer,
 				  &dst_x, &dst_y);
 
@@ -535,25 +592,14 @@ intel_renderbuffer_tile_offsets(struct intel_renderbuffer *irb,
 				uint32_t *tile_y)
 {
    struct intel_region *region = irb->mt->region;
-   int cpp = region->cpp;
-   uint32_t pitch = region->pitch * cpp;
+   uint32_t mask_x, mask_y;
 
-   if (region->tiling == I915_TILING_NONE) {
-      *tile_x = 0;
-      *tile_y = 0;
-      return irb->draw_x * cpp + irb->draw_y * pitch;
-   } else if (region->tiling == I915_TILING_X) {
-      *tile_x = irb->draw_x % (512 / cpp);
-      *tile_y = irb->draw_y % 8;
-      return ((irb->draw_y / 8) * (8 * pitch) +
-	      (irb->draw_x - *tile_x) / (512 / cpp) * 4096);
-   } else {
-      assert(region->tiling == I915_TILING_Y);
-      *tile_x = irb->draw_x % (128 / cpp);
-      *tile_y = irb->draw_y % 32;
-      return ((irb->draw_y / 32) * (32 * pitch) +
-	      (irb->draw_x - *tile_x) / (128 / cpp) * 4096);
-   }
+   intel_region_get_tile_masks(region, &mask_x, &mask_y, false);
+
+   *tile_x = irb->draw_x & mask_x;
+   *tile_y = irb->draw_y & mask_y;
+   return intel_region_get_aligned_offset(region, irb->draw_x & ~mask_x,
+                                          irb->draw_y & ~mask_y, false);
 }
 
 /**
@@ -666,6 +712,10 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
    struct intel_mipmap_tree *depth_mt = NULL, *stencil_mt = NULL;
    int i;
 
+   DBG("%s() on fb %p (%s)\n", __FUNCTION__,
+       fb, (fb == ctx->DrawBuffer ? "drawbuffer" :
+	    (fb == ctx->ReadBuffer ? "readbuffer" : "other buffer")));
+
    if (depthRb)
       depth_mt = depthRb->mt;
    if (stencilRb) {
@@ -682,13 +732,23 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 	  */
 	 if (depthRb->mt_level != stencilRb->mt_level ||
 	     depthRb->mt_layer != stencilRb->mt_layer) {
+	    DBG("depth image level/layer %d/%d != stencil image %d/%d\n",
+		depthRb->mt_level,
+		depthRb->mt_layer,
+		stencilRb->mt_level,
+		stencilRb->mt_layer);
 	    fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
 	 }
       } else {
-	 if (!intel->has_separate_stencil)
+	 if (!intel->has_separate_stencil) {
+	    DBG("separate stencil unsupported\n");
 	    fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
-	 if (stencil_mt->format != MESA_FORMAT_S8)
+	 }
+	 if (stencil_mt->format != MESA_FORMAT_S8) {
+	    DBG("separate stencil is %s instead of S8\n",
+		_mesa_get_format_name(stencil_mt->format));
 	    fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED_EXT;
+	 }
 	 if (intel->gen < 7 && depth_mt->hiz_mt == NULL) {
 	    /* Before Gen7, separate depth and stencil buffers can be used
 	     * only if HiZ is enabled. From the Sandybridge PRM, Volume 2,
@@ -696,6 +756,7 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 	     *     [DevSNB]: This field must be set to the same value (enabled
 	     *     or disabled) as Hierarchical Depth Buffer Enable.
 	     */
+	    DBG("separate stencil without HiZ\n");
 	    fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED;
 	 }
       }
@@ -762,44 +823,72 @@ intel_blit_framebuffer_copy_tex_sub_image(struct gl_context *ctx,
                                           GLbitfield mask, GLenum filter)
 {
    if (mask & GL_COLOR_BUFFER_BIT) {
+      GLint i;
       const struct gl_framebuffer *drawFb = ctx->DrawBuffer;
       const struct gl_framebuffer *readFb = ctx->ReadBuffer;
-      const struct gl_renderbuffer_attachment *drawAtt =
-         &drawFb->Attachment[drawFb->_ColorDrawBufferIndexes[0]];
+      const struct gl_renderbuffer_attachment *drawAtt;
       struct intel_renderbuffer *srcRb = 
          intel_renderbuffer(readFb->_ColorReadBuffer);
 
-      /* If the source and destination are the same size with no
-         mirroring, the rectangles are within the size of the
-         texture and there is no scissor then we can use
-         glCopyTexSubimage2D to implement the blit. This will end
-         up as a fast hardware blit on some drivers */
-      if (srcRb && drawAtt && drawAtt->Texture &&
-          srcX0 - srcX1 == dstX0 - dstX1 &&
-          srcY0 - srcY1 == dstY0 - dstY1 &&
-          srcX1 >= srcX0 &&
-          srcY1 >= srcY0 &&
-          srcX0 >= 0 && srcX1 <= readFb->Width &&
-          srcY0 >= 0 && srcY1 <= readFb->Height &&
-          dstX0 >= 0 && dstX1 <= drawFb->Width &&
-          dstY0 >= 0 && dstY1 <= drawFb->Height &&
-          !ctx->Scissor.Enabled) {
-         const struct gl_texture_object *texObj = drawAtt->Texture;
-         const GLuint dstLevel = drawAtt->TextureLevel;
-         const GLenum target = texObj->Target;
+      /* If the source and destination are the same size with no mirroring,
+       * the rectangles are within the size of the texture and there is no
+       * scissor then we can use glCopyTexSubimage2D to implement the blit.
+       * This will end up as a fast hardware blit on some drivers.
+       */
+      const GLboolean use_intel_copy_texsubimage =
+         srcX0 - srcX1 == dstX0 - dstX1 &&
+         srcY0 - srcY1 == dstY0 - dstY1 &&
+         srcX1 >= srcX0 &&
+         srcY1 >= srcY0 &&
+         srcX0 >= 0 && srcX1 <= readFb->Width &&
+         srcY0 >= 0 && srcY1 <= readFb->Height &&
+         dstX0 >= 0 && dstX1 <= drawFb->Width &&
+         dstY0 >= 0 && dstY1 <= drawFb->Height &&
+         !ctx->Scissor.Enabled;
 
-         struct gl_texture_image *texImage =
-            _mesa_select_tex_image(ctx, texObj, target, dstLevel);
+      /* Verify that all the draw buffers can be blitted using
+       * intel_copy_texsubimage().
+       */
+      for (i = 0; i < ctx->DrawBuffer->_NumColorDrawBuffers; i++) {
+         int idx = ctx->DrawBuffer->_ColorDrawBufferIndexes[i];
+         if (idx == -1)
+            continue;
+         drawAtt = &drawFb->Attachment[idx];
 
-         if (intel_copy_texsubimage(intel_context(ctx),
-                                    intel_texture_image(texImage),
-                                    dstX0, dstY0,
-                                    srcRb,
-                                    srcX0, srcY0,
-                                    srcX1 - srcX0, /* width */
-                                    srcY1 - srcY0))
-            mask &= ~GL_COLOR_BUFFER_BIT;
+         if (srcRb && drawAtt && drawAtt->Texture &&
+             use_intel_copy_texsubimage)
+            continue;
+         else
+            return mask;
       }
+
+      /* Blit to all active draw buffers */
+      for (i = 0; i < ctx->DrawBuffer->_NumColorDrawBuffers; i++) {
+         int idx = ctx->DrawBuffer->_ColorDrawBufferIndexes[i];
+         if (idx == -1)
+            continue;
+         drawAtt = &drawFb->Attachment[idx];
+
+         {
+            const struct gl_texture_object *texObj = drawAtt->Texture;
+            const GLuint dstLevel = drawAtt->TextureLevel;
+            const GLenum target = texObj->Target;
+
+            struct gl_texture_image *texImage =
+               _mesa_select_tex_image(ctx, texObj, target, dstLevel);
+
+            if (!intel_copy_texsubimage(intel_context(ctx),
+                                        intel_texture_image(texImage),
+                                        dstX0, dstY0,
+                                        srcRb,
+                                        srcX0, srcY0,
+                                        srcX1 - srcX0, /* width */
+                                        srcY1 - srcY0))
+               return mask;
+         }
+      }
+
+      mask &= ~GL_COLOR_BUFFER_BIT;
    }
 
    return mask;
@@ -819,10 +908,29 @@ intel_blit_framebuffer(struct gl_context *ctx,
    if (mask == 0x0)
       return;
 
+#ifndef I915
+   mask = brw_blorp_framebuffer(intel_context(ctx),
+                                srcX0, srcY0, srcX1, srcY1,
+                                dstX0, dstY0, dstX1, dstY1,
+                                mask, filter);
+   if (mask == 0x0)
+      return;
+#endif
+
    _mesa_meta_BlitFramebuffer(ctx,
                               srcX0, srcY0, srcX1, srcY1,
                               dstX0, dstY0, dstX1, dstY1,
                               mask, filter);
+}
+
+/**
+ * This is a no-op except on multisample buffers shared with DRI2.
+ */
+void
+intel_renderbuffer_set_needs_downsample(struct intel_renderbuffer *irb)
+{
+   if (irb->mt && irb->mt->singlesample_mt)
+      irb->mt->need_downsample = true;
 }
 
 void
@@ -871,6 +979,36 @@ intel_renderbuffer_resolve_depth(struct intel_context *intel,
    return false;
 }
 
+void
+intel_renderbuffer_move_to_temp(struct intel_context *intel,
+                                struct intel_renderbuffer *irb)
+{
+   struct intel_texture_image *intel_image =
+      intel_texture_image(irb->tex_image);
+   struct intel_mipmap_tree *new_mt;
+   int width, height, depth;
+
+   intel_miptree_get_dimensions_for_image(irb->tex_image, &width, &height, &depth);
+
+   new_mt = intel_miptree_create(intel, irb->tex_image->TexObject->Target,
+                                 intel_image->base.Base.TexFormat,
+                                 intel_image->base.Base.Level,
+                                 intel_image->base.Base.Level,
+                                 width, height, depth,
+                                 true,
+                                 irb->mt->num_samples,
+                                 false /* force_y_tiling */);
+
+   if (intel->vtbl.is_hiz_depth_format(intel, new_mt->format)) {
+      intel_miptree_alloc_hiz(intel, new_mt, irb->mt->num_samples);
+   }
+
+   intel_miptree_copy_teximage(intel, intel_image, new_mt);
+   intel_miptree_reference(&irb->mt, intel_image->mt);
+   intel_renderbuffer_set_draw_offset(irb);
+   intel_miptree_release(&new_mt);
+}
+
 /**
  * Do one-time context initializations related to GL_EXT_framebuffer_object.
  * Hook in device driver functions.
@@ -889,9 +1027,6 @@ intel_fbo_init(struct intel_context *intel)
    intel->ctx.Driver.ResizeBuffers = intel_resize_buffers;
    intel->ctx.Driver.ValidateFramebuffer = intel_validate_framebuffer;
    intel->ctx.Driver.BlitFramebuffer = intel_blit_framebuffer;
-
-#if FEATURE_OES_EGL_image
    intel->ctx.Driver.EGLImageTargetRenderbufferStorage =
       intel_image_target_renderbuffer_storage;
-#endif   
 }

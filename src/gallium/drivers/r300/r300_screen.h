@@ -28,6 +28,7 @@
 #include "../../winsys/radeon/drm/radeon_winsys.h"
 #include "pipe/p_screen.h"
 #include "util/u_slab.h"
+#include "os/os_thread.h"
 #include <stdio.h>
 
 struct r300_screen {
@@ -40,16 +41,12 @@ struct r300_screen {
     struct radeon_info info;
     struct r300_capabilities caps;
 
-    /* Memory pools. */
-    struct util_slab_mempool pool_buffers;
-
     /** Combination of DBG_xxx flags */
     unsigned debug;
 
-    /* The number of created contexts to know whether we have multiple
-     * contexts or not. */
-    int num_contexts;
-    pipe_mutex num_contexts_mutex;
+    /* The MSAA texture with CMASK access; */
+    struct pipe_resource *cmask_resource;
+    pipe_mutex cmask_mutex;
 };
 
 
@@ -91,6 +88,7 @@ radeon_winsys(struct pipe_screen *screen) {
 #define DBG_HYPERZ      (1 << 11)
 #define DBG_SCISSOR     (1 << 12)
 #define DBG_INFO        (1 << 13)
+#define DBG_MSAA        (1 << 14)
 /* Features. */
 #define DBG_ANISOHQ     (1 << 16)
 #define DBG_NO_TILING   (1 << 17)
@@ -99,6 +97,7 @@ radeon_winsys(struct pipe_screen *screen) {
 #define DBG_NO_CBZB     (1 << 20)
 #define DBG_NO_ZMASK    (1 << 21)
 #define DBG_NO_HIZ      (1 << 22)
+#define DBG_NO_CMASK    (1 << 23)
 /* Statistics. */
 #define DBG_P_STAT      (1 << 25)
 /*@}*/

@@ -133,7 +133,7 @@ svga_transfer_dma(struct svga_context *svga,
       }
    }
    else {
-      unsigned y, h, srcy;
+      int y, h, srcy;
       unsigned blockheight = util_format_get_blockheight(st->base.resource->format);
       h = st->hw_nblocksy * blockheight;
       srcy = 0;
@@ -236,12 +236,13 @@ svga_texture_destroy(struct pipe_screen *screen,
 /* XXX: Still implementing this as if it was a screen function, but
  * can now modify it to queue transfers on the context.
  */
-static struct pipe_transfer *
-svga_texture_get_transfer(struct pipe_context *pipe,
+static void *
+svga_texture_transfer_map(struct pipe_context *pipe,
                           struct pipe_resource *texture,
                           unsigned level,
                           unsigned usage,
-                          const struct pipe_box *box)
+                          const struct pipe_box *box,
+                          struct pipe_transfer **ptransfer)
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_screen *ss = svga_screen(pipe->screen);
@@ -251,7 +252,7 @@ svga_texture_get_transfer(struct pipe_context *pipe,
    unsigned nblocksy = util_format_get_nblocksy(texture->format, box->height);
 
    /* We can't map texture storage directly */
-   if (usage & (PIPE_TRANSFER_MAP_DIRECTLY | PIPE_TRANSFER_MAP_PERMANENTLY))
+   if (usage & PIPE_TRANSFER_MAP_DIRECTLY)
       return NULL;
 
    assert(box->depth == 1);
@@ -259,7 +260,7 @@ svga_texture_get_transfer(struct pipe_context *pipe,
    if (!st)
       return NULL;
 
-   pipe_resource_reference(&st->base.resource, texture);
+   st->base.resource = texture;
    st->base.level = level;
    st->base.usage = usage;
    st->base.box = *box;
@@ -305,8 +306,22 @@ svga_texture_get_transfer(struct pipe_context *pipe,
       svga_transfer_dma(svga, st, SVGA3D_READ_HOST_VRAM, flags);
    }
 
-   return &st->base;
+   if (st->swbuf) {
+      *ptransfer = &st->base;
+      return st->swbuf;
+   } else {
+      /* The wait for read transfers already happened when svga_transfer_dma
+       * was called. */
+      void *map = sws->buffer_map(sws, st->hwbuf, usage);
+      if (!map)
+         goto fail;
 
+      *ptransfer = &st->base;
+      return map;
+   }
+
+fail:
+   FREE(st->swbuf);
 no_swbuf:
    sws->buffer_destroy(sws, st->hwbuf);
 no_hwbuf:
@@ -318,48 +333,18 @@ no_hwbuf:
 /* XXX: Still implementing this as if it was a screen function, but
  * can now modify it to queue transfers on the context.
  */
-static void *
-svga_texture_transfer_map( struct pipe_context *pipe,
-			   struct pipe_transfer *transfer )
-{
-   struct svga_screen *ss = svga_screen(pipe->screen);
-   struct svga_winsys_screen *sws = ss->sws;
-   struct svga_transfer *st = svga_transfer(transfer);
-
-   if(st->swbuf)
-      return st->swbuf;
-   else
-      /* The wait for read transfers already happened when svga_transfer_dma
-       * was called. */
-      return sws->buffer_map(sws, st->hwbuf, transfer->usage);
-}
-
-
-/* XXX: Still implementing this as if it was a screen function, but
- * can now modify it to queue transfers on the context.
- */
 static void
 svga_texture_transfer_unmap(struct pipe_context *pipe,
 			    struct pipe_transfer *transfer)
 {
+   struct svga_context *svga = svga_context(pipe);
    struct svga_screen *ss = svga_screen(pipe->screen);
    struct svga_winsys_screen *sws = ss->sws;
    struct svga_transfer *st = svga_transfer(transfer);
-   
+   struct svga_texture *tex = svga_texture(transfer->resource);
+
    if(!st->swbuf)
       sws->buffer_unmap(sws, st->hwbuf);
-}
-
-
-static void
-svga_texture_transfer_destroy(struct pipe_context *pipe,
-			      struct pipe_transfer *transfer)
-{
-   struct svga_context *svga = svga_context(pipe);
-   struct svga_texture *tex = svga_texture(transfer->resource);
-   struct svga_screen *ss = svga_screen(pipe->screen);
-   struct svga_winsys_screen *sws = ss->sws;
-   struct svga_transfer *st = svga_transfer(transfer);
 
    if (st->base.usage & PIPE_TRANSFER_WRITE) {
       SVGA3dSurfaceDMAFlags flags;
@@ -381,7 +366,6 @@ svga_texture_transfer_destroy(struct pipe_context *pipe,
          tex->defined[0][transfer->level] = TRUE;
    }
 
-   pipe_resource_reference(&st->base.resource, NULL);
    FREE(st->swbuf);
    sws->buffer_destroy(sws, st->hwbuf);
    FREE(st);
@@ -392,8 +376,6 @@ struct u_resource_vtbl svga_texture_vtbl =
 {
    svga_texture_get_handle,	      /* get_handle */
    svga_texture_destroy,	      /* resource_destroy */
-   svga_texture_get_transfer,	      /* get_transfer */
-   svga_texture_transfer_destroy,     /* transfer_destroy */
    svga_texture_transfer_map,	      /* transfer_map */
    u_default_transfer_flush_region,   /* transfer_flush_region */
    svga_texture_transfer_unmap,	      /* transfer_unmap */
@@ -433,8 +415,7 @@ svga_texture_create(struct pipe_screen *screen,
       tex->key.numFaces = 1;
    }
 
-   /* XXX: Disabled for now */
-   tex->key.cachable = 0;
+   tex->key.cachable = 1;
 
    if (template->bind & PIPE_BIND_SAMPLER_VIEW)
       tex->key.flags |= SVGA3D_SURFACE_HINT_TEXTURE;
@@ -540,14 +521,6 @@ svga_texture_from_handle(struct pipe_screen *screen,
    tex->b.vtbl = &svga_texture_vtbl;
    pipe_reference_init(&tex->b.b.reference, 1);
    tex->b.b.screen = screen;
-
-   if (format == SVGA3D_X8R8G8B8)
-      tex->b.b.format = PIPE_FORMAT_B8G8R8X8_UNORM;
-   else if (format == SVGA3D_A8R8G8B8)
-      tex->b.b.format = PIPE_FORMAT_B8G8R8A8_UNORM;
-   else {
-      /* ?? */
-   }
 
    SVGA_DBG(DEBUG_DMA, "wrap surface sid %p\n", srf);
 

@@ -191,9 +191,14 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_log:
    case ir_unop_exp2:
    case ir_unop_log2:
+   case ir_unop_bitcast_i2f:
+   case ir_unop_bitcast_f2i:
+   case ir_unop_bitcast_f2u:
+   case ir_unop_bitcast_u2f:
    case ir_unop_i2u:
    case ir_unop_u2i:
    case ir_unop_f2i:
+   case ir_unop_f2u:
    case ir_unop_i2f:
    case ir_unop_f2b:
    case ir_unop_b2f:
@@ -332,8 +337,29 @@ ir_channel_expressions_visitor::visit_leave(ir_assignment *ir)
    case ir_unop_noise:
       assert(!"noise should have been broken down to function call");
       break;
+
+   case ir_binop_ubo_load:
+      assert(!"not yet supported");
+      break;
+
+   case ir_unop_pack_snorm_2x16:
+   case ir_unop_pack_snorm_4x8:
+   case ir_unop_pack_unorm_2x16:
+   case ir_unop_pack_unorm_4x8:
+   case ir_unop_pack_half_2x16:
+   case ir_unop_unpack_snorm_2x16:
+   case ir_unop_unpack_snorm_4x8:
+   case ir_unop_unpack_unorm_2x16:
+   case ir_unop_unpack_unorm_4x8:
+   case ir_unop_unpack_half_2x16:
    case ir_quadop_vector:
       assert(!"should have been lowered");
+      break;
+
+   case ir_unop_unpack_half_2x16_split_x:
+   case ir_unop_unpack_half_2x16_split_y:
+   case ir_binop_pack_half_2x16_split:
+      assert("!not reached: expression operates on scalars only");
       break;
    }
 

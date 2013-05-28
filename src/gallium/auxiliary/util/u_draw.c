@@ -44,7 +44,6 @@
 unsigned
 util_draw_max_index(
       const struct pipe_vertex_buffer *vertex_buffers,
-      unsigned nr_vertex_buffers,
       const struct pipe_vertex_element *vertex_elements,
       unsigned nr_vertex_elements,
       const struct pipe_draw_info *info)
@@ -61,6 +60,10 @@ util_draw_max_index(
       unsigned buffer_size;
       const struct util_format_description *format_desc;
       unsigned format_size;
+
+      if (!buffer->buffer) {
+         continue;
+      }
 
       assert(buffer->buffer->height0 == 1);
       assert(buffer->buffer->depth0 == 1);
@@ -105,8 +108,15 @@ util_draw_max_index(
          else {
             /* Per-instance data. Simply make sure the state tracker didn't
              * request more instances than those that fit in the buffer */
-            assert((info->start_instance + info->instance_count)/element->instance_divisor
-                   <= (buffer_max_index + 1));
+            if ((info->start_instance + info->instance_count)/element->instance_divisor
+                > (buffer_max_index + 1)) {
+               /* FIXME: We really should stop thinking in terms of maximum
+                * indices/instances and simply start clamping against buffer
+                * size. */
+               debug_printf("%s: too many instances for vertex buffer\n",
+                            __FUNCTION__);
+               return 0;
+            }
          }
       }
    }

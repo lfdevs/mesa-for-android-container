@@ -40,7 +40,7 @@ extern "C" {
 }
 
 void GLAPIENTRY
-_mesa_BindAttribLocationARB(GLhandleARB program, GLuint index,
+_mesa_BindAttribLocation(GLhandleARB program, GLuint index,
                             const GLcharARB *name)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -77,7 +77,7 @@ _mesa_BindAttribLocationARB(GLhandleARB program, GLuint index,
 }
 
 void GLAPIENTRY
-_mesa_GetActiveAttribARB(GLhandleARB program, GLuint desired_index,
+_mesa_GetActiveAttrib(GLhandleARB program, GLuint desired_index,
                          GLsizei maxLength, GLsizei * length, GLint * size,
                          GLenum * type, GLcharARB * name)
 {
@@ -106,7 +106,7 @@ _mesa_GetActiveAttribARB(GLhandleARB program, GLuint desired_index,
       const ir_variable *const var = ((ir_instruction *) node)->as_variable();
 
       if (var == NULL
-	  || var->mode != ir_var_in
+	  || var->mode != ir_var_shader_in
 	  || var->location == -1)
 	 continue;
 
@@ -132,7 +132,7 @@ _mesa_GetActiveAttribARB(GLhandleARB program, GLuint desired_index,
 }
 
 GLint GLAPIENTRY
-_mesa_GetAttribLocationARB(GLhandleARB program, const GLcharARB * name)
+_mesa_GetAttribLocation(GLhandleARB program, const GLcharARB * name)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader_program *const shProg =
@@ -169,7 +169,7 @@ _mesa_GetAttribLocationARB(GLhandleARB program, const GLcharARB * name)
        *     attribute, or if an error occurs, -1 will be returned."
        */
       if (var == NULL
-	  || var->mode != ir_var_in
+	  || var->mode != ir_var_shader_in
 	  || var->location == -1
 	  || var->location < VERT_ATTRIB_GENERIC0)
 	 continue;
@@ -197,7 +197,7 @@ _mesa_count_active_attribs(struct gl_shader_program *shProg)
       const ir_variable *const var = ((ir_instruction *) node)->as_variable();
 
       if (var == NULL
-	  || var->mode != ir_var_in
+	  || var->mode != ir_var_shader_in
 	  || var->location == -1)
 	 continue;
 
@@ -223,7 +223,7 @@ _mesa_longest_attribute_name_length(struct gl_shader_program *shProg)
       const ir_variable *const var = ((ir_instruction *) node)->as_variable();
 
       if (var == NULL
-	  || var->mode != ir_var_in
+	  || var->mode != ir_var_shader_in
 	  || var->location == -1)
 	 continue;
 
@@ -239,10 +239,17 @@ void GLAPIENTRY
 _mesa_BindFragDataLocation(GLuint program, GLuint colorNumber,
 			   const GLchar *name)
 {
+   _mesa_BindFragDataLocationIndexed(program, colorNumber, 0, name);
+}
+
+void GLAPIENTRY
+_mesa_BindFragDataLocationIndexed(GLuint program, GLuint colorNumber,
+                                  GLuint index, const GLchar *name)
+{
    GET_CURRENT_CONTEXT(ctx);
 
    struct gl_shader_program *const shProg =
-      _mesa_lookup_shader_program_err(ctx, program, "glBindFragDataLocation");
+      _mesa_lookup_shader_program_err(ctx, program, "glBindFragDataLocationIndexed");
    if (!shProg)
       return;
 
@@ -250,13 +257,22 @@ _mesa_BindFragDataLocation(GLuint program, GLuint colorNumber,
       return;
 
    if (strncmp(name, "gl_", 3) == 0) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glBindFragDataLocation(illegal name)");
+      _mesa_error(ctx, GL_INVALID_OPERATION, "glBindFragDataLocationIndexed(illegal name)");
       return;
    }
 
-   if (colorNumber >= ctx->Const.MaxDrawBuffers) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "glBindFragDataLocation(index)");
+   if (index > 1) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glBindFragDataLocationIndexed(index)");
+      return;
+   }
+
+   if (index == 0 && colorNumber >= ctx->Const.MaxDrawBuffers) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glBindFragDataLocationIndexed(colorNumber)");
+      return;
+   }
+
+   if (index == 1 && colorNumber >= ctx->Const.MaxDualSourceDrawBuffers) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glBindFragDataLocationIndexed(colorNumber)");
       return;
    }
 
@@ -265,11 +281,68 @@ _mesa_BindFragDataLocation(GLuint program, GLuint colorNumber,
     * between built-in attributes and user-defined attributes.
     */
    shProg->FragDataBindings->put(colorNumber + FRAG_RESULT_DATA0, name);
-
+   shProg->FragDataIndexBindings->put(index, name);
    /*
     * Note that this binding won't go into effect until
     * glLinkProgram is called again.
     */
+
+}
+
+GLint GLAPIENTRY
+_mesa_GetFragDataIndex(GLuint program, const GLchar *name)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   struct gl_shader_program *const shProg =
+      _mesa_lookup_shader_program_err(ctx, program, "glGetFragDataIndex");
+
+   if (!shProg) {
+      return -1;
+   }
+
+   if (!shProg->LinkStatus) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "glGetFragDataIndex(program not linked)");
+      return -1;
+   }
+
+   if (!name)
+      return -1;
+
+   if (strncmp(name, "gl_", 3) == 0) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "glGetFragDataIndex(illegal name)");
+      return -1;
+   }
+
+   /* Not having a fragment shader is not an error.
+    */
+   if (shProg->_LinkedShaders[MESA_SHADER_FRAGMENT] == NULL)
+      return -1;
+
+   exec_list *ir = shProg->_LinkedShaders[MESA_SHADER_FRAGMENT]->ir;
+   foreach_list(node, ir) {
+      const ir_variable *const var = ((ir_instruction *) node)->as_variable();
+
+      /* The extra check against FRAG_RESULT_DATA0 is because
+       * glGetFragDataLocation cannot be used on "conventional" attributes.
+       *
+       * From page 95 of the OpenGL 3.0 spec:
+       *
+       *     "If name is not an active attribute, if name is a conventional
+       *     attribute, or if an error occurs, -1 will be returned."
+       */
+      if (var == NULL
+          || var->mode != ir_var_shader_out
+          || var->location == -1
+          || var->location < FRAG_RESULT_DATA0)
+         continue;
+
+      if (strcmp(var->name, name) == 0)
+         return var->index;
+   }
+
+   return -1;
 }
 
 GLint GLAPIENTRY
@@ -316,7 +389,7 @@ _mesa_GetFragDataLocation(GLuint program, const GLchar *name)
        *     attribute, or if an error occurs, -1 will be returned."
        */
       if (var == NULL
-	  || var->mode != ir_var_out
+	  || var->mode != ir_var_shader_out
 	  || var->location == -1
 	  || var->location < FRAG_RESULT_DATA0)
 	 continue;

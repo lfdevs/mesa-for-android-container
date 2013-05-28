@@ -60,8 +60,7 @@ gen6_upload_wm_push_constants(struct brw_context *brw)
 				  32, &brw->wm.push_const_offset);
 
       for (i = 0; i < brw->wm.prog_data->nr_params; i++) {
-	 constants[i] = convert_param(brw->wm.prog_data->param_convert[i],
-				      brw->wm.prog_data->param[i]);
+	 constants[i] = *brw->wm.prog_data->param[i];
       }
 
       if (0) {
@@ -99,8 +98,8 @@ upload_wm_state(struct brw_context *brw)
       brw_fragment_program_const(brw->fragment_program);
    uint32_t dw2, dw4, dw5, dw6;
 
-   /* _NEW_LIGHT */
-   bool flat_shade = (ctx->Light.ShadeModel == GL_FLAT);
+   /* _NEW_BUFFERS */
+   bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
 
     /* CACHE_NEW_WM_PROG */
    if (brw->wm.prog_data->nr_params == 0) {
@@ -152,12 +151,15 @@ upload_wm_state(struct brw_context *brw)
    dw5 |= (brw->max_wm_threads - 1) << GEN6_WM_MAX_THREADS_SHIFT;
 
    /* CACHE_NEW_WM_PROG */
-   if (brw->wm.prog_data->dispatch_width == 8) {
-      dw5 |= GEN6_WM_8_DISPATCH_ENABLE;
-      if (brw->wm.prog_data->prog_offset_16)
-	 dw5 |= GEN6_WM_16_DISPATCH_ENABLE;
-   } else {
+   dw5 |= GEN6_WM_8_DISPATCH_ENABLE;
+   if (brw->wm.prog_data->prog_offset_16)
       dw5 |= GEN6_WM_16_DISPATCH_ENABLE;
+
+   /* CACHE_NEW_WM_PROG | _NEW_COLOR */
+   if (brw->wm.prog_data->dual_src_blend &&
+       (ctx->Color.BlendEnabled & 1) &&
+       ctx->Color.Blend[0]._UsesDualSrc) {
+      dw5 |= GEN6_WM_DUAL_SOURCE_BLEND_ENABLE;
    }
 
    /* _NEW_LINE */
@@ -173,11 +175,13 @@ upload_wm_state(struct brw_context *brw)
       dw5 |= GEN6_WM_USES_SOURCE_DEPTH | GEN6_WM_USES_SOURCE_W;
    if (fp->program.Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
       dw5 |= GEN6_WM_COMPUTED_DEPTH;
-   dw6 |= brw_compute_barycentric_interp_modes(flat_shade, &fp->program) <<
+   /* CACHE_NEW_WM_PROG */
+   dw6 |= brw->wm.prog_data->barycentric_interp_modes <<
       GEN6_WM_BARYCENTRIC_INTERPOLATION_MODE_SHIFT;
 
-   /* _NEW_COLOR */
-   if (fp->program.UsesKill || ctx->Color.AlphaEnabled)
+   /* _NEW_COLOR, _NEW_MULTISAMPLE */
+   if (fp->program.UsesKill || ctx->Color.AlphaEnabled ||
+       ctx->Multisample.SampleAlphaToCoverage)
       dw5 |= GEN6_WM_KILL_ENABLE;
 
    if (brw_color_buffer_write_enabled(brw) ||
@@ -187,6 +191,17 @@ upload_wm_state(struct brw_context *brw)
 
    dw6 |= _mesa_bitcount_64(brw->fragment_program->Base.InputsRead) <<
       GEN6_WM_NUM_SF_OUTPUTS_SHIFT;
+   if (multisampled_fbo) {
+      /* _NEW_MULTISAMPLE */
+      if (ctx->Multisample.Enabled)
+         dw6 |= GEN6_WM_MSRAST_ON_PATTERN;
+      else
+         dw6 |= GEN6_WM_MSRAST_OFF_PIXEL;
+      dw6 |= GEN6_WM_MSDISPMODE_PERPIXEL;
+   } else {
+      dw6 |= GEN6_WM_MSRAST_OFF_PIXEL;
+      dw6 |= GEN6_WM_MSDISPMODE_PERSAMPLE;
+   }
 
    BEGIN_BATCH(9);
    OUT_BATCH(_3DSTATE_WM << 16 | (9 - 2));
@@ -210,11 +225,11 @@ upload_wm_state(struct brw_context *brw)
 const struct brw_tracked_state gen6_wm_state = {
    .dirty = {
       .mesa  = (_NEW_LINE |
-                _NEW_LIGHT |
 		_NEW_COLOR |
 		_NEW_BUFFERS |
 		_NEW_PROGRAM_CONSTANTS |
-		_NEW_POLYGON),
+		_NEW_POLYGON |
+                _NEW_MULTISAMPLE),
       .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
 		BRW_NEW_BATCH),
       .cache = (CACHE_NEW_SAMPLER |

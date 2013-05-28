@@ -30,6 +30,8 @@
 
 #include "ir.h"
 
+namespace {
+
 class ir_if_simplification_visitor : public ir_hierarchical_visitor {
 public:
    ir_if_simplification_visitor()
@@ -42,6 +44,8 @@ public:
 
    bool made_progress;
 };
+
+} /* unnamed namespace */
 
 /* We only care about the top level "if" instructions, so don't
  * descend into expressions.
@@ -66,6 +70,14 @@ do_if_simplification(exec_list *instructions)
 ir_visitor_status
 ir_if_simplification_visitor::visit_leave(ir_if *ir)
 {
+   /* If the if statement has nothing on either side, remove it. */
+   if (ir->then_instructions.is_empty() &&
+       ir->else_instructions.is_empty()) {
+      ir->remove();
+      this->made_progress = true;
+      return visit_continue;
+   }
+
    /* FINISHME: Ideally there would be a way to note that the condition results
     * FINISHME: in a constant before processing both of the other subtrees.
     * FINISHME: This can probably be done with some flags, but it would take

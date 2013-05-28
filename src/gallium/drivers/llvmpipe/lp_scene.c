@@ -64,6 +64,28 @@ lp_scene_create( struct pipe_context *pipe )
 
    pipe_mutex_init(scene->mutex);
 
+#ifdef DEBUG
+   /* Do some scene limit sanity checks here */
+   {
+      size_t maxBins = TILES_X * TILES_Y;
+      size_t maxCommandBytes = sizeof(struct cmd_block) * maxBins;
+      size_t maxCommandPlusData = maxCommandBytes + DATA_BLOCK_SIZE;
+      /* We'll need at least one command block per bin.  Make sure that's
+       * less than the max allowed scene size.
+       */
+      assert(maxCommandBytes < LP_SCENE_MAX_SIZE);
+      /* We'll also need space for at least one other data block */
+      assert(maxCommandPlusData <= LP_SCENE_MAX_SIZE);
+
+      /* Ideally, the size of a cmd_block object will be a power of two
+       * in order to avoid wasting space when we allocation them from
+       * data blocks (which are power of two also).
+       */
+      assert(sizeof(struct cmd_block) ==
+             util_next_power_of_two(sizeof(struct cmd_block)));
+   }
+#endif
+
    return scene;
 }
 
@@ -472,10 +494,11 @@ end:
 
 
 void lp_scene_begin_binning( struct lp_scene *scene,
-                             struct pipe_framebuffer_state *fb )
+                             struct pipe_framebuffer_state *fb, boolean discard )
 {
    assert(lp_scene_is_empty(scene));
 
+   scene->discard = discard;
    util_copy_framebuffer_state(&scene->fb, fb);
 
    scene->tiles_x = align(fb->width, TILE_SIZE) / TILE_SIZE;

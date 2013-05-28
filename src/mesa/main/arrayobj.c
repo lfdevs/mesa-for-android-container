@@ -123,14 +123,15 @@ _mesa_delete_array_object( struct gl_context *ctx, struct gl_array_object *obj )
 
 /**
  * Set ptr to arrayObj w/ reference counting.
+ * Note: this should only be called from the _mesa_reference_array_object()
+ * inline function.
  */
 void
-_mesa_reference_array_object(struct gl_context *ctx,
-                             struct gl_array_object **ptr,
-                             struct gl_array_object *arrayObj)
+_mesa_reference_array_object_(struct gl_context *ctx,
+                              struct gl_array_object **ptr,
+                              struct gl_array_object *arrayObj)
 {
-   if (*ptr == arrayObj)
-      return;
+   assert(*ptr != arrayObj);
 
    if (*ptr) {
       /* Unreference the old array object */
@@ -235,11 +236,9 @@ _mesa_initialize_array_object( struct gl_context *ctx,
       case VERT_ATTRIB_EDGEFLAG:
          init_array(ctx, &obj->VertexAttrib[VERT_ATTRIB_EDGEFLAG], 1, GL_BOOL);
          break;
-#if FEATURE_point_size_array
       case VERT_ATTRIB_POINT_SIZE:
          init_array(ctx, &obj->VertexAttrib[VERT_ATTRIB_POINT_SIZE], 1, GL_FLOAT);
          break;
-#endif
       default:
          init_array(ctx, &obj->VertexAttrib[i], 4, GL_FLOAT);
          break;
@@ -280,15 +279,26 @@ remove_array_object( struct gl_context *ctx, struct gl_array_object *obj )
 
 
 /**
- * Helper for update_arrays().
- * \return  min(current min, array->_MaxElement).
+ * Helper for _mesa_update_array_object_max_element().
+ * \return  min(arrayObj->VertexAttrib[*]._MaxElement).
  */
 static GLuint
-update_min(GLuint min, struct gl_client_array *array)
+compute_max_element(struct gl_array_object *arrayObj, GLbitfield64 enabled)
 {
-   assert(array->Enabled);
-   _mesa_update_array_max_element(array);
-   return MIN2(min, array->_MaxElement);
+   GLuint min = ~((GLuint)0);
+   
+   while (enabled) {
+      struct gl_client_array *client_array;
+      GLint attrib = ffsll(enabled) - 1;
+      enabled ^= BITFIELD64_BIT(attrib);
+      
+      client_array = &arrayObj->VertexAttrib[attrib];
+      assert(client_array->Enabled);
+      _mesa_update_array_max_element(client_array);
+      min = MIN2(min, client_array->_MaxElement);
+   }
+   
+   return min;
 }
 
 
@@ -299,17 +309,17 @@ void
 _mesa_update_array_object_max_element(struct gl_context *ctx,
                                       struct gl_array_object *arrayObj)
 {
-   GLbitfield64 enabled = arrayObj->_Enabled;
-   GLuint min = ~0u;
+   GLbitfield64 enabled;
 
-   while (enabled) {
-      GLint attrib = _mesa_ffsll(enabled) - 1;
-      enabled &= ~BITFIELD64_BIT(attrib);
-      min = update_min(min, &arrayObj->VertexAttrib[attrib]);
+   if (!ctx->VertexProgram._Current ||
+       ctx->VertexProgram._Current == ctx->VertexProgram._TnlProgram) {
+      enabled = _mesa_array_object_get_enabled_ff(arrayObj);
+   } else {
+      enabled = _mesa_array_object_get_enabled_arb(arrayObj);
    }
 
    /* _MaxElement is one past the last legal array element */
-   arrayObj->_MaxElement = min;
+   arrayObj->_MaxElement = compute_max_element(arrayObj, enabled);
 }
 
 
@@ -328,7 +338,6 @@ bind_vertex_array(struct gl_context *ctx, GLuint id, GLboolean genRequired)
 {
    struct gl_array_object * const oldObj = ctx->Array.ArrayObj;
    struct gl_array_object *newObj = NULL;
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    ASSERT(oldObj != NULL);
 
@@ -349,7 +358,7 @@ bind_vertex_array(struct gl_context *ctx, GLuint id, GLboolean genRequired)
       newObj = lookup_arrayobj(ctx, id);
       if (!newObj) {
          if (genRequired) {
-            _mesa_error(ctx, GL_INVALID_OPERATION, "glBindVertexArray(id)");
+            _mesa_error(ctx, GL_INVALID_OPERATION, "glBindVertexArray(non-gen name)");
             return;
          }
 
@@ -363,7 +372,7 @@ bind_vertex_array(struct gl_context *ctx, GLuint id, GLboolean genRequired)
          save_array_object(ctx, newObj);
       }
 
-      if (!newObj->_Used) {
+      if (!newObj->EverBound) {
          /* The "Interactions with APPLE_vertex_array_object" section of the
           * GL_ARB_vertex_array_object spec says:
           *
@@ -371,12 +380,11 @@ bind_vertex_array(struct gl_context *ctx, GLuint id, GLboolean genRequired)
           *     BindVertexArrayAPPLE, determines the semantic of the object."
           */
          newObj->ARBsemantics = genRequired;
-         newObj->_Used = GL_TRUE;
+         newObj->EverBound = GL_TRUE;
       }
    }
 
    ctx->NewState |= _NEW_ARRAY;
-   ctx->Array.NewState |= VERT_BIT_ALL;
    _mesa_reference_array_object(ctx, &ctx->Array.ArrayObj, newObj);
 
    /* Pass BindVertexArray call to device driver */
@@ -422,11 +430,10 @@ _mesa_BindVertexArrayAPPLE( GLuint id )
  * \param ids    Array of \c n array object IDs.
  */
 void GLAPIENTRY
-_mesa_DeleteVertexArraysAPPLE(GLsizei n, const GLuint *ids)
+_mesa_DeleteVertexArrays(GLsizei n, const GLuint *ids)
 {
    GET_CURRENT_CONTEXT(ctx);
    GLsizei i;
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (n < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glDeleteVertexArrayAPPLE(n)");
@@ -444,7 +451,7 @@ _mesa_DeleteVertexArraysAPPLE(GLsizei n, const GLuint *ids)
 	  * becomes current."
 	  */
 	 if ( obj == ctx->Array.ArrayObj ) {
-	    CALL_BindVertexArrayAPPLE( ctx->Exec, (0) );
+	    _mesa_BindVertexArray(0);
 	 }
 
 	 /* The ID is immediately freed for re-use */
@@ -471,7 +478,6 @@ gen_vertex_arrays(struct gl_context *ctx, GLsizei n, GLuint *arrays)
 {
    GLuint first;
    GLint i;
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (n < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glGenVertexArraysAPPLE");
@@ -532,7 +538,7 @@ _mesa_GenVertexArraysAPPLE(GLsizei n, GLuint *arrays)
  *          \c GL_FALSE otherwise.
  */
 GLboolean GLAPIENTRY
-_mesa_IsVertexArrayAPPLE( GLuint id )
+_mesa_IsVertexArray( GLuint id )
 {
    struct gl_array_object * obj;
    GET_CURRENT_CONTEXT(ctx);
@@ -542,6 +548,8 @@ _mesa_IsVertexArrayAPPLE( GLuint id )
       return GL_FALSE;
 
    obj = lookup_arrayobj(ctx, id);
+   if (obj == NULL)
+      return GL_FALSE;
 
-   return (obj != NULL) ? GL_TRUE : GL_FALSE;
+   return obj->EverBound;
 }

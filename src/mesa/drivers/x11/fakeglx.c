@@ -52,10 +52,6 @@
 #include "xfonts.h"
 #include "xmesaP.h"
 
-#ifdef __VMS
-#define sprintf sprintf
-#endif
-
 /* This indicates the client-side GLX API and GLX encoder version. */
 #define CLIENT_MAJOR_VERSION 1
 #define CLIENT_MINOR_VERSION 4  /* but don't have 1.3's pbuffers, etc yet */
@@ -201,7 +197,7 @@ GetOverlayInfo(Display *dpy, int screen, int *numOverlays)
    if (status != Success || actualType != overlayVisualsAtom ||
        actualFormat != 32 || sizeData < 4) {
       /* something went wrong */
-      XFree((void *) ovInfo);
+      free((void *) ovInfo);
       *numOverlays = 0;
       return NULL;
    }
@@ -239,18 +235,18 @@ level_of_visual( Display *dpy, XVisualInfo *vinfo )
          /* found the visual */
          if (/*ov->transparent_type==1 &&*/ ov->layer!=0) {
             int level = ov->layer;
-            XFree((void *) overlay_info);
+            free((void *) overlay_info);
             return level;
          }
          else {
-            XFree((void *) overlay_info);
+            free((void *) overlay_info);
             return 0;
          }
       }
    }
 
    /* The visual ID was not found in the overlay list. */
-   XFree((void *) overlay_info);
+   free((void *) overlay_info);
    return 0;
 }
 
@@ -428,7 +424,7 @@ create_glx_visual( Display *dpy, XVisualInfo *visinfo )
 			      GL_TRUE,   /* double */
 			      GL_FALSE,  /* stereo */
 			      zBits,
-			      STENCIL_BITS,
+			      8,       /* stencil bits */
 			      accBits, /* r */
 			      accBits, /* g */
 			      accBits, /* b */
@@ -497,19 +493,19 @@ transparent_pixel( XMesaVisual glxvis )
          /* found it! */
          if (ov->transparent_type == 0) {
             /* type 0 indicates no transparency */
-            XFree((void *) overlay_info);
+            free((void *) overlay_info);
             return -1;
          }
          else {
             /* ov->value is the transparent pixel */
-            XFree((void *) overlay_info);
+            free((void *) overlay_info);
             return ov->value;
          }
       }
    }
 
    /* The visual ID was not found in the overlay list. */
-   XFree((void *) overlay_info);
+   free((void *) overlay_info);
    return -1;
 }
 
@@ -554,7 +550,7 @@ get_visual( Display *dpy, int scr, unsigned int depth, int xclass )
          return vis;
       }
       else {
-         XFree((void *) vis);
+         free((void *) vis);
          return NULL;
       }
    }
@@ -779,9 +775,7 @@ choose_x_overlay_visual( Display *dpy, int scr,
 
       if (deepvis==NULL || vislist->depth > deepest) {
          /* YES!  found a satisfactory visual */
-         if (deepvis) {
-            XFree( deepvis );
-         }
+         free(deepvis);
          deepest = vislist->depth;
          deepvis = vislist;
          /* DEBUG  tt = ov->transparent_type;*/
@@ -916,6 +910,20 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
    parselist = list;
 
    while (*parselist) {
+
+      if (fbConfig &&
+          parselist[1] == GLX_DONT_CARE &&
+          parselist[0] != GLX_LEVEL) {
+         /* For glXChooseFBConfig(), skip attributes whose value is
+          * GLX_DONT_CARE (-1), unless it's GLX_LEVEL (which can legitimately be
+          * a negative value).
+          *
+          * From page 17 (23 of the pdf) of the GLX 1.4 spec:
+          * GLX DONT CARE may be specified for all attributes except GLX LEVEL.
+          */
+         parselist += 2;
+         continue;
+      }
 
       switch (*parselist) {
 	 case GLX_USE_GL:
@@ -1153,6 +1161,7 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
       return NULL;
 
    (void) caveat;
+   (void) min_ci;
 
    /*
     * Since we're only simulating the GLX extension this function will never
@@ -1174,7 +1183,7 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
          if (vis->depth <= 8)
 	    return NULL;
          depth_size = default_depth_bits();
-         stencil_size = STENCIL_BITS;
+         stencil_size = 8;
          /* XXX accum??? */
       }
    }
@@ -1215,7 +1224,7 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
 
       /* we only support one size of stencil and accum buffers. */
       if (stencil_size > 0)
-         stencil_size = STENCIL_BITS;
+         stencil_size = 8;
       if (accumRedSize > 0 || accumGreenSize > 0 || accumBlueSize > 0 ||
           accumAlphaSize > 0) {
          accumRedSize = 
@@ -1248,7 +1257,7 @@ Fake_glXChooseVisual( Display *dpy, int screen, int *list )
       return xmvis->vishandle;
 #else
       /* create a new vishandle - the cached one may be stale */
-      xmvis->vishandle = (XVisualInfo *) malloc(sizeof(XVisualInfo));
+      xmvis->vishandle = malloc(sizeof(XVisualInfo));
       if (xmvis->vishandle) {
          memcpy(xmvis->vishandle, xmvis->visinfo, sizeof(XVisualInfo));
       }
@@ -1963,7 +1972,7 @@ Fake_glXGetFBConfigs( Display *dpy, int screen, int *nelements )
    visuals = XGetVisualInfo(dpy, visMask, &visTemplate, nelements);
    if (*nelements > 0) {
       XMesaVisual *results;
-      results = (XMesaVisual *) malloc(*nelements * sizeof(XMesaVisual));
+      results = malloc(*nelements * sizeof(XMesaVisual));
       if (!results) {
          *nelements = 0;
          return NULL;
@@ -1993,7 +2002,7 @@ Fake_glXChooseFBConfig( Display *dpy, int screen,
 
    xmvis = choose_visual(dpy, screen, attribList, GL_TRUE);
    if (xmvis) {
-      GLXFBConfig *config = (GLXFBConfig *) malloc(sizeof(XMesaVisual));
+      GLXFBConfig *config = malloc(sizeof(XMesaVisual));
       if (!config) {
          *nitems = 0;
          return NULL;
@@ -2018,7 +2027,7 @@ Fake_glXGetVisualFromFBConfig( Display *dpy, GLXFBConfig config )
       return xmvis->vishandle;
 #else
       /* create a new vishandle - the cached one may be stale */
-      xmvis->vishandle = (XVisualInfo *) malloc(sizeof(XVisualInfo));
+      xmvis->vishandle = malloc(sizeof(XVisualInfo));
       if (xmvis->vishandle) {
          memcpy(xmvis->vishandle, xmvis->visinfo, sizeof(XVisualInfo));
       }
@@ -2220,13 +2229,13 @@ Fake_glXCreatePbuffer( Display *dpy, GLXFBConfig config,
    if (width == 0 || height == 0)
       return 0;
 
-   if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+   if (width > SWRAST_MAX_WIDTH || height > SWRAST_MAX_HEIGHT) {
       /* If allocation would have failed and GLX_LARGEST_PBUFFER is set,
        * allocate the largest possible buffer.
        */
       if (useLargest) {
-         width = MAX_WIDTH;
-         height = MAX_HEIGHT;
+         width = SWRAST_MAX_WIDTH;
+         height = SWRAST_MAX_HEIGHT;
       }
    }
 

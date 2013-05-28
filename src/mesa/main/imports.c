@@ -57,15 +57,10 @@
 #endif
 
 
-#define MAXSTRING 4000  /* for vsnprintf() */
-
-#ifdef WIN32
+#ifdef _WIN32
 #define vsnprintf _vsnprintf
-#elif defined(__IBMC__) || defined(__IBMCPP__) || ( defined(__VMS) && __CRTL_VER < 70312000 )
+#elif defined(__IBMC__) || defined(__IBMCPP__)
 extern int vsnprintf(char *str, size_t count, const char *fmt, va_list arg);
-#ifdef __VMS
-#include "vsnprintf.c"
-#endif
 #endif
 
 /**********************************************************************/
@@ -99,7 +94,7 @@ _mesa_align_malloc(size_t bytes, unsigned long alignment)
 
    ASSERT( alignment > 0 );
 
-   ptr = (uintptr_t) malloc(bytes + alignment + sizeof(void *));
+   ptr = (uintptr_t)malloc(bytes + alignment + sizeof(void *));
    if (!ptr)
       return NULL;
 
@@ -148,7 +143,7 @@ _mesa_align_calloc(size_t bytes, unsigned long alignment)
 
    ASSERT( alignment > 0 );
 
-   ptr = (uintptr_t) calloc(1, bytes + alignment + sizeof(void *));
+   ptr = (uintptr_t)calloc(1, bytes + alignment + sizeof(void *));
    if (!ptr)
       return NULL;
 
@@ -220,22 +215,8 @@ _mesa_realloc(void *oldBuffer, size_t oldSize, size_t newSize)
    void *newBuffer = malloc(newSize);
    if (newBuffer && oldBuffer && copySize > 0)
       memcpy(newBuffer, oldBuffer, copySize);
-   if (oldBuffer)
-      free(oldBuffer);
+   free(oldBuffer);
    return newBuffer;
-}
-
-/**
- * Fill memory with a constant 16bit word.
- * \param dst destination pointer.
- * \param val value.
- * \param n number of words.
- */
-void
-_mesa_memset16( unsigned short *dst, unsigned short val, size_t n )
-{
-   while (n-- > 0)
-      *dst++ = val;
 }
 
 /*@}*/
@@ -245,222 +226,14 @@ _mesa_memset16( unsigned short *dst, unsigned short val, size_t n )
 /** \name Math */
 /*@{*/
 
-/** Wrapper around sqrt() */
-double
-_mesa_sqrtd(double x)
-{
-   return sqrt(x);
-}
-
-
-/*
- * A High Speed, Low Precision Square Root
- * by Paul Lalonde and Robert Dawson
- * from "Graphics Gems", Academic Press, 1990
- *
- * SPARC implementation of a fast square root by table
- * lookup.
- * SPARC floating point format is as follows:
- *
- * BIT 31 	30 	23 	22 	0
- *     sign	exponent	mantissa
- */
-static short sqrttab[0x100];    /* declare table of square roots */
-
-void
-_mesa_init_sqrt_table(void)
-{
-#if defined(USE_IEEE) && !defined(DEBUG)
-   unsigned short i;
-   fi_type fi;     /* to access the bits of a float in  C quickly  */
-                   /* we use a union defined in glheader.h         */
-
-   for(i=0; i<= 0x7f; i++) {
-      fi.i = 0;
-
-      /*
-       * Build a float with the bit pattern i as mantissa
-       * and an exponent of 0, stored as 127
-       */
-
-      fi.i = (i << 16) | (127 << 23);
-      fi.f = _mesa_sqrtd(fi.f);
-
-      /*
-       * Take the square root then strip the first 7 bits of
-       * the mantissa into the table
-       */
-
-      sqrttab[i] = (fi.i & 0x7fffff) >> 16;
-
-      /*
-       * Repeat the process, this time with an exponent of
-       * 1, stored as 128
-       */
-
-      fi.i = 0;
-      fi.i = (i << 16) | (128 << 23);
-      fi.f = sqrt(fi.f);
-      sqrttab[i+0x80] = (fi.i & 0x7fffff) >> 16;
-   }
-#else
-   (void) sqrttab;  /* silence compiler warnings */
-#endif /*HAVE_FAST_MATH*/
-}
-
-
-/**
- * Single precision square root.
- */
-float
-_mesa_sqrtf( float x )
-{
-#if defined(USE_IEEE) && !defined(DEBUG)
-   fi_type num;
-                                /* to access the bits of a float in C
-                                 * we use a union from glheader.h     */
-
-   short e;                     /* the exponent */
-   if (x == 0.0F) return 0.0F;  /* check for square root of 0 */
-   num.f = x;
-   e = (num.i >> 23) - 127;     /* get the exponent - on a SPARC the */
-                                /* exponent is stored with 127 added */
-   num.i &= 0x7fffff;           /* leave only the mantissa */
-   if (e & 0x01) num.i |= 0x800000;
-                                /* the exponent is odd so we have to */
-                                /* look it up in the second half of  */
-                                /* the lookup table, so we set the   */
-                                /* high bit                                */
-   e >>= 1;                     /* divide the exponent by two */
-                                /* note that in C the shift */
-                                /* operators are sign preserving */
-                                /* for signed operands */
-   /* Do the table lookup, based on the quaternary mantissa,
-    * then reconstruct the result back into a float
-    */
-   num.i = ((sqrttab[num.i >> 16]) << 16) | ((e + 127) << 23);
-
-   return num.f;
-#else
-   return (float) _mesa_sqrtd((double) x);
-#endif
-}
-
-
-/**
- inv_sqrt - A single precision 1/sqrt routine for IEEE format floats.
- written by Josh Vanderhoof, based on newsgroup posts by James Van Buskirk
- and Vesa Karvonen.
-*/
-float
-_mesa_inv_sqrtf(float n)
-{
-#if defined(USE_IEEE) && !defined(DEBUG)
-        float r0, x0, y0;
-        float r1, x1, y1;
-        float r2, x2, y2;
-#if 0 /* not used, see below -BP */
-        float r3, x3, y3;
-#endif
-        fi_type u;
-        unsigned int magic;
-
-        /*
-         Exponent part of the magic number -
-
-         We want to:
-         1. subtract the bias from the exponent,
-         2. negate it
-         3. divide by two (rounding towards -inf)
-         4. add the bias back
-
-         Which is the same as subtracting the exponent from 381 and dividing
-         by 2.
-
-         floor(-(x - 127) / 2) + 127 = floor((381 - x) / 2)
-        */
-
-        magic = 381 << 23;
-
-        /*
-         Significand part of magic number -
-
-         With the current magic number, "(magic - u.i) >> 1" will give you:
-
-         for 1 <= u.f <= 2: 1.25 - u.f / 4
-         for 2 <= u.f <= 4: 1.00 - u.f / 8
-
-         This isn't a bad approximation of 1/sqrt.  The maximum difference from
-         1/sqrt will be around .06.  After three Newton-Raphson iterations, the
-         maximum difference is less than 4.5e-8.  (Which is actually close
-         enough to make the following bias academic...)
-
-         To get a better approximation you can add a bias to the magic
-         number.  For example, if you subtract 1/2 of the maximum difference in
-         the first approximation (.03), you will get the following function:
-
-         for 1 <= u.f <= 2:    1.22 - u.f / 4
-         for 2 <= u.f <= 3.76: 0.97 - u.f / 8
-         for 3.76 <= u.f <= 4: 0.72 - u.f / 16
-         (The 3.76 to 4 range is where the result is < .5.)
-
-         This is the closest possible initial approximation, but with a maximum
-         error of 8e-11 after three NR iterations, it is still not perfect.  If
-         you subtract 0.0332281 instead of .03, the maximum error will be
-         2.5e-11 after three NR iterations, which should be about as close as
-         is possible.
-
-         for 1 <= u.f <= 2:    1.2167719 - u.f / 4
-         for 2 <= u.f <= 3.73: 0.9667719 - u.f / 8
-         for 3.73 <= u.f <= 4: 0.7167719 - u.f / 16
-
-        */
-
-        magic -= (int)(0.0332281 * (1 << 25));
-
-        u.f = n;
-        u.i = (magic - u.i) >> 1;
-
-        /*
-         Instead of Newton-Raphson, we use Goldschmidt's algorithm, which
-         allows more parallelism.  From what I understand, the parallelism
-         comes at the cost of less precision, because it lets error
-         accumulate across iterations.
-        */
-        x0 = 1.0f;
-        y0 = 0.5f * n;
-        r0 = u.f;
-
-        x1 = x0 * r0;
-        y1 = y0 * r0 * r0;
-        r1 = 1.5f - y1;
-
-        x2 = x1 * r1;
-        y2 = y1 * r1 * r1;
-        r2 = 1.5f - y2;
-
-#if 1
-        return x2 * r2;  /* we can stop here, and be conformant -BP */
-#else
-        x3 = x2 * r2;
-        y3 = y2 * r2 * r2;
-        r3 = 1.5f - y3;
-
-        return x3 * r3;
-#endif
-#else
-        return (float) (1.0 / sqrt(n));
-#endif
-}
 
 #ifndef __GNUC__
 /**
  * Find the first bit set in a word.
  */
 int
-_mesa_ffs(int32_t i)
+ffs(int i)
 {
-#if (defined(_WIN32) ) || defined(__IBMC__) || defined(__IBMCPP__)
    register int bit = 0;
    if (i != 0) {
       if ((i & 0xffff) == 0) {
@@ -482,9 +255,6 @@ _mesa_ffs(int32_t i)
       bit++;
    }
    return bit;
-#else
-   return ffs(i);
-#endif
 }
 
 
@@ -495,23 +265,24 @@ _mesa_ffs(int32_t i)
  *          if no bits set.
  */
 int
-_mesa_ffsll(int64_t val)
+ffsll(long long int val)
 {
    int bit;
 
    assert(sizeof(val) == 8);
 
-   bit = _mesa_ffs((int32_t)val);
+   bit = ffs((int) val);
    if (bit != 0)
       return bit;
 
-   bit = _mesa_ffs((int32_t)(val >> 32));
+   bit = ffs((int) (val >> 32));
    if (bit != 0)
       return 32 + bit;
 
    return 0;
 }
-#endif
+#endif /* __GNUC__ */
+
 
 #if !defined(__GNUC__) ||\
    ((__GNUC__ * 100 + __GNUC_MINOR__) < 304) /* Not gcc 3.4 or later */
@@ -543,10 +314,43 @@ _mesa_bitcount_64(uint64_t n)
 #endif
 
 
+/* Using C99 rounding functions for roundToEven() implementation is
+ * difficult, because round(), rint, and nearbyint() are affected by
+ * fesetenv(), which the application may have done for its own
+ * purposes.  Mesa's IROUND macro is close to what we want, but it
+ * rounds away from 0 on n + 0.5.
+ */
+int
+_mesa_round_to_even(float val)
+{
+   int rounded = IROUND(val);
+
+   if (val - floor(val) == 0.5) {
+      if (rounded % 2 != 0)
+         rounded += val > 0 ? -1 : 1;
+   }
+
+   return rounded;
+}
+
+
 /**
  * Convert a 4-byte float to a 2-byte half float.
- * Based on code from:
- * http://www.opengl.org/discussion_boards/ubb/Forum3/HTML/008786.html
+ *
+ * Not all float32 values can be represented exactly as a float16 value. We
+ * round such intermediate float32 values to the nearest float16. When the
+ * float32 lies exactly between to float16 values, we round to the one with
+ * an even mantissa.
+ *
+ * This rounding behavior has several benefits:
+ *   - It has no sign bias.
+ *
+ *   - It reproduces the behavior of real hardware: opcode F32TO16 in Intel's
+ *     GPU ISA.
+ *
+ *   - By reproducing the behavior of the GPU (at least on Intel hardware),
+ *     compile-time evaluation of constant packHalf2x16 GLSL expressions will
+ *     result in the same value as if the expression were executed on the GPU.
  */
 GLhalfARB
 _mesa_float_to_half(float val)
@@ -585,32 +389,13 @@ _mesa_float_to_half(float val)
    else {
       /* regular number */
       const int new_exp = flt_e - 127;
-      if (new_exp < -24) {
-         /* this maps to 0 */
-         /* m = 0; - already set */
+      if (new_exp < -14) {
+         /* The float32 lies in the range (0.0, min_normal16) and is rounded
+          * to a nearby float16 value. The result will be either zero, subnormal,
+          * or normal.
+          */
          e = 0;
-      }
-      else if (new_exp < -14) {
-         /* this maps to a denorm */
-         unsigned int exp_val = (unsigned int) (-14 - new_exp); /* 2^-exp_val*/
-         e = 0;
-         switch (exp_val) {
-            case 0:
-               _mesa_warning(NULL,
-                   "float_to_half: logical error in denorm creation!\n");
-               /* m = 0; - already set */
-               break;
-            case 1: m = 512 + (flt_m >> 14); break;
-            case 2: m = 256 + (flt_m >> 15); break;
-            case 3: m = 128 + (flt_m >> 16); break;
-            case 4: m = 64 + (flt_m >> 17); break;
-            case 5: m = 32 + (flt_m >> 18); break;
-            case 6: m = 16 + (flt_m >> 19); break;
-            case 7: m = 8 + (flt_m >> 20); break;
-            case 8: m = 4 + (flt_m >> 21); break;
-            case 9: m = 2 + (flt_m >> 22); break;
-            case 10: m = 1; break;
-         }
+         m = _mesa_round_to_even((1 << 24) * fabsf(fi.f));
       }
       else if (new_exp > 15) {
          /* map this value to infinity */
@@ -618,10 +403,24 @@ _mesa_float_to_half(float val)
          e = 31;
       }
       else {
-         /* regular */
+         /* The float32 lies in the range
+          *   [min_normal16, max_normal16 + max_step16)
+          * and is rounded to a nearby float16 value. The result will be
+          * either normal or infinite.
+          */
          e = new_exp + 15;
-         m = flt_m >> 13;
+         m = _mesa_round_to_even(flt_m / (float) (1 << 13));
       }
+   }
+
+   assert(0 <= m && m <= 1024);
+   if (m == 1024) {
+      /* The float32 was rounded upwards into the range of the next exponent,
+       * so bump the exponent. This correctly handles the case where f32
+       * should be rounded up to float16 infinity.
+       */
+      ++e;
+      m = 0;
    }
 
    result = (s << 15) | (e << 10) | m;
@@ -752,7 +551,7 @@ _mesa_strdup( const char *s )
 {
    if (s) {
       size_t l = strlen(s);
-      char *s2 = (char *) malloc(l + 1);
+      char *s2 = malloc(l + 1);
       if (s2)
          strcpy(s2, s);
       return s2;
@@ -767,7 +566,7 @@ float
 _mesa_strtof( const char *s, char **end )
 {
 #if defined(_GNU_SOURCE) && !defined(__CYGWIN__) && !defined(__FreeBSD__) && \
-   !defined(ANDROID) && !defined(__HAIKU__)
+   !defined(ANDROID) && !defined(__HAIKU__) && !defined(__UCLIBC__)
    static locale_t loc = NULL;
    if (!loc) {
       loc = newlocale(LC_CTYPE_MASK, "C", NULL);
@@ -797,6 +596,13 @@ _mesa_str_checksum(const char *str)
 /*@}*/
 
 
+/** Needed due to #ifdef's, above. */
+int
+_mesa_vsnprintf(char *str, size_t size, const char *fmt, va_list args)
+{
+   return vsnprintf( str, size, fmt, args);
+}
+
 /** Wrapper around vsnprintf() */
 int
 _mesa_snprintf( char *str, size_t size, const char *fmt, ... )
@@ -810,239 +616,3 @@ _mesa_snprintf( char *str, size_t size, const char *fmt, ... )
 }
 
 
-/**********************************************************************/
-/** \name Diagnostics */
-/*@{*/
-
-static void
-output_if_debug(const char *prefixString, const char *outputString,
-                GLboolean newline)
-{
-   static int debug = -1;
-
-   /* Check the MESA_DEBUG environment variable if it hasn't
-    * been checked yet.  We only have to check it once...
-    */
-   if (debug == -1) {
-      char *env = _mesa_getenv("MESA_DEBUG");
-
-      /* In a debug build, we print warning messages *unless*
-       * MESA_DEBUG is 0.  In a non-debug build, we don't
-       * print warning messages *unless* MESA_DEBUG is
-       * set *to any value*.
-       */
-#ifdef DEBUG
-      debug = (env != NULL && atoi(env) == 0) ? 0 : 1;
-#else
-      debug = (env != NULL) ? 1 : 0;
-#endif
-   }
-
-   /* Now only print the string if we're required to do so. */
-   if (debug) {
-      fprintf(stderr, "%s: %s", prefixString, outputString);
-      if (newline)
-         fprintf(stderr, "\n");
-
-#if defined(_WIN32) && !defined(_WIN32_WCE)
-      /* stderr from windows applications without console is not usually 
-       * visible, so communicate with the debugger instead */ 
-      {
-         char buf[4096];
-         _mesa_snprintf(buf, sizeof(buf), "%s: %s%s", prefixString, outputString, newline ? "\n" : "");
-         OutputDebugStringA(buf);
-      }
-#endif
-   }
-}
-
-
-/**
- * Return string version of GL error code.
- */
-static const char *
-error_string( GLenum error )
-{
-   switch (error) {
-   case GL_NO_ERROR:
-      return "GL_NO_ERROR";
-   case GL_INVALID_VALUE:
-      return "GL_INVALID_VALUE";
-   case GL_INVALID_ENUM:
-      return "GL_INVALID_ENUM";
-   case GL_INVALID_OPERATION:
-      return "GL_INVALID_OPERATION";
-   case GL_STACK_OVERFLOW:
-      return "GL_STACK_OVERFLOW";
-   case GL_STACK_UNDERFLOW:
-      return "GL_STACK_UNDERFLOW";
-   case GL_OUT_OF_MEMORY:
-      return "GL_OUT_OF_MEMORY";
-   case GL_TABLE_TOO_LARGE:
-      return "GL_TABLE_TOO_LARGE";
-   case GL_INVALID_FRAMEBUFFER_OPERATION_EXT:
-      return "GL_INVALID_FRAMEBUFFER_OPERATION";
-   default:
-      return "unknown";
-   }
-}
-
-
-/**
- * When a new type of error is recorded, print a message describing
- * previous errors which were accumulated.
- */
-static void
-flush_delayed_errors( struct gl_context *ctx )
-{
-   char s[MAXSTRING];
-
-   if (ctx->ErrorDebugCount) {
-      _mesa_snprintf(s, MAXSTRING, "%d similar %s errors", 
-                     ctx->ErrorDebugCount,
-                     error_string(ctx->ErrorValue));
-
-      output_if_debug("Mesa", s, GL_TRUE);
-
-      ctx->ErrorDebugCount = 0;
-   }
-}
-
-
-/**
- * Report a warning (a recoverable error condition) to stderr if
- * either DEBUG is defined or the MESA_DEBUG env var is set.
- *
- * \param ctx GL context.
- * \param fmtString printf()-like format string.
- */
-void
-_mesa_warning( struct gl_context *ctx, const char *fmtString, ... )
-{
-   char str[MAXSTRING];
-   va_list args;
-   va_start( args, fmtString );  
-   (void) vsnprintf( str, MAXSTRING, fmtString, args );
-   va_end( args );
-   
-   if (ctx)
-      flush_delayed_errors( ctx );
-
-   output_if_debug("Mesa warning", str, GL_TRUE);
-}
-
-
-/**
- * Report an internal implementation problem.
- * Prints the message to stderr via fprintf().
- *
- * \param ctx GL context.
- * \param fmtString problem description string.
- */
-void
-_mesa_problem( const struct gl_context *ctx, const char *fmtString, ... )
-{
-   va_list args;
-   char str[MAXSTRING];
-   static int numCalls = 0;
-
-   (void) ctx;
-
-   if (numCalls < 50) {
-      numCalls++;
-
-      va_start( args, fmtString );  
-      vsnprintf( str, MAXSTRING, fmtString, args );
-      va_end( args );
-      fprintf(stderr, "Mesa %s implementation error: %s\n",
-              MESA_VERSION_STRING, str);
-      fprintf(stderr, "Please report at bugs.freedesktop.org\n");
-   }
-}
-
-
-/**
- * Record an OpenGL state error.  These usually occur when the user
- * passes invalid parameters to a GL function.
- *
- * If debugging is enabled (either at compile-time via the DEBUG macro, or
- * run-time via the MESA_DEBUG environment variable), report the error with
- * _mesa_debug().
- * 
- * \param ctx the GL context.
- * \param error the error value.
- * \param fmtString printf() style format string, followed by optional args
- */
-void
-_mesa_error( struct gl_context *ctx, GLenum error, const char *fmtString, ... )
-{
-   static GLint debug = -1;
-
-   /* Check debug environment variable only once:
-    */
-   if (debug == -1) {
-      const char *debugEnv = _mesa_getenv("MESA_DEBUG");
-
-#ifdef DEBUG
-      if (debugEnv && strstr(debugEnv, "silent"))
-         debug = GL_FALSE;
-      else
-         debug = GL_TRUE;
-#else
-      if (debugEnv)
-         debug = GL_TRUE;
-      else
-         debug = GL_FALSE;
-#endif
-   }
-
-   if (debug) {      
-      if (ctx->ErrorValue == error &&
-          ctx->ErrorDebugFmtString == fmtString) {
-         ctx->ErrorDebugCount++;
-      }
-      else {
-         char s[MAXSTRING], s2[MAXSTRING];
-         va_list args;
-
-         flush_delayed_errors( ctx );
-         
-         va_start(args, fmtString);
-         vsnprintf(s, MAXSTRING, fmtString, args);
-         va_end(args);
-
-         _mesa_snprintf(s2, MAXSTRING, "%s in %s", error_string(error), s);
-         output_if_debug("Mesa: User error", s2, GL_TRUE);
-         
-         ctx->ErrorDebugFmtString = fmtString;
-         ctx->ErrorDebugCount = 0;
-      }
-   }
-
-   _mesa_record_error(ctx, error);
-}
-
-
-/**
- * Report debug information.  Print error message to stderr via fprintf().
- * No-op if DEBUG mode not enabled.
- * 
- * \param ctx GL context.
- * \param fmtString printf()-style format string, followed by optional args.
- */
-void
-_mesa_debug( const struct gl_context *ctx, const char *fmtString, ... )
-{
-#ifdef DEBUG
-   char s[MAXSTRING];
-   va_list args;
-   va_start(args, fmtString);
-   vsnprintf(s, MAXSTRING, fmtString, args);
-   va_end(args);
-   output_if_debug("Mesa", s, GL_FALSE);
-#endif /* DEBUG */
-   (void) ctx;
-   (void) fmtString;
-}
-
-/*@}*/

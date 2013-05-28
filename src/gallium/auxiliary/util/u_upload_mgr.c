@@ -76,13 +76,12 @@ void u_upload_unmap( struct u_upload_mgr *upload )
 {
    if (upload->transfer) {
       struct pipe_box *box = &upload->transfer->box;
-      if (upload->offset > box->x) {
+      if ((int) upload->offset > box->x) {
 
          pipe_buffer_flush_mapped_range(upload->pipe, upload->transfer,
                                         box->x, upload->offset - box->x);
       }
       pipe_transfer_unmap(upload->pipe, upload->transfer);
-      pipe_transfer_destroy(upload->pipe, upload->transfer);
       upload->transfer = NULL;
       upload->map = NULL;
    }
@@ -142,13 +141,13 @@ u_upload_alloc_buffer( struct u_upload_mgr *upload,
                                        PIPE_TRANSFER_FLUSH_EXPLICIT,
                                        &upload->transfer);
    if (upload->map == NULL) {
+      upload->transfer = NULL;
       upload->size = 0;
       pipe_resource_reference(&upload->buffer, NULL);
       return PIPE_ERROR_OUT_OF_MEMORY;
    }
 
    upload->size = size;
-
    upload->offset = 0;
    return PIPE_OK;
 }
@@ -163,6 +162,13 @@ enum pipe_error u_upload_alloc( struct u_upload_mgr *upload,
    unsigned alloc_size = align( size, upload->alignment );
    unsigned alloc_offset = align(min_out_offset, upload->alignment);
    unsigned offset;
+
+   /* Init these return values here in case we fail below to make
+    * sure the caller doesn't get garbage values.
+    */
+   *out_offset = ~0;
+   pipe_resource_reference(outbuf, NULL);
+   *ptr = NULL;
 
    /* Make sure we have enough space in the upload buffer
     * for the sub-allocation. */
@@ -183,8 +189,7 @@ enum pipe_error u_upload_alloc( struct u_upload_mgr *upload,
 					  PIPE_TRANSFER_UNSYNCHRONIZED,
 					  &upload->transfer);
       if (!upload->map) {
-         pipe_resource_reference(outbuf, NULL);
-         *ptr = NULL;
+         upload->transfer = NULL;
          return PIPE_ERROR_OUT_OF_MEMORY;
       }
 

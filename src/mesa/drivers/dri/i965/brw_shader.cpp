@@ -48,13 +48,12 @@ brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
 struct gl_shader_program *
 brw_new_shader_program(struct gl_context *ctx, GLuint name)
 {
-   struct brw_shader_program *prog;
-   prog = rzalloc(NULL, struct brw_shader_program);
+   struct gl_shader_program *prog = rzalloc(NULL, struct gl_shader_program);
    if (prog) {
-      prog->base.Name = name;
-      _mesa_init_shader_program(ctx, &prog->base);
+      prog->Name = name;
+      _mesa_init_shader_program(ctx, prog);
    }
-   return &prog->base;
+   return prog;
 }
 
 /**
@@ -62,7 +61,7 @@ brw_new_shader_program(struct gl_context *ctx, GLuint name)
  * what non-orthogonal state will be set, in the hope that it reflects
  * the eventual NOS used, and thus allows us to produce link failures.
  */
-bool
+static bool
 brw_shader_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
 {
    struct brw_context *brw = brw_context(ctx);
@@ -70,10 +69,42 @@ brw_shader_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
    if (brw->precompile && !brw_fs_precompile(ctx, prog))
       return false;
 
-   if (!brw_vs_precompile(ctx, prog))
+   if (brw->precompile && !brw_vs_precompile(ctx, prog))
       return false;
 
    return true;
+}
+
+static void
+brw_lower_packing_builtins(struct brw_context *brw,
+                           gl_shader_type shader_type,
+                           exec_list *ir)
+{
+   int ops = LOWER_PACK_SNORM_2x16
+           | LOWER_UNPACK_SNORM_2x16
+           | LOWER_PACK_UNORM_2x16
+           | LOWER_UNPACK_UNORM_2x16
+           | LOWER_PACK_SNORM_4x8
+           | LOWER_UNPACK_SNORM_4x8
+           | LOWER_PACK_UNORM_4x8
+           | LOWER_UNPACK_UNORM_4x8;
+
+   if (brw->intel.gen >= 7) {
+      /* Gen7 introduced the f32to16 and f16to32 instructions, which can be
+       * used to execute packHalf2x16 and unpackHalf2x16. For AOS code, no
+       * lowering is needed. For SOA code, the Half2x16 ops must be
+       * scalarized.
+       */
+      if (shader_type == MESA_SHADER_FRAGMENT) {
+         ops |= LOWER_PACK_HALF_2x16_TO_SPLIT
+             |  LOWER_UNPACK_HALF_2x16_TO_SPLIT;
+      }
+   } else {
+      ops |= LOWER_PACK_HALF_2x16
+          |  LOWER_UNPACK_HALF_2x16;
+   }
+
+   lower_packing_builtins(ir, ops);
 }
 
 GLboolean
@@ -98,40 +129,12 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       struct gl_program *prog =
 	 ctx->Driver.NewProgram(ctx, targets[stage], shader->base.Name);
       if (!prog)
-	return NULL;
+	return false;
       prog->Parameters = _mesa_new_parameter_list();
-
-      _mesa_generate_parameters_list_for_uniforms(shProg, &shader->base,
-						  prog->Parameters);
 
       if (stage == 0) {
 	 struct gl_vertex_program *vp = (struct gl_vertex_program *) prog;
 	 vp->UsesClipDistance = shProg->Vert.UsesClipDistance;
-      }
-
-      if (stage == 1) {
-	 class uses_kill_visitor : public ir_hierarchical_visitor {
-	 public:
-	    uses_kill_visitor() : uses_kill(false)
-	    {
-	       /* empty */
-	    }
-
-	    virtual ir_visitor_status visit_enter(class ir_discard *ir)
-	    {
-	       this->uses_kill = true;
-	       return visit_stop;
-	    }
-
-	    bool uses_kill;
-	 };
-
-	 uses_kill_visitor v;
-
-	 v.run(shader->base.ir);
-
-	 struct gl_fragment_program *fp = (struct gl_fragment_program *) prog;
-	 fp->UsesKill = v.uses_kill;
       }
 
       void *mem_ctx = ralloc_context(NULL);
@@ -142,6 +145,10 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       shader->ir = new(shader) exec_list;
       clone_ir_list(mem_ctx, shader->ir, shader->base.ir);
 
+      /* lower_packing_builtins() inserts arithmetic instructions, so it
+       * must precede lower_instructions().
+       */
+      brw_lower_packing_builtins(brw, (gl_shader_type) stage, shader->ir);
       do_mat_op_to_vec(shader->ir);
       lower_instructions(shader->ir,
 			 MOD_TO_FRACT |
@@ -157,6 +164,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 	 lower_if_to_cond_assign(shader->ir, 16);
 
       do_lower_texture_projection(shader->ir);
+      brw_lower_texture_gradients(intel, shader->ir);
       do_vec_index_to_cond_assign(shader->ir);
       brw_do_cubemap_normalize(shader->ir);
       lower_noise(shader->ir);
@@ -165,10 +173,19 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       bool input = true;
       bool output = stage == MESA_SHADER_FRAGMENT;
       bool temp = stage == MESA_SHADER_FRAGMENT;
-      bool uniform = stage == MESA_SHADER_FRAGMENT;
+      bool uniform = false;
 
-      lower_variable_index_to_cond_assign(shader->ir,
-					  input, output, temp, uniform);
+      bool lowered_variable_indexing =
+         lower_variable_index_to_cond_assign(shader->ir,
+                                             input, output, temp, uniform);
+
+      if (unlikely((INTEL_DEBUG & DEBUG_PERF) && lowered_variable_indexing)) {
+         perf_debug("Unsupported form of variable indexing in FS; falling "
+                    "back to very inefficient code generation\n");
+      }
+
+      /* FINISHME: Do this before the variable index lowering. */
+      lower_ubo_reference(&shader->base, shader->ir);
 
       do {
 	 progress = false;
@@ -192,7 +209,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
        * uniforms that are used.  This has to be done now (during linking).
        * Code generation doesn't happen until the first time this shader is
        * used for rendering.  Waiting until then to generate the parameters is
-       * too late.  At that point, the values for the built-in informs won't
+       * too late.  At that point, the values for the built-in uniforms won't
        * get sent to the shader.
        */
       foreach_list(node, shader->ir) {
@@ -224,6 +241,8 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 
       _mesa_reference_program(ctx, &shader->base.Program, prog);
 
+      brw_add_texrect_params(prog);
+
       /* This has to be done last.  Any operation that can cause
        * prog->ParameterValues to get reallocated (e.g., anything that adds a
        * program constant) has to happen before creating this linkage.
@@ -231,6 +250,15 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       _mesa_associate_uniform_storage(ctx, shProg, prog->Parameters);
 
       _mesa_reference_program(ctx, &prog, NULL);
+
+      if (ctx->Shader.Flags & GLSL_DUMP) {
+         static const char *target_strings[]
+            = { "vertex", "fragment", "geometry" };
+         printf("\n");
+         printf("GLSL IR for linked %s program %d:\n", target_strings[stage],
+                shProg->Name);
+         _mesa_print_ir(shader->base.ir, NULL);
+      }
    }
 
    if (!brw_shader_precompile(ctx, shProg))
@@ -260,10 +288,14 @@ brw_type_for_base_type(const struct glsl_type *type)
        * way to trip up if we don't.
        */
       return BRW_REGISTER_TYPE_UD;
-   default:
+   case GLSL_TYPE_VOID:
+   case GLSL_TYPE_ERROR:
+   case GLSL_TYPE_INTERFACE:
       assert(!"not reached");
-      return BRW_REGISTER_TYPE_F;
+      break;
    }
+
+   return BRW_REGISTER_TYPE_F;
 }
 
 uint32_t

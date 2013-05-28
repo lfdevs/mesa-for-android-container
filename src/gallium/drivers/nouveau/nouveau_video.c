@@ -27,38 +27,23 @@
 #include "nouveau_context.h"
 #include "nouveau_video.h"
 
-#include "nvfx/nvfx_context.h"
-#include "nvfx/nvfx_resource.h"
-#include "nouveau/nouveau_bo.h"
 #include "nouveau/nouveau_buffer.h"
 #include "util/u_video.h"
 #include "util/u_format.h"
 #include "util/u_sampler.h"
-#include "nouveau/nouveau_device.h"
-#include "nouveau_winsys.h"
-
-static bool
-nouveau_video_is_nvfx(struct nouveau_decoder *dec) {
-   if (dec->screen->device->chipset < 0x50)
-      return true;
-   if (dec->screen->device->chipset >= 0x60 && dec->screen->device->chipset < 0x70)
-      return true;
-   return false;
-}
 
 static int
 nouveau_vpe_init(struct nouveau_decoder *dec) {
    int ret;
    if (dec->cmds)
       return 0;
-   ret = nouveau_bo_map(dec->cmd_bo, NOUVEAU_BO_RDWR);
+   ret = nouveau_bo_map(dec->cmd_bo, NOUVEAU_BO_RDWR, dec->client);
    if (ret) {
       debug_printf("Mapping cmd bo: %s\n", strerror(-ret));
       return ret;
    }
-   ret = nouveau_bo_map(dec->data_bo, NOUVEAU_BO_RDWR);
+   ret = nouveau_bo_map(dec->data_bo, NOUVEAU_BO_RDWR, dec->client);
    if (ret) {
-      nouveau_bo_unmap(dec->cmd_bo);
       debug_printf("Mapping data bo: %s\n", strerror(-ret));
       return ret;
    }
@@ -69,39 +54,45 @@ nouveau_vpe_init(struct nouveau_decoder *dec) {
 
 static void
 nouveau_vpe_synch(struct nouveau_decoder *dec) {
-   struct nouveau_channel *chan = dec->screen->channel;
+   struct nouveau_pushbuf *push = dec->push;
 #if 0
    if (dec->fence_map) {
-      BEGIN_RING(chan, dec->mpeg, NV84_MPEG_QUERY_COUNTER, 1);
-      OUT_RING(chan, ++dec->fence_seq);
-      FIRE_RING(chan);
+      BEGIN_NV04(push, NV84_MPEG(QUERY_COUNTER), 1);
+      PUSH_DATA (push, ++dec->fence_seq);
+      PUSH_KICK (push);
       while (dec->fence_map[0] != dec->fence_seq)
          usleep(1000);
    } else
 #endif
-      FIRE_RING(chan);
+      PUSH_KICK(push);
 }
 
 static void
 nouveau_vpe_fini(struct nouveau_decoder *dec) {
-   struct nouveau_channel *chan = dec->screen->channel;
+   struct nouveau_pushbuf *push = dec->push;
    if (!dec->cmds)
       return;
 
-   nouveau_bo_unmap(dec->data_bo);
-   nouveau_bo_unmap(dec->cmd_bo);
+   nouveau_pushbuf_space(push, 8, 2, 0);
+   nouveau_bufctx_reset(dec->bufctx, NV31_VIDEO_BIND_CMD);
 
-   MARK_RING(chan, 8, 2);
-   BEGIN_RING(chan, dec->mpeg, NV31_MPEG_CMD_OFFSET, 2);
-   OUT_RELOCl(chan, dec->cmd_bo, 0, NOUVEAU_BO_RD|NOUVEAU_BO_GART);
-   OUT_RING(chan, dec->ofs * 4);
+#define BCTX_ARGS dec->bufctx, NV31_VIDEO_BIND_CMD, NOUVEAU_BO_RD
 
-   BEGIN_RING(chan, dec->mpeg, NV31_MPEG_DATA_OFFSET, 2);
-   OUT_RELOCl(chan, dec->data_bo, 0, NOUVEAU_BO_RD|NOUVEAU_BO_GART);
-   OUT_RING(chan, dec->data_pos * 4);
+   BEGIN_NV04(push, NV31_MPEG(CMD_OFFSET), 2);
+   PUSH_MTHDl(push, NV31_MPEG(CMD_OFFSET), dec->cmd_bo, 0, BCTX_ARGS);
+   PUSH_DATA (push, dec->ofs * 4);
 
-   BEGIN_RING(chan, dec->mpeg, NV31_MPEG_EXEC, 1);
-   OUT_RING(chan, 1);
+   BEGIN_NV04(push, NV31_MPEG(DATA_OFFSET), 2);
+   PUSH_MTHDl(push, NV31_MPEG(DATA_OFFSET), dec->data_bo, 0, BCTX_ARGS);
+   PUSH_DATA (push, dec->data_pos * 4);
+
+#undef BCTX_ARGS
+
+   if (unlikely(nouveau_pushbuf_validate(dec->push)))
+      return;
+
+   BEGIN_NV04(push, NV31_MPEG(EXEC), 1);
+   PUSH_DATA (push, 1);
 
    nouveau_vpe_synch(dec);
    dec->ofs = dec->data_pos = dec->num_surfaces = 0;
@@ -395,8 +386,10 @@ nouveau_decoder_surface_index(struct nouveau_decoder *dec,
                               struct pipe_video_buffer *buffer)
 {
    struct nouveau_video_buffer *buf = (struct nouveau_video_buffer *)buffer;
-   struct nouveau_channel *chan = dec->screen->channel;
-   struct nouveau_bo *bo_y, *bo_c;
+   struct nouveau_pushbuf *push = dec->push;
+   struct nouveau_bo *bo_y = nv04_resource(buf->resources[0])->bo;
+   struct nouveau_bo *bo_c = nv04_resource(buf->resources[1])->bo;
+
    unsigned i;
 
    if (!buf)
@@ -409,59 +402,45 @@ nouveau_decoder_surface_index(struct nouveau_decoder *dec,
    dec->surfaces[i] = buf;
    dec->num_surfaces++;
 
-   if (nouveau_video_is_nvfx(dec)) {
-      bo_y = ((struct nvfx_resource *)buf->resources[0])->bo;
-      bo_c = ((struct nvfx_resource *)buf->resources[1])->bo;
-   } else {
-      bo_y = ((struct nv04_resource *)buf->resources[0])->bo;
-      bo_c = ((struct nv04_resource *)buf->resources[1])->bo;
-   }
-   MARK_RING(chan, 3, 2);
-   BEGIN_RING(chan, dec->mpeg, NV31_MPEG_IMAGE_Y_OFFSET(i), 2);
-   OUT_RELOCl(chan, bo_y, 0, NOUVEAU_BO_RDWR);
-   OUT_RELOCl(chan, bo_c, 0, NOUVEAU_BO_RDWR);
+   nouveau_bufctx_reset(dec->bufctx, NV31_VIDEO_BIND_IMG(i));
+
+#define BCTX_ARGS dec->bufctx, NV31_VIDEO_BIND_IMG(i), NOUVEAU_BO_RDWR
+   BEGIN_NV04(push, NV31_MPEG(IMAGE_Y_OFFSET(i)), 2);
+   PUSH_MTHDl(push, NV31_MPEG(IMAGE_Y_OFFSET(i)), bo_y, 0, BCTX_ARGS);
+   PUSH_MTHDl(push, NV31_MPEG(IMAGE_C_OFFSET(i)), bo_c, 0, BCTX_ARGS);
+#undef BCTX_ARGS
+
    return i;
 }
 
 static void
-nouveau_decoder_set_picture_parameters(struct pipe_video_decoder *decoder,
-                                       struct pipe_picture_desc *picture_desc)
+nouveau_decoder_begin_frame(struct pipe_video_decoder *decoder,
+                            struct pipe_video_buffer *target,
+                            struct pipe_picture_desc *picture)
 {
-   struct nouveau_decoder *dec = (struct nouveau_decoder *)decoder;
-   struct pipe_mpeg12_picture_desc *desc;
-   desc = (struct pipe_mpeg12_picture_desc *)picture_desc;
-   dec->picture_structure = desc->picture_structure;
-}
-
-static void
-nouveau_decoder_set_reference_frames(struct pipe_video_decoder *decoder,
-                                     struct pipe_video_buffer **buffers,
-                                     unsigned count)
-{
-   struct nouveau_decoder *dec = (struct nouveau_decoder *)decoder;
-   if (count >= 1 && buffers[0])
-      dec->past = nouveau_decoder_surface_index(dec, buffers[0]);
-   if (count >= 2 && buffers[1])
-      dec->future = nouveau_decoder_surface_index(dec, buffers[1]);
-}
-
-static void
-nouveau_decoder_set_decode_target(struct pipe_video_decoder *decoder,
-                                  struct pipe_video_buffer *buffer)
-{
-   struct nouveau_decoder *dec = (struct nouveau_decoder *)decoder;
-   dec->current = nouveau_decoder_surface_index(dec, buffer);
 }
 
 static void
 nouveau_decoder_decode_macroblock(struct pipe_video_decoder *decoder,
+                                  struct pipe_video_buffer *target,
+                                  struct pipe_picture_desc *picture,
                                   const struct pipe_macroblock *pipe_mb,
                                   unsigned num_macroblocks)
 {
    struct nouveau_decoder *dec = (struct nouveau_decoder *)decoder;
+   struct pipe_mpeg12_picture_desc *desc = (struct pipe_mpeg12_picture_desc*)picture;
    const struct pipe_mpeg12_macroblock *mb;
    unsigned i;
+   assert(target->width == decoder->width);
+   assert(target->height == decoder->height);
+
+   dec->current = nouveau_decoder_surface_index(dec, target);
    assert(dec->current < 8);
+   dec->picture_structure = desc->picture_structure;
+   if (desc->ref[1])
+      dec->future = nouveau_decoder_surface_index(dec, desc->ref[1]);
+   if (desc->ref[0])
+      dec->past = nouveau_decoder_surface_index(dec, desc->ref[0]);
 
    if (nouveau_vpe_init(dec)) return;
    mb = (const struct pipe_mpeg12_macroblock *)pipe_mb;
@@ -484,6 +463,13 @@ nouveau_decoder_decode_macroblock(struct pipe_video_decoder *decoder,
 }
 
 static void
+nouveau_decoder_end_frame(struct pipe_video_decoder *decoder,
+                          struct pipe_video_buffer *target,
+                          struct pipe_picture_desc *picture)
+{
+}
+
+static void
 nouveau_decoder_flush(struct pipe_video_decoder *decoder)
 {
    struct nouveau_decoder *dec = (struct nouveau_decoder *)decoder;
@@ -496,29 +482,25 @@ nouveau_decoder_destroy(struct pipe_video_decoder *decoder)
 {
    struct nouveau_decoder *dec = (struct nouveau_decoder*)decoder;
 
-   if (dec->cmds) {
-      nouveau_bo_unmap(dec->data_bo);
-      nouveau_bo_unmap(dec->cmd_bo);
-   }
-
    if (dec->data_bo)
       nouveau_bo_ref(NULL, &dec->data_bo);
    if (dec->cmd_bo)
       nouveau_bo_ref(NULL, &dec->cmd_bo);
    if (dec->fence_bo)
       nouveau_bo_ref(NULL, &dec->fence_bo);
-   nouveau_grobj_free(&dec->mpeg);
+
+   nouveau_object_del(&dec->mpeg);
+
+   if (dec->bufctx)
+      nouveau_bufctx_del(&dec->bufctx);
+   if (dec->push)
+      nouveau_pushbuf_del(&dec->push);
+   if (dec->client)
+      nouveau_client_del(&dec->client);
+   if (dec->chan)
+      nouveau_object_del(&dec->chan);
+
    FREE(dec);
-}
-
-static void
-nouveau_decoder_begin_frame(struct pipe_video_decoder *decoder)
-{
-}
-
-static void
-nouveau_decoder_end_frame(struct pipe_video_decoder *decoder)
-{
 }
 
 static struct pipe_video_decoder *
@@ -530,9 +512,10 @@ nouveau_create_decoder(struct pipe_context *context,
                        unsigned width, unsigned height,
                        unsigned max_references, bool expect_chunked_decode)
 {
-   struct nouveau_channel *chan = screen->channel;
-   struct nouveau_grobj *mpeg = NULL;
+   struct nv04_fifo nv04_data = { .vram = 0xbeef0201, .gart = 0xbeef0202 };
+   struct nouveau_object *mpeg = NULL;
    struct nouveau_decoder *dec;
+   struct nouveau_pushbuf *push;
    int ret;
    bool is8274 = screen->device->chipset > 0x80;
 
@@ -546,23 +529,40 @@ nouveau_create_decoder(struct pipe_context *context,
    if (screen->device->chipset >= 0x98 && screen->device->chipset != 0xa0)
       goto vl;
 
+   dec = CALLOC_STRUCT(nouveau_decoder);
+   if (!dec)
+      return NULL;
+
+   ret = nouveau_object_new(&screen->device->object, 0,
+                            NOUVEAU_FIFO_CHANNEL_CLASS,
+                            &nv04_data, sizeof(nv04_data), &dec->chan);
+   if (ret)
+      goto fail;
+   ret = nouveau_client_new(screen->device, &dec->client);
+   if (ret)
+      goto fail;
+   ret = nouveau_pushbuf_new(dec->client, dec->chan, 2, 4096, 1, &dec->push);
+   if (ret)
+      goto fail;
+   ret = nouveau_bufctx_new(dec->client, NV31_VIDEO_BIND_COUNT, &dec->bufctx);
+   if (ret)
+      goto fail;
+   push = dec->push;
+
    width = align(width, 64);
    height = align(height, 64);
 
    if (is8274)
-       ret = nouveau_grobj_alloc(chan, 0xbeef8274, 0x8274, &mpeg);
+      ret = nouveau_object_new(dec->chan, 0xbeef8274, NV84_MPEG_CLASS, NULL, 0,
+                               &mpeg);
    else
-       ret = nouveau_grobj_alloc(chan, 0xbeef8274, 0x3174, &mpeg);
+      ret = nouveau_object_new(dec->chan, 0xbeef3174, NV31_MPEG_CLASS, NULL, 0,
+                               &mpeg);
    if (ret < 0) {
       debug_printf("Creation failed: %s (%i)\n", strerror(-ret), ret);
       return NULL;
    }
 
-   dec = CALLOC_STRUCT(nouveau_decoder);
-   if (!dec) {
-      nouveau_grobj_free(&mpeg);
-      goto fail;
-   }
    dec->mpeg = mpeg;
    dec->base.context = context;
    dec->base.profile = profile;
@@ -573,65 +573,68 @@ nouveau_create_decoder(struct pipe_context *context,
    dec->base.max_references = max_references;
    dec->base.destroy = nouveau_decoder_destroy;
    dec->base.begin_frame = nouveau_decoder_begin_frame;
-   dec->base.end_frame = nouveau_decoder_end_frame;
-   dec->base.set_decode_target = nouveau_decoder_set_decode_target;
-   dec->base.set_picture_parameters = nouveau_decoder_set_picture_parameters;
-   dec->base.set_reference_frames = nouveau_decoder_set_reference_frames;
    dec->base.decode_macroblock = nouveau_decoder_decode_macroblock;
+   dec->base.end_frame = nouveau_decoder_end_frame;
    dec->base.flush = nouveau_decoder_flush;
    dec->screen = screen;
 
-   ret = nouveau_bo_new(dec->screen->device, NOUVEAU_BO_GART, 0, 1024 * 1024, &dec->cmd_bo);
+   ret = nouveau_bo_new(dec->screen->device, NOUVEAU_BO_GART | NOUVEAU_BO_MAP,
+                        0, 1024 * 1024, NULL, &dec->cmd_bo);
    if (ret)
       goto fail;
 
-   ret = nouveau_bo_new(dec->screen->device, NOUVEAU_BO_GART, 0, width * height * 6, &dec->data_bo);
+   ret = nouveau_bo_new(dec->screen->device, NOUVEAU_BO_GART | NOUVEAU_BO_MAP,
+                        0, width * height * 6, NULL, &dec->data_bo);
    if (ret)
       goto fail;
 
-   ret = nouveau_bo_new(dec->screen->device, NOUVEAU_BO_GART|NOUVEAU_BO_MAP, 0, 4096,
-                        &dec->fence_bo);
+   /* we don't need the fence, the kernel sync's for us */
+#if 0
+   ret = nouveau_bo_new(dec->screen->device, NOUVEAU_BO_GART | NOUVEAU_BO_MAP,
+                        0, 4096, NULL, &dec->fence_bo);
    if (ret)
       goto fail;
-   nouveau_bo_map(dec->fence_bo, NOUVEAU_BO_RDWR);
+   nouveau_bo_map(dec->fence_bo, NOUVEAU_BO_RDWR, NULL);
    dec->fence_map = dec->fence_bo->map;
-   nouveau_bo_unmap(dec->fence_bo);
    dec->fence_map[0] = 0;
+#endif
 
-   if (is8274)
-      MARK_RING(chan, 25, 3);
-   else
-      MARK_RING(chan, 20, 2);
+   nouveau_pushbuf_bufctx(dec->push, dec->bufctx);
+   nouveau_pushbuf_space(push, 32, 4, 0);
 
-   BEGIN_RING(chan, mpeg, NV31_MPEG_DMA_CMD, 1);
-   OUT_RING(chan, chan->vram->handle);
+   BEGIN_NV04(push, SUBC_MPEG(NV01_SUBCHAN_OBJECT), 1);
+   PUSH_DATA (push, dec->mpeg->handle);
 
-   BEGIN_RING(chan, mpeg, NV31_MPEG_DMA_DATA, 1);
-   OUT_RING(chan, chan->vram->handle);
+   BEGIN_NV04(push, NV31_MPEG(DMA_CMD), 1);
+   PUSH_DATA (push, nv04_data.gart);
 
-   BEGIN_RING(chan, mpeg, NV31_MPEG_DMA_IMAGE, 1);
-   OUT_RING(chan, chan->vram->handle);
+   BEGIN_NV04(push, NV31_MPEG(DMA_DATA), 1);
+   PUSH_DATA (push, nv04_data.gart);
 
-   BEGIN_RING(chan, mpeg, NV31_MPEG_PITCH, 2);
-   OUT_RING(chan, width | NV31_MPEG_PITCH_UNK);
-   OUT_RING(chan, (height << NV31_MPEG_SIZE_H__SHIFT) | width);
+   BEGIN_NV04(push, NV31_MPEG(DMA_IMAGE), 1);
+   PUSH_DATA (push, nv04_data.vram);
 
-   BEGIN_RING(chan, mpeg, NV31_MPEG_FORMAT, 2);
-   OUT_RING(chan, 0);
+   BEGIN_NV04(push, NV31_MPEG(PITCH), 2);
+   PUSH_DATA (push, width | NV31_MPEG_PITCH_UNK);
+   PUSH_DATA (push, (height << NV31_MPEG_SIZE_H__SHIFT) | width);
+
+   BEGIN_NV04(push, NV31_MPEG(FORMAT), 2);
+   PUSH_DATA (push, 0);
    switch (entrypoint) {
-      case PIPE_VIDEO_ENTRYPOINT_BITSTREAM: OUT_RING(chan, 0x100); break;
-      case PIPE_VIDEO_ENTRYPOINT_IDCT: OUT_RING(chan, 1); break;
-      case PIPE_VIDEO_ENTRYPOINT_MC: OUT_RING(chan, 0); break;
+      case PIPE_VIDEO_ENTRYPOINT_BITSTREAM: PUSH_DATA (push, 0x100); break;
+      case PIPE_VIDEO_ENTRYPOINT_IDCT: PUSH_DATA (push, 1); break;
+      case PIPE_VIDEO_ENTRYPOINT_MC: PUSH_DATA (push, 0); break;
       default: assert(0);
    }
 
    if (is8274) {
-      BEGIN_RING(chan, mpeg, NV84_MPEG_DMA_QUERY, 1);
-      OUT_RING(chan, chan->vram->handle);
-
-      BEGIN_RING(chan, mpeg, NV84_MPEG_QUERY_OFFSET, 2);
-      OUT_RELOCl(chan, dec->fence_bo, 0, NOUVEAU_BO_WR|NOUVEAU_BO_GART);
-      OUT_RING(chan, dec->fence_seq);
+      BEGIN_NV04(push, NV84_MPEG(DMA_QUERY), 1);
+      PUSH_DATA (push, nv04_data.vram);
+#if 0
+      BEGIN_NV04(push, NV84_MPEG(QUERY_OFFSET), 2);
+      PUSH_DATA (push, dec->fence_bo->offset);
+      PUSH_DATA (push, dec->fence_seq);
+#endif
    }
 
    ret = nouveau_vpe_init(dec);
@@ -702,7 +705,7 @@ nouveau_video_buffer_sampler_view_components(struct pipe_video_buffer *buffer)
       unsigned nr_components = util_format_get_nr_components(buf->resources[i]->format);
 
       for (j = 0; j < nr_components; ++j, ++component) {
-         assert(component < VL_MAX_PLANES);
+         assert(component < VL_NUM_COMPONENTS);
 
          if (!buf->sampler_view_components[component]) {
             memset(&sv_templ, 0, sizeof(sv_templ));
@@ -741,7 +744,6 @@ nouveau_video_buffer_surfaces(struct pipe_video_buffer *buffer)
       if (!buf->surfaces[i]) {
          memset(&surf_templ, 0, sizeof(surf_templ));
          surf_templ.format = buf->resources[i]->format;
-         surf_templ.usage = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
          buf->surfaces[i] = pipe->create_surface(pipe, buf->resources[i], &surf_templ);
          if (!buf->surfaces[i])
             goto error;
@@ -780,24 +782,23 @@ nouveau_video_buffer_destroy(struct pipe_video_buffer *buffer)
 static struct pipe_video_buffer *
 nouveau_video_buffer_create(struct pipe_context *pipe,
                             struct nouveau_screen *screen,
-                            enum pipe_format buffer_format,
-                            enum pipe_video_chroma_format chroma_format,
-                            unsigned width, unsigned height)
+                            const struct pipe_video_buffer *templat)
 {
    struct nouveau_video_buffer *buffer;
    struct pipe_resource templ;
+   unsigned width, height;
 
    /* Only do a linear surface when a hardware decoder is used
     * hardware decoder is only supported on some chipsets
     * and it only supports the NV12 format
     */
-   if (buffer_format != PIPE_FORMAT_NV12 || getenv("XVMC_VL") ||
+   if (templat->buffer_format != PIPE_FORMAT_NV12 || getenv("XVMC_VL") ||
        (screen->device->chipset >= 0x98 && screen->device->chipset != 0xa0))
-      return vl_video_buffer_create(pipe, buffer_format, chroma_format, width, height);
+      return vl_video_buffer_create(pipe, templat);
 
-   assert(chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420);
-   width = align(width, 64);
-   height = align(height, 64);
+   assert(templat->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420);
+   width = align(templat->width, 64);
+   height = align(templat->height, 64);
 
    buffer = CALLOC_STRUCT(nouveau_video_buffer);
    if (!buffer)
@@ -808,7 +809,7 @@ nouveau_video_buffer_create(struct pipe_context *pipe,
    buffer->base.get_sampler_view_planes = nouveau_video_buffer_sampler_view_planes;
    buffer->base.get_sampler_view_components = nouveau_video_buffer_sampler_view_components;
    buffer->base.get_surfaces = nouveau_video_buffer_surfaces;
-   buffer->base.chroma_format = chroma_format;
+   buffer->base.chroma_format = templat->chroma_format;
    buffer->base.width = width;
    buffer->base.height = height;
    buffer->num_planes = 2;
@@ -853,6 +854,14 @@ nouveau_screen_get_video_param(struct pipe_screen *pscreen,
    case PIPE_VIDEO_CAP_MAX_WIDTH:
    case PIPE_VIDEO_CAP_MAX_HEIGHT:
       return vl_video_buffer_max_size(pscreen);
+   case PIPE_VIDEO_CAP_PREFERED_FORMAT:
+      return PIPE_FORMAT_NV12;
+   case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
+      return false;
+   case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
+      return false;
+   case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
+      return true;
    default:
       debug_printf("unknown video param: %d\n", param);
       return 0;
@@ -864,37 +873,6 @@ nouveau_screen_init_vdec(struct nouveau_screen *screen)
 {
    screen->base.get_video_param = nouveau_screen_get_video_param;
    screen->base.is_video_format_supported = vl_video_buffer_is_format_supported;
-}
-
-static struct pipe_video_decoder *
-nvfx_context_create_decoder(struct pipe_context *context,
-                            enum pipe_video_profile profile,
-                            enum pipe_video_entrypoint entrypoint,
-                            enum pipe_video_chroma_format chroma_format,
-                            unsigned width, unsigned height,
-                            unsigned max_references, bool expect_chunked_decode)
-{
-   struct nouveau_screen *screen = &nvfx_context(context)->screen->base;
-   return nouveau_create_decoder(context, screen, profile, entrypoint,
-                                 chroma_format, width, height,
-                                 max_references, expect_chunked_decode);
-}
-
-static struct pipe_video_buffer *
-nvfx_context_video_buffer_create(struct pipe_context *pipe,
-                                 enum pipe_format buffer_format,
-                                 enum pipe_video_chroma_format chroma_format,
-                                 unsigned width, unsigned height)
-{
-   struct nouveau_screen *screen = &nvfx_context(pipe)->screen->base;
-   return nouveau_video_buffer_create(pipe, screen, buffer_format, chroma_format, width, height);
-}
-
-void
-nvfx_context_init_vdec(struct nvfx_context *nv)
-{
-   nv->pipe.create_video_decoder = nvfx_context_create_decoder;
-   nv->pipe.create_video_buffer = nvfx_context_video_buffer_create;
 }
 
 static struct pipe_video_decoder *
@@ -913,12 +891,10 @@ nouveau_context_create_decoder(struct pipe_context *context,
 
 static struct pipe_video_buffer *
 nouveau_context_video_buffer_create(struct pipe_context *pipe,
-                                    enum pipe_format buffer_format,
-                                    enum pipe_video_chroma_format chroma_format,
-                                    unsigned width, unsigned height)
+                                    const struct pipe_video_buffer *templat)
 {
    struct nouveau_screen *screen = nouveau_context(pipe)->screen;
-   return nouveau_video_buffer_create(pipe, screen, buffer_format, chroma_format, width, height);
+   return nouveau_video_buffer_create(pipe, screen, templat);
 }
 
 void

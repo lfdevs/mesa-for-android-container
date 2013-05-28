@@ -42,7 +42,6 @@ void GLAPIENTRY
 _mesa_ClearDepth( GLclampd depth )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glClearDepth(%f)\n", depth);
@@ -54,8 +53,6 @@ _mesa_ClearDepth( GLclampd depth )
 
    FLUSH_VERTICES(ctx, _NEW_DEPTH);
    ctx->Depth.Clear = depth;
-   if (ctx->Driver.ClearDepth)
-      (*ctx->Driver.ClearDepth)( ctx, ctx->Depth.Clear );
 }
 
 
@@ -70,7 +67,6 @@ void GLAPIENTRY
 _mesa_DepthFunc( GLenum func )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glDepthFunc %s\n", _mesa_lookup_enum_by_nr(func));
@@ -106,7 +102,6 @@ void GLAPIENTRY
 _mesa_DepthMask( GLboolean flag )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glDepthMask %d\n", flag);
@@ -134,7 +129,6 @@ void GLAPIENTRY
 _mesa_DepthBoundsEXT( GLclampd zmin, GLclampd zmax )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glDepthBounds(%f, %f)\n", zmin, zmax);

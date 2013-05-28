@@ -42,6 +42,7 @@
 #include "st_atom.h"
 
 #include "util/u_blit.h"
+#include "util/u_format.h"
 
 
 void
@@ -59,86 +60,6 @@ st_destroy_blit(struct st_context *st)
 }
 
 
-#if FEATURE_EXT_framebuffer_blit
-
-static void
-st_BlitFramebuffer_resolve(struct gl_context *ctx,
-                           GLbitfield mask,
-                           struct pipe_resolve_info *info)
-{
-   const GLbitfield depthStencil = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
-
-   struct st_context *st = st_context(ctx);
-
-   struct st_renderbuffer *srcRb, *dstRb;
-
-   if (mask & GL_COLOR_BUFFER_BIT) {
-      srcRb = st_renderbuffer(ctx->ReadBuffer->_ColorReadBuffer);
-      dstRb = st_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0]);
-
-      info->mask = PIPE_MASK_RGBA;
-
-      info->src.res = srcRb->texture;
-      info->src.layer = srcRb->surface->u.tex.first_layer;
-      info->dst.res = dstRb->texture;
-      info->dst.level = dstRb->surface->u.tex.level;
-      info->dst.layer = dstRb->surface->u.tex.first_layer;
-
-      st->pipe->resource_resolve(st->pipe, info);
-   }
-
-   if (mask & depthStencil) {
-      struct gl_renderbuffer_attachment *srcDepth, *srcStencil;
-      struct gl_renderbuffer_attachment *dstDepth, *dstStencil;
-      boolean combined;
-
-      srcDepth = &ctx->ReadBuffer->Attachment[BUFFER_DEPTH];
-      dstDepth = &ctx->DrawBuffer->Attachment[BUFFER_DEPTH];
-      srcStencil = &ctx->ReadBuffer->Attachment[BUFFER_STENCIL];
-      dstStencil = &ctx->DrawBuffer->Attachment[BUFFER_STENCIL];
-
-      combined =
-         st_is_depth_stencil_combined(srcDepth, srcStencil) &&
-         st_is_depth_stencil_combined(dstDepth, dstStencil);
-
-      if ((mask & GL_DEPTH_BUFFER_BIT) || combined) {
-         /* resolve depth and, if combined and requested, stencil as well */
-         srcRb = st_renderbuffer(srcDepth->Renderbuffer);
-         dstRb = st_renderbuffer(dstDepth->Renderbuffer);
-
-         info->mask = (mask & GL_DEPTH_BUFFER_BIT) ? PIPE_MASK_Z : 0;
-         if (combined && (mask & GL_STENCIL_BUFFER_BIT)) {
-            mask &= ~GL_STENCIL_BUFFER_BIT;
-            info->mask |= PIPE_MASK_S;
-         }
-
-         info->src.res = srcRb->texture;
-         info->src.layer = srcRb->surface->u.tex.first_layer;
-         info->dst.res = dstRb->texture;
-         info->dst.level = dstRb->surface->u.tex.level;
-         info->dst.layer = dstRb->surface->u.tex.first_layer;
-
-         st->pipe->resource_resolve(st->pipe, info);
-      }
-
-      if (mask & GL_STENCIL_BUFFER_BIT) {
-         /* resolve separate stencil buffer */
-         srcRb = st_renderbuffer(srcStencil->Renderbuffer);
-         dstRb = st_renderbuffer(dstStencil->Renderbuffer);
-
-         info->mask = PIPE_MASK_S;
-
-         info->src.res = srcRb->texture;
-         info->src.layer = srcRb->surface->u.tex.first_layer;
-         info->dst.res = dstRb->texture;
-         info->dst.level = dstRb->surface->u.tex.level;
-         info->dst.layer = dstRb->surface->u.tex.first_layer;
-
-         st->pipe->resource_resolve(st->pipe, info);
-      }
-   }
-}
-
 static void
 st_BlitFramebuffer(struct gl_context *ctx,
                    GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
@@ -149,65 +70,68 @@ st_BlitFramebuffer(struct gl_context *ctx,
                                     GL_STENCIL_BUFFER_BIT);
    struct st_context *st = st_context(ctx);
    const uint pFilter = ((filter == GL_NEAREST)
-                         ? PIPE_TEX_MIPFILTER_NEAREST
-                         : PIPE_TEX_MIPFILTER_LINEAR);
+                         ? PIPE_TEX_FILTER_NEAREST
+                         : PIPE_TEX_FILTER_LINEAR);
    struct gl_framebuffer *readFB = ctx->ReadBuffer;
    struct gl_framebuffer *drawFB = ctx->DrawBuffer;
+   struct {
+      GLint srcX0, srcY0, srcX1, srcY1;
+      GLint dstX0, dstY0, dstX1, dstY1;
+   } clip;
+   struct pipe_blit_info blit;
 
    st_validate_state(st);
 
-   if (!_mesa_clip_blit(ctx, &srcX0, &srcY0, &srcX1, &srcY1,
-                        &dstX0, &dstY0, &dstX1, &dstY1)) {
+   clip.srcX0 = srcX0;
+   clip.srcY0 = srcY0;
+   clip.srcX1 = srcX1;
+   clip.srcY1 = srcY1;
+   clip.dstX0 = dstX0;
+   clip.dstY0 = dstY0;
+   clip.dstX1 = dstX1;
+   clip.dstY1 = dstY1;
+
+   /* NOTE: If the src and dst dimensions don't match, we cannot simply adjust
+    * the integer coordinates to account for clipping (or scissors) because that
+    * would make us cut off fractional parts, affecting the result of the blit.
+    *
+    * XXX: This should depend on mask !
+    */
+   if (!_mesa_clip_blit(ctx,
+                        &clip.srcX0, &clip.srcY0, &clip.srcX1, &clip.srcY1,
+                        &clip.dstX0, &clip.dstY0, &clip.dstX1, &clip.dstY1)) {
       return; /* nothing to draw/blit */
    }
+   blit.scissor_enable =
+      (dstX0 != clip.dstX0) ||
+      (dstY0 != clip.dstY0) ||
+      (dstX1 != clip.dstX1) ||
+      (dstY1 != clip.dstY1);
 
    if (st_fb_orientation(drawFB) == Y_0_TOP) {
       /* invert Y for dest */
       dstY0 = drawFB->Height - dstY0;
       dstY1 = drawFB->Height - dstY1;
+      /* invert Y for clip */
+      clip.dstY0 = drawFB->Height - clip.dstY0;
+      clip.dstY1 = drawFB->Height - clip.dstY1;
+   }
+   if (blit.scissor_enable) {
+      blit.scissor.minx = MIN2(clip.dstX0, clip.dstX1);
+      blit.scissor.miny = MIN2(clip.dstY0, clip.dstY1);
+      blit.scissor.maxx = MAX2(clip.dstX0, clip.dstX1);
+      blit.scissor.maxy = MAX2(clip.dstY0, clip.dstY1);
+#if 0
+      debug_printf("scissor = (%i,%i)-(%i,%i)\n",
+                   blit.scissor.minx,blit.scissor.miny,
+                   blit.scissor.maxx,blit.scissor.maxy);
+#endif
    }
 
    if (st_fb_orientation(readFB) == Y_0_TOP) {
       /* invert Y for src */
       srcY0 = readFB->Height - srcY0;
       srcY1 = readFB->Height - srcY1;
-   }
-
-   /* Disable conditional rendering. */
-   if (st->render_condition) {
-      st->pipe->render_condition(st->pipe, NULL, 0);
-   }
-
-   if (readFB->Visual.sampleBuffers > drawFB->Visual.sampleBuffers &&
-       readFB->Visual.samples > 1) {
-      struct pipe_resolve_info info;
-
-      if (dstX0 < dstX1) {
-         info.dst.x0 = dstX0;
-         info.dst.x1 = dstX1;
-         info.src.x0 = srcX0;
-         info.src.x1 = srcX1;
-      } else {
-         info.dst.x0 = dstX1;
-         info.dst.x1 = dstX0;
-         info.src.x0 = srcX1;
-         info.src.x1 = srcX0;
-      }
-      if (dstY0 < dstY1) {
-         info.dst.y0 = dstY0;
-         info.dst.y1 = dstY1;
-         info.src.y0 = srcY0;
-         info.src.y1 = srcY1;
-      } else {
-         info.dst.y0 = dstY1;
-         info.dst.y1 = dstY0;
-         info.src.y0 = srcY1;
-         info.src.y1 = srcY0;
-      }
-
-      st_BlitFramebuffer_resolve(ctx, mask, &info); /* filter doesn't apply */
-
-      goto done;
    }
 
    if (srcY0 > srcY1 && dstY0 > dstY1) {
@@ -224,40 +148,106 @@ st_BlitFramebuffer(struct gl_context *ctx,
       dstY1 = tmp;
    }
 
+   blit.src.box.depth = 1;
+   blit.dst.box.depth = 1;
+
+   /* Destination dimensions have to be positive: */
+   if (dstX0 < dstX1) {
+      blit.dst.box.x = dstX0;
+      blit.src.box.x = srcX0;
+      blit.dst.box.width = dstX1 - dstX0;
+      blit.src.box.width = srcX1 - srcX0;
+   } else {
+      blit.dst.box.x = dstX1;
+      blit.src.box.x = srcX1;
+      blit.dst.box.width = dstX0 - dstX1;
+      blit.src.box.width = srcX0 - srcX1;
+   }
+   if (dstY0 < dstY1) {
+      blit.dst.box.y = dstY0;
+      blit.src.box.y = srcY0;
+      blit.dst.box.height = dstY1 - dstY0;
+      blit.src.box.height = srcY1 - srcY0;
+   } else {
+      blit.dst.box.y = dstY1;
+      blit.src.box.y = srcY1;
+      blit.dst.box.height = dstY0 - dstY1;
+      blit.src.box.height = srcY0 - srcY1;
+   }
+
+   blit.filter = pFilter;
+
    if (mask & GL_COLOR_BUFFER_BIT) {
       struct gl_renderbuffer_attachment *srcAtt =
          &readFB->Attachment[readFB->_ColorReadBufferIndex];
 
-      if(srcAtt->Type == GL_TEXTURE) {
-         struct st_texture_object *srcObj =
-            st_texture_object(srcAtt->Texture);
-         struct st_renderbuffer *dstRb =
-            st_renderbuffer(drawFB->_ColorDrawBuffers[0]);
-         struct pipe_surface *dstSurf = dstRb->surface;
+      blit.mask = PIPE_MASK_RGBA;
 
-         if (!srcObj->pt)
-            goto done;
+      if (srcAtt->Type == GL_TEXTURE) {
+         struct st_texture_object *srcObj = st_texture_object(srcAtt->Texture);
+         GLuint i;
 
-         util_blit_pixels(st->blit, srcObj->pt, srcAtt->TextureLevel,
-                          srcX0, srcY0, srcX1, srcY1,
-                          srcAtt->Zoffset + srcAtt->CubeMapFace,
-                          dstSurf, dstX0, dstY0, dstX1, dstY1,
-                          0.0, pFilter);
+         if (!srcObj || !srcObj->pt) {
+            return;
+         }
+
+         for (i = 0; i < drawFB->_NumColorDrawBuffers; i++) {
+            struct st_renderbuffer *dstRb =
+               st_renderbuffer(drawFB->_ColorDrawBuffers[i]);
+
+            if (dstRb) {
+               struct pipe_surface *dstSurf = dstRb->surface;
+
+               if (dstSurf) {
+                  blit.dst.resource = dstSurf->texture;
+                  blit.dst.level = dstSurf->u.tex.level;
+                  blit.dst.box.z = dstSurf->u.tex.first_layer;
+                  blit.dst.format = util_format_linear(dstSurf->format);
+
+                  blit.src.resource = srcObj->pt;
+                  blit.src.level = srcAtt->TextureLevel;
+                  blit.src.box.z = srcAtt->Zoffset + srcAtt->CubeMapFace;
+                  blit.src.format = util_format_linear(srcObj->pt->format);
+
+                  st->pipe->blit(st->pipe, &blit);
+               }
+            }
+         }
       }
       else {
          struct st_renderbuffer *srcRb =
             st_renderbuffer(readFB->_ColorReadBuffer);
-         struct st_renderbuffer *dstRb =
-            st_renderbuffer(drawFB->_ColorDrawBuffers[0]);
-         struct pipe_surface *srcSurf = srcRb->surface;
-         struct pipe_surface *dstSurf = dstRb->surface;
+         struct pipe_surface *srcSurf;
+         GLuint i;
 
-         util_blit_pixels(st->blit,
-                          srcRb->texture, srcSurf->u.tex.level,
-                          srcX0, srcY0, srcX1, srcY1,
-                          srcSurf->u.tex.first_layer,
-                          dstSurf, dstX0, dstY0, dstX1, dstY1,
-                          0.0, pFilter);
+         if (!srcRb || !srcRb->surface) {
+            return;
+         }
+
+         srcSurf = srcRb->surface;
+
+         for (i = 0; i < drawFB->_NumColorDrawBuffers; i++) {
+            struct st_renderbuffer *dstRb =
+               st_renderbuffer(drawFB->_ColorDrawBuffers[i]);
+
+            if (dstRb) {
+               struct pipe_surface *dstSurf = dstRb->surface;
+
+               if (dstSurf) {
+                  blit.dst.resource = dstSurf->texture;
+                  blit.dst.level = dstSurf->u.tex.level;
+                  blit.dst.box.z = dstSurf->u.tex.first_layer;
+                  blit.dst.format = util_format_linear(dstSurf->format);
+
+                  blit.src.resource = srcSurf->texture;
+                  blit.src.level = srcSurf->u.tex.level;
+                  blit.src.box.z = srcSurf->u.tex.first_layer;
+                  blit.src.format = util_format_linear(srcSurf->format);
+
+                  st->pipe->blit(st->pipe, &blit);
+               }
+            }
+         }
       }
    }
 
@@ -275,51 +265,74 @@ st_BlitFramebuffer(struct gl_context *ctx,
          &drawFB->Attachment[BUFFER_STENCIL];
 
       struct st_renderbuffer *srcDepthRb =
-         st_renderbuffer(readFB->Attachment[BUFFER_DEPTH].Renderbuffer);
+         st_renderbuffer(srcDepth->Renderbuffer);
       struct st_renderbuffer *dstDepthRb = 
-         st_renderbuffer(drawFB->Attachment[BUFFER_DEPTH].Renderbuffer);
+         st_renderbuffer(dstDepth->Renderbuffer);
       struct pipe_surface *dstDepthSurf =
          dstDepthRb ? dstDepthRb->surface : NULL;
 
-      if ((mask & depthStencil) == depthStencil &&
-          st_is_depth_stencil_combined(srcDepth, srcStencil) &&
-          st_is_depth_stencil_combined(dstDepth, dstStencil)) {
+      struct st_renderbuffer *srcStencilRb =
+         st_renderbuffer(srcStencil->Renderbuffer);
+      struct st_renderbuffer *dstStencilRb =
+         st_renderbuffer(dstStencil->Renderbuffer);
+      struct pipe_surface *dstStencilSurf =
+         dstStencilRb ? dstStencilRb->surface : NULL;
 
-         /* Blitting depth and stencil values between combined
-          * depth/stencil buffers.  This is the ideal case for such buffers.
-          */
-         util_blit_pixels(st->blit,
-                          srcDepthRb->texture,
-                          srcDepthRb->surface->u.tex.level,
-                          srcX0, srcY0, srcX1, srcY1,
-                          srcDepthRb->surface->u.tex.first_layer,
-                          dstDepthSurf, dstX0, dstY0, dstX1, dstY1,
-                          0.0, pFilter);
+      if (st_is_depth_stencil_combined(srcDepth, srcStencil) &&
+          st_is_depth_stencil_combined(dstDepth, dstStencil)) {
+         blit.mask = 0;
+         if (mask & GL_DEPTH_BUFFER_BIT)
+            blit.mask |= PIPE_MASK_Z;
+         if (mask & GL_STENCIL_BUFFER_BIT)
+            blit.mask |= PIPE_MASK_S;
+
+         blit.dst.resource = dstDepthSurf->texture;
+         blit.dst.level = dstDepthSurf->u.tex.level;
+         blit.dst.box.z = dstDepthSurf->u.tex.first_layer;
+         blit.dst.format = dstDepthSurf->format;
+
+         blit.src.resource = srcDepthRb->texture;
+         blit.src.level = srcDepthRb->surface->u.tex.level;
+         blit.src.box.z = srcDepthRb->surface->u.tex.first_layer;
+         blit.src.format = srcDepthRb->surface->format;
+
+         st->pipe->blit(st->pipe, &blit);
       }
       else {
          /* blitting depth and stencil separately */
 
          if (mask & GL_DEPTH_BUFFER_BIT) {
-            util_blit_pixels(st->blit, srcDepthRb->texture,
-                             srcDepthRb->surface->u.tex.level,
-                             srcX0, srcY0, srcX1, srcY1,
-                             srcDepthRb->surface->u.tex.first_layer,
-                             dstDepthSurf, dstX0, dstY0, dstX1, dstY1,
-                             0.0, pFilter);
+            blit.mask = PIPE_MASK_Z;
+
+            blit.dst.resource = dstDepthSurf->texture;
+            blit.dst.level = dstDepthSurf->u.tex.level;
+            blit.dst.box.z = dstDepthSurf->u.tex.first_layer;
+            blit.dst.format = dstDepthSurf->format;
+
+            blit.src.resource = srcDepthRb->texture;
+            blit.src.level = srcDepthRb->surface->u.tex.level;
+            blit.src.box.z = srcDepthRb->surface->u.tex.first_layer;
+            blit.src.format = srcDepthRb->surface->format;
+
+            st->pipe->blit(st->pipe, &blit);
          }
 
          if (mask & GL_STENCIL_BUFFER_BIT) {
-            /* blit stencil only */
-            _mesa_problem(ctx, "st_BlitFramebuffer(STENCIL) not completed");
+            blit.mask = PIPE_MASK_S;
+
+            blit.dst.resource = dstStencilSurf->texture;
+            blit.dst.level = dstStencilSurf->u.tex.level;
+            blit.dst.box.z = dstStencilSurf->u.tex.first_layer;
+            blit.dst.format = dstStencilSurf->format;
+
+            blit.src.resource = srcStencilRb->texture;
+            blit.src.level = srcStencilRb->surface->u.tex.level;
+            blit.src.box.z = srcStencilRb->surface->u.tex.first_layer;
+            blit.src.format = srcStencilRb->surface->format;
+
+            st->pipe->blit(st->pipe, &blit);
          }
       }
-   }
-
-done:
-   /* Restore conditional rendering state. */
-   if (st->render_condition) {
-      st->pipe->render_condition(st->pipe, st->render_condition,
-                                 st->condition_mode);
    }
 }
 
@@ -329,5 +342,3 @@ st_init_blit_functions(struct dd_function_table *functions)
 {
    functions->BlitFramebuffer = st_BlitFramebuffer;
 }
-
-#endif /* FEATURE_EXT_framebuffer_blit */

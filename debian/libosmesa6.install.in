@@ -1,3 +1,1 @@
-usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa.so.*
-usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa16.so.*
-usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa32.so.*
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libOSMesa.so.*	usr/lib/${DEB_HOST_MULTIARCH}

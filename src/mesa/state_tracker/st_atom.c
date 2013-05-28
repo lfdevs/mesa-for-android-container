@@ -57,13 +57,19 @@ static const struct st_tracked_state *atoms[] =
    &st_update_blend,
    &st_update_sampler,
    &st_update_vertex_texture,
-   &st_update_texture,
+   &st_update_fragment_texture,
+   &st_update_geometry_texture,
    &st_update_framebuffer,
    &st_update_msaa,
    &st_update_vs_constants,
    &st_update_gs_constants,
    &st_update_fs_constants,
-   &st_update_pixel_transfer
+   &st_bind_vs_ubos,
+   &st_bind_fs_ubos,
+   &st_update_pixel_transfer,
+
+   /* this must be done after the vertex program update */
+   &st_update_array
 };
 
 
@@ -122,6 +128,22 @@ static void check_program_state( struct st_context *st )
       st->dirty.st |= ST_NEW_GEOMETRY_PROGRAM;
 }
 
+static void check_attrib_edgeflag(struct st_context *st)
+{
+   const struct gl_client_array **arrays = st->ctx->Array._DrawArrays;
+   GLboolean vertDataEdgeFlags;
+
+   if (!arrays)
+      return;
+
+   vertDataEdgeFlags = arrays[VERT_ATTRIB_EDGEFLAG]->BufferObj &&
+                       arrays[VERT_ATTRIB_EDGEFLAG]->BufferObj->Name;
+   if (vertDataEdgeFlags != st->vertdata_edgeflags) {
+      st->vertdata_edgeflags = vertDataEdgeFlags;
+      st->dirty.st |= ST_NEW_EDGEFLAGS_DATA;
+   }
+}
+
 
 /***********************************************************************
  * Update all derived state:
@@ -131,6 +153,12 @@ void st_validate_state( struct st_context *st )
 {
    struct st_state_flags *state = &st->dirty;
    GLuint i;
+
+   /* Get Mesa driver state. */
+   st->dirty.st |= st->ctx->NewDriverState;
+   st->ctx->NewDriverState = 0;
+
+   check_attrib_edgeflag(st);
 
    /* The bitmap cache is immune to pixel unpack changes.
     * Note that GLUT makes several calls to glPixelStore for each
@@ -148,10 +176,10 @@ void st_validate_state( struct st_context *st )
 
    /*printf("%s %x/%x\n", __FUNCTION__, state->mesa, state->st);*/
 
-#ifdef NDEBUG
-   if (0) {
-#else
+#ifdef DEBUG
    if (1) {
+#else
+   if (0) {
 #endif
       /* Debug version which enforces various sanity checks on the
        * state flags which are generated and checked to help ensure

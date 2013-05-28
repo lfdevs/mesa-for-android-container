@@ -32,11 +32,12 @@
 #include "tgsi_strings.h"
 
 
-const char *tgsi_processor_type_names[3] =
+const char *tgsi_processor_type_names[4] =
 {
    "FRAG",
    "VERT",
-   "GEOM"
+   "GEOM",
+   "COMP"
 };
 
 const char *tgsi_file_names[TGSI_FILE_COUNT] =
@@ -53,7 +54,8 @@ const char *tgsi_file_names[TGSI_FILE_COUNT] =
    "SV",
    "IMMX",
    "TEMPX",
-   "RES"
+   "RES",
+   "SVIEW"
 };
 
 const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT] =
@@ -72,12 +74,16 @@ const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT] =
    "VERTEXID",
    "STENCIL",
    "CLIPDIST",
-   "CLIPVERTEX"
+   "CLIPVERTEX",
+   "GRID_SIZE",
+   "BLOCK_ID",
+   "BLOCK_SIZE",
+   "THREAD_ID"
 };
 
 const char *tgsi_texture_names[TGSI_TEXTURE_COUNT] =
 {
-   "UNKNOWN",
+   "BUFFER",
    "1D",
    "2D",
    "3D",
@@ -86,11 +92,16 @@ const char *tgsi_texture_names[TGSI_TEXTURE_COUNT] =
    "SHADOW1D",
    "SHADOW2D",
    "SHADOWRECT",
-   "1DARRAY",
-   "2DARRAY",
-   "SHADOW1DARRAY",
-   "SHADOW2DARRAY",
-   "SHADOWCUBE"
+   "1D_ARRAY",
+   "2D_ARRAY",
+   "SHADOW1D_ARRAY",
+   "SHADOW2D_ARRAY",
+   "SHADOWCUBE",
+   "2D_MSAA",
+   "2D_ARRAY_MSAA",
+   "CUBEARRAY",
+   "SHADOWCUBEARRAY",
+   "UNKNOWN",
 };
 
 const char *tgsi_property_names[TGSI_PROPERTY_COUNT] =

@@ -25,6 +25,8 @@
 
 #include "nv50_ir_target_nvc0.h"
 
+#include <limits>
+
 namespace nv50_ir {
 
 #define QOP_ADD  0
@@ -32,9 +34,10 @@ namespace nv50_ir {
 #define QOP_SUB  2
 #define QOP_MOV2 3
 
+//             UL UR LL LR
 #define QUADOP(q, r, s, t)                      \
-   ((QOP_##q << 0) | (QOP_##r << 2) |           \
-    (QOP_##s << 4) | (QOP_##t << 6))
+   ((QOP_##q << 6) | (QOP_##r << 4) |           \
+    (QOP_##s << 2) | (QOP_##t << 0))
 
 class NVC0LegalizeSSA : public Pass
 {
@@ -117,6 +120,9 @@ NVC0LegalizeSSA::visit(BasicBlock *bb)
 
 class NVC0LegalizePostRA : public Pass
 {
+public:
+   NVC0LegalizePostRA(const Program *);
+
 private:
    virtual bool visit(Function *);
    virtual bool visit(BasicBlock *);
@@ -126,14 +132,343 @@ private:
    bool tryReplaceContWithBra(BasicBlock *);
    void propagateJoin(BasicBlock *);
 
-   LValue *r63;
+   struct TexUse
+   {
+      TexUse(Instruction *use, const Instruction *tex)
+         : insn(use), tex(tex), level(-1) { }
+      Instruction *insn;
+      const Instruction *tex; // or split / mov
+      int level;
+   };
+   struct Limits
+   {
+      Limits() { }
+      Limits(int min, int max) : min(min), max(max) { }
+      int min, max;
+   };
+   bool insertTextureBarriers(Function *);
+   inline bool insnDominatedBy(const Instruction *, const Instruction *) const;
+   void findFirstUses(const Instruction *tex, const Instruction *def,
+                      std::list<TexUse>&);
+   void findOverwritingDefs(const Instruction *tex, Instruction *insn,
+                            const BasicBlock *term,
+                            std::list<TexUse>&);
+   void addTexUse(std::list<TexUse>&, Instruction *, const Instruction *);
+   const Instruction *recurseDef(const Instruction *);
+
+private:
+   LValue *rZero;
+   const bool needTexBar;
 };
+
+NVC0LegalizePostRA::NVC0LegalizePostRA(const Program *prog)
+   : needTexBar(prog->getTarget()->getChipset() >= 0xe0)
+{
+}
+
+bool
+NVC0LegalizePostRA::insnDominatedBy(const Instruction *later,
+                                    const Instruction *early) const
+{
+   if (early->bb == later->bb)
+      return early->serial < later->serial;
+   return later->bb->dominatedBy(early->bb);
+}
+
+void
+NVC0LegalizePostRA::addTexUse(std::list<TexUse> &uses,
+                              Instruction *usei, const Instruction *insn)
+{
+   bool add = true;
+   for (std::list<TexUse>::iterator it = uses.begin();
+        it != uses.end();) {
+      if (insnDominatedBy(usei, it->insn)) {
+         add = false;
+         break;
+      }
+      if (insnDominatedBy(it->insn, usei))
+         it = uses.erase(it);
+      else
+         ++it;
+   }
+   if (add)
+      uses.push_back(TexUse(usei, insn));
+}
+
+void
+NVC0LegalizePostRA::findOverwritingDefs(const Instruction *texi,
+                                        Instruction *insn,
+                                        const BasicBlock *term,
+                                        std::list<TexUse> &uses)
+{
+   while (insn->op == OP_MOV && insn->getDef(0)->equals(insn->getSrc(0)))
+      insn = insn->getSrc(0)->getUniqueInsn();
+
+   if (!insn || !insn->bb->reachableBy(texi->bb, term))
+      return;
+
+   switch (insn->op) {
+   /* Values not connected to the tex's definition through any of these should
+    * not be conflicting.
+    */
+   case OP_SPLIT:
+   case OP_MERGE:
+   case OP_PHI:
+   case OP_UNION:
+      /* recurse again */
+      for (int s = 0; insn->srcExists(s); ++s)
+         findOverwritingDefs(texi, insn->getSrc(s)->getUniqueInsn(), term,
+                             uses);
+      break;
+   default:
+      // if (!isTextureOp(insn->op)) // TODO: are TEXes always ordered ?
+      addTexUse(uses, insn, texi);
+      break;
+   }
+}
+
+void
+NVC0LegalizePostRA::findFirstUses(const Instruction *texi,
+                                  const Instruction *insn,
+                                  std::list<TexUse> &uses)
+{
+   for (int d = 0; insn->defExists(d); ++d) {
+      Value *v = insn->getDef(d);
+      for (Value::UseIterator u = v->uses.begin(); u != v->uses.end(); ++u) {
+         Instruction *usei = (*u)->getInsn();
+
+         if (usei->op == OP_PHI || usei->op == OP_UNION) {
+            // need a barrier before WAW cases
+            for (int s = 0; usei->srcExists(s); ++s) {
+               Instruction *defi = usei->getSrc(s)->getUniqueInsn();
+               if (defi && &usei->src(s) != *u)
+                  findOverwritingDefs(texi, defi, usei->bb, uses);
+            }
+         }
+
+         if (usei->op == OP_SPLIT ||
+             usei->op == OP_MERGE ||
+             usei->op == OP_PHI ||
+             usei->op == OP_UNION) {
+            // these uses don't manifest in the machine code
+            findFirstUses(texi, usei, uses);
+         } else
+         if (usei->op == OP_MOV && usei->getDef(0)->equals(usei->getSrc(0)) &&
+             usei->subOp != NV50_IR_SUBOP_MOV_FINAL) {
+            findFirstUses(texi, usei, uses);
+         } else {
+            addTexUse(uses, usei, insn);
+         }
+      }
+   }
+}
+
+// Texture barriers:
+// This pass is a bit long and ugly and can probably be optimized.
+//
+// 1. obtain a list of TEXes and their outputs' first use(s)
+// 2. calculate the barrier level of each first use (minimal number of TEXes,
+//    over all paths, between the TEX and the use in question)
+// 3. for each barrier, if all paths from the source TEX to that barrier
+//    contain a barrier of lesser level, it can be culled
+bool
+NVC0LegalizePostRA::insertTextureBarriers(Function *fn)
+{
+   std::list<TexUse> *uses;
+   std::vector<Instruction *> texes;
+   std::vector<int> bbFirstTex;
+   std::vector<int> bbFirstUse;
+   std::vector<int> texCounts;
+   std::vector<TexUse> useVec;
+   ArrayList insns;
+
+   fn->orderInstructions(insns);
+
+   texCounts.resize(fn->allBBlocks.getSize(), 0);
+   bbFirstTex.resize(fn->allBBlocks.getSize(), insns.getSize());
+   bbFirstUse.resize(fn->allBBlocks.getSize(), insns.getSize());
+
+   // tag BB CFG nodes by their id for later
+   for (ArrayList::Iterator i = fn->allBBlocks.iterator(); !i.end(); i.next()) {
+      BasicBlock *bb = reinterpret_cast<BasicBlock *>(i.get());
+      if (bb)
+         bb->cfg.tag = bb->getId();
+   }
+
+   // gather the first uses for each TEX
+   for (int i = 0; i < insns.getSize(); ++i) {
+      Instruction *tex = reinterpret_cast<Instruction *>(insns.get(i));
+      if (isTextureOp(tex->op)) {
+         texes.push_back(tex);
+         if (!texCounts.at(tex->bb->getId()))
+            bbFirstTex[tex->bb->getId()] = texes.size() - 1;
+         texCounts[tex->bb->getId()]++;
+      }
+   }
+   insns.clear();
+   if (texes.empty())
+      return false;
+   uses = new std::list<TexUse>[texes.size()];
+   if (!uses)
+      return false;
+   for (size_t i = 0; i < texes.size(); ++i)
+      findFirstUses(texes[i], texes[i], uses[i]);
+
+   // determine the barrier level at each use
+   for (size_t i = 0; i < texes.size(); ++i) {
+      for (std::list<TexUse>::iterator u = uses[i].begin(); u != uses[i].end();
+           ++u) {
+         BasicBlock *tb = texes[i]->bb;
+         BasicBlock *ub = u->insn->bb;
+         if (tb == ub) {
+            u->level = 0;
+            for (size_t j = i + 1; j < texes.size() &&
+                    texes[j]->bb == tb && texes[j]->serial < u->insn->serial;
+                 ++j)
+               u->level++;
+         } else {
+            u->level = fn->cfg.findLightestPathWeight(&tb->cfg,
+                                                      &ub->cfg, texCounts);
+            if (u->level < 0) {
+               WARN("Failed to find path TEX -> TEXBAR\n");
+               u->level = 0;
+               continue;
+            }
+            // this counted all TEXes in the origin block, correct that
+            u->level -= i - bbFirstTex.at(tb->getId()) + 1 /* this TEX */;
+            // and did not count the TEXes in the destination block, add those
+            for (size_t j = bbFirstTex.at(ub->getId()); j < texes.size() &&
+                    texes[j]->bb == ub && texes[j]->serial < u->insn->serial;
+                 ++j)
+               u->level++;
+         }
+         assert(u->level >= 0);
+         useVec.push_back(*u);
+      }
+   }
+   delete[] uses;
+   uses = NULL;
+
+   // insert the barriers
+   for (size_t i = 0; i < useVec.size(); ++i) {
+      Instruction *prev = useVec[i].insn->prev;
+      if (useVec[i].level < 0)
+         continue;
+      if (prev && prev->op == OP_TEXBAR) {
+         if (prev->subOp > useVec[i].level)
+            prev->subOp = useVec[i].level;
+         prev->setSrc(prev->srcCount(), useVec[i].tex->getDef(0));
+      } else {
+         Instruction *bar = new_Instruction(func, OP_TEXBAR, TYPE_NONE);
+         bar->fixed = 1;
+         bar->subOp = useVec[i].level;
+         // make use explicit to ease latency calculation
+         bar->setSrc(bar->srcCount(), useVec[i].tex->getDef(0));
+         useVec[i].insn->bb->insertBefore(useVec[i].insn, bar);
+      }
+   }
+
+   if (fn->getProgram()->optLevel < 3) {
+      if (uses)
+         delete[] uses;
+      return true;
+   }
+
+   std::vector<Limits> limitT, limitB, limitS; // entry, exit, single
+
+   limitT.resize(fn->allBBlocks.getSize(), Limits(0, 0));
+   limitB.resize(fn->allBBlocks.getSize(), Limits(0, 0));
+   limitS.resize(fn->allBBlocks.getSize());
+
+   // cull unneeded barriers (should do that earlier, but for simplicity)
+   IteratorRef bi = fn->cfg.iteratorCFG();
+   // first calculate min/max outstanding TEXes for each BB
+   for (bi->reset(); !bi->end(); bi->next()) {
+      Graph::Node *n = reinterpret_cast<Graph::Node *>(bi->get());
+      BasicBlock *bb = BasicBlock::get(n);
+      int min = 0;
+      int max = std::numeric_limits<int>::max();
+      for (Instruction *i = bb->getFirst(); i; i = i->next) {
+         if (isTextureOp(i->op)) {
+            min++;
+            if (max < std::numeric_limits<int>::max())
+               max++;
+         } else
+         if (i->op == OP_TEXBAR) {
+            min = MIN2(min, i->subOp);
+            max = MIN2(max, i->subOp);
+         }
+      }
+      // limits when looking at an isolated block
+      limitS[bb->getId()].min = min;
+      limitS[bb->getId()].max = max;
+   }
+   // propagate the min/max values
+   for (unsigned int l = 0; l <= fn->loopNestingBound; ++l) {
+      for (bi->reset(); !bi->end(); bi->next()) {
+         Graph::Node *n = reinterpret_cast<Graph::Node *>(bi->get());
+         BasicBlock *bb = BasicBlock::get(n);
+         const int bbId = bb->getId();
+         for (Graph::EdgeIterator ei = n->incident(); !ei.end(); ei.next()) {
+            BasicBlock *in = BasicBlock::get(ei.getNode());
+            const int inId = in->getId();
+            limitT[bbId].min = MAX2(limitT[bbId].min, limitB[inId].min);
+            limitT[bbId].max = MAX2(limitT[bbId].max, limitB[inId].max);
+         }
+         // I just hope this is correct ...
+         if (limitS[bbId].max == std::numeric_limits<int>::max()) {
+            // no barrier
+            limitB[bbId].min = limitT[bbId].min + limitS[bbId].min;
+            limitB[bbId].max = limitT[bbId].max + limitS[bbId].min;
+         } else {
+            // block contained a barrier
+            limitB[bbId].min = MIN2(limitS[bbId].max,
+                                    limitT[bbId].min + limitS[bbId].min);
+            limitB[bbId].max = MIN2(limitS[bbId].max,
+                                    limitT[bbId].max + limitS[bbId].min);
+         }
+      }
+   }
+   // finally delete unnecessary barriers
+   for (bi->reset(); !bi->end(); bi->next()) {
+      Graph::Node *n = reinterpret_cast<Graph::Node *>(bi->get());
+      BasicBlock *bb = BasicBlock::get(n);
+      Instruction *prev = NULL;
+      Instruction *next;
+      int max = limitT[bb->getId()].max;
+      for (Instruction *i = bb->getFirst(); i; i = next) {
+         next = i->next;
+         if (i->op == OP_TEXBAR) {
+            if (i->subOp >= max) {
+               delete_Instruction(prog, i);
+            } else {
+               max = i->subOp;
+               if (prev && prev->op == OP_TEXBAR && prev->subOp >= max) {
+                  delete_Instruction(prog, prev);
+                  prev = NULL;
+               }
+            }
+         } else
+         if (isTextureOp(i->op)) {
+            max++;
+         }
+         if (!i->isNop())
+            prev = i;
+      }
+   }
+   if (uses)
+      delete[] uses;
+   return true;
+}
 
 bool
 NVC0LegalizePostRA::visit(Function *fn)
 {
-   r63 = new_LValue(fn, FILE_GPR);
-   r63->reg.data.id = 63;
+   if (needTexBar)
+      insertTextureBarriers(fn);
+
+   rZero = new_LValue(fn, FILE_GPR);
+   rZero->reg.data.id = prog->getTarget()->getFileSize(FILE_GPR);
    return true;
 }
 
@@ -143,7 +478,7 @@ NVC0LegalizePostRA::replaceZero(Instruction *i)
    for (int s = 0; i->srcExists(s); ++s) {
       ImmediateValue *imm = i->getSrc(s)->asImm();
       if (imm && imm->reg.data.u64 == 0)
-         i->setSrc(s, r63);
+         i->setSrc(s, rZero);
    }
 }
 
@@ -159,7 +494,7 @@ NVC0LegalizePostRA::split64BitOp(Instruction *i)
          return;
       i->dType = i->sType = TYPE_U32;
 
-      i->bb->insertAfter(i, i->clone(true)); // deep cloning
+      i->bb->insertAfter(i, cloneForward(func, i));
    }
 }
 
@@ -220,8 +555,8 @@ NVC0LegalizePostRA::visit(BasicBlock *bb)
       if (i->op == OP_EMIT || i->op == OP_RESTART) {
          if (!i->getDef(0)->refCount())
             i->setDef(0, NULL);
-         if (i->src[0].getFile() == FILE_IMMEDIATE)
-            i->setSrc(0, r63); // initial value must be 0
+         if (i->src(0).getFile() == FILE_IMMEDIATE)
+            i->setSrc(0, rZero); // initial value must be 0
       } else
       if (i->isNop()) {
          bb->remove(i);
@@ -310,7 +645,61 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
    const int dim = i->tex.target.getDim() + i->tex.target.isCube();
    const int arg = i->tex.target.getArgCount();
 
-   // generate and move the tsc/tic/array source to the front
+   if (prog->getTarget()->getChipset() >= 0xe0) {
+      if (i->tex.r == i->tex.s) {
+         i->tex.r += 8; // NOTE: offset should probably be a driver option
+         i->tex.s  = 0; // only a single cX[] value possible here
+      } else {
+         // TODO: extract handles and use register to select TIC/TSC entries
+      }
+      if (i->tex.target.isArray()) {
+         LValue *layer = new_LValue(func, FILE_GPR);
+         Value *src = i->getSrc(arg - 1);
+         const int sat = (i->op == OP_TXF) ? 1 : 0;
+         DataType sTy = (i->op == OP_TXF) ? TYPE_U32 : TYPE_F32;
+         bld.mkCvt(OP_CVT, TYPE_U16, layer, sTy, src)->saturate = sat;
+         for (int s = dim; s >= 1; --s)
+            i->setSrc(s, i->getSrc(s - 1));
+         i->setSrc(0, layer);
+      }
+      if (i->tex.rIndirectSrc >= 0 || i->tex.sIndirectSrc >= 0) {
+         Value *tmp[2];
+         Symbol *bind;
+         Value *rRel = i->getIndirectR();
+         Value *sRel = i->getIndirectS();
+         Value *shCnt = bld.loadImm(NULL, 2);
+
+         if (rRel) {
+            tmp[0] = bld.getScratch();
+            bind = bld.mkSymbol(FILE_MEMORY_CONST, 15, TYPE_U32, i->tex.r * 4);
+            bld.mkOp2(OP_SHL, TYPE_U32, tmp[0], rRel, shCnt);
+            tmp[1] = bld.mkLoad(TYPE_U32, bind, tmp[0]);
+            bld.mkOp2(OP_AND, TYPE_U32, tmp[0], tmp[1],
+                      bld.loadImm(tmp[0], 0x00ffffffu));
+            rRel = tmp[0];
+            i->setSrc(i->tex.rIndirectSrc, NULL);
+         }
+         if (sRel) {
+            tmp[0] = bld.getScratch();
+            bind = bld.mkSymbol(FILE_MEMORY_CONST, 15, TYPE_U32, i->tex.s * 4);
+            bld.mkOp2(OP_SHL, TYPE_U32, tmp[0], sRel, shCnt);
+            tmp[1] = bld.mkLoad(TYPE_U32, bind, tmp[0]);
+            bld.mkOp2(OP_AND, TYPE_U32, tmp[0], tmp[1],
+                      bld.loadImm(tmp[0], 0xff000000u));
+            sRel = tmp[0];
+            i->setSrc(i->tex.sIndirectSrc, NULL);
+         }
+         bld.mkOp2(OP_OR, TYPE_U32, rRel, rRel, sRel);
+
+         int min = i->tex.rIndirectSrc;
+         if (min < 0 || min > i->tex.sIndirectSrc)
+            min = i->tex.sIndirectSrc;
+         for (int s = min; s >= 1; --s)
+            i->setSrc(s, i->getSrc(s - 1));
+         i->setSrc(0, rRel);
+      }
+   } else
+   // (nvc0) generate and move the tsc/tic/array source to the front
    if (dim != arg || i->tex.rIndirectSrc >= 0 || i->tex.sIndirectSrc >= 0) {
       LValue *src = new_LValue(func, FILE_GPR); // 0xttxsaaaa
 
@@ -390,7 +779,7 @@ NVC0LoweringPass::handleManualTXD(TexInstruction *i)
       for (c = 0; c < dim; ++c)
          bld.mkQuadop(qOps[l][1], crd[c], l, i->dPdy[c].get(), crd[c]);
       // texture
-      bld.insert(tex = i->clone(true));
+      bld.insert(tex = cloneForward(func, i));
       for (c = 0; c < dim; ++c)
          tex->setSrc(c, crd[c]);
       // save results
@@ -418,23 +807,24 @@ bool
 NVC0LoweringPass::handleTXD(TexInstruction *txd)
 {
    int dim = txd->tex.target.getDim();
-   int arg = txd->tex.target.getDim() + txd->tex.target.isArray();
+   int arg = txd->tex.target.getArgCount();
 
    handleTEX(txd);
-   while (txd->src[arg].exists())
+   while (txd->srcExists(arg))
       ++arg;
 
    txd->tex.derivAll = true;
-   if (dim > 2 || txd->tex.target.isShadow())
+   if (dim > 2 ||
+       txd->tex.target.isCube() ||
+       arg > 4 ||
+       txd->tex.target.isShadow())
       return handleManualTXD(txd);
 
-   assert(arg <= 4); // at most s/t/array, x, y, offset
-
    for (int c = 0; c < dim; ++c) {
-      txd->src[arg + c * 2 + 0].set(txd->dPdx[c]);
-      txd->src[arg + c * 2 + 1].set(txd->dPdy[c]);
-      txd->dPdx[c] = NULL;
-      txd->dPdy[c] = NULL;
+      txd->setSrc(arg + c * 2 + 0, txd->dPdx[c]);
+      txd->setSrc(arg + c * 2 + 1, txd->dPdy[c]);
+      txd->dPdx[c].set(NULL);
+      txd->dPdy[c].set(NULL);
    }
    return true;
 }
@@ -600,10 +990,11 @@ NVC0LoweringPass::handleEXPORT(Instruction *i)
    if (prog->getType() == Program::TYPE_FRAGMENT) {
       int id = i->getSrc(0)->reg.data.offset / 4;
 
-      if (i->src[0].isIndirect(0)) // TODO, ugly
+      if (i->src(0).isIndirect(0)) // TODO, ugly
          return false;
       i->op = OP_MOV;
-      i->src[0].set(i->src[1]);
+      i->subOp = NV50_IR_SUBOP_MOV_FINAL;
+      i->src(0).set(i->src(1));
       i->setSrc(1, NULL);
       i->setDef(0, new_LValue(func, FILE_GPR));
       i->getDef(0)->reg.data.id = id;
@@ -698,14 +1089,14 @@ NVC0LoweringPass::visit(Instruction *i)
    case OP_WRSV:
       return handleWRSV(i);
    case OP_LOAD:
-      if (i->src[0].getFile() == FILE_SHADER_INPUT) {
+      if (i->src(0).getFile() == FILE_SHADER_INPUT) {
          i->op = OP_VFETCH;
          assert(prog->getType() != Program::TYPE_FRAGMENT);
       }
       break;
    default:
       break;
-   }   
+   }
    return true;
 }
 
@@ -717,7 +1108,7 @@ TargetNVC0::runLegalizePass(Program *prog, CGStage stage) const
       return pass.run(prog, false, true);
    } else
    if (stage == CG_STAGE_POST_RA) {
-      NVC0LegalizePostRA pass;
+      NVC0LegalizePostRA pass(prog);
       return pass.run(prog, false, true);
    } else
    if (stage == CG_STAGE_SSA) {

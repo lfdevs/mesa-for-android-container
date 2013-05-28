@@ -51,6 +51,12 @@ struct fetch_pipeline_middle_end {
    unsigned opt;
 };
 
+
+/**
+ * Prepare/validate middle part of the vertex pipeline.
+ * NOTE: if you change this function, also look at the LLVM
+ * function llvm_middle_end_prepare() for similar changes.
+ */
 static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
                                     unsigned prim,
 				    unsigned opt,
@@ -59,18 +65,21 @@ static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
    struct fetch_pipeline_middle_end *fpme = (struct fetch_pipeline_middle_end *)middle;
    struct draw_context *draw = fpme->draw;
    struct draw_vertex_shader *vs = draw->vs.vertex_shader;
+   struct draw_geometry_shader *gs = draw->gs.geometry_shader;
    unsigned i;
    unsigned instance_id_index = ~0;
 
-   unsigned gs_out_prim = (draw->gs.geometry_shader ? 
-                           draw->gs.geometry_shader->output_primitive :
-                           prim);
+   unsigned gs_out_prim = (gs ? gs->output_primitive : prim);
 
    /* Add one to num_outputs because the pipeline occasionally tags on
     * an additional texcoord, eg for AA lines.
     */
    unsigned nr = MAX2( vs->info.num_inputs,
 		       vs->info.num_outputs + 1 );
+
+   if (gs) {
+      nr = MAX2(nr, gs->info.num_outputs + 1);
+   }
 
    /* Scan for instanceID system value.
     */
@@ -108,7 +117,7 @@ static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
 			    (boolean)draw->rasterizer->gl_rasterization_rules,
 			    (draw->vs.edgeflag_output ? TRUE : FALSE) );
 
-   draw_pt_so_emit_prepare( fpme->so_emit );
+   draw_pt_so_emit_prepare( fpme->so_emit, FALSE );
 
    if (!(opt & PT_PIPELINE)) {
       draw_pt_emit_prepare( fpme->emit,
@@ -125,6 +134,15 @@ static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
    /* No need to prepare the shader.
     */
    vs->prepare(vs, draw);
+}
+
+
+static void
+fetch_pipeline_bind_parameters(struct draw_pt_middle_end *middle)
+{
+   /* No-op since the vertex shader executor and drawing pipeline
+    * just grab the constants, viewport, etc. from the draw context state.
+    */
 }
 
 
@@ -412,6 +430,7 @@ struct draw_pt_middle_end *draw_pt_fetch_pipeline_or_emit( struct draw_context *
       goto fail;
 
    fpme->base.prepare        = fetch_pipeline_prepare;
+   fpme->base.bind_parameters  = fetch_pipeline_bind_parameters;
    fpme->base.run            = fetch_pipeline_run;
    fpme->base.run_linear     = fetch_pipeline_linear_run;
    fpme->base.run_linear_elts = fetch_pipeline_linear_run_elts;

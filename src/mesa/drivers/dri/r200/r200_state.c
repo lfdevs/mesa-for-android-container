@@ -40,6 +40,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/colormac.h"
 #include "main/light.h"
 #include "main/framebuffer.h"
+#include "main/fbobject.h"
 
 #include "swrast/swrast.h"
 #include "vbo/vbo.h"
@@ -354,22 +355,6 @@ static void r200DepthFunc( struct gl_context *ctx, GLenum func )
    }
 }
 
-static void r200ClearDepth( struct gl_context *ctx, GLclampd d )
-{
-   r200ContextPtr rmesa = R200_CONTEXT(ctx);
-   GLuint format = (rmesa->hw.ctx.cmd[CTX_RB3D_ZSTENCILCNTL] &
-		    R200_DEPTH_FORMAT_MASK);
-
-   switch ( format ) {
-   case R200_DEPTH_FORMAT_16BIT_INT_Z:
-      rmesa->radeon.state.depth.clear = d * 0x0000ffff;
-      break;
-   case R200_DEPTH_FORMAT_24BIT_INT_Z:
-      rmesa->radeon.state.depth.clear = d * 0x00ffffff;
-      break;
-   }
-}
-
 static void r200DepthMask( struct gl_context *ctx, GLboolean flag )
 {
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
@@ -544,6 +529,7 @@ static void r200CullFace( struct gl_context *ctx, GLenum unused )
 static void r200FrontFace( struct gl_context *ctx, GLenum mode )
 {
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
+   int cull_face = (mode == GL_CW) ? R200_FFACE_CULL_CW : R200_FFACE_CULL_CCW;
 
    R200_STATECHANGE( rmesa, set );
    rmesa->hw.set.cmd[SET_SE_CNTL] &= ~R200_FFACE_CULL_DIR_MASK;
@@ -552,18 +538,12 @@ static void r200FrontFace( struct gl_context *ctx, GLenum mode )
    rmesa->hw.tcl.cmd[TCL_UCP_VERT_BLEND_CTL] &= ~R200_CULL_FRONT_IS_CCW;
 
    /* Winding is inverted when rendering to FBO */
-   if (ctx->DrawBuffer && ctx->DrawBuffer->Name)
-      mode = (mode == GL_CW) ? GL_CCW : GL_CW;
+   if (ctx->DrawBuffer && _mesa_is_user_fbo(ctx->DrawBuffer))
+      cull_face = (mode == GL_CCW) ? R200_FFACE_CULL_CW : R200_FFACE_CULL_CCW;
+   rmesa->hw.set.cmd[SET_SE_CNTL] |= cull_face;
 
-   switch ( mode ) {
-   case GL_CW:
-      rmesa->hw.set.cmd[SET_SE_CNTL] |= R200_FFACE_CULL_CW;
-      break;
-   case GL_CCW:
-      rmesa->hw.set.cmd[SET_SE_CNTL] |= R200_FFACE_CULL_CCW;
+   if ( mode == GL_CCW )
       rmesa->hw.tcl.cmd[TCL_UCP_VERT_BLEND_CTL] |= R200_CULL_FRONT_IS_CCW;
-      break;
-   }
 }
 
 /* =============================================================
@@ -912,7 +892,7 @@ static void r200ColorMaterial( struct gl_context *ctx, GLenum face, GLenum mode 
 		   (0xf << R200_BACK_SPECULAR_SOURCE_SHIFT));
 
    if (ctx->Light.ColorMaterialEnabled) {
-      GLuint mask = ctx->Light.ColorMaterialBitmask;
+      GLuint mask = ctx->Light._ColorMaterialBitmask;
 
       if (mask & MAT_BIT_FRONT_EMISSION) {
 	 light_model_ctl1 |= (R200_LM1_SOURCE_VERTEX_COLOR_0 <<
@@ -1010,7 +990,7 @@ void r200UpdateMaterial( struct gl_context *ctx )
 
    /* Might be possible and faster to update everything unconditionally? */
    if (ctx->Light.ColorMaterialEnabled)
-      mask &= ~ctx->Light.ColorMaterialBitmask;
+      mask &= ~ctx->Light._ColorMaterialBitmask;
 
    if (R200_DEBUG & RADEON_STATE)
       fprintf(stderr, "%s\n", __FUNCTION__);
@@ -1547,16 +1527,6 @@ r200StencilOpSeparate( struct gl_context *ctx, GLenum face, GLenum fail,
    }
 }
 
-static void r200ClearStencil( struct gl_context *ctx, GLint s )
-{
-   r200ContextPtr rmesa = R200_CONTEXT(ctx);
-
-   rmesa->radeon.state.stencil.clear =
-      ((GLuint) (ctx->Stencil.Clear & 0xff) |
-       (0xff << R200_STENCIL_MASK_SHIFT) |
-       ((ctx->Stencil.WriteMask[0] & 0xff) << R200_STENCIL_WRITEMASK_SHIFT));
-}
-
 
 /* =============================================================
  * Window position and viewport transformation
@@ -1573,7 +1543,7 @@ void r200UpdateWindow( struct gl_context *ctx )
    GLfloat xoffset = 0;
    GLfloat yoffset = dPriv ? (GLfloat) dPriv->h : 0;
    const GLfloat *v = ctx->Viewport._WindowMap.m;
-   const GLboolean render_to_fbo = (ctx->DrawBuffer ? (ctx->DrawBuffer->Name != 0) : 0);
+   const GLboolean render_to_fbo = (ctx->DrawBuffer ? _mesa_is_user_fbo(ctx->DrawBuffer) : 0);
    const GLfloat depthScale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
    GLfloat y_scale, y_bias;
 
@@ -1701,23 +1671,6 @@ void r200UpdateViewportOffset( struct gl_context *ctx )
 /* =============================================================
  * Miscellaneous
  */
-
-static void r200ClearColor( struct gl_context *ctx,
-                            const union gl_color_union c )
-{
-   r200ContextPtr rmesa = R200_CONTEXT(ctx);
-   GLubyte color[4];
-   struct radeon_renderbuffer *rrb;
-
-   rrb = radeon_get_colorbuffer(&rmesa->radeon);
-   if (!rrb)
-     return;
-   _mesa_unclamped_float_rgba_to_ubyte(color, c.f);
-   rmesa->radeon.state.color.clear = radeonPackColor( rrb->cpp,
-                                             color[0], color[1],
-                                             color[2], color[3] );
-}
-
 
 static void r200RenderMode( struct gl_context *ctx, GLenum mode )
 {
@@ -2478,9 +2431,6 @@ void r200InitStateFuncs( radeonContextPtr radeon, struct dd_function_table *func
    functions->BlendColor		= r200BlendColor;
    functions->BlendEquationSeparate	= r200BlendEquationSeparate;
    functions->BlendFuncSeparate		= r200BlendFuncSeparate;
-   functions->ClearColor		= r200ClearColor;
-   functions->ClearDepth		= r200ClearDepth;
-   functions->ClearStencil		= r200ClearStencil;
    functions->ClipPlane			= r200ClipPlane;
    functions->ColorMask			= r200ColorMask;
    functions->CullFace			= r200CullFace;

@@ -63,7 +63,6 @@ static const struct svga_tracked_state *hw_clear_state[] =
  */
 static const struct svga_tracked_state *hw_draw_state[] =
 {
-   &svga_hw_update_zero_stride,
    &svga_hw_fs,
    &svga_hw_vs,
    &svga_hw_rss,
@@ -71,8 +70,8 @@ static const struct svga_tracked_state *hw_draw_state[] =
    &svga_hw_tss_binding,
    &svga_hw_clip_planes,
    &svga_hw_vdecl,
-   &svga_hw_fs_parameters,
-   &svga_hw_vs_parameters,
+   &svga_hw_fs_constants,
+   &svga_hw_vs_constants,
    NULL
 };
 
@@ -191,7 +190,7 @@ svga_update_state(struct svga_context *svga, unsigned max_level)
 {
    struct svga_screen *screen = svga_screen(svga->pipe.screen);
    enum pipe_error ret = PIPE_OK;
-   int i;
+   unsigned i;
 
    /* Check for updates to bound textures.  This can't be done in an
     * atom as there is no flag which could provoke this test, and we

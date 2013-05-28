@@ -131,8 +131,10 @@ svga_vbuf_render_map_vertices( struct vbuf_render *render )
                                          &svga_render->vbuf_transfer);
       if (ptr)
          return ptr + svga_render->vbuf_offset;
-      else
+      else {
+         svga_render->vbuf_transfer = NULL;
          return NULL;
+      }
    }
    else {
       /* we probably ran out of memory when allocating the vertex buffer */
@@ -175,7 +177,7 @@ svga_vbuf_submit_state( struct svga_vbuf_render *svga_render )
    struct svga_context *svga = svga_render->svga;
    SVGA3dVertexDecl vdecl[PIPE_MAX_ATTRIBS];
    enum pipe_error ret;
-   int i;
+   unsigned i;
 
    /* if the vdecl or vbuf hasn't changed do nothing */
    if (!svga->swtnl.new_vdecl)

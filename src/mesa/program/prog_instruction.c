@@ -69,7 +69,7 @@ _mesa_init_instructions(struct prog_instruction *inst, GLuint count)
 struct prog_instruction *
 _mesa_alloc_instructions(GLuint numInst)
 {
-   return (struct prog_instruction *)
+   return
       calloc(1, numInst * sizeof(struct prog_instruction));
 }
 
@@ -127,10 +127,8 @@ _mesa_free_instructions(struct prog_instruction *inst, GLuint count)
 {
    GLuint i;
    for (i = 0; i < count; i++) {
-      if (inst[i].Data)
-         free(inst[i].Data);
-      if (inst[i].Comment)
-         free((char *) inst[i].Comment);
+      free(inst[i].Data);
+      free((char *)inst[i].Comment);
    }
    free(inst);
 }
@@ -156,13 +154,9 @@ static const struct instruction_info InstInfo[MAX_OPCODE] = {
    { OPCODE_ABS,    "ABS",     1, 1 },
    { OPCODE_ADD,    "ADD",     2, 1 },
    { OPCODE_AND,    "AND",     2, 1 },
-   { OPCODE_ARA,    "ARA",     1, 1 },
    { OPCODE_ARL,    "ARL",     1, 1 },
-   { OPCODE_ARL_NV, "ARL_NV",  1, 1 },
-   { OPCODE_ARR,    "ARL",     1, 1 },
    { OPCODE_BGNLOOP,"BGNLOOP", 0, 0 },
    { OPCODE_BGNSUB, "BGNSUB",  0, 0 },
-   { OPCODE_BRA,    "BRA",     0, 0 },
    { OPCODE_BRK,    "BRK",     0, 0 },
    { OPCODE_CAL,    "CAL",     0, 0 },
    { OPCODE_CMP,    "CMP",     3, 1 },
@@ -177,9 +171,7 @@ static const struct instruction_info InstInfo[MAX_OPCODE] = {
    { OPCODE_DPH,    "DPH",     2, 1 },
    { OPCODE_DST,    "DST",     2, 1 },
    { OPCODE_ELSE,   "ELSE",    0, 0 },
-   { OPCODE_EMIT_VERTEX,   "EMIT_VERTEX",    0, 0 },
    { OPCODE_END,    "END",     0, 0 },
-   { OPCODE_END_PRIMITIVE,    "END_PRIMITIVE",     0, 0 },
    { OPCODE_ENDIF,  "ENDIF",   0, 0 },
    { OPCODE_ENDLOOP,"ENDLOOP", 0, 0 },
    { OPCODE_ENDSUB, "ENDSUB",  0, 0 },
@@ -212,10 +204,7 @@ static const struct instruction_info InstInfo[MAX_OPCODE] = {
    { OPCODE_PK4B,   "PK4B",    1, 1 },
    { OPCODE_PK4UB,  "PK4UB",   1, 1 },
    { OPCODE_POW,    "POW",     2, 1 },
-   { OPCODE_POPA,   "POPA",    0, 0 },
    { OPCODE_PRINT,  "PRINT",   1, 0 },
-   { OPCODE_PUSHA,  "PUSHA",   0, 0 },
-   { OPCODE_RCC,    "RCC",     1, 1 },
    { OPCODE_RCP,    "RCP",     1, 1 },
    { OPCODE_RET,    "RET",     0, 0 },
    { OPCODE_RFL,    "RFL",     1, 1 },

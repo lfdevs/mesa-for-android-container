@@ -38,6 +38,7 @@
 #include "main/macros.h"
 #include "main/imports.h"
 #include "main/image.h"
+#include "main/samplerobj.h"
 
 #include "s_atifragshader.h"
 #include "s_alpha.h"
@@ -418,8 +419,8 @@ _swrast_compute_lambda(GLfloat dsdx, GLfloat dsdy, GLfloat dtdx, GLfloat dtdy,
    GLfloat dvdx = texH * ((t + dtdx) / (q + dqdx) - t * invQ);
    GLfloat dudy = texW * ((s + dsdy) / (q + dqdy) - s * invQ);
    GLfloat dvdy = texH * ((t + dtdy) / (q + dqdy) - t * invQ);
-   GLfloat x = SQRTF(dudx * dudx + dvdx * dvdx);
-   GLfloat y = SQRTF(dudy * dudy + dvdy * dvdy);
+   GLfloat x = sqrtf(dudx * dudx + dvdx * dvdx);
+   GLfloat y = sqrtf(dudy * dudy + dvdy * dvdy);
    GLfloat rho = MAX2(x, y);
    GLfloat lambda = LOG2(rho);
    return lambda;
@@ -497,14 +498,15 @@ interpolate_texcoords(struct gl_context *ctx, SWspan *span)
             const struct gl_texture_image *img = obj->Image[0][obj->BaseLevel];
             const struct swrast_texture_image *swImg =
                swrast_texture_image_const(img);
+            const struct gl_sampler_object *samp = _mesa_get_samplerobj(ctx, u);
 
-            needLambda = (obj->Sampler.MinFilter != obj->Sampler.MagFilter)
+            needLambda = (samp->MinFilter != samp->MagFilter)
                || _swrast_use_fragment_program(ctx);
             /* LOD is calculated directly in the ansiotropic filter, we can
              * skip the normal lambda function as the result is ignored.
              */
-            if (obj->Sampler.MaxAnisotropy > 1.0 &&
-                obj->Sampler.MinFilter == GL_LINEAR_MIPMAP_LINEAR) {
+            if (samp->MaxAnisotropy > 1.0 &&
+                samp->MinFilter == GL_LINEAR_MIPMAP_LINEAR) {
                needLambda = GL_FALSE;
             }
             texW = swImg->WidthScale;
@@ -1035,8 +1037,8 @@ put_values(struct gl_context *ctx, struct gl_renderbuffer *rb,
            GLuint count, const GLint x[], const GLint y[],
            const void *values, const GLubyte *mask)
 {
-   gl_pack_ubyte_rgba_func pack_ubyte;
-   gl_pack_float_rgba_func pack_float;
+   gl_pack_ubyte_rgba_func pack_ubyte = NULL;
+   gl_pack_float_rgba_func pack_float = NULL;
    GLuint i;
 
    if (datatype == GL_UNSIGNED_BYTE)
@@ -1164,7 +1166,7 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
       return;
    }
 
-   ASSERT(span->end <= MAX_WIDTH);
+   ASSERT(span->end <= SWRAST_MAX_WIDTH);
 
    /* Depth bounds test */
    if (ctx->Depth.BoundsTest && fb->Visual.depthBits > 0) {
@@ -1319,7 +1321,8 @@ _swrast_write_rgba_span( struct gl_context *ctx, SWspan *span)
          /* color[fragOutput] will be written to buffer[buf] */
 
          if (rb) {
-            GLchan rgbaSave[MAX_WIDTH][4];
+            /* re-use one of the attribute array buffers for rgbaSave */
+            GLchan (*rgbaSave)[4] = (GLchan (*)[4]) span->array->attribs[0];
             struct swrast_renderbuffer *srb = swrast_renderbuffer(rb);
             GLenum colorType = srb->ColorType;
 

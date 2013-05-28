@@ -1312,28 +1312,36 @@ This opcode is the inverse of :opcode:`DFRACEXP`.
    dst.zw = \sqrt{src.zw}
 
 
-.. _resourceopcodes:
+.. _samplingopcodes:
 
-Resource Access Opcodes
-^^^^^^^^^^^^^^^^^^^^^^^^
+Resource Sampling Opcodes
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Those opcodes follow very closely semantics of the respective Direct3D
 instructions. If in doubt double check Direct3D documentation.
 
-.. opcode:: LOAD - Simplified alternative to the "SAMPLE" instruction.
-               Using the provided integer address, LOAD fetches data
-               from the specified buffer/texture without any filtering.
+.. opcode:: SAMPLE - Using provided address, sample data from the
+               specified texture using the filtering mode identified
+               by the gven sampler. The source data may come from
+               any resource type other than buffers.
+               SAMPLE dst, address, sampler_view, sampler
+               e.g.
+               SAMPLE TEMP[0], TEMP[1], SVIEW[0], SAMP[0]
+
+.. opcode:: SAMPLE_I - Simplified alternative to the SAMPLE instruction.
+               Using the provided integer address, SAMPLE_I fetches data
+               from the specified sampler view without any filtering.
                The source data may come from any resource type other
                than CUBE.
-               LOAD dst, address, resource
+               SAMPLE_I dst, address, sampler_view
                e.g.
-               LOAD TEMP[0], TEMP[1], RES[0]
+               SAMPLE_I TEMP[0], TEMP[1], SVIEW[0]
                The 'address' is specified as unsigned integers. If the
                'address' is out of range [0...(# texels - 1)] the
                result of the fetch is always 0 in all components.
                As such the instruction doesn't honor address wrap
                modes, in cases where that behavior is desirable
-               'sample' instruction should be used.
+               'SAMPLE' instruction should be used.
                address.w always provides an unsigned integer mipmap
                level. If the value is out of the range then the
                instruction always returns 0 in all components.
@@ -1348,7 +1356,7 @@ instructions. If in doubt double check Direct3D documentation.
                For 2D texture arrays address.z provides the array
                index, otherwise it exhibits the same behavior as in
                the case for 1D texture arrays.
-               The exeact semantics of the source address are presented
+               The exact semantics of the source address are presented
                in the table below:
                resource type         X     Y     Z       W
                -------------         ------------------------
@@ -1364,25 +1372,16 @@ instructions. If in doubt double check Direct3D documentation.
                Where 'mpl' is a mipmap level and 'idx' is the
                array index.
 
-
-.. opcode:: LOAD_MS - Just like LOAD but allows fetch data from
+.. opcode:: SAMPLE_I_MS - Just like SAMPLE_I but allows fetch data from
                multi-sampled surfaces.
-
-.. opcode:: SAMPLE - Using provided address, sample data from the
-               specified texture using the filtering mode identified
-               by the gven sampler. The source data may come from
-               any resource type other than buffers.
-               SAMPLE dst, address, resource, sampler
-               e.g.
-               SAMPLE TEMP[0], TEMP[1], RES[0], SAMP[0]
 
 .. opcode:: SAMPLE_B - Just like the SAMPLE instruction with the
                exception that an additiona bias is applied to the
                level of detail computed as part of the instruction
                execution.
-               SAMPLE_B dst, address, resource, sampler, lod_bias
+               SAMPLE_B dst, address, sampler_view, sampler, lod_bias
                e.g.
-               SAMPLE_B TEMP[0], TEMP[1], RES[0], SAMP[0], TEMP[2].x
+               SAMPLE_B TEMP[0], TEMP[1], SVIEW[0], SAMP[0], TEMP[2].x
 
 .. opcode:: SAMPLE_C - Similar to the SAMPLE instruction but it
                performs a comparison filter. The operands to SAMPLE_C
@@ -1394,59 +1393,58 @@ instructions. If in doubt double check Direct3D documentation.
                reference value against the red component value for the
                surce resource at each texel that the currently configured
                texture filter covers based on the provided coordinates.
-               SAMPLE_C dst, address, resource.r, sampler, ref_value
+               SAMPLE_C dst, address, sampler_view.r, sampler, ref_value
                e.g.
-               SAMPLE_C TEMP[0], TEMP[1], RES[0].r, SAMP[0], TEMP[2].x
+               SAMPLE_C TEMP[0], TEMP[1], SVIEW[0].r, SAMP[0], TEMP[2].x
 
 .. opcode:: SAMPLE_C_LZ - Same as SAMPLE_C, but LOD is 0 and derivatives
                are ignored. The LZ stands for level-zero.
-               SAMPLE_C_LZ dst, address, resource.r, sampler, ref_value
+               SAMPLE_C_LZ dst, address, sampler_view.r, sampler, ref_value
                e.g.
-               SAMPLE_C_LZ TEMP[0], TEMP[1], RES[0].r, SAMP[0], TEMP[2].x
+               SAMPLE_C_LZ TEMP[0], TEMP[1], SVIEW[0].r, SAMP[0], TEMP[2].x
 
 
 .. opcode:: SAMPLE_D - SAMPLE_D is identical to the SAMPLE opcode except
                that the derivatives for the source address in the x
                direction and the y direction are provided by extra
                parameters.
-               SAMPLE_D dst, address, resource, sampler, der_x, der_y
+               SAMPLE_D dst, address, sampler_view, sampler, der_x, der_y
                e.g.
-               SAMPLE_D TEMP[0], TEMP[1], RES[0], SAMP[0], TEMP[2], TEMP[3]
+               SAMPLE_D TEMP[0], TEMP[1], SVIEW[0], SAMP[0], TEMP[2], TEMP[3]
 
 .. opcode:: SAMPLE_L - SAMPLE_L is identical to the SAMPLE opcode except
                that the LOD is provided directly as a scalar value,
                representing no anisotropy. Source addresses A channel
                is used as the LOD.
-               SAMPLE_L dst, address, resource, sampler
+               SAMPLE_L dst, address, sampler_view, sampler
                e.g.
-               SAMPLE_L TEMP[0], TEMP[1], RES[0], SAMP[0]
-
+               SAMPLE_L TEMP[0], TEMP[1], SVIEW[0], SAMP[0]
 
 .. opcode:: GATHER4 - Gathers the four texels to be used in a bi-linear
                filtering operation and packs them into a single register.
-               Only woth with 2D, 2D array, cubemaps, and cubemaps arrays.
+               Only works with 2D, 2D array, cubemaps, and cubemaps arrays.
                For 2D textures, only the addressing modes of the sampler and
                the top level of any mip pyramid are used. Set W to zero.
                It behaves like the SAMPLE instruction, but a filtered
                sample is not generated. The four samples that contribute
-               to filtering are places into xyzw in cunter-clockwise order,
+               to filtering are placed into xyzw in counter-clockwise order,
                starting with the (u,v) texture coordinate delta at the
                following locations (-, +), (+, +), (+, -), (-, -), where
                the magnitude of the deltas are half a texel.
 
 
-.. opcode:: RESINFO - query the dimensions of a given input buffer.
+.. opcode:: SVIEWINFO - query the dimensions of a given sampler view.
                dst receives width, height, depth or array size and
                number of mipmap levels. The dst can have a writemask
                which will specify what info is the caller interested
                in.
-               RESINFO dst, src_mip_level, resource
+               SVIEWINFO dst, src_mip_level, sampler_view
                e.g.
-               RESINFO TEMP[0], TEMP[1].x, RES[0]
+               SVIEWINFO TEMP[0], TEMP[1].x, SVIEW[0]
                src_mip_level is an unsigned integer scalar. If it's
                out of range then returns 0 for width, height and
                depth/array size but the total number of mipmap is
-               still returned correctly for the given resource.
+               still returned correctly for the given sampler view.
                The returned width, height and depth values are for
                the mipmap level selected by the src_mip_level and
                are in the number of texels.
@@ -1461,6 +1459,272 @@ instructions. If in doubt double check Direct3D documentation.
 .. opcode:: SAMPLE_INFO - dst receives number of samples in x.
                If the resource is not a multi-sample resource and
                not a render target, the result is 0.
+
+
+.. _resourceopcodes:
+
+Resource Access Opcodes
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. opcode:: LOAD - Fetch data from a shader resource
+
+               Syntax: ``LOAD dst, resource, address``
+
+               Example: ``LOAD TEMP[0], RES[0], TEMP[1]``
+
+               Using the provided integer address, LOAD fetches data
+               from the specified buffer or texture without any
+               filtering.
+
+               The 'address' is specified as a vector of unsigned
+               integers.  If the 'address' is out of range the result
+               is unspecified.
+
+               Only the first mipmap level of a resource can be read
+               from using this instruction.
+
+               For 1D or 2D texture arrays, the array index is
+               provided as an unsigned integer in address.y or
+               address.z, respectively.  address.yz are ignored for
+               buffers and 1D textures.  address.z is ignored for 1D
+               texture arrays and 2D textures.  address.w is always
+               ignored.
+
+.. opcode:: STORE - Write data to a shader resource
+
+               Syntax: ``STORE resource, address, src``
+
+               Example: ``STORE RES[0], TEMP[0], TEMP[1]``
+
+               Using the provided integer address, STORE writes data
+               to the specified buffer or texture.
+
+               The 'address' is specified as a vector of unsigned
+               integers.  If the 'address' is out of range the result
+               is unspecified.
+
+               Only the first mipmap level of a resource can be
+               written to using this instruction.
+
+               For 1D or 2D texture arrays, the array index is
+               provided as an unsigned integer in address.y or
+               address.z, respectively.  address.yz are ignored for
+               buffers and 1D textures.  address.z is ignored for 1D
+               texture arrays and 2D textures.  address.w is always
+               ignored.
+
+
+.. _threadsyncopcodes:
+
+Inter-thread synchronization opcodes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+These opcodes are intended for communication between threads running
+within the same compute grid.  For now they're only valid in compute
+programs.
+
+.. opcode:: MFENCE - Memory fence
+
+  Syntax: ``MFENCE resource``
+
+  Example: ``MFENCE RES[0]``
+
+  This opcode forces strong ordering between any memory access
+  operations that affect the specified resource.  This means that
+  previous loads and stores (and only those) will be performed and
+  visible to other threads before the program execution continues.
+
+
+.. opcode:: LFENCE - Load memory fence
+
+  Syntax: ``LFENCE resource``
+
+  Example: ``LFENCE RES[0]``
+
+  Similar to MFENCE, but it only affects the ordering of memory loads.
+
+
+.. opcode:: SFENCE - Store memory fence
+
+  Syntax: ``SFENCE resource``
+
+  Example: ``SFENCE RES[0]``
+
+  Similar to MFENCE, but it only affects the ordering of memory stores.
+
+
+.. opcode:: BARRIER - Thread group barrier
+
+  ``BARRIER``
+
+  This opcode suspends the execution of the current thread until all
+  the remaining threads in the working group reach the same point of
+  the program.  Results are unspecified if any of the remaining
+  threads terminates or never reaches an executed BARRIER instruction.
+
+
+.. _atomopcodes:
+
+Atomic opcodes
+^^^^^^^^^^^^^^
+
+These opcodes provide atomic variants of some common arithmetic and
+logical operations.  In this context atomicity means that another
+concurrent memory access operation that affects the same memory
+location is guaranteed to be performed strictly before or after the
+entire execution of the atomic operation.
+
+For the moment they're only valid in compute programs.
+
+.. opcode:: ATOMUADD - Atomic integer addition
+
+  Syntax: ``ATOMUADD dst, resource, offset, src``
+
+  Example: ``ATOMUADD TEMP[0], RES[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = dst_i + src_i
+
+
+.. opcode:: ATOMXCHG - Atomic exchange
+
+  Syntax: ``ATOMXCHG dst, resource, offset, src``
+
+  Example: ``ATOMXCHG TEMP[0], RES[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = src_i
+
+
+.. opcode:: ATOMCAS - Atomic compare-and-exchange
+
+  Syntax: ``ATOMCAS dst, resource, offset, cmp, src``
+
+  Example: ``ATOMCAS TEMP[0], RES[0], TEMP[1], TEMP[2], TEMP[3]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = (dst_i == cmp_i ? src_i : dst_i)
+
+
+.. opcode:: ATOMAND - Atomic bitwise And
+
+  Syntax: ``ATOMAND dst, resource, offset, src``
+
+  Example: ``ATOMAND TEMP[0], RES[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = dst_i \& src_i
+
+
+.. opcode:: ATOMOR - Atomic bitwise Or
+
+  Syntax: ``ATOMOR dst, resource, offset, src``
+
+  Example: ``ATOMOR TEMP[0], RES[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = dst_i | src_i
+
+
+.. opcode:: ATOMXOR - Atomic bitwise Xor
+
+  Syntax: ``ATOMXOR dst, resource, offset, src``
+
+  Example: ``ATOMXOR TEMP[0], RES[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = dst_i \oplus src_i
+
+
+.. opcode:: ATOMUMIN - Atomic unsigned minimum
+
+  Syntax: ``ATOMUMIN dst, resource, offset, src``
+
+  Example: ``ATOMUMIN TEMP[0], RES[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = (dst_i < src_i ? dst_i : src_i)
+
+
+.. opcode:: ATOMUMAX - Atomic unsigned maximum
+
+  Syntax: ``ATOMUMAX dst, resource, offset, src``
+
+  Example: ``ATOMUMAX TEMP[0], RES[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = (dst_i > src_i ? dst_i : src_i)
+
+
+.. opcode:: ATOMIMIN - Atomic signed minimum
+
+  Syntax: ``ATOMIMIN dst, resource, offset, src``
+
+  Example: ``ATOMIMIN TEMP[0], RES[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = (dst_i < src_i ? dst_i : src_i)
+
+
+.. opcode:: ATOMIMAX - Atomic signed maximum
+
+  Syntax: ``ATOMIMAX dst, resource, offset, src``
+
+  Example: ``ATOMIMAX TEMP[0], RES[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically on each component:
+
+.. math::
+
+  dst_i = resource[offset]_i
+
+  resource[offset]_i = (dst_i > src_i ? dst_i : src_i)
+
 
 
 Explanation of symbols used
@@ -1531,19 +1795,17 @@ of TGSI_FILE.
 UsageMask field specifies which of the register components can be accessed
 and is one of TGSI_WRITEMASK.
 
-Interpolate field is only valid for fragment shader INPUT register files.
-It specifes the way input is being interpolated by the rasteriser and is one
-of TGSI_INTERPOLATE.
+The Local flag specifies that a given value isn't intended for
+subroutine parameter passing and, as a result, the implementation
+isn't required to give any guarantees of it being preserved across
+subroutine boundaries.  As it's merely a compiler hint, the
+implementation is free to ignore it.
 
 If Dimension flag is set to 1, a Declaration Dimension token follows.
 
 If Semantic flag is set to 1, a Declaration Semantic token follows.
 
-CylindricalWrap bitfield is only valid for fragment shader INPUT register
-files. It specifies which register components should be subject to cylindrical
-wrapping when interpolating by the rasteriser. If TGSI_CYLINDRICAL_WRAP_X
-is set to 1, the X component should be interpolated according to cylindrical
-wrapping rules.
+If Interpolate flag is set to 1, a Declaration Interpolate token follows.
 
 If file is TGSI_FILE_RESOURCE, a Declaration Resource token follows.
 
@@ -1690,12 +1952,42 @@ is a writable stencil reference value. Only the Y component is writable.
 This allows the fragment shader to change the fragments stencilref value.
 
 
-Declaration Resource
+Declaration Interpolate
+^^^^^^^^^^^^^^^^^^^^^^^
+
+This token is only valid for fragment shader INPUT declarations.
+
+The Interpolate field specifes the way input is being interpolated by
+the rasteriser and is one of TGSI_INTERPOLATE_*.
+
+The CylindricalWrap bitfield specifies which register components
+should be subject to cylindrical wrapping when interpolating by the
+rasteriser. If TGSI_CYLINDRICAL_WRAP_X is set to 1, the X component
+should be interpolated according to cylindrical wrapping rules.
+
+
+Declaration Sampler View
 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+   Follows Declaration token if file is TGSI_FILE_SAMPLER_VIEW.
+
+   DCL SVIEW[#], resource, type(s)
+
+   Declares a shader input sampler view and assigns it to a SVIEW[#]
+   register.
+
+   resource can be one of BUFFER, 1D, 2D, 3D, 1DArray and 2DArray.
+
+   type must be 1 or 4 entries (if specifying on a per-component
+   level) out of UNORM, SNORM, SINT, UINT and FLOAT.
+
+
+Declaration Resource
+^^^^^^^^^^^^^^^^^^^^
 
    Follows Declaration token if file is TGSI_FILE_RESOURCE.
 
-   DCL RES[#], resource, type(s)
+   DCL RES[#], resource [, WR] [, RAW]
 
    Declares a shader input resource and assigns it to a RES[#]
    register.
@@ -1703,8 +1995,21 @@ Declaration Resource
    resource can be one of BUFFER, 1D, 2D, 3D, CUBE, 1DArray and
    2DArray.
 
-   type must be 1 or 4 entries (if specifying on a per-component
-   level) out of UNORM, SNORM, SINT, UINT and FLOAT.
+   If the RAW keyword is not specified, the texture data will be
+   subject to conversion, swizzling and scaling as required to yield
+   the specified data type from the physical data format of the bound
+   resource.
+
+   If the RAW keyword is specified, no channel conversion will be
+   performed: the values read for each of the channels (X,Y,Z,W) will
+   correspond to consecutive words in the same order and format
+   they're found in memory.  No element-to-address conversion will be
+   performed either: the value of the provided X coordinate will be
+   interpreted in byte units instead of texel units.  The result of
+   accessing a misaligned address is undefined.
+
+   Usage of the STORE opcode is only allowed if the WR (writable) flag
+   is set.
 
 
 Properties

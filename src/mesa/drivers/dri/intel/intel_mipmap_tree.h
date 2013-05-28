@@ -33,6 +33,10 @@
 #include "intel_regions.h"
 #include "intel_resolve_map.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* A layer on top of the intel_regions code which adds:
  *
  * - Code to size and layout a region to hold a set of mipmaps.
@@ -75,6 +79,12 @@ struct intel_miptree_map {
    void *ptr;
    /** Stride of the mapping. */
    int stride;
+
+   /**
+    * intel_mipmap_tree::singlesample_mt is temporary storage that persists
+    * only for the duration of the map.
+    */
+   bool singlesample_mt_is_tmp;
 };
 
 /**
@@ -127,11 +137,47 @@ struct intel_mipmap_level
       /** \} */
 
       /**
-       * Pointer to mapping information, present across
-       * intel_tex_image_map()/unmap of the slice.
+       * Mapping information. Persistent for the duration of
+       * intel_miptree_map/unmap on this slice.
        */
       struct intel_miptree_map *map;
    } *slice;
+};
+
+/**
+ * Enum for keeping track of the different MSAA layouts supported by Gen7.
+ */
+enum intel_msaa_layout
+{
+   /**
+    * Ordinary surface with no MSAA.
+    */
+   INTEL_MSAA_LAYOUT_NONE,
+
+   /**
+    * Interleaved Multisample Surface.  The additional samples are
+    * accommodated by scaling up the width and the height of the surface so
+    * that all the samples corresponding to a pixel are located at nearby
+    * memory locations.
+    */
+   INTEL_MSAA_LAYOUT_IMS,
+
+   /**
+    * Uncompressed Multisample Surface.  The surface is stored as a 2D array,
+    * with array slice n containing all pixel data for sample n.
+    */
+   INTEL_MSAA_LAYOUT_UMS,
+
+   /**
+    * Compressed Multisample Surface.  The surface is stored as in
+    * INTEL_MSAA_LAYOUT_UMS, but there is an additional buffer called the MCS
+    * (Multisample Control Surface) buffer.  Each pixel in the MCS buffer
+    * indicates the mapping from sample number to array slice.  This allows
+    * the common case (where all samples constituting a pixel have the same
+    * color value) to be stored efficiently by just using a single array
+    * slice.
+    */
+   INTEL_MSAA_LAYOUT_CMS,
 };
 
 struct intel_mipmap_tree
@@ -150,8 +196,14 @@ struct intel_mipmap_tree
     * MESA_FORMAT_Z32_FLOAT_X24S8, then mt->format will be
     * MESA_FORMAT_Z32_FLOAT, otherwise for MESA_FORMAT_S8_Z24 objects it will be
     * MESA_FORMAT_X8_Z24.
+    *
+    * For ETC1/ETC2 textures, this is one of the uncompressed mesa texture
+    * formats if the hardware lacks support for ETC1/ETC2. See @ref wraps_etc.
     */
    gl_format format;
+
+   /** This variable stores the value of ETC compressed texture format */
+   gl_format etc_format;
 
    /**
     * The X offset of each image in the miptree must be aligned to this. See
@@ -163,14 +215,53 @@ struct intel_mipmap_tree
    GLuint first_level;
    GLuint last_level;
 
-   GLuint width0, height0, depth0; /**< Level zero image dimensions */
+   /**
+    * Level zero image dimensions.  These dimensions correspond to the
+    * physical layout of data in memory.  Accordingly, they account for the
+    * extra width, height, and or depth that must be allocated in order to
+    * accommodate multisample formats, and they account for the extra factor
+    * of 6 in depth that must be allocated in order to accommodate cubemap
+    * textures.
+    */
+   GLuint physical_width0, physical_height0, physical_depth0;
+
    GLuint cpp;
+   GLuint num_samples;
    bool compressed;
+
+   /**
+    * Level zero image dimensions.  These dimensions correspond to the
+    * logical width, height, and depth of the region as seen by client code.
+    * Accordingly, they do not account for the extra width, height, and/or
+    * depth that must be allocated in order to accommodate multisample
+    * formats, nor do they account for the extra factor of 6 in depth that
+    * must be allocated in order to accommodate cubemap textures.
+    */
+   uint32_t logical_width0, logical_height0, logical_depth0;
+
+   /**
+    * For 1D array, 2D array, cube, and 2D multisampled surfaces on Gen7: true
+    * if the surface only contains LOD 0, and hence no space is for LOD's
+    * other than 0 in between array slices.
+    *
+    * Corresponds to the surface_array_spacing bit in gen7_surface_state.
+    */
+   bool array_spacing_lod0;
+
+   /**
+    * MSAA layout used by this buffer.
+    */
+   enum intel_msaa_layout msaa_layout;
 
    /* Derived from the above:
     */
    GLuint total_width;
    GLuint total_height;
+
+   /* The 3DSTATE_CLEAR_PARAMS value associated with the last depth clear to
+    * this depth mipmap tree, if any.
+    */
+   uint32_t depth_clear_value;
 
    /* Includes image offset tables:
     */
@@ -179,6 +270,54 @@ struct intel_mipmap_tree
    /* The data is held here:
     */
    struct intel_region *region;
+
+   /* Offset into region bo where miptree starts:
+    */
+   uint32_t offset;
+
+   /**
+    * \brief Singlesample miptree.
+    *
+    * This is used under two cases.
+    *
+    * --- Case 1: As persistent singlesample storage for multisample window
+    *  system front and back buffers ---
+    *
+    * Suppose that the window system FBO was created with a multisample
+    * config.  Let `back_irb` be the `intel_renderbuffer` for the FBO's back
+    * buffer. Then `back_irb` contains two miptrees: a parent multisample
+    * miptree (back_irb->mt) and a child singlesample miptree
+    * (back_irb->mt->singlesample_mt).  The DRM buffer shared with DRI2
+    * belongs to `back_irb->mt->singlesample_mt` and contains singlesample
+    * data.  The singlesample miptree is created at the same time as and
+    * persists for the lifetime of its parent multisample miptree.
+    *
+    * When access to the singlesample data is needed, such as at
+    * eglSwapBuffers and glReadPixels, an automatic downsample occurs from
+    * `back_rb->mt` to `back_rb->mt->singlesample_mt` when necessary.
+    *
+    * This description of the back buffer applies analogously to the front
+    * buffer.
+    *
+    *
+    * --- Case 2: As temporary singlesample storage for mapping multisample
+    *  miptrees ---
+    *
+    * Suppose the intel_miptree_map is called on a multisample miptree, `mt`,
+    * for which case 1 does not apply (that is, `mt` does not belong to
+    * a front or back buffer).  Then `mt->singlesample_mt` is null at the
+    * start of the call. intel_miptree_map will create a temporary
+    * singlesample miptree, store it at `mt->singlesample_mt`, downsample from
+    * `mt` to `mt->singlesample_mt` if necessary, then map
+    * `mt->singlesample_mt`. The temporary miptree is later deleted during
+    * intel_miptree_unmap.
+    */
+   struct intel_mipmap_tree *singlesample_mt;
+
+   /**
+    * \brief A downsample is needed from this miptree to singlesample_mt.
+    */
+   bool need_downsample;
 
    /**
     * \brief HiZ miptree
@@ -212,6 +351,29 @@ struct intel_mipmap_tree
     */
    struct intel_mipmap_tree *stencil_mt;
 
+   /**
+    * \brief MCS miptree for multisampled textures.
+    *
+    * This miptree contains the "multisample control surface", which stores
+    * the necessary information to implement compressed MSAA on Gen7+
+    * (INTEL_MSAA_FORMAT_CMS).
+    */
+   struct intel_mipmap_tree *mcs_mt;
+
+   /**
+    * \brief The miptree contains uncompressed data that was originally
+    * ETC1/ETC2 data.
+    *
+    * On hardware that lacks support for ETC1/ETC2 textures, we do the following
+    * on calls to glCompressedTexImage2D() with an ETC1/ETC2 texture format:
+    *   1. Create a miptree whose format is a suitable uncompressed mesa format
+    *      with the wraps_etc flag set.
+    *   2. Translate the ETC1/ETC2 data into uncompressed mesa format.
+    *   3. Store the uncompressed  data into the miptree and discard the ETC1/ETC2
+    *      data.
+    */
+   bool wraps_etc;
+
    /* These are also refcounted:
     */
    GLuint refcount;
@@ -227,13 +389,22 @@ struct intel_mipmap_tree *intel_miptree_create(struct intel_context *intel,
                                                GLuint width0,
                                                GLuint height0,
                                                GLuint depth0,
-					       bool expect_accelerated_upload);
+					       bool expect_accelerated_upload,
+                                               GLuint num_samples,
+                                               bool force_y_tiling);
 
 struct intel_mipmap_tree *
 intel_miptree_create_for_region(struct intel_context *intel,
 				GLenum target,
 				gl_format format,
 				struct intel_region *region);
+
+struct intel_mipmap_tree*
+intel_miptree_create_for_dri2_buffer(struct intel_context *intel,
+                                     unsigned dri_attachment,
+                                     gl_format format,
+                                     uint32_t num_samples,
+                                     struct intel_region *region);
 
 /**
  * Create a miptree appropriate as the storage for a non-texture renderbuffer.
@@ -246,7 +417,8 @@ struct intel_mipmap_tree*
 intel_miptree_create_for_renderbuffer(struct intel_context *intel,
                                       gl_format format,
                                       uint32_t width,
-                                      uint32_t height);
+                                      uint32_t height,
+                                      uint32_t num_samples);
 
 /** \brief Assert that the level and layer are valid for the miptree. */
 static inline void
@@ -276,7 +448,7 @@ bool intel_miptree_match_image(struct intel_mipmap_tree *mt,
 
 void
 intel_miptree_get_image_offset(struct intel_mipmap_tree *mt,
-			       GLuint level, GLuint face, GLuint depth,
+			       GLuint level, GLuint slice,
 			       GLuint *x, GLuint *y);
 
 void
@@ -321,6 +493,11 @@ intel_miptree_s8z24_gather(struct intel_context *intel,
                            uint32_t level,
                            uint32_t layer);
 
+bool
+intel_miptree_alloc_mcs(struct intel_context *intel,
+                        struct intel_mipmap_tree *mt,
+                        GLuint num_samples);
+
 /**
  * \name Miptree HiZ functions
  * \{
@@ -337,7 +514,8 @@ intel_miptree_s8z24_gather(struct intel_context *intel,
 
 bool
 intel_miptree_alloc_hiz(struct intel_context *intel,
-			struct intel_mipmap_tree *mt);
+			struct intel_mipmap_tree *mt,
+                        GLuint num_samples);
 
 void
 intel_miptree_slice_set_needs_hiz_resolve(struct intel_mipmap_tree *mt,
@@ -347,11 +525,6 @@ void
 intel_miptree_slice_set_needs_depth_resolve(struct intel_mipmap_tree *mt,
                                             uint32_t level,
 					    uint32_t depth);
-void
-intel_miptree_all_slices_set_need_hiz_resolve(struct intel_mipmap_tree *mt);
-
-void
-intel_miptree_all_slices_set_need_depth_resolve(struct intel_mipmap_tree *mt);
 
 /**
  * \return false if no resolve was needed
@@ -387,6 +560,14 @@ intel_miptree_all_slices_resolve_depth(struct intel_context *intel,
 
 /**\}*/
 
+void
+intel_miptree_downsample(struct intel_context *intel,
+                         struct intel_mipmap_tree *mt);
+
+void
+intel_miptree_upsample(struct intel_context *intel,
+                       struct intel_mipmap_tree *mt);
+
 /* i915_mipmap_tree.c:
  */
 void i915_miptree_layout(struct intel_mipmap_tree *mt);
@@ -412,5 +593,24 @@ intel_miptree_unmap(struct intel_context *intel,
 		    struct intel_mipmap_tree *mt,
 		    unsigned int level,
 		    unsigned int slice);
+
+#ifdef I915
+static inline void
+intel_hiz_exec(struct intel_context *intel, struct intel_mipmap_tree *mt,
+	       unsigned int level, unsigned int layer, enum gen6_hiz_op op)
+{
+   /* Stub on i915.  It would be nice if we didn't execute resolve code at all
+    * there.
+    */
+}
+#else
+void
+intel_hiz_exec(struct intel_context *intel, struct intel_mipmap_tree *mt,
+	       unsigned int level, unsigned int layer, enum gen6_hiz_op op);
+#endif
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

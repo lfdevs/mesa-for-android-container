@@ -104,43 +104,6 @@ intel_offset_S8(uint32_t stride, uint32_t x, uint32_t y, bool swizzled)
    return u;
 }
 
-
-/**
- * Resolve all buffers that will be mapped by intelSpanRenderStart().
- *
- * Resolve the depth buffer of each enabled texture and of the read and draw
- * buffers.
- *
- * (Note: In the future this will also perform MSAA resolves.)
- */
-static void
-intel_span_resolve_buffers(struct intel_context *intel)
-{
-   struct gl_context *ctx = &intel->ctx;
-   struct intel_renderbuffer *draw_irb;
-   struct intel_renderbuffer *read_irb;
-   struct intel_texture_object *tex_obj;
-
-   /* Resolve depth buffer of each enabled texture. */
-   for (int i = 0; i < ctx->Const.MaxTextureImageUnits; i++) {
-      if (!ctx->Texture.Unit[i]._ReallyEnabled)
-	 continue;
-      tex_obj = intel_texture_object(ctx->Texture.Unit[i]._Current);
-      intel_finalize_mipmap_tree(intel, i);
-      if (!tex_obj || !tex_obj->mt)
-	 continue;
-      intel_miptree_all_slices_resolve_depth(intel, tex_obj->mt);
-   }
-
-   /* Resolve each attached depth buffer. */
-   draw_irb = intel_get_renderbuffer(ctx->DrawBuffer, BUFFER_DEPTH);
-   read_irb = intel_get_renderbuffer(ctx->ReadBuffer, BUFFER_DEPTH);
-   if (draw_irb)
-      intel_renderbuffer_resolve_depth(intel, draw_irb);
-   if (read_irb != draw_irb && read_irb)
-      intel_renderbuffer_resolve_depth(intel, read_irb);
-}
-
 /**
  * Map the regions needed by intelSpanRenderStart().
  */
@@ -175,7 +138,6 @@ intelSpanRenderStart(struct gl_context * ctx)
 
    intel_flush(ctx);
    intel_prepare_render(intel);
-   intel_span_resolve_buffers(intel);
    intel_flush(ctx);
    intel_span_map_buffers(intel);
 }
@@ -207,8 +169,10 @@ void
 intelInitSpanFuncs(struct gl_context * ctx)
 {
    struct swrast_device_driver *swdd = _swrast_GetDeviceDriverReference(ctx);
-   swdd->SpanRenderStart = intelSpanRenderStart;
-   swdd->SpanRenderFinish = intelSpanRenderFinish;
+   if (swdd) {
+      swdd->SpanRenderStart = intelSpanRenderStart;
+      swdd->SpanRenderFinish = intelSpanRenderFinish;
+   }
 }
 
 void

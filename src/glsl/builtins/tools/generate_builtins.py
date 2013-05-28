@@ -29,11 +29,23 @@ def read_ir_files(fs):
         with open(filename) as f:
             fs[function_name] = f.read()
 
+def read_glsl_files(fs):
+    for filename in glob(path.join(path.join(builtins_dir, 'glsl'), '*.glsl')):
+        function_name = path.basename(filename).split('.')[0]
+        (output, returncode) = run_compiler([filename])
+        if (returncode):
+            sys.stderr.write("Failed to compile builtin: " + filename + "\n")
+            sys.stderr.write("Result:\n")
+            sys.stderr.write(output)
+        else:
+            fs[function_name] = output;
+
 # Return a dictionary containing all builtin definitions (even generated)
 def get_builtin_definitions():
     fs = {}
     generate_texture_functions(fs)
     read_ir_files(fs)
+    read_glsl_files(fs)
     return fs
 
 def stringify(s):
@@ -59,9 +71,17 @@ def write_function_definitions():
         print stringify(v), ';'
 
 def run_compiler(args):
-    command = [compiler, '--dump-lir'] + args
+    command = [compiler, '--dump-hir'] + args
     p = Popen(command, 1, stdout=PIPE, shell=False)
     output = p.communicate()[0]
+
+    if (p.returncode):
+        sys.stderr.write("Failed to compile builtins with command:\n")
+        for arg in command:
+            sys.stderr.write(arg + " ")
+        sys.stderr.write("\n")
+        sys.stderr.write("Result:\n")
+        sys.stderr.write(output)
 
     # Clean up output a bit by killing whitespace before a closing paren.
     kill_paren_whitespace = re.compile(r'[ \n]*\)', re.MULTILINE)
@@ -69,6 +89,10 @@ def run_compiler(args):
 
     # Also toss any duplicate newlines
     output = output.replace('\n\n', '\n')
+
+    # Kill any global variable declarations.  We don't want them.
+    kill_globals = re.compile(r'^\(declare.*\n', re.MULTILINE)
+    output = kill_globals.sub('', output)
 
     return (output, p.returncode)
 
@@ -78,10 +102,6 @@ def write_profile(filename, profile):
     if returncode != 0:
         print '#error builtins profile', profile, 'failed to compile'
         return
-
-    # Kill any global variable declarations.  We don't want them.
-    kill_globals = re.compile(r'^\(declare.*\n', re.MULTILINE)
-    proto_ir = kill_globals.sub('', proto_ir)
 
     print 'static const char prototypes_for_' + profile + '[] ='
     print stringify(proto_ir), ';'
@@ -105,7 +125,7 @@ def write_profiles():
 
 def get_profile_list():
     profile_files = []
-    for extension in ['frag', 'vert']:
+    for extension in ['glsl', 'frag', 'vert']:
         path_glob = path.join(
             path.join(builtins_dir, 'profiles'), '*.' + extension)
         profile_files.extend(glob(path_glob))
@@ -153,18 +173,23 @@ gl_shader *
 read_builtins(GLenum target, const char *protos, const char **functions, unsigned count)
 {
    struct gl_context fakeCtx;
-   fakeCtx.API = API_OPENGL;
-   fakeCtx.Const.GLSLVersion = 130;
+   fakeCtx.API = API_OPENGL_COMPAT;
+   fakeCtx.Const.GLSLVersion = 140;
    fakeCtx.Extensions.ARB_ES2_compatibility = true;
+   fakeCtx.Extensions.ARB_ES3_compatibility = true;
+   fakeCtx.Const.ForceGLSLExtensionsWarn = false;
    gl_shader *sh = _mesa_new_shader(NULL, 0, target);
    struct _mesa_glsl_parse_state *st =
       new(sh) _mesa_glsl_parse_state(&fakeCtx, target, sh);
 
-   st->language_version = 130;
-   st->symbols->language_version = 130;
+   st->language_version = 140;
+   st->symbols->separate_function_namespace = false;
    st->ARB_texture_rectangle_enable = true;
    st->EXT_texture_array_enable = true;
    st->OES_EGL_image_external_enable = true;
+   st->ARB_shader_bit_encoding_enable = true;
+   st->ARB_texture_cube_map_array_enable = true;
+   st->ARB_shading_language_packing_enable = true;
    _mesa_glsl_initialize_types(st);
 
    sh->ir = new(sh) exec_list;
@@ -203,7 +228,7 @@ read_builtins(GLenum target, const char *protos, const char **functions, unsigne
     print 'static gl_shader *builtin_profiles[%d];' % len(profiles)
 
     print """
-void *builtin_mem_ctx = NULL;
+static void *builtin_mem_ctx = NULL;
 
 void
 _mesa_glsl_release_functions(void)
@@ -251,10 +276,16 @@ _mesa_glsl_initialize_functions(struct _mesa_glsl_parse_state *state)
             check = 'state->target == vertex_shader && '
         elif profile.endswith('_frag'):
             check = 'state->target == fragment_shader && '
+        else:
+            check = ''
 
-        version = re.sub(r'_(vert|frag)$', '', profile)
-        if version.isdigit():
+        version = re.sub(r'_(glsl|vert|frag)$', '', profile)
+        if version[0].isdigit():
+            is_es = version.endswith('es')
+            if is_es:
+                version = version[:-2]
             check += 'state->language_version == ' + version
+            check += ' && {0}state->es_shader'.format('' if is_es else '!')
         else: # an extension name
             check += 'state->' + version + '_enable'
 

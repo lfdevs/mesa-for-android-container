@@ -201,12 +201,13 @@ aa_transform_inst(struct tgsi_transform_context *ctx,
       decl = tgsi_default_full_declaration();
       decl.Declaration.File = TGSI_FILE_INPUT;
       /* XXX this could be linear... */
-      decl.Declaration.Interpolate = TGSI_INTERPOLATE_PERSPECTIVE;
+      decl.Declaration.Interpolate = 1;
       decl.Declaration.Semantic = 1;
       decl.Semantic.Name = TGSI_SEMANTIC_GENERIC;
       decl.Semantic.Index = aactx->maxGeneric + 1;
       decl.Range.First = 
       decl.Range.Last = texInput;
+      decl.Interp.Interpolate = TGSI_INTERPOLATE_PERSPECTIVE;
       ctx->emit_declaration(ctx, &decl);
 
       /* declare new temp regs */
@@ -744,7 +745,7 @@ aapoint_flush(struct draw_stage *stage, unsigned flags)
 
    /* restore original frag shader */
    draw->suspend_flushing = TRUE;
-   aapoint->driver_bind_fs_state(pipe, aapoint->fs->driver_fs);
+   aapoint->driver_bind_fs_state(pipe, aapoint->fs ? aapoint->fs->driver_fs : NULL);
 
    /* restore original rasterizer state */
    if (draw->rast_handle) {

@@ -63,7 +63,7 @@ fail:
 
 void svga_hwtnl_destroy( struct svga_hwtnl *hwtnl )
 {
-   int i, j;
+   unsigned i, j;
 
    for (i = 0; i < PIPE_PRIM_MAX; i++) {
       for (j = 0; j < IDX_CACHE_MAX; j++) {
@@ -310,12 +310,6 @@ enum pipe_error svga_hwtnl_prim( struct svga_hwtnl *hwtnl,
          assert(size);
          assert(offset < size);
          assert(min_index <= max_index);
-         if (index_bias >= 0) {
-            assert(offset + index_bias*stride < size);
-         }
-         if (min_index != ~0 && index_bias >= 0) {
-            assert(offset + (index_bias + min_index) * stride < size);
-         }
 
          switch (hwtnl->cmd.vdecl[i].identity.type) {
          case SVGA3D_DECLTYPE_FLOAT1:
@@ -375,9 +369,14 @@ enum pipe_error svga_hwtnl_prim( struct svga_hwtnl *hwtnl,
             break;
          }
 
-         if (max_index != ~0) {
-            assert(offset + (index_bias + max_index) * stride + width <= size);
+         if (index_bias >= 0) {
+            assert(offset + index_bias*stride + width <= size);
          }
+
+         /*
+          * min_index/max_index are merely conservative guesses, so we can't
+          * make buffer overflow detection based on their values.
+          */
       }
 
       assert(range->indexWidth == range->indexArray.stride);

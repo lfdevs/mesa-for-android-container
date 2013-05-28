@@ -28,16 +28,21 @@
 
 #include "wayland-drm.h"
 
-void *
+void
 egl_g3d_wl_drm_helper_reference_buffer(void *user_data, uint32_t name,
-                                       int32_t width, int32_t height,
-                                       uint32_t stride, uint32_t format);
+                                       struct wl_drm_buffer *buffer);
 
 void
-egl_g3d_wl_drm_helper_unreference_buffer(void *user_data, void *buffer);
+egl_g3d_wl_drm_helper_unreference_buffer(void *user_data,
+                                         struct wl_drm_buffer *buffer);
 
 struct pipe_resource *
 egl_g3d_wl_drm_common_wl_buffer_get_resource(struct native_display *ndpy,
                                              struct wl_buffer *buffer);
+
+EGLBoolean
+egl_g3d_wl_drm_common_query_buffer(struct native_display *ndpy,
+                                   struct wl_buffer *buffer,
+                                   EGLint attribute, EGLint *value);
 
 #endif /* _NATIVE_WAYLAND_DRM_BUFMGR_HELPER_H_ */

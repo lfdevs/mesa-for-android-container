@@ -259,6 +259,16 @@ typedef enum
    /*@}*/
 
    MESA_FORMAT_ETC1_RGB8,
+   MESA_FORMAT_ETC2_RGB8,
+   MESA_FORMAT_ETC2_SRGB8,
+   MESA_FORMAT_ETC2_RGBA8_EAC,
+   MESA_FORMAT_ETC2_SRGB8_ALPHA8_EAC,
+   MESA_FORMAT_ETC2_R11_EAC,
+   MESA_FORMAT_ETC2_RG11_EAC,
+   MESA_FORMAT_ETC2_SIGNED_R11_EAC,
+   MESA_FORMAT_ETC2_SIGNED_RG11_EAC,
+   MESA_FORMAT_ETC2_RGB8_PUNCHTHROUGH_ALPHA1,
+   MESA_FORMAT_ETC2_SRGB8_PUNCHTHROUGH_ALPHA1,
 
    MESA_FORMAT_SIGNED_A8,         /*                               AAAA AAAA */
    MESA_FORMAT_SIGNED_L8,         /*                               LLLL LLLL */
@@ -276,6 +286,7 @@ typedef enum
    MESA_FORMAT_Z32_FLOAT_X24S8,
 
    MESA_FORMAT_ARGB2101010_UINT,
+   MESA_FORMAT_ABGR2101010_UINT,
 
    MESA_FORMAT_COUNT
 } gl_format;
@@ -311,6 +322,9 @@ _mesa_is_format_packed_depth_stencil(gl_format format);
 extern GLboolean
 _mesa_is_format_integer_color(gl_format format);
 
+extern GLboolean
+_mesa_is_format_unsigned(gl_format format);
+
 extern GLenum
 _mesa_get_format_color_encoding(gl_format format);
 
@@ -343,8 +357,8 @@ _mesa_format_num_components(gl_format format);
 
 GLboolean
 _mesa_format_matches_format_and_type(gl_format gl_format,
-				     GLenum format, GLenum type);
-
+				     GLenum format, GLenum type,
+                                     GLboolean swapBytes);
 
 #ifdef __cplusplus
 }

@@ -36,6 +36,8 @@
 #include <float.h>
 
 #include "util/u_debug.h"
+#include "util/u_math.h"
+#include "util/u_half.h"
 
 #include "lp_bld_type.h"
 #include "lp_bld_const.h"
@@ -49,10 +51,12 @@ lp_mantissa(struct lp_type type)
 
    if(type.floating) {
       switch(type.width) {
+      case 16:
+         return 10;
       case 32:
          return 23;
       case 64:
-         return 53;
+         return 52;
       default:
          assert(0);
          return 0;
@@ -135,6 +139,8 @@ lp_const_min(struct lp_type type)
 
    if (type.floating) {
       switch(type.width) {
+      case 16:
+         return -65504;
       case 32:
          return -FLT_MAX;
       case 64:
@@ -168,6 +174,8 @@ lp_const_max(struct lp_type type)
 
    if (type.floating) {
       switch(type.width) {
+      case 16:
+         return 65504;
       case 32:
          return FLT_MAX;
       case 64:
@@ -195,6 +203,8 @@ lp_const_eps(struct lp_type type)
 {
    if (type.floating) {
       switch(type.width) {
+      case 16:
+         return 2E-10;
       case 32:
          return FLT_EPSILON;
       case 64:
@@ -246,7 +256,9 @@ lp_build_one(struct gallivm_state *gallivm, struct lp_type type)
 
    elem_type = lp_build_elem_type(gallivm, type);
 
-   if(type.floating)
+   if(type.floating && type.width == 16)
+      elems[0] = LLVMConstInt(elem_type, util_float_to_half(1.0f), 0);
+   else if(type.floating)
       elems[0] = LLVMConstReal(elem_type, 1.0);
    else if(type.fixed)
       elems[0] = LLVMConstInt(elem_type, 1LL << (type.width/2), 0);
@@ -257,7 +269,7 @@ lp_build_one(struct gallivm_state *gallivm, struct lp_type type)
    else {
       /* special case' -- 1.0 for normalized types is more easily attained if
        * we start with a vector consisting of all bits set */
-      LLVMTypeRef vec_type = LLVMVectorType(elem_type, type.length);
+      LLVMTypeRef vec_type = lp_build_vec_type(gallivm, type);
       LLVMValueRef vec = LLVMConstAllOnes(vec_type);
 
 #if 0
@@ -291,13 +303,15 @@ lp_build_const_elem(struct gallivm_state *gallivm,
    LLVMTypeRef elem_type = lp_build_elem_type(gallivm, type);
    LLVMValueRef elem;
 
-   if(type.floating) {
+   if(type.floating && type.width == 16) {
+      elem = LLVMConstInt(elem_type, util_float_to_half((float)val), 0);
+   } else if(type.floating) {
       elem = LLVMConstReal(elem_type, val);
    }
    else {
       double dscale = lp_const_scale(type);
 
-      elem = LLVMConstInt(elem_type, val*dscale + 0.5, 0);
+      elem = LLVMConstInt(elem_type, round(val*dscale), 0);
    }
 
    return elem;
@@ -351,32 +365,21 @@ lp_build_const_aos(struct gallivm_state *gallivm,
                    const unsigned char *swizzle)
 {
    const unsigned char default_swizzle[4] = {0, 1, 2, 3};
-   LLVMTypeRef elem_type;
    LLVMValueRef elems[LP_MAX_VECTOR_LENGTH];
    unsigned i;
 
    assert(type.length % 4 == 0);
    assert(type.length <= LP_MAX_VECTOR_LENGTH);
 
-   elem_type = lp_build_elem_type(gallivm, type);
+   lp_build_elem_type(gallivm, type);
 
    if(swizzle == NULL)
       swizzle = default_swizzle;
 
-   if(type.floating) {
-      elems[swizzle[0]] = LLVMConstReal(elem_type, r);
-      elems[swizzle[1]] = LLVMConstReal(elem_type, g);
-      elems[swizzle[2]] = LLVMConstReal(elem_type, b);
-      elems[swizzle[3]] = LLVMConstReal(elem_type, a);
-   }
-   else {
-      double dscale = lp_const_scale(type);
-
-      elems[swizzle[0]] = LLVMConstInt(elem_type, r*dscale + 0.5, 0);
-      elems[swizzle[1]] = LLVMConstInt(elem_type, g*dscale + 0.5, 0);
-      elems[swizzle[2]] = LLVMConstInt(elem_type, b*dscale + 0.5, 0);
-      elems[swizzle[3]] = LLVMConstInt(elem_type, a*dscale + 0.5, 0);
-   }
+   elems[swizzle[0]] = lp_build_const_elem(gallivm, type, r);
+   elems[swizzle[1]] = lp_build_const_elem(gallivm, type, g);
+   elems[swizzle[2]] = lp_build_const_elem(gallivm, type, b);
+   elems[swizzle[3]] = lp_build_const_elem(gallivm, type, a);
 
    for(i = 4; i < type.length; ++i)
       elems[i] = elems[i % 4];
@@ -391,7 +394,8 @@ lp_build_const_aos(struct gallivm_state *gallivm,
 LLVMValueRef
 lp_build_const_mask_aos(struct gallivm_state *gallivm,
                         struct lp_type type,
-                        unsigned mask)
+                        unsigned mask,
+                        unsigned channels)
 {
    LLVMTypeRef elem_type = LLVMIntTypeInContext(gallivm->context, type.width);
    LLVMValueRef masks[LP_MAX_VECTOR_LENGTH];
@@ -399,8 +403,8 @@ lp_build_const_mask_aos(struct gallivm_state *gallivm,
 
    assert(type.length <= LP_MAX_VECTOR_LENGTH);
 
-   for (j = 0; j < type.length; j += 4) {
-      for( i = 0; i < 4; ++i) {
+   for (j = 0; j < type.length; j += channels) {
+      for( i = 0; i < channels; ++i) {
          masks[j + i] = LLVMConstInt(elem_type,
                                      mask & (1 << i) ? ~0ULL : 0,
                                      1);
@@ -408,4 +412,74 @@ lp_build_const_mask_aos(struct gallivm_state *gallivm,
    }
 
    return LLVMConstVector(masks, type.length);
+}
+
+
+/**
+ * Performs lp_build_const_mask_aos, but first swizzles the mask
+ */
+LLVMValueRef
+lp_build_const_mask_aos_swizzled(struct gallivm_state *gallivm,
+                                 struct lp_type type,
+                                 unsigned mask,
+                                 unsigned channels,
+                                 const unsigned char *swizzle)
+{
+   unsigned i, mask_swizzled;
+   mask_swizzled = 0;
+
+   for (i = 0; i < channels; ++i) {
+      if (swizzle[i] < 4) {
+         mask_swizzled |= ((mask & (1 << swizzle[i])) >> swizzle[i]) << i;
+      }
+   }
+
+   return lp_build_const_mask_aos(gallivm, type, mask_swizzled, channels);
+}
+
+
+/**
+ * Build a zero-terminated constant string.
+ */
+LLVMValueRef
+lp_build_const_string(struct gallivm_state *gallivm,
+                      const char *str)
+{
+   unsigned len = strlen(str) + 1;
+   LLVMTypeRef i8 = LLVMInt8TypeInContext(gallivm->context);
+   LLVMValueRef string = LLVMAddGlobal(gallivm->module, LLVMArrayType(i8, len), "");
+   LLVMSetGlobalConstant(string, TRUE);
+   LLVMSetLinkage(string, LLVMInternalLinkage);
+   LLVMSetInitializer(string, LLVMConstStringInContext(gallivm->context, str, len, TRUE));
+   string = LLVMConstBitCast(string, LLVMPointerType(i8, 0));
+   return string;
+}
+
+
+/**
+ * Build a callable function pointer.
+ *
+ * We use function pointer constants instead of LLVMAddGlobalMapping()
+ * to work around a bug in LLVM 2.6, and for efficiency/simplicity.
+ */
+LLVMValueRef
+lp_build_const_func_pointer(struct gallivm_state *gallivm,
+                            const void *ptr,
+                            LLVMTypeRef ret_type,
+                            LLVMTypeRef *arg_types,
+                            unsigned num_args,
+                            const char *name)
+{
+   LLVMTypeRef function_type;
+   LLVMValueRef function;
+
+   function_type = LLVMFunctionType(ret_type, arg_types, num_args, 0);
+
+   function = lp_build_const_int_pointer(gallivm, ptr);
+
+   function = LLVMBuildBitCast(gallivm->builder, function,
+                               LLVMPointerType(function_type, 0),
+                               name);
+
+   return function;
 }

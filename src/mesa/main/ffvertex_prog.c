@@ -181,7 +181,7 @@ static void make_state_key( struct gl_context *ctx, struct state_key *key )
 	 key->light_twoside = 1;
 
       if (ctx->Light.ColorMaterialEnabled) {
-	 key->light_color_material_mask = ctx->Light.ColorMaterialBitmask;
+	 key->light_color_material_mask = ctx->Light._ColorMaterialBitmask;
       }
 
       for (i = 0; i < MAX_LIGHTS; i++) {
@@ -229,10 +229,8 @@ static void make_state_key( struct gl_context *ctx, struct state_key *key )
    if (ctx->Point._Attenuated)
       key->point_attenuated = 1;
 
-#if FEATURE_point_size_array
    if (ctx->Array.ArrayObj->VertexAttrib[VERT_ATTRIB_POINT_SIZE].Enabled)
       key->point_array = 1;
-#endif
 
    if (ctx->Texture._TexGenEnabled ||
        ctx->Texture._TexMatEnabled ||
@@ -378,7 +376,7 @@ static struct ureg swizzle1( struct ureg reg, int x )
 
 static struct ureg get_temp( struct tnl_program *p )
 {
-   int bit = _mesa_ffs( ~p->temp_in_use );
+   int bit = ffs( ~p->temp_in_use );
    if (!bit) {
       _mesa_problem(NULL, "%s: out of temporaries\n", __FILE__);
       exit(1);
@@ -546,7 +544,6 @@ static void emit_dst( struct prog_dst_register *dst,
    dst->WriteMask = mask ? mask : WRITEMASK_XYZW;
    dst->CondMask = COND_TR;  /* always pass cond test */
    dst->CondSwizzle = SWIZZLE_NOOP;
-   dst->CondSrc = 0;
    /* Check that bitfield sizes aren't exceeded */
    ASSERT(dst->Index == reg.idx);
 }
@@ -1572,7 +1569,7 @@ static void build_array_pointsize( struct tnl_program *p )
 
 static void build_tnl_program( struct tnl_program *p )
 {
-   /* Emit the program, starting with modelviewproject:
+   /* Emit the program, starting with the modelview, projection transforms:
     */
    build_hpos(p);
 
@@ -1658,7 +1655,6 @@ create_new_program( const struct state_key *key,
 /**
  * Return a vertex program which implements the current fixed-function
  * transform/lighting/texgen operations.
- * XXX move this into core mesa (main/)
  */
 struct gl_vertex_program *
 _mesa_get_fixed_func_vertex_program(struct gl_context *ctx)
@@ -1672,16 +1668,15 @@ _mesa_get_fixed_func_vertex_program(struct gl_context *ctx)
 
    /* Look for an already-prepared program for this state:
     */
-   prog = (struct gl_vertex_program *)
-      _mesa_search_program_cache(ctx->VertexProgram.Cache, &key, sizeof(key));
+   prog = gl_vertex_program(
+      _mesa_search_program_cache(ctx->VertexProgram.Cache, &key, sizeof(key)));
 
    if (!prog) {
       /* OK, we'll have to build a new one */
       if (0)
          printf("Build new TNL program\n");
 
-      prog = (struct gl_vertex_program *)
-         ctx->Driver.NewProgram(ctx, GL_VERTEX_PROGRAM_ARB, 0);
+      prog = gl_vertex_program(ctx->Driver.NewProgram(ctx, GL_VERTEX_PROGRAM_ARB, 0));
       if (!prog)
          return NULL;
 

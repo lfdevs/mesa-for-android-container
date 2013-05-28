@@ -34,7 +34,9 @@
 
 #include "main/macros.h"
 #include "main/mtypes.h"
+#include "main/glformats.h"
 #include "main/samplerobj.h"
+#include "main/texobj.h"
 
 #include "st_context.h"
 #include "st_cb_texture.h"
@@ -132,7 +134,7 @@ convert_sampler(struct st_context *st,
 
    texobj = ctx->Texture.Unit[texUnit]._Current;
    if (!texobj) {
-      texobj = st_get_default_texture(st);
+      texobj = _mesa_get_fallback_texture(ctx, TEXTURE_2D_INDEX);
    }
 
    msamp = _mesa_get_samplerobj(ctx, texUnit);
@@ -171,12 +173,17 @@ convert_sampler(struct st_context *st,
        msamp->BorderColor.ui[2] ||
        msamp->BorderColor.ui[3]) {
       struct gl_texture_image *teximg;
+      GLboolean is_integer = GL_FALSE;
 
       teximg = texobj->Image[0][texobj->BaseLevel];
 
-      st_translate_color(msamp->BorderColor.f,
-                         teximg ? teximg->_BaseFormat : GL_RGBA,
-                         sampler->border_color.f);
+      if (teximg) {
+         is_integer = _mesa_is_enum_format_integer(teximg->InternalFormat);
+      }
+
+      st_translate_color(&msamp->BorderColor,
+                         &sampler->border_color,
+                         teximg ? teximg->_BaseFormat : GL_RGBA, is_integer);
    }
 
    sampler->max_anisotropy = (msamp->MaxAnisotropy == 1.0 ?
@@ -194,78 +201,82 @@ convert_sampler(struct st_context *st,
 }
 
 
+/**
+ * Update the gallium driver's sampler state for fragment, vertex or
+ * geometry shader stage.
+ */
 static void
-update_vertex_samplers(struct st_context *st)
+update_shader_samplers(struct st_context *st,
+                       unsigned shader_stage,
+                       const struct gl_program *prog,
+                       unsigned max_units,
+                       struct pipe_sampler_state *samplers,
+                       unsigned *num_samplers)
 {
-   const struct gl_context *ctx = st->ctx;
-   struct gl_vertex_program *vprog = ctx->VertexProgram._Current;
-   GLuint su;
+   GLuint unit;
+   GLbitfield samplers_used;
+   const GLuint old_max = *num_samplers;
 
-   st->state.num_vertex_samplers = 0;
+   samplers_used = prog->SamplersUsed;
+
+   if (*num_samplers == 0 && samplers_used == 0x0)
+       return;
+
+   *num_samplers = 0;
 
    /* loop over sampler units (aka tex image units) */
-   for (su = 0; su < ctx->Const.MaxVertexTextureImageUnits; su++) {
-      struct pipe_sampler_state *sampler = st->state.vertex_samplers + su;
+   for (unit = 0; unit < max_units; unit++, samplers_used >>= 1) {
+      struct pipe_sampler_state *sampler = samplers + unit;
 
-      if (vprog->Base.SamplersUsed & (1 << su)) {
-	 GLuint texUnit;
+      if (samplers_used & 1) {
+         const GLuint texUnit = prog->SamplerUnits[unit];
 
-	 texUnit = vprog->Base.SamplerUnits[su];
+         convert_sampler(st, sampler, texUnit);
 
-	 convert_sampler(st, sampler, texUnit);
+         *num_samplers = unit + 1;
 
-	 st->state.num_vertex_samplers = su + 1;
-
-	 cso_single_vertex_sampler(st->cso_context, su, sampler);
-      } else {
-	 cso_single_vertex_sampler(st->cso_context, su, NULL);
+         cso_single_sampler(st->cso_context, shader_stage, unit, sampler);
       }
-   }
-   cso_single_vertex_sampler_done(st->cso_context);
-}
-
-
-static void
-update_fragment_samplers(struct st_context *st)
-{
-   const struct gl_context *ctx = st->ctx;
-   struct gl_fragment_program *fprog = ctx->FragmentProgram._Current;
-   GLuint su;
-
-   st->state.num_samplers = 0;
-
-   /* loop over sampler units (aka tex image units) */
-   for (su = 0; su < ctx->Const.MaxTextureImageUnits; su++) {
-      struct pipe_sampler_state *sampler = st->state.samplers + su;
-
-
-      if (fprog->Base.SamplersUsed & (1 << su)) {
-         GLuint texUnit;
-
-	 texUnit = fprog->Base.SamplerUnits[su];
-
-	 convert_sampler(st, sampler, texUnit);
-
-         st->state.num_samplers = su + 1;
-
-         /*printf("%s su=%u non-null\n", __FUNCTION__, su);*/
-         cso_single_sampler(st->cso_context, su, sampler);
+      else if (samplers_used != 0 || unit < old_max) {
+         cso_single_sampler(st->cso_context, shader_stage, unit, NULL);
       }
       else {
-         /*printf("%s su=%u null\n", __FUNCTION__, su);*/
-         cso_single_sampler(st->cso_context, su, NULL);
+         /* if we've reset all the old samplers and we have no more new ones */
+         break;
       }
    }
 
-   cso_single_sampler_done(st->cso_context);
+   cso_single_sampler_done(st->cso_context, shader_stage);
 }
 
 
 static void
 update_samplers(struct st_context *st)
 {
-    update_fragment_samplers(st);
-    update_vertex_samplers(st);
+   const struct gl_context *ctx = st->ctx;
+
+   update_shader_samplers(st,
+                          PIPE_SHADER_FRAGMENT,
+                          &ctx->FragmentProgram._Current->Base,
+                          ctx->Const.MaxTextureImageUnits,
+                          st->state.samplers[PIPE_SHADER_FRAGMENT],
+                          &st->state.num_samplers[PIPE_SHADER_FRAGMENT]);
+
+   update_shader_samplers(st,
+                          PIPE_SHADER_VERTEX,
+                          &ctx->VertexProgram._Current->Base,
+                          ctx->Const.MaxVertexTextureImageUnits,
+                          st->state.samplers[PIPE_SHADER_VERTEX],
+                          &st->state.num_samplers[PIPE_SHADER_VERTEX]);
+
+   if (ctx->GeometryProgram._Current) {
+      update_shader_samplers(st,
+                             PIPE_SHADER_GEOMETRY,
+                             &ctx->GeometryProgram._Current->Base,
+                             ctx->Const.MaxGeometryTextureImageUnits,
+                             st->state.samplers[PIPE_SHADER_GEOMETRY],
+                             &st->state.num_samplers[PIPE_SHADER_GEOMETRY]);
+   }
 }
 
 

@@ -79,7 +79,12 @@ LOCAL_STATIC_LIBRARIES += libmesa_egl_dri2
 # require i915_dri and/or i965_dri
 LOCAL_REQUIRED_MODULES += \
 	$(addsuffix _dri, $(filter i915 i965, $(MESA_GPU_DRIVERS)))
+
+ifeq ($(shell echo "$(MESA_ANDROID_VERSION) >= 4.2" | bc),1)
+    LOCAL_SHARED_LIBRARIES += \
+        libsync
 endif
+endif # MESA_BUILD_CLASSIC
 
 ifeq ($(strip $(MESA_BUILD_GALLIUM)),true)
 
@@ -107,14 +112,17 @@ gallium_DRIVERS += \
 LOCAL_SHARED_LIBRARIES += libdrm_nouveau
 endif
 
-# r300g/r600g
-ifneq ($(filter r300g r600g, $(MESA_GPU_DRIVERS)),)
+# r300g/r600g/radeonsi
+ifneq ($(filter r300g r600g radeonsi, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_winsys_radeon
 ifneq ($(filter r300g, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_pipe_r300
 endif
 ifneq ($(filter r600g, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_pipe_r600
+endif
+ifneq ($(filter radeonsi, $(MESA_GPU_DRIVERS)),)
+gallium_DRIVERS += libmesa_pipe_radeonsi
 endif
 endif
 

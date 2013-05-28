@@ -42,44 +42,19 @@ static INLINE void map_point(float *mat, float x, float y,
    }
 }
 
-static INLINE struct pipe_resource *
-renderer_buffer_create(struct xorg_renderer *r)
-{
-   struct pipe_resource *buf =
-      pipe_user_buffer_create(r->pipe->screen,
-                              r->buffer,
-                              sizeof(float)*
-                              r->buffer_size,
-/* XXX was: PIPE_BUFFER_USAGE_PIXEL/PIPE_BUFFER_USAGE_GPU_WRITE even though this is a vertex buffer??? */
-			      PIPE_BIND_VERTEX_BUFFER);
-   r->buffer_size = 0;
-
-   return buf;
-}
-
 static INLINE void
 renderer_draw(struct xorg_renderer *r)
 {
-   struct pipe_context *pipe = r->pipe;
-   struct pipe_resource *buf = 0;
    int num_verts = r->buffer_size/(r->attrs_per_vertex * NUM_COMPONENTS);
 
    if (!r->buffer_size)
       return;
 
-   buf = renderer_buffer_create(r);
+   cso_set_vertex_elements(r->cso, r->attrs_per_vertex, r->velems);
+   util_draw_user_vertex_buffer(r->cso, r->buffer, PIPE_PRIM_QUADS,
+                                num_verts, r->attrs_per_vertex);
 
-
-   if (buf) {
-      cso_set_vertex_elements(r->cso, r->attrs_per_vertex, r->velems);
-
-      util_draw_vertex_buffer(pipe, r->cso, buf, 0,
-                              PIPE_PRIM_QUADS,
-                              num_verts,  /* verts */
-                              r->attrs_per_vertex); /* attribs/vert */
-
-      pipe_resource_reference(&buf, NULL);
-   }
+   r->buffer_size = 0;
 }
 
 static INLINE void
@@ -238,56 +213,76 @@ add_vertex_data2(struct xorg_renderer *r,
                  struct pipe_resource *mask,
                  float *src_matrix, float *mask_matrix)
 {
-   float src_s0, src_t0, src_s1, src_t1;
-   float mask_s0, mask_t0, mask_s1, mask_t1;
-   float spt0[2], spt1[2];
-   float mpt0[2], mpt1[2];
+   float src_s0, src_t0, src_s1, src_t1, src_s2, src_t2, src_s3, src_t3;
+   float mask_s0, mask_t0, mask_s1, mask_t1, mask_s2, mask_t2, mask_s3, mask_t3;
+   float spt0[2], spt1[2], spt2[2], spt3[2];
+   float mpt0[2], mpt1[2], mpt2[2], mpt3[2];
 
    spt0[0] = srcX;
    spt0[1] = srcY;
-   spt1[0] = srcX + width;
-   spt1[1] = srcY + height;
+   spt1[0] = (srcX + width);
+   spt1[1] = srcY;
+   spt2[0] = (srcX + width);
+   spt2[1] = (srcY + height);
+   spt3[0] = srcX;
+   spt3[1] = (srcY + height);
 
    mpt0[0] = maskX;
    mpt0[1] = maskY;
-   mpt1[0] = maskX + width;
-   mpt1[1] = maskY + height;
+   mpt1[0] = (maskX + width);
+   mpt1[1] = maskY;
+   mpt2[0] = (maskX + width);
+   mpt2[1] = (maskY + height);
+   mpt3[0] = maskX;
+   mpt3[1] = (maskY + height);
 
    if (src_matrix) {
       map_point(src_matrix, spt0[0], spt0[1], &spt0[0], &spt0[1]);
       map_point(src_matrix, spt1[0], spt1[1], &spt1[0], &spt1[1]);
+      map_point(src_matrix, spt2[0], spt2[1], &spt2[0], &spt2[1]);
+      map_point(src_matrix, spt3[0], spt3[1], &spt3[0], &spt3[1]);
    }
 
    if (mask_matrix) {
       map_point(mask_matrix, mpt0[0], mpt0[1], &mpt0[0], &mpt0[1]);
       map_point(mask_matrix, mpt1[0], mpt1[1], &mpt1[0], &mpt1[1]);
+      map_point(mask_matrix, mpt2[0], mpt2[1], &mpt2[0], &mpt2[1]);
+      map_point(mask_matrix, mpt3[0], mpt3[1], &mpt3[0], &mpt3[1]);
    }
 
-   src_s0 = spt0[0] / src->width0;
-   src_t0 = spt0[1] / src->height0;
-   src_s1 = spt1[0] / src->width0;
-   src_t1 = spt1[1] / src->height0;
+   src_s0 =  spt0[0] / src->width0;
+   src_s1 =  spt1[0] / src->width0;
+   src_s2 =  spt2[0] / src->width0;
+   src_s3 =  spt3[0] / src->width0;
+   src_t0 =  spt0[1] / src->height0;
+   src_t1 =  spt1[1] / src->height0;
+   src_t2 =  spt2[1] / src->height0;
+   src_t3 =  spt3[1] / src->height0;
 
-   mask_s0 = mpt0[0] / mask->width0;
-   mask_t0 = mpt0[1] / mask->height0;
-   mask_s1 = mpt1[0] / mask->width0;
-   mask_t1 = mpt1[1] / mask->height0;
+   mask_s0 =  mpt0[0] / mask->width0;
+   mask_s1 =  mpt1[0] / mask->width0;
+   mask_s2 =  mpt2[0] / mask->width0;
+   mask_s3 =  mpt3[0] / mask->width0;
+   mask_t0 =  mpt0[1] / mask->height0;
+   mask_t1 =  mpt1[1] / mask->height0;
+   mask_t2 =  mpt2[1] / mask->height0;
+   mask_t3 =  mpt3[1] / mask->height0;
 
    /* 1st vertex */
    add_vertex_2tex(r, dstX, dstY,
                    src_s0, src_t0, mask_s0, mask_t0);
    /* 2nd vertex */
    add_vertex_2tex(r, dstX + width, dstY,
-                   src_s1, src_t0, mask_s1, mask_t0);
+                   src_s1, src_t1, mask_s1, mask_t1);
    /* 3rd vertex */
    add_vertex_2tex(r, dstX + width, dstY + height,
-                   src_s1, src_t1, mask_s1, mask_t1);
+                   src_s2, src_t2, mask_s2, mask_t2);
    /* 4th vertex */
    add_vertex_2tex(r, dstX, dstY + height,
-                   src_s0, src_t1, mask_s0, mask_t1);
+                   src_s3, src_t3, mask_s3, mask_t3);
 }
 
-static struct pipe_resource *
+static void
 setup_vertex_data_yuv(struct xorg_renderer *r,
                       float srcX, float srcY, float srcW, float srcH,
                       float dstX, float dstY, float dstW, float dstH,
@@ -317,8 +312,6 @@ setup_vertex_data_yuv(struct xorg_renderer *r,
    /* 4th vertex */
    add_vertex_1tex(r, dstX, dstY + dstH,
                    s0, t1);
-
-   return renderer_buffer_create(r);
 }
 
 
@@ -437,161 +430,8 @@ void renderer_set_constants(struct xorg_renderer *r,
       pipe_buffer_write(r->pipe, *cbuf,
                         0, param_bytes, params);
    }
-   r->pipe->set_constant_buffer(r->pipe, shader_type, 0, *cbuf);
+   pipe_set_constant_buffer(r->pipe, shader_type, 0, *cbuf);
 }
-
-
-void renderer_copy_prepare(struct xorg_renderer *r,
-                           struct pipe_surface *dst_surface,
-                           struct pipe_resource *src_texture)
-{
-   struct pipe_context *pipe = r->pipe;
-   struct pipe_screen *screen = pipe->screen;
-   struct xorg_shader shader;
-
-   assert(screen->is_format_supported(screen, dst_surface->format,
-                                      PIPE_TEXTURE_2D, 0,
-                                      PIPE_BIND_RENDER_TARGET));
-   (void) screen;
-
-
-   /* set misc state we care about */
-   {
-      struct pipe_blend_state blend;
-      memset(&blend, 0, sizeof(blend));
-      blend.rt[0].rgb_src_factor = PIPE_BLENDFACTOR_ONE;
-      blend.rt[0].alpha_src_factor = PIPE_BLENDFACTOR_ONE;
-      blend.rt[0].rgb_dst_factor = PIPE_BLENDFACTOR_ZERO;
-      blend.rt[0].alpha_dst_factor = PIPE_BLENDFACTOR_ZERO;
-      blend.rt[0].colormask = PIPE_MASK_RGBA;
-      cso_set_blend(r->cso, &blend);
-   }
-
-   /* sampler */
-   {
-      struct pipe_sampler_state sampler;
-      memset(&sampler, 0, sizeof(sampler));
-      sampler.wrap_s = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
-      sampler.wrap_t = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
-      sampler.wrap_r = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
-      sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
-      sampler.min_img_filter = PIPE_TEX_FILTER_NEAREST;
-      sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
-      sampler.normalized_coords = 1;
-      cso_single_sampler(r->cso, 0, &sampler);
-      cso_single_sampler_done(r->cso);
-   }
-
-   renderer_bind_destination(r, dst_surface, 
-                             dst_surface->width,
-                             dst_surface->height);
-
-   /* texture/sampler view */
-   {
-      struct pipe_sampler_view templ;
-      struct pipe_sampler_view *src_view;
-      u_sampler_view_default_template(&templ,
-                                      src_texture,
-                                      src_texture->format);
-      src_view = pipe->create_sampler_view(pipe, src_texture, &templ);
-      cso_set_fragment_sampler_views(r->cso, 1, &src_view);
-      pipe_sampler_view_reference(&src_view, NULL);
-   }
-
-   /* shaders */
-   shader = xorg_shaders_get(r->shaders,
-                             VS_COMPOSITE,
-                             FS_COMPOSITE);
-   cso_set_vertex_shader_handle(r->cso, shader.vs);
-   cso_set_fragment_shader_handle(r->cso, shader.fs);
-
-   r->buffer_size = 0;
-   r->attrs_per_vertex = 2;
-}
-
-struct pipe_resource *
-renderer_clone_texture(struct xorg_renderer *r,
-                       struct pipe_resource *src)
-{
-   enum pipe_format format;
-   struct pipe_context *pipe = r->pipe;
-   struct pipe_screen *screen = pipe->screen;
-   struct pipe_resource *pt;
-   struct pipe_resource templ;
-
-   /* the coming in texture should already have that invariance */
-   debug_assert(screen->is_format_supported(screen, src->format,
-                                            PIPE_TEXTURE_2D, 0,
-                                            PIPE_BIND_SAMPLER_VIEW));
-
-   format = src->format;
-
-   memset(&templ, 0, sizeof(templ));
-   templ.target = PIPE_TEXTURE_2D;
-   templ.format = format;
-   templ.last_level = 0;
-   templ.width0 = src->width0;
-   templ.height0 = src->height0;
-   templ.depth0 = 1;
-   templ.array_size = 1;
-   templ.bind = PIPE_BIND_SAMPLER_VIEW;
-
-   pt = screen->resource_create(screen, &templ);
-
-   debug_assert(!pt || pipe_is_referenced(&pt->reference));
-
-   if (!pt)
-      return NULL;
-
-   {
-      /* copy source framebuffer surface into texture */
-      struct pipe_box src_box;
-      u_box_origin_2d(src->width0, src->height0, &src_box);
-
-      pipe->resource_copy_region(pipe,
-                                 pt, /* dest */
-                                 0, /* dest_level */
-                                 0, 0, 0, /* destx/y/z */
-                                 src,
-                                 0, &src_box);
-   }
-
-   return pt;
-}
-
-
-void renderer_copy_pixmap(struct xorg_renderer *r,
-                          int dx, int dy,
-                          int sx, int sy,
-                          int width, int height,
-                          float src_width,
-                          float src_height)
-{
-   float s0, t0, s1, t1;
-   float x0, y0, x1, y1;
-
-
-   /* XXX: could put the texcoord scaling calculation into the vertex
-    * shader.
-    */
-   s0 = sx            / src_width;
-   s1 = (sx + width)  / src_width;
-   t0 = sy            / src_height;
-   t1 = (sy + height) / src_height;
-
-   x0 = dx;
-   x1 = dx + width;
-   y0 = dy;
-   y1 = dy + height;
-
-   /* draw quad */
-   renderer_draw_conditional(r, 4*8);
-   add_vertex_1tex(r, x0, y0, s0, t0);
-   add_vertex_1tex(r, x1, y0, s1, t0);
-   add_vertex_1tex(r, x1, y1, s1, t1);
-   add_vertex_1tex(r, x0, y1, s0, t1);
-}
-
 
 
 
@@ -600,26 +440,21 @@ void renderer_draw_yuv(struct xorg_renderer *r,
                        int dst_x, int dst_y, int dst_w, int dst_h,
                        struct pipe_resource **textures)
 {
-   struct pipe_context *pipe = r->pipe;
-   struct pipe_resource *buf = 0;
+   const int num_attribs = 2; /*pos + tex coord*/
 
-   buf = setup_vertex_data_yuv(r,
-                               src_x, src_y, src_w, src_h,
-                               dst_x, dst_y, dst_w, dst_h,
-                               textures);
+   setup_vertex_data_yuv(r,
+                         src_x, src_y, src_w, src_h,
+                         dst_x, dst_y, dst_w, dst_h,
+                         textures);
 
-   if (buf) {
-      const int num_attribs = 2; /*pos + tex coord*/
+   cso_set_vertex_elements(r->cso, num_attribs, r->velems);
 
-      cso_set_vertex_elements(r->cso, num_attribs, r->velems);
+   util_draw_user_vertex_buffer(r->cso, r->buffer,
+                                PIPE_PRIM_QUADS,
+                                4,  /* verts */
+                                num_attribs); /* attribs/vert */
 
-      util_draw_vertex_buffer(pipe, r->cso, buf, 0,
-                              PIPE_PRIM_QUADS,
-                              4,  /* verts */
-                              num_attribs); /* attribs/vert */
-
-      pipe_resource_reference(&buf, NULL);
-   }
+   r->buffer_size = 0;
 }
 
 void renderer_begin_solid(struct xorg_renderer *r)

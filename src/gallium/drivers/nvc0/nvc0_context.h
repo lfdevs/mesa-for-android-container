@@ -10,7 +10,9 @@
 #include "util/u_inlines.h"
 #include "util/u_dynarray.h"
 
+#ifdef NVC0_WITH_DRAW_MODULE
 #include "draw/draw_vertex.h"
+#endif
 
 #include "nv50/nv50_debug.h"
 #include "nvc0_winsys.h"
@@ -27,7 +29,9 @@
 #include "nvc0_3d.xml.h"
 #include "nvc0_2d.xml.h"
 #include "nvc0_m2mf.xml.h"
+#include "nve4_p2mf.xml.h"
 
+/* NOTE: must keep NVC0_NEW_...PROG in consecutive bits in this order */
 #define NVC0_NEW_BLEND        (1 << 0)
 #define NVC0_NEW_RASTERIZER   (1 << 1)
 #define NVC0_NEW_ZSA          (1 << 2)
@@ -50,32 +54,55 @@
 #define NVC0_NEW_TEXTURES     (1 << 19)
 #define NVC0_NEW_SAMPLERS     (1 << 20)
 #define NVC0_NEW_TFB_TARGETS  (1 << 21)
+#define NVC0_NEW_IDXBUF       (1 << 22)
 
-#define NVC0_BUFCTX_CONSTANT 0
-#define NVC0_BUFCTX_FRAME    1
-#define NVC0_BUFCTX_VERTEX   2
-#define NVC0_BUFCTX_TEXTURES 3
-#define NVC0_BUFCTX_TFB      4
-#define NVC0_BUFCTX_COUNT    5
+#define NVC0_BIND_FB            0
+#define NVC0_BIND_VTX           1
+#define NVC0_BIND_VTX_TMP       2
+#define NVC0_BIND_IDX           3
+#define NVC0_BIND_TEX(s, i)  (  4 + 32 * (s) + (i))
+#define NVC0_BIND_CB(s, i)   (164 + 16 * (s) + (i))
+#define NVC0_BIND_TFB         244
+#define NVC0_BIND_SCREEN      245
+#define NVC0_BIND_TLS         246
+#define NVC0_BIND_COUNT       247
+
+#define NVC0_BIND_2D            0
+#define NVC0_BIND_M2MF          0
+#define NVC0_BIND_FENCE         1
+
+
+struct nvc0_blitctx;
+
+boolean nvc0_blitctx_create(struct nvc0_context *);
 
 struct nvc0_context {
    struct nouveau_context base;
 
+   struct nouveau_bufctx *bufctx_3d;
+   struct nouveau_bufctx *bufctx;
+
    struct nvc0_screen *screen;
 
-   struct util_dynarray residents[NVC0_BUFCTX_COUNT];
-   unsigned residents_size;
+   void (*m2mf_copy_rect)(struct nvc0_context *,
+                          const struct nv50_m2mf_rect *dst,
+                          const struct nv50_m2mf_rect *src,
+                          uint32_t nblocksx, uint32_t nblocksy);
 
    uint32_t dirty;
 
    struct {
+      boolean flushed;
+      boolean rasterizer_discard;
+      boolean early_z_forced;
+      boolean prim_restart;
       uint32_t instance_elts; /* bitmask of per-instance elements */
       uint32_t instance_base;
+      uint32_t constant_vbos;
+      uint32_t constant_elts;
       int32_t index_bias;
-      boolean prim_restart;
-      boolean early_z;
       uint16_t scissor;
-      boolean rasterizer_discard;
+      uint8_t vbo_mode; /* 0 = normal, 1 = translate, 3 = translate, forced */
       uint8_t num_vtxbufs;
       uint8_t num_vtxelts;
       uint8_t num_textures[5];
@@ -99,21 +126,27 @@ struct nvc0_context {
    struct nvc0_program *gmtyprog;
    struct nvc0_program *fragprog;
 
-   struct pipe_resource *constbuf[5][16];
+   struct nvc0_constbuf constbuf[5][NVC0_MAX_PIPE_CONSTBUFS];
    uint16_t constbuf_dirty[5];
 
    struct pipe_vertex_buffer vtxbuf[PIPE_MAX_ATTRIBS];
    unsigned num_vtxbufs;
    struct pipe_index_buffer idxbuf;
-   uint32_t vbo_fifo; /* bitmask of vertex elements to be pushed to FIFO */
+   uint32_t constant_vbos;
    uint32_t vbo_user; /* bitmask of vertex buffers pointing to user memory */
-   unsigned vbo_min_index; /* from pipe_draw_info, for vertex upload */
-   unsigned vbo_max_index;
+   uint32_t vb_elt_first; /* from pipe_draw_info, for vertex upload */
+   uint32_t vb_elt_limit; /* max - min element (count - 1) */
+   uint32_t instance_off; /* current base vertex for instanced arrays */
+   uint32_t instance_max; /* last instance for current draw call */
 
    struct pipe_sampler_view *textures[5][PIPE_MAX_SAMPLERS];
    unsigned num_textures[5];
+   uint32_t textures_dirty[5];
    struct nv50_tsc_entry *samplers[5][PIPE_MAX_SAMPLERS];
    unsigned num_samplers[5];
+   uint16_t samplers_dirty[5];
+
+   uint32_t tex_handles[5][PIPE_MAX_SAMPLERS]; /* for nve4 */
 
    struct pipe_framebuffer_state framebuffer;
    struct pipe_blend_color blend_colour;
@@ -131,7 +164,14 @@ struct nvc0_context {
    struct pipe_stream_output_target *tfbbuf[4];
    unsigned num_tfbbufs;
 
+   struct pipe_query *cond_query;
+   uint cond_mode;
+
+   struct nvc0_blitctx *blit;
+
+#ifdef NVC0_WITH_DRAW_MODULE
    struct draw_context *draw;
+#endif
 };
 
 static INLINE struct nvc0_context *
@@ -140,37 +180,43 @@ nvc0_context(struct pipe_context *pipe)
    return (struct nvc0_context *)pipe;
 }
 
+static INLINE unsigned
+nvc0_shader_stage(unsigned pipe)
+{
+   switch (pipe) {
+   case PIPE_SHADER_VERTEX: return 0;
+/* case PIPE_SHADER_TESSELLATION_CONTROL: return 1; */
+/* case PIPE_SHADER_TESSELLATION_EVALUATION: return 2; */
+   case PIPE_SHADER_GEOMETRY: return 3;
+   case PIPE_SHADER_FRAGMENT: return 4;
+   case PIPE_SHADER_COMPUTE: return 5;
+   default:
+      assert(!"invalid PIPE_SHADER type");
+      return 0;
+   }
+}
+
+
 /* nvc0_context.c */
 struct pipe_context *nvc0_create(struct pipe_screen *, void *);
-
-void nvc0_default_flush_notify(struct nouveau_channel *);
-
-void nvc0_bufctx_emit_relocs(struct nvc0_context *);
-void nvc0_bufctx_add_resident(struct nvc0_context *, int ctx,
-                              struct nv04_resource *, uint32_t flags);
-void nvc0_bufctx_del_resident(struct nvc0_context *, int ctx,
-                              struct nv04_resource *);
-static INLINE void
-nvc0_bufctx_reset(struct nvc0_context *nvc0, int ctx)
-{
-   nvc0->residents_size -= nvc0->residents[ctx].size;
-   util_dynarray_resize(&nvc0->residents[ctx], 0);
-}
+void nvc0_bufctx_fence(struct nvc0_context *, struct nouveau_bufctx *,
+                       boolean on_flush);
+void nvc0_default_kick_notify(struct nouveau_pushbuf *);
 
 /* nvc0_draw.c */
 extern struct draw_stage *nvc0_draw_render_stage(struct nvc0_context *);
 
 /* nvc0_program.c */
-boolean nvc0_program_translate(struct nvc0_program *);
+boolean nvc0_program_translate(struct nvc0_program *, uint16_t chipset);
 boolean nvc0_program_upload_code(struct nvc0_context *, struct nvc0_program *);
 void nvc0_program_destroy(struct nvc0_context *, struct nvc0_program *);
 void nvc0_program_library_upload(struct nvc0_context *);
 
 /* nvc0_query.c */
 void nvc0_init_query_functions(struct nvc0_context *);
-void nvc0_query_pushbuf_submit(struct nouveau_channel *,
+void nvc0_query_pushbuf_submit(struct nouveau_pushbuf *,
                                struct pipe_query *, unsigned result_offset);
-void nvc0_query_fifo_wait(struct nouveau_channel *, struct pipe_query *);
+void nvc0_query_fifo_wait(struct nouveau_pushbuf *, struct pipe_query *);
 void nvc0_so_target_save_offset(struct pipe_context *,
                                 struct pipe_stream_output_target *, unsigned i,
                                 boolean *serialize);
@@ -202,7 +248,14 @@ extern void nvc0_init_surface_functions(struct nvc0_context *);
 /* nvc0_tex.c */
 void nvc0_validate_textures(struct nvc0_context *);
 void nvc0_validate_samplers(struct nvc0_context *);
+void nve4_set_tex_handles(struct nvc0_context *);
 
+struct pipe_sampler_view *
+nvc0_create_texture_view(struct pipe_context *,
+                         struct pipe_resource *,
+                         const struct pipe_sampler_view *,
+                         uint32_t flags,
+                         enum pipe_texture_target);
 struct pipe_sampler_view *
 nvc0_create_sampler_view(struct pipe_context *,
                          struct pipe_resource *,
@@ -210,19 +263,16 @@ nvc0_create_sampler_view(struct pipe_context *,
 
 /* nvc0_transfer.c */
 void
-nvc0_m2mf_transfer_rect(struct pipe_screen *pscreen,
-                        const struct nv50_m2mf_rect *dst,
-                        const struct nv50_m2mf_rect *src,
-                        uint32_t nblocksx, uint32_t nblocksy);
+nvc0_init_transfer_functions(struct nvc0_context *);
+
 void
 nvc0_m2mf_push_linear(struct nouveau_context *nv,
                       struct nouveau_bo *dst, unsigned offset, unsigned domain,
                       unsigned size, const void *data);
 void
-nvc0_m2mf_copy_linear(struct nouveau_context *nv,
-		      struct nouveau_bo *dst, unsigned dstoff, unsigned dstdom,
-		      struct nouveau_bo *src, unsigned srcoff, unsigned srcdom,
-		      unsigned size);
+nve4_p2mf_push_linear(struct nouveau_context *nv,
+                      struct nouveau_bo *dst, unsigned offset, unsigned domain,
+                      unsigned size, const void *data);
 void
 nvc0_cb_push(struct nouveau_context *,
              struct nouveau_bo *bo, unsigned domain,
@@ -239,10 +289,30 @@ nvc0_vertex_state_create(struct pipe_context *pipe,
 void
 nvc0_vertex_state_delete(struct pipe_context *pipe, void *hwcso);
 
-void nvc0_vertex_arrays_validate(struct nvc0_context *nvc0);
+void nvc0_vertex_arrays_validate(struct nvc0_context *);
+
+void nvc0_idxbuf_validate(struct nvc0_context *);
+
+/* nvc0_video.c */
+struct pipe_video_decoder *
+nvc0_create_decoder(struct pipe_context *context,
+                    enum pipe_video_profile profile,
+                    enum pipe_video_entrypoint entrypoint,
+                    enum pipe_video_chroma_format chroma_format,
+                    unsigned width, unsigned height,
+                    unsigned max_references,
+                    bool expect_chunked_decode);
+
+struct pipe_video_buffer *
+nvc0_video_buffer_create(struct pipe_context *pipe,
+                         const struct pipe_video_buffer *templat);
+
+int
+nvc0_screen_get_video_param(struct pipe_screen *pscreen,
+                            enum pipe_video_profile profile,
+                            enum pipe_video_cap param);
 
 /* nvc0_push.c */
 void nvc0_push_vbo(struct nvc0_context *, const struct pipe_draw_info *);
-void nvc0_push_vbo2(struct nvc0_context *, const struct pipe_draw_info *);
 
 #endif

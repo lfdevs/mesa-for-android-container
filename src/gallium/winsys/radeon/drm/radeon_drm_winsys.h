@@ -33,9 +33,12 @@
 #include "radeon_winsys.h"
 #include "os/os_thread.h"
 
+struct radeon_drm_cs;
+
 enum radeon_generation {
-    R300,
-    R600
+    DRV_R300,
+    DRV_R600,
+    DRV_SI
 };
 
 struct radeon_drm_winsys {
@@ -49,6 +52,7 @@ struct radeon_drm_winsys {
 
     struct pb_manager *kman;
     struct pb_manager *cman;
+    struct radeon_surface_manager *surf_man;
 
     uint32_t num_cpus;      /* Number of CPUs. */
 
@@ -56,6 +60,19 @@ struct radeon_drm_winsys {
     pipe_mutex hyperz_owner_mutex;
     struct radeon_drm_cs *cmask_owner;
     pipe_mutex cmask_owner_mutex;
+
+    /* rings submission thread */
+    pipe_mutex cs_stack_lock;
+    pipe_semaphore cs_queued;
+    /* we cannot use semaphore for empty queue because maintaining an even
+     * number of call to semaphore_wait and semaphore_signal is, to say the
+     * least, tricky
+     */
+    pipe_condvar cs_queue_empty;
+    pipe_thread thread;
+    int kill_thread;
+    int ncs;
+    struct radeon_drm_cs *cs_stack[RING_LAST];
 };
 
 static INLINE struct radeon_drm_winsys *
@@ -63,5 +80,7 @@ radeon_drm_winsys(struct radeon_winsys *base)
 {
     return (struct radeon_drm_winsys*)base;
 }
+
+void radeon_drm_ws_queue_cs(struct radeon_drm_winsys *ws, struct radeon_drm_cs *cs);
 
 #endif

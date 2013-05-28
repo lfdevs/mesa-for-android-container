@@ -84,8 +84,7 @@ _mesa_parse_arb_fragment_program(struct gl_context* ctx, GLenum target,
       return;
    }
 
-   if (program->Base.String != NULL)
-      free(program->Base.String);
+   free(program->Base.String);
 
    /* Copy the relevant contents of the arb_program struct into the
     * fragment_program struct.
@@ -120,9 +119,9 @@ _mesa_parse_arb_fragment_program(struct gl_context* ctx, GLenum target,
    program->PixelCenterInteger = state.option.PixelCenterInteger;
 
    program->UsesKill            = state.fragment.UsesKill;
+   program->UsesDFdy            = state.fragment.UsesDFdy;
 
-   if (program->Base.Instructions)
-      free(program->Base.Instructions);
+   free(program->Base.Instructions);
    program->Base.Instructions = prog.Instructions;
 
    if (program->Base.Parameters)
@@ -178,8 +177,7 @@ _mesa_parse_arb_vertex_program(struct gl_context *ctx, GLenum target,
       return;
    }
 
-   if (program->Base.String != NULL)
-      free(program->Base.String);
+   free(program->Base.String);
 
    /* Copy the relevant contents of the arb_program struct into the 
     * vertex_program struct.
@@ -201,8 +199,7 @@ _mesa_parse_arb_vertex_program(struct gl_context *ctx, GLenum target,
    program->IsPositionInvariant = (state.option.PositionInvariant)
       ? GL_TRUE : GL_FALSE;
 
-   if (program->Base.Instructions)
-      free(program->Base.Instructions);
+   free(program->Base.Instructions);
    program->Base.Instructions = prog.Instructions;
 
    if (program->Base.Parameters)

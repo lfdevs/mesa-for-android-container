@@ -75,10 +75,9 @@ st_render_mipmap(struct st_context *st,
 {
    struct pipe_context *pipe = st->pipe;
    struct pipe_screen *screen = pipe->screen;
-   struct pipe_sampler_view *psv = st_get_texture_sampler_view(stObj, pipe);
+   struct pipe_sampler_view *psv;
    const uint face = _mesa_tex_target_to_face(target);
 
-   assert(psv->texture == stObj->pt);
 #if 0
    assert(target != GL_TEXTURE_3D); /* implemented but untested */
 #endif
@@ -86,22 +85,18 @@ st_render_mipmap(struct st_context *st,
    /* check if we can render in the texture's format */
    /* XXX should probably kill this and always use util_gen_mipmap
       since this implements a sw fallback as well */
-   if (!screen->is_format_supported(screen, psv->format, psv->texture->target,
+   if (!screen->is_format_supported(screen, stObj->pt->format,
+                                    stObj->pt->target,
                                     0, PIPE_BIND_RENDER_TARGET)) {
       return FALSE;
    }
 
-   /* Disable conditional rendering. */
-   if (st->render_condition) {
-      pipe->render_condition(pipe, NULL, 0);
-   }
+   psv = st_create_texture_sampler_view(pipe, stObj->pt);
 
    util_gen_mipmap(st->gen_mipmap, psv, face, baseLevel, lastLevel,
                    PIPE_TEX_FILTER_LINEAR);
 
-   if (st->render_condition) {
-      pipe->render_condition(pipe, st->render_condition, st->condition_mode);
-   }
+   pipe_sampler_view_reference(&psv, NULL);
 
    return TRUE;
 }
@@ -117,30 +112,16 @@ compute_num_levels(struct gl_context *ctx,
                    struct gl_texture_object *texObj,
                    GLenum target)
 {
-   if (target == GL_TEXTURE_RECTANGLE_ARB) {
-      return 1;
-   }
-   else {
-      const struct gl_texture_image *baseImage = 
-         _mesa_get_tex_image(ctx, texObj, target, texObj->BaseLevel);
-      GLuint size, numLevels;
+   const struct gl_texture_image *baseImage;
+   GLuint numLevels;
 
-      size = MAX2(baseImage->Width2, baseImage->Height2);
-      size = MAX2(size, baseImage->Depth2);
+   baseImage = _mesa_get_tex_image(ctx, texObj, target, texObj->BaseLevel);
 
-      numLevels = texObj->BaseLevel;
+   numLevels = texObj->BaseLevel + baseImage->MaxNumLevels;
+   numLevels = MIN2(numLevels, texObj->MaxLevel + 1);
+   assert(numLevels >= 1);
 
-      while (size > 0) {
-         numLevels++;
-         size >>= 1;
-      }
-
-      numLevels = MIN2(numLevels, texObj->MaxLevel + 1);
-
-      assert(numLevels >= 1);
-
-      return numLevels;
-   }
+   return numLevels;
 }
 
 

@@ -31,6 +31,11 @@ const glsl_type glsl_type::_sampler3D_type =
    glsl_type(GL_SAMPLER_3D, GLSL_SAMPLER_DIM_3D, 0, 0, GLSL_TYPE_FLOAT,
 	     "sampler3D");
 
+const glsl_type glsl_type::_samplerCubeShadow_type =
+   glsl_type(GL_SAMPLER_CUBE_SHADOW,
+	     GLSL_SAMPLER_DIM_CUBE, 1, 0, GLSL_TYPE_FLOAT,
+             "samplerCubeShadow");
+
 const glsl_type *const glsl_type::error_type = & glsl_type::_error_type;
 const glsl_type *const glsl_type::void_type = & glsl_type::_void_type;
 
@@ -63,7 +68,12 @@ const glsl_type glsl_type::builtin_core_types[] = {
 };
 
 const glsl_type *const glsl_type::bool_type  = & builtin_core_types[0];
+const glsl_type *const glsl_type::bvec2_type = & builtin_core_types[1];
+const glsl_type *const glsl_type::bvec3_type = & builtin_core_types[2];
+const glsl_type *const glsl_type::bvec4_type = & builtin_core_types[3];
 const glsl_type *const glsl_type::int_type   = & builtin_core_types[4];
+const glsl_type *const glsl_type::ivec2_type = & builtin_core_types[5];
+const glsl_type *const glsl_type::ivec3_type = & builtin_core_types[6];
 const glsl_type *const glsl_type::ivec4_type = & builtin_core_types[7];
 const glsl_type *const glsl_type::float_type = & builtin_core_types[8];
 const glsl_type *const glsl_type::vec2_type = & builtin_core_types[9];
@@ -79,9 +89,9 @@ const glsl_type *const glsl_type::mat4_type = & builtin_core_types[14];
 /*@{*/
 
 static const struct glsl_struct_field gl_DepthRangeParameters_fields[] = {
-   { glsl_type::float_type, "near" },
-   { glsl_type::float_type, "far" },
-   { glsl_type::float_type, "diff" },
+   { glsl_type::float_type, "near", false },
+   { glsl_type::float_type, "far", false },
+   { glsl_type::float_type, "diff", false },
 };
 
 const glsl_type glsl_type::builtin_structure_types[] = {
@@ -96,58 +106,58 @@ const glsl_type glsl_type::builtin_structure_types[] = {
 /*@{*/
 
 static const struct glsl_struct_field gl_PointParameters_fields[] = {
-   { glsl_type::float_type, "size" },
-   { glsl_type::float_type, "sizeMin" },
-   { glsl_type::float_type, "sizeMax" },
-   { glsl_type::float_type, "fadeThresholdSize" },
-   { glsl_type::float_type, "distanceConstantAttenuation" },
-   { glsl_type::float_type, "distanceLinearAttenuation" },
-   { glsl_type::float_type, "distanceQuadraticAttenuation" },
+   { glsl_type::float_type, "size", false },
+   { glsl_type::float_type, "sizeMin", false },
+   { glsl_type::float_type, "sizeMax", false },
+   { glsl_type::float_type, "fadeThresholdSize", false },
+   { glsl_type::float_type, "distanceConstantAttenuation", false },
+   { glsl_type::float_type, "distanceLinearAttenuation", false },
+   { glsl_type::float_type, "distanceQuadraticAttenuation", false },
 };
 
 static const struct glsl_struct_field gl_MaterialParameters_fields[] = {
-   { glsl_type::vec4_type, "emission" },
-   { glsl_type::vec4_type, "ambient" },
-   { glsl_type::vec4_type, "diffuse" },
-   { glsl_type::vec4_type, "specular" },
-   { glsl_type::float_type, "shininess" },
+   { glsl_type::vec4_type, "emission", false },
+   { glsl_type::vec4_type, "ambient", false },
+   { glsl_type::vec4_type, "diffuse", false },
+   { glsl_type::vec4_type, "specular", false },
+   { glsl_type::float_type, "shininess", false },
 };
 
 static const struct glsl_struct_field gl_LightSourceParameters_fields[] = {
-   { glsl_type::vec4_type, "ambient" },
-   { glsl_type::vec4_type, "diffuse" },
-   { glsl_type::vec4_type, "specular" },
-   { glsl_type::vec4_type, "position" },
-   { glsl_type::vec4_type, "halfVector" },
-   { glsl_type::vec3_type, "spotDirection" },
-   { glsl_type::float_type, "spotExponent" },
-   { glsl_type::float_type, "spotCutoff" },
-   { glsl_type::float_type, "spotCosCutoff" },
-   { glsl_type::float_type, "constantAttenuation" },
-   { glsl_type::float_type, "linearAttenuation" },
-   { glsl_type::float_type, "quadraticAttenuation" },
+   { glsl_type::vec4_type, "ambient", false },
+   { glsl_type::vec4_type, "diffuse", false },
+   { glsl_type::vec4_type, "specular", false },
+   { glsl_type::vec4_type, "position", false },
+   { glsl_type::vec4_type, "halfVector", false },
+   { glsl_type::vec3_type, "spotDirection", false },
+   { glsl_type::float_type, "spotExponent", false },
+   { glsl_type::float_type, "spotCutoff", false },
+   { glsl_type::float_type, "spotCosCutoff", false },
+   { glsl_type::float_type, "constantAttenuation", false },
+   { glsl_type::float_type, "linearAttenuation", false },
+   { glsl_type::float_type, "quadraticAttenuation", false },
 };
 
 static const struct glsl_struct_field gl_LightModelParameters_fields[] = {
-   { glsl_type::vec4_type, "ambient" },
+   { glsl_type::vec4_type, "ambient", false },
 };
 
 static const struct glsl_struct_field gl_LightModelProducts_fields[] = {
-   { glsl_type::vec4_type, "sceneColor" },
+   { glsl_type::vec4_type, "sceneColor", false },
 };
 
 static const struct glsl_struct_field gl_LightProducts_fields[] = {
-   { glsl_type::vec4_type, "ambient" },
-   { glsl_type::vec4_type, "diffuse" },
-   { glsl_type::vec4_type, "specular" },
+   { glsl_type::vec4_type, "ambient", false },
+   { glsl_type::vec4_type, "diffuse", false },
+   { glsl_type::vec4_type, "specular", false },
 };
 
 static const struct glsl_struct_field gl_FogParameters_fields[] = {
-   { glsl_type::vec4_type, "color" },
-   { glsl_type::float_type, "density" },
-   { glsl_type::float_type, "start" },
-   { glsl_type::float_type, "end" },
-   { glsl_type::float_type, "scale" },
+   { glsl_type::vec4_type, "color", false },
+   { glsl_type::float_type, "density", false },
+   { glsl_type::float_type, "start", false },
+   { glsl_type::float_type, "end", false },
+   { glsl_type::float_type, "scale", false },
 };
 
 const glsl_type glsl_type::builtin_110_deprecated_structure_types[] = {
@@ -259,6 +269,18 @@ const glsl_type *const glsl_type::uvec3_type = & builtin_130_types[2];
 const glsl_type *const glsl_type::uvec4_type = & builtin_130_types[3];
 /*@}*/
 
+
+/** \name Types added in GLSL 1.40
+ */
+/*@{*/
+const glsl_type glsl_type::builtin_140_types[] = {
+   glsl_type(GL_INT_SAMPLER_2D_RECT,
+	     GLSL_SAMPLER_DIM_RECT, 0, 0, GLSL_TYPE_INT, "isampler2DRect"),
+   glsl_type(GL_UNSIGNED_INT_SAMPLER_2D_RECT,
+	     GLSL_SAMPLER_DIM_RECT, 0, 0, GLSL_TYPE_UINT, "usampler2DRect"),
+};
+/*@}*/
+
 /** \name Sampler types added by GL_ARB_texture_rectangle
  */
 /*@{*/
@@ -308,5 +330,20 @@ const glsl_type glsl_type::builtin_EXT_texture_buffer_object_types[] = {
 const glsl_type glsl_type::builtin_OES_EGL_image_external_types[] = {
    glsl_type(GL_SAMPLER_EXTERNAL_OES,
 	     GLSL_SAMPLER_DIM_EXTERNAL, 0, 0, GLSL_TYPE_FLOAT, "samplerExternalOES"),
+};
+/*@}*/
+
+/** \name Sampler types added by GL_ARB_texture_cube_map_array
+ */
+/*@{*/
+const glsl_type glsl_type::builtin_ARB_texture_cube_map_array_types[] = {
+   glsl_type(GL_SAMPLER_CUBE_MAP_ARRAY,
+	     GLSL_SAMPLER_DIM_CUBE, 0, 1, GLSL_TYPE_FLOAT, "samplerCubeArray"),
+   glsl_type(GL_SAMPLER_CUBE_MAP_ARRAY_SHADOW,
+	     GLSL_SAMPLER_DIM_CUBE, 1, 1, GLSL_TYPE_FLOAT, "samplerCubeArrayShadow"),
+   glsl_type(GL_INT_SAMPLER_CUBE_MAP_ARRAY,
+	     GLSL_SAMPLER_DIM_CUBE, 0, 1, GLSL_TYPE_INT, "isamplerCubeArray"),
+   glsl_type(GL_UNSIGNED_INT_SAMPLER_CUBE_MAP_ARRAY,
+	     GLSL_SAMPLER_DIM_CUBE, 0, 1, GLSL_TYPE_UINT, "usamplerCubeArray"),
 };
 /*@}*/

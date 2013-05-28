@@ -444,13 +444,15 @@ util_dump_shader_state(FILE *stream, const struct pipe_shader_state *state)
    util_dump_member_begin(stream, "stream_output");
    util_dump_struct_begin(stream, "pipe_stream_output_info");
    util_dump_member(stream, uint, &state->stream_output, num_outputs);
-   util_dump_member(stream, uint, &state->stream_output, stride);
+   util_dump_array(stream, uint, state->stream_output.stride,
+                   Elements(state->stream_output.stride));
    util_dump_array_begin(stream);
    for(i = 0; i < state->stream_output.num_outputs; ++i) {
       util_dump_elem_begin(stream);
       util_dump_struct_begin(stream, ""); /* anonymous */
       util_dump_member(stream, uint, &state->stream_output.output[i], register_index);
-      util_dump_member(stream, uint, &state->stream_output.output[i], register_mask);
+      util_dump_member(stream, uint, &state->stream_output.output[i], start_component);
+      util_dump_member(stream, uint, &state->stream_output.output[i], num_components);
       util_dump_member(stream, uint, &state->stream_output.output[i], output_buffer);
       util_dump_struct_end(stream);
       util_dump_elem_end(stream);
@@ -659,8 +661,6 @@ util_dump_surface(FILE *stream, const struct pipe_surface *state)
    util_dump_member(stream, uint, state, width);
    util_dump_member(stream, uint, state, height);
 
-   util_dump_member(stream, uint, state, usage);
-
    util_dump_member(stream, ptr, state, texture);
    util_dump_member(stream, uint, state, u.tex.level);
    util_dump_member(stream, uint, state, u.tex.first_layer);
@@ -681,12 +681,13 @@ util_dump_transfer(FILE *stream, const struct pipe_transfer *state)
    util_dump_struct_begin(stream, "pipe_transfer");
 
    util_dump_member(stream, ptr, state, resource);
-   /*util_dump_member(stream, uint, state, box);*/
-
+   util_dump_member(stream, uint, state, level);
+   util_dump_member(stream, uint, state, usage);
+   util_dump_member_begin(stream, "box");
+   util_dump_box(stream, &state->box);
+   util_dump_member_end(stream);
    util_dump_member(stream, uint, state, stride);
    util_dump_member(stream, uint, state, layer_stride);
-
-   /*util_dump_member(stream, ptr, state, data);*/
 
    util_dump_struct_end(stream);
 }
@@ -757,6 +758,79 @@ util_dump_draw_info(FILE *stream, const struct pipe_draw_info *state)
    util_dump_member(stream, uint, state, restart_index);
 
    util_dump_member(stream, ptr, state, count_from_stream_output);
+
+   util_dump_struct_end(stream);
+}
+
+void util_dump_box(FILE *stream, const struct pipe_box *box)
+{
+   if(!box) {
+      util_dump_null(stream);
+      return;
+   }
+
+   util_dump_struct_begin(stream, "pipe_box");
+
+   util_dump_member(stream, int, box, x);
+   util_dump_member(stream, int, box, y);
+   util_dump_member(stream, int, box, z);
+   util_dump_member(stream, int, box, width);
+   util_dump_member(stream, int, box, height);
+   util_dump_member(stream, int, box, depth);
+
+   util_dump_struct_end(stream);
+}
+
+void util_dump_blit_info(FILE *stream, const struct pipe_blit_info *info)
+{
+   char mask[7];
+
+   if (!info) {
+      util_dump_null(stream);
+      return;
+   }
+
+   util_dump_struct_begin(stream, "pipe_blit_info");
+
+   util_dump_member_begin(stream, "dst");
+   util_dump_struct_begin(stream, "dst");
+   util_dump_member(stream, ptr, &info->dst, resource);
+   util_dump_member(stream, uint, &info->dst, level);
+   util_dump_member(stream, format, &info->dst, format);
+   util_dump_member_begin(stream, "box");
+   util_dump_box(stream, &info->dst.box);
+   util_dump_member_end(stream);
+   util_dump_struct_end(stream);
+   util_dump_member_end(stream);
+
+   util_dump_member_begin(stream, "src");
+   util_dump_struct_begin(stream, "src");
+   util_dump_member(stream, ptr, &info->src, resource);
+   util_dump_member(stream, uint, &info->src, level);
+   util_dump_member(stream, format, &info->src, format);
+   util_dump_member_begin(stream, "box");
+   util_dump_box(stream, &info->src.box);
+   util_dump_member_end(stream);
+   util_dump_struct_end(stream);
+   util_dump_member_end(stream);
+
+   mask[0] = (info->mask & PIPE_MASK_R) ? 'R' : '-';
+   mask[1] = (info->mask & PIPE_MASK_G) ? 'G' : '-';
+   mask[2] = (info->mask & PIPE_MASK_B) ? 'B' : '-';
+   mask[3] = (info->mask & PIPE_MASK_A) ? 'A' : '-';
+   mask[4] = (info->mask & PIPE_MASK_Z) ? 'Z' : '-';
+   mask[5] = (info->mask & PIPE_MASK_S) ? 'S' : '-';
+   mask[6] = 0;
+
+   util_dump_member_begin(stream, "mask");
+   util_dump_string(stream, mask);
+   util_dump_member_end(stream);
+   util_dump_member(stream, uint, info, filter);
+
+   util_dump_member(stream, bool, info, scissor_enable);
+   util_dump_member_begin(stream, "scissor");
+   util_dump_scissor_state(stream, &info->scissor);
+   util_dump_member_end(stream);
 
    util_dump_struct_end(stream);
 }

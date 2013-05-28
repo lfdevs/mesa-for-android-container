@@ -32,9 +32,12 @@
 #include "pipe/p_compiler.h"
 #include "pipe/p_state.h"
 #include "lp_limits.h"
+#include "gallivm/lp_bld_type.h"
 
-extern PIPE_ALIGN_VAR(16) uint8_t lp_swizzled_cbuf[LP_MAX_THREADS][PIPE_MAX_COLOR_BUFS][TILE_SIZE * TILE_SIZE * 4];
+extern PIPE_ALIGN_VAR(LP_MIN_VECTOR_ALIGN)
+uint8_t lp_swizzled_cbuf[LP_MAX_THREADS][PIPE_MAX_COLOR_BUFS][TILE_SIZE * TILE_SIZE * 4];
 
-extern PIPE_ALIGN_VAR(16) uint8_t lp_dummy_tile[TILE_SIZE * TILE_SIZE * 4];
+extern PIPE_ALIGN_VAR(LP_MIN_VECTOR_ALIGN)
+uint8_t lp_dummy_tile[TILE_SIZE * TILE_SIZE * 4];
 
 #endif /* LP_MEMORY_H */

@@ -284,20 +284,29 @@ svga_tgsi_translate( const struct svga_shader *shader,
 
    if (unit == PIPE_SHADER_VERTEX) {
       emit.imm_start += key.vkey.need_prescale ? 2 : 0;
-      emit.imm_start += key.vkey.num_zero_stride_vertex_elements;
    }
 
    emit.nr_hw_float_const = (emit.imm_start + emit.info.file_max[TGSI_FILE_IMMEDIATE] + 1);
 
    emit.nr_hw_temp = emit.info.file_max[TGSI_FILE_TEMPORARY] + 1;
+   
+   if (emit.nr_hw_temp >= SVGA3D_TEMPREG_MAX) {
+      debug_printf("svga: too many temporary registers (%u)\n", emit.nr_hw_temp);
+      goto fail;
+   }
+
    emit.in_main_func = TRUE;
 
-   if (!svga_shader_emit_header( &emit ))
+   if (!svga_shader_emit_header( &emit )) {
+      debug_printf("svga: emit header failed\n");
       goto fail;
+   }
 
-   if (!svga_shader_emit_instructions( &emit, shader->tokens ))
+   if (!svga_shader_emit_instructions( &emit, shader->tokens )) {
+      debug_printf("svga: emit instructions failed\n");
       goto fail;
-   
+   }
+
    result = CALLOC_STRUCT(svga_shader_result);
    if (result == NULL)
       goto fail;
@@ -339,6 +348,8 @@ svga_translate_fragment_program( const struct svga_fragment_shader *fs,
 {
    struct svga_compile_key key;
 
+   memset(&key, 0, sizeof(key));
+
    memcpy(&key.fkey, fkey, sizeof *fkey);
 
    memcpy(key.generic_remap_table, fs->generic_remap_table,
@@ -354,6 +365,8 @@ svga_translate_vertex_program( const struct svga_vertex_shader *vs,
                                const struct svga_vs_compile_key *vkey )
 {
    struct svga_compile_key key;
+
+   memset(&key, 0, sizeof(key));
 
    memcpy(&key.vkey, vkey, sizeof *vkey);
 

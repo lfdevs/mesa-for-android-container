@@ -51,16 +51,17 @@ private:
    ir_variable *read_declaration(s_expression *);
    ir_if *read_if(s_expression *, ir_loop *);
    ir_loop *read_loop(s_expression *);
+   ir_call *read_call(s_expression *);
    ir_return *read_return(s_expression *);
    ir_rvalue *read_rvalue(s_expression *);
    ir_assignment *read_assignment(s_expression *);
    ir_expression *read_expression(s_expression *);
-   ir_call *read_call(s_expression *);
    ir_swizzle *read_swizzle(s_expression *);
    ir_constant *read_constant(s_expression *);
    ir_texture *read_texture(s_expression *);
 
    ir_dereference *read_dereference(s_expression *);
+   ir_dereference_variable *read_var_ref(s_expression *);
 };
 
 ir_reader::ir_reader(_mesa_glsl_parse_state *state) : state(state)
@@ -348,6 +349,8 @@ ir_reader::read_instruction(s_expression *expr, ir_loop *loop_ctx)
       inst = read_if(list, loop_ctx);
    } else if (strcmp(tag->value(), "loop") == 0) {
       inst = read_loop(list);
+   } else if (strcmp(tag->value(), "call") == 0) {
+      inst = read_call(list);
    } else if (strcmp(tag->value(), "return") == 0) {
       inst = read_return(list);
    } else if (strcmp(tag->value(), "function") == 0) {
@@ -397,13 +400,19 @@ ir_reader::read_declaration(s_expression *expr)
       } else if (strcmp(qualifier->value(), "auto") == 0) {
 	 var->mode = ir_var_auto;
       } else if (strcmp(qualifier->value(), "in") == 0) {
-	 var->mode = ir_var_in;
+	 var->mode = ir_var_function_in;
+      } else if (strcmp(qualifier->value(), "shader_in") == 0) {
+         var->mode = ir_var_shader_in;
       } else if (strcmp(qualifier->value(), "const_in") == 0) {
 	 var->mode = ir_var_const_in;
       } else if (strcmp(qualifier->value(), "out") == 0) {
-	 var->mode = ir_var_out;
+	 var->mode = ir_var_function_out;
+      } else if (strcmp(qualifier->value(), "shader_out") == 0) {
+	 var->mode = ir_var_shader_out;
       } else if (strcmp(qualifier->value(), "inout") == 0) {
-	 var->mode = ir_var_inout;
+	 var->mode = ir_var_function_inout;
+      } else if (strcmp(qualifier->value(), "temporary") == 0) {
+	 var->mode = ir_var_temporary;
       } else if (strcmp(qualifier->value(), "smooth") == 0) {
 	 var->interpolation = INTERP_QUALIFIER_SMOOTH;
       } else if (strcmp(qualifier->value(), "flat") == 0) {
@@ -521,8 +530,6 @@ ir_reader::read_rvalue(s_expression *expr)
       rvalue = read_swizzle(list);
    } else if (strcmp(tag->value(), "expression") == 0) {
       rvalue = read_expression(list);
-   } else if (strcmp(tag->value(), "call") == 0) {
-      rvalue = read_call(list);
    } else if (strcmp(tag->value(), "constant") == 0) {
       rvalue = read_constant(list);
    } else {
@@ -610,10 +617,20 @@ ir_reader::read_call(s_expression *expr)
 {
    s_symbol *name;
    s_list *params;
+   s_list *s_return = NULL;
 
-   s_pattern pat[] = { "call", name, params };
-   if (!MATCH(expr, pat)) {
-      ir_read_error(expr, "expected (call <name> (<param> ...))");
+   ir_dereference_variable *return_deref = NULL;
+
+   s_pattern void_pat[] = { "call", name, params };
+   s_pattern non_void_pat[] = { "call", name, s_return, params };
+   if (MATCH(expr, non_void_pat)) {
+      return_deref = read_var_ref(s_return);
+      if (return_deref == NULL) {
+	 ir_read_error(s_return, "when reading a call's return storage");
+	 return NULL;
+      }
+   } else if (!MATCH(expr, void_pat)) {
+      ir_read_error(expr, "expected (call <name> [<deref>] (<param> ...))");
       return NULL;
    }
 
@@ -643,7 +660,15 @@ ir_reader::read_call(s_expression *expr)
       return NULL;
    }
 
-   return new(mem_ctx) ir_call(callee, &parameters);
+   if (callee->return_type == glsl_type::void_type && return_deref) {
+      ir_read_error(expr, "call has return value storage but void type");
+      return NULL;
+   } else if (callee->return_type != glsl_type::void_type && !return_deref) {
+      ir_read_error(expr, "call has non-void type but no return value storage");
+      return NULL;
+   }
+
+   return new(mem_ctx) ir_call(callee, return_deref, &parameters);
 }
 
 ir_expression *
@@ -828,17 +853,11 @@ ir_reader::read_constant(s_expression *expr)
    return new(mem_ctx) ir_constant(type, &data);
 }
 
-ir_dereference *
-ir_reader::read_dereference(s_expression *expr)
+ir_dereference_variable *
+ir_reader::read_var_ref(s_expression *expr)
 {
    s_symbol *s_var;
-   s_expression *s_subject;
-   s_expression *s_index;
-   s_symbol *s_field;
-
    s_pattern var_pat[] = { "var_ref", s_var };
-   s_pattern array_pat[] = { "array_ref", s_subject, s_index };
-   s_pattern record_pat[] = { "record_ref", s_subject, s_field };
 
    if (MATCH(expr, var_pat)) {
       ir_variable *var = state->symbols->get_variable(s_var->value());
@@ -847,6 +866,23 @@ ir_reader::read_dereference(s_expression *expr)
 	 return NULL;
       }
       return new(mem_ctx) ir_dereference_variable(var);
+   }
+   return NULL;
+}
+
+ir_dereference *
+ir_reader::read_dereference(s_expression *expr)
+{
+   s_expression *s_subject;
+   s_expression *s_index;
+   s_symbol *s_field;
+
+   s_pattern array_pat[] = { "array_ref", s_subject, s_index };
+   s_pattern record_pat[] = { "record_ref", s_subject, s_field };
+
+   ir_dereference_variable *var_ref = read_var_ref(expr);
+   if (var_ref != NULL) {
+      return var_ref;
    } else if (MATCH(expr, array_pat)) {
       ir_rvalue *subject = read_rvalue(s_subject);
       if (subject == NULL) {

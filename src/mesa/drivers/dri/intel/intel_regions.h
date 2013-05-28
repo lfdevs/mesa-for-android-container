@@ -41,6 +41,10 @@
 #include "main/mtypes.h"
 #include "intel_bufmgr.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct intel_context;
 struct intel_buffer_object;
 
@@ -59,7 +63,7 @@ struct intel_region
    GLuint cpp;      /**< bytes per pixel */
    GLuint width;    /**< in pixels */
    GLuint height;   /**< in pixels */
-   GLuint pitch;    /**< in pixels */
+   GLuint pitch;    /**< in bytes */
    GLubyte *map;    /**< only non-NULL when region is actually mapped */
    GLuint map_refcount;  /**< Reference count for mapping */
 
@@ -129,12 +133,52 @@ void _mesa_copy_rect(GLubyte * dst,
                 const GLubyte * src,
                 GLuint src_pitch, GLuint src_x, GLuint src_y);
 
+void
+intel_region_get_tile_masks(struct intel_region *region,
+                            uint32_t *mask_x, uint32_t *mask_y,
+                            bool map_stencil_as_y_tiled);
+
+uint32_t
+intel_region_get_aligned_offset(struct intel_region *region, uint32_t x,
+                                uint32_t y, bool map_stencil_as_y_tiled);
+
+/**
+ * Used with images created with image_from_names
+ * to help support planar images.
+ */
+struct intel_image_format {
+   int fourcc;
+   int components;
+   int nplanes;
+   struct {
+      int buffer_index;
+      int width_shift;
+      int height_shift;
+      uint32_t dri_format;
+      int cpp;
+   } planes[3];
+};
+
 struct __DRIimageRec {
    struct intel_region *region;
    GLenum internal_format;
+   uint32_t dri_format;
    GLuint format;
-   GLenum data_type;
+   uint32_t offset;
+
+   /*
+    * Need to save these here between calls to
+    * image_from_names and calls to image_from_planar.
+    */
+   uint32_t strides[3];
+   uint32_t offsets[3];
+   struct intel_image_format *planar_format;
+
    void *data;
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

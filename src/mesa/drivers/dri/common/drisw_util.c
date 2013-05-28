@@ -68,7 +68,7 @@ driCreateNewScreen(int scrn, const __DRIextension **extensions,
 
     *driver_configs = driDriverAPI.InitScreen(psp);
     if (*driver_configs == NULL) {
-	FREE(psp);
+	free(psp);
 	return NULL;
     }
 
@@ -79,7 +79,7 @@ static void driDestroyScreen(__DRIscreen *psp)
 {
     if (psp) {
 	driDriverAPI.DestroyScreen(psp);
-	FREE(psp);
+	free(psp);
     }
 }
 
@@ -117,16 +117,20 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
 
     switch (api) {
     case __DRI_API_OPENGL:
-            mesa_api = API_OPENGL;
+            mesa_api = API_OPENGL_COMPAT;
             break;
     case __DRI_API_GLES:
             mesa_api = API_OPENGLES;
             break;
     case __DRI_API_GLES2:
+    case __DRI_API_GLES3:
             mesa_api = API_OPENGLES2;
             break;
     case __DRI_API_OPENGL_CORE:
+            mesa_api = API_OPENGL_CORE;
+            break;
     default:
+            *error = __DRI_CTX_ERROR_BAD_API;
             return NULL;
     }
 
@@ -149,6 +153,19 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
 	}
     }
 
+    /* Mesa does not support the GL_ARB_compatibilty extension or the
+     * compatibility profile.  This means that we treat a API_OPENGL_COMPAT 3.1 as
+     * API_OPENGL_CORE and reject API_OPENGL_COMPAT 3.2+.
+     */
+    if (mesa_api == API_OPENGL_COMPAT && major_version == 3 && minor_version == 1)
+       mesa_api = API_OPENGL_CORE;
+
+    if (mesa_api == API_OPENGL_COMPAT
+        && ((major_version > 3)
+            || (major_version == 3 && minor_version >= 2))) {
+       *error = __DRI_CTX_ERROR_BAD_API;
+       return NULL;
+    }
     /* There are no forward-compatible contexts before OpenGL 3.0.  The
      * GLX_ARB_create_context spec says:
      *
@@ -178,7 +195,7 @@ driCreateContextAttribs(__DRIscreen *screen, int api,
     if (!driDriverAPI.CreateContext(mesa_api, modes, pcp,
 				    major_version, minor_version,
 				    flags, error, shareCtx)) {
-        FREE(pcp);
+        free(pcp);
         return NULL;
     }
 
@@ -209,7 +226,7 @@ driDestroyContext(__DRIcontext *pcp)
 {
     if (pcp) {
 	driDriverAPI.DestroyContext(pcp);
-	FREE(pcp);
+	free(pcp);
     }
 }
 
@@ -289,7 +306,7 @@ static void dri_put_drawable(__DRIdrawable *pdp)
 	    return;
 
 	driDriverAPI.DestroyBuffer(pdp);
-	FREE(pdp);
+	free(pdp);
     }
 }
 
@@ -311,7 +328,7 @@ driCreateNewDrawable(__DRIscreen *psp,
     dri_get_drawable(pdp);
 
     if (!driDriverAPI.CreateBuffer(psp, pdp, &config->modes, GL_FALSE)) {
-	FREE(pdp);
+	free(pdp);
 	return NULL;
     }
 

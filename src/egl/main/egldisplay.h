@@ -103,9 +103,8 @@ struct _egl_extensions
    EGLBoolean KHR_reusable_sync;
    EGLBoolean KHR_fence_sync;
 
-   EGLBoolean KHR_surfaceless_gles1;
-   EGLBoolean KHR_surfaceless_gles2;
-   EGLBoolean KHR_surfaceless_opengl;
+   EGLBoolean KHR_surfaceless_context;
+   EGLBoolean KHR_create_context;
 
    EGLBoolean NOK_swap_region;
    EGLBoolean NOK_texture_from_pixmap;
@@ -113,6 +112,9 @@ struct _egl_extensions
    EGLBoolean ANDROID_image_native_buffer;
 
    EGLBoolean NV_post_sub_buffer;
+
+   EGLBoolean EXT_create_context_robustness;
+   EGLBoolean EXT_buffer_age;
 };
 
 

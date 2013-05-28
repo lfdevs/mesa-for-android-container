@@ -168,10 +168,8 @@ xmesa_init_display( Display *display )
             xmdpy->screen->destroy(xmdpy->screen);
             xmdpy->screen = NULL;
          }
-         if (xmdpy->smapi) {
-            FREE(xmdpy->smapi);
-            xmdpy->smapi = NULL;
-         }
+         free(xmdpy->smapi);
+         xmdpy->smapi = NULL;
 
          xmdpy->display = NULL;
       }
@@ -220,7 +218,7 @@ bits_per_pixel( XMesaVisual xmv )
    /* Create a temporary XImage */
    img = XCreateImage( dpy, visinfo->visual, visinfo->depth,
 		       ZPixmap, 0,           /*format, offset*/
-		       (char*) MALLOC(8),    /*data*/
+		       malloc(8),    /*data*/
 		       1, 1,                 /*width, height*/
 		       32,                   /*bitmap_pad*/
 		       0                     /*bytes_per_line*/
@@ -440,7 +438,6 @@ create_xmesa_buffer(Drawable d, BufferType type,
 {
    XMesaDisplay xmdpy = xmesa_init_display(vis->display);
    XMesaBuffer b;
-   uint width, height;
 
    ASSERT(type == WINDOW || type == PIXMAP || type == PBUFFER);
 
@@ -459,7 +456,7 @@ create_xmesa_buffer(Drawable d, BufferType type,
    b->type = type;
    b->cmap = cmap;
 
-   get_drawable_size(vis->display, d, &width, &height);
+   get_drawable_size(vis->display, d, &b->width, &b->height);
 
    /*
     * Create framebuffer, but we'll plug in our own renderbuffers below.
@@ -706,7 +703,7 @@ XMesaVisual XMesaCreateVisual( Display *display,
     * the struct but we may need some of the information contained in it
     * at a later time.
     */
-   v->visinfo = (XVisualInfo *) MALLOC(sizeof(*visinfo));
+   v->visinfo = (XVisualInfo *) malloc(sizeof(*visinfo));
    if (!v->visinfo) {
       free(v);
       return NULL;
@@ -800,8 +797,8 @@ XMesaVisual XMesaCreateVisual( Display *display,
 
    v->stvis.color_format = choose_pixel_format(v);
    if (v->stvis.color_format == PIPE_FORMAT_NONE) {
-      FREE(v->visinfo);
-      FREE(v);
+      free(v->visinfo);
+      free(v);
       return NULL;
    }
 
@@ -1370,12 +1367,12 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
 
       internal_format = choose_pixel_format(drawable->xm_visual);
 
-      tex_xfer = pipe_get_transfer(pipe, res,
-                                   0, 0,    /* level, layer */
-                                   PIPE_TRANSFER_WRITE,
-                                   x, y,
-                                   w, h);
-      if (!tex_xfer)
+      map = pipe_transfer_map(pipe, res,
+                              0, 0,    /* level, layer */
+                              PIPE_TRANSFER_WRITE,
+                              x, y,
+                              w, h, &tex_xfer);
+      if (!map)
          return;
 
       /* Grab the XImage that we want to turn into a texture. */
@@ -1387,14 +1384,7 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
                       ZPixmap);
 
       if (!img) {
-         pipe_transfer_destroy(pipe, tex_xfer);
-         return;
-      }
-
-      map = pipe_transfer_map(pipe, tex_xfer);
-
-      if (!map) {
-         pipe_transfer_destroy(pipe, tex_xfer);
+         pipe_transfer_unmap(pipe, tex_xfer);
          return;
       }
 
@@ -1408,8 +1398,6 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
                 ximage_stride);
 
       pipe_transfer_unmap(pipe, tex_xfer);
-
-      pipe_transfer_destroy(pipe, tex_xfer);
 
       st->teximage(st,
                    ST_TEXTURE_2D,

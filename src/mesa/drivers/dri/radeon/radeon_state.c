@@ -39,6 +39,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/light.h"
 #include "main/context.h"
 #include "main/framebuffer.h"
+#include "main/fbobject.h"
 #include "main/simple_list.h"
 #include "main/state.h"
 
@@ -305,22 +306,6 @@ static void radeonDepthMask( struct gl_context *ctx, GLboolean flag )
    }
 }
 
-static void radeonClearDepth( struct gl_context *ctx, GLclampd d )
-{
-   r100ContextPtr rmesa = R100_CONTEXT(ctx);
-   GLuint format = (rmesa->hw.ctx.cmd[CTX_RB3D_ZSTENCILCNTL] &
-		    RADEON_DEPTH_FORMAT_MASK);
-
-   switch ( format ) {
-   case RADEON_DEPTH_FORMAT_16BIT_INT_Z:
-      rmesa->radeon.state.depth.clear = d * 0x0000ffff;
-      break;
-   case RADEON_DEPTH_FORMAT_24BIT_INT_Z:
-      rmesa->radeon.state.depth.clear = d * 0x00ffffff;
-      break;
-   }
-}
-
 
 /* =============================================================
  * Fog
@@ -452,6 +437,7 @@ static void radeonCullFace( struct gl_context *ctx, GLenum unused )
 static void radeonFrontFace( struct gl_context *ctx, GLenum mode )
 {
    r100ContextPtr rmesa = R100_CONTEXT(ctx);
+   int cull_face = (mode == GL_CW) ? RADEON_FFACE_CULL_CW : RADEON_FFACE_CULL_CCW;
 
    RADEON_STATECHANGE( rmesa, set );
    rmesa->hw.set.cmd[SET_SE_CNTL] &= ~RADEON_FFACE_CULL_DIR_MASK;
@@ -460,18 +446,12 @@ static void radeonFrontFace( struct gl_context *ctx, GLenum mode )
    rmesa->hw.tcl.cmd[TCL_UCP_VERT_BLEND_CTL] &= ~RADEON_CULL_FRONT_IS_CCW;
 
    /* Winding is inverted when rendering to FBO */
-   if (ctx->DrawBuffer && ctx->DrawBuffer->Name)
-      mode = (mode == GL_CW) ? GL_CCW : GL_CW;
+   if (ctx->DrawBuffer && _mesa_is_user_fbo(ctx->DrawBuffer))
+      cull_face = (mode == GL_CCW) ? RADEON_FFACE_CULL_CW : RADEON_FFACE_CULL_CCW;
+   rmesa->hw.set.cmd[SET_SE_CNTL] |= cull_face;
 
-   switch ( mode ) {
-   case GL_CW:
-      rmesa->hw.set.cmd[SET_SE_CNTL] |= RADEON_FFACE_CULL_CW;
-      break;
-   case GL_CCW:
-      rmesa->hw.set.cmd[SET_SE_CNTL] |= RADEON_FFACE_CULL_CCW;
+   if ( mode == GL_CCW )
       rmesa->hw.tcl.cmd[TCL_UCP_VERT_BLEND_CTL] |= RADEON_CULL_FRONT_IS_CCW;
-      break;
-   }
 }
 
 
@@ -722,8 +702,8 @@ static void check_twoside_fallback( struct gl_context *ctx )
 
    if (ctx->Light.Enabled && ctx->Light.Model.TwoSide) {
       if (ctx->Light.ColorMaterialEnabled &&
-	  (ctx->Light.ColorMaterialBitmask & BACK_MATERIAL_BITS) !=
-	  ((ctx->Light.ColorMaterialBitmask & FRONT_MATERIAL_BITS)<<1))
+	  (ctx->Light._ColorMaterialBitmask & BACK_MATERIAL_BITS) !=
+	  ((ctx->Light._ColorMaterialBitmask & FRONT_MATERIAL_BITS)<<1))
 	 fallback = GL_TRUE;
       else {
 	 for (i = MAT_ATTRIB_FRONT_AMBIENT; i < MAT_ATTRIB_FRONT_INDEXES; i+=2)
@@ -751,7 +731,7 @@ static void radeonColorMaterial( struct gl_context *ctx, GLenum face, GLenum mod
 			   (3 << RADEON_SPECULAR_SOURCE_SHIFT));
 
    if (ctx->Light.ColorMaterialEnabled) {
-      GLuint mask = ctx->Light.ColorMaterialBitmask;
+      GLuint mask = ctx->Light._ColorMaterialBitmask;
 
       if (mask & MAT_BIT_FRONT_EMISSION) {
 	 light_model_ctl1 |= (RADEON_LM_SOURCE_VERTEX_DIFFUSE <<
@@ -812,7 +792,7 @@ void radeonUpdateMaterial( struct gl_context *ctx )
    GLuint mask = ~0;
 
    if (ctx->Light.ColorMaterialEnabled)
-      mask &= ~ctx->Light.ColorMaterialBitmask;
+      mask &= ~ctx->Light._ColorMaterialBitmask;
 
    if (RADEON_DEBUG & RADEON_STATE)
       fprintf(stderr, "%s\n", __FUNCTION__);
@@ -1346,15 +1326,6 @@ static void radeonStencilOpSeparate( struct gl_context *ctx, GLenum face, GLenum
    }
 }
 
-static void radeonClearStencil( struct gl_context *ctx, GLint s )
-{
-   r100ContextPtr rmesa = R100_CONTEXT(ctx);
-
-   rmesa->radeon.state.stencil.clear =
-      ((GLuint) (ctx->Stencil.Clear & 0xff) |
-       (0xff << RADEON_STENCIL_MASK_SHIFT) |
-       ((ctx->Stencil.WriteMask[0] & 0xff) << RADEON_STENCIL_WRITEMASK_SHIFT));
-}
 
 
 /* =============================================================
@@ -1379,7 +1350,7 @@ void radeonUpdateWindow( struct gl_context *ctx )
    GLfloat xoffset = 0.0;
    GLfloat yoffset = dPriv ? (GLfloat) dPriv->h : 0;
    const GLfloat *v = ctx->Viewport._WindowMap.m;
-   const GLboolean render_to_fbo = (ctx->DrawBuffer ? (ctx->DrawBuffer->Name != 0) : 0);
+   const GLboolean render_to_fbo = (ctx->DrawBuffer ? _mesa_is_user_fbo(ctx->DrawBuffer) : 0);
    const GLfloat depthScale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
    GLfloat y_scale, y_bias;
 
@@ -1482,23 +1453,6 @@ void radeonUpdateViewportOffset( struct gl_context *ctx )
 /* =============================================================
  * Miscellaneous
  */
-
-static void radeonClearColor( struct gl_context *ctx,
-                              const union gl_color_union color )
-{
-   r100ContextPtr rmesa = R100_CONTEXT(ctx);
-   GLubyte c[4];
-   struct radeon_renderbuffer *rrb;
-
-   rrb = radeon_get_colorbuffer(&rmesa->radeon);
-   if (!rrb)
-     return;
-     
-   _mesa_unclamped_float_rgba_to_ubyte(c, color.f);
-   rmesa->radeon.state.color.clear = radeonPackColor( rrb->cpp,
-					       c[0], c[1], c[2], c[3] );
-}
-
 
 static void radeonRenderMode( struct gl_context *ctx, GLenum mode )
 {
@@ -1891,7 +1845,7 @@ void radeonUploadTexMatrix( r100ContextPtr rmesa,
    int idx = TEXMAT_0 + unit;
    float *dest = ((float *)RADEON_DB_STATE( mat[idx] )) + MAT_ELT_0;
    int i;
-   struct gl_texture_unit tUnit = rmesa->radeon.glCtx->Texture.Unit[unit];
+   struct gl_texture_unit tUnit = rmesa->radeon.glCtx.Texture.Unit[unit];
    GLfloat *src = rmesa->tmpmat[unit].m;
 
    rmesa->TexMatColSwap &= ~(1 << unit);
@@ -2233,9 +2187,6 @@ void radeonInitStateFuncs( struct gl_context *ctx )
    ctx->Driver.AlphaFunc		= radeonAlphaFunc;
    ctx->Driver.BlendEquationSeparate	= radeonBlendEquationSeparate;
    ctx->Driver.BlendFuncSeparate	= radeonBlendFuncSeparate;
-   ctx->Driver.ClearColor		= radeonClearColor;
-   ctx->Driver.ClearDepth		= radeonClearDepth;
-   ctx->Driver.ClearStencil		= radeonClearStencil;
    ctx->Driver.ClipPlane		= radeonClipPlane;
    ctx->Driver.ColorMask		= radeonColorMask;
    ctx->Driver.CullFace			= radeonCullFace;

@@ -57,6 +57,7 @@ struct dri_drawable
    unsigned old_h;
 
    struct pipe_resource *textures[ST_ATTACHMENT_COUNT];
+   struct pipe_resource *msaa_textures[ST_ATTACHMENT_COUNT];
    unsigned int texture_mask, texture_stamp;
 
    struct pipe_fence_handle *swap_fences[DRI_SWAP_FENCES_MAX];
@@ -64,6 +65,7 @@ struct dri_drawable
    unsigned int head;
    unsigned int tail;
    unsigned int desired_fences;
+   boolean flushing; /* prevents recursion in dri_flush */
 
    /* used only by DRISW */
    struct pipe_surface *drisw_surface;
@@ -75,7 +77,8 @@ struct dri_drawable
 
    void (*update_drawable_info)(struct dri_drawable *drawable);
 
-   void (*flush_frontbuffer)(struct dri_drawable *drawable,
+   void (*flush_frontbuffer)(struct dri_context *ctx,
+                             struct dri_drawable *drawable,
                              enum st_attachment_type statt);
 
    void (*update_tex_buffer)(struct dri_drawable *drawable,
@@ -105,6 +108,17 @@ dri_drawable_get_format(struct dri_drawable *drawable,
                         enum st_attachment_type statt,
                         enum pipe_format *format,
                         unsigned *bind);
+
+void
+dri_msaa_resolve(struct dri_context *ctx,
+                 struct dri_drawable *drawable,
+                 enum st_attachment_type att);
+
+void
+dri_flush(__DRIcontext *cPriv,
+          __DRIdrawable *dPriv,
+          unsigned flags,
+          enum __DRI2throttleReason reason);
 
 extern const __DRItexBufferExtension driTexBufferExtension;
 extern const __DRI2throttleExtension dri2ThrottleExtension;

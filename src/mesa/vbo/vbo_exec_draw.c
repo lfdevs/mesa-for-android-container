@@ -38,9 +38,6 @@
 #include "vbo_noop.h"
 
 
-#if FEATURE_beginend
-
-
 static void
 vbo_exec_debug_verts( struct vbo_exec_context *exec )
 {
@@ -174,26 +171,23 @@ vbo_exec_bind_arrays( struct gl_context *ctx )
    switch (get_program_mode(exec->ctx)) {
    case VP_NONE:
       for (attr = 0; attr < VERT_ATTRIB_FF_MAX; attr++) {
-         exec->vtx.inputs[attr] = &vbo->legacy_currval[attr];
+         exec->vtx.inputs[attr] = &vbo->currval[VBO_ATTRIB_POS+attr];
       }
       for (attr = 0; attr < MAT_ATTRIB_MAX; attr++) {
          ASSERT(VERT_ATTRIB_GENERIC(attr) < Elements(exec->vtx.inputs));
-         exec->vtx.inputs[VERT_ATTRIB_GENERIC(attr)] = &vbo->mat_currval[attr];
+         exec->vtx.inputs[VERT_ATTRIB_GENERIC(attr)] =
+            &vbo->currval[VBO_ATTRIB_MAT_FRONT_AMBIENT+attr];
       }
       map = vbo->map_vp_none;
       break;
-   case VP_NV:
    case VP_ARB:
-      /* The aliasing of attributes for NV vertex programs has already
-       * occurred.  NV vertex programs cannot access material values,
-       * nor attributes greater than VERT_ATTRIB_TEX7.  
-       */
       for (attr = 0; attr < VERT_ATTRIB_FF_MAX; attr++) {
-         exec->vtx.inputs[attr] = &vbo->legacy_currval[attr];
+         exec->vtx.inputs[attr] = &vbo->currval[VBO_ATTRIB_POS+attr];
       }
       for (attr = 0; attr < VERT_ATTRIB_GENERIC_MAX; attr++) {
          ASSERT(VERT_ATTRIB_GENERIC(attr) < Elements(exec->vtx.inputs));
-         exec->vtx.inputs[VERT_ATTRIB_GENERIC(attr)] = &vbo->generic_currval[attr];
+         exec->vtx.inputs[VERT_ATTRIB_GENERIC(attr)] =
+            &vbo->currval[VBO_ATTRIB_GENERIC0+attr];
       }
       map = vbo->map_vp_arb;
 
@@ -213,9 +207,6 @@ vbo_exec_bind_arrays( struct gl_context *ctx )
       assert(0);
    }
 
-   /* Make all active attributes (including edgeflag) available as
-    * arrays of floats.
-    */
    for (attr = 0; attr < VERT_ATTRIB_MAX ; attr++) {
       const GLuint src = map[attr];
 
@@ -241,7 +232,9 @@ vbo_exec_bind_arrays( struct gl_context *ctx )
 	 arrays[attr].Size = exec->vtx.attrsz[src];
 	 arrays[attr].StrideB = exec->vtx.vertex_size * sizeof(GLfloat);
 	 arrays[attr].Stride = exec->vtx.vertex_size * sizeof(GLfloat);
-	 arrays[attr].Type = GL_FLOAT;
+	 arrays[attr].Type = exec->vtx.attrtype[src];
+	 arrays[attr].Integer =
+               vbo_attrtype_to_integer_flag(exec->vtx.attrtype[src]);
          arrays[attr].Format = GL_RGBA;
 	 arrays[attr].Enabled = 1;
          arrays[attr]._ElementSize = arrays[attr].Size * sizeof(GLfloat);
@@ -251,11 +244,11 @@ vbo_exec_bind_arrays( struct gl_context *ctx )
 	 arrays[attr]._MaxElement = count; /* ??? */
 
          varying_inputs |= VERT_BIT(attr);
-         ctx->NewState |= _NEW_ARRAY;
       }
    }
 
    _mesa_set_varying_vp_inputs( ctx, varying_inputs );
+   ctx->NewDriverState |= ctx->DriverFlags.NewArray;
 }
 
 
@@ -388,7 +381,7 @@ vbo_exec_vtx_flush(struct vbo_exec_context *exec, GLboolean keepUnmapped)
       if (exec->vtx.copied.nr != exec->vtx.vert_count) {
 	 struct gl_context *ctx = exec->ctx;
 	 
-	 /* Before the update_state() as this may raise _NEW_ARRAY
+	 /* Before the update_state() as this may raise _NEW_VARYING_VP_INPUTS
           * from _mesa_set_varying_vp_inputs().
 	  */
 	 vbo_exec_bind_arrays( ctx );
@@ -405,8 +398,7 @@ vbo_exec_vtx_flush(struct vbo_exec_context *exec, GLboolean keepUnmapped)
 		   exec->vtx.vert_count);
 
 	 vbo_context(ctx)->draw_prims( ctx, 
-				       exec->vtx.inputs, 
-				       exec->vtx.prim, 
+				       exec->vtx.prim,
 				       exec->vtx.prim_count,
 				       NULL,
 				       GL_TRUE,
@@ -440,6 +432,3 @@ vbo_exec_vtx_flush(struct vbo_exec_context *exec, GLboolean keepUnmapped)
    exec->vtx.prim_count = 0;
    exec->vtx.vert_count = 0;
 }
-
-
-#endif /* FEATURE_beginend */

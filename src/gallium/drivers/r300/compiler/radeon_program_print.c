@@ -109,6 +109,22 @@ static void rc_print_comparefunc(FILE * f, const char * lhs, rc_compare_func fun
 	}
 }
 
+static void rc_print_inline_float(FILE * f, int index)
+{
+	int r300_exponent = (index >> 3) & 0xf;
+	unsigned r300_mantissa = index & 0x7;
+	unsigned float_exponent;
+	unsigned real_float;
+	float * print_float = (float*) &real_float;
+
+	r300_exponent -= 7;
+	float_exponent = r300_exponent + 127;
+	real_float = (r300_mantissa << 20) | (float_exponent << 23);
+
+	fprintf(f, "%f (0x%x)", *print_float, index);
+
+}
+
 static void rc_print_register(FILE * f, rc_register_file file, int index, unsigned int reladdr)
 {
 	if (file == RC_FILE_NONE) {
@@ -118,6 +134,8 @@ static void rc_print_register(FILE * f, rc_register_file file, int index, unsign
 		case RC_SPECIAL_ALU_RESULT: fprintf(f, "aluresult"); break;
 		default: fprintf(f, "special[%i]", index); break;
 		}
+	} else if (file == RC_FILE_INLINE) {
+		rc_print_inline_float(f, index);
 	} else {
 		const char * filename;
 		switch(file) {
@@ -309,6 +327,12 @@ static void rc_print_normal_instruction(FILE * f, struct rc_instruction * inst, 
 			(inst->U.I.WriteALUResult == RC_ALURESULT_X) ? "x" : "w",
 			inst->U.I.ALUResultCompare, "0");
 		fprintf(f, ")]");
+	}
+
+	if (inst->U.I.DstReg.Pred == RC_PRED_SET) {
+		fprintf(f, " PRED_SET");
+	} else if (inst->U.I.DstReg.Pred == RC_PRED_INV) {
+		fprintf(f, " PRED_INV");
 	}
 
 	fprintf(f, "\n");

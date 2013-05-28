@@ -37,9 +37,6 @@
 /* Some debugging info.  */
 
 #ifdef DEBUG
-#undef _R
-#undef _G
-#undef _B
 #include <ctype.h>
 
 int debug_xfonts = 0;
@@ -244,7 +241,7 @@ glXUseXFont(Font font, int first, int count, int listbase)
    max_bm_width = (max_width + 7) / 8;
    max_bm_height = max_height;
 
-   bm = (GLubyte *) MALLOC((max_bm_width * max_bm_height) * sizeof(GLubyte));
+   bm = (GLubyte *) malloc((max_bm_width * max_bm_height) * sizeof(GLubyte));
    if (!bm) {
       XFreeFontInfo(NULL, fs, 1);
       _mesa_error(NULL, GL_OUT_OF_MEMORY,
@@ -360,7 +357,7 @@ glXUseXFont(Font font, int first, int count, int listbase)
       glEndList();
    }
 
-   FREE(bm);
+   free(bm);
    XFreeFontInfo(NULL, fs, 1);
    XFreeGC(dpy, gc);
 

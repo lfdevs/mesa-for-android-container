@@ -29,21 +29,9 @@
  */
 struct brw_sampler_prog_key_data {
    /**
-    * Per-sampler comparison functions:
-    *
-    * If comparison mode is GL_COMPARE_R_TO_TEXTURE, then this is set to one
-    * of GL_NEVER, GL_LESS, GL_EQUAL, GL_LEQUAL, GL_GREATER, GL_NOTEQUAL,
-    * GL_GEQUAL, or GL_ALWAYS.  Otherwise (comparison mode is GL_NONE), this
-    * field is irrelevant so it's left as GL_NONE (0).
-    *
-    * While this is a GLenum, all possible values fit in 16-bits.
-    */
-   uint16_t compare_funcs[BRW_MAX_TEX_UNIT];
-
-   /**
     * EXT_texture_swizzle and DEPTH_TEXTURE_MODE swizzles.
     */
-   uint16_t swizzles[BRW_MAX_TEX_UNIT];
+   uint16_t swizzles[MAX_SAMPLERS];
 
    uint16_t gl_clamp_mask[3];
 
@@ -55,6 +43,10 @@ struct brw_sampler_prog_key_data {
 };
 
 void brw_populate_sampler_prog_key_data(struct gl_context *ctx,
-				        struct brw_sampler_prog_key_data *key, int i);
+				        const struct gl_program *prog,
+				        struct brw_sampler_prog_key_data *key);
+bool brw_debug_recompile_sampler_key(const struct brw_sampler_prog_key_data *old_key,
+                                     const struct brw_sampler_prog_key_data *key);
+void brw_add_texrect_params(struct gl_program *prog);
 
 #endif

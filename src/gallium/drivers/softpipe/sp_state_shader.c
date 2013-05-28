@@ -38,7 +38,6 @@
 #include "draw/draw_vs.h"
 #include "draw/draw_gs.h"
 #include "tgsi/tgsi_dump.h"
-#include "tgsi/tgsi_exec.h"
 #include "tgsi/tgsi_scan.h"
 #include "tgsi/tgsi_parse.h"
 
@@ -182,13 +181,6 @@ softpipe_delete_fs_state(struct pipe_context *pipe, void *fs)
 
    assert(fs != softpipe->fs);
 
-   if (softpipe->fs_machine->Tokens == state->shader.tokens) {
-      /* unbind the shader from the tgsi executor if we're
-       * deleting it.
-       */
-      tgsi_exec_machine_bind_shader(softpipe->fs_machine, NULL, 0, NULL);
-   }
-
    /* delete variants */
    for (var = state->variants; var; var = next_var) {
       next_var = var->next;
@@ -200,7 +192,7 @@ softpipe_delete_fs_state(struct pipe_context *pipe, void *fs)
       draw_delete_fragment_shader(softpipe->draw, var->draw_shader);
 #endif
 
-      var->delete(var);
+      var->delete(var, softpipe->fs_machine);
    }
 
    draw_delete_fragment_shader(softpipe->draw, state->draw_shader);
@@ -344,11 +336,22 @@ softpipe_delete_gs_state(struct pipe_context *pipe, void *gs)
 static void
 softpipe_set_constant_buffer(struct pipe_context *pipe,
                              uint shader, uint index,
-                             struct pipe_resource *constants)
+                             struct pipe_constant_buffer *cb)
 {
    struct softpipe_context *softpipe = softpipe_context(pipe);
-   unsigned size = constants ? constants->width0 : 0;
-   const void *data = constants ? softpipe_resource(constants)->data : NULL;
+   struct pipe_resource *constants = cb ? cb->buffer : NULL;
+   unsigned size;
+   const void *data;
+
+   if (cb && cb->user_buffer) {
+      constants = softpipe_user_buffer_create(pipe->screen,
+                                              (void *) cb->user_buffer,
+                                              cb->buffer_size,
+                                              PIPE_BIND_CONSTANT_BUFFER);
+   }
+
+   size = constants ? constants->width0 : 0;
+   data = constants ? softpipe_resource(constants)->data : NULL;
 
    assert(shader < PIPE_SHADER_TYPES);
 
@@ -365,6 +368,10 @@ softpipe_set_constant_buffer(struct pipe_context *pipe,
    softpipe->const_buffer_size[shader][index] = size;
 
    softpipe->dirty |= SP_NEW_CONSTANTS;
+
+   if (cb && cb->user_buffer) {
+      pipe_resource_reference(&constants, NULL);
+   }
 }
 
 

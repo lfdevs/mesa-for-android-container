@@ -37,7 +37,7 @@ Modifier::Modifier(operation op)
    case OP_NEG: bits = NV50_IR_MOD_NEG; break;
    case OP_ABS: bits = NV50_IR_MOD_ABS; break;
    case OP_SAT: bits = NV50_IR_MOD_SAT; break;
-   case OP_NOP: bits = NV50_IR_MOD_NOT; break;
+   case OP_NOT: bits = NV50_IR_MOD_NOT; break;
    default:
       bits = 0;
       break;
@@ -58,11 +58,18 @@ Modifier Modifier::operator*(const Modifier m) const
    return Modifier(a | c);
 }
 
-ValueRef::ValueRef() : value(0), insn(0), next(this), prev(this)
+ValueRef::ValueRef(Value *v) : value(NULL), insn(NULL)
 {
    indirect[0] = -1;
    indirect[1] = -1;
    usedAsPtr = false;
+   set(v);
+}
+
+ValueRef::ValueRef(const ValueRef& ref) : value(NULL), insn(ref.insn)
+{
+   set(ref);
+   usedAsPtr = ref.usedAsPtr;
 }
 
 ValueRef::~ValueRef()
@@ -70,24 +77,48 @@ ValueRef::~ValueRef()
    this->set(NULL);
 }
 
-ImmediateValue *ValueRef::getImmediate() const
+bool ValueRef::getImmediate(ImmediateValue &imm) const
 {
-   Value *src = value;
+   const ValueRef *src = this;
+   Modifier m;
+   DataType type = src->insn->sType;
 
    while (src) {
-      if (src->reg.file == FILE_IMMEDIATE)
-         return src->asImm();
+      if (src->mod) {
+         if (src->insn->sType != type)
+            break;
+         m *= src->mod;
+      }
+      if (src->getFile() == FILE_IMMEDIATE) {
+         imm = *(src->value->asImm());
+         // The immediate's type isn't required to match its use, it's
+         // more of a hint; applying a modifier makes use of that hint.
+         imm.reg.type = type;
+         m.applyTo(imm);
+         return true;
+      }
 
-      Instruction *insn = src->getUniqueInsn();
+      Instruction *insn = src->value->getUniqueInsn();
 
-      src = (insn && insn->op == OP_MOV) ? insn->getSrc(0) : NULL;
+      if (insn && insn->op == OP_MOV) {
+         src = &insn->src(0);
+         if (src->mod)
+            WARN("OP_MOV with modifier encountered !\n");
+      } else {
+         src = NULL;
+      }
    }
-   return NULL;
+   return false;
 }
 
-ValueDef::ValueDef() : value(0), insn(0), next(this), prev(this)
+ValueDef::ValueDef(Value *v) : value(NULL), insn(NULL)
 {
-   // nothing to do
+   set(v);
+}
+
+ValueDef::ValueDef(const ValueDef& def) : value(NULL), insn(NULL)
+{
+   set(def.get());
 }
 
 ValueDef::~ValueDef()
@@ -109,138 +140,86 @@ ValueRef::set(Value *refVal)
 {
    if (value == refVal)
       return;
-   if (value) {
-      if (value->uses == this)
-         value->uses = (next == this) ? NULL : next;
-      value->unref();
-      DLLIST_DEL(this);
-   }
+   if (value)
+      value->uses.remove(this);
+   if (refVal)
+      refVal->uses.push_back(this);
 
-   if (refVal) {
-      if (refVal->uses)
-         DLLIST_ADDTAIL(refVal->uses, this);
-      else
-         refVal->uses = this;
-      refVal->ref();
-   }
    value = refVal;
 }
 
 void
 ValueDef::set(Value *defVal)
 {
-   assert(next != this || prev == this); // check that SSA hack isn't active
-
    if (value == defVal)
       return;
-   if (value) {
-      if (value->defs == this)
-         value->defs = (next == this) ? NULL : next;
-      DLLIST_DEL(this);
-   }
+   if (value)
+      value->defs.remove(this);
+   if (defVal)
+      defVal->defs.push_back(this);
 
-   if (defVal) {
-      if (defVal->defs)
-         DLLIST_ADDTAIL(defVal->defs, this);
-      else
-         defVal->defs = this;
-   }
    value = defVal;
 }
 
-// TODO: make me faster by using a safe iterator
-void
-ValueDef::replace(Value *repVal, bool doSet)
+// Check if we can replace this definition's value by the value in @rep,
+// including the source modifiers, i.e. make sure that all uses support
+// @rep.mod.
+bool
+ValueDef::mayReplace(const ValueRef &rep)
 {
-   ValueRef **refs = new ValueRef * [value->refCount()];
-   int n = 0;
+   if (!rep.mod)
+      return true;
 
-   if (!refs && value->refCount())
-      FATAL("memory allocation failed");
+   if (!insn || !insn->bb) // Unbound instruction ?
+      return false;
 
-   for (ValueRef::Iterator iter = value->uses->iterator(); !iter.end();
-        iter.next()) {
-      assert(n < value->refCount());
-      refs[n++] = iter.get();
+   const Target *target = insn->bb->getProgram()->getTarget();
+
+   for (Value::UseIterator it = value->uses.begin(); it != value->uses.end();
+        ++it) {
+      Instruction *insn = (*it)->getInsn();
+      int s = -1;
+
+      for (int i = 0; insn->srcExists(i); ++i) {
+         if (insn->src(i).get() == value) {
+            // If there are multiple references to us we'd have to check if the
+            // combination of mods is still supported, but just bail for now.
+            if (&insn->src(i) != (*it))
+               return false;
+            s = i;
+         }
+      }
+      assert(s >= 0); // integrity of uses list
+
+      if (!target->isModSupported(insn, s, rep.mod))
+         return false;
    }
-   while (n)
-      refs[--n]->set(repVal);
-
-   if (doSet)
-      this->set(repVal);
-
-   if (refs)
-      delete[] refs;
+   return true;
 }
 
 void
-ValueDef::mergeDefs(ValueDef *join)
+ValueDef::replace(const ValueRef &repVal, bool doSet)
 {
-   DLLIST_MERGE(this, join, ValueDef *);
+   assert(mayReplace(repVal));
+
+   if (value == repVal.get())
+      return;
+
+   while (!value->uses.empty()) {
+      ValueRef *ref = value->uses.front();
+      ref->set(repVal.get());
+      ref->mod *= repVal.mod;
+   }
+
+   if (doSet)
+      set(repVal.get());
 }
 
 Value::Value()
 {
-  refCnt = 0;
-  uses = NULL;
-  defs = NULL;
   join = this;
-
   memset(&reg, 0, sizeof(reg));
   reg.size = 4;
-}
-
-bool
-Value::coalesce(Value *jval, bool force)
-{
-   Value *repr = this->join; // new representative
-   Value *jrep = jval->join;
-
-   if (reg.file != jval->reg.file || reg.size != jval->reg.size) {
-      if (!force)
-         return false;
-      ERROR("forced coalescing of values of different sizes/files");
-   }
-
-   if (!force && (repr->reg.data.id != jrep->reg.data.id)) {
-      if (repr->reg.data.id >= 0 &&
-          jrep->reg.data.id >= 0)
-            return false;
-      if (jrep->reg.data.id >= 0) {
-         repr = jval->join;
-         jrep = this->join;
-         jval = this;
-      }
-
-      // need to check all fixed register values of the program for overlap
-      Function *func = defs->getInsn()->bb->getFunction();
-
-      // TODO: put values in by register-id bins per function
-      ArrayList::Iterator iter = func->allLValues.iterator();
-      for (; !iter.end(); iter.next()) {
-         Value *fixed = reinterpret_cast<Value *>(iter.get());
-         assert(fixed);
-         if (fixed->reg.data.id == repr->reg.data.id)
-            if (fixed->livei.overlaps(jrep->livei))
-               return false;
-      }
-   }
-   if (repr->livei.overlaps(jrep->livei)) {
-      if (!force)
-         return false;
-      // do we really want this ? if at all, only for constraint ops
-      INFO("NOTE: forced coalescing with live range overlap\n");
-   }
-
-   ValueDef::Iterator iter = jrep->defs->iterator();
-   for (; !iter.end(); iter.next())
-      iter.get()->get()->join = repr;
-
-   repr->defs->mergeDefs(jrep->defs);
-   repr->livei.unify(jrep->livei);
-
-   assert(repr->join == repr && jval->join == repr);
-   return true;
 }
 
 LValue::LValue(Function *fn, DataFile file)
@@ -249,7 +228,11 @@ LValue::LValue(Function *fn, DataFile file)
    reg.size = (file != FILE_PREDICATE) ? 4 : 1;
    reg.data.id = -1;
 
-   affinity = -1;
+   compMask = 0;
+   compound = 0;
+   ssa = 0;
+   fixedReg = 0;
+   noSpill = 0;
 
    fn->add(this, this->id);
 }
@@ -262,20 +245,37 @@ LValue::LValue(Function *fn, LValue *lval)
    reg.size = lval->reg.size;
    reg.data.id = -1;
 
-   affinity = -1;
+   compMask = 0;
+   compound = 0;
+   ssa = 0;
+   fixedReg = 0;
+   noSpill = 0;
 
    fn->add(this, this->id);
 }
 
-Value *LValue::clone(Function *func) const
+LValue *
+LValue::clone(ClonePolicy<Function>& pol) const
 {
-   LValue *that = new_LValue(func, reg.file);
+   LValue *that = new_LValue(pol.context(), reg.file);
+
+   pol.set<Value>(this, that);
 
    that->reg.size = this->reg.size;
    that->reg.type = this->reg.type;
    that->reg.data = this->reg.data;
 
    return that;
+}
+
+bool
+LValue::isUniform() const
+{
+   if (defs.size() > 1)
+      return false;
+   Instruction *insn = getInsn();
+   // let's not try too hard here for now ...
+   return !insn->srcExists(1) && insn->getSrc(0)->isUniform();
 }
 
 Symbol::Symbol(Program *prog, DataFile f, ubyte fidx)
@@ -289,12 +289,14 @@ Symbol::Symbol(Program *prog, DataFile f, ubyte fidx)
    prog->add(this, this->id);
 }
 
-Value *
-Symbol::clone(Function *func) const
+Symbol *
+Symbol::clone(ClonePolicy<Function>& pol) const
 {
-   Program *prog = func->getProgram();
+   Program *prog = pol.context()->getProgram();
 
    Symbol *that = new_Symbol(prog, reg.file, reg.fileIndex);
+
+   pol.set<Value>(this, that);
 
    that->reg.size = this->reg.size;
    that->reg.type = this->reg.type;
@@ -303,6 +305,15 @@ Symbol::clone(Function *func) const
    that->baseSym = this->baseSym;
 
    return that;
+}
+
+bool
+Symbol::isUniform() const
+{
+   return
+      reg.file != FILE_SYSTEM_VALUE &&
+      reg.file != FILE_MEMORY_LOCAL &&
+      reg.file != FILE_SHADER_INPUT;
 }
 
 ImmediateValue::ImmediateValue(Program *prog, uint32_t uval)
@@ -350,6 +361,21 @@ ImmediateValue::ImmediateValue(const ImmediateValue *proto, DataType ty)
 
    reg.type = ty;
    reg.size = typeSizeof(ty);
+}
+
+ImmediateValue *
+ImmediateValue::clone(ClonePolicy<Function>& pol) const
+{
+   Program *prog = pol.context()->getProgram();
+   ImmediateValue *that = new_ImmediateValue(prog, 0u);
+
+   pol.set<Value>(this, that);
+
+   that->reg.size = this->reg.size;
+   that->reg.type = this->reg.type;
+   that->reg.data = this->reg.data;
+
+   return that;
 }
 
 bool
@@ -450,6 +476,13 @@ ImmediateValue::compare(CondCode cc, float fval) const
    }
 }
 
+ImmediateValue&
+ImmediateValue::operator=(const ImmediateValue &that)
+{
+   this->reg = that.reg;
+   return (*this);
+}
+
 bool
 Value::interfers(const Value *that) const
 {
@@ -464,8 +497,8 @@ Value::interfers(const Value *that) const
       idA = this->join->reg.data.offset;
       idB = that->join->reg.data.offset;
    } else {
-      idA = this->join->reg.data.id * this->reg.size;
-      idB = that->join->reg.data.id * that->reg.size;
+      idA = this->join->reg.data.id * MIN2(this->reg.size, 4);
+      idB = that->join->reg.data.id * MIN2(that->reg.size, 4);
    }
 
    if (idA < idB)
@@ -480,8 +513,6 @@ Value::interfers(const Value *that) const
 bool
 Value::equals(const Value *that, bool strict) const
 {
-   that = that->join;
-
    if (strict)
       return this == that;
 
@@ -528,8 +559,11 @@ void Instruction::init()
    subOp = 0;
 
    saturate = 0;
-   join = terminator = 0;
-   ftz = dnz = 0;
+   join = 0;
+   exit = 0;
+   terminator = 0;
+   ftz = 0;
+   dnz = 0;
    atomic = 0;
    perPatch = 0;
    fixed = 0;
@@ -539,11 +573,6 @@ void Instruction::init()
    lanes = 0xf;
 
    postFactor = 0;
-
-   for (int p = 0; p < NV50_IR_MAX_DEFS; ++p)
-      def[p].setInsn(this);
-   for (int p = 0; p < NV50_IR_MAX_SRCS; ++p)
-      src[p].setInsn(this);
 
    predSrc = -1;
    flagsDef = -1;
@@ -587,22 +616,71 @@ Instruction::~Instruction()
 }
 
 void
-Instruction::setSrc(int s, ValueRef& ref)
+Instruction::setDef(int i, Value *val)
+{
+   int size = defs.size();
+   if (i >= size) {
+      defs.resize(i + 1);
+      while (size <= i)
+         defs[size++].setInsn(this);
+   }
+   defs[i].set(val);
+}
+
+void
+Instruction::setSrc(int s, Value *val)
+{
+   int size = srcs.size();
+   if (s >= size) {
+      srcs.resize(s + 1);
+      while (size <= s)
+         srcs[size++].setInsn(this);
+   }
+   srcs[s].set(val);
+}
+
+void
+Instruction::setSrc(int s, const ValueRef& ref)
 {
    setSrc(s, ref.get());
-   src[s].mod = ref.mod;
+   srcs[s].mod = ref.mod;
 }
 
 void
 Instruction::swapSources(int a, int b)
 {
-   Value *value = src[a].get();
-   Modifier m = src[a].mod;
+   Value *value = srcs[a].get();
+   Modifier m = srcs[a].mod;
 
-   setSrc(a, src[b]);
+   setSrc(a, srcs[b]);
 
-   src[b].set(value);
-   src[b].mod = m;
+   srcs[b].set(value);
+   srcs[b].mod = m;
+}
+
+// TODO: extend for delta < 0
+void
+Instruction::moveSources(int s, int delta)
+{
+   if (delta == 0)
+      return;
+   assert(delta > 0);
+
+   int k;
+   for (k = 0; srcExists(k); ++k) {
+      for (int i = 0; i < 2; ++i) {
+         if (src(k).indirect[i] >= s)
+            src(k).indirect[i] += delta;
+      }
+   }
+   if (predSrc >= s)
+      predSrc += delta;
+   if (flagsSrc >= s)
+      flagsSrc += delta;
+
+   --k;
+   for (int p = k + delta; k >= s; --k, --p)
+      setSrc(p, src(k));
 }
 
 void
@@ -633,57 +711,63 @@ Instruction::putExtraSources(int s, Value *values[3])
 }
 
 Instruction *
-Instruction::clone(bool deep) const
+Instruction::clone(ClonePolicy<Function>& pol, Instruction *i) const
 {
-   Instruction *insn = new_Instruction(bb->getFunction(), op, dType);
-   assert(!asCmp() && !asFlow());
-   cloneBase(insn, deep);
-   return insn;
-}
+   if (!i)
+      i = new_Instruction(pol.context(), op, dType);
+#ifndef NDEBUG // non-conformant assert, so this is required
+   assert(typeid(*i) == typeid(*this));
+#endif
 
-void
-Instruction::cloneBase(Instruction *insn, bool deep) const
-{
-   insn->sType = this->sType;
+   pol.set<Instruction>(this, i);
 
-   insn->cc = this->cc;
-   insn->rnd = this->rnd;
-   insn->cache = this->cache;
-   insn->subOp = this->subOp;
+   i->sType = sType;
 
-   insn->saturate = this->saturate;
-   insn->atomic = this->atomic;
-   insn->ftz = this->ftz;
-   insn->dnz = this->dnz;
-   insn->ipa = this->ipa;
-   insn->lanes = this->lanes;
-   insn->perPatch = this->perPatch;
+   i->rnd = rnd;
+   i->cache = cache;
+   i->subOp = subOp;
 
-   insn->postFactor = this->postFactor;
+   i->saturate = saturate;
+   i->join = join;
+   i->exit = exit;
+   i->atomic = atomic;
+   i->ftz = ftz;
+   i->dnz = dnz;
+   i->ipa = ipa;
+   i->lanes = lanes;
+   i->perPatch = perPatch;
 
-   if (deep) {
-      if (!bb)
-         return;
-      Function *fn = bb->getFunction();
-      for (int d = 0; this->defExists(d); ++d)
-         insn->setDef(d, this->getDef(d)->clone(fn));
-   } else {
-      for (int d = 0; this->defExists(d); ++d)
-         insn->setDef(d, this->getDef(d));
+   i->postFactor = postFactor;
+
+   for (int d = 0; defExists(d); ++d)
+      i->setDef(d, pol.get(getDef(d)));
+
+   for (int s = 0; srcExists(s); ++s) {
+      i->setSrc(s, pol.get(getSrc(s)));
+      i->src(s).mod = src(s).mod;
    }
 
-   for (int s = 0; this->srcExists(s); ++s)
-      insn->src[s].set(this->src[s]);
+   i->cc = cc;
+   i->predSrc = predSrc;
+   i->flagsDef = flagsDef;
+   i->flagsSrc = flagsSrc;
 
-   insn->predSrc = this->predSrc;
-   insn->flagsDef = this->flagsDef;
-   insn->flagsSrc = this->flagsSrc;
+   return i;
 }
 
 unsigned int
-Instruction::defCount(unsigned int mask) const
+Instruction::defCount(unsigned int mask, bool singleFile) const
 {
    unsigned int i, n;
+
+   if (singleFile) {
+      unsigned int d = ffs(mask);
+      if (!d)
+         return 0;
+      for (i = d--; defExists(i); ++i)
+         if (getDef(i)->reg.file != getDef(d)->reg.file)
+            mask &= ~(1 << i);
+   }
 
    for (n = 0, i = 0; this->defExists(i); ++i, mask >>= 1)
       n += mask & 1;
@@ -691,9 +775,18 @@ Instruction::defCount(unsigned int mask) const
 }
 
 unsigned int
-Instruction::srcCount(unsigned int mask) const
+Instruction::srcCount(unsigned int mask, bool singleFile) const
 {
    unsigned int i, n;
+
+   if (singleFile) {
+      unsigned int s = ffs(mask);
+      if (!s)
+         return 0;
+      for (i = s--; srcExists(i); ++i)
+         if (getSrc(i)->reg.file != getSrc(s)->reg.file)
+            mask &= ~(1 << i);
+   }
 
    for (n = 0, i = 0; this->srcExists(i); ++i, mask >>= 1)
       n += mask & 1;
@@ -703,19 +796,19 @@ Instruction::srcCount(unsigned int mask) const
 bool
 Instruction::setIndirect(int s, int dim, Value *value)
 {
-   int p = src[s].indirect[dim];
-
    assert(this->srcExists(s));
+
+   int p = srcs[s].indirect[dim];
    if (p < 0) {
       if (!value)
          return true;
-      for (p = s + 1; this->srcExists(p); ++p);
+      p = srcs.size();
+      while (p > 0 && !srcExists(p - 1))
+         --p;
    }
-   assert(p < NV50_IR_MAX_SRCS);
-
-   src[p] = value;
-   src[p].usedAsPtr = (value != 0);
-   src[s].indirect[dim] = value ? p : -1;
+   setSrc(p, value);
+   srcs[p].usedAsPtr = (value != 0);
+   srcs[s].indirect[dim] = value ? p : -1;
    return true;
 }
 
@@ -726,34 +819,33 @@ Instruction::setPredicate(CondCode ccode, Value *value)
 
    if (!value) {
       if (predSrc >= 0) {
-         src[predSrc] = 0;
+         srcs[predSrc].set(NULL);
          predSrc = -1;
       }
       return true;
    }
 
    if (predSrc < 0) {
-      int s;
-      for (s = 0; this->srcExists(s); ++s)
-      assert(s < NV50_IR_MAX_SRCS);
-      predSrc = s;
+      predSrc = srcs.size();
+      while (predSrc > 0 && !srcExists(predSrc - 1))
+         --predSrc;
    }
-   src[predSrc] = value;
+
+   setSrc(predSrc, value);
    return true;
 }
 
 bool
 Instruction::writesPredicate() const
 {
-   for (int d = 0; d < 2 && def[d].exists(); ++d)
-      if (def[d].exists() &&
-          (getDef(d)->inFile(FILE_PREDICATE) || getDef(d)->inFile(FILE_FLAGS)))
+   for (int d = 0; defExists(d); ++d)
+      if (getDef(d)->inFile(FILE_PREDICATE) || getDef(d)->inFile(FILE_FLAGS))
          return true;
    return false;
 }
 
 static bool
-insnCheckCommutation(const Instruction *a, const Instruction *b)
+insnCheckCommutationDefSrc(const Instruction *a, const Instruction *b)
 {
    for (int d = 0; a->defExists(d); ++d)
       for (int s = 0; b->srcExists(s); ++s)
@@ -762,12 +854,22 @@ insnCheckCommutation(const Instruction *a, const Instruction *b)
    return true;
 }
 
+static bool
+insnCheckCommutationDefDef(const Instruction *a, const Instruction *b)
+{
+   for (int d = 0; a->defExists(d); ++d)
+      for (int c = 0; b->defExists(c); ++c)
+         if (a->getDef(d)->interfers(b->getDef(c)))
+            return false;
+   return true;
+}
+
 bool
 Instruction::isCommutationLegal(const Instruction *i) const
 {
-   bool ret = true;
-   ret = ret && insnCheckCommutation(this, i);
-   ret = ret && insnCheckCommutation(i, this);
+   bool ret = insnCheckCommutationDefDef(this, i);
+   ret = ret && insnCheckCommutationDefSrc(this, i);
+   ret = ret && insnCheckCommutationDefSrc(i, this);
    return ret;
 }
 
@@ -788,11 +890,13 @@ TexInstruction::~TexInstruction()
    }
 }
 
-Instruction *
-TexInstruction::clone(bool deep) const
+TexInstruction *
+TexInstruction::clone(ClonePolicy<Function>& pol, Instruction *i) const
 {
-   TexInstruction *tex = new_TexInstruction(bb->getFunction(), op);
-   cloneBase(tex, deep);
+   TexInstruction *tex = (i ? static_cast<TexInstruction *>(i) :
+                          new_TexInstruction(pol.context(), op));
+
+   Instruction::clone(pol, tex);
 
    tex->tex = this->tex;
 
@@ -834,21 +938,24 @@ CmpInstruction::CmpInstruction(Function *fn, operation op)
    setCond = CC_ALWAYS;
 }
 
-Instruction *
-CmpInstruction::clone(bool deep) const
+CmpInstruction *
+CmpInstruction::clone(ClonePolicy<Function>& pol, Instruction *i) const
 {
-   CmpInstruction *cmp = new_CmpInstruction(bb->getFunction(), op);
-   cloneBase(cmp, deep);
-   cmp->setCond = setCond;
+   CmpInstruction *cmp = (i ? static_cast<CmpInstruction *>(i) :
+                          new_CmpInstruction(pol.context(), op));
    cmp->dType = dType;
+   Instruction::clone(pol, cmp);
+   cmp->setCond = setCond;
    return cmp;
 }
 
-FlowInstruction::FlowInstruction(Function *fn, operation op,
-                                 BasicBlock *targ)
+FlowInstruction::FlowInstruction(Function *fn, operation op, void *targ)
    : Instruction(fn, op, TYPE_NONE)
 {
-   target.bb = targ;
+   if (op == OP_CALL)
+      target.fn = reinterpret_cast<Function *>(targ);
+   else
+      target.bb = reinterpret_cast<BasicBlock *>(targ);
 
    if (op == OP_BRA ||
        op == OP_CONT || op == OP_BREAK ||
@@ -858,7 +965,31 @@ FlowInstruction::FlowInstruction(Function *fn, operation op,
    if (op == OP_JOIN)
       terminator = targ ? 1 : 0;
 
-   allWarp = absolute = limit = 0;
+   allWarp = absolute = limit = builtin = 0;
+}
+
+FlowInstruction *
+FlowInstruction::clone(ClonePolicy<Function>& pol, Instruction *i) const
+{
+   FlowInstruction *flow = (i ? static_cast<FlowInstruction *>(i) :
+                            new_FlowInstruction(pol.context(), op, NULL));
+
+   Instruction::clone(pol, flow);
+   flow->allWarp = allWarp;
+   flow->absolute = absolute;
+   flow->limit = limit;
+   flow->builtin = builtin;
+
+   if (builtin)
+      flow->target.builtin = target.builtin;
+   else
+   if (op == OP_CALL)
+      flow->target.fn = target.fn;
+   else
+   if (target.bb)
+      flow->target.bb = pol.get<BasicBlock>(target.bb);
+
+   return flow;
 }
 
 Program::Program(Type type, Target *arch)
@@ -877,15 +1008,22 @@ Program::Program(Type type, Target *arch)
 
    maxGPR = -1;
 
-   main = new Function(this, "MAIN");
+   main = new Function(this, "MAIN", ~0);
+   calls.insert(&main->call);
 
    dbgFlags = 0;
+   optLevel = 0;
+
+   targetPriv = NULL;
 }
 
 Program::~Program()
 {
-   if (main)
-      delete main;
+   for (ArrayList::Iterator it = allFuncs.iterator(); !it.end(); it.next())
+      delete reinterpret_cast<Function *>(it.get());
+
+   for (ArrayList::Iterator it = allRValues.iterator(); !it.end(); it.next())
+      releaseValue(reinterpret_cast<Value *>(it.get()));
 }
 
 void Program::releaseInstruction(Instruction *insn)
@@ -908,6 +1046,8 @@ void Program::releaseInstruction(Instruction *insn)
 
 void Program::releaseValue(Value *value)
 {
+   value->~Value();
+
    if (value->asLValue())
       mem_LValue.release(value);
    else
@@ -938,6 +1078,7 @@ nv50_ir_init_prog_info(struct nv50_ir_prog_info *info)
    }
    info->io.clipDistance = 0xff;
    info->io.pointSize = 0xff;
+   info->io.instanceId = 0xff;
    info->io.vertexId = 0xff;
    info->io.edgeFlagIn = 0xff;
    info->io.edgeFlagOut = 0xff;
@@ -978,6 +1119,7 @@ nv50_ir_generate_code(struct nv50_ir_prog_info *info)
    if (!prog)
       return -1;
    prog->dbgFlags = info->dbgFlags;
+   prog->optLevel = info->optLevel;
 
    switch (info->bin.sourceRep) {
 #if 0
@@ -998,6 +1140,7 @@ nv50_ir_generate_code(struct nv50_ir_prog_info *info)
    if (prog->dbgFlags & NV50_IR_DEBUG_VERBOSE)
       prog->print();
 
+   targ->parseDriverInfo(info);
    prog->getTarget()->runLegalizePass(prog, nv50_ir::CG_STAGE_PRE_SSA);
 
    prog->convertToSSA();
@@ -1030,6 +1173,7 @@ out:
    info->bin.maxGPR = prog->maxGPR;
    info->bin.code = prog->code;
    info->bin.codeSize = prog->binSize;
+   info->bin.tlsSpace = prog->tlsSize;
 
    delete prog;
    nv50_ir::Target::destroy(targ);

@@ -236,7 +236,7 @@ static GLboolean init_vertex_stage( struct gl_context *ctx,
    struct vertex_stage_data *store;
    GLuint size = VB->Size;
 
-   stage->privatePtr = CALLOC(sizeof(*store));
+   stage->privatePtr = calloc(1, sizeof(*store));
    store = VERTEX_STAGE_DATA(stage);
    if (!store)
       return GL_FALSE;
@@ -245,7 +245,7 @@ static GLboolean init_vertex_stage( struct gl_context *ctx,
    _mesa_vector4f_alloc( &store->clip, 0, size, 32 );
    _mesa_vector4f_alloc( &store->proj, 0, size, 32 );
 
-   store->clipmask = (GLubyte *) _mesa_align_malloc(sizeof(GLubyte)*size, 32 );
+   store->clipmask = _mesa_align_malloc(sizeof(GLubyte)*size, 32 );
 
    if (!store->clipmask ||
        !store->eye.data ||
@@ -265,7 +265,7 @@ static void dtr( struct tnl_pipeline_stage *stage )
       _mesa_vector4f_free( &store->clip );
       _mesa_vector4f_free( &store->proj );
       _mesa_align_free( store->clipmask );
-      FREE(store);
+      free(store);
       stage->privatePtr = NULL;
       stage->run = init_vertex_stage;
    }

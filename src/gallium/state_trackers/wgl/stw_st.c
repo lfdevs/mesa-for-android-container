@@ -171,14 +171,26 @@ stw_st_framebuffer_present_locked(HDC hdc,
 }
 
 static boolean
-stw_st_framebuffer_flush_front(struct st_framebuffer_iface *stfb,
+stw_st_framebuffer_flush_front(struct st_context_iface *stctx,
+                               struct st_framebuffer_iface *stfb,
                                enum st_attachment_type statt)
 {
    struct stw_st_framebuffer *stwfb = stw_st_framebuffer(stfb);
+   boolean ret;
+   HDC hDC;
 
    pipe_mutex_lock(stwfb->fb->mutex);
 
-   return stw_st_framebuffer_present_locked(stwfb->fb->hDC, &stwfb->base, statt);
+   /* We must not cache HDCs anywhere, as they can be invalidated by the
+    * application, or screen resolution changes. */
+
+   hDC = GetDC(stwfb->fb->hWnd);
+
+   ret = stw_st_framebuffer_present_locked(hDC, &stwfb->base, statt);
+
+   ReleaseDC(stwfb->fb->hWnd, hDC);
+
+   return ret;
 }
 
 /**

@@ -99,11 +99,16 @@ struct dri2_egl_display
    __DRI2flushExtension     *flush;
    __DRItexBufferExtension  *tex_buffer;
    __DRIimageExtension      *image;
+   __DRIrobustnessExtension *robustness;
+   __DRI2configQueryExtension *config;
    int                       fd;
 
    int                       own_device;
    int                       swap_available;
    int                       invalidate_available;
+   int                       min_swap_interval;
+   int                       max_swap_interval;
+   int                       default_swap_interval;
 #ifdef HAVE_DRM_PLATFORM
    struct gbm_dri_device    *gbm_dri;
 #endif
@@ -121,8 +126,10 @@ struct dri2_egl_display
 
 #ifdef HAVE_WAYLAND_PLATFORM
    struct wl_display        *wl_dpy;
+   struct wl_registry       *wl_registry;
    struct wl_drm            *wl_server_drm;
    struct wl_drm            *wl_drm;
+   struct wl_event_queue    *wl_queue;
    int			     authenticated;
    int			     formats;
 #endif
@@ -165,16 +172,29 @@ struct dri2_egl_surface
 
 #ifdef HAVE_WAYLAND_PLATFORM
    struct wl_egl_window  *wl_win;
-   struct wl_egl_pixmap  *wl_pix;
-   struct wl_buffer      *wl_drm_buffer[WL_BUFFER_COUNT];
-   int                    wl_buffer_lock[WL_BUFFER_COUNT];
    int                    dx;
    int                    dy;
-   __DRIbuffer           *dri_buffers[__DRI_BUFFER_COUNT];
-   __DRIbuffer           *third_buffer;
-   __DRIbuffer           *pending_buffer;
-   EGLBoolean             block_swap_buffers;
+   struct wl_callback    *frame_callback;
    int			  format;
+#endif
+
+#ifdef HAVE_DRM_PLATFORM
+   struct gbm_dri_surface *gbm_surf;
+#endif
+
+#if defined(HAVE_WAYLAND_PLATFORM) || defined(HAVE_DRM_PLATFORM)
+   __DRIbuffer           *dri_buffers[__DRI_BUFFER_COUNT];
+   struct {
+#ifdef HAVE_WAYLAND_PLATFORM
+      struct wl_buffer   *wl_buffer;
+      __DRIbuffer        *dri_buffer;
+#endif
+#ifdef HAVE_DRM_PLATFORM
+      struct gbm_bo       *bo;
+#endif
+      int                 locked;
+      int                 age;
+   } color_buffers[3], *back, *current;
 #endif
 
 #ifdef HAVE_ANDROID_PLATFORM
@@ -184,11 +204,6 @@ struct dri2_egl_surface
    /* EGL-owned buffers */
    __DRIbuffer           *local_buffers[__DRI_BUFFER_COUNT];
 #endif
-};
-
-struct dri2_egl_buffer {
-   __DRIbuffer *dri_buffer;
-   struct dri2_egl_display *dri2_dpy;
 };
 
 

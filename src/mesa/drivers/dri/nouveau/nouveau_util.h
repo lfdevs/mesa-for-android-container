@@ -171,22 +171,6 @@ get_viewport_translate(struct gl_context *ctx, float a[4])
 	a[2] = fb->_DepthMaxF * (vp->Far + vp->Near) / 2;
 }
 
-static inline void
-OUT_RINGb(struct nouveau_channel *chan, GLboolean x)
-{
-	OUT_RING(chan, x ? 1 : 0);
-}
-
-static inline void
-OUT_RINGm(struct nouveau_channel *chan, float m[16])
-{
-	int i, j;
-
-	for (i = 0; i < 4; i++)
-		for (j = 0; j < 4; j++)
-			OUT_RINGf(chan, m[4*j + i]);
-}
-
 static inline GLboolean
 is_color_operand(int op)
 {
@@ -221,6 +205,26 @@ get_texgen_coeff(struct gl_texgen *c)
 		return c->EyePlane;
 	else
 		return NULL;
+}
+
+static inline unsigned
+get_format_blocksx(gl_format format,
+		       unsigned x)
+{
+	GLuint blockwidth;
+	GLuint blockheight;
+	_mesa_get_format_block_size(format, &blockwidth, &blockheight);
+	return (x + blockwidth - 1) / blockwidth;
+}
+
+static inline unsigned
+get_format_blocksy(gl_format format,
+		       unsigned y)
+{
+	GLuint blockwidth;
+	GLuint blockheight;
+	_mesa_get_format_block_size(format, &blockwidth, &blockheight);
+	return (y + blockheight - 1) / blockheight;
 }
 
 #endif

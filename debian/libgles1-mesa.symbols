@@ -67,6 +67,7 @@ libGLESv1_CM.so.1 libgles1-mesa #MINVER# | libgles1
  glEnableClientState@Base 7.8.1
  glFinish@Base 7.8.1
  glFlush@Base 7.8.1
+ glFlushMappedBufferRangeEXT@Base 9.1~
  glFogf@Base 7.8.1
  glFogfv@Base 7.8.1
  glFogx@Base 7.8.1
@@ -145,6 +146,7 @@ libGLESv1_CM.so.1 libgles1-mesa #MINVER# | libgles1
  glLoadMatrixxOES@Base 7.8.1
  glLogicOp@Base 7.8.1
  glMapBufferOES@Base 7.8.1
+ glMapBufferRangeEXT@Base 9.1~
  glMaterialf@Base 7.8.1
  glMaterialfv@Base 7.8.1
  glMaterialx@Base 7.8.1

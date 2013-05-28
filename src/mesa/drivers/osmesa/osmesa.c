@@ -35,14 +35,18 @@
 
 #include "main/glheader.h"
 #include "GL/osmesa.h"
+#include "main/api_exec.h"
 #include "main/context.h"
 #include "main/extensions.h"
 #include "main/formats.h"
 #include "main/framebuffer.h"
 #include "main/imports.h"
 #include "main/macros.h"
+#include "main/mipmap.h"
 #include "main/mtypes.h"
 #include "main/renderbuffer.h"
+#include "main/version.h"
+#include "main/vtxfmt.h"
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
 #include "swrast/s_context.h"
@@ -72,7 +76,7 @@ struct osmesa_context
    GLenum format;		/*< User-specified context format */
    GLint userRowLength;		/*< user-specified number of pixels per row */
    GLint rInd, gInd, bInd, aInd;/*< index offsets for RGBA formats */
-   GLvoid *rowaddr[MAX_HEIGHT];	/*< address of first pixel in each image row */
+   GLvoid *rowaddr[SWRAST_MAX_HEIGHT];	/*< address of first pixel in each image row */
    GLboolean yup;		/*< TRUE  -> Y increases upward */
 				/*< FALSE -> Y increases downward */
    GLenum DataType;
@@ -386,9 +390,9 @@ compute_row_addresses( OSMesaContext osmesa )
  * Don't use _mesa_delete_renderbuffer since we can't free rb->Buffer.
  */
 static void
-osmesa_delete_renderbuffer(struct gl_renderbuffer *rb)
+osmesa_delete_renderbuffer(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
-   free(rb);
+   _mesa_delete_renderbuffer(ctx, rb);
 }
 
 
@@ -709,11 +713,11 @@ OSMesaCreateContextExt( GLenum format, GLint depthBits, GLint stencilBits,
       functions.GetBufferSize = NULL;
 
       if (!_mesa_initialize_context(&osmesa->mesa,
-                                    API_OPENGL,
+                                    API_OPENGL_COMPAT,
                                     osmesa->gl_visual,
                                     sharelist ? &sharelist->mesa
                                               : (struct gl_context *) NULL,
-                                    &functions, (void *) osmesa)) {
+                                    &functions)) {
          _mesa_destroy_visual( osmesa->gl_visual );
          free(osmesa);
          return NULL;
@@ -780,12 +784,20 @@ OSMesaCreateContextExt( GLenum format, GLint depthBits, GLint stencilBits,
          ctx->Driver.MapRenderbuffer = osmesa_MapRenderbuffer;
          ctx->Driver.UnmapRenderbuffer = osmesa_UnmapRenderbuffer;
 
+         ctx->Driver.GenerateMipmap = _mesa_generate_mipmap;
+
          /* Extend the software rasterizer with our optimized line and triangle
           * drawing functions.
           */
          swrast = SWRAST_CONTEXT( ctx );
          swrast->choose_line = osmesa_choose_line;
          swrast->choose_triangle = osmesa_choose_triangle;
+
+         _mesa_compute_version(ctx);
+
+         /* Exec table initialization requires the version to be computed */
+         _mesa_initialize_dispatch_tables(ctx);
+         _mesa_initialize_vbo_vtxfmt(ctx);
       }
    }
    return osmesa;
@@ -852,7 +864,7 @@ OSMesaMakeCurrent( OSMesaContext osmesa, void *buffer, GLenum type,
 {
    if (!osmesa || !buffer ||
        width < 1 || height < 1 ||
-       width > MAX_WIDTH || height > MAX_HEIGHT) {
+       width > SWRAST_MAX_WIDTH || height > SWRAST_MAX_HEIGHT) {
       return GL_FALSE;
    }
 
@@ -998,10 +1010,10 @@ OSMesaGetIntegerv( GLint pname, GLint *value )
          *value = osmesa->yup;
          return;
       case OSMESA_MAX_WIDTH:
-         *value = MAX_WIDTH;
+         *value = SWRAST_MAX_WIDTH;
          return;
       case OSMESA_MAX_HEIGHT:
-         *value = MAX_HEIGHT;
+         *value = SWRAST_MAX_HEIGHT;
          return;
       default:
          _mesa_error(&osmesa->mesa, GL_INVALID_ENUM, "OSMesaGetIntergerv(pname)");

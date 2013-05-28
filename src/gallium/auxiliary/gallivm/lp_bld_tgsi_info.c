@@ -47,7 +47,7 @@ struct analysis_context
    struct lp_tgsi_info *info;
 
    unsigned num_imms;
-   float imm[32][4];
+   float imm[128][4];
 
    struct lp_tgsi_channel_info temp[32][4];
 };
@@ -129,6 +129,7 @@ analyse_tex(struct analysis_context *ctx,
          readmask = TGSI_WRITEMASK_XYZ;
          break;
       case TGSI_TEXTURE_SHADOW2D_ARRAY:
+      case TGSI_TEXTURE_SHADOWCUBE:
          readmask = TGSI_WRITEMASK_XYZW;
          break;
       default:
@@ -442,8 +443,12 @@ lp_build_tgsi_info(const struct tgsi_token *tokens,
             assert(size <= 4);
             if (ctx.num_imms < Elements(ctx.imm)) {
                for (chan = 0; chan < size; ++chan) {
-                  ctx.imm[ctx.num_imms][chan] =
-                        parse.FullToken.FullImmediate.u[chan].Float;
+                  float value = parse.FullToken.FullImmediate.u[chan].Float;
+                  ctx.imm[ctx.num_imms][chan] = value;
+
+                  if (value < 0.0f || value > 1.0f) {
+                     info->unclamped_immediates = TRUE;
+                  }
                }
                ++ctx.num_imms;
             }

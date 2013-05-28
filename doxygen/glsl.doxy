@@ -12,7 +12,6 @@ PROJECT_NAME           = "Mesa GLSL module"
 INPUT                  = ../src/glsl/
 RECURSIVE              = NO
 EXCLUDE                = ../src/glsl/glsl_lexer.cpp \
-                         ../src/glsl/glsl_lexer.h \
                          ../src/glsl/glsl_parser.cpp \
                          ../src/glsl/glsl_parser.h
 EXCLUDE_PATTERNS       =

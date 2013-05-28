@@ -59,7 +59,7 @@ extern void
 svga_propagate_surface(struct svga_context *svga, struct pipe_surface *surf);
 
 extern boolean
-svga_surface_needs_propagation(struct pipe_surface *surf);
+svga_surface_needs_propagation(const struct pipe_surface *surf);
 
 struct svga_winsys_surface *
 svga_texture_view_surface(struct svga_context *svga,
@@ -89,6 +89,14 @@ svga_surface(struct pipe_surface *surface)
 {
    assert(surface);
    return (struct svga_surface *)surface;
+}
+
+
+static INLINE const struct svga_surface *
+svga_surface_const(const struct pipe_surface *surface)
+{
+   assert(surface);
+   return (const struct svga_surface *)surface;
 }
 
 #endif

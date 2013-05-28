@@ -148,13 +148,9 @@ typedef enum prog_opcode {
    OPCODE_ABS,       /*   X        X       1.1               X   */
    OPCODE_ADD,       /*   X        X       X       X         X   */
    OPCODE_AND,       /*                                          */
-   OPCODE_ARA,       /*                    2                     */
    OPCODE_ARL,       /*   X                X                 X   */
-   OPCODE_ARL_NV,    /*                    2                     */
-   OPCODE_ARR,       /*                    2                     */
    OPCODE_BGNLOOP,   /*                                     opt  */
    OPCODE_BGNSUB,    /*                                     opt  */
-   OPCODE_BRA,       /*                    2                     */
    OPCODE_BRK,       /*                    2                opt  */
    OPCODE_CAL,       /*                    2       2        opt  */
    OPCODE_CMP,       /*            X                         X   */
@@ -169,9 +165,7 @@ typedef enum prog_opcode {
    OPCODE_DPH,       /*   X        X       1.1                   */
    OPCODE_DST,       /*   X        X       X       X             */
    OPCODE_ELSE,      /*                                     opt  */
-   OPCODE_EMIT_VERTEX,/*                                     X   */
    OPCODE_END,       /*   X        X       X       X        opt  */
-   OPCODE_END_PRIMITIVE,/*                                   X   */
    OPCODE_ENDIF,     /*                                     opt  */
    OPCODE_ENDLOOP,   /*                                     opt  */
    OPCODE_ENDSUB,    /*                                     opt  */
@@ -204,13 +198,10 @@ typedef enum prog_opcode {
    OPCODE_PK4B,      /*                            X             */
    OPCODE_PK4UB,     /*                            X             */
    OPCODE_POW,       /*   X        X               X         X   */
-   OPCODE_POPA,      /*                    3                     */
    OPCODE_PRINT,     /*                    X       X             */
-   OPCODE_PUSHA,     /*                    3                     */
-   OPCODE_RCC,       /*                    1.1                   */
    OPCODE_RCP,       /*   X        X       X       X         X   */
    OPCODE_RET,       /*                    2       2        opt  */
-   OPCODE_RFL,       /*            X               X             */
+   OPCODE_RFL,       /*                            X             */
    OPCODE_RSQ,       /*   X        X       X       X         X   */
    OPCODE_SCS,       /*            X                         X   */
    OPCODE_SEQ,       /*                    2       X         X   */
@@ -304,8 +295,7 @@ struct prog_dst_register
     * \name Conditional destination update control.
     *
     * \since
-    * NV_fragment_program, NV_fragment_program_option, NV_vertex_program2,
-    * NV_vertex_program2_option.
+    * NV_fragment_program_option, NV_vertex_program2, NV_vertex_program2_option.
     */
    /*@{*/
    /**
@@ -320,15 +310,6 @@ struct prog_dst_register
     * Condition code swizzle value.
     */
    GLuint CondSwizzle:12;
-
-   /**
-    * Selects the condition code register to use for conditional destination
-    * update masking.  In NV_fragmnet_program or NV_vertex_program2 mode, only
-    * condition code register 0 is available.  In NV_vertex_program3 mode,
-    * condition code registers 0 and 1 are available.
-    */
-   GLuint CondSrc:1;
-   /*@}*/
 };
 
 
@@ -346,8 +327,7 @@ struct prog_instruction
     * register.
     *
     * \since
-    * NV_fragment_program, NV_fragment_program_option, NV_vertex_program2,
-    * NV_vertex_program2_option.
+    * NV_fragment_program_option, NV_vertex_program2, NV_vertex_program2_option.
     */
    GLuint CondUpdate:1;
 
@@ -360,8 +340,7 @@ struct prog_instruction
     * code registers 0 and 1 are available.
     *
     * \since
-    * NV_fragment_program, NV_fragment_program_option, NV_vertex_program2,
-    * NV_vertex_program2_option.
+    * NV_fragment_program_option, NV_vertex_program2, NV_vertex_program2_option.
     */
    GLuint CondDst:1;
 
@@ -372,7 +351,7 @@ struct prog_instruction
     * Value is one of the SATURATE_* tokens.
     *
     * \since
-    * NV_fragment_program, NV_fragment_program_option, NV_vertex_program3.
+    * NV_fragment_program_option, NV_vertex_program3.
     */
    GLuint SaturateMode:2;
 
@@ -380,7 +359,7 @@ struct prog_instruction
     * Per-instruction selectable precision: FLOAT32, FLOAT16, FIXED12.
     *
     * \since
-    * NV_fragment_program, NV_fragment_program_option.
+    * NV_fragment_program_option.
     */
    GLuint Precision:3;
 

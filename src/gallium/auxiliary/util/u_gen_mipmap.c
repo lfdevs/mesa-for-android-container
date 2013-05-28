@@ -59,14 +59,17 @@ struct gen_mipmap_state
    struct pipe_context *pipe;
    struct cso_context *cso;
 
-   struct pipe_blend_state blend;
-   struct pipe_depth_stencil_alpha_state depthstencil;
+   struct pipe_blend_state blend_keep_color, blend_write_color;
+   struct pipe_depth_stencil_alpha_state dsa_keep_depth, dsa_write_depth;
    struct pipe_rasterizer_state rasterizer;
    struct pipe_sampler_state sampler;
    struct pipe_vertex_element velem[2];
 
    void *vs;
-   void *fs[TGSI_TEXTURE_COUNT]; /**< Not all are used, but simplifies code */
+
+   /** Not all are used, but simplifies code */
+   void *fs_color[TGSI_TEXTURE_COUNT];
+   void *fs_depth[TGSI_TEXTURE_COUNT];
 
    struct pipe_resource *vbuf;  /**< quad vertices */
    unsigned vbuf_slot;
@@ -1108,17 +1111,14 @@ make_1d_mipmap(struct gen_mipmap_state *ctx,
       struct pipe_transfer *srcTrans, *dstTrans;
       void *srcMap, *dstMap;
 
-      srcTrans = pipe_get_transfer(pipe, pt, srcLevel, layer,
-                                   PIPE_TRANSFER_READ, 0, 0,
-                                   u_minify(pt->width0, srcLevel),
-                                   u_minify(pt->height0, srcLevel));
-      dstTrans = pipe_get_transfer(pipe, pt, dstLevel, layer,
-                                   PIPE_TRANSFER_WRITE, 0, 0,
-                                   u_minify(pt->width0, dstLevel),
-                                   u_minify(pt->height0, dstLevel));
-
-      srcMap = (ubyte *) pipe->transfer_map(pipe, srcTrans);
-      dstMap = (ubyte *) pipe->transfer_map(pipe, dstTrans);
+      srcMap = pipe_transfer_map(pipe, pt, srcLevel, layer,
+                                 PIPE_TRANSFER_READ, 0, 0,
+                                 u_minify(pt->width0, srcLevel),
+                                 u_minify(pt->height0, srcLevel), &srcTrans);
+      dstMap = pipe_transfer_map(pipe, pt, dstLevel, layer,
+                                 PIPE_TRANSFER_WRITE, 0, 0,
+                                 u_minify(pt->width0, dstLevel),
+                                 u_minify(pt->height0, dstLevel), &dstTrans);
 
       reduce_1d(pt->format,
                 srcTrans->box.width, srcMap,
@@ -1126,9 +1126,6 @@ make_1d_mipmap(struct gen_mipmap_state *ctx,
 
       pipe->transfer_unmap(pipe, srcTrans);
       pipe->transfer_unmap(pipe, dstTrans);
-
-      pipe->transfer_destroy(pipe, srcTrans);
-      pipe->transfer_destroy(pipe, dstTrans);
    }
 }
 
@@ -1149,17 +1146,14 @@ make_2d_mipmap(struct gen_mipmap_state *ctx,
       struct pipe_transfer *srcTrans, *dstTrans;
       ubyte *srcMap, *dstMap;
 
-      srcTrans = pipe_get_transfer(pipe, pt, srcLevel, layer,
-                                   PIPE_TRANSFER_READ, 0, 0,
-                                   u_minify(pt->width0, srcLevel),
-                                   u_minify(pt->height0, srcLevel));
-      dstTrans = pipe_get_transfer(pipe, pt, dstLevel, layer,
-                                   PIPE_TRANSFER_WRITE, 0, 0,
-                                   u_minify(pt->width0, dstLevel),
-                                   u_minify(pt->height0, dstLevel));
-
-      srcMap = (ubyte *) pipe->transfer_map(pipe, srcTrans);
-      dstMap = (ubyte *) pipe->transfer_map(pipe, dstTrans);
+      srcMap = pipe_transfer_map(pipe, pt, srcLevel, layer,
+                                 PIPE_TRANSFER_READ, 0, 0,
+                                 u_minify(pt->width0, srcLevel),
+                                 u_minify(pt->height0, srcLevel), &srcTrans);
+      dstMap = pipe_transfer_map(pipe, pt, dstLevel, layer,
+                                 PIPE_TRANSFER_WRITE, 0, 0,
+                                 u_minify(pt->width0, dstLevel),
+                                 u_minify(pt->height0, dstLevel), &dstTrans);
 
       reduce_2d(pt->format,
                 srcTrans->box.width, srcTrans->box.height,
@@ -1169,9 +1163,6 @@ make_2d_mipmap(struct gen_mipmap_state *ctx,
 
       pipe->transfer_unmap(pipe, srcTrans);
       pipe->transfer_unmap(pipe, dstTrans);
-
-      pipe->transfer_destroy(pipe, srcTrans);
-      pipe->transfer_destroy(pipe, dstTrans);
    }
 }
 
@@ -1204,15 +1195,12 @@ make_3d_mipmap(struct gen_mipmap_state *ctx,
       dst_box.height = u_minify(pt->height0, dstLevel);
       dst_box.depth = u_minify(pt->depth0, dstLevel);
 
-      srcTrans = pipe->get_transfer(pipe, pt, srcLevel,
-                                    PIPE_TRANSFER_READ,
-                                    &src_box);
-      dstTrans = pipe->get_transfer(pipe, pt, dstLevel,
-                                    PIPE_TRANSFER_WRITE,
-                                    &dst_box);
-
-      srcMap = (ubyte *) pipe->transfer_map(pipe, srcTrans);
-      dstMap = (ubyte *) pipe->transfer_map(pipe, dstTrans);
+      srcMap = pipe->transfer_map(pipe, pt, srcLevel,
+                                  PIPE_TRANSFER_READ,
+                                  &src_box, &srcTrans);
+      dstMap = pipe->transfer_map(pipe, pt, dstLevel,
+                                  PIPE_TRANSFER_WRITE,
+                                  &dst_box, &dstTrans);
 
       reduce_3d(pt->format,
                 srcTrans->box.width, srcTrans->box.height, srcTrans->box.depth,
@@ -1222,9 +1210,6 @@ make_3d_mipmap(struct gen_mipmap_state *ctx,
 
       pipe->transfer_unmap(pipe, srcTrans);
       pipe->transfer_unmap(pipe, dstTrans);
-
-      pipe->transfer_destroy(pipe, srcTrans);
-      pipe->transfer_destroy(pipe, dstTrans);
    }
 }
 
@@ -1272,11 +1257,16 @@ util_create_gen_mipmap(struct pipe_context *pipe,
    ctx->cso = cso;
 
    /* disabled blending/masking */
-   memset(&ctx->blend, 0, sizeof(ctx->blend));
-   ctx->blend.rt[0].colormask = PIPE_MASK_RGBA;
+   memset(&ctx->blend_keep_color, 0, sizeof(ctx->blend_keep_color));
+   memset(&ctx->blend_write_color, 0, sizeof(ctx->blend_write_color));
+   ctx->blend_write_color.rt[0].colormask = PIPE_MASK_RGBA;
 
    /* no-op depth/stencil/alpha */
-   memset(&ctx->depthstencil, 0, sizeof(ctx->depthstencil));
+   memset(&ctx->dsa_keep_depth, 0, sizeof(ctx->dsa_keep_depth));
+   memset(&ctx->dsa_write_depth, 0, sizeof(ctx->dsa_write_depth));
+   ctx->dsa_write_depth.depth.enabled = 1;
+   ctx->dsa_write_depth.depth.func = PIPE_FUNC_ALWAYS;
+   ctx->dsa_write_depth.depth.writemask = 1;
 
    /* rasterizer */
    memset(&ctx->rasterizer, 0, sizeof(ctx->rasterizer));
@@ -1297,7 +1287,7 @@ util_create_gen_mipmap(struct pipe_context *pipe,
    for (i = 0; i < 2; i++) {
       ctx->velem[i].src_offset = i * 4 * sizeof(float);
       ctx->velem[i].instance_divisor = 0;
-      ctx->velem[i].vertex_buffer_index = 0;
+      ctx->velem[i].vertex_buffer_index = cso_get_aux_vertex_buffer_slot(cso);
       ctx->velem[i].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
    }
 
@@ -1318,14 +1308,25 @@ util_create_gen_mipmap(struct pipe_context *pipe,
  * Helper function to set the fragment shaders.
  */
 static INLINE void
-set_fragment_shader(struct gen_mipmap_state *ctx, uint type)
+set_fragment_shader(struct gen_mipmap_state *ctx, uint type,
+                    boolean output_depth)
 {
-   if (!ctx->fs[type])
-      ctx->fs[type] =
-         util_make_fragment_tex_shader(ctx->pipe, type,
-                                       TGSI_INTERPOLATE_LINEAR);
+   if (output_depth) {
+      if (!ctx->fs_depth[type])
+         ctx->fs_depth[type] =
+            util_make_fragment_tex_shader_writedepth(ctx->pipe, type,
+                                                     TGSI_INTERPOLATE_LINEAR);
 
-   cso_set_fragment_shader_handle(ctx->cso, ctx->fs[type]);
+      cso_set_fragment_shader_handle(ctx->cso, ctx->fs_depth[type]);
+   }
+   else {
+      if (!ctx->fs_color[type])
+         ctx->fs_color[type] =
+            util_make_fragment_tex_shader(ctx->pipe, type,
+                                          TGSI_INTERPOLATE_LINEAR);
+
+      cso_set_fragment_shader_handle(ctx->cso, ctx->fs_color[type]);
+   }
 }
 
 
@@ -1361,8 +1362,10 @@ get_next_slot(struct gen_mipmap_state *ctx)
 {
    const unsigned max_slots = 4096 / sizeof ctx->vertices;
 
-   if (ctx->vbuf_slot >= max_slots) 
-      util_gen_mipmap_flush( ctx );
+   if (ctx->vbuf_slot >= max_slots) {
+      pipe_resource_reference(&ctx->vbuf, NULL);
+      ctx->vbuf_slot = 0;
+   }
 
    if (!ctx->vbuf) {
       ctx->vbuf = pipe_buffer_create(ctx->pipe->screen,
@@ -1462,9 +1465,13 @@ util_destroy_gen_mipmap(struct gen_mipmap_state *ctx)
    struct pipe_context *pipe = ctx->pipe;
    unsigned i;
 
-   for (i = 0; i < Elements(ctx->fs); i++)
-      if (ctx->fs[i])
-         pipe->delete_fs_state(pipe, ctx->fs[i]);
+   for (i = 0; i < Elements(ctx->fs_color); i++)
+      if (ctx->fs_color[i])
+         pipe->delete_fs_state(pipe, ctx->fs_color[i]);
+
+   for (i = 0; i < Elements(ctx->fs_depth); i++)
+      if (ctx->fs_depth[i])
+         pipe->delete_fs_state(pipe, ctx->fs_depth[i]);
 
    if (ctx->vs)
       pipe->delete_vs_state(pipe, ctx->vs);
@@ -1473,17 +1480,6 @@ util_destroy_gen_mipmap(struct gen_mipmap_state *ctx)
 
    FREE(ctx);
 }
-
-
-
-/* Release vertex buffer at end of frame to avoid synchronous
- * rendering.
- */
-void util_gen_mipmap_flush( struct gen_mipmap_state *ctx )
-{
-   pipe_resource_reference(&ctx->vbuf, NULL);
-   ctx->vbuf_slot = 0;
-} 
 
 
 /**
@@ -1509,6 +1505,7 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
    uint dstLevel;
    uint offset;
    uint type;
+   boolean is_depth = util_format_is_depth_or_stencil(psv->format);
 
    /* The texture object should have room for the levels which we're
     * about to generate.
@@ -1547,7 +1544,9 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
 
    /* check if we can render in the texture's format */
    if (!screen->is_format_supported(screen, psv->format, pt->target,
-                                    pt->nr_samples, PIPE_BIND_RENDER_TARGET)) {
+                                    pt->nr_samples,
+                                    is_depth ? PIPE_BIND_DEPTH_STENCIL :
+                                               PIPE_BIND_RENDER_TARGET)) {
       fallback_gen_mipmap(ctx, pt, face, baseLevel, lastLevel);
       return;
    }
@@ -1556,8 +1555,9 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
    cso_save_blend(ctx->cso);
    cso_save_depth_stencil_alpha(ctx->cso);
    cso_save_rasterizer(ctx->cso);
-   cso_save_samplers(ctx->cso);
-   cso_save_fragment_sampler_views(ctx->cso);
+   cso_save_sample_mask(ctx->cso);
+   cso_save_samplers(ctx->cso, PIPE_SHADER_FRAGMENT);
+   cso_save_sampler_views(ctx->cso, PIPE_SHADER_FRAGMENT);
    cso_save_stream_outputs(ctx->cso);
    cso_save_framebuffer(ctx->cso);
    cso_save_fragment_shader(ctx->cso);
@@ -1565,30 +1565,31 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
    cso_save_geometry_shader(ctx->cso);
    cso_save_viewport(ctx->cso);
    cso_save_vertex_elements(ctx->cso);
+   cso_save_aux_vertex_buffer_slot(ctx->cso);
+   cso_save_render_condition(ctx->cso);
 
    /* bind our state */
-   cso_set_blend(ctx->cso, &ctx->blend);
-   cso_set_depth_stencil_alpha(ctx->cso, &ctx->depthstencil);
+   cso_set_blend(ctx->cso, is_depth ? &ctx->blend_keep_color :
+                                      &ctx->blend_write_color);
+   cso_set_depth_stencil_alpha(ctx->cso, is_depth ? &ctx->dsa_write_depth :
+                                                    &ctx->dsa_keep_depth);
    cso_set_rasterizer(ctx->cso, &ctx->rasterizer);
+   cso_set_sample_mask(ctx->cso, ~0);
    cso_set_vertex_elements(ctx->cso, 2, ctx->velem);
    cso_set_stream_outputs(ctx->cso, 0, NULL, 0);
+   cso_set_render_condition(ctx->cso, NULL, 0);
 
-   set_fragment_shader(ctx, type);
+   set_fragment_shader(ctx, type, is_depth);
    set_vertex_shader(ctx);
    cso_set_geometry_shader_handle(ctx->cso, NULL);
 
    /* init framebuffer state */
    memset(&fb, 0, sizeof(fb));
-   fb.nr_cbufs = 1;
 
    /* set min/mag to same filter for faster sw speed */
    ctx->sampler.mag_img_filter = filter;
    ctx->sampler.min_img_filter = filter;
 
-   /*
-    * XXX for small mipmap levels, it may be faster to use the software
-    * fallback path...
-    */
    for (dstLevel = baseLevel + 1; dstLevel <= lastLevel; dstLevel++) {
       const uint srcLevel = dstLevel - 1;
       struct pipe_viewport_state vp;
@@ -1616,8 +1617,7 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
 	 } else
             layer = face;
 
-         memset(&surf_templ, 0, sizeof(surf_templ));
-         u_surface_default_template(&surf_templ, pt, PIPE_BIND_RENDER_TARGET);
+         u_surface_default_template(&surf_templ, pt);
          surf_templ.u.tex.level = dstLevel;
          surf_templ.u.tex.first_layer = layer;
          surf_templ.u.tex.last_layer = layer;
@@ -1626,7 +1626,14 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
          /*
           * Setup framebuffer / dest surface
           */
-         fb.cbufs[0] = surf;
+         if (is_depth) {
+            fb.nr_cbufs = 0;
+            fb.zsbuf = surf;
+         }
+         else {
+            fb.nr_cbufs = 1;
+            fb.cbufs[0] = surf;
+         }
          fb.width = u_minify(pt->width0, dstLevel);
          fb.height = u_minify(pt->height0, dstLevel);
          cso_set_framebuffer(ctx->cso, &fb);
@@ -1651,10 +1658,10 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
           */
          ctx->sampler.min_lod = ctx->sampler.max_lod = (float) srcLevel;
          ctx->sampler.lod_bias = (float) srcLevel;
-         cso_single_sampler(ctx->cso, 0, &ctx->sampler);
-         cso_single_sampler_done(ctx->cso);
+         cso_single_sampler(ctx->cso, PIPE_SHADER_FRAGMENT, 0, &ctx->sampler);
+         cso_single_sampler_done(ctx->cso, PIPE_SHADER_FRAGMENT);
 
-         cso_set_fragment_sampler_views(ctx->cso, 1, &psv);
+         cso_set_sampler_views(ctx->cso, PIPE_SHADER_FRAGMENT, 1, &psv);
 
          /* quad coords in clip coords */
          offset = set_vertex_data(ctx,
@@ -1665,6 +1672,7 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
          util_draw_vertex_buffer(ctx->pipe,
                                  ctx->cso,
                                  ctx->vbuf,
+                                 cso_get_aux_vertex_buffer_slot(ctx->cso),
                                  offset,
                                  PIPE_PRIM_TRIANGLE_FAN,
                                  4,  /* verts */
@@ -1679,8 +1687,9 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
    cso_restore_blend(ctx->cso);
    cso_restore_depth_stencil_alpha(ctx->cso);
    cso_restore_rasterizer(ctx->cso);
-   cso_restore_samplers(ctx->cso);
-   cso_restore_fragment_sampler_views(ctx->cso);
+   cso_restore_sample_mask(ctx->cso);
+   cso_restore_samplers(ctx->cso, PIPE_SHADER_FRAGMENT);
+   cso_restore_sampler_views(ctx->cso, PIPE_SHADER_FRAGMENT);
    cso_restore_framebuffer(ctx->cso);
    cso_restore_fragment_shader(ctx->cso);
    cso_restore_vertex_shader(ctx->cso);
@@ -1688,4 +1697,6 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
    cso_restore_viewport(ctx->cso);
    cso_restore_vertex_elements(ctx->cso);
    cso_restore_stream_outputs(ctx->cso);
+   cso_restore_aux_vertex_buffer_slot(ctx->cso);
+   cso_restore_render_condition(ctx->cso);
 }

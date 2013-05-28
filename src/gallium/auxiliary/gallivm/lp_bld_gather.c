@@ -32,6 +32,7 @@
 #include "lp_bld_format.h"
 #include "lp_bld_gather.h"
 #include "lp_bld_init.h"
+#include "lp_bld_intr.h"
 
 
 /**
@@ -92,10 +93,15 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
    res = LLVMBuildLoad(gallivm->builder, ptr, "");
 
    assert(src_width <= dst_width);
-   if (src_width > dst_width)
+   if (src_width > dst_width) {
       res = LLVMBuildTrunc(gallivm->builder, res, dst_elem_type, "");
-   if (src_width < dst_width)
+   } else if (src_width < dst_width) {
       res = LLVMBuildZExt(gallivm->builder, res, dst_elem_type, "");
+#ifdef PIPE_ARCH_BIG_ENDIAN
+      res = LLVMBuildShl(gallivm->builder, res,
+                         LLVMConstInt(dst_elem_type, dst_width - src_width, 0), "");
+#endif
+   }
 
    return res;
 }
@@ -146,4 +152,21 @@ lp_build_gather(struct gallivm_state *gallivm,
    }
 
    return res;
+}
+
+LLVMValueRef
+lp_build_gather_values(struct gallivm_state * gallivm,
+                       LLVMValueRef * values,
+                       unsigned value_count)
+{
+   LLVMTypeRef vec_type = LLVMVectorType(LLVMTypeOf(values[0]), value_count);
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef vec = LLVMGetUndef(vec_type);
+   unsigned i;
+
+   for (i = 0; i < value_count; i++) {
+      LLVMValueRef index = lp_build_const_int32(gallivm, i);
+      vec = LLVMBuildInsertElement(builder, vec, values[i], index, "");
+   }
+   return vec;
 }

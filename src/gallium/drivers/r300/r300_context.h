@@ -23,6 +23,8 @@
 #ifndef R300_CONTEXT_H
 #define R300_CONTEXT_H
 
+#define R300_BUFFER_ALIGNMENT 64
+
 #include "draw/draw_vertex.h"
 
 #include "util/u_blitter.h"
@@ -30,10 +32,10 @@
 #include "pipe/p_context.h"
 #include "util/u_inlines.h"
 #include "util/u_transfer.h"
-#include "util/u_vbuf.h"
 
 #include "r300_defines.h"
 #include "r300_screen.h"
+#include "compiler/radeon_regalloc.h"
 #include "../../winsys/radeon/drm/radeon_winsys.h"
 
 struct u_upload_mgr;
@@ -71,7 +73,6 @@ struct r300_aa_state {
     struct r300_surface *dest;
 
     uint32_t aa_config;
-    uint32_t aaresolve_ctl;
 };
 
 struct r300_blend_state {
@@ -96,8 +97,6 @@ struct r300_dsa_state {
 
     /* This is actually a command buffer with named dwords. */
     uint32_t cb_begin;
-    uint32_t alpha_function;    /* R300_FG_ALPHA_FUNC: 0x4bd4 */
-    uint32_t cb_reg_seq;
     uint32_t z_buffer_control;  /* R300_ZB_CNTL: 0x4f00 */
     uint32_t z_stencil_control; /* R300_ZB_ZSTENCILCNTL: 0x4f04 */
     uint32_t stencil_ref_mask;  /* R300_ZB_STENCILREFMASK: 0x4f08 */
@@ -106,21 +105,11 @@ struct r300_dsa_state {
     uint32_t cb_reg1;
     uint32_t alpha_value;       /* R500_FG_ALPHA_VALUE: 0x4be0 */
 
-    /* The same, but for FP16 alpha test. */
-    uint32_t cb_begin_fp16;
-    uint32_t alpha_function_fp16;    /* R300_FG_ALPHA_FUNC: 0x4bd4 */
-    uint32_t cb_reg_seq_fp16;
-    uint32_t z_buffer_control_fp16;  /* R300_ZB_CNTL: 0x4f00 */
-    uint32_t z_stencil_control_fp16; /* R300_ZB_ZSTENCILCNTL: 0x4f04 */
-    uint32_t stencil_ref_mask_fp16;  /* R300_ZB_STENCILREFMASK: 0x4f08 */
-    uint32_t cb_reg_fp16;
-    uint32_t stencil_ref_bf_fp16;    /* R500_ZB_STENCILREFMASK_BF: 0x4fd4 */
-    uint32_t cb_reg1_fp16;
-    uint32_t alpha_value_fp16;       /* R500_FG_ALPHA_VALUE: 0x4be0 */
+    /* Same, but without ZB reads and writes. */
+    uint32_t cb_zb_no_readwrite[8]; /* ZB not bound */
 
-    /* The second command buffer disables zbuffer reads and writes. */
-    uint32_t cb_zb_no_readwrite[10];
-    uint32_t cb_fp16_zb_no_readwrite[10];
+    /* Emitted separately: */
+    uint32_t alpha_function;
 
     /* Whether a two-sided stencil is enabled. */
     boolean two_sided;
@@ -320,6 +309,7 @@ struct r300_surface {
     uint32_t pitch;     /* COLORPITCH or DEPTHPITCH. */
     uint32_t pitch_zmask; /* ZMASK_PITCH */
     uint32_t pitch_hiz;   /* HIZ_PITCH */
+    uint32_t pitch_cmask; /* CMASK_PITCH */
     uint32_t format;    /* US_OUT_FMT or ZB_FORMAT. */
 
     /* Parameters dedicated to the CBZB clear. */
@@ -391,19 +381,24 @@ struct r300_texture_desc {
     /* Zmask/HiZ strides for each miplevel. */
     unsigned zmask_stride_in_pixels[R300_MAX_TEXTURE_LEVELS];
     unsigned hiz_stride_in_pixels[R300_MAX_TEXTURE_LEVELS];
+
+    /* CMASK info for AA buffers (no mipmapping). */
+    unsigned cmask_dwords;
+    unsigned cmask_stride_in_pixels;
 };
 
 struct r300_resource
 {
-    struct u_vbuf_resource b;
+    struct u_resource b;
 
     /* Winsys buffer backing this resource. */
     struct pb_buffer *buf;
     struct radeon_winsys_cs_handle *cs_buf;
     enum radeon_bo_domain domain;
 
-    /* Constant buffers are in user memory. */
-    uint8_t *constant_buffer;
+    /* Constant buffers and SWTCL vertex and index buffers are in user
+     * memory. */
+    uint8_t *malloced_buffer;
 
     /* Texture description (addressing, layout, special features). */
     struct r300_texture_desc tex;
@@ -417,8 +412,6 @@ struct r300_vertex_element_state {
     unsigned count;
     struct pipe_vertex_element velem[PIPE_MAX_ATTRIBS];
     unsigned format_size[PIPE_MAX_ATTRIBS];
-
-    struct u_vbuf_elements *vmgr_elements;
 
     /* The size of the vertex, in dwords. */
     unsigned vertex_size_dwords;
@@ -462,13 +455,10 @@ struct r300_context {
     /* Draw module. Used mostly for SW TCL. */
     struct draw_context* draw;
     /* Vertex buffer for SW TCL. */
-    struct pipe_resource* vbo;
+    struct pb_buffer *vbo;
+    struct radeon_winsys_cs_handle *vbo_cs;
     /* Offset and size into the SW TCL VBO. */
     size_t draw_vbo_offset;
-    size_t draw_vbo_size;
-    /* Whether the VBO must not be flushed. */
-    boolean draw_vbo_locked;
-    boolean draw_first_emitted;
 
     /* Accelerated blit support. */
     struct blitter_context* blitter;
@@ -482,7 +472,7 @@ struct r300_context {
 
     /* When no vertex buffer is set, this one is used instead to prevent
      * hardlocks. */
-    struct pipe_resource *dummy_vb;
+    struct pipe_vertex_buffer dummy_vb;
 
     /* The currently active query. */
     struct r300_query *query_current;
@@ -497,6 +487,13 @@ struct r300_context {
      * performance and stability if not handled with care. */
     /* GPU flush. */
     struct r300_atom gpu_flush;
+    /* Clears must be emitted immediately after the flush. */
+    /* HiZ clear */
+    struct r300_atom hiz_clear;
+    /* zmask clear */
+    struct r300_atom zmask_clear;
+    /* cmask clear */
+    struct r300_atom cmask_clear;
     /* Anti-aliasing (MSAA) state. */
     struct r300_atom aa_state;
     /* Framebuffer state. */
@@ -513,6 +510,8 @@ struct r300_context {
     struct r300_atom blend_color_state;
     /* Scissor state. */
     struct r300_atom scissor_state;
+    /* Sample mask. */
+    struct r300_atom sample_mask;
     /* Invariant state. This must be emitted to get the engine started. */
     struct r300_atom invariant_state;
     /* Viewport state. */
@@ -545,10 +544,6 @@ struct r300_context {
     struct r300_atom texture_cache_inval;
     /* Textures state. */
     struct r300_atom textures_state;
-    /* HiZ clear */
-    struct r300_atom hiz_clear;
-    /* zmask clear */
-    struct r300_atom zmask_clear;
     /* Occlusion query. */
     struct r300_atom query_start;
 
@@ -581,21 +576,23 @@ struct r300_context {
     int sprite_coord_enable;
     /* Whether two-sided color selection is enabled (AKA light_twoside). */
     boolean two_sided_color;
-    /* Whether fragment color clamping is enabled. */
-    boolean frag_clamp;
     /* Whether fast color clear is enabled. */
     boolean cbzb_clear;
     /* Whether fragment shader needs to be validated. */
     enum r300_fs_validity_status fs_status;
     /* Framebuffer multi-write. */
     boolean fb_multiwrite;
+    unsigned num_samples;
+    boolean msaa_enable;
+    boolean alpha_to_one;
+    boolean alpha_to_coverage;
 
     void *dsa_decompress_zmask;
 
-    struct u_vbuf *vbuf_mgr;
-    struct pipe_index_buffer swtcl_index_buffer;
-    struct pipe_vertex_buffer swtcl_vertex_buffer[PIPE_MAX_ATTRIBS];
-    unsigned swtcl_nr_vertex_buffers;
+    struct pipe_index_buffer index_buffer;
+    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
+    unsigned nr_vertex_buffers;
+    struct u_upload_mgr *uploader;
 
     struct util_slab_mempool pool_transfers;
 
@@ -626,6 +623,17 @@ struct r300_context {
     boolean hiz_in_use;         /* Whether HIZ is enabled. */
     enum r300_hiz_func hiz_func; /* HiZ function. Can be either MIN or MAX. */
     uint32_t hiz_clear_value;   /* HiZ clear value. */
+
+    /* CMASK state. */
+    boolean cmask_access;
+    boolean cmask_in_use;
+    uint32_t color_clear_value; /* RGBA8 or RGBA1010102 */
+    uint32_t color_clear_value_ar; /* RGBA16F */
+    uint32_t color_clear_value_gb; /* RGBA16F */
+
+    /* Compiler state. */
+    struct rc_regalloc_state fs_regalloc_state; /* Register allocator info for
+                                                 * fragment shaders. */
 };
 
 #define foreach_atom(r300, atom) \
@@ -709,7 +717,8 @@ void r300_stop_query(struct r300_context *r300);
 
 /* r300_render_translate.c */
 void r300_translate_index_buffer(struct r300_context *r300,
-                                 struct pipe_resource **index_buffer,
+                                 struct pipe_index_buffer *ib,
+                                 struct pipe_resource **out_index_buffer,
                                  unsigned *index_size, unsigned index_offset,
                                  unsigned *start, unsigned count);
 
@@ -717,14 +726,19 @@ void r300_translate_index_buffer(struct r300_context *r300,
 void r300_plug_in_stencil_ref_fallback(struct r300_context *r300);
 
 /* r300_render.c */
-void r300_draw_flush_vbuf(struct r300_context *r300);
 void r500_emit_index_bias(struct r300_context *r300, int index_bias);
+void r300_blitter_draw_rectangle(struct blitter_context *blitter,
+                                 int x1, int y1, int x2, int y2,
+                                 float depth,
+                                 enum blitter_attrib_type type,
+                                 const union pipe_color_union *attrib);
 
 /* r300_state.c */
 enum r300_fb_state_change {
     R300_CHANGED_FB_STATE = 0,
     R300_CHANGED_HYPERZ_FLAG,
-    R300_CHANGED_MULTIWRITE
+    R300_CHANGED_MULTIWRITE,
+    R300_CHANGED_CMASK_ENABLE,
 };
 
 void r300_mark_fb_state_dirty(struct r300_context *r300,

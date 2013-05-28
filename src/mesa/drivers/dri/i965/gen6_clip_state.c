@@ -30,61 +30,50 @@
 #include "brw_defines.h"
 #include "brw_util.h"
 #include "intel_batchbuffer.h"
-
-/**
- * Return true if at least one of the inputs used by the given fragment
- * program has the GLSL "noperspective" interpolation qualifier.
- */
-bool
-brw_fprog_uses_noperspective(const struct gl_fragment_program *fprog)
-{
-   int attr;
-   for (attr = 0; attr < FRAG_ATTRIB_MAX; ++attr) {
-      /* Ignore unused inputs. */
-      if (!(fprog->Base.InputsRead & BITFIELD64_BIT(attr)))
-         continue;
-
-      if (fprog->InterpQualifier[attr] == INTERP_QUALIFIER_NOPERSPECTIVE)
-         return true;
-   }
-   return false;
-}
-
+#include "main/fbobject.h"
 
 static void
 upload_clip_state(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
-   uint32_t depth_clamp = 0;
-   uint32_t provoking, userclip;
-   uint32_t nonperspective_barycentric_enable_flag = 0;
-   /* BRW_NEW_FRAGMENT_PROGRAM */
-   const struct gl_fragment_program *fprog = brw->fragment_program;
+   uint32_t dw2 = 0;
 
-   if (brw_fprog_uses_noperspective(fprog)) {
-      nonperspective_barycentric_enable_flag =
-         GEN6_CLIP_NON_PERSPECTIVE_BARYCENTRIC_ENABLE;
+   /* _NEW_BUFFERS */
+   struct gl_framebuffer *fb = ctx->DrawBuffer;
+
+   /* CACHE_NEW_WM_PROG */
+   if (brw->wm.prog_data->barycentric_interp_modes &
+       BRW_WM_NONPERSPECTIVE_BARYCENTRIC_BITS) {
+      dw2 |= GEN6_CLIP_NON_PERSPECTIVE_BARYCENTRIC_ENABLE;
    }
 
    if (!ctx->Transform.DepthClamp)
-      depth_clamp = GEN6_CLIP_Z_TEST;
+      dw2 |= GEN6_CLIP_Z_TEST;
 
    /* _NEW_LIGHT */
    if (ctx->Light.ProvokingVertex == GL_FIRST_VERTEX_CONVENTION) {
-      provoking =
+      dw2 |=
 	 (0 << GEN6_CLIP_TRI_PROVOKE_SHIFT) |
 	 (1 << GEN6_CLIP_TRIFAN_PROVOKE_SHIFT) |
 	 (0 << GEN6_CLIP_LINE_PROVOKE_SHIFT);
    } else {
-      provoking =
+      dw2 |=
 	 (2 << GEN6_CLIP_TRI_PROVOKE_SHIFT) |
 	 (2 << GEN6_CLIP_TRIFAN_PROVOKE_SHIFT) |
 	 (1 << GEN6_CLIP_LINE_PROVOKE_SHIFT);
    }
 
    /* _NEW_TRANSFORM */
-   userclip = ctx->Transform.ClipPlanesEnabled;
+   dw2 |= (ctx->Transform.ClipPlanesEnabled <<
+           GEN6_USER_CLIP_CLIP_DISTANCES_SHIFT);
+
+   if (ctx->Viewport.X == 0 &&
+       ctx->Viewport.Y == 0 &&
+       ctx->Viewport.Width == fb->Width &&
+       ctx->Viewport.Height == fb->Height) {
+      dw2 |= GEN6_CLIP_GB_TEST;
+   }
 
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_CLIP << 16 | (4 - 2));
@@ -92,11 +81,8 @@ upload_clip_state(struct brw_context *brw)
    OUT_BATCH(GEN6_CLIP_ENABLE |
 	     GEN6_CLIP_API_OGL |
 	     GEN6_CLIP_MODE_NORMAL |
-             nonperspective_barycentric_enable_flag |
 	     GEN6_CLIP_XY_TEST |
-	     userclip << GEN6_USER_CLIP_CLIP_DISTANCES_SHIFT |
-	     depth_clamp |
-	     provoking);
+	     dw2);
    OUT_BATCH(U_FIXED(0.125, 3) << GEN6_CLIP_MIN_POINT_WIDTH_SHIFT |
              U_FIXED(255.875, 3) << GEN6_CLIP_MAX_POINT_WIDTH_SHIFT |
              GEN6_CLIP_FORCE_ZERO_RTAINDEX);
@@ -105,10 +91,9 @@ upload_clip_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen6_clip_state = {
    .dirty = {
-      .mesa  = _NEW_TRANSFORM | _NEW_LIGHT,
-      .brw   = (BRW_NEW_CONTEXT |
-                BRW_NEW_FRAGMENT_PROGRAM),
-      .cache = 0
+      .mesa  = _NEW_TRANSFORM | _NEW_LIGHT | _NEW_BUFFERS,
+      .brw   = (BRW_NEW_CONTEXT),
+      .cache = CACHE_NEW_WM_PROG
    },
    .emit = upload_clip_state,
 };

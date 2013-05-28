@@ -29,7 +29,6 @@
 #include <math.h>
 
 #include "vdpau_private.h"
-#include "vl_winsys.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_defines.h"
 #include "util/u_debug.h"
@@ -72,8 +71,6 @@ vlVdpVideoSurfaceQueryCapabilities(VdpDevice device, VdpChromaType surface_chrom
    struct pipe_screen *pscreen;
    uint32_t max_2d_texture_level;
 
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Querying VdpVideoSurface capabilities\n");
-
    if (!(is_supported && max_width && max_height))
       return VDP_STATUS_INVALID_POINTER;
 
@@ -85,12 +82,12 @@ vlVdpVideoSurfaceQueryCapabilities(VdpDevice device, VdpChromaType surface_chrom
    if (!pscreen)
       return VDP_STATUS_RESOURCES;
 
+   pipe_mutex_lock(dev->mutex);
+
    /* XXX: Current limits */
    *is_supported = true;
-   if (surface_chroma_type != VDP_CHROMA_TYPE_420)
-      *is_supported = false;
-
    max_2d_texture_level = pscreen->get_param(pscreen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
+   pipe_mutex_unlock(dev->mutex);
    if (!max_2d_texture_level)
       return VDP_STATUS_RESOURCES;
 
@@ -111,8 +108,6 @@ vlVdpVideoSurfaceQueryGetPutBitsYCbCrCapabilities(VdpDevice device, VdpChromaTyp
    vlVdpDevice *dev;
    struct pipe_screen *pscreen;
 
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Querying VdpVideoSurface get/put bits YCbCr capabilities\n");
-
    if (!is_supported)
       return VDP_STATUS_INVALID_POINTER;
 
@@ -124,12 +119,31 @@ vlVdpVideoSurfaceQueryGetPutBitsYCbCrCapabilities(VdpDevice device, VdpChromaTyp
    if (!pscreen)
       return VDP_STATUS_RESOURCES;
 
-   *is_supported = pscreen->is_video_format_supported
+   pipe_mutex_lock(dev->mutex);
+
+   switch(bits_ycbcr_format) {
+   case VDP_YCBCR_FORMAT_UYVY:
+   case VDP_YCBCR_FORMAT_YUYV:
+      *is_supported = surface_chroma_type == VDP_CHROMA_TYPE_422;
+      break;
+
+   case VDP_YCBCR_FORMAT_Y8U8V8A8:
+   case VDP_YCBCR_FORMAT_V8U8Y8A8:
+      *is_supported = surface_chroma_type == VDP_CHROMA_TYPE_444;
+      break;
+
+   default:
+      *is_supported = true;
+      break;
+   }
+
+   *is_supported &= pscreen->is_video_format_supported
    (
       pscreen,
       FormatYCBCRToPipe(bits_ycbcr_format),
       PIPE_VIDEO_PROFILE_UNKNOWN
    );
+   pipe_mutex_unlock(dev->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -145,8 +159,6 @@ vlVdpDecoderQueryCapabilities(VdpDevice device, VdpDecoderProfile profile,
    vlVdpDevice *dev;
    struct pipe_screen *pscreen;
    enum pipe_video_profile p_profile;
-
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Querying VdpDecoder capabilities\n");
 
    if (!(is_supported && max_level && max_macroblocks && max_width && max_height))
       return VDP_STATUS_INVALID_POINTER;
@@ -165,6 +177,7 @@ vlVdpDecoderQueryCapabilities(VdpDevice device, VdpDecoderProfile profile,
       return VDP_STATUS_OK;
    }
    
+   pipe_mutex_lock(dev->mutex);
    *is_supported = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_CAP_SUPPORTED);
    if (*is_supported) {
       *max_width = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_CAP_MAX_WIDTH); 
@@ -177,6 +190,7 @@ vlVdpDecoderQueryCapabilities(VdpDevice device, VdpDecoderProfile profile,
       *max_level = 0;
       *max_macroblocks = 0;
    }
+   pipe_mutex_unlock(dev->mutex);
 
    return VDP_STATUS_OK;
 }
@@ -188,12 +202,48 @@ VdpStatus
 vlVdpOutputSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format,
                                     VdpBool *is_supported, uint32_t *max_width, uint32_t *max_height)
 {
+   vlVdpDevice *dev;
+   struct pipe_screen *pscreen;
+   enum pipe_format format;
+
+   dev = vlGetDataHTAB(device);
+   if (!dev)
+      return VDP_STATUS_INVALID_HANDLE;
+
+   pscreen = dev->vscreen->pscreen;
+   if (!pscreen)
+      return VDP_STATUS_RESOURCES;
+
+   format = FormatRGBAToPipe(surface_rgba_format);
+   if (format == PIPE_FORMAT_NONE || format == PIPE_FORMAT_A8_UNORM)
+      return VDP_STATUS_INVALID_RGBA_FORMAT;
+
    if (!(is_supported && max_width && max_height))
       return VDP_STATUS_INVALID_POINTER;
 
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Querying VdpOutputSurface capabilities\n");
+   pipe_mutex_lock(dev->mutex);
+   *is_supported = pscreen->is_format_supported
+   (
+      pscreen, format, PIPE_TEXTURE_3D, 1,
+      PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
+   );
+   if (*is_supported) {
+      uint32_t max_2d_texture_level = pscreen->get_param(
+         pscreen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
 
-   return VDP_STATUS_NO_IMPLEMENTATION;
+      if (!max_2d_texture_level) {
+         pipe_mutex_unlock(dev->mutex);
+         return VDP_STATUS_ERROR;
+      }
+
+      *max_width = *max_height = pow(2, max_2d_texture_level - 1);
+   } else {
+      *max_width = 0;
+      *max_height = 0;
+   }
+   pipe_mutex_unlock(dev->mutex);
+
+   return VDP_STATUS_OK;
 }
 
 /**
@@ -204,12 +254,34 @@ VdpStatus
 vlVdpOutputSurfaceQueryGetPutBitsNativeCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format,
                                                     VdpBool *is_supported)
 {
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Querying VdpOutputSurface get/put bits native capabilities\n");
+   vlVdpDevice *dev;
+   struct pipe_screen *pscreen;
+   enum pipe_format format;
+
+   dev = vlGetDataHTAB(device);
+   if (!dev)
+      return VDP_STATUS_INVALID_HANDLE;
+
+   pscreen = dev->vscreen->pscreen;
+   if (!pscreen)
+      return VDP_STATUS_ERROR;
+
+   format = FormatRGBAToPipe(surface_rgba_format);
+   if (format == PIPE_FORMAT_NONE || format == PIPE_FORMAT_A8_UNORM)
+      return VDP_STATUS_INVALID_RGBA_FORMAT;
 
    if (!is_supported)
       return VDP_STATUS_INVALID_POINTER;
 
-   return VDP_STATUS_NO_IMPLEMENTATION;
+   pipe_mutex_lock(dev->mutex);
+   *is_supported = pscreen->is_format_supported
+   (
+      pscreen, format, PIPE_TEXTURE_2D, 1,
+      PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
+   );
+   pipe_mutex_unlock(dev->mutex);
+
+   return VDP_STATUS_OK;
 }
 
 /**
@@ -223,12 +295,54 @@ vlVdpOutputSurfaceQueryPutBitsIndexedCapabilities(VdpDevice device,
                                                   VdpColorTableFormat color_table_format,
                                                   VdpBool *is_supported)
 {
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Querying VdpOutputSurface put bits indexed capabilities\n");
+   vlVdpDevice *dev;
+   struct pipe_screen *pscreen;
+   enum pipe_format rgba_format, index_format, colortbl_format;
+
+   dev = vlGetDataHTAB(device);
+   if (!dev)
+      return VDP_STATUS_INVALID_HANDLE;
+
+   pscreen = dev->vscreen->pscreen;
+   if (!pscreen)
+      return VDP_STATUS_ERROR;
+
+   rgba_format = FormatRGBAToPipe(surface_rgba_format);
+   if (rgba_format == PIPE_FORMAT_NONE || rgba_format == PIPE_FORMAT_A8_UNORM)
+      return VDP_STATUS_INVALID_RGBA_FORMAT;
+
+   index_format = FormatIndexedToPipe(bits_indexed_format);
+   if (index_format == PIPE_FORMAT_NONE)
+       return VDP_STATUS_INVALID_INDEXED_FORMAT;
+
+   colortbl_format = FormatColorTableToPipe(color_table_format);
+   if (colortbl_format == PIPE_FORMAT_NONE)
+       return VDP_STATUS_INVALID_COLOR_TABLE_FORMAT;
 
    if (!is_supported)
       return VDP_STATUS_INVALID_POINTER;
 
-   return VDP_STATUS_NO_IMPLEMENTATION;
+   pipe_mutex_lock(dev->mutex);
+   *is_supported = pscreen->is_format_supported
+   (
+      pscreen, rgba_format, PIPE_TEXTURE_2D, 1,
+      PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
+   );
+
+   *is_supported &= pscreen->is_format_supported
+   (
+      pscreen, index_format, PIPE_TEXTURE_2D, 1,
+      PIPE_BIND_SAMPLER_VIEW
+   );
+
+   *is_supported &= pscreen->is_format_supported
+   (
+      pscreen, colortbl_format, PIPE_TEXTURE_1D, 1,
+      PIPE_BIND_SAMPLER_VIEW
+   );
+   pipe_mutex_unlock(dev->mutex);
+
+   return VDP_STATUS_OK;
 }
 
 /**
@@ -240,12 +354,44 @@ vlVdpOutputSurfaceQueryPutBitsYCbCrCapabilities(VdpDevice device, VdpRGBAFormat 
                                                 VdpYCbCrFormat bits_ycbcr_format,
                                                 VdpBool *is_supported)
 {
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Querying VdpOutputSurface put bits YCbCr capabilities\n");
+   vlVdpDevice *dev;
+   struct pipe_screen *pscreen;
+   enum pipe_format rgba_format, ycbcr_format;
+
+   dev = vlGetDataHTAB(device);
+   if (!dev)
+      return VDP_STATUS_INVALID_HANDLE;
+
+   pscreen = dev->vscreen->pscreen;
+   if (!pscreen)
+      return VDP_STATUS_ERROR;
+
+   rgba_format = FormatRGBAToPipe(surface_rgba_format);
+   if (rgba_format == PIPE_FORMAT_NONE || rgba_format == PIPE_FORMAT_A8_UNORM)
+      return VDP_STATUS_INVALID_RGBA_FORMAT;
+
+   ycbcr_format = FormatYCBCRToPipe(bits_ycbcr_format);
+   if (ycbcr_format == PIPE_FORMAT_NONE)
+       return VDP_STATUS_INVALID_INDEXED_FORMAT;
 
    if (!is_supported)
       return VDP_STATUS_INVALID_POINTER;
 
-   return VDP_STATUS_NO_IMPLEMENTATION;
+   pipe_mutex_lock(dev->mutex);
+   *is_supported = pscreen->is_format_supported
+   (
+      pscreen, rgba_format, PIPE_TEXTURE_2D, 1,
+      PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
+   );
+
+   *is_supported &= pscreen->is_video_format_supported
+   (
+      pscreen, ycbcr_format,
+      PIPE_VIDEO_PROFILE_UNKNOWN
+   );
+   pipe_mutex_unlock(dev->mutex);
+
+   return VDP_STATUS_OK;
 }
 
 /**
@@ -255,12 +401,48 @@ VdpStatus
 vlVdpBitmapSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format,
                                     VdpBool *is_supported, uint32_t *max_width, uint32_t *max_height)
 {
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Querying VdpBitmapSurface capabilities\n");
+   vlVdpDevice *dev;
+   struct pipe_screen *pscreen;
+   enum pipe_format format;
+
+   dev = vlGetDataHTAB(device);
+   if (!dev)
+      return VDP_STATUS_INVALID_HANDLE;
+
+   pscreen = dev->vscreen->pscreen;
+   if (!pscreen)
+      return VDP_STATUS_RESOURCES;
+
+   format = FormatRGBAToPipe(surface_rgba_format);
+   if (format == PIPE_FORMAT_NONE)
+      return VDP_STATUS_INVALID_RGBA_FORMAT;
 
    if (!(is_supported && max_width && max_height))
       return VDP_STATUS_INVALID_POINTER;
 
-   return VDP_STATUS_NO_IMPLEMENTATION;
+   pipe_mutex_lock(dev->mutex);
+   *is_supported = pscreen->is_format_supported
+   (
+      pscreen, format, PIPE_TEXTURE_3D, 1,
+      PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
+   );
+   if (*is_supported) {
+      uint32_t max_2d_texture_level = pscreen->get_param(
+         pscreen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
+
+      if (!max_2d_texture_level) {
+         pipe_mutex_unlock(dev->mutex);
+         return VDP_STATUS_ERROR;
+      }
+
+      *max_width = *max_height = pow(2, max_2d_texture_level - 1);
+   } else {
+      *max_width = 0;
+      *max_height = 0;
+   }
+   pipe_mutex_unlock(dev->mutex);
+
+   return VDP_STATUS_OK;
 }
 
 /**
@@ -270,12 +452,19 @@ VdpStatus
 vlVdpVideoMixerQueryFeatureSupport(VdpDevice device, VdpVideoMixerFeature feature,
                                    VdpBool *is_supported)
 {
-   VDPAU_MSG(VDPAU_TRACE, "[VDPAU] Querying VdpVideoMixer feature support\n");
-
    if (!is_supported)
       return VDP_STATUS_INVALID_POINTER;
 
-   return VDP_STATUS_NO_IMPLEMENTATION;
+   switch (feature) {
+   case VDP_VIDEO_MIXER_FEATURE_SHARPNESS:
+   case VDP_VIDEO_MIXER_FEATURE_NOISE_REDUCTION:
+      *is_supported = VDP_TRUE;
+      break;
+   default:
+      *is_supported = VDP_FALSE;
+      break;
+   }
+   return VDP_STATUS_OK;
 }
 
 /**
@@ -312,10 +501,13 @@ vlVdpVideoMixerQueryParameterValueRange(VdpDevice device, VdpVideoMixerParameter
    vlVdpDevice *dev = vlGetDataHTAB(device);
    struct pipe_screen *screen;
    enum pipe_video_profile prof = PIPE_VIDEO_PROFILE_UNKNOWN;
+
    if (!dev)
       return VDP_STATUS_INVALID_HANDLE;
    if (!(min_value && max_value))
       return VDP_STATUS_INVALID_POINTER;
+
+   pipe_mutex_lock(dev->mutex);
    screen = dev->vscreen->pscreen;
    switch (parameter) {
    case VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_WIDTH:
@@ -334,8 +526,10 @@ vlVdpVideoMixerQueryParameterValueRange(VdpDevice device, VdpVideoMixerParameter
 
    case VDP_VIDEO_MIXER_PARAMETER_CHROMA_TYPE:
    default:
+      pipe_mutex_unlock(dev->mutex);
       return VDP_STATUS_INVALID_VIDEO_MIXER_PARAMETER;
    }
+   pipe_mutex_unlock(dev->mutex);
    return VDP_STATUS_OK;
 }
 

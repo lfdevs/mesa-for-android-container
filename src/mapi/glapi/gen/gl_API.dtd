@@ -26,6 +26,7 @@
                    size                NMTOKEN #REQUIRED
 		   float               (true | false) "false"
 		   unsigned            (true | false) "false"
+		   pointer             (true | false) "false"
                    glx_name            NMTOKEN #IMPLIED>
 <!ATTLIST enum     name                NMTOKEN #REQUIRED
                    count               CDATA   #IMPLIED
@@ -34,7 +35,12 @@
                    alias               NMTOKEN #IMPLIED
                    offset              CDATA   #IMPLIED
                    static_dispatch     (true | false) "true"
-                   vectorequiv         NMTOKEN #IMPLIED>
+                   vectorequiv         NMTOKEN #IMPLIED
+                   es1                 CDATA   "none"
+                   es2                 CDATA   "none"
+                   deprecated          CDATA   "none"
+                   exec                NMTOKEN #IMPLIED
+                   desktop             (true | false) "true">
 <!ATTLIST size     name                NMTOKEN #REQUIRED
                    count               NMTOKEN #IMPLIED
                    mode                (get | set) "set">

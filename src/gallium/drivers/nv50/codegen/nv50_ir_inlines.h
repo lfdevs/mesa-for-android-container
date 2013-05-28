@@ -40,9 +40,10 @@ static inline bool isMemoryFile(DataFile f)
    return (f >= FILE_MEMORY_CONST && f <= FILE_MEMORY_LOCAL);
 }
 
+// contrary to asTex(), this will never include SULD/SUST
 static inline bool isTextureOp(operation op)
 {
-   return (op >= OP_TEX && op <= OP_TEXCSAA);
+   return (op >= OP_TEX && op <= OP_TEXCSAA) || (op == OP_TEXPREP);
 }
 
 static inline unsigned int typeSizeof(DataType ty)
@@ -72,6 +73,31 @@ static inline unsigned int typeSizeof(DataType ty)
    }
 }
 
+static inline unsigned int typeSizeofLog2(DataType ty)
+{
+   switch (ty) {
+   case TYPE_F16:
+   case TYPE_U16:
+   case TYPE_S16:
+      return 1;
+   case TYPE_F32:
+   case TYPE_U32:
+   case TYPE_S32:
+      return 2;
+   case TYPE_F64:
+   case TYPE_U64:
+   case TYPE_S64:
+      return 3;
+   case TYPE_B96:
+   case TYPE_B128:
+      return 4;
+   case TYPE_U8:
+   case TYPE_S8:
+   default:
+      return 0;
+   }
+}
+
 static inline DataType typeOfSize(unsigned int size,
                                   bool flt = false, bool sgn = false)
 {
@@ -82,8 +108,9 @@ static inline DataType typeOfSize(unsigned int size,
    case 12: return TYPE_B96;
    case 16: return TYPE_B128;
    case 4:
-   default:
       return flt ? TYPE_F32 : (sgn ? TYPE_S32 : TYPE_U32);
+   default:
+      return TYPE_NONE;
    }
 }
 
@@ -112,9 +139,20 @@ static inline bool isSignedType(DataType ty)
    }
 }
 
+static inline DataType intTypeToSigned(DataType ty)
+{
+   switch (ty) {
+   case TYPE_U32: return TYPE_S32;
+   case TYPE_U16: return TYPE_S16;
+   case TYPE_U8: return TYPE_S8;
+   default:
+      return ty;
+   }
+}
+
 const ValueRef *ValueRef::getIndirect(int dim) const
 {
-   return isIndirect(dim) ? &insn->src[indirect[dim]] : NULL;
+   return isIndirect(dim) ? &insn->src(indirect[dim]) : NULL;
 }
 
 DataFile ValueRef::getFile() const
@@ -151,67 +189,79 @@ unsigned int ValueDef::getSize() const
 
 void ValueDef::setSSA(LValue *lval)
 {
-   Value *save = value;
-
-   this->set(NULL);
-   prev = reinterpret_cast<ValueDef *>(save);
-   value = lval;
-   lval->defs = this;
-}
-
-void ValueDef::restoreDefList()
-{
-   if (next == this)
-      prev = this;
+   origin = value->asLValue();
+   set(lval);
 }
 
 const LValue *ValueDef::preSSA() const
 {
-   return reinterpret_cast<LValue *>(prev);
+   return origin;
 }
 
 Instruction *Value::getInsn() const
 {
-   assert(!defs || getUniqueInsn());
-   return defs ? defs->getInsn() : NULL;
+   return defs.empty() ? NULL : defs.front()->getInsn();
 }
 
 Instruction *Value::getUniqueInsn() const
 {
-   if (defs) {
-      if (join != this) {
-         ValueDef::Iterator it = defs->iterator();
-         while (!it.end() && it.get()->get() != this)
-            it.next();
-         assert(it.get()->get() == this);
-         return it.get()->getInsn();
-      }
+   if (defs.empty())
+      return NULL;
 
-      // after regalloc, the definitions of coalesced values are linked
-      if (reg.data.id < 0) {
-         ValueDef::Iterator it = defs->iterator();
-         int nDef;
-         for (nDef = 0; !it.end() && nDef < 2; it.next())
-            if (it.get()->get() == this) // don't count joined values
-               ++nDef;
-         if (nDef > 1)
-            WARN("value %%%i not uniquely defined\n", id); // return NULL ?
-      }
-
-      assert(defs->get() == this);
-      return defs->getInsn();
+   // after regalloc, the definitions of coalesced values are linked
+   if (join != this) {
+      for (DefCIterator it = defs.begin(); it != defs.end(); ++it)
+         if ((*it)->get() == this)
+            return (*it)->getInsn();
+      // should be unreachable and trigger assertion at the end
    }
-   return NULL;
+#ifdef DEBUG
+   if (reg.data.id < 0) {
+      int n = 0;
+      for (DefCIterator it = defs.begin(); n < 2 && it != defs.end(); ++it)
+         if ((*it)->get() == this) // don't count joined values
+            ++n;
+      if (n > 1)
+         WARN("value %%%i not uniquely defined\n", id); // return NULL ?
+   }
+#endif
+   assert(defs.front()->get() == this);
+   return defs.front()->getInsn();
+}
+
+inline bool Instruction::constrainedDefs() const
+{
+   return defExists(1) || op == OP_UNION;
 }
 
 Value *Instruction::getIndirect(int s, int dim) const
 {
-   return src[s].isIndirect(dim) ? getSrc(src[s].indirect[dim]) : NULL;
+   return srcs[s].isIndirect(dim) ? getSrc(srcs[s].indirect[dim]) : NULL;
 }
 
 Value *Instruction::getPredicate() const
 {
    return (predSrc >= 0) ? getSrc(predSrc) : NULL;
+}
+
+void Instruction::setFlagsDef(int d, Value *val)
+{
+   if (val) {
+      if (flagsDef < 0)
+         flagsDef = d;
+      setDef(flagsDef, val);
+   } else {
+      if (flagsDef >= 0) {
+         setDef(flagsDef, NULL);
+         flagsDef = -1;
+      }
+   }
+}
+
+void Instruction::setFlagsSrc(int s, Value *val)
+{
+   flagsSrc = s;
+   setSrc(flagsSrc, val);
 }
 
 Value *TexInstruction::getIndirectR() const
@@ -254,7 +304,7 @@ const FlowInstruction *Instruction::asFlow() const
 
 TexInstruction *Instruction::asTex()
 {
-   if (op >= OP_TEX && op <= OP_TEXCSAA)
+   if ((op >= OP_TEX && op <= OP_TEXCSAA) || (op == OP_TEXPREP))
       return static_cast<TexInstruction *>(this);
    return NULL;
 }
@@ -264,6 +314,16 @@ const TexInstruction *Instruction::asTex() const
    if (op >= OP_TEX && op <= OP_TEXCSAA)
       return static_cast<const TexInstruction *>(this);
    return NULL;
+}
+
+static inline Instruction *cloneForward(Function *ctx, Instruction *obj)
+{
+   DeepClonePolicy<Function> pol(ctx);
+
+   for (int i = 0; obj->srcExists(i); ++i)
+      pol.set(obj->getSrc(i), obj->getSrc(i));
+
+   return obj->clone(pol);
 }
 
 // XXX: use a virtual function so we're really really safe ?
@@ -324,7 +384,7 @@ Value *Value::get(Iterator &it)
    return reinterpret_cast<Value *>(it.get());
 }
 
-bool BasicBlock::reachableBy(BasicBlock *by, BasicBlock *term)
+bool BasicBlock::reachableBy(const BasicBlock *by, const BasicBlock *term)
 {
    return cfg.reachableBy(&by->cfg, &term->cfg);
 }
@@ -338,6 +398,12 @@ BasicBlock *BasicBlock::get(Graph::Node *node)
 {
    assert(node);
    return reinterpret_cast<BasicBlock *>(node->data);
+}
+
+Function *Function::get(Graph::Node *node)
+{
+   assert(node);
+   return reinterpret_cast<Function *>(node->data);
 }
 
 LValue *Function::getLValue(int id)

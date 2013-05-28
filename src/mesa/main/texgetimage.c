@@ -35,6 +35,7 @@
 #include "context.h"
 #include "formats.h"
 #include "format_unpack.h"
+#include "glformats.h"
 #include "image.h"
 #include "mfeatures.h"
 #include "mtypes.h"
@@ -79,7 +80,7 @@ get_tex_depth(struct gl_context *ctx, GLuint dimensions,
    const GLint height = texImage->Height;
    const GLint depth = texImage->Depth;
    GLint img, row;
-   GLfloat *depthRow = (GLfloat *) malloc(width * sizeof(GLfloat));
+   GLfloat *depthRow = malloc(width * sizeof(GLfloat));
 
    if (!depthRow) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage");
@@ -228,6 +229,8 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
    const gl_format texFormat =
       _mesa_get_srgb_format_linear(texImage->TexFormat);
    const GLenum baseFormat = _mesa_get_format_base_format(texFormat);
+   const GLenum destBaseFormat = _mesa_base_tex_format(ctx, format);
+   GLenum rebaseFormat = GL_NONE;
    const GLuint width = texImage->Width;
    const GLuint height = texImage->Height;
    const GLuint depth = texImage->Depth;
@@ -235,7 +238,7 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
    GLuint row;
 
    /* Decompress into temp float buffer, then pack into user buffer */
-   tempImage = (GLfloat *) malloc(width * height * depth
+   tempImage = malloc(width * height * depth
                                   * 4 * sizeof(GLfloat));
    if (!tempImage) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage()");
@@ -246,23 +249,12 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
    {
       GLubyte *srcMap;
       GLint srcRowStride;
-      GLuint bytes, bw, bh;
-
-      bytes = _mesa_get_format_bytes(texFormat);
-      _mesa_get_format_block_size(texFormat, &bw, &bh);
 
       ctx->Driver.MapTextureImage(ctx, texImage, 0,
                                   0, 0, width, height,
                                   GL_MAP_READ_BIT,
                                   &srcMap, &srcRowStride);
       if (srcMap) {
-         /* XXX This line is a bit of a hack to work around the
-          * mismatch of compressed row strides as returned by
-          * MapTextureImage() vs. what the texture decompression code
-          * uses.  This will be fixed in the future.
-          */
-         srcRowStride = srcRowStride * bh / bytes;
-
          _mesa_decompress_image(texFormat, width, height,
                                 srcMap, srcRowStride, tempImage);
 
@@ -270,13 +262,37 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
       }
       else {
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage");
+         free(tempImage);
+         return;
       }
    }
 
    if (baseFormat == GL_LUMINANCE ||
+       baseFormat == GL_INTENSITY ||
        baseFormat == GL_LUMINANCE_ALPHA) {
+      /* If a luminance (or intensity) texture is read back as RGB(A), the
+       * returned value should be (L,0,0,1), not (L,L,L,1).  Set rebaseFormat
+       * here to get G=B=0.
+       */
+      rebaseFormat = texImage->_BaseFormat;
+   }
+   else if ((baseFormat == GL_RGBA ||
+             baseFormat == GL_RGB  ||
+             baseFormat == GL_RG) &&
+            (destBaseFormat == GL_LUMINANCE ||
+             destBaseFormat == GL_LUMINANCE_ALPHA ||
+             destBaseFormat == GL_LUMINANCE_INTEGER_EXT ||
+             destBaseFormat == GL_LUMINANCE_ALPHA_INTEGER_EXT)) {
+      /* If we're reading back an RGB(A) texture as luminance then we need
+       * to return L=tex(R).  Note, that's different from glReadPixels which
+       * returns L=R+G+B.
+       */
+      rebaseFormat = GL_LUMINANCE_ALPHA; /* this covers GL_LUMINANCE too */
+   }
+
+   if (rebaseFormat) {
       _mesa_rebase_rgba_float(width * height, (GLfloat (*)[4]) tempImage,
-                              baseFormat);
+                              rebaseFormat);
    }
 
    srcRow = tempImage;
@@ -295,6 +311,41 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
 
 
 /**
+ * Return a base GL format given the user-requested format
+ * for glGetTexImage().
+ */
+static GLenum
+_mesa_base_pack_format(GLenum format)
+{
+   switch (format) {
+   case GL_ABGR_EXT:
+   case GL_BGRA:
+   case GL_BGRA_INTEGER:
+   case GL_RGBA_INTEGER:
+      return GL_RGBA;
+   case GL_BGR:
+   case GL_BGR_INTEGER:
+   case GL_RGB_INTEGER:
+      return GL_RGB;
+   case GL_RED_INTEGER:
+      return GL_RED;
+   case GL_GREEN_INTEGER:
+      return GL_GREEN;
+   case GL_BLUE_INTEGER:
+      return GL_BLUE;
+   case GL_ALPHA_INTEGER:
+      return GL_ALPHA;
+   case GL_LUMINANCE_INTEGER_EXT:
+      return GL_LUMINANCE;
+   case GL_LUMINANCE_ALPHA_INTEGER_EXT:
+      return GL_LUMINANCE_ALPHA;
+   default:
+      return format;
+   }
+}
+
+
+/**
  * Get an uncompressed color texture image.
  */
 static void
@@ -307,17 +358,19 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
    const gl_format texFormat =
       _mesa_get_srgb_format_linear(texImage->TexFormat);
    const GLuint width = texImage->Width;
-   const GLenum destBaseFormat = _mesa_base_tex_format(ctx, format);
+   GLenum destBaseFormat = _mesa_base_pack_format(format);
    GLenum rebaseFormat = GL_NONE;
    GLuint height = texImage->Height;
    GLuint depth = texImage->Depth;
    GLuint img, row;
    GLfloat (*rgba)[4];
    GLuint (*rgba_uint)[4];
-   GLboolean is_integer = _mesa_is_format_integer_color(texImage->TexFormat);
+   GLboolean tex_is_integer = _mesa_is_format_integer_color(texImage->TexFormat);
+   GLboolean tex_is_uint = _mesa_is_format_unsigned(texImage->TexFormat);
+   GLenum texBaseFormat = _mesa_get_format_base_format(texImage->TexFormat);
 
    /* Allocate buffer for one row of texels */
-   rgba = (GLfloat (*)[4]) malloc(4 * width * sizeof(GLfloat));
+   rgba = malloc(4 * width * sizeof(GLfloat));
    rgba_uint = (GLuint (*)[4]) rgba;
    if (!rgba) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage()");
@@ -339,7 +392,8 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
       rebaseFormat = texImage->_BaseFormat;
    }
    else if ((texImage->_BaseFormat == GL_RGBA ||
-             texImage->_BaseFormat == GL_RGB) &&
+             texImage->_BaseFormat == GL_RGB ||
+             texImage->_BaseFormat == GL_RG) &&
             (destBaseFormat == GL_LUMINANCE ||
              destBaseFormat == GL_LUMINANCE_ALPHA ||
              destBaseFormat == GL_LUMINANCE_INTEGER_EXT ||
@@ -349,6 +403,50 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
        * returns L=R+G+B.
        */
       rebaseFormat = GL_LUMINANCE_ALPHA; /* this covers GL_LUMINANCE too */
+   }
+   else if (texImage->_BaseFormat != texBaseFormat) {
+      /* The internal format and the real format differ, so we can't rely
+       * on the unpack functions setting the correct constant values.
+       * (e.g. reading back GL_RGB8 which is actually RGBA won't set alpha=1)
+       */
+      switch (texImage->_BaseFormat) {
+      case GL_RED:
+         if ((texBaseFormat == GL_RGBA ||
+              texBaseFormat == GL_RGB ||
+              texBaseFormat == GL_RG) &&
+             (destBaseFormat == GL_RGBA ||
+              destBaseFormat == GL_RGB ||
+              destBaseFormat == GL_RG ||
+              destBaseFormat == GL_GREEN)) {
+            rebaseFormat = texImage->_BaseFormat;
+            break;
+         }
+         /* fall through */
+      case GL_RG:
+         if ((texBaseFormat == GL_RGBA ||
+              texBaseFormat == GL_RGB) &&
+             (destBaseFormat == GL_RGBA ||
+              destBaseFormat == GL_RGB ||
+              destBaseFormat == GL_BLUE)) {
+            rebaseFormat = texImage->_BaseFormat;
+            break;
+         }
+         /* fall through */
+      case GL_RGB:
+         if (texBaseFormat == GL_RGBA &&
+             (destBaseFormat == GL_RGBA ||
+              destBaseFormat == GL_ALPHA ||
+              destBaseFormat == GL_LUMINANCE_ALPHA)) {
+            rebaseFormat = texImage->_BaseFormat;
+         }
+         break;
+
+      case GL_ALPHA:
+         if (destBaseFormat != GL_ALPHA) {
+            rebaseFormat = texImage->_BaseFormat;
+         }
+         break;
+      }
    }
 
    for (img = 0; img < depth; img++) {
@@ -366,12 +464,19 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
                                              width, height, format, type,
                                              img, row, 0);
 
-	    if (is_integer) {
+	    if (tex_is_integer) {
 	       _mesa_unpack_uint_rgba_row(texFormat, width, src, rgba_uint);
                if (rebaseFormat)
                   _mesa_rebase_rgba_uint(width, rgba_uint, rebaseFormat);
-	       _mesa_pack_rgba_span_int(ctx, width, rgba_uint,
-					format, type, dest);
+               if (tex_is_uint) {
+                  _mesa_pack_rgba_span_from_uints(ctx, width,
+                                                  (GLuint (*)[4]) rgba_uint,
+                                                  format, type, dest);
+               } else {
+                  _mesa_pack_rgba_span_from_ints(ctx, width,
+                                                 (GLint (*)[4]) rgba_uint,
+                                                 format, type, dest);
+               }
 	    } else {
 	       _mesa_unpack_rgba_row(texFormat, width, src, rgba);
                if (rebaseFormat)
@@ -413,20 +518,12 @@ get_tex_rgba(struct gl_context *ctx, GLuint dimensions,
    if (type_needs_clamping(type)) {
       /* the returned image type can't have negative values */
       if (dataType == GL_FLOAT ||
+          dataType == GL_HALF_FLOAT ||
           dataType == GL_SIGNED_NORMALIZED ||
           format == GL_LUMINANCE ||
           format == GL_LUMINANCE_ALPHA) {
          transferOps |= IMAGE_CLAMP_BIT;
       }
-   }
-   /* This applies to RGB, RGBA textures. if the format is either LUMINANCE
-    * or LUMINANCE ALPHA, luminance (L) is computed as L=R+G+B .we need to
-    * clamp the sum to [0,1].
-    */
-   else if ((format == GL_LUMINANCE ||
-            format == GL_LUMINANCE_ALPHA) &&
-            dataType == GL_UNSIGNED_NORMALIZED) {
-      transferOps |= IMAGE_CLAMP_BIT;
    }
 
    if (_mesa_is_format_compressed(texImage->TexFormat)) {
@@ -451,54 +548,21 @@ get_tex_memcpy(struct gl_context *ctx, GLenum format, GLenum type,
 {
    const GLenum target = texImage->TexObject->Target;
    GLboolean memCopy = GL_FALSE;
+   GLenum texBaseFormat = _mesa_get_format_base_format(texImage->TexFormat);
 
    /*
-    * Check if the src/dst formats are compatible.
-    * Also note that GL's pixel transfer ops don't apply to glGetTexImage()
-    * so we don't have to worry about those.
-    * XXX more format combinations could be supported here.
+    * Check if we can use memcpy to copy from the hardware texture
+    * format to the user's format/type.
+    * Note that GL's pixel transfer ops don't apply to glGetTexImage()
     */
-   if (target == GL_TEXTURE_1D ||
-       target == GL_TEXTURE_2D ||
-       target == GL_TEXTURE_RECTANGLE ||
-       _mesa_is_cube_face(target)) {
-      if ((texImage->TexFormat == MESA_FORMAT_ARGB8888 ||
-             texImage->TexFormat == MESA_FORMAT_SARGB8) &&
-          format == GL_BGRA &&
-          (type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_INT_8_8_8_8_REV) &&
-          !ctx->Pack.SwapBytes &&
-          _mesa_little_endian()) {
-         memCopy = GL_TRUE;
-      }
-      else if ((texImage->TexFormat == MESA_FORMAT_AL88 ||
-                  texImage->TexFormat == MESA_FORMAT_SLA8) &&
-               format == GL_LUMINANCE_ALPHA &&
-               type == GL_UNSIGNED_BYTE &&
-               !ctx->Pack.SwapBytes &&
-               _mesa_little_endian()) {
-         memCopy = GL_TRUE;
-      }
-      else if ((texImage->TexFormat == MESA_FORMAT_L8 ||
-                  texImage->TexFormat == MESA_FORMAT_SL8) &&
-               format == GL_LUMINANCE &&
-               type == GL_UNSIGNED_BYTE) {
-         memCopy = GL_TRUE;
-      }
-      else if (texImage->TexFormat == MESA_FORMAT_L16 &&
-               format == GL_LUMINANCE &&
-               type == GL_UNSIGNED_SHORT) {
-         memCopy = GL_TRUE;
-      }
-      else if (texImage->TexFormat == MESA_FORMAT_A8 &&
-               format == GL_ALPHA &&
-               type == GL_UNSIGNED_BYTE) {
-         memCopy = GL_TRUE;
-      }
-      else if (texImage->TexFormat == MESA_FORMAT_A16 &&
-               format == GL_ALPHA &&
-               type == GL_UNSIGNED_SHORT) {
-         memCopy = GL_TRUE;
-      }
+   if ((target == GL_TEXTURE_1D ||
+        target == GL_TEXTURE_2D ||
+        target == GL_TEXTURE_RECTANGLE ||
+        _mesa_is_cube_face(target)) &&
+       texBaseFormat == texImage->_BaseFormat) {
+      memCopy = _mesa_format_matches_format_and_type(texImage->TexFormat,
+                                                     format, type,
+                                                     ctx->Pack.SwapBytes);
    }
 
    if (memCopy) {
@@ -677,6 +741,38 @@ _mesa_get_compressed_teximage(struct gl_context *ctx,
 }
 
 
+/**
+ * Validate the texture target enum supplied to glTexImage or
+ * glCompressedTexImage.
+ */
+static GLboolean
+legal_getteximage_target(struct gl_context *ctx, GLenum target)
+{
+   switch (target) {
+   case GL_TEXTURE_1D:
+   case GL_TEXTURE_2D:
+   case GL_TEXTURE_3D:
+      return GL_TRUE;
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_X_ARB:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_Y_ARB:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_ARB:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_Z_ARB:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_ARB:
+      return ctx->Extensions.ARB_texture_cube_map;
+   case GL_TEXTURE_RECTANGLE_NV:
+      return ctx->Extensions.NV_texture_rectangle;
+   case GL_TEXTURE_1D_ARRAY_EXT:
+   case GL_TEXTURE_2D_ARRAY_EXT:
+      return (ctx->Extensions.MESA_texture_array ||
+              ctx->Extensions.EXT_texture_array);
+   case GL_TEXTURE_CUBE_MAP_ARRAY:
+      return ctx->Extensions.ARB_texture_cube_map_array;
+   default:
+      return GL_FALSE;
+   }
+}
+
 
 /**
  * Do error checking for a glGetTexImage() call.
@@ -693,47 +789,14 @@ getteximage_error_check(struct gl_context *ctx, GLenum target, GLint level,
    const GLuint dimensions = (target == GL_TEXTURE_3D) ? 3 : 2;
    GLenum baseFormat, err;
 
-   if (maxLevels == 0) {
+   if (!legal_getteximage_target(ctx, target)) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glGetTexImage(target=0x%x)", target);
       return GL_TRUE;
    }
 
+   assert(maxLevels != 0);
    if (level < 0 || level >= maxLevels) {
       _mesa_error( ctx, GL_INVALID_VALUE, "glGetTexImage(level)" );
-      return GL_TRUE;
-   }
-
-   if (_mesa_sizeof_packed_type(type) <= 0) {
-      _mesa_error( ctx, GL_INVALID_ENUM, "glGetTexImage(type)" );
-      return GL_TRUE;
-   }
-
-   if (_mesa_components_in_format(format) <= 0 ||
-       format == GL_STENCIL_INDEX ||
-       format == GL_COLOR_INDEX) {
-      _mesa_error( ctx, GL_INVALID_ENUM, "glGetTexImage(format)" );
-      return GL_TRUE;
-   }
-
-   if (!ctx->Extensions.ARB_depth_texture && _mesa_is_depth_format(format)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glGetTexImage(format)");
-      return GL_TRUE;
-   }
-
-   if (!ctx->Extensions.MESA_ycbcr_texture && _mesa_is_ycbcr_format(format)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glGetTexImage(format)");
-      return GL_TRUE;
-   }
-
-   if (!ctx->Extensions.EXT_packed_depth_stencil
-       && _mesa_is_depthstencil_format(format)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glGetTexImage(format)");
-      return GL_TRUE;
-   }
-
-   if (!ctx->Extensions.ATI_envmap_bumpmap
-       && _mesa_is_dudv_format(format)) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glGetTexImage(format)");
       return GL_TRUE;
    }
 
@@ -745,7 +808,7 @@ getteximage_error_check(struct gl_context *ctx, GLenum target, GLint level,
 
    texObj = _mesa_get_current_tex_object(ctx, target);
 
-   if (!texObj || _mesa_is_proxy_texture(target)) {
+   if (!texObj) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glGetTexImage(target)");
       return GL_TRUE;
    }
@@ -833,7 +896,8 @@ _mesa_GetnTexImageARB( GLenum target, GLint level, GLenum format,
    struct gl_texture_object *texObj;
    struct gl_texture_image *texImage;
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
 
    if (getteximage_error_check(ctx, target, level, format, type,
                                bufSize, pixels)) {
@@ -889,22 +953,16 @@ getcompressedteximage_error_check(struct gl_context *ctx, GLenum target,
    const GLint maxLevels = _mesa_max_texture_levels(ctx, target);
    GLuint compressedSize;
 
-   if (maxLevels == 0) {
+   if (!legal_getteximage_target(ctx, target)) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glGetCompressedTexImage(target=0x%x)",
                   target);
       return GL_TRUE;
    }
 
+   assert(maxLevels != 0);
    if (level < 0 || level >= maxLevels) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "glGetCompressedTexImageARB(bad level = %d)", level);
-      return GL_TRUE;
-   }
-
-   if (_mesa_is_proxy_texture(target)) {
-      _mesa_error(ctx, GL_INVALID_ENUM,
-                  "glGetCompressedTexImageARB(bad target = %s)",
-                  _mesa_lookup_enum_by_nr(target));
       return GL_TRUE;
    }
 
@@ -936,7 +994,7 @@ getcompressedteximage_error_check(struct gl_context *ctx, GLenum target,
 
    if (!_mesa_is_bufferobj(ctx->Pack.BufferObj)) {
       /* do bounds checking on writing to client memory */
-      if (clientMemSize < compressedSize) {
+      if (clientMemSize < (GLsizei) compressedSize) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glGetnCompressedTexImageARB(out of bounds access:"
                      " bufSize (%d) is too small)", clientMemSize);
@@ -970,7 +1028,8 @@ _mesa_GetnCompressedTexImageARB(GLenum target, GLint level, GLsizei bufSize,
    struct gl_texture_object *texObj;
    struct gl_texture_image *texImage;
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
 
    if (getcompressedteximage_error_check(ctx, target, level, bufSize, img)) {
       return;
@@ -1003,7 +1062,7 @@ _mesa_GetnCompressedTexImageARB(GLenum target, GLint level, GLsizei bufSize,
 }
 
 void GLAPIENTRY
-_mesa_GetCompressedTexImageARB(GLenum target, GLint level, GLvoid *img)
+_mesa_GetCompressedTexImage(GLenum target, GLint level, GLvoid *img)
 {
    _mesa_GetnCompressedTexImageARB(target, level, INT_MAX, img);
 }

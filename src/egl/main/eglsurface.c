@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "egldisplay.h"
+#include "egldriver.h"
 #include "eglcontext.h"
 #include "eglconfig.h"
 #include "eglcurrent.h"
@@ -409,6 +410,13 @@ _eglQuerySurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface,
    case EGL_POST_SUB_BUFFER_SUPPORTED_NV:
       *value = surface->PostSubBufferSupportedNV;
       break;
+   case EGL_BUFFER_AGE_EXT:
+      if (!dpy->Extensions.EXT_buffer_age) {
+         _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
+         return EGL_FALSE;
+      }
+      *value = drv->API.QueryBufferAge(drv, dpy, surface);
+      break;
    default:
       _eglError(EGL_BAD_ATTRIBUTE, "eglQuerySurface");
       return EGL_FALSE;
@@ -427,11 +435,14 @@ _eglSurfaceAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surface,
 {
    EGLint confval;
    EGLint err = EGL_SUCCESS;
+   EGLint all_es_bits = EGL_OPENGL_ES_BIT |
+                        EGL_OPENGL_ES2_BIT |
+                        EGL_OPENGL_ES3_BIT_KHR;
 
    switch (attribute) {
    case EGL_MIPMAP_LEVEL:
       confval = surface->Config->RenderableType;
-      if (!(confval & (EGL_OPENGL_ES_BIT | EGL_OPENGL_ES2_BIT))) {
+      if (!(confval & all_es_bits)) {
          err = EGL_BAD_PARAMETER;
          break;
       }

@@ -1,3 +1,27 @@
+/*
+ * (C) Copyright IBM Corporation 2002, 2004
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * on the rights to use, copy, modify, merge, publish, distribute, sub
+ * license, and/or sell copies of the Software, and to permit persons to whom
+ * the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+ * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 /**
  * \file dri_util.c
  * DRI utility functions.
@@ -159,15 +183,18 @@ dri2CreateContextAttribs(__DRIscreen *screen, int api,
 
     switch (api) {
     case __DRI_API_OPENGL:
-	mesa_api = API_OPENGL;
+	mesa_api = API_OPENGL_COMPAT;
 	break;
     case __DRI_API_GLES:
 	mesa_api = API_OPENGLES;
 	break;
     case __DRI_API_GLES2:
+    case __DRI_API_GLES3:
 	mesa_api = API_OPENGLES2;
 	break;
     case __DRI_API_OPENGL_CORE:
+        mesa_api = API_OPENGL_CORE;
+        break;
     default:
 	*error = __DRI_CTX_ERROR_BAD_API;
 	return NULL;
@@ -194,6 +221,20 @@ dri2CreateContextAttribs(__DRIscreen *screen, int api,
 	}
     }
 
+    /* Mesa does not support the GL_ARB_compatibilty extension or the
+     * compatibility profile.  This means that we treat a API_OPENGL_COMPAT 3.1 as
+     * API_OPENGL_CORE and reject API_OPENGL_COMPAT 3.2+.
+     */
+    if (mesa_api == API_OPENGL_COMPAT && major_version == 3 && minor_version == 1)
+       mesa_api = API_OPENGL_CORE;
+
+    if (mesa_api == API_OPENGL_COMPAT
+        && ((major_version > 3)
+            || (major_version == 3 && minor_version >= 2))) {
+       *error = __DRI_CTX_ERROR_BAD_API;
+       return NULL;
+    }
+
     /* The EGL_KHR_create_context spec says:
      *
      *     "Flags are only defined for OpenGL context creation, and specifying
@@ -204,8 +245,8 @@ dri2CreateContextAttribs(__DRIscreen *screen, int api,
      * anything specific about this case.  However, none of the known flags
      * have any meaning in an ES context, so this seems safe.
      */
-    if (mesa_api != __DRI_API_OPENGL
-        && mesa_api != __DRI_API_OPENGL_CORE
+    if (mesa_api != API_OPENGL_COMPAT
+        && mesa_api != API_OPENGL_CORE
         && flags != 0) {
 	*error = __DRI_CTX_ERROR_BAD_FLAG;
 	return NULL;
@@ -217,17 +258,17 @@ dri2CreateContextAttribs(__DRIscreen *screen, int api,
      *     "Forward-compatible contexts are defined only for OpenGL versions
      *     3.0 and later."
      *
-     * Moreover, Mesa can't fulfill the requirements of a forward-looking
-     * context.  Return failure if a forward-looking context is requested.
+     * Forward-looking contexts are supported by silently converting the
+     * requested API to API_OPENGL_CORE.
      *
      * In Mesa, a debug context is the same as a regular context.
      */
     if ((flags & __DRI_CTX_FLAG_FORWARD_COMPATIBLE) != 0) {
-	*error = __DRI_CTX_ERROR_BAD_FLAG;
-	return NULL;
+       mesa_api = API_OPENGL_CORE;
     }
 
-    if ((flags & ~__DRI_CTX_FLAG_DEBUG) != 0) {
+    if ((flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE))
+        != 0) {
 	*error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
 	return NULL;
     }
@@ -523,40 +564,43 @@ dri2GetAPIMask(__DRIscreen *screen)
 
 /** Core interface */
 const __DRIcoreExtension driCoreExtension = {
-    { __DRI_CORE, __DRI_CORE_VERSION },
-    NULL,
-    driDestroyScreen,
-    driGetExtensions,
-    driGetConfigAttrib,
-    driIndexConfigAttrib,
-    NULL,
-    driDestroyDrawable,
-    NULL,
-    NULL,
-    driCopyContext,
-    driDestroyContext,
-    driBindContext,
-    driUnbindContext
+    .base = { __DRI_CORE, __DRI_CORE_VERSION },
+
+    .createNewScreen            = NULL,
+    .destroyScreen              = driDestroyScreen,
+    .getExtensions              = driGetExtensions,
+    .getConfigAttrib            = driGetConfigAttrib,
+    .indexConfigAttrib          = driIndexConfigAttrib,
+    .createNewDrawable          = NULL,
+    .destroyDrawable            = driDestroyDrawable,
+    .swapBuffers                = NULL,
+    .createNewContext           = NULL,
+    .copyContext                = driCopyContext,
+    .destroyContext             = driDestroyContext,
+    .bindContext                = driBindContext,
+    .unbindContext              = driUnbindContext
 };
 
 /** DRI2 interface */
 const __DRIdri2Extension driDRI2Extension = {
-    { __DRI_DRI2, __DRI_DRI2_VERSION },
-    dri2CreateNewScreen,
-    dri2CreateNewDrawable,
-    dri2CreateNewContext,
-    dri2GetAPIMask,
-    dri2CreateNewContextForAPI,
-    dri2AllocateBuffer,
-    dri2ReleaseBuffer,
-    dri2CreateContextAttribs
+    .base = { __DRI_DRI2, 3 },
+
+    .createNewScreen            = dri2CreateNewScreen,
+    .createNewDrawable          = dri2CreateNewDrawable,
+    .createNewContext           = dri2CreateNewContext,
+    .getAPIMask                 = dri2GetAPIMask,
+    .createNewContextForAPI     = dri2CreateNewContextForAPI,
+    .allocateBuffer             = dri2AllocateBuffer,
+    .releaseBuffer              = dri2ReleaseBuffer,
+    .createContextAttribs       = dri2CreateContextAttribs
 };
 
 const __DRI2configQueryExtension dri2ConfigQueryExtension = {
-   { __DRI2_CONFIG_QUERY, __DRI2_CONFIG_QUERY_VERSION },
-   dri2ConfigQueryb,
-   dri2ConfigQueryi,
-   dri2ConfigQueryf,
+   .base = { __DRI2_CONFIG_QUERY, __DRI2_CONFIG_QUERY_VERSION },
+
+   .configQueryb        = dri2ConfigQueryb,
+   .configQueryi        = dri2ConfigQueryi,
+   .configQueryf        = dri2ConfigQueryf,
 };
 
 void

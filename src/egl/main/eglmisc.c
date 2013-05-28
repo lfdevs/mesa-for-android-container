@@ -107,14 +107,16 @@ _eglUpdateExtensionsString(_EGLDisplay *dpy)
    _EGL_CHECK_EXTENSION(KHR_reusable_sync);
    _EGL_CHECK_EXTENSION(KHR_fence_sync);
 
-   _EGL_CHECK_EXTENSION(KHR_surfaceless_gles1);
-   _EGL_CHECK_EXTENSION(KHR_surfaceless_gles2);
-   _EGL_CHECK_EXTENSION(KHR_surfaceless_opengl);
+   _EGL_CHECK_EXTENSION(KHR_surfaceless_context);
+   _EGL_CHECK_EXTENSION(KHR_create_context);
 
    _EGL_CHECK_EXTENSION(NOK_swap_region);
    _EGL_CHECK_EXTENSION(NOK_texture_from_pixmap);
 
    _EGL_CHECK_EXTENSION(ANDROID_image_native_buffer);
+
+   _EGL_CHECK_EXTENSION(EXT_create_context_robustness);
+   _EGL_CHECK_EXTENSION(EXT_buffer_age);
 
    _EGL_CHECK_EXTENSION(NV_post_sub_buffer);
 #undef _EGL_CHECK_EXTENSION
@@ -137,6 +139,9 @@ _eglUpdateAPIsString(_EGLDisplay *dpy)
 
    if (dpy->ClientAPIs & EGL_OPENGL_ES2_BIT)
       strcat(apis, "OpenGL_ES2 ");
+
+   if (dpy->ClientAPIs & EGL_OPENGL_ES3_BIT_KHR)
+      strcat(apis, "OpenGL_ES3 ");
 
    if (dpy->ClientAPIs & EGL_OPENVG_BIT)
       strcat(apis, "OpenVG ");

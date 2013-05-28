@@ -47,24 +47,87 @@ const uint8_t Target::operationSrcNr[OP_LAST + 1] =
    1, 1, 1, 1, 1,          // TXF, TXQ, TXD, TXG, TEXCSAA
    1, 2,                   // SULD, SUST
    1, 1,                   // DFDX, DFDY
-   1, 2, 2, 2, 0, 0,       // RDSV, WRSV, PIXLD, QUADOP, QUADON, QUADPOP
-   2, 3, 2,                // POPCNT, INSBF, EXTBF
+   1, 2, 2, 2, 0, 0,       // RDSV, WRSV, TEXPREP, QUADOP, QUADON, QUADPOP
+   2, 3, 2, 0,             // POPCNT, INSBF, EXTBF, TEXBAR
    0
+};
+
+const OpClass Target::operationClass[OP_LAST + 1] =
+{
+   // NOP; PHI; UNION, SPLIT, MERGE, CONSTRAINT
+   OPCLASS_OTHER,
+   OPCLASS_PSEUDO,
+   OPCLASS_PSEUDO, OPCLASS_PSEUDO, OPCLASS_PSEUDO, OPCLASS_PSEUDO,
+   // MOV; LOAD; STORE
+   OPCLASS_MOVE,
+   OPCLASS_LOAD,
+   OPCLASS_STORE,
+   // ADD, SUB, MUL; DIV, MOD; MAD, FMA, SAD
+   OPCLASS_ARITH, OPCLASS_ARITH, OPCLASS_ARITH,
+   OPCLASS_ARITH, OPCLASS_ARITH,
+   OPCLASS_ARITH, OPCLASS_ARITH, OPCLASS_ARITH,
+   // ABS, NEG; NOT, AND, OR, XOR; SHL, SHR
+   OPCLASS_CONVERT, OPCLASS_CONVERT,
+   OPCLASS_LOGIC, OPCLASS_LOGIC, OPCLASS_LOGIC, OPCLASS_LOGIC,
+   OPCLASS_SHIFT, OPCLASS_SHIFT,
+   // MAX, MIN
+   OPCLASS_COMPARE, OPCLASS_COMPARE,
+   // SAT, CEIL, FLOOR, TRUNC; CVT
+   OPCLASS_CONVERT, OPCLASS_CONVERT, OPCLASS_CONVERT, OPCLASS_CONVERT,
+   OPCLASS_CONVERT,
+   // SET(AND,OR,XOR); SELP, SLCT
+   OPCLASS_COMPARE, OPCLASS_COMPARE, OPCLASS_COMPARE, OPCLASS_COMPARE,
+   OPCLASS_COMPARE, OPCLASS_COMPARE,
+   // RCP, RSQ, LG2, SIN, COS; EX2, EXP, LOG, PRESIN, PREEX2; SQRT, POW
+   OPCLASS_SFU, OPCLASS_SFU, OPCLASS_SFU, OPCLASS_SFU, OPCLASS_SFU,
+   OPCLASS_SFU, OPCLASS_SFU, OPCLASS_SFU, OPCLASS_SFU, OPCLASS_SFU,
+   OPCLASS_SFU, OPCLASS_SFU,
+   // BRA, CALL, RET; CONT, BREAK, PRE(RET,CONT,BREAK); BRKPT, JOINAT, JOIN
+   OPCLASS_FLOW, OPCLASS_FLOW, OPCLASS_FLOW,
+   OPCLASS_FLOW, OPCLASS_FLOW, OPCLASS_FLOW, OPCLASS_FLOW, OPCLASS_FLOW,
+   OPCLASS_FLOW, OPCLASS_FLOW, OPCLASS_FLOW,
+   // DISCARD, EXIT
+   OPCLASS_FLOW, OPCLASS_FLOW,
+   // MEMBAR
+   OPCLASS_OTHER,
+   // VFETCH, PFETCH, EXPORT
+   OPCLASS_LOAD, OPCLASS_OTHER, OPCLASS_STORE,
+   // LINTERP, PINTERP
+   OPCLASS_SFU, OPCLASS_SFU,
+   // EMIT, RESTART
+   OPCLASS_OTHER, OPCLASS_OTHER,
+   // TEX, TXB, TXL, TXF; TXQ, TXD, TXG, TEXCSAA
+   OPCLASS_TEXTURE, OPCLASS_TEXTURE, OPCLASS_TEXTURE, OPCLASS_TEXTURE,
+   OPCLASS_TEXTURE, OPCLASS_TEXTURE, OPCLASS_TEXTURE, OPCLASS_TEXTURE,
+   // SULD, SUST
+   OPCLASS_SURFACE, OPCLASS_SURFACE,
+   // DFDX, DFDY, RDSV, WRSV; TEXPREP, QUADOP, QUADON, QUADPOP
+   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER,
+   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER,
+   // POPCNT, INSBF, EXTBF
+   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER,
+   // TEXBAR
+   OPCLASS_OTHER,
+   OPCLASS_PSEUDO // LAST
 };
 
 
 extern Target *getTargetNVC0(unsigned int chipset);
+extern Target *getTargetNV50(unsigned int chipset);
 
 Target *Target::create(unsigned int chipset)
 {
    switch (chipset & 0xf0) {
    case 0xc0:
    case 0xd0:
+   case 0xe0:
+   case NVISA_GK110_CHIPSET:
       return getTargetNVC0(chipset);
    case 0x50:
    case 0x80:
    case 0x90:
    case 0xa0:
+      return getTargetNV50(chipset);
    default:
       ERROR("unsupported target: NV%x\n", chipset);
       return 0;
@@ -74,6 +137,10 @@ Target *Target::create(unsigned int chipset)
 void Target::destroy(Target *targ)
 {
    delete targ;
+}
+
+CodeEmitter::CodeEmitter(const Target *target) : targ(target)
+{
 }
 
 void
@@ -97,6 +164,11 @@ CodeEmitter::printBinary() const
    INFO("\n");
 }
 
+static inline uint32_t sizeToBundlesNVE4(uint32_t size)
+{
+   return (size + 55) / 56;
+}
+
 void
 CodeEmitter::prepareEmission(Program *prog)
 {
@@ -105,6 +177,23 @@ CodeEmitter::prepareEmission(Program *prog)
       Function *func = reinterpret_cast<Function *>(fi.get());
       func->binPos = prog->binSize;
       prepareEmission(func);
+
+      // adjust sizes & positions for schedulding info:
+      if (prog->getTarget()->hasSWSched) {
+         BasicBlock *bb = NULL;
+         for (int i = 0; i < func->bbCount; ++i) {
+            bb = func->bbArray[i];
+            const uint32_t oldPos = bb->binPos;
+            const uint32_t oldEnd = bb->binPos + bb->binSize;
+            uint32_t adjPos = oldPos + sizeToBundlesNVE4(oldPos) * 8;
+            uint32_t adjEnd = oldEnd + sizeToBundlesNVE4(oldEnd) * 8;
+            bb->binPos = adjPos;
+            bb->binSize = adjEnd - adjPos;
+         }
+         if (bb)
+            func->binSize = bb->binPos + bb->binSize;
+      }
+
       prog->binSize += func->binSize;
    }
 }
@@ -117,10 +206,8 @@ CodeEmitter::prepareEmission(Function *func)
 
    BasicBlock::get(func->cfg.getRoot())->binPos = func->binPos;
 
-   Graph::GraphIterator *iter;
-   for (iter = func->cfg.iteratorCFG(); !iter->end(); iter->next())
-      prepareEmission(BasicBlock::get(*iter));
-   func->cfg.putIterator(iter);
+   for (IteratorRef it = func->cfg.iteratorCFG(); !it->end(); it->next())
+      prepareEmission(BasicBlock::get(*it));
 }
 
 void
@@ -210,6 +297,27 @@ CodeEmitter::prepareEmission(BasicBlock *bb)
    func->binSize += bb->binSize;
 }
 
+void
+Program::emitSymbolTable(struct nv50_ir_prog_info *info)
+{
+   unsigned int n = 0, nMax = allFuncs.getSize();
+
+   info->bin.syms =
+      (struct nv50_ir_prog_symbol *)MALLOC(nMax * sizeof(*info->bin.syms));
+
+   for (ArrayList::Iterator fi = allFuncs.iterator();
+        !fi.end();
+        fi.next(), ++n) {
+      Function *f = (Function *)fi.get();
+      assert(n < nMax);
+
+      info->bin.syms[n].label = f->getLabel();
+      info->bin.syms[n].offset = f->binPos;
+   }
+
+   info->bin.numSyms = n;
+}
+
 bool
 Program::emitBinary(struct nv50_ir_prog_info *info)
 {
@@ -239,6 +347,12 @@ Program::emitBinary(struct nv50_ir_prog_info *info)
             emit->emitInstruction(i);
    }
    info->bin.relocData = emit->getRelocInfo();
+
+   emitSymbolTable(info);
+
+   // the nvc0 driver will print the binary iself together with the header
+   if ((dbgFlags & NV50_IR_DEBUG_BASIC) && getTarget()->getChipset() < 0xc0)
+      emit->printBinary();
 
    delete emit;
    return true;

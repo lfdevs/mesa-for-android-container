@@ -5,13 +5,19 @@
 #include "util/u_memory.h"
 #include "util/u_double_list.h"
 
+#include "nouveau_winsys.h"
 #include "nouveau_screen.h"
 #include "nouveau_mm.h"
 
-#include "nouveau/nouveau_bo.h"
+/* TODO: Higher orders can waste a lot of space for npot size buffers, should
+ * add an extra cache for such buffer objects.
+ *
+ * HACK: Max order == 21 to accommodate TF2's 1.5 MiB, frequently reallocated
+ * vertex buffer (VM flush (?) decreases performance dramatically).
+ */
 
-#define MM_MIN_ORDER 7
-#define MM_MAX_ORDER 20
+#define MM_MIN_ORDER 7 /* >= 6 to not violate ARB_map_buffer_alignment */
+#define MM_MAX_ORDER 21
 
 #define MM_NUM_BUCKETS (MM_MAX_ORDER - MM_MIN_ORDER + 1)
 
@@ -28,8 +34,8 @@ struct mm_bucket {
 struct nouveau_mman {
    struct nouveau_device *dev;
    struct mm_bucket bucket[MM_NUM_BUCKETS];
-   uint32_t storage_type;
    uint32_t domain;
+   union nouveau_bo_config config;
    uint64_t allocated;
 };
 
@@ -103,7 +109,7 @@ mm_default_slab_size(unsigned chunk_order)
 {
    static const int8_t slab_order[MM_MAX_ORDER - MM_MIN_ORDER + 1] =
    {
-      12, 12, 13, 14, 14, 17, 17, 17, 17, 19, 19, 20, 21, 22
+      12, 12, 13, 14, 14, 17, 17, 17, 17, 19, 19, 20, 21, 22, 22
    };
 
    assert(chunk_order <= MM_MAX_ORDER && chunk_order >= MM_MIN_ORDER);
@@ -128,8 +134,9 @@ mm_slab_new(struct nouveau_mman *cache, int chunk_order)
    memset(&slab->bits[0], ~0, words * 4);
 
    slab->bo = NULL;
-   ret = nouveau_bo_new_tile(cache->dev, cache->domain, 0, size,
-                             0, cache->storage_type, &slab->bo);
+
+   ret = nouveau_bo_new(cache->dev, cache->domain, 0, size, &cache->config,
+                        &slab->bo);
    if (ret) {
       FREE(slab);
       return PIPE_ERROR_OUT_OF_MEMORY;
@@ -155,7 +162,7 @@ mm_slab_new(struct nouveau_mman *cache, int chunk_order)
 /* @return token to identify slab or NULL if we just allocated a new bo */
 struct nouveau_mm_allocation *
 nouveau_mm_allocate(struct nouveau_mman *cache,
-                 uint32_t size, struct nouveau_bo **bo, uint32_t *offset)
+                    uint32_t size, struct nouveau_bo **bo, uint32_t *offset)
 {
    struct mm_bucket *bucket;
    struct mm_slab *slab;
@@ -164,10 +171,11 @@ nouveau_mm_allocate(struct nouveau_mman *cache,
 
    bucket = mm_bucket_by_size(cache, size);
    if (!bucket) {
-      ret = nouveau_bo_new_tile(cache->dev, cache->domain, 0, size,
-                                0, cache->storage_type, bo);
+      ret = nouveau_bo_new(cache->dev, cache->domain, 0, size, &cache->config,
+                           bo);
       if (ret)
-         debug_printf("bo_new(%x, %x): %i\n", size, cache->storage_type, ret);
+         debug_printf("bo_new(%x, %x): %i\n",
+                      size, cache->config.nv50.memtype, ret);
 
       *offset = 0;
       return NULL;
@@ -233,7 +241,7 @@ nouveau_mm_free_work(void *data)
 
 struct nouveau_mman *
 nouveau_mm_create(struct nouveau_device *dev, uint32_t domain,
-               uint32_t storage_type)
+                  union nouveau_bo_config *config)
 {
    struct nouveau_mman *cache = MALLOC_STRUCT(nouveau_mman);
    int i;
@@ -243,7 +251,7 @@ nouveau_mm_create(struct nouveau_device *dev, uint32_t domain,
 
    cache->dev = dev;
    cache->domain = domain;
-   cache->storage_type = storage_type;
+   cache->config = *config;
    cache->allocated = 0;
 
    for (i = 0; i < MM_NUM_BUCKETS; ++i) {

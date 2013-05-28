@@ -99,8 +99,7 @@ st_new_program(struct gl_context *ctx, GLenum target, GLuint id)
       return _mesa_init_vertex_program(ctx, &prog->Base, target, id);
    }
 
-   case GL_FRAGMENT_PROGRAM_ARB:
-   case GL_FRAGMENT_PROGRAM_NV: {
+   case GL_FRAGMENT_PROGRAM_ARB: {
       struct st_fragment_program *prog = ST_CALLOC_STRUCT(st_fragment_program);
       return _mesa_init_fragment_program(ctx, &prog->Base, target, id);
    }
@@ -160,11 +159,6 @@ st_delete_program(struct gl_context *ctx, struct gl_program *prog)
          
          if (stfp->glsl_to_tgsi)
             free_glsl_to_tgsi_visitor(stfp->glsl_to_tgsi);
-         
-         if (stfp->tgsi.tokens) {
-            st_free_tokens(stfp->tgsi.tokens);
-            stfp->tgsi.tokens = NULL;
-         }
       }
       break;
    default:
@@ -204,11 +198,6 @@ st_program_string_notify( struct gl_context *ctx,
       struct st_fragment_program *stfp = (struct st_fragment_program *) prog;
 
       st_release_fp_variants(st, stfp);
-
-      if (stfp->tgsi.tokens) {
-         st_free_tokens(stfp->tgsi.tokens);
-         stfp->tgsi.tokens = NULL;
-      }
 
       if (st->fp == stfp)
 	 st->dirty.st |= ST_NEW_FRAGMENT_PROGRAM;

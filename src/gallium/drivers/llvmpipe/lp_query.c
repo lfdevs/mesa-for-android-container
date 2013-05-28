@@ -33,6 +33,7 @@
 #include "draw/draw_context.h"
 #include "pipe/p_defines.h"
 #include "util/u_memory.h"
+#include "os/os_time.h"
 #include "lp_context.h"
 #include "lp_flush.h"
 #include "lp_fence.h"
@@ -51,9 +52,13 @@ llvmpipe_create_query(struct pipe_context *pipe,
 {
    struct llvmpipe_query *pq;
 
-   assert(type == PIPE_QUERY_OCCLUSION_COUNTER);
+   assert(type < PIPE_QUERY_TYPES);
 
    pq = CALLOC_STRUCT( llvmpipe_query );
+
+   if (pq) {
+      pq->type = type;
+   }
 
    return (struct pipe_query *) pq;
 }
@@ -85,7 +90,7 @@ static boolean
 llvmpipe_get_query_result(struct pipe_context *pipe, 
                           struct pipe_query *q,
                           boolean wait,
-                          void *vresult)
+                          union pipe_query_result *vresult)
 {
    struct llvmpipe_query *pq = llvmpipe_query(q);
    uint64_t *result = (uint64_t *)vresult;
@@ -100,7 +105,7 @@ llvmpipe_get_query_result(struct pipe_context *pipe,
    if (!lp_fence_signalled(pq->fence)) {
       if (!lp_fence_issued(pq->fence))
          llvmpipe_flush(pipe, NULL, __FUNCTION__);
-         
+
       if (!wait)
          return FALSE;
 
@@ -110,8 +115,31 @@ llvmpipe_get_query_result(struct pipe_context *pipe,
    /* Sum the results from each of the threads:
     */
    *result = 0;
-   for (i = 0; i < LP_MAX_THREADS; i++) {
-      *result += pq->count[i];
+
+   switch (pq->type) {
+   case PIPE_QUERY_OCCLUSION_COUNTER:
+      for (i = 0; i < LP_MAX_THREADS; i++) {
+         *result += pq->count[i];
+      }
+      break;
+   case PIPE_QUERY_TIMESTAMP:
+      for (i = 0; i < LP_MAX_THREADS; i++) {
+         if (pq->count[i] > *result) {
+            *result = pq->count[i];
+         }
+         if (*result == 0)
+            *result = os_time_get_nano();
+      }
+      break;
+   case PIPE_QUERY_PRIMITIVES_GENERATED:
+      *result = pq->num_primitives_generated;
+      break;
+   case PIPE_QUERY_PRIMITIVES_EMITTED:
+      *result = pq->num_primitives_written;
+      break;
+   default:
+      assert(0);
+      break;
    }
 
    return TRUE;
@@ -136,8 +164,20 @@ llvmpipe_begin_query(struct pipe_context *pipe, struct pipe_query *q)
    memset(pq->count, 0, sizeof(pq->count));
    lp_setup_begin_query(llvmpipe->setup, pq);
 
-   llvmpipe->active_query_count++;
-   llvmpipe->dirty |= LP_NEW_QUERY;
+   if (pq->type == PIPE_QUERY_PRIMITIVES_EMITTED) {
+      pq->num_primitives_written = 0;
+      llvmpipe->so_stats.num_primitives_written = 0;
+   }
+
+   if (pq->type == PIPE_QUERY_PRIMITIVES_GENERATED) {
+      pq->num_primitives_generated = 0;
+      llvmpipe->num_primitives_generated = 0;
+   }
+
+   if (pq->type == PIPE_QUERY_OCCLUSION_COUNTER) {
+      llvmpipe->active_occlusion_query = TRUE;
+      llvmpipe->dirty |= LP_NEW_OCCLUSION_QUERY;
+   }
 }
 
 
@@ -149,9 +189,19 @@ llvmpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
 
    lp_setup_end_query(llvmpipe->setup, pq);
 
-   assert(llvmpipe->active_query_count);
-   llvmpipe->active_query_count--;
-   llvmpipe->dirty |= LP_NEW_QUERY;
+   if (pq->type == PIPE_QUERY_PRIMITIVES_EMITTED) {
+      pq->num_primitives_written = llvmpipe->so_stats.num_primitives_written;
+   }
+
+   if (pq->type == PIPE_QUERY_PRIMITIVES_GENERATED) {
+      pq->num_primitives_generated = llvmpipe->num_primitives_generated;
+   }
+
+   if (pq->type == PIPE_QUERY_OCCLUSION_COUNTER) {
+      assert(llvmpipe->active_occlusion_query);
+      llvmpipe->active_occlusion_query = FALSE;
+      llvmpipe->dirty |= LP_NEW_OCCLUSION_QUERY;
+   }
 }
 
 boolean
@@ -166,7 +216,7 @@ llvmpipe_check_render_cond(struct llvmpipe_context *lp)
    wait = (lp->render_cond_mode == PIPE_RENDER_COND_WAIT ||
            lp->render_cond_mode == PIPE_RENDER_COND_BY_REGION_WAIT);
 
-   b = pipe->get_query_result(pipe, lp->render_cond_query, wait, &result);
+   b = pipe->get_query_result(pipe, lp->render_cond_query, wait, (void*)&result);
    if (b)
       return result > 0;
    else

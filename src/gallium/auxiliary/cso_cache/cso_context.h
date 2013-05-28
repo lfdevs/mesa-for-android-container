@@ -39,6 +39,7 @@ extern "C" {
 #endif
 
 struct cso_context;
+struct u_vbuf;
 
 struct cso_context *cso_create_context( struct pipe_context *pipe );
 
@@ -68,39 +69,29 @@ void cso_save_rasterizer(struct cso_context *cso);
 void cso_restore_rasterizer(struct cso_context *cso);
 
 
+enum pipe_error
+cso_set_samplers(struct cso_context *cso,
+                 unsigned shader_stage,
+                 unsigned count,
+                 const struct pipe_sampler_state **states);
 
-enum pipe_error cso_set_samplers( struct cso_context *cso,
-                                  unsigned count,
-                                  const struct pipe_sampler_state **states );
-void cso_save_samplers(struct cso_context *cso);
-void cso_restore_samplers(struct cso_context *cso);
+void
+cso_save_samplers(struct cso_context *cso, unsigned shader_stage);
+
+void
+cso_restore_samplers(struct cso_context *cso, unsigned shader_stage);
 
 /* Alternate interface to support state trackers that like to modify
  * samplers one at a time:
  */
-enum pipe_error cso_single_sampler( struct cso_context *cso,
-                                    unsigned nr,
-                                    const struct pipe_sampler_state *states );
-
-void cso_single_sampler_done( struct cso_context *cso );
-
-enum pipe_error cso_set_vertex_samplers(struct cso_context *cso,
-                                        unsigned count,
-                                        const struct pipe_sampler_state **states);
-
-void
-cso_save_vertex_samplers(struct cso_context *cso);
-
-void
-cso_restore_vertex_samplers(struct cso_context *cso);
-
 enum pipe_error
-cso_single_vertex_sampler(struct cso_context *cso,
-                          unsigned nr,
-                          const struct pipe_sampler_state *states);
+cso_single_sampler(struct cso_context *cso,
+                   unsigned shader_stage,
+                   unsigned count,
+                   const struct pipe_sampler_state *states);
 
 void
-cso_single_vertex_sampler_done(struct cso_context *cso);
+cso_single_sampler_done(struct cso_context *cso, unsigned shader_stage);
 
 
 enum pipe_error cso_set_vertex_elements(struct cso_context *ctx,
@@ -111,10 +102,14 @@ void cso_restore_vertex_elements(struct cso_context *ctx);
 
 
 void cso_set_vertex_buffers(struct cso_context *ctx,
-                            unsigned count,
+                            unsigned start_slot, unsigned count,
                             const struct pipe_vertex_buffer *buffers);
-void cso_save_vertex_buffers(struct cso_context *ctx);
-void cso_restore_vertex_buffers(struct cso_context *ctx);
+
+/* One vertex buffer slot is provided with the save/restore functionality.
+ * cso_context chooses the slot, it can be non-zero. */
+void cso_save_aux_vertex_buffer_slot(struct cso_context *ctx);
+void cso_restore_aux_vertex_buffer_slot(struct cso_context *ctx);
+unsigned cso_get_aux_vertex_buffer_slot(struct cso_context *ctx);
 
 
 void cso_set_stream_outputs(struct cso_context *ctx,
@@ -125,62 +120,59 @@ void cso_save_stream_outputs(struct cso_context *ctx);
 void cso_restore_stream_outputs(struct cso_context *ctx);
 
 
-/* These aren't really sensible -- most of the time the api provides
+/*
+ * We don't provide shader caching in CSO.  Most of the time the api provides
  * object semantics for shaders anyway, and the cases where it doesn't
- * (eg mesa's internall-generated texenv programs), it will be up to
+ * (eg mesa's internally-generated texenv programs), it will be up to
  * the state tracker to implement their own specialized caching.
  */
-enum pipe_error cso_set_fragment_shader_handle(struct cso_context *ctx,
-                                               void *handle );
+
+void cso_set_fragment_shader_handle(struct cso_context *ctx, void *handle);
 void cso_delete_fragment_shader(struct cso_context *ctx, void *handle );
-/*
-enum pipe_error cso_set_fragment_shader( struct cso_context *cso,
-                                         const struct pipe_shader_state *shader );
-*/
 void cso_save_fragment_shader(struct cso_context *cso);
 void cso_restore_fragment_shader(struct cso_context *cso);
 
 
-enum pipe_error cso_set_vertex_shader_handle(struct cso_context *ctx,
-                                             void *handle );
+void cso_set_vertex_shader_handle(struct cso_context *ctx, void *handle);
 void cso_delete_vertex_shader(struct cso_context *ctx, void *handle );
-/*
-enum pipe_error cso_set_vertex_shader( struct cso_context *cso,
-                                       const struct pipe_shader_state *shader );
-*/
 void cso_save_vertex_shader(struct cso_context *cso);
 void cso_restore_vertex_shader(struct cso_context *cso);
 
 
-enum pipe_error cso_set_geometry_shader_handle(struct cso_context *ctx,
-                                               void *handle);
+void cso_set_geometry_shader_handle(struct cso_context *ctx, void *handle);
 void cso_delete_geometry_shader(struct cso_context *ctx, void *handle);
 void cso_save_geometry_shader(struct cso_context *cso);
 void cso_restore_geometry_shader(struct cso_context *cso);
 
 
-enum pipe_error cso_set_framebuffer(struct cso_context *cso,
-                                    const struct pipe_framebuffer_state *fb);
+void cso_set_framebuffer(struct cso_context *cso,
+                         const struct pipe_framebuffer_state *fb);
 void cso_save_framebuffer(struct cso_context *cso);
 void cso_restore_framebuffer(struct cso_context *cso);
 
 
-enum pipe_error cso_set_viewport(struct cso_context *cso,
-                                 const struct pipe_viewport_state *vp);
+void cso_set_viewport(struct cso_context *cso,
+                      const struct pipe_viewport_state *vp);
 void cso_save_viewport(struct cso_context *cso);
 void cso_restore_viewport(struct cso_context *cso);
 
 
-enum pipe_error cso_set_blend_color(struct cso_context *cso,
-                                    const struct pipe_blend_color *bc);
+void cso_set_blend_color(struct cso_context *cso,
+                         const struct pipe_blend_color *bc);
 
-enum pipe_error cso_set_sample_mask(struct cso_context *cso,
-                                    unsigned stencil_mask);
+void cso_set_sample_mask(struct cso_context *cso, unsigned stencil_mask);
+void cso_save_sample_mask(struct cso_context *ctx);
+void cso_restore_sample_mask(struct cso_context *ctx);
 
-enum pipe_error cso_set_stencil_ref(struct cso_context *cso,
-                                    const struct pipe_stencil_ref *sr);
+void cso_set_stencil_ref(struct cso_context *cso,
+                         const struct pipe_stencil_ref *sr);
 void cso_save_stencil_ref(struct cso_context *cso);
 void cso_restore_stencil_ref(struct cso_context *cso);
+
+void cso_set_render_condition(struct cso_context *cso,
+                              struct pipe_query *query, uint mode);
+void cso_save_render_condition(struct cso_context *cso);
+void cso_restore_render_condition(struct cso_context *cso);
 
 
 /* clip state */
@@ -196,33 +188,35 @@ void
 cso_restore_clip(struct cso_context *cso);
 
 
-/* fragment sampler view state */
+/* sampler view state */
 
 void
-cso_set_fragment_sampler_views(struct cso_context *cso,
-                               uint count,
-                               struct pipe_sampler_view **views);
+cso_set_sampler_views(struct cso_context *cso,
+                      unsigned shader_stage,
+                      unsigned count,
+                      struct pipe_sampler_view **views);
 
 void
-cso_save_fragment_sampler_views(struct cso_context *cso);
+cso_save_sampler_views(struct cso_context *cso, unsigned shader_stage);
 
 void
-cso_restore_fragment_sampler_views(struct cso_context *cso);
+cso_restore_sampler_views(struct cso_context *cso, unsigned shader_stage);
 
 
-/* vertex sampler view state */
 
-void
-cso_set_vertex_sampler_views(struct cso_context *cso,
-                             uint count,
-                             struct pipe_sampler_view **views);
+/* drawing */
 
 void
-cso_save_vertex_sampler_views(struct cso_context *cso);
+cso_set_index_buffer(struct cso_context *cso,
+                     const struct pipe_index_buffer *ib);
 
 void
-cso_restore_vertex_sampler_views(struct cso_context *cso);
+cso_draw_vbo(struct cso_context *cso,
+             const struct pipe_draw_info *info);
 
+/* helper drawing function */
+void
+cso_draw_arrays(struct cso_context *cso, uint mode, uint start, uint count);
 
 #ifdef	__cplusplus
 }

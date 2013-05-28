@@ -85,7 +85,12 @@ typedef enum {
 	 * Indicates this register should use the result of the presubtract
 	 * operation.
 	 */
-	RC_FILE_PRESUB
+	RC_FILE_PRESUB,
+
+	/**
+	 * Indicates that the source index has been encoded as a 7-bit float.
+	 */
+	RC_FILE_INLINE
 } rc_register_file;
 
 enum {
@@ -121,6 +126,7 @@ typedef enum {
 
 #define RC_SWIZZLE_XYZW RC_MAKE_SWIZZLE(RC_SWIZZLE_X, RC_SWIZZLE_Y, RC_SWIZZLE_Z, RC_SWIZZLE_W)
 #define RC_SWIZZLE_XYZ0 RC_MAKE_SWIZZLE(RC_SWIZZLE_X, RC_SWIZZLE_Y, RC_SWIZZLE_Z, RC_SWIZZLE_ZERO)
+#define RC_SWIZZLE_XYZ1 RC_MAKE_SWIZZLE(RC_SWIZZLE_X, RC_SWIZZLE_Y, RC_SWIZZLE_Z, RC_SWIZZLE_ONE)
 #define RC_SWIZZLE_XYZZ RC_MAKE_SWIZZLE(RC_SWIZZLE_X, RC_SWIZZLE_Y, RC_SWIZZLE_Z, RC_SWIZZLE_Z)
 #define RC_SWIZZLE_XXXX RC_MAKE_SWIZZLE_SMEAR(RC_SWIZZLE_X)
 #define RC_SWIZZLE_YYYY RC_MAKE_SWIZZLE_SMEAR(RC_SWIZZLE_Y)
@@ -197,5 +203,11 @@ static inline int rc_presubtract_src_reg_count(rc_presubtract_op op){
 #define RC_SOURCE_NONE  0x0
 #define RC_SOURCE_RGB   0x1
 #define RC_SOURCE_ALPHA 0x2
+
+typedef enum {
+	RC_PRED_DISABLED,
+	RC_PRED_SET,
+	RC_PRED_INV
+} rc_predicate_mode;
 
 #endif /* RADEON_PROGRAM_CONSTANTS_H */

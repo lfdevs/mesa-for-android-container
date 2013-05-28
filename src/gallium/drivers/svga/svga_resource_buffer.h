@@ -42,7 +42,6 @@
 #define SVGA_BUFFER_MAX_RANGES 32
 
 
-struct svga_screen;
 struct svga_context;
 struct svga_winsys_buffer;
 struct svga_winsys_surface;
@@ -241,12 +240,6 @@ struct svga_winsys_buffer *
 svga_winsys_buffer_create(struct svga_context *svga,
                           unsigned alignment, 
                           unsigned usage,
-                          unsigned size);
-
-void
-svga_redefine_user_buffer(struct pipe_context *ctx,
-                          struct pipe_resource *resource,
-                          unsigned offset,
                           unsigned size);
 
 #endif /* SVGA_BUFFER_H */

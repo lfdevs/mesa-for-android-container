@@ -50,11 +50,9 @@ extern "C" {
 #endif
 
 
-/** Opaque type */
+/** Opaque types */
 struct winsys_handle;
-/** Opaque type */
 struct pipe_fence_handle;
-struct pipe_winsys;
 struct pipe_resource;
 struct pipe_surface;
 struct pipe_transfer;
@@ -66,10 +64,7 @@ struct pipe_transfer;
  * context.
  */
 struct pipe_screen {
-   struct pipe_winsys *winsys;
-
    void (*destroy)( struct pipe_screen * );
-
 
    const char *(*get_name)( struct pipe_screen * );
 
@@ -101,6 +96,25 @@ struct pipe_screen {
 			   enum pipe_video_profile profile,
 			   enum pipe_video_cap param );
 
+   /**
+    * Query a compute-specific capability/parameter/limit.
+    * \param param  one of PIPE_COMPUTE_CAP_x
+    * \param ret    pointer to a preallocated buffer that will be
+    *               initialized to the parameter value, or NULL.
+    * \return       size in bytes of the parameter value that would be
+    *               returned.
+    */
+   int (*get_compute_param)(struct pipe_screen *,
+			    enum pipe_compute_cap param,
+			    void *ret);
+
+   /**
+    * Query a timestamp in nanoseconds. The returned value should match
+    * PIPE_QUERY_TIMESTAMP. This function returns immediately and doesn't
+    * wait for rendering to complete (which cannot be achieved with queries).
+    */
+   uint64_t (*get_timestamp)(struct pipe_screen *);
+
    struct pipe_context * (*context_create)( struct pipe_screen *,
 					    void *priv );
 
@@ -123,6 +137,14 @@ struct pipe_screen {
                                          enum pipe_format format,
                                          enum pipe_video_profile profile );
 
+   /**
+    * Check if we can actually create the given resource (test the dimension,
+    * overall size, etc).  Used to implement proxy textures.
+    * \return TRUE if size is OK, FALSE if too large.
+    */
+   boolean (*can_create_resource)(struct pipe_screen *screen,
+                                  const struct pipe_resource *templat);
+                               
    /**
     * Create a new texture object, using the given template info.
     */
@@ -153,32 +175,6 @@ struct pipe_screen {
 
 
    /**
-    * Create a buffer that wraps user-space data.
-    *
-    * Effectively this schedules a delayed call to buffer_create
-    * followed by an upload of the data at *some point in the future*,
-    * or perhaps never.  Basically the allocate/upload is delayed
-    * until the buffer is actually passed to hardware.
-    *
-    * The intention is to provide a quick way to turn regular data
-    * into a buffer, and secondly to avoid a copy operation if that
-    * data subsequently turns out to be only accessed by the CPU.
-    *
-    * Common example is OpenGL vertex buffers that are subsequently
-    * processed either by software TNL in the driver or by passing to
-    * hardware.
-    *
-    * XXX: What happens if the delayed call to buffer_create() fails?
-    *
-    * Note that ptr may be accessed at any time upto the time when the
-    * buffer is destroyed, so the data must not be freed before then.
-    */
-   struct pipe_resource *(*user_buffer_create)(struct pipe_screen *screen,
-					       void *ptr,
-					       unsigned bytes,
-					       unsigned bind_flags);
-
-   /**
     * Do any special operations to ensure frontbuffer contents are
     * displayed, eg copy fake frontbuffer.
     * \param winsys_drawable_handle  an opaque handle that the calling context
@@ -204,7 +200,7 @@ struct pipe_screen {
 
    /**
     * Wait for the fence to finish.
-    * \param timeout  in nanoseconds
+    * \param timeout  in nanoseconds (may be PIPE_TIMEOUT_INFINITE).
     */
    boolean (*fence_finish)( struct pipe_screen *screen,
                             struct pipe_fence_handle *fence,

@@ -21,6 +21,7 @@
  */
 
 #include "pipe/p_defines.h"
+#include "util/u_helpers.h"
 #include "util/u_inlines.h"
 #include "util/u_transfer.h"
 
@@ -86,76 +87,106 @@ static void *
 nvc0_blend_state_create(struct pipe_context *pipe,
                         const struct pipe_blend_state *cso)
 {
-    struct nvc0_blend_stateobj *so = CALLOC_STRUCT(nvc0_blend_stateobj);
-    int i;
-    uint32_t ms;
+   struct nvc0_blend_stateobj *so = CALLOC_STRUCT(nvc0_blend_stateobj);
+   int i;
+   int r; /* reference */
+   uint32_t ms;
+   uint8_t blend_en = 0;
+   boolean indep_masks = FALSE;
+   boolean indep_funcs = FALSE;
 
-    so->pipe = *cso;
+   so->pipe = *cso;
 
-    SB_IMMED_3D(so, BLEND_INDEPENDENT, cso->independent_blend_enable);
+   /* check which states actually have differing values */
+   if (cso->independent_blend_enable) {
+      for (r = 0; r < 8 && !cso->rt[r].blend_enable; ++r);
+      blend_en |= 1 << r;
+      for (i = r + 1; i < 8; ++i) {
+         if (!cso->rt[i].blend_enable)
+            continue;
+         blend_en |= 1 << i;
+         if (cso->rt[i].rgb_func != cso->rt[r].rgb_func ||
+             cso->rt[i].rgb_src_factor != cso->rt[r].rgb_src_factor ||
+             cso->rt[i].rgb_dst_factor != cso->rt[r].rgb_dst_factor ||
+             cso->rt[i].alpha_func != cso->rt[r].alpha_func ||
+             cso->rt[i].alpha_src_factor != cso->rt[r].alpha_src_factor ||
+             cso->rt[i].alpha_dst_factor != cso->rt[r].alpha_dst_factor) {
+            indep_funcs = TRUE;
+            break;
+         }
+      }
+      for (; i < 8; ++i)
+         blend_en |= (cso->rt[i].blend_enable ? 1 : 0) << i;
 
-    if (!cso->logicop_enable)
-       SB_IMMED_3D(so, LOGIC_OP_ENABLE, 0);
+      for (i = 1; i < 8; ++i) {
+         if (cso->rt[i].colormask != cso->rt[0].colormask) {
+            indep_masks = TRUE;
+            break;
+         }
+      }
+   } else {
+      r = 0;
+      if (cso->rt[0].blend_enable)
+         blend_en = 0xff;
+   }
 
-    if (cso->logicop_enable) {
-       SB_BEGIN_3D(so, LOGIC_OP_ENABLE, 2);
-       SB_DATA    (so, 1);
-       SB_DATA    (so, nvgl_logicop_func(cso->logicop_func));
+   if (cso->logicop_enable) {
+      SB_BEGIN_3D(so, LOGIC_OP_ENABLE, 2);
+      SB_DATA    (so, 1);
+      SB_DATA    (so, nvgl_logicop_func(cso->logicop_func));
 
-       SB_IMMED_3D(so, BLEND_ENABLES, 0);
-    } else
-    if (!cso->independent_blend_enable) {
-        SB_IMMED_3D(so, BLEND_ENABLES, cso->rt[0].blend_enable ? 0xff : 0);
+      SB_IMMED_3D(so, MACRO_BLEND_ENABLES, 0);
+   } else {
+      SB_IMMED_3D(so, LOGIC_OP_ENABLE, 0);
 
-        if (cso->rt[0].blend_enable) {
-            SB_BEGIN_3D(so, BLEND_EQUATION_RGB, 5);
-            SB_DATA    (so, nvgl_blend_eqn(cso->rt[0].rgb_func));
-            SB_DATA    (so, nvc0_blend_fac(cso->rt[0].rgb_src_factor));
-            SB_DATA    (so, nvc0_blend_fac(cso->rt[0].rgb_dst_factor));
-            SB_DATA    (so, nvgl_blend_eqn(cso->rt[0].alpha_func));
-            SB_DATA    (so, nvc0_blend_fac(cso->rt[0].alpha_src_factor));
-            SB_BEGIN_3D(so, BLEND_FUNC_DST_ALPHA, 1);
-            SB_DATA    (so, nvc0_blend_fac(cso->rt[0].alpha_dst_factor));
-        }
+      SB_IMMED_3D(so, BLEND_INDEPENDENT, indep_funcs);
+      SB_IMMED_3D(so, MACRO_BLEND_ENABLES, blend_en);
+      if (indep_funcs) {
+         for (i = 0; i < 8; ++i) {
+            if (cso->rt[i].blend_enable) {
+               SB_BEGIN_3D(so, IBLEND_EQUATION_RGB(i), 6);
+               SB_DATA    (so, nvgl_blend_eqn(cso->rt[i].rgb_func));
+               SB_DATA    (so, nvc0_blend_fac(cso->rt[i].rgb_src_factor));
+               SB_DATA    (so, nvc0_blend_fac(cso->rt[i].rgb_dst_factor));
+               SB_DATA    (so, nvgl_blend_eqn(cso->rt[i].alpha_func));
+               SB_DATA    (so, nvc0_blend_fac(cso->rt[i].alpha_src_factor));
+               SB_DATA    (so, nvc0_blend_fac(cso->rt[i].alpha_dst_factor));
+            }
+         }
+      } else
+      if (blend_en) {
+         SB_BEGIN_3D(so, BLEND_EQUATION_RGB, 5);
+         SB_DATA    (so, nvgl_blend_eqn(cso->rt[r].rgb_func));
+         SB_DATA    (so, nvc0_blend_fac(cso->rt[r].rgb_src_factor));
+         SB_DATA    (so, nvc0_blend_fac(cso->rt[r].rgb_dst_factor));
+         SB_DATA    (so, nvgl_blend_eqn(cso->rt[r].alpha_func));
+         SB_DATA    (so, nvc0_blend_fac(cso->rt[r].alpha_src_factor));
+         SB_BEGIN_3D(so, BLEND_FUNC_DST_ALPHA, 1);
+         SB_DATA    (so, nvc0_blend_fac(cso->rt[r].alpha_dst_factor));
+      }
 
-        SB_IMMED_3D(so, COLOR_MASK_COMMON, 1);
-        SB_BEGIN_3D(so, COLOR_MASK(0), 1);
-        SB_DATA    (so, nvc0_colormask(cso->rt[0].colormask));
-    } else {
-        uint8_t en = 0;
-
-        for (i = 0; i < 8; ++i) {
-            if (!cso->rt[i].blend_enable)
-                continue;
-            en |= 1 << i;
-
-            SB_BEGIN_3D(so, IBLEND_EQUATION_RGB(i), 6);
-            SB_DATA    (so, nvgl_blend_eqn(cso->rt[i].rgb_func));
-            SB_DATA    (so, nvc0_blend_fac(cso->rt[i].rgb_src_factor));
-            SB_DATA    (so, nvc0_blend_fac(cso->rt[i].rgb_dst_factor));
-            SB_DATA    (so, nvgl_blend_eqn(cso->rt[i].alpha_func));
-            SB_DATA    (so, nvc0_blend_fac(cso->rt[i].alpha_src_factor));
-            SB_DATA    (so, nvc0_blend_fac(cso->rt[i].alpha_dst_factor));
-        }
-        SB_IMMED_3D(so, BLEND_ENABLES, en);
-
-        SB_IMMED_3D(so, COLOR_MASK_COMMON, 0);
-        SB_BEGIN_3D(so, COLOR_MASK(0), 8);
-        for (i = 0; i < 8; ++i)
+      SB_IMMED_3D(so, COLOR_MASK_COMMON, !indep_masks);
+      if (indep_masks) {
+         SB_BEGIN_3D(so, COLOR_MASK(0), 8);
+         for (i = 0; i < 8; ++i)
             SB_DATA(so, nvc0_colormask(cso->rt[i].colormask));
-    }
+      } else {
+         SB_BEGIN_3D(so, COLOR_MASK(0), 1);
+         SB_DATA    (so, nvc0_colormask(cso->rt[0].colormask));
+      }
+   }
 
-    ms = 0;
-    if (cso->alpha_to_coverage)
-       ms |= NVC0_3D_MULTISAMPLE_CTRL_ALPHA_TO_COVERAGE;
-    if (cso->alpha_to_one)
-       ms |= NVC0_3D_MULTISAMPLE_CTRL_ALPHA_TO_ONE;
+   ms = 0;
+   if (cso->alpha_to_coverage)
+      ms |= NVC0_3D_MULTISAMPLE_CTRL_ALPHA_TO_COVERAGE;
+   if (cso->alpha_to_one)
+      ms |= NVC0_3D_MULTISAMPLE_CTRL_ALPHA_TO_ONE;
 
-    SB_BEGIN_3D(so, MULTISAMPLE_CTRL, 1);
-    SB_DATA    (so, ms);
+   SB_BEGIN_3D(so, MULTISAMPLE_CTRL, 1);
+   SB_DATA    (so, ms);
 
-    assert(so->size <= (sizeof(so->state) / sizeof(so->state[0])));
-    return so;
+   assert(so->size <= (sizeof(so->state) / sizeof(so->state[0])));
+   return so;
 }
 
 static void
@@ -232,9 +263,9 @@ nvc0_rasterizer_state_create(struct pipe_context *pipe,
     SB_IMMED_3D(so, POINT_SPRITE_ENABLE, cso->point_quad_rasterization);
     SB_IMMED_3D(so, POINT_SMOOTH_ENABLE, cso->point_smooth);
 
-    SB_BEGIN_3D(so, POLYGON_MODE_FRONT, 1);
+    SB_BEGIN_3D(so, MACRO_POLYGON_MODE_FRONT, 1);
     SB_DATA    (so, nvgl_polygon_mode(cso->fill_front));
-    SB_BEGIN_3D(so, POLYGON_MODE_BACK, 1);
+    SB_BEGIN_3D(so, MACRO_POLYGON_MODE_BACK, 1);
     SB_DATA    (so, nvgl_polygon_mode(cso->fill_back));
     SB_IMMED_3D(so, POLYGON_SMOOTH_ENABLE, cso->poly_smooth);
 
@@ -420,13 +451,20 @@ nvc0_stage_sampler_states_bind(struct nvc0_context *nvc0, int s,
    for (i = 0; i < nr; ++i) {
       struct nv50_tsc_entry *old = nvc0->samplers[s][i];
 
+      if (hwcso[i] == old)
+         continue;
+      nvc0->samplers_dirty[s] |= 1 << i;
+
       nvc0->samplers[s][i] = nv50_tsc_entry(hwcso[i]);
       if (old)
          nvc0_screen_tsc_unlock(nvc0->screen, old);
    }
-   for (; i < nvc0->num_samplers[s]; ++i)
-      if (nvc0->samplers[s][i])
+   for (; i < nvc0->num_samplers[s]; ++i) {
+      if (nvc0->samplers[s][i]) {
          nvc0_screen_tsc_unlock(nvc0->screen, nvc0->samplers[s][i]);
+         nvc0->samplers[s][i] = NULL;
+      }
+   }
 
    nvc0->num_samplers[s] = nr;
 
@@ -472,24 +510,29 @@ nvc0_stage_set_sampler_views(struct nvc0_context *nvc0, int s,
 
    for (i = 0; i < nr; ++i) {
       struct nv50_tic_entry *old = nv50_tic_entry(nvc0->textures[s][i]);
-      if (old)
+
+      if (views[i] == nvc0->textures[s][i])
+         continue;
+      nvc0->textures_dirty[s] |= 1 << i;
+
+      if (old) {
+         nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(s, i));
          nvc0_screen_tic_unlock(nvc0->screen, old);
+      }
 
       pipe_sampler_view_reference(&nvc0->textures[s][i], views[i]);
    }
 
    for (i = nr; i < nvc0->num_textures[s]; ++i) {
       struct nv50_tic_entry *old = nv50_tic_entry(nvc0->textures[s][i]);
-      if (!old)
-         continue;
-      nvc0_screen_tic_unlock(nvc0->screen, old);
-
-      pipe_sampler_view_reference(&nvc0->textures[s][i], NULL);
+      if (old) {
+         nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(s, i));
+         nvc0_screen_tic_unlock(nvc0->screen, old);
+         pipe_sampler_view_reference(&nvc0->textures[s][i], NULL);
+      }
    }
 
    nvc0->num_textures[s] = nr;
-
-   nvc0_bufctx_reset(nvc0, NVC0_BUFCTX_TEXTURES);
 
    nvc0->dirty |= NVC0_NEW_TEXTURES;
 }
@@ -603,30 +646,35 @@ nvc0_gp_state_bind(struct pipe_context *pipe, void *hwcso)
 
 static void
 nvc0_set_constant_buffer(struct pipe_context *pipe, uint shader, uint index,
-                         struct pipe_resource *res)
+                         struct pipe_constant_buffer *cb)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct pipe_resource *res = cb ? cb->buffer : NULL;
+   const unsigned s = nvc0_shader_stage(shader);
+   const unsigned i = index;
 
-   switch (shader) {
-   case PIPE_SHADER_VERTEX: shader = 0; break;
-      /*
-   case PIPE_SHADER_TESSELLATION_CONTROL: shader = 1; break;
-   case PIPE_SHADER_TESSELLATION_EVALUATION: shader = 2; break;
-      */
-   case PIPE_SHADER_GEOMETRY: shader = 3; break;
-   case PIPE_SHADER_FRAGMENT: shader = 4; break;
-   default:
-      assert(0);
-      break;
+   if (shader == PIPE_SHADER_COMPUTE)
+      return;
+
+   if (nvc0->constbuf[s][i].user)
+      nvc0->constbuf[s][i].u.buf = NULL;
+   else
+   if (nvc0->constbuf[s][i].u.buf)
+      nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_CB(s, i));
+
+   pipe_resource_reference(&nvc0->constbuf[s][i].u.buf, res);
+
+   nvc0->constbuf[s][i].user = (cb && cb->user_buffer) ? TRUE : FALSE;
+   if (nvc0->constbuf[s][i].user) {
+      nvc0->constbuf[s][i].u.data = cb->user_buffer;
+      nvc0->constbuf[s][i].size = cb->buffer_size;
+   } else
+   if (cb) {
+      nvc0->constbuf[s][i].offset = cb->buffer_offset;
+      nvc0->constbuf[s][i].size = align(cb->buffer_size, 0x100);
    }
 
-   if (nvc0->constbuf[shader][index])
-      nvc0_bufctx_del_resident(nvc0, NVC0_BUFCTX_CONSTANT,
-			       nv04_resource(nvc0->constbuf[shader][index]));
-
-   pipe_resource_reference(&nvc0->constbuf[shader][index], res);
-
-   nvc0->constbuf_dirty[shader] |= 1 << index;
+   nvc0->constbuf_dirty[s] |= 1 << i;
 
    nvc0->dirty |= NVC0_NEW_CONSTBUF;
 }
@@ -680,8 +728,22 @@ nvc0_set_framebuffer_state(struct pipe_context *pipe,
                            const struct pipe_framebuffer_state *fb)
 {
     struct nvc0_context *nvc0 = nvc0_context(pipe);
+    unsigned i;
 
-    nvc0->framebuffer = *fb;
+    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_FB);
+
+    for (i = 0; i < fb->nr_cbufs; ++i)
+       pipe_surface_reference(&nvc0->framebuffer.cbufs[i], fb->cbufs[i]);
+    for (; i < nvc0->framebuffer.nr_cbufs; ++i)
+       pipe_surface_reference(&nvc0->framebuffer.cbufs[i], NULL);
+
+    nvc0->framebuffer.nr_cbufs = fb->nr_cbufs;
+
+    nvc0->framebuffer.width = fb->width;
+    nvc0->framebuffer.height = fb->height;
+
+    pipe_surface_reference(&nvc0->framebuffer.zsbuf, fb->zsbuf);
+
     nvc0->dirty |= NVC0_NEW_FRAMEBUFFER;
 }
 
@@ -717,23 +779,38 @@ nvc0_set_viewport_state(struct pipe_context *pipe,
 
 static void
 nvc0_set_vertex_buffers(struct pipe_context *pipe,
-                        unsigned count,
+                        unsigned start_slot, unsigned count,
                         const struct pipe_vertex_buffer *vb)
 {
     struct nvc0_context *nvc0 = nvc0_context(pipe);
     unsigned i;
 
-    for (i = 0; i < count; ++i)
-       pipe_resource_reference(&nvc0->vtxbuf[i].buffer, vb[i].buffer);
-    for (; i < nvc0->num_vtxbufs; ++i)
-       pipe_resource_reference(&nvc0->vtxbuf[i].buffer, NULL);
+    util_set_vertex_buffers_count(nvc0->vtxbuf, &nvc0->num_vtxbufs, vb,
+                                  start_slot, count);
 
-    memcpy(nvc0->vtxbuf, vb, sizeof(*vb) * count);
-    nvc0->num_vtxbufs = count;
+    if (!vb) {
+       nvc0->vbo_user &= ~(((1ull << count) - 1) << start_slot);
+       nvc0->constant_vbos &= ~(((1ull << count) - 1) << start_slot);
+       return;
+    }
 
-    nvc0_bufctx_reset(nvc0, NVC0_BUFCTX_VERTEX);
+    for (i = 0; i < count; ++i) {
+       unsigned dst_index = start_slot + i;
+
+       if (vb[i].user_buffer) {
+          nvc0->vbo_user |= 1 << dst_index;
+          if (!vb[i].stride)
+             nvc0->constant_vbos |= 1 << dst_index;
+          else
+             nvc0->constant_vbos &= ~(1 << dst_index);
+       } else {
+          nvc0->vbo_user &= ~(1 << dst_index);
+          nvc0->constant_vbos &= ~(1 << dst_index);
+       }
+    }
 
     nvc0->dirty |= NVC0_NEW_ARRAYS;
+    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_VTX);
 }
 
 static void
@@ -742,11 +819,21 @@ nvc0_set_index_buffer(struct pipe_context *pipe,
 {
     struct nvc0_context *nvc0 = nvc0_context(pipe);
 
+    if (nvc0->idxbuf.buffer)
+       nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_IDX);
+
     if (ib) {
        pipe_resource_reference(&nvc0->idxbuf.buffer, ib->buffer);
-
-       memcpy(&nvc0->idxbuf, ib, sizeof(nvc0->idxbuf));
+       nvc0->idxbuf.index_size = ib->index_size;
+       if (ib->buffer) {
+          nvc0->idxbuf.offset = ib->offset;
+          nvc0->dirty |= NVC0_NEW_IDXBUF;
+       } else {
+          nvc0->idxbuf.user_buffer = ib->user_buffer;
+          nvc0->dirty &= ~NVC0_NEW_IDXBUF;
+       }
     } else {
+       nvc0->dirty &= ~NVC0_NEW_IDXBUF;
        pipe_resource_reference(&nvc0->idxbuf.buffer, NULL);
     }
 }
@@ -792,6 +879,7 @@ nvc0_so_target_destroy(struct pipe_context *pipe,
 {
    struct nvc0_so_target *targ = nvc0_so_target(ptarg);
    pipe->destroy_query(pipe, targ->pq);
+   pipe_resource_reference(&targ->pipe.buffer, NULL);
    FREE(targ);
 }
 
@@ -890,7 +978,5 @@ nvc0_init_state_functions(struct nvc0_context *nvc0)
    pipe->create_stream_output_target = nvc0_so_target_create;
    pipe->stream_output_target_destroy = nvc0_so_target_destroy;
    pipe->set_stream_output_targets = nvc0_set_transform_feedback_targets;
-
-   pipe->redefine_user_buffer = u_default_redefine_user_buffer;
 }
 

@@ -38,15 +38,13 @@
 
 
 extern "C" void GLAPIENTRY
-_mesa_GetActiveUniformARB(GLhandleARB program, GLuint index,
+_mesa_GetActiveUniform(GLhandleARB program, GLuint index,
                           GLsizei maxLength, GLsizei *length, GLint *size,
                           GLenum *type, GLcharARB *nameOut)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader_program *shProg =
       _mesa_lookup_shader_program_err(ctx, program, "glGetActiveUniform");
-
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (!shProg)
       return;
@@ -59,7 +57,7 @@ _mesa_GetActiveUniformARB(GLhandleARB program, GLuint index,
    const struct gl_uniform_storage *const uni = &shProg->UniformStorage[index];
 
    if (nameOut) {
-      _mesa_copy_string(nameOut, maxLength, length, uni->name);
+      _mesa_get_uniform_name(uni, maxLength, length, nameOut);
    }
 
    if (size) {
@@ -71,6 +69,93 @@ _mesa_GetActiveUniformARB(GLhandleARB program, GLuint index,
 
    if (type) {
       *type = uni->type->gl_type;
+   }
+}
+
+extern "C" void GLAPIENTRY
+_mesa_GetActiveUniformsiv(GLuint program,
+			  GLsizei uniformCount,
+			  const GLuint *uniformIndices,
+			  GLenum pname,
+			  GLint *params)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   struct gl_shader_program *shProg;
+   GLsizei i;
+
+   shProg = _mesa_lookup_shader_program_err(ctx, program, "glGetActiveUniform");
+   if (!shProg)
+      return;
+
+   if (uniformCount < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+		  "glGetUniformIndices(uniformCount < 0)");
+      return;
+   }
+
+   for (i = 0; i < uniformCount; i++) {
+      GLuint index = uniformIndices[i];
+
+      if (index >= shProg->NumUserUniformStorage) {
+	 _mesa_error(ctx, GL_INVALID_VALUE, "glGetActiveUniformsiv(index)");
+	 return;
+      }
+   }
+
+   for (i = 0; i < uniformCount; i++) {
+      GLuint index = uniformIndices[i];
+      const struct gl_uniform_storage *uni = &shProg->UniformStorage[index];
+
+      switch (pname) {
+      case GL_UNIFORM_TYPE:
+	 params[i] = uni->type->gl_type;
+	 break;
+
+      case GL_UNIFORM_SIZE:
+	 /* array_elements is zero for non-arrays, but the API requires that 1 be
+	  * returned.
+	  */
+	 params[i] = MAX2(1, uni->array_elements);
+	 break;
+
+      case GL_UNIFORM_NAME_LENGTH:
+	 params[i] = strlen(uni->name) + 1;
+
+         /* Page 61 (page 73 of the PDF) in section 2.11 of the OpenGL ES 3.0
+          * spec says:
+          *
+          *     "If the active uniform is an array, the uniform name returned
+          *     in name will always be the name of the uniform array appended
+          *     with "[0]"."
+          */
+         if (uni->array_elements != 0)
+            params[i] += 3;
+	 break;
+
+      case GL_UNIFORM_BLOCK_INDEX:
+	 params[i] = uni->block_index;
+	 break;
+
+      case GL_UNIFORM_OFFSET:
+	 params[i] = uni->offset;
+	 break;
+
+      case GL_UNIFORM_ARRAY_STRIDE:
+	 params[i] = uni->array_stride;
+	 break;
+
+      case GL_UNIFORM_MATRIX_STRIDE:
+	 params[i] = uni->matrix_stride;
+	 break;
+
+      case GL_UNIFORM_IS_ROW_MAJOR:
+	 params[i] = uni->row_major;
+	 break;
+
+      default:
+	 _mesa_error(ctx, GL_INVALID_ENUM, "glGetActiveUniformsiv(pname)");
+	 return;
+      }
    }
 }
 
@@ -506,8 +591,6 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
    enum glsl_base_type basicType;
    struct gl_uniform_storage *uni;
 
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
-
    if (!validate_uniform_parameters(ctx, shProg, location, count,
 				    &loc, &offset, "glUniform", false))
       return;
@@ -736,7 +819,8 @@ _mesa_uniform(struct gl_context *ctx, struct gl_shader_program *shProg,
 		   sizeof(shProg->SamplerUnits));
 
 	    _mesa_update_shader_textures_used(shProg, prog);
-	    (void) ctx->Driver.ProgramStringNotify(ctx, prog->Target, prog);
+            if (ctx->Driver.SamplerUniformChange)
+	       ctx->Driver.SamplerUniformChange(ctx, prog->Target, prog);
 	 }
       }
    }
@@ -757,8 +841,6 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
    unsigned components;
    unsigned elements;
    struct gl_uniform_storage *uni;
-
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (!validate_uniform_parameters(ctx, shProg, location, count,
 				    &loc, &offset, "glUniformMatrix", false))
@@ -782,6 +864,17 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
       _mesa_error(ctx, GL_INVALID_OPERATION,
 		  "glUniformMatrix(matrix size mismatch)");
       return;
+   }
+
+   /* GL_INVALID_VALUE is generated if `transpose' is not GL_FALSE.
+    * http://www.khronos.org/opengles/sdk/docs/man/xhtml/glUniform.xml */
+   if (ctx->API == API_OPENGLES
+       || (ctx->API == API_OPENGLES2 && ctx->Version < 30)) {
+      if (transpose) {
+	 _mesa_error(ctx, GL_INVALID_VALUE,
+		     "glUniformMatrix(matrix transpose is not GL_FALSE)");
+	 return;
+      }
    }
 
    if (ctx->Shader.Flags & GLSL_UNIFORMS) {
@@ -836,84 +929,51 @@ _mesa_uniform_matrix(struct gl_context *ctx, struct gl_shader_program *shProg,
    _mesa_propagate_uniforms_to_driver_storage(uni, offset, count);
 }
 
+
 /**
  * Called via glGetUniformLocation().
  *
- * The return value will encode two values, the uniform location and an
- * offset (used for arrays, structs).
+ * Returns the uniform index into UniformStorage (also the
+ * glGetActiveUniformsiv uniform index), and stores the referenced
+ * array offset in *offset, or GL_INVALID_INDEX (-1).  Those two
+ * return values can be encoded into a uniform location for
+ * glUniform* using _mesa_uniform_merge_location_offset(index, offset).
  */
-extern "C" GLint
+extern "C" unsigned
 _mesa_get_uniform_location(struct gl_context *ctx,
                            struct gl_shader_program *shProg,
-			   const GLchar *name)
+                           const GLchar *name,
+                           unsigned *out_offset)
 {
-   const size_t len = strlen(name);
-   long offset;
-   bool array_lookup;
+   /* Page 80 (page 94 of the PDF) of the OpenGL 2.1 spec says:
+    *
+    *     "The first element of a uniform array is identified using the
+    *     name of the uniform array appended with "[0]". Except if the last
+    *     part of the string name indicates a uniform array, then the
+    *     location of the first element of that array can be retrieved by
+    *     either using the name of the uniform array, or the name of the
+    *     uniform array appended with "[0]"."
+    *
+    * Note: since uniform names are not allowed to use whitespace, and array
+    * indices within uniform names are not allowed to use "+", "-", or leading
+    * zeros, it follows that each uniform has a unique name up to the possible
+    * ambiguity with "[0]" noted above.  Therefore we don't need to worry
+    * about mal-formed inputs--they will properly fail when we try to look up
+    * the uniform name in shProg->UniformHash.
+    */
+
+   const GLchar *base_name_end;
+   long offset = parse_program_resource_name(name, &base_name_end);
+   bool array_lookup = offset >= 0;
    char *name_copy;
 
-   /* If the name ends with a ']', assume that it refers to some element of an
-    * array.  Malformed array references will fail the hash table look up
-    * below, so it doesn't matter that they are not caught here.  This code
-    * only wants to catch the "leaf" array references so that arrays of
-    * structures containing arrays will be handled correctly.
-    */
-   if (name[len-1] == ']') {
-      unsigned i;
-
-      /* Walk backwards over the string looking for a non-digit character.
-       * This had better be the opening bracket for an array index.
-       *
-       * Initially, i specifies the location of the ']'.  Since the string may
-       * contain only the ']' charcater, walk backwards very carefully.
-       */
-      for (i = len - 1; (i > 0) && isdigit(name[i-1]); --i)
-	 /* empty */ ;
-
-      /* Page 80 (page 94 of the PDF) of the OpenGL 2.1 spec says:
-       *
-       *     "The first element of a uniform array is identified using the
-       *     name of the uniform array appended with "[0]". Except if the last
-       *     part of the string name indicates a uniform array, then the
-       *     location of the first element of that array can be retrieved by
-       *     either using the name of the uniform array, or the name of the
-       *     uniform array appended with "[0]"."
-       *
-       * Page 79 (page 93 of the PDF) of the OpenGL 2.1 spec says:
-       *
-       *     "name must be a null terminated string, without white space."
-       *
-       * Return an error if there is no opening '[' to match the closing ']'.
-       * An error will also be returned if there is intervening white space
-       * (or other non-digit characters) before the opening '['.
-       */
-      if ((i == 0) || name[i-1] != '[')
-	 return -1;
-
-      /* Return an error if there are no digits between the opening '[' to
-       * match the closing ']'.
-       */
-      if (i == (len - 1))
-	 return -1;
-
-      /* Make a new string that is a copy of the old string up to (but not
-       * including) the '[' character.
-       */
-      name_copy = (char *) malloc(i);
-      memcpy(name_copy, name, i - 1);
-      name_copy[i-1] = '\0';
-
-      offset = strtol(&name[i], NULL, 10);
-      if (offset < 0) {
-	 free(name_copy);
-	 return -1;
-      }
-
-      array_lookup = true;
+   if (array_lookup) {
+      name_copy = (char *) malloc(base_name_end - name + 1);
+      memcpy(name_copy, name, base_name_end - name);
+      name_copy[base_name_end - name] = '\0';
    } else {
       name_copy = (char *) name;
       offset = 0;
-      array_lookup = false;
    }
 
    unsigned location = 0;
@@ -928,7 +988,7 @@ _mesa_get_uniform_location(struct gl_context *ctx,
       free(name_copy);
 
    if (!found)
-      return -1;
+      return GL_INVALID_INDEX;
 
    /* If the uniform is an array, fail if the index is out of bounds.
     * (A negative index is caught above.)  This also fails if the uniform
@@ -936,11 +996,12 @@ _mesa_get_uniform_location(struct gl_context *ctx,
     * array_elements is zero and offset >= 0.
     */
    if (array_lookup
-	 && offset >= shProg->UniformStorage[location].array_elements) {
-      return -1;
+       && offset >= (long) shProg->UniformStorage[location].array_elements) {
+      return GL_INVALID_INDEX;
    }
 
-   return _mesa_uniform_merge_location_offset(location, offset);
+   *out_offset = offset;
+   return location;
 }
 
 extern "C" bool

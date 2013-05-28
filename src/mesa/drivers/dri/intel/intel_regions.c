@@ -123,6 +123,12 @@ intel_region_map(struct intel_context *intel, struct intel_region *region,
     * flush is only needed on first map of the buffer.
     */
 
+   if (unlikely(INTEL_DEBUG & DEBUG_PERF)) {
+      if (drm_intel_bo_busy(region->bo)) {
+         perf_debug("Mapping a busy BO, causing a stall on the GPU.\n");
+      }
+   }
+
    _DBG("%s %p\n", __FUNCTION__, region);
    if (!region->map_refcount) {
       intel_flush(&intel->ctx);
@@ -204,7 +210,7 @@ intel_region_alloc(struct intel_screen *screen,
       return NULL;
 
    region = intel_region_alloc_internal(screen, cpp, width, height,
-                                        aligned_pitch / cpp, tiling, buffer);
+                                        aligned_pitch, tiling, buffer);
    if (region == NULL) {
       drm_intel_bo_unreference(buffer);
       return NULL;
@@ -338,8 +344,6 @@ _mesa_copy_rect(GLubyte * dst,
 {
    GLuint i;
 
-   dst_pitch *= cpp;
-   src_pitch *= cpp;
    dst += dst_x * cpp;
    src += src_x * cpp;
    dst += dst_y * dst_pitch;
@@ -389,4 +393,79 @@ intel_region_copy(struct intel_context *intel,
 			    dst->pitch, dst->bo, dst_offset, dst->tiling,
 			    srcx, srcy, dstx, dsty, width, height,
 			    logicop);
+}
+
+/**
+ * This function computes masks that may be used to select the bits of the X
+ * and Y coordinates that indicate the offset within a tile.  If the region is
+ * untiled, the masks are set to 0.
+ */
+void
+intel_region_get_tile_masks(struct intel_region *region,
+                            uint32_t *mask_x, uint32_t *mask_y,
+                            bool map_stencil_as_y_tiled)
+{
+   int cpp = region->cpp;
+   uint32_t tiling = region->tiling;
+
+   if (map_stencil_as_y_tiled)
+      tiling = I915_TILING_Y;
+
+   switch (tiling) {
+   default:
+      assert(false);
+   case I915_TILING_NONE:
+      *mask_x = *mask_y = 0;
+      break;
+   case I915_TILING_X:
+      *mask_x = 512 / cpp - 1;
+      *mask_y = 7;
+      break;
+   case I915_TILING_Y:
+      *mask_x = 128 / cpp - 1;
+      *mask_y = 31;
+      break;
+   }
+}
+
+/**
+ * Compute the offset (in bytes) from the start of the region to the given x
+ * and y coordinate.  For tiled regions, caller must ensure that x and y are
+ * multiples of the tile size.
+ */
+uint32_t
+intel_region_get_aligned_offset(struct intel_region *region, uint32_t x,
+                                uint32_t y, bool map_stencil_as_y_tiled)
+{
+   int cpp = region->cpp;
+   uint32_t pitch = region->pitch;
+   uint32_t tiling = region->tiling;
+
+   if (map_stencil_as_y_tiled) {
+      tiling = I915_TILING_Y;
+
+      /* When mapping a W-tiled stencil buffer as Y-tiled, each 64-high W-tile
+       * gets transformed into a 32-high Y-tile.  Accordingly, the pitch of
+       * the resulting region is twice the pitch of the original region, since
+       * each row in the Y-tiled view corresponds to two rows in the actual
+       * W-tiled surface.  So we need to correct the pitch before computing
+       * the offsets.
+       */
+      pitch *= 2;
+   }
+
+   switch (tiling) {
+   default:
+      assert(false);
+   case I915_TILING_NONE:
+      return y * pitch + x * cpp;
+   case I915_TILING_X:
+      assert((x % (512 / cpp)) == 0);
+      assert((y % 8) == 0);
+      return y * pitch + x / (512 / cpp) * 4096;
+   case I915_TILING_Y:
+      assert((x % (128 / cpp)) == 0);
+      assert((y % 32) == 0);
+      return y * pitch + x / (128 / cpp) * 4096;
+   }
 }

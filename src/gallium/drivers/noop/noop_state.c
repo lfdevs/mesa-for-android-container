@@ -116,7 +116,6 @@ static struct pipe_surface *noop_create_surface(struct pipe_context *ctx,
 	surface->format = surf_tmpl->format;
 	surface->width = texture->width0;
 	surface->height = texture->height0;
-	surface->usage = surf_tmpl->usage;
 	surface->texture = texture;
 	surface->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
 	surface->u.tex.last_layer = surf_tmpl->u.tex.last_layer;
@@ -175,7 +174,7 @@ static void noop_set_framebuffer_state(struct pipe_context *ctx,
 
 static void noop_set_constant_buffer(struct pipe_context *ctx,
 					uint shader, uint index,
-					struct pipe_resource *buffer)
+					struct pipe_constant_buffer *cb)
 {
 }
 
@@ -215,8 +214,9 @@ static void noop_set_index_buffer(struct pipe_context *ctx,
 {
 }
 
-static void noop_set_vertex_buffers(struct pipe_context *ctx, unsigned count,
-					const struct pipe_vertex_buffer *buffers)
+static void noop_set_vertex_buffers(struct pipe_context *ctx,
+				    unsigned start_slot, unsigned count,
+				    const struct pipe_vertex_buffer *buffers)
 {
 }
 
@@ -320,7 +320,6 @@ void noop_init_state_functions(struct pipe_context *ctx)
 	ctx->sampler_view_destroy = noop_sampler_view_destroy;
 	ctx->surface_destroy = noop_surface_destroy;
 	ctx->draw_vbo = noop_draw_vbo;
-	ctx->redefine_user_buffer = u_default_redefine_user_buffer;
 	ctx->create_stream_output_target = noop_create_stream_output_target;
 	ctx->stream_output_target_destroy = noop_stream_output_target_destroy;
 	ctx->set_stream_output_targets = noop_set_stream_output_targets;

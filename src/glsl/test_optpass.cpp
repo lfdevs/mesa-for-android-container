@@ -98,8 +98,6 @@ do_optimization(struct exec_list *ir, const char *optimization)
       return do_lower_texture_projection(ir);
    } else if (strcmp(optimization, "do_if_simplification") == 0) {
       return do_if_simplification(ir);
-   } else if (strcmp(optimization, "do_discard_simplification") == 0) {
-      return do_discard_simplification(ir);
    } else if (sscanf(optimization, "lower_if_to_cond_assign ( %d ) ",
                      &int_0) == 1) {
       return lower_if_to_cond_assign(ir, int_0);
@@ -199,7 +197,7 @@ int test_optpass(int argc, char **argv)
 
    struct gl_context local_ctx;
    struct gl_context *ctx = &local_ctx;
-   initialize_context_to_defaults(ctx, API_OPENGL);
+   initialize_context_to_defaults(ctx, API_OPENGL_COMPAT);
 
    ctx->Driver.NewShader = _mesa_new_shader;
 
@@ -218,8 +216,8 @@ int test_optpass(int argc, char **argv)
    } else {
       shader->Source = input.c_str();
       const char *source = shader->Source;
-      state->error = preprocess(state, &source, &state->info_log,
-                                state->extensions, ctx->API) != 0;
+      state->error = glcpp_preprocess(state, &source, &state->info_log,
+                                state->extensions, ctx) != 0;
 
       if (!state->error) {
          _mesa_glsl_lexer_ctor(state, source);

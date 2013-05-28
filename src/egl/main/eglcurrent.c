@@ -42,7 +42,7 @@
 static _EGLThreadInfo dummy_thread = _EGL_THREAD_INFO_INITIALIZER;
 
 
-#if PTHREADS
+#if HAVE_PTHREAD
 #include <pthread.h>
 
 static _EGL_DECLARE_MUTEX(_egl_TSDMutex);
@@ -108,7 +108,7 @@ static INLINE EGLBoolean _eglInitTSD(void (*dtor)(_EGLThreadInfo *))
    return EGL_TRUE;
 }
 
-#else /* PTHREADS */
+#else /* HAVE_PTHREAD */
 static const _EGLThreadInfo *_egl_TSD;
 static void (*_egl_FreeTSD)(_EGLThreadInfo *);
 
@@ -137,7 +137,7 @@ static INLINE EGLBoolean _eglInitTSD(void (*dtor)(_EGLThreadInfo *))
    return EGL_TRUE;
 }
 
-#endif /* !PTHREADS */
+#endif /* !HAVE_PTHREAD */
 
 
 static void
@@ -156,7 +156,7 @@ _eglInitThreadInfo(_EGLThreadInfo *t)
 static _EGLThreadInfo *
 _eglCreateThreadInfo(void)
 {
-   _EGLThreadInfo *t = (_EGLThreadInfo *) calloc(1, sizeof(_EGLThreadInfo));
+   _EGLThreadInfo *t = calloc(1, sizeof(_EGLThreadInfo));
    if (t)
       _eglInitThreadInfo(t);
    else

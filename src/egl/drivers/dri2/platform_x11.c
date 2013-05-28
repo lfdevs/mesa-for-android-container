@@ -39,6 +39,12 @@
 
 #include "egl_dri2.h"
 
+/* From xmlpool/options.h, user exposed so should be stable */
+#define DRI_CONF_VBLANK_NEVER 0
+#define DRI_CONF_VBLANK_DEF_INTERVAL_0 1
+#define DRI_CONF_VBLANK_DEF_INTERVAL_1 2
+#define DRI_CONF_VBLANK_ALWAYS_SYNC 3
+
 static void
 swrastCreateDrawable(struct dri2_egl_display * dri2_dpy,
                      struct dri2_egl_surface * dri2_surf,
@@ -175,7 +181,7 @@ swrastGetImage(__DRIdrawable * read,
  */
 static _EGLSurface *
 dri2_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
-		    _EGLConfig *conf, EGLNativeWindowType window,
+		    _EGLConfig *conf, EGLNativeWindowType native_window,
 		    const EGLint *attrib_list)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
@@ -185,6 +191,7 @@ dri2_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
    xcb_get_geometry_reply_t *reply;
    xcb_screen_iterator_t s;
    xcb_generic_error_t *error;
+   xcb_drawable_t window = (uintptr_t )native_window;
 
    (void) drv;
 
@@ -272,8 +279,22 @@ dri2_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
 			   _EGLConfig *conf, EGLNativeWindowType window,
 			   const EGLint *attrib_list)
 {
-   return dri2_create_surface(drv, disp, EGL_WINDOW_BIT, conf,
-			      window, attrib_list);
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   _EGLSurface *surf;
+
+   surf = dri2_create_surface(drv, disp, EGL_WINDOW_BIT, conf,
+                              window, attrib_list);
+   if (surf != NULL) {
+      /* When we first create the DRI2 drawable, its swap interval on the
+       * server side is 1.
+       */
+      surf->SwapInterval = 1;
+
+      /* Override that with a driconf-set value. */
+      drv->API.SwapInterval(drv, disp, surf, dri2_dpy->default_swap_interval);
+   }
+
+   return surf;
 }
 
 static _EGLSurface *
@@ -542,11 +563,7 @@ dri2_connect(struct dri2_egl_display *dri2_dpy)
       dri2_strndup(driver_name,
 		   xcb_dri2_connect_driver_name_length (connect));
 
-#if XCB_DRI2_CONNECT_DEVICE_NAME_BROKEN
-   device_name = driver_name + ((connect->driver_name_length + 3) & ~3);
-#else
    device_name = xcb_dri2_connect_device_name (connect);
-#endif
 
    dri2_dpy->device_name =
       dri2_strndup(device_name,
@@ -581,8 +598,7 @@ dri2_x11_authenticate(_EGLDisplay *disp, uint32_t id)
    if (authenticate == NULL || !authenticate->authenticated)
       ret = -1;
 
-   if (authenticate)
-      free(authenticate);
+   free(authenticate);
    
    return ret;
 }
@@ -673,10 +689,8 @@ dri2_copy_region(_EGLDriver *drv, _EGLDisplay *disp,
    if (draw->Type == EGL_PIXMAP_BIT || draw->Type == EGL_PBUFFER_BIT)
       return EGL_TRUE;
 
-#ifdef __DRI2_FLUSH
    if (dri2_dpy->flush)
       (*dri2_dpy->flush->flush)(dri2_surf->dri_drawable);
-#endif
 
    if (dri2_surf->have_fake_front)
       render_attachment = XCB_DRI2_ATTACHMENT_BUFFER_FAKE_FRONT_LEFT;
@@ -697,7 +711,6 @@ static int64_t
 dri2_swap_buffers_msc(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
                       int64_t msc, int64_t divisor, int64_t remainder)
 {
-#if XCB_DRI2_MINOR_VERSION >= 3
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
    uint32_t msc_hi = msc >> 32;
@@ -717,10 +730,8 @@ dri2_swap_buffers_msc(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
    if (draw->SwapBehavior == EGL_BUFFER_PRESERVED || !dri2_dpy->swap_available)
       return dri2_copy_region(drv, disp, draw, dri2_surf->region) ? 0 : -1;
 
-#ifdef __DRI2_FLUSH
    if (dri2_dpy->flush)
       (*dri2_dpy->flush->flush)(dri2_surf->dri_drawable);
-#endif
 
    cookie = xcb_dri2_swap_buffers_unchecked(dri2_dpy->conn, dri2_surf->drawable,
                   msc_hi, msc_lo, divisor_hi, divisor_lo, remainder_hi, remainder_lo);
@@ -732,20 +743,7 @@ dri2_swap_buffers_msc(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
       free(reply);
    }
 
-#if __DRI2_FLUSH_VERSION >= 3
-   /* If the server doesn't send invalidate events */
-   if (dri2_dpy->invalidate_available && dri2_dpy->flush &&
-       dri2_dpy->flush->base.version >= 3 && dri2_dpy->flush->invalidate)
-      (*dri2_dpy->flush->invalidate)(dri2_surf->dri_drawable);
-#endif
-
    return swap_count;
-#else
-   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
-
-   return dri2_copy_region(drv, disp, draw, dri2_surf->region) ? 0 : -1;
-#endif /* XCB_DRI2_MINOR_VERSION >= 3 */
-
 }
 
 static EGLBoolean
@@ -778,10 +776,9 @@ dri2_swap_buffers_region(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
    if (numRects > (int)ARRAY_SIZE(rectangles))
       return dri2_copy_region(drv, disp, draw, dri2_surf->region);
 
-   /* FIXME: Invert y here? */
    for (i = 0; i < numRects; i++) {
       rectangles[i].x = rects[i * 4];
-      rectangles[i].y = rects[i * 4 + 1];
+      rectangles[i].y = dri2_surf->base.Height - rects[i * 4 + 1] - rects[i * 4 + 3];
       rectangles[i].width = rects[i * 4 + 2];
       rectangles[i].height = rects[i * 4 + 3];
    }
@@ -798,7 +795,7 @@ static EGLBoolean
 dri2_post_sub_buffer(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
 		     EGLint x, EGLint y, EGLint width, EGLint height)
 {
-   const EGLint rect[4] = { x, draw->Height - y - height, width, height };
+   const EGLint rect[4] = { x, y, width, height };
 
    if (x < 0 || y < 0 || width < 0 || height < 0)
       _eglError(EGL_BAD_PARAMETER, "eglPostSubBufferNV");
@@ -809,22 +806,16 @@ dri2_post_sub_buffer(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
 static EGLBoolean
 dri2_swap_interval(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint interval)
 {
-#if XCB_DRI2_MINOR_VERSION >= 3
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
-#endif
-
-   /* XXX Check vblank_mode here? */
 
    if (interval > surf->Config->MaxSwapInterval)
       interval = surf->Config->MaxSwapInterval;
    else if (interval < surf->Config->MinSwapInterval)
       interval = surf->Config->MinSwapInterval;
 
-#if XCB_DRI2_MINOR_VERSION >= 3
    if (interval != surf->SwapInterval && dri2_dpy->swap_available)
       xcb_dri2_swap_interval(dri2_dpy->conn, dri2_surf->drawable, interval);
-#endif
 
    surf->SwapInterval = interval;
 
@@ -833,11 +824,12 @@ dri2_swap_interval(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint
 
 static EGLBoolean
 dri2_copy_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf,
-		  EGLNativePixmapType target)
+		  EGLNativePixmapType native_target)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
    xcb_gcontext_t gc;
+   xcb_pixmap_t target = (uintptr_t )native_target;
 
    (void) drv;
 
@@ -981,11 +973,9 @@ dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
    drv->API.CreateDRMImageMESA = NULL;
    drv->API.ExportDRMImageMESA = NULL;
 
-   dri2_dpy = malloc(sizeof *dri2_dpy);
+   dri2_dpy = calloc(1, sizeof *dri2_dpy);
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
-
-   memset(dri2_dpy, 0, sizeof *dri2_dpy);
 
    disp->DriverData = (void *) dri2_dpy;
    if (disp->PlatformDisplay == NULL) {
@@ -1040,6 +1030,51 @@ dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
    return EGL_FALSE;
 }
 
+static void
+dri2_setup_swap_interval(struct dri2_egl_display *dri2_dpy)
+{
+   GLint vblank_mode = DRI_CONF_VBLANK_DEF_INTERVAL_1;
+   int arbitrary_max_interval = 1000;
+
+   /* default behavior for no SwapBuffers support: no vblank syncing
+    * either.
+    */
+   dri2_dpy->min_swap_interval = 0;
+   dri2_dpy->max_swap_interval = 0;
+
+   if (!dri2_dpy->swap_available)
+      return;
+
+   /* If we do have swapbuffers, then we can support pretty much any swap
+    * interval, but we allow driconf to override applications.
+    */
+   if (dri2_dpy->config)
+      dri2_dpy->config->configQueryi(dri2_dpy->dri_screen,
+                                     "vblank_mode", &vblank_mode);
+   switch (vblank_mode) {
+   case DRI_CONF_VBLANK_NEVER:
+      dri2_dpy->min_swap_interval = 0;
+      dri2_dpy->max_swap_interval = 0;
+      dri2_dpy->default_swap_interval = 0;
+      break;
+   case DRI_CONF_VBLANK_ALWAYS_SYNC:
+      dri2_dpy->min_swap_interval = 1;
+      dri2_dpy->max_swap_interval = arbitrary_max_interval;
+      dri2_dpy->default_swap_interval = 1;
+      break;
+   case DRI_CONF_VBLANK_DEF_INTERVAL_0:
+      dri2_dpy->min_swap_interval = 0;
+      dri2_dpy->max_swap_interval = arbitrary_max_interval;
+      dri2_dpy->default_swap_interval = 0;
+      break;
+   default:
+   case DRI_CONF_VBLANK_DEF_INTERVAL_1:
+      dri2_dpy->min_swap_interval = 0;
+      dri2_dpy->max_swap_interval = arbitrary_max_interval;
+      dri2_dpy->default_swap_interval = 1;
+      break;
+   }
+}
 
 static EGLBoolean
 dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
@@ -1057,11 +1092,9 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
    drv->API.PostSubBufferNV = dri2_post_sub_buffer;
    drv->API.SwapInterval = dri2_swap_interval;
 
-   dri2_dpy = malloc(sizeof *dri2_dpy);
+   dri2_dpy = calloc(1, sizeof *dri2_dpy);
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
-
-   memset(dri2_dpy, 0, sizeof *dri2_dpy);
 
    disp->DriverData = (void *) dri2_dpy;
    if (disp->PlatformDisplay == NULL) {
@@ -1083,7 +1116,16 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
    if (!dri2_load_driver(disp))
       goto cleanup_conn;
 
+#ifdef O_CLOEXEC
    dri2_dpy->fd = open(dri2_dpy->device_name, O_RDWR | O_CLOEXEC);
+   if (dri2_dpy->fd == -1 && errno == EINVAL)
+#endif
+   {
+      dri2_dpy->fd = open(dri2_dpy->device_name, O_RDWR);
+      if (dri2_dpy->fd != -1)
+         fcntl(dri2_dpy->fd, F_SETFD, fcntl(dri2_dpy->fd, F_GETFD) |
+            FD_CLOEXEC);
+   }
    if (dri2_dpy->fd == -1) {
       _eglLog(_EGL_WARNING,
 	      "DRI2: could not open %s (%s)", dri2_dpy->device_name,
@@ -1115,13 +1157,13 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
    dri2_dpy->extensions[1] = &image_lookup_extension.base;
    dri2_dpy->extensions[2] = NULL;
 
-#if XCB_DRI2_MINOR_VERSION >= 3
    dri2_dpy->swap_available = (dri2_dpy->dri2_minor >= 2);
    dri2_dpy->invalidate_available = (dri2_dpy->dri2_minor >= 3);
-#endif
 
    if (!dri2_create_screen(disp))
       goto cleanup_fd;
+
+   dri2_setup_swap_interval(dri2_dpy);
 
    if (dri2_dpy->conn) {
       if (!dri2_add_configs_for_visuals(dri2_dpy, disp))

@@ -20,14 +20,13 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include <stdio.h>
-#include <errno.h>
-#include "util/u_memory.h"
 #include "r600_pipe.h"
-#include "r600_asm.h"
-#include "eg_sq.h"
 #include "r600_opcodes.h"
-#include "evergreend.h"
+#include "r600_shader.h"
+
+#include "util/u_memory.h"
+#include "eg_sq.h"
+#include <errno.h>
 
 int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf)
 {
@@ -123,6 +122,7 @@ int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf)
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_ELSE:
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_POP:
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_START_NO_AL:
+	case EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_START_DX10:
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_END:
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_CONTINUE:
 	case EG_V_SQ_CF_WORD1_SQ_CF_INST_LOOP_BREAK:
@@ -135,9 +135,32 @@ int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf)
 					S_SQ_CF_WORD1_COND(cf->cond) |
 					S_SQ_CF_WORD1_POP_COUNT(cf->pop_count);
 		break;
+	case CF_NATIVE:
+		bc->bytecode[id++] = cf->isa[0];
+		bc->bytecode[id++] = cf->isa[1];
+		break;
 	default:
 		R600_ERR("unsupported CF instruction (0x%X)\n", cf->inst);
 		return -EINVAL;
 	}
 	return 0;
+}
+
+void eg_bytecode_export_read(struct r600_bytecode_output *output, uint32_t word0, uint32_t word1)
+{
+	output->array_base = G_SQ_CF_ALLOC_EXPORT_WORD0_ARRAY_BASE(word0);
+	output->type = G_SQ_CF_ALLOC_EXPORT_WORD0_TYPE(word0);
+	output->gpr = G_SQ_CF_ALLOC_EXPORT_WORD0_RW_GPR(word0);
+	output->elem_size = G_SQ_CF_ALLOC_EXPORT_WORD0_ELEM_SIZE(word0);
+
+	output->swizzle_x = G_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_X(word1);
+	output->swizzle_y = G_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_Y(word1);
+	output->swizzle_z = G_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_Z(word1);
+	output->swizzle_w = G_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_W(word1);
+	output->burst_count = G_SQ_CF_ALLOC_EXPORT_WORD1_BURST_COUNT(word1);
+	output->end_of_program = G_SQ_CF_ALLOC_EXPORT_WORD1_END_OF_PROGRAM(word1);
+	output->inst = EG_S_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(G_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(word1));
+	output->barrier = G_SQ_CF_ALLOC_EXPORT_WORD1_BARRIER(word1);
+	output->array_size = G_SQ_CF_ALLOC_EXPORT_WORD1_BUF_ARRAY_SIZE(word1);
+	output->comp_mask = G_SQ_CF_ALLOC_EXPORT_WORD1_BUF_COMP_MASK(word1);
 }

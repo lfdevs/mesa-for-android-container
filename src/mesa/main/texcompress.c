@@ -33,15 +33,16 @@
 #include "glheader.h"
 #include "imports.h"
 #include "colormac.h"
+#include "context.h"
 #include "formats.h"
 #include "mfeatures.h"
 #include "mtypes.h"
+#include "context.h"
 #include "texcompress.h"
 #include "texcompress_fxt1.h"
 #include "texcompress_rgtc.h"
 #include "texcompress_s3tc.h"
 #include "texcompress_etc.h"
-#include "swrast/s_context.h"
 
 
 /**
@@ -77,12 +78,16 @@ _mesa_gl_compressed_format_base_format(GLenum format)
 {
    switch (format) {
    case GL_COMPRESSED_RED:
+   case GL_COMPRESSED_R11_EAC:
    case GL_COMPRESSED_RED_RGTC1:
+   case GL_COMPRESSED_SIGNED_R11_EAC:
    case GL_COMPRESSED_SIGNED_RED_RGTC1:
       return GL_RED;
 
    case GL_COMPRESSED_RG:
+   case GL_COMPRESSED_RG11_EAC:
    case GL_COMPRESSED_RG_RGTC2:
+   case GL_COMPRESSED_SIGNED_RG11_EAC:
    case GL_COMPRESSED_SIGNED_RG_RGTC2:
       return GL_RG;
 
@@ -92,6 +97,8 @@ _mesa_gl_compressed_format_base_format(GLenum format)
    case GL_COMPRESSED_RGB_FXT1_3DFX:
    case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
    case GL_ETC1_RGB8_OES:
+   case GL_COMPRESSED_RGB8_ETC2:
+   case GL_COMPRESSED_SRGB8_ETC2:
       return GL_RGB;
 
    case GL_COMPRESSED_RGBA:
@@ -107,6 +114,10 @@ _mesa_gl_compressed_format_base_format(GLenum format)
    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
+   case GL_COMPRESSED_RGBA8_ETC2_EAC:
+   case GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC:
+   case GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2:
+   case GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2:
       return GL_RGBA;
 
    case GL_COMPRESSED_ALPHA:
@@ -254,7 +265,8 @@ _mesa_get_compressed_formats(struct gl_context *ctx, GLint *formats)
          n += 3;
       }
    }
-   if (ctx->Extensions.S3_s3tc) {
+   if (_mesa_is_desktop_gl(ctx)
+       && ctx->Extensions.ANGLE_texture_compression_dxt) {
       if (formats) {
          formats[n++] = GL_RGB_S3TC;
          formats[n++] = GL_RGB4_S3TC;
@@ -275,7 +287,6 @@ _mesa_get_compressed_formats(struct gl_context *ctx, GLint *formats)
       }
    }
 
-#if FEATURE_ES1
    if (ctx->API == API_OPENGLES) {
       if (formats) {
 	 formats[n++] = GL_PALETTE4_RGB8_OES;
@@ -293,8 +304,24 @@ _mesa_get_compressed_formats(struct gl_context *ctx, GLint *formats)
 	 n += 10;
       }
    }
-#endif
 
+   if (_mesa_is_gles3(ctx)) {
+      if (formats) {
+         formats[n++] = GL_COMPRESSED_RGB8_ETC2;
+         formats[n++] = GL_COMPRESSED_SRGB8_ETC2;
+         formats[n++] = GL_COMPRESSED_RGBA8_ETC2_EAC;
+         formats[n++] = GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC;
+         formats[n++] = GL_COMPRESSED_R11_EAC;
+         formats[n++] = GL_COMPRESSED_RG11_EAC;
+         formats[n++] = GL_COMPRESSED_SIGNED_R11_EAC;
+         formats[n++] = GL_COMPRESSED_SIGNED_RG11_EAC;
+         formats[n++] = GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+         formats[n++] = GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+      }
+      else {
+         n += 10;
+      }
+   }
    return n;
 }
 
@@ -354,6 +381,26 @@ _mesa_glenum_to_compressed_format(GLenum format)
 
    case GL_ETC1_RGB8_OES:
       return MESA_FORMAT_ETC1_RGB8;
+   case GL_COMPRESSED_RGB8_ETC2:
+      return MESA_FORMAT_ETC2_RGB8;
+   case GL_COMPRESSED_SRGB8_ETC2:
+      return MESA_FORMAT_ETC2_SRGB8;
+   case GL_COMPRESSED_RGBA8_ETC2_EAC:
+      return MESA_FORMAT_ETC2_RGBA8_EAC;
+   case GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC:
+      return MESA_FORMAT_ETC2_SRGB8_ALPHA8_EAC;
+   case GL_COMPRESSED_R11_EAC:
+      return MESA_FORMAT_ETC2_R11_EAC;
+   case GL_COMPRESSED_RG11_EAC:
+      return MESA_FORMAT_ETC2_RG11_EAC;
+   case GL_COMPRESSED_SIGNED_R11_EAC:
+      return MESA_FORMAT_ETC2_SIGNED_R11_EAC;
+   case GL_COMPRESSED_SIGNED_RG11_EAC:
+      return MESA_FORMAT_ETC2_SIGNED_RG11_EAC;
+   case GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2:
+      return MESA_FORMAT_ETC2_RGB8_PUNCHTHROUGH_ALPHA1;
+   case GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2:
+      return MESA_FORMAT_ETC2_SRGB8_PUNCHTHROUGH_ALPHA1;
 
    default:
       return MESA_FORMAT_NONE;
@@ -372,16 +419,13 @@ _mesa_glenum_to_compressed_format(GLenum format)
  * internal format unchanged.
  */
 GLenum
-_mesa_compressed_format_to_glenum(struct gl_context *ctx, GLuint mesaFormat)
+_mesa_compressed_format_to_glenum(struct gl_context *ctx, gl_format mesaFormat)
 {
    switch (mesaFormat) {
-#if FEATURE_texture_fxt1
    case MESA_FORMAT_RGB_FXT1:
       return GL_COMPRESSED_RGB_FXT1_3DFX;
    case MESA_FORMAT_RGBA_FXT1:
       return GL_COMPRESSED_RGBA_FXT1_3DFX;
-#endif
-#if FEATURE_texture_s3tc
    case MESA_FORMAT_RGB_DXT1:
       return GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
    case MESA_FORMAT_RGBA_DXT1:
@@ -390,7 +434,6 @@ _mesa_compressed_format_to_glenum(struct gl_context *ctx, GLuint mesaFormat)
       return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
    case MESA_FORMAT_RGBA_DXT5:
       return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
-#if FEATURE_EXT_texture_sRGB
    case MESA_FORMAT_SRGB_DXT1:
       return GL_COMPRESSED_SRGB_S3TC_DXT1_EXT;
    case MESA_FORMAT_SRGBA_DXT1:
@@ -399,9 +442,6 @@ _mesa_compressed_format_to_glenum(struct gl_context *ctx, GLuint mesaFormat)
       return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT;
    case MESA_FORMAT_SRGBA_DXT5:
       return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
-#endif
-#endif
-
    case MESA_FORMAT_RED_RGTC1:
       return GL_COMPRESSED_RED_RGTC1;
    case MESA_FORMAT_SIGNED_RED_RGTC1:
@@ -422,6 +462,26 @@ _mesa_compressed_format_to_glenum(struct gl_context *ctx, GLuint mesaFormat)
 
    case MESA_FORMAT_ETC1_RGB8:
       return GL_ETC1_RGB8_OES;
+   case MESA_FORMAT_ETC2_RGB8:
+      return GL_COMPRESSED_RGB8_ETC2;
+   case MESA_FORMAT_ETC2_SRGB8:
+      return GL_COMPRESSED_SRGB8_ETC2;
+   case MESA_FORMAT_ETC2_RGBA8_EAC:
+      return GL_COMPRESSED_RGBA8_ETC2_EAC;
+   case MESA_FORMAT_ETC2_SRGB8_ALPHA8_EAC:
+      return GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC;
+   case MESA_FORMAT_ETC2_R11_EAC:
+      return GL_COMPRESSED_R11_EAC;
+   case MESA_FORMAT_ETC2_RG11_EAC:
+      return GL_COMPRESSED_RG11_EAC;
+   case MESA_FORMAT_ETC2_SIGNED_R11_EAC:
+      return GL_COMPRESSED_SIGNED_R11_EAC;
+   case MESA_FORMAT_ETC2_SIGNED_RG11_EAC:
+      return GL_COMPRESSED_SIGNED_RG11_EAC;
+   case MESA_FORMAT_ETC2_RGB8_PUNCHTHROUGH_ALPHA1:
+      return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+   case MESA_FORMAT_ETC2_SRGB8_PUNCHTHROUGH_ALPHA1:
+      return GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2;
 
    default:
       _mesa_problem(ctx, "Unexpected mesa texture format in"
@@ -464,87 +524,71 @@ _mesa_compressed_image_address(GLint col, GLint row, GLint img,
 
 
 /**
+ * Return a texel-fetch function for the given format, or NULL if
+ * invalid format.
+ */
+compressed_fetch_func
+_mesa_get_compressed_fetch_func(gl_format format)
+{
+   switch (format) {
+   case MESA_FORMAT_RGB_DXT1:
+   case MESA_FORMAT_RGBA_DXT1:
+   case MESA_FORMAT_RGBA_DXT3:
+   case MESA_FORMAT_RGBA_DXT5:
+   case MESA_FORMAT_SRGB_DXT1:
+   case MESA_FORMAT_SRGBA_DXT1:
+   case MESA_FORMAT_SRGBA_DXT3:
+   case MESA_FORMAT_SRGBA_DXT5:
+      return _mesa_get_dxt_fetch_func(format);
+   case MESA_FORMAT_RGB_FXT1:
+   case MESA_FORMAT_RGBA_FXT1:
+      return _mesa_get_fxt_fetch_func(format);
+   case MESA_FORMAT_RED_RGTC1:
+   case MESA_FORMAT_L_LATC1:
+   case MESA_FORMAT_SIGNED_RED_RGTC1:
+   case MESA_FORMAT_SIGNED_L_LATC1:
+   case MESA_FORMAT_RG_RGTC2:
+   case MESA_FORMAT_LA_LATC2:
+   case MESA_FORMAT_SIGNED_RG_RGTC2:
+   case MESA_FORMAT_SIGNED_LA_LATC2:
+      return _mesa_get_compressed_rgtc_func(format);
+   case MESA_FORMAT_ETC1_RGB8:
+      return _mesa_get_etc_fetch_func(format);
+   default:
+      return NULL;
+   }
+}
+
+
+/**
  * Decompress a compressed texture image, returning a GL_RGBA/GL_FLOAT image.
+ * \param srcRowStride  stride in bytes between rows of blocks in the
+ *                      compressed source image.
  */
 void
 _mesa_decompress_image(gl_format format, GLuint width, GLuint height,
                        const GLubyte *src, GLint srcRowStride,
                        GLfloat *dest)
 {
-   void (*fetch)(const struct swrast_texture_image *texImage,
-                 GLint i, GLint j, GLint k, GLfloat *texel);
-   struct swrast_texture_image texImage;  /* dummy teximage */
+   compressed_fetch_func fetch;
    GLuint i, j;
+   GLuint bytes, bw, bh;
+   GLint stride;
 
-   /* setup dummy texture image info */
-   memset(&texImage, 0, sizeof(texImage));
-   texImage.Map = (void *) src;
-   texImage.RowStride = srcRowStride;
+   bytes = _mesa_get_format_bytes(format);
+   _mesa_get_format_block_size(format, &bw, &bh);
 
-   switch (format) {
-   /* DXT formats */
-   case MESA_FORMAT_RGB_DXT1:
-      fetch = _mesa_fetch_texel_2d_f_rgb_dxt1;
-      break;
-   case MESA_FORMAT_RGBA_DXT1:
-      fetch = _mesa_fetch_texel_2d_f_rgba_dxt1;
-      break;
-   case MESA_FORMAT_RGBA_DXT3:
-      fetch = _mesa_fetch_texel_2d_f_rgba_dxt3;
-      break;
-   case MESA_FORMAT_RGBA_DXT5:
-      fetch = _mesa_fetch_texel_2d_f_rgba_dxt5;
-      break;
-
-   /* FXT1 formats */
-   case MESA_FORMAT_RGB_FXT1:
-      fetch = _mesa_fetch_texel_2d_f_rgb_fxt1;
-      break;
-   case MESA_FORMAT_RGBA_FXT1:
-      fetch = _mesa_fetch_texel_2d_f_rgba_fxt1;
-      break;
-
-   /* Red/RG formats */
-   case MESA_FORMAT_RED_RGTC1:
-      fetch = _mesa_fetch_texel_2d_f_red_rgtc1;
-      break;
-   case MESA_FORMAT_SIGNED_RED_RGTC1:
-      fetch = _mesa_fetch_texel_2d_f_signed_red_rgtc1;
-      break;
-   case MESA_FORMAT_RG_RGTC2:
-      fetch = _mesa_fetch_texel_2d_f_rg_rgtc2;
-      break;
-   case MESA_FORMAT_SIGNED_RG_RGTC2:
-      fetch = _mesa_fetch_texel_2d_f_signed_rg_rgtc2;
-      break;
-
-   /* L/LA formats */
-   case MESA_FORMAT_L_LATC1:
-      fetch = _mesa_fetch_texel_2d_f_l_latc1;
-      break;
-   case MESA_FORMAT_SIGNED_L_LATC1:
-      fetch = _mesa_fetch_texel_2d_f_signed_l_latc1;
-      break;
-   case MESA_FORMAT_LA_LATC2:
-      fetch = _mesa_fetch_texel_2d_f_la_latc2;
-      break;
-   case MESA_FORMAT_SIGNED_LA_LATC2:
-      fetch = _mesa_fetch_texel_2d_f_signed_la_latc2;
-      break;
-
-   /* ETC1 formats */
-   case MESA_FORMAT_ETC1_RGB8:
-      fetch = _mesa_fetch_texel_2d_f_etc1_rgb8;
-      break;
-
-   default:
+   fetch = _mesa_get_compressed_fetch_func(format);
+   if (!fetch) {
       _mesa_problem(NULL, "Unexpected format in _mesa_decompress_image()");
       return;
    }
+ 
+   stride = srcRowStride * bh / bytes;
 
    for (j = 0; j < height; j++) {
       for (i = 0; i < width; i++) {
-         fetch(&texImage, i, j, 0, dest);
+         fetch(src, NULL, stride, i, j, 0, dest);
          dest += 4;
       }
    }

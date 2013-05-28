@@ -102,8 +102,8 @@ static void inline emit_tx_setup(struct r100_context *r100,
     uint32_t txformat = RADEON_TXFORMAT_NON_POWER2;
     BATCH_LOCALS(&r100->radeon);
 
-    assert(width <= 2047);
-    assert(height <= 2047);
+    assert(width <= 2048);
+    assert(height <= 2048);
     assert(offset % 32 == 0);
 
     /* XXX others?  BE/LE? */
@@ -216,8 +216,8 @@ static inline void emit_cb_setup(struct r100_context *r100,
 
     BEGIN_BATCH_NO_AUTOSTATE(18);
     OUT_BATCH_REGVAL(RADEON_RE_TOP_LEFT, 0);
-    OUT_BATCH_REGVAL(RADEON_RE_WIDTH_HEIGHT, ((width << RADEON_RE_WIDTH_SHIFT) |
-					      (height << RADEON_RE_HEIGHT_SHIFT)));
+    OUT_BATCH_REGVAL(RADEON_RE_WIDTH_HEIGHT, (((width - 1) << RADEON_RE_WIDTH_SHIFT) |
+					      ((height - 1) << RADEON_RE_HEIGHT_SHIFT)));
     OUT_BATCH_REGVAL(RADEON_RB3D_PLANEMASK, 0xffffffff);
     OUT_BATCH_REGVAL(RADEON_RB3D_BLENDCNTL, RADEON_SRC_BLEND_GL_ONE | RADEON_DST_BLEND_GL_ZERO);
     OUT_BATCH_REGVAL(RADEON_RB3D_CNTL, dst_format);
@@ -390,13 +390,13 @@ unsigned r100_blit(struct gl_context *ctx,
     }
 
     if (0) {
-        fprintf(stderr, "src: size [%d x %d], pitch %d, offset %d "
+        fprintf(stderr, "src: size [%d x %d], pitch %d, offset %zd "
                 "offset [%d x %d], format %s, bo %p\n",
                 src_width, src_height, src_pitch, src_offset,
                 src_x_offset, src_y_offset,
                 _mesa_get_format_name(src_mesaformat),
                 src_bo);
-        fprintf(stderr, "dst: pitch %d offset %d, offset[%d x %d], format %s, bo %p\n",
+        fprintf(stderr, "dst: pitch %d offset %zd, offset[%d x %d], format %s, bo %p\n",
                 dst_pitch, dst_offset,  dst_x_offset, dst_y_offset,
                 _mesa_get_format_name(dst_mesaformat), dst_bo);
         fprintf(stderr, "region: %d x %d\n", reg_width, reg_height);

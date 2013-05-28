@@ -44,11 +44,12 @@ struct dump_ctx
    struct tgsi_iterate_context iter;
 
    uint instno;
+   uint immno;
    int indent;
    
    uint indentation;
 
-   void (*printf)(struct dump_ctx *ctx, const char *format, ...);
+   void (*dump_printf)(struct dump_ctx *ctx, const char *format, ...);
 };
 
 static void 
@@ -69,19 +70,19 @@ dump_enum(
    uint enum_count )
 {
    if (e >= enum_count)
-      ctx->printf( ctx, "%u", e );
+      ctx->dump_printf( ctx, "%u", e );
    else
-      ctx->printf( ctx, "%s", enums[e] );
+      ctx->dump_printf( ctx, "%s", enums[e] );
 }
 
-#define EOL()           ctx->printf( ctx, "\n" )
-#define TXT(S)          ctx->printf( ctx, "%s", S )
-#define CHR(C)          ctx->printf( ctx, "%c", C )
-#define UIX(I)          ctx->printf( ctx, "0x%x", I )
-#define UID(I)          ctx->printf( ctx, "%u", I )
-#define INSTID(I)          ctx->printf( ctx, "% 3u", I )
-#define SID(I)          ctx->printf( ctx, "%d", I )
-#define FLT(F)          ctx->printf( ctx, "%10.4f", F )
+#define EOL()           ctx->dump_printf( ctx, "\n" )
+#define TXT(S)          ctx->dump_printf( ctx, "%s", S )
+#define CHR(C)          ctx->dump_printf( ctx, "%c", C )
+#define UIX(I)          ctx->dump_printf( ctx, "0x%x", I )
+#define UID(I)          ctx->dump_printf( ctx, "%u", I )
+#define INSTID(I)       ctx->dump_printf( ctx, "% 3u", I )
+#define SID(I)          ctx->dump_printf( ctx, "%d", I )
+#define FLT(F)          ctx->dump_printf( ctx, "%10.4f", F )
 #define ENM(E,ENUMS)    dump_enum( ctx, E, ENUMS, sizeof( ENUMS ) / sizeof( *ENUMS ) )
 
 const char *
@@ -271,6 +272,9 @@ iter_declaration(
       ctx,
       decl->Declaration.UsageMask );
 
+   if (decl->Declaration.Local)
+      TXT( ", LOCAL" );
+
    if (decl->Declaration.Semantic) {
       TXT( ", " );
       ENM( decl->Semantic.Name, tgsi_semantic_names );
@@ -285,53 +289,64 @@ iter_declaration(
    if (decl->Declaration.File == TGSI_FILE_RESOURCE) {
       TXT(", ");
       ENM(decl->Resource.Resource, tgsi_texture_names);
+      if (decl->Resource.Writable)
+         TXT(", WR");
+      if (decl->Resource.Raw)
+         TXT(", RAW");
+   }
+
+   if (decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
       TXT(", ");
-      if ((decl->Resource.ReturnTypeX == decl->Resource.ReturnTypeY) &&
-          (decl->Resource.ReturnTypeX == decl->Resource.ReturnTypeZ) &&
-          (decl->Resource.ReturnTypeX == decl->Resource.ReturnTypeW)) {
-         ENM(decl->Resource.ReturnTypeX, tgsi_type_names);
+      ENM(decl->SamplerView.Resource, tgsi_texture_names);
+      TXT(", ");
+      if ((decl->SamplerView.ReturnTypeX == decl->SamplerView.ReturnTypeY) &&
+          (decl->SamplerView.ReturnTypeX == decl->SamplerView.ReturnTypeZ) &&
+          (decl->SamplerView.ReturnTypeX == decl->SamplerView.ReturnTypeW)) {
+         ENM(decl->SamplerView.ReturnTypeX, tgsi_type_names);
       } else {
-         ENM(decl->Resource.ReturnTypeX, tgsi_type_names);
+         ENM(decl->SamplerView.ReturnTypeX, tgsi_type_names);
          TXT(", ");
-         ENM(decl->Resource.ReturnTypeY, tgsi_type_names);
+         ENM(decl->SamplerView.ReturnTypeY, tgsi_type_names);
          TXT(", ");
-         ENM(decl->Resource.ReturnTypeZ, tgsi_type_names);
+         ENM(decl->SamplerView.ReturnTypeZ, tgsi_type_names);
          TXT(", ");
-         ENM(decl->Resource.ReturnTypeW, tgsi_type_names);
+         ENM(decl->SamplerView.ReturnTypeW, tgsi_type_names);
+      }
+   }
+
+   if (decl->Declaration.Interpolate) {
+      if (iter->processor.Processor == TGSI_PROCESSOR_FRAGMENT &&
+          decl->Declaration.File == TGSI_FILE_INPUT)
+      {
+         TXT( ", " );
+         ENM( decl->Interp.Interpolate, tgsi_interpolate_names );
       }
 
-   }
+      if (decl->Interp.Centroid) {
+         TXT( ", CENTROID" );
+      }
 
-   if (iter->processor.Processor == TGSI_PROCESSOR_FRAGMENT &&
-       decl->Declaration.File == TGSI_FILE_INPUT)
-   {
-      TXT( ", " );
-      ENM( decl->Declaration.Interpolate, tgsi_interpolate_names );
-   }
-
-   if (decl->Declaration.Centroid) {
-      TXT( ", CENTROID" );
+      if (decl->Interp.CylindricalWrap) {
+         TXT(", CYLWRAP_");
+         if (decl->Interp.CylindricalWrap & TGSI_CYLINDRICAL_WRAP_X) {
+            CHR('X');
+         }
+         if (decl->Interp.CylindricalWrap & TGSI_CYLINDRICAL_WRAP_Y) {
+            CHR('Y');
+         }
+         if (decl->Interp.CylindricalWrap & TGSI_CYLINDRICAL_WRAP_Z) {
+            CHR('Z');
+         }
+         if (decl->Interp.CylindricalWrap & TGSI_CYLINDRICAL_WRAP_W) {
+            CHR('W');
+         }
+      }
    }
 
    if (decl->Declaration.Invariant) {
       TXT( ", INVARIANT" );
    }
 
-   if (decl->Declaration.CylindricalWrap) {
-      TXT(", CYLWRAP_");
-      if (decl->Declaration.CylindricalWrap & TGSI_CYLINDRICAL_WRAP_X) {
-         CHR('X');
-      }
-      if (decl->Declaration.CylindricalWrap & TGSI_CYLINDRICAL_WRAP_Y) {
-         CHR('Y');
-      }
-      if (decl->Declaration.CylindricalWrap & TGSI_CYLINDRICAL_WRAP_Z) {
-         CHR('Z');
-      }
-      if (decl->Declaration.CylindricalWrap & TGSI_CYLINDRICAL_WRAP_W) {
-         CHR('W');
-      }
-   }
 
    if (decl->Declaration.File == TGSI_FILE_IMMEDIATE_ARRAY) {
       unsigned i;
@@ -381,7 +396,7 @@ tgsi_dump_declaration(
 {
    struct dump_ctx ctx;
 
-   ctx.printf = dump_ctx_printf;
+   ctx.dump_printf = dump_ctx_printf;
 
    iter_declaration( &ctx.iter, (struct tgsi_full_declaration *)decl );
 }
@@ -391,7 +406,7 @@ iter_property(
    struct tgsi_iterate_context *iter,
    struct tgsi_full_property *prop )
 {
-   int i;
+   unsigned i;
    struct dump_ctx *ctx = (struct dump_ctx *)iter;
 
    TXT( "PROPERTY " );
@@ -429,7 +444,7 @@ void tgsi_dump_property(
 {
    struct dump_ctx ctx;
 
-   ctx.printf = dump_ctx_printf;
+   ctx.dump_printf = dump_ctx_printf;
 
    iter_property( &ctx.iter, (struct tgsi_full_property *)prop );
 }
@@ -441,7 +456,9 @@ iter_immediate(
 {
    struct dump_ctx *ctx = (struct dump_ctx *) iter;
 
-   TXT( "IMM " );
+   TXT( "IMM[" );
+   SID( ctx->immno++ );
+   TXT( "] " );
    ENM( imm->Immediate.DataType, tgsi_immediate_type_names );
 
    dump_imm_data(iter, imm->u, imm->Immediate.NrTokens - 1,
@@ -458,7 +475,7 @@ tgsi_dump_immediate(
 {
    struct dump_ctx ctx;
 
-   ctx.printf = dump_ctx_printf;
+   ctx.dump_printf = dump_ctx_printf;
 
    iter_immediate( &ctx.iter, (struct tgsi_full_immediate *)imm );
 }
@@ -612,8 +629,9 @@ tgsi_dump_instruction(
    struct dump_ctx ctx;
 
    ctx.instno = instno;
+   ctx.immno = instno;
    ctx.indent = 0;
-   ctx.printf = dump_ctx_printf;
+   ctx.dump_printf = dump_ctx_printf;
    ctx.indentation = 0;
 
    iter_instruction( &ctx.iter, (struct tgsi_full_instruction *)inst );
@@ -644,8 +662,9 @@ tgsi_dump(
    ctx.iter.epilog = NULL;
 
    ctx.instno = 0;
+   ctx.immno = 0;
    ctx.indent = 0;
-   ctx.printf = dump_ctx_printf;
+   ctx.dump_printf = dump_ctx_printf;
    ctx.indentation = 0;
 
    tgsi_iterate_shader( tokens, &ctx.iter );
@@ -699,8 +718,9 @@ tgsi_dump_str(
    ctx.base.iter.epilog = NULL;
 
    ctx.base.instno = 0;
+   ctx.base.immno = 0;
    ctx.base.indent = 0;
-   ctx.base.printf = &str_dump_ctx_printf;
+   ctx.base.dump_printf = &str_dump_ctx_printf;
    ctx.base.indentation = 0;
 
    ctx.str = str;

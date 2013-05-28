@@ -29,32 +29,39 @@
 #include "util/u_format.h"
 #include "util/u_surface.h"
 
+#include "os/os_thread.h"
+
 #include "nvc0_context.h"
 #include "nvc0_resource.h"
 
 #include "nv50/nv50_defs.xml.h"
+#include "nv50/nv50_texture.xml.h"
 
-#define NVC0_ENG2D_SUPPORTED_FORMATS 0xff9ccfe1cce3ccc9ULL
+/* these are used in nv50_blit.h */
+#define NV50_ENG2D_SUPPORTED_FORMATS 0xff9ccfe1cce3ccc9ULL
+#define NV50_ENG2D_NOCONVERT_FORMATS 0x009cc02000000000ULL
+#define NV50_ENG2D_LUMINANCE_FORMATS 0x001cc02000000000ULL
+#define NV50_ENG2D_INTENSITY_FORMATS 0x0080000000000000ULL
+#define NV50_ENG2D_OPERATION_FORMATS 0x060001c000638000ULL
 
-/* return TRUE for formats that can be converted among each other by NVC0_2D */
-static INLINE boolean
-nvc0_2d_format_faithful(enum pipe_format format)
-{
-   uint8_t id = nvc0_format_table[format].rt;
-
-   return (id >= 0xc0) && (NVC0_ENG2D_SUPPORTED_FORMATS & (1ULL << (id - 0xc0)));
-}
+#define NOUVEAU_DRIVER 0xc0
+#include "nv50/nv50_blit.h"
 
 static INLINE uint8_t
-nvc0_2d_format(enum pipe_format format)
+nvc0_2d_format(enum pipe_format format, boolean dst, boolean dst_src_equal)
 {
    uint8_t id = nvc0_format_table[format].rt;
+
+   /* A8_UNORM is treated as I8_UNORM as far as the 2D engine is concerned. */
+   if (!dst && unlikely(format == PIPE_FORMAT_I8_UNORM) && !dst_src_equal)
+      return NV50_SURFACE_FORMAT_A8_UNORM;
 
    /* Hardware values for color formats range from 0xc0 to 0xff,
     * but the 2D engine doesn't support all of them.
     */
-   if (nvc0_2d_format_faithful(format))
+   if (nv50_2d_format_supported(format))
       return id;
+   assert(dst_src_equal);
 
    switch (util_format_get_blocksize(format)) {
    case 1:
@@ -68,25 +75,26 @@ nvc0_2d_format(enum pipe_format format)
    case 16:
       return NV50_SURFACE_FORMAT_RGBA32_FLOAT;
    default:
+      assert(0);
       return 0;
    }
 }
 
 static int
-nvc0_2d_texture_set(struct nouveau_channel *chan, int dst,
-                    struct nv50_miptree *mt, unsigned level, unsigned layer)
+nvc0_2d_texture_set(struct nouveau_pushbuf *push, boolean dst,
+                    struct nv50_miptree *mt, unsigned level, unsigned layer,
+                    enum pipe_format pformat, boolean dst_src_pformat_equal)
 {
    struct nouveau_bo *bo = mt->base.bo;
    uint32_t width, height, depth;
    uint32_t format;
    uint32_t mthd = dst ? NVC0_2D_DST_FORMAT : NVC0_2D_SRC_FORMAT;
-   uint32_t flags = mt->base.domain | (dst ? NOUVEAU_BO_WR : NOUVEAU_BO_RD);
    uint32_t offset = mt->level[level].offset;
 
-   format = nvc0_2d_format(mt->base.base.format);
+   format = nvc0_2d_format(pformat, dst, dst_src_pformat_equal);
    if (!format) {
       NOUVEAU_ERR("invalid/unsupported surface format: %s\n",
-                  util_format_name(mt->base.base.format));
+                  util_format_name(pformat));
       return 1;
    }
 
@@ -106,92 +114,82 @@ nvc0_2d_texture_set(struct nouveau_channel *chan, int dst,
       layer = 0;
    }
 
-   if (!(bo->tile_flags & NOUVEAU_BO_TILE_LAYOUT_MASK)) {
-      BEGIN_RING(chan, RING_2D_(mthd), 2);
-      OUT_RING  (chan, format);
-      OUT_RING  (chan, 1);
-      BEGIN_RING(chan, RING_2D_(mthd + 0x14), 5);
-      OUT_RING  (chan, mt->level[level].pitch);
-      OUT_RING  (chan, width);
-      OUT_RING  (chan, height);
-      OUT_RELOCh(chan, bo, offset, flags);
-      OUT_RELOCl(chan, bo, offset, flags);
+   if (!nouveau_bo_memtype(bo)) {
+      BEGIN_NVC0(push, SUBC_2D(mthd), 2);
+      PUSH_DATA (push, format);
+      PUSH_DATA (push, 1);
+      BEGIN_NVC0(push, SUBC_2D(mthd + 0x14), 5);
+      PUSH_DATA (push, mt->level[level].pitch);
+      PUSH_DATA (push, width);
+      PUSH_DATA (push, height);
+      PUSH_DATAh(push, bo->offset + offset);
+      PUSH_DATA (push, bo->offset + offset);
    } else {
-      BEGIN_RING(chan, RING_2D_(mthd), 5);
-      OUT_RING  (chan, format);
-      OUT_RING  (chan, 0);
-      OUT_RING  (chan, mt->level[level].tile_mode);
-      OUT_RING  (chan, depth);
-      OUT_RING  (chan, layer);
-      BEGIN_RING(chan, RING_2D_(mthd + 0x18), 4);
-      OUT_RING  (chan, width);
-      OUT_RING  (chan, height);
-      OUT_RELOCh(chan, bo, offset, flags);
-      OUT_RELOCl(chan, bo, offset, flags);
+      BEGIN_NVC0(push, SUBC_2D(mthd), 5);
+      PUSH_DATA (push, format);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, mt->level[level].tile_mode);
+      PUSH_DATA (push, depth);
+      PUSH_DATA (push, layer);
+      BEGIN_NVC0(push, SUBC_2D(mthd + 0x18), 4);
+      PUSH_DATA (push, width);
+      PUSH_DATA (push, height);
+      PUSH_DATAh(push, bo->offset + offset);
+      PUSH_DATA (push, bo->offset + offset);
    }
 
 #if 0
    if (dst) {
-      BEGIN_RING(chan, RING_2D_(NVC0_2D_CLIP_X), 4);
-      OUT_RING  (chan, 0);
-      OUT_RING  (chan, 0);
-      OUT_RING  (chan, width);
-      OUT_RING  (chan, height);
+      BEGIN_NVC0(push, SUBC_2D(NVC0_2D_CLIP_X), 4);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, width);
+      PUSH_DATA (push, height);
    }
 #endif
    return 0;
 }
 
 static int
-nvc0_2d_texture_do_copy(struct nouveau_channel *chan,
+nvc0_2d_texture_do_copy(struct nouveau_pushbuf *push,
                         struct nv50_miptree *dst, unsigned dst_level,
                         unsigned dx, unsigned dy, unsigned dz,
                         struct nv50_miptree *src, unsigned src_level,
                         unsigned sx, unsigned sy, unsigned sz,
                         unsigned w, unsigned h)
 {
-   static const uint32_t duvdxy[5] =
-   {
-      0x40000000, 0x80000000, 0x00000001, 0x00000002, 0x00000004
-   };
-
+   const enum pipe_format dfmt = dst->base.base.format;
+   const enum pipe_format sfmt = src->base.base.format;
    int ret;
-   uint32_t ctrl = 0x00;
+   boolean eqfmt = dfmt == sfmt;
 
-   ret = MARK_RING(chan, 2 * 16 + 32, 4);
+   if (!PUSH_SPACE(push, 2 * 16 + 32))
+      return PIPE_ERROR;
+
+   ret = nvc0_2d_texture_set(push, TRUE, dst, dst_level, dz, dfmt, eqfmt);
    if (ret)
       return ret;
 
-   ret = nvc0_2d_texture_set(chan, 1, dst, dst_level, dz);
+   ret = nvc0_2d_texture_set(push, FALSE, src, src_level, sz, sfmt, eqfmt);
    if (ret)
       return ret;
 
-   ret = nvc0_2d_texture_set(chan, 0, src, src_level, sz);
-   if (ret)
-      return ret;
-
-   /* NOTE: 2D engine doesn't work for MS8 */
-   if (src->ms_x)
-      ctrl = 0x11;
-
-   /* 0/1 = CENTER/CORNER, 00/10 = POINT/BILINEAR */
-   BEGIN_RING(chan, RING_2D(BLIT_CONTROL), 1);
-   OUT_RING  (chan, ctrl);
-   BEGIN_RING(chan, RING_2D(BLIT_DST_X), 4);
-   OUT_RING  (chan, dx << dst->ms_x);
-   OUT_RING  (chan, dy << dst->ms_y);
-   OUT_RING  (chan, w << dst->ms_x);
-   OUT_RING  (chan, h << dst->ms_y);
-   BEGIN_RING(chan, RING_2D(BLIT_DU_DX_FRACT), 4);
-   OUT_RING  (chan, duvdxy[2 + ((int)src->ms_x - (int)dst->ms_x)] & 0xf0000000);
-   OUT_RING  (chan, duvdxy[2 + ((int)src->ms_x - (int)dst->ms_x)] & 0x0000000f);
-   OUT_RING  (chan, duvdxy[2 + ((int)src->ms_y - (int)dst->ms_y)] & 0xf0000000);
-   OUT_RING  (chan, duvdxy[2 + ((int)src->ms_y - (int)dst->ms_y)] & 0x0000000f);
-   BEGIN_RING(chan, RING_2D(BLIT_SRC_X_FRACT), 4);
-   OUT_RING  (chan, 0);
-   OUT_RING  (chan, sx << src->ms_x);
-   OUT_RING  (chan, 0);
-   OUT_RING  (chan, sy << src->ms_x);
+   IMMED_NVC0(push, NVC0_2D(BLIT_CONTROL), 0x00);
+   BEGIN_NVC0(push, NVC0_2D(BLIT_DST_X), 4);
+   PUSH_DATA (push, dx << dst->ms_x);
+   PUSH_DATA (push, dy << dst->ms_y);
+   PUSH_DATA (push, w << dst->ms_x);
+   PUSH_DATA (push, h << dst->ms_y);
+   BEGIN_NVC0(push, NVC0_2D(BLIT_DU_DX_FRACT), 4);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, 1);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, 1);
+   BEGIN_NVC0(push, NVC0_2D(BLIT_SRC_X_FRACT), 4);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, sx << src->ms_x);
+   PUSH_DATA (push, 0);
+   PUSH_DATA (push, sy << src->ms_x);
 
    return 0;
 }
@@ -203,7 +201,7 @@ nvc0_resource_copy_region(struct pipe_context *pipe,
                           struct pipe_resource *src, unsigned src_level,
                           const struct pipe_box *src_box)
 {
-   struct nvc0_screen *screen = nvc0_context(pipe)->screen;
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
    int ret;
    boolean m2mf;
    unsigned dst_layer = dstz, src_layer = src_box->z;
@@ -215,7 +213,8 @@ nvc0_resource_copy_region(struct pipe_context *pipe,
       return;
    }
 
-   assert(src->nr_samples == dst->nr_samples);
+   /* 0 and 1 are equal, only supporting 0/1, 2, 4 and 8 */
+   assert((src->nr_samples | 1) == (dst->nr_samples | 1));
 
    m2mf = (src->format == dst->format) ||
       (util_format_get_blocksizebits(src->format) ==
@@ -234,7 +233,7 @@ nvc0_resource_copy_region(struct pipe_context *pipe,
                            src_box->x, src_box->y, src_box->z);
 
       for (i = 0; i < src_box->depth; ++i) {
-         nvc0_m2mf_transfer_rect(&screen->base.base, &drect, &srect, nx, ny);
+         nvc0->m2mf_copy_rect(nvc0, &drect, &srect, nx, ny);
 
          if (nv50_miptree(dst)->layout_3d)
             drect.z++;
@@ -249,19 +248,25 @@ nvc0_resource_copy_region(struct pipe_context *pipe,
       return;
    }
 
-   assert(nvc0_2d_format_faithful(src->format));
-   assert(nvc0_2d_format_faithful(dst->format));
+   assert(nv50_2d_dst_format_faithful(dst->format));
+   assert(nv50_2d_src_format_faithful(src->format));
+
+   BCTX_REFN(nvc0->bufctx, 2D, nv04_resource(src), RD);
+   BCTX_REFN(nvc0->bufctx, 2D, nv04_resource(dst), WR);
+   nouveau_pushbuf_bufctx(nvc0->base.pushbuf, nvc0->bufctx);
+   nouveau_pushbuf_validate(nvc0->base.pushbuf);
 
    for (; dst_layer < dstz + src_box->depth; ++dst_layer, ++src_layer) {
-      ret = nvc0_2d_texture_do_copy(screen->base.channel,
+      ret = nvc0_2d_texture_do_copy(nvc0->base.pushbuf,
                                     nv50_miptree(dst), dst_level,
                                     dstx, dsty, dst_layer,
                                     nv50_miptree(src), src_level,
                                     src_box->x, src_box->y, src_layer,
                                     src_box->width, src_box->height);
       if (ret)
-         return;
+         break;
    }
+   nouveau_bufctx_reset(nvc0->bufctx, 0);
 }
 
 static void
@@ -271,69 +276,70 @@ nvc0_clear_render_target(struct pipe_context *pipe,
                          unsigned dstx, unsigned dsty,
                          unsigned width, unsigned height)
 {
-   struct nvc0_context *nv50 = nvc0_context(pipe);
-   struct nvc0_screen *screen = nv50->screen;
-   struct nouveau_channel *chan = screen->base.channel;
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nv50_surface *sf = nv50_surface(dst);
    struct nv04_resource *res = nv04_resource(sf->base.texture);
    unsigned z;
 
-   BEGIN_RING(chan, RING_3D(CLEAR_COLOR(0)), 4);
-   OUT_RINGf (chan, color->f[0]);
-   OUT_RINGf (chan, color->f[1]);
-   OUT_RINGf (chan, color->f[2]);
-   OUT_RINGf (chan, color->f[3]);
-
-   if (MARK_RING(chan, 18, 2))
+   if (!PUSH_SPACE(push, 32 + sf->depth))
       return;
 
-   BEGIN_RING(chan, RING_3D(SCREEN_SCISSOR_HORIZ), 2);
-   OUT_RING  (chan, ( width << 16) | dstx);
-   OUT_RING  (chan, (height << 16) | dsty);
+   PUSH_REFN (push, res->bo, res->domain | NOUVEAU_BO_WR);
 
-   BEGIN_RING(chan, RING_3D(RT_CONTROL), 1);
-   OUT_RING  (chan, 1);
-   BEGIN_RING(chan, RING_3D(RT_ADDRESS_HIGH(0)), 9);
-   OUT_RESRCh(chan, res, sf->offset, NOUVEAU_BO_WR);
-   OUT_RESRCl(chan, res, sf->offset, NOUVEAU_BO_WR);
-   if (likely(nouveau_bo_tile_layout(res->bo))) {
+   BEGIN_NVC0(push, NVC0_3D(CLEAR_COLOR(0)), 4);
+   PUSH_DATAf(push, color->f[0]);
+   PUSH_DATAf(push, color->f[1]);
+   PUSH_DATAf(push, color->f[2]);
+   PUSH_DATAf(push, color->f[3]);
+
+   BEGIN_NVC0(push, NVC0_3D(SCREEN_SCISSOR_HORIZ), 2);
+   PUSH_DATA (push, ( width << 16) | dstx);
+   PUSH_DATA (push, (height << 16) | dsty);
+
+   BEGIN_NVC0(push, NVC0_3D(RT_CONTROL), 1);
+   PUSH_DATA (push, 1);
+   BEGIN_NVC0(push, NVC0_3D(RT_ADDRESS_HIGH(0)), 9);
+   PUSH_DATAh(push, res->address + sf->offset);
+   PUSH_DATA (push, res->address + sf->offset);
+   if (likely(nouveau_bo_memtype(res->bo))) {
       struct nv50_miptree *mt = nv50_miptree(dst->texture);
 
-      OUT_RING(chan, sf->width);
-      OUT_RING(chan, sf->height);
-      OUT_RING(chan, nvc0_format_table[dst->format].rt);
-      OUT_RING(chan, (mt->layout_3d << 16) |
+      PUSH_DATA(push, sf->width);
+      PUSH_DATA(push, sf->height);
+      PUSH_DATA(push, nvc0_format_table[dst->format].rt);
+      PUSH_DATA(push, (mt->layout_3d << 16) |
                mt->level[sf->base.u.tex.level].tile_mode);
-      OUT_RING(chan, dst->u.tex.first_layer + sf->depth);
-      OUT_RING(chan, mt->layer_stride >> 2);
-      OUT_RING(chan, dst->u.tex.first_layer);
+      PUSH_DATA(push, dst->u.tex.first_layer + sf->depth);
+      PUSH_DATA(push, mt->layer_stride >> 2);
+      PUSH_DATA(push, dst->u.tex.first_layer);
    } else {
       if (res->base.target == PIPE_BUFFER) {
-         OUT_RING(chan, 262144);
-         OUT_RING(chan, 1);
+         PUSH_DATA(push, 262144);
+         PUSH_DATA(push, 1);
       } else {
-         OUT_RING(chan, nv50_miptree(&res->base)->level[0].pitch);
-         OUT_RING(chan, sf->height);
+         PUSH_DATA(push, nv50_miptree(&res->base)->level[0].pitch);
+         PUSH_DATA(push, sf->height);
       }
-      OUT_RING(chan, nvc0_format_table[sf->base.format].rt);
-      OUT_RING(chan, 1 << 12);
-      OUT_RING(chan, 1);
-      OUT_RING(chan, 0);
-      OUT_RING(chan, 0);
+      PUSH_DATA(push, nvc0_format_table[sf->base.format].rt);
+      PUSH_DATA(push, 1 << 12);
+      PUSH_DATA(push, 1);
+      PUSH_DATA(push, 0);
+      PUSH_DATA(push, 0);
 
-      IMMED_RING(chan, RING_3D(ZETA_ENABLE), 0);
+      IMMED_NVC0(push, NVC0_3D(ZETA_ENABLE), 0);
 
       /* tiled textures don't have to be fenced, they're not mapped directly */
       nvc0_resource_fence(res, NOUVEAU_BO_WR);
    }
 
+   BEGIN_NIC0(push, NVC0_3D(CLEAR_BUFFERS), sf->depth);
    for (z = 0; z < sf->depth; ++z) {
-      BEGIN_RING(chan, RING_3D(CLEAR_BUFFERS), 1);
-      OUT_RING  (chan, 0x3c |
+      PUSH_DATA (push, 0x3c |
                  (z << NVC0_3D_CLEAR_BUFFERS_LAYER__SHIFT));
    }
 
-   nv50->dirty |= NVC0_NEW_FRAMEBUFFER;
+   nvc0->dirty |= NVC0_NEW_FRAMEBUFFER;
 }
 
 static void
@@ -345,57 +351,57 @@ nvc0_clear_depth_stencil(struct pipe_context *pipe,
                          unsigned dstx, unsigned dsty,
                          unsigned width, unsigned height)
 {
-	struct nvc0_context *nv50 = nvc0_context(pipe);
-	struct nvc0_screen *screen = nv50->screen;
-	struct nouveau_channel *chan = screen->base.channel;
+	struct nvc0_context *nvc0 = nvc0_context(pipe);
+	struct nouveau_pushbuf *push = nvc0->base.pushbuf;
 	struct nv50_miptree *mt = nv50_miptree(dst->texture);
 	struct nv50_surface *sf = nv50_surface(dst);
-	struct nouveau_bo *bo = mt->base.bo;
 	uint32_t mode = 0;
 	int unk = mt->base.base.target == PIPE_TEXTURE_2D;
 	unsigned z;
 
+	if (!PUSH_SPACE(push, 32 + sf->depth))
+		return;
+
+	PUSH_REFN (push, mt->base.bo, mt->base.domain | NOUVEAU_BO_WR);
+
 	if (clear_flags & PIPE_CLEAR_DEPTH) {
-		BEGIN_RING(chan, RING_3D(CLEAR_DEPTH), 1);
-		OUT_RINGf (chan, depth);
+		BEGIN_NVC0(push, NVC0_3D(CLEAR_DEPTH), 1);
+		PUSH_DATAf(push, depth);
 		mode |= NVC0_3D_CLEAR_BUFFERS_Z;
 	}
 
 	if (clear_flags & PIPE_CLEAR_STENCIL) {
-		BEGIN_RING(chan, RING_3D(CLEAR_STENCIL), 1);
-		OUT_RING  (chan, stencil & 0xff);
+		BEGIN_NVC0(push, NVC0_3D(CLEAR_STENCIL), 1);
+		PUSH_DATA (push, stencil & 0xff);
 		mode |= NVC0_3D_CLEAR_BUFFERS_S;
 	}
 
-	if (MARK_RING(chan, 20, 2))
-		return;
+	BEGIN_NVC0(push, NVC0_3D(SCREEN_SCISSOR_HORIZ), 2);
+	PUSH_DATA (push, ( width << 16) | dstx);
+	PUSH_DATA (push, (height << 16) | dsty);
 
-	BEGIN_RING(chan, RING_3D(SCREEN_SCISSOR_HORIZ), 2);
-	OUT_RING  (chan, ( width << 16) | dstx);
-	OUT_RING  (chan, (height << 16) | dsty);
+	BEGIN_NVC0(push, NVC0_3D(ZETA_ADDRESS_HIGH), 5);
+	PUSH_DATAh(push, mt->base.address + sf->offset);
+	PUSH_DATA (push, mt->base.address + sf->offset);
+	PUSH_DATA (push, nvc0_format_table[dst->format].rt);
+	PUSH_DATA (push, mt->level[sf->base.u.tex.level].tile_mode);
+	PUSH_DATA (push, mt->layer_stride >> 2);
+	BEGIN_NVC0(push, NVC0_3D(ZETA_ENABLE), 1);
+	PUSH_DATA (push, 1);
+	BEGIN_NVC0(push, NVC0_3D(ZETA_HORIZ), 3);
+	PUSH_DATA (push, sf->width);
+	PUSH_DATA (push, sf->height);
+	PUSH_DATA (push, (unk << 16) | (dst->u.tex.first_layer + sf->depth));
+	BEGIN_NVC0(push, NVC0_3D(ZETA_BASE_LAYER), 1);
+	PUSH_DATA (push, dst->u.tex.first_layer);
 
-	BEGIN_RING(chan, RING_3D(ZETA_ADDRESS_HIGH), 5);
-	OUT_RELOCh(chan, bo, sf->offset, NOUVEAU_BO_VRAM | NOUVEAU_BO_WR);
-	OUT_RELOCl(chan, bo, sf->offset, NOUVEAU_BO_VRAM | NOUVEAU_BO_WR);
-	OUT_RING  (chan, nvc0_format_table[dst->format].rt);
-	OUT_RING  (chan, mt->level[sf->base.u.tex.level].tile_mode);
-	OUT_RING  (chan, mt->layer_stride >> 2);
-	BEGIN_RING(chan, RING_3D(ZETA_ENABLE), 1);
-	OUT_RING  (chan, 1);
-	BEGIN_RING(chan, RING_3D(ZETA_HORIZ), 3);
-	OUT_RING  (chan, sf->width);
-	OUT_RING  (chan, sf->height);
-	OUT_RING  (chan, (unk << 16) | (dst->u.tex.first_layer + sf->depth));
-	BEGIN_RING(chan, RING_3D(ZETA_BASE_LAYER), 1);
-	OUT_RING  (chan, dst->u.tex.first_layer);
-
+	BEGIN_NIC0(push, NVC0_3D(CLEAR_BUFFERS), sf->depth);
 	for (z = 0; z < sf->depth; ++z) {
-		BEGIN_RING(chan, RING_3D(CLEAR_BUFFERS), 1);
-		OUT_RING  (chan, mode |
+		PUSH_DATA (push, mode |
 			   (z << NVC0_3D_CLEAR_BUFFERS_LAYER__SHIFT));
 	}
 
-	nv50->dirty |= NVC0_NEW_FRAMEBUFFER;
+	nvc0->dirty |= NVC0_NEW_FRAMEBUFFER;
 }
 
 void
@@ -404,7 +410,7 @@ nvc0_clear(struct pipe_context *pipe, unsigned buffers,
            double depth, unsigned stencil)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
-   struct nouveau_channel *chan = nvc0->screen->base.channel;
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct pipe_framebuffer_state *fb = &nvc0->framebuffer;
    unsigned i;
    uint32_t mode = 0;
@@ -414,41 +420,61 @@ nvc0_clear(struct pipe_context *pipe, unsigned buffers,
       return;
 
    if (buffers & PIPE_CLEAR_COLOR && fb->nr_cbufs) {
-      BEGIN_RING(chan, RING_3D(CLEAR_COLOR(0)), 4);
-      OUT_RINGf (chan, color->f[0]);
-      OUT_RINGf (chan, color->f[1]);
-      OUT_RINGf (chan, color->f[2]);
-      OUT_RINGf (chan, color->f[3]);
+      BEGIN_NVC0(push, NVC0_3D(CLEAR_COLOR(0)), 4);
+      PUSH_DATAf(push, color->f[0]);
+      PUSH_DATAf(push, color->f[1]);
+      PUSH_DATAf(push, color->f[2]);
+      PUSH_DATAf(push, color->f[3]);
       mode =
          NVC0_3D_CLEAR_BUFFERS_R | NVC0_3D_CLEAR_BUFFERS_G |
          NVC0_3D_CLEAR_BUFFERS_B | NVC0_3D_CLEAR_BUFFERS_A;
    }
 
    if (buffers & PIPE_CLEAR_DEPTH) {
-      BEGIN_RING(chan, RING_3D(CLEAR_DEPTH), 1);
-      OUT_RING  (chan, fui(depth));
+      BEGIN_NVC0(push, NVC0_3D(CLEAR_DEPTH), 1);
+      PUSH_DATA (push, fui(depth));
       mode |= NVC0_3D_CLEAR_BUFFERS_Z;
    }
 
    if (buffers & PIPE_CLEAR_STENCIL) {
-      BEGIN_RING(chan, RING_3D(CLEAR_STENCIL), 1);
-      OUT_RING  (chan, stencil & 0xff);
+      BEGIN_NVC0(push, NVC0_3D(CLEAR_STENCIL), 1);
+      PUSH_DATA (push, stencil & 0xff);
       mode |= NVC0_3D_CLEAR_BUFFERS_S;
    }
 
-   BEGIN_RING(chan, RING_3D(CLEAR_BUFFERS), 1);
-   OUT_RING  (chan, mode);
+   BEGIN_NVC0(push, NVC0_3D(CLEAR_BUFFERS), 1);
+   PUSH_DATA (push, mode);
 
    for (i = 1; i < fb->nr_cbufs; i++) {
-      BEGIN_RING(chan, RING_3D(CLEAR_BUFFERS), 1);
-      OUT_RING  (chan, (i << 6) | 0x3c);
+      BEGIN_NVC0(push, NVC0_3D(CLEAR_BUFFERS), 1);
+      PUSH_DATA (push, (i << 6) | 0x3c);
    }
 }
 
 
+/* =============================== BLIT CODE ===================================
+ */
+
+struct nvc0_blitter
+{
+   struct nvc0_program *fp[NV50_BLIT_MAX_TEXTURE_TYPES][NV50_BLIT_MODES];
+   struct nvc0_program vp;
+
+   struct nv50_tsc_entry sampler[2]; /* nearest, bilinear */
+
+   pipe_mutex mutex;
+
+   struct nvc0_screen *screen;
+};
+
 struct nvc0_blitctx
 {
-   struct nvc0_screen *screen;
+   struct nvc0_context *nvc0;
+   struct nvc0_program *fp;
+   uint8_t mode;
+   uint16_t color_mask;
+   uint8_t filter;
+   enum pipe_texture_target target;
    struct {
       struct pipe_framebuffer_state fb;
       struct nvc0_program *vp;
@@ -458,209 +484,117 @@ struct nvc0_blitctx
       struct nvc0_program *fp;
       unsigned num_textures[5];
       unsigned num_samplers[5];
-      struct pipe_sampler_view *texture;
-      struct nv50_tsc_entry *sampler;
-      unsigned dirty;
+      struct pipe_sampler_view *texture[2];
+      struct nv50_tsc_entry *sampler[2];
+      uint32_t dirty;
    } saved;
-   struct nvc0_program vp;
-   struct nvc0_program fp;
-   struct nv50_tsc_entry sampler[2]; /* nearest, bilinear */
-   uint32_t fp_offset;
-   uint16_t color_mask;
-   uint8_t filter;
 };
 
 static void
-nvc0_blitctx_make_vp(struct nvc0_blitctx *blit)
+nvc0_blitter_make_vp(struct nvc0_blitter *blit)
 {
-   static const uint32_t code[] =
+   static const uint32_t code_nvc0[] =
    {
-      0xfff01c66, 0x06000080, /* vfetch b128 { $r0 $r1 $r2 $r3 } a[0x80] */
-      0xfff11c26, 0x06000090, /* vfetch b64 { $r4 $r5 } a[0x90]*/
-      0x03f01c66, 0x0a7e0070, /* export b128 o[0x70] { $r0 $r1 $r2 $r3 } */
-      0x13f01c26, 0x0a7e0080, /* export b64 o[0x80] { $r4 $r5 } */
+      0xfff11c26, 0x06000080, /* vfetch b64 $r4:$r5 a[0x80] */
+      0xfff01c46, 0x06000090, /* vfetch b96 $r0:$r1:$r2 a[0x90] */
+      0x13f01c26, 0x0a7e0070, /* export b64 o[0x70] $r4:$r5 */
+      0x03f01c46, 0x0a7e0080, /* export b96 o[0x80] $r0:$r1:$r2 */
+      0x00001de7, 0x80000000, /* exit */
+   };
+   static const uint32_t code_nve4[] =
+   {
+      0x00000007, 0x20000000, /* sched */
+      0xfff11c26, 0x06000080, /* vfetch b64 $r4:$r5 a[0x80] */
+      0xfff01c46, 0x06000090, /* vfetch b96 $r0:$r1:$r2 a[0x90] */
+      0x13f01c26, 0x0a7e0070, /* export b64 o[0x70] $r4:$r5 */
+      0x03f01c46, 0x0a7e0080, /* export b96 o[0x80] $r0:$r1:$r2 */
       0x00001de7, 0x80000000, /* exit */
    };
 
    blit->vp.type = PIPE_SHADER_VERTEX;
    blit->vp.translated = TRUE;
-   blit->vp.code = (uint32_t *)code; /* no relocations -> no modification */
-   blit->vp.code_size = sizeof(code);
+   if (blit->screen->base.class_3d >= NVE4_3D_CLASS) {
+      blit->vp.code = (uint32_t *)code_nve4; /* const_cast */
+      blit->vp.code_size = sizeof(code_nve4);
+   } else {
+      blit->vp.code = (uint32_t *)code_nvc0; /* const_cast */
+      blit->vp.code_size = sizeof(code_nvc0);
+   }
    blit->vp.max_gpr = 6;
    blit->vp.vp.edgeflag = PIPE_MAX_ATTRIBS;
 
    blit->vp.hdr[0]  = 0x00020461; /* vertprog magic */
    blit->vp.hdr[4]  = 0x000ff000; /* no outputs read */
-   blit->vp.hdr[6]  = 0x0000003f; /* a[0x80], a[0x90] */
-   blit->vp.hdr[13] = 0x0003f000; /* o[0x70], o[0x80] */
+   blit->vp.hdr[6]  = 0x00000073; /* a[0x80].xy, a[0x90].xyz */
+   blit->vp.hdr[13] = 0x00073000; /* o[0x70].xy, o[0x80].xyz */
 }
 
 static void
-nvc0_blitctx_make_fp(struct nvc0_blitctx *blit)
-{
-   static const uint32_t code[] = /* use nvc0dis */
-   {
-      /* 2 coords RGBA in, RGBA out, also for Z32_FLOAT(_S8X24_UINT)
-       * NOTE:
-       * NVC0 doesn't like tex 3d on non-3d textures, but there should
-       * only be 2d and 2d-array MS resources anyway.
-       */
-      0xfff01c00, 0xc07e0080,
-      0xfff05c00, 0xc07e0084,
-      0x00001c86, 0x8013c000,
-      0x00001de7, 0x80000000,
-      /* size: 0x70 + padding  */
-      0, 0, 0, 0,
-
-      /* 2 coords ZS in, S encoded in R, Z encoded in GBA (8_UNORM)
-       * Setup float outputs in a way that conversion to UNORM yields the
-       * desired byte value.
-       */
-      /* NOTE: need to repeat header */
-      0x00021462, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-      0x80000000, 0x0000000f, 0x00000000, 0x00000000, 0x00000000,
-      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-      0x00000000, 0x00000000, 0x00000000, 0x0000000f, 0x00000000,
-      0xfff01c00, 0xc07e0080,
-      0xfff05c00, 0xc07e0084,
-      0x00001c86, 0x8010c000,
-      0xfc009c02, 0x312dffff,
-      0x05001c88,
-      0x09009e88,
-      0x04001c02, 0x30ee0202,
-      0xfc205c02, 0x38000003,
-      0x0020dc02, 0x3803fc00,
-      0x00209c02, 0x380003fc,
-      0x05005c88,
-      0x0d00dc88,
-      0x09209e04, 0x18000000,
-      0x04105c02, 0x30ee0202,
-      0x0430dc02, 0x30ce0202,
-      0x04209c02, 0x30de0202,
-      0x00001de7, 0x80000000,
-      /* size: 0xc8 + padding */
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-
-      /* 2 coords ZS in, Z encoded in RGB, S encoded in A (U8_UNORM) */
-      0x00021462, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-      0x80000000, 0x0000000f, 0x00000000, 0x00000000, 0x00000000,
-      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-      0x00000000, 0x00000000, 0x00000000, 0x0000000f, 0x00000000,
-      0xfff01c00, 0xc07e0080,
-      0xfff05c00, 0xc07e0084,
-      0x00001c86, 0x8010c000,
-      0xfc009c02, 0x312dffff,
-      0x05081c88,
-      0x09009e88,
-      0x0430dc02, 0x30ee0202,
-      0xfc201c02, 0x38000003,
-      0x00205c02, 0x380003fc,
-      0x00209c02, 0x3803fc00,
-      0x01001c88,
-      0x05005c88,
-      0x09209e04, 0x18000000,
-      0x04001c02, 0x30ee0202,
-      0x04105c02, 0x30de0202,
-      0x04209c02, 0x30ce0202,
-      0x00001de7, 0x80000000,
-   };
-
-   blit->fp.type = PIPE_SHADER_FRAGMENT;
-   blit->fp.translated = TRUE;
-   blit->fp.code = (uint32_t *)code; /* const_cast */
-   blit->fp.code_size = sizeof(code);
-   blit->fp.max_gpr = 4;
-
-   blit->fp.hdr[0]  = 0x00021462; /* fragprog magic */
-   blit->fp.hdr[5]  = 0x80000000;
-   blit->fp.hdr[6]  = 0x0000000f; /* 2 linear */
-   blit->fp.hdr[18] = 0x0000000f; /* 1 colour output */
-}
-
-static void
-nvc0_blitctx_make_sampler(struct nvc0_blitctx *blit)
+nvc0_blitter_make_sampler(struct nvc0_blitter *blit)
 {
    /* clamp to edge, min/max lod = 0, nearest filtering */
 
    blit->sampler[0].id = -1;
 
-   blit->sampler[0].tsc[0] = 0x00000092;
-   blit->sampler[0].tsc[1] = 0x00000051;
+   blit->sampler[0].tsc[0] = NV50_TSC_0_SRGB_CONVERSION_ALLOWED |
+      (NV50_TSC_WRAP_CLAMP_TO_EDGE << NV50_TSC_0_WRAPS__SHIFT) |
+      (NV50_TSC_WRAP_CLAMP_TO_EDGE << NV50_TSC_0_WRAPT__SHIFT) |
+      (NV50_TSC_WRAP_CLAMP_TO_EDGE << NV50_TSC_0_WRAPR__SHIFT);
+   blit->sampler[0].tsc[1] =
+      NV50_TSC_1_MAGF_NEAREST | NV50_TSC_1_MINF_NEAREST | NV50_TSC_1_MIPF_NONE;
 
    /* clamp to edge, min/max lod = 0, bilinear filtering */
 
    blit->sampler[1].id = -1;
 
-   blit->sampler[1].tsc[0] = 0x00000092;
-   blit->sampler[1].tsc[1] = 0x00000062;
-}
-
-/* Since shaders cannot export stencil, we cannot copy stencil values when
- * rendering to ZETA, so we attach the ZS surface to a colour render target.
- */
-static INLINE enum pipe_format
-nvc0_blit_zeta_to_colour_format(enum pipe_format format)
-{
-   switch (format) {
-   case PIPE_FORMAT_Z16_UNORM:               return PIPE_FORMAT_R16_UNORM;
-   case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-   case PIPE_FORMAT_S8_UINT_Z24_UNORM:
-   case PIPE_FORMAT_Z24X8_UNORM:             return PIPE_FORMAT_R8G8B8A8_UNORM;
-   case PIPE_FORMAT_Z32_FLOAT:               return PIPE_FORMAT_R32_FLOAT;
-   case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:    return PIPE_FORMAT_R32G32_FLOAT;
-   default:
-      assert(0);
-      return PIPE_FORMAT_NONE;
-   }
+   blit->sampler[1].tsc[0] = blit->sampler[0].tsc[0];
+   blit->sampler[1].tsc[1] =
+      NV50_TSC_1_MAGF_LINEAR | NV50_TSC_1_MINF_LINEAR | NV50_TSC_1_MIPF_NONE;
 }
 
 static void
-nvc0_blitctx_get_color_mask_and_fp(struct nvc0_blitctx *blit,
-                                   enum pipe_format format, uint8_t mask)
+nvc0_blit_select_fp(struct nvc0_blitctx *ctx, const struct pipe_blit_info *info)
 {
-   blit->color_mask = 0;
+   struct nvc0_blitter *blitter = ctx->nvc0->screen->blitter;
 
-   switch (format) {
-   case PIPE_FORMAT_Z24X8_UNORM:
-   case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-      blit->fp_offset = 0x180;
-      if (mask & PIPE_MASK_Z)
-         blit->color_mask |= 0x0111;
-      if (mask & PIPE_MASK_S)
-         blit->color_mask |= 0x1000;
-      break;
-   case PIPE_FORMAT_S8_UINT_Z24_UNORM:
-      blit->fp_offset = 0x80;
-      if (mask & PIPE_MASK_Z)
-         blit->color_mask |= 0x1110;
-      if (mask & PIPE_MASK_S)
-         blit->color_mask |= 0x0001;
-      break;
-   default:
-      blit->fp_offset = 0;
-      if (mask & (PIPE_MASK_R | PIPE_MASK_Z)) blit->color_mask |= 0x0001;
-      if (mask & (PIPE_MASK_G | PIPE_MASK_S)) blit->color_mask |= 0x0010;
-      if (mask & PIPE_MASK_B) blit->color_mask |= 0x0100;
-      if (mask & PIPE_MASK_A) blit->color_mask |= 0x1000;
-      break;
+   const enum pipe_texture_target ptarg =
+      nv50_blit_reinterpret_pipe_texture_target(info->src.resource->target);
+
+   const unsigned targ = nv50_blit_texture_type(ptarg);
+   const unsigned mode = ctx->mode;
+
+   if (!blitter->fp[targ][mode]) {
+      pipe_mutex_lock(blitter->mutex);
+      if (!blitter->fp[targ][mode])
+         blitter->fp[targ][mode] =
+            nv50_blitter_make_fp(&ctx->nvc0->base.pipe, mode, ptarg);
+      pipe_mutex_unlock(blitter->mutex);
    }
+   ctx->fp = blitter->fp[targ][mode];
 }
 
 static void
-nvc0_blit_set_dst(struct nvc0_context *nvc0,
-                  struct pipe_resource *res, unsigned level, unsigned layer)
+nvc0_blit_set_dst(struct nvc0_blitctx *ctx,
+                  struct pipe_resource *res, unsigned level, unsigned layer,
+                  enum pipe_format format)
 {
+   struct nvc0_context *nvc0 = ctx->nvc0;
    struct pipe_context *pipe = &nvc0->base.pipe;
    struct pipe_surface templ;
 
-   if (util_format_is_depth_or_stencil(res->format))
-      templ.format = nvc0_blit_zeta_to_colour_format(res->format);
+   if (util_format_is_depth_or_stencil(format))
+      templ.format = nv50_blit_zeta_to_colour_format(format);
    else
-      templ.format = res->format;
+      templ.format = format;
 
-   templ.usage = PIPE_USAGE_STREAM;
    templ.u.tex.level = level;
    templ.u.tex.first_layer = templ.u.tex.last_layer = layer;
+
+   if (layer == -1) {
+      templ.u.tex.first_layer = 0;
+      templ.u.tex.last_layer =
+         (res->target == PIPE_TEXTURE_3D ? res->depth0 : res->array_size) - 1;
+   }
 
    nvc0->framebuffer.cbufs[0] = nvc0_miptree_surface_new(pipe, res, &templ);
    nvc0->framebuffer.nr_cbufs = 1;
@@ -669,27 +603,21 @@ nvc0_blit_set_dst(struct nvc0_context *nvc0,
    nvc0->framebuffer.height = nvc0->framebuffer.cbufs[0]->height;
 }
 
-static INLINE void
-nvc0_blit_fixup_tic_entry(struct pipe_sampler_view *view)
-{
-   struct nv50_tic_entry *ent = nv50_tic_entry(view);
-
-   ent->tic[2] &= ~(1 << 31); /* scaled coordinates, ok with 3d textures ? */
-
-   /* magic: */
-
-   ent->tic[3] = 0x20000000; /* affects quality of near vertical edges in MS8 */
-}
-
 static void
-nvc0_blit_set_src(struct nvc0_context *nvc0,
-                  struct pipe_resource *res, unsigned level, unsigned layer)
+nvc0_blit_set_src(struct nvc0_blitctx *ctx,
+                  struct pipe_resource *res, unsigned level, unsigned layer,
+                  enum pipe_format format, const uint8_t filter)
 {
+   struct nvc0_context *nvc0 = ctx->nvc0;
    struct pipe_context *pipe = &nvc0->base.pipe;
    struct pipe_sampler_view templ;
-   int s;
+   uint32_t flags;
+   unsigned s;
+   enum pipe_texture_target target;
 
-   templ.format = res->format;
+   target = nv50_blit_reinterpret_pipe_texture_target(res->target);
+
+   templ.format = format;
    templ.u.tex.first_layer = templ.u.tex.last_layer = layer;
    templ.u.tex.first_level = templ.u.tex.last_level = level;
    templ.swizzle_r = PIPE_SWIZZLE_RED;
@@ -697,93 +625,125 @@ nvc0_blit_set_src(struct nvc0_context *nvc0,
    templ.swizzle_b = PIPE_SWIZZLE_BLUE;
    templ.swizzle_a = PIPE_SWIZZLE_ALPHA;
 
-   nvc0->textures[4][0] = nvc0_create_sampler_view(pipe, res, &templ);
+   if (layer == -1) {
+      templ.u.tex.first_layer = 0;
+      templ.u.tex.last_layer =
+         (res->target == PIPE_TEXTURE_3D ? res->depth0 : res->array_size) - 1;
+   }
 
-   nvc0_blit_fixup_tic_entry(nvc0->textures[4][0]);
+   flags = res->last_level ? 0 : NV50_TEXVIEW_SCALED_COORDS;
+   if (filter && res->nr_samples == 8)
+      flags |= NV50_TEXVIEW_FILTER_MSAA8;
+
+   nvc0->textures[4][0] = nvc0_create_texture_view(
+      pipe, res, &templ, flags, target);
+   nvc0->textures[4][1] = NULL;
 
    for (s = 0; s <= 3; ++s)
       nvc0->num_textures[s] = 0;
    nvc0->num_textures[4] = 1;
+
+   templ.format = nv50_zs_to_s_format(format);
+   if (templ.format != format) {
+      nvc0->textures[4][1] = nvc0_create_texture_view(
+         pipe, res, &templ, flags, target);
+      nvc0->num_textures[4] = 2;
+   }
 }
 
 static void
 nvc0_blitctx_prepare_state(struct nvc0_blitctx *blit)
 {
-   struct nouveau_channel *chan = blit->screen->base.channel;
+   struct nouveau_pushbuf *push = blit->nvc0->base.pushbuf;
 
    /* TODO: maybe make this a MACRO (if we need more logic) ? */
 
+   if (blit->nvc0->cond_query)
+      IMMED_NVC0(push, NVC0_3D(COND_MODE), NVC0_3D_COND_MODE_ALWAYS);
+
    /* blend state */
-   BEGIN_RING(chan, RING_3D(COLOR_MASK(0)), 1);
-   OUT_RING  (chan, blit->color_mask);
-   BEGIN_RING(chan, RING_3D(BLEND_ENABLE(0)), 1);
-   OUT_RING  (chan, 0);
-   IMMED_RING(chan, RING_3D(LOGIC_OP_ENABLE), 0);
+   BEGIN_NVC0(push, NVC0_3D(COLOR_MASK(0)), 1);
+   PUSH_DATA (push, blit->color_mask);
+   IMMED_NVC0(push, NVC0_3D(BLEND_ENABLE(0)), 0);
+   IMMED_NVC0(push, NVC0_3D(LOGIC_OP_ENABLE), 0);
 
    /* rasterizer state */
-   BEGIN_RING(chan, RING_3D(FRAG_COLOR_CLAMP_EN), 1);
-   OUT_RING  (chan, 0);
-   IMMED_RING(chan, RING_3D(MULTISAMPLE_ENABLE), 0);
-   BEGIN_RING(chan, RING_3D(MSAA_MASK(0)), 4);
-   OUT_RING  (chan, 0xffff);
-   OUT_RING  (chan, 0xffff);
-   OUT_RING  (chan, 0xffff);
-   OUT_RING  (chan, 0xffff);
-   BEGIN_RING(chan, RING_3D(POLYGON_MODE_FRONT), 1);
-   OUT_RING  (chan, NVC0_3D_POLYGON_MODE_FRONT_FILL);
-   BEGIN_RING(chan, RING_3D(POLYGON_MODE_BACK), 1);
-   OUT_RING  (chan, NVC0_3D_POLYGON_MODE_BACK_FILL);
-   IMMED_RING(chan, RING_3D(POLYGON_SMOOTH_ENABLE), 0);
-   IMMED_RING(chan, RING_3D(POLYGON_OFFSET_FILL_ENABLE), 0);
-   IMMED_RING(chan, RING_3D(POLYGON_STIPPLE_ENABLE), 0);
-   IMMED_RING(chan, RING_3D(CULL_FACE_ENABLE), 0);
+   IMMED_NVC0(push, NVC0_3D(FRAG_COLOR_CLAMP_EN), 0);
+   IMMED_NVC0(push, NVC0_3D(MULTISAMPLE_ENABLE), 0);
+   BEGIN_NVC0(push, NVC0_3D(MSAA_MASK(0)), 4);
+   PUSH_DATA (push, 0xffff);
+   PUSH_DATA (push, 0xffff);
+   PUSH_DATA (push, 0xffff);
+   PUSH_DATA (push, 0xffff);
+   BEGIN_NVC0(push, NVC0_3D(MACRO_POLYGON_MODE_FRONT), 1);
+   PUSH_DATA (push, NVC0_3D_MACRO_POLYGON_MODE_FRONT_FILL);
+   BEGIN_NVC0(push, NVC0_3D(MACRO_POLYGON_MODE_BACK), 1);
+   PUSH_DATA (push, NVC0_3D_MACRO_POLYGON_MODE_BACK_FILL);
+   IMMED_NVC0(push, NVC0_3D(POLYGON_SMOOTH_ENABLE), 0);
+   IMMED_NVC0(push, NVC0_3D(POLYGON_OFFSET_FILL_ENABLE), 0);
+   IMMED_NVC0(push, NVC0_3D(POLYGON_STIPPLE_ENABLE), 0);
+   IMMED_NVC0(push, NVC0_3D(CULL_FACE_ENABLE), 0);
 
    /* zsa state */
-   IMMED_RING(chan, RING_3D(DEPTH_TEST_ENABLE), 0);
-   IMMED_RING(chan, RING_3D(STENCIL_ENABLE), 0);
-   IMMED_RING(chan, RING_3D(ALPHA_TEST_ENABLE), 0);
+   IMMED_NVC0(push, NVC0_3D(DEPTH_TEST_ENABLE), 0);
+   IMMED_NVC0(push, NVC0_3D(STENCIL_ENABLE), 0);
+   IMMED_NVC0(push, NVC0_3D(ALPHA_TEST_ENABLE), 0);
 
    /* disable transform feedback */
-   IMMED_RING(chan, RING_3D(TFB_ENABLE), 0);
+   IMMED_NVC0(push, NVC0_3D(TFB_ENABLE), 0);
 }
 
 static void
-nvc0_blitctx_pre_blit(struct nvc0_blitctx *blit, struct nvc0_context *nvc0)
+nvc0_blitctx_pre_blit(struct nvc0_blitctx *ctx)
 {
+   struct nvc0_context *nvc0 = ctx->nvc0;
+   struct nvc0_blitter *blitter = nvc0->screen->blitter;
    int s;
 
-   blit->saved.fb.width = nvc0->framebuffer.width;
-   blit->saved.fb.height = nvc0->framebuffer.height;
-   blit->saved.fb.nr_cbufs = nvc0->framebuffer.nr_cbufs;
-   blit->saved.fb.cbufs[0] = nvc0->framebuffer.cbufs[0];
-   blit->saved.fb.zsbuf = nvc0->framebuffer.zsbuf;
+   ctx->saved.fb.width = nvc0->framebuffer.width;
+   ctx->saved.fb.height = nvc0->framebuffer.height;
+   ctx->saved.fb.nr_cbufs = nvc0->framebuffer.nr_cbufs;
+   ctx->saved.fb.cbufs[0] = nvc0->framebuffer.cbufs[0];
+   ctx->saved.fb.zsbuf = nvc0->framebuffer.zsbuf;
 
-   blit->saved.vp = nvc0->vertprog;
-   blit->saved.tcp = nvc0->tctlprog;
-   blit->saved.tep = nvc0->tevlprog;
-   blit->saved.gp = nvc0->gmtyprog;
-   blit->saved.fp = nvc0->fragprog;
+   ctx->saved.vp = nvc0->vertprog;
+   ctx->saved.tcp = nvc0->tctlprog;
+   ctx->saved.tep = nvc0->tevlprog;
+   ctx->saved.gp = nvc0->gmtyprog;
+   ctx->saved.fp = nvc0->fragprog;
 
-   nvc0->vertprog = &blit->vp;
-   nvc0->fragprog = &blit->fp;
+   nvc0->vertprog = &blitter->vp;
    nvc0->tctlprog = NULL;
    nvc0->tevlprog = NULL;
    nvc0->gmtyprog = NULL;
+   nvc0->fragprog = ctx->fp;
 
    for (s = 0; s <= 4; ++s) {
-      blit->saved.num_textures[s] = nvc0->num_textures[s];
-      blit->saved.num_samplers[s] = nvc0->num_samplers[s];
+      ctx->saved.num_textures[s] = nvc0->num_textures[s];
+      ctx->saved.num_samplers[s] = nvc0->num_samplers[s];
+      nvc0->textures_dirty[s] = (1 << nvc0->num_textures[s]) - 1;
+      nvc0->samplers_dirty[s] = (1 << nvc0->num_samplers[s]) - 1;
    }
-   blit->saved.texture = nvc0->textures[4][0];
-   blit->saved.sampler = nvc0->samplers[4][0];
+   ctx->saved.texture[0] = nvc0->textures[4][0];
+   ctx->saved.texture[1] = nvc0->textures[4][1];
+   ctx->saved.sampler[0] = nvc0->samplers[4][0];
+   ctx->saved.sampler[1] = nvc0->samplers[4][1];
 
-   nvc0->samplers[4][0] = &blit->sampler[blit->filter];
+   nvc0->samplers[4][0] = &blitter->sampler[ctx->filter];
+   nvc0->samplers[4][1] = &blitter->sampler[ctx->filter];
 
    for (s = 0; s <= 3; ++s)
       nvc0->num_samplers[s] = 0;
-   nvc0->num_samplers[4] = 1;
+   nvc0->num_samplers[4] = 2;
 
-   blit->saved.dirty = nvc0->dirty;
+   ctx->saved.dirty = nvc0->dirty;
+
+   nvc0->textures_dirty[4] |= 3;
+   nvc0->samplers_dirty[4] |= 3;
+
+   nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_FB);
+   nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(4, 0));
+   nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(4, 1));
 
    nvc0->dirty = NVC0_NEW_FRAMEBUFFER |
       NVC0_NEW_VERTPROG | NVC0_NEW_FRAGPROG |
@@ -792,8 +752,9 @@ nvc0_blitctx_pre_blit(struct nvc0_blitctx *blit, struct nvc0_context *nvc0)
 }
 
 static void
-nvc0_blitctx_post_blit(struct nvc0_context *nvc0, struct nvc0_blitctx *blit)
+nvc0_blitctx_post_blit(struct nvc0_blitctx *blit)
 {
+   struct nvc0_context *nvc0 = blit->nvc0;
    int s;
 
    pipe_surface_reference(&nvc0->framebuffer.cbufs[0], NULL);
@@ -811,13 +772,29 @@ nvc0_blitctx_post_blit(struct nvc0_context *nvc0, struct nvc0_blitctx *blit)
    nvc0->fragprog = blit->saved.fp;
 
    pipe_sampler_view_reference(&nvc0->textures[4][0], NULL);
+   pipe_sampler_view_reference(&nvc0->textures[4][1], NULL);
 
    for (s = 0; s <= 4; ++s) {
       nvc0->num_textures[s] = blit->saved.num_textures[s];
       nvc0->num_samplers[s] = blit->saved.num_samplers[s];
+      nvc0->textures_dirty[s] = (1 << nvc0->num_textures[s]) - 1;
+      nvc0->samplers_dirty[s] = (1 << nvc0->num_samplers[s]) - 1;
    }
-   nvc0->textures[4][0] = blit->saved.texture;
-   nvc0->samplers[4][0] = blit->saved.sampler;
+   nvc0->textures[4][0] = blit->saved.texture[0];
+   nvc0->textures[4][1] = blit->saved.texture[1];
+   nvc0->samplers[4][0] = blit->saved.sampler[0];
+   nvc0->samplers[4][1] = blit->saved.sampler[1];
+
+   nvc0->textures_dirty[4] |= 3;
+   nvc0->samplers_dirty[4] |= 3;
+
+   if (nvc0->cond_query)
+      nvc0->base.pipe.render_condition(&nvc0->base.pipe, nvc0->cond_query,
+                                       nvc0->cond_mode);
+
+   nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_FB);
+   nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(4, 0));
+   nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(4, 1));
 
    nvc0->dirty = blit->saved.dirty |
       (NVC0_NEW_FRAMEBUFFER | NVC0_NEW_SCISSOR | NVC0_NEW_SAMPLE_MASK |
@@ -829,46 +806,38 @@ nvc0_blitctx_post_blit(struct nvc0_context *nvc0, struct nvc0_blitctx *blit)
 }
 
 static void
-nvc0_resource_resolve(struct pipe_context *pipe,
-                      const struct pipe_resolve_info *info)
+nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
 {
-   struct nvc0_context *nvc0 = nvc0_context(pipe);
-   struct nvc0_screen *screen = nvc0->screen;
-   struct nvc0_blitctx *blit = screen->blitctx;
-   struct nouveau_channel *chan = screen->base.channel;
-   struct pipe_resource *src = info->src.res;
-   struct pipe_resource *dst = info->dst.res;
-   float x0, x1, y0, y1;
+   struct nvc0_blitctx *blit = nvc0->blit;
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct pipe_resource *src = info->src.resource;
+   struct pipe_resource *dst = info->dst.resource;
+   int32_t minx, maxx, miny, maxy;
+   int32_t i;
+   float x0, x1, y0, y1, z;
+   float dz;
    float x_range, y_range;
 
-   /* Would need more shader variants or, better, just change the TIC target.
-    * But no API creates 3D MS textures ...
-    */
-   if (src->target == PIPE_TEXTURE_3D)
-      return;
+   blit->mode = nv50_blit_select_mode(info);
+   blit->color_mask = nv50_blit_derive_color_mask(info);
+   blit->filter = nv50_blit_get_filter(info);
 
-   nvc0_blitctx_get_color_mask_and_fp(blit, dst->format, info->mask);
+   nvc0_blit_select_fp(blit, info);
+   nvc0_blitctx_pre_blit(blit);
 
-   blit->filter = util_format_is_depth_or_stencil(dst->format) ? 0 : 1;
-
-   nvc0_blitctx_pre_blit(blit, nvc0);
-
-   nvc0_blit_set_dst(nvc0, dst, info->dst.level, info->dst.layer);
-   nvc0_blit_set_src(nvc0, src, 0,               info->src.layer);
+   nvc0_blit_set_dst(blit, dst, info->dst.level, -1, info->dst.format);
+   nvc0_blit_set_src(blit, src, info->src.level, -1, info->src.format,
+                     blit->filter);
 
    nvc0_blitctx_prepare_state(blit);
 
-   nvc0_state_validate(nvc0, ~0, 36);
+   nvc0_state_validate(nvc0, ~0, 48);
 
-   x_range =
-      (float)(info->src.x1 - info->src.x0) /
-      (float)(info->dst.x1 - info->dst.x0);
-   y_range =
-      (float)(info->src.y1 - info->src.y0) /
-      (float)(info->dst.y1 - info->dst.y0);
+   x_range = (float)info->src.box.width / (float)info->dst.box.width;
+   y_range = (float)info->src.box.height / (float)info->dst.box.height;
 
-   x0 = (float)info->src.x0 - x_range * (float)info->dst.x0;
-   y0 = (float)info->src.y0 - y_range * (float)info->dst.y0;
+   x0 = (float)info->src.box.x - x_range * (float)info->dst.box.x;
+   y0 = (float)info->src.box.y - y_range * (float)info->dst.box.y;
 
    x1 = x0 + 16384.0f * x_range;
    y1 = y0 + 16384.0f * y_range;
@@ -878,11 +847,28 @@ nvc0_resource_resolve(struct pipe_context *pipe,
    y0 *= (float)(1 << nv50_miptree(src)->ms_y);
    y1 *= (float)(1 << nv50_miptree(src)->ms_y);
 
-   BEGIN_RING(chan, RING_3D(SP_START_ID(5)), 1);
-   OUT_RING  (chan,
-              blit->fp.code_base + blit->fp_offset);
+   if (src->last_level > 0) {
+      /* If there are mip maps, GPU always assumes normalized coordinates. */
+      const unsigned l = info->src.level;
+      const float fh = u_minify(src->width0 << nv50_miptree(src)->ms_x, l);
+      const float fv = u_minify(src->height0 << nv50_miptree(src)->ms_y, l);
+      x0 /= fh;
+      x1 /= fh;
+      y0 /= fv;
+      y1 /= fv;
+   }
 
-   IMMED_RING(chan, RING_3D(VIEWPORT_TRANSFORM_EN), 0);
+   dz = (float)info->src.box.depth / (float)info->dst.box.depth;
+   z = (float)info->src.box.z;
+   if (nv50_miptree(src)->layout_3d)
+      z += 0.5f * dz;
+
+   IMMED_NVC0(push, NVC0_3D(VIEWPORT_TRANSFORM_EN), 0);
+   IMMED_NVC0(push, NVC0_3D(VIEW_VOLUME_CLIP_CTRL), 0x2 |
+              NVC0_3D_VIEW_VOLUME_CLIP_CTRL_DEPTH_RANGE_0_1);
+   BEGIN_NVC0(push, NVC0_3D(VIEWPORT_HORIZ(0)), 2);
+   PUSH_DATA (push, nvc0->framebuffer.width << 16);
+   PUSH_DATA (push, nvc0->framebuffer.height << 16);
 
    /* Draw a large triangle in screen coordinates covering the whole
     * render target, with scissors defining the destination region.
@@ -890,68 +876,359 @@ nvc0_resource_resolve(struct pipe_context *pipe,
     * arranged in a way to yield the desired offset and scale.
     */
 
-   BEGIN_RING(chan, RING_3D(SCISSOR_HORIZ(0)), 2);
-   OUT_RING  (chan, (info->dst.x1 << 16) | info->dst.x0);
-   OUT_RING  (chan, (info->dst.y1 << 16) | info->dst.y0);
+   minx = info->dst.box.x;
+   maxx = info->dst.box.x + info->dst.box.width;
+   miny = info->dst.box.y;
+   maxy = info->dst.box.y + info->dst.box.height;
+   if (info->scissor_enable) {
+      minx = MAX2(minx, info->scissor.minx);
+      maxx = MIN2(maxx, info->scissor.maxx);
+      miny = MAX2(miny, info->scissor.miny);
+      maxy = MIN2(maxy, info->scissor.maxy);
+   }
+   BEGIN_NVC0(push, NVC0_3D(SCISSOR_HORIZ(0)), 2);
+   PUSH_DATA (push, (maxx << 16) | minx);
+   PUSH_DATA (push, (maxy << 16) | miny);
 
-   IMMED_RING(chan, RING_3D(VERTEX_BEGIN_GL),
-              NVC0_3D_VERTEX_BEGIN_GL_PRIMITIVE_TRIANGLES);
+   for (i = 0; i < info->dst.box.depth; ++i, z += dz) {
+      if (info->dst.box.z + i) {
+         BEGIN_NVC0(push, NVC0_3D(LAYER), 1);
+         PUSH_DATA (push, info->dst.box.z + i);
+      }
 
-   BEGIN_RING(chan, RING_3D(VTX_ATTR_DEFINE), 3);
-   OUT_RING  (chan, 0x74201);
-   OUT_RINGf (chan, x0);
-   OUT_RINGf (chan, y0);
-   BEGIN_RING(chan, RING_3D(VTX_ATTR_DEFINE), 3);
-   OUT_RING  (chan, 0x74200);
-   OUT_RINGf (chan, 0.0f);
-   OUT_RINGf (chan, 0.0f);
-   BEGIN_RING(chan, RING_3D(VTX_ATTR_DEFINE), 3);
-   OUT_RING  (chan, 0x74201);
-   OUT_RINGf (chan, x1);
-   OUT_RINGf (chan, y0);
-   BEGIN_RING(chan, RING_3D(VTX_ATTR_DEFINE), 3);
-   OUT_RING  (chan, 0x74200);
-   OUT_RINGf (chan, 16384 << nv50_miptree(dst)->ms_x);
-   OUT_RINGf (chan, 0.0f);
-   BEGIN_RING(chan, RING_3D(VTX_ATTR_DEFINE), 3);
-   OUT_RING  (chan, 0x74201);
-   OUT_RINGf (chan, x0);
-   OUT_RINGf (chan, y1);
-   BEGIN_RING(chan, RING_3D(VTX_ATTR_DEFINE), 3);
-   OUT_RING  (chan, 0x74200);
-   OUT_RINGf (chan, 0.0f);
-   OUT_RINGf (chan, 16384 << nv50_miptree(dst)->ms_y);
+      IMMED_NVC0(push, NVC0_3D(VERTEX_BEGIN_GL),
+                       NVC0_3D_VERTEX_BEGIN_GL_PRIMITIVE_TRIANGLES);
 
-   IMMED_RING(chan, RING_3D(VERTEX_END_GL), 0);
+      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 4);
+      PUSH_DATA (push, 0x74301);
+      PUSH_DATAf(push, x0);
+      PUSH_DATAf(push, y0);
+      PUSH_DATAf(push, z);
+      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 3);
+      PUSH_DATA (push, 0x74200);
+      PUSH_DATAf(push, 0.0f);
+      PUSH_DATAf(push, 0.0f);
+      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 4);
+      PUSH_DATA (push, 0x74301);
+      PUSH_DATAf(push, x1);
+      PUSH_DATAf(push, y0);
+      PUSH_DATAf(push, z);
+      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 3);
+      PUSH_DATA (push, 0x74200);
+      PUSH_DATAf(push, 16384 << nv50_miptree(dst)->ms_x);
+      PUSH_DATAf(push, 0.0f);
+      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 4);
+      PUSH_DATA (push, 0x74301);
+      PUSH_DATAf(push, x0);
+      PUSH_DATAf(push, y1);
+      PUSH_DATAf(push, z);
+      BEGIN_NVC0(push, NVC0_3D(VTX_ATTR_DEFINE), 3);
+      PUSH_DATA (push, 0x74200);
+      PUSH_DATAf(push, 0.0f);
+      PUSH_DATAf(push, 16384 << nv50_miptree(dst)->ms_y);
 
-   /* re-enable normally constant state */
+      IMMED_NVC0(push, NVC0_3D(VERTEX_END_GL), 0);
+   }
+   if (info->dst.box.z + info->dst.box.depth - 1)
+      IMMED_NVC0(push, NVC0_3D(LAYER), 0);
 
-   IMMED_RING(chan, RING_3D(VIEWPORT_TRANSFORM_EN), 1);
+   nvc0_blitctx_post_blit(blit);
 
-   nvc0_blitctx_post_blit(nvc0, blit);
+   /* restore viewport */
+
+   BEGIN_NVC0(push, NVC0_3D(VIEWPORT_HORIZ(0)), 2);
+   PUSH_DATA (push, nvc0->framebuffer.width << 16);
+   PUSH_DATA (push, nvc0->framebuffer.height << 16);
+   IMMED_NVC0(push, NVC0_3D(VIEWPORT_TRANSFORM_EN), 1);
+}
+
+static void
+nvc0_blit_eng2d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
+{
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct nv50_miptree *dst = nv50_miptree(info->dst.resource);
+   struct nv50_miptree *src = nv50_miptree(info->src.resource);
+   const int32_t srcx_adj = info->src.box.width < 0 ? -1 : 0;
+   const int32_t srcy_adj = info->src.box.height < 0 ? -1 : 0;
+   const int dz = info->dst.box.z;
+   const int sz = info->src.box.z;
+   uint32_t dstw, dsth;
+   int32_t dstx, dsty;
+   int64_t srcx, srcy;
+   int64_t du_dx, dv_dy;
+   int i;
+   uint32_t mode;
+   uint32_t mask = nv50_blit_eng2d_get_mask(info);
+   boolean b;
+
+   mode = nv50_blit_get_filter(info) ?
+      NVC0_2D_BLIT_CONTROL_FILTER_BILINEAR :
+      NVC0_2D_BLIT_CONTROL_FILTER_POINT_SAMPLE;
+   mode |= (src->base.base.nr_samples > dst->base.base.nr_samples) ?
+      NVC0_2D_BLIT_CONTROL_ORIGIN_CORNER : NVC0_2D_BLIT_CONTROL_ORIGIN_CENTER;
+
+   du_dx = ((int64_t)info->src.box.width << 32) / info->dst.box.width;
+   dv_dy = ((int64_t)info->src.box.height << 32) / info->dst.box.height;
+
+   b = info->dst.format == info->src.format;
+   nvc0_2d_texture_set(push, 1, dst, info->dst.level, dz, info->dst.format, b);
+   nvc0_2d_texture_set(push, 0, src, info->src.level, sz, info->src.format, b);
+
+   if (info->scissor_enable) {
+      BEGIN_NVC0(push, NVC0_2D(CLIP_X), 5);
+      PUSH_DATA (push, info->scissor.minx << dst->ms_x);
+      PUSH_DATA (push, info->scissor.miny << dst->ms_y);
+      PUSH_DATA (push, (info->scissor.maxx - info->scissor.minx) << dst->ms_x);
+      PUSH_DATA (push, (info->scissor.maxy - info->scissor.miny) << dst->ms_y);
+      PUSH_DATA (push, 1); /* enable */
+   }
+
+   if (mask != 0xffffffff) {
+      IMMED_NVC0(push, NVC0_2D(ROP), 0xca); /* DPSDxax */
+      IMMED_NVC0(push, NVC0_2D(PATTERN_COLOR_FORMAT),
+                       NVC0_2D_PATTERN_COLOR_FORMAT_32BPP);
+      BEGIN_NVC0(push, NVC0_2D(PATTERN_COLOR(0)), 4);
+      PUSH_DATA (push, 0x00000000);
+      PUSH_DATA (push, mask);
+      PUSH_DATA (push, 0xffffffff);
+      PUSH_DATA (push, 0xffffffff);
+      IMMED_NVC0(push, NVC0_2D(OPERATION), NVC0_2D_OPERATION_ROP);
+   } else
+   if (info->src.format != info->dst.format) {
+      if (info->src.format == PIPE_FORMAT_R8_UNORM ||
+          info->src.format == PIPE_FORMAT_R8_SNORM ||
+          info->src.format == PIPE_FORMAT_R16_UNORM ||
+          info->src.format == PIPE_FORMAT_R16_SNORM ||
+          info->src.format == PIPE_FORMAT_R16_FLOAT ||
+          info->src.format == PIPE_FORMAT_R32_FLOAT) {
+         mask = 0xffff0000; /* also makes condition for OPERATION reset true */
+         BEGIN_NVC0(push, NVC0_2D(BETA4), 2);
+         PUSH_DATA (push, mask);
+         PUSH_DATA (push, NVC0_2D_OPERATION_SRCCOPY_PREMULT);
+      } else
+      if (info->src.format == PIPE_FORMAT_A8_UNORM) {
+         mask = 0xff000000;
+         BEGIN_NVC0(push, NVC0_2D(BETA4), 2);
+         PUSH_DATA (push, mask);
+         PUSH_DATA (push, NVC0_2D_OPERATION_SRCCOPY_PREMULT);
+      }
+   }
+
+   if (src->ms_x > dst->ms_x || src->ms_y > dst->ms_y) {
+      /* ms_x is always >= ms_y */
+      du_dx <<= src->ms_x - dst->ms_x;
+      dv_dy <<= src->ms_y - dst->ms_y;
+   } else {
+      du_dx >>= dst->ms_x - src->ms_x;
+      dv_dy >>= dst->ms_y - src->ms_y;
+   }
+
+   srcx = (int64_t)(info->src.box.x + srcx_adj) << (src->ms_x + 32);
+   srcy = (int64_t)(info->src.box.y + srcy_adj) << (src->ms_y + 32);
+
+   if (src->base.base.nr_samples > dst->base.base.nr_samples) {
+      /* center src coorinates for proper MS resolve filtering */
+      srcx += (int64_t)src->ms_x << 32;
+      srcy += (int64_t)src->ms_y << 32;
+   }
+
+   dstx = info->dst.box.x << dst->ms_x;
+   dsty = info->dst.box.y << dst->ms_y;
+
+   dstw = info->dst.box.width << dst->ms_x;
+   dsth = info->dst.box.height << dst->ms_y;
+
+   if (dstx < 0) {
+      dstw += dstx;
+      srcx -= du_dx * dstx;
+      dstx = 0;
+   }
+   if (dsty < 0) {
+      dsth += dsty;
+      srcy -= dv_dy * dsty;
+      dsty = 0;
+   }
+
+   IMMED_NVC0(push, NVC0_2D(BLIT_CONTROL), mode);
+   BEGIN_NVC0(push, NVC0_2D(BLIT_DST_X), 4);
+   PUSH_DATA (push, dstx);
+   PUSH_DATA (push, dsty);
+   PUSH_DATA (push, dstw);
+   PUSH_DATA (push, dsth);
+   BEGIN_NVC0(push, NVC0_2D(BLIT_DU_DX_FRACT), 4);
+   PUSH_DATA (push, du_dx);
+   PUSH_DATA (push, du_dx >> 32);
+   PUSH_DATA (push, dv_dy);
+   PUSH_DATA (push, dv_dy >> 32);
+
+   BCTX_REFN(nvc0->bufctx, 2D, &dst->base, WR);
+   BCTX_REFN(nvc0->bufctx, 2D, &src->base, RD);
+   nouveau_pushbuf_bufctx(nvc0->base.pushbuf, nvc0->bufctx);
+   if (nouveau_pushbuf_validate(nvc0->base.pushbuf))
+      return;
+
+   for (i = 0; i < info->dst.box.depth; ++i) {
+      if (i > 0) {
+         /* no scaling in z-direction possible for eng2d blits */
+         if (dst->layout_3d) {
+            BEGIN_NVC0(push, NVC0_2D(DST_LAYER), 1);
+            PUSH_DATA (push, info->dst.box.z + i);
+         } else {
+            const unsigned z = info->dst.box.z + i;
+            BEGIN_NVC0(push, NVC0_2D(DST_ADDRESS_HIGH), 2);
+            PUSH_DATAh(push, dst->base.address + z * dst->layer_stride);
+            PUSH_DATA (push, dst->base.address + z * dst->layer_stride);
+         }
+         if (src->layout_3d) {
+            /* not possible because of depth tiling */
+            assert(0);
+         } else {
+            const unsigned z = info->src.box.z + i;
+            BEGIN_NVC0(push, NVC0_2D(SRC_ADDRESS_HIGH), 2);
+            PUSH_DATAh(push, src->base.address + z * src->layer_stride);
+            PUSH_DATA (push, src->base.address + z * src->layer_stride);
+         }
+         BEGIN_NVC0(push, NVC0_2D(BLIT_SRC_Y_INT), 1); /* trigger */
+         PUSH_DATA (push, srcy >> 32);
+      } else {
+         BEGIN_NVC0(push, NVC0_2D(BLIT_SRC_X_FRACT), 4);
+         PUSH_DATA (push, srcx);
+         PUSH_DATA (push, srcx >> 32);
+         PUSH_DATA (push, srcy);
+         PUSH_DATA (push, srcy >> 32);
+      }
+   }
+   nvc0_bufctx_fence(nvc0, nvc0->bufctx, FALSE);
+
+   nouveau_bufctx_reset(nvc0->bufctx, NVC0_BIND_2D);
+
+   if (info->scissor_enable)
+      IMMED_NVC0(push, NVC0_2D(CLIP_ENABLE), 0);
+   if (mask != 0xffffffff)
+      IMMED_NVC0(push, NVC0_2D(OPERATION), NVC0_2D_OPERATION_SRCCOPY);
+}
+
+static void
+nvc0_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   boolean eng3d = FALSE;
+
+   if (util_format_is_depth_or_stencil(info->dst.resource->format)) {
+      if (!(info->mask & PIPE_MASK_ZS))
+         return;
+      if (info->dst.resource->format == PIPE_FORMAT_Z32_FLOAT ||
+          info->dst.resource->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
+         eng3d = TRUE;
+      if (info->filter != PIPE_TEX_FILTER_NEAREST)
+         eng3d = TRUE;
+   } else {
+      if (!(info->mask & PIPE_MASK_RGBA))
+         return;
+      if (info->mask != PIPE_MASK_RGBA)
+         eng3d = TRUE;
+   }
+
+   if (nv50_miptree(info->src.resource)->layout_3d) {
+      eng3d = TRUE;
+   } else
+   if (info->src.box.depth != info->dst.box.depth) {
+      eng3d = TRUE;
+      debug_printf("blit: cannot filter array or cube textures in z direction");
+   }
+
+   if (!eng3d && info->dst.format != info->src.format) {
+      if (!nv50_2d_dst_format_faithful(info->dst.format)) {
+         eng3d = TRUE;
+      } else
+      if (!nv50_2d_src_format_faithful(info->src.format)) {
+         if (!util_format_is_luminance(info->src.format)) {
+            if (util_format_is_intensity(info->src.format))
+               eng3d = info->src.format != PIPE_FORMAT_I8_UNORM;
+            else
+            if (!nv50_2d_dst_format_ops_supported(info->dst.format))
+               eng3d = TRUE;
+            else
+               eng3d = !nv50_2d_format_supported(info->src.format);
+         }
+      } else
+      if (util_format_is_luminance_alpha(info->src.format))
+         eng3d = TRUE;
+   }
+
+   if (info->src.resource->nr_samples == 8 &&
+       info->dst.resource->nr_samples <= 1)
+      eng3d = TRUE;
+#if 0
+   /* FIXME: can't make this work with eng2d anymore, at least not on nv50 */
+   if (info->src.resource->nr_samples > 1 ||
+       info->dst.resource->nr_samples > 1)
+      eng3d = TRUE;
+#endif
+   /* FIXME: find correct src coordinates adjustments */
+   if ((info->src.box.width !=  info->dst.box.width &&
+        info->src.box.width != -info->dst.box.width) ||
+       (info->src.box.height !=  info->dst.box.height &&
+        info->src.box.height != -info->dst.box.height))
+      eng3d = TRUE;
+
+   if (!eng3d)
+      nvc0_blit_eng2d(nvc0, info);
+   else
+      nvc0_blit_3d(nvc0, info);
 }
 
 boolean
-nvc0_blitctx_create(struct nvc0_screen *screen)
+nvc0_blitter_create(struct nvc0_screen *screen)
 {
-   screen->blitctx = CALLOC_STRUCT(nvc0_blitctx);
-   if (!screen->blitctx) {
-      NOUVEAU_ERR("failed to allocate blit context\n");
+   screen->blitter = CALLOC_STRUCT(nvc0_blitter);
+   if (!screen->blitter) {
+      NOUVEAU_ERR("failed to allocate blitter struct\n");
       return FALSE;
    }
+   screen->blitter->screen = screen;
 
-   screen->blitctx->screen = screen;
+   pipe_mutex_init(screen->blitter->mutex);
 
-   nvc0_blitctx_make_vp(screen->blitctx);
-   nvc0_blitctx_make_fp(screen->blitctx);
-
-   nvc0_blitctx_make_sampler(screen->blitctx);
-
-   screen->blitctx->color_mask = 0x1111;
+   nvc0_blitter_make_vp(screen->blitter);
+   nvc0_blitter_make_sampler(screen->blitter);
 
    return TRUE;
 }
 
+void
+nvc0_blitter_destroy(struct nvc0_screen *screen)
+{
+   struct nvc0_blitter *blitter = screen->blitter;
+   unsigned i, m;
+
+   for (i = 0; i < NV50_BLIT_MAX_TEXTURE_TYPES; ++i) {
+      for (m = 0; m < NV50_BLIT_MODES; ++m) {
+         struct nvc0_program *prog = blitter->fp[i][m];
+         if (prog) {
+            nvc0_program_destroy(NULL, prog);
+            FREE((void *)prog->pipe.tokens);
+            FREE(prog);
+         }
+      }
+   }
+
+   FREE(blitter);
+}
+
+boolean
+nvc0_blitctx_create(struct nvc0_context *nvc0)
+{
+   nvc0->blit = CALLOC_STRUCT(nvc0_blitctx);
+   if (!nvc0->blit) {
+      NOUVEAU_ERR("failed to allocate blit context\n");
+      return FALSE;
+   }
+
+   nvc0->blit->nvc0 = nvc0;
+
+   return TRUE;
+}
 
 void
 nvc0_init_surface_functions(struct nvc0_context *nvc0)
@@ -959,7 +1236,7 @@ nvc0_init_surface_functions(struct nvc0_context *nvc0)
    struct pipe_context *pipe = &nvc0->base.pipe;
 
    pipe->resource_copy_region = nvc0_resource_copy_region;
-   pipe->resource_resolve = nvc0_resource_resolve;
+   pipe->blit = nvc0_blit;
    pipe->clear_render_target = nvc0_clear_render_target;
    pipe->clear_depth_stencil = nvc0_clear_depth_stencil;
 }

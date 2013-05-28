@@ -57,6 +57,11 @@ struct llvm_middle_end {
 };
 
 
+/**
+ * Prepare/validate middle part of the vertex pipeline.
+ * NOTE: if you change this function, also look at the non-LLVM
+ * function fetch_pipeline_prepare() for similar changes.
+ */
 static void
 llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
                          unsigned in_prim,
@@ -65,21 +70,15 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
 {
    struct llvm_middle_end *fpme = (struct llvm_middle_end *)middle;
    struct draw_context *draw = fpme->draw;
-   struct llvm_vertex_shader *shader =
-      llvm_vertex_shader(draw->vs.vertex_shader);
-   char store[DRAW_LLVM_MAX_VARIANT_KEY_SIZE];
-   struct draw_llvm_variant_key *key;
-   struct draw_llvm_variant *variant = NULL;
-   struct draw_llvm_variant_list_item *li;
-   const unsigned out_prim = (draw->gs.geometry_shader ? 
-                              draw->gs.geometry_shader->output_primitive :
-                              in_prim);
+   struct draw_vertex_shader *vs = draw->vs.vertex_shader;
+   struct draw_geometry_shader *gs = draw->gs.geometry_shader;
+   const unsigned out_prim = gs ? gs->output_primitive : in_prim;
 
    /* Add one to num_outputs because the pipeline occasionally tags on
     * an additional texcoord, eg for AA lines.
     */
-   const unsigned nr = MAX2( shader->base.info.num_inputs,
-                             shader->base.info.num_outputs + 1 );
+   const unsigned nr = MAX2( vs->info.num_inputs,
+                             vs->info.num_outputs + 1 );
 
    fpme->input_prim = in_prim;
    fpme->opt = opt;
@@ -103,7 +102,7 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
 			    (boolean)draw->rasterizer->gl_rasterization_rules,
 			    (draw->vs.edgeflag_output ? TRUE : FALSE) );
 
-   draw_pt_so_emit_prepare( fpme->so_emit );
+   draw_pt_so_emit_prepare( fpme->so_emit, TRUE );
 
    if (!(opt & PT_PIPELINE)) {
       draw_pt_emit_prepare( fpme->emit,
@@ -119,68 +118,96 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
 
    /* return even number */
    *max_vertices = *max_vertices & ~1;
-   
-   key = draw_llvm_make_variant_key(fpme->llvm, store);
 
-   /* Search shader's list of variants for the key */
-   li = first_elem(&shader->variants);
-   while (!at_end(&shader->variants, li)) {
-      if (memcmp(&li->base->key, key, shader->variant_key_size) == 0) {
-         variant = li->base;
-         break;
-      }
-      li = next_elem(li);
-   }
-
-   if (variant) {
-      /* found the variant, move to head of global list (for LRU) */
-      move_to_head(&fpme->llvm->vs_variants_list, &variant->list_item_global);
-   }
-   else {
-      /* Need to create new variant */
+   /* Find/create the vertex shader variant */
+   {
+      struct draw_llvm_variant_key *key;
+      struct draw_llvm_variant *variant = NULL;
+      struct draw_llvm_variant_list_item *li;
+      struct llvm_vertex_shader *shader = llvm_vertex_shader(vs);
+      char store[DRAW_LLVM_MAX_VARIANT_KEY_SIZE];
       unsigned i;
 
-      /* First check if we've created too many variants.  If so, free
-       * 25% of the LRU to avoid using too much memory.
-       */
-      if (fpme->llvm->nr_variants >= DRAW_MAX_SHADER_VARIANTS) {
-         /*
-          * XXX: should we flush here ?
+      key = draw_llvm_make_variant_key(fpme->llvm, store);
+
+      /* Search shader's list of variants for the key */
+      li = first_elem(&shader->variants);
+      while (!at_end(&shader->variants, li)) {
+         if (memcmp(&li->base->key, key, shader->variant_key_size) == 0) {
+            variant = li->base;
+            break;
+         }
+         li = next_elem(li);
+      }
+
+      if (variant) {
+         /* found the variant, move to head of global list (for LRU) */
+         move_to_head(&fpme->llvm->vs_variants_list,
+                      &variant->list_item_global);
+      }
+      else {
+         /* Need to create new variant */
+
+         /* First check if we've created too many variants.  If so, free
+          * 25% of the LRU to avoid using too much memory.
           */
-         for (i = 0; i < DRAW_MAX_SHADER_VARIANTS / 4; i++) {
-            struct draw_llvm_variant_list_item *item;
-            if (is_empty_list(&fpme->llvm->vs_variants_list)) {
-               break;
+         if (fpme->llvm->nr_variants >= DRAW_MAX_SHADER_VARIANTS) {
+            /*
+             * XXX: should we flush here ?
+             */
+            for (i = 0; i < DRAW_MAX_SHADER_VARIANTS / 4; i++) {
+               struct draw_llvm_variant_list_item *item;
+               if (is_empty_list(&fpme->llvm->vs_variants_list)) {
+                  break;
+               }
+               item = last_elem(&fpme->llvm->vs_variants_list);
+               assert(item);
+               assert(item->base);
+               draw_llvm_destroy_variant(item->base);
             }
-            item = last_elem(&fpme->llvm->vs_variants_list);
-            assert(item);
-            assert(item->base);
-            draw_llvm_destroy_variant(item->base);
+         }
+
+         variant = draw_llvm_create_variant(fpme->llvm, nr, key);
+
+         if (variant) {
+            insert_at_head(&shader->variants, &variant->list_item_local);
+            insert_at_head(&fpme->llvm->vs_variants_list,
+                           &variant->list_item_global);
+            fpme->llvm->nr_variants++;
+            shader->variants_cached++;
          }
       }
 
-      variant = draw_llvm_create_variant(fpme->llvm, nr, key);
+      fpme->current_variant = variant;
+   }
+}
 
-      if (variant) {
-         insert_at_head(&shader->variants, &variant->list_item_local);
-         insert_at_head(&fpme->llvm->vs_variants_list, &variant->list_item_global);
-         fpme->llvm->nr_variants++;
-         shader->variants_cached++;
-      }
+
+/**
+ * Bind/update constant buffer pointers, clip planes and viewport dims.
+ * These are "light weight" parameters which aren't baked into the
+ * generated code.  Updating these items is much cheaper than revalidating
+ * and rebuilding the generated pipeline code.
+ */
+static void
+llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
+{
+   struct llvm_middle_end *fpme = (struct llvm_middle_end *)middle;
+   struct draw_context *draw = fpme->draw;
+   unsigned i;
+
+   for (i = 0; i < Elements(fpme->llvm->jit_context.vs_constants); ++i) {
+      fpme->llvm->jit_context.vs_constants[i] = draw->pt.user.vs_constants[i];
    }
 
-   fpme->current_variant = variant;
+   for (i = 0; i < Elements(fpme->llvm->jit_context.gs_constants); ++i) {
+      fpme->llvm->jit_context.gs_constants[i] = draw->pt.user.gs_constants[i];
+   }
 
-   /*XXX we only support one constant buffer */
-   fpme->llvm->jit_context.vs_constants =
-      draw->pt.user.vs_constants[0];
-   fpme->llvm->jit_context.gs_constants =
-      draw->pt.user.gs_constants[0];
    fpme->llvm->jit_context.planes =
-      (float (*) [DRAW_TOTAL_CLIP_PLANES][4]) draw->pt.user.planes[0];
-   fpme->llvm->jit_context.viewport =
-      (float *)draw->viewport.scale;
-    
+      (float (*)[DRAW_TOTAL_CLIP_PLANES][4]) draw->pt.user.planes[0];
+
+   fpme->llvm->jit_context.viewport = (float *) draw->viewport.scale;
 }
 
 
@@ -230,7 +257,7 @@ llvm_pipeline_generic( struct draw_pt_middle_end *middle,
    llvm_vert_info.stride = fpme->vertex_size;
    llvm_vert_info.verts =
       (struct vertex_header *)MALLOC(fpme->vertex_size *
-                                     align(fetch_info->count,  4));
+                                     align(fetch_info->count,  lp_native_vector_width / 32));
    if (!llvm_vert_info.verts) {
       assert(0);
       return;
@@ -423,7 +450,7 @@ draw_pt_fetch_pipeline_or_emit_llvm(struct draw_context *draw)
 {
    struct llvm_middle_end *fpme = 0;
 
-   if (!draw->llvm || !draw->llvm->gallivm->engine)
+   if (!draw->llvm)
       return NULL;
 
    fpme = CALLOC_STRUCT( llvm_middle_end );
@@ -431,6 +458,7 @@ draw_pt_fetch_pipeline_or_emit_llvm(struct draw_context *draw)
       goto fail;
 
    fpme->base.prepare         = llvm_middle_end_prepare;
+   fpme->base.bind_parameters = llvm_middle_end_bind_parameters;
    fpme->base.run             = llvm_middle_end_run;
    fpme->base.run_linear      = llvm_middle_end_linear_run;
    fpme->base.run_linear_elts = llvm_middle_end_linear_run_elts;

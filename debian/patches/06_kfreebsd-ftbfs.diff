@@ -5,16 +5,14 @@ mesa fails to build on GNU/kFreeBSD, since some parts are not enabled.
 
 Debian bug: http://bugs.debian.org/524690
 
-Index: mesa/configure.ac
-===================================================================
---- mesa.orig/configure.ac	2012-05-21 18:19:36.835922738 -0400
-+++ mesa/configure.ac	2012-05-21 18:19:43.047922906 -0400
-@@ -1215,7 +1215,7 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -1026,7 +1026,7 @@
              ;;
          esac
          ;;
 -    freebsd* | dragonfly* | *netbsd*)
 +    freebsd* | dragonfly* | *netbsd* | kfreebsd*-gnu*)
-         DEFINES="$DEFINES -DPTHREADS -DUSE_EXTERNAL_DXTN_LIB=1"
+         DEFINES="$DEFINES -DHAVE_PTHREAD -DUSE_EXTERNAL_DXTN_LIB=1"
          DEFINES="$DEFINES -DIN_DRI_DRIVER -DHAVE_ALIAS"
  

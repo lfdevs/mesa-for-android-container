@@ -43,14 +43,15 @@
 #include "intel_fbo.h"
 
 #include "brw_context.h"
+#include "brw_program.h"
 #include "brw_defines.h"
 #include "brw_state.h"
 #include "brw_draw.h"
 #include "brw_vs.h"
 #include "brw_wm.h"
 
-#include "gen6_hiz.h"
-#include "gen7_hiz.h"
+#include "gen6_blorp.h"
+#include "gen7_blorp.h"
 
 #include "glsl/ralloc.h"
 
@@ -69,18 +70,25 @@ static void brw_destroy_context( struct intel_context *intel )
 {
    struct brw_context *brw = brw_context(&intel->ctx);
 
+   if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
+      /* Force a report. */
+      brw->shader_time.report_time = 0;
+
+      brw_collect_and_report_shader_time(brw);
+      brw_destroy_shader_time(brw);
+   }
+
    brw_destroy_state(brw);
    brw_draw_destroy( brw );
 
-   ralloc_free(brw->wm.compile_data);
-
    dri_bo_release(&brw->curbe.curbe_bo);
-   dri_bo_release(&brw->hiz.vertex_bo);
    dri_bo_release(&brw->vs.const_bo);
    dri_bo_release(&brw->wm.const_bo);
 
    free(brw->curbe.last_buf);
    free(brw->curbe.next_buf);
+
+   drm_intel_gem_context_destroy(intel->hw_ctx);
 }
 
 /**
@@ -146,6 +154,10 @@ brw_update_draw_buffer(struct intel_context *intel)
 /**
  * called from intel_batchbuffer_flush and children before sending a
  * batchbuffer off.
+ *
+ * Note that ALL state emitted here must fit in the reserved space
+ * at the end of a batchbuffer.  If you add more GPU state, increase
+ * the BATCH_RESERVED macro.
  */
 static void brw_finish_batch(struct intel_context *intel)
 {
@@ -167,11 +179,16 @@ static void brw_new_batch( struct intel_context *intel )
 {
    struct brw_context *brw = brw_context(&intel->ctx);
 
-   /* Mark all context state as needing to be re-emitted.
-    * This is probably not as severe as on 915, since almost all of our state
-    * is just in referenced buffers.
+   /* If the kernel supports hardware contexts, then most hardware state is
+    * preserved between batches; we only need to re-emit state that is required
+    * to be in every batch.  Otherwise we need to re-emit all the state that
+    * would otherwise be stored in the context (which for all intents and
+    * purposes means everything).
     */
-   brw->state.dirty.brw |= BRW_NEW_CONTEXT | BRW_NEW_BATCH;
+   if (intel->hw_ctx == NULL)
+      brw->state.dirty.brw |= BRW_NEW_CONTEXT;
+
+   brw->state.dirty.brw |= BRW_NEW_BATCH;
 
    /* Assume that the last command before the start of our batch was a
     * primitive, for safety.
@@ -186,7 +203,6 @@ static void brw_new_batch( struct intel_context *intel )
     */
    brw->sol.offset_0_batch_start = brw->sol.svbi_0_starting_index;
 
-   brw->vb.nr_current_buffers = 0;
    brw->ib.type = -1;
 
    /* Mark that the current program cache BO has been used by the GPU.
@@ -194,6 +210,14 @@ static void brw_new_batch( struct intel_context *intel )
     * next batch.
     */
    brw->cache.bo_used_by_gpu = true;
+
+   /* We need to periodically reap the shader time results, because rollover
+    * happens every few seconds.  We also want to see results every once in a
+    * while, because many programs won't cleanly destroy our context, so the
+    * end-of-run printout may not happen.
+    */
+   if (INTEL_DEBUG & DEBUG_SHADER_TIME)
+      brw_collect_and_report_shader_time(brw);
 }
 
 static void brw_invalidate_state( struct intel_context *intel, GLuint new_state )
@@ -215,6 +239,7 @@ static bool brw_is_hiz_depth_format(struct intel_context *intel,
    case MESA_FORMAT_Z32_FLOAT_X24S8:
    case MESA_FORMAT_X8_Z24:
    case MESA_FORMAT_S8_Z24:
+   case MESA_FORMAT_Z16:
       return true;
    default:
       return false;
@@ -235,24 +260,16 @@ void brwInitVtbl( struct brw_context *brw )
    brw->intel.vtbl.destroy = brw_destroy_context;
    brw->intel.vtbl.update_draw_buffer = brw_update_draw_buffer;
    brw->intel.vtbl.debug_batch = brw_debug_batch;
+   brw->intel.vtbl.annotate_aub = brw_annotate_aub;
    brw->intel.vtbl.render_target_supported = brw_render_target_supported;
    brw->intel.vtbl.is_hiz_depth_format = brw_is_hiz_depth_format;
 
-   if (brw->intel.has_hiz) {
-      if (brw->intel.gen == 7) {
-         brw->intel.vtbl.resolve_depth_slice = gen7_resolve_depth_slice;
-         brw->intel.vtbl.resolve_hiz_slice = gen7_resolve_hiz_slice;
-      } else if (brw->intel.gen == 6) {
-         brw->intel.vtbl.resolve_depth_slice = gen6_resolve_depth_slice;
-         brw->intel.vtbl.resolve_hiz_slice = gen6_resolve_hiz_slice;
-      } else {
-         assert(0);
-      }
-   }
-
+   assert(brw->intel.gen >= 4);
    if (brw->intel.gen >= 7) {
       gen7_init_vtable_surface_functions(brw);
+      brw->intel.vtbl.emit_depth_stencil_hiz = gen7_emit_depth_stencil_hiz;
    } else if (brw->intel.gen >= 4) {
       gen4_init_vtable_surface_functions(brw);
+      brw->intel.vtbl.emit_depth_stencil_hiz = brw_emit_depth_stencil_hiz;
    }
 }

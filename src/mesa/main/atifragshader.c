@@ -32,31 +32,9 @@
 #include "main/dispatch.h"
 #include "main/atifragshader.h"
 
-#if FEATURE_ATI_fragment_shader
-
 #define MESA_DEBUG_ATI_FS 0
 
 static struct ati_fragment_shader DummyShader;
-
-
-void
-_mesa_init_ati_fragment_shader_dispatch(struct _glapi_table *disp)
-{
-   SET_GenFragmentShadersATI(disp, _mesa_GenFragmentShadersATI);
-   SET_BindFragmentShaderATI(disp, _mesa_BindFragmentShaderATI);
-   SET_DeleteFragmentShaderATI(disp, _mesa_DeleteFragmentShaderATI);
-   SET_BeginFragmentShaderATI(disp, _mesa_BeginFragmentShaderATI);
-   SET_EndFragmentShaderATI(disp, _mesa_EndFragmentShaderATI);
-   SET_PassTexCoordATI(disp, _mesa_PassTexCoordATI);
-   SET_SampleMapATI(disp, _mesa_SampleMapATI);
-   SET_ColorFragmentOp1ATI(disp, _mesa_ColorFragmentOp1ATI);
-   SET_ColorFragmentOp2ATI(disp, _mesa_ColorFragmentOp2ATI);
-   SET_ColorFragmentOp3ATI(disp, _mesa_ColorFragmentOp3ATI);
-   SET_AlphaFragmentOp1ATI(disp, _mesa_AlphaFragmentOp1ATI);
-   SET_AlphaFragmentOp2ATI(disp, _mesa_AlphaFragmentOp2ATI);
-   SET_AlphaFragmentOp3ATI(disp, _mesa_AlphaFragmentOp3ATI);
-   SET_SetFragmentShaderConstantATI(disp, _mesa_SetFragmentShaderConstantATI);
-}
 
 
 /**
@@ -83,10 +61,8 @@ _mesa_delete_ati_fragment_shader(struct gl_context *ctx, struct ati_fragment_sha
 {
    GLuint i;
    for (i = 0; i < MAX_NUM_PASSES_ATI; i++) {
-      if (s->Instructions[i])
-         free(s->Instructions[i]);
-      if (s->SetupInst[i])
-         free(s->SetupInst[i]);
+      free(s->Instructions[i]);
+      free(s->SetupInst[i]);
    }
    free(s);
 }
@@ -342,21 +318,17 @@ _mesa_BeginFragmentShaderATI(void)
       (or, could use the same mem but would need to reinitialize) */
    /* no idea if it's allowed to redefine a shader */
    for (i = 0; i < MAX_NUM_PASSES_ATI; i++) {
-         if (ctx->ATIFragmentShader.Current->Instructions[i])
-            free(ctx->ATIFragmentShader.Current->Instructions[i]);
-         if (ctx->ATIFragmentShader.Current->SetupInst[i])
-            free(ctx->ATIFragmentShader.Current->SetupInst[i]);
+         free(ctx->ATIFragmentShader.Current->Instructions[i]);
+         free(ctx->ATIFragmentShader.Current->SetupInst[i]);
    }
 
    /* malloc the instructions here - not sure if the best place but its
       a start */
    for (i = 0; i < MAX_NUM_PASSES_ATI; i++) {
       ctx->ATIFragmentShader.Current->Instructions[i] =
-	 (struct atifs_instruction *)
 	 calloc(1, sizeof(struct atifs_instruction) *
 		   (MAX_NUM_INSTRUCTIONS_PER_PASS_ATI));
       ctx->ATIFragmentShader.Current->SetupInst[i] =
-	 (struct atifs_setupinst *)
 	 calloc(1, sizeof(struct atifs_setupinst) *
 		   (MAX_NUM_FRAGMENT_REGISTERS_ATI));
    }
@@ -792,5 +764,3 @@ _mesa_SetFragmentShaderConstantATI(GLuint dst, const GLfloat * value)
       COPY_4V(ctx->ATIFragmentShader.GlobalConstants[dstindex], value);
    }
 }
-
-#endif /* FEATURE_ATI_fragment_shader */

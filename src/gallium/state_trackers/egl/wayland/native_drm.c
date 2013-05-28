@@ -71,18 +71,17 @@ wayland_drm_display_destroy(struct native_display *ndpy)
 {
    struct wayland_drm_display *drmdpy = wayland_drm_display(ndpy);
 
-   if (drmdpy->fd)
-      close(drmdpy->fd);
    if (drmdpy->wl_drm)
       wl_drm_destroy(drmdpy->wl_drm);
-   if (drmdpy->device_name)
-      FREE(drmdpy->device_name);
-   if (drmdpy->base.configs)
-      FREE(drmdpy->base.configs);
+   FREE(drmdpy->device_name);
+   FREE(drmdpy->base.configs);
    if (drmdpy->base.own_dpy)
-      wl_display_destroy(drmdpy->base.dpy);
+      wl_display_disconnect(drmdpy->base.dpy);
 
    ndpy_uninit(ndpy);
+
+   if (drmdpy->fd)
+      close(drmdpy->fd);
 
    FREE(drmdpy);
 }
@@ -133,7 +132,15 @@ drm_handle_device(void *data, struct wl_drm *drm, const char *device)
    if (!drmdpy->device_name)
       return;
 
-   drmdpy->fd = open(drmdpy->device_name, O_RDWR);
+#ifdef O_CLOEXEC
+   drmdpy->fd = open(drmdpy->device_name, O_RDWR | O_CLOEXEC);
+   if (drmdpy->fd == -1 && errno == EINVAL)
+#endif
+   {
+      drmdpy->fd = open(drmdpy->device_name, O_RDWR);
+      if (drmdpy->fd != -1)
+         fcntl(drmdpy->fd, F_SETFD, fcntl(drmdpy->fd, F_GETFD) | FD_CLOEXEC);
+   }
    if (drmdpy->fd == -1) {
       _eglLog(_EGL_WARNING, "wayland-egl: could not open %s (%s)",
               drmdpy->device_name, strerror(errno));
@@ -173,34 +180,42 @@ static const struct wl_drm_listener drm_listener = {
    drm_handle_authenticated
 };
 
+static void
+registry_handle_global(void *data, struct wl_registry *registry, uint32_t name,
+                       const char *interface, uint32_t version)
+{
+   struct wayland_drm_display *drmdpy = data;
+
+   if (strcmp(interface, "wl_drm") == 0) {
+      drmdpy->wl_drm = wl_registry_bind(registry, name, &wl_drm_interface, 1);
+      wl_drm_add_listener(drmdpy->wl_drm, &drm_listener, drmdpy);
+   }
+}
+
+static const struct wl_registry_listener registry_listener = {
+       registry_handle_global
+};
+
 static boolean
 wayland_drm_display_init_screen(struct native_display *ndpy)
 {
    struct wayland_drm_display *drmdpy = wayland_drm_display(ndpy);
-   uint32_t id;
 
-   id = wl_display_get_global(drmdpy->base.dpy, "wl_drm", 1);
-   if (id == 0)
-      wl_display_roundtrip(drmdpy->base.dpy);
-   id = wl_display_get_global(drmdpy->base.dpy, "wl_drm", 1);
-   if (id == 0)
-      return FALSE;
-
-   drmdpy->wl_drm = wl_display_bind(drmdpy->base.dpy, id, &wl_drm_interface);
-   if (!drmdpy->wl_drm)
+   drmdpy->base.queue = wl_display_create_queue(drmdpy->base.dpy);
+   drmdpy->base.registry = wl_display_get_registry(drmdpy->base.dpy);
+   wl_proxy_set_queue((struct wl_proxy *) drmdpy->base.registry,
+                      drmdpy->base.queue);
+   wl_registry_add_listener(drmdpy->base.registry, &registry_listener, drmdpy);
+   if (wayland_roundtrip(&drmdpy->base) < 0 || drmdpy->wl_drm == NULL)
       return FALSE;
 
    wl_drm_add_listener(drmdpy->wl_drm, &drm_listener, drmdpy);
-   wl_display_roundtrip(drmdpy->base.dpy);
-   if (drmdpy->fd == -1)
+   if (wayland_roundtrip(&drmdpy->base) < 0 || drmdpy->fd == -1)
       return FALSE;
 
-   wl_display_roundtrip(drmdpy->base.dpy);
-   if (!drmdpy->authenticated)
+   if (wayland_roundtrip(&drmdpy->base) < 0 || !drmdpy->authenticated)
       return FALSE;
 
-   if (drmdpy->base.formats == 0)
-      wl_display_roundtrip(drmdpy->base.dpy);
    if (drmdpy->base.formats == 0)
       return FALSE;
 
@@ -282,7 +297,8 @@ wayland_drm_display_unbind_wayland_display(struct native_display *ndpy,
 static struct native_display_wayland_bufmgr wayland_drm_display_wayland_bufmgr = {
    wayland_drm_display_bind_wayland_display,
    wayland_drm_display_unbind_wayland_display,
-   egl_g3d_wl_drm_common_wl_buffer_get_resource
+   egl_g3d_wl_drm_common_wl_buffer_get_resource,
+   egl_g3d_wl_drm_common_query_buffer
 };
 
 

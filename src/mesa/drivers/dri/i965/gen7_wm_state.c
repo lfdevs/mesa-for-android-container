@@ -39,12 +39,12 @@ upload_wm_state(struct brw_context *brw)
    const struct brw_fragment_program *fp =
       brw_fragment_program_const(brw->fragment_program);
    bool writes_depth = false;
-   uint32_t dw1;
+   uint32_t dw1, dw2;
 
-   /* _NEW_LIGHT */
-   bool flat_shade = (ctx->Light.ShadeModel == GL_FLAT);
+   /* _NEW_BUFFERS */
+   bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
 
-   dw1 = 0;
+   dw1 = dw2 = 0;
    dw1 |= GEN7_WM_STATISTICS_ENABLE;
    dw1 |= GEN7_WM_LINE_AA_WIDTH_1_0;
    dw1 |= GEN7_WM_LINE_END_CAP_AA_WIDTH_0_5;
@@ -64,11 +64,13 @@ upload_wm_state(struct brw_context *brw)
       writes_depth = true;
       dw1 |= GEN7_WM_PSCDEPTH_ON;
    }
-   dw1 |= brw_compute_barycentric_interp_modes(flat_shade, &fp->program) <<
+   /* CACHE_NEW_WM_PROG */
+   dw1 |= brw->wm.prog_data->barycentric_interp_modes <<
       GEN7_WM_BARYCENTRIC_INTERPOLATION_MODE_SHIFT;
 
-   /* _NEW_COLOR */
-   if (fp->program.UsesKill || ctx->Color.AlphaEnabled)
+   /* _NEW_COLOR, _NEW_MULTISAMPLE */
+   if (fp->program.UsesKill || ctx->Color.AlphaEnabled ||
+       ctx->Multisample.SampleAlphaToCoverage)
       dw1 |= GEN7_WM_KILL_ENABLE;
 
    /* _NEW_BUFFERS */
@@ -76,21 +78,33 @@ upload_wm_state(struct brw_context *brw)
        dw1 & GEN7_WM_KILL_ENABLE) {
       dw1 |= GEN7_WM_DISPATCH_ENABLE;
    }
+   if (multisampled_fbo) {
+      /* _NEW_MULTISAMPLE */
+      if (ctx->Multisample.Enabled)
+         dw1 |= GEN7_WM_MSRAST_ON_PATTERN;
+      else
+         dw1 |= GEN7_WM_MSRAST_OFF_PIXEL;
+      dw2 |= GEN7_WM_MSDISPMODE_PERPIXEL;
+   } else {
+      dw1 |= GEN7_WM_MSRAST_OFF_PIXEL;
+      dw2 |= GEN7_WM_MSDISPMODE_PERSAMPLE;
+   }
 
    BEGIN_BATCH(3);
    OUT_BATCH(_3DSTATE_WM << 16 | (3 - 2));
    OUT_BATCH(dw1);
-   OUT_BATCH(0);
+   OUT_BATCH(dw2);
    ADVANCE_BATCH();
 }
 
 const struct brw_tracked_state gen7_wm_state = {
    .dirty = {
-      .mesa  = (_NEW_LINE | _NEW_LIGHT | _NEW_POLYGON |
-	        _NEW_COLOR | _NEW_BUFFERS),
+      .mesa  = (_NEW_LINE | _NEW_POLYGON |
+	        _NEW_COLOR | _NEW_BUFFERS |
+                _NEW_MULTISAMPLE),
       .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
 		BRW_NEW_BATCH),
-      .cache = 0,
+      .cache = CACHE_NEW_WM_PROG,
    },
    .emit = upload_wm_state,
 };
@@ -99,12 +113,15 @@ static void
 upload_ps_state(struct brw_context *brw)
 {
    struct intel_context *intel = &brw->intel;
+   struct gl_context *ctx = &intel->ctx;
    uint32_t dw2, dw4, dw5;
+   const int max_threads_shift = brw->intel.is_haswell ?
+      HSW_PS_MAX_THREADS_SHIFT : IVB_PS_MAX_THREADS_SHIFT;
 
    /* BRW_NEW_PS_BINDING_TABLE */
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS_PS << 16 | (2 - 2));
-   OUT_BATCH(brw->bind.bo_offset);
+   OUT_BATCH(brw->wm.bind_bo_offset);
    ADVANCE_BATCH();
 
    /* CACHE_NEW_SAMPLER */
@@ -155,23 +172,33 @@ upload_ps_state(struct brw_context *brw)
    if (intel->ctx.Shader.CurrentFragmentProgram == NULL)
       dw2 |= GEN7_PS_FLOATING_POINT_MODE_ALT;
 
-   dw4 |= (brw->max_wm_threads - 1) << GEN7_PS_MAX_THREADS_SHIFT;
+   if (intel->is_haswell)
+      dw4 |= SET_FIELD(1, HSW_PS_SAMPLE_MASK); /* 1 sample for now */
+
+   dw4 |= (brw->max_wm_threads - 1) << max_threads_shift;
 
    /* CACHE_NEW_WM_PROG */
    if (brw->wm.prog_data->nr_params > 0)
       dw4 |= GEN7_PS_PUSH_CONSTANT_ENABLE;
 
+   /* CACHE_NEW_WM_PROG | _NEW_COLOR
+    *
+    * The hardware wedges if you have this bit set but don't turn on any dual
+    * source blend factors.
+    */
+   if (brw->wm.prog_data->dual_src_blend &&
+       (ctx->Color.BlendEnabled & 1) &&
+       ctx->Color.Blend[0]._UsesDualSrc) {
+      dw4 |= GEN7_PS_DUAL_SOURCE_BLEND_ENABLE;
+   }
+
    /* BRW_NEW_FRAGMENT_PROGRAM */
    if (brw->fragment_program->Base.InputsRead != 0)
       dw4 |= GEN7_PS_ATTRIBUTE_ENABLE;
 
-   if (brw->wm.prog_data->dispatch_width == 8) {
-      dw4 |= GEN7_PS_8_DISPATCH_ENABLE;
-      if (brw->wm.prog_data->prog_offset_16)
-	 dw4 |= GEN7_PS_16_DISPATCH_ENABLE;
-   } else {
+   dw4 |= GEN7_PS_8_DISPATCH_ENABLE;
+   if (brw->wm.prog_data->prog_offset_16)
       dw4 |= GEN7_PS_16_DISPATCH_ENABLE;
-   }
 
    dw5 |= (brw->wm.prog_data->first_curbe_grf <<
 	   GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
@@ -198,7 +225,8 @@ upload_ps_state(struct brw_context *brw)
 
 const struct brw_tracked_state gen7_ps_state = {
    .dirty = {
-      .mesa  = _NEW_PROGRAM_CONSTANTS,
+      .mesa  = (_NEW_PROGRAM_CONSTANTS |
+		_NEW_COLOR),
       .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
 		BRW_NEW_PS_BINDING_TABLE |
 		BRW_NEW_BATCH),

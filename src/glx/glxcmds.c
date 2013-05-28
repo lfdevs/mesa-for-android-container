@@ -53,11 +53,9 @@
 #else
 #endif
 
-#if defined(USE_XCB)
 #include <X11/Xlib-xcb.h>
 #include <xcb/xcb.h>
 #include <xcb/glx.h>
-#endif
 
 static const char __glXGLXClientVendorName[] = "Mesa Project and SGI";
 static const char __glXGLXClientVersion[] = "1.4";
@@ -576,10 +574,6 @@ glXCopyContext(Display * dpy, GLXContext source_user,
 static Bool
 __glXIsDirect(Display * dpy, GLXContextID contextID)
 {
-#if !defined(USE_XCB)
-   xGLXIsDirectReq *req;
-   xGLXIsDirectReply reply;
-#endif
    CARD8 opcode;
 
    opcode = __glXSetupForCommand(dpy);
@@ -587,7 +581,6 @@ __glXIsDirect(Display * dpy, GLXContextID contextID)
       return GL_FALSE;
    }
 
-#ifdef USE_XCB
    xcb_connection_t *c = XGetXCBConnection(dpy);
    xcb_generic_error_t *err;
    xcb_glx_is_direct_reply_t *reply = xcb_glx_is_direct_reply(c,
@@ -605,19 +598,6 @@ __glXIsDirect(Display * dpy, GLXContextID contextID)
    free(reply);
 
    return is_direct;
-#else
-   /* Send the glXIsDirect request */
-   LockDisplay(dpy);
-   GetReq(GLXIsDirect, req);
-   req->reqType = opcode;
-   req->glxCode = X_GLXIsDirect;
-   req->context = contextID;
-   _XReply(dpy, (xReply *) & reply, 0, False);
-   UnlockDisplay(dpy);
-   SyncHandle();
-
-   return reply.isDirect;
-#endif /* USE_XCB */
 }
 
 /**
@@ -669,7 +649,7 @@ glXCreateGLXPixmap(Display * dpy, XVisualInfo * vis, Pixmap pixmap)
       return None;
    }
 
-   glxDraw = Xmalloc(sizeof(*glxDraw));
+   glxDraw = malloc(sizeof(*glxDraw));
    if (!glxDraw)
       return None;
 
@@ -792,11 +772,7 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
    struct glx_context *gc;
    GLXContextTag tag;
    CARD8 opcode;
-#ifdef USE_XCB
    xcb_connection_t *c;
-#else
-   xGLXSwapBuffersReq *req;
-#endif
 
    gc = __glXGetCurrentContext();
 
@@ -805,11 +781,9 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
       __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, drawable);
 
       if (pdraw != NULL) {
-         if (gc && drawable == gc->currentDrawable) {
-            glFlush();
-         }
+         Bool flush = gc && drawable == gc->currentDrawable;
 
-         (*pdraw->psc->driScreen->swapBuffers)(pdraw, 0, 0, 0);
+         (*pdraw->psc->driScreen->swapBuffers)(pdraw, 0, 0, 0, flush);
          return;
       }
    }
@@ -833,22 +807,9 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
       tag = 0;
    }
 
-#ifdef USE_XCB
    c = XGetXCBConnection(dpy);
    xcb_glx_swap_buffers(c, tag, drawable);
    xcb_flush(c);
-#else
-   /* Send the glXSwapBuffers request */
-   LockDisplay(dpy);
-   GetReq(GLXSwapBuffers, req);
-   req->reqType = opcode;
-   req->glxCode = X_GLXSwapBuffers;
-   req->drawable = drawable;
-   req->contextTag = tag;
-   UnlockDisplay(dpy);
-   SyncHandle();
-   XFlush(dpy);
-#endif /* USE_XCB */
 #endif /* GLX_USE_APPLEGL */
 }
 
@@ -951,8 +912,10 @@ init_fbconfig_for_chooser(struct glx_config * config,
 /* Test that all bits from a are contained in b */
 #define MATCH_MASK(param)			\
   do {						\
-    if ((a->param & ~b->param) != 0)		\
+    if ( ((int) a-> param != (int) GLX_DONT_CARE)	\
+         && ((a->param & ~b->param) != 0) ) {   \
       return False;				\
+    }                                           \
   } while (0);
 
 /**
@@ -1267,7 +1230,7 @@ glXChooseVisual(Display * dpy, int screen, int *attribList)
                                   &visualTemplate, &i);
 
          if (newList) {
-            Xfree(visualList);
+            free(visualList);
             visualList = newList;
             best_config = config;
          }
@@ -1369,30 +1332,11 @@ __glXClientInfo(Display * dpy, int opcode)
    char *ext_str = __glXGetClientGLExtensionString();
    int size = strlen(ext_str) + 1;
 
-#ifdef USE_XCB
    xcb_connection_t *c = XGetXCBConnection(dpy);
    xcb_glx_client_info(c,
                        GLX_MAJOR_VERSION, GLX_MINOR_VERSION, size, ext_str);
-#else
-   xGLXClientInfoReq *req;
 
-   /* Send the glXClientInfo request */
-   LockDisplay(dpy);
-   GetReq(GLXClientInfo, req);
-   req->reqType = opcode;
-   req->glxCode = X_GLXClientInfo;
-   req->major = GLX_MAJOR_VERSION;
-   req->minor = GLX_MINOR_VERSION;
-
-   req->length += (size + 3) >> 2;
-   req->numbytes = size;
-   Data(dpy, ext_str, size);
-
-   UnlockDisplay(dpy);
-   SyncHandle();
-#endif /* USE_XCB */
-
-   Xfree(ext_str);
+   free(ext_str);
 }
 
 
@@ -1628,7 +1572,7 @@ glXChooseFBConfig(Display * dpy, int screen,
    if ((config_list != NULL) && (list_size > 0) && (attribList != NULL)) {
       list_size = choose_visual(config_list, list_size, attribList, GL_TRUE);
       if (list_size == 0) {
-         XFree(config_list);
+         free(config_list);
          config_list = NULL;
       }
    }
@@ -1682,7 +1626,7 @@ glXGetFBConfigs(Display * dpy, int screen, int *nelements)
          }
       }
 
-      config_list = Xmalloc(num_configs * sizeof *config_list);
+      config_list = malloc(num_configs * sizeof *config_list);
       if (config_list != NULL) {
          *nelements = num_configs;
          i = 0;
@@ -2227,7 +2171,7 @@ __glXSwapBuffersMscOML(Display * dpy, GLXDrawable drawable,
 #ifdef GLX_DIRECT_RENDERING
    if (psc->driScreen && psc->driScreen->swapBuffers)
       return (*psc->driScreen->swapBuffers)(pdraw, target_msc, divisor,
-					    remainder);
+					    remainder, False);
 #endif
 
    return -1;
@@ -2367,8 +2311,7 @@ __glXCopySubBufferMESA(Display * dpy, GLXDrawable drawable,
    if (pdraw != NULL) {
       struct glx_screen *psc = pdraw->psc;
       if (psc->driScreen->copySubBuffer != NULL) {
-         glFlush();
-         (*psc->driScreen->copySubBuffer) (pdraw, x, y, width, height);
+         (*psc->driScreen->copySubBuffer) (pdraw, x, y, width, height, True);
       }
 
       return;
@@ -2454,7 +2397,7 @@ _X_HIDDEN char *
 __glXstrdup(const char *str)
 {
    char *copy;
-   copy = (char *) Xmalloc(strlen(str) + 1);
+   copy = malloc(strlen(str) + 1);
    if (!copy)
       return NULL;
    strcpy(copy, str);

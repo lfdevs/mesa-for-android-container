@@ -49,47 +49,6 @@
 DEBUG_GET_ONCE_BOOL_OPTION(gallium_dump_vs, "GALLIUM_DUMP_VS", FALSE)
 
 
-/**
- * Set a vertex shader constant buffer.
- * \param slot  which constant buffer in [0, PIPE_MAX_CONSTANT_BUFFERS-1]
- * \param constants  the mapped buffer
- * \param size  size of buffer in bytes
- */
-void
-draw_vs_set_constants(struct draw_context *draw,
-                      unsigned slot,
-                      const void *constants,
-                      unsigned size)
-{
-   const int alignment = 16;
-
-   /* check if buffer is 16-byte aligned */
-   if (((uintptr_t)constants) & (alignment - 1)) {
-      /* if not, copy the constants into a new, 16-byte aligned buffer */
-      if (size > draw->vs.const_storage_size[slot]) {
-         if (draw->vs.aligned_constant_storage[slot]) {
-            align_free((void *)draw->vs.aligned_constant_storage[slot]);
-            draw->vs.const_storage_size[slot] = 0;
-         }
-         draw->vs.aligned_constant_storage[slot] =
-            align_malloc(size, alignment);
-         if (draw->vs.aligned_constant_storage[slot]) {
-            draw->vs.const_storage_size[slot] = size;
-         }
-      }
-      assert(constants);
-      if (draw->vs.aligned_constant_storage[slot]) {
-         memcpy((void *)draw->vs.aligned_constant_storage[slot],
-                constants,
-                size);
-      }
-      constants = draw->vs.aligned_constant_storage[slot];
-   }
-
-   draw->vs.aligned_constants[slot] = constants;
-}
-
-
 void draw_vs_set_viewport( struct draw_context *draw,
                            const struct pipe_viewport_state *viewport )
 {
@@ -121,6 +80,7 @@ draw_create_vertex_shader(struct draw_context *draw,
    {
       uint i;
       bool found_clipvertex = FALSE;
+      vs->position_output = -1;
       for (i = 0; i < vs->info.num_outputs; i++) {
          if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_POSITION &&
              vs->info.output_semantic_index[i] == 0)
@@ -193,8 +153,8 @@ draw_vs_init( struct draw_context *draw )
 {
    draw->dump_vs = debug_get_option_gallium_dump_vs();
 
-   draw->vs.machine = tgsi_exec_machine_create();
-   if (!draw->vs.machine)
+   draw->vs.tgsi.machine = tgsi_exec_machine_create();
+   if (!draw->vs.tgsi.machine)
       return FALSE;
 
    draw->vs.emit_cache = translate_cache_create();
@@ -211,21 +171,13 @@ draw_vs_init( struct draw_context *draw )
 void
 draw_vs_destroy( struct draw_context *draw )
 {
-   uint i;
-
    if (draw->vs.fetch_cache)
       translate_cache_destroy(draw->vs.fetch_cache);
 
    if (draw->vs.emit_cache)
       translate_cache_destroy(draw->vs.emit_cache);
 
-   for (i = 0; i < PIPE_MAX_CONSTANT_BUFFERS; i++) {
-      if (draw->vs.aligned_constant_storage[i]) {
-         align_free((void *)draw->vs.aligned_constant_storage[i]);
-      }
-   }
-
-   tgsi_exec_machine_destroy(draw->vs.machine);
+   tgsi_exec_machine_destroy(draw->vs.tgsi.machine);
 }
 
 

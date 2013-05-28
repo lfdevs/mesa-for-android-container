@@ -50,7 +50,8 @@ struct _mesa_prim {
    GLuint start;
    GLuint count;
    GLint basevertex;
-   GLsizei num_instances;
+   GLuint num_instances;
+   GLuint base_instance;
 };
 
 /* Would like to call this a "vbo_index_buffer", but this would be
@@ -72,7 +73,6 @@ void _vbo_InvalidateState( struct gl_context *ctx, GLuint new_state );
 
 
 typedef void (*vbo_draw_func)( struct gl_context *ctx,
-			       const struct gl_client_array **arrays,
 			       const struct _mesa_prim *prims,
 			       GLuint nr_prims,
 			       const struct _mesa_index_buffer *ib,
@@ -123,13 +123,27 @@ void vbo_rebase_prims( struct gl_context *ctx,
 		       GLuint max_index,
 		       vbo_draw_func draw );
 
-int
-vbo_sizeof_ib_type(GLenum type);
+static inline int
+vbo_sizeof_ib_type(GLenum type)
+{
+   switch (type) {
+   case GL_UNSIGNED_INT:
+      return sizeof(GLuint);
+   case GL_UNSIGNED_SHORT:
+      return sizeof(GLushort);
+   case GL_UNSIGNED_BYTE:
+      return sizeof(GLubyte);
+   default:
+      assert(!"unsupported index data type");
+      /* In case assert is turned off */
+      return 0;
+   }
+}
 
 void
-vbo_get_minmax_index(struct gl_context *ctx, const struct _mesa_prim *prim,
-		     const struct _mesa_index_buffer *ib,
-		     GLuint *min_index, GLuint *max_index);
+vbo_get_minmax_indices(struct gl_context *ctx, const struct _mesa_prim *prim,
+                       const struct _mesa_index_buffer *ib,
+                       GLuint *min_index, GLuint *max_index, GLuint nr_prims);
 
 void vbo_use_buffer_objects(struct gl_context *ctx);
 
@@ -142,7 +156,14 @@ void vbo_check_buffers_are_unmapped(struct gl_context *ctx);
 void vbo_bind_arrays(struct gl_context *ctx);
 
 size_t
-count_tessellated_primitives(const struct _mesa_prim *prim);
+vbo_count_tessellated_primitives(GLenum mode, GLuint count,
+                                 GLuint num_instances);
+
+void
+vbo_sw_primitive_restart(struct gl_context *ctx,
+                         const struct _mesa_prim *prim,
+                         GLuint nr_prims,
+                         const struct _mesa_index_buffer *ib);
 
 void GLAPIENTRY
 _es_Color4f(GLfloat r, GLfloat g, GLfloat b, GLfloat a);

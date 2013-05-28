@@ -32,11 +32,7 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 
-struct {
-    char    *name;
-    int	    nsrc;
-    int	    ndst;
-} opcode[128] = {
+const struct opcode_desc opcode_descs[128] = {
     [BRW_OPCODE_MOV] = { .name = "mov", .nsrc = 1, .ndst = 1 },
     [BRW_OPCODE_FRC] = { .name = "frc", .nsrc = 1, .ndst = 1 },
     [BRW_OPCODE_RNDU] = { .name = "rndu", .nsrc = 1, .ndst = 1 },
@@ -45,12 +41,15 @@ struct {
     [BRW_OPCODE_RNDZ] = { .name = "rndz", .nsrc = 1, .ndst = 1 },
     [BRW_OPCODE_NOT] = { .name = "not", .nsrc = 1, .ndst = 1 },
     [BRW_OPCODE_LZD] = { .name = "lzd", .nsrc = 1, .ndst = 1 },
+    [BRW_OPCODE_F32TO16] = { .name = "f32to16", .nsrc = 1, .ndst = 1 },
+    [BRW_OPCODE_F16TO32] = { .name = "f16to32", .nsrc = 1, .ndst = 1 },
 
     [BRW_OPCODE_MUL] = { .name = "mul", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_MAC] = { .name = "mac", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_MACH] = { .name = "mach", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_LINE] = { .name = "line", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_PLN] = { .name = "pln", .nsrc = 2, .ndst = 1 },
+    [BRW_OPCODE_MAD] = { .name = "mad", .nsrc = 3, .ndst = 1 },
     [BRW_OPCODE_SAD2] = { .name = "sad2", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_SADA2] = { .name = "sada2", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_DP4] = { .name = "dp4", .nsrc = 2, .ndst = 1 },
@@ -90,8 +89,9 @@ struct {
     [BRW_OPCODE_DO] = { .name = "do", .nsrc = 0, .ndst = 0 },
     [BRW_OPCODE_ENDIF] = { .name = "endif", .nsrc = 2, .ndst = 0 },
 };
+static const struct opcode_desc *opcode = opcode_descs;
 
-char *conditional_modifier[16] = {
+static const char * const conditional_modifier[16] = {
     [BRW_CONDITIONAL_NONE] = "",
     [BRW_CONDITIONAL_Z] = ".e",
     [BRW_CONDITIONAL_NZ] = ".ne",
@@ -104,17 +104,17 @@ char *conditional_modifier[16] = {
     [BRW_CONDITIONAL_U] = ".u",
 };
 
-char *negate[2] = {
+static const char * const negate[2] = {
     [0] = "",
     [1] = "-",
 };
 
-char *_abs[2] = {
+static const char * const _abs[2] = {
     [0] = "",
     [1] = "(abs)",
 };
 
-char *vert_stride[16] = {
+static const char * const vert_stride[16] = {
     [0] = "0",
     [1] = "1",
     [2] = "2",
@@ -125,7 +125,7 @@ char *vert_stride[16] = {
     [15] = "VxH",
 };
 
-char *width[8] = {
+static const char * const width[8] = {
     [0] = "1",
     [1] = "2",
     [2] = "4",
@@ -133,44 +133,41 @@ char *width[8] = {
     [4] = "16",
 };
 
-char *horiz_stride[4] = {
+static const char * const horiz_stride[4] = {
     [0] = "0",
     [1] = "1",
     [2] = "2",
     [3] = "4"
 };
 
-char *chan_sel[4] = {
+static const char * const chan_sel[4] = {
     [0] = "x",
     [1] = "y",
     [2] = "z",
     [3] = "w",
 };
 
-char *dest_condmod[16] = {
-};
-
-char *debug_ctrl[2] = {
+static const char * const debug_ctrl[2] = {
     [0] = "",
     [1] = ".breakpoint"
 };
 
-char *saturate[2] = {
+static const char * const saturate[2] = {
     [0] = "",
     [1] = ".sat"
 };
 
-char *accwr[2] = {
+static const char * const accwr[2] = {
     [0] = "",
     [1] = "AccWrEnable"
 };
 
-char *wectrl[2] = {
+static const char * const wectrl[2] = {
     [0] = "WE_normal",
     [1] = "WE_all"
 };
 
-char *exec_size[8] = {
+static const char * const exec_size[8] = {
     [0] = "1",
     [1] = "2",
     [2] = "4",
@@ -179,12 +176,12 @@ char *exec_size[8] = {
     [5] = "32"
 };
 
-char *pred_inv[2] = {
+static const char * const pred_inv[2] = {
     [0] = "+",
     [1] = "-"
 };
 
-char *pred_ctrl_align16[16] = {
+static const char * const pred_ctrl_align16[16] = {
     [1] = "",
     [2] = ".x",
     [3] = ".y",
@@ -194,7 +191,7 @@ char *pred_ctrl_align16[16] = {
     [7] = ".all4h",
 };
 
-char *pred_ctrl_align1[16] = {
+static const char * const pred_ctrl_align1[16] = {
     [1] = "",
     [2] = ".anyv",
     [3] = ".allv",
@@ -208,36 +205,36 @@ char *pred_ctrl_align1[16] = {
     [11] = ".all16h",
 };
 
-char *thread_ctrl[4] = {
+static const char * const thread_ctrl[4] = {
     [0] = "",
     [2] = "switch"
 };
 
-char *compr_ctrl[4] = {
+static const char * const compr_ctrl[4] = {
     [0] = "",
     [1] = "sechalf",
     [2] = "compr",
     [3] = "compr4",
 };
 
-char *dep_ctrl[4] = {
+static const char * const dep_ctrl[4] = {
     [0] = "",
     [1] = "NoDDClr",
     [2] = "NoDDChk",
     [3] = "NoDDClr,NoDDChk",
 };
 
-char *mask_ctrl[4] = {
+static const char * const mask_ctrl[4] = {
     [0] = "",
     [1] = "nomask",
 };
 
-char *access_mode[2] = {
+static const char * const access_mode[2] = {
     [0] = "align1",
     [1] = "align16",
 };
 
-char *reg_encoding[8] = {
+static const char * const reg_encoding[8] = {
     [0] = "UD",
     [1] = "D",
     [2] = "UW",
@@ -247,7 +244,7 @@ char *reg_encoding[8] = {
     [7] = "F"
 };
 
-int reg_type_size[8] = {
+const int reg_type_size[8] = {
     [0] = 4,
     [1] = 4,
     [2] = 2,
@@ -257,24 +254,14 @@ int reg_type_size[8] = {
     [7] = 4
 };
 
-char *imm_encoding[8] = {
-    [0] = "UD",
-    [1] = "D",
-    [2] = "UW",
-    [3] = "W",
-    [5] = "VF",
-    [6] = "V",
-    [7] = "F"
-};
-
-char *reg_file[4] = {
+static const char * const reg_file[4] = {
     [0] = "A",
     [1] = "g",
     [2] = "m",
     [3] = "imm",
 };
 
-char *writemask[16] = {
+static const char * const writemask[16] = {
     [0x0] = ".",
     [0x1] = ".x",
     [0x2] = ".y",
@@ -293,12 +280,12 @@ char *writemask[16] = {
     [0xf] = "",
 };
 
-char *end_of_thread[2] = {
+static const char * const end_of_thread[2] = {
     [0] = "",
     [1] = "EOT"
 };
 
-char *target_function[16] = {
+static const char * const target_function[16] = {
     [BRW_SFID_NULL] = "null",
     [BRW_SFID_MATH] = "math",
     [BRW_SFID_SAMPLER] = "sampler",
@@ -309,7 +296,7 @@ char *target_function[16] = {
     [BRW_SFID_THREAD_SPAWNER] = "thread_spawner"
 };
 
-char *target_function_gen6[16] = {
+static const char * const target_function_gen6[16] = {
     [BRW_SFID_NULL] = "null",
     [BRW_SFID_MATH] = "math",
     [BRW_SFID_SAMPLER] = "sampler",
@@ -322,7 +309,7 @@ char *target_function_gen6[16] = {
     [GEN7_SFID_DATAPORT_DATA_CACHE] = "data"
 };
 
-char *dp_rc_msg_type_gen6[16] = {
+static const char * const dp_rc_msg_type_gen6[16] = {
     [BRW_DATAPORT_READ_MESSAGE_OWORD_BLOCK_READ] = "OWORD block read",
     [GEN6_DATAPORT_READ_MESSAGE_RENDER_UNORM_READ] = "RT UNORM read",
     [GEN6_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ] = "OWORD dual block read",
@@ -339,7 +326,7 @@ char *dp_rc_msg_type_gen6[16] = {
     [GEN6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_UNORM_WRITE] = "RT UNORMc write",
 };
 
-char *math_function[16] = {
+static const char * const math_function[16] = {
     [BRW_MATH_FUNCTION_INV] = "inv",
     [BRW_MATH_FUNCTION_LOG] = "log",
     [BRW_MATH_FUNCTION_EXP] = "exp",
@@ -355,53 +342,53 @@ char *math_function[16] = {
     [BRW_MATH_FUNCTION_INT_DIV_REMAINDER] = "intmod",
 };
 
-char *math_saturate[2] = {
+static const char * const math_saturate[2] = {
     [0] = "",
     [1] = "sat"
 };
 
-char *math_signed[2] = {
+static const char * const math_signed[2] = {
     [0] = "",
     [1] = "signed"
 };
 
-char *math_scalar[2] = {
+static const char * const math_scalar[2] = {
     [0] = "",
     [1] = "scalar"
 };
 
-char *math_precision[2] = {
+static const char * const math_precision[2] = {
     [0] = "",
     [1] = "partial_precision"
 };
 
-char *urb_opcode[2] = {
+static const char * const urb_opcode[2] = {
     [0] = "urb_write",
     [1] = "ff_sync",
 };
 
-char *urb_swizzle[4] = {
+static const char * const urb_swizzle[4] = {
     [BRW_URB_SWIZZLE_NONE] = "",
     [BRW_URB_SWIZZLE_INTERLEAVE] = "interleave",
     [BRW_URB_SWIZZLE_TRANSPOSE] = "transpose",
 };
 
-char *urb_allocate[2] = {
+static const char * const urb_allocate[2] = {
     [0] = "",
     [1] = "allocate"
 };
 
-char *urb_used[2] = {
+static const char * const urb_used[2] = {
     [0] = "",
     [1] = "used"
 };
 
-char *urb_complete[2] = {
+static const char * const urb_complete[2] = {
     [0] = "",
     [1] = "complete"
 };
 
-char *sampler_target_format[4] = {
+static const char * const sampler_target_format[4] = {
     [0] = "F",
     [2] = "UD",
     [3] = "D"
@@ -410,14 +397,14 @@ char *sampler_target_format[4] = {
 
 static int column;
 
-static int string (FILE *file, char *string)
+static int string (FILE *file, const char *string)
 {
     fputs (string, file);
     column += strlen (string);
     return 0;
 }
 
-static int format (FILE *f, char *format, ...)
+static int format (FILE *f, const char *format, ...)
 {
     char    buf[1024];
     va_list	args;
@@ -444,7 +431,8 @@ static int pad (FILE *f, int c)
     return 0;
 }
 
-static int control (FILE *file, char *name, char *ctrl[], GLuint id, int *space)
+static int control (FILE *file, const char *name, const char * const ctrl[],
+                    GLuint id, int *space)
 {
     if (!ctrl[id]) {
 	fprintf (file, "*** invalid %s value %d ",
@@ -538,7 +526,9 @@ static int dest (FILE *file, struct brw_instruction *inst)
 	    if (inst->bits1.da1.dest_subreg_nr)
 		format (file, ".%d", inst->bits1.da1.dest_subreg_nr /
 				     reg_type_size[inst->bits1.da1.dest_reg_type]);
-	    format (file, "<%d>", inst->bits1.da1.dest_horiz_stride);
+	    string (file, "<");
+	    err |= control (file, "horiz stride", horiz_stride, inst->bits1.da1.dest_horiz_stride, NULL);
+	    string (file, ">");
 	    err |= control (file, "dest reg encoding", reg_encoding, inst->bits1.da1.dest_reg_type, NULL);
 	}
 	else
@@ -549,8 +539,9 @@ static int dest (FILE *file, struct brw_instruction *inst)
 					reg_type_size[inst->bits1.ia1.dest_reg_type]);
 	    if (inst->bits1.ia1.dest_indirect_offset)
 		format (file, " %d", inst->bits1.ia1.dest_indirect_offset);
-	    string (file, "]");
-	    format (file, "<%d>", inst->bits1.ia1.dest_horiz_stride);
+	    string (file, "]<");
+	    err |= control (file, "horiz stride", horiz_stride, inst->bits1.ia1.dest_horiz_stride, NULL);
+	    string (file, ">");
 	    err |= control (file, "dest reg encoding", reg_encoding, inst->bits1.ia1.dest_reg_type, NULL);
 	}
     }
@@ -574,6 +565,28 @@ static int dest (FILE *file, struct brw_instruction *inst)
 	    string (file, "Indirect align16 address mode not supported");
 	}
     }
+
+    return 0;
+}
+
+static int dest_3src (FILE *file, struct brw_instruction *inst)
+{
+    int	err = 0;
+    uint32_t reg_file;
+
+    if (inst->bits1.da3src.dest_reg_file)
+       reg_file = BRW_MESSAGE_REGISTER_FILE;
+    else
+       reg_file = BRW_GENERAL_REGISTER_FILE;
+
+    err |= reg (file, reg_file, inst->bits1.da3src.dest_reg_nr);
+    if (err == -1)
+       return 0;
+    if (inst->bits1.da3src.dest_subreg_nr)
+       format (file, ".%d", inst->bits1.da3src.dest_subreg_nr);
+    string (file, "<1>");
+    err |= control (file, "writemask", writemask, inst->bits1.da3src.dest_writemask, NULL);
+    err |= control (file, "dest reg encoding", reg_encoding, BRW_REGISTER_TYPE_F, NULL);
 
     return 0;
 }
@@ -694,6 +707,156 @@ static int src_da16 (FILE *file,
     return err;
 }
 
+static int src0_3src (FILE *file, struct brw_instruction *inst)
+{
+    int err = 0;
+    GLuint swz_x = (inst->bits2.da3src.src0_swizzle >> 0) & 0x3;
+    GLuint swz_y = (inst->bits2.da3src.src0_swizzle >> 2) & 0x3;
+    GLuint swz_z = (inst->bits2.da3src.src0_swizzle >> 4) & 0x3;
+    GLuint swz_w = (inst->bits2.da3src.src0_swizzle >> 6) & 0x3;
+
+    err |= control (file, "negate", negate, inst->bits1.da3src.src0_negate, NULL);
+    err |= control (file, "abs", _abs, inst->bits1.da3src.src0_abs, NULL);
+
+    err |= reg (file, BRW_GENERAL_REGISTER_FILE, inst->bits2.da3src.src0_reg_nr);
+    if (err == -1)
+	return 0;
+    if (inst->bits2.da3src.src0_subreg_nr)
+	format (file, ".%d", inst->bits2.da3src.src0_subreg_nr);
+    string (file, "<4,1,1>");
+    err |= control (file, "src da16 reg type", reg_encoding,
+		    BRW_REGISTER_TYPE_F, NULL);
+    /*
+     * Three kinds of swizzle display:
+     *  identity - nothing printed
+     *  1->all	 - print the single channel
+     *  1->1     - print the mapping
+     */
+    if (swz_x == BRW_CHANNEL_X &&
+	swz_y == BRW_CHANNEL_Y &&
+	swz_z == BRW_CHANNEL_Z &&
+	swz_w == BRW_CHANNEL_W)
+    {
+	;
+    }
+    else if (swz_x == swz_y && swz_x == swz_z && swz_x == swz_w)
+    {
+	string (file, ".");
+	err |= control (file, "channel select", chan_sel, swz_x, NULL);
+    }
+    else
+    {
+	string (file, ".");
+	err |= control (file, "channel select", chan_sel, swz_x, NULL);
+	err |= control (file, "channel select", chan_sel, swz_y, NULL);
+	err |= control (file, "channel select", chan_sel, swz_z, NULL);
+	err |= control (file, "channel select", chan_sel, swz_w, NULL);
+    }
+    return err;
+}
+
+static int src1_3src (FILE *file, struct brw_instruction *inst)
+{
+    int err = 0;
+    GLuint swz_x = (inst->bits2.da3src.src1_swizzle >> 0) & 0x3;
+    GLuint swz_y = (inst->bits2.da3src.src1_swizzle >> 2) & 0x3;
+    GLuint swz_z = (inst->bits2.da3src.src1_swizzle >> 4) & 0x3;
+    GLuint swz_w = (inst->bits2.da3src.src1_swizzle >> 6) & 0x3;
+    GLuint src1_subreg_nr = (inst->bits2.da3src.src1_subreg_nr_low |
+			     (inst->bits3.da3src.src1_subreg_nr_high << 2));
+
+    err |= control (file, "negate", negate, inst->bits1.da3src.src1_negate,
+		    NULL);
+    err |= control (file, "abs", _abs, inst->bits1.da3src.src1_abs, NULL);
+
+    err |= reg (file, BRW_GENERAL_REGISTER_FILE,
+		inst->bits3.da3src.src1_reg_nr);
+    if (err == -1)
+	return 0;
+    if (src1_subreg_nr)
+	format (file, ".%d", src1_subreg_nr);
+    string (file, "<4,1,1>");
+    err |= control (file, "src da16 reg type", reg_encoding,
+		    BRW_REGISTER_TYPE_F, NULL);
+    /*
+     * Three kinds of swizzle display:
+     *  identity - nothing printed
+     *  1->all	 - print the single channel
+     *  1->1     - print the mapping
+     */
+    if (swz_x == BRW_CHANNEL_X &&
+	swz_y == BRW_CHANNEL_Y &&
+	swz_z == BRW_CHANNEL_Z &&
+	swz_w == BRW_CHANNEL_W)
+    {
+	;
+    }
+    else if (swz_x == swz_y && swz_x == swz_z && swz_x == swz_w)
+    {
+	string (file, ".");
+	err |= control (file, "channel select", chan_sel, swz_x, NULL);
+    }
+    else
+    {
+	string (file, ".");
+	err |= control (file, "channel select", chan_sel, swz_x, NULL);
+	err |= control (file, "channel select", chan_sel, swz_y, NULL);
+	err |= control (file, "channel select", chan_sel, swz_z, NULL);
+	err |= control (file, "channel select", chan_sel, swz_w, NULL);
+    }
+    return err;
+}
+
+
+static int src2_3src (FILE *file, struct brw_instruction *inst)
+{
+    int err = 0;
+    GLuint swz_x = (inst->bits3.da3src.src2_swizzle >> 0) & 0x3;
+    GLuint swz_y = (inst->bits3.da3src.src2_swizzle >> 2) & 0x3;
+    GLuint swz_z = (inst->bits3.da3src.src2_swizzle >> 4) & 0x3;
+    GLuint swz_w = (inst->bits3.da3src.src2_swizzle >> 6) & 0x3;
+
+    err |= control (file, "negate", negate, inst->bits1.da3src.src2_negate,
+		    NULL);
+    err |= control (file, "abs", _abs, inst->bits1.da3src.src2_abs, NULL);
+
+    err |= reg (file, BRW_GENERAL_REGISTER_FILE,
+		inst->bits3.da3src.src2_reg_nr);
+    if (err == -1)
+	return 0;
+    if (inst->bits3.da3src.src2_subreg_nr)
+	format (file, ".%d", inst->bits3.da3src.src2_subreg_nr);
+    string (file, "<4,1,1>");
+    err |= control (file, "src da16 reg type", reg_encoding,
+		    BRW_REGISTER_TYPE_F, NULL);
+    /*
+     * Three kinds of swizzle display:
+     *  identity - nothing printed
+     *  1->all	 - print the single channel
+     *  1->1     - print the mapping
+     */
+    if (swz_x == BRW_CHANNEL_X &&
+	swz_y == BRW_CHANNEL_Y &&
+	swz_z == BRW_CHANNEL_Z &&
+	swz_w == BRW_CHANNEL_W)
+    {
+	;
+    }
+    else if (swz_x == swz_y && swz_x == swz_z && swz_x == swz_w)
+    {
+	string (file, ".");
+	err |= control (file, "channel select", chan_sel, swz_x, NULL);
+    }
+    else
+    {
+	string (file, ".");
+	err |= control (file, "channel select", chan_sel, swz_x, NULL);
+	err |= control (file, "channel select", chan_sel, swz_y, NULL);
+	err |= control (file, "channel select", chan_sel, swz_z, NULL);
+	err |= control (file, "channel select", chan_sel, swz_w, NULL);
+    }
+    return err;
+}
 
 static int imm (FILE *file, GLuint type, struct brw_instruction *inst) {
     switch (type) {
@@ -890,9 +1053,9 @@ int brw_disasm (FILE *file, struct brw_instruction *inst, int gen)
     if (inst->header.predicate_control) {
 	string (file, "(");
 	err |= control (file, "predicate inverse", pred_inv, inst->header.predicate_inverse, NULL);
-	string (file, "f0");
-	if (inst->bits2.da1.flag_reg_nr)
-	    format (file, ".%d", inst->bits2.da1.flag_reg_nr);
+	format (file, "f%d", gen >= 7 ? inst->bits2.da1.flag_reg_nr : 0);
+	if (inst->bits2.da1.flag_subreg_nr)
+	    format (file, ".%d", inst->bits2.da1.flag_subreg_nr);
 	if (inst->header.access_mode == BRW_ALIGN_1)
 	    err |= control (file, "predicate control align1", pred_ctrl_align1,
 			    inst->header.predicate_control, NULL);
@@ -911,9 +1074,23 @@ int brw_disasm (FILE *file, struct brw_instruction *inst, int gen)
 	err |= control (file, "function", math_function,
 			inst->header.destreg__conditionalmod, NULL);
     } else if (inst->header.opcode != BRW_OPCODE_SEND &&
-	       inst->header.opcode != BRW_OPCODE_SENDC)
+	       inst->header.opcode != BRW_OPCODE_SENDC) {
 	err |= control (file, "conditional modifier", conditional_modifier,
 			inst->header.destreg__conditionalmod, NULL);
+
+        /* If we're using the conditional modifier, print which flags reg is
+         * used for it.  Note that on gen6+, the embedded-condition SEL and
+         * control flow doesn't update flags.
+         */
+	if (inst->header.destreg__conditionalmod &&
+            (gen < 6 || (inst->header.opcode != BRW_OPCODE_SEL &&
+                         inst->header.opcode != BRW_OPCODE_IF &&
+                         inst->header.opcode != BRW_OPCODE_WHILE))) {
+	    format (file, ".f%d", gen >= 7 ? inst->bits2.da1.flag_reg_nr : 0);
+	    if (inst->bits2.da1.flag_subreg_nr)
+		format (file, ".%d", inst->bits2.da1.flag_subreg_nr);
+        }
+    }
 
     if (inst->header.opcode != BRW_OPCODE_NOP) {
 	string (file, "(");
@@ -924,25 +1101,48 @@ int brw_disasm (FILE *file, struct brw_instruction *inst, int gen)
     if (inst->header.opcode == BRW_OPCODE_SEND && gen < 6)
 	format (file, " %d", inst->header.destreg__conditionalmod);
 
-    if (opcode[inst->header.opcode].ndst > 0) {
-	pad (file, 16);
-	err |= dest (file, inst);
-    } else if (gen >= 6 && (inst->header.opcode == BRW_OPCODE_IF ||
-			    inst->header.opcode == BRW_OPCODE_ELSE ||
-			    inst->header.opcode == BRW_OPCODE_ENDIF ||
-			    inst->header.opcode == BRW_OPCODE_WHILE)) {
-       format (file, " %d", inst->bits1.branch_gen6.jump_count);
-    } else if (inst->header.opcode == BRW_OPCODE_JMPI) {
-       format (file, " %d", inst->bits3.d);
-    }
+    if (opcode[inst->header.opcode].nsrc == 3) {
+       pad (file, 16);
+       err |= dest_3src (file, inst);
 
-    if (opcode[inst->header.opcode].nsrc > 0) {
-	pad (file, 32);
-	err |= src0 (file, inst);
-    }
-    if (opcode[inst->header.opcode].nsrc > 1) {
-	pad (file, 48);
-	err |= src1 (file, inst);
+       pad (file, 32);
+       err |= src0_3src (file, inst);
+
+       pad (file, 48);
+       err |= src1_3src (file, inst);
+
+       pad (file, 64);
+       err |= src2_3src (file, inst);
+    } else {
+       if (opcode[inst->header.opcode].ndst > 0) {
+	  pad (file, 16);
+	  err |= dest (file, inst);
+       } else if (gen == 7 && (inst->header.opcode == BRW_OPCODE_ELSE ||
+			       inst->header.opcode == BRW_OPCODE_ENDIF ||
+			       inst->header.opcode == BRW_OPCODE_WHILE)) {
+	  format (file, " %d", inst->bits3.break_cont.jip);
+       } else if (gen == 6 && (inst->header.opcode == BRW_OPCODE_IF ||
+			       inst->header.opcode == BRW_OPCODE_ELSE ||
+			       inst->header.opcode == BRW_OPCODE_ENDIF ||
+			       inst->header.opcode == BRW_OPCODE_WHILE)) {
+	  format (file, " %d", inst->bits1.branch_gen6.jump_count);
+       } else if ((gen >= 6 && (inst->header.opcode == BRW_OPCODE_BREAK ||
+                                inst->header.opcode == BRW_OPCODE_CONTINUE ||
+                                inst->header.opcode == BRW_OPCODE_HALT)) ||
+                  (gen == 7 && inst->header.opcode == BRW_OPCODE_IF)) {
+	  format (file, " %d %d", inst->bits3.break_cont.uip, inst->bits3.break_cont.jip);
+       } else if (inst->header.opcode == BRW_OPCODE_JMPI) {
+	  format (file, " %d", inst->bits3.d);
+       }
+
+       if (opcode[inst->header.opcode].nsrc > 0) {
+	  pad (file, 32);
+	  err |= src0 (file, inst);
+       }
+       if (opcode[inst->header.opcode].nsrc > 1) {
+	  pad (file, 48);
+	  err |= src1 (file, inst);
+       }
     }
 
     if (inst->header.opcode == BRW_OPCODE_SEND ||

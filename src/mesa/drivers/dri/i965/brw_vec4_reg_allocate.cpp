@@ -34,17 +34,17 @@ using namespace brw;
 namespace brw {
 
 static void
-assign(int *reg_hw_locations, reg *reg)
+assign(unsigned int *reg_hw_locations, reg *reg)
 {
    if (reg->file == GRF) {
       reg->reg = reg_hw_locations[reg->reg];
    }
 }
 
-void
+bool
 vec4_visitor::reg_allocate_trivial()
 {
-   int hw_reg_mapping[this->virtual_grf_count];
+   unsigned int hw_reg_mapping[this->virtual_grf_count];
    bool virtual_grf_used[this->virtual_grf_count];
    int i;
    int next;
@@ -90,7 +90,10 @@ vec4_visitor::reg_allocate_trivial()
    if (prog_data->total_grf > max_grf) {
       fail("Ran out of regs on trivial allocator (%d/%d)\n",
 	   prog_data->total_grf, max_grf);
+      return false;
    }
+
+   return true;
 }
 
 static void
@@ -136,13 +139,13 @@ brw_alloc_reg_set_for_classes(struct brw_context *brw,
    }
    assert(reg == ra_reg_count);
 
-   ra_set_finalize(brw->vs.regs);
+   ra_set_finalize(brw->vs.regs, NULL);
 }
 
-void
+bool
 vec4_visitor::reg_allocate()
 {
-   int hw_reg_mapping[virtual_grf_count];
+   unsigned int hw_reg_mapping[virtual_grf_count];
    int first_assigned_grf = this->first_non_payload_grf;
    int base_reg_count = max_grf - first_assigned_grf;
    int class_sizes[base_reg_count];
@@ -151,10 +154,8 @@ vec4_visitor::reg_allocate()
    /* Using the trivial allocator can be useful in debugging undefined
     * register access as a result of broken optimization passes.
     */
-   if (0) {
-      reg_allocate_trivial();
-      return;
-   }
+   if (0)
+      return reg_allocate_trivial();
 
    calculate_live_intervals();
 
@@ -203,9 +204,17 @@ vec4_visitor::reg_allocate()
    }
 
    if (!ra_allocate_no_spills(g)) {
+      /* Failed to allocate registers.  Spill a reg, and the caller will
+       * loop back into here to try again.
+       */
+      int reg = choose_spill_reg(g);
+      if (reg == -1) {
+         fail("no register to spill\n");
+      } else {
+         spill_reg(reg);
+      }
       ralloc_free(g);
-      fail("No register spilling support yet\n");
-      return;
+      return false;
    }
 
    /* Get the chosen virtual registers for each node, and map virtual
@@ -231,6 +240,117 @@ vec4_visitor::reg_allocate()
    }
 
    ralloc_free(g);
+
+   return true;
+}
+
+void
+vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
+{
+   float loop_scale = 1.0;
+
+   for (int i = 0; i < this->virtual_grf_count; i++) {
+      spill_costs[i] = 0.0;
+      no_spill[i] = virtual_grf_sizes[i] != 1;
+   }
+
+   /* Calculate costs for spilling nodes.  Call it a cost of 1 per
+    * spill/unspill we'll have to do, and guess that the insides of
+    * loops run 10 times.
+    */
+   foreach_list(node, &this->instructions) {
+      vec4_instruction *inst = (vec4_instruction *) node;
+
+      for (unsigned int i = 0; i < 3; i++) {
+	 if (inst->src[i].file == GRF) {
+	    spill_costs[inst->src[i].reg] += loop_scale;
+            if (inst->src[i].reladdr)
+               no_spill[inst->src[i].reg] = true;
+	 }
+      }
+
+      if (inst->dst.file == GRF) {
+	 spill_costs[inst->dst.reg] += loop_scale;
+         if (inst->dst.reladdr)
+            no_spill[inst->dst.reg] = true;
+      }
+
+      switch (inst->opcode) {
+
+      case BRW_OPCODE_DO:
+	 loop_scale *= 10;
+	 break;
+
+      case BRW_OPCODE_WHILE:
+	 loop_scale /= 10;
+	 break;
+
+      case VS_OPCODE_SCRATCH_READ:
+      case VS_OPCODE_SCRATCH_WRITE:
+         for (int i = 0; i < 3; i++) {
+            if (inst->src[i].file == GRF)
+               no_spill[inst->src[i].reg] = true;
+         }
+	 if (inst->dst.file == GRF)
+	    no_spill[inst->dst.reg] = true;
+	 break;
+
+      default:
+	 break;
+      }
+   }
+}
+
+int
+vec4_visitor::choose_spill_reg(struct ra_graph *g)
+{
+   float spill_costs[this->virtual_grf_count];
+   bool no_spill[this->virtual_grf_count];
+
+   evaluate_spill_costs(spill_costs, no_spill);
+
+   for (int i = 0; i < this->virtual_grf_count; i++) {
+      if (!no_spill[i])
+         ra_set_node_spill_cost(g, i, spill_costs[i]);
+   }
+
+   return ra_get_best_spill_node(g);
+}
+
+void
+vec4_visitor::spill_reg(int spill_reg_nr)
+{
+   assert(virtual_grf_sizes[spill_reg_nr] == 1);
+   unsigned int spill_offset = c->last_scratch++;
+
+   /* Generate spill/unspill instructions for the objects being spilled. */
+   foreach_list(node, &this->instructions) {
+      vec4_instruction *inst = (vec4_instruction *) node;
+
+      for (unsigned int i = 0; i < 3; i++) {
+         if (inst->src[i].file == GRF && inst->src[i].reg == spill_reg_nr) {
+            src_reg spill_reg = inst->src[i];
+            inst->src[i].reg = virtual_grf_alloc(1);
+            dst_reg temp = dst_reg(inst->src[i]);
+
+            /* Only read the necessary channels, to avoid overwriting the rest
+             * with data that may not have been written to scratch.
+             */
+            temp.writemask = 0;
+            for (int c = 0; c < 4; c++)
+               temp.writemask |= (1 << BRW_GET_SWZ(inst->src[i].swizzle, c));
+            assert(temp.writemask != 0);
+
+            emit_scratch_read(inst, temp, spill_reg, spill_offset);
+         }
+      }
+
+      if (inst->dst.file == GRF && inst->dst.reg == spill_reg_nr) {
+         emit_scratch_write(inst, spill_offset);
+      }
+   }
+
+   this->live_intervals_valid = false;
 }
 
 } /* namespace brw */

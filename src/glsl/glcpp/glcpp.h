@@ -25,6 +25,9 @@
 #define GLCPP_H
 
 #include <stdint.h>
+#include <stdbool.h>
+
+#include "main/mtypes.h"
 
 #include "../ralloc.h"
 
@@ -174,7 +177,14 @@ struct glcpp_parser {
 	token_node_t *lex_from_node;
 	char *output;
 	char *info_log;
+	size_t output_length;
+	size_t info_log_length;
 	int error;
+	bool has_new_line_number;
+	int new_line_number;
+	bool has_new_source_number;
+	int new_source_number;
+	bool is_gles;
 };
 
 struct gl_extensions;
@@ -189,8 +199,8 @@ void
 glcpp_parser_destroy (glcpp_parser_t *parser);
 
 int
-preprocess(void *ralloc_ctx, const char **shader, char **info_log,
-	   const struct gl_extensions *extensions, int api);
+glcpp_preprocess(void *ralloc_ctx, const char **shader, char **info_log,
+	   const struct gl_extensions *extensions, struct gl_context *g_ctx);
 
 /* Functions for writing to the info log */
 

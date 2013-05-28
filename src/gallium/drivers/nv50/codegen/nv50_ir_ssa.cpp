@@ -76,19 +76,17 @@ void DominatorTree::debugPrint()
 DominatorTree::DominatorTree(Graph *cfgraph) : cfg(cfgraph),
                                                count(cfg->getSize())
 {
-   Iterator *iter;
-   int i;
+   int i = 0;
 
    vert = new Node * [count];
    data = new int[5 * count];
 
-   for (i = 0, iter = cfg->iteratorDFS(true); !iter->end(); iter->next(), ++i) {
-      vert[i] = reinterpret_cast<Node *>(iter->get());
+   for (IteratorRef it = cfg->iteratorDFS(true); !it->end(); it->next(), ++i) {
+      vert[i] = reinterpret_cast<Node *>(it->get());
       vert[i]->tag = i;
       LABEL(i) = i;
       SEMI(i) = ANCESTOR(i) = -1;
    }
-   cfg->putIterator(iter);
 
    build();
 
@@ -190,39 +188,38 @@ void DominatorTree::build()
 
 void DominatorTree::findDominanceFrontiers()
 {
-   Iterator *dtIter;
    BasicBlock *bb;
 
-   for (dtIter = this->iteratorDFS(false); !dtIter->end(); dtIter->next()) {
-      EdgeIterator succIter, chldIter;
+   for (IteratorRef dtIt = iteratorDFS(false); !dtIt->end(); dtIt->next()) {
+      EdgeIterator succIt, chldIt;
 
-      bb = BasicBlock::get(reinterpret_cast<Node *>(dtIter->get()));
+      bb = BasicBlock::get(reinterpret_cast<Node *>(dtIt->get()));
       bb->getDF().clear();
 
-      for (succIter = bb->cfg.outgoing(); !succIter.end(); succIter.next()) {
-         BasicBlock *dfLocal = BasicBlock::get(succIter.getNode());
+      for (succIt = bb->cfg.outgoing(); !succIt.end(); succIt.next()) {
+         BasicBlock *dfLocal = BasicBlock::get(succIt.getNode());
          if (dfLocal->idom() != bb)
             bb->getDF().insert(dfLocal);
       }
 
-      for (chldIter = bb->dom.outgoing(); !chldIter.end(); chldIter.next()) {
-         BasicBlock *cb = BasicBlock::get(chldIter.getNode());
+      for (chldIt = bb->dom.outgoing(); !chldIt.end(); chldIt.next()) {
+         BasicBlock *cb = BasicBlock::get(chldIt.getNode());
 
-         DLList::Iterator dfIter = cb->getDF().iterator();
-         for (; !dfIter.end(); dfIter.next()) {
-            BasicBlock *dfUp = BasicBlock::get(dfIter);
+         DLList::Iterator dfIt = cb->getDF().iterator();
+         for (; !dfIt.end(); dfIt.next()) {
+            BasicBlock *dfUp = BasicBlock::get(dfIt);
             if (dfUp->idom() != bb)
                bb->getDF().insert(dfUp);
          }
       }
    }
-   this->putIterator(dtIter);
 }
 
 // liveIn(bb) = usedBeforeAssigned(bb) U (liveOut(bb) - assigned(bb))
 void
 Function::buildLiveSetsPreSSA(BasicBlock *bb, const int seq)
 {
+   Function *f = bb->getFunction();
    BitSet usedBeforeAssigned(allLValues.getSize(), true);
    BitSet assigned(allLValues.getSize(), true);
 
@@ -252,8 +249,37 @@ Function::buildLiveSetsPreSSA(BasicBlock *bb, const int seq)
          assigned.set(i->getDef(d)->id);
    }
 
+   if (bb == BasicBlock::get(f->cfgExit)) {
+      for (std::deque<ValueRef>::iterator it = f->outs.begin();
+           it != f->outs.end(); ++it) {
+         if (!assigned.test(it->get()->id))
+            usedBeforeAssigned.set(it->get()->id);
+      }
+   }
+
    bb->liveSet.andNot(assigned);
    bb->liveSet |= usedBeforeAssigned;
+}
+
+void
+Function::buildDefSetsPreSSA(BasicBlock *bb, const int seq)
+{
+   bb->defSet.allocate(allLValues.getSize(), !bb->liveSet.marker);
+   bb->liveSet.marker = true;
+
+   for (Graph::EdgeIterator ei = bb->cfg.incident(); !ei.end(); ei.next()) {
+      BasicBlock *in = BasicBlock::get(ei.getNode());
+
+      if (in->cfg.visit(seq))
+         buildDefSetsPreSSA(in, seq);
+
+      bb->defSet |= in->defSet;
+   }
+
+   for (Instruction *i = bb->getEntry(); i; i = i->next) {
+      for (int d = 0; i->defExists(d); ++d)
+         bb->defSet.set(i->getDef(d)->id);
+   }
 }
 
 class RenamePass
@@ -267,11 +293,12 @@ public:
 
    inline LValue *getStackTop(Value *);
 
+   LValue *mkUndefined(Value *);
+
 private:
    Stack *stack;
    Function *func;
    Program *prog;
-   Instruction *undef;
 };
 
 bool
@@ -294,13 +321,7 @@ bool
 Function::convertToSSA()
 {
    // 0. calculate live in variables (for pruned SSA)
-   int seq = cfg.nextSequence();
-   for (unsigned i = 0; i <= loopNestingBound; seq = cfg.nextSequence(), ++i)
-      buildLiveSetsPreSSA(BasicBlock::get(cfg.getRoot()), seq);
-
-   // reset liveSet marker for use in regalloc
-   for (ArrayList::Iterator bi = allBBlocks.iterator(); !bi.end(); bi.next())
-      reinterpret_cast<BasicBlock *>(bi.get())->liveSet.marker = false;
+   buildLiveSets();
 
    // 1. create the dominator tree
    domTree = new DominatorTree(&cfg);
@@ -322,7 +343,7 @@ Function::convertToSSA()
       if (!allLValues.get(var))
          continue;
       lval = reinterpret_cast<Value *>(allLValues.get(var))->asLValue();
-      if (!lval || !lval->defs)
+      if (!lval || lval->defs.empty())
          continue;
       ++iterCount;
 
@@ -330,8 +351,9 @@ Function::convertToSSA()
       //  the BB they're defined in
 
       // gather blocks with assignments to lval in workList
-      for (ValueDef::Iterator d = lval->defs->iterator(); !d.end(); d.next()) {
-         bb = d.get()->getInsn()->bb;
+      for (Value::DefIterator d = lval->defs.begin();
+           d != lval->defs.end(); ++d) {
+         bb = ((*d)->getInsn() ? (*d)->getInsn()->bb : NULL);
          if (!bb)
             continue; // instruction likely been removed but not XXX deleted
 
@@ -359,9 +381,6 @@ Function::convertToSSA()
             if (!dfBB->liveSet.test(lval->id))
                continue;
 
-            // TODO: use dedicated PhiInstruction to lift this limit
-            assert(dfBB->cfg.incidentCount() <= NV50_IR_MAX_SRCS);
-
             phi = new_Instruction(this, OP_PHI, typeOfSize(lval->reg.size));
             dfBB->insertTail(phi);
 
@@ -384,12 +403,6 @@ Function::convertToSSA()
 
 RenamePass::RenamePass(Function *fn) : func(fn), prog(fn->getProgram())
 {
-   BasicBlock *root = BasicBlock::get(func->cfg.getRoot());
-
-   undef = new_Instruction(func, OP_NOP, TYPE_U32);
-   undef->setDef(0, new_LValue(func, FILE_GPR));
-   root->insertHead(undef);
-
    stack = new Stack[func->allLValues.getSize()];
 }
 
@@ -407,27 +420,47 @@ RenamePass::getStackTop(Value *val)
    return reinterpret_cast<LValue *>(stack[val->id].peek().u.p);
 }
 
+LValue *
+RenamePass::mkUndefined(Value *val)
+{
+   LValue *lval = val->asLValue();
+   assert(lval);
+   LValue *ud = new_LValue(func, lval);
+   Instruction *nop = new_Instruction(func, OP_NOP, typeOfSize(lval->reg.size));
+   nop->setDef(0, ud);
+   BasicBlock::get(func->cfg.getRoot())->insertHead(nop);
+   return ud;
+}
+
 bool RenamePass::run()
 {
    if (!stack)
       return false;
    search(BasicBlock::get(func->domTree->getRoot()));
 
-   ArrayList::Iterator iter = func->allInsns.iterator();
-   for (; !iter.end(); iter.next()) {
-      Instruction *insn = reinterpret_cast<Instruction *>(iter.get());
-      for (int d = 0; insn->defExists(d); ++d)
-         insn->def[d].restoreDefList();
-   }
-
    return true;
 }
 
 void RenamePass::search(BasicBlock *bb)
 {
-   LValue *lval;
+   LValue *lval, *ssa;
    int d, s;
    const Target *targ = prog->getTarget();
+
+   if (bb == BasicBlock::get(func->cfg.getRoot())) {
+      for (std::deque<ValueDef>::iterator it = func->ins.begin();
+           it != func->ins.end(); ++it) {
+         lval = it->get()->asLValue();
+         assert(lval);
+
+         ssa = new_LValue(func, targ->nativeFile(lval->reg.file));
+         ssa->reg.size = lval->reg.size;
+         ssa->reg.data.id = lval->reg.data.id;
+
+         it->setSSA(ssa);
+         stack[lval->id].push(ssa);
+      }
+   }
 
    for (Instruction *stmt = bb->getFirst(); stmt; stmt = stmt->next) {
       if (stmt->op != OP_PHI) {
@@ -437,17 +470,18 @@ void RenamePass::search(BasicBlock *bb)
                continue;
             lval = getStackTop(lval);
             if (!lval)
-               lval = static_cast<LValue *>(undef->getDef(0));
+               lval = mkUndefined(stmt->getSrc(s));
             stmt->setSrc(s, lval);
          }
       }
       for (d = 0; stmt->defExists(d); ++d) {
-         lval = stmt->def[d].get()->asLValue();
+         lval = stmt->def(d).get()->asLValue();
          assert(lval);
-         stmt->def[d].setSSA(
+         stmt->def(d).setSSA(
             new_LValue(func, targ->nativeFile(lval->reg.file)));
-         stmt->def[d].get()->reg.data.id = lval->reg.data.id;
-         stack[lval->id].push(stmt->def[d].get());
+         stmt->def(d).get()->reg.size = lval->reg.size;
+         stmt->def(d).get()->reg.data.id = lval->reg.data.id;
+         stack[lval->id].push(stmt->def(d).get());
       }
    }
 
@@ -467,7 +501,7 @@ void RenamePass::search(BasicBlock *bb)
       for (phi = sb->getPhi(); phi && phi->op == OP_PHI; phi = phi->next) {
          lval = getStackTop(phi->getSrc(p));
          if (!lval)
-            lval = undef->getDef(0)->asLValue();
+            lval = mkUndefined(phi->getSrc(p));
          phi->setSrc(p, lval);
       }
    }
@@ -475,9 +509,24 @@ void RenamePass::search(BasicBlock *bb)
    for (Graph::EdgeIterator ei = bb->dom.outgoing(); !ei.end(); ei.next())
       search(BasicBlock::get(ei.getNode()));
 
+   if (bb == BasicBlock::get(func->cfgExit)) {
+      for (std::deque<ValueRef>::iterator it = func->outs.begin();
+           it != func->outs.end(); ++it) {
+         lval = it->get()->asLValue();
+         if (!lval)
+            continue;
+         lval = getStackTop(lval);
+         if (!lval)
+            lval = mkUndefined(it->get());
+         it->set(lval);
+      }
+   }
+
    for (Instruction *stmt = bb->getFirst(); stmt; stmt = stmt->next) {
+      if (stmt->op == OP_NOP)
+         continue;
       for (d = 0; stmt->defExists(d); ++d)
-         stack[stmt->def[d].preSSA()->id].pop();
+         stack[stmt->def(d).preSSA()->id].pop();
    }
 }
 

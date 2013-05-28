@@ -61,7 +61,7 @@ softpipe_draw_vbo(struct pipe_context *pipe,
 {
    struct softpipe_context *sp = softpipe_context(pipe);
    struct draw_context *draw = sp->draw;
-   void *mapped_indices = NULL;
+   const void *mapped_indices = NULL;
    unsigned i;
 
    if (!softpipe_check_render_cond(sp))
@@ -73,19 +73,29 @@ softpipe_draw_vbo(struct pipe_context *pipe,
       softpipe_update_derived(sp, sp->reduced_api_prim);
    }
 
-   softpipe_map_transfers(sp);
-
    /* Map vertex buffers */
    for (i = 0; i < sp->num_vertex_buffers; i++) {
-      void *buf = softpipe_resource(sp->vertex_buffer[i].buffer)->data;
+      const void *buf = sp->vertex_buffer[i].user_buffer;
+      if (!buf) {
+         if (!sp->vertex_buffer[i].buffer) {
+            continue;
+         }
+         buf = softpipe_resource(sp->vertex_buffer[i].buffer)->data;
+      }
       draw_set_mapped_vertex_buffer(draw, i, buf);
    }
 
    /* Map index buffer, if present */
-   if (info->indexed && sp->index_buffer.buffer)
-      mapped_indices = softpipe_resource(sp->index_buffer.buffer)->data;
+   if (info->indexed) {
+      mapped_indices = sp->index_buffer.user_buffer;
+      if (!mapped_indices)
+         mapped_indices = softpipe_resource(sp->index_buffer.buffer)->data;
 
-   draw_set_mapped_index_buffer(draw, mapped_indices);
+      draw_set_indexes(draw,
+                       (ubyte *) mapped_indices + sp->index_buffer.offset,
+                       sp->index_buffer.index_size);
+   }
+
 
    for (i = 0; i < sp->num_so_targets; i++) {
       void *buf = softpipe_resource(sp->so_targets[i]->target.buffer)->data;
@@ -103,7 +113,7 @@ softpipe_draw_vbo(struct pipe_context *pipe,
       draw_set_mapped_vertex_buffer(draw, i, NULL);
    }
    if (mapped_indices) {
-      draw_set_mapped_index_buffer(draw, NULL);
+      draw_set_indexes(draw, NULL, 0);
    }
 
    draw_set_mapped_so_targets(draw, 0, NULL);

@@ -22,6 +22,15 @@
  */
 #include <getopt.h>
 
+/** @file main.cpp
+ *
+ * This file is the main() routine and scaffolding for producing
+ * builtin_compiler (which doesn't include builtins itself and is used
+ * to generate the profile information for builtin_function.cpp), and
+ * for glsl_compiler (which does include builtins and can be used to
+ * offline compile GLSL code and examine the resulting GLSL IR.
+ */
+
 #include "ast.h"
 #include "glsl_parser_extras.h"
 #include "ir_optimization.h"
@@ -35,10 +44,11 @@ initialize_context(struct gl_context *ctx, gl_api api)
 {
    initialize_context_to_defaults(ctx, api);
 
-   /* GLSL 1.30 isn't fully supported, but we need to advertise 1.30 so that
-    * the built-in functions for 1.30 can be built.
+   /* The standalone compiler needs to claim support for almost
+    * everything in order to compile the built-in functions.
     */
-   ctx->Const.GLSLVersion = 130;
+   ctx->Const.GLSLVersion = 140;
+   ctx->Extensions.ARB_ES3_compatibility = true;
 
    ctx->Const.MaxClipPlanes = 8;
    ctx->Const.MaxDrawBuffers = 2;
@@ -135,8 +145,8 @@ compile_shader(struct gl_context *ctx, struct gl_shader *shader)
       new(shader) _mesa_glsl_parse_state(ctx, shader->Type, shader);
 
    const char *source = shader->Source;
-   state->error = preprocess(state, &source, &state->info_log,
-			     state->extensions, ctx->API) != 0;
+   state->error = glcpp_preprocess(state, &source, &state->info_log,
+			     state->extensions, ctx) != 0;
 
    if (!state->error) {
       _mesa_glsl_lexer_ctor(state, source);
@@ -181,6 +191,7 @@ compile_shader(struct gl_context *ctx, struct gl_shader *shader)
    shader->symbols = state->symbols;
    shader->CompileStatus = !state->error;
    shader->Version = state->language_version;
+   shader->IsES = state->es_shader;
    memcpy(shader->builtins_to_link, state->builtins_to_link,
 	  sizeof(shader->builtins_to_link[0]) * state->num_builtins_to_link);
    shader->num_builtins_to_link = state->num_builtins_to_link;
@@ -214,7 +225,7 @@ main(int argc, char **argv)
    if (argc <= optind)
       usage_fail(argv[0]);
 
-   initialize_context(ctx, (glsl_es) ? API_OPENGLES2 : API_OPENGL);
+   initialize_context(ctx, (glsl_es) ? API_OPENGLES2 : API_OPENGL_COMPAT);
 
    struct gl_shader_program *whole_program;
 
@@ -238,7 +249,7 @@ main(int argc, char **argv)
 	 usage_fail(argv[0]);
 
       const char *const ext = & argv[optind][len - 5];
-      if (strncmp(".vert", ext, 5) == 0)
+      if (strncmp(".vert", ext, 5) == 0 || strncmp(".glsl", ext, 5) == 0)
 	 shader->Type = GL_VERTEX_SHADER;
       else if (strncmp(".geom", ext, 5) == 0)
 	 shader->Type = GL_GEOMETRY_SHADER;

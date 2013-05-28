@@ -37,7 +37,7 @@ struct st_framebuffer_iface;
 struct stw_pixelformat_info;
 
 /**
- * Windows framebuffer, derived from gl_framebuffer.
+ * Windows framebuffer.
  */
 struct stw_framebuffer
 {
@@ -58,11 +58,14 @@ struct stw_framebuffer
     * above, to prevent the framebuffer from being destroyed.
     */
    
-   HDC hDC;
    HWND hWnd;
 
    int iPixelFormat;
    const struct stw_pixelformat_info *pfi;
+
+   /* A pixel format that can be used by GDI */
+   int iDisplayablePixelFormat;
+   boolean bPbuffer;
 
    struct st_framebuffer_iface *stfb;
 

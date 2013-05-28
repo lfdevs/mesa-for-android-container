@@ -33,6 +33,7 @@
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
 #include "intel_buffer_objects.h"
+#include "main/transformfeedback.h"
 
 static void
 upload_3dstate_so_buffers(struct brw_context *brw)
@@ -81,12 +82,14 @@ upload_3dstate_so_buffers(struct brw_context *brw)
       end = ALIGN(start + xfb_obj->Size[i], 4);
       assert(end <= bo->size);
 
-      /* Offset the starting offset by the current vertex index into the
-       * feedback buffer, offset register is always set to 0 at the start of the
-       * batchbuffer.
+      /* If we don't have hardware contexts, then we reset our offsets at the
+       * start of every batch, so we track the number of vertices written in
+       * software and increment our pointers by that many.
        */
-      start += brw->sol.offset_0_batch_start * stride;
-      assert(start <= end);
+      if (!intel->hw_ctx) {
+         start += brw->sol.offset_0_batch_start * stride;
+         assert(start <= end);
+      }
 
       BEGIN_BATCH(4);
       OUT_BATCH(_3DSTATE_SO_BUFFER << 16 | (4 - 2));
@@ -236,20 +239,18 @@ upload_sol_state(struct brw_context *brw)
    struct intel_context *intel = &brw->intel;
    struct gl_context *ctx = &intel->ctx;
    /* _NEW_TRANSFORM_FEEDBACK */
-   struct gl_transform_feedback_object *xfb_obj =
-      ctx->TransformFeedback.CurrentObject;
-   bool active = xfb_obj->Active && !xfb_obj->Paused;
-   struct brw_vue_map vue_map;
-
-   /* _NEW_TRANSFORM, CACHE_NEW_VS_PROG */
-   brw_compute_vue_map(&vue_map, intel, ctx->Transform.ClipPlanesEnabled != 0,
-                       brw->vs.prog_data->outputs_written);
+   bool active = _mesa_is_xfb_active_and_unpaused(ctx);
 
    if (active) {
       upload_3dstate_so_buffers(brw);
-      upload_3dstate_so_decl_list(brw, &vue_map);
+      /* CACHE_NEW_VS_PROG */
+      upload_3dstate_so_decl_list(brw, &brw->vs.prog_data->vue_map);
 
-      intel->batch.needs_sol_reset = true;
+      /* If we don't have hardware contexts, then some other client may have
+       * changed the SO write offsets, and we need to rewrite them.
+       */
+      if (!intel->hw_ctx)
+         intel->batch.needs_sol_reset = true;
    }
 
    /* Finally, set up the SOL stage.  This command must always follow updates to
@@ -257,15 +258,14 @@ upload_sol_state(struct brw_context *brw)
     * MMIO register updates (current performed by the kernel at each batch
     * emit).
     */
-   upload_3dstate_streamout(brw, active, &vue_map);
+   upload_3dstate_streamout(brw, active, &brw->vs.prog_data->vue_map);
 }
 
 const struct brw_tracked_state gen7_sol_state = {
    .dirty = {
       .mesa  = (_NEW_RASTERIZER_DISCARD |
 		_NEW_LIGHT |
-		_NEW_TRANSFORM_FEEDBACK |
-		_NEW_TRANSFORM),
+		_NEW_TRANSFORM_FEEDBACK),
       .brw   = (BRW_NEW_BATCH |
 		BRW_NEW_VERTEX_PROGRAM),
       .cache = CACHE_NEW_VS_PROG,

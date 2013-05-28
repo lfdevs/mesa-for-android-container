@@ -39,7 +39,8 @@
 
 /** Initialize the post-processing queue. */
 struct pp_queue_t *
-pp_init(struct pipe_screen *pscreen, const unsigned int *enabled)
+pp_init(struct pipe_context *pipe, const unsigned int *enabled,
+        struct cso_context *cso)
 {
 
    unsigned int curpos = 0, i, tmp_req = 0;
@@ -64,7 +65,7 @@ pp_init(struct pipe_screen *pscreen, const unsigned int *enabled)
    if (!tmp_q || !ppq || !ppq->shaders || !ppq->verts)
       goto error;
 
-   ppq->p = pp_init_prog(ppq, pscreen);
+   ppq->p = pp_init_prog(ppq, pipe, cso);
    if (!ppq->p)
       goto error;
 
@@ -89,7 +90,7 @@ pp_init(struct pipe_screen *pscreen, const unsigned int *enabled)
       }
    }
 
-   ppq->p->blitctx = util_create_blit(ppq->p->pipe, ppq->p->cso);
+   ppq->p->blitctx = util_create_blit(ppq->p->pipe, cso);
    if (!ppq->p->blitctx)
       goto error;
 
@@ -152,9 +153,6 @@ pp_free(struct pp_queue_t *ppq)
 
    util_destroy_blit(ppq->p->blitctx);
 
-   cso_set_fragment_sampler_views(ppq->p->cso, 0, NULL);
-   cso_release_all(ppq->p->cso);
-
    for (i = 0; i < ppq->n_filters; i++) {
       for (j = 0; j < PP_MAX_PASSES && ppq->shaders[i][j]; j++) {
          if (j >= ppq->verts[i]) {
@@ -167,9 +165,6 @@ pp_free(struct pp_queue_t *ppq)
          }
       }
    }
-
-   cso_destroy_context(ppq->p->cso);
-   ppq->p->pipe->destroy(ppq->p->pipe);
 
    FREE(ppq->p);
    FREE(ppq->pp_queue);
@@ -218,7 +213,7 @@ pp_init_fbos(struct pp_queue_t *ppq, unsigned int w,
    tmp_res.depth0 = 1;
    tmp_res.array_size = 1;
    tmp_res.last_level = 0;
-   tmp_res.bind = p->surf.usage = PIPE_BIND_RENDER_TARGET;
+   tmp_res.bind = PIPE_BIND_RENDER_TARGET;
 
    if (!p->screen->is_format_supported(p->screen, tmp_res.format,
                                        tmp_res.target, 1, tmp_res.bind))
@@ -242,7 +237,7 @@ pp_init_fbos(struct pp_queue_t *ppq, unsigned int w,
          goto error;
    }
 
-   tmp_res.bind = p->surf.usage = PIPE_BIND_DEPTH_STENCIL;
+   tmp_res.bind = PIPE_BIND_DEPTH_STENCIL;
 
    tmp_res.format = p->surf.format = PIPE_FORMAT_S8_UINT_Z24_UNORM;
 

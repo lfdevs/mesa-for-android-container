@@ -153,7 +153,7 @@ static GLushort *r200AllocElts( r200ContextPtr rmesa, GLuint nr )
    }
    else {
       if (rmesa->radeon.dma.flush)
-	 rmesa->radeon.dma.flush( rmesa->radeon.glCtx );
+	 rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );
 
       r200EmitAOS( rmesa,
 		   rmesa->radeon.tcl.aos_count, 0 );
@@ -284,90 +284,6 @@ void r200TclPrimitive( struct gl_context *ctx,
    }
 }
 
-
-/**********************************************************************/
-/*             Fog blend factor computation for hw tcl                */
-/*             same calculation used as in t_vb_fog.c                 */
-/**********************************************************************/
-
-#define FOG_EXP_TABLE_SIZE 256
-#define FOG_MAX (10.0)
-#define EXP_FOG_MAX .0006595
-#define FOG_INCR (FOG_MAX/FOG_EXP_TABLE_SIZE)
-static GLfloat exp_table[FOG_EXP_TABLE_SIZE];
-
-#if 1
-#define NEG_EXP( result, narg )						\
-do {									\
-   GLfloat f = (GLfloat) (narg * (1.0/FOG_INCR));			\
-   GLint k = (GLint) f;							\
-   if (k > FOG_EXP_TABLE_SIZE-2) 					\
-      result = (GLfloat) EXP_FOG_MAX;					\
-   else									\
-      result = exp_table[k] + (f-k)*(exp_table[k+1]-exp_table[k]);	\
-} while (0)
-#else
-#define NEG_EXP( result, narg )					\
-do {								\
-   result = exp(-narg);						\
-} while (0)
-#endif
-
-
-/**
- * Initialize the exp_table[] lookup table for approximating exp().
- */
-void
-r200InitStaticFogData( void )
-{
-   GLfloat f = 0.0F;
-   GLint i = 0;
-   for ( ; i < FOG_EXP_TABLE_SIZE ; i++, f += FOG_INCR) {
-      exp_table[i] = (GLfloat) exp(-f);
-   }
-}
-
-
-/**
- * Compute per-vertex fog blend factors from fog coordinates by
- * evaluating the GL_LINEAR, GL_EXP or GL_EXP2 fog function.
- * Fog coordinates are distances from the eye (typically between the
- * near and far clip plane distances).
- * Note the fog (eye Z) coords may be negative so we use ABS(z) below.
- * Fog blend factors are in the range [0,1].
- */
-float
-r200ComputeFogBlendFactor( struct gl_context *ctx, GLfloat fogcoord )
-{
-   GLfloat end  = ctx->Fog.End;
-   GLfloat d, temp;
-   const GLfloat z = FABSF(fogcoord);
-
-   switch (ctx->Fog.Mode) {
-   case GL_LINEAR:
-      if (ctx->Fog.Start == ctx->Fog.End)
-         d = 1.0F;
-      else
-         d = 1.0F / (ctx->Fog.End - ctx->Fog.Start);
-      temp = (end - z) * d;
-      return CLAMP(temp, 0.0F, 1.0F);
-      break;
-   case GL_EXP:
-      d = ctx->Fog.Density;
-      NEG_EXP( temp, d * z );
-      return temp;
-      break;
-   case GL_EXP2:
-      d = ctx->Fog.Density*ctx->Fog.Density;
-      NEG_EXP( temp, d * z * z );
-      return temp;
-      break;
-   default:
-      _mesa_problem(ctx, "Bad fog mode in make_fog_coord");
-      return 0;
-   }
-}
-
 /**
  * Predict total emit size for next rendering operation so there is no flush in middle of rendering
  * Prediction has to aim towards the best possible value that is worse than worst case scenario
@@ -396,7 +312,7 @@ static GLuint r200EnsureEmitSize( struct gl_context * ctx , GLubyte* vimap_rev )
     state_size = radeonCountStateEmitSize( &rmesa->radeon );
     /* vtx may be changed in r200EmitArrays so account for it if not dirty */
     if (!rmesa->hw.vtx.dirty)
-      state_size += rmesa->hw.vtx.check(rmesa->radeon.glCtx, &rmesa->hw.vtx);
+      state_size += rmesa->hw.vtx.check(&rmesa->radeon.glCtx, &rmesa->hw.vtx);
     /* predict size for elements */
     for (i = 0; i < VB->PrimitiveCount; ++i)
     {
@@ -604,10 +520,10 @@ static void transition_to_swtnl( struct gl_context *ctx )
    r200ChooseVertexState( ctx );
    r200ChooseRenderState( ctx );
 
-   _mesa_validate_all_lighting_tables( ctx ); 
+   _tnl_validate_shine_tables( ctx ); 
 
    tnl->Driver.NotifyMaterialChange = 
-      _mesa_validate_all_lighting_tables;
+      _tnl_validate_shine_tables;
 
    radeonReleaseArrays( ctx, ~0 );
 
@@ -630,7 +546,7 @@ static void transition_to_hwtnl( struct gl_context *ctx )
    tnl->Driver.NotifyMaterialChange = r200UpdateMaterial;
 
    if ( rmesa->radeon.dma.flush )			
-      rmesa->radeon.dma.flush( rmesa->radeon.glCtx );	
+      rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );	
 
    rmesa->radeon.dma.flush = NULL;
    
@@ -697,7 +613,7 @@ void r200TclFallback( struct gl_context *ctx, GLuint bit, GLboolean mode )
 		if (oldfallback == 0) {
 			/* We have to flush before transition */
 			if ( rmesa->radeon.dma.flush )
-				rmesa->radeon.dma.flush( rmesa->radeon.glCtx );
+				rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );
 
 			if (R200_DEBUG & RADEON_FALLBACKS)
 				fprintf(stderr, "R200 begin tcl fallback %s\n",
@@ -710,7 +626,7 @@ void r200TclFallback( struct gl_context *ctx, GLuint bit, GLboolean mode )
 		if (oldfallback == bit) {
 			/* We have to flush before transition */
 			if ( rmesa->radeon.dma.flush )
-				rmesa->radeon.dma.flush( rmesa->radeon.glCtx );
+				rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );
 
 			if (R200_DEBUG & RADEON_FALLBACKS)
 				fprintf(stderr, "R200 end tcl fallback %s\n",

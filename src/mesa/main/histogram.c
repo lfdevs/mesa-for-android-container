@@ -32,18 +32,12 @@
 #include "main/dispatch.h"
 
 
-#if FEATURE_histogram
-
 /**********************************************************************
  * API functions
  */
 
 
-/* this is defined below */
-static void GLAPIENTRY _mesa_ResetMinmax(GLenum target);
-
-
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_GetnMinmaxARB(GLenum target, GLboolean reset, GLenum format,
                     GLenum type, GLsizei bufSize, GLvoid *values)
 {
@@ -53,7 +47,7 @@ _mesa_GetnMinmaxARB(GLenum target, GLboolean reset, GLenum format,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_GetMinmax(GLenum target, GLboolean reset, GLenum format, GLenum type,
                 GLvoid *values)
 {
@@ -61,7 +55,7 @@ _mesa_GetMinmax(GLenum target, GLboolean reset, GLenum format, GLenum type,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_GetnHistogramARB(GLenum target, GLboolean reset, GLenum format,
                        GLenum type, GLsizei bufSize, GLvoid *values)
 {
@@ -71,7 +65,7 @@ _mesa_GetnHistogramARB(GLenum target, GLboolean reset, GLenum format,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_GetHistogram(GLenum target, GLboolean reset, GLenum format, GLenum type,
                    GLvoid *values)
 {
@@ -79,7 +73,7 @@ _mesa_GetHistogram(GLenum target, GLboolean reset, GLenum format, GLenum type,
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_GetHistogramParameterfv(GLenum target, GLenum pname, GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -88,7 +82,7 @@ _mesa_GetHistogramParameterfv(GLenum target, GLenum pname, GLfloat *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_GetHistogramParameteriv(GLenum target, GLenum pname, GLint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -97,7 +91,7 @@ _mesa_GetHistogramParameteriv(GLenum target, GLenum pname, GLint *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_GetMinmaxParameterfv(GLenum target, GLenum pname, GLfloat *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -106,7 +100,7 @@ _mesa_GetMinmaxParameterfv(GLenum target, GLenum pname, GLfloat *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_GetMinmaxParameteriv(GLenum target, GLenum pname, GLint *params)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -115,7 +109,7 @@ _mesa_GetMinmaxParameteriv(GLenum target, GLenum pname, GLint *params)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_Histogram(GLenum target, GLsizei width, GLenum internalFormat, GLboolean sink)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -124,7 +118,7 @@ _mesa_Histogram(GLenum target, GLsizei width, GLenum internalFormat, GLboolean s
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_Minmax(GLenum target, GLenum internalFormat, GLboolean sink)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -133,7 +127,7 @@ _mesa_Minmax(GLenum target, GLenum internalFormat, GLboolean sink)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_ResetHistogram(GLenum target)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -142,32 +136,10 @@ _mesa_ResetHistogram(GLenum target)
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_ResetMinmax(GLenum target)
 {
    GET_CURRENT_CONTEXT(ctx);
 
    _mesa_error(ctx, GL_INVALID_OPERATION, "glResetMinmax");
 }
-
-
-void
-_mesa_init_histogram_dispatch(struct _glapi_table *disp)
-{
-   SET_GetHistogram(disp, _mesa_GetHistogram);
-   SET_GetHistogramParameterfv(disp, _mesa_GetHistogramParameterfv);
-   SET_GetHistogramParameteriv(disp, _mesa_GetHistogramParameteriv);
-   SET_GetMinmax(disp, _mesa_GetMinmax);
-   SET_GetMinmaxParameterfv(disp, _mesa_GetMinmaxParameterfv);
-   SET_GetMinmaxParameteriv(disp, _mesa_GetMinmaxParameteriv);
-   SET_Histogram(disp, _mesa_Histogram);
-   SET_Minmax(disp, _mesa_Minmax);
-   SET_ResetHistogram(disp, _mesa_ResetHistogram);
-   SET_ResetMinmax(disp, _mesa_ResetMinmax);
-
-   /* GL_ARB_robustness */
-   SET_GetnHistogramARB(disp, _mesa_GetnHistogramARB);
-   SET_GetnMinmaxARB(disp, _mesa_GetnMinmaxARB);
-}
-
-#endif /* FEATURE_histogram */

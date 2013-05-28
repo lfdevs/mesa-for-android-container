@@ -135,6 +135,10 @@ print_type(const glsl_type *t)
    }
 }
 
+void ir_print_visitor::visit(ir_rvalue *ir)
+{
+   printf("error");
+}
 
 void ir_print_visitor::visit(ir_variable *ir)
 {
@@ -142,7 +146,8 @@ void ir_print_visitor::visit(ir_variable *ir)
 
    const char *const cent = (ir->centroid) ? "centroid " : "";
    const char *const inv = (ir->invariant) ? "invariant " : "";
-   const char *const mode[] = { "", "uniform ", "in ", "out ", "inout ",
+   const char *const mode[] = { "", "uniform ", "shader_in ", "shader_out ",
+                                "in ", "out ", "inout ",
 			        "const_in ", "sys ", "temporary " };
    const char *const interp[] = { "", "flat", "noperspective" };
 
@@ -404,7 +409,10 @@ void ir_print_visitor::visit(ir_constant *ir)
 void
 ir_print_visitor::visit(ir_call *ir)
 {
-   printf("(call %s (", ir->callee_name());
+   printf("(call %s ", ir->callee_name());
+   if (ir->return_deref)
+      ir->return_deref->accept(this);
+   printf(" (");
    foreach_iter(exec_list_iterator, iter, *ir) {
       ir_instruction *const inst = (ir_instruction *) iter.get();
 

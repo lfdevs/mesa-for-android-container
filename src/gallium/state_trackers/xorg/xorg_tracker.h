@@ -46,6 +46,10 @@
 #include <damage.h>
 #endif
 
+/* Prevent symbol clash */
+#undef Absolute
+
+#include "compat-api.h"
 #include "pipe/p_screen.h"
 #include "util/u_inlines.h"
 #include "util/u_debug.h"
@@ -116,7 +120,7 @@ typedef struct _modesettingRec
     /* Broken-out options. */
     OptionInfoPtr Options;
 
-    void (*blockHandler)(int, pointer, pointer, pointer);
+    void (*blockHandler)(BLOCKHANDLER_ARGS_DECL);
     struct pipe_fence_handle *fence[XORG_NR_FENCES];
 
     CreateScreenResourcesProcPtr createScreenResources;

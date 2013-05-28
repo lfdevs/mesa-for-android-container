@@ -37,7 +37,7 @@
 
 void svga_cleanup_tss_binding(struct svga_context *svga)
 {
-   int i;
+   unsigned i;
    unsigned count = MAX2( svga->curr.num_sampler_views,
                           svga->state.hw_draw.num_views );
 
@@ -45,7 +45,7 @@ void svga_cleanup_tss_binding(struct svga_context *svga)
       struct svga_hw_view_state *view = &svga->state.hw_draw.views[i];
 
       svga_sampler_view_reference(&view->v, NULL);
-      pipe_sampler_view_reference( &svga->curr.sampler_views[i], NULL );
+      pipe_sampler_view_release(&svga->pipe, &svga->curr.sampler_views[i]);
       pipe_resource_reference( &view->texture, NULL );
 
       view->dirty = 1;
@@ -87,8 +87,8 @@ update_tss_binding(struct svga_context *svga,
       /* get min max lod */
       if (sv) {
          min_lod = MAX2(0, (s->view_min_lod + sv->u.tex.first_level));
-         max_lod = MIN2(s->view_max_lod, sv->texture->last_level);
-         max_lod += sv->u.tex.first_level;
+         max_lod = MIN2(s->view_max_lod + sv->u.tex.first_level,
+                        sv->texture->last_level);
          texture = sv->texture;
       } else {
          min_lod = 0;

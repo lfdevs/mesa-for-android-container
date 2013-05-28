@@ -31,7 +31,6 @@
 #include "i915_screen.h"
 
 
-
 /***********************************************************************
  * Update framebuffer state
  */
@@ -39,6 +38,7 @@ static unsigned translate_format(enum pipe_format format)
 {
    switch (format) {
    case PIPE_FORMAT_B8G8R8A8_UNORM:
+   case PIPE_FORMAT_B8G8R8A8_SRGB:
    case PIPE_FORMAT_B8G8R8X8_UNORM:
    case PIPE_FORMAT_R8G8B8A8_UNORM:
    case PIPE_FORMAT_R8G8B8X8_UNORM:
@@ -151,8 +151,7 @@ static void update_framebuffer(struct i915_context *i915)
       i915->static_dirty |= I915_DST_RECT;
    }
 
-   /* we also send a new program to make sure the fixup for RGBA surfaces happens */
-   i915->hardware_dirty |= I915_HW_STATIC | I915_HW_PROGRAM;
+   i915->hardware_dirty |= I915_HW_STATIC;
 
    /* flush the cache in case we sample from the old renderbuffers */
    i915_set_flush_dirty(i915, I915_FLUSH_CACHE);
@@ -177,7 +176,7 @@ static const struct
    { PIPE_FORMAT_NONE,           0x00000000},
 };
 
-static uint need_target_fixup(struct pipe_surface* p, uint32_t *fixup)
+static uint32_t need_target_fixup(struct pipe_surface* p, uint32_t *fixup)
 {
    enum pipe_format f;
    /* if we don't have a surface bound yet, we don't need to fixup the shader */
@@ -188,7 +187,7 @@ static uint need_target_fixup(struct pipe_surface* p, uint32_t *fixup)
    for(int i=0; fixup_formats[i].format != PIPE_FORMAT_NONE; i++)
       if (fixup_formats[i].format == f) {
          *fixup = fixup_formats[i].hw_swizzle;
-         return 1;
+         return f;
       }
 
    *fixup = 0;
@@ -240,10 +239,11 @@ static void update_dst_buf_vars(struct i915_context *i915)
    }
 
    need_fixup = need_target_fixup(cbuf_surface, &fixup);
-   if (i915->current.need_target_fixup != need_fixup ||
+   if (i915->current.target_fixup_format != need_fixup ||
          i915->current.fixup_swizzle != fixup) {
-      i915->current.need_target_fixup = need_fixup;
+      i915->current.target_fixup_format = need_fixup;
       i915->current.fixup_swizzle = fixup;
+      /* we also send a new program to make sure the fixup for RGBA surfaces happens */
       i915->hardware_dirty |= I915_HW_PROGRAM;
    }
 }

@@ -34,6 +34,7 @@
 
 #include "main/imports.h"
 #include "main/context.h"
+#include "main/glformats.h"
 #include "main/texstore.h"
 #include "main/image.h"
 #include "main/macros.h"
@@ -118,7 +119,6 @@ st_mesa_format_to_pipe_format(gl_format mesaFormat)
       return PIPE_FORMAT_Z32_FLOAT_S8X24_UINT;
    case MESA_FORMAT_YCBCR:
       return PIPE_FORMAT_UYVY;
-#if FEATURE_texture_s3tc
    case MESA_FORMAT_RGB_DXT1:
       return PIPE_FORMAT_DXT1_RGB;
    case MESA_FORMAT_RGBA_DXT1:
@@ -127,7 +127,6 @@ st_mesa_format_to_pipe_format(gl_format mesaFormat)
       return PIPE_FORMAT_DXT3_RGBA;
    case MESA_FORMAT_RGBA_DXT5:
       return PIPE_FORMAT_DXT5_RGBA;
-#if FEATURE_EXT_texture_sRGB
    case MESA_FORMAT_SRGB_DXT1:
       return PIPE_FORMAT_DXT1_SRGB;
    case MESA_FORMAT_SRGBA_DXT1:
@@ -136,9 +135,6 @@ st_mesa_format_to_pipe_format(gl_format mesaFormat)
       return PIPE_FORMAT_DXT3_SRGBA;
    case MESA_FORMAT_SRGBA_DXT5:
       return PIPE_FORMAT_DXT5_SRGBA;
-#endif
-#endif
-#if FEATURE_EXT_texture_sRGB
    case MESA_FORMAT_SLA8:
       return PIPE_FORMAT_L8A8_SRGB;
    case MESA_FORMAT_SL8:
@@ -149,7 +145,6 @@ st_mesa_format_to_pipe_format(gl_format mesaFormat)
       return PIPE_FORMAT_A8B8G8R8_SRGB;
    case MESA_FORMAT_SARGB8:
       return PIPE_FORMAT_B8G8R8A8_SRGB;
-#endif
    case MESA_FORMAT_RGBA_FLOAT32:
       return PIPE_FORMAT_R32G32B32A32_FLOAT;
    case MESA_FORMAT_RGBA_FLOAT16:
@@ -448,7 +443,6 @@ st_pipe_format_to_mesa_format(enum pipe_format format)
    case PIPE_FORMAT_YUYV:
       return MESA_FORMAT_YCBCR_REV;
 
-#if FEATURE_texture_s3tc
    case PIPE_FORMAT_DXT1_RGB:
       return MESA_FORMAT_RGB_DXT1;
    case PIPE_FORMAT_DXT1_RGBA:
@@ -457,7 +451,6 @@ st_pipe_format_to_mesa_format(enum pipe_format format)
       return MESA_FORMAT_RGBA_DXT3;
    case PIPE_FORMAT_DXT5_RGBA:
       return MESA_FORMAT_RGBA_DXT5;
-#if FEATURE_EXT_texture_sRGB
    case PIPE_FORMAT_DXT1_SRGB:
       return MESA_FORMAT_SRGB_DXT1;
    case PIPE_FORMAT_DXT1_SRGBA:
@@ -466,10 +459,6 @@ st_pipe_format_to_mesa_format(enum pipe_format format)
       return MESA_FORMAT_SRGBA_DXT3;
    case PIPE_FORMAT_DXT5_SRGBA:
       return MESA_FORMAT_SRGBA_DXT5;
-#endif
-#endif
-
-#if FEATURE_EXT_texture_sRGB
    case PIPE_FORMAT_L8A8_SRGB:
       return MESA_FORMAT_SLA8;
    case PIPE_FORMAT_L8_SRGB:
@@ -480,7 +469,6 @@ st_pipe_format_to_mesa_format(enum pipe_format format)
       return MESA_FORMAT_SRGBA8;
    case PIPE_FORMAT_B8G8R8A8_SRGB:
       return MESA_FORMAT_SARGB8;
-#endif
    case PIPE_FORMAT_R32G32B32A32_FLOAT:
       return MESA_FORMAT_RGBA_FLOAT32;
    case PIPE_FORMAT_R16G16B16A16_FLOAT:
@@ -792,6 +780,10 @@ static const struct format_mapping format_map[] = {
       { GL_RGB5, GL_RGB4 },
       { PIPE_FORMAT_B5G6R5_UNORM, PIPE_FORMAT_B5G5R5A1_UNORM,
         DEFAULT_RGBA_FORMATS }
+   },
+   {
+      { GL_RGB565 },
+      { PIPE_FORMAT_B5G6R5_UNORM, DEFAULT_RGBA_FORMATS }
    },
 
    /* basic Alpha formats */
@@ -1406,18 +1398,25 @@ static const struct format_mapping format_map[] = {
 
 /**
  * Return first supported format from the given list.
+ * \param allow_dxt  indicates whether it's OK to return a DXT format.
  */
 static enum pipe_format
 find_supported_format(struct pipe_screen *screen,
                       const enum pipe_format formats[],
                       enum pipe_texture_target target,
                       unsigned sample_count,
-                      unsigned tex_usage)
+                      unsigned tex_usage,
+                      boolean allow_dxt)
 {
    uint i;
    for (i = 0; formats[i]; i++) {
       if (screen->is_format_supported(screen, formats[i], target,
                                       sample_count, tex_usage)) {
+         if (!allow_dxt && util_format_is_s3tc(formats[i])) {
+            /* we can't return a dxt format, continue searching */
+            continue;
+         }
+
          return formats[i];
       }
    }
@@ -1522,12 +1521,16 @@ find_exact_format(GLint internalFormat, GLenum format, GLenum type)
  * \param internalFormat  the user value passed to glTexImage2D
  * \param target  one of PIPE_TEXTURE_x
  * \param bindings  bitmask of PIPE_BIND_x flags.
+ * \param allow_dxt  indicates whether it's OK to return a DXT format.  This
+ *                   only matters when internalFormat names a generic or
+ *                   specific compressed format.  And that should only happen
+ *                   when we're getting called from gl[Copy]TexImage().
  */
 enum pipe_format
 st_choose_format(struct pipe_screen *screen, GLenum internalFormat,
                  GLenum format, GLenum type,
                  enum pipe_texture_target target, unsigned sample_count,
-                 unsigned bindings)
+                 unsigned bindings, boolean allow_dxt)
 {
    GET_CURRENT_CONTEXT(ctx); /* XXX this should be a function parameter */
    int i, j;
@@ -1555,7 +1558,8 @@ st_choose_format(struct pipe_screen *screen, GLenum internalFormat,
              * which is supported by the driver.
              */
             return find_supported_format(screen, mapping->pipeFormats,
-                                         target, sample_count, bindings);
+                                         target, sample_count, bindings,
+                                         allow_dxt);
          }
       }
    }
@@ -1577,8 +1581,8 @@ st_choose_renderbuffer_format(struct pipe_screen *screen,
       usage = PIPE_BIND_DEPTH_STENCIL;
    else
       usage = PIPE_BIND_RENDER_TARGET;
-   return st_choose_format(screen, internalFormat, GL_NONE, GL_NONE, PIPE_TEXTURE_2D,
-                           sample_count, usage);
+   return st_choose_format(screen, internalFormat, GL_NONE, GL_NONE,
+                           PIPE_TEXTURE_2D, sample_count, usage, FALSE);
 }
 
 
@@ -1605,12 +1609,13 @@ st_ChooseTextureFormat_renderable(struct gl_context *ctx, GLint internalFormat,
    }
 
    pFormat = st_choose_format(screen, internalFormat, format, type,
-                              PIPE_TEXTURE_2D, 0, bindings);
+                              PIPE_TEXTURE_2D, 0, bindings, ctx->Mesa_DXTn);
 
    if (pFormat == PIPE_FORMAT_NONE) {
       /* try choosing format again, this time without render target bindings */
       pFormat = st_choose_format(screen, internalFormat, format, type,
-                                 PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW);
+                                 PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW,
+                                 ctx->Mesa_DXTn);
    }
 
    if (pFormat == PIPE_FORMAT_NONE) {
@@ -1626,7 +1631,8 @@ st_ChooseTextureFormat_renderable(struct gl_context *ctx, GLint internalFormat,
  * Called via ctx->Driver.ChooseTextureFormat().
  */
 gl_format
-st_ChooseTextureFormat(struct gl_context *ctx, GLint internalFormat,
+st_ChooseTextureFormat(struct gl_context *ctx, GLenum target,
+                       GLint internalFormat,
                        GLenum format, GLenum type)
 {
    boolean want_renderable =
@@ -1635,28 +1641,53 @@ st_ChooseTextureFormat(struct gl_context *ctx, GLint internalFormat,
       internalFormat == GL_RGB8 || internalFormat == GL_RGBA8 ||
       internalFormat == GL_BGRA;
 
+   if (target == GL_TEXTURE_1D || target == GL_TEXTURE_1D_ARRAY) {
+      /* We don't do compression for these texture targets because of
+       * difficulty with sub-texture updates on non-block boundaries, etc.
+       * So change the internal format request to an uncompressed format.
+       */
+      internalFormat =
+        _mesa_generic_compressed_format_to_uncompressed_format(internalFormat);
+   }
+
    return st_ChooseTextureFormat_renderable(ctx, internalFormat,
 					    format, type, want_renderable);
 }
 
+
 /**
- * Test if a gallium format is equivalent to a GL format/type.
+ * Called via ctx->Driver.ChooseTextureFormat().
  */
-GLboolean
-st_equal_formats(enum pipe_format pFormat, GLenum format, GLenum type)
+size_t
+st_QuerySamplesForFormat(struct gl_context *ctx, GLenum internalFormat,
+                         int samples[16])
 {
-   switch (pFormat) {
-   case PIPE_FORMAT_A8B8G8R8_UNORM:
-      return format == GL_RGBA && type == GL_UNSIGNED_BYTE;
-   case PIPE_FORMAT_A8R8G8B8_UNORM:
-      return format == GL_BGRA && type == GL_UNSIGNED_BYTE;
-   case PIPE_FORMAT_B5G6R5_UNORM:
-      return format == GL_RGB && type == GL_UNSIGNED_SHORT_5_6_5;
-   /* XXX more combos... */
-   default:
-      return GL_FALSE;
+   struct pipe_screen *screen = st_context(ctx)->pipe->screen;
+   enum pipe_format format;
+   unsigned i, bind, num_sample_counts = 0;
+
+   if (_mesa_is_depth_or_stencil_format(internalFormat))
+      bind = PIPE_BIND_DEPTH_STENCIL;
+   else
+      bind = PIPE_BIND_RENDER_TARGET;
+
+   /* Set sample counts in descending order. */
+   for (i = 16; i > 1; i--) {
+      format = st_choose_format(screen, internalFormat, GL_NONE, GL_NONE,
+                                PIPE_TEXTURE_2D, i, bind, FALSE);
+
+      if (format != PIPE_FORMAT_NONE) {
+         samples[num_sample_counts++] = i;
+      }
    }
+
+   if (!num_sample_counts) {
+      samples[num_sample_counts++] = 1;
+   }
+
+   return num_sample_counts;
 }
+
 
 GLboolean
 st_sampler_compat_formats(enum pipe_format format1, enum pipe_format format2)
@@ -1702,44 +1733,92 @@ st_sampler_compat_formats(enum pipe_format format1, enum pipe_format format2)
  * Similarly for texture border colors.
  */
 void
-st_translate_color(const GLfloat colorIn[4], GLenum baseFormat,
-                   GLfloat colorOut[4])
+st_translate_color(union gl_color_union *colorIn,
+                   union pipe_color_union *colorOut,
+                   GLenum baseFormat, GLboolean is_integer)
 {
-   switch (baseFormat) {
-   case GL_RED:
-      colorOut[0] = colorIn[0];
-      colorOut[1] = 0.0F;
-      colorOut[2] = 0.0F;
-      colorOut[3] = 1.0F;
-      break;
-   case GL_RG:
-      colorOut[0] = colorIn[0];
-      colorOut[1] = colorIn[1];
-      colorOut[2] = 0.0F;
-      colorOut[3] = 1.0F;
-      break;
-   case GL_RGB:
-      colorOut[0] = colorIn[0];
-      colorOut[1] = colorIn[1];
-      colorOut[2] = colorIn[2];
-      colorOut[3] = 1.0F;
-      break;
-   case GL_ALPHA:
-      colorOut[0] = colorOut[1] = colorOut[2] = 0.0;
-      colorOut[3] = colorIn[3];
-      break;
-   case GL_LUMINANCE:
-      colorOut[0] = colorOut[1] = colorOut[2] = colorIn[0];
-      colorOut[3] = 1.0;
-      break;
-   case GL_LUMINANCE_ALPHA:
-      colorOut[0] = colorOut[1] = colorOut[2] = colorIn[0];
-      colorOut[3] = colorIn[3];
-      break;
-   case GL_INTENSITY:
-      colorOut[0] = colorOut[1] = colorOut[2] = colorOut[3] = colorIn[0];
-      break;
-   default:
-      COPY_4V(colorOut, colorIn);
+   if (is_integer) {
+      int *in = colorIn->i;
+      int *out = colorOut->i;
+
+      switch (baseFormat) {
+      case GL_RED:
+         out[0] = in[0];
+         out[1] = 0;
+         out[2] = 0;
+         out[3] = 1;
+         break;
+      case GL_RG:
+         out[0] = in[0];
+         out[1] = in[1];
+         out[2] = 0;
+         out[3] = 1;
+         break;
+      case GL_RGB:
+         out[0] = in[0];
+         out[1] = in[1];
+         out[2] = in[2];
+         out[3] = 1;
+         break;
+      case GL_ALPHA:
+         out[0] = out[1] = out[2] = 0;
+         out[3] = in[3];
+         break;
+      case GL_LUMINANCE:
+         out[0] = out[1] = out[2] = in[0];
+         out[3] = 1;
+         break;
+      case GL_LUMINANCE_ALPHA:
+         out[0] = out[1] = out[2] = in[0];
+         out[3] = in[3];
+         break;
+      case GL_INTENSITY:
+         out[0] = out[1] = out[2] = out[3] = in[0];
+         break;
+      default:
+         COPY_4V(out, in);
+      }
+   }
+   else {
+      float *in = colorIn->f;
+      float *out = colorOut->f;
+
+      switch (baseFormat) {
+      case GL_RED:
+         out[0] = in[0];
+         out[1] = 0.0F;
+         out[2] = 0.0F;
+         out[3] = 1.0F;
+         break;
+      case GL_RG:
+         out[0] = in[0];
+         out[1] = in[1];
+         out[2] = 0.0F;
+         out[3] = 1.0F;
+         break;
+      case GL_RGB:
+         out[0] = in[0];
+         out[1] = in[1];
+         out[2] = in[2];
+         out[3] = 1.0F;
+         break;
+      case GL_ALPHA:
+         out[0] = out[1] = out[2] = 0.0F;
+         out[3] = in[3];
+         break;
+      case GL_LUMINANCE:
+         out[0] = out[1] = out[2] = in[0];
+         out[3] = 1.0F;
+         break;
+      case GL_LUMINANCE_ALPHA:
+         out[0] = out[1] = out[2] = in[0];
+         out[3] = in[3];
+         break;
+      case GL_INTENSITY:
+         out[0] = out[1] = out[2] = out[3] = in[0];
+         break;
+      default:
+         COPY_4V(out, in);
+      }
    }
 }

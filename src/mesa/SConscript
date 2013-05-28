@@ -6,6 +6,7 @@ Import('*')
 import filecmp
 import os
 import subprocess
+from sys import executable as python_cmd
 
 env = env.Clone()
 
@@ -13,11 +14,12 @@ env.Append(CPPPATH = [
     '#/src/mapi',
     '#/src/glsl',
     '#/src/mesa',
+    Dir('../mapi'), # src/mapi build path
+    Dir('.'), # src/mesa build path
 ])
 
-env.Append(CPPDEFINES = [
-    'FEATURE_GL=1',
-])
+enabled_apis = []
+enabled_apis += ['GL']
 
 if env['platform'] == 'windows':
     env.Append(CPPDEFINES = [
@@ -30,6 +32,7 @@ if env['platform'] == 'windows':
 else:
     env.Append(CPPDEFINES = [
         'IN_DRI_DRIVER', # enable the remap table (for DRI drivers)
+        ('HAVE_DLOPEN', '1'),
     ])
 
 #
@@ -59,11 +62,12 @@ main_sources = [
     'main/debug.c',
     'main/depth.c',
     'main/dlist.c',
-    'main/dlopen.c',
     'main/drawpix.c',
     'main/drawtex.c',
     'main/enable.c',
     'main/enums.c',
+    'main/errors.c',
+    'main/es1_conversion.c',
     'main/eval.c',
     'main/execmem.c',
     'main/extensions.c',
@@ -72,13 +76,15 @@ main_sources = [
     'main/ff_fragment_shader.cpp',
     'main/ffvertex_prog.c',
     'main/fog.c',
+    'main/formatquery.c',
     'main/formats.c',
     'main/format_pack.c',
     'main/format_unpack.c',
     'main/framebuffer.c',
-    'main/get.c',
     'main/getstring.c',
+    'main/glformats.c',
     'main/hash.c',
+    'main/hash_table.c',
     'main/hint.c',
     'main/histogram.c',
     'main/image.c',
@@ -89,7 +95,6 @@ main_sources = [
     'main/mipmap.c',
     'main/mm.c',
     'main/multisample.c',
-    'main/nvprogram.c',
     'main/pack.c',
     'main/pbo.c',
     'main/pixel.c',
@@ -105,6 +110,7 @@ main_sources = [
     'main/renderbuffer.c',
     'main/samplerobj.c',
     'main/scissor.c',
+    'main/set.c',
     'main/shaderapi.c',
     'main/shaderobj.c',
     'main/shader_query.cpp',
@@ -113,6 +119,7 @@ main_sources = [
     'main/stencil.c',
     'main/syncobj.c',
     'main/texcompress.c',
+    'main/texcompress_cpal.c',
     'main/texcompress_rgtc.c',
     'main/texcompress_s3tc.c',
     'main/texcompress_fxt1.c',
@@ -123,7 +130,6 @@ main_sources = [
     'main/texgetimage.c',
     'main/teximage.c',
     'main/texobj.c',
-    'main/texpal.c',
     'main/texparam.c',
     'main/texstate.c',
     'main/texstorage.c',
@@ -136,6 +142,10 @@ main_sources = [
     'main/version.c',
     'main/viewport.c',
     'main/vtxfmt.c',
+]
+
+glget_sources = [
+    'main/get.c',
 ]
 
 math_sources = [
@@ -214,6 +224,7 @@ vbo_sources = [
     'vbo/vbo_exec_draw.c',
     'vbo/vbo_exec_eval.c',
     'vbo/vbo_noop.c',
+    'vbo/vbo_primitive_restart.c',
     'vbo/vbo_rebase.c',
     'vbo/vbo_split.c',
     'vbo/vbo_split_copy.c',
@@ -226,6 +237,7 @@ vbo_sources = [
 
 statetracker_sources = [
     'state_tracker/st_atom.c',
+    'state_tracker/st_atom_array.c',
     'state_tracker/st_atom_blend.c',
     'state_tracker/st_atom_clip.c',
     'state_tracker/st_atom_constbuf.c',
@@ -275,20 +287,15 @@ statetracker_sources = [
     'state_tracker/st_texture.c',
 ]
 
-env.Append(YACCFLAGS = '-d')
+env.Append(YACCFLAGS = '-d -p "_mesa_program_"')
 program_lex = env.CFile('program/lex.yy.c', 'program/program_lexer.l')
 program_parse = env.CFile('program/program_parse.tab.c',
                           'program/program_parse.y')
 
-# Make program/program_parse.tab.h reacheable from the include path
-env.Append(CPPPATH = [Dir('.').abspath])
-
 program_sources = [
     'program/arbprogparse.c',
-    'program/hash_table.c',
+    'program/prog_hash_table.c',
     'program/ir_to_mesa.cpp',
-    'program/nvfragparse.c',
-    'program/nvvertparse.c',
     'program/program.c',
     'program/program_parse_extra.c',
     'program/prog_cache.c',
@@ -316,6 +323,7 @@ common_driver_sources =	[
 
 mesa_sources = (
     main_sources +
+    glget_sources +
     math_sources +
     program_sources +
     vbo_sources +
@@ -326,65 +334,28 @@ mesa_sources = (
     statetracker_sources
 )
 
+GLAPI = '#src/mapi/glapi/'
+
 if env['gles']:
-    from sys import executable as python_cmd
 
-    env.Append(CPPDEFINES = ['FEATURE_ES1=1', 'FEATURE_ES2=1'])
+    enabled_apis += ['ES1', 'ES2']
 
-    # generate GLES sources
-    gles_sources = []
-    gles_sources += env.CodeGenerate(
-        target = 'main/api_exec_es1.c',
-        script = 'main/es_generator.py',
-        source = 'main/APIspec.xml',
-        command = python_cmd + ' $SCRIPT -S $SOURCE -V GLES1.1 > $TARGET'
-    )
-    gles_sources += env.CodeGenerate(
-        target = 'main/api_exec_es2.c',
-        script = 'main/es_generator.py',
-        source = 'main/APIspec.xml',
-        command = python_cmd + ' $SCRIPT -S $SOURCE -V GLES2.0 > $TARGET'
-    )
+env.Append(CPPDEFINES = ["FEATURE_%s=1" % api for api in enabled_apis])
 
-    # generate GLES headers
-    GLAPI = '#src/mapi/glapi/'
-    gles_headers = []
-    gles_headers += env.CodeGenerate(
-        target = 'main/api_exec_es1_dispatch.h',
-        script = GLAPI + 'gen/gl_table.py',
-        source = GLAPI + 'gen/gl_and_es_API.xml',
-        command = python_cmd + ' $SCRIPT -c es1 -m remap_table -f $SOURCE > $TARGET',
-    )
-    gles_headers += env.CodeGenerate(
-        target = 'main/api_exec_es1_remap_helper.h',
-        script = GLAPI + 'gen/remap_helper.py',
-        source = GLAPI + 'gen/gl_and_es_API.xml',
-        command = python_cmd + ' $SCRIPT -c es1 -f $SOURCE > $TARGET',
-    )
-    gles_headers += env.CodeGenerate(
-        target = 'main/api_exec_es2_dispatch.h',
-        script = GLAPI + 'gen/gl_table.py',
-        source = GLAPI + 'gen/gl_and_es_API.xml',
-        command = python_cmd + ' $SCRIPT -c es2 -m remap_table -f $SOURCE > $TARGET',
-    )
-    gles_headers += env.CodeGenerate(
-        target = 'main/api_exec_es2_remap_helper.h',
-        script = GLAPI + 'gen/remap_helper.py',
-        source = GLAPI + 'gen/gl_and_es_API.xml',
-        command = python_cmd + ' $SCRIPT -c es2 -f $SOURCE > $TARGET',
-    )
+get_hash_gen_opts = ' '.join(["-a %s" % api for api in enabled_apis])
 
-    env.Depends(gles_sources, gles_headers)
-
-    # gles_sources #include gles_headers with full path
-    env.Append(CPPPATH = [gles_headers[0].dir.up().up()])
-
-    mesa_sources += gles_sources
+get_hash_header = env.CodeGenerate(
+      target = 'main/get_hash.h',
+      script = 'main/get_hash_generator.py',
+      source = GLAPI + 'gen/gl_and_es_API.xml',
+      command = python_cmd + ' $SCRIPT ' + get_hash_gen_opts +
+                ' -f $SOURCE > $TARGET'
+)
 
 #
 # Assembly sources
 #
-if env['gcc'] and env['platform'] != 'windows':
+if env['gcc'] and env['platform'] not in ('cygwin', 'darwin', 'windows', 'haiku'):
     if env['machine'] == 'x86':
         env.Append(CPPDEFINES = [
             'USE_X86_ASM',
@@ -423,18 +394,10 @@ if env['gcc'] and env['platform'] != 'windows':
             'x86-64/x86-64.c',
             'x86-64/xform4.S',
         ]
-    elif env['machine'] == 'ppc':
-        env.Append(CPPDEFINES = [
-            'USE_PPC_ASM',
-            'USE_VMX_ASM',
-        ])
-        mesa_sources += [
-            'ppc/common_ppc.c',
-        ]
     elif env['machine'] == 'sparc':
         mesa_sources += [
             'sparc/sparc.c',
-            'sparc/clip.S',
+            'sparc/sparc_clip.S',
             'sparc/norm.S',
             'sparc/xform.S',
         ]
@@ -458,6 +421,21 @@ if env['gcc'] and env['platform'] != 'windows':
         env.Append(CPPPATH = [matypes[0].dir])
 
 
+# The enums.c file is generated from the GL/ES API.xml file
+env.CodeGenerate(
+    target = 'main/enums.c',
+    script = GLAPI + 'gen/gl_enums.py',
+    source = GLAPI + 'gen/gl_and_es_API.xml',
+    command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET'
+    )
+
+# The api_exec.c file is generated from the GL/ES API.xml file
+env.CodeGenerate(
+    target = 'main/api_exec.c',
+    script = GLAPI + 'gen/gl_genexec.py',
+    source = GLAPI + 'gen/gl_and_es_API.xml',
+    command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET'
+    )
 
 
 def write_git_sha1_h_file(filename):

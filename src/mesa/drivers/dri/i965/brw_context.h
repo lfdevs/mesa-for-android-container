@@ -36,7 +36,11 @@
 #include "intel_context.h"
 #include "brw_structs.h"
 #include "main/imports.h"
+#include "main/macros.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Glossary:
  *
@@ -190,38 +194,75 @@ struct brw_state_flags {
    GLuint cache;
 };
 
+#define AUB_TRACE_TYPE_MASK		0x0000ff00
+#define AUB_TRACE_TYPE_NOTYPE		(0 << 8)
+#define AUB_TRACE_TYPE_BATCH		(1 << 8)
+#define AUB_TRACE_TYPE_VERTEX_BUFFER	(5 << 8)
+#define AUB_TRACE_TYPE_2D_MAP		(6 << 8)
+#define AUB_TRACE_TYPE_CUBE_MAP		(7 << 8)
+#define AUB_TRACE_TYPE_VOLUME_MAP	(9 << 8)
+#define AUB_TRACE_TYPE_1D_MAP		(10 << 8)
+#define AUB_TRACE_TYPE_CONSTANT_BUFFER	(11 << 8)
+#define AUB_TRACE_TYPE_CONSTANT_URB	(12 << 8)
+#define AUB_TRACE_TYPE_INDEX_BUFFER	(13 << 8)
+#define AUB_TRACE_TYPE_GENERAL		(14 << 8)
+#define AUB_TRACE_TYPE_SURFACE		(15 << 8)
+
+/**
+ * state_struct_type enum values are encoded with the top 16 bits representing
+ * the type to be delivered to the .aub file, and the bottom 16 bits
+ * representing the subtype.  This macro performs the encoding.
+ */
+#define ENCODE_SS_TYPE(type, subtype) (((type) << 16) | (subtype))
+
 enum state_struct_type {
-   AUB_TRACE_VS_STATE =			1,
-   AUB_TRACE_GS_STATE =			2,
-   AUB_TRACE_CLIP_STATE =		3,
-   AUB_TRACE_SF_STATE =			4,
-   AUB_TRACE_WM_STATE =			5,
-   AUB_TRACE_CC_STATE =			6,
-   AUB_TRACE_CLIP_VP_STATE =		7,
-   AUB_TRACE_SF_VP_STATE =		8,
-   AUB_TRACE_CC_VP_STATE =		0x9,
-   AUB_TRACE_SAMPLER_STATE =		0xa,
-   AUB_TRACE_KERNEL_INSTRUCTIONS =	0xb,
-   AUB_TRACE_SCRATCH_SPACE =		0xc,
-   AUB_TRACE_SAMPLER_DEFAULT_COLOR =    0xd,
+   AUB_TRACE_VS_STATE =			ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 1),
+   AUB_TRACE_GS_STATE =			ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 2),
+   AUB_TRACE_CLIP_STATE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 3),
+   AUB_TRACE_SF_STATE =			ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 4),
+   AUB_TRACE_WM_STATE =			ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 5),
+   AUB_TRACE_CC_STATE =			ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 6),
+   AUB_TRACE_CLIP_VP_STATE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 7),
+   AUB_TRACE_SF_VP_STATE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 8),
+   AUB_TRACE_CC_VP_STATE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 0x9),
+   AUB_TRACE_SAMPLER_STATE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 0xa),
+   AUB_TRACE_KERNEL_INSTRUCTIONS =	ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 0xb),
+   AUB_TRACE_SCRATCH_SPACE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 0xc),
+   AUB_TRACE_SAMPLER_DEFAULT_COLOR =    ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 0xd),
 
-   AUB_TRACE_SCISSOR_STATE =		0x15,
-   AUB_TRACE_BLEND_STATE =		0x16,
-   AUB_TRACE_DEPTH_STENCIL_STATE =	0x17,
+   AUB_TRACE_SCISSOR_STATE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 0x15),
+   AUB_TRACE_BLEND_STATE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 0x16),
+   AUB_TRACE_DEPTH_STENCIL_STATE =	ENCODE_SS_TYPE(AUB_TRACE_TYPE_GENERAL, 0x17),
 
-   /* Not written to .aub files the same way the structures above are. */
-   AUB_TRACE_NO_TYPE =			0x100,
-   AUB_TRACE_BINDING_TABLE =		0x101,
-   AUB_TRACE_SURFACE_STATE =		0x102,
-   AUB_TRACE_VS_CONSTANTS =		0x103,
-   AUB_TRACE_WM_CONSTANTS =		0x104,
+   AUB_TRACE_VERTEX_BUFFER =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_VERTEX_BUFFER, 0),
+   AUB_TRACE_BINDING_TABLE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_SURFACE, 0x100),
+   AUB_TRACE_SURFACE_STATE =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_SURFACE, 0x200),
+   AUB_TRACE_VS_CONSTANTS =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_CONSTANT_BUFFER, 0),
+   AUB_TRACE_WM_CONSTANTS =		ENCODE_SS_TYPE(AUB_TRACE_TYPE_CONSTANT_BUFFER, 1),
 };
+
+/**
+ * Decode a state_struct_type value to determine the type that should be
+ * stored in the .aub file.
+ */
+static inline uint32_t AUB_TRACE_TYPE(enum state_struct_type ss_type)
+{
+   return (ss_type & 0xFFFF0000) >> 16;
+}
+
+/**
+ * Decode a state_struct_type value to determine the subtype that should be
+ * stored in the .aub file.
+ */
+static inline uint32_t AUB_TRACE_SUBTYPE(enum state_struct_type ss_type)
+{
+   return ss_type & 0xFFFF;
+}
 
 /** Subclass of Mesa vertex program */
 struct brw_vertex_program {
    struct gl_vertex_program program;
    GLuint id;
-   bool use_const_buffer;
 };
 
 
@@ -234,26 +275,19 @@ struct brw_fragment_program {
 struct brw_shader {
    struct gl_shader base;
 
+   bool compiled_once;
+
    /** Shader IR transformed for native compile, at link time. */
    struct exec_list *ir;
-};
-
-struct brw_shader_program {
-   struct gl_shader_program base;
-};
-
-enum param_conversion {
-   PARAM_NO_CONVERT,
-   PARAM_CONVERT_F2I,
-   PARAM_CONVERT_F2U,
-   PARAM_CONVERT_F2B,
-   PARAM_CONVERT_ZERO,
 };
 
 /* Data about a particular attempt to compile a program.  Note that
  * there can be many of these, each in a different GL state
  * corresponding to a different brw_wm_prog_key struct, with different
- * compiled programs:
+ * compiled programs.
+ *
+ * Note: brw_wm_prog_data_compare() must be updated when adding fields to this
+ * struct!
  */
 struct brw_wm_prog_data {
    GLuint curb_read_length;
@@ -268,16 +302,24 @@ struct brw_wm_prog_data {
    GLuint nr_params;       /**< number of float params/constants */
    GLuint nr_pull_params;
    bool error;
+   bool dual_src_blend;
    int dispatch_width;
    uint32_t prog_offset_16;
 
-   /* Pointer to tracked values (only valid once
-    * _mesa_load_state_parameters has been called at runtime).
+   /**
+    * Mask of which interpolation modes are required by the fragment shader.
+    * Used in hardware setup on gen6+.
     */
-   const float *param[MAX_UNIFORMS * 4]; /* should be: BRW_MAX_CURBE */
-   enum param_conversion param_convert[MAX_UNIFORMS * 4];
-   const float *pull_param[MAX_UNIFORMS * 4];
-   enum param_conversion pull_param_convert[MAX_UNIFORMS * 4];
+   uint32_t barycentric_interp_modes;
+
+   /* Pointers to tracked values (only valid once
+    * _mesa_load_state_parameters has been called at runtime).
+    *
+    * These must be the last fields of the struct (see
+    * brw_wm_prog_data_compare()).
+    */
+   const float **param;
+   const float **pull_param;
 };
 
 /**
@@ -386,7 +428,12 @@ struct brw_gs_prog_data {
    unsigned svbi_postincrement_value;
 };
 
+/* Note: brw_vs_prog_data_compare() must be updated when adding fields to this
+ * struct!
+ */
 struct brw_vs_prog_data {
+   struct brw_vue_map vue_map;
+
    GLuint curb_read_length;
    GLuint urb_read_length;
    GLuint total_grf;
@@ -401,20 +448,15 @@ struct brw_vs_prog_data {
     */
    GLuint urb_entry_size;
 
-   const float *param[MAX_UNIFORMS * 4]; /* should be: BRW_MAX_CURBE */
-   const float *pull_param[MAX_UNIFORMS * 4];
-
-   bool uses_new_param_layout;
    bool uses_vertexid;
+   bool userclip;
+
+   int num_surfaces;
+
+   /* These pointers must appear last.  See brw_vs_prog_data_compare(). */
+   const float **param;
+   const float **pull_param;
 };
-
-
-/* Size == 0 if output either not written, or always [0,0,0,1]
- */
-struct brw_vs_ouput_sizes {
-   GLubyte output_size[VERT_RESULT_MAX];
-};
-
 
 /** Number of texture sampler units */
 #define BRW_MAX_TEX_UNIT 16
@@ -450,6 +492,9 @@ struct brw_vs_ouput_sizes {
 /** Maximum number of actual buffers used for stream output */
 #define BRW_MAX_SOL_BUFFERS 4
 
+#define BRW_MAX_WM_UBOS              12
+#define BRW_MAX_VS_UBOS              12
+
 /**
  * Helpers to create Surface Binding Table indexes for draw buffers,
  * textures, and constant buffers.
@@ -461,44 +506,72 @@ struct brw_vs_ouput_sizes {
  * For example, a shader might ask to sample from "surface 7."  In this case,
  * bind[7] would contain a pointer to a texture.
  *
- * Although the hardware supports separate binding tables per pipeline stage
- * (VS, HS, DS, GS, PS), we currently share a single binding table for all of
- * them.  This is purely for convenience.
- *
- * Currently our binding tables are (arbitrarily) programmed as follows:
+ * Currently, our WM binding tables are (arbitrarily) programmed as follows:
  *
  *    +-------------------------------+
- *    |   0 | Draw buffer 0           | .
- *    |   . |     .                   |  \
- *    |   : |     :                   |   > Only relevant to the WM.
- *    |   7 | Draw buffer 7           |  /
- *    |-----|-------------------------| `
- *    |   8 | VS Pull Constant Buffer |
- *    |   9 | WM Pull Constant Buffer |
+ *    |   0 | Draw buffer 0           |
+ *    |   . |     .                   |
+ *    |   : |     :                   |
+ *    |   7 | Draw buffer 7           |
  *    |-----|-------------------------|
- *    |  10 | Texture 0               |
+ *    |   8 | WM Pull Constant Buffer |
+ *    |-----|-------------------------|
+ *    |   9 | Texture 0               |
  *    |   . |     .                   |
  *    |   : |     :                   |
- *    |  25 | Texture 15              |
- *    +-----|-------------------------+
- *    |  26 | SOL Binding 0           |
+ *    |  24 | Texture 15              |
+ *    |-----|-------------------------|
+ *    |  25 | UBO 0                   |
  *    |   . |     .                   |
  *    |   : |     :                   |
- *    |  89 | SOL Binding 63          |
+ *    |  36 | UBO 11                  |
  *    +-------------------------------+
+ *
+ * Our VS binding tables are programmed as follows:
+ *
+ *    +-----+-------------------------+
+ *    |   0 | VS Pull Constant Buffer |
+ *    +-----+-------------------------+
+ *    |   1 | Texture 0               |
+ *    |   . |     .                   |
+ *    |   : |     :                   |
+ *    |  16 | Texture 15              |
+ *    +-----+-------------------------+
+ *    |  17 | UBO 0                   |
+ *    |   . |     .                   |
+ *    |   : |     :                   |
+ *    |  28 | UBO 11                  |
+ *    +-------------------------------+
+ *
+ * Our (gen6) GS binding tables are programmed as follows:
+ *
+ *    +-----+-------------------------+
+ *    |   0 | SOL Binding 0           |
+ *    |   . |     .                   |
+ *    |   : |     :                   |
+ *    |  63 | SOL Binding 63          |
+ *    +-----+-------------------------+
  *
  * Note that nothing actually uses the SURF_INDEX_DRAW macro, so it has to be
  * the identity function or things will break.  We do want to keep draw buffers
  * first so we can use headerless render target writes for RT 0.
  */
 #define SURF_INDEX_DRAW(d)           (d)
-#define SURF_INDEX_VERT_CONST_BUFFER (BRW_MAX_DRAW_BUFFERS + 0)
 #define SURF_INDEX_FRAG_CONST_BUFFER (BRW_MAX_DRAW_BUFFERS + 1)
 #define SURF_INDEX_TEXTURE(t)        (BRW_MAX_DRAW_BUFFERS + 2 + (t))
-#define SURF_INDEX_SOL_BINDING(t)    (SURF_INDEX_TEXTURE(BRW_MAX_TEX_UNIT) + (t))
-
+#define SURF_INDEX_WM_UBO(u)         (SURF_INDEX_TEXTURE(BRW_MAX_TEX_UNIT) + u)
+#define SURF_INDEX_WM_SHADER_TIME    (SURF_INDEX_WM_UBO(12))
 /** Maximum size of the binding table. */
-#define BRW_MAX_SURFACES SURF_INDEX_SOL_BINDING(BRW_MAX_SOL_BINDINGS)
+#define BRW_MAX_WM_SURFACES          (SURF_INDEX_WM_SHADER_TIME + 1)
+
+#define SURF_INDEX_VERT_CONST_BUFFER (0)
+#define SURF_INDEX_VS_TEXTURE(t)     (SURF_INDEX_VERT_CONST_BUFFER + 1 + (t))
+#define SURF_INDEX_VS_UBO(u)         (SURF_INDEX_VS_TEXTURE(BRW_MAX_TEX_UNIT) + u)
+#define SURF_INDEX_VS_SHADER_TIME    (SURF_INDEX_VS_UBO(12))
+#define BRW_MAX_VS_SURFACES          (SURF_INDEX_VS_SHADER_TIME + 1)
+
+#define SURF_INDEX_SOL_BINDING(t)    ((t))
+#define BRW_MAX_GS_SURFACES          SURF_INDEX_SOL_BINDING(BRW_MAX_SOL_BINDINGS)
 
 enum brw_cache_id {
    BRW_BLEND_STATE,
@@ -507,6 +580,7 @@ enum brw_cache_id {
    BRW_CC_VP,
    BRW_CC_UNIT,
    BRW_WM_PROG,
+   BRW_BLORP_BLIT_PROG,
    BRW_SAMPLER,
    BRW_WM_UNIT,
    BRW_SF_PROG,
@@ -543,6 +617,9 @@ struct brw_cache_item {
 };   
 
 
+typedef bool (*cache_aux_compare_func)(const void *a, const void *b,
+                                       int aux_size, const void *key);
+typedef void (*cache_aux_free_func)(const void *aux);
 
 struct brw_cache {
    struct brw_context *brw;
@@ -553,6 +630,15 @@ struct brw_cache {
 
    uint32_t next_offset;
    bool bo_used_by_gpu;
+
+   /**
+    * Optional functions used in determining whether the prog_data for a new
+    * cache item matches an existing cache item (in case there's relevant data
+    * outside of the prog_data).  If NULL, a plain memcmp is done.
+    */
+   cache_aux_compare_func aux_compare[BRW_MAX_CACHE];
+   /** Optional functions for freeing other pointers attached to a prog_data. */
+   cache_aux_free_func aux_free[BRW_MAX_CACHE];
 };
 
 
@@ -565,6 +651,19 @@ struct brw_cache {
 struct brw_tracked_state {
    struct brw_state_flags dirty;
    void (*emit)( struct brw_context *brw );
+};
+
+enum shader_time_shader_type {
+   ST_NONE,
+   ST_VS,
+   ST_VS_WRITTEN,
+   ST_VS_RESET,
+   ST_FS8,
+   ST_FS8_WRITTEN,
+   ST_FS8_RESET,
+   ST_FS16,
+   ST_FS16_WRITTEN,
+   ST_FS16_RESET,
 };
 
 /* Flags for brw->state.cache.
@@ -607,6 +706,7 @@ struct brw_vertex_buffer {
    uint32_t offset;
    /** Byte stride between elements in the uploaded array */
    GLuint stride;
+   GLuint step_rate;
 };
 struct brw_vertex_element {
    const struct gl_client_array *glarray;
@@ -615,8 +715,6 @@ struct brw_vertex_element {
 
    /** The corresponding Mesa vertex attribute */
    gl_vert_attrib attrib;
-   /** Size of a complete element */
-   GLuint element_size;
    /** Offset of the first element within the buffer object */
    unsigned int offset;
 };
@@ -655,6 +753,15 @@ struct brw_context
    bool has_pln;
    bool precompile;
 
+   /**
+    * Some versions of Gen hardware don't do centroid interpolation correctly
+    * on unlit pixels, causing incorrect values for derivatives near triangle
+    * edges.  Enabling this flag causes the fragment shader to use
+    * non-centroid interpolation for unlit pixels, at the expense of two extra
+    * fragment shader instructions.
+    */
+   bool needs_unlit_centroid_workaround;
+
    struct {
       struct brw_state_flags dirty;
    } state;
@@ -665,15 +772,10 @@ struct brw_context
    struct {
       struct brw_vertex_element inputs[VERT_ATTRIB_MAX];
       struct brw_vertex_buffer buffers[VERT_ATTRIB_MAX];
-      struct {
-	      uint32_t handle;
-	      uint32_t offset;
-	      uint32_t stride;
-      } current_buffers[VERT_ATTRIB_MAX];
 
       struct brw_vertex_element *enabled[VERT_ATTRIB_MAX];
       GLuint nr_enabled;
-      GLuint nr_buffers, nr_current_buffers;
+      GLuint nr_buffers;
 
       /* Summary of size and varying of active arrays, so we can check
        * for changes to this state:
@@ -797,12 +899,6 @@ struct brw_context
       GLuint last_bufsz;
    } curbe;
 
-   struct {
-      /** Binding table of pointers to surf_bo entries */
-      uint32_t bo_offset;
-      uint32_t surf_offset[BRW_MAX_SURFACES];
-   } bind;
-
    /** SAMPLER_STATE count and offset */
    struct {
       GLuint count;
@@ -838,6 +934,9 @@ struct brw_context
       */
       uint8_t *ra_reg_to_grf;
       /** @} */
+
+      uint32_t bind_bo_offset;
+      uint32_t surf_offset[BRW_MAX_VS_SURFACES];
    } vs;
 
    struct {
@@ -847,6 +946,9 @@ struct brw_context
       /** Offset in the program cache to the CLIP program pre-gen6 */
       uint32_t prog_offset;
       uint32_t state_offset;
+
+      uint32_t bind_bo_offset;
+      uint32_t surf_offset[BRW_MAX_GS_SURFACES];
    } gs;
 
    struct {
@@ -876,7 +978,6 @@ struct brw_context
 
    struct {
       struct brw_wm_prog_data *prog_data;
-      struct brw_wm_compile *compile_data;
 
       /** Input sizes, calculated from active vertex program.
        * One bit per fragment program input attribute.
@@ -891,6 +992,12 @@ struct brw_context
 
       drm_intel_bo *scratch_bo;
 
+      /**
+       * Buffer object used in place of multisampled null render targets on
+       * Gen6.  See brw_update_null_renderbuffer_surface().
+       */
+      drm_intel_bo *multisampled_null_render_target_bo;
+
       /** Offset in the program cache to the WM program */
       uint32_t prog_offset;
 
@@ -904,28 +1011,30 @@ struct brw_context
        */
       uint32_t push_const_offset;
 
-      /** @{ register allocator */
+      /** Binding table of pointers to surf_bo entries */
+      uint32_t bind_bo_offset;
+      uint32_t surf_offset[BRW_MAX_WM_SURFACES];
 
-      struct ra_regs *regs;
+      struct {
+         struct ra_regs *regs;
 
-      /** Array of the ra classes for the unaligned contiguous
-       * register block sizes used.
-       */
-      int *classes;
+         /** Array of the ra classes for the unaligned contiguous
+          * register block sizes used.
+          */
+         int *classes;
 
-      /**
-       * Mapping for register-allocated objects in *regs to the first
-       * GRF for that object.
-      */
-      uint8_t *ra_reg_to_grf;
+         /**
+          * Mapping for register-allocated objects in *regs to the first
+          * GRF for that object.
+          */
+         uint8_t *ra_reg_to_grf;
 
-      /**
-       * ra class for the aligned pairs we use for PLN, which doesn't
-       * appear in *classes.
-       */
-      int aligned_pairs_class;
-
-      /** @} */
+         /**
+          * ra class for the aligned pairs we use for PLN, which doesn't
+          * appear in *classes.
+          */
+         int aligned_pairs_class;
+      } reg_sets[2];
    } wm;
 
 
@@ -940,11 +1049,8 @@ struct brw_context
       struct brw_query_object *obj;
       drm_intel_bo *bo;
       int index;
-      bool active;
+      bool begin_emitted;
    } query;
-   /* Used to give every program string a unique id
-    */
-   GLuint program_id;
 
    int num_atoms;
    const struct brw_tracked_state **atoms;
@@ -957,44 +1063,53 @@ struct brw_context
    } *state_batch_list;
    int state_batch_count;
 
-   /**
-    * \brief State needed to execute HiZ ops.
-    *
-    * \see gen6_hiz_init()
-    * \see gen6_hiz_exec()
-    */
-   struct brw_hiz_state {
-      /** \brief VBO for rectangle primitive.
-       *
-       * Rather than using glGenBuffers(), we allocate the VBO directly
-       * through drm.
-       */
-      drm_intel_bo *vertex_bo;
-   } hiz;
-
    struct brw_sol_state {
       uint32_t svbi_0_starting_index;
       uint32_t svbi_0_max_index;
       uint32_t offset_0_batch_start;
       uint32_t primitives_generated;
       uint32_t primitives_written;
+      bool counting_primitives_generated;
+      bool counting_primitives_written;
    } sol;
 
    uint32_t render_target_format[MESA_FORMAT_COUNT];
    bool format_supported_as_render_target[MESA_FORMAT_COUNT];
+
+   /* PrimitiveRestart */
+   struct {
+      bool in_progress;
+      bool enable_cut_index;
+   } prim_restart;
+
+   /** Computed depth/stencil/hiz state from the current attached
+    * renderbuffers, valid only during the drawing state upload loop after
+    * brw_workaround_depthstencil_alignment().
+    */
+   struct {
+      struct intel_mipmap_tree *depth_mt;
+      struct intel_mipmap_tree *stencil_mt;
+      struct intel_mipmap_tree *hiz_mt;
+
+      /* Inter-tile (page-aligned) byte offsets. */
+      uint32_t depth_offset, hiz_offset, stencil_offset;
+      /* Intra-tile x,y offsets for drawing to depth/stencil/hiz */
+      uint32_t tile_x, tile_y;
+   } depthstencil;
+
+   uint32_t num_instances;
+   int basevertex;
+
+   struct {
+      drm_intel_bo *bo;
+      struct gl_shader_program **programs;
+      enum shader_time_shader_type *types;
+      uint64_t *cumulative;
+      int num_entries;
+      int max_entries;
+      double report_time;
+   } shader_time;
 };
-
-
-
-#define BRW_PACKCOLOR8888(r,g,b,a)  ((r<<24) | (g<<16) | (b<<8) | a)
-
-struct brw_instruction_info {
-    char    *name;
-    int	    nsrc;
-    int	    ndst;
-    bool is_arith;
-};
-extern const struct brw_instruction_info brw_opcodes[128];
 
 /*======================================================================
  * brw_vtbl.c
@@ -1007,13 +1122,25 @@ void brwInitVtbl( struct brw_context *brw );
 bool brwCreateContext(int api,
 		      const struct gl_config *mesaVis,
 		      __DRIcontext *driContextPriv,
+                      unsigned major_version,
+                      unsigned minor_version,
+                      uint32_t flags,
+                      unsigned *error,
 		      void *sharedContextPrivate);
+
+/*======================================================================
+ * brw_misc_state.c
+ */
+void brw_get_depthstencil_tile_masks(struct intel_mipmap_tree *depth_mt,
+                                     struct intel_mipmap_tree *stencil_mt,
+                                     uint32_t *out_tile_mask_x,
+                                     uint32_t *out_tile_mask_y);
+void brw_workaround_depthstencil_alignment(struct brw_context *brw);
 
 /*======================================================================
  * brw_queryobj.c
  */
 void brw_init_queryobj_functions(struct dd_function_table *functions);
-void brw_prepare_query_begin(struct brw_context *brw);
 void brw_emit_query_begin(struct brw_context *brw);
 void brw_emit_query_end(struct brw_context *brw);
 
@@ -1021,6 +1148,7 @@ void brw_emit_query_end(struct brw_context *brw);
  * brw_state_dump.c
  */
 void brw_debug_batch(struct intel_context *intel);
+void brw_annotate_aub(struct intel_context *intel);
 
 /*======================================================================
  * brw_tex.c
@@ -1036,7 +1164,9 @@ void brwInitFragProgFuncs( struct dd_function_table *functions );
 int brw_get_scratch_size(int size);
 void brw_get_scratch_bo(struct intel_context *intel,
 			drm_intel_bo **scratch_bo, int size);
-
+void brw_init_shader_time(struct brw_context *brw);
+void brw_collect_and_report_shader_time(struct brw_context *brw);
+void brw_destroy_shader_time(struct brw_context *brw);
 
 /* brw_urb.c
  */
@@ -1046,20 +1176,15 @@ void brw_upload_urb_fence(struct brw_context *brw);
  */
 void brw_upload_cs_urb_state(struct brw_context *brw);
 
+/* brw_fs_reg_allocate.cpp
+ */
+void brw_fs_alloc_reg_sets(struct brw_context *brw);
+
 /* brw_disasm.c */
 int brw_disasm (FILE *file, struct brw_instruction *inst, int gen);
 
 /* brw_vs.c */
-void brw_compute_vue_map(struct brw_vue_map *vue_map,
-                         const struct intel_context *intel,
-                         bool userclip_active,
-                         GLbitfield64 outputs_written);
 gl_clip_plane *brw_select_clip_planes(struct gl_context *ctx);
-
-/* brw_wm.c */
-unsigned
-brw_compute_barycentric_interp_modes(bool shade_model_flat,
-                                     const struct gl_fragment_program *fprog);
 
 /* brw_wm_surface_state.c */
 void brw_init_surface_formats(struct brw_context *brw);
@@ -1068,10 +1193,9 @@ brw_update_sol_surface(struct brw_context *brw,
                        struct gl_buffer_object *buffer_obj,
                        uint32_t *out_offset, unsigned num_vector_components,
                        unsigned stride_dwords, unsigned offset_dwords);
-
-/* gen6_clip_state.c */
-bool
-brw_fprog_uses_noperspective(const struct gl_fragment_program *fprog);
+void brw_upload_ubo_surfaces(struct brw_context *brw,
+			     struct gl_shader *shader,
+			     uint32_t *surf_offsets);
 
 /* gen6_sol.c */
 void
@@ -1085,6 +1209,38 @@ brw_end_transform_feedback(struct gl_context *ctx,
 void
 gen7_end_transform_feedback(struct gl_context *ctx,
 			    struct gl_transform_feedback_object *obj);
+
+/* brw_blorp_blit.cpp */
+GLbitfield
+brw_blorp_framebuffer(struct intel_context *intel,
+                      GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
+                      GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
+                      GLbitfield mask, GLenum filter);
+
+bool
+brw_blorp_copytexsubimage(struct intel_context *intel,
+                          struct gl_renderbuffer *src_rb,
+                          struct gl_texture_image *dst_image,
+                          int srcX0, int srcY0,
+                          int dstX0, int dstY0,
+                          int width, int height);
+
+/* gen6_multisample_state.c */
+void
+gen6_emit_3dstate_multisample(struct brw_context *brw,
+                              unsigned num_samples);
+void
+gen6_emit_3dstate_sample_mask(struct brw_context *brw,
+                              unsigned num_samples, float coverage,
+                              bool coverage_invert);
+
+/* gen7_urb.c */
+void
+gen7_allocate_push_constants(struct brw_context *brw);
+
+void
+gen7_emit_urb_state(struct brw_context *brw, GLuint nr_vs_entries,
+                    GLuint vs_size, GLuint vs_start);
 
 
 
@@ -1122,37 +1278,6 @@ brw_fragment_program_const(const struct gl_fragment_program *p)
    return (const struct brw_fragment_program *) p;
 }
 
-static inline
-float convert_param(enum param_conversion conversion, const float *param)
-{
-   union {
-      float f;
-      uint32_t u;
-      int32_t i;
-   } fi;
-
-   switch (conversion) {
-   case PARAM_NO_CONVERT:
-      return *param;
-   case PARAM_CONVERT_F2I:
-      fi.i = *param;
-      return fi.f;
-   case PARAM_CONVERT_F2U:
-      fi.u = *param;
-      return fi.f;
-   case PARAM_CONVERT_F2B:
-      if (*param != 0.0)
-	 fi.i = 1;
-      else
-	 fi.i = 0;
-      return fi.f;
-   case PARAM_CONVERT_ZERO:
-      return 0.0;
-   default:
-      return *param;
-   }
-}
-
 /**
  * Pre-gen6, the register file of the EUs was shared between threads,
  * and each thread used some subset allocated on a 16-register block
@@ -1185,5 +1310,42 @@ brw_program_reloc(struct brw_context *brw, uint32_t state_offset,
 }
 
 bool brw_do_cubemap_normalize(struct exec_list *instructions);
+bool brw_lower_texture_gradients(struct intel_context *intel,
+                                 struct exec_list *instructions);
+
+struct opcode_desc {
+    char    *name;
+    int	    nsrc;
+    int	    ndst;
+};
+
+extern const struct opcode_desc opcode_descs[128];
+
+void
+brw_emit_depthbuffer(struct brw_context *brw);
+
+void
+brw_emit_depth_stencil_hiz(struct brw_context *brw,
+                           struct intel_mipmap_tree *depth_mt,
+                           uint32_t depth_offset, uint32_t depthbuffer_format,
+                           uint32_t depth_surface_type,
+                           struct intel_mipmap_tree *stencil_mt,
+                           struct intel_mipmap_tree *hiz_mt,
+                           bool separate_stencil, uint32_t width,
+                           uint32_t height, uint32_t tile_x, uint32_t tile_y);
+
+void
+gen7_emit_depth_stencil_hiz(struct brw_context *brw,
+                            struct intel_mipmap_tree *depth_mt,
+                            uint32_t depth_offset, uint32_t depthbuffer_format,
+                            uint32_t depth_surface_type,
+                            struct intel_mipmap_tree *stencil_mt,
+                            struct intel_mipmap_tree *hiz_mt,
+                            bool separate_stencil, uint32_t width,
+                            uint32_t height, uint32_t tile_x, uint32_t tile_y);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

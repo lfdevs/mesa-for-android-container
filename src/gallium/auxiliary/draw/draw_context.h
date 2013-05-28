@@ -48,7 +48,6 @@ struct draw_vertex_shader;
 struct draw_geometry_shader;
 struct draw_fragment_shader;
 struct tgsi_sampler;
-struct gallivm_state;
 
 /*
  * structure to contain driver internal information 
@@ -66,9 +65,6 @@ struct draw_so_target {
 struct draw_context *draw_create( struct pipe_context *pipe );
 
 struct draw_context *draw_create_no_llvm(struct pipe_context *pipe);
-
-struct draw_context *
-draw_create_gallivm(struct pipe_context *pipe, struct gallivm_state *gallivm);
 
 void draw_destroy( struct draw_context *draw );
 
@@ -143,21 +139,25 @@ draw_texture_samplers(struct draw_context *draw,
 
 void
 draw_set_sampler_views(struct draw_context *draw,
+                       unsigned shader_stage,
                        struct pipe_sampler_view **views,
                        unsigned num);
 void
 draw_set_samplers(struct draw_context *draw,
+                  unsigned shader_stage,
                   struct pipe_sampler_state **samplers,
                   unsigned num);
 
 void
 draw_set_mapped_texture(struct draw_context *draw,
+                        unsigned shader_stage,
                         unsigned sampler_idx,
                         uint32_t width, uint32_t height, uint32_t depth,
                         uint32_t first_level, uint32_t last_level,
+                        const void *base,
                         uint32_t row_stride[PIPE_MAX_TEXTURE_LEVELS],
                         uint32_t img_stride[PIPE_MAX_TEXTURE_LEVELS],
-                        const void *data[PIPE_MAX_TEXTURE_LEVELS]);
+                        uint32_t mip_offsets[PIPE_MAX_TEXTURE_LEVELS]);
 
 
 /*
@@ -201,18 +201,15 @@ void draw_delete_geometry_shader(struct draw_context *draw,
  */
 
 void draw_set_vertex_buffers(struct draw_context *draw,
-                             unsigned count,
+                             unsigned start_slot, unsigned count,
                              const struct pipe_vertex_buffer *buffers);
 
 void draw_set_vertex_elements(struct draw_context *draw,
 			      unsigned count,
                               const struct pipe_vertex_element *elements);
 
-void draw_set_index_buffer(struct draw_context *draw,
-                           const struct pipe_index_buffer *ib);
-
-void draw_set_mapped_index_buffer(struct draw_context *draw,
-                                  const void *elements);
+void draw_set_indexes(struct draw_context *draw,
+                      const void *elements, unsigned elem_size);
 
 void draw_set_mapped_vertex_buffer(struct draw_context *draw,
                                    unsigned attr, const void *buffer);
@@ -280,16 +277,10 @@ boolean draw_need_pipeline(const struct draw_context *draw,
                            const struct pipe_rasterizer_state *rasterizer,
                            unsigned prim );
 
-static INLINE int
-draw_get_shader_param(unsigned shader, enum pipe_shader_cap param)
-{
-   switch(shader) {
-   case PIPE_SHADER_VERTEX:
-   case PIPE_SHADER_GEOMETRY:
-      return tgsi_exec_get_shader_param(param);
-   default:
-      return 0;
-   }
-}
+int
+draw_get_shader_param(unsigned shader, enum pipe_shader_cap param);
+
+int
+draw_get_shader_param_no_llvm(unsigned shader, enum pipe_shader_cap param);
 
 #endif /* DRAW_CONTEXT_H */

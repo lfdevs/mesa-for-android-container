@@ -30,6 +30,7 @@
 #include "main/image.h"
 #include "main/teximage.h"
 #include "main/texstate.h"
+#include "main/fbobject.h"
 
 #include "drivers/common/meta.h"
 
@@ -40,6 +41,9 @@
 #include "intel_fbo.h"
 #include "intel_tex.h"
 #include "intel_blit.h"
+#ifndef I915
+#include "brw_context.h"
+#endif
 
 #define FILE_DEBUG_FLAG DEBUG_TEXTURE
 
@@ -60,13 +64,39 @@ intel_copy_texsubimage(struct intel_context *intel,
    intel_prepare_render(intel);
 
    if (!intelImage->mt || !irb || !irb->mt) {
-      if (unlikely(INTEL_DEBUG & DEBUG_FALLBACKS))
+      if (unlikely(INTEL_DEBUG & DEBUG_PERF))
 	 fprintf(stderr, "%s fail %p %p (0x%08x)\n",
 		 __FUNCTION__, intelImage->mt, irb, internalFormat);
       return false;
    } else {
       region = irb->mt->region;
       assert(region);
+   }
+
+   /* According to the Ivy Bridge PRM, Vol1 Part4, section 1.2.1.2 (Graphics
+    * Data Size Limitations):
+    *
+    *    The BLT engine is capable of transferring very large quantities of
+    *    graphics data. Any graphics data read from and written to the
+    *    destination is permitted to represent a number of pixels that
+    *    occupies up to 65,536 scan lines and up to 32,768 bytes per scan line
+    *    at the destination. The maximum number of pixels that may be
+    *    represented per scan line’s worth of graphics data depends on the
+    *    color depth.
+    *
+    * Furthermore, intelEmitCopyBlit (which is called below) uses a signed
+    * 16-bit integer to represent buffer pitch, so it can only handle buffer
+    * pitches < 32k.
+    *
+    * As a result of these two limitations, we can only use the blitter to do
+    * this copy when the region's pitch is less than 32k.
+    */
+   if (region->pitch >= 32768)
+      return false;
+
+   if (intelImage->base.Base.TexObject->Target == GL_TEXTURE_1D_ARRAY ||
+       intelImage->base.Base.TexObject->Target == GL_TEXTURE_2D_ARRAY) {
+      perf_debug("no support for array textures\n");
    }
 
    copy_supported = intelImage->base.Base.TexFormat == intel_rb_format(irb);
@@ -84,7 +114,7 @@ intel_copy_texsubimage(struct intel_context *intel,
    }
 
    if (!copy_supported && !copy_supported_with_alpha_override) {
-      if (unlikely(INTEL_DEBUG & DEBUG_FALLBACKS))
+      if (unlikely(INTEL_DEBUG & DEBUG_PERF))
 	 fprintf(stderr, "%s mismatched formats %s, %s\n",
 		 __FUNCTION__,
 		 _mesa_get_format_name(intelImage->base.Base.TexFormat),
@@ -100,7 +130,6 @@ intel_copy_texsubimage(struct intel_context *intel,
       intel_miptree_get_image_offset(intelImage->mt,
 				     intelImage->base.Base.Level,
 				     intelImage->base.Base.Face,
-				     0,
 				     &image_x, &image_y);
 
       /* The blitter can't handle Y-tiled buffers. */
@@ -108,7 +137,7 @@ intel_copy_texsubimage(struct intel_context *intel,
 	 return false;
       }
 
-      if (ctx->ReadBuffer->Name == 0) {
+      if (_mesa_is_winsys_fbo(ctx->ReadBuffer)) {
 	 /* Flip vertical orientation for system framebuffers */
 	 y = ctx->ReadBuffer->Height - (y + height);
 	 src_pitch = -region->pitch;
@@ -144,45 +173,40 @@ intel_copy_texsubimage(struct intel_context *intel,
 
 
 static void
-intelCopyTexSubImage1D(struct gl_context *ctx,
-                       struct gl_texture_image *texImage,
-                       GLint xoffset,
-                       struct gl_renderbuffer *rb,
-                       GLint x, GLint y, GLsizei width)
+intelCopyTexSubImage(struct gl_context *ctx, GLuint dims,
+                     struct gl_texture_image *texImage,
+                     GLint xoffset, GLint yoffset, GLint zoffset,
+                     struct gl_renderbuffer *rb,
+                     GLint x, GLint y,
+                     GLsizei width, GLsizei height)
 {
-   if (!intel_copy_texsubimage(intel_context(ctx),
-                               intel_texture_image(texImage),
-                               xoffset, 0,
-                               intel_renderbuffer(rb), x, y, width, 1)) {
-      fallback_debug("%s - fallback to swrast\n", __FUNCTION__);
-      _mesa_meta_CopyTexSubImage1D(ctx, texImage, xoffset,
-                                   rb, x, y, width);
-   }
-}
+   struct intel_context *intel = intel_context(ctx);
+   if (dims != 3) {
+#ifndef I915
+      /* Try BLORP first.  It can handle almost everything. */
+      if (brw_blorp_copytexsubimage(intel, rb, texImage, x, y,
+                                    xoffset, yoffset, width, height))
+         return;
+#endif
 
-
-static void
-intelCopyTexSubImage2D(struct gl_context *ctx,
-                       struct gl_texture_image *texImage,
-                       GLint xoffset, GLint yoffset,
-                       struct gl_renderbuffer *rb,
-                       GLint x, GLint y, GLsizei width, GLsizei height)
-{
-   if (!intel_copy_texsubimage(intel_context(ctx),
-                               intel_texture_image(texImage),
-                               xoffset, yoffset,
-                               intel_renderbuffer(rb), x, y, width, height)) {
-      fallback_debug("%s - fallback to swrast\n", __FUNCTION__);
-      _mesa_meta_CopyTexSubImage2D(ctx, texImage,
-                                   xoffset, yoffset,
-                                   rb, x, y, width, height);
+      /* Next, try the BLT engine. */
+      if (intel_copy_texsubimage(intel_context(ctx),
+                                 intel_texture_image(texImage),
+                                 xoffset, yoffset,
+                                 intel_renderbuffer(rb), x, y, width, height))
+         return;
    }
+
+   /* Finally, fall back to meta.  This will likely be slow. */
+   fallback_debug("%s - fallback to swrast\n", __FUNCTION__);
+   _mesa_meta_CopyTexSubImage(ctx, dims, texImage,
+                              xoffset, yoffset, zoffset,
+                              rb, x, y, width, height);
 }
 
 
 void
 intelInitTextureCopyImageFuncs(struct dd_function_table *functions)
 {
-   functions->CopyTexSubImage1D = intelCopyTexSubImage1D;
-   functions->CopyTexSubImage2D = intelCopyTexSubImage2D;
+   functions->CopyTexSubImage = intelCopyTexSubImage;
 }

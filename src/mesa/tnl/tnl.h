@@ -86,7 +86,6 @@ _tnl_draw_prims( struct gl_context *ctx,
 
 void
 _tnl_vbo_draw_prims( struct gl_context *ctx,
-		     const struct gl_client_array *arrays[],
 		     const struct _mesa_prim *prim,
 		     GLuint nr_prims,
 		     const struct _mesa_index_buffer *ib,
@@ -96,9 +95,9 @@ _tnl_vbo_draw_prims( struct gl_context *ctx,
 		     struct gl_transform_feedback_object *tfb_vertcount );
 
 extern void
-_mesa_load_tracked_matrices(struct gl_context *ctx);
+_tnl_RasterPos(struct gl_context *ctx, const GLfloat vObj[4]);
 
 extern void
-_tnl_RasterPos(struct gl_context *ctx, const GLfloat vObj[4]);
+_tnl_validate_shine_tables( struct gl_context *ctx );
 
 #endif

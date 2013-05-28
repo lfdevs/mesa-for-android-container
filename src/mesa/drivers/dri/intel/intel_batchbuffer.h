@@ -7,10 +7,25 @@
 #include "intel_bufmgr.h"
 #include "intel_reg.h"
 
-#define BATCH_RESERVED 16
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * Number of bytes to reserve for commands necessary to complete a batch.
+ *
+ * This includes:
+ * - MI_BATCHBUFFER_END (4 bytes)
+ * - Optional MI_NOOP for ensuring the batch length is qword aligned (4 bytes)
+ * - Any state emitted by vtbl->finish_batch()
+ *   - On 965+, this means ending occlusion queries (on Gen6, which has the
+ *     most workaround flushes, this can be as much as (4+4+5)*4 = 52 bytes)
+ */
+#define BATCH_RESERVED 60
+
+struct intel_batchbuffer;
 
 void intel_batchbuffer_init(struct intel_context *intel);
-void intel_batchbuffer_reset(struct intel_context *intel);
 void intel_batchbuffer_free(struct intel_context *intel);
 void intel_batchbuffer_save_state(struct intel_context *intel);
 void intel_batchbuffer_reset_to_saved(struct intel_context *intel);
@@ -151,5 +166,9 @@ void intel_batchbuffer_cached_advance(struct intel_context *intel);
 
 #define ADVANCE_BATCH() intel_batchbuffer_advance(intel);
 #define CACHED_BATCH() intel_batchbuffer_cached_advance(intel);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

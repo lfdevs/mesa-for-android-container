@@ -49,7 +49,7 @@
  * Simple pass-through fragment shader to use when we don't have
  * a real shader (or it fails to compile for some reason).
  */
-static unsigned passthrough[] =
+static unsigned passthrough_decl[] =
 {
    _3DSTATE_PIXEL_SHADER_PROGRAM | ((2*3)-1),
 
@@ -61,7 +61,10 @@ static unsigned passthrough[] =
     D0_CHANNEL_ALL),
    0,
    0,
+};
 
+static unsigned passthrough_program[] =
+{
    /* move to output color:
     */
    (A0_MOV |
@@ -125,10 +128,13 @@ negate(int reg, int x, int y, int z, int w)
 static void
 i915_use_passthrough_shader(struct i915_fragment_shader *fs)
 {
-   fs->program = (uint *) MALLOC(sizeof(passthrough));
+   fs->program = (uint *) MALLOC(sizeof(passthrough_program));
+   fs->decl = (uint *) MALLOC(sizeof(passthrough_decl));
    if (fs->program) {
-      memcpy(fs->program, passthrough, sizeof(passthrough));
-      fs->program_len = Elements(passthrough);
+      memcpy(fs->program, passthrough_program, sizeof(passthrough_program));
+      memcpy(fs->decl, passthrough_decl, sizeof(passthrough_decl));
+      fs->program_len = Elements(passthrough_program);
+      fs->decl_len = Elements(passthrough_decl);
    }
    fs->num_constants = 0;
 }
@@ -506,6 +512,22 @@ i915_translate_instruction(struct i915_fp_compile *p,
       emit_simple_arith(p, inst, A0_ADD, 2, fs);
       break;
 
+   case TGSI_OPCODE_CEIL:
+      src0 = src_vector(p, &inst->Src[0], fs);
+      tmp = i915_get_utemp(p);
+      flags = get_result_flags(inst);
+      i915_emit_arith(p,
+                      A0_FLR,
+                      tmp,
+                      flags & A0_DEST_CHANNEL_ALL, 0,
+                      negate(src0, 1, 1, 1, 1), 0, 0);
+      i915_emit_arith(p,
+                      A0_MOV,
+                      get_result_vector(p, &inst->Dst[0]),
+                      flags, 0,
+                      negate(tmp, 1, 1, 1, 1), 0, 0);
+      break;
+
    case TGSI_OPCODE_CMP:
       src0 = src_vector(p, &inst->Src[0], fs);
       src1 = src_vector(p, &inst->Src[1], fs);
@@ -528,7 +550,7 @@ i915_translate_instruction(struct i915_fp_compile *p,
       i915_emit_arith(p, A0_MOD, tmp, A0_DEST_CHANNEL_X, 0, tmp, 0, 0);
 
       /* 
-       * t0.xy = MUL x.xx11, x.x1111  ; x^2, x, 1, 1
+       * t0.xy = MUL x.xx11, x.x111  ; x^2, x, 1, 1
        * t0 = MUL t0.xyxy t0.xx11 ; x^4, x^3, x^2, 1
        * t0 = MUL t0.xxz1 t0.z111    ; x^6 x^4 x^2 1
        * result = DP4 t0, cos_constants
@@ -1277,17 +1299,26 @@ i915_fini_compile(struct i915_context *i915, struct i915_fp_compile *p)
 
       /* Copy compilation results to fragment program struct: 
        */
+      assert(!ifs->decl);
       assert(!ifs->program);
-      ifs->program
-         = (uint *) MALLOC((program_size + decl_size) * sizeof(uint));
-      if (ifs->program) {
-         ifs->program_len = program_size + decl_size;
 
-         memcpy(ifs->program,
+      ifs->decl
+         = (uint *) MALLOC(decl_size * sizeof(uint));
+      ifs->program
+         = (uint *) MALLOC(program_size * sizeof(uint));
+
+      if (ifs->decl) {
+         ifs->decl_len = decl_size;
+
+         memcpy(ifs->decl,
                 p->declarations,
                 decl_size * sizeof(uint));
+      }
 
-         memcpy(ifs->program + decl_size,
+      if (ifs->program) {
+         ifs->program_len = program_size;
+
+         memcpy(ifs->program,
                 p->program,
                 program_size * sizeof(uint));
       }

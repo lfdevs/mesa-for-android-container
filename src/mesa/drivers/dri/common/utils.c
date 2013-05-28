@@ -31,6 +31,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include "main/mtypes.h"
 #include "main/cpuinfo.h"
 #include "main/extensions.h"
@@ -148,13 +149,7 @@ driGetRendererString( char * buffer, const char * hardware_name,
  *                      If the function fails and returns \c GL_FALSE, this
  *                      value will be unmodified, but some elements in the
  *                      linked list may be modified.
- * \param fb_format     Format of the framebuffer.  Currently only \c GL_RGB,
- *                      \c GL_RGBA, \c GL_BGR, and \c GL_BGRA are supported.
- * \param fb_type       Type of the pixels in the framebuffer.  Currently only
- *                      \c GL_UNSIGNED_SHORT_5_6_5, 
- *                      \c GL_UNSIGNED_SHORT_5_6_5_REV,
- *                      \c GL_UNSIGNED_INT_8_8_8_8, and
- *                      \c GL_UNSIGNED_INT_8_8_8_8_REV are supported.
+ * \param format        Mesa gl_format enum describing the pixel format
  * \param depth_bits    Array of depth buffer sizes to be exposed.
  * \param stencil_bits  Array of stencil buffer sizes to be exposed.
  * \param num_depth_stencil_bits  Number of entries in both \c depth_bits and
@@ -173,155 +168,63 @@ driGetRendererString( char * buffer, const char * hardware_name,
  *                      \c GLX_DIRECT_COLOR.
  * 
  * \returns
- * \c GL_TRUE on success or \c GL_FALSE on failure.  Currently the only
- * cause of failure is a bad parameter (i.e., unsupported \c fb_format or
- * \c fb_type).
- * 
- * \todo
- * There is currently no way to support packed RGB modes (i.e., modes with
- * exactly 3 bytes per pixel) or floating-point modes.  This could probably
- * be done by creating some new, private enums with clever names likes
- * \c GL_UNSIGNED_3BYTE_8_8_8, \c GL_4FLOAT_32_32_32_32, 
- * \c GL_4HALF_16_16_16_16, etc.  We can cross that bridge when we come to it.
+ * Pointer to any array of pointers to the \c __DRIconfig structures created
+ * for the specified formats.  If there is an error, \c NULL is returned.
+ * Currently the only cause of failure is a bad parameter (i.e., unsupported
+ * \c format).
  */
 __DRIconfig **
-driCreateConfigs(GLenum fb_format, GLenum fb_type,
+driCreateConfigs(gl_format format,
 		 const uint8_t * depth_bits, const uint8_t * stencil_bits,
 		 unsigned num_depth_stencil_bits,
 		 const GLenum * db_modes, unsigned num_db_modes,
 		 const uint8_t * msaa_samples, unsigned num_msaa_modes,
 		 GLboolean enable_accum)
 {
-   static const uint8_t bits_table[4][4] = {
-     /* R  G  B  A */
-      { 3, 3, 2, 0 }, /* Any GL_UNSIGNED_BYTE_3_3_2 */
-      { 5, 6, 5, 0 }, /* Any GL_UNSIGNED_SHORT_5_6_5 */
-      { 8, 8, 8, 0 }, /* Any RGB with any GL_UNSIGNED_INT_8_8_8_8 */
-      { 8, 8, 8, 8 }  /* Any RGBA with any GL_UNSIGNED_INT_8_8_8_8 */
+   static const uint32_t masks_table[][4] = {
+      /* MESA_FORMAT_RGB565 */
+      { 0x0000F800, 0x000007E0, 0x0000001F, 0x00000000 },
+      /* MESA_FORMAT_XRGB8888 */
+      { 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00000000 },
+      /* MESA_FORMAT_ARGB8888 */
+      { 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000 },
    };
 
-   static const uint32_t masks_table_rgb[6][4] = {
-      { 0x000000E0, 0x0000001C, 0x00000003, 0x00000000 }, /* 3_3_2       */
-      { 0x00000007, 0x00000038, 0x000000C0, 0x00000000 }, /* 2_3_3_REV   */
-      { 0x0000F800, 0x000007E0, 0x0000001F, 0x00000000 }, /* 5_6_5       */
-      { 0x0000001F, 0x000007E0, 0x0000F800, 0x00000000 }, /* 5_6_5_REV   */
-      { 0xFF000000, 0x00FF0000, 0x0000FF00, 0x00000000 }, /* 8_8_8_8     */
-      { 0x000000FF, 0x0000FF00, 0x00FF0000, 0x00000000 }  /* 8_8_8_8_REV */
-   };
-
-   static const uint32_t masks_table_rgba[6][4] = {
-      { 0x000000E0, 0x0000001C, 0x00000003, 0x00000000 }, /* 3_3_2       */
-      { 0x00000007, 0x00000038, 0x000000C0, 0x00000000 }, /* 2_3_3_REV   */
-      { 0x0000F800, 0x000007E0, 0x0000001F, 0x00000000 }, /* 5_6_5       */
-      { 0x0000001F, 0x000007E0, 0x0000F800, 0x00000000 }, /* 5_6_5_REV   */
-      { 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF }, /* 8_8_8_8     */
-      { 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000 }, /* 8_8_8_8_REV */
-   };
-
-   static const uint32_t masks_table_bgr[6][4] = {
-      { 0x00000007, 0x00000038, 0x000000C0, 0x00000000 }, /* 3_3_2       */
-      { 0x000000E0, 0x0000001C, 0x00000003, 0x00000000 }, /* 2_3_3_REV   */
-      { 0x0000001F, 0x000007E0, 0x0000F800, 0x00000000 }, /* 5_6_5       */
-      { 0x0000F800, 0x000007E0, 0x0000001F, 0x00000000 }, /* 5_6_5_REV   */
-      { 0x0000FF00, 0x00FF0000, 0xFF000000, 0x00000000 }, /* 8_8_8_8     */
-      { 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00000000 }, /* 8_8_8_8_REV */
-   };
-
-   static const uint32_t masks_table_bgra[6][4] = {
-      { 0x00000007, 0x00000038, 0x000000C0, 0x00000000 }, /* 3_3_2       */
-      { 0x000000E0, 0x0000001C, 0x00000003, 0x00000000 }, /* 2_3_3_REV   */
-      { 0x0000001F, 0x000007E0, 0x0000F800, 0x00000000 }, /* 5_6_5       */
-      { 0x0000F800, 0x000007E0, 0x0000001F, 0x00000000 }, /* 5_6_5_REV   */
-      { 0x0000FF00, 0x00FF0000, 0xFF000000, 0x000000FF }, /* 8_8_8_8     */
-      { 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000 }, /* 8_8_8_8_REV */
-   };
-
-   static const uint8_t bytes_per_pixel[6] = {
-      1, /* 3_3_2       */
-      1, /* 2_3_3_REV   */
-      2, /* 5_6_5       */
-      2, /* 5_6_5_REV   */
-      4, /* 8_8_8_8     */
-      4  /* 8_8_8_8_REV */
-   };
-
-   const uint8_t  * bits;
    const uint32_t * masks;
-   int index;
    __DRIconfig **configs, **c;
    struct gl_config *modes;
    unsigned i, j, k, h;
    unsigned num_modes;
    unsigned num_accum_bits = (enable_accum) ? 2 : 1;
+   int red_bits;
+   int green_bits;
+   int blue_bits;
+   int alpha_bits;
+   bool is_srgb;
 
-   switch ( fb_type ) {
-      case GL_UNSIGNED_BYTE_3_3_2:
-	 index = 0;
-	 break;
-      case GL_UNSIGNED_BYTE_2_3_3_REV:
-	 index = 1;
-	 break;
-      case GL_UNSIGNED_SHORT_5_6_5:
-	 index = 2;
-	 break;
-      case GL_UNSIGNED_SHORT_5_6_5_REV:
-	 index = 3;
-	 break;
-      case GL_UNSIGNED_INT_8_8_8_8:
-	 index = 4;
-	 break;
-      case GL_UNSIGNED_INT_8_8_8_8_REV:
-	 index = 5;
-	 break;
-      default:
-	 fprintf( stderr, "[%s:%u] Unknown framebuffer type 0x%04x.\n",
-               __FUNCTION__, __LINE__, fb_type );
-	 return NULL;
+   switch (format) {
+   case MESA_FORMAT_RGB565:
+      masks = masks_table[0];
+      break;
+   case MESA_FORMAT_XRGB8888:
+      masks = masks_table[1];
+      break;
+   case MESA_FORMAT_ARGB8888:
+   case MESA_FORMAT_SARGB8:
+      masks = masks_table[2];
+      break;
+   default:
+      fprintf(stderr, "[%s:%u] Unknown framebuffer type %s (%d).\n",
+              __FUNCTION__, __LINE__,
+              _mesa_get_format_name(format), format);
+      return NULL;
    }
 
-
-   /* Valid types are GL_UNSIGNED_SHORT_5_6_5 and GL_UNSIGNED_INT_8_8_8_8 and
-    * the _REV versions.
-    *
-    * Valid formats are GL_RGBA, GL_RGB, and GL_BGRA.
-    */
-
-   switch ( fb_format ) {
-      case GL_RGB:
-         masks = masks_table_rgb[ index ];
-         break;
-
-      case GL_RGBA:
-         masks = masks_table_rgba[ index ];
-         break;
-
-      case GL_BGR:
-         masks = masks_table_bgr[ index ];
-         break;
-
-      case GL_BGRA:
-         masks = masks_table_bgra[ index ];
-         break;
-
-      default:
-         fprintf( stderr, "[%s:%u] Unknown framebuffer format 0x%04x.\n",
-               __FUNCTION__, __LINE__, fb_format );
-         return NULL;
-   }
-
-   switch ( bytes_per_pixel[ index ] ) {
-      case 1:
-	 bits = bits_table[0];
-	 break;
-      case 2:
-	 bits = bits_table[1];
-	 break;
-      default:
-	 bits = ((fb_format == GL_RGB) || (fb_format == GL_BGR))
-	    ? bits_table[2]
-	    : bits_table[3];
-	 break;
-   }
+   red_bits = _mesa_get_format_bits(format, GL_RED_BITS);
+   green_bits = _mesa_get_format_bits(format, GL_GREEN_BITS);
+   blue_bits = _mesa_get_format_bits(format, GL_BLUE_BITS);
+   alpha_bits = _mesa_get_format_bits(format, GL_ALPHA_BITS);
+   is_srgb = _mesa_get_format_color_encoding(format) == GL_SRGB;
 
    num_modes = num_depth_stencil_bits * num_db_modes * num_accum_bits * num_msaa_modes;
    configs = calloc(1, (num_modes + 1) * sizeof *configs);
@@ -338,10 +241,10 @@ driCreateConfigs(GLenum fb_format, GLenum fb_type,
 		    c++;
 
 		    memset(modes, 0, sizeof *modes);
-		    modes->redBits   = bits[0];
-		    modes->greenBits = bits[1];
-		    modes->blueBits  = bits[2];
-		    modes->alphaBits = bits[3];
+		    modes->redBits   = red_bits;
+		    modes->greenBits = green_bits;
+		    modes->blueBits  = blue_bits;
+		    modes->alphaBits = alpha_bits;
 		    modes->redMask   = masks[0];
 		    modes->greenMask = masks[1];
 		    modes->blueMask  = masks[2];
@@ -393,7 +296,7 @@ driCreateConfigs(GLenum fb_format, GLenum fb_type,
 			__DRI_ATTRIB_TEXTURE_2D_BIT |
 			__DRI_ATTRIB_TEXTURE_RECTANGLE_BIT;
 
-		    modes->sRGBCapable = GL_FALSE;
+		    modes->sRGBCapable = is_srgb;
 		}
 	    }
 	}
@@ -408,6 +311,11 @@ __DRIconfig **driConcatConfigs(__DRIconfig **a,
 {
     __DRIconfig **all;
     int i, j, index;
+
+    if (a == NULL || a[0] == NULL)
+       return b;
+    else if (b == NULL || b[0] == NULL)
+       return a;
 
     i = 0;
     while (a[i] != NULL)

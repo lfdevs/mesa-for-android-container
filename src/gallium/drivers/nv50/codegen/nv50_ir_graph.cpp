@@ -21,6 +21,10 @@
  */
 
 #include "nv50_ir_graph.h"
+#include <limits>
+#include <list>
+#include <stack>
+#include "nv50_ir.h"
 
 namespace nv50_ir {
 
@@ -33,23 +37,17 @@ Graph::Graph()
 
 Graph::~Graph()
 {
-   Iterator *iter = this->safeIteratorDFS();
-
-   for (; !iter->end(); iter->next())
-      reinterpret_cast<Node *>(iter->get())->cut();
-
-   putIterator(iter);
+   for (IteratorRef it = safeIteratorDFS(); !it->end(); it->next())
+      reinterpret_cast<Node *>(it->get())->cut();
 }
 
 void Graph::insert(Node *node)
 {
-   if (!root) {
+   if (!root)
       root = node;
-      size = 1;
-      node->graph = this;
-   } else {
-      root->attach(node, Edge::TREE);
-   }
+
+   node->graph = this;
+   size++;
 }
 
 void Graph::Edge::unlink()
@@ -118,11 +116,11 @@ void Graph::Node::attach(Node *node, Edge::Type kind)
    ++this->outCount;
    ++node->inCount;
 
-   assert(this->graph);
-   if (!node->graph) {
-      node->graph = this->graph;
-      ++node->graph->size;
-   }
+   assert(graph || node->graph);
+   if (!node->graph)
+      graph->insert(node);
+   if (!graph)
+      node->graph->insert(this);
 
    if (kind == Edge::UNKNOWN)
       graph->classifyEdges();
@@ -168,16 +166,17 @@ Graph::Edge::Edge(Node *org, Node *tgt, Type kind)
 }
 
 bool
-Graph::Node::reachableBy(Node *node, Node *term)
+Graph::Node::reachableBy(const Node *node, const Node *term) const
 {
-   Stack stack;
-   Node *pos;
+   std::stack<const Node *> stack;
+   const Node *pos = NULL;
    const int seq = graph->nextSequence();
 
    stack.push(node);
 
-   while (stack.getSize()) {
-      pos = reinterpret_cast<Node *>(stack.pop().u.p);
+   while (!stack.empty()) {
+      pos = stack.top();
+      stack.pop();
 
       if (pos == this)
          return true;
@@ -194,7 +193,7 @@ Graph::Node::reachableBy(Node *node, Node *term)
    return pos == this;
 }
 
-class DFSIterator : public Graph::GraphIterator
+class DFSIterator : public Iterator
 {
 public:
    DFSIterator(Graph *graph, const bool preorder)
@@ -234,8 +233,7 @@ public:
    virtual bool end() const { return pos >= count; }
    virtual void next() { if (pos < count) ++pos; }
    virtual void *get() const { return nodes[pos]; }
-
-   void reset() { pos = 0; }
+   virtual void reset() { pos = 0; }
 
 protected:
    Graph::Node **nodes;
@@ -243,17 +241,17 @@ protected:
    int pos;
 };
 
-Graph::GraphIterator *Graph::iteratorDFS(bool preorder)
+IteratorRef Graph::iteratorDFS(bool preorder)
 {
-   return new DFSIterator(this, preorder);
+   return IteratorRef(new DFSIterator(this, preorder));
 }
 
-Graph::GraphIterator *Graph::safeIteratorDFS(bool preorder)
+IteratorRef Graph::safeIteratorDFS(bool preorder)
 {
    return this->iteratorDFS(preorder);
 }
 
-class CFGIterator : public Graph::GraphIterator
+class CFGIterator : public Iterator
 {
 public:
    CFGIterator(Graph *graph)
@@ -264,10 +262,8 @@ public:
       nodes[graph->getSize()] = 0;
 
       // TODO: argh, use graph->sequence instead of tag and just raise it by > 1
-      Iterator *iter;
-      for (iter = graph->iteratorDFS(); !iter->end(); iter->next())
-         reinterpret_cast<Graph::Node *>(iter->get())->tag = 0;
-      graph->putIterator(iter);
+      for (IteratorRef it = graph->iteratorDFS(); !it->end(); it->next())
+         reinterpret_cast<Graph::Node *>(it->get())->tag = 0;
 
       if (graph->getRoot())
          search(graph->getRoot(), graph->nextSequence());
@@ -282,6 +278,7 @@ public:
    virtual void *get() const { return nodes[pos]; }
    virtual bool end() const { return pos >= count; }
    virtual void next() { if (pos < count) ++pos; }
+   virtual void reset() { pos = 0; }
 
 private:
    void search(Graph::Node *node, const int sequence)
@@ -329,27 +326,25 @@ private:
    int pos;
 };
 
-Graph::GraphIterator *Graph::iteratorCFG()
+IteratorRef Graph::iteratorCFG()
 {
-   return new CFGIterator(this);
+   return IteratorRef(new CFGIterator(this));
 }
 
-Graph::GraphIterator *Graph::safeIteratorCFG()
+IteratorRef Graph::safeIteratorCFG()
 {
    return this->iteratorCFG();
 }
 
 void Graph::classifyEdges()
 {
-   DFSIterator *iter;
    int seq;
 
-   for (iter = new DFSIterator(this, true); !iter->end(); iter->next()) {
-      Node *node = reinterpret_cast<Node *>(iter->get());
+   for (IteratorRef it = iteratorDFS(true); !it->end(); it->next()) {
+      Node *node = reinterpret_cast<Node *>(it->get());
       node->visit(0);
       node->tag = 0;
    }
-   putIterator(iter);
 
    classifyDFS(root, (seq = 0));
 
@@ -397,6 +392,45 @@ void Graph::classifyDFS(Node *curr, int& seq)
    }
 
    curr->tag = 0;
+}
+
+// @dist is indexed by Node::tag, returns -1 if no path found
+int
+Graph::findLightestPathWeight(Node *a, Node *b, const std::vector<int> &weight)
+{
+   std::vector<int> path(weight.size(), std::numeric_limits<int>::max());
+   std::list<Node *> nodeList;
+   const int seq = nextSequence();
+
+   path[a->tag] = 0;
+   for (Node *c = a; c && c != b;) {
+      const int p = path[c->tag] + weight[c->tag];
+      for (EdgeIterator ei = c->outgoing(); !ei.end(); ei.next()) {
+         Node *t = ei.getNode();
+         if (t->getSequence() < seq) {
+            if (path[t->tag] == std::numeric_limits<int>::max())
+               nodeList.push_front(t);
+            if (p < path[t->tag])
+               path[t->tag] = p;
+         }
+      }
+      c->visit(seq);
+      Node *next = NULL;
+      for (std::list<Node *>::iterator n = nodeList.begin();
+           n != nodeList.end(); ++n) {
+         if (!next || path[(*n)->tag] < path[next->tag])
+            next = *n;
+         if ((*n) == c) {
+            // erase visited
+            n = nodeList.erase(n);
+            --n;
+         }
+      }
+      c = next;
+   }
+   if (path[b->tag] == std::numeric_limits<int>::max())
+      return -1;
+   return path[b->tag];
 }
 
 } // namespace nv50_ir

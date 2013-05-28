@@ -73,7 +73,7 @@ struct draw_pt_front_end {
                 unsigned start,
                 unsigned count );
 
-   void (*finish)( struct draw_pt_front_end * );
+   void (*flush)( struct draw_pt_front_end *, unsigned flags );
    void (*destroy)( struct draw_pt_front_end * );
 };
 
@@ -92,6 +92,13 @@ struct draw_pt_middle_end {
                     unsigned prim,
 		    unsigned opt,
                     unsigned *max_vertices );
+
+   /**
+    * Bind/update parameter state such as constants, viewport dims
+    * and clip planes.  Basically, stuff which isn't "baked" into the
+    * shader or pipeline state.
+    */
+   void (*bind_parameters)(struct draw_pt_middle_end *);
 
    void (*run)( struct draw_pt_middle_end *,
                 const unsigned *fetch_elts,
@@ -178,7 +185,7 @@ struct pt_emit *draw_pt_emit_create( struct draw_context *draw );
  */
 struct pt_so_emit;
 
-void draw_pt_so_emit_prepare( struct pt_so_emit *emit );
+void draw_pt_so_emit_prepare(struct pt_so_emit *emit, boolean use_pre_clip_pos);
 
 void draw_pt_so_emit( struct pt_so_emit *emit,
                       const struct draw_vertex_info *vert_info,

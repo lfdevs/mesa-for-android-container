@@ -253,7 +253,8 @@ xmesa_st_framebuffer_validate(struct st_framebuffer_iface *stfbi,
  * Called via st_framebuffer_iface::flush_front()
  */
 static boolean
-xmesa_st_framebuffer_flush_front(struct st_framebuffer_iface *stfbi,
+xmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
+                                 struct st_framebuffer_iface *stfbi,
                                  enum st_attachment_type statt)
 {
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
@@ -278,10 +279,8 @@ xmesa_create_st_framebuffer(XMesaDisplay xmdpy, XMesaBuffer b)
    stfbi = CALLOC_STRUCT(st_framebuffer_iface);
    xstfb = CALLOC_STRUCT(xmesa_st_framebuffer);
    if (!stfbi || !xstfb) {
-      if (stfbi)
-         FREE(stfbi);
-      if (xstfb)
-         FREE(xstfb);
+      free(stfbi);
+      free(xstfb);
       return NULL;
    }
 
@@ -314,8 +313,8 @@ xmesa_destroy_st_framebuffer(struct st_framebuffer_iface *stfbi)
    for (i = 0; i < ST_ATTACHMENT_COUNT; i++)
       pipe_resource_reference(&xstfb->textures[i], NULL);
 
-   FREE(xstfb);
-   FREE(stfbi);
+   free(xstfb);
+   free(stfbi);
 }
 
 void

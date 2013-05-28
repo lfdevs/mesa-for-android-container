@@ -84,9 +84,6 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "vbo_noop.h"
 
 
-#if FEATURE_dlist
-
-
 #ifdef ERROR
 #undef ERROR
 #endif
@@ -233,13 +230,13 @@ free_vertex_store(struct gl_context *ctx,
       _mesa_reference_buffer_object(ctx, &vertex_store->bufferobj, NULL);
    }
 
-   FREE(vertex_store);
+   free(vertex_store);
 }
 
 
-static GLfloat *
-map_vertex_store(struct gl_context *ctx,
-                 struct vbo_save_vertex_store *vertex_store)
+GLfloat *
+vbo_save_map_vertex_store(struct gl_context *ctx,
+                          struct vbo_save_vertex_store *vertex_store)
 {
    assert(vertex_store->bufferobj);
    assert(!vertex_store->buffer);
@@ -259,9 +256,9 @@ map_vertex_store(struct gl_context *ctx,
 }
 
 
-static void
-unmap_vertex_store(struct gl_context *ctx,
-                   struct vbo_save_vertex_store *vertex_store)
+void
+vbo_save_unmap_vertex_store(struct gl_context *ctx,
+                            struct vbo_save_vertex_store *vertex_store)
 {
    if (vertex_store->bufferobj->Size > 0) {
       ctx->Driver.UnmapBuffer(ctx, vertex_store->bufferobj);
@@ -327,6 +324,7 @@ _save_compile_vertex_list(struct gl_context *ctx)
    /* Duplicate our template, increment refcounts to the storage structs:
     */
    memcpy(node->attrsz, save->attrsz, sizeof(node->attrsz));
+   memcpy(node->attrtype, save->attrtype, sizeof(node->attrtype));
    node->vertex_size = save->vertex_size;
    node->buffer_offset =
       (save->buffer - save->vertex_store->buffer) * sizeof(GLfloat);
@@ -353,7 +351,7 @@ _save_compile_vertex_list(struct gl_context *ctx)
          /* If the malloc fails, we just pull the data out of the VBO
           * later instead.
           */
-         node->current_data = MALLOC(node->current_size * sizeof(GLfloat));
+         node->current_data = malloc(node->current_size * sizeof(GLfloat));
          if (node->current_data) {
             const char *buffer = (const char *) save->vertex_store->buffer;
             unsigned attr_offset = node->attrsz[0] * sizeof(GLfloat);
@@ -407,7 +405,7 @@ _save_compile_vertex_list(struct gl_context *ctx)
 
       /* Unmap old store:
        */
-      unmap_vertex_store(ctx, save->vertex_store);
+      vbo_save_unmap_vertex_store(ctx, save->vertex_store);
 
       /* Release old reference:
        */
@@ -418,7 +416,7 @@ _save_compile_vertex_list(struct gl_context *ctx)
       /* Allocate and map new store:
        */
       save->vertex_store = alloc_vertex_store(ctx);
-      save->buffer_ptr = map_vertex_store(ctx, save->vertex_store);
+      save->buffer_ptr = vbo_save_map_vertex_store(ctx, save->vertex_store);
       save->out_of_memory = save->buffer_ptr == NULL;
    }
 
@@ -471,6 +469,7 @@ _save_wrap_buffers(struct gl_context *ctx)
    save->prim[0].start = 0;
    save->prim[0].count = 0;
    save->prim[0].num_instances = 1;
+   save->prim[0].base_instance = 0;
    save->prim_count = 1;
 }
 
@@ -512,7 +511,8 @@ _save_copy_to_current(struct gl_context *ctx)
    for (i = VBO_ATTRIB_POS + 1; i < VBO_ATTRIB_MAX; i++) {
       if (save->attrsz[i]) {
          save->currentsz[i][0] = save->attrsz[i];
-         COPY_CLEAN_4V(save->current[i], save->attrsz[i], save->attrptr[i]);
+         COPY_CLEAN_4V_TYPE_AS_FLOAT(save->current[i], save->attrsz[i],
+                                     save->attrptr[i], save->attrtype[i]);
       }
    }
 }
@@ -614,7 +614,8 @@ _save_upgrade_vertex(struct gl_context *ctx, GLuint attr, GLuint newsz)
             if (save->attrsz[j]) {
                if (j == attr) {
                   if (oldsz) {
-                     COPY_CLEAN_4V(dest, oldsz, data);
+                     COPY_CLEAN_4V_TYPE_AS_FLOAT(dest, oldsz, data,
+                                                 save->attrtype[j]);
                      data += oldsz;
                      dest += newsz;
                   }
@@ -651,8 +652,8 @@ save_fixup_vertex(struct gl_context *ctx, GLuint attr, GLuint sz)
       _save_upgrade_vertex(ctx, attr, sz);
    }
    else if (sz < save->active_sz[attr]) {
-      static GLfloat id[4] = { 0, 0, 0, 1 };
       GLuint i;
+      const GLfloat *id = vbo_get_default_vals_as_float(save->attrtype[attr]);
 
       /* New size is equal or smaller - just need to fill in some
        * zeros.
@@ -690,7 +691,7 @@ _save_reset_vertex(struct gl_context *ctx)
  * 3f version won't otherwise set color[3] to 1.0 -- this is the job
  * of the chooser function when switching between Color4f and Color3f.
  */
-#define ATTR(A, N, V0, V1, V2, V3)				\
+#define ATTR(A, N, T, V0, V1, V2, V3)				\
 do {								\
    struct vbo_save_context *save = &vbo_context(ctx)->save;	\
 								\
@@ -703,6 +704,7 @@ do {								\
       if (N>1) dest[1] = V1;					\
       if (N>2) dest[2] = V2;					\
       if (N>3) dest[3] = V3;					\
+      save->attrtype[A] = T;                                    \
    }								\
 								\
    if ((A) == 0) {						\
@@ -907,6 +909,7 @@ vbo_save_NotifyBegin(struct gl_context *ctx, GLenum mode)
    save->prim[i].start = save->vert_count;
    save->prim[i].count = 0;
    save->prim[i].num_instances = 1;
+   save->prim[i].base_instance = 0;
 
    if (save->out_of_memory) {
       _mesa_install_save_vtxfmt(ctx, &save->vtxfmt_noop);
@@ -1040,7 +1043,7 @@ _save_MultiDrawElements(GLenum mode, const GLsizei *count, GLenum type,
 
 static void GLAPIENTRY
 _save_MultiDrawElementsBaseVertex(GLenum mode, const GLsizei *count,
-                                  GLenum type, const GLvoid **indices,
+                                  GLenum type, const GLvoid * const *indices,
                                   GLsizei primcount, const GLint *basevertex)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -1062,6 +1065,45 @@ _save_DrawTransformFeedback(GLenum mode, GLuint name)
    (void) mode;
    (void) name;
    _mesa_compile_error(ctx, GL_INVALID_OPERATION, "glDrawTransformFeedback");
+}
+
+
+static void GLAPIENTRY
+_save_DrawTransformFeedbackStream(GLenum mode, GLuint name, GLuint stream)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   (void) mode;
+   (void) name;
+   (void) stream;
+   _mesa_compile_error(ctx, GL_INVALID_OPERATION,
+                       "glDrawTransformFeedbackStream");
+}
+
+
+static void GLAPIENTRY
+_save_DrawTransformFeedbackInstanced(GLenum mode, GLuint name,
+                                     GLsizei primcount)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   (void) mode;
+   (void) name;
+   (void) primcount;
+   _mesa_compile_error(ctx, GL_INVALID_OPERATION,
+                       "glDrawTransformFeedbackInstanced");
+}
+
+
+static void GLAPIENTRY
+_save_DrawTransformFeedbackStreamInstanced(GLenum mode, GLuint name,
+                                           GLuint stream, GLsizei primcount)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   (void) mode;
+   (void) name;
+   (void) stream;
+   (void) primcount;
+   _mesa_compile_error(ctx, GL_INVALID_OPERATION,
+                       "glDrawTransformFeedbackStreamInstanced");
 }
 
 
@@ -1253,7 +1295,7 @@ _save_OBE_MultiDrawElements(GLenum mode, const GLsizei *count, GLenum type,
 static void GLAPIENTRY
 _save_OBE_MultiDrawElementsBaseVertex(GLenum mode, const GLsizei *count,
                                       GLenum type,
-                                      const GLvoid **indices,
+                                      const GLvoid * const *indices,
                                       GLsizei primcount,
                                       const GLint *basevertex)
 {
@@ -1414,9 +1456,13 @@ _save_vtxfmt_init(struct gl_context *ctx)
    vfmt->DrawRangeElements = _save_DrawRangeElements;
    vfmt->DrawElementsBaseVertex = _save_DrawElementsBaseVertex;
    vfmt->DrawRangeElementsBaseVertex = _save_DrawRangeElementsBaseVertex;
-   vfmt->DrawTransformFeedback = _save_DrawTransformFeedback;
    vfmt->MultiDrawElementsEXT = _save_MultiDrawElements;
    vfmt->MultiDrawElementsBaseVertex = _save_MultiDrawElementsBaseVertex;
+   vfmt->DrawTransformFeedback = _save_DrawTransformFeedback;
+   vfmt->DrawTransformFeedbackStream = _save_DrawTransformFeedbackStream;
+   vfmt->DrawTransformFeedbackInstanced = _save_DrawTransformFeedbackInstanced;
+   vfmt->DrawTransformFeedbackStreamInstanced =
+         _save_DrawTransformFeedbackStreamInstanced;
 }
 
 
@@ -1455,7 +1501,7 @@ vbo_save_NewList(struct gl_context *ctx, GLuint list, GLenum mode)
    if (!save->vertex_store)
       save->vertex_store = alloc_vertex_store(ctx);
 
-   save->buffer_ptr = map_vertex_store(ctx, save->vertex_store);
+   save->buffer_ptr = vbo_save_map_vertex_store(ctx, save->vertex_store);
 
    _save_reset_vertex(ctx);
    _save_reset_counters(ctx);
@@ -1492,7 +1538,7 @@ vbo_save_EndList(struct gl_context *ctx)
       _mesa_install_save_vtxfmt(ctx, &ctx->ListState.ListVtxfmt);
    }
 
-   unmap_vertex_store(ctx, save->vertex_store);
+   vbo_save_unmap_vertex_store(ctx, save->vertex_store);
 
    assert(save->vertex_size == 0);
 }
@@ -1530,12 +1576,10 @@ vbo_destroy_vertex_list(struct gl_context *ctx, void *data)
       free_vertex_store(ctx, node->vertex_store);
 
    if (--node->prim_store->refcount == 0)
-      FREE(node->prim_store);
+      free(node->prim_store);
 
-   if (node->current_data) {
-      FREE(node->current_data);
-      node->current_data = NULL;
-   }
+   free(node->current_data);
+   node->current_data = NULL;
 }
 
 
@@ -1563,6 +1607,9 @@ vbo_print_vertex_list(struct gl_context *ctx, void *data)
 }
 
 
+/**
+ * Called during context creation/init.
+ */
 static void
 _save_current_init(struct gl_context *ctx)
 {
@@ -1586,7 +1633,7 @@ _save_current_init(struct gl_context *ctx)
 
 
 /**
- * Initialize the display list compiler
+ * Initialize the display list compiler.  Called during context creation.
  */
 void
 vbo_save_api_init(struct vbo_save_context *save)
@@ -1620,8 +1667,4 @@ vbo_save_api_init(struct vbo_save_context *save)
    ctx->ListState.ListVtxfmt.DrawRangeElements = _save_OBE_DrawRangeElements;
    ctx->ListState.ListVtxfmt.MultiDrawElementsEXT = _save_OBE_MultiDrawElements;
    ctx->ListState.ListVtxfmt.MultiDrawElementsBaseVertex = _save_OBE_MultiDrawElementsBaseVertex;
-   _mesa_install_save_vtxfmt(ctx, &ctx->ListState.ListVtxfmt);
 }
-
-
-#endif /* FEATURE_dlist */

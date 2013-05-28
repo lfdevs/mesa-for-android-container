@@ -79,19 +79,31 @@ void r300_emit_dsa_state(struct r300_context* r300, unsigned size, void* state)
     struct r300_dsa_state* dsa = (struct r300_dsa_state*)state;
     struct pipe_framebuffer_state* fb =
         (struct pipe_framebuffer_state*)r300->fb_state.state;
+    boolean is_r500 = r300->screen->caps.is_r500;
     CS_LOCALS(r300);
+    uint32_t alpha_func = dsa->alpha_function;
 
-    if (fb->zsbuf) {
-        if (fb->nr_cbufs && fb->cbufs[0]->format == PIPE_FORMAT_R16G16B16A16_FLOAT)
-            WRITE_CS_TABLE(&dsa->cb_begin_fp16, size);
-        else
-            WRITE_CS_TABLE(&dsa->cb_begin, size);
-    } else {
-        if (fb->nr_cbufs && fb->cbufs[0]->format == PIPE_FORMAT_R16G16B16A16_FLOAT)
-            WRITE_CS_TABLE(dsa->cb_fp16_zb_no_readwrite, size);
-        else
-            WRITE_CS_TABLE(dsa->cb_zb_no_readwrite, size);
+    /* Choose the alpha ref value between 8-bit (FG_ALPHA_FUNC.AM_VAL) and
+     * 16-bit (FG_ALPHA_VALUE). */
+    if (is_r500 && (alpha_func & R300_FG_ALPHA_FUNC_ENABLE)) {
+        if (fb->nr_cbufs && fb->cbufs[0]->format == PIPE_FORMAT_R16G16B16A16_FLOAT) {
+            alpha_func |= R500_FG_ALPHA_FUNC_FP16_ENABLE;
+        } else {
+            alpha_func |= R500_FG_ALPHA_FUNC_8BIT;
+        }
     }
+
+    /* Setup alpha-to-coverage. */
+    if (r300->alpha_to_coverage && r300->msaa_enable) {
+        /* Always set 3/6, it improves precision even for 2x and 4x MSAA. */
+        alpha_func |= R300_FG_ALPHA_FUNC_MASK_ENABLE |
+                      R300_FG_ALPHA_FUNC_CFG_3_OF_6;
+    }
+
+    BEGIN_CS(size);
+    OUT_CS_REG(R300_FG_ALPHA_FUNC, alpha_func);
+    OUT_CS_TABLE(fb->zsbuf ? &dsa->cb_begin : dsa->cb_zb_no_readwrite, size-2);
+    END_CS;
 }
 
 static void get_rc_constant_state(
@@ -122,9 +134,9 @@ static void get_rc_constant_state(
         case RC_STATE_R300_TEXSCALE_FACTOR:
             tex = r300_resource(texstate->sampler_views[constant->u.State[1]]->base.texture);
             /* Add a small number to the texture size to work around rounding errors in hw. */
-            vec[0] = tex->b.b.b.width0  / (tex->tex.width0  + 0.001f);
-            vec[1] = tex->b.b.b.height0 / (tex->tex.height0 + 0.001f);
-            vec[2] = tex->b.b.b.depth0  / (tex->tex.depth0  + 0.001f);
+            vec[0] = tex->b.b.width0  / (tex->tex.width0  + 0.001f);
+            vec[1] = tex->b.b.height0 / (tex->tex.height0 + 0.001f);
+            vec[2] = tex->b.b.depth0  / (tex->tex.depth0  + 0.001f);
             vec[3] = 1;
             break;
 
@@ -363,12 +375,16 @@ void r300_emit_aa_state(struct r300_context *r300, unsigned size, void *state)
     OUT_CS_REG(R300_GB_AA_CONFIG, aa->aa_config);
 
     if (aa->dest) {
-        OUT_CS_REG(R300_RB3D_AARESOLVE_OFFSET, aa->dest->offset);
+        OUT_CS_REG_SEQ(R300_RB3D_AARESOLVE_OFFSET, 3);
+        OUT_CS(aa->dest->offset);
+        OUT_CS(aa->dest->pitch & R300_RB3D_AARESOLVE_PITCH_MASK);
+        OUT_CS(R300_RB3D_AARESOLVE_CTL_AARESOLVE_MODE_RESOLVE |
+               R300_RB3D_AARESOLVE_CTL_AARESOLVE_ALPHA_AVERAGE);
         OUT_CS_RELOC(aa->dest);
-        OUT_CS_REG(R300_RB3D_AARESOLVE_PITCH, aa->dest->pitch);
+    } else {
+        OUT_CS_REG(R300_RB3D_AARESOLVE_CTL, 0);
     }
 
-    OUT_CS_REG(R300_RB3D_AARESOLVE_CTL, aa->aaresolve_ctl);
     END_CS;
 }
 
@@ -383,13 +399,16 @@ void r300_emit_fb_state(struct r300_context* r300, unsigned size, void* state)
 
     BEGIN_CS(size);
 
-    /* NUM_MULTIWRITES replicates COLOR[0] to all colorbuffers, which is not
-     * what we usually want. */
     if (r300->screen->caps.is_r500) {
         rb3d_cctl = R300_RB3D_CCTL_INDEPENDENT_COLORFORMAT_ENABLE_ENABLE;
     }
+    /* NUM_MULTIWRITES replicates COLOR[0] to all colorbuffers. */
     if (fb->nr_cbufs && r300->fb_multiwrite) {
         rb3d_cctl |= R300_RB3D_CCTL_NUM_MULTIWRITES(fb->nr_cbufs);
+    }
+    if (r300->cmask_in_use) {
+        rb3d_cctl |= R300_RB3D_CCTL_AA_COMPRESSION_ENABLE |
+                     R300_RB3D_CCTL_CMASK_ENABLE;
     }
 
     OUT_CS_REG(R300_RB3D_CCTL, rb3d_cctl);
@@ -403,6 +422,17 @@ void r300_emit_fb_state(struct r300_context* r300, unsigned size, void* state)
 
         OUT_CS_REG(R300_RB3D_COLORPITCH0 + (4 * i), surf->pitch);
         OUT_CS_RELOC(surf);
+
+        if (r300->cmask_in_use && i == 0) {
+            OUT_CS_REG(R300_RB3D_CMASK_OFFSET0, 0);
+            OUT_CS_REG(R300_RB3D_CMASK_PITCH0, surf->pitch_cmask);
+            OUT_CS_REG(R300_RB3D_COLOR_CLEAR_VALUE, r300->color_clear_value);
+            if (r300->screen->caps.is_r500 && r300->screen->info.drm_minor >= 29) {
+                OUT_CS_REG_SEQ(R500_RB3D_COLOR_CLEAR_VALUE_AR, 2);
+                OUT_CS(r300->color_clear_value_ar);
+                OUT_CS(r300->color_clear_value_gb);
+            }
+        }
     }
 
     /* Set up the ZB part of the CBZB clear. */
@@ -441,19 +471,6 @@ void r300_emit_fb_state(struct r300_context* r300, unsigned size, void* state)
             OUT_CS_REG(R300_ZB_ZMASK_OFFSET, 0);
             OUT_CS_REG(R300_ZB_ZMASK_PITCH, surf->pitch_zmask);
         }
-    /* Set up a dummy zbuffer. Otherwise occlusion queries won't work.
-     * Use the first colorbuffer, we will disable writes in the DSA state
-     * so as not to corrupt it. */
-    } else if (fb->nr_cbufs) {
-        surf = r300_surface(fb->cbufs[0]);
-
-        OUT_CS_REG(R300_ZB_FORMAT, R300_DEPTHFORMAT_16BIT_INT_Z);
-
-        OUT_CS_REG(R300_ZB_DEPTHOFFSET, 0);
-        OUT_CS_RELOC(surf);
-
-        OUT_CS_REG(R300_ZB_DEPTHPITCH, 4 | R300_DEPTHMICROTILE_TILED_SQUARE);
-        OUT_CS_RELOC(surf);
     }
 
     END_CS;
@@ -485,9 +502,82 @@ void r300_emit_hyperz_end(struct r300_context *r300)
     r300_emit_hyperz_state(r300, r300->hyperz_state.size, &z);
 }
 
+#define R300_NIBBLES(x0, y0, x1, y1, x2, y2, d0y, d0x)  \
+    (((x0) & 0xf) | (((y0) & 0xf) << 4) |		   \
+    (((x1) & 0xf) << 8) | (((y1) & 0xf) << 12) |	   \
+    (((x2) & 0xf) << 16) | (((y2) & 0xf) << 20) |	   \
+    (((d0y) & 0xf) << 24) | (((d0x) & 0xf) << 28))
+
+static unsigned r300_get_mspos(int index, unsigned *p)
+{
+    unsigned reg, i, distx, disty, dist;
+
+    if (index == 0) {
+        /* MSPOS0 contains positions for samples 0,1,2 as (X,Y) pairs of nibbles,
+         * followed by a (Y,X) pair containing the minimum distance from the pixel
+         * edge:
+         *     X0, Y0, X1, Y1, X2, Y2, D0_Y, D0_X
+         *
+         * There is a quirk when setting D0_X. The value represents the distance
+         * from the left edge of the pixel quad to the first sample in subpixels.
+         * All values less than eight should use the actual value, but „7‟ should
+         * be used for the distance „8‟. The hardware will convert 7 into 8 internally.
+         */
+        distx = 11;
+        for (i = 0; i < 12; i += 2) {
+            if (p[i] < distx)
+                distx = p[i];
+        }
+
+        disty = 11;
+        for (i = 1; i < 12; i += 2) {
+            if (p[i] < disty)
+                disty = p[i];
+        }
+
+        if (distx == 8)
+            distx = 7;
+
+        reg = R300_NIBBLES(p[0], p[1], p[2], p[3], p[4], p[5], disty, distx);
+    } else {
+        /* MSPOS1 contains positions for samples 3,4,5 as (X,Y) pairs of nibbles,
+         * followed by the minimum distance from the pixel edge (not sure if X or Y):
+         *     X3, Y3, X4, Y4, X5, Y5, D1
+         */
+        dist = 11;
+        for (i = 0; i < 12; i++) {
+            if (p[i] < dist)
+                dist = p[i];
+        }
+
+        reg = R300_NIBBLES(p[6], p[7], p[8], p[9], p[10], p[11], dist, 0);
+    }
+    return reg;
+}
+
 void r300_emit_fb_state_pipelined(struct r300_context *r300,
                                   unsigned size, void *state)
 {
+    /* The sample coordinates are in the range [0,11], because
+     * GB_TILE_CONFIG.SUBPIXEL is set to the 1/12 subpixel precision.
+     *
+     * Some sample coordinates reach to neighboring pixels and should not be used.
+     * (e.g. Y=11)
+     *
+     * The unused samples must be set to the positions of other valid samples. */
+    static unsigned sample_locs_1x[12] = {
+        6,6,  6,6,  6,6,  6,6,  6,6,  6,6
+    };
+    static unsigned sample_locs_2x[12] = {
+        3,9,  9,3,  9,3,  9,3,  9,3,  9,3
+    };
+    static unsigned sample_locs_4x[12] = {
+        4,4,  8,8,  2,10,  10,2,  10,2,  10,2
+    };
+    static unsigned sample_locs_6x[12] = {
+        3,1,  7,3,  11,5,  1,7,  5,9,  9,10
+    };
+
     struct pipe_framebuffer_state* fb =
             (struct pipe_framebuffer_state*)r300->fb_state.state;
     unsigned i, num_cbufs = fb->nr_cbufs;
@@ -517,34 +607,26 @@ void r300_emit_fb_state_pipelined(struct r300_context *r300,
         OUT_CS(R300_US_OUT_FMT_UNUSED);
     }
 
-    /* Multisampling. Depends on framebuffer sample count.
-     * These are pipelined regs and as such cannot be moved
-     * to the AA state. */
-    mspos0 = 0x66666666;
-    mspos1 = 0x6666666;
-
-    if (fb->nr_cbufs && fb->cbufs[0]->texture->nr_samples > 1) {
-        /* Subsample placement. These may not be optimal. */
-        switch (fb->cbufs[0]->texture->nr_samples) {
-        case 2:
-            mspos0 = 0x33996633;
-            mspos1 = 0x6666663;
-            break;
-        case 3:
-            mspos0 = 0x33936933;
-            mspos1 = 0x6666663;
-            break;
-        case 4:
-            mspos0 = 0x33939933;
-            mspos1 = 0x3966663;
-            break;
-        case 6:
-            mspos0 = 0x22a2aa22;
-            mspos1 = 0x2a65672;
-            break;
-        default:
-            debug_printf("r300: Bad number of multisamples!\n");
-        }
+    /* Set sample positions. It depends on the framebuffer sample count.
+     * These are pipelined regs and as such cannot be moved to the AA state.
+     */
+    switch (r300->num_samples) {
+    default:
+        mspos0 = r300_get_mspos(0, sample_locs_1x);
+        mspos1 = r300_get_mspos(1, sample_locs_1x);
+        break;
+    case 2:
+        mspos0 = r300_get_mspos(0, sample_locs_2x);
+        mspos1 = r300_get_mspos(1, sample_locs_2x);
+        break;
+    case 4:
+        mspos0 = r300_get_mspos(0, sample_locs_4x);
+        mspos1 = r300_get_mspos(1, sample_locs_4x);
+        break;
+    case 6:
+        mspos0 = r300_get_mspos(0, sample_locs_6x);
+        mspos1 = r300_get_mspos(1, sample_locs_6x);
+        break;
     }
 
     OUT_CS_REG_SEQ(R300_GB_MSPOS0, 2);
@@ -562,7 +644,7 @@ void r300_emit_query_start(struct r300_context *r300, unsigned size, void*state)
 	return;
 
     BEGIN_CS(size);
-    if (r300->screen->caps.family == CHIP_FAMILY_RV530) {
+    if (r300->screen->caps.family == CHIP_RV530) {
         OUT_CS_REG(RV530_FG_ZBREG_DEST, RV530_FG_ZBREG_DEST_PIPE_SELECT_ALL);
     } else {
         OUT_CS_REG(R300_SU_REG_DEST, R300_RASTER_PIPE_SELECT_ALL);
@@ -665,7 +747,7 @@ void r300_emit_query_end(struct r300_context* r300)
     if (query->begin_emitted == FALSE)
         return;
 
-    if (caps->family == CHIP_FAMILY_RV530) {
+    if (caps->family == CHIP_RV530) {
         if (r300->screen->info.r300_num_z_pipes == 2)
             rv530_emit_query_end_double_z(r300, query);
         else
@@ -761,6 +843,18 @@ void r300_emit_rs_block_state(struct r300_context* r300,
     END_CS;
 }
 
+void r300_emit_sample_mask(struct r300_context *r300,
+                           unsigned size, void *state)
+{
+    unsigned mask = (*(unsigned*)state) & ((1 << 6)-1);
+    CS_LOCALS(r300);
+
+    BEGIN_CS(size);
+    OUT_CS_REG(R300_SC_SCREENDOOR,
+               mask | (mask << 6) | (mask << 12) | (mask << 18));
+    END_CS;
+}
+
 void r300_emit_scissor_state(struct r300_context* r300,
                              unsigned size, void* state)
 {
@@ -825,7 +919,7 @@ void r300_emit_textures_state(struct r300_context *r300,
 void r300_emit_vertex_arrays(struct r300_context* r300, int offset,
                              boolean indexed, int instance_id)
 {
-    struct pipe_vertex_buffer *vbuf = r300->vbuf_mgr->real_vertex_buffer;
+    struct pipe_vertex_buffer *vbuf = r300->vertex_buffer;
     struct pipe_vertex_element *velem = r300->velems->velem;
     struct r300_resource *buf;
     int i;
@@ -943,7 +1037,10 @@ void r300_emit_vertex_arrays_swtcl(struct r300_context *r300, boolean indexed)
             (r300->vertex_info.size << 8));
     OUT_CS(r300->draw_vbo_offset);
     OUT_CS(0);
-    OUT_CS_RELOC(r300_resource(r300->vbo));
+
+    assert(r300->vbo_cs);
+    cs_winsys->cs_write_reloc(cs_copy, r300->vbo_cs);
+    CS_USED_DW(2);
     END_CS;
 }
 
@@ -1151,6 +1248,27 @@ void r300_emit_zmask_clear(struct r300_context *r300, unsigned size, void *state
     r300_mark_atom_dirty(r300, &r300->hyperz_state);
 }
 
+void r300_emit_cmask_clear(struct r300_context *r300, unsigned size, void *state)
+{
+    struct pipe_framebuffer_state *fb =
+        (struct pipe_framebuffer_state*)r300->fb_state.state;
+    struct r300_resource *tex;
+    CS_LOCALS(r300);
+
+    tex = r300_resource(fb->cbufs[0]->texture);
+
+    BEGIN_CS(size);
+    OUT_CS_PKT3(R300_PACKET3_3D_CLEAR_CMASK, 2);
+    OUT_CS(0);
+    OUT_CS(tex->tex.cmask_dwords);
+    OUT_CS(0);
+    END_CS;
+
+    /* Mark the current zbuffer's zmask as in use. */
+    r300->cmask_in_use = TRUE;
+    r300_mark_fb_state_dirty(r300, R300_CHANGED_CMASK_ENABLE);
+}
+
 void r300_emit_ztop_state(struct r300_context* r300,
                           unsigned size, void* state)
 {
@@ -1177,6 +1295,7 @@ boolean r300_emit_buffer_validate(struct r300_context *r300,
 {
     struct pipe_framebuffer_state *fb =
         (struct pipe_framebuffer_state*)r300->fb_state.state;
+    struct r300_aa_state *aa = (struct r300_aa_state*)r300->aa_state.state;
     struct r300_textures_state *texstate =
         (struct r300_textures_state*)r300->textures_state.state;
     struct r300_resource *tex;
@@ -1202,6 +1321,14 @@ validate:
                                     r300_surface(fb->zsbuf)->domain);
         }
     }
+    /* The AA resolve buffer. */
+    if (r300->aa_state.dirty) {
+        if (aa->dest) {
+            r300->rws->cs_add_reloc(r300->cs, aa->dest->cs_buf,
+                                    RADEON_USAGE_WRITE,
+                                    aa->dest->domain);
+        }
+    }
     if (r300->textures_state.dirty) {
         /* ...textures... */
         for (i = 0; i < texstate->count; i++) {
@@ -1219,16 +1346,16 @@ validate:
         r300->rws->cs_add_reloc(r300->cs, r300->query_current->cs_buf,
                                 RADEON_USAGE_WRITE, RADEON_DOMAIN_GTT);
     /* ...vertex buffer for SWTCL path... */
-    if (r300->vbo)
-        r300->rws->cs_add_reloc(r300->cs, r300_resource(r300->vbo)->cs_buf,
-                                RADEON_USAGE_READ,
-                                r300_resource(r300->vbo)->domain);
+    if (r300->vbo_cs)
+        r300->rws->cs_add_reloc(r300->cs, r300->vbo_cs,
+                                RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
     /* ...vertex buffers for HWTCL path... */
     if (do_validate_vertex_buffers && r300->vertex_arrays_dirty) {
-        struct pipe_vertex_buffer *vbuf = r300->vbuf_mgr->real_vertex_buffer;
-        struct pipe_vertex_buffer *last = r300->vbuf_mgr->real_vertex_buffer +
-                                      r300->vbuf_mgr->nr_real_vertex_buffers;
+        struct pipe_vertex_buffer *vbuf = r300->vertex_buffer;
+        struct pipe_vertex_buffer *last = r300->vertex_buffer +
+                                      r300->nr_vertex_buffers;
         struct pipe_resource *buf;
+
         for (; vbuf != last; vbuf++) {
             buf = vbuf->buffer;
             if (!buf)
@@ -1283,7 +1410,9 @@ unsigned r300_get_num_cs_end_dwords(struct r300_context *r300)
     dwords += 26; /* emit_query_end */
     dwords += r300->hyperz_state.size + 2; /* emit_hyperz_end + zcache flush */
     if (r300->screen->caps.is_r500)
-        dwords += 2;
+        dwords += 2; /* emit_index_bias */
+    if (r300->screen->info.drm_minor >= 6)
+        dwords += 3; /* MSPOS */
 
     return dwords;
 }

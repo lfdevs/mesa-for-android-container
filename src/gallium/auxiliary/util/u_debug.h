@@ -41,6 +41,8 @@
 
 #include "os/os_misc.h"
 
+#include "pipe/p_format.h"
+
 
 #ifdef	__cplusplus
 extern "C" {
@@ -101,7 +103,7 @@ debug_printf(const char *format, ...)
  * ... isn't portable so we need to pass arguments in parentheses.
  *
  * usage:
- *    debug_printf_once(("awnser: %i\n", 42));
+ *    debug_printf_once(("answer: %i\n", 42));
  */
 #define debug_printf_once(args) \
    do { \
@@ -275,7 +277,7 @@ struct debug_named_value
  *    ...
  * @endcode
  */
-#define DEBUG_NAMED_VALUE(__symbol) DEBUG_NAMED_VALUE_WITH_DESCRIPTION(__symbol, NULL)
+#define DEBUG_NAMED_VALUE(__symbol) {#__symbol, (unsigned long)__symbol, NULL}
 #define DEBUG_NAMED_VALUE_WITH_DESCRIPTION(__symbol, __desc) {#__symbol, (unsigned long)__symbol, __desc}
 #define DEBUG_NAMED_VALUE_END {NULL, 0, NULL}
 
@@ -418,7 +420,7 @@ struct pipe_transfer;
 struct pipe_resource;
 
 void debug_dump_image(const char *prefix,
-                      unsigned format, unsigned cpp,
+                      enum pipe_format format, unsigned cpp,
                       unsigned width, unsigned height,
                       unsigned stride,
                       const void *data);
@@ -433,7 +435,7 @@ void debug_dump_surface_bmp(struct pipe_context *pipe,
                             struct pipe_surface *surface);
 void debug_dump_transfer_bmp(struct pipe_context *pipe,
                              const char *filename,
-                             struct pipe_transfer *transfer);
+                             struct pipe_transfer *transfer, void *ptr);
 void debug_dump_float_rgba_bmp(const char *filename,
                                unsigned width, unsigned height,
                                float *rgba, unsigned stride);
@@ -441,9 +443,13 @@ void debug_dump_float_rgba_bmp(const char *filename,
 #define debug_dump_image(prefix, format, cpp, width, height, stride, data) ((void)0)
 #define debug_dump_surface(pipe, prefix, surface) ((void)0)
 #define debug_dump_surface_bmp(pipe, filename, surface) ((void)0)
-#define debug_dump_transfer_bmp(filename, transfer) ((void)0)
+#define debug_dump_transfer_bmp(filename, transfer, ptr) ((void)0)
 #define debug_dump_float_rgba_bmp(filename, width, height, rgba, stride) ((void)0)
 #endif
+
+
+void
+debug_print_transfer_flags(const char *msg, unsigned usage);
 
 
 #ifdef	__cplusplus

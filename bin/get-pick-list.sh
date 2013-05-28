@@ -1,6 +1,12 @@
 #!/bin/sh
 
 # Script for generating a list of candidates for cherry-picking to a stable branch
+#
+# Usage examples:
+#
+# $ bin/get-pick-list.sh
+# $ bin/get-pick-list.sh > picklist
+# $ bin/get-pick-list.sh | tee picklist
 
 # Grep for commits with "cherry picked from commit" in the commit message.
 git log --reverse --grep="cherry picked from commit" origin/master..HEAD |\
@@ -8,12 +14,12 @@ git log --reverse --grep="cherry picked from commit" origin/master..HEAD |\
 	sed -e 's/^[[:space:]]*(cherry picked from commit[[:space:]]*//' -e 's/)//' > already_picked
 
 # Grep for commits that were marked as a candidate for the stable tree.
-git log --reverse --pretty=%H -i --grep='^[[:space:]]*NOTE: This is a candidate' HEAD..origin/master |\
+git log --reverse --pretty=%H -i --grep='^[[:space:]]*NOTE: .*[Cc]andidate' HEAD..origin/master |\
 while read sha
 do
 	# Check to see whether the patch is on the ignore list.
-	if [ -f .git/cherry-ignore ] ; then
-		if grep -q ^$sha .git/cherry-ignore ; then
+	if [ -f bin/.cherry-ignore ] ; then
+		if grep -q ^$sha bin/.cherry-ignore ; then
 			continue
 		fi
 	fi

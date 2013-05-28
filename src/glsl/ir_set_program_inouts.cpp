@@ -26,7 +26,8 @@
  *
  * Sets the InputsRead and OutputsWritten of Mesa programs.
  *
- * Additionally, for fragment shaders, sets the InterpQualifier array.
+ * Additionally, for fragment shaders, sets the InterpQualifier array, the
+ * IsCentroid bitfield, and the UsesDFdy flag.
  *
  * Mesa programs (gl_program, not gl_shader_program) have a set of
  * flags indicating which varyings are read and written.  Computing
@@ -60,6 +61,8 @@ public:
 
    virtual ir_visitor_status visit_enter(ir_dereference_array *);
    virtual ir_visitor_status visit_enter(ir_function_signature *);
+   virtual ir_visitor_status visit_enter(ir_expression *);
+   virtual ir_visitor_status visit_enter(ir_discard *);
    virtual ir_visitor_status visit(ir_dereference_variable *);
    virtual ir_visitor_status visit(ir_variable *);
 
@@ -81,13 +84,15 @@ mark(struct gl_program *prog, ir_variable *var, int offset, int len,
     */
 
    for (int i = 0; i < len; i++) {
-      GLbitfield64 bitfield = BITFIELD64_BIT(var->location + offset + i);
-      if (var->mode == ir_var_in) {
+      GLbitfield64 bitfield = BITFIELD64_BIT(var->location + var->index + offset + i);
+      if (var->mode == ir_var_shader_in) {
 	 prog->InputsRead |= bitfield;
          if (is_fragment_shader) {
             gl_fragment_program *fprog = (gl_fragment_program *) prog;
-            fprog->InterpQualifier[var->location + offset + i] =
+            fprog->InterpQualifier[var->location + var->index + offset + i] =
                (glsl_interp_qualifier) var->interpolation;
+            if (var->centroid)
+               fprog->IsCentroid |= bitfield;
          }
       } else if (var->mode == ir_var_system_value) {
          prog->SystemValuesRead |= bitfield;
@@ -147,8 +152,8 @@ ir_set_program_inouts_visitor::visit_enter(ir_dereference_array *ir)
 ir_visitor_status
 ir_set_program_inouts_visitor::visit(ir_variable *ir)
 {
-   if (ir->mode == ir_var_in ||
-       ir->mode == ir_var_out ||
+   if (ir->mode == ir_var_shader_in ||
+       ir->mode == ir_var_shader_out ||
        ir->mode == ir_var_system_value) {
       hash_table_insert(this->ht, ir, ir);
    }
@@ -166,6 +171,28 @@ ir_set_program_inouts_visitor::visit_enter(ir_function_signature *ir)
    return visit_continue_with_parent;
 }
 
+ir_visitor_status
+ir_set_program_inouts_visitor::visit_enter(ir_expression *ir)
+{
+   if (is_fragment_shader && ir->operation == ir_unop_dFdy) {
+      gl_fragment_program *fprog = (gl_fragment_program *) prog;
+      fprog->UsesDFdy = true;
+   }
+   return visit_continue;
+}
+
+ir_visitor_status
+ir_set_program_inouts_visitor::visit_enter(ir_discard *)
+{
+   /* discards are only allowed in fragment shaders. */
+   assert(is_fragment_shader);
+
+   gl_fragment_program *fprog = (gl_fragment_program *) prog;
+   fprog->UsesKill = true;
+
+   return visit_continue;
+}
+
 void
 do_set_program_inouts(exec_list *instructions, struct gl_program *prog,
                       bool is_fragment_shader)
@@ -176,8 +203,11 @@ do_set_program_inouts(exec_list *instructions, struct gl_program *prog,
    prog->OutputsWritten = 0;
    prog->SystemValuesRead = 0;
    if (is_fragment_shader) {
-      memset(((gl_fragment_program *) prog)->InterpQualifier, 0,
-             sizeof(((gl_fragment_program *) prog)->InterpQualifier));
+      gl_fragment_program *fprog = (gl_fragment_program *) prog;
+      memset(fprog->InterpQualifier, 0, sizeof(fprog->InterpQualifier));
+      fprog->IsCentroid = 0;
+      fprog->UsesDFdy = false;
+      fprog->UsesKill = false;
    }
    visit_list_elements(&v, instructions);
 }

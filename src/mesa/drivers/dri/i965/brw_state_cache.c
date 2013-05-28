@@ -47,6 +47,9 @@
 #include "main/imports.h"
 #include "intel_batchbuffer.h"
 #include "brw_state.h"
+#include "brw_vs.h"
+#include "brw_wm.h"
+#include "brw_vs.h"
 
 #define FILE_DEBUG_FLAG DEBUG_STATE
 
@@ -111,7 +114,7 @@ rehash(struct brw_cache *cache)
    GLuint size, i;
 
    size = cache->size * 3;
-   items = (struct brw_cache_item**) calloc(1, size * sizeof(*items));
+   items = calloc(1, size * sizeof(*items));
 
    for (i = 0; i < cache->size; i++)
       for (c = cache->items[i]; c; c = next) {
@@ -120,7 +123,7 @@ rehash(struct brw_cache *cache)
 	 items[c->hash % size] = c;
       }
 
-   FREE(cache->items);
+   free(cache->items);
    cache->items = items;
    cache->size = size;
 }
@@ -211,7 +214,12 @@ brw_try_upload_using_copy(struct brw_cache *cache,
 	    continue;
 	 }
 
-	 if (memcmp(item_aux, aux, item->aux_size) != 0) {
+         if (cache->aux_compare[result_item->cache_id]) {
+            if (!cache->aux_compare[result_item->cache_id](item_aux, aux,
+                                                           item->aux_size,
+                                                           item->key))
+               continue;
+         } else if (memcmp(item_aux, aux, item->aux_size) != 0) {
 	    continue;
 	 }
 
@@ -327,12 +335,17 @@ brw_init_caches(struct brw_context *brw)
 
    cache->size = 7;
    cache->n_items = 0;
-   cache->items = (struct brw_cache_item **)
-      calloc(1, cache->size * sizeof(struct brw_cache_item));
+   cache->items =
+      calloc(1, cache->size * sizeof(struct brw_cache_item *));
 
    cache->bo = drm_intel_bo_alloc(intel->bufmgr,
 				  "program cache",
 				  4096, 64);
+
+   cache->aux_compare[BRW_VS_PROG] = brw_vs_prog_data_compare;
+   cache->aux_compare[BRW_WM_PROG] = brw_wm_prog_data_compare;
+   cache->aux_free[BRW_VS_PROG] = brw_vs_prog_data_free;
+   cache->aux_free[BRW_WM_PROG] = brw_wm_prog_data_free;
 }
 
 static void
@@ -347,6 +360,10 @@ brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
    for (i = 0; i < cache->size; i++) {
       for (c = cache->items[i]; c; c = next) {
 	 next = c->next;
+         if (cache->aux_free[c->cache_id]) {
+            const void *item_aux = c->key + c->key_size;
+            cache->aux_free[c->cache_id](item_aux);
+         }
 	 free((void *)c->key);
 	 free(c);
       }
@@ -372,11 +389,14 @@ brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
 void
 brw_state_cache_check_size(struct brw_context *brw)
 {
-   /* un-tuned guess.  Each object is generally a page, so 1000 of them is 4 MB of
+   /* un-tuned guess.  Each object is generally a page, so 2000 of them is 8 MB of
     * state cache.
     */
-   if (brw->cache.n_items > 1000)
+   if (brw->cache.n_items > 2000) {
+      perf_debug("Exceeded state cache size limit.  Clearing the set "
+                 "of compiled programs, which will trigger recompiles\n");
       brw_clear_cache(brw, &brw->cache);
+   }
 }
 
 

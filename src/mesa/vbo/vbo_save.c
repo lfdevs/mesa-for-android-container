@@ -34,9 +34,6 @@
 #include "vbo_context.h"
 
 
-#if FEATURE_dlist
-
-
 static void vbo_save_callback_init( struct gl_context *ctx )
 {
    ctx->Driver.NewList = vbo_save_NewList;
@@ -49,6 +46,9 @@ static void vbo_save_callback_init( struct gl_context *ctx )
 
 
 
+/**
+ * Called at context creation time.
+ */
 void vbo_save_init( struct gl_context *ctx )
 {
    struct vbo_context *vbo = vbo_context(ctx);
@@ -63,24 +63,26 @@ void vbo_save_init( struct gl_context *ctx )
       struct gl_client_array *arrays = save->arrays;
       unsigned i;
 
-      memcpy(arrays, vbo->legacy_currval,
+      memcpy(arrays, &vbo->currval[VBO_ATTRIB_POS],
              VERT_ATTRIB_FF_MAX * sizeof(arrays[0]));
       for (i = 0; i < VERT_ATTRIB_FF_MAX; ++i) {
          struct gl_client_array *array;
          array = &arrays[VERT_ATTRIB_FF(i)];
          array->BufferObj = NULL;
          _mesa_reference_buffer_object(ctx, &arrays->BufferObj,
-                                       vbo->legacy_currval[i].BufferObj);
+                                       vbo->currval[VBO_ATTRIB_POS+i].BufferObj);
       }
 
-      memcpy(arrays + VERT_ATTRIB_GENERIC(0), vbo->generic_currval,
+      memcpy(arrays + VERT_ATTRIB_GENERIC(0),
+             &vbo->currval[VBO_ATTRIB_GENERIC0],
              VERT_ATTRIB_GENERIC_MAX * sizeof(arrays[0]));
+
       for (i = 0; i < VERT_ATTRIB_GENERIC_MAX; ++i) {
          struct gl_client_array *array;
          array = &arrays[VERT_ATTRIB_GENERIC(i)];
          array->BufferObj = NULL;
          _mesa_reference_buffer_object(ctx, &array->BufferObj,
-                                       vbo->generic_currval[i].BufferObj);
+                           vbo->currval[VBO_ATTRIB_GENERIC0+i].BufferObj);
       }
    }
 
@@ -96,13 +98,13 @@ void vbo_save_destroy( struct gl_context *ctx )
 
    if (save->prim_store) {
       if ( --save->prim_store->refcount == 0 ) {
-         FREE( save->prim_store );
+         free(save->prim_store);
          save->prim_store = NULL;
       }
       if ( --save->vertex_store->refcount == 0 ) {
          _mesa_reference_buffer_object(ctx,
                                        &save->vertex_store->bufferobj, NULL);
-         FREE( save->vertex_store );
+         free(save->vertex_store);
          save->vertex_store = NULL;
       }
    }
@@ -126,6 +128,3 @@ void vbo_save_fallback( struct gl_context *ctx, GLboolean fallback )
    else
       save->replay_flags &= ~VBO_SAVE_FALLBACK;
 }
-
-
-#endif /* FEATURE_dlist */

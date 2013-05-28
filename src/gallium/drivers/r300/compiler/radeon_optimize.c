@@ -700,7 +700,7 @@ static int peephole_mul_omod(
 	struct rc_instruction * inst_mul,
 	struct rc_list * var_list)
 {
-	unsigned int chan, swz, i;
+	unsigned int chan = 0, swz, i;
 	int const_index = -1;
 	int temp_index = -1;
 	float const_value;
@@ -708,6 +708,7 @@ static int peephole_mul_omod(
 	struct rc_list * writer_list;
 	struct rc_variable * var;
 	struct peephole_mul_cb_data cb_data;
+	unsigned writemask_sum;
 
 	for (i = 0; i < 2; i++) {
 		unsigned int j;
@@ -815,10 +816,11 @@ static int peephole_mul_omod(
 	}
 
 	/* Rewrite the instructions */
+	writemask_sum = rc_variable_writemask_sum(writer_list->Item);
 	for (var = writer_list->Item; var; var = var->Friend) {
-		struct rc_variable * writer = writer_list->Item;
+		struct rc_variable * writer = var;
 		unsigned conversion_swizzle = rc_make_conversion_swizzle(
-					writer->Inst->U.I.DstReg.WriteMask,
+					writemask_sum,
 					inst_mul->U.I.DstReg.WriteMask);
 		writer->Inst->U.I.Omod = omod_op;
 		writer->Inst->U.I.DstReg.File = inst_mul->U.I.DstReg.File;

@@ -140,15 +140,11 @@ intel_bufferobj_data(struct gl_context * ctx,
    intel_obj->sys_buffer = NULL;
 
    if (size != 0) {
-      if (usage == GL_DYNAMIC_DRAW
 #ifdef I915
-	  /* On pre-965, stick VBOs in system memory, as we're always doing
-	   * swtnl with their contents anyway.
-	   */
-	  || target == GL_ARRAY_BUFFER || target == GL_ELEMENT_ARRAY_BUFFER
-#endif
-	 )
-      {
+      /* On pre-965, stick VBOs in system memory, as we're always doing
+       * swtnl with their contents anyway.
+       */
+      if (target == GL_ARRAY_BUFFER || target == GL_ELEMENT_ARRAY_BUFFER) {
 	 intel_obj->sys_buffer = malloc(size);
 	 if (intel_obj->sys_buffer != NULL) {
 	    if (data != NULL)
@@ -156,6 +152,7 @@ intel_bufferobj_data(struct gl_context * ctx,
 	    return true;
 	 }
       }
+#endif
       intel_bufferobj_alloc_buffer(intel, intel_obj);
       if (!intel_obj->buffer)
          return false;
@@ -208,16 +205,17 @@ intel_bufferobj_subdata(struct gl_context * ctx,
       drm_intel_bo_busy(intel_obj->buffer) ||
       drm_intel_bo_references(intel->batch.bo, intel_obj->buffer);
 
-   /* replace the current busy bo with fresh data */
-   if (busy && size == intel_obj->Base.Size) {
-      drm_intel_bo_unreference(intel_obj->buffer);
-      intel_bufferobj_alloc_buffer(intel, intel_obj);
-      drm_intel_bo_subdata(intel_obj->buffer, 0, size, data);
-   } else if (intel->gen < 6) {
-      if (busy) {
-	 drm_intel_bo *temp_bo;
-
-	 temp_bo = drm_intel_bo_alloc(intel->bufmgr, "subdata temp", size, 64);
+   if (busy) {
+      if (size == intel_obj->Base.Size) {
+	 /* Replace the current busy bo with fresh data. */
+	 drm_intel_bo_unreference(intel_obj->buffer);
+	 intel_bufferobj_alloc_buffer(intel, intel_obj);
+	 drm_intel_bo_subdata(intel_obj->buffer, 0, size, data);
+      } else {
+         perf_debug("Using a blit copy to avoid stalling on glBufferSubData() "
+                    "to a busy buffer object.\n");
+	 drm_intel_bo *temp_bo =
+	    drm_intel_bo_alloc(intel->bufmgr, "subdata temp", size, 64);
 
 	 drm_intel_bo_subdata(temp_bo, 0, size, data);
 
@@ -227,13 +225,12 @@ intel_bufferobj_subdata(struct gl_context * ctx,
 				size);
 
 	 drm_intel_bo_unreference(temp_bo);
-      } else {
-	 drm_intel_bo_subdata(intel_obj->buffer, offset, size, data);
       }
    } else {
-      /* Can't use the blit to modify the buffer in the middle of batch. */
-      if (drm_intel_bo_references(intel->batch.bo, intel_obj->buffer)) {
-	 intel_batchbuffer_flush(intel);
+      if (unlikely(INTEL_DEBUG & DEBUG_PERF)) {
+         if (drm_intel_bo_busy(intel_obj->buffer)) {
+            perf_debug("Stalling on the GPU in glBufferSubData().\n");
+         }
       }
       drm_intel_bo_subdata(intel_obj->buffer, offset, size, data);
    }
@@ -314,27 +311,32 @@ intel_bufferobj_map_range(struct gl_context * ctx,
       intel_obj->sys_buffer = NULL;
    }
 
-   /* If the mapping is synchronized with other GL operations, flush
-    * the batchbuffer so that GEM knows about the buffer access for later
-    * syncing.
-    */
-   if (!(access & GL_MAP_UNSYNCHRONIZED_BIT) &&
-       drm_intel_bo_references(intel->batch.bo, intel_obj->buffer))
-      intel_flush(ctx);
-
    if (intel_obj->buffer == NULL) {
       obj->Pointer = NULL;
       return NULL;
    }
 
-   /* If the user doesn't care about existing buffer contents and mapping
-    * would cause us to block, then throw out the old buffer.
+   /* If the access is synchronized (like a normal buffer mapping), then get
+    * things flushed out so the later mapping syncs appropriately through GEM.
+    * If the user doesn't care about existing buffer contents and mapping would
+    * cause us to block, then throw out the old buffer.
+    *
+    * If they set INVALIDATE_BUFFER, we can pitch the current contents to
+    * achieve the required synchronization.
     */
-   if (!(access & GL_MAP_UNSYNCHRONIZED_BIT) &&
-       (access & GL_MAP_INVALIDATE_BUFFER_BIT) &&
-       drm_intel_bo_busy(intel_obj->buffer)) {
-      drm_intel_bo_unreference(intel_obj->buffer);
-      intel_bufferobj_alloc_buffer(intel, intel_obj);
+   if (!(access & GL_MAP_UNSYNCHRONIZED_BIT)) {
+      if (drm_intel_bo_references(intel->batch.bo, intel_obj->buffer)) {
+	 if (access & GL_MAP_INVALIDATE_BUFFER_BIT) {
+	    drm_intel_bo_unreference(intel_obj->buffer);
+	    intel_bufferobj_alloc_buffer(intel, intel_obj);
+	 } else {
+	    intel_flush(ctx);
+	 }
+      } else if (drm_intel_bo_busy(intel_obj->buffer) &&
+		 (access & GL_MAP_INVALIDATE_BUFFER_BIT)) {
+	 drm_intel_bo_unreference(intel_obj->buffer);
+	 intel_bufferobj_alloc_buffer(intel, intel_obj);
+      }
    }
 
    /* If the user is mapping a range of an active buffer object but
@@ -353,23 +355,21 @@ intel_bufferobj_map_range(struct gl_context * ctx,
 						      length, 64);
 	 if (!(access & GL_MAP_READ_BIT)) {
 	    drm_intel_gem_bo_map_gtt(intel_obj->range_map_bo);
-	    intel_obj->mapped_gtt = true;
 	 } else {
 	    drm_intel_bo_map(intel_obj->range_map_bo,
 			     (access & GL_MAP_WRITE_BIT) != 0);
-	    intel_obj->mapped_gtt = false;
 	 }
 	 obj->Pointer = intel_obj->range_map_bo->virtual;
       }
       return obj->Pointer;
    }
 
-   if (!(access & GL_MAP_READ_BIT)) {
+   if (access & GL_MAP_UNSYNCHRONIZED_BIT)
+      drm_intel_gem_bo_map_unsynchronized(intel_obj->buffer);
+   else if (!(access & GL_MAP_READ_BIT)) {
       drm_intel_gem_bo_map_gtt(intel_obj->buffer);
-      intel_obj->mapped_gtt = true;
    } else {
       drm_intel_bo_map(intel_obj->buffer, (access & GL_MAP_WRITE_BIT) != 0);
-      intel_obj->mapped_gtt = false;
    }
 
    obj->Pointer = intel_obj->buffer->virtual + offset;
@@ -435,11 +435,7 @@ intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj)
       free(intel_obj->range_map_buffer);
       intel_obj->range_map_buffer = NULL;
    } else if (intel_obj->range_map_bo != NULL) {
-      if (intel_obj->mapped_gtt) {
-	 drm_intel_gem_bo_unmap_gtt(intel_obj->range_map_bo);
-      } else {
-	 drm_intel_bo_unmap(intel_obj->range_map_bo);
-      }
+      drm_intel_bo_unmap(intel_obj->range_map_bo);
 
       intel_emit_linear_blit(intel,
 			     intel_obj->buffer, obj->Offset,
@@ -456,11 +452,7 @@ intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj)
       drm_intel_bo_unreference(intel_obj->range_map_bo);
       intel_obj->range_map_bo = NULL;
    } else if (intel_obj->buffer != NULL) {
-      if (intel_obj->mapped_gtt) {
-	 drm_intel_gem_bo_unmap_gtt(intel_obj->buffer);
-      } else {
-	 drm_intel_bo_unmap(intel_obj->buffer);
-      }
+      drm_intel_bo_unmap(intel_obj->buffer);
    }
    obj->Pointer = NULL;
    obj->Offset = 0;
@@ -702,7 +694,6 @@ intel_bufferobj_copy_subdata(struct gl_context *ctx,
    intel_batchbuffer_emit_mi_flush(intel);
 }
 
-#if FEATURE_APPLE_object_purgeable
 static GLenum
 intel_buffer_purgeable(drm_intel_bo *buffer)
 {
@@ -725,10 +716,8 @@ intel_buffer_object_purgeable(struct gl_context * ctx,
       return intel_buffer_purgeable(intel_obj->buffer);
 
    if (option == GL_RELEASED_APPLE) {
-      if (intel_obj->sys_buffer != NULL) {
-         free(intel_obj->sys_buffer);
-         intel_obj->sys_buffer = NULL;
-      }
+      free(intel_obj->sys_buffer);
+      intel_obj->sys_buffer = NULL;
 
       return GL_RELEASED_APPLE;
    } else {
@@ -830,7 +819,6 @@ intel_render_object_unpurgeable(struct gl_context * ctx,
 
    return intel_buffer_unpurgeable(intel->mt->region->bo);
 }
-#endif
 
 void
 intelInitBufferObjectFuncs(struct dd_function_table *functions)
@@ -845,7 +833,6 @@ intelInitBufferObjectFuncs(struct dd_function_table *functions)
    functions->UnmapBuffer = intel_bufferobj_unmap;
    functions->CopyBufferSubData = intel_bufferobj_copy_subdata;
 
-#if FEATURE_APPLE_object_purgeable
    functions->BufferObjectPurgeable = intel_buffer_object_purgeable;
    functions->TextureObjectPurgeable = intel_texture_object_purgeable;
    functions->RenderObjectPurgeable = intel_render_object_purgeable;
@@ -853,5 +840,4 @@ intelInitBufferObjectFuncs(struct dd_function_table *functions)
    functions->BufferObjectUnpurgeable = intel_buffer_object_unpurgeable;
    functions->TextureObjectUnpurgeable = intel_texture_object_unpurgeable;
    functions->RenderObjectUnpurgeable = intel_render_object_unpurgeable;
-#endif
 }

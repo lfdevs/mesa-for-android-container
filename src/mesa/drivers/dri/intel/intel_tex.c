@@ -34,7 +34,13 @@ intelNewTextureObject(struct gl_context * ctx, GLuint name, GLenum target)
    (void) ctx;
 
    DBG("%s\n", __FUNCTION__);
+
+   if (obj == NULL)
+      return NULL;
+
    _mesa_initialize_texture_object(&obj->base, name, target);
+
+   obj->needs_validate = true;
 
    return &obj->base;
 }
@@ -51,9 +57,7 @@ intelDeleteTextureObject(struct gl_context *ctx,
 
 static GLboolean
 intel_alloc_texture_image_buffer(struct gl_context *ctx,
-				 struct gl_texture_image *image,
-				 gl_format format, GLsizei width,
-				 GLsizei height, GLsizei depth)
+				 struct gl_texture_image *image)
 {
    struct intel_context *intel = intel_context(ctx);
    struct intel_texture_image *intel_image = intel_texture_image(image);
@@ -84,14 +88,14 @@ intel_alloc_texture_image_buffer(struct gl_context *ctx,
    assert(!intel_image->base.ImageOffsets);
    intel_image->base.ImageOffsets = malloc(slices * sizeof(GLuint));
 
-   _swrast_init_texture_image(image, width, height, depth);
+   _swrast_init_texture_image(image);
 
    if (intel_texobj->mt &&
        intel_miptree_match_image(intel_texobj->mt, image)) {
       intel_miptree_reference(&intel_image->mt, intel_texobj->mt);
       DBG("%s: alloc obj %p level %d %dx%dx%d using object's miptree %p\n",
           __FUNCTION__, texobj, image->Level,
-          width, height, depth, intel_texobj->mt);
+          image->Width, image->Height, image->Depth, intel_texobj->mt);
    } else {
       intel_image->mt = intel_miptree_create_for_teximage(intel, intel_texobj,
                                                           intel_image,
@@ -106,7 +110,34 @@ intel_alloc_texture_image_buffer(struct gl_context *ctx,
 
       DBG("%s: alloc obj %p level %d %dx%dx%d using new miptree %p\n",
           __FUNCTION__, texobj, image->Level,
-          width, height, depth, intel_image->mt);
+          image->Width, image->Height, image->Depth, intel_image->mt);
+   }
+
+   intel_texobj->needs_validate = true;
+
+   return true;
+}
+
+/**
+ * Called via ctx->Driver.AllocTextureStorage()
+ * Just have to allocate memory for the texture images.
+ */
+static GLboolean
+intel_alloc_texture_storage(struct gl_context *ctx,
+                            struct gl_texture_object *texObj,
+                            GLsizei levels, GLsizei width,
+                            GLsizei height, GLsizei depth)
+{
+   const int numFaces = _mesa_num_tex_faces(texObj->Target);
+   int face;
+   int level;
+
+   for (face = 0; face < numFaces; face++) {
+      for (level = 0; level < levels; level++) {
+         struct gl_texture_image *const texImage = texObj->Image[face][level];
+         if (!intel_alloc_texture_image_buffer(ctx, texImage))
+            return false;
+      }
    }
 
    return true;
@@ -127,10 +158,8 @@ intel_free_texture_image_buffer(struct gl_context * ctx,
       intelImage->base.Buffer = NULL;
    }
 
-   if (intelImage->base.ImageOffsets) {
-      free(intelImage->base.ImageOffsets);
-      intelImage->base.ImageOffsets = NULL;
-   }
+   free(intelImage->base.ImageOffsets);
+   intelImage->base.ImageOffsets = NULL;
 }
 
 /**
@@ -193,6 +222,7 @@ intelInitTextureFuncs(struct dd_function_table *functions)
    functions->DeleteTexture = intelDeleteTextureObject;
    functions->AllocTextureImageBuffer = intel_alloc_texture_image_buffer;
    functions->FreeTextureImageBuffer = intel_free_texture_image_buffer;
+   functions->AllocTextureStorage = intel_alloc_texture_storage;
    functions->MapTextureImage = intel_map_texture_image;
    functions->UnmapTextureImage = intel_unmap_texture_image;
 }

@@ -40,12 +40,10 @@ r300_resource_create(struct pipe_screen *screen,
 
 void r300_init_resource_functions(struct r300_context *r300)
 {
-   r300->context.get_transfer = u_get_transfer_vtbl;
    r300->context.transfer_map = u_transfer_map_vtbl;
    r300->context.transfer_flush_region = u_default_transfer_flush_region;
    r300->context.transfer_unmap = u_transfer_unmap_vtbl;
-   r300->context.transfer_destroy = u_transfer_destroy_vtbl;
-   r300->context.transfer_inline_write = u_transfer_inline_write_vtbl;
+   r300->context.transfer_inline_write = u_default_transfer_inline_write;
    r300->context.create_surface = r300_create_surface;
    r300->context.surface_destroy = r300_surface_destroy;
 }
@@ -56,5 +54,4 @@ void r300_init_screen_resource_functions(struct r300_screen *r300screen)
    r300screen->screen.resource_from_handle = r300_texture_from_handle;
    r300screen->screen.resource_get_handle = r300_resource_get_handle;
    r300screen->screen.resource_destroy = u_resource_destroy_vtbl;
-   r300screen->screen.user_buffer_create = r300_user_buffer_create;
 }

@@ -117,6 +117,7 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
 {
    switch (texture) {
    case GL_TEXTURE_1D:
+   case GL_PROXY_TEXTURE_1D:
       assert(heightIn == 1);
       assert(depthIn == 1);
       *widthOut = widthIn;
@@ -125,6 +126,7 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
       *layersOut = 1;
       break;
    case GL_TEXTURE_1D_ARRAY:
+   case GL_PROXY_TEXTURE_1D_ARRAY:
       assert(depthIn == 1);
       *widthOut = widthIn;
       *heightOut = 1;
@@ -132,7 +134,9 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
       *layersOut = heightIn;
       break;
    case GL_TEXTURE_2D:
+   case GL_PROXY_TEXTURE_2D:
    case GL_TEXTURE_RECTANGLE:
+   case GL_PROXY_TEXTURE_RECTANGLE:
    case GL_TEXTURE_EXTERNAL_OES:
       assert(depthIn == 1);
       *widthOut = widthIn;
@@ -141,6 +145,13 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
       *layersOut = 1;
       break;
    case GL_TEXTURE_CUBE_MAP:
+   case GL_PROXY_TEXTURE_CUBE_MAP:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_X:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_X:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_Y:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y:
+   case GL_TEXTURE_CUBE_MAP_POSITIVE_Z:
+   case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z:
       assert(depthIn == 1);
       *widthOut = widthIn;
       *heightOut = heightIn;
@@ -148,6 +159,14 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
       *layersOut = 6;
       break;
    case GL_TEXTURE_2D_ARRAY:
+   case GL_PROXY_TEXTURE_2D_ARRAY:
+      *widthOut = widthIn;
+      *heightOut = heightIn;
+      *depthOut = 1;
+      *layersOut = depthIn;
+      break;
+   case GL_TEXTURE_CUBE_MAP_ARRAY:
+   case GL_PROXY_TEXTURE_CUBE_MAP_ARRAY:
       *widthOut = widthIn;
       *heightOut = heightIn;
       *depthOut = 1;
@@ -157,6 +176,7 @@ st_gl_texture_dims_to_pipe_dims(GLenum texture,
       assert(0 && "Unexpected texture in st_gl_texture_dims_to_pipe_dims()");
       /* fall-through */
    case GL_TEXTURE_3D:
+   case GL_PROXY_TEXTURE_3D:
       *widthOut = widthIn;
       *heightOut = heightIn;
       *depthOut = depthIn;
@@ -212,12 +232,12 @@ st_texture_match_image(const struct pipe_resource *pt,
  */
 GLubyte *
 st_texture_image_map(struct st_context *st, struct st_texture_image *stImage,
-                     GLuint zoffset, enum pipe_transfer_usage usage,
-                     GLuint x, GLuint y, GLuint w, GLuint h)
+                     enum pipe_transfer_usage usage,
+                     GLuint x, GLuint y, GLuint z,
+                     GLuint w, GLuint h, GLuint d)
 {
    struct st_texture_object *stObj =
       st_texture_object(stImage->base.TexObject);
-   struct pipe_context *pipe = st->pipe;
    GLuint level;
 
    DBG("%s \n", __FUNCTION__);
@@ -230,14 +250,9 @@ st_texture_image_map(struct st_context *st, struct st_texture_image *stImage,
    else
       level = stImage->base.Level;
 
-   stImage->transfer = pipe_get_transfer(st->pipe, stImage->pt, level,
-                                         stImage->base.Face + zoffset,
-                                         usage, x, y, w, h);
-
-   if (stImage->transfer)
-      return pipe_transfer_map(pipe, stImage->transfer);
-   else
-      return NULL;
+   return pipe_transfer_map_3d(st->pipe, stImage->pt, level, usage,
+                               x, y, z + stImage->base.Face,
+                               w, h, d, &stImage->transfer);
 }
 
 
@@ -250,40 +265,7 @@ st_texture_image_unmap(struct st_context *st,
    DBG("%s\n", __FUNCTION__);
 
    pipe_transfer_unmap(pipe, stImage->transfer);
-
-   pipe->transfer_destroy(pipe, stImage->transfer);
    stImage->transfer = NULL;
-}
-
-
-
-/**
- * Upload data to a rectangular sub-region.  Lots of choices how to do this:
- *
- * - memcpy by span to current destination
- * - upload data as new buffer and blit
- *
- * Currently always memcpy.
- */
-static void
-st_surface_data(struct pipe_context *pipe,
-		struct pipe_transfer *dst,
-		unsigned dstx, unsigned dsty,
-		const void *src, unsigned src_stride,
-		unsigned srcx, unsigned srcy, unsigned width, unsigned height)
-{
-   void *map = pipe_transfer_map(pipe, dst);
-
-   assert(dst->resource);
-   util_copy_rect(map,
-                  dst->resource->format,
-                  dst->stride,
-                  dstx, dsty, 
-                  width, height, 
-                  src, src_stride, 
-                  srcx, srcy);
-
-   pipe_transfer_unmap(pipe, dst);
 }
 
 
@@ -300,11 +282,11 @@ st_texture_image_data(struct st_context *st,
    struct pipe_context *pipe = st->pipe;
    GLuint i;
    const GLubyte *srcUB = src;
-   struct pipe_transfer *dst_transfer;
    GLuint layers;
 
    if (dst->target == PIPE_TEXTURE_1D_ARRAY ||
-       dst->target == PIPE_TEXTURE_2D_ARRAY)
+       dst->target == PIPE_TEXTURE_2D_ARRAY ||
+       dst->target == PIPE_TEXTURE_CUBE_ARRAY)
       layers = dst->array_size;
    else
       layers = u_minify(dst->depth0, level);
@@ -312,20 +294,14 @@ st_texture_image_data(struct st_context *st,
    DBG("%s\n", __FUNCTION__);
 
    for (i = 0; i < layers; i++) {
-      dst_transfer = pipe_get_transfer(st->pipe, dst, level, face + i,
-                                       PIPE_TRANSFER_WRITE, 0, 0,
-                                       u_minify(dst->width0, level),
-                                       u_minify(dst->height0, level));
+      struct pipe_box box;
+      u_box_2d_zslice(0, 0, face + i,
+                      u_minify(dst->width0, level),
+                      u_minify(dst->height0, level),
+                      &box);
 
-      st_surface_data(pipe, dst_transfer,
-		      0, 0,                             /* dstx, dsty */
-		      srcUB,
-		      src_row_stride,
-		      0, 0,                             /* source x, y */
-		      u_minify(dst->width0, level),
-                      u_minify(dst->height0, level));    /* width, height */
-
-      pipe->transfer_destroy(pipe, dst_transfer);
+      pipe->transfer_inline_write(pipe, dst, level, PIPE_TRANSFER_WRITE,
+                                  &box, srcUB, src_row_stride, 0);
 
       srcUB += src_image_stride;
    }
@@ -349,13 +325,11 @@ print_center_pixel(struct pipe_context *pipe, struct pipe_resource *src)
    region.height = 1;
    region.depth = 1;
 
-   xfer = pipe->get_transfer(pipe, src, 0, PIPE_TRANSFER_READ, &region);
-   map = pipe->transfer_map(pipe, xfer);
+   map = pipe->transfer_map(pipe, src, 0, PIPE_TRANSFER_READ, &region, &xfer);
 
    printf("center pixel: %d %d %d %d\n", map[0], map[1], map[2], map[3]);
 
    pipe->transfer_unmap(pipe, xfer);
-   pipe->transfer_destroy(pipe, xfer);
 }
 
 
@@ -424,7 +398,8 @@ st_create_color_map_texture(struct gl_context *ctx)
 
    /* find an RGBA texture format */
    format = st_choose_format(pipe->screen, GL_RGBA, GL_NONE, GL_NONE,
-                             PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW);
+                             PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW,
+                             FALSE);
 
    /* create texture for color map/table */
    pt = st_texture_create(st, PIPE_TEXTURE_2D, format, 0,

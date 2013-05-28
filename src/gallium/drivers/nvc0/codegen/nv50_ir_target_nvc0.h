@@ -38,6 +38,9 @@ public:
 
    virtual CodeEmitter *getCodeEmitter(Program::Type);
 
+   CodeEmitter *createCodeEmitterNVC0(Program::Type);
+   CodeEmitter *createCodeEmitterGK110(Program::Type);
+
    virtual bool runLegalizePass(Program *, CGStage stage) const;
 
    virtual void getBuiltinCode(const uint32_t **code, uint32_t *size) const;
@@ -45,10 +48,13 @@ public:
    virtual bool insnCanLoad(const Instruction *insn, int s,
                             const Instruction *ld) const;
    virtual bool isOpSupported(operation, DataType) const;
+   virtual bool isAccessSupported(DataFile, DataType) const;
    virtual bool isModSupported(const Instruction *, int s, Modifier) const;
    virtual bool isSatSupported(const Instruction *) const;
+   virtual bool isPostMultiplySupported(operation, float, int& e) const;
    virtual bool mayPredicate(const Instruction *, const Value *) const;
 
+   virtual bool canDualIssue(const Instruction *, const Instruction *) const;
    virtual int getLatency(const Instruction *) const;
    virtual int getThroughput(const Instruction *) const;
 
@@ -61,7 +67,8 @@ public:
 
 private:
    void initOpInfo();
-
 };
+
+bool calculateSchedDataNVC0(const Target *, Function *);
 
 } // namespace nv50_ir

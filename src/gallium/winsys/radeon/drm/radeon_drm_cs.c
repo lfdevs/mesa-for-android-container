@@ -71,18 +71,40 @@
 #include <stdint.h>
 #include <xf86drm.h>
 
+/*
+ * this are copy from radeon_drm, once an updated libdrm is released
+ * we should bump configure.ac requirement for it and remove the following
+ * field
+ */
 #ifndef RADEON_CHUNK_ID_FLAGS
-#define RADEON_CHUNK_ID_FLAGS	0x03
+#define RADEON_CHUNK_ID_FLAGS       0x03
 
 /* The first dword of RADEON_CHUNK_ID_FLAGS is a uint32 of these flags: */
 #define RADEON_CS_KEEP_TILING_FLAGS 0x01
 #endif
 
+#ifndef RADEON_CS_USE_VM
+#define RADEON_CS_USE_VM            0x02
+/* The second dword of RADEON_CHUNK_ID_FLAGS is a uint32 that sets the ring type */
+#define RADEON_CS_RING_GFX          0
+#define RADEON_CS_RING_COMPUTE      1
+#endif
+
+#ifndef RADEON_CS_RING_DMA
+#define RADEON_CS_RING_DMA          2
+#endif
+
+#ifndef RADEON_CS_END_OF_FRAME
+#define RADEON_CS_END_OF_FRAME      0x04
+#endif
+
+
 #define RELOC_DWORDS (sizeof(struct drm_radeon_cs_reloc) / sizeof(uint32_t))
 
-static boolean radeon_init_cs_context(struct radeon_cs_context *csc, int fd)
+static boolean radeon_init_cs_context(struct radeon_cs_context *csc,
+                                      struct radeon_drm_winsys *ws)
 {
-    csc->fd = fd;
+    csc->fd = ws->fd;
     csc->nrelocs = 512;
     csc->relocs_bo = (struct radeon_bo**)
                      CALLOC(1, csc->nrelocs * sizeof(struct radeon_bo*));
@@ -104,7 +126,7 @@ static boolean radeon_init_cs_context(struct radeon_cs_context *csc, int fd)
     csc->chunks[1].length_dw = 0;
     csc->chunks[1].chunk_data = (uint64_t)(uintptr_t)csc->relocs;
     csc->chunks[2].chunk_id = RADEON_CHUNK_ID_FLAGS;
-    csc->chunks[2].length_dw = 1;
+    csc->chunks[2].length_dw = 2;
     csc->chunks[2].chunk_data = (uint64_t)(uintptr_t)&csc->flags;
 
     csc->chunk_array[0] = (uint64_t)(uintptr_t)&csc->chunks[0];
@@ -140,10 +162,8 @@ static void radeon_destroy_cs_context(struct radeon_cs_context *csc)
     FREE(csc->relocs);
 }
 
-DEBUG_GET_ONCE_BOOL_OPTION(thread, "RADEON_THREAD", TRUE)
-static PIPE_THREAD_ROUTINE(radeon_drm_cs_emit_ioctl, param);
 
-static struct radeon_winsys_cs *radeon_drm_cs_create(struct radeon_winsys *rws)
+static struct radeon_winsys_cs *radeon_drm_cs_create(struct radeon_winsys *rws, enum ring_type ring_type)
 {
     struct radeon_drm_winsys *ws = radeon_drm_winsys(rws);
     struct radeon_drm_cs *cs;
@@ -152,16 +172,15 @@ static struct radeon_winsys_cs *radeon_drm_cs_create(struct radeon_winsys *rws)
     if (!cs) {
         return NULL;
     }
-    pipe_semaphore_init(&cs->flush_queued, 0);
     pipe_semaphore_init(&cs->flush_completed, 0);
 
     cs->ws = ws;
 
-    if (!radeon_init_cs_context(&cs->csc1, cs->ws->fd)) {
+    if (!radeon_init_cs_context(&cs->csc1, cs->ws)) {
         FREE(cs);
         return NULL;
     }
-    if (!radeon_init_cs_context(&cs->csc2, cs->ws->fd)) {
+    if (!radeon_init_cs_context(&cs->csc2, cs->ws)) {
         radeon_destroy_cs_context(&cs->csc1);
         FREE(cs);
         return NULL;
@@ -171,10 +190,9 @@ static struct radeon_winsys_cs *radeon_drm_cs_create(struct radeon_winsys *rws)
     cs->csc = &cs->csc1;
     cs->cst = &cs->csc2;
     cs->base.buf = cs->csc->buf;
+    cs->base.ring_type = ring_type;
 
     p_atomic_inc(&ws->num_cs);
-    if (cs->ws->num_cpus > 1 && debug_get_option_thread())
-        cs->thread = pipe_thread_create(radeon_drm_cs_emit_ioctl, cs);
     return &cs->base;
 }
 
@@ -228,35 +246,49 @@ int radeon_get_reloc(struct radeon_cs_context *csc, struct radeon_bo *bo)
     return -1;
 }
 
-static unsigned radeon_add_reloc(struct radeon_cs_context *csc,
+static unsigned radeon_add_reloc(struct radeon_drm_cs *cs,
                                  struct radeon_bo *bo,
                                  enum radeon_bo_usage usage,
                                  enum radeon_bo_domain domains,
                                  enum radeon_bo_domain *added_domains)
 {
+    struct radeon_cs_context *csc = cs->csc;
     struct drm_radeon_cs_reloc *reloc;
-    unsigned i;
     unsigned hash = bo->handle & (sizeof(csc->is_handle_added)-1);
     enum radeon_bo_domain rd = usage & RADEON_USAGE_READ ? domains : 0;
     enum radeon_bo_domain wd = usage & RADEON_USAGE_WRITE ? domains : 0;
+    bool update_hash = TRUE;
+    int i;
 
+    *added_domains = 0;
     if (csc->is_handle_added[hash]) {
         i = csc->reloc_indices_hashlist[hash];
         reloc = &csc->relocs[i];
-        if (reloc->handle == bo->handle) {
-            update_reloc_domains(reloc, rd, wd, added_domains);
-            return i;
+        if (reloc->handle != bo->handle) {
+            /* Hash collision, look for the BO in the list of relocs linearly. */
+            for (i = csc->crelocs - 1; i >= 0; i--) {
+                reloc = &csc->relocs[i];
+                if (reloc->handle == bo->handle) {
+                    /*printf("write_reloc collision, hash: %i, handle: %i\n", hash, bo->handle);*/
+                    break;
+                }
+            }
         }
 
-        /* Hash collision, look for the BO in the list of relocs linearly. */
-        for (i = csc->crelocs; i != 0;) {
-            --i;
-            reloc = &csc->relocs[i];
-            if (reloc->handle == bo->handle) {
-                update_reloc_domains(reloc, rd, wd, added_domains);
-
+        if (i >= 0) {
+            /* On DMA ring we need to emit as many relocation as there is use of the bo
+             * thus each time this function is call we should grow add again the bo to
+             * the relocation buffer
+             *
+             * Do not update the hash table if it's dma ring, so that first hash always point
+             * to first bo relocation which will the one used by the kernel. Following relocation
+             * will be ignore by the kernel memory placement (but still use by the kernel to
+             * update the cmd stream with proper buffer offset).
+             */
+            update_hash = FALSE;
+            update_reloc_domains(reloc, rd, wd, added_domains);
+            if (cs->base.ring_type != RING_DMA) {
                 csc->reloc_indices_hashlist[hash] = i;
-                /*printf("write_reloc collision, hash: %i, handle: %i\n", hash, bo->handle);*/
                 return i;
             }
         }
@@ -268,10 +300,10 @@ static unsigned radeon_add_reloc(struct radeon_cs_context *csc,
         csc->nrelocs += 10;
 
         size = csc->nrelocs * sizeof(struct radeon_bo*);
-        csc->relocs_bo = (struct radeon_bo**)realloc(csc->relocs_bo, size);
+        csc->relocs_bo = realloc(csc->relocs_bo, size);
 
         size = csc->nrelocs * sizeof(struct drm_radeon_cs_reloc);
-        csc->relocs = (struct drm_radeon_cs_reloc*)realloc(csc->relocs, size);
+        csc->relocs = realloc(csc->relocs, size);
 
         csc->chunks[1].chunk_data = (uint64_t)(uintptr_t)csc->relocs;
     }
@@ -287,7 +319,9 @@ static unsigned radeon_add_reloc(struct radeon_cs_context *csc,
     reloc->flags = 0;
 
     csc->is_handle_added[hash] = TRUE;
-    csc->reloc_indices_hashlist[hash] = csc->crelocs;
+    if (update_hash) {
+        csc->reloc_indices_hashlist[hash] = csc->crelocs;
+    }
 
     csc->chunks[1].length_dw += RELOC_DWORDS;
 
@@ -303,8 +337,7 @@ static unsigned radeon_drm_cs_add_reloc(struct radeon_winsys_cs *rcs,
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
     struct radeon_bo *bo = (struct radeon_bo*)buf;
     enum radeon_bo_domain added_domains;
-
-    unsigned index = radeon_add_reloc(cs->csc, bo, usage, domains, &added_domains);
+    unsigned index = radeon_add_reloc(cs, bo, usage, domains, &added_domains);
 
     if (added_domains & RADEON_DOMAIN_GTT)
         cs->csc->used_gart += bo->base.size;
@@ -350,12 +383,21 @@ static boolean radeon_drm_cs_validate(struct radeon_winsys_cs *rcs)
     return status;
 }
 
+static boolean radeon_drm_cs_memory_below_limit(struct radeon_winsys_cs *rcs, uint64_t vram, uint64_t gtt)
+{
+    struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
+    boolean status =
+        (cs->csc->used_gart + gtt) < cs->ws->info.gart_size * 0.7 &&
+        (cs->csc->used_vram + vram) < cs->ws->info.vram_size * 0.7;
+
+    return status;
+}
+
 static void radeon_drm_cs_write_reloc(struct radeon_winsys_cs *rcs,
                                       struct radeon_winsys_cs_handle *buf)
 {
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
     struct radeon_bo *bo = (struct radeon_bo*)buf;
-
     unsigned index = radeon_get_reloc(cs->csc, bo);
 
     if (index == -1) {
@@ -367,7 +409,7 @@ static void radeon_drm_cs_write_reloc(struct radeon_winsys_cs *rcs,
     OUT_CS(&cs->base, index * RELOC_DWORDS);
 }
 
-static void radeon_drm_cs_emit_ioctl_oneshot(struct radeon_cs_context *csc)
+void radeon_drm_cs_emit_ioctl_oneshot(struct radeon_cs_context *csc)
 {
     unsigned i;
 
@@ -392,44 +434,40 @@ static void radeon_drm_cs_emit_ioctl_oneshot(struct radeon_cs_context *csc)
     radeon_cs_context_cleanup(csc);
 }
 
-static PIPE_THREAD_ROUTINE(radeon_drm_cs_emit_ioctl, param)
+/*
+ * Make sure previous submission of this cs are completed
+ */
+void radeon_drm_cs_sync_flush(struct radeon_winsys_cs *rcs)
 {
-    struct radeon_drm_cs *cs = (struct radeon_drm_cs*)param;
+    struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
 
-    while (1) {
-        pipe_semaphore_wait(&cs->flush_queued);
-        if (cs->kill_thread)
-            break;
-        radeon_drm_cs_emit_ioctl_oneshot(cs->cst);
-        pipe_semaphore_signal(&cs->flush_completed);
-    }
-    pipe_semaphore_signal(&cs->flush_completed);
-    return NULL;
-}
-
-void radeon_drm_cs_sync_flush(struct radeon_drm_cs *cs)
-{
     /* Wait for any pending ioctl to complete. */
-    if (cs->thread && cs->flush_started) {
+    if (cs->ws->thread && cs->flush_started) {
         pipe_semaphore_wait(&cs->flush_completed);
         cs->flush_started = 0;
     }
 }
+
+DEBUG_GET_ONCE_BOOL_OPTION(noop, "RADEON_NOOP", FALSE)
 
 static void radeon_drm_cs_flush(struct radeon_winsys_cs *rcs, unsigned flags)
 {
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
     struct radeon_cs_context *tmp;
 
-    radeon_drm_cs_sync_flush(cs);
+    if (rcs->cdw > RADEON_MAX_CMDBUF_DWORDS) {
+       fprintf(stderr, "radeon: command stream overflowed\n");
+    }
+
+    radeon_drm_cs_sync_flush(rcs);
 
     /* Flip command streams. */
     tmp = cs->csc;
     cs->csc = cs->cst;
     cs->cst = tmp;
 
-    /* If the CS is not empty, emit it in a separate thread. */
-    if (cs->base.cdw) {
+    /* If the CS is not empty or overflowed, emit it in a separate thread. */
+    if (cs->base.cdw && cs->base.cdw <= RADEON_MAX_CMDBUF_DWORDS && !debug_get_option_noop()) {
         unsigned i, crelocs = cs->cst->crelocs;
 
         cs->cst->chunks[0].length_dw = cs->base.cdw;
@@ -439,18 +477,50 @@ static void radeon_drm_cs_flush(struct radeon_winsys_cs *rcs, unsigned flags)
             p_atomic_inc(&cs->cst->relocs_bo[i]->num_active_ioctls);
         }
 
-        if (flags & RADEON_FLUSH_KEEP_TILING_FLAGS) {
+        switch (cs->base.ring_type) {
+        case RING_DMA:
+            cs->cst->flags[0] = 0;
+            cs->cst->flags[1] = RADEON_CS_RING_DMA;
             cs->cst->cs.num_chunks = 3;
-            cs->cst->flags = RADEON_CS_KEEP_TILING_FLAGS;
-        } else {
+            if (cs->ws->info.r600_virtual_address) {
+                cs->cst->flags[0] |= RADEON_CS_USE_VM;
+            }
+            break;
+        default:
+        case RING_GFX:
+            cs->cst->flags[0] = 0;
+            cs->cst->flags[1] = RADEON_CS_RING_GFX;
             cs->cst->cs.num_chunks = 2;
+            if (flags & RADEON_FLUSH_KEEP_TILING_FLAGS) {
+                cs->cst->flags[0] |= RADEON_CS_KEEP_TILING_FLAGS;
+                cs->cst->cs.num_chunks = 3;
+            }
+            if (cs->ws->info.r600_virtual_address) {
+                cs->cst->flags[0] |= RADEON_CS_USE_VM;
+                cs->cst->cs.num_chunks = 3;
+            }
+            if (flags & RADEON_FLUSH_END_OF_FRAME) {
+                cs->cst->flags[0] |= RADEON_CS_END_OF_FRAME;
+                cs->cst->cs.num_chunks = 3;
+            }
+            if (flags & RADEON_FLUSH_COMPUTE) {
+                cs->cst->flags[1] = RADEON_CS_RING_COMPUTE;
+                cs->cst->cs.num_chunks = 3;
+            }
+            break;
         }
 
-        if (cs->thread &&
-            (flags & RADEON_FLUSH_ASYNC)) {
+        if (cs->ws->thread && (flags & RADEON_FLUSH_ASYNC)) {
             cs->flush_started = 1;
-            pipe_semaphore_signal(&cs->flush_queued);
+            radeon_drm_ws_queue_cs(cs->ws, cs);
         } else {
+            pipe_mutex_lock(cs->ws->cs_stack_lock);
+            if (cs->ws->thread) {
+                while (p_atomic_read(&cs->ws->ncs)) {
+                    pipe_condvar_wait(cs->ws->cs_queue_empty, cs->ws->cs_stack_lock);
+                }
+            }
+            pipe_mutex_unlock(cs->ws->cs_stack_lock);
             radeon_drm_cs_emit_ioctl_oneshot(cs->cst);
         }
     } else {
@@ -465,14 +535,8 @@ static void radeon_drm_cs_flush(struct radeon_winsys_cs *rcs, unsigned flags)
 static void radeon_drm_cs_destroy(struct radeon_winsys_cs *rcs)
 {
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
-    radeon_drm_cs_sync_flush(cs);
-    if (cs->thread) {
-        cs->kill_thread = 1;
-        pipe_semaphore_signal(&cs->flush_queued);
-        pipe_semaphore_wait(&cs->flush_completed);
-        pipe_thread_wait(cs->thread);
-    }
-    pipe_semaphore_destroy(&cs->flush_queued);
+
+    radeon_drm_cs_sync_flush(rcs);
     pipe_semaphore_destroy(&cs->flush_completed);
     radeon_cs_context_cleanup(&cs->csc1);
     radeon_cs_context_cleanup(&cs->csc2);
@@ -487,17 +551,32 @@ static void radeon_drm_cs_set_flush(struct radeon_winsys_cs *rcs,
                                     void *user)
 {
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
+
     cs->flush_cs = flush;
     cs->flush_data = user;
 }
 
 static boolean radeon_bo_is_referenced(struct radeon_winsys_cs *rcs,
-                                       struct radeon_winsys_cs_handle *_buf)
+                                       struct radeon_winsys_cs_handle *_buf,
+                                       enum radeon_bo_usage usage)
 {
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
     struct radeon_bo *bo = (struct radeon_bo*)_buf;
+    int index;
 
-    return radeon_bo_is_referenced_by_cs(cs, bo);
+    if (!bo->num_cs_references)
+        return FALSE;
+
+    index = radeon_get_reloc(cs->csc, bo);
+    if (index == -1)
+        return FALSE;
+
+    if ((usage & RADEON_USAGE_WRITE) && cs->csc->relocs[index].write_domain)
+        return TRUE;
+    if ((usage & RADEON_USAGE_READ) && cs->csc->relocs[index].read_domains)
+        return TRUE;
+
+    return FALSE;
 }
 
 void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws)
@@ -506,8 +585,10 @@ void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws)
     ws->base.cs_destroy = radeon_drm_cs_destroy;
     ws->base.cs_add_reloc = radeon_drm_cs_add_reloc;
     ws->base.cs_validate = radeon_drm_cs_validate;
+    ws->base.cs_memory_below_limit = radeon_drm_cs_memory_below_limit;
     ws->base.cs_write_reloc = radeon_drm_cs_write_reloc;
     ws->base.cs_flush = radeon_drm_cs_flush;
     ws->base.cs_set_flush_callback = radeon_drm_cs_set_flush;
     ws->base.cs_is_buffer_referenced = radeon_bo_is_referenced;
+    ws->base.cs_sync_flush = radeon_drm_cs_sync_flush;
 }

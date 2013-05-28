@@ -49,6 +49,8 @@
 
 static bool debug = false;
 
+namespace {
+
 class acp_entry : public exec_node
 {
 public:
@@ -93,6 +95,7 @@ public:
    ir_copy_propagation_elements_visitor()
    {
       this->progress = false;
+      this->killed_all = false;
       this->mem_ctx = ralloc_context(NULL);
       this->shader_mem_ctx = NULL;
       this->acp = new(mem_ctx) exec_list;
@@ -133,6 +136,8 @@ public:
    /* Context for allocating new shader nodes. */
    void *shader_mem_ctx;
 };
+
+} /* unnamed namespace */
 
 ir_visitor_status
 ir_copy_propagation_elements_visitor::visit_enter(ir_function_signature *ir)
@@ -288,11 +293,12 @@ ir_visitor_status
 ir_copy_propagation_elements_visitor::visit_enter(ir_call *ir)
 {
    /* Do copy propagation on call parameters, but skip any out params */
-   exec_list_iterator sig_param_iter = ir->get_callee()->parameters.iterator();
+   exec_list_iterator sig_param_iter = ir->callee->parameters.iterator();
    foreach_iter(exec_list_iterator, iter, ir->actual_parameters) {
       ir_variable *sig_param = (ir_variable *)sig_param_iter.get();
       ir_instruction *ir = (ir_instruction *)iter.get();
-      if (sig_param->mode != ir_var_out && sig_param->mode != ir_var_inout) {
+      if (sig_param->mode != ir_var_function_out
+          && sig_param->mode != ir_var_function_inout) {
          ir->accept(this);
       }
       sig_param_iter.next();

@@ -179,7 +179,7 @@ static void renderer_set_mvp(struct renderer *renderer,
       pipe_buffer_write(renderer->pipe, cbuf,
             0, sizeof(consts), consts);
    }
-   renderer->pipe->set_constant_buffer(renderer->pipe,
+   pipe_set_constant_buffer(renderer->pipe,
          PIPE_SHADER_VERTEX, 0, cbuf);
 
    memcpy(cur, mvp, sizeof(*mvp));
@@ -308,7 +308,8 @@ static void renderer_set_fs(struct renderer *r, RendererFs id)
 
       switch (id) {
       case RENDERER_FS_COLOR:
-         fs = util_make_fragment_passthrough_shader(r->pipe);
+         fs = util_make_fragment_passthrough_shader(r->pipe,
+                          TGSI_SEMANTIC_COLOR, TGSI_INTERPOLATE_PERSPECTIVE);
          break;
       case RENDERER_FS_TEXTURE:
          fs = util_make_fragment_tex_shader(r->pipe,
@@ -435,11 +436,11 @@ static void renderer_set_samplers(struct renderer *r,
 
    /* set samplers */
    for (i = 0; i < num_views; i++)
-      cso_single_sampler(r->cso, i, &sampler);
-   cso_single_sampler_done(r->cso);
+      cso_single_sampler(r->cso, PIPE_SHADER_FRAGMENT, i, &sampler);
+   cso_single_sampler_done(r->cso, PIPE_SHADER_FRAGMENT);
 
    /* set views */
-   cso_set_fragment_sampler_views(r->cso, num_views, views);
+   cso_set_sampler_views(r->cso, PIPE_SHADER_FRAGMENT, num_views, views);
 }
 
 /**
@@ -461,8 +462,8 @@ static void renderer_set_custom_fs(struct renderer *renderer,
 
    /* set samplers and views */
    if (num_samplers) {
-      cso_set_samplers(renderer->cso, num_samplers, samplers);
-      cso_set_fragment_sampler_views(renderer->cso, num_samplers, views);
+      cso_set_samplers(renderer->cso, PIPE_SHADER_FRAGMENT, num_samplers, samplers);
+      cso_set_sampler_views(renderer->cso, PIPE_SHADER_FRAGMENT, num_samplers, views);
    }
 
    /* upload fs constant buffer */
@@ -478,7 +479,7 @@ static void renderer_set_custom_fs(struct renderer *renderer,
                const_buffer_len);
          pipe_buffer_write(renderer->pipe, cbuf, 0,
                const_buffer_len, const_buffer);
-         renderer->pipe->set_constant_buffer(renderer->pipe,
+         pipe_set_constant_buffer(renderer->pipe,
                PIPE_SHADER_FRAGMENT, 0, cbuf);
 
          renderer->fs_cbuf = cbuf;
@@ -566,20 +567,9 @@ static void renderer_quad_texcoord(struct renderer *r,
  */
 static void renderer_quad_draw(struct renderer *r)
 {
-   struct pipe_resource *buf;
-
-   buf = pipe_user_buffer_create(r->pipe->screen,
-                                 r->vertices,
-                                 sizeof(r->vertices),
-                                 PIPE_BIND_VERTEX_BUFFER);
-   if (buf) {
-      util_draw_vertex_buffer(r->pipe, r->cso, buf, 0,
-                              PIPE_PRIM_TRIANGLE_FAN,
-                              Elements(r->vertices),     /* verts */
-                              Elements(r->vertices[0])); /* attribs/vert */
-
-      pipe_resource_reference(&buf, NULL);
-   }
+   util_draw_user_vertex_buffer(r->cso, r->vertices, PIPE_PRIM_TRIANGLE_FAN,
+                                Elements(r->vertices),     /* verts */
+                                Elements(r->vertices[0])); /* attribs/vert */
 }
 
 /**
@@ -602,8 +592,8 @@ VGboolean renderer_copy_begin(struct renderer *renderer,
    cso_save_framebuffer(renderer->cso);
    cso_save_viewport(renderer->cso);
    cso_save_blend(renderer->cso);
-   cso_save_samplers(renderer->cso);
-   cso_save_fragment_sampler_views(renderer->cso);
+   cso_save_samplers(renderer->cso, PIPE_SHADER_FRAGMENT);
+   cso_save_sampler_views(renderer->cso, PIPE_SHADER_FRAGMENT);
    cso_save_fragment_shader(renderer->cso);
    cso_save_vertex_shader(renderer->cso);
 
@@ -656,8 +646,8 @@ void renderer_copy_end(struct renderer *renderer)
    cso_restore_framebuffer(renderer->cso);
    cso_restore_viewport(renderer->cso);
    cso_restore_blend(renderer->cso);
-   cso_restore_samplers(renderer->cso);
-   cso_restore_fragment_sampler_views(renderer->cso);
+   cso_restore_samplers(renderer->cso, PIPE_SHADER_FRAGMENT);
+   cso_restore_sampler_views(renderer->cso, PIPE_SHADER_FRAGMENT);
    cso_restore_fragment_shader(renderer->cso);
    cso_restore_vertex_shader(renderer->cso);
 
@@ -676,8 +666,8 @@ VGboolean renderer_drawtex_begin(struct renderer *renderer,
       return VG_FALSE;
 
    cso_save_blend(renderer->cso);
-   cso_save_samplers(renderer->cso);
-   cso_save_fragment_sampler_views(renderer->cso);
+   cso_save_samplers(renderer->cso, PIPE_SHADER_FRAGMENT);
+   cso_save_sampler_views(renderer->cso, PIPE_SHADER_FRAGMENT);
    cso_save_fragment_shader(renderer->cso);
    cso_save_vertex_shader(renderer->cso);
 
@@ -727,8 +717,8 @@ void renderer_drawtex_end(struct renderer *renderer)
    assert(renderer->state == RENDERER_STATE_DRAWTEX);
 
    cso_restore_blend(renderer->cso);
-   cso_restore_samplers(renderer->cso);
-   cso_restore_fragment_sampler_views(renderer->cso);
+   cso_restore_samplers(renderer->cso, PIPE_SHADER_FRAGMENT);
+   cso_restore_sampler_views(renderer->cso, PIPE_SHADER_FRAGMENT);
    cso_restore_fragment_shader(renderer->cso);
    cso_restore_vertex_shader(renderer->cso);
 
@@ -881,8 +871,7 @@ VGboolean renderer_filter_begin(struct renderer *renderer,
    if (!renderer_can_support(renderer, dst, PIPE_BIND_RENDER_TARGET))
       return VG_FALSE;
 
-   u_surface_default_template(&surf_tmpl, dst,
-                              PIPE_BIND_RENDER_TARGET);
+   u_surface_default_template(&surf_tmpl, dst);
    surf = renderer->pipe->create_surface(renderer->pipe, dst, &surf_tmpl);
    if (!surf)
       return VG_FALSE;
@@ -900,8 +889,8 @@ VGboolean renderer_filter_begin(struct renderer *renderer,
    if (num_samplers) {
       struct pipe_resource *tex;
 
-      cso_save_samplers(renderer->cso);
-      cso_save_fragment_sampler_views(renderer->cso);
+      cso_save_samplers(renderer->cso, PIPE_SHADER_FRAGMENT);
+      cso_save_sampler_views(renderer->cso, PIPE_SHADER_FRAGMENT);
       cso_save_fragment_shader(renderer->cso);
       cso_save_vertex_shader(renderer->cso);
 
@@ -961,8 +950,8 @@ void renderer_filter_end(struct renderer *renderer)
    assert(renderer->state == RENDERER_STATE_FILTER);
 
    if (renderer->u.filter.use_sampler) {
-      cso_restore_samplers(renderer->cso);
-      cso_restore_fragment_sampler_views(renderer->cso);
+      cso_restore_samplers(renderer->cso, PIPE_SHADER_FRAGMENT);
+      cso_restore_sampler_views(renderer->cso, PIPE_SHADER_FRAGMENT);
       cso_restore_vertex_shader(renderer->cso);
    }
 
@@ -1051,10 +1040,10 @@ void renderer_polygon_stencil(struct renderer *renderer,
 {
    assert(renderer->state == RENDERER_STATE_POLYGON_STENCIL);
 
-   cso_set_vertex_buffers(renderer->cso, 1, vbuf);
+   cso_set_vertex_buffers(renderer->cso, 0, 1, vbuf);
 
    if (!renderer->u.polygon_stencil.manual_two_sides) {
-      util_draw_arrays(renderer->pipe, mode, start, count);
+      cso_draw_arrays(renderer->cso, mode, start, count);
    }
    else {
       struct pipe_rasterizer_state raster;
@@ -1069,7 +1058,7 @@ void renderer_polygon_stencil(struct renderer *renderer,
 
       cso_set_rasterizer(renderer->cso, &raster);
       cso_set_depth_stencil_alpha(renderer->cso, &dsa);
-      util_draw_arrays(renderer->pipe, mode, start, count);
+      cso_draw_arrays(renderer->cso, mode, start, count);
 
       /* back */
       raster.cull_face = PIPE_FACE_FRONT;
@@ -1077,7 +1066,7 @@ void renderer_polygon_stencil(struct renderer *renderer,
 
       cso_set_rasterizer(renderer->cso, &raster);
       cso_set_depth_stencil_alpha(renderer->cso, &dsa);
-      util_draw_arrays(renderer->pipe, mode, start, count);
+      cso_draw_arrays(renderer->cso, mode, start, count);
    }
 }
 

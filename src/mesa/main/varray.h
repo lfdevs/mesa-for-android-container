@@ -65,8 +65,6 @@ _mesa_update_array_max_element(struct gl_client_array *array)
 }
 
 
-#if _HAVE_FULL_GL
-
 extern void GLAPIENTRY
 _mesa_VertexPointer(GLint size, GLenum type, GLsizei stride,
                     const GLvoid *ptr);
@@ -129,25 +127,20 @@ _mesa_EdgeFlagPointerEXT(GLsizei stride, GLsizei count, const GLboolean *ptr);
 
 
 extern void GLAPIENTRY
-_mesa_FogCoordPointerEXT(GLenum type, GLsizei stride, const GLvoid *ptr);
+_mesa_FogCoordPointer(GLenum type, GLsizei stride, const GLvoid *ptr);
 
 
 extern void GLAPIENTRY
-_mesa_SecondaryColorPointerEXT(GLint size, GLenum type,
+_mesa_SecondaryColorPointer(GLint size, GLenum type,
 			       GLsizei stride, const GLvoid *ptr);
 
 
 extern void GLAPIENTRY
-_mesa_PointSizePointer(GLenum type, GLsizei stride, const GLvoid *ptr);
+_mesa_PointSizePointerOES(GLenum type, GLsizei stride, const GLvoid *ptr);
 
 
 extern void GLAPIENTRY
-_mesa_VertexAttribPointerNV(GLuint index, GLint size, GLenum type,
-                            GLsizei stride, const GLvoid *pointer);
-
-
-extern void GLAPIENTRY
-_mesa_VertexAttribPointerARB(GLuint index, GLint size, GLenum type,
+_mesa_VertexAttribPointer(GLuint index, GLint size, GLenum type,
                              GLboolean normalized, GLsizei stride,
                              const GLvoid *pointer);
 
@@ -157,23 +150,23 @@ _mesa_VertexAttribIPointer(GLuint index, GLint size, GLenum type,
 
 
 extern void GLAPIENTRY
-_mesa_EnableVertexAttribArrayARB(GLuint index);
+_mesa_EnableVertexAttribArray(GLuint index);
 
 
 extern void GLAPIENTRY
-_mesa_DisableVertexAttribArrayARB(GLuint index);
+_mesa_DisableVertexAttribArray(GLuint index);
 
 
 extern void GLAPIENTRY
-_mesa_GetVertexAttribdvARB(GLuint index, GLenum pname, GLdouble *params);
+_mesa_GetVertexAttribdv(GLuint index, GLenum pname, GLdouble *params);
 
 
 extern void GLAPIENTRY
-_mesa_GetVertexAttribfvARB(GLuint index, GLenum pname, GLfloat *params);
+_mesa_GetVertexAttribfv(GLuint index, GLenum pname, GLfloat *params);
 
 
 extern void GLAPIENTRY
-_mesa_GetVertexAttribivARB(GLuint index, GLenum pname, GLint *params);
+_mesa_GetVertexAttribiv(GLuint index, GLenum pname, GLint *params);
 
 
 extern void GLAPIENTRY
@@ -185,7 +178,7 @@ _mesa_GetVertexAttribIuiv(GLuint index, GLenum pname, GLuint *params);
 
 
 extern void GLAPIENTRY
-_mesa_GetVertexAttribPointervARB(GLuint index, GLenum pname, GLvoid **pointer);
+_mesa_GetVertexAttribPointerv(GLuint index, GLenum pname, GLvoid **pointer);
 
 
 extern void GLAPIENTRY
@@ -193,7 +186,7 @@ _mesa_InterleavedArrays(GLenum format, GLsizei stride, const GLvoid *pointer);
 
 
 extern void GLAPIENTRY
-_mesa_MultiDrawArraysEXT( GLenum mode, const GLint *first,
+_mesa_MultiDrawArrays( GLenum mode, const GLint *first,
                           const GLsizei *count, GLsizei primcount );
 
 extern void GLAPIENTRY
@@ -245,12 +238,8 @@ _mesa_DrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint end,
 				  const GLvoid *indices,
 				  GLint basevertex);
 
-#if FEATURE_EXT_transform_feedback
-
 extern void GLAPIENTRY
 _mesa_DrawTransformFeedback(GLenum mode, GLuint name);
-
-#endif
 
 extern void GLAPIENTRY
 _mesa_PrimitiveRestartIndex(GLuint index);
@@ -274,13 +263,5 @@ _mesa_init_varray( struct gl_context * ctx );
 
 extern void 
 _mesa_free_varray_data(struct gl_context *ctx);
-
-#else
-
-/** No-op */
-#define _mesa_init_varray( c )  ((void)0)
-#define _mesa_free_varray_data( c )  ((void)0)
-
-#endif
 
 #endif

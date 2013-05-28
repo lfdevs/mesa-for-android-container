@@ -100,13 +100,11 @@ void
 _mesa_print_tri_caps( const char *name, GLuint flags )
 {
    _mesa_debug(NULL,
-	   "%s: (0x%x) %s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+	   "%s: (0x%x) %s%s%s%s%s%s%s%s%s%s\n",
 	   name,
 	   flags,
-	   (flags & DD_FLATSHADE)           ? "flat-shade, " : "",
 	   (flags & DD_SEPARATE_SPECULAR)   ? "separate-specular, " : "",
 	   (flags & DD_TRI_LIGHT_TWOSIDE)   ? "tri-light-twoside, " : "",
-	   (flags & DD_TRI_TWOSTENCIL)      ? "tri-twostencil, " : "",
 	   (flags & DD_TRI_UNFILLED)        ? "tri-unfilled, " : "",
 	   (flags & DD_TRI_STIPPLE)         ? "tri-stipple, " : "",
 	   (flags & DD_TRI_OFFSET)          ? "tri-offset, " : "",
@@ -114,8 +112,7 @@ _mesa_print_tri_caps( const char *name, GLuint flags )
 	   (flags & DD_LINE_SMOOTH)         ? "line-smooth, " : "",
 	   (flags & DD_LINE_STIPPLE)        ? "line-stipple, " : "",
 	   (flags & DD_POINT_SMOOTH)        ? "point-smooth, " : "",
-	   (flags & DD_POINT_ATTEN)         ? "point-atten, " : "",
-	   (flags & DD_TRI_CULL_FRONT_BACK) ? "cull-all, " : ""
+	   (flags & DD_POINT_ATTEN)         ? "point-atten, " : ""
       );
 }
 
@@ -152,21 +149,19 @@ void _mesa_print_info( void )
 
 
 /**
- * Set the debugging flags.
- *
- * \param debug debug string
- *
- * If compiled with debugging support then search for keywords in \p debug and
- * enables the verbose debug output of the respective feature.
+ * Set verbose logging flags.  When these flags are set, GL API calls
+ * in the various categories will be printed to stderr.
+ * \param str  a comma-separated list of keywords
  */
-static void add_debug_flags( const char *debug )
+static void
+set_verbose_flags(const char *str)
 {
 #ifdef DEBUG
-   struct debug_option {
+   struct option {
       const char *name;
       GLbitfield flag;
    };
-   static const struct debug_option debug_opt[] = {
+   static const struct option opts[] = {
       { "varray",    VERBOSE_VARRAY },
       { "tex",       VERBOSE_TEXTURE },
       { "mat",       VERBOSE_MATERIAL },
@@ -182,34 +177,59 @@ static void add_debug_flags( const char *debug )
    };
    GLuint i;
 
+   if (!str)
+      return;
+
    MESA_VERBOSE = 0x0;
-   for (i = 0; i < Elements(debug_opt); i++) {
-      if (strstr(debug, debug_opt[i].name) || strcmp(debug, "all") == 0)
-         MESA_VERBOSE |= debug_opt[i].flag;
+   for (i = 0; i < Elements(opts); i++) {
+      if (strstr(str, opts[i].name) || strcmp(str, "all") == 0)
+         MESA_VERBOSE |= opts[i].flag;
    }
-
-   /* Debug flag:
-    */
-   if (strstr(debug, "flush"))
-      MESA_DEBUG_FLAGS |= DEBUG_ALWAYS_FLUSH;
-
-#else
-   (void) debug;
 #endif
 }
 
 
+/**
+ * Set debugging flags.  When these flags are set, Mesa will do additional
+ * debug checks or actions.
+ * \param str  a comma-separated list of keywords
+ */
+static void
+set_debug_flags(const char *str)
+{
+#ifdef DEBUG
+   struct option {
+      const char *name;
+      GLbitfield flag;
+   };
+   static const struct option opts[] = {
+      { "silent", DEBUG_SILENT }, /* turn off debug messages */
+      { "flush", DEBUG_ALWAYS_FLUSH }, /* flush after each drawing command */
+      { "incomplete_tex", DEBUG_INCOMPLETE_TEXTURE },
+      { "incomplete_fbo", DEBUG_INCOMPLETE_FBO }
+   };
+   GLuint i;
+
+   if (!str)
+      return;
+
+   MESA_DEBUG_FLAGS = 0x0;
+   for (i = 0; i < Elements(opts); i++) {
+      if (strstr(str, opts[i].name))
+         MESA_DEBUG_FLAGS |= opts[i].flag;
+   }
+#endif
+}
+
+
+/**
+ * Initialize debugging variables from env vars.
+ */
 void 
 _mesa_init_debug( struct gl_context *ctx )
 {
-   char *c;
-   c = _mesa_getenv("MESA_DEBUG");
-   if (c)
-      add_debug_flags(c);
-
-   c = _mesa_getenv("MESA_VERBOSE");
-   if (c)
-      add_debug_flags(c);
+   set_debug_flags(_mesa_getenv("MESA_DEBUG"));
+   set_verbose_flags(_mesa_getenv("MESA_VERBOSE"));
 }
 
 
@@ -263,7 +283,7 @@ write_texture_image(struct gl_texture_object *texObj,
       GLubyte *buffer;
       char s[100];
 
-      buffer = (GLubyte *) malloc(img->Width * img->Height
+      buffer = malloc(img->Width * img->Height
                                         * img->Depth * 4);
 
       store = ctx->Pack; /* save */
@@ -312,7 +332,7 @@ _mesa_write_renderbuffer_image(const struct gl_renderbuffer *rb)
       return;
    }
 
-   buffer = (GLubyte *) malloc(rb->Width * rb->Height * 4);
+   buffer = malloc(rb->Width * rb->Height * 4);
 
    ctx->Driver.ReadPixels(ctx, 0, 0, rb->Width, rb->Height,
                           format, type, &ctx->DefaultPacking, buffer);
@@ -446,7 +466,7 @@ _mesa_dump_color_buffer(const char *filename)
    const GLuint h = ctx->DrawBuffer->Height;
    GLubyte *buf;
 
-   buf = (GLubyte *) malloc(w * h * 4);
+   buf = malloc(w * h * 4);
 
    _mesa_PushClientAttrib(GL_CLIENT_PIXEL_STORE_BIT);
    _mesa_PixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -478,8 +498,8 @@ _mesa_dump_depth_buffer(const char *filename)
    GLubyte *buf2;
    GLuint i;
 
-   buf = (GLuint *) malloc(w * h * 4);  /* 4 bpp */
-   buf2 = (GLubyte *) malloc(w * h * 3); /* 3 bpp */
+   buf = malloc(w * h * 4);  /* 4 bpp */
+   buf2 = malloc(w * h * 3); /* 3 bpp */
 
    _mesa_PushClientAttrib(GL_CLIENT_PIXEL_STORE_BIT);
    _mesa_PixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -514,8 +534,8 @@ _mesa_dump_stencil_buffer(const char *filename)
    GLubyte *buf2;
    GLuint i;
 
-   buf = (GLubyte *) malloc(w * h);  /* 1 bpp */
-   buf2 = (GLubyte *) malloc(w * h * 3); /* 3 bpp */
+   buf = malloc(w * h);  /* 1 bpp */
+   buf2 = malloc(w * h * 3); /* 3 bpp */
 
    _mesa_PushClientAttrib(GL_CLIENT_PIXEL_STORE_BIT);
    _mesa_PixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -554,8 +574,35 @@ _mesa_dump_image(const char *filename, const void *image, GLuint w, GLuint h,
    else if (format == GL_LUMINANCE_ALPHA && type == GL_UNSIGNED_BYTE) {
       write_ppm(filename, image, w, h, 2, 1, 0, 0, invert);
    }
+   else if (format == GL_RED && type == GL_UNSIGNED_BYTE) {
+      write_ppm(filename, image, w, h, 1, 0, 0, 0, invert);
+   }
+   else if (format == GL_RGBA && type == GL_FLOAT) {
+      /* convert floats to ubyte */
+      GLubyte *buf = malloc(w * h * 4 * sizeof(GLubyte));
+      const GLfloat *f = (const GLfloat *) image;
+      GLuint i;
+      for (i = 0; i < w * h * 4; i++) {
+         UNCLAMPED_FLOAT_TO_UBYTE(buf[i], f[i]);
+      }
+      write_ppm(filename, buf, w, h, 4, 0, 1, 2, invert);
+      free(buf);
+   }
+   else if (format == GL_RED && type == GL_FLOAT) {
+      /* convert floats to ubyte */
+      GLubyte *buf = malloc(w * h * sizeof(GLubyte));
+      const GLfloat *f = (const GLfloat *) image;
+      GLuint i;
+      for (i = 0; i < w * h; i++) {
+         UNCLAMPED_FLOAT_TO_UBYTE(buf[i], f[i]);
+      }
+      write_ppm(filename, buf, w, h, 1, 0, 0, 0, invert);
+      free(buf);
+   }
    else {
-      _mesa_problem(NULL, "Unsupported format/type in _mesa_dump_image()");
+      _mesa_problem(NULL,
+                 "Unsupported format 0x%x / type 0x%x in _mesa_dump_image()",
+                 format, type);
    }
 }
 

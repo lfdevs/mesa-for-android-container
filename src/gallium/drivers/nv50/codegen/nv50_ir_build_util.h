@@ -29,6 +29,7 @@ class BuildUtil
 {
 public:
    BuildUtil();
+   BuildUtil(Program *);
 
    inline void setProgram(Program *);
    inline Program *getProgram() const { return prog; }
@@ -44,8 +45,9 @@ public:
    inline void insert(Instruction *);
    inline void remove(Instruction *i) { assert(i->bb == bb); bb->remove(i); }
 
-   inline LValue *getScratch(int size = 4);
-   inline LValue *getSSA(int size = 4); // scratch value for a single assignment
+   inline LValue *getScratch(int size = 4, DataFile = FILE_GPR);
+   // scratch value for a single assignment:
+   inline LValue *getSSA(int size = 4, DataFile = FILE_GPR);
 
    inline Instruction *mkOp(operation, DataType, Value *);
    Instruction *mkOp1(operation, DataType, Value *, Value *);
@@ -75,10 +77,11 @@ public:
                       Value **def, Value **src);
    Instruction *mkQuadop(uint8_t qop, Value *, uint8_t l, Value *, Value *);
 
-   FlowInstruction *mkFlow(operation, BasicBlock *target,
-                           CondCode, Value *pred);
+   FlowInstruction *mkFlow(operation, void *target, CondCode, Value *pred);
 
    Instruction *mkSelect(Value *pred, Value *dst, Value *trSrc, Value *flSrc);
+
+   Instruction *mkSplit(Value *half[2], uint8_t halfSize, Value *);
 
    void mkClobber(DataFile file, uint32_t regMask, int regUnitLog2);
 
@@ -94,29 +97,58 @@ public:
 
    Value *loadImm(Value *dst, int i) { return loadImm(dst, (uint32_t)i); }
 
+   struct Location
+   {
+      Location(unsigned array, unsigned arrayIdx, unsigned i, unsigned c)
+         : array(array), arrayIdx(arrayIdx), i(i), c(c) { }
+      Location(const Location &l)
+         : array(l.array), arrayIdx(l.arrayIdx), i(l.i), c(l.c) { }
+
+      bool operator==(const Location &l) const
+      {
+         return
+            array == l.array && arrayIdx == l.arrayIdx && i == l.i && c == l.c;
+      }
+
+      bool operator<(const Location &l) const
+      {
+         return array != l.array ? array < l.array :
+            arrayIdx != l.arrayIdx ? arrayIdx < l.arrayIdx :
+            i != l.i ? i < l.i :
+            c != l.c ? c < l.c :
+            false;
+      }
+
+      unsigned array, arrayIdx, i, c;
+   };
+
+   typedef bimap<Location, Value *> ValueMap;
+
    class DataArray
    {
    public:
-      DataArray();
-      DataArray(BuildUtil *);
-      ~DataArray();
+      DataArray(BuildUtil *bld) : up(bld) { }
 
-      inline void setParent(BuildUtil *bld) { assert(!up); up = bld; }
+      void setup(unsigned array, unsigned arrayIdx,
+                 uint32_t base, int len, int vecDim, int eltSize,
+                 DataFile file, int8_t fileIdx);
 
-      void setup(uint32_t base, int len, int vecDim, int size,
-                 DataFile, int8_t fileIndex = 0);
+      inline bool exists(ValueMap&, unsigned int i, unsigned int c);
 
-      inline bool exists(unsigned int i, unsigned int c);
-
-      Value *load(int i, int c, Value *ptr);
-      void store(int i, int c, Value *ptr, Value *value);
-      Value *acquire(int i, int c);
+      Value *load(ValueMap&, int i, int c, Value *ptr);
+      void store(ValueMap&, int i, int c, Value *ptr, Value *value);
+      Value *acquire(ValueMap&, int i, int c);
 
    private:
-      Symbol *mkSymbol(int i, int c, Symbol *base);
+      inline Value *lookup(ValueMap&, unsigned i, unsigned c);
+      inline Value *insert(ValueMap&, unsigned i, unsigned c, Value *v);
+
+      Symbol *mkSymbol(int i, int c);
 
    private:
-      Value **values;
+      BuildUtil *up;
+      unsigned array, arrayIdx;
+
       uint32_t baseAddr;
       uint32_t arrayLen;
       Symbol *baseSym;
@@ -126,10 +158,6 @@ public:
 
       DataFile file;
       bool regOnly;
-
-      BuildUtil *up;
-
-      void init();
    };
 
    Symbol *mkSymbol(DataFile file, int8_t fileIndex,
@@ -138,6 +166,7 @@ public:
    Symbol *mkSysVal(SVSemantic svName, uint32_t svIndex);
 
 private:
+   void init(Program *);
    void addImmediate(ImmediateValue *);
    inline unsigned int u32Hash(uint32_t);
 
@@ -186,21 +215,19 @@ BuildUtil::setPosition(Instruction *i, bool after)
 }
 
 LValue *
-BuildUtil::getScratch(int size)
+BuildUtil::getScratch(int size, DataFile f)
 {
-   LValue *lval = new_LValue(func, FILE_GPR);
-   if (size != 4)
-      lval->reg.size = size;
+   LValue *lval = new_LValue(func, f);
+   lval->reg.size = size;
    return lval;
 }
 
 LValue *
-BuildUtil::getSSA(int size)
+BuildUtil::getSSA(int size, DataFile f)
 {
-   LValue *lval = new_LValue(func, FILE_GPR);
+   LValue *lval = new_LValue(func, f);
    lval->ssa = 1;
-   if (size != 4)
-      lval->reg.size = size;
+   lval->reg.size = size;
    return lval;
 }
 
@@ -256,10 +283,24 @@ BuildUtil::mkOp3v(operation op, DataType ty, Value *dst,
 }
 
 bool
-BuildUtil::DataArray::exists(unsigned int i, unsigned int c)
+BuildUtil::DataArray::exists(ValueMap &m, unsigned int i, unsigned int c)
 {
    assert(i < arrayLen && c < vecDim);
-   return !regOnly || values[i * vecDim + c];
+   return !regOnly || m.r.count(Location(array, arrayIdx, i, c));
+}
+
+Value *
+BuildUtil::DataArray::lookup(ValueMap &m, unsigned i, unsigned c)
+{
+   ValueMap::r_iterator it = m.r.find(Location(array, arrayIdx, i, c));
+   return it != m.r.end() ? it->second : NULL;
+}
+
+Value *
+BuildUtil::DataArray::insert(ValueMap &m, unsigned i, unsigned c, Value *v)
+{
+   m.insert(Location(array, arrayIdx, i, c), v);
+   return v;
 }
 
 } // namespace nv50_ir

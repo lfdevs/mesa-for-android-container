@@ -24,8 +24,9 @@
 
 namespace nv50_ir {
 
-Function::Function(Program *p, const char *fnName)
+Function::Function(Program *p, const char *fnName, uint32_t label)
    : call(this),
+     label(label),
      name(fnName),
      prog(p)
 {
@@ -40,15 +41,27 @@ Function::Function(Program *p, const char *fnName)
    binPos = 0;
    binSize = 0;
 
+   stackPtr = NULL;
+   tlsBase = 0;
+   tlsSize = 0;
+
    prog->add(this, id);
 }
 
 Function::~Function()
 {
+   prog->del(this, id);
+
    if (domTree)
       delete domTree;
    if (bbArray)
       delete[] bbArray;
+
+   for (ArrayList::Iterator it = allInsns.iterator(); !it.end(); it.next())
+      delete_Instruction(prog, reinterpret_cast<Instruction *>(it.get()));
+
+   for (ArrayList::Iterator it = allLValues.iterator(); !it.end(); it.next())
+      delete_Value(prog, reinterpret_cast<LValue *>(it.get()));
 
    for (ArrayList::Iterator BBs = allBBlocks.iterator(); !BBs.end(); BBs.next())
       delete reinterpret_cast<BasicBlock *>(BBs.get());
@@ -75,6 +88,26 @@ BasicBlock::~BasicBlock()
 }
 
 BasicBlock *
+BasicBlock::clone(ClonePolicy<Function>& pol) const
+{
+   BasicBlock *bb = new BasicBlock(pol.context());
+
+   pol.set(this, bb);
+
+   for (Instruction *i = getFirst(); i; i = i->next)
+      bb->insertTail(i->clone(pol));
+
+   pol.context()->cfg.insert(&bb->cfg);
+
+   for (Graph::EdgeIterator it = cfg.outgoing(); !it.end(); it.next()) {
+      BasicBlock *obb = BasicBlock::get(it.getNode());
+      bb->cfg.attach(&pol.get(obb)->cfg, it.getType());
+   }
+
+   return bb;
+}
+
+BasicBlock *
 BasicBlock::idom() const
 {
    Graph::Node *dn = dom.parent();
@@ -91,7 +124,7 @@ BasicBlock::insertHead(Instruction *inst)
          insertBefore(phi, inst);
       } else {
          if (entry) {
-            insertBefore(entry, phi);
+            insertBefore(entry, inst);
          } else {
             assert(!exit);
             phi = exit = inst;
@@ -104,7 +137,7 @@ BasicBlock::insertHead(Instruction *inst)
          insertBefore(entry, inst);
       } else {
          if (phi) {
-            insertAfter(phi, inst);
+            insertAfter(exit, inst); // after last phi
          } else {
             assert(!exit);
             entry = exit = inst;
@@ -211,8 +244,15 @@ BasicBlock::remove(Instruction *insn)
    else
       exit = insn->prev;
 
-   if (insn == entry)
-      entry = insn->next ? insn->next : insn->prev;
+   if (insn == entry) {
+      if (insn->next)
+         entry = insn->next;
+      else
+      if (insn->prev && insn->prev->op != OP_PHI)
+         entry = insn->prev;
+      else
+         entry = NULL;
+   }
 
    if (insn == phi)
       phi = (insn->next && insn->next->op == OP_PHI) ? insn->next : 0;
@@ -249,6 +289,60 @@ void BasicBlock::permuteAdjacent(Instruction *a, Instruction *b)
       b->prev->next = b;
    if (a->prev)
       a->next->prev = a;
+}
+
+void
+BasicBlock::splitCommon(Instruction *insn, BasicBlock *bb, bool attach)
+{
+   bb->entry = insn;
+
+   if (insn) {
+      exit = insn->prev;
+      insn->prev = NULL;
+   }
+
+   if (exit)
+      exit->next = NULL;
+   else
+      entry = NULL;
+
+   while (!cfg.outgoing(true).end()) {
+      Graph::Edge *e = cfg.outgoing(true).getEdge();
+      bb->cfg.attach(e->getTarget(), e->getType());
+      this->cfg.detach(e->getTarget());
+   }
+
+   for (; insn; insn = insn->next) {
+      this->numInsns--;
+      bb->numInsns++;
+      insn->bb = bb;
+      bb->exit = insn;
+   }
+   if (attach)
+      this->cfg.attach(&bb->cfg, Graph::Edge::TREE);
+}
+
+BasicBlock *
+BasicBlock::splitBefore(Instruction *insn, bool attach)
+{
+   BasicBlock *bb = new BasicBlock(func);
+   assert(!insn || insn->op != OP_PHI);
+
+   splitCommon(insn, bb, attach);
+   return bb;
+}
+
+BasicBlock *
+BasicBlock::splitAfter(Instruction *insn, bool attach)
+{
+   BasicBlock *bb = new BasicBlock(func);
+   assert(!insn || insn->op != OP_PHI);
+
+   bb->joinAt = joinAt;
+   joinAt = NULL;
+
+   splitCommon(insn ? insn->next : NULL, bb, attach);
+   return bb;
 }
 
 bool
@@ -315,13 +409,37 @@ Function::setExit(BasicBlock *bb)
 unsigned int
 Function::orderInstructions(ArrayList &result)
 {
-   Iterator *iter;
-   for (iter = cfg.iteratorCFG(); !iter->end(); iter->next())
-      for (Instruction *insn = BasicBlock::get(*iter)->getFirst();
-           insn; insn = insn->next)
+   result.clear();
+
+   for (IteratorRef it = cfg.iteratorCFG(); !it->end(); it->next()) {
+      BasicBlock *bb =
+         BasicBlock::get(reinterpret_cast<Graph::Node *>(it->get()));
+
+      for (Instruction *insn = bb->getFirst(); insn; insn = insn->next)
          result.insert(insn, insn->serial);
-   cfg.putIterator(iter);
+   }
+
    return result.getSize();
+}
+
+void
+Function::buildLiveSets()
+{
+   for (unsigned i = 0; i <= loopNestingBound; ++i)
+      buildLiveSetsPreSSA(BasicBlock::get(cfg.getRoot()), cfg.nextSequence());
+
+   for (ArrayList::Iterator bi = allBBlocks.iterator(); !bi.end(); bi.next())
+      BasicBlock::get(bi)->liveSet.marker = false;
+}
+
+void
+Function::buildDefSets()
+{
+   for (unsigned i = 0; i <= loopNestingBound; ++i)
+      buildDefSetsPreSSA(BasicBlock::get(cfgExit), cfg.nextSequence());
+
+   for (ArrayList::Iterator bi = allBBlocks.iterator(); !bi.end(); bi.next())
+      BasicBlock::get(bi)->liveSet.marker = false;
 }
 
 bool
@@ -335,10 +453,10 @@ Pass::run(Program *prog, bool ordered, bool skipPhi)
 bool
 Pass::doRun(Program *prog, bool ordered, bool skipPhi)
 {
-   for (ArrayList::Iterator fi = prog->allFuncs.iterator();
-        !fi.end(); fi.next()) {
-      Function *fn = reinterpret_cast<Function *>(fi.get());
-      if (!doRun(fn, ordered, skipPhi))
+   for (IteratorRef it = prog->calls.iteratorDFS(false);
+        !it->end(); it->next()) {
+      Graph::Node *n = reinterpret_cast<Graph::Node *>(it->get());
+      if (!doRun(Function::get(n), ordered, skipPhi))
          return false;
    }
    return !err;
@@ -355,7 +473,7 @@ Pass::run(Function *func, bool ordered, bool skipPhi)
 bool
 Pass::doRun(Function *func, bool ordered, bool skipPhi)
 {
-   Iterator *bbIter;
+   IteratorRef bbIter;
    BasicBlock *bb;
    Instruction *insn, *next;
 
@@ -376,7 +494,7 @@ Pass::doRun(Function *func, bool ordered, bool skipPhi)
             break;
       }
    }
-   func->cfg.putIterator(bbIter);
+
    return !err;
 }
 
@@ -392,10 +510,9 @@ Function::printCFGraph(const char *filePath)
 
    fprintf(out, "digraph G {\n");
 
-   Iterator *iter;
-   for (iter = cfg.iteratorDFS(); !iter->end(); iter->next()) {
+   for (IteratorRef it = cfg.iteratorDFS(); !it->end(); it->next()) {
       BasicBlock *bb = BasicBlock::get(
-         reinterpret_cast<Graph::Node *>(iter->get()));
+         reinterpret_cast<Graph::Node *>(it->get()));
       int idA = bb->getId();
       for (Graph::EdgeIterator ei = bb->cfg.outgoing(); !ei.end(); ei.next()) {
          int idB = BasicBlock::get(ei.getNode())->getId();
@@ -421,7 +538,6 @@ Function::printCFGraph(const char *filePath)
          }
       }
    }
-   cfg.putIterator(iter);
 
    fprintf(out, "}\n");
    fclose(out);

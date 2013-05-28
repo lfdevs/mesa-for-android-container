@@ -38,9 +38,13 @@
 
 #include "util/u_debug.h"
 #include "util/u_rect.h"
-#include "vl/vl_compositor.h"
+#include "os/os_thread.h"
 
-#include "vl_winsys.h"
+#include "vl/vl_compositor.h"
+#include "vl/vl_csc.h"
+#include "vl/vl_matrix_filter.h"
+#include "vl/vl_median_filter.h"
+#include "vl/vl_winsys.h"
 
 /* Full VDPAU API documentation available at :
  * ftp://download.nvidia.com/XFree86/vdpau/doxygen/html/index.html */
@@ -97,10 +101,10 @@ FormatYCBCRToPipe(VdpYCbCrFormat vdpau_format)
          return PIPE_FORMAT_UYVY;
       case VDP_YCBCR_FORMAT_YUYV:
          return PIPE_FORMAT_YUYV;
-      case VDP_YCBCR_FORMAT_Y8U8V8A8: /* Not defined in p_format.h */
-         return PIPE_FORMAT_NONE;
+      case VDP_YCBCR_FORMAT_Y8U8V8A8:
+         return PIPE_FORMAT_R8G8B8A8_UNORM;
       case VDP_YCBCR_FORMAT_V8U8Y8A8:
-	     return PIPE_FORMAT_VUYA;
+         return PIPE_FORMAT_B8G8R8A8_UNORM;
       default:
          assert(0);
    }
@@ -120,9 +124,9 @@ PipeToFormatYCBCR(enum pipe_format p_format)
          return VDP_YCBCR_FORMAT_UYVY;
       case PIPE_FORMAT_YUYV:
          return VDP_YCBCR_FORMAT_YUYV;
-      //case PIPE_FORMAT_YUVA:
-        // return VDP_YCBCR_FORMAT_Y8U8V8A8;
-      case PIPE_FORMAT_VUYA:
+      case PIPE_FORMAT_R8G8B8A8_UNORM:
+        return VDP_YCBCR_FORMAT_Y8U8V8A8;
+      case PIPE_FORMAT_B8G8R8A8_UNORM:
          return VDP_YCBCR_FORMAT_V8U8Y8A8;
       default:
          assert(0);
@@ -268,24 +272,52 @@ PipeToProfile(enum pipe_video_profile p_profile)
    }
 }
 
-static inline struct pipe_video_rect *
-RectToPipe(const VdpRect *src, struct pipe_video_rect *dst)
+static inline struct u_rect *
+RectToPipe(const VdpRect *src, struct u_rect *dst)
 {
    if (src) {
-      dst->x = MIN2(src->x1, src->x0);
-      dst->y = MIN2(src->y1, src->y0);
-      dst->w = abs(src->x1 - src->x0);
-      dst->h = abs(src->y1 - src->y0);
+      dst->x0 = src->x0;
+      dst->y0 = src->y0;
+      dst->x1 = src->x1;
+      dst->y1 = src->y1;
       return dst;
    }
    return NULL;
 }
 
+static inline struct pipe_box
+RectToPipeBox(const VdpRect *rect, struct pipe_resource *res)
+{
+   struct pipe_box box;
+
+   box.x = 0;
+   box.y = 0;
+   box.z = 0;
+   box.width = res->width0;
+   box.height = res->height0;
+   box.depth = 1;
+
+   if (rect) {
+      box.x = MIN2(rect->x0, rect->x1);
+      box.y = MIN2(rect->y0, rect->y1);
+      box.width = abs(rect->x1 - rect->x0);
+      box.height = abs(rect->y1 - rect->y0);
+   }
+
+   return box;
+}
+
 typedef struct
 {
    struct vl_screen *vscreen;
-   struct vl_context *context;
+   struct pipe_context *context;
    struct vl_compositor compositor;
+   pipe_mutex mutex;
+
+   struct {
+      struct vl_compositor_state *cstate;
+      VdpOutputSurface surface;
+   } delayed_rendering;
 } vlVdpDevice;
 
 typedef struct
@@ -298,26 +330,46 @@ typedef struct
 {
    vlVdpDevice *device;
    Drawable drawable;
-   struct vl_compositor compositor;
-   struct u_rect dirty_area;
+   struct vl_compositor_state cstate;
 } vlVdpPresentationQueue;
 
 typedef struct
 {
    vlVdpDevice *device;
-   struct vl_compositor compositor;
+   struct vl_compositor_state cstate;
+
+   struct {
+      bool supported, enabled;
+      unsigned level;
+      struct vl_median_filter *filter;
+   } noise_reduction;
+
+   struct {
+      bool supported, enabled;
+      float value;
+      struct vl_matrix_filter *filter;
+   } sharpness;
+
    unsigned video_width, video_height;
    enum pipe_video_chroma_format chroma_format;
-   unsigned max_layers, skip_chroma_deint, custom_csc;
-   float luma_key_min, luma_key_max, sharpness, noise_reduction_level;
-   float csc[16];
+   unsigned max_layers, skip_chroma_deint;
+   float luma_key_min, luma_key_max;
+
+   bool custom_csc;
+   vl_csc_matrix csc;
 } vlVdpVideoMixer;
 
 typedef struct
 {
    vlVdpDevice *device;
-   struct pipe_video_buffer *video_buffer;
+   struct pipe_video_buffer templat, *video_buffer;
 } vlVdpSurface;
+
+typedef struct
+{
+   vlVdpDevice *device;
+   struct pipe_sampler_view *sampler_view;
+} vlVdpBitmapSurface;
 
 typedef uint64_t vlVdpTime;
 
@@ -328,6 +380,7 @@ typedef struct
    struct pipe_surface *surface;
    struct pipe_sampler_view *sampler_view;
    struct pipe_fence_handle *fence;
+   struct vl_compositor_state cstate;
    struct u_rect dirty_area;
 } vlVdpOutputSurface;
 
@@ -350,6 +403,12 @@ boolean vlGetFuncFTAB(VdpFuncId function_id, void **func);
 /* Public functions */
 VdpDeviceCreateX11 vdp_imp_device_create_x11;
 VdpPresentationQueueTargetCreateX11 vlVdpPresentationQueueTargetCreateX11;
+
+void vlVdpDefaultSamplerViewTemplate(struct pipe_sampler_view *templ, struct pipe_resource *res);
+
+/* Delayed rendering funtionality */
+void vlVdpResolveDelayedRendering(vlVdpDevice *dev, struct pipe_surface *surface, struct u_rect *dirty_area);
+void vlVdpSave4DelayedRendering(vlVdpDevice *dev, VdpOutputSurface surface, struct vl_compositor_state *cstate);
 
 /* Internal function pointers */
 VdpGetErrorString vlVdpGetErrorString;
@@ -375,6 +434,7 @@ VdpVideoSurfaceDestroy vlVdpVideoSurfaceDestroy;
 VdpVideoSurfaceGetParameters vlVdpVideoSurfaceGetParameters;
 VdpVideoSurfaceGetBitsYCbCr vlVdpVideoSurfaceGetBitsYCbCr;
 VdpVideoSurfacePutBitsYCbCr vlVdpVideoSurfacePutBitsYCbCr;
+void vlVdpVideoSurfaceClear(vlVdpSurface *vlsurf);
 VdpDecoderCreate vlVdpDecoderCreate;
 VdpDecoderDestroy vlVdpDecoderDestroy;
 VdpDecoderGetParameters vlVdpDecoderGetParameters;

@@ -23,21 +23,21 @@
  *
  **********************************************************/
 
-#include "svga_cmd.h"
 
+#include "os/os_thread.h"
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"
-#include "os/os_thread.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
+#include "svga_cmd.h"
 #include "svga_context.h"
-#include "svga_screen.h"
+#include "svga_debug.h"
 #include "svga_resource_buffer.h"
 #include "svga_resource_buffer_upload.h"
+#include "svga_screen.h"
 #include "svga_winsys.h"
-#include "svga_debug.h"
 
 
 /**
@@ -287,9 +287,7 @@ svga_buffer_upload_flush(struct svga_context *svga,
 
    assert(sbuf->head.prev && sbuf->head.next);
    LIST_DEL(&sbuf->head);
-#ifdef DEBUG
-   sbuf->head.next = sbuf->head.prev = NULL;
-#endif
+
    sbuf->dma.pending = FALSE;
    sbuf->dma.flags.discard = FALSE;
    sbuf->dma.flags.unsynchronized = FALSE;
@@ -410,7 +408,7 @@ svga_buffer_add_range(struct svga_buffer *sbuf,
 /**
  * Copy the contents of the malloc buffer to a hardware buffer.
  */
-static INLINE enum pipe_error
+static enum pipe_error
 svga_buffer_update_hw(struct svga_screen *ss, struct svga_buffer *sbuf)
 {
    assert(!sbuf->user);
@@ -460,7 +458,7 @@ svga_buffer_update_hw(struct svga_screen *ss, struct svga_buffer *sbuf)
  *
  * Used when the buffer is too big to fit in the GMR aperture.
  */
-static INLINE enum pipe_error
+static enum pipe_error
 svga_buffer_upload_piecewise(struct svga_screen *ss,
                              struct svga_context *svga,
                              struct svga_buffer *sbuf)
@@ -643,22 +641,4 @@ svga_context_flush_buffers(struct svga_context *svga)
       curr = next;
       next = curr->next;
    }
-}
-
-
-void
-svga_redefine_user_buffer(struct pipe_context *pipe,
-                          struct pipe_resource *resource,
-                          unsigned offset,
-                          unsigned size)
-{
-   struct svga_buffer *sbuf = svga_buffer(resource);
-
-   assert(sbuf->user);
-   assert(!sbuf->dma.pending);
-   assert(!sbuf->handle);
-   assert(!sbuf->hwbuf);
-
-   /* use the default action of simply resizing the user buffer's size */
-   u_default_redefine_user_buffer(pipe, resource, offset, size);
 }

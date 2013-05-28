@@ -191,9 +191,6 @@ svga_create_surface(struct pipe_context *pipe,
    struct svga_screen *ss = svga_screen(screen);
    struct svga_surface *s;
    unsigned face, zslice;
-   /* XXX surfaces should only be used for rendering purposes nowadays */
-   boolean render = (surf_tmpl->usage & (PIPE_BIND_RENDER_TARGET |
-                                         PIPE_BIND_DEPTH_STENCIL)) ? TRUE : FALSE;
    boolean view = FALSE;
    SVGA3dSurfaceFlags flags;
    SVGA3dSurfaceFormat format;
@@ -219,31 +216,25 @@ svga_create_surface(struct pipe_context *pipe,
    s->base.format = surf_tmpl->format;
    s->base.width = u_minify(pt->width0, surf_tmpl->u.tex.level);
    s->base.height = u_minify(pt->height0, surf_tmpl->u.tex.level);
-   s->base.usage = surf_tmpl->usage;
    s->base.u.tex.level = surf_tmpl->u.tex.level;
    s->base.u.tex.first_layer = surf_tmpl->u.tex.first_layer;
    s->base.u.tex.last_layer = surf_tmpl->u.tex.last_layer;
 
-   if (!render) {
-      flags = SVGA3D_SURFACE_HINT_TEXTURE;
-   } else {
-      if (surf_tmpl->usage & PIPE_BIND_RENDER_TARGET) {
-         flags = SVGA3D_SURFACE_HINT_RENDERTARGET;
-      }
-      if (surf_tmpl->usage & PIPE_BIND_DEPTH_STENCIL) {
-         flags = SVGA3D_SURFACE_HINT_DEPTHSTENCIL;
-      }
+   if (util_format_is_depth_or_stencil(surf_tmpl->format)) {
+      flags = SVGA3D_SURFACE_HINT_DEPTHSTENCIL;
+   }
+   else {
+      flags = SVGA3D_SURFACE_HINT_RENDERTARGET;
    }
 
-   format = svga_translate_format(ss, surf_tmpl->format, surf_tmpl->usage);
+   format = svga_translate_format(ss, surf_tmpl->format, 0);
    assert(format != SVGA3D_FORMAT_INVALID);
 
    if (svga_screen(screen)->debug.force_surface_view)
       view = TRUE;
 
    /* Currently only used for compressed textures */
-   if (render && 
-       format != svga_translate_format(ss, surf_tmpl->format, surf_tmpl->usage)) {
+   if (format != svga_translate_format(ss, surf_tmpl->format, 0)) {
       view = TRUE;
    }
 
@@ -389,9 +380,9 @@ svga_propagate_surface(struct svga_context *svga, struct pipe_surface *surf)
  * Check if we should call svga_propagate_surface on the surface.
  */
 boolean
-svga_surface_needs_propagation(struct pipe_surface *surf)
+svga_surface_needs_propagation(const struct pipe_surface *surf)
 {
-   struct svga_surface *s = svga_surface(surf);
+   const struct svga_surface *s = svga_surface_const(surf);
    struct svga_texture *tex = svga_texture(surf->texture);
 
    return s->dirty && s->handle != tex->handle;

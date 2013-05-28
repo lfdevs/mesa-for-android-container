@@ -52,7 +52,8 @@
  */
 static boolean
 softpipe_resource_layout(struct pipe_screen *screen,
-                         struct softpipe_resource *spr)
+                         struct softpipe_resource *spr,
+                         boolean allocate)
 {
    struct pipe_resource *pt = &spr->base;
    unsigned level;
@@ -83,9 +84,31 @@ softpipe_resource_layout(struct pipe_screen *screen,
       depth = u_minify(depth, 1);
    }
 
-   spr->data = align_malloc(buffer_size, 16);
+   if (buffer_size > SP_MAX_TEXTURE_SIZE)
+      return FALSE;
 
-   return spr->data != NULL;
+   if (allocate) {
+      spr->data = align_malloc(buffer_size, 16);
+      return spr->data != NULL;
+   }
+   else {
+      return TRUE;
+   }
+}
+
+
+/**
+ * Check the size of the texture specified by 'res'.
+ * \return TRUE if OK, FALSE if too large.
+ */
+static boolean
+softpipe_can_create_resource(struct pipe_screen *screen,
+                             const struct pipe_resource *res)
+{
+   struct softpipe_resource spr;
+   memset(&spr, 0, sizeof(spr));
+   spr.base = *res;
+   return softpipe_resource_layout(screen, &spr, FALSE);
 }
 
 
@@ -140,7 +163,7 @@ softpipe_resource_create(struct pipe_screen *screen,
          goto fail;
    }
    else {
-      if (!softpipe_resource_layout(screen, spr))
+      if (!softpipe_resource_layout(screen, spr, TRUE))
          goto fail;
    }
     
@@ -235,6 +258,7 @@ sp_get_tex_image_offset(const struct softpipe_resource *spr,
    unsigned offset = spr->level_offset[level];
 
    if (spr->base.target == PIPE_TEXTURE_CUBE ||
+       spr->base.target == PIPE_TEXTURE_CUBE_ARRAY ||
        spr->base.target == PIPE_TEXTURE_3D ||
        spr->base.target == PIPE_TEXTURE_2D_ARRAY) {
       offset += layer * nblocksy * spr->stride[level];
@@ -272,7 +296,6 @@ softpipe_create_surface(struct pipe_context *pipe,
       ps->format = surf_tmpl->format;
       ps->width = u_minify(pt->width0, level);
       ps->height = u_minify(pt->height0, level);
-      ps->usage = surf_tmpl->usage;
 
       ps->u.tex.level = level;
       ps->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
@@ -308,15 +331,22 @@ softpipe_surface_destroy(struct pipe_context *pipe,
  * \param usage  bitmask of PIPE_TRANSFER_x flags
  * \param box  the 1D/2D/3D region of interest
  */
-static struct pipe_transfer *
-softpipe_get_transfer(struct pipe_context *pipe,
+static void *
+softpipe_transfer_map(struct pipe_context *pipe,
                       struct pipe_resource *resource,
                       unsigned level,
                       unsigned usage,
-                      const struct pipe_box *box)
+                      const struct pipe_box *box,
+                      struct pipe_transfer **transfer)
 {
+   struct sw_winsys *winsys = softpipe_screen(pipe->screen)->winsys;
    struct softpipe_resource *spr = softpipe_resource(resource);
    struct softpipe_transfer *spt;
+   struct pipe_transfer *pt;
+   enum pipe_format format = resource->format;
+   const unsigned hgt = u_minify(spr->base.height0, level);
+   const unsigned nblocksy = util_format_get_nblocksy(format, hgt);
+   uint8_t *map;
 
    assert(resource);
    assert(level <= resource->last_level);
@@ -333,6 +363,9 @@ softpipe_get_transfer(struct pipe_context *pipe,
       }
       else if (resource->target == PIPE_TEXTURE_CUBE) {
          assert(box->z < 6);
+      }
+      else if (resource->target == PIPE_TEXTURE_CUBE_ARRAY) {
+         assert(box->z <= resource->array_size);
       }
       else {
          assert(box->z + box->depth <= (u_minify(resource->depth0, level)));
@@ -361,69 +394,41 @@ softpipe_get_transfer(struct pipe_context *pipe,
    }
 
    spt = CALLOC_STRUCT(softpipe_transfer);
-   if (spt) {
-      struct pipe_transfer *pt = &spt->base;
-      enum pipe_format format = resource->format;
-      const unsigned hgt = u_minify(spr->base.height0, level);
-      const unsigned nblocksy = util_format_get_nblocksy(format, hgt);
+   if (!spt)
+      return NULL;
 
-      pipe_resource_reference(&pt->resource, resource);
-      pt->level = level;
-      pt->usage = usage;
-      pt->box = *box;
-      pt->stride = spr->stride[level];
-      pt->layer_stride = pt->stride * nblocksy;
+   pt = &spt->base;
 
-      spt->offset = sp_get_tex_image_offset(spr, level, box->z);
- 
-      spt->offset += 
+   pipe_resource_reference(&pt->resource, resource);
+   pt->level = level;
+   pt->usage = usage;
+   pt->box = *box;
+   pt->stride = spr->stride[level];
+   pt->layer_stride = pt->stride * nblocksy;
+
+   spt->offset = sp_get_tex_image_offset(spr, level, box->z);
+
+   spt->offset +=
          box->y / util_format_get_blockheight(format) * spt->base.stride +
          box->x / util_format_get_blockwidth(format) * util_format_get_blocksize(format);
 
-      return pt;
-   }
-   return NULL;
-}
-
-
-/**
- * Free a pipe_transfer object which was created with
- * softpipe_get_transfer().
- */
-static void 
-softpipe_transfer_destroy(struct pipe_context *pipe,
-                          struct pipe_transfer *transfer)
-{
-   pipe_resource_reference(&transfer->resource, NULL);
-   FREE(transfer);
-}
-
-
-/**
- * Create memory mapping for given pipe_transfer object.
- */
-static void *
-softpipe_transfer_map(struct pipe_context *pipe,
-                      struct pipe_transfer *transfer)
-{
-   struct softpipe_transfer *spt = softpipe_transfer(transfer);
-   struct softpipe_resource *spr = softpipe_resource(transfer->resource);
-   struct sw_winsys *winsys = softpipe_screen(pipe->screen)->winsys;
-   uint8_t *map;
-   
    /* resources backed by display target treated specially:
     */
    if (spr->dt) {
-      map = winsys->displaytarget_map(winsys, spr->dt, transfer->usage);
+      map = winsys->displaytarget_map(winsys, spr->dt, usage);
    }
    else {
       map = spr->data;
    }
 
-   if (map == NULL)
+   if (map == NULL) {
+      pipe_resource_reference(&pt->resource, NULL);
+      FREE(spt);
       return NULL;
-   else
-      return map + spt->offset;
+   }
+
+   *transfer = pt;
+   return map + spt->offset;
 }
 
 
@@ -449,12 +454,15 @@ softpipe_transfer_unmap(struct pipe_context *pipe,
       /* Mark the texture as dirty to expire the tile caches. */
       spr->timestamp++;
    }
+
+   pipe_resource_reference(&transfer->resource, NULL);
+   FREE(transfer);
 }
 
 /**
  * Create buffer which wraps user-space data.
  */
-static struct pipe_resource *
+struct pipe_resource *
 softpipe_user_buffer_create(struct pipe_screen *screen,
                             void *ptr,
                             unsigned bytes,
@@ -486,8 +494,6 @@ softpipe_user_buffer_create(struct pipe_screen *screen,
 void
 softpipe_init_texture_funcs(struct pipe_context *pipe)
 {
-   pipe->get_transfer = softpipe_get_transfer;
-   pipe->transfer_destroy = softpipe_transfer_destroy;
    pipe->transfer_map = softpipe_transfer_map;
    pipe->transfer_unmap = softpipe_transfer_unmap;
 
@@ -506,6 +512,5 @@ softpipe_init_screen_texture_funcs(struct pipe_screen *screen)
    screen->resource_destroy = softpipe_resource_destroy;
    screen->resource_from_handle = softpipe_resource_from_handle;
    screen->resource_get_handle = softpipe_resource_get_handle;
-   screen->user_buffer_create = softpipe_user_buffer_create;
-
+   screen->can_create_resource = softpipe_can_create_resource;
 }

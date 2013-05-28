@@ -30,7 +30,7 @@
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/enums.h"
-#include "main/image.h"
+#include "main/glformats.h"
 #include "vbo_split.h"
 
 
@@ -62,6 +62,8 @@ struct split_context {
 
 static void flush_vertex( struct split_context *split )
 {
+   struct gl_context *ctx = split->ctx;
+   const struct gl_client_array **saved_arrays = ctx->Array._DrawArrays;
    struct _mesa_index_buffer ib;
    GLuint i;
 
@@ -82,8 +84,10 @@ static void flush_vertex( struct split_context *split )
 
    assert(split->max_index >= split->min_index);
 
-   split->draw(split->ctx,
-	       split->array,
+   ctx->Array._DrawArrays = split->array;
+   ctx->NewDriverState |= ctx->DriverFlags.NewArray;
+
+   split->draw(ctx,
 	       split->dstprim,
 	       split->dstprim_nr,
 	       split->ib ? &ib : NULL,
@@ -91,6 +95,9 @@ static void flush_vertex( struct split_context *split )
 	       split->min_index,
 	       split->max_index,
 	       NULL);
+
+   ctx->Array._DrawArrays = saved_arrays;
+   ctx->NewDriverState |= ctx->DriverFlags.NewArray;
 
    split->dstprim_nr = 0;
    split->min_index = ~0;
@@ -173,13 +180,14 @@ static void split_prims( struct split_context *split)
 
 	    nr = MIN2( available, remaining );
 	    nr -= (nr - first) % incr;
-	    
+
 	    outprim->mode = prim->mode;
 	    outprim->begin = (j == 0 && prim->begin);
 	    outprim->end = (nr == remaining && prim->end);
 	    outprim->start = prim->start + j;
 	    outprim->count = nr;
             outprim->num_instances = prim->num_instances;
+            outprim->base_instance = prim->base_instance;
 
 	    update_index_bounds(split, outprim);
 
@@ -218,12 +226,13 @@ static void split_prims( struct split_context *split)
 	 ib.type = GL_UNSIGNED_INT;
 	 ib.obj = split->ctx->Shared->NullBufferObj;
 	 ib.ptr = elts;
-	    
+
 	 tmpprim = *prim;
 	 tmpprim.indexed = 1;
 	 tmpprim.start = 0;
 	 tmpprim.count = count;
          tmpprim.num_instances = 1;
+         tmpprim.base_instance = 0;
 
 	 flush_vertex(split);
 

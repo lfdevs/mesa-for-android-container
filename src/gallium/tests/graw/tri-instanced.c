@@ -13,6 +13,7 @@
 
 #include "util/u_memory.h"      /* Offset() */
 #include "util/u_draw_quad.h"
+#include "util/u_inlines.h"
 
 
 enum pipe_format formats[] = {
@@ -129,31 +130,34 @@ static void set_vertices( void )
    handle = ctx->create_vertex_elements_state(ctx, 3, ve);
    ctx->bind_vertex_elements_state(ctx, handle);
 
+   memset(&vbuf, 0, sizeof vbuf);
 
    /* vertex data */
    vbuf[0].stride = sizeof( struct vertex );
    vbuf[0].buffer_offset = 0;
-   vbuf[0].buffer = screen->user_buffer_create(screen,
-                                               vertices,
-                                               sizeof(vertices),
-                                               PIPE_BIND_VERTEX_BUFFER);
+   vbuf[0].buffer = pipe_buffer_create_with_data(ctx,
+                                                 PIPE_BIND_VERTEX_BUFFER,
+                                                 PIPE_USAGE_STATIC,
+                                                 sizeof(vertices),
+                                                 vertices);
 
    /* instance data */
    vbuf[1].stride = sizeof( inst_data[0] );
    vbuf[1].buffer_offset = 0;
-   vbuf[1].buffer = screen->user_buffer_create(screen,
-                                               inst_data,
-                                               sizeof(inst_data),
-                                               PIPE_BIND_VERTEX_BUFFER);
+   vbuf[1].buffer = pipe_buffer_create_with_data(ctx,
+                                                 PIPE_BIND_VERTEX_BUFFER,
+                                                 PIPE_USAGE_STATIC,
+                                                 sizeof(inst_data),
+                                                 inst_data);
 
-
-   ctx->set_vertex_buffers(ctx, 2, vbuf);
+   ctx->set_vertex_buffers(ctx, 0, 2, vbuf);
 
    /* index data */
-   ibuf.buffer = screen->user_buffer_create(screen,
-                                            indices,
-                                            sizeof(indices),
-                                            PIPE_BIND_VERTEX_BUFFER);
+   ibuf.buffer = pipe_buffer_create_with_data(ctx,
+                                              PIPE_BIND_INDEX_BUFFER,
+                                              PIPE_USAGE_STATIC,
+                                              sizeof(indices),
+                                              indices);
    ibuf.offset = 0;
    ibuf.index_size = 2;
 
@@ -211,7 +215,7 @@ static void draw( void )
 
    ctx->draw_vbo(ctx, &info);
 
-   ctx->flush(ctx, NULL);
+   ctx->flush(ctx, NULL, 0);
 
    graw_save_surface_to_file(ctx, surf, NULL);
 
@@ -265,7 +269,6 @@ static void init( void )
       exit(4);
 
    surf_tmpl.format = templat.format;
-   surf_tmpl.usage = PIPE_BIND_RENDER_TARGET;
    surf_tmpl.u.tex.level = 0;
    surf_tmpl.u.tex.first_layer = 0;
    surf_tmpl.u.tex.last_layer = 0;

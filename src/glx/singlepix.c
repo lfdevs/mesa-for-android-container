@@ -30,7 +30,6 @@
 
 #include "packsingle.h"
 #include "indirect.h"
-#include "glapitable.h"
 #include "glapi.h"
 #include "glthread.h"
 #include <GL/glxproto.h>
@@ -69,7 +68,7 @@ __indirect_glGetSeparableFilter(GLenum target, GLenum format, GLenum type,
       heightsize = __glImageSize(height, 1, 1, format, type, 0);
 
       /* Allocate a holding buffer to transform the data from */
-      rowBuf = (GLubyte *) Xmalloc(widthsize);
+      rowBuf = malloc(widthsize);
       if (!rowBuf) {
          /* Throw data away */
          _XEatData(dpy, compsize);
@@ -81,9 +80,9 @@ __indirect_glGetSeparableFilter(GLenum target, GLenum format, GLenum type,
       else {
          __GLX_SINGLE_GET_CHAR_ARRAY(((char *) rowBuf), widthsize);
          __glEmptyImage(gc, 1, width, 1, 1, format, type, rowBuf, row);
-         Xfree((char *) rowBuf);
+         free((char *) rowBuf);
       }
-      colBuf = (GLubyte *) Xmalloc(heightsize);
+      colBuf = malloc(heightsize);
       if (!colBuf) {
          /* Throw data away */
          _XEatData(dpy, compsize - __GLX_PAD(widthsize));
@@ -95,7 +94,7 @@ __indirect_glGetSeparableFilter(GLenum target, GLenum format, GLenum type,
       else {
          __GLX_SINGLE_GET_CHAR_ARRAY(((char *) colBuf), heightsize);
          __glEmptyImage(gc, 1, height, 1, 1, format, type, colBuf, column);
-         Xfree((char *) colBuf);
+         free((char *) colBuf);
       }
    }
    else {
@@ -117,8 +116,11 @@ void gl_dispatch_stub_GetSeparableFilterEXT (GLenum target, GLenum format,
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
    if (gc->isDirect) {
-      GET_DISPATCH()->GetSeparableFilter(target, format, type,
-                                         row, column, span);
+      const _glapi_proc *const table = (_glapi_proc *) GET_DISPATCH();
+      PFNGLGETSEPARABLEFILTEREXTPROC p =
+         (PFNGLGETSEPARABLEFILTEREXTPROC) table[359];
+
+      p(target, format, type, row, column, span);
       return;
    }
    else
@@ -153,8 +155,7 @@ void gl_dispatch_stub_GetSeparableFilterEXT (GLenum target, GLenum format,
             const GLint heightsize =
                __glImageSize(height, 1, 1, format, type, 0);
             GLubyte *const buf =
-               (GLubyte *) Xmalloc((widthsize > heightsize) ? widthsize :
-                                   heightsize);
+               malloc((widthsize > heightsize) ? widthsize : heightsize);
 
             if (buf == NULL) {
                /* Throw data away */
@@ -184,7 +185,7 @@ void gl_dispatch_stub_GetSeparableFilterEXT (GLenum target, GLenum format,
 
                __glEmptyImage(gc, 1, height, 1, 1, format, type, buf, column);
 
-               Xfree((char *) buf);
+               free((char *) buf);
             }
          }
       }

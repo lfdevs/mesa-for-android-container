@@ -42,21 +42,37 @@
 #ifndef _U_THREAD_H_
 #define _U_THREAD_H_
 
+#include <stdio.h>
+#include <stdlib.h>
 #include "u_compiler.h"
 
-#if defined(PTHREADS)
+#if defined(HAVE_PTHREAD)
 #include <pthread.h> /* POSIX threads headers */
 #endif
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-#if defined(PTHREADS) || defined(_WIN32)
+#if defined(HAVE_PTHREAD) || defined(_WIN32)
 #ifndef THREADS
 #define THREADS
 #endif
 #endif
 
+/*
+ * Error messages
+ */
+#define INIT_TSD_ERROR "_glthread_: failed to allocate key for thread specific data"
+#define GET_TSD_ERROR "_glthread_: failed to get thread specific data"
+#define SET_TSD_ERROR "_glthread_: thread failed to set thread specific data"
+
+
+/*
+ * Magic number to determine if a TSD object has been initialized.
+ * Kind of a hack but there doesn't appear to be a better cross-platform
+ * solution.
+ */
+#define INIT_MAGIC 0xff8adc98
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,11 +88,11 @@ extern "C" {
  * compiler flag.  On Solaris with gcc, use -D_REENTRANT to enable
  * proper compiling for MT-safe libc etc.
  */
-#if defined(PTHREADS)
+#if defined(HAVE_PTHREAD)
 
 struct u_tsd {
    pthread_key_t key;
-   int initMagic;
+   unsigned initMagic;
 };
 
 typedef pthread_mutex_t u_mutex;
@@ -89,7 +105,47 @@ typedef pthread_mutex_t u_mutex;
 #define u_mutex_lock(name)    (void) pthread_mutex_lock(&(name))
 #define u_mutex_unlock(name)  (void) pthread_mutex_unlock(&(name))
 
-#endif /* PTHREADS */
+static INLINE unsigned long
+u_thread_self(void)
+{
+   return (unsigned long) pthread_self();
+}
+
+
+static INLINE void
+u_tsd_init(struct u_tsd *tsd)
+{
+   if (pthread_key_create(&tsd->key, NULL/*free*/) != 0) {
+      perror(INIT_TSD_ERROR);
+      exit(-1);
+   }
+   tsd->initMagic = INIT_MAGIC;
+}
+
+
+static INLINE void *
+u_tsd_get(struct u_tsd *tsd)
+{
+   if (tsd->initMagic != INIT_MAGIC) {
+      u_tsd_init(tsd);
+   }
+   return pthread_getspecific(tsd->key);
+}
+
+
+static INLINE void
+u_tsd_set(struct u_tsd *tsd, void *ptr)
+{
+   if (tsd->initMagic != INIT_MAGIC) {
+      u_tsd_init(tsd);
+   }
+   if (pthread_setspecific(tsd->key, ptr) != 0) {
+      perror(SET_TSD_ERROR);
+      exit(-1);
+   }
+}
+
+#endif /* HAVE_PTHREAD */
 
 
 /*
@@ -97,11 +153,11 @@ typedef pthread_mutex_t u_mutex;
  * IMPORTANT: Link with multithreaded runtime library when THREADS are
  * used!
  */
-#ifdef WIN32
+#ifdef _WIN32
 
 struct u_tsd {
    DWORD key;
-   int   initMagic;
+   unsigned initMagic;
 };
 
 typedef CRITICAL_SECTION u_mutex;
@@ -115,7 +171,61 @@ typedef CRITICAL_SECTION u_mutex;
 #define u_mutex_lock(name)    EnterCriticalSection(&name)
 #define u_mutex_unlock(name)  LeaveCriticalSection(&name)
 
-#endif /* WIN32 */
+static INLINE unsigned long
+u_thread_self(void)
+{
+   return GetCurrentThreadId();
+}
+
+
+static INLINE void
+u_tsd_init(struct u_tsd *tsd)
+{
+   tsd->key = TlsAlloc();
+   if (tsd->key == TLS_OUT_OF_INDEXES) {
+      perror(INIT_TSD_ERROR);
+      exit(-1);
+   }
+   tsd->initMagic = INIT_MAGIC;
+}
+
+
+static INLINE void
+u_tsd_destroy(struct u_tsd *tsd)
+{
+   if (tsd->initMagic != INIT_MAGIC) {
+      return;
+   }
+   TlsFree(tsd->key);
+   tsd->initMagic = 0x0;
+}
+
+
+static INLINE void *
+u_tsd_get(struct u_tsd *tsd)
+{
+   if (tsd->initMagic != INIT_MAGIC) {
+      u_tsd_init(tsd);
+   }
+   return TlsGetValue(tsd->key);
+}
+
+
+static INLINE void
+u_tsd_set(struct u_tsd *tsd, void *ptr)
+{
+   /* the following code assumes that the struct u_tsd has been initialized
+      to zero at creation */
+   if (tsd->initMagic != INIT_MAGIC) {
+      u_tsd_init(tsd);
+   }
+   if (TlsSetValue(tsd->key, ptr) == 0) {
+      perror(SET_TSD_ERROR);
+      exit(-1);
+   }
+}
+
+#endif /* _WIN32 */
 
 
 /*
@@ -124,7 +234,7 @@ typedef CRITICAL_SECTION u_mutex;
 #ifndef THREADS
 
 struct u_tsd {
-   int initMagic; 
+   unsigned initMagic;
 };
 
 typedef unsigned u_mutex;
@@ -135,23 +245,39 @@ typedef unsigned u_mutex;
 #define u_mutex_lock(name)             (void) name
 #define u_mutex_unlock(name)           (void) name
 
+/*
+ * no-op functions
+ */
+
+static INLINE unsigned long
+u_thread_self(void)
+{
+   return 0;
+}
+
+
+static INLINE void
+u_tsd_init(struct u_tsd *tsd)
+{
+   (void) tsd;
+}
+
+
+static INLINE void *
+u_tsd_get(struct u_tsd *tsd)
+{
+   (void) tsd;
+   return NULL;
+}
+
+
+static INLINE void
+u_tsd_set(struct u_tsd *tsd, void *ptr)
+{
+   (void) tsd;
+   (void) ptr;
+}
 #endif /* THREADS */
-
-
-unsigned long
-u_thread_self(void);
-
-void
-u_tsd_init(struct u_tsd *tsd);
-
-void
-u_tsd_destroy(struct u_tsd *tsd); /* WIN32 only */
-
-void *
-u_tsd_get(struct u_tsd *tsd);
-
-void
-u_tsd_set(struct u_tsd *tsd, void *ptr);
 
 
 #ifdef __cplusplus

@@ -8,12 +8,12 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- rnndb/nv50_texture.xml (   7947 bytes, from 2011-07-09 13:43:58)
-- ./rnndb/copyright.xml  (   6452 bytes, from 2011-07-09 13:43:58)
-- ./rnndb/nvchipsets.xml (   3617 bytes, from 2011-07-09 13:43:58)
-- ./rnndb/nv50_defs.xml  (   5468 bytes, from 2011-07-09 13:43:58)
+- rnndb/nv50_texture.xml (   8180 bytes, from 2012-07-31 11:07:50)
+- ./rnndb/copyright.xml  (   6452 bytes, from 2011-07-10 21:35:25)
+- ./rnndb/nvchipsets.xml (   3736 bytes, from 2012-07-31 11:01:16)
+- ./rnndb/nv50_defs.xml  (   5468 bytes, from 2011-07-10 21:35:25)
 
-Copyright (C) 2006-2011 by the following authors:
+Copyright (C) 2006-2012 by the following authors:
 - Artur Huillet <arthur.huillet@free.fr> (ahuillet)
 - Ben Skeggs (darktama, darktama_)
 - B. R. <koala_br@users.sourceforge.net> (koala_br)
@@ -147,8 +147,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define NV50_TIC_0_FMT_RGTC1					0x00000027
 #define NV50_TIC_0_FMT_RGTC2					0x00000028
 #define NV50_TIC_0_FMT_S8_Z24					0x00000029
-#define NV50_TIC_0_FMT_Z24_S8					0x0000002a
-#define NV50_TIC_0_FMT_Z24_X8					0x0000002b
+#define NV50_TIC_0_FMT_Z24_X8					0x0000002a
+#define NV50_TIC_0_FMT_Z24_S8					0x0000002b
 #define NV50_TIC_0_FMT_Z24_C8_MS4_CS4				0x0000002c
 #define NV50_TIC_0_FMT_Z24_C8_MS8_CS8				0x0000002d
 #define NV50_TIC_0_FMT_Z24_C8_MS4_CS12				0x0000002e
@@ -242,6 +242,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define NV50_TSC_0_SHADOW_COMPARE_ENABLE			0x00000200
 #define NV50_TSC_0_SHADOW_COMPARE_FUNC__MASK			0x00001c00
 #define NV50_TSC_0_SHADOW_COMPARE_FUNC__SHIFT			10
+#define NV50_TSC_0_SRGB_CONVERSION_ALLOWED			0x00002000
 #define NV50_TSC_0_BOX_S__MASK					0x0001c000
 #define NV50_TSC_0_BOX_S__SHIFT					14
 #define NV50_TSC_0_BOX_T__MASK					0x000e0000
@@ -265,8 +266,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define NV50_TSC_1_MIPF_NONE					0x00000040
 #define NV50_TSC_1_MIPF_NEAREST					0x00000080
 #define NV50_TSC_1_MIPF_LINEAR					0x000000c0
+#define NVE4_TSC_1_CUBE_SEAMLESS				0x00000200
 #define NV50_TSC_1_LOD_BIAS__MASK				0x01fff000
 #define NV50_TSC_1_LOD_BIAS__SHIFT				12
+#define NVE4_TSC_1_FORCE_NONNORMALIZED_COORDS			0x02000000
 
 #define NV50_TSC_2						0x00000008
 #define NV50_TSC_2_MIN_LOD__MASK				0x00000fff

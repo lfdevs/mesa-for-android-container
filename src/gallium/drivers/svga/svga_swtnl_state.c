@@ -35,21 +35,21 @@
 #include "svga_swtnl_private.h"
 
 
-#define SVGA_POINT_ADJ_X -0.375
-#define SVGA_POINT_ADJ_Y -0.5
+#define SVGA_POINT_ADJ_X -0.375f
+#define SVGA_POINT_ADJ_Y -0.5f
 
-#define SVGA_LINE_ADJ_X -0.5
-#define SVGA_LINE_ADJ_Y -0.5
+#define SVGA_LINE_ADJ_X -0.5f
+#define SVGA_LINE_ADJ_Y -0.5f
 
-#define SVGA_TRIANGLE_ADJ_X -0.375
-#define SVGA_TRIANGLE_ADJ_Y -0.5
+#define SVGA_TRIANGLE_ADJ_X -0.375f
+#define SVGA_TRIANGLE_ADJ_Y -0.5f
 
 
 static void set_draw_viewport( struct svga_context *svga )
 {
    struct pipe_viewport_state vp = svga->curr.viewport;
-   float adjx = 0;
-   float adjy = 0;
+   float adjx = 0.0f;
+   float adjy = 0.0f;
 
    switch (svga->curr.reduced_prim) {
    case PIPE_PRIM_POINTS:
@@ -63,8 +63,8 @@ static void set_draw_viewport( struct svga_context *svga )
        */
       if (svga->curr.rast->need_pipeline & SVGA_PIPELINE_FLAG_LINES)
       {
-         adjx = SVGA_LINE_ADJ_X + 0.175;
-         adjy = SVGA_LINE_ADJ_Y - 0.175;
+         adjx = SVGA_LINE_ADJ_X + 0.175f;
+         adjy = SVGA_LINE_ADJ_Y - 0.175f;
       }
       else {
          adjx = SVGA_LINE_ADJ_X;
@@ -98,7 +98,7 @@ update_swtnl_draw( struct svga_context *svga,
                                 svga->curr.fs->draw_shader);
 
    if (dirty & SVGA_NEW_VBUFFER)
-      draw_set_vertex_buffers(svga->swtnl.draw, 
+      draw_set_vertex_buffers(svga->swtnl.draw, 0,
                               svga->curr.num_vertex_buffers, 
                               svga->curr.vb);
 
@@ -156,7 +156,8 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
    struct svga_fragment_shader *fs = svga->curr.fs;
    int offset = 0;
    int nr_decls = 0;
-   int src, i;
+   int src;
+   unsigned i;
 
    memset(vinfo, 0, sizeof(*vinfo));
    memset(vdecl, 0, sizeof(vdecl));

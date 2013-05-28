@@ -33,6 +33,7 @@
  
 #include "st_context.h"
 #include "st_atom.h"
+#include "st_cb_bitmap.h"
 #include "st_cb_fbo.h"
 #include "st_texture.h"
 #include "pipe/p_context.h"
@@ -70,7 +71,6 @@ update_renderbuffer_surface(struct st_context *st,
             struct pipe_surface surf_tmpl;
             memset(&surf_tmpl, 0, sizeof(surf_tmpl));
             surf_tmpl.format = format;
-            surf_tmpl.usage = PIPE_BIND_RENDER_TARGET;
             surf_tmpl.u.tex.level = level;
             surf_tmpl.u.tex.first_layer = strb->rtt_face + strb->rtt_slice;
             surf_tmpl.u.tex.last_layer = strb->rtt_face + strb->rtt_slice;
@@ -103,6 +103,9 @@ update_framebuffer_state( struct st_context *st )
    struct st_renderbuffer *strb;
    GLuint i;
 
+   st_flush_bitmap_cache(st);
+
+   st->state.fb_orientation = st_fb_orientation(fb);
    framebuffer->width = fb->Width;
    framebuffer->height = fb->Height;
 

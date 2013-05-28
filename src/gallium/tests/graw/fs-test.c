@@ -22,7 +22,7 @@ unsigned show_fps = 0;
 static void usage(char *name)
 {
    fprintf(stderr, "usage: %s [ options ] shader_filename\n", name);
-#ifndef WIN32
+#ifndef _WIN32
    fprintf(stderr, "\n" );
    fprintf(stderr, "options:\n");
    fprintf(stderr, "    -fps  show frames per second\n");
@@ -42,8 +42,6 @@ static const int HEIGHT = 250;
 static struct pipe_screen *screen = NULL;
 static struct pipe_context *ctx = NULL;
 static struct pipe_resource *rttex = NULL;
-static struct pipe_resource *constbuf1 = NULL;
-static struct pipe_resource *constbuf2 = NULL;
 static struct pipe_surface *surf = NULL;
 static struct pipe_sampler_view *sv = NULL;
 static void *sampler = NULL;
@@ -111,64 +109,24 @@ static float constants2[] =
 
 static void init_fs_constbuf( void )
 {
-   struct pipe_resource templat;
-   struct pipe_box box;
+   struct pipe_constant_buffer cb1;
+   struct pipe_constant_buffer cb2;
 
-   templat.target = PIPE_BUFFER;
-   templat.format = PIPE_FORMAT_R8_UNORM;
-   templat.width0 = sizeof(constants1);
-   templat.height0 = 1;
-   templat.depth0 = 1;
-   templat.array_size = 1;
-   templat.last_level = 0;
-   templat.nr_samples = 1;
-   templat.bind = PIPE_BIND_CONSTANT_BUFFER;
+   memset(&cb1, 0, sizeof cb1);
+   cb1.buffer_size = sizeof constants1;
+   cb1.user_buffer = constants1;
 
-   constbuf1 = screen->resource_create(screen,
-                                       &templat);
-   if (constbuf1 == NULL)
-      exit(4);
+   ctx->set_constant_buffer(ctx,
+                            PIPE_SHADER_FRAGMENT, 0,
+                            &cb1);
 
-   constbuf2 = screen->resource_create(screen,
-                                       &templat);
-   if (constbuf2 == NULL)
-      exit(4);
+   memset(&cb2, 0, sizeof cb2);
+   cb2.buffer_size = sizeof constants2;
+   cb2.user_buffer = constants2;
 
-
-   {
-      u_box_2d(0,0,sizeof(constants1),1, &box);
-
-      ctx->transfer_inline_write(ctx,
-                                 constbuf1,
-                                 0,
-                                 PIPE_TRANSFER_WRITE,
-                                 &box,
-                                 constants1,
-                                 sizeof constants1,
-                                 sizeof constants1);
-
-
-      ctx->set_constant_buffer(ctx,
-                               PIPE_SHADER_FRAGMENT, 0,
-                               constbuf1);
-   }
-   {
-      u_box_2d(0,0,sizeof(constants2),1, &box);
-
-      ctx->transfer_inline_write(ctx,
-                                 constbuf2,
-                                 0,
-                                 PIPE_TRANSFER_WRITE,
-                                 &box,
-                                 constants2,
-                                 sizeof constants2,
-                                 sizeof constants2);
-
-
-      ctx->set_constant_buffer(ctx,
-                               PIPE_SHADER_FRAGMENT, 1,
-                               constbuf2);
-   }
+   ctx->set_constant_buffer(ctx,
+                            PIPE_SHADER_FRAGMENT, 1,
+                            &cb2);
 }
 
 
@@ -213,15 +171,17 @@ static void set_vertices( void )
    handle = ctx->create_vertex_elements_state(ctx, 3, ve);
    ctx->bind_vertex_elements_state(ctx, handle);
 
+   memset(&vbuf, 0, sizeof vbuf);
 
    vbuf.stride = sizeof( struct vertex );
    vbuf.buffer_offset = 0;
-   vbuf.buffer = screen->user_buffer_create(screen,
-                                            vertices,
-                                            sizeof(vertices),
-                                            PIPE_BIND_VERTEX_BUFFER);
+   vbuf.buffer = pipe_buffer_create_with_data(ctx,
+                                              PIPE_BIND_VERTEX_BUFFER,
+                                              PIPE_USAGE_STATIC,
+                                              sizeof(vertices),
+                                              vertices);
 
-   ctx->set_vertex_buffers(ctx, 1, &vbuf);
+   ctx->set_vertex_buffers(ctx, 0, 1, &vbuf);
 }
 
 static void set_vertex_shader( void )
@@ -276,7 +236,7 @@ static void draw( void )
 
    ctx->clear(ctx, PIPE_CLEAR_COLOR, &clear_color, 0, 0);
    util_draw_arrays(ctx, PIPE_PRIM_TRIANGLES, 0, 3);
-   ctx->flush(ctx, NULL);
+   ctx->flush(ctx, NULL, 0);
 
    graw_save_surface_to_file(ctx, surf, NULL);
 
@@ -368,12 +328,10 @@ static void init_tex( void )
    {
       struct pipe_transfer *t;
       uint32_t *ptr;
-      t = pipe_get_transfer(ctx, samptex,
-                            0, 0, /* level, layer */
-                            PIPE_TRANSFER_READ,
-                            0, 0, SIZE, SIZE); /* x, y, width, height */
-
-      ptr = ctx->transfer_map(ctx, t);
+      ptr = pipe_transfer_map(ctx, samptex,
+                              0, 0, /* level, layer */
+                              PIPE_TRANSFER_READ,
+                              0, 0, SIZE, SIZE, &t); /* x, y, width, height */
 
       if (memcmp(ptr, tex2d, sizeof tex2d) != 0) {
          assert(0);
@@ -381,8 +339,6 @@ static void init_tex( void )
       }
 
       ctx->transfer_unmap(ctx, t);
-
-      ctx->transfer_destroy(ctx, t);
    }
 
    memset(&sv_template, 0, sizeof sv_template);
@@ -465,7 +421,6 @@ static void init( void )
       exit(4);
 
    surf_tmpl.format = templat.format;
-   surf_tmpl.usage = PIPE_BIND_RENDER_TARGET;
    surf_tmpl.u.tex.level = 0;
    surf_tmpl.u.tex.first_layer = 0;
    surf_tmpl.u.tex.last_layer = 0;

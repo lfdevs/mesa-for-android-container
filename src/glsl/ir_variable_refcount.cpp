@@ -33,10 +33,29 @@
 #include "ir_visitor.h"
 #include "ir_variable_refcount.h"
 #include "glsl_types.h"
+#include "main/hash_table.h"
 
+ir_variable_refcount_visitor::ir_variable_refcount_visitor()
+{
+   this->mem_ctx = ralloc_context(NULL);
+   this->ht = _mesa_hash_table_create(NULL, _mesa_key_pointer_equal);
+}
+
+static void
+free_entry(struct hash_entry *entry)
+{
+   ir_variable_refcount_entry *ivre = (ir_variable_refcount_entry *) entry->data;
+   delete ivre;
+}
+
+ir_variable_refcount_visitor::~ir_variable_refcount_visitor()
+{
+   ralloc_free(this->mem_ctx);
+   _mesa_hash_table_destroy(this->ht, free_entry);
+}
 
 // constructor
-variable_entry::variable_entry(ir_variable *var)
+ir_variable_refcount_entry::ir_variable_refcount_entry(ir_variable *var)
 {
    this->var = var;
    assign = NULL;
@@ -46,19 +65,21 @@ variable_entry::variable_entry(ir_variable *var)
 }
 
 
-variable_entry *
+ir_variable_refcount_entry *
 ir_variable_refcount_visitor::get_variable_entry(ir_variable *var)
 {
    assert(var);
-   foreach_iter(exec_list_iterator, iter, this->variable_list) {
-      variable_entry *entry = (variable_entry *)iter.get();
-      if (entry->var == var)
-	 return entry;
-   }
 
-   variable_entry *entry = new(mem_ctx) variable_entry(var);
+   struct hash_entry *e = _mesa_hash_table_search(this->ht,
+						    _mesa_hash_pointer(var),
+						    var);
+   if (e)
+      return (ir_variable_refcount_entry *)e->data;
+
+   ir_variable_refcount_entry *entry = new ir_variable_refcount_entry(var);
    assert(entry->referenced_count == 0);
-   this->variable_list.push_tail(entry);
+   _mesa_hash_table_insert(this->ht, _mesa_hash_pointer(var), var, entry);
+
    return entry;
 }
 
@@ -66,7 +87,7 @@ ir_variable_refcount_visitor::get_variable_entry(ir_variable *var)
 ir_visitor_status
 ir_variable_refcount_visitor::visit(ir_variable *ir)
 {
-   variable_entry *entry = this->get_variable_entry(ir);
+   ir_variable_refcount_entry *entry = this->get_variable_entry(ir);
    if (entry)
       entry->declaration = true;
 
@@ -78,7 +99,7 @@ ir_visitor_status
 ir_variable_refcount_visitor::visit(ir_dereference_variable *ir)
 {
    ir_variable *const var = ir->variable_referenced();
-   variable_entry *entry = this->get_variable_entry(var);
+   ir_variable_refcount_entry *entry = this->get_variable_entry(var);
 
    if (entry)
       entry->referenced_count++;
@@ -101,7 +122,7 @@ ir_variable_refcount_visitor::visit_enter(ir_function_signature *ir)
 ir_visitor_status
 ir_variable_refcount_visitor::visit_leave(ir_assignment *ir)
 {
-   variable_entry *entry;
+   ir_variable_refcount_entry *entry;
    entry = this->get_variable_entry(ir->lhs->variable_referenced());
    if (entry) {
       entry->assigned_count++;

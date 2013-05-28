@@ -60,7 +60,7 @@ static void st_delete_sync_object(struct gl_context *ctx,
    struct st_sync_object *so = (struct st_sync_object*)obj;
 
    screen->fence_reference(screen, &so->fence, NULL);
-   FREE(so);
+   free(so);
 }
 
 static void st_fence_sync(struct gl_context *ctx, struct gl_sync_object *obj,
@@ -72,7 +72,7 @@ static void st_fence_sync(struct gl_context *ctx, struct gl_sync_object *obj,
    assert(condition == GL_SYNC_GPU_COMMANDS_COMPLETE && flags == 0);
    assert(so->fence == NULL);
 
-   pipe->flush(pipe, &so->fence);
+   pipe->flush(pipe, &so->fence, 0);
 }
 
 static void st_check_sync(struct gl_context *ctx, struct gl_sync_object *obj)

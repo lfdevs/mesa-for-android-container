@@ -32,8 +32,6 @@
 #include "main/hash.h"
 
 
-#if FEATURE_queryobj
-
 static inline struct gl_query_object *
 _mesa_lookup_query_object(struct gl_context *ctx, GLuint id)
 {
@@ -46,33 +44,39 @@ extern void
 _mesa_init_query_object_functions(struct dd_function_table *driver);
 
 extern void
-_mesa_init_queryobj_dispatch(struct _glapi_table *disp);
-
-#else /* FEATURE_queryobj */
-
-static inline struct gl_query_object *
-_mesa_lookup_query_object(struct gl_context *ctx, GLuint id)
-{
-   return NULL;
-}
-
-static inline void
-_mesa_init_query_object_functions(struct dd_function_table *driver)
-{
-}
-
-static inline void
-_mesa_init_queryobj_dispatch(struct _glapi_table *disp)
-{
-}
-
-#endif /* FEATURE_queryobj */
-
-extern void
 _mesa_init_queryobj(struct gl_context *ctx);
 
 extern void
 _mesa_free_queryobj_data(struct gl_context *ctx);
 
+void GLAPIENTRY
+_mesa_GenQueries(GLsizei n, GLuint *ids);
+void GLAPIENTRY
+_mesa_DeleteQueries(GLsizei n, const GLuint *ids);
+GLboolean GLAPIENTRY
+_mesa_IsQuery(GLuint id);
+void GLAPIENTRY
+_mesa_BeginQueryIndexed(GLenum target, GLuint index, GLuint id);
+void GLAPIENTRY
+_mesa_EndQueryIndexed(GLenum target, GLuint index);
+void GLAPIENTRY
+_mesa_BeginQuery(GLenum target, GLuint id);
+void GLAPIENTRY
+_mesa_EndQuery(GLenum target);
+void GLAPIENTRY
+_mesa_QueryCounter(GLuint id, GLenum target);
+void GLAPIENTRY
+_mesa_GetQueryIndexediv(GLenum target, GLuint index, GLenum pname,
+                        GLint *params);
+void GLAPIENTRY
+_mesa_GetQueryiv(GLenum target, GLenum pname, GLint *params);
+void GLAPIENTRY
+_mesa_GetQueryObjectiv(GLuint id, GLenum pname, GLint *params);
+void GLAPIENTRY
+_mesa_GetQueryObjectuiv(GLuint id, GLenum pname, GLuint *params);
+void GLAPIENTRY
+_mesa_GetQueryObjecti64v(GLuint id, GLenum pname, GLint64EXT *params);
+void GLAPIENTRY
+_mesa_GetQueryObjectui64v(GLuint id, GLenum pname, GLuint64EXT *params);
 
 #endif /* QUERYOBJ_H */

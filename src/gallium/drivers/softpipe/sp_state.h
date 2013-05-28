@@ -88,7 +88,8 @@ struct sp_fragment_shader_variant
 		   struct quad_header *quad);
 
    /* Deletes this instance of the object */
-   void (*delete)(struct sp_fragment_shader_variant *shader);
+   void (*delete)(struct sp_fragment_shader_variant *shader,
+                  struct tgsi_exec_machine *machine);
 
    struct sp_fragment_shader_variant *next;
 };
@@ -157,12 +158,6 @@ softpipe_update_derived(struct softpipe_context *softpipe, unsigned prim);
 void
 softpipe_draw_vbo(struct pipe_context *pipe,
                   const struct pipe_draw_info *info);
-
-void
-softpipe_map_transfers(struct softpipe_context *sp);
-
-void
-softpipe_unmap_transfers(struct softpipe_context *sp);
 
 void
 softpipe_map_texture_surfaces(struct softpipe_context *sp);

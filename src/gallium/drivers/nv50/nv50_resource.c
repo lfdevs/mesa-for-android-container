@@ -43,7 +43,6 @@ nv50_surface_from_buffer(struct pipe_context *pipe,
    pipe_resource_reference(&sf->base.texture, pbuf);
 
    sf->base.format = templ->format;
-   sf->base.usage = templ->usage;
    sf->base.u.buf.first_element = templ->u.buf.first_element;
    sf->base.u.buf.last_element = templ->u.buf.last_element;
 
@@ -86,11 +85,9 @@ nv50_surface_destroy(struct pipe_context *pipe, struct pipe_surface *ps)
 void
 nv50_init_resource_functions(struct pipe_context *pcontext)
 {
-   pcontext->get_transfer = u_get_transfer_vtbl;
    pcontext->transfer_map = u_transfer_map_vtbl;
    pcontext->transfer_flush_region = u_transfer_flush_region_vtbl;
    pcontext->transfer_unmap = u_transfer_unmap_vtbl;
-   pcontext->transfer_destroy = u_transfer_destroy_vtbl;
    pcontext->transfer_inline_write = u_transfer_inline_write_vtbl;
    pcontext->create_surface = nv50_surface_create;
    pcontext->surface_destroy = nv50_surface_destroy;
@@ -103,5 +100,4 @@ nv50_screen_init_resource_functions(struct pipe_screen *pscreen)
    pscreen->resource_from_handle = nv50_resource_from_handle;
    pscreen->resource_get_handle = u_resource_get_handle_vtbl;
    pscreen->resource_destroy = u_resource_destroy_vtbl;
-   pscreen->user_buffer_create = nouveau_user_buffer_create;
 }

@@ -26,7 +26,10 @@
  **************************************************************************/
 
 #include "i830_context.h"
+#include "main/api_exec.h"
 #include "main/imports.h"
+#include "main/version.h"
+#include "main/vtxfmt.h"
 #include "tnl/tnl.h"
 #include "tnl/t_vertex.h"
 #include "tnl/t_context.h"
@@ -49,23 +52,33 @@ i830InitDriverFunctions(struct dd_function_table *functions)
 extern const struct tnl_pipeline_stage *intel_pipeline[];
 
 bool
-i830CreateContext(const struct gl_config * mesaVis,
+i830CreateContext(int api,
+                  const struct gl_config * mesaVis,
                   __DRIcontext * driContextPriv,
+                  unsigned major_version,
+                  unsigned minor_version,
+                  unsigned *error,
                   void *sharedContextPrivate)
 {
    struct dd_function_table functions;
    struct i830_context *i830 = rzalloc(NULL, struct i830_context);
    struct intel_context *intel = &i830->intel;
    struct gl_context *ctx = &intel->ctx;
-   if (!i830)
+
+   if (!i830) {
+      *error = __DRI_CTX_ERROR_NO_MEMORY;
       return false;
+   }
 
    i830InitVtbl(i830);
    i830InitDriverFunctions(&functions);
 
-   if (!intelInitContext(intel, __DRI_API_OPENGL, mesaVis, driContextPriv,
-                         sharedContextPrivate, &functions)) {
-      FREE(i830);
+   if (!intelInitContext(intel, __DRI_API_OPENGL,
+                         major_version, minor_version,
+                         mesaVis, driContextPriv,
+                         sharedContextPrivate, &functions,
+                         error)) {
+      ralloc_free(i830);
       return false;
    }
 
@@ -110,6 +123,11 @@ i830CreateContext(const struct gl_config * mesaVis,
 
    _tnl_allow_vertex_fog(ctx, 1);
    _tnl_allow_pixel_fog(ctx, 0);
+
+   _mesa_compute_version(ctx);
+
+   _mesa_initialize_dispatch_tables(ctx);
+   _mesa_initialize_vbo_vtxfmt(ctx);
 
    return true;
 }

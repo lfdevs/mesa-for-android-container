@@ -54,6 +54,8 @@
 #include "ir_optimization.h"
 #include "glsl_types.h"
 
+namespace {
+
 static bool debug = false;
 
 class ir_tree_grafting_visitor : public ir_hierarchical_visitor {
@@ -202,14 +204,15 @@ ir_tree_grafting_visitor::visit_enter(ir_function_signature *ir)
 ir_visitor_status
 ir_tree_grafting_visitor::visit_enter(ir_call *ir)
 {
-   exec_list_iterator sig_iter = ir->get_callee()->parameters.iterator();
+   exec_list_iterator sig_iter = ir->callee->parameters.iterator();
    /* Reminder: iterating ir_call iterates its parameters. */
    foreach_iter(exec_list_iterator, iter, *ir) {
       ir_variable *sig_param = (ir_variable *)sig_iter.get();
       ir_rvalue *ir = (ir_rvalue *)iter.get();
       ir_rvalue *new_ir = ir;
 
-      if (sig_param->mode != ir_var_in && sig_param->mode != ir_var_const_in) {
+      if (sig_param->mode != ir_var_function_in
+          && sig_param->mode != ir_var_const_in) {
 	 if (check_graft(ir, sig_param) == visit_stop)
 	    return visit_stop;
 	 continue;
@@ -221,6 +224,9 @@ ir_tree_grafting_visitor::visit_enter(ir_call *ir)
       }
       sig_iter.next();
    }
+
+   if (ir->return_deref && check_graft(ir, ir->return_deref->var) == visit_stop)
+      return visit_stop;
 
    return visit_continue;
 }
@@ -345,11 +351,12 @@ tree_grafting_basic_block(ir_instruction *bb_first,
       if (!lhs_var)
 	 continue;
 
-      if (lhs_var->mode == ir_var_out ||
-	  lhs_var->mode == ir_var_inout)
+      if (lhs_var->mode == ir_var_function_out ||
+	  lhs_var->mode == ir_var_function_inout ||
+          lhs_var->mode == ir_var_shader_out)
 	 continue;
 
-      variable_entry *entry = info->refs->get_variable_entry(lhs_var);
+      ir_variable_refcount_entry *entry = info->refs->get_variable_entry(lhs_var);
 
       if (!entry->declaration ||
 	  entry->assigned_count != 1 ||
@@ -365,6 +372,8 @@ tree_grafting_basic_block(ir_instruction *bb_first,
       info->progress |= try_tree_grafting(assign, lhs_var, bb_last);
    }
 }
+
+} /* unnamed namespace */
 
 /**
  * Does a copy propagation pass on the code present in the instruction stream.

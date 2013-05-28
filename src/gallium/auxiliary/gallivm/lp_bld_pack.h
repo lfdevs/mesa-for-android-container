@@ -44,6 +44,12 @@
 
 struct lp_type;
 
+LLVMValueRef
+lp_build_interleave2_half(struct gallivm_state *gallivm,
+                     struct lp_type type,
+                     LLVMValueRef a,
+                     LLVMValueRef b,
+                     unsigned lo_hi);
 
 LLVMValueRef
 lp_build_interleave2(struct gallivm_state *gallivm,
@@ -68,6 +74,26 @@ lp_build_unpack(struct gallivm_state *gallivm,
                 struct lp_type dst_type,
                 LLVMValueRef src,
                 LLVMValueRef *dst, unsigned num_dsts);
+
+LLVMValueRef
+lp_build_extract_range(struct gallivm_state *gallivm,
+                       LLVMValueRef src,
+                       unsigned start,
+                       unsigned size);
+
+LLVMValueRef
+lp_build_concat(struct gallivm_state *gallivm,
+                LLVMValueRef src[],
+                struct lp_type src_type,
+                unsigned num_vectors);
+
+int
+lp_build_concat_n(struct gallivm_state *gallivm,
+                  struct lp_type src_type,
+                  LLVMValueRef *src,
+                  unsigned num_srcs,
+                  LLVMValueRef *dst,
+                  unsigned num_dsts);
 
 
 LLVMValueRef
@@ -101,5 +127,10 @@ lp_build_resize(struct gallivm_state *gallivm,
                 const LLVMValueRef *src, unsigned num_srcs,
                 LLVMValueRef *dst, unsigned num_dsts);
 
+
+LLVMValueRef
+lp_build_pad_vector(struct gallivm_state *gallivm,
+                    LLVMValueRef src,
+                    unsigned dst_length);
 
 #endif /* !LP_BLD_PACK_H */

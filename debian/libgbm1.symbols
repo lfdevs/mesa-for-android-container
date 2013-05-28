@@ -1,16 +1,34 @@
 libgbm.so.1 libgbm1 #MINVER#
+ _gbm_create_device@Base 8.1~0
  _gbm_fd_get_device_name@Base 7.11~1
  _gbm_log@Base 7.11~1
  _gbm_mesa_get_device@Base 7.11~1
  _gbm_udev_device_new_from_fd@Base 7.11~1
+ devices@Base 8.1~0
+ dri2_loader_extension@Base 8.1~0
+ dri_fd_get_driver_name@Base 8.1~0
  gbm_bo_create@Base 7.11~1
- gbm_bo_create_from_egl_image@Base 7.11~1
+#MISSING: 8.1~0 gbm_bo_create_from_egl_image@Base 7.11~1
  gbm_bo_destroy@Base 7.11~1
+ gbm_bo_get_device@Base 8.1~0
+ gbm_bo_get_format@Base 8.1~0
  gbm_bo_get_handle@Base 7.11~1
  gbm_bo_get_height@Base 7.11~1
- gbm_bo_get_pitch@Base 7.11~1
+#MISSING: 8.1~0 gbm_bo_get_pitch@Base 7.11~1
+ gbm_bo_get_stride@Base 8.1~0
+ gbm_bo_get_user_data@Base 8.1~0
  gbm_bo_get_width@Base 7.11~1
+ gbm_bo_import@Base 8.1~0
+ gbm_bo_set_user_data@Base 8.1~0
+ gbm_bo_write@Base 8.1~0
  gbm_create_device@Base 7.11~1
  gbm_device_destroy@Base 7.11~1
  gbm_device_get_backend_name@Base 7.11~1
  gbm_device_get_fd@Base 7.11~1
+ gbm_device_is_format_supported@Base 8.1~0
+ gbm_dri_backend@Base 8.1~0
+ gbm_surface_create@Base 8.1~0
+ gbm_surface_destroy@Base 8.1~0
+ gbm_surface_has_free_buffers@Base 8.1~0
+ gbm_surface_lock_front_buffer@Base 8.1~0
+ gbm_surface_release_buffer@Base 8.1~0

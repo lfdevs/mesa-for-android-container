@@ -35,7 +35,6 @@ struct brw_context;
 
 
 void brw_draw_prims( struct gl_context *ctx,
-		     const struct gl_client_array *arrays[],
 		     const struct _mesa_prim *prims,
 		     GLuint nr_prims,
 		     const struct _mesa_index_buffer *ib,
@@ -51,5 +50,12 @@ void brw_draw_destroy( struct brw_context *brw );
  */
 void brw_init_current_values(struct gl_context *ctx,
 			     struct gl_client_array *arrays);
+
+/* brw_primitive_restart.c */
+GLboolean
+brw_handle_primitive_restart(struct gl_context *ctx,
+                             const struct _mesa_prim *prim,
+                             GLuint nr_prims,
+                             const struct _mesa_index_buffer *ib);
 
 #endif

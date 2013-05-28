@@ -29,7 +29,6 @@
 static INLINE struct pipe_screen *
 debug_screen_wrap(struct pipe_screen *screen)
 {
-
 #if defined(GALLIUM_RBUG)
    screen = rbug_screen_create(screen);
 #endif

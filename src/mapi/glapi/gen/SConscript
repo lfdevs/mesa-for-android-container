@@ -1,0 +1,43 @@
+Import('*')
+
+from sys import executable as python_cmd
+
+
+# Generate the GL API headers that are used by various parts of the
+# Mesa and GLX tree.  Other .c and .h files are generated elsewhere
+# if they're only used in one place.
+
+env.CodeGenerate(
+    target = '../../../mesa/main/dispatch.h',
+    script = 'gl_table.py',
+    source = 'gl_and_es_API.xml',
+    command = python_cmd + ' $SCRIPT -m remap_table -f $SOURCE > $TARGET',
+    )
+
+env.CodeGenerate(
+    target = '../../../mapi/glapi/glapitable.h',
+    script = 'gl_table.py',
+    source = 'gl_and_es_API.xml',
+    command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET'
+    )
+
+env.CodeGenerate(
+    target = '../../../mapi/glapi/glapitemp.h',
+    script = 'gl_apitemp.py',
+    source = 'gl_and_es_API.xml',
+    command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET'
+    )
+
+env.CodeGenerate(
+    target = '../../../mapi/glapi/glprocs.h',
+    script = 'gl_procs.py',
+    source = 'gl_and_es_API.xml',
+    command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET'
+    )
+
+env.CodeGenerate(
+    target = '../../../mesa/main/remap_helper.h',
+    script = 'remap_helper.py',
+    source = 'gl_and_es_API.xml',
+    command = python_cmd + ' $SCRIPT -f $SOURCE > $TARGET'
+    )

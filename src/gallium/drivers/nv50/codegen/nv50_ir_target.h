@@ -61,6 +61,9 @@ struct RelocInfo
 class CodeEmitter
 {
 public:
+   CodeEmitter(const Target *);
+   virtual ~CodeEmitter() { }
+
    // returns whether the instruction was encodable and written
    virtual bool emitInstruction(Instruction *) = 0;
 
@@ -76,12 +79,14 @@ public:
    inline void *getRelocInfo() const { return relocInfo; }
 
    void prepareEmission(Program *);
-   void prepareEmission(Function *);
+   virtual void prepareEmission(Function *);
    virtual void prepareEmission(BasicBlock *);
 
    void printBinary() const;
 
 protected:
+   const Target *targ;
+
    uint32_t *code;
    uint32_t codeSize;
    uint32_t codeSizeLimit;
@@ -89,9 +94,32 @@ protected:
    RelocInfo *relocInfo;
 };
 
+
+enum OpClass
+{
+   OPCLASS_MOVE          = 0,
+   OPCLASS_LOAD          = 1,
+   OPCLASS_STORE         = 2,
+   OPCLASS_ARITH         = 3,
+   OPCLASS_SHIFT         = 4,
+   OPCLASS_SFU           = 5,
+   OPCLASS_LOGIC         = 6,
+   OPCLASS_COMPARE       = 7,
+   OPCLASS_CONVERT       = 8,
+   OPCLASS_ATOMIC        = 9,
+   OPCLASS_TEXTURE       = 10,
+   OPCLASS_SURFACE       = 11,
+   OPCLASS_FLOW          = 12,
+   OPCLASS_PSEUDO        = 14,
+   OPCLASS_OTHER         = 15
+};
+
 class Target
 {
 public:
+   Target(bool j, bool s) : joinAnterior(j), hasSWSched(s) { }
+   virtual ~Target() { }
+
    static Target *create(uint32_t chipset);
    static void destroy(Target *);
 
@@ -104,6 +132,8 @@ public:
    // Drivers should upload this so we can use it from all programs.
    // The address chosen is supplied to the relocation routine.
    virtual void getBuiltinCode(const uint32_t **code, uint32_t *size) const = 0;
+
+   virtual void parseDriverInfo(const struct nv50_ir_prog_info *info) { }
 
    virtual bool runLegalizePass(Program *, CGStage stage) const = 0;
 
@@ -138,12 +168,18 @@ public:
    virtual bool insnCanLoad(const Instruction *insn, int s,
                             const Instruction *ld) const = 0;
    virtual bool isOpSupported(operation, DataType) const = 0;
+   virtual bool isAccessSupported(DataFile, DataType) const = 0;
    virtual bool isModSupported(const Instruction *,
                                int s, Modifier) const = 0;
    virtual bool isSatSupported(const Instruction *) const = 0;
+   virtual bool isPostMultiplySupported(operation op, float f,
+                                        int& e) const { return false; }
    virtual bool mayPredicate(const Instruction *,
                              const Value *) const = 0;
 
+   // whether @insn can be issued together with @next (order matters)
+   virtual bool canDualIssue(const Instruction *insn,
+                             const Instruction *next) const { return false; }
    virtual int getLatency(const Instruction *) const { return 1; }
    virtual int getThroughput(const Instruction *) const { return 1; }
 
@@ -153,9 +189,20 @@ public:
    virtual uint32_t getSVAddress(DataFile, const Symbol *) const = 0;
 
 public:
-   bool joinAnterior; // true if join is executed before the op
+   const bool joinAnterior; // true if join is executed before the op
+   const bool hasSWSched;   // true if code should provide scheduling data
 
    static const uint8_t operationSrcNr[OP_LAST + 1];
+   static const OpClass operationClass[OP_LAST + 1];
+
+   static inline uint8_t getOpSrcNr(operation op)
+   {
+      return operationSrcNr[op];
+   }
+   static inline OpClass getOpClass(operation op)
+   {
+      return operationClass[op];
+   }
 
 protected:
    uint32_t chipset;

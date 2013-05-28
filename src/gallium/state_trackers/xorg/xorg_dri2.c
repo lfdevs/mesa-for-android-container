@@ -64,7 +64,7 @@ dri2_do_create_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer, unsigned int form
 {
     struct pipe_resource *tex = NULL;
     ScreenPtr pScreen = pDraw->pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     modesettingPtr ms = modesettingPTR(pScrn);
     struct exa_pixmap_priv *exa_priv;
     BufferPrivatePtr private = buffer->driverPrivate;
@@ -183,7 +183,7 @@ static void
 dri2_do_destroy_buffer(DrawablePtr pDraw, DRI2BufferPtr buffer)
 {
     ScreenPtr pScreen = pDraw->pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     modesettingPtr ms = modesettingPTR(pScrn);
     BufferPrivatePtr private = buffer->driverPrivate;
     struct exa_pixmap_priv *exa_priv = exaGetPixmapDriverPrivate(private->pPixmap);
@@ -293,7 +293,7 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
                  DRI2BufferPtr pDestBuffer, DRI2BufferPtr pSrcBuffer)
 {
     ScreenPtr pScreen = pDraw->pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     modesettingPtr ms = modesettingPTR(pScrn);
     BufferPrivatePtr dst_priv = pDestBuffer->driverPrivate;
     BufferPrivatePtr src_priv = pSrcBuffer->driverPrivate;
@@ -336,7 +336,7 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
 	/* pixmap glXWaitX */
 	if (pSrcBuffer->attachment == DRI2BufferFrontLeft &&
 	    pDestBuffer->attachment == DRI2BufferFakeFrontLeft) {
-	    ms->ctx->flush(ms->ctx, NULL);
+	    ms->ctx->flush(ms->ctx, NULL, 0);
 	    return;
 	}
 	/* pixmap glXWaitGL */
@@ -394,7 +394,7 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
     ms->ctx->flush(ms->ctx,
 		   (pDestBuffer->attachment == DRI2BufferFrontLeft
 		    && ms->swapThrottling) ?
-		   &dst_priv->fence : NULL);
+		   &dst_priv->fence : NULL, 0);
 
    if (cust && cust->winsys_context_throttle)
        cust->winsys_context_throttle(cust, ms->ctx, THROTTLE_RENDER);
@@ -404,7 +404,7 @@ dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
 Bool
 xorg_dri2_init(ScreenPtr pScreen)
 {
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     modesettingPtr ms = modesettingPTR(pScrn);
     DRI2InfoRec dri2info;
 #if DRI2INFOREC_VERSION >= 2

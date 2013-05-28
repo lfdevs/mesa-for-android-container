@@ -34,9 +34,11 @@ MESA_DRI_MODULE_UNSTRIPPED_PATH := $(TARGET_OUT_SHARED_LIBRARIES_UNSTRIPPED)/dri
 MESA_DRI_CFLAGS := \
 	-DFEATURE_GL=1 \
 	-DFEATURE_ES1=1 \
-	-DFEATURE_ES2=1
+	-DFEATURE_ES2=1 \
+	-DHAVE_ANDROID_PLATFORM
 
 MESA_DRI_C_INCLUDES := \
+	$(call intermediates-dir-for,STATIC_LIBRARIES,libmesa_dri_common) \
 	$(addprefix $(MESA_TOP)/, $(mesa_dri_common_INCLUDES)) \
 	$(DRM_TOP) \
 	$(DRM_TOP)/include/drm \
@@ -54,6 +56,9 @@ MESA_DRI_SHARED_LIBRARIES := \
 	libexpat \
 	libglapi \
 	liblog
+
+# All DRI modules must add this to LOCAL_GENERATED_SOURCES.
+MESA_DRI_OPTIONS_H := $(call intermediates-dir-for,STATIC_LIBRARIES,libmesa_dri_common)/xmlpool/options.h
 
 #-----------------------------------------------
 # Build drivers and libmesa_dri_common

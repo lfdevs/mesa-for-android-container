@@ -43,6 +43,14 @@ static void r300_flush_and_cleanup(struct r300_context *r300, unsigned flags)
     if (r300->screen->caps.is_r500)
         r500_emit_index_bias(r300, 0);
 
+    /* The DDX doesn't set these regs. */
+    if (r300->screen->info.drm_minor >= 6) {
+        CS_LOCALS(r300);
+        OUT_CS_REG_SEQ(R300_GB_MSPOS0, 2);
+        OUT_CS(0x66666666);
+        OUT_CS(0x6666666);
+    }
+
     r300->flush_counter++;
     r300->rws->cs_flush(r300->cs, flags);
     r300->dirty_hw = 0;
@@ -70,17 +78,13 @@ void r300_flush(struct pipe_context *pipe,
     struct r300_context *r300 = r300_context(pipe);
     struct pb_buffer **rfence = (struct pb_buffer**)fence;
 
-    if (r300->draw && !r300->draw_vbo_locked)
-	r300_draw_flush_vbuf(r300);
-
     if (r300->screen->info.drm_minor >= 12) {
         flags |= RADEON_FLUSH_KEEP_TILING_FLAGS;
     }
 
     if (rfence) {
         /* Create a fence, which is a dummy BO. */
-        *rfence = r300->rws->buffer_create(r300->rws, 1, 1,
-                                           PIPE_BIND_CUSTOM,
+        *rfence = r300->rws->buffer_create(r300->rws, 1, 1, TRUE,
                                            RADEON_DOMAIN_GTT);
         /* Add the fence as a dummy relocation. */
         r300->rws->cs_add_reloc(r300->cs,
@@ -105,36 +109,41 @@ void r300_flush(struct pipe_context *pipe,
     }
 
     /* Update Hyper-Z status. */
-    if (r300->num_z_clears) {
-        r300->hyperz_time_of_last_flush = os_time_get();
-    } else if (!r300->hyperz_time_of_last_flush > 2000000) {
-        /* 2 seconds without a Z clear pretty much means a dead context
-         * for HyperZ. */
+    if (r300->hyperz_enabled) {
+        /* If there was a Z clear, keep Hyper-Z access. */
+        if (r300->num_z_clears) {
+            r300->hyperz_time_of_last_flush = os_time_get();
+            r300->num_z_clears = 0;
+        } else if (r300->hyperz_time_of_last_flush - os_time_get() > 2000000) {
+            /* If there hasn't been a Z clear for 2 seconds, revoke Hyper-Z access. */
+            r300->hiz_in_use = FALSE;
 
-        r300->hiz_in_use = FALSE;
+            /* Decompress the Z buffer. */
+            if (r300->zmask_in_use) {
+                if (r300->locked_zbuffer) {
+                    r300_decompress_zmask_locked(r300);
+                } else {
+                    r300_decompress_zmask(r300);
+                }
 
-        /* Decompress Z buffer. */
-        if (r300->zmask_in_use) {
-            if (r300->locked_zbuffer) {
-                r300_decompress_zmask_locked(r300);
-            } else {
-                r300_decompress_zmask(r300);
+                r300_flush_and_cleanup(r300, flags);
             }
 
-            r300_flush_and_cleanup(r300, flags);
+            /* Revoke Hyper-Z access, so that some other process can take it. */
+            r300->rws->cs_request_feature(r300->cs, RADEON_FID_R300_HYPERZ_ACCESS,
+                                          FALSE);
+            r300->hyperz_enabled = FALSE;
         }
-
-        /* Release HyperZ. */
-        r300->rws->cs_request_feature(r300->cs, RADEON_FID_R300_HYPERZ_ACCESS,
-                                      FALSE);
     }
-    r300->num_z_clears = 0;
 }
 
 static void r300_flush_wrapped(struct pipe_context *pipe,
-                               struct pipe_fence_handle **fence)
+                               struct pipe_fence_handle **fence,
+                               enum pipe_flush_flags flags)
 {
-    r300_flush(pipe, 0, fence);
+    r300_flush(pipe,
+               flags & PIPE_FLUSH_END_OF_FRAME ? RADEON_FLUSH_END_OF_FRAME : 0,
+               fence);
 }
 
 void r300_init_flush_functions(struct r300_context* r300)

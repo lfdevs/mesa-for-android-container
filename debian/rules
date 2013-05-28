@@ -37,18 +37,12 @@ endif
 include debian/not-installed
 
 # build the following configurations by default
-CONFIGS = swx11+glu \
-	  swx11+glu-static \
-	  dri \
-	  osmesa \
-	  osmesa-static \
-	  osmesa16 \
-	  osmesa16-static \
-	  osmesa32 \
-	  osmesa32-static
+CONFIGS = swx11 \
+	  swx11-static \
+	  dri
 
 ifeq ($(DEB_HOST_ARCH_CPU), i386)
-	CONFIGS += swx11+glu-i386-i686
+	CONFIGS += swx11-i386-i686
 endif
 
 STAMP_DIR = debian/stamp
@@ -59,7 +53,6 @@ QUILT_STAMPFN = $(STAMP_DIR)/patch
 include /usr/share/quilt/quilt.make
 
 confflags-common = \
-	--disable-glu \
 	CFLAGS="$(CFLAGS)" \
 	CXXFLAGS="$(CXXFLAGS)"
 
@@ -78,6 +71,7 @@ else
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 # Gallium drivers require libdrm-{nouveau,radeon}, only available on Linux
 	GALLIUM_DRIVERS += nouveau r600 r300 svga
+#
 # Although the KMS egl drivers will probably build on kfreebsd & hurd
 # only linux actually has KMS drivers implemented at this point.
 	EGL_DISPLAYS += drm
@@ -88,6 +82,11 @@ else
     endif
     ifneq (,$(filter $(DEB_HOST_ARCH_CPU), amd64 i386))
 	DRI_DRIVERS += i915 i965
+	# Radeonsi needs LLVM, so only build it on the subset of archs
+	# where we have LLVM enabled.
+	GALLIUM_DRIVERS += radeonsi
+    else
+	EXTRA_SED="-e/libllvmradeon/ s/^/\#/"
     endif
   endif
 
@@ -100,8 +99,9 @@ else
   endif
 
   # LLVM is required for r300g and recommended for swrastg on x86:
-  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386))
+  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf))
 	confflags_GALLIUM += --enable-gallium-llvm
+	confflags_GALLIUM += --with-llvm-shared-libs
   endif
 
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
@@ -112,10 +112,11 @@ else
 endif
 
 confflags-dri = \
-	--with-driver=dri \
+	--enable-dri \
 	--with-dri-drivers="$(DRI_DRIVERS)" \
 	--with-dri-driverdir=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
 	--with-dri-searchpath='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
+	--enable-osmesa \
 	--enable-glx-tls \
 	--enable-shared-glapi \
 	--enable-texture-float \
@@ -127,79 +128,38 @@ confflags-dri = \
 	$(confflags_OPENVG) \
 	$(confflags-common)
 
-confflags-osmesa = \
+confflags-swx11 = \
+	--disable-dri \
 	--disable-egl \
 	--with-gallium-drivers= \
-	--with-driver=osmesa \
-	$(confflags-common)
-
-confflags-osmesa-static = \
+	--enable-xlib-glx \
 	--disable-egl \
-	--with-gallium-drivers= \
-	--with-driver=osmesa \
-	--enable-static \
-	$(confflags-common)
-
-confflags-osmesa16 = \
-	--disable-egl \
-	--with-gallium-drivers= \
-	--with-driver=osmesa \
-	--with-osmesa-bits=16 \
-	$(confflags-common)
-
-confflags-osmesa16-static = \
-	--disable-egl \
-	--with-gallium-drivers= \
-	--with-driver=osmesa \
-	--with-osmesa-bits=16 \
-	--enable-static \
-	$(confflags-common)
-
-confflags-osmesa32 = \
-	--disable-egl \
-	--with-gallium-drivers= \
-	--with-driver=osmesa \
-	--with-osmesa-bits=32 \
-	$(confflags-common)
-
-confflags-osmesa32-static = \
-	--disable-egl \
-	--with-gallium-drivers= \
-	--with-driver=osmesa \
-	--with-osmesa-bits=32 \
-	--enable-static \
-	$(confflags-common)
-
-confflags-swx11+glu = \
-	--disable-egl \
-	--with-gallium-drivers= \
-	--with-driver=xlib \
-	--disable-egl \
+	--disable-shared-glapi \
 	CFLAGS="$(CFLAGS)" \
 	CXXFLAGS="$(CXXFLAGS)"
 
-confflags-swx11+glu-static = \
+confflags-swx11-static = \
+	--disable-dri \
 	--disable-egl \
 	--with-gallium-drivers= \
-	--with-driver=xlib \
+	--enable-xlib-glx \
 	--enable-static \
 	--disable-egl \
+	--disable-shared-glapi \
 	CFLAGS="$(CFLAGS)" \
 	CXXFLAGS="$(CXXFLAGS)"
 
-confflags-swx11+glu-i386-i686 = \
+confflags-swx11-i386-i686 = \
+	--disable-dri \
 	--disable-egl \
 	--with-gallium-drivers= \
-	--with-driver=xlib \
+	--enable-xlib-glx \
 	--disable-egl \
 	--libdir=/usr/lib/$(DEB_HOST_MULTIARCH)/i686/cmov \
 	CFLAGS="$(CFLAGS) -march=i686" \
 	CXXFLAGS="$(CXXFLAGS) -march=i686"
 
-autotools_files = bin/config.guess bin/config.sub
-
 configure: $(QUILT_STAMPFN) configure.ac
-	for file in $(autotools_files); do cp $$file $$file.pristine; done
 	autoreconf -vfi
 
 # list the configurations that will built
@@ -229,7 +189,8 @@ $(STAMP)-build-%: configure
 	../../configure --prefix=/usr --mandir=\$${prefix}/share/man \
 	             --infodir=\$${prefix}/share/info --sysconfdir=/etc \
 	             --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
-	             --localstatedir=/var $(confflags) $(confflags-$*)
+	             --localstatedir=/var $(confflags) $(confflags-$*) \
+	             ac_cv_path_LLVM_CONFIG=llvm-config-3.2
 	cd $(DEB_BUILD_DIR)/$* && $(MAKE)
 	>$@
 
@@ -246,6 +207,7 @@ install: build
 	for file in debian/*.in; \
 	do \
 		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
+		    $(EXTRA_SED) \
 			$${file} > $${file%%.in}; \
 	done
 
@@ -258,14 +220,17 @@ clean: unpatch
 	rm -f conftest* */conftest*
 	rm -rf autom4te.cache */autom4te.cache
 	rm -rf build
-	rm -rf configure config.guess config.sub config.h.in
+	rm -rf configure bin/config.guess bin/config.sub config.h.in
 	rm -rf $$(find -name Makefile.in)
-	rm -rf aclocal.m4 missing depcomp install-sh ltmain.sh
+	rm -rf aclocal.m4 bin/missing bin/depcomp install-sh bin/ltmain.sh
+	rm -f bin/ar-lib bin/compile bin/ylwrap bin/install-sh
 	rm -rf $(STAMP_DIR)
 	for file in debian/*.in; do rm -f $${file%%.in}; done
-	# Those are auto-updated, grr:
-	for file in $(autotools_files); do if [ -f $$file.pristine ]; then mv -f $$file.pristine $$file; fi; done
-	ln -sf minstall bin/install-sh
+	rm -f src/glsl/builtins/tools/texture_builtins.pyc
+	rm -f src/mapi/glapi/gen/*.pyc
+	rm -f src/mesa/main/*.pyc
+	rm -f src/gallium/auxiliary/util/*.pyc
+	rm -f m4/libtool.m4 m4/ltoptions.m4 m4/ltsugar.m4 m4/ltversion.m4 m4/lt~obsolete.m4
 
 	dh_clean
 
@@ -287,26 +252,18 @@ binary-arch: install
 	dh_installdocs -s
 	dh_installexamples -s
 
-	# Classic DRI and Gallium DRI are mixed up together here
-	# Remove the whole tree to avoid false-positives in --list-missing, and
-	# install the right files manually.
-	rm -r debian/tmp/dri/usr/lib/$(DEB_HOST_MULTIARCH)/dri
-
 	# Also get rid of other files which aren't installed. Do not
 	# use -f to ensure we notice disappearing files:
 	set -e; for file in $(NOT_INSTALLED); do rm debian/tmp/$$file; done
 	# Files only in git, not in tarballs, OK to use rm -f here:
 	set -e; for file in $(NOT_INSTALLED_EITHER); do rm -f debian/tmp/$$file; done
-	# No need for this .so, libglapi is just a convenience library:
+	# No need for these .so, they're just convenience libraries:
 	rm debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/libglapi.so
+	rm debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/libdricore*.so
+	# purge .la files
+	find debian/tmp/ -name '*.la' -exec rm '{}' ';'
 
 	dh_install -s --fail-missing
-
-# If the llvmpipe driver was built, copy it to the package dir
-ifneq (,$(filter swrast,$(GALLIUM_DRIVERS)))
-	dh_install -plibgl1-mesa-dri build/dri/$(DEB_HOST_MULTIARCH)/gallium/swrast_dri.so \
-		usr/lib/${DEB_HOST_MULTIARCH}/dri
-endif
 
 	dh_installman -s
 	dh_lintian -s

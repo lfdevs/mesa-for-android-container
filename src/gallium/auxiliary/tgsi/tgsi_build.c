@@ -104,12 +104,12 @@ tgsi_default_declaration( void )
    declaration.NrTokens = 1;
    declaration.File = TGSI_FILE_NULL;
    declaration.UsageMask = TGSI_WRITEMASK_XYZW;
-   declaration.Interpolate = TGSI_INTERPOLATE_CONSTANT;
+   declaration.Interpolate = 0;
    declaration.Dimension = 0;
    declaration.Semantic = 0;
-   declaration.Centroid = 0;
    declaration.Invariant = 0;
-   declaration.CylindricalWrap = 0;
+   declaration.Local = 0;
+   declaration.Padding = 0;
 
    return declaration;
 }
@@ -121,9 +121,8 @@ tgsi_build_declaration(
    unsigned interpolate,
    unsigned dimension,
    unsigned semantic,
-   unsigned centroid,
    unsigned invariant,
-   unsigned cylindrical_wrap,
+   unsigned local,
    struct tgsi_header *header )
 {
    struct tgsi_declaration declaration;
@@ -137,9 +136,8 @@ tgsi_build_declaration(
    declaration.Interpolate = interpolate;
    declaration.Dimension = dimension;
    declaration.Semantic = semantic;
-   declaration.Centroid = centroid;
    declaration.Invariant = invariant;
-   declaration.CylindricalWrap = cylindrical_wrap;
+   declaration.Local = local;
 
    header_bodysize_grow( header );
 
@@ -194,6 +192,38 @@ tgsi_build_declaration_dimension(unsigned index_2d,
    return dd;
 }
 
+static struct tgsi_declaration_interp
+tgsi_default_declaration_interp( void )
+{
+   struct tgsi_declaration_interp di;
+
+   di.Interpolate = TGSI_INTERPOLATE_CONSTANT;
+   di.Centroid = 0;
+   di.CylindricalWrap = 0;
+   di.Padding = 0;
+
+   return di;
+}
+
+static struct tgsi_declaration_interp
+tgsi_build_declaration_interp(unsigned interpolate,
+                              unsigned centroid,
+                              unsigned cylindrical_wrap,
+                              struct tgsi_declaration *declaration,
+                              struct tgsi_header *header)
+{
+   struct tgsi_declaration_interp di;
+
+   di.Interpolate = interpolate;
+   di.Centroid = centroid;
+   di.CylindricalWrap = cylindrical_wrap;
+   di.Padding = 0;
+
+   declaration_grow(declaration, header);
+
+   return di;
+}
+
 static struct tgsi_declaration_semantic
 tgsi_default_declaration_semantic( void )
 {
@@ -227,42 +257,73 @@ tgsi_build_declaration_semantic(
    return ds;
 }
 
-
 static struct tgsi_declaration_resource
 tgsi_default_declaration_resource(void)
 {
-   struct tgsi_declaration_resource declaration_resource;
+   struct tgsi_declaration_resource dr;
 
-   declaration_resource.Resource = TGSI_TEXTURE_UNKNOWN;
-   declaration_resource.ReturnTypeX = PIPE_TYPE_UNORM;
-   declaration_resource.ReturnTypeY = PIPE_TYPE_UNORM;
-   declaration_resource.ReturnTypeZ = PIPE_TYPE_UNORM;
-   declaration_resource.ReturnTypeW = PIPE_TYPE_UNORM;
+   dr.Resource = TGSI_TEXTURE_BUFFER;
+   dr.Raw = 0;
+   dr.Writable = 0;
+   dr.Padding = 0;
 
-   return declaration_resource;
+   return dr;
 }
 
 static struct tgsi_declaration_resource
 tgsi_build_declaration_resource(unsigned texture,
-                                unsigned return_type_x,
-                                unsigned return_type_y,
-                                unsigned return_type_z,
-                                unsigned return_type_w,
+                                unsigned raw,
+                                unsigned writable,
                                 struct tgsi_declaration *declaration,
                                 struct tgsi_header *header)
 {
-   struct tgsi_declaration_resource declaration_resource;
+   struct tgsi_declaration_resource dr;
 
-   declaration_resource = tgsi_default_declaration_resource();
-   declaration_resource.Resource = texture;
-   declaration_resource.ReturnTypeX = return_type_x;
-   declaration_resource.ReturnTypeY = return_type_y;
-   declaration_resource.ReturnTypeZ = return_type_z;
-   declaration_resource.ReturnTypeW = return_type_w;
+   dr = tgsi_default_declaration_resource();
+   dr.Resource = texture;
+   dr.Raw = raw;
+   dr.Writable = writable;
 
    declaration_grow(declaration, header);
 
-   return declaration_resource;
+   return dr;
+}
+
+static struct tgsi_declaration_sampler_view
+tgsi_default_declaration_sampler_view(void)
+{
+   struct tgsi_declaration_sampler_view dsv;
+
+   dsv.Resource = TGSI_TEXTURE_BUFFER;
+   dsv.ReturnTypeX = PIPE_TYPE_UNORM;
+   dsv.ReturnTypeY = PIPE_TYPE_UNORM;
+   dsv.ReturnTypeZ = PIPE_TYPE_UNORM;
+   dsv.ReturnTypeW = PIPE_TYPE_UNORM;
+
+   return dsv;
+}
+
+static struct tgsi_declaration_sampler_view
+tgsi_build_declaration_sampler_view(unsigned texture,
+                                    unsigned return_type_x,
+                                    unsigned return_type_y,
+                                    unsigned return_type_z,
+                                    unsigned return_type_w,
+                                    struct tgsi_declaration *declaration,
+                                    struct tgsi_header *header)
+{
+   struct tgsi_declaration_sampler_view dsv;
+
+   dsv = tgsi_default_declaration_sampler_view();
+   dsv.Resource = texture;
+   dsv.ReturnTypeX = return_type_x;
+   dsv.ReturnTypeY = return_type_y;
+   dsv.ReturnTypeZ = return_type_z;
+   dsv.ReturnTypeW = return_type_w;
+
+   declaration_grow(declaration, header);
+
+   return dsv;
 }
 
 
@@ -274,8 +335,10 @@ tgsi_default_full_declaration( void )
    full_declaration.Declaration  = tgsi_default_declaration();
    full_declaration.Range = tgsi_default_declaration_range();
    full_declaration.Semantic = tgsi_default_declaration_semantic();
+   full_declaration.Interp = tgsi_default_declaration_interp();
    full_declaration.ImmediateData.u = NULL;
    full_declaration.Resource = tgsi_default_declaration_resource();
+   full_declaration.SamplerView = tgsi_default_declaration_sampler_view();
 
    return full_declaration;
 }
@@ -302,9 +365,8 @@ tgsi_build_full_declaration(
       full_decl->Declaration.Interpolate,
       full_decl->Declaration.Dimension,
       full_decl->Declaration.Semantic,
-      full_decl->Declaration.Centroid,
       full_decl->Declaration.Invariant,
-      full_decl->Declaration.CylindricalWrap,
+      full_decl->Declaration.Local,
       header );
 
    if (maxsize <= size)
@@ -330,6 +392,22 @@ tgsi_build_full_declaration(
       *dd = tgsi_build_declaration_dimension(full_decl->Dim.Index2D,
                                              declaration,
                                              header);
+   }
+
+   if (full_decl->Declaration.Interpolate) {
+      struct tgsi_declaration_interp *di;
+
+      if (maxsize <= size) {
+         return 0;
+      }
+      di = (struct tgsi_declaration_interp *)&tokens[size];
+      size++;
+
+      *di = tgsi_build_declaration_interp(full_decl->Interp.Interpolate,
+                                          full_decl->Interp.Centroid,
+                                          full_decl->Interp.CylindricalWrap,
+                                          declaration,
+                                          header);
    }
 
    if( full_decl->Declaration.Semantic ) {
@@ -375,12 +453,29 @@ tgsi_build_full_declaration(
       size++;
 
       *dr = tgsi_build_declaration_resource(full_decl->Resource.Resource,
-                                            full_decl->Resource.ReturnTypeX,
-                                            full_decl->Resource.ReturnTypeY,
-                                            full_decl->Resource.ReturnTypeZ,
-                                            full_decl->Resource.ReturnTypeW,
+                                            full_decl->Resource.Raw,
+                                            full_decl->Resource.Writable,
                                             declaration,
                                             header);
+   }
+
+   if (full_decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
+      struct tgsi_declaration_sampler_view *dsv;
+
+      if (maxsize <= size) {
+         return  0;
+      }
+      dsv = (struct tgsi_declaration_sampler_view *)&tokens[size];
+      size++;
+
+      *dsv = tgsi_build_declaration_sampler_view(
+         full_decl->SamplerView.Resource,
+         full_decl->SamplerView.ReturnTypeX,
+         full_decl->SamplerView.ReturnTypeY,
+         full_decl->SamplerView.ReturnTypeZ,
+         full_decl->SamplerView.ReturnTypeW,
+         declaration,
+         header);
    }
 
    return size;
@@ -405,11 +500,13 @@ tgsi_default_immediate( void )
 
 static struct tgsi_immediate
 tgsi_build_immediate(
-   struct tgsi_header *header )
+   struct tgsi_header *header,
+   unsigned type )
 {
    struct tgsi_immediate immediate;
 
    immediate = tgsi_default_immediate();
+   immediate.DataType = type;
 
    header_bodysize_grow( header );
 
@@ -442,21 +539,6 @@ immediate_grow(
    header_bodysize_grow( header );
 }
 
-static union tgsi_immediate_data
-tgsi_build_immediate_float32(
-   float value,
-   struct tgsi_immediate *immediate,
-   struct tgsi_header *header )
-{
-   union tgsi_immediate_data immediate_data;
-
-   immediate_data.Float = value;
-
-   immediate_grow( immediate, header );
-
-   return immediate_data;
-}
-
 unsigned
 tgsi_build_full_immediate(
    const struct tgsi_full_immediate *full_imm,
@@ -472,7 +554,7 @@ tgsi_build_full_immediate(
    immediate = (struct tgsi_immediate *) &tokens[size];
    size++;
 
-   *immediate = tgsi_build_immediate( header );
+   *immediate = tgsi_build_immediate( header, full_imm->Immediate.DataType );
 
    assert( full_imm->Immediate.NrTokens <= 4 + 1 );
 
@@ -481,13 +563,12 @@ tgsi_build_full_immediate(
 
       if( maxsize <= size )
          return  0;
-      data = (union tgsi_immediate_data *) &tokens[size];
-      size++;
 
-      *data = tgsi_build_immediate_float32(
-         full_imm->u[i].Float,
-         immediate,
-         header );
+      data = (union tgsi_immediate_data *) &tokens[size];
+      *data = full_imm->u[i];
+
+      immediate_grow( immediate, header );
+      size++;
    }
 
    return size;

@@ -27,25 +27,25 @@
     <enum name="FRAMEBUFFER_ATTACHMENT_LAYERED_ARB"   value="0x8DA7"/>
     <enum name="FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER" value="0x8CD4"/>
     <enum name="PROGRAM_POINT_SIZE_ARB" value="0x8642"/>
-    <function name="ProgramParameteriARB"  offset="assign">
+    <function name="ProgramParameteriARB"  alias="ProgramParameteri">
         <param name="program" type="GLuint"/>
         <param name="pname" type="GLenum"/>
         <param name="value" type="GLint"/>
     </function>
-    <function name="FramebufferTextureARB"  offset="assign">
+    <function name="FramebufferTextureARB"  alias="FramebufferTexture">
         <param name="target" type="GLenum"/>
         <param name="attachment" type="GLenum"/>
         <param name="texture" type="GLuint"/>
         <param name="level" type="GLint"/>
     </function>
-    <function name="FramebufferTextureLayerARB" alias="FramebufferTextureLayerEXT">
+    <function name="FramebufferTextureLayerARB" alias="FramebufferTextureLayer">
         <param name="target" type="GLenum"/>
         <param name="attachment" type="GLenum"/>
         <param name="texture" type="GLuint"/>
         <param name="level" type="GLint"/>
         <param name="layer" type="GLint"/>
     </function>
-    <function name="FramebufferTextureFaceARB"  offset="assign">
+    <function name="FramebufferTextureFaceARB" exec="skip" offset="assign">
         <param name="target" type="GLenum"/>
         <param name="attachment" type="GLenum"/>
         <param name="texture" type="GLuint"/>

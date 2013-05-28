@@ -33,30 +33,71 @@ _mesa_get_samplerobj(struct gl_context *ctx, GLuint unit)
 {
    if (ctx->Texture.Unit[unit].Sampler)
       return ctx->Texture.Unit[unit].Sampler;
-   else
+   else if (ctx->Texture.Unit[unit]._Current)
       return &ctx->Texture.Unit[unit]._Current->Sampler;
+   else
+      return NULL;
 }
 
-extern void
-_mesa_reference_sampler_object(struct gl_context *ctx,
-                               struct gl_sampler_object **ptr,
-                               struct gl_sampler_object *samp);
+
+/** Does the given filter state do mipmap filtering? */
+static inline GLboolean
+_mesa_is_mipmap_filter(const struct gl_sampler_object *samp)
+{
+   return samp->MinFilter != GL_NEAREST && samp->MinFilter != GL_LINEAR;
+}
+
 
 extern void
-_mesa_init_sampler_object(struct gl_sampler_object *sampObj, GLuint name);
+_mesa_reference_sampler_object_(struct gl_context *ctx,
+                                struct gl_sampler_object **ptr,
+                                struct gl_sampler_object *samp);
+
+static inline void
+_mesa_reference_sampler_object(struct gl_context *ctx,
+                               struct gl_sampler_object **ptr,
+                               struct gl_sampler_object *samp)
+{
+   if (*ptr != samp)
+      _mesa_reference_sampler_object_(ctx, ptr, samp);
+}
+
+extern struct gl_sampler_object *
+_mesa_lookup_samplerobj(struct gl_context *ctx, GLuint name);
 
 extern struct gl_sampler_object *
 _mesa_new_sampler_object(struct gl_context *ctx, GLuint name);
 
 extern void
-_mesa_delete_sampler_object(struct gl_context *ctx,
-                            struct gl_sampler_object *sampObj);
-
-extern void
 _mesa_init_sampler_object_functions(struct dd_function_table *driver);
 
-extern void
-_mesa_init_sampler_object_dispatch(struct _glapi_table *disp);
-
+void GLAPIENTRY
+_mesa_GenSamplers(GLsizei count, GLuint *samplers);
+void GLAPIENTRY
+_mesa_DeleteSamplers(GLsizei count, const GLuint *samplers);
+GLboolean GLAPIENTRY
+_mesa_IsSampler(GLuint sampler);
+void GLAPIENTRY
+_mesa_BindSampler(GLuint unit, GLuint sampler);
+void GLAPIENTRY
+_mesa_SamplerParameteri(GLuint sampler, GLenum pname, GLint param);
+void GLAPIENTRY
+_mesa_SamplerParameterf(GLuint sampler, GLenum pname, GLfloat param);
+void GLAPIENTRY
+_mesa_SamplerParameteriv(GLuint sampler, GLenum pname, const GLint *params);
+void GLAPIENTRY
+_mesa_SamplerParameterfv(GLuint sampler, GLenum pname, const GLfloat *params);
+void GLAPIENTRY
+_mesa_SamplerParameterIiv(GLuint sampler, GLenum pname, const GLint *params);
+void GLAPIENTRY
+_mesa_SamplerParameterIuiv(GLuint sampler, GLenum pname, const GLuint *params);
+void GLAPIENTRY
+_mesa_GetSamplerParameteriv(GLuint sampler, GLenum pname, GLint *params);
+void GLAPIENTRY
+_mesa_GetSamplerParameterfv(GLuint sampler, GLenum pname, GLfloat *params);
+void GLAPIENTRY
+_mesa_GetSamplerParameterIiv(GLuint sampler, GLenum pname, GLint *params);
+void GLAPIENTRY
+_mesa_GetSamplerParameterIuiv(GLuint sampler, GLenum pname, GLuint *params);
 
 #endif /* SAMPLEROBJ_H */

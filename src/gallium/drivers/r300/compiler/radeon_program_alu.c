@@ -321,6 +321,24 @@ static void transform_FLR(struct radeon_compiler* c,
 	rc_remove_instruction(inst);
 }
 
+static void transform_TRUNC(struct radeon_compiler* c,
+	struct rc_instruction* inst)
+{
+	/* Definition of trunc:
+	 *   trunc(x) = (abs(x) - fract(abs(x))) * sgn(x)
+	 *
+	 * The multiplication by sgn(x) can be simplified using CMP:
+	 *   y * sgn(x) = (x < 0 ? -y : y)
+	 */
+	struct rc_dst_register dst = try_to_reuse_dst(c, inst);
+	emit1(c, inst->Prev, RC_OPCODE_FRC, 0, dst, absolute(inst->U.I.SrcReg[0]));
+	emit2(c, inst->Prev, RC_OPCODE_ADD, 0, dst, absolute(inst->U.I.SrcReg[0]),
+	      negate(srcreg(RC_FILE_TEMPORARY, dst.Index)));
+	emit3(c, inst->Prev, RC_OPCODE_CMP, &inst->U.I, inst->U.I.DstReg, inst->U.I.SrcReg[0],
+	      negate(srcreg(RC_FILE_TEMPORARY, dst.Index)), srcreg(RC_FILE_TEMPORARY, dst.Index));
+	rc_remove_instruction(inst);
+}
+
 /**
  * Definition of LIT (from ARB_fragment_program):
  *
@@ -666,6 +684,7 @@ int radeonTransformALU(
 	case RC_OPCODE_SSG: transform_SSG(c, inst); return 1;
 	case RC_OPCODE_SUB: transform_SUB(c, inst); return 1;
 	case RC_OPCODE_SWZ: transform_SWZ(c, inst); return 1;
+	case RC_OPCODE_TRUNC: transform_TRUNC(c, inst); return 1;
 	case RC_OPCODE_XPD: transform_XPD(c, inst); return 1;
 	default:
 		return 0;
@@ -866,6 +885,17 @@ static void transform_r300_vertex_SSG(struct radeon_compiler* c,
 	rc_remove_instruction(inst);
 }
 
+static void transform_vertex_TRUNC(struct radeon_compiler* c,
+	struct rc_instruction* inst)
+{
+	struct rc_instruction *next = inst->Next;
+
+	/* next->Prev is removed after each transformation and replaced
+	 * by a new instruction. */
+	transform_TRUNC(c, next->Prev);
+	transform_r300_vertex_CMP(c, next->Prev);
+}
+
 /**
  * For use with rc_local_transform, this transforms non-native ALU
  * instructions of the r300 up to r500 vertex engine.
@@ -904,6 +934,7 @@ int r300_transform_vertex_alu(
 	case RC_OPCODE_SSG: transform_r300_vertex_SSG(c, inst); return 1;
 	case RC_OPCODE_SUB: transform_SUB(c, inst); return 1;
 	case RC_OPCODE_SWZ: transform_SWZ(c, inst); return 1;
+	case RC_OPCODE_TRUNC: transform_vertex_TRUNC(c, inst); return 1;
 	case RC_OPCODE_XPD: transform_XPD(c, inst); return 1;
 	default:
 		return 0;
@@ -1251,4 +1282,32 @@ void rc_transform_KILP(struct radeon_compiler * c, void *user)
 			}
 		}
 	}
+}
+
+int rc_force_output_alpha_to_one(struct radeon_compiler *c,
+				 struct rc_instruction *inst, void *data)
+{
+	struct r300_fragment_program_compiler *fragc = (struct r300_fragment_program_compiler*)c;
+	const struct rc_opcode_info *info = rc_get_opcode_info(inst->U.I.Opcode);
+	unsigned tmp;
+
+	if (!info->HasDstReg || inst->U.I.DstReg.File != RC_FILE_OUTPUT ||
+	    inst->U.I.DstReg.Index == fragc->OutputDepth)
+		return 1;
+
+	tmp = rc_find_free_temporary(c);
+
+	/* Insert MOV after inst, set alpha to 1. */
+	emit1(c, inst, RC_OPCODE_MOV, 0, inst->U.I.DstReg,
+	      srcregswz(RC_FILE_TEMPORARY, tmp, RC_SWIZZLE_XYZ1));
+
+	/* Re-route the destination of inst to the source of mov. */
+	inst->U.I.DstReg.File = RC_FILE_TEMPORARY;
+	inst->U.I.DstReg.Index = tmp;
+
+	/* Move the saturate output modifier to the MOV instruction
+	 * (for better copy propagation). */
+	inst->Next->U.I.SaturateMode = inst->U.I.SaturateMode;
+	inst->U.I.SaturateMode = RC_SATURATE_NONE;
+	return 1;
 }

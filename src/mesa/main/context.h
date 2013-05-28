@@ -109,15 +109,13 @@ _mesa_initialize_context( struct gl_context *ctx,
                           gl_api api,
                           const struct gl_config *visual,
                           struct gl_context *share_list,
-                          const struct dd_function_table *driverFunctions,
-                          void *driverContext );
+                          const struct dd_function_table *driverFunctions);
 
 extern struct gl_context *
 _mesa_create_context(gl_api api,
                      const struct gl_config *visual,
                      struct gl_context *share_list,
-                     const struct dd_function_table *driverFunctions,
-                     void *driverContext);
+                     const struct dd_function_table *driverFunctions);
 
 extern void
 _mesa_free_context_data( struct gl_context *ctx );
@@ -179,6 +177,8 @@ _mesa_finish(struct gl_context *ctx);
 extern void
 _mesa_flush(struct gl_context *ctx);
 
+extern int
+_mesa_generic_nop(void);
 
 extern void GLAPIENTRY
 _mesa_Finish( void );
@@ -262,32 +262,37 @@ do {									\
    }									\
 } while (0)
 
-/**
- * Macro to assert that the API call was made outside the
- * glBegin()/glEnd() pair and flush the vertices.
- * 
- * \param ctx GL context.
- */
-#define ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx)				\
-do {									\
-   ASSERT_OUTSIDE_BEGIN_END(ctx);					\
-   FLUSH_VERTICES(ctx, 0);						\
-} while (0)
-
-/**
- * Macro to assert that the API call was made outside the
- * glBegin()/glEnd() pair and flush the vertices, with return value.
- * 
- * \param ctx GL context.
- * \param retval value to return in case the assertion fails.
- */
-#define ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH_WITH_RETVAL(ctx, retval)	\
-do {									\
-   ASSERT_OUTSIDE_BEGIN_END_WITH_RETVAL(ctx, retval);			\
-   FLUSH_VERTICES(ctx, 0);						\
-} while (0)
-
 /*@}*/
+
+
+/**
+ * Checks if the context is for Desktop GL (Compatibility or Core)
+ */
+static inline GLboolean
+_mesa_is_desktop_gl(const struct gl_context *ctx)
+{
+   return ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGL_CORE;
+}
+
+
+/**
+ * Checks if the context is for any GLES version
+ */
+static inline GLboolean
+_mesa_is_gles(const struct gl_context *ctx)
+{
+   return ctx->API == API_OPENGLES || ctx->API == API_OPENGLES2;
+}
+
+
+/**
+ * Checks if the context is for GLES 3.x
+ */
+static inline GLboolean
+_mesa_is_gles3(const struct gl_context *ctx)
+{
+   return ctx->API == API_OPENGLES2 && ctx->Version >= 30;
+}
 
 
 #ifdef __cplusplus

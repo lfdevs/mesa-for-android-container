@@ -143,14 +143,14 @@ zoom_span( struct gl_context *ctx, GLint imgX, GLint imgY, const SWspan *span,
 
    if (!swrast->ZoomedArrays) {
       /* allocate on demand */
-      swrast->ZoomedArrays = (SWspanarrays *) CALLOC(sizeof(SWspanarrays));
+      swrast->ZoomedArrays = (SWspanarrays *) calloc(1, sizeof(SWspanarrays));
       if (!swrast->ZoomedArrays)
          return;
    }
 
    zoomedWidth = x1 - x0;
    ASSERT(zoomedWidth > 0);
-   ASSERT(zoomedWidth <= MAX_WIDTH);
+   ASSERT(zoomedWidth <= SWRAST_MAX_WIDTH);
 
    /* no pixel arrays! must be horizontal spans. */
    ASSERT((span->arrayMask & SPAN_XY) == 0);
@@ -234,7 +234,7 @@ zoom_span( struct gl_context *ctx, GLint imgX, GLint imgY, const SWspan *span,
          for (i = 0; i < zoomedWidth; i++) {
             GLint j = unzoom_x(ctx->Pixel.ZoomX, imgX, x0 + i) - span->x;
             ASSERT(j >= 0);
-            ASSERT(j < span->end);
+            ASSERT(j < (GLint) span->end);
             COPY_4V(zoomed.array->attribs[FRAG_ATTRIB_COL0][i], rgba[j]);
          }
       }
@@ -272,7 +272,7 @@ zoom_span( struct gl_context *ctx, GLint imgX, GLint imgY, const SWspan *span,
          for (i = 0; i < zoomedWidth; i++) {
             GLint j = unzoom_x(ctx->Pixel.ZoomX, imgX, x0 + i) - span->x;
             ASSERT(j >= 0);
-            ASSERT(j < span->end);
+            ASSERT(j < (GLint) span->end);
             zoomed.array->attribs[FRAG_ATTRIB_COL0][i][0] = rgb[j][0];
             zoomed.array->attribs[FRAG_ATTRIB_COL0][i][1] = rgb[j][1];
             zoomed.array->attribs[FRAG_ATTRIB_COL0][i][2] = rgb[j][2];
@@ -362,7 +362,7 @@ _swrast_write_zoomed_stencil_span(struct gl_context *ctx, GLint imgX, GLint imgY
                                   GLint width, GLint spanX, GLint spanY,
                                   const GLubyte stencil[])
 {
-   GLubyte zoomedVals[MAX_WIDTH];
+   GLubyte *zoomedVals;
    GLint x0, x1, y0, y1, y;
    GLint i, zoomedWidth;
 
@@ -373,7 +373,11 @@ _swrast_write_zoomed_stencil_span(struct gl_context *ctx, GLint imgX, GLint imgY
 
    zoomedWidth = x1 - x0;
    ASSERT(zoomedWidth > 0);
-   ASSERT(zoomedWidth <= MAX_WIDTH);
+   ASSERT(zoomedWidth <= SWRAST_MAX_WIDTH);
+
+   zoomedVals = malloc(zoomedWidth * sizeof(GLubyte));
+   if (!zoomedVals)
+      return;
 
    /* zoom the span horizontally */
    for (i = 0; i < zoomedWidth; i++) {
@@ -387,6 +391,8 @@ _swrast_write_zoomed_stencil_span(struct gl_context *ctx, GLint imgX, GLint imgY
    for (y = y0; y < y1; y++) {
       _swrast_write_stencil_span(ctx, zoomedWidth, x0, y, zoomedVals);
    }
+
+   free(zoomedVals);
 }
 
 
@@ -401,7 +407,7 @@ _swrast_write_zoomed_z_span(struct gl_context *ctx, GLint imgX, GLint imgY,
 {
    struct gl_renderbuffer *rb =
       ctx->DrawBuffer->Attachment[BUFFER_DEPTH].Renderbuffer;
-   GLuint zoomedVals[MAX_WIDTH];
+   GLuint *zoomedVals;
    GLint x0, x1, y0, y1, y;
    GLint i, zoomedWidth;
 
@@ -412,7 +418,11 @@ _swrast_write_zoomed_z_span(struct gl_context *ctx, GLint imgX, GLint imgY,
 
    zoomedWidth = x1 - x0;
    ASSERT(zoomedWidth > 0);
-   ASSERT(zoomedWidth <= MAX_WIDTH);
+   ASSERT(zoomedWidth <= SWRAST_MAX_WIDTH);
+
+   zoomedVals = malloc(zoomedWidth * sizeof(GLuint));
+   if (!zoomedVals)
+      return;
 
    /* zoom the span horizontally */
    for (i = 0; i < zoomedWidth; i++) {
@@ -427,4 +437,6 @@ _swrast_write_zoomed_z_span(struct gl_context *ctx, GLint imgX, GLint imgY,
       GLubyte *dst = _swrast_pixel_address(rb, x0, y);
       _mesa_pack_uint_z_row(rb->Format, zoomedWidth, zoomedVals, dst);
    }
+
+   free(zoomedVals);
 }

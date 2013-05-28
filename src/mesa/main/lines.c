@@ -41,12 +41,28 @@ void GLAPIENTRY
 _mesa_LineWidth( GLfloat width )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glLineWidth %f\n", width);
 
    if (width<=0.0) {
+      _mesa_error( ctx, GL_INVALID_VALUE, "glLineWidth" );
+      return;
+   }
+
+   /* Page 407 (page 423 of the PDF) of the OpenGL 3.0 spec says (in the list
+    * of deprecated functionality):
+    *
+    *     "Wide lines and line stipple - LineWidth is not deprecated, but
+    *     values greater than 1.0 will generate an INVALID_VALUE error;"
+    *
+    * This is one of the very few cases where functionality was deprecated but
+    * *NOT* removed in a later spec.  Therefore, we only disallow this in a
+    * forward compatible context.
+    */
+   if (ctx->API == API_OPENGL_CORE
+       && ((ctx->Const.ContextFlags & GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT)
+           != 0)) {
       _mesa_error( ctx, GL_INVALID_VALUE, "glLineWidth" );
       return;
    }
@@ -78,7 +94,6 @@ void GLAPIENTRY
 _mesa_LineStipple( GLint factor, GLushort pattern )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glLineStipple %d %u\n", factor, pattern);

@@ -35,10 +35,8 @@
 
 #if HAVE_LLVM >= 0x0300
 #include <llvm/Support/TargetRegistry.h>
-#include <llvm/Support/TargetSelect.h>
 #else /* HAVE_LLVM < 0x0300 */
 #include <llvm/Target/TargetRegistry.h>
-#include <llvm/Target/TargetSelect.h>
 #endif /* HAVE_LLVM < 0x0300 */
 
 #if HAVE_LLVM >= 0x0209
@@ -53,6 +51,9 @@
 #include <llvm/MC/MCInst.h>
 #include <llvm/MC/MCInstPrinter.h>
 #endif /* HAVE_LLVM >= 0x0207 */
+#if HAVE_LLVM >= 0x0301
+#include <llvm/MC/MCRegisterInfo.h>
+#endif /* HAVE_LLVM >= 0x0301 */
 
 #include "util/u_math.h"
 #include "util/u_debug.h"
@@ -80,15 +81,19 @@ lp_check_alignment(const void *ptr, unsigned alignment)
 class raw_debug_ostream :
    public llvm::raw_ostream
 {
+private:
    uint64_t pos;
 
+public:
+   raw_debug_ostream() : pos(0) { }
+
    void write_impl(const char *Ptr, size_t Size);
-   uint64_t current_pos() { return pos; }
-   uint64_t current_pos() const { return pos; }
 
 #if HAVE_LLVM >= 0x207
-   uint64_t preferred_buffer_size() { return 512; }
+   uint64_t current_pos() const { return pos; }
+   size_t preferred_buffer_size() const { return 512; }
 #else
+   uint64_t current_pos() { return pos; }
    size_t preferred_buffer_size() { return 512; }
 #endif
 };
@@ -180,7 +185,7 @@ lp_disassemble(const void* func)
    /*
     * Limit disassembly to this extent
     */
-   const uint64_t extent = 0x10000;
+   const uint64_t extent = 96 * 1024;
 
    uint64_t max_pc = 0;
 
@@ -196,14 +201,6 @@ lp_disassemble(const void* func)
 
    std::string Error;
    const Target *T = TargetRegistry::lookupTarget(Triple, Error);
-
-#if HAVE_LLVM >= 0x0208
-   InitializeNativeTargetAsmPrinter();
-#else
-   InitializeAllAsmPrinters();
-#endif
-
-   InitializeAllDisassemblers();
 
 #if HAVE_LLVM >= 0x0300
    OwningPtr<const MCAsmInfo> AsmInfo(T->createMCAsmInfo(Triple));
@@ -235,7 +232,24 @@ lp_disassemble(const void* func)
    int AsmPrinterVariant = AsmInfo->getAssemblerDialect();
 #endif
 
-#if HAVE_LLVM >= 0x0300
+#if HAVE_LLVM >= 0x0301
+   OwningPtr<const MCRegisterInfo> MRI(T->createMCRegInfo(Triple));
+   if (!MRI) {
+      debug_printf("error: no register info for target %s\n", Triple.c_str());
+      return;
+   }
+
+   OwningPtr<const MCInstrInfo> MII(T->createMCInstrInfo());
+   if (!MII) {
+      debug_printf("error: no instruction info for target %s\n", Triple.c_str());
+      return;
+   }
+#endif
+
+#if HAVE_LLVM >= 0x0301
+   OwningPtr<MCInstPrinter> Printer(
+         T->createMCInstPrinter(AsmPrinterVariant, *AsmInfo, *MII, *MRI, *STI));
+#elif HAVE_LLVM == 0x0300
    OwningPtr<MCInstPrinter> Printer(
          T->createMCInstPrinter(AsmPrinterVariant, *AsmInfo, *STI));
 #elif HAVE_LLVM >= 0x0208

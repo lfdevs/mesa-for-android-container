@@ -53,14 +53,11 @@ llvmpipe_clear(struct pipe_context *pipe,
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
-   if (llvmpipe->no_rast)
-      return;
-
    if (!llvmpipe_check_render_cond(llvmpipe))
       return;
 
    if (LP_PERF & PERF_NO_DEPTH)
       buffers &= ~PIPE_CLEAR_DEPTHSTENCIL;
 
-   lp_setup_clear( llvmpipe->setup, color->f, depth, stencil, buffers );
+   lp_setup_clear( llvmpipe->setup, color, depth, stencil, buffers );
 }

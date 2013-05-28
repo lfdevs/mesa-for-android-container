@@ -1,4 +1,4 @@
-C_SOURCES := \
+C_SOURCES = \
 	r300_blit.c \
 	r300_chipset.c \
 	r300_context.c \
@@ -28,6 +28,7 @@ C_SOURCES := \
 	compiler/radeon_compiler_util.c \
 	compiler/radeon_emulate_branches.c \
 	compiler/radeon_emulate_loops.c \
+	compiler/radeon_inline_literals.c \
 	compiler/radeon_program.c \
 	compiler/radeon_program_print.c \
 	compiler/radeon_opcodes.c \
@@ -45,6 +46,7 @@ C_SOURCES := \
 	compiler/radeon_optimize.c \
 	compiler/radeon_remove_constants.c \
 	compiler/radeon_rename_regs.c \
+	compiler/radeon_vert_fc.c \
 	compiler/radeon_variable.c \
 	compiler/r3xx_fragprog.c \
 	compiler/r300_fragprog.c \

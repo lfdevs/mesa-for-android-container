@@ -256,6 +256,12 @@ inst_token( unsigned opcode )
    return inst;
 }
 
+
+/**
+ * Create an instance of a SVGA3dShaderDestToken.
+ * Note that this function is used to create tokens for output registers,
+ * temp registers AND constants (see emit_def_const()).
+ */
 static INLINE SVGA3dShaderDestToken 
 dst_register( unsigned file,
               int number )

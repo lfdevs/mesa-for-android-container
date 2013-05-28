@@ -3,7 +3,7 @@
 The syntax of a source list file is a very small subset of GNU Make.  These
 features are supported
 
- operators: +=, :=
+ operators: =, +=, :=
  line continuation
  non-nested variable expansion
  comment
@@ -13,6 +13,7 @@ The goal is to allow Makefile's and SConscript's to share source listing.
 
 class SourceListParser(object):
     def __init__(self):
+        self.symbol_table = {}
         self._reset()
 
     def _reset(self, filename=None):
@@ -20,7 +21,6 @@ class SourceListParser(object):
 
         self.line_no = 1
         self.line_cont = ''
-        self.symbol_table = {}
 
     def _error(self, msg):
         raise RuntimeError('%s:%d: %s' % (self.filename, self.line_no, msg))
@@ -62,20 +62,24 @@ class SourceListParser(object):
         if op_pos < 0:
             self._error('not a variable definition')
 
-        if op_pos > 0 and line[op_pos - 1] in [':', '+']:
-            op_pos -= 1
+        if op_pos > 0:
+            if line[op_pos - 1] in [':', '+', '?']:
+                op_pos -= 1
         else:
-            self._error('only := and += are supported')
+            self._error('only =, :=, and += are supported')
 
         # set op, sym, and val
         op = line[op_pos:op_end]
         sym = line[:op_pos].strip()
         val = self._expand_value(line[op_end:].lstrip())
 
-        if op == ':=':
+        if op in ('=', ':='):
             self.symbol_table[sym] = val
         elif op == '+=':
             self.symbol_table[sym] += ' ' + val
+        elif op == '?=':
+            if sym not in self.symbol_table:
+                self.symbol_table[sym] = val
 
     def _parse_line(self, line):
         """Parse a source list line."""
@@ -121,3 +125,6 @@ class SourceListParser(object):
                 raise
 
         return self.symbol_table
+
+    def add_symbol(self, name, value):
+        self.symbol_table[name] = value

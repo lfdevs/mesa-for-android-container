@@ -51,10 +51,19 @@ extern "C" {
 
 
 /*
- * Get the current time in microseconds from an unknown base.
+ * Get the current time in nanoseconds from an unknown base.
  */
 int64_t
-os_time_get(void);
+os_time_get_nano(void);
+
+
+/*
+ * Get the current time in microseconds from an unknown base.
+ */
+static INLINE int64_t
+os_time_get(void) {
+    return os_time_get_nano() / 1000;
+}
 
 
 /*

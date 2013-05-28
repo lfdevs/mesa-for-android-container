@@ -26,8 +26,11 @@
  **************************************************************************/
 
 #include "i915_context.h"
+#include "main/api_exec.h"
 #include "main/imports.h"
 #include "main/macros.h"
+#include "main/version.h"
+#include "main/vtxfmt.h"
 #include "intel_tris.h"
 #include "tnl/t_context.h"
 #include "tnl/t_pipeline.h"
@@ -146,6 +149,9 @@ bool
 i915CreateContext(int api,
 		  const struct gl_config * mesaVis,
                   __DRIcontext * driContextPriv,
+                  unsigned major_version,
+                  unsigned minor_version,
+                  unsigned *error,
                   void *sharedContextPrivate)
 {
    struct dd_function_table functions;
@@ -153,16 +159,20 @@ i915CreateContext(int api,
    struct intel_context *intel = &i915->intel;
    struct gl_context *ctx = &intel->ctx;
 
-   if (!i915)
+   if (!i915) {
+      *error = __DRI_CTX_ERROR_NO_MEMORY;
       return false;
+   }
 
    i915InitVtbl(i915);
 
    i915InitDriverFunctions(&functions);
 
-   if (!intelInitContext(intel, api, mesaVis, driContextPriv,
-                         sharedContextPrivate, &functions)) {
-      FREE(i915);
+   if (!intelInitContext(intel, api, major_version, minor_version,
+                         mesaVis, driContextPriv,
+                         sharedContextPrivate, &functions,
+                         error)) {
+      ralloc_free(i915);
       return false;
    }
 
@@ -265,6 +275,11 @@ i915CreateContext(int api,
     */
    _tnl_allow_vertex_fog(ctx, 0);
    _tnl_allow_pixel_fog(ctx, 1);
+
+   _mesa_compute_version(ctx);
+
+   _mesa_initialize_dispatch_tables(ctx);
+   _mesa_initialize_vbo_vtxfmt(ctx);
 
    return true;
 }

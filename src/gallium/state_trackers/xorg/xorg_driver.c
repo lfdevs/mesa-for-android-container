@@ -59,7 +59,7 @@
 #include "xorg_winsys.h"
 
 #ifdef HAVE_LIBKMS
-#include "libkms.h"
+#include "libkms/libkms.h"
 #endif
 
 /*
@@ -67,14 +67,14 @@
  */
 
 static Bool drv_pre_init(ScrnInfoPtr pScrn, int flags);
-static Bool drv_screen_init(int scrnIndex, ScreenPtr pScreen, int argc,
-			    char **argv);
-static Bool drv_switch_mode(int scrnIndex, DisplayModePtr mode, int flags);
-static void drv_adjust_frame(int scrnIndex, int x, int y, int flags);
-static Bool drv_enter_vt(int scrnIndex, int flags);
-static void drv_leave_vt(int scrnIndex, int flags);
-static void drv_free_screen(int scrnIndex, int flags);
-static ModeStatus drv_valid_mode(int scrnIndex, DisplayModePtr mode, Bool verbose,
+static Bool drv_screen_init(SCREEN_INIT_ARGS_DECL);
+static Bool drv_switch_mode(SWITCH_MODE_ARGS_DECL);
+static void drv_adjust_frame(ADJUST_FRAME_ARGS_DECL);
+static Bool drv_enter_vt(VT_FUNC_ARGS_DECL);
+static Bool drv_enter_vt_flags(ScrnInfoPtr pScrn, int flags);
+static void drv_leave_vt(VT_FUNC_ARGS_DECL);
+static void drv_free_screen(FREE_SCREEN_ARGS_DECL);
+static ModeStatus drv_valid_mode(SCRN_ARG_TYPE arg, DisplayModePtr mode, Bool verbose,
 			         int flags);
 
 typedef enum
@@ -149,7 +149,7 @@ xorg_tracker_have_modesetting(ScrnInfoPtr pScrn, struct pci_device *device)
  */
 
 static Bool drv_init_front_buffer_functions(ScrnInfoPtr pScrn);
-static Bool drv_close_screen(int scrnIndex, ScreenPtr pScreen);
+static Bool drv_close_screen(CLOSE_SCREEN_ARGS_DECL);
 
 
 /*
@@ -543,7 +543,7 @@ drv_pre_init(ScrnInfoPtr pScrn, int flags)
 
 void xorg_flush(ScreenPtr pScreen)
 {
-    modesettingPtr ms = modesettingPTR(xf86Screens[pScreen->myNum]);
+    modesettingPtr ms = modesettingPTR(xf86ScreenToScrn(pScreen));
 
     if (ms->ctx) {
 	int j;
@@ -551,7 +551,7 @@ void xorg_flush(ScreenPtr pScreen)
 	ms->ctx->flush(ms->ctx,
 		       ms->dirtyThrottling ?
 		       &ms->fence[XORG_NR_FENCES-1] :
-		       NULL);
+		       NULL, 0);
        
 	if (ms->dirtyThrottling) {
 	    if (ms->fence[0])
@@ -605,14 +605,13 @@ void xorg_flush(ScreenPtr pScreen)
 #endif
 }
 
-static void drv_block_handler(int i, pointer blockData, pointer pTimeout,
-                              pointer pReadmask)
+static void drv_block_handler(BLOCKHANDLER_ARGS_DECL)
 {
-    ScreenPtr pScreen = screenInfo.screens[i];
-    modesettingPtr ms = modesettingPTR(xf86Screens[pScreen->myNum]);
+    SCREEN_PTR(arg);
+    modesettingPtr ms = modesettingPTR(xf86ScreenToScrn(pScreen));
 
     pScreen->BlockHandler = ms->blockHandler;
-    pScreen->BlockHandler(i, blockData, pTimeout, pReadmask);
+    pScreen->BlockHandler(BLOCKHANDLER_ARGS);
     pScreen->BlockHandler = drv_block_handler;
 
     xorg_flush(pScreen);
@@ -621,7 +620,7 @@ static void drv_block_handler(int i, pointer blockData, pointer pTimeout,
 static Bool
 drv_create_screen_resources(ScreenPtr pScreen)
 {
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     modesettingPtr ms = modesettingPTR(pScrn);
     PixmapPtr rootPixmap;
     Bool ret;
@@ -636,7 +635,7 @@ drv_create_screen_resources(ScreenPtr pScreen)
 
     ms->noEvict = FALSE;
 
-    drv_adjust_frame(pScrn->scrnIndex, pScrn->frameX0, pScrn->frameY0, 0);
+    drv_adjust_frame(ADJUST_FRAME_ARGS(pScrn, pScrn->frameX0, pScrn->frameY0));
 
 #ifdef DRM_MODE_FEATURE_DIRTYFB
     rootPixmap = pScreen->GetScreenPixmap(pScreen);
@@ -741,9 +740,9 @@ static void drv_load_palette(ScrnInfoPtr pScrn, int numColors,
 
 
 static Bool
-drv_screen_init(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
+drv_screen_init(SCREEN_INIT_ARGS_DECL)
 {
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     modesettingPtr ms = modesettingPTR(pScrn);
     VisualPtr visual;
     CustomizerPtr cust = ms->cust;
@@ -853,7 +852,6 @@ drv_screen_init(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO, "##################################\n");
 
-    miInitializeBackingStore(pScreen);
     xf86SetBackingStore(pScreen);
     xf86SetSilkenMouse(pScreen);
     miDCInitialize(pScreen, xf86GetPointerScreenFuncs());
@@ -889,13 +887,13 @@ drv_screen_init(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
     if (serverGeneration == 1)
 	xf86ShowUnusedOptions(pScrn->scrnIndex, pScrn->options);
 
-    return drv_enter_vt(scrnIndex, 1);
+    return drv_enter_vt_flags(pScrn, 1);
 }
 
 static void
-drv_adjust_frame(int scrnIndex, int x, int y, int flags)
+drv_adjust_frame(ADJUST_FRAME_ARGS_DECL)
 {
-    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+    SCRN_INFO_PTR(arg);
     xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
     xf86OutputPtr output = config->output[config->compat_output];
     xf86CrtcPtr crtc = output->crtc;
@@ -909,15 +907,16 @@ drv_adjust_frame(int scrnIndex, int x, int y, int flags)
 }
 
 static void
-drv_free_screen(int scrnIndex, int flags)
+drv_free_screen(FREE_SCREEN_ARGS_DECL)
 {
-    drv_free_rec(xf86Screens[scrnIndex]);
+    SCRN_INFO_PTR(arg);
+    drv_free_rec(pScrn);
 }
 
 static void
-drv_leave_vt(int scrnIndex, int flags)
+drv_leave_vt(VT_FUNC_ARGS_DECL)
 {
-    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+    SCRN_INFO_PTR(arg);
     modesettingPtr ms = modesettingPTR(pScrn);
     xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
     CustomizerPtr cust = ms->cust;
@@ -960,9 +959,8 @@ drv_leave_vt(int scrnIndex, int flags)
  * This gets called when gaining control of the VT, and from ScreenInit().
  */
 static Bool
-drv_enter_vt(int scrnIndex, int flags)
+drv_enter_vt_flags(ScrnInfoPtr pScrn, int flags)
 {
-    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
     modesettingPtr ms = modesettingPTR(pScrn);
     CustomizerPtr cust = ms->cust;
 
@@ -985,17 +983,24 @@ drv_enter_vt(int scrnIndex, int flags)
 }
 
 static Bool
-drv_switch_mode(int scrnIndex, DisplayModePtr mode, int flags)
+drv_enter_vt(VT_FUNC_ARGS_DECL)
 {
-    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+    SCRN_INFO_PTR(arg);
+    return drv_enter_vt_flags(pScrn, 0);
+}
+
+static Bool
+drv_switch_mode(SWITCH_MODE_ARGS_DECL)
+{
+    SCRN_INFO_PTR(arg);
 
     return xf86SetSingleMode(pScrn, mode, RR_Rotate_0);
 }
 
 static Bool
-drv_close_screen(int scrnIndex, ScreenPtr pScreen)
+drv_close_screen(CLOSE_SCREEN_ARGS_DECL)
 {
-    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     modesettingPtr ms = modesettingPTR(pScrn);
     CustomizerPtr cust = ms->cust;
 
@@ -1031,17 +1036,17 @@ drv_close_screen(int scrnIndex, ScreenPtr pScreen)
 
     /* calls drop master make sure we don't talk to 3D HW after that */
     if (pScrn->vtSema) {
-	drv_leave_vt(scrnIndex, 0);
+	drv_leave_vt(VT_FUNC_ARGS);
     }
 
     pScrn->vtSema = FALSE;
     pScreen->CloseScreen = ms->CloseScreen;
 
-    return (*pScreen->CloseScreen) (scrnIndex, pScreen);
+    return (*pScreen->CloseScreen) (CLOSE_SCREEN_ARGS);
 }
 
 static ModeStatus
-drv_valid_mode(int scrnIndex, DisplayModePtr mode, Bool verbose, int flags)
+drv_valid_mode(SCRN_ARG_TYPE arg, DisplayModePtr mode, Bool verbose, int flags)
 {
     return MODE_OK;
 }
@@ -1110,7 +1115,7 @@ drv_create_front_buffer_ga3d(ScrnInfoPtr pScrn)
 
     pScrn->frameX0 = 0;
     pScrn->frameY0 = 0;
-    drv_adjust_frame(pScrn->scrnIndex, pScrn->frameX0, pScrn->frameY0, 0);
+    drv_adjust_frame(ADJUST_FRAME_ARGS(pScrn, pScrn->frameX0, pScrn->frameY0));
 
     pipe_resource_reference(&ms->root_texture, tex);
     pipe_resource_reference(&tex, NULL);
@@ -1222,7 +1227,7 @@ drv_create_front_buffer_kms(ScrnInfoPtr pScrn)
 
     pScrn->frameX0 = 0;
     pScrn->frameY0 = 0;
-    drv_adjust_frame(pScrn->scrnIndex, pScrn->frameX0, pScrn->frameY0, 0);
+    drv_adjust_frame(ADJUST_FRAME_ARGS(pScrn, pScrn->frameX0, pScrn->frameY0));
     ms->root_bo = bo;
     ms->fb_id = fb_id;
 

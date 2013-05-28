@@ -36,6 +36,8 @@
 #include <GL/gl.h> /* dri_interface needs GL types */
 #include "GL/internal/dri_interface.h"
 
+struct gbm_dri_surface;
+
 struct gbm_dri_device {
    struct gbm_drm_device base;
 
@@ -46,18 +48,40 @@ struct gbm_dri_device {
    __DRIcoreExtension   *core;
    __DRIdri2Extension   *dri2;
    __DRIimageExtension  *image;
+   __DRI2flushExtension *flush;
+   __DRIdri2LoaderExtension *loader;
 
    const __DRIconfig   **driver_configs;
-   const __DRIextension *extensions[3];
+   const __DRIextension *extensions[4];
 
    __DRIimage *(*lookup_image)(__DRIscreen *screen, void *image, void *data);
    void *lookup_user_data;
+
+   __DRIbuffer *(*get_buffers)(__DRIdrawable * driDrawable,
+                               int *width, int *height,
+                               unsigned int *attachments, int count,
+                               int *out_count, void *data);
+   void (*flush_front_buffer)(__DRIdrawable * driDrawable, void *data);
+   __DRIbuffer *(*get_buffers_with_format)(__DRIdrawable * driDrawable,
+			     int *width, int *height,
+			     unsigned int *attachments, int count,
+			     int *out_count, void *data);
 };
 
 struct gbm_dri_bo {
    struct gbm_drm_bo base;
 
    __DRIimage *image;
+
+   /* Only used for cursors */
+   uint32_t handle, size;
+   void *map;
+};
+
+struct gbm_dri_surface {
+   struct gbm_surface base;
+
+   void *dri_private;
 };
 
 static inline struct gbm_dri_device *
@@ -70,6 +94,12 @@ static inline struct gbm_dri_bo *
 gbm_dri_bo(struct gbm_bo *bo)
 {
    return (struct gbm_dri_bo *) bo;
+}
+
+static inline struct gbm_dri_surface *
+gbm_dri_surface(struct gbm_surface *surface)
+{
+   return (struct gbm_dri_surface *) surface;
 }
 
 char *

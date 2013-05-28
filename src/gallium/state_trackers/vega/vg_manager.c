@@ -61,9 +61,7 @@ vg_context_update_color_rb(struct vg_context *ctx, struct pipe_resource *pt)
 
    strb->texture = pt;
 
-   memset(&surf_tmpl, 0, sizeof(surf_tmpl));
-   u_surface_default_template(&surf_tmpl, strb->texture,
-                              PIPE_BIND_RENDER_TARGET);
+   u_surface_default_template(&surf_tmpl, strb->texture);
    strb->surface = pipe->create_surface(pipe, strb->texture, &surf_tmpl);
 
    if (!strb->surface) {
@@ -91,7 +89,7 @@ vg_manager_flush_frontbuffer(struct vg_context *ctx)
    switch (stfb->strb_att) {
    case ST_ATTACHMENT_FRONT_LEFT:
    case ST_ATTACHMENT_FRONT_RIGHT:
-      stfb->iface->flush_front(stfb->iface, stfb->strb_att);
+      stfb->iface->flush_front(&ctx->iface, stfb->iface, stfb->strb_att);
       break;
    default:
       break;
@@ -145,7 +143,13 @@ vg_context_flush(struct st_context_iface *stctxi, unsigned flags,
                  struct pipe_fence_handle **fence)
 {
    struct vg_context *ctx = (struct vg_context *) stctxi;
-   ctx->pipe->flush(ctx->pipe, fence);
+   enum pipe_flush_flags pipe_flags = 0;
+
+   if (flags & ST_FLUSH_END_OF_FRAME) {
+      pipe_flags |= PIPE_FLUSH_END_OF_FRAME;
+   }
+
+   ctx->pipe->flush(ctx->pipe, fence, pipe_flags);
    if (flags & ST_FLUSH_FRONT)
       vg_manager_flush_frontbuffer(ctx);
 }
@@ -369,6 +373,7 @@ static const struct st_api vg_api = {
    "Vega " VEGA_VERSION_STRING,
    ST_API_OPENVG,
    ST_PROFILE_DEFAULT_MASK,
+   0,
    vg_api_destroy,
    vg_api_get_proc_address,
    vg_api_create_context,

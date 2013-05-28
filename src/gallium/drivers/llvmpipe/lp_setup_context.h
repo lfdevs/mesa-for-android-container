@@ -37,7 +37,6 @@
 
 #include "lp_setup.h"
 #include "lp_rast.h"
-#include "lp_tile_soa.h"        /* for TILE_SIZE */
 #include "lp_scene.h"
 #include "lp_bld_interp.h"	/* for struct lp_shader_input */
 
@@ -90,12 +89,13 @@ struct lp_setup_context
    struct lp_scene *scene;               /**< current scene being built */
 
    struct lp_fence *last_fence;
-   struct llvmpipe_query *active_query;
+   struct llvmpipe_query *active_query[PIPE_QUERY_TYPES];
 
    boolean flatshade_first;
    boolean ccw_is_frontface;
    boolean scissor_test;
    boolean point_size_per_vertex;
+   boolean rasterizer_discard;
    unsigned cullmode;
    float pixel_offset;
    float line_width;
@@ -123,15 +123,15 @@ struct lp_setup_context
    struct {
       const struct lp_rast_state *stored; /**< what's in the scene */
       struct lp_rast_state current;  /**< currently set state */
-      struct pipe_resource *current_tex[PIPE_MAX_SAMPLERS];
+      struct pipe_resource *current_tex[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    } fs;
 
    /** fragment shader constants */
    struct {
-      struct pipe_resource *current;
+      struct pipe_constant_buffer current;
       unsigned stored_size;
       const void *stored_data;
-   } constants;
+   } constants[LP_MAX_TGSI_CONST_BUFFERS];
 
    struct {
       struct pipe_blend_color current;

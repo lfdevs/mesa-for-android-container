@@ -26,6 +26,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <deque>
+#include <list>
+#include <vector>
 
 #include "nv50_ir_util.h"
 #include "nv50_ir_graph.h"
@@ -42,7 +45,7 @@ enum operation
    OP_SPLIT, // $r0d -> { $r0, $r1 } ($r0d and $r0/$r1 will be coalesced)
    OP_MERGE, // opposite of split, e.g. combine 2 32 bit into a 64 bit value
    OP_CONSTRAINT, // copy values into consecutive registers
-   OP_MOV,
+   OP_MOV, // simple copy, no modifiers allowed
    OP_LOAD,
    OP_STORE,
    OP_ADD,
@@ -121,22 +124,28 @@ enum operation
    OP_DFDY,
    OP_RDSV, // read system value
    OP_WRSV, // write system value
-   OP_PIXLD,
+   OP_TEXPREP, // turn cube map array into 2d array coordinates, TODO: move
    OP_QUADOP,
    OP_QUADON,
    OP_QUADPOP,
    OP_POPCNT, // bitcount(src0 & src1)
    OP_INSBF,  // insert first src1[8:15] bits of src0 into src2 at src1[0:7]
    OP_EXTBF,
+   OP_TEXBAR,
    OP_LAST
 };
 
+// various instruction-specific modifier definitions Instruction::subOp
+// MOV_FINAL marks a MOV originating from an EXPORT (used for placing TEXBARs)
 #define NV50_IR_SUBOP_MUL_HIGH     1
 #define NV50_IR_SUBOP_EMIT_RESTART 1
 #define NV50_IR_SUBOP_LDC_IL       1
 #define NV50_IR_SUBOP_LDC_IS       2
 #define NV50_IR_SUBOP_LDC_ISL      3
 #define NV50_IR_SUBOP_SHIFT_WRAP   1
+#define NV50_IR_SUBOP_EMU_PRERET   1
+#define NV50_IR_SUBOP_TEXBAR(n)    n
+#define NV50_IR_SUBOP_MOV_FINAL    1
 
 enum DataType
 {
@@ -216,6 +225,7 @@ enum DataFile
    FILE_PREDICATE,       // boolean predicate
    FILE_FLAGS,           // zero/sign/carry/overflow bits
    FILE_ADDRESS,
+   LAST_REGISTER_FILE = FILE_ADDRESS,
    FILE_IMMEDIATE,
    FILE_MEMORY_CONST,
    FILE_SHADER_INPUT,
@@ -317,7 +327,7 @@ struct Storage
       float f32;
       double f64;
       int32_t offset; // offset from 0 (base of address space)
-      int32_t id;     // register id (< 0 if virtual/unassigned)
+      int32_t id;     // register id (< 0 if virtual/unassigned, in units <= 4)
       struct {
          SVSemantic sv;
          int index;
@@ -353,6 +363,7 @@ public:
 
    // @return new Modifier applying a after b (asserts if unrepresentable)
    Modifier operator*(const Modifier) const;
+   Modifier operator*=(const Modifier m) { *this = *this * m; return *this; }
    Modifier operator==(const Modifier m) const { return m.bits == bits; }
    Modifier operator!=(const Modifier m) const { return m.bits != bits; }
 
@@ -365,7 +376,7 @@ public:
    inline int neg() const { return (bits & NV50_IR_MOD_NEG) ? 1 : 0; }
    inline int abs() const { return (bits & NV50_IR_MOD_ABS) ? 1 : 0; }
 
-   inline operator bool() { return bits ? true : false; }
+   inline operator bool() const { return bits ? true : false; }
 
    void applyTo(ImmediateValue &imm) const;
 
@@ -378,10 +389,9 @@ private:
 class ValueRef
 {
 public:
-   ValueRef();
+   ValueRef(Value * = NULL);
+   ValueRef(const ValueRef&);
    ~ValueRef();
-
-   inline ValueRef& operator=(Value *val) { this->set(val); return *this; }
 
    inline bool exists() const { return value != NULL; }
 
@@ -400,26 +410,11 @@ public:
    inline unsigned getSize() const;
 
    // SSA: return eventual (traverse MOVs) literal value, if it exists
-   ImmediateValue *getImmediate() const;
-
-   class Iterator
-   {
-   public:
-      Iterator(ValueRef *ref) : pos(ref), ini(ref) { }
-
-      inline ValueRef *get() const { return pos; }
-      inline bool end() const { return pos == NULL; }
-      inline void next() { pos = (pos->next != ini) ? pos->next : 0; }
-
-   private:
-      ValueRef *pos, *ini;
-   };
-
-   inline Iterator iterator() { return Iterator(this); }
+   bool getImmediate(ImmediateValue&) const;
 
 public:
    Modifier mod;
-   int8_t indirect[2]; // >= 0 if relative to lvalue in insn->src[indirect[i]]
+   int8_t indirect[2]; // >= 0 if relative to lvalue in insn->src(indirect[i])
    uint8_t swizzle;
 
    bool usedAsPtr; // for printing
@@ -427,24 +422,22 @@ public:
 private:
    Value *value;
    Instruction *insn;
-   ValueRef *next; // to link uses of the value
-   ValueRef *prev;
 };
 
 class ValueDef
 {
 public:
-   ValueDef();
+   ValueDef(Value * = NULL);
+   ValueDef(const ValueDef&);
    ~ValueDef();
-
-   inline ValueDef& operator=(Value *val) { this->set(val); return *this; }
 
    inline bool exists() const { return value != NULL; }
 
    inline Value *get() const { return value; }
    inline Value *rep() const;
    void set(Value *);
-   void replace(Value *, bool doSet); // replace all uses of the old value
+   bool mayReplace(const ValueRef &);
+   void replace(const ValueRef &, bool doSet); // replace all uses of the old value
 
    inline Instruction *getInsn() const { return insn; }
    inline void setInsn(Instruction *inst) { insn = inst; }
@@ -452,53 +445,35 @@ public:
    inline DataFile getFile() const;
    inline unsigned getSize() const;
 
-   // HACK: save the pre-SSA value in 'prev', in SSA we don't need the def list
-   //  but we'll use it again for coalescing in register allocation
    inline void setSSA(LValue *);
    inline const LValue *preSSA() const;
-   inline void restoreDefList(); // after having been abused for SSA hack
-   void mergeDefs(ValueDef *);
-
-   class Iterator
-   {
-   public:
-      Iterator(ValueDef *def) : pos(def), ini(def) { }
-
-      inline ValueDef *get() const { return pos; }
-      inline bool end() const { return pos == NULL; }
-      inline void next() { pos = (pos->next != ini) ? pos->next : NULL; }
-
-   private:
-      ValueDef *pos, *ini;
-   };
-
-   inline Iterator iterator() { return Iterator(this); }
 
 private:
    Value *value;   // should make this LValue * ...
+   LValue *origin; // pre SSA value
    Instruction *insn;
-   ValueDef *next; // circular list of all definitions of the same value
-   ValueDef *prev;
 };
 
 class Value
 {
 public:
    Value();
+   virtual ~Value() { }
 
-   virtual Value *clone(Function *) const { return NULL; }
+   virtual Value *clone(ClonePolicy<Function>&) const = 0;
 
    virtual int print(char *, size_t, DataType ty = TYPE_NONE) const = 0;
 
    virtual bool equals(const Value *, bool strict = false) const;
    virtual bool interfers(const Value *) const;
+   virtual bool isUniform() const { return true; }
+
+   inline Value *rep() const { return join; }
 
    inline Instruction *getUniqueInsn() const;
    inline Instruction *getInsn() const; // use when uniqueness is certain
 
-   inline int refCount() { return refCnt; }
-   inline int ref() { return ++refCnt; }
-   inline int unref() { --refCnt; assert(refCnt >= 0); return refCnt; }
+   inline int refCount() { return uses.size(); }
 
    inline LValue *asLValue();
    inline Symbol *asSym();
@@ -506,22 +481,18 @@ public:
    inline const Symbol *asSym() const;
    inline const ImmediateValue *asImm() const;
 
-   bool coalesce(Value *, bool force = false);
-
    inline bool inFile(DataFile f) { return reg.file == f; }
 
    static inline Value *get(Iterator&);
 
-protected:
-   int refCnt;
+   std::list<ValueRef *> uses;
+   std::list<ValueDef *> defs;
+   typedef std::list<ValueRef *>::iterator UseIterator;
+   typedef std::list<ValueRef *>::const_iterator UseCIterator;
+   typedef std::list<ValueDef *>::iterator DefIterator;
+   typedef std::list<ValueDef *>::const_iterator DefCIterator;
 
-   friend class ValueDef;
-   friend class ValueRef;
-
-public:
    int id;
-   ValueRef *uses;
-   ValueDef *defs;
    Storage reg;
 
    // TODO: these should be in LValue:
@@ -534,25 +505,33 @@ class LValue : public Value
 public:
    LValue(Function *, DataFile file);
    LValue(Function *, LValue *);
+   ~LValue() { }
 
-   virtual Value *clone(Function *) const;
+   virtual bool isUniform() const;
+
+   virtual LValue *clone(ClonePolicy<Function>&) const;
 
    virtual int print(char *, size_t, DataType ty = TYPE_NONE) const;
 
 public:
-   unsigned ssa : 1;
-
-   int affinity;
+   unsigned compMask : 8; // compound/component mask
+   unsigned compound : 1; // used by RA, value involved in split/merge
+   unsigned ssa      : 1;
+   unsigned fixedReg : 1; // set & used by RA, earlier just use (id < 0)
+   unsigned noSpill  : 1; // do not spill (e.g. if spill temporary already)
 };
 
 class Symbol : public Value
 {
 public:
    Symbol(Program *, DataFile file = FILE_MEMORY_CONST, ubyte fileIdx = 0);
+   ~Symbol() { }
 
-   virtual Value *clone(Function *) const;
+   virtual Symbol *clone(ClonePolicy<Function>&) const;
 
    virtual bool equals(const Value *that, bool strict) const;
+
+   virtual bool isUniform() const;
 
    virtual int print(char *, size_t, DataType ty = TYPE_NONE) const;
 
@@ -578,12 +557,15 @@ private:
 class ImmediateValue : public Value
 {
 public:
+   ImmediateValue() { }
    ImmediateValue(Program *, uint32_t);
    ImmediateValue(Program *, float);
    ImmediateValue(Program *, double);
-
    // NOTE: not added to program with
    ImmediateValue(const ImmediateValue *, DataType ty);
+   ~ImmediateValue() { };
+
+   virtual ImmediateValue *clone(ClonePolicy<Function>&) const;
 
    virtual bool equals(const Value *that, bool strict) const;
 
@@ -600,14 +582,12 @@ public:
    ImmediateValue operator*(const ImmediateValue&) const;
    ImmediateValue operator/(const ImmediateValue&) const;
 
+   ImmediateValue& operator=(const ImmediateValue&); // only sets value !
+
    bool compare(CondCode cc, float fval) const;
 
    virtual int print(char *, size_t, DataType ty = TYPE_NONE) const;
 };
-
-
-#define NV50_IR_MAX_DEFS 4
-#define NV50_IR_MAX_SRCS 8
 
 class Instruction
 {
@@ -616,29 +596,48 @@ public:
    Instruction(Function *, operation, DataType);
    virtual ~Instruction();
 
-   virtual Instruction *clone(bool deep) const;
+   virtual Instruction *clone(ClonePolicy<Function>&,
+                              Instruction * = NULL) const;
 
-   inline void setDef(int i, Value *val) { def[i].set(val); }
-   inline void setSrc(int s, Value *val) { src[s].set(val); }
-   void setSrc(int s, ValueRef&);
+   void setDef(int i, Value *);
+   void setSrc(int s, Value *);
+   void setSrc(int s, const ValueRef&);
    void swapSources(int a, int b);
+   void moveSources(int s, int delta); // NOTE: only delta > 0 implemented
    bool setIndirect(int s, int dim, Value *);
 
-   inline Value *getDef(int d) const { return def[d].get(); }
-   inline Value *getSrc(int s) const { return src[s].get(); }
+   inline ValueRef& src(int s) { return srcs[s]; }
+   inline ValueDef& def(int s) { return defs[s]; }
+   inline const ValueRef& src(int s) const { return srcs[s]; }
+   inline const ValueDef& def(int s) const { return defs[s]; }
+
+   inline Value *getDef(int d) const { return defs[d].get(); }
+   inline Value *getSrc(int s) const { return srcs[s].get(); }
    inline Value *getIndirect(int s, int dim) const;
 
-   inline bool defExists(int d) const { return d < 4 && def[d].exists(); }
-   inline bool srcExists(int s) const { return s < 8 && src[s].exists(); }
+   inline bool defExists(unsigned d) const
+   {
+      return d < defs.size() && defs[d].exists();
+   }
+   inline bool srcExists(unsigned s) const
+   {
+      return s < srcs.size() && srcs[s].exists();
+   }
 
-   inline bool constrainedDefs() const { return def[1].exists(); }
+   inline bool constrainedDefs() const;
 
    bool setPredicate(CondCode ccode, Value *);
    inline Value *getPredicate() const;
    bool writesPredicate() const;
+   inline bool isPredicated() const { return predSrc >= 0; }
 
-   unsigned int defCount(unsigned int mask) const;
-   unsigned int srcCount(unsigned int mask) const;
+   inline void setFlagsSrc(int s, Value *);
+   inline void setFlagsDef(int d, Value *);
+
+   unsigned int defCount() const { return defs.size(); };
+   unsigned int defCount(unsigned int mask, bool singleFile = false) const;
+   unsigned int srcCount() const { return srcs.size(); };
+   unsigned int srcCount(unsigned int mask, bool singleFile = false) const;
 
    // save & remove / set indirect[0,1] and predicate source
    void takeExtraSources(int s, Value *[3]);
@@ -683,6 +682,8 @@ public:
 
    uint8_t subOp; // quadop, 1 for mul-high, etc.
 
+   uint8_t sched; // scheduling data (NOTE: maybe move to separate storage)
+
    unsigned encSize    : 4; // encoding size in bytes
    unsigned saturate   : 1; // to [0.0f, 1.0f]
    unsigned join       : 1; // converge control flow (use OP_JOIN until end)
@@ -702,11 +703,11 @@ public:
    int8_t flagsDef;
    int8_t flagsSrc;
 
-   // NOTE: should make these pointers, saves space and work on shuffling
-   ValueDef def[NV50_IR_MAX_DEFS]; // no gaps !
-   ValueRef src[NV50_IR_MAX_SRCS]; // no gaps !
-
    BasicBlock *bb;
+
+protected:
+   std::deque<ValueDef> defs; // no gaps !
+   std::deque<ValueRef> srcs; // no gaps !
 
    // instruction specific methods:
    // (don't want to subclass, would need more constructors and memory pools)
@@ -718,8 +719,6 @@ public:
 
 private:
    void init();
-protected:
-   void cloneBase(Instruction *clone, bool deep) const;
 };
 
 enum TexQuery
@@ -751,6 +750,7 @@ public:
       Target& operator=(TexTarget targ)
       {
          assert(targ < TEX_TARGET_COUNT);
+         target = targ;
          return *this;
       }
 
@@ -777,7 +777,8 @@ public:
    TexInstruction(Function *, operation);
    virtual ~TexInstruction();
 
-   virtual Instruction *clone(bool deep) const;
+   virtual TexInstruction *clone(ClonePolicy<Function>&,
+                                 Instruction * = NULL) const;
 
    inline void setTexture(Target targ, uint8_t r, uint8_t s)
    {
@@ -820,7 +821,8 @@ class CmpInstruction : public Instruction
 public:
    CmpInstruction(Function *, operation);
 
-   virtual Instruction *clone(bool deep) const;
+   virtual CmpInstruction *clone(ClonePolicy<Function>&,
+                                 Instruction * = NULL) const;
 
    void setCondition(CondCode cond) { setCond = cond; }
    CondCode getCondition() const { return setCond; }
@@ -832,7 +834,10 @@ public:
 class FlowInstruction : public Instruction
 {
 public:
-   FlowInstruction(Function *, operation, BasicBlock *target);
+   FlowInstruction(Function *, operation, void *target);
+
+   virtual FlowInstruction *clone(ClonePolicy<Function>&,
+                                  Instruction * = NULL) const;
 
 public:
    unsigned allWarp  : 1;
@@ -853,12 +858,14 @@ public:
    BasicBlock(Function *);
    ~BasicBlock();
 
+   BasicBlock *clone(ClonePolicy<Function>&) const;
+
    inline int getId() const { return id; }
    inline unsigned int getInsnCount() const { return numInsns; }
    inline bool isTerminated() const { return exit && exit->terminator; }
 
    bool dominatedBy(BasicBlock *bb);
-   inline bool reachableBy(BasicBlock *by, BasicBlock *term);
+   inline bool reachableBy(const BasicBlock *by, const BasicBlock *term);
 
    // returns mask of conditional out blocks
    // e.g. 3 for IF { .. } ELSE { .. } ENDIF, 1 for IF { .. } ENDIF
@@ -882,6 +889,10 @@ public:
 
    BasicBlock *idom() const;
 
+   // NOTE: currently does not rebuild the dominator tree
+   BasicBlock *splitBefore(Instruction *, bool attach = true);
+   BasicBlock *splitAfter(Instruction *, bool attach = true);
+
    DLList& getDF() { return df; }
    DLList::Iterator iterDF() { return df.iterator(); }
 
@@ -893,6 +904,7 @@ public:
    Graph::Node dom;
 
    BitSet liveSet;
+   BitSet defSet;
 
    uint32_t binPos;
    uint32_t binSize;
@@ -914,17 +926,22 @@ private:
 private:
    Function *func;
    Program *program;
+
+   void splitCommon(Instruction *, BasicBlock *, bool attach);
 };
 
 class Function
 {
 public:
-   Function(Program *, const char *name);
+   Function(Program *, const char *name, uint32_t label);
    ~Function();
+
+   static inline Function *get(Graph::Node *node);
 
    inline Program *getProgram() const { return prog; }
    inline const char *getName() const { return name; }
    inline int getId() const { return id; }
+   inline uint32_t getLabel() const { return label; }
 
    void print();
    void printLiveIntervals() const;
@@ -941,9 +958,15 @@ public:
 
    inline LValue *getLValue(int id);
 
+   void buildLiveSets();
+   void buildDefSets();
    bool convertToSSA();
 
 public:
+   std::deque<ValueDef> ins;
+   std::deque<ValueRef> outs;
+   std::deque<Value *> clobbers;
+
    Graph cfg;
    Graph::Node *cfgExit;
    Graph *domTree;
@@ -958,14 +981,21 @@ public:
    uint32_t binPos;
    uint32_t binSize;
 
+   Value *stackPtr;
+
+   uint32_t tlsBase; // base address for l[] space (if no stack pointer is used)
+   uint32_t tlsSize;
+
    ArrayList allBBlocks;
    ArrayList allInsns;
    ArrayList allLValues;
 
 private:
    void buildLiveSetsPreSSA(BasicBlock *, const int sequence);
+   void buildDefSetsPreSSA(BasicBlock *bb, const int seq);
 
 private:
+   uint32_t label;
    int id;
    const char *const name;
    Program *prog;
@@ -999,6 +1029,7 @@ public:
    Type getType() const { return progType; }
 
    inline void add(Function *fn, int& id) { allFuncs.insert(fn, id); }
+   inline void del(Function *fn, int& id) { allFuncs.remove(id); }
    inline void add(Value *rval, int& id) { allRValues.insert(rval, id); }
 
    bool makeFromTGSI(struct nv50_ir_prog_info *);
@@ -1012,6 +1043,8 @@ public:
    const Target *getTarget() const { return target; }
 
 private:
+   void emitSymbolTable(struct nv50_ir_prog_info *);
+
    Type progType;
    Target *target;
 
@@ -1024,6 +1057,7 @@ public:
 
    uint32_t *code;
    uint32_t binSize;
+   uint32_t tlsSize; // size required for FILE_MEMORY_LOCAL
 
    int maxGPR;
 
@@ -1036,6 +1070,9 @@ public:
    MemoryPool mem_ImmediateValue;
 
    uint32_t dbgFlags;
+   uint8_t  optLevel;
+
+   void *targetPriv; // e.g. to carry information between passes
 
    void releaseInstruction(Instruction *);
    void releaseValue(Value *);

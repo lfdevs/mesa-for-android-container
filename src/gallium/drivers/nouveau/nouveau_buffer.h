@@ -8,10 +8,6 @@ struct pipe_resource;
 struct nouveau_context;
 struct nouveau_bo;
 
-#define NOUVEAU_BUFFER_SCORE_MIN -25000
-#define NOUVEAU_BUFFER_SCORE_MAX  25000
-#define NOUVEAU_BUFFER_SCORE_VRAM_THRESHOLD 20000
-
 /* DIRTY: buffer was (or will be after the next flush) written to by GPU and
  *  resource->data has not been updated to reflect modified VRAM contents
  *
@@ -20,7 +16,10 @@ struct nouveau_bo;
  */
 #define NOUVEAU_BUFFER_STATUS_GPU_READING (1 << 0)
 #define NOUVEAU_BUFFER_STATUS_GPU_WRITING (1 << 1)
+#define NOUVEAU_BUFFER_STATUS_DIRTY       (1 << 2)
 #define NOUVEAU_BUFFER_STATUS_USER_MEMORY (1 << 7)
+
+#define NOUVEAU_BUFFER_STATUS_REALLOC_MASK NOUVEAU_BUFFER_STATUS_USER_MEMORY
 
 /* Resources, if mapped into the GPU's address space, are guaranteed to
  * have constant virtual addresses (nv50+).
@@ -32,14 +31,14 @@ struct nv04_resource {
    struct pipe_resource base;
    const struct u_resource_vtbl *vtbl;
 
+   uint64_t address; /* virtual address (nv50+) */
+
    uint8_t *data;
    struct nouveau_bo *bo;
    uint32_t offset;
 
    uint8_t status;
    uint8_t domain;
-
-   int16_t score; /* low if mapped very often, if high can move to VRAM */
 
    struct nouveau_fence *fence;
    struct nouveau_fence *fence_wr;
@@ -58,52 +57,9 @@ boolean
 nouveau_buffer_migrate(struct nouveau_context *,
                        struct nv04_resource *, unsigned domain);
 
-static INLINE void
-nouveau_buffer_adjust_score(struct nouveau_context *pipe,
-                            struct nv04_resource *res, int16_t score)
-{
-   if (score < 0) {
-      if (res->score > NOUVEAU_BUFFER_SCORE_MIN)
-         res->score += score;
-   } else
-   if (score > 0){
-      if (res->score < NOUVEAU_BUFFER_SCORE_MAX)
-         res->score += score;
-      if (res->domain == NOUVEAU_BO_GART &&
-          res->score > NOUVEAU_BUFFER_SCORE_VRAM_THRESHOLD)
-         nouveau_buffer_migrate(pipe, res, NOUVEAU_BO_VRAM);
-   }
-}
-
-/* XXX: wait for fence (atm only using this for vertex push) */
-static INLINE void *
-nouveau_resource_map_offset(struct nouveau_context *pipe,
-                            struct nv04_resource *res, uint32_t offset,
-                            uint32_t flags)
-{
-   void *map;
-
-   nouveau_buffer_adjust_score(pipe, res, -250);
-
-   if ((res->domain == NOUVEAU_BO_VRAM) &&
-       (res->status & NOUVEAU_BUFFER_STATUS_GPU_WRITING))
-      nouveau_buffer_download(pipe, res, 0, res->base.width0);
-
-   if ((res->domain != NOUVEAU_BO_GART) ||
-       (res->status & NOUVEAU_BUFFER_STATUS_USER_MEMORY))
-      return res->data + offset;
-
-   if (res->mm)
-      flags |= NOUVEAU_BO_NOSYNC;
-
-   if (nouveau_bo_map_range(res->bo, res->offset + offset,
-                            res->base.width0, flags))
-      return NULL;
-
-   map = res->bo->map;
-   nouveau_bo_unmap(res->bo);
-   return map;
-}
+void *
+nouveau_resource_map_offset(struct nouveau_context *, struct nv04_resource *,
+                            uint32_t offset, uint32_t flags);
 
 static INLINE void
 nouveau_resource_unmap(struct nv04_resource *res)
@@ -133,7 +89,15 @@ nouveau_user_buffer_create(struct pipe_screen *screen, void *ptr,
                            unsigned bytes, unsigned usage);
 
 boolean
-nouveau_user_buffer_upload(struct nv04_resource *, unsigned base,
-                           unsigned size);
+nouveau_user_buffer_upload(struct nouveau_context *, struct nv04_resource *,
+                           unsigned base, unsigned size);
+
+/* Copy data to a scratch buffer and return address & bo the data resides in.
+ * Returns 0 on failure.
+ */
+uint64_t
+nouveau_scratch_data(struct nouveau_context *,
+                     const void *data, unsigned base, unsigned size,
+                     struct nouveau_bo **);
 
 #endif

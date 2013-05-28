@@ -58,7 +58,7 @@
  * PIPE_CONTROL operation, a combination MI_FLUSH and register write with
  * additional flushing control.
  */
-#define _3DSTATE_PIPE_CONTROL		(CMD_3D | (3 << 27) | (2 << 24) | 2)
+#define _3DSTATE_PIPE_CONTROL		(CMD_3D | (3 << 27) | (2 << 24))
 #define PIPE_CONTROL_CS_STALL		(1 << 20)
 #define PIPE_CONTROL_GLOBAL_SNAPSHOT_COUNT_RESET	(1 << 19)
 #define PIPE_CONTROL_TLB_INVALIDATE	(1 << 18)
@@ -275,3 +275,5 @@
 #define SO_NUM_PRIMS_WRITTEN1_IVB	0x5208
 #define SO_NUM_PRIMS_WRITTEN2_IVB	0x5210
 #define SO_NUM_PRIMS_WRITTEN3_IVB	0x5218
+
+#define TIMESTAMP                       0x2358

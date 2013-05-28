@@ -27,7 +27,19 @@ namespace nv50_ir {
 
 BuildUtil::BuildUtil()
 {
-   prog = NULL;
+   init(NULL);
+}
+
+BuildUtil::BuildUtil(Program *prog)
+{
+   init(prog);
+}
+
+void
+BuildUtil::init(Program *prog)
+{
+   this->prog = prog;
+
    func = NULL;
    bb = NULL;
    pos = NULL;
@@ -213,13 +225,17 @@ BuildUtil::mkCmp(operation op, CondCode cc, DataType ty, Value *dst,
 {
    CmpInstruction *insn = new_CmpInstruction(func, op);
 
-   insn->setType(dst->reg.file == FILE_PREDICATE ? TYPE_U8 : ty, ty);
+   insn->setType((dst->reg.file == FILE_PREDICATE ||
+                  dst->reg.file == FILE_FLAGS) ? TYPE_U8 : ty, ty);
    insn->setCondition(cc);
    insn->setDef(0, dst);
    insn->setSrc(0, src0);
    insn->setSrc(1, src1);
    if (src2)
       insn->setSrc(2, src2);
+
+   if (dst->reg.file == FILE_FLAGS)
+      insn->flagsDef = 0;
 
    insert(insn);
    return insn;
@@ -238,6 +254,7 @@ BuildUtil::mkTex(operation op, TexTarget targ, uint8_t tic, uint8_t tsc,
 
    tex->setTexture(targ, tic, tsc);
 
+   insert(tex);
    return tex;
 }
 
@@ -253,21 +270,42 @@ BuildUtil::mkQuadop(uint8_t q, Value *def, uint8_t l, Value *src0, Value *src1)
 Instruction *
 BuildUtil::mkSelect(Value *pred, Value *dst, Value *trSrc, Value *flSrc)
 {
-   Instruction *insn;
    LValue *def0 = getSSA();
    LValue *def1 = getSSA();
 
    mkMov(def0, trSrc)->setPredicate(CC_P, pred);
    mkMov(def1, flSrc)->setPredicate(CC_NOT_P, pred);
 
-   insn = mkOp2(OP_UNION, typeOfSize(dst->reg.size), dst, def0, def1);
+   return mkOp2(OP_UNION, typeOfSize(dst->reg.size), dst, def0, def1);
+}
 
-   insert(insn);
+Instruction *
+BuildUtil::mkSplit(Value *h[2], uint8_t halfSize, Value *val)
+{
+   Instruction *insn = NULL;
+
+   const DataType fTy = typeOfSize(halfSize * 2);
+
+   if (val->reg.file == FILE_IMMEDIATE)
+      val = mkMov(getSSA(halfSize * 2), val, fTy)->getDef(0);
+
+   if (isMemoryFile(val->reg.file)) {
+      h[0] = cloneShallow(getFunction(), val);
+      h[1] = cloneShallow(getFunction(), val);
+      h[0]->reg.size = halfSize;
+      h[1]->reg.size = halfSize;
+      h[1]->reg.data.offset += halfSize;
+   } else {
+      h[0] = getSSA(halfSize, val->reg.file);
+      h[1] = getSSA(halfSize, val->reg.file);
+      insn = mkOp1(OP_SPLIT, fTy, h[0], val);
+      insn->setDef(1, h[1]);
+   }
    return insn;
 }
 
 FlowInstruction *
-BuildUtil::mkFlow(operation op, BasicBlock *targ, CondCode cc, Value *pred)
+BuildUtil::mkFlow(operation op, void *targ, CondCode cc, Value *pred)
 {
    FlowInstruction *insn = new_FlowInstruction(func, op, targ);
 
@@ -284,7 +322,7 @@ BuildUtil::mkClobber(DataFile f, uint32_t rMask, int unit)
    static const uint16_t baseSize2[16] =
    {
       0x0000, 0x0010, 0x0011, 0x0020, 0x0012, 0x1210, 0x1211, 0x1220,
-      0x0013, 0x1310, 0x1311, 0x0020, 0x1320, 0x0022, 0x2210, 0x0040,
+      0x0013, 0x1310, 0x1311, 0x1320, 0x0022, 0x2210, 0x2211, 0x0040,
    };
 
    int base = 0;
@@ -414,127 +452,91 @@ BuildUtil::mkSysVal(SVSemantic svName, uint32_t svIndex)
 }
 
 void
-BuildUtil::DataArray::init()
+BuildUtil::DataArray::setup(unsigned array, unsigned arrayIdx,
+                            uint32_t base, int len, int vecDim, int eltSize,
+                            DataFile file, int8_t fileIdx)
 {
-   values = NULL;
-   baseAddr = 0;
-   arrayLen = 0;
-
-   vecDim = 4;
-   eltSize = 2;
-
-   file = FILE_GPR;
-   regOnly = true;
-}
-
-BuildUtil::DataArray::DataArray()
-{
-   init();
-}
-
-BuildUtil::DataArray::DataArray(BuildUtil *bld) : up(bld)
-{
-   init();
-}
-
-BuildUtil::DataArray::~DataArray()
-{
-   if (values)
-      delete[] values;
-}
-
-void
-BuildUtil::DataArray::setup(uint32_t base, int len, int v, int size,
-                            DataFile f, int8_t fileIndex)
-{
-   baseAddr = base;
-   arrayLen = len;
-
-   vecDim = v;
-   eltSize = size;
-
-   file = f;
-   regOnly = !isMemoryFile(f);
-
-   values = new Value * [arrayLen * vecDim];
-   if (values)
-      memset(values, 0, arrayLen * vecDim * sizeof(Value *));
+   this->array = array;
+   this->arrayIdx = arrayIdx;
+   this->baseAddr = base;
+   this->arrayLen = len;
+   this->vecDim = vecDim;
+   this->eltSize = eltSize;
+   this->file = file;
+   this->regOnly = !isMemoryFile(file);
 
    if (!regOnly) {
-      baseSym = new_Symbol(up->getProgram(), file, fileIndex);
+      baseSym = new_Symbol(up->getProgram(), file, fileIdx);
       baseSym->setOffset(baseAddr);
-      baseSym->reg.size = size;
+      baseSym->reg.size = eltSize;
+   } else {
+      baseSym = NULL;
    }
 }
 
 Value *
-BuildUtil::DataArray::acquire(int i, int c)
+BuildUtil::DataArray::acquire(ValueMap &m, int i, int c)
 {
-   const unsigned int idx = i * vecDim + c;
-
-   assert(idx < arrayLen * vecDim);
-
    if (regOnly) {
-      const unsigned int idx = i * 4 + c; // vecDim always 4 if regOnly
-      if (!values[idx])
-         values[idx] = new_LValue(up->getFunction(), file);
-      return values[idx];
+      Value *v = lookup(m, i, c);
+      if (!v)
+         v = insert(m, i, c, new_LValue(up->getFunction(), file));
+
+      return v;
    } else {
       return up->getScratch();
    }
 }
 
 Value *
-BuildUtil::DataArray::load(int i, int c, Value *ptr)
+BuildUtil::DataArray::load(ValueMap &m, int i, int c, Value *ptr)
 {
-   const unsigned int idx = i * vecDim + c;
-
-   assert(idx < arrayLen * vecDim);
-
    if (regOnly) {
-      if (!values[idx])
-         values[idx] = new_LValue(up->getFunction(), file);
-      return values[idx];
+      Value *v = lookup(m, i, c);
+      if (!v)
+         v = insert(m, i, c, new_LValue(up->getFunction(), file));
+
+      return v;
    } else {
-      Symbol *sym = reinterpret_cast<Symbol *>(values[idx]);
+      Value *sym = lookup(m, i, c);
       if (!sym)
-         values[idx] = sym = this->mkSymbol(i, c, baseSym);
-      return up->mkLoad(typeOfSize(eltSize), sym, ptr);
+         sym = insert(m, i, c, mkSymbol(i, c));
+
+      return up->mkLoad(typeOfSize(eltSize), static_cast<Symbol *>(sym), ptr);
    }
 }
 
 void
-BuildUtil::DataArray::store(int i, int c, Value *ptr, Value *value)
+BuildUtil::DataArray::store(ValueMap &m, int i, int c, Value *ptr, Value *value)
 {
-   const unsigned int idx = i * vecDim + c;
-
-   assert(idx < arrayLen * vecDim);
-
    if (regOnly) {
       assert(!ptr);
-      assert(!values[idx] || values[idx] == value);
-      values[idx] = value;
+      if (!lookup(m, i, c))
+         insert(m, i, c, value);
+
+      assert(lookup(m, i, c) == value);
    } else {
-      Symbol *sym = reinterpret_cast<Symbol *>(values[idx]);
+      Value *sym = lookup(m, i, c);
       if (!sym)
-         values[idx] = sym = this->mkSymbol(i, c, baseSym);
-      up->mkStore(OP_STORE, typeOfSize(value->reg.size), sym, ptr, value);
+         sym = insert(m, i, c, mkSymbol(i, c));
+
+      const DataType stTy = typeOfSize(value->reg.size);
+
+      up->mkStore(OP_STORE, stTy, static_cast<Symbol *>(sym), ptr, value);
    }
 }
 
 Symbol *
-BuildUtil::DataArray::mkSymbol(int i, int c, Symbol *base)
+BuildUtil::DataArray::mkSymbol(int i, int c)
 {
    const unsigned int idx = i * vecDim + c;
-
    Symbol *sym = new_Symbol(up->getProgram(), file, 0);
 
-   assert(base || (idx < arrayLen && c < vecDim));
+   assert(baseSym || (idx < arrayLen && c < vecDim));
 
    sym->reg.size = eltSize;
    sym->reg.type = typeOfSize(eltSize);
-
-   sym->setAddress(base, baseAddr + idx * eltSize);
+   sym->setAddress(baseSym, baseAddr + idx * eltSize);
    return sym;
 }
 

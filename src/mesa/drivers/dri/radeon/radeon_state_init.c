@@ -503,23 +503,8 @@ static void tex_emit_cs(struct gl_context *ctx, struct radeon_state_atom *atom)
  */
 void radeonInitState( r100ContextPtr rmesa )
 {
-   struct gl_context *ctx = rmesa->radeon.glCtx;
+   struct gl_context *ctx = &rmesa->radeon.glCtx;
    GLuint i;
-
-   rmesa->radeon.state.color.clear = 0x00000000;
-
-   switch ( ctx->Visual.depthBits ) {
-   case 16:
-      rmesa->radeon.state.depth.clear = 0x0000ffff;
-      rmesa->radeon.state.stencil.clear = 0x00000000;
-      break;
-   case 24:
-      rmesa->radeon.state.depth.clear = 0x00ffffff;
-      rmesa->radeon.state.stencil.clear = 0xffff0000;
-      break;
-   default:
-      break;
-   }
 
    rmesa->radeon.Fallback = 0;
 
@@ -529,8 +514,8 @@ void radeonInitState( r100ContextPtr rmesa )
 #define ALLOC_STATE_IDX( ATOM, CHK, SZ, NM, FLAG, IDX )		\
    do {								\
       rmesa->hw.ATOM.cmd_size = SZ;				\
-      rmesa->hw.ATOM.cmd = (GLuint *)CALLOC(SZ * sizeof(int));	\
-      rmesa->hw.ATOM.lastcmd = (GLuint *)CALLOC(SZ * sizeof(int)); \
+      rmesa->hw.ATOM.cmd = (GLuint *) calloc(SZ, sizeof(int));          \
+      rmesa->hw.ATOM.lastcmd = (GLuint *) calloc(SZ, sizeof(int));      \
       rmesa->hw.ATOM.name = NM;						\
       rmesa->hw.ATOM.is_tcl = FLAG;					\
       rmesa->hw.ATOM.check = check_##CHK;				\

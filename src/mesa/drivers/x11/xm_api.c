@@ -64,6 +64,7 @@
 
 #include "glxheader.h"
 #include "xmesaP.h"
+#include "main/api_exec.h"
 #include "main/context.h"
 #include "main/extensions.h"
 #include "main/framebuffer.h"
@@ -71,6 +72,8 @@
 #include "main/macros.h"
 #include "main/renderbuffer.h"
 #include "main/teximage.h"
+#include "main/version.h"
+#include "main/vtxfmt.h"
 #include "glapi/glthread.h"
 #include "swrast/swrast.h"
 #include "swrast/s_renderbuffer.h"
@@ -171,7 +174,7 @@ bits_per_pixel( XMesaVisual xmv )
    /* Create a temporary XImage */
    img = XCreateImage( dpy, visinfo->visual, visinfo->depth,
 		       ZPixmap, 0,           /*format, offset*/
-		       (char*) MALLOC(8),    /*data*/
+		       malloc(8),    /*data*/
 		       1, 1,                 /*width, height*/
 		       32,                   /*bitmap_pad*/
 		       0                     /*bytes_per_line*/
@@ -781,7 +784,7 @@ XMesaVisual XMesaCreateVisual( XMesaDisplay *display,
     * the struct but we may need some of the information contained in it
     * at a later time.
     */
-   v->visinfo = (XVisualInfo *) MALLOC(sizeof(*visinfo));
+   v->visinfo = (XVisualInfo *) malloc(sizeof(*visinfo));
    if(!v->visinfo) {
       free(v);
       return NULL;
@@ -844,15 +847,18 @@ XMesaVisual XMesaCreateVisual( XMesaDisplay *display,
       alpha_bits = v->mesa_visual.alphaBits;
    }
 
-   _mesa_initialize_visual( &v->mesa_visual,
-                            db_flag, stereo_flag,
-                            red_bits, green_bits,
-                            blue_bits, alpha_bits,
-                            depth_size,
-                            stencil_size,
-                            accum_red_size, accum_green_size,
-                            accum_blue_size, accum_alpha_size,
-                            0 );
+   if (!_mesa_initialize_visual(&v->mesa_visual,
+                                db_flag, stereo_flag,
+                                red_bits, green_bits,
+                                blue_bits, alpha_bits,
+                                depth_size,
+                                stencil_size,
+                                accum_red_size, accum_green_size,
+                                accum_blue_size, accum_alpha_size,
+                                0)) {
+      FREE(v);
+      return NULL;
+   }
 
    /* XXX minor hack */
    v->mesa_visual.level = level;
@@ -900,9 +906,9 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
    /* initialize with default driver functions, then plug in XMesa funcs */
    _mesa_init_driver_functions(&functions);
    xmesa_init_driver_functions(v, &functions);
-   if (!_mesa_initialize_context(mesaCtx, API_OPENGL, &v->mesa_visual,
+   if (!_mesa_initialize_context(mesaCtx, API_OPENGL_COMPAT, &v->mesa_visual,
                       share_list ? &(share_list->mesa) : (struct gl_context *) NULL,
-                      &functions, (void *) c)) {
+                      &functions)) {
       free(c);
       return NULL;
    }
@@ -921,13 +927,11 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
    _mesa_enable_1_5_extensions(mesaCtx);
    _mesa_enable_2_0_extensions(mesaCtx);
    _mesa_enable_2_1_extensions(mesaCtx);
-#if ENABLE_EXT_texure_compression_s3tc
     if (mesaCtx->Mesa_DXTn) {
        _mesa_enable_extension(mesaCtx, "GL_EXT_texture_compression_s3tc");
-       _mesa_enable_extension(mesaCtx, "GL_S3_s3tc");
+       _mesa_enable_extension(mesaCtx, "GL_ANGLE_texture_compression_dxt");
     }
     _mesa_enable_extension(mesaCtx, "GL_3DFX_texture_compression_FXT1");
-#endif
 #if ENABLE_EXT_timer_query
     _mesa_enable_extension(mesaCtx, "GL_EXT_timer_query");
 #endif
@@ -959,6 +963,12 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
    _swsetup_Wakeup(mesaCtx);
 
    _mesa_meta_init(mesaCtx);
+
+   _mesa_compute_version(mesaCtx);
+
+    /* Exec table initialization requires the version to be computed */
+   _mesa_initialize_dispatch_tables(mesaCtx);
+   _mesa_initialize_vbo_vtxfmt(mesaCtx);
 
    return c;
 }

@@ -260,7 +260,7 @@ _mesa_remove_dead_code_global(struct gl_program *prog)
       /*_mesa_print_program(prog);*/
    }
 
-   removeInst = (GLboolean *)
+   removeInst =
       calloc(1, prog->NumInstructions * sizeof(GLboolean));
 
    /* Determine which temps are read and written */
@@ -392,7 +392,6 @@ find_next_use(const struct gl_program *prog,
       switch (inst->Opcode) {
       case OPCODE_BGNLOOP:
       case OPCODE_BGNSUB:
-      case OPCODE_BRA:
       case OPCODE_CAL:
       case OPCODE_CONT:
       case OPCODE_IF:
@@ -439,7 +438,6 @@ _mesa_is_flow_control_opcode(enum prog_opcode opcode)
    switch (opcode) {
    case OPCODE_BGNLOOP:
    case OPCODE_BGNSUB:
-   case OPCODE_BRA:
    case OPCODE_CAL:
    case OPCODE_CONT:
    case OPCODE_IF:
@@ -604,7 +602,7 @@ _mesa_remove_dead_code_local(struct gl_program *prog)
    GLboolean *removeInst;
    GLuint i, arg, rem = 0;
 
-   removeInst = (GLboolean *)
+   removeInst =
       calloc(1, prog->NumInstructions * sizeof(GLboolean));
 
    for (i = 0; i < prog->NumInstructions; i++) {
@@ -745,7 +743,7 @@ _mesa_remove_extra_moves(struct gl_program *prog)
       _mesa_print_program(prog);
    }
 
-   removeInst = (GLboolean *)
+   removeInst =
       calloc(1, prog->NumInstructions * sizeof(GLboolean));
 
    /*
@@ -791,7 +789,6 @@ _mesa_remove_extra_moves(struct gl_program *prog)
             if (prevInst->DstReg.File == PROGRAM_TEMPORARY &&
                 prevInst->DstReg.Index == id &&
                 prevInst->DstReg.RelAddr == 0 &&
-                prevInst->DstReg.CondSrc == 0 && 
                 prevInst->DstReg.CondMask == COND_TR) {
 
                const GLuint dst_mask = prevInst->DstReg.WriteMask;

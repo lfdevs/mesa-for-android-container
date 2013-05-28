@@ -24,10 +24,12 @@
  *
  */
 
+#include "nouveau_driver.h"
 #include "nouveau_bufferobj.h"
 #include "nouveau_util.h"
 
 #include "main/bufferobj.h"
+#include "main/glformats.h"
 #include "main/image.h"
 
 /* Arbitrary pushbuf length we can assume we can get with a single
@@ -59,7 +61,7 @@ vbo_init_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
 
 	if (ib)
 		nouveau_init_array(&render->ib, 0, 0, ib->count, ib->type,
-				   ib->obj, ib->ptr, GL_TRUE);
+				   ib->obj, ib->ptr, GL_TRUE, ctx);
 
 	FOR_EACH_BOUND_ATTR(render, i, attr) {
 		const struct gl_client_array *array = arrays[attr];
@@ -68,7 +70,7 @@ vbo_init_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
 				   get_array_stride(ctx, array),
 				   array->Size, array->Type,
 				   imm ? array->BufferObj : NULL,
-				   array->Ptr, imm);
+				   array->Ptr, imm, ctx);
 	}
 }
 
@@ -119,7 +121,7 @@ static void
 vbo_emit_attr(struct gl_context *ctx, const struct gl_client_array **arrays,
 	      int attr)
 {
-	struct nouveau_channel *chan = context_chan(ctx);
+	struct nouveau_pushbuf *push = context_push(ctx);
 	struct nouveau_render_state *render = to_render_state(ctx);
 	const struct gl_client_array *array = arrays[attr];
 	struct nouveau_array *a = &render->attrs[attr];
@@ -133,7 +135,7 @@ vbo_emit_attr(struct gl_context *ctx, const struct gl_client_array **arrays,
 		/* Constant attribute. */
 		nouveau_init_array(a, attr, array->StrideB, array->Size,
 				   array->Type, array->BufferObj, array->Ptr,
-				   GL_TRUE);
+				   GL_TRUE, ctx);
 		EMIT_IMM(ctx, a, 0);
 		nouveau_deinit_array(a);
 
@@ -215,7 +217,7 @@ get_max_client_stride(struct gl_context *ctx, const struct gl_client_array **arr
 }
 
 static void
-TAG(vbo_render_prims)(struct gl_context *ctx, const struct gl_client_array **arrays,
+TAG(vbo_render_prims)(struct gl_context *ctx,
 		      const struct _mesa_prim *prims, GLuint nr_prims,
 		      const struct _mesa_index_buffer *ib,
 		      GLboolean index_bounds_valid,
@@ -230,7 +232,8 @@ vbo_maybe_split(struct gl_context *ctx, const struct gl_client_array **arrays,
 {
 	struct nouveau_context *nctx = to_nouveau_context(ctx);
 	struct nouveau_render_state *render = to_render_state(ctx);
-	unsigned pushbuf_avail = PUSHBUF_DWORDS - 2 * (nctx->bo.count +
+	struct nouveau_bufctx *bufctx = nctx->hw.bufctx;
+	unsigned pushbuf_avail = PUSHBUF_DWORDS - 2 * (bufctx->relocs +
 						       render->attr_count),
 		vert_avail = get_max_vertices(ctx, NULL, pushbuf_avail),
 		idx_avail = get_max_vertices(ctx, ib, pushbuf_avail);
@@ -286,7 +289,7 @@ vbo_bind_vertices(struct gl_context *ctx, const struct gl_client_array **arrays,
 		  int base, unsigned min_index, unsigned max_index, int *pdelta)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
-	struct nouveau_channel *chan = context_chan(ctx);
+	struct nouveau_pushbuf *push = context_push(ctx);
 	struct nouveau_bo *bo[NUM_VERTEX_ATTRS];
 	unsigned offset[NUM_VERTEX_ATTRS];
 	GLboolean dirty = GL_FALSE;
@@ -338,8 +341,8 @@ vbo_bind_vertices(struct gl_context *ctx, const struct gl_client_array **arrays,
 			a->bo = bo[i];
 		}
 
+		TAG(render_release_vertices)(ctx);
 		TAG(render_bind_vertices)(ctx);
-
 	} else {
 		/* Just cleanup. */
 		FOR_EACH_BOUND_ATTR(render, i, attr)
@@ -355,7 +358,8 @@ vbo_draw_vbo(struct gl_context *ctx, const struct gl_client_array **arrays,
 	     const struct _mesa_index_buffer *ib, GLuint min_index,
 	     GLuint max_index)
 {
-	struct nouveau_channel *chan = context_chan(ctx);
+	struct nouveau_context *nctx = to_nouveau_context(ctx);
+	struct nouveau_pushbuf *push = context_push(ctx);
 	dispatch_t dispatch = get_array_dispatch(&to_render_state(ctx)->ib);
 	int i, delta = 0, basevertex = 0;
 	RENDER_LOCALS(ctx);
@@ -370,15 +374,24 @@ vbo_draw_vbo(struct gl_context *ctx, const struct gl_client_array **arrays,
 			basevertex = prims[i].basevertex;
 			vbo_bind_vertices(ctx, arrays, basevertex, min_index,
 					  max_index, &delta);
+
+			nouveau_pushbuf_bufctx(push, nctx->hw.bufctx);
+			if (nouveau_pushbuf_validate(push)) {
+				nouveau_pushbuf_bufctx(push, NULL);
+				return;
+			}
 		}
 
-		if (count > get_max_vertices(ctx, ib, AVAIL_RING(chan)))
-			WAIT_RING(chan, PUSHBUF_DWORDS);
+		if (count > get_max_vertices(ctx, ib, PUSH_AVAIL(push)))
+			PUSH_SPACE(push, PUSHBUF_DWORDS);
 
 		BATCH_BEGIN(nvgl_primitive(prims[i].mode));
 		dispatch(ctx, start, delta, count);
 		BATCH_END();
 	}
+
+	nouveau_pushbuf_bufctx(push, NULL);
+	TAG(render_release_vertices)(ctx);
 }
 
 /* Immediate rendering path. */
@@ -396,18 +409,25 @@ vbo_draw_imm(struct gl_context *ctx, const struct gl_client_array **arrays,
 	     GLuint max_index)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
-	struct nouveau_channel *chan = context_chan(ctx);
+	struct nouveau_context *nctx = to_nouveau_context(ctx);
+	struct nouveau_pushbuf *push = context_push(ctx);
 	extract_u_t extract = ib ? render->ib.extract_u : extract_id;
 	int i, j, k, attr;
 	RENDER_LOCALS(ctx);
+
+	nouveau_pushbuf_bufctx(push, nctx->hw.bufctx);
+	if (nouveau_pushbuf_validate(push)) {
+		nouveau_pushbuf_bufctx(push, NULL);
+		return;
+	}
 
 	for (i = 0; i < nr_prims; i++) {
 		unsigned start = prims[i].start,
 			end = start + prims[i].count;
 
 		if (prims[i].count > get_max_vertices(ctx, ib,
-						      AVAIL_RING(chan)))
-			WAIT_RING(chan, PUSHBUF_DWORDS);
+						      PUSH_AVAIL(push)))
+			PUSH_SPACE(push, PUSHBUF_DWORDS);
 
 		BATCH_BEGIN(nvgl_primitive(prims[i].mode));
 
@@ -421,13 +441,14 @@ vbo_draw_imm(struct gl_context *ctx, const struct gl_client_array **arrays,
 
 		BATCH_END();
 	}
+
+	nouveau_pushbuf_bufctx(push, NULL);
 }
 
 /* draw_prims entry point when we're doing hw-tnl. */
 
 static void
 TAG(vbo_render_prims)(struct gl_context *ctx,
-		      const struct gl_client_array **arrays,
 		      const struct _mesa_prim *prims, GLuint nr_prims,
 		      const struct _mesa_index_buffer *ib,
 		      GLboolean index_bounds_valid,
@@ -435,9 +456,11 @@ TAG(vbo_render_prims)(struct gl_context *ctx,
 		      struct gl_transform_feedback_object *tfb_vertcount)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
+	const struct gl_client_array **arrays = ctx->Array._DrawArrays;
 
 	if (!index_bounds_valid)
-		vbo_get_minmax_index(ctx, prims, ib, &min_index, &max_index);
+		vbo_get_minmax_indices(ctx, prims, ib, &min_index, &max_index,
+				       nr_prims);
 
 	vbo_choose_render_mode(ctx, arrays);
 	vbo_choose_attrs(ctx, arrays);
@@ -462,7 +485,6 @@ TAG(vbo_render_prims)(struct gl_context *ctx,
 
 static void
 TAG(vbo_check_render_prims)(struct gl_context *ctx,
-			    const struct gl_client_array **arrays,
 			    const struct _mesa_prim *prims, GLuint nr_prims,
 			    const struct _mesa_index_buffer *ib,
 			    GLboolean index_bounds_valid,
@@ -474,12 +496,12 @@ TAG(vbo_check_render_prims)(struct gl_context *ctx,
 	nouveau_validate_framebuffer(ctx);
 
 	if (nctx->fallback == HWTNL)
-		TAG(vbo_render_prims)(ctx, arrays, prims, nr_prims, ib,
+		TAG(vbo_render_prims)(ctx, prims, nr_prims, ib,
 				      index_bounds_valid, min_index, max_index,
 				      tfb_vertcount);
 
 	if (nctx->fallback == SWTNL)
-		_tnl_vbo_draw_prims(ctx, arrays, prims, nr_prims, ib,
+		_tnl_vbo_draw_prims(ctx, prims, nr_prims, ib,
 				    index_bounds_valid, min_index, max_index,
 				    tfb_vertcount);
 }

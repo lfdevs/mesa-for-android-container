@@ -1,6 +1,5 @@
 C_SOURCES := \
 	nvc0_context.c \
-	nvc0_draw.c \
 	nvc0_formats.c \
 	nvc0_miptree.c \
 	nvc0_resource.c \
@@ -11,13 +10,11 @@ C_SOURCES := \
 	nvc0_tex.c \
 	nvc0_transfer.c \
 	nvc0_vbo.c \
+	nvc0_vbo_translate.c \
 	nvc0_program.c \
 	nvc0_shader_state.c \
-	nvc0_push.c \
-	nvc0_push2.c \
-	nvc0_query.c
-
-CPP_SOURCES := \
-	codegen/nv50_ir_emit_nvc0.cpp \
-	codegen/nv50_ir_lowering_nvc0.cpp \
-	codegen/nv50_ir_target_nvc0.cpp
+	nvc0_query.c \
+	nvc0_video.c \
+	nvc0_video_bsp.c \
+	nvc0_video_vp.c \
+	nvc0_video_ppp.c

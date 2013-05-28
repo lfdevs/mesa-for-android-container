@@ -31,6 +31,7 @@
 #include "p_compiler.h"
 #include "p_format.h"
 #include "p_video_enums.h"
+#include "p_defines.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,8 +40,10 @@ extern "C" {
 
 struct pipe_blend_color;
 struct pipe_blend_state;
+struct pipe_blit_info;
 struct pipe_box;
 struct pipe_clip_state;
+struct pipe_constant_buffer;
 struct pipe_depth_stencil_alpha_state;
 struct pipe_draw_info;
 struct pipe_fence_handle;
@@ -58,12 +61,15 @@ struct pipe_shader_state;
 struct pipe_stencil_ref;
 struct pipe_stream_output_target;
 struct pipe_surface;
+struct pipe_transfer;
 struct pipe_vertex_buffer;
 struct pipe_vertex_element;
 struct pipe_video_buffer;
 struct pipe_video_decoder;
 struct pipe_viewport_state;
+struct pipe_compute_state;
 union pipe_color_union;
+union pipe_query_result;
 
 /**
  * Gallium rendering context.  Basically:
@@ -72,7 +78,6 @@ union pipe_color_union;
  *  - surface functions
  */
 struct pipe_context {
-   struct pipe_winsys *winsys;
    struct pipe_screen *screen;
 
    void *priv;  /**< context private data (for DRI for example) */
@@ -118,7 +123,7 @@ struct pipe_context {
    boolean (*get_query_result)(struct pipe_context *pipe,
                                struct pipe_query *q,
                                boolean wait,
-                               void *result);
+                               union pipe_query_result *result);
    /*@}*/
 
    /**
@@ -141,6 +146,10 @@ struct pipe_context {
    void   (*bind_geometry_sampler_states)(struct pipe_context *,
                                           unsigned num_samplers,
                                           void **samplers);
+   void   (*bind_compute_sampler_states)(struct pipe_context *,
+                                         unsigned start_slot,
+                                         unsigned num_samplers,
+                                         void **samplers);
    void   (*delete_sampler_state)(struct pipe_context *, void *);
 
    void * (*create_rasterizer_state)(struct pipe_context *,
@@ -194,7 +203,7 @@ struct pipe_context {
 
    void (*set_constant_buffer)( struct pipe_context *,
                                 uint shader, uint index,
-                                struct pipe_resource *buf );
+                                struct pipe_constant_buffer *buf );
 
    void (*set_framebuffer_state)( struct pipe_context *,
                                   const struct pipe_framebuffer_state * );
@@ -220,7 +229,28 @@ struct pipe_context {
                                       unsigned num_views,
                                       struct pipe_sampler_view **);
 
+   void (*set_compute_sampler_views)(struct pipe_context *,
+                                     unsigned start_slot, unsigned num_views,
+                                     struct pipe_sampler_view **);
+
+   /**
+    * Bind an array of shader resources that will be used by the
+    * graphics pipeline.  Any resources that were previously bound to
+    * the specified range will be unbound after this call.
+    *
+    * \param start      first resource to bind.
+    * \param count      number of consecutive resources to bind.
+    * \param resources  array of pointers to the resources to bind, it
+    *                   should contain at least \a count elements
+    *                   unless it's NULL, in which case no new
+    *                   resources will be bound.
+    */
+   void (*set_shader_resources)(struct pipe_context *,
+                                unsigned start, unsigned count,
+                                struct pipe_surface **resources);
+
    void (*set_vertex_buffers)( struct pipe_context *,
+                               unsigned start_slot,
                                unsigned num_buffers,
                                const struct pipe_vertex_buffer * );
 
@@ -254,7 +284,7 @@ struct pipe_context {
    /**
     * Resource functions for blit-like functionality
     *
-    * If a driver supports multisampling, resource_resolve must be available.
+    * If a driver supports multisampling, blit must implement color resolve.
     */
    /*@{*/
 
@@ -271,12 +301,11 @@ struct pipe_context {
                                 unsigned src_level,
                                 const struct pipe_box *src_box);
 
-   /**
-    * Resolve a multisampled resource into a non-multisampled one.
-    * Source and destination must be of the same format.
+   /* Optimal hardware path for blitting pixels.
+    * Scaling, format conversion, up- and downsampling (resolve) are allowed.
     */
-   void (*resource_resolve)(struct pipe_context *pipe,
-                            const struct pipe_resolve_info *info);
+   void (*blit)(struct pipe_context *pipe,
+                const struct pipe_blit_info *info);
 
    /*@}*/
 
@@ -321,8 +350,9 @@ struct pipe_context {
 
    /** Flush draw commands
     */
-   void (*flush)( struct pipe_context *pipe,
-                  struct pipe_fence_handle **fence );
+   void (*flush)(struct pipe_context *pipe,
+                 struct pipe_fence_handle **fence,
+                 enum pipe_flush_flags flags);
 
    /**
     * Create a view on a texture to be used by a shader stage.
@@ -338,7 +368,6 @@ struct pipe_context {
    /**
     * Get a surface which is a "view" into a resource, used by
     * render target / depth stencil stages.
-    * \param usage  bitmaks of PIPE_BIND_* flags
     */
    struct pipe_surface *(*create_surface)(struct pipe_context *ctx,
                                           struct pipe_resource *resource,
@@ -348,22 +377,21 @@ struct pipe_context {
                            struct pipe_surface *);
 
    /**
-    * Get a transfer object for transferring data to/from a texture.
+    * Map a resource.
     *
     * Transfers are (by default) context-private and allow uploads to be
-    * interleaved with
+    * interleaved with rendering.
+    *
+    * out_transfer will contain the transfer object that must be passed
+    * to all the other transfer functions. It also contains useful
+    * information (like texture strides).
     */
-   struct pipe_transfer *(*get_transfer)(struct pipe_context *,
-                                         struct pipe_resource *resource,
-                                         unsigned level,
-                                         unsigned usage,  /* a combination of PIPE_TRANSFER_x */
-                                         const struct pipe_box *);
-
-   void (*transfer_destroy)(struct pipe_context *,
-                            struct pipe_transfer *);
-
-   void *(*transfer_map)( struct pipe_context *,
-                          struct pipe_transfer *transfer );
+   void *(*transfer_map)(struct pipe_context *,
+                         struct pipe_resource *resource,
+                         unsigned level,
+                         unsigned usage,  /* a combination of PIPE_TRANSFER_x */
+                         const struct pipe_box *,
+                         struct pipe_transfer **out_transfer);
 
    /* If transfer was created with WRITE|FLUSH_EXPLICIT, only the
     * regions specified with this call are guaranteed to be written to
@@ -373,9 +401,8 @@ struct pipe_context {
 				  struct pipe_transfer *transfer,
 				  const struct pipe_box *);
 
-   void (*transfer_unmap)( struct pipe_context *,
-                           struct pipe_transfer *transfer );
-
+   void (*transfer_unmap)(struct pipe_context *,
+                          struct pipe_transfer *transfer);
 
    /* One-shot transfer operation with data supplied in a user
     * pointer.  XXX: strides??
@@ -388,15 +415,6 @@ struct pipe_context {
                                   const void *data,
                                   unsigned stride,
                                   unsigned layer_stride);
-
-
-   /* Notify a driver that a content of a user buffer has been changed.
-    * The changed range is [offset, offset+size-1].
-    * The new width0 of the buffer is offset+size. */
-   void (*redefine_user_buffer)(struct pipe_context *,
-                                struct pipe_resource *,
-                                unsigned offset,
-                                unsigned size);
 
    /**
     * Flush any pending framebuffer writes and invalidate texture caches.
@@ -417,9 +435,91 @@ struct pipe_context {
     * Creates a video buffer as decoding target
     */
    struct pipe_video_buffer *(*create_video_buffer)( struct pipe_context *context,
-                                                     enum pipe_format buffer_format,
-                                                     enum pipe_video_chroma_format chroma_format,
-                                                     unsigned width, unsigned height );
+                                                     const struct pipe_video_buffer *templat );
+
+   /**
+    * Compute kernel execution
+    */
+   /*@{*/
+   /**
+    * Define the compute program and parameters to be used by
+    * pipe_context::launch_grid.
+    */
+   void *(*create_compute_state)(struct pipe_context *context,
+				 const struct pipe_compute_state *);
+   void (*bind_compute_state)(struct pipe_context *, void *);
+   void (*delete_compute_state)(struct pipe_context *, void *);
+
+   /**
+    * Bind an array of shader resources that will be used by the
+    * compute program.  Any resources that were previously bound to
+    * the specified range will be unbound after this call.
+    *
+    * \param start      first resource to bind.
+    * \param count      number of consecutive resources to bind.
+    * \param resources  array of pointers to the resources to bind, it
+    *                   should contain at least \a count elements
+    *                   unless it's NULL, in which case no new
+    *                   resources will be bound.
+    */
+   void (*set_compute_resources)(struct pipe_context *,
+                                 unsigned start, unsigned count,
+                                 struct pipe_surface **resources);
+
+   /**
+    * Bind an array of buffers to be mapped into the address space of
+    * the GLOBAL resource.  Any buffers that were previously bound
+    * between [first, first + count - 1] are unbound after this call.
+    *
+    * \param first      first buffer to map.
+    * \param count      number of consecutive buffers to map.
+    * \param resources  array of pointers to the buffers to map, it
+    *                   should contain at least \a count elements
+    *                   unless it's NULL, in which case no new
+    *                   resources will be bound.
+    * \param handles    array of pointers to the memory locations that
+    *                   will be filled with the respective base
+    *                   addresses each buffer will be mapped to.  It
+    *                   should contain at least \a count elements,
+    *                   unless \a resources is NULL in which case \a
+    *                   handles should be NULL as well.
+    *
+    * Note that the driver isn't required to make any guarantees about
+    * the contents of the \a handles array being valid anytime except
+    * during the subsequent calls to pipe_context::launch_grid.  This
+    * means that the only sensible location handles[i] may point to is
+    * somewhere within the INPUT buffer itself.  This is so to
+    * accommodate implementations that lack virtual memory but
+    * nevertheless migrate buffers on the fly, leading to resource
+    * base addresses that change on each kernel invocation or are
+    * unknown to the pipe driver.
+    */
+   void (*set_global_binding)(struct pipe_context *context,
+                              unsigned first, unsigned count,
+                              struct pipe_resource **resources,
+                              uint32_t **handles);
+
+   /**
+    * Launch the compute kernel starting from instruction \a pc of the
+    * currently bound compute program.
+    *
+    * \a grid_layout and \a block_layout are arrays of size \a
+    * PIPE_COMPUTE_CAP_GRID_DIMENSION that determine the layout of the
+    * grid (in block units) and working block (in thread units) to be
+    * used, respectively.
+    *
+    * \a pc For drivers that use PIPE_SHADER_IR_LLVM as their prefered IR,
+    * this value will be the index of the kernel in the opencl.kernels
+    * metadata list.
+    *
+    * \a input will be used to initialize the INPUT resource, and it
+    * should point to a buffer of at least
+    * pipe_compute_state::req_input_mem bytes.
+    */
+   void (*launch_grid)(struct pipe_context *context,
+                       const uint *block_layout, const uint *grid_layout,
+                       uint32_t pc, const void *input);
+   /*@}*/
 };
 
 

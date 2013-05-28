@@ -123,8 +123,6 @@ shade_rastpos(struct gl_context *ctx,
    const struct gl_light *light;
    GLfloat diffuseColor[4], specularColor[4];  /* for RGB mode only */
 
-   _mesa_validate_all_lighting_tables( ctx );
-
    COPY_3V(diffuseColor, base[0]);
    diffuseColor[3] = CLAMP( 
       ctx->Light.Material.Attrib[MAT_ATTRIB_FRONT_DIFFUSE][3], 0.0F, 1.0F );
@@ -167,10 +165,7 @@ shade_rastpos(struct gl_context *ctx,
 	       continue;
 	    }
 	    else {
-	       double x = PV_dot_dir * (EXP_TABLE_SIZE-1);
-	       int k = (int) x;
-	       GLfloat spot = (GLfloat) (light->_SpotExpTable[k][0]
-			       + (x-k)*light->_SpotExpTable[k][1]);
+               GLfloat spot = powf(PV_dot_dir, light->SpotExponent);
 	       attenuation *= spot;
 	    }
 	 }
@@ -217,8 +212,11 @@ shade_rastpos(struct gl_context *ctx,
 	 n_dot_h = DOT3(normal, h);
 
 	 if (n_dot_h > 0.0F) {
+	    GLfloat shine;
 	    GLfloat spec_coef;
-	    GET_SHINE_TAB_ENTRY( ctx->_ShineTable[0], n_dot_h, spec_coef );
+
+	    shine = ctx->Light.Material.Attrib[MAT_ATTRIB_FRONT_SHININESS][0];
+	    spec_coef = powf(n_dot_h, shine);
 
 	    if (spec_coef > 1.0e-10) {
                if (ctx->Light.Model.ColorControl==GL_SEPARATE_SPECULAR_COLOR) {
@@ -273,7 +271,7 @@ compute_texgen(struct gl_context *ctx, const GLfloat vObj[4], const GLfloat vEye
    rz = u[2] - normal[2] * two_nu;
    m = rx * rx + ry * ry + (rz + 1.0F) * (rz + 1.0F);
    if (m > 0.0F)
-      mInv = 0.5F * _mesa_inv_sqrtf(m);
+      mInv = 0.5F * INV_SQRTF(m);
    else
       mInv = 0.0F;
 
@@ -431,7 +429,7 @@ _tnl_RasterPos(struct gl_context *ctx, const GLfloat vObj[4])
          ctx->Current.RasterDistance = ctx->Current.Attrib[VERT_ATTRIB_FOG][0];
       else
          ctx->Current.RasterDistance =
-                        SQRTF( eye[0]*eye[0] + eye[1]*eye[1] + eye[2]*eye[2] );
+                        sqrtf( eye[0]*eye[0] + eye[1]*eye[1] + eye[2]*eye[2] );
 
       /* compute transformed normal vector (for lighting or texgen) */
       if (ctx->_NeedEyeCoords) {

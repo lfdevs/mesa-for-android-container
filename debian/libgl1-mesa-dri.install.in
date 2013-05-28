@@ -1,3 +1,5 @@
-# If this part gets modified, make sure to update .install.$os as well:
 build/dri/src/mesa/drivers/dri/common/drirc etc
-build/dri/${DEB_HOST_MULTIARCH}/*_dri.so  usr/lib/${DEB_HOST_MULTIARCH}/dri
+dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri
+dri/usr/lib/${DEB_HOST_MULTIARCH}/gallium-pipe/*.so usr/lib/${DEB_HOST_MULTIARCH}/gallium-pipe
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libdricore*.so* usr/lib/${DEB_HOST_MULTIARCH}/
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libllvmradeon*.so usr/lib/${DEB_HOST_MULTIARCH}/

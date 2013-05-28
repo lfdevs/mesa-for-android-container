@@ -27,6 +27,7 @@
 
 extern "C" {
 #include "main/core.h" /* for struct gl_context */
+#include "main/context.h"
 }
 
 #include "ralloc.h"
@@ -36,8 +37,19 @@ extern "C" {
 #include "ir_optimization.h"
 #include "loop_analysis.h"
 
-_mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *ctx,
+/**
+ * Format a short human-readable description of the given GLSL version.
+ */
+const char *
+glsl_compute_version_string(void *mem_ctx, bool is_es, unsigned version)
+{
+   return ralloc_asprintf(mem_ctx, "GLSL%s %d.%02d", is_es ? " ES" : "",
+                          version / 100, version % 100);
+}
+
+_mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
 					       GLenum target, void *mem_ctx)
+ : ctx(_ctx)
 {
    switch (target) {
    case GL_VERTEX_SHADER:   this->target = vertex_shader; break;
@@ -80,26 +92,16 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *ctx,
    this->Const.MaxCombinedTextureImageUnits = ctx->Const.MaxCombinedTextureImageUnits;
    this->Const.MaxTextureImageUnits = ctx->Const.MaxTextureImageUnits;
    this->Const.MaxFragmentUniformComponents = ctx->Const.FragmentProgram.MaxUniformComponents;
+   this->Const.MinProgramTexelOffset = ctx->Const.MinProgramTexelOffset;
+   this->Const.MaxProgramTexelOffset = ctx->Const.MaxProgramTexelOffset;
 
    this->Const.MaxDrawBuffers = ctx->Const.MaxDrawBuffers;
-
-   /* Note: Once the OpenGL 3.0 'forward compatible' context or the OpenGL 3.2
-    * Core context is supported, this logic will need change.  Older versions of
-    * GLSL are no longer supported outside the compatibility contexts of 3.x.
-    */
-   this->Const.GLSL_100ES = (ctx->API == API_OPENGLES2)
-      || ctx->Extensions.ARB_ES2_compatibility;
-   this->Const.GLSL_110 = (ctx->API == API_OPENGL);
-   this->Const.GLSL_120 = (ctx->API == API_OPENGL)
-      && (ctx->Const.GLSLVersion >= 120);
-   this->Const.GLSL_130 = (ctx->API == API_OPENGL)
-      && (ctx->Const.GLSLVersion >= 130);
 
    const unsigned lowest_version =
       (ctx->API == API_OPENGLES2) || ctx->Extensions.ARB_ES2_compatibility
       ? 100 : 110;
    const unsigned highest_version =
-      (ctx->API == API_OPENGL) ? ctx->Const.GLSLVersion : 100;
+      _mesa_is_desktop_gl(ctx) ? ctx->Const.GLSLVersion : 100;
    char *supported = ralloc_strdup(this, "");
 
    for (unsigned ver = lowest_version; ver <= highest_version; ver += 10) {
@@ -117,6 +119,170 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *ctx,
 
    if (ctx->Const.ForceGLSLExtensionsWarn)
       _mesa_glsl_process_extension("all", NULL, "warn", NULL, this);
+
+   this->default_uniform_qualifier = new(this) ast_type_qualifier();
+   this->default_uniform_qualifier->flags.q.shared = 1;
+   this->default_uniform_qualifier->flags.q.column_major = 1;
+}
+
+/**
+ * Determine whether the current GLSL version is sufficiently high to support
+ * a certain feature, and generate an error message if it isn't.
+ *
+ * \param required_glsl_version and \c required_glsl_es_version are
+ * interpreted as they are in _mesa_glsl_parse_state::is_version().
+ *
+ * \param locp is the parser location where the error should be reported.
+ *
+ * \param fmt (and additional arguments) constitute a printf-style error
+ * message to report if the version check fails.  Information about the
+ * current and required GLSL versions will be appended.  So, for example, if
+ * the GLSL version being compiled is 1.20, and check_version(130, 300, locp,
+ * "foo unsupported") is called, the error message will be "foo unsupported in
+ * GLSL 1.20 (GLSL 1.30 or GLSL 3.00 ES required)".
+ */
+bool
+_mesa_glsl_parse_state::check_version(unsigned required_glsl_version,
+                                      unsigned required_glsl_es_version,
+                                      YYLTYPE *locp, const char *fmt, ...)
+{
+   if (this->is_version(required_glsl_version, required_glsl_es_version))
+      return true;
+
+   va_list args;
+   va_start(args, fmt);
+   char *problem = ralloc_vasprintf(this, fmt, args);
+   va_end(args);
+   const char *glsl_version_string
+      = glsl_compute_version_string(this, false, required_glsl_version);
+   const char *glsl_es_version_string
+      = glsl_compute_version_string(this, true, required_glsl_es_version);
+   const char *requirement_string = "";
+   if (required_glsl_version && required_glsl_es_version) {
+      requirement_string = ralloc_asprintf(this, " (%s or %s required)",
+                                           glsl_version_string,
+                                           glsl_es_version_string);
+   } else if (required_glsl_version) {
+      requirement_string = ralloc_asprintf(this, " (%s required)",
+                                           glsl_version_string);
+   } else if (required_glsl_es_version) {
+      requirement_string = ralloc_asprintf(this, " (%s required)",
+                                           glsl_es_version_string);
+   }
+   _mesa_glsl_error(locp, this, "%s in %s%s.",
+                    problem, this->get_version_string(),
+                    requirement_string);
+
+   return false;
+}
+
+/**
+ * Process a GLSL #version directive.
+ *
+ * \param version is the integer that follows the #version token.
+ *
+ * \param ident is a string identifier that follows the integer, if any is
+ * present.  Otherwise NULL.
+ */
+void
+_mesa_glsl_parse_state::process_version_directive(YYLTYPE *locp, int version,
+                                                  const char *ident)
+{
+   bool es_token_present = false;
+   if (ident) {
+      if (strcmp(ident, "es") == 0) {
+         es_token_present = true;
+      } else {
+         _mesa_glsl_error(locp, this,
+                          "Illegal text following version number\n");
+      }
+   }
+
+   bool supported = false;
+
+   if (es_token_present) {
+      this->es_shader = true;
+      switch (version) {
+      case 100:
+         _mesa_glsl_error(locp, this,
+                          "GLSL 1.00 ES should be selected using "
+                          "`#version 100'\n");
+         supported = this->ctx->API == API_OPENGLES2 ||
+            this->ctx->Extensions.ARB_ES2_compatibility;
+         break;
+      case 300:
+         supported = _mesa_is_gles3(this->ctx) ||
+	    this->ctx->Extensions.ARB_ES3_compatibility;
+         break;
+      default:
+         supported = false;
+         break;
+      }
+   } else {
+      switch (version) {
+      case 100:
+         this->es_shader = true;
+         supported = this->ctx->API == API_OPENGLES2 ||
+            this->ctx->Extensions.ARB_ES2_compatibility;
+         break;
+      case 110:
+      case 120:
+         /* FINISHME: Once the OpenGL 3.0 'forward compatible' context or
+          * the OpenGL 3.2 Core context is supported, this logic will need
+          * change.  Older versions of GLSL are no longer supported
+          * outside the compatibility contexts of 3.x.
+          */
+      case 130:
+      case 140:
+      case 150:
+      case 330:
+      case 400:
+      case 410:
+      case 420:
+         supported = _mesa_is_desktop_gl(this->ctx) &&
+            ((unsigned) version) <= this->ctx->Const.GLSLVersion;
+         break;
+      default:
+         supported = false;
+         break;
+      }
+   }
+
+   this->language_version = version;
+
+   if (!supported) {
+      _mesa_glsl_error(locp, this, "%s is not supported. "
+                       "Supported versions are: %s\n",
+                       this->get_version_string(),
+                       this->supported_version_string);
+
+      /* On exit, the language_version must be set to a valid value.
+       * Later calls to _mesa_glsl_initialize_types will misbehave if
+       * the version is invalid.
+       */
+      switch (this->ctx->API) {
+      case API_OPENGL_COMPAT:
+      case API_OPENGL_CORE:
+	 this->language_version = this->ctx->Const.GLSLVersion;
+	 break;
+
+      case API_OPENGLES:
+	 assert(!"Should not get here.");
+	 /* FALLTHROUGH */
+
+      case API_OPENGLES2:
+	 this->language_version = 100;
+	 break;
+      }
+   }
+
+   if (this->language_version >= 140) {
+      this->ARB_uniform_buffer_object_enable = true;
+   }
+
+   if (this->language_version == 300 && this->es_shader) {
+      this->ARB_explicit_attrib_location_enable = true;
+   }
 }
 
 const char *
@@ -132,24 +298,49 @@ _mesa_glsl_shader_target_name(enum _mesa_glsl_parser_targets target)
    return "unknown";
 }
 
+/* This helper function will append the given message to the shader's
+   info log and report it via GL_ARB_debug_output. Per that extension,
+   'type' is one of the enum values classifying the message, and
+   'id' is the implementation-defined ID of the given message. */
+static void
+_mesa_glsl_msg(const YYLTYPE *locp, _mesa_glsl_parse_state *state,
+               GLenum type, GLuint id, const char *fmt, va_list ap)
+{
+   bool error = (type == GL_DEBUG_TYPE_ERROR_ARB);
+
+   assert(state->info_log != NULL);
+
+   /* Get the offset that the new message will be written to. */
+   int msg_offset = strlen(state->info_log);
+
+   ralloc_asprintf_append(&state->info_log, "%u:%u(%u): %s: ",
+					    locp->source,
+					    locp->first_line,
+					    locp->first_column,
+					    error ? "error" : "warning");
+   ralloc_vasprintf_append(&state->info_log, fmt, ap);
+
+   const char *const msg = &state->info_log[msg_offset];
+   struct gl_context *ctx = state->ctx;
+   /* Report the error via GL_ARB_debug_output. */
+   if (error)
+      _mesa_shader_debug(ctx, type, id, msg, strlen(msg));
+
+   ralloc_strcat(&state->info_log, "\n");
+}
 
 void
 _mesa_glsl_error(YYLTYPE *locp, _mesa_glsl_parse_state *state,
 		 const char *fmt, ...)
 {
    va_list ap;
+   GLenum type = GL_DEBUG_TYPE_ERROR_ARB;
 
    state->error = true;
 
-   assert(state->info_log != NULL);
-   ralloc_asprintf_append(&state->info_log, "%u:%u(%u): error: ",
-					    locp->source,
-					    locp->first_line,
-					    locp->first_column);
    va_start(ap, fmt);
-   ralloc_vasprintf_append(&state->info_log, fmt, ap);
+   _mesa_glsl_msg(locp, state, type, SHADER_ERROR_UNKNOWN, fmt, ap);
    va_end(ap);
-   ralloc_strcat(&state->info_log, "\n");
 }
 
 
@@ -158,16 +349,11 @@ _mesa_glsl_warning(const YYLTYPE *locp, _mesa_glsl_parse_state *state,
 		   const char *fmt, ...)
 {
    va_list ap;
+   GLenum type = GL_DEBUG_TYPE_OTHER_ARB;
 
-   assert(state->info_log != NULL);
-   ralloc_asprintf_append(&state->info_log, "%u:%u(%u): warning: ",
-					    locp->source,
-					    locp->first_line,
-					    locp->first_column);
    va_start(ap, fmt);
-   ralloc_vasprintf_append(&state->info_log, fmt, ap);
+   _mesa_glsl_msg(locp, state, type, 0, fmt, ap);
    va_end(ap);
-   ralloc_strcat(&state->info_log, "\n");
 }
 
 
@@ -272,6 +458,11 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(AMD_shader_stencil_export,      false, false, true,  true,  false,     ARB_shader_stencil_export),
    EXT(OES_texture_3D,                 true,  false, true,  false, true,      EXT_texture3D),
    EXT(OES_EGL_image_external,         true,  false, true,  false, true,      OES_EGL_image_external),
+   EXT(ARB_shader_bit_encoding,        true,  true,  true,  true,  false,     ARB_shader_bit_encoding),
+   EXT(ARB_uniform_buffer_object,      true,  false, true,  true,  false,     ARB_uniform_buffer_object),
+   EXT(OES_standard_derivatives,       false, false, true,  false,  true,     OES_standard_derivatives),
+   EXT(ARB_texture_cube_map_array,     true,  false, true,  true,  false,     ARB_texture_cube_map_array),
+   EXT(ARB_shading_language_packing,   true,  false, true,  true,  false,     ARB_shading_language_packing),
 };
 
 #undef EXT
@@ -711,7 +902,7 @@ ast_declaration::print(void) const
 }
 
 
-ast_declaration::ast_declaration(char *identifier, int is_array,
+ast_declaration::ast_declaration(const char *identifier, int is_array,
 				 ast_expression *array_size,
 				 ast_expression *initializer)
 {
@@ -748,6 +939,7 @@ ast_declarator_list::ast_declarator_list(ast_fully_specified_type *type)
 {
    this->type = type;
    this->invariant = false;
+   this->ubo_qualifiers_valid = false;
 }
 
 void
@@ -977,8 +1169,8 @@ ast_struct_specifier::print(void) const
 }
 
 
-ast_struct_specifier::ast_struct_specifier(char *identifier,
-					   ast_node *declarator_list)
+ast_struct_specifier::ast_struct_specifier(const char *identifier,
+					   ast_declarator_list *declarator_list)
 {
    if (identifier == NULL) {
       static unsigned anon_count = 1;
@@ -1021,7 +1213,6 @@ do_common_optimization(exec_list *ir, bool linked,
       progress = do_structure_splitting(ir) || progress;
    }
    progress = do_if_simplification(ir) || progress;
-   progress = do_discard_simplification(ir) || progress;
    progress = do_copy_propagation(ir) || progress;
    progress = do_copy_propagation_elements(ir) || progress;
    if (linked)
@@ -1042,6 +1233,7 @@ do_common_optimization(exec_list *ir, bool linked,
    progress = do_swizzle_swizzle(ir) || progress;
    progress = do_noop_swizzle(ir) || progress;
 
+   progress = optimize_split_arrays(ir, linked) || progress;
    progress = optimize_redundant_jumps(ir) || progress;
 
    loop_state *ls = analyze_loop_variables(ir);

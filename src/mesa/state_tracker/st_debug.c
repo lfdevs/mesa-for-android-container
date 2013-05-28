@@ -53,6 +53,8 @@ static const struct debug_named_value st_debug_flags[] = {
    { "fallback", DEBUG_FALLBACK, NULL },
    { "screen",   DEBUG_SCREEN, NULL },
    { "query",    DEBUG_QUERY, NULL },
+   { "draw",     DEBUG_DRAW, NULL },
+   { "buffer",   DEBUG_BUFFER, NULL },
    DEBUG_NAMED_VALUE_END
 };
 
@@ -94,7 +96,7 @@ st_print_current(void)
    if (st->vp->Base.Base.Parameters)
       _mesa_print_parameter_list(st->vp->Base.Base.Parameters);
 
-   tgsi_dump( st->fp->tgsi.tokens, 0 );
+   tgsi_dump( st->fp->variants[0].tgsi.tokens, 0 );
    if (st->fp->Base.Base.Parameters)
       _mesa_print_parameter_list(st->fp->Base.Base.Parameters);
 }

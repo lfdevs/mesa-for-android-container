@@ -68,7 +68,8 @@ _mesa_Frustum( GLdouble left, GLdouble right,
                GLdouble nearval, GLdouble farval )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
 
    if (nearval <= 0.0 ||
        farval <= 0.0 ||
@@ -110,7 +111,8 @@ _mesa_Ortho( GLdouble left, GLdouble right,
              GLdouble nearval, GLdouble farval )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glOrtho(%f, %f, %f, %f, %f, %f)\n",
@@ -147,7 +149,6 @@ void GLAPIENTRY
 _mesa_MatrixMode( GLenum mode )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (ctx->Transform.MatrixMode == mode && mode != GL_TEXTURE)
       return;
@@ -179,22 +180,6 @@ _mesa_MatrixMode( GLenum mode )
       ASSERT(ctx->Texture.CurrentUnit < Elements(ctx->TextureMatrixStack));
       ctx->CurrentStack = &ctx->TextureMatrixStack[ctx->Texture.CurrentUnit];
       break;
-   case GL_MATRIX0_NV:
-   case GL_MATRIX1_NV:
-   case GL_MATRIX2_NV:
-   case GL_MATRIX3_NV:
-   case GL_MATRIX4_NV:
-   case GL_MATRIX5_NV:
-   case GL_MATRIX6_NV:
-   case GL_MATRIX7_NV:
-      if (ctx->Extensions.NV_vertex_program) {
-         ctx->CurrentStack = &ctx->ProgramMatrixStack[mode - GL_MATRIX0_NV];
-      }
-      else {
-         _mesa_error( ctx,  GL_INVALID_ENUM, "glMatrixMode(mode)" );
-         return;
-      }
-      break;
    case GL_MATRIX0_ARB:
    case GL_MATRIX1_ARB:
    case GL_MATRIX2_ARB:
@@ -203,8 +188,9 @@ _mesa_MatrixMode( GLenum mode )
    case GL_MATRIX5_ARB:
    case GL_MATRIX6_ARB:
    case GL_MATRIX7_ARB:
-      if (ctx->Extensions.ARB_vertex_program ||
-          ctx->Extensions.ARB_fragment_program) {
+      if (ctx->API == API_OPENGL_COMPAT
+          && (ctx->Extensions.ARB_vertex_program ||
+              ctx->Extensions.ARB_fragment_program)) {
          const GLuint m = mode - GL_MATRIX0_ARB;
          if (m > ctx->Const.MaxProgramMatrices) {
             _mesa_error(ctx, GL_INVALID_ENUM,
@@ -241,7 +227,6 @@ _mesa_PushMatrix( void )
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_matrix_stack *stack = ctx->CurrentStack;
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE&VERBOSE_API)
       _mesa_debug(ctx, "glPushMatrix %s\n",
@@ -281,7 +266,8 @@ _mesa_PopMatrix( void )
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_matrix_stack *stack = ctx->CurrentStack;
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
 
    if (MESA_VERBOSE&VERBOSE_API)
       _mesa_debug(ctx, "glPopMatrix %s\n",
@@ -318,7 +304,8 @@ void GLAPIENTRY
 _mesa_LoadIdentity( void )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glLoadIdentity()\n");
@@ -352,7 +339,7 @@ _mesa_LoadMatrixf( const GLfloat *m )
           m[2], m[6], m[10], m[14],
           m[3], m[7], m[11], m[15]);
 
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+   FLUSH_VERTICES(ctx, 0);
    _math_matrix_loadf( ctx->CurrentStack->Top, m );
    ctx->NewState |= ctx->CurrentStack->DirtyFlag;
 }
@@ -381,7 +368,8 @@ _mesa_MultMatrixf( const GLfloat *m )
           m[1], m[5], m[9], m[13],
           m[2], m[6], m[10], m[14],
           m[3], m[7], m[11], m[15]);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
    _math_matrix_mul_floats( ctx->CurrentStack->Top, m );
    ctx->NewState |= ctx->CurrentStack->DirtyFlag;
 }
@@ -405,7 +393,8 @@ void GLAPIENTRY
 _mesa_Rotatef( GLfloat angle, GLfloat x, GLfloat y, GLfloat z )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
    if (angle != 0.0F) {
       _math_matrix_rotate( ctx->CurrentStack->Top, angle, x, y, z);
       ctx->NewState |= ctx->CurrentStack->DirtyFlag;
@@ -430,7 +419,8 @@ void GLAPIENTRY
 _mesa_Scalef( GLfloat x, GLfloat y, GLfloat z )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
    _math_matrix_scale( ctx->CurrentStack->Top, x, y, z);
    ctx->NewState |= ctx->CurrentStack->DirtyFlag;
 }
@@ -453,13 +443,13 @@ void GLAPIENTRY
 _mesa_Translatef( GLfloat x, GLfloat y, GLfloat z )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+
+   FLUSH_VERTICES(ctx, 0);
    _math_matrix_translate( ctx->CurrentStack->Top, x, y, z);
    ctx->NewState |= ctx->CurrentStack->DirtyFlag;
 }
 
  
-#if _HAVE_FULL_GL
 void GLAPIENTRY
 _mesa_LoadMatrixd( const GLdouble *m )
 {
@@ -502,12 +492,10 @@ _mesa_Translated( GLdouble x, GLdouble y, GLdouble z )
 {
    _mesa_Translatef((GLfloat) x, (GLfloat) y, (GLfloat) z);
 }
-#endif
 
 
-#if _HAVE_FULL_GL
 void GLAPIENTRY
-_mesa_LoadTransposeMatrixfARB( const GLfloat *m )
+_mesa_LoadTransposeMatrixf( const GLfloat *m )
 {
    GLfloat tm[16];
    if (!m) return;
@@ -517,7 +505,7 @@ _mesa_LoadTransposeMatrixfARB( const GLfloat *m )
 
 
 void GLAPIENTRY
-_mesa_LoadTransposeMatrixdARB( const GLdouble *m )
+_mesa_LoadTransposeMatrixd( const GLdouble *m )
 {
    GLfloat tm[16];
    if (!m) return;
@@ -527,7 +515,7 @@ _mesa_LoadTransposeMatrixdARB( const GLdouble *m )
 
 
 void GLAPIENTRY
-_mesa_MultTransposeMatrixfARB( const GLfloat *m )
+_mesa_MultTransposeMatrixf( const GLfloat *m )
 {
    GLfloat tm[16];
    if (!m) return;
@@ -537,14 +525,13 @@ _mesa_MultTransposeMatrixfARB( const GLfloat *m )
 
 
 void GLAPIENTRY
-_mesa_MultTransposeMatrixdARB( const GLdouble *m )
+_mesa_MultTransposeMatrixd( const GLdouble *m )
 {
    GLfloat tm[16];
    if (!m) return;
    _math_transposefd(tm, m);
    _mesa_MultMatrixf(tm);
 }
-#endif
 
 
 
@@ -571,7 +558,6 @@ update_projection( struct gl_context *ctx )
 {
    _math_matrix_analyse( ctx->ProjectionMatrixStack.Top );
 
-#if FEATURE_userclip
    /* Recompute clip plane positions in clipspace.  This is also done
     * in _mesa_ClipPlane().
     */
@@ -585,7 +571,6 @@ update_projection( struct gl_context *ctx )
 	 }
       }
    }
-#endif
 }
 
 
@@ -658,8 +643,7 @@ void _mesa_update_modelview_project( struct gl_context *ctx, GLuint new_state )
  * \param dirtyFlag dirty flag.
  * 
  * Allocates an array of \p maxDepth elements for the matrix stack and calls
- * _math_matrix_ctr() and _math_matrix_alloc_inv() for each element to
- * initialize it.
+ * _math_matrix_ctr() for each element to initialize it.
  */
 static void
 init_matrix_stack( struct gl_matrix_stack *stack,
@@ -671,10 +655,9 @@ init_matrix_stack( struct gl_matrix_stack *stack,
    stack->MaxDepth = maxDepth;
    stack->DirtyFlag = dirtyFlag;
    /* The stack */
-   stack->Stack = (GLmatrix *) CALLOC(maxDepth * sizeof(GLmatrix));
+   stack->Stack = calloc(maxDepth, sizeof(GLmatrix));
    for (i = 0; i < maxDepth; i++) {
       _math_matrix_ctr(&stack->Stack[i]);
-      _math_matrix_alloc_inv(&stack->Stack[i]);
    }
    stack->Top = stack->Stack;
 }
@@ -694,7 +677,7 @@ free_matrix_stack( struct gl_matrix_stack *stack )
    for (i = 0; i < stack->MaxDepth; i++) {
       _math_matrix_dtr(&stack->Stack[i]);
    }
-   FREE(stack->Stack);
+   free(stack->Stack);
    stack->Stack = stack->Top = NULL;
 }
 
@@ -769,7 +752,7 @@ void _mesa_free_matrix_data( struct gl_context *ctx )
  */
 void _mesa_init_transform( struct gl_context *ctx )
 {
-   GLint i;
+   GLuint i;
 
    /* Transformation group */
    ctx->Transform.MatrixMode = GL_MODELVIEW;

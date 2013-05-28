@@ -123,7 +123,6 @@ static GLboolean r200VertexProgUpdateParams(struct gl_context *ctx, struct r200_
    for(pi = 0; pi < paramList->NumParameters; pi++) {
       switch(paramList->Parameters[pi].Type) {
       case PROGRAM_STATE_VAR:
-      case PROGRAM_NAMED_PARAM:
       //fprintf(stderr, "%s", vp->Parameters->Parameters[pi].Name);
       case PROGRAM_CONSTANT:
 	 *fcmd++ = paramList->ParameterValues[pi][0].f;
@@ -214,13 +213,11 @@ static unsigned long t_src_class(gl_register_file file)
 
    case PROGRAM_LOCAL_PARAM:
    case PROGRAM_ENV_PARAM:
-   case PROGRAM_NAMED_PARAM:
    case PROGRAM_CONSTANT:
    case PROGRAM_STATE_VAR:
       return VSF_IN_CLASS_PARAM;
    /*
    case PROGRAM_OUTPUT:
-   case PROGRAM_WRITE_ONLY:
    case PROGRAM_ADDRESS:
    */
    default:
@@ -443,11 +440,6 @@ static GLboolean r200_translate_vertex_program(struct gl_context *ctx, struct r2
       return GL_FALSE;
    }
 
-   if (mesa_vp->IsNVProgram) {
-   /* subtle differences in spec like guaranteed initialized regs could cause
-      headaches. Might want to remove the driconf option to enable it completely */
-      return GL_FALSE;
-   }
    /* Initial value should be last tmp reg that hw supports.
       Strangely enough r300 doesnt mind even though these would be out of range.
       Smart enough to realize that it doesnt need it? */
@@ -1218,7 +1210,6 @@ r200NewProgram(struct gl_context *ctx, GLenum target, GLuint id)
       vp = CALLOC_STRUCT(r200_vertex_program);
       return _mesa_init_vertex_program(ctx, &vp->mesa_program, target, id);
    case GL_FRAGMENT_PROGRAM_ARB:
-   case GL_FRAGMENT_PROGRAM_NV:
       return _mesa_init_fragment_program( ctx, CALLOC_STRUCT(gl_fragment_program), target, id );
    default:
       _mesa_problem(ctx, "Bad target in r200NewProgram");
@@ -1264,7 +1255,6 @@ r200IsProgramNative(struct gl_context *ctx, GLenum target, struct gl_program *pr
    struct r200_vertex_program *vp = (void *)prog;
 
    switch(target){
-   case GL_VERTEX_STATE_PROGRAM_NV:
    case GL_VERTEX_PROGRAM_ARB:
       if (!vp->translated) {
 	 r200_translate_vertex_program(ctx, vp);

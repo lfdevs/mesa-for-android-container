@@ -42,6 +42,24 @@
 
 struct lp_type;
 
+LLVMValueRef
+lp_build_bswap(struct gallivm_state *gallivm,
+               LLVMValueRef res,
+               struct lp_type type);
+
+LLVMValueRef
+lp_build_bswap_vec(struct gallivm_state *gallivm,
+                   LLVMValueRef packed,
+                   struct lp_type src_type,
+                   struct lp_type dst_type);
+
+LLVMValueRef
+lp_build_half_to_float(struct gallivm_state *gallivm,
+                       LLVMValueRef src);
+
+LLVMValueRef
+lp_build_float_to_half(struct gallivm_state *gallivm,
+                       LLVMValueRef src);
 
 LLVMValueRef
 lp_build_clamped_float_to_unsigned_norm(struct gallivm_state *gallivm,
@@ -62,6 +80,16 @@ lp_build_conv(struct gallivm_state *gallivm,
               struct lp_type dst_type,
               const LLVMValueRef *srcs, unsigned num_srcs,
               LLVMValueRef *dsts, unsigned num_dsts);
+
+
+int
+lp_build_conv_auto(struct gallivm_state *gallivm,
+                   struct lp_type src_type,
+                   struct lp_type* dst_type,
+                   const LLVMValueRef *src,
+                   unsigned num_srcs,
+                   LLVMValueRef *dst);
+
 
 void
 lp_build_conv_mask(struct gallivm_state *gallivm,

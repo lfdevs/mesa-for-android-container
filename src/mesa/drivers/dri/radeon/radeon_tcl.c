@@ -34,8 +34,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "main/glheader.h"
 #include "main/imports.h"
-#include "main/light.h"
 #include "main/mtypes.h"
+#include "main/light.h"
 #include "main/enums.h"
 
 #include "vbo/vbo.h"
@@ -147,7 +147,7 @@ static GLboolean discrete_prim[0x10] = {
 static GLushort *radeonAllocElts( r100ContextPtr rmesa, GLuint nr ) 
 {
       if (rmesa->radeon.dma.flush)
-	 rmesa->radeon.dma.flush( rmesa->radeon.glCtx );
+	 rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );
 
       radeonEmitAOS( rmesa,
 		     rmesa->radeon.tcl.aos_count, 0 );
@@ -265,7 +265,7 @@ void radeonTclPrimitive( struct gl_context *ctx,
    se_cntl = rmesa->hw.set.cmd[SET_SE_CNTL];
    se_cntl &= ~RADEON_FLAT_SHADE_VTX_LAST;
 
-   if (prim == GL_POLYGON && (ctx->_TriangleCaps & DD_FLATSHADE)) 
+   if (prim == GL_POLYGON && ctx->Light.ShadeModel == GL_FLAT) 
       se_cntl |= RADEON_FLAT_SHADE_VTX_0;
    else
       se_cntl |= RADEON_FLAT_SHADE_VTX_LAST;
@@ -273,89 +273,6 @@ void radeonTclPrimitive( struct gl_context *ctx,
    if (se_cntl != rmesa->hw.set.cmd[SET_SE_CNTL]) {
       RADEON_STATECHANGE( rmesa, set );
       rmesa->hw.set.cmd[SET_SE_CNTL] = se_cntl;
-   }
-}
-
-/**********************************************************************/
-/*             Fog blend factor computation for hw tcl                */
-/*             same calculation used as in t_vb_fog.c                 */
-/**********************************************************************/
-
-#define FOG_EXP_TABLE_SIZE 256
-#define FOG_MAX (10.0)
-#define EXP_FOG_MAX .0006595
-#define FOG_INCR (FOG_MAX/FOG_EXP_TABLE_SIZE)
-static GLfloat exp_table[FOG_EXP_TABLE_SIZE];
-
-#if 1
-#define NEG_EXP( result, narg )						\
-do {									\
-   GLfloat f = (GLfloat) (narg * (1.0/FOG_INCR));			\
-   GLint k = (GLint) f;							\
-   if (k > FOG_EXP_TABLE_SIZE-2) 					\
-      result = (GLfloat) EXP_FOG_MAX;					\
-   else									\
-      result = exp_table[k] + (f-k)*(exp_table[k+1]-exp_table[k]);	\
-} while (0)
-#else
-#define NEG_EXP( result, narg )					\
-do {								\
-   result = exp(-narg);						\
-} while (0)
-#endif
-
-
-/**
- * Initialize the exp_table[] lookup table for approximating exp().
- */
-void
-radeonInitStaticFogData( void )
-{
-   GLfloat f = 0.0F;
-   GLint i = 0;
-   for ( ; i < FOG_EXP_TABLE_SIZE ; i++, f += FOG_INCR) {
-      exp_table[i] = (GLfloat) exp(-f);
-   }
-}
-
-
-/**
- * Compute per-vertex fog blend factors from fog coordinates by
- * evaluating the GL_LINEAR, GL_EXP or GL_EXP2 fog function.
- * Fog coordinates are distances from the eye (typically between the
- * near and far clip plane distances).
- * Note the fog (eye Z) coords may be negative so we use ABS(z) below.
- * Fog blend factors are in the range [0,1].
- */
-float
-radeonComputeFogBlendFactor( struct gl_context *ctx, GLfloat fogcoord )
-{
-   GLfloat end  = ctx->Fog.End;
-   GLfloat d, temp;
-   const GLfloat z = FABSF(fogcoord);
-
-   switch (ctx->Fog.Mode) {
-   case GL_LINEAR:
-      if (ctx->Fog.Start == ctx->Fog.End)
-         d = 1.0F;
-      else
-         d = 1.0F / (ctx->Fog.End - ctx->Fog.Start);
-      temp = (end - z) * d;
-      return CLAMP(temp, 0.0F, 1.0F);
-      break;
-   case GL_EXP:
-      d = ctx->Fog.Density;
-      NEG_EXP( temp, d * z );
-      return temp;
-      break;
-   case GL_EXP2:
-      d = ctx->Fog.Density*ctx->Fog.Density;
-      NEG_EXP( temp, d * z * z );
-      return temp;
-      break;
-   default:
-      _mesa_problem(ctx, "Bad fog mode in make_fog_coord");
-      return 0;
    }
 }
 
@@ -397,7 +314,7 @@ static GLuint radeonEnsureEmitSize( struct gl_context * ctx , GLuint inputs )
     state_size = radeonCountStateEmitSize( &rmesa->radeon );
     /* tcl may be changed in radeonEmitArrays so account for it if not dirty */
     if (!rmesa->hw.tcl.dirty)
-      state_size += rmesa->hw.tcl.check( rmesa->radeon.glCtx, &rmesa->hw.tcl );
+      state_size += rmesa->hw.tcl.check( &rmesa->radeon.glCtx, &rmesa->hw.tcl );
     /* predict size for elements */
     for (i = 0; i < VB->PrimitiveCount; ++i)
     {
@@ -544,10 +461,10 @@ static void transition_to_swtnl( struct gl_context *ctx )
    radeonChooseVertexState( ctx );
    radeonChooseRenderState( ctx );
 
-   _mesa_validate_all_lighting_tables( ctx ); 
+   _tnl_validate_shine_tables( ctx ); 
 
    tnl->Driver.NotifyMaterialChange = 
-      _mesa_validate_all_lighting_tables;
+      _tnl_validate_shine_tables;
 
    radeonReleaseArrays( ctx, ~0 );
 
@@ -583,7 +500,7 @@ static void transition_to_hwtnl( struct gl_context *ctx )
    tnl->Driver.NotifyMaterialChange = radeonUpdateMaterial;
 
    if ( rmesa->radeon.dma.flush )			
-      rmesa->radeon.dma.flush( rmesa->radeon.glCtx );	
+      rmesa->radeon.dma.flush( &rmesa->radeon.glCtx );	
 
    rmesa->radeon.dma.flush = NULL;
    rmesa->swtcl.vertex_format = 0;

@@ -35,12 +35,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <stdbool.h>
 #include "main/glheader.h"
 #include "main/api_arrayelt.h"
+#include "main/api_exec.h"
 #include "main/context.h"
 #include "main/simple_list.h"
 #include "main/imports.h"
 #include "main/extensions.h"
 #include "main/mfeatures.h"
 #include "main/version.h"
+#include "main/vtxfmt.h"
 
 #include "swrast/swrast.h"
 #include "swrast_setup/swrast_setup.h"
@@ -60,6 +62,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "r200_vertprog.h"
 #include "radeon_queryobj.h"
 #include "r200_blit.h"
+#include "radeon_fog.h"
 
 #include "radeon_span.h"
 
@@ -211,9 +214,22 @@ GLboolean r200CreateContext( gl_api api,
    int i;
    int tcl_mode;
 
-   /* API and flag filtering is handled in dri2CreateContextAttribs.
+   switch (api) {
+   case API_OPENGL_COMPAT:
+      if (major_version > 1 || minor_version > 3) {
+         *error = __DRI_CTX_ERROR_BAD_VERSION;
+         return GL_FALSE;
+      }
+      break;
+   case API_OPENGLES:
+      break;
+   default:
+      *error = __DRI_CTX_ERROR_BAD_API;
+      return GL_FALSE;
+   }
+
+   /* Flag filtering is handled in dri2CreateContextAttribs.
     */
-   (void) api;
    (void) flags;
 
    assert(glVisual);
@@ -221,7 +237,7 @@ GLboolean r200CreateContext( gl_api api,
    assert(screen);
 
    /* Allocate the R200 context */
-   rmesa = (r200ContextPtr) CALLOC( sizeof(*rmesa) );
+   rmesa = calloc(1, sizeof(*rmesa));
    if ( !rmesa ) {
       *error = __DRI_CTX_ERROR_NO_MEMORY;
       return GL_FALSE;
@@ -230,7 +246,7 @@ GLboolean r200CreateContext( gl_api api,
    rmesa->radeon.radeonScreen = screen;
    r200_init_vtbl(&rmesa->radeon);
    /* init exp fog table data */
-   r200InitStaticFogData();
+   radeonInitStaticFogData();
 
    /* Parse configuration files.
     * Do this here so that initialMaxAnisotropy is set before we create
@@ -267,7 +283,7 @@ GLboolean r200CreateContext( gl_api api,
    if (!radeonInitContext(&rmesa->radeon, &functions,
 			  glVisual, driContextPriv,
 			  sharedContextPrivate)) {
-     FREE(rmesa);
+     free(rmesa);
      *error = __DRI_CTX_ERROR_NO_MEMORY;
      return GL_FALSE;
    }
@@ -275,13 +291,20 @@ GLboolean r200CreateContext( gl_api api,
    rmesa->radeon.swtcl.RenderIndex = ~0;
    rmesa->radeon.hw.all_dirty = 1;
 
+   ctx = &rmesa->radeon.glCtx;
+   /* Initialize the software rasterizer and helper modules.
+    */
+   _swrast_CreateContext( ctx );
+   _vbo_CreateContext( ctx );
+   _tnl_CreateContext( ctx );
+   _swsetup_CreateContext( ctx );
+   _ae_create_context( ctx );
+
    /* Set the maximum texture size small enough that we can guarentee that
     * all texture units can bind a maximal texture and have all of them in
     * texturable memory at once. Depending on the allow_large_textures driconf
     * setting allow larger textures.
     */
-
-   ctx = rmesa->radeon.glCtx;
    ctx->Const.MaxTextureUnits = driQueryOptioni (&rmesa->radeon.optionCache,
 						 "texture_units");
    ctx->Const.MaxTextureImageUnits = ctx->Const.MaxTextureUnits;
@@ -331,14 +354,6 @@ GLboolean r200CreateContext( gl_api api,
 
    _mesa_set_mvp_with_dp4( ctx, GL_TRUE );
 
-   /* Initialize the software rasterizer and helper modules.
-    */
-   _swrast_CreateContext( ctx );
-   _vbo_CreateContext( ctx );
-   _tnl_CreateContext( ctx );
-   _swsetup_CreateContext( ctx );
-   _ae_create_context( ctx );
-
    /* Install the customized pipeline:
     */
    _tnl_destroy_pipeline( ctx );
@@ -370,7 +385,6 @@ GLboolean r200CreateContext( gl_api api,
    ctx->Extensions.ARB_texture_env_combine = true;
    ctx->Extensions.ARB_texture_env_dot3 = true;
    ctx->Extensions.ARB_texture_env_crossbar = true;
-   ctx->Extensions.ARB_vertex_array_object = true;
    ctx->Extensions.EXT_blend_color = true;
    ctx->Extensions.EXT_blend_minmax = true;
    ctx->Extensions.EXT_fog_coord = true;
@@ -379,16 +393,12 @@ GLboolean r200CreateContext( gl_api api,
    ctx->Extensions.EXT_texture_env_dot3 = true;
    ctx->Extensions.EXT_texture_filter_anisotropic = true;
    ctx->Extensions.EXT_texture_mirror_clamp = true;
-   ctx->Extensions.APPLE_vertex_array_object = true;
    ctx->Extensions.ATI_texture_env_combine3 = true;
    ctx->Extensions.ATI_texture_mirror_once = true;
    ctx->Extensions.MESA_pack_invert = true;
    ctx->Extensions.NV_blend_square = true;
    ctx->Extensions.NV_texture_rectangle = true;
-#if FEATURE_OES_EGL_image
    ctx->Extensions.OES_EGL_image = true;
-#endif
-
    ctx->Extensions.EXT_framebuffer_object = true;
    ctx->Extensions.ARB_occlusion_query = true;
 
@@ -397,12 +407,13 @@ GLboolean r200CreateContext( gl_api api,
 	others get the bit ordering right but don't actually do YUV-RGB conversion */
       ctx->Extensions.MESA_ycbcr_texture = true;
    }
-   if (rmesa->radeon.glCtx->Mesa_DXTn) {
+   if (rmesa->radeon.glCtx.Mesa_DXTn) {
       ctx->Extensions.EXT_texture_compression_s3tc = true;
-      ctx->Extensions.S3_s3tc = true;
+      ctx->Extensions.ANGLE_texture_compression_dxt = true;
    }
    else if (driQueryOptionb (&rmesa->radeon.optionCache, "force_s3tc_enable")) {
       ctx->Extensions.EXT_texture_compression_s3tc = true;
+      ctx->Extensions.ANGLE_texture_compression_dxt = true;
    }
 
    ctx->Extensions.ARB_texture_cube_map = true;
@@ -412,9 +423,6 @@ GLboolean r200CreateContext( gl_api api,
 
    ctx->Extensions.ARB_vertex_program = true;
    ctx->Extensions.EXT_gpu_program_parameters = true;
-
-   ctx->Extensions.NV_vertex_program =
-      driQueryOptionb(&rmesa->radeon.optionCache, "nv_vertex_program");
 
    ctx->Extensions.ATI_fragment_shader = (ctx->Const.MaxTextureUnits == 6);
 
@@ -449,17 +457,14 @@ GLboolean r200CreateContext( gl_api api,
 	 rmesa->radeon.radeonScreen->chip_flags &= ~RADEON_CHIPSET_TCL;
 	 fprintf(stderr, "Disabling HW TCL support\n");
       }
-      TCL_FALLBACK(rmesa->radeon.glCtx, R200_TCL_FALLBACK_TCL_DISABLE, 1);
+      TCL_FALLBACK(&rmesa->radeon.glCtx, R200_TCL_FALLBACK_TCL_DISABLE, 1);
    }
 
    _mesa_compute_version(ctx);
-   if (ctx->VersionMajor < major_version
-       || (ctx->VersionMajor == major_version
-	   && ctx->VersionMinor < minor_version)) {
-      r200DestroyContext(driContextPriv);
-      *error = __DRI_CTX_ERROR_BAD_VERSION;
-      return GL_FALSE;
-   }
+
+   /* Exec table initialization requires the version to be computed */
+   _mesa_initialize_dispatch_tables(ctx);
+   _mesa_initialize_vbo_vtxfmt(ctx);
 
    *error = __DRI_CTX_ERROR_SUCCESS;
    return GL_TRUE;

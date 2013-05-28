@@ -80,6 +80,9 @@ void r300_emit_rs_state(struct r300_context* r300, unsigned size, void* state);
 void r300_emit_rs_block_state(struct r300_context* r300,
                               unsigned size, void* state);
 
+void r300_emit_sample_mask(struct r300_context *r300,
+                           unsigned size, void *state);
+
 void r300_emit_scissor_state(struct r300_context* r300,
                              unsigned size, void* state);
 
@@ -114,6 +117,7 @@ void r300_emit_invariant_state(struct r300_context *r300,
 
 void r300_emit_hiz_clear(struct r300_context *r300, unsigned size, void *state);
 void r300_emit_zmask_clear(struct r300_context *r300, unsigned size, void *state);
+void r300_emit_cmask_clear(struct r300_context *r300, unsigned size, void *state);
 
 unsigned r300_get_num_dirty_dwords(struct r300_context *r300);
 unsigned r300_get_num_cs_end_dwords(struct r300_context *r300);

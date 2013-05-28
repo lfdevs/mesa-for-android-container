@@ -28,54 +28,13 @@
 
 #include "../../winsys/radeon/drm/radeon_winsys.h"
 #include "util/u_double_list.h"
-#include "util/u_vbuf.h"
+#include "util/u_range.h"
+#include "util/u_transfer.h"
 
 #define R600_ERR(fmt, args...) \
 	fprintf(stderr, "EE %s:%d %s - "fmt, __FILE__, __LINE__, __func__, ##args)
 
-typedef uint64_t		u64;
-typedef uint32_t		u32;
-typedef uint16_t		u16;
-typedef uint8_t			u8;
-
 struct winsys_handle;
-
-enum radeon_family {
-	CHIP_UNKNOWN,
-	CHIP_R600,
-	CHIP_RV610,
-	CHIP_RV630,
-	CHIP_RV670,
-	CHIP_RV620,
-	CHIP_RV635,
-	CHIP_RS780,
-	CHIP_RS880,
-	CHIP_RV770,
-	CHIP_RV730,
-	CHIP_RV710,
-	CHIP_RV740,
-	CHIP_CEDAR,
-	CHIP_REDWOOD,
-	CHIP_JUNIPER,
-	CHIP_CYPRESS,
-	CHIP_HEMLOCK,
-	CHIP_PALM,
-	CHIP_SUMO,
-	CHIP_SUMO2,
-	CHIP_BARTS,
-	CHIP_TURKS,
-	CHIP_CAICOS,
-	CHIP_CAYMAN,
-	CHIP_ARUBA,
-	CHIP_LAST,
-};
-
-enum chip_class {
-	R600,
-	R700,
-	EVERGREEN,
-	CAYMAN,
-};
 
 struct r600_tiling_info {
 	unsigned num_channels;
@@ -84,7 +43,7 @@ struct r600_tiling_info {
 };
 
 struct r600_resource {
-	struct u_vbuf_resource		b;
+	struct u_resource		b;
 
 	/* Winsys objects. */
 	struct pb_buffer		*buf;
@@ -92,10 +51,18 @@ struct r600_resource {
 
 	/* Resource state. */
 	unsigned			domains;
+
+	/* The buffer range which is initialized (with a write transfer,
+	 * streamout, DMA, or as a random access target). The rest of
+	 * the buffer is considered invalid and can be mapped unsynchronized.
+	 *
+	 * This allows unsychronized mapping of a buffer range which hasn't
+	 * been used yet. It's for applications which forget to use
+	 * the unsynchronized map flag and expect the driver to figure it out.
+         */
+	struct util_range		valid_buffer_range;
 };
 
-/* R600/R700 STATES */
-#define R600_GROUP_MAX			16
 #define R600_BLOCK_MAX_BO		32
 #define R600_BLOCK_MAX_REG		128
 
@@ -111,12 +78,11 @@ struct r600_resource {
 #define CTX_BLOCK_ID(offset) (((offset - RANGE_OFFSET_START) >> 2) & ((1 << HASH_SHIFT) - 1))
 
 struct r600_pipe_reg {
-	u32				value;
-	u32				mask;
+	uint32_t			value;
 	struct r600_block 		*block;
 	struct r600_resource		*bo;
 	enum radeon_bo_usage		bo_usage;
-	u32				id;
+	uint32_t			id;
 };
 
 struct r600_pipe_state {
@@ -125,24 +91,12 @@ struct r600_pipe_state {
 	struct r600_pipe_reg		regs[R600_BLOCK_MAX_REG];
 };
 
-struct r600_pipe_resource_state {
-	unsigned			id;
-	u32                             val[8];
-	struct r600_resource		*bo[2];
-	enum radeon_bo_usage		bo_usage[2];
-};
-
 #define R600_BLOCK_STATUS_ENABLED	(1 << 0)
 #define R600_BLOCK_STATUS_DIRTY		(1 << 1)
-#define R600_BLOCK_STATUS_RESOURCE_DIRTY	(1 << 2)
-
-#define R600_BLOCK_STATUS_RESOURCE_VERTEX	(1 << 3)
 
 struct r600_block_reloc {
 	struct r600_resource	*bo;
 	enum radeon_bo_usage	bo_usage;
-	unsigned		flush_flags;
-	unsigned		flush_mask;
 	unsigned		bo_pm4_index;
 };
 
@@ -153,12 +107,11 @@ struct r600_block {
 	unsigned                flags;
 	unsigned		start_offset;
 	unsigned		pm4_ndwords;
-	unsigned		pm4_flush_ndwords;
 	unsigned		nbo;
-	u16 		        nreg;
-	u16                     nreg_dirty;
-	u32			*reg;
-	u32			pm4[R600_BLOCK_MAX_REG];
+	uint16_t 		nreg;
+	uint16_t                nreg_dirty;
+	uint32_t		*reg;
+	uint32_t		pm4[R600_BLOCK_MAX_REG];
 	unsigned		pm4_bo_index[R600_BLOCK_MAX_REG];
 	struct r600_block_reloc	reloc[R600_BLOCK_MAX_BO];
 };
@@ -167,25 +120,25 @@ struct r600_range {
 	struct r600_block	**blocks;
 };
 
-struct r600_query {
-	union {
-		uint64_t			u64;
-		boolean				b;
-		struct pipe_query_data_so_statistics so;
-	} result;
-	/* The kind of query */
-	unsigned				type;
-	/* Offset of the first result for current query */
-	unsigned				results_start;
+struct r600_query_buffer {
+	/* The buffer where query results are stored. */
+	struct r600_resource			*buf;
 	/* Offset of the next free result after current query data */
 	unsigned				results_end;
+	/* If a query buffer is full, a new buffer is created and the old one
+	 * is put in here. When we calculate the result, we sum up the samples
+	 * from all buffers. */
+	struct r600_query_buffer		*previous;
+};
+
+struct r600_query {
+	/* The query buffer and how many results are in it. */
+	struct r600_query_buffer		buffer;
+	/* The type of query */
+	unsigned				type;
 	/* Size of the result in memory for both begin_query and end_query,
 	 * this can be one or two numbers, or it could even be a size of a structure. */
 	unsigned				result_size;
-	/* The buffer where query results are stored. It's used as a ring,
-	 * data blocks for current query are stored sequentially from
-	 * results_start to results_end, with wrapping on the buffer end */
-	struct r600_resource			*buffer;
 	/* The number of dwords for begin_query or end_query. */
 	unsigned				num_cs_dw;
 	/* linked list of queries */
@@ -196,141 +149,88 @@ struct r600_so_target {
 	struct pipe_stream_output_target b;
 
 	/* The buffer where BUFFER_FILLED_SIZE is stored. */
-	struct r600_resource	*filled_size;
-	unsigned		stride;
+	struct r600_resource	*buf_filled_size;
+	unsigned		buf_filled_size_offset;
+
+	unsigned		stride_in_dw;
 	unsigned		so_index;
 };
 
-#define R600_CONTEXT_DRAW_PENDING	(1 << 0)
-#define R600_CONTEXT_DST_CACHES_DIRTY	(1 << 1)
-#define R600_CONTEXT_CHECK_EVENT_FLUSH	(1 << 2)
+#define R600_CONTEXT_INVAL_READ_CACHES		(1 << 0)
+#define R600_CONTEXT_STREAMOUT_FLUSH		(1 << 1)
+#define R600_CONTEXT_WAIT_3D_IDLE		(1 << 2)
+#define R600_CONTEXT_WAIT_CP_DMA_IDLE		(1 << 3)
+#define R600_CONTEXT_FLUSH_AND_INV		(1 << 4)
+#define R600_CONTEXT_FLUSH_AND_INV_CB_META	(1 << 5)
+#define R600_CONTEXT_PS_PARTIAL_FLUSH		(1 << 6)
+#define R600_CONTEXT_FLUSH_AND_INV_DB_META      (1 << 7)
 
-struct r600_context {
-	struct r600_screen	*screen;
-	struct radeon_winsys	*ws;
-	struct radeon_winsys_cs	*cs;
-	struct pipe_context	*pipe;
-
-	void (*flush)(void *pipe, unsigned flags);
-
-	struct r600_range	*range;
-	unsigned		nblocks;
-	struct r600_block	**blocks;
-	struct list_head	dirty;
-	struct list_head	resource_dirty;
-	struct list_head	enable_list;
-	unsigned		pm4_dirty_cdwords;
-	unsigned		ctx_pm4_ndwords;
-	unsigned		init_dwords;
-
-	unsigned		creloc;
-	struct r600_resource	**bo;
-
-	u32			*pm4;
-	unsigned		pm4_cdwords;
-
-	/* The list of active queries. Only one query of each type can be active. */
-	struct list_head	active_query_list;
-	unsigned		num_cs_dw_queries_suspend;
-	unsigned		num_cs_dw_streamout_end;
-
-	unsigned		backend_mask;
-	unsigned                max_db; /* for OQ */
-	unsigned                num_dest_buffers;
-	unsigned		flags;
-	boolean                 predicate_drawing;
-	struct r600_range ps_resources;
-	struct r600_range vs_resources;
-	struct r600_range fs_resources;
-	int num_ps_resources, num_vs_resources, num_fs_resources;
-	boolean			have_depth_texture, have_depth_fb;
-
-	unsigned			num_so_targets;
-	struct r600_so_target		*so_targets[PIPE_MAX_SO_BUFFERS];
-	boolean				streamout_start;
-	unsigned			streamout_append_bitmask;
-	unsigned			*vs_shader_so_strides;
-};
-
-struct r600_draw {
-	u32			vgt_num_indices;
-	u32			vgt_num_instances;
-	u32			vgt_index_type;
-	u32			vgt_draw_initiator;
-	u32			indices_bo_offset;
-	struct r600_resource	*indices;
-};
+struct r600_context;
+struct r600_screen;
 
 void r600_get_backend_mask(struct r600_context *ctx);
-int r600_context_init(struct r600_context *ctx, struct r600_screen *screen);
+int r600_context_init(struct r600_context *ctx);
 void r600_context_fini(struct r600_context *ctx);
+void r600_context_pipe_state_emit(struct r600_context *ctx, struct r600_pipe_state *state, unsigned pkt_flags);
 void r600_context_pipe_state_set(struct r600_context *ctx, struct r600_pipe_state *state);
-void r600_context_pipe_state_set_ps_resource(struct r600_context *ctx, struct r600_pipe_resource_state *state, unsigned rid);
-void r600_context_pipe_state_set_vs_resource(struct r600_context *ctx, struct r600_pipe_resource_state *state, unsigned rid);
-void r600_context_pipe_state_set_fs_resource(struct r600_context *ctx, struct r600_pipe_resource_state *state, unsigned rid);
-void r600_context_pipe_state_set_ps_sampler(struct r600_context *ctx, struct r600_pipe_state *state, unsigned id);
-void r600_context_pipe_state_set_vs_sampler(struct r600_context *ctx, struct r600_pipe_state *state, unsigned id);
 void r600_context_flush(struct r600_context *ctx, unsigned flags);
-void r600_context_draw(struct r600_context *ctx, const struct r600_draw *draw);
+void r600_begin_new_cs(struct r600_context *ctx);
 
-struct r600_query *r600_context_query_create(struct r600_context *ctx, unsigned query_type);
-void r600_context_query_destroy(struct r600_context *ctx, struct r600_query *query);
-boolean r600_context_query_result(struct r600_context *ctx,
-				struct r600_query *query,
-				boolean wait, void *vresult);
-void r600_query_begin(struct r600_context *ctx, struct r600_query *query);
-void r600_query_end(struct r600_context *ctx, struct r600_query *query);
-void r600_context_queries_suspend(struct r600_context *ctx);
-void r600_context_queries_resume(struct r600_context *ctx);
-void r600_query_predication(struct r600_context *ctx, struct r600_query *query, int operation,
-			    int flag_wait);
 void r600_context_emit_fence(struct r600_context *ctx, struct r600_resource *fence,
                              unsigned offset, unsigned value);
-void r600_context_flush_all(struct r600_context *ctx, unsigned flush_flags);
-void r600_context_flush_dest_caches(struct r600_context *ctx);
+void r600_flush_emit(struct r600_context *ctx);
 
 void r600_context_streamout_begin(struct r600_context *ctx);
 void r600_context_streamout_end(struct r600_context *ctx);
-void r600_context_draw_opaque_count(struct r600_context *ctx, struct r600_so_target *t);
+void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw, boolean count_draw_in);
+void r600_need_dma_space(struct r600_context *ctx, unsigned num_dw);
+void r600_dma_copy(struct r600_context *rctx,
+		struct pipe_resource *dst,
+		struct pipe_resource *src,
+		uint64_t dst_offset,
+		uint64_t src_offset,
+		uint64_t size);
+boolean r600_dma_blit(struct pipe_context *ctx,
+			struct pipe_resource *dst,
+			unsigned dst_level,
+			unsigned dst_x, unsigned dst_y, unsigned dst_z,
+			struct pipe_resource *src,
+			unsigned src_level,
+			const struct pipe_box *src_box);
+void evergreen_dma_copy(struct r600_context *rctx,
+		struct pipe_resource *dst,
+		struct pipe_resource *src,
+		uint64_t dst_offset,
+		uint64_t src_offset,
+		uint64_t size);
+boolean evergreen_dma_blit(struct pipe_context *ctx,
+			struct pipe_resource *dst,
+			unsigned dst_level,
+			unsigned dst_x, unsigned dst_y, unsigned dst_z,
+			struct pipe_resource *src,
+			unsigned src_level,
+			const struct pipe_box *src_box);
+void r600_context_block_emit_dirty(struct r600_context *ctx, struct r600_block *block, unsigned pkt_flags);
+void r600_cp_dma_copy_buffer(struct r600_context *rctx,
+			     struct pipe_resource *dst, uint64_t dst_offset,
+			     struct pipe_resource *src, uint64_t src_offset,
+			     unsigned size);
 
-int evergreen_context_init(struct r600_context *ctx, struct r600_screen *screen);
-void evergreen_context_draw(struct r600_context *ctx, const struct r600_draw *draw);
-void evergreen_context_flush_dest_caches(struct r600_context *ctx);
-void evergreen_context_pipe_state_set_ps_resource(struct r600_context *ctx, struct r600_pipe_resource_state *state, unsigned rid);
-void evergreen_context_pipe_state_set_vs_resource(struct r600_context *ctx, struct r600_pipe_resource_state *state, unsigned rid);
-void evergreen_context_pipe_state_set_fs_resource(struct r600_context *ctx, struct r600_pipe_resource_state *state, unsigned rid);
-void evergreen_context_pipe_state_set_ps_sampler(struct r600_context *ctx, struct r600_pipe_state *state, unsigned id);
-void evergreen_context_pipe_state_set_vs_sampler(struct r600_context *ctx, struct r600_pipe_state *state, unsigned id);
+int evergreen_context_init(struct r600_context *ctx);
+
+void _r600_pipe_state_add_reg_bo(struct r600_context *ctx,
+				 struct r600_pipe_state *state,
+				 uint32_t offset, uint32_t value,
+				 uint32_t range_id, uint32_t block_id,
+				 struct r600_resource *bo,
+				 enum radeon_bo_usage usage);
 
 void _r600_pipe_state_add_reg(struct r600_context *ctx,
 			      struct r600_pipe_state *state,
-			      u32 offset, u32 value, u32 mask,
-			      u32 range_id, u32 block_id,
-			      struct r600_resource *bo,
-			      enum radeon_bo_usage usage);
+			      uint32_t offset, uint32_t value,
+			      uint32_t range_id, uint32_t block_id);
 
-void r600_pipe_state_add_reg_noblock(struct r600_pipe_state *state,
-				     u32 offset, u32 value, u32 mask,
-				     struct r600_resource *bo,
-				     enum radeon_bo_usage usage);
-
-#define r600_pipe_state_add_reg(state, offset, value, mask, bo, usage) _r600_pipe_state_add_reg(&rctx->ctx, state, offset, value, mask, CTX_RANGE_ID(offset), CTX_BLOCK_ID(offset), bo, usage)
-
-static inline void r600_pipe_state_mod_reg(struct r600_pipe_state *state,
-					   u32 value)
-{
-	state->regs[state->nregs].value = value;
-	state->nregs++;
-}
-
-static inline void r600_pipe_state_mod_reg_bo(struct r600_pipe_state *state,
-					      u32 value, struct r600_resource *bo,
-					      enum radeon_bo_usage usage)
-{
-	state->regs[state->nregs].value = value;
-	state->regs[state->nregs].bo = bo;
-	state->regs[state->nregs].bo_usage = usage;
-	state->nregs++;
-}
+#define r600_pipe_state_add_reg_bo(state, offset, value, bo, usage) _r600_pipe_state_add_reg_bo(rctx, state, offset, value, CTX_RANGE_ID(offset), CTX_BLOCK_ID(offset), bo, usage)
+#define r600_pipe_state_add_reg(state, offset, value) _r600_pipe_state_add_reg(rctx, state, offset, value, CTX_RANGE_ID(offset), CTX_BLOCK_ID(offset))
 
 #endif

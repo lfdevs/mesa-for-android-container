@@ -1,3 +1,77 @@
+mesa (9.1.3-1) experimental; urgency=low
+
+  * Team upload.
+  * New upstream release.
+    - Set close on exec flag when opening dri devices (Closes: #651370).
+    - Don't emit a .note.ABI-tag section anymore (Closes: #628758).
+
+  [ Timo Aaltonen ]
+  * Refresh patches
+    - disable 05_kfreebsd-egl-x11.diff for now.
+  * control: Added libtool to build-depends.
+  * rules: Drop special handling of config.{guess,sub}, not needed anymore.
+  * rules, libosmesa*: Build only the 32bit OSMesa library.
+  * control: Bump libdrm build-dep to 2.4.39.
+  * control: Bump libwayland-dev build-dep to 0.95.
+  * rules: Update the clean target.
+  * rules: Add --disable-shared-glapi to the swx11 targets.
+  * libosmesa*.install.in: Install files from the correct path.
+  * rules: --with-driver= is deprecated, use --enable-foo.
+  * rules: Purge .la files before dh_install.
+  * Update symbols.
+  * libgl1-mesa-dri.install*.in: Add libdricore.
+  * control: Add new dependencies to libgl1-mesa-dev.
+  * rules, libgl1-mesa-dri.install.linux.in: Add support for radeonsi.
+  * rules: Build llvm shared libs on platforms that support llvm.
+  * control, rules, libglu*: Remove libglu packaging, since it's been split
+    off upstream.
+  * rules: Disable dri for the swx11 targets.
+  * not-installed: Updated.
+  * Update symbols for libgles2-mesa and libxatracker1.
+  * libegl1-mesa-drivers.install.linux: Bump libwayland-egl.so version
+  * control: Add libdrm-dev to mesa-common-dev Depends.
+  * control: Build-depend on llvm-3.2-dev (Closes: #678822).
+  * libgl1-mesa-dri.install.in: Include gallium-pipe/*.so and libllvmradeon*.so.
+  * rules: Add files to clean.
+  * control: Add libxcb-dri2-0-dev to libgl1-mesa-dev depends.
+
+  [ Steve Langasek ]
+  * Install all dri drivers from the DESTDIR tree, instead of copying them
+    from the build tree; this simplifies the install rules since we know
+    already that we're only building drivers that we want to ship, and
+    avoids rpath problems with libtool linking to in-tree convenience
+    libraries.
+  * debian/rules: don't install libdricore*.so, this isn't a public library.
+  * Add Pre-Depends on multiarch-support to libgl1-mesa-dri, since we're
+    shipping a shared library in the package; not an issue in practice since
+    this is all post-wheezy / post-precise, but it's an archive reject error
+    in Debian right now so let's just be complete.
+
+  [ Maarten Lankhorst ]
+  * Bump standards-version to 3.9.3.
+  * control: Bump libwayland-dev build-dep to 1.0.2.
+  * Remove 13-llvm-config-pick-a-version.diff and just pass a flag to configure.
+
+  [ Robert Hooker ]
+  * Drop xutils-dev build dep, makedepend is no longer required
+  * Recommend libtxc-dxtn0 in libgl1-mesa-dri for easier use with multiarch
+    installs (Closes: #668645).
+  * Drop 02_use-ieee-fp-on-s390-and-m68k.patch, upstream in 9.1.2.
+  * Drop 10-hurd-configure-tweaks.diff, upstream in 9.1.2.
+
+  [ Sven Joachim ]
+  * Bump libdrm-dev build-dependency to 2.4.42.
+
+  [ Rico Tzschichholz ]
+  * Update packaging mesa packaging with xorg-edgers
+
+  [ Emilio Pozuelo Monfort ]
+  * integer overflows calculating memory needs for replies [CVE-2013-1993]
+  * Bump llvm-3.2-dev build dependency to 1:3.2repack-7~ for a fixed
+    llvm-config-3.2 --libdir, otherwise configure fails.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Tue, 28 May 2013 21:15:55 +0200
+
 mesa (8.0.5-4) unstable; urgency=low
 
   * Cherry-pick commit 17f1cb1d99 (dri/nouveau: fix crash in

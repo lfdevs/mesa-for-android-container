@@ -344,7 +344,7 @@ struct GalliumD3D10Device : public GalliumD3D10ScreenImpl<threadsafe>
 			{
 				constant_buffers[s][start + i] = constbufs[i];
 				if(s < caps.stages && start + i < caps.constant_buffers[s])
-					pipe->set_constant_buffer(pipe, s, start + i, constbufs[i] ? constbufs[i]->resource : NULL);
+					pipe_set_constant_buffer(pipe, s, start + i, constbufs[i] ? constbufs[i]->resource : NULL);
 			}
 		}
 	}
@@ -1501,20 +1501,21 @@ struct GalliumD3D10Device : public GalliumD3D10ScreenImpl<threadsafe>
 		else if(map_type == D3D11_MAP_WRITE_DISCARD)
 			usage = PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD;
 		else if(map_type == D3D11_MAP_WRITE_NO_OVERWRITE)
-			usage = PIPE_TRANSFER_WRITE | PIPE_TRANSFER_NOOVERWRITE;
+			usage = PIPE_TRANSFER_WRITE | PIPE_TRANSFER_UNSYNCHRONIZED;
 		else
 			return E_INVALIDARG;
 		if(map_type & D3D10_MAP_FLAG_DO_NOT_WAIT)
 			usage |= PIPE_TRANSFER_DONTBLOCK;
-		struct pipe_transfer* transfer = pipe->get_transfer(pipe, resource->resource, level, usage, &box);
-		if(!transfer) {
+		struct pipe_transfer* transfer;
+                void *map = pipe->transfer_map(pipe, resource->resource, level, usage, &box, &transfer);
+		if(!map) {
 			if(map_type & D3D10_MAP_FLAG_DO_NOT_WAIT)
 				return DXGI_ERROR_WAS_STILL_DRAWING;
 			else
 				return E_FAIL;
 		}
 		resource->transfers[subresource] = transfer;
-		mapped_resource->pData = pipe->transfer_map(pipe, transfer);
+		mapped_resource->pData = map;
 		mapped_resource->RowPitch = transfer->stride;
 		mapped_resource->DepthPitch = transfer->layer_stride;
 		return S_OK;
@@ -1530,7 +1531,6 @@ struct GalliumD3D10Device : public GalliumD3D10ScreenImpl<threadsafe>
 		if(i != resource->transfers.end())
 		{
 			pipe->transfer_unmap(pipe, i->second);
-			pipe->transfer_destroy(pipe, i->second);
 			resource->transfers.erase(i);
 		}
 	}
@@ -1715,7 +1715,7 @@ struct GalliumD3D10Device : public GalliumD3D10ScreenImpl<threadsafe>
 		{
 			unsigned num = std::min(caps.constant_buffers[s], (unsigned)D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT);
 			for(unsigned i = 0; i < num; ++i)
-				pipe->set_constant_buffer(pipe, s, i, constant_buffers[s][i].p ? constant_buffers[s][i].p->resource : 0);
+				pipe_set_constant_buffer(pipe, s, i, constant_buffers[s][i].p ? constant_buffers[s][i].p->resource : 0);
 		}
 
 		update_flags |= (1 << (UPDATE_SAMPLERS_SHIFT + D3D11_STAGE_VS)) | (1 << (UPDATE_VIEWS_SHIFT + D3D11_STAGE_VS));
@@ -1755,6 +1755,7 @@ struct GalliumD3D10Device : public GalliumD3D10ScreenImpl<threadsafe>
 		unsigned src_subresource,
 		DXGI_FORMAT format)
 	{
+#if 0
 		SYNCHRONIZED;
 		GalliumD3D11Resource<>* dst = (GalliumD3D11Resource<>*)dst_resource;
 		GalliumD3D11Resource<>* src = (GalliumD3D11Resource<>*)src_resource;
@@ -1778,6 +1779,7 @@ struct GalliumD3D10Device : public GalliumD3D10ScreenImpl<threadsafe>
 		info.mask = PIPE_MASK_RGBA | PIPE_MASK_ZS;
 
 		pipe->resource_resolve(pipe, &info);
+#endif
 	}
 
 #if API >= 11
@@ -1961,7 +1963,7 @@ struct GalliumD3D10Device : public GalliumD3D10ScreenImpl<threadsafe>
 				if(constant_buffers[s][i] == buffer)
 				{
 					constant_buffers[s][i] = (ID3D10Buffer*)NULL;
-					pipe->set_constant_buffer(pipe, s, i, NULL);
+					pipe_set_constant_buffer(pipe, s, i, NULL);
 				}
 			}
 		}

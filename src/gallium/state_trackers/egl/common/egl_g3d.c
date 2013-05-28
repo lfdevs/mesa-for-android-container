@@ -169,8 +169,7 @@ egl_g3d_add_screens(_EGLDriver *drv, _EGLDisplay *dpy)
    native_connectors =
       gdpy->native->modeset->get_connectors(gdpy->native, &num_connectors, NULL);
    if (!num_connectors) {
-      if (native_connectors)
-         FREE(native_connectors);
+      FREE(native_connectors);
       return;
    }
 
@@ -184,8 +183,7 @@ egl_g3d_add_screens(_EGLDriver *drv, _EGLDisplay *dpy)
       native_modes =
          gdpy->native->modeset->get_modes(gdpy->native, nconn, &num_modes);
       if (!num_modes) {
-         if (native_modes)
-            FREE(native_modes);
+         FREE(native_modes);
          continue;
       }
 
@@ -428,8 +426,7 @@ egl_g3d_add_configs(_EGLDriver *drv, _EGLDisplay *dpy, EGLint id)
 
    native_configs = gdpy->native->get_configs(gdpy->native, &num_configs);
    if (!num_configs) {
-      if (native_configs)
-         FREE(native_configs);
+      FREE(native_configs);
       return id;
    }
 
@@ -583,9 +580,7 @@ egl_g3d_initialize(_EGLDriver *drv, _EGLDisplay *dpy)
    dpy->Extensions.KHR_reusable_sync = EGL_TRUE;
    dpy->Extensions.KHR_fence_sync = EGL_TRUE;
 
-   dpy->Extensions.KHR_surfaceless_gles1 = EGL_TRUE;
-   dpy->Extensions.KHR_surfaceless_gles2 = EGL_TRUE;
-   dpy->Extensions.KHR_surfaceless_opengl = EGL_TRUE;
+   dpy->Extensions.KHR_surfaceless_context = EGL_TRUE;
 
    if (dpy->Platform == _EGL_PLATFORM_DRM) {
       dpy->Extensions.MESA_drm_display = EGL_TRUE;

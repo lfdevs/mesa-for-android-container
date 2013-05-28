@@ -30,13 +30,13 @@
 #include "main/bufferobj.h"
 #include "main/colormac.h"
 #include "main/mtypes.h"
+#include "main/samplerobj.h"
 #include "main/teximage.h"
 #include "program/prog_parameter.h"
 #include "program/prog_statevars.h"
 #include "swrast.h"
 #include "s_blend.h"
 #include "s_context.h"
-#include "s_fragprog.h"
 #include "s_lines.h"
 #include "s_points.h"
 #include "s_span.h"
@@ -251,9 +251,7 @@ _swrast_update_fog_state( struct gl_context *ctx )
    SWcontext *swrast = SWRAST_CONTEXT(ctx);
    const struct gl_fragment_program *fp = ctx->FragmentProgram._Current;
 
-   assert((fp == NULL) ||
-          (fp->Base.Target == GL_FRAGMENT_PROGRAM_ARB) ||
-          (fp->Base.Target == GL_FRAGMENT_PROGRAM_NV));
+   assert(fp == NULL || fp->Base.Target == GL_FRAGMENT_PROGRAM_ARB);
 
    /* determine if fog is needed, and if so, which fog mode */
    swrast->_FogEnabled = (!_swrast_use_fragment_program(ctx) &&
@@ -313,7 +311,7 @@ _swrast_update_specular_vertex_add(struct gl_context *ctx)
                               _SWRAST_NEW_RASTERMASK|		\
                               _NEW_LIGHT|			\
                               _NEW_FOG |			\
-			      _DD_NEW_SEPARATE_SPECULAR)
+			      _MESA_NEW_SEPARATE_SPECULAR)
 
 #define _SWRAST_NEW_LINE (_SWRAST_NEW_DERIVED |		\
 			  _NEW_RENDERMODE|		\
@@ -322,7 +320,7 @@ _swrast_update_specular_vertex_add(struct gl_context *ctx)
                           _NEW_LIGHT|			\
                           _NEW_FOG|			\
                           _NEW_DEPTH |			\
-                          _DD_NEW_SEPARATE_SPECULAR)
+                          _MESA_NEW_SEPARATE_SPECULAR)
 
 #define _SWRAST_NEW_POINT (_SWRAST_NEW_DERIVED |	\
 			   _NEW_RENDERMODE |		\
@@ -330,7 +328,7 @@ _swrast_update_specular_vertex_add(struct gl_context *ctx)
 			   _NEW_TEXTURE |		\
 			   _NEW_LIGHT |			\
 			   _NEW_FOG |			\
-                           _DD_NEW_SEPARATE_SPECULAR)
+                           _MESA_NEW_SEPARATE_SPECULAR)
 
 #define _SWRAST_NEW_TEXTURE_SAMPLE_FUNC _NEW_TEXTURE
 
@@ -480,10 +478,10 @@ _swrast_update_texture_samplers(struct gl_context *ctx)
       /* Note: If tObj is NULL, the sample function will be a simple
        * function that just returns opaque black (0,0,0,1).
        */
-      if (tObj) {
-         _mesa_update_fetch_functions(tObj);
-      }
-      swrast->TextureSample[u] = _swrast_choose_texture_sample_func(ctx, tObj);
+      _mesa_update_fetch_functions(ctx, u);
+      swrast->TextureSample[u] =
+         _swrast_choose_texture_sample_func(ctx, tObj,
+                                            _mesa_get_samplerobj(ctx, u));
    }
 }
 
@@ -720,12 +718,24 @@ GLboolean
 _swrast_CreateContext( struct gl_context *ctx )
 {
    GLuint i;
-   SWcontext *swrast = (SWcontext *)CALLOC(sizeof(SWcontext));
+   SWcontext *swrast = calloc(1, sizeof(SWcontext));
 #ifdef _OPENMP
    const GLuint maxThreads = omp_get_max_threads();
 #else
    const GLuint maxThreads = 1;
 #endif
+
+   assert(ctx->Const.MaxViewportWidth <= SWRAST_MAX_WIDTH);
+   assert(ctx->Const.MaxViewportHeight <= SWRAST_MAX_WIDTH);
+
+   assert(ctx->Const.MaxRenderbufferSize <= SWRAST_MAX_WIDTH);
+
+   /* make sure largest texture image is <= SWRAST_MAX_WIDTH in size */
+   assert((1 << (ctx->Const.MaxTextureLevels - 1)) <= SWRAST_MAX_WIDTH);
+   assert((1 << (ctx->Const.MaxCubeTextureLevels - 1)) <= SWRAST_MAX_WIDTH);
+   assert((1 << (ctx->Const.Max3DTextureLevels - 1)) <= SWRAST_MAX_WIDTH);
+
+   assert(PROG_MAX_WIDTH == SWRAST_MAX_WIDTH);
 
    if (SWRAST_DEBUG) {
       _mesa_debug(ctx, "_swrast_CreateContext\n");
@@ -763,9 +773,9 @@ _swrast_CreateContext( struct gl_context *ctx )
     * using multiple threads, it is necessary to have one SpanArrays instance
     * per thread.
     */
-   swrast->SpanArrays = (SWspanarrays *) MALLOC(maxThreads * sizeof(SWspanarrays));
+   swrast->SpanArrays = malloc(maxThreads * sizeof(SWspanarrays));
    if (!swrast->SpanArrays) {
-      FREE(swrast);
+      free(swrast);
       return GL_FALSE;
    }
    for(i = 0; i < maxThreads; i++) {
@@ -791,6 +801,19 @@ _swrast_CreateContext( struct gl_context *ctx )
 
    ctx->swrast_context = swrast;
 
+   swrast->stencil_temp.buf1 = malloc(SWRAST_MAX_WIDTH * sizeof(GLubyte));
+   swrast->stencil_temp.buf2 = malloc(SWRAST_MAX_WIDTH * sizeof(GLubyte));
+   swrast->stencil_temp.buf3 = malloc(SWRAST_MAX_WIDTH * sizeof(GLubyte));
+   swrast->stencil_temp.buf4 = malloc(SWRAST_MAX_WIDTH * sizeof(GLubyte));
+
+   if (!swrast->stencil_temp.buf1 ||
+       !swrast->stencil_temp.buf2 ||
+       !swrast->stencil_temp.buf3 ||
+       !swrast->stencil_temp.buf4) {
+      _swrast_DestroyContext(ctx);
+      return GL_FALSE;
+   }
+
    return GL_TRUE;
 }
 
@@ -803,11 +826,16 @@ _swrast_DestroyContext( struct gl_context *ctx )
       _mesa_debug(ctx, "_swrast_DestroyContext\n");
    }
 
-   FREE( swrast->SpanArrays );
-   if (swrast->ZoomedArrays)
-      FREE( swrast->ZoomedArrays );
-   FREE( swrast->TexelBuffer );
-   FREE( swrast );
+   free( swrast->SpanArrays );
+   free( swrast->ZoomedArrays );
+   free( swrast->TexelBuffer );
+
+   free(swrast->stencil_temp.buf1);
+   free(swrast->stencil_temp.buf2);
+   free(swrast->stencil_temp.buf3);
+   free(swrast->stencil_temp.buf4);
+
+   free( swrast );
 
    ctx->swrast_context = 0;
 }

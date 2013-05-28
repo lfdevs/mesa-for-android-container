@@ -49,7 +49,6 @@ extern "C" {
 
 #ifdef __cplusplus
 	#undef virtual
-}
 #endif
 
 #include "tnl/t_vertex.h"
@@ -117,6 +116,32 @@ struct intel_sync_object {
 
 struct brw_context;
 
+struct intel_batchbuffer {
+   /** Current batchbuffer being queued up. */
+   drm_intel_bo *bo;
+   /** Last BO submitted to the hardware.  Used for glFinish(). */
+   drm_intel_bo *last_bo;
+   /** BO for post-sync nonzero writes for gen6 workaround. */
+   drm_intel_bo *workaround_bo;
+   bool need_workaround_flush;
+
+   struct cached_batch_item *cached_items;
+
+   uint16_t emit, total;
+   uint16_t used, reserved_space;
+   uint32_t map[8192];
+#define BATCH_SZ (8192*sizeof(uint32_t))
+
+   uint32_t state_batch_offset;
+   bool is_blit;
+   bool needs_sol_reset;
+
+   struct {
+      uint16_t used;
+      int reloc_count;
+   } saved;
+};
+
 /**
  * intel_context is derived from Mesa's context class: struct gl_context.
  */
@@ -152,6 +177,7 @@ struct intel_context
       void (*assert_not_dirty) (struct intel_context *intel);
 
       void (*debug_batch)(struct intel_context *intel);
+      void (*annotate_aub)(struct intel_context *intel);
       bool (*render_target_supported)(struct intel_context *intel,
 				      struct gl_renderbuffer *rb);
 
@@ -160,30 +186,13 @@ struct intel_context
 	                          gl_format format);
 
       /**
-       * \name HiZ operations
-       *
-       * See the following sections of the Sandy Bridge PRM, Volume 1, Part2:
-       *   - 7.5.3.1 Depth Buffer Clear
-       *   - 7.5.3.2 Depth Buffer Resolve
-       *   - 7.5.3.3 Hierarchical Depth Buffer Resolve
-       * \{
-       */
-      void (*resolve_hiz_slice)(struct intel_context *intel,
-				struct intel_mipmap_tree *mt,
-				uint32_t level,
-				uint32_t layer);
-
-      void (*resolve_depth_slice)(struct intel_context *intel,
-				  struct intel_mipmap_tree *mt,
-				  uint32_t level,
-				  uint32_t layer);
-      /** \} */
-
-      /**
        * Surface state operations (i965+ only)
        * \{
        */
-      void (*update_texture_surface)(struct gl_context *ctx, unsigned unit);
+      void (*update_texture_surface)(struct gl_context *ctx,
+                                     unsigned unit,
+                                     uint32_t *binding_table,
+                                     unsigned surf_index);
       void (*update_renderbuffer_surface)(struct brw_context *brw,
 					  struct gl_renderbuffer *rb,
 					  unsigned unit);
@@ -191,9 +200,26 @@ struct intel_context
 					       unsigned unit);
       void (*create_constant_surface)(struct brw_context *brw,
 				      drm_intel_bo *bo,
-				      int width,
+				      uint32_t offset,
+				      uint32_t size,
 				      uint32_t *out_offset);
       /** \} */
+
+      /**
+       * Send the appropriate state packets to configure depth, stencil, and
+       * HiZ buffers (i965+ only)
+       */
+      void (*emit_depth_stencil_hiz)(struct brw_context *brw,
+                                     struct intel_mipmap_tree *depth_mt,
+                                     uint32_t depth_offset,
+                                     uint32_t depthbuffer_format,
+                                     uint32_t depth_surface_type,
+                                     struct intel_mipmap_tree *stencil_mt,
+                                     struct intel_mipmap_tree *hiz_mt,
+                                     bool separate_stencil,
+                                     uint32_t width, uint32_t height,
+                                     uint32_t tile_x, uint32_t tile_y);
+
    } vtbl;
 
    GLbitfield Fallback;  /**< mask of INTEL_FALLBACK_x bits */
@@ -208,6 +234,7 @@ struct intel_context
    int gen;
    int gt;
    bool needs_ff_sync;
+   bool is_haswell;
    bool is_g4x;
    bool is_945;
    bool has_separate_stencil;
@@ -218,31 +245,9 @@ struct intel_context
 
    int urb_size;
 
-   struct intel_batchbuffer {
-      /** Current batchbuffer being queued up. */
-      drm_intel_bo *bo;
-      /** Last BO submitted to the hardware.  Used for glFinish(). */
-      drm_intel_bo *last_bo;
-      /** BO for post-sync nonzero writes for gen6 workaround. */
-      drm_intel_bo *workaround_bo;
-      bool need_workaround_flush;
+   drm_intel_context *hw_ctx;
 
-      struct cached_batch_item *cached_items;
-
-      uint16_t emit, total;
-      uint16_t used, reserved_space;
-      uint32_t map[8192];
-#define BATCH_SZ (8192*sizeof(uint32_t))
-
-      uint32_t state_batch_offset;
-      bool is_blit;
-      bool needs_sol_reset;
-
-      struct {
-	 uint16_t used;
-	 int reloc_count;
-      } saved;
-   } batch;
+   struct intel_batchbuffer batch;
 
    drm_intel_bo *first_post_swapbuffers_batch;
    bool need_throttle;
@@ -288,12 +293,6 @@ struct intel_context
    bool no_rast;
    bool always_flush_batch;
    bool always_flush_cache;
-
-   /* 0 - nonconformant, best performance;
-    * 1 - fallback to sw for known conformance bugs
-    * 2 - always fallback to sw
-    */
-   GLuint conformance_mode;
 
    /* State for intelvb.c and inteltris.c.
     */
@@ -367,19 +366,6 @@ extern char *__progname;
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
 /**
- * Align a value up to an alignment value
- *
- * If \c value is not already aligned to the requested alignment value, it
- * will be rounded up.
- *
- * \param value  Value to be rounded
- * \param alignment  Alignment value to be used.  This must be a power of two.
- *
- * \sa ROUND_DOWN_TO()
- */
-#define ALIGN(value, alignment)  (((value) + alignment - 1) & ~(alignment - 1))
-
-/**
  * Align a value down to an alignment value
  *
  * If \c value is not already aligned to the requested alignment value, it
@@ -451,7 +437,7 @@ extern int INTEL_DEBUG;
 #define DEBUG_IOCTL	0x4
 #define DEBUG_BLIT	0x8
 #define DEBUG_MIPTREE   0x10
-#define DEBUG_FALLBACKS	0x20
+#define DEBUG_PERF	0x20
 #define DEBUG_VERBOSE	0x40
 #define DEBUG_BATCH     0x80
 #define DEBUG_PIXEL     0x100
@@ -472,16 +458,46 @@ extern int INTEL_DEBUG;
 #define DEBUG_URB       0x800000
 #define DEBUG_VS        0x1000000
 #define DEBUG_CLIP      0x2000000
+#define DEBUG_AUB       0x4000000
+#define DEBUG_SHADER_TIME 0x8000000
+#define DEBUG_NO16      0x20000000
+
+#ifdef HAVE_ANDROID_PLATFORM
+#define LOG_TAG "INTEL-MESA"
+#include <cutils/log.h>
+#ifndef ALOGW
+#define ALOGW LOGW
+#endif
+#define dbg_printf(...)	ALOGW(__VA_ARGS__)
+#else
+#define dbg_printf(...)	printf(__VA_ARGS__)
+#endif /* HAVE_ANDROID_PLATFORM */
 
 #define DBG(...) do {						\
 	if (unlikely(INTEL_DEBUG & FILE_DEBUG_FLAG))		\
-		printf(__VA_ARGS__);			\
+		dbg_printf(__VA_ARGS__);			\
 } while(0)
 
 #define fallback_debug(...) do {				\
-	if (unlikely(INTEL_DEBUG & DEBUG_FALLBACKS))		\
-		printf(__VA_ARGS__);				\
+	if (unlikely(INTEL_DEBUG & DEBUG_PERF))			\
+		dbg_printf(__VA_ARGS__);			\
 } while(0)
+
+#define perf_debug(...) do {					\
+	if (unlikely(INTEL_DEBUG & DEBUG_PERF))			\
+		dbg_printf(__VA_ARGS__);			\
+} while(0)
+
+#define WARN_ONCE(cond, fmt...) do {                            \
+   if (unlikely(cond)) {                                        \
+      static bool _warned = false;                              \
+      if (!_warned) {                                           \
+         fprintf(stderr, "WARNING: ");                          \
+         fprintf(stderr, fmt);                                  \
+         _warned = true;                                        \
+      }                                                         \
+   }                                                            \
+} while (0)
 
 #define PCI_CHIP_845_G			0x2562
 #define PCI_CHIP_I830_M			0x3577
@@ -502,11 +518,14 @@ extern int INTEL_DEBUG;
  */
 
 extern bool intelInitContext(struct intel_context *intel,
-				  int api,
-                                  const struct gl_config * mesaVis,
-                                  __DRIcontext * driContextPriv,
-                                  void *sharedContextPrivate,
-                                  struct dd_function_table *functions);
+                             int api,
+                             unsigned major_version,
+                             unsigned minor_version,
+                             const struct gl_config * mesaVis,
+                             __DRIcontext * driContextPriv,
+                             void *sharedContextPrivate,
+                             struct dd_function_table *functions,
+                             unsigned *dri_ctx_error);
 
 extern void intelFinish(struct gl_context * ctx);
 extern void intel_flush_rendering_to_batch(struct gl_context *ctx);
@@ -522,7 +541,6 @@ void intel_init_syncobj_functions(struct dd_function_table *functions);
 /* ================================================================
  * intel_state.c:
  */
-extern void intelInitStateFuncs(struct dd_function_table *functions);
 
 #define COMPAREFUNC_ALWAYS		0
 #define COMPAREFUNC_NEVER		0x1
@@ -591,6 +609,10 @@ void intel_update_renderbuffers(__DRIcontext *context,
 				__DRIdrawable *drawable);
 void intel_prepare_render(struct intel_context *intel);
 
+void
+intel_downsample_for_dri2_flush(struct intel_context *intel,
+                                __DRIdrawable *drawable);
+
 void i915_set_buf_info_for_region(uint32_t *state, struct intel_region *region,
 				  uint32_t buffer_id);
 void intel_init_texture_formats(struct gl_context *ctx);
@@ -610,5 +632,9 @@ is_power_of_two(uint32_t value)
 {
    return (value & (value - 1)) == 0;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

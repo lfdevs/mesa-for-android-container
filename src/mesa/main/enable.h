@@ -53,19 +53,26 @@ extern void
 _mesa_set_enablei(struct gl_context *ctx, GLenum cap, GLuint index, GLboolean state);
 
 extern void GLAPIENTRY
-_mesa_DisableIndexed( GLenum cap, GLuint index );
+_mesa_Disablei( GLenum cap, GLuint index );
 
 extern void GLAPIENTRY
-_mesa_EnableIndexed( GLenum cap, GLuint index );
+_mesa_Enablei( GLenum cap, GLuint index );
 
 extern GLboolean GLAPIENTRY
-_mesa_IsEnabledIndexed( GLenum cap, GLuint index );
+_mesa_IsEnabledi( GLenum cap, GLuint index );
 
 extern void GLAPIENTRY
 _mesa_EnableClientState( GLenum cap );
 
 extern void GLAPIENTRY
 _mesa_DisableClientState( GLenum cap );
+
+extern void
+_mesa_set_multisample(struct gl_context *ctx, GLboolean state);
+
+extern void
+_mesa_set_framebuffer_srgb(struct gl_context *ctx, GLboolean state);
+
 
 
 #endif

@@ -3,14 +3,13 @@ Section: graphics
 Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: Cyril Brulebois <kibi@debian.org>
-Standards-Version: 3.8.4
+Standards-Version: 3.9.3
 Build-Depends:
  debhelper (>= 8.1.3),
  quilt (>= 0.40),
  pkg-config,
- libdrm-dev (>= 2.4.30) [!hurd-any],
+ libdrm-dev (>= 2.4.42) [!hurd-any],
  libx11-dev,
- xutils-dev,
  x11proto-gl-dev (>= 1.4.14),
  libxxf86vm-dev,
  libexpat1-dev,
@@ -20,6 +19,7 @@ Build-Depends:
  libxext-dev,
  autoconf,
  automake,
+ libtool,
  x11proto-dri2-dev (>= 2.6),
  linux-libc-dev (>= 2.6.31) [linux-any],
  libx11-xcb-dev,
@@ -30,8 +30,8 @@ Build-Depends:
  libudev-dev [linux-any],
  flex,
  bison,
- llvm-2.9-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386],
- libwayland-dev (>= 0.85.0) [linux-any],
+ llvm-3.2-dev (>= 1:3.2repack-7~) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
+ libwayland-dev (>= 1.0.2) [linux-any],
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.sourceforge.net/
@@ -286,6 +286,7 @@ Depends:
  libxdamage-dev,
  libxfixes-dev,
  libxcb-glx0-dev,
+ libxcb-dri2-0-dev,
  libx11-xcb-dev,
  ${misc:Depends},
 Description: free implementation of the EGL API -- development files
@@ -600,9 +601,11 @@ Package: libgl1-mesa-dri
 Section: libs
 Priority: optional
 Architecture: any
+Pre-Depends: ${misc:Pre-Depends}
 Depends:
  ${shlibs:Depends},
  ${misc:Depends}
+Recommends: libtxc-dxtn0
 Suggests: libglide3
 Conflicts: xlibmesa-dri (<< 1:7.0.0)
 Replaces: xlibmesa-dri (<< 1:7.0.0), libgl1-mesa-dri-experimental (<< 7.11.1)
@@ -701,7 +704,17 @@ Architecture: any
 Depends:
  mesa-common-dev (= ${binary:Version}),
  libgl1-mesa-glx (= ${binary:Version}),
+ libdrm-dev (>= 2.4.24) [!hurd-any],
+ libx11-dev,
+ libx11-xcb-dev,
+ libxcb-dri2-0-dev,
+ libxcb-glx0-dev,
+ libxdamage-dev,
  libxext-dev,
+ libxfixes-dev,
+ libxxf86vm-dev,
+ x11proto-dri2-dev (>= 2.6),
+ x11proto-gl-dev (>= 1.4.14),
  ${misc:Depends},
 Conflicts: libgl-dev, libgl1-mesa-dri-dev
 Replaces: libgl-dev, libgl1-mesa-dri-dev
@@ -723,6 +736,7 @@ Architecture: any
 Replaces: xlibmesa-gl-dev (<< 1:7), xlibosmesa-dev, libgl1-mesa-swx11-dev (<< 6.5.2), libgl1-mesa-dev (<< 7.5~rc4-2)
 Depends:
  libx11-dev,
+ libdrm-dev [!hurd-any],
  ${misc:Depends},
 Description: Developer documentation for Mesa
  This package includes the specifications for the Mesa-specific OpenGL
@@ -761,46 +775,5 @@ Description: Mesa Off-screen rendering extension -- development files
  that use the off-screen rendering extension of Mesa.
  .
  For more information on OSmesa see the libosmesa6 package.
-
-Package: libglu1-mesa
-Section: libs
-Architecture: any
-Depends:
- ${shlibs:Depends},
- ${misc:Depends},
-Provides: libglu1
-Conflicts: mesag3 (<< 5.0.0-1), xlibmesa3, libglu1
-Replaces: libglu1
-Pre-Depends: ${misc:Pre-Depends}
-Multi-Arch: same
-Description: Mesa OpenGL utility library (GLU)
- GLU offers simple interfaces for building mipmaps; checking for the
- presence of extensions in the OpenGL (or other libraries which follow
- the same conventions for advertising extensions); drawing
- piecewise-linear curves, NURBS, quadrics and other primitives
- (including, but not limited to, teapots); tesselating surfaces; setting
- up projection matrices and unprojecting screen coordinates to world
- coordinates.
- .
- On Linux, this library is also known as libGLU or libGLU.so.1.
- .
- This package provides the SGI implementation of GLU shipped with the
- Mesa package (ergo the "-mesa" suffix).
-
-Package: libglu1-mesa-dev
-Section: libdevel
-Architecture: any
-Depends:
- libglu1-mesa (= ${binary:Version}),
- libgl1-mesa-dev | libgl-dev,
- ${misc:Depends},
-Provides: libglu-dev, xlibmesa-glu-dev
-Conflicts: mesag-dev (<< 5.0.0-1), mesa-glide2-dev (<< 5.0.0-1), mesag3+ggi-dev (<< 5.0.0-1), xlibmesa-dev
-Replaces: libglu-dev
-Description: Mesa OpenGL utility library -- development files
- Includes headers and static libraries for compiling programs with GLU.
- .
- For a complete description of GLU, please look at the libglu1-mesa
- package.
 
 # vim: tw=0

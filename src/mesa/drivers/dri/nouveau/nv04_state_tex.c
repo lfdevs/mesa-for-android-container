@@ -32,6 +32,7 @@
 #include "nv_object.xml.h"
 #include "nv04_3d.xml.h"
 #include "nv04_driver.h"
+#include "main/samplerobj.h"
 
 static uint32_t
 get_tex_format(struct gl_texture_image *ti)
@@ -59,20 +60,15 @@ get_tex_format(struct gl_texture_image *ti)
 void
 nv04_emit_tex_obj(struct gl_context *ctx, int emit)
 {
+	struct nv04_context *nv04 = to_nv04_context(ctx);
 	const int i = emit - NOUVEAU_STATE_TEX_OBJ0;
-	struct nouveau_channel *chan = context_chan(ctx);
-	struct nouveau_grobj *fahrenheit = nv04_context_engine(ctx);
-	struct nouveau_bo_context *bctx = context_bctx_i(ctx, TEXTURE, i);
-	const int bo_flags = NOUVEAU_BO_RD | NOUVEAU_BO_GART | NOUVEAU_BO_VRAM;
 	struct nouveau_surface *s;
 	uint32_t format = 0xa0, filter = 0x1010;
-
-	if (i && !nv04_mtex_engine(fahrenheit))
-		return;
 
 	if (ctx->Texture.Unit[i]._ReallyEnabled) {
 		struct gl_texture_object *t = ctx->Texture.Unit[i]._Current;
 		struct gl_texture_image *ti = t->Image[0][t->BaseLevel];
+		const struct gl_sampler_object *sa = _mesa_get_samplerobj(ctx, i);
 		int lod_max = 1, lod_bias = 0;
 
 		if (!nouveau_texture_validate(ctx, t))
@@ -80,26 +76,26 @@ nv04_emit_tex_obj(struct gl_context *ctx, int emit)
 
 		s = &to_nouveau_texture(t)->surfaces[t->BaseLevel];
 
-		if (t->Sampler.MinFilter != GL_NEAREST &&
-		    t->Sampler.MinFilter != GL_LINEAR) {
-			lod_max = CLAMP(MIN2(t->Sampler.MaxLod, t->_MaxLambda),
+		if (sa->MinFilter != GL_NEAREST &&
+		    sa->MinFilter != GL_LINEAR) {
+			lod_max = CLAMP(MIN2(sa->MaxLod, t->_MaxLambda),
 					0, 15) + 1;
 
 			lod_bias = CLAMP(ctx->Texture.Unit[i].LodBias +
-					 t->Sampler.LodBias, -16, 15) * 8;
+					 sa->LodBias, -16, 15) * 8;
 		}
 
-		format |= nvgl_wrap_mode(t->Sampler.WrapT) << 28 |
-			nvgl_wrap_mode(t->Sampler.WrapS) << 24 |
+		format |= nvgl_wrap_mode(sa->WrapT) << 28 |
+			nvgl_wrap_mode(sa->WrapS) << 24 |
 			ti->HeightLog2 << 20 |
 			ti->WidthLog2 << 16 |
 			lod_max << 12 |
 			get_tex_format(ti);
 
-		filter |= log2i(t->Sampler.MaxAnisotropy) << 31 |
-			nvgl_filter_mode(t->Sampler.MagFilter) << 28 |
-			log2i(t->Sampler.MaxAnisotropy) << 27 |
-			nvgl_filter_mode(t->Sampler.MinFilter) << 24 |
+		filter |= log2i(sa->MaxAnisotropy) << 31 |
+			nvgl_filter_mode(sa->MagFilter) << 28 |
+			log2i(sa->MaxAnisotropy) << 27 |
+			nvgl_filter_mode(sa->MinFilter) << 24 |
 			(lod_bias & 0xff) << 16;
 
 	} else {
@@ -114,37 +110,7 @@ nv04_emit_tex_obj(struct gl_context *ctx, int emit)
 			NV04_TEXTURED_TRIANGLE_FILTER_MAGNIFY_NEAREST;
 	}
 
-	if (nv04_mtex_engine(fahrenheit)) {
-		nouveau_bo_markl(bctx, fahrenheit,
-				 NV04_MULTITEX_TRIANGLE_OFFSET(i),
-				 s->bo, s->offset, bo_flags);
-
-		nouveau_bo_mark(bctx, fahrenheit,
-				NV04_MULTITEX_TRIANGLE_FORMAT(i),
-				s->bo, format, 0,
-				NV04_MULTITEX_TRIANGLE_FORMAT_DMA_A,
-				NV04_MULTITEX_TRIANGLE_FORMAT_DMA_B,
-				bo_flags | NOUVEAU_BO_OR);
-
-		BEGIN_RING(chan, fahrenheit, NV04_MULTITEX_TRIANGLE_FILTER(i), 1);
-		OUT_RING(chan, filter);
-
-	} else {
-		nouveau_bo_markl(bctx, fahrenheit,
-				 NV04_TEXTURED_TRIANGLE_OFFSET,
-				 s->bo, s->offset, bo_flags);
-
-		nouveau_bo_mark(bctx, fahrenheit,
-				NV04_TEXTURED_TRIANGLE_FORMAT,
-				s->bo, format, 0,
-				NV04_TEXTURED_TRIANGLE_FORMAT_DMA_A,
-				NV04_TEXTURED_TRIANGLE_FORMAT_DMA_B,
-				bo_flags | NOUVEAU_BO_OR);
-
-		BEGIN_RING(chan, fahrenheit, NV04_TEXTURED_TRIANGLE_COLORKEY, 1);
-		OUT_RING(chan, 0);
-
-		BEGIN_RING(chan, fahrenheit, NV04_TEXTURED_TRIANGLE_FILTER, 1);
-		OUT_RING(chan, filter);
-	}
+	nv04->texture[i] = s;
+	nv04->format[i] = format;
+	nv04->filter[i] = filter;
 }

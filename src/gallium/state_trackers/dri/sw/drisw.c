@@ -158,10 +158,10 @@ drisw_swap_buffers(__DRIdrawable *dPriv)
 }
 
 static void
-drisw_flush_frontbuffer(struct dri_drawable *drawable,
+drisw_flush_frontbuffer(struct dri_context *ctx,
+                        struct dri_drawable *drawable,
                         enum st_attachment_type statt)
 {
-   struct dri_context *ctx = dri_get_current(drawable->sPriv);
    struct pipe_resource *ptex;
 
    if (!ctx)
@@ -257,11 +257,10 @@ drisw_update_tex_buffer(struct dri_drawable *drawable,
 
    get_drawable_info(dPriv, &x, &y, &w, &h);
 
-   transfer = pipe_get_transfer(pipe, res,
-                                0, 0, // level, layer,
-                                PIPE_TRANSFER_WRITE,
-                                x, y, w, h);
-   map = pipe_transfer_map(pipe, transfer);
+   map = pipe_transfer_map(pipe, res,
+                           0, 0, // level, layer,
+                           PIPE_TRANSFER_WRITE,
+                           x, y, w, h, &transfer);
 
    /* Copy the Drawable content to the mapped texture buffer */
    get_image(dPriv, x, y, w, h, map);
@@ -275,7 +274,6 @@ drisw_update_tex_buffer(struct dri_drawable *drawable,
    }
 
    pipe_transfer_unmap(pipe, transfer);
-   pipe_transfer_destroy(pipe, transfer);
 }
 
 /*
@@ -313,7 +311,7 @@ drisw_init_screen(__DRIscreen * sPriv)
    pscreen = drisw_create_screen(&drisw_lf);
    /* dri_init_screen_helper checks pscreen for us */
 
-   configs = dri_init_screen_helper(screen, pscreen, 32);
+   configs = dri_init_screen_helper(screen, pscreen);
    if (!configs)
       goto fail;
 

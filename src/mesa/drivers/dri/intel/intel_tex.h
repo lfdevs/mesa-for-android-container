@@ -42,8 +42,6 @@ void intelInitTextureSubImageFuncs(struct dd_function_table *functions);
 
 void intelInitTextureCopyImageFuncs(struct dd_function_table *functions);
 
-GLenum intel_mesa_format_to_rb_datatype(gl_format format);
-
 void intelSetTexBuffer(__DRIcontext *pDRICtx,
 		       GLint target, __DRIdrawable *pDraw);
 void intelSetTexBuffer2(__DRIcontext *pDRICtx,
@@ -84,5 +82,16 @@ bool intel_copy_texsubimage(struct intel_context *intel,
                             struct intel_renderbuffer *irb,
                             GLint x, GLint y,
                             GLsizei width, GLsizei height);
+
+bool
+intel_texsubimage_tiled_memcpy(struct gl_context *ctx,
+                               GLuint dims,
+                               struct gl_texture_image *texImage,
+                               GLint xoffset, GLint yoffset, GLint zoffset,
+                               GLsizei width, GLsizei height, GLsizei depth,
+                               GLenum format, GLenum type,
+                               const GLvoid *pixels,
+                               const struct gl_pixelstore_attrib *packing,
+                               bool for_glTexImage);
 
 #endif

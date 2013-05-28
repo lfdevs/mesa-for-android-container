@@ -39,13 +39,24 @@
 #include "brw_program.h"
 #include "program/program.h"
 
+/**
+ * The VF can't natively handle certain types of attributes, such as GL_FIXED
+ * or most 10_10_10_2 types.  These flags enable various VS workarounds to
+ * "fix" attributes at the beginning of shaders.
+ */
+#define BRW_ATTRIB_WA_COMPONENT_MASK    7  /* mask for GL_FIXED scale channel count */
+#define BRW_ATTRIB_WA_NORMALIZE     8   /* normalize in shader */
+#define BRW_ATTRIB_WA_BGRA          16  /* swap r/b channels in shader */
+#define BRW_ATTRIB_WA_SIGN          32  /* interpret as signed in shader */
+#define BRW_ATTRIB_WA_SCALE         64  /* interpret as scaled in shader */
 
 struct brw_vs_prog_key {
    GLuint program_string_id;
-   /**
-    * Number of channels of the vertex attribute that need GL_FIXED rescaling
+
+   /*
+    * Per-attribute workaround flags
     */
-   uint8_t gl_fixed_input_size[VERT_ATTRIB_MAX];
+   uint8_t gl_attrib_wa_flags[VERT_ATTRIB_MAX];
 
    /**
     * True if at least one clip flag is enabled, regardless of whether the
@@ -83,46 +94,25 @@ struct brw_vs_prog_key {
 
 
 struct brw_vs_compile {
-   struct brw_compile func;
    struct brw_vs_prog_key key;
    struct brw_vs_prog_data prog_data;
-   int8_t constant_map[1024];
 
    struct brw_vertex_program *vp;
 
-   GLuint nr_inputs;
-
-   struct brw_vue_map vue_map;
-   GLuint first_output;
-   GLuint last_scratch;
-
-   GLuint first_tmp;
-   GLuint last_tmp;
-
-   struct brw_reg r0;
-   struct brw_reg r1;
-   struct brw_reg regs[PROGRAM_ADDRESS+1][128];
-   struct brw_reg tmp;
-   struct brw_reg stack;
-
-   struct {	
-       bool used_in_src;
-       struct brw_reg reg;
-   } output_regs[128];
-
-   struct brw_reg userplane[MAX_CLIP_PLANES];
-
-   /** we may need up to 3 constants per instruction (if use_const_buffer) */
-   struct {
-      GLint index;
-      struct brw_reg reg;
-   } current_const[3];
-
-   bool needs_stack;
+   GLuint last_scratch; /**< measured in 32-byte (register size) units */
 };
 
-bool brw_vs_emit(struct gl_shader_program *prog, struct brw_vs_compile *c);
-void brw_old_vs_emit(struct brw_vs_compile *c);
+const unsigned *brw_vs_emit(struct brw_context *brw,
+                            struct gl_shader_program *prog,
+                            struct brw_vs_compile *c,
+                            void *mem_ctx,
+                            unsigned *program_size);
 bool brw_vs_precompile(struct gl_context *ctx, struct gl_shader_program *prog);
+void brw_vs_debug_recompile(struct brw_context *brw,
+                            struct gl_shader_program *prog,
+                            const struct brw_vs_prog_key *key);
+bool brw_vs_prog_data_compare(const void *a, const void *b,
+                              int aux_size, const void *key);
+void brw_vs_prog_data_free(const void *in_prog_data);
 
 #endif

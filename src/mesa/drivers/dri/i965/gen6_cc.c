@@ -31,10 +31,13 @@
 #include "brw_util.h"
 #include "intel_batchbuffer.h"
 #include "main/macros.h"
+#include "main/enums.h"
+#include "main/glformats.h"
 
 static void
 gen6_upload_blend_state(struct brw_context *brw)
 {
+   bool is_buffer_zero_integer_format = false;
    struct gl_context *ctx = &brw->intel.ctx;
    struct gen6_blend_state *blend;
    int b;
@@ -68,7 +71,6 @@ gen6_upload_blend_state(struct brw_context *brw)
 	 rb_type = GL_UNSIGNED_NORMALIZED;
 
       /* Used for implementing the following bit of GL_EXT_texture_integer:
-       *
        *     "Per-fragment operations that require floating-point color
        *      components, including multisample alpha operations, alpha test,
        *      blending, and dithering, have no effect when the corresponding
@@ -76,28 +78,38 @@ gen6_upload_blend_state(struct brw_context *brw)
       */
       integer = (rb_type == GL_INT || rb_type == GL_UNSIGNED_INT);
 
+      if(b == 0 && integer)
+         is_buffer_zero_integer_format = true;
+
       /* _NEW_COLOR */
       if (ctx->Color.ColorLogicOpEnabled) {
 	 /* Floating point RTs should have no effect from LogicOp,
-	  * except for disabling of blending.
+	  * except for disabling of blending, but other types should.
 	  *
-	  * From the Sandy Bridge PRM, Vol 2 Par 1, Section 8.1.11, "Logic Ops",
+	  * However, from the Sandy Bridge PRM, Vol 2 Par 1, Section 8.1.11,
+	  * "Logic Ops",
 	  *
 	  *     "Logic Ops are only supported on *_UNORM surfaces (excluding
 	  *      _SRGB variants), otherwise Logic Ops must be DISABLED."
 	  */
+         WARN_ONCE(ctx->Color.LogicOp != GL_COPY &&
+                   rb_type != GL_UNSIGNED_NORMALIZED &&
+                   rb_type != GL_FLOAT, "Ignoring %s logic op on %s "
+                   "renderbuffer\n",
+                   _mesa_lookup_enum_by_nr(ctx->Color.LogicOp),
+                   _mesa_lookup_enum_by_nr(rb_type));
 	 if (rb_type == GL_UNSIGNED_NORMALIZED) {
 	    blend[b].blend1.logic_op_enable = 1;
 	    blend[b].blend1.logic_op_func =
 	       intel_translate_logic_op(ctx->Color.LogicOp);
 	 }
       } else if (ctx->Color.BlendEnabled & (1 << b) && !integer) {
-	 GLenum eqRGB = ctx->Color.Blend[0].EquationRGB;
-	 GLenum eqA = ctx->Color.Blend[0].EquationA;
-	 GLenum srcRGB = ctx->Color.Blend[0].SrcRGB;
-	 GLenum dstRGB = ctx->Color.Blend[0].DstRGB;
-	 GLenum srcA = ctx->Color.Blend[0].SrcA;
-	 GLenum dstA = ctx->Color.Blend[0].DstA;
+	 GLenum eqRGB = ctx->Color.Blend[b].EquationRGB;
+	 GLenum eqA = ctx->Color.Blend[b].EquationA;
+	 GLenum srcRGB = ctx->Color.Blend[b].SrcRGB;
+	 GLenum dstRGB = ctx->Color.Blend[b].DstRGB;
+	 GLenum srcA = ctx->Color.Blend[b].SrcA;
+	 GLenum dstA = ctx->Color.Blend[b].DstA;
 
 	 if (eqRGB == GL_MIN || eqRGB == GL_MAX) {
 	    srcRGB = dstRGB = GL_ONE;
@@ -106,6 +118,21 @@ gen6_upload_blend_state(struct brw_context *brw)
 	 if (eqA == GL_MIN || eqA == GL_MAX) {
 	    srcA = dstA = GL_ONE;
 	 }
+
+         /* Due to hardware limitations, the destination may have information
+          * in an alpha channel even when the format specifies no alpha
+          * channel. In order to avoid getting any incorrect blending due to
+          * that alpha channel, coerce the blend factors to values that will
+          * not read the alpha channel, but will instead use the correct
+          * implicit value for alpha.
+          */
+         if (rb && !_mesa_base_format_has_channel(rb->_BaseFormat, GL_TEXTURE_ALPHA_TYPE))
+         {
+            srcRGB = brw_fix_xRGB_alpha(srcRGB);
+            srcA = brw_fix_xRGB_alpha(srcA);
+            dstRGB = brw_fix_xRGB_alpha(dstRGB);
+            dstA = brw_fix_xRGB_alpha(dstA);
+         }
 
 	 blend[b].blend0.dest_blend_factor = brw_translate_blend_factor(dstRGB);
 	 blend[b].blend0.source_blend_factor = brw_translate_blend_factor(srcRGB);
@@ -161,6 +188,38 @@ gen6_upload_blend_state(struct brw_context *brw)
       blend[b].blend1.write_disable_g = !ctx->Color.ColorMask[b][1];
       blend[b].blend1.write_disable_b = !ctx->Color.ColorMask[b][2];
       blend[b].blend1.write_disable_a = !ctx->Color.ColorMask[b][3];
+
+      /* OpenGL specification 3.3 (page 196), section 4.1.3 says:
+       * "If drawbuffer zero is not NONE and the buffer it references has an
+       * integer format, the SAMPLE_ALPHA_TO_COVERAGE and SAMPLE_ALPHA_TO_ONE
+       * operations are skipped."
+       */
+      if(!is_buffer_zero_integer_format) {
+         /* _NEW_MULTISAMPLE */
+         blend[b].blend1.alpha_to_coverage =
+            ctx->Multisample._Enabled && ctx->Multisample.SampleAlphaToCoverage;
+
+	/* From SandyBridge PRM, volume 2 Part 1, section 8.2.3, BLEND_STATE:
+	 * DWord 1, Bit 30 (AlphaToOne Enable):
+	 * "If Dual Source Blending is enabled, this bit must be disabled"
+	 */
+         WARN_ONCE(ctx->Color.Blend[b]._UsesDualSrc &&
+                   ctx->Multisample._Enabled &&
+                   ctx->Multisample.SampleAlphaToOne,
+                   "HW workaround: disabling alpha to one with dual src "
+                   "blending\n");
+	 if (ctx->Color.Blend[b]._UsesDualSrc)
+            blend[b].blend1.alpha_to_one = false;
+	 else
+	    blend[b].blend1.alpha_to_one =
+	       ctx->Multisample._Enabled && ctx->Multisample.SampleAlphaToOne;
+
+         blend[b].blend1.alpha_to_coverage_dither = (brw->intel.gen >= 7);
+      }
+      else {
+         blend[b].blend1.alpha_to_coverage = false;
+         blend[b].blend1.alpha_to_one = false;
+      }
    }
 
    brw->state.dirty.cache |= CACHE_NEW_BLEND_STATE;
@@ -169,7 +228,8 @@ gen6_upload_blend_state(struct brw_context *brw)
 const struct brw_tracked_state gen6_blend_state = {
    .dirty = {
       .mesa = (_NEW_COLOR |
-	       _NEW_BUFFERS),
+               _NEW_BUFFERS |
+               _NEW_MULTISAMPLE),
       .brw = BRW_NEW_BATCH,
       .cache = 0,
    },

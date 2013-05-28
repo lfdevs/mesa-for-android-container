@@ -54,7 +54,7 @@ enum util_format_layout {
    /**
     * Formats with sub-sampled channels.
     *
-    * This is for formats like YV12 where there is less than one sample per
+    * This is for formats like YVYU where there is less than one sample per
     * pixel.
     */
    UTIL_FORMAT_LAYOUT_SUBSAMPLED = 3,
@@ -156,7 +156,7 @@ struct util_format_description
    unsigned nr_channels:3;
 
    /**
-    * Whether all channels have the same number of (whole) bytes.
+    * Whether all channels have the same number of (whole) bytes and type.
     */
    unsigned is_array:1;
 
@@ -549,6 +549,19 @@ util_format_colormask(const struct util_format_description *desc)
 }
 
 
+/**
+ * Checks if color mask covers every channel for the specified format
+ *
+ * @param desc       a format description to check colormask with
+ * @param colormask  a bit mask for channels, matches format of PIPE_MASK_RGBA
+ */
+static INLINE boolean
+util_format_colormask_full(const struct util_format_description *desc, unsigned colormask)
+{
+   return (~colormask & util_format_colormask(desc)) == 0;
+}
+
+
 boolean
 util_format_is_float(enum pipe_format format);
 
@@ -578,8 +591,9 @@ boolean
 util_format_is_pure_uint(enum pipe_format format);
 
 /**
- * Whether the src format can be blitted to destation format with a simple
- * memcpy.
+ * Check if the src format can be blitted to the destination format with
+ * a simple memcpy.  For example, blitting from RGBA to RGBx is OK, but not
+ * the reverse.
  */
 boolean
 util_is_format_compatible(const struct util_format_description *src_desc,
@@ -857,6 +871,35 @@ util_format_linear(enum pipe_format format)
       return PIPE_FORMAT_DXT5_RGBA;
    default:
       return format;
+   }
+}
+
+/**
+ * Given a depth-stencil format, return the corresponding stencil-only format.
+ * For stencil-only formats, return the format unchanged.
+ */
+static INLINE enum pipe_format
+util_format_stencil_only(enum pipe_format format)
+{
+   switch (format) {
+   /* mask out the depth component */
+   case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+      return PIPE_FORMAT_X24S8_UINT;
+   case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+      return PIPE_FORMAT_S8X24_UINT;
+   case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+      return PIPE_FORMAT_X32_S8X24_UINT;
+
+   /* stencil only formats */
+   case PIPE_FORMAT_X24S8_UINT:
+   case PIPE_FORMAT_S8X24_UINT:
+   case PIPE_FORMAT_X32_S8X24_UINT:
+   case PIPE_FORMAT_S8_UINT:
+      return format;
+
+   default:
+      assert(0);
+      return PIPE_FORMAT_NONE;
    }
 }
 

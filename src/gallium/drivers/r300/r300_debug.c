@@ -42,6 +42,7 @@ static const struct debug_named_value debug_options[] = {
     { "cbzb", DBG_CBZB, "Log fast color clear info" },
     { "hyperz", DBG_HYPERZ, "Log HyperZ info" },
     { "scissor", DBG_SCISSOR, "Log scissor info" },
+    { "msaa", DBG_MSAA, "Log MSAA resources"},
     { "anisohq", DBG_ANISOHQ, "Use high quality anisotropic filtering" },
     { "notiling", DBG_NO_TILING, "Disable tiling" },
     { "noimmd", DBG_NO_IMMD, "Disable immediate mode" },
@@ -49,6 +50,7 @@ static const struct debug_named_value debug_options[] = {
     { "nocbzb", DBG_NO_CBZB, "Disable fast color clear" },
     { "nozmask", DBG_NO_ZMASK, "Disable zbuffer compression" },
     { "nohiz", DBG_NO_HIZ, "Disable hierarchical zbuffer" },
+    { "nocmask", DBG_NO_CMASK, "Disable AA compression and fast AA clear" },
 
     /* must be last */
     DEBUG_NAMED_VALUE_END

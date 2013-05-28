@@ -35,6 +35,9 @@
 #include "mtypes.h"
 #include "formats.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /** Is the given value one of the 6 cube faces? */
 static inline GLboolean
@@ -63,6 +66,8 @@ _mesa_base_tex_format( struct gl_context *ctx, GLint internalFormat );
 extern GLboolean
 _mesa_is_proxy_texture(GLenum target);
 
+extern GLenum
+_mesa_get_proxy_target(GLenum target);
 
 extern struct gl_texture_image *
 _mesa_new_texture_image( struct gl_context *ctx );
@@ -117,18 +122,14 @@ _mesa_get_tex_image(struct gl_context *ctx, struct gl_texture_object *texObj,
                     GLenum target, GLint level);
 
 
-extern struct gl_texture_image *
-_mesa_get_proxy_tex_image(struct gl_context *ctx, GLenum target, GLint level);
-
-
 extern GLint
 _mesa_max_texture_levels(struct gl_context *ctx, GLenum target);
 
 
 extern GLboolean
 _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target, GLint level,
-                         GLint internalFormat, GLenum format, GLenum type,
-                         GLint width, GLint height, GLint depth, GLint border);
+                          gl_format format,
+                          GLint width, GLint height, GLint depth, GLint border);
 
 
 extern GLuint
@@ -136,6 +137,15 @@ _mesa_tex_target_to_face(GLenum target);
 
 extern GLint
 _mesa_get_texture_dimensions(GLenum target);
+
+extern GLsizei
+_mesa_get_tex_max_num_levels(GLenum target, GLsizei width, GLsizei height,
+                             GLsizei depth);
+
+extern GLboolean
+_mesa_legal_texture_dimensions(struct gl_context *ctx, GLenum target,
+                               GLint level, GLint width, GLint height,
+                               GLint depth, GLint border);
 
 /**
  * Lock a texture for updating.  See also _mesa_lock_context_textures().
@@ -241,41 +251,36 @@ _mesa_CopyTexSubImage3D( GLenum target, GLint level,
 
 
 extern void GLAPIENTRY
-_mesa_CompressedTexImage1DARB(GLenum target, GLint level,
+_mesa_CompressedTexImage1D(GLenum target, GLint level,
                               GLenum internalformat, GLsizei width,
                               GLint border, GLsizei imageSize,
                               const GLvoid *data);
 
 extern void GLAPIENTRY
-_mesa_CompressedTexImage2DARB(GLenum target, GLint level,
+_mesa_CompressedTexImage2D(GLenum target, GLint level,
                               GLenum internalformat, GLsizei width,
                               GLsizei height, GLint border, GLsizei imageSize,
                               const GLvoid *data);
 
 extern void GLAPIENTRY
-_mesa_CompressedTexImage3DARB(GLenum target, GLint level,
+_mesa_CompressedTexImage3D(GLenum target, GLint level,
                               GLenum internalformat, GLsizei width,
                               GLsizei height, GLsizei depth, GLint border,
                               GLsizei imageSize, const GLvoid *data);
 
-#ifdef VMS
-#define _mesa_CompressedTexSubImage1DARB _mesa_CompressedTexSubImage1DAR
-#define _mesa_CompressedTexSubImage2DARB _mesa_CompressedTexSubImage2DAR
-#define _mesa_CompressedTexSubImage3DARB _mesa_CompressedTexSubImage3DAR
-#endif
 extern void GLAPIENTRY
-_mesa_CompressedTexSubImage1DARB(GLenum target, GLint level, GLint xoffset,
+_mesa_CompressedTexSubImage1D(GLenum target, GLint level, GLint xoffset,
                                  GLsizei width, GLenum format,
                                  GLsizei imageSize, const GLvoid *data);
 
 extern void GLAPIENTRY
-_mesa_CompressedTexSubImage2DARB(GLenum target, GLint level, GLint xoffset,
+_mesa_CompressedTexSubImage2D(GLenum target, GLint level, GLint xoffset,
                                  GLint yoffset, GLsizei width, GLsizei height,
                                  GLenum format, GLsizei imageSize,
                                  const GLvoid *data);
 
 extern void GLAPIENTRY
-_mesa_CompressedTexSubImage3DARB(GLenum target, GLint level, GLint xoffset,
+_mesa_CompressedTexSubImage3D(GLenum target, GLint level, GLint xoffset,
                                  GLint yoffset, GLint zoffset, GLsizei width,
                                  GLsizei height, GLsizei depth, GLenum format,
                                  GLsizei imageSize, const GLvoid *data);
@@ -286,5 +291,9 @@ _mesa_TexBuffer(GLenum target, GLenum internalFormat, GLuint buffer);
 
 
 /*@}*/
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

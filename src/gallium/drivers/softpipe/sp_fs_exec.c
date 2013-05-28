@@ -66,14 +66,11 @@ exec_prepare( const struct sp_fragment_shader_variant *var,
 {
    /*
     * Bind tokens/shader to the interpreter's machine state.
-    * Avoid redundant binding.
     */
-   if (machine->Tokens != var->tokens) {
-      tgsi_exec_machine_bind_shader( machine,
-                                     var->tokens,
-                                     PIPE_MAX_SAMPLERS,
-                                     samplers );
-   }
+   tgsi_exec_machine_bind_shader(machine,
+                                 var->tokens,
+                                 PIPE_MAX_SAMPLERS,
+                                 samplers);
 }
 
 
@@ -180,8 +177,13 @@ exec_run( const struct sp_fragment_shader_variant *var,
 
 
 static void 
-exec_delete( struct sp_fragment_shader_variant *var )
+exec_delete(struct sp_fragment_shader_variant *var,
+            struct tgsi_exec_machine *machine)
 {
+   if (machine->Tokens == var->tokens) {
+      tgsi_exec_machine_bind_shader(machine, NULL, 0, NULL);
+   }
+
    FREE( (void *) var->tokens );
    FREE(var);
 }

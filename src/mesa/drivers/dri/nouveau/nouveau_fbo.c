@@ -102,12 +102,12 @@ nouveau_renderbuffer_storage(struct gl_context *ctx, struct gl_renderbuffer *rb,
 }
 
 static void
-nouveau_renderbuffer_del(struct gl_renderbuffer *rb)
+nouveau_renderbuffer_del(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
 	struct nouveau_surface *s = &to_nouveau_renderbuffer(rb)->surface;
 
 	nouveau_surface_ref(NULL, s);
-	FREE(rb);
+	_mesa_delete_renderbuffer(ctx, rb);
 }
 
 static struct gl_renderbuffer *
@@ -146,7 +146,7 @@ nouveau_renderbuffer_map(struct gl_context *ctx,
 	if (mode & GL_MAP_WRITE_BIT)
 		flags |= NOUVEAU_BO_WR;
 
-	nouveau_bo_map(s->bo, flags);
+	nouveau_bo_map(s->bo, flags, context_client(ctx));
 
 	map = s->bo->map;
 	stride = s->pitch;
@@ -167,9 +167,6 @@ static void
 nouveau_renderbuffer_unmap(struct gl_context *ctx,
 			   struct gl_renderbuffer *rb)
 {
-	struct nouveau_surface *s = &to_nouveau_renderbuffer(rb)->surface;
-
-	nouveau_bo_unmap(s->bo);
 }
 
 static GLboolean
@@ -198,7 +195,7 @@ nouveau_renderbuffer_dri_new(GLenum format, __DRIdrawable *drawable)
 	rb->AllocStorage = nouveau_renderbuffer_dri_storage;
 
 	if (!set_renderbuffer_format(rb, format)) {
-		nouveau_renderbuffer_del(rb);
+		nouveau_renderbuffer_del(NULL, rb);
 		return NULL;
 	}
 
@@ -304,7 +301,6 @@ nouveau_finish_render_texture(struct gl_context *ctx,
 void
 nouveau_fbo_functions_init(struct dd_function_table *functions)
 {
-#if FEATURE_EXT_framebuffer_object
 	functions->NewFramebuffer = nouveau_framebuffer_new;
 	functions->NewRenderbuffer = nouveau_renderbuffer_new;
 	functions->MapRenderbuffer = nouveau_renderbuffer_map;
@@ -313,5 +309,4 @@ nouveau_fbo_functions_init(struct dd_function_table *functions)
 	functions->FramebufferRenderbuffer = nouveau_framebuffer_renderbuffer;
 	functions->RenderTexture = nouveau_render_texture;
 	functions->FinishRenderTexture = nouveau_finish_render_texture;
-#endif
 }

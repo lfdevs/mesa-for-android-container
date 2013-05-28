@@ -47,7 +47,7 @@ static void update_clip( struct st_context *st )
    const struct gl_context *ctx = st->ctx;
    bool use_eye = FALSE;
 
-   assert(sizeof(clip.ucp) <= sizeof(ctx->Transform._ClipUserPlane));
+   STATIC_ASSERT(sizeof(clip.ucp) <= sizeof(ctx->Transform._ClipUserPlane));
 
    /* if we have a vertex shader that writes clip vertex we need to pass
       the pre-projection transformed coordinates into the driver. */
@@ -67,8 +67,8 @@ static void update_clip( struct st_context *st )
 const struct st_tracked_state st_update_clip = {
    "st_update_clip",					/* name */
    {							/* dirty */
-      (_NEW_TRANSFORM | _NEW_PROGRAM),			/* mesa */
-      0,						/* st */
+      _NEW_TRANSFORM,                                   /* mesa */
+      ST_NEW_VERTEX_PROGRAM,				/* st */
    },
    update_clip						/* update */
 };

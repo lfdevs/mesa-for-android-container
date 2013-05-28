@@ -40,9 +40,6 @@
 #include "main/dispatch.h"
 
 
-#if FEATURE_feedback
-
-
 #define FB_3D		0x01
 #define FB_4D		0x02
 #define FB_COLOR	0x04
@@ -50,11 +47,10 @@
 
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_FeedbackBuffer( GLsizei size, GLenum type, GLfloat *buffer )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (ctx->RenderMode==GL_FEEDBACK) {
       _mesa_error( ctx, GL_INVALID_OPERATION, "glFeedbackBuffer" );
@@ -99,11 +95,10 @@ _mesa_FeedbackBuffer( GLsizei size, GLenum type, GLfloat *buffer )
 }
 
 
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_PassThrough( GLfloat token )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (ctx->RenderMode==GL_FEEDBACK) {
       FLUSH_VERTICES(ctx, 0);
@@ -162,11 +157,10 @@ _mesa_feedback_vertex(struct gl_context *ctx,
  * Verifies we're not in selection mode, flushes the vertices and initialize
  * the fields in __struct gl_contextRec::Select with the given buffer.
  */
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_SelectBuffer( GLsizei size, GLuint *buffer )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (size < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glSelectBuffer(size)");
@@ -274,11 +268,11 @@ write_hit_record(struct gl_context *ctx)
  * the hit record data in gl_selection. Marks new render mode in
  * __struct gl_contextRec::NewState.
  */
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_InitNames( void )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END_AND_FLUSH(ctx);
+   FLUSH_VERTICES(ctx, 0);
 
    /* Record the hit before the HitFlag is wiped out again. */
    if (ctx->RenderMode == GL_SELECT) {
@@ -305,11 +299,10 @@ _mesa_InitNames( void )
  *
  * sa __struct gl_contextRec::Select.
  */
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_LoadName( GLuint name )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (ctx->RenderMode != GL_SELECT) {
       return;
@@ -344,11 +337,10 @@ _mesa_LoadName( GLuint name )
  *
  * sa __struct gl_contextRec::Select.
  */
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_PushName( GLuint name )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (ctx->RenderMode != GL_SELECT) {
       return;
@@ -375,11 +367,10 @@ _mesa_PushName( GLuint name )
  *
  * sa __struct gl_contextRec::Select.
  */
-static void GLAPIENTRY
+void GLAPIENTRY
 _mesa_PopName( void )
 {
    GET_CURRENT_CONTEXT(ctx);
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (ctx->RenderMode != GL_SELECT) {
       return;
@@ -452,7 +443,6 @@ _mesa_RenderMode( GLenum mode )
 	 ctx->Select.Hits = 0;
 	 ctx->Select.NameStackDepth = 0;
 	 break;
-#if _HAVE_FULL_GL
       case GL_FEEDBACK:
 	 if (ctx->Feedback.Count > ctx->Feedback.BufferSize) {
 	    /* overflow */
@@ -463,7 +453,6 @@ _mesa_RenderMode( GLenum mode )
 	 }
 	 ctx->Feedback.Count = 0;
 	 break;
-#endif
       default:
 	 _mesa_error( ctx, GL_INVALID_ENUM, "glRenderMode" );
 	 return 0;
@@ -478,14 +467,12 @@ _mesa_RenderMode( GLenum mode )
 	    _mesa_error( ctx, GL_INVALID_OPERATION, "glRenderMode" );
 	 }
 	 break;
-#if _HAVE_FULL_GL
       case GL_FEEDBACK:
 	 if (ctx->Feedback.BufferSize==0) {
 	    /* haven't called glFeedbackBuffer yet */
 	    _mesa_error( ctx, GL_INVALID_OPERATION, "glRenderMode" );
 	 }
 	 break;
-#endif
       default:
 	 _mesa_error( ctx, GL_INVALID_ENUM, "glRenderMode" );
 	 return 0;
@@ -499,23 +486,6 @@ _mesa_RenderMode( GLenum mode )
 }
 
 /*@}*/
-
-
-void
-_mesa_init_feedback_dispatch(struct _glapi_table *disp)
-{
-   SET_InitNames(disp, _mesa_InitNames);
-   SET_FeedbackBuffer(disp, _mesa_FeedbackBuffer);
-   SET_LoadName(disp, _mesa_LoadName);
-   SET_PassThrough(disp, _mesa_PassThrough);
-   SET_PopName(disp, _mesa_PopName);
-   SET_PushName(disp, _mesa_PushName);
-   SET_SelectBuffer(disp, _mesa_SelectBuffer);
-   SET_RenderMode(disp, _mesa_RenderMode);
-}
-
-
-#endif /* FEATURE_feedback */
 
 
 /**********************************************************************/

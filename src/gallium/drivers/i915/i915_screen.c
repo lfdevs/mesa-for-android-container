@@ -107,10 +107,10 @@ i915_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_sha
       switch (cap) {
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
          if (debug_get_bool_option("DRAW_USE_LLVM", TRUE))
-            return PIPE_MAX_VERTEX_SAMPLERS;
+            return PIPE_MAX_SAMPLERS;
          else
             return 0;
-      default:
+       default:
          return draw_get_shader_param(shader, cap);
       }
    case PIPE_SHADER_FRAGMENT:
@@ -151,8 +151,6 @@ i915_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_sha
          return 0;
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
          return I915_TEX_UNITS;
-      case PIPE_SHADER_CAP_OUTPUT_READ:
-         return 0;
       default:
          debug_printf("%s: Unknown cap %u.\n", __FUNCTION__, cap);
          return 0;
@@ -172,7 +170,6 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    switch (cap) {
    /* Supported features (boolean caps). */
    case PIPE_CAP_ANISOTROPIC_FILTER:
-   case PIPE_CAP_DEPTHSTENCIL_CLEAR_SEPARATE:
    case PIPE_CAP_NPOT_TEXTURES:
    case PIPE_CAP_POINT_SPRITE:
    case PIPE_CAP_PRIMITIVE_RESTART: /* draw module */
@@ -181,6 +178,10 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_TGSI_INSTANCEID:
+   case PIPE_CAP_VERTEX_COLOR_CLAMPED:
+   case PIPE_CAP_USER_VERTEX_BUFFERS:
+   case PIPE_CAP_USER_INDEX_BUFFERS:
+   case PIPE_CAP_USER_CONSTANT_BUFFERS:
       return 1;
 
    /* Unsupported features (boolean caps). */
@@ -191,18 +192,27 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_SHADER_STENCIL_EXPORT:
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
    case PIPE_CAP_TEXTURE_SWIZZLE:
-   case PIPE_CAP_TIMER_QUERY:
+   case PIPE_CAP_QUERY_TIME_ELAPSED:
    case PIPE_CAP_SM3:
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
    case PIPE_CAP_SCALED_RESOLVE:
-   case PIPE_CAP_FRAGMENT_COLOR_CLAMP_CONTROL:
+   case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
    case PIPE_CAP_CONDITIONAL_RENDER:
    case PIPE_CAP_TEXTURE_BARRIER:
    case PIPE_CAP_TGSI_CAN_COMPACT_VARYINGS:
    case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
+   case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
+   case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
+   case PIPE_CAP_START_INSTANCE:
+   case PIPE_CAP_QUERY_TIMESTAMP:
+   case PIPE_CAP_TEXTURE_MULTISAMPLE:
+   case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return 0;
+
+   case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
+      return 16;
 
    /* Features we can lie about (boolean caps). */
    case PIPE_CAP_OCCLUSION_QUERY:
@@ -282,6 +292,7 @@ i915_is_format_supported(struct pipe_screen *screen,
 {
    static const enum pipe_format tex_supported[] = {
       PIPE_FORMAT_B8G8R8A8_UNORM,
+      PIPE_FORMAT_B8G8R8A8_SRGB,
       PIPE_FORMAT_B8G8R8X8_UNORM,
       PIPE_FORMAT_R8G8B8A8_UNORM,
       PIPE_FORMAT_R8G8B8X8_UNORM,
@@ -335,8 +346,10 @@ i915_is_format_supported(struct pipe_screen *screen,
       list = depth_supported;
    else if (tex_usage & PIPE_BIND_RENDER_TARGET)
       list = render_supported;
-   else
+   else if (tex_usage & PIPE_BIND_SAMPLER_VIEW)
       list = tex_supported;
+   else
+      return TRUE; /* PIPE_BIND_{VERTEX,INDEX}_BUFFER */
 
    for (i = 0; list[i] != PIPE_FORMAT_NONE; i++) {
       if (list[i] == format)
@@ -448,8 +461,6 @@ i915_screen_create(struct i915_winsys *iws)
    }
 
    is->iws = iws;
-
-   is->base.winsys = NULL;
 
    is->base.destroy = i915_destroy_screen;
    is->base.flush_frontbuffer = i915_flush_frontbuffer;

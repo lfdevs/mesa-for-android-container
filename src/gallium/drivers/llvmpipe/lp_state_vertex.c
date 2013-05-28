@@ -33,6 +33,7 @@
 #include "lp_state.h"
 
 #include "draw/draw_context.h"
+#include "util/u_helpers.h"
 #include "util/u_inlines.h"
 #include "util/u_transfer.h"
 
@@ -75,20 +76,20 @@ llvmpipe_delete_vertex_elements_state(struct pipe_context *pipe, void *velems)
 
 static void
 llvmpipe_set_vertex_buffers(struct pipe_context *pipe,
-                            unsigned count,
+                            unsigned start_slot, unsigned count,
                             const struct pipe_vertex_buffer *buffers)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
    assert(count <= PIPE_MAX_ATTRIBS);
 
-   util_copy_vertex_buffers(llvmpipe->vertex_buffer,
-                            &llvmpipe->num_vertex_buffers,
-                            buffers, count);
+   util_set_vertex_buffers_count(llvmpipe->vertex_buffer,
+                                 &llvmpipe->num_vertex_buffers,
+                                 buffers, start_slot, count);
 
    llvmpipe->dirty |= LP_NEW_VERTEX;
 
-   draw_set_vertex_buffers(llvmpipe->draw, count, buffers);
+   draw_set_vertex_buffers(llvmpipe->draw, start_slot, count, buffers);
 }
 
 
@@ -102,8 +103,6 @@ llvmpipe_set_index_buffer(struct pipe_context *pipe,
       memcpy(&llvmpipe->index_buffer, ib, sizeof(llvmpipe->index_buffer));
    else
       memset(&llvmpipe->index_buffer, 0, sizeof(llvmpipe->index_buffer));
-
-   draw_set_index_buffer(llvmpipe->draw, ib);
 }
 
 void
@@ -115,6 +114,4 @@ llvmpipe_init_vertex_funcs(struct llvmpipe_context *llvmpipe)
 
    llvmpipe->pipe.set_vertex_buffers = llvmpipe_set_vertex_buffers;
    llvmpipe->pipe.set_index_buffer = llvmpipe_set_index_buffer;
-
-   llvmpipe->pipe.redefine_user_buffer = u_default_redefine_user_buffer;
 }

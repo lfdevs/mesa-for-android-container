@@ -40,47 +40,33 @@ struct lp_type;
 struct lp_build_context;
 
 
-/**
- * Whether the blending function is commutative or not.
- */
-boolean
-lp_build_blend_func_commutative(unsigned func);
-
-
-/**
- * Whether the blending functions are the reverse of each other.
- */
-boolean
-lp_build_blend_func_reverse(unsigned rgb_func, unsigned alpha_func);
-
-
 LLVMValueRef
-lp_build_blend_func(struct lp_build_context *bld,
-                    unsigned func,
-                    LLVMValueRef term1,
-                    LLVMValueRef term2);
+lp_build_blend(struct lp_build_context *bld,
+               unsigned func,
+               unsigned factor_src,
+               unsigned factor_dst,
+               LLVMValueRef src,
+               LLVMValueRef dst,
+               LLVMValueRef src_factor,
+               LLVMValueRef dst_factor,
+               boolean not_alpha_dependent,
+               boolean optimise_only);
 
 
 LLVMValueRef
 lp_build_blend_aos(struct gallivm_state *gallivm,
                    const struct pipe_blend_state *blend,
+                   const enum pipe_format cbuf_format,
                    struct lp_type type,
                    unsigned rt,
                    LLVMValueRef src,
+                   LLVMValueRef src_alpha,
                    LLVMValueRef dst,
+                   LLVMValueRef mask,
                    LLVMValueRef const_,
-                   unsigned alpha_swizzle);
-
-
-void
-lp_build_blend_soa(struct gallivm_state *gallivm,
-                   const struct pipe_blend_state *blend,
-                   struct lp_type type,
-                   unsigned rt,
-                   LLVMValueRef src[4],
-                   LLVMValueRef dst[4],
-                   LLVMValueRef const_[4],
-                   LLVMValueRef res[4]);
+                   LLVMValueRef const_alpha,
+                   const unsigned char swizzle[4],
+                   int nr_channels);
 
 
 /**
@@ -94,6 +80,22 @@ lp_build_logicop(LLVMBuilderRef builder,
                  unsigned logicop_func,
                  LLVMValueRef src,
                  LLVMValueRef dst);
+
+
+LLVMValueRef
+lp_build_blend_func(struct lp_build_context *bld,
+                    unsigned func,
+                    LLVMValueRef term1,
+                    LLVMValueRef term2);
+
+
+boolean
+lp_build_blend_func_reverse(unsigned rgb_func,
+                            unsigned alpha_func);
+
+
+boolean
+lp_build_blend_func_commutative(unsigned func);
 
 
 #endif /* !LP_BLD_BLEND_H */

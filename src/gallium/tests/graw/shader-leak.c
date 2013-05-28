@@ -11,6 +11,7 @@
 
 #include "util/u_memory.h"      /* Offset() */
 #include "util/u_draw_quad.h"
+#include "util/u_inlines.h"
 
 
 static int num_iters = 100;
@@ -86,15 +87,17 @@ static void set_vertices( void )
    handle = ctx->create_vertex_elements_state(ctx, 2, ve);
    ctx->bind_vertex_elements_state(ctx, handle);
 
+   memset(&vbuf, 0, sizeof vbuf);
 
    vbuf.stride = sizeof(struct vertex);
    vbuf.buffer_offset = 0;
-   vbuf.buffer = screen->user_buffer_create(screen,
-                                            vertices,
-                                            sizeof(vertices),
-                                            PIPE_BIND_VERTEX_BUFFER);
+   vbuf.buffer = pipe_buffer_create_with_data(ctx,
+                                              PIPE_BIND_VERTEX_BUFFER,
+                                              PIPE_USAGE_STATIC,
+                                              sizeof(vertices),
+                                              vertices);
 
-   ctx->set_vertex_buffers(ctx, 1, &vbuf);
+   ctx->set_vertex_buffers(ctx, 0, 1, &vbuf);
 }
 
 static void set_vertex_shader( void )
@@ -149,7 +152,7 @@ static void draw( void )
 
       ctx->clear(ctx, PIPE_CLEAR_COLOR, &clear_color, 0, 0);
       util_draw_arrays(ctx, PIPE_PRIM_POINTS, 0, 1);
-      ctx->flush(ctx, NULL);
+      ctx->flush(ctx, NULL, 0);
 
       ctx->bind_fs_state(ctx, NULL);
       ctx->delete_fs_state(ctx, fs);
@@ -208,7 +211,6 @@ static void init( void )
    }
 
    surf_tmpl.format = templat.format;
-   surf_tmpl.usage = PIPE_BIND_RENDER_TARGET;
    surf_tmpl.u.tex.level = 0;
    surf_tmpl.u.tex.first_layer = 0;
    surf_tmpl.u.tex.last_layer = 0;

@@ -427,9 +427,7 @@ eglCreateContext(EGLDisplay dpy, EGLConfig config, EGLContext share_list,
 
    if (!config) {
       /* config may be NULL if surfaceless */
-      if (!disp->Extensions.KHR_surfaceless_gles1 &&
-          !disp->Extensions.KHR_surfaceless_gles2 &&
-          !disp->Extensions.KHR_surfaceless_opengl)
+      if (!disp->Extensions.KHR_surfaceless_context)
          RETURN_EGL_ERROR(disp, EGL_BAD_CONFIG, EGL_NO_CONTEXT);
    }
 
@@ -487,9 +485,7 @@ eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read,
       RETURN_EGL_ERROR(disp, EGL_BAD_CONTEXT, EGL_FALSE);
    if (!draw_surf || !read_surf) {
       /* surfaces may be NULL if surfaceless */
-      if (!disp->Extensions.KHR_surfaceless_gles1 &&
-          !disp->Extensions.KHR_surfaceless_gles2 &&
-          !disp->Extensions.KHR_surfaceless_opengl)
+      if (!disp->Extensions.KHR_surfaceless_context)
          RETURN_EGL_ERROR(disp, EGL_BAD_SURFACE, EGL_FALSE);
 
       if ((!draw_surf && draw != EGL_NO_SURFACE) ||
@@ -940,6 +936,7 @@ eglGetProcAddress(const char *procname)
 #ifdef EGL_WL_bind_wayland_display
       { "eglBindWaylandDisplayWL", (_EGLProc) eglBindWaylandDisplayWL },
       { "eglUnbindWaylandDisplayWL", (_EGLProc) eglUnbindWaylandDisplayWL },
+      { "eglQueryWaylandBufferWL", (_EGLProc) eglQueryWaylandBufferWL },
 #endif
       { "eglPostSubBufferNV", (_EGLProc) eglPostSubBufferNV },
       { NULL, NULL }
@@ -1537,6 +1534,25 @@ eglUnbindWaylandDisplayWL(EGLDisplay dpy, struct wl_display *display)
       RETURN_EGL_ERROR(disp, EGL_BAD_PARAMETER, EGL_FALSE);
 
    ret = drv->API.UnbindWaylandDisplayWL(drv, disp, display);
+
+   RETURN_EGL_EVAL(disp, ret);
+}
+
+EGLBoolean EGLAPIENTRY
+eglQueryWaylandBufferWL(EGLDisplay dpy,struct wl_buffer *buffer,
+                        EGLint attribute, EGLint *value)
+{
+   _EGLDisplay *disp = _eglLockDisplay(dpy);
+   _EGLDriver *drv;
+   EGLBoolean ret;
+
+   _EGL_CHECK_DISPLAY(disp, EGL_FALSE, drv);
+   assert(disp->Extensions.WL_bind_wayland_display);
+
+   if (!buffer)
+      RETURN_EGL_ERROR(disp, EGL_BAD_PARAMETER, EGL_FALSE);
+
+   ret = drv->API.QueryWaylandBufferWL(drv, disp, buffer, attribute, value);
 
    RETURN_EGL_EVAL(disp, ret);
 }

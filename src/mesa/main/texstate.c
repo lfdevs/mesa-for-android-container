@@ -286,7 +286,7 @@ calculate_derived_texenv( struct gl_tex_env_combine_state *state,
 
 /* GL_ARB_multitexture */
 void GLAPIENTRY
-_mesa_ActiveTextureARB(GLenum texture)
+_mesa_ActiveTexture(GLenum texture)
 {
    const GLuint texUnit = texture - GL_TEXTURE0;
    GLuint k;
@@ -297,8 +297,6 @@ _mesa_ActiveTextureARB(GLenum texture)
             ctx->Const.MaxTextureCoordUnits);
 
    ASSERT(k <= Elements(ctx->Texture.Unit));
-   
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
       _mesa_debug(ctx, "glActiveTexture %s\n",
@@ -325,11 +323,10 @@ _mesa_ActiveTextureARB(GLenum texture)
 
 /* GL_ARB_multitexture */
 void GLAPIENTRY
-_mesa_ClientActiveTextureARB(GLenum texture)
+_mesa_ClientActiveTexture(GLenum texture)
 {
    GET_CURRENT_CONTEXT(ctx);
    GLuint texUnit = texture - GL_TEXTURE0;
-   ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    if (MESA_VERBOSE & (VERBOSE_API | VERBOSE_TEXTURE))
       _mesa_debug(ctx, "glClientActiveTexture %s\n",
@@ -390,6 +387,10 @@ update_tex_combine(struct gl_context *ctx, struct gl_texture_unit *texUnit)
 {
    struct gl_tex_env_combine_state *combine;
 
+   /* No combiners will apply to this. */
+   if (texUnit->_Current->Target == GL_TEXTURE_BUFFER)
+      return;
+
    /* Set the texUnit->_CurrentCombine field to point to the user's combiner
     * state, or the combiner state which is derived from traditional texenv
     * mode.
@@ -403,7 +404,7 @@ update_tex_combine(struct gl_context *ctx, struct gl_texture_unit *texUnit)
       GLenum format = texObj->Image[0][texObj->BaseLevel]->_BaseFormat;
 
       if (format == GL_DEPTH_COMPONENT || format == GL_DEPTH_STENCIL_EXT) {
-         format = texObj->Sampler.DepthMode;
+         format = texObj->DepthMode;
       }
       calculate_derived_texenv(&texUnit->_EnvMode, texUnit->EnvMode, format);
       texUnit->_CurrentCombine = & texUnit->_EnvMode;
@@ -476,6 +477,43 @@ update_tex_combine(struct gl_context *ctx, struct gl_texture_unit *texUnit)
    }
 }
 
+static void
+update_texgen(struct gl_context *ctx)
+{
+   GLuint unit;
+
+   /* Setup texgen for those texture coordinate sets that are in use */
+   for (unit = 0; unit < ctx->Const.MaxTextureCoordUnits; unit++) {
+      struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
+
+      texUnit->_GenFlags = 0x0;
+
+      if (!(ctx->Texture._EnabledCoordUnits & (1 << unit)))
+	 continue;
+
+      if (texUnit->TexGenEnabled) {
+	 if (texUnit->TexGenEnabled & S_BIT) {
+	    texUnit->_GenFlags |= texUnit->GenS._ModeBit;
+	 }
+	 if (texUnit->TexGenEnabled & T_BIT) {
+	    texUnit->_GenFlags |= texUnit->GenT._ModeBit;
+	 }
+	 if (texUnit->TexGenEnabled & R_BIT) {
+	    texUnit->_GenFlags |= texUnit->GenR._ModeBit;
+	 }
+	 if (texUnit->TexGenEnabled & Q_BIT) {
+	    texUnit->_GenFlags |= texUnit->GenQ._ModeBit;
+	 }
+
+	 ctx->Texture._TexGenEnabled |= ENABLE_TEXGEN(unit);
+	 ctx->Texture._GenFlags |= texUnit->_GenFlags;
+      }
+
+      ASSERT(unit < Elements(ctx->TextureMatrixStack));
+      if (ctx->TextureMatrixStack[unit].Top->type != MATRIX_IDENTITY)
+	 ctx->Texture._TexMatEnabled |= ENABLE_TEXMAT(unit);
+   }
+}
 
 /**
  * \note This routine refers to derived texture matrix values to
@@ -496,11 +534,6 @@ update_texture_state( struct gl_context *ctx )
    if (ctx->Shader.CurrentVertexProgram &&
        ctx->Shader.CurrentVertexProgram->LinkStatus) {
       vprog = ctx->Shader.CurrentVertexProgram->_LinkedShaders[MESA_SHADER_VERTEX]->Program;
-   } else if (ctx->VertexProgram._Enabled) {
-      /* XXX enable this if/when non-shader vertex programs get
-       * texture fetches:
-       vprog = &ctx->VertexProgram.Current->Base;
-       */
    }
 
    if (ctx->Shader.CurrentFragmentProgram &&
@@ -569,10 +602,13 @@ update_texture_state( struct gl_context *ctx )
       for (texIndex = 0; texIndex < NUM_TEXTURE_TARGETS; texIndex++) {
          if (enabledTargets & (1 << texIndex)) {
             struct gl_texture_object *texObj = texUnit->CurrentTex[texIndex];
-            if (!texObj->_Complete) {
+            struct gl_sampler_object *sampler = texUnit->Sampler ?
+               texUnit->Sampler : &texObj->Sampler;
+
+            if (!_mesa_is_texture_complete(texObj, sampler)) {
                _mesa_test_texobj_completeness(ctx, texObj);
             }
-            if (texObj->_Complete) {
+            if (_mesa_is_texture_complete(texObj, sampler)) {
                texUnit->_ReallyEnabled = 1 << texIndex;
                _mesa_reference_texobj(&texUnit->_Current, texObj);
                break;
@@ -586,9 +622,22 @@ update_texture_state( struct gl_context *ctx )
              * object, but there isn't one (or it's incomplete).  Use the
              * fallback texture.
              */
-            struct gl_texture_object *texObj = _mesa_get_fallback_texture(ctx);
-            texUnit->_ReallyEnabled = 1 << TEXTURE_2D_INDEX;
+            struct gl_texture_object *texObj;
+            gl_texture_index texTarget;
+
+            assert(_mesa_bitcount(enabledTargets) == 1);
+
+            texTarget = (gl_texture_index) (ffs(enabledTargets) - 1);
+            texObj = _mesa_get_fallback_texture(ctx, texTarget);
+            
+            assert(texObj);
+            if (!texObj) {
+               /* invalid fallback texture: don't enable the texture unit */
+               continue;
+            }
+
             _mesa_reference_texobj(&texUnit->_Current, texObj);
+            texUnit->_ReallyEnabled = 1 << texTarget;
          }
          else {
             /* fixed-function: texture unit is really disabled */
@@ -603,7 +652,8 @@ update_texture_state( struct gl_context *ctx )
       if (enabledFragTargets)
          enabledFragUnits |= (1 << unit);
 
-      update_tex_combine(ctx, texUnit);
+      if (!fprog)
+         update_tex_combine(ctx, texUnit);
    }
 
 
@@ -617,37 +667,8 @@ update_texture_state( struct gl_context *ctx )
       ctx->Texture._EnabledCoordUnits = enabledFragUnits;
    }
 
-   /* Setup texgen for those texture coordinate sets that are in use */
-   for (unit = 0; unit < ctx->Const.MaxTextureCoordUnits; unit++) {
-      struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
-
-      texUnit->_GenFlags = 0x0;
-
-      if (!(ctx->Texture._EnabledCoordUnits & (1 << unit)))
-	 continue;
-
-      if (texUnit->TexGenEnabled) {
-	 if (texUnit->TexGenEnabled & S_BIT) {
-	    texUnit->_GenFlags |= texUnit->GenS._ModeBit;
-	 }
-	 if (texUnit->TexGenEnabled & T_BIT) {
-	    texUnit->_GenFlags |= texUnit->GenT._ModeBit;
-	 }
-	 if (texUnit->TexGenEnabled & R_BIT) {
-	    texUnit->_GenFlags |= texUnit->GenR._ModeBit;
-	 }
-	 if (texUnit->TexGenEnabled & Q_BIT) {
-	    texUnit->_GenFlags |= texUnit->GenQ._ModeBit;
-	 }
-
-	 ctx->Texture._TexGenEnabled |= ENABLE_TEXGEN(unit);
-	 ctx->Texture._GenFlags |= texUnit->_GenFlags;
-      }
-
-      ASSERT(unit < Elements(ctx->TextureMatrixStack));
-      if (ctx->TextureMatrixStack[unit].Top->type != MATRIX_IDENTITY)
-	 ctx->Texture._TexMatEnabled |= ENABLE_TEXMAT(unit);
-   }
+   if (!fprog || !vprog)
+      update_texgen(ctx);
 }
 
 
@@ -686,6 +707,7 @@ alloc_proxy_textures( struct gl_context *ctx )
     * values!
     */
    static const GLenum targets[] = {
+      GL_TEXTURE_CUBE_MAP_ARRAY,
       GL_TEXTURE_BUFFER,
       GL_TEXTURE_2D_ARRAY_EXT,
       GL_TEXTURE_1D_ARRAY_EXT,
@@ -828,11 +850,9 @@ _mesa_free_texture_data(struct gl_context *ctx)
    /* GL_ARB_texture_buffer_object */
    _mesa_reference_buffer_object(ctx, &ctx->Texture.BufferObject, NULL);
 
-#if FEATURE_sampler_objects
    for (u = 0; u < Elements(ctx->Texture.Unit); u++) {
       _mesa_reference_sampler_object(ctx, &ctx->Texture.Unit[u].Sampler, NULL);
    }
-#endif
 }
 
 

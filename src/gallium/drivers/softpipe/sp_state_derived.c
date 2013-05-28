@@ -207,46 +207,22 @@ compute_cliprect(struct softpipe_context *sp)
 static void
 update_tgsi_samplers( struct softpipe_context *softpipe )
 {
-   unsigned i;
+   unsigned i, sh;
 
    softpipe_reset_sampler_variants( softpipe );
 
-   for (i = 0; i < PIPE_MAX_SAMPLERS; i++) {
-      struct softpipe_tex_tile_cache *tc = softpipe->fragment_tex_cache[i];
-      if (tc && tc->texture) {
-         struct softpipe_resource *spt = softpipe_resource(tc->texture);
-         if (spt->timestamp != tc->timestamp) {
-	    sp_tex_tile_cache_validate_texture( tc );
-            /*
-            _debug_printf("INV %d %d\n", tc->timestamp, spt->timestamp);
-            */
-            tc->timestamp = spt->timestamp;
-         }
-      }
-   }
-
-   for (i = 0; i < PIPE_MAX_VERTEX_SAMPLERS; i++) {
-      struct softpipe_tex_tile_cache *tc = softpipe->vertex_tex_cache[i];
-
-      if (tc && tc->texture) {
-         struct softpipe_resource *spt = softpipe_resource(tc->texture);
-
-         if (spt->timestamp != tc->timestamp) {
-	    sp_tex_tile_cache_validate_texture(tc);
-            tc->timestamp = spt->timestamp;
-         }
-      }
-   }
-
-   for (i = 0; i < PIPE_MAX_GEOMETRY_SAMPLERS; i++) {
-      struct softpipe_tex_tile_cache *tc = softpipe->geometry_tex_cache[i];
-
-      if (tc && tc->texture) {
-         struct softpipe_resource *spt = softpipe_resource(tc->texture);
-
-         if (spt->timestamp != tc->timestamp) {
-	    sp_tex_tile_cache_validate_texture(tc);
-            tc->timestamp = spt->timestamp;
+   for (sh = 0; sh < Elements(softpipe->tex_cache); sh++) {
+      for (i = 0; i < PIPE_MAX_SAMPLERS; i++) {
+         struct softpipe_tex_tile_cache *tc = softpipe->tex_cache[sh][i];
+         if (tc && tc->texture) {
+            struct softpipe_resource *spt = softpipe_resource(tc->texture);
+            if (spt->timestamp != tc->timestamp) {
+               sp_tex_tile_cache_validate_texture( tc );
+               /*
+                 _debug_printf("INV %d %d\n", tc->timestamp, spt->timestamp);
+               */
+               tc->timestamp = spt->timestamp;
+            }
          }
       }
    }
@@ -266,6 +242,12 @@ update_fragment_shader(struct softpipe_context *softpipe, unsigned prim)
    if (softpipe->fs) {
       softpipe->fs_variant = softpipe_find_fs_variant(softpipe,
                                                       softpipe->fs, &key);
+
+      /* prepare the TGSI interpreter for FS execution */
+      softpipe->fs_variant->prepare(softpipe->fs_variant, 
+                                    softpipe->fs_machine,
+                                    (struct tgsi_sampler **) softpipe->
+                                    tgsi.samplers_list[PIPE_SHADER_FRAGMENT]);
    }
    else {
       softpipe->fs_variant = NULL;
@@ -329,16 +311,14 @@ update_polygon_stipple_enable(struct softpipe_context *softpipe, unsigned prim)
        softpipe->fs_variant->key.polygon_stipple) {
       const unsigned unit = softpipe->fs_variant->stipple_sampler_unit;
 
-      assert(unit >= softpipe->num_fragment_samplers);
-
       /* sampler state */
-      softpipe->fragment_samplers[unit] = softpipe->pstipple.sampler;
+      softpipe->samplers[PIPE_SHADER_FRAGMENT][unit] = softpipe->pstipple.sampler;
 
       /* sampler view */
-      pipe_sampler_view_reference(&softpipe->fragment_sampler_views[unit],
+      pipe_sampler_view_reference(&softpipe->sampler_views[PIPE_SHADER_FRAGMENT][unit],
                                   softpipe->pstipple.sampler_view);
 
-      sp_tex_tile_cache_set_sampler_view(softpipe->fragment_tex_cache[unit],
+      sp_tex_tile_cache_set_sampler_view(softpipe->tex_cache[PIPE_SHADER_FRAGMENT][unit],
                                          softpipe->pstipple.sampler_view);
 
       softpipe->dirty |= SP_NEW_SAMPLER;

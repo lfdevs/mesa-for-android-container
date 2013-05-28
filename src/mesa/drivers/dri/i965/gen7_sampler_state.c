@@ -33,7 +33,7 @@
  * Sets the sampler state for a single unit.
  */
 static void
-gen7_update_sampler_state(struct brw_context *brw, int unit,
+gen7_update_sampler_state(struct brw_context *brw, int unit, int ss_index,
 			  struct gen7_sampler_state *sampler)
 {
    struct intel_context *intel = &brw->intel;
@@ -42,6 +42,10 @@ gen7_update_sampler_state(struct brw_context *brw, int unit,
    struct gl_texture_object *texObj = texUnit->_Current;
    struct gl_sampler_object *gl_sampler = _mesa_get_samplerobj(ctx, unit);
    bool using_nearest = false;
+
+   /* These don't use samplers at all. */
+   if (texObj->Target == GL_TEXTURE_BUFFER)
+      return;
 
    switch (gl_sampler->MinFilter) {
    case GL_NEAREST:
@@ -107,7 +111,8 @@ gen7_update_sampler_state(struct brw_context *brw, int unit,
    /* Cube-maps on 965 and later must use the same wrap mode for all 3
     * coordinate dimensions.  Futher, only CUBE and CLAMP are valid.
     */
-   if (texObj->Target == GL_TEXTURE_CUBE_MAP) {
+   if (texObj->Target == GL_TEXTURE_CUBE_MAP ||
+       texObj->Target == GL_TEXTURE_CUBE_MAP_ARRAY) {
       if (ctx->Texture.CubeMapSeamless &&
 	  (gl_sampler->MinFilter != GL_NEAREST ||
 	   gl_sampler->MagFilter != GL_NEAREST)) {
@@ -164,9 +169,9 @@ gen7_update_sampler_state(struct brw_context *brw, int unit,
       sampler->ss3.non_normalized_coord = 1;
    }
 
-   upload_default_color(brw, gl_sampler, unit);
+   upload_default_color(brw, gl_sampler, unit, ss_index);
 
-   sampler->ss2.default_color_pointer = brw->wm.sdc_offset[unit] >> 5;
+   sampler->ss2.default_color_pointer = brw->wm.sdc_offset[ss_index] >> 5;
 
    if (sampler->ss0.min_filter != BRW_MAPFILTER_NEAREST)
       sampler->ss3.address_round |= BRW_ADDRESS_ROUNDING_ENABLE_U_MIN |
@@ -179,22 +184,19 @@ gen7_update_sampler_state(struct brw_context *brw, int unit,
 }
 
 
-/* All samplers must be uploaded in a single contiguous array, which
- * complicates various things.  However, this is still too confusing -
- * FIXME: simplify all the different new texture state flags.
- */
 static void
 gen7_upload_samplers(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->intel.ctx;
    struct gen7_sampler_state *samplers;
-   int i;
 
-   brw->sampler.count = 0;
-   for (i = 0; i < BRW_MAX_TEX_UNIT; i++) {
-      if (ctx->Texture.Unit[i]._ReallyEnabled)
-	 brw->sampler.count = i + 1;
-   }
+   /* BRW_NEW_VERTEX_PROGRAM and BRW_NEW_FRAGMENT_PROGRAM */
+   struct gl_program *vs = (struct gl_program *) brw->vertex_program;
+   struct gl_program *fs = (struct gl_program *) brw->fragment_program;
+
+   GLbitfield SamplersUsed = vs->SamplersUsed | fs->SamplersUsed;
+
+   brw->sampler.count = _mesa_fls(SamplersUsed);
 
    if (brw->sampler.count == 0)
       return;
@@ -204,9 +206,13 @@ gen7_upload_samplers(struct brw_context *brw)
 			      32, &brw->sampler.offset);
    memset(samplers, 0, brw->sampler.count * sizeof(*samplers));
 
-   for (i = 0; i < brw->sampler.count; i++) {
-      if (ctx->Texture.Unit[i]._ReallyEnabled)
-	 gen7_update_sampler_state(brw, i, &samplers[i]);
+   for (unsigned s = 0; s < brw->sampler.count; s++) {
+      if (SamplersUsed & (1 << s)) {
+         const unsigned unit = (fs->SamplersUsed & (1 << s)) ?
+            fs->SamplerUnits[s] : vs->SamplerUnits[s];
+         if (ctx->Texture.Unit[unit]._ReallyEnabled)
+            gen7_update_sampler_state(brw, unit, s, &samplers[s]);
+      }
    }
 
    brw->state.dirty.cache |= CACHE_NEW_SAMPLER;
@@ -215,7 +221,9 @@ gen7_upload_samplers(struct brw_context *brw)
 const struct brw_tracked_state gen7_samplers = {
    .dirty = {
       .mesa = _NEW_TEXTURE,
-      .brw = BRW_NEW_BATCH,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_VERTEX_PROGRAM |
+             BRW_NEW_FRAGMENT_PROGRAM,
       .cache = 0
    },
    .emit = gen7_upload_samplers,

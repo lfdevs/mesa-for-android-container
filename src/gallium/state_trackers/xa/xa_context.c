@@ -103,15 +103,11 @@ xa_surface_dma(struct xa_context *ctx,
 	w = boxes->x2 - boxes->x1;
 	h = boxes->y2 - boxes->y1;
 
-	transfer = pipe_get_transfer(pipe, srf->tex, 0, 0,
-				     transfer_direction, boxes->x1, boxes->y1,
-				     w, h);
-	if (!transfer)
-	    return -XA_ERR_NORES;
-
-	map = pipe_transfer_map(ctx->pipe, transfer);
+	map = pipe_transfer_map(pipe, srf->tex, 0, 0,
+                                transfer_direction, boxes->x1, boxes->y1,
+                                w, h, &transfer);
 	if (!map)
-	    goto out_no_map;
+	    return -XA_ERR_NORES;
 
 	if (to_surface) {
 	    util_copy_rect(map, srf->tex->format, transfer->stride,
@@ -122,14 +118,10 @@ xa_surface_dma(struct xa_context *ctx,
 			   0);
 	}
 	pipe->transfer_unmap(pipe, transfer);
-	pipe->transfer_destroy(pipe, transfer);
 	if (to_surface)
-	    pipe->flush(pipe, &ctx->last_fence);
+	    pipe->flush(pipe, &ctx->last_fence, 0);
     }
     return XA_ERR_NONE;
- out_no_map:
-    pipe->transfer_destroy(pipe, transfer);
-    return -XA_ERR_NORES;
 }
 
 XA_EXPORT void *
@@ -154,15 +146,12 @@ xa_surface_map(struct xa_context *ctx,
     if (!transfer_direction)
 	return NULL;
 
-    srf->transfer = pipe_get_transfer(pipe, srf->tex, 0, 0,
-				      transfer_direction, 0, 0,
-				      srf->tex->width0, srf->tex->height0);
-    if (!srf->transfer)
-	return NULL;
-
-    map = pipe_transfer_map(pipe, srf->transfer);
+    map = pipe_transfer_map(pipe, srf->tex, 0, 0,
+                            transfer_direction, 0, 0,
+                            srf->tex->width0, srf->tex->height0,
+                            &srf->transfer);
     if (!map)
-	pipe->transfer_destroy(pipe, srf->transfer);
+	return NULL;
 
     srf->mapping_pipe = pipe;
     return map;
@@ -175,7 +164,6 @@ xa_surface_unmap(struct xa_surface *srf)
 	struct pipe_context *pipe = srf->mapping_pipe;
 
 	pipe->transfer_unmap(pipe, srf->transfer);
-	pipe->transfer_destroy(pipe, srf->transfer);
 	srf->transfer = NULL;
     }
 }
@@ -194,8 +182,7 @@ xa_ctx_srf_create(struct xa_context *ctx, struct xa_surface *dst)
 				     PIPE_BIND_RENDER_TARGET))
 	return -XA_ERR_INVAL;
 
-    u_surface_default_template(&srf_templ, dst->tex,
-			       PIPE_BIND_RENDER_TARGET);
+    u_surface_default_template(&srf_templ, dst->tex);
     ctx->srf = ctx->pipe->create_surface(ctx->pipe, dst->tex, &srf_templ);
     if (!ctx->srf)
 	return -XA_ERR_NORES;
@@ -257,9 +244,9 @@ xa_copy_done(struct xa_context *ctx)
 {
     if (!ctx->simple_copy) {
 	   renderer_draw_flush(ctx);
-	   ctx->pipe->flush(ctx->pipe, &ctx->last_fence);
+	   ctx->pipe->flush(ctx->pipe, &ctx->last_fence, 0);
     } else
-	ctx->pipe->flush(ctx->pipe, &ctx->last_fence);
+	ctx->pipe->flush(ctx->pipe, &ctx->last_fence, 0);
 }
 
 static void
@@ -315,8 +302,8 @@ xa_solid_prepare(struct xa_context *ctx, struct xa_surface *dst,
 
     renderer_bind_destination(ctx, ctx->srf, width, height);
     bind_solid_blend_state(ctx);
-    cso_set_samplers(ctx->cso, 0, NULL);
-    cso_set_fragment_sampler_views(ctx->cso, 0, NULL);
+    cso_set_samplers(ctx->cso, PIPE_SHADER_FRAGMENT, 0, NULL);
+    cso_set_sampler_views(ctx->cso, PIPE_SHADER_FRAGMENT, 0, NULL);
 
     shader = xa_shaders_get(ctx->shaders, vs_traits, fs_traits);
     cso_set_vertex_shader_handle(ctx->cso, shader.vs);
@@ -338,7 +325,7 @@ XA_EXPORT void
 xa_solid_done(struct xa_context *ctx)
 {
     renderer_draw_flush(ctx);
-    ctx->pipe->flush(ctx->pipe, &ctx->last_fence);
+    ctx->pipe->flush(ctx->pipe, &ctx->last_fence, 0);
 
     ctx->comp = NULL;
     ctx->has_solid_color = FALSE;

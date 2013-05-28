@@ -88,12 +88,15 @@ struct llvmpipe_resource
 
    /** Row stride in bytes */
    unsigned row_stride[LP_MAX_TEXTURE_LEVELS];
-   /** Image stride (for cube maps or 3D textures) in bytes */
+   /** Image stride (for cube maps, array or 3D textures) in bytes */
    unsigned img_stride[LP_MAX_TEXTURE_LEVELS];
    unsigned tiles_per_row[LP_MAX_TEXTURE_LEVELS];
    unsigned tiles_per_image[LP_MAX_TEXTURE_LEVELS];
    /** Number of 3D slices or cube faces per level */
    unsigned num_slices_faces[LP_MAX_TEXTURE_LEVELS];
+   /** Offset to start of mipmap level, in bytes */
+   unsigned tiled_mip_offsets[LP_MAX_TEXTURE_LEVELS];
+   unsigned linear_mip_offsets[LP_MAX_TEXTURE_LEVELS];
 
    /**
     * Display target, for textures with the PIPE_BIND_DISPLAY_TARGET
@@ -104,8 +107,8 @@ struct llvmpipe_resource
    /**
     * Malloc'ed data for regular textures, or a mapping to dt above.
     */
-   struct llvmpipe_texture_image tiled[LP_MAX_TEXTURE_LEVELS];
-   struct llvmpipe_texture_image linear[LP_MAX_TEXTURE_LEVELS];
+   struct llvmpipe_texture_image tiled_img;
+   struct llvmpipe_texture_image linear_img;
 
    /**
     * Data for non-texture resources.
@@ -221,18 +224,6 @@ llvmpipe_get_texture_tile(struct llvmpipe_resource *lpr,
                            unsigned x, unsigned y);
 
 
-void
-llvmpipe_unswizzle_cbuf_tile(struct llvmpipe_resource *lpr,
-                             unsigned face_slice, unsigned level,
-                             unsigned x, unsigned y,
-                             uint8_t *tile);
-
-void
-llvmpipe_swizzle_cbuf_tile(struct llvmpipe_resource *lpr,
-                           unsigned face_slice, unsigned level,
-                           unsigned x, unsigned y,
-                           uint8_t *tile);
-
 extern void
 llvmpipe_print_resources(void);
 
@@ -252,5 +243,8 @@ unsigned int
 llvmpipe_is_resource_referenced( struct pipe_context *pipe,
                                  struct pipe_resource *presource,
                                  unsigned level, int layer);
+
+unsigned
+llvmpipe_get_format_alignment(enum pipe_format format);
 
 #endif /* LP_TEXTURE_H */

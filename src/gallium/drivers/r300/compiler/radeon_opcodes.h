@@ -175,6 +175,9 @@ typedef enum {
 	/** vec4 instruction: dst.c = src0.c */
 	RC_OPCODE_SWZ,
 
+	/** vec4 instruction: dst.c = (abs(src0.c) - fract(abs(src0.c))) * sgn(src0.c) */
+	RC_OPCODE_TRUNC,
+
 	/** special instruction, see ARB_fragment_program */
 	RC_OPCODE_XPD,
 
@@ -216,6 +219,21 @@ typedef enum {
 
 	/** Stop execution of the shader (GLSL discard) */
 	RC_OPCODE_KILP,
+
+	/* Vertex shader CF Instructions */
+	RC_ME_PRED_SEQ,
+	RC_ME_PRED_SGT,
+	RC_ME_PRED_SGE,
+	RC_ME_PRED_SNEQ,
+	RC_ME_PRED_SET_CLR,
+	RC_ME_PRED_SET_INV,
+	RC_ME_PRED_SET_POP,
+	RC_ME_PRED_SET_RESTORE,
+
+	RC_VE_PRED_SEQ_PUSH,
+	RC_VE_PRED_SGT_PUSH,
+	RC_VE_PRED_SGE_PUSH,
+	RC_VE_PRED_SNEQ_PUSH,
 
 	MAX_RC_OPCODE
 } rc_opcode;

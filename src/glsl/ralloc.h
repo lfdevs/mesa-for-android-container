@@ -54,6 +54,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include "main/compiler.h"
 
 /**
  * \def ralloc(ctx, type)
@@ -301,7 +302,7 @@ bool ralloc_strncat(char **dest, const char *str, size_t n);
  *
  * \return The newly allocated string.
  */
-char *ralloc_asprintf (const void *ctx, const char *fmt, ...);
+char *ralloc_asprintf (const void *ctx, const char *fmt, ...) PRINTFLIKE(2, 3);
 
 /**
  * Print to a string, given a va_list.
@@ -329,11 +330,13 @@ char *ralloc_vasprintf(const void *ctx, const char *fmt, va_list args);
  * \param fmt   A printf-style formatting string
  *
  * \p str will be updated to the new pointer unless allocation fails.
+ * \p start will be increased by the length of the newly formatted text.
  *
  * \return True unless allocation failed.
  */
-bool ralloc_asprintf_rewrite_tail(char **str, size_t start,
-				  const char *fmt, ...);
+bool ralloc_asprintf_rewrite_tail(char **str, size_t *start,
+				  const char *fmt, ...)
+				  PRINTFLIKE(3, 4);
 
 /**
  * Rewrite the tail of an existing string, starting at a given index.
@@ -352,10 +355,11 @@ bool ralloc_asprintf_rewrite_tail(char **str, size_t start,
  * \param args  A va_list containing the data to be formatted
  *
  * \p str will be updated to the new pointer unless allocation fails.
+ * \p start will be increased by the length of the newly formatted text.
  *
  * \return True unless allocation failed.
  */
-bool ralloc_vasprintf_rewrite_tail(char **str, size_t start, const char *fmt,
+bool ralloc_vasprintf_rewrite_tail(char **str, size_t *start, const char *fmt,
 				   va_list args);
 
 /**
@@ -374,7 +378,8 @@ bool ralloc_vasprintf_rewrite_tail(char **str, size_t start, const char *fmt,
  *
  * \return True unless allocation failed.
  */
-bool ralloc_asprintf_append (char **str, const char *fmt, ...);
+bool ralloc_asprintf_append (char **str, const char *fmt, ...)
+			     PRINTFLIKE(2, 3);
 
 /**
  * Append formatted text to the supplied string, given a va_list.
