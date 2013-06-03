@@ -1,3 +1,25 @@
+mesa (9.1.3-2) experimental; urgency=low
+
+  * Team upload.
+
+  [ Julien Cristau ]
+  * Fix build of swrast only without libdrm, causing build failure on hurd
+    (cherry-picked from upstream).  Thanks, Andreas Boll!
+
+  [ Andreas Boll ]
+  * debian/not-installed: Remove glut headers
+  * debian/patches: Drop 05_kfreebsd-egl-x11.diff, fixed by eglibc (2.17-4)
+  * debian/rules: Use rm -f instead of rm for deleting libdricore*.so, fixes
+    build failure on kfreebsd-*.
+  * glapi: Add some missing static_dispatch=false annotations to
+    es_EXT.xml. Fixes FTBFS on powerpc and ia64 (cherry-picked from
+    upstream).
+
+  [ Emilio Pozuelo Monfort ]
+  * Release to experimental.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Mon, 03 Jun 2013 15:25:19 +0200
+
 mesa (9.1.3-1) experimental; urgency=low
 
   * Team upload.

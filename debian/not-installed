@@ -28,11 +28,3 @@ NOT_INSTALLED_hurd-i386     = $(NOT_INSTALLED_i386)
 # Detect the current architecture and add the files if any:
 DEB_HOST_ARCH ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 NOT_INSTALLED += $(NOT_INSTALLED_$(DEB_HOST_ARCH))
-
-# Additional files which may or may not be there (depending on
-# whether it's from a tarball or from a git snapshot):
-NOT_INSTALLED_EITHER = \
-		dri/usr/include/GL/glutf90.h \
-		dri/usr/include/GL/glut.h \
-		usr/include/GL/glutf90.h \
-		usr/include/GL/glut.h
