@@ -1,0 +1,2 @@
+dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libdricore*.so* usr/lib/${DEB_HOST_MULTIARCH}/

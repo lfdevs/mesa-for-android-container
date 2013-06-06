@@ -1,4 +1,4 @@
-build/dri/src/mesa/drivers/dri/common/drirc etc
+dri/etc/drirc etc
 dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_dri.so usr/lib/${DEB_HOST_MULTIARCH}/dri
 dri/usr/lib/${DEB_HOST_MULTIARCH}/gallium-pipe/*.so usr/lib/${DEB_HOST_MULTIARCH}/gallium-pipe
 dri/usr/lib/${DEB_HOST_MULTIARCH}/libdricore*.so* usr/lib/${DEB_HOST_MULTIARCH}/

@@ -81,7 +81,6 @@ else
 	DRI_DRIVERS += r200 radeon nouveau
     endif
     ifneq (,$(filter $(DEB_HOST_ARCH_CPU), amd64 i386))
-	DRI_DRIVERS += i915 i965
 	# Radeonsi needs LLVM, so only build it on the subset of archs
 	# where we have LLVM enabled.
 	GALLIUM_DRIVERS += radeonsi
@@ -96,6 +95,7 @@ else
 	DRI_DRIVERS += swrast
   else
 	GALLIUM_DRIVERS += swrast
+	DRI_DRIVERS += i915 i965
   endif
 
   # LLVM is required for r300g and recommended for swrastg on x86:

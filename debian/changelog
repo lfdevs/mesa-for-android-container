@@ -1,3 +1,22 @@
+mesa (9.1.3-3) experimental; urgency=low
+
+  [ Andreas Boll ]
+  * debian/not-installed: Remove /etc/drirc, it's shipped since 8.0.5-1.
+    Fixes build on hurd.
+  * debian: Fix build regression on !hurd.
+    Fix it with libgl1-mesa-dri.install.hurd.in, where we don't install drirc.
+  * Cherry-pick commit 7de78ce5, 07f2dee and 9622049 from upstream
+    (Fixes FTBFS on kfreebsd-*)
+    - configure.ac: Remove redundant checks of enable_dri.
+    - configure.ac: Build dricommon for DRI gallium drivers
+    - configure.ac: Build dricommon for gallium swrast
+  * Memory corruption (OOB read/write) in i965 driver [CVE-2013-1872]
+
+  [ Julien Cristau ]
+  * Build i915 and i965 on kfreebsd.
+
+ -- Cyril Brulebois <kibi@debian.org>  Thu, 06 Jun 2013 10:29:15 +0200
+
 mesa (9.1.3-2) experimental; urgency=low
 
   * Team upload.
