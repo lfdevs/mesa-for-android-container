@@ -6,10 +6,10 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  dri2_add_config@Base 8.1~0
  dri2_create_image_khr@Base 8.1~0
  dri2_create_screen@Base 8.1~0
- dri2_get_device_name_for_fd@Base 8.1~0
- dri2_get_driver_for_fd@Base 8.1~0
- dri2_initialize_drm@Base 8.1~0
- dri2_initialize_wayland@Base 8.1~0
+ (arch=linux-any)dri2_get_device_name_for_fd@Base 8.1~0
+ (arch=linux-any)dri2_get_driver_for_fd@Base 8.1~0
+ (arch=linux-any)dri2_initialize_drm@Base 8.1~0
+ (arch=linux-any)dri2_initialize_wayland@Base 8.1~0
  dri2_initialize_x11@Base 8.1~0
  dri2_load_driver@Base 8.1~0
  dri2_load_driver_swrast@Base 8.1~0
@@ -79,9 +79,9 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  eglWaitNative@Base 7.8.1
  image_lookup_extension@Base 8.1~0
  use_invalidate@Base 8.1~0
- wayland_buffer_is_drm@Base 8.1~0
- wayland_drm_buffer_get_buffer@Base 8.1~0
- wayland_drm_buffer_get_format@Base 8.1~0
- wayland_drm_init@Base 8.1~0
- wayland_drm_uninit@Base 8.1~0
+ (arch=linux-any)wayland_buffer_is_drm@Base 8.1~0
+ (arch=linux-any)wayland_drm_buffer_get_buffer@Base 8.1~0
+ (arch=linux-any)wayland_drm_buffer_get_format@Base 8.1~0
+ (arch=linux-any)wayland_drm_init@Base 8.1~0
+ (arch=linux-any)wayland_drm_uninit@Base 8.1~0
  (arch=linux-any)wl_drm_interface@Base 8.0-2~
