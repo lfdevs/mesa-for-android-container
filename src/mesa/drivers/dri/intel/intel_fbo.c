@@ -321,6 +321,7 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
    rb->Format = image->format;
    rb->_BaseFormat = _mesa_base_fbo_format(&intel->ctx,
 					   image->internal_format);
+   rb->NeedsFinishRenderTexture = true;
 }
 
 /**
@@ -633,28 +634,13 @@ intel_render_texture(struct gl_context * ctx,
       /* Fallback on drawing to a texture that doesn't have a miptree
        * (has a border, width/height 0, etc.)
        */
-      _mesa_reference_renderbuffer(&att->Renderbuffer, NULL);
       _swrast_render_texture(ctx, fb, att);
       return;
    }
-   else if (!irb) {
-      intel_miptree_check_level_layer(mt, att->TextureLevel, layer);
 
-      irb = (struct intel_renderbuffer *)intel_new_renderbuffer(ctx, ~0);
-
-      if (irb) {
-         /* bind the wrapper to the attachment point */
-         _mesa_reference_renderbuffer(&att->Renderbuffer, &irb->Base.Base);
-      }
-      else {
-         /* fallback to software rendering */
-         _swrast_render_texture(ctx, fb, att);
-         return;
-      }
-   }
+   intel_miptree_check_level_layer(mt, att->TextureLevel, layer);
 
    if (!intel_renderbuffer_update_wrapper(intel, irb, image, layer)) {
-       _mesa_reference_renderbuffer(&att->Renderbuffer, NULL);
        _swrast_render_texture(ctx, fb, att);
        return;
    }
@@ -679,13 +665,10 @@ intel_finish_render_texture(struct gl_context * ctx,
                             struct gl_renderbuffer_attachment *att)
 {
    struct intel_context *intel = intel_context(ctx);
-   struct gl_texture_object *tex_obj = att->Texture;
-   struct gl_texture_image *image =
-      tex_obj->Image[att->CubeMapFace][att->TextureLevel];
-   struct intel_renderbuffer *irb = intel_renderbuffer(att->Renderbuffer);
+   struct gl_renderbuffer *rb = att->Renderbuffer;
+   struct intel_renderbuffer *irb = intel_renderbuffer(rb);
 
-   DBG("Finish render %s texture tex=%u\n",
-       _mesa_get_format_name(image->TexFormat), att->Texture->Name);
+   DBG("Finish render %s texture\n", _mesa_get_format_name(rb->Format));
 
    if (irb)
       irb->tex_image = NULL;

@@ -510,7 +510,7 @@ instruction_scheduler::calculate_deps()
       /* write-after-write deps. */
       if (inst->dst.file == GRF) {
          if (post_reg_alloc) {
-            for (int r = 0; r < inst->regs_written() * reg_width; r++) {
+            for (int r = 0; r < inst->regs_written * reg_width; r++) {
                add_dep(last_grf_write[inst->dst.reg + r], n);
                last_grf_write[inst->dst.reg + r] = n;
             }
@@ -617,7 +617,7 @@ instruction_scheduler::calculate_deps()
        */
       if (inst->dst.file == GRF) {
          if (post_reg_alloc) {
-            for (int r = 0; r < inst->regs_written() * reg_width; r++)
+            for (int r = 0; r < inst->regs_written * reg_width; r++)
                last_grf_write[inst->dst.reg + r] = n;
          } else {
             last_grf_write[inst->dst.reg] = n;
@@ -716,7 +716,7 @@ instruction_scheduler::schedule_instructions(fs_inst *next_block_header)
             schedule_node *n = (schedule_node *)node;
 
             chosen = n;
-            if (chosen->inst->regs_written() <= 1)
+            if (chosen->inst->regs_written <= 1)
                break;
          }
 

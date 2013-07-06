@@ -186,48 +186,81 @@ intelGetString(struct gl_context * ctx, GLenum name)
       case PCI_CHIP_IVYBRIDGE_S_GT2:
 	 chipset = "Intel(R) Ivybridge Server";
 	 break;
+      case PCI_CHIP_BAYTRAIL_M_1:
+      case PCI_CHIP_BAYTRAIL_M_2:
+      case PCI_CHIP_BAYTRAIL_M_3:
+      case PCI_CHIP_BAYTRAIL_M_4:
+      case PCI_CHIP_BAYTRAIL_D:
+         chipset = "Intel(R) Bay Trail";
+         break;
       case PCI_CHIP_HASWELL_GT1:
       case PCI_CHIP_HASWELL_GT2:
-      case PCI_CHIP_HASWELL_GT2_PLUS:
+      case PCI_CHIP_HASWELL_GT3:
       case PCI_CHIP_HASWELL_SDV_GT1:
       case PCI_CHIP_HASWELL_SDV_GT2:
-      case PCI_CHIP_HASWELL_SDV_GT2_PLUS:
+      case PCI_CHIP_HASWELL_SDV_GT3:
       case PCI_CHIP_HASWELL_ULT_GT1:
       case PCI_CHIP_HASWELL_ULT_GT2:
-      case PCI_CHIP_HASWELL_ULT_GT2_PLUS:
+      case PCI_CHIP_HASWELL_ULT_GT3:
       case PCI_CHIP_HASWELL_CRW_GT1:
       case PCI_CHIP_HASWELL_CRW_GT2:
-      case PCI_CHIP_HASWELL_CRW_GT2_PLUS:
+      case PCI_CHIP_HASWELL_CRW_GT3:
 	 chipset = "Intel(R) Haswell Desktop";
 	 break;
       case PCI_CHIP_HASWELL_M_GT1:
       case PCI_CHIP_HASWELL_M_GT2:
-      case PCI_CHIP_HASWELL_M_GT2_PLUS:
+      case PCI_CHIP_HASWELL_M_GT3:
       case PCI_CHIP_HASWELL_SDV_M_GT1:
       case PCI_CHIP_HASWELL_SDV_M_GT2:
-      case PCI_CHIP_HASWELL_SDV_M_GT2_PLUS:
+      case PCI_CHIP_HASWELL_SDV_M_GT3:
       case PCI_CHIP_HASWELL_ULT_M_GT1:
       case PCI_CHIP_HASWELL_ULT_M_GT2:
-      case PCI_CHIP_HASWELL_ULT_M_GT2_PLUS:
+      case PCI_CHIP_HASWELL_ULT_M_GT3:
       case PCI_CHIP_HASWELL_CRW_M_GT1:
       case PCI_CHIP_HASWELL_CRW_M_GT2:
-      case PCI_CHIP_HASWELL_CRW_M_GT2_PLUS:
+      case PCI_CHIP_HASWELL_CRW_M_GT3:
 	 chipset = "Intel(R) Haswell Mobile";
 	 break;
       case PCI_CHIP_HASWELL_S_GT1:
       case PCI_CHIP_HASWELL_S_GT2:
-      case PCI_CHIP_HASWELL_S_GT2_PLUS:
+      case PCI_CHIP_HASWELL_S_GT3:
       case PCI_CHIP_HASWELL_SDV_S_GT1:
       case PCI_CHIP_HASWELL_SDV_S_GT2:
-      case PCI_CHIP_HASWELL_SDV_S_GT2_PLUS:
+      case PCI_CHIP_HASWELL_SDV_S_GT3:
       case PCI_CHIP_HASWELL_ULT_S_GT1:
       case PCI_CHIP_HASWELL_ULT_S_GT2:
-      case PCI_CHIP_HASWELL_ULT_S_GT2_PLUS:
+      case PCI_CHIP_HASWELL_ULT_S_GT3:
       case PCI_CHIP_HASWELL_CRW_S_GT1:
       case PCI_CHIP_HASWELL_CRW_S_GT2:
-      case PCI_CHIP_HASWELL_CRW_S_GT2_PLUS:
+      case PCI_CHIP_HASWELL_CRW_S_GT3:
 	 chipset = "Intel(R) Haswell Server";
 	 break;
+      case PCI_CHIP_HASWELL_B_GT1:
+      case PCI_CHIP_HASWELL_B_GT2:
+      case PCI_CHIP_HASWELL_B_GT3:
+      case PCI_CHIP_HASWELL_SDV_B_GT1:
+      case PCI_CHIP_HASWELL_SDV_B_GT2:
+      case PCI_CHIP_HASWELL_SDV_B_GT3:
+      case PCI_CHIP_HASWELL_ULT_B_GT1:
+      case PCI_CHIP_HASWELL_ULT_B_GT2:
+      case PCI_CHIP_HASWELL_ULT_B_GT3:
+      case PCI_CHIP_HASWELL_CRW_B_GT1:
+      case PCI_CHIP_HASWELL_CRW_B_GT2:
+      case PCI_CHIP_HASWELL_CRW_B_GT3:
+      case PCI_CHIP_HASWELL_E_GT1:
+      case PCI_CHIP_HASWELL_E_GT2:
+      case PCI_CHIP_HASWELL_E_GT3:
+      case PCI_CHIP_HASWELL_SDV_E_GT1:
+      case PCI_CHIP_HASWELL_SDV_E_GT2:
+      case PCI_CHIP_HASWELL_SDV_E_GT3:
+      case PCI_CHIP_HASWELL_ULT_E_GT1:
+      case PCI_CHIP_HASWELL_ULT_E_GT2:
+      case PCI_CHIP_HASWELL_ULT_E_GT3:
+      case PCI_CHIP_HASWELL_CRW_E_GT1:
+      case PCI_CHIP_HASWELL_CRW_E_GT2:
+      case PCI_CHIP_HASWELL_CRW_E_GT3:
+         chipset = "Intel(R) Haswell";
+         break;
       default:
          chipset = "Unknown Intel Chipset";
          break;
@@ -679,11 +712,16 @@ intelInitContext(struct intel_context *intel,
       intel->gt = 1;
    else if (IS_SNB_GT2(devID) || IS_IVB_GT2(devID) || IS_HSW_GT2(devID))
       intel->gt = 2;
+   else if (IS_HSW_GT3(devID))
+      intel->gt = 3;
    else
       intel->gt = 0;
 
    if (IS_HASWELL(devID)) {
       intel->is_haswell = true;
+   } else if (IS_BAYTRAIL(devID)) {
+      intel->is_baytrail = true;
+      intel->gt = 1;
    } else if (IS_G4X(devID)) {
       intel->is_g4x = true;
    } else if (IS_945(devID)) {

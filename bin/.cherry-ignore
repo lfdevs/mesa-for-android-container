@@ -14,3 +14,19 @@ dbf94d105a48b7aafb2c8cf64d8b4392d87efea1 glsl: Replace constant-index vector arr
 
 # This patch was backported as c3eb301
 a8246927e35a49097f70cffb7fa8dd05ec1365e1 r600g: Fix UMAD on Cayman
+
+# These patches cannot be backported without other, too invasive changes
+eb19163a4dd3d7bfeed63229820c926f99ed00d9 radeonsi: Initial support for multiple constant buffers
+e3befbca5ed9f22effcdc91c5886c86b644bc190 radeonsi: Handle TGSI_SEMANTIC_CLIPVERTEX
+
+# These patches are performance improvements that are difficult to backport and cause regressions
+740350c982bd2735b9eb9063c2b91856b6f1ad31 i965: Make the fragment shader pull constants index by dwords, not vec4s.
+dca5fc14358a8b267b3854c39c976a822885898f i965/fs: Improve performance of varying-index uniform loads on IVB.
+70b27e0e4b5d15e575ea477d63c0f6cb19d645c2 i965/fs: Use LD messages for pre-gen7 varying-index uniform loads
+62501c3af85089b423218a41a2e2433ac849c2d3 i965/fs: Allow CSE on pre-gen7 varying-index uniform loads
+
+# Reverted in master
+98dfd59a0445666060c97b0dccaf0e9f030b547a i965: fix problem with constant out of bounds access (v2)
+
+# Already cherry-picked, but squashed with the commit that broke what this fixed
+4405ff4055685841c9d9545da52c7edc8708b14b i965: Fix haswell_upload_cut_index when there's no index buffer.

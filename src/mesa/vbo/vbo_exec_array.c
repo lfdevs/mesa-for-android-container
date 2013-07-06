@@ -91,7 +91,7 @@ vbo_get_minmax_index(struct gl_context *ctx,
 		     const GLuint count)
 {
    const GLboolean restart = ctx->Array._PrimitiveRestart;
-   const GLuint restartIndex = ctx->Array._RestartIndex;
+   const GLuint restartIndex = _mesa_primitive_restart_index(ctx, ib->type);
    const int index_size = vbo_sizeof_ib_type(ib->type);
    const char *indices;
    GLuint i;
@@ -501,6 +501,7 @@ vbo_bind_arrays(struct gl_context *ctx)
 
    if (exec->array.recalculate_inputs) {
       recalculate_input_bindings(ctx);
+      exec->array.recalculate_inputs = GL_FALSE;
 
       /* Again... because we may have changed the bitmask of per-vertex varying
        * attributes.  If we regenerate the fixed-function vertex program now
@@ -508,10 +509,13 @@ vbo_bind_arrays(struct gl_context *ctx)
        * need in the shader.
        */
       if (ctx->NewState) {
+         /* Setting "validating" to TRUE prevents _mesa_update_state from
+          * invalidating what we just did.
+          */
+         exec->validating = GL_TRUE;
          _mesa_update_state(ctx);
+         exec->validating = GL_FALSE;
       }
-
-      exec->array.recalculate_inputs = GL_FALSE;
    }
 }
 
@@ -572,10 +576,10 @@ vbo_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
    prim[0].base_instance = baseInstance;
 
    /* Implement the primitive restart index */
-   if (ctx->Array._PrimitiveRestart && ctx->Array._RestartIndex < count) {
+   if (ctx->Array.PrimitiveRestart && ctx->Array.RestartIndex < count) {
       GLuint primCount = 0;
 
-      if (ctx->Array._RestartIndex == start) {
+      if (ctx->Array.RestartIndex == start) {
          /* special case: RestartIndex at beginning */
          if (count > 1) {
             prim[0].start = start + 1;
@@ -583,7 +587,7 @@ vbo_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
             primCount = 1;
          }
       }
-      else if (ctx->Array._RestartIndex == start + count - 1) {
+      else if (ctx->Array.RestartIndex == start + count - 1) {
          /* special case: RestartIndex at end */
          if (count > 1) {
             prim[0].start = start;
@@ -594,10 +598,10 @@ vbo_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
       else {
          /* general case: RestartIndex in middle, split into two prims */
          prim[0].start = start;
-         prim[0].count = ctx->Array._RestartIndex - start;
+         prim[0].count = ctx->Array.RestartIndex - start;
 
          prim[1] = prim[0];
-         prim[1].start = ctx->Array._RestartIndex + 1;
+         prim[1].start = ctx->Array.RestartIndex + 1;
          prim[1].count = count - prim[1].start;
 
          primCount = 2;

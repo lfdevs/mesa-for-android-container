@@ -598,6 +598,7 @@ radeon_image_target_renderbuffer_storage(struct gl_context *ctx,
    rb->Format = image->format;
    rb->_BaseFormat = _mesa_base_fbo_format(&radeon->glCtx,
                                            image->internal_format);
+   rb->NeedsFinishRenderTexture = GL_TRUE;
 }
 
 /**
@@ -836,25 +837,11 @@ radeon_render_texture(struct gl_context * ctx,
    if (!radeon_image->mt) {
       /* Fallback on drawing to a texture without a miptree.
        */
-      _mesa_reference_renderbuffer(&att->Renderbuffer, NULL);
       _swrast_render_texture(ctx, fb, att);
       return;
    }
-   else if (!rrb) {
-      rrb = radeon_wrap_texture(ctx, newImage);
-      if (rrb) {
-         /* bind the wrapper to the attachment point */
-         _mesa_reference_renderbuffer(&att->Renderbuffer, &rrb->base.Base);
-      }
-      else {
-         /* fallback to software rendering */
-         _swrast_render_texture(ctx, fb, att);
-         return;
-      }
-   }
 
    if (!radeon_update_wrapper(ctx, rrb, newImage)) {
-       _mesa_reference_renderbuffer(&att->Renderbuffer, NULL);
        _swrast_render_texture(ctx, fb, att);
        return;
    }
@@ -898,10 +885,11 @@ radeon_finish_render_texture(struct gl_context * ctx,
                             struct gl_renderbuffer_attachment *att)
 {
     struct gl_texture_object *tex_obj = att->Texture;
-    struct gl_texture_image *image =
-	tex_obj->Image[att->CubeMapFace][att->TextureLevel];
-    radeon_texture_image *radeon_image = (radeon_texture_image *)image;
-    
+    radeon_texture_image *radeon_image = NULL;
+
+    if (tex_obj)
+        radeon_image = (radeon_texture_image *)_mesa_get_attachment_teximage(att);
+
     if (radeon_image)
 	radeon_image->used_as_render_target = GL_FALSE;
 

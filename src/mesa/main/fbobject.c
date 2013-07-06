@@ -322,12 +322,14 @@ void
 _mesa_remove_attachment(struct gl_context *ctx,
                         struct gl_renderbuffer_attachment *att)
 {
+   struct gl_renderbuffer *rb = att->Renderbuffer;
+
+   /* tell driver that we're done rendering to this texture. */
+   if (rb && rb->NeedsFinishRenderTexture)
+      ctx->Driver.FinishRenderTexture(ctx, att);
+
    if (att->Type == GL_TEXTURE) {
       ASSERT(att->Texture);
-      if (ctx->Driver.FinishRenderTexture) {
-         /* tell driver that we're done rendering to this texture. */
-         ctx->Driver.FinishRenderTexture(ctx, att);
-      }
       _mesa_reference_texobj(&att->Texture, NULL); /* unbind */
       ASSERT(!att->Texture);
    }
@@ -340,6 +342,49 @@ _mesa_remove_attachment(struct gl_context *ctx,
    att->Complete = GL_TRUE;
 }
 
+/**
+ * Create a renderbuffer which will be set up by the driver to wrap the
+ * texture image slice.
+ *
+ * By using a gl_renderbuffer (like user-allocated renderbuffers), drivers get
+ * to share most of their framebuffer rendering code between winsys,
+ * renderbuffer, and texture attachments.
+ *
+ * The allocated renderbuffer uses a non-zero Name so that drivers can check
+ * it for determining vertical orientation, but we use ~0 to make it fairly
+ * unambiguous with actual user (non-texture) renderbuffers.
+ */
+void
+_mesa_update_texture_renderbuffer(struct gl_context *ctx,
+                                  struct gl_framebuffer *fb,
+                                  struct gl_renderbuffer_attachment *att)
+{
+   struct gl_texture_image *texImage;
+   struct gl_renderbuffer *rb;
+
+   texImage = _mesa_get_attachment_teximage(att);
+   if (!texImage)
+      return;
+
+   rb = att->Renderbuffer;
+   if (!rb) {
+      rb = ctx->Driver.NewRenderbuffer(ctx, ~0);
+      if (!rb) {
+         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glFramebufferTexture()");
+         return;
+      }
+      _mesa_reference_renderbuffer(&att->Renderbuffer, rb);
+
+      /* This can't get called on a texture renderbuffer, so set it to NULL
+       * for clarity compared to user renderbuffers.
+       */
+      rb->AllocStorage = NULL;
+
+      rb->NeedsFinishRenderTexture = ctx->Driver.FinishRenderTexture != NULL;
+   }
+
+   ctx->Driver.RenderTexture(ctx, fb, att);
+}
 
 /**
  * Bind a texture object to an attachment point.
@@ -352,21 +397,23 @@ _mesa_set_texture_attachment(struct gl_context *ctx,
                              struct gl_texture_object *texObj,
                              GLenum texTarget, GLuint level, GLuint zoffset)
 {
+   struct gl_renderbuffer *rb = att->Renderbuffer;
+
+   if (rb && rb->NeedsFinishRenderTexture)
+      ctx->Driver.FinishRenderTexture(ctx, att);
+
    if (att->Texture == texObj) {
       /* re-attaching same texture */
       ASSERT(att->Type == GL_TEXTURE);
-      if (ctx->Driver.FinishRenderTexture)
-	 ctx->Driver.FinishRenderTexture(ctx, att);
    }
    else {
       /* new attachment */
-      if (ctx->Driver.FinishRenderTexture && att->Texture)
-	 ctx->Driver.FinishRenderTexture(ctx, att);
       _mesa_remove_attachment(ctx, att);
       att->Type = GL_TEXTURE;
       assert(!att->Texture);
       _mesa_reference_texobj(&att->Texture, texObj);
    }
+   invalidate_framebuffer(fb);
 
    /* always update these fields */
    att->TextureLevel = level;
@@ -374,11 +421,7 @@ _mesa_set_texture_attachment(struct gl_context *ctx,
    att->Zoffset = zoffset;
    att->Complete = GL_FALSE;
 
-   if (_mesa_get_attachment_teximage(att)) {
-      ctx->Driver.RenderTexture(ctx, fb, att);
-   }
-
-   invalidate_framebuffer(fb);
+   _mesa_update_texture_renderbuffer(ctx, fb, att);
 }
 
 
@@ -1740,7 +1783,8 @@ check_end_texture_render(struct gl_context *ctx, struct gl_framebuffer *fb)
       GLuint i;
       for (i = 0; i < BUFFER_COUNT; i++) {
          struct gl_renderbuffer_attachment *att = fb->Attachment + i;
-         if (att->Texture && att->Renderbuffer) {
+         struct gl_renderbuffer *rb = att->Renderbuffer;
+         if (rb && rb->NeedsFinishRenderTexture) {
             ctx->Driver.FinishRenderTexture(ctx, att);
          }
       }

@@ -313,15 +313,17 @@ _mesa_base_tex_format( struct gl_context *ctx, GLint internalFormat )
       case GL_SRGB_EXT:
       case GL_SRGB8_EXT:
       case GL_COMPRESSED_SRGB_EXT:
-      case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
          return GL_RGB;
+      case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
+         return ctx->Extensions.EXT_texture_compression_s3tc ? GL_RGB : -1;
       case GL_SRGB_ALPHA_EXT:
       case GL_SRGB8_ALPHA8_EXT:
       case GL_COMPRESSED_SRGB_ALPHA_EXT:
+         return GL_RGBA;
       case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
       case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
       case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
-         return GL_RGBA;
+         return ctx->Extensions.EXT_texture_compression_s3tc ? GL_RGBA : -1;
       case GL_SLUMINANCE_ALPHA_EXT:
       case GL_SLUMINANCE8_ALPHA8_EXT:
       case GL_COMPRESSED_SLUMINANCE_ALPHA_EXT:
@@ -1478,13 +1480,13 @@ error_check_subtexture_dimensions(struct gl_context *ctx,
    }
 
    /* check xoffset and width */
-   if (xoffset < -destImage->Border) {
+   if (xoffset < - (GLint) destImage->Border) {
       _mesa_error(ctx, GL_INVALID_VALUE, "%s%dD(xoffset)",
                   function, dims);
       return GL_TRUE;
    }
 
-   if (xoffset + subWidth > destImage->Width) {
+   if (xoffset + subWidth > (GLint) destImage->Width) {
       _mesa_error(ctx, GL_INVALID_VALUE, "%s%dD(xoffset+width)",
                   function, dims);
       return GL_TRUE;
@@ -1498,7 +1500,7 @@ error_check_subtexture_dimensions(struct gl_context *ctx,
                      function, dims);
          return GL_TRUE;
       }
-      if (yoffset + subHeight > destImage->Height) {
+      if (yoffset + subHeight > (GLint) destImage->Height) {
          _mesa_error(ctx, GL_INVALID_VALUE, "%s%dD(yoffset+height)",
                      function, dims);
          return GL_TRUE;
@@ -1536,14 +1538,20 @@ error_check_subtexture_dimensions(struct gl_context *ctx,
          return GL_TRUE;
       }
 
-      /* size must be multiple of bw by bh or equal to whole texture size */
-      if ((subWidth % bw != 0) && subWidth != destImage->Width) {
+      /* The size must be a multiple of bw x bh, or we must be using a
+       * offset+size that exactly hits the edge of the image.  This
+       * is important for small mipmap levels (1x1, 2x1, etc) and for
+       * NPOT textures.
+       */
+      if ((subWidth % bw != 0) &&
+          (xoffset + subWidth != (GLint) destImage->Width)) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "%s%dD(width = %d)", function, dims, subWidth);
          return GL_TRUE;
       }
 
-      if ((subHeight % bh != 0) && subHeight != destImage->Height) {
+      if ((subHeight % bh != 0) &&
+          (yoffset + subHeight != (GLint) destImage->Height)) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "%s%dD(height = %d)", function, dims, subHeight);
          return GL_TRUE;
@@ -2696,8 +2704,7 @@ check_rtt_cb(GLuint key, void *data, void *userData)
              att->TextureLevel == level &&
              att->CubeMapFace == face) {
             ASSERT(_mesa_get_attachment_teximage(att));
-            /* Tell driver about the new renderbuffer texture */
-            ctx->Driver.RenderTexture(ctx, ctx->DrawBuffer, att);
+            _mesa_update_texture_renderbuffer(ctx, ctx->DrawBuffer, att);
             /* Mark fb status as indeterminate to force re-validation */
             fb->_Status = 0;
          }

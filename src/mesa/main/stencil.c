@@ -135,7 +135,6 @@ void GLAPIENTRY
 _mesa_StencilFuncSeparateATI( GLenum frontfunc, GLenum backfunc, GLint ref, GLuint mask )
 {
    GET_CURRENT_CONTEXT(ctx);
-   const GLint stencilMax = (1 << ctx->DrawBuffer->Visual.stencilBits) - 1;
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glStencilFuncSeparateATI()\n");
@@ -150,8 +149,6 @@ _mesa_StencilFuncSeparateATI( GLenum frontfunc, GLenum backfunc, GLint ref, GLui
                   "glStencilFuncSeparateATI(backfunc)");
       return;
    }
-
-   ref = CLAMP( ref, 0, stencilMax );
 
    /* set both front and back state */
    if (ctx->Stencil.Function[0] == frontfunc &&
@@ -192,7 +189,6 @@ void GLAPIENTRY
 _mesa_StencilFunc( GLenum func, GLint ref, GLuint mask )
 {
    GET_CURRENT_CONTEXT(ctx);
-   const GLint stencilMax = (1 << ctx->DrawBuffer->Visual.stencilBits) - 1;
    const GLint face = ctx->Stencil.ActiveFace;
 
    if (MESA_VERBOSE & VERBOSE_API)
@@ -202,8 +198,6 @@ _mesa_StencilFunc( GLenum func, GLint ref, GLuint mask )
       _mesa_error(ctx, GL_INVALID_ENUM, "glStencilFunc(func)");
       return;
    }
-
-   ref = CLAMP( ref, 0, stencilMax );
 
    if (face != 0) {
       if (ctx->Stencil.Function[face] == func &&
@@ -467,7 +461,6 @@ void GLAPIENTRY
 _mesa_StencilFuncSeparate(GLenum face, GLenum func, GLint ref, GLuint mask)
 {
    GET_CURRENT_CONTEXT(ctx);
-   const GLint stencilMax = (1 << ctx->DrawBuffer->Visual.stencilBits) - 1;
 
    if (MESA_VERBOSE & VERBOSE_API)
       _mesa_debug(ctx, "glStencilFuncSeparate()\n");
@@ -480,8 +473,6 @@ _mesa_StencilFuncSeparate(GLenum face, GLenum func, GLint ref, GLuint mask)
       _mesa_error(ctx, GL_INVALID_ENUM, "glStencilFuncSeparate(func)");
       return;
    }
-
-   ref = CLAMP(ref, 0, stencilMax);
 
    FLUSH_VERTICES(ctx, _NEW_STENCIL);
 

@@ -1,3 +1,25 @@
+mesa (9.1.4-1) unstable; urgency=low
+
+  [ Julien Cristau ]
+  * Don't call wayland_buffer_is_drm from libgbm, it's in libEGL
+    (closes: #712556).
+  * Make sure libgbm doesn't have undefined symbols.
+
+  [ Andreas Boll ]
+  * Use dpkg-buildflags.
+  * Disable silent rules.
+  * Cherry-pick commit 0829b89 (mesa: Fix ieee fp on Alpha) from upstream
+    (Fixes FTBFS on alpha)
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+
+  [ Julien Cristau ]
+  * libegl1-mesa-drivers depends on libgl1-mesa-dri for libllvmradeon
+    (closes: #714828)
+
+ -- Julien Cristau <jcristau@debian.org>  Sat, 06 Jul 2013 11:37:34 +0200
+
 mesa (9.1.3-6) unstable; urgency=low
 
   * Team upload.

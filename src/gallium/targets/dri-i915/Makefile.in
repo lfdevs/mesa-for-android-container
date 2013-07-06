@@ -140,6 +140,13 @@ i915_dri_la_DEPENDENCIES = $(top_builddir)/src/mesa/libmesagallium.la \
 	$(am__DEPENDENCIES_2)
 am_i915_dri_la_OBJECTS = target.lo utils.lo dri_util.lo xmlconfig.lo
 i915_dri_la_OBJECTS = $(am_i915_dri_la_OBJECTS)
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
+am__v_lt_1 = 
+i915_dri_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(i915_dri_la_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -156,10 +163,6 @@ DEFAULT_INCLUDES = -I.@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/bin/depcomp
 am__depfiles_maybe = depfiles
 am__mv = mv -f
-AM_V_lt = $(am__v_lt_@AM_V@)
-am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
-am__v_lt_0 = --silent
-am__v_lt_1 = 
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -533,12 +536,7 @@ i915_dri_la_LIBADD = $(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/gallium/drivers/rbug/librbug.la \
 	$(top_builddir)/src/gallium/drivers/i915/libi915.la \
 	$(GALLIUM_DRI_LIB_DEPS) $(INTEL_LIBS) $(am__append_2)
-@HAVE_MESA_LLVM_FALSE@i915_dri_la_LINK = $(LINK) $(i915_dri_la_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@i915_dri_la_LINK = $(CXXLINK) $(i915_dri_la_LDFLAGS)
-# Mention a dummy pure C file to trigger generation of the $(LINK) variable
-@HAVE_MESA_LLVM_FALSE@nodist_EXTRA_i915_dri_la_SOURCES = dummy-c.c
-# Mention a dummy pure C++ file to trigger generation of the $(LINK) variable
-@HAVE_MESA_LLVM_TRUE@nodist_EXTRA_i915_dri_la_SOURCES = dummy-cpp.cpp
+nodist_EXTRA_i915_dri_la_SOURCES = dummy.cpp
 all: all-am
 
 .SUFFIXES:
@@ -609,7 +607,7 @@ clean-driLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 i915_dri.la: $(i915_dri_la_OBJECTS) $(i915_dri_la_DEPENDENCIES) $(EXTRA_i915_dri_la_DEPENDENCIES) 
-	$(AM_V_GEN)$(i915_dri_la_LINK) -rpath $(dridir) $(i915_dri_la_OBJECTS) $(i915_dri_la_LIBADD) $(LIBS)
+	$(AM_V_CXXLD)$(i915_dri_la_LINK) -rpath $(dridir) $(i915_dri_la_OBJECTS) $(i915_dri_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -618,8 +616,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dri_util.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy-c.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy-cpp.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/target.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utils.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/xmlconfig.Plo@am__quote@

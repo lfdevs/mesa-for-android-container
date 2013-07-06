@@ -575,7 +575,7 @@ brw_emit_depthbuffer(struct brw_context *brw)
       depth_mt = stencil_mt;
    }
 
-   if (depth_irb) {
+   if (depth_irb && depth_mt) {
       struct intel_region *region = depth_mt->region;
 
       /* When 3DSTATE_DEPTH_BUFFER.Separate_Stencil_Enable is set, then

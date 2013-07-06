@@ -1,3 +1,5 @@
+01_gbm_egl.diff
+02_gbm_no_undefined.diff
 04_osmesa_version.diff
 06_kfreebsd-ftbfs.diff
 08-kfreebsd-gallium.diff

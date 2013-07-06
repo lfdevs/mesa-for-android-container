@@ -306,6 +306,9 @@ intel_create_image_from_name(__DRIscreen *screen,
     int cpp;
 
     image = intel_allocate_image(format, loaderPrivate);
+    if (image == NULL)
+       return NULL;
+
     if (image->format == MESA_FORMAT_NONE)
        cpp = 1;
     else
@@ -369,6 +372,7 @@ intel_create_image_from_renderbuffer(__DRIcontext *context,
       break;
    }
 
+   rb->NeedsFinishRenderTexture = true;
    return image;
 }
 
@@ -398,6 +402,9 @@ intel_create_image(__DRIscreen *screen,
    }
 
    image = intel_allocate_image(format, loaderPrivate);
+   if (image == NULL)
+      return NULL;
+
    cpp = _mesa_get_format_bytes(image->format);
    image->region =
       intel_region_alloc(intelScreen, tiling, cpp, width, height, true);
@@ -544,6 +551,9 @@ intel_from_planar(__DRIimage *parent, int plane, void *loaderPrivate)
     stride = parent->strides[index];
 
     image = intel_allocate_image(dri_format, loaderPrivate);
+    if (image == NULL)
+       return NULL;
+
     if (offset + height * stride > parent->region->bo->size) {
        _mesa_warning(NULL, "intel_create_sub_image: subimage out of bounds");
        free(image);

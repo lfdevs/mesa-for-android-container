@@ -66,14 +66,16 @@ struct si_pipe_shader_selector {
 
 struct si_shader {
 	unsigned		ninput;
-	struct si_shader_io	input[32];
+	struct si_shader_io	input[40];
 
 	unsigned		noutput;
-	struct si_shader_io	output[32];
+	struct si_shader_io	output[40];
 
 	unsigned		ninterp;
 	bool			uses_kill;
 	bool			fs_write_all;
+	bool			vs_out_misc_write;
+	bool			vs_out_point_size;
 	unsigned		nr_cbufs;
 };
 

@@ -313,6 +313,7 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     case CHIP_PITCAIRN:
     case CHIP_VERDE:
     case CHIP_OLAND:
+    case CHIP_HAINAN:
         ws->info.chip_class = TAHITI;
         break;
     }
@@ -381,6 +382,8 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
                                       &ws->info.r600_ib_vm_max_size))
                 ws->info.r600_virtual_address = FALSE;
         }
+	if (ws->gen == DRV_R600 && !debug_get_bool_option("RADEON_VA", TRUE))
+		ws->info.r600_virtual_address = FALSE;
     }
 
     /* Get max pipes, this is only needed for compute shaders.  All evergreen+

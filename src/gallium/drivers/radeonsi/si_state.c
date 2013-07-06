@@ -383,6 +383,7 @@ static void *si_create_rs_state(struct pipe_context *ctx,
 	}
 
 	rs->two_side = state->light_twoside;
+	rs->clip_plane_enable = state->clip_plane_enable;
 
 	polygon_dual_mode = (state->fill_front != PIPE_POLYGON_MODE_FILL ||
 				state->fill_back != PIPE_POLYGON_MODE_FILL);
@@ -411,9 +412,6 @@ static void *si_create_rs_state(struct pipe_context *ctx,
 		S_028810_ZCLIP_NEAR_DISABLE(!state->depth_clip) |
 		S_028810_ZCLIP_FAR_DISABLE(!state->depth_clip) |
 		S_028810_DX_LINEAR_ATTR_CLIP_ENA(1);
-	rs->pa_cl_vs_out_cntl =
-		S_02881C_USE_VTX_POINT_SIZE(state->point_size_per_vertex) |
-		S_02881C_VS_OUT_MISC_VEC_ENA(state->point_size_per_vertex);
 
 	clip_rule = state->scissor ? 0xAAAA : 0xFFFF;
 
@@ -484,7 +482,6 @@ static void si_bind_rs_state(struct pipe_context *ctx, void *state)
 	rctx->pa_sc_line_stipple = rs->pa_sc_line_stipple;
 	rctx->pa_su_sc_mode_cntl = rs->pa_su_sc_mode_cntl;
 	rctx->pa_cl_clip_cntl = rs->pa_cl_clip_cntl;
-	rctx->pa_cl_vs_out_cntl = rs->pa_cl_vs_out_cntl;
 
 	si_pm4_bind_state(rctx, rasterizer, rs);
 	si_update_fb_rs_state(rctx);
@@ -2737,6 +2734,9 @@ void si_init_config(struct r600_context *rctx)
 		break;
 	case CHIP_OLAND:
 		si_pm4_set_reg(pm4, R_028350_PA_SC_RASTER_CONFIG, 0x00000082);
+		break;
+	case CHIP_HAINAN:
+		si_pm4_set_reg(pm4, R_028350_PA_SC_RASTER_CONFIG, 0x00000000);
 		break;
 	default:
 		si_pm4_set_reg(pm4, R_028350_PA_SC_RASTER_CONFIG, 0x00000000);

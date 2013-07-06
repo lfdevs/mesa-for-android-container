@@ -5,15 +5,6 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-CFLAGS = -Wall -g
-CXXFLAGS = -Wall -g
-ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
-	CFLAGS += -O0
-	CXXFLAGS += -O0
-else
-	CFLAGS += -O2
-	CXXFLAGS += -O2
-endif
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
 	NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
 	MAKEFLAGS += -j$(NUMJOBS)
@@ -31,6 +22,12 @@ ifeq ($(DEB_BUILD_GNU_TYPE), $(DEB_HOST_GNU_TYPE))
 else
 	confflags += --build=$(DEB_BUILD_GNU_TYPE) --host=$(DEB_HOST_GNU_TYPE)
 endif
+
+buildflags = \
+	$(shell DEB_CFLAGS_MAINT_APPEND=-Wall DEB_CXXFLAGS_MAINT_APPEND=-Wall dpkg-buildflags --export=configure)
+
+buildflags-i686 = \
+	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -march=i686" DEB_CXXFLAGS_MAINT_APPEND="-Wall -march=i686" dpkg-buildflags --export=configure)
 
 # keep a list of files we don't install (yet), but since it's a bit
 # large, use an external file:
@@ -51,10 +48,6 @@ BUILD_STAMPS = $(addprefix $(STAMP)-build-, $(CONFIGS))
 
 QUILT_STAMPFN = $(STAMP_DIR)/patch
 include /usr/share/quilt/quilt.make
-
-confflags-common = \
-	CFLAGS="$(CFLAGS)" \
-	CXXFLAGS="$(CXXFLAGS)"
 
 DRI_DRIVERS =
 GALLIUM_DRIVERS =
@@ -126,7 +119,7 @@ confflags-dri = \
 	$(confflags_GALLIUM) \
 	$(confflags_GLES) \
 	$(confflags_OPENVG) \
-	$(confflags-common)
+	$(buildflags)
 
 confflags-swx11 = \
 	--disable-dri \
@@ -135,8 +128,7 @@ confflags-swx11 = \
 	--enable-xlib-glx \
 	--disable-egl \
 	--disable-shared-glapi \
-	CFLAGS="$(CFLAGS)" \
-	CXXFLAGS="$(CXXFLAGS)"
+	$(buildflags)
 
 confflags-swx11-static = \
 	--disable-dri \
@@ -146,8 +138,7 @@ confflags-swx11-static = \
 	--enable-static \
 	--disable-egl \
 	--disable-shared-glapi \
-	CFLAGS="$(CFLAGS)" \
-	CXXFLAGS="$(CXXFLAGS)"
+	$(buildflags)
 
 confflags-swx11-i386-i686 = \
 	--disable-dri \
@@ -156,8 +147,7 @@ confflags-swx11-i386-i686 = \
 	--enable-xlib-glx \
 	--disable-egl \
 	--libdir=/usr/lib/$(DEB_HOST_MULTIARCH)/i686/cmov \
-	CFLAGS="$(CFLAGS) -march=i686" \
-	CXXFLAGS="$(CXXFLAGS) -march=i686"
+	$(buildflags-i686)
 
 configure: $(QUILT_STAMPFN) configure.ac
 	autoreconf -vfi
@@ -189,7 +179,8 @@ $(STAMP)-build-%: configure
 	../../configure --prefix=/usr --mandir=\$${prefix}/share/man \
 	             --infodir=\$${prefix}/share/info --sysconfdir=/etc \
 	             --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
-	             --localstatedir=/var $(confflags) $(confflags-$*) \
+	             --localstatedir=/var --disable-silent-rules \
+				 $(confflags) $(confflags-$*) \
 	             ac_cv_path_LLVM_CONFIG=llvm-config-3.2
 	cd $(DEB_BUILD_DIR)/$* && $(MAKE)
 	>$@

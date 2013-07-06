@@ -125,6 +125,9 @@ intel_miptree_create_internal(struct intel_context *intel,
                               GLuint num_samples)
 {
    struct intel_mipmap_tree *mt = calloc(sizeof(*mt), 1);
+   if (!mt)
+      return NULL;
+
    int compress_byte = 0;
 
    DBG("%s target %s format %s level %d..%d <-- %p\n", __FUNCTION__,
@@ -338,6 +341,18 @@ intel_miptree_create(struct intel_context *intel,
    etc_format = (format != tex_format) ? tex_format : MESA_FORMAT_NONE;
    base_format = _mesa_get_format_base_format(format);
 
+   mt = intel_miptree_create_internal(intel, target, format,
+				      first_level, last_level, width0,
+				      height0, depth0,
+				      false, num_samples);
+   /*
+    * pitch == 0 || height == 0  indicates the null texture
+    */
+   if (!mt || !mt->total_width || !mt->total_height) {
+      intel_miptree_release(&mt);
+      return NULL;
+   }
+
    if (num_samples > 1) {
       /* From p82 of the Sandy Bridge PRM, dw3[1] of SURFACE_STATE ("Tiled
        * Surface"):
@@ -361,20 +376,15 @@ intel_miptree_create(struct intel_context *intel,
 	 tiling = I915_TILING_Y;
       else if (force_y_tiling) {
          tiling = I915_TILING_Y;
-      } else if (width0 >= 64)
-	 tiling = I915_TILING_X;
-   }
-
-   mt = intel_miptree_create_internal(intel, target, format,
-				      first_level, last_level, width0,
-				      height0, depth0,
-				      false, num_samples);
-   /*
-    * pitch == 0 || height == 0  indicates the null texture
-    */
-   if (!mt || !mt->total_width || !mt->total_height) {
-      intel_miptree_release(&mt);
-      return NULL;
+      } else if (width0 >= 64) {
+         if (ALIGN(mt->total_width * mt->cpp, 512) < 32768) {
+            tiling = I915_TILING_X;
+         } else {
+            perf_debug("%dx%d miptree too large to blit, "
+                       "falling back to untiled",
+                       mt->total_width, mt->total_height);
+         }
+      }
    }
 
    total_width = mt->total_width;
@@ -1212,9 +1222,30 @@ intel_miptree_unmap_blit(struct intel_context *intel,
 			 unsigned int level,
 			 unsigned int slice)
 {
-   assert(!(map->mode & GL_MAP_WRITE_BIT));
-
+   struct gl_context *ctx = &intel->ctx;
    drm_intel_bo_unmap(map->bo);
+
+   if (map->mode & GL_MAP_WRITE_BIT) {
+      unsigned int image_x, image_y;
+      int x = map->x;
+      int y = map->y;
+      intel_miptree_get_image_offset(mt, level, slice, &image_x, &image_y);
+      x += image_x;
+      y += image_y;
+
+      bool ok = intelEmitCopyBlit(intel,
+                                  mt->region->cpp,
+                                  map->stride, map->bo,
+                                  0, I915_TILING_NONE,
+                                  mt->region->pitch, mt->region->bo,
+                                  mt->offset, mt->region->tiling,
+                                  0, 0,
+                                  x, y,
+                                  map->w, map->h,
+                                  GL_COPY);
+      WARN_ONCE(!ok, "Failed to blit from linear temporary mapping");
+   }
+
    drm_intel_bo_unreference(map->bo);
 }
 
@@ -1551,6 +1582,23 @@ intel_miptree_map_singlesample(struct intel_context *intel,
 {
    struct intel_miptree_map *map;
 
+   /* Estimate the size of the mappable aperture into the GTT.  There's an
+    * ioctl to get the whole GTT size, but not one to get the mappable subset.
+    * It turns out it's basically always 256MB, though some ancient hardware
+    * was smaller.
+    */
+   uint32_t gtt_size = 256 * 1024 * 1024;
+   if (intel->gen == 2)
+      gtt_size = 128 * 1024 * 1024;
+
+   /* We don't want to map two objects such that a memcpy between them would
+    * just fault one mapping in and then the other over and over forever.  So
+    * we would need to divide the GTT size by 2.  Additionally, some GTT is
+    * taken up by things like the framebuffer and the ringbuffer and such, so
+    * be more conservative.
+    */
+   uint32_t max_gtt_map_object_size = gtt_size / 4;
+
    assert(mt->num_samples <= 1);
 
    map = intel_miptree_attach_map(mt, level, slice, x, y, w, h, mode);
@@ -1595,6 +1643,10 @@ intel_miptree_map_singlesample(struct intel_context *intel,
             !mt->compressed &&
             mt->region->tiling == I915_TILING_X &&
             mt->region->pitch < 32768) {
+      intel_miptree_map_blit(intel, mt, map, level, slice);
+   } else if (mt->region->tiling != I915_TILING_NONE &&
+              mt->region->bo->size >= max_gtt_map_object_size) {
+      assert(mt->region->pitch < 32768);
       intel_miptree_map_blit(intel, mt, map, level, slice);
    } else {
       intel_miptree_map_gtt(intel, mt, map, level, slice);

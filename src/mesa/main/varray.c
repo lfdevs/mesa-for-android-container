@@ -1112,10 +1112,9 @@ _mesa_PrimitiveRestartIndex(GLuint index)
       return;
    }
 
-   ctx->Array.RestartIndex = index;
-   if (ctx->Array.PrimitiveRestart && ctx->Array._RestartIndex != index) {
+   if (ctx->Array.RestartIndex != index) {
       FLUSH_VERTICES(ctx, _NEW_TRANSFORM);
-      ctx->Array._RestartIndex = index;
+      ctx->Array.RestartIndex = index;
    }
 }
 
@@ -1152,6 +1151,30 @@ _mesa_VertexAttribDivisor(GLuint index, GLuint divisor)
    }
 }
 
+
+unsigned
+_mesa_primitive_restart_index(const struct gl_context *ctx, GLenum ib_type)
+{
+   /* From the OpenGL 4.3 core specification, page 302:
+    * "If both PRIMITIVE_RESTART and PRIMITIVE_RESTART_FIXED_INDEX are
+    *  enabled, the index value determined by PRIMITIVE_RESTART_FIXED_INDEX
+    *  is used."
+    */
+   if (ctx->Array.PrimitiveRestartFixedIndex) {
+      switch (ib_type) {
+      case GL_UNSIGNED_BYTE:
+         return 0xff;
+      case GL_UNSIGNED_SHORT:
+         return 0xffff;
+      case GL_UNSIGNED_INT:
+         return 0xffffffff;
+      default:
+         assert(!"_mesa_primitive_restart_index: Invalid index buffer type.");
+      }
+   }
+
+   return ctx->Array.RestartIndex;
+}
 
 
 /**

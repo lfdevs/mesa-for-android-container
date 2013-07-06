@@ -28,6 +28,8 @@
 #include "main/imports.h"
 #include "main/format_pack.h"
 #include "main/format_unpack.h"
+#include "main/core.h"
+#include "main/stencil.h"
 
 #include "s_context.h"
 #include "s_depth.h"
@@ -128,7 +130,7 @@ apply_stencil_op(const struct gl_context *ctx, GLenum oper, GLuint face,
                  GLuint n, GLubyte stencil[], const GLubyte mask[],
                  GLint stride)
 {
-   const GLubyte ref = ctx->Stencil.Ref[face];
+   const GLubyte ref = _mesa_get_stencil_ref(ctx, face);
    const GLubyte wrtmask = ctx->Stencil.WriteMask[face];
    const GLubyte invmask = (GLubyte) (~wrtmask);
    GLuint i, j;
@@ -215,7 +217,7 @@ do_stencil_test(struct gl_context *ctx, GLuint face, GLuint n,
    GLboolean allfail = GL_FALSE;
    GLuint i, j;
    const GLuint valueMask = ctx->Stencil.ValueMask[face];
-   const GLubyte ref = (GLubyte) (ctx->Stencil.Ref[face] & valueMask);
+   const GLubyte ref = (GLubyte) (_mesa_get_stencil_ref(ctx, face) & valueMask);
    GLubyte s;
 
    /*

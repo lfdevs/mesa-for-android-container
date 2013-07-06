@@ -549,7 +549,7 @@ fs_visitor::choose_spill_reg(struct ra_graph *g)
       }
 
       if (inst->dst.file == GRF) {
-	 spill_costs[inst->dst.reg] += inst->regs_written() * loop_scale;
+	 spill_costs[inst->dst.reg] += inst->regs_written * loop_scale;
 
          if (inst->dst.smear >= 0) {
             no_spill[inst->dst.reg] = true;
@@ -618,7 +618,7 @@ fs_visitor::spill_reg(int spill_reg)
 	  inst->dst.reg == spill_reg) {
          int subset_spill_offset = (spill_offset +
                                     REG_SIZE * inst->dst.reg_offset);
-         inst->dst.reg = virtual_grf_alloc(inst->regs_written());
+         inst->dst.reg = virtual_grf_alloc(inst->regs_written);
          inst->dst.reg_offset = 0;
 
 	 /* If our write is going to affect just part of the
@@ -627,7 +627,7 @@ fs_visitor::spill_reg(int spill_reg)
 	  */
 	 if (inst->predicate || inst->force_uncompressed || inst->force_sechalf) {
             fs_reg unspill_reg = inst->dst;
-            for (int chan = 0; chan < inst->regs_written(); chan++) {
+            for (int chan = 0; chan < inst->regs_written; chan++) {
                emit_unspill(inst, unspill_reg,
                             subset_spill_offset + REG_SIZE * chan);
                unspill_reg.reg_offset++;
@@ -640,7 +640,7 @@ fs_visitor::spill_reg(int spill_reg)
 	 spill_src.negate = false;
 	 spill_src.smear = -1;
 
-	 for (int chan = 0; chan < inst->regs_written(); chan++) {
+	 for (int chan = 0; chan < inst->regs_written; chan++) {
 	    fs_inst *spill_inst = new(mem_ctx) fs_inst(FS_OPCODE_SPILL,
 						       reg_null_f, spill_src);
 	    spill_src.reg_offset++;

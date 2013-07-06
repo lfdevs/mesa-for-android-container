@@ -35,6 +35,7 @@
 #include "gallivm/lp_bld_tgsi.h"
 #include "radeon_llvm.h"
 #include "radeon_llvm_emit.h"
+#include "util/u_memory.h"
 #include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_scan.h"
@@ -626,6 +627,7 @@ static void si_llvm_emit_epilogue(struct lp_build_tgsi_context * bld_base)
 		switch (d->Declaration.File) {
 		case TGSI_FILE_INPUT:
 			i = shader->ninput++;
+			assert(i < Elements(shader->input));
 			shader->input[i].name = d->Semantic.Name;
 			shader->input[i].sid = d->Semantic.Index;
 			shader->input[i].interpolate = d->Interp.Interpolate;
@@ -634,6 +636,7 @@ static void si_llvm_emit_epilogue(struct lp_build_tgsi_context * bld_base)
 
 		case TGSI_FILE_OUTPUT:
 			i = shader->noutput++;
+			assert(i < Elements(shader->output));
 			shader->output[i].name = d->Semantic.Name;
 			shader->output[i].sid = d->Semantic.Index;
 			shader->output[i].interpolate = d->Interp.Interpolate;
@@ -647,7 +650,9 @@ static void si_llvm_emit_epilogue(struct lp_build_tgsi_context * bld_base)
 			/* Select the correct target */
 			switch(d->Semantic.Name) {
 			case TGSI_SEMANTIC_PSIZE:
-				target = V_008DFC_SQ_EXP_POS;
+				shader->vs_out_misc_write = 1;
+				shader->vs_out_point_size = 1;
+				target = V_008DFC_SQ_EXP_POS + 1;
 				break;
 			case TGSI_SEMANTIC_POSITION:
 				if (si_shader_ctx->type == TGSI_PROCESSOR_VERTEX) {

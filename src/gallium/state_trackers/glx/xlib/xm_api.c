@@ -1238,9 +1238,13 @@ void XMesaSwapBuffers( XMesaBuffer b )
  */
 void XMesaCopySubBuffer( XMesaBuffer b, int x, int y, int width, int height )
 {
+   XMesaContext xmctx = XMesaGetCurrentContext();
+
+   xmctx->st->flush( xmctx->st, ST_FLUSH_FRONT, NULL);
+
    xmesa_copy_st_framebuffer(b->stfb,
          ST_ATTACHMENT_BACK_LEFT, ST_ATTACHMENT_FRONT_LEFT,
-         x, y, width, height);
+         x, b->height - y - height, width, height);
 }
 
 

@@ -60,6 +60,12 @@
 #include <llvm/Target/TargetSelect.h>
 #endif /* HAVE_LLVM < 0x0300 */
 
+#if HAVE_LLVM >= 0x0303
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Module.h>
+#include <llvm/Support/CBindingWrapping.h>
+#endif
+
 #include "pipe/p_config.h"
 #include "util/u_debug.h"
 #include "util/u_cpu_detect.h"
