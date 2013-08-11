@@ -30,3 +30,37 @@ dca5fc14358a8b267b3854c39c976a822885898f i965/fs: Improve performance of varying
 
 # Already cherry-picked, but squashed with the commit that broke what this fixed
 4405ff4055685841c9d9545da52c7edc8708b14b i965: Fix haswell_upload_cut_index when there's no index buffer.
+
+# Already cherry-picked as commit bf8053a2dbac1500586d6d387cd88c30aad63a60
+6b676e66343356d5096260c2bc1601014c808cb0 i965,i915: Return early if miptree allocation fails
+
+# Has potential to break previously-working (though technically incorrect) programs
+fcaa48d9cc8937e0ceb59dfd22ef5b6e6fd1a273 glsl: Disallow return with a void argument from void functions.
+
+# Rejected at author's request (attempted backport did not fix piglit test)
+4c3ed795662974a1c2ad2326fc74bef608a34f31 r600g: Workaround for a harware bug with nested loops on Cayman
+
+# These do not apply and the author has confirmed they should be dropped.
+49c1fc7044eaaa5c2dca05ff4a709be8e3636871 r600g: don't emit SQ_DYN_GPR_RESOURCE_LIMIT_1 on cayman
+4539f8e20af286d1f521eb016c89c6d9af0b801c r600g: don't emit surface_sync after FLUSH_AND_INV_EVENT
+
+# Backported as commit ca2df146429fba22ea8df3e8f9b76d84d391cf5f
+da33f9b919039442e9ab51f9b1d1c83a73607133 r600g: increase array size for shader inputs and outputs
+
+# Has potential to break previously-working (though technically incorrect) programs
+17856726c94000bf16156f7f9acea77a271a6005 glsl: Disallow auxiliary storage qualifiers on FS outputs.
+
+# Doesn't cherry-pick cleanly, and doesn't change the implementation (just cleans up compiler warning spam)
+803f755edeabd1b0af3d8f4ebf2005333e152ad4 glsl: Less const for glsl_type convenience accessors
+
+# Not needed for 9.1 (restores code never deleted from this branch)
+0e9549e2bd57168086421468cbf1db0821c36730 Revert "i965: Delete pre-DRI2.3 viewport hacks."
+
+# These are all intended for 9.2, not 9.1
+4e90bc9a12bea93c6b5522abe8151a8cfe1d6d1d gallium: Add PIPE_CAP_ENDIANNESS
+8c9d3c62f60a2819948bdfb005600cdc10aa2547 clover: Return correct value for CL_DEVICE_ENDIAN_LITTLE
+a3dcab43c6b6fed2f35aa0e802be6398985f100c clover: Pass corresponding module::argument to kernel::argument::bind().
+2265b40e377cc2c9d1091498df2aede5df2ff684 clover: Add kernel argument fields to allow differing host/target data types.
+829caf410e2c2c6f79902199da5a7900abc16129 clover: Byte-swap kernel arguments when host and device endianness differ.
+f64c0ca692d3e8c78dd9ae1f015f58f1dfc1c760 clover: Extend kernel arguments for differing host and device data types.
+df530829f757a8968389427eb26f45a0d46623fa clover: Respect kernel argument alignment restrictions.

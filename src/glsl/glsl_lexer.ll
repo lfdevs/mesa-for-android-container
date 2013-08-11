@@ -361,7 +361,7 @@ layout		{
 		      return LAYOUT_TOK;
 		   } else {
 		      yylval->identifier = strdup(yytext);
-		      return IDENTIFIER;
+		      return classify_identifier(yyextra, yytext);
 		   }
 		}
 

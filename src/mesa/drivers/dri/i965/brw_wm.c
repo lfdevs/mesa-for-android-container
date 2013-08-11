@@ -272,7 +272,7 @@ brw_wm_debug_recompile(struct brw_context *brw,
    found |= key_debug("depth statistics", old_key->stats_wm, key->stats_wm);
    found |= key_debug("flat shading", old_key->flat_shade, key->flat_shade);
    found |= key_debug("number of color buffers", old_key->nr_color_regions, key->nr_color_regions);
-   found |= key_debug("sample alpha to coverage", old_key->sample_alpha_to_coverage, key->sample_alpha_to_coverage);
+   found |= key_debug("MRT alpha test or alpha-to-coverage", old_key->replicate_alpha, key->replicate_alpha);
    found |= key_debug("rendering to FBO", old_key->render_to_fbo, key->render_to_fbo);
    found |= key_debug("fragment color clamping", old_key->clamp_fragment_color, key->clamp_fragment_color);
    found |= key_debug("line smoothing", old_key->line_aa, key->line_aa);
@@ -460,8 +460,10 @@ static void brw_wm_populate_key( struct brw_context *brw,
 
    /* _NEW_BUFFERS */
    key->nr_color_regions = ctx->DrawBuffer->_NumColorDrawBuffers;
-  /* _NEW_MULTISAMPLE */
-   key->sample_alpha_to_coverage = ctx->Multisample.SampleAlphaToCoverage;
+
+   /* _NEW_MULTISAMPLE, _NEW_COLOR, _NEW_BUFFERS */
+   key->replicate_alpha = ctx->DrawBuffer->_NumColorDrawBuffers > 1 &&
+      (ctx->Multisample.SampleAlphaToCoverage || ctx->Color.AlphaEnabled);
 
    /* CACHE_NEW_VS_PROG */
    if (intel->gen < 6)

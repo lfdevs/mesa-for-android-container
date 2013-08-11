@@ -7,7 +7,6 @@
 
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
 	NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-	MAKEFLAGS += -j$(NUMJOBS)
 endif
 
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
@@ -182,7 +181,7 @@ $(STAMP)-build-%: configure
 	             --localstatedir=/var --disable-silent-rules \
 				 $(confflags) $(confflags-$*) \
 	             ac_cv_path_LLVM_CONFIG=llvm-config-3.2
-	cd $(DEB_BUILD_DIR)/$* && $(MAKE)
+	cd $(DEB_BUILD_DIR)/$* && $(MAKE) -j$(NUMJOBS)
 	>$@
 
 install: build

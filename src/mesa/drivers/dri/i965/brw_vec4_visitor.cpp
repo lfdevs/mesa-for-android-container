@@ -2215,7 +2215,7 @@ vec4_visitor::visit(ir_texture *ir)
 	    }
 	 } else /* intel->gen == 4 */ {
 	    mrf = param_base;
-	    writemask = WRITEMASK_Z;
+	    writemask = WRITEMASK_W;
 	 }
 	 emit(MOV(dst_reg(MRF, mrf, lod_type, writemask), lod));
       } else if (ir->op == ir_txf) {
@@ -2285,7 +2285,7 @@ vec4_visitor::swizzle_result(ir_texture *ir, src_reg orig_val, int sampler)
    }
 
    int zero_mask = 0, one_mask = 0, copy_mask = 0;
-   int swizzle[4];
+   int swizzle[4] = {0};
 
    for (int i = 0; i < 4; i++) {
       switch (GET_SWZ(s, i)) {

@@ -1,3 +1,15 @@
+mesa (9.1.6-1) unstable; urgency=low
+
+  [ Andreas Boll ]
+  * New upstream release. (Closes: #717410)
+  * Cherry-pick commit 0dbbfa0 (mesa: Fix MESA_PATCH version) from
+    upstream.
+
+  [ Julien Cristau ]
+  * Don't run configure for different builds in parallel.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 11 Aug 2013 18:15:58 +0200
+
 mesa (9.1.4-1) unstable; urgency=low
 
   [ Julien Cristau ]

@@ -1366,7 +1366,7 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
       enum pipe_format internal_format = res->format;
       struct pipe_transfer *tex_xfer;
       char *map;
-      int line, ximage_stride;
+      int line, byte_width;
       XImage *img;
 
       internal_format = choose_pixel_format(drawable->xm_visual);
@@ -1392,14 +1392,13 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
          return;
       }
 
-      /* The pipe transfer has a pitch rounded up to the nearest 64 pixels.
-         We assume 32 bit pixels. */
-      ximage_stride = w * 4;
+      /* The pipe transfer has a pitch rounded up to the nearest 64 pixels. */
+      byte_width = w * ((img->bits_per_pixel + 7) / 8);
 
       for (line = 0; line < h; line++)
          memcpy(&map[line * tex_xfer->stride],
-                &img->data[line * ximage_stride],
-                ximage_stride);
+                &img->data[line * img->bytes_per_line],
+                byte_width);
 
       pipe_transfer_unmap(pipe, tex_xfer);
 

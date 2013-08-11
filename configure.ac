@@ -6,7 +6,7 @@ dnl Tell the user about autoconf.html in the --help output
 m4_divert_once([HELP_END], [
 See docs/autoconf.html for more details on the options for Mesa.])
 
-AC_INIT([Mesa], [9.1.4],
+AC_INIT([Mesa], [9.1.6],
     [https://bugs.freedesktop.org/enter_bug.cgi?product=Mesa])
 AC_CONFIG_AUX_DIR([bin])
 AC_CONFIG_MACRO_DIR([m4])
@@ -1780,8 +1780,8 @@ gallium_require_drm_loader() {
 radeon_llvm_check() {
     LLVM_REQUIRED_VERSION_MAJOR="3"
     LLVM_REQUIRED_VERSION_MINOR="2"
-    if test "$LLVM_VERSION_INT" -lt "${LLVM_REQUIRED_VERSION_MAJOR}0${LLVM_REQUIRED_VERSION_MINOR}"; then
-        AC_MSG_ERROR([LLVM $LLVM_REQUIRED_VERSION_MAJOR.$LLVM_REQUIRED_VERSION_MINOR or newer with R600 target enabled is required.
+    if test "$LLVM_VERSION_INT" -ne "${LLVM_REQUIRED_VERSION_MAJOR}0${LLVM_REQUIRED_VERSION_MINOR}"; then
+        AC_MSG_ERROR([LLVM $LLVM_REQUIRED_VERSION_MAJOR.$LLVM_REQUIRED_VERSION_MINOR with R600 target enabled is required.
                      To use the r600/radeonsi LLVM backend, you need to fetch the LLVM source from:
                      git://people.freedesktop.org/~tstellar/llvm master
                      and build with --enable-experimental-targets=R600])
