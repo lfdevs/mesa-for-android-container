@@ -181,7 +181,7 @@ $(STAMP)-build-%: configure
 	             --localstatedir=/var --disable-silent-rules \
 				 $(confflags) $(confflags-$*) \
 	             ac_cv_path_LLVM_CONFIG=llvm-config-3.2
-	cd $(DEB_BUILD_DIR)/$* && $(MAKE) -j$(NUMJOBS)
+	cd $(DEB_BUILD_DIR)/$* && $(MAKE) $(if $(NUMJOBS),-j$(NUMJOBS))
 	>$@
 
 install: build
