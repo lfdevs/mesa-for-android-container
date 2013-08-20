@@ -28,7 +28,7 @@ extern "C" {
 }
 #include "brw_fs.h"
 #include "glsl/ir_optimization.h"
-#include "glsl/ir_print_visitor.h"
+#include "glsl/glsl_parser_extras.h"
 
 struct gl_shader *
 brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
@@ -89,7 +89,7 @@ brw_lower_packing_builtins(struct brw_context *brw,
            | LOWER_PACK_UNORM_4x8
            | LOWER_UNPACK_UNORM_4x8;
 
-   if (brw->intel.gen >= 7) {
+   if (brw->gen >= 7) {
       /* Gen7 introduced the f32to16 and f16to32 instructions, which can be
        * used to execute packHalf2x16 and unpackHalf2x16. For AOS code, no
        * lowering is needed. For SOA code, the Half2x16 ops must be
@@ -111,23 +111,18 @@ GLboolean
 brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct intel_context *intel = &brw->intel;
    unsigned int stage;
 
    for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {
       struct brw_shader *shader =
 	 (struct brw_shader *)shProg->_LinkedShaders[stage];
-      static const GLenum targets[] = {
-	 GL_VERTEX_PROGRAM_ARB,
-	 GL_FRAGMENT_PROGRAM_ARB,
-	 GL_GEOMETRY_PROGRAM_NV
-      };
 
       if (!shader)
 	 continue;
 
       struct gl_program *prog =
-	 ctx->Driver.NewProgram(ctx, targets[stage], shader->base.Name);
+	 ctx->Driver.NewProgram(ctx, _mesa_program_index_to_target(stage),
+                                shader->base.Name);
       if (!prog)
 	return false;
       prog->Parameters = _mesa_new_parameter_list();
@@ -150,22 +145,29 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
        */
       brw_lower_packing_builtins(brw, (gl_shader_type) stage, shader->ir);
       do_mat_op_to_vec(shader->ir);
+      const int bitfield_insert = brw->gen >= 7
+                                  ? BITFIELD_INSERT_TO_BFM_BFI
+                                  : 0;
+      const int lrp_to_arith = brw->gen < 6 ? LRP_TO_ARITH : 0;
       lower_instructions(shader->ir,
 			 MOD_TO_FRACT |
 			 DIV_TO_MUL_RCP |
 			 SUB_TO_ADD_NEG |
 			 EXP_TO_EXP2 |
-			 LOG_TO_LOG2);
+			 LOG_TO_LOG2 |
+                         bitfield_insert |
+                         lrp_to_arith);
 
       /* Pre-gen6 HW can only nest if-statements 16 deep.  Beyond this,
        * if-statements need to be flattened.
        */
-      if (intel->gen < 6)
+      if (brw->gen < 6)
 	 lower_if_to_cond_assign(shader->ir, 16);
 
       do_lower_texture_projection(shader->ir);
-      brw_lower_texture_gradients(intel, shader->ir);
+      brw_lower_texture_gradients(brw, shader->ir);
       do_vec_index_to_cond_assign(shader->ir);
+      lower_vector_insert(shader->ir, true);
       brw_do_cubemap_normalize(shader->ir);
       lower_noise(shader->ir);
       lower_quadop_vector(shader->ir, false);
@@ -179,7 +181,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
          lower_variable_index_to_cond_assign(shader->ir,
                                              input, output, temp, uniform);
 
-      if (unlikely((INTEL_DEBUG & DEBUG_PERF) && lowered_variable_indexing)) {
+      if (unlikely(brw->perf_debug && lowered_variable_indexing)) {
          perf_debug("Unsupported form of variable indexing in FS; falling "
                     "back to very inefficient code generation\n");
       }
@@ -201,7 +203,8 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 				   false /* loops */
 				   ) || progress;
 
-	 progress = do_common_optimization(shader->ir, true, true, 32)
+	 progress = do_common_optimization(shader->ir, true, true, 32,
+                                           &ctx->ShaderCompilerOptions[stage])
 	   || progress;
       } while (progress);
 
@@ -252,12 +255,26 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       _mesa_reference_program(ctx, &prog, NULL);
 
       if (ctx->Shader.Flags & GLSL_DUMP) {
-         static const char *target_strings[]
-            = { "vertex", "fragment", "geometry" };
          printf("\n");
-         printf("GLSL IR for linked %s program %d:\n", target_strings[stage],
-                shProg->Name);
+         printf("GLSL IR for linked %s program %d:\n",
+                _mesa_glsl_shader_target_name(shader->base.Type), shProg->Name);
          _mesa_print_ir(shader->base.ir, NULL);
+         printf("\n");
+      }
+   }
+
+   if (ctx->Shader.Flags & GLSL_DUMP) {
+      for (unsigned i = 0; i < shProg->NumShaders; i++) {
+         const struct gl_shader *sh = shProg->Shaders[i];
+         if (!sh)
+            continue;
+
+         printf("GLSL %s shader %d source for linked program %d:\n",
+                _mesa_glsl_shader_target_name(sh->Type),
+                i,
+                shProg->Name);
+         printf("%s", sh->Source);
+         printf("\n");
       }
    }
 
@@ -373,4 +390,175 @@ brw_texture_offset(ir_constant *offset)
       offset_bits |= (offsets[i] << shift) & (0xF << shift);
    }
    return offset_bits;
+}
+
+const char *
+brw_instruction_name(enum opcode op)
+{
+   char *fallback;
+
+   if (op < ARRAY_SIZE(opcode_descs) && opcode_descs[op].name)
+      return opcode_descs[op].name;
+
+   switch (op) {
+   case FS_OPCODE_FB_WRITE:
+      return "fb_write";
+
+   case SHADER_OPCODE_RCP:
+      return "rcp";
+   case SHADER_OPCODE_RSQ:
+      return "rsq";
+   case SHADER_OPCODE_SQRT:
+      return "sqrt";
+   case SHADER_OPCODE_EXP2:
+      return "exp2";
+   case SHADER_OPCODE_LOG2:
+      return "log2";
+   case SHADER_OPCODE_POW:
+      return "pow";
+   case SHADER_OPCODE_INT_QUOTIENT:
+      return "int_quot";
+   case SHADER_OPCODE_INT_REMAINDER:
+      return "int_rem";
+   case SHADER_OPCODE_SIN:
+      return "sin";
+   case SHADER_OPCODE_COS:
+      return "cos";
+
+   case SHADER_OPCODE_TEX:
+      return "tex";
+   case SHADER_OPCODE_TXD:
+      return "txd";
+   case SHADER_OPCODE_TXF:
+      return "txf";
+   case SHADER_OPCODE_TXL:
+      return "txl";
+   case SHADER_OPCODE_TXS:
+      return "txs";
+   case FS_OPCODE_TXB:
+      return "txb";
+   case SHADER_OPCODE_TXF_MS:
+      return "txf_ms";
+
+   case FS_OPCODE_DDX:
+      return "ddx";
+   case FS_OPCODE_DDY:
+      return "ddy";
+
+   case FS_OPCODE_PIXEL_X:
+      return "pixel_x";
+   case FS_OPCODE_PIXEL_Y:
+      return "pixel_y";
+
+   case FS_OPCODE_CINTERP:
+      return "cinterp";
+   case FS_OPCODE_LINTERP:
+      return "linterp";
+
+   case FS_OPCODE_SPILL:
+      return "spill";
+   case FS_OPCODE_UNSPILL:
+      return "unspill";
+
+   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
+      return "uniform_pull_const";
+   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GEN7:
+      return "uniform_pull_const_gen7";
+   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD:
+      return "varying_pull_const";
+   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7:
+      return "varying_pull_const_gen7";
+
+   case FS_OPCODE_MOV_DISPATCH_TO_FLAGS:
+      return "mov_dispatch_to_flags";
+   case FS_OPCODE_DISCARD_JUMP:
+      return "discard_jump";
+
+   case FS_OPCODE_SET_SIMD4X2_OFFSET:
+      return "set_simd4x2_offset";
+
+   case FS_OPCODE_PACK_HALF_2x16_SPLIT:
+      return "pack_half_2x16_split";
+   case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X:
+      return "unpack_half_2x16_split_x";
+   case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y:
+      return "unpack_half_2x16_split_y";
+
+   case FS_OPCODE_PLACEHOLDER_HALT:
+      return "placeholder_halt";
+
+   case VS_OPCODE_URB_WRITE:
+      return "urb_write";
+   case VS_OPCODE_SCRATCH_READ:
+      return "scratch_read";
+   case VS_OPCODE_SCRATCH_WRITE:
+      return "scratch_write";
+   case VS_OPCODE_PULL_CONSTANT_LOAD:
+      return "pull_constant_load";
+   case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
+      return "pull_constant_load_gen7";
+
+   default:
+      /* Yes, this leaks.  It's in debug code, it should never occur, and if
+       * it does, you should just add the case to the list above.
+       */
+      asprintf(&fallback, "op%d", op);
+      return fallback;
+   }
+}
+
+bool
+backend_instruction::is_tex()
+{
+   return (opcode == SHADER_OPCODE_TEX ||
+           opcode == FS_OPCODE_TXB ||
+           opcode == SHADER_OPCODE_TXD ||
+           opcode == SHADER_OPCODE_TXF ||
+           opcode == SHADER_OPCODE_TXF_MS ||
+           opcode == SHADER_OPCODE_TXL ||
+           opcode == SHADER_OPCODE_TXS ||
+           opcode == SHADER_OPCODE_LOD);
+}
+
+bool
+backend_instruction::is_math()
+{
+   return (opcode == SHADER_OPCODE_RCP ||
+           opcode == SHADER_OPCODE_RSQ ||
+           opcode == SHADER_OPCODE_SQRT ||
+           opcode == SHADER_OPCODE_EXP2 ||
+           opcode == SHADER_OPCODE_LOG2 ||
+           opcode == SHADER_OPCODE_SIN ||
+           opcode == SHADER_OPCODE_COS ||
+           opcode == SHADER_OPCODE_INT_QUOTIENT ||
+           opcode == SHADER_OPCODE_INT_REMAINDER ||
+           opcode == SHADER_OPCODE_POW);
+}
+
+bool
+backend_instruction::is_control_flow()
+{
+   switch (opcode) {
+   case BRW_OPCODE_DO:
+   case BRW_OPCODE_WHILE:
+   case BRW_OPCODE_IF:
+   case BRW_OPCODE_ELSE:
+   case BRW_OPCODE_ENDIF:
+   case BRW_OPCODE_BREAK:
+   case BRW_OPCODE_CONTINUE:
+      return true;
+   default:
+      return false;
+   }
+}
+
+void
+backend_visitor::dump_instructions()
+{
+   int ip = 0;
+   foreach_list(node, &this->instructions) {
+      backend_instruction *inst = (backend_instruction *)node;
+      printf("%d: ", ip++);
+      dump_instruction(inst);
+   }
 }

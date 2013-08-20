@@ -44,17 +44,6 @@ class dst_reg;
 unsigned
 swizzle_for_size(int size);
 
-enum register_file {
-   ARF = BRW_ARCHITECTURE_REGISTER_FILE,
-   GRF = BRW_GENERAL_REGISTER_FILE,
-   MRF = BRW_MESSAGE_REGISTER_FILE,
-   IMM = BRW_IMMEDIATE_VALUE,
-   HW_REG, /* a struct brw_reg */
-   ATTR,
-   UNIFORM, /* prog_data->params[hw_reg] */
-   BAD_FILE
-};
-
 class reg
 {
 public:
@@ -172,6 +161,7 @@ public:
 
    bool saturate;
    bool force_writemask_all;
+   bool no_dd_clear, no_dd_check;
 
    int conditional_mod; /**< BRW_CONDITIONAL_* */
 
@@ -192,8 +182,7 @@ public:
    const void *ir;
    const char *annotation;
 
-   bool is_tex();
-   bool is_math();
+   bool is_send_from_grf();
    bool can_reswizzle_dst(int dst_writemask, int swizzle, int swizzle_mask);
    void reswizzle_dst(int dst_writemask, int swizzle);
 };
@@ -208,10 +197,14 @@ class vec4_visitor : public backend_visitor
 {
 public:
    vec4_visitor(struct brw_context *brw,
-                struct brw_vs_compile *c,
-		struct gl_shader_program *prog,
+                struct brw_vec4_compile *c,
+                struct gl_program *prog,
+                const struct brw_vec4_prog_key *key,
+                struct brw_vec4_prog_data *prog_data,
+		struct gl_shader_program *shader_prog,
 		struct brw_shader *shader,
-		void *mem_ctx);
+		void *mem_ctx,
+                bool debug_flag);
    ~vec4_visitor();
 
    dst_reg dst_null_f()
@@ -224,9 +217,10 @@ public:
       return dst_reg(retype(brw_null_reg(), BRW_REGISTER_TYPE_D));
    }
 
-   const struct gl_vertex_program *vp;
-   struct brw_vs_compile *c;
-   struct brw_vs_prog_data *prog_data;
+   struct gl_program *prog;
+   struct brw_vec4_compile *c;
+   const struct brw_vec4_prog_key *key;
+   struct brw_vec4_prog_data *prog_data;
    unsigned int sanity_param_count;
 
    char *fail_msg;
@@ -244,12 +238,9 @@ public:
    int virtual_grf_array_size;
    int first_non_payload_grf;
    unsigned int max_grf;
-   int *virtual_grf_def;
-   int *virtual_grf_use;
+   int *virtual_grf_start;
+   int *virtual_grf_end;
    dst_reg userplane[MAX_CLIP_PLANES];
-
-   src_reg *vp_temp_regs;
-   src_reg vp_addr_reg;
 
    /**
     * This is the size to be used for an array with an element per
@@ -299,8 +290,8 @@ public:
    /* Regs for vertex results.  Generated at ir_variable visiting time
     * for the ir->location's used.
     */
-   dst_reg output_reg[BRW_VERT_RESULT_MAX];
-   const char *output_reg_annotation[BRW_VERT_RESULT_MAX];
+   dst_reg output_reg[BRW_VARYING_SLOT_COUNT];
+   const char *output_reg_annotation[BRW_VARYING_SLOT_COUNT];
    int uniform_size[MAX_UNIFORMS];
    int uniform_vector_size[MAX_UNIFORMS];
    int uniforms;
@@ -316,7 +307,6 @@ public:
    void setup_uniform_clipplane_values();
    void setup_uniform_values(ir_variable *ir);
    void setup_builtin_uniform_values(ir_variable *ir);
-   int setup_attributes(int payload_reg);
    int setup_uniforms(int payload_reg);
    void setup_payload();
    bool reg_allocate_trivial();
@@ -336,6 +326,10 @@ public:
    bool opt_copy_propagation();
    bool opt_algebraic();
    bool opt_register_coalesce();
+   void opt_set_dependency_control();
+   void opt_schedule_instructions();
+
+   bool can_do_source_mods(vec4_instruction *inst);
 
    vec4_instruction *emit(vec4_instruction *inst);
 
@@ -380,6 +374,14 @@ public:
    vec4_instruction *PULL_CONSTANT_LOAD(dst_reg dst, src_reg index);
    vec4_instruction *SCRATCH_READ(dst_reg dst, src_reg index);
    vec4_instruction *SCRATCH_WRITE(dst_reg dst, src_reg src, src_reg index);
+   vec4_instruction *LRP(dst_reg dst, src_reg a, src_reg y, src_reg x);
+   vec4_instruction *BFREV(dst_reg dst, src_reg value);
+   vec4_instruction *BFE(dst_reg dst, src_reg bits, src_reg offset, src_reg value);
+   vec4_instruction *BFI1(dst_reg dst, src_reg bits, src_reg offset);
+   vec4_instruction *BFI2(dst_reg dst, src_reg bfi1_dst, src_reg insert, src_reg base);
+   vec4_instruction *FBH(dst_reg dst, src_reg value);
+   vec4_instruction *FBL(dst_reg dst, src_reg value);
+   vec4_instruction *CBIT(dst_reg dst, src_reg value);
 
    int implied_mrf_writes(vec4_instruction *inst);
 
@@ -389,16 +391,14 @@ public:
 			       vec4_instruction *pre_rhs_inst,
 			       vec4_instruction *last_rhs_inst);
 
+   bool try_copy_propagation(vec4_instruction *inst, int arg,
+                             src_reg *values[4]);
+
    /** Walks an exec_list of ir_instruction and sends it through this visitor. */
    void visit_instructions(const exec_list *list);
 
-   void setup_vp_regs();
-   void emit_attribute_fixups();
-   void emit_vertex_program_code();
    void emit_vp_sop(uint32_t condmod, dst_reg dst,
                     src_reg src0, src_reg src1, src_reg one);
-   dst_reg get_vp_dst_reg(const prog_dst_register &dst);
-   src_reg get_vp_src_reg(const prog_src_register &src);
 
    void emit_bool_to_cond_code(ir_rvalue *ir, uint32_t *predicate);
    void emit_bool_comparison(unsigned int op, dst_reg dst, src_reg src0, src_reg src1);
@@ -425,6 +425,8 @@ public:
    void emit_scs(ir_instruction *ir, enum prog_opcode op,
 		 dst_reg dst, const src_reg &src);
 
+   src_reg fix_3src_operand(src_reg src);
+
    void emit_math1_gen6(enum opcode opcode, dst_reg dst, src_reg src);
    void emit_math1_gen4(enum opcode opcode, dst_reg dst, src_reg src);
    void emit_math(enum opcode opcode, dst_reg dst, src_reg src);
@@ -441,9 +443,8 @@ public:
    void emit_ndc_computation();
    void emit_psiz_and_flags(struct brw_reg reg);
    void emit_clip_distances(struct brw_reg reg, int offset);
-   void emit_generic_urb_slot(dst_reg reg, int vert_result);
-   void emit_urb_slot(int mrf, int vert_result);
-   void emit_urb_writes(void);
+   void emit_generic_urb_slot(dst_reg reg, int varying);
+   void emit_urb_slot(int mrf, int varying);
 
    void emit_shader_time_begin();
    void emit_shader_time_end();
@@ -466,14 +467,58 @@ public:
 				int base_offset);
 
    bool try_emit_sat(ir_expression *ir);
+   bool try_emit_mad(ir_expression *ir, int mul_arg);
    void resolve_ud_negate(src_reg *reg);
 
    src_reg get_timestamp();
 
    bool process_move_condition(ir_rvalue *ir);
 
-   void dump_instruction(vec4_instruction *inst);
-   void dump_instructions();
+   void dump_instruction(backend_instruction *inst);
+
+protected:
+   void emit_vertex();
+   void lower_attributes_to_hw_regs(const int *attribute_map);
+   virtual dst_reg *make_reg_for_system_value(ir_variable *ir) = 0;
+   virtual int setup_attributes(int payload_reg) = 0;
+   virtual void emit_prolog() = 0;
+   virtual void emit_program_code() = 0;
+   virtual void emit_thread_end() = 0;
+   virtual void emit_urb_write_header(int mrf) = 0;
+   virtual vec4_instruction *emit_urb_write_opcode(bool complete) = 0;
+   virtual int compute_array_stride(ir_dereference_array *ir);
+
+   const bool debug_flag;
+};
+
+class vec4_vs_visitor : public vec4_visitor
+{
+public:
+   vec4_vs_visitor(struct brw_context *brw,
+                   struct brw_vs_compile *vs_compile,
+                   struct brw_vs_prog_data *vs_prog_data,
+                   struct gl_shader_program *prog,
+                   struct brw_shader *shader,
+                   void *mem_ctx);
+
+protected:
+   virtual dst_reg *make_reg_for_system_value(ir_variable *ir);
+   virtual int setup_attributes(int payload_reg);
+   virtual void emit_prolog();
+   virtual void emit_program_code();
+   virtual void emit_thread_end();
+   virtual void emit_urb_write_header(int mrf);
+   virtual vec4_instruction *emit_urb_write_opcode(bool complete);
+
+private:
+   void setup_vp_regs();
+   dst_reg get_vp_dst_reg(const prog_dst_register &dst);
+   src_reg get_vp_src_reg(const prog_src_register &src);
+
+   struct brw_vs_compile * const vs_compile;
+   struct brw_vs_prog_data * const vs_prog_data;
+   src_reg *vp_temp_regs;
+   src_reg vp_addr_reg;
 };
 
 /**
@@ -485,18 +530,19 @@ class vec4_generator
 {
 public:
    vec4_generator(struct brw_context *brw,
-                  struct brw_vs_compile *c,
-                  struct gl_shader_program *prog,
-                  void *mem_ctx);
+                  struct gl_shader_program *shader_prog,
+                  struct gl_program *prog,
+                  void *mem_ctx,
+                  bool debug_flag);
    ~vec4_generator();
 
    const unsigned *generate_assembly(exec_list *insts, unsigned *asm_size);
 
 private:
    void generate_code(exec_list *instructions);
-   void generate_vs_instruction(vec4_instruction *inst,
-				struct brw_reg dst,
-				struct brw_reg *src);
+   void generate_vec4_instruction(vec4_instruction *inst,
+                                  struct brw_reg dst,
+                                  struct brw_reg *src);
 
    void generate_math1_gen4(vec4_instruction *inst,
 			    struct brw_reg dst,
@@ -535,19 +581,22 @@ private:
 				    struct brw_reg dst,
 				    struct brw_reg index,
 				    struct brw_reg offset);
+   void generate_pull_constant_load_gen7(vec4_instruction *inst,
+                                         struct brw_reg dst,
+                                         struct brw_reg surf_index,
+                                         struct brw_reg offset);
 
    struct brw_context *brw;
-   struct intel_context *intel;
    struct gl_context *ctx;
 
    struct brw_compile *p;
-   struct brw_vs_compile *c;
 
-   struct gl_shader_program *prog;
+   struct gl_shader_program *shader_prog;
    struct gl_shader *shader;
-   const struct gl_vertex_program *vp;
+   const struct gl_program *prog;
 
    void *mem_ctx;
+   const bool debug_flag;
 };
 
 } /* namespace brw */

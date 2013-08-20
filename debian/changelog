@@ -1,3 +1,17 @@
+mesa (9.2~rc1-1) experimental; urgency=low
+
+  * New upstream release.
+  * Refresh patches for 9.2:
+    - 02_gbm_no_undefined.diff.
+    - 04_osmesa_version.diff
+    - 06_kfreebsd-ftbfs.diff
+  * Removed writes to srcdir, fixing parallel builds.
+    - 12_fix_glapi_gen.diff
+  * Require llvm-3.3-dev >= 1:3.3-4 and libelf-dev.
+  * Update symbols files.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 20 Aug 2013 15:42:31 +0200
+
 mesa (9.1.6-2) unstable; urgency=low
 
   * Don't run 'make -j' if DEB_BUILD_OPTIONS doesn't set parallel.  Oops.

@@ -84,11 +84,10 @@ static void update_raster_state( struct st_context *st )
 
    /* _NEW_LIGHT
     */
-   if (ctx->Light.ShadeModel == GL_FLAT)
-      raster->flatshade = 1;
-
-   if (ctx->Light.ProvokingVertex == GL_FIRST_VERTEX_CONVENTION_EXT)
-      raster->flatshade_first = 1;
+   raster->flatshade = ctx->Light.ShadeModel == GL_FLAT;
+      
+   raster->flatshade_first = ctx->Light.ProvokingVertex ==
+                             GL_FIRST_VERTEX_CONVENTION_EXT;
 
    /* _NEW_LIGHT | _NEW_PROGRAM */
    raster->light_twoside = ctx->VertexProgram._TwoSideEnabled;
@@ -145,18 +144,13 @@ static void update_raster_state( struct st_context *st )
       raster->offset_scale = ctx->Polygon.OffsetFactor;
    }
 
-   if (ctx->Polygon.SmoothFlag)
-      raster->poly_smooth = 1;
-
-   if (ctx->Polygon.StippleFlag)
-      raster->poly_stipple_enable = 1;
+   raster->poly_smooth = ctx->Polygon.SmoothFlag;
+   raster->poly_stipple_enable = ctx->Polygon.StippleFlag;
 
    /* _NEW_POINT
     */
    raster->point_size = ctx->Point.Size;
-
-   if (!ctx->Point.PointSprite && ctx->Point.SmoothFlag)
-      raster->point_smooth = 1;
+   raster->point_smooth = !ctx->Point.PointSprite && ctx->Point.SmoothFlag;
 
    /* _NEW_POINT | _NEW_PROGRAM
     */
@@ -177,9 +171,9 @@ static void update_raster_state( struct st_context *st )
             raster->sprite_coord_enable |= 1 << i;
          }
       }
-      if (fragProg->Base.InputsRead & FRAG_BIT_PNTC) {
+      if (fragProg->Base.InputsRead & VARYING_BIT_PNTC) {
          raster->sprite_coord_enable |=
-            1 << (FRAG_ATTRIB_PNTC - FRAG_ATTRIB_TEX0);
+            1 << (VARYING_SLOT_PNTC - VARYING_SLOT_TEX0);
       }
 
       raster->point_quad_rasterization = 1;
@@ -189,7 +183,7 @@ static void update_raster_state( struct st_context *st )
     */
    if (vertProg) {
       if (vertProg->Base.Id == 0) {
-         if (vertProg->Base.OutputsWritten & BITFIELD64_BIT(VERT_RESULT_PSIZ)) {
+         if (vertProg->Base.OutputsWritten & BITFIELD64_BIT(VARYING_SLOT_PSIZ)) {
             /* generated program which emits point size */
             raster->point_size_per_vertex = TRUE;
          }
@@ -229,16 +223,17 @@ static void update_raster_state( struct st_context *st )
    raster->multisample = ctx->Multisample._Enabled;
 
    /* _NEW_SCISSOR */
-   if (ctx->Scissor.Enabled)
-      raster->scissor = 1;
+   raster->scissor = ctx->Scissor.Enabled;
 
    /* _NEW_FRAG_CLAMP */
    raster->clamp_fragment_color = !st->clamp_frag_color_in_shader &&
-                                  ctx->Color._ClampFragmentColor &&
-                                  !ctx->DrawBuffer->_IntegerColor;
-   raster->gl_rasterization_rules = 1;
+                                  ctx->Color._ClampFragmentColor;
 
-   /* _NEW_RASTERIZER_DISCARD */
+   raster->half_pixel_center = 1;
+   if (st_fb_orientation(ctx->DrawBuffer) == Y_0_TOP)
+      raster->bottom_edge_rule = 1;
+
+   /* ST_NEW_RASTERIZER */
    raster->rasterizer_discard = ctx->RasterDiscard;
 
    /* _NEW_TRANSFORM */
@@ -260,9 +255,9 @@ const struct st_tracked_state st_update_rasterizer = {
        _NEW_PROGRAM |
        _NEW_SCISSOR |
        _NEW_FRAG_CLAMP |
-       _NEW_RASTERIZER_DISCARD |
        _NEW_TRANSFORM),      /* mesa state dependencies*/
-      ST_NEW_VERTEX_PROGRAM,  /* state tracker dependencies */
+      (ST_NEW_VERTEX_PROGRAM |
+       ST_NEW_RASTERIZER),  /* state tracker dependencies */
    },
    update_raster_state     /* update function */
 };

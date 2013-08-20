@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50_ir.h"
@@ -43,9 +43,12 @@ public:
 
    bool assign(int32_t& reg, DataFile f, unsigned int size);
    void release(DataFile f, int32_t reg, unsigned int size);
-   bool occupy(DataFile f, int32_t reg, unsigned int size, bool noTest = false);
-   bool occupy(const Value *);
+   void occupy(DataFile f, int32_t reg, unsigned int size);
+   void occupy(const Value *);
    void occupyMask(DataFile f, int32_t reg, uint8_t mask);
+   bool isOccupied(DataFile f, int32_t reg, unsigned int size) const;
+   bool testOccupy(const Value *);
+   bool testOccupy(DataFile f, int32_t reg, unsigned int size);
 
    inline int getMaxAssigned(DataFile f) const { return fill[f]; }
 
@@ -61,11 +64,11 @@ public:
       return size >> unit[f];
    }
    // for regs of size >= 4, id is counted in 4-byte words (like nv50/c0 binary)
-   inline unsigned int idToBytes(Value *v) const
+   inline unsigned int idToBytes(const Value *v) const
    {
       return v->reg.data.id * MIN2(v->reg.size, 4);
    }
-   inline unsigned int idToUnits(Value *v) const
+   inline unsigned int idToUnits(const Value *v) const
    {
       return units(v->reg.file, idToBytes(v));
    }
@@ -155,9 +158,15 @@ RegisterSet::assign(int32_t& reg, DataFile f, unsigned int size)
 }
 
 bool
+RegisterSet::isOccupied(DataFile f, int32_t reg, unsigned int size) const
+{
+   return bits[f].testRange(reg, size);
+}
+
+void
 RegisterSet::occupy(const Value *v)
 {
-   return occupy(v->reg.file, v->reg.data.id, v->reg.size >> unit[v->reg.file]);
+   occupy(v->reg.file, idToUnits(v), v->reg.size >> unit[v->reg.file]);
 }
 
 void
@@ -166,18 +175,29 @@ RegisterSet::occupyMask(DataFile f, int32_t reg, uint8_t mask)
    bits[f].setMask(reg & ~31, static_cast<uint32_t>(mask) << (reg % 32));
 }
 
-bool
-RegisterSet::occupy(DataFile f, int32_t reg, unsigned int size, bool noTest)
+void
+RegisterSet::occupy(DataFile f, int32_t reg, unsigned int size)
 {
-   if (!noTest && bits[f].testRange(reg, size))
-      return false;
-
    bits[f].setRange(reg, size);
 
    INFO_DBG(0, REG_ALLOC, "reg occupy: %u[%i] %u\n", f, reg, size);
 
    fill[f] = MAX2(fill[f], (int32_t)(reg + size - 1));
+}
 
+bool
+RegisterSet::testOccupy(const Value *v)
+{
+   return testOccupy(v->reg.file,
+                     idToUnits(v), v->reg.size >> unit[v->reg.file]);
+}
+
+bool
+RegisterSet::testOccupy(DataFile f, int32_t reg, unsigned int size)
+{
+   if (isOccupied(f, reg, size))
+      return false;
+   occupy(f, reg, size);
    return true;
 }
 
@@ -389,14 +409,17 @@ RegAlloc::ArgumentMovesPass::visit(BasicBlock *bb)
    // conflict arises.
    for (Instruction *i = bb->getEntry(); i; i = i->next) {
       FlowInstruction *cal = i->asFlow();
-      if (!cal || cal->op != OP_CALL || cal->builtin)
+      // TODO: Handle indirect calls.
+      // Right now they should only be generated for builtins.
+      if (!cal || cal->op != OP_CALL || cal->builtin || cal->indirect)
          continue;
       RegisterSet clobberSet(prog->getTarget());
 
       // Bind input values.
-      for (int s = 0; cal->srcExists(s); ++s) {
+      for (int s = cal->indirect ? 1 : 0; cal->srcExists(s); ++s) {
+         const int t = cal->indirect ? (s - 1) : s;
          LValue *tmp = new_LValue(func, cal->getSrc(s)->asLValue());
-         tmp->reg.data.id = cal->target.fn->ins[s].rep()->reg.data.id;
+         tmp->reg.data.id = cal->target.fn->ins[t].rep()->reg.data.id;
 
          Instruction *mov =
             new_Instruction(func, OP_MOV, typeOfSize(tmp->reg.size));
@@ -426,7 +449,7 @@ RegAlloc::ArgumentMovesPass::visit(BasicBlock *bb)
       for (std::deque<Value *>::iterator it = cal->target.fn->clobbers.begin();
            it != cal->target.fn->clobbers.end();
            ++it) {
-         if (clobberSet.occupy(*it)) {
+         if (clobberSet.testOccupy(*it)) {
             Value *tmp = new_LValue(func, (*it)->asLValue());
             tmp->reg.data.id = (*it)->reg.data.id;
             cal->setDef(cal->defCount(), tmp);
@@ -857,10 +880,19 @@ static inline uint8_t makeCompMask(int compSize, int base, int size)
    }
 }
 
+// Used when coalescing moves. The non-compound value will become one, e.g.:
+// mov b32 $r0 $r2            / merge b64 $r0d { $r0 $r1 }
+// split b64 { $r0 $r1 } $r0d / mov b64 $r0d f64 $r2d
 static inline void copyCompound(Value *dst, Value *src)
 {
    LValue *ldst = dst->asLValue();
    LValue *lsrc = src->asLValue();
+
+   if (ldst->compound && !lsrc->compound) {
+      LValue *swap = lsrc;
+      lsrc = ldst;
+      ldst = swap;
+   }
 
    ldst->compound = lsrc->compound;
    ldst->compMask = lsrc->compMask;
@@ -1061,16 +1093,15 @@ GCRA::buildRIG(ArrayList& insns)
       RIG_Node *cur = values.front();
 
       for (std::list<RIG_Node *>::iterator it = active.begin();
-           it != active.end();
-           ++it) {
+           it != active.end();) {
          RIG_Node *node = *it;
 
          if (node->livei.end() <= cur->livei.begin()) {
             it = active.erase(it);
-            --it;
-         } else
-         if (node->f == cur->f && node->livei.overlaps(cur->livei)) {
-            cur->addInterference(node);
+         } else {
+            if (node->f == cur->f && node->livei.overlaps(cur->livei))
+               cur->addInterference(node);
+            ++it;
          }
       }
       values.pop_front();
@@ -1235,7 +1266,7 @@ GCRA::checkInterference(const RIG_Node *node, Graph::EdgeIterator& ei)
       INFO_DBG(prog->dbgFlags, REG_ALLOC,
                "(%%%i) X (%%%i): $r%i + %u\n",
                vA->id, vB->id, intf->reg, intf->colors);
-      regs.occupy(node->f, intf->reg, intf->colors, true);
+      regs.occupy(node->f, intf->reg, intf->colors);
    }
 }
 
@@ -1263,7 +1294,7 @@ GCRA::selectRegisters()
               it != node->prefRegs.end();
               ++it) {
             if ((*it)->reg >= 0 &&
-                regs.occupy(node->f, (*it)->reg, node->colors)) {
+                regs.testOccupy(node->f, (*it)->reg, node->colors)) {
                node->reg = (*it)->reg;
                break;
             }
@@ -1339,7 +1370,7 @@ GCRA::allocateRegisters(ArrayList& insns)
       if (prog->dbgFlags & NV50_IR_DEBUG_REG_ALLOC)
          func->print();
    } else {
-      prog->maxGPR = regs.getMaxAssigned(FILE_GPR);
+      prog->maxGPR = std::max(prog->maxGPR, regs.getMaxAssigned(FILE_GPR));
    }
 
 out:
@@ -1557,6 +1588,13 @@ RegAlloc::execFunc()
 
    unsigned int i, retries;
    bool ret;
+
+   if (!func->ins.empty()) {
+      // Insert a nop at the entry so inputs only used by the first instruction
+      // don't count as having an empty live range.
+      Instruction *nop = new_Instruction(func, OP_NOP, TYPE_NONE);
+      BasicBlock::get(func->cfg.getRoot())->insertHead(nop);
+   }
 
    ret = insertConstr.exec(func);
    if (!ret)
@@ -1814,17 +1852,23 @@ RegAlloc::InsertConstraintsPass::condenseSrcs(Instruction *insn,
 void
 RegAlloc::InsertConstraintsPass::texConstraintNVE0(TexInstruction *tex)
 {
-   textureMask(tex);
+   if (isTextureOp(tex->op))
+      textureMask(tex);
    condenseDefs(tex);
 
-   int n = tex->srcCount(0xff, true);
-   if (n > 4) {
-      condenseSrcs(tex, 0, 3);
-      if (n > 5) // NOTE: first call modified positions already
-         condenseSrcs(tex, 4 - (4 - 1), n - 1 - (4 - 1));
+   if (tex->op == OP_SUSTB || tex->op == OP_SUSTP) {
+      condenseSrcs(tex, 3, (3 + typeSizeof(tex->dType) / 4) - 1);
    } else
-   if (n > 1) {
-      condenseSrcs(tex, 0, n - 1);
+   if (isTextureOp(tex->op)) {
+      int n = tex->srcCount(0xff, true);
+      if (n > 4) {
+         condenseSrcs(tex, 0, 3);
+         if (n > 5) // NOTE: first call modified positions already
+            condenseSrcs(tex, 4 - (4 - 1), n - 1 - (4 - 1));
+      } else
+      if (n > 1) {
+         condenseSrcs(tex, 0, n - 1);
+      }
    }
 }
 
@@ -1927,7 +1971,9 @@ RegAlloc::InsertConstraintsPass::visit(BasicBlock *bb)
          if (i->src(0).isIndirect(0) && typeSizeof(i->dType) >= 8)
             addHazard(i, i->src(0).getIndirect(0));
       } else
-      if (i->op == OP_UNION) {
+      if (i->op == OP_UNION ||
+          i->op == OP_MERGE ||
+          i->op == OP_SPLIT) {
          constrList.push_back(i);
       }
    }

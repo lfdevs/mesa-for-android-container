@@ -21,14 +21,13 @@
 
 SRCDIR=$(top_srcdir)/src/mesa/
 BUILDDIR=$(top_builddir)/src/mesa/
-include ../sources.mak
+include ../Makefile.sources
 include ../../glsl/Makefile.sources
 
 noinst_PROGRAMS =
 
 AM_CPPFLAGS = \
 	$(INCLUDE_DIRS) \
-	$(API_DEFINES) \
 	$(DEFINES) \
 	-DUSE_DRICORE
 

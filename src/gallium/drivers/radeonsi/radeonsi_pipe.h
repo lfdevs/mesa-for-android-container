@@ -47,6 +47,11 @@
 #define R600_BIG_ENDIAN 0
 #endif
 
+#define R600_TRACE_CS 0
+#define R600_TRACE_CS_DWORDS		6
+
+struct si_pipe_compute;
+
 struct r600_pipe_fences {
 	struct si_resource		*bo;
 	unsigned			*data;
@@ -67,6 +72,11 @@ struct r600_screen {
 	struct r600_tiling_info		tiling_info;
 	struct util_slab_mempool	pool_buffers;
 	struct r600_pipe_fences		fences;
+#if R600_TRACE_CS
+	struct si_resource		*trace_bo;
+	uint32_t			*trace_ptr;
+	unsigned			cs_count;
+#endif
 };
 
 struct si_pipe_sampler_view {
@@ -77,7 +87,11 @@ struct si_pipe_sampler_view {
 
 struct si_pipe_sampler_state {
 	uint32_t			val[4];
-	float				border_color[4];
+	uint32_t			border_color[4];
+};
+
+struct si_cs_shader_state {
+	struct si_pipe_compute		*program;
 };
 
 /* needed for blitter save */
@@ -110,6 +124,13 @@ struct r600_fence_block {
 #define R600_CONSTANT_ARRAY_SIZE 256
 #define R600_RESOURCE_ARRAY_SIZE 160
 
+struct r600_constbuf_state
+{
+	struct pipe_constant_buffer	cb[2];
+	uint32_t			enabled_mask;
+	uint32_t			dirty_mask;
+};
+
 struct r600_context {
 	struct pipe_context		context;
 	struct blitter_context		*blitter;
@@ -125,18 +146,21 @@ struct r600_context {
 	struct pipe_framebuffer_state	framebuffer;
 	unsigned			pa_sc_line_stipple;
 	unsigned			pa_su_sc_mode_cntl;
-	unsigned			pa_cl_clip_cntl;
 	/* for saving when using blitter */
 	struct pipe_stencil_ref		stencil_ref;
 	struct si_pipe_shader_selector	*ps_shader;
 	struct si_pipe_shader_selector	*vs_shader;
+	struct si_cs_shader_state	cs_shader_state;
 	struct pipe_query		*current_render_cond;
 	unsigned			current_render_cond_mode;
+	boolean				current_render_cond_cond;
 	struct pipe_query		*saved_render_cond;
 	unsigned			saved_render_cond_mode;
+	boolean				saved_render_cond_cond;
 	/* shader information */
 	unsigned			sprite_coord_enable;
 	unsigned			export_16bpc;
+	struct r600_constbuf_state	constbuf_state[PIPE_SHADER_TYPES];
 	struct r600_textures_info	vs_samplers;
 	struct r600_textures_info	ps_samplers;
 	struct si_resource		*border_color_table;
@@ -209,6 +233,7 @@ void r600_upload_index_buffer(struct r600_context *rctx,
 /* r600_pipe.c */
 void radeonsi_flush(struct pipe_context *ctx, struct pipe_fence_handle **fence,
 		    unsigned flags);
+const char *r600_get_llvm_processor_name(enum radeon_family family);
 
 /* r600_query.c */
 void r600_init_query_functions(struct r600_context *rctx);
@@ -224,6 +249,24 @@ void si_init_surface_functions(struct r600_context *r600);
 void r600_translate_index_buffer(struct r600_context *r600,
 				 struct pipe_index_buffer *ib,
 				 unsigned count);
+
+#if R600_TRACE_CS
+void r600_trace_emit(struct r600_context *rctx);
+#endif
+
+/* radeonsi_compute.c */
+void si_init_compute_functions(struct r600_context *rctx);
+
+/* radeonsi_uvd.c */
+struct pipe_video_decoder *radeonsi_uvd_create_decoder(struct pipe_context *context,
+						       enum pipe_video_profile profile,
+						       enum pipe_video_entrypoint entrypoint,
+						       enum pipe_video_chroma_format chroma_format,
+						       unsigned width, unsigned height,
+						       unsigned max_references, bool expect_chunked_decode);
+
+struct pipe_video_buffer *radeonsi_video_buffer_create(struct pipe_context *pipe,
+						       const struct pipe_video_buffer *tmpl);
 
 /*
  * common helpers
@@ -274,22 +317,6 @@ static INLINE uint64_t r600_resource_va(struct pipe_screen *screen, struct pipe_
 	struct si_resource *rresource = (struct si_resource*)resource;
 
 	return rscreen->ws->buffer_get_virtual_address(rresource->cs_buf);
-}
-
-static INLINE unsigned u_max_layer(struct pipe_resource *r, unsigned level)
-{
-	switch (r->target) {
-	case PIPE_TEXTURE_CUBE:
-		return 6 - 1;
-	case PIPE_TEXTURE_3D:
-		return u_minify(r->depth0, level) - 1;
-	case PIPE_TEXTURE_1D_ARRAY:
-	case PIPE_TEXTURE_2D_ARRAY:
-	case PIPE_TEXTURE_CUBE_ARRAY:
-		return r->array_size - 1;
-	default:
-		return 0;
-	}
 }
 
 #endif

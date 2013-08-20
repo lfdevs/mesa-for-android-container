@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  3.5
  *
  * Copyright (C) 1999-2001  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -28,14 +28,12 @@
 #define API_LOOPBACK_H
 
 #include "main/compiler.h"
-#include "main/mfeatures.h"
 #include "main/glheader.h" // ?
 #include "main/macros.h" // ?
 #include "main/mtypes.h" // ?
 #include "glapi/glapi.h" // ?
 #include "glapi/glthread.h" // ?
 #include "main/dispatch.h" // ?
-#include "main/mfeatures.h" // ?
 #include "main/context.h" // ?
 
 struct _glapi_table;

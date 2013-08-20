@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.9
  *
  * Copyright (C) 2010 LunarG Inc.
  *
@@ -26,7 +25,7 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
-#include "mapi/mapi.h"
+#include "mapi.h"
 
 /* define vega_spec and vega_procs for use with mapi */
 #define API_TMP_DEFINE_SPEC

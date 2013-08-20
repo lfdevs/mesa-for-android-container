@@ -5,7 +5,6 @@
 
 /*
  * Mesa 3-D graphics library
- * Version:  6.5
  *
  * Copyright (C) 1999-2005  Brian Paul   All Rights Reserved.
  *
@@ -22,9 +21,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -289,6 +289,32 @@ _mesa_CompressedTexSubImage3D(GLenum target, GLint level, GLint xoffset,
 extern void GLAPIENTRY
 _mesa_TexBuffer(GLenum target, GLenum internalFormat, GLuint buffer);
 
+extern void GLAPIENTRY
+_mesa_TexBufferRange(GLenum target, GLenum internalFormat, GLuint buffer,
+                     GLintptr offset, GLsizeiptr size);
+
+
+extern void GLAPIENTRY
+_mesa_TexImage2DMultisample(GLenum target, GLsizei samples,
+                            GLint internalformat, GLsizei width,
+                            GLsizei height, GLboolean fixedsamplelocations);
+
+extern void GLAPIENTRY
+_mesa_TexImage3DMultisample(GLenum target, GLsizei samples,
+                            GLint internalformat, GLsizei width,
+                            GLsizei height, GLsizei depth,
+                            GLboolean fixedsamplelocations);
+
+extern void GLAPIENTRY
+_mesa_TexStorage2DMultisample(GLenum target, GLsizei samples,
+                              GLenum internalformat, GLsizei width,
+                              GLsizei height, GLboolean fixedsamplelocations);
+
+extern void GLAPIENTRY
+_mesa_TexStorage3DMultisample(GLenum target, GLsizei samples,
+                              GLenum internalformat, GLsizei width,
+                              GLsizei height, GLsizei depth,
+                              GLboolean fixedsamplelocations);
 
 /*@}*/
 

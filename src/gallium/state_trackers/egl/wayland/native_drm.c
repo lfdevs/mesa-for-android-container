@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.11
  *
  * Copyright (C) 2011 Benjamin Franzke <benjaminfranzke@googlemail.com>
  *
@@ -271,7 +270,7 @@ wayland_drm_display_bind_wayland_display(struct native_display *ndpy,
 
    drmdpy->wl_server_drm =
       wayland_drm_init(wl_dpy, drmdpy->device_name,
-                       &wl_drm_callbacks, ndpy);
+                       &wl_drm_callbacks, ndpy, 0);
 
    if (!drmdpy->wl_server_drm)
       return FALSE;

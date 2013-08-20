@@ -86,12 +86,16 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_QUERY_TIME_ELAPSED:
       return 1;
+   case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
+      return 1;
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
       return 1;
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
       return 1;
    case PIPE_CAP_TEXTURE_SWIZZLE:
       return 1;
+   case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
+      return 0;
    case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
       return SP_MAX_TEXTURE_2D_LEVELS;
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
@@ -157,7 +161,6 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 16;
-   case PIPE_CAP_TGSI_CAN_COMPACT_VARYINGS:
    case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
@@ -171,6 +174,17 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 1;
+   case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
+      return 65536;
+   case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
+      return 0;
+   case PIPE_CAP_TGSI_TEXCOORD:
+   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+      return 0;
+   case PIPE_CAP_MAX_VIEWPORTS:
+      return 1;
+   case PIPE_CAP_ENDIANNESS:
+      return PIPE_ENDIAN_NATIVE;
    }
    /* should only get here on unhandled cases */
    debug_printf("Unexpected PIPE_CAP %d query\n", param);

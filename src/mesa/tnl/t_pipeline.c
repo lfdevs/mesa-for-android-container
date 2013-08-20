@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  6.5.3
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors:
  *    Keith Whitwell <keith@tungstengraphics.com>
@@ -94,7 +94,7 @@ static GLuint check_output_changes( struct gl_context *ctx )
 #if 0
    TNLcontext *tnl = TNL_CONTEXT(ctx);
    
-   for (i = 0; i < VERT_RESULT_MAX; i++) {
+   for (i = 0; i < VARYING_SLOT_MAX; i++) {
       if (tnl->vb.ResultPtr[i]->size != tnl->last_result_size[i] ||
 	  tnl->vb.ResultPtr[i]->stride != tnl->last_result_stride[i]) {
 	 tnl->last_result_size[i] = tnl->vb.ResultPtr[i]->size;

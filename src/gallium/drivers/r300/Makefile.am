@@ -17,12 +17,15 @@ AM_CFLAGS = \
 	$(LLVM_CFLAGS) \
 	$(RADEON_CFLAGS)
 
-r300_compiler_tests_LDADD = libr300.la
+r300_compiler_tests_LDADD = libr300.la libr300-helper.la \
+	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
+	$(GALLIUM_DRI_LIB_DEPS)
 r300_compiler_tests_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/drivers/r300/compiler
 r300_compiler_tests_SOURCES = \
 	$(testdir)/r300_compiler_tests.c \
 	$(testdir)/radeon_compiler_optimize_tests.c \
+	$(testdir)/radeon_compiler_regalloc_tests.c \
 	$(testdir)/radeon_compiler_util_tests.c \
 	$(testdir)/rc_test_helpers.c \
 	$(testdir)/unit_test.c

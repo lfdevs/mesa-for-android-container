@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50/codegen/nv50_ir.h"
@@ -122,7 +122,6 @@ private:
 
    void handlePRERET(FlowInstruction *);
    void replaceZero(Instruction *);
-   void split64BitOp(Instruction *);
 
    LValue *r63;
 };
@@ -157,22 +156,6 @@ NV50LegalizePostRA::replaceZero(Instruction *i)
       ImmediateValue *imm = i->getSrc(s)->asImm();
       if (imm && imm->reg.data.u64 == 0)
          i->setSrc(s, r63);
-   }
-}
-
-void
-NV50LegalizePostRA::split64BitOp(Instruction *i)
-{
-   if (i->dType == TYPE_F64) {
-      if (i->op == OP_MAD)
-         i->op = OP_FMA;
-      if (i->op == OP_ADD || i->op == OP_MUL || i->op == OP_FMA ||
-          i->op == OP_CVT || i->op == OP_MIN || i->op == OP_MAX ||
-          i->op == OP_SET)
-         return;
-      i->dType = i->sType = TYPE_U32;
-
-      i->bb->insertAfter(i, cloneForward(func, i));
    }
 }
 
@@ -229,11 +212,18 @@ NV50LegalizePostRA::visit(BasicBlock *bb)
       if (i->op == OP_PRERET && prog->getTarget()->getChipset() < 0xa0) {
          handlePRERET(i->asFlow());
       } else {
+         // TODO: We will want to do this before register allocation,
+         // since have to use a $c register for the carry flag.
+         if (typeSizeof(i->dType) == 8) {
+            Instruction *hi = BuildUtil::split64BitOpPostRA(func, i, r63, NULL);
+            if (hi)
+               next = hi;
+         }
+
          if (i->op != OP_MOV && i->op != OP_PFETCH &&
+             i->op != OP_BAR &&
              (!i->defExists(0) || i->def(0).getFile() != FILE_ADDRESS))
             replaceZero(i);
-         if (typeSizeof(i->dType) == 8)
-            split64BitOp(i);
       }
    }
    if (!bb->getEntry())
@@ -594,11 +584,13 @@ NV50LoweringPreSSA::handleTEX(TexInstruction *i)
       i->setSrc(arg - 1, src);
 
       if (i->tex.target.isCube()) {
-         Value *acube[4], *a2d[4];
+         std::vector<Value *> acube, a2d;
          int c;
 
+         acube.resize(4);
          for (c = 0; c < 4; ++c)
             acube[c] = i->getSrc(c);
+         a2d.resize(4);
          for (c = 0; c < 3; ++c)
             a2d[c] = new_LValue(func, FILE_GPR);
          a2d[3] = NULL;
@@ -1019,7 +1011,7 @@ NV50LoweringPreSSA::checkPredicate(Instruction *insn)
       return;
    cdst = bld.getSSA(1, FILE_FLAGS);
 
-   bld.mkCmp(OP_SET, CC_NEU, TYPE_U32, cdst, bld.loadImm(NULL, 0), pred);
+   bld.mkCmp(OP_SET, CC_NEU, insn->dType, cdst, bld.loadImm(NULL, 0), pred);
 
    insn->setPredicate(insn->cc, cdst);
 }

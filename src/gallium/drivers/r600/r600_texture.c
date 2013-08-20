@@ -25,12 +25,47 @@
  *      Corbin Simpson
  */
 #include "r600_formats.h"
+#include "evergreen_compute.h"
 #include "r600d.h"
 
 #include <errno.h>
 #include "util/u_format_s3tc.h"
 #include "util/u_memory.h"
 
+
+/* Same as resource_copy_region, except that both upsampling and downsampling are allowed. */
+static void r600_copy_region_with_blit(struct pipe_context *pipe,
+				       struct pipe_resource *dst,
+                                       unsigned dst_level,
+                                       unsigned dstx, unsigned dsty, unsigned dstz,
+                                       struct pipe_resource *src,
+                                       unsigned src_level,
+                                       const struct pipe_box *src_box)
+{
+	struct pipe_blit_info blit;
+
+	memset(&blit, 0, sizeof(blit));
+	blit.src.resource = src;
+	blit.src.format = src->format;
+	blit.src.level = src_level;
+	blit.src.box = *src_box;
+	blit.dst.resource = dst;
+	blit.dst.format = dst->format;
+	blit.dst.level = dst_level;
+	blit.dst.box.x = dstx;
+	blit.dst.box.y = dsty;
+	blit.dst.box.z = dstz;
+	blit.dst.box.width = src_box->width;
+	blit.dst.box.height = src_box->height;
+	blit.dst.box.depth = src_box->depth;
+	blit.mask = util_format_get_mask(src->format) &
+		    util_format_get_mask(dst->format);
+	blit.filter = PIPE_TEX_FILTER_NEAREST;
+
+	if (blit.mask) {
+		pipe->blit(pipe, &blit);
+	}
+}
 
 /* Copy from a full GPU texture to a transfer's staging one. */
 static void r600_copy_to_staging_texture(struct pipe_context *ctx, struct r600_transfer *rtransfer)
@@ -40,32 +75,17 @@ static void r600_copy_to_staging_texture(struct pipe_context *ctx, struct r600_t
 	struct pipe_resource *dst = &rtransfer->staging->b.b;
 	struct pipe_resource *src = transfer->resource;
 
-	if (src->nr_samples <= 1) {
-		if (!rctx->screen->dma_blit(ctx, dst, 0, 0, 0, 0,
-					    src, transfer->level,
-					    &transfer->box)) {
-			/* async dma could not be use */
-			ctx->resource_copy_region(ctx, dst, 0, 0, 0, 0,
-						  src, transfer->level, &transfer->box);
-		}
-	} else {
-		/* Resolve the resource. */
-		struct pipe_blit_info blit;
+	if (src->nr_samples > 1) {
+		r600_copy_region_with_blit(ctx, dst, 0, 0, 0, 0,
+					   src, transfer->level, &transfer->box);
+		return;
+	}
 
-		memset(&blit, 0, sizeof(blit));
-	        blit.src.resource = src;
-	        blit.src.format = src->format;
-	        blit.src.level = transfer->level;
-	        blit.src.box = transfer->box;
-	        blit.dst.resource = dst;
-	        blit.dst.format = dst->format;
-	        blit.dst.box.width = transfer->box.width;
-	        blit.dst.box.height = transfer->box.height;
-	        blit.dst.box.depth = transfer->box.depth;
-	        blit.mask = PIPE_MASK_RGBA;
-	        blit.filter = PIPE_TEX_FILTER_NEAREST;
-
-		ctx->blit(ctx, &blit);
+	if (!rctx->screen->dma_blit(ctx, dst, 0, 0, 0, 0,
+				    src, transfer->level,
+				    &transfer->box)) {
+		ctx->resource_copy_region(ctx, dst, 0, 0, 0, 0,
+					  src, transfer->level, &transfer->box);
 	}
 }
 
@@ -74,27 +94,37 @@ static void r600_copy_from_staging_texture(struct pipe_context *ctx, struct r600
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
 	struct pipe_transfer *transfer = (struct pipe_transfer*)rtransfer;
-	struct pipe_resource *texture = transfer->resource;
+	struct pipe_resource *dst = transfer->resource;
+	struct pipe_resource *src = &rtransfer->staging->b.b;
 	struct pipe_box sbox;
 
 	u_box_3d(0, 0, 0, transfer->box.width, transfer->box.height, transfer->box.depth, &sbox);
 
-	if (!rctx->screen->dma_blit(ctx, texture, transfer->level,
+	if (dst->nr_samples > 1) {
+		r600_copy_region_with_blit(ctx, dst, transfer->level,
+					   transfer->box.x, transfer->box.y, transfer->box.z,
+					   src, 0, &sbox);
+		return;
+	}
+
+	if (!rctx->screen->dma_blit(ctx, dst, transfer->level,
 				    transfer->box.x, transfer->box.y, transfer->box.z,
-				    &rtransfer->staging->b.b, 0, &sbox)) {
-		/* async dma could not be use */
-		ctx->resource_copy_region(ctx, texture, transfer->level,
+				    src, 0, &sbox)) {
+		ctx->resource_copy_region(ctx, dst, transfer->level,
 					  transfer->box.x, transfer->box.y, transfer->box.z,
-					  &rtransfer->staging->b.b,
-					  0, &sbox);
+					  src, 0, &sbox);
 	}
 }
 
-unsigned r600_texture_get_offset(struct r600_texture *rtex,
-					unsigned level, unsigned layer)
+static unsigned r600_texture_get_offset(struct r600_texture *rtex, unsigned level,
+					const struct pipe_box *box)
 {
+	enum pipe_format format = rtex->resource.b.b.format;
+
 	return rtex->surface.level[level].offset +
-	       layer * rtex->surface.level[level].slice_size;
+	       box->z * rtex->surface.level[level].slice_size +
+	       box->y / util_format_get_blockheight(format) * rtex->surface.level[level].pitch_bytes +
+	       box->x / util_format_get_blockwidth(format) * util_format_get_blocksize(format);
 }
 
 static int r600_init_surface(struct r600_screen *rscreen,
@@ -283,50 +313,51 @@ void r600_texture_get_fmask_info(struct r600_screen *rscreen,
 				 unsigned nr_samples,
 				 struct r600_fmask_info *out)
 {
-	/* FMASK is allocated pretty much like an ordinary texture.
-	 * Here we use bpe in the units of bits, not bytes. */
+	/* FMASK is allocated like an ordinary texture. */
 	struct radeon_surface fmask = rtex->surface;
+
+	memset(out, 0, sizeof(*out));
+
+	fmask.bo_alignment = 0;
+	fmask.bo_size = 0;
+	fmask.nsamples = 1;
+	fmask.flags |= RADEON_SURF_FMASK;
 
 	switch (nr_samples) {
 	case 2:
-		/* This should be 8,1, but we should set nsamples > 1
-		 * for the allocator to treat it as a multisample surface.
-		 * Let's set 4,2 then. */
 	case 4:
-		fmask.bpe = 4;
-		fmask.nsamples = 2;
+		fmask.bpe = 1;
+		fmask.bankh = 4;
 		break;
 	case 8:
-		fmask.bpe = 8;
-		fmask.nsamples = 4;
-		break;
-	case 16:
-		fmask.bpe = 16;
-		fmask.nsamples = 4;
+		fmask.bpe = 4;
 		break;
 	default:
 		R600_ERR("Invalid sample count for FMASK allocation.\n");
 		return;
 	}
 
-	/* R600-R700 errata? Anyway, this fixes colorbuffer corruption. */
+	/* Overallocate FMASK on R600-R700 to fix colorbuffer corruption.
+	 * This can be fixed by writing a separate FMASK allocator specifically
+	 * for R600-R700 asics. */
 	if (rscreen->chip_class <= R700) {
 		fmask.bpe *= 2;
-	}
-
-	if (rscreen->chip_class >= EVERGREEN) {
-		fmask.bankh = nr_samples <= 4 ? 4 : 1;
 	}
 
 	if (rscreen->ws->surface_init(rscreen->ws, &fmask)) {
 		R600_ERR("Got error in surface_init while allocating FMASK.\n");
 		return;
 	}
+
 	assert(fmask.level[0].mode == RADEON_SURF_MODE_2D);
+
+	out->slice_tile_max = (fmask.level[0].nblk_x * fmask.level[0].nblk_y) / 64;
+	if (out->slice_tile_max)
+		out->slice_tile_max -= 1;
 
 	out->bank_height = fmask.bankh;
 	out->alignment = MAX2(256, fmask.bo_alignment);
-	out->size = (fmask.bo_size + 7) / 8;
+	out->size = fmask.bo_size;
 }
 
 static void r600_texture_allocate_fmask(struct r600_screen *rscreen,
@@ -338,6 +369,7 @@ static void r600_texture_allocate_fmask(struct r600_screen *rscreen,
 				    rtex->resource.b.b.nr_samples, &fmask);
 
 	rtex->fmask_bank_height = fmask.bank_height;
+	rtex->fmask_slice_tile_max = fmask.slice_tile_max;
 	rtex->fmask_offset = align(rtex->size, fmask.alignment);
 	rtex->fmask_size = fmask.size;
 	rtex->size = rtex->fmask_offset + rtex->fmask_size;
@@ -399,8 +431,6 @@ static void r600_texture_allocate_cmask(struct r600_screen *rscreen,
 #endif
 }
 
-DEBUG_GET_ONCE_BOOL_OPTION(print_texdepth, "R600_PRINT_TEXDEPTH", FALSE);
-
 static struct r600_texture *
 r600_texture_create_object(struct pipe_screen *screen,
 			   const struct pipe_resource *base,
@@ -436,8 +466,8 @@ r600_texture_create_object(struct pipe_screen *screen,
 	}
 
 	if (base->nr_samples > 1 && !rtex->is_depth && !buf) {
-		r600_texture_allocate_cmask(rscreen, rtex);
 		r600_texture_allocate_fmask(rscreen, rtex);
+		r600_texture_allocate_cmask(rscreen, rtex);
 	}
 
 	if (!rtex->is_depth && base->nr_samples > 1 &&
@@ -456,7 +486,8 @@ r600_texture_create_object(struct pipe_screen *screen,
 	rtex->htile = NULL;
 	if (!(base->flags & (R600_RESOURCE_FLAG_TRANSFER | R600_RESOURCE_FLAG_FLUSHED_DEPTH)) &&
 	    util_format_is_depth_or_stencil(base->format) &&
-	    rscreen->use_hyperz &&
+	    rscreen->info.drm_minor >= 26 &&
+	    !(rscreen->debug_flags & DBG_NO_HYPERZ) &&
 	    base->target == PIPE_TEXTURE_2D &&
 	    rtex->surface.level[0].nblk_x >= 32 &&
 	    rtex->surface.level[0].nblk_y >= 32) {
@@ -506,7 +537,15 @@ r600_texture_create_object(struct pipe_screen *screen,
 					 rtex->cmask_offset, rtex->cmask_size, 0xCC);
 	}
 
-	if (debug_get_option_print_texdepth() && rtex->is_depth && rtex->non_disp_tiling) {
+	if (rscreen->debug_flags & DBG_VM) {
+		fprintf(stderr, "VM start=0x%llX  end=0x%llX | Texture %ix%ix%i, %i levels, %i samples, %s\n",
+			r600_resource_va(screen, &rtex->resource.b.b),
+			r600_resource_va(screen, &rtex->resource.b.b) + rtex->resource.buf->size,
+			base->width0, base->height0, util_max_layer(base, 0)+1, base->last_level+1,
+			base->nr_samples ? base->nr_samples : 1, util_format_short_name(base->format));
+	}
+
+	if (rscreen->debug_flags & DBG_TEX_DEPTH && rtex->is_depth && rtex->non_disp_tiling) {
 		printf("Texture: npix_x=%u, npix_y=%u, npix_z=%u, blk_w=%u, "
 		       "blk_h=%u, blk_d=%u, array_size=%u, last_level=%u, "
 		       "bpe=%u, nsamples=%u, flags=%u\n",
@@ -605,8 +644,8 @@ struct pipe_surface *r600_create_surface_custom(struct pipe_context *pipe,
 {
 	struct r600_surface *surface = CALLOC_STRUCT(r600_surface);
 
-        assert(templ->u.tex.first_layer <= u_max_layer(texture, templ->u.tex.level));
-        assert(templ->u.tex.last_layer <= u_max_layer(texture, templ->u.tex.level));
+        assert(templ->u.tex.first_layer <= util_max_layer(texture, templ->u.tex.level));
+        assert(templ->u.tex.last_layer <= util_max_layer(texture, templ->u.tex.level));
 	assert(templ->u.tex.first_layer == templ->u.tex.last_layer);
 	if (surface == NULL)
 		return NULL;
@@ -721,6 +760,44 @@ bool r600_init_flushed_depth_texture(struct pipe_context *ctx,
 	return true;
 }
 
+/**
+ * Initialize the pipe_resource descriptor to be of the same size as the box,
+ * which is supposed to hold a subregion of the texture "orig" at the given
+ * mipmap level.
+ */
+static void r600_init_temp_resource_from_box(struct pipe_resource *res,
+					     struct pipe_resource *orig,
+					     const struct pipe_box *box,
+					     unsigned level, unsigned flags)
+{
+	memset(res, 0, sizeof(*res));
+	res->format = orig->format;
+	res->width0 = box->width;
+	res->height0 = box->height;
+	res->depth0 = 1;
+	res->array_size = 1;
+	res->usage = flags & R600_RESOURCE_FLAG_TRANSFER ? PIPE_USAGE_STAGING : PIPE_USAGE_STATIC;
+	res->flags = flags;
+
+	/* We must set the correct texture target and dimensions for a 3D box. */
+	if (box->depth > 1 && util_max_layer(orig, level) > 0)
+		res->target = orig->target;
+	else
+		res->target = PIPE_TEXTURE_2D;
+
+	switch (res->target) {
+	case PIPE_TEXTURE_1D_ARRAY:
+	case PIPE_TEXTURE_2D_ARRAY:
+	case PIPE_TEXTURE_CUBE_ARRAY:
+		res->array_size = box->depth;
+		break;
+	case PIPE_TEXTURE_3D:
+		res->depth0 = box->depth;
+		break;
+	default:;
+	}
+}
+
 static void *r600_texture_transfer_map(struct pipe_context *ctx,
 				       struct pipe_resource *texture,
 				       unsigned level,
@@ -732,7 +809,6 @@ static void *r600_texture_transfer_map(struct pipe_context *ctx,
 	struct r600_texture *rtex = (struct r600_texture*)texture;
 	struct r600_transfer *trans;
 	boolean use_staging_texture = FALSE;
-	enum pipe_format format = texture->format;
 	struct r600_resource *buf;
 	unsigned offset = 0;
 	char *map;
@@ -774,66 +850,66 @@ static void *r600_texture_transfer_map(struct pipe_context *ctx,
 	trans->transfer.level = level;
 	trans->transfer.usage = usage;
 	trans->transfer.box = *box;
+
 	if (rtex->is_depth) {
-		/* XXX: only readback the rectangle which is being mapped?
-		*/
-		/* XXX: when discard is true, no need to read back from depth texture
-		*/
 		struct r600_texture *staging_depth;
 
-		assert(rtex->resource.b.b.nr_samples <= 1);
 		if (rtex->resource.b.b.nr_samples > 1) {
-			R600_ERR("mapping MSAA zbuffer unimplemented\n");
-			FREE(trans);
-			return NULL;
-		}
+			/* MSAA depth buffers need to be converted to single sample buffers.
+			 *
+			 * Mapping MSAA depth buffers can occur if ReadPixels is called
+			 * with a multisample GLX visual.
+			 *
+			 * First downsample the depth buffer to a temporary texture,
+			 * then decompress the temporary one to staging.
+			 *
+			 * Only the region being mapped is transfered.
+			 */
+			struct pipe_resource resource;
 
-		if (!r600_init_flushed_depth_texture(ctx, texture, &staging_depth)) {
-			R600_ERR("failed to create temporary texture to hold untiled copy\n");
-			FREE(trans);
-			return NULL;
-		}
+			r600_init_temp_resource_from_box(&resource, texture, box, level, 0);
 
-		r600_blit_decompress_depth(ctx, rtex, staging_depth,
-					   level, level,
-					   box->z, box->z + box->depth - 1,
-					   0, 0);
+			if (!r600_init_flushed_depth_texture(ctx, &resource, &staging_depth)) {
+				R600_ERR("failed to create temporary texture to hold untiled copy\n");
+				FREE(trans);
+				return NULL;
+			}
+
+			if (usage & PIPE_TRANSFER_READ) {
+				struct pipe_resource *temp = ctx->screen->resource_create(ctx->screen, &resource);
+
+				r600_copy_region_with_blit(ctx, temp, 0, 0, 0, 0, texture, level, box);
+				r600_blit_decompress_depth(ctx, (struct r600_texture*)temp, staging_depth,
+							   0, 0, 0, box->depth, 0, 0);
+				pipe_resource_reference((struct pipe_resource**)&temp, NULL);
+			}
+		}
+		else {
+			/* XXX: only readback the rectangle which is being mapped? */
+			/* XXX: when discard is true, no need to read back from depth texture */
+			if (!r600_init_flushed_depth_texture(ctx, texture, &staging_depth)) {
+				R600_ERR("failed to create temporary texture to hold untiled copy\n");
+				FREE(trans);
+				return NULL;
+			}
+
+			r600_blit_decompress_depth(ctx, rtex, staging_depth,
+						   level, level,
+						   box->z, box->z + box->depth - 1,
+						   0, 0);
+
+			offset = r600_texture_get_offset(staging_depth, level, box);
+		}
 
 		trans->transfer.stride = staging_depth->surface.level[level].pitch_bytes;
                 trans->transfer.layer_stride = staging_depth->surface.level[level].slice_size;
-		trans->offset = r600_texture_get_offset(staging_depth, level, box->z);
 		trans->staging = (struct r600_resource*)staging_depth;
 	} else if (use_staging_texture) {
 		struct pipe_resource resource;
 		struct r600_texture *staging;
 
-		memset(&resource, 0, sizeof(resource));
-		resource.format = texture->format;
-		resource.width0 = box->width;
-		resource.height0 = box->height;
-		resource.depth0 = 1;
-		resource.array_size = 1;
-		resource.usage = PIPE_USAGE_STAGING;
-		resource.flags = R600_RESOURCE_FLAG_TRANSFER;
-
-		/* We must set the correct texture target and dimensions if needed for a 3D transfer. */
-		if (box->depth > 1 && u_max_layer(texture, level) > 0)
-			resource.target = texture->target;
-		else
-			resource.target = PIPE_TEXTURE_2D;
-
-		switch (resource.target) {
-		case PIPE_TEXTURE_1D_ARRAY:
-		case PIPE_TEXTURE_2D_ARRAY:
-		case PIPE_TEXTURE_CUBE_ARRAY:
-			resource.array_size = box->depth;
-			break;
-		case PIPE_TEXTURE_3D:
-			resource.depth0 = box->depth;
-			break;
-		default:;
-		}
-
+		r600_init_temp_resource_from_box(&resource, texture, box, level,
+						 R600_RESOURCE_FLAG_TRANSFER);
 
 		/* Create the temporary texture. */
 		staging = (struct r600_texture*)ctx->screen->resource_create(ctx->screen, &resource);
@@ -847,16 +923,12 @@ static void *r600_texture_transfer_map(struct pipe_context *ctx,
 		trans->transfer.layer_stride = staging->surface.level[0].slice_size;
 		if (usage & PIPE_TRANSFER_READ) {
 			r600_copy_to_staging_texture(ctx, trans);
-			/* flush gfx & dma ring, order does not matter as only one can be live */
-			if (rctx->rings.dma.cs) {
-				rctx->rings.dma.flush(rctx, 0);
-			}
-			rctx->rings.gfx.flush(rctx, 0);
 		}
 	} else {
+		/* the resource is mapped directly */
 		trans->transfer.stride = rtex->surface.level[level].pitch_bytes;
 		trans->transfer.layer_stride = rtex->surface.level[level].slice_size;
-		trans->offset = r600_texture_get_offset(rtex, level, box->z);
+		offset = r600_texture_get_offset(rtex, level, box);
 	}
 
 	if (trans->staging) {
@@ -864,11 +936,6 @@ static void *r600_texture_transfer_map(struct pipe_context *ctx,
 	} else {
 		buf = &rtex->resource;
 	}
-
-	if (rtex->is_depth || !trans->staging)
-		offset = trans->offset +
-			box->y / util_format_get_blockheight(format) * trans->transfer.stride +
-			box->x / util_format_get_blockwidth(format) * util_format_get_blocksize(format);
 
 	if (!(map = r600_buffer_mmap_sync_with_rings(rctx, buf, usage))) {
 		pipe_resource_reference((struct pipe_resource**)&trans->staging, NULL);
@@ -901,7 +968,7 @@ static void r600_texture_transfer_unmap(struct pipe_context *ctx,
 	rctx->ws->buffer_unmap(buf);
 
 	if ((transfer->usage & PIPE_TRANSFER_WRITE) && rtransfer->staging) {
-		if (rtex->is_depth) {
+		if (rtex->is_depth && rtex->resource.b.b.nr_samples <= 1) {
 			ctx->resource_copy_region(ctx, texture, transfer->level,
 						  transfer->box.x, transfer->box.y, transfer->box.z,
 						  &rtransfer->staging->b.b, transfer->level,
@@ -981,11 +1048,14 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 				  const unsigned char *swizzle_view,
 				  uint32_t *word4_p, uint32_t *yuv_format_p)
 {
+	struct r600_screen *rscreen = (struct r600_screen *)screen;
 	uint32_t result = 0, word4 = 0, yuv_format = 0;
 	const struct util_format_description *desc;
 	boolean uniform = TRUE;
-	static int r600_enable_s3tc = -1;
+	bool enable_s3tc = rscreen->info.drm_minor >= 9;
 	bool is_srgb_valid = FALSE;
+	const unsigned char swizzle_xxxx[4] = {0, 0, 0, 0};
+	const unsigned char swizzle_yyyy[4] = {1, 1, 1, 1};
 
 	int i;
 	const uint32_t sign_bit[4] = {
@@ -996,38 +1066,62 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 	};
 	desc = util_format_description(format);
 
-	word4 |= r600_get_swizzle_combined(desc->swizzle, swizzle_view, FALSE);
+	/* Depth and stencil swizzling is handled separately. */
+	if (desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS) {
+		word4 |= r600_get_swizzle_combined(desc->swizzle, swizzle_view, FALSE);
+	}
 
 	/* Colorspace (return non-RGB formats directly). */
 	switch (desc->colorspace) {
 	/* Depth stencil formats */
 	case UTIL_FORMAT_COLORSPACE_ZS:
 		switch (format) {
+		/* Depth sampler formats. */
 		case PIPE_FORMAT_Z16_UNORM:
+			word4 |= r600_get_swizzle_combined(swizzle_xxxx, swizzle_view, FALSE);
 			result = FMT_16;
+			goto out_word4;
+		case PIPE_FORMAT_Z24X8_UNORM:
+		case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+			word4 |= r600_get_swizzle_combined(swizzle_xxxx, swizzle_view, FALSE);
+			result = FMT_8_24;
+			goto out_word4;
+		case PIPE_FORMAT_X8Z24_UNORM:
+		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+			if (rscreen->chip_class < EVERGREEN)
+				goto out_unknown;
+			word4 |= r600_get_swizzle_combined(swizzle_yyyy, swizzle_view, FALSE);
+			result = FMT_24_8;
+			goto out_word4;
+		case PIPE_FORMAT_Z32_FLOAT:
+			word4 |= r600_get_swizzle_combined(swizzle_xxxx, swizzle_view, FALSE);
+			result = FMT_32_FLOAT;
+			goto out_word4;
+		case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+			word4 |= r600_get_swizzle_combined(swizzle_xxxx, swizzle_view, FALSE);
+			result = FMT_X24_8_32_FLOAT;
+			goto out_word4;
+		/* Stencil sampler formats. */
+		case PIPE_FORMAT_S8_UINT:
+			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
+			word4 |= r600_get_swizzle_combined(swizzle_xxxx, swizzle_view, FALSE);
+			result = FMT_8;
 			goto out_word4;
 		case PIPE_FORMAT_X24S8_UINT:
 			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
-		case PIPE_FORMAT_Z24X8_UNORM:
-		case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+			word4 |= r600_get_swizzle_combined(swizzle_yyyy, swizzle_view, FALSE);
 			result = FMT_8_24;
 			goto out_word4;
 		case PIPE_FORMAT_S8X24_UINT:
+			if (rscreen->chip_class < EVERGREEN)
+				goto out_unknown;
 			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
-		case PIPE_FORMAT_X8Z24_UNORM:
-		case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+			word4 |= r600_get_swizzle_combined(swizzle_xxxx, swizzle_view, FALSE);
 			result = FMT_24_8;
-			goto out_word4;
-		case PIPE_FORMAT_S8_UINT:
-			result = FMT_8;
-			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
-			goto out_word4;
-		case PIPE_FORMAT_Z32_FLOAT:
-			result = FMT_32_FLOAT;
 			goto out_word4;
 		case PIPE_FORMAT_X32_S8X24_UINT:
 			word4 |= S_038010_NUM_FORMAT_ALL(V_038010_SQ_NUM_FORMAT_INT);
-		case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+			word4 |= r600_get_swizzle_combined(swizzle_yyyy, swizzle_view, FALSE);
 			result = FMT_X24_8_32_FLOAT;
 			goto out_word4;
 		default:
@@ -1052,16 +1146,8 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 		break;
 	}
 
-	if (r600_enable_s3tc == -1) {
-		struct r600_screen *rscreen = (struct r600_screen *)screen;
-		if (rscreen->info.drm_minor >= 9)
-			r600_enable_s3tc = 1;
-		else
-			r600_enable_s3tc = debug_get_bool_option("R600_ENABLE_S3TC", FALSE);
-	}
-
 	if (desc->layout == UTIL_FORMAT_LAYOUT_RGTC) {
-		if (!r600_enable_s3tc)
+		if (!enable_s3tc)
 			goto out_unknown;
 
 		switch (format) {
@@ -1086,7 +1172,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 
 	if (desc->layout == UTIL_FORMAT_LAYOUT_S3TC) {
 
-		if (!r600_enable_s3tc)
+		if (!enable_s3tc)
 			goto out_unknown;
 
 		if (!util_format_s3tc_enabled) {

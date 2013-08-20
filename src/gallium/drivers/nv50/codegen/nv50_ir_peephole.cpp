@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50_ir.h"
@@ -36,6 +36,8 @@ Instruction::isNop() const
    if (op == OP_PHI || op == OP_SPLIT || op == OP_MERGE || op == OP_CONSTRAINT)
       return true;
    if (terminator || join) // XXX: should terminator imply flow ?
+      return false;
+   if (op == OP_ATOM)
       return false;
    if (!fixed && op == OP_NOP)
       return true;
@@ -63,6 +65,8 @@ bool Instruction::isDead() const
 {
    if (op == OP_STORE ||
        op == OP_EXPORT ||
+       op == OP_ATOM ||
+       op == OP_SUSTB || op == OP_SUSTP || op == OP_SUREDP || op == OP_SUREDB ||
        op == OP_WRSV)
       return false;
 
@@ -199,6 +203,9 @@ LoadPropagation::visit(BasicBlock *bb)
    for (Instruction *i = bb->getEntry(); i; i = next) {
       next = i->next;
 
+      if (i->op == OP_CALL) // calls have args as sources, they must be in regs
+         continue;
+
       if (i->srcExists(1))
          checkSwapSrc01(i);
 
@@ -317,6 +324,8 @@ ConstantFolding::findOriginForTestWithZero(Value *value)
 void
 Modifier::applyTo(ImmediateValue& imm) const
 {
+   if (!bits) // avoid failure if imm.reg.type is unhandled (e.g. b128)
+      return;
    switch (imm.reg.type) {
    case TYPE_F32:
       if (bits & NV50_IR_MOD_ABS)
@@ -658,6 +667,8 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
       }
       break;
    case OP_ADD:
+      if (i->usesFlags())
+         break;
       if (imm0.isInteger(0)) {
          if (s == 0) {
             i->setSrc(0, i->getSrc(1));
@@ -924,6 +935,7 @@ private:
    void handleSLCT(Instruction *);
    void handleLOGOP(Instruction *);
    void handleCVT(Instruction *);
+   void handleSUCLAMP(Instruction *);
 
    BuildUtil bld;
 };
@@ -1208,6 +1220,47 @@ AlgebraicOpt::handleCVT(Instruction *cvt)
    delete_Instruction(prog, cvt);
 }
 
+// SUCLAMP dst, (ADD b imm), k, 0 -> SUCLAMP dst, b, k, imm (if imm fits s6)
+void
+AlgebraicOpt::handleSUCLAMP(Instruction *insn)
+{
+   ImmediateValue imm;
+   int32_t val = insn->getSrc(2)->asImm()->reg.data.s32;
+   int s;
+   Instruction *add;
+
+   assert(insn->srcExists(0) && insn->src(0).getFile() == FILE_GPR);
+
+   // look for ADD (TODO: only count references by non-SUCLAMP)
+   if (insn->getSrc(0)->refCount() > 1)
+      return;
+   add = insn->getSrc(0)->getInsn();
+   if (!add || add->op != OP_ADD ||
+       (add->dType != TYPE_U32 &&
+        add->dType != TYPE_S32))
+      return;
+
+   // look for immediate
+   for (s = 0; s < 2; ++s)
+      if (add->src(s).getImmediate(imm))
+         break;
+   if (s >= 2)
+      return;
+   s = s ? 0 : 1;
+   // determine if immediate fits
+   val += imm.reg.data.s32;
+   if (val > 31 || val < -32)
+      return;
+   // determine if other addend fits
+   if (add->src(s).getFile() != FILE_GPR || add->src(s).mod != Modifier(0))
+      return;
+
+   bld.setPosition(insn, false); // make sure bld is init'ed
+   // replace sources
+   insn->setSrc(2, bld.mkImm(val));
+   insn->setSrc(0, add->getSrc(s));
+}
+
 bool
 AlgebraicOpt::visit(BasicBlock *bb)
 {
@@ -1238,6 +1291,9 @@ AlgebraicOpt::visit(BasicBlock *bb)
          break;
       case OP_CVT:
          handleCVT(i);
+         break;
+      case OP_SUCLAMP:
+         handleSUCLAMP(i);
          break;
       default:
          break;
@@ -1727,11 +1783,22 @@ MemoryOpt::runOpt(BasicBlock *bb)
          isLoad = false;
       } else {
          // TODO: maybe have all fixed ops act as barrier ?
-         if (ldst->op == OP_CALL) {
+         if (ldst->op == OP_CALL ||
+             ldst->op == OP_BAR ||
+             ldst->op == OP_MEMBAR) {
             purgeRecords(NULL, FILE_MEMORY_LOCAL);
             purgeRecords(NULL, FILE_MEMORY_GLOBAL);
             purgeRecords(NULL, FILE_MEMORY_SHARED);
             purgeRecords(NULL, FILE_SHADER_OUTPUT);
+         } else
+         if (ldst->op == OP_ATOM || ldst->op == OP_CCTL) {
+            if (ldst->src(0).getFile() == FILE_MEMORY_GLOBAL) {
+               purgeRecords(NULL, FILE_MEMORY_LOCAL);
+               purgeRecords(NULL, FILE_MEMORY_GLOBAL);
+               purgeRecords(NULL, FILE_MEMORY_SHARED);
+            } else {
+               purgeRecords(NULL, ldst->src(0).getFile());
+            }
          } else
          if (ldst->op == OP_EMIT || ldst->op == OP_RESTART) {
             purgeRecords(NULL, FILE_SHADER_OUTPUT);
@@ -1885,42 +1952,46 @@ FlatteningPass::mayPredicate(const Instruction *insn, const Value *pred) const
    return true;
 }
 
-// If we conditionally skip over or to a branch instruction, replace it.
+// If we jump to BRA/RET/EXIT, replace the jump with it.
 // NOTE: We do not update the CFG anymore here !
+//
+// TODO: Handle cases where we skip over a branch (maybe do that elsewhere ?):
+//  BB:0
+//   @p0 bra BB:2 -> @!p0 bra BB:3 iff (!) BB:2 immediately adjoins BB:1
+//  BB1:
+//   bra BB:3
+//  BB2:
+//   ...
+//  BB3:
+//   ...
 void
 FlatteningPass::tryPropagateBranch(BasicBlock *bb)
 {
-   BasicBlock *bf = NULL;
-   unsigned int i;
+   for (Instruction *i = bb->getExit(); i && i->op == OP_BRA; i = i->prev) {
+      BasicBlock *bf = i->asFlow()->target.bb;
 
-   if (bb->cfg.outgoingCount() != 2)
-      return;
-   if (!bb->getExit() || bb->getExit()->op != OP_BRA)
-      return;
-   Graph::EdgeIterator ei = bb->cfg.outgoing();
+      if (bf->getInsnCount() != 1)
+         continue;
 
-   for (i = 0; !ei.end(); ++i, ei.next()) {
-      bf = BasicBlock::get(ei.getNode());
-      if (bf->getInsnCount() == 1)
-         break;
+      FlowInstruction *bra = i->asFlow();
+      FlowInstruction *rep = bf->getExit()->asFlow();
+
+      if (!rep || rep->getPredicate())
+         continue;
+      if (rep->op != OP_BRA &&
+          rep->op != OP_JOIN &&
+          rep->op != OP_EXIT)
+         continue;
+
+      // TODO: If there are multiple branches to @rep, only the first would
+      // be replaced, so only remove them after this pass is done ?
+      // Also, need to check all incident blocks for fall-through exits and
+      // add the branch there.
+      bra->op = rep->op;
+      bra->target.bb = rep->target.bb;
+      if (bf->cfg.incidentCount() == 1)
+         bf->remove(rep);
    }
-   if (ei.end() || !bf->getExit())
-      return;
-   FlowInstruction *bra = bb->getExit()->asFlow();
-   FlowInstruction *rep = bf->getExit()->asFlow();
-
-   if (rep->getPredicate())
-      return;
-   if (rep->op != OP_BRA &&
-       rep->op != OP_JOIN &&
-       rep->op != OP_EXIT)
-      return;
-
-   bra->op = rep->op;
-   bra->target.bb = rep->target.bb;
-   if (i) // 2nd out block means branch not taken
-      bra->cc = inverseCondCode(bra->cc);
-   bf->remove(rep);
 }
 
 bool
@@ -1937,6 +2008,7 @@ FlatteningPass::visit(BasicBlock *bb)
           !insn->asFlow() &&
           insn->op != OP_TEXBAR &&
           !isTextureOp(insn->op) && // probably just nve4
+          !isSurfaceOp(insn->op) && // not confirmed
           insn->op != OP_LINTERP && // probably just nve4
           insn->op != OP_PINTERP && // probably just nve4
           ((insn->op != OP_LOAD && insn->op != OP_STORE) ||
@@ -2056,8 +2128,7 @@ Instruction::isActionEqual(const Instruction *that) const
    if (this->asFlow()) {
       return false;
    } else {
-      if (this->atomic != that->atomic ||
-          this->ipa != that->ipa ||
+      if (this->ipa != that->ipa ||
           this->lanes != that->lanes ||
           this->perPatch != that->perPatch)
          return false;
@@ -2070,7 +2141,8 @@ Instruction::isActionEqual(const Instruction *that) const
        this->rnd != that->rnd ||
        this->ftz != that->ftz ||
        this->dnz != that->dnz ||
-       this->cache != that->cache)
+       this->cache != that->cache ||
+       this->mask != that->mask)
       return false;
 
    return true;
@@ -2282,6 +2354,12 @@ DeadCodeElim::visit(BasicBlock *bb)
       } else
       if (i->defExists(1) && (i->op == OP_VFETCH || i->op == OP_LOAD)) {
          checkSplitLoad(i);
+      } else
+      if (i->defExists(0) && !i->getDef(0)->refCount()) {
+         if (i->op == OP_ATOM ||
+             i->op == OP_SUREDP ||
+             i->op == OP_SUREDB)
+            i->setDef(0, NULL);
       }
    }
    return true;

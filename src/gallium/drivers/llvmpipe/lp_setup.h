@@ -77,7 +77,8 @@ lp_setup_set_triangle_state( struct lp_setup_context *setup,
                              unsigned cullmode,
                              boolean front_is_ccw,
                              boolean scissor,
-                             boolean gl_rasterization_rules );
+                             boolean half_pixel_center,
+                             boolean bottom_edge_rule);
 
 void 
 lp_setup_set_line_state( struct lp_setup_context *setup,
@@ -116,8 +117,8 @@ lp_setup_set_blend_color( struct lp_setup_context *setup,
                           const struct pipe_blend_color *blend_color );
 
 void
-lp_setup_set_scissor( struct lp_setup_context *setup,
-                      const struct pipe_scissor_state *scissor );
+lp_setup_set_scissors( struct lp_setup_context *setup,
+                       const struct pipe_scissor_state *scissors );
 
 void
 lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
@@ -152,5 +153,11 @@ lp_setup_begin_query(struct lp_setup_context *setup,
 void
 lp_setup_end_query(struct lp_setup_context *setup,
                    struct llvmpipe_query *pq);
+
+static INLINE unsigned
+lp_clamp_scissor_idx(int idx)
+{
+   return (PIPE_MAX_VIEWPORTS > idx && idx >= 0) ? idx : 0;
+}
 
 #endif

@@ -23,6 +23,7 @@ C_SOURCES := \
 	draw/draw_pipe_vbuf.c \
 	draw/draw_pipe_wide_line.c \
 	draw/draw_pipe_wide_point.c \
+	draw/draw_prim_assembler.c \
 	draw/draw_pt.c \
 	draw/draw_pt_emit.c \
 	draw/draw_pt_fetch.c \
@@ -37,7 +38,13 @@ C_SOURCES := \
 	draw/draw_vs.c \
 	draw/draw_vs_exec.c \
 	draw/draw_vs_variant.c \
+	hud/font.c \
+	hud/hud_context.c \
+	hud/hud_cpu.c \
+	hud/hud_fps.c \
+        hud/hud_driver_query.c \
 	os/os_misc.c \
+	os/os_process.c \
 	os/os_time.c \
 	pipebuffer/pb_buffer_fenced.c \
 	pipebuffer/pb_buffer_malloc.c \
@@ -157,6 +164,7 @@ GENERATED_SOURCES := \
 
 GALLIVM_SOURCES := \
         gallivm/lp_bld_arit.c \
+        gallivm/lp_bld_arit_overflow.c \
         gallivm/lp_bld_assert.c \
         gallivm/lp_bld_bitarit.c \
         gallivm/lp_bld_const.c \
@@ -164,6 +172,8 @@ GALLIVM_SOURCES := \
         gallivm/lp_bld_flow.c \
         gallivm/lp_bld_format_aos.c \
         gallivm/lp_bld_format_aos_array.c \
+	gallivm/lp_bld_format_float.c \
+        gallivm/lp_bld_format_srgb.c \
         gallivm/lp_bld_format_soa.c \
         gallivm/lp_bld_format_yuv.c \
         gallivm/lp_bld_gather.c \

@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.1
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -28,6 +28,7 @@
 #include "main/accum.h"
 #include "main/arrayobj.h"
 #include "main/context.h"
+#include "main/formatquery.h"
 #include "main/framebuffer.h"
 #include "main/mipmap.h"
 #include "main/queryobj.h"
@@ -39,6 +40,7 @@
 #include "main/texgetimage.h"
 #include "main/teximage.h"
 #include "main/texobj.h"
+#include "main/texstorage.h"
 #include "main/texstore.h"
 #include "main/bufferobj.h"
 #include "main/fbobject.h"
@@ -73,9 +75,7 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
 
    driver->GetString = NULL;  /* REQUIRED! */
    driver->UpdateState = NULL;  /* REQUIRED! */
-   driver->GetBufferSize = NULL;  /* REQUIRED! */
    driver->ResizeBuffers = _mesa_resize_framebuffer;
-   driver->Error = NULL;
 
    driver->Finish = NULL;
    driver->Flush = NULL;
@@ -91,7 +91,7 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
 
    /* Texture functions */
    driver->ChooseTextureFormat = _mesa_choose_tex_format;
-   driver->QuerySamplesForFormat = NULL;
+   driver->QuerySamplesForFormat = _mesa_query_samples_for_format;
    driver->TexImage = _mesa_store_teximage;
    driver->TexSubImage = _mesa_store_texsubimage;
    driver->GetTexImage = _mesa_meta_GetTexImage;
@@ -175,6 +175,7 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
    driver->ValidateFramebuffer = _mesa_validate_framebuffer;
 
    driver->BlitFramebuffer = _swrast_BlitFramebuffer;
+   driver->DiscardFramebuffer = NULL;
 
    _mesa_init_texture_barrier_functions(driver);
 
@@ -208,7 +209,10 @@ _mesa_init_driver_functions(struct dd_function_table *driver)
    driver->EndCallList = NULL;
 
    /* GL_ARB_texture_storage */
-   driver->AllocTextureStorage = _swrast_AllocTextureStorage;
+   driver->AllocTextureStorage = _mesa_alloc_texture_storage;
+
+   /* GL_ARB_texture_multisample */
+   driver->GetSamplePosition = NULL;
 }
 
 

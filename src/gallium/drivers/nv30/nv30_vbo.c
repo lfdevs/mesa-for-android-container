@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors: Ben Skeggs
  *
@@ -40,13 +40,15 @@ nv30_emit_vtxattr(struct nv30_context *nv30, struct pipe_vertex_buffer *vb,
    const unsigned nc = util_format_get_nr_components(ve->src_format);
    struct nouveau_pushbuf *push = nv30->base.pushbuf;
    struct nv04_resource *res = nv04_resource(vb->buffer);
+   const struct util_format_description *desc =
+      util_format_description(ve->src_format);
    const void *data;
    float v[4];
 
    data = nouveau_resource_map_offset(&nv30->base, res, vb->buffer_offset +
                                       ve->src_offset, NOUVEAU_BO_RD);
 
-   util_format_read_4f(ve->src_format, v, 0, data, 0, 0, 0, 1, 1);
+   desc->unpack_rgba_float(v, 0, data, 0, 1, 1);
 
    switch (nc) {
    case 4:
@@ -278,6 +280,7 @@ nv30_vertex_state_create(struct pipe_context *pipe, unsigned num_elements,
             case 4: fmt = PIPE_FORMAT_R32G32B32A32_FLOAT; break;
             default:
                 assert(0);
+                FREE(so);
                 return NULL;
             }
             so->element[i].state = nv30_vtxfmt(pipe->screen, fmt)->hw;

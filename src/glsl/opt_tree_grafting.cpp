@@ -274,6 +274,7 @@ ir_tree_grafting_visitor::visit_enter(ir_texture *ir)
 
    switch (ir->op) {
    case ir_tex:
+   case ir_lod:
       break;
    case ir_txb:
       if (do_graft(&ir->lod_info.bias))
@@ -284,6 +285,10 @@ ir_tree_grafting_visitor::visit_enter(ir_texture *ir)
    case ir_txs:
       if (do_graft(&ir->lod_info.lod))
 	 return visit_stop;
+      break;
+   case ir_txf_ms:
+      if (do_graft(&ir->lod_info.sample_index))
+         return visit_stop;
       break;
    case ir_txd:
       if (do_graft(&ir->lod_info.grad.dPdx) ||

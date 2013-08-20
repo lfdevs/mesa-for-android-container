@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.1
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -172,16 +172,16 @@ _swrast_add_spec_terms_line(struct gl_context *ctx,
    COPY_CHAN4(cSave[0], ncv0->color);
    COPY_CHAN4(cSave[1], ncv1->color);
    /* sum v0 */
-   rSum = CHAN_TO_FLOAT(ncv0->color[0]) + ncv0->attrib[FRAG_ATTRIB_COL1][0];
-   gSum = CHAN_TO_FLOAT(ncv0->color[1]) + ncv0->attrib[FRAG_ATTRIB_COL1][1];
-   bSum = CHAN_TO_FLOAT(ncv0->color[2]) + ncv0->attrib[FRAG_ATTRIB_COL1][2];
+   rSum = CHAN_TO_FLOAT(ncv0->color[0]) + ncv0->attrib[VARYING_SLOT_COL1][0];
+   gSum = CHAN_TO_FLOAT(ncv0->color[1]) + ncv0->attrib[VARYING_SLOT_COL1][1];
+   bSum = CHAN_TO_FLOAT(ncv0->color[2]) + ncv0->attrib[VARYING_SLOT_COL1][2];
    UNCLAMPED_FLOAT_TO_CHAN(ncv0->color[0], rSum);
    UNCLAMPED_FLOAT_TO_CHAN(ncv0->color[1], gSum);
    UNCLAMPED_FLOAT_TO_CHAN(ncv0->color[2], bSum);
    /* sum v1 */
-   rSum = CHAN_TO_FLOAT(ncv1->color[0]) + ncv1->attrib[FRAG_ATTRIB_COL1][0];
-   gSum = CHAN_TO_FLOAT(ncv1->color[1]) + ncv1->attrib[FRAG_ATTRIB_COL1][1];
-   bSum = CHAN_TO_FLOAT(ncv1->color[2]) + ncv1->attrib[FRAG_ATTRIB_COL1][2];
+   rSum = CHAN_TO_FLOAT(ncv1->color[0]) + ncv1->attrib[VARYING_SLOT_COL1][0];
+   gSum = CHAN_TO_FLOAT(ncv1->color[1]) + ncv1->attrib[VARYING_SLOT_COL1][1];
+   bSum = CHAN_TO_FLOAT(ncv1->color[2]) + ncv1->attrib[VARYING_SLOT_COL1][2];
    UNCLAMPED_FLOAT_TO_CHAN(ncv1->color[0], rSum);
    UNCLAMPED_FLOAT_TO_CHAN(ncv1->color[1], gSum);
    UNCLAMPED_FLOAT_TO_CHAN(ncv1->color[2], bSum);

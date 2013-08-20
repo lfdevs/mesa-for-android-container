@@ -397,6 +397,10 @@ enum pipe_flush_flags {
 #define PIPE_QUERY_PIPELINE_STATISTICS  10
 #define PIPE_QUERY_TYPES                11
 
+/* start of driver queries,
+ * see pipe_screen::get_driver_query_info */
+#define PIPE_QUERY_DRIVER_SPECIFIC     256
+
 
 /**
  * Conditional rendering modes
@@ -478,7 +482,6 @@ enum pipe_cap {
    PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS = 55,
    PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS = 56,
    PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME = 57,
-   PIPE_CAP_TGSI_CAN_COMPACT_VARYINGS = 58, /* temporary */
    PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS = 59, /* temporary */
    PIPE_CAP_VERTEX_COLOR_UNCLAMPED = 60,
    PIPE_CAP_VERTEX_COLOR_CLAMPED = 61,
@@ -497,7 +500,28 @@ enum pipe_cap {
    PIPE_CAP_TEXTURE_MULTISAMPLE = 74,
    PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT = 75,
    PIPE_CAP_CUBE_MAP_ARRAY = 76,
-   PIPE_CAP_TEXTURE_BUFFER_OBJECTS = 77
+   PIPE_CAP_TEXTURE_BUFFER_OBJECTS = 77,
+   PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT = 78,
+   PIPE_CAP_TGSI_TEXCOORD = 79,
+   PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER = 80,
+   PIPE_CAP_QUERY_PIPELINE_STATISTICS = 81,
+   PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK = 82,
+   PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE = 83,
+   PIPE_CAP_MAX_VIEWPORTS = 84,
+   PIPE_CAP_ENDIANNESS = 85
+};
+
+#define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 (1 << 0)
+#define PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_R600 (1 << 1)
+
+enum pipe_endian {
+   PIPE_ENDIAN_LITTLE = 0,
+   PIPE_ENDIAN_BIG = 1,
+#if defined(PIPE_ARCH_LITTLE_ENDIAN)
+   PIPE_ENDIAN_NATIVE = PIPE_ENDIAN_LITTLE
+#elif defined(PIPE_ARCH_BIG_ENDIAN)
+   PIPE_ENDIAN_NATIVE = PIPE_ENDIAN_BIG
+#endif
 };
 
 /**
@@ -541,7 +565,8 @@ enum pipe_shader_cap
    PIPE_SHADER_CAP_SUBROUTINES = 16, /* BGNSUB, ENDSUB, CAL, RET */
    PIPE_SHADER_CAP_INTEGERS = 17,
    PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS = 18,
-   PIPE_SHADER_CAP_PREFERRED_IR = 19
+   PIPE_SHADER_CAP_PREFERRED_IR = 19,
+   PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED = 20
 };
 
 /**
@@ -643,6 +668,14 @@ union pipe_color_union
    float f[4];
    int i[4];
    unsigned int ui[4];
+};
+
+struct pipe_driver_query_info
+{
+   const char *name;
+   unsigned query_type; /* PIPE_QUERY_DRIVER_SPECIFIC + i */
+   uint64_t max_value; /* max value that can be returned */
+   boolean uses_byte_units; /* whether the result is in bytes */
 };
 
 #ifdef __cplusplus

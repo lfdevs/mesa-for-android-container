@@ -57,9 +57,11 @@
 /**
  * Maximum control flow nesting
  *
- * SM3.0 requires 24
+ * SM4.0 requires 64 (per subroutine actually, subroutine nesting itself is 32)
+ * SM3.0 requires 24 (most likely per subroutine too)
+ * add 2 more (some translation could add one more)
  */
-#define LP_MAX_TGSI_NESTING 32
+#define LP_MAX_TGSI_NESTING 66
 
 /**
  * Maximum iterations before loop termination
@@ -110,6 +112,8 @@ gallivm_get_shader_param(enum pipe_shader_cap param)
       return 1;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       return PIPE_MAX_SAMPLERS;
+   case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+      return 1;
    default:
       return 0;
    }

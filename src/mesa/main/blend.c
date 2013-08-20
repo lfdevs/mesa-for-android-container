@@ -5,7 +5,6 @@
 
 /*
  * Mesa 3-D graphics library
- * Version:  6.5.1
  *
  * Copyright (C) 1999-2006  Brian Paul   All Rights Reserved.
  *
@@ -22,9 +21,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -48,7 +48,6 @@ legal_src_factor(const struct gl_context *ctx, GLenum factor)
    switch (factor) {
    case GL_SRC_COLOR:
    case GL_ONE_MINUS_SRC_COLOR:
-      return ctx->Extensions.NV_blend_square;
    case GL_ZERO:
    case GL_ONE:
    case GL_DST_COLOR:
@@ -86,7 +85,6 @@ legal_dst_factor(const struct gl_context *ctx, GLenum factor)
    switch (factor) {
    case GL_DST_COLOR:
    case GL_ONE_MINUS_DST_COLOR:
-      return ctx->Extensions.NV_blend_square;
    case GL_ZERO:
    case GL_ONE:
    case GL_SRC_COLOR:
@@ -765,25 +763,113 @@ _mesa_ClampColor(GLenum target, GLenum clamp)
 
    switch (target) {
    case GL_CLAMP_VERTEX_COLOR_ARB:
+      if (ctx->API == API_OPENGL_CORE &&
+          !ctx->Extensions.ARB_color_buffer_float) {
+         goto invalid_enum;
+      }
       FLUSH_VERTICES(ctx, _NEW_LIGHT);
       ctx->Light.ClampVertexColor = clamp;
+      _mesa_update_clamp_vertex_color(ctx);
       break;
    case GL_CLAMP_FRAGMENT_COLOR_ARB:
+      if (ctx->API == API_OPENGL_CORE &&
+          !ctx->Extensions.ARB_color_buffer_float) {
+         goto invalid_enum;
+      }
       FLUSH_VERTICES(ctx, _NEW_FRAG_CLAMP);
       ctx->Color.ClampFragmentColor = clamp;
+      _mesa_update_clamp_fragment_color(ctx);
       break;
    case GL_CLAMP_READ_COLOR_ARB:
-      FLUSH_VERTICES(ctx, _NEW_COLOR);
       ctx->Color.ClampReadColor = clamp;
       break;
    default:
-      _mesa_error(ctx, GL_INVALID_ENUM, "glClampColorARB(target)");
-      return;
+      goto invalid_enum;
    }
+   return;
+
+invalid_enum:
+   _mesa_error(ctx, GL_INVALID_ENUM, "glClampColor(%s)",
+               _mesa_lookup_enum_by_nr(target));
 }
 
+static GLboolean
+get_clamp_color(const struct gl_framebuffer *fb, GLenum clamp)
+{
+   if (clamp == GL_TRUE || clamp == GL_FALSE)
+      return clamp;
 
+   ASSERT(clamp == GL_FIXED_ONLY);
+   if (!fb)
+      return GL_TRUE;
 
+   return fb->_AllColorBuffersFixedPoint;
+}
+
+GLboolean
+_mesa_get_clamp_fragment_color(const struct gl_context *ctx)
+{
+   return get_clamp_color(ctx->DrawBuffer,
+                                ctx->Color.ClampFragmentColor);
+}
+
+GLboolean
+_mesa_get_clamp_vertex_color(const struct gl_context *ctx)
+{
+   return get_clamp_color(ctx->DrawBuffer, ctx->Light.ClampVertexColor);
+}
+
+GLboolean
+_mesa_get_clamp_read_color(const struct gl_context *ctx)
+{
+   return get_clamp_color(ctx->ReadBuffer, ctx->Color.ClampReadColor);
+}
+
+/**
+ * Update the ctx->Color._ClampFragmentColor field
+ */
+void
+_mesa_update_clamp_fragment_color(struct gl_context *ctx)
+{
+   struct gl_framebuffer *fb = ctx->DrawBuffer;
+
+   /* Don't clamp if:
+    * - there is no colorbuffer
+    * - all colorbuffers are unsigned normalized, so clamping has no effect
+    * - there is an integer colorbuffer
+    */
+   if (!fb || !fb->_HasSNormOrFloatColorBuffer || fb->_IntegerColor)
+      ctx->Color._ClampFragmentColor = GL_FALSE;
+   else
+      ctx->Color._ClampFragmentColor = _mesa_get_clamp_fragment_color(ctx);
+}
+
+/**
+ * Update the ctx->Color._ClampVertexColor field
+ */
+void
+_mesa_update_clamp_vertex_color(struct gl_context *ctx)
+{
+   ctx->Light._ClampVertexColor = _mesa_get_clamp_vertex_color(ctx);
+}
+
+/**
+ * Returns an appropriate gl_format for color rendering based on the
+ * GL_FRAMEBUFFER_SRGB state.
+ *
+ * Some drivers implement GL_FRAMEBUFFER_SRGB using a flag on the blend state
+ * (which GL_FRAMEBUFFER_SRGB maps to reasonably), but some have to do so by
+ * overriding the format of the surface.  This is a helper for doing the
+ * surface format override variant.
+ */
+gl_format
+_mesa_get_render_format(const struct gl_context *ctx, gl_format format)
+{
+   if (ctx->Color.sRGBEnabled)
+      return format;
+   else
+      return _mesa_get_srgb_format_linear(format);
+}
 
 /**********************************************************************/
 /** \name Initialization */
@@ -832,10 +918,10 @@ void _mesa_init_color( struct gl_context * ctx )
       ctx->Color.DrawBuffer[0] = GL_FRONT;
    }
 
-   ctx->Color.ClampFragmentColor = GL_FIXED_ONLY_ARB;
-   ctx->Color._ClampFragmentColor = GL_TRUE;
+   ctx->Color.ClampFragmentColor = ctx->API == API_OPENGL_COMPAT ?
+                                   GL_FIXED_ONLY_ARB : GL_FALSE;
+   ctx->Color._ClampFragmentColor = GL_FALSE;
    ctx->Color.ClampReadColor = GL_FIXED_ONLY_ARB;
-   ctx->Color._ClampReadColor = GL_TRUE;
 
    if (ctx->API == API_OPENGLES2) {
       /* GLES 3 behaves as though GL_FRAMEBUFFER_SRGB is always enabled. */

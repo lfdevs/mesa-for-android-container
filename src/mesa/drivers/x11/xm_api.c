@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.1
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
@@ -922,18 +922,9 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
    }
 
    _mesa_enable_sw_extensions(mesaCtx);
-   _mesa_enable_1_3_extensions(mesaCtx);
-   _mesa_enable_1_4_extensions(mesaCtx);
-   _mesa_enable_1_5_extensions(mesaCtx);
-   _mesa_enable_2_0_extensions(mesaCtx);
-   _mesa_enable_2_1_extensions(mesaCtx);
-    if (mesaCtx->Mesa_DXTn) {
-       _mesa_enable_extension(mesaCtx, "GL_EXT_texture_compression_s3tc");
-       _mesa_enable_extension(mesaCtx, "GL_ANGLE_texture_compression_dxt");
-    }
-    _mesa_enable_extension(mesaCtx, "GL_3DFX_texture_compression_FXT1");
+
 #if ENABLE_EXT_timer_query
-    _mesa_enable_extension(mesaCtx, "GL_EXT_timer_query");
+    mesaCtx->Extensions.EXT_timer_query = GL_TRUE;
 #endif
 
 
@@ -1193,7 +1184,6 @@ xmesa_check_and_update_buffer_size(XMesaContext xmctx, XMesaBuffer drawBuffer)
       struct gl_context *ctx = xmctx ? &xmctx->mesa : NULL;
       _mesa_resize_framebuffer(ctx, &(drawBuffer->mesa_buffer), width, height);
    }
-   drawBuffer->mesa_buffer.Initialized = GL_TRUE; /* XXX TEMPORARY? */
 }
 
 

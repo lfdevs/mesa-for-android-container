@@ -49,9 +49,9 @@ struct llvmpipe_screen;
 
 struct lp_jit_texture
 {
-   uint32_t width;
+   uint32_t width;        /* same as number of elements */
    uint32_t height;
-   uint32_t depth;
+   uint32_t depth;        /* doubles as array size */
    uint32_t first_level;
    uint32_t last_level;
    const void *base;
@@ -162,6 +162,22 @@ enum {
    lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_CTX_SAMPLERS, "samplers")
 
 
+struct lp_jit_thread_data
+{
+   uint64_t vis_counter;
+};
+
+
+enum {
+   LP_JIT_THREAD_DATA_COUNTER = 0,
+   LP_JIT_THREAD_DATA_COUNT
+};
+
+
+#define lp_jit_thread_data_counter(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_THREAD_DATA_COUNTER, "counter")
+
+
 /**
  * typedef for fragment shader function
  *
@@ -177,6 +193,7 @@ enum {
  * @param mask          mask of visible pixels in block
  * @param thread_data   task thread data
  * @param stride        color buffer row stride in bytes
+ * @param depth_stride  depth buffer row stride in bytes
  */
 typedef void
 (*lp_jit_frag_func)(const struct lp_jit_context *context,
@@ -187,10 +204,11 @@ typedef void
                     const void *dadx,
                     const void *dady,
                     uint8_t **color,
-                    void *depth,
+                    uint8_t *depth,
                     uint32_t mask,
-                    uint32_t *counter,
-                    unsigned *stride);
+                    struct lp_jit_thread_data *thread_data,
+                    unsigned *stride,
+                    unsigned depth_stride);
 
 
 void

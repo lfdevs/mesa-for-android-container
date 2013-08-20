@@ -187,7 +187,8 @@ static void r300_set_clear_color(struct r300_context *r300,
     memset(&uc, 0, sizeof(uc));
     util_pack_color(color->f, fb->cbufs[0]->format, &uc);
 
-    if (fb->cbufs[0]->format == PIPE_FORMAT_R16G16B16A16_FLOAT) {
+    if (fb->cbufs[0]->format == PIPE_FORMAT_R16G16B16A16_FLOAT ||
+        fb->cbufs[0]->format == PIPE_FORMAT_R16G16B16X16_FLOAT) {
         /* (0,1,2,3) maps to (B,G,R,A) */
         r300->color_clear_value_gb = uc.h[0] | ((uint32_t)uc.h[1] << 16);
         r300->color_clear_value_ar = uc.h[2] | ((uint32_t)uc.h[3] << 16);
@@ -362,14 +363,12 @@ static void r300_clear(struct pipe_context* pipe,
 
     /* Clear. */
     if (buffers) {
-        enum pipe_format cformat = fb->nr_cbufs ? fb->cbufs[0]->format : PIPE_FORMAT_NONE;
         /* Clear using the blitter. */
         r300_blitter_begin(r300, R300_CLEAR);
         util_blitter_clear(r300->blitter,
                            width,
                            height,
-                           fb->nr_cbufs,
-                           buffers, cformat, color, depth, stencil);
+                           buffers, color, depth, stencil);
         r300_blitter_end(r300);
     } else if (r300->zmask_clear.dirty ||
                r300->hiz_clear.dirty ||

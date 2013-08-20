@@ -50,13 +50,8 @@
 #define BRW_ATTRIB_WA_SIGN          32  /* interpret as signed in shader */
 #define BRW_ATTRIB_WA_SCALE         64  /* interpret as scaled in shader */
 
-struct brw_vs_prog_key {
+struct brw_vec4_prog_key {
    GLuint program_string_id;
-
-   /*
-    * Per-attribute workaround flags
-    */
-   uint8_t gl_attrib_wa_flags[VERT_ATTRIB_MAX];
 
    /**
     * True if at least one clip flag is enabled, regardless of whether the
@@ -85,34 +80,61 @@ struct brw_vs_prog_key {
     */
    GLuint userclip_planes_enabled_gen_4_5:MAX_CLIP_PLANES;
 
-   GLuint copy_edgeflag:1;
-   GLuint point_coord_replace:8;
    GLuint clamp_vertex_color:1;
 
    struct brw_sampler_prog_key_data tex;
 };
 
 
+struct brw_vs_prog_key {
+   struct brw_vec4_prog_key base;
+
+   /*
+    * Per-attribute workaround flags
+    */
+   uint8_t gl_attrib_wa_flags[VERT_ATTRIB_MAX];
+
+   GLuint copy_edgeflag:1;
+
+   /**
+    * For pre-Gen6 hardware, a bitfield indicating which texture coordinates
+    * are going to be replaced with point coordinates (as a consequence of a
+    * call to glTexEnvi(GL_POINT_SPRITE, GL_COORD_REPLACE, GL_TRUE)).  Because
+    * our SF thread requires exact matching between VS outputs and FS inputs,
+    * these texture coordinates will need to be unconditionally included in
+    * the VUE, even if they aren't written by the vertex shader.
+    */
+   GLuint point_coord_replace:8;
+};
+
+
+struct brw_vec4_compile {
+   GLuint last_scratch; /**< measured in 32-byte (register size) units */
+};
+
+
 struct brw_vs_compile {
+   struct brw_vec4_compile base;
    struct brw_vs_prog_key key;
-   struct brw_vs_prog_data prog_data;
 
    struct brw_vertex_program *vp;
-
-   GLuint last_scratch; /**< measured in 32-byte (register size) units */
 };
 
 const unsigned *brw_vs_emit(struct brw_context *brw,
                             struct gl_shader_program *prog,
                             struct brw_vs_compile *c,
+                            struct brw_vs_prog_data *prog_data,
                             void *mem_ctx,
                             unsigned *program_size);
 bool brw_vs_precompile(struct gl_context *ctx, struct gl_shader_program *prog);
 void brw_vs_debug_recompile(struct brw_context *brw,
                             struct gl_shader_program *prog,
                             const struct brw_vs_prog_key *key);
+bool brw_vec4_prog_data_compare(const struct brw_vec4_prog_data *a,
+                                const struct brw_vec4_prog_data *b);
 bool brw_vs_prog_data_compare(const void *a, const void *b,
                               int aux_size, const void *key);
+void brw_vec4_prog_data_free(const struct brw_vec4_prog_data *prog_data);
 void brw_vs_prog_data_free(const void *in_prog_data);
 
 #endif

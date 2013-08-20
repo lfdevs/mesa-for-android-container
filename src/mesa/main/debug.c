@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  6.5
  *
  * Copyright (C) 1999-2005  Brian Paul   All Rights Reserved.
  * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "mtypes.h"
@@ -51,9 +51,14 @@ tex_target_name(GLenum tgt)
       { GL_TEXTURE_RECTANGLE, "GL_TEXTURE_RECTANGLE" },
       { GL_TEXTURE_1D_ARRAY_EXT, "GL_TEXTURE_1D_ARRAY" },
       { GL_TEXTURE_2D_ARRAY_EXT, "GL_TEXTURE_2D_ARRAY" },
+      { GL_TEXTURE_CUBE_MAP_ARRAY, "GL_TEXTURE_CUBE_MAP_ARRAY" },
+      { GL_TEXTURE_BUFFER, "GL_TEXTURE_BUFFER" },
+      { GL_TEXTURE_2D_MULTISAMPLE, "GL_TEXTURE_2D_MULTISAMPLE" },
+      { GL_TEXTURE_2D_MULTISAMPLE_ARRAY, "GL_TEXTURE_2D_MULTISAMPLE_ARRAY" },
       { GL_TEXTURE_EXTERNAL_OES, "GL_TEXTURE_EXTERNAL_OES" }
    };
    GLuint i;
+   STATIC_ASSERT(Elements(tex_targets) == NUM_TEXTURE_TARGETS);
    for (i = 0; i < Elements(tex_targets); i++) {
       if (tex_targets[i].target == tgt)
          return tex_targets[i].name;
@@ -66,7 +71,7 @@ void
 _mesa_print_state( const char *msg, GLuint state )
 {
    _mesa_debug(NULL,
-	   "%s: (0x%x) %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+	   "%s: (0x%x) %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 	   msg,
 	   state,
 	   (state & _NEW_MODELVIEW)       ? "ctx->ModelView, " : "",
@@ -88,33 +93,11 @@ _mesa_print_state( const char *msg, GLuint state )
 	   (state & _NEW_TEXTURE)         ? "ctx->Texture, " : "",
 	   (state & _NEW_TRANSFORM)       ? "ctx->Transform, " : "",
 	   (state & _NEW_VIEWPORT)        ? "ctx->Viewport, " : "",
-	   (state & _NEW_PACKUNPACK)      ? "ctx->Pack/Unpack, " : "",
 	   (state & _NEW_ARRAY)           ? "ctx->Array, " : "",
 	   (state & _NEW_RENDERMODE)      ? "ctx->RenderMode, " : "",
 	   (state & _NEW_BUFFERS)         ? "ctx->Visual, ctx->DrawBuffer,, " : "");
 }
 
-
-
-void
-_mesa_print_tri_caps( const char *name, GLuint flags )
-{
-   _mesa_debug(NULL,
-	   "%s: (0x%x) %s%s%s%s%s%s%s%s%s%s\n",
-	   name,
-	   flags,
-	   (flags & DD_SEPARATE_SPECULAR)   ? "separate-specular, " : "",
-	   (flags & DD_TRI_LIGHT_TWOSIDE)   ? "tri-light-twoside, " : "",
-	   (flags & DD_TRI_UNFILLED)        ? "tri-unfilled, " : "",
-	   (flags & DD_TRI_STIPPLE)         ? "tri-stipple, " : "",
-	   (flags & DD_TRI_OFFSET)          ? "tri-offset, " : "",
-	   (flags & DD_TRI_SMOOTH)          ? "tri-smooth, " : "",
-	   (flags & DD_LINE_SMOOTH)         ? "line-smooth, " : "",
-	   (flags & DD_LINE_STIPPLE)        ? "line-stipple, " : "",
-	   (flags & DD_POINT_SMOOTH)        ? "point-smooth, " : "",
-	   (flags & DD_POINT_ATTEN)         ? "point-atten, " : ""
-      );
-}
 
 
 /**

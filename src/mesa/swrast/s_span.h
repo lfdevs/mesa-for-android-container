@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.5
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -68,11 +68,11 @@ struct gl_renderbuffer;
  */
 typedef struct sw_span_arrays
 {
-   /** Per-fragment attributes (indexed by FRAG_ATTRIB_* tokens) */
+   /** Per-fragment attributes (indexed by VARYING_SLOT_* tokens) */
    /* XXX someday look at transposing first two indexes for better memory
     * access pattern.
     */
-   GLfloat attribs[FRAG_ATTRIB_MAX][SWRAST_MAX_WIDTH][4];
+   GLfloat attribs[VARYING_SLOT_MAX][SWRAST_MAX_WIDTH][4];
 
    /** This mask indicates which fragments are alive or culled */
    GLubyte mask[SWRAST_MAX_WIDTH];
@@ -133,9 +133,9 @@ typedef struct sw_span
    GLbitfield interpMask;
 
    /** Fragment attribute interpolants */
-   GLfloat attrStart[FRAG_ATTRIB_MAX][4];   /**< initial value */
-   GLfloat attrStepX[FRAG_ATTRIB_MAX][4];   /**< dvalue/dx */
-   GLfloat attrStepY[FRAG_ATTRIB_MAX][4];   /**< dvalue/dy */
+   GLfloat attrStart[VARYING_SLOT_MAX][4];   /**< initial value */
+   GLfloat attrStepX[VARYING_SLOT_MAX][4];   /**< dvalue/dx */
+   GLfloat attrStepY[VARYING_SLOT_MAX][4];   /**< dvalue/dy */
 
    /* XXX the rest of these will go away eventually... */
 
@@ -156,7 +156,7 @@ typedef struct sw_span
     */
    GLbitfield arrayMask;
 
-   /** Mask of FRAG_BIT_x bits */
+   /** Mask of VARYING_BIT_x bits */
    GLbitfield64 arrayAttribs;
 
    /**

@@ -68,29 +68,40 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
     */
    for (i = 0; i < lp->num_vertex_buffers; i++) {
       const void *buf = lp->vertex_buffer[i].user_buffer;
+      size_t size = ~0;
       if (!buf) {
          if (!lp->vertex_buffer[i].buffer) {
             continue;
          }
          buf = llvmpipe_resource_data(lp->vertex_buffer[i].buffer);
+         size = lp->vertex_buffer[i].buffer->width0;
       }
-      draw_set_mapped_vertex_buffer(draw, i, buf);
+      draw_set_mapped_vertex_buffer(draw, i, buf, size);
    }
 
    /* Map index buffer, if present */
    if (info->indexed) {
+      unsigned available_space = ~0;
       mapped_indices = lp->index_buffer.user_buffer;
-      if (!mapped_indices)
+      if (!mapped_indices) {
          mapped_indices = llvmpipe_resource_data(lp->index_buffer.buffer);
-
+         if (lp->index_buffer.buffer->width0 > lp->index_buffer.offset)
+            available_space =
+               (lp->index_buffer.buffer->width0 - lp->index_buffer.offset);
+         else
+            available_space = 0;
+      }
       draw_set_indexes(draw,
                        (ubyte *) mapped_indices + lp->index_buffer.offset,
-                       lp->index_buffer.index_size);
+                       lp->index_buffer.index_size, available_space);
    }
 
    for (i = 0; i < lp->num_so_targets; i++) {
-      void *buf = llvmpipe_resource(lp->so_targets[i]->target.buffer)->data;
-      lp->so_targets[i]->mapping = buf;
+      void *buf = 0;
+      if (lp->so_targets[i]) {
+         buf = llvmpipe_resource(lp->so_targets[i]->target.buffer)->data;
+         lp->so_targets[i]->mapping = buf;
+      }
    }
    draw_set_mapped_so_targets(draw, lp->num_so_targets,
                               lp->so_targets);
@@ -98,6 +109,18 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    llvmpipe_prepare_vertex_sampling(lp,
                                     lp->num_sampler_views[PIPE_SHADER_VERTEX],
                                     lp->sampler_views[PIPE_SHADER_VERTEX]);
+   llvmpipe_prepare_geometry_sampling(lp,
+                                      lp->num_sampler_views[PIPE_SHADER_GEOMETRY],
+                                      lp->sampler_views[PIPE_SHADER_GEOMETRY]);
+   if (lp->gs && !lp->gs->shader.tokens) {
+      /* we have an empty geometry shader with stream output, so
+         attach the stream output info to the current vertex shader */
+      if (lp->vs) {
+         draw_vs_attach_so(lp->vs->draw_data, &lp->gs->shader.stream_output);
+      }
+   }
+   draw_collect_pipeline_statistics(draw,
+                                    lp->active_statistics_queries > 0);
 
    /* draw! */
    draw_vbo(draw, info);
@@ -106,14 +129,23 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
     * unmap vertex/index buffers
     */
    for (i = 0; i < lp->num_vertex_buffers; i++) {
-      draw_set_mapped_vertex_buffer(draw, i, NULL);
+      draw_set_mapped_vertex_buffer(draw, i, NULL, 0);
    }
    if (mapped_indices) {
-      draw_set_indexes(draw, NULL, 0);
+      draw_set_indexes(draw, NULL, 0, 0);
    }
    draw_set_mapped_so_targets(draw, 0, NULL);
 
+   if (lp->gs && !lp->gs->shader.tokens) {
+      /* we have attached stream output to the vs for rendering,
+         now lets reset it */
+      if (lp->vs) {
+         draw_vs_reset_so(lp->vs->draw_data);
+      }
+   }
+   
    llvmpipe_cleanup_vertex_sampling(lp);
+   llvmpipe_cleanup_geometry_sampling(lp);
 
    /*
     * TODO: Flush only when a user vertex/index buffer is present

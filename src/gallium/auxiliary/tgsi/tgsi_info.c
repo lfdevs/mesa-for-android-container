@@ -57,7 +57,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 2, 0, 0, 0, 0, COMP, "SUB", TGSI_OPCODE_SUB },
    { 1, 3, 0, 0, 0, 0, COMP, "LRP", TGSI_OPCODE_LRP },
    { 1, 3, 0, 0, 0, 0, COMP, "CND", TGSI_OPCODE_CND },
-   { 0, 0, 0, 0, 0, 0, NONE, "", 20 },      /* removed */
+   { 1, 1, 0, 0, 0, 0, REPL, "SQRT", TGSI_OPCODE_SQRT },
    { 1, 3, 0, 0, 0, 0, REPL, "DP2A", TGSI_OPCODE_DP2A },
    { 0, 0, 0, 0, 0, 0, NONE, "", 22 },      /* removed */
    { 0, 0, 0, 0, 0, 0, NONE, "", 23 },      /* removed */
@@ -76,7 +76,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 1, 0, 0, 0, 0, REPL, "COS", TGSI_OPCODE_COS },
    { 1, 1, 0, 0, 0, 0, COMP, "DDX", TGSI_OPCODE_DDX },
    { 1, 1, 0, 0, 0, 0, COMP, "DDY", TGSI_OPCODE_DDY },
-   { 0, 0, 0, 0, 0, 0, NONE, "KILP", TGSI_OPCODE_KILP },
+   { 0, 0, 0, 0, 0, 0, NONE, "KILL", TGSI_OPCODE_KILL },
    { 1, 1, 0, 0, 0, 0, COMP, "PK2H", TGSI_OPCODE_PK2H },
    { 1, 1, 0, 0, 0, 0, COMP, "PK2US", TGSI_OPCODE_PK2US },
    { 1, 1, 0, 0, 0, 0, COMP, "PK4B", TGSI_OPCODE_PK4B },
@@ -112,7 +112,7 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 1, 2, 1, 0, 0, 0, OTHR, "TXL", TGSI_OPCODE_TXL },
    { 0, 0, 0, 0, 0, 0, NONE, "BRK", TGSI_OPCODE_BRK },
    { 0, 1, 0, 1, 0, 1, NONE, "IF", TGSI_OPCODE_IF },
-   { 1, 1, 0, 0, 0, 1, NONE, "", 75 },      /* removed */
+   { 0, 1, 0, 1, 0, 1, NONE, "UIF", TGSI_OPCODE_UIF },
    { 0, 1, 0, 0, 0, 1, NONE, "", 76 },      /* removed */
    { 0, 0, 0, 1, 1, 1, NONE, "ELSE", TGSI_OPCODE_ELSE },
    { 0, 0, 0, 0, 1, 0, NONE, "ENDIF", TGSI_OPCODE_ENDIF },
@@ -151,9 +151,9 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
    { 0, 0, 0, 0, 0, 0, NONE, "", 111 },     /* removed */
    { 1, 1, 0, 0, 0, 0, REPL, "NRM4", TGSI_OPCODE_NRM4 },
    { 0, 1, 0, 0, 0, 0, NONE, "CALLNZ", TGSI_OPCODE_CALLNZ },
-   { 0, 1, 0, 0, 0, 0, NONE, "IFC", TGSI_OPCODE_IFC },
+   { 0, 1, 0, 0, 0, 0, NONE, "", 114 },     /* removed */
    { 0, 1, 0, 0, 0, 0, NONE, "BREAKC", TGSI_OPCODE_BREAKC },
-   { 0, 1, 0, 0, 0, 0, NONE, "KIL", TGSI_OPCODE_KIL },
+   { 0, 1, 0, 0, 0, 0, NONE, "KILL_IF", TGSI_OPCODE_KILL_IF },
    { 0, 0, 0, 0, 0, 0, NONE, "END", TGSI_OPCODE_END },
    { 0, 0, 0, 0, 0, 0, NONE, "", 118 },     /* removed */
    { 1, 1, 0, 0, 0, 0, COMP, "F2I", TGSI_OPCODE_F2I },
@@ -185,12 +185,12 @@ static const struct tgsi_opcode_info opcode_info[TGSI_OPCODE_LAST] =
 
    { 1, 3, 0, 0, 0, 0, OTHR, "SAMPLE",      TGSI_OPCODE_SAMPLE },
    { 1, 2, 0, 0, 0, 0, OTHR, "SAMPLE_I",    TGSI_OPCODE_SAMPLE_I },
-   { 1, 2, 0, 0, 0, 0, OTHR, "SAMPLE_I_MS", TGSI_OPCODE_SAMPLE_I_MS },
+   { 1, 3, 0, 0, 0, 0, OTHR, "SAMPLE_I_MS", TGSI_OPCODE_SAMPLE_I_MS },
    { 1, 4, 0, 0, 0, 0, OTHR, "SAMPLE_B",    TGSI_OPCODE_SAMPLE_B },
    { 1, 4, 0, 0, 0, 0, OTHR, "SAMPLE_C",    TGSI_OPCODE_SAMPLE_C },
    { 1, 4, 0, 0, 0, 0, OTHR, "SAMPLE_C_LZ", TGSI_OPCODE_SAMPLE_C_LZ },
    { 1, 5, 0, 0, 0, 0, OTHR, "SAMPLE_D",    TGSI_OPCODE_SAMPLE_D },
-   { 1, 3, 0, 0, 0, 0, OTHR, "SAMPLE_L",    TGSI_OPCODE_SAMPLE_L },
+   { 1, 4, 0, 0, 0, 0, OTHR, "SAMPLE_L",    TGSI_OPCODE_SAMPLE_L },
    { 1, 3, 0, 0, 0, 0, OTHR, "GATHER4",     TGSI_OPCODE_GATHER4 },
    { 1, 2, 0, 0, 0, 0, OTHR, "SVIEWINFO",   TGSI_OPCODE_SVIEWINFO },
    { 1, 2, 0, 0, 0, 0, OTHR, "SAMPLE_POS",  TGSI_OPCODE_SAMPLE_POS },
@@ -264,86 +264,43 @@ tgsi_get_processor_name( uint processor )
    }
 }
 
-/*
- * infer the source type of a TGSI opcode.
- * MOV is special so return VOID
+/**
+ * Infer the type (of the dst) of the opcode.
+ *
+ * MOV and UCMP is special so return VOID
  */
-enum tgsi_opcode_type
-tgsi_opcode_infer_src_type( uint opcode )
+static INLINE enum tgsi_opcode_type
+tgsi_opcode_infer_type( uint opcode )
 {
    switch (opcode) {
    case TGSI_OPCODE_MOV:
+   case TGSI_OPCODE_UCMP:
       return TGSI_TYPE_UNTYPED;
+   case TGSI_OPCODE_NOT:
+   case TGSI_OPCODE_SHL:
    case TGSI_OPCODE_AND:
    case TGSI_OPCODE_OR:
    case TGSI_OPCODE_XOR:
-   case TGSI_OPCODE_SAD:
-   case TGSI_OPCODE_U2F:
-   case TGSI_OPCODE_UADD:
-   case TGSI_OPCODE_UDIV:
-   case TGSI_OPCODE_UMOD:
-   case TGSI_OPCODE_UMAD:
-   case TGSI_OPCODE_UMUL:
-   case TGSI_OPCODE_UMAX:
-   case TGSI_OPCODE_UMIN:
-   case TGSI_OPCODE_USEQ:
-   case TGSI_OPCODE_USGE:
-   case TGSI_OPCODE_USLT:
-   case TGSI_OPCODE_USNE:
-   case TGSI_OPCODE_USHR:
-   case TGSI_OPCODE_SHL:
-   case TGSI_OPCODE_TXQ:
-   case TGSI_OPCODE_TXF:
-      return TGSI_TYPE_UNSIGNED;
-   case TGSI_OPCODE_MOD:
-   case TGSI_OPCODE_I2F:
-   case TGSI_OPCODE_IDIV:
-   case TGSI_OPCODE_IMAX:
-   case TGSI_OPCODE_IMIN:
-   case TGSI_OPCODE_INEG:
-   case TGSI_OPCODE_ISGE:
-   case TGSI_OPCODE_ISHR:
-   case TGSI_OPCODE_ISLT:
-   case TGSI_OPCODE_IABS:
-   case TGSI_OPCODE_ISSG:
-   case TGSI_OPCODE_UARL:
-      return TGSI_TYPE_SIGNED;
-   default:
-      return TGSI_TYPE_FLOAT;
-   }
-}
-
-/*
- * infer the destination type of a TGSI opcode.
- * MOV is special so return VOID
- */
-enum tgsi_opcode_type
-tgsi_opcode_infer_dst_type( uint opcode )
-{
-   switch (opcode) {
-   case TGSI_OPCODE_MOV:
-      return TGSI_TYPE_UNTYPED;
-   case TGSI_OPCODE_F2U:
-   case TGSI_OPCODE_AND:
-   case TGSI_OPCODE_OR:
-   case TGSI_OPCODE_XOR:
-   case TGSI_OPCODE_SAD:
-   case TGSI_OPCODE_UADD:
-   case TGSI_OPCODE_UDIV:
-   case TGSI_OPCODE_UMOD:
-   case TGSI_OPCODE_UMAD:
-   case TGSI_OPCODE_UMUL:
-   case TGSI_OPCODE_UMAX:
-   case TGSI_OPCODE_UMIN:
-   case TGSI_OPCODE_USEQ:
-   case TGSI_OPCODE_USGE:
-   case TGSI_OPCODE_USLT:
-   case TGSI_OPCODE_USNE:
-   case TGSI_OPCODE_USHR:
-   case TGSI_OPCODE_SHL:
+   case TGSI_OPCODE_SAD: /* XXX some src args may be signed for SAD ? */
    case TGSI_OPCODE_TXQ:
    case TGSI_OPCODE_TXQ_LZ:
+   case TGSI_OPCODE_F2U:
+   case TGSI_OPCODE_UDIV:
+   case TGSI_OPCODE_UMAD:
+   case TGSI_OPCODE_UMAX:
+   case TGSI_OPCODE_UMIN:
+   case TGSI_OPCODE_UMOD:
+   case TGSI_OPCODE_UMUL:
+   case TGSI_OPCODE_USEQ:
+   case TGSI_OPCODE_USGE:
+   case TGSI_OPCODE_USHR:
+   case TGSI_OPCODE_USLT:
+   case TGSI_OPCODE_USNE:
+   case TGSI_OPCODE_SVIEWINFO:
       return TGSI_TYPE_UNSIGNED;
+   case TGSI_OPCODE_ARL:
+   case TGSI_OPCODE_ARR:
+   case TGSI_OPCODE_MOD:
    case TGSI_OPCODE_F2I:
    case TGSI_OPCODE_IDIV:
    case TGSI_OPCODE_IMAX:
@@ -352,14 +309,52 @@ tgsi_opcode_infer_dst_type( uint opcode )
    case TGSI_OPCODE_ISGE:
    case TGSI_OPCODE_ISHR:
    case TGSI_OPCODE_ISLT:
-   case TGSI_OPCODE_MOD:
+   case TGSI_OPCODE_UADD:
    case TGSI_OPCODE_UARL:
-   case TGSI_OPCODE_ARL:
-   case TGSI_OPCODE_ARR:
    case TGSI_OPCODE_IABS:
    case TGSI_OPCODE_ISSG:
       return TGSI_TYPE_SIGNED;
    default:
       return TGSI_TYPE_FLOAT;
    }
+}
+
+/*
+ * infer the source type of a TGSI opcode.
+ */
+enum tgsi_opcode_type
+tgsi_opcode_infer_src_type( uint opcode )
+{
+   switch (opcode) {
+   case TGSI_OPCODE_UIF:
+   case TGSI_OPCODE_TXF:
+   case TGSI_OPCODE_BREAKC:
+   case TGSI_OPCODE_U2F:
+   case TGSI_OPCODE_UADD:
+   case TGSI_OPCODE_SWITCH:
+   case TGSI_OPCODE_CASE:
+   case TGSI_OPCODE_SAMPLE_I:
+   case TGSI_OPCODE_SAMPLE_I_MS:
+      return TGSI_TYPE_UNSIGNED;
+   case TGSI_OPCODE_I2F:
+      return TGSI_TYPE_SIGNED;
+   case TGSI_OPCODE_ARL:
+   case TGSI_OPCODE_ARR:
+   case TGSI_OPCODE_TXQ_LZ:
+   case TGSI_OPCODE_F2I:
+   case TGSI_OPCODE_F2U:
+   case TGSI_OPCODE_UCMP:
+      return TGSI_TYPE_FLOAT;
+   default:
+      return tgsi_opcode_infer_type(opcode);
+   }
+}
+
+/*
+ * infer the destination type of a TGSI opcode.
+ */
+enum tgsi_opcode_type
+tgsi_opcode_infer_dst_type( uint opcode )
+{
+   return tgsi_opcode_infer_type(opcode);
 }

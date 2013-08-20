@@ -34,10 +34,9 @@
 
 #include <stdlib.h>
 
+#include "macros.h"
 #include "set.h"
 #include "ralloc.h"
-
-#define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
 
 /*
  * From Knuth -- a good choice for hash/rehash values is p, p-2 where
@@ -104,8 +103,8 @@ entry_is_present(struct set_entry *entry)
 
 struct set *
 _mesa_set_create(void *mem_ctx,
-                 bool key_equals_function(const void *a,
-                                          const void *b))
+                 bool (*key_equals_function)(const void *a,
+                                             const void *b))
 {
    struct set *ht;
 

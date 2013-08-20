@@ -134,6 +134,42 @@ The integer capabilities:
   expected for a pointer returned by transfer_map if the resource is
   PIPE_BUFFER. In other words, the pointer returned by transfer_map is
   always aligned to this value.
+* ``PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT``: Describes the required
+  alignment for pipe_sampler_view::u.buf.first_element, in bytes.
+  If a driver does not support first/last_element, it should return 0.
+* ``PIPE_CAP_TGSI_TEXCOORD``: This CAP describes a hw limitation.
+  If true, the hardware cannot replace arbitrary shader inputs with sprite
+  coordinates and hence the inputs that are desired to be replaceable must
+  be declared with TGSI_SEMANTIC_TEXCOORD instead of TGSI_SEMANTIC_GENERIC.
+  The rasterizer's sprite_coord_enable state therefore also applies to the
+  TEXCOORD semantic.
+  Also, TGSI_SEMANTIC_PCOORD becomes available, which labels a fragment shader
+  input that will always be replaced with sprite coordinates.
+* ``PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER``: Whether it is preferable
+  to use a blit to implement a texture transfer which needs format conversions
+  and swizzling in state trackers. Generally, all hardware drivers with
+  dedicated memory should return 1 and all software rasterizers should return 0.
+* ``PIPE_CAP_QUERY_PIPELINE_STATISTICS``: Whether PIPE_QUERY_PIPELINE_STATISTICS
+  is supported.
+* ``PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK``: Bitmask indicating whether special
+  considerations have to be given to the interaction between the border color
+  in the sampler object and the sampler view used with it.
+  If PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_R600 is set, the border color
+  may be affected in undefined ways for any kind of permutational swizzle
+  (any swizzle XYZW where X/Y/Z/W are not ZERO, ONE, or R/G/B/A respectively)
+  in the sampler view.
+  If PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 is set, the border color
+  state should be swizzled manually according to the swizzle in the sampler
+  view it is intended to be used with, or herein undefined results may occur
+  for permutational swizzles.
+* ``PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE``: The maximum accessible size with
+  a buffer sampler view, in bytes.
+* ``PIPE_CAP_MAX_VIEWPORTS``: The maximum number of viewports (and scissors
+  since they are linked) a driver can support. Returning 0 is equivalent
+  to returning 1 because every driver has to support at least a single
+  viewport/scissor combination.  
+* ''PIPE_CAP_ENDIANNESS``:: The endianness of the device.  Either
+  PIPE_ENDIAN_BIG or PIPE_ENDIAN_LITTLE.
 
 
 .. _pipe_capf:
@@ -219,10 +255,10 @@ PIPE_COMPUTE_CAP_*
 Compute-specific capabilities. They can be queried using
 pipe_screen::get_compute_param.
 
-* ``PIPE_COMPUTE_CAP_IR_TARGET``: A description of the target as a target
-  triple specification of the form ``processor-manufacturer-os`` that will
-  be passed on to the compiler.  This CAP is only relevant for drivers
-  that specify PIPE_SHADER_IR_LLVM for their preferred IR.
+* ``PIPE_COMPUTE_CAP_IR_TARGET``: A description of the target of the form
+  ``processor-arch-manufacturer-os`` that will be passed on to the compiler.
+  This CAP is only relevant for drivers that specify PIPE_SHADER_IR_LLVM for
+  their preferred IR.
   Value type: null-terminated string.
 * ``PIPE_COMPUTE_CAP_GRID_DIMENSION``: Number of supported dimensions
   for grid and block coordinates.  Value type: ``uint64_t``.
@@ -425,3 +461,15 @@ get_timestamp
 Query a timestamp in nanoseconds. The returned value should match
 PIPE_QUERY_TIMESTAMP. This function returns immediately and doesn't
 wait for rendering to complete (which cannot be achieved with queries).
+
+
+
+get_driver_query_info
+^^^^^^^^^^^^^^^^^^^^^
+
+Return a driver-specific query. If the **info** parameter is NULL,
+the number of available queries is returned.  Otherwise, the driver
+query at the specified **index** is returned in **info**.
+The function returns non-zero on success.
+The driver-specific query is described with the pipe_driver_query_info
+structure.

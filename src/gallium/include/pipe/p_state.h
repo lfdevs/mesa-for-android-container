@@ -64,6 +64,10 @@ extern "C" {
 #define PIPE_MAX_SHADER_RESOURCES 32
 #define PIPE_MAX_TEXTURE_LEVELS   16
 #define PIPE_MAX_SO_BUFFERS        4
+#define PIPE_MAX_SO_OUTPUTS       64
+#define PIPE_MAX_VIEWPORTS        16
+#define PIPE_MAX_CLIP_OR_CULL_DISTANCE_COUNT 8
+#define PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT 2
 
 
 struct pipe_reference
@@ -107,18 +111,8 @@ struct pipe_rasterizer_state
     */
    unsigned flatshade_first:1;
 
-   /**
-    * When true, triangle rasterization uses (0.5, 0.5) pixel centers
-    * for determining pixel ownership.
-    *
-    * When false, triangle rasterization uses (0,0) pixel centers for
-    * determining pixel ownership.
-    *
-    * Triangle rasterization always uses a 'top,left' rule for pixel
-    * ownership, this just alters which point we consider the pixel
-    * center for that test.
-    */
-   unsigned gl_rasterization_rules:1;
+   unsigned half_pixel_center:1;
+   unsigned bottom_edge_rule:1;
 
    /**
     * When true, rasterization is disabled and no pixels are written.
@@ -134,6 +128,12 @@ struct pipe_rasterizer_state
    unsigned depth_clip:1;
 
    /**
+    * When true clip space in the z axis goes from [0..1] (D3D).  When false
+    * [-1, 1] (GL).
+    */
+   unsigned clip_halfz:1;
+
+   /**
     * Enable bits for clipping half-spaces.
     * This applies to both user clip planes and shader clip distances.
     * Note that if the bound shader exports any clip distances, these
@@ -145,7 +145,7 @@ struct pipe_rasterizer_state
    unsigned line_stipple_factor:8;  /**< [1..256] actually */
    unsigned line_stipple_pattern:16;
 
-   unsigned sprite_coord_enable; /* bitfield referring to 32 GENERIC inputs */
+   uint32_t sprite_coord_enable; /* referring to 32 TEXCOORD/GENERIC inputs */
 
    float line_width;
    float point_size;           /**< used when no per-vertex size */
@@ -202,7 +202,7 @@ struct pipe_stream_output_info
       unsigned num_components:3;  /** 1 to 4 */
       unsigned output_buffer:3;   /**< 0 to PIPE_MAX_SO_BUFFERS */
       unsigned dst_offset:16;     /**< offset into the buffer in dwords */
-   } output[PIPE_MAX_SHADER_OUTPUTS];
+   } output[PIPE_MAX_SO_OUTPUTS];
 };
 
 
@@ -467,6 +467,13 @@ struct pipe_constant_buffer {
  * (appended) to it. The internal offset is buffer_offset + how many bytes
  * have been written. The internal offset can be stored on the device
  * and the CPU actually doesn't have to query it.
+ *
+ * Note that the buffer_size variable is actually specifying the available
+ * space in the buffer, not the size of the attached buffer. 
+ * In other words in majority of cases buffer_size would simply be 
+ * 'buffer->width0 - buffer_offset', so buffer_size refers to the size
+ * of the buffer left, after accounting for buffer offset, for stream output
+ * to write to.
  *
  * Use PIPE_QUERY_SO_STATISTICS to know how many primitives have
  * actually been written.

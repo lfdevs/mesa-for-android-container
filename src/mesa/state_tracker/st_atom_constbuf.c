@@ -39,6 +39,7 @@
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"
 #include "util/u_upload_mgr.h"
+#include "cso_cache/cso_context.h"
 
 #include "st_debug.h"
 #include "st_context.h"
@@ -96,16 +97,17 @@ void st_upload_constants( struct st_context *st,
          _mesa_print_parameter_list(params);
       }
 
-      st->pipe->set_constant_buffer(st->pipe, shader_type, 0, &cb);
+      cso_set_constant_buffer(st->cso_context, shader_type, 0, &cb);
       pipe_resource_reference(&cb.buffer, NULL);
 
       st->state.constants[shader_type].ptr = params->ParameterValues;
       st->state.constants[shader_type].size = paramBytes;
    }
    else if (st->state.constants[shader_type].ptr) {
+      /* Unbind. */
       st->state.constants[shader_type].ptr = NULL;
       st->state.constants[shader_type].size = 0;
-      st->pipe->set_constant_buffer(st->pipe, shader_type, 0, NULL);
+      cso_set_constant_buffer(st->cso_context, shader_type, 0, NULL);
    }
 }
 
@@ -203,14 +205,14 @@ static void st_bind_ubos(struct st_context *st,
           * Take the minimum just to be sure.
           */
          if (!binding->AutomaticSize)
-            cb.buffer_size = MIN2(cb.buffer_size, binding->Size);
+            cb.buffer_size = MIN2(cb.buffer_size, (unsigned) binding->Size);
       }
       else {
          cb.buffer_offset = 0;
          cb.buffer_size = 0;
       }
 
-      st->pipe->set_constant_buffer(st->pipe, shader_type, 1 + i, &cb);
+      cso_set_constant_buffer(st->cso_context, shader_type, 1 + i, &cb);
    }
 }
 
@@ -227,8 +229,8 @@ static void bind_vs_ubos(struct st_context *st)
 const struct st_tracked_state st_bind_vs_ubos = {
    "st_bind_vs_ubos",
    {
-      (_NEW_PROGRAM | _NEW_BUFFER_OBJECT),
-      ST_NEW_VERTEX_PROGRAM,
+      0,
+      ST_NEW_VERTEX_PROGRAM | ST_NEW_UNIFORM_BUFFER,
    },
    bind_vs_ubos
 };
@@ -241,14 +243,13 @@ static void bind_fs_ubos(struct st_context *st)
       return;
 
    st_bind_ubos(st, prog->_LinkedShaders[MESA_SHADER_FRAGMENT], PIPE_SHADER_FRAGMENT);
-
 }
 
 const struct st_tracked_state st_bind_fs_ubos = {
    "st_bind_fs_ubos",
    {
-      (_NEW_PROGRAM | _NEW_BUFFER_OBJECT),
-      ST_NEW_FRAGMENT_PROGRAM,
+      0,
+      ST_NEW_FRAGMENT_PROGRAM | ST_NEW_UNIFORM_BUFFER,
    },
    bind_fs_ubos
 };

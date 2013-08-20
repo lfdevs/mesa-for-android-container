@@ -56,6 +56,9 @@ endif
 ifneq ($(filter i915g, $(MESA_GPU_DRIVERS)),)
 LOCAL_CFLAGS += -D_EGL_PIPE_I915=1
 endif
+ifneq ($(filter ilo, $(MESA_GPU_DRIVERS)),)
+LOCAL_CFLAGS += -D_EGL_PIPE_ILO=1
+endif
 ifneq ($(filter nouveau, $(MESA_GPU_DRIVERS)),)
 LOCAL_CFLAGS += -D_EGL_PIPE_NOUVEAU=1
 endif

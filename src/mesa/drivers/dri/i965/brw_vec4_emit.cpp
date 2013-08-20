@@ -133,15 +133,14 @@ vec4_instruction::get_src(int i)
 }
 
 vec4_generator::vec4_generator(struct brw_context *brw,
-                               struct brw_vs_compile *c,
-                               struct gl_shader_program *prog,
-                               void *mem_ctx)
-   : brw(brw), c(c), prog(prog), mem_ctx(mem_ctx)
+                               struct gl_shader_program *shader_prog,
+                               struct gl_program *prog,
+                               void *mem_ctx,
+                               bool debug_flag)
+   : brw(brw), shader_prog(shader_prog), prog(prog), mem_ctx(mem_ctx),
+     debug_flag(debug_flag)
 {
-   intel = &brw->intel;
-   vp = &c->vp->program;
-
-   shader = prog ? prog->_LinkedShaders[MESA_SHADER_VERTEX] : NULL;
+   shader = shader_prog ? shader_prog->_LinkedShaders[MESA_SHADER_VERTEX] : NULL;
 
    p = rzalloc(mem_ctx, struct brw_compile);
    brw_init_compile(brw, p, mem_ctx);
@@ -267,7 +266,7 @@ vec4_generator::generate_tex(vec4_instruction *inst,
 {
    int msg_type = -1;
 
-   if (intel->gen >= 5) {
+   if (brw->gen >= 5) {
       switch (inst->opcode) {
       case SHADER_OPCODE_TEX:
       case SHADER_OPCODE_TXL:
@@ -280,7 +279,7 @@ vec4_generator::generate_tex(vec4_instruction *inst,
       case SHADER_OPCODE_TXD:
          if (inst->shadow_compare) {
             /* Gen7.5+.  Otherwise, lowered by brw_lower_texture_gradients(). */
-            assert(intel->is_haswell);
+            assert(brw->is_haswell);
             msg_type = HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE;
          } else {
             msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_DERIVS;
@@ -289,6 +288,12 @@ vec4_generator::generate_tex(vec4_instruction *inst,
       case SHADER_OPCODE_TXF:
 	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
 	 break;
+      case SHADER_OPCODE_TXF_MS:
+         if (brw->gen >= 7)
+            msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS;
+         else
+            msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
+         break;
       case SHADER_OPCODE_TXS:
 	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_RESINFO;
 	 break;
@@ -372,7 +377,6 @@ vec4_generator::generate_tex(vec4_instruction *inst,
 	      src,
 	      SURF_INDEX_VS_TEXTURE(inst->sampler),
 	      inst->sampler,
-	      WRITEMASK_XYZW,
 	      msg_type,
 	      1, /* response length */
 	      inst->mlen,
@@ -404,7 +408,7 @@ vec4_generator::generate_oword_dual_block_offsets(struct brw_reg m1,
 {
    int second_vertex_offset;
 
-   if (intel->gen >= 6)
+   if (brw->gen >= 6)
       second_vertex_offset = 1;
    else
       second_vertex_offset = 16;
@@ -449,9 +453,9 @@ vec4_generator::generate_scratch_read(vec4_instruction *inst,
 
    uint32_t msg_type;
 
-   if (intel->gen >= 6)
+   if (brw->gen >= 6)
       msg_type = GEN6_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
-   else if (intel->gen == 5 || intel->is_g4x)
+   else if (brw->gen == 5 || brw->is_g4x)
       msg_type = G45_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
    else
       msg_type = BRW_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
@@ -462,7 +466,7 @@ vec4_generator::generate_scratch_read(vec4_instruction *inst,
    struct brw_instruction *send = brw_next_insn(p, BRW_OPCODE_SEND);
    brw_set_dest(p, send, dst);
    brw_set_src0(p, send, header);
-   if (intel->gen < 6)
+   if (brw->gen < 6)
       send->header.destreg__conditionalmod = inst->base_mrf;
    brw_set_dp_read_message(p, send,
 			   255, /* binding table index: stateless access */
@@ -499,9 +503,9 @@ vec4_generator::generate_scratch_write(vec4_instruction *inst,
 
    uint32_t msg_type;
 
-   if (intel->gen >= 7)
+   if (brw->gen >= 7)
       msg_type = GEN7_DATAPORT_WRITE_MESSAGE_OWORD_DUAL_BLOCK_WRITE;
-   else if (intel->gen == 6)
+   else if (brw->gen == 6)
       msg_type = GEN6_DATAPORT_WRITE_MESSAGE_OWORD_DUAL_BLOCK_WRITE;
    else
       msg_type = BRW_DATAPORT_WRITE_MESSAGE_OWORD_DUAL_BLOCK_WRITE;
@@ -513,7 +517,7 @@ vec4_generator::generate_scratch_write(vec4_instruction *inst,
     * guaranteed and write commits only matter for inter-thread
     * synchronization.
     */
-   if (intel->gen >= 6) {
+   if (brw->gen >= 6) {
       write_commit = false;
    } else {
       /* The visitor set up our destination register to be g0.  This
@@ -533,7 +537,7 @@ vec4_generator::generate_scratch_write(vec4_instruction *inst,
    struct brw_instruction *send = brw_next_insn(p, BRW_OPCODE_SEND);
    brw_set_dest(p, send, dst);
    brw_set_src0(p, send, header);
-   if (intel->gen < 6)
+   if (brw->gen < 6)
       send->header.destreg__conditionalmod = inst->base_mrf;
    brw_set_dp_write_message(p, send,
 			    255, /* binding table index: stateless access */
@@ -553,26 +557,10 @@ vec4_generator::generate_pull_constant_load(vec4_instruction *inst,
                                             struct brw_reg index,
                                             struct brw_reg offset)
 {
+   assert(brw->gen <= 7);
    assert(index.file == BRW_IMMEDIATE_VALUE &&
 	  index.type == BRW_REGISTER_TYPE_UD);
    uint32_t surf_index = index.dw1.ud;
-
-   if (intel->gen == 7) {
-      gen6_resolve_implied_move(p, &offset, inst->base_mrf);
-      brw_instruction *insn = brw_next_insn(p, BRW_OPCODE_SEND);
-      brw_set_dest(p, insn, dst);
-      brw_set_src0(p, insn, offset);
-      brw_set_sampler_message(p, insn,
-                              surf_index,
-                              0, /* LD message ignores sampler unit */
-                              GEN5_SAMPLER_MESSAGE_SAMPLE_LD,
-                              1, /* rlen */
-                              1, /* mlen */
-                              false, /* no header */
-                              BRW_SAMPLER_SIMD_MODE_SIMD4X2,
-                              0);
-      return;
-   }
 
    struct brw_reg header = brw_vec8_grf(0, 0);
 
@@ -583,9 +571,9 @@ vec4_generator::generate_pull_constant_load(vec4_instruction *inst,
 
    uint32_t msg_type;
 
-   if (intel->gen >= 6)
+   if (brw->gen >= 6)
       msg_type = GEN6_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
-   else if (intel->gen == 5 || intel->is_g4x)
+   else if (brw->gen == 5 || brw->is_g4x)
       msg_type = G45_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
    else
       msg_type = BRW_DATAPORT_READ_MESSAGE_OWORD_DUAL_BLOCK_READ;
@@ -596,7 +584,7 @@ vec4_generator::generate_pull_constant_load(vec4_instruction *inst,
    struct brw_instruction *send = brw_next_insn(p, BRW_OPCODE_SEND);
    brw_set_dest(p, send, dst);
    brw_set_src0(p, send, header);
-   if (intel->gen < 6)
+   if (brw->gen < 6)
       send->header.destreg__conditionalmod = inst->base_mrf;
    brw_set_dp_read_message(p, send,
 			   surf_index,
@@ -609,13 +597,200 @@ vec4_generator::generate_pull_constant_load(vec4_instruction *inst,
 }
 
 void
-vec4_generator::generate_vs_instruction(vec4_instruction *instruction,
-                                        struct brw_reg dst,
-                                        struct brw_reg *src)
+vec4_generator::generate_pull_constant_load_gen7(vec4_instruction *inst,
+                                                 struct brw_reg dst,
+                                                 struct brw_reg surf_index,
+                                                 struct brw_reg offset)
 {
-   vec4_instruction *inst = (vec4_instruction *)instruction;
+   assert(surf_index.file == BRW_IMMEDIATE_VALUE &&
+	  surf_index.type == BRW_REGISTER_TYPE_UD);
+
+   brw_instruction *insn = brw_next_insn(p, BRW_OPCODE_SEND);
+   brw_set_dest(p, insn, dst);
+   brw_set_src0(p, insn, offset);
+   brw_set_sampler_message(p, insn,
+                           surf_index.dw1.ud,
+                           0, /* LD message ignores sampler unit */
+                           GEN5_SAMPLER_MESSAGE_SAMPLE_LD,
+                           1, /* rlen */
+                           1, /* mlen */
+                           false, /* no header */
+                           BRW_SAMPLER_SIMD_MODE_SIMD4X2,
+                           0);
+}
+
+/**
+ * Generate assembly for a Vec4 IR instruction.
+ *
+ * \param instruction The Vec4 IR instruction to generate code for.
+ * \param dst         The destination register.
+ * \param src         An array of up to three source registers.
+ */
+void
+vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
+                                          struct brw_reg dst,
+                                          struct brw_reg *src)
+{
+   vec4_instruction *inst = (vec4_instruction *) instruction;
 
    switch (inst->opcode) {
+   case BRW_OPCODE_MOV:
+      brw_MOV(p, dst, src[0]);
+      break;
+   case BRW_OPCODE_ADD:
+      brw_ADD(p, dst, src[0], src[1]);
+      break;
+   case BRW_OPCODE_MUL:
+      brw_MUL(p, dst, src[0], src[1]);
+      break;
+   case BRW_OPCODE_MACH:
+      brw_set_acc_write_control(p, 1);
+      brw_MACH(p, dst, src[0], src[1]);
+      brw_set_acc_write_control(p, 0);
+      break;
+
+   case BRW_OPCODE_MAD:
+      brw_MAD(p, dst, src[0], src[1], src[2]);
+      break;
+
+   case BRW_OPCODE_FRC:
+      brw_FRC(p, dst, src[0]);
+      break;
+   case BRW_OPCODE_RNDD:
+      brw_RNDD(p, dst, src[0]);
+      break;
+   case BRW_OPCODE_RNDE:
+      brw_RNDE(p, dst, src[0]);
+      break;
+   case BRW_OPCODE_RNDZ:
+      brw_RNDZ(p, dst, src[0]);
+      break;
+
+   case BRW_OPCODE_AND:
+      brw_AND(p, dst, src[0], src[1]);
+      break;
+   case BRW_OPCODE_OR:
+      brw_OR(p, dst, src[0], src[1]);
+      break;
+   case BRW_OPCODE_XOR:
+      brw_XOR(p, dst, src[0], src[1]);
+      break;
+   case BRW_OPCODE_NOT:
+      brw_NOT(p, dst, src[0]);
+      break;
+   case BRW_OPCODE_ASR:
+      brw_ASR(p, dst, src[0], src[1]);
+      break;
+   case BRW_OPCODE_SHR:
+      brw_SHR(p, dst, src[0], src[1]);
+      break;
+   case BRW_OPCODE_SHL:
+      brw_SHL(p, dst, src[0], src[1]);
+      break;
+
+   case BRW_OPCODE_CMP:
+      brw_CMP(p, dst, inst->conditional_mod, src[0], src[1]);
+      break;
+   case BRW_OPCODE_SEL:
+      brw_SEL(p, dst, src[0], src[1]);
+      break;
+
+   case BRW_OPCODE_DPH:
+      brw_DPH(p, dst, src[0], src[1]);
+      break;
+
+   case BRW_OPCODE_DP4:
+      brw_DP4(p, dst, src[0], src[1]);
+      break;
+
+   case BRW_OPCODE_DP3:
+      brw_DP3(p, dst, src[0], src[1]);
+      break;
+
+   case BRW_OPCODE_DP2:
+      brw_DP2(p, dst, src[0], src[1]);
+      break;
+
+   case BRW_OPCODE_F32TO16:
+      brw_F32TO16(p, dst, src[0]);
+      break;
+
+   case BRW_OPCODE_F16TO32:
+      brw_F16TO32(p, dst, src[0]);
+      break;
+
+   case BRW_OPCODE_LRP:
+      brw_LRP(p, dst, src[0], src[1], src[2]);
+      break;
+
+   case BRW_OPCODE_BFREV:
+      /* BFREV only supports UD type for src and dst. */
+      brw_BFREV(p, retype(dst, BRW_REGISTER_TYPE_UD),
+                   retype(src[0], BRW_REGISTER_TYPE_UD));
+      break;
+   case BRW_OPCODE_FBH:
+      /* FBH only supports UD type for dst. */
+      brw_FBH(p, retype(dst, BRW_REGISTER_TYPE_UD), src[0]);
+      break;
+   case BRW_OPCODE_FBL:
+      /* FBL only supports UD type for dst. */
+      brw_FBL(p, retype(dst, BRW_REGISTER_TYPE_UD), src[0]);
+      break;
+   case BRW_OPCODE_CBIT:
+      /* CBIT only supports UD type for dst. */
+      brw_CBIT(p, retype(dst, BRW_REGISTER_TYPE_UD), src[0]);
+      break;
+
+   case BRW_OPCODE_BFE:
+      brw_BFE(p, dst, src[0], src[1], src[2]);
+      break;
+
+   case BRW_OPCODE_BFI1:
+      brw_BFI1(p, dst, src[0], src[1]);
+      break;
+   case BRW_OPCODE_BFI2:
+      brw_BFI2(p, dst, src[0], src[1], src[2]);
+      break;
+
+   case BRW_OPCODE_IF:
+      if (inst->src[0].file != BAD_FILE) {
+         /* The instruction has an embedded compare (only allowed on gen6) */
+         assert(brw->gen == 6);
+         gen6_IF(p, inst->conditional_mod, src[0], src[1]);
+      } else {
+         struct brw_instruction *brw_inst = brw_IF(p, BRW_EXECUTE_8);
+         brw_inst->header.predicate_control = inst->predicate;
+      }
+      break;
+
+   case BRW_OPCODE_ELSE:
+      brw_ELSE(p);
+      break;
+   case BRW_OPCODE_ENDIF:
+      brw_ENDIF(p);
+      break;
+
+   case BRW_OPCODE_DO:
+      brw_DO(p, BRW_EXECUTE_8);
+      break;
+
+   case BRW_OPCODE_BREAK:
+      brw_BREAK(p);
+      brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+      break;
+   case BRW_OPCODE_CONTINUE:
+      /* FINISHME: We need to write the loop instruction support still. */
+      if (brw->gen >= 6)
+         gen6_CONT(p);
+      else
+         brw_CONT(p);
+      brw_set_predicate_control(p, BRW_PREDICATE_NONE);
+      break;
+
+   case BRW_OPCODE_WHILE:
+      brw_WHILE(p);
+      break;
+
    case SHADER_OPCODE_RCP:
    case SHADER_OPCODE_RSQ:
    case SHADER_OPCODE_SQRT:
@@ -623,7 +798,7 @@ vec4_generator::generate_vs_instruction(vec4_instruction *instruction,
    case SHADER_OPCODE_LOG2:
    case SHADER_OPCODE_SIN:
    case SHADER_OPCODE_COS:
-      if (intel->gen == 6) {
+      if (brw->gen == 6) {
 	 generate_math1_gen6(inst, dst, src[0]);
       } else {
 	 /* Also works for Gen7. */
@@ -634,9 +809,9 @@ vec4_generator::generate_vs_instruction(vec4_instruction *instruction,
    case SHADER_OPCODE_POW:
    case SHADER_OPCODE_INT_QUOTIENT:
    case SHADER_OPCODE_INT_REMAINDER:
-      if (intel->gen >= 7) {
+      if (brw->gen >= 7) {
 	 generate_math2_gen7(inst, dst, src[0], src[1]);
-      } else if (intel->gen == 6) {
+      } else if (brw->gen == 6) {
 	 generate_math2_gen6(inst, dst, src[0], src[1]);
       } else {
 	 generate_math2_gen4(inst, dst, src[0], src[1]);
@@ -646,6 +821,7 @@ vec4_generator::generate_vs_instruction(vec4_instruction *instruction,
    case SHADER_OPCODE_TEX:
    case SHADER_OPCODE_TXD:
    case SHADER_OPCODE_TXF:
+   case SHADER_OPCODE_TXF_MS:
    case SHADER_OPCODE_TXL:
    case SHADER_OPCODE_TXS:
       generate_tex(inst, dst, src[0]);
@@ -667,8 +843,12 @@ vec4_generator::generate_vs_instruction(vec4_instruction *instruction,
       generate_pull_constant_load(inst, dst, src[0], src[1]);
       break;
 
+   case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
+      generate_pull_constant_load_gen7(inst, dst, src[0], src[1]);
+      break;
+
    case SHADER_OPCODE_SHADER_TIME_ADD:
-      brw_shader_time_add(p, inst->base_mrf, SURF_INDEX_VS_SHADER_TIME);
+      brw_shader_time_add(p, src[0], SURF_INDEX_VS_SHADER_TIME);
       break;
 
    default:
@@ -689,11 +869,11 @@ vec4_generator::generate_code(exec_list *instructions)
    const char *last_annotation_string = NULL;
    const void *last_annotation_ir = NULL;
 
-   if (unlikely(INTEL_DEBUG & DEBUG_VS)) {
+   if (unlikely(debug_flag)) {
       if (shader) {
-         printf("Native code for vertex shader %d:\n", prog->Name);
+         printf("Native code for vertex shader %d:\n", shader_prog->Name);
       } else {
-         printf("Native code for vertex program %d:\n", c->vp->program.Base.Id);
+         printf("Native code for vertex program %d:\n", prog->Id);
       }
    }
 
@@ -701,7 +881,7 @@ vec4_generator::generate_code(exec_list *instructions)
       vec4_instruction *inst = (vec4_instruction *)node;
       struct brw_reg src[3], dst;
 
-      if (unlikely(INTEL_DEBUG & DEBUG_VS)) {
+      if (unlikely(debug_flag)) {
 	 if (last_annotation_ir != inst->ir) {
 	    last_annotation_ir = inst->ir;
 	    if (last_annotation_ir) {
@@ -711,7 +891,7 @@ vec4_generator::generate_code(exec_list *instructions)
                } else {
                   const prog_instruction *vpi;
                   vpi = (const prog_instruction *) inst->ir;
-                  printf("%d: ", (int)(vpi - vp->Base.Instructions));
+                  printf("%d: ", (int)(vpi - prog->Instructions));
                   _mesa_fprint_instruction_opt(stdout, vpi, 0,
                                                PROG_PRINT_DEBUG, NULL);
                }
@@ -736,133 +916,24 @@ vec4_generator::generate_code(exec_list *instructions)
       brw_set_saturate(p, inst->saturate);
       brw_set_mask_control(p, inst->force_writemask_all);
 
-      switch (inst->opcode) {
-      case BRW_OPCODE_MOV:
-	 brw_MOV(p, dst, src[0]);
-	 break;
-      case BRW_OPCODE_ADD:
-	 brw_ADD(p, dst, src[0], src[1]);
-	 break;
-      case BRW_OPCODE_MUL:
-	 brw_MUL(p, dst, src[0], src[1]);
-	 break;
-      case BRW_OPCODE_MACH:
-	 brw_set_acc_write_control(p, 1);
-	 brw_MACH(p, dst, src[0], src[1]);
-	 brw_set_acc_write_control(p, 0);
-	 break;
+      unsigned pre_emit_nr_insn = p->nr_insn;
 
-      case BRW_OPCODE_FRC:
-	 brw_FRC(p, dst, src[0]);
-	 break;
-      case BRW_OPCODE_RNDD:
-	 brw_RNDD(p, dst, src[0]);
-	 break;
-      case BRW_OPCODE_RNDE:
-	 brw_RNDE(p, dst, src[0]);
-	 break;
-      case BRW_OPCODE_RNDZ:
-	 brw_RNDZ(p, dst, src[0]);
-	 break;
+      generate_vec4_instruction(inst, dst, src);
 
-      case BRW_OPCODE_AND:
-	 brw_AND(p, dst, src[0], src[1]);
-	 break;
-      case BRW_OPCODE_OR:
-	 brw_OR(p, dst, src[0], src[1]);
-	 break;
-      case BRW_OPCODE_XOR:
-	 brw_XOR(p, dst, src[0], src[1]);
-	 break;
-      case BRW_OPCODE_NOT:
-	 brw_NOT(p, dst, src[0]);
-	 break;
-      case BRW_OPCODE_ASR:
-	 brw_ASR(p, dst, src[0], src[1]);
-	 break;
-      case BRW_OPCODE_SHR:
-	 brw_SHR(p, dst, src[0], src[1]);
-	 break;
-      case BRW_OPCODE_SHL:
-	 brw_SHL(p, dst, src[0], src[1]);
-	 break;
+      if (inst->no_dd_clear || inst->no_dd_check) {
+         assert(p->nr_insn == pre_emit_nr_insn + 1 ||
+                !"no_dd_check or no_dd_clear set for IR emitting more "
+                "than 1 instruction");
 
-      case BRW_OPCODE_CMP:
-	 brw_CMP(p, dst, inst->conditional_mod, src[0], src[1]);
-	 break;
-      case BRW_OPCODE_SEL:
-	 brw_SEL(p, dst, src[0], src[1]);
-	 break;
+         struct brw_instruction *last = &p->store[pre_emit_nr_insn];
 
-      case BRW_OPCODE_DPH:
-	 brw_DPH(p, dst, src[0], src[1]);
-	 break;
-
-      case BRW_OPCODE_DP4:
-	 brw_DP4(p, dst, src[0], src[1]);
-	 break;
-
-      case BRW_OPCODE_DP3:
-	 brw_DP3(p, dst, src[0], src[1]);
-	 break;
-
-      case BRW_OPCODE_DP2:
-	 brw_DP2(p, dst, src[0], src[1]);
-	 break;
-
-      case BRW_OPCODE_F32TO16:
-         brw_F32TO16(p, dst, src[0]);
-         break;
-
-      case BRW_OPCODE_F16TO32:
-         brw_F16TO32(p, dst, src[0]);
-         break;
-
-      case BRW_OPCODE_IF:
-	 if (inst->src[0].file != BAD_FILE) {
-	    /* The instruction has an embedded compare (only allowed on gen6) */
-	    assert(intel->gen == 6);
-	    gen6_IF(p, inst->conditional_mod, src[0], src[1]);
-	 } else {
-	    struct brw_instruction *brw_inst = brw_IF(p, BRW_EXECUTE_8);
-	    brw_inst->header.predicate_control = inst->predicate;
-	 }
-	 break;
-
-      case BRW_OPCODE_ELSE:
-	 brw_ELSE(p);
-	 break;
-      case BRW_OPCODE_ENDIF:
-	 brw_ENDIF(p);
-	 break;
-
-      case BRW_OPCODE_DO:
-	 brw_DO(p, BRW_EXECUTE_8);
-	 break;
-
-      case BRW_OPCODE_BREAK:
-	 brw_BREAK(p);
-	 brw_set_predicate_control(p, BRW_PREDICATE_NONE);
-	 break;
-      case BRW_OPCODE_CONTINUE:
-	 /* FINISHME: We need to write the loop instruction support still. */
-	 if (intel->gen >= 6)
-	    gen6_CONT(p);
-	 else
-	    brw_CONT(p);
-	 brw_set_predicate_control(p, BRW_PREDICATE_NONE);
-	 break;
-
-      case BRW_OPCODE_WHILE:
-	 brw_WHILE(p);
-	 break;
-
-      default:
-	 generate_vs_instruction(inst, dst, src);
-	 break;
+         if (inst->no_dd_clear)
+            last->header.dependency_control |= BRW_DEPENDENCY_NOTCLEARED;
+         if (inst->no_dd_check)
+            last->header.dependency_control |= BRW_DEPENDENCY_NOTCHECKED;
       }
 
-      if (unlikely(INTEL_DEBUG & DEBUG_VS)) {
+      if (unlikely(debug_flag)) {
 	 brw_dump_compile(p, stdout,
 			  last_native_insn_offset, p->next_insn_offset);
       }
@@ -870,7 +941,7 @@ vec4_generator::generate_code(exec_list *instructions)
       last_native_insn_offset = p->next_insn_offset;
    }
 
-   if (unlikely(INTEL_DEBUG & DEBUG_VS)) {
+   if (unlikely(debug_flag)) {
       printf("\n");
    }
 
@@ -881,7 +952,7 @@ vec4_generator::generate_code(exec_list *instructions)
     * which is often something we want to debug.  So this is here in
     * case you're doing that.
     */
-   if (0 && unlikely(INTEL_DEBUG & DEBUG_VS)) {
+   if (0 && unlikely(debug_flag)) {
       brw_dump_compile(p, stdout, 0, p->next_insn_offset);
    }
 }

@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.5
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (C) 2009  VMware, Inc.   All Rights Reserved.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -611,7 +611,7 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
        * thread.
        */
       swrast->TexelBuffer =
-	 malloc(ctx->Const.MaxTextureImageUnits * maxThreads *
+	 malloc(ctx->Const.FragmentProgram.MaxTextureImageUnits * maxThreads *
 			    SWRAST_MAX_WIDTH * 4 * sizeof(GLfloat));
       if (!swrast->TexelBuffer) {
 	 _mesa_error(ctx, GL_OUT_OF_MEMORY, "texture_combine");
@@ -648,9 +648,9 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
       if (texUnit->_ReallyEnabled &&
          texUnit->_CurrentCombine->ModeRGB == GL_BUMP_ENVMAP_ATI) {
          const GLfloat (*texcoords)[4] = (const GLfloat (*)[4])
-            span->array->attribs[FRAG_ATTRIB_TEX0 + unit];
+            span->array->attribs[VARYING_SLOT_TEX0 + unit];
          float4_array targetcoords =
-            span->array->attribs[FRAG_ATTRIB_TEX0 +
+            span->array->attribs[VARYING_SLOT_TEX0 +
                ctx->Texture.Unit[unit].BumpTarget - GL_TEXTURE0];
 
          const struct gl_sampler_object *samp = _mesa_get_samplerobj(ctx, unit);
@@ -714,7 +714,7 @@ _swrast_texture_span( struct gl_context *ctx, SWspan *span )
       if (texUnit->_ReallyEnabled &&
           texUnit->_CurrentCombine->ModeRGB != GL_BUMP_ENVMAP_ATI) {
          const GLfloat (*texcoords)[4] = (const GLfloat (*)[4])
-            span->array->attribs[FRAG_ATTRIB_TEX0 + unit];
+            span->array->attribs[VARYING_SLOT_TEX0 + unit];
          const struct gl_texture_object *curObj = texUnit->_Current;
          const struct gl_sampler_object *samp = _mesa_get_samplerobj(ctx, unit);
          GLfloat *lambda = span->array->lambda[unit];

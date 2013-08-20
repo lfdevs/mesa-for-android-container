@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50/codegen/nv50_ir.h"
@@ -44,11 +44,16 @@ const uint8_t Target::operationSrcNr[OP_LAST + 1] =
    1, 1, 2, 1, 2,          // VFETCH, PFETCH, EXPORT, LINTERP, PINTERP
    1, 1,                   // EMIT, RESTART
    1, 1, 1,                // TEX, TXB, TXL,
-   1, 1, 1, 1, 1,          // TXF, TXQ, TXD, TXG, TEXCSAA
-   1, 2,                   // SULD, SUST
+   1, 1, 1, 1, 1, 2,       // TXF, TXQ, TXD, TXG, TEXCSAA, TEXPREP
+   1, 1, 2, 2, 2, 2, 2,    // SULDB, SULDP, SUSTB, SUSTP, SUREDB, SUREDP, SULEA
+   3, 3, 3, 3,             // SUBFM, SUCLAMP, SUEAU, MADSP
+   0,                      // TEXBAR
    1, 1,                   // DFDX, DFDY
-   1, 2, 2, 2, 0, 0,       // RDSV, WRSV, TEXPREP, QUADOP, QUADON, QUADPOP
-   2, 3, 2, 0,             // POPCNT, INSBF, EXTBF, TEXBAR
+   1, 2, 2, 0, 0,          // RDSV, WRSV, QUADOP, QUADON, QUADPOP
+   2, 3, 2, 3,             // POPCNT, INSBF, EXTBF, PERMT
+   2, 2,                   // ATOM, BAR
+   2, 2, 2, 2, 3, 2,       // VADD, VAVG, VMIN, VMAX, VSAD, VSET,
+   2, 2, 2, 1,             // VSHR, VSHL, VSEL, CCTL
    0
 };
 
@@ -89,25 +94,37 @@ const OpClass Target::operationClass[OP_LAST + 1] =
    // DISCARD, EXIT
    OPCLASS_FLOW, OPCLASS_FLOW,
    // MEMBAR
-   OPCLASS_OTHER,
+   OPCLASS_CONTROL,
    // VFETCH, PFETCH, EXPORT
    OPCLASS_LOAD, OPCLASS_OTHER, OPCLASS_STORE,
    // LINTERP, PINTERP
    OPCLASS_SFU, OPCLASS_SFU,
    // EMIT, RESTART
-   OPCLASS_OTHER, OPCLASS_OTHER,
-   // TEX, TXB, TXL, TXF; TXQ, TXD, TXG, TEXCSAA
+   OPCLASS_CONTROL, OPCLASS_CONTROL,
+   // TEX, TXB, TXL, TXF; TXQ, TXD, TXG, TEXCSAA; TEXPREP
    OPCLASS_TEXTURE, OPCLASS_TEXTURE, OPCLASS_TEXTURE, OPCLASS_TEXTURE,
    OPCLASS_TEXTURE, OPCLASS_TEXTURE, OPCLASS_TEXTURE, OPCLASS_TEXTURE,
-   // SULD, SUST
-   OPCLASS_SURFACE, OPCLASS_SURFACE,
-   // DFDX, DFDY, RDSV, WRSV; TEXPREP, QUADOP, QUADON, QUADPOP
-   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER,
-   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER,
-   // POPCNT, INSBF, EXTBF
-   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER,
+   OPCLASS_TEXTURE,
+   // SULDB, SULDP, SUSTB, SUSTP; SUREDB, SUREDP, SULEA
+   OPCLASS_SURFACE, OPCLASS_SURFACE, OPCLASS_ATOMIC, OPCLASS_SURFACE,
+   OPCLASS_SURFACE, OPCLASS_SURFACE, OPCLASS_SURFACE,
+   // SUBFM, SUCLAMP, SUEAU, MADSP
+   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_ARITH,
    // TEXBAR
    OPCLASS_OTHER,
+   // DFDX, DFDY, RDSV, WRSV; QUADOP, QUADON, QUADPOP
+   OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER, OPCLASS_OTHER,
+   OPCLASS_OTHER, OPCLASS_CONTROL, OPCLASS_CONTROL,
+   // POPCNT, INSBF, EXTBF, PERMT
+   OPCLASS_BITFIELD, OPCLASS_BITFIELD, OPCLASS_BITFIELD, OPCLASS_BITFIELD,
+   // ATOM, BAR
+   OPCLASS_ATOMIC, OPCLASS_CONTROL,
+   // VADD, VAVG, VMIN, VMAX
+   OPCLASS_VECTOR, OPCLASS_VECTOR, OPCLASS_VECTOR, OPCLASS_VECTOR,
+   // VSAD, VSET, VSHR, VSHL
+   OPCLASS_VECTOR, OPCLASS_VECTOR, OPCLASS_VECTOR, OPCLASS_VECTOR,
+   // VSEL, CCTL
+   OPCLASS_VECTOR, OPCLASS_CONTROL,
    OPCLASS_PSEUDO // LAST
 };
 
@@ -180,18 +197,23 @@ CodeEmitter::prepareEmission(Program *prog)
 
       // adjust sizes & positions for schedulding info:
       if (prog->getTarget()->hasSWSched) {
+         uint32_t adjPos = func->binPos;
          BasicBlock *bb = NULL;
          for (int i = 0; i < func->bbCount; ++i) {
             bb = func->bbArray[i];
-            const uint32_t oldPos = bb->binPos;
-            const uint32_t oldEnd = bb->binPos + bb->binSize;
-            uint32_t adjPos = oldPos + sizeToBundlesNVE4(oldPos) * 8;
-            uint32_t adjEnd = oldEnd + sizeToBundlesNVE4(oldEnd) * 8;
+            int32_t adjSize = bb->binSize;
+            if (adjPos % 64) {
+               adjSize -= 64 - adjPos % 64;
+               if (adjSize < 0)
+                  adjSize = 0;
+            }
+            adjSize = bb->binSize + sizeToBundlesNVE4(adjSize) * 8;
             bb->binPos = adjPos;
-            bb->binSize = adjEnd - adjPos;
+            bb->binSize = adjSize;
+            adjPos += adjSize;
          }
          if (bb)
-            func->binSize = bb->binPos + bb->binSize;
+            func->binSize = adjPos - func->binPos;
       }
 
       prog->binSize += func->binSize;
@@ -246,6 +268,11 @@ CodeEmitter::prepareEmission(BasicBlock *bb)
    nShort = 0;
    for (i = bb->getEntry(); i; i = next) {
       next = i->next;
+
+      if (i->op == OP_MEMBAR && !targ->isOpSupported(OP_MEMBAR, TYPE_NONE)) {
+         bb->remove(i);
+         continue;
+      }
 
       i->encSize = getMinEncodingSize(i);
       if (next && i->encSize < 8)

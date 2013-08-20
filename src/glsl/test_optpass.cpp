@@ -39,7 +39,6 @@
 
 #include "ast.h"
 #include "ir_optimization.h"
-#include "ir_print_visitor.h"
 #include "program.h"
 #include "ir_reader.h"
 #include "standalone_scaffolding.h"
@@ -54,7 +53,8 @@ static string read_stdin_to_eof()
 }
 
 static GLboolean
-do_optimization(struct exec_list *ir, const char *optimization)
+do_optimization(struct exec_list *ir, const char *optimization,
+                const struct gl_shader_compiler_options *options)
 {
    int int_0;
    int int_1;
@@ -64,7 +64,7 @@ do_optimization(struct exec_list *ir, const char *optimization)
 
    if (sscanf(optimization, "do_common_optimization ( %d , %d ) ",
               &int_0, &int_1) == 2) {
-      return do_common_optimization(ir, int_0 != 0, false, int_1);
+      return do_common_optimization(ir, int_0 != 0, false, int_1, options);
    } else if (strcmp(optimization, "do_algebraic") == 0) {
       return do_algebraic(ir);
    } else if (strcmp(optimization, "do_constant_folding") == 0) {
@@ -141,7 +141,8 @@ do_optimization(struct exec_list *ir, const char *optimization)
 
 static GLboolean
 do_optimization_passes(struct exec_list *ir, char **optimizations,
-                       int num_optimizations, bool quiet)
+                       int num_optimizations, bool quiet,
+                       const struct gl_shader_compiler_options *options)
 {
    GLboolean overall_progress = false;
 
@@ -150,7 +151,7 @@ do_optimization_passes(struct exec_list *ir, char **optimizations,
       if (!quiet) {
          printf("*** Running optimization %s...", optimization);
       }
-      GLboolean progress = do_optimization(ir, optimization);
+      GLboolean progress = do_optimization(ir, optimization, options);
       if (!quiet) {
          printf("%s\n", progress ? "progress" : "no progress");
       }
@@ -240,9 +241,11 @@ int test_optpass(int argc, char **argv)
    /* Optimization passes */
    if (!state->error) {
       GLboolean progress;
+      const struct gl_shader_compiler_options *options =
+         &ctx->ShaderCompilerOptions[_mesa_shader_type_to_index(shader_type)];
       do {
          progress = do_optimization_passes(shader->ir, &argv[optind],
-                                           argc - optind, quiet != 0);
+                                           argc - optind, quiet != 0, options);
       } while (loop && progress);
    }
 

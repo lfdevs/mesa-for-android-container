@@ -31,6 +31,7 @@
 
 #include "main/mtypes.h"
 #include "glsl_symbol_table.h"
+#include "glsl_parser_extras.h"
 #include "ir_optimization.h"
 #include "linker.h"
 #include "link_varyings.h"
@@ -47,9 +48,10 @@ cross_validate_outputs_to_inputs(struct gl_shader_program *prog,
 				 gl_shader *producer, gl_shader *consumer)
 {
    glsl_symbol_table parameters;
-   /* FINISHME: Figure these out dynamically. */
-   const char *const producer_stage = "vertex";
-   const char *const consumer_stage = "fragment";
+   const char *const producer_stage =
+      _mesa_glsl_shader_target_name(producer->Type);
+   const char *const consumer_stage =
+      _mesa_glsl_shader_target_name(consumer->Type);
 
    /* Find all shader outputs in the "producer" stage.
     */
@@ -604,8 +606,8 @@ private:
       /**
        * The location which has been assigned for this varying.  This is
        * expressed in multiples of a float, with the first generic varying
-       * (i.e. the one referred to by VERT_RESULT_VAR0 or FRAG_ATTRIB_VAR0)
-       * represented by the value 0.
+       * (i.e. the one referred to by VARYING_SLOT_VAR0) represented by the
+       * value 0.
        */
       unsigned generic_location;
    } *matches;
@@ -869,9 +871,9 @@ is_varying_var(GLenum shaderType, const ir_variable *var)
    if (shaderType == GL_FRAGMENT_SHADER &&
        var->mode == ir_var_shader_in) {
       switch (var->location) {
-      case FRAG_ATTRIB_WPOS:
-      case FRAG_ATTRIB_FACE:
-      case FRAG_ATTRIB_PNTC:
+      case VARYING_SLOT_POS:
+      case VARYING_SLOT_FACE:
+      case VARYING_SLOT_PNTC:
          return false;
       default:
          return true;
@@ -895,7 +897,9 @@ public:
    tfeedback_candidate_generator(void *mem_ctx,
                                  hash_table *tfeedback_candidates)
       : mem_ctx(mem_ctx),
-        tfeedback_candidates(tfeedback_candidates)
+        tfeedback_candidates(tfeedback_candidates),
+        toplevel_var(NULL),
+        varying_floats(0)
    {
    }
 
@@ -983,12 +987,15 @@ assign_varying_locations(struct gl_context *ctx,
                          unsigned num_tfeedback_decls,
                          tfeedback_decl *tfeedback_decls)
 {
-   /* FINISHME: Set dynamically when geometry shader support is added. */
-   const unsigned producer_base = VERT_RESULT_VAR0;
-   const unsigned consumer_base = FRAG_ATTRIB_VAR0;
+   const unsigned producer_base = VARYING_SLOT_VAR0;
+   const unsigned consumer_base = VARYING_SLOT_VAR0;
    varying_matches matches(ctx->Const.DisableVaryingPacking,
                            consumer && consumer->Type == GL_FRAGMENT_SHADER);
    hash_table *tfeedback_candidates
+      = hash_table_ctor(0, hash_table_string_hash, hash_table_string_compare);
+   hash_table *consumer_inputs
+      = hash_table_ctor(0, hash_table_string_hash, hash_table_string_compare);
+   hash_table *consumer_interface_inputs
       = hash_table_ctor(0, hash_table_string_hash, hash_table_string_compare);
 
    /* Operate in a total of three passes.
@@ -1002,6 +1009,27 @@ assign_varying_locations(struct gl_context *ctx,
     *    not being inputs.  This lets the optimizer eliminate them.
     */
 
+   if (consumer) {
+      foreach_list(node, consumer->ir) {
+         ir_variable *const input_var =
+            ((ir_instruction *) node)->as_variable();
+
+         if ((input_var != NULL) && (input_var->mode == ir_var_shader_in)) {
+            if (input_var->interface_type != NULL) {
+               char *const iface_field_name =
+                  ralloc_asprintf(mem_ctx, "%s.%s",
+                                  input_var->interface_type->name,
+                                  input_var->name);
+               hash_table_insert(consumer_interface_inputs, input_var,
+                                 iface_field_name);
+            } else {
+               hash_table_insert(consumer_inputs, input_var,
+                                 ralloc_strdup(mem_ctx, input_var->name));
+            }
+         }
+      }
+   }
+
    foreach_list(node, producer->ir) {
       ir_variable *const output_var = ((ir_instruction *) node)->as_variable();
 
@@ -1011,8 +1039,19 @@ assign_varying_locations(struct gl_context *ctx,
       tfeedback_candidate_generator g(mem_ctx, tfeedback_candidates);
       g.process(output_var);
 
-      ir_variable *input_var =
-	 consumer ? consumer->symbols->get_variable(output_var->name) : NULL;
+      ir_variable *input_var;
+      if (output_var->interface_type != NULL) {
+         char *const iface_field_name =
+            ralloc_asprintf(mem_ctx, "%s.%s",
+                            output_var->interface_type->name,
+                            output_var->name);
+         input_var =
+            (ir_variable *) hash_table_find(consumer_interface_inputs,
+                                            iface_field_name);
+      } else {
+         input_var =
+            (ir_variable *) hash_table_find(consumer_inputs, output_var->name);
+      }
 
       if (input_var && input_var->mode != ir_var_shader_in)
          input_var = NULL;
@@ -1031,6 +1070,8 @@ assign_varying_locations(struct gl_context *ctx,
 
       if (matched_candidate == NULL) {
          hash_table_dtor(tfeedback_candidates);
+         hash_table_dtor(consumer_inputs);
+         hash_table_dtor(consumer_interface_inputs);
          return false;
       }
 
@@ -1047,11 +1088,15 @@ assign_varying_locations(struct gl_context *ctx,
 
       if (!tfeedback_decls[i].assign_location(ctx, prog)) {
          hash_table_dtor(tfeedback_candidates);
+         hash_table_dtor(consumer_inputs);
+         hash_table_dtor(consumer_interface_inputs);
          return false;
       }
    }
 
    hash_table_dtor(tfeedback_candidates);
+   hash_table_dtor(consumer_inputs);
+   hash_table_dtor(consumer_interface_inputs);
 
    if (ctx->Const.DisableVaryingPacking) {
       /* Transform feedback code assumes varyings are packed, so if the driver
@@ -1068,16 +1113,12 @@ assign_varying_locations(struct gl_context *ctx,
       }
    }
 
-   unsigned varying_vectors = 0;
-
    if (consumer) {
       foreach_list(node, consumer->ir) {
          ir_variable *const var = ((ir_instruction *) node)->as_variable();
 
-         if ((var == NULL) || (var->mode != ir_var_shader_in))
-            continue;
-
-         if (var->is_unmatched_generic_inout) {
+         if (var && var->mode == ir_var_shader_in &&
+             var->is_unmatched_generic_inout) {
             if (prog->Version <= 120) {
                /* On page 25 (page 31 of the PDF) of the GLSL 1.20 spec:
                 *
@@ -1092,53 +1133,57 @@ assign_varying_locations(struct gl_context *ctx,
                 * "glsl1-varying read but not written" in piglit.
                 */
 
-               linker_error(prog, "fragment shader varying %s not written "
-                            "by vertex shader\n.", var->name);
+               linker_error(prog, "%s shader varying %s not written "
+                            "by %s shader\n.",
+                            _mesa_glsl_shader_target_name(consumer->Type),
+			    var->name,
+                            _mesa_glsl_shader_target_name(producer->Type));
             }
 
             /* An 'in' variable is only really a shader input if its
              * value is written by the previous stage.
              */
             var->mode = ir_var_auto;
-         } else if (is_varying_var(consumer->Type, var)) {
-            /* The packing rules are used for vertex shader inputs are also
-             * used for fragment shader inputs.
-             */
-            varying_vectors += count_attribute_slots(var->type);
          }
+      }
+   }
+
+   return true;
+}
+
+bool
+check_against_varying_limit(struct gl_context *ctx,
+                            struct gl_shader_program *prog,
+                            gl_shader *consumer)
+{
+   unsigned varying_vectors = 0;
+
+   foreach_list(node, consumer->ir) {
+      ir_variable *const var = ((ir_instruction *) node)->as_variable();
+
+      if (var && var->mode == ir_var_shader_in &&
+          is_varying_var(consumer->Type, var)) {
+         /* The packing rules used for vertex shader inputs are also
+          * used for fragment shader inputs.
+          */
+         varying_vectors += count_attribute_slots(var->type);
       }
    }
 
    if (ctx->API == API_OPENGLES2 || prog->IsES) {
       if (varying_vectors > ctx->Const.MaxVarying) {
-         if (ctx->Const.GLSLSkipStrictMaxVaryingLimitCheck) {
-            linker_warning(prog, "shader uses too many varying vectors "
-                           "(%u > %u), but the driver will try to optimize "
-                           "them out; this is non-portable out-of-spec "
-                           "behavior\n",
-                           varying_vectors, ctx->Const.MaxVarying);
-         } else {
-            linker_error(prog, "shader uses too many varying vectors "
-                         "(%u > %u)\n",
-                         varying_vectors, ctx->Const.MaxVarying);
-            return false;
-         }
+         linker_error(prog, "shader uses too many varying vectors "
+                      "(%u > %u)\n",
+                      varying_vectors, ctx->Const.MaxVarying);
+         return false;
       }
    } else {
       const unsigned float_components = varying_vectors * 4;
       if (float_components > ctx->Const.MaxVarying * 4) {
-         if (ctx->Const.GLSLSkipStrictMaxVaryingLimitCheck) {
-            linker_warning(prog, "shader uses too many varying components "
-                           "(%u > %u), but the driver will try to optimize "
-                           "them out; this is non-portable out-of-spec "
-                           "behavior\n",
-                           float_components, ctx->Const.MaxVarying * 4);
-         } else {
-            linker_error(prog, "shader uses too many varying components "
-                         "(%u > %u)\n",
-                         float_components, ctx->Const.MaxVarying * 4);
-            return false;
-         }
+         linker_error(prog, "shader uses too many varying components "
+                      "(%u > %u)\n",
+                      float_components, ctx->Const.MaxVarying * 4);
+         return false;
       }
    }
 

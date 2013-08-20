@@ -29,24 +29,19 @@
 
 #include <llvm-c/Core.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+struct radeon_llvm_binary {
+	unsigned char *code;
+	unsigned code_size;
+	unsigned char *config;
+	unsigned config_size;
+};
 
-unsigned radeon_llvm_bitcode_compile(
-   unsigned char * bitcode, unsigned bitcode_len,
-   unsigned char ** bytes, unsigned * byte_count,
-   const  char * gpu_family, unsigned dump);
+void radeon_llvm_shader_type(LLVMValueRef F, unsigned type);
 
 unsigned  radeon_llvm_compile(
 	LLVMModuleRef M,
-	unsigned char ** bytes,
-	unsigned * byte_count,
+	struct radeon_llvm_binary *binary,
 	const char * gpu_family,
 	unsigned dump);
-
-#ifdef __cplusplus
-} /* Extern "C" */
-#endif
 
 #endif /* RADEON_LLVM_EMIT_H */

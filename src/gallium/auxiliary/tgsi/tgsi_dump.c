@@ -99,21 +99,26 @@ _dump_register_src(
    struct dump_ctx *ctx,
    const struct tgsi_full_src_register *src )
 {
-   ENM(src->Register.File, tgsi_file_names);
+   TXT(tgsi_file_name(src->Register.File));
    if (src->Register.Dimension) {
       if (src->Dimension.Indirect) {
          CHR( '[' );
-         ENM( src->DimIndirect.File, tgsi_file_names );
+         TXT(tgsi_file_name(src->DimIndirect.File));
          CHR( '[' );
          SID( src->DimIndirect.Index );
          TXT( "]." );
-         ENM( src->DimIndirect.SwizzleX, tgsi_swizzle_names );
+         ENM( src->DimIndirect.Swizzle, tgsi_swizzle_names );
          if (src->Dimension.Index != 0) {
             if (src->Dimension.Index > 0)
                CHR( '+' );
             SID( src->Dimension.Index );
          }
          CHR( ']' );
+         if (src->DimIndirect.ArrayID) {
+            CHR( '(' );
+            SID( src->DimIndirect.ArrayID );
+            CHR( ')' );
+         }
       } else {
          CHR('[');
          SID(src->Dimension.Index);
@@ -122,17 +127,22 @@ _dump_register_src(
    }
    if (src->Register.Indirect) {
       CHR( '[' );
-      ENM( src->Indirect.File, tgsi_file_names );
+      TXT(tgsi_file_name(src->Indirect.File));
       CHR( '[' );
       SID( src->Indirect.Index );
       TXT( "]." );
-      ENM( src->Indirect.SwizzleX, tgsi_swizzle_names );
+      ENM( src->Indirect.Swizzle, tgsi_swizzle_names );
       if (src->Register.Index != 0) {
          if (src->Register.Index > 0)
             CHR( '+' );
          SID( src->Register.Index );
       }
       CHR( ']' );
+      if (src->Indirect.ArrayID) {
+         CHR( '(' );
+         SID( src->Indirect.ArrayID );
+         CHR( ')' );
+      }
    } else {
       CHR( '[' );
       SID( src->Register.Index );
@@ -146,21 +156,26 @@ _dump_register_dst(
    struct dump_ctx *ctx,
    const struct tgsi_full_dst_register *dst )
 {
-   ENM(dst->Register.File, tgsi_file_names);
+   TXT(tgsi_file_name(dst->Register.File));
    if (dst->Register.Dimension) {
       if (dst->Dimension.Indirect) {
          CHR( '[' );
-         ENM( dst->DimIndirect.File, tgsi_file_names );
+         TXT(tgsi_file_name(dst->DimIndirect.File));
          CHR( '[' );
          SID( dst->DimIndirect.Index );
          TXT( "]." );
-         ENM( dst->DimIndirect.SwizzleX, tgsi_swizzle_names );
+         ENM( dst->DimIndirect.Swizzle, tgsi_swizzle_names );
          if (dst->Dimension.Index != 0) {
             if (dst->Dimension.Index > 0)
                CHR( '+' );
             SID( dst->Dimension.Index );
          }
          CHR( ']' );
+         if (dst->DimIndirect.ArrayID) {
+            CHR( '(' );
+            SID( dst->DimIndirect.ArrayID );
+            CHR( ')' );
+         }
       } else {
          CHR('[');
          SID(dst->Dimension.Index);
@@ -169,17 +184,22 @@ _dump_register_dst(
    }
    if (dst->Register.Indirect) {
       CHR( '[' );
-      ENM( dst->Indirect.File, tgsi_file_names );
+      TXT(tgsi_file_name(dst->Indirect.File));
       CHR( '[' );
       SID( dst->Indirect.Index );
       TXT( "]." );
-      ENM( dst->Indirect.SwizzleX, tgsi_swizzle_names );
+      ENM( dst->Indirect.Swizzle, tgsi_swizzle_names );
       if (dst->Register.Index != 0) {
          if (dst->Register.Index > 0)
             CHR( '+' );
          SID( dst->Register.Index );
       }
       CHR( ']' );
+      if (dst->Indirect.ArrayID) {
+         CHR( '(' );
+         SID( dst->Indirect.ArrayID );
+         CHR( ')' );
+      }
    } else {
       CHR( '[' );
       SID( dst->Register.Index );
@@ -246,7 +266,7 @@ iter_declaration(
 
    TXT( "DCL " );
 
-   ENM(decl->Declaration.File, tgsi_file_names);
+   TXT(tgsi_file_name(decl->Declaration.File));
 
    /* all geometry shader inputs are two dimensional */
    if (decl->Declaration.File == TGSI_FILE_INPUT &&
@@ -272,6 +292,12 @@ iter_declaration(
       ctx,
       decl->Declaration.UsageMask );
 
+   if (decl->Declaration.Array) {
+      TXT( ", ARRAY(" );
+      SID(decl->Array.ArrayID);
+      CHR(')');
+   }
+
    if (decl->Declaration.Local)
       TXT( ", LOCAL" );
 
@@ -279,6 +305,7 @@ iter_declaration(
       TXT( ", " );
       ENM( decl->Semantic.Name, tgsi_semantic_names );
       if (decl->Semantic.Index != 0 ||
+          decl->Semantic.Name == TGSI_SEMANTIC_TEXCOORD ||
           decl->Semantic.Name == TGSI_SEMANTIC_GENERIC) {
          CHR( '[' );
          UID( decl->Semantic.Index );
@@ -345,44 +372,6 @@ iter_declaration(
 
    if (decl->Declaration.Invariant) {
       TXT( ", INVARIANT" );
-   }
-
-
-   if (decl->Declaration.File == TGSI_FILE_IMMEDIATE_ARRAY) {
-      unsigned i;
-      char range_indent[4];
-
-      TXT(" {");
-
-      if (decl->Range.Last < 10)
-         range_indent[0] = '\0';
-      else if (decl->Range.Last < 100) {
-         range_indent[0] = ' ';
-         range_indent[1] = '\0';
-      } else if (decl->Range.Last < 1000) {
-         range_indent[0] = ' ';
-         range_indent[1] = ' ';
-         range_indent[2] = '\0';
-      } else {
-         range_indent[0] = ' ';
-         range_indent[1] = ' ';
-         range_indent[2] = ' ';
-         range_indent[3] = '\0';
-      }
-
-      dump_imm_data(iter, decl->ImmediateData.u,
-                    4, TGSI_IMM_FLOAT32);
-      for(i = 1; i <= decl->Range.Last; ++i) {
-         /* indent by strlen of:
-          *   "DCL IMMX[0..1] {" */
-         CHR('\n');
-         TXT( "                " );
-         TXT( range_indent );
-         dump_imm_data(iter, decl->ImmediateData.u + i,
-                       4, TGSI_IMM_FLOAT32);
-      }
-
-      TXT(" }");
    }
 
    EOL();
@@ -587,7 +576,7 @@ iter_instruction(
       ENM( inst->Texture.Texture, tgsi_texture_names );
       for (i = 0; i < inst->Texture.NumOffsets; i++) {
          TXT( ", " );
-         ENM( inst->TexOffsets[i].File, tgsi_file_names);
+         TXT(tgsi_file_name(inst->TexOffsets[i].File));
          CHR( '[' );
          SID( inst->TexOffsets[i].Index );
          CHR( ']' );
@@ -600,6 +589,7 @@ iter_instruction(
 
    switch (inst->Instruction.Opcode) {
    case TGSI_OPCODE_IF:
+   case TGSI_OPCODE_UIF:
    case TGSI_OPCODE_ELSE:
    case TGSI_OPCODE_BGNLOOP:
    case TGSI_OPCODE_ENDLOOP:
@@ -611,6 +601,7 @@ iter_instruction(
 
    /* update indentation */
    if (inst->Instruction.Opcode == TGSI_OPCODE_IF ||
+       inst->Instruction.Opcode == TGSI_OPCODE_UIF ||
        inst->Instruction.Opcode == TGSI_OPCODE_ELSE ||
        inst->Instruction.Opcode == TGSI_OPCODE_BGNLOOP) {
       ctx->indentation += indent_spaces;

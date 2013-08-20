@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50_ir_target_nvc0.h"
@@ -39,165 +39,40 @@ TargetNVC0::TargetNVC0(unsigned int card) : Target(false, card >= 0xe4)
 
 // lazyness -> will just hardcode everything for the time being
 
-// Will probably make this nicer once we support subroutines properly,
-// i.e. when we have an input IR that provides function declarations.
-
-// TODO: separate version for nve4+ which doesn't like the 4-byte insn formats
-static const uint32_t nvc0_builtin_code[] =
-{
-// DIV U32: slow unsigned integer division
-//
-// UNR recurrence (q = a / b):
-// look for z such that 2^32 - b <= b * z < 2^32
-// then q - 1 <= (a * z) / 2^32 <= q
-//
-// INPUT:   $r0: dividend, $r1: divisor
-// OUTPUT:  $r0: result, $r1: modulus
-// CLOBBER: $r2 - $r3, $p0 - $p1
-// SIZE:    22 / 14 * 8 bytes
-//
-#if 1
-   0x04009c03, 0x78000000,
-   0x7c209c82, 0x38000000, // 0x7c209cdd,
-   0x0400dde2, 0x18000000, // 0x0010dd18,
-   0x08309c03, 0x60000000,
-   0x05205d04, 0x1c000000, // 0x05605c18,
-   0x0810dc03, 0x50000000, // 0x0810dc2a,
-   0x0c209c43, 0x20040000,
-   0x0810dc03, 0x50000000,
-   0x0c209c43, 0x20040000,
-   0x0810dc03, 0x50000000,
-   0x0c209c43, 0x20040000,
-   0x0810dc03, 0x50000000,
-   0x0c209c43, 0x20040000,
-   0x0810dc03, 0x50000000,
-   0x0c209c43, 0x20040000,
-   0x0000dde4, 0x28000000,
-   0x08001c43, 0x50000000,
-   0x05209d04, 0x1c000000, // 0x05609c18,
-   0x00105c03, 0x20060000, // 0x0010430d,
-   0x0811dc03, 0x1b0e0000,
-   0x08104103, 0x48000000,
-   0x04000002, 0x08000000,
-   0x0811c003, 0x1b0e0000,
-   0x08104103, 0x48000000,
-   0x04000002, 0x08000000, // 0x040000ac,
-   0x00001de7, 0x90000000, // 0x90001dff,
-#else
-   0x0401dc03, 0x1b0e0000,
-   0x00008003, 0x78000000,
-   0x0400c003, 0x78000000,
-   0x0c20c103, 0x48000000,
-   0x0c108003, 0x60000000,
-   0x00005c28,
-   0x00001d18,
-   0x0031c023, 0x1b0ec000,
-   0xb000a1e7, 0x40000000,
-   0x04000003, 0x6000c000,
-   0x0813dc03, 0x1b000000,
-   0x0420446c,
-   0x040004bd,
-   0x04208003, 0x5800c000,
-   0x0430c103, 0x4800c000,
-   0x0ffc5dff,
-   0x90001dff,
-#endif
-
-// DIV S32: slow signed integer division
-//
-// INPUT:   $r0: dividend, $r1: divisor
-// OUTPUT:  $r0: result, $r1: modulus
-// CLOBBER: $r2 - $r3, $p0 - $p3
-// SIZE:    18 * 8 bytes
-//
-   0xfc05dc23, 0x188e0000,
-   0xfc17dc23, 0x18c40000,
-   0x01201ec4, 0x1c000000, // 0x03301e18,
-   0x05205ec4, 0x1c000000, // 0x07305e18,
-   0x0401dc03, 0x1b0e0000,
-   0x00008003, 0x78000000,
-   0x0400c003, 0x78000000,
-   0x0c20c103, 0x48000000,
-   0x0c108003, 0x60000000,
-   0x00005de4, 0x28000000, // 0x00005c28,
-   0x00001de2, 0x18000000, // 0x00001d18,
-   0x0031c023, 0x1b0ec000,
-   0xe000a1e7, 0x40000000, // 0xb000a1e7, 0x40000000,
-   0x04000003, 0x6000c000,
-   0x0813dc03, 0x1b000000,
-   0x04204603, 0x48000000, // 0x0420446c,
-   0x04000442, 0x38000000, // 0x040004bd,
-   0x04208003, 0x5800c000,
-   0x0430c103, 0x4800c000,
-   0xe0001de7, 0x4003fffe, // 0x0ffc5dff,
-   0x01200f84, 0x1c000000, // 0x01700e18,
-   0x05204b84, 0x1c000000, // 0x05704a18,
-   0x00001de7, 0x90000000, // 0x90001dff,
-
-// RCP F64: Newton Raphson reciprocal(x): r_{i+1} = r_i * (2.0 - x * r_i)
-//
-// INPUT:   $r0d (x)
-// OUTPUT:  $r0d (rcp(x))
-// CLOBBER: $r2 - $r7
-// SIZE:    9 * 8 bytes
-//
-   0x9810dc08,
-   0x00009c28,
-   0x4001df18,
-   0x00019d18,
-   0x08011e01, 0x200c0000,
-   0x10209c01, 0x50000000,
-   0x08011e01, 0x200c0000,
-   0x10209c01, 0x50000000,
-   0x08011e01, 0x200c0000,
-   0x10201c01, 0x50000000,
-   0x00001de7, 0x90000000,
-
-// RSQ F64: Newton Raphson rsqrt(x): r_{i+1} = r_i * (1.5 - 0.5 * x * r_i * r_i)
-//
-// INPUT:   $r0d (x)
-// OUTPUT:  $r0d (rsqrt(x))
-// CLOBBER: $r2 - $r7
-// SIZE:    14 * 8 bytes
-//
-   0x9c10dc08,
-   0x00009c28,
-   0x00019d18,
-   0x3fe1df18,
-   0x18001c01, 0x50000000,
-   0x0001dde2, 0x18ffe000,
-   0x08211c01, 0x50000000,
-   0x10011e01, 0x200c0000,
-   0x10209c01, 0x50000000,
-   0x08211c01, 0x50000000,
-   0x10011e01, 0x200c0000,
-   0x10209c01, 0x50000000,
-   0x08211c01, 0x50000000,
-   0x10011e01, 0x200c0000,
-   0x10201c01, 0x50000000,
-   0x00001de7, 0x90000000,
-};
-
-static const uint16_t nvc0_builtin_offsets[NVC0_BUILTIN_COUNT] =
-{
-   0,
-   8 * (26),
-   8 * (26 + 23),
-   8 * (26 + 23 + 9)
-};
+#include "target_lib_nvc0.asm.h"
+#include "target_lib_nve4.asm.h"
+#include "target_lib_nvf0.asm.h"
 
 void
 TargetNVC0::getBuiltinCode(const uint32_t **code, uint32_t *size) const
 {
-   *code = &nvc0_builtin_code[0];
-   *size = sizeof(nvc0_builtin_code);
+   switch (chipset & 0xf0) {
+   case 0xe0:
+      *code = (const uint32_t *)&nve4_builtin_code[0];
+      *size = sizeof(nve4_builtin_code);
+      break;
+   case 0xf0:
+      *code = (const uint32_t *)&nvf0_builtin_code[0];
+      *size = sizeof(nvf0_builtin_code);
+      break;
+   default:
+      *code = (const uint32_t *)&nvc0_builtin_code[0];
+      *size = sizeof(nvc0_builtin_code);
+      break;
+   }
 }
 
 uint32_t
 TargetNVC0::getBuiltinOffset(int builtin) const
 {
    assert(builtin < NVC0_BUILTIN_COUNT);
-   return nvc0_builtin_offsets[builtin];
+
+   switch (chipset & 0xf0) {
+   case 0xe0: return nve4_builtin_offsets[builtin];
+   case 0xf0: return nvf0_builtin_offsets[builtin];
+   default:
+      return nvc0_builtin_offsets[builtin];
+   }
 }
 
 struct opProperties
@@ -220,6 +95,7 @@ static const struct opProperties _initProps[] =
    { OP_MAX,    0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
    { OP_MIN,    0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
    { OP_MAD,    0x7, 0x0, 0x0, 0x8, 0x6, 0x2 | 0x8 }, // special c[] constraint
+   { OP_MADSP,  0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
    { OP_ABS,    0x0, 0x0, 0x0, 0x0, 0x1, 0x0 },
    { OP_NEG,    0x0, 0x1, 0x0, 0x0, 0x1, 0x0 },
    { OP_CVT,    0x1, 0x1, 0x0, 0x8, 0x1, 0x0 },
@@ -245,12 +121,20 @@ static const struct opProperties _initProps[] =
    { OP_DFDY,   0x1, 0x0, 0x0, 0x0, 0x0, 0x0 },
    { OP_CALL,   0x0, 0x0, 0x0, 0x0, 0x1, 0x0 },
    { OP_INSBF,  0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
+   { OP_PERMT,  0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
    { OP_SET_AND, 0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
    { OP_SET_OR, 0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
    { OP_SET_XOR, 0x3, 0x3, 0x0, 0x0, 0x2, 0x2 },
    // saturate only:
    { OP_LINTERP, 0x0, 0x0, 0x0, 0x8, 0x0, 0x0 },
    { OP_PINTERP, 0x0, 0x0, 0x0, 0x8, 0x0, 0x0 },
+   // nve4 ops:
+   { OP_SULDB,   0x0, 0x0, 0x0, 0x0, 0x2, 0x0 },
+   { OP_SUSTB,   0x0, 0x0, 0x0, 0x0, 0x2, 0x0 },
+   { OP_SUSTP,   0x0, 0x0, 0x0, 0x0, 0x2, 0x0 },
+   { OP_SUCLAMP, 0x0, 0x0, 0x0, 0x0, 0x2, 0x2 },
+   { OP_SUBFM,   0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
+   { OP_SUEAU,   0x0, 0x0, 0x0, 0x0, 0x6, 0x2 }
 };
 
 void TargetNVC0::initOpInfo()
@@ -260,13 +144,13 @@ void TargetNVC0::initOpInfo()
    static const uint32_t commutative[(OP_LAST + 31) / 32] =
    {
       // ADD, MAD, MUL, AND, OR, XOR, MAX, MIN
-      0x0670ca00, 0x0000003f, 0x00000000
+      0x0670ca00, 0x0000003f, 0x00000000, 0x00000000
    };
 
    static const uint32_t shortForm[(OP_LAST + 31) / 32] =
    {
       // ADD, MAD, MUL, AND, OR, XOR, PRESIN, PREEX2, SFN, CVT, PINTERP, MOV
-      0x0670ca00, 0x00000000, 0x00000000
+      0x0670ca00, 0x00000000, 0x00000000, 0x00000000
    };
 
    static const operation noDest[] =
@@ -274,7 +158,14 @@ void TargetNVC0::initOpInfo()
       OP_STORE, OP_WRSV, OP_EXPORT, OP_BRA, OP_CALL, OP_RET, OP_EXIT,
       OP_DISCARD, OP_CONT, OP_BREAK, OP_PRECONT, OP_PREBREAK, OP_PRERET,
       OP_JOIN, OP_JOINAT, OP_BRKPT, OP_MEMBAR, OP_EMIT, OP_RESTART,
-      OP_QUADON, OP_QUADPOP, OP_TEXBAR
+      OP_QUADON, OP_QUADPOP, OP_TEXBAR, OP_SUSTB, OP_SUSTP, OP_SUREDP,
+      OP_SUREDB, OP_BAR
+   };
+
+   static const operation noPred[] =
+   {
+      OP_CALL, OP_PRERET, OP_QUADON, OP_QUADPOP,
+      OP_JOINAT, OP_PREBREAK, OP_PRECONT, OP_BRKPT
    };
 
    for (i = 0; i < DATA_FILE_COUNT; ++i)
@@ -306,6 +197,8 @@ void TargetNVC0::initOpInfo()
    }
    for (i = 0; i < sizeof(noDest) / sizeof(noDest[0]); ++i)
       opInfo[noDest[i]].hasDest = 0;
+   for (i = 0; i < sizeof(noPred) / sizeof(noPred[0]); ++i)
+      opInfo[noPred[i]].predicate = 0;
 
    for (i = 0; i < sizeof(_initProps) / sizeof(_initProps[0]); ++i) {
       const struct opProperties *prop = &_initProps[i];
@@ -367,6 +260,7 @@ TargetNVC0::getSVAddress(DataFile shaderFile, const Symbol *sym) const
    const SVSemantic sv = sym->reg.data.sv.sv;
 
    const bool isInput = shaderFile == FILE_SHADER_INPUT;
+   const bool kepler = getChipset() >= NVISA_GK104_CHIPSET;
 
    switch (sv) {
    case SV_POSITION:       return 0x070 + idx * 4;
@@ -381,6 +275,9 @@ TargetNVC0::getSVAddress(DataFile shaderFile, const Symbol *sym) const
    case SV_FACE:           return 0x3fc;
    case SV_TESS_FACTOR:    return 0x000 + idx * 4;
    case SV_TESS_COORD:     return 0x2f0 + idx * 4;
+   case SV_NTID:           return kepler ? (0x00 + idx * 4) : ~0;
+   case SV_NCTAID:         return kepler ? (0x0c + idx * 4) : ~0;
+   case SV_GRIDID:         return kepler ? 0x18 : ~0;
    default:
       return 0xffffffff;
    }
@@ -394,7 +291,9 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
 
    // immediate 0 can be represented by GPR $r63/$r255
    if (sf == FILE_IMMEDIATE && ld->getSrc(0)->reg.data.u64 == 0)
-      return (!i->asTex() && i->op != OP_EXPORT && i->op != OP_STORE);
+      return (!i->isPseudo() &&
+              !i->asTex() &&
+              i->op != OP_EXPORT && i->op != OP_STORE);
 
    if (s >= opInfo[i->op].srcNr)
       return false;
@@ -407,6 +306,8 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
 
    for (int k = 0; i->srcExists(k); ++k) {
       if (i->src(k).getFile() == FILE_IMMEDIATE) {
+         if (k == 2 && i->op == OP_SUCLAMP) // special case
+            continue;
          if (i->getSrc(k)->reg.data.u64 != 0)
             return false;
       } else
@@ -450,7 +351,14 @@ TargetNVC0::isAccessSupported(DataFile file, DataType ty) const
    if (file == FILE_MEMORY_CONST && getChipset() >= 0xe0) // wrong encoding ?
       return typeSizeof(ty) <= 8;
    if (ty == TYPE_B96)
-      return (file == FILE_SHADER_INPUT) || (file == FILE_SHADER_OUTPUT);
+      return false;
+   if (getChipset() >= 0xf0) {
+      // XXX: find wide vfetch/export
+      if (ty == TYPE_B128)
+         return false;
+      if (ty == TYPE_U64)
+         return false;
+   }
    return true;
 }
 

@@ -50,6 +50,11 @@ struct cmd_bin;
 #define FIXED_ORDER 4
 #define FIXED_ONE (1<<FIXED_ORDER)
 
+/* Rasterizer output size going to jit fs, width/height */
+#define LP_RASTER_BLOCK_SIZE 4
+
+#define LP_MAX_ACTIVE_BINNED_QUERIES 16
+
 
 struct lp_rasterizer_task;
 
@@ -83,8 +88,8 @@ struct lp_rast_shader_inputs {
    unsigned opaque:1;           /** Is opaque */
    unsigned pad0:29;            /* wasted space */
    unsigned stride;             /* how much to advance data between a0, dadx, dady */
+   unsigned layer;              /* the layer to render to (from gs, already clamped) */
    unsigned pad2;               /* wasted space */
-   unsigned pad3;               /* wasted space */
    /* followed by a0, dadx, dady and planes[] */
 };
 
@@ -154,8 +159,8 @@ union lp_rast_cmd_arg {
    const struct lp_rast_state *set_state;
    union pipe_color_union clear_color;
    struct {
-      uint32_t value;
-      uint32_t mask;
+      uint64_t value;
+      uint64_t mask;
    } clear_zstencil;
    const struct lp_rast_state *state;
    struct lp_fence *fence;
@@ -217,7 +222,7 @@ lp_rast_arg_fence( struct lp_fence *fence )
 
 
 static INLINE union lp_rast_cmd_arg
-lp_rast_arg_clearzs( unsigned value, unsigned mask )
+lp_rast_arg_clearzs( uint64_t value, uint64_t mask )
 {
    union lp_rast_cmd_arg arg;
    arg.clear_zstencil.value = value;

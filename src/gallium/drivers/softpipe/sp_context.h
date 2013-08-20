@@ -80,17 +80,20 @@ struct softpipe_context {
    struct pipe_framebuffer_state framebuffer;
    struct pipe_poly_stipple poly_stipple;
    struct pipe_scissor_state scissor;
-   struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
+   struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    struct pipe_viewport_state viewport;
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
    struct pipe_index_buffer index_buffer;
 
    struct draw_so_target *so_targets[PIPE_MAX_SO_BUFFERS];
-   int num_so_targets;
+   unsigned num_so_targets;
    
    struct pipe_query_data_so_statistics so_stats;
    unsigned num_primitives_generated;
+
+   struct pipe_query_data_pipeline_statistics pipeline_statistics;
+   unsigned active_statistics_queries;
 
    unsigned num_samplers[PIPE_SHADER_TYPES];
    unsigned num_sampler_views[PIPE_SHADER_TYPES];
@@ -140,6 +143,7 @@ struct softpipe_context {
    /** Conditional query object and mode */
    struct pipe_query *render_cond_query;
    uint render_cond_mode;
+   boolean render_cond_cond;
 
    /** Polygon stipple items */
    struct {
@@ -159,7 +163,7 @@ struct softpipe_context {
 
    /** TGSI exec things */
    struct {
-      struct sp_sampler_variant *samplers_list[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
+      struct sp_tgsi_sampler *sampler[PIPE_SHADER_TYPES];
    } tgsi;
 
    struct tgsi_exec_machine *fs_machine;
@@ -184,8 +188,10 @@ struct softpipe_context {
     * Texture caches for vertex, fragment, geometry stages.
     * Don't use PIPE_SHADER_TYPES here to avoid allocating unused memory
     * for compute shaders.
+    * XXX wouldn't it make more sense for the tile cache to just be part
+    * of sp_sampler_view?
     */
-   struct softpipe_tex_tile_cache *tex_cache[PIPE_SHADER_GEOMETRY+1][PIPE_MAX_SAMPLERS];
+   struct softpipe_tex_tile_cache *tex_cache[PIPE_SHADER_GEOMETRY+1][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    unsigned dump_fs : 1;
    unsigned dump_gs : 1;
@@ -199,8 +205,6 @@ softpipe_context( struct pipe_context *pipe )
    return (struct softpipe_context *)pipe;
 }
 
-void
-softpipe_reset_sampler_variants(struct softpipe_context *softpipe);
 
 struct pipe_context *
 softpipe_create_context( struct pipe_screen *, void *priv );

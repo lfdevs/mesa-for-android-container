@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.9
  *
  * Copyright (C) 2010 LunarG Inc.
  *
@@ -27,7 +26,7 @@
  */
 
 #include "glapi/glapi.h"
-#include "mapi/u_current.h"
+#include "u_current.h"
 
 /*
  * Global variables, _glapi_get_context, and _glapi_get_dispatch are defined in

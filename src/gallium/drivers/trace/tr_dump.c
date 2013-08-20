@@ -45,6 +45,7 @@
 
 #include "pipe/p_compiler.h"
 #include "os/os_thread.h"
+#include "os/os_time.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
@@ -56,8 +57,8 @@
 #include "tr_texture.h"
 
 
+static boolean close_stream = FALSE;
 static FILE *stream = NULL;
-static unsigned refcount = 0;
 pipe_static_mutex(call_mutex);
 static long unsigned call_no = 0;
 static boolean dumping = FALSE;
@@ -227,14 +228,31 @@ trace_dump_trace_close(void)
 {
    if(stream) {
       trace_dump_writes("</trace>\n");
-      fclose(stream);
-      stream = NULL;
-      refcount = 0;
+      if (close_stream) {
+         fclose(stream);
+         close_stream = FALSE;
+         stream = NULL;
+      }
       call_no = 0;
    }
 }
 
-boolean trace_dump_trace_begin()
+
+static void
+trace_dump_call_time(int64_t time)
+{
+   if (stream) {
+      trace_dump_indent(2);
+      trace_dump_tag_begin("time");
+      trace_dump_int(time);
+      trace_dump_tag_end("time");
+      trace_dump_newline();
+   }
+}
+
+
+boolean
+trace_dump_trace_begin(void)
 {
    const char *filename;
 
@@ -244,22 +262,31 @@ boolean trace_dump_trace_begin()
 
    if(!stream) {
 
-      stream = fopen(filename, "wt");
-      if(!stream)
-         return FALSE;
+      if (strcmp(filename, "stderr") == 0) {
+         close_stream = FALSE;
+         stream = stderr;
+      }
+      else if (strcmp(filename, "stdout") == 0) {
+         close_stream = FALSE;
+         stream = stdout;
+      }
+      else {
+         close_stream = TRUE;
+         stream = fopen(filename, "wt");
+         if (!stream)
+            return FALSE;
+      }
 
       trace_dump_writes("<?xml version='1.0' encoding='UTF-8'?>\n");
       trace_dump_writes("<?xml-stylesheet type='text/xsl' href='trace.xsl'?>\n");
       trace_dump_writes("<trace version='0.1'>\n");
 
-#if defined(PIPE_OS_LINUX) || defined(PIPE_OS_BSD) || defined(PIPE_OS_SOLARIS) || defined(PIPE_OS_APPLE)
-      /* Linux applications rarely cleanup GL / Gallium resources so catch
-       * application exit here */
+      /* Many applications don't exit cleanly, others may create and destroy a
+       * screen multiple times, so we only write </trace> tag and close at exit
+       * time.
+       */
       atexit(trace_dump_trace_close);
-#endif
    }
-
-   ++refcount;
 
    return TRUE;
 }
@@ -267,13 +294,6 @@ boolean trace_dump_trace_begin()
 boolean trace_dump_trace_enabled(void)
 {
    return stream ? TRUE : FALSE;
-}
-
-void trace_dump_trace_end(void)
-{
-   if(stream)
-      if(!--refcount)
-         trace_dump_trace_close();
 }
 
 /*
@@ -336,6 +356,8 @@ boolean trace_dumping_enabled(void)
  * Dump functions
  */
 
+static int64_t call_start_time = 0;
+
 void trace_dump_call_begin_locked(const char *klass, const char *method)
 {
    if (!dumping)
@@ -351,13 +373,20 @@ void trace_dump_call_begin_locked(const char *klass, const char *method)
    trace_dump_escape(method);
    trace_dump_writes("\'>");
    trace_dump_newline();
+
+   call_start_time = os_time_get();
 }
 
 void trace_dump_call_end_locked(void)
 {
+   int64_t call_end_time;
+
    if (!dumping)
       return;
 
+   call_end_time = os_time_get();
+
+   trace_dump_call_time(call_end_time - call_start_time);
    trace_dump_indent(1);
    trace_dump_tag_end("call");
    trace_dump_newline();
@@ -466,19 +495,28 @@ void trace_dump_bytes(const void *data,
 }
 
 void trace_dump_box_bytes(const void *data,
-			  enum pipe_format format,
+                          struct pipe_resource *resource,
 			  const struct pipe_box *box,
 			  unsigned stride,
 			  unsigned slice_stride)
 {
    size_t size;
 
-   if (slice_stride)
-      size = box->depth * slice_stride;
-   else if (stride)
-      size = util_format_get_nblocksy(format, box->height) * stride;
-   else {
-      size = util_format_get_nblocksx(format, box->width) * util_format_get_blocksize(format);
+   /*
+    * Only dump buffer transfers to avoid huge files.
+    * TODO: Make this run-time configurable
+    */
+   if (resource->target != PIPE_BUFFER) {
+      size = 0;
+   } else {
+      enum pipe_format format = resource->format;
+      if (slice_stride)
+         size = box->depth * slice_stride;
+      else if (stride)
+         size = util_format_get_nblocksy(format, box->height) * stride;
+      else {
+         size = util_format_get_nblocksx(format, box->width) * util_format_get_blocksize(format);
+      }
    }
 
    trace_dump_bytes(data, size);

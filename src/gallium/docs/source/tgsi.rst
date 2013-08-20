@@ -23,6 +23,18 @@ When an instruction has a scalar result, the result is usually copied into
 each of the components of *dst*. When this happens, the result is said to be
 *replicated* to *dst*. :opcode:`RCP` is one such instruction.
 
+Modifiers
+^^^^^^^^^^^^^^^
+
+TGSI supports modifiers on inputs (as well as saturate modifier on instructions).
+
+For inputs which have a floating point type, both absolute value and negation
+modifiers are supported (with absolute value being applied first).
+TGSI_OPCODE_MOV is considered to have float input type for applying modifiers.
+
+For inputs which have signed or unsigned type only the negate modifier is
+supported.
+
 Instruction Set
 ---------------
 
@@ -82,11 +94,20 @@ This instruction replicates its result.
 
 .. opcode:: RSQ - Reciprocal Square Root
 
-This instruction replicates its result.
+This instruction replicates its result. The results are undefined for src <= 0.
 
 .. math::
 
-  dst = \frac{1}{\sqrt{|src.x|}}
+  dst = \frac{1}{\sqrt{src.x}}
+
+
+.. opcode:: SQRT - Square Root
+
+This instruction replicates its result. The results are undefined for src < 0.
+
+.. math::
+
+  dst = {\sqrt{src.x}}
 
 
 .. opcode:: EXP - Approximate Exponential Base 2
@@ -450,11 +471,6 @@ This instruction replicates its result.
   dst.w = partialy(src.w)
 
 
-.. opcode:: KILP - Predicated Discard
-
-  discard
-
-
 .. opcode:: PK2H - Pack Two 16-bit Floats
 
   TBD
@@ -699,25 +715,6 @@ This instruction replicates its result.
   dst.w = round(src.w)
 
 
-.. opcode:: BRA - Branch
-
-  pc = target
-
-.. note::
-
-   Considered for removal.
-
-.. opcode:: CAL - Subroutine Call
-
-  push(pc)
-  pc = target
-
-
-.. opcode:: RET - Subroutine Call Return
-
-  pc = pop()
-
-
 .. opcode:: SSG - Set Sign
 
 .. math::
@@ -744,13 +741,20 @@ This instruction replicates its result.
   dst.w = (src0.w < 0) ? src1.w : src2.w
 
 
-.. opcode:: KIL - Conditional Discard
+.. opcode:: KILL_IF - Conditional Discard
+
+  Conditional discard.  Allowed in fragment shaders only.
 
 .. math::
 
   if (src.x < 0 || src.y < 0 || src.z < 0 || src.w < 0)
     discard
   endif
+
+
+.. opcode:: KILL - Discard
+
+  Unconditional discard.  Allowed in fragment shaders only.
 
 
 .. opcode:: SCS - Sine Cosine
@@ -835,26 +839,6 @@ This instruction replicates its result.
   dst = texture_sample(unit, coord, lod)
 
 
-.. opcode:: BRK - Break
-
-  TBD
-
-
-.. opcode:: IF - If
-
-  TBD
-
-
-.. opcode:: ELSE - Else
-
-  TBD
-
-
-.. opcode:: ENDIF - End If
-
-  TBD
-
-
 .. opcode:: PUSHA - Push Address Register On Stack
 
   push(src.x)
@@ -886,13 +870,35 @@ This instruction replicates its result.
    Considered for removal.
 
 
+.. opcode:: BRA - Branch
+
+  pc = target
+
+.. note::
+
+   Considered for removal.
+
+
+.. opcode:: CALLNZ - Subroutine Call If Not Zero
+
+   TBD
+
+.. note::
+
+   Considered for cleanup.
+
+.. note::
+
+   Considered for removal.
+
+
 Compute ISA
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 These opcodes are primarily provided for special-use computational shaders.
 Support for these opcodes indicated by a special pipe capability bit (TBD).
 
-XXX so let's discuss it, yeah?
+XXX doesn't look like most of the opcodes really belong here.
 
 .. opcode:: CEIL - Ceiling
 
@@ -905,32 +911,6 @@ XXX so let's discuss it, yeah?
   dst.z = \lceil src.z\rceil
 
   dst.w = \lceil src.w\rceil
-
-
-.. opcode:: I2F - Integer To Float
-
-.. math::
-
-  dst.x = (float) src.x
-
-  dst.y = (float) src.y
-
-  dst.z = (float) src.z
-
-  dst.w = (float) src.w
-
-
-.. opcode:: NOT - Bitwise Not
-
-.. math::
-
-  dst.x = ~src.x
-
-  dst.y = ~src.y
-
-  dst.z = ~src.z
-
-  dst.w = ~src.w
 
 
 .. opcode:: TRUNC - Truncate
@@ -946,58 +926,6 @@ XXX so let's discuss it, yeah?
   dst.w = trunc(src.w)
 
 
-.. opcode:: SHL - Shift Left
-
-.. math::
-
-  dst.x = src0.x << src1.x
-
-  dst.y = src0.y << src1.x
-
-  dst.z = src0.z << src1.x
-
-  dst.w = src0.w << src1.x
-
-
-.. opcode:: SHR - Shift Right
-
-.. math::
-
-  dst.x = src0.x >> src1.x
-
-  dst.y = src0.y >> src1.x
-
-  dst.z = src0.z >> src1.x
-
-  dst.w = src0.w >> src1.x
-
-
-.. opcode:: AND - Bitwise And
-
-.. math::
-
-  dst.x = src0.x & src1.x
-
-  dst.y = src0.y & src1.y
-
-  dst.z = src0.z & src1.z
-
-  dst.w = src0.w & src1.w
-
-
-.. opcode:: OR - Bitwise Or
-
-.. math::
-
-  dst.x = src0.x | src1.x
-
-  dst.y = src0.y | src1.y
-
-  dst.z = src0.z | src1.z
-
-  dst.w = src0.w | src1.w
-
-
 .. opcode:: MOD - Modulus
 
 .. math::
@@ -1011,49 +939,10 @@ XXX so let's discuss it, yeah?
   dst.w = src0.w \bmod src1.w
 
 
-.. opcode:: XOR - Bitwise Xor
-
-.. math::
-
-  dst.x = src0.x \oplus src1.x
-
-  dst.y = src0.y \oplus src1.y
-
-  dst.z = src0.z \oplus src1.z
-
-  dst.w = src0.w \oplus src1.w
-
-
-.. opcode:: UCMP - Integer Conditional Move
-
-.. math::
-
-  dst.x = src0.x ? src1.x : src2.x
-
-  dst.y = src0.y ? src1.y : src2.y
-
-  dst.z = src0.z ? src1.z : src2.z
-
-  dst.w = src0.w ? src1.w : src2.w
-
-
 .. opcode:: UARL - Integer Address Register Load
 
   Moves the contents of the source register, assumed to be an integer, into the
   destination register, which is assumed to be an address (ADDR) register.
-
-
-.. opcode:: IABS - Integer Absolute Value
-
-.. math::
-
-  dst.x = |src.x|
-
-  dst.y = |src.y|
-
-  dst.z = |src.z|
-
-  dst.w = |src.w|
 
 
 .. opcode:: SAD - Sum Of Absolute Differences
@@ -1089,7 +978,7 @@ XXX so let's discuss it, yeah?
 
 .. math::
 
-  lod = src0
+  lod = src0.x
 
   dst.x = texture_width(unit, lod)
 
@@ -1098,14 +987,442 @@ XXX so let's discuss it, yeah?
   dst.z = texture_depth(unit, lod)
 
 
-.. opcode:: CONT - Continue
+Integer ISA
+^^^^^^^^^^^^^^^^^^^^^^^^
+These opcodes are used for integer operations.
+Support for these opcodes indicated by PIPE_SHADER_CAP_INTEGERS (all of them?)
 
-  TBD
 
-.. note::
+.. opcode:: I2F - Signed Integer To Float
 
-   Support for CONT is determined by a special capability bit,
-   ``TGSI_CONT_SUPPORTED``. See :ref:`Screen` for more information.
+   Rounding is unspecified (round to nearest even suggested).
+
+.. math::
+
+  dst.x = (float) src.x
+
+  dst.y = (float) src.y
+
+  dst.z = (float) src.z
+
+  dst.w = (float) src.w
+
+
+.. opcode:: U2F - Unsigned Integer To Float
+
+   Rounding is unspecified (round to nearest even suggested).
+
+.. math::
+
+  dst.x = (float) src.x
+
+  dst.y = (float) src.y
+
+  dst.z = (float) src.z
+
+  dst.w = (float) src.w
+
+
+.. opcode:: F2I - Float to Signed Integer
+
+   Rounding is towards zero (truncate).
+   Values outside signed range (including NaNs) produce undefined results.
+
+.. math::
+
+  dst.x = (int) src.x
+
+  dst.y = (int) src.y
+
+  dst.z = (int) src.z
+
+  dst.w = (int) src.w
+
+
+.. opcode:: F2U - Float to Unsigned Integer
+
+   Rounding is towards zero (truncate).
+   Values outside unsigned range (including NaNs) produce undefined results.
+
+.. math::
+
+  dst.x = (unsigned) src.x
+
+  dst.y = (unsigned) src.y
+
+  dst.z = (unsigned) src.z
+
+  dst.w = (unsigned) src.w
+
+
+.. opcode:: UADD - Integer Add
+
+   This instruction works the same for signed and unsigned integers.
+   The low 32bit of the result is returned.
+
+.. math::
+
+  dst.x = src0.x + src1.x
+
+  dst.y = src0.y + src1.y
+
+  dst.z = src0.z + src1.z
+
+  dst.w = src0.w + src1.w
+
+
+.. opcode:: UMAD - Integer Multiply And Add
+
+   This instruction works the same for signed and unsigned integers.
+   The multiplication returns the low 32bit (as does the result itself).
+
+.. math::
+
+  dst.x = src0.x \times src1.x + src2.x
+
+  dst.y = src0.y \times src1.y + src2.y
+
+  dst.z = src0.z \times src1.z + src2.z
+
+  dst.w = src0.w \times src1.w + src2.w
+
+
+.. opcode:: UMUL - Integer Multiply
+
+   This instruction works the same for signed and unsigned integers.
+   The low 32bit of the result is returned.
+
+.. math::
+
+  dst.x = src0.x \times src1.x
+
+  dst.y = src0.y \times src1.y
+
+  dst.z = src0.z \times src1.z
+
+  dst.w = src0.w \times src1.w
+
+
+.. opcode:: IDIV - Signed Integer Division
+
+   TBD: behavior for division by zero.
+
+.. math::
+
+  dst.x = src0.x \ src1.x
+
+  dst.y = src0.y \ src1.y
+
+  dst.z = src0.z \ src1.z
+
+  dst.w = src0.w \ src1.w
+
+
+.. opcode:: UDIV - Unsigned Integer Division
+
+   For division by zero, 0xffffffff is returned.
+
+.. math::
+
+  dst.x = src0.x \ src1.x
+
+  dst.y = src0.y \ src1.y
+
+  dst.z = src0.z \ src1.z
+
+  dst.w = src0.w \ src1.w
+
+
+.. opcode:: UMOD - Unsigned Integer Remainder
+
+   If second arg is zero, 0xffffffff is returned.
+
+.. math::
+
+  dst.x = src0.x \ src1.x
+
+  dst.y = src0.y \ src1.y
+
+  dst.z = src0.z \ src1.z
+
+  dst.w = src0.w \ src1.w
+
+
+.. opcode:: NOT - Bitwise Not
+
+.. math::
+
+  dst.x = ~src.x
+
+  dst.y = ~src.y
+
+  dst.z = ~src.z
+
+  dst.w = ~src.w
+
+
+.. opcode:: AND - Bitwise And
+
+.. math::
+
+  dst.x = src0.x & src1.x
+
+  dst.y = src0.y & src1.y
+
+  dst.z = src0.z & src1.z
+
+  dst.w = src0.w & src1.w
+
+
+.. opcode:: OR - Bitwise Or
+
+.. math::
+
+  dst.x = src0.x | src1.x
+
+  dst.y = src0.y | src1.y
+
+  dst.z = src0.z | src1.z
+
+  dst.w = src0.w | src1.w
+
+
+.. opcode:: XOR - Bitwise Xor
+
+.. math::
+
+  dst.x = src0.x \oplus src1.x
+
+  dst.y = src0.y \oplus src1.y
+
+  dst.z = src0.z \oplus src1.z
+
+  dst.w = src0.w \oplus src1.w
+
+
+.. opcode:: IMAX - Maximum of Signed Integers
+
+.. math::
+
+  dst.x = max(src0.x, src1.x)
+
+  dst.y = max(src0.y, src1.y)
+
+  dst.z = max(src0.z, src1.z)
+
+  dst.w = max(src0.w, src1.w)
+
+
+.. opcode:: UMAX - Maximum of Unsigned Integers
+
+.. math::
+
+  dst.x = max(src0.x, src1.x)
+
+  dst.y = max(src0.y, src1.y)
+
+  dst.z = max(src0.z, src1.z)
+
+  dst.w = max(src0.w, src1.w)
+
+
+.. opcode:: IMIN - Minimum of Signed Integers
+
+.. math::
+
+  dst.x = min(src0.x, src1.x)
+
+  dst.y = min(src0.y, src1.y)
+
+  dst.z = min(src0.z, src1.z)
+
+  dst.w = min(src0.w, src1.w)
+
+
+.. opcode:: UMIN - Minimum of Unsigned Integers
+
+.. math::
+
+  dst.x = min(src0.x, src1.x)
+
+  dst.y = min(src0.y, src1.y)
+
+  dst.z = min(src0.z, src1.z)
+
+  dst.w = min(src0.w, src1.w)
+
+
+.. opcode:: SHL - Shift Left
+
+.. math::
+
+  dst.x = src0.x << src1.x
+
+  dst.y = src0.y << src1.x
+
+  dst.z = src0.z << src1.x
+
+  dst.w = src0.w << src1.x
+
+
+.. opcode:: ISHR - Arithmetic Shift Right (of Signed Integer)
+
+.. math::
+
+  dst.x = src0.x >> src1.x
+
+  dst.y = src0.y >> src1.x
+
+  dst.z = src0.z >> src1.x
+
+  dst.w = src0.w >> src1.x
+
+
+.. opcode:: USHR - Logical Shift Right
+
+.. math::
+
+  dst.x = src0.x >> (unsigned) src1.x
+
+  dst.y = src0.y >> (unsigned) src1.x
+
+  dst.z = src0.z >> (unsigned) src1.x
+
+  dst.w = src0.w >> (unsigned) src1.x
+
+
+.. opcode:: UCMP - Integer Conditional Move
+
+.. math::
+
+  dst.x = src0.x ? src1.x : src2.x
+
+  dst.y = src0.y ? src1.y : src2.y
+
+  dst.z = src0.z ? src1.z : src2.z
+
+  dst.w = src0.w ? src1.w : src2.w
+
+
+
+.. opcode:: ISSG - Integer Set Sign
+
+.. math::
+
+  dst.x = (src0.x < 0) ? -1 : (src0.x > 0) ? 1 : 0
+
+  dst.y = (src0.y < 0) ? -1 : (src0.y > 0) ? 1 : 0
+
+  dst.z = (src0.z < 0) ? -1 : (src0.z > 0) ? 1 : 0
+
+  dst.w = (src0.w < 0) ? -1 : (src0.w > 0) ? 1 : 0
+
+
+
+.. opcode:: ISLT - Signed Integer Set On Less Than
+
+.. math::
+
+  dst.x = (src0.x < src1.x) ? ~0 : 0
+
+  dst.y = (src0.y < src1.y) ? ~0 : 0
+
+  dst.z = (src0.z < src1.z) ? ~0 : 0
+
+  dst.w = (src0.w < src1.w) ? ~0 : 0
+
+
+.. opcode:: USLT - Unsigned Integer Set On Less Than
+
+.. math::
+
+  dst.x = (src0.x < src1.x) ? ~0 : 0
+
+  dst.y = (src0.y < src1.y) ? ~0 : 0
+
+  dst.z = (src0.z < src1.z) ? ~0 : 0
+
+  dst.w = (src0.w < src1.w) ? ~0 : 0
+
+
+.. opcode:: ISGE - Signed Integer Set On Greater Equal Than
+
+.. math::
+
+  dst.x = (src0.x >= src1.x) ? ~0 : 0
+
+  dst.y = (src0.y >= src1.y) ? ~0 : 0
+
+  dst.z = (src0.z >= src1.z) ? ~0 : 0
+
+  dst.w = (src0.w >= src1.w) ? ~0 : 0
+
+
+.. opcode:: USGE - Unsigned Integer Set On Greater Equal Than
+
+.. math::
+
+  dst.x = (src0.x >= src1.x) ? ~0 : 0
+
+  dst.y = (src0.y >= src1.y) ? ~0 : 0
+
+  dst.z = (src0.z >= src1.z) ? ~0 : 0
+
+  dst.w = (src0.w >= src1.w) ? ~0 : 0
+
+
+.. opcode:: USEQ - Integer Set On Equal
+
+.. math::
+
+  dst.x = (src0.x == src1.x) ? ~0 : 0
+
+  dst.y = (src0.y == src1.y) ? ~0 : 0
+
+  dst.z = (src0.z == src1.z) ? ~0 : 0
+
+  dst.w = (src0.w == src1.w) ? ~0 : 0
+
+
+.. opcode:: USNE - Integer Set On Not Equal
+
+.. math::
+
+  dst.x = (src0.x != src1.x) ? ~0 : 0
+
+  dst.y = (src0.y != src1.y) ? ~0 : 0
+
+  dst.z = (src0.z != src1.z) ? ~0 : 0
+
+  dst.w = (src0.w != src1.w) ? ~0 : 0
+
+
+.. opcode:: INEG - Integer Negate
+
+  Two's complement.
+
+.. math::
+
+  dst.x = -src.x
+
+  dst.y = -src.y
+
+  dst.z = -src.z
+
+  dst.w = -src.w
+
+
+.. opcode:: IABS - Integer Absolute Value
+
+.. math::
+
+  dst.x = |src.x|
+
+  dst.y = |src.y|
+
+  dst.z = |src.z|
+
+  dst.w = |src.w|
 
 
 Geometry ISA
@@ -1116,12 +1433,14 @@ in any other type of shader.
 
 .. opcode:: EMIT - Emit
 
-  TBD
+  Generate a new vertex for the current primitive using the values in the
+  output registers.
 
 
 .. opcode:: ENDPRIM - End Primitive
 
-  TBD
+  Complete the current primitive (consisting of the emitted vertices),
+  and start a new one.
 
 
 GLSL ISA
@@ -1129,30 +1448,141 @@ GLSL ISA
 
 These opcodes are part of :term:`GLSL`'s opcode set. Support for these
 opcodes is determined by a special capability bit, ``GLSL``.
+Some require glsl version 1.30 (UIF/BREAKC/SWITCH/CASE/DEFAULT/ENDSWITCH).
+
+.. opcode:: CAL - Subroutine Call
+
+  push(pc)
+  pc = target
+
+
+.. opcode:: RET - Subroutine Call Return
+
+  pc = pop()
+
+
+.. opcode:: CONT - Continue
+
+  Unconditionally moves the point of execution to the instruction after the
+  last bgnloop. The instruction must appear within a bgnloop/endloop.
+
+.. note::
+
+   Support for CONT is determined by a special capability bit,
+   ``TGSI_CONT_SUPPORTED``. See :ref:`Screen` for more information.
+
 
 .. opcode:: BGNLOOP - Begin a Loop
 
-  TBD
+  Start a loop. Must have a matching endloop.
 
 
 .. opcode:: BGNSUB - Begin Subroutine
 
-  TBD
+  Starts definition of a subroutine. Must have a matching endsub.
 
 
 .. opcode:: ENDLOOP - End a Loop
 
-  TBD
+  End a loop started with bgnloop.
 
 
 .. opcode:: ENDSUB - End Subroutine
 
-  TBD
+  Ends definition of a subroutine.
 
 
 .. opcode:: NOP - No Operation
 
   Do nothing.
+
+
+.. opcode:: BRK - Break
+
+  Unconditionally moves the point of execution to the instruction after the
+  next endloop or endswitch. The instruction must appear within a loop/endloop
+  or switch/endswitch.
+
+
+.. opcode:: BREAKC - Break Conditional
+
+  Conditionally moves the point of execution to the instruction after the
+  next endloop or endswitch. The instruction must appear within a loop/endloop
+  or switch/endswitch.
+  Condition evaluates to true if src0.x != 0 where src0.x is interpreted
+  as an integer register.
+
+.. note::
+
+   Considered for removal as it's quite inconsistent wrt other opcodes
+   (could emulate with UIF/BRK/ENDIF). 
+
+
+.. opcode:: IF - Float If
+
+  Start an IF ... ELSE .. ENDIF block.  Condition evaluates to true if
+
+    src0.x != 0.0
+
+  where src0.x is interpreted as a floating point register.
+
+
+.. opcode:: UIF - Bitwise If
+
+  Start an UIF ... ELSE .. ENDIF block. Condition evaluates to true if
+
+    src0.x != 0
+
+  where src0.x is interpreted as an integer register.
+
+
+.. opcode:: ELSE - Else
+
+  Starts an else block, after an IF or UIF statement.
+
+
+.. opcode:: ENDIF - End If
+
+  Ends an IF or UIF block.
+
+
+.. opcode:: SWITCH - Switch
+
+   Starts a C-style switch expression. The switch consists of one or multiple
+   CASE statements, and at most one DEFAULT statement. Execution of a statement
+   ends when a BRK is hit, but just like in C falling through to other cases
+   without a break is allowed. Similarly, DEFAULT label is allowed anywhere not
+   just as last statement, and fallthrough is allowed into/from it.
+   CASE src arguments are evaluated at bit level against the SWITCH src argument.
+
+   Example:
+   SWITCH src[0].x
+   CASE src[0].x
+   (some instructions here)
+   (optional BRK here)
+   DEFAULT
+   (some instructions here)
+   (optional BRK here)
+   CASE src[0].x
+   (some instructions here)
+   (optional BRK here)
+   ENDSWITCH
+
+
+.. opcode:: CASE - Switch case
+
+   This represents a switch case label. The src arg must be an integer immediate.
+
+
+.. opcode:: DEFAULT - Switch default
+
+   This represents the default case in the switch, which is taken if no other
+   case matches.
+
+
+.. opcode:: ENDSWITCH - End of switch
+
+   Ends a switch expression.
 
 
 .. opcode:: NRM4 - 4-component Vector Normalise
@@ -1163,25 +1593,6 @@ This instruction replicates its result.
 
   dst = \frac{src.x}{src.x \times src.x + src.y \times src.y + src.z \times src.z + src.w \times src.w}
 
-
-ps_2_x
-^^^^^^^^^^^^
-
-XXX wait what
-
-.. opcode:: CALLNZ - Subroutine Call If Not Zero
-
-  TBD
-
-
-.. opcode:: IFC - If
-
-  TBD
-
-
-.. opcode:: BREAKC - Break Conditional
-
-  TBD
 
 .. _doubleopcodes:
 
@@ -1374,9 +1785,10 @@ instructions. If in doubt double check Direct3D documentation.
 
 .. opcode:: SAMPLE_I_MS - Just like SAMPLE_I but allows fetch data from
                multi-sampled surfaces.
+               SAMPLE_I_MS dst, address, sampler_view, sample
 
 .. opcode:: SAMPLE_B - Just like the SAMPLE instruction with the
-               exception that an additiona bias is applied to the
+               exception that an additional bias is applied to the
                level of detail computed as part of the instruction
                execution.
                SAMPLE_B dst, address, sampler_view, sampler, lod_bias
@@ -1385,7 +1797,7 @@ instructions. If in doubt double check Direct3D documentation.
 
 .. opcode:: SAMPLE_C - Similar to the SAMPLE instruction but it
                performs a comparison filter. The operands to SAMPLE_C
-               are identical to SAMPLE, except that tere is an additional
+               are identical to SAMPLE, except that there is an additional
                float32 operand, reference value, which must be a register
                with single-component, or a scalar literal.
                SAMPLE_C makes the hardware use the current samplers
@@ -1414,11 +1826,10 @@ instructions. If in doubt double check Direct3D documentation.
 
 .. opcode:: SAMPLE_L - SAMPLE_L is identical to the SAMPLE opcode except
                that the LOD is provided directly as a scalar value,
-               representing no anisotropy. Source addresses A channel
-               is used as the LOD.
-               SAMPLE_L dst, address, sampler_view, sampler
+               representing no anisotropy.
+               SAMPLE_L dst, address, sampler_view, sampler, explicit_lod
                e.g.
-               SAMPLE_L TEMP[0], TEMP[1], SVIEW[0], SAMP[0]
+               SAMPLE_L TEMP[0], TEMP[1], SVIEW[0], SAMP[0], TEMP[2].x
 
 .. opcode:: GATHER4 - Gathers the four texels to be used in a bi-linear
                filtering operation and packs them into a single register.
@@ -1435,7 +1846,7 @@ instructions. If in doubt double check Direct3D documentation.
 
 .. opcode:: SVIEWINFO - query the dimensions of a given sampler view.
                dst receives width, height, depth or array size and
-               number of mipmap levels. The dst can have a writemask
+               number of mipmap levels as int4. The dst can have a writemask
                which will specify what info is the caller interested
                in.
                SVIEWINFO dst, src_mip_level, sampler_view
@@ -1809,6 +2220,24 @@ If Interpolate flag is set to 1, a Declaration Interpolate token follows.
 
 If file is TGSI_FILE_RESOURCE, a Declaration Resource token follows.
 
+If Array flag is set to 1, a Declaration Array token follows.
+
+Array Declaration
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Declarations can optional have an ArrayID attribute which can be referred by
+indirect addressing operands. An ArrayID of zero is reserved and treaded as
+if no ArrayID is specified.
+
+If an indirect addressing operand refers to a specific declaration by using
+an ArrayID only the registers in this declaration are guaranteed to be
+accessed, accessing any register outside this declaration results in undefined
+behavior. Note that for compatibility the effective index is zero-based and
+not relative to the specified declaration
+
+If no ArrayID is specified with an indirect addressing operand the whole
+register file might be accessed by this operand. This is strongly discouraged
+and will prevent packing of scalar/vec2 arrays and effective alias analysis.
 
 Declaration Semantic
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1907,6 +2336,35 @@ When using this semantic, be sure to set the appropriate state in the
 :ref:`rasterizer` first.
 
 
+TGSI_SEMANTIC_TEXCOORD
+""""""""""""""""""""""
+
+Only available if PIPE_CAP_TGSI_TEXCOORD is exposed !
+
+Vertex shader outputs and fragment shader inputs may be labeled with
+this semantic to make them replaceable by sprite coordinates via the
+sprite_coord_enable state in the :ref:`rasterizer`.
+The semantic index permitted with this semantic is limited to <= 7.
+
+If the driver does not support TEXCOORD, sprite coordinate replacement
+applies to inputs with the GENERIC semantic instead.
+
+The intended use case for this semantic is gl_TexCoord.
+
+
+TGSI_SEMANTIC_PCOORD
+""""""""""""""""""""
+
+Only available if PIPE_CAP_TGSI_TEXCOORD is exposed !
+
+Fragment shader inputs may be labeled with TGSI_SEMANTIC_PCOORD to indicate
+that the register contains sprite coordinates in the form (x, y, 0, 1), if
+the current primitive is a point and point sprites are enabled. Otherwise,
+the contents of the register are undefined.
+
+The intended use case for this semantic is gl_PointCoord.
+
+
 TGSI_SEMANTIC_GENERIC
 """""""""""""""""""""
 
@@ -1944,12 +2402,64 @@ Edge flags are used to control which lines or points are actually
 drawn when the polygon mode converts triangles/quads/polygons into
 points or lines.
 
-TGSI_SEMANTIC_STENCIL
-""""""""""""""""""""""
 
-For fragment shaders, this semantic label indicates than an output
+TGSI_SEMANTIC_STENCIL
+"""""""""""""""""""""
+
+For fragment shaders, this semantic label indicates that an output
 is a writable stencil reference value. Only the Y component is writable.
 This allows the fragment shader to change the fragments stencilref value.
+
+
+TGSI_SEMANTIC_VIEWPORT_INDEX
+""""""""""""""""""""""""""""
+
+For geometry shaders, this semantic label indicates that an output
+contains the index of the viewport (and scissor) to use.
+Only the X value is used.
+
+
+TGSI_SEMANTIC_LAYER
+"""""""""""""""""""
+
+For geometry shaders, this semantic label indicates that an output
+contains the layer value to use for the color and depth/stencil surfaces.
+Only the X value is used. (Also known as rendertarget array index.)
+
+
+TGSI_SEMANTIC_CULLDIST
+""""""""""""""""""""""
+
+Used as distance to plane for performing application-defined culling
+of individual primitives against a plane. When components of vertex
+elements are given this label, these values are assumed to be a
+float32 signed distance to a plane. Primitives will be completely
+discarded if the plane distance for all of the vertices in the
+primitive are < 0. If a vertex has a cull distance of NaN, that
+vertex counts as "out" (as if its < 0);
+The limits on both clip and cull distances are bound
+by the PIPE_MAX_CLIP_OR_CULL_DISTANCE_COUNT define which defines
+the maximum number of components that can be used to hold the
+distances and by the PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT
+which specifies the maximum number of registers which can be
+annotated with those semantics.
+
+
+TGSI_SEMANTIC_CLIPDIST
+""""""""""""""""""""""
+
+When components of vertex elements are identified this way, these
+values are each assumed to be a float32 signed distance to a plane.
+Primitive setup only invokes rasterization on pixels for which
+the interpolated plane distances are >= 0. Multiple clip planes
+can be implemented simultaneously, by annotating multiple
+components of one or more vertex elements with the above specified
+semantic. The limits on both clip and cull distances are bound
+by the PIPE_MAX_CLIP_OR_CULL_DISTANCE_COUNT define which defines
+the maximum number of components that can be used to hold the
+distances and by the PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT
+which specifies the maximum number of registers which can be
+annotated with those semantics.
 
 
 Declaration Interpolate
@@ -2044,7 +2554,7 @@ If HALF_INTEGER, the fractionary part of the position will be 0.5
 If INTEGER, the fractionary part of the position will be 0.0
 
 Note that this does not affect the set of fragments generated by
-rasterization, which is instead controlled by gl_rasterization_rules in the
+rasterization, which is instead controlled by half_pixel_center in the
 rasterizer.
 
 OpenGL defaults to HALF_INTEGER, and is configurable with the

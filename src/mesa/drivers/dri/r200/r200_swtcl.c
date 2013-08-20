@@ -239,6 +239,9 @@ void r200ChooseVertexState( struct gl_context *ctx )
    TNLcontext *tnl = TNL_CONTEXT(ctx);
    GLuint vte;
    GLuint vap;
+   GLboolean unfilled = (ctx->Polygon.FrontMode != GL_FILL ||
+                         ctx->Polygon.BackMode != GL_FILL);
+   GLboolean twosided = ctx->Light.Enabled && ctx->Light.Model.TwoSide;
 
    /* We must ensure that we don't do _tnl_need_projected_coords while in a
     * rasterization fallback.  As this function will be called again when we
@@ -254,7 +257,8 @@ void r200ChooseVertexState( struct gl_context *ctx )
     * bigger one.
     */
    if ((0 == (tnl->render_inputs_bitset & BITFIELD64_RANGE(_TNL_ATTRIB_TEX0, _TNL_NUM_TEX)))
-	|| (ctx->_TriangleCaps & (DD_TRI_LIGHT_TWOSIDE|DD_TRI_UNFILLED))) {
+       || twosided
+       || unfilled) {
       rmesa->swtcl.needproj = GL_TRUE;
       vte |= R200_VTX_XY_FMT | R200_VTX_Z_FMT;
       vte &= ~R200_VTX_W0_FMT;
@@ -318,7 +322,7 @@ static INLINE GLuint reduced_hw_prim( struct gl_context *ctx, GLuint prim)
 {
    switch (prim) {
    case GL_POINTS:
-      return ((!(ctx->_TriangleCaps & DD_POINT_SMOOTH)) ?
+      return ((!ctx->Point.SmoothFlag) ?
 	 R200_VF_PRIM_POINT_SPRITES : R200_VF_PRIM_POINTS);
    case GL_LINES:
    /* fallthrough */
@@ -570,13 +574,17 @@ void r200ChooseRenderState( struct gl_context *ctx )
    TNLcontext *tnl = TNL_CONTEXT(ctx);
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
    GLuint index = 0;
-   GLuint flags = ctx->_TriangleCaps;
+   GLboolean unfilled = (ctx->Polygon.FrontMode != GL_FILL ||
+                         ctx->Polygon.BackMode != GL_FILL);
+   GLboolean twosided = ctx->Light.Enabled && ctx->Light.Model.TwoSide;
 
    if (!rmesa->radeon.TclFallback || rmesa->radeon.Fallback)
       return;
 
-   if (flags & DD_TRI_LIGHT_TWOSIDE) index |= R200_TWOSIDE_BIT;
-   if (flags & DD_TRI_UNFILLED)      index |= R200_UNFILLED_BIT;
+   if (twosided)
+      index |= R200_TWOSIDE_BIT;
+   if (unfilled)
+      index |= R200_UNFILLED_BIT;
 
    if (index != rmesa->radeon.swtcl.RenderIndex) {
       tnl->Driver.Render.Points = rast_tab[index].points;
@@ -634,8 +642,11 @@ static void r200RasterPrimitive( struct gl_context *ctx, GLuint hwprim )
 static void r200RenderPrimitive( struct gl_context *ctx, GLenum prim )
 {
    r200ContextPtr rmesa = R200_CONTEXT(ctx);
+   GLboolean unfilled = (ctx->Polygon.FrontMode != GL_FILL ||
+                         ctx->Polygon.BackMode != GL_FILL);
+
    rmesa->radeon.swtcl.render_primitive = prim;
-   if (prim < GL_TRIANGLES || !(ctx->_TriangleCaps & DD_TRI_UNFILLED))
+   if (prim < GL_TRIANGLES || !unfilled)
       r200RasterPrimitive( ctx, reduced_hw_prim(ctx, prim) );
 }
 

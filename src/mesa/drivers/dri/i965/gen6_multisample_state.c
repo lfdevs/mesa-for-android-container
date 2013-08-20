@@ -26,6 +26,77 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 
+/* Sample positions:
+ *   2 6 a e
+ * 2   0
+ * 6       1
+ * a 2
+ * e     3
+ */
+static uint32_t
+sample_positions_4x[] = { 0xae2ae662 };
+/* Sample positions are based on a solution to the "8 queens" puzzle.
+ * Rationale: in a solution to the 8 queens puzzle, no two queens share
+ * a row, column, or diagonal.  This is a desirable property for samples
+ * in a multisampling pattern, because it ensures that the samples are
+ * relatively uniformly distributed through the pixel.
+ *
+ * There are several solutions to the 8 queens puzzle (see
+ * http://en.wikipedia.org/wiki/Eight_queens_puzzle).  This solution was
+ * chosen because it has a queen close to the center; this should
+ * improve the accuracy of centroid interpolation, since the hardware
+ * implements centroid interpolation by choosing the centermost sample
+ * that overlaps with the primitive being drawn.
+ *
+ * Note: from the Ivy Bridge PRM, Vol2 Part1 p304 (3DSTATE_MULTISAMPLE:
+ * Programming Notes):
+ *
+ *     "When programming the sample offsets (for NUMSAMPLES_4 or _8 and
+ *     MSRASTMODE_xxx_PATTERN), the order of the samples 0 to 3 (or 7
+ *     for 8X) must have monotonically increasing distance from the
+ *     pixel center. This is required to get the correct centroid
+ *     computation in the device."
+ *
+ * Sample positions:
+ *   1 3 5 7 9 b d f
+ * 1     5
+ * 3           2
+ * 5               6
+ * 7 4
+ * 9       0
+ * b             3
+ * d         1
+ * f   7
+ */
+static uint32_t
+sample_positions_8x[] = { 0xdbb39d79, 0x3ff55117 };
+
+
+void
+gen6_get_sample_position(struct gl_context *ctx,
+                         struct gl_framebuffer *fb,
+                         GLuint index, GLfloat *result)
+{
+   switch (fb->Visual.samples) {
+   case 1:
+      result[0] = result[1] = 0.5f;
+      break;
+   case 4: {
+      uint8_t val = (uint8_t)(sample_positions_4x[0] >> (8*index));
+      result[0] = ((val >> 4) & 0xf) / 16.0f;
+      result[1] = (val & 0xf) / 16.0f;
+      break;
+   }
+   case 8: {
+      uint8_t val = (uint8_t)(sample_positions_8x[index>>2] >> (8*(index & 3)));
+      result[0] = ((val >> 4) & 0xf) / 16.0f;
+      result[1] = (val & 0xf) / 16.0f;
+      break;
+   }
+   default:
+      assert(!"Not implemented");
+   }
+}
 
 /**
  * 3DSTATE_MULTISAMPLE
@@ -34,8 +105,6 @@ void
 gen6_emit_3dstate_multisample(struct brw_context *brw,
                               unsigned num_samples)
 {
-   struct intel_context *intel = &brw->intel;
-
    uint32_t number_of_multisamples = 0;
    uint32_t sample_positions_3210 = 0;
    uint32_t sample_positions_7654 = 0;
@@ -47,64 +116,24 @@ gen6_emit_3dstate_multisample(struct brw_context *brw,
       break;
    case 4:
       number_of_multisamples = MS_NUMSAMPLES_4;
-      /* Sample positions:
-       *   2 6 a e
-       * 2   0
-       * 6       1
-       * a 2
-       * e     3
-       */
-      sample_positions_3210 = 0xae2ae662;
+      sample_positions_3210 = sample_positions_4x[0];
       break;
    case 8:
       number_of_multisamples = MS_NUMSAMPLES_8;
-      /* Sample positions are based on a solution to the "8 queens" puzzle.
-       * Rationale: in a solution to the 8 queens puzzle, no two queens share
-       * a row, column, or diagonal.  This is a desirable property for samples
-       * in a multisampling pattern, because it ensures that the samples are
-       * relatively uniformly distributed through the pixel.
-       *
-       * There are several solutions to the 8 queens puzzle (see
-       * http://en.wikipedia.org/wiki/Eight_queens_puzzle).  This solution was
-       * chosen because it has a queen close to the center; this should
-       * improve the accuracy of centroid interpolation, since the hardware
-       * implements centroid interpolation by choosing the centermost sample
-       * that overlaps with the primitive being drawn.
-       *
-       * Note: from the Ivy Bridge PRM, Vol2 Part1 p304 (3DSTATE_MULTISAMPLE:
-       * Programming Notes):
-       *
-       *     "When programming the sample offsets (for NUMSAMPLES_4 or _8 and
-       *     MSRASTMODE_xxx_PATTERN), the order of the samples 0 to 3 (or 7
-       *     for 8X) must have monotonically increasing distance from the
-       *     pixel center. This is required to get the correct centroid
-       *     computation in the device."
-       *
-       * Sample positions:
-       *   1 3 5 7 9 b d f
-       * 1     5
-       * 3           2
-       * 5               6
-       * 7 4
-       * 9       0
-       * b             3
-       * d         1
-       * f   7
-       */
-      sample_positions_3210 = 0xdbb39d79;
-      sample_positions_7654 = 0x3ff55117;
+      sample_positions_3210 = sample_positions_8x[0];
+      sample_positions_7654 = sample_positions_8x[1];
       break;
    default:
       assert(!"Unrecognized num_samples in gen6_emit_3dstate_multisample");
       break;
    }
 
-   int len = intel->gen >= 7 ? 4 : 3;
+   int len = brw->gen >= 7 ? 4 : 3;
    BEGIN_BATCH(len);
    OUT_BATCH(_3DSTATE_MULTISAMPLE << 16 | (len - 2));
    OUT_BATCH(MS_PIXEL_LOCATION_CENTER | number_of_multisamples);
    OUT_BATCH(sample_positions_3210);
-   if (intel->gen >= 7)
+   if (brw->gen >= 7)
       OUT_BATCH(sample_positions_7654);
    ADVANCE_BATCH();
 }
@@ -116,10 +145,8 @@ gen6_emit_3dstate_multisample(struct brw_context *brw,
 void
 gen6_emit_3dstate_sample_mask(struct brw_context *brw,
                               unsigned num_samples, float coverage,
-                              bool coverage_invert)
+                              bool coverage_invert, unsigned sample_mask)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_SAMPLE_MASK << 16 | (2 - 2));
    if (num_samples > 1) {
@@ -127,7 +154,7 @@ gen6_emit_3dstate_sample_mask(struct brw_context *brw,
       uint32_t coverage_bits = (1 << coverage_int) - 1;
       if (coverage_invert)
          coverage_bits ^= (1 << num_samples) - 1;
-      OUT_BATCH(coverage_bits);
+      OUT_BATCH(coverage_bits & sample_mask);
    } else {
       OUT_BATCH(1);
    }
@@ -137,25 +164,31 @@ gen6_emit_3dstate_sample_mask(struct brw_context *brw,
 
 static void upload_multisample_state(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    float coverage = 1.0;
    float coverage_invert = false;
+   unsigned sample_mask = ~0u;
 
    /* _NEW_BUFFERS */
    unsigned num_samples = ctx->DrawBuffer->Visual.samples;
 
    /* _NEW_MULTISAMPLE */
-   if (ctx->Multisample._Enabled && ctx->Multisample.SampleCoverage) {
-      coverage = ctx->Multisample.SampleCoverageValue;
-      coverage_invert = ctx->Multisample.SampleCoverageInvert;
+   if (ctx->Multisample._Enabled) {
+      if (ctx->Multisample.SampleCoverage) {
+         coverage = ctx->Multisample.SampleCoverageValue;
+         coverage_invert = ctx->Multisample.SampleCoverageInvert;
+      }
+      if (ctx->Multisample.SampleMask) {
+         sample_mask = ctx->Multisample.SampleMaskValue;
+      }
    }
 
    /* 3DSTATE_MULTISAMPLE is nonpipelined. */
-   intel_emit_post_sync_nonzero_flush(intel);
+   intel_emit_post_sync_nonzero_flush(brw);
 
    gen6_emit_3dstate_multisample(brw, num_samples);
-   gen6_emit_3dstate_sample_mask(brw, num_samples, coverage, coverage_invert);
+   gen6_emit_3dstate_sample_mask(brw, num_samples, coverage,
+         coverage_invert, sample_mask);
 }
 
 

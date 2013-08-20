@@ -49,12 +49,11 @@
 static void
 gen6_upload_urb( struct brw_context *brw )
 {
-   struct intel_context *intel = &brw->intel;
    int nr_vs_entries, nr_gs_entries;
    int total_urb_size = brw->urb.size * 1024; /* in bytes */
 
    /* CACHE_NEW_VS_PROG */
-   unsigned vs_size = MAX2(brw->vs.prog_data->urb_entry_size, 1);
+   unsigned vs_size = MAX2(brw->vs.prog_data->base.urb_entry_size, 1);
 
    /* We use the same VUE layout for VS outputs and GS outputs (as it's what
     * the SF and Clipper expect), so we can simply make the GS URB entry size
@@ -111,7 +110,7 @@ gen6_upload_urb( struct brw_context *brw )
     * a workaround.
     */
    if (brw->urb.gen6_gs_previously_active && !brw->gs.prog_active)
-      intel_batchbuffer_emit_mi_flush(intel);
+      intel_batchbuffer_emit_mi_flush(brw);
    brw->urb.gen6_gs_previously_active = brw->gs.prog_active;
 }
 

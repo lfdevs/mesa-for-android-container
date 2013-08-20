@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50_ir_target_nvc0.h"
@@ -38,7 +38,7 @@ public:
    inline void setProgramType(Program::Type pType) { progType = pType; }
 
 private:
-   const TargetNVC0 *targ;
+   const TargetNVC0 *targNVC0;
 
    Program::Type progType;
 
@@ -1116,7 +1116,7 @@ CodeEmitterGK110::emitFlow(const Instruction *i)
    if (f->op == OP_CALL) {
       if (f->builtin) {
          assert(f->absolute);
-         uint32_t pcAbs = targ->getBuiltinOffset(f->target.builtin);
+         uint32_t pcAbs = targNVC0->getBuiltinOffset(f->target.builtin);
          addReloc(RelocEntry::TYPE_BUILTIN, 0, pcAbs, 0xff800000, 23);
          addReloc(RelocEntry::TYPE_BUILTIN, 1, pcAbs, 0x007fffff, -9);
       } else {
@@ -1144,13 +1144,45 @@ CodeEmitterGK110::emitPFETCH(const Instruction *i)
 void
 CodeEmitterGK110::emitVFETCH(const Instruction *i)
 {
-   emitNOP(i); // TODO
+   uint32_t offset = i->src(0).get()->reg.data.offset;
+
+   code[0] = 0x00000002 | (offset << 23);
+   code[1] = 0x7ec00000 | (offset >> 9);
+
+#if 0
+   if (i->perPatch)
+      code[0] |= 0x100;
+   if (i->getSrc(0)->reg.file == FILE_SHADER_OUTPUT)
+      code[0] |= 0x200; // yes, TCPs can read from *outputs* of other threads
+#endif
+
+   emitPredicate(i);
+
+   defId(i->def(0), 2);
+   srcId(i->src(0).getIndirect(0), 10);
+   srcId(i->src(0).getIndirect(1), 32 + 10); // vertex address
 }
 
 void
 CodeEmitterGK110::emitEXPORT(const Instruction *i)
 {
-   emitNOP(i); // TODO
+   uint32_t offset = i->src(0).get()->reg.data.offset;
+
+   code[0] = 0x00000002 | (offset << 23);
+   code[1] = 0x7f000000 | (offset >> 9);
+
+#if 0
+   if (i->perPatch)
+      code[0] |= 0x100;
+#endif
+
+   emitPredicate(i);
+
+   assert(i->src(1).getFile() == FILE_GPR);
+
+   srcId(i->src(0).getIndirect(0), 10);
+   srcId(i->src(0).getIndirect(1), 32 + 10); // vertex base address
+   srcId(i->src(1), 2);
 }
 
 void
@@ -1162,13 +1194,35 @@ CodeEmitterGK110::emitOUT(const Instruction *i)
 void
 CodeEmitterGK110::emitInterpMode(const Instruction *i)
 {
-   emitNOP(i); // TODO
+   code[1] |= i->ipa << 21; // TODO: INTERP_SAMPLEID
 }
 
 void
 CodeEmitterGK110::emitINTERP(const Instruction *i)
 {
-   emitNOP(i); // TODO
+   const uint32_t base = i->getSrc(0)->reg.data.offset;
+
+   code[0] = 0x00000002 | (base << 31);
+   code[1] = 0x74800000 | (base >> 1);
+
+   if (i->saturate)
+      code[1] |= 1 << 18;
+
+   if (i->op == OP_PINTERP)
+      srcId(i->src(1), 23);
+   else
+      code[0] |= 0xff << 23;
+
+   srcId(i->src(0).getIndirect(0), 10);
+   emitInterpMode(i);
+
+   emitPredicate(i);
+   defId(i->def(0), 2);
+
+   if (i->getSampleMode() == NV50_IR_INTERP_OFFSET)
+      srcId(i->src(i->op == OP_PINTERP ? 2 : 1), 32 + 10);
+   else
+      code[1] |= 0xff << 10;
 }
 
 void
@@ -1609,6 +1663,7 @@ CodeEmitterGK110::prepareEmission(Function *func)
 
 CodeEmitterGK110::CodeEmitterGK110(const TargetNVC0 *target)
    : CodeEmitter(target),
+     targNVC0(target),
      writeIssueDelays(target->hasSWSched)
 {
    code = NULL;

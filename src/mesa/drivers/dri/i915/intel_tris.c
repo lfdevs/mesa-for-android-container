@@ -52,7 +52,6 @@
 #include "intel_batchbuffer.h"
 #include "intel_buffers.h"
 #include "intel_reg.h"
-#include "intel_span.h"
 #include "i830_context.h"
 #include "i830_reg.h"
 #include "i915_context.h"
@@ -94,8 +93,6 @@ static void intel_start_inline(struct intel_context *intel, uint32_t prim)
    intel->vtbl.emit_state(intel);
 
    intel->no_batch_wrap = true;
-
-   /*printf("%s *", __progname);*/
 
    /* Emit a slot which will be filled with the inline primitive
     * command later.
@@ -641,7 +638,7 @@ do {							\
 } while (0)
 
 
-#define DEPTH_SCALE intel->polygon_offset_scale
+#define DEPTH_SCALE (ctx->DrawBuffer->Visual.depthBits == 16 ? 1.0 : 2.0)
 #define UNFILLED_TRI unfilled_tri
 #define UNFILLED_QUAD unfilled_quad
 #define VERT_X(_v) _v->v.x
@@ -808,9 +805,9 @@ intel_fallback_tri(struct intel_context *intel,
    _swsetup_Translate(ctx, v0, &v[0]);
    _swsetup_Translate(ctx, v1, &v[1]);
    _swsetup_Translate(ctx, v2, &v[2]);
-   intelSpanRenderStart(ctx);
+   _swrast_render_start(ctx);
    _swrast_Triangle(ctx, &v[0], &v[1], &v[2]);
-   intelSpanRenderFinish(ctx);
+   _swrast_render_finish(ctx);
 }
 
 
@@ -828,9 +825,9 @@ intel_fallback_line(struct intel_context *intel,
 
    _swsetup_Translate(ctx, v0, &v[0]);
    _swsetup_Translate(ctx, v1, &v[1]);
-   intelSpanRenderStart(ctx);
+   _swrast_render_start(ctx);
    _swrast_Line(ctx, &v[0], &v[1]);
-   intelSpanRenderFinish(ctx);
+   _swrast_render_finish(ctx);
 }
 
 static void
@@ -846,9 +843,9 @@ intel_fallback_point(struct intel_context *intel,
    INTEL_FIREVERTICES(intel);
 
    _swsetup_Translate(ctx, v0, &v[0]);
-   intelSpanRenderStart(ctx);
+   _swrast_render_start(ctx);
    _swrast_Point(ctx, &v[0]);
-   intelSpanRenderFinish(ctx);
+   _swrast_render_finish(ctx);
 }
 
 
@@ -943,7 +940,12 @@ intelFastRenderClippedPoly(struct gl_context * ctx, const GLuint * elts, GLuint 
 /**********************************************************************/
 
 
-
+#define DD_TRI_LIGHT_TWOSIDE (1 << 1)
+#define DD_TRI_UNFILLED (1 << 2)
+#define DD_TRI_STIPPLE  (1 << 4)
+#define DD_TRI_OFFSET   (1 << 5)
+#define DD_LINE_STIPPLE (1 << 7)
+#define DD_POINT_ATTEN  (1 << 9)
 
 #define ANY_FALLBACK_FLAGS (DD_LINE_STIPPLE | DD_TRI_STIPPLE | DD_POINT_ATTEN)
 #define ANY_RASTER_FLAGS (DD_TRI_LIGHT_TWOSIDE | DD_TRI_OFFSET | DD_TRI_UNFILLED)
@@ -953,9 +955,19 @@ intelChooseRenderState(struct gl_context * ctx)
 {
    TNLcontext *tnl = TNL_CONTEXT(ctx);
    struct intel_context *intel = intel_context(ctx);
-   GLuint flags = ctx->_TriangleCaps;
+   GLuint flags =
+      ((ctx->Light.Enabled &&
+        ctx->Light.Model.TwoSide) ? DD_TRI_LIGHT_TWOSIDE : 0) |
+      ((ctx->Polygon.FrontMode != GL_FILL ||
+        ctx->Polygon.BackMode != GL_FILL) ? DD_TRI_UNFILLED : 0) |
+      (ctx->Polygon.StippleFlag ? DD_TRI_STIPPLE : 0) |
+      ((ctx->Polygon.OffsetPoint ||
+        ctx->Polygon.OffsetLine ||
+        ctx->Polygon.OffsetFill) ? DD_TRI_OFFSET : 0) |
+      (ctx->Line.StippleFlag ? DD_LINE_STIPPLE : 0) |
+      (ctx->Point._Attenuated ? DD_POINT_ATTEN : 0);
    const struct gl_fragment_program *fprog = ctx->FragmentProgram._Current;
-   bool have_wpos = (fprog && (fprog->Base.InputsRead & FRAG_BIT_WPOS));
+   bool have_wpos = (fprog && (fprog->Base.InputsRead & VARYING_BIT_POS));
    GLuint index = 0;
 
    if (INTEL_DEBUG & DEBUG_STATE)
@@ -1081,11 +1093,9 @@ intelRunPipeline(struct gl_context * ctx)
       intel->NewGLState = 0;
    }
 
-   intel_map_vertex_shader_textures(ctx);
    intel->tnl_pipeline_running = true;
    _tnl_run_pipeline(ctx);
    intel->tnl_pipeline_running = false;
-   intel_unmap_vertex_shader_textures(ctx);
 
    _mesa_unlock_context_textures(ctx);
 }
@@ -1144,6 +1154,8 @@ static void
 intelRenderPrimitive(struct gl_context * ctx, GLenum prim)
 {
    struct intel_context *intel = intel_context(ctx);
+   GLboolean unfilled = (ctx->Polygon.FrontMode != GL_FILL ||
+                         ctx->Polygon.BackMode != GL_FILL);
 
    if (0)
       fprintf(stderr, "%s %s\n", __FUNCTION__, _mesa_lookup_enum_by_nr(prim));
@@ -1157,8 +1169,7 @@ intelRenderPrimitive(struct gl_context * ctx, GLenum prim)
     * primitive will always be reset by lower level functions in that case,
     * potentially pingponging the state:
     */
-   if (reduced_prim[prim] == GL_TRIANGLES &&
-       (ctx->_TriangleCaps & DD_TRI_UNFILLED))
+   if (reduced_prim[prim] == GL_TRIANGLES && unfilled)
       return;
 
    /* Set some primitive-dependent state and Start? a new primitive.

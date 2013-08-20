@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.5
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -474,10 +474,6 @@ _mesa_LightModelfv( GLenum pname, const GLfloat *params )
 	    return;
 	 FLUSH_VERTICES(ctx, _NEW_LIGHT);
 	 ctx->Light.Model.TwoSide = newbool;
-         if (ctx->Light.Enabled && ctx->Light.Model.TwoSide)
-            ctx->_TriangleCaps |= DD_TRI_LIGHT_TWOSIDE;
-         else
-            ctx->_TriangleCaps &= ~DD_TRI_LIGHT_TWOSIDE;
          break;
       case GL_LIGHT_MODEL_COLOR_CONTROL:
          if (ctx->API != API_OPENGL_COMPAT)
@@ -1202,7 +1198,8 @@ _mesa_init_lighting( struct gl_context *ctx )
                                                NULL );
 
    ctx->Light.ColorMaterialEnabled = GL_FALSE;
-   ctx->Light.ClampVertexColor = GL_TRUE;
+   ctx->Light.ClampVertexColor = ctx->API == API_OPENGL_COMPAT;
+   ctx->Light._ClampVertexColor = ctx->API == API_OPENGL_COMPAT;
 
    /* Miscellaneous */
    ctx->Light._NeedEyeCoords = GL_FALSE;

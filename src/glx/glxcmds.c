@@ -224,13 +224,40 @@ ValidateGLXFBConfig(Display * dpy, GLXFBConfig fbconfig)
    return NULL;
 }
 
+/**
+ * Verifies context's GLX_RENDER_TYPE value with config.
+ *
+ * \param config GLX FBConfig which will support the returned renderType.
+ * \param renderType The context render type to be verified.
+ * \return True if the value of context renderType was approved, or 0 if no
+ * valid value was found.
+ */
+Bool
+validate_renderType_against_config(const struct glx_config *config,
+                                   int renderType)
+{
+    switch (renderType) {
+    case GLX_RGBA_TYPE:
+        return (config->renderType & GLX_RGBA_BIT) != 0;
+    case GLX_COLOR_INDEX_TYPE:
+        return (config->renderType & GLX_COLOR_INDEX_BIT) != 0;
+    case GLX_RGBA_FLOAT_TYPE_ARB:
+        return (config->renderType & GLX_RGBA_FLOAT_BIT_ARB) != 0;
+    case GLX_RGBA_UNSIGNED_FLOAT_TYPE_EXT:
+        return (config->renderType & GLX_RGBA_UNSIGNED_FLOAT_BIT_EXT) != 0;
+    default:
+        break;
+    }
+    return 0;
+}
+
 _X_HIDDEN Bool
 glx_context_init(struct glx_context *gc,
 		 struct glx_screen *psc, struct glx_config *config)
 {
    gc->majorOpcode = __glXSetupForCommand(psc->display->dpy);
    if (!gc->majorOpcode)
-      return GL_FALSE;
+      return False;
 
    gc->screen = psc->scr;
    gc->psc = psc;
@@ -238,7 +265,7 @@ glx_context_init(struct glx_context *gc,
    gc->isDirect = GL_TRUE;
    gc->currentContextTag = -1;
 
-   return GL_TRUE;
+   return True;
 }
 
 
@@ -344,7 +371,6 @@ CreateContext(Display *dpy, int generic_id, struct glx_config *config,
 
    gc->share_xid = shareList ? shareList->xid : None;
    gc->imported = GL_FALSE;
-   gc->renderType = renderType;
 
    return (GLXContext) gc;
 }
@@ -354,7 +380,7 @@ glXCreateContext(Display * dpy, XVisualInfo * vis,
                  GLXContext shareList, Bool allowDirect)
 {
    struct glx_config *config = NULL;
-   int renderType = 0;
+   int renderType = GLX_RGBA_TYPE;
 
 #if defined(GLX_DIRECT_RENDERING) || defined(GLX_USE_APPLEGL)
    struct glx_screen *const psc = GetGLXScreenConfigs(dpy, vis->screen);
@@ -373,7 +399,32 @@ glXCreateContext(Display * dpy, XVisualInfo * vis,
       return None;
    }
 
-   renderType = config->rgbMode ? GLX_RGBA_TYPE : GLX_COLOR_INDEX_TYPE;
+   /* Choose the context render type based on DRI config values.  It is
+    * unusual to set this type from config, but we have no other choice, as
+    * this old API does not provide renderType parameter.
+    */
+   if (config->renderType & GLX_RGBA_FLOAT_BIT_ARB) {
+       renderType = GLX_RGBA_FLOAT_TYPE_ARB;
+   } else if (config->renderType & GLX_RGBA_UNSIGNED_FLOAT_BIT_EXT) {
+       renderType = GLX_RGBA_UNSIGNED_FLOAT_TYPE_EXT;
+   } else if (config->renderType & GLX_RGBA_BIT) {
+       renderType = GLX_RGBA_TYPE;
+   } else if (config->renderType & GLX_COLOR_INDEX_BIT) {
+       renderType = GLX_COLOR_INDEX_TYPE;
+   } else if (config->rgbMode) {
+       /* If we're here, then renderType is not set correctly.  Let's use a
+        * safeguard - any TrueColor or DirectColor mode is RGB mode.  Such
+        * default value is needed by old DRI drivers, which didn't set
+        * renderType correctly as the value was just ignored.
+        */
+       renderType = GLX_RGBA_TYPE;
+   } else {
+       /* Safeguard - only one option left, all non-RGB modes are indexed
+        * modes.  Again, this allows drivers with invalid renderType to work
+        * properly.
+        */
+       renderType = GLX_COLOR_INDEX_TYPE;
+   }
 #endif
 
    return CreateContext(dpy, vis->visualid, config, shareList, allowDirect,
@@ -435,13 +486,13 @@ glXQueryVersion(Display * dpy, int *major, int *minor)
    /* Init the extension.  This fetches the major and minor version. */
    priv = __glXInitialize(dpy);
    if (!priv)
-      return GL_FALSE;
+      return False;
 
    if (major)
       *major = priv->majorVersion;
    if (minor)
       *minor = priv->minorVersion;
-   return GL_TRUE;
+   return True;
 }
 
 /*
@@ -569,26 +620,25 @@ glXCopyContext(Display * dpy, GLXContext source_user,
  * \param dpy        Display where the context was created.
  * \param contextID  ID of the context to be tested.
  *
- * \returns \c GL_TRUE if the context is direct rendering or not.
+ * \returns \c True if the context is direct rendering or not.
  */
 static Bool
 __glXIsDirect(Display * dpy, GLXContextID contextID)
 {
    CARD8 opcode;
+   xcb_connection_t *c;
+   xcb_generic_error_t *err;
+   xcb_glx_is_direct_reply_t *reply;
+   Bool is_direct;
 
    opcode = __glXSetupForCommand(dpy);
    if (!opcode) {
-      return GL_FALSE;
+      return False;
    }
 
-   xcb_connection_t *c = XGetXCBConnection(dpy);
-   xcb_generic_error_t *err;
-   xcb_glx_is_direct_reply_t *reply = xcb_glx_is_direct_reply(c,
-                                                              xcb_glx_is_direct
-                                                              (c, contextID),
-                                                              &err);
-
-   const Bool is_direct = (reply != NULL && reply->is_direct) ? True : False;
+   c = XGetXCBConnection(dpy);
+   reply = xcb_glx_is_direct_reply(c, xcb_glx_is_direct(c, contextID), &err);
+   is_direct = (reply != NULL && reply->is_direct) ? True : False;
 
    if (err != NULL) {
       __glXSendErrorForXcb(dpy, err);
@@ -602,7 +652,7 @@ __glXIsDirect(Display * dpy, GLXContextID contextID)
 
 /**
  * \todo
- * Shouldn't this function \b always return \c GL_FALSE when
+ * Shouldn't this function \b always return \c False when
  * \c GLX_DIRECT_RENDERING is not defined?  Do we really need to bother with
  * the GLX protocol here at all?
  */
@@ -612,13 +662,13 @@ glXIsDirect(Display * dpy, GLXContext gc_user)
    struct glx_context *gc = (struct glx_context *) gc_user;
 
    if (!gc) {
-      return GL_FALSE;
+      return False;
    }
    else if (gc->isDirect) {
-      return GL_TRUE;
+      return True;
    }
 #ifdef GLX_USE_APPLEGL  /* TODO: indirect on darwin */
-      return GL_FALSE;
+   return False;
 #else
    return __glXIsDirect(dpy, gc->xid);
 #endif
@@ -844,7 +894,7 @@ glXGetConfig(Display * dpy, XVisualInfo * vis, int attribute,
     ** supported by the OpenGL implementation on the server.
     */
    if ((status == GLX_BAD_VISUAL) && (attribute == GLX_USE_GL)) {
-      *value_return = GL_FALSE;
+      *value_return = False;
       status = Success;
    }
 
@@ -861,12 +911,17 @@ init_fbconfig_for_chooser(struct glx_config * config,
    config->visualID = (XID) GLX_DONT_CARE;
    config->visualType = GLX_DONT_CARE;
 
-   /* glXChooseFBConfig specifies different defaults for these two than
+   /* glXChooseFBConfig specifies different defaults for these properties than
     * glXChooseVisual.
     */
    if (fbconfig_style_tags) {
       config->rgbMode = GL_TRUE;
       config->doubleBufferMode = GLX_DONT_CARE;
+      /* allow any kind of drawable, including those for off-screen buffers */
+      config->drawableType = 0;
+   } else {
+       /* allow configs which support on-screen drawing */
+       config->drawableType = GLX_WINDOW_BIT;
    }
 
    config->visualRating = GLX_DONT_CARE;
@@ -877,9 +932,8 @@ init_fbconfig_for_chooser(struct glx_config * config,
    config->transparentAlpha = GLX_DONT_CARE;
    config->transparentIndex = GLX_DONT_CARE;
 
-   config->drawableType = GLX_WINDOW_BIT;
-   config->renderType =
-      (config->rgbMode) ? GLX_RGBA_BIT : GLX_COLOR_INDEX_BIT;
+   /* Set GLX_RENDER_TYPE property to not expect any flags by default. */
+   config->renderType = 0;
    config->xRenderable = GLX_DONT_CARE;
    config->fbconfigID = (GLXFBConfigID) (GLX_DONT_CARE);
 
@@ -1377,7 +1431,7 @@ glXImportContextEXT(Display *dpy, GLXContextID contextID)
    struct glx_config *mode;
    uint32_t fbconfigID = 0;
    uint32_t visualID = 0;
-   uint32_t screen;
+   uint32_t screen = 0;
    Bool got_screen = False;
 
    /* The GLX_EXT_import_context spec says:
@@ -1442,7 +1496,7 @@ glXImportContextEXT(Display *dpy, GLXContextID contextID)
    numProps = nPropListBytes / (2 * sizeof(propList[0]));
    share = None;
    mode = NULL;
-   renderType = 0;
+   renderType = GLX_RGBA_TYPE; /* By default, assume RGBA context */
    pProp = propList;
 
    for (i = 0, pProp = propList; i < numProps; i++, pProp += 2)

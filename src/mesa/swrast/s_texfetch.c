@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.7
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (c) 2009  VMware, Inc.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -97,10 +97,17 @@ static void
 fetch_compressed(const struct swrast_texture_image *swImage,
                  GLint i, GLint j, GLint k, GLfloat *texel)
 {
-   swImage->FetchCompressedTexel(swImage->Map,
-                                 swImage->ImageOffsets,
-                                 swImage->RowStride,
-                                 i, j, k, texel);
+   /* The FetchCompressedTexel function takes an integer pixel rowstride,
+    * while the image's rowstride is bytes per row of blocks.
+    */
+   GLuint bw, bh;
+   GLuint texelBytes = _mesa_get_format_bytes(swImage->Base.TexFormat);
+   _mesa_get_format_block_size(swImage->Base.TexFormat, &bw, &bh);
+   assert(swImage->RowStride * bw % texelBytes == 0);
+
+   swImage->FetchCompressedTexel(swImage->ImageSlices[k],
+                                 swImage->RowStride * bw / texelBytes,
+                                 i, j, texel);
 }
 
 
@@ -352,13 +359,13 @@ texfetch_funcs[] =
       fetch_texel_3d_f_r16
    },
    {
-      MESA_FORMAT_RG1616,
+      MESA_FORMAT_GR1616,
       fetch_texel_1d_f_rg1616,
       fetch_texel_2d_f_rg1616,
       fetch_texel_3d_f_rg1616
    },
    {
-      MESA_FORMAT_RG1616_REV,
+      MESA_FORMAT_RG1616,
       fetch_texel_1d_f_rg1616_rev,
       fetch_texel_2d_f_rg1616_rev,
       fetch_texel_3d_f_rg1616_rev
@@ -1185,6 +1192,96 @@ texfetch_funcs[] =
    },
    {
       MESA_FORMAT_ABGR2101010_UINT,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XRGB4444_UNORM,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XRGB1555_UNORM,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XBGR8888_SNORM,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XBGR8888_SRGB,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XBGR8888_UINT,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XBGR8888_SINT,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XRGB2101010_UNORM,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XBGR16161616_UNORM,
+      fetch_texel_1d_xbgr16161616_unorm,
+      fetch_texel_2d_xbgr16161616_unorm,
+      fetch_texel_3d_xbgr16161616_unorm
+   },
+   {
+      MESA_FORMAT_XBGR16161616_SNORM,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XBGR16161616_FLOAT,
+      fetch_texel_1d_xbgr16161616_float,
+      fetch_texel_2d_xbgr16161616_float,
+      fetch_texel_3d_xbgr16161616_float
+   },
+   {
+      MESA_FORMAT_XBGR16161616_UINT,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XBGR16161616_SINT,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XBGR32323232_FLOAT,
+      fetch_texel_1d_xbgr32323232_float,
+      fetch_texel_2d_xbgr32323232_float,
+      fetch_texel_3d_xbgr32323232_float
+   },
+   {
+      MESA_FORMAT_XBGR32323232_UINT,
+      NULL,
+      NULL,
+      NULL
+   },
+   {
+      MESA_FORMAT_XBGR32323232_SINT,
       NULL,
       NULL,
       NULL

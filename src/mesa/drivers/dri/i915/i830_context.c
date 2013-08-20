@@ -34,7 +34,6 @@
 #include "tnl/t_vertex.h"
 #include "tnl/t_context.h"
 #include "tnl/t_pipeline.h"
-#include "intel_span.h"
 #include "intel_tris.h"
 #include "../glsl/ralloc.h"
 
@@ -87,7 +86,6 @@ i830CreateContext(int api,
    _math_matrix_ctr(&intel->ViewportMatrix);
 
    /* Initialize swrast, tnl driver tables: */
-   intelInitSpanFuncs(ctx);
    intelInitTriFuncs(ctx);
 
    /* Install the customized pipeline: */
@@ -98,7 +96,7 @@ i830CreateContext(int api,
       FALLBACK(intel, INTEL_FALLBACK_USER, 1);
 
    intel->ctx.Const.MaxTextureUnits = I830_TEX_UNITS;
-   intel->ctx.Const.MaxTextureImageUnits = I830_TEX_UNITS;
+   intel->ctx.Const.FragmentProgram.MaxTextureImageUnits = I830_TEX_UNITS;
    intel->ctx.Const.MaxTextureCoordUnits = I830_TEX_UNITS;
 
    /* Advertise the full hardware capabilities.  The new memory
@@ -113,6 +111,7 @@ i830CreateContext(int api,
    ctx->Const.MaxTextureMaxAnisotropy = 2.0;
 
    ctx->Const.MaxDrawBuffers = 1;
+   ctx->Const.QueryCounterBits.SamplesPassed = 0;
 
    _tnl_init_vertices(ctx, ctx->Const.MaxArrayLockSize + 12,
                       18 * sizeof(GLfloat));

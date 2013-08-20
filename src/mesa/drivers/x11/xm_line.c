@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  6.5
  *
  * Copyright (C) 1999-2006  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -423,10 +423,10 @@ xor_line(struct gl_context *ctx, const SWvertex *vert0, const SWvertex *vert1)
                                               vert1->color[0], vert1->color[1],
                                               vert1->color[2], vert1->color[3],
                                               xmesa->pixelformat);
-   int x0 =            (GLint) vert0->attrib[FRAG_ATTRIB_WPOS][0];
-   int y0 = YFLIP(xrb, (GLint) vert0->attrib[FRAG_ATTRIB_WPOS][1]);
-   int x1 =            (GLint) vert1->attrib[FRAG_ATTRIB_WPOS][0];
-   int y1 = YFLIP(xrb, (GLint) vert1->attrib[FRAG_ATTRIB_WPOS][1]);
+   int x0 =            (GLint) vert0->attrib[VARYING_SLOT_POS][0];
+   int y0 = YFLIP(xrb, (GLint) vert0->attrib[VARYING_SLOT_POS][1]);
+   int x1 =            (GLint) vert1->attrib[VARYING_SLOT_POS][0];
+   int y1 = YFLIP(xrb, (GLint) vert1->attrib[VARYING_SLOT_POS][1]);
    XMesaSetForeground(dpy, gc, pixel);
    XMesaSetFunction(dpy, gc, GXxor);
    XSetLineAttributes(dpy, gc, (int) ctx->Line.Width,

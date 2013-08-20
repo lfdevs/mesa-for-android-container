@@ -109,10 +109,9 @@ static void brw_clip_project_vertex( struct brw_clip_compile *c,
 {
    struct brw_compile *p = &c->func;
    struct brw_reg tmp = get_tmp(c);
-   GLuint hpos_offset = brw_vert_result_to_offset(&c->vue_map,
-                                                  VERT_RESULT_HPOS);
-   GLuint ndc_offset = brw_vert_result_to_offset(&c->vue_map,
-                                                 BRW_VERT_RESULT_NDC);
+   GLuint hpos_offset = brw_varying_to_offset(&c->vue_map, VARYING_SLOT_POS);
+   GLuint ndc_offset = brw_varying_to_offset(&c->vue_map,
+                                             BRW_VARYING_SLOT_NDC);
 
    /* Fixup position.  Extract from the original vertex and re-project
     * to screen space:
@@ -152,23 +151,23 @@ void brw_clip_interp_vertex( struct brw_clip_compile *c,
    /* Iterate over each attribute (could be done in pairs?)
     */
    for (slot = 0; slot < c->vue_map.num_slots; slot++) {
-      int vert_result = c->vue_map.slot_to_vert_result[slot];
+      int varying = c->vue_map.slot_to_varying[slot];
       GLuint delta = brw_vue_slot_to_offset(slot);
 
-      if (vert_result == VERT_RESULT_EDGE) {
+      if (varying == VARYING_SLOT_EDGE) {
 	 if (force_edgeflag) 
 	    brw_MOV(p, deref_4f(dest_ptr, delta), brw_imm_f(1));
 	 else
 	    brw_MOV(p, deref_4f(dest_ptr, delta), deref_4f(v0_ptr, delta));
-      } else if (vert_result == VERT_RESULT_PSIZ ||
-                 vert_result == VERT_RESULT_CLIP_DIST0 ||
-                 vert_result == VERT_RESULT_CLIP_DIST1) {
+      } else if (varying == VARYING_SLOT_PSIZ ||
+                 varying == VARYING_SLOT_CLIP_DIST0 ||
+                 varying == VARYING_SLOT_CLIP_DIST1) {
 	 /* PSIZ doesn't need interpolation because it isn't used by the
           * fragment shader.  CLIP_DIST0 and CLIP_DIST1 don't need
           * intepolation because on pre-GEN6, these are just placeholder VUE
           * slots that don't perform any action.
           */
-      } else if (vert_result < VERT_RESULT_MAX) {
+      } else if (varying < VARYING_SLOT_MAX) {
 	 /* This is a true vertex result (and not a special value for the VUE
 	  * header), so interpolate:
 	  *
@@ -299,41 +298,41 @@ void brw_clip_copy_colors( struct brw_clip_compile *c,
 {
    struct brw_compile *p = &c->func;
 
-   if (brw_clip_have_vert_result(c, VERT_RESULT_COL0))
+   if (brw_clip_have_varying(c, VARYING_SLOT_COL0))
       brw_MOV(p, 
 	      byte_offset(c->reg.vertex[to],
-                          brw_vert_result_to_offset(&c->vue_map,
-                                                    VERT_RESULT_COL0)),
+                          brw_varying_to_offset(&c->vue_map,
+                                                VARYING_SLOT_COL0)),
 	      byte_offset(c->reg.vertex[from],
-                          brw_vert_result_to_offset(&c->vue_map,
-                                                    VERT_RESULT_COL0)));
+                          brw_varying_to_offset(&c->vue_map,
+                                                VARYING_SLOT_COL0)));
 
-   if (brw_clip_have_vert_result(c, VERT_RESULT_COL1))
+   if (brw_clip_have_varying(c, VARYING_SLOT_COL1))
       brw_MOV(p, 
 	      byte_offset(c->reg.vertex[to],
-                          brw_vert_result_to_offset(&c->vue_map,
-                                                    VERT_RESULT_COL1)),
+                          brw_varying_to_offset(&c->vue_map,
+                                                VARYING_SLOT_COL1)),
 	      byte_offset(c->reg.vertex[from],
-                          brw_vert_result_to_offset(&c->vue_map,
-                                                    VERT_RESULT_COL1)));
+                          brw_varying_to_offset(&c->vue_map,
+                                                VARYING_SLOT_COL1)));
 
-   if (brw_clip_have_vert_result(c, VERT_RESULT_BFC0))
+   if (brw_clip_have_varying(c, VARYING_SLOT_BFC0))
       brw_MOV(p, 
 	      byte_offset(c->reg.vertex[to],
-                          brw_vert_result_to_offset(&c->vue_map,
-                                                    VERT_RESULT_BFC0)),
+                          brw_varying_to_offset(&c->vue_map,
+                                                VARYING_SLOT_BFC0)),
 	      byte_offset(c->reg.vertex[from],
-                          brw_vert_result_to_offset(&c->vue_map,
-                                                    VERT_RESULT_BFC0)));
+                          brw_varying_to_offset(&c->vue_map,
+                                                VARYING_SLOT_BFC0)));
 
-   if (brw_clip_have_vert_result(c, VERT_RESULT_BFC1))
+   if (brw_clip_have_varying(c, VARYING_SLOT_BFC1))
       brw_MOV(p, 
 	      byte_offset(c->reg.vertex[to],
-                          brw_vert_result_to_offset(&c->vue_map,
-                                                    VERT_RESULT_BFC1)),
+                          brw_varying_to_offset(&c->vue_map,
+                                                VARYING_SLOT_BFC1)),
 	      byte_offset(c->reg.vertex[from],
-                          brw_vert_result_to_offset(&c->vue_map,
-                                                    VERT_RESULT_BFC1)));
+                          brw_varying_to_offset(&c->vue_map,
+                                                VARYING_SLOT_BFC1)));
 }
 
 
@@ -363,11 +362,10 @@ void brw_clip_init_clipmask( struct brw_clip_compile *c )
 
 void brw_clip_ff_sync(struct brw_clip_compile *c)
 {
-    struct intel_context *intel = &c->func.brw->intel;
+    struct brw_compile *p = &c->func;
+    struct brw_context *brw = p->brw;
 
-    if (intel->needs_ff_sync) {
-        struct brw_compile *p = &c->func;
-
+    if (brw->gen == 5) {
         brw_set_conditionalmod(p, BRW_CONDITIONAL_Z);
         brw_AND(p, brw_null_reg(), c->reg.ff_sync, brw_imm_ud(0x1));
         brw_IF(p, BRW_EXECUTE_1);
@@ -388,9 +386,9 @@ void brw_clip_ff_sync(struct brw_clip_compile *c)
 
 void brw_clip_init_ff_sync(struct brw_clip_compile *c)
 {
-    struct intel_context *intel = &c->func.brw->intel;
+    struct brw_context *brw = c->func.brw;
 
-    if (intel->needs_ff_sync) {
+    if (brw->gen == 5) {
 	struct brw_compile *p = &c->func;
         
         brw_MOV(p, c->reg.ff_sync, brw_imm_ud(0));

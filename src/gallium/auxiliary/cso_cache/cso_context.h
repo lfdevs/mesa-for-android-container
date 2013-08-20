@@ -170,7 +170,8 @@ void cso_save_stencil_ref(struct cso_context *cso);
 void cso_restore_stencil_ref(struct cso_context *cso);
 
 void cso_set_render_condition(struct cso_context *cso,
-                              struct pipe_query *query, uint mode);
+                              struct pipe_query *query,
+                              boolean condition, uint mode);
 void cso_save_render_condition(struct cso_context *cso);
 void cso_restore_render_condition(struct cso_context *cso);
 
@@ -202,6 +203,19 @@ cso_save_sampler_views(struct cso_context *cso, unsigned shader_stage);
 void
 cso_restore_sampler_views(struct cso_context *cso, unsigned shader_stage);
 
+
+/* constant buffers */
+
+void cso_set_constant_buffer(struct cso_context *cso, unsigned shader_stage,
+                             unsigned index, struct pipe_constant_buffer *cb);
+void cso_set_constant_buffer_resource(struct cso_context *cso,
+                                      unsigned shader_stage,
+                                      unsigned index,
+                                      struct pipe_resource *buffer);
+void cso_save_constant_buffer_slot0(struct cso_context *cso,
+                                    unsigned shader_stage);
+void cso_restore_constant_buffer_slot0(struct cso_context *cso,
+                                       unsigned shader_stage);
 
 
 /* drawing */

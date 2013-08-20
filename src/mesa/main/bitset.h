@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  6.5
  *
  * Copyright (C) 2006  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
@@ -42,8 +42,8 @@
 
 /* bitset declarations
  */
-#define BITSET_DECLARE(name, size) \
-   BITSET_WORD name[((size) + BITSET_WORDBITS - 1) / BITSET_WORDBITS]
+#define BITSET_WORDS(bits) (ALIGN(bits, BITSET_WORDBITS) / BITSET_WORDBITS)
+#define BITSET_DECLARE(name, bits) BITSET_WORD name[BITSET_WORDS(bits)]
 
 /* bitset operations
  */
@@ -95,66 +95,5 @@ __bitset_ffs(const BITSET_WORD *x, int n)
 }
 
 #define BITSET_FFS(x) __bitset_ffs(x, Elements(x))
-
-/****************************************************************************
- * 64-bit bitset implementation
- */
- 
-#define BITSET64_WORD GLuint
-#define BITSET64_WORDBITS (sizeof (BITSET64_WORD) * 8)
-
-/* bitset declarations
- */
-#define BITSET64_DECLARE(name, size) \
-   GLuint name[2]
-
-/* bitset operations
- */
-#define BITSET64_COPY(x, y) do { (x)[0] = (y)[0]; (x)[1] = (y)[1]; } while (0)
-#define BITSET64_EQUAL(x, y) ( (x)[0] == (y)[0] && (x)[1] == (y)[1] )
-#define BITSET64_ZERO(x) do { (x)[0] = 0; (x)[1] = 0; } while (0)
-#define BITSET64_ONES(x) do { (x)[0] = 0xFF; (x)[1] = 0xFF; } while (0)
-
-#define BITSET64_BITWORD(b) ((b) / BITSET64_WORDBITS)
-#define BITSET64_BIT(b) (1 << ((b) % BITSET64_WORDBITS))
-
-/* single bit operations
- */
-#define BITSET64_TEST(x, b) ((x)[BITSET64_BITWORD(b)] & BITSET64_BIT(b))
-#define BITSET64_SET(x, b) ((x)[BITSET64_BITWORD(b)] |= BITSET64_BIT(b))
-#define BITSET64_CLEAR(x, b) ((x)[BITSET64_BITWORD(b)] &= ~BITSET64_BIT(b))
-
-#define BITSET64_MASK(b) ((b) == BITSET64_WORDBITS ? ~0 : BITSET64_BIT(b) - 1)
-#define BITSET64_RANGE(b, e) (BITSET64_MASK((e) + 1) & ~BITSET64_MASK(b))
-
-/* bit range operations
- */
-#define BITSET64_TEST_SUBRANGE(x, b, e) \
-   (BITSET64_BITWORD(b) == BITSET64_BITWORD(e) ? \
-   ((x)[BITSET64_BITWORD(b)] & BITSET64_RANGE(b, e)) : \
-   (assert (!"BITSET64_TEST_RANGE: bit range crosses word boundary"), 0))
-#define BITSET64_TEST_RANGE(x, b, e) \
-   (BITSET64_BITWORD(b) == BITSET64_BITWORD(e) ? \
-   (BITSET64_TEST_SUBRANGE(x, b, e)) : \
-   (BITSET64_TEST_SUBRANGE(x, b, BITSET64_WORDBITS - 1) | \
-    BITSET64_TEST_SUBRANGE(x, BITSET64_WORDBITS, e)))
-#define BITSET64_SET_SUBRANGE(x, b, e) \
-   (BITSET64_BITWORD(b) == BITSET64_BITWORD(e) ? \
-   ((x)[BITSET64_BITWORD(b)] |= BITSET64_RANGE(b, e)) : \
-   (assert (!"BITSET64_SET_RANGE: bit range crosses word boundary"), 0))
-#define BITSET64_SET_RANGE(x, b, e) \
-   (BITSET64_BITWORD(b) == BITSET64_BITWORD(e) ? \
-   (BITSET64_SET_SUBRANGE(x, b, e)) : \
-   (BITSET64_SET_SUBRANGE(x, b, BITSET64_WORDBITS - 1) | \
-    BITSET64_SET_SUBRANGE(x, BITSET64_WORDBITS, e)))
-#define BITSET64_CLEAR_SUBRANGE(x, b, e) \
-   (BITSET64_BITWORD(b) == BITSET64_BITWORD(e) ? \
-   ((x)[BITSET64_BITWORD(b)] &= ~BITSET64_RANGE(b, e)) : \
-   (assert (!"BITSET64_CLEAR_RANGE: bit range crosses word boundary"), 0))
-#define BITSET64_CLEAR_RANGE(x, b, e) \
-   (BITSET64_BITWORD(b) == BITSET64_BITWORD(e) ? \
-   (BITSET64_CLEAR_SUBRANGE(x, b, e)) : \
-   (BITSET64_CLEAR_SUBRANGE(x, b, BITSET64_WORDBITS - 1) | \
-    BITSET64_CLEAR_SUBRANGE(x, BITSET64_WORDBITS, e)))
 
 #endif

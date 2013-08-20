@@ -81,6 +81,10 @@ static void llvmpipe_destroy( struct pipe_context *pipe )
       pipe_sampler_view_reference(&llvmpipe->sampler_views[PIPE_SHADER_VERTEX][i], NULL);
    }
 
+   for (i = 0; i < Elements(llvmpipe->sampler_views[0]); i++) {
+      pipe_sampler_view_reference(&llvmpipe->sampler_views[PIPE_SHADER_GEOMETRY][i], NULL);
+   }
+
    for (i = 0; i < Elements(llvmpipe->constants); i++) {
       for (j = 0; j < Elements(llvmpipe->constants[i]); j++) {
          pipe_resource_reference(&llvmpipe->constants[i][j].buffer, NULL);
@@ -99,7 +103,7 @@ static void llvmpipe_destroy( struct pipe_context *pipe )
 static void
 do_flush( struct pipe_context *pipe,
           struct pipe_fence_handle **fence,
-          enum pipe_flush_flags flags)
+          unsigned flags)
 {
    llvmpipe_flush(pipe, fence, __FUNCTION__);
 }
@@ -108,12 +112,14 @@ do_flush( struct pipe_context *pipe,
 static void
 llvmpipe_render_condition ( struct pipe_context *pipe,
                             struct pipe_query *query,
+                            boolean condition,
                             uint mode )
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
 
    llvmpipe->render_cond_query = query;
    llvmpipe->render_cond_mode = mode;
+   llvmpipe->render_cond_cond = condition;
 }
 
 struct pipe_context *

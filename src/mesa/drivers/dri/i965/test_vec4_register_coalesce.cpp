@@ -35,29 +35,77 @@ class register_coalesce_test : public ::testing::Test {
 
 public:
    struct brw_context *brw;
-   struct intel_context *intel;
    struct gl_context *ctx;
    struct gl_shader_program *shader_prog;
-   struct brw_vs_compile *c;
+   struct brw_vertex_program *vp;
    vec4_visitor *v;
 };
+
+
+class register_coalesce_vec4_visitor : public vec4_visitor
+{
+public:
+   register_coalesce_vec4_visitor(struct brw_context *brw,
+                                  struct gl_shader_program *shader_prog)
+      : vec4_visitor(brw, NULL, NULL, NULL, NULL, shader_prog, NULL, NULL,
+                     false)
+   {
+   }
+
+protected:
+   virtual dst_reg *make_reg_for_system_value(ir_variable *ir)
+   {
+      assert(!"Not reached");
+      return NULL;
+   }
+
+   virtual int setup_attributes(int payload_reg)
+   {
+      assert(!"Not reached");
+      return 0;
+   }
+
+   virtual void emit_prolog()
+   {
+      assert(!"Not reached");
+   }
+
+   virtual void emit_program_code()
+   {
+      assert(!"Not reached");
+   }
+
+   virtual void emit_thread_end()
+   {
+      assert(!"Not reached");
+   }
+
+   virtual void emit_urb_write_header(int mrf)
+   {
+      assert(!"Not reached");
+   }
+
+   virtual vec4_instruction *emit_urb_write_opcode(bool complete)
+   {
+      assert(!"Not reached");
+   }
+};
+
 
 void register_coalesce_test::SetUp()
 {
    brw = (struct brw_context *)calloc(1, sizeof(*brw));
-   intel = &brw->intel;
-   ctx = &intel->ctx;
+   ctx = &brw->ctx;
 
-   c = ralloc(NULL, struct brw_vs_compile);
-   c->vp = ralloc(NULL, struct brw_vertex_program);
+   vp = ralloc(NULL, struct brw_vertex_program);
 
    shader_prog = ralloc(NULL, struct gl_shader_program);
 
-   v = new vec4_visitor(brw, c, shader_prog, NULL, NULL);
+   v = new register_coalesce_vec4_visitor(brw, shader_prog);
 
-   _mesa_init_vertex_program(ctx, &c->vp->program, GL_VERTEX_SHADER, 0);
+   _mesa_init_vertex_program(ctx, &vp->program, GL_VERTEX_SHADER, 0);
 
-   intel->gen = 4;
+   brw->gen = 4;
 }
 
 static void

@@ -66,6 +66,7 @@ libGLESv2.so.2 libgles2-mesa #MINVER# | libgles2
  glDetachShader@Base 7.8.1
  glDisable@Base 7.8.1
  glDisableVertexAttribArray@Base 7.8.1
+ glDiscardFramebufferEXT@Base 9.2~0
  glDrawArrays@Base 7.8.1
  glDrawArraysInstanced@Base 9.1~
  glDrawBuffers@Base 9.1~

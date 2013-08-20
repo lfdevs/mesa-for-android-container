@@ -148,9 +148,22 @@ struct _mesa_glsl_parse_state {
    unsigned uniform_block_array_size;
    struct gl_uniform_block *uniform_blocks;
 
+   unsigned num_supported_versions;
+   struct {
+      unsigned ver;
+      bool es;
+   } supported_versions[12];
+
    bool es_shader;
    unsigned language_version;
    enum _mesa_glsl_parser_targets target;
+
+   /**
+    * Number of nested struct_specifier levels
+    *
+    * Outside a struct_specifer, this is zero.
+    */
+   unsigned struct_specifier_depth;
 
    /**
     * Default uniform layout qualifiers tracked during parsing.
@@ -274,6 +287,16 @@ struct _mesa_glsl_parse_state {
    bool ARB_texture_cube_map_array_warn;
    bool ARB_shading_language_packing_enable;
    bool ARB_shading_language_packing_warn;
+   bool ARB_texture_multisample_enable;
+   bool ARB_texture_multisample_warn;
+   bool ARB_texture_query_lod_enable;
+   bool ARB_texture_query_lod_warn;
+   bool ARB_gpu_shader5_enable;
+   bool ARB_gpu_shader5_warn;
+   bool AMD_vertex_shader_layer_enable;
+   bool AMD_vertex_shader_layer_warn;
+   bool ARB_shading_language_420pack_enable;
+   bool ARB_shading_language_420pack_warn;
    /*@}*/
 
    /** Extensions supported by the OpenGL implementation. */
@@ -321,8 +344,8 @@ extern void _mesa_glsl_lexer_ctor(struct _mesa_glsl_parse_state *state,
 extern void _mesa_glsl_lexer_dtor(struct _mesa_glsl_parse_state *state);
 
 union YYSTYPE;
-extern int _mesa_glsl_lex(union YYSTYPE *yylval, YYLTYPE *yylloc, 
-			  void *scanner);
+extern int _mesa_glsl_lexer_lex(union YYSTYPE *yylval, YYLTYPE *yylloc,
+                                void *scanner);
 
 extern int _mesa_glsl_parse(struct _mesa_glsl_parse_state *);
 
@@ -354,6 +377,9 @@ _mesa_glsl_shader_target_name(enum _mesa_glsl_parser_targets target);
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+extern const char *
+_mesa_glsl_shader_target_name(GLenum type);
 
 extern int glcpp_preprocess(void *ctx, const char **shader, char **info_log,
                       const struct gl_extensions *extensions, struct gl_context *gl_ctx);

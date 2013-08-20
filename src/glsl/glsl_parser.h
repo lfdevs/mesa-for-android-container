@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 2.7.12-4996.  */
+/* A Bison parser, made by GNU Bison 2.6.1.  */
 
 /* Bison interface for Yacc-like parsers in C
    
-      Copyright (C) 1984, 1989-1990, 2000-2013 Free Software Foundation, Inc.
+      Copyright (C) 1984, 1989-1990, 2000-2012 Free Software Foundation, Inc.
    
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -30,8 +30,8 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-#ifndef YY__MESA_GLSL_SRC_GLSL_GLSL_PARSER_H_INCLUDED
-# define YY__MESA_GLSL_SRC_GLSL_GLSL_PARSER_H_INCLUDED
+#ifndef _MESA_GLSL_SRC_GLSL_GLSL_PARSER_H
+# define _MESA_GLSL_SRC_GLSL_GLSL_PARSER_H
 /* Enabling traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -127,111 +127,111 @@ extern int _mesa_glsl_debug;
      SAMPLERBUFFER = 336,
      ISAMPLERBUFFER = 337,
      USAMPLERBUFFER = 338,
-     SAMPLEREXTERNALOES = 339,
-     STRUCT = 340,
-     VOID_TOK = 341,
-     WHILE = 342,
-     IDENTIFIER = 343,
-     TYPE_IDENTIFIER = 344,
-     NEW_IDENTIFIER = 345,
-     FLOATCONSTANT = 346,
-     INTCONSTANT = 347,
-     UINTCONSTANT = 348,
-     BOOLCONSTANT = 349,
-     FIELD_SELECTION = 350,
-     LEFT_OP = 351,
-     RIGHT_OP = 352,
-     INC_OP = 353,
-     DEC_OP = 354,
-     LE_OP = 355,
-     GE_OP = 356,
-     EQ_OP = 357,
-     NE_OP = 358,
-     AND_OP = 359,
-     OR_OP = 360,
-     XOR_OP = 361,
-     MUL_ASSIGN = 362,
-     DIV_ASSIGN = 363,
-     ADD_ASSIGN = 364,
-     MOD_ASSIGN = 365,
-     LEFT_ASSIGN = 366,
-     RIGHT_ASSIGN = 367,
-     AND_ASSIGN = 368,
-     XOR_ASSIGN = 369,
-     OR_ASSIGN = 370,
-     SUB_ASSIGN = 371,
-     INVARIANT = 372,
-     LOWP = 373,
-     MEDIUMP = 374,
-     HIGHP = 375,
-     SUPERP = 376,
-     PRECISION = 377,
-     VERSION_TOK = 378,
-     EXTENSION = 379,
-     LINE = 380,
-     COLON = 381,
-     EOL = 382,
-     INTERFACE = 383,
-     OUTPUT = 384,
-     PRAGMA_DEBUG_ON = 385,
-     PRAGMA_DEBUG_OFF = 386,
-     PRAGMA_OPTIMIZE_ON = 387,
-     PRAGMA_OPTIMIZE_OFF = 388,
-     PRAGMA_INVARIANT_ALL = 389,
-     LAYOUT_TOK = 390,
-     ASM = 391,
-     CLASS = 392,
-     UNION = 393,
-     ENUM = 394,
-     TYPEDEF = 395,
-     TEMPLATE = 396,
-     THIS = 397,
-     PACKED_TOK = 398,
-     GOTO = 399,
-     INLINE_TOK = 400,
-     NOINLINE = 401,
-     VOLATILE = 402,
-     PUBLIC_TOK = 403,
-     STATIC = 404,
-     EXTERN = 405,
-     EXTERNAL = 406,
-     LONG_TOK = 407,
-     SHORT_TOK = 408,
-     DOUBLE_TOK = 409,
-     HALF = 410,
-     FIXED_TOK = 411,
-     UNSIGNED = 412,
-     INPUT_TOK = 413,
-     OUPTUT = 414,
-     HVEC2 = 415,
-     HVEC3 = 416,
-     HVEC4 = 417,
-     DVEC2 = 418,
-     DVEC3 = 419,
-     DVEC4 = 420,
-     FVEC2 = 421,
-     FVEC3 = 422,
-     FVEC4 = 423,
-     SAMPLER3DRECT = 424,
-     SIZEOF = 425,
-     CAST = 426,
-     NAMESPACE = 427,
-     USING = 428,
-     COHERENT = 429,
-     RESTRICT = 430,
-     READONLY = 431,
-     WRITEONLY = 432,
-     RESOURCE = 433,
-     ATOMIC_UINT = 434,
-     PATCH = 435,
-     SAMPLE = 436,
-     SUBROUTINE = 437,
-     SAMPLER2DMS = 438,
-     ISAMPLER2DMS = 439,
-     USAMPLER2DMS = 440,
-     SAMPLER2DMSARRAY = 441,
-     ISAMPLER2DMSARRAY = 442,
-     USAMPLER2DMSARRAY = 443,
+     SAMPLER2DMS = 339,
+     ISAMPLER2DMS = 340,
+     USAMPLER2DMS = 341,
+     SAMPLER2DMSARRAY = 342,
+     ISAMPLER2DMSARRAY = 343,
+     USAMPLER2DMSARRAY = 344,
+     SAMPLEREXTERNALOES = 345,
+     STRUCT = 346,
+     VOID_TOK = 347,
+     WHILE = 348,
+     IDENTIFIER = 349,
+     TYPE_IDENTIFIER = 350,
+     NEW_IDENTIFIER = 351,
+     FLOATCONSTANT = 352,
+     INTCONSTANT = 353,
+     UINTCONSTANT = 354,
+     BOOLCONSTANT = 355,
+     FIELD_SELECTION = 356,
+     LEFT_OP = 357,
+     RIGHT_OP = 358,
+     INC_OP = 359,
+     DEC_OP = 360,
+     LE_OP = 361,
+     GE_OP = 362,
+     EQ_OP = 363,
+     NE_OP = 364,
+     AND_OP = 365,
+     OR_OP = 366,
+     XOR_OP = 367,
+     MUL_ASSIGN = 368,
+     DIV_ASSIGN = 369,
+     ADD_ASSIGN = 370,
+     MOD_ASSIGN = 371,
+     LEFT_ASSIGN = 372,
+     RIGHT_ASSIGN = 373,
+     AND_ASSIGN = 374,
+     XOR_ASSIGN = 375,
+     OR_ASSIGN = 376,
+     SUB_ASSIGN = 377,
+     INVARIANT = 378,
+     LOWP = 379,
+     MEDIUMP = 380,
+     HIGHP = 381,
+     SUPERP = 382,
+     PRECISION = 383,
+     VERSION_TOK = 384,
+     EXTENSION = 385,
+     LINE = 386,
+     COLON = 387,
+     EOL = 388,
+     INTERFACE = 389,
+     OUTPUT = 390,
+     PRAGMA_DEBUG_ON = 391,
+     PRAGMA_DEBUG_OFF = 392,
+     PRAGMA_OPTIMIZE_ON = 393,
+     PRAGMA_OPTIMIZE_OFF = 394,
+     PRAGMA_INVARIANT_ALL = 395,
+     LAYOUT_TOK = 396,
+     ASM = 397,
+     CLASS = 398,
+     UNION = 399,
+     ENUM = 400,
+     TYPEDEF = 401,
+     TEMPLATE = 402,
+     THIS = 403,
+     PACKED_TOK = 404,
+     GOTO = 405,
+     INLINE_TOK = 406,
+     NOINLINE = 407,
+     VOLATILE = 408,
+     PUBLIC_TOK = 409,
+     STATIC = 410,
+     EXTERN = 411,
+     EXTERNAL = 412,
+     LONG_TOK = 413,
+     SHORT_TOK = 414,
+     DOUBLE_TOK = 415,
+     HALF = 416,
+     FIXED_TOK = 417,
+     UNSIGNED = 418,
+     INPUT_TOK = 419,
+     OUPTUT = 420,
+     HVEC2 = 421,
+     HVEC3 = 422,
+     HVEC4 = 423,
+     DVEC2 = 424,
+     DVEC3 = 425,
+     DVEC4 = 426,
+     FVEC2 = 427,
+     FVEC3 = 428,
+     FVEC4 = 429,
+     SAMPLER3DRECT = 430,
+     SIZEOF = 431,
+     CAST = 432,
+     NAMESPACE = 433,
+     USING = 434,
+     COHERENT = 435,
+     RESTRICT = 436,
+     READONLY = 437,
+     WRITEONLY = 438,
+     RESOURCE = 439,
+     ATOMIC_UINT = 440,
+     PATCH = 441,
+     SAMPLE = 442,
+     SUBROUTINE = 443,
      ERROR_TOK = 444,
      COMMON = 445,
      PARTITION = 446,
@@ -262,7 +262,8 @@ extern int _mesa_glsl_debug;
      UIMAGEBUFFER = 471,
      IMAGE1DARRAYSHADOW = 472,
      IMAGE2DARRAYSHADOW = 473,
-     ROW_MAJOR = 474
+     ROW_MAJOR = 474,
+     THEN = 475
    };
 #endif
 
@@ -270,8 +271,8 @@ extern int _mesa_glsl_debug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
 {
-/* Line 2053 of yacc.c  */
-#line 59 "glsl_parser.yy"
+/* Line 2049 of yacc.c  */
+#line 65 "glsl_parser.yy"
 
    int n;
    float real;
@@ -295,7 +296,7 @@ typedef union YYSTYPE
    ast_case_label_list *case_label_list;
    ast_case_statement *case_statement;
    ast_case_statement_list *case_statement_list;
-   ast_uniform_block *uniform_block;
+   ast_interface_block *interface_block;
 
    struct {
       ast_node *cond;
@@ -308,8 +309,8 @@ typedef union YYSTYPE
    } selection_rest_statement;
 
 
-/* Line 2053 of yacc.c  */
-#line 313 "../../src/glsl/glsl_parser.h"
+/* Line 2049 of yacc.c  */
+#line 314 "../../src/glsl/glsl_parser.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
@@ -344,4 +345,4 @@ int _mesa_glsl_parse ();
 #endif
 #endif /* ! YYPARSE_PARAM */
 
-#endif /* !YY__MESA_GLSL_SRC_GLSL_GLSL_PARSER_H_INCLUDED  */
+#endif /* !_MESA_GLSL_SRC_GLSL_GLSL_PARSER_H  */

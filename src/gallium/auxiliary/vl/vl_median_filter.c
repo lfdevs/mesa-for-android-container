@@ -254,7 +254,8 @@ vl_median_filter_init(struct vl_median_filter *filter, struct pipe_context *pipe
    filter->pipe = pipe;
 
    memset(&rs_state, 0, sizeof(rs_state));
-   rs_state.gl_rasterization_rules = true;
+   rs_state.half_pixel_center = true;
+   rs_state.bottom_edge_rule = true;
    rs_state.depth_clip = 1;
    filter->rs_state = pipe->create_rasterizer_state(pipe, &rs_state);
    if (!filter->rs_state)
@@ -389,7 +390,7 @@ vl_median_filter_render(struct vl_median_filter *filter,
    filter->pipe->bind_vs_state(filter->pipe, filter->vs);
    filter->pipe->bind_fs_state(filter->pipe, filter->fs);
    filter->pipe->set_framebuffer_state(filter->pipe, &fb_state);
-   filter->pipe->set_viewport_state(filter->pipe, &viewport);
+   filter->pipe->set_viewport_states(filter->pipe, 0, 1, &viewport);
    filter->pipe->set_vertex_buffers(filter->pipe, 0, 1, &filter->quad);
    filter->pipe->bind_vertex_elements_state(filter->pipe, filter->ves);
 

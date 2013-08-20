@@ -77,13 +77,13 @@
 #define _3DPRIM_LINESTRIP_CONT_BF 0x14
 #define _3DPRIM_TRIFAN_NOSTIPPLE  0x15
 
-#define BRW_ANISORATIO_2     0 
-#define BRW_ANISORATIO_4     1 
-#define BRW_ANISORATIO_6     2 
-#define BRW_ANISORATIO_8     3 
-#define BRW_ANISORATIO_10    4 
-#define BRW_ANISORATIO_12    5 
-#define BRW_ANISORATIO_14    6 
+#define BRW_ANISORATIO_2     0
+#define BRW_ANISORATIO_4     1
+#define BRW_ANISORATIO_6     2
+#define BRW_ANISORATIO_8     3
+#define BRW_ANISORATIO_10    4
+#define BRW_ANISORATIO_12    5
+#define BRW_ANISORATIO_14    6
 #define BRW_ANISORATIO_16    7
 
 #define BRW_BLENDFACTOR_ONE                 0x1
@@ -188,14 +188,14 @@
 #define BRW_LOGICOPFUNCTION_COPY             12
 #define BRW_LOGICOPFUNCTION_OR_REVERSE       13
 #define BRW_LOGICOPFUNCTION_OR               14
-#define BRW_LOGICOPFUNCTION_SET              15  
+#define BRW_LOGICOPFUNCTION_SET              15
 
-#define BRW_MAPFILTER_NEAREST        0x0 
-#define BRW_MAPFILTER_LINEAR         0x1 
+#define BRW_MAPFILTER_NEAREST        0x0
+#define BRW_MAPFILTER_LINEAR         0x1
 #define BRW_MAPFILTER_ANISOTROPIC    0x2
 
-#define BRW_MIPFILTER_NONE        0   
-#define BRW_MIPFILTER_NEAREST     1   
+#define BRW_MIPFILTER_NONE        0
+#define BRW_MIPFILTER_NEAREST     1
 #define BRW_MIPFILTER_LINEAR      3
 
 #define BRW_ADDRESS_ROUNDING_ENABLE_U_MAG	0x20
@@ -208,7 +208,7 @@
 #define BRW_POLYGON_FRONT_FACING     0
 #define BRW_POLYGON_BACK_FACING      1
 
-#define BRW_PREFILTER_ALWAYS     0x0 
+#define BRW_PREFILTER_ALWAYS     0x0
 #define BRW_PREFILTER_NEVER      0x1
 #define BRW_PREFILTER_LESS       0x2
 #define BRW_PREFILTER_EQUAL      0x3
@@ -218,10 +218,10 @@
 #define BRW_PREFILTER_GEQUAL     0x7
 
 #define BRW_PROVOKING_VERTEX_0    0
-#define BRW_PROVOKING_VERTEX_1    1 
+#define BRW_PROVOKING_VERTEX_1    1
 #define BRW_PROVOKING_VERTEX_2    2
 
-#define BRW_RASTRULE_UPPER_LEFT  0    
+#define BRW_RASTRULE_UPPER_LEFT  0
 #define BRW_RASTRULE_UPPER_RIGHT 1
 /* These are listed as "Reserved, but not seen as useful"
  * in Intel documentation (page 212, "Point Rasterization Rule",
@@ -229,7 +229,7 @@
  * "Intel® 965 Express Chipset Family and Intel® G35 Express
  * Chipset Graphics Controller Programmer's Reference Manual,
  * Volume 2: 3D/Media", Revision 1.0b as of January 2008,
- * available at 
+ * available at
  *     http://intellinuxgraphics.org/documentation.html
  * at the time of this writing).
  *
@@ -267,88 +267,90 @@
 #define BRW_SURFACE_WRITEDISABLE_R_SHIFT	16
 #define BRW_SURFACE_WRITEDISABLE_A_SHIFT	17
 
-#define BRW_SURFACEFORMAT_R32G32B32A32_FLOAT             0x000 
-#define BRW_SURFACEFORMAT_R32G32B32A32_SINT              0x001 
-#define BRW_SURFACEFORMAT_R32G32B32A32_UINT              0x002 
-#define BRW_SURFACEFORMAT_R32G32B32A32_UNORM             0x003 
-#define BRW_SURFACEFORMAT_R32G32B32A32_SNORM             0x004 
-#define BRW_SURFACEFORMAT_R64G64_FLOAT                   0x005 
-#define BRW_SURFACEFORMAT_R32G32B32X32_FLOAT             0x006 
+#define BRW_SURFACEFORMAT_R32G32B32A32_FLOAT             0x000
+#define BRW_SURFACEFORMAT_R32G32B32A32_SINT              0x001
+#define BRW_SURFACEFORMAT_R32G32B32A32_UINT              0x002
+#define BRW_SURFACEFORMAT_R32G32B32A32_UNORM             0x003
+#define BRW_SURFACEFORMAT_R32G32B32A32_SNORM             0x004
+#define BRW_SURFACEFORMAT_R64G64_FLOAT                   0x005
+#define BRW_SURFACEFORMAT_R32G32B32X32_FLOAT             0x006
 #define BRW_SURFACEFORMAT_R32G32B32A32_SSCALED           0x007
 #define BRW_SURFACEFORMAT_R32G32B32A32_USCALED           0x008
 #define BRW_SURFACEFORMAT_R32G32B32A32_SFIXED            0x020
-#define BRW_SURFACEFORMAT_R32G32B32_FLOAT                0x040 
-#define BRW_SURFACEFORMAT_R32G32B32_SINT                 0x041 
-#define BRW_SURFACEFORMAT_R32G32B32_UINT                 0x042 
-#define BRW_SURFACEFORMAT_R32G32B32_UNORM                0x043 
-#define BRW_SURFACEFORMAT_R32G32B32_SNORM                0x044 
-#define BRW_SURFACEFORMAT_R32G32B32_SSCALED              0x045 
-#define BRW_SURFACEFORMAT_R32G32B32_USCALED              0x046 
+#define BRW_SURFACEFORMAT_R64G64_PASSTHRU                0x021
+#define BRW_SURFACEFORMAT_R32G32B32_FLOAT                0x040
+#define BRW_SURFACEFORMAT_R32G32B32_SINT                 0x041
+#define BRW_SURFACEFORMAT_R32G32B32_UINT                 0x042
+#define BRW_SURFACEFORMAT_R32G32B32_UNORM                0x043
+#define BRW_SURFACEFORMAT_R32G32B32_SNORM                0x044
+#define BRW_SURFACEFORMAT_R32G32B32_SSCALED              0x045
+#define BRW_SURFACEFORMAT_R32G32B32_USCALED              0x046
 #define BRW_SURFACEFORMAT_R32G32B32_SFIXED               0x050
-#define BRW_SURFACEFORMAT_R16G16B16A16_UNORM             0x080 
-#define BRW_SURFACEFORMAT_R16G16B16A16_SNORM             0x081 
-#define BRW_SURFACEFORMAT_R16G16B16A16_SINT              0x082 
-#define BRW_SURFACEFORMAT_R16G16B16A16_UINT              0x083 
-#define BRW_SURFACEFORMAT_R16G16B16A16_FLOAT             0x084 
-#define BRW_SURFACEFORMAT_R32G32_FLOAT                   0x085 
-#define BRW_SURFACEFORMAT_R32G32_SINT                    0x086 
-#define BRW_SURFACEFORMAT_R32G32_UINT                    0x087 
-#define BRW_SURFACEFORMAT_R32_FLOAT_X8X24_TYPELESS       0x088 
-#define BRW_SURFACEFORMAT_X32_TYPELESS_G8X24_UINT        0x089 
-#define BRW_SURFACEFORMAT_L32A32_FLOAT                   0x08A 
-#define BRW_SURFACEFORMAT_R32G32_UNORM                   0x08B 
-#define BRW_SURFACEFORMAT_R32G32_SNORM                   0x08C 
-#define BRW_SURFACEFORMAT_R64_FLOAT                      0x08D 
-#define BRW_SURFACEFORMAT_R16G16B16X16_UNORM             0x08E 
-#define BRW_SURFACEFORMAT_R16G16B16X16_FLOAT             0x08F 
-#define BRW_SURFACEFORMAT_A32X32_FLOAT                   0x090 
-#define BRW_SURFACEFORMAT_L32X32_FLOAT                   0x091 
-#define BRW_SURFACEFORMAT_I32X32_FLOAT                   0x092 
+#define BRW_SURFACEFORMAT_R16G16B16A16_UNORM             0x080
+#define BRW_SURFACEFORMAT_R16G16B16A16_SNORM             0x081
+#define BRW_SURFACEFORMAT_R16G16B16A16_SINT              0x082
+#define BRW_SURFACEFORMAT_R16G16B16A16_UINT              0x083
+#define BRW_SURFACEFORMAT_R16G16B16A16_FLOAT             0x084
+#define BRW_SURFACEFORMAT_R32G32_FLOAT                   0x085
+#define BRW_SURFACEFORMAT_R32G32_SINT                    0x086
+#define BRW_SURFACEFORMAT_R32G32_UINT                    0x087
+#define BRW_SURFACEFORMAT_R32_FLOAT_X8X24_TYPELESS       0x088
+#define BRW_SURFACEFORMAT_X32_TYPELESS_G8X24_UINT        0x089
+#define BRW_SURFACEFORMAT_L32A32_FLOAT                   0x08A
+#define BRW_SURFACEFORMAT_R32G32_UNORM                   0x08B
+#define BRW_SURFACEFORMAT_R32G32_SNORM                   0x08C
+#define BRW_SURFACEFORMAT_R64_FLOAT                      0x08D
+#define BRW_SURFACEFORMAT_R16G16B16X16_UNORM             0x08E
+#define BRW_SURFACEFORMAT_R16G16B16X16_FLOAT             0x08F
+#define BRW_SURFACEFORMAT_A32X32_FLOAT                   0x090
+#define BRW_SURFACEFORMAT_L32X32_FLOAT                   0x091
+#define BRW_SURFACEFORMAT_I32X32_FLOAT                   0x092
 #define BRW_SURFACEFORMAT_R16G16B16A16_SSCALED           0x093
 #define BRW_SURFACEFORMAT_R16G16B16A16_USCALED           0x094
 #define BRW_SURFACEFORMAT_R32G32_SSCALED                 0x095
 #define BRW_SURFACEFORMAT_R32G32_USCALED                 0x096
 #define BRW_SURFACEFORMAT_R32G32_SFIXED                  0x0A0
-#define BRW_SURFACEFORMAT_B8G8R8A8_UNORM                 0x0C0 
-#define BRW_SURFACEFORMAT_B8G8R8A8_UNORM_SRGB            0x0C1 
-#define BRW_SURFACEFORMAT_R10G10B10A2_UNORM              0x0C2 
-#define BRW_SURFACEFORMAT_R10G10B10A2_UNORM_SRGB         0x0C3 
-#define BRW_SURFACEFORMAT_R10G10B10A2_UINT               0x0C4 
-#define BRW_SURFACEFORMAT_R10G10B10_SNORM_A2_UNORM       0x0C5 
-#define BRW_SURFACEFORMAT_R8G8B8A8_UNORM                 0x0C7 
-#define BRW_SURFACEFORMAT_R8G8B8A8_UNORM_SRGB            0x0C8 
-#define BRW_SURFACEFORMAT_R8G8B8A8_SNORM                 0x0C9 
-#define BRW_SURFACEFORMAT_R8G8B8A8_SINT                  0x0CA 
-#define BRW_SURFACEFORMAT_R8G8B8A8_UINT                  0x0CB 
-#define BRW_SURFACEFORMAT_R16G16_UNORM                   0x0CC 
-#define BRW_SURFACEFORMAT_R16G16_SNORM                   0x0CD 
-#define BRW_SURFACEFORMAT_R16G16_SINT                    0x0CE 
-#define BRW_SURFACEFORMAT_R16G16_UINT                    0x0CF 
-#define BRW_SURFACEFORMAT_R16G16_FLOAT                   0x0D0 
-#define BRW_SURFACEFORMAT_B10G10R10A2_UNORM              0x0D1 
-#define BRW_SURFACEFORMAT_B10G10R10A2_UNORM_SRGB         0x0D2 
-#define BRW_SURFACEFORMAT_R11G11B10_FLOAT                0x0D3 
-#define BRW_SURFACEFORMAT_R32_SINT                       0x0D6 
-#define BRW_SURFACEFORMAT_R32_UINT                       0x0D7 
-#define BRW_SURFACEFORMAT_R32_FLOAT                      0x0D8 
-#define BRW_SURFACEFORMAT_R24_UNORM_X8_TYPELESS          0x0D9 
-#define BRW_SURFACEFORMAT_X24_TYPELESS_G8_UINT           0x0DA 
-#define BRW_SURFACEFORMAT_L16A16_UNORM                   0x0DF 
-#define BRW_SURFACEFORMAT_I24X8_UNORM                    0x0E0 
-#define BRW_SURFACEFORMAT_L24X8_UNORM                    0x0E1 
-#define BRW_SURFACEFORMAT_A24X8_UNORM                    0x0E2 
-#define BRW_SURFACEFORMAT_I32_FLOAT                      0x0E3 
-#define BRW_SURFACEFORMAT_L32_FLOAT                      0x0E4 
-#define BRW_SURFACEFORMAT_A32_FLOAT                      0x0E5 
-#define BRW_SURFACEFORMAT_B8G8R8X8_UNORM                 0x0E9 
-#define BRW_SURFACEFORMAT_B8G8R8X8_UNORM_SRGB            0x0EA 
-#define BRW_SURFACEFORMAT_R8G8B8X8_UNORM                 0x0EB 
-#define BRW_SURFACEFORMAT_R8G8B8X8_UNORM_SRGB            0x0EC 
-#define BRW_SURFACEFORMAT_R9G9B9E5_SHAREDEXP             0x0ED 
-#define BRW_SURFACEFORMAT_B10G10R10X2_UNORM              0x0EE 
-#define BRW_SURFACEFORMAT_L16A16_FLOAT                   0x0F0 
-#define BRW_SURFACEFORMAT_R32_UNORM                      0x0F1 
-#define BRW_SURFACEFORMAT_R32_SNORM                      0x0F2 
+#define BRW_SURFACEFORMAT_R64_PASSTHRU                   0x0A1
+#define BRW_SURFACEFORMAT_B8G8R8A8_UNORM                 0x0C0
+#define BRW_SURFACEFORMAT_B8G8R8A8_UNORM_SRGB            0x0C1
+#define BRW_SURFACEFORMAT_R10G10B10A2_UNORM              0x0C2
+#define BRW_SURFACEFORMAT_R10G10B10A2_UNORM_SRGB         0x0C3
+#define BRW_SURFACEFORMAT_R10G10B10A2_UINT               0x0C4
+#define BRW_SURFACEFORMAT_R10G10B10_SNORM_A2_UNORM       0x0C5
+#define BRW_SURFACEFORMAT_R8G8B8A8_UNORM                 0x0C7
+#define BRW_SURFACEFORMAT_R8G8B8A8_UNORM_SRGB            0x0C8
+#define BRW_SURFACEFORMAT_R8G8B8A8_SNORM                 0x0C9
+#define BRW_SURFACEFORMAT_R8G8B8A8_SINT                  0x0CA
+#define BRW_SURFACEFORMAT_R8G8B8A8_UINT                  0x0CB
+#define BRW_SURFACEFORMAT_R16G16_UNORM                   0x0CC
+#define BRW_SURFACEFORMAT_R16G16_SNORM                   0x0CD
+#define BRW_SURFACEFORMAT_R16G16_SINT                    0x0CE
+#define BRW_SURFACEFORMAT_R16G16_UINT                    0x0CF
+#define BRW_SURFACEFORMAT_R16G16_FLOAT                   0x0D0
+#define BRW_SURFACEFORMAT_B10G10R10A2_UNORM              0x0D1
+#define BRW_SURFACEFORMAT_B10G10R10A2_UNORM_SRGB         0x0D2
+#define BRW_SURFACEFORMAT_R11G11B10_FLOAT                0x0D3
+#define BRW_SURFACEFORMAT_R32_SINT                       0x0D6
+#define BRW_SURFACEFORMAT_R32_UINT                       0x0D7
+#define BRW_SURFACEFORMAT_R32_FLOAT                      0x0D8
+#define BRW_SURFACEFORMAT_R24_UNORM_X8_TYPELESS          0x0D9
+#define BRW_SURFACEFORMAT_X24_TYPELESS_G8_UINT           0x0DA
+#define BRW_SURFACEFORMAT_L16A16_UNORM                   0x0DF
+#define BRW_SURFACEFORMAT_I24X8_UNORM                    0x0E0
+#define BRW_SURFACEFORMAT_L24X8_UNORM                    0x0E1
+#define BRW_SURFACEFORMAT_A24X8_UNORM                    0x0E2
+#define BRW_SURFACEFORMAT_I32_FLOAT                      0x0E3
+#define BRW_SURFACEFORMAT_L32_FLOAT                      0x0E4
+#define BRW_SURFACEFORMAT_A32_FLOAT                      0x0E5
+#define BRW_SURFACEFORMAT_B8G8R8X8_UNORM                 0x0E9
+#define BRW_SURFACEFORMAT_B8G8R8X8_UNORM_SRGB            0x0EA
+#define BRW_SURFACEFORMAT_R8G8B8X8_UNORM                 0x0EB
+#define BRW_SURFACEFORMAT_R8G8B8X8_UNORM_SRGB            0x0EC
+#define BRW_SURFACEFORMAT_R9G9B9E5_SHAREDEXP             0x0ED
+#define BRW_SURFACEFORMAT_B10G10R10X2_UNORM              0x0EE
+#define BRW_SURFACEFORMAT_L16A16_FLOAT                   0x0F0
+#define BRW_SURFACEFORMAT_R32_UNORM                      0x0F1
+#define BRW_SURFACEFORMAT_R32_SNORM                      0x0F2
 #define BRW_SURFACEFORMAT_R10G10B10X2_USCALED            0x0F3
 #define BRW_SURFACEFORMAT_R8G8B8A8_SSCALED               0x0F4
 #define BRW_SURFACEFORMAT_R8G8B8A8_USCALED               0x0F5
@@ -356,25 +358,27 @@
 #define BRW_SURFACEFORMAT_R16G16_USCALED                 0x0F7
 #define BRW_SURFACEFORMAT_R32_SSCALED                    0x0F8
 #define BRW_SURFACEFORMAT_R32_USCALED                    0x0F9
-#define BRW_SURFACEFORMAT_B5G6R5_UNORM                   0x100 
-#define BRW_SURFACEFORMAT_B5G6R5_UNORM_SRGB              0x101 
-#define BRW_SURFACEFORMAT_B5G5R5A1_UNORM                 0x102 
-#define BRW_SURFACEFORMAT_B5G5R5A1_UNORM_SRGB            0x103 
-#define BRW_SURFACEFORMAT_B4G4R4A4_UNORM                 0x104 
-#define BRW_SURFACEFORMAT_B4G4R4A4_UNORM_SRGB            0x105 
-#define BRW_SURFACEFORMAT_R8G8_UNORM                     0x106 
-#define BRW_SURFACEFORMAT_R8G8_SNORM                     0x107 
-#define BRW_SURFACEFORMAT_R8G8_SINT                      0x108 
-#define BRW_SURFACEFORMAT_R8G8_UINT                      0x109 
-#define BRW_SURFACEFORMAT_R16_UNORM                      0x10A 
-#define BRW_SURFACEFORMAT_R16_SNORM                      0x10B 
-#define BRW_SURFACEFORMAT_R16_SINT                       0x10C 
-#define BRW_SURFACEFORMAT_R16_UINT                       0x10D 
-#define BRW_SURFACEFORMAT_R16_FLOAT                      0x10E 
-#define BRW_SURFACEFORMAT_I16_UNORM                      0x111 
-#define BRW_SURFACEFORMAT_L16_UNORM                      0x112 
-#define BRW_SURFACEFORMAT_A16_UNORM                      0x113 
-#define BRW_SURFACEFORMAT_L8A8_UNORM                     0x114 
+#define BRW_SURFACEFORMAT_B5G6R5_UNORM                   0x100
+#define BRW_SURFACEFORMAT_B5G6R5_UNORM_SRGB              0x101
+#define BRW_SURFACEFORMAT_B5G5R5A1_UNORM                 0x102
+#define BRW_SURFACEFORMAT_B5G5R5A1_UNORM_SRGB            0x103
+#define BRW_SURFACEFORMAT_B4G4R4A4_UNORM                 0x104
+#define BRW_SURFACEFORMAT_B4G4R4A4_UNORM_SRGB            0x105
+#define BRW_SURFACEFORMAT_R8G8_UNORM                     0x106
+#define BRW_SURFACEFORMAT_R8G8_SNORM                     0x107
+#define BRW_SURFACEFORMAT_R8G8_SINT                      0x108
+#define BRW_SURFACEFORMAT_R8G8_UINT                      0x109
+#define BRW_SURFACEFORMAT_R16_UNORM                      0x10A
+#define BRW_SURFACEFORMAT_R16_SNORM                      0x10B
+#define BRW_SURFACEFORMAT_R16_SINT                       0x10C
+#define BRW_SURFACEFORMAT_R16_UINT                       0x10D
+#define BRW_SURFACEFORMAT_R16_FLOAT                      0x10E
+#define BRW_SURFACEFORMAT_A8P8_UNORM_PALETTE0            0x10F
+#define BRW_SURFACEFORMAT_A8P8_UNORM_PALETTE1            0x110
+#define BRW_SURFACEFORMAT_I16_UNORM                      0x111
+#define BRW_SURFACEFORMAT_L16_UNORM                      0x112
+#define BRW_SURFACEFORMAT_A16_UNORM                      0x113
+#define BRW_SURFACEFORMAT_L8A8_UNORM                     0x114
 #define BRW_SURFACEFORMAT_I16_FLOAT                      0x115
 #define BRW_SURFACEFORMAT_L16_FLOAT                      0x116
 #define BRW_SURFACEFORMAT_A16_FLOAT                      0x117
@@ -386,47 +390,80 @@
 #define BRW_SURFACEFORMAT_R8G8_USCALED                   0x11D
 #define BRW_SURFACEFORMAT_R16_SSCALED                    0x11E
 #define BRW_SURFACEFORMAT_R16_USCALED                    0x11F
-#define BRW_SURFACEFORMAT_R8_UNORM                       0x140 
-#define BRW_SURFACEFORMAT_R8_SNORM                       0x141 
-#define BRW_SURFACEFORMAT_R8_SINT                        0x142 
-#define BRW_SURFACEFORMAT_R8_UINT                        0x143 
-#define BRW_SURFACEFORMAT_A8_UNORM                       0x144 
-#define BRW_SURFACEFORMAT_I8_UNORM                       0x145 
-#define BRW_SURFACEFORMAT_L8_UNORM                       0x146 
-#define BRW_SURFACEFORMAT_P4A4_UNORM                     0x147 
+#define BRW_SURFACEFORMAT_P8A8_UNORM_PALETTE0            0x122
+#define BRW_SURFACEFORMAT_P8A8_UNORM_PALETTE1            0x123
+#define BRW_SURFACEFORMAT_A1B5G5R5_UNORM                 0x124
+#define BRW_SURFACEFORMAT_A4B4G4R4_UNORM                 0x125
+#define BRW_SURFACEFORMAT_L8A8_UINT                      0x126
+#define BRW_SURFACEFORMAT_L8A8_SINT                      0x127
+#define BRW_SURFACEFORMAT_R8_UNORM                       0x140
+#define BRW_SURFACEFORMAT_R8_SNORM                       0x141
+#define BRW_SURFACEFORMAT_R8_SINT                        0x142
+#define BRW_SURFACEFORMAT_R8_UINT                        0x143
+#define BRW_SURFACEFORMAT_A8_UNORM                       0x144
+#define BRW_SURFACEFORMAT_I8_UNORM                       0x145
+#define BRW_SURFACEFORMAT_L8_UNORM                       0x146
+#define BRW_SURFACEFORMAT_P4A4_UNORM                     0x147
 #define BRW_SURFACEFORMAT_A4P4_UNORM                     0x148
 #define BRW_SURFACEFORMAT_R8_SSCALED                     0x149
 #define BRW_SURFACEFORMAT_R8_USCALED                     0x14A
+#define BRW_SURFACEFORMAT_P8_UNORM_PALETTE0              0x14B
 #define BRW_SURFACEFORMAT_L8_UNORM_SRGB                  0x14C
+#define BRW_SURFACEFORMAT_P8_UNORM_PALETTE1              0x14D
+#define BRW_SURFACEFORMAT_P4A4_UNORM_PALETTE1            0x14E
+#define BRW_SURFACEFORMAT_A4P4_UNORM_PALETTE1            0x14F
+#define BRW_SURFACEFORMAT_Y8_SNORM                       0x150
+#define BRW_SURFACEFORMAT_L8_UINT                        0x152
+#define BRW_SURFACEFORMAT_L8_SINT                        0x153
+#define BRW_SURFACEFORMAT_I8_UINT                        0x154
+#define BRW_SURFACEFORMAT_I8_SINT                        0x155
 #define BRW_SURFACEFORMAT_DXT1_RGB_SRGB                  0x180
-#define BRW_SURFACEFORMAT_R1_UINT                        0x181 
-#define BRW_SURFACEFORMAT_YCRCB_NORMAL                   0x182 
-#define BRW_SURFACEFORMAT_YCRCB_SWAPUVY                  0x183 
-#define BRW_SURFACEFORMAT_BC1_UNORM                      0x186 
-#define BRW_SURFACEFORMAT_BC2_UNORM                      0x187 
-#define BRW_SURFACEFORMAT_BC3_UNORM                      0x188 
-#define BRW_SURFACEFORMAT_BC4_UNORM                      0x189 
-#define BRW_SURFACEFORMAT_BC5_UNORM                      0x18A 
-#define BRW_SURFACEFORMAT_BC1_UNORM_SRGB                 0x18B 
-#define BRW_SURFACEFORMAT_BC2_UNORM_SRGB                 0x18C 
-#define BRW_SURFACEFORMAT_BC3_UNORM_SRGB                 0x18D 
-#define BRW_SURFACEFORMAT_MONO8                          0x18E 
-#define BRW_SURFACEFORMAT_YCRCB_SWAPUV                   0x18F 
-#define BRW_SURFACEFORMAT_YCRCB_SWAPY                    0x190 
-#define BRW_SURFACEFORMAT_DXT1_RGB                       0x191 
-#define BRW_SURFACEFORMAT_FXT1                           0x192 
-#define BRW_SURFACEFORMAT_R8G8B8_UNORM                   0x193 
-#define BRW_SURFACEFORMAT_R8G8B8_SNORM                   0x194 
-#define BRW_SURFACEFORMAT_R8G8B8_SSCALED                 0x195 
-#define BRW_SURFACEFORMAT_R8G8B8_USCALED                 0x196 
-#define BRW_SURFACEFORMAT_R64G64B64A64_FLOAT             0x197 
-#define BRW_SURFACEFORMAT_R64G64B64_FLOAT                0x198 
-#define BRW_SURFACEFORMAT_BC4_SNORM                      0x199 
-#define BRW_SURFACEFORMAT_BC5_SNORM                      0x19A 
-#define BRW_SURFACEFORMAT_R16G16B16_UNORM                0x19C 
-#define BRW_SURFACEFORMAT_R16G16B16_SNORM                0x19D 
-#define BRW_SURFACEFORMAT_R16G16B16_SSCALED              0x19E 
+#define BRW_SURFACEFORMAT_R1_UINT                        0x181
+#define BRW_SURFACEFORMAT_YCRCB_NORMAL                   0x182
+#define BRW_SURFACEFORMAT_YCRCB_SWAPUVY                  0x183
+#define BRW_SURFACEFORMAT_P2_UNORM_PALETTE0              0x184
+#define BRW_SURFACEFORMAT_P2_UNORM_PALETTE1              0x185
+#define BRW_SURFACEFORMAT_BC1_UNORM                      0x186
+#define BRW_SURFACEFORMAT_BC2_UNORM                      0x187
+#define BRW_SURFACEFORMAT_BC3_UNORM                      0x188
+#define BRW_SURFACEFORMAT_BC4_UNORM                      0x189
+#define BRW_SURFACEFORMAT_BC5_UNORM                      0x18A
+#define BRW_SURFACEFORMAT_BC1_UNORM_SRGB                 0x18B
+#define BRW_SURFACEFORMAT_BC2_UNORM_SRGB                 0x18C
+#define BRW_SURFACEFORMAT_BC3_UNORM_SRGB                 0x18D
+#define BRW_SURFACEFORMAT_MONO8                          0x18E
+#define BRW_SURFACEFORMAT_YCRCB_SWAPUV                   0x18F
+#define BRW_SURFACEFORMAT_YCRCB_SWAPY                    0x190
+#define BRW_SURFACEFORMAT_DXT1_RGB                       0x191
+#define BRW_SURFACEFORMAT_FXT1                           0x192
+#define BRW_SURFACEFORMAT_R8G8B8_UNORM                   0x193
+#define BRW_SURFACEFORMAT_R8G8B8_SNORM                   0x194
+#define BRW_SURFACEFORMAT_R8G8B8_SSCALED                 0x195
+#define BRW_SURFACEFORMAT_R8G8B8_USCALED                 0x196
+#define BRW_SURFACEFORMAT_R64G64B64A64_FLOAT             0x197
+#define BRW_SURFACEFORMAT_R64G64B64_FLOAT                0x198
+#define BRW_SURFACEFORMAT_BC4_SNORM                      0x199
+#define BRW_SURFACEFORMAT_BC5_SNORM                      0x19A
+#define BRW_SURFACEFORMAT_R16G16B16_FLOAT                0x19B
+#define BRW_SURFACEFORMAT_R16G16B16_UNORM                0x19C
+#define BRW_SURFACEFORMAT_R16G16B16_SNORM                0x19D
+#define BRW_SURFACEFORMAT_R16G16B16_SSCALED              0x19E
 #define BRW_SURFACEFORMAT_R16G16B16_USCALED              0x19F
+#define BRW_SURFACEFORMAT_BC6H_SF16                      0x1A1
+#define BRW_SURFACEFORMAT_BC7_UNORM                      0x1A2
+#define BRW_SURFACEFORMAT_BC7_UNORM_SRGB                 0x1A3
+#define BRW_SURFACEFORMAT_BC6H_UF16                      0x1A4
+#define BRW_SURFACEFORMAT_PLANAR_420_8                   0x1A5
+#define BRW_SURFACEFORMAT_R8G8B8_UNORM_SRGB              0x1A8
+#define BRW_SURFACEFORMAT_ETC1_RGB8                      0x1A9
+#define BRW_SURFACEFORMAT_ETC2_RGB8                      0x1AA
+#define BRW_SURFACEFORMAT_EAC_R11                        0x1AB
+#define BRW_SURFACEFORMAT_EAC_RG11                       0x1AC
+#define BRW_SURFACEFORMAT_EAC_SIGNED_R11                 0x1AD
+#define BRW_SURFACEFORMAT_EAC_SIGNED_RG11                0x1AE
+#define BRW_SURFACEFORMAT_ETC2_SRGB8                     0x1AF
+#define BRW_SURFACEFORMAT_R16G16B16_UINT                 0x1B0
+#define BRW_SURFACEFORMAT_R16G16B16_SINT                 0x1B1
 #define BRW_SURFACEFORMAT_R32_SFIXED                     0x1B2
 #define BRW_SURFACEFORMAT_R10G10B10A2_SNORM              0x1B3
 #define BRW_SURFACEFORMAT_R10G10B10A2_USCALED            0x1B4
@@ -437,6 +474,14 @@
 #define BRW_SURFACEFORMAT_B10G10R10A2_SSCALED            0x1B9
 #define BRW_SURFACEFORMAT_B10G10R10A2_UINT               0x1BA
 #define BRW_SURFACEFORMAT_B10G10R10A2_SINT               0x1BB
+#define BRW_SURFACEFORMAT_R64G64B64A64_PASSTHRU          0x1BC
+#define BRW_SURFACEFORMAT_R64G64B64_PASSTHRU             0x1BD
+#define BRW_SURFACEFORMAT_ETC2_RGB8_PTA                  0x1C0
+#define BRW_SURFACEFORMAT_ETC2_SRGB8_PTA                 0x1C1
+#define BRW_SURFACEFORMAT_ETC2_EAC_RGBA8                 0x1C2
+#define BRW_SURFACEFORMAT_ETC2_EAC_SRGB8_A8              0x1C3
+#define BRW_SURFACEFORMAT_R8G8B8_UINT                    0x1C8
+#define BRW_SURFACEFORMAT_R8G8B8_SINT                    0x1C9
 #define BRW_SURFACEFORMAT_RAW                            0x1FF
 #define BRW_SURFACE_FORMAT_SHIFT	18
 #define BRW_SURFACE_FORMAT_MASK		INTEL_MASK(26, 18)
@@ -494,6 +539,8 @@
 #define GEN7_SURFACE_MULTISAMPLECOUNT_8         (3 << 3)
 #define GEN7_SURFACE_MSFMT_MSS                  (0 << 6)
 #define GEN7_SURFACE_MSFMT_DEPTH_STENCIL        (1 << 6)
+#define GEN7_SURFACE_MIN_ARRAY_ELEMENT_SHIFT	18
+#define GEN7_SURFACE_RENDER_TARGET_VIEW_EXTENT_SHIFT	7
 
 /* Surface state DW5 */
 #define BRW_SURFACE_X_OFFSET_SHIFT		25
@@ -504,12 +551,16 @@
 #define GEN7_SURFACE_MIN_LOD_SHIFT              4
 #define GEN7_SURFACE_MIN_LOD_MASK               INTEL_MASK(7, 4)
 
+#define GEN7_SURFACE_MOCS_SHIFT                 16
+#define GEN7_SURFACE_MOCS_MASK                  INTEL_MASK(19, 16)
+
 /* Surface state DW6 */
 #define GEN7_SURFACE_MCS_ENABLE                 (1 << 0)
 #define GEN7_SURFACE_MCS_PITCH_SHIFT            3
 #define GEN7_SURFACE_MCS_PITCH_MASK             INTEL_MASK(11, 3)
 
 /* Surface state DW7 */
+#define GEN7_SURFACE_CLEAR_COLOR_SHIFT		28
 #define GEN7_SURFACE_SCS_R_SHIFT                25
 #define GEN7_SURFACE_SCS_R_MASK                 INTEL_MASK(27, 25)
 #define GEN7_SURFACE_SCS_G_SHIFT                22
@@ -647,6 +698,10 @@ enum opcode {
    BRW_OPCODE_CMPN =	17,
    BRW_OPCODE_F32TO16 = 19,
    BRW_OPCODE_F16TO32 = 20,
+   BRW_OPCODE_BFREV =	23,
+   BRW_OPCODE_BFE =	24,
+   BRW_OPCODE_BFI1 =	25,
+   BRW_OPCODE_BFI2 =	26,
    BRW_OPCODE_JMPI =	32,
    BRW_OPCODE_IF =	34,
    BRW_OPCODE_IFF =	35,
@@ -676,6 +731,9 @@ enum opcode {
    BRW_OPCODE_MAC =	72,
    BRW_OPCODE_MACH =	73,
    BRW_OPCODE_LZD =	74,
+   BRW_OPCODE_FBH =	75,
+   BRW_OPCODE_FBL =	76,
+   BRW_OPCODE_CBIT =	77,
    BRW_OPCODE_SAD2 =	80,
    BRW_OPCODE_SADA2 =	81,
    BRW_OPCODE_DP4 =	84,
@@ -686,6 +744,7 @@ enum opcode {
    BRW_OPCODE_LINE =	89,
    BRW_OPCODE_PLN =	90,
    BRW_OPCODE_MAD =	91,
+   BRW_OPCODE_LRP =	92,
    BRW_OPCODE_NOP =	126,
 
    /* These are compiler backend opcodes that get translated into other
@@ -709,6 +768,8 @@ enum opcode {
    SHADER_OPCODE_TXL,
    SHADER_OPCODE_TXS,
    FS_OPCODE_TXB,
+   SHADER_OPCODE_TXF_MS,
+   SHADER_OPCODE_LOD,
 
    SHADER_OPCODE_SHADER_TIME_ADD,
 
@@ -726,15 +787,17 @@ enum opcode {
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7,
    FS_OPCODE_MOV_DISPATCH_TO_FLAGS,
    FS_OPCODE_DISCARD_JUMP,
-   FS_OPCODE_SET_GLOBAL_OFFSET,
+   FS_OPCODE_SET_SIMD4X2_OFFSET,
    FS_OPCODE_PACK_HALF_2x16_SPLIT,
    FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X,
    FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y,
+   FS_OPCODE_PLACEHOLDER_HALT,
 
    VS_OPCODE_URB_WRITE,
    VS_OPCODE_SCRATCH_READ,
    VS_OPCODE_SCRATCH_WRITE,
    VS_OPCODE_PULL_CONSTANT_LOAD,
+   VS_OPCODE_PULL_CONSTANT_LOAD_GEN7,
 };
 
 #define BRW_PREDICATE_NONE             0
@@ -772,9 +835,20 @@ enum opcode {
 #define BRW_REGISTER_TYPE_V   6	/* packed int vector, immediates only, uword dest only */
 #define BRW_REGISTER_TYPE_F   7
 
+/* SNB adds 3-src instructions (MAD and LRP) that only operate on floats, so
+ * the types were implied. IVB adds BFE and BFI2 that operate on doublewords
+ * and unsigned doublewords, so a new field is also available in the da3src
+ * struct (part of struct brw_instruction.bits1 in brw_structs.h) to select
+ * dst and shared-src types. The values are different from BRW_REGISTER_TYPE_*.
+ */
+#define BRW_3SRC_TYPE_F  0
+#define BRW_3SRC_TYPE_D  1
+#define BRW_3SRC_TYPE_UD 2
+#define BRW_3SRC_TYPE_DF 3
+
 #define BRW_ARF_NULL                  0x00
 #define BRW_ARF_ADDRESS               0x10
-#define BRW_ARF_ACCUMULATOR           0x20   
+#define BRW_ARF_ACCUMULATOR           0x20
 #define BRW_ARF_FLAG                  0x30
 #define BRW_ARF_MASK                  0x40
 #define BRW_ARF_MASK_STACK            0x50
@@ -840,8 +914,7 @@ enum opcode {
  * In particular, see the following tables:
  * - G45 PRM, Volume 4, Table 14-15 "Message Descriptor Definition"
  * - Sandybridge PRM, Volume 4 Part 2, Table 8-16 "Extended Message Descriptor"
- * - BSpec, Volume 1a (GPU Overview) / Graphics Processing Engine (GPE) /
- *   Overview / GPE Function IDs
+ * - Ivybridge PRM, Volume 1 Part 1, section 3.2.7 "GPE Function IDs"
  */
 enum brw_message_target {
    BRW_SFID_NULL                     = 0,
@@ -894,6 +967,7 @@ enum brw_message_target {
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_BIAS_COMPARE 5
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_LOD_COMPARE  6
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_LD           7
+#define GEN5_SAMPLER_MESSAGE_LOD                 9
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_RESINFO      10
 #define HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE 20
 #define GEN7_SAMPLER_MESSAGE_SAMPLE_LD_MCS       29
@@ -1028,10 +1102,9 @@ enum brw_message_target {
 #define BRW_MATH_FUNCTION_EXP                              3
 #define BRW_MATH_FUNCTION_SQRT                             4
 #define BRW_MATH_FUNCTION_RSQ                              5
-#define BRW_MATH_FUNCTION_SIN                              6 /* was 7 */
-#define BRW_MATH_FUNCTION_COS                              7 /* was 8 */
-#define BRW_MATH_FUNCTION_SINCOS                           8 /* was 6 */
-#define BRW_MATH_FUNCTION_TAN                              9 /* gen4 */
+#define BRW_MATH_FUNCTION_SIN                              6
+#define BRW_MATH_FUNCTION_COS                              7
+#define BRW_MATH_FUNCTION_SINCOS                           8 /* gen4, gen5 */
 #define BRW_MATH_FUNCTION_FDIV                             9 /* gen6+ */
 #define BRW_MATH_FUNCTION_POW                              10
 #define BRW_MATH_FUNCTION_INT_DIV_QUOTIENT_AND_REMAINDER   11
@@ -1545,7 +1618,9 @@ enum brw_wm_barycentric_interp_mode {
 # define GEN7_PS_PUSH_CONSTANT_ENABLE		        (1 << 11)
 # define GEN7_PS_ATTRIBUTE_ENABLE		        (1 << 10)
 # define GEN7_PS_OMASK_TO_RENDER_TARGET			(1 << 9)
+# define GEN7_PS_RENDER_TARGET_FAST_CLEAR_ENABLE	(1 << 8)
 # define GEN7_PS_DUAL_SOURCE_BLEND_ENABLE		(1 << 7)
+# define GEN7_PS_RENDER_TARGET_RESOLVE_ENABLE		(1 << 6)
 # define GEN7_PS_POSOFFSET_NONE				(0 << 3)
 # define GEN7_PS_POSOFFSET_CENTROID			(2 << 3)
 # define GEN7_PS_POSOFFSET_SAMPLE			(3 << 3)
@@ -1654,6 +1729,32 @@ enum brw_wm_barycentric_interp_mode {
  * pointer of type SURFTYPE_BUFFER
  */
 #define BRW_MAX_NUM_BUFFER_ENTRIES	(1 << 27)
+
+/* Memory Object Control State:
+ * Specifying zero for L3 means "uncached in L3", at least on Haswell
+ * and Baytrail, since there are no PTE flags for setting L3 cacheability.
+ * On Ivybridge, the PTEs do have a cache-in-L3 bit, so setting MOCS to 0
+ * may still respect that.
+ */
+#define GEN7_MOCS_L3                    1
+
+/* Ivybridge only: cache in LLC.
+ * Specifying zero here means to use the PTE values set by the kernel;
+ * non-zero overrides the PTE values.
+ */
+#define IVB_MOCS_LLC                    (1 << 1)
+
+/* Baytrail only: snoop in CPU cache */
+#define BYT_MOCS_SNOOP                  (1 << 1)
+
+/* Haswell only: LLC/eLLC controls (write-back or uncached).
+ * Specifying zero here means to use the PTE values set by the kernel,
+ * which is useful since it offers additional control (write-through
+ * cacheing and age).  Non-zero overrides the PTE values.
+ */
+#define HSW_MOCS_UC_LLC_UC_ELLC         (1 << 1)
+#define HSW_MOCS_WB_LLC_WB_ELLC         (2 << 1)
+#define HSW_MOCS_UC_LLC_WB_ELLC         (3 << 1)
 
 #include "intel_chipset.h"
 

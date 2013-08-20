@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.11
  *
  * Copyright (C) 2011 Benjamin Franzke <benjaminfranzke@googlemail.com>
  *
@@ -29,7 +28,7 @@
 #include "wayland-drm.h"
 
 void
-egl_g3d_wl_drm_helper_reference_buffer(void *user_data, uint32_t name,
+egl_g3d_wl_drm_helper_reference_buffer(void *user_data, uint32_t name, int fd,
                                        struct wl_drm_buffer *buffer);
 
 void

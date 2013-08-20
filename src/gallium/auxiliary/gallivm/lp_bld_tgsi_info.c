@@ -96,6 +96,11 @@ is_immediate(const struct lp_tgsi_channel_info *chan_info, float value)
 }
 
 
+/**
+ * Analyse properties of tex instructions, in particular used
+ * to figure out if a texture is considered indirect.
+ * Not actually used by much except the tgsi dumping code.
+ */
 static void
 analyse_tex(struct analysis_context *ctx,
             const struct tgsi_full_instruction *inst,
@@ -140,14 +145,76 @@ analyse_tex(struct analysis_context *ctx,
       if (modifier == LP_BLD_TEX_MODIFIER_EXPLICIT_DERIV) {
          /* We don't track explicit derivatives, although we could */
          indirect = TRUE;
-         tex_info->unit = inst->Src[3].Register.Index;
+         tex_info->sampler_unit = inst->Src[3].Register.Index;
+         tex_info->texture_unit = inst->Src[3].Register.Index;
       }  else {
          if (modifier == LP_BLD_TEX_MODIFIER_PROJECTED ||
              modifier == LP_BLD_TEX_MODIFIER_LOD_BIAS ||
              modifier == LP_BLD_TEX_MODIFIER_EXPLICIT_LOD) {
             readmask |= TGSI_WRITEMASK_W;
          }
-         tex_info->unit = inst->Src[1].Register.Index;
+         tex_info->sampler_unit = inst->Src[1].Register.Index;
+         tex_info->texture_unit = inst->Src[1].Register.Index;
+      }
+
+      for (chan = 0; chan < 4; ++chan) {
+         struct lp_tgsi_channel_info *chan_info = &tex_info->coord[chan];
+         if (readmask & (1 << chan)) {
+            analyse_src(ctx, chan_info, &inst->Src[0].Register, chan);
+            if (chan_info->file != TGSI_FILE_INPUT) {
+               indirect = TRUE;
+            }
+         } else {
+            memset(chan_info, 0, sizeof *chan_info);
+         }
+      }
+
+      if (indirect) {
+         info->indirect_textures = TRUE;
+      }
+
+      ++info->num_texs;
+   } else {
+      info->indirect_textures = TRUE;
+   }
+}
+
+
+/**
+ * Analyse properties of sample instructions, in particular used
+ * to figure out if a texture is considered indirect.
+ * Not actually used by much except the tgsi dumping code.
+ */
+static void
+analyse_sample(struct analysis_context *ctx,
+               const struct tgsi_full_instruction *inst,
+               enum lp_build_tex_modifier modifier,
+               boolean shadow)
+{
+   struct lp_tgsi_info *info = ctx->info;
+   unsigned chan;
+
+   if (info->num_texs < Elements(info->tex)) {
+      struct lp_tgsi_texture_info *tex_info = &info->tex[info->num_texs];
+      boolean indirect = FALSE;
+      boolean shadow = FALSE;
+      unsigned readmask;
+
+      /*
+       * We don't really get much information here, in particular not
+       * the target info, hence no useful writemask neither. Maybe should just
+       * forget the whole function.
+       */
+      readmask = TGSI_WRITEMASK_XYZW;
+
+      tex_info->texture_unit = inst->Src[1].Register.Index;
+      tex_info->sampler_unit = inst->Src[2].Register.Index;
+
+      if (modifier == LP_BLD_TEX_MODIFIER_EXPLICIT_DERIV ||
+          modifier == LP_BLD_TEX_MODIFIER_EXPLICIT_LOD ||
+          modifier == LP_BLD_TEX_MODIFIER_LOD_BIAS || shadow) {
+         /* We don't track insts with additional regs, although we could */
+         indirect = TRUE;
       }
 
       for (chan = 0; chan < 4; ++chan) {
@@ -229,6 +296,24 @@ analyse_instruction(struct analysis_context *ctx,
       case TGSI_OPCODE_TXP:
          analyse_tex(ctx, inst, LP_BLD_TEX_MODIFIER_PROJECTED);
          break;
+      case TGSI_OPCODE_SAMPLE:
+         analyse_sample(ctx, inst, LP_BLD_TEX_MODIFIER_NONE, FALSE);
+         break;
+      case TGSI_OPCODE_SAMPLE_C:
+         analyse_sample(ctx, inst, LP_BLD_TEX_MODIFIER_NONE, TRUE);
+         break;
+      case TGSI_OPCODE_SAMPLE_C_LZ:
+         analyse_sample(ctx, inst, LP_BLD_TEX_MODIFIER_LOD_ZERO, TRUE);
+         break;
+      case TGSI_OPCODE_SAMPLE_D:
+         analyse_sample(ctx, inst, LP_BLD_TEX_MODIFIER_EXPLICIT_DERIV, FALSE);
+         break;
+      case TGSI_OPCODE_SAMPLE_B:
+         analyse_sample(ctx, inst, LP_BLD_TEX_MODIFIER_LOD_BIAS, FALSE);
+         break;
+      case TGSI_OPCODE_SAMPLE_L:
+         analyse_sample(ctx, inst, LP_BLD_TEX_MODIFIER_EXPLICIT_LOD, FALSE);
+         break;
       default:
          break;
       }
@@ -304,7 +389,7 @@ analyse_instruction(struct analysis_context *ctx,
 
    switch (inst->Instruction.Opcode) {
    case TGSI_OPCODE_IF:
-   case TGSI_OPCODE_IFC:
+   case TGSI_OPCODE_UIF:
    case TGSI_OPCODE_ELSE:
    case TGSI_OPCODE_ENDIF:
    case TGSI_OPCODE_BGNLOOP:
@@ -348,15 +433,16 @@ dump_info(const struct tgsi_token *tokens,
                &tex_info->coord[chan];
          if (chan_info->file != TGSI_FILE_NULL) {
             debug_printf(" %s[%u].%c",
-                         tgsi_file_names[chan_info->file],
+                         tgsi_file_name(chan_info->file),
                          chan_info->u.index,
                          "xyzw01"[chan_info->swizzle]);
          } else {
             debug_printf(" _");
          }
       }
-      debug_printf(", SAMP[%u], %s\n",
-                   tex_info->unit,
+      debug_printf(", RES[%u], SAMP[%u], %s\n",
+                   tex_info->texture_unit,
+                   tex_info->sampler_unit,
                    tgsi_texture_names[tex_info->target]);
    }
 

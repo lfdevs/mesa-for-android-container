@@ -32,8 +32,8 @@ graw_util_create_window(struct graw_info *info,
                         int num_cbufs, bool zstencil_buf)
 {
    static const enum pipe_format formats[] = {
-      PIPE_FORMAT_R8G8B8A8_UNORM,
-      PIPE_FORMAT_B8G8R8A8_UNORM,
+      PIPE_FORMAT_RGBA8888_UNORM,
+      PIPE_FORMAT_BGRA8888_UNORM,
       PIPE_FORMAT_NONE
    };
    enum pipe_format format;
@@ -173,7 +173,8 @@ graw_util_default_state(struct graw_info *info, boolean depth_test)
       void *handle;
       memset(&rasterizer, 0, sizeof rasterizer);
       rasterizer.cull_face = PIPE_FACE_NONE;
-      rasterizer.gl_rasterization_rules = 1;
+      rasterizer.half_pixel_center = 1;
+      rasterizer.bottom_edge_rule = 1;
       handle = info->ctx->create_rasterizer_state(info->ctx, &rasterizer);
       info->ctx->bind_rasterizer_state(info->ctx, handle);
    }
@@ -202,7 +203,7 @@ graw_util_viewport(struct graw_info *info,
    vp.translate[2] = half_depth + z;
    vp.translate[3] = 0.0f;
 
-   info->ctx->set_viewport_state(info->ctx, &vp);
+   info->ctx->set_viewport_states(info->ctx, 0, 1, &vp);
 }
 
 
@@ -225,7 +226,7 @@ graw_util_create_tex2d(const struct graw_info *info,
    struct pipe_box box;
 
    temp.target = PIPE_TEXTURE_2D;
-   temp.format = PIPE_FORMAT_B8G8R8A8_UNORM;
+   temp.format = format;
    temp.width0 = width;
    temp.height0 = height;
    temp.depth0 = 1;

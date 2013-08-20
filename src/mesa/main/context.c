@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.3
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  * Copyright (C) 2008  VMware, Inc.  All Rights Reserved.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
@@ -77,7 +77,6 @@
 
 
 #include "glheader.h"
-#include "mfeatures.h"
 #include "imports.h"
 #include "accum.h"
 #include "api_exec.h"
@@ -344,23 +343,17 @@ dummy_enum_func(void)
 {
    gl_buffer_index bi = BUFFER_FRONT_LEFT;
    gl_face_index fi = FACE_POS_X;
-   gl_frag_attrib fa = FRAG_ATTRIB_WPOS;
    gl_frag_result fr = FRAG_RESULT_DEPTH;
    gl_texture_index ti = TEXTURE_2D_ARRAY_INDEX;
    gl_vert_attrib va = VERT_ATTRIB_POS;
-   gl_vert_result vr = VERT_RESULT_HPOS;
-   gl_geom_attrib ga = GEOM_ATTRIB_POSITION;
-   gl_geom_result gr = GEOM_RESULT_POS;
+   gl_varying_slot vs = VARYING_SLOT_POS;
 
    (void) bi;
    (void) fi;
-   (void) fa;
    (void) fr;
    (void) ti;
    (void) va;
-   (void) vr;
-   (void) ga;
-   (void) gr;
+   (void) vs;
 }
 
 
@@ -410,7 +403,7 @@ one_time_init( struct gl_context *ctx )
 #if defined(DEBUG) && defined(__DATE__) && defined(__TIME__)
       if (MESA_VERBOSE != 0) {
 	 _mesa_debug(ctx, "Mesa %s DEBUG build %s %s\n",
-		     MESA_VERSION_STRING, __DATE__, __TIME__);
+		     PACKAGE_VERSION, __DATE__, __TIME__);
       }
 #endif
 
@@ -558,12 +551,13 @@ _mesa_init_constants(struct gl_context *ctx)
    ctx->Const.MaxTextureRectSize = MAX_TEXTURE_RECT_SIZE;
    ctx->Const.MaxArrayTextureLayers = MAX_ARRAY_TEXTURE_LAYERS;
    ctx->Const.MaxTextureCoordUnits = MAX_TEXTURE_COORD_UNITS;
-   ctx->Const.MaxTextureImageUnits = MAX_TEXTURE_IMAGE_UNITS;
+   ctx->Const.FragmentProgram.MaxTextureImageUnits = MAX_TEXTURE_IMAGE_UNITS;
    ctx->Const.MaxTextureUnits = MIN2(ctx->Const.MaxTextureCoordUnits,
-                                     ctx->Const.MaxTextureImageUnits);
+                                     ctx->Const.FragmentProgram.MaxTextureImageUnits);
    ctx->Const.MaxTextureMaxAnisotropy = MAX_TEXTURE_MAX_ANISOTROPY;
    ctx->Const.MaxTextureLodBias = MAX_TEXTURE_LOD_BIAS;
    ctx->Const.MaxTextureBufferSize = 65536;
+   ctx->Const.TextureBufferOffsetAlignment = 1;
    ctx->Const.MaxArrayLockSize = MAX_ARRAY_LOCK_SIZE;
    ctx->Const.SubPixelBits = SUB_PIXEL_BITS;
    ctx->Const.MinPointSize = MIN_POINT_SIZE;
@@ -576,7 +570,6 @@ _mesa_init_constants(struct gl_context *ctx)
    ctx->Const.MinLineWidthAA = MIN_LINE_WIDTH;
    ctx->Const.MaxLineWidthAA = MAX_LINE_WIDTH;
    ctx->Const.LineWidthGranularity = (GLfloat) LINE_WIDTH_GRANULARITY;
-   ctx->Const.MaxColorTableSize = MAX_COLOR_TABLE_SIZE;
    ctx->Const.MaxClipPlanes = 6;
    ctx->Const.MaxLights = MAX_LIGHTS;
    ctx->Const.MaxShininess = 128.0;
@@ -606,12 +599,10 @@ _mesa_init_constants(struct gl_context *ctx)
    ctx->Const.MaxColorAttachments = MAX_COLOR_ATTACHMENTS;
    ctx->Const.MaxRenderbufferSize = MAX_RENDERBUFFER_SIZE;
 
-   ctx->Const.MaxVertexTextureImageUnits = MAX_VERTEX_TEXTURE_IMAGE_UNITS;
+   ctx->Const.VertexProgram.MaxTextureImageUnits = MAX_TEXTURE_IMAGE_UNITS;
    ctx->Const.MaxCombinedTextureImageUnits = MAX_COMBINED_TEXTURE_IMAGE_UNITS;
    ctx->Const.MaxVarying = 16; /* old limit not to break tnl and swrast */
-   ctx->Const.MaxGeometryTextureImageUnits = MAX_GEOMETRY_TEXTURE_IMAGE_UNITS;
-   ctx->Const.MaxVertexVaryingComponents = MAX_VERTEX_VARYING_COMPONENTS;
-   ctx->Const.MaxGeometryVaryingComponents = MAX_GEOMETRY_VARYING_COMPONENTS;
+   ctx->Const.GeometryProgram.MaxTextureImageUnits = MAX_TEXTURE_IMAGE_UNITS;
    ctx->Const.MaxGeometryOutputVertices = MAX_GEOMETRY_OUTPUT_VERTICES;
    ctx->Const.MaxGeometryTotalOutputComponents = MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS;
 
@@ -645,8 +636,10 @@ _mesa_init_constants(struct gl_context *ctx)
    ctx->Const.MaxTransformFeedbackInterleavedComponents = 4 * MAX_FEEDBACK_ATTRIBS;
    ctx->Const.MaxVertexStreams = 1;
 
-   /* GL 3.2: hard-coded for now: */
-   ctx->Const.ProfileMask = GL_CONTEXT_COMPATIBILITY_PROFILE_BIT;
+   /* GL 3.2  */
+   ctx->Const.ProfileMask = ctx->API == API_OPENGL_CORE
+                          ? GL_CONTEXT_CORE_PROFILE_BIT
+                          : GL_CONTEXT_COMPATIBILITY_PROFILE_BIT;
 
    /** GL_EXT_gpu_shader4 */
    ctx->Const.MinProgramTexelOffset = -8;
@@ -660,6 +653,11 @@ _mesa_init_constants(struct gl_context *ctx)
 
    /* ES 3.0 or ARB_ES3_compatibility */
    ctx->Const.MaxElementIndex = 0xffffffffu;
+
+   /* GL_ARB_texture_multisample */
+   ctx->Const.MaxColorTextureSamples = 1;
+   ctx->Const.MaxDepthTextureSamples = 1;
+   ctx->Const.MaxIntegerSamples = 1;
 }
 
 
@@ -671,32 +669,30 @@ static void
 check_context_limits(struct gl_context *ctx)
 {
    /* check that we don't exceed the size of various bitfields */
-   assert(VERT_RESULT_MAX <=
+   assert(VARYING_SLOT_MAX <=
 	  (8 * sizeof(ctx->VertexProgram._Current->Base.OutputsWritten)));
-   assert(FRAG_ATTRIB_MAX <=
+   assert(VARYING_SLOT_MAX <=
 	  (8 * sizeof(ctx->FragmentProgram._Current->Base.InputsRead)));
-
-   assert(MAX_COMBINED_TEXTURE_IMAGE_UNITS <= 8 * sizeof(GLbitfield));
 
    /* shader-related checks */
    assert(ctx->Const.FragmentProgram.MaxLocalParams <= MAX_PROGRAM_LOCAL_PARAMS);
    assert(ctx->Const.VertexProgram.MaxLocalParams <= MAX_PROGRAM_LOCAL_PARAMS);
 
    /* Texture unit checks */
-   assert(ctx->Const.MaxTextureImageUnits > 0);
-   assert(ctx->Const.MaxTextureImageUnits <= MAX_TEXTURE_IMAGE_UNITS);
+   assert(ctx->Const.FragmentProgram.MaxTextureImageUnits > 0);
+   assert(ctx->Const.FragmentProgram.MaxTextureImageUnits <= MAX_TEXTURE_IMAGE_UNITS);
    assert(ctx->Const.MaxTextureCoordUnits > 0);
    assert(ctx->Const.MaxTextureCoordUnits <= MAX_TEXTURE_COORD_UNITS);
    assert(ctx->Const.MaxTextureUnits > 0);
    assert(ctx->Const.MaxTextureUnits <= MAX_TEXTURE_IMAGE_UNITS);
    assert(ctx->Const.MaxTextureUnits <= MAX_TEXTURE_COORD_UNITS);
-   assert(ctx->Const.MaxTextureUnits == MIN2(ctx->Const.MaxTextureImageUnits,
+   assert(ctx->Const.MaxTextureUnits == MIN2(ctx->Const.FragmentProgram.MaxTextureImageUnits,
                                              ctx->Const.MaxTextureCoordUnits));
    assert(ctx->Const.MaxCombinedTextureImageUnits > 0);
    assert(ctx->Const.MaxCombinedTextureImageUnits <= MAX_COMBINED_TEXTURE_IMAGE_UNITS);
    assert(ctx->Const.MaxTextureCoordUnits <= MAX_COMBINED_TEXTURE_IMAGE_UNITS);
    /* number of coord units cannot be greater than number of image units */
-   assert(ctx->Const.MaxTextureCoordUnits <= ctx->Const.MaxTextureImageUnits);
+   assert(ctx->Const.MaxTextureCoordUnits <= ctx->Const.FragmentProgram.MaxTextureImageUnits);
 
 
    /* Texture size checks */
@@ -923,7 +919,6 @@ create_beginend_table(const struct gl_context *ctx)
    COPY_DISPATCH(ClientWaitSync);
    COPY_DISPATCH(MapBuffer);
    COPY_DISPATCH(UnmapBuffer);
-   COPY_DISPATCH(MapBufferRange);
    COPY_DISPATCH(MapBufferRange);
    COPY_DISPATCH(ObjectPurgeableAPPLE);
    COPY_DISPATCH(ObjectUnpurgeableAPPLE);
@@ -1395,25 +1390,6 @@ check_compatible(const struct gl_context *ctx,
 
 
 /**
- * Do one-time initialization for the given framebuffer.  Specifically,
- * ask the driver for the window's current size and update the framebuffer
- * object to match.
- * Really, the device driver should totally take care of this.
- */
-static void
-initialize_framebuffer_size(struct gl_context *ctx, struct gl_framebuffer *fb)
-{
-   GLuint width, height;
-   if (ctx->Driver.GetBufferSize) {
-      ctx->Driver.GetBufferSize(fb, &width, &height);
-      if (ctx->Driver.ResizeBuffers)
-         ctx->Driver.ResizeBuffers(ctx, fb, width, height);
-      fb->Initialized = GL_TRUE;
-   }
-}
-
-
-/**
  * Check if the viewport/scissor size has not yet been initialized.
  * Initialize the size if the given width and height are non-zero.
  */
@@ -1514,32 +1490,6 @@ _mesa_make_current( struct gl_context *newCtx,
           * framebuffer bindings.
           */
 	 newCtx->NewState |= _NEW_BUFFERS;
-
-#if 1
-         /* We want to get rid of these lines: */
-         if (!drawBuffer->Initialized) {
-            initialize_framebuffer_size(newCtx, drawBuffer);
-         }
-         if (readBuffer != drawBuffer && !readBuffer->Initialized) {
-            initialize_framebuffer_size(newCtx, readBuffer);
-         }
-
-	 _mesa_resizebuffers(newCtx);
-#else
-         /* We want the drawBuffer and readBuffer to be initialized by
-          * the driver.
-          * This generally means the Width and Height match the actual
-          * window size and the renderbuffers (both hardware and software
-          * based) are allocated to match.  The later can generally be
-          * done with a call to _mesa_resize_framebuffer().
-          *
-          * It's theoretically possible for a buffer to have zero width
-          * or height, but for now, assert check that the driver did what's
-          * expected of it.
-          */
-         ASSERT(drawBuffer->Width > 0);
-         ASSERT(drawBuffer->Height > 0);
-#endif
 
          if (drawBuffer) {
             _mesa_check_init_viewport(newCtx,
@@ -1664,11 +1614,6 @@ _mesa_record_error(struct gl_context *ctx, GLenum error)
    if (ctx->ErrorValue == GL_NO_ERROR) {
       ctx->ErrorValue = error;
    }
-
-   /* Call device driver's error handler, if any.  This is used on the Mac. */
-   if (ctx->Driver.Error) {
-      ctx->Driver.Error(ctx);
-   }
 }
 
 
@@ -1730,18 +1675,6 @@ _mesa_Flush(void)
    _mesa_flush(ctx);
 }
 
-
-/**
- * Set mvp_with_dp4 flag.  If a driver has a preference for DP4 over
- * MUL/MAD, or vice versa, call this function to register that.
- * Otherwise we default to MUL/MAD.
- */
-void
-_mesa_set_mvp_with_dp4( struct gl_context *ctx,
-                        GLboolean flag )
-{
-   ctx->mvp_with_dp4 = flag;
-}
 
 /*
  * ARB_blend_func_extended - ERRORS section

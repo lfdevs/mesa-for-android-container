@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "pipe/p_context.h"
@@ -95,7 +95,7 @@ nvc0_vertprog_validate(struct nvc0_context *nvc0)
    PUSH_DATA (push, 0x11);
    PUSH_DATA (push, vp->code_base);
    BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(1)), 1);
-   PUSH_DATA (push, vp->max_gpr);
+   PUSH_DATA (push, vp->num_gprs);
 
    // BEGIN_NVC0(push, NVC0_3D_(0x163c), 1);
    // PUSH_DATA (push, 0);
@@ -120,7 +120,7 @@ nvc0_fragprog_validate(struct nvc0_context *nvc0)
    PUSH_DATA (push, 0x51);
    PUSH_DATA (push, fp->code_base);
    BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(5)), 1);
-   PUSH_DATA (push, fp->max_gpr);
+   PUSH_DATA (push, fp->num_gprs);
 
    BEGIN_NVC0(push, SUBC_3D(0x0360), 2);
    PUSH_DATA (push, 0x20164010);
@@ -144,7 +144,7 @@ nvc0_tctlprog_validate(struct nvc0_context *nvc0)
       PUSH_DATA (push, 0x21);
       PUSH_DATA (push, tp->code_base);
       BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(2)), 1);
-      PUSH_DATA (push, tp->max_gpr);
+      PUSH_DATA (push, tp->num_gprs);
 
       if (tp->tp.input_patch_size <= 32)
          IMMED_NVC0(push, NVC0_3D(PATCH_VERTICES), tp->tp.input_patch_size);
@@ -171,7 +171,7 @@ nvc0_tevlprog_validate(struct nvc0_context *nvc0)
       BEGIN_NVC0(push, NVC0_3D(SP_START_ID(3)), 1);
       PUSH_DATA (push, tp->code_base);
       BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(3)), 1);
-      PUSH_DATA (push, tp->max_gpr);
+      PUSH_DATA (push, tp->num_gprs);
    } else {
       BEGIN_NVC0(push, NVC0_3D(MACRO_TEP_SELECT), 1);
       PUSH_DATA (push, 0x30);
@@ -197,7 +197,7 @@ nvc0_gmtyprog_validate(struct nvc0_context *nvc0)
       BEGIN_NVC0(push, NVC0_3D(SP_START_ID(4)), 1);
       PUSH_DATA (push, gp->code_base);
       BEGIN_NVC0(push, NVC0_3D(SP_GPR_ALLOC(4)), 1);
-      PUSH_DATA (push, gp->max_gpr);
+      PUSH_DATA (push, gp->num_gprs);
       BEGIN_NVC0(push, NVC0_3D(LAYER), 1);
       PUSH_DATA (push, gp_selects_layer ? NVC0_3D_LAYER_USE_GP : 0);
    } else {

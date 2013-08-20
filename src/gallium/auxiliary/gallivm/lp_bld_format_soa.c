@@ -51,16 +51,25 @@ lp_build_format_swizzle_soa(const struct util_format_description *format_desc,
    assert(UTIL_FORMAT_SWIZZLE_1 == PIPE_SWIZZLE_ONE);
 
    if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {
+      enum util_format_swizzle swizzle;
+      LLVMValueRef depth_or_stencil;
+
+      if (util_format_has_stencil(format_desc) &&
+          !util_format_has_depth(format_desc)) {
+         assert(!bld->type.floating);
+         swizzle = format_desc->swizzle[1];
+      }
+      else {
+         assert(bld->type.floating);
+         swizzle = format_desc->swizzle[0];
+      }
       /*
-       * Return zzz1 for depth-stencil formats.
-       *
-       * XXX: Allow to control the depth swizzle with an additional parameter,
-       * as the caller may wish another depth swizzle, or retain the stencil
-       * value.
+       * Return zzz1 or sss1 for depth-stencil formats here.
+       * Correct swizzling will be handled by apply_sampler_swizzle() later.
        */
-      enum util_format_swizzle swizzle = format_desc->swizzle[0];
-      LLVMValueRef depth = lp_build_swizzle_soa_channel(bld, unswizzled, swizzle);
-      swizzled_out[2] = swizzled_out[1] = swizzled_out[0] = depth;
+      depth_or_stencil = lp_build_swizzle_soa_channel(bld, unswizzled, swizzle);
+
+      swizzled_out[2] = swizzled_out[1] = swizzled_out[0] = depth_or_stencil;
       swizzled_out[3] = bld->one;
    }
    else {
@@ -106,7 +115,6 @@ lp_build_unpack_rgba_soa(struct gallivm_state *gallivm,
    LLVMBuilderRef builder = gallivm->builder;
    struct lp_build_context bld;
    LLVMValueRef inputs[4];
-   unsigned start;
    unsigned chan;
 
    assert(format_desc->layout == UTIL_FORMAT_LAYOUT_PLAIN);
@@ -119,9 +127,9 @@ lp_build_unpack_rgba_soa(struct gallivm_state *gallivm,
    lp_build_context_init(&bld, gallivm, type);
 
    /* Decode the input vector components */
-   start = 0;
    for (chan = 0; chan < format_desc->nr_channels; ++chan) {
       const unsigned width = format_desc->channel[chan].size;
+      const unsigned start = format_desc->channel[chan].shift;
       const unsigned stop = start + width;
       LLVMValueRef input;
 
@@ -155,11 +163,23 @@ lp_build_unpack_rgba_soa(struct gallivm_state *gallivm,
           */
 
          if (type.floating) {
-            if(format_desc->channel[chan].normalized)
-               input = lp_build_unsigned_norm_to_float(gallivm, width, type, input);
-            else
-               input = LLVMBuildSIToFP(builder, input,
-                                       lp_build_vec_type(gallivm, type), "");
+            if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB) {
+               assert(width == 8);
+               if (format_desc->swizzle[3] == chan) {
+                  input = lp_build_unsigned_norm_to_float(gallivm, width, type, input);
+               }
+               else {
+                  struct lp_type conv_type = lp_uint_type(type);
+                  input = lp_build_srgb_to_linear(gallivm, conv_type, input);
+               }
+            }
+            else {
+               if(format_desc->channel[chan].normalized)
+                  input = lp_build_unsigned_norm_to_float(gallivm, width, type, input);
+               else
+                  input = LLVMBuildSIToFP(builder, input,
+                                          lp_build_vec_type(gallivm, type), "");
+            }
          }
          else if (format_desc->channel[chan].pure_integer) {
             /* Nothing to do */
@@ -247,8 +267,6 @@ lp_build_unpack_rgba_soa(struct gallivm_state *gallivm,
       }
 
       inputs[chan] = input;
-
-      start = stop;
    }
 
    lp_build_format_swizzle_soa(format_desc, &bld, inputs, rgba_out);
@@ -282,7 +300,11 @@ lp_build_rgba8_to_fi32_soa(struct gallivm_state *gallivm,
 
    /* Decode the input vector components */
    for (chan = 0; chan < 4; ++chan) {
+#ifdef PIPE_ARCH_LITTLE_ENDIAN
       unsigned start = chan*8;
+#else
+      unsigned start = (3-chan)*8;
+#endif
       unsigned stop = start + 8;
       LLVMValueRef input;
 
@@ -310,9 +332,10 @@ lp_build_rgba8_to_fi32_soa(struct gallivm_state *gallivm,
  * \param type  the desired return type for 'rgba'.  The vector length
  *              is the number of texels to fetch
  *
- * \param base_ptr  points to start of the texture image block.  For non-
- *                  compressed formats, this simply points to the texel.
- *                  For compressed formats, it points to the start of the
+ * \param base_ptr  points to the base of the texture mip tree.
+ * \param offset    offset to start of the texture image block.  For non-
+ *                  compressed formats, this simply is an offset to the texel.
+ *                  For compressed formats, it is an offset to the start of the
  *                  compressed data block.
  *
  * \param i, j  the sub-block pixel coordinates.  For non-compressed formats
@@ -333,6 +356,7 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
 
    if (format_desc->layout == UTIL_FORMAT_LAYOUT_PLAIN &&
        (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB ||
+        format_desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB ||
         format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) &&
        format_desc->block.width == 1 &&
        format_desc->block.height == 1 &&
@@ -350,13 +374,14 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
 
       /*
        * gather the texels from the texture
-       * Ex: packed = {BGRA, BGRA, BGRA, BGRA}.
+       * Ex: packed = {XYZW, XYZW, XYZW, XYZW}
        */
+      assert(format_desc->block.bits <= type.width);
       packed = lp_build_gather(gallivm,
                                type.length,
                                format_desc->block.bits,
                                type.width,
-                               base_ptr, offset);
+                               base_ptr, offset, FALSE);
 
       /*
        * convert texels to float rgba
@@ -365,6 +390,64 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
                                format_desc,
                                type,
                                packed, rgba_out);
+      return;
+   }
+
+   if (format_desc->format == PIPE_FORMAT_R11G11B10_FLOAT ||
+       format_desc->format == PIPE_FORMAT_R9G9B9E5_FLOAT) {
+      /*
+       * similar conceptually to above but requiring special
+       * AoS packed -> SoA float conversion code.
+       */
+      LLVMValueRef packed;
+
+      assert(type.floating);
+      assert(type.width == 32);
+
+      packed = lp_build_gather(gallivm, type.length,
+                               format_desc->block.bits,
+                               type.width, base_ptr, offset,
+                               FALSE);
+      if (format_desc->format == PIPE_FORMAT_R11G11B10_FLOAT) {
+         lp_build_r11g11b10_to_float(gallivm, packed, rgba_out);
+      }
+      else {
+         lp_build_rgb9e5_to_float(gallivm, packed, rgba_out);
+      }
+      return;
+   }
+
+   if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS &&
+       format_desc->block.bits == 64) {
+      /*
+       * special case the format is 64 bits but we only require
+       * 32bit (or 8bit) from each block.
+       */
+      LLVMValueRef packed;
+
+      if (format_desc->format == PIPE_FORMAT_X32_S8X24_UINT) {
+         /*
+          * for stencil simply fix up offsets - could in fact change
+          * base_ptr instead even outside the shader.
+          */
+         unsigned mask = (1 << 8) - 1;
+         LLVMValueRef s_offset = lp_build_const_int_vec(gallivm, type, 4);
+         offset = LLVMBuildAdd(builder, offset, s_offset, "");
+         packed = lp_build_gather(gallivm, type.length,
+                                  32, type.width, base_ptr, offset, FALSE);
+         packed = LLVMBuildAnd(builder, packed,
+                               lp_build_const_int_vec(gallivm, type, mask), "");
+      }
+      else {
+         assert (format_desc->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT);
+         packed = lp_build_gather(gallivm, type.length,
+                                  32, type.width, base_ptr, offset, TRUE);
+         packed = LLVMBuildBitCast(builder, packed,
+                                   lp_build_vec_type(gallivm, type), "");
+      }
+      /* for consistency with lp_build_unpack_rgba_soa() return sss1 or zzz1 */
+      rgba_out[0] = rgba_out[1] = rgba_out[2] = packed;
+      rgba_out[3] = lp_build_const_vec(gallivm, type, 1.0f);
       return;
    }
 

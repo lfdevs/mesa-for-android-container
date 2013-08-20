@@ -31,10 +31,11 @@
 #include "gallivm/lp_bld_init.h"
 #include "gallivm/lp_bld_tgsi.h"
 
-#define RADEON_LLVM_MAX_INPUTS 16 * 4
-#define RADEON_LLVM_MAX_OUTPUTS 16 * 4
+#define RADEON_LLVM_MAX_INPUTS 32 * 4
+#define RADEON_LLVM_MAX_OUTPUTS 32 * 4
 #define RADEON_LLVM_MAX_BRANCH_DEPTH 16
 #define RADEON_LLVM_MAX_LOOP_DEPTH 16
+#define RADEON_LLVM_MAX_ARRAYS 16
 
 #define RADEON_LLVM_MAX_SYSTEM_VALUES 4
 
@@ -64,6 +65,8 @@ struct radeon_llvm_context {
 	struct pipe_stream_output_info *stream_outputs;
 	unsigned color_buffer_count;
 	unsigned fs_color_all;
+	unsigned alpha_to_one;
+	unsigned has_txq_cube_array_z_comp;
 
 	/*=== Front end configuration ===*/
 
@@ -116,11 +119,31 @@ struct radeon_llvm_context {
 	unsigned branch_depth;
 	unsigned loop_depth;
 
+	struct tgsi_declaration_range arrays[RADEON_LLVM_MAX_ARRAYS];
+	unsigned num_arrays;
 
 	LLVMValueRef main_fn;
 
 	struct gallivm_state gallivm;
 };
+
+static inline LLVMTypeRef tgsi2llvmtype(
+		struct lp_build_tgsi_context * bld_base,
+		enum tgsi_opcode_type type)
+{
+	LLVMContextRef ctx = bld_base->base.gallivm->context;
+
+	switch (type) {
+	case TGSI_TYPE_UNSIGNED:
+	case TGSI_TYPE_SIGNED:
+		return LLVMInt32TypeInContext(ctx);
+	case TGSI_TYPE_UNTYPED:
+	case TGSI_TYPE_FLOAT:
+		return LLVMFloatTypeInContext(ctx);
+	default: break;
+	}
+	return 0;
+}
 
 static inline LLVMValueRef bitcast(
 		struct lp_build_tgsi_context * bld_base,
@@ -129,22 +152,7 @@ static inline LLVMValueRef bitcast(
 )
 {
 	LLVMBuilderRef builder = bld_base->base.gallivm->builder;
-	LLVMContextRef ctx = bld_base->base.gallivm->context;
-	LLVMTypeRef dst_type;
-
-	switch (type) {
-	case TGSI_TYPE_UNSIGNED:
-	case TGSI_TYPE_SIGNED:
-		dst_type = LLVMInt32TypeInContext(ctx);
-		break;
-	case TGSI_TYPE_UNTYPED:
-	case TGSI_TYPE_FLOAT:
-		dst_type = LLVMFloatTypeInContext(ctx);
-		break;
-	default:
-		dst_type = 0;
-		break;
-	}
+	LLVMTypeRef dst_type = tgsi2llvmtype(bld_base, type);
 
 	if (dst_type)
 		return LLVMBuildBitCast(builder, value, dst_type, "");
@@ -158,6 +166,9 @@ void radeon_llvm_emit_prepare_cube_coords(struct lp_build_tgsi_context * bld_bas
                                           LLVMValueRef *coords_arg);
 
 void radeon_llvm_context_init(struct radeon_llvm_context * ctx);
+
+void radeon_llvm_create_func(struct radeon_llvm_context * ctx,
+                             LLVMTypeRef *ParamTypes, unsigned ParamCount);
 
 void radeon_llvm_dispose(struct radeon_llvm_context * ctx);
 

@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.1
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -29,7 +29,6 @@
 #include "hash.h"
 #include "imports.h"
 #include "queryobj.h"
-#include "mfeatures.h"
 #include "mtypes.h"
 #include "main/dispatch.h"
 
@@ -76,7 +75,7 @@ _mesa_new_query_object(struct gl_context *ctx, GLuint id)
 static void
 _mesa_begin_query(struct gl_context *ctx, struct gl_query_object *q)
 {
-   /* no-op */
+   ctx->NewState |= _NEW_DEPTH; /* for swrast */
 }
 
 
@@ -87,6 +86,7 @@ _mesa_begin_query(struct gl_context *ctx, struct gl_query_object *q)
 static void
 _mesa_end_query(struct gl_context *ctx, struct gl_query_object *q)
 {
+   ctx->NewState |= _NEW_DEPTH; /* for swrast */
    q->Ready = GL_TRUE;
 }
 
@@ -315,7 +315,7 @@ _mesa_BeginQueryIndexed(GLenum target, GLuint index, GLuint id)
    if (!query_error_check_index(ctx, target, index))
       return;
 
-   FLUSH_VERTICES(ctx, _NEW_DEPTH);
+   FLUSH_VERTICES(ctx, 0);
 
    bindpt = get_query_binding_point(ctx, target);
    if (!bindpt) {
@@ -392,7 +392,7 @@ _mesa_EndQueryIndexed(GLenum target, GLuint index)
    if (!query_error_check_index(ctx, target, index))
       return;
 
-   FLUSH_VERTICES(ctx, _NEW_DEPTH);
+   FLUSH_VERTICES(ctx, 0);
 
    bindpt = get_query_binding_point(ctx, target);
    if (!bindpt) {
@@ -486,9 +486,14 @@ _mesa_QueryCounter(GLuint id, GLenum target)
    q->Result = 0;
    q->Ready = GL_FALSE;
 
-   /* QueryCounter is implemented using EndQuery without BeginQuery
-    * in drivers. This is actually Direct3D and Gallium convention. */
-   ctx->Driver.EndQuery(ctx, q);
+   if (ctx->Driver.QueryCounter) {
+      ctx->Driver.QueryCounter(ctx, q);
+   } else {
+      /* QueryCounter is implemented using EndQuery without BeginQuery
+       * in drivers. This is actually Direct3D and Gallium convention.
+       */
+      ctx->Driver.EndQuery(ctx, q);
+   }
 }
 
 

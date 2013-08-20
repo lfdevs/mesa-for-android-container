@@ -32,7 +32,6 @@
 #include "main/framebuffer.h"
 #include "main/renderbuffer.h"
 #include "main/fbobject.h"
-#include "main/mfeatures.h"
 
 static GLboolean
 set_renderbuffer_format(struct gl_renderbuffer *rb, GLenum internalFormat)
@@ -248,33 +247,14 @@ nouveau_framebuffer_renderbuffer(struct gl_context *ctx, struct gl_framebuffer *
 	context_dirty(ctx, FRAMEBUFFER);
 }
 
-static GLenum
-get_tex_format(struct gl_texture_image *ti)
-{
-	switch (ti->TexFormat) {
-	case MESA_FORMAT_ARGB8888:
-		return GL_RGBA8;
-	case MESA_FORMAT_XRGB8888:
-		return GL_RGB8;
-	case MESA_FORMAT_RGB565:
-		return GL_RGB5;
-	default:
-		return GL_NONE;
-	}
-}
-
 static void
 nouveau_render_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
 		       struct gl_renderbuffer_attachment *att)
 {
 	struct gl_renderbuffer *rb = att->Renderbuffer;
-	struct gl_texture_image *ti =
-		att->Texture->Image[att->CubeMapFace][att->TextureLevel];
+	struct gl_texture_image *ti = rb->TexImage;
 
 	/* Update the renderbuffer fields from the texture. */
-	set_renderbuffer_format(rb, get_tex_format(ti));
-	rb->Width = ti->Width;
-	rb->Height = ti->Height;
 	nouveau_surface_ref(&to_nouveau_teximage(ti)->surface,
 			    &to_nouveau_renderbuffer(rb)->surface);
 
@@ -283,9 +263,9 @@ nouveau_render_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
 
 static void
 nouveau_finish_render_texture(struct gl_context *ctx,
-			      struct gl_renderbuffer_attachment *att)
+			      struct gl_renderbuffer *rb)
 {
-	texture_dirty(att->Texture);
+	texture_dirty(rb->TexImage->TexObject);
 }
 
 void

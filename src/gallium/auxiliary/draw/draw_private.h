@@ -55,6 +55,10 @@ struct gallivm_state;
 /** Sum of frustum planes and user-defined planes */
 #define DRAW_TOTAL_CLIP_PLANES (6 + PIPE_MAX_CLIP_PLANES)
 
+/**
+ * The largest possible index of a vertex that can be fetched.
+ */
+#define DRAW_MAX_FETCH_IDX 0xffffffff
 
 struct pipe_context;
 struct draw_vertex_shader;
@@ -65,6 +69,14 @@ struct tgsi_exec_machine;
 struct tgsi_sampler;
 struct draw_pt_front_end;
 
+
+/**
+ * Represents the mapped vertex buffer.
+ */
+struct draw_vertex_buffer {
+   const void *map;
+   uint32_t size;
+};
 
 /**
  * Basic vertex info.
@@ -178,12 +190,13 @@ struct draw_context
          /** bytes per index (0, 1, 2 or 4) */
          unsigned eltSizeIB;
          unsigned eltSize;
-         int eltBias;
+         unsigned eltMax;
+         int eltBias;         
          unsigned min_index;
          unsigned max_index;
          
          /** vertex arrays */
-         const void *vbuffer[PIPE_MAX_ATTRIBS];
+         struct draw_vertex_buffer vbuffer[PIPE_MAX_ATTRIBS];
          
          /** constant buffers (for vertex/geometry shader) */
          const void *vs_constants[PIPE_MAX_CONSTANT_BUFFERS];
@@ -232,7 +245,7 @@ struct draw_context
    /** Rasterizer CSOs without culling/stipple/etc */
    void *rasterizer_no_cull[2][2];
 
-   struct pipe_viewport_state viewport;
+   struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    boolean identity_viewport;
 
    /** Vertex shader state */
@@ -248,8 +261,7 @@ struct draw_context
       struct {
          struct tgsi_exec_machine *machine;
 
-         struct tgsi_sampler **samplers;
-         uint num_samplers;
+         struct tgsi_sampler *sampler;
       } tgsi;
 
       struct translate *fetch;
@@ -268,8 +280,7 @@ struct draw_context
       struct {
          struct tgsi_exec_machine *machine;
 
-         struct tgsi_sampler **samplers;
-         uint num_samplers;
+         struct tgsi_sampler *sampler;
       } tgsi;
 
    } gs;
@@ -281,7 +292,6 @@ struct draw_context
 
    /** Stream output (vertex feedback) state */
    struct {
-      struct pipe_stream_output_info state;
       struct draw_so_target *targets[PIPE_MAX_SO_BUFFERS];
       uint num_targets;
    } so;
@@ -300,6 +310,7 @@ struct draw_context
    } extra_shader_outputs;
 
    unsigned instance_id;
+   unsigned start_instance;
 
 #ifdef HAVE_LLVM
    struct draw_llvm *llvm;
@@ -314,6 +325,9 @@ struct draw_context
    unsigned num_sampler_views[PIPE_SHADER_TYPES];
    const struct pipe_sampler_state *samplers[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
    unsigned num_samplers[PIPE_SHADER_TYPES];
+
+   struct pipe_query_data_pipeline_statistics statistics;
+   boolean collect_statistics;
 
    void *driver_private;
 };
@@ -355,15 +369,13 @@ struct draw_prim_info {
  * Draw common initialization code
  */
 boolean draw_init(struct draw_context *draw);
+void draw_new_instance(struct draw_context *draw);
 
 /*******************************************************************************
  * Vertex shader code:
  */
 boolean draw_vs_init( struct draw_context *draw );
 void draw_vs_destroy( struct draw_context *draw );
-
-void draw_vs_set_viewport( struct draw_context *, 
-                           const struct pipe_viewport_state * );
 
 
 /*******************************************************************************
@@ -379,11 +391,17 @@ void draw_gs_destroy( struct draw_context *draw );
  */
 uint draw_current_shader_outputs(const struct draw_context *draw);
 uint draw_current_shader_position_output(const struct draw_context *draw);
+uint draw_current_shader_viewport_index_output(const struct draw_context *draw);
 uint draw_current_shader_clipvertex_output(const struct draw_context *draw);
 uint draw_current_shader_clipdistance_output(const struct draw_context *draw, int index);
+uint draw_current_shader_num_written_clipdistances(const struct draw_context *draw);
+uint draw_current_shader_culldistance_output(const struct draw_context *draw, int index);
+uint draw_current_shader_num_written_culldistances(const struct draw_context *draw);
 int draw_alloc_extra_vertex_attrib(struct draw_context *draw,
                                    uint semantic_name, uint semantic_index);
 void draw_remove_extra_vertex_attribs(struct draw_context *draw);
+boolean draw_current_shader_uses_viewport_index(
+   const struct draw_context *draw);
 
 
 /*******************************************************************************
@@ -450,5 +468,42 @@ draw_get_rasterizer_no_cull( struct draw_context *draw,
                              boolean scissor,
                              boolean flatshade );
 
+void
+draw_stats_clipper_primitives(struct draw_context *draw,
+                              const struct draw_prim_info *prim_info);
+
+/** 
+ * Return index i from the index buffer.
+ * If the index buffer would overflow we return the
+ * maximum possible index.
+ */
+#define DRAW_GET_IDX(_elts, _i)                   \
+   (((_i) >= draw->pt.user.eltMax) ? DRAW_MAX_FETCH_IDX : (_elts)[_i])
+
+/**
+ * Return index of the given viewport clamping it
+ * to be between 0 <= and < PIPE_MAX_VIEWPORTS
+ */
+static INLINE unsigned
+draw_clamp_viewport_idx(int idx)
+{
+   return ((PIPE_MAX_VIEWPORTS > idx || idx < 0) ? idx : 0);
+}
+
+/**
+ * Adds two unsigned integers and if the addition
+ * overflows then it returns the value from
+ * from the overflow_value variable.
+ */
+static INLINE unsigned
+draw_overflow_uadd(unsigned a, unsigned b,
+                   unsigned overflow_value)
+{
+   unsigned res = a + b;
+   if (res < a || res < b) {
+      res = overflow_value;
+   }
+   return res;
+}
 
 #endif /* DRAW_PRIVATE_H */

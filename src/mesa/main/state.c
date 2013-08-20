@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.3
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -51,16 +51,7 @@
 #include "texobj.h"
 #include "texstate.h"
 #include "varray.h"
-
-
-static void
-update_separate_specular(struct gl_context *ctx)
-{
-   if (_mesa_need_secondary_color(ctx))
-      ctx->_TriangleCaps |= DD_SEPARATE_SPECULAR;
-   else
-      ctx->_TriangleCaps &= ~DD_SEPARATE_SPECULAR;
-}
+#include "blend.h"
 
 
 /**
@@ -308,47 +299,6 @@ update_multisample(struct gl_context *ctx)
 
 
 /**
- * Update the ctx->Color._ClampFragmentColor field
- */
-static void
-update_clamp_fragment_color(struct gl_context *ctx)
-{
-   if (ctx->Color.ClampFragmentColor == GL_FIXED_ONLY_ARB)
-      ctx->Color._ClampFragmentColor =
-         !ctx->DrawBuffer || !ctx->DrawBuffer->Visual.floatMode;
-   else
-      ctx->Color._ClampFragmentColor = ctx->Color.ClampFragmentColor;
-}
-
-
-/**
- * Update the ctx->Color._ClampVertexColor field
- */
-static void
-update_clamp_vertex_color(struct gl_context *ctx)
-{
-   if (ctx->Light.ClampVertexColor == GL_FIXED_ONLY_ARB)
-      ctx->Light._ClampVertexColor =
-         !ctx->DrawBuffer || !ctx->DrawBuffer->Visual.floatMode;
-   else
-      ctx->Light._ClampVertexColor = ctx->Light.ClampVertexColor;
-}
-
-
-/**
- * Update the ctx->Color._ClampReadColor field
- */
-static void
-update_clamp_read_color(struct gl_context *ctx)
-{
-   if (ctx->Color.ClampReadColor == GL_FIXED_ONLY_ARB)
-      ctx->Color._ClampReadColor =
-         !ctx->ReadBuffer || !ctx->ReadBuffer->Visual.floatMode;
-   else
-      ctx->Color._ClampReadColor = ctx->Color.ClampReadColor;
-}
-
-/**
  * Update the ctx->VertexProgram._TwoSideEnabled flag.
  */
 static void
@@ -362,82 +312,6 @@ update_twoside(struct gl_context *ctx)
 					    ctx->Light.Model.TwoSide);
    }
 }
-
-
-/*
- * Check polygon state and set DD_TRI_OFFSET
- * in ctx->_TriangleCaps if needed.
- */
-static void
-update_polygon(struct gl_context *ctx)
-{
-   ctx->_TriangleCaps &= ~DD_TRI_OFFSET;
-
-   if (   ctx->Polygon.OffsetPoint
-       || ctx->Polygon.OffsetLine
-       || ctx->Polygon.OffsetFill)
-      ctx->_TriangleCaps |= DD_TRI_OFFSET;
-}
-
-
-/**
- * Update the ctx->_TriangleCaps bitfield.
- * XXX that bitfield should really go away someday!
- * This function must be called after other update_*() functions since
- * there are dependencies on some other derived values.
- */
-#if 0
-static void
-update_tricaps(struct gl_context *ctx, GLbitfield new_state)
-{
-   ctx->_TriangleCaps = 0;
-
-   /*
-    * Points
-    */
-   if (1/*new_state & _NEW_POINT*/) {
-      if (ctx->Point.SmoothFlag)
-         ctx->_TriangleCaps |= DD_POINT_SMOOTH;
-      if (ctx->Point._Attenuated)
-         ctx->_TriangleCaps |= DD_POINT_ATTEN;
-   }
-
-   /*
-    * Lines
-    */
-   if (1/*new_state & _NEW_LINE*/) {
-      if (ctx->Line.SmoothFlag)
-         ctx->_TriangleCaps |= DD_LINE_SMOOTH;
-      if (ctx->Line.StippleFlag)
-         ctx->_TriangleCaps |= DD_LINE_STIPPLE;
-   }
-
-   /*
-    * Polygons
-    */
-   if (1/*new_state & _NEW_POLYGON*/) {
-      if (ctx->Polygon.SmoothFlag)
-         ctx->_TriangleCaps |= DD_TRI_SMOOTH;
-      if (ctx->Polygon.StippleFlag)
-         ctx->_TriangleCaps |= DD_TRI_STIPPLE;
-      if (ctx->Polygon.FrontMode != GL_FILL
-          || ctx->Polygon.BackMode != GL_FILL)
-         ctx->_TriangleCaps |= DD_TRI_UNFILLED;
-      if (ctx->Polygon.OffsetPoint ||
-          ctx->Polygon.OffsetLine ||
-          ctx->Polygon.OffsetFill)
-         ctx->_TriangleCaps |= DD_TRI_OFFSET;
-   }
-
-   /*
-    * Lighting and shading
-    */
-   if (ctx->Light.Enabled && ctx->Light.Model.TwoSide)
-      ctx->_TriangleCaps |= DD_TRI_LIGHT_TWOSIDE;
-   if (_mesa_need_secondary_color(ctx))
-      ctx->_TriangleCaps |= DD_SEPARATE_SPECULAR;
-}
-#endif
 
 
 /**
@@ -498,17 +372,11 @@ _mesa_update_state_locked( struct gl_context *ctx )
    if (new_state & (_NEW_SCISSOR | _NEW_BUFFERS | _NEW_VIEWPORT))
       _mesa_update_draw_buffer_bounds( ctx );
 
-   if (new_state & _NEW_POLYGON)
-      update_polygon( ctx );
-
    if (new_state & _NEW_LIGHT)
       _mesa_update_lighting( ctx );
 
    if (new_state & (_NEW_LIGHT | _NEW_PROGRAM))
       update_twoside( ctx );
-
-   if (new_state & (_NEW_LIGHT | _NEW_BUFFERS))
-      update_clamp_vertex_color(ctx);
 
    if (new_state & (_NEW_STENCIL | _NEW_BUFFERS))
       _mesa_update_stencil( ctx );
@@ -516,26 +384,11 @@ _mesa_update_state_locked( struct gl_context *ctx )
    if (new_state & _NEW_PIXEL)
       _mesa_update_pixel( ctx, new_state );
 
-   if (new_state & _MESA_NEW_SEPARATE_SPECULAR)
-      update_separate_specular( ctx );
-
    if (new_state & (_NEW_BUFFERS | _NEW_VIEWPORT))
       update_viewport_matrix(ctx);
 
    if (new_state & (_NEW_MULTISAMPLE | _NEW_BUFFERS))
       update_multisample( ctx );
-
-   if (new_state & (_NEW_COLOR | _NEW_BUFFERS))
-      update_clamp_read_color(ctx);
-
-   if(new_state & (_NEW_FRAG_CLAMP | _NEW_BUFFERS))
-      update_clamp_fragment_color(ctx);
-
-#if 0
-   if (new_state & (_NEW_POINT | _NEW_LINE | _NEW_POLYGON | _NEW_LIGHT
-                    | _NEW_STENCIL | _MESA_NEW_SEPARATE_SPECULAR))
-      update_tricaps( ctx, new_state );
-#endif
 
    /* ctx->_NeedEyeCoords is now up to date.
     *
@@ -557,8 +410,10 @@ _mesa_update_state_locked( struct gl_context *ctx )
       new_prog_state |= update_program( ctx );
    }
 
-   if (new_state & (_NEW_ARRAY | _NEW_PROGRAM | _NEW_BUFFER_OBJECT))
+   if (ctx->Const.CheckArrayBounds &&
+       new_state & (_NEW_ARRAY | _NEW_PROGRAM | _NEW_BUFFER_OBJECT)) {
       _mesa_update_array_object_max_element(ctx, ctx->Array.ArrayObj);
+   }
 
  out:
    new_prog_state |= update_program_constants(ctx);
@@ -575,7 +430,6 @@ _mesa_update_state_locked( struct gl_context *ctx )
    new_state = ctx->NewState | new_prog_state;
    ctx->NewState = 0;
    ctx->Driver.UpdateState(ctx, new_state);
-   ctx->Array.ArrayObj->NewArrays = 0x0;
 }
 
 

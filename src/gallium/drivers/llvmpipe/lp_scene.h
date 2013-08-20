@@ -81,10 +81,6 @@ struct cmd_block {
    struct cmd_block *next;
 };
 
-struct cmd_block_list {
-   struct cmd_block *head;
-   struct cmd_block *tail;
-};
 
 struct data_block {
    ubyte data[DATA_BLOCK_SIZE];
@@ -98,8 +94,6 @@ struct data_block {
  * For each screen tile we have one of these bins.
  */
 struct cmd_bin {
-   ushort x;
-   ushort y;
    const struct lp_rast_state *last_state;       /* most recent state set in bin */
    struct cmd_block *head;
    struct cmd_block *tail;
@@ -135,15 +129,24 @@ struct lp_scene {
    struct pipe_context *pipe;
    struct lp_fence *fence;
 
+   /* The queries still active at end of scene */
+   struct llvmpipe_query *active_queries[LP_MAX_ACTIVE_BINNED_QUERIES];
+   unsigned num_active_queries;
+   /* If queries were either active or there were begin/end query commands */
+   boolean had_queries;
+
    /* Framebuffer mappings - valid only between begin_rasterization()
     * and end_rasterization().
     */
    struct {
       uint8_t *map;
       unsigned stride;
-      unsigned blocksize;
+      unsigned layer_stride;
    } zsbuf, cbufs[PIPE_MAX_COLOR_BUFS];
-   
+
+   /* OpenGL permits different amount of layers per rt, but rendering limited to minimum */
+   unsigned fb_max_layer;
+
    /** the framebuffer to render the scene into */
    struct pipe_framebuffer_state fb;
 
@@ -379,7 +382,7 @@ void
 lp_scene_bin_iter_begin( struct lp_scene *scene );
 
 struct cmd_bin *
-lp_scene_bin_iter_next( struct lp_scene *scene );
+lp_scene_bin_iter_next( struct lp_scene *scene, int *x, int *y );
 
 
 

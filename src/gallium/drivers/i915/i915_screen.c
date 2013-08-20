@@ -139,6 +139,7 @@ i915_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe_sha
       case PIPE_SHADER_CAP_MAX_PREDS:
          return 0;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
+      case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
          return 0;
       case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
       case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
@@ -183,6 +184,8 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_USER_INDEX_BUFFERS:
    case PIPE_CAP_USER_CONSTANT_BUFFERS:
       return 1;
+   case PIPE_CAP_TGSI_TEXCOORD:
+      return 0;
 
    /* Unsupported features (boolean caps). */
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
@@ -201,15 +204,25 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
    case PIPE_CAP_CONDITIONAL_RENDER:
    case PIPE_CAP_TEXTURE_BARRIER:
-   case PIPE_CAP_TGSI_CAN_COMPACT_VARYINGS:
    case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_START_INSTANCE:
    case PIPE_CAP_QUERY_TIMESTAMP:
+   case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
+   case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
       return 0;
+   case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
+   case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
+   case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
+   case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
+   case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
+       return 0;
+
+   case PIPE_CAP_GLSL_FEATURE_LEVEL:
+      return 120;
 
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 16;
@@ -250,6 +263,8 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
       return 0;
+   case PIPE_CAP_ENDIANNESS:
+      return PIPE_ENDIAN_LITTLE;
 
    default:
       debug_printf("%s: Unknown cap %u.\n", __FUNCTION__, cap);

@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.3
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
@@ -89,7 +89,7 @@ static const char *
 arb_input_attrib_string(GLint index, GLenum progType)
 {
    /*
-    * These strings should match the VERT_ATTRIB_x and FRAG_ATTRIB_x tokens.
+    * These strings should match the VERT_ATTRIB_x and VARYING_SLOT_x tokens.
     */
    static const char *const vertAttribs[] = {
       "vertex.position",
@@ -139,10 +139,17 @@ arb_input_attrib_string(GLint index, GLenum progType)
       "fragment.texcoord[5]",
       "fragment.texcoord[6]",
       "fragment.texcoord[7]",
-      "fragment.(twelve)", /* FRAG_ATTRIB_FACE */
-      "fragment.(thirteen)", /* FRAG_ATTRIB_PNTC */
-      "fragment.(fourteen)", /* FRAG_ATTRIB_CLIP_DIST0 */
-      "fragment.(fifteen)", /* FRAG_ATTRIB_CLIP_DIST1 */
+      "fragment.(twelve)", /* VARYING_SLOT_PSIZ */
+      "fragment.(thirteen)", /* VARYING_SLOT_BFC0 */
+      "fragment.(fourteen)", /* VARYING_SLOT_BFC1 */
+      "fragment.(fifteen)", /* VARYING_SLOT_EDGE */
+      "fragment.(sixteen)", /* VARYING_SLOT_CLIP_VERTEX */
+      "fragment.(seventeen)", /* VARYING_SLOT_CLIP_DIST0 */
+      "fragment.(eighteen)", /* VARYING_SLOT_CLIP_DIST1 */
+      "fragment.(nineteen)", /* VARYING_SLOT_PRIMITIVE_ID */
+      "fragment.(twenty)", /* VARYING_SLOT_LAYER */
+      "fragment.(twenty-one)", /* VARYING_SLOT_FACE */
+      "fragment.(twenty-two)", /* VARYING_SLOT_PNTC */
       "fragment.varying[0]",
       "fragment.varying[1]",
       "fragment.varying[2]",
@@ -179,11 +186,11 @@ arb_input_attrib_string(GLint index, GLenum progType)
 
    /* sanity checks */
    STATIC_ASSERT(Elements(vertAttribs) == VERT_ATTRIB_MAX);
-   STATIC_ASSERT(Elements(fragAttribs) == FRAG_ATTRIB_MAX);
+   STATIC_ASSERT(Elements(fragAttribs) == VARYING_SLOT_MAX);
    assert(strcmp(vertAttribs[VERT_ATTRIB_TEX0], "vertex.texcoord[0]") == 0);
    assert(strcmp(vertAttribs[VERT_ATTRIB_GENERIC15], "vertex.attrib[15]") == 0);
-   assert(strcmp(fragAttribs[FRAG_ATTRIB_TEX0], "fragment.texcoord[0]") == 0);
-   assert(strcmp(fragAttribs[FRAG_ATTRIB_VAR0+15], "fragment.varying[15]") == 0);
+   assert(strcmp(fragAttribs[VARYING_SLOT_TEX0], "fragment.texcoord[0]") == 0);
+   assert(strcmp(fragAttribs[VARYING_SLOT_VAR0+15], "fragment.varying[15]") == 0);
 
    if (progType == GL_VERTEX_PROGRAM_ARB) {
       assert(index < Elements(vertAttribs));
@@ -241,7 +248,7 @@ static const char *
 arb_output_attrib_string(GLint index, GLenum progType)
 {
    /*
-    * These strings should match the VERT_RESULT_x and FRAG_RESULT_x tokens.
+    * These strings should match the VARYING_SLOT_x and FRAG_RESULT_x tokens.
     */
    static const char *const vertResults[] = {
       "result.position",
@@ -256,13 +263,17 @@ arb_output_attrib_string(GLint index, GLenum progType)
       "result.texcoord[5]",
       "result.texcoord[6]",
       "result.texcoord[7]",
-      "result.pointsize", /* VERT_RESULT_PSIZ */
-      "result.(thirteen)", /* VERT_RESULT_BFC0 */
-      "result.(fourteen)", /* VERT_RESULT_BFC1 */
-      "result.(fifteen)", /* VERT_RESULT_EDGE */
-      "result.(sixteen)", /* VERT_RESULT_CLIP_VERTEX */
-      "result.(seventeen)", /* VERT_RESULT_CLIP_DIST0 */
-      "result.(eighteen)", /* VERT_RESULT_CLIP_DIST1 */
+      "result.pointsize", /* VARYING_SLOT_PSIZ */
+      "result.(thirteen)", /* VARYING_SLOT_BFC0 */
+      "result.(fourteen)", /* VARYING_SLOT_BFC1 */
+      "result.(fifteen)", /* VARYING_SLOT_EDGE */
+      "result.(sixteen)", /* VARYING_SLOT_CLIP_VERTEX */
+      "result.(seventeen)", /* VARYING_SLOT_CLIP_DIST0 */
+      "result.(eighteen)", /* VARYING_SLOT_CLIP_DIST1 */
+      "result.(nineteen)", /* VARYING_SLOT_PRIMITIVE_ID */
+      "result.(twenty)", /* VARYING_SLOT_LAYER */
+      "result.(twenty-one)", /* VARYING_SLOT_FACE */
+      "result.(twenty-two)", /* VARYING_SLOT_PNTC */
       "result.varying[0]",
       "result.varying[1]",
       "result.varying[2]",
@@ -311,10 +322,10 @@ arb_output_attrib_string(GLint index, GLenum progType)
    };
 
    /* sanity checks */
-   STATIC_ASSERT(Elements(vertResults) == VERT_RESULT_MAX);
+   STATIC_ASSERT(Elements(vertResults) == VARYING_SLOT_MAX);
    STATIC_ASSERT(Elements(fragResults) == FRAG_RESULT_MAX);
-   assert(strcmp(vertResults[VERT_RESULT_HPOS], "result.position") == 0);
-   assert(strcmp(vertResults[VERT_RESULT_VAR0], "result.varying[0]") == 0);
+   assert(strcmp(vertResults[VARYING_SLOT_POS], "result.position") == 0);
+   assert(strcmp(vertResults[VARYING_SLOT_VAR0], "result.varying[0]") == 0);
    assert(strcmp(fragResults[FRAG_RESULT_DATA0], "result.color[0]") == 0);
 
    if (progType == GL_VERTEX_PROGRAM_ARB) {
@@ -652,20 +663,6 @@ _mesa_fprint_instruction_opt(FILE *f,
    }
 
    switch (inst->Opcode) {
-   case OPCODE_PRINT:
-      fprintf(f, "PRINT '%s'", (char *) inst->Data);
-      if (inst->SrcReg[0].File != PROGRAM_UNDEFINED) {
-         fprintf(f, ", ");
-         fprintf(f, "%s[%d]%s",
-                 _mesa_register_file_name((gl_register_file) inst->SrcReg[0].File),
-		 inst->SrcReg[0].Index,
-		 _mesa_swizzle_string(inst->SrcReg[0].Swizzle,
-				      inst->SrcReg[0].Negate, GL_FALSE));
-      }
-      if (inst->Comment)
-         fprintf(f, "  # %s", inst->Comment);
-      fprint_comment(f, inst);
-      break;
    case OPCODE_SWZ:
       fprintf(f, "SWZ");
       if (inst->SaturateMode == SATURATE_ZERO_ONE)

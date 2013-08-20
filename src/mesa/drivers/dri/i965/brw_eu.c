@@ -111,7 +111,7 @@ brw_set_compression_control(struct brw_compile *p,
 {
    p->compressed = (compression_control == BRW_COMPRESSION_COMPRESSED);
 
-   if (p->brw->intel.gen >= 6) {
+   if (p->brw->gen >= 6) {
       /* Since we don't use the 32-wide support in gen6, we translate
        * the pre-gen6 compression control here.
        */
@@ -154,7 +154,7 @@ void brw_set_saturate( struct brw_compile *p, bool enable )
 
 void brw_set_acc_write_control(struct brw_compile *p, GLuint value)
 {
-   if (p->brw->intel.gen >= 6)
+   if (p->brw->gen >= 6)
       p->current->header.acc_wr_control = value;
 }
 
@@ -213,7 +213,7 @@ brw_init_compile(struct brw_context *brw, struct brw_compile *p, void *mem_ctx)
    p->loop_stack = rzalloc_array(mem_ctx, int, p->loop_stack_array_size);
    p->if_depth_in_loop = rzalloc_array(mem_ctx, int, p->loop_stack_array_size);
 
-   brw_init_compaction_tables(&brw->intel);
+   brw_init_compaction_tables(brw);
 }
 
 
@@ -230,7 +230,6 @@ void
 brw_dump_compile(struct brw_compile *p, FILE *out, int start, int end)
 {
    struct brw_context *brw = p->brw;
-   struct intel_context *intel = &brw->intel;
    void *store = p->store;
    bool dump_hex = false;
 
@@ -247,7 +246,7 @@ brw_dump_compile(struct brw_compile *p, FILE *out, int start, int end)
 		   ((uint32_t *)insn)[0]);
 	 }
 
-	 brw_uncompact_instruction(intel, &uncompacted, compacted);
+	 brw_uncompact_instruction(brw, &uncompacted, compacted);
 	 insn = &uncompacted;
 	 offset += 8;
       } else {
@@ -261,6 +260,6 @@ brw_dump_compile(struct brw_compile *p, FILE *out, int start, int end)
 	 offset += 16;
       }
 
-      brw_disasm(stdout, insn, p->brw->intel.gen);
+      brw_disasm(stdout, insn, p->brw->gen);
    }
 }

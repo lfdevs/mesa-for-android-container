@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  6.5.3
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -137,11 +137,24 @@ struct swrast_texture_image
    /** used for mipmap LOD computation */
    GLfloat WidthScale, HeightScale, DepthScale;
 
-   /** These fields only valid when texture memory is mapped */
-   GLint RowStride;		/**< Padded width in units of texels */
-   GLuint *ImageOffsets;        /**< if 3D texture: array [Depth] of offsets to
-                                     each 2D slice in 'Data', in texels */
-   GLubyte *Map;		/**< Pointer to mapped image memory */
+   /**
+    * Byte stride between rows in ImageSlices.
+    *
+    * For compressed textures, this is the byte stride between one row of
+    * blocks and the next row of blocks.
+    *
+    * Only valid while one of the ImageSlices is mapped, and must be the same
+    * between all slices.
+    */
+   GLint RowStride;
+   /**
+    * When a texture image is mapped for swrast, this array contains pointers
+    * to the beginning of each slice.
+    *
+    * For swrast-allocated textures, these pointers will always stay
+    * initialized to point within Buffer.
+    */
+   void **ImageSlices;
 
    /** Malloc'd texture memory */
    GLubyte *Buffer;
@@ -224,13 +237,13 @@ typedef struct
    GLboolean _DeferredTexture;
 
    /** List/array of the fragment attributes to interpolate */
-   GLuint _ActiveAttribs[FRAG_ATTRIB_MAX];
-   /** Same info, but as a bitmask of FRAG_BIT_x bits */
+   GLuint _ActiveAttribs[VARYING_SLOT_MAX];
+   /** Same info, but as a bitmask of VARYING_BIT_x bits */
    GLbitfield64 _ActiveAttribMask;
    /** Number of fragment attributes to interpolate */
    GLuint _NumActiveAttribs;
    /** Indicates how each attrib is to be interpolated (lines/tris) */
-   GLenum _InterpMode[FRAG_ATTRIB_MAX]; /* GL_FLAT or GL_SMOOTH (for now) */
+   GLenum _InterpMode[VARYING_SLOT_MAX]; /* GL_FLAT or GL_SMOOTH (for now) */
 
    /* Working values:
     */
@@ -299,7 +312,7 @@ typedef struct
    /** Internal hooks, kept up to date by the same mechanism as above.
     */
    blend_func BlendFunc;
-   texture_sample_func TextureSample[MAX_TEXTURE_IMAGE_UNITS];
+   texture_sample_func TextureSample[MAX_COMBINED_TEXTURE_IMAGE_UNITS];
 
    /** Buffer for saving the sampled texture colors.
     * Needed for GL_ARB_texture_env_crossbar implementation.
@@ -378,6 +391,9 @@ _swrast_map_textures(struct gl_context *ctx);
 
 extern void
 _swrast_unmap_textures(struct gl_context *ctx);
+
+extern unsigned int
+_swrast_teximage_slice_height(struct gl_texture_image *texImage);
 
 extern void
 _swrast_map_texture(struct gl_context *ctx, struct gl_texture_object *texObj);

@@ -66,7 +66,10 @@ is_expression(const fs_inst *const inst)
    case BRW_OPCODE_LINE:
    case BRW_OPCODE_PLN:
    case BRW_OPCODE_MAD:
+   case BRW_OPCODE_LRP:
+   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
    case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7:
+   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD:
    case FS_OPCODE_CINTERP:
    case FS_OPCODE_LINTERP:
       return true;
@@ -88,13 +91,13 @@ fs_visitor::opt_cse_local(bblock_t *block, exec_list *aeb)
 
    void *mem_ctx = ralloc_context(this->mem_ctx);
 
+   int ip = block->start_ip;
    for (fs_inst *inst = (fs_inst *)block->start;
 	inst != block->end->next;
 	inst = (fs_inst *) inst->next) {
 
       /* Skip some cases. */
-      if (is_expression(inst) && !inst->predicate && inst->mlen == 0 &&
-          !inst->force_uncompressed && !inst->force_sechalf &&
+      if (is_expression(inst) && !inst->is_partial_write() &&
           !inst->conditional_mod)
       {
 	 bool found = false;
@@ -173,18 +176,33 @@ fs_visitor::opt_cse_local(bblock_t *block, exec_list *aeb)
 	 }
       }
 
-      /* Kill all AEB entries that use the destination. */
       foreach_list_safe(entry_node, aeb) {
 	 aeb_entry *entry = (aeb_entry *)entry_node;
 
 	 for (int i = 0; i < 3; i++) {
+            fs_reg *src_reg = &entry->generator->src[i];
+
+            /* Kill all AEB entries that use the destination we just
+             * overwrote.
+             */
             if (inst->overwrites_reg(entry->generator->src[i])) {
 	       entry->remove();
 	       ralloc_free(entry);
 	       break;
 	    }
+
+            /* Kill any AEB entries using registers that don't get reused any
+             * more -- a sure sign they'll fail operands_match().
+             */
+            if (src_reg->file == GRF && virtual_grf_end[src_reg->reg] < ip) {
+               entry->remove();
+               ralloc_free(entry);
+	       break;
+            }
 	 }
       }
+
+      ip++;
    }
 
    ralloc_free(mem_ctx);
@@ -199,6 +217,8 @@ bool
 fs_visitor::opt_cse()
 {
    bool progress = false;
+
+   calculate_live_intervals();
 
    cfg_t cfg(this);
 

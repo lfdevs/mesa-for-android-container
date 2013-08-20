@@ -69,6 +69,11 @@ if env['gles']:
 #######################################################################
 # Environment setup
 
+env.Append(CPPDEFINES = [
+    ('PACKAGE_VERSION', '\\"9.2.0-rc1\\"'),
+    ('PACKAGE_BUGREPORT', '\\"https://bugs.freedesktop.org/enter_bug.cgi?product=Mesa\\"'),
+])
+
 # Includes
 env.Prepend(CPPPATH = [
 	'#/include',

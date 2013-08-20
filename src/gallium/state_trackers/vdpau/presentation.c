@@ -238,8 +238,6 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
    surf_templ.format = tex->format;
    surf_draw = pipe->create_surface(pipe, tex, &surf_templ);
 
-   surf->timestamp = (vlVdpTime)earliest_presentation_time;
-
    dst_clip.x0 = 0;
    dst_clip.y0 = 0;
    dst_clip.x1 = clip_width ? clip_width : surf_draw->width;
@@ -264,7 +262,7 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
       vl_compositor_clear_layers(cstate);
       vl_compositor_set_rgba_layer(cstate, compositor, 0, surf->sampler_view, &src_rect, NULL, NULL);
       vl_compositor_set_dst_clip(cstate, &dst_clip);
-      vl_compositor_render(cstate, compositor, surf_draw, dirty_area);
+      vl_compositor_render(cstate, compositor, surf_draw, dirty_area, true);
    }
 
    vl_screen_set_next_timestamp(pq->device->vscreen, earliest_presentation_time);
@@ -276,6 +274,7 @@ vlVdpPresentationQueueDisplay(VdpPresentationQueue presentation_queue,
 
    pipe->screen->fence_reference(pipe->screen, &surf->fence, NULL);
    pipe->flush(pipe, &surf->fence, 0);
+   pq->last_surf = surf;
 
    if (dump_window == -1) {
       dump_window = debug_get_num_option("VDPAU_DUMP", 0);
@@ -360,7 +359,10 @@ vlVdpPresentationQueueQuerySurfaceStatus(VdpPresentationQueue presentation_queue
    *first_presentation_time = 0;
 
    if (!surf->fence) {
-      *status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+      if (pq->last_surf == surf)
+         *status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
+      else
+         *status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
    } else {
       pipe_mutex_lock(pq->device->mutex);
       screen = pq->device->vscreen->pscreen;

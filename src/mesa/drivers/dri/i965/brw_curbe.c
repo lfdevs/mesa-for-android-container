@@ -55,12 +55,12 @@
  */
 static void calculate_curbe_offsets( struct brw_context *brw )
 {
-   struct gl_context *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->ctx;
    /* CACHE_NEW_WM_PROG */
    const GLuint nr_fp_regs = (brw->wm.prog_data->nr_params + 15) / 16;
    
    /* BRW_NEW_VERTEX_PROGRAM */
-   const GLuint nr_vp_regs = (brw->vs.prog_data->nr_params + 15) / 16;
+   const GLuint nr_vp_regs = (brw->vs.prog_data->base.nr_params + 15) / 16;
    GLuint nr_clip_regs = 0;
    GLuint total_regs;
 
@@ -146,8 +146,6 @@ const struct brw_tracked_state brw_curbe_offsets = {
  */
 void brw_upload_cs_urb_state(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(2);
    /* It appears that this is the state packet for the CS unit, ie. the
     * urb entries detailed here are housed in the CS range from the
@@ -182,8 +180,7 @@ static GLfloat fixed_plane[6][4] = {
 static void
 brw_upload_constant_buffer(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    const GLuint sz = brw->curbe.total_size;
    const GLuint bufsz = sz * 16 * sizeof(GLfloat);
    GLfloat *buf;
@@ -240,8 +237,8 @@ brw_upload_constant_buffer(struct brw_context *brw)
    if (brw->curbe.vs_size) {
       GLuint offset = brw->curbe.vs_start * 16;
 
-      for (i = 0; i < brw->vs.prog_data->nr_params; i++) {
-         buf[offset + i] = *brw->vs.prog_data->param[i];
+      for (i = 0; i < brw->vs.prog_data->base.nr_params; i++) {
+         buf[offset + i] = *brw->vs.prog_data->base.param[i];
       }
    }
 
@@ -280,7 +277,7 @@ brw_upload_constant_buffer(struct brw_context *brw)
 	 /* Allocate a single page for CURBE entries for this batchbuffer.
 	  * They're generally around 64b.
 	  */
-	 brw->curbe.curbe_bo = drm_intel_bo_alloc(brw->intel.bufmgr, "CURBE",
+	 brw->curbe.curbe_bo = drm_intel_bo_alloc(brw->bufmgr, "CURBE",
 						  4096, 1 << 6);
 	 brw->curbe.curbe_next_offset = 0;
 	 drm_intel_gem_bo_map_gtt(brw->curbe.curbe_bo);
@@ -326,12 +323,6 @@ emit:
    ADVANCE_BATCH();
 }
 
-/* This tracked state is unique in that the state it monitors varies
- * dynamically depending on the parameters tracked by the fragment and
- * vertex programs.  This is the template used as a starting point,
- * each context will maintain a copy of this internally and update as
- * required.
- */
 const struct brw_tracked_state brw_constant_buffer = {
    .dirty = {
       .mesa = _NEW_PROGRAM_CONSTANTS,

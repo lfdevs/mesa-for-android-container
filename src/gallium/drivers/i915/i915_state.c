@@ -534,7 +534,9 @@ static void i915_delete_depth_stencil_state(struct pipe_context *pipe,
 }
 
 
-static void i915_set_scissor_state( struct pipe_context *pipe,
+static void i915_set_scissor_states( struct pipe_context *pipe,
+                                     unsigned start_slot,
+                                     unsigned num_scissors,
                                  const struct pipe_scissor_state *scissor )
 {
    struct i915_context *i915 = i915_context(pipe);
@@ -711,13 +713,18 @@ static void i915_set_fragment_sampler_views(struct pipe_context *pipe,
        !memcmp(i915->fragment_sampler_views, views, num * sizeof(struct pipe_sampler_view *)))
       return;
 
-   for (i = 0; i < num; i++)
+   for (i = 0; i < num; i++) {
+      /* Note: we're using pipe_sampler_view_release() here to work around
+       * a possible crash when the old view belongs to another context that
+       * was already destroyed.
+       */
+      pipe_sampler_view_release(pipe, &i915->fragment_sampler_views[i]);
       pipe_sampler_view_reference(&i915->fragment_sampler_views[i],
                                   views[i]);
+   }
 
    for (i = num; i < i915->num_fragment_sampler_views; i++)
-      pipe_sampler_view_reference(&i915->fragment_sampler_views[i],
-                                  NULL);
+      pipe_sampler_view_release(pipe, &i915->fragment_sampler_views[i]);
 
    i915->num_fragment_sampler_views = num;
 
@@ -820,7 +827,9 @@ static void i915_set_clip_state( struct pipe_context *pipe,
 /* Called when driver state tracker notices changes to the viewport
  * matrix:
  */
-static void i915_set_viewport_state( struct pipe_context *pipe,
+static void i915_set_viewport_states( struct pipe_context *pipe,
+                                      unsigned start_slot,
+                                      unsigned num_viewports,
 				     const struct pipe_viewport_state *viewport )
 {
    struct i915_context *i915 = i915_context(pipe);
@@ -828,7 +837,8 @@ static void i915_set_viewport_state( struct pipe_context *pipe,
    i915->viewport = *viewport; /* struct copy */
 
    /* pass the viewport info to the draw module */
-   draw_set_viewport_state(i915->draw, &i915->viewport);
+   draw_set_viewport_states(i915->draw, start_slot, num_viewports,
+                            &i915->viewport);
 
    i915->dirty |= I915_NEW_VIEWPORT;
 }
@@ -1035,12 +1045,12 @@ i915_init_state_functions( struct i915_context *i915 )
    i915->base.set_framebuffer_state = i915_set_framebuffer_state;
 
    i915->base.set_polygon_stipple = i915_set_polygon_stipple;
-   i915->base.set_scissor_state = i915_set_scissor_state;
+   i915->base.set_scissor_states = i915_set_scissor_states;
    i915->base.set_fragment_sampler_views = i915_set_fragment_sampler_views;
    i915->base.set_vertex_sampler_views = i915_set_vertex_sampler_views;
    i915->base.create_sampler_view = i915_create_sampler_view;
    i915->base.sampler_view_destroy = i915_sampler_view_destroy;
-   i915->base.set_viewport_state = i915_set_viewport_state;
+   i915->base.set_viewport_states = i915_set_viewport_states;
    i915->base.set_vertex_buffers = i915_set_vertex_buffers;
    i915->base.set_index_buffer = i915_set_index_buffer;
 }

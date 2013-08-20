@@ -31,6 +31,7 @@
 #include "draw/draw_context.h"
 #include "draw/draw_vbuf.h"
 #include "draw/draw_vertex.h"
+#include "draw/draw_prim_assembler.h"
 #include "draw/draw_pt.h"
 #include "draw/draw_vs.h"
 #include "draw/draw_gs.h"
@@ -69,7 +70,8 @@ static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
    unsigned i;
    unsigned instance_id_index = ~0;
 
-   unsigned gs_out_prim = (gs ? gs->output_primitive : prim);
+   const unsigned gs_out_prim = (gs ? gs->output_primitive :
+                                 u_assembled_prim(prim));
 
    /* Add one to num_outputs because the pipeline occasionally tags on
     * an additional texcoord, eg for AA lines.
@@ -105,17 +107,14 @@ static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
                           vs->info.num_inputs,
                           fpme->vertex_size,
                           instance_id_index );
-   /* XXX: it's not really gl rasterization rules we care about here,
-    * but gl vs dx9 clip spaces.
-    */
    draw_pt_post_vs_prepare( fpme->post_vs,
-			    draw->clip_xy,
-			    draw->clip_z,
-			    draw->clip_user,
+                            draw->clip_xy,
+                            draw->clip_z,
+                            draw->clip_user,
                             draw->guard_band_xy,
-			    draw->identity_viewport,
-			    (boolean)draw->rasterizer->gl_rasterization_rules,
-			    (draw->vs.edgeflag_output ? TRUE : FALSE) );
+                            draw->identity_viewport,
+                            draw->rasterizer->clip_halfz,
+                            (draw->vs.edgeflag_output ? TRUE : FALSE) );
 
    draw_pt_so_emit_prepare( fpme->so_emit, FALSE );
 
@@ -217,7 +216,7 @@ static void draw_vertex_shader_run(struct draw_vertex_shader *vshader,
 
 static void fetch_pipeline_generic( struct draw_pt_middle_end *middle,
                                     const struct draw_fetch_info *fetch_info,
-                                    const struct draw_prim_info *prim_info )
+                                    const struct draw_prim_info *in_prim_info )
 {
    struct fetch_pipeline_middle_end *fpme = (struct fetch_pipeline_middle_end *)middle;
    struct draw_context *draw = fpme->draw;
@@ -228,6 +227,10 @@ static void fetch_pipeline_generic( struct draw_pt_middle_end *middle,
    struct draw_vertex_info vs_vert_info;
    struct draw_vertex_info gs_vert_info;
    struct draw_vertex_info *vert_info;
+   struct draw_prim_info ia_prim_info;
+   struct draw_vertex_info ia_vert_info;
+   const struct draw_prim_info *prim_info = in_prim_info;
+   boolean free_prim_info = FALSE;
    unsigned opt = fpme->opt;
 
    fetched_vert_info.count = fetch_info->count;
@@ -239,6 +242,12 @@ static void fetch_pipeline_generic( struct draw_pt_middle_end *middle,
    if (!fetched_vert_info.verts) {
       assert(0);
       return;
+   }
+   if (draw->collect_statistics) {
+      draw->statistics.ia_vertices += prim_info->count;
+      draw->statistics.ia_primitives +=
+         u_decomposed_prims_for_vertices(prim_info->prim, fetch_info->count);
+      draw->statistics.vs_invocations += fetch_info->count;
    }
 
    /* Fetch into our vertex buffer.
@@ -270,12 +279,34 @@ static void fetch_pipeline_generic( struct draw_pt_middle_end *middle,
                                draw->pt.user.gs_constants_size,
                                vert_info,
                                prim_info,
+                               &vshader->info,
                                &gs_vert_info,
                                &gs_prim_info);
 
       FREE(vert_info->verts);
       vert_info = &gs_vert_info;
       prim_info = &gs_prim_info;
+   } else {
+      if (draw_prim_assembler_is_required(draw, prim_info, vert_info)) {
+         draw_prim_assembler_run(draw, prim_info, vert_info,
+                                 &ia_prim_info, &ia_vert_info);
+
+         if (ia_vert_info.count) {
+            FREE(vert_info->verts);
+            vert_info = &ia_vert_info;
+            prim_info = &ia_prim_info;
+            free_prim_info = TRUE;
+         }
+      }
+   }
+   if (prim_info->count == 0) {
+      debug_printf("GS/IA didn't emit any vertices!\n");
+      
+      FREE(vert_info->verts);
+      if (free_prim_info) {
+         FREE(prim_info->primitive_lengths);
+      }
+      return;
    }
 
 
@@ -284,29 +315,34 @@ static void fetch_pipeline_generic( struct draw_pt_middle_end *middle,
     * XXX: Stream output surely needs to respect the prim_info->elt
     *      lists.
     */
-   draw_pt_so_emit( fpme->so_emit,
-                    vert_info,
-                    prim_info );
+   draw_pt_so_emit( fpme->so_emit, vert_info, prim_info );
 
-   if (draw_pt_post_vs_run( fpme->post_vs,
-                            vert_info ))
-   {
-      opt |= PT_PIPELINE;
-   }
+   draw_stats_clipper_primitives(draw, prim_info);
 
-   /* Do we need to run the pipeline?
+   /*
+    * if there's no position, need to stop now, or the latter stages
+    * will try to access non-existent position output.
     */
-   if (opt & PT_PIPELINE) {
-      pipeline( fpme,
-                vert_info,
-                prim_info );
-   }
-   else {
-      emit( fpme->emit,
-            vert_info,
-            prim_info );
+   if (draw_current_shader_position_output(draw) != -1) {
+
+      if (draw_pt_post_vs_run( fpme->post_vs, vert_info, prim_info ))
+      {
+         opt |= PT_PIPELINE;
+      }
+
+      /* Do we need to run the pipeline?
+       */
+      if (opt & PT_PIPELINE) {
+         pipeline( fpme, vert_info, prim_info );
+      }
+      else {
+         emit( fpme->emit, vert_info, prim_info );
+      }
    }
    FREE(vert_info->verts);
+   if (free_prim_info) {
+      FREE(prim_info->primitive_lengths);
+   }
 }
 
 static void fetch_pipeline_run( struct draw_pt_middle_end *middle,

@@ -49,31 +49,12 @@ void
 gen6_blorp_emit_batch_head(struct brw_context *brw,
                            const brw_blorp_params *params)
 {
-   struct gl_context *ctx = &brw->intel.ctx;
-   struct intel_context *intel = &brw->intel;
+   struct gl_context *ctx = &brw->ctx;
 
    /* To ensure that the batch contains only the resolve, flush the batch
     * before beginning and after finishing emitting the resolve packets.
-    *
-    * Ideally, we would not need to flush for the resolve op. But, I suspect
-    * that it's unsafe for CMD_PIPELINE_SELECT to occur multiple times in
-    * a single batch, and there is no safe way to ensure that other than by
-    * fencing the resolve with flushes. Ideally, we would just detect if
-    * a batch is in progress and do the right thing, but that would require
-    * the ability to *safely* access brw_context::state::dirty::brw
-    * outside of the brw_upload_state() codepath.
     */
    intel_flush(ctx);
-
-   /* CMD_PIPELINE_SELECT
-    *
-    * Select the 3D pipeline, as opposed to the media pipeline.
-    */
-   {
-      BEGIN_BATCH(1);
-      OUT_BATCH(brw->CMD_PIPELINE_SELECT << 16);
-      ADVANCE_BATCH();
-   }
 }
 
 
@@ -93,15 +74,13 @@ void
 gen6_blorp_emit_state_base_address(struct brw_context *brw,
                                    const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(10);
    OUT_BATCH(CMD_STATE_BASE_ADDRESS << 16 | (10 - 2));
    OUT_BATCH(1); /* GeneralStateBaseAddressModifyEnable */
    /* SurfaceStateBaseAddress */
-   OUT_RELOC(intel->batch.bo, I915_GEM_DOMAIN_SAMPLER, 0, 1);
+   OUT_RELOC(brw->batch.bo, I915_GEM_DOMAIN_SAMPLER, 0, 1);
    /* DynamicStateBaseAddress */
-   OUT_RELOC(intel->batch.bo, (I915_GEM_DOMAIN_RENDER |
+   OUT_RELOC(brw->batch.bo, (I915_GEM_DOMAIN_RENDER |
                                I915_GEM_DOMAIN_INSTRUCTION), 0, 1);
    OUT_BATCH(1); /* IndirectObjectBaseAddress */
    if (params->use_wm_prog) {
@@ -127,7 +106,6 @@ void
 gen6_blorp_emit_vertices(struct brw_context *brw,
                          const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
    uint32_t vertex_offset;
 
    /* Setup VBO for the rectangle primitive..
@@ -182,17 +160,20 @@ gen6_blorp_emit_vertices(struct brw_context *brw,
       uint32_t dw0 = GEN6_VB0_ACCESS_VERTEXDATA |
                      (GEN6_BLORP_NUM_VUE_ELEMS * sizeof(float)) << BRW_VB0_PITCH_SHIFT;
 
-      if (intel->gen >= 7)
+      if (brw->gen >= 7)
          dw0 |= GEN7_VB0_ADDRESS_MODIFYENABLE;
+
+      if (brw->is_haswell)
+         dw0 |= GEN7_MOCS_L3 << 16;
 
       BEGIN_BATCH(batch_length);
       OUT_BATCH((_3DSTATE_VERTEX_BUFFERS << 16) | (batch_length - 2));
       OUT_BATCH(dw0);
       /* start address */
-      OUT_RELOC(intel->batch.bo, I915_GEM_DOMAIN_VERTEX, 0,
+      OUT_RELOC(brw->batch.bo, I915_GEM_DOMAIN_VERTEX, 0,
 		vertex_offset);
       /* end address */
-      OUT_RELOC(intel->batch.bo, I915_GEM_DOMAIN_VERTEX, 0,
+      OUT_RELOC(brw->batch.bo, I915_GEM_DOMAIN_VERTEX, 0,
 		vertex_offset + GEN6_BLORP_VBO_SIZE - 1);
       OUT_BATCH(0);
       ADVANCE_BATCH();
@@ -250,8 +231,6 @@ static void
 gen6_blorp_emit_urb_config(struct brw_context *brw,
                            const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(3);
    OUT_BATCH(_3DSTATE_URB << 16 | (3 - 2));
    OUT_BATCH(brw->urb.max_vs_entries << GEN6_URB_VS_ENTRIES_SHIFT);
@@ -278,17 +257,18 @@ gen6_blorp_emit_blend_state(struct brw_context *brw,
    blend->blend1.post_blend_clamp_enable = 1;
    blend->blend1.clamp_range = BRW_RENDERTARGET_CLAMPRANGE_FORMAT;
 
-   blend->blend1.write_disable_r = false;
-   blend->blend1.write_disable_g = false;
-   blend->blend1.write_disable_b = false;
-   blend->blend1.write_disable_a = false;
+   blend->blend1.write_disable_r = params->color_write_disable[0];
+   blend->blend1.write_disable_g = params->color_write_disable[1];
+   blend->blend1.write_disable_b = params->color_write_disable[2];
+   blend->blend1.write_disable_a = params->color_write_disable[3];
 
    /* When blitting from an XRGB source to a ARGB destination, we need to
     * interpret the missing channel as 1.0.  Blending can do that for us:
     * we simply use the RGB values from the fragment shader ("source RGB"),
     * but smash the alpha channel to 1.
     */
-   if (_mesa_get_format_bits(params->dst.mt->format, GL_ALPHA_BITS) > 0 &&
+   if (params->src.mt &&
+       _mesa_get_format_bits(params->dst.mt->format, GL_ALPHA_BITS) > 0 &&
        _mesa_get_format_bits(params->src.mt->format, GL_ALPHA_BITS) == 0) {
       blend->blend0.blend_enable = 1;
       blend->blend0.ia_blend_enable = 1;
@@ -348,7 +328,7 @@ gen6_blorp_emit_depth_stencil_state(struct brw_context *brw,
    state->ds2.depth_write_enable = 1;
    if (params->hiz_op == GEN6_HIZ_OP_DEPTH_RESOLVE) {
       state->ds2.depth_test_enable = 1;
-      state->ds2.depth_test_func = COMPAREFUNC_NEVER;
+      state->ds2.depth_test_func = BRW_COMPAREFUNCTION_NEVER;
    }
 
    return depthstencil_offset;
@@ -369,8 +349,6 @@ gen6_blorp_emit_cc_state_pointers(struct brw_context *brw,
                                   uint32_t depthstencil_offset,
                                   uint32_t cc_state_offset)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_CC_STATE_POINTERS << 16 | (4 - 2));
    OUT_BATCH(cc_blend_state_offset | 1); /* BLEND_STATE offset */
@@ -460,7 +438,7 @@ gen6_blorp_emit_surface_state(struct brw_context *brw,
                BRW_SURFACE_VERTICAL_ALIGN_ENABLE : 0));
 
    /* Emit relocation to surface contents */
-   drm_intel_bo_emit_reloc(brw->intel.batch.bo,
+   drm_intel_bo_emit_reloc(brw->batch.bo,
                            wm_surf_offset + 4,
                            region->bo,
                            surf[1] - region->bo->offset,
@@ -557,8 +535,6 @@ gen6_blorp_emit_sampler_state_pointers(struct brw_context *brw,
                                        const brw_blorp_params *params,
                                        uint32_t sampler_offset)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_SAMPLER_STATE_POINTERS << 16 |
              VS_SAMPLER_STATE_CHANGE |
@@ -580,10 +556,8 @@ void
 gen6_blorp_emit_vs_disable(struct brw_context *brw,
                            const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
-   if (intel->gen == 6) {
-      /* From the BSpec, Volume 2a, Part 3 "Vertex Shader", Section
+   if (brw->gen == 6) {
+      /* From the BSpec, 3D Pipeline > Geometry > Vertex Shader > State,
        * 3DSTATE_VS, Dword 5.0 "VS Function Enable":
        *
        *   [DevSNB] A pipeline flush must be programmed prior to a
@@ -591,7 +565,7 @@ gen6_blorp_emit_vs_disable(struct brw_context *brw,
        *   toggle. Pipeline flush can be executed by sending a PIPE_CONTROL
        *   command with CS stall bit set and a post sync operation.
        */
-      intel_emit_post_sync_nonzero_flush(intel);
+      intel_emit_post_sync_nonzero_flush(brw);
    }
 
    /* Disable the push constant buffers. */
@@ -622,8 +596,6 @@ void
 gen6_blorp_emit_gs_disable(struct brw_context *brw,
                            const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    /* Disable all the constant buffers. */
    BEGIN_BATCH(5);
    OUT_BATCH(_3DSTATE_CONSTANT_GS << 16 | (5 - 2));
@@ -663,8 +635,6 @@ void
 gen6_blorp_emit_clip_disable(struct brw_context *brw,
                              const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_CLIP << 16 | (4 - 2));
    OUT_BATCH(0);
@@ -696,8 +666,6 @@ static void
 gen6_blorp_emit_sf_config(struct brw_context *brw,
                           const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(20);
    OUT_BATCH(_3DSTATE_SF << 16 | (20 - 2));
    OUT_BATCH((1 - 1) << GEN6_SF_NUM_OUTPUTS_SHIFT | /* only position */
@@ -720,13 +688,12 @@ gen6_blorp_emit_wm_config(struct brw_context *brw,
                           uint32_t prog_offset,
                           brw_blorp_prog_data *prog_data)
 {
-   struct intel_context *intel = &brw->intel;
    uint32_t dw2, dw4, dw5, dw6;
 
    /* Even when thread dispatch is disabled, max threads (dw5.25:31) must be
-    * nonzero to prevent the GPU from hanging. See the valid ranges in the
-    * BSpec, Volume 2a.11 Windower, Section 3DSTATE_WM, Dword 5.25:31
-    * "Maximum Number Of Threads".
+    * nonzero to prevent the GPU from hanging.  While the documentation doesn't
+    * mention this explicitly, it notes that the valid range for the field is
+    * [1,39] = [2,40] threads, which excludes zero.
     *
     * To be safe (and to minimize extraneous code) we go ahead and fully
     * configure the WM state whether or not there is a WM program.
@@ -749,7 +716,6 @@ gen6_blorp_emit_wm_config(struct brw_context *brw,
       assert(0);
       break;
    }
-   dw4 |= GEN6_WM_STATISTICS_ENABLE;
    dw5 |= GEN6_WM_LINE_AA_WIDTH_1_0;
    dw5 |= GEN6_WM_LINE_END_CAP_AA_WIDTH_0_5;
    dw5 |= (brw->max_wm_threads - 1) << GEN6_WM_MAX_THREADS_SHIFT;
@@ -793,8 +759,6 @@ gen6_blorp_emit_constant_ps(struct brw_context *brw,
                             const brw_blorp_params *params,
                             uint32_t wm_push_const_offset)
 {
-   struct intel_context *intel = &brw->intel;
-
    /* Make sure the push constants fill an exact integer number of
     * registers.
     */
@@ -819,8 +783,6 @@ static void
 gen6_blorp_emit_constant_ps_disable(struct brw_context *brw,
                                     const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    /* Disable the push constant buffers. */
    BEGIN_BATCH(5);
    OUT_BATCH(_3DSTATE_CONSTANT_PS << 16 | (5 - 2));
@@ -839,8 +801,6 @@ gen6_blorp_emit_binding_table_pointers(struct brw_context *brw,
                                        const brw_blorp_params *params,
                                        uint32_t wm_bind_bo_offset)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS << 16 |
              GEN6_BINDING_TABLE_MODIFY_PS |
@@ -856,12 +816,15 @@ static void
 gen6_blorp_emit_depth_stencil_config(struct brw_context *brw,
                                      const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
+   struct gl_context *ctx = &brw->ctx;
    uint32_t draw_x = params->depth.x_offset;
    uint32_t draw_y = params->depth.y_offset;
    uint32_t tile_mask_x, tile_mask_y;
 
-   brw_get_depthstencil_tile_masks(params->depth.mt, NULL,
+   brw_get_depthstencil_tile_masks(params->depth.mt,
+                                   params->depth.level,
+                                   params->depth.layer,
+                                   NULL,
                                    &tile_mask_x, &tile_mask_y);
 
    /* 3DSTATE_DEPTH_BUFFER */
@@ -888,11 +851,14 @@ gen6_blorp_emit_depth_stencil_config(struct brw_context *brw,
        * tile_x and tile_y to 0.  This is a temporary workaround until we come
        * up with a better solution.
        */
+      WARN_ONCE((tile_x & 7) || (tile_y & 7),
+                "Depth/stencil buffer needs alignment to 8-pixel boundaries.\n"
+                "Truncating offset, bad rendering may occur.\n");
       tile_x &= ~7;
       tile_y &= ~7;
 
-      intel_emit_post_sync_nonzero_flush(intel);
-      intel_emit_depth_stall_flushes(intel);
+      intel_emit_post_sync_nonzero_flush(brw);
+      intel_emit_depth_stall_flushes(brw);
 
       BEGIN_BATCH(7);
       OUT_BATCH(_3DSTATE_DEPTH_BUFFER << 16 | (7 - 2));
@@ -948,8 +914,6 @@ static void
 gen6_blorp_emit_depth_disable(struct brw_context *brw,
                               const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(7);
    OUT_BATCH(_3DSTATE_DEPTH_BUFFER << 16 | (7 - 2));
    OUT_BATCH((BRW_DEPTHFORMAT_D32_FLOAT << 18) |
@@ -973,8 +937,6 @@ static void
 gen6_blorp_emit_clear_params(struct brw_context *brw,
                              const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_CLEAR_PARAMS << 16 |
 	     GEN5_DEPTH_CLEAR_VALID |
@@ -989,8 +951,6 @@ void
 gen6_blorp_emit_drawing_rectangle(struct brw_context *brw,
                                   const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_DRAWING_RECTANGLE << 16 | (4 - 2));
    OUT_BATCH(0);
@@ -1005,7 +965,6 @@ void
 gen6_blorp_emit_viewport_state(struct brw_context *brw,
 			       const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
    struct brw_cc_viewport *ccv;
    uint32_t cc_vp_offset;
 
@@ -1031,8 +990,6 @@ static void
 gen6_blorp_emit_primitive(struct brw_context *brw,
                           const brw_blorp_params *params)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(6);
    OUT_BATCH(CMD_3D_PRIM << 16 | (6 - 2) |
              _3DPRIM_RECTLIST << GEN4_3DPRIM_TOPOLOGY_TYPE_SHIFT |
@@ -1056,11 +1013,9 @@ gen6_blorp_emit_primitive(struct brw_context *brw,
  * This function alters no GL state.
  */
 void
-gen6_blorp_exec(struct intel_context *intel,
+gen6_blorp_exec(struct brw_context *brw,
                 const brw_blorp_params *params)
 {
-   struct gl_context *ctx = &intel->ctx;
-   struct brw_context *brw = brw_context(ctx);
    brw_blorp_prog_data *prog_data = NULL;
    uint32_t cc_blend_state_offset = 0;
    uint32_t cc_state_offset = 0;
@@ -1071,7 +1026,7 @@ gen6_blorp_exec(struct intel_context *intel,
    uint32_t prog_offset = params->get_wm_prog(brw, &prog_data);
    gen6_blorp_emit_batch_head(brw, params);
    gen6_emit_3dstate_multisample(brw, params->num_samples);
-   gen6_emit_3dstate_sample_mask(brw, params->num_samples, 1.0, false);
+   gen6_emit_3dstate_sample_mask(brw, params->num_samples, 1.0, false, ~0u);
    gen6_blorp_emit_state_base_address(brw, params);
    gen6_blorp_emit_vertices(brw, params);
    gen6_blorp_emit_urb_config(brw, params);
@@ -1084,16 +1039,19 @@ gen6_blorp_exec(struct intel_context *intel,
                                      depthstencil_offset, cc_state_offset);
    if (params->use_wm_prog) {
       uint32_t wm_surf_offset_renderbuffer;
-      uint32_t wm_surf_offset_texture;
+      uint32_t wm_surf_offset_texture = 0;
       uint32_t sampler_offset;
       wm_push_const_offset = gen6_blorp_emit_wm_constants(brw, params);
+      intel_miptree_used_for_rendering(params->dst.mt);
       wm_surf_offset_renderbuffer =
          gen6_blorp_emit_surface_state(brw, params, &params->dst,
                                        I915_GEM_DOMAIN_RENDER,
                                        I915_GEM_DOMAIN_RENDER);
-      wm_surf_offset_texture =
-         gen6_blorp_emit_surface_state(brw, params, &params->src,
-                                       I915_GEM_DOMAIN_SAMPLER, 0);
+      if (params->src.mt) {
+         wm_surf_offset_texture =
+            gen6_blorp_emit_surface_state(brw, params, &params->src,
+                                          I915_GEM_DOMAIN_SAMPLER, 0);
+      }
       wm_bind_bo_offset =
          gen6_blorp_emit_binding_table(brw, params,
                                        wm_surf_offset_renderbuffer,
@@ -1121,14 +1079,5 @@ gen6_blorp_exec(struct intel_context *intel,
    gen6_blorp_emit_clear_params(brw, params);
    gen6_blorp_emit_drawing_rectangle(brw, params);
    gen6_blorp_emit_primitive(brw, params);
-
-   /* See comments above at first invocation of intel_flush() in
-    * gen6_blorp_emit_batch_head().
-    */
-   intel_flush(ctx);
-
-   /* Be safe. */
-   brw->state.dirty.brw = ~0;
-   brw->state.dirty.cache = ~0;
 }
 

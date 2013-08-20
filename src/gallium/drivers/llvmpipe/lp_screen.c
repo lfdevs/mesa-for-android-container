@@ -115,7 +115,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_SM3:
       return 1;
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
-      return 0;
+      return 1;
    case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
       return PIPE_MAX_SO_BUFFERS;
    case PIPE_CAP_ANISOTROPIC_FILTER:
@@ -130,12 +130,16 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 0;
    case PIPE_CAP_QUERY_TIMESTAMP:
       return 1;
+   case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
+      return 0;
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
       return 1;
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
       return 1;
    case PIPE_CAP_TEXTURE_SWIZZLE:
       return 1;
+   case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
+      return 0;
    case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
       return LP_MAX_TEXTURE_2D_LEVELS;
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
@@ -152,9 +156,9 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
    case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
       return 1;
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
       return 0;
    case PIPE_CAP_PRIMITIVE_RESTART:
       return 1;
@@ -188,14 +192,13 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 16*4;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
       return 1;
-   case PIPE_CAP_TGSI_CAN_COMPACT_VARYINGS:
    case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
       return 0;
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
    case PIPE_CAP_VERTEX_COLOR_CLAMPED:
       return 1;
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
-      return 120;
+      return 140;
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
       return 0;
    case PIPE_CAP_COMPUTE:
@@ -208,6 +211,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
+   case PIPE_CAP_TGSI_TEXCOORD:
       return 0;
 
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
@@ -216,8 +220,19 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
    case PIPE_CAP_CUBE_MAP_ARRAY:
-   case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 0;
+   case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
+      return 1;
+   case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
+      return 65536;
+   case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
+      return 1;
+   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+      return 0;
+   case PIPE_CAP_MAX_VIEWPORTS:
+      return PIPE_MAX_VIEWPORTS;
+   case PIPE_CAP_ENDIANNESS:
+      return PIPE_ENDIAN_NATIVE;
    }
    /* should only get here on unhandled cases */
    debug_printf("Unexpected PIPE_CAP %d query\n", param);
@@ -302,10 +317,6 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
    if (!format_desc)
       return FALSE;
 
-   /* Z16 support is missing, which breaks the blit */
-   if (format == PIPE_FORMAT_Z16_UNORM)
-      return FALSE;
-
    assert(target == PIPE_BUFFER ||
           target == PIPE_TEXTURE_1D ||
           target == PIPE_TEXTURE_1D_ARRAY ||
@@ -319,18 +330,25 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
       return FALSE;
 
    if (bind & PIPE_BIND_RENDER_TARGET) {
-      if (format_desc->colorspace != UTIL_FORMAT_COLORSPACE_RGB)
+      if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB) {
+         if (format_desc->nr_channels < 3)
+            return FALSE;
+      }
+      else if (format_desc->colorspace != UTIL_FORMAT_COLORSPACE_RGB)
          return FALSE;
 
-      if (format_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN)
+      if (format_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN &&
+          format != PIPE_FORMAT_R11G11B10_FLOAT)
          return FALSE;
+
       assert(format_desc->block.width == 1);
       assert(format_desc->block.height == 1);
 
       if (format_desc->is_mixed)
          return FALSE;
 
-      if (!format_desc->is_array && !format_desc->is_bitmask)
+      if (!format_desc->is_array && !format_desc->is_bitmask &&
+          format != PIPE_FORMAT_R11G11B10_FLOAT)
          return FALSE;
 
       /*
@@ -360,9 +378,10 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
       if (format_desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS)
          return FALSE;
 
-      /* FIXME: Temporary restriction. See lp_state_fs.c. */
-      if (format_desc->block.bits != 32)
+      /* TODO: Support stencil-only formats */
+      if (format_desc->swizzle[0] == UTIL_FORMAT_SWIZZLE_NONE) {
          return FALSE;
+      }
    }
 
    if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC) {
@@ -474,9 +493,10 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
 {
    struct llvmpipe_screen *screen;
 
-#ifdef PIPE_ARCH_X86
-   /* require SSE2 due to LLVM PR6960. */
    util_cpu_detect();
+
+#if defined(PIPE_ARCH_X86) && HAVE_LLVM < 0x0302
+   /* require SSE2 due to LLVM PR6960. */
    if (!util_cpu_caps.has_sse2)
        return NULL;
 #endif

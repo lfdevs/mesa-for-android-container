@@ -49,13 +49,6 @@
 DEBUG_GET_ONCE_BOOL_OPTION(gallium_dump_vs, "GALLIUM_DUMP_VS", FALSE)
 
 
-void draw_vs_set_viewport( struct draw_context *draw,
-                           const struct pipe_viewport_state *viewport )
-{
-}
-
-
-
 struct draw_vertex_shader *
 draw_create_vertex_shader(struct draw_context *draw,
                           const struct pipe_shader_state *shader)
@@ -93,10 +86,13 @@ draw_create_vertex_shader(struct draw_context *draw,
             found_clipvertex = TRUE;
             vs->clipvertex_output = i;
          } else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_CLIPDIST) {
-            if (vs->info.output_semantic_index[i] == 0)
-               vs->clipdistance_output[0] = i;
-            else
-               vs->clipdistance_output[1] = i;
+            debug_assert(vs->info.output_semantic_index[i] <
+                         PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT);
+            vs->clipdistance_output[vs->info.output_semantic_index[i]] = i;
+         } else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_CULLDIST) {
+            debug_assert(vs->info.output_semantic_index[i] <
+                         PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT);
+            vs->culldistance_output[vs->info.output_semantic_index[i]] = i;
          }
       }
       if (!found_clipvertex)
@@ -244,4 +240,17 @@ draw_vs_get_emit( struct draw_context *draw,
    }
    
    return draw->vs.emit;
+}
+
+void
+draw_vs_attach_so(struct draw_vertex_shader *dvs,
+                  const struct pipe_stream_output_info *info)
+{
+   dvs->state.stream_output = *info;
+}
+
+void
+draw_vs_reset_so(struct draw_vertex_shader *dvs)
+{
+   memset(&dvs->state.stream_output, 0, sizeof(dvs->state.stream_output));
 }

@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.10
  *
  * Copyright (C) 2011 LunarG Inc.
  *
@@ -33,6 +32,9 @@
 #include "i915/drm/i915_drm_public.h"
 #include "i915/i915_public.h"
 #include "target-helpers/inline_wrapper_sw_helper.h"
+/* for ilo */
+#include "intel/intel_winsys.h"
+#include "ilo/ilo_public.h"
 /* for nouveau */
 #include "nouveau/drm/nouveau_drm_public.h"
 /* for r300 */
@@ -45,6 +47,8 @@
 /* for vmwgfx */
 #include "svga/drm/svga_drm_public.h"
 #include "svga/svga_public.h"
+/* for freedreno */
+#include "freedreno/drm/freedreno_drm_public.h"
 
 static struct pipe_screen *
 pipe_i915_create_screen(int fd)
@@ -58,6 +62,29 @@ pipe_i915_create_screen(int fd)
       return NULL;
 
    screen = i915_screen_create(iws);
+   if (!screen)
+      return NULL;
+
+   screen = debug_screen_wrap(screen);
+
+   return screen;
+#else
+   return NULL;
+#endif
+}
+
+static struct pipe_screen *
+pipe_ilo_create_screen(int fd)
+{
+#if _EGL_PIPE_ILO
+   struct intel_winsys *iws;
+   struct pipe_screen *screen;
+
+   iws = intel_winsys_create_for_fd(fd);
+   if (!iws)
+      return NULL;
+
+   screen = ilo_screen_create(iws);
    if (!screen)
       return NULL;
 
@@ -179,11 +206,31 @@ pipe_vmwgfx_create_screen(int fd)
 #endif
 }
 
+static struct pipe_screen *
+pipe_freedreno_create_screen(int fd)
+{
+#if _EGL_PIPE_FREEDRENO
+   struct pipe_screen *screen;
+
+   screen = fd_drm_screen_create(fd);
+   if (!screen)
+      return NULL;
+
+   screen = debug_screen_wrap(screen);
+
+   return screen;
+#else
+   return NULL;
+#endif
+}
+
 struct pipe_screen *
 egl_pipe_create_drm_screen(const char *name, int fd)
 {
    if (strcmp(name, "i915") == 0)
       return pipe_i915_create_screen(fd);
+   else if (strcmp(name, "i965") == 0)
+      return pipe_ilo_create_screen(fd);
    else if (strcmp(name, "nouveau") == 0)
       return pipe_nouveau_create_screen(fd);
    else if (strcmp(name, "r300") == 0)
@@ -194,6 +241,8 @@ egl_pipe_create_drm_screen(const char *name, int fd)
       return pipe_radeonsi_create_screen(fd);
    else if (strcmp(name, "vmwgfx") == 0)
       return pipe_vmwgfx_create_screen(fd);
+   else if (strcmp(name, "kgsl") == 0)
+      return pipe_freedreno_create_screen(fd);
    else
       return NULL;
 }

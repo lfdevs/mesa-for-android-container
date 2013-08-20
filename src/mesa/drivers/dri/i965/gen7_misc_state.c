@@ -35,21 +35,21 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
                             uint32_t depth_offset, uint32_t depthbuffer_format,
                             uint32_t depth_surface_type,
                             struct intel_mipmap_tree *stencil_mt,
-                            struct intel_mipmap_tree *hiz_mt,
-                            bool separate_stencil, uint32_t width,
-                            uint32_t height, uint32_t tile_x, uint32_t tile_y)
+                            bool hiz, bool separate_stencil,
+                            uint32_t width, uint32_t height,
+                            uint32_t tile_x, uint32_t tile_y)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
+   uint8_t mocs = brw->is_haswell ? GEN7_MOCS_L3 : 0;
 
-   intel_emit_depth_stall_flushes(intel);
+   intel_emit_depth_stall_flushes(brw);
 
-   /* _NEW_DEPTH, _NEW_STENCIL */
+   /* _NEW_DEPTH, _NEW_STENCIL, _NEW_BUFFERS */
    BEGIN_BATCH(7);
    OUT_BATCH(GEN7_3DSTATE_DEPTH_BUFFER << 16 | (7 - 2));
    OUT_BATCH((depth_mt ? depth_mt->region->pitch - 1 : 0) |
              (depthbuffer_format << 18) |
-             ((hiz_mt ? 1 : 0) << 22) |
+             ((hiz ? 1 : 0) << 22) |
              ((stencil_mt != NULL && ctx->Stencil._WriteEnabled) << 27) |
              ((ctx->Depth.Mask != 0) << 28) |
              (depth_surface_type << 29));
@@ -64,21 +64,23 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
 
    OUT_BATCH(((width + tile_x - 1) << 4) |
              ((height + tile_y - 1) << 18));
-   OUT_BATCH(0);
+   OUT_BATCH(mocs);
    OUT_BATCH(tile_x | (tile_y << 16));
    OUT_BATCH(0);
    ADVANCE_BATCH();
 
-   if (hiz_mt == NULL) {
+   if (!hiz) {
       BEGIN_BATCH(3);
       OUT_BATCH(GEN7_3DSTATE_HIER_DEPTH_BUFFER << 16 | (3 - 2));
       OUT_BATCH(0);
       OUT_BATCH(0);
       ADVANCE_BATCH();
    } else {
+      struct intel_mipmap_tree *hiz_mt = depth_mt->hiz_mt;
       BEGIN_BATCH(3);
       OUT_BATCH(GEN7_3DSTATE_HIER_DEPTH_BUFFER << 16 | (3 - 2));
-      OUT_BATCH(hiz_mt->region->pitch - 1);
+      OUT_BATCH((mocs << 25) |
+                (hiz_mt->region->pitch - 1));
       OUT_RELOC(hiz_mt->region->bo,
                 I915_GEM_DOMAIN_RENDER,
                 I915_GEM_DOMAIN_RENDER,
@@ -93,25 +95,22 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       OUT_BATCH(0);
       ADVANCE_BATCH();
    } else {
-      const int enabled = intel->is_haswell ? HSW_STENCIL_ENABLED : 0;
+      const int enabled = brw->is_haswell ? HSW_STENCIL_ENABLED : 0;
 
       BEGIN_BATCH(3);
       OUT_BATCH(GEN7_3DSTATE_STENCIL_BUFFER << 16 | (3 - 2));
-      /* The stencil buffer has quirky pitch requirements.  From the Graphics
-       * BSpec: vol2a.11 3D Pipeline Windower > Early Depth/Stencil Processing
-       * > Depth/Stencil Buffer State > 3DSTATE_STENCIL_BUFFER [DevIVB+],
-       * field "Surface Pitch":
+      /* The stencil buffer has quirky pitch requirements.  From the
+       * Sandybridge PRM, Volume 2 Part 1, page 329 (3DSTATE_STENCIL_BUFFER
+       * dword 1 bits 16:0 - Surface Pitch):
        *
        *    The pitch must be set to 2x the value computed based on width, as
        *    the stencil buffer is stored with two rows interleaved.
        *
-       * (Note that it is not 100% clear whether this intended to apply to
-       * Gen7; the BSpec flags this comment as "DevILK,DevSNB" (which would
-       * imply that it doesn't), however the comment appears on a "DevIVB+"
-       * page (which would imply that it does).  Experiments with the hardware
-       * indicate that it does.
+       * While the Ivybridge PRM lacks this comment, the BSpec contains the
+       * same text, and experiments indicate that this is necessary.
        */
       OUT_BATCH(enabled |
+                mocs << 25 |
 	        (2 * stencil_mt->region->pitch - 1));
       OUT_RELOC(stencil_mt->region->bo,
 	        I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,

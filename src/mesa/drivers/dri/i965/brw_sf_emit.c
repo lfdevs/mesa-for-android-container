@@ -44,25 +44,25 @@
 
 
 /**
- * Determine the vert_result corresponding to the given half of the given
+ * Determine the varying corresponding to the given half of the given
  * register.  half=0 means the first half of a register, half=1 means the
  * second half.
  */
-static inline int vert_reg_to_vert_result(struct brw_sf_compile *c, GLuint reg,
-                                          int half)
+static inline int vert_reg_to_varying(struct brw_sf_compile *c, GLuint reg,
+                                      int half)
 {
    int vue_slot = (reg + c->urb_entry_read_offset) * 2 + half;
-   return c->vue_map.slot_to_vert_result[vue_slot];
+   return c->vue_map.slot_to_varying[vue_slot];
 }
 
 /**
- * Determine the register corresponding to the given vert_result.
+ * Determine the register corresponding to the given varying.
  */
-static struct brw_reg get_vert_result(struct brw_sf_compile *c,
-                                      struct brw_reg vert,
-                                      GLuint vert_result)
+static struct brw_reg get_varying(struct brw_sf_compile *c,
+                                  struct brw_reg vert,
+                                  GLuint varying)
 {
-   int vue_slot = c->vue_map.vert_result_to_slot[vert_result];
+   int vue_slot = c->vue_map.varying_to_slot[varying];
    assert (vue_slot >= c->urb_entry_read_offset);
    GLuint off = vue_slot / 2 - c->urb_entry_read_offset;
    GLuint sub = vue_slot % 2;
@@ -86,11 +86,11 @@ static void copy_bfc( struct brw_sf_compile *c,
    GLuint i;
 
    for (i = 0; i < 2; i++) {
-      if (have_attr(c, VERT_RESULT_COL0+i) &&
-	  have_attr(c, VERT_RESULT_BFC0+i))
+      if (have_attr(c, VARYING_SLOT_COL0+i) &&
+	  have_attr(c, VARYING_SLOT_BFC0+i))
 	 brw_MOV(p, 
-		 get_vert_result(c, vert, VERT_RESULT_COL0+i),
-		 get_vert_result(c, vert, VERT_RESULT_BFC0+i));
+		 get_varying(c, vert, VARYING_SLOT_COL0+i),
+		 get_varying(c, vert, VARYING_SLOT_BFC0+i));
    }
 }
 
@@ -109,8 +109,8 @@ static void do_twoside_color( struct brw_sf_compile *c )
     * for user-supplied vertex programs, as t_vp_build.c always does
     * the right thing.
     */
-   if (!(have_attr(c, VERT_RESULT_COL0) && have_attr(c, VERT_RESULT_BFC0)) &&
-       !(have_attr(c, VERT_RESULT_COL1) && have_attr(c, VERT_RESULT_BFC1)))
+   if (!(have_attr(c, VARYING_SLOT_COL0) && have_attr(c, VARYING_SLOT_BFC0)) &&
+       !(have_attr(c, VARYING_SLOT_COL1) && have_attr(c, VARYING_SLOT_BFC1)))
       return;
    
    /* Need to use BRW_EXECUTE_4 and also do an 4-wide compare in order
@@ -138,8 +138,8 @@ static void do_twoside_color( struct brw_sf_compile *c )
  * Flat shading
  */
 
-#define VERT_RESULT_COLOR_BITS (BITFIELD64_BIT(VERT_RESULT_COL0) | \
-				BITFIELD64_BIT(VERT_RESULT_COL1))
+#define VARYING_SLOT_COLOR_BITS (BITFIELD64_BIT(VARYING_SLOT_COL0) | \
+                                 BITFIELD64_BIT(VARYING_SLOT_COL1))
 
 static void copy_colors( struct brw_sf_compile *c,
 		     struct brw_reg dst,
@@ -148,11 +148,11 @@ static void copy_colors( struct brw_sf_compile *c,
    struct brw_compile *p = &c->func;
    GLuint i;
 
-   for (i = VERT_RESULT_COL0; i <= VERT_RESULT_COL1; i++) {
+   for (i = VARYING_SLOT_COL0; i <= VARYING_SLOT_COL1; i++) {
       if (have_attr(c,i))
 	 brw_MOV(p, 
-		 get_vert_result(c, dst, i),
-		 get_vert_result(c, src, i));
+		 get_varying(c, dst, i),
+		 get_varying(c, src, i));
    }
 }
 
@@ -165,9 +165,9 @@ static void copy_colors( struct brw_sf_compile *c,
 static void do_flatshade_triangle( struct brw_sf_compile *c )
 {
    struct brw_compile *p = &c->func;
-   struct intel_context *intel = &p->brw->intel;
+   struct brw_context *brw = p->brw;
    struct brw_reg ip = brw_ip_reg();
-   GLuint nr = _mesa_bitcount_64(c->key.attrs & VERT_RESULT_COLOR_BITS);
+   GLuint nr = _mesa_bitcount_64(c->key.attrs & VARYING_SLOT_COLOR_BITS);
    GLuint jmpi = 1;
 
    if (!nr)
@@ -178,7 +178,7 @@ static void do_flatshade_triangle( struct brw_sf_compile *c )
    if (c->key.primitive == SF_UNFILLED_TRIS)
       return;
 
-   if (intel->gen == 5)
+   if (brw->gen == 5)
        jmpi = 2;
 
    brw_push_insn_state(p);
@@ -204,9 +204,9 @@ static void do_flatshade_triangle( struct brw_sf_compile *c )
 static void do_flatshade_line( struct brw_sf_compile *c )
 {
    struct brw_compile *p = &c->func;
-   struct intel_context *intel = &p->brw->intel;
+   struct brw_context *brw = p->brw;
    struct brw_reg ip = brw_ip_reg();
-   GLuint nr = _mesa_bitcount_64(c->key.attrs & VERT_RESULT_COLOR_BITS);
+   GLuint nr = _mesa_bitcount_64(c->key.attrs & VARYING_SLOT_COLOR_BITS);
    GLuint jmpi = 1;
 
    if (!nr)
@@ -217,7 +217,7 @@ static void do_flatshade_line( struct brw_sf_compile *c )
    if (c->key.primitive == SF_UNFILLED_TRIS)
       return;
 
-   if (intel->gen == 5)
+   if (brw->gen == 5)
        jmpi = 2;
 
    brw_push_insn_state(p);
@@ -334,15 +334,15 @@ calculate_masks(struct brw_sf_compile *c,
    GLbitfield64 linear_mask;
 
    if (c->key.do_flat_shading)
-      persp_mask = c->key.attrs & ~(BITFIELD64_BIT(VERT_RESULT_HPOS) |
-                                    BITFIELD64_BIT(VERT_RESULT_COL0) |
-                                    BITFIELD64_BIT(VERT_RESULT_COL1));
+      persp_mask = c->key.attrs & ~(BITFIELD64_BIT(VARYING_SLOT_POS) |
+                                    BITFIELD64_BIT(VARYING_SLOT_COL0) |
+                                    BITFIELD64_BIT(VARYING_SLOT_COL1));
    else
-      persp_mask = c->key.attrs & ~(BITFIELD64_BIT(VERT_RESULT_HPOS));
+      persp_mask = c->key.attrs & ~(BITFIELD64_BIT(VARYING_SLOT_POS));
 
    if (c->key.do_flat_shading)
-      linear_mask = c->key.attrs & ~(BITFIELD64_BIT(VERT_RESULT_COL0) |
-                                     BITFIELD64_BIT(VERT_RESULT_COL1));
+      linear_mask = c->key.attrs & ~(BITFIELD64_BIT(VARYING_SLOT_COL0) |
+                                     BITFIELD64_BIT(VARYING_SLOT_COL1));
    else
       linear_mask = c->key.attrs;
 
@@ -350,21 +350,21 @@ calculate_masks(struct brw_sf_compile *c,
    *pc_linear = 0;
    *pc = 0xf;
       
-   if (persp_mask & BITFIELD64_BIT(vert_reg_to_vert_result(c, reg, 0)))
+   if (persp_mask & BITFIELD64_BIT(vert_reg_to_varying(c, reg, 0)))
       *pc_persp = 0xf;
 
-   if (linear_mask & BITFIELD64_BIT(vert_reg_to_vert_result(c, reg, 0)))
+   if (linear_mask & BITFIELD64_BIT(vert_reg_to_varying(c, reg, 0)))
       *pc_linear = 0xf;
 
    /* Maybe only processs one attribute on the final round:
     */
-   if (vert_reg_to_vert_result(c, reg, 1) != BRW_VERT_RESULT_MAX) {
+   if (vert_reg_to_varying(c, reg, 1) != BRW_VARYING_SLOT_COUNT) {
       *pc |= 0xf0;
 
-      if (persp_mask & BITFIELD64_BIT(vert_reg_to_vert_result(c, reg, 1)))
+      if (persp_mask & BITFIELD64_BIT(vert_reg_to_varying(c, reg, 1)))
 	 *pc_persp |= 0xf0;
 
-      if (linear_mask & BITFIELD64_BIT(vert_reg_to_vert_result(c, reg, 1)))
+      if (linear_mask & BITFIELD64_BIT(vert_reg_to_varying(c, reg, 1)))
 	 *pc_linear |= 0xf0;
    }
 
@@ -377,24 +377,24 @@ calculate_masks(struct brw_sf_compile *c,
 static uint16_t
 calculate_point_sprite_mask(struct brw_sf_compile *c, GLuint reg)
 {
-   int vert_result1, vert_result2;
+   int varying1, varying2;
    uint16_t pc = 0;
 
-   vert_result1 = vert_reg_to_vert_result(c, reg, 0);
-   if (vert_result1 >= VERT_RESULT_TEX0 && vert_result1 <= VERT_RESULT_TEX7) {
-      if (c->key.point_sprite_coord_replace & (1 << (vert_result1 - VERT_RESULT_TEX0)))
+   varying1 = vert_reg_to_varying(c, reg, 0);
+   if (varying1 >= VARYING_SLOT_TEX0 && varying1 <= VARYING_SLOT_TEX7) {
+      if (c->key.point_sprite_coord_replace & (1 << (varying1 - VARYING_SLOT_TEX0)))
 	 pc |= 0x0f;
    }
-   if (vert_result1 == BRW_VERT_RESULT_PNTC)
+   if (varying1 == BRW_VARYING_SLOT_PNTC)
       pc |= 0x0f;
 
-   vert_result2 = vert_reg_to_vert_result(c, reg, 1);
-   if (vert_result2 >= VERT_RESULT_TEX0 && vert_result2 <= VERT_RESULT_TEX7) {
-      if (c->key.point_sprite_coord_replace & (1 << (vert_result2 -
-                                                     VERT_RESULT_TEX0)))
+   varying2 = vert_reg_to_varying(c, reg, 1);
+   if (varying2 >= VARYING_SLOT_TEX0 && varying2 <= VARYING_SLOT_TEX7) {
+      if (c->key.point_sprite_coord_replace & (1 << (varying2 -
+                                                     VARYING_SLOT_TEX0)))
          pc |= 0xf0;
    }
-   if (vert_result2 == BRW_VERT_RESULT_PNTC)
+   if (varying2 == BRW_VARYING_SLOT_PNTC)
       pc |= 0xf0;
 
    return pc;

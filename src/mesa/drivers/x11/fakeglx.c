@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.5
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (C) 2009  VMware, Inc.   All Rights Reserved.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -63,7 +63,7 @@
 #define SERVER_MINOR_VERSION 4
 
 /* This is appended onto the glXGetClient/ServerString version strings. */
-#define MESA_GLX_VERSION "Mesa " MESA_VERSION_STRING
+#define MESA_GLX_VERSION "Mesa " PACKAGE_VERSION
 
 /* Who implemented this GLX? */
 #define VENDOR "Brian Paul"
@@ -1090,6 +1090,9 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
             else if (*parselist & GLX_COLOR_INDEX_BIT) {
                rgb_flag = GL_FALSE;
             }
+            else if (*parselist & (GLX_RGBA_FLOAT_BIT_ARB|GLX_RGBA_UNSIGNED_FLOAT_BIT_EXT)) {
+               rgb_flag = GL_TRUE;
+            }
             else if (*parselist == 0) {
                rgb_flag = GL_TRUE;
             }
@@ -1761,7 +1764,9 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
       case GLX_RENDER_TYPE_SGIX:
          if (!fbconfig)
             return GLX_BAD_ATTRIBUTE;
-         if (xmvis->mesa_visual.rgbMode)
+         if (xmvis->mesa_visual.floatMode)
+            *value = GLX_RGBA_FLOAT_BIT_ARB;
+         else if (xmvis->mesa_visual.rgbMode)
             *value = GLX_RGBA_BIT;
          else
             *value = GLX_COLOR_INDEX_BIT;
@@ -2320,7 +2325,10 @@ Fake_glXCreateNewContext( Display *dpy, GLXFBConfig config,
    XMesaVisual xmvis = (XMesaVisual) config;
 
    if (!dpy || !config ||
-       (renderType != GLX_RGBA_TYPE && renderType != GLX_COLOR_INDEX_TYPE))
+       (renderType != GLX_RGBA_TYPE &&
+        renderType != GLX_COLOR_INDEX_TYPE &&
+        renderType != GLX_RGBA_FLOAT_TYPE_ARB &&
+        renderType != GLX_RGBA_UNSIGNED_FLOAT_TYPE_EXT))
       return 0;
 
    glxCtx = CALLOC_STRUCT(fake_glx_context);

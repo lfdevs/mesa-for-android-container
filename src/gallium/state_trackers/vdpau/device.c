@@ -166,6 +166,7 @@ vlVdpDeviceDestroy(VdpDevice device)
    dev->context->destroy(dev->context);
    vl_screen_destroy(dev->vscreen);
 
+   vlRemoveDataHTAB(device);
    FREE(dev);
    vlDestroyHTAB();
 
@@ -279,7 +280,7 @@ vlVdpResolveDelayedRendering(vlVdpDevice *dev, struct pipe_surface *surface, str
       dirty_area = &vlsurface->dirty_area;
    }
 
-   vl_compositor_render(cstate, &dev->compositor, surface, dirty_area);
+   vl_compositor_render(cstate, &dev->compositor, surface, dirty_area, true);
 
    dev->delayed_rendering.surface = VDP_INVALID_HANDLE;
    dev->delayed_rendering.cstate = NULL;

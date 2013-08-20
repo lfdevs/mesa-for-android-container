@@ -47,7 +47,6 @@ extern "C" {
 #include "brw_fs.h"
 #include "glsl/glsl_types.h"
 #include "glsl/ir_optimization.h"
-#include "glsl/ir_print_visitor.h"
 
 void
 fs_visitor::visit(ir_variable *ir)
@@ -199,12 +198,39 @@ fs_visitor::visit(ir_dereference_array *ir)
 }
 
 void
+fs_visitor::emit_lrp(fs_reg dst, fs_reg x, fs_reg y, fs_reg a)
+{
+   if (brw->gen < 6 ||
+       !x.is_valid_3src() ||
+       !y.is_valid_3src() ||
+       !a.is_valid_3src()) {
+      /* We can't use the LRP instruction.  Emit x*(1-a) + y*a. */
+      fs_reg y_times_a           = fs_reg(this, glsl_type::float_type);
+      fs_reg one_minus_a         = fs_reg(this, glsl_type::float_type);
+      fs_reg x_times_one_minus_a = fs_reg(this, glsl_type::float_type);
+
+      emit(MUL(y_times_a, y, a));
+
+      a.negate = !a.negate;
+      emit(ADD(one_minus_a, a, fs_reg(1.0f)));
+      emit(MUL(x_times_one_minus_a, x, one_minus_a));
+
+      emit(ADD(dst, x_times_one_minus_a, y_times_a));
+   } else {
+      /* The LRP instruction actually does op1 * op0 + op2 * (1 - op0), so
+       * we need to reorder the operands.
+       */
+      emit(LRP(dst, a, y, x));
+   }
+}
+
+void
 fs_visitor::emit_minmax(uint32_t conditionalmod, fs_reg dst,
                         fs_reg src0, fs_reg src1)
 {
    fs_inst *inst;
 
-   if (intel->gen >= 6) {
+   if (brw->gen >= 6) {
       inst = emit(BRW_OPCODE_SEL, dst, src0, src1);
       inst->conditional_mod = conditionalmod;
    } else {
@@ -254,7 +280,7 @@ bool
 fs_visitor::try_emit_mad(ir_expression *ir, int mul_arg)
 {
    /* 3-src instructions were introduced in gen6. */
-   if (intel->gen < 6)
+   if (brw->gen < 6)
       return false;
 
    /* MAD can only handle floating-point data. */
@@ -291,10 +317,10 @@ void
 fs_visitor::visit(ir_expression *ir)
 {
    unsigned int operand;
-   fs_reg op[2], temp;
+   fs_reg op[3], temp;
    fs_inst *inst;
 
-   assert(ir->get_num_operands() <= 2);
+   assert(ir->get_num_operands() <= 3);
 
    if (try_emit_saturate(ir))
       return;
@@ -306,9 +332,9 @@ fs_visitor::visit(ir_expression *ir)
    for (operand = 0; operand < ir->get_num_operands(); operand++) {
       ir->operands[operand]->accept(this);
       if (this->result.file == BAD_FILE) {
-	 ir_print_visitor v;
 	 fail("Failed to get tree for expression operand:\n");
-	 ir->operands[operand]->accept(&v);
+	 ir->operands[operand]->print();
+         printf("\n");
       }
       op[operand] = this->result;
 
@@ -403,7 +429,7 @@ fs_visitor::visit(ir_expression *ir)
 	  * FINISHME: Emit just the MUL if we know an operand is small
 	  * enough.
 	  */
-	 if (intel->gen >= 7 && dispatch_width == 16)
+	 if (brw->gen >= 7 && dispatch_width == 16)
 	    fail("16-wide explicit accumulator operands unsupported\n");
 
 	 struct brw_reg acc = retype(brw_acc_reg(), BRW_REGISTER_TYPE_D);
@@ -466,6 +492,14 @@ fs_visitor::visit(ir_expression *ir)
       assert(!"not reached: should be handled by lower_quadop_vector");
       break;
 
+   case ir_binop_vector_extract:
+      assert(!"not reached: should be handled by lower_vec_index_to_cond_assign()");
+      break;
+
+   case ir_triop_vector_insert:
+      assert(!"not reached: should be handled by lower_vector_insert()");
+      break;
+
    case ir_unop_sqrt:
       emit_math(SHADER_OPCODE_SQRT, this->result, op[0]);
       break;
@@ -497,7 +531,7 @@ fs_visitor::visit(ir_expression *ir)
       break;
 
    case ir_unop_b2i:
-      inst = emit(AND(this->result, op[0], fs_reg(1)));
+      emit(AND(this->result, op[0], fs_reg(1)));
       break;
    case ir_unop_b2f:
       temp = fs_reg(this, glsl_type::int_type);
@@ -517,14 +551,14 @@ fs_visitor::visit(ir_expression *ir)
       break;
    case ir_unop_ceil:
       op[0].negate = !op[0].negate;
-      inst = emit(RNDD(this->result, op[0]));
+      emit(RNDD(this->result, op[0]));
       this->result.negate = true;
       break;
    case ir_unop_floor:
-      inst = emit(RNDD(this->result, op[0]));
+      emit(RNDD(this->result, op[0]));
       break;
    case ir_unop_fract:
-      inst = emit(FRC(this->result, op[0]));
+      emit(FRC(this->result, op[0]));
       break;
    case ir_unop_round_even:
       emit(RNDE(this->result, op[0]));
@@ -560,33 +594,76 @@ fs_visitor::visit(ir_expression *ir)
       emit_math(SHADER_OPCODE_POW, this->result, op[0], op[1]);
       break;
 
+   case ir_unop_bitfield_reverse:
+      emit(BFREV(this->result, op[0]));
+      break;
+   case ir_unop_bit_count:
+      emit(CBIT(this->result, op[0]));
+      break;
+   case ir_unop_find_msb:
+      temp = fs_reg(this, glsl_type::uint_type);
+      emit(FBH(temp, op[0]));
+
+      /* FBH counts from the MSB side, while GLSL's findMSB() wants the count
+       * from the LSB side. If FBH didn't return an error (0xFFFFFFFF), then
+       * subtract the result from 31 to convert the MSB count into an LSB count.
+       */
+
+      /* FBH only supports UD type for dst, so use a MOV to convert UD to D. */
+      emit(MOV(this->result, temp));
+      emit(CMP(reg_null_d, this->result, fs_reg(-1), BRW_CONDITIONAL_NZ));
+
+      temp.negate = true;
+      inst = emit(ADD(this->result, temp, fs_reg(31)));
+      inst->predicate = BRW_PREDICATE_NORMAL;
+      break;
+   case ir_unop_find_lsb:
+      emit(FBL(this->result, op[0]));
+      break;
+   case ir_triop_bitfield_extract:
+      /* Note that the instruction's argument order is reversed from GLSL
+       * and the IR.
+       */
+      emit(BFE(this->result, op[2], op[1], op[0]));
+      break;
+   case ir_binop_bfm:
+      emit(BFI1(this->result, op[0], op[1]));
+      break;
+   case ir_triop_bfi:
+      emit(BFI2(this->result, op[0], op[1], op[2]));
+      break;
+   case ir_quadop_bitfield_insert:
+      assert(!"not reached: should be handled by "
+              "lower_instructions::bitfield_insert_to_bfm_bfi");
+      break;
+
    case ir_unop_bit_not:
-      inst = emit(NOT(this->result, op[0]));
+      emit(NOT(this->result, op[0]));
       break;
    case ir_binop_bit_and:
-      inst = emit(AND(this->result, op[0], op[1]));
+      emit(AND(this->result, op[0], op[1]));
       break;
    case ir_binop_bit_xor:
-      inst = emit(XOR(this->result, op[0], op[1]));
+      emit(XOR(this->result, op[0], op[1]));
       break;
    case ir_binop_bit_or:
-      inst = emit(OR(this->result, op[0], op[1]));
+      emit(OR(this->result, op[0], op[1]));
       break;
 
    case ir_binop_lshift:
-      inst = emit(SHL(this->result, op[0], op[1]));
+      emit(SHL(this->result, op[0], op[1]));
       break;
 
    case ir_binop_rshift:
       if (ir->type->base_type == GLSL_TYPE_INT)
-	 inst = emit(ASR(this->result, op[0], op[1]));
+	 emit(ASR(this->result, op[0], op[1]));
       else
-	 inst = emit(SHR(this->result, op[0], op[1]));
+	 emit(SHR(this->result, op[0], op[1]));
       break;
    case ir_binop_pack_half_2x16_split:
       emit(FS_OPCODE_PACK_HALF_2x16_SPLIT, this->result, op[0], op[1]);
       break;
-   case ir_binop_ubo_load:
+   case ir_binop_ubo_load: {
       /* This IR node takes a constant uniform block and a constant or
        * variable byte offset within the block and loads a vector from that.
        */
@@ -637,6 +714,11 @@ fs_visitor::visit(ir_expression *ir)
       }
 
       result.reg_offset = 0;
+      break;
+   }
+
+   case ir_triop_lrp:
+      emit_lrp(this->result, op[0], op[1], op[2]);
       break;
    }
 }
@@ -892,7 +974,7 @@ fs_visitor::emit_texture_gen4(ir_texture *ir, fs_reg dst, fs_reg coordinate,
        */
       orig_dst = dst;
       dst = fs_reg(GRF, virtual_grf_alloc(8),
-                   (intel->is_g4x ?
+                   (brw->is_g4x ?
                     brw_type_for_base_type(ir->type) :
                     BRW_REGISTER_TYPE_F));
    }
@@ -917,6 +999,8 @@ fs_visitor::emit_texture_gen4(ir_texture *ir, fs_reg dst, fs_reg coordinate,
    case ir_txf:
       inst = emit(SHADER_OPCODE_TXF, dst);
       break;
+   default:
+      fail("unrecognized texture opcode");
    }
    inst->base_mrf = base_mrf;
    inst->mlen = mlen;
@@ -944,7 +1028,8 @@ fs_visitor::emit_texture_gen4(ir_texture *ir, fs_reg dst, fs_reg coordinate,
  */
 fs_inst *
 fs_visitor::emit_texture_gen5(ir_texture *ir, fs_reg dst, fs_reg coordinate,
-			      fs_reg shadow_c, fs_reg lod, fs_reg lod2)
+                              fs_reg shadow_c, fs_reg lod, fs_reg lod2,
+                              fs_reg sample_index)
 {
    int mlen = 0;
    int base_mrf = 2;
@@ -1042,10 +1127,21 @@ fs_visitor::emit_texture_gen5(ir_texture *ir, fs_reg dst, fs_reg coordinate,
       break;
    case ir_txf:
       mlen = header_present + 4 * reg_width;
-
-      emit(MOV(fs_reg(MRF, base_mrf + mlen - reg_width, BRW_REGISTER_TYPE_UD),
-               lod));
+      emit(MOV(fs_reg(MRF, base_mrf + mlen - reg_width, BRW_REGISTER_TYPE_UD), lod));
       inst = emit(SHADER_OPCODE_TXF, dst);
+      break;
+   case ir_txf_ms:
+      mlen = header_present + 4 * reg_width;
+
+      /* lod */
+      emit(MOV(fs_reg(MRF, base_mrf + mlen - reg_width, BRW_REGISTER_TYPE_UD), fs_reg(0)));
+      /* sample index */
+      emit(MOV(fs_reg(MRF, base_mrf + mlen, BRW_REGISTER_TYPE_UD), sample_index));
+      mlen += reg_width;
+      inst = emit(SHADER_OPCODE_TXF_MS, dst);
+      break;
+   case ir_lod:
+      inst = emit(SHADER_OPCODE_LOD, dst);
       break;
    }
    inst->base_mrf = base_mrf;
@@ -1062,7 +1158,8 @@ fs_visitor::emit_texture_gen5(ir_texture *ir, fs_reg dst, fs_reg coordinate,
 
 fs_inst *
 fs_visitor::emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
-			      fs_reg shadow_c, fs_reg lod, fs_reg lod2)
+                              fs_reg shadow_c, fs_reg lod, fs_reg lod2,
+                              fs_reg sample_index)
 {
    int mlen = 0;
    int base_mrf = 2;
@@ -1087,6 +1184,7 @@ fs_visitor::emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
    /* Set up the LOD info */
    switch (ir->op) {
    case ir_tex:
+   case ir_lod:
       break;
    case ir_txb:
       emit(MOV(fs_reg(MRF, base_mrf + mlen), lod));
@@ -1158,10 +1256,31 @@ fs_visitor::emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
 	 mlen += reg_width;
       }
       break;
+   case ir_txf_ms:
+      emit(MOV(fs_reg(MRF, base_mrf + mlen, BRW_REGISTER_TYPE_UD), sample_index));
+      mlen += reg_width;
+
+      /* constant zero MCS; we arrange to never actually have a compressed
+       * multisample surface here for now. TODO: issue ld_mcs to get this first,
+       * if we ever support texturing from compressed multisample surfaces
+       */
+      emit(MOV(fs_reg(MRF, base_mrf + mlen, BRW_REGISTER_TYPE_UD), fs_reg(0u)));
+      mlen += reg_width;
+
+      /* there is no offsetting for this message; just copy in the integer
+       * texture coordinates
+       */
+      for (int i = 0; i < ir->coordinate->type->vector_elements; i++) {
+         emit(MOV(fs_reg(MRF, base_mrf + mlen, BRW_REGISTER_TYPE_D),
+                  coordinate));
+         coordinate.reg_offset++;
+         mlen += reg_width;
+      }
+      break;
    }
 
    /* Set up the coordinate (except for cases where it was done above) */
-   if (ir->op != ir_txd && ir->op != ir_txs && ir->op != ir_txf) {
+   if (ir->op != ir_txd && ir->op != ir_txs && ir->op != ir_txf && ir->op != ir_txf_ms) {
       for (int i = 0; i < ir->coordinate->type->vector_elements; i++) {
 	 emit(MOV(fs_reg(MRF, base_mrf + mlen), coordinate));
 	 coordinate.reg_offset++;
@@ -1177,7 +1296,9 @@ fs_visitor::emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
    case ir_txl: inst = emit(SHADER_OPCODE_TXL, dst); break;
    case ir_txd: inst = emit(SHADER_OPCODE_TXD, dst); break;
    case ir_txf: inst = emit(SHADER_OPCODE_TXF, dst); break;
+   case ir_txf_ms: inst = emit(SHADER_OPCODE_TXF_MS, dst); break;
    case ir_txs: inst = emit(SHADER_OPCODE_TXS, dst); break;
+   case ir_lod: inst = emit(SHADER_OPCODE_LOD, dst); break;
    }
    inst->base_mrf = base_mrf;
    inst->mlen = mlen;
@@ -1204,8 +1325,8 @@ fs_visitor::rescale_texcoord(ir_texture *ir, fs_reg coordinate,
     * tracking to get the scaling factor.
     */
    if (is_rect &&
-       (intel->gen < 6 ||
-	(intel->gen >= 6 && (c->key.tex.gl_clamp_mask[0] & (1 << sampler) ||
+       (brw->gen < 6 ||
+	(brw->gen >= 6 && (c->key.tex.gl_clamp_mask[0] & (1 << sampler) ||
 			     c->key.tex.gl_clamp_mask[1] & (1 << sampler))))) {
       struct gl_program_parameter_list *params = fp->Base.Parameters;
       int tokens[STATE_LENGTH] = {
@@ -1236,7 +1357,7 @@ fs_visitor::rescale_texcoord(ir_texture *ir, fs_reg coordinate,
     * texture coordinates.  We use the program parameter state
     * tracking to get the scaling factor.
     */
-   if (intel->gen < 6 && is_rect) {
+   if (brw->gen < 6 && is_rect) {
       fs_reg dst = fs_reg(this, ir->coordinate->type);
       fs_reg src = coordinate;
       coordinate = dst;
@@ -1297,7 +1418,8 @@ fs_visitor::visit(ir_texture *ir)
 {
    fs_inst *inst = NULL;
 
-   int sampler = _mesa_get_sampler_uniform_value(ir->sampler, prog, &fp->Base);
+   int sampler =
+      _mesa_get_sampler_uniform_value(ir->sampler, shader_prog, &fp->Base);
    /* FINISHME: We're failing to recompile our programs when the sampler is
     * updated.  This only matters for the texture rectangle scale parameters
     * (pre-gen6, or gen6+ with GL_CLAMP).
@@ -1327,9 +1449,10 @@ fs_visitor::visit(ir_texture *ir)
       shadow_comparitor = this->result;
    }
 
-   fs_reg lod, lod2;
+   fs_reg lod, lod2, sample_index;
    switch (ir->op) {
    case ir_tex:
+   case ir_lod:
       break;
    case ir_txb:
       ir->lod_info.bias->accept(this);
@@ -1348,6 +1471,10 @@ fs_visitor::visit(ir_texture *ir)
       ir->lod_info.lod->accept(this);
       lod = this->result;
       break;
+   case ir_txf_ms:
+      ir->lod_info.sample_index->accept(this);
+      sample_index = this->result;
+      break;
    };
 
    /* Writemasking doesn't eliminate channels on SIMD8 texture
@@ -1355,12 +1482,12 @@ fs_visitor::visit(ir_texture *ir)
     */
    fs_reg dst = fs_reg(this, glsl_type::get_instance(ir->type->base_type, 4, 1));
 
-   if (intel->gen >= 7) {
+   if (brw->gen >= 7) {
       inst = emit_texture_gen7(ir, dst, coordinate, shadow_comparitor,
-                               lod, lod2);
-   } else if (intel->gen >= 5) {
+                               lod, lod2, sample_index);
+   } else if (brw->gen >= 5) {
       inst = emit_texture_gen5(ir, dst, coordinate, shadow_comparitor,
-                               lod, lod2);
+                               lod, lod2, sample_index);
    } else {
       inst = emit_texture_gen4(ir, dst, coordinate, shadow_comparitor,
                                lod, lod2);
@@ -1400,7 +1527,7 @@ fs_visitor::swizzle_result(ir_texture *ir, fs_reg orig_val, int sampler)
 {
    this->result = orig_val;
 
-   if (ir->op == ir_txs)
+   if (ir->op == ir_txs || ir->op == ir_lod)
       return;
 
    if (ir->type == glsl_type::float_type) {
@@ -1484,7 +1611,7 @@ fs_visitor::visit(ir_discard *ir)
    cmp->predicate = BRW_PREDICATE_NORMAL;
    cmp->flag_subreg = 1;
 
-   if (intel->gen >= 6) {
+   if (brw->gen >= 6) {
       /* For performance, after a discard, jump to the end of the shader.
        * However, many people will do foliage by discarding based on a
        * texture's alpha mask, and then continue on to texture with the
@@ -1599,7 +1726,7 @@ fs_visitor::emit_bool_to_cond_code(ir_rvalue *ir)
 	 goto out;
 
       case ir_unop_f2b:
-	 if (intel->gen >= 6) {
+	 if (brw->gen >= 6) {
 	    emit(CMP(reg_null_d, op[0], fs_reg(0.0f), BRW_CONDITIONAL_NZ));
 	 } else {
 	    inst = emit(MOV(reg_null_f, op[0]));
@@ -1608,7 +1735,7 @@ fs_visitor::emit_bool_to_cond_code(ir_rvalue *ir)
 	 break;
 
       case ir_unop_i2b:
-	 if (intel->gen >= 6) {
+	 if (brw->gen >= 6) {
 	    emit(CMP(reg_null_d, op[0], fs_reg(0), BRW_CONDITIONAL_NZ));
 	 } else {
 	    inst = emit(MOV(reg_null_d, op[0]));
@@ -1718,7 +1845,7 @@ fs_visitor::emit_if_gen6(ir_if *ir)
 void
 fs_visitor::visit(ir_if *ir)
 {
-   if (intel->gen < 6 && dispatch_width == 16) {
+   if (brw->gen < 6 && dispatch_width == 16) {
       fail("Can't support (non-uniform) control flow on 16-wide\n");
    }
 
@@ -1727,7 +1854,7 @@ fs_visitor::visit(ir_if *ir)
     */
    this->base_ir = ir->condition;
 
-   if (intel->gen == 6) {
+   if (brw->gen == 6) {
       emit_if_gen6(ir);
    } else {
       emit_bool_to_cond_code(ir->condition);
@@ -1761,7 +1888,7 @@ fs_visitor::visit(ir_loop *ir)
 {
    fs_reg counter = reg_undef;
 
-   if (intel->gen < 6 && dispatch_width == 16) {
+   if (brw->gen < 6 && dispatch_width == 16) {
       fail("Can't support (non-uniform) control flow on 16-wide\n");
    }
 
@@ -1972,7 +2099,7 @@ fs_visitor::emit_interpolation_setup_gen4()
    emit(FS_OPCODE_LINTERP, wpos_w,
         this->delta_x[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC],
         this->delta_y[BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC],
-	interp_reg(FRAG_ATTRIB_WPOS, 3));
+	interp_reg(VARYING_SLOT_POS, 3));
    /* Compute the pixel 1/W value from wpos.w. */
    this->pixel_w = fs_reg(this, glsl_type::float_type);
    emit_math(SHADER_OPCODE_RCP, this->pixel_w, wpos_w);
@@ -2035,7 +2162,7 @@ fs_visitor::emit_color_write(int target, int index, int first_color_mrf)
 
    color.reg_offset += index;
 
-   if (dispatch_width == 8 || intel->gen >= 6) {
+   if (dispatch_width == 8 || brw->gen >= 6) {
       /* SIMD8 write looks like:
        * m + 0: r0
        * m + 1: r1
@@ -2121,7 +2248,7 @@ fs_visitor::emit_fb_writes()
     *      dispatched. This field is only required for the end-of-
     *      thread message and on all dual-source messages."
     */
-   if (intel->gen >= 6 &&
+   if (brw->gen >= 6 &&
        !this->fp->UsesKill &&
        !do_dual_src &&
        c->key.nr_color_regions == 1) {
@@ -2129,7 +2256,7 @@ fs_visitor::emit_fb_writes()
    }
 
    if (header_present) {
-      src0_alpha_to_render_target = intel->gen >= 6 &&
+      src0_alpha_to_render_target = brw->gen >= 6 &&
 				    !do_dual_src &&
                                     c->key.replicate_alpha;
       /* m2, m3 header */
@@ -2152,7 +2279,7 @@ fs_visitor::emit_fb_writes()
       nr += reg_width;
 
    if (c->source_depth_to_render_target) {
-      if (intel->gen == 6 && dispatch_width == 16) {
+      if (brw->gen == 6 && dispatch_width == 16) {
 	 /* For outputting oDepth on gen6, SIMD8 writes have to be
 	  * used.  This would require 8-wide moves of each half to
 	  * message regs, kind of like pre-gen5 SIMD16 FB writes.
@@ -2200,6 +2327,9 @@ fs_visitor::emit_fb_writes()
 	 inst->saturate = c->key.clamp_fragment_color;
       }
 
+      if (INTEL_DEBUG & DEBUG_SHADER_TIME)
+         emit_shader_time_end();
+
       fs_inst *inst = emit(FS_OPCODE_FB_WRITE);
       inst->target = 0;
       inst->base_mrf = base_mrf;
@@ -2234,6 +2364,14 @@ fs_visitor::emit_fb_writes()
       for (unsigned i = 0; i < this->output_components[target]; i++)
          emit_color_write(target, i, write_color_mrf);
 
+      bool eot = false;
+      if (target == c->key.nr_color_regions - 1) {
+         eot = true;
+
+         if (INTEL_DEBUG & DEBUG_SHADER_TIME)
+            emit_shader_time_end();
+      }
+
       fs_inst *inst = emit(FS_OPCODE_FB_WRITE);
       inst->target = target;
       inst->base_mrf = base_mrf;
@@ -2241,8 +2379,7 @@ fs_visitor::emit_fb_writes()
          inst->mlen = nr - base_mrf - reg_width;
       else
          inst->mlen = nr - base_mrf;
-      if (target == c->key.nr_color_regions - 1)
-	 inst->eot = true;
+      inst->eot = eot;
       inst->header_present = header_present;
    }
 
@@ -2252,6 +2389,9 @@ fs_visitor::emit_fb_writes()
        * alpha-testing, alpha-to-coverage, and so on.
        */
       emit_color_write(0, 3, color_mrf);
+
+      if (INTEL_DEBUG & DEBUG_SHADER_TIME)
+         emit_shader_time_end();
 
       fs_inst *inst = emit(FS_OPCODE_FB_WRITE);
       inst->base_mrf = base_mrf;
@@ -2288,7 +2428,7 @@ fs_visitor::resolve_bool_comparison(ir_rvalue *rvalue, fs_reg *reg)
 
 fs_visitor::fs_visitor(struct brw_context *brw,
                        struct brw_wm_compile *c,
-                       struct gl_shader_program *prog,
+                       struct gl_shader_program *shader_prog,
                        struct gl_fragment_program *fp,
                        unsigned dispatch_width)
    : dispatch_width(dispatch_width)
@@ -2296,12 +2436,12 @@ fs_visitor::fs_visitor(struct brw_context *brw,
    this->c = c;
    this->brw = brw;
    this->fp = fp;
-   this->prog = prog;
-   this->intel = &brw->intel;
-   this->ctx = &intel->ctx;
+   this->shader_prog = shader_prog;
+   this->ctx = &brw->ctx;
    this->mem_ctx = ralloc_context(NULL);
-   if (prog)
-      shader = (struct brw_shader *) prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
+   if (shader_prog)
+      shader = (struct brw_shader *)
+         shader_prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
    else
       shader = NULL;
    this->failed = false;
@@ -2312,7 +2452,7 @@ fs_visitor::fs_visitor(struct brw_context *brw,
    memset(this->outputs, 0, sizeof(this->outputs));
    memset(this->output_components, 0, sizeof(this->output_components));
    this->first_non_payload_grf = 0;
-   this->max_grf = intel->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
+   this->max_grf = brw->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
 
    this->current_annotation = NULL;
    this->base_ir = NULL;
@@ -2320,8 +2460,8 @@ fs_visitor::fs_visitor(struct brw_context *brw,
    this->virtual_grf_sizes = NULL;
    this->virtual_grf_count = 0;
    this->virtual_grf_array_size = 0;
-   this->virtual_grf_def = NULL;
-   this->virtual_grf_use = NULL;
+   this->virtual_grf_start = NULL;
+   this->virtual_grf_end = NULL;
    this->live_intervals_valid = false;
 
    this->params_remap = NULL;

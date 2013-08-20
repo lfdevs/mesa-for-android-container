@@ -33,7 +33,6 @@
 #include "main/imports.h"
 #include "main/context.h"
 #include "main/enums.h"
-#include "main/mfeatures.h"
 #include "main/mipmap.h"
 #include "main/pbo.h"
 #include "main/texcompress.h"
@@ -106,21 +105,13 @@ radeonAllocTextureImageBuffer(struct gl_context *ctx,
 			      struct gl_texture_image *timage)
 {
 	radeonContextPtr rmesa = RADEON_CONTEXT(ctx);
-	radeon_texture_image *image = get_radeon_texture_image(timage);
 	struct gl_texture_object *texobj = timage->TexObject;
-	int slices;
 
 	ctx->Driver.FreeTextureImageBuffer(ctx, timage);
 
-	switch (texobj->Target) {
-	case GL_TEXTURE_3D:
-		slices = timage->Depth;
-		break;
-	default:
-		slices = 1;
-	}
-	assert(!image->base.ImageOffsets);
-	image->base.ImageOffsets = malloc(slices * sizeof(GLuint));
+	if (!_swrast_init_texture_image(timage))
+		return GL_FALSE;
+
 	teximage_assign_miptree(rmesa, texobj, timage);
 				
 	return GL_TRUE;
@@ -136,70 +127,13 @@ void radeonFreeTextureImageBuffer(struct gl_context *ctx, struct gl_texture_imag
 
 	if (image->mt) {
 		radeon_miptree_unreference(&image->mt);
-	} else {
-		_swrast_free_texture_image_buffer(ctx, timage);
 	}
 	if (image->bo) {
 		radeon_bo_unref(image->bo);
 		image->bo = NULL;
 	}
-	if (image->base.Buffer) {
-		_mesa_align_free(image->base.Buffer);
-		image->base.Buffer = NULL;
-	}
 
-	free(image->base.ImageOffsets);
-	image->base.ImageOffsets = NULL;
-}
-
-/* Set Data pointer and additional data for mapped texture image */
-static void teximage_set_map_data(radeon_texture_image *image)
-{
-	radeon_mipmap_level *lvl;
-
-	if (!image->mt) {
-		radeon_warning("%s(%p) Trying to set map data without miptree.\n",
-				__func__, image);
-
-		return;
-	}
-
-	lvl = &image->mt->levels[image->base.Base.Level];
-
-	image->base.Map = image->mt->bo->ptr + lvl->faces[image->base.Base.Face].offset;
-	image->base.RowStride = lvl->rowstride / _mesa_get_format_bytes(image->base.Base.TexFormat);
-}
-
-
-/**
- * Map a single texture image for glTexImage and friends.
- */
-void radeon_teximage_map(radeon_texture_image *image, GLboolean write_enable)
-{
-	radeon_print(RADEON_TEXTURE, RADEON_VERBOSE,
-			"%s(img %p), write_enable %s.\n",
-			__func__, image,
-			write_enable ? "true": "false");
-	if (image->mt) {
-		assert(!image->base.Map);
-
-		radeon_bo_map(image->mt->bo, write_enable);
-		teximage_set_map_data(image);
-	}
-}
-
-
-void radeon_teximage_unmap(radeon_texture_image *image)
-{
-	radeon_print(RADEON_TEXTURE, RADEON_VERBOSE,
-			"%s(img %p)\n",
-			__func__, image);
-	if (image->mt) {
-		assert(image->base.Map);
-
-		image->base.Map = 0;
-		radeon_bo_unmap(image->mt->bo);
-	}
+        _swrast_free_texture_image_buffer(ctx, timage);
 }
 
 /**
@@ -694,83 +628,6 @@ radeon_init_common_texture_funcs(radeonContextPtr radeon,
 	functions->EGLImageTargetTexture2D = radeon_image_target_texture_2d;
 
 	radeonInitTextureFormats();
-}
-
-static void
-radeon_swrast_map_image(radeonContextPtr rmesa,
-			radeon_texture_image *image)
-{
-	GLuint level, face;
-	radeon_mipmap_tree *mt;
-	GLuint texel_size;
-	radeon_mipmap_level *lvl;
-	int rs;
-
-	if (!image || !image->mt)
-		return;
-
-	texel_size = _mesa_get_format_bytes(image->base.Base.TexFormat);
-	level = image->base.Base.Level;
-	face = image->base.Base.Face;
-	mt = image->mt;
-
-	lvl = &image->mt->levels[level];
-
-	rs = lvl->rowstride / texel_size;
-
-	radeon_bo_map(mt->bo, 1);
-	
-	image->base.Map = mt->bo->ptr + lvl->faces[face].offset;
-	if (mt->target == GL_TEXTURE_3D) {
-		int i;
-
-		for (i = 0; i < mt->levels[level].depth; i++)
-			image->base.ImageOffsets[i] = rs * lvl->height * i;
-	}
-	image->base.RowStride = rs;
-}
-
-static void
-radeon_swrast_unmap_image(radeonContextPtr rmesa,
-			  radeon_texture_image *image)
-{
-	if (image && image->mt) {
-		image->base.Map = NULL;
-		radeon_bo_unmap(image->mt->bo);
-	}
-}
-
-void
-radeon_swrast_map_texture_images(struct gl_context *ctx,
-				 struct gl_texture_object *texObj)
-{
-	radeonContextPtr rmesa = RADEON_CONTEXT(ctx);
-	GLuint nr_faces = _mesa_num_tex_faces(texObj->Target);
-	int i, face;
-
-	for (i = texObj->BaseLevel; i <= texObj->_MaxLevel; i++) {
-		for (face = 0; face < nr_faces; face++) {
-			radeon_texture_image *image = get_radeon_texture_image(texObj->Image[face][i]);
-			radeon_swrast_map_image(rmesa, image);
-		}
-	}
-}
-
-void
-radeon_swrast_unmap_texture_images(struct gl_context *ctx,
-				   struct gl_texture_object *texObj)
-{
-	radeonContextPtr rmesa = RADEON_CONTEXT(ctx);
-	GLuint nr_faces = _mesa_num_tex_faces(texObj->Target);
-	int i, face;
-
-	for (i = texObj->BaseLevel; i <= texObj->_MaxLevel; i++) {
-		for (face = 0; face < nr_faces; face++) {
-			radeon_texture_image *image = get_radeon_texture_image(texObj->Image[face][i]);
-			radeon_swrast_unmap_image(rmesa, image);
-		}
-	}
-	
 }
 
 static radeon_mipmap_tree *radeon_miptree_create_for_teximage(radeonContextPtr rmesa,

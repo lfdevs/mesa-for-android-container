@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50_ir.h"
@@ -46,7 +46,7 @@ public:
 private:
    Program::Type progType;
 
-   const TargetNV50 *targ;
+   const TargetNV50 *targNV50;
 
 private:
    inline void defId(const ValueDef&, const int pos);
@@ -122,6 +122,9 @@ private:
 
    void emitFlow(const Instruction *, uint8_t flowOp);
    void emitPRERETEmu(const FlowInstruction *);
+   void emitBAR(const Instruction *);
+
+   void emitATOM(const Instruction *);
 };
 
 #define SDATA(a) ((a).rep()->reg.data)
@@ -1512,7 +1515,7 @@ CodeEmitterNV50::emitFlow(const Instruction *i, uint8_t flowOp)
 
       if (f->op == OP_CALL) {
          if (f->builtin) {
-            pos = targ->getBuiltinOffset(f->target.builtin);
+            pos = targNV50->getBuiltinOffset(f->target.builtin);
          } else {
             pos = f->target.fn->binPos;
          }
@@ -1530,6 +1533,55 @@ CodeEmitterNV50::emitFlow(const Instruction *i, uint8_t flowOp)
       addReloc(relocTy, 0, pos, 0x07fff800, 9);
       addReloc(relocTy, 1, pos, 0x000fc000, -4);
    }
+}
+
+void
+CodeEmitterNV50::emitBAR(const Instruction *i)
+{
+   ImmediateValue *barId = i->getSrc(0)->asImm();
+   assert(barId);
+
+   code[0] = 0x82000003 | (barId->reg.data.u32 << 21);
+   code[1] = 0x00004000;
+
+   if (i->subOp == NV50_IR_SUBOP_BAR_SYNC)
+      code[0] |= 1 << 26;
+}
+
+void
+CodeEmitterNV50::emitATOM(const Instruction *i)
+{
+   uint8_t subOp;
+   switch (i->subOp) {
+   case NV50_IR_SUBOP_ATOM_ADD:  subOp = 0x0; break;
+   case NV50_IR_SUBOP_ATOM_MIN:  subOp = 0x7; break;
+   case NV50_IR_SUBOP_ATOM_MAX:  subOp = 0x6; break;
+   case NV50_IR_SUBOP_ATOM_INC:  subOp = 0x4; break;
+   case NV50_IR_SUBOP_ATOM_DEC:  subOp = 0x5; break;
+   case NV50_IR_SUBOP_ATOM_AND:  subOp = 0xa; break;
+   case NV50_IR_SUBOP_ATOM_OR:   subOp = 0xb; break;
+   case NV50_IR_SUBOP_ATOM_XOR:  subOp = 0xc; break;
+   case NV50_IR_SUBOP_ATOM_CAS:  subOp = 0x2; break;
+   case NV50_IR_SUBOP_ATOM_EXCH: subOp = 0x1; break;
+   default:
+      assert(!"invalid subop");
+      return;
+   }
+   code[0] = 0xd0000001;
+   code[1] = 0xe0c00000 | (subOp << 2);
+   if (isSignedType(i->dType))
+      code[1] |= 1 << 21;
+
+   // args
+   emitFlagsRd(i);
+   setDst(i, 0);
+   setSrc(i, 1, 1);
+   if (i->subOp == NV50_IR_SUBOP_ATOM_CAS)
+      setSrc(i, 2, 2);
+
+   // g[] pointer
+   code[0] |= i->getSrc(0)->reg.fileIndex << 23;
+   srcId(i->getIndirect(0, 0), 9);
 }
 
 bool
@@ -1712,6 +1764,12 @@ CodeEmitterNV50::emitInstruction(Instruction *insn)
    case OP_DFDY:
       emitQUADOP(insn, 5, insn->src(0).mod.neg() ? 0x5a : 0xa5);
       break;
+   case OP_ATOM:
+      emitATOM(insn);
+      break;
+   case OP_BAR:
+      emitBAR(insn);
+      break;
    case OP_PHI:
    case OP_UNION:
    case OP_CONSTRAINT:
@@ -1884,7 +1942,8 @@ CodeEmitterNV50::prepareEmission(Function *func)
    replaceExitWithModifier(func);
 }
 
-CodeEmitterNV50::CodeEmitterNV50(const TargetNV50 *target) : CodeEmitter(target)
+CodeEmitterNV50::CodeEmitterNV50(const TargetNV50 *target) :
+   CodeEmitter(target), targNV50(target)
 {
    targ = target; // specialized
    code = NULL;

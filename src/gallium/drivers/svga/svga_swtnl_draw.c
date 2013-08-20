@@ -72,7 +72,7 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
                                PIPE_TRANSFER_READ,
                                &vb_transfer[i]);
 
-         draw_set_mapped_vertex_buffer(draw, i, map);
+         draw_set_mapped_vertex_buffer(draw, i, map, ~0);
       }
    }
 
@@ -84,7 +84,7 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
                             &ib_transfer);
       draw_set_indexes(draw,
                        (const ubyte *) map + svga->curr.ib.offset,
-                       svga->curr.ib.index_size);
+                       svga->curr.ib.index_size, ~0);
    }
 
    if (svga->curr.cb[PIPE_SHADER_VERTEX]) {
@@ -112,13 +112,13 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
    for (i = 0; i < svga->curr.num_vertex_buffers; i++) {
       if (svga->curr.vb[i].buffer) {
          pipe_buffer_unmap(&svga->pipe, vb_transfer[i]);
-         draw_set_mapped_vertex_buffer(draw, i, NULL);
+         draw_set_mapped_vertex_buffer(draw, i, NULL, 0);
       }
    }
 
    if (ib_transfer) {
       pipe_buffer_unmap(&svga->pipe, ib_transfer);
-      draw_set_indexes(draw, NULL, 0);
+      draw_set_indexes(draw, NULL, 0, 0);
    }
 
    if (svga->curr.cb[PIPE_SHADER_VERTEX]) {

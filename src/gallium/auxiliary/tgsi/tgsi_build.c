@@ -109,6 +109,7 @@ tgsi_default_declaration( void )
    declaration.Semantic = 0;
    declaration.Invariant = 0;
    declaration.Local = 0;
+   declaration.Array = 0;
    declaration.Padding = 0;
 
    return declaration;
@@ -327,6 +328,17 @@ tgsi_build_declaration_sampler_view(unsigned texture,
 }
 
 
+static struct tgsi_declaration_array
+tgsi_default_declaration_array( void )
+{
+   struct tgsi_declaration_array a;
+
+   a.ArrayID = 0;
+   a.Padding = 0;
+
+   return a;
+}
+
 struct tgsi_full_declaration
 tgsi_default_full_declaration( void )
 {
@@ -336,9 +348,9 @@ tgsi_default_full_declaration( void )
    full_declaration.Range = tgsi_default_declaration_range();
    full_declaration.Semantic = tgsi_default_declaration_semantic();
    full_declaration.Interp = tgsi_default_declaration_interp();
-   full_declaration.ImmediateData.u = NULL;
    full_declaration.Resource = tgsi_default_declaration_resource();
    full_declaration.SamplerView = tgsi_default_declaration_sampler_view();
+   full_declaration.Array = tgsi_default_declaration_array();
 
    return full_declaration;
 }
@@ -423,24 +435,6 @@ tgsi_build_full_declaration(
          full_decl->Semantic.Index,
          declaration,
          header );
-   }
-
-   if (full_decl->Declaration.File == TGSI_FILE_IMMEDIATE_ARRAY) {
-      unsigned i, j;
-      union tgsi_immediate_data *data;
-
-      for (i = 0; i <= dr->Last; ++i) {
-         for (j = 0; j < 4; ++j) {
-            unsigned idx = i*4 + j;
-            if (maxsize <= size)
-               return 0;
-            data = (union tgsi_immediate_data *) &tokens[size];
-            ++size;
-
-            *data = full_decl->ImmediateData.u[idx];
-            declaration_grow( declaration, header );
-         }
-      }
    }
 
    if (full_decl->Declaration.File == TGSI_FILE_RESOURCE) {
@@ -835,6 +829,44 @@ tgsi_build_src_register(
    return src_register;
 }
 
+static struct tgsi_ind_register
+tgsi_default_ind_register( void )
+{
+   struct tgsi_ind_register ind_register;
+
+   ind_register.File = TGSI_FILE_NULL;
+   ind_register.Index = 0;
+   ind_register.Swizzle = TGSI_SWIZZLE_X;
+   ind_register.ArrayID = 0;
+
+   return ind_register;
+}
+
+static struct tgsi_ind_register
+tgsi_build_ind_register(
+   unsigned file,
+   unsigned swizzle,
+   unsigned arrayid,
+   int index,
+   struct tgsi_instruction *instruction,
+   struct tgsi_header *header )
+{
+   struct tgsi_ind_register   ind_register;
+
+   assert( file < TGSI_FILE_COUNT );
+   assert( swizzle <= TGSI_SWIZZLE_W );
+   assert( index >= -0x8000 && index <= 0x7FFF );
+
+   ind_register.File = file;
+   ind_register.Swizzle = swizzle;
+   ind_register.Index = index;
+   ind_register.ArrayID = arrayid;
+
+   instruction_grow( instruction, header );
+
+   return ind_register;
+}
+
 static struct tgsi_dimension
 tgsi_default_dimension( void )
 {
@@ -854,9 +886,9 @@ tgsi_default_full_src_register( void )
    struct tgsi_full_src_register full_src_register;
 
    full_src_register.Register = tgsi_default_src_register();
-   full_src_register.Indirect = tgsi_default_src_register();
+   full_src_register.Indirect = tgsi_default_ind_register();
    full_src_register.Dimension = tgsi_default_dimension();
-   full_src_register.DimIndirect = tgsi_default_src_register();
+   full_src_register.DimIndirect = tgsi_default_ind_register();
 
    return full_src_register;
 }
@@ -929,9 +961,9 @@ tgsi_default_full_dst_register( void )
    struct tgsi_full_dst_register full_dst_register;
 
    full_dst_register.Register = tgsi_default_dst_register();
-   full_dst_register.Indirect = tgsi_default_src_register();
+   full_dst_register.Indirect = tgsi_default_ind_register();
    full_dst_register.Dimension = tgsi_default_dimension();
-   full_dst_register.DimIndirect = tgsi_default_src_register();
+   full_dst_register.DimIndirect = tgsi_default_ind_register();
 
    return full_dst_register;
 }
@@ -1076,24 +1108,18 @@ tgsi_build_full_instruction(
          header );
 
       if( reg->Register.Indirect ) {
-         struct tgsi_src_register *ind;
+         struct tgsi_ind_register *ind;
 
          if( maxsize <= size )
             return 0;
-         ind = (struct tgsi_src_register *) &tokens[size];
+         ind = (struct tgsi_ind_register *) &tokens[size];
          size++;
 
-         *ind = tgsi_build_src_register(
+         *ind = tgsi_build_ind_register(
             reg->Indirect.File,
-            reg->Indirect.SwizzleX,
-            reg->Indirect.SwizzleY,
-            reg->Indirect.SwizzleZ,
-            reg->Indirect.SwizzleW,
-            reg->Indirect.Negate,
-            reg->Indirect.Absolute,
-            reg->Indirect.Indirect,
-            reg->Indirect.Dimension,
+            reg->Indirect.Swizzle,
             reg->Indirect.Index,
+            reg->Indirect.ArrayID,
             instruction,
             header );
       }
@@ -1115,24 +1141,18 @@ tgsi_build_full_instruction(
             header );
 
          if( reg->Dimension.Indirect ) {
-            struct tgsi_src_register *ind;
+            struct tgsi_ind_register *ind;
 
             if( maxsize <= size )
                return 0;
-            ind = (struct tgsi_src_register *) &tokens[size];
+            ind = (struct tgsi_ind_register *) &tokens[size];
             size++;
 
-            *ind = tgsi_build_src_register(
+            *ind = tgsi_build_ind_register(
                reg->DimIndirect.File,
-               reg->DimIndirect.SwizzleX,
-               reg->DimIndirect.SwizzleY,
-               reg->DimIndirect.SwizzleZ,
-               reg->DimIndirect.SwizzleW,
-               reg->DimIndirect.Negate,
-               reg->DimIndirect.Absolute,
-               reg->DimIndirect.Indirect,
-               reg->DimIndirect.Dimension,
+               reg->DimIndirect.Swizzle,
                reg->DimIndirect.Index,
+               reg->DimIndirect.ArrayID,
                instruction,
                header );
          }
@@ -1163,24 +1183,18 @@ tgsi_build_full_instruction(
          header );
 
       if( reg->Register.Indirect ) {
-         struct  tgsi_src_register *ind;
+         struct  tgsi_ind_register *ind;
 
          if( maxsize <= size )
             return 0;
-         ind = (struct tgsi_src_register *) &tokens[size];
+         ind = (struct tgsi_ind_register *) &tokens[size];
          size++;
 
-         *ind = tgsi_build_src_register(
+         *ind = tgsi_build_ind_register(
             reg->Indirect.File,
-            reg->Indirect.SwizzleX,
-            reg->Indirect.SwizzleY,
-            reg->Indirect.SwizzleZ,
-            reg->Indirect.SwizzleW,
-            reg->Indirect.Negate,
-            reg->Indirect.Absolute,
-            reg->Indirect.Indirect,
-            reg->Indirect.Dimension,
+            reg->Indirect.Swizzle,
             reg->Indirect.Index,
+            reg->Indirect.ArrayID,
             instruction,
             header );
       }
@@ -1202,24 +1216,18 @@ tgsi_build_full_instruction(
             header );
 
          if( reg->Dimension.Indirect ) {
-            struct tgsi_src_register *ind;
+            struct tgsi_ind_register *ind;
 
             if( maxsize <= size )
                return 0;
-            ind = (struct tgsi_src_register *) &tokens[size];
+            ind = (struct tgsi_ind_register *) &tokens[size];
             size++;
 
-            *ind = tgsi_build_src_register(
+            *ind = tgsi_build_ind_register(
                reg->DimIndirect.File,
-               reg->DimIndirect.SwizzleX,
-               reg->DimIndirect.SwizzleY,
-               reg->DimIndirect.SwizzleZ,
-               reg->DimIndirect.SwizzleW,
-               reg->DimIndirect.Negate,
-               reg->DimIndirect.Absolute,
-               reg->DimIndirect.Indirect,
-               reg->DimIndirect.Dimension,
+               reg->DimIndirect.Swizzle,
                reg->DimIndirect.Index,
+               reg->DimIndirect.ArrayID,
                instruction,
                header );
          }

@@ -34,7 +34,6 @@
 #include "main/image.h"
 #include "main/bufferobj.h"
 #include "main/macros.h"
-#include "main/mfeatures.h"
 #include "main/pbo.h"
 #include "program/program.h"
 #include "program/prog_print.h"
@@ -139,7 +138,7 @@ make_bitmap_fragment_program(struct gl_context *ctx, GLuint samplerIndex)
    p->Instructions[ic].DstReg.File = PROGRAM_TEMPORARY;
    p->Instructions[ic].DstReg.Index = 0;
    p->Instructions[ic].SrcReg[0].File = PROGRAM_INPUT;
-   p->Instructions[ic].SrcReg[0].Index = FRAG_ATTRIB_TEX0;
+   p->Instructions[ic].SrcReg[0].Index = VARYING_SLOT_TEX0;
    p->Instructions[ic].TexSrcUnit = samplerIndex;
    p->Instructions[ic].TexSrcTarget = TEXTURE_2D_INDEX;
    ic++;
@@ -160,7 +159,7 @@ make_bitmap_fragment_program(struct gl_context *ctx, GLuint samplerIndex)
 
    assert(ic == p->NumInstructions);
 
-   p->InputsRead = FRAG_BIT_TEX0;
+   p->InputsRead = VARYING_BIT_TEX0;
    p->OutputsWritten = 0x0;
    p->SamplersUsed = (1 << samplerIndex);
 
@@ -299,7 +298,7 @@ make_bitmap_texture(struct gl_context *ctx, GLsizei width, GLsizei height,
     * Create texture to hold bitmap pattern.
     */
    pt = st_texture_create(st, st->internal_target, st->bitmap.tex_format,
-                          0, width, height, 1, 1,
+                          0, width, height, 1, 1, 0,
                           PIPE_BIND_SAMPLER_VIEW);
    if (!pt) {
       _mesa_unmap_pbo_source(ctx, unpack);
@@ -417,8 +416,7 @@ draw_bitmap_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
    key.st = st;
    key.bitmap = GL_TRUE;
    key.clamp_color = st->clamp_frag_color_in_shader &&
-                     st->ctx->Color._ClampFragmentColor &&
-                     !st->ctx->DrawBuffer->_IntegerColor;
+                     st->ctx->Color._ClampFragmentColor;
 
    fpv = st_get_fp_variant(st, st->fp, &key);
 
@@ -568,7 +566,7 @@ reset_cache(struct st_context *st)
    cache->texture = st_texture_create(st, PIPE_TEXTURE_2D,
                                       st->bitmap.tex_format, 0,
                                       BITMAP_CACHE_WIDTH, BITMAP_CACHE_HEIGHT,
-                                      1, 1,
+                                      1, 1, 0,
 				      PIPE_BIND_SAMPLER_VIEW);
 }
 
@@ -766,6 +764,7 @@ st_Bitmap(struct gl_context *ctx, GLint x, GLint y,
       /* create pass-through vertex shader now */
       const uint semantic_names[] = { TGSI_SEMANTIC_POSITION,
                                       TGSI_SEMANTIC_COLOR,
+        st->needs_texcoord_semantic ? TGSI_SEMANTIC_TEXCOORD :
                                       TGSI_SEMANTIC_GENERIC };
       const uint semantic_indexes[] = { 0, 0, 0 };
       st->bitmap.vs = util_make_vertex_passthrough_shader(st->pipe, 3,
@@ -826,7 +825,8 @@ st_init_bitmap(struct st_context *st)
 
    /* init baseline rasterizer state once */
    memset(&st->bitmap.rasterizer, 0, sizeof(st->bitmap.rasterizer));
-   st->bitmap.rasterizer.gl_rasterization_rules = 1;
+   st->bitmap.rasterizer.half_pixel_center = 1;
+   st->bitmap.rasterizer.bottom_edge_rule = 1;
    st->bitmap.rasterizer.depth_clip = 1;
 
    /* find a usable texture format */

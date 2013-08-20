@@ -16,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -50,6 +51,45 @@ check_for_ending(const char *string, const char *ending)
 }
 
 /**
+ * Returns the gl override data
+ *
+ * version > 0 indicates there is an override requested
+ * fwd_context is only valid if version > 0
+ */
+static void
+get_gl_override(int *version, GLboolean *fwd_context)
+{
+   const char *env_var = "MESA_GL_VERSION_OVERRIDE";
+   const char *version_str;
+   int major, minor, n;
+   static int override_version = -1;
+   static GLboolean fc_suffix = GL_FALSE;
+
+   if (override_version < 0) {
+      override_version = 0;
+
+      version_str = getenv(env_var);
+      if (version_str) {
+         fc_suffix = check_for_ending(version_str, "FC");
+
+         n = sscanf(version_str, "%u.%u", &major, &minor);
+         if (n != 2) {
+            fprintf(stderr, "error: invalid value for %s: %s\n", env_var, version_str);
+            override_version = 0;
+         } else {
+            override_version = major * 10 + minor;
+            if (override_version < 30 && fc_suffix) {
+               fprintf(stderr, "error: invalid value for %s: %s\n", env_var, version_str);
+            }
+         }
+      }
+   }
+
+   *version = override_version;
+   *fwd_context = fc_suffix;
+}
+
+/**
  * Builds the MESA version string.
  */
 static void
@@ -60,7 +100,7 @@ create_version_string(struct gl_context *ctx, const char *prefix)
    ctx->VersionString = malloc(max);
    if (ctx->VersionString) {
       _mesa_snprintf(ctx->VersionString, max,
-		     "%s%u.%u%s Mesa " MESA_VERSION_STRING
+		     "%s%u.%u%s Mesa " PACKAGE_VERSION
 #ifdef MESA_GIT_SHA1
 		     " (" MESA_GIT_SHA1 ")"
 #endif
@@ -87,38 +127,39 @@ create_version_string(struct gl_context *ctx, const char *prefix)
 void
 _mesa_override_gl_version(struct gl_context *ctx)
 {
-   const char *env_var = "MESA_GL_VERSION_OVERRIDE";
-   const char *version;
-   int n;
-   int major, minor;
-   GLboolean fc_suffix;
+   int version;
+   GLboolean fwd_context;
 
-   version = getenv(env_var);
-   if (!version) {
-      return;
-   }
+   get_gl_override(&version, &fwd_context);
 
-   fc_suffix = check_for_ending(version, "FC");
-
-   n = sscanf(version, "%u.%u", &major, &minor);
-   if (n != 2) {
-      fprintf(stderr, "error: invalid value for %s: %s\n", env_var, version);
-   } else {
-      ctx->Version = major * 10 + minor;
-      if (ctx->Version < 30 && fc_suffix) {
-         fprintf(stderr, "error: invalid value for %s: %s\n", env_var, version);
+   if (version > 0) {
+      ctx->Version = version;
+      if (version >= 30 && fwd_context) {
+         ctx->API = API_OPENGL_CORE;
+         ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
+      } else if (version >= 31) {
+         ctx->API = API_OPENGL_CORE;
       } else {
-         if (ctx->Version >= 30 && fc_suffix) {
-            ctx->API = API_OPENGL_CORE;
-            ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
-         } else if (ctx->Version >= 31) {
-            ctx->API = API_OPENGL_CORE;
-         } else {
-            ctx->API = API_OPENGL_COMPAT;
-         }
-         create_version_string(ctx, "");
+         ctx->API = API_OPENGL_COMPAT;
       }
+      create_version_string(ctx, "");
    }
+}
+
+/**
+ * Returns the gl override value
+ *
+ * version > 0 indicates there is an override requested
+ */
+int
+_mesa_get_gl_version_override(void)
+{
+   int version;
+   GLboolean fwd_context;
+
+   get_gl_override(&version, &fwd_context);
+
+   return version;
 }
 
 /**
@@ -164,15 +205,11 @@ compute_version(struct gl_context *ctx)
                               ctx->Extensions.EXT_blend_color &&
                               ctx->Extensions.EXT_blend_func_separate &&
                               ctx->Extensions.EXT_blend_minmax &&
-                              ctx->Extensions.EXT_fog_coord &&
-                              ctx->Extensions.EXT_point_parameters &&
-                              ctx->Extensions.EXT_secondary_color);
+                              ctx->Extensions.EXT_point_parameters);
    const GLboolean ver_1_5 = (ver_1_4 &&
-                              ctx->Extensions.ARB_occlusion_query &&
-                              ctx->Extensions.EXT_shadow_funcs);
+                              ctx->Extensions.ARB_occlusion_query);
    const GLboolean ver_2_0 = (ver_1_5 &&
                               ctx->Extensions.ARB_point_sprite &&
-                              ctx->Extensions.ARB_shader_objects &&
                               ctx->Extensions.ARB_vertex_shader &&
                               ctx->Extensions.ARB_fragment_shader &&
                               ctx->Extensions.ARB_texture_non_power_of_two &&
@@ -193,7 +230,8 @@ compute_version(struct gl_context *ctx)
    const GLboolean ver_3_0 = (ver_2_1 &&
                               ctx->Const.GLSLVersion >= 130 &&
                               ctx->Const.MaxSamples >= 4 &&
-                              ctx->Extensions.ARB_color_buffer_float &&
+                              (ctx->API == API_OPENGL_CORE ||
+                               ctx->Extensions.ARB_color_buffer_float) &&
                               ctx->Extensions.ARB_depth_buffer_float &&
                               ctx->Extensions.ARB_half_float_pixel &&
                               ctx->Extensions.ARB_half_float_vertex &&
@@ -218,7 +256,7 @@ compute_version(struct gl_context *ctx)
                               ctx->Extensions.EXT_texture_snorm &&
                               ctx->Extensions.NV_primitive_restart &&
                               ctx->Extensions.NV_texture_rectangle &&
-                              ctx->Const.MaxVertexTextureImageUnits >= 16);
+                              ctx->Const.VertexProgram.MaxTextureImageUnits >= 16);
    const GLboolean ver_3_2 = (ver_3_1 &&
                               ctx->Const.GLSLVersion >= 150 &&
                               ctx->Extensions.ARB_depth_clamp &&
@@ -318,7 +356,6 @@ compute_version_es2(struct gl_context *ctx)
                               ctx->Extensions.EXT_blend_color &&
                               ctx->Extensions.EXT_blend_func_separate &&
                               ctx->Extensions.EXT_blend_minmax &&
-                              ctx->Extensions.ARB_shader_objects &&
                               ctx->Extensions.ARB_vertex_shader &&
                               ctx->Extensions.ARB_fragment_shader &&
                               ctx->Extensions.ARB_texture_non_power_of_two &&

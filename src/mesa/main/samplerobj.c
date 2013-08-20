@@ -16,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -35,7 +36,6 @@
 #include "main/enums.h"
 #include "main/hash.h"
 #include "main/macros.h"
-#include "main/mfeatures.h"
 #include "main/mtypes.h"
 #include "main/samplerobj.h"
 
@@ -529,21 +529,15 @@ set_sampler_compare_func(struct gl_context *ctx,
    switch (param) {
    case GL_LEQUAL:
    case GL_GEQUAL:
-      flush(ctx);
-      samp->CompareFunc = param;
-      return GL_TRUE;
    case GL_EQUAL:
    case GL_NOTEQUAL:
    case GL_LESS:
    case GL_GREATER:
    case GL_ALWAYS:
    case GL_NEVER:
-      if (ctx->Extensions.EXT_shadow_funcs) {
-         flush(ctx);
-         samp->CompareFunc = param;
-         return GL_TRUE;
-      }
-      /* fall-through */
+      flush(ctx);
+      samp->CompareFunc = param;
+      return GL_TRUE;
    default:
       return INVALID_PARAM;
    }

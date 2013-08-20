@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.6
  *
  * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
@@ -615,18 +615,16 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
          _mesa_set_enable(ctx, GL_FRAGMENT_SHADER_ATI, GL_FALSE);
       }
 
-      if (ctx->Extensions.ARB_shader_objects) {
-	 _mesa_reference_shader_program(ctx, &save->VertexShader,
-					ctx->Shader.CurrentVertexProgram);
-	 _mesa_reference_shader_program(ctx, &save->GeometryShader,
-					ctx->Shader.CurrentGeometryProgram);
-	 _mesa_reference_shader_program(ctx, &save->FragmentShader,
-					ctx->Shader.CurrentFragmentProgram);
-	 _mesa_reference_shader_program(ctx, &save->ActiveShader,
-					ctx->Shader.ActiveProgram);
+      _mesa_reference_shader_program(ctx, &save->VertexShader,
+                                     ctx->Shader.CurrentVertexProgram);
+      _mesa_reference_shader_program(ctx, &save->GeometryShader,
+                                     ctx->Shader.CurrentGeometryProgram);
+      _mesa_reference_shader_program(ctx, &save->FragmentShader,
+                                     ctx->Shader.CurrentFragmentProgram);
+      _mesa_reference_shader_program(ctx, &save->ActiveShader,
+                                     ctx->Shader.ActiveProgram);
 
-         _mesa_UseProgram(0);
-      }
+      _mesa_UseProgram(0);
    }
 
    if (state & MESA_META_STENCIL_TEST) {
@@ -654,7 +652,8 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
                _mesa_set_enable(ctx, GL_TEXTURE_2D, GL_FALSE);
                if (ctx->Extensions.ARB_texture_cube_map)
                   _mesa_set_enable(ctx, GL_TEXTURE_CUBE_MAP, GL_FALSE);
-               if (ctx->Extensions.OES_EGL_image_external)
+               if (_mesa_is_gles(ctx) &&
+                   ctx->Extensions.OES_EGL_image_external)
                   _mesa_set_enable(ctx, GL_TEXTURE_EXTERNAL_OES, GL_FALSE);
 
                if (ctx->API == API_OPENGL_COMPAT) {
@@ -705,9 +704,14 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
       _mesa_LoadIdentity();
       _mesa_MatrixMode(GL_PROJECTION);
       _mesa_LoadIdentity();
-      _mesa_Ortho(0.0, ctx->DrawBuffer->Width,
-                  0.0, ctx->DrawBuffer->Height,
-                  -1.0, 1.0);
+
+      /* glOrtho with width = 0 or height = 0 generates GL_INVALID_VALUE.
+       * This can occur when there is no draw buffer.
+       */
+      if (ctx->DrawBuffer->Width != 0 && ctx->DrawBuffer->Height != 0)
+         _mesa_Ortho(0.0, ctx->DrawBuffer->Width,
+                     0.0, ctx->DrawBuffer->Height,
+                     -1.0, 1.0);
    }
 
    if (state & MESA_META_CLIP) {
@@ -757,7 +761,8 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
        * it's for the pixel path (ClampFragmentColor is GL_TRUE),
        * regardless of the internal implementation of the metaops.
        */
-      if (ctx->Color.ClampFragmentColor != GL_TRUE)
+      if (ctx->Color.ClampFragmentColor != GL_TRUE &&
+          ctx->Extensions.ARB_color_buffer_float)
 	 _mesa_ClampColor(GL_CLAMP_FRAGMENT_COLOR, GL_FALSE);
    }
 
@@ -767,7 +772,8 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
       /* Generally in here we never want vertex color clamping --
        * result clamping is only dependent on fragment clamping.
        */
-      _mesa_ClampColor(GL_CLAMP_VERTEX_COLOR, GL_FALSE);
+      if (ctx->Extensions.ARB_color_buffer_float)
+         _mesa_ClampColor(GL_CLAMP_VERTEX_COLOR, GL_FALSE);
    }
 
    if (state & MESA_META_CONDITIONAL_RENDER) {
@@ -1091,11 +1097,13 @@ _mesa_meta_end(struct gl_context *ctx)
       _mesa_DepthRange(save->DepthNear, save->DepthFar);
    }
 
-   if (state & MESA_META_CLAMP_FRAGMENT_COLOR) {
+   if (state & MESA_META_CLAMP_FRAGMENT_COLOR &&
+       ctx->Extensions.ARB_color_buffer_float) {
       _mesa_ClampColor(GL_CLAMP_FRAGMENT_COLOR, save->ClampFragmentColor);
    }
 
-   if (state & MESA_META_CLAMP_VERTEX_COLOR) {
+   if (state & MESA_META_CLAMP_VERTEX_COLOR &&
+       ctx->Extensions.ARB_color_buffer_float) {
       _mesa_ClampColor(GL_CLAMP_VERTEX_COLOR, save->ClampVertexColor);
    }
 
@@ -1529,6 +1537,9 @@ setup_glsl_blit_framebuffer(struct gl_context *ctx,
          "}\n";
 
       fs_source = ralloc_asprintf(mem_ctx,
+                                  "#ifdef GL_ES\n"
+                                  "precision highp float;\n"
+                                  "#endif\n"
                                   "uniform %s texSampler;\n"
                                   "varying vec2 texCoords;\n"
                                   "void main()\n"
@@ -1553,6 +1564,9 @@ setup_glsl_blit_framebuffer(struct gl_context *ctx,
                                   _mesa_is_desktop_gl(ctx) ? "130" : "300 es");
       fs_source = ralloc_asprintf(mem_ctx,
                                   "#version %s\n"
+                                  "#ifdef GL_ES\n"
+                                  "precision highp float;\n"
+                                  "#endif\n"
                                   "uniform %s texSampler;\n"
                                   "in vec2 texCoords;\n"
                                   "out vec4 out_color;\n"
@@ -1876,19 +1890,24 @@ _mesa_meta_BlitFramebuffer(struct gl_context *ctx,
       const GLenum rb_base_format =
          _mesa_base_tex_format(ctx, colorReadRb->InternalFormat);
 
-      newTex = alloc_texture(tex, srcW, srcH, rb_base_format);
-      setup_copypix_texture(ctx, tex, newTex, srcX, srcY, srcW, srcH,
+      /* Using  the exact source rectangle to create the texture does incorrect
+       * linear filtering along the edges. So, allocate the texture extended along
+       * edges by one pixel in x, y directions.
+       */
+      newTex = alloc_texture(tex, srcW + 2, srcH + 2, rb_base_format);
+      setup_copypix_texture(ctx, tex, newTex,
+                            srcX - 1, srcY - 1, srcW + 2, srcH + 2,
                             rb_base_format, filter);
       /* texcoords (after texture allocation!) */
       {
-         verts[0].s = 0.0F;
-         verts[0].t = 0.0F;
-         verts[1].s = tex->Sright;
-         verts[1].t = 0.0F;
-         verts[2].s = tex->Sright;
-         verts[2].t = tex->Ttop;
-         verts[3].s = 0.0F;
-         verts[3].t = tex->Ttop;
+         verts[0].s = 1.0F;
+         verts[0].t = 1.0F;
+         verts[1].s = tex->Sright - 1.0F;
+         verts[1].t = 1.0F;
+         verts[2].s = tex->Sright - 1.0F;
+         verts[2].t = tex->Ttop - 1.0F;
+         verts[3].s = 1.0F;
+         verts[3].t = tex->Ttop - 1.0F;
 
          /* upload new vertex data */
          _mesa_BufferSubData(GL_ARRAY_BUFFER_ARB, 0, sizeof(verts), verts);
@@ -2044,7 +2063,8 @@ _mesa_meta_Clear(struct gl_context *ctx, GLbitfield buffers)
       /* leave colormask, glDrawBuffer state as-is */
 
       /* Clears never have the color clamped. */
-      _mesa_ClampColor(GL_CLAMP_FRAGMENT_COLOR, GL_FALSE);
+      if (ctx->Extensions.ARB_color_buffer_float)
+         _mesa_ClampColor(GL_CLAMP_FRAGMENT_COLOR, GL_FALSE);
    }
    else {
       ASSERT(metaSave & MESA_META_COLOR_MASK);
@@ -2125,6 +2145,9 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
       "   gl_Position = position;\n"
       "}\n";
    const char *fs_source =
+      "#ifdef GL_ES\n"
+      "precision highp float;\n"
+      "#endif\n"
       "uniform vec4 color;\n"
       "void main()\n"
       "{\n"
@@ -2184,6 +2207,9 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
       const char *fs_int_source =
          ralloc_asprintf(shader_source_mem_ctx,
                          "#version %s\n"
+                         "#ifdef GL_ES\n"
+                         "precision highp float;\n"
+                         "#endif\n"
                          "uniform ivec4 color;\n"
                          "out ivec4 out_color;\n"
                          "\n"
@@ -2295,7 +2321,8 @@ _mesa_meta_glsl_Clear(struct gl_context *ctx, GLbitfield buffers)
       /* leave colormask, glDrawBuffer state as-is */
 
       /* Clears never have the color clamped. */
-      _mesa_ClampColor(GL_CLAMP_FRAGMENT_COLOR, GL_FALSE);
+      if (ctx->Extensions.ARB_color_buffer_float)
+         _mesa_ClampColor(GL_CLAMP_FRAGMENT_COLOR, GL_FALSE);
    }
    else {
       ASSERT(metaSave & MESA_META_COLOR_MASK);
@@ -3042,16 +3069,27 @@ _mesa_meta_check_generate_mipmap_fallback(struct gl_context *ctx, GLenum target,
    GLenum status;
 
    /* check for fallbacks */
-   if (!ctx->Extensions.EXT_framebuffer_object ||
-       target == GL_TEXTURE_3D ||
+   if (target == GL_TEXTURE_3D ||
        target == GL_TEXTURE_1D_ARRAY ||
        target == GL_TEXTURE_2D_ARRAY) {
+      _mesa_perf_debug(ctx, MESA_DEBUG_SEVERITY_HIGH,
+                       "glGenerateMipmap() to %s target\n",
+                       _mesa_lookup_enum_by_nr(target));
       return GL_TRUE;
    }
 
    srcLevel = texObj->BaseLevel;
    baseImage = _mesa_select_tex_image(ctx, texObj, target, srcLevel);
-   if (!baseImage || _mesa_is_format_compressed(baseImage->TexFormat)) {
+   if (!baseImage) {
+      _mesa_perf_debug(ctx, MESA_DEBUG_SEVERITY_HIGH,
+                       "glGenerateMipmap() couldn't find base teximage\n");
+      return GL_TRUE;
+   }
+
+   if (_mesa_is_format_compressed(baseImage->TexFormat)) {
+      _mesa_perf_debug(ctx, MESA_DEBUG_SEVERITY_HIGH,
+                       "glGenerateMipmap() with %s format\n",
+                       _mesa_get_format_name(baseImage->TexFormat));
       return GL_TRUE;
    }
 
@@ -3061,6 +3099,9 @@ _mesa_meta_check_generate_mipmap_fallback(struct gl_context *ctx, GLenum target,
        * texture sample conversion.  So we won't be able to generate the
        * right colors when rendering.  Need to use a fallback.
        */
+      _mesa_perf_debug(ctx, MESA_DEBUG_SEVERITY_HIGH,
+                       "glGenerateMipmap() of sRGB texture without "
+                       "sRGB decode\n");
       return GL_TRUE;
    }
 
@@ -3097,6 +3138,8 @@ _mesa_meta_check_generate_mipmap_fallback(struct gl_context *ctx, GLenum target,
    _mesa_BindFramebuffer(GL_FRAMEBUFFER_EXT, fboSave);
 
    if (status != GL_FRAMEBUFFER_COMPLETE_EXT) {
+      _mesa_perf_debug(ctx, MESA_DEBUG_SEVERITY_HIGH,
+                       "glGenerateMipmap() got incomplete FBO\n");
       return GL_TRUE;
    }
 
@@ -3118,6 +3161,7 @@ setup_texture_coords(GLenum faceTarget,
                      GLint slice,
                      GLint width,
                      GLint height,
+                     GLint depth,
                      GLfloat coords0[3],
                      GLfloat coords1[3],
                      GLfloat coords2[3],
@@ -3134,8 +3178,11 @@ setup_texture_coords(GLenum faceTarget,
    case GL_TEXTURE_2D:
    case GL_TEXTURE_3D:
    case GL_TEXTURE_2D_ARRAY:
-      if (faceTarget == GL_TEXTURE_3D)
-         r = 1.0F / slice;
+      if (faceTarget == GL_TEXTURE_3D) {
+         assert(slice < depth);
+         assert(depth >= 1);
+         r = (slice + 0.5f) / depth;
+      }
       else if (faceTarget == GL_TEXTURE_2D_ARRAY)
          r = slice;
       else
@@ -3391,6 +3438,9 @@ setup_glsl_generate_mipmap(struct gl_context *ctx,
 
       fs_source = ralloc_asprintf(mem_ctx,
                                   "#extension GL_EXT_texture_array : enable\n"
+                                  "#ifdef GL_ES\n"
+                                  "precision highp float;\n"
+                                  "#endif\n"
                                   "uniform %s texSampler;\n"
                                   "varying vec3 texCoords;\n"
                                   "void main()\n"
@@ -3414,6 +3464,9 @@ setup_glsl_generate_mipmap(struct gl_context *ctx,
                                   _mesa_is_desktop_gl(ctx) ? "130" : "300 es");
       fs_source = ralloc_asprintf(mem_ctx,
                                   "#version %s\n"
+                                  "#ifdef GL_ES\n"
+                                  "precision highp float;\n"
+                                  "#endif\n"
                                   "uniform %s texSampler;\n"
                                   "in vec3 texCoords;\n"
                                   "out vec4 out_color;\n"
@@ -3571,10 +3624,10 @@ _mesa_meta_GenerateMipmap(struct gl_context *ctx, GLenum target,
    else
       assert(!genMipmapSave);
 
-  /* Setup texture coordinates */
+   /* Setup texture coordinates */
    setup_texture_coords(faceTarget,
                         slice,
-                        0, 0, /* width, height never used here */
+                        0, 0, 1, /* width, height never used here */
                         verts[0].tex,
                         verts[1].tex,
                         verts[2].tex,
@@ -3731,10 +3784,20 @@ get_temp_image_type(struct gl_context *ctx, gl_format format)
             return datatype;
          return GL_FLOAT;
       }
-   case GL_DEPTH_COMPONENT:
-      return GL_UNSIGNED_INT;
-   case GL_DEPTH_STENCIL:
-      return GL_UNSIGNED_INT_24_8;
+   case GL_DEPTH_COMPONENT: {
+      GLenum datatype = _mesa_get_format_datatype(format);
+      if (datatype == GL_FLOAT)
+         return GL_FLOAT;
+      else
+         return GL_UNSIGNED_INT;
+   }
+   case GL_DEPTH_STENCIL: {
+      GLenum datatype = _mesa_get_format_datatype(format);
+      if (datatype == GL_FLOAT)
+         return GL_FLOAT_32_UNSIGNED_INT_24_8_REV;
+      else
+         return GL_UNSIGNED_INT_24_8;
+   }
    default:
       _mesa_problem(ctx, "Unexpected format %d in get_temp_image_type()",
 		    baseFormat);
@@ -3808,9 +3871,16 @@ _mesa_meta_CopyTexSubImage(struct gl_context *ctx, GLuint dims,
     */
    _mesa_meta_begin(ctx, MESA_META_PIXEL_STORE);
 
-   ctx->Driver.TexSubImage(ctx, dims, texImage,
-                           xoffset, yoffset, zoffset, width, height, 1,
-                           format, type, buf, &ctx->Unpack);
+   if (texImage->TexObject->Target == GL_TEXTURE_1D_ARRAY) {
+      assert(yoffset == 0);
+      ctx->Driver.TexSubImage(ctx, dims, texImage,
+                              xoffset, zoffset, 0, width, 1, 1,
+                              format, type, buf, &ctx->Unpack);
+   } else {
+      ctx->Driver.TexSubImage(ctx, dims, texImage,
+                              xoffset, yoffset, zoffset, width, height, 1,
+                              format, type, buf, &ctx->Unpack);
+   }
 
    _mesa_meta_end(ctx);
 
@@ -3840,6 +3910,7 @@ decompress_texture_image(struct gl_context *ctx,
    struct gl_texture_object *texObj = texImage->TexObject;
    const GLint width = texImage->Width;
    const GLint height = texImage->Height;
+   const GLint depth = texImage->Height;
    const GLenum target = texObj->Target;
    GLenum faceTarget;
    struct vertex {
@@ -3935,7 +4006,7 @@ decompress_texture_image(struct gl_context *ctx,
       _mesa_BindSampler(ctx->Texture.CurrentUnit, decompress->Sampler);
    }
 
-   setup_texture_coords(faceTarget, slice, width, height,
+   setup_texture_coords(faceTarget, slice, width, height, depth,
                         verts[0].tex,
                         verts[1].tex,
                         verts[2].tex,

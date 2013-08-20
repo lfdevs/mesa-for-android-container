@@ -14,10 +14,10 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-// THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
-// OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+// OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+// OTHER DEALINGS IN THE SOFTWARE.
 //
 
 #include "core/compiler.hpp"
@@ -28,21 +28,33 @@
 #include <clang/CodeGen/CodeGenAction.h>
 #include <llvm/Bitcode/BitstreamWriter.h>
 #include <llvm/Bitcode/ReaderWriter.h>
-#include <llvm/DerivedTypes.h>
 #include <llvm/Linker.h>
+#if HAVE_LLVM < 0x0303
+#include <llvm/DerivedTypes.h>
 #include <llvm/LLVMContext.h>
 #include <llvm/Module.h>
+#else
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/Support/SourceMgr.h>
+#include <llvm/IRReader/IRReader.h>
+#endif
 #include <llvm/PassManager.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/MemoryBuffer.h>
+#if HAVE_LLVM < 0x0303
 #include <llvm/Support/PathV1.h>
+#endif
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #if HAVE_LLVM < 0x0302
 #include <llvm/Target/TargetData.h>
-#else
+#elif HAVE_LLVM < 0x0303
 #include <llvm/DataLayout.h>
+#else
+#include <llvm/IR/DataLayout.h>
 #endif
 
 #include "pipe/p_state.h"
@@ -100,7 +112,8 @@ namespace {
 
    llvm::Module *
    compile(const std::string &source, const std::string &name,
-           const std::string &triple, const std::string &opts) {
+           const std::string &triple, const std::string &processor,
+           const std::string &opts) {
 
       clang::CompilerInstance c;
       clang::CompilerInvocation invocation;
@@ -151,7 +164,11 @@ namespace {
       // Add libclc generic search path
       c.getHeaderSearchOpts().AddPath(LIBCLC_INCLUDEDIR,
                                       clang::frontend::Angled,
-                                      false, false, false);
+                                      false, false
+#if HAVE_LLVM < 0x0303
+                                      , false
+#endif
+                                      );
 
       // Add libclc include
       c.getPreprocessorOpts().Includes.push_back("clc/clc.h");
@@ -161,14 +178,19 @@ namespace {
 
       c.getLangOpts().NoBuiltin = true;
       c.getTargetOpts().Triple = triple;
+      c.getTargetOpts().CPU = processor;
 #if HAVE_LLVM <= 0x0301
       c.getInvocation().setLangDefaults(clang::IK_OpenCL);
 #else
       c.getInvocation().setLangDefaults(c.getLangOpts(), clang::IK_OpenCL,
                                         clang::LangStandard::lang_opencl11);
 #endif
-      c.createDiagnostics(0, NULL, new clang::TextDiagnosticPrinter(
-                          s_log,
+      c.createDiagnostics(
+#if HAVE_LLVM < 0x0303
+                          0, NULL,
+#endif
+                          new clang::TextDiagnosticPrinter(
+                                 s_log,
 #if HAVE_LLVM <= 0x0301
                                  c.getDiagnosticOpts()));
 #else
@@ -189,6 +211,13 @@ namespace {
    find_kernels(llvm::Module *mod, std::vector<llvm::Function *> &kernels) {
       const llvm::NamedMDNode *kernel_node =
                                  mod->getNamedMetadata("opencl.kernels");
+      // This means there are no kernels in the program.  The spec does not
+      // require that we return an error here, but there will be an error if
+      // the user tries to pass this program to a clCreateKernel() call.
+      if (!kernel_node) {
+         return;
+      }
+
       for (unsigned i = 0; i < kernel_node->getNumOperands(); ++i) {
          kernels.push_back(llvm::dyn_cast<llvm::Function>(
                                     kernel_node->getOperand(i)->getOperand(0)));
@@ -197,16 +226,30 @@ namespace {
 
    void
    link(llvm::Module *mod, const std::string &triple,
+        const std::string &processor,
         const std::vector<llvm::Function *> &kernels) {
 
       llvm::PassManager PM;
       llvm::PassManagerBuilder Builder;
+      std::string libclc_path = LIBCLC_LIBEXECDIR + processor + "-"
+                                                  + triple + ".bc";
+      // Link the kernel with libclc
+#if HAVE_LLVM < 0x0303
       bool isNative;
       llvm::Linker linker("clover", mod);
-
-      // Link the kernel with libclc
-      linker.LinkInFile(llvm::sys::Path(LIBCLC_LIBEXECDIR + triple + ".bc"), isNative);
+      linker.LinkInFile(llvm::sys::Path(libclc_path), isNative);
       mod = linker.releaseModule();
+#else
+      std::string err_str;
+      llvm::SMDiagnostic err;
+      llvm::Module *libclc_mod = llvm::ParseIRFile(libclc_path, err,
+                                                   mod->getContext());
+      if (llvm::Linker::LinkModules(mod, libclc_mod,
+                                    llvm::Linker::DestroySource,
+                                    &err_str)) {
+         throw build_error(err_str);
+      }
+#endif
 
       // Add a function internalizer pass.
       //
@@ -261,13 +304,20 @@ namespace {
          for (llvm::Function::arg_iterator I = kernel_func->arg_begin(),
                                       E = kernel_func->arg_end(); I != E; ++I) {
             llvm::Argument &arg = *I;
-            llvm::Type *arg_type = arg.getType();
 #if HAVE_LLVM < 0x0302
             llvm::TargetData TD(kernel_func->getParent());
 #else
             llvm::DataLayout TD(kernel_func->getParent()->getDataLayout());
 #endif
+
+            llvm::Type *arg_type = arg.getType();
             unsigned arg_size = TD.getTypeStoreSize(arg_type);
+
+            llvm::Type *target_type = arg_type->isIntegerTy() ?
+               TD.getSmallestLegalIntType(mod->getContext(), arg_size * 8) :
+               arg_type;
+            unsigned target_size = TD.getTypeStoreSize(target_type);
+            unsigned target_align = TD.getABITypeAlignment(target_type);
 
             if (llvm::isa<llvm::PointerType>(arg_type) && arg.hasByValAttr()) {
                arg_type =
@@ -281,11 +331,24 @@ namespace {
                unsigned address_space = llvm::cast<llvm::PointerType>(arg_type)->getAddressSpace();
                switch (address_space) {
                   default:
-                     args.push_back(module::argument(module::argument::global, arg_size));
+                     args.push_back(
+                        module::argument(module::argument::global, arg_size,
+                                         target_size, target_align,
+                                         module::argument::zero_ext));
                      break;
                }
+
             } else {
-               args.push_back(module::argument(module::argument::scalar, arg_size));
+               llvm::AttributeSet attrs = kernel_func->getAttributes();
+               enum module::argument::ext_type ext_type =
+                  (attrs.hasAttribute(arg.getArgNo() + 1,
+                                     llvm::Attribute::SExt) ?
+                   module::argument::sign_ext :
+                   module::argument::zero_ext);
+
+               args.push_back(
+                  module::argument(module::argument::scalar, arg_size,
+                                   target_size, target_align, ext_type));
             }
          }
 
@@ -307,18 +370,22 @@ namespace {
 module
 clover::compile_program_llvm(const compat::string &source,
                              enum pipe_shader_ir ir,
-                             const compat::string &triple,
+                             const compat::string &target,
                              const compat::string &opts) {
 
    std::vector<llvm::Function *> kernels;
+   size_t processor_str_len = std::string(target.begin()).find_first_of("-");
+   std::string processor(target.begin(), 0, processor_str_len);
+   std::string triple(target.begin(), processor_str_len + 1,
+                      target.size() - processor_str_len - 1);
 
    // The input file name must have the .cl extension in order for the
    // CompilerInvocation class to recognize it as an OpenCL source file.
-   llvm::Module *mod = compile(source, "input.cl", triple, opts);
+   llvm::Module *mod = compile(source, "input.cl", triple, processor, opts);
 
    find_kernels(mod, kernels);
 
-   link(mod, triple, kernels);
+   link(mod, triple, processor, kernels);
 
    // Build the clover::module
    switch (ir) {

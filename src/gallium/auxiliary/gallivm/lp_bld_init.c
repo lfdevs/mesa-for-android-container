@@ -49,7 +49,7 @@
  *   - MC-JIT supports limited OSes (MacOSX and Linux)
  * - standard JIT in LLVM 3.1, with backports
  */
-#if defined(PIPE_ARCH_PPC_64)
+#if defined(PIPE_ARCH_PPC_64) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_ARM) || defined(PIPE_ARCH_AARCH64)
 #  define USE_MCJIT 1
 #  define HAVE_AVX 0
 #elif HAVE_LLVM >= 0x0302 || (HAVE_LLVM == 0x0301 && defined(HAVE_JIT_AVX_SUPPORT))
@@ -79,6 +79,7 @@ static const struct debug_named_value lp_bld_debug_flags[] = {
    { "nopt",   GALLIVM_DEBUG_NO_OPT, NULL },
    { "perf",   GALLIVM_DEBUG_PERF, NULL },
    { "no_brilinear", GALLIVM_DEBUG_NO_BRILINEAR, NULL },
+   { "no_rho_approx", GALLIVM_DEBUG_NO_RHO_APPROX, NULL },
    { "gc",     GALLIVM_DEBUG_GC, NULL },
    DEBUG_NAMED_VALUE_END
 };
@@ -146,7 +147,10 @@ create_pass_manager(struct gallivm_state *gallivm)
        * but there are more on SVN.
        * TODO: Add more passes.
        */
+      LLVMAddScalarReplAggregatesPass(gallivm->passmgr);
+      LLVMAddLICMPass(gallivm->passmgr);
       LLVMAddCFGSimplificationPass(gallivm->passmgr);
+      LLVMAddReassociatePass(gallivm->passmgr);
 
       if (HAVE_LLVM >= 0x207 && sizeof(void*) == 4) {
          /* For LLVM >= 2.7 and 32-bit build, use this order of passes to
@@ -273,10 +277,6 @@ init_gallivm_engine(struct gallivm_state *gallivm)
          LLVMDisposeMessage(error);
          goto fail;
       }
-
-#if defined(DEBUG) || defined(PROFILE)
-      lp_register_oprofile_jit_event_listener(gallivm->engine);
-#endif
    }
 
    LLVMAddModuleProvider(gallivm->engine, gallivm->provider);//new
@@ -468,6 +468,15 @@ lp_build_init(void)
       util_cpu_caps.has_avx = 0;
    }
 
+   if (!HAVE_AVX) {
+      /*
+       * note these instructions are VEX-only, so can only emit if we use
+       * avx (don't want to base it on has_avx & has_f16c later as that would
+       * omit it unnecessarily on amd cpus, see above).
+       */
+      util_cpu_caps.has_f16c = 0;
+   }
+
 #ifdef PIPE_ARCH_PPC_64
    /* Set the NJ bit in VSCR to 0 so denormalized values are handled as
     * specified by IEEE standard (PowerISA 2.06 - Section 6.3). This garantees
@@ -495,6 +504,7 @@ lp_build_init(void)
    util_cpu_caps.has_ssse3 = 0;
    util_cpu_caps.has_sse4_1 = 0;
    util_cpu_caps.has_avx = 0;
+   util_cpu_caps.has_f16c = 0;
 #endif
 }
 
@@ -625,6 +635,7 @@ gallivm_compile_module(struct gallivm_state *gallivm)
 }
 
 
+
 func_pointer
 gallivm_jit_function(struct gallivm_state *gallivm,
                      LLVMValueRef func)
@@ -640,8 +651,12 @@ gallivm_jit_function(struct gallivm_state *gallivm,
    jit_func = pointer_to_func(code);
 
    if (gallivm_debug & GALLIVM_DEBUG_ASM) {
-      lp_disassemble(code);
+      lp_disassemble(func, code);
    }
+
+#if defined(PROFILE)
+   lp_profile(func, code);
+#endif
 
    /* Free the function body to save memory */
    lp_func_delete_body(func);

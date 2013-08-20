@@ -2,7 +2,6 @@
 
 
 # Mesa 3-D graphics library
-# Version:  4.1
 # 
 # Copyright (C) 1999-2001  Brian Paul   All Rights Reserved.
 # 
@@ -19,9 +18,10 @@
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 # OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-# BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
-# AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
 
 
 # Generate the mesa.def file for Windows.
@@ -134,7 +134,6 @@ def PrintTail():
     print '\t_mesa_new_buffer_object'
     print '\t_mesa_new_texture_object'
     print '\t_mesa_problem'
-    print '\t_mesa_ResizeBuffersMESA'
     print '\t_mesa_store_compressed_teximage1d'
     print '\t_mesa_store_compressed_teximage2d'
     print '\t_mesa_store_compressed_teximage3d'

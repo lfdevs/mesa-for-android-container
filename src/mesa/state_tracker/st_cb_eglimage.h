@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.9
  *
  * Copyright (C) 2010 LunarG Inc.
  *
@@ -30,7 +29,6 @@
 #define ST_CB_EGLIMAGE_H
 
 #include "main/compiler.h"
-#include "main/mfeatures.h"
 
 struct dd_function_table;
 

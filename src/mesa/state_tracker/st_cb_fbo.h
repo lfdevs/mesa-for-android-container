@@ -59,7 +59,7 @@ struct st_renderbuffer
    void *data;
 
    struct st_texture_object *rtt;  /**< GL render to texture's texture */
-   int rtt_level, rtt_face, rtt_slice;
+   unsigned rtt_level, rtt_face, rtt_slice;
 };
 
 
@@ -75,10 +75,5 @@ st_new_renderbuffer_fb(enum pipe_format format, int samples, boolean sw);
 
 extern void
 st_init_fbo_functions(struct dd_function_table *functions);
-
-extern GLboolean
-st_is_depth_stencil_combined(const struct gl_renderbuffer_attachment *depth,
-                             const struct gl_renderbuffer_attachment *stencil);
-
 
 #endif /* ST_CB_FBO_H */

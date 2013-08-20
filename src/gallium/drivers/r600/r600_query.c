@@ -41,6 +41,16 @@ static struct r600_resource *r600_new_query_buffer(struct r600_context *ctx, uns
 {
 	unsigned j, i, num_results, buf_size = 4096;
 	uint32_t *results;
+
+	/* Non-GPU queries. */
+	switch (type) {
+	case R600_QUERY_DRAW_CALLS:
+	case R600_QUERY_REQUESTED_VRAM:
+	case R600_QUERY_REQUESTED_GTT:
+	case R600_QUERY_BUFFER_WAIT_TIME:
+		return NULL;
+	}
+
 	/* Queries are normally read by the CPU after
 	 * being written by the gpu, hence staging is probably a good
 	 * usage pattern.
@@ -75,6 +85,7 @@ static struct r600_resource *r600_new_query_buffer(struct r600_context *ctx, uns
 	case PIPE_QUERY_PRIMITIVES_GENERATED:
 	case PIPE_QUERY_SO_STATISTICS:
 	case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+	case PIPE_QUERY_PIPELINE_STATISTICS:
 		results = r600_buffer_mmap_sync_with_rings(ctx, buf, PIPE_TRANSFER_WRITE);
 		memset(results, 0, buf_size);
 		ctx->ws->buffer_unmap(buf->cs_buf);
@@ -150,6 +161,17 @@ static void r600_emit_query_begin(struct r600_context *ctx, struct r600_query *q
 		cs->buf[cs->cdw++] = 0;
 		cs->buf[cs->cdw++] = 0;
 		break;
+	case PIPE_QUERY_PIPELINE_STATISTICS:
+		if (!ctx->num_pipelinestat_queries) {
+			cs->buf[cs->cdw++] = PKT3(PKT3_EVENT_WRITE, 0, 0);
+			cs->buf[cs->cdw++] = EVENT_TYPE(EVENT_TYPE_PIPELINESTAT_START) | EVENT_INDEX(0);
+		}
+		ctx->num_pipelinestat_queries++;
+		cs->buf[cs->cdw++] = PKT3(PKT3_EVENT_WRITE, 2, 0);
+		cs->buf[cs->cdw++] = EVENT_TYPE(EVENT_TYPE_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2);
+		cs->buf[cs->cdw++] = va;
+		cs->buf[cs->cdw++] = (va >> 32UL) & 0xFF;
+		break;
 	default:
 		assert(0);
 	}
@@ -202,6 +224,19 @@ static void r600_emit_query_end(struct r600_context *ctx, struct r600_query *que
 		cs->buf[cs->cdw++] = (3 << 29) | ((va >> 32UL) & 0xFF);
 		cs->buf[cs->cdw++] = 0;
 		cs->buf[cs->cdw++] = 0;
+		break;
+	case PIPE_QUERY_PIPELINE_STATISTICS:
+		assert(ctx->num_pipelinestat_queries > 0);
+		ctx->num_pipelinestat_queries--;
+		if (!ctx->num_pipelinestat_queries) {
+			cs->buf[cs->cdw++] = PKT3(PKT3_EVENT_WRITE, 0, 0);
+			cs->buf[cs->cdw++] = EVENT_TYPE(EVENT_TYPE_PIPELINESTAT_STOP) | EVENT_INDEX(0);
+		}
+		va += query->buffer.results_end + query->result_size/2;
+		cs->buf[cs->cdw++] = PKT3(PKT3_EVENT_WRITE, 2, 0);
+		cs->buf[cs->cdw++] = EVENT_TYPE(EVENT_TYPE_SAMPLE_PIPELINESTAT) | EVENT_INDEX(2);
+		cs->buf[cs->cdw++] = va;
+		cs->buf[cs->cdw++] = (va >> 32UL) & 0xFF;
 		break;
 	default:
 		assert(0);
@@ -270,8 +305,8 @@ static void r600_emit_query_predication(struct r600_context *ctx, struct r600_qu
 static struct pipe_query *r600_create_query(struct pipe_context *ctx, unsigned query_type)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
-
 	struct r600_query *query;
+	bool skip_allocation = false;
 
 	query = CALLOC_STRUCT(r600_query);
 	if (query == NULL)
@@ -301,16 +336,30 @@ static struct pipe_query *r600_create_query(struct pipe_context *ctx, unsigned q
 		query->result_size = 32;
 		query->num_cs_dw = 6;
 		break;
+	case PIPE_QUERY_PIPELINE_STATISTICS:
+		/* 11 values on EG, 8 on R600. */
+		query->result_size = (rctx->chip_class >= EVERGREEN ? 11 : 8) * 16;
+		query->num_cs_dw = 8;
+		break;
+	/* Non-GPU queries. */
+	case R600_QUERY_DRAW_CALLS:
+	case R600_QUERY_REQUESTED_VRAM:
+	case R600_QUERY_REQUESTED_GTT:
+	case R600_QUERY_BUFFER_WAIT_TIME:
+		skip_allocation = true;
+		break;
 	default:
 		assert(0);
 		FREE(query);
 		return NULL;
 	}
 
-	query->buffer.buf = r600_new_query_buffer(rctx, query_type);
-	if (!query->buffer.buf) {
-		FREE(query);
-		return NULL;
+	if (!skip_allocation) {
+		query->buffer.buf = r600_new_query_buffer(rctx, query_type);
+		if (!query->buffer.buf) {
+			FREE(query);
+			return NULL;
+		}
 	}
 	return (struct pipe_query*)query;
 }
@@ -343,6 +392,20 @@ static void r600_begin_query(struct pipe_context *ctx, struct pipe_query *query)
 		return;
 	}
 
+	/* Non-GPU queries. */
+	switch (rquery->type) {
+	case R600_QUERY_DRAW_CALLS:
+		rquery->begin_result = rctx->num_draw_calls;
+		return;
+	case R600_QUERY_REQUESTED_VRAM:
+	case R600_QUERY_REQUESTED_GTT:
+		rquery->begin_result = 0;
+		return;
+	case R600_QUERY_BUFFER_WAIT_TIME:
+		rquery->begin_result = rctx->ws->query_value(rctx->ws, RADEON_BUFFER_WAIT_TIME_NS);
+		return;
+	}
+
 	/* Discard the old query buffers. */
 	while (prev) {
 		struct r600_query_buffer *qbuf = prev;
@@ -372,6 +435,22 @@ static void r600_end_query(struct pipe_context *ctx, struct pipe_query *query)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_query *rquery = (struct r600_query *)query;
+
+	/* Non-GPU queries. */
+	switch (rquery->type) {
+	case R600_QUERY_DRAW_CALLS:
+		rquery->end_result = rctx->num_draw_calls;
+		return;
+	case R600_QUERY_REQUESTED_VRAM:
+		rquery->end_result = rctx->ws->query_value(rctx->ws, RADEON_REQUESTED_VRAM_MEMORY);
+		return;
+	case R600_QUERY_REQUESTED_GTT:
+		rquery->end_result = rctx->ws->query_value(rctx->ws, RADEON_REQUESTED_GTT_MEMORY);
+		return;
+	case R600_QUERY_BUFFER_WAIT_TIME:
+		rquery->end_result = rctx->ws->query_value(rctx->ws, RADEON_BUFFER_WAIT_TIME_NS);
+		return;
+	}
 
 	r600_emit_query_end(rctx, rquery);
 
@@ -406,6 +485,16 @@ static boolean r600_get_query_buffer_result(struct r600_context *ctx,
 {
 	unsigned results_base = 0;
 	char *map;
+
+	/* Non-GPU queries. */
+	switch (query->type) {
+	case R600_QUERY_DRAW_CALLS:
+	case R600_QUERY_REQUESTED_VRAM:
+	case R600_QUERY_REQUESTED_GTT:
+	case R600_QUERY_BUFFER_WAIT_TIME:
+		result->u64 = query->end_result - query->begin_result;
+		return TRUE;
+	}
 
 	map = r600_buffer_mmap_sync_with_rings(ctx, qbuf->buf,
 						PIPE_TRANSFER_READ |
@@ -481,6 +570,71 @@ static boolean r600_get_query_buffer_result(struct r600_context *ctx,
 			results_base += query->result_size;
 		}
 		break;
+	case PIPE_QUERY_PIPELINE_STATISTICS:
+		if (ctx->chip_class >= EVERGREEN) {
+			while (results_base != qbuf->results_end) {
+				result->pipeline_statistics.ps_invocations +=
+					r600_query_read_result(map + results_base, 0, 22, false);
+				result->pipeline_statistics.c_primitives +=
+					r600_query_read_result(map + results_base, 2, 24, false);
+				result->pipeline_statistics.c_invocations +=
+					r600_query_read_result(map + results_base, 4, 26, false);
+				result->pipeline_statistics.vs_invocations +=
+					r600_query_read_result(map + results_base, 6, 28, false);
+				result->pipeline_statistics.gs_invocations +=
+					r600_query_read_result(map + results_base, 8, 30, false);
+				result->pipeline_statistics.gs_primitives +=
+					r600_query_read_result(map + results_base, 10, 32, false);
+				result->pipeline_statistics.ia_primitives +=
+					r600_query_read_result(map + results_base, 12, 34, false);
+				result->pipeline_statistics.ia_vertices +=
+					r600_query_read_result(map + results_base, 14, 36, false);
+				result->pipeline_statistics.hs_invocations +=
+					r600_query_read_result(map + results_base, 16, 38, false);
+				result->pipeline_statistics.ds_invocations +=
+					r600_query_read_result(map + results_base, 18, 40, false);
+				result->pipeline_statistics.cs_invocations +=
+					r600_query_read_result(map + results_base, 20, 42, false);
+				results_base += query->result_size;
+			}
+		} else {
+			while (results_base != qbuf->results_end) {
+				result->pipeline_statistics.ps_invocations +=
+					r600_query_read_result(map + results_base, 0, 16, false);
+				result->pipeline_statistics.c_primitives +=
+					r600_query_read_result(map + results_base, 2, 18, false);
+				result->pipeline_statistics.c_invocations +=
+					r600_query_read_result(map + results_base, 4, 20, false);
+				result->pipeline_statistics.vs_invocations +=
+					r600_query_read_result(map + results_base, 6, 22, false);
+				result->pipeline_statistics.gs_invocations +=
+					r600_query_read_result(map + results_base, 8, 24, false);
+				result->pipeline_statistics.gs_primitives +=
+					r600_query_read_result(map + results_base, 10, 26, false);
+				result->pipeline_statistics.ia_primitives +=
+					r600_query_read_result(map + results_base, 12, 28, false);
+				result->pipeline_statistics.ia_vertices +=
+					r600_query_read_result(map + results_base, 14, 30, false);
+				results_base += query->result_size;
+			}
+		}
+#if 0 /* for testing */
+		printf("Pipeline stats: IA verts=%llu, IA prims=%llu, VS=%llu, HS=%llu, "
+		       "DS=%llu, GS=%llu, GS prims=%llu, Clipper=%llu, "
+		       "Clipper prims=%llu, PS=%llu, CS=%llu\n",
+		       result->pipeline_statistics.ia_vertices,
+		       result->pipeline_statistics.ia_primitives,
+		       result->pipeline_statistics.vs_invocations,
+		       result->pipeline_statistics.hs_invocations,
+		       result->pipeline_statistics.ds_invocations,
+		       result->pipeline_statistics.gs_invocations,
+		       result->pipeline_statistics.gs_primitives,
+		       result->pipeline_statistics.c_invocations,
+		       result->pipeline_statistics.c_primitives,
+		       result->pipeline_statistics.ps_invocations,
+		       result->pipeline_statistics.cs_invocations);
+#endif
+		break;
 	default:
 		assert(0);
 	}
@@ -515,6 +669,7 @@ static boolean r600_get_query_result(struct pipe_context *ctx,
 
 static void r600_render_condition(struct pipe_context *ctx,
 				  struct pipe_query *query,
+				  boolean condition,
 				  uint mode)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
@@ -522,6 +677,7 @@ static void r600_render_condition(struct pipe_context *ctx,
 	bool wait_flag = false;
 
 	rctx->current_render_cond = query;
+	rctx->current_render_cond_cond = condition;
 	rctx->current_render_cond_mode = mode;
 
 	if (query == NULL) {

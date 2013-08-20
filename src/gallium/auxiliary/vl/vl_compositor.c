@@ -152,7 +152,7 @@ create_frag_shader_video_buffer(struct vl_compositor *c)
     * fragment = csc * texel
     */
    for (i = 0; i < 3; ++i)
-      ureg_TEX(shader, ureg_writemask(texel, TGSI_WRITEMASK_X << i), TGSI_TEXTURE_3D, tc, sampler[i]);
+      ureg_TEX(shader, ureg_writemask(texel, TGSI_WRITEMASK_X << i), TGSI_TEXTURE_2D_ARRAY, tc, sampler[i]);
 
    ureg_MOV(shader, ureg_writemask(texel, TGSI_WRITEMASK_W), ureg_imm1f(shader, 1.0f));
 
@@ -207,7 +207,7 @@ create_frag_shader_weave(struct vl_compositor *c)
                i_tc[i], ureg_imm1f(shader, 0.5f));
       ureg_ROUND(shader, ureg_writemask(t_tc[i], TGSI_WRITEMASK_YZ), ureg_src(t_tc[i]));
       ureg_MOV(shader, ureg_writemask(t_tc[i], TGSI_WRITEMASK_W),
-               ureg_imm1f(shader, i ? -0.25f : 0.25f));
+               ureg_imm1f(shader, i ? 1.0f : 0.0f));
       ureg_ADD(shader, ureg_writemask(t_tc[i], TGSI_WRITEMASK_YZ),
                ureg_src(t_tc[i]), ureg_imm1f(shader, 0.5f));
       ureg_MUL(shader, ureg_writemask(t_tc[i], TGSI_WRITEMASK_Y),
@@ -227,7 +227,7 @@ create_frag_shader_weave(struct vl_compositor *c)
             TGSI_SWIZZLE_X, j ? TGSI_SWIZZLE_Z : TGSI_SWIZZLE_Y, TGSI_SWIZZLE_W, TGSI_SWIZZLE_W);
 
          ureg_TEX(shader, ureg_writemask(t_texel[i], TGSI_WRITEMASK_X << j),
-                  TGSI_TEXTURE_3D, src, sampler[j]);
+                  TGSI_TEXTURE_2D_ARRAY, src, sampler[j]);
       }
 
    /* calculate linear interpolation factor
@@ -453,7 +453,8 @@ init_pipe_state(struct vl_compositor *c)
    rast.point_size_per_vertex = 1;
    rast.offset_units = 1;
    rast.offset_scale = 1;
-   rast.gl_rasterization_rules = 1;
+   rast.half_pixel_center = 1;
+   rast.bottom_edge_rule = 1;
    rast.depth_clip = 1;
 
    c->rast = c->pipe->create_rasterizer_state(c->pipe, &rast);
@@ -557,7 +558,7 @@ static INLINE struct u_rect
 default_rect(struct vl_compositor_layer *layer)
 {
    struct pipe_resource *res = layer->sampler_views[0]->texture;
-   struct u_rect rect = { 0, res->width0, 0, res->height0 * res->depth0 };
+   struct u_rect rect = { 0, res->width0, 0, res->height0 * res->array_size };
    return rect;
 }
 
@@ -722,7 +723,7 @@ draw_layers(struct vl_compositor *c, struct vl_compositor_state *s, struct u_rec
          void *blend = layer->blend ? layer->blend : i ? c->blend_add : c->blend_clear;
 
          c->pipe->bind_blend_state(c->pipe, blend);
-         c->pipe->set_viewport_state(c->pipe, &layer->viewport);
+         c->pipe->set_viewport_states(c->pipe, 0, 1, &layer->viewport);
          c->pipe->bind_fs_state(c->pipe, layer->fs);
          c->pipe->bind_fragment_sampler_states(c->pipe, num_sampler_views, layer->samplers);
          c->pipe->set_fragment_sampler_views(c->pipe, num_sampler_views, samplers);
@@ -901,14 +902,14 @@ vl_compositor_set_buffer_layer(struct vl_compositor_state *s,
          break;
 
       case VL_COMPOSITOR_BOB_TOP:
-         s->layers[layer].zw.x = 0.25f;
+         s->layers[layer].zw.x = 0.0f;
          s->layers[layer].src.tl.y += half_a_line;
          s->layers[layer].src.br.y += half_a_line;
          s->layers[layer].fs = c->fs_video_buffer;
          break;
 
       case VL_COMPOSITOR_BOB_BOTTOM:
-         s->layers[layer].zw.x = 0.75f;
+         s->layers[layer].zw.x = 1.0f;
          s->layers[layer].src.tl.y -= half_a_line;
          s->layers[layer].src.br.y -= half_a_line;
          s->layers[layer].fs = c->fs_video_buffer;
@@ -985,7 +986,8 @@ void
 vl_compositor_render(struct vl_compositor_state *s,
                      struct vl_compositor       *c,
                      struct pipe_surface        *dst_surface,
-                     struct u_rect              *dirty_area)
+                     struct u_rect              *dirty_area,
+                     bool                        clear_dirty)
 {
    assert(c);
    assert(dst_surface);
@@ -1003,8 +1005,8 @@ vl_compositor_render(struct vl_compositor_state *s,
 
    gen_vertex_data(c, s, dirty_area);
 
-   if (dirty_area && (dirty_area->x0 < dirty_area->x1 ||
-                      dirty_area->y0 < dirty_area->y1)) {
+   if (clear_dirty && dirty_area &&
+       (dirty_area->x0 < dirty_area->x1 || dirty_area->y0 < dirty_area->y1)) {
 
       c->pipe->clear_render_target(c->pipe, dst_surface, &s->clear_color,
                                    0, 0, dst_surface->width, dst_surface->height);
@@ -1012,7 +1014,7 @@ vl_compositor_render(struct vl_compositor_state *s,
       dirty_area->x1 = dirty_area->y1 = MIN_DIRTY;
    }
 
-   c->pipe->set_scissor_state(c->pipe, &s->scissor);
+   c->pipe->set_scissor_states(c->pipe, 0, 1, &s->scissor);
    c->pipe->set_framebuffer_state(c->pipe, &c->fb_state);
    c->pipe->bind_vs_state(c->pipe, c->vs);
    c->pipe->set_vertex_buffers(c->pipe, 0, 1, &c->vertex_buf);

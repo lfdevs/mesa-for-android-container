@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #ifndef __NV50_IR_INLINES_H__
@@ -43,7 +43,12 @@ static inline bool isMemoryFile(DataFile f)
 // contrary to asTex(), this will never include SULD/SUST
 static inline bool isTextureOp(operation op)
 {
-   return (op >= OP_TEX && op <= OP_TEXCSAA) || (op == OP_TEXPREP);
+   return (op >= OP_TEX && op <= OP_TEXPREP);
+}
+
+static inline bool isSurfaceOp(operation op)
+{
+   return (op >= OP_SULDB && op <= OP_SULEA);
 }
 
 static inline unsigned int typeSizeof(DataType ty)
@@ -304,14 +309,14 @@ const FlowInstruction *Instruction::asFlow() const
 
 TexInstruction *Instruction::asTex()
 {
-   if ((op >= OP_TEX && op <= OP_TEXCSAA) || (op == OP_TEXPREP))
+   if (op >= OP_TEX && op <= OP_SULEA)
       return static_cast<TexInstruction *>(this);
    return NULL;
 }
 
 const TexInstruction *Instruction::asTex() const
 {
-   if (op >= OP_TEX && op <= OP_TEXCSAA)
+   if (op >= OP_TEX && op <= OP_SULEA)
       return static_cast<const TexInstruction *>(this);
    return NULL;
 }

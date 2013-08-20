@@ -729,6 +729,7 @@ decode_dct(struct vl_mpg12_bs *bs, struct pipe_mpeg12_macroblock *mb, int scale)
       vl_vlc_eatbits(&bs->vlc, entry->length);
       if (entry->run == dct_End_of_Block) {
 
+next_d:
          dst += 64;
          cbp <<= 1;
          cbp &= 0x3F;
@@ -760,12 +761,27 @@ entry:
             dst[0] = bs->pred_dc[cc];
             i = 0;
 
+            if (bs->desc->picture_coding_type == PIPE_MPEG12_PICTURE_CODING_TYPE_D)
+               goto next_d;
          } else {
             entry = tbl_B14_DC + vl_vlc_peekbits(&bs->vlc, 17);
             i = -1;
             continue;
          }
 
+      } else if (entry->run == dct_Escape &&
+                 bs->decoder->profile == PIPE_VIDEO_PROFILE_MPEG1) {
+         i += vl_vlc_get_uimsbf(&bs->vlc, 6) + 1;
+         if (i > 64)
+            break;
+
+         dst[i] = vl_vlc_get_simsbf(&bs->vlc, 8);
+         if (dst[i] == -128)
+            dst[i] = vl_vlc_get_uimsbf(&bs->vlc, 8) - 256;
+         else if (dst[i] == 0)
+            dst[i] = vl_vlc_get_uimsbf(&bs->vlc, 8);
+
+         dst[i] *= scale;
       } else if (entry->run == dct_Escape) {
          i += vl_vlc_get_uimsbf(&bs->vlc, 6) + 1;
          if (i > 64)
@@ -784,6 +800,9 @@ entry:
       vl_vlc_fillbits(&bs->vlc);
       entry = table + vl_vlc_peekbits(&bs->vlc, 17);
    }
+
+   if (bs->desc->picture_coding_type == PIPE_MPEG12_PICTURE_CODING_TYPE_D)
+      vl_vlc_eatbits(&bs->vlc, 1);
 }
 
 static INLINE void
@@ -808,22 +827,27 @@ decode_slice(struct vl_mpg12_bs *bs, struct pipe_video_buffer *target)
          vl_vlc_fillbits(&bs->vlc);
 
    vl_vlc_fillbits(&bs->vlc);
-   assert(vl_vlc_bits_left(&bs->vlc) > 23 && vl_vlc_peekbits(&bs->vlc, 23));
+   assert(vl_vlc_peekbits(&bs->vlc, 23));
    do {
       int inc = 0;
 
-      if (bs->decoder->profile == PIPE_VIDEO_PROFILE_MPEG1)
+      while (1) {
+         /* MPEG-1 macroblock stuffing, can appear an arbitrary number of times. */
          while (vl_vlc_peekbits(&bs->vlc, 11) == 15) {
             vl_vlc_eatbits(&bs->vlc, 11);
             vl_vlc_fillbits(&bs->vlc);
          }
 
-      while (vl_vlc_peekbits(&bs->vlc, 11) == 8) {
-         vl_vlc_eatbits(&bs->vlc, 11);
-         vl_vlc_fillbits(&bs->vlc);
-         inc += 33;
+         if (vl_vlc_peekbits(&bs->vlc, 11) == 8) {
+            vl_vlc_eatbits(&bs->vlc, 11);
+            vl_vlc_fillbits(&bs->vlc);
+            inc += 33;
+         } else {
+            inc += vl_vlc_get_vlclbf(&bs->vlc, tbl_B1, 11);
+            break;
+         }
       }
-      inc += vl_vlc_get_vlclbf(&bs->vlc, tbl_B1, 11);
+
       if (x != -1) {
          if (!inc)
             return;
@@ -831,6 +855,11 @@ decode_slice(struct vl_mpg12_bs *bs, struct pipe_video_buffer *target)
          bs->decoder->decode_macroblock(bs->decoder, target, &bs->desc->base, &mb.base, 1);
       }
       mb.x = x += inc;
+      if (bs->decoder->profile == PIPE_VIDEO_PROFILE_MPEG1) {
+         int width = align(bs->decoder->width, 16) / 16;
+         mb.y += mb.x / width;
+         mb.x = x %= width;
+      }
 
       switch (bs->desc->picture_coding_type) {
       case PIPE_MPEG12_PICTURE_CODING_TYPE_I:
@@ -845,10 +874,10 @@ decode_slice(struct vl_mpg12_bs *bs, struct pipe_video_buffer *target)
          mb.macroblock_type = vl_vlc_get_vlclbf(&bs->vlc, tbl_B4, 6);
          break;
 
-      default:
-         mb.macroblock_type = 0;
-         /* dumb gcc */
-         assert(0);
+      case PIPE_MPEG12_PICTURE_CODING_TYPE_D:
+         vl_vlc_eatbits(&bs->vlc, 1);
+         mb.macroblock_type = PIPE_MPEG12_MB_TYPE_INTRA;
+         break;
       }
 
       mb.macroblock_modes.value = 0;

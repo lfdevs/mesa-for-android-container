@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.2
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -32,6 +32,7 @@
 
 #include "glheader.h"
 #include "imports.h"
+#include "blend.h"
 #include "buffers.h"
 #include "context.h"
 #include "enums.h"
@@ -154,6 +155,8 @@ _mesa_initialize_window_framebuffer(struct gl_framebuffer *fb,
 
    fb->Delete = _mesa_destroy_framebuffer;
    fb->_Status = GL_FRAMEBUFFER_COMPLETE_EXT;
+   fb->_AllColorBuffersFixedPoint = !visual->floatMode;
+   fb->_HasSNormOrFloatColorBuffer = visual->floatMode;
 
    compute_depth_max(fb);
 }
@@ -315,85 +318,6 @@ _mesa_resize_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
       ctx->NewState |= _NEW_BUFFERS;
    }
 }
-
-
-
-/**
- * XXX THIS IS OBSOLETE - drivers should take care of detecting window
- * size changes and act accordingly, likely calling _mesa_resize_framebuffer().
- *
- * GL_MESA_resize_buffers extension.
- *
- * When this function is called, we'll ask the window system how large
- * the current window is.  If it's a new size, we'll call the driver's
- * ResizeBuffers function.  The driver will then resize its color buffers
- * as needed, and maybe call the swrast's routine for reallocating
- * swrast-managed depth/stencil/accum/etc buffers.
- * \note This function should only be called through the GL API, not
- * from device drivers (as was done in the past).
- */
-void
-_mesa_resizebuffers( struct gl_context *ctx )
-{
-   FLUSH_VERTICES(ctx, 0);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glResizeBuffersMESA\n");
-
-   if (!ctx->Driver.GetBufferSize) {
-      return;
-   }
-
-   if (ctx->WinSysDrawBuffer) {
-      GLuint newWidth, newHeight;
-      struct gl_framebuffer *buffer = ctx->WinSysDrawBuffer;
-
-      assert(_mesa_is_winsys_fbo(buffer));
-
-      /* ask device driver for size of output buffer */
-      ctx->Driver.GetBufferSize( buffer, &newWidth, &newHeight );
-
-      /* see if size of device driver's color buffer (window) has changed */
-      if (buffer->Width != newWidth || buffer->Height != newHeight) {
-         if (ctx->Driver.ResizeBuffers)
-            ctx->Driver.ResizeBuffers(ctx, buffer, newWidth, newHeight );
-      }
-   }
-
-   if (ctx->WinSysReadBuffer
-       && ctx->WinSysReadBuffer != ctx->WinSysDrawBuffer) {
-      GLuint newWidth, newHeight;
-      struct gl_framebuffer *buffer = ctx->WinSysReadBuffer;
-
-      assert(_mesa_is_winsys_fbo(buffer));
-
-      /* ask device driver for size of read buffer */
-      ctx->Driver.GetBufferSize( buffer, &newWidth, &newHeight );
-
-      /* see if size of device driver's color buffer (window) has changed */
-      if (buffer->Width != newWidth || buffer->Height != newHeight) {
-         if (ctx->Driver.ResizeBuffers)
-            ctx->Driver.ResizeBuffers(ctx, buffer, newWidth, newHeight );
-      }
-   }
-
-   ctx->NewState |= _NEW_BUFFERS;  /* to update scissor / window bounds */
-}
-
-
-/*
- * XXX THIS IS OBSOLETE
- */
-void GLAPIENTRY
-_mesa_ResizeBuffersMESA( void )
-{
-   GET_CURRENT_CONTEXT(ctx);
-
-   if (ctx->Extensions.MESA_resize_buffers)
-      _mesa_resizebuffers( ctx );
-}
-
-
 
 /**
  * Examine all the framebuffer's renderbuffers to update the Width/Height
@@ -740,6 +664,9 @@ _mesa_update_framebuffer(struct gl_context *ctx)
    update_framebuffer(ctx, drawFb);
    if (readFb != drawFb)
       update_framebuffer(ctx, readFb);
+
+   _mesa_update_clamp_vertex_color(ctx);
+   _mesa_update_clamp_fragment_color(ctx);
 }
 
 
@@ -941,10 +868,10 @@ _mesa_get_color_read_type(struct gl_context *ctx)
  * Returns the read renderbuffer for the specified format.
  */
 struct gl_renderbuffer *
-_mesa_get_read_renderbuffer_for_format(struct gl_context *ctx,
+_mesa_get_read_renderbuffer_for_format(const struct gl_context *ctx,
                                        GLenum format)
 {
-   struct gl_framebuffer *rfb = ctx->ReadBuffer;
+   const struct gl_framebuffer *rfb = ctx->ReadBuffer;
 
    if (_mesa_is_color_format(format)) {
       return rfb->Attachment[rfb->_ColorReadBufferIndex].Renderbuffer;
@@ -973,8 +900,7 @@ _mesa_print_framebuffer(const struct gl_framebuffer *fb)
    for (i = 0; i < BUFFER_COUNT; i++) {
       const struct gl_renderbuffer_attachment *att = &fb->Attachment[i];
       if (att->Type == GL_TEXTURE) {
-         const struct gl_texture_image *texImage =
-            _mesa_get_attachment_teximage_const(att);
+         const struct gl_texture_image *texImage = att->Renderbuffer->TexImage;
          fprintf(stderr,
                  "  %2d: Texture %u, level %u, face %u, slice %u, complete %d\n",
                  i, att->Texture->Name, att->TextureLevel, att->CubeMapFace,

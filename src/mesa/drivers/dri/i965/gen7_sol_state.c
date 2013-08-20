@@ -38,14 +38,13 @@
 static void
 upload_3dstate_so_buffers(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_VERTEX_PROGRAM */
    const struct gl_shader_program *vs_prog =
       ctx->Shader.CurrentVertexProgram;
    const struct gl_transform_feedback_info *linked_xfb_info =
       &vs_prog->LinkedTransformFeedback;
-   /* _NEW_TRANSFORM_FEEDBACK */
+   /* BRW_NEW_TRANSFORM_FEEDBACK */
    struct gl_transform_feedback_object *xfb_obj =
       ctx->TransformFeedback.CurrentObject;
    int i;
@@ -74,22 +73,13 @@ upload_3dstate_so_buffers(struct brw_context *brw)
 	 continue;
       }
 
-      bo = intel_bufferobj_buffer(intel, bufferobj, INTEL_WRITE_PART);
+      bo = intel_bufferobj_buffer(brw, bufferobj, INTEL_WRITE_PART);
       stride = linked_xfb_info->BufferStride[i] * 4;
 
       start = xfb_obj->Offset[i];
       assert(start % 4 == 0);
       end = ALIGN(start + xfb_obj->Size[i], 4);
       assert(end <= bo->size);
-
-      /* If we don't have hardware contexts, then we reset our offsets at the
-       * start of every batch, so we track the number of vertices written in
-       * software and increment our pointers by that many.
-       */
-      if (!intel->hw_ctx) {
-         start += brw->sol.offset_0_batch_start * stride;
-         assert(start <= end);
-      }
 
       BEGIN_BATCH(4);
       OUT_BATCH(_3DSTATE_SO_BUFFER << 16 | (4 - 2));
@@ -109,14 +99,13 @@ upload_3dstate_so_buffers(struct brw_context *brw)
  */
 static void
 upload_3dstate_so_decl_list(struct brw_context *brw,
-			    struct brw_vue_map *vue_map)
+			    const struct brw_vue_map *vue_map)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_VERTEX_PROGRAM */
    const struct gl_shader_program *vs_prog =
       ctx->Shader.CurrentVertexProgram;
-   /* _NEW_TRANSFORM_FEEDBACK */
+   /* BRW_NEW_TRANSFORM_FEEDBACK */
    const struct gl_transform_feedback_info *linked_xfb_info =
       &vs_prog->LinkedTransformFeedback;
    int i;
@@ -132,12 +121,12 @@ upload_3dstate_so_decl_list(struct brw_context *brw,
    for (i = 0; i < linked_xfb_info->NumOutputs; i++) {
       int buffer = linked_xfb_info->Outputs[i].OutputBuffer;
       uint16_t decl = 0;
-      int vert_result = linked_xfb_info->Outputs[i].OutputRegister;
+      int varying = linked_xfb_info->Outputs[i].OutputRegister;
       unsigned component_mask =
          (1 << linked_xfb_info->Outputs[i].NumComponents) - 1;
 
-      /* gl_PointSize is stored in VERT_RESULT_PSIZ.w. */
-      if (vert_result == VERT_RESULT_PSIZ) {
+      /* gl_PointSize is stored in VARYING_SLOT_PSIZ.w. */
+      if (varying == VARYING_SLOT_PSIZ) {
          assert(linked_xfb_info->Outputs[i].NumComponents == 1);
          component_mask <<= 3;
       } else {
@@ -147,7 +136,7 @@ upload_3dstate_so_decl_list(struct brw_context *brw,
       buffer_mask |= 1 << buffer;
 
       decl |= buffer << SO_DECL_OUTPUT_BUFFER_SLOT_SHIFT;
-      decl |= vue_map->vert_result_to_slot[vert_result] <<
+      decl |= vue_map->varying_to_slot[varying] <<
 	 SO_DECL_REGISTER_INDEX_SHIFT;
       decl |= component_mask << SO_DECL_COMPONENT_MASK_SHIFT;
 
@@ -185,19 +174,14 @@ upload_3dstate_so_decl_list(struct brw_context *brw,
 
 static void
 upload_3dstate_streamout(struct brw_context *brw, bool active,
-			 struct brw_vue_map *vue_map)
+			 const struct brw_vue_map *vue_map)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
-   /* _NEW_TRANSFORM_FEEDBACK */
+   struct gl_context *ctx = &brw->ctx;
+   /* BRW_NEW_TRANSFORM_FEEDBACK */
    struct gl_transform_feedback_object *xfb_obj =
       ctx->TransformFeedback.CurrentObject;
    uint32_t dw1 = 0, dw2 = 0;
    int i;
-
-   /* _NEW_RASTERIZER_DISCARD */
-   if (ctx->RasterDiscard)
-      dw1 |= SO_RENDERING_DISABLE;
 
    if (active) {
       int urb_entry_read_offset = 0;
@@ -236,21 +220,14 @@ upload_3dstate_streamout(struct brw_context *brw, bool active,
 static void
 upload_sol_state(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
-   /* _NEW_TRANSFORM_FEEDBACK */
+   struct gl_context *ctx = &brw->ctx;
+   /* BRW_NEW_TRANSFORM_FEEDBACK */
    bool active = _mesa_is_xfb_active_and_unpaused(ctx);
 
    if (active) {
       upload_3dstate_so_buffers(brw);
-      /* CACHE_NEW_VS_PROG */
-      upload_3dstate_so_decl_list(brw, &brw->vs.prog_data->vue_map);
-
-      /* If we don't have hardware contexts, then some other client may have
-       * changed the SO write offsets, and we need to rewrite them.
-       */
-      if (!intel->hw_ctx)
-         intel->batch.needs_sol_reset = true;
+      /* BRW_NEW_VUE_MAP_GEOM_OUT */
+      upload_3dstate_so_decl_list(brw, &brw->vue_map_geom_out);
    }
 
    /* Finally, set up the SOL stage.  This command must always follow updates to
@@ -258,20 +235,29 @@ upload_sol_state(struct brw_context *brw)
     * MMIO register updates (current performed by the kernel at each batch
     * emit).
     */
-   upload_3dstate_streamout(brw, active, &brw->vs.prog_data->vue_map);
+   upload_3dstate_streamout(brw, active, &brw->vue_map_geom_out);
 }
 
 const struct brw_tracked_state gen7_sol_state = {
    .dirty = {
-      .mesa  = (_NEW_RASTERIZER_DISCARD |
-		_NEW_LIGHT |
-		_NEW_TRANSFORM_FEEDBACK),
+      .mesa  = (_NEW_LIGHT),
       .brw   = (BRW_NEW_BATCH |
-		BRW_NEW_VERTEX_PROGRAM),
-      .cache = CACHE_NEW_VS_PROG,
+		BRW_NEW_VERTEX_PROGRAM |
+                BRW_NEW_VUE_MAP_GEOM_OUT |
+                BRW_NEW_TRANSFORM_FEEDBACK)
    },
    .emit = upload_sol_state,
 };
+
+void
+gen7_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
+                              struct gl_transform_feedback_object *obj)
+{
+   struct brw_context *brw = brw_context(ctx);
+
+   intel_batchbuffer_flush(brw);
+   brw->batch.needs_sol_reset = true;
+}
 
 void
 gen7_end_transform_feedback(struct gl_context *ctx,
@@ -284,7 +270,6 @@ gen7_end_transform_feedback(struct gl_context *ctx,
     * This also covers any cache flushing required.
     */
    struct brw_context *brw = brw_context(ctx);
-   struct intel_context *intel = &brw->intel;
 
-   intel_batchbuffer_flush(intel);
+   intel_batchbuffer_flush(brw);
 }

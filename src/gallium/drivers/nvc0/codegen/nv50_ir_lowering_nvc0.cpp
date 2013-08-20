@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50/codegen/nv50_ir.h"
@@ -128,7 +128,6 @@ private:
    virtual bool visit(BasicBlock *);
 
    void replaceZero(Instruction *);
-   void split64BitOp(Instruction *);
    bool tryReplaceContWithBra(BasicBlock *);
    void propagateJoin(BasicBlock *);
 
@@ -158,6 +157,7 @@ private:
 
 private:
    LValue *rZero;
+   LValue *carry;
    const bool needTexBar;
 };
 
@@ -468,7 +468,11 @@ NVC0LegalizePostRA::visit(Function *fn)
       insertTextureBarriers(fn);
 
    rZero = new_LValue(fn, FILE_GPR);
+   carry = new_LValue(fn, FILE_FLAGS);
+
    rZero->reg.data.id = prog->getTarget()->getFileSize(FILE_GPR);
+   carry->reg.data.id = 0;
+
    return true;
 }
 
@@ -476,25 +480,11 @@ void
 NVC0LegalizePostRA::replaceZero(Instruction *i)
 {
    for (int s = 0; i->srcExists(s); ++s) {
+      if (s == 2 && i->op == OP_SUCLAMP)
+         continue;
       ImmediateValue *imm = i->getSrc(s)->asImm();
       if (imm && imm->reg.data.u64 == 0)
          i->setSrc(s, rZero);
-   }
-}
-
-void
-NVC0LegalizePostRA::split64BitOp(Instruction *i)
-{
-   if (i->dType == TYPE_F64) {
-      if (i->op == OP_MAD)
-         i->op = OP_FMA;
-      if (i->op == OP_ADD || i->op == OP_MUL || i->op == OP_FMA ||
-          i->op == OP_CVT || i->op == OP_MIN || i->op == OP_MAX ||
-          i->op == OP_SET)
-         return;
-      i->dType = i->sType = TYPE_U32;
-
-      i->bb->insertAfter(i, cloneForward(func, i));
    }
 }
 
@@ -561,10 +551,17 @@ NVC0LegalizePostRA::visit(BasicBlock *bb)
       if (i->isNop()) {
          bb->remove(i);
       } else {
+         // TODO: Move this to before register allocation for operations that
+         // need the $c register !
+         if (typeSizeof(i->dType) == 8) {
+            Instruction *hi;
+            hi = BuildUtil::split64BitOpPostRA(func, i, rZero, carry);
+            if (hi)
+               next = hi;
+         }
+
          if (i->op != OP_MOV && i->op != OP_PFETCH)
             replaceZero(i);
-         if (typeSizeof(i->dType) == 8)
-            split64BitOp(i);
       }
    }
    if (!bb->getEntry())
@@ -598,22 +595,34 @@ private:
    bool handleTXD(TexInstruction *);
    bool handleTXQ(TexInstruction *);
    bool handleManualTXD(TexInstruction *);
+   bool handleATOM(Instruction *);
+   bool handleCasExch(Instruction *, bool needCctl);
+   void handleSurfaceOpNVE4(TexInstruction *);
 
    void checkPredicate(Instruction *);
 
    void readTessCoord(LValue *dst, int c);
+
+   Value *loadResInfo32(Value *ptr, uint32_t off);
+   Value *loadMsInfo32(Value *ptr, uint32_t off);
+   Value *loadTexHandle(Value *ptr, unsigned int slot);
+
+   void adjustCoordinatesMS(TexInstruction *);
+   void processSurfaceCoordsNVE4(TexInstruction *);
 
 private:
    const Target *const targ;
 
    BuildUtil bld;
 
+   Symbol *gMemBase;
    LValue *gpEmitAddress;
 };
 
 NVC0LoweringPass::NVC0LoweringPass(Program *prog) : targ(prog->getTarget())
 {
    bld.setProgram(prog);
+   gMemBase = NULL;
 }
 
 bool
@@ -638,23 +647,44 @@ NVC0LoweringPass::visit(BasicBlock *bb)
    return true;
 }
 
+inline Value *
+NVC0LoweringPass::loadTexHandle(Value *ptr, unsigned int slot)
+{
+   uint8_t b = prog->driver->io.resInfoCBSlot;
+   uint32_t off = prog->driver->io.texBindBase + slot * 4;
+   return bld.
+      mkLoadv(TYPE_U32, bld.mkSymbol(FILE_MEMORY_CONST, b, TYPE_U32, off), ptr);
+}
+
 // move array source to first slot, convert to u16, add indirections
 bool
 NVC0LoweringPass::handleTEX(TexInstruction *i)
 {
    const int dim = i->tex.target.getDim() + i->tex.target.isCube();
    const int arg = i->tex.target.getArgCount();
+   const int lyr = arg - (i->tex.target.isMS() ? 2 : 1);
 
-   if (prog->getTarget()->getChipset() >= 0xe0) {
+   if (prog->getTarget()->getChipset() >= NVISA_GK104_CHIPSET) {
+      if (i->tex.rIndirectSrc >= 0 || i->tex.sIndirectSrc >= 0) {
+         WARN("indirect TEX not implemented\n");
+      }
       if (i->tex.r == i->tex.s) {
-         i->tex.r += 8; // NOTE: offset should probably be a driver option
+         i->tex.r += prog->driver->io.texBindBase / 4;
          i->tex.s  = 0; // only a single cX[] value possible here
       } else {
-         // TODO: extract handles and use register to select TIC/TSC entries
+         Value *hnd = bld.getScratch();
+         Value *rHnd = loadTexHandle(NULL, i->tex.r);
+         Value *sHnd = loadTexHandle(NULL, i->tex.s);
+
+         bld.mkOp3(OP_INSBF, TYPE_U32, hnd, rHnd, bld.mkImm(0x1400), sHnd);
+
+         i->tex.r = 0; // not used for indirect tex
+         i->tex.s = 0;
+         i->setIndirectR(hnd);
       }
       if (i->tex.target.isArray()) {
          LValue *layer = new_LValue(func, FILE_GPR);
-         Value *src = i->getSrc(arg - 1);
+         Value *src = i->getSrc(lyr);
          const int sat = (i->op == OP_TXF) ? 1 : 0;
          DataType sTy = (i->op == OP_TXF) ? TYPE_U32 : TYPE_F32;
          bld.mkCvt(OP_CVT, TYPE_U16, layer, sTy, src)->saturate = sat;
@@ -662,48 +692,12 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
             i->setSrc(s, i->getSrc(s - 1));
          i->setSrc(0, layer);
       }
-      if (i->tex.rIndirectSrc >= 0 || i->tex.sIndirectSrc >= 0) {
-         Value *tmp[2];
-         Symbol *bind;
-         Value *rRel = i->getIndirectR();
-         Value *sRel = i->getIndirectS();
-         Value *shCnt = bld.loadImm(NULL, 2);
-
-         if (rRel) {
-            tmp[0] = bld.getScratch();
-            bind = bld.mkSymbol(FILE_MEMORY_CONST, 15, TYPE_U32, i->tex.r * 4);
-            bld.mkOp2(OP_SHL, TYPE_U32, tmp[0], rRel, shCnt);
-            tmp[1] = bld.mkLoad(TYPE_U32, bind, tmp[0]);
-            bld.mkOp2(OP_AND, TYPE_U32, tmp[0], tmp[1],
-                      bld.loadImm(tmp[0], 0x00ffffffu));
-            rRel = tmp[0];
-            i->setSrc(i->tex.rIndirectSrc, NULL);
-         }
-         if (sRel) {
-            tmp[0] = bld.getScratch();
-            bind = bld.mkSymbol(FILE_MEMORY_CONST, 15, TYPE_U32, i->tex.s * 4);
-            bld.mkOp2(OP_SHL, TYPE_U32, tmp[0], sRel, shCnt);
-            tmp[1] = bld.mkLoad(TYPE_U32, bind, tmp[0]);
-            bld.mkOp2(OP_AND, TYPE_U32, tmp[0], tmp[1],
-                      bld.loadImm(tmp[0], 0xff000000u));
-            sRel = tmp[0];
-            i->setSrc(i->tex.sIndirectSrc, NULL);
-         }
-         bld.mkOp2(OP_OR, TYPE_U32, rRel, rRel, sRel);
-
-         int min = i->tex.rIndirectSrc;
-         if (min < 0 || min > i->tex.sIndirectSrc)
-            min = i->tex.sIndirectSrc;
-         for (int s = min; s >= 1; --s)
-            i->setSrc(s, i->getSrc(s - 1));
-         i->setSrc(0, rRel);
-      }
    } else
    // (nvc0) generate and move the tsc/tic/array source to the front
    if (dim != arg || i->tex.rIndirectSrc >= 0 || i->tex.sIndirectSrc >= 0) {
       LValue *src = new_LValue(func, FILE_GPR); // 0xttxsaaaa
 
-      Value *arrayIndex = i->tex.target.isArray() ? i->getSrc(arg - 1) : NULL;
+      Value *arrayIndex = i->tex.target.isArray() ? i->getSrc(lyr) : NULL;
       for (int s = dim; s >= 1; --s)
          i->setSrc(s, i->getSrc(s - 1));
       i->setSrc(0, arrayIndex);
@@ -735,11 +729,29 @@ NVC0LoweringPass::handleTEX(TexInstruction *i)
    if (i->tex.useOffsets) {
       uint32_t value = 0;
       int n, c;
-      int s = i->srcCount(0xff);
+      int s = i->srcCount(0xff, true);
+      if (i->srcExists(s)) // move potential predicate out of the way
+         i->moveSources(s, 1);
       for (n = 0; n < i->tex.useOffsets; ++n)
          for (c = 0; c < 3; ++c)
             value |= (i->tex.offset[n][c] & 0xf) << (n * 12 + c * 4);
       i->setSrc(s, bld.loadImm(NULL, value));
+   }
+
+   if (prog->getTarget()->getChipset() >= NVISA_GK104_CHIPSET) {
+      //
+      // If TEX requires more than 4 sources, the 2nd register tuple must be
+      // aligned to 4, even if it consists of just a single 4-byte register.
+      //
+      // XXX HACK: We insert 0 sources to avoid the 5 or 6 regs case.
+      //
+      int s = i->srcCount(0xff, true);
+      if (s > 4 && s < 7) {
+         if (i->srcExists(s)) // move potential predicate out of the way
+            i->moveSources(s, 7 - s);
+         while (s < 7)
+            i->setSrc(s++, bld.loadImm(NULL, 0));
+      }
    }
 
    return true;
@@ -837,6 +849,425 @@ NVC0LoweringPass::handleTXQ(TexInstruction *txq)
 }
 
 bool
+NVC0LoweringPass::handleATOM(Instruction *atom)
+{
+   SVSemantic sv;
+
+   switch (atom->src(0).getFile()) {
+   case FILE_MEMORY_LOCAL:
+      sv = SV_LBASE;
+      break;
+   case FILE_MEMORY_SHARED:
+      sv = SV_SBASE;
+      break;
+   default:
+      assert(atom->src(0).getFile() == FILE_MEMORY_GLOBAL);
+      return true;
+   }
+   Value *base =
+      bld.mkOp1v(OP_RDSV, TYPE_U32, bld.getScratch(), bld.mkSysVal(sv, 0));
+   Value *ptr = atom->getIndirect(0, 0);
+
+   atom->setSrc(0, cloneShallow(func, atom->getSrc(0)));
+   atom->getSrc(0)->reg.file = FILE_MEMORY_GLOBAL;
+   if (ptr)
+      base = bld.mkOp2v(OP_ADD, TYPE_U32, base, base, ptr);
+   atom->setIndirect(0, 0, base);
+
+   return true;
+}
+
+bool
+NVC0LoweringPass::handleCasExch(Instruction *cas, bool needCctl)
+{
+   if (cas->subOp != NV50_IR_SUBOP_ATOM_CAS &&
+       cas->subOp != NV50_IR_SUBOP_ATOM_EXCH)
+      return false;
+   bld.setPosition(cas, true);
+
+   if (needCctl) {
+      Instruction *cctl = bld.mkOp1(OP_CCTL, TYPE_NONE, NULL, cas->getSrc(0));
+      cctl->setIndirect(0, 0, cas->getIndirect(0, 0));
+      cctl->fixed = 1;
+      cctl->subOp = NV50_IR_SUBOP_CCTL_IV;
+      if (cas->isPredicated())
+         cctl->setPredicate(cas->cc, cas->getPredicate());
+   }
+
+   if (cas->defExists(0) && cas->subOp == NV50_IR_SUBOP_ATOM_CAS) {
+      // CAS is crazy. It's 2nd source is a double reg, and the 3rd source
+      // should be set to the high part of the double reg or bad things will
+      // happen elsewhere in the universe.
+      // Also, it sometimes returns the new value instead of the old one
+      // under mysterious circumstances.
+      Value *dreg = bld.getSSA(8);
+      bld.setPosition(cas, false);
+      bld.mkOp2(OP_MERGE, TYPE_U64, dreg, cas->getSrc(1), cas->getSrc(2));
+      cas->setSrc(1, dreg);
+   }
+
+   return true;
+}
+
+inline Value *
+NVC0LoweringPass::loadResInfo32(Value *ptr, uint32_t off)
+{
+   uint8_t b = prog->driver->io.resInfoCBSlot;
+   off += prog->driver->io.suInfoBase;
+   return bld.
+      mkLoadv(TYPE_U32, bld.mkSymbol(FILE_MEMORY_CONST, b, TYPE_U32, off), ptr);
+}
+
+inline Value *
+NVC0LoweringPass::loadMsInfo32(Value *ptr, uint32_t off)
+{
+   uint8_t b = prog->driver->io.msInfoCBSlot;
+   off += prog->driver->io.msInfoBase;
+   return bld.
+      mkLoadv(TYPE_U32, bld.mkSymbol(FILE_MEMORY_CONST, b, TYPE_U32, off), ptr);
+}
+
+/* On nvc0, surface info is obtained via the surface binding points passed
+ * to the SULD/SUST instructions.
+ * On nve4, surface info is stored in c[] and is used by various special
+ * instructions, e.g. for clamping coordiantes or generating an address.
+ * They couldn't just have added an equivalent to TIC now, couldn't they ?
+ */
+#define NVE4_SU_INFO_ADDR   0x00
+#define NVE4_SU_INFO_FMT    0x04
+#define NVE4_SU_INFO_DIM_X  0x08
+#define NVE4_SU_INFO_PITCH  0x0c
+#define NVE4_SU_INFO_DIM_Y  0x10
+#define NVE4_SU_INFO_ARRAY  0x14
+#define NVE4_SU_INFO_DIM_Z  0x18
+#define NVE4_SU_INFO_UNK1C  0x1c
+#define NVE4_SU_INFO_WIDTH  0x20
+#define NVE4_SU_INFO_HEIGHT 0x24
+#define NVE4_SU_INFO_DEPTH  0x28
+#define NVE4_SU_INFO_TARGET 0x2c
+#define NVE4_SU_INFO_CALL   0x30
+#define NVE4_SU_INFO_RAW_X  0x34
+#define NVE4_SU_INFO_MS_X   0x38
+#define NVE4_SU_INFO_MS_Y   0x3c
+
+#define NVE4_SU_INFO__STRIDE 0x40
+
+#define NVE4_SU_INFO_DIM(i)  (0x08 + (i) * 8)
+#define NVE4_SU_INFO_SIZE(i) (0x20 + (i) * 4)
+#define NVE4_SU_INFO_MS(i)   (0x38 + (i) * 4)
+
+static inline uint16_t getSuClampSubOp(const TexInstruction *su, int c)
+{
+   switch (su->tex.target.getEnum()) {
+   case TEX_TARGET_BUFFER:      return NV50_IR_SUBOP_SUCLAMP_PL(0, 1);
+   case TEX_TARGET_RECT:        return NV50_IR_SUBOP_SUCLAMP_SD(0, 2);
+   case TEX_TARGET_1D:          return NV50_IR_SUBOP_SUCLAMP_SD(0, 2);
+   case TEX_TARGET_1D_ARRAY:    return (c == 1) ?
+                                   NV50_IR_SUBOP_SUCLAMP_PL(0, 2) :
+                                   NV50_IR_SUBOP_SUCLAMP_SD(0, 2);
+   case TEX_TARGET_2D:          return NV50_IR_SUBOP_SUCLAMP_BL(0, 2);
+   case TEX_TARGET_2D_MS:       return NV50_IR_SUBOP_SUCLAMP_BL(0, 2);
+   case TEX_TARGET_2D_ARRAY:    return NV50_IR_SUBOP_SUCLAMP_SD(0, 2);
+   case TEX_TARGET_2D_MS_ARRAY: return NV50_IR_SUBOP_SUCLAMP_SD(0, 2);
+   case TEX_TARGET_3D:          return NV50_IR_SUBOP_SUCLAMP_SD(0, 2);
+   case TEX_TARGET_CUBE:        return NV50_IR_SUBOP_SUCLAMP_SD(0, 2);
+   case TEX_TARGET_CUBE_ARRAY:  return NV50_IR_SUBOP_SUCLAMP_SD(0, 2);
+   default:
+      assert(0);
+      return 0;
+   }
+}
+
+void
+NVC0LoweringPass::adjustCoordinatesMS(TexInstruction *tex)
+{
+   const uint16_t base = tex->tex.r * NVE4_SU_INFO__STRIDE;
+   const int arg = tex->tex.target.getArgCount();
+
+   if (tex->tex.target == TEX_TARGET_2D_MS)
+      tex->tex.target = TEX_TARGET_2D;
+   else
+   if (tex->tex.target == TEX_TARGET_2D_MS_ARRAY)
+      tex->tex.target = TEX_TARGET_2D_ARRAY;
+   else
+      return;
+
+   Value *x = tex->getSrc(0);
+   Value *y = tex->getSrc(1);
+   Value *s = tex->getSrc(arg - 1);
+
+   Value *tx = bld.getSSA(), *ty = bld.getSSA(), *ts = bld.getSSA();
+
+   Value *ms_x = loadResInfo32(NULL, base + NVE4_SU_INFO_MS(0));
+   Value *ms_y = loadResInfo32(NULL, base + NVE4_SU_INFO_MS(1));
+
+   bld.mkOp2(OP_SHL, TYPE_U32, tx, x, ms_x);
+   bld.mkOp2(OP_SHL, TYPE_U32, ty, y, ms_y);
+
+   s = bld.mkOp2v(OP_AND, TYPE_U32, ts, s, bld.loadImm(NULL, 0x7));
+   s = bld.mkOp2v(OP_SHL, TYPE_U32, ts, ts, bld.mkImm(3));
+
+   Value *dx = loadMsInfo32(ts, 0x0);
+   Value *dy = loadMsInfo32(ts, 0x4);
+
+   bld.mkOp2(OP_ADD, TYPE_U32, tx, tx, dx);
+   bld.mkOp2(OP_ADD, TYPE_U32, ty, ty, dy);
+
+   tex->setSrc(0, tx);
+   tex->setSrc(1, ty);
+   tex->moveSources(arg, -1);
+}
+
+// Sets 64-bit "generic address", predicate and format sources for SULD/SUST.
+// They're computed from the coordinates using the surface info in c[] space.
+void
+NVC0LoweringPass::processSurfaceCoordsNVE4(TexInstruction *su)
+{
+   Instruction *insn;
+   const bool atom = su->op == OP_SUREDB || su->op == OP_SUREDP;
+   const bool raw =
+      su->op == OP_SULDB || su->op == OP_SUSTB || su->op == OP_SUREDB;
+   const int idx = su->tex.r;
+   const int dim = su->tex.target.getDim();
+   const int arg = dim + (su->tex.target.isArray() ? 1 : 0);
+   const uint16_t base = idx * NVE4_SU_INFO__STRIDE;
+   int c;
+   Value *zero = bld.mkImm(0);
+   Value *p1 = NULL;
+   Value *v;
+   Value *src[3];
+   Value *bf, *eau, *off;
+   Value *addr, *pred;
+
+   off = bld.getScratch(4);
+   bf = bld.getScratch(4);
+   addr = bld.getSSA(8);
+   pred = bld.getScratch(1, FILE_PREDICATE);
+
+   bld.setPosition(su, false);
+
+   adjustCoordinatesMS(su);
+
+   // calculate clamped coordinates
+   for (c = 0; c < arg; ++c) {
+      src[c] = bld.getScratch();
+      if (c == 0 && raw)
+         v = loadResInfo32(NULL, base + NVE4_SU_INFO_RAW_X);
+      else
+         v = loadResInfo32(NULL, base + NVE4_SU_INFO_DIM(c));
+      bld.mkOp3(OP_SUCLAMP, TYPE_S32, src[c], su->getSrc(c), v, zero)
+         ->subOp = getSuClampSubOp(su, c);
+   }
+   for (; c < 3; ++c)
+      src[c] = zero;
+
+   // set predicate output
+   if (su->tex.target == TEX_TARGET_BUFFER) {
+      src[0]->getInsn()->setFlagsDef(1, pred);
+   } else
+   if (su->tex.target.isArray()) {
+      p1 = bld.getSSA(1, FILE_PREDICATE);
+      src[dim]->getInsn()->setFlagsDef(1, p1);
+   }
+
+   // calculate pixel offset
+   if (dim == 1) {
+      if (su->tex.target != TEX_TARGET_BUFFER)
+         bld.mkOp2(OP_AND, TYPE_U32, off, src[0], bld.loadImm(NULL, 0xffff));
+   } else
+   if (dim == 3) {
+      v = loadResInfo32(NULL, base + NVE4_SU_INFO_UNK1C);
+      bld.mkOp3(OP_MADSP, TYPE_U32, off, src[2], v, src[1])
+         ->subOp = NV50_IR_SUBOP_MADSP(4,2,8); // u16l u16l u16l
+
+      v = loadResInfo32(NULL, base + NVE4_SU_INFO_PITCH);
+      bld.mkOp3(OP_MADSP, TYPE_U32, off, off, v, src[0])
+         ->subOp = NV50_IR_SUBOP_MADSP(0,2,8); // u32 u16l u16l
+   } else {
+      assert(dim == 2);
+      v = loadResInfo32(NULL, base + NVE4_SU_INFO_PITCH);
+      bld.mkOp3(OP_MADSP, TYPE_U32, off, src[1], v, src[0])
+         ->subOp = su->tex.target.isArray() ?
+         NV50_IR_SUBOP_MADSP_SD : NV50_IR_SUBOP_MADSP(4,2,8); // u16l u16l u16l
+   }
+
+   // calculate effective address part 1
+   if (su->tex.target == TEX_TARGET_BUFFER) {
+      if (raw) {
+         bf = src[0];
+      } else {
+         v = loadResInfo32(NULL, base + NVE4_SU_INFO_FMT);
+         bld.mkOp3(OP_VSHL, TYPE_U32, bf, src[0], v, zero)
+            ->subOp = NV50_IR_SUBOP_V1(7,6,8|2);
+      }
+   } else {
+      Value *y = src[1];
+      Value *z = src[2];
+      uint16_t subOp = 0;
+
+      switch (dim) {
+      case 1:
+         y = zero;
+         z = zero;
+         break;
+      case 2:
+         z = off;
+         if (!su->tex.target.isArray()) {
+            z = loadResInfo32(NULL, base + NVE4_SU_INFO_UNK1C);
+            subOp = NV50_IR_SUBOP_SUBFM_3D;
+         }
+         break;
+      default:
+         subOp = NV50_IR_SUBOP_SUBFM_3D;
+         assert(dim == 3);
+         break;
+      }
+      insn = bld.mkOp3(OP_SUBFM, TYPE_U32, bf, src[0], y, z);
+      insn->subOp = subOp;
+      insn->setFlagsDef(1, pred);
+   }
+
+   // part 2
+   v = loadResInfo32(NULL, base + NVE4_SU_INFO_ADDR);
+
+   if (su->tex.target == TEX_TARGET_BUFFER) {
+      eau = v;
+   } else {
+      eau = bld.mkOp3v(OP_SUEAU, TYPE_U32, bld.getScratch(4), off, bf, v);
+   }
+   // add array layer offset
+   if (su->tex.target.isArray()) {
+      v = loadResInfo32(NULL, base + NVE4_SU_INFO_ARRAY);
+      if (dim == 1)
+         bld.mkOp3(OP_MADSP, TYPE_U32, eau, src[1], v, eau)
+            ->subOp = NV50_IR_SUBOP_MADSP(4,0,0); // u16 u24 u32
+      else
+         bld.mkOp3(OP_MADSP, TYPE_U32, eau, v, src[2], eau)
+            ->subOp = NV50_IR_SUBOP_MADSP(0,0,0); // u32 u24 u32
+      // combine predicates
+      assert(p1);
+      bld.mkOp2(OP_OR, TYPE_U8, pred, pred, p1);
+   }
+
+   if (atom) {
+      Value *lo = bf;
+      if (su->tex.target == TEX_TARGET_BUFFER) {
+         lo = zero;
+         bld.mkMov(off, bf);
+      }
+      //  bf == g[] address & 0xff
+      // eau == g[] address >> 8
+      bld.mkOp3(OP_PERMT, TYPE_U32,  bf,   lo, bld.loadImm(NULL, 0x6540), eau);
+      bld.mkOp3(OP_PERMT, TYPE_U32, eau, zero, bld.loadImm(NULL, 0x0007), eau);
+   } else
+   if (su->op == OP_SULDP && su->tex.target == TEX_TARGET_BUFFER) {
+      // Convert from u32 to u8 address format, which is what the library code
+      // doing SULDP currently uses.
+      // XXX: can SUEAU do this ?
+      // XXX: does it matter that we don't mask high bytes in bf ?
+      // Grrr.
+      bld.mkOp2(OP_SHR, TYPE_U32, off, bf, bld.mkImm(8));
+      bld.mkOp2(OP_ADD, TYPE_U32, eau, eau, off);
+   }
+
+   bld.mkOp2(OP_MERGE, TYPE_U64, addr, bf, eau);
+
+   if (atom && su->tex.target == TEX_TARGET_BUFFER)
+      bld.mkOp2(OP_ADD, TYPE_U64, addr, addr, off);
+
+   // let's just set it 0 for raw access and hope it works
+   v = raw ?
+      bld.mkImm(0) : loadResInfo32(NULL, base + NVE4_SU_INFO_FMT);
+
+   // get rid of old coordinate sources, make space for fmt info and predicate
+   su->moveSources(arg, 3 - arg);
+   // set 64 bit address and 32-bit format sources
+   su->setSrc(0, addr);
+   su->setSrc(1, v);
+   su->setSrc(2, pred);
+}
+
+void
+NVC0LoweringPass::handleSurfaceOpNVE4(TexInstruction *su)
+{
+   processSurfaceCoordsNVE4(su);
+
+   // Who do we hate more ? The person who decided that nvc0's SULD doesn't
+   // have to support conversion or the person who decided that, in OpenCL,
+   // you don't have to specify the format here like you do in OpenGL ?
+
+   if (su->op == OP_SULDP) {
+      // We don't patch shaders. Ever.
+      // You get an indirect call to our library blob here.
+      // But at least it's uniform.
+      FlowInstruction *call;
+      LValue *p[3];
+      LValue *r[5];
+      uint16_t base = su->tex.r * NVE4_SU_INFO__STRIDE + NVE4_SU_INFO_CALL;
+
+      for (int i = 0; i < 4; ++i)
+         (r[i] = bld.getScratch(4, FILE_GPR))->reg.data.id = i;
+      for (int i = 0; i < 3; ++i)
+         (p[i] = bld.getScratch(1, FILE_PREDICATE))->reg.data.id = i;
+      (r[4] = bld.getScratch(8, FILE_GPR))->reg.data.id = 4;
+
+      bld.mkMov(p[1], bld.mkImm((su->cache == CACHE_CA) ? 1 : 0), TYPE_U8);
+      bld.mkMov(p[2], bld.mkImm((su->cache == CACHE_CG) ? 1 : 0), TYPE_U8);
+      bld.mkMov(p[0], su->getSrc(2), TYPE_U8);
+      bld.mkMov(r[4], su->getSrc(0), TYPE_U64);
+      bld.mkMov(r[2], su->getSrc(1), TYPE_U32);
+
+      call = bld.mkFlow(OP_CALL, NULL, su->cc, su->getPredicate());
+
+      call->indirect = 1;
+      call->absolute = 1;
+      call->setSrc(0, bld.mkSymbol(FILE_MEMORY_CONST,
+                                   prog->driver->io.resInfoCBSlot, TYPE_U32,
+                                   prog->driver->io.suInfoBase + base));
+      call->setSrc(1, r[2]);
+      call->setSrc(2, r[4]);
+      for (int i = 0; i < 3; ++i)
+         call->setSrc(3 + i, p[i]);
+      for (int i = 0; i < 4; ++i) {
+         call->setDef(i, r[i]);
+         bld.mkMov(su->getDef(i), r[i]);
+      }
+      call->setDef(4, p[1]);
+      delete_Instruction(bld.getProgram(), su);
+   }
+
+   if (su->op == OP_SUREDB || su->op == OP_SUREDP) {
+      // FIXME: for out of bounds access, destination value will be undefined !
+      Value *pred = su->getSrc(2);
+      CondCode cc = CC_NOT_P;
+      if (su->getPredicate()) {
+         pred = bld.getScratch(1, FILE_PREDICATE);
+         cc = su->cc;
+         if (cc == CC_NOT_P) {
+            bld.mkOp2(OP_OR, TYPE_U8, pred, su->getPredicate(), su->getSrc(2));
+         } else {
+            bld.mkOp2(OP_AND, TYPE_U8, pred, su->getPredicate(), su->getSrc(2));
+            pred->getInsn()->src(1).mod = Modifier(NV50_IR_MOD_NOT);
+         }
+      }
+      Instruction *red = bld.mkOp(OP_ATOM, su->dType, su->getDef(0));
+      red->subOp = su->subOp;
+      if (!gMemBase)
+         gMemBase = bld.mkSymbol(FILE_MEMORY_GLOBAL, 0, TYPE_U32, 0);
+      red->setSrc(0, gMemBase);
+      red->setSrc(1, su->getSrc(3));
+      if (su->subOp == NV50_IR_SUBOP_ATOM_CAS)
+         red->setSrc(2, su->getSrc(4));
+      red->setIndirect(0, 0, su->getSrc(0));
+      red->setPredicate(cc, pred);
+      delete_Instruction(bld.getProgram(), su);
+      handleCasExch(red, true);
+   } else {
+      su->sType = (su->tex.target == TEX_TARGET_BUFFER) ? TYPE_U32 : TYPE_U8;
+   }
+}
+
+bool
 NVC0LoweringPass::handleWRSV(Instruction *i)
 {
    Instruction *st;
@@ -892,14 +1323,22 @@ bool
 NVC0LoweringPass::handleRDSV(Instruction *i)
 {
    Symbol *sym = i->getSrc(0)->asSym();
+   const SVSemantic sv = sym->reg.data.sv.sv;
    Value *vtx = NULL;
    Instruction *ld;
    uint32_t addr = targ->getSVAddress(FILE_SHADER_INPUT, sym);
 
-   if (addr >= 0x400) // mov $sreg
+   if (addr >= 0x400) {
+      // mov $sreg
+      if (sym->reg.data.sv.index == 3) {
+         // TGSI backend may use 4th component of TID,NTID,CTAID,NCTAID
+         i->op = OP_MOV;
+         i->setSrc(0, bld.mkImm((sv == SV_NTID || sv == SV_NCTAID) ? 1 : 0));
+      }
       return true;
+   }
 
-   switch (i->getSrc(0)->reg.data.sv.sv) {
+   switch (sv) {
    case SV_POSITION:
       assert(prog->getType() == Program::TYPE_FRAGMENT);
       bld.mkInterp(NV50_IR_INTERP_LINEAR, i->getDef(0), addr, NULL);
@@ -917,6 +1356,19 @@ NVC0LoweringPass::handleRDSV(Instruction *i)
    case SV_TESS_COORD:
       assert(prog->getType() == Program::TYPE_TESSELLATION_EVAL);
       readTessCoord(i->getDef(0)->asLValue(), i->getSrc(0)->reg.data.sv.index);
+      break;
+   case SV_NTID:
+   case SV_NCTAID:
+   case SV_GRIDID:
+      assert(targ->getChipset() >= NVISA_GK104_CHIPSET); // mov $sreg otherwise
+      if (sym->reg.data.sv.index == 3) {
+         i->op = OP_MOV;
+         i->setSrc(0, bld.mkImm(sv == SV_GRIDID ? 0 : 1));
+         return true;
+      }
+      addr += prog->driver->prop.cp.gridInfoBase;
+      bld.mkLoad(TYPE_U32, i->getDef(0),
+                 bld.mkSymbol(FILE_MEMORY_CONST, 0, TYPE_U32, addr), NULL);
       break;
    default:
       if (prog->getType() == Program::TYPE_TESSELLATION_EVAL)
@@ -1038,7 +1490,7 @@ NVC0LoweringPass::checkPredicate(Instruction *insn)
    // CAUTION: don't use pdst->getInsn, the definition might not be unique,
    //  delay turning PSET(FSET(x,y),0) into PSET(x,y) to a later pass
 
-   bld.mkCmp(OP_SET, CC_NEU, TYPE_U32, pdst, bld.mkImm(0), pred);
+   bld.mkCmp(OP_SET, CC_NEU, insn->dType, pdst, bld.mkImm(0), pred);
 
    insn->setPredicate(insn->cc, pdst);
 }
@@ -1090,9 +1542,30 @@ NVC0LoweringPass::visit(Instruction *i)
       return handleWRSV(i);
    case OP_LOAD:
       if (i->src(0).getFile() == FILE_SHADER_INPUT) {
-         i->op = OP_VFETCH;
-         assert(prog->getType() != Program::TYPE_FRAGMENT);
+         if (prog->getType() == Program::TYPE_COMPUTE) {
+            i->getSrc(0)->reg.file = FILE_MEMORY_CONST;
+            i->getSrc(0)->reg.fileIndex = 0;
+         } else {
+            i->op = OP_VFETCH;
+            assert(prog->getType() != Program::TYPE_FRAGMENT); // INTERP
+         }
       }
+      break;
+   case OP_ATOM:
+   {
+      const bool cctl = i->src(0).getFile() == FILE_MEMORY_GLOBAL;
+      handleATOM(i);
+      handleCasExch(i, cctl);
+   }
+      break;
+   case OP_SULDB:
+   case OP_SULDP:
+   case OP_SUSTB:
+   case OP_SUSTP:
+   case OP_SUREDB:
+   case OP_SUREDP:
+      if (targ->getChipset() >= NVISA_GK104_CHIPSET)
+         handleSurfaceOpNVE4(i->asTex());
       break;
    default:
       break;

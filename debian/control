@@ -30,7 +30,8 @@ Build-Depends:
  libudev-dev [linux-any],
  flex,
  bison,
- llvm-3.2-dev (>= 1:3.2repack-7~) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
+ llvm-3.3-dev (>= 1:3.3-4) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
+ libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
  libwayland-dev (>= 1.0.2) [linux-any],
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git

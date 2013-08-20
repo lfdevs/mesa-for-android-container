@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "intel_batchbuffer.h"
 #include "intel_fbo.h"
 
 #include "brw_blorp.h"
@@ -28,8 +29,12 @@
 #include "gen6_blorp.h"
 #include "gen7_blorp.h"
 
+#define FILE_DEBUG_FLAG DEBUG_BLORP
+
 brw_blorp_mip_info::brw_blorp_mip_info()
    : mt(NULL),
+     level(0),
+     layer(0),
      width(0),
      height(0),
      x_offset(0),
@@ -50,6 +55,8 @@ brw_blorp_mip_info::set(struct intel_mipmap_tree *mt,
    intel_miptree_check_level_layer(mt, level, layer);
 
    this->mt = mt;
+   this->level = level;
+   this->layer = layer;
    this->width = mt->level[level].width;
    this->height = mt->level[level].height;
 
@@ -140,37 +147,78 @@ brw_blorp_params::brw_blorp_params()
      y1(0),
      depth_format(0),
      hiz_op(GEN6_HIZ_OP_NONE),
+     fast_clear_op(GEN7_FAST_CLEAR_OP_NONE),
      num_samples(0),
      use_wm_prog(false)
 {
+   color_write_disable[0] = false;
+   color_write_disable[1] = false;
+   color_write_disable[2] = false;
+   color_write_disable[3] = false;
 }
 
 extern "C" {
 void
-intel_hiz_exec(struct intel_context *intel, struct intel_mipmap_tree *mt,
+intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
 	       unsigned int level, unsigned int layer, gen6_hiz_op op)
 {
+   const char *opname = NULL;
+
+   switch (op) {
+   case GEN6_HIZ_OP_DEPTH_RESOLVE:
+      opname = "depth resolve";
+      break;
+   case GEN6_HIZ_OP_HIZ_RESOLVE:
+      opname = "hiz ambiguate";
+      break;
+   case GEN6_HIZ_OP_DEPTH_CLEAR:
+      opname = "depth clear";
+      break;
+   case GEN6_HIZ_OP_NONE:
+      opname = "noop?";
+      break;
+   }
+
+   DBG("%s %s to mt %p level %d layer %d\n",
+       __FUNCTION__, opname, mt, level, layer);
+
    brw_hiz_op_params params(mt, level, layer, op);
-   brw_blorp_exec(intel, &params);
+   brw_blorp_exec(brw, &params);
 }
 
 } /* extern "C" */
 
 void
-brw_blorp_exec(struct intel_context *intel, const brw_blorp_params *params)
+brw_blorp_exec(struct brw_context *brw, const brw_blorp_params *params)
 {
-   switch (intel->gen) {
+   switch (brw->gen) {
    case 6:
-      gen6_blorp_exec(intel, params);
+      gen6_blorp_exec(brw, params);
       break;
    case 7:
-      gen7_blorp_exec(intel, params);
+      gen7_blorp_exec(brw, params);
       break;
    default:
       /* BLORP is not supported before Gen6. */
       assert(false);
       break;
    }
+
+   if (unlikely(brw->always_flush_batch))
+      intel_batchbuffer_flush(brw);
+
+   /* We've smashed all state compared to what the normal 3D pipeline
+    * rendering tracks for GL.
+    */
+   brw->state.dirty.brw = ~0;
+   brw->state.dirty.cache = ~0;
+   brw->state_batch_count = 0;
+   brw->batch.need_workaround_flush = true;
+
+   /* Flush the sampler cache so any texturing from the destination is
+    * coherent.
+    */
+   intel_batchbuffer_emit_mi_flush(brw);
 }
 
 brw_hiz_op_params::brw_hiz_op_params(struct intel_mipmap_tree *mt,
@@ -181,10 +229,39 @@ brw_hiz_op_params::brw_hiz_op_params(struct intel_mipmap_tree *mt,
    this->hiz_op = op;
 
    depth.set(mt, level, layer);
+
+   /* Align the rectangle primitive to 8x4 pixels.
+    *
+    * During fast depth clears, the emitted rectangle primitive  must be
+    * aligned to 8x4 pixels.  From the Ivybridge PRM, Vol 2 Part 1 Section
+    * 11.5.3.1 Depth Buffer Clear (and the matching section in the Sandybridge
+    * PRM):
+    *     If Number of Multisamples is NUMSAMPLES_1, the rectangle must be
+    *     aligned to an 8x4 pixel block relative to the upper left corner
+    *     of the depth buffer [...]
+    *
+    * For hiz resolves, the rectangle must also be 8x4 aligned. Item
+    * WaHizAmbiguate8x4Aligned from the Haswell workarounds page and the
+    * Ivybridge simulator require the alignment.
+    *
+    * To be safe, let's just align the rect for all hiz operations and all
+    * hardware generations.
+    *
+    * However, for some miptree slices of a Z24 texture, emitting an 8x4
+    * aligned rectangle that covers the slice may clobber adjacent slices if
+    * we strictly adhered to the texture alignments specified in the PRM.  The
+    * Ivybridge PRM, Section "Alignment Unit Size", states that
+    * SURFACE_STATE.Surface_Horizontal_Alignment should be 4 for Z24 surfaces,
+    * not 8. But commit 1f112cc increased the alignment from 4 to 8, which
+    * prevents the clobbering.
+    */
+   depth.width = ALIGN(depth.width, 8);
+   depth.height = ALIGN(depth.height, 4);
+
    x1 = depth.width;
    y1 = depth.height;
 
-   assert(mt->hiz_mt != NULL);
+   assert(intel_miptree_slice_has_hiz(mt, level, layer));
 
    switch (mt->format) {
    case MESA_FORMAT_Z16:       depth_format = BRW_DEPTHFORMAT_D16_UNORM; break;

@@ -5,7 +5,6 @@
 
 /*
  * Mesa 3-D graphics library
- * Version:  6.5.2
  *
  * Copyright (C) 1999-2006  Brian Paul   All Rights Reserved.
  *
@@ -22,9 +21,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -34,6 +34,7 @@
 
 
 #include "glheader.h"
+#include "formats.h"
 
 struct gl_context;
 
@@ -99,6 +100,23 @@ _mesa_ColorMaski( GLuint buf, GLboolean red, GLboolean green,
 extern void GLAPIENTRY
 _mesa_ClampColor(GLenum target, GLenum clamp);
 
+extern GLboolean
+_mesa_get_clamp_fragment_color(const struct gl_context *ctx);
+
+extern GLboolean
+_mesa_get_clamp_vertex_color(const struct gl_context *ctx);
+
+extern GLboolean
+_mesa_get_clamp_read_color(const struct gl_context *ctx);
+
+extern void
+_mesa_update_clamp_fragment_color(struct gl_context *ctx);
+
+extern void
+_mesa_update_clamp_vertex_color(struct gl_context *ctx);
+
+extern gl_format
+_mesa_get_render_format(const struct gl_context *ctx, gl_format format);
 
 extern void  
 _mesa_init_color( struct gl_context * ctx );

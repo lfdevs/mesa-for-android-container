@@ -101,7 +101,7 @@ endif
 if HAVE_OPENGL
 AM_CPPFLAGS += \
 	-I$(top_srcdir)/src/mesa \
-	$(API_DEFINES)
+	-DFEATURE_GL=1
 
 egl_gallium_la_LIBADD += \
 	$(top_builddir)/src/mesa/libmesagallium.la
@@ -132,6 +132,16 @@ st_GL_la_LIBADD = \
 endif
 endif
 
+if HAVE_OPENGL_ES1
+AM_CPPFLAGS += \
+	-DFEATURE_ES1=1
+endif
+
+if HAVE_OPENGL_ES2
+AM_CPPFLAGS += \
+	-DFEATURE_ES2=1
+endif
+
 if HAVE_OPENVG
 AM_CPPFLAGS += \
 	-I$(top_srcdir)/src/gallium/state_trackers/vega \
@@ -146,6 +156,14 @@ AM_CPPFLAGS += -D_EGL_PIPE_I915=1
 egl_gallium_la_LIBADD += \
 	$(top_builddir)/src/gallium/winsys/i915/drm/libi915drm.la \
 	$(top_builddir)/src/gallium/drivers/i915/libi915.la \
+	$(INTEL_LIBS)
+endif
+
+if HAVE_GALLIUM_ILO
+AM_CPPFLAGS += -D_EGL_PIPE_ILO=1
+egl_gallium_la_LIBADD += \
+	$(top_builddir)/src/gallium/winsys/intel/drm/libintelwinsys.la \
+	$(top_builddir)/src/gallium/drivers/ilo/libilo.la \
 	$(INTEL_LIBS)
 endif
 
@@ -189,6 +207,15 @@ AM_CPPFLAGS += -D_EGL_PIPE_VMWGFX=1
 egl_gallium_la_LIBADD += \
 	$(top_builddir)/src/gallium/winsys/svga/drm/libsvgadrm.la \
 	$(top_builddir)/src/gallium/drivers/svga/libsvga.la
+endif
+
+if HAVE_GALLIUM_FREEDRENO
+AM_CPPFLAGS += -D_EGL_PIPE_FREEDRENO=1
+egl_gallium_la_LIBADD += \
+	$(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
+	$(top_builddir)/src/gallium/drivers/freedreno/libfreedreno.la \
+	$(FREEDRENO_LIBS)
+
 endif
 
 if HAVE_GALLIUM_SOFTPIPE

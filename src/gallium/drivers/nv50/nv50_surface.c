@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include <stdint.h>
@@ -199,10 +199,10 @@ nv50_resource_copy_region(struct pipe_context *pipe,
    boolean m2mf;
    unsigned dst_layer = dstz, src_layer = src_box->z;
 
-   /* Fallback for buffers. */
    if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
-      util_resource_copy_region(pipe, dst, dst_level, dstx, dsty, dstz,
-                                src, src_level, src_box);
+      nouveau_copy_buffer(&nv50->base,
+                          nv04_resource(dst), dstx,
+                          nv04_resource(src), src_box->x, src_box->width);
       return;
    }
 
@@ -458,6 +458,7 @@ struct nv50_blitctx
    enum pipe_texture_target target;
    struct {
       struct pipe_framebuffer_state fb;
+      struct nv50_rasterizer_stateobj *rast;
       struct nv50_program *vp;
       struct nv50_program *gp;
       struct nv50_program *fp;
@@ -467,6 +468,7 @@ struct nv50_blitctx
       struct nv50_tsc_entry *sampler[2];
       uint32_t dirty;
    } saved;
+   struct nv50_rasterizer_stateobj rast;
 };
 
 static void
@@ -493,7 +495,7 @@ nv50_blitter_make_vp(struct nv50_blitter *blit)
    blit->vp.out[1].hw = 2;
    blit->vp.out[1].mask = 0x7;
    blit->vp.out[1].sn = TGSI_SEMANTIC_GENERIC;
-   blit->vp.out[1].si = 8;
+   blit->vp.out[1].si = 0;
    blit->vp.vp.attrs[0] = 0x73;
    blit->vp.vp.psiz = 0x40;
    blit->vp.vp.edgeflag = 0x40;
@@ -535,9 +537,8 @@ nv50_blitter_make_fp(struct pipe_context *pipe,
       return NULL;
 
    out = ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 0);
-   /* NOTE: use GENERIC[8] so we don't use the TEXCOORD slots on nvc0 */
    tc = ureg_DECL_fs_input(
-      ureg, TGSI_SEMANTIC_GENERIC, 8, TGSI_INTERPOLATE_LINEAR);
+      ureg, TGSI_SEMANTIC_GENERIC, 0, TGSI_INTERPOLATE_LINEAR);
 
    data = ureg_DECL_temporary(ureg);
 
@@ -751,6 +752,7 @@ nv50_blit_set_src(struct nv50_blitctx *blit,
    }
 
    flags = res->last_level ? 0 : NV50_TEXVIEW_SCALED_COORDS;
+   flags |= NV50_TEXVIEW_ACCESS_RESOLVE;
    if (filter && res->nr_samples == 8)
       flags |= NV50_TEXVIEW_FILTER_MSAA8;
 
@@ -836,9 +838,13 @@ nv50_blitctx_pre_blit(struct nv50_blitctx *ctx)
    ctx->saved.fb.cbufs[0] = nv50->framebuffer.cbufs[0];
    ctx->saved.fb.zsbuf = nv50->framebuffer.zsbuf;
 
+   ctx->saved.rast = nv50->rast;
+
    ctx->saved.vp = nv50->vertprog;
    ctx->saved.gp = nv50->gmtyprog;
    ctx->saved.fp = nv50->fragprog;
+
+   nv50->rast = &ctx->rast;
 
    nv50->vertprog = &blitter->vp;
    nv50->gmtyprog = NULL;
@@ -884,6 +890,8 @@ nv50_blitctx_post_blit(struct nv50_blitctx *blit)
    nv50->framebuffer.cbufs[0] = blit->saved.fb.cbufs[0];
    nv50->framebuffer.zsbuf = blit->saved.fb.zsbuf;
 
+   nv50->rast = blit->saved.rast;
+
    nv50->vertprog = blit->saved.vp;
    nv50->gmtyprog = blit->saved.gp;
    nv50->fragprog = blit->saved.fp;
@@ -902,7 +910,7 @@ nv50_blitctx_post_blit(struct nv50_blitctx *blit)
 
    if (nv50->cond_query)
       nv50->base.pipe.render_condition(&nv50->base.pipe, nv50->cond_query,
-                                       nv50->cond_mode);
+                                       nv50->cond_cond, nv50->cond_mode);
 
    nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_FB);
    nouveau_bufctx_reset(nv50->bufctx_3d, NV50_BIND_TEXTURES);
@@ -1327,6 +1335,8 @@ nv50_blitctx_create(struct nv50_context *nv50)
    }
 
    nv50->blit->nv50 = nv50;
+
+   nv50->blit->rast.pipe.half_pixel_center = 1;
 
    return TRUE;
 }

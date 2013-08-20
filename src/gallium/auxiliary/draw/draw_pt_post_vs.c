@@ -27,6 +27,7 @@
 
 #include "util/u_memory.h"
 #include "util/u_math.h"
+#include "util/u_prim.h"
 #include "pipe/p_context.h"
 #include "draw/draw_context.h"
 #include "draw/draw_private.h"
@@ -48,7 +49,8 @@ struct pt_post_vs {
    unsigned flags;
 
    boolean (*run)( struct pt_post_vs *pvs,
-                   struct draw_vertex_info *info );
+                   struct draw_vertex_info *info,
+                   const struct draw_prim_info *prim_info );
 };
 
 static INLINE void
@@ -115,9 +117,10 @@ dot4(const float *a, const float *b)
 
 
 boolean draw_pt_post_vs_run( struct pt_post_vs *pvs,
-			     struct draw_vertex_info *info )
+			     struct draw_vertex_info *info,
+                             const struct draw_prim_info *prim_info )
 {
-   return pvs->run( pvs, info );
+   return pvs->run( pvs, info, prim_info );
 }
 
 
@@ -127,14 +130,14 @@ void draw_pt_post_vs_prepare( struct pt_post_vs *pvs,
                               boolean clip_user,
                               boolean guard_band,
 			      boolean bypass_viewport,
-			      boolean opengl,
+                              boolean clip_halfz,
 			      boolean need_edgeflags )
 {
    pvs->flags = 0;
 
    /* This combination not currently tested/in use:
     */
-   if (opengl)
+   if (!clip_halfz)
       guard_band = FALSE;
 
    if (clip_xy && !guard_band) {
@@ -152,14 +155,14 @@ void draw_pt_post_vs_prepare( struct pt_post_vs *pvs,
       ASSIGN_4V( pvs->draw->plane[3],  0,  0.5,  0, 1 );
    }
 
-   if (clip_z && opengl) {
-      pvs->flags |= DO_CLIP_FULL_Z;
-      ASSIGN_4V( pvs->draw->plane[4],  0,  0,  1, 1 );
-   }
-
-   if (clip_z && !opengl) {
-      pvs->flags |= DO_CLIP_HALF_Z;
-      ASSIGN_4V( pvs->draw->plane[4],  0,  0,  1, 0 );
+   if (clip_z) {
+      if (clip_halfz) {
+         pvs->flags |= DO_CLIP_HALF_Z;
+         ASSIGN_4V( pvs->draw->plane[4],  0,  0,  1, 0 );
+      } else {
+         pvs->flags |= DO_CLIP_FULL_Z;
+         ASSIGN_4V( pvs->draw->plane[4],  0,  0,  1, 1 );
+      }
    }
 
    if (clip_user)

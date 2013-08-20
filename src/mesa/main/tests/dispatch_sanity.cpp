@@ -39,10 +39,6 @@
  * modified to expect dispatch functions for the new extension functions.
  */
 
-extern "C" {
-#include "main/mfeatures.h"
-}
-
 #include <gtest/gtest.h>
 
 extern "C" {
@@ -505,9 +501,6 @@ const struct function gl_core_functions_possible[] = {
    /* GL_EXT_transform_feedback */
    { "glBindBufferOffsetEXT", 31, -1 },
 
-   /* GL_MESA_resize_buffers */
-   { "glResizeBuffersMESA", 31, -1 },
-
    /* GL_IBM_multimode_draw_arrays */
    { "glMultiModeDrawArraysIBM", 31, -1 },
    { "glMultiModeDrawElementsIBM", 31, -1 },
@@ -602,10 +595,10 @@ const struct function gl_core_functions_possible[] = {
    { "glWaitSync", 43, -1 },
    { "glGetInteger64v", 43, -1 },
    { "glGetSynciv", 43, -1 },
-// { "glTexImage2DMultisample", 43, -1 },               // XXX: Add to xml
-// { "glTexImage3DMultisample", 43, -1 },               // XXX: Add to xml
-// { "glGetMultisamplefv", 43, -1 },                    // XXX: Add to xml
-// { "glSampleMaski", 43, -1 },                         // XXX: Add to xml
+   { "glTexImage2DMultisample", 43, -1 },
+   { "glTexImage3DMultisample", 43, -1 },
+   { "glGetMultisamplefv", 43, -1 },
+   { "glSampleMaski", 43, -1 },
    { "glBlendEquationiARB", 43, -1 },
    { "glBlendEquationSeparateiARB", 43, -1 },
    { "glBlendFunciARB", 43, -1 },
@@ -893,10 +886,10 @@ const struct function gl_core_functions_possible[] = {
 // { "glGetProgramResourceLocation", 43, -1 },          // XXX: Add to xml
 // { "glGetProgramResourceLocationIndex", 43, -1 },     // XXX: Add to xml
 // { "glShaderStorageBlockBinding", 43, -1 },           // XXX: Add to xml
-// { "glTexBufferRange", 43, -1 },                      // XXX: Add to xml
+   { "glTexBufferRange", 43, -1 },
 // { "glTextureBufferRangeEXT", 43, -1 },               // XXX: Add to xml
-// { "glTexStorage2DMultisample", 43, -1 },             // XXX: Add to xml
-// { "glTexStorage3DMultisample", 43, -1 },             // XXX: Add to xml
+   { "glTexStorage2DMultisample", 43, -1 },
+   { "glTexStorage3DMultisample", 43, -1 },
 // { "glTextureStorage2DMultisampleEXT", 43, -1 },      // XXX: Add to xml
 // { "glTextureStorage3DMultisampleEXT", 43, -1 },      // XXX: Add to xml
 
@@ -949,6 +942,7 @@ const struct function gles11_functions_possible[] = {
    { "glDepthRangef", 11, -1 },
    { "glDepthRangex", 11, -1 },
    { "glDisable", 11, _gloffset_Disable },
+   { "glDiscardFramebufferEXT", 11, -1 },
    { "glDisableClientState", 11, _gloffset_DisableClientState },
    { "glDrawArrays", 11, _gloffset_DrawArrays },
    { "glDrawElements", 11, _gloffset_DrawElements },
@@ -1145,6 +1139,7 @@ const struct function gles2_functions_possible[] = {
    { "glDepthRangef", 20, -1 },
    { "glDetachShader", 20, -1 },
    { "glDisable", 20, _gloffset_Disable },
+   { "glDiscardFramebufferEXT", 20, -1 },
    { "glDisableVertexAttribArray", 20, -1 },
    { "glDrawArrays", 20, _gloffset_DrawArrays },
    { "glDrawBuffersNV", 20, -1 },

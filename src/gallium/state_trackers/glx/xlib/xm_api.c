@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.1
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
@@ -63,6 +63,8 @@
 
 #include "util/u_atomic.h"
 #include "util/u_inlines.h"
+
+#include "hud/hud_context.h"
 
 #include "xm_public.h"
 #include <GL/glx.h>
@@ -326,10 +328,10 @@ choose_pixel_format(XMesaVisual v)
        && v->BitsPerPixel == 32) {
       if (native_byte_order) {
          /* no byteswapping needed */
-         return PIPE_FORMAT_R8G8B8A8_UNORM;
+         return PIPE_FORMAT_RGBA8888_UNORM;
       }
       else {
-         return PIPE_FORMAT_A8B8G8R8_UNORM;
+         return PIPE_FORMAT_ABGR8888_UNORM;
       }
    }
    else if (   GET_REDMASK(v)   == 0xff0000
@@ -338,10 +340,10 @@ choose_pixel_format(XMesaVisual v)
             && v->BitsPerPixel == 32) {
       if (native_byte_order) {
          /* no byteswapping needed */
-         return PIPE_FORMAT_B8G8R8A8_UNORM;
+         return PIPE_FORMAT_BGRA8888_UNORM;
       }
       else {
-         return PIPE_FORMAT_A8R8G8B8_UNORM;
+         return PIPE_FORMAT_ARGB8888_UNORM;
       }
    }
    else if (   GET_REDMASK(v)   == 0x0000ff00
@@ -350,10 +352,10 @@ choose_pixel_format(XMesaVisual v)
             && v->BitsPerPixel == 32) {
       if (native_byte_order) {
          /* no byteswapping needed */
-         return PIPE_FORMAT_A8R8G8B8_UNORM;
+         return PIPE_FORMAT_ARGB8888_UNORM;
       }
       else {
-         return PIPE_FORMAT_B8G8R8A8_UNORM;
+         return PIPE_FORMAT_BGRA8888_UNORM;
       }
    }
    else if (   GET_REDMASK(v)   == 0xf800
@@ -910,6 +912,8 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
 
    c->st->st_manager_private = (void *) c;
 
+   c->hud = hud_create(c->st->pipe, c->st->cso_context);
+
    return c;
 
 fail:
@@ -925,6 +929,10 @@ fail:
 PUBLIC
 void XMesaDestroyContext( XMesaContext c )
 {
+   if (c->hud) {
+      hud_destroy(c->hud);
+   }
+
    c->st->destroy(c->st);
 
    /* FIXME: We should destroy the screen here, but if we do so, surfaces may 
@@ -1223,6 +1231,13 @@ PUBLIC
 void XMesaSwapBuffers( XMesaBuffer b )
 {
    XMesaContext xmctx = XMesaGetCurrentContext();
+
+   /* Need to draw HUD before flushing */
+   if (xmctx && xmctx->hud) {
+      struct pipe_resource *back =
+         xmesa_get_framebuffer_resource(b->stfb, ST_ATTACHMENT_BACK_LEFT);
+      hud_draw(xmctx->hud, back);
+   }
 
    if (xmctx && xmctx->xm_buffer == b) {
       xmctx->st->flush( xmctx->st, ST_FLUSH_FRONT, NULL);

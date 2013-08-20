@@ -1271,7 +1271,8 @@ util_create_gen_mipmap(struct pipe_context *pipe,
    /* rasterizer */
    memset(&ctx->rasterizer, 0, sizeof(ctx->rasterizer));
    ctx->rasterizer.cull_face = PIPE_FACE_NONE;
-   ctx->rasterizer.gl_rasterization_rules = 1;
+   ctx->rasterizer.half_pixel_center = 1;
+   ctx->rasterizer.bottom_edge_rule = 1;
    ctx->rasterizer.depth_clip = 1;
 
    /* sampler state */
@@ -1577,7 +1578,7 @@ util_gen_mipmap(struct gen_mipmap_state *ctx,
    cso_set_sample_mask(ctx->cso, ~0);
    cso_set_vertex_elements(ctx->cso, 2, ctx->velem);
    cso_set_stream_outputs(ctx->cso, 0, NULL, 0);
-   cso_set_render_condition(ctx->cso, NULL, 0);
+   cso_set_render_condition(ctx->cso, NULL, FALSE, 0);
 
    set_fragment_shader(ctx, type, is_depth);
    set_vertex_shader(ctx);

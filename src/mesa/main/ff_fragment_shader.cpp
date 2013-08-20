@@ -31,6 +31,7 @@ extern "C" {
 #include "glheader.h"
 #include "imports.h"
 #include "mtypes.h"
+#include "main/context.h"
 #include "main/uniforms.h"
 #include "main/macros.h"
 #include "main/samplerobj.h"
@@ -50,7 +51,6 @@ extern "C" {
 #include "../glsl/glsl_symbol_table.h"
 #include "../glsl/glsl_parser_extras.h"
 #include "../glsl/ir_optimization.h"
-#include "../glsl/ir_print_visitor.h"
 #include "../program/ir_to_mesa.h"
 
 using namespace ir_builder;
@@ -304,7 +304,6 @@ static GLuint translate_tex_src_bit( GLbitfield bit )
 
 
 #define VERT_BIT_TEX_ANY    (0xff << VERT_ATTRIB_TEX0)
-#define VERT_RESULT_TEX_ANY (0xff << VERT_RESULT_TEX0)
 
 /**
  * Identify all possible varying inputs.  The fragment program will
@@ -334,7 +333,7 @@ static GLbitfield get_fp_input_mask( struct gl_context *ctx )
    }
    else if (ctx->RenderMode == GL_FEEDBACK) {
       /* _NEW_RENDERMODE */
-      fp_inputs = (FRAG_BIT_COL0 | FRAG_BIT_TEX0);
+      fp_inputs = (VARYING_BIT_COL0 | VARYING_BIT_TEX0);
    }
    else if (!(vertexProgram || vertexShader)) {
       /* Fixed function vertex logic */
@@ -346,33 +345,33 @@ static GLbitfield get_fp_input_mask( struct gl_context *ctx )
        */
       /* _NEW_POINT */
       if (ctx->Point.PointSprite)
-         varying_inputs |= FRAG_BITS_TEX_ANY;
+         varying_inputs |= VARYING_BITS_TEX_ANY;
 
       /* First look at what values may be computed by the generated
        * vertex program:
        */
       /* _NEW_LIGHT */
       if (ctx->Light.Enabled) {
-         fp_inputs |= FRAG_BIT_COL0;
+         fp_inputs |= VARYING_BIT_COL0;
 
          if (texenv_doing_secondary_color(ctx))
-            fp_inputs |= FRAG_BIT_COL1;
+            fp_inputs |= VARYING_BIT_COL1;
       }
 
       /* _NEW_TEXTURE */
       fp_inputs |= (ctx->Texture._TexGenEnabled |
-                    ctx->Texture._TexMatEnabled) << FRAG_ATTRIB_TEX0;
+                    ctx->Texture._TexMatEnabled) << VARYING_SLOT_TEX0;
 
       /* Then look at what might be varying as a result of enabled
        * arrays, etc:
        */
       if (varying_inputs & VERT_BIT_COLOR0)
-         fp_inputs |= FRAG_BIT_COL0;
+         fp_inputs |= VARYING_BIT_COL0;
       if (varying_inputs & VERT_BIT_COLOR1)
-         fp_inputs |= FRAG_BIT_COL1;
+         fp_inputs |= VARYING_BIT_COL1;
 
       fp_inputs |= (((varying_inputs & VERT_BIT_TEX_ANY) >> VERT_ATTRIB_TEX0) 
-                    << FRAG_ATTRIB_TEX0);
+                    << VARYING_SLOT_TEX0);
 
    }
    else {
@@ -396,15 +395,15 @@ static GLbitfield get_fp_input_mask( struct gl_context *ctx )
        */
       /* _NEW_POINT */
       if (ctx->Point.PointSprite)
-         vp_outputs |= FRAG_BITS_TEX_ANY;
+         vp_outputs |= VARYING_BITS_TEX_ANY;
 
-      if (vp_outputs & (1 << VERT_RESULT_COL0))
-         fp_inputs |= FRAG_BIT_COL0;
-      if (vp_outputs & (1 << VERT_RESULT_COL1))
-         fp_inputs |= FRAG_BIT_COL1;
+      if (vp_outputs & (1 << VARYING_SLOT_COL0))
+         fp_inputs |= VARYING_BIT_COL0;
+      if (vp_outputs & (1 << VARYING_SLOT_COL1))
+         fp_inputs |= VARYING_BIT_COL1;
 
-      fp_inputs |= (((vp_outputs & VERT_RESULT_TEX_ANY) >> VERT_RESULT_TEX0) 
-                    << FRAG_ATTRIB_TEX0);
+      fp_inputs |= (((vp_outputs & VARYING_BITS_TEX_ANY) >> VARYING_SLOT_TEX0) 
+                    << VARYING_SLOT_TEX0);
    }
    
    return fp_inputs;
@@ -418,7 +417,7 @@ static GLbitfield get_fp_input_mask( struct gl_context *ctx )
 static GLuint make_state_key( struct gl_context *ctx,  struct state_key *key )
 {
    GLuint i, j;
-   GLbitfield inputs_referenced = FRAG_BIT_COL0;
+   GLbitfield inputs_referenced = VARYING_BIT_COL0;
    const GLbitfield inputs_available = get_fp_input_mask( ctx );
    GLuint keySize;
 
@@ -441,7 +440,7 @@ static GLuint make_state_key( struct gl_context *ctx,  struct state_key *key )
       key->unit[i].enabled = 1;
       key->enabled_units |= (1<<i);
       key->nr_enabled_units = i + 1;
-      inputs_referenced |= FRAG_BIT_TEX(i);
+      inputs_referenced |= VARYING_BIT_TEX(i);
 
       key->unit[i].source_index =
          translate_tex_src_bit(texUnit->_ReallyEnabled);
@@ -483,14 +482,14 @@ static GLuint make_state_key( struct gl_context *ctx,  struct state_key *key )
    /* _NEW_LIGHT | _NEW_FOG */
    if (texenv_doing_secondary_color(ctx)) {
       key->separate_specular = 1;
-      inputs_referenced |= FRAG_BIT_COL1;
+      inputs_referenced |= VARYING_BIT_COL1;
    }
 
    /* _NEW_FOG */
    if (ctx->Fog.Enabled) {
       key->fog_enabled = 1;
       key->fog_mode = translate_fog_mode(ctx->Fog.Mode);
-      inputs_referenced |= FRAG_BIT_FOGC; /* maybe */
+      inputs_referenced |= VARYING_BIT_FOGC; /* maybe */
    }
 
    /* _NEW_BUFFERS */
@@ -554,7 +553,7 @@ get_current_attrib(texenv_fragment_program *p, GLuint attrib)
 static ir_rvalue *
 get_gl_Color(texenv_fragment_program *p)
 {
-   if (p->state->inputs_available & FRAG_BIT_COL0) {
+   if (p->state->inputs_available & VARYING_BIT_COL0) {
       ir_variable *var = p->shader->symbols->get_variable("gl_Color");
       assert(var);
       return new(p->mem_ctx) ir_dereference_variable(var);
@@ -919,7 +918,7 @@ static void load_texture( texenv_fragment_program *p, GLuint unit )
    const GLuint texTarget = p->state->unit[unit].source_index;
    ir_rvalue *texcoord;
 
-   if (!(p->state->inputs_available & (FRAG_BIT_TEX0 << unit))) {
+   if (!(p->state->inputs_available & (VARYING_BIT_TEX0 << unit))) {
       texcoord = get_current_attrib(p, VERT_ATTRIB_TEX0 + unit);
    } else if (p->texcoord_tex[unit]) {
       texcoord = new(p->mem_ctx) ir_dereference_variable(p->texcoord_tex[unit]);
@@ -1254,7 +1253,7 @@ emit_instructions(texenv_fragment_program *p)
       p->emit(assign(spec_result, cf));
 
       ir_rvalue *secondary;
-      if (p->state->inputs_available & FRAG_BIT_COL1) {
+      if (p->state->inputs_available & VARYING_BIT_COL1) {
 	 ir_variable *var =
 	    p->shader->symbols->get_variable("gl_SecondaryColor");
 	 assert(var);
@@ -1310,7 +1309,7 @@ create_new_program(struct gl_context *ctx, struct state_key *key)
 
    state->language_version = 130;
    state->es_shader = false;
-   if (ctx->Extensions.OES_EGL_image_external)
+   if (_mesa_is_gles(ctx) && ctx->Extensions.OES_EGL_image_external)
       state->OES_EGL_image_external_enable = true;
    _mesa_glsl_initialize_types(state);
    _mesa_glsl_initialize_variables(p.instructions, state);
@@ -1337,7 +1336,10 @@ create_new_program(struct gl_context *ctx, struct state_key *key)
 
    validate_ir_tree(p.shader->ir);
 
-   while (do_common_optimization(p.shader->ir, false, false, 32))
+   const struct gl_shader_compiler_options *options =
+      &ctx->ShaderCompilerOptions[MESA_SHADER_FRAGMENT];
+
+   while (do_common_optimization(p.shader->ir, false, false, 32, options))
       ;
    reparent_ir(p.shader->ir, p.shader->ir);
 
@@ -1350,22 +1352,6 @@ create_new_program(struct gl_context *ctx, struct state_key *key)
    p.shader_program->NumShaders = 1;
 
    _mesa_glsl_link_shader(ctx, p.shader_program);
-
-   /* Set the sampler uniforms, and relink to get them into the linked
-    * program.
-    */
-   struct gl_shader *const fs =
-      p.shader_program->_LinkedShaders[MESA_SHADER_FRAGMENT];
-   struct gl_program *const fp = fs->Program;
-
-   _mesa_generate_parameters_list_for_uniforms(p.shader_program, fs,
-					       fp->Parameters);
-
-   _mesa_associate_uniform_storage(ctx, p.shader_program, fp->Parameters);
-
-   _mesa_update_shader_textures_used(p.shader_program, fp);
-   if (ctx->Driver.SamplerUniformChange)
-      ctx->Driver.SamplerUniformChange(ctx, fp->Target, fp);
 
    if (!p.shader_program->LinkStatus)
       _mesa_problem(ctx, "Failed to link fixed function fragment shader: %s\n",

@@ -41,6 +41,7 @@
 #include "swrast_setup/swrast_setup.h"
 #include "drivers/common/meta.h"
 
+#include "brw_blorp.h"
 #include "brw_draw.h"
 #include "brw_defines.h"
 #include "brw_context.h"
@@ -89,7 +90,7 @@ static const GLenum reduced_prim[GL_POLYGON+1] = {
 static void brw_set_prim(struct brw_context *brw,
                          const struct _mesa_prim *prim)
 {
-   struct gl_context *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->ctx;
    uint32_t hw_prim = prim_to_hw_prim[prim->mode];
 
    DBG("PRIM: %s\n", _mesa_lookup_enum_by_nr(prim->mode));
@@ -113,8 +114,8 @@ static void brw_set_prim(struct brw_context *brw,
       brw->primitive = hw_prim;
       brw->state.dirty.brw |= BRW_NEW_PRIMITIVE;
 
-      if (reduced_prim[prim->mode] != brw->intel.reduced_primitive) {
-	 brw->intel.reduced_primitive = reduced_prim[prim->mode];
+      if (reduced_prim[prim->mode] != brw->reduced_primitive) {
+	 brw->reduced_primitive = reduced_prim[prim->mode];
 	 brw->state.dirty.brw |= BRW_NEW_REDUCED_PRIMITIVE;
       }
    }
@@ -136,6 +137,14 @@ static void gen6_set_prim(struct brw_context *brw,
 }
 
 
+/**
+ * The hardware is capable of removing dangling vertices on its own; however,
+ * prior to Gen6, we sometimes convert quads into trifans (and quad strips
+ * into tristrips), since pre-Gen6 hardware requires a GS to render quads.
+ * This function manually trims dangling vertices from a draw call involving
+ * quads so that those dangling vertices won't get drawn when we convert to
+ * trifans/tristrips.
+ */
 static GLuint trim(GLenum prim, GLuint length)
 {
    if (prim == GL_QUAD_STRIP)
@@ -151,7 +160,6 @@ static void brw_emit_prim(struct brw_context *brw,
 			  const struct _mesa_prim *prim,
 			  uint32_t hw_prim)
 {
-   struct intel_context *intel = &brw->intel;
    int verts_per_instance;
    int vertex_access_type;
    int start_vertex_location;
@@ -171,7 +179,11 @@ static void brw_emit_prim(struct brw_context *brw,
       start_vertex_location += brw->vb.start_vertex_bias;
    }
 
-   verts_per_instance = trim(prim->mode, prim->count);
+   /* We only need to trim the primitive count on pre-Gen6. */
+   if (brw->gen < 6)
+      verts_per_instance = trim(prim->mode, prim->count);
+   else
+      verts_per_instance = prim->count;
 
    /* If nothing to emit, just return. */
    if (verts_per_instance == 0)
@@ -182,8 +194,8 @@ static void brw_emit_prim(struct brw_context *brw,
     * and missed flushes of the render cache as it heads to other parts of
     * the besides the draw code.
     */
-   if (intel->always_flush_cache) {
-      intel_batchbuffer_emit_mi_flush(intel);
+   if (brw->always_flush_cache) {
+      intel_batchbuffer_emit_mi_flush(brw);
    }
 
    BEGIN_BATCH(6);
@@ -197,10 +209,10 @@ static void brw_emit_prim(struct brw_context *brw,
    OUT_BATCH(base_vertex_location);
    ADVANCE_BATCH();
 
-   intel->batch.need_workaround_flush = true;
+   brw->batch.need_workaround_flush = true;
 
-   if (intel->always_flush_cache) {
-      intel_batchbuffer_emit_mi_flush(intel);
+   if (brw->always_flush_cache) {
+      intel_batchbuffer_emit_mi_flush(brw);
    }
 }
 
@@ -208,7 +220,6 @@ static void gen7_emit_prim(struct brw_context *brw,
 			   const struct _mesa_prim *prim,
 			   uint32_t hw_prim)
 {
-   struct intel_context *intel = &brw->intel;
    int verts_per_instance;
    int vertex_access_type;
    int start_vertex_location;
@@ -228,7 +239,7 @@ static void gen7_emit_prim(struct brw_context *brw,
       start_vertex_location += brw->vb.start_vertex_bias;
    }
 
-   verts_per_instance = trim(prim->mode, prim->count);
+   verts_per_instance = prim->count;
 
    /* If nothing to emit, just return. */
    if (verts_per_instance == 0)
@@ -239,8 +250,8 @@ static void gen7_emit_prim(struct brw_context *brw,
     * and missed flushes of the render cache as it heads to other parts of
     * the besides the draw code.
     */
-   if (intel->always_flush_cache) {
-      intel_batchbuffer_emit_mi_flush(intel);
+   if (brw->always_flush_cache) {
+      intel_batchbuffer_emit_mi_flush(brw);
    }
 
    BEGIN_BATCH(7);
@@ -253,8 +264,8 @@ static void gen7_emit_prim(struct brw_context *brw,
    OUT_BATCH(base_vertex_location);
    ADVANCE_BATCH();
 
-   if (intel->always_flush_cache) {
-      intel_batchbuffer_emit_mi_flush(intel);
+   if (brw->always_flush_cache) {
+      intel_batchbuffer_emit_mi_flush(brw);
    }
 }
 
@@ -262,7 +273,6 @@ static void gen7_emit_prim(struct brw_context *brw,
 static void brw_merge_inputs( struct brw_context *brw,
 		       const struct gl_client_array *arrays[])
 {
-   struct brw_vertex_info old = brw->vb.info;
    GLuint i;
 
    for (i = 0; i < brw->vb.nr_buffers; i++) {
@@ -271,21 +281,11 @@ static void brw_merge_inputs( struct brw_context *brw,
    }
    brw->vb.nr_buffers = 0;
 
-   memset(&brw->vb.info, 0, sizeof(brw->vb.info));
-
    for (i = 0; i < VERT_ATTRIB_MAX; i++) {
       brw->vb.inputs[i].buffer = -1;
       brw->vb.inputs[i].glarray = arrays[i];
       brw->vb.inputs[i].attrib = (gl_vert_attrib) i;
-
-      if (arrays[i]->StrideB != 0)
-	 brw->vb.info.sizes[i/16] |= (brw->vb.inputs[i].glarray->Size - 1) <<
-	    ((i%16) * 2);
    }
-
-   /* Raise statechanges if input sizes have changed. */
-   if (memcmp(brw->vb.info.sizes, old.sizes, sizeof(old.sizes)) != 0)
-      brw->state.dirty.brw |= BRW_NEW_INPUT_DIMENSIONS;
 }
 
 /*
@@ -299,24 +299,26 @@ static void brw_merge_inputs( struct brw_context *brw,
 static void
 brw_predraw_resolve_buffers(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->intel.ctx;
-   struct intel_context *intel = &brw->intel;
+   struct gl_context *ctx = &brw->ctx;
    struct intel_renderbuffer *depth_irb;
    struct intel_texture_object *tex_obj;
 
    /* Resolve the depth buffer's HiZ buffer. */
    depth_irb = intel_get_renderbuffer(ctx->DrawBuffer, BUFFER_DEPTH);
    if (depth_irb)
-      intel_renderbuffer_resolve_hiz(intel, depth_irb);
+      intel_renderbuffer_resolve_hiz(brw, depth_irb);
 
-   /* Resolve depth buffer of each enabled depth texture. */
+   /* Resolve depth buffer of each enabled depth texture, and color buffer of
+    * each fast-clear-enabled color texture.
+    */
    for (int i = 0; i < BRW_MAX_TEX_UNIT; i++) {
       if (!ctx->Texture.Unit[i]._ReallyEnabled)
 	 continue;
       tex_obj = intel_texture_object(ctx->Texture.Unit[i]._Current);
       if (!tex_obj || !tex_obj->mt)
 	 continue;
-      intel_miptree_all_slices_resolve_depth(intel, tex_obj->mt);
+      intel_miptree_all_slices_resolve_depth(brw, tex_obj->mt);
+      intel_miptree_resolve_color(brw, tex_obj->mt);
    }
 }
 
@@ -331,15 +333,14 @@ brw_predraw_resolve_buffers(struct brw_context *brw)
  */
 static void brw_postdraw_set_buffers_need_resolve(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->ctx;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
 
    struct intel_renderbuffer *front_irb = NULL;
    struct intel_renderbuffer *back_irb = intel_get_renderbuffer(fb, BUFFER_BACK_LEFT);
    struct intel_renderbuffer *depth_irb = intel_get_renderbuffer(fb, BUFFER_DEPTH);
 
-   if (intel->is_front_buffer_rendering)
+   if (brw->is_front_buffer_rendering)
       front_irb = intel_get_renderbuffer(fb, BUFFER_FRONT_LEFT);
 
    if (front_irb)
@@ -348,61 +349,6 @@ static void brw_postdraw_set_buffers_need_resolve(struct brw_context *brw)
       intel_renderbuffer_set_needs_downsample(back_irb);
    if (depth_irb && ctx->Depth.Mask)
       intel_renderbuffer_set_needs_depth_resolve(depth_irb);
-}
-
-static int
-verts_per_prim(GLenum mode)
-{
-   switch (mode) {
-   case GL_POINTS:
-      return 1;
-   case GL_LINE_STRIP:
-   case GL_LINE_LOOP:
-   case GL_LINES:
-      return 2;
-   case GL_TRIANGLE_STRIP:
-   case GL_TRIANGLE_FAN:
-   case GL_POLYGON:
-   case GL_TRIANGLES:
-   case GL_QUADS:
-   case GL_QUAD_STRIP:
-      return 3;
-   default:
-      _mesa_problem(NULL,
-		    "unknown prim type in transform feedback primitive count");
-      return 0;
-   }
-}
-
-/**
- * Update internal counters based on the the drawing operation described in
- * prim.
- */
-static void
-brw_update_primitive_count(struct brw_context *brw,
-                           const struct _mesa_prim *prim)
-{
-   uint32_t count
-      = vbo_count_tessellated_primitives(prim->mode, prim->count,
-                                         prim->num_instances);
-   brw->sol.primitives_generated += count;
-   if (_mesa_is_xfb_active_and_unpaused(&brw->intel.ctx)) {
-      /* Update brw->sol.svbi_0_max_index to reflect the amount by which the
-       * hardware is going to increment SVBI 0 when this drawing operation
-       * occurs.  This is necessary because the kernel does not (yet) save and
-       * restore GPU registers when context switching, so we'll need to be
-       * able to reload SVBI 0 with the correct value in case we have to start
-       * a new batch buffer.
-       */
-      unsigned verts = verts_per_prim(prim->mode);
-      uint32_t space_avail =
-         (brw->sol.svbi_0_max_index - brw->sol.svbi_0_starting_index) / verts;
-      uint32_t primitives_written = MIN2 (space_avail, count);
-      brw->sol.svbi_0_starting_index += verts * primitives_written;
-
-      /* And update the TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN query. */
-      brw->sol.primitives_written += primitives_written;
-   }
 }
 
 /* May fail if out of video memory for texture or vbo upload, or on
@@ -416,7 +362,6 @@ static bool brw_try_draw_prims( struct gl_context *ctx,
 				     GLuint min_index,
 				     GLuint max_index )
 {
-   struct intel_context *intel = intel_context(ctx);
    struct brw_context *brw = brw_context(ctx);
    bool retval = true;
    GLuint i;
@@ -434,12 +379,12 @@ static bool brw_try_draw_prims( struct gl_context *ctx,
     */
    brw_validate_textures( brw );
 
-   intel_prepare_render(intel);
+   intel_prepare_render(brw);
 
-   /* This workaround has to happen outside of brw_state_upload() because it
+   /* This workaround has to happen outside of brw_upload_state() because it
     * may flush the batchbuffer for a blit, affecting the state flags.
     */
-   brw_workaround_depthstencil_alignment(brw);
+   brw_workaround_depthstencil_alignment(brw, 0);
 
    /* Resolves must occur after updating renderbuffers, updating context state,
     * and finalizing textures but before setting up any hardware state for
@@ -473,8 +418,8 @@ static bool brw_try_draw_prims( struct gl_context *ctx,
        * we've got validated state that needs to be in the same batch as the
        * primitives.
        */
-      intel_batchbuffer_require_space(intel, estimated_max_prim_size, false);
-      intel_batchbuffer_save_state(intel);
+      intel_batchbuffer_require_space(brw, estimated_max_prim_size, false);
+      intel_batchbuffer_save_state(brw);
 
       if (brw->num_instances != prim->num_instances) {
          brw->num_instances = prim->num_instances;
@@ -484,7 +429,7 @@ static bool brw_try_draw_prims( struct gl_context *ctx,
          brw->basevertex = prim->basevertex;
          brw->state.dirty.brw |= BRW_NEW_VERTICES;
       }
-      if (intel->gen < 6)
+      if (brw->gen < 6)
 	 brw_set_prim(brw, &prim[i]);
       else
 	 gen6_set_prim(brw, &prim[i]);
@@ -496,25 +441,25 @@ retry:
        * brw->state.dirty.brw.
        */
       if (brw->state.dirty.brw) {
-	 intel->no_batch_wrap = true;
+	 brw->no_batch_wrap = true;
 	 brw_upload_state(brw);
       }
 
-      if (intel->gen >= 7)
+      if (brw->gen >= 7)
 	 gen7_emit_prim(brw, &prim[i], brw->primitive);
       else
 	 brw_emit_prim(brw, &prim[i], brw->primitive);
 
-      intel->no_batch_wrap = false;
+      brw->no_batch_wrap = false;
 
-      if (dri_bufmgr_check_aperture_space(&intel->batch.bo, 1)) {
+      if (dri_bufmgr_check_aperture_space(&brw->batch.bo, 1)) {
 	 if (!fail_next) {
-	    intel_batchbuffer_reset_to_saved(intel);
-	    intel_batchbuffer_flush(intel);
+	    intel_batchbuffer_reset_to_saved(brw);
+	    intel_batchbuffer_flush(brw);
 	    fail_next = true;
 	    goto retry;
 	 } else {
-	    if (intel_batchbuffer_flush(intel) == -ENOSPC) {
+	    if (intel_batchbuffer_flush(brw) == -ENOSPC) {
 	       static bool warned = false;
 
 	       if (!warned) {
@@ -527,13 +472,10 @@ retry:
 	    }
 	 }
       }
-
-      if (!_mesa_meta_in_progress(ctx))
-         brw_update_primitive_count(brw, &prim[i]);
    }
 
-   if (intel->always_flush_batch)
-      intel_batchbuffer_flush(intel);
+   if (brw->always_flush_batch)
+      intel_batchbuffer_flush(brw);
 
    brw_state_cache_check_size(brw);
    brw_postdraw_set_buffers_need_resolve(brw);
@@ -550,6 +492,7 @@ void brw_draw_prims( struct gl_context *ctx,
 		     GLuint max_index,
 		     struct gl_transform_feedback_object *tfb_vertcount )
 {
+   struct brw_context *brw = brw_context(ctx);
    const struct gl_client_array **arrays = ctx->Array._DrawArrays;
 
    if (!_mesa_check_conditional_render(ctx))
@@ -589,7 +532,7 @@ void brw_draw_prims( struct gl_context *ctx,
 
 void brw_draw_init( struct brw_context *brw )
 {
-   struct gl_context *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->ctx;
    struct vbo_context *vbo = vbo_context(ctx);
    int i;
 

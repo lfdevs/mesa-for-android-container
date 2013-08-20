@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nvc0_video.h"
@@ -67,7 +67,7 @@ nvc0_decoder_setup_ppp(struct nvc0_decoder *dec, struct nvc0_video_buffer *targe
       struct nv50_miptree *mt = (struct nv50_miptree *)target->resources[i];
 
       PUSH_DATA (push, mt->base.address >> 8);
-      PUSH_DATA (push, (mt->base.address + mt->total_size/2/mt->base.base.array_size) >> 8);
+      PUSH_DATA (push, (mt->base.address + mt->total_size/2) >> 8);
       mt->base.status |= NOUVEAU_BUFFER_STATUS_GPU_WRITING;
    }
 }
@@ -99,7 +99,7 @@ nvc0_decoder_ppp(struct nvc0_decoder *dec, union pipe_desc desc, struct nvc0_vid
    fence_extra = 4;
 #endif
 
-   PUSH_SPACE(push, 11 + (codec == PIPE_VIDEO_CODEC_VC1 ? 2 : 0) + 3 + fence_extra + 2);
+   nouveau_pushbuf_space(push, 11 + (codec == PIPE_VIDEO_CODEC_VC1 ? 2 : 0) + 3 + fence_extra + 2, 4, 0);
 
    switch (codec) {
    case PIPE_VIDEO_CODEC_MPEG12: {
@@ -132,7 +132,7 @@ nvc0_decoder_ppp(struct nvc0_decoder *dec, union pipe_desc desc, struct nvc0_vid
       do {
          usleep(100);
          if ((spin++ & 0xff) == 0xff)
-            debug_printf("ppp%u: %u\n", dec->fence_seq, dec->fence_map[8]);
+            debug_printf("p%u: %u\n", dec->fence_seq, dec->fence_map[8]);
       } while (dec->fence_seq > dec->fence_map[8]);
    }
 #else

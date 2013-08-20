@@ -65,7 +65,12 @@ LOCAL_SHARED_LIBRARIES := \
 	libdl \
 	libhardware \
 	liblog \
-	libcutils
+	libcutils \
+	libgralloc_drm \
+
+ifeq ($(shell echo "$(MESA_ANDROID_VERSION) >= 4.2" | bc),1)
+LOCAL_SHARED_LIBRARIES += libsync
+endif
 
 # add libdrm if there are hardware drivers
 ifneq ($(MESA_GPU_DRIVERS),swrast)
@@ -79,11 +84,6 @@ LOCAL_STATIC_LIBRARIES += libmesa_egl_dri2
 # require i915_dri and/or i965_dri
 LOCAL_REQUIRED_MODULES += \
 	$(addsuffix _dri, $(filter i915 i965, $(MESA_GPU_DRIVERS)))
-
-ifeq ($(shell echo "$(MESA_ANDROID_VERSION) >= 4.2" | bc),1)
-    LOCAL_SHARED_LIBRARIES += \
-        libsync
-endif
 endif # MESA_BUILD_CLASSIC
 
 ifeq ($(strip $(MESA_BUILD_GALLIUM)),true)
@@ -98,6 +98,12 @@ gallium_DRIVERS += libmesa_pipe_softpipe libmesa_winsys_sw_android
 # i915g
 ifneq ($(filter i915g, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_winsys_i915 libmesa_pipe_i915
+LOCAL_SHARED_LIBRARIES += libdrm_intel
+endif
+
+# ilo
+ifneq ($(filter ilo, $(MESA_GPU_DRIVERS)),)
+gallium_DRIVERS += libmesa_winsys_intel libmesa_pipe_ilo
 LOCAL_SHARED_LIBRARIES += libdrm_intel
 endif
 

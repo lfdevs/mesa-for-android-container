@@ -110,6 +110,17 @@
 #endif
 #endif
 
+#if defined(__s390x__)
+#define PIPE_ARCH_S390
+#endif
+
+#if defined(__arm__)
+#define PIPE_ARCH_ARM
+#endif
+
+#if defined(__aarch64__)
+#define PIPE_ARCH_AARCH64
+#endif
 
 /*
  * Endian detection.
@@ -144,9 +155,9 @@
 
 #else
 
-#if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
+#if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64) || defined(PIPE_ARCH_ARM) || defined(PIPE_ARCH_AARCH64)
 #define PIPE_ARCH_LITTLE_ENDIAN
-#elif defined(PIPE_ARCH_PPC) || defined(PIPE_ARCH_PPC_64)
+#elif defined(PIPE_ARCH_PPC) || defined(PIPE_ARCH_PPC_64) || defined(PIPE_ARCH_S390)
 #define PIPE_ARCH_BIG_ENDIAN
 #endif
 

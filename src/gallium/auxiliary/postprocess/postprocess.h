@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -53,11 +53,13 @@ struct pp_queue_t
 
    struct pipe_resource *depth; /* depth of original input */
    struct pipe_resource *stencil;       /* stencil shared by inner_tmps */
+   struct pipe_resource *constbuf;      /* MLAA constant buffer */
+   struct pipe_resource *areamaptex;    /* MLAA area map texture */
 
    struct pipe_surface *tmps[2], *inner_tmps[3], *stencils;
 
    void ***shaders;             /* Shaders in TGSI form */
-   unsigned int *verts;
+   unsigned int *filters;       /* Active filter to filters.h mapping. */
    struct program *p;
 
    bool fbos_init;
@@ -75,6 +77,14 @@ void pp_debug(const char *, ...);
 struct program *pp_init_prog(struct pp_queue_t *, struct pipe_context *pipe,
                              struct cso_context *);
 void pp_init_fbos(struct pp_queue_t *, unsigned int, unsigned int);
+void pp_blit(struct pipe_context *pipe,
+             struct pipe_resource *src_tex,
+             int srcX0, int srcY0,
+             int srcX1, int srcY1,
+             int srcZ0,
+             struct pipe_surface *dst,
+             int dstX0, int dstY0,
+             int dstX1, int dstY1);
 
 /* The filters */
 
@@ -88,14 +98,20 @@ void pp_jimenezmlaa_color(struct pp_queue_t *, struct pipe_resource *,
 
 /* The filter init functions */
 
-void pp_celshade_init(struct pp_queue_t *, unsigned int, unsigned int);
+bool pp_celshade_init(struct pp_queue_t *, unsigned int, unsigned int);
 
-void pp_nored_init(struct pp_queue_t *, unsigned int, unsigned int);
-void pp_nogreen_init(struct pp_queue_t *, unsigned int, unsigned int);
-void pp_noblue_init(struct pp_queue_t *, unsigned int, unsigned int);
+bool pp_nored_init(struct pp_queue_t *, unsigned int, unsigned int);
+bool pp_nogreen_init(struct pp_queue_t *, unsigned int, unsigned int);
+bool pp_noblue_init(struct pp_queue_t *, unsigned int, unsigned int);
 
-void pp_jimenezmlaa_init(struct pp_queue_t *, unsigned int, unsigned int);
-void pp_jimenezmlaa_init_color(struct pp_queue_t *, unsigned int,
+bool pp_jimenezmlaa_init(struct pp_queue_t *, unsigned int, unsigned int);
+bool pp_jimenezmlaa_init_color(struct pp_queue_t *, unsigned int,
                                unsigned int);
+
+/* The filter free functions */
+
+void pp_celshade_free(struct pp_queue_t *, unsigned int);
+void pp_nocolor_free(struct pp_queue_t *, unsigned int);
+void pp_jimenezmlaa_free(struct pp_queue_t *, unsigned int);
 
 #endif

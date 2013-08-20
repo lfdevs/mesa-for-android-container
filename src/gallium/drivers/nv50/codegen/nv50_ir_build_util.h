@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #ifndef __NV50_IR_BUILD_UTIL__
@@ -58,8 +58,10 @@ public:
    LValue *mkOp2v(operation, DataType, Value *, Value *, Value *);
    LValue *mkOp3v(operation, DataType, Value *, Value *, Value *, Value *);
 
-   LValue *mkLoad(DataType, Symbol *, Value *ptr);
+   Instruction *mkLoad(DataType, Value *dst, Symbol *, Value *ptr);
    Instruction *mkStore(operation, DataType, Symbol *, Value *ptr, Value *val);
+
+   LValue *mkLoadv(DataType, Symbol *, Value *ptr);
 
    Instruction *mkMov(Value *, Value *, DataType = TYPE_U32);
    Instruction *mkMovToReg(int id, Value *);
@@ -73,8 +75,10 @@ public:
    CmpInstruction *mkCmp(operation, CondCode, DataType,
 			 Value *,
 			 Value *, Value *, Value * = NULL);
-   Instruction *mkTex(operation, TexTarget, uint8_t tic, uint8_t tsc,
-                      Value **def, Value **src);
+   TexInstruction *mkTex(operation, TexTarget,
+                         uint16_t tic, uint16_t tsc,
+                         const std::vector<Value *> &def,
+                         const std::vector<Value *> &src);
    Instruction *mkQuadop(uint8_t qop, Value *, uint8_t l, Value *, Value *);
 
    FlowInstruction *mkFlow(operation, void *target, CondCode, Value *pred);
@@ -96,6 +100,10 @@ public:
    Value *loadImm(Value *dst, uint64_t);
 
    Value *loadImm(Value *dst, int i) { return loadImm(dst, (uint32_t)i); }
+
+   // returns high part of the operation
+   static Instruction *split64BitOpPostRA(Function *, Instruction *,
+                                          Value *zero, Value *carry);
 
    struct Location
    {
@@ -280,6 +288,14 @@ BuildUtil::mkOp3v(operation op, DataType ty, Value *dst,
 {
    mkOp3(op, ty, dst, src0, src1, src2);
    return dst->asLValue();
+}
+
+inline LValue *
+BuildUtil::mkLoadv(DataType ty, Symbol *mem, Value *ptr)
+{
+   LValue *dst = getScratch();
+   mkLoad(ty, dst, mem, ptr);
+   return dst;
 }
 
 bool

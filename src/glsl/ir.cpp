@@ -195,34 +195,6 @@ ir_assignment::ir_assignment(ir_rvalue *lhs, ir_rvalue *rhs,
    this->set_lhs(lhs);
 }
 
-
-ir_expression::ir_expression(int op, const struct glsl_type *type,
-			     ir_rvalue *op0)
-{
-   assert(get_num_operands(ir_expression_operation(op)) == 1);
-   this->ir_type = ir_type_expression;
-   this->type = type;
-   this->operation = ir_expression_operation(op);
-   this->operands[0] = op0;
-   this->operands[1] = NULL;
-   this->operands[2] = NULL;
-   this->operands[3] = NULL;
-}
-
-ir_expression::ir_expression(int op, const struct glsl_type *type,
-			     ir_rvalue *op0, ir_rvalue *op1)
-{
-   assert(((op1 == NULL) && (get_num_operands(ir_expression_operation(op)) == 1))
-	  || (get_num_operands(ir_expression_operation(op)) == 2));
-   this->ir_type = ir_type_expression;
-   this->type = type;
-   this->operation = ir_expression_operation(op);
-   this->operands[0] = op0;
-   this->operands[1] = op1;
-   this->operands[2] = NULL;
-   this->operands[3] = NULL;
-}
-
 ir_expression::ir_expression(int op, const struct glsl_type *type,
 			     ir_rvalue *op0, ir_rvalue *op1,
 			     ir_rvalue *op2, ir_rvalue *op3)
@@ -234,6 +206,12 @@ ir_expression::ir_expression(int op, const struct glsl_type *type,
    this->operands[1] = op1;
    this->operands[2] = op2;
    this->operands[3] = op3;
+#ifndef NDEBUG
+   int num_operands = get_num_operands(this->operation);
+   for (int i = num_operands; i < 4; i++) {
+      assert(this->operands[i] == NULL);
+   }
+#endif
 }
 
 ir_expression::ir_expression(int op, ir_rvalue *op0)
@@ -421,6 +399,10 @@ ir_expression::ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1)
       this->type = op0->type;
       break;
 
+   case ir_binop_vector_extract:
+      this->type = op0->type->get_scalar_type();
+      break;
+
    default:
       assert(!"not reached: missing automatic type setup for ir_expression");
       this->type = glsl_type::float_type;
@@ -438,7 +420,10 @@ ir_expression::get_num_operands(ir_expression_operation op)
    if (op <= ir_last_binop)
       return 2;
 
-   if (op == ir_quadop_vector)
+   if (op <= ir_last_triop)
+      return 3;
+
+   if (op <= ir_last_quadop)
       return 4;
 
    assert(false);
@@ -496,6 +481,10 @@ static const char *const operator_strs[] = {
    "unpackHalf2x16",
    "unpackHalf2x16_split_x",
    "unpackHalf2x16_split_y",
+   "bitfield_reverse",
+   "bit_count",
+   "find_msb",
+   "find_lsb",
    "noise",
    "+",
    "-",
@@ -523,7 +512,14 @@ static const char *const operator_strs[] = {
    "max",
    "pow",
    "packHalf2x16_split",
+   "bfm",
    "ubo_load",
+   "vector_extract",
+   "lrp",
+   "bfi",
+   "bitfield_extract",
+   "vector_insert",
+   "bitfield_insert",
    "vector",
 };
 
@@ -1325,7 +1321,7 @@ ir_dereference::is_lvalue() const
 }
 
 
-static const char *tex_opcode_strs[] = { "tex", "txb", "txl", "txd", "txf", "txs" };
+static const char *tex_opcode_strs[] = { "tex", "txb", "txl", "txd", "txf", "txf_ms", "txs", "lod" };
 
 const char *ir_texture::opcode_string()
 {
@@ -1356,6 +1352,9 @@ ir_texture::set_sampler(ir_dereference *sampler, const glsl_type *type)
 
    if (this->op == ir_txs) {
       assert(type->base_type == GLSL_TYPE_INT);
+   } else if (this->op == ir_lod) {
+      assert(type->vector_elements == 2);
+      assert(type->base_type == GLSL_TYPE_FLOAT);
    } else {
       assert(sampler->type->sampler_type == (int) type->base_type);
       if (sampler->type->sampler_shadow)
@@ -1571,7 +1570,7 @@ ir_variable::determine_interpolation_mode(bool flat_shade)
       return (glsl_interp_qualifier) this->interpolation;
    int location = this->location;
    bool is_gl_Color =
-      location == FRAG_ATTRIB_COL0 || location == FRAG_ATTRIB_COL1;
+      location == VARYING_SLOT_COL0 || location == VARYING_SLOT_COL1;
    if (flat_shade && is_gl_Color)
       return INTERP_QUALIFIER_FLAT;
    else

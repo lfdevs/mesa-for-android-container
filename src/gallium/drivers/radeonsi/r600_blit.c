@@ -80,8 +80,9 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 
 	if ((op & R600_DISABLE_RENDER_COND) && rctx->current_render_cond) {
 		rctx->saved_render_cond = rctx->current_render_cond;
+		rctx->saved_render_cond_cond = rctx->current_render_cond_cond;
 		rctx->saved_render_cond_mode = rctx->current_render_cond_mode;
-		rctx->context.render_condition(&rctx->context, NULL, 0);
+		rctx->context.render_condition(&rctx->context, NULL, FALSE, 0);
 	}
 
 }
@@ -92,6 +93,7 @@ static void r600_blitter_end(struct pipe_context *ctx)
 	if (rctx->saved_render_cond) {
 		rctx->context.render_condition(&rctx->context,
 					       rctx->saved_render_cond,
+					       rctx->saved_render_cond_cond,
 					       rctx->saved_render_cond_mode);
 		rctx->saved_render_cond = NULL;
 	}
@@ -136,7 +138,7 @@ void si_blit_uncompress_depth(struct pipe_context *ctx,
 
 		/* The smaller the mipmap level, the less layers there are
 		 * as far as 3D textures are concerned. */
-		max_layer = u_max_layer(&texture->resource.b.b, level);
+		max_layer = util_max_layer(&texture->resource.b.b, level);
 		checked_last_layer = last_layer < max_layer ? last_layer : max_layer;
 
 		for (layer = first_layer; layer <= checked_last_layer; layer++) {
@@ -187,7 +189,7 @@ static void si_blit_decompress_depth_in_place(struct r600_context *rctx,
 
 		/* The smaller the mipmap level, the less layers there are
 		 * as far as 3D textures are concerned. */
-		max_layer = u_max_layer(&texture->resource.b.b, level);
+		max_layer = util_max_layer(&texture->resource.b.b, level);
 		checked_last_layer = last_layer < max_layer ? last_layer : max_layer;
 
 		for (layer = first_layer; layer <= checked_last_layer; layer++) {
@@ -231,7 +233,7 @@ void si_flush_depth_textures(struct r600_context *rctx,
 
 		si_blit_decompress_depth_in_place(rctx, tex,
 						  view->u.tex.first_level, view->u.tex.last_level,
-						  0, u_max_layer(&tex->resource.b.b, view->u.tex.first_level));
+						  0, util_max_layer(&tex->resource.b.b, view->u.tex.first_level));
 	}
 }
 
@@ -244,8 +246,7 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 
 	r600_blitter_begin(ctx, R600_CLEAR);
 	util_blitter_clear(rctx->blitter, fb->width, fb->height,
-			   fb->nr_cbufs, buffers, fb->nr_cbufs ? fb->cbufs[0]->format : PIPE_FORMAT_NONE,
-			   color, depth, stencil);
+			   buffers, color, depth, stencil);
 	r600_blitter_end(ctx);
 }
 

@@ -36,6 +36,8 @@
 #include "ir_hierarchical_visitor.h"
 #include "main/mtypes.h"
 
+#ifdef __cplusplus
+
 /**
  * \defgroup IR Intermediate representation nodes
  *
@@ -120,6 +122,7 @@ public:
    virtual class ir_dereference *       as_dereference()      { return NULL; }
    virtual class ir_dereference_array *	as_dereference_array() { return NULL; }
    virtual class ir_dereference_variable *as_dereference_variable() { return NULL; }
+   virtual class ir_dereference_record *as_dereference_record() { return NULL; }
    virtual class ir_expression *        as_expression()       { return NULL; }
    virtual class ir_rvalue *            as_rvalue()           { return NULL; }
    virtual class ir_loop *              as_loop()             { return NULL; }
@@ -130,6 +133,7 @@ public:
    virtual class ir_swizzle *           as_swizzle()          { return NULL; }
    virtual class ir_constant *          as_constant()         { return NULL; }
    virtual class ir_discard *           as_discard()          { return NULL; }
+   virtual class ir_jump *              as_jump()             { return NULL; }
    /*@}*/
 
 protected:
@@ -272,7 +276,8 @@ enum ir_variable_mode {
    ir_var_function_inout,
    ir_var_const_in,	/**< "in" param that must be a constant expression */
    ir_var_system_value, /**< Ex: front-face, instance-id, etc. */
-   ir_var_temporary	/**< Temporary variable generated during compilation. */
+   ir_var_temporary,	/**< Temporary variable generated during compilation. */
+   ir_var_mode_count	/**< Number of variable modes */
 };
 
 /**
@@ -466,6 +471,14 @@ public:
    unsigned explicit_index:1;
 
    /**
+    * Was an initial binding explicitly set in the shader?
+    *
+    * If so, constant_value contains an integer ir_constant representing the
+    * initial binding point.
+    */
+   unsigned explicit_binding:1;
+
+   /**
     * Does this variable have an initializer?
     *
     * This is used by the linker to cross-validiate initializers of global
@@ -505,8 +518,8 @@ public:
     * The precise meaning of this field depends on the nature of the variable.
     *
     *   - Vertex shader input: one of the values from \c gl_vert_attrib.
-    *   - Vertex shader output: one of the values from \c gl_vert_result.
-    *   - Fragment shader input: one of the values from \c gl_frag_attrib.
+    *   - Vertex shader output: one of the values from \c gl_varying_slot.
+    *   - Fragment shader input: one of the values from \c gl_varying_slot.
     *   - Fragment shader output: one of the values from \c gl_frag_result.
     *   - Uniforms: Per-stage uniform slot number for default uniform block.
     *   - Uniforms: Index within the uniform block definition for UBO members.
@@ -521,6 +534,13 @@ public:
     * output index for dual source blending.
     */
    int index;
+
+   /**
+    * Initial binding point for a sampler or UBO.
+    *
+    * For array types, this represents the binding point for the first element.
+    */
+   int binding;
 
    /**
     * Built-in state that backs this uniform
@@ -1030,6 +1050,16 @@ enum ir_expression_operation {
    ir_unop_unpack_half_2x16_split_y,
    /*@}*/
 
+   /**
+    * \name Bit operations, part of ARB_gpu_shader5.
+    */
+   /*@{*/
+   ir_unop_bitfield_reverse,
+   ir_unop_bit_count,
+   ir_unop_find_msb,
+   ir_unop_find_lsb,
+   /*@}*/
+
    ir_unop_noise,
 
    /**
@@ -1106,6 +1136,15 @@ enum ir_expression_operation {
    /*@}*/
 
    /**
+    * \name First half of a lowered bitfieldInsert() operation.
+    *
+    * \see lower_instructions::bitfield_insert_to_bfm_bfi
+    */
+   /*@{*/
+   ir_binop_bfm,
+   /*@}*/
+
+   /**
     * Load a value the size of a given GLSL type from a uniform block.
     *
     * operand0 is the ir_constant uniform block index in the linked shader.
@@ -1114,11 +1153,53 @@ enum ir_expression_operation {
    ir_binop_ubo_load,
 
    /**
+    * Extract a scalar from a vector
+    *
+    * operand0 is the vector
+    * operand1 is the index of the field to read from operand0
+    */
+   ir_binop_vector_extract,
+
+   /**
     * A sentinel marking the last of the binary operations.
     */
-   ir_last_binop = ir_binop_ubo_load,
+   ir_last_binop = ir_binop_vector_extract,
+
+   ir_triop_lrp,
+
+   /**
+    * \name Second half of a lowered bitfieldInsert() operation.
+    *
+    * \see lower_instructions::bitfield_insert_to_bfm_bfi
+    */
+   /*@{*/
+   ir_triop_bfi,
+   /*@}*/
+
+   ir_triop_bitfield_extract,
+
+   /**
+    * Generate a value with one field of a vector changed
+    *
+    * operand0 is the vector
+    * operand1 is the value to write into the vector result
+    * operand2 is the index in operand0 to be modified
+    */
+   ir_triop_vector_insert,
+
+   /**
+    * A sentinel marking the last of the ternary operations.
+    */
+   ir_last_triop = ir_triop_vector_insert,
+
+   ir_quadop_bitfield_insert,
 
    ir_quadop_vector,
+
+   /**
+    * A sentinel marking the last of the ternary operations.
+    */
+   ir_last_quadop = ir_quadop_vector,
 
    /**
     * A sentinel marking the last of all operations.
@@ -1128,24 +1209,19 @@ enum ir_expression_operation {
 
 class ir_expression : public ir_rvalue {
 public:
+   ir_expression(int op, const struct glsl_type *type,
+                 ir_rvalue *op0, ir_rvalue *op1 = NULL,
+                 ir_rvalue *op2 = NULL, ir_rvalue *op3 = NULL);
+
    /**
     * Constructor for unary operation expressions
     */
-   ir_expression(int op, const struct glsl_type *type, ir_rvalue *);
    ir_expression(int op, ir_rvalue *);
 
    /**
     * Constructor for binary operation expressions
     */
-   ir_expression(int op, const struct glsl_type *type,
-		 ir_rvalue *, ir_rvalue *);
    ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1);
-
-   /**
-    * Constructor for quad operator expressions
-    */
-   ir_expression(int op, const struct glsl_type *type,
-		 ir_rvalue *, ir_rvalue *, ir_rvalue *, ir_rvalue *);
 
    virtual ir_expression *as_expression()
    {
@@ -1294,6 +1370,12 @@ protected:
    {
       ir_type = ir_type_unset;
    }
+
+public:
+   virtual ir_jump *as_jump()
+   {
+      return this;
+   }
 };
 
 class ir_return : public ir_jump {
@@ -1422,7 +1504,9 @@ enum ir_texture_opcode {
    ir_txl,		/**< Texture look-up with explicit LOD */
    ir_txd,		/**< Texture look-up with partial derivatvies */
    ir_txf,		/**< Texel fetch with explicit LOD */
-   ir_txs		/**< Texture size */
+   ir_txf_ms,           /**< Multisample texture fetch */
+   ir_txs,		/**< Texture size */
+   ir_lod		/**< Texture lod query */
 };
 
 
@@ -1443,13 +1527,16 @@ enum ir_texture_opcode {
  * (txl <type> <sampler> <coordinate> 0 1 ( ) <lod>)
  * (txd <type> <sampler> <coordinate> 0 1 ( ) (dPdx dPdy))
  * (txf <type> <sampler> <coordinate> 0       <lod>)
+ * (txf_ms
+ *      <type> <sampler> <coordinate>         <sample_index>)
  * (txs <type> <sampler> <lod>)
+ * (lod <type> <sampler> <coordinate>)
  */
 class ir_texture : public ir_rvalue {
 public:
    ir_texture(enum ir_texture_opcode op)
-      : op(op), coordinate(NULL), projector(NULL), shadow_comparitor(NULL),
-        offset(NULL)
+      : op(op), sampler(NULL), coordinate(NULL), projector(NULL),
+        shadow_comparitor(NULL), offset(NULL)
    {
       this->ir_type = ir_type_texture;
    }
@@ -1509,6 +1596,7 @@ public:
    union {
       ir_rvalue *lod;		/**< Floating point LOD */
       ir_rvalue *bias;		/**< Floating point LOD bias */
+      ir_rvalue *sample_index;  /**< MSAA sample index */
       struct {
 	 ir_rvalue *dPdx;	/**< Partial derivative of coordinate wrt X */
 	 ir_rvalue *dPdy;	/**< Partial derivative of coordinate wrt Y */
@@ -1731,6 +1819,11 @@ public:
 					struct hash_table *) const;
 
    virtual ir_constant *constant_expression_value(struct hash_table *variable_context = NULL);
+
+   virtual ir_dereference_record *as_dereference_record()
+   {
+      return this;
+   }
 
    /**
     * Get the variable that is ultimately referenced by an r-value
@@ -1973,5 +2066,15 @@ do_set_program_inouts(exec_list *instructions, struct gl_program *prog,
 extern char *
 prototype_string(const glsl_type *return_type, const char *name,
 		 exec_list *parameters);
+
+extern "C" {
+#endif /* __cplusplus */
+
+extern void _mesa_print_ir(struct exec_list *instructions,
+                           struct _mesa_glsl_parse_state *state);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif /* IR_H */

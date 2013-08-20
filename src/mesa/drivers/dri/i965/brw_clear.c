@@ -33,14 +33,13 @@
 #include "drivers/common/meta.h"
 
 #include "intel_batchbuffer.h"
-#include "intel_context.h"
 #include "intel_blit.h"
-#include "intel_clear.h"
 #include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
 #include "intel_regions.h"
 
 #include "brw_context.h"
+#include "brw_blorp.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BLIT
 
@@ -105,16 +104,16 @@ noop_scissor(struct gl_context *ctx, struct gl_framebuffer *fb)
 static bool
 brw_fast_clear_depth(struct gl_context *ctx)
 {
-   struct intel_context *intel = intel_context(ctx);
+   struct brw_context *brw = brw_context(ctx);
    struct gl_framebuffer *fb = ctx->DrawBuffer;
    struct intel_renderbuffer *depth_irb =
       intel_get_renderbuffer(fb, BUFFER_DEPTH);
    struct intel_mipmap_tree *mt = depth_irb->mt;
 
-   if (intel->gen < 6)
+   if (brw->gen < 6)
       return false;
 
-   if (!mt->hiz_mt)
+   if (!intel_renderbuffer_has_hiz(depth_irb))
       return false;
 
    /* We only handle full buffer clears -- otherwise you'd have to track whether
@@ -124,19 +123,6 @@ brw_fast_clear_depth(struct gl_context *ctx)
    if (ctx->Scissor.Enabled && !noop_scissor(ctx, fb)) {
       perf_debug("Failed to fast clear depth due to scissor being enabled.  "
                  "Possible 5%% performance win if avoided.\n");
-      return false;
-   }
-
-   /* The rendered area has to be 8x4 samples, not resolved pixels, so we look
-    * at the miptree slice dimensions instead of renderbuffer size.
-    */
-   if (mt->level[depth_irb->mt_level].width % 8 != 0 ||
-       mt->level[depth_irb->mt_level].height % 4 != 0) {
-      perf_debug("Failed to fast clear depth due to width/height %d,%d not "
-                 "being aligned to 8,4.  Possible 5%% performance win if "
-                 "avoided\n",
-                 mt->level[depth_irb->mt_level].width,
-                 mt->level[depth_irb->mt_level].height);
       return false;
    }
 
@@ -168,7 +154,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
        *        width of the map (LOD0) is not multiple of 16, fast clear
        *        optimization must be disabled.
        */
-      if (intel->gen == 6 && (mt->level[depth_irb->mt_level].width % 16) != 0)
+      if (brw->gen == 6 && (mt->level[depth_irb->mt_level].width % 16) != 0)
 	 return false;
       /* FALLTHROUGH */
 
@@ -181,7 +167,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
     * flags out of the HiZ buffer into the real depth buffer.
     */
    if (mt->depth_clear_value != depth_clear_value) {
-      intel_miptree_all_slices_resolve_depth(intel, mt);
+      intel_miptree_all_slices_resolve_depth(brw, mt);
       mt->depth_clear_value = depth_clear_value;
    }
 
@@ -192,19 +178,19 @@ brw_fast_clear_depth(struct gl_context *ctx)
     *      must be issued before the rectangle primitive used for the depth
     *      buffer clear operation.
     */
-   intel_batchbuffer_emit_mi_flush(intel);
+   intel_batchbuffer_emit_mi_flush(brw);
 
-   intel_hiz_exec(intel, mt, depth_irb->mt_level, depth_irb->mt_layer,
+   intel_hiz_exec(brw, mt, depth_irb->mt_level, depth_irb->mt_layer,
 		  GEN6_HIZ_OP_DEPTH_CLEAR);
 
-   if (intel->gen == 6) {
+   if (brw->gen == 6) {
       /* From the Sandy Bridge PRM, volume 2 part 1, page 314:
        *
        *     "DevSNB, DevSNB-B{W/A}]: Depth buffer clear pass must be followed
        *      by a PIPE_CONTROL command with DEPTH_STALL bit set and Then
        *      followed by Depth FLUSH'
       */
-      intel_batchbuffer_emit_mi_flush(intel);
+      intel_batchbuffer_emit_mi_flush(brw);
    }
 
    /* Now, the HiZ buffer contains data that needs to be resolved to the depth
@@ -222,22 +208,33 @@ static void
 brw_clear(struct gl_context *ctx, GLbitfield mask)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct intel_context *intel = &brw->intel;
+   struct gl_framebuffer *fb = ctx->DrawBuffer;
+   bool partial_clear = ctx->Scissor.Enabled && !noop_scissor(ctx, fb);
 
    if (!_mesa_check_conditional_render(ctx))
       return;
 
    if (mask & (BUFFER_BIT_FRONT_LEFT | BUFFER_BIT_FRONT_RIGHT)) {
-      intel->front_buffer_dirty = true;
+      brw->front_buffer_dirty = true;
    }
 
-   intel_prepare_render(intel);
-   brw_workaround_depthstencil_alignment(brw);
+   intel_prepare_render(brw);
+   brw_workaround_depthstencil_alignment(brw, partial_clear ? 0 : mask);
 
    if (mask & BUFFER_BIT_DEPTH) {
       if (brw_fast_clear_depth(ctx)) {
 	 DBG("fast clear: depth\n");
 	 mask &= ~BUFFER_BIT_DEPTH;
+      }
+   }
+
+   /* BLORP is currently only supported on Gen6+. */
+   if (brw->gen >= 6) {
+      if (mask & BUFFER_BITS_COLOR) {
+         if (brw_blorp_clear_color(brw, fb, partial_clear)) {
+            debug_mask("blorp color", mask & BUFFER_BITS_COLOR);
+            mask &= ~BUFFER_BITS_COLOR;
+         }
       }
    }
 
@@ -250,9 +247,9 @@ brw_clear(struct gl_context *ctx, GLbitfield mask)
       mask &= ~tri_mask;
 
       if (ctx->API == API_OPENGLES) {
-         _mesa_meta_Clear(&intel->ctx, tri_mask);
+         _mesa_meta_Clear(&brw->ctx, tri_mask);
       } else {
-         _mesa_meta_glsl_Clear(&intel->ctx, tri_mask);
+         _mesa_meta_glsl_Clear(&brw->ctx, tri_mask);
       }
    }
 

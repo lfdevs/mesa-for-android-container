@@ -415,6 +415,8 @@ static uint32_t r300_translate_colorformat(enum pipe_format format)
         case PIPE_FORMAT_L8A8_SNORM:
         case PIPE_FORMAT_R8G8_UNORM:
         case PIPE_FORMAT_R8G8_SNORM:
+        case PIPE_FORMAT_R8A8_UNORM:
+        case PIPE_FORMAT_R8A8_SNORM:
         /* These formats work fine with UV88 if US_OUT_FMT is set correctly. */
         case PIPE_FORMAT_A16_UNORM:
         case PIPE_FORMAT_A16_SNORM:
@@ -449,7 +451,7 @@ static uint32_t r300_translate_colorformat(enum pipe_format format)
         case PIPE_FORMAT_R8G8B8A8_UNORM:
         case PIPE_FORMAT_R8G8B8A8_SNORM:
         case PIPE_FORMAT_R8G8B8X8_UNORM:
-        /*case PIPE_FORMAT_R8G8B8X8_SNORM:*/
+        case PIPE_FORMAT_R8G8B8X8_SNORM:
         /* These formats work fine with ARGB8888 if US_OUT_FMT is set
          * correctly. */
         case PIPE_FORMAT_R16G16_UNORM:
@@ -458,6 +460,9 @@ static uint32_t r300_translate_colorformat(enum pipe_format format)
         case PIPE_FORMAT_L16A16_UNORM:
         case PIPE_FORMAT_L16A16_SNORM:
         case PIPE_FORMAT_L16A16_FLOAT:
+        case PIPE_FORMAT_R16A16_UNORM:
+        case PIPE_FORMAT_R16A16_SNORM:
+        case PIPE_FORMAT_R16A16_FLOAT:
         case PIPE_FORMAT_A32_FLOAT:
         case PIPE_FORMAT_L32_FLOAT:
         case PIPE_FORMAT_I32_FLOAT:
@@ -467,20 +472,26 @@ static uint32_t r300_translate_colorformat(enum pipe_format format)
         case PIPE_FORMAT_R10G10B10A2_UNORM:
         case PIPE_FORMAT_R10G10B10X2_SNORM:
         case PIPE_FORMAT_B10G10R10A2_UNORM:
+        case PIPE_FORMAT_B10G10R10X2_UNORM:
             return R500_COLOR_FORMAT_ARGB2101010;  /* R5xx-only? */
 
         /* 64-bit buffers. */
         case PIPE_FORMAT_R16G16B16A16_UNORM:
         case PIPE_FORMAT_R16G16B16A16_SNORM:
         case PIPE_FORMAT_R16G16B16A16_FLOAT:
+        case PIPE_FORMAT_R16G16B16X16_UNORM:
+        case PIPE_FORMAT_R16G16B16X16_SNORM:
+        case PIPE_FORMAT_R16G16B16X16_FLOAT:
         /* These formats work fine with ARGB16161616 if US_OUT_FMT is set
          * correctly. */
         case PIPE_FORMAT_R32G32_FLOAT:
         case PIPE_FORMAT_L32A32_FLOAT:
+        case PIPE_FORMAT_R32A32_FLOAT:
             return R300_COLOR_FORMAT_ARGB16161616;
 
         /* 128-bit buffers. */
         case PIPE_FORMAT_R32G32B32A32_FLOAT:
+        case PIPE_FORMAT_R32G32B32X32_FLOAT:
             return R300_COLOR_FORMAT_ARGB32323232;
 
         /* YUV buffers. */
@@ -625,6 +636,8 @@ static uint32_t r300_translate_out_fmt(enum pipe_format format)
          * COLORFORMAT_UV88 stores ZX (C2 and C0). */
         case PIPE_FORMAT_L8A8_SNORM:
         case PIPE_FORMAT_L8A8_UNORM:
+        case PIPE_FORMAT_R8A8_SNORM:
+        case PIPE_FORMAT_R8A8_UNORM:
             return modifier | R300_C0_SEL_A | R300_C2_SEL_R;
         case PIPE_FORMAT_R8G8_SNORM:
         case PIPE_FORMAT_R8G8_UNORM:
@@ -648,6 +661,7 @@ static uint32_t r300_translate_out_fmt(enum pipe_format format)
         case PIPE_FORMAT_B8G8R8X8_UNORM:
         /*case PIPE_FORMAT_B8G8R8X8_SNORM:*/
         case PIPE_FORMAT_B10G10R10A2_UNORM:
+        case PIPE_FORMAT_B10G10R10X2_UNORM:
             return modifier |
                 R300_C0_SEL_B | R300_C1_SEL_G |
                 R300_C2_SEL_R | R300_C3_SEL_A;
@@ -663,7 +677,7 @@ static uint32_t r300_translate_out_fmt(enum pipe_format format)
 
         /* RGBA outputs. */
         case PIPE_FORMAT_R8G8B8X8_UNORM:
-        /*case PIPE_FORMAT_R8G8B8X8_SNORM:*/
+        case PIPE_FORMAT_R8G8B8X8_SNORM:
         case PIPE_FORMAT_R8G8B8A8_UNORM:
         case PIPE_FORMAT_R8G8B8A8_SNORM:
         case PIPE_FORMAT_R10G10B10A2_UNORM:
@@ -679,6 +693,7 @@ static uint32_t r300_translate_out_fmt(enum pipe_format format)
         case PIPE_FORMAT_R16G16B16A16_FLOAT:
         case PIPE_FORMAT_R32_FLOAT:
         case PIPE_FORMAT_R32G32B32A32_FLOAT:
+        case PIPE_FORMAT_R32G32B32X32_FLOAT:
         case PIPE_FORMAT_L16_UNORM:
         case PIPE_FORMAT_L16_SNORM:
         case PIPE_FORMAT_L16_FLOAT:
@@ -687,6 +702,9 @@ static uint32_t r300_translate_out_fmt(enum pipe_format format)
         case PIPE_FORMAT_I16_SNORM:
         case PIPE_FORMAT_I16_FLOAT:
         case PIPE_FORMAT_I32_FLOAT:
+        case PIPE_FORMAT_R16G16B16X16_UNORM:
+        case PIPE_FORMAT_R16G16B16X16_SNORM:
+        case PIPE_FORMAT_R16G16B16X16_FLOAT:
             return modifier |
                 R300_C0_SEL_R | R300_C1_SEL_G |
                 R300_C2_SEL_B | R300_C3_SEL_A;
@@ -695,7 +713,11 @@ static uint32_t r300_translate_out_fmt(enum pipe_format format)
         case PIPE_FORMAT_L16A16_UNORM:
         case PIPE_FORMAT_L16A16_SNORM:
         case PIPE_FORMAT_L16A16_FLOAT:
+        case PIPE_FORMAT_R16A16_UNORM:
+        case PIPE_FORMAT_R16A16_SNORM:
+        case PIPE_FORMAT_R16A16_FLOAT:
         case PIPE_FORMAT_L32A32_FLOAT:
+        case PIPE_FORMAT_R32A32_FLOAT:
             return modifier |
                 R300_C0_SEL_R | R300_C1_SEL_A;
 
@@ -728,10 +750,16 @@ static uint32_t r300_translate_colormask_swizzle(enum pipe_format format)
 
     case PIPE_FORMAT_L8A8_SNORM:
     case PIPE_FORMAT_L8A8_UNORM:
+    case PIPE_FORMAT_R8A8_UNORM:
+    case PIPE_FORMAT_R8A8_SNORM:
     case PIPE_FORMAT_L16A16_UNORM:
     case PIPE_FORMAT_L16A16_SNORM:
     case PIPE_FORMAT_L16A16_FLOAT:
+    case PIPE_FORMAT_R16A16_UNORM:
+    case PIPE_FORMAT_R16A16_SNORM:
+    case PIPE_FORMAT_R16A16_FLOAT:
     case PIPE_FORMAT_L32A32_FLOAT:
+    case PIPE_FORMAT_R32A32_FLOAT:
         return COLORMASK_ARRA;
 
     case PIPE_FORMAT_R8G8_SNORM:
@@ -742,24 +770,34 @@ static uint32_t r300_translate_colormask_swizzle(enum pipe_format format)
     case PIPE_FORMAT_R32G32_FLOAT:
         return COLORMASK_GRRG;
 
-    case PIPE_FORMAT_B5G6R5_UNORM:
-    case PIPE_FORMAT_B5G5R5A1_UNORM:
     case PIPE_FORMAT_B5G5R5X1_UNORM:
-    case PIPE_FORMAT_B4G4R4A4_UNORM:
     case PIPE_FORMAT_B4G4R4X4_UNORM:
-    case PIPE_FORMAT_B8G8R8A8_UNORM:
-    /*case PIPE_FORMAT_B8G8R8A8_SNORM:*/
     case PIPE_FORMAT_B8G8R8X8_UNORM:
     /*case PIPE_FORMAT_B8G8R8X8_SNORM:*/
+    case PIPE_FORMAT_B10G10R10X2_UNORM:
+        return COLORMASK_BGRX;
+
+    case PIPE_FORMAT_B5G6R5_UNORM:
+    case PIPE_FORMAT_B5G5R5A1_UNORM:
+    case PIPE_FORMAT_B4G4R4A4_UNORM:
+    case PIPE_FORMAT_B8G8R8A8_UNORM:
+    /*case PIPE_FORMAT_B8G8R8A8_SNORM:*/
     case PIPE_FORMAT_B10G10R10A2_UNORM:
         return COLORMASK_BGRA;
 
     case PIPE_FORMAT_R8G8B8X8_UNORM:
+    /* RGBX_SNORM formats are broken for an unknown reason */
     /*case PIPE_FORMAT_R8G8B8X8_SNORM:*/
+    /*case PIPE_FORMAT_R10G10B10X2_SNORM:*/
+    case PIPE_FORMAT_R16G16B16X16_UNORM:
+    /*case PIPE_FORMAT_R16G16B16X16_SNORM:*/
+    case PIPE_FORMAT_R16G16B16X16_FLOAT:
+    case PIPE_FORMAT_R32G32B32X32_FLOAT:
+        return COLORMASK_RGBX;
+
     case PIPE_FORMAT_R8G8B8A8_UNORM:
     case PIPE_FORMAT_R8G8B8A8_SNORM:
     case PIPE_FORMAT_R10G10B10A2_UNORM:
-    case PIPE_FORMAT_R10G10B10X2_SNORM:
     case PIPE_FORMAT_R16_UNORM:
     case PIPE_FORMAT_R16G16B16A16_UNORM:
     case PIPE_FORMAT_R16_SNORM:
@@ -978,7 +1016,8 @@ r300_texture_create_object(struct r300_screen *rscreen,
     tex->tex.microtile = microtile;
     tex->tex.macrotile[0] = macrotile;
     tex->tex.stride_in_bytes_override = stride_in_bytes_override;
-    tex->domain = base->flags & R300_RESOURCE_FLAG_TRANSFER ? RADEON_DOMAIN_GTT :
+    tex->domain = (base->flags & R300_RESOURCE_FLAG_TRANSFER ||
+                   base->usage == PIPE_USAGE_STAGING) ? RADEON_DOMAIN_GTT :
                   base->nr_samples > 1 ? RADEON_DOMAIN_VRAM :
                                          RADEON_DOMAIN_VRAM | RADEON_DOMAIN_GTT;
     tex->buf = buffer;

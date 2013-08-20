@@ -66,6 +66,7 @@
 
 #include "main/core.h"
 #include "glsl_symbol_table.h"
+#include "glsl_parser_extras.h"
 #include "ir.h"
 #include "program.h"
 #include "program/hash_table.h"
@@ -540,6 +541,25 @@ cross_validate_globals(struct gl_shader_program *prog,
 	       existing->explicit_location = true;
 	    }
 
+            /* From the GLSL 4.20 specification:
+             * "A link error will result if two compilation units in a program
+             *  specify different integer-constant bindings for the same
+             *  opaque-uniform name.  However, it is not an error to specify a
+             *  binding on some but not all declarations for the same name"
+             */
+            if (var->explicit_binding) {
+               if (existing->explicit_binding &&
+                   var->binding != existing->binding) {
+                  linker_error(prog, "explicit bindings for %s "
+                               "`%s' have differing values\n",
+                               mode_string(var), var->name);
+                  return false;
+               }
+
+               existing->binding = var->binding;
+               existing->explicit_binding = true;
+            }
+
 	    /* Validate layout qualifiers for gl_FragDepth.
 	     *
 	     * From the AMD/ARB_conservative_depth specs:
@@ -938,6 +958,12 @@ link_intrastage_shaders(void *mem_ctx,
    if (!cross_validate_globals(prog, shader_list, num_shaders, false))
       return NULL;
 
+   /* Check that interface blocks defined in multiple shaders are consistent.
+    */
+   if (!validate_intrastage_interface_blocks((const gl_shader **)shader_list,
+                                             num_shaders))
+      return NULL;
+
    /* Check that uniform blocks between shaders for a stage agree. */
    const int num_uniform_blocks =
       link_uniform_blocks(mem_ctx, prog, shader_list, num_shaders,
@@ -1003,8 +1029,7 @@ link_intrastage_shaders(void *mem_ctx,
 
    if (main == NULL) {
       linker_error(prog, "%s shader lacks `main'\n",
-		   (shader_list[0]->Type == GL_VERTEX_SHADER)
-		   ? "vertex" : "fragment");
+		   _mesa_glsl_shader_target_name(shader_list[0]->Type));
       return NULL;
    }
 
@@ -1141,7 +1166,7 @@ update_array_sizes(struct gl_shader_program *prog)
 	    }
 	 }
 
-	 if (size + 1 != var->type->fields.array->length) {
+	 if (size + 1 != var->type->length) {
 	    /* If this is a built-in uniform (i.e., it's backed by some
 	     * fixed-function state), adjust the number of state slots to
 	     * match the new array size.  The number of slots per array entry
@@ -1508,25 +1533,31 @@ static bool
 check_resources(struct gl_context *ctx, struct gl_shader_program *prog)
 {
    static const char *const shader_names[MESA_SHADER_TYPES] = {
-      "vertex", "fragment", "geometry"
+      "vertex", "geometry", "fragment"
    };
 
    const unsigned max_samplers[MESA_SHADER_TYPES] = {
-      ctx->Const.MaxVertexTextureImageUnits,
-      ctx->Const.MaxTextureImageUnits,
-      ctx->Const.MaxGeometryTextureImageUnits
+      ctx->Const.VertexProgram.MaxTextureImageUnits,
+      ctx->Const.GeometryProgram.MaxTextureImageUnits,
+      ctx->Const.FragmentProgram.MaxTextureImageUnits
    };
 
-   const unsigned max_uniform_components[MESA_SHADER_TYPES] = {
+   const unsigned max_default_uniform_components[MESA_SHADER_TYPES] = {
       ctx->Const.VertexProgram.MaxUniformComponents,
-      ctx->Const.FragmentProgram.MaxUniformComponents,
-      0          /* FINISHME: Geometry shaders. */
+      ctx->Const.GeometryProgram.MaxUniformComponents,
+      ctx->Const.FragmentProgram.MaxUniformComponents
+   };
+
+   const unsigned max_combined_uniform_components[MESA_SHADER_TYPES] = {
+      ctx->Const.VertexProgram.MaxCombinedUniformComponents,
+      ctx->Const.GeometryProgram.MaxCombinedUniformComponents,
+      ctx->Const.FragmentProgram.MaxCombinedUniformComponents
    };
 
    const unsigned max_uniform_blocks[MESA_SHADER_TYPES] = {
       ctx->Const.VertexProgram.MaxUniformBlocks,
-      ctx->Const.FragmentProgram.MaxUniformBlocks,
       ctx->Const.GeometryProgram.MaxUniformBlocks,
+      ctx->Const.FragmentProgram.MaxUniformBlocks
    };
 
    for (unsigned i = 0; i < MESA_SHADER_TYPES; i++) {
@@ -1540,7 +1571,22 @@ check_resources(struct gl_context *ctx, struct gl_shader_program *prog)
 		      shader_names[i]);
       }
 
-      if (sh->num_uniform_components > max_uniform_components[i]) {
+      if (sh->num_uniform_components > max_default_uniform_components[i]) {
+         if (ctx->Const.GLSLSkipStrictMaxUniformLimitCheck) {
+            linker_warning(prog, "Too many %s shader default uniform block "
+                           "components, but the driver will try to optimize "
+                           "them out; this is non-portable out-of-spec "
+			   "behavior\n",
+                           shader_names[i]);
+         } else {
+            linker_error(prog, "Too many %s shader default uniform block "
+			 "components",
+                         shader_names[i]);
+         }
+      }
+
+      if (sh->num_combined_uniform_components >
+	  max_combined_uniform_components[i]) {
          if (ctx->Const.GLSLSkipStrictMaxUniformLimitCheck) {
             linker_warning(prog, "Too many %s shader uniform components, "
                            "but the driver will try to optimize them out; "
@@ -1722,6 +1768,12 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 	 if (prog->_LinkedShaders[i] == NULL)
 	    continue;
 
+         if (!validate_interstage_interface_blocks(prog->_LinkedShaders[prev],
+                                                   prog->_LinkedShaders[i])) {
+            linker_error(prog, "interface block mismatch between shader stages\n");
+            goto done;
+         }
+
 	 if (!cross_validate_outputs_to_inputs(prog,
 					       prog->_LinkedShaders[prev],
 					       prog->_LinkedShaders[i]))
@@ -1731,6 +1783,12 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       }
 
       prog->LinkStatus = true;
+   }
+
+
+   for (unsigned int i = 0; i < MESA_SHADER_TYPES; i++) {
+      if (prog->_LinkedShaders[i] != NULL)
+         lower_named_interface_blocks(mem_ctx, prog->_LinkedShaders[i]);
    }
 
    /* Implement the GLSL 1.30+ rule for discard vs infinite loops Do
@@ -1767,7 +1825,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 
       unsigned max_unroll = ctx->ShaderCompilerOptions[i].MaxUnrollIterations;
 
-      while (do_common_optimization(prog->_LinkedShaders[i]->ir, true, false, max_unroll))
+      while (do_common_optimization(prog->_LinkedShaders[i]->ir, true, false, max_unroll, &ctx->ShaderCompilerOptions[i]))
 	 ;
    }
 
@@ -1775,13 +1833,13 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    if (prog->_LinkedShaders[MESA_SHADER_VERTEX] != NULL) {
       link_invalidate_variable_locations(
             prog->_LinkedShaders[MESA_SHADER_VERTEX],
-            VERT_ATTRIB_GENERIC0, VERT_RESULT_VAR0);
+            VERT_ATTRIB_GENERIC0, VARYING_SLOT_VAR0);
    }
    /* FINISHME: Geometry shaders not implemented yet */
    if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT] != NULL) {
       link_invalidate_variable_locations(
             prog->_LinkedShaders[MESA_SHADER_FRAGMENT],
-            FRAG_ATTRIB_VAR0, FRAG_RESULT_DATA0);
+            VARYING_SLOT_VAR0, FRAG_RESULT_DATA0);
    }
 
    /* FINISHME: The value of the max_attribute_index parameter is
@@ -1797,9 +1855,9 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       goto done;
    }
 
-   unsigned prev;
-   for (prev = 0; prev < MESA_SHADER_TYPES; prev++) {
-      if (prog->_LinkedShaders[prev] != NULL)
+   unsigned first;
+   for (first = 0; first < MESA_SHADER_TYPES; first++) {
+      if (prog->_LinkedShaders[first] != NULL)
 	 break;
    }
 
@@ -1811,7 +1869,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
        *     non-zero, but the program object has no vertex or geometry
        *     shader;
        */
-      if (prev >= MESA_SHADER_FRAGMENT) {
+      if (first >= MESA_SHADER_FRAGMENT) {
          linker_error(prog, "Transform feedback varyings specified, but "
                       "no vertex or geometry shader is present.");
          goto done;
@@ -1825,68 +1883,89 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
          goto done;
    }
 
-   for (unsigned i = prev + 1; i < MESA_SHADER_TYPES; i++) {
-      if (prog->_LinkedShaders[i] == NULL)
-	 continue;
-
-      if (!assign_varying_locations(
-				    ctx, mem_ctx, prog, prog->_LinkedShaders[prev], prog->_LinkedShaders[i],
-             i == MESA_SHADER_FRAGMENT ? num_tfeedback_decls : 0,
-             tfeedback_decls))
-	 goto done;
-
-      prev = i;
+   /* Linking the stages in the opposite order (from fragment to vertex)
+    * ensures that inter-shader outputs written to in an earlier stage are
+    * eliminated if they are (transitively) not used in a later stage.
+    */
+   int last, next;
+   for (last = MESA_SHADER_TYPES-1; last >= 0; last--) {
+      if (prog->_LinkedShaders[last] != NULL)
+         break;
    }
 
-   if (prev != MESA_SHADER_FRAGMENT && num_tfeedback_decls != 0) {
-      /* There was no fragment shader, but we still have to assign varying
-       * locations for use by transform feedback.
+   if (last >= 0 && last < MESA_SHADER_FRAGMENT) {
+      gl_shader *const sh = prog->_LinkedShaders[last];
+
+      if (num_tfeedback_decls != 0) {
+         /* There was no fragment shader, but we still have to assign varying
+          * locations for use by transform feedback.
+          */
+         if (!assign_varying_locations(ctx, mem_ctx, prog,
+                                       sh, NULL,
+                                       num_tfeedback_decls, tfeedback_decls))
+            goto done;
+      }
+
+      do_dead_builtin_varyings(ctx, sh, NULL,
+                               num_tfeedback_decls, tfeedback_decls);
+
+      demote_shader_inputs_and_outputs(sh, ir_var_shader_out);
+
+      /* Eliminate code that is now dead due to unused outputs being demoted.
        */
-      if (!assign_varying_locations(
-				    ctx, mem_ctx, prog, prog->_LinkedShaders[prev], NULL, num_tfeedback_decls,
-             tfeedback_decls))
+      while (do_dead_code(sh->ir, false))
+         ;
+   }
+   else if (first == MESA_SHADER_FRAGMENT) {
+      /* If the program only contains a fragment shader...
+       */
+      gl_shader *const sh = prog->_LinkedShaders[first];
+
+      do_dead_builtin_varyings(ctx, NULL, sh,
+                               num_tfeedback_decls, tfeedback_decls);
+
+      demote_shader_inputs_and_outputs(sh, ir_var_shader_in);
+
+      while (do_dead_code(sh->ir, false))
+         ;
+   }
+
+   next = last;
+   for (int i = next - 1; i >= 0; i--) {
+      if (prog->_LinkedShaders[i] == NULL)
+         continue;
+
+      gl_shader *const sh_i = prog->_LinkedShaders[i];
+      gl_shader *const sh_next = prog->_LinkedShaders[next];
+
+      if (!assign_varying_locations(ctx, mem_ctx, prog, sh_i, sh_next,
+                next == MESA_SHADER_FRAGMENT ? num_tfeedback_decls : 0,
+                tfeedback_decls))
          goto done;
+
+      do_dead_builtin_varyings(ctx, sh_i, sh_next,
+                next == MESA_SHADER_FRAGMENT ? num_tfeedback_decls : 0,
+                tfeedback_decls);
+
+      demote_shader_inputs_and_outputs(sh_i, ir_var_shader_out);
+      demote_shader_inputs_and_outputs(sh_next, ir_var_shader_in);
+
+      /* Eliminate code that is now dead due to unused outputs being demoted.
+       */
+      while (do_dead_code(sh_i->ir, false))
+         ;
+      while (do_dead_code(sh_next->ir, false))
+         ;
+
+      /* This must be done after all dead varyings are eliminated. */
+      if (!check_against_varying_limit(ctx, prog, sh_next))
+         goto done;
+
+      next = i;
    }
 
    if (!store_tfeedback_info(ctx, prog, num_tfeedback_decls, tfeedback_decls))
       goto done;
-
-   if (prog->_LinkedShaders[MESA_SHADER_VERTEX] != NULL) {
-      demote_shader_inputs_and_outputs(prog->_LinkedShaders[MESA_SHADER_VERTEX],
-				       ir_var_shader_out);
-
-      /* Eliminate code that is now dead due to unused vertex outputs being
-       * demoted.
-       */
-      while (do_dead_code(prog->_LinkedShaders[MESA_SHADER_VERTEX]->ir, false))
-	 ;
-   }
-
-   if (prog->_LinkedShaders[MESA_SHADER_GEOMETRY] != NULL) {
-      gl_shader *const sh = prog->_LinkedShaders[MESA_SHADER_GEOMETRY];
-
-      demote_shader_inputs_and_outputs(sh, ir_var_shader_in);
-      demote_shader_inputs_and_outputs(sh, ir_var_shader_out);
-
-      /* Eliminate code that is now dead due to unused geometry outputs being
-       * demoted.
-       */
-      while (do_dead_code(prog->_LinkedShaders[MESA_SHADER_GEOMETRY]->ir, false))
-	 ;
-   }
-
-   if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT] != NULL) {
-      gl_shader *const sh = prog->_LinkedShaders[MESA_SHADER_FRAGMENT];
-
-      demote_shader_inputs_and_outputs(sh, ir_var_shader_in);
-
-      /* Eliminate code that is now dead due to unused fragment inputs being
-       * demoted.  This shouldn't actually do anything other than remove
-       * declarations of the (now unused) global variables.
-       */
-      while (do_dead_code(prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->ir, false))
-	 ;
-   }
 
    update_array_sizes(prog);
    link_assign_uniform_locations(prog);

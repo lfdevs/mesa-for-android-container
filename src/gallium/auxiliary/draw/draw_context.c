@@ -37,6 +37,7 @@
 #include "util/u_cpu_detect.h"
 #include "util/u_inlines.h"
 #include "util/u_helpers.h"
+#include "util/u_prim.h"
 #include "draw_context.h"
 #include "draw_vs.h"
 #include "draw_gs.h"
@@ -46,7 +47,7 @@
 #include "gallivm/lp_bld_limits.h"
 #include "draw_llvm.h"
 
-static boolean
+boolean
 draw_get_option_use_llvm(void)
 {
    static boolean first = TRUE;
@@ -57,7 +58,7 @@ draw_get_option_use_llvm(void)
 
 #ifdef PIPE_ARCH_X86
       util_cpu_detect();
-      /* require SSE2 due to LLVM PR6960. */
+      /* require SSE2 due to LLVM PR6960. XXX Might be fixed by now? */
       if (!util_cpu_caps.has_sse2)
          value = FALSE;
 #endif
@@ -76,6 +77,9 @@ draw_create_context(struct pipe_context *pipe, boolean try_llvm)
    struct draw_context *draw = CALLOC_STRUCT( draw_context );
    if (draw == NULL)
       goto err_out;
+
+   /* we need correct cpu caps for disabling denorms in draw_vbo() */
+   util_cpu_detect();
 
 #if HAVE_LLVM
    if (try_llvm && draw_get_option_use_llvm()) {
@@ -137,6 +141,7 @@ boolean draw_init(struct draw_context *draw)
    draw->clip_z = TRUE;
 
    draw->pt.user.planes = (float (*) [DRAW_TOTAL_CLIP_PLANES][4]) &(draw->plane[0]);
+   draw->pt.user.eltMax = ~0;
 
    if (!draw_pipeline_init( draw ))
       return FALSE;
@@ -154,6 +159,19 @@ boolean draw_init(struct draw_context *draw)
       draw->pipe->screen, PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION);
 
    return TRUE;
+}
+
+/*
+ * Called whenever we're starting to draw a new instance.
+ * Some internal structures don't want to have to reset internal
+ * members on each invocation (because their state might have to persist
+ * between multiple primitive restart rendering call) but might have to 
+ * for each new instance. 
+ * This is particularly the case for primitive id's in geometry shader.
+ */
+void draw_new_instance(struct draw_context *draw)
+{
+   draw_geometry_shader_new_instance(draw->gs.geometry_shader);
 }
 
 
@@ -298,21 +316,29 @@ void draw_set_clip_state( struct draw_context *draw,
 /**
  * Set the draw module's viewport state.
  */
-void draw_set_viewport_state( struct draw_context *draw,
-                              const struct pipe_viewport_state *viewport )
+void draw_set_viewport_states( struct draw_context *draw,
+                               unsigned start_slot,
+                               unsigned num_viewports,
+                               const struct pipe_viewport_state *vps )
 {
+   const struct pipe_viewport_state *viewport = vps;
    draw_do_flush(draw, DRAW_FLUSH_PARAMETER_CHANGE);
-   draw->viewport = *viewport; /* struct copy */
-   draw->identity_viewport = (viewport->scale[0] == 1.0f &&
-                              viewport->scale[1] == 1.0f &&
-                              viewport->scale[2] == 1.0f &&
-                              viewport->scale[3] == 1.0f &&
-                              viewport->translate[0] == 0.0f &&
-                              viewport->translate[1] == 0.0f &&
-                              viewport->translate[2] == 0.0f &&
-                              viewport->translate[3] == 0.0f);
 
-   draw_vs_set_viewport( draw, viewport );
+   debug_assert(start_slot < PIPE_MAX_VIEWPORTS);
+   debug_assert((start_slot + num_viewports) <= PIPE_MAX_VIEWPORTS);
+
+   memcpy(draw->viewports + start_slot, vps,
+          sizeof(struct pipe_viewport_state) * num_viewports);
+
+   draw->identity_viewport = (num_viewports == 1) &&
+      (viewport->scale[0] == 1.0f &&
+       viewport->scale[1] == 1.0f &&
+       viewport->scale[2] == 1.0f &&
+       viewport->scale[3] == 1.0f &&
+       viewport->translate[0] == 0.0f &&
+       viewport->translate[1] == 0.0f &&
+       viewport->translate[2] == 0.0f &&
+       viewport->translate[3] == 0.0f);
 }
 
 
@@ -351,9 +377,11 @@ draw_set_vertex_elements(struct draw_context *draw,
  */
 void
 draw_set_mapped_vertex_buffer(struct draw_context *draw,
-                              unsigned attr, const void *buffer)
+                              unsigned attr, const void *buffer,
+                              size_t size)
 {
-   draw->pt.user.vbuffer[attr] = buffer;
+   draw->pt.user.vbuffer[attr].map  = buffer;
+   draw->pt.user.vbuffer[attr].size = size;
 }
 
 
@@ -468,7 +496,7 @@ draw_alloc_extra_vertex_attrib(struct draw_context *draw,
    uint n;
 
    slot = draw_find_shader_output(draw, semantic_name, semantic_index);
-   if (slot > 0) {
+   if (slot >= 0) {
       return slot;
    }
 
@@ -524,9 +552,10 @@ draw_get_shader_info(const struct draw_context *draw)
  * attributes (such as texcoords for AA lines).  The driver can call this
  * function to find those attributes.
  *
- * Zero is returned if the attribute is not found since this is
- * a don't care / undefined situtation.  Returning -1 would be a bit more
- * work for the drivers.
+ * -1 is returned if the attribute is not found since this is
+ * an undefined situation. Note, that zero is valid and can
+ * be used by any of the attributes, because position is not
+ * required to be attribute 0 or even at all present.
  */
 int
 draw_find_shader_output(const struct draw_context *draw,
@@ -549,7 +578,7 @@ draw_find_shader_output(const struct draw_context *draw,
       }
    }
 
-   return 0;
+   return -1;
 }
 
 
@@ -581,18 +610,15 @@ draw_num_shader_outputs(const struct draw_context *draw)
  * This might only be used by software drivers for the time being.
  */
 void
-draw_texture_samplers(struct draw_context *draw,
-                      uint shader,
-                      uint num_samplers,
-                      struct tgsi_sampler **samplers)
+draw_texture_sampler(struct draw_context *draw,
+                     uint shader,
+                     struct tgsi_sampler *sampler)
 {
    if (shader == PIPE_SHADER_VERTEX) {
-      draw->vs.tgsi.num_samplers = num_samplers;
-      draw->vs.tgsi.samplers = samplers;
+      draw->vs.tgsi.sampler = sampler;
    } else {
       debug_assert(shader == PIPE_SHADER_GEOMETRY);
-      draw->gs.tgsi.num_samplers = num_samplers;
-      draw->gs.tgsi.samplers = samplers;
+      draw->gs.tgsi.sampler = sampler;
    }
 }
 
@@ -615,7 +641,8 @@ void draw_set_render( struct draw_context *draw,
  */
 void
 draw_set_indexes(struct draw_context *draw,
-                 const void *elements, unsigned elem_size)
+                 const void *elements, unsigned elem_size,
+                 unsigned elem_buffer_space)
 {
    assert(elem_size == 0 ||
           elem_size == 1 ||
@@ -623,6 +650,10 @@ draw_set_indexes(struct draw_context *draw,
           elem_size == 4);
    draw->pt.user.elts = elements;
    draw->pt.user.eltSizeIB = elem_size;
+   if (elem_size)
+      draw->pt.user.eltMax = elem_buffer_space / elem_size;
+   else
+      draw->pt.user.eltMax = 0;
 }
 
 
@@ -675,6 +706,31 @@ draw_current_shader_position_output(const struct draw_context *draw)
 
 /**
  * Return the index of the shader output which will contain the
+ * viewport index.
+ */
+uint
+draw_current_shader_viewport_index_output(const struct draw_context *draw)
+{
+   if (draw->gs.geometry_shader)
+      return draw->gs.geometry_shader->viewport_index_output;
+   return 0;
+}
+
+/**
+ * Returns true if there's a geometry shader bound and the geometry
+ * shader writes out a viewport index.
+ */
+boolean
+draw_current_shader_uses_viewport_index(const struct draw_context *draw)
+{
+   if (draw->gs.geometry_shader)
+      return draw->gs.geometry_shader->info.writes_viewport_index;
+   return FALSE;
+}
+
+
+/**
+ * Return the index of the shader output which will contain the
  * vertex position.
  */
 uint
@@ -686,7 +742,37 @@ draw_current_shader_clipvertex_output(const struct draw_context *draw)
 uint
 draw_current_shader_clipdistance_output(const struct draw_context *draw, int index)
 {
+   debug_assert(index < PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT);
+   if (draw->gs.geometry_shader)
+      return draw->gs.geometry_shader->clipdistance_output[index];
    return draw->vs.clipdistance_output[index];
+}
+
+
+uint
+draw_current_shader_num_written_clipdistances(const struct draw_context *draw)
+{
+   if (draw->gs.geometry_shader)
+      return draw->gs.geometry_shader->info.num_written_clipdistance;
+   return draw->vs.vertex_shader->info.num_written_clipdistance;
+}
+
+
+uint
+draw_current_shader_culldistance_output(const struct draw_context *draw, int index)
+{
+   debug_assert(index < PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT);
+   if (draw->gs.geometry_shader)
+      return draw->gs.geometry_shader->culldistance_output[index];
+   return draw->vs.vertex_shader->culldistance_output[index];
+}
+
+uint
+draw_current_shader_num_written_culldistances(const struct draw_context *draw)
+{
+   if (draw->gs.geometry_shader)
+      return draw->gs.geometry_shader->info.num_written_culldistance;
+   return draw->vs.vertex_shader->info.num_written_culldistance;
 }
 
 /**
@@ -714,7 +800,9 @@ draw_get_rasterizer_no_cull( struct draw_context *draw,
       rast.scissor = scissor;
       rast.flatshade = flatshade;
       rast.front_ccw = 1;
-      rast.gl_rasterization_rules = draw->rasterizer->gl_rasterization_rules;
+      rast.half_pixel_center = draw->rasterizer->half_pixel_center;
+      rast.bottom_edge_rule = draw->rasterizer->bottom_edge_rule;
+      rast.clip_halfz = draw->rasterizer->clip_halfz;
 
       draw->rasterizer_no_cull[scissor][flatshade] =
          pipe->create_rasterizer_state(pipe, &rast);
@@ -738,22 +826,6 @@ draw_set_mapped_so_targets(struct draw_context *draw,
 }
 
 void
-draw_set_mapped_so_buffers(struct draw_context *draw,
-                           void *buffers[PIPE_MAX_SO_BUFFERS],
-                           unsigned num_buffers)
-{
-}
-
-void
-draw_set_so_state(struct draw_context *draw,
-                  struct pipe_stream_output_info *state)
-{
-   memcpy(&draw->so.state,
-          state,
-          sizeof(struct pipe_stream_output_info));
-}
-
-void
 draw_set_sampler_views(struct draw_context *draw,
                        unsigned shader_stage,
                        struct pipe_sampler_view **views,
@@ -763,6 +835,8 @@ draw_set_sampler_views(struct draw_context *draw,
 
    debug_assert(shader_stage < PIPE_SHADER_TYPES);
    debug_assert(num <= PIPE_MAX_SHADER_SAMPLER_VIEWS);
+
+   draw_do_flush( draw, DRAW_FLUSH_STATE_CHANGE );
 
    for (i = 0; i < num; ++i)
       draw->sampler_views[shader_stage][i] = views[i];
@@ -783,6 +857,8 @@ draw_set_samplers(struct draw_context *draw,
    debug_assert(shader_stage < PIPE_SHADER_TYPES);
    debug_assert(num <= PIPE_MAX_SAMPLERS);
 
+   draw_do_flush( draw, DRAW_FLUSH_STATE_CHANGE );
+
    for (i = 0; i < num; ++i)
       draw->samplers[shader_stage][i] = samplers[i];
    for (i = num; i < PIPE_MAX_SAMPLERS; ++i)
@@ -791,15 +867,15 @@ draw_set_samplers(struct draw_context *draw,
    draw->num_samplers[shader_stage] = num;
 
 #ifdef HAVE_LLVM
-   if (draw->llvm && shader_stage == PIPE_SHADER_VERTEX)
-      draw_llvm_set_sampler_state(draw);
+   if (draw->llvm)
+      draw_llvm_set_sampler_state(draw, shader_stage);
 #endif
 }
 
 void
 draw_set_mapped_texture(struct draw_context *draw,
                         unsigned shader_stage,
-                        unsigned sampler_idx,
+                        unsigned sview_idx,
                         uint32_t width, uint32_t height, uint32_t depth,
                         uint32_t first_level, uint32_t last_level,
                         const void *base_ptr,
@@ -807,16 +883,15 @@ draw_set_mapped_texture(struct draw_context *draw,
                         uint32_t img_stride[PIPE_MAX_TEXTURE_LEVELS],
                         uint32_t mip_offsets[PIPE_MAX_TEXTURE_LEVELS])
 {
-   if (shader_stage == PIPE_SHADER_VERTEX) {
 #ifdef HAVE_LLVM
-      if (draw->llvm)
-         draw_llvm_set_mapped_texture(draw,
-                                      sampler_idx,
-                                      width, height, depth, first_level,
-                                      last_level, base_ptr,
-                                      row_stride, img_stride, mip_offsets);
+   if (draw->llvm)
+      draw_llvm_set_mapped_texture(draw,
+                                   shader_stage,
+                                   sview_idx,
+                                   width, height, depth, first_level,
+                                   last_level, base_ptr,
+                                   row_stride, img_stride, mip_offsets);
 #endif
-   }
 }
 
 /**
@@ -858,3 +933,43 @@ draw_get_shader_param(unsigned shader, enum pipe_shader_cap param)
    return draw_get_shader_param_no_llvm(shader, param);
 }
 
+/**
+ * Enables or disables collection of statistics.
+ *
+ * Draw module is capable of generating statistics for the vertex
+ * processing pipeline. Collection of that data isn't free and so
+ * it's disabled by default. The users of the module can enable
+ * (or disable) this functionality through this function.
+ * The actual data will be emitted through the VBUF interface,
+ * the 'pipeline_statistics' callback to be exact.
+ */
+void
+draw_collect_pipeline_statistics(struct draw_context *draw,
+                                 boolean enable)
+{
+   draw->collect_statistics = enable;
+}
+
+/**
+ * Computes clipper invocation statistics.
+ *
+ * Figures out how many primitives would have been
+ * sent to the clipper given the specified
+ * prim info data.
+ */
+void
+draw_stats_clipper_primitives(struct draw_context *draw,
+                              const struct draw_prim_info *prim_info)
+{
+   if (draw->collect_statistics) {
+      unsigned start, i;
+      for (start = i = 0;
+           i < prim_info->primitive_count;
+           start += prim_info->primitive_lengths[i], i++)
+      {
+         draw->statistics.c_invocations +=
+            u_decomposed_prims_for_vertices(prim_info->prim,
+                                            prim_info->primitive_lengths[i]);
+      }
+   }
+}

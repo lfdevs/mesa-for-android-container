@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nvc0_video.h"
@@ -268,6 +268,9 @@ nvc0_decoder_bsp(struct nvc0_decoder *dec, union pipe_desc desc,
    };
    int num_refs = sizeof(bo_refs)/sizeof(*bo_refs);
 
+   if (!dec->bitplane_bo)
+      num_refs--;
+
 #ifdef NVC0_DEBUG_FENCE
    fence_extra = 4;
 #endif
@@ -309,9 +312,7 @@ nvc0_decoder_bsp(struct nvc0_decoder *dec, union pipe_desc desc,
 
    nvc0_decoder_vp_caps(dec, desc, target, comm_seq, vp_caps, is_ref, refs);
 
-   PUSH_SPACE(push, 6 + (codec == PIPE_VIDEO_CODEC_MPEG4_AVC ? 9 : 7) + fence_extra + 2);
-   if (!dec->bitplane_bo)
-      num_refs--;
+   nouveau_pushbuf_space(push, 6 + (codec == PIPE_VIDEO_CODEC_MPEG4_AVC ? 9 : 7) + fence_extra + 2, num_refs, 0);
    nouveau_pushbuf_refn(push, bo_refs, num_refs);
 
    caps |= 0 << 16; // reset struct comm if flag is set
@@ -406,7 +407,7 @@ nvc0_decoder_bsp(struct nvc0_decoder *dec, union pipe_desc desc,
       do {
          usleep(100);
          if ((spin++ & 0xff) == 0xff) {
-            debug_printf("%u: %u\n", dec->fence_seq, dec->fence_map[0]);
+            debug_printf("b%u: %u\n", dec->fence_seq, dec->fence_map[0]);
             dump_comm_bsp(dec->comm);
          }
       } while (dec->fence_seq > dec->fence_map[0]);

@@ -60,7 +60,8 @@ get_passthrough_fs(struct st_context *st)
    if (!st->passthrough_fs) {
       st->passthrough_fs =
          util_make_fragment_passthrough_shader(st->pipe, TGSI_SEMANTIC_COLOR,
-                                               TGSI_INTERPOLATE_PERSPECTIVE);
+                                               TGSI_INTERPOLATE_PERSPECTIVE,
+                                               TRUE);
    }
 
    return st->passthrough_fs;
@@ -86,8 +87,7 @@ update_fp( struct st_context *st )
 
    /* _NEW_FRAG_CLAMP */
    key.clamp_color = st->clamp_frag_color_in_shader &&
-                     st->ctx->Color._ClampFragmentColor &&
-                     !st->ctx->DrawBuffer->_IntegerColor;
+                     st->ctx->Color._ClampFragmentColor;
 
    st->fp_variant = st_get_fp_variant(st, stfp, &key);
 

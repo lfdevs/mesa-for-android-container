@@ -61,7 +61,6 @@ static void
 lp_rast_begin( struct lp_rasterizer *rast,
                struct lp_scene *scene )
 {
-
    rast->curr_scene = scene;
 
    LP_DBG(DEBUG_RAST, "%s\n", __FUNCTION__);
@@ -87,59 +86,32 @@ lp_rast_end( struct lp_rasterizer *rast )
  */
 static void
 lp_rast_tile_begin(struct lp_rasterizer_task *task,
-                   const struct cmd_bin *bin)
+                   const struct cmd_bin *bin,
+                   int x, int y)
 {
-   const struct lp_scene *scene = task->scene;
-   enum lp_texture_usage usage;
-
-   LP_DBG(DEBUG_RAST, "%s %d,%d\n", __FUNCTION__, bin->x, bin->y);
+   LP_DBG(DEBUG_RAST, "%s %d,%d\n", __FUNCTION__, x, y);
 
    task->bin = bin;
-   task->x = bin->x * TILE_SIZE;
-   task->y = bin->y * TILE_SIZE;
+   task->x = x * TILE_SIZE;
+   task->y = y * TILE_SIZE;
+   task->width = TILE_SIZE + x * TILE_SIZE > task->scene->fb.width ?
+                    task->scene->fb.width - x * TILE_SIZE : TILE_SIZE;
+   task->height = TILE_SIZE + y * TILE_SIZE > task->scene->fb.height ?
+                    task->scene->fb.height - y * TILE_SIZE : TILE_SIZE;
 
-   /* reset pointers to color tile(s) */
+   task->thread_data.vis_counter = 0;
+   task->ps_invocations = 0;
+
+   /* reset pointers to color and depth tile(s) */
    memset(task->color_tiles, 0, sizeof(task->color_tiles));
-
-   /* get pointer to depth/stencil tile */
-   {
-      struct pipe_surface *zsbuf = task->scene->fb.zsbuf;
-      if (zsbuf) {
-         struct llvmpipe_resource *lpt = llvmpipe_resource(zsbuf->texture);
-
-         if (scene->has_depthstencil_clear)
-            usage = LP_TEX_USAGE_WRITE_ALL;
-         else
-            usage = LP_TEX_USAGE_READ_WRITE;
-
-         /* "prime" the tile: convert data from linear to tiled if necessary
-          * and update the tile's layout info.
-          */
-         (void) llvmpipe_get_texture_tile(lpt,
-                                          zsbuf->u.tex.first_layer,
-                                          zsbuf->u.tex.level,
-                                          usage,
-                                          task->x,
-                                          task->y);
-         /* Get actual pointer to the tile data.  Note that depth/stencil
-          * data is tiled differently than color data.
-          */
-         task->depth_tile = lp_rast_get_depth_block_pointer(task,
-                                                            task->x,
-                                                            task->y);
-
-         assert(task->depth_tile);
-      }
-      else {
-         task->depth_tile = NULL;
-      }
-   }
+   task->depth_tile = NULL;
 }
 
 
 /**
  * Clear the rasterizer's current color tile.
  * This is a bin command called during bin processing.
+ * Clear commands always clear all bound layers.
  */
 static void
 lp_rast_clear_color(struct lp_rasterizer_task *task,
@@ -165,42 +137,26 @@ lp_rast_clear_color(struct lp_rasterizer_task *task,
 
          for (i = 0; i < scene->fb.nr_cbufs; i++) {
             enum pipe_format format = scene->fb.cbufs[i]->format;
-            /*
-             * XXX the format_write_4i/ui functions do clamping to max value
-             * and I'm not sure that's actually right - spec doesn't seem to
-             * say much about that topic. If it is should probably adjust the
-             * border color handling to do the same. If not and chopping off
-             * bits is the way to go, the write_4i and write_4ui functions
-             * would be identical.
-             */
-            if (util_format_is_pure_sint(format)) {
-               int rgba[4];
-               rgba[0] = arg.clear_color.i[0];
-               rgba[1] = arg.clear_color.i[1];
-               rgba[2] = arg.clear_color.i[2];
-               rgba[3] = arg.clear_color.i[3];
 
-               util_format_write_4i(format, rgba, 0, &uc, 0, 0, 0, 1, 1);
+            if (util_format_is_pure_sint(format)) {
+               util_format_write_4i(format, arg.clear_color.i, 0, &uc, 0, 0, 0, 1, 1);
             }
             else {
-               unsigned rgba[4];
-               rgba[0] = arg.clear_color.ui[0];
-               rgba[1] = arg.clear_color.ui[1];
-               rgba[2] = arg.clear_color.ui[2];
-               rgba[3] = arg.clear_color.ui[3];
-
                assert(util_format_is_pure_uint(format));
-               util_format_write_4ui(format, rgba, 0, &uc, 0, 0, 0, 1, 1);
+               util_format_write_4ui(format, arg.clear_color.ui, 0, &uc, 0, 0, 0, 1, 1);
             }
 
-            util_fill_rect(scene->cbufs[i].map,
-                           scene->fb.cbufs[i]->format,
-                           scene->cbufs[i].stride,
-                           task->x,
-                           task->y,
-                           TILE_SIZE,
-                           TILE_SIZE,
-                           &uc);
+            util_fill_box(scene->cbufs[i].map,
+                          format,
+                          scene->cbufs[i].stride,
+                          scene->cbufs[i].layer_stride,
+                          task->x,
+                          task->y,
+                          0,
+                          task->width,
+                          task->height,
+                          scene->fb_max_layer + 1,
+                          &uc);
          }
       }
       else {
@@ -217,18 +173,20 @@ lp_rast_clear_color(struct lp_rasterizer_task *task,
                     clear_color[3]);
 
          for (i = 0; i < scene->fb.nr_cbufs; i++) {
-
             util_pack_color(arg.clear_color.f,
                             scene->fb.cbufs[i]->format, &uc);
 
-            util_fill_rect(scene->cbufs[i].map,
-                           scene->fb.cbufs[i]->format,
-                           scene->cbufs[i].stride,
-                           task->x,
-                           task->y,
-                           TILE_SIZE,
-                           TILE_SIZE,
-                           &uc);
+            util_fill_box(scene->cbufs[i].map,
+                          scene->fb.cbufs[i]->format,
+                          scene->cbufs[i].stride,
+                          scene->cbufs[i].layer_stride,
+                          task->x,
+                          task->y,
+                          0,
+                          task->width,
+                          task->height,
+                          scene->fb_max_layer + 1,
+                          &uc);
          }
       }
    }
@@ -239,89 +197,117 @@ lp_rast_clear_color(struct lp_rasterizer_task *task,
 
 
 
-
-
 /**
  * Clear the rasterizer's current z/stencil tile.
  * This is a bin command called during bin processing.
+ * Clear commands always clear all bound layers.
  */
 static void
 lp_rast_clear_zstencil(struct lp_rasterizer_task *task,
                        const union lp_rast_cmd_arg arg)
 {
    const struct lp_scene *scene = task->scene;
-   uint32_t clear_value = arg.clear_zstencil.value;
-   uint32_t clear_mask = arg.clear_zstencil.mask;
-   const unsigned height = TILE_SIZE / TILE_VECTOR_HEIGHT;
-   const unsigned width = TILE_SIZE * TILE_VECTOR_HEIGHT;
-   const unsigned block_size = scene->zsbuf.blocksize;
-   const unsigned dst_stride = scene->zsbuf.stride * TILE_VECTOR_HEIGHT;
+   uint64_t clear_value64 = arg.clear_zstencil.value;
+   uint64_t clear_mask64 = arg.clear_zstencil.mask;
+   uint32_t clear_value = (uint32_t) clear_value64;
+   uint32_t clear_mask = (uint32_t) clear_mask64;
+   const unsigned height = task->height;
+   const unsigned width = task->width;
+   const unsigned dst_stride = scene->zsbuf.stride;
    uint8_t *dst;
    unsigned i, j;
+   unsigned block_size;
 
    LP_DBG(DEBUG_RAST, "%s: value=0x%08x, mask=0x%08x\n",
            __FUNCTION__, clear_value, clear_mask);
 
    /*
-    * Clear the area of the swizzled depth/depth buffer matching this tile, in
-    * stripes of TILE_VECTOR_HEIGHT x TILE_SIZE at a time.
-    *
-    * The swizzled depth format is such that the depths for
-    * TILE_VECTOR_HEIGHT x TILE_VECTOR_WIDTH pixels have consecutive offsets.
+    * Clear the area of the depth/depth buffer matching this tile.
     */
 
-   dst = task->depth_tile;
+   if (scene->fb.zsbuf) {
+      unsigned layer;
+      uint8_t *dst_layer = lp_rast_get_unswizzled_depth_tile_pointer(task, LP_TEX_USAGE_READ_WRITE);
+      block_size = util_format_get_blocksize(scene->fb.zsbuf->format);
 
-   clear_value &= clear_mask;
+      clear_value &= clear_mask;
 
-   switch (block_size) {
-   case 1:
-      assert(clear_mask == 0xff);
-      memset(dst, (uint8_t) clear_value, height * width);
-      break;
-   case 2:
-      if (clear_mask == 0xffff) {
-         for (i = 0; i < height; i++) {
-            uint16_t *row = (uint16_t *)dst;
-            for (j = 0; j < width; j++)
-               *row++ = (uint16_t) clear_value;
-            dst += dst_stride;
-         }
-      }
-      else {
-         for (i = 0; i < height; i++) {
-            uint16_t *row = (uint16_t *)dst;
-            for (j = 0; j < width; j++) {
-               uint16_t tmp = ~clear_mask & *row;
-               *row++ = clear_value | tmp;
+      for (layer = 0; layer <= scene->fb_max_layer; layer++) {
+         dst = dst_layer;
+
+         switch (block_size) {
+         case 1:
+            assert(clear_mask == 0xff);
+            memset(dst, (uint8_t) clear_value, height * width);
+            break;
+         case 2:
+            if (clear_mask == 0xffff) {
+               for (i = 0; i < height; i++) {
+                  uint16_t *row = (uint16_t *)dst;
+                  for (j = 0; j < width; j++)
+                     *row++ = (uint16_t) clear_value;
+                  dst += dst_stride;
+               }
             }
-            dst += dst_stride;
-         }
-      }
-      break;
-   case 4:
-      if (clear_mask == 0xffffffff) {
-         for (i = 0; i < height; i++) {
-            uint32_t *row = (uint32_t *)dst;
-            for (j = 0; j < width; j++)
-               *row++ = clear_value;
-            dst += dst_stride;
-         }
-      }
-      else {
-         for (i = 0; i < height; i++) {
-            uint32_t *row = (uint32_t *)dst;
-            for (j = 0; j < width; j++) {
-               uint32_t tmp = ~clear_mask & *row;
-               *row++ = clear_value | tmp;
+            else {
+               for (i = 0; i < height; i++) {
+                  uint16_t *row = (uint16_t *)dst;
+                  for (j = 0; j < width; j++) {
+                     uint16_t tmp = ~clear_mask & *row;
+                     *row++ = clear_value | tmp;
+                  }
+                  dst += dst_stride;
+               }
             }
-            dst += dst_stride;
+            break;
+         case 4:
+            if (clear_mask == 0xffffffff) {
+               for (i = 0; i < height; i++) {
+                  uint32_t *row = (uint32_t *)dst;
+                  for (j = 0; j < width; j++)
+                     *row++ = clear_value;
+                  dst += dst_stride;
+               }
+            }
+            else {
+               for (i = 0; i < height; i++) {
+                  uint32_t *row = (uint32_t *)dst;
+                  for (j = 0; j < width; j++) {
+                     uint32_t tmp = ~clear_mask & *row;
+                     *row++ = clear_value | tmp;
+                  }
+                  dst += dst_stride;
+               }
+            }
+            break;
+         case 8:
+            clear_value64 &= clear_mask64;
+            if (clear_mask64 == 0xffffffffffULL) {
+               for (i = 0; i < height; i++) {
+                  uint64_t *row = (uint64_t *)dst;
+                  for (j = 0; j < width; j++)
+                     *row++ = clear_value64;
+                  dst += dst_stride;
+               }
+            }
+            else {
+               for (i = 0; i < height; i++) {
+                  uint64_t *row = (uint64_t *)dst;
+                  for (j = 0; j < width; j++) {
+                     uint64_t tmp = ~clear_mask64 & *row;
+                     *row++ = clear_value64 | tmp;
+                  }
+                  dst += dst_stride;
+               }
+            }
+            break;
+
+         default:
+            assert(0);
+            break;
          }
+         dst_layer += scene->zsbuf.layer_stride;
       }
-      break;
-   default:
-      assert(0);
-      break;
    }
 }
 
@@ -358,22 +344,27 @@ lp_rast_shade_tile(struct lp_rasterizer_task *task,
    variant = state->variant;
 
    /* render the whole 64x64 tile in 4x4 chunks */
-   for (y = 0; y < TILE_SIZE; y += 4){
-      for (x = 0; x < TILE_SIZE; x += 4) {
+   for (y = 0; y < task->height; y += 4){
+      for (x = 0; x < task->width; x += 4) {
          uint8_t *color[PIPE_MAX_COLOR_BUFS];
          unsigned stride[PIPE_MAX_COLOR_BUFS];
-         uint32_t *depth;
+         uint8_t *depth = NULL;
+         unsigned depth_stride = 0;
          unsigned i;
 
          /* color buffer */
          for (i = 0; i < scene->fb.nr_cbufs; i++){
             stride[i] = scene->cbufs[i].stride;
-
-            color[i] = lp_rast_get_unswizzled_color_block_pointer(task, i, tile_x + x, tile_y + y);
+            color[i] = lp_rast_get_unswizzled_color_block_pointer(task, i, tile_x + x,
+                                                                  tile_y + y, inputs->layer);
          }
 
          /* depth buffer */
-         depth = lp_rast_get_depth_block_pointer(task, tile_x + x, tile_y + y);
+         if (scene->zsbuf.map) {
+            depth = lp_rast_get_unswizzled_depth_block_pointer(task, tile_x + x,
+                                                               tile_y + y, inputs->layer);
+            depth_stride = scene->zsbuf.stride;
+         }
 
          /* run shader on 4x4 block */
          BEGIN_JIT_CALL(state, task);
@@ -386,8 +377,9 @@ lp_rast_shade_tile(struct lp_rasterizer_task *task,
                                             color,
                                             depth,
                                             0xffff,
-                                            &task->vis_counter,
-                                            stride);
+                                            &task->thread_data,
+                                            stride,
+                                            depth_stride);
          END_JIT_CALL();
       }
    }
@@ -431,7 +423,8 @@ lp_rast_shade_quads_mask(struct lp_rasterizer_task *task,
    const struct lp_scene *scene = task->scene;
    uint8_t *color[PIPE_MAX_COLOR_BUFS];
    unsigned stride[PIPE_MAX_COLOR_BUFS];
-   void *depth;
+   uint8_t *depth = NULL;
+   unsigned depth_stride = 0;
    unsigned i;
 
    assert(state);
@@ -448,30 +441,42 @@ lp_rast_shade_quads_mask(struct lp_rasterizer_task *task,
    /* color buffer */
    for (i = 0; i < scene->fb.nr_cbufs; i++) {
       stride[i] = scene->cbufs[i].stride;
-
-      color[i] = lp_rast_get_unswizzled_color_block_pointer(task, i, x, y);
+      color[i] = lp_rast_get_unswizzled_color_block_pointer(task, i, x, y, inputs->layer);
    }
 
    /* depth buffer */
-   depth = lp_rast_get_depth_block_pointer(task, x, y);
-
+   if (scene->zsbuf.map) {
+      depth_stride = scene->zsbuf.stride;
+      depth = lp_rast_get_unswizzled_depth_block_pointer(task, x, y, inputs->layer);
+   }
 
    assert(lp_check_alignment(state->jit_context.u8_blend_color, 16));
 
-   /* run shader on 4x4 block */
-   BEGIN_JIT_CALL(state, task);
-   variant->jit_function[RAST_EDGE_TEST](&state->jit_context,
-                                         x, y,
-                                         inputs->frontfacing,
-                                         GET_A0(inputs),
-                                         GET_DADX(inputs),
-                                         GET_DADY(inputs),
-                                         color,
-                                         depth,
-                                         mask,
-                                         &task->vis_counter,
-                                         stride);
-   END_JIT_CALL();
+   /*
+    * The rasterizer may produce fragments outside our
+    * allocated 4x4 blocks hence need to filter them out here.
+    */
+   if ((x % TILE_SIZE) < task->width && (y % TILE_SIZE) < task->height) {
+      /* not very accurate would need a popcount on the mask */
+      /* always count this not worth bothering? */
+      task->ps_invocations++;
+
+      /* run shader on 4x4 block */
+      BEGIN_JIT_CALL(state, task);
+      variant->jit_function[RAST_EDGE_TEST](&state->jit_context,
+                                            x, y,
+                                            inputs->frontfacing,
+                                            GET_A0(inputs),
+                                            GET_DADX(inputs),
+                                            GET_DADY(inputs),
+                                            color,
+                                            depth,
+                                            mask,
+                                            &task->thread_data,
+                                            stride,
+                                            depth_stride);
+      END_JIT_CALL();
+   }
 }
 
 
@@ -487,21 +492,18 @@ lp_rast_begin_query(struct lp_rasterizer_task *task,
 {
    struct llvmpipe_query *pq = arg.query_obj;
 
-   assert(task->query[pq->type] == NULL);
-
    switch (pq->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
-      task->vis_counter = 0;
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
+      pq->start[task->thread_index] = task->thread_data.vis_counter;
       break;
-   case PIPE_QUERY_PRIMITIVES_GENERATED:
-   case PIPE_QUERY_PRIMITIVES_EMITTED:
+   case PIPE_QUERY_PIPELINE_STATISTICS:
+      pq->start[task->thread_index] = task->ps_invocations;
       break;
    default:
       assert(0);
       break;
    }
-
-   task->query[pq->type] = pq;
 }
 
 
@@ -515,25 +517,25 @@ lp_rast_end_query(struct lp_rasterizer_task *task,
                   const union lp_rast_cmd_arg arg)
 {
    struct llvmpipe_query *pq = arg.query_obj;
-   assert(task->query[pq->type] == pq || pq->type == PIPE_QUERY_TIMESTAMP);
 
    switch (pq->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
-      pq->count[task->thread_index] += task->vis_counter;
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
+      pq->end[task->thread_index] +=
+         task->thread_data.vis_counter - pq->start[task->thread_index];
+      pq->start[task->thread_index] = 0;
       break;
    case PIPE_QUERY_TIMESTAMP:
-      pq->count[task->thread_index] = os_time_get_nano();
+      pq->end[task->thread_index] = os_time_get_nano();
       break;
-   case PIPE_QUERY_PRIMITIVES_GENERATED:
-   case PIPE_QUERY_PRIMITIVES_EMITTED:
+   case PIPE_QUERY_PIPELINE_STATISTICS:
+      pq->end[task->thread_index] +=
+         task->ps_invocations - pq->start[task->thread_index];
+      pq->start[task->thread_index] = 0;
       break;
    default:
       assert(0);
       break;
-   }
-
-   if (task->query[pq->type] == pq) {
-      task->query[pq->type] = NULL;
    }
 }
 
@@ -555,10 +557,8 @@ lp_rast_tile_end(struct lp_rasterizer_task *task)
 {
    unsigned i;
 
-   for (i = 0; i < PIPE_QUERY_TYPES; ++i) {
-      if (task->query[i]) {
-         lp_rast_end_query(task, lp_rast_arg_query(task->query[i]));
-      }
+   for (i = 0; i < task->scene->num_active_queries; ++i) {
+      lp_rast_end_query(task, lp_rast_arg_query(task->scene->active_queries[i]));
    }
 
    /* debug */
@@ -593,13 +593,14 @@ static lp_rast_cmd_func dispatch[LP_RAST_OP_MAX] =
 
 static void
 do_rasterize_bin(struct lp_rasterizer_task *task,
-                 const struct cmd_bin *bin)
+                 const struct cmd_bin *bin,
+                 int x, int y)
 {
    const struct cmd_block *block;
    unsigned k;
 
    if (0)
-      lp_debug_bin(bin);
+      lp_debug_bin(bin, x, y);
 
    for (block = bin->head; block; block = block->next) {
       for (k = 0; k < block->count; k++) {
@@ -618,11 +619,11 @@ do_rasterize_bin(struct lp_rasterizer_task *task,
  */
 static void
 rasterize_bin(struct lp_rasterizer_task *task,
-              const struct cmd_bin *bin )
+              const struct cmd_bin *bin, int x, int y )
 {
-   lp_rast_tile_begin( task, bin );
+   lp_rast_tile_begin( task, bin, x, y );
 
-   do_rasterize_bin(task, bin);
+   do_rasterize_bin(task, bin, x, y);
 
    lp_rast_tile_end(task);
 
@@ -664,27 +665,16 @@ rasterize_scene(struct lp_rasterizer_task *task,
 
    if (!task->rast->no_rast && !scene->discard) {
       /* loop over scene bins, rasterize each */
-#if 0
-      {
-         unsigned i, j;
-         for (i = 0; i < scene->tiles_x; i++) {
-            for (j = 0; j < scene->tiles_y; j++) {
-               struct cmd_bin *bin = lp_scene_get_bin(scene, i, j);
-               rasterize_bin(task, bin, i, j);
-            }
-         }
-      }
-#else
       {
          struct cmd_bin *bin;
+         int i, j;
 
          assert(scene);
-         while ((bin = lp_scene_bin_iter_next(scene))) {
+         while ((bin = lp_scene_bin_iter_next(scene, &i, &j))) {
             if (!is_empty_bin( bin ))
-               rasterize_bin(task, bin);
+               rasterize_bin(task, bin, i, j);
          }
       }
-#endif
    }
 
 
@@ -761,6 +751,12 @@ static PIPE_THREAD_ROUTINE( thread_function, init_data )
    struct lp_rasterizer_task *task = (struct lp_rasterizer_task *) init_data;
    struct lp_rasterizer *rast = task->rast;
    boolean debug = false;
+   unsigned fpstate = util_fpstate_get();
+
+   /* Make sure that denorms are treated like zeros. This is 
+    * the behavior required by D3D10. OpenGL doesn't care.
+    */
+   util_fpstate_set_denorms_to_zero(fpstate);
 
    while (1) {
       /* wait for work */
@@ -866,8 +862,6 @@ lp_rast_create( unsigned num_threads )
 
    /* for synchronizing rasterization threads */
    pipe_barrier_init( &rast->barrier, rast->num_threads );
-
-   memset(lp_swizzled_cbuf, 0, sizeof lp_swizzled_cbuf);
 
    memset(lp_dummy_tile, 0, sizeof lp_dummy_tile);
 

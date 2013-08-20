@@ -81,7 +81,7 @@ struct sp_fragment_shader_variant
 
    void (*prepare)(const struct sp_fragment_shader_variant *shader,
 		   struct tgsi_exec_machine *machine,
-		   struct tgsi_sampler **samplers);
+		   struct tgsi_sampler *sampler);
 
    unsigned (*run)(const struct sp_fragment_shader_variant *shader,
 		   struct tgsi_exec_machine *machine,
@@ -154,6 +154,14 @@ softpipe_set_framebuffer_state(struct pipe_context *,
 
 void
 softpipe_update_derived(struct softpipe_context *softpipe, unsigned prim);
+
+void
+softpipe_set_sampler_views(struct pipe_context *pipe,
+                           unsigned shader,
+                           unsigned start,
+                           unsigned num,
+                           struct pipe_sampler_view **views);
+
 
 void
 softpipe_draw_vbo(struct pipe_context *pipe,

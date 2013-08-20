@@ -4,11 +4,11 @@ AM_CFLAGS = \
 	$(X11_CFLAGS) \
 	$(PTHREAD_CFLAGS)
 AM_CPPFLAGS = \
-	-I$(top_builddir)/src/gtest/include \
-	-I$(top_builddir)/src/mapi \
-	-I$(top_builddir)/src/mesa \
-	-I$(top_builddir)/include \
-	$(API_DEFINES) $(DEFINES) $(INCLUDE_DIRS)
+	-I$(top_srcdir)/src/gtest/include \
+	-I$(top_srcdir)/src/mapi \
+	-I$(top_srcdir)/src/mesa \
+	-I$(top_srcdir)/include \
+	$(DEFINES) $(INCLUDE_DIRS)
 
 TESTS = main-test
 check_PROGRAMS = main-test

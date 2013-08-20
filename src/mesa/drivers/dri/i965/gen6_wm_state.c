@@ -37,8 +37,7 @@
 static void
 gen6_upload_wm_push_constants(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FRAGMENT_PROGRAM */
    const struct brw_fragment_program *fp =
       brw_fragment_program_const(brw->fragment_program);
@@ -92,8 +91,7 @@ const struct brw_tracked_state gen6_wm_push_constants = {
 static void
 upload_wm_state(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    const struct brw_fragment_program *fp =
       brw_fragment_program_const(brw->fragment_program);
    uint32_t dw2, dw4, dw5, dw6;
@@ -171,7 +169,7 @@ upload_wm_state(struct brw_context *brw)
       dw5 |= GEN6_WM_POLYGON_STIPPLE_ENABLE;
 
    /* BRW_NEW_FRAGMENT_PROGRAM */
-   if (fp->program.Base.InputsRead & FRAG_BIT_WPOS)
+   if (fp->program.Base.InputsRead & VARYING_BIT_POS)
       dw5 |= GEN6_WM_USES_SOURCE_DEPTH | GEN6_WM_USES_SOURCE_W;
    if (fp->program.Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
       dw5 |= GEN6_WM_COMPUTED_DEPTH;

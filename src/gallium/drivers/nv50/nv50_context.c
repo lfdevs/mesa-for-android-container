@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "pipe/p_defines.h"
@@ -34,7 +34,7 @@
 static void
 nv50_flush(struct pipe_context *pipe,
            struct pipe_fence_handle **fence,
-           enum pipe_flush_flags flags)
+           unsigned flags)
 {
    struct nouveau_screen *screen = nouveau_screen(pipe->screen);
 
@@ -258,7 +258,18 @@ nv50_create(struct pipe_screen *pscreen, void *priv)
    draw_set_rasterize_stage(nv50->draw, nv50_draw_render_stage(nv50));
 #endif
 
-   nouveau_context_init_vdec(&nv50->base);
+   if (screen->base.device->chipset < 0x84) {
+      /* PMPEG */
+      nouveau_context_init_vdec(&nv50->base);
+   } else if (screen->base.device->chipset < 0x98 ||
+              screen->base.device->chipset == 0xa0) {
+      /* VP2 */
+      pipe->create_video_decoder = nv84_create_decoder;
+      pipe->create_video_buffer = nv84_video_buffer_create;
+   } else {
+      /* Unsupported, but need to init pointers. */
+      nouveau_context_init_vdec(&nv50->base);
+   }
 
    flags = NOUVEAU_BO_VRAM | NOUVEAU_BO_RD;
 

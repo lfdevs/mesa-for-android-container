@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.5
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /** 
@@ -29,7 +29,6 @@
  */
 
 #include "glheader.h"
-#include "mfeatures.h"
 #include "bufferobj.h"
 #include "colormac.h"
 #include "colortab.h"
@@ -661,7 +660,7 @@ update_texture_state( struct gl_context *ctx )
    if (fprog) {
       const GLuint coordMask = (1 << MAX_TEXTURE_COORD_UNITS) - 1;
       ctx->Texture._EnabledCoordUnits
-         = (fprog->InputsRead >> FRAG_ATTRIB_TEX0) & coordMask;
+         = (fprog->InputsRead >> VARYING_SLOT_TEX0) & coordMask;
    }
    else {
       ctx->Texture._EnabledCoordUnits = enabledFragUnits;
@@ -707,6 +706,8 @@ alloc_proxy_textures( struct gl_context *ctx )
     * values!
     */
    static const GLenum targets[] = {
+      GL_TEXTURE_2D_MULTISAMPLE,
+      GL_TEXTURE_2D_MULTISAMPLE_ARRAY,
       GL_TEXTURE_CUBE_MAP_ARRAY,
       GL_TEXTURE_BUFFER,
       GL_TEXTURE_2D_ARRAY_EXT,

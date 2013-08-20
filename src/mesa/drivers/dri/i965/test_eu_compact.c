@@ -32,7 +32,6 @@ static bool
 test_compact_instruction(struct brw_compile *p, struct brw_instruction src)
 {
    struct brw_context *brw = p->brw;
-   struct intel_context *intel = &brw->intel;
 
    struct brw_compact_instruction dst;
    memset(&dst, 0xd0, sizeof(dst));
@@ -40,9 +39,9 @@ test_compact_instruction(struct brw_compile *p, struct brw_instruction src)
    if (brw_try_compact_instruction(p, &dst, &src)) {
       struct brw_instruction uncompacted;
 
-      brw_uncompact_instruction(intel, &uncompacted, &dst);
+      brw_uncompact_instruction(brw, &uncompacted, &dst);
       if (memcmp(&uncompacted, &src, sizeof(src))) {
-	 brw_debug_compact_uncompact(intel, &src, &uncompacted);
+	 brw_debug_compact_uncompact(brw, &src, &uncompacted);
 	 return false;
       }
    } else {
@@ -52,7 +51,7 @@ test_compact_instruction(struct brw_compile *p, struct brw_instruction src)
       if (memcmp(&unchanged, &dst, sizeof(dst))) {
 	 fprintf(stderr, "Failed to compact, but dst changed\n");
 	 fprintf(stderr, "  Instruction: ");
-	 brw_disasm(stderr, &src, intel->gen);
+	 brw_disasm(stderr, &src, brw->gen);
 	 return false;
       }
    }
@@ -296,11 +295,10 @@ int
 main(int argc, char **argv)
 {
    struct brw_context *brw = calloc(1, sizeof(*brw));
-   struct intel_context *intel = &brw->intel;
-   intel->gen = 6;
+   brw->gen = 6;
    bool fail = false;
 
-   for (intel->gen = 6; intel->gen <= 7; intel->gen++) {
+   for (brw->gen = 6; brw->gen <= 7; brw->gen++) {
       fail |= run_tests(brw);
    }
 

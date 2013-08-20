@@ -50,11 +50,13 @@ ir_variable::clone(void *mem_ctx, struct hash_table *ht) const
    var->interpolation = this->interpolation;
    var->location = this->location;
    var->index = this->index;
+   var->binding = this->binding;
    var->warn_extension = this->warn_extension;
    var->origin_upper_left = this->origin_upper_left;
    var->pixel_center_integer = this->pixel_center_integer;
    var->explicit_location = this->explicit_location;
    var->explicit_index = this->explicit_index;
+   var->explicit_binding = this->explicit_binding;
    var->has_initializer = this->has_initializer;
    var->depth_layout = this->depth_layout;
 
@@ -243,6 +245,7 @@ ir_texture::clone(void *mem_ctx, struct hash_table *ht) const
 
    switch (this->op) {
    case ir_tex:
+   case ir_lod:
       break;
    case ir_txb:
       new_tex->lod_info.bias = this->lod_info.bias->clone(mem_ctx, ht);
@@ -251,6 +254,9 @@ ir_texture::clone(void *mem_ctx, struct hash_table *ht) const
    case ir_txf:
    case ir_txs:
       new_tex->lod_info.lod = this->lod_info.lod->clone(mem_ctx, ht);
+      break;
+   case ir_txf_ms:
+      new_tex->lod_info.sample_index = this->lod_info.sample_index->clone(mem_ctx, ht);
       break;
    case ir_txd:
       new_tex->lod_info.grad.dPdx = this->lod_info.grad.dPdx->clone(mem_ctx, ht);

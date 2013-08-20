@@ -49,8 +49,6 @@ struct brw_gs_prog_key {
 
    GLuint pv_first:1;
    GLuint need_gs_prog:1;
-   GLuint userclip_active:1;
-   GLuint rasterizer_discard:1;
 
    /**
     * Number of varyings that are output to transform feedback.
@@ -59,7 +57,7 @@ struct brw_gs_prog_key {
 
    /**
     * Map from the index of a transform feedback binding table entry to the
-    * gl_vert_result that should be streamed out through that binding table
+    * gl_varying_slot that should be streamed out through that binding table
     * entry.
     */
    unsigned char transform_feedback_bindings[BRW_MAX_SOL_BINDINGS];
@@ -103,8 +101,6 @@ struct brw_gs_compile {
 
    struct brw_vue_map vue_map;
 };
-
-#define ATTR_SIZE  (4*4)
 
 void brw_gs_quads( struct brw_gs_compile *c, struct brw_gs_prog_key *key );
 void brw_gs_quad_strip( struct brw_gs_compile *c, struct brw_gs_prog_key *key );

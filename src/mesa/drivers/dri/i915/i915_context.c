@@ -31,6 +31,7 @@
 #include "main/macros.h"
 #include "main/version.h"
 #include "main/vtxfmt.h"
+#include "intel_chipset.h"
 #include "intel_tris.h"
 #include "tnl/t_context.h"
 #include "tnl/t_pipeline.h"
@@ -43,8 +44,6 @@
 
 #include "i915_reg.h"
 #include "i915_program.h"
-
-#include "intel_span.h"
 
 /***************************************
  * Mesa's Driver Functions
@@ -104,6 +103,8 @@ intel_init_texture_formats(struct gl_context *ctx)
    if (intel_screen->deviceID != PCI_CHIP_I830_M &&
        intel_screen->deviceID != PCI_CHIP_845_G)
       ctx->TextureFormatSupported[MESA_FORMAT_XRGB8888] = true;
+   if (intel->gen == 3)
+      ctx->TextureFormatSupported[MESA_FORMAT_SARGB8] = true;
    ctx->TextureFormatSupported[MESA_FORMAT_ARGB4444] = true;
    ctx->TextureFormatSupported[MESA_FORMAT_ARGB1555] = true;
    ctx->TextureFormatSupported[MESA_FORMAT_RGB565] = true;
@@ -115,7 +116,6 @@ intel_init_texture_formats(struct gl_context *ctx)
    /* Depth and stencil */
    ctx->TextureFormatSupported[MESA_FORMAT_S8_Z24] = true;
    ctx->TextureFormatSupported[MESA_FORMAT_X8_Z24] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_S8] = intel->has_separate_stencil;
 
    /*
     * This was disabled in initial FBO enabling to avoid combinations
@@ -181,7 +181,6 @@ i915CreateContext(int api,
    _math_matrix_ctr(&intel->ViewportMatrix);
 
    /* Initialize swrast, tnl driver tables: */
-   intelInitSpanFuncs(ctx);
    intelInitTriFuncs(ctx);
 
    /* Install the customized pipeline: */
@@ -192,12 +191,12 @@ i915CreateContext(int api,
       FALLBACK(intel, INTEL_FALLBACK_USER, 1);
 
    ctx->Const.MaxTextureUnits = I915_TEX_UNITS;
-   ctx->Const.MaxTextureImageUnits = I915_TEX_UNITS;
+   ctx->Const.FragmentProgram.MaxTextureImageUnits = I915_TEX_UNITS;
    ctx->Const.MaxTextureCoordUnits = I915_TEX_UNITS;
    ctx->Const.MaxVarying = I915_TEX_UNITS;
    ctx->Const.MaxCombinedTextureImageUnits =
-      ctx->Const.MaxVertexTextureImageUnits +
-      ctx->Const.MaxTextureImageUnits;
+      ctx->Const.VertexProgram.MaxTextureImageUnits +
+      ctx->Const.FragmentProgram.MaxTextureImageUnits;
 
    /* Advertise the full hardware capabilities.  The new memory
     * manager should cope much better with overload situations:
@@ -262,6 +261,7 @@ i915CreateContext(int api,
    fs_options->EmitNoIndirectTemp = true;
 
    ctx->Const.MaxDrawBuffers = 1;
+   ctx->Const.QueryCounterBits.SamplesPassed = 0;
 
    _tnl_init_vertices(ctx, ctx->Const.MaxArrayLockSize + 12,
                       36 * sizeof(GLfloat));

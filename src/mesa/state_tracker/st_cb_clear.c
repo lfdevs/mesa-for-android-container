@@ -67,7 +67,8 @@ st_init_clear(struct st_context *st)
 {
    memset(&st->clear, 0, sizeof(st->clear));
 
-   st->clear.raster.gl_rasterization_rules = 1;
+   st->clear.raster.half_pixel_center = 1;
+   st->clear.raster.bottom_edge_rule = 1;
    st->clear.raster.depth_clip = 1;
 }
 
@@ -98,7 +99,8 @@ set_fragment_shader(struct st_context *st)
    if (!st->clear.fs)
       st->clear.fs =
          util_make_fragment_passthrough_shader(st->pipe, TGSI_SEMANTIC_GENERIC,
-                                               TGSI_INTERPOLATE_CONSTANT);
+                                               TGSI_INTERPOLATE_CONSTANT,
+                                               TRUE);
 
    cso_set_fragment_shader_handle(st->cso_context, st->clear.fs);
 }
@@ -344,8 +346,8 @@ is_scissor_enabled(struct gl_context *ctx, struct gl_renderbuffer *rb)
    return ctx->Scissor.Enabled &&
           (ctx->Scissor.X > 0 ||
            ctx->Scissor.Y > 0 ||
-           ctx->Scissor.Width < rb->Width ||
-           ctx->Scissor.Height < rb->Height);
+           (unsigned) ctx->Scissor.Width < rb->Width ||
+           (unsigned) ctx->Scissor.Height < rb->Height);
 }
 
 

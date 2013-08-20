@@ -75,13 +75,14 @@ struct llvmpipe_context {
    struct pipe_constant_buffer constants[PIPE_SHADER_TYPES][LP_MAX_TGSI_CONST_BUFFERS];
    struct pipe_framebuffer_state framebuffer;
    struct pipe_poly_stipple poly_stipple;
-   struct pipe_scissor_state scissor;
+   struct pipe_scissor_state scissors[PIPE_MAX_VIEWPORTS];
    struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
-   struct pipe_viewport_state viewport;
+   struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
    struct pipe_index_buffer index_buffer;
    struct pipe_resource *mapped_vs_tex[PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   struct pipe_resource *mapped_gs_tex[PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    unsigned num_samplers[PIPE_SHADER_TYPES];
    unsigned num_sampler_views[PIPE_SHADER_TYPES];
@@ -93,9 +94,12 @@ struct llvmpipe_context {
    struct pipe_query_data_so_statistics so_stats;
    unsigned num_primitives_generated;
 
-   unsigned dirty; /**< Mask of LP_NEW_x flags */
+   struct pipe_query_data_pipeline_statistics pipeline_statistics;
+   unsigned active_statistics_queries;
 
-   unsigned active_occlusion_query;
+   unsigned active_occlusion_queries;
+
+   unsigned dirty; /**< Mask of LP_NEW_x flags */
 
    /** Mapped vertex buffers */
    ubyte *mapped_vbuffer[PIPE_MAX_ATTRIBS];
@@ -111,6 +115,12 @@ struct llvmpipe_context {
 
    /** Which vertex shader output slot contains point size */
    int psize_slot;
+
+   /** Which vertex shader output slot contains viewport index */
+   int viewport_index_slot;
+
+   /** Which geometry shader output slot contains layer */
+   int layer_slot;
 
    /**< minimum resolvable depth value, for polygon offset */   
    double mrd;
@@ -138,6 +148,7 @@ struct llvmpipe_context {
    /** Conditional query object and mode */
    struct pipe_query *render_cond_query;
    uint render_cond_mode;
+   boolean render_cond_cond;
 };
 
 

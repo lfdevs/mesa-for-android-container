@@ -32,12 +32,14 @@
 
 import sys
 import string
-import format
+import binascii
 
 try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
+
+import format
 
 
 class Node:
@@ -60,6 +62,22 @@ class Literal(Node):
 
     def visit(self, visitor):
         visitor.visit_literal(self)
+
+
+class Blob(Node):
+    
+    def __init__(self, value):
+        self._rawValue = None
+        self._hexValue = value
+
+    def getValue(self):
+        if self._rawValue is None:
+            self._rawValue = binascii.a2b_hex(self._hexValue)
+            self._hexValue = None
+        return self._rawValue
+
+    def visit(self, visitor):
+        visitor.visit_blob(self)
 
 
 class NamedConstant(Node):
@@ -101,12 +119,13 @@ class Pointer(Node):
 
 class Call:
     
-    def __init__(self, no, klass, method, args, ret):
+    def __init__(self, no, klass, method, args, ret, time):
         self.no = no
         self.klass = klass
         self.method = method
         self.args = args
         self.ret = ret
+        self.time = time
         
     def visit(self, visitor):
         visitor.visit_call(self)
@@ -124,6 +143,9 @@ class Trace:
 class Visitor:
     
     def visit_literal(self, node):
+        raise NotImplementedError
+    
+    def visit_blob(self, node):
         raise NotImplementedError
     
     def visit_named_constant(self, node):
@@ -156,15 +178,13 @@ class PrettyPrinter:
             return
 
         if isinstance(node.value, basestring):
-            if len(node.value) >= 4096 or node.value.strip(string.printable):
-                self.formatter.address('blob(%u)' % len(node.value))
-                #self.formatter.text('...')
-                return
-
             self.formatter.literal('"' + node.value + '"')
             return
 
         self.formatter.literal(repr(node.value))
+    
+    def visit_blob(self, node):
+        self.formatter.address('blob()')
     
     def visit_named_constant(self, node):
         self.formatter.literal(node.name)
@@ -210,7 +230,10 @@ class PrettyPrinter:
         if node.ret is not None:
             self.formatter.text(' = ')
             node.ret.visit(self)
-    
+        if node.time is not None:
+            self.formatter.text(' // time ')
+            node.time.visit(self)
+
     def visit_trace(self, node):
         for call in node.calls:
             call.visit(self)

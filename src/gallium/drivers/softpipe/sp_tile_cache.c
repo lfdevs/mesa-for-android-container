@@ -99,7 +99,7 @@ sp_create_tile_cache( struct pipe_context *pipe )
    tc = CALLOC_STRUCT( softpipe_tile_cache );
    if (tc) {
       tc->pipe = pipe;
-      for (pos = 0; pos < NUM_ENTRIES; pos++) {
+      for (pos = 0; pos < Elements(tc->tile_addrs); pos++) {
          tc->tile_addrs[pos].bits.invalid = 1;
       }
       tc->last_tile_addr.bits.invalid = 1;
@@ -134,7 +134,7 @@ sp_destroy_tile_cache(struct softpipe_tile_cache *tc)
    if (tc) {
       uint pos;
 
-      for (pos = 0; pos < NUM_ENTRIES; pos++) {
+      for (pos = 0; pos < Elements(tc->entries); pos++) {
          /*assert(tc->entries[pos].x < 0);*/
          FREE( tc->entries[pos] );
       }
@@ -170,12 +170,18 @@ sp_tile_cache_set_surface(struct softpipe_tile_cache *tc,
    tc->surface = ps;
 
    if (ps) {
-      tc->transfer_map = pipe_transfer_map(pipe, ps->texture,
-                                           ps->u.tex.level, ps->u.tex.first_layer,
-                                           PIPE_TRANSFER_READ_WRITE |
-                                           PIPE_TRANSFER_UNSYNCHRONIZED,
-                                           0, 0, ps->width, ps->height,
-                                           &tc->transfer);
+      if (ps->texture->target != PIPE_BUFFER) {
+         tc->transfer_map = pipe_transfer_map(pipe, ps->texture,
+                                              ps->u.tex.level, ps->u.tex.first_layer,
+                                              PIPE_TRANSFER_READ_WRITE |
+                                              PIPE_TRANSFER_UNSYNCHRONIZED,
+                                              0, 0, ps->width, ps->height,
+                                              &tc->transfer);
+      }
+      else {
+         /* can't render to buffers */
+         assert(0);
+      }
 
       tc->depth_stencil = util_format_is_depth_or_stencil(ps->format);
    }
@@ -413,7 +419,7 @@ sp_flush_tile_cache(struct softpipe_tile_cache *tc)
 
    if (pt) {
       /* caching a drawing transfer */
-      for (pos = 0; pos < NUM_ENTRIES; pos++) {
+      for (pos = 0; pos < Elements(tc->entries); pos++) {
          struct softpipe_cached_tile *tile = tc->entries[pos];
          if (!tile)
          {
@@ -446,7 +452,7 @@ sp_alloc_tile(struct softpipe_tile_cache *tc)
       if (!tc->tile)
       {
          unsigned pos;
-         for (pos = 0; pos < NUM_ENTRIES; ++pos) {
+         for (pos = 0; pos < Elements(tc->entries); ++pos) {
             if (!tc->entries[pos])
                continue;
 
@@ -602,7 +608,7 @@ sp_tile_cache_clear(struct softpipe_tile_cache *tc,
    /* set flags to indicate all the tiles are cleared */
    memset(tc->clear_flags, 255, sizeof(tc->clear_flags));
 
-   for (pos = 0; pos < NUM_ENTRIES; pos++) {
+   for (pos = 0; pos < Elements(tc->tile_addrs); pos++) {
       tc->tile_addrs[pos].bits.invalid = 1;
    }
    tc->last_tile_addr.bits.invalid = 1;

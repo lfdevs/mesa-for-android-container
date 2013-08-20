@@ -100,6 +100,15 @@ struct brw_clip_compile {
       struct brw_reg plane_equation;
        
       struct brw_reg ff_sync;
+
+      /* Bitmask indicating which coordinate attribute should be used for
+       * comparison to each clipping plane. A 0 indicates that VARYING_SLOT_POS
+       * should be used, because it's one of the fixed +/- x/y/z planes that
+       * constitute the bounds of the view volume. A 1 indicates that
+       * VARYING_SLOT_CLIP_VERTEX should be used (if available) since it's a user-
+       * defined clipping plane.
+       */
+      struct brw_reg vertex_src_mask;
    } reg;
 
    /* Number of registers storing VUE data */
@@ -113,15 +122,13 @@ struct brw_clip_compile {
    struct brw_vue_map vue_map;
 };
 
-#define ATTR_SIZE  (4*4)
-
 /**
- * True if the given vert_result is one of the outputs of the vertex shader.
+ * True if the given varying is one of the outputs of the vertex shader.
  */
-static inline bool brw_clip_have_vert_result(struct brw_clip_compile *c,
-                                             GLuint vert_result)
+static inline bool brw_clip_have_varying(struct brw_clip_compile *c,
+                                         GLuint varying)
 {
-   return (c->key.attrs & BITFIELD64_BIT(vert_result)) ? 1 : 0;
+   return (c->key.attrs & BITFIELD64_BIT(varying)) ? 1 : 0;
 }
 
 /* Points are only culled, so no need for a clip routine, however it

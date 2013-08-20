@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.5
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -44,8 +44,9 @@
 extern "C" {
 #endif
 
+#include "mtypes.h"
+
 struct _glapi_table;
-struct gl_context;
 
 extern void
 _mesa_init_errors( struct gl_context *ctx );
@@ -66,7 +67,25 @@ extern void
 _mesa_debug( const struct gl_context *ctx, const char *fmtString, ... ) PRINTFLIKE(2, 3);
 
 extern void
-_mesa_shader_debug( struct gl_context *ctx, GLenum type, GLuint id, const char *msg, int len );
+_mesa_gl_debug(struct gl_context *ctx,
+               GLuint *id,
+               enum mesa_debug_type type,
+               enum mesa_debug_severity severity,
+               const char *fmtString, ...) PRINTFLIKE(5, 6);
+
+#define _mesa_perf_debug(ctx, sev, ...) do {                              \
+   static GLuint msg_id = 0;                                              \
+   if (unlikely(ctx->Const.ContextFlags & GL_CONTEXT_FLAG_DEBUG_BIT)) {   \
+      _mesa_gl_debug(ctx, &msg_id,                                        \
+                     MESA_DEBUG_TYPE_PERFORMANCE,                         \
+                     sev,                                                 \
+                     __VA_ARGS__);                                        \
+   }                                                                      \
+} while (0)
+
+extern void
+_mesa_shader_debug(struct gl_context *ctx, GLenum type, GLuint *id,
+                   const char *msg, int len);
 
 void GLAPIENTRY
 _mesa_DebugMessageInsertARB(GLenum source, GLenum type, GLuint id,
@@ -82,7 +101,7 @@ _mesa_DebugMessageControlARB(GLenum source, GLenum type, GLenum severity,
                              GLboolean enabled);
 void GLAPIENTRY
 _mesa_DebugMessageCallbackARB(GLDEBUGPROCARB callback,
-                              const GLvoid *userParam);
+                              const void *userParam);
 
 #ifdef __cplusplus
 }

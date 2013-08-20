@@ -31,10 +31,27 @@
 #include "draw_context.h"
 #include "draw_private.h"
 
-
 #define MAX_TGSI_PRIMITIVES 4
 
 struct draw_context;
+
+#ifdef HAVE_LLVM
+struct draw_gs_jit_context;
+struct draw_gs_llvm_variant;
+
+/**
+ * Structure holding the inputs to the geometry shader. It uses SOA layout.
+ * The dimensions are as follows:
+ * - maximum number of vertices for a geometry shader input primitive
+ *   (6 for triangle_adjacency)
+ * - maximum number of attributes for each vertex
+ * - four channels per each attribute (x,y,z,w)
+ * - number of input primitives equal to the SOA vector length
+ */
+struct draw_gs_inputs {
+   float data[6][PIPE_MAX_SHADER_INPUTS][TGSI_NUM_CHANNELS][TGSI_NUM_CHANNELS];
+};
+#endif
 
 /**
  * Private version of the compiled geometry shader
@@ -49,8 +66,12 @@ struct draw_geometry_shader {
 
    struct tgsi_shader_info info;
    unsigned position_output;
+   unsigned viewport_index_output;
+   unsigned clipdistance_output[PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT];
+   unsigned culldistance_output[PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT];
 
    unsigned max_output_vertices;
+   unsigned primitive_boundary;
    unsigned input_primitive;
    unsigned output_primitive;
 
@@ -63,8 +84,40 @@ struct draw_geometry_shader {
 
    unsigned in_prim_idx;
    unsigned input_vertex_stride;
+   unsigned fetched_prim_count;
    const float (*input)[4];
+   const struct tgsi_shader_info *input_info;
+   unsigned vector_length;
+   unsigned max_out_prims;
+
+#ifdef HAVE_LLVM
+   struct draw_gs_inputs *gs_input;
+   struct draw_gs_jit_context *jit_context;
+   struct draw_gs_llvm_variant *current_variant;
+   struct vertex_header *gs_output;
+
+   int **llvm_prim_lengths;
+   int *llvm_emitted_primitives;
+   int *llvm_emitted_vertices;
+   int *llvm_prim_ids;
+#endif
+
+   void (*fetch_inputs)(struct draw_geometry_shader *shader,
+                        unsigned *indices,
+                        unsigned num_vertices,
+                        unsigned prim_idx);
+   void (*fetch_outputs)(struct draw_geometry_shader *shader,
+                         unsigned num_primitives,
+                         float (**p_output)[4]);
+
+   void     (*prepare)(struct draw_geometry_shader *shader,
+                       const void *constants[PIPE_MAX_CONSTANT_BUFFERS], 
+                       const unsigned constants_size[PIPE_MAX_CONSTANT_BUFFERS]);
+   unsigned (*run)(struct draw_geometry_shader *shader,
+                   unsigned input_primitives);
 };
+
+void draw_geometry_shader_new_instance(struct draw_geometry_shader *gs);
 
 /*
  * Returns the number of vertices emitted.
@@ -76,6 +129,7 @@ int draw_geometry_shader_run(struct draw_geometry_shader *shader,
                              const unsigned constants_size[PIPE_MAX_CONSTANT_BUFFERS], 
                              const struct draw_vertex_info *input_verts,
                              const struct draw_prim_info *input_prim,
+                             const struct tgsi_shader_info *input_info,
                              struct draw_vertex_info *output_verts,
                              struct draw_prim_info *output_prims );
 
@@ -84,5 +138,10 @@ void draw_geometry_shader_prepare(struct draw_geometry_shader *shader,
 
 int draw_gs_max_output_vertices(struct draw_geometry_shader *shader,
                                 unsigned pipe_prim);
+
+#ifdef HAVE_LLVM
+void draw_gs_set_current_variant(struct draw_geometry_shader *shader,
+                                 struct draw_gs_llvm_variant *variant);
+#endif
 
 #endif

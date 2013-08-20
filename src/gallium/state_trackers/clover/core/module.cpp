@@ -14,10 +14,10 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-// THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
-// OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+// OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+// OTHER DEALINGS IN THE SOFTWARE.
 //
 
 #include <type_traits>
@@ -94,6 +94,7 @@ namespace {
       template<typename S, typename QT>
       static void
       proc(S &s, QT &x) {
+         __proc(s, x.id);
          __proc(s, x.type);
          __proc(s, x.size);
          __proc(s, x.data);
@@ -117,6 +118,7 @@ namespace {
       template<typename S, typename QT>
       static void
       proc(S &s, QT &x) {
+         __proc(s, x.name);
          __proc(s, x.section);
          __proc(s, x.offset);
          __proc(s, x.args);

@@ -63,6 +63,11 @@ struct r600_shader {
 	boolean			vs_out_point_size;
 	boolean			has_txq_cube_array_z_comp;
 	boolean			uses_tex_buffers;
+
+	unsigned		indirect_files;
+	unsigned		max_arrays;
+	unsigned		num_arrays;
+	struct r600_shader_array * arrays;
 };
 
 struct r600_shader_key {
@@ -71,11 +76,17 @@ struct r600_shader_key {
 	unsigned nr_cbufs:4;
 };
 
+struct r600_shader_array {
+	unsigned gpr_start;
+	unsigned gpr_count;
+	unsigned comp_mask;
+};
+
 struct r600_pipe_shader {
 	struct r600_pipe_shader_selector *selector;
 	struct r600_pipe_shader	*next_variant;
 	struct r600_shader	shader;
-	struct r600_pipe_state	rstate;
+	struct r600_command_buffer command_buffer; /* register writes */
 	struct r600_resource	*bo;
 	unsigned		sprite_coord_enable;
 	unsigned		flatshade;

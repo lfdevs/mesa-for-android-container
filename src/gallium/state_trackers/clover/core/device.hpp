@@ -14,10 +14,10 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-// THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
-// OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+// OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+// OTHER DEALINGS IN THE SOFTWARE.
 //
 
 #ifndef __CORE_DEVICE_HPP__
@@ -32,16 +32,19 @@
 
 namespace clover {
    typedef struct _cl_device_id device;
+   typedef struct _cl_platform_id platform;
    class root_resource;
    class hard_event;
 }
 
 struct _cl_device_id {
 public:
-   _cl_device_id(pipe_loader_device *ldev);
+   _cl_device_id(clover::platform &platform, pipe_loader_device *ldev);
    _cl_device_id(_cl_device_id &&dev);
    _cl_device_id(const _cl_device_id &dev) = delete;
    ~_cl_device_id();
+
+   _cl_device_id &operator=(_cl_device_id dev);
 
    cl_device_type type() const;
    cl_uint vendor_id() const;
@@ -63,6 +66,7 @@ public:
    std::string vendor_name() const;
    enum pipe_shader_ir ir_format() const;
    std::string ir_target() const;
+   enum pipe_endian endianness() const;
 
    friend struct _cl_command_queue;
    friend class clover::root_resource;
@@ -70,41 +74,11 @@ public:
    friend std::set<cl_image_format>
    clover::supported_formats(cl_context, cl_mem_object_type);
 
+   clover::platform &platform;
+
 private:
    pipe_screen *pipe;
    pipe_loader_device *ldev;
 };
-
-namespace clover {
-   ///
-   /// Container of all the compute devices that are available in the
-   /// system.
-   ///
-   class device_registry {
-   public:
-      typedef std::vector<device>::iterator iterator;
-
-      device_registry();
-
-      iterator begin() {
-         return devs.begin();
-      }
-
-      iterator end() {
-         return devs.end();
-      }
-
-      device &front() {
-         return devs.front();
-      }
-
-      device &back() {
-         return devs.back();
-      }
-
-   protected:
-      std::vector<device> devs;
-   };
-}
 
 #endif

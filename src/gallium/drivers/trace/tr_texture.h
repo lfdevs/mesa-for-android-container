@@ -36,6 +36,14 @@
 
 struct trace_context;
 
+
+struct tr_list
+{
+   struct tr_list *next;
+   struct tr_list *prev;
+};
+
+
 struct trace_resource
 {
    struct pipe_resource base;
@@ -125,8 +133,9 @@ trace_resource_destroy(struct trace_screen *tr_scr,
 		       struct trace_resource *tr_res);
 
 struct pipe_surface *
-trace_surf_create(struct trace_resource *tr_res,
-                     struct pipe_surface *surface);
+trace_surf_create(struct trace_context *tr_ctx,
+                  struct trace_resource *tr_res,
+                  struct pipe_surface *surface);
 
 void
 trace_surf_destroy(struct trace_surface *tr_surf);

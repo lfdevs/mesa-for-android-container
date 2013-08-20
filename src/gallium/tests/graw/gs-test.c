@@ -225,7 +225,7 @@ static void set_viewport( float x, float y,
    vp.translate[2] = half_depth + z;
    vp.translate[3] = 0.0f;
 
-   ctx->set_viewport_state( ctx, &vp );
+   ctx->set_viewport_states( ctx, 0, 1, &vp );
 }
 
 static void set_vertices( void )
@@ -565,7 +565,8 @@ static void init( void )
       void *handle;
       memset(&rasterizer, 0, sizeof rasterizer);
       rasterizer.cull_face = PIPE_FACE_NONE;
-      rasterizer.gl_rasterization_rules = 1;
+      rasterizer.half_pixel_center = 1;
+      rasterizer.bottom_edge_rule = 1;
       rasterizer.depth_clip = 1;
       handle = ctx->create_rasterizer_state(ctx, &rasterizer);
       ctx->bind_rasterizer_state(ctx, handle);

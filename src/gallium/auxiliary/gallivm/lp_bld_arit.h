@@ -85,17 +85,27 @@ lp_build_div(struct lp_build_context *bld,
              LLVMValueRef a,
              LLVMValueRef b);
 
+
+/**
+ * Set when the weights for normalized are prescaled, that is, in range
+ * 0..2**n, as opposed to range 0..2**(n-1).
+ */
+#define LP_BLD_LERP_PRESCALED_WEIGHTS (1 << 0)
+
+/**
+ * Used internally when using wide intermediates for normalized lerps.
+ *
+ * Do not use.
+ */
+#define LP_BLD_LERP_WIDE_NORMALIZED (1 << 1)
+
 LLVMValueRef
 lp_build_lerp(struct lp_build_context *bld,
               LLVMValueRef x,
               LLVMValueRef v0,
-              LLVMValueRef v1);
+              LLVMValueRef v1,
+              unsigned flags);
 
-/**
- * Bilinear interpolation.
- *
- * Values indices are in v_{yx}.
- */
 LLVMValueRef
 lp_build_lerp_2d(struct lp_build_context *bld,
                  LLVMValueRef x,
@@ -103,7 +113,24 @@ lp_build_lerp_2d(struct lp_build_context *bld,
                  LLVMValueRef v00,
                  LLVMValueRef v01,
                  LLVMValueRef v10,
-                 LLVMValueRef v11);
+                 LLVMValueRef v11,
+                 unsigned flags);
+
+LLVMValueRef
+lp_build_lerp_3d(struct lp_build_context *bld,
+                 LLVMValueRef x,
+                 LLVMValueRef y,
+                 LLVMValueRef z,
+                 LLVMValueRef v000,
+                 LLVMValueRef v001,
+                 LLVMValueRef v010,
+                 LLVMValueRef v011,
+                 LLVMValueRef v100,
+                 LLVMValueRef v101,
+                 LLVMValueRef v110,
+                 LLVMValueRef v111,
+                 unsigned flags);
+
 
 LLVMValueRef
 lp_build_min(struct lp_build_context *bld,
@@ -203,6 +230,19 @@ lp_build_rcp(struct lp_build_context *bld,
 LLVMValueRef
 lp_build_rsqrt(struct lp_build_context *bld,
                LLVMValueRef a);
+
+boolean
+lp_build_fast_rsqrt_available(struct lp_type type);
+
+LLVMValueRef
+lp_build_fast_rsqrt(struct lp_build_context *bld,
+                    LLVMValueRef a);
+
+LLVMValueRef
+lp_build_polynomial(struct lp_build_context *bld,
+                    LLVMValueRef x,
+                    const double *coeffs,
+                    unsigned num_coeffs);
 
 LLVMValueRef
 lp_build_cos(struct lp_build_context *bld,

@@ -33,6 +33,7 @@
 #include "util/u_double_list.h"
 #include "os/os_thread.h"
 #include "os/os_mman.h"
+#include "os/os_time.h"
 
 #include "state_tracker/drm_driver.h"
 
@@ -166,7 +167,7 @@ static void radeon_bo_wait(struct pb_buffer *_buf, enum radeon_bo_usage usage)
         struct drm_radeon_gem_wait_idle args;
         memset(&args, 0, sizeof(args));
         args.handle = bo->handle;
-        while (drmCommandWriteRead(bo->rws->fd, DRM_RADEON_GEM_WAIT_IDLE,
+        while (drmCommandWrite(bo->rws->fd, DRM_RADEON_GEM_WAIT_IDLE,
                                    &args, sizeof(args)) == -EBUSY);
     }
 }
@@ -388,78 +389,18 @@ static void radeon_bo_destroy(struct pb_buffer *_buf)
     }
 
     pipe_mutex_destroy(bo->map_mutex);
+
+    if (bo->initial_domain & RADEON_DOMAIN_VRAM)
+        bo->rws->allocated_vram -= align(bo->base.size, 4096);
+    else if (bo->initial_domain & RADEON_DOMAIN_GTT)
+        bo->rws->allocated_gtt -= align(bo->base.size, 4096);
     FREE(bo);
 }
 
-static void *radeon_bo_map(struct radeon_winsys_cs_handle *buf,
-                           struct radeon_winsys_cs *rcs,
-                           enum pipe_transfer_usage usage)
+void *radeon_bo_do_map(struct radeon_bo *bo)
 {
-    struct radeon_bo *bo = (struct radeon_bo*)buf;
-    struct radeon_drm_cs *cs = (struct radeon_drm_cs*)rcs;
     struct drm_radeon_gem_mmap args = {0};
     void *ptr;
-
-    /* If it's not unsynchronized bo_map, flush CS if needed and then wait. */
-    if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
-        /* DONTBLOCK doesn't make sense with UNSYNCHRONIZED. */
-        if (usage & PIPE_TRANSFER_DONTBLOCK) {
-            if (!(usage & PIPE_TRANSFER_WRITE)) {
-                /* Mapping for read.
-                 *
-                 * Since we are mapping for read, we don't need to wait
-                 * if the GPU is using the buffer for read too
-                 * (neither one is changing it).
-                 *
-                 * Only check whether the buffer is being used for write. */
-                if (radeon_bo_is_referenced_by_cs_for_write(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC);
-                    return NULL;
-                }
-
-                if (radeon_bo_is_busy((struct pb_buffer*)bo,
-                                      RADEON_USAGE_WRITE)) {
-                    return NULL;
-                }
-            } else {
-                if (radeon_bo_is_referenced_by_cs(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC);
-                    return NULL;
-                }
-
-                if (radeon_bo_is_busy((struct pb_buffer*)bo,
-                                      RADEON_USAGE_READWRITE)) {
-                    return NULL;
-                }
-            }
-        } else {
-            if (!(usage & PIPE_TRANSFER_WRITE)) {
-                /* Mapping for read.
-                 *
-                 * Since we are mapping for read, we don't need to wait
-                 * if the GPU is using the buffer for read too
-                 * (neither one is changing it).
-                 *
-                 * Only check whether the buffer is being used for write. */
-                if (radeon_bo_is_referenced_by_cs_for_write(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, 0);
-                }
-                radeon_bo_wait((struct pb_buffer*)bo,
-                               RADEON_USAGE_WRITE);
-            } else {
-                /* Mapping for write. */
-                if (radeon_bo_is_referenced_by_cs(cs, bo)) {
-                    cs->flush_cs(cs->flush_data, 0);
-                } else {
-                    /* Try to avoid busy-waiting in radeon_bo_wait. */
-                    if (p_atomic_read(&bo->num_active_ioctls))
-                        radeon_drm_cs_sync_flush(rcs);
-                }
-
-                radeon_bo_wait((struct pb_buffer*)bo, RADEON_USAGE_READWRITE);
-            }
-        }
-    }
 
     /* Return the pointer if it's already mapped. */
     if (bo->ptr)
@@ -496,6 +437,83 @@ static void *radeon_bo_map(struct radeon_winsys_cs_handle *buf,
     pipe_mutex_unlock(bo->map_mutex);
 
     return bo->ptr;
+}
+
+static void *radeon_bo_map(struct radeon_winsys_cs_handle *buf,
+                           struct radeon_winsys_cs *rcs,
+                           enum pipe_transfer_usage usage)
+{
+    struct radeon_bo *bo = (struct radeon_bo*)buf;
+    struct radeon_drm_cs *cs = (struct radeon_drm_cs*)rcs;
+
+    /* If it's not unsynchronized bo_map, flush CS if needed and then wait. */
+    if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
+        /* DONTBLOCK doesn't make sense with UNSYNCHRONIZED. */
+        if (usage & PIPE_TRANSFER_DONTBLOCK) {
+            if (!(usage & PIPE_TRANSFER_WRITE)) {
+                /* Mapping for read.
+                 *
+                 * Since we are mapping for read, we don't need to wait
+                 * if the GPU is using the buffer for read too
+                 * (neither one is changing it).
+                 *
+                 * Only check whether the buffer is being used for write. */
+                if (cs && radeon_bo_is_referenced_by_cs_for_write(cs, bo)) {
+                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC);
+                    return NULL;
+                }
+
+                if (radeon_bo_is_busy((struct pb_buffer*)bo,
+                                      RADEON_USAGE_WRITE)) {
+                    return NULL;
+                }
+            } else {
+                if (cs && radeon_bo_is_referenced_by_cs(cs, bo)) {
+                    cs->flush_cs(cs->flush_data, RADEON_FLUSH_ASYNC);
+                    return NULL;
+                }
+
+                if (radeon_bo_is_busy((struct pb_buffer*)bo,
+                                      RADEON_USAGE_READWRITE)) {
+                    return NULL;
+                }
+            }
+        } else {
+            uint64_t time = os_time_get_nano();
+
+            if (!(usage & PIPE_TRANSFER_WRITE)) {
+                /* Mapping for read.
+                 *
+                 * Since we are mapping for read, we don't need to wait
+                 * if the GPU is using the buffer for read too
+                 * (neither one is changing it).
+                 *
+                 * Only check whether the buffer is being used for write. */
+                if (cs && radeon_bo_is_referenced_by_cs_for_write(cs, bo)) {
+                    cs->flush_cs(cs->flush_data, 0);
+                }
+                radeon_bo_wait((struct pb_buffer*)bo,
+                               RADEON_USAGE_WRITE);
+            } else {
+                /* Mapping for write. */
+                if (cs) {
+                    if (radeon_bo_is_referenced_by_cs(cs, bo)) {
+                        cs->flush_cs(cs->flush_data, 0);
+                    } else {
+                        /* Try to avoid busy-waiting in radeon_bo_wait. */
+                        if (p_atomic_read(&bo->num_active_ioctls))
+                            radeon_drm_cs_sync_flush(rcs);
+                    }
+                }
+
+                radeon_bo_wait((struct pb_buffer*)bo, RADEON_USAGE_READWRITE);
+            }
+
+            bo->mgr->rws->buffer_wait_time += os_time_get_nano() - time;
+        }
+    }
+
+    return radeon_bo_do_map(bo);
 }
 
 static void radeon_bo_unmap(struct radeon_winsys_cs_handle *_buf)
@@ -576,6 +594,7 @@ static struct pb_buffer *radeon_bomgr_create_bo(struct pb_manager *_mgr,
     bo->rws = mgr->rws;
     bo->handle = args.handle;
     bo->va = 0;
+    bo->initial_domain = rdesc->initial_domains;
     pipe_mutex_init(bo->map_mutex);
 
     if (mgr->va) {
@@ -607,6 +626,11 @@ static struct pb_buffer *radeon_bomgr_create_bo(struct pb_manager *_mgr,
             radeon_bomgr_force_va(mgr, bo->va, bo->va_size);
         }
     }
+
+    if (rdesc->initial_domains & RADEON_DOMAIN_VRAM)
+        rws->allocated_vram += align(size, 4096);
+    else if (rdesc->initial_domains & RADEON_DOMAIN_GTT)
+        rws->allocated_gtt += align(size, 4096);
 
     return &bo->base;
 }
@@ -930,6 +954,9 @@ done:
             radeon_bomgr_force_va(mgr, bo->va, bo->va_size);
         }
     }
+
+    ws->allocated_vram += align(open_arg.size, 4096);
+    bo->initial_domain = RADEON_DOMAIN_VRAM;
 
     return (struct pb_buffer*)bo;
 

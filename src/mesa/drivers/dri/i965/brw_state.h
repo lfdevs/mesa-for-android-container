@@ -55,12 +55,10 @@ extern const struct brw_tracked_state brw_gs_prog;
 extern const struct brw_tracked_state brw_gs_unit;
 extern const struct brw_tracked_state brw_line_stipple;
 extern const struct brw_tracked_state brw_aa_line_parameters;
-extern const struct brw_tracked_state brw_pipelined_state_pointers;
 extern const struct brw_tracked_state brw_binding_table_pointers;
 extern const struct brw_tracked_state brw_depthbuffer;
 extern const struct brw_tracked_state brw_polygon_stipple_offset;
 extern const struct brw_tracked_state brw_polygon_stipple;
-extern const struct brw_tracked_state brw_program_parameters;
 extern const struct brw_tracked_state brw_recalculate_urb_fence;
 extern const struct brw_tracked_state brw_samplers;
 extern const struct brw_tracked_state brw_sf_prog;
@@ -68,11 +66,9 @@ extern const struct brw_tracked_state brw_sf_unit;
 extern const struct brw_tracked_state brw_sf_vp;
 extern const struct brw_tracked_state brw_state_base_address;
 extern const struct brw_tracked_state brw_urb_fence;
-extern const struct brw_tracked_state brw_vertex_state;
 extern const struct brw_tracked_state brw_vs_prog;
 extern const struct brw_tracked_state brw_vs_ubo_surfaces;
 extern const struct brw_tracked_state brw_vs_unit;
-extern const struct brw_tracked_state brw_wm_input_sizes;
 extern const struct brw_tracked_state brw_wm_prog;
 extern const struct brw_tracked_state brw_renderbuffer_surfaces;
 extern const struct brw_tracked_state brw_texture_surfaces;
@@ -82,8 +78,6 @@ extern const struct brw_tracked_state brw_wm_ubo_surfaces;
 extern const struct brw_tracked_state brw_wm_unit;
 
 extern const struct brw_tracked_state brw_psp_urb_cbs;
-
-extern const struct brw_tracked_state brw_pipe_control;
 
 extern const struct brw_tracked_state brw_drawing_rect;
 extern const struct brw_tracked_state brw_indices;
@@ -102,7 +96,6 @@ extern const struct brw_tracked_state gen6_multisample_state;
 extern const struct brw_tracked_state gen6_renderbuffer_surfaces;
 extern const struct brw_tracked_state gen6_sampler_state;
 extern const struct brw_tracked_state gen6_scissor_state;
-extern const struct brw_tracked_state gen6_sol_indices;
 extern const struct brw_tracked_state gen6_sol_surface;
 extern const struct brw_tracked_state gen6_sf_state;
 extern const struct brw_tracked_state gen6_sf_vp;
@@ -113,29 +106,22 @@ extern const struct brw_tracked_state gen6_vs_state;
 extern const struct brw_tracked_state gen6_wm_push_constants;
 extern const struct brw_tracked_state gen6_wm_state;
 extern const struct brw_tracked_state gen7_depthbuffer;
-extern const struct brw_tracked_state gen7_blend_state_pointer;
-extern const struct brw_tracked_state gen7_cc_state_pointer;
 extern const struct brw_tracked_state gen7_cc_viewport_state_pointer;
 extern const struct brw_tracked_state gen7_clip_state;
-extern const struct brw_tracked_state gen7_depth_stencil_state_pointer;
 extern const struct brw_tracked_state gen7_disable_stages;
 extern const struct brw_tracked_state gen7_ps_state;
-extern const struct brw_tracked_state gen7_push_constant_alloc;
 extern const struct brw_tracked_state gen7_samplers;
 extern const struct brw_tracked_state gen7_sbe_state;
 extern const struct brw_tracked_state gen7_sf_clip_viewport;
-extern const struct brw_tracked_state gen7_sf_clip_viewport_state_pointer;
 extern const struct brw_tracked_state gen7_sf_state;
 extern const struct brw_tracked_state gen7_sol_state;
 extern const struct brw_tracked_state gen7_urb;
 extern const struct brw_tracked_state gen7_vs_state;
-extern const struct brw_tracked_state gen7_wm_constants;
-extern const struct brw_tracked_state gen7_wm_constant_surface;
 extern const struct brw_tracked_state gen7_wm_state;
-extern const struct brw_tracked_state gen7_wm_surfaces;
 extern const struct brw_tracked_state haswell_cut_index;
 
 /* brw_misc_state.c */
+void brw_upload_invariant_state(struct brw_context *brw);
 uint32_t
 brw_depthbuffer_format(struct brw_context *brw);
 
@@ -174,7 +160,7 @@ void brw_destroy_caches( struct brw_context *brw );
 /***********************************************************************
  * brw_state_batch.c
  */
-#define BRW_BATCH_STRUCT(brw, s) intel_batchbuffer_data(&brw->intel, (s), \
+#define BRW_BATCH_STRUCT(brw, s) intel_batchbuffer_data(brw, (s), \
 							sizeof(*(s)), false)
 
 void *brw_state_batch(struct brw_context *brw,
@@ -192,9 +178,8 @@ uint32_t brw_format_for_mesa_format(gl_format mesa_format);
 
 GLuint translate_tex_target(GLenum target);
 
-GLuint translate_tex_format(struct intel_context *intel,
+GLuint translate_tex_format(struct brw_context *brw,
                             gl_format mesa_format,
-			    GLenum internal_format,
 			    GLenum depth_mode,
 			    GLenum srgb_decode);
 
@@ -222,8 +207,11 @@ void upload_default_color(struct brw_context *brw,
 
 /* gen6_sf_state.c */
 uint32_t
-get_attr_override(struct brw_vue_map *vue_map, int urb_entry_read_offset,
+get_attr_override(const struct brw_vue_map *vue_map, int urb_entry_read_offset,
                   int fs_attr, bool two_side_color, uint32_t *max_source_attr);
+
+/* gen7_urb.c */
+void gen7_allocate_push_constants(struct brw_context *brw);
 
 #ifdef __cplusplus
 }

@@ -40,7 +40,7 @@ brw_track_state_batch(struct brw_context *brw,
 		      uint32_t offset,
 		      int size)
 {
-   struct intel_batchbuffer *batch = &brw->intel.batch;
+   struct intel_batchbuffer *batch = &brw->batch;
 
    if (!brw->state_batch_list) {
       /* Our structs are always aligned to at least 32 bytes, so
@@ -79,15 +79,13 @@ make_annotation(drm_intel_aub_annotation *annotation, uint32_t type,
  * is annotated according to the type of each data structure.
  */
 void
-brw_annotate_aub(struct intel_context *intel)
+brw_annotate_aub(struct brw_context *brw)
 {
-   struct brw_context *brw = brw_context(&intel->ctx);
-
    unsigned annotation_count = 2 * brw->state_batch_count + 1;
    drm_intel_aub_annotation annotations[annotation_count];
    int a = 0;
    make_annotation(&annotations[a++], AUB_TRACE_TYPE_BATCH, 0,
-                   4*intel->batch.used);
+                   4*brw->batch.used);
    for (int i = brw->state_batch_count; i-- > 0; ) {
       uint32_t type = brw->state_batch_list[i].type;
       uint32_t start_offset = brw->state_batch_list[i].offset;
@@ -98,7 +96,7 @@ brw_annotate_aub(struct intel_context *intel)
                       AUB_TRACE_SUBTYPE(type), end_offset);
    }
    assert(a == annotation_count);
-   drm_intel_bufmgr_gem_set_aub_annotations(intel->batch.bo, annotations,
+   drm_intel_bufmgr_gem_set_aub_annotations(brw->batch.bo, annotations,
                                             annotation_count);
 }
 
@@ -123,7 +121,7 @@ brw_state_batch(struct brw_context *brw,
 		int alignment,
 		uint32_t *out_offset)
 {
-   struct intel_batchbuffer *batch = &brw->intel.batch;
+   struct intel_batchbuffer *batch = &brw->batch;
    uint32_t offset;
 
    assert(size < batch->bo->size);
@@ -135,7 +133,7 @@ brw_state_batch(struct brw_context *brw,
     */
    if (batch->state_batch_offset < size ||
        offset < 4*batch->used + batch->reserved_space) {
-      intel_batchbuffer_flush(&brw->intel);
+      intel_batchbuffer_flush(brw);
       offset = ROUND_DOWN_TO(batch->state_batch_offset - size, alignment);
    }
 

@@ -32,6 +32,7 @@
 #include "util/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
+#include "util/u_resource.h"
 
 #include "svga_format.h"
 #include "svga_screen.h"
@@ -217,7 +218,7 @@ svga_texture_destroy(struct pipe_screen *screen,
 		     struct pipe_resource *pt)
 {
    struct svga_screen *ss = svga_screen(screen);
-   struct svga_texture *tex = (struct svga_texture *)pt;
+   struct svga_texture *tex = svga_texture(pt);
 
    ss->texture_timestamp++;
 
@@ -228,6 +229,8 @@ svga_texture_destroy(struct pipe_screen *screen,
    */
    SVGA_DBG(DEBUG_DMA, "unref sid %p (texture)\n", tex->handle);
    svga_screen_surface_destroy(ss, &tex->key, &tex->handle);
+
+   ss->total_resource_bytes -= tex->size;
 
    FREE(tex);
 }
@@ -255,7 +258,6 @@ svga_texture_transfer_map(struct pipe_context *pipe,
    if (usage & PIPE_TRANSFER_MAP_DIRECTLY)
       return NULL;
 
-   assert(box->depth == 1);
    st = CALLOC_STRUCT(svga_transfer);
    if (!st)
       return NULL;
@@ -265,19 +267,19 @@ svga_texture_transfer_map(struct pipe_context *pipe,
    st->base.usage = usage;
    st->base.box = *box;
    st->base.stride = nblocksx*util_format_get_blocksize(texture->format);
-   st->base.layer_stride = 0;
+   st->base.layer_stride = st->base.stride * nblocksy;
 
    st->hw_nblocksy = nblocksy;
 
    st->hwbuf = svga_winsys_buffer_create(svga,
                                          1, 
                                          0,
-                                         st->hw_nblocksy*st->base.stride);
+                                         st->hw_nblocksy * st->base.stride * box->depth);
    while(!st->hwbuf && (st->hw_nblocksy /= 2)) {
       st->hwbuf = svga_winsys_buffer_create(svga,
                                             1, 
                                             0,
-                                            st->hw_nblocksy*st->base.stride);
+                                            st->hw_nblocksy * st->base.stride * box->depth);
    }
 
    if(!st->hwbuf)
@@ -359,11 +361,11 @@ svga_texture_transfer_unmap(struct pipe_context *pipe,
 
       svga_transfer_dma(svga, st, SVGA3D_WRITE_HOST_VRAM, flags);
       ss->texture_timestamp++;
-      tex->view_age[transfer->level] = ++(tex->age);
+      svga_age_texture_view(tex, transfer->level);
       if (transfer->resource->target == PIPE_TEXTURE_CUBE)
-         tex->defined[transfer->box.z][transfer->level] = TRUE;
+         svga_define_texture_level(tex, transfer->box.z, transfer->level);
       else
-         tex->defined[0][transfer->level] = TRUE;
+         svga_define_texture_level(tex, 0, transfer->level);
    }
 
    FREE(st->swbuf);
@@ -413,6 +415,10 @@ svga_texture_create(struct pipe_screen *screen,
    }
    else {
       tex->key.numFaces = 1;
+   }
+
+   if (template->target == PIPE_TEXTURE_3D) {
+      tex->key.flags |= SVGA3D_SURFACE_HINT_VOLUME;
    }
 
    tex->key.cachable = 1;
@@ -465,6 +471,9 @@ svga_texture_create(struct pipe_screen *screen,
 
    debug_reference(&tex->b.b.reference,
                    (debug_reference_descriptor)debug_describe_resource, 0);
+
+   tex->size = util_resource_size(template);
+   svgascreen->total_resource_bytes += tex->size;
 
    return &tex->b.b;
 

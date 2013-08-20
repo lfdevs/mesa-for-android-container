@@ -89,8 +89,11 @@ struct tgsi_interp_coef
 };
 
 enum tgsi_sampler_control {
+   tgsi_sampler_lod_none,
    tgsi_sampler_lod_bias,
-   tgsi_sampler_lod_explicit
+   tgsi_sampler_lod_explicit,
+   tgsi_sampler_lod_zero,
+   tgsi_sampler_derivs_explicit
 };
 
 /**
@@ -105,32 +108,39 @@ struct tgsi_sampler
     * s - the first texture coordinate for sampling.
     * t - the second texture coordinate for sampling - unused for 1D,
           layer for 1D arrays.
-    * p - the third coordinate for sampling for 3D, cube, cube arrays,
+    * r - the third coordinate for sampling for 3D, cube, cube arrays,
     *     layer for 2D arrays. Compare value for 1D/2D shadows.
-    * c0 - lod value for lod variants, compare value for shadow cube
-    *      and shadow 2d arrays.
-    * c1 - cube array only - lod for cube map arrays
-    *                        compare for shadow cube map arrays.
+    * c0 - Compare value for shadow cube and shadow 2d arrays,
+    *      layer for cube arrays.
+    * derivs - explicit derivatives.
+    * offset - texel offsets
+    * lod - lod value, except for shadow cube arrays (compare value there).
     */
    void (*get_samples)(struct tgsi_sampler *sampler,
+                       const unsigned sview_index,
+                       const unsigned sampler_index,
                        const float s[TGSI_QUAD_SIZE],
                        const float t[TGSI_QUAD_SIZE],
-                       const float p[TGSI_QUAD_SIZE],
+                       const float r[TGSI_QUAD_SIZE],
                        const float c0[TGSI_QUAD_SIZE],
                        const float c1[TGSI_QUAD_SIZE],
+                       float derivs[3][2][TGSI_QUAD_SIZE],
+                       const int8_t offset[3],
                        enum tgsi_sampler_control control,
                        float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
-   void (*get_dims)(struct tgsi_sampler *sampler, int level,
-		    int dims[4]);
-   void (*get_texel)(struct tgsi_sampler *sampler, const int i[TGSI_QUAD_SIZE],
-		     const int j[TGSI_QUAD_SIZE], const int k[TGSI_QUAD_SIZE],
-		     const int lod[TGSI_QUAD_SIZE], const int8_t offset[3],
-		     float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
+   void (*get_dims)(struct tgsi_sampler *sampler,
+                    const unsigned sview_index,
+                    int level, int dims[4]);
+   void (*get_texel)(struct tgsi_sampler *sampler,
+                     const unsigned sview_index,
+                     const int i[TGSI_QUAD_SIZE],
+                     const int j[TGSI_QUAD_SIZE], const int k[TGSI_QUAD_SIZE],
+                     const int lod[TGSI_QUAD_SIZE], const int8_t offset[3],
+                     float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
 };
 
 #define TGSI_EXEC_NUM_TEMPS       4096
 #define TGSI_EXEC_NUM_IMMEDIATES  256
-#define TGSI_EXEC_NUM_TEMP_ARRAYS 8
 
 /*
  * Locations of various utility registers (_I = Index, _C = Channel)
@@ -258,7 +268,6 @@ struct tgsi_exec_machine
     */
    struct tgsi_exec_vector       Temps[TGSI_EXEC_NUM_TEMPS +
                                        TGSI_EXEC_NUM_TEMP_EXTRAS];
-   struct tgsi_exec_vector       TempArray[TGSI_EXEC_NUM_TEMP_ARRAYS][TGSI_EXEC_NUM_TEMPS];
 
    float                         Imms[TGSI_EXEC_NUM_IMMEDIATES][4];
 
@@ -274,7 +283,7 @@ struct tgsi_exec_machine
    struct tgsi_exec_vector       *Addrs;
    struct tgsi_exec_vector       *Predicates;
 
-   struct tgsi_sampler           **Samplers;
+   struct tgsi_sampler           *Sampler;
 
    unsigned                      ImmLimit;
 
@@ -361,8 +370,7 @@ void
 tgsi_exec_machine_bind_shader(
    struct tgsi_exec_machine *mach,
    const struct tgsi_token *tokens,
-   uint numSamplers,
-   struct tgsi_sampler **samplers);
+   struct tgsi_sampler *sampler);
 
 uint
 tgsi_exec_machine_run(
@@ -441,6 +449,8 @@ tgsi_exec_get_shader_param(enum pipe_shader_cap param)
       return 1;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       return PIPE_MAX_SAMPLERS;
+   case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+      return 1;
    default:
       return 0;
    }

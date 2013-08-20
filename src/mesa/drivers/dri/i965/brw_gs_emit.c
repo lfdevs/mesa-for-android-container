@@ -201,32 +201,9 @@ static void brw_gs_emit_vue(struct brw_gs_compile *c,
 }
 
 /**
- * De-allocate the URB entry that was previously allocated to this thread
- * (without writing any vertex data to it), and terminate the thread.  This is
- * used to implement RASTERIZER_DISCARD functionality.
- */
-static void brw_gs_terminate(struct brw_gs_compile *c)
-{
-   struct brw_compile *p = &c->func;
-   brw_urb_WRITE(p,
-                 retype(brw_null_reg(), BRW_REGISTER_TYPE_UD), /* dest */
-                 0, /* msg_reg_nr */
-                 c->reg.header, /* src0 */
-                 false, /* allocate */
-                 false, /* used */
-                 1, /* msg_length */
-                 0, /* response_length */
-                 true, /* eot */
-                 true, /* writes_complete */
-                 0, /* offset */
-                 BRW_URB_SWIZZLE_NONE);
-}
-
-/**
  * Send an FF_SYNC message to ensure that all previously spawned GS threads
  * have finished sending primitives down the pipeline, and to allocate a URB
- * entry for the first output vertex.  Only needed when intel->needs_ff_sync
- * is true.
+ * entry for the first output vertex.  Only needed on Ironlake+.
  *
  * This function modifies c->reg.header: in DWORD 1, it stores num_prim (which
  * is needed by the FF_SYNC message), and in DWORD 0, it stores the handle to
@@ -252,14 +229,14 @@ static void brw_gs_ff_sync(struct brw_gs_compile *c, int num_prim)
 
 void brw_gs_quads( struct brw_gs_compile *c, struct brw_gs_prog_key *key )
 {
-   struct intel_context *intel = &c->func.brw->intel;
+   struct brw_context *brw = c->func.brw;
 
    brw_gs_alloc_regs(c, 4, false);
    brw_gs_initialize_header(c);
    /* Use polygons for correct edgeflag behaviour. Note that vertex 3
     * is the PV for quads, but vertex 0 for polygons:
     */
-   if (intel->needs_ff_sync)
+   if (brw->gen == 5)
       brw_gs_ff_sync(c, 1);
    brw_gs_overwrite_header_dw2(
       c, ((_3DPRIM_POLYGON << URB_WRITE_PRIM_TYPE_SHIFT)
@@ -290,12 +267,12 @@ void brw_gs_quads( struct brw_gs_compile *c, struct brw_gs_prog_key *key )
 
 void brw_gs_quad_strip( struct brw_gs_compile *c, struct brw_gs_prog_key *key )
 {
-   struct intel_context *intel = &c->func.brw->intel;
+   struct brw_context *brw = c->func.brw;
 
    brw_gs_alloc_regs(c, 4, false);
    brw_gs_initialize_header(c);
    
-   if (intel->needs_ff_sync)
+   if (brw->gen == 5)
       brw_gs_ff_sync(c, 1);
    brw_gs_overwrite_header_dw2(
       c, ((_3DPRIM_POLYGON << URB_WRITE_PRIM_TYPE_SHIFT)
@@ -326,12 +303,12 @@ void brw_gs_quad_strip( struct brw_gs_compile *c, struct brw_gs_prog_key *key )
 
 void brw_gs_lines( struct brw_gs_compile *c )
 {
-   struct intel_context *intel = &c->func.brw->intel;
+   struct brw_context *brw = c->func.brw;
 
    brw_gs_alloc_regs(c, 2, false);
    brw_gs_initialize_header(c);
 
-   if (intel->needs_ff_sync)
+   if (brw->gen == 5)
       brw_gs_ff_sync(c, 1);
    brw_gs_overwrite_header_dw2(
       c, ((_3DPRIM_LINESTRIP << URB_WRITE_PRIM_TYPE_SHIFT)
@@ -431,9 +408,9 @@ gen6_sol_program(struct brw_gs_compile *c, struct brw_gs_prog_key *key,
 
          for (binding = 0; binding < key->num_transform_feedback_bindings;
               ++binding) {
-            unsigned char vert_result =
+            unsigned char varying =
                key->transform_feedback_bindings[binding];
-            unsigned char slot = c->vue_map.vert_result_to_slot[vert_result];
+            unsigned char slot = c->vue_map.varying_to_slot[varying];
             /* From the Sandybridge PRM, Volume 2, Part 1, Section 4.5.1:
              *
              *   "Prior to End of Thread with a URB_WRITE, the kernel must
@@ -446,8 +423,8 @@ gen6_sol_program(struct brw_gs_compile *c, struct brw_gs_prog_key *key,
             struct brw_reg vertex_slot = c->reg.vertex[vertex];
             vertex_slot.nr += slot / 2;
             vertex_slot.subnr = (slot % 2) * 16;
-            /* gl_PointSize is stored in VERT_RESULT_PSIZ.w. */
-            vertex_slot.dw1.bits.swizzle = vert_result == VERT_RESULT_PSIZ
+            /* gl_PointSize is stored in VARYING_SLOT_PSIZ.w. */
+            vertex_slot.dw1.bits.swizzle = varying == VARYING_SLOT_PSIZ
                ? BRW_SWIZZLE_WWWW : key->transform_feedback_swizzles[binding];
             brw_set_access_mode(p, BRW_ALIGN_16);
             brw_MOV(p, stride(c->reg.header, 4, 4, 1),
@@ -483,14 +460,6 @@ gen6_sol_program(struct brw_gs_compile *c, struct brw_gs_prog_key *key,
    }
 
    brw_gs_ff_sync(c, 1);
-
-   /* If RASTERIZER_DISCARD is enabled, we have nothing further to do, so
-    * release the URB that was just allocated, and terminate the thread.
-    */
-   if (key->rasterizer_discard) {
-      brw_gs_terminate(c);
-      return;
-   }
 
    brw_gs_overwrite_header_dw2_from_r0(c);
    switch (num_verts) {

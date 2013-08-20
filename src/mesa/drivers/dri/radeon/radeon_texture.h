@@ -32,7 +32,6 @@
 #define RADEON_TEXTURE_H
 
 #include "main/formats.h"
-#include "main/mfeatures.h"
 
 extern gl_format _radeon_texformat_rgba8888;
 extern gl_format _radeon_texformat_argb8888;
@@ -47,15 +46,10 @@ void copy_rows(void* dst, GLuint dststride, const void* src, GLuint srcstride,
 struct gl_texture_image *radeonNewTextureImage(struct gl_context *ctx);
 void radeonFreeTextureImageBuffer(struct gl_context *ctx, struct gl_texture_image *timage);
 
-void radeon_teximage_map(radeon_texture_image *image, GLboolean write_enable);
-void radeon_teximage_unmap(radeon_texture_image *image);
 int radeon_validate_texture_miptree(struct gl_context * ctx,
 				    struct gl_sampler_object *samp,
 				    struct gl_texture_object *texObj);
 
-
-void radeon_swrast_map_texture_images(struct gl_context *ctx, struct gl_texture_object *texObj);
-void radeon_swrast_unmap_texture_images(struct gl_context *ctx, struct gl_texture_object *texObj);
 
 gl_format radeonChooseTextureFormat_mesa(struct gl_context * ctx,
                                          GLenum target,

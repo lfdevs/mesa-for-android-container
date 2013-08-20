@@ -36,12 +36,10 @@
 static void
 gen6_upload_vs_push_constants(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    /* _BRW_NEW_VERTEX_PROGRAM */
    const struct brw_vertex_program *vp =
       brw_vertex_program_const(brw->vertex_program);
-   unsigned int nr_params = brw->vs.prog_data->nr_params / 4;
 
    /* Updates the ParamaterValues[i] pointers for all parameters of the
     * basic type of PROGRAM_STATE_VAR.
@@ -49,23 +47,28 @@ gen6_upload_vs_push_constants(struct brw_context *brw)
    /* XXX: Should this happen somewhere before to get our state flag set? */
    _mesa_load_state_parameters(ctx, vp->program.Base.Parameters);
 
-   /* CACHE_NEW_VS_PROG | _NEW_TRANSFORM */
-   if (brw->vs.prog_data->nr_params == 0 && !ctx->Transform.ClipPlanesEnabled) {
+   /* CACHE_NEW_VS_PROG */
+   if (brw->vs.prog_data->base.nr_params == 0) {
       brw->vs.push_const_size = 0;
    } else {
-      int params_uploaded = 0;
+      int params_uploaded;
       float *param;
       int i;
 
       param = brw_state_batch(brw, AUB_TRACE_VS_CONSTANTS,
-			      (MAX_CLIP_PLANES + nr_params) *
-			      4 * sizeof(float),
+			      brw->vs.prog_data->base.nr_params * sizeof(float),
 			      32, &brw->vs.push_const_offset);
 
-      for (i = 0; i < brw->vs.prog_data->nr_params; i++) {
-         param[i] = *brw->vs.prog_data->param[i];
+      /* _NEW_PROGRAM_CONSTANTS
+       *
+       * Also _NEW_TRANSFORM -- we may reference clip planes other than as a
+       * side effect of dereferencing uniforms, so _NEW_PROGRAM_CONSTANTS
+       * wouldn't be set for them.
+      */
+      for (i = 0; i < brw->vs.prog_data->base.nr_params; i++) {
+         param[i] = *brw->vs.prog_data->base.param[i];
       }
-      params_uploaded += brw->vs.prog_data->nr_params / 4;
+      params_uploaded = brw->vs.prog_data->base.nr_params / 4;
 
       if (0) {
 	 printf("VS constant buffer:\n");
@@ -95,17 +98,21 @@ const struct brw_tracked_state gen6_vs_push_constants = {
 static void
 upload_vs_state(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
+   struct gl_context *ctx = &brw->ctx;
    uint32_t floating_point_mode = 0;
 
-   /* From the BSpec, Volume 2a, Part 3 "Vertex Shader", Section
+   /* From the BSpec, 3D Pipeline > Geometry > Vertex Shader > State,
     * 3DSTATE_VS, Dword 5.0 "VS Function Enable":
+    *
     *   [DevSNB] A pipeline flush must be programmed prior to a 3DSTATE_VS
     *   command that causes the VS Function Enable to toggle. Pipeline
     *   flush can be executed by sending a PIPE_CONTROL command with CS
     *   stall bit set and a post sync operation.
+    *
+    * Although we don't disable the VS during normal drawing, BLORP sometimes
+    * disables it.  To be safe, do the flush here just in case.
     */
-   intel_emit_post_sync_nonzero_flush(intel);
+   intel_emit_post_sync_nonzero_flush(brw);
 
    if (brw->vs.push_const_size == 0) {
       /* Disable the push constant buffers. */
@@ -135,7 +142,7 @@ upload_vs_state(struct brw_context *brw)
    /* Use ALT floating point mode for ARB vertex programs, because they
     * require 0^0 == 1.
     */
-   if (intel->ctx.Shader.CurrentVertexProgram == NULL)
+   if (ctx->Shader.CurrentVertexProgram == NULL)
       floating_point_mode = GEN6_VS_FLOATING_POINT_MODE_ALT;
 
    BEGIN_BATCH(6);
@@ -144,16 +151,16 @@ upload_vs_state(struct brw_context *brw)
    OUT_BATCH(floating_point_mode |
 	     ((ALIGN(brw->sampler.count, 4)/4) << GEN6_VS_SAMPLER_COUNT_SHIFT));
 
-   if (brw->vs.prog_data->total_scratch) {
+   if (brw->vs.prog_data->base.total_scratch) {
       OUT_RELOC(brw->vs.scratch_bo,
 		I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-		ffs(brw->vs.prog_data->total_scratch) - 11);
+		ffs(brw->vs.prog_data->base.total_scratch) - 11);
    } else {
       OUT_BATCH(0);
    }
 
    OUT_BATCH((1 << GEN6_VS_DISPATCH_START_GRF_SHIFT) |
-	     (brw->vs.prog_data->urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
+	     (brw->vs.prog_data->base.urb_read_length << GEN6_VS_URB_READ_LENGTH_SHIFT) |
 	     (0 << GEN6_VS_URB_ENTRY_READ_OFFSET_SHIFT));
 
    OUT_BATCH(((brw->max_vs_threads - 1) << GEN6_VS_MAX_THREADS_SHIFT) |
@@ -178,7 +185,7 @@ upload_vs_state(struct brw_context *brw)
     * bug reports that led to this workaround, and may be more than
     * what is strictly required to avoid the issue.
     */
-   intel_emit_post_sync_nonzero_flush(intel);
+   intel_emit_post_sync_nonzero_flush(brw);
 
    BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_PIPE_CONTROL | (4 - 2));

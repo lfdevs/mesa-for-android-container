@@ -30,8 +30,7 @@
 static void
 gen7_upload_sf_clip_viewport(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    const GLfloat depth_scale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
    GLfloat y_scale, y_bias;
    const bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
@@ -99,8 +98,6 @@ const struct brw_tracked_state gen7_sf_clip_viewport = {
 
 static void upload_cc_viewport_state_pointer(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_VIEWPORT_STATE_POINTERS_CC << 16 | (2 - 2));
    OUT_BATCH(brw->cc.vp_offset);

@@ -38,8 +38,10 @@
 #include "pipe/p_screen.h"
 #include "pipe/p_format.h"
 #include "state_tracker/st_gl_api.h" /* for st_gl_api_create */
+#include "state_tracker/drm_driver.h"
 
 #include "util/u_debug.h"
+#include "util/u_format_s3tc.h"
 
 #define MSAA_VISUAL_MAX_SAMPLES 32
 
@@ -47,14 +49,8 @@
 
 PUBLIC const char __driConfigOptions[] =
    DRI_CONF_BEGIN
-      DRI_CONF_SECTION_PERFORMANCE
-         DRI_CONF_FTHROTTLE_MODE(DRI_CONF_FTHROTTLE_IRQS)
-         DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_0)
-      DRI_CONF_SECTION_END
-
       DRI_CONF_SECTION_QUALITY
-/*       DRI_CONF_FORCE_S3TC_ENABLE(false) */
-         DRI_CONF_ALLOW_LARGE_TEXTURES(1)
+         DRI_CONF_FORCE_S3TC_ENABLE("false")
          DRI_CONF_PP_CELSHADE(0)
          DRI_CONF_PP_NORED(0)
          DRI_CONF_PP_NOGREEN(0)
@@ -64,15 +60,21 @@ PUBLIC const char __driConfigOptions[] =
       DRI_CONF_SECTION_END
 
       DRI_CONF_SECTION_DEBUG
-         DRI_CONF_FORCE_GLSL_EXTENSIONS_WARN(false)
-         DRI_CONF_DISABLE_GLSL_LINE_CONTINUATIONS(false)
+         DRI_CONF_FORCE_GLSL_EXTENSIONS_WARN("false")
+         DRI_CONF_DISABLE_GLSL_LINE_CONTINUATIONS("false")
+         DRI_CONF_DISABLE_BLEND_FUNC_EXTENDED("false")
+         DRI_CONF_DISABLE_SHADER_BIT_ENCODING("false")
+         DRI_CONF_FORCE_GLSL_VERSION(0)
       DRI_CONF_SECTION_END
 
+      DRI_CONF_SECTION_MISCELLANEOUS
+         DRI_CONF_ALWAYS_HAVE_DEPTH_BUFFER("false")
+      DRI_CONF_SECTION_END
    DRI_CONF_END;
 
 #define false 0
 
-static const uint __driNConfigOptions = 11;
+static const uint __driNConfigOptions = 13;
 
 static const __DRIconfig **
 dri_fill_in_modes(struct dri_screen *screen)
@@ -83,8 +85,8 @@ dri_fill_in_modes(struct dri_screen *screen)
       MESA_FORMAT_RGB565,
    };
    static const enum pipe_format pipe_formats[3] = {
-      PIPE_FORMAT_B8G8R8A8_UNORM,
-      PIPE_FORMAT_B8G8R8X8_UNORM,
+      PIPE_FORMAT_BGRA8888_UNORM,
+      PIPE_FORMAT_BGRX8888_UNORM,
       PIPE_FORMAT_B5G6R5_UNORM,
    };
    gl_format format;
@@ -101,10 +103,16 @@ dri_fill_in_modes(struct dri_screen *screen)
       GLX_NONE, GLX_SWAP_UNDEFINED_OML, GLX_SWAP_COPY_OML
    };
 
-   depth_bits_array[0] = 0;
-   stencil_bits_array[0] = 0;
-   depth_buffer_factor = 1;
-
+   if (driQueryOptionb(&screen->optionCache, "always_have_depth_buffer")) {
+      /* all visuals will have a depth buffer */
+      depth_buffer_factor = 0;
+   }
+   else {
+      depth_bits_array[0] = 0;
+      stencil_bits_array[0] = 0;
+      depth_buffer_factor = 1;
+   }
+ 
    msaa_samples_max = (screen->st_api->feature_mask & ST_API_FEATURE_MS_VISUALS_MASK)
       ? MSAA_VISUAL_MAX_SAMPLES : 1;
 
@@ -240,9 +248,9 @@ dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
 
    if (mode->redBits == 8) {
       if (mode->alphaBits == 8)
-         stvis->color_format = PIPE_FORMAT_B8G8R8A8_UNORM;
+         stvis->color_format = PIPE_FORMAT_BGRA8888_UNORM;
       else
-         stvis->color_format = PIPE_FORMAT_B8G8R8X8_UNORM;
+         stvis->color_format = PIPE_FORMAT_BGRX8888_UNORM;
    } else {
       stvis->color_format = PIPE_FORMAT_B5G6R5_UNORM;
    }
@@ -398,8 +406,27 @@ dri_init_screen_helper(struct dri_screen *screen,
    else
       screen->target = PIPE_TEXTURE_RECT;
 
-   driParseOptionInfo(&screen->optionCache,
+   driParseOptionInfo(&screen->optionCacheDefaults,
                       __driConfigOptions, __driNConfigOptions);
+
+   driParseConfigFiles(&screen->optionCache,
+		       &screen->optionCacheDefaults,
+                       screen->sPriv->myNum,
+                       driver_descriptor.name);
+
+   /* Handle force_s3tc_enable. */
+   if (!util_format_s3tc_enabled &&
+       driQueryOptionb(&screen->optionCache, "force_s3tc_enable")) {
+      /* Ensure libtxc_dxtn has been loaded if available.
+       * Forcing S3TC on before calling this would prevent loading
+       * the library.
+       * This is just a precaution, the driver should have called it
+       * already.
+       */
+      util_format_s3tc_init();
+
+      util_format_s3tc_enabled = TRUE;
+   }
 
    return dri_fill_in_modes(screen);
 }

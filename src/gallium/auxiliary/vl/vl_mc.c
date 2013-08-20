@@ -340,7 +340,7 @@ create_ycbcr_frag_shader(struct vl_mc *r, float scale, bool invert,
 
    ureg_IF(shader, ureg_scalar(ureg_src(tmp), TGSI_SWIZZLE_Y), &label);
 
-      ureg_KILP(shader);
+      ureg_KILL(shader);
 
    ureg_fixup_label(shader, label, ureg_get_instruction_number(shader));
    ureg_ELSE(shader, &label);
@@ -428,7 +428,8 @@ init_pipe_state(struct vl_mc *r)
    rs_state.sprite_coord_mode = PIPE_SPRITE_COORD_UPPER_LEFT;
    rs_state.point_quad_rasterization = true;
    rs_state.point_size = VL_BLOCK_WIDTH;
-   rs_state.gl_rasterization_rules = true;
+   rs_state.half_pixel_center = true;
+   rs_state.bottom_edge_rule = true;
    rs_state.depth_clip = 1;
    r->rs_state = r->pipe->create_rasterizer_state(r->pipe, &rs_state);
    if (!r->rs_state)
@@ -599,7 +600,7 @@ prepare_pipe_4_rendering(struct vl_mc *renderer, struct vl_mc_buffer *buffer, un
       renderer->pipe->bind_blend_state(renderer->pipe, renderer->blend_clear[mask]);
 
    renderer->pipe->set_framebuffer_state(renderer->pipe, &buffer->fb_state);
-   renderer->pipe->set_viewport_state(renderer->pipe, &buffer->viewport);
+   renderer->pipe->set_viewport_states(renderer->pipe, 0, 1, &buffer->viewport);
 }
 
 void

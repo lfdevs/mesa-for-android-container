@@ -122,4 +122,52 @@ lp_build_fetch_subsampled_rgba_aos(struct gallivm_state *gallivm,
                                    LLVMValueRef i,
                                    LLVMValueRef j);
 
+/*
+ * special float formats
+ */
+
+LLVMValueRef
+lp_build_float_to_smallfloat(struct gallivm_state *gallivm,
+                             struct lp_type i32_type,
+                             LLVMValueRef src,
+                             unsigned mantissa_bits,
+                             unsigned exponent_bits,
+                             unsigned mantissa_start,
+                             boolean has_sign);
+
+LLVMValueRef
+lp_build_smallfloat_to_float(struct gallivm_state *gallivm,
+                             struct lp_type f32_type,
+                             LLVMValueRef src,
+                             unsigned mantissa_bits,
+                             unsigned exponent_bits,
+                             unsigned mantissa_start,
+                             boolean has_sign);
+
+LLVMValueRef
+lp_build_float_to_r11g11b10(struct gallivm_state *gallivm,
+                            LLVMValueRef *src);
+
+void
+lp_build_r11g11b10_to_float(struct gallivm_state *gallivm,
+                            LLVMValueRef src,
+                            LLVMValueRef *dst);
+
+void
+lp_build_rgb9e5_to_float(struct gallivm_state *gallivm,
+                         LLVMValueRef src,
+                         LLVMValueRef *dst);
+
+LLVMValueRef
+lp_build_float_to_srgb_packed(struct gallivm_state *gallivm,
+                              const struct util_format_description *dst_fmt,
+                              struct lp_type src_type,
+                              LLVMValueRef *src);
+
+LLVMValueRef
+lp_build_srgb_to_linear(struct gallivm_state *gallivm,
+                        struct lp_type src_type,
+                        LLVMValueRef src);
+
+
 #endif /* !LP_BLD_FORMAT_H */

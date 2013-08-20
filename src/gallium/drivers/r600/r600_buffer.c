@@ -135,11 +135,13 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 				}
 			}
 			/* Streamout buffers. */
-			for (i = 0; i < rctx->num_so_targets; i++) {
-				if (rctx->so_targets[i]->b.buffer == &rbuffer->b.b) {
-					r600_context_streamout_end(rctx);
-					rctx->streamout_start = TRUE;
-					rctx->streamout_append_bitmask = ~0;
+			for (i = 0; i < rctx->streamout.num_targets; i++) {
+				if (rctx->streamout.targets[i]->b.buffer == &rbuffer->b.b) {
+					if (rctx->streamout.begin_emitted) {
+						r600_emit_streamout_end(rctx);
+					}
+					rctx->streamout.append_bitmask = rctx->streamout.enabled_mask;
+					r600_streamout_buffers_dirty(rctx);
 				}
 			}
 			/* Constant buffers. */
@@ -148,9 +150,11 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 	}
 	else if ((usage & PIPE_TRANSFER_DISCARD_RANGE) &&
 		 !(usage & PIPE_TRANSFER_UNSYNCHRONIZED) &&
-		 rctx->screen->has_streamout &&
-		 /* The buffer range must be aligned to 4. */
-		 box->x % 4 == 0 && box->width % 4 == 0) {
+		 !(rctx->screen->debug_flags & DBG_NO_DISCARD_RANGE) &&
+		 (rctx->screen->has_cp_dma ||
+		  (rctx->screen->has_streamout &&
+		   /* The buffer range must be aligned to 4 with streamout. */
+		   box->x % 4 == 0 && box->width % 4 == 0))) {
 		assert(usage & PIPE_TRANSFER_WRITE);
 
 		/* Check if mapping this buffer would cause waiting for the GPU. */
@@ -275,6 +279,13 @@ bool r600_init_resource(struct r600_screen *rscreen,
 	res->cs_buf = rscreen->ws->buffer_get_cs_handle(res->buf);
 	res->domains = domains;
 	util_range_set_empty(&res->valid_buffer_range);
+
+	if (rscreen->debug_flags & DBG_VM && res->b.b.target == PIPE_BUFFER) {
+		fprintf(stderr, "VM start=0x%llX  end=0x%llX | Buffer %u bytes\n",
+			r600_resource_va(&rscreen->screen, &res->b.b),
+			r600_resource_va(&rscreen->screen, &res->b.b) + res->buf->size,
+			res->buf->size);
+	}
 	return true;
 }
 

@@ -23,12 +23,36 @@
 #ifndef R600_RESOURCE_H
 #define R600_RESOURCE_H
 
-#include "r600.h"
+#include "../../winsys/radeon/drm/radeon_winsys.h"
+#include "util/u_range.h"
+
+struct r600_screen;
 
 /* flag to indicate a resource is to be used as a transfer so should not be tiled */
 #define R600_RESOURCE_FLAG_TRANSFER		PIPE_RESOURCE_FLAG_DRV_PRIV
 #define R600_RESOURCE_FLAG_FLUSHED_DEPTH	(PIPE_RESOURCE_FLAG_DRV_PRIV << 1)
 #define R600_RESOURCE_FLAG_FORCE_TILING		(PIPE_RESOURCE_FLAG_DRV_PRIV << 2)
+
+struct r600_resource {
+	struct u_resource		b;
+
+	/* Winsys objects. */
+	struct pb_buffer		*buf;
+	struct radeon_winsys_cs_handle	*cs_buf;
+
+	/* Resource state. */
+	enum radeon_bo_domain		domains;
+
+	/* The buffer range which is initialized (with a write transfer,
+	 * streamout, DMA, or as a random access target). The rest of
+	 * the buffer is considered invalid and can be mapped unsynchronized.
+	 *
+	 * This allows unsychronized mapping of a buffer range which hasn't
+	 * been used yet. It's for applications which forget to use
+	 * the unsynchronized map flag and expect the driver to figure it out.
+         */
+	struct util_range		valid_buffer_range;
+};
 
 struct r600_transfer {
 	struct pipe_transfer		transfer;
@@ -60,11 +84,15 @@ struct r600_texture {
 	/* FMASK and CMASK can only be used with MSAA textures for now.
 	 * MSAA textures cannot have mipmaps. */
 	unsigned			fmask_offset, fmask_size, fmask_bank_height;
-	unsigned			cmask_offset, cmask_size, cmask_slice_tile_max;
+	unsigned			fmask_slice_tile_max;
+	unsigned			cmask_offset, cmask_size;
+	unsigned			cmask_slice_tile_max;
 
 	struct r600_resource		*htile;
 	/* use htile only for first level */
 	float				depth_clear;
+
+	unsigned			color_clear_value[2];
 };
 
 #define R600_TEX_IS_TILED(tex, level) ((tex)->array_mode[level] != V_038000_ARRAY_LINEAR_GENERAL && (tex)->array_mode[level] != V_038000_ARRAY_LINEAR_ALIGNED)
@@ -73,6 +101,7 @@ struct r600_fmask_info {
 	unsigned size;
 	unsigned alignment;
 	unsigned bank_height;
+	unsigned slice_tile_max;
 };
 
 struct r600_cmask_info {

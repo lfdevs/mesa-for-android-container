@@ -175,11 +175,11 @@ dst_register( struct st_translate *t,
 
    case PROGRAM_OUTPUT:
       if (t->procType == TGSI_PROCESSOR_VERTEX)
-         assert(index < VERT_RESULT_MAX);
+         assert(index < VARYING_SLOT_MAX);
       else if (t->procType == TGSI_PROCESSOR_FRAGMENT)
          assert(index < FRAG_RESULT_MAX);
       else
-         assert(index < GEOM_RESULT_MAX);
+         assert(index < VARYING_SLOT_MAX);
 
       assert(t->outputMapping[index] < Elements(t->outputs));
 
@@ -269,6 +269,8 @@ st_translate_texture_target( GLuint textarget,
    }
 
    switch( textarget ) {
+   case TEXTURE_2D_MULTISAMPLE_INDEX: return TGSI_TEXTURE_2D_MSAA;
+   case TEXTURE_2D_MULTISAMPLE_ARRAY_INDEX: return TGSI_TEXTURE_2D_ARRAY_MSAA;
    case TEXTURE_BUFFER_INDEX: return TGSI_TEXTURE_BUFFER;
    case TEXTURE_1D_INDEX:   return TGSI_TEXTURE_1D;
    case TEXTURE_2D_INDEX:   return TGSI_TEXTURE_2D;
@@ -310,10 +312,10 @@ translate_dst( struct st_translate *t,
       case TGSI_PROCESSOR_VERTEX:
          /* XXX if the geometry shader is present, this must be done there
           * instead of here. */
-         if (DstReg->Index == VERT_RESULT_COL0 ||
-             DstReg->Index == VERT_RESULT_COL1 ||
-             DstReg->Index == VERT_RESULT_BFC0 ||
-             DstReg->Index == VERT_RESULT_BFC1) {
+         if (DstReg->Index == VARYING_SLOT_COL0 ||
+             DstReg->Index == VARYING_SLOT_COL1 ||
+             DstReg->Index == VARYING_SLOT_BFC0 ||
+             DstReg->Index == VARYING_SLOT_BFC1) {
             dst = ureg_saturate(dst);
          }
          break;
@@ -554,8 +556,6 @@ translate_opcode( unsigned op )
       return TGSI_OPCODE_DDY;
    case OPCODE_DP2:
       return TGSI_OPCODE_DP2;
-   case OPCODE_DP2A:
-      return TGSI_OPCODE_DP2A;
    case OPCODE_DP3:
       return TGSI_OPCODE_DP3;
    case OPCODE_DP4:
@@ -585,9 +585,10 @@ translate_opcode( unsigned op )
    case OPCODE_TRUNC:
       return TGSI_OPCODE_TRUNC;
    case OPCODE_KIL:
-      return TGSI_OPCODE_KIL;
+      return TGSI_OPCODE_KILL_IF;
    case OPCODE_KIL_NV:
-      return TGSI_OPCODE_KILP;
+      /* XXX we don't support condition codes in TGSI */
+      return TGSI_OPCODE_KILL;
    case OPCODE_LG2:
       return TGSI_OPCODE_LG2;
    case OPCODE_LOG:
@@ -608,18 +609,12 @@ translate_opcode( unsigned op )
       return TGSI_OPCODE_MUL;
    case OPCODE_NOP:
       return TGSI_OPCODE_NOP;
-   case OPCODE_NRM3:
-      return TGSI_OPCODE_NRM;
-   case OPCODE_NRM4:
-      return TGSI_OPCODE_NRM4;
    case OPCODE_POW:
       return TGSI_OPCODE_POW;
    case OPCODE_RCP:
       return TGSI_OPCODE_RCP;
    case OPCODE_RET:
       return TGSI_OPCODE_RET;
-   case OPCODE_RSQ:
-      return TGSI_OPCODE_RSQ;
    case OPCODE_SCS:
       return TGSI_OPCODE_SCS;
    case OPCODE_SEQ:
@@ -663,6 +658,7 @@ translate_opcode( unsigned op )
 
 static void
 compile_instruction(
+   struct gl_context *ctx,
    struct st_translate *t,
    const struct prog_instruction *inst,
    boolean clamp_dst_color_output)
@@ -695,10 +691,17 @@ compile_instruction(
    case OPCODE_CAL:
    case OPCODE_ELSE:
    case OPCODE_ENDLOOP:
-   case OPCODE_IF:
       debug_assert(num_dst == 0);
       ureg_label_insn( ureg,
                        translate_opcode( inst->Opcode ),
+                       src, num_src,
+                       get_label( t, inst->BranchTarget ));
+      return;
+
+   case OPCODE_IF:
+      debug_assert(num_dst == 0);
+      ureg_label_insn( ureg,
+                       ctx->Const.NativeIntegers ? TGSI_OPCODE_UIF : TGSI_OPCODE_IF,
                        src, num_src,
                        get_label( t, inst->BranchTarget ));
       return;
@@ -751,6 +754,10 @@ compile_instruction(
       emit_ddy( t, dst[0], &inst->SrcReg[0] );
       break;
 
+   case OPCODE_RSQ:
+      ureg_RSQ( ureg, dst[0], ureg_abs(src[0]) );
+      break;
+
    default:
       ureg_insn( ureg, 
                  translate_opcode( inst->Opcode ), 
@@ -790,7 +797,7 @@ emit_wpos_adjustment( struct st_translate *t,
 
    struct ureg_src wpostrans = ureg_DECL_constant( ureg, wposTransConst );
    struct ureg_dst wpos_temp = ureg_DECL_temporary( ureg );
-   struct ureg_src wpos_input = t->inputs[t->inputMapping[FRAG_ATTRIB_WPOS]];
+   struct ureg_src wpos_input = t->inputs[t->inputMapping[VARYING_SLOT_POS]];
 
    /* First, apply the coordinate shift: */
    if (adjX || adjY[0] || adjY[1]) {
@@ -841,7 +848,7 @@ emit_wpos_adjustment( struct st_translate *t,
 
    /* Use wpos_temp as position input from here on:
     */
-   t->inputs[t->inputMapping[FRAG_ATTRIB_WPOS]] = ureg_src(wpos_temp);
+   t->inputs[t->inputMapping[VARYING_SLOT_POS]] = ureg_src(wpos_temp);
 }
 
 
@@ -961,7 +968,7 @@ emit_face_var( struct st_translate *t,
 {
    struct ureg_program *ureg = t->ureg;
    struct ureg_dst face_temp = ureg_DECL_temporary( ureg );
-   struct ureg_src face_input = t->inputs[t->inputMapping[FRAG_ATTRIB_FACE]];
+   struct ureg_src face_input = t->inputs[t->inputMapping[VARYING_SLOT_FACE]];
 
    /* MOV_SAT face_temp, input[face]
     */
@@ -970,7 +977,7 @@ emit_face_var( struct st_translate *t,
 
    /* Use face_temp as face input from here on:
     */
-   t->inputs[t->inputMapping[FRAG_ATTRIB_FACE]] = ureg_src(face_temp);
+   t->inputs[t->inputMapping[VARYING_SLOT_FACE]] = ureg_src(face_temp);
 }
 
 
@@ -979,7 +986,7 @@ emit_edgeflags( struct st_translate *t,
                  const struct gl_program *program )
 {
    struct ureg_program *ureg = t->ureg;
-   struct ureg_dst edge_dst = t->outputs[t->outputMapping[VERT_RESULT_EDGE]];
+   struct ureg_dst edge_dst = t->outputs[t->outputMapping[VARYING_SLOT_EDGE]];
    struct ureg_src edge_src = t->inputs[t->inputMapping[VERT_ATTRIB_EDGEFLAG]];
 
    ureg_MOV( ureg, edge_dst, edge_src );
@@ -1051,14 +1058,14 @@ st_translate_mesa_program(
                                            interpMode[i]);
       }
 
-      if (program->InputsRead & FRAG_BIT_WPOS) {
+      if (program->InputsRead & VARYING_BIT_POS) {
          /* Must do this after setting up t->inputs, and before
           * emitting constant references, below:
           */
          emit_wpos(st_context(ctx), t, program, ureg);
       }
 
-      if (program->InputsRead & FRAG_BIT_FACE) {
+      if (program->InputsRead & VARYING_BIT_FACE) {
          emit_face_var( t, program );
       }
 
@@ -1217,7 +1224,7 @@ st_translate_mesa_program(
    }
 
    /* texture samplers */
-   for (i = 0; i < ctx->Const.MaxTextureImageUnits; i++) {
+   for (i = 0; i < ctx->Const.FragmentProgram.MaxTextureImageUnits; i++) {
       if (program->SamplersUsed & (1 << i)) {
          t->samplers[i] = ureg_DECL_sampler( ureg, i );
       }
@@ -1227,7 +1234,7 @@ st_translate_mesa_program(
     */
    for (i = 0; i < program->NumInstructions; i++) {
       set_insn_start( t, ureg_get_instruction_number( ureg ));
-      compile_instruction( t, &program->Instructions[i], clamp_color );
+      compile_instruction( ctx, t, &program->Instructions[i], clamp_color );
    }
 
    /* Fix up all emitted labels:

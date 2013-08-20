@@ -12,6 +12,8 @@ AM_CPPFLAGS = \
 	$(GALLIUM_PIPE_LOADER_DEFINES)
 
 LDADD = $(GALLIUM_PIPE_LOADER_LIBS) \
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
+	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
 	$(LIBUDEV_LIBS) \
 	$(DLOPEN_LIBS) \
@@ -26,9 +28,5 @@ tri_SOURCES = tri.c
 
 quad_tex_SOURCES = quad-tex.c
 
-all-local:
-	@$(MAKE) -C $(PIPE_SRC_DIR)
-
 clean-local:
-	@$(MAKE) -C $(PIPE_SRC_DIR) clean
 	-rm -f result.bmp

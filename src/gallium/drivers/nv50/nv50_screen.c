@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "util/u_format.h"
@@ -65,11 +65,6 @@ nv50_screen_is_format_supported(struct pipe_screen *pscreen,
       if (nv50_screen(pscreen)->tesla->oclass < NVA0_3D_CLASS)
          return FALSE;
       break;
-   case PIPE_FORMAT_R8G8B8A8_UNORM:
-   case PIPE_FORMAT_R8G8B8X8_UNORM:
-      /* HACK: GL requires equal formats for MS resolve and window is BGRA */
-      if (bindings & PIPE_BIND_RENDER_TARGET)
-         return FALSE;
    default:
       break;
    }
@@ -108,7 +103,10 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_NPOT_TEXTURES:
    case PIPE_CAP_ANISOTROPIC_FILTER:
    case PIPE_CAP_SCALED_RESOLVE:
+   case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 1;
+   case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
+      return 65536;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
       return nv50_screen(pscreen)->tesla->oclass >= NVA0_3D_CLASS;
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
@@ -125,7 +123,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SM3:
       return 1;
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
-      return 130;
+      return 140;
    case PIPE_CAP_MAX_RENDER_TARGETS:
       return 8;
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
@@ -167,7 +165,6 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_START_INSTANCE:
       return 1;
-   case PIPE_CAP_TGSI_CAN_COMPACT_VARYINGS:
    case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
       return 0; /* state trackers will know better */
    case PIPE_CAP_USER_CONSTANT_BUFFERS:
@@ -176,14 +173,24 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 256;
+   case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
+      return 1; /* 256 for binding as RT, but that's not possible in GL */
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
       return NOUVEAU_MIN_BUFFER_MAP_ALIGN;
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
+   case PIPE_CAP_TGSI_TEXCOORD:
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
-   case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 0;
+   case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+      return 1;
+   case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
+      return 0;
+   case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
+      return PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50;
+   case PIPE_CAP_ENDIANNESS:
+      return PIPE_ENDIAN_LITTLE;
    default:
       NOUVEAU_ERR("unknown PIPE_CAP %d\n", param);
       return 0;
@@ -233,6 +240,8 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       return nv50_screen(pscreen)->max_tls_space / ONE_TEMP_SIZE;
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
       return 1;
+   case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+      return 0;
    case PIPE_SHADER_CAP_SUBROUTINES:
       return 0; /* please inline, or provide function declarations */
    case PIPE_SHADER_CAP_INTEGERS:
@@ -638,7 +647,18 @@ nv50_screen_create(struct nouveau_device *dev)
 
    nv50_screen_init_resource_functions(pscreen);
 
-   nouveau_screen_init_vdec(&screen->base);
+   if (screen->base.device->chipset < 0x84) {
+      /* PMPEG */
+      nouveau_screen_init_vdec(&screen->base);
+   } else if (screen->base.device->chipset < 0x98 ||
+              screen->base.device->chipset == 0xa0) {
+      /* VP2 */
+      screen->base.base.get_video_param = nv84_screen_get_video_param;
+      screen->base.base.is_video_format_supported = nv84_screen_video_supported;
+   } else {
+      /* Unsupported, but need to init pointers. */
+      nouveau_screen_init_vdec(&screen->base);
+   }
 
    ret = nouveau_bo_new(dev, NOUVEAU_BO_GART | NOUVEAU_BO_MAP, 0, 4096,
                         NULL, &screen->fence.bo);

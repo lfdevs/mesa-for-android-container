@@ -700,6 +700,7 @@ trace_context_set_constant_buffer(struct pipe_context *_pipe,
    if (constant_buffer) {
       cb = *constant_buffer;
       cb.buffer = trace_resource_unwrap(tr_ctx, constant_buffer->buffer);
+      constant_buffer = &cb;
    }
 
    trace_dump_call_begin("pipe_context", "set_constant_buffer");
@@ -709,8 +710,7 @@ trace_context_set_constant_buffer(struct pipe_context *_pipe,
    trace_dump_arg(uint, index);
    trace_dump_arg(constant_buffer, constant_buffer);
 
-   pipe->set_constant_buffer(pipe, shader, index,
-                             constant_buffer ? &cb : NULL);
+   pipe->set_constant_buffer(pipe, shader, index, constant_buffer);
 
    trace_dump_call_end();
 }
@@ -765,36 +765,44 @@ trace_context_set_polygon_stipple(struct pipe_context *_pipe,
 
 
 static INLINE void
-trace_context_set_scissor_state(struct pipe_context *_pipe,
-                                const struct pipe_scissor_state *state)
+trace_context_set_scissor_states(struct pipe_context *_pipe,
+                                 unsigned start_slot,
+                                 unsigned num_scissors,
+                                 const struct pipe_scissor_state *states)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
 
-   trace_dump_call_begin("pipe_context", "set_scissor_state");
+   trace_dump_call_begin("pipe_context", "set_scissor_states");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg(scissor_state, state);
+   trace_dump_arg(uint, start_slot);
+   trace_dump_arg(uint, num_scissors);
+   trace_dump_arg(scissor_state, states);
 
-   pipe->set_scissor_state(pipe, state);
+   pipe->set_scissor_states(pipe, start_slot, num_scissors, states);
 
    trace_dump_call_end();
 }
 
 
 static INLINE void
-trace_context_set_viewport_state(struct pipe_context *_pipe,
-                                 const struct pipe_viewport_state *state)
+trace_context_set_viewport_states(struct pipe_context *_pipe,
+                                  unsigned start_slot,
+                                  unsigned num_viewports,
+                                  const struct pipe_viewport_state *states)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
 
-   trace_dump_call_begin("pipe_context", "set_viewport_state");
+   trace_dump_call_begin("pipe_context", "set_viewport_states");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg(viewport_state, state);
+   trace_dump_arg(uint, start_slot);
+   trace_dump_arg(uint, num_viewports);
+   trace_dump_arg(viewport_state, states);
 
-   pipe->set_viewport_state(pipe, state);
+   pipe->set_viewport_states(pipe, start_slot, num_viewports, states);
 
    trace_dump_call_end();
 }
@@ -852,6 +860,8 @@ trace_context_sampler_view_destroy(struct pipe_context *_pipe,
    struct pipe_context *pipe = tr_ctx->pipe;
    struct pipe_sampler_view *view = tr_view->sampler_view;
 
+   assert(_view->context == _pipe);
+
    trace_dump_call_begin("pipe_context", "sampler_view_destroy");
 
    trace_dump_arg(ptr, pipe);
@@ -897,7 +907,7 @@ trace_context_create_surface(struct pipe_context *_pipe,
 
    trace_dump_call_end();
 
-   result = trace_surf_create(tr_res, result);
+   result = trace_surf_create(tr_ctx, tr_res, result);
 
    return result;
 }
@@ -1089,6 +1099,8 @@ trace_context_create_stream_output_target(struct pipe_context *_pipe,
 
    result = pipe->create_stream_output_target(pipe,
                                               res, buffer_offset, buffer_size);
+
+   trace_dump_ret(ptr, result);
 
    trace_dump_call_end();
 
@@ -1285,7 +1297,7 @@ trace_context_clear_depth_stencil(struct pipe_context *_pipe,
 static INLINE void
 trace_context_flush(struct pipe_context *_pipe,
                     struct pipe_fence_handle **fence,
-                    enum pipe_flush_flags flags)
+                    unsigned flags)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
@@ -1408,7 +1420,7 @@ trace_context_transfer_unmap(struct pipe_context *_context,
 
       trace_dump_arg_begin("data");
       trace_dump_box_bytes(tr_trans->map,
-                           resource->format,
+                           resource,
                            box,
                            stride,
                            layer_stride);
@@ -1454,7 +1466,7 @@ trace_context_transfer_inline_write(struct pipe_context *_context,
 
    trace_dump_arg_begin("data");
    trace_dump_box_bytes(data,
-                        resource->format,
+                        resource,
                         box,
                         stride,
                         layer_stride);
@@ -1472,6 +1484,7 @@ trace_context_transfer_inline_write(struct pipe_context *_context,
 
 static void trace_context_render_condition(struct pipe_context *_context,
                                            struct pipe_query *query,
+                                           boolean condition,
                                            uint mode)
 {
    struct trace_context *tr_context = trace_context(_context);
@@ -1481,11 +1494,12 @@ static void trace_context_render_condition(struct pipe_context *_context,
 
    trace_dump_arg(ptr, context);
    trace_dump_arg(ptr, query);
+   trace_dump_arg(bool, condition);
    trace_dump_arg(uint, mode);
 
    trace_dump_call_end();
 
-   context->render_condition(context, query, mode);
+   context->render_condition(context, query, condition, mode);
 }
 
 
@@ -1574,8 +1588,8 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(set_constant_buffer);
    TR_CTX_INIT(set_framebuffer_state);
    TR_CTX_INIT(set_polygon_stipple);
-   TR_CTX_INIT(set_scissor_state);
-   TR_CTX_INIT(set_viewport_state);
+   TR_CTX_INIT(set_scissor_states);
+   TR_CTX_INIT(set_viewport_states);
    TR_CTX_INIT(set_fragment_sampler_views);
    TR_CTX_INIT(set_vertex_sampler_views);
    TR_CTX_INIT(set_geometry_sampler_views);
@@ -1610,3 +1624,16 @@ trace_context_create(struct trace_screen *tr_scr,
 error1:
    return pipe;
 }
+
+
+/**
+ * Sanity checker: check that the given context really is a 
+ * trace context (and not the wrapped driver's context).
+ */
+void
+trace_context_check(const struct pipe_context *pipe)
+{
+   struct trace_context *tr_ctx = (struct trace_context *) pipe;
+   assert(tr_ctx->base.destroy == trace_context_destroy);
+}
+

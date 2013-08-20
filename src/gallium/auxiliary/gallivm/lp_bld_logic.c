@@ -464,6 +464,8 @@ lp_build_select(struct lp_build_context *bld,
        * XXX: Using vector selects would avoid emitting intrinsics, but they aren't
        * properly supported yet.
        *
+       * LLVM 3.1 supports it, but it yields buggy code (e.g. lp_blend_test).
+       *
        * LLVM 3.0 includes experimental support provided the -promote-elements
        * options is passed to LLVM's command line (e.g., via
        * llvm::cl::ParseCommandLineOptions), but resulting code quality is much

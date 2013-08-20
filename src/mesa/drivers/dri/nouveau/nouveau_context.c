@@ -198,13 +198,9 @@ nouveau_context_init(struct gl_context *ctx, struct nouveau_screen *screen,
 	/* Enable any supported extensions. */
 	ctx->Extensions.EXT_blend_color = true;
 	ctx->Extensions.EXT_blend_minmax = true;
-	ctx->Extensions.EXT_fog_coord = true;
 	ctx->Extensions.EXT_framebuffer_blit = true;
-	ctx->Extensions.EXT_framebuffer_object = true;
 	ctx->Extensions.EXT_packed_depth_stencil = true;
-	ctx->Extensions.EXT_secondary_color = true;
 	ctx->Extensions.EXT_texture_filter_anisotropic = true;
-	ctx->Extensions.NV_blend_square = true;
 	ctx->Extensions.NV_texture_env_combine4 = true;
 
 	return GL_TRUE;

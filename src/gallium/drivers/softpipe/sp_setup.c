@@ -394,7 +394,7 @@ setup_sort_vertices(struct setup_context *setup,
     *  - pixel center (0.5, 0.5) for GL, or
     *  - assume (0.0, 0.0) for other APIs.
     */
-   if (setup->softpipe->rasterizer->gl_rasterization_rules) {
+   if (setup->softpipe->rasterizer->half_pixel_center) {
       setup->pixel_offset = 0.5f;
    } else {
       setup->pixel_offset = 0.0f;
@@ -578,15 +578,15 @@ setup_fragcoord_coeff(struct setup_context *setup, uint slot)
    const struct tgsi_shader_info *fsInfo = &setup->softpipe->fs_variant->info;
 
    /*X*/
-   setup->coef[slot].a0[0] = fsInfo->pixel_center_integer ? 0.0 : 0.5;
-   setup->coef[slot].dadx[0] = 1.0;
-   setup->coef[slot].dady[0] = 0.0;
+   setup->coef[slot].a0[0] = fsInfo->pixel_center_integer ? 0.0f : 0.5f;
+   setup->coef[slot].dadx[0] = 1.0f;
+   setup->coef[slot].dady[0] = 0.0f;
    /*Y*/
    setup->coef[slot].a0[1] =
 		   (fsInfo->origin_lower_left ? setup->softpipe->framebuffer.height-1 : 0)
-		   + (fsInfo->pixel_center_integer ? 0.0 : 0.5);
-   setup->coef[slot].dadx[1] = 0.0;
-   setup->coef[slot].dady[1] = fsInfo->origin_lower_left ? -1.0 : 1.0;
+		   + (fsInfo->pixel_center_integer ? 0.0f : 0.5f);
+   setup->coef[slot].dadx[1] = 0.0f;
+   setup->coef[slot].dady[1] = fsInfo->origin_lower_left ? -1.0f : 1.0f;
    /*Z*/
    setup->coef[slot].a0[2] = setup->posCoef.a0[2];
    setup->coef[slot].dadx[2] = setup->posCoef.dadx[2];
@@ -856,6 +856,10 @@ sp_setup_tri(struct setup_context *setup,
    }
 
    flush_spans( setup );
+
+   if (setup->softpipe->active_statistics_queries) {
+      setup->softpipe->pipeline_statistics.c_primitives++;
+   }
 
 #if DEBUG_FRAGS
    printf("Tri: %u frags emitted, %u written\n",

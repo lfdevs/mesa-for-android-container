@@ -16,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -34,7 +35,6 @@
 #include "enums.h"
 #include "imports.h"
 #include "macros.h"
-#include "mfeatures.h"
 #include "teximage.h"
 #include "texobj.h"
 #include "texstorage.h"
@@ -202,20 +202,9 @@ clear_texture_fields(struct gl_context *ctx,
 }
 
 
-/**
- * Do error checking for calls to glTexStorage1/2/3D().
- * If an error is found, record it with _mesa_error(), unless the target
- * is a proxy texture.
- * \return GL_TRUE if any error, GL_FALSE otherwise.
- */
-static GLboolean
-tex_storage_error_check(struct gl_context *ctx, GLuint dims, GLenum target,
-                        GLsizei levels, GLenum internalformat,
-                        GLsizei width, GLsizei height, GLsizei depth)
+GLboolean
+_mesa_is_legal_tex_storage_format(struct gl_context *ctx, GLenum internalformat)
 {
-   struct gl_texture_object *texObj;
-   GLboolean legalFormat;
-
    /* check internal format - note that only sized formats are allowed */
    switch (internalformat) {
    case GL_ALPHA:
@@ -250,13 +239,57 @@ tex_storage_error_check(struct gl_context *ctx, GLuint dims, GLenum target,
    case GL_LUMINANCE_INTEGER_EXT:
    case GL_LUMINANCE_ALPHA_INTEGER_EXT:
       /* these unsized formats are illegal */
-      legalFormat = GL_FALSE;
-      break;
+      return GL_FALSE;
    default:
-      legalFormat = _mesa_base_tex_format(ctx, internalformat) > 0;
+      return _mesa_base_tex_format(ctx, internalformat) > 0;
+   }
+}
+
+/**
+ * Default ctx->Driver.AllocTextureStorage() handler.
+ *
+ * The driver can override this with a more specific implementation if it
+ * desires, but this can be used to get the texture images allocated using the
+ * usual texture image handling code.  The immutability of
+ * GL_ARB_texture_storage texture layouts is handled by texObj->Immutable
+ * checks at glTexImage* time.
+ */
+GLboolean
+_mesa_alloc_texture_storage(struct gl_context *ctx,
+                            struct gl_texture_object *texObj,
+                            GLsizei levels, GLsizei width,
+                            GLsizei height, GLsizei depth)
+{
+   const int numFaces = _mesa_num_tex_faces(texObj->Target);
+   int face;
+   int level;
+
+   for (face = 0; face < numFaces; face++) {
+      for (level = 0; level < levels; level++) {
+         struct gl_texture_image *const texImage = texObj->Image[face][level];
+         if (!ctx->Driver.AllocTextureImageBuffer(ctx, texImage))
+            return GL_FALSE;
+      }
    }
 
-   if (!legalFormat) {
+   return GL_TRUE;
+}
+
+
+/**
+ * Do error checking for calls to glTexStorage1/2/3D().
+ * If an error is found, record it with _mesa_error(), unless the target
+ * is a proxy texture.
+ * \return GL_TRUE if any error, GL_FALSE otherwise.
+ */
+static GLboolean
+tex_storage_error_check(struct gl_context *ctx, GLuint dims, GLenum target,
+                        GLsizei levels, GLenum internalformat,
+                        GLsizei width, GLsizei height, GLsizei depth)
+{
+   struct gl_texture_object *texObj;
+
+   if (!_mesa_is_legal_tex_storage_format(ctx, internalformat)) {
       _mesa_error(ctx, GL_INVALID_ENUM,
                   "glTexStorage%uD(internalformat = %s)", dims,
                   _mesa_lookup_enum_by_nr(internalformat));
@@ -302,14 +335,14 @@ tex_storage_error_check(struct gl_context *ctx, GLuint dims, GLenum target,
 
    /* non-default texture object check */
    texObj = _mesa_get_current_tex_object(ctx, target);
-   if (!texObj || (texObj->Name == 0)) {
+   if (!_mesa_is_proxy_texture(target) && (!texObj || (texObj->Name == 0))) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glTexStorage%uD(texture object 0)", dims);
       return GL_TRUE;
    }
 
    /* Check if texObj->Immutable is set */
-   if (texObj->Immutable) {
+   if (!_mesa_is_proxy_texture(target) && texObj->Immutable) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "glTexStorage%uD(immutable)",
                   dims);
       return GL_TRUE;

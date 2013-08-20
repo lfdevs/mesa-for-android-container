@@ -29,14 +29,13 @@
 extern "C" {
 #endif
 
-struct intel_context;
 struct intel_mipmap_tree;
 
 #ifdef __cplusplus
 }
 
 void
-gen6_blorp_exec(struct intel_context *intel,
+gen6_blorp_exec(struct brw_context *brw,
                 const brw_blorp_params *params);
 
 #endif

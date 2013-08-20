@@ -270,7 +270,8 @@ init_state(struct vl_zscan *zscan)
    assert(zscan);
 
    memset(&rs_state, 0, sizeof(rs_state));
-   rs_state.gl_rasterization_rules = true;
+   rs_state.half_pixel_center = true;
+   rs_state.bottom_edge_rule = true;
    rs_state.depth_clip = 1;
    zscan->rs_state = zscan->pipe->create_rasterizer_state(zscan->pipe, &rs_state);
    if (!zscan->rs_state)
@@ -575,7 +576,7 @@ vl_zscan_render(struct vl_zscan *zscan, struct vl_zscan_buffer *buffer, unsigned
    zscan->pipe->bind_blend_state(zscan->pipe, zscan->blend);
    zscan->pipe->bind_fragment_sampler_states(zscan->pipe, 3, zscan->samplers);
    zscan->pipe->set_framebuffer_state(zscan->pipe, &buffer->fb_state);
-   zscan->pipe->set_viewport_state(zscan->pipe, &buffer->viewport);
+   zscan->pipe->set_viewport_states(zscan->pipe, 0, 1, &buffer->viewport);
    zscan->pipe->set_fragment_sampler_views(zscan->pipe, 3, &buffer->src);
    zscan->pipe->bind_vs_state(zscan->pipe, zscan->vs);
    zscan->pipe->bind_fs_state(zscan->pipe, zscan->fs);

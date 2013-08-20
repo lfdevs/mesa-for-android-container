@@ -37,8 +37,8 @@
 #include "main/context.h"
 #include "main/fbobject.h"
 #include "main/framebuffer.h"
+#include "main/glformats.h"
 #include "main/macros.h"
-#include "main/mfeatures.h"
 #include "main/renderbuffer.h"
 
 #include "pipe/p_context.h"
@@ -63,7 +63,7 @@ st_renderbuffer_alloc_sw_storage(struct gl_context * ctx,
                                  GLenum internalFormat,
                                  GLuint width, GLuint height)
 {
-   struct pipe_screen *screen = st_context(ctx)->pipe->screen;
+   struct st_context *st = st_context(ctx);
    struct st_renderbuffer *strb = st_renderbuffer(rb);
    enum pipe_format format;
    size_t size;
@@ -80,7 +80,7 @@ st_renderbuffer_alloc_sw_storage(struct gl_context * ctx,
       format = PIPE_FORMAT_R16G16B16A16_SNORM;
    }
    else {
-      format = st_choose_renderbuffer_format(screen, internalFormat, 0);
+      format = st_choose_renderbuffer_format(st, internalFormat, 0);
 
       /* Not setting gl_renderbuffer::Format here will cause
        * FRAMEBUFFER_UNSUPPORTED and ValidateFramebuffer will not be called.
@@ -133,6 +133,13 @@ st_renderbuffer_alloc_storage(struct gl_context * ctx,
    pipe_surface_reference( &strb->surface, NULL );
    pipe_resource_reference( &strb->texture, NULL );
 
+   /* If an sRGB framebuffer is unsupported, sRGB formats behave like linear
+    * formats.
+    */
+   if (!ctx->Extensions.EXT_framebuffer_sRGB) {
+      internalFormat = _mesa_get_linear_internalformat(internalFormat);
+   }
+
    /* Handle multisample renderbuffers first.
     *
     * From ARB_framebuffer_object:
@@ -153,7 +160,7 @@ st_renderbuffer_alloc_storage(struct gl_context * ctx,
       unsigned i;
 
       for (i = rb->NumSamples; i <= ctx->Const.MaxSamples; i++) {
-         format = st_choose_renderbuffer_format(screen, internalFormat, i);
+         format = st_choose_renderbuffer_format(st, internalFormat, i);
 
          if (format != PIPE_FORMAT_NONE) {
             rb->NumSamples = i;
@@ -161,7 +168,7 @@ st_renderbuffer_alloc_storage(struct gl_context * ctx,
          }
       }
    } else {
-      format = st_choose_renderbuffer_format(screen, internalFormat, 0);
+      format = st_choose_renderbuffer_format(st, internalFormat, 0);
    }
 
    /* Not setting gl_renderbuffer::Format here will cause
@@ -330,6 +337,9 @@ st_new_renderbuffer_fb(enum pipe_format format, int samples, boolean sw)
       /* accum buffer */
       strb->Base.InternalFormat = GL_RGBA16_SNORM;
       break;
+   case PIPE_FORMAT_R16G16B16A16_UNORM:
+      strb->Base.InternalFormat = GL_RGBA16;
+      break;
    case PIPE_FORMAT_R8_UNORM:
       strb->Base.InternalFormat = GL_R8;
       break;
@@ -392,7 +402,6 @@ st_render_texture(struct gl_context *ctx,
    struct st_renderbuffer *strb = st_renderbuffer(rb);
    struct pipe_resource *pt;
    struct st_texture_object *stObj;
-   const struct gl_texture_image *texImage;
    struct pipe_surface surf_tmpl;
 
    if (!st_finalize_texture(ctx, pipe, att->Texture))
@@ -400,9 +409,6 @@ st_render_texture(struct gl_context *ctx,
 
    pt = st_get_texobj_resource(att->Texture);
    assert(pt);
-
-   /* get pointer to texture image we're rendeing to */
-   texImage = _mesa_get_attachment_teximage(att);
 
    /* get the texture for the texture object */
    stObj = st_texture_object(att->Texture);
@@ -412,11 +418,6 @@ st_render_texture(struct gl_context *ctx,
    strb->rtt_level = att->TextureLevel;
    strb->rtt_face = att->CubeMapFace;
    strb->rtt_slice = att->Zoffset;
-
-   rb->Width = texImage->Width2;
-   rb->Height = texImage->Height2;
-   rb->_BaseFormat = texImage->_BaseFormat;
-   rb->InternalFormat = texImage->InternalFormat;
 
    pipe_resource_reference( &strb->texture, pt );
 
@@ -456,10 +457,9 @@ st_render_texture(struct gl_context *ctx,
  * Called via ctx->Driver.FinishRenderTexture.
  */
 static void
-st_finish_render_texture(struct gl_context *ctx,
-                         struct gl_renderbuffer_attachment *att)
+st_finish_render_texture(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
-   struct st_renderbuffer *strb = st_renderbuffer(att->Renderbuffer);
+   struct st_renderbuffer *strb = st_renderbuffer(rb);
 
    if (!strb)
       return;
@@ -506,7 +506,7 @@ st_validate_attachment(struct gl_context *ctx,
       return GL_FALSE;
 
    format = stObj->pt->format;
-   texFormat = _mesa_get_attachment_teximage_const(att)->TexFormat;
+   texFormat = att->Renderbuffer->TexImage->TexFormat;
 
    /* If the encoding is sRGB and sRGB rendering cannot be enabled,
     * check for linear format support instead.
@@ -525,30 +525,6 @@ st_validate_attachment(struct gl_context *ctx,
    }
 
    return valid;
-}
-
-
-/**
- * Check if two renderbuffer attachments name a combined depth/stencil
- * renderbuffer.
- */
-GLboolean
-st_is_depth_stencil_combined(const struct gl_renderbuffer_attachment *depth,
-                             const struct gl_renderbuffer_attachment *stencil)
-{
-   assert(depth && stencil);
-
-   if (depth->Type == stencil->Type) {
-      if (depth->Type == GL_RENDERBUFFER_EXT &&
-          depth->Renderbuffer == stencil->Renderbuffer)
-         return GL_TRUE;
-
-      if (depth->Type == GL_TEXTURE &&
-          depth->Texture == stencil->Texture)
-         return GL_TRUE;
-   }
-
-   return GL_FALSE;
 }
  
 

@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.9
  *
  * Copyright 2009 VMware, Inc.  All Rights Reserved.
  * Copyright (C) 2010 LunarG Inc.
@@ -143,7 +142,7 @@ vg_context_flush(struct st_context_iface *stctxi, unsigned flags,
                  struct pipe_fence_handle **fence)
 {
    struct vg_context *ctx = (struct vg_context *) stctxi;
-   enum pipe_flush_flags pipe_flags = 0;
+   unsigned pipe_flags = 0;
 
    if (flags & ST_FLUSH_END_OF_FRAME) {
       pipe_flags |= PIPE_FLUSH_END_OF_FRAME;
@@ -370,7 +369,7 @@ vg_api_destroy(struct st_api *stapi)
 }
 
 static const struct st_api vg_api = {
-   "Vega " VEGA_VERSION_STRING,
+   "Vega " PACKAGE_VERSION,
    ST_API_OPENVG,
    ST_PROFILE_DEFAULT_MASK,
    0,

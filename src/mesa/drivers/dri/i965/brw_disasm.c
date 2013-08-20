@@ -43,6 +43,10 @@ const struct opcode_desc opcode_descs[128] = {
     [BRW_OPCODE_LZD] = { .name = "lzd", .nsrc = 1, .ndst = 1 },
     [BRW_OPCODE_F32TO16] = { .name = "f32to16", .nsrc = 1, .ndst = 1 },
     [BRW_OPCODE_F16TO32] = { .name = "f16to32", .nsrc = 1, .ndst = 1 },
+    [BRW_OPCODE_BFREV] = { .name = "bfrev", .nsrc = 1, .ndst = 1},
+    [BRW_OPCODE_FBH] = { .name = "fbh", .nsrc = 1, .ndst = 1},
+    [BRW_OPCODE_FBL] = { .name = "fbl", .nsrc = 1, .ndst = 1},
+    [BRW_OPCODE_CBIT] = { .name = "cbit", .nsrc = 1, .ndst = 1},
 
     [BRW_OPCODE_MUL] = { .name = "mul", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_MAC] = { .name = "mac", .nsrc = 2, .ndst = 1 },
@@ -50,6 +54,7 @@ const struct opcode_desc opcode_descs[128] = {
     [BRW_OPCODE_LINE] = { .name = "line", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_PLN] = { .name = "pln", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_MAD] = { .name = "mad", .nsrc = 3, .ndst = 1 },
+    [BRW_OPCODE_LRP] = { .name = "lrp", .nsrc = 3, .ndst = 1 },
     [BRW_OPCODE_SAD2] = { .name = "sad2", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_SADA2] = { .name = "sada2", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_DP4] = { .name = "dp4", .nsrc = 2, .ndst = 1 },
@@ -69,6 +74,9 @@ const struct opcode_desc opcode_descs[128] = {
     [BRW_OPCODE_ASR] = { .name = "asr", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_CMP] = { .name = "cmp", .nsrc = 2, .ndst = 1 },
     [BRW_OPCODE_CMPN] = { .name = "cmpn", .nsrc = 2, .ndst = 1 },
+    [BRW_OPCODE_BFE] = { .name = "bfe", .nsrc = 3, .ndst = 1},
+    [BRW_OPCODE_BFI1] = { .name = "bfe1", .nsrc = 2, .ndst = 1},
+    [BRW_OPCODE_BFI2] = { .name = "bfe2", .nsrc = 3, .ndst = 1},
 
     [BRW_OPCODE_SEND] = { .name = "send", .nsrc = 1, .ndst = 1 },
     [BRW_OPCODE_SENDC] = { .name = "sendc", .nsrc = 1, .ndst = 1 },
@@ -335,7 +343,7 @@ static const char * const math_function[16] = {
     [BRW_MATH_FUNCTION_SIN] = "sin",
     [BRW_MATH_FUNCTION_COS] = "cos",
     [BRW_MATH_FUNCTION_SINCOS] = "sincos",
-    [BRW_MATH_FUNCTION_TAN] = "tan",
+    [BRW_MATH_FUNCTION_FDIV] = "fdiv",
     [BRW_MATH_FUNCTION_POW] = "pow",
     [BRW_MATH_FUNCTION_INT_DIV_QUOTIENT_AND_REMAINDER] = "intdivmod",
     [BRW_MATH_FUNCTION_INT_DIV_QUOTIENT] = "intdiv",
@@ -458,6 +466,19 @@ static int print_opcode (FILE *file, int id)
     }
     string (file, opcode[id].name);
     return 0;
+}
+
+static int three_source_type_to_reg_type(int three_source_type)
+{
+   switch (three_source_type) {
+   case BRW_3SRC_TYPE_F:
+      return BRW_REGISTER_TYPE_F;
+   case BRW_3SRC_TYPE_D:
+      return BRW_REGISTER_TYPE_D;
+   case BRW_3SRC_TYPE_UD:
+      return BRW_REGISTER_TYPE_UD;
+   }
+   return -1;
 }
 
 static int reg (FILE *file, GLuint _reg_file, GLuint _reg_nr)
@@ -586,7 +607,9 @@ static int dest_3src (FILE *file, struct brw_instruction *inst)
        format (file, ".%d", inst->bits1.da3src.dest_subreg_nr);
     string (file, "<1>");
     err |= control (file, "writemask", writemask, inst->bits1.da3src.dest_writemask, NULL);
-    err |= control (file, "dest reg encoding", reg_encoding, BRW_REGISTER_TYPE_F, NULL);
+    err |= control (file, "dest reg encoding", reg_encoding,
+                    three_source_type_to_reg_type(inst->bits1.da3src.dst_type),
+                    NULL);
 
     return 0;
 }
@@ -725,7 +748,8 @@ static int src0_3src (FILE *file, struct brw_instruction *inst)
 	format (file, ".%d", inst->bits2.da3src.src0_subreg_nr);
     string (file, "<4,1,1>");
     err |= control (file, "src da16 reg type", reg_encoding,
-		    BRW_REGISTER_TYPE_F, NULL);
+                    three_source_type_to_reg_type(inst->bits1.da3src.src_type),
+                    NULL);
     /*
      * Three kinds of swizzle display:
      *  identity - nothing printed
@@ -777,7 +801,8 @@ static int src1_3src (FILE *file, struct brw_instruction *inst)
 	format (file, ".%d", src1_subreg_nr);
     string (file, "<4,1,1>");
     err |= control (file, "src da16 reg type", reg_encoding,
-		    BRW_REGISTER_TYPE_F, NULL);
+                    three_source_type_to_reg_type(inst->bits1.da3src.src_type),
+                    NULL);
     /*
      * Three kinds of swizzle display:
      *  identity - nothing printed
@@ -828,7 +853,8 @@ static int src2_3src (FILE *file, struct brw_instruction *inst)
 	format (file, ".%d", inst->bits3.da3src.src2_subreg_nr);
     string (file, "<4,1,1>");
     err |= control (file, "src da16 reg type", reg_encoding,
-		    BRW_REGISTER_TYPE_F, NULL);
+                    three_source_type_to_reg_type(inst->bits1.da3src.src_type),
+                    NULL);
     /*
      * Three kinds of swizzle display:
      *  identity - nothing printed

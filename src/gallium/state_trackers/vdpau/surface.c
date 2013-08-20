@@ -54,11 +54,6 @@ vlVdpVideoSurfaceCreate(VdpDevice device, VdpChromaType chroma_type,
       goto inv_size;
    }
 
-   if (!vlCreateHTAB()) {
-      ret = VDP_STATUS_RESOURCES;
-      goto no_htab;
-   }
-
    p_surf = CALLOC(1, sizeof(vlVdpSurface));
    if (!p_surf) {
       ret = VDP_STATUS_RESOURCES;
@@ -110,7 +105,6 @@ inv_device:
    FREE(p_surf);
 
 no_res:
-no_htab:
 inv_size:
    return ret;
 }
@@ -132,7 +126,9 @@ vlVdpVideoSurfaceDestroy(VdpVideoSurface surface)
       p_surf->video_buffer->destroy(p_surf->video_buffer);
    pipe_mutex_unlock(p_surf->device->mutex);
 
+   vlRemoveDataHTAB(surface);
    FREE(p_surf);
+
    return VDP_STATUS_OK;
 }
 
@@ -228,7 +224,7 @@ vlVdpVideoSurfaceGetBitsYCbCr(VdpVideoSurface surface,
 
       vlVdpVideoSurfaceSize(vlsurface, i, &width, &height);
 
-      for (j = 0; j < sv->texture->depth0; ++j) {
+      for (j = 0; j < sv->texture->array_size; ++j) {
          struct pipe_box box = {
             0, 0, j,
             width, height, 1
@@ -244,7 +240,7 @@ vlVdpVideoSurfaceGetBitsYCbCr(VdpVideoSurface surface,
          }
 
          util_copy_rect(destination_data[i] + destination_pitches[i] * j, sv->texture->format,
-                        destination_pitches[i] * sv->texture->depth0, 0, 0,
+                        destination_pitches[i] * sv->texture->array_size, 0, 0,
                         box.width, box.height, map, transfer->stride, 0, 0);
 
          pipe_transfer_unmap(pipe, transfer);
@@ -269,9 +265,6 @@ vlVdpVideoSurfacePutBitsYCbCr(VdpVideoSurface surface,
    struct pipe_context *pipe;
    struct pipe_sampler_view **sampler_views;
    unsigned i, j;
-
-   if (!vlCreateHTAB())
-      return VDP_STATUS_RESOURCES;
 
    vlVdpSurface *p_surf = vlGetDataHTAB(surface);
    if (!p_surf)
@@ -315,7 +308,7 @@ vlVdpVideoSurfacePutBitsYCbCr(VdpVideoSurface surface,
 
       vlVdpVideoSurfaceSize(p_surf, i, &width, &height);
 
-      for (j = 0; j < sv->texture->depth0; ++j) {
+      for (j = 0; j < sv->texture->array_size; ++j) {
          struct pipe_box dst_box = {
             0, 0, j,
             width, height, 1
@@ -324,7 +317,7 @@ vlVdpVideoSurfacePutBitsYCbCr(VdpVideoSurface surface,
          pipe->transfer_inline_write(pipe, sv->texture, 0,
                                      PIPE_TRANSFER_WRITE, &dst_box,
                                      source_data[i] + source_pitches[i] * j,
-                                     source_pitches[i] * sv->texture->depth0,
+                                     source_pitches[i] * sv->texture->array_size,
                                      0);
       }
    }

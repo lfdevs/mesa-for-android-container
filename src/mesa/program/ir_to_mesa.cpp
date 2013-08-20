@@ -33,7 +33,6 @@
 #include "main/compiler.h"
 #include "ir.h"
 #include "ir_visitor.h"
-#include "ir_print_visitor.h"
 #include "ir_expression_flattening.h"
 #include "ir_uniform.h"
 #include "glsl_types.h"
@@ -93,7 +92,7 @@ public:
    explicit src_reg(dst_reg reg);
 
    gl_register_file file; /**< PROGRAM_* from Mesa */
-   int index; /**< temporary index, VERT_ATTRIB_*, FRAG_ATTRIB_*, etc. */
+   int index; /**< temporary index, VERT_ATTRIB_*, VARYING_SLOT_*, etc. */
    GLuint swizzle; /**< SWIZZLE_XYZWONEZERO swizzles from Mesa. */
    int negate; /**< NEGATE_XYZW mask from mesa */
    /** Register index should be offset by the integer in this reg. */
@@ -123,7 +122,7 @@ public:
    explicit dst_reg(src_reg reg);
 
    gl_register_file file; /**< PROGRAM_* from Mesa */
-   int index; /**< temporary index, VERT_ATTRIB_*, FRAG_ATTRIB_*, etc. */
+   int index; /**< temporary index, VERT_ATTRIB_*, VARYING_SLOT_*, etc. */
    int writemask; /**< Bitfield of WRITEMASK_[XYZW] */
    GLuint cond_mask:4;
    /** Register index should be offset by the integer in this reg. */
@@ -1057,9 +1056,9 @@ ir_to_mesa_visitor::emit_swz(ir_expression *ir)
    this->result.file = PROGRAM_UNDEFINED;
    deref->accept(this);
    if (this->result.file == PROGRAM_UNDEFINED) {
-      ir_print_visitor v;
       printf("Failed to get tree for expression operand:\n");
-      deref->accept(&v);
+      deref->print();
+      printf("\n");
       exit(1);
    }
 
@@ -1129,9 +1128,9 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       this->result.file = PROGRAM_UNDEFINED;
       ir->operands[operand]->accept(this);
       if (this->result.file == PROGRAM_UNDEFINED) {
-	 ir_print_visitor v;
 	 printf("Failed to get tree for expression operand:\n");
-	 ir->operands[operand]->accept(&v);
+         ir->operands[operand]->print();
+         printf("\n");
 	 exit(1);
       }
       op[operand] = this->result;
@@ -1444,6 +1443,10 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
    case ir_unop_unpack_half_2x16_split_x:
    case ir_unop_unpack_half_2x16_split_y:
    case ir_binop_pack_half_2x16_split:
+   case ir_unop_bitfield_reverse:
+   case ir_unop_bit_count:
+   case ir_unop_find_msb:
+   case ir_unop_find_lsb:
       assert(!"not supported");
       break;
    case ir_binop_min:
@@ -1475,6 +1478,22 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
       break;
 
    case ir_binop_ubo_load:
+      assert(!"not supported");
+      break;
+
+   case ir_triop_lrp:
+      /* ir_triop_lrp operands are (x, y, a) while
+       * OPCODE_LRP operands are (a, y, x) to match ARB_fragment_program.
+       */
+      emit(ir, OPCODE_LRP, result_dst, op[2], op[1], op[0]);
+      break;
+
+   case ir_binop_vector_extract:
+   case ir_binop_bfm:
+   case ir_triop_bfi:
+   case ir_triop_bitfield_extract:
+   case ir_triop_vector_insert:
+   case ir_quadop_bitfield_insert:
       assert(!"not supported");
       break;
 
@@ -2038,6 +2057,12 @@ ir_to_mesa_visitor::visit(ir_texture *ir)
       ir->lod_info.grad.dPdy->accept(this);
       dy = this->result;
       break;
+   case ir_txf_ms:
+      assert(!"Unexpected ir_txf_ms opcode");
+      break;
+   case ir_lod:
+      assert(!"Unexpected ir_lod opcode");
+      break;
    }
 
    const glsl_type *sampler_type = ir->sampler->type;
@@ -2378,8 +2403,10 @@ print_program(struct prog_instruction *mesa_instructions,
 class add_uniform_to_shader : public program_resource_visitor {
 public:
    add_uniform_to_shader(struct gl_shader_program *shader_program,
-			 struct gl_program_parameter_list *params)
-      : shader_program(shader_program), params(params), idx(-1)
+			 struct gl_program_parameter_list *params,
+                         gl_shader_type shader_type)
+      : shader_program(shader_program), params(params), idx(-1),
+        shader_type(shader_type)
    {
       /* empty */
    }
@@ -2399,6 +2426,7 @@ private:
    struct gl_shader_program *shader_program;
    struct gl_program_parameter_list *params;
    int idx;
+   gl_shader_type shader_type;
 };
 
 void
@@ -2445,8 +2473,11 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
 	 struct gl_uniform_storage *storage =
 	    &this->shader_program->UniformStorage[location];
 
+         assert(storage->sampler[shader_type].active);
+
 	 for (unsigned int j = 0; j < size / 4; j++)
-	    params->ParameterValues[index + j][0].f = storage->sampler + j;
+            params->ParameterValues[index + j][0].f =
+               storage->sampler[shader_type].index + j;
       }
    }
 
@@ -2472,7 +2503,8 @@ _mesa_generate_parameters_list_for_uniforms(struct gl_shader_program
 					    struct gl_program_parameter_list
 					    *params)
 {
-   add_uniform_to_shader add(shader_program, params);
+   add_uniform_to_shader add(shader_program, params,
+                             _mesa_shader_type_to_index(sh->Type));
 
    foreach_list(node, sh->ir) {
       ir_variable *var = ((ir_instruction *) node)->as_variable();
@@ -2778,22 +2810,19 @@ get_mesa_program(struct gl_context *ctx,
    int i;
    struct gl_program *prog;
    GLenum target;
-   const char *target_string;
+   const char *target_string = _mesa_glsl_shader_target_name(shader->Type);
    struct gl_shader_compiler_options *options =
          &ctx->ShaderCompilerOptions[_mesa_shader_type_to_index(shader->Type)];
 
    switch (shader->Type) {
    case GL_VERTEX_SHADER:
       target = GL_VERTEX_PROGRAM_ARB;
-      target_string = "vertex";
       break;
    case GL_FRAGMENT_SHADER:
       target = GL_FRAGMENT_PROGRAM_ARB;
-      target_string = "fragment";
       break;
    case GL_GEOMETRY_SHADER:
       target = GL_GEOMETRY_PROGRAM_NV;
-      target_string = "geometry";
       break;
    default:
       assert(!"should not be reached");
@@ -3001,7 +3030,8 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 	 progress = do_lower_jumps(ir, true, true, options->EmitNoMainReturn, options->EmitNoCont, options->EmitNoLoops) || progress;
 
 	 progress = do_common_optimization(ir, true, true,
-					   options->MaxUnrollIterations)
+					   options->MaxUnrollIterations,
+                                           options)
 	   || progress;
 
 	 progress = lower_quadop_vector(ir, true) || progress;
@@ -3028,6 +3058,7 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 	     || progress;
 
 	 progress = do_vec_index_to_cond_assign(ir) || progress;
+         progress = lower_vector_insert(ir, true) || progress;
       } while (progress);
 
       validate_ir_tree(ir);
@@ -3042,12 +3073,6 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       linked_prog = get_mesa_program(ctx, prog, prog->_LinkedShaders[i]);
 
       if (linked_prog) {
-	 static const GLenum targets[] = {
-	    GL_VERTEX_PROGRAM_ARB,
-	    GL_FRAGMENT_PROGRAM_ARB,
-	    GL_GEOMETRY_PROGRAM_NV
-	 };
-
 	 if (i == MESA_SHADER_VERTEX) {
             ((struct gl_vertex_program *)linked_prog)->UsesClipDistance
                = prog->Vert.UsesClipDistance;
@@ -3055,7 +3080,9 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
 	 _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
 				 linked_prog);
-         if (!ctx->Driver.ProgramStringNotify(ctx, targets[i], linked_prog)) {
+         if (!ctx->Driver.ProgramStringNotify(ctx,
+                                              _mesa_program_index_to_target(i),
+                                              linked_prog)) {
             return GL_FALSE;
          }
       }
@@ -3065,97 +3092,6 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 
    return prog->LinkStatus;
 }
-
-
-/**
- * Compile a GLSL shader.  Called via glCompileShader().
- */
-void
-_mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader)
-{
-   struct _mesa_glsl_parse_state *state =
-      new(shader) _mesa_glsl_parse_state(ctx, shader->Type, shader);
-
-   const char *source = shader->Source;
-   /* Check if the user called glCompileShader without first calling
-    * glShaderSource.  This should fail to compile, but not raise a GL_ERROR.
-    */
-   if (source == NULL) {
-      shader->CompileStatus = GL_FALSE;
-      return;
-   }
-
-   state->error = glcpp_preprocess(state, &source, &state->info_log,
-			     &ctx->Extensions, ctx);
-
-   if (ctx->Shader.Flags & GLSL_DUMP) {
-      printf("GLSL source for %s shader %d:\n",
-	     _mesa_glsl_shader_target_name(state->target), shader->Name);
-      printf("%s\n", shader->Source);
-   }
-
-   if (!state->error) {
-     _mesa_glsl_lexer_ctor(state, source);
-     _mesa_glsl_parse(state);
-     _mesa_glsl_lexer_dtor(state);
-   }
-
-   ralloc_free(shader->ir);
-   shader->ir = new(shader) exec_list;
-   if (!state->error && !state->translation_unit.is_empty())
-      _mesa_ast_to_hir(shader->ir, state);
-
-   if (!state->error && !shader->ir->is_empty()) {
-      validate_ir_tree(shader->ir);
-
-      /* Do some optimization at compile time to reduce shader IR size
-       * and reduce later work if the same shader is linked multiple times
-       */
-      while (do_common_optimization(shader->ir, false, false, 32))
-	 ;
-
-      validate_ir_tree(shader->ir);
-   }
-
-   shader->symbols = state->symbols;
-
-   shader->CompileStatus = !state->error;
-   shader->InfoLog = state->info_log;
-   shader->Version = state->language_version;
-   memcpy(shader->builtins_to_link, state->builtins_to_link,
-	  sizeof(shader->builtins_to_link[0]) * state->num_builtins_to_link);
-   shader->num_builtins_to_link = state->num_builtins_to_link;
-
-   if (ctx->Shader.Flags & GLSL_LOG) {
-      _mesa_write_shader_to_file(shader);
-   }
-
-   if (ctx->Shader.Flags & GLSL_DUMP) {
-      if (shader->CompileStatus) {
-	 printf("GLSL IR for shader %d:\n", shader->Name);
-	 _mesa_print_ir(shader->ir, NULL);
-	 printf("\n\n");
-      } else {
-	 printf("GLSL shader %d failed to compile.\n", shader->Name);
-      }
-      if (shader->InfoLog && shader->InfoLog[0] != 0) {
-	 printf("GLSL shader %d info log:\n", shader->Name);
-	 printf("%s\n", shader->InfoLog);
-      }
-   }
-
-   if (shader->UniformBlocks)
-      ralloc_free(shader->UniformBlocks);
-   shader->NumUniformBlocks = state->num_uniform_blocks;
-   shader->UniformBlocks = state->uniform_blocks;
-   ralloc_steal(shader, shader->UniformBlocks);
-
-   /* Retain any live IR, but trash the rest. */
-   reparent_ir(shader->ir, shader->ir);
-
-   ralloc_free(state);
-}
-
 
 /**
  * Link a GLSL shader program.  Called via glLinkProgram().

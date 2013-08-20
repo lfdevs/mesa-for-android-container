@@ -60,6 +60,7 @@ struct draw_so_target {
    struct pipe_stream_output_target target;
    void *mapping;
    int internal_offset;
+   int emitted_vertices;
 };
 
 struct draw_context *draw_create( struct pipe_context *pipe );
@@ -70,8 +71,10 @@ void draw_destroy( struct draw_context *draw );
 
 void draw_flush(struct draw_context *draw);
 
-void draw_set_viewport_state( struct draw_context *draw,
-                              const struct pipe_viewport_state *viewport );
+void draw_set_viewport_states( struct draw_context *draw,
+                               unsigned start_slot,
+                               unsigned num_viewports,
+                               const struct pipe_viewport_state *viewports );
 
 void draw_set_clip_state( struct draw_context *pipe,
                           const struct pipe_clip_state *clip );
@@ -132,10 +135,9 @@ draw_num_shader_outputs(const struct draw_context *draw);
 
 
 void
-draw_texture_samplers(struct draw_context *draw,
-                      uint shader_type,
-                      uint num_samplers,
-                      struct tgsi_sampler **samplers);
+draw_texture_sampler(struct draw_context *draw,
+                     uint shader_type,
+                     struct tgsi_sampler *sampler);
 
 void
 draw_set_sampler_views(struct draw_context *draw,
@@ -151,7 +153,7 @@ draw_set_samplers(struct draw_context *draw,
 void
 draw_set_mapped_texture(struct draw_context *draw,
                         unsigned shader_stage,
-                        unsigned sampler_idx,
+                        unsigned sview_idx,
                         uint32_t width, uint32_t height, uint32_t depth,
                         uint32_t first_level, uint32_t last_level,
                         const void *base,
@@ -171,6 +173,9 @@ void draw_bind_vertex_shader(struct draw_context *draw,
                              struct draw_vertex_shader *dvs);
 void draw_delete_vertex_shader(struct draw_context *draw,
                                struct draw_vertex_shader *dvs);
+void draw_vs_attach_so(struct draw_vertex_shader *dvs,
+                       const struct pipe_stream_output_info *info);
+void draw_vs_reset_so(struct draw_vertex_shader *dvs);
 
 
 /*
@@ -209,10 +214,12 @@ void draw_set_vertex_elements(struct draw_context *draw,
                               const struct pipe_vertex_element *elements);
 
 void draw_set_indexes(struct draw_context *draw,
-                      const void *elements, unsigned elem_size);
+                      const void *elements, unsigned elem_size,
+                      unsigned available_space);
 
 void draw_set_mapped_vertex_buffer(struct draw_context *draw,
-                                   unsigned attr, const void *buffer);
+                                   unsigned attr, const void *buffer,
+                                   size_t size);
 
 void
 draw_set_mapped_constant_buffer(struct draw_context *draw,
@@ -222,18 +229,9 @@ draw_set_mapped_constant_buffer(struct draw_context *draw,
                                 unsigned size);
 
 void
-draw_set_mapped_so_buffers(struct draw_context *draw,
-                           void *buffers[PIPE_MAX_SO_BUFFERS],
-                           unsigned num_buffers);
-
-void
 draw_set_mapped_so_targets(struct draw_context *draw,
                            int num_targets,
                            struct draw_so_target *targets[PIPE_MAX_SO_BUFFERS]);
-
-void
-draw_set_so_state(struct draw_context *draw,
-                  struct pipe_stream_output_info *state);
 
 
 /***********************************************************************
@@ -242,17 +240,6 @@ draw_set_so_state(struct draw_context *draw,
 
 void draw_vbo(struct draw_context *draw,
               const struct pipe_draw_info *info);
-
-void draw_arrays(struct draw_context *draw, unsigned prim,
-		 unsigned start, unsigned count);
-
-void
-draw_arrays_instanced(struct draw_context *draw,
-                      unsigned mode,
-                      unsigned start,
-                      unsigned count,
-                      unsigned startInstance,
-                      unsigned instanceCount);
 
 
 /*******************************************************************************
@@ -270,6 +257,13 @@ void draw_set_driver_clipping( struct draw_context *draw,
 void draw_set_force_passthrough( struct draw_context *draw, 
                                  boolean enable );
 
+
+/*******************************************************************************
+ * Draw statistics
+ */
+void draw_collect_pipeline_statistics(struct draw_context *draw,
+                                      boolean enable);
+
 /*******************************************************************************
  * Draw pipeline 
  */
@@ -282,5 +276,10 @@ draw_get_shader_param(unsigned shader, enum pipe_shader_cap param);
 
 int
 draw_get_shader_param_no_llvm(unsigned shader, enum pipe_shader_cap param);
+
+#ifdef HAVE_LLVM
+boolean
+draw_get_option_use_llvm(void);
+#endif
 
 #endif /* DRAW_CONTEXT_H */

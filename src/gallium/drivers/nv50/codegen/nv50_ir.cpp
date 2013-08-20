@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50_ir.h"
@@ -546,6 +546,9 @@ Symbol::equals(const Value *that, bool strict) const
    if (this->baseSym != that->asSym()->baseSym)
       return false;
 
+   if (reg.file == FILE_SYSTEM_VALUE)
+      return (this->reg.data.sv.sv    == that->reg.data.sv.sv &&
+              this->reg.data.sv.index == that->reg.data.sv.index);
    return this->reg.data.offset == that->reg.data.offset;
 }
 
@@ -564,11 +567,11 @@ void Instruction::init()
    terminator = 0;
    ftz = 0;
    dnz = 0;
-   atomic = 0;
    perPatch = 0;
    fixed = 0;
    encSize = 0;
    ipa = 0;
+   mask = 0;
 
    lanes = 0xf;
 
@@ -658,29 +661,49 @@ Instruction::swapSources(int a, int b)
    srcs[b].mod = m;
 }
 
-// TODO: extend for delta < 0
+static inline void moveSourcesAdjustIndex(int8_t &index, int s, int delta)
+{
+   if (index >= s)
+      index += delta;
+   else
+   if ((delta < 0) && (index >= (s + delta)))
+      index = -1;
+}
+
+// Moves sources [@s,last_source] by @delta.
+// If @delta < 0, sources [@s - abs(@delta), @s) are erased.
 void
-Instruction::moveSources(int s, int delta)
+Instruction::moveSources(const int s, const int delta)
 {
    if (delta == 0)
       return;
-   assert(delta > 0);
+   assert(s + delta >= 0);
 
    int k;
-   for (k = 0; srcExists(k); ++k) {
-      for (int i = 0; i < 2; ++i) {
-         if (src(k).indirect[i] >= s)
-            src(k).indirect[i] += delta;
-      }
-   }
-   if (predSrc >= s)
-      predSrc += delta;
-   if (flagsSrc >= s)
-      flagsSrc += delta;
 
-   --k;
-   for (int p = k + delta; k >= s; --k, --p)
-      setSrc(p, src(k));
+   for (k = 0; srcExists(k); ++k) {
+      for (int i = 0; i < 2; ++i)
+         moveSourcesAdjustIndex(src(k).indirect[i], s, delta);
+   }
+   moveSourcesAdjustIndex(predSrc, s, delta);
+   moveSourcesAdjustIndex(flagsSrc, s, delta);
+   if (asTex()) {
+      TexInstruction *tex = asTex();
+      moveSourcesAdjustIndex(tex->tex.rIndirectSrc, s, delta);
+      moveSourcesAdjustIndex(tex->tex.sIndirectSrc, s, delta);
+   }
+
+   if (delta > 0) {
+      --k;
+      for (int p = k + delta; k >= s; --k, --p)
+         setSrc(p, src(k));
+   } else {
+      int p;
+      for (p = s; p < k; ++p)
+         setSrc(p + delta, src(p));
+      for (; (p + delta) < k; ++p)
+         setSrc(p + delta, NULL);
+   }
 }
 
 void
@@ -730,7 +753,7 @@ Instruction::clone(ClonePolicy<Function>& pol, Instruction *i) const
    i->saturate = saturate;
    i->join = join;
    i->exit = exit;
-   i->atomic = atomic;
+   i->mask = mask;
    i->ftz = ftz;
    i->dnz = dnz;
    i->ipa = ipa;
@@ -914,7 +937,7 @@ const struct TexInstruction::Target::Desc TexInstruction::Target::descTable[] =
 {
    { "1D",                1, 1, false, false, false },
    { "2D",                2, 2, false, false, false },
-   { "2D_MS",             2, 2, false, false, false },
+   { "2D_MS",             2, 3, false, false, false },
    { "3D",                3, 3, false, false, false },
    { "CUBE",              2, 3, false, true,  false },
    { "1D_SHADOW",         1, 1, false, false, true  },
@@ -922,7 +945,7 @@ const struct TexInstruction::Target::Desc TexInstruction::Target::descTable[] =
    { "CUBE_SHADOW",       2, 3, false, true,  true  },
    { "1D_ARRAY",          1, 2, true,  false, false },
    { "2D_ARRAY",          2, 3, true,  false, false },
-   { "2D_MS_ARRAY",       2, 3, true,  false, false },
+   { "2D_MS_ARRAY",       2, 4, true,  false, false },
    { "CUBE_ARRAY",        2, 4, true,  true,  false },
    { "1D_ARRAY_SHADOW",   1, 2, true,  false, true  },
    { "2D_ARRAY_SHADOW",   2, 3, true,  false, true  },
@@ -931,6 +954,28 @@ const struct TexInstruction::Target::Desc TexInstruction::Target::descTable[] =
    { "CUBE_ARRAY_SHADOW", 2, 4, true,  true,  true  },
    { "BUFFER",            1, 1, false, false, false },
 };
+
+void
+TexInstruction::setIndirectR(Value *v)
+{
+   int p = ((tex.rIndirectSrc < 0) && v) ? srcs.size() : tex.rIndirectSrc;
+   if (p >= 0) {
+      tex.rIndirectSrc = p;
+      setSrc(p, v);
+      srcs[p].usedAsPtr = !!v;
+   }
+}
+
+void
+TexInstruction::setIndirectS(Value *v)
+{
+   int p = ((tex.sIndirectSrc < 0) && v) ? srcs.size() : tex.sIndirectSrc;
+   if (p >= 0) {
+      tex.sIndirectSrc = p;
+      setSrc(p, v);
+      srcs[p].usedAsPtr = !!v;
+   }
+}
 
 CmpInstruction::CmpInstruction(Function *fn, operation op)
    : Instruction(fn, op, TYPE_F32)
@@ -965,7 +1010,7 @@ FlowInstruction::FlowInstruction(Function *fn, operation op, void *targ)
    if (op == OP_JOIN)
       terminator = targ ? 1 : 0;
 
-   allWarp = absolute = limit = builtin = 0;
+   allWarp = absolute = limit = builtin = indirect = 0;
 }
 
 FlowInstruction *
@@ -1105,6 +1150,7 @@ nv50_ir_generate_code(struct nv50_ir_prog_info *info)
 // PROG_TYPE_CASE(DOMAIN, TESSELLATION_EVAL);
    PROG_TYPE_CASE(GEOMETRY, GEOMETRY);
    PROG_TYPE_CASE(FRAGMENT, FRAGMENT);
+   PROG_TYPE_CASE(COMPUTE, COMPUTE);
    default:
       type = nv50_ir::Program::TYPE_COMPUTE;
       break;
@@ -1118,6 +1164,7 @@ nv50_ir_generate_code(struct nv50_ir_prog_info *info)
    nv50_ir::Program *prog = new nv50_ir::Program(type, targ);
    if (!prog)
       return -1;
+   prog->driver = info;
    prog->dbgFlags = info->dbgFlags;
    prog->optLevel = info->optLevel;
 

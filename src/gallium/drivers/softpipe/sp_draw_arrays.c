@@ -76,24 +76,33 @@ softpipe_draw_vbo(struct pipe_context *pipe,
    /* Map vertex buffers */
    for (i = 0; i < sp->num_vertex_buffers; i++) {
       const void *buf = sp->vertex_buffer[i].user_buffer;
+      size_t size = ~0;
       if (!buf) {
          if (!sp->vertex_buffer[i].buffer) {
             continue;
          }
          buf = softpipe_resource(sp->vertex_buffer[i].buffer)->data;
+         size = sp->vertex_buffer[i].buffer->width0;
       }
-      draw_set_mapped_vertex_buffer(draw, i, buf);
+      draw_set_mapped_vertex_buffer(draw, i, buf, size);
    }
 
    /* Map index buffer, if present */
    if (info->indexed) {
+      unsigned available_space = ~0;
       mapped_indices = sp->index_buffer.user_buffer;
-      if (!mapped_indices)
+      if (!mapped_indices) {
          mapped_indices = softpipe_resource(sp->index_buffer.buffer)->data;
+         if (sp->index_buffer.buffer->width0 > sp->index_buffer.offset)
+            available_space =
+               (sp->index_buffer.buffer->width0 - sp->index_buffer.offset);
+         else
+            available_space = 0;
+      }
 
       draw_set_indexes(draw,
                        (ubyte *) mapped_indices + sp->index_buffer.offset,
-                       sp->index_buffer.index_size);
+                       sp->index_buffer.index_size, available_space);
    }
 
 
@@ -105,15 +114,25 @@ softpipe_draw_vbo(struct pipe_context *pipe,
    draw_set_mapped_so_targets(draw, sp->num_so_targets,
                               sp->so_targets);
 
+   if (sp->gs && !sp->gs->shader.tokens) {
+      /* we have an empty geometry shader with stream output, so
+         attach the stream output info to the current vertex shader */
+      if (sp->vs) {
+         draw_vs_attach_so(sp->vs->draw_data, &sp->gs->shader.stream_output);
+      }
+   }
+   draw_collect_pipeline_statistics(draw,
+                                    sp->active_statistics_queries > 0);
+
    /* draw! */
    draw_vbo(draw, info);
 
    /* unmap vertex/index buffers - will cause draw module to flush */
    for (i = 0; i < sp->num_vertex_buffers; i++) {
-      draw_set_mapped_vertex_buffer(draw, i, NULL);
+      draw_set_mapped_vertex_buffer(draw, i, NULL, 0);
    }
    if (mapped_indices) {
-      draw_set_indexes(draw, NULL, 0);
+      draw_set_indexes(draw, NULL, 0, 0);
    }
 
    draw_set_mapped_so_targets(draw, 0, NULL);

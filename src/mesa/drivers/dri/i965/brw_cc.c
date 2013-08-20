@@ -41,7 +41,7 @@
 static void
 brw_upload_cc_vp(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->ctx;
    struct brw_cc_viewport *ccv;
 
    ccv = brw_state_batch(brw, AUB_TRACE_CC_VP_STATE,
@@ -96,15 +96,14 @@ brw_fix_xRGB_alpha(GLenum function)
  */
 static void upload_cc_unit(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->ctx;
    struct brw_cc_unit_state *cc;
 
    cc = brw_state_batch(brw, AUB_TRACE_CC_STATE,
 			sizeof(*cc), 64, &brw->cc.state_offset);
    memset(cc, 0, sizeof(*cc));
 
-   /* _NEW_STENCIL */
+   /* _NEW_STENCIL | _NEW_BUFFERS */
    if (ctx->Stencil._Enabled) {
       const unsigned back = ctx->Stencil._BackFace;
 
@@ -211,27 +210,27 @@ static void upload_cc_unit(struct brw_context *brw)
       cc->cc2.depth_write_enable = ctx->Depth.Mask;
    }
 
-   if (intel->stats_wm || unlikely(INTEL_DEBUG & DEBUG_STATS))
+   if (brw->stats_wm || unlikely(INTEL_DEBUG & DEBUG_STATS))
       cc->cc5.statistics_enable = 1;
 
    /* CACHE_NEW_CC_VP */
-   cc->cc4.cc_viewport_state_offset = (intel->batch.bo->offset +
+   cc->cc4.cc_viewport_state_offset = (brw->batch.bo->offset +
 				       brw->cc.vp_offset) >> 5; /* reloc */
 
    brw->state.dirty.cache |= CACHE_NEW_CC_UNIT;
 
    /* Emit CC viewport relocation */
-   drm_intel_bo_emit_reloc(brw->intel.batch.bo,
+   drm_intel_bo_emit_reloc(brw->batch.bo,
 			   (brw->cc.state_offset +
 			    offsetof(struct brw_cc_unit_state, cc4)),
-			   intel->batch.bo, brw->cc.vp_offset,
+			   brw->batch.bo, brw->cc.vp_offset,
 			   I915_GEM_DOMAIN_INSTRUCTION, 0);
 }
 
 const struct brw_tracked_state brw_cc_unit = {
    .dirty = {
-      .mesa = _NEW_STENCIL | _NEW_COLOR | _NEW_DEPTH,
-      .brw = BRW_NEW_BATCH,
+      .mesa = _NEW_STENCIL | _NEW_COLOR | _NEW_DEPTH | _NEW_BUFFERS,
+      .brw = BRW_NEW_BATCH | BRW_NEW_STATS_WM,
       .cache = CACHE_NEW_CC_VP
    },
    .emit = upload_cc_unit,
@@ -239,8 +238,7 @@ const struct brw_tracked_state brw_cc_unit = {
 
 static void upload_blend_constant_color(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
 
    BEGIN_BATCH(5);
    OUT_BATCH(_3DSTATE_BLEND_CONSTANT_COLOR << 16 | (5-2));

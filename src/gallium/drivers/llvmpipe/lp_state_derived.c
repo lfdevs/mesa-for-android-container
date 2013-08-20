@@ -50,7 +50,7 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
 {
    const struct lp_fragment_shader *lpfs = llvmpipe->fs;
    struct vertex_info *vinfo = &llvmpipe->vertex_info;
-   unsigned vs_index;
+   int vs_index;
    uint i;
 
    llvmpipe->color_slot[0] = -1;
@@ -99,7 +99,7 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
       vs_index = draw_find_shader_output(llvmpipe->draw,
                                          TGSI_SEMANTIC_BCOLOR, i);
 
-      if (vs_index > 0) {
+      if (vs_index >= 0) {
          llvmpipe->bcolor_slot[i] = (int)vinfo->num_attribs;
          draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_PERSPECTIVE, vs_index);
       }
@@ -111,10 +111,33 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
    vs_index = draw_find_shader_output(llvmpipe->draw,
                                       TGSI_SEMANTIC_PSIZE, 0);
 
-   if (vs_index > 0) {
+   if (vs_index >= 0) {
       llvmpipe->psize_slot = vinfo->num_attribs;
       draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_CONSTANT, vs_index);
    }
+
+   /* Figure out if we need viewport index */
+   vs_index = draw_find_shader_output(llvmpipe->draw,
+                                      TGSI_SEMANTIC_VIEWPORT_INDEX,
+                                      0);
+   if (vs_index >= 0) {
+      llvmpipe->viewport_index_slot = vinfo->num_attribs;
+      draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_CONSTANT, vs_index);
+   } else {
+      llvmpipe->viewport_index_slot = 0;
+   }
+
+   /* Figure out if we need layer */
+   vs_index = draw_find_shader_output(llvmpipe->draw,
+                                      TGSI_SEMANTIC_LAYER,
+                                      0);
+   if (vs_index >= 0) {
+      llvmpipe->layer_slot = vinfo->num_attribs;
+      draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_CONSTANT, vs_index);
+   } else {
+      llvmpipe->layer_slot = 0;
+   }
+
 
    draw_compute_vertex_size(vinfo);
    lp_setup_set_vertex_info(llvmpipe->setup, vinfo);
@@ -164,7 +187,7 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
                                &llvmpipe->blend_color);
 
    if (llvmpipe->dirty & LP_NEW_SCISSOR)
-      lp_setup_set_scissor(llvmpipe->setup, &llvmpipe->scissor);
+      lp_setup_set_scissors(llvmpipe->setup, llvmpipe->scissors);
 
    if (llvmpipe->dirty & LP_NEW_DEPTH_STENCIL_ALPHA) {
       lp_setup_set_alpha_ref_value(llvmpipe->setup, 

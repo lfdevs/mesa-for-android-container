@@ -34,8 +34,7 @@
 static void
 upload_wm_state(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    const struct brw_fragment_program *fp =
       brw_fragment_program_const(brw->fragment_program);
    bool writes_depth = false;
@@ -58,7 +57,7 @@ upload_wm_state(struct brw_context *brw)
       dw1 |= GEN7_WM_POLYGON_STIPPLE_ENABLE;
 
    /* BRW_NEW_FRAGMENT_PROGRAM */
-   if (fp->program.Base.InputsRead & FRAG_BIT_WPOS)
+   if (fp->program.Base.InputsRead & VARYING_BIT_POS)
       dw1 |= GEN7_WM_USES_SOURCE_DEPTH | GEN7_WM_USES_SOURCE_W;
    if (fp->program.Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) {
       writes_depth = true;
@@ -112,10 +111,9 @@ const struct brw_tracked_state gen7_wm_state = {
 static void
 upload_ps_state(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    uint32_t dw2, dw4, dw5;
-   const int max_threads_shift = brw->intel.is_haswell ?
+   const int max_threads_shift = brw->is_haswell ?
       HSW_PS_MAX_THREADS_SHIFT : IVB_PS_MAX_THREADS_SHIFT;
 
    /* BRW_NEW_PS_BINDING_TABLE */
@@ -143,6 +141,8 @@ upload_ps_state(struct brw_context *brw)
       OUT_BATCH(0);
       ADVANCE_BATCH();
    } else {
+      uint8_t mocs = brw->is_haswell ? GEN7_MOCS_L3 : 0;
+
       BEGIN_BATCH(7);
       OUT_BATCH(_3DSTATE_CONSTANT_PS << 16 | (7 - 2));
 
@@ -152,7 +152,7 @@ upload_ps_state(struct brw_context *brw)
       /* Pointer to the WM constant buffer.  Covered by the set of
        * state flags from gen6_upload_wm_push_constants.
        */
-      OUT_BATCH(brw->wm.push_const_offset);
+      OUT_BATCH(brw->wm.push_const_offset | mocs);
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
@@ -169,10 +169,10 @@ upload_ps_state(struct brw_context *brw)
     * rendering, CurrentFragmentProgram is used for this check to
     * differentiate between the GLSL and non-GLSL cases.
     */
-   if (intel->ctx.Shader.CurrentFragmentProgram == NULL)
+   if (ctx->Shader.CurrentFragmentProgram == NULL)
       dw2 |= GEN7_PS_FLOATING_POINT_MODE_ALT;
 
-   if (intel->is_haswell)
+   if (brw->is_haswell)
       dw4 |= SET_FIELD(1, HSW_PS_SAMPLE_MASK); /* 1 sample for now */
 
    dw4 |= (brw->max_wm_threads - 1) << max_threads_shift;

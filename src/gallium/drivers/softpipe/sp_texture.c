@@ -283,10 +283,6 @@ softpipe_create_surface(struct pipe_context *pipe,
                         const struct pipe_surface *surf_tmpl)
 {
    struct pipe_surface *ps;
-   unsigned level = surf_tmpl->u.tex.level;
-
-   assert(level <= pt->last_level);
-   assert(surf_tmpl->u.tex.first_layer == surf_tmpl->u.tex.last_layer);
 
    ps = CALLOC_STRUCT(pipe_surface);
    if (ps) {
@@ -294,12 +290,26 @@ softpipe_create_surface(struct pipe_context *pipe,
       pipe_resource_reference(&ps->texture, pt);
       ps->context = pipe;
       ps->format = surf_tmpl->format;
-      ps->width = u_minify(pt->width0, level);
-      ps->height = u_minify(pt->height0, level);
-
-      ps->u.tex.level = level;
-      ps->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
-      ps->u.tex.last_layer = surf_tmpl->u.tex.last_layer;
+      if (pt->target != PIPE_BUFFER) {
+         assert(surf_tmpl->u.tex.level <= pt->last_level);
+         ps->width = u_minify(pt->width0, surf_tmpl->u.tex.level);
+         ps->height = u_minify(pt->height0, surf_tmpl->u.tex.level);
+         ps->u.tex.level = surf_tmpl->u.tex.level;
+         ps->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
+         ps->u.tex.last_layer = surf_tmpl->u.tex.last_layer;
+         if (ps->u.tex.first_layer != ps->u.tex.last_layer) {
+            debug_printf("creating surface with multiple layers, rendering to first layer only\n");
+         }
+      }
+      else {
+         /* setting width as number of elements should get us correct renderbuffer width */
+         ps->width = surf_tmpl->u.buf.last_element - surf_tmpl->u.buf.first_element + 1;
+         ps->height = pt->height0;
+         ps->u.buf.first_element = surf_tmpl->u.buf.first_element;
+         ps->u.buf.last_element = surf_tmpl->u.buf.last_element;
+         assert(ps->u.buf.first_element <= ps->u.buf.last_element);
+         assert(ps->u.buf.last_element < ps->width);
+      }
    }
    return ps;
 }
@@ -352,23 +362,23 @@ softpipe_transfer_map(struct pipe_context *pipe,
    assert(level <= resource->last_level);
 
    /* make sure the requested region is in the image bounds */
-   assert(box->x + box->width <= u_minify(resource->width0, level));
+   assert(box->x + box->width <= (int) u_minify(resource->width0, level));
    if (resource->target == PIPE_TEXTURE_1D_ARRAY) {
-      assert(box->y + box->height <= resource->array_size);
+      assert(box->y + box->height <= (int) resource->array_size);
    }
    else {
-      assert(box->y + box->height <= u_minify(resource->height0, level));
+      assert(box->y + box->height <= (int) u_minify(resource->height0, level));
       if (resource->target == PIPE_TEXTURE_2D_ARRAY) {
-         assert(box->z + box->depth <= resource->array_size);
+         assert(box->z + box->depth <= (int) resource->array_size);
       }
       else if (resource->target == PIPE_TEXTURE_CUBE) {
          assert(box->z < 6);
       }
       else if (resource->target == PIPE_TEXTURE_CUBE_ARRAY) {
-         assert(box->z <= resource->array_size);
+         assert(box->z <= (int) resource->array_size);
       }
       else {
-         assert(box->z + box->depth <= (u_minify(resource->depth0, level)));
+         assert(box->z + box->depth <= (int) u_minify(resource->depth0, level));
       }
    }
 

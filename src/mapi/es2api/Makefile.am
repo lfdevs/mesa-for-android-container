@@ -28,6 +28,8 @@ AM_CPPFLAGS = \
 
 AM_CFLAGS = $(VISIBILITY_CFLAGS)
 
+TESTS = ABI-check
+
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = glesv2.pc
 
@@ -44,7 +46,7 @@ GLES3_include_HEADERS = \
 
 lib_LTLIBRARIES = libGLESv2.la
 
-libGLESv2_la_SOURCES = ../mapi/entry.c glapi_mapi_tmp.h
+libGLESv2_la_SOURCES = ../entry.c glapi_mapi_tmp.h
 libGLESv2_la_LIBADD = $(GLESv2_LIB_DEPS)
 libGLESv2_la_LDFLAGS = -version-number 2 -no-undefined
 

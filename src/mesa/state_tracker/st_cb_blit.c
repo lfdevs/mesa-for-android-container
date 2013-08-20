@@ -33,7 +33,6 @@
 #include "main/imports.h"
 #include "main/image.h"
 #include "main/macros.h"
-#include "main/mfeatures.h"
 
 #include "st_context.h"
 #include "st_texture.h"
@@ -41,23 +40,7 @@
 #include "st_cb_fbo.h"
 #include "st_atom.h"
 
-#include "util/u_blit.h"
 #include "util/u_format.h"
-
-
-void
-st_init_blit(struct st_context *st)
-{
-   st->blit = util_create_blit(st->pipe, st->cso_context);
-}
-
-
-void
-st_destroy_blit(struct st_context *st)
-{
-   util_destroy_blit(st->blit);
-   st->blit = NULL;
-}
 
 
 static void
@@ -255,31 +238,22 @@ st_BlitFramebuffer(struct gl_context *ctx,
       /* depth and/or stencil blit */
 
       /* get src/dst depth surfaces */
-      struct gl_renderbuffer_attachment *srcDepth =
-         &readFB->Attachment[BUFFER_DEPTH];
-      struct gl_renderbuffer_attachment *dstDepth =
-         &drawFB->Attachment[BUFFER_DEPTH];
-      struct gl_renderbuffer_attachment *srcStencil =
-         &readFB->Attachment[BUFFER_STENCIL];
-      struct gl_renderbuffer_attachment *dstStencil =
-         &drawFB->Attachment[BUFFER_STENCIL];
-
       struct st_renderbuffer *srcDepthRb =
-         st_renderbuffer(srcDepth->Renderbuffer);
+         st_renderbuffer(readFB->Attachment[BUFFER_DEPTH].Renderbuffer);
       struct st_renderbuffer *dstDepthRb = 
-         st_renderbuffer(dstDepth->Renderbuffer);
+         st_renderbuffer(drawFB->Attachment[BUFFER_DEPTH].Renderbuffer);
       struct pipe_surface *dstDepthSurf =
          dstDepthRb ? dstDepthRb->surface : NULL;
 
       struct st_renderbuffer *srcStencilRb =
-         st_renderbuffer(srcStencil->Renderbuffer);
+         st_renderbuffer(readFB->Attachment[BUFFER_STENCIL].Renderbuffer);
       struct st_renderbuffer *dstStencilRb =
-         st_renderbuffer(dstStencil->Renderbuffer);
+         st_renderbuffer(drawFB->Attachment[BUFFER_STENCIL].Renderbuffer);
       struct pipe_surface *dstStencilSurf =
          dstStencilRb ? dstStencilRb->surface : NULL;
 
-      if (st_is_depth_stencil_combined(srcDepth, srcStencil) &&
-          st_is_depth_stencil_combined(dstDepth, dstStencil)) {
+      if (_mesa_has_depthstencil_combined(readFB) &&
+          _mesa_has_depthstencil_combined(drawFB)) {
          blit.mask = 0;
          if (mask & GL_DEPTH_BUFFER_BIT)
             blit.mask |= PIPE_MASK_Z;

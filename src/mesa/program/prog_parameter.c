@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.3
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
@@ -155,7 +155,21 @@ _mesa_add_parameter(struct gl_program_parameter_list *paramList,
          p->Size = size;
          p->DataType = datatype;
          if (values) {
-            COPY_4V(paramList->ParameterValues[oldNum + i], values);
+            if (size >= 4) {
+               COPY_4V(paramList->ParameterValues[oldNum + i], values);
+            }
+            else {
+               /* copy 1, 2 or 3 values */
+               GLuint remaining = size % 4;
+               assert(remaining < 4);
+               for (j = 0; j < remaining; j++) {
+                  paramList->ParameterValues[oldNum + i][j].f = values[j].f;
+               }
+               /* fill in remaining positions with zeros */
+               for (; j < 4; j++) {
+                  paramList->ParameterValues[oldNum + i][j].f = 0.0f;
+               }
+            }
             values += 4;
             p->Initialized = GL_TRUE;
          }

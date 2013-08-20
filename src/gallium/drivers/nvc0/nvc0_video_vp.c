@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nvc0_video.h"
@@ -577,8 +577,8 @@ nvc0_decoder_vp(struct nvc0_decoder *dec, union pipe_desc desc,
    if (!is_ref)
       nvc0_decoder_kick_ref(dec, target);
 
-   PUSH_SPACE(push, 8 + 3 * (codec != PIPE_VIDEO_CODEC_MPEG12) +
-              6 + codec_extra + fence_extra + 2);
+   nouveau_pushbuf_space(push, 8 + 3 * (codec != PIPE_VIDEO_CODEC_MPEG12) +
+              6 + codec_extra + fence_extra + 2, num_refs, 0);
 
    nouveau_pushbuf_refn(push, bo_refs, num_refs);
 
@@ -650,7 +650,7 @@ nvc0_decoder_vp(struct nvc0_decoder *dec, union pipe_desc desc,
       do {
          usleep(100);
          if ((spin++ & 0xff) == 0xff) {
-            debug_printf("vp%u: %u\n", dec->fence_seq, dec->fence_map[4]);
+            debug_printf("v%u: %u\n", dec->fence_seq, dec->fence_map[4]);
             dump_comm_vp(dec, dec->comm, comm_seq, inter_bo, slice_size << 8);
          }
       } while (dec->fence_seq > dec->fence_map[4]);

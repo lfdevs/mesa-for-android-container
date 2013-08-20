@@ -65,7 +65,7 @@ reswizzle(src_reg orig, unsigned x, unsigned y, unsigned z, unsigned w)
 }
 
 void
-vec4_visitor::emit_vertex_program_code()
+vec4_vs_visitor::emit_program_code()
 {
    this->need_all_constants_in_pull_buffer = false;
 
@@ -84,8 +84,8 @@ vec4_visitor::emit_vertex_program_code()
    src_reg one = src_reg(this, glsl_type::float_type);
    emit(MOV(dst_reg(one), src_reg(1.0f)));
 
-   for (unsigned int insn = 0; insn < vp->Base.NumInstructions; insn++) {
-      const struct prog_instruction *vpi = &vp->Base.Instructions[insn];
+   for (unsigned int insn = 0; insn < prog->NumInstructions; insn++) {
+      const struct prog_instruction *vpi = &prog->Instructions[insn];
       base_ir = vpi;
 
       dst_reg dst;
@@ -111,7 +111,7 @@ vec4_visitor::emit_vertex_program_code()
          break;
 
       case OPCODE_ARL:
-         if (intel->gen >= 6) {
+         if (brw->gen >= 6) {
             dst.writemask = WRITEMASK_X;
             dst_reg dst_f = dst;
             dst_f.type = BRW_REGISTER_TYPE_F;
@@ -410,26 +410,29 @@ vec4_visitor::emit_vertex_program_code()
     * pull constants.  Do that now.
     */
    if (this->need_all_constants_in_pull_buffer) {
-      const struct gl_program_parameter_list *params = c->vp->program.Base.Parameters;
+      const struct gl_program_parameter_list *params =
+         vs_compile->vp->program.Base.Parameters;
       unsigned i;
       for (i = 0; i < params->NumParameters * 4; i++) {
-         c->prog_data.pull_param[i] = &params->ParameterValues[i / 4][i % 4].f;
+         prog_data->pull_param[i] =
+            &params->ParameterValues[i / 4][i % 4].f;
       }
-      c->prog_data.nr_pull_params = i;
+      prog_data->nr_pull_params = i;
    }
 }
 
 void
-vec4_visitor::setup_vp_regs()
+vec4_vs_visitor::setup_vp_regs()
 {
    /* PROGRAM_TEMPORARY */
-   int num_temp = vp->Base.NumTemporaries;
+   int num_temp = prog->NumTemporaries;
    vp_temp_regs = rzalloc_array(mem_ctx, src_reg, num_temp);
    for (int i = 0; i < num_temp; i++)
       vp_temp_regs[i] = src_reg(this, glsl_type::vec4_type);
 
    /* PROGRAM_STATE_VAR etc. */
-   struct gl_program_parameter_list *plist = c->vp->program.Base.Parameters;
+   struct gl_program_parameter_list *plist =
+      vs_compile->vp->program.Base.Parameters;
    for (unsigned p = 0; p < plist->NumParameters; p++) {
       unsigned components = plist->Parameters[p].Size;
 
@@ -442,20 +445,20 @@ vec4_visitor::setup_vp_regs()
       this->uniform_size[this->uniforms] = 1; /* 1 vec4 */
       this->uniform_vector_size[this->uniforms] = components;
       for (unsigned i = 0; i < 4; i++) {
-         c->prog_data.param[this->uniforms * 4 + i] = i >= components ? 0 :
-            &plist->ParameterValues[p][i].f;
+         prog_data->param[this->uniforms * 4 + i] = i >= components
+            ? 0 : &plist->ParameterValues[p][i].f;
       }
       this->uniforms++; /* counted in vec4 units */
    }
 
    /* PROGRAM_OUTPUT */
-   for (int slot = 0; slot < c->prog_data.vue_map.num_slots; slot++) {
-      int vert_result = c->prog_data.vue_map.slot_to_vert_result[slot];
-      if (vert_result == VERT_RESULT_PSIZ)
-         output_reg[vert_result] = dst_reg(this, glsl_type::float_type);
+   for (int slot = 0; slot < prog_data->vue_map.num_slots; slot++) {
+      int varying = prog_data->vue_map.slot_to_varying[slot];
+      if (varying == VARYING_SLOT_PSIZ)
+         output_reg[varying] = dst_reg(this, glsl_type::float_type);
       else
-         output_reg[vert_result] = dst_reg(this, glsl_type::vec4_type);
-      assert(output_reg[vert_result].type == BRW_REGISTER_TYPE_F);
+         output_reg[varying] = dst_reg(this, glsl_type::vec4_type);
+      assert(output_reg[varying].type == BRW_REGISTER_TYPE_F);
    }
 
    /* PROGRAM_ADDRESS */
@@ -464,7 +467,7 @@ vec4_visitor::setup_vp_regs()
 }
 
 dst_reg
-vec4_visitor::get_vp_dst_reg(const prog_dst_register &dst)
+vec4_vs_visitor::get_vp_dst_reg(const prog_dst_register &dst)
 {
    dst_reg result;
 
@@ -498,9 +501,10 @@ vec4_visitor::get_vp_dst_reg(const prog_dst_register &dst)
 }
 
 src_reg
-vec4_visitor::get_vp_src_reg(const prog_src_register &src)
+vec4_vs_visitor::get_vp_src_reg(const prog_src_register &src)
 {
-   struct gl_program_parameter_list *plist = c->vp->program.Base.Parameters;
+   struct gl_program_parameter_list *plist =
+      vs_compile->vp->program.Base.Parameters;
 
    src_reg result;
 
@@ -543,7 +547,7 @@ vec4_visitor::get_vp_src_reg(const prog_src_register &src)
          dst_reladdr.writemask = WRITEMASK_X;
          emit(ADD(dst_reladdr, this->vp_addr_reg, src_reg(src.Index)));
 
-         if (intel->gen < 6)
+         if (brw->gen < 6)
             emit(MUL(dst_reladdr, reladdr, src_reg(16)));
 
       #if 0

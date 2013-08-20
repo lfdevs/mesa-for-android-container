@@ -175,6 +175,14 @@ ALU2(DP2)
 ALU2(LINE)
 ALU2(PLN)
 ALU3(MAD)
+ALU3(LRP)
+ALU1(BFREV)
+ALU3(BFE)
+ALU2(BFI1)
+ALU3(BFI2)
+ALU1(FBH)
+ALU1(FBL)
+ALU1(CBIT)
 
 ROUND(RNDZ)
 ROUND(RNDE)
@@ -265,7 +273,6 @@ void brw_SAMPLE(struct brw_compile *p,
 		struct brw_reg src0,
 		GLuint binding_table_index,
 		GLuint sampler,
-		GLuint writemask,
 		GLuint msg_type,
 		GLuint response_length,
 		GLuint msg_length,
@@ -305,7 +312,7 @@ void brw_oword_block_write_scratch(struct brw_compile *p,
 				   GLuint offset);
 
 void brw_shader_time_add(struct brw_compile *p,
-                         int mrf,
+                         struct brw_reg payload,
                          uint32_t surf_index);
 
 /* If/else/endif.  Works by manipulating the execution flags on each
@@ -386,23 +393,18 @@ void brw_set_uip_jip(struct brw_compile *p);
 uint32_t brw_swap_cmod(uint32_t cmod);
 
 /* brw_eu_compact.c */
-void brw_init_compaction_tables(struct intel_context *intel);
+void brw_init_compaction_tables(struct brw_context *brw);
 void brw_compact_instructions(struct brw_compile *p);
-void brw_uncompact_instruction(struct intel_context *intel,
+void brw_uncompact_instruction(struct brw_context *brw,
 			       struct brw_instruction *dst,
 			       struct brw_compact_instruction *src);
 bool brw_try_compact_instruction(struct brw_compile *p,
                                  struct brw_compact_instruction *dst,
                                  struct brw_instruction *src);
 
-void brw_debug_compact_uncompact(struct intel_context *intel,
+void brw_debug_compact_uncompact(struct brw_context *brw,
 				 struct brw_instruction *orig,
 				 struct brw_instruction *uncompacted);
-
-/* brw_optimize.c */
-void brw_optimize(struct brw_compile *p);
-void brw_remove_duplicate_mrf_moves(struct brw_compile *p);
-void brw_remove_grf_to_mrf_moves(struct brw_compile *p);
 
 #ifdef __cplusplus
 }

@@ -21,7 +21,9 @@
  * IN THE SOFTWARE.
  */
 #include "main/mtypes.h"
+#include "main/blend.h"
 #include "main/samplerobj.h"
+#include "main/texformat.h"
 #include "program/prog_parameter.h"
 
 #include "intel_mipmap_tree.h"
@@ -126,7 +128,7 @@ gen7_set_surface_mcs_info(struct brw_context *brw,
              SET_FIELD(pitch_tiles - 1, GEN7_SURFACE_MCS_PITCH) |
              mcs_mt->region->bo->offset;
 
-   drm_intel_bo_emit_reloc(brw->intel.batch.bo,
+   drm_intel_bo_emit_reloc(brw->batch.bo,
                            surf_offset + 6 * 4,
                            mcs_mt->region->bo,
                            surf[6] & 0xfff,
@@ -146,9 +148,8 @@ gen7_check_surface_setup(uint32_t *surf, bool is_render_target)
 
    (void) surface_array_spacing;
 
-   /* From the Graphics BSpec: vol5c Shared Functions [SNB+] > State >
-    * SURFACE_STATE > SURFACE_STATE for most messages [DevIVB]: Surface Array
-    * Spacing:
+   /* From the Ivybridge PRM, Volume 4 Part 1, page 66 (RENDER_SURFACE_STATE
+    * dword 0 bit 10 "Surface Array Spacing" Programming Notes):
     *
     *   If Multisampled Surface Storage Format is MSFMT_MSS and Number of
     *   Multisamples is not MULTISAMPLECOUNT_1, this field must be set to
@@ -158,9 +159,8 @@ gen7_check_surface_setup(uint32_t *surf, bool is_render_target)
        && is_multisampled)
       assert(surface_array_spacing == GEN7_SURFACE_ARYSPC_LOD0);
 
-   /* From the Graphics BSpec: vol5c Shared Functions [SNB+] > State >
-    * SURFACE_STATE > SURFACE_STATE for most messages [DevIVB]: Multisampled
-    * Surface Storage Format:
+   /* From the Ivybridge PRM, Volume 4 Part 1, page 72 (RENDER_SURFACE_STATE
+    * dword 4 bit 6 "Multisampled Surface Storage" Programming Notes):
     *
     *   All multisampled render target surfaces must have this field set to
     *   MSFMT_MSS.
@@ -173,9 +173,8 @@ gen7_check_surface_setup(uint32_t *surf, bool is_render_target)
       assert(multisampled_surface_storage_format == GEN7_SURFACE_MSFMT_MSS);
    }
 
-   /* From the Graphics BSpec: vol5c Shared Functions [SNB+] > State >
-    * SURFACE_STATE > SURFACE_STATE for most messages [DevIVB]: Multisampled
-    * Surface Storage Format:
+   /* From the Ivybridge PRM, Volume 4 Part 1, page 72 (RENDER_SURFACE_STATE
+    * dword 4 bit 6 "Multisampled Surface Storage Format" Errata):
     *
     *   If the surface’s Number of Multisamples is MULTISAMPLECOUNT_8, Width
     *   is >= 8192 (meaning the actual surface width is >= 8193 pixels), this
@@ -186,9 +185,8 @@ gen7_check_surface_setup(uint32_t *surf, bool is_render_target)
       assert(multisampled_surface_storage_format == GEN7_SURFACE_MSFMT_MSS);
    }
 
-   /* From the Graphics BSpec: vol5c Shared Functions [SNB+] > State >
-    * SURFACE_STATE > SURFACE_STATE for most messages [DevIVB]: Multisampled
-    * Surface Storage Format:
+   /* From the Ivybridge PRM, Volume 4 Part 1, page 72 (RENDER_SURFACE_STATE
+    * dword 4 bit 6 "Multisampled Surface Storage Format" Errata):
     *
     *   If the surface’s Number of Multisamples is MULTISAMPLECOUNT_8,
     *   ((Depth+1) * (Height+1)) is > 4,194,304, OR if the surface’s Number of
@@ -198,7 +196,7 @@ gen7_check_surface_setup(uint32_t *surf, bool is_render_target)
     *   following: I24X8_UNORM, L24X8_UNORM, A24X8_UNORM, or
     *   R24_UNORM_X8_TYPELESS.
     *
-    * But also:
+    * But also (from the Programming Notes):
     *
     *   This field is ignored if Number of Multisamples is MULTISAMPLECOUNT_1.
     */
@@ -234,7 +232,6 @@ gen7_update_buffer_texture_surface(struct gl_context *ctx,
                                    unsigned surf_index)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct intel_context *intel = &brw->intel;
    struct gl_texture_object *tObj = ctx->Texture.Unit[unit]._Current;
    struct intel_buffer_object *intel_obj =
       intel_buffer_object(tObj->BufferObject);
@@ -258,20 +255,18 @@ gen7_update_buffer_texture_surface(struct gl_context *ctx,
    if (bo) {
       surf[1] = bo->offset; /* reloc */
 
-      /* Emit relocation to surface contents.  Section 5.1.1 of the gen4
-       * bspec ("Data Cache") says that the data cache does not exist as
-       * a separate cache and is just the sampler cache.
-       */
-      drm_intel_bo_emit_reloc(intel->batch.bo,
+      drm_intel_bo_emit_reloc(brw->batch.bo,
 			      binding_table[surf_index] + 4,
 			      bo, 0,
 			      I915_GEM_DOMAIN_SAMPLER, 0);
 
       int texel_size = _mesa_get_format_bytes(format);
       int w = intel_obj->Base.Size / texel_size;
+
+      /* note that these differ from GEN6 */
       surf[2] = SET_FIELD(w & 0x7f, GEN7_SURFACE_WIDTH) | /* bits 6:0 of size */
-                SET_FIELD((w >> 7) & 0x1fff, GEN7_SURFACE_HEIGHT); /* 19:7 */
-      surf[3] = SET_FIELD((w >> 20) & 0x7f, BRW_SURFACE_DEPTH) | /* bits 26:20 */
+                SET_FIELD((w >> 7) & 0x3fff, GEN7_SURFACE_HEIGHT); /* 20:7 */
+      surf[3] = SET_FIELD((w >> 21) & 0x3f, BRW_SURFACE_DEPTH) | /* bits 26:21 */
                 (texel_size - 1);
    }
 
@@ -285,32 +280,25 @@ gen7_update_texture_surface(struct gl_context *ctx,
                             unsigned surf_index)
 {
    struct brw_context *brw = brw_context(ctx);
-   struct intel_context *intel = &brw->intel;
    struct gl_texture_object *tObj = ctx->Texture.Unit[unit]._Current;
    struct intel_texture_object *intelObj = intel_texture_object(tObj);
    struct intel_mipmap_tree *mt = intelObj->mt;
    struct gl_texture_image *firstImage = tObj->Image[0][tObj->BaseLevel];
    struct gl_sampler_object *sampler = _mesa_get_samplerobj(ctx, unit);
-   int width, height, depth;
+   uint32_t tile_x, tile_y;
+   uint8_t mocs = brw->is_haswell ? GEN7_MOCS_L3 : 0;
 
    if (tObj->Target == GL_TEXTURE_BUFFER) {
       gen7_update_buffer_texture_surface(ctx, unit, binding_table, surf_index);
       return;
    }
 
-   /* We don't support MSAA for textures. */
-   assert(!mt->array_spacing_lod0);
-   assert(mt->num_samples <= 1);
-
-   intel_miptree_get_dimensions_for_image(firstImage, &width, &height, &depth);
-
    uint32_t *surf = brw_state_batch(brw, AUB_TRACE_SURFACE_STATE,
                                     8 * 4, 32, &binding_table[surf_index]);
    memset(surf, 0, 8 * 4);
 
-   uint32_t tex_format = translate_tex_format(intel,
+   uint32_t tex_format = translate_tex_format(brw,
                                               mt->format,
-                                              firstImage->InternalFormat,
                                               tObj->DepthMode,
                                               sampler->sRGBDecode);
 
@@ -324,19 +312,34 @@ gen7_update_texture_surface(struct gl_context *ctx,
    if (mt->align_w == 8)
       surf[0] |= GEN7_SURFACE_HALIGN_8;
 
-   if (depth > 1 && tObj->Target != GL_TEXTURE_3D)
+   if (mt->logical_depth0 > 1 && tObj->Target != GL_TEXTURE_3D)
       surf[0] |= GEN7_SURFACE_IS_ARRAY;
 
-   surf[1] = mt->region->bo->offset + mt->offset; /* reloc */
+   if (mt->array_spacing_lod0)
+      surf[0] |= GEN7_SURFACE_ARYSPC_LOD0;
 
-   surf[2] = SET_FIELD(width - 1, GEN7_SURFACE_WIDTH) |
-             SET_FIELD(height - 1, GEN7_SURFACE_HEIGHT);
-   surf[3] = SET_FIELD(depth - 1, BRW_SURFACE_DEPTH) |
+   surf[1] = mt->region->bo->offset + mt->offset; /* reloc */
+   surf[1] += intel_miptree_get_tile_offsets(intelObj->mt, firstImage->Level, 0,
+                                             &tile_x, &tile_y);
+
+   surf[2] = SET_FIELD(mt->logical_width0 - 1, GEN7_SURFACE_WIDTH) |
+             SET_FIELD(mt->logical_height0 - 1, GEN7_SURFACE_HEIGHT);
+   surf[3] = SET_FIELD(mt->logical_depth0 - 1, BRW_SURFACE_DEPTH) |
              ((intelObj->mt->region->pitch) - 1);
 
-   surf[5] = intelObj->_MaxLevel - tObj->BaseLevel; /* mip count */
+   surf[4] = gen7_surface_msaa_bits(mt->num_samples, mt->msaa_layout);
 
-   if (intel->is_haswell) {
+   assert(brw->has_surface_tile_offset || (tile_x == 0 && tile_y == 0));
+   /* Note that the low bits of these fields are missing, so
+    * there's the possibility of getting in trouble.
+    */
+   surf[5] = ((tile_x / 4) << BRW_SURFACE_X_OFFSET_SHIFT |
+              (tile_y / 2) << BRW_SURFACE_Y_OFFSET_SHIFT |
+              SET_FIELD(mocs, GEN7_SURFACE_MOCS) |
+              /* mip count */
+              (intelObj->_MaxLevel - tObj->BaseLevel));
+
+   if (brw->is_haswell) {
       /* Handling GL_ALPHA as a surface format override breaks 1.30+ style
        * texturing functions that return a float, as our code generation always
        * selects the .x channel (which would always be 0).
@@ -356,9 +359,10 @@ gen7_update_texture_surface(struct gl_context *ctx,
    }
 
    /* Emit relocation to surface contents */
-   drm_intel_bo_emit_reloc(brw->intel.batch.bo,
+   drm_intel_bo_emit_reloc(brw->batch.bo,
 			   binding_table[surf_index] + 4,
-			   intelObj->mt->region->bo, intelObj->mt->offset,
+			   intelObj->mt->region->bo,
+                           surf[1] - intelObj->mt->region->bo->offset,
 			   I915_GEM_DOMAIN_SAMPLER, 0);
 
    gen7_check_surface_setup(surf, false /* is_render_target */);
@@ -373,10 +377,10 @@ gen7_create_constant_surface(struct brw_context *brw,
 			     drm_intel_bo *bo,
 			     uint32_t offset,
 			     uint32_t size,
-			     uint32_t *out_offset)
+			     uint32_t *out_offset,
+                             bool dword_pitch)
 {
-   struct intel_context *intel = &brw->intel;
-   uint32_t stride = 16;
+   uint32_t stride = dword_pitch ? 4 : 16;
    uint32_t elements = ALIGN(size, stride) / stride;
    const GLint w = elements - 1;
 
@@ -391,23 +395,20 @@ gen7_create_constant_surface(struct brw_context *brw,
    assert(bo);
    surf[1] = bo->offset + offset; /* reloc */
 
+   /* note that these differ from GEN6 */
    surf[2] = SET_FIELD(w & 0x7f, GEN7_SURFACE_WIDTH) |
-             SET_FIELD((w >> 7) & 0x1fff, GEN7_SURFACE_HEIGHT);
-   surf[3] = SET_FIELD((w >> 20) & 0x7f, BRW_SURFACE_DEPTH) |
+             SET_FIELD((w >> 7) & 0x3fff, GEN7_SURFACE_HEIGHT);
+   surf[3] = SET_FIELD((w >> 21) & 0x3f, BRW_SURFACE_DEPTH) |
              (stride - 1);
 
-   if (intel->is_haswell) {
+   if (brw->is_haswell) {
       surf[7] = SET_FIELD(HSW_SCS_RED,   GEN7_SURFACE_SCS_R) |
                 SET_FIELD(HSW_SCS_GREEN, GEN7_SURFACE_SCS_G) |
                 SET_FIELD(HSW_SCS_BLUE,  GEN7_SURFACE_SCS_B) |
                 SET_FIELD(HSW_SCS_ALPHA, GEN7_SURFACE_SCS_A);
    }
 
-   /* Emit relocation to surface contents.  Section 5.1.1 of the gen4
-    * bspec ("Data Cache") says that the data cache does not exist as
-    * a separate cache and is just the sampler cache.
-    */
-   drm_intel_bo_emit_reloc(intel->batch.bo,
+   drm_intel_bo_emit_reloc(brw->batch.bo,
 			   *out_offset + 4,
 			   bo, offset,
 			   I915_GEM_DOMAIN_SAMPLER, 0);
@@ -421,7 +422,6 @@ gen7_create_constant_surface(struct brw_context *brw,
 void
 gen7_create_shader_time_surface(struct brw_context *brw, uint32_t *out_offset)
 {
-   struct intel_context *intel = &brw->intel;
    const int w = brw->shader_time.bo->size - 1;
 
    uint32_t *surf = brw_state_batch(brw, AUB_TRACE_SURFACE_STATE,
@@ -434,20 +434,17 @@ gen7_create_shader_time_surface(struct brw_context *brw, uint32_t *out_offset)
 
    surf[1] = brw->shader_time.bo->offset; /* reloc */
 
+   /* note that these differ from GEN6 */
    surf[2] = SET_FIELD(w & 0x7f, GEN7_SURFACE_WIDTH) |
-             SET_FIELD((w >> 7) & 0x1fff, GEN7_SURFACE_HEIGHT);
-   surf[3] = SET_FIELD((w >> 20) & 0x7f, BRW_SURFACE_DEPTH);
+             SET_FIELD((w >> 7) & 0x3fff, GEN7_SURFACE_HEIGHT);
+   surf[3] = SET_FIELD((w >> 21) & 0x3f, BRW_SURFACE_DEPTH);
 
    /* Unlike texture or renderbuffer surfaces, we only do untyped operations
     * on the shader_time surface, so there's no need to set HSW channel
     * overrides.
     */
 
-   /* Emit relocation to surface contents.  Section 5.1.1 of the gen4
-    * bspec ("Data Cache") says that the data cache does not exist as
-    * a separate cache and is just the sampler cache.
-    */
-   drm_intel_bo_emit_reloc(intel->batch.bo,
+   drm_intel_bo_emit_reloc(brw->batch.bo,
                            *out_offset + 4,
                            brw->shader_time.bo, 0,
                            I915_GEM_DOMAIN_SAMPLER, 0);
@@ -473,8 +470,7 @@ gen7_update_null_renderbuffer_surface(struct brw_context *brw, unsigned unit)
     *     depth buffer’s corresponding state for all render target surfaces,
     *     including null.
     */
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
 
    /* _NEW_BUFFERS */
    const struct gl_framebuffer *fb = ctx->DrawBuffer;
@@ -505,46 +501,61 @@ gen7_update_null_renderbuffer_surface(struct brw_context *brw, unsigned unit)
 static void
 gen7_update_renderbuffer_surface(struct brw_context *brw,
 				 struct gl_renderbuffer *rb,
+				 bool layered,
 				 unsigned int unit)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct intel_region *region = irb->mt->region;
-   uint32_t tile_x, tile_y;
    uint32_t format;
-   gl_format rb_format = intel_rb_format(irb);
+   /* _NEW_BUFFERS */
+   gl_format rb_format = _mesa_get_render_format(ctx, intel_rb_format(irb));
+   uint32_t surftype;
+   bool is_array = false;
+   int depth = MAX2(rb->Depth, 1);
+   int min_array_element;
+   uint8_t mocs = brw->is_haswell ? GEN7_MOCS_L3 : 0;
+   GLenum gl_target = rb->TexImage ?
+                         rb->TexImage->TexObject->Target : GL_TEXTURE_2D;
 
    uint32_t *surf = brw_state_batch(brw, AUB_TRACE_SURFACE_STATE,
                                     8 * 4, 32, &brw->wm.surf_offset[unit]);
    memset(surf, 0, 8 * 4);
 
+   intel_miptree_used_for_rendering(irb->mt);
+
    /* Render targets can't use IMS layout */
    assert(irb->mt->msaa_layout != INTEL_MSAA_LAYOUT_IMS);
 
-   switch (rb_format) {
-   case MESA_FORMAT_SARGB8:
-      /* _NEW_BUFFERS
-       *
-       * Without GL_EXT_framebuffer_sRGB we shouldn't bind sRGB surfaces to the
-       * blend/update as sRGB.
-       */
-      if (ctx->Color.sRGBEnabled)
-	 format = brw_format_for_mesa_format(rb_format);
-      else
-	 format = BRW_SURFACEFORMAT_B8G8R8A8_UNORM;
+   assert(brw_render_target_supported(brw, rb));
+   format = brw->render_target_format[rb_format];
+   if (unlikely(!brw->format_supported_as_render_target[rb_format])) {
+      _mesa_problem(ctx, "%s: renderbuffer format %s unsupported\n",
+                    __FUNCTION__, _mesa_get_format_name(rb_format));
+   }
+
+   switch (gl_target) {
+   case GL_TEXTURE_CUBE_MAP_ARRAY:
+   case GL_TEXTURE_CUBE_MAP:
+      surftype = BRW_SURFACE_2D;
+      is_array = true;
+      depth *= 6;
       break;
    default:
-      assert(brw_render_target_supported(intel, rb));
-      format = brw->render_target_format[rb_format];
-      if (unlikely(!brw->format_supported_as_render_target[rb_format])) {
-	 _mesa_problem(ctx, "%s: renderbuffer format %s unsupported\n",
-		       __FUNCTION__, _mesa_get_format_name(rb_format));
-      }
+      surftype = translate_tex_target(gl_target);
+      is_array = _mesa_tex_target_is_array(gl_target);
       break;
    }
 
-   surf[0] = BRW_SURFACE_2D << BRW_SURFACE_TYPE_SHIFT |
+   if (layered) {
+      min_array_element = 0;
+   } else if (irb->mt->num_samples > 1) {
+      min_array_element = irb->mt_layer / irb->mt->num_samples;
+   } else {
+      min_array_element = irb->mt_layer;
+   }
+
+   surf[0] = surftype << BRW_SURFACE_TYPE_SHIFT |
              format << BRW_SURFACE_FORMAT_SHIFT |
              (irb->mt->array_spacing_lod0 ? GEN7_SURFACE_ARYSPC_LOD0
                                           : GEN7_SURFACE_ARYSPC_FULL) |
@@ -555,38 +566,42 @@ gen7_update_renderbuffer_surface(struct brw_context *brw,
    if (irb->mt->align_w == 8)
       surf[0] |= GEN7_SURFACE_HALIGN_8;
 
-   /* reloc */
-   surf[1] = intel_renderbuffer_tile_offsets(irb, &tile_x, &tile_y) +
-             region->bo->offset; /* reloc */
+   if (is_array) {
+      surf[0] |= GEN7_SURFACE_IS_ARRAY;
+   }
+
+   surf[1] = region->bo->offset;
 
    assert(brw->has_surface_tile_offset);
-   /* Note that the low bits of these fields are missing, so
-    * there's the possibility of getting in trouble.
-    */
-   assert(tile_x % 4 == 0);
-   assert(tile_y % 2 == 0);
-   surf[5] = SET_FIELD(tile_x / 4, BRW_SURFACE_X_OFFSET) |
-             SET_FIELD(tile_y / 2, BRW_SURFACE_Y_OFFSET);
 
-   surf[2] = SET_FIELD(rb->Width - 1, GEN7_SURFACE_WIDTH) |
-             SET_FIELD(rb->Height - 1, GEN7_SURFACE_HEIGHT);
-   surf[3] = region->pitch - 1;
+   surf[5] = SET_FIELD(mocs, GEN7_SURFACE_MOCS) |
+             (irb->mt_level - irb->mt->first_level);
 
-   surf[4] = gen7_surface_msaa_bits(irb->mt->num_samples, irb->mt->msaa_layout);
+   surf[2] = SET_FIELD(irb->mt->logical_width0 - 1, GEN7_SURFACE_WIDTH) |
+             SET_FIELD(irb->mt->logical_height0 - 1, GEN7_SURFACE_HEIGHT);
 
-   if (irb->mt->msaa_layout == INTEL_MSAA_LAYOUT_CMS) {
+   surf[3] = ((depth - 1) << BRW_SURFACE_DEPTH_SHIFT) |
+             (region->pitch - 1);
+
+   surf[4] = gen7_surface_msaa_bits(irb->mt->num_samples, irb->mt->msaa_layout) |
+             min_array_element << GEN7_SURFACE_MIN_ARRAY_ELEMENT_SHIFT |
+             (depth - 1) << GEN7_SURFACE_RENDER_TARGET_VIEW_EXTENT_SHIFT;
+
+   if (irb->mt->mcs_mt) {
       gen7_set_surface_mcs_info(brw, surf, brw->wm.surf_offset[unit],
                                 irb->mt->mcs_mt, true /* is RT */);
    }
 
-   if (intel->is_haswell) {
-      surf[7] = SET_FIELD(HSW_SCS_RED,   GEN7_SURFACE_SCS_R) |
-                SET_FIELD(HSW_SCS_GREEN, GEN7_SURFACE_SCS_G) |
-                SET_FIELD(HSW_SCS_BLUE,  GEN7_SURFACE_SCS_B) |
-                SET_FIELD(HSW_SCS_ALPHA, GEN7_SURFACE_SCS_A);
+   surf[7] = irb->mt->fast_clear_color_value;
+
+   if (brw->is_haswell) {
+      surf[7] |= (SET_FIELD(HSW_SCS_RED,   GEN7_SURFACE_SCS_R) |
+                  SET_FIELD(HSW_SCS_GREEN, GEN7_SURFACE_SCS_G) |
+                  SET_FIELD(HSW_SCS_BLUE,  GEN7_SURFACE_SCS_B) |
+                  SET_FIELD(HSW_SCS_ALPHA, GEN7_SURFACE_SCS_A));
    }
 
-   drm_intel_bo_emit_reloc(brw->intel.batch.bo,
+   drm_intel_bo_emit_reloc(brw->batch.bo,
 			   brw->wm.surf_offset[unit] + 4,
 			   region->bo,
 			   surf[1] - region->bo->offset,
@@ -599,11 +614,9 @@ gen7_update_renderbuffer_surface(struct brw_context *brw,
 void
 gen7_init_vtable_surface_functions(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-
-   intel->vtbl.update_texture_surface = gen7_update_texture_surface;
-   intel->vtbl.update_renderbuffer_surface = gen7_update_renderbuffer_surface;
-   intel->vtbl.update_null_renderbuffer_surface =
+   brw->vtbl.update_texture_surface = gen7_update_texture_surface;
+   brw->vtbl.update_renderbuffer_surface = gen7_update_renderbuffer_surface;
+   brw->vtbl.update_null_renderbuffer_surface =
       gen7_update_null_renderbuffer_surface;
-   intel->vtbl.create_constant_surface = gen7_create_constant_surface;
+   brw->vtbl.create_constant_surface = gen7_create_constant_surface;
 }

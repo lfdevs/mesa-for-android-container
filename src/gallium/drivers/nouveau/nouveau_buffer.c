@@ -2,6 +2,7 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
+#include "util/u_surface.h"
 
 #include "nouveau_screen.h"
 #include "nouveau_context.h"
@@ -41,7 +42,9 @@ nouveau_buffer_allocate(struct nouveau_screen *screen,
 {
    uint32_t size = buf->base.width0;
 
-   if (buf->base.bind & PIPE_BIND_CONSTANT_BUFFER)
+   if (buf->base.bind & (PIPE_BIND_CONSTANT_BUFFER |
+                         PIPE_BIND_COMPUTE_RESOURCE |
+                         PIPE_BIND_SHADER_RESOURCE))
       size = align(size, 0x100);
 
    if (domain == NOUVEAU_BO_VRAM) {
@@ -49,12 +52,14 @@ nouveau_buffer_allocate(struct nouveau_screen *screen,
                                     &buf->bo, &buf->offset);
       if (!buf->bo)
          return nouveau_buffer_allocate(screen, buf, NOUVEAU_BO_GART);
+      NOUVEAU_DRV_STAT(screen, buf_obj_current_bytes_vid, buf->base.width0);
    } else
    if (domain == NOUVEAU_BO_GART) {
       buf->mm = nouveau_mm_allocate(screen->mm_GART, size,
                                     &buf->bo, &buf->offset);
       if (!buf->bo)
          return FALSE;
+      NOUVEAU_DRV_STAT(screen, buf_obj_current_bytes_sys, buf->base.width0);
    } else {
       assert(domain == 0);
       if (!nouveau_buffer_malloc(buf))
@@ -82,6 +87,11 @@ nouveau_buffer_release_gpu_storage(struct nv04_resource *buf)
 
    if (buf->mm)
       release_allocation(&buf->mm, buf->fence);
+
+   if (buf->domain == NOUVEAU_BO_VRAM)
+      NOUVEAU_DRV_STAT_RES(buf, buf_obj_current_bytes_vid, -(uint64_t)buf->base.width0);
+   if (buf->domain == NOUVEAU_BO_GART)
+      NOUVEAU_DRV_STAT_RES(buf, buf_obj_current_bytes_sys, -(uint64_t)buf->base.width0);
 
    buf->domain = 0;
 }
@@ -115,6 +125,8 @@ nouveau_buffer_destroy(struct pipe_screen *pscreen,
    nouveau_fence_ref(NULL, &res->fence_wr);
 
    FREE(res);
+
+   NOUVEAU_DRV_STAT(nouveau_screen(pscreen), buf_obj_current_count, -1);
 }
 
 static uint8_t *
@@ -151,6 +163,8 @@ nouveau_transfer_read(struct nouveau_context *nv, struct nouveau_transfer *tx)
    const unsigned base = tx->base.box.x;
    const unsigned size = tx->base.box.width;
 
+   NOUVEAU_DRV_STAT(nv->screen, buf_read_bytes_staging_vid, size);
+
    nv->copy_data(nv, tx->bo, tx->offset, NOUVEAU_BO_GART,
                  buf->bo, buf->offset + base, buf->domain, size);
 
@@ -177,6 +191,11 @@ nouveau_transfer_write(struct nouveau_context *nv, struct nouveau_transfer *tx,
    else
       buf->status |= NOUVEAU_BUFFER_STATUS_DIRTY;
 
+   if (buf->domain == NOUVEAU_BO_VRAM)
+      NOUVEAU_DRV_STAT(nv->screen, buf_write_bytes_staging_vid, size);
+   if (buf->domain == NOUVEAU_BO_GART)
+      NOUVEAU_DRV_STAT(nv->screen, buf_write_bytes_staging_sys, size);
+
    if (tx->bo)
       nv->copy_data(nv, buf->bo, buf->offset + base, buf->domain,
                     tx->bo, tx->offset + offset, NOUVEAU_BO_GART, size);
@@ -195,11 +214,15 @@ nouveau_buffer_sync(struct nv04_resource *buf, unsigned rw)
    if (rw == PIPE_TRANSFER_READ) {
       if (!buf->fence_wr)
          return TRUE;
+      NOUVEAU_DRV_STAT_RES(buf, buf_non_kernel_fence_sync_count,
+                           !nouveau_fence_signalled(buf->fence_wr));
       if (!nouveau_fence_wait(buf->fence_wr))
          return FALSE;
    } else {
       if (!buf->fence)
          return TRUE;
+      NOUVEAU_DRV_STAT_RES(buf, buf_non_kernel_fence_sync_count,
+                           !nouveau_fence_signalled(buf->fence));
       if (!nouveau_fence_wait(buf->fence))
          return FALSE;
 
@@ -318,6 +341,11 @@ nouveau_buffer_transfer_map(struct pipe_context *pipe,
    nouveau_buffer_transfer_init(tx, resource, box, usage);
    *ptransfer = &tx->base;
 
+   if (usage & PIPE_TRANSFER_READ)
+      NOUVEAU_DRV_STAT(nv->screen, buf_transfers_rd, 1);
+   if (usage & PIPE_TRANSFER_WRITE)
+      NOUVEAU_DRV_STAT(nv->screen, buf_transfers_wr, 1);
+
    if (buf->domain == NOUVEAU_BO_VRAM) {
       if (usage & NOUVEAU_TRANSFER_DISCARD) {
          if (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE)
@@ -425,8 +453,44 @@ nouveau_buffer_transfer_unmap(struct pipe_context *pipe,
       }
    }
 
+   if (!tx->bo && (tx->base.usage & PIPE_TRANSFER_WRITE))
+      NOUVEAU_DRV_STAT(nv->screen, buf_write_bytes_direct, tx->base.box.width);
+
    nouveau_buffer_transfer_del(nv, tx);
    FREE(tx);
+}
+
+
+void
+nouveau_copy_buffer(struct nouveau_context *nv,
+                    struct nv04_resource *dst, unsigned dstx,
+                    struct nv04_resource *src, unsigned srcx, unsigned size)
+{
+   assert(dst->base.target == PIPE_BUFFER && src->base.target == PIPE_BUFFER);
+
+   if (likely(dst->domain) && likely(src->domain)) {
+      nv->copy_data(nv,
+                    dst->bo, dst->offset + dstx, dst->domain,
+                    src->bo, src->offset + srcx, src->domain, size);
+
+      dst->status |= NOUVEAU_BUFFER_STATUS_GPU_WRITING;
+      nouveau_fence_ref(nv->screen->fence.current, &dst->fence);
+      nouveau_fence_ref(nv->screen->fence.current, &dst->fence_wr);
+
+      src->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
+      nouveau_fence_ref(nv->screen->fence.current, &src->fence);
+   } else {
+      struct pipe_box src_box;
+      src_box.x = srcx;
+      src_box.y = 0;
+      src_box.z = 0;
+      src_box.width = size;
+      src_box.height = 1;
+      src_box.depth = 1;
+      util_resource_copy_region(&nv->pipe,
+                                &dst->base, 0, dstx, 0, 0,
+                                &src->base, 0, &src_box);
+   }
 }
 
 
@@ -522,6 +586,8 @@ nouveau_buffer_create(struct pipe_screen *pscreen,
 
    if (buffer->domain == NOUVEAU_BO_VRAM && screen->hint_buf_keep_sysmem_copy)
       nouveau_buffer_cache(NULL, buffer);
+
+   NOUVEAU_DRV_STAT(screen, buf_obj_current_count, 1);
 
    return &buffer->base;
 

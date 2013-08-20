@@ -56,43 +56,29 @@
 void
 gen7_allocate_push_constants(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-
    unsigned size = 8;
-   if (intel->is_haswell && intel->gt == 3)
+   if (brw->is_haswell && brw->gt == 3)
       size = 16;
 
-   BEGIN_BATCH(2);
+   BEGIN_BATCH(4);
    OUT_BATCH(_3DSTATE_PUSH_CONSTANT_ALLOC_VS << 16 | (2 - 2));
    OUT_BATCH(size);
-   ADVANCE_BATCH();
 
-   BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_PUSH_CONSTANT_ALLOC_PS << 16 | (2 - 2));
    OUT_BATCH(size | size << GEN7_PUSH_CONSTANT_BUFFER_OFFSET_SHIFT);
    ADVANCE_BATCH();
 }
 
-const struct brw_tracked_state gen7_push_constant_alloc = {
-   .dirty = {
-      .mesa = 0,
-      .brw = BRW_NEW_CONTEXT,
-      .cache = 0,
-   },
-   .emit = gen7_allocate_push_constants,
-};
-
 static void
 gen7_upload_urb(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   const int push_size_kB = intel->is_haswell && intel->gt == 3 ? 32 : 16;
+   const int push_size_kB = brw->is_haswell && brw->gt == 3 ? 32 : 16;
 
    /* Total space for entries is URB size - 16kB for push constants */
    int handle_region_size = (brw->urb.size - push_size_kB) * 1024; /* bytes */
 
    /* CACHE_NEW_VS_PROG */
-   unsigned vs_size = MAX2(brw->vs.prog_data->urb_entry_size, 1);
+   unsigned vs_size = MAX2(brw->vs.prog_data->base.urb_entry_size, 1);
 
    int nr_vs_entries = handle_region_size / (vs_size * 64);
    if (nr_vs_entries > brw->urb.max_vs_entries)
@@ -109,7 +95,7 @@ gen7_upload_urb(struct brw_context *brw)
    /* GS requirement */
    assert(!brw->gs.prog_active);
 
-   gen7_emit_vs_workaround_flush(intel);
+   gen7_emit_vs_workaround_flush(brw);
    gen7_emit_urb_state(brw, brw->urb.nr_vs_entries, vs_size, brw->urb.vs_start);
 }
 
@@ -117,29 +103,21 @@ void
 gen7_emit_urb_state(struct brw_context *brw, GLuint nr_vs_entries,
                     GLuint vs_size, GLuint vs_start)
 {
-   struct intel_context *intel = &brw->intel;
-
-   BEGIN_BATCH(2);
+   BEGIN_BATCH(8);
    OUT_BATCH(_3DSTATE_URB_VS << 16 | (2 - 2));
    OUT_BATCH(nr_vs_entries |
              ((vs_size - 1) << GEN7_URB_ENTRY_SIZE_SHIFT) |
              (vs_start << GEN7_URB_STARTING_ADDRESS_SHIFT));
-   ADVANCE_BATCH();
 
    /* Allocate the GS, HS, and DS zero space - we don't use them. */
-   BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_URB_GS << 16 | (2 - 2));
    OUT_BATCH((0 << GEN7_URB_ENTRY_SIZE_SHIFT) |
              (vs_start << GEN7_URB_STARTING_ADDRESS_SHIFT));
-   ADVANCE_BATCH();
 
-   BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_URB_HS << 16 | (2 - 2));
    OUT_BATCH((0 << GEN7_URB_ENTRY_SIZE_SHIFT) |
              (vs_start << GEN7_URB_STARTING_ADDRESS_SHIFT));
-   ADVANCE_BATCH();
 
-   BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_URB_DS << 16 | (2 - 2));
    OUT_BATCH((0 << GEN7_URB_ENTRY_SIZE_SHIFT) |
              (vs_start << GEN7_URB_STARTING_ADDRESS_SHIFT));

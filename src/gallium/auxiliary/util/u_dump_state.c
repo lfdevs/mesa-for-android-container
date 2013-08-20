@@ -327,7 +327,8 @@ util_dump_rasterizer_state(FILE *stream, const struct pipe_rasterizer_state *sta
    util_dump_member(stream, uint, state, line_stipple_pattern);
    util_dump_member(stream, bool, state, line_last_pixel);
    util_dump_member(stream, bool, state, flatshade_first);
-   util_dump_member(stream, bool, state, gl_rasterization_rules);
+   util_dump_member(stream, bool, state, half_pixel_center);
+   util_dump_member(stream, bool, state, bottom_edge_rule);
    util_dump_member(stream, bool, state, rasterizer_discard);
    util_dump_member(stream, bool, state, depth_clip);
    util_dump_member(stream, uint, state, clip_plane_enable);
@@ -722,9 +723,8 @@ util_dump_vertex_element(FILE *stream, const struct pipe_vertex_element *state)
    util_dump_struct_begin(stream, "pipe_vertex_element");
 
    util_dump_member(stream, uint, state, src_offset);
-
+   util_dump_member(stream, uint, state, instance_divisor);
    util_dump_member(stream, uint, state, vertex_buffer_index);
-
    util_dump_member(stream, format, state, src_format);
 
    util_dump_struct_end(stream);

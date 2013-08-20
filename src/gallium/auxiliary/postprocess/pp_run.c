@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -28,9 +28,49 @@
 #include "postprocess.h"
 
 #include "postprocess/pp_filters.h"
-#include "util/u_blit.h"
 #include "util/u_inlines.h"
 #include "util/u_sampler.h"
+
+#include "tgsi/tgsi_parse.h"
+
+void
+pp_blit(struct pipe_context *pipe,
+        struct pipe_resource *src_tex,
+        int srcX0, int srcY0,
+        int srcX1, int srcY1,
+        int srcZ0,
+        struct pipe_surface *dst,
+        int dstX0, int dstY0,
+        int dstX1, int dstY1)
+{
+   struct pipe_blit_info blit;
+
+   memset(&blit, 0, sizeof(blit));
+
+   blit.src.resource = src_tex;
+   blit.src.level = 0;
+   blit.src.format = src_tex->format;
+   blit.src.box.x = srcX0;
+   blit.src.box.y = srcY0;
+   blit.src.box.z = srcZ0;
+   blit.src.box.width = srcX1 - srcX0;
+   blit.src.box.height = srcY1 - srcY0;
+   blit.src.box.depth = 1;
+
+   blit.dst.resource = dst->texture;
+   blit.dst.level = dst->u.tex.level;
+   blit.dst.format = dst->format;
+   blit.dst.box.x = dstX0;
+   blit.dst.box.y = dstY0;
+   blit.dst.box.z = 0;
+   blit.dst.box.width = dstX1 - dstX0;
+   blit.dst.box.height = dstY1 - dstY0;
+   blit.dst.box.depth = 1;
+
+   blit.mask = PIPE_MASK_RGBA;
+
+   pipe->blit(pipe, &blit);
+}
 
 /**
 *	Main run function of the PP queue. Called on swapbuffers/flush.
@@ -46,6 +86,12 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    unsigned int i;
    struct cso_context *cso = ppq->p->cso;
 
+   if (ppq->n_filters == 0)
+      return;
+
+   assert(ppq->pp_queue);
+   assert(ppq->tmp[0]);
+
    if (in->width0 != ppq->p->framebuffer.width ||
        in->height0 != ppq->p->framebuffer.height) {
       pp_debug("Resizing the temp pp buffers\n");
@@ -58,10 +104,10 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
       unsigned int w = ppq->p->framebuffer.width;
       unsigned int h = ppq->p->framebuffer.height;
 
-      util_blit_pixels(ppq->p->blitctx, in, 0, 0, 0,
-                       w, h, 0, ppq->tmps[0],
-                       0, 0, w, h, 0, PIPE_TEX_MIPFILTER_NEAREST,
-                       TGSI_WRITEMASK_XYZW, 0);
+
+      pp_blit(ppq->p->pipe, in, 0, 0,
+              w, h, 0, ppq->tmps[0],
+              0, 0, w, h);
 
       in = ppq->tmp[0];
    }
@@ -82,13 +128,15 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    cso_save_vertex_shader(cso);
    cso_save_viewport(cso);
    cso_save_aux_vertex_buffer_slot(cso);
+   cso_save_constant_buffer_slot0(cso, PIPE_SHADER_VERTEX);
+   cso_save_constant_buffer_slot0(cso, PIPE_SHADER_FRAGMENT);
    cso_save_render_condition(cso);
 
    /* set default state */
    cso_set_sample_mask(cso, ~0);
    cso_set_stream_outputs(cso, 0, NULL, 0);
    cso_set_geometry_shader_handle(cso, NULL);
-   cso_set_render_condition(cso, NULL, 0);
+   cso_set_render_condition(cso, NULL, FALSE, 0);
 
    // Kept only for this frame.
    pipe_resource_reference(&ppq->depth, indepth);
@@ -96,6 +144,9 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    pipe_resource_reference(&refout, out);
 
    switch (ppq->n_filters) {
+   case 0:
+      /* Failsafe, but never reached. */
+      break;
    case 1:                     /* No temp buf */
       ppq->pp_queue[0] (ppq, in, out, 0);
       break;
@@ -106,6 +157,7 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
 
       break;
    default:                    /* Two temp bufs */
+      assert(ppq->tmp[1]);
       ppq->pp_queue[0] (ppq, in, ppq->tmp[0], 0);
 
       for (i = 1; i < (ppq->n_filters - 1); i++) {
@@ -141,6 +193,8 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
    cso_restore_vertex_shader(cso);
    cso_restore_viewport(cso);
    cso_restore_aux_vertex_buffer_slot(cso);
+   cso_restore_constant_buffer_slot0(cso, PIPE_SHADER_VERTEX);
+   cso_restore_constant_buffer_slot0(cso, PIPE_SHADER_FRAGMENT);
    cso_restore_render_condition(cso);
 
    pipe_resource_reference(&ppq->depth, NULL);
@@ -188,20 +242,37 @@ pp_tgsi_to_state(struct pipe_context *pipe, const char *text, bool isvs,
                  const char *name)
 {
    struct pipe_shader_state state;
-   struct tgsi_token tokens[PP_MAX_TOKENS];
+   struct tgsi_token *tokens = NULL;
+   void *ret_state = NULL;
+ 
+   /*
+    * Allocate temporary token storage. State creation will duplicate
+    * tokens so we must free them on exit.
+    */ 
+   tokens = tgsi_alloc_tokens(PP_MAX_TOKENS);
 
-   if (tgsi_text_translate(text, tokens, Elements(tokens)) == FALSE) {
-      pp_debug("Failed to translate %s\n", name);
+   if (tokens == NULL) {
+      pp_debug("Failed to allocate temporary token storage.\n");
+      return NULL;
+   }
+
+   if (tgsi_text_translate(text, tokens, PP_MAX_TOKENS) == FALSE) {
+      _debug_printf("pp: Failed to translate a shader for %s\n", name);
       return NULL;
    }
 
    state.tokens = tokens;
    memset(&state.stream_output, 0, sizeof(state.stream_output));
 
-   if (isvs)
-      return pipe->create_vs_state(pipe, &state);
-   else
-      return pipe->create_fs_state(pipe, &state);
+   if (isvs) {
+      ret_state = pipe->create_vs_state(pipe, &state);
+      FREE(tokens);
+   } else {
+      ret_state = pipe->create_fs_state(pipe, &state);
+      FREE(tokens);
+   }
+
+   return ret_state;
 }
 
 /** Setup misc state for the filter. */

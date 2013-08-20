@@ -32,6 +32,7 @@
 #include "lp_limits.h"
 #include "lp_surface.h"
 #include "lp_texture.h"
+#include "lp_query.h"
 
 
 /**
@@ -57,15 +58,27 @@ lp_resource_copy(struct pipe_context *pipe,
                  struct pipe_resource *src, unsigned src_level,
                  const struct pipe_box *src_box)
 {
-   /* XXX this used to ignore srcz/dstz
-    * assume it works the same for cube and 3d
-    */
    struct llvmpipe_resource *src_tex = llvmpipe_resource(src);
    struct llvmpipe_resource *dst_tex = llvmpipe_resource(dst);
    const enum pipe_format format = src_tex->base.format;
    unsigned width = src_box->width;
    unsigned height = src_box->height;
-   assert(src_box->depth == 1);
+   unsigned depth = src_box->depth;
+   unsigned z;
+
+   llvmpipe_flush_resource(pipe,
+                           dst, dst_level,
+                           FALSE, /* read_only */
+                           TRUE, /* cpu_access */
+                           FALSE, /* do_not_block */
+                           "blit dest");
+
+   llvmpipe_flush_resource(pipe,
+                           src, src_level,
+                           TRUE, /* read_only */
+                           TRUE, /* cpu_access */
+                           FALSE, /* do_not_block */
+                           "blit src");
 
    /* Fallback for buffers. */
    if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
@@ -74,76 +87,65 @@ lp_resource_copy(struct pipe_context *pipe,
       return;
    }
 
-   llvmpipe_flush_resource(pipe,
-                           dst, dst_level, dstz,
-                           FALSE, /* read_only */
-                           TRUE, /* cpu_access */
-                           FALSE, /* do_not_block */
-                           "blit dest");
-
-   llvmpipe_flush_resource(pipe,
-                           src, src_level, src_box->z,
-                           TRUE, /* read_only */
-                           TRUE, /* cpu_access */
-                           FALSE, /* do_not_block */
-                           "blit src");
-
    /*
    printf("surface copy from %u lvl %u to %u lvl %u: %u,%u,%u to %u,%u,%u %u x %u x %u\n",
-          src_tex->id, src_level, dst_tex->id, dst_level, 
+          src_tex->id, src_level, dst_tex->id, dst_level,
           src_box->x, src_box->y, src_box->z, dstx, dsty, dstz,
           src_box->width, src_box->height, src_box->depth);
    */
 
-   /* set src tiles to linear layout */
-   {
-      unsigned tx, ty, tw, th;
-      unsigned x, y;
+   for (z = 0; z < src_box->depth; z++){
 
-      adjust_to_tile_bounds(src_box->x, src_box->y, width, height,
-                            &tx, &ty, &tw, &th);
+      /* set src tiles to linear layout */
+      {
+         unsigned tx, ty, tw, th;
+         unsigned x, y;
 
-      for (y = 0; y < th; y += TILE_SIZE) {
-         for (x = 0; x < tw; x += TILE_SIZE) {
-            (void) llvmpipe_get_texture_tile_linear(src_tex,
-                                                    src_box->z, src_level,
-                                                    LP_TEX_USAGE_READ,
-                                                    tx + x, ty + y);
+         adjust_to_tile_bounds(src_box->x, src_box->y, width, height,
+                               &tx, &ty, &tw, &th);
+
+         for (y = 0; y < th; y += TILE_SIZE) {
+            for (x = 0; x < tw; x += TILE_SIZE) {
+               (void) llvmpipe_get_texture_tile_linear(src_tex,
+                                                       src_box->z + z, src_level,
+                                                       LP_TEX_USAGE_READ,
+                                                       tx + x, ty + y);
+            }
          }
       }
-   }
 
-   /* set dst tiles to linear layout */
-   {
-      unsigned tx, ty, tw, th;
-      unsigned x, y;
-      enum lp_texture_usage usage;
+      /* set dst tiles to linear layout */
+      {
+         unsigned tx, ty, tw, th;
+         unsigned x, y;
+         enum lp_texture_usage usage;
 
-      adjust_to_tile_bounds(dstx, dsty, width, height, &tx, &ty, &tw, &th);
+         adjust_to_tile_bounds(dstx, dsty, width, height, &tx, &ty, &tw, &th);
 
-      for (y = 0; y < th; y += TILE_SIZE) {
-         boolean contained_y = ty + y >= dsty &&
-                               ty + y + TILE_SIZE <= dsty + height ?
-                               TRUE : FALSE;
-
-         for (x = 0; x < tw; x += TILE_SIZE) {
-            boolean contained_x = tx + x >= dstx &&
-                                  tx + x + TILE_SIZE <= dstx + width ?
+         for (y = 0; y < th; y += TILE_SIZE) {
+            boolean contained_y = ty + y >= dsty &&
+                                  ty + y + TILE_SIZE <= dsty + height ?
                                   TRUE : FALSE;
 
-            /*
-             * Set the usage mode to WRITE_ALL for the tiles which are
-             * completely contained by the dest rectangle.
-             */
-            if (contained_y && contained_x)
-               usage = LP_TEX_USAGE_WRITE_ALL;
-            else
-               usage = LP_TEX_USAGE_READ_WRITE;
+            for (x = 0; x < tw; x += TILE_SIZE) {
+               boolean contained_x = tx + x >= dstx &&
+                                     tx + x + TILE_SIZE <= dstx + width ?
+                                     TRUE : FALSE;
 
-            (void) llvmpipe_get_texture_tile_linear(dst_tex,
-                                                    dstz, dst_level,
-                                                    usage,
-                                                    tx + x, ty + y);
+               /*
+                * Set the usage mode to WRITE_ALL for the tiles which are
+                * completely contained by the dest rectangle.
+                */
+               if (contained_y && contained_x)
+                  usage = LP_TEX_USAGE_WRITE_ALL;
+               else
+                  usage = LP_TEX_USAGE_READ_WRITE;
+
+               (void) llvmpipe_get_texture_tile_linear(dst_tex,
+                                                       dstz + z, dst_level,
+                                                       usage,
+                                                       tx + x, ty + y);
+            }
          }
       }
    }
@@ -152,21 +154,21 @@ lp_resource_copy(struct pipe_context *pipe,
    {
       const ubyte *src_linear_ptr
          = llvmpipe_get_texture_image_address(src_tex, src_box->z,
-                                              src_level,
-                                              LP_TEX_LAYOUT_LINEAR);
+                                              src_level);
       ubyte *dst_linear_ptr
          = llvmpipe_get_texture_image_address(dst_tex, dstz,
-                                              dst_level,
-                                              LP_TEX_LAYOUT_LINEAR);
+                                              dst_level);
 
       if (dst_linear_ptr && src_linear_ptr) {
-         util_copy_rect(dst_linear_ptr, format,
-                        llvmpipe_resource_stride(&dst_tex->base, dst_level),
-                        dstx, dsty,
-                        width, height,
-                        src_linear_ptr,
-                        llvmpipe_resource_stride(&src_tex->base, src_level),
-                        src_box->x, src_box->y);
+         util_copy_box(dst_linear_ptr, format,
+                       llvmpipe_resource_stride(&dst_tex->base, dst_level),
+                       dst_tex->img_stride[dst_level],
+                       dstx, dsty, 0,
+                       width, height, depth,
+                       src_linear_ptr,
+                       llvmpipe_resource_stride(&src_tex->base, src_level),
+                       src_tex->img_stride[src_level],
+                       src_box->x, src_box->y, 0);
       }
    }
 }
@@ -211,8 +213,8 @@ static void lp_blit(struct pipe_context *pipe,
    util_blitter_save_so_targets(lp->blitter, lp->num_so_targets,
                                 (struct pipe_stream_output_target**)lp->so_targets);
    util_blitter_save_rasterizer(lp->blitter, (void*)lp->rasterizer);
-   util_blitter_save_viewport(lp->blitter, &lp->viewport);
-   util_blitter_save_scissor(lp->blitter, &lp->scissor);
+   util_blitter_save_viewport(lp->blitter, &lp->viewports[0]);
+   util_blitter_save_scissor(lp->blitter, &lp->scissors[0]);
    util_blitter_save_fragment_shader(lp->blitter, lp->fs);
    util_blitter_save_blend(lp->blitter, (void*)lp->blend);
    util_blitter_save_depth_stencil_alpha(lp->blitter, (void*)lp->depth_stencil);
@@ -226,16 +228,110 @@ static void lp_blit(struct pipe_context *pipe,
                      lp->num_sampler_views[PIPE_SHADER_FRAGMENT],
                      lp->sampler_views[PIPE_SHADER_FRAGMENT]);
    util_blitter_save_render_condition(lp->blitter, lp->render_cond_query,
-                                      lp->render_cond_mode);
+                                      lp->render_cond_cond, lp->render_cond_mode);
    util_blitter_blit(lp->blitter, &info);
+}
+
+
+static struct pipe_surface *
+llvmpipe_create_surface(struct pipe_context *pipe,
+                        struct pipe_resource *pt,
+                        const struct pipe_surface *surf_tmpl)
+{
+   struct pipe_surface *ps;
+
+   if (!(pt->bind & (PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_RENDER_TARGET)))
+      debug_printf("Illegal surface creation without bind flag\n");
+
+   ps = CALLOC_STRUCT(pipe_surface);
+   if (ps) {
+      pipe_reference_init(&ps->reference, 1);
+      pipe_resource_reference(&ps->texture, pt);
+      ps->context = pipe;
+      ps->format = surf_tmpl->format;
+      if (llvmpipe_resource_is_texture(pt)) {
+         assert(surf_tmpl->u.tex.level <= pt->last_level);
+         assert(surf_tmpl->u.tex.first_layer <= surf_tmpl->u.tex.last_layer);
+         ps->width = u_minify(pt->width0, surf_tmpl->u.tex.level);
+         ps->height = u_minify(pt->height0, surf_tmpl->u.tex.level);
+         ps->u.tex.level = surf_tmpl->u.tex.level;
+         ps->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
+         ps->u.tex.last_layer = surf_tmpl->u.tex.last_layer;
+      }
+      else {
+         /* setting width as number of elements should get us correct renderbuffer width */
+         ps->width = surf_tmpl->u.buf.last_element - surf_tmpl->u.buf.first_element + 1;
+         ps->height = pt->height0;
+         ps->u.buf.first_element = surf_tmpl->u.buf.first_element;
+         ps->u.buf.last_element = surf_tmpl->u.buf.last_element;
+         assert(ps->u.buf.first_element <= ps->u.buf.last_element);
+         assert(util_format_get_blocksize(surf_tmpl->format) *
+                (ps->u.buf.last_element + 1) <= pt->width0);
+      }
+   }
+   return ps;
+}
+
+
+static void
+llvmpipe_surface_destroy(struct pipe_context *pipe,
+                         struct pipe_surface *surf)
+{
+   /* Effectively do the texture_update work here - if texture images
+    * needed post-processing to put them into hardware layout, this is
+    * where it would happen.  For llvmpipe, nothing to do.
+    */
+   assert(surf->texture);
+   pipe_resource_reference(&surf->texture, NULL);
+   FREE(surf);
+}
+
+
+static void
+llvmpipe_clear_render_target(struct pipe_context *pipe,
+                             struct pipe_surface *dst,
+                             const union pipe_color_union *color,
+                             unsigned dstx, unsigned dsty,
+                             unsigned width, unsigned height)
+{
+   struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
+
+   if (!llvmpipe_check_render_cond(llvmpipe))
+      return;
+
+   util_clear_render_target(pipe, dst, color,
+                            dstx, dsty, width, height);
+}
+
+
+static void
+llvmpipe_clear_depth_stencil(struct pipe_context *pipe,
+                             struct pipe_surface *dst,
+                             unsigned clear_flags,
+                             double depth,
+                             unsigned stencil,
+                             unsigned dstx, unsigned dsty,
+                             unsigned width, unsigned height)
+{
+   struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
+
+   if (!llvmpipe_check_render_cond(llvmpipe))
+      return;
+
+   util_clear_depth_stencil(pipe, dst, clear_flags,
+                            depth, stencil,
+                            dstx, dsty, width, height);
 }
 
 
 void
 llvmpipe_init_surface_functions(struct llvmpipe_context *lp)
 {
+   lp->pipe.clear_render_target = llvmpipe_clear_render_target;
+   lp->pipe.clear_depth_stencil = llvmpipe_clear_depth_stencil;
+   lp->pipe.create_surface = llvmpipe_create_surface;
+   lp->pipe.surface_destroy = llvmpipe_surface_destroy;
+   /* These two are not actually functions dealing with surfaces */
    lp->pipe.resource_copy_region = lp_resource_copy;
-   lp->pipe.clear_render_target = util_clear_render_target;
-   lp->pipe.clear_depth_stencil = util_clear_depth_stencil;
    lp->pipe.blit = lp_blit;
 }

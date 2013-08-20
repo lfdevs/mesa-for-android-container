@@ -30,17 +30,9 @@
 
 
 #include "main/compiler.h"
-#include "main/mfeatures.h"
 
 struct dd_function_table;
 struct st_context;
-
-
-extern void
-st_init_blit(struct st_context *st);
-
-extern void
-st_destroy_blit(struct st_context *st);
 
 extern void
 st_init_blit_functions(struct dd_function_table *functions);

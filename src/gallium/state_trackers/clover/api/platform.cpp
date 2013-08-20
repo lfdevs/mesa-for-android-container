@@ -14,15 +14,18 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-// THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
-// OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+// OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+// OTHER DEALINGS IN THE SOFTWARE.
 //
 
 #include "api/util.hpp"
+#include "core/platform.hpp"
 
 using namespace clover;
+
+static platform __platform;
 
 PUBLIC cl_int
 clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms,
@@ -34,7 +37,7 @@ clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms,
    if (num_platforms)
       *num_platforms = 1;
    if (platforms)
-      *platforms = NULL;
+      *platforms = &__platform;
 
    return CL_SUCCESS;
 }
@@ -42,7 +45,7 @@ clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms,
 PUBLIC cl_int
 clGetPlatformInfo(cl_platform_id platform, cl_platform_info param_name,
                   size_t size, void *buf, size_t *size_ret) {
-   if (platform != NULL)
+   if (platform != &__platform)
       return CL_INVALID_PLATFORM;
 
    switch (param_name) {
@@ -51,7 +54,7 @@ clGetPlatformInfo(cl_platform_id platform, cl_platform_info param_name,
 
    case CL_PLATFORM_VERSION:
       return string_property(buf, size, size_ret,
-                             "OpenCL 1.1 MESA " MESA_VERSION);
+                             "OpenCL 1.1 MESA " PACKAGE_VERSION);
 
    case CL_PLATFORM_NAME:
       return string_property(buf, size, size_ret, "Default");

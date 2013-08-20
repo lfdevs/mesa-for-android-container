@@ -44,7 +44,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "main/fbobject.h"
 #include "swrast/s_renderbuffer.h"
 
-#define STANDALONE_MMIO
 #include "radeon_chipset.h"
 #include "radeon_macros.h"
 #include "radeon_screen.h"
@@ -80,24 +79,23 @@ DRI_CONF_BEGIN
         DRI_CONF_FTHROTTLE_MODE(DRI_CONF_FTHROTTLE_IRQS)
         DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_0)
         DRI_CONF_MAX_TEXTURE_UNITS(3,2,3)
-        DRI_CONF_HYPERZ(false)
+        DRI_CONF_HYPERZ("false")
         DRI_CONF_COMMAND_BUFFER_SIZE(8, 8, 32)
     DRI_CONF_SECTION_END
     DRI_CONF_SECTION_QUALITY
         DRI_CONF_TEXTURE_DEPTH(DRI_CONF_TEXTURE_DEPTH_FB)
         DRI_CONF_DEF_MAX_ANISOTROPY(1.0,"1.0,2.0,4.0,8.0,16.0")
-        DRI_CONF_NO_NEG_LOD_BIAS(false)
-        DRI_CONF_FORCE_S3TC_ENABLE(false)
+        DRI_CONF_NO_NEG_LOD_BIAS("false")
+        DRI_CONF_FORCE_S3TC_ENABLE("false")
         DRI_CONF_COLOR_REDUCTION(DRI_CONF_COLOR_REDUCTION_DITHER)
         DRI_CONF_ROUND_MODE(DRI_CONF_ROUND_TRUNC)
         DRI_CONF_DITHER_MODE(DRI_CONF_DITHER_XERRORDIFF)
-        DRI_CONF_ALLOW_LARGE_TEXTURES(2)
     DRI_CONF_SECTION_END
     DRI_CONF_SECTION_DEBUG
-        DRI_CONF_NO_RAST(false)
+        DRI_CONF_NO_RAST("false")
     DRI_CONF_SECTION_END
 DRI_CONF_END;
-static const GLuint __driNConfigOptions = 15;
+static const GLuint __driNConfigOptions = 14;
 
 #elif defined(RADEON_R200)
 
@@ -108,25 +106,24 @@ DRI_CONF_BEGIN
         DRI_CONF_FTHROTTLE_MODE(DRI_CONF_FTHROTTLE_IRQS)
         DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_0)
         DRI_CONF_MAX_TEXTURE_UNITS(6,2,6)
-        DRI_CONF_HYPERZ(false)
+        DRI_CONF_HYPERZ("false")
         DRI_CONF_COMMAND_BUFFER_SIZE(8, 8, 32)
     DRI_CONF_SECTION_END
     DRI_CONF_SECTION_QUALITY
         DRI_CONF_TEXTURE_DEPTH(DRI_CONF_TEXTURE_DEPTH_FB)
         DRI_CONF_DEF_MAX_ANISOTROPY(1.0,"1.0,2.0,4.0,8.0,16.0")
-        DRI_CONF_NO_NEG_LOD_BIAS(false)
-        DRI_CONF_FORCE_S3TC_ENABLE(false)
+        DRI_CONF_NO_NEG_LOD_BIAS("false")
+        DRI_CONF_FORCE_S3TC_ENABLE("false")
         DRI_CONF_COLOR_REDUCTION(DRI_CONF_COLOR_REDUCTION_DITHER)
         DRI_CONF_ROUND_MODE(DRI_CONF_ROUND_TRUNC)
         DRI_CONF_DITHER_MODE(DRI_CONF_DITHER_XERRORDIFF)
-        DRI_CONF_ALLOW_LARGE_TEXTURES(2)
         DRI_CONF_TEXTURE_BLEND_QUALITY(1.0,"0.0:1.0")
     DRI_CONF_SECTION_END
     DRI_CONF_SECTION_DEBUG
-        DRI_CONF_NO_RAST(false)
+        DRI_CONF_NO_RAST("false")
     DRI_CONF_SECTION_END
 DRI_CONF_END;
-static const GLuint __driNConfigOptions = 16;
+static const GLuint __driNConfigOptions = 15;
 
 #endif
 
@@ -700,8 +697,6 @@ radeonDestroyBuffer(__DRIdrawable *driDrawPriv)
     radeon_cleanup_renderbuffers(rfb);
     _mesa_reference_framebuffer((struct gl_framebuffer **)(&(driDrawPriv->driverPrivate)), NULL);
 }
-
-#define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
 
 /**
  * This is the driver specific part of the createNewScreen entry point.

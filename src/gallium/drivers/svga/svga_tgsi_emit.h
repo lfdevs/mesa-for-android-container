@@ -38,16 +38,18 @@ struct src_register
 };
 
 
-struct svga_arl_consts {
+struct svga_arl_consts
+{
    int number;
    int idx;
    int swizzle;
    int arl_num;
 };
 
-/* Internal functions:
- */
 
+/**
+ * This is the context/state used during TGSI->SVGA shader translation.
+ */
 struct svga_shader_emitter
 {
    unsigned size;
@@ -63,7 +65,7 @@ struct svga_shader_emitter
    int nr_hw_float_const;
    int nr_hw_int_const;
    int nr_hw_temp;
-   
+
    int insn_offset;
 
    int internal_temp_count;
@@ -129,106 +131,24 @@ struct svga_shader_emitter
 };
 
 
-boolean svga_shader_emit_dword( struct svga_shader_emitter *emit,
-                                unsigned dword );
+boolean
+svga_shader_emit_dword(struct svga_shader_emitter *emit, unsigned dword);
 
-boolean svga_shader_emit_dwords( struct svga_shader_emitter *emit,
-                                 const unsigned *dwords,
-                                 unsigned nr );
+boolean
+svga_shader_emit_dwords(struct svga_shader_emitter *emit,
+                        const unsigned *dwords, unsigned nr);
 
-boolean svga_shader_emit_opcode( struct svga_shader_emitter *emit,
-                                 unsigned opcode );
+boolean
+svga_shader_emit_opcode(struct svga_shader_emitter *emit,
+                        unsigned opcode);
 
-boolean svga_shader_emit_instructions( struct svga_shader_emitter *emit,
-                                       const struct tgsi_token *tokens );
+boolean
+svga_shader_emit_instructions(struct svga_shader_emitter *emit,
+                              const struct tgsi_token *tokens);
 
-boolean svga_translate_decl_sm30( struct svga_shader_emitter *emit,
-                               const struct tgsi_full_declaration *decl );
-
-
-static INLINE boolean emit_dst( struct svga_shader_emitter *emit,
-                         SVGA3dShaderDestToken dest )
-{
-   assert(dest.reserved0);
-   assert(dest.mask);
-   return svga_shader_emit_dword( emit, dest.value );
-}
-
-static INLINE boolean emit_src( struct svga_shader_emitter *emit,
-                         const struct src_register src )
-{
-   if (src.base.relAddr) {
-      assert(src.base.reserved0);
-      assert(src.indirect.reserved0);
-      return (svga_shader_emit_dword( emit, src.base.value ) &&
-              svga_shader_emit_dword( emit, src.indirect.value ));
-   }
-   else {
-      assert(src.base.reserved0);
-      return svga_shader_emit_dword( emit, src.base.value );
-   }
-}
-
-
-static INLINE boolean emit_instruction( struct svga_shader_emitter *emit,
-                                 SVGA3dShaderInstToken opcode )
-{
-   return svga_shader_emit_opcode( emit, opcode.value );
-}
-
-
-static INLINE boolean emit_op1( struct svga_shader_emitter *emit,
-                         SVGA3dShaderInstToken inst,
-                         SVGA3dShaderDestToken dest,
-                         struct src_register src0 )
-{
-   return (emit_instruction( emit, inst ) &&
-           emit_dst( emit, dest ) &&
-           emit_src( emit, src0 ));
-}
-
-static INLINE boolean emit_op2( struct svga_shader_emitter *emit,
-                     SVGA3dShaderInstToken inst,
-                     SVGA3dShaderDestToken dest,
-                     struct src_register src0,
-                     struct src_register src1 )
-{
-   return (emit_instruction( emit, inst ) &&
-           emit_dst( emit, dest ) &&
-           emit_src( emit, src0 ) &&
-           emit_src( emit, src1 ));
-}
-
-static INLINE boolean emit_op3( struct svga_shader_emitter *emit,
-                         SVGA3dShaderInstToken inst,
-                         SVGA3dShaderDestToken dest,
-                         struct src_register src0,
-                         struct src_register src1,
-                         struct src_register src2 )
-{
-   return (emit_instruction( emit, inst ) &&
-           emit_dst( emit, dest ) &&
-           emit_src( emit, src0 ) &&
-           emit_src( emit, src1 ) &&
-           emit_src( emit, src2 ));
-}
-
-
-static INLINE boolean emit_op4( struct svga_shader_emitter *emit,
-                                SVGA3dShaderInstToken inst,
-                                SVGA3dShaderDestToken dest,
-                                struct src_register src0,
-                                struct src_register src1,
-                                struct src_register src2,
-                                struct src_register src3)
-{
-   return (emit_instruction( emit, inst ) &&
-           emit_dst( emit, dest ) &&
-           emit_src( emit, src0 ) &&
-           emit_src( emit, src1 ) &&
-           emit_src( emit, src2 ) &&
-           emit_src( emit, src3 ));
-}
+boolean
+svga_translate_decl_sm30(struct svga_shader_emitter *emit,
+                         const struct tgsi_full_declaration *decl);
 
 
 #define TRANSLATE_SWIZZLE(x,y,z,w)  ((x) | ((y) << 2) | ((z) << 4) | ((w) << 6))
@@ -244,9 +164,18 @@ static INLINE boolean emit_op4( struct svga_shader_emitter *emit,
  TRANSLATE_SWIZZLE(TGSI_SWIZZLE_W,TGSI_SWIZZLE_W,TGSI_SWIZZLE_W,TGSI_SWIZZLE_W)
 
 
+/** Emit the given SVGA3dShaderInstToken opcode */
+static INLINE boolean
+emit_instruction(struct svga_shader_emitter *emit,
+                 SVGA3dShaderInstToken opcode)
+{
+   return svga_shader_emit_opcode(emit, opcode.value);
+}
 
+
+/** Generate a SVGA3dShaderInstToken for the given SVGA3D shader opcode */
 static INLINE SVGA3dShaderInstToken
-inst_token( unsigned opcode )
+inst_token(unsigned opcode)
 {
    SVGA3dShaderInstToken inst;
 
@@ -262,9 +191,8 @@ inst_token( unsigned opcode )
  * Note that this function is used to create tokens for output registers,
  * temp registers AND constants (see emit_def_const()).
  */
-static INLINE SVGA3dShaderDestToken 
-dst_register( unsigned file,
-              int number )
+static INLINE SVGA3dShaderDestToken
+dst_register(unsigned file, int number)
 {
    SVGA3dShaderDestToken dest;
 
@@ -282,13 +210,17 @@ dst_register( unsigned file,
    dest.shfScale = 0;
    dest.type_lower = file & 0x7;
    dest.reserved0 = 1;          /* is_reg */
-   
+
    return dest;
 }
 
+
+/**
+ * Apply a writemask to the given SVGA3dShaderDestToken, returning a
+ * new SVGA3dShaderDestToken.
+ */
 static INLINE SVGA3dShaderDestToken
-writemask( SVGA3dShaderDestToken dest,
-           unsigned mask )
+writemask(SVGA3dShaderDestToken dest, unsigned mask)
 {
    assert(dest.mask & mask);
    dest.mask &= mask;
@@ -296,8 +228,9 @@ writemask( SVGA3dShaderDestToken dest,
 }
 
 
-static INLINE SVGA3dShaderSrcToken 
-src_token( unsigned file, int number )
+/** Create a SVGA3dShaderSrcToken given a register file and number */
+static INLINE SVGA3dShaderSrcToken
+src_token(unsigned file, int number)
 {
    SVGA3dShaderSrcToken src;
 
@@ -319,75 +252,31 @@ src_token( unsigned file, int number )
 }
 
 
-static INLINE struct src_register 
-absolute( struct src_register src )
-{
-   src.base.srcMod = SVGA3DSRCMOD_ABS;
-
-   return src;
-}
-
-
-static INLINE struct src_register 
-negate( struct src_register src )
-{
-   switch (src.base.srcMod) {
-   case SVGA3DSRCMOD_ABS:
-      src.base.srcMod = SVGA3DSRCMOD_ABSNEG;
-      break;
-   case SVGA3DSRCMOD_ABSNEG:
-      src.base.srcMod = SVGA3DSRCMOD_ABS;
-      break;
-   case SVGA3DSRCMOD_NEG:
-      src.base.srcMod = SVGA3DSRCMOD_NONE;
-      break;
-   case SVGA3DSRCMOD_NONE:
-      src.base.srcMod = SVGA3DSRCMOD_NEG;
-      break;
-   }
-   return src;
-}
-
-
-static INLINE struct src_register 
-src_register( unsigned file, int number )
+/** Create a src_register given a register file and register number */
+static INLINE struct src_register
+src_register(unsigned file, int number)
 {
    struct src_register src;
-   
-   src.base = src_token( file, number );
+
+   src.base = src_token(file, number);
    src.indirect.value = 0;
 
    return src;
 }
 
-static INLINE SVGA3dShaderDestToken dst( struct src_register src )
+/** Translate src_register into SVGA3dShaderDestToken */
+static INLINE SVGA3dShaderDestToken
+dst(struct src_register src)
 {
-   return dst_register( SVGA3dShaderGetRegType( src.base.value ),
-                        src.base.num );
+   return dst_register(SVGA3dShaderGetRegType(src.base.value), src.base.num);
 }
 
-static INLINE struct src_register src( SVGA3dShaderDestToken dst )
-{
-   return src_register( SVGA3dShaderGetRegType( dst.value ),
-                        dst.num );
-}
 
-static INLINE ubyte svga_tgsi_sampler_type( struct svga_shader_emitter *emit,
-                                            int idx )
+/** Translate SVGA3dShaderDestToken to a src_register */
+static INLINE struct src_register
+src(SVGA3dShaderDestToken dst)
 {
-   switch (emit->key.fkey.tex[idx].texture_target) {
-   case PIPE_TEXTURE_1D:
-      return SVGA3DSAMP_2D;
-   case PIPE_TEXTURE_2D:
-   case PIPE_TEXTURE_RECT:
-      return SVGA3DSAMP_2D;
-   case PIPE_TEXTURE_3D:
-      return SVGA3DSAMP_VOLUME;
-   case PIPE_TEXTURE_CUBE:
-      return SVGA3DSAMP_CUBE;
-   }
-
-   return SVGA3DSAMP_UNKNOWN;
+   return src_register(SVGA3dShaderGetRegType(dst.value), dst.num);
 }
 
 #endif

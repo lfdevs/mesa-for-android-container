@@ -79,14 +79,10 @@ lp_build_ddy(struct lp_build_context *bld,
 }
 
 /*
- * To be able to handle multiple quads at once in texture sampling and
- * do lod calculations per quad, it is necessary to get the per-quad
- * derivatives into the lp_build_rho function.
- * For 8-wide vectors the packed derivative values for 3 coords would
- * look like this, this scales to a arbitrary (multiple of 4) vector size:
- * ds1dx ds1dy dt1dx dt1dy ds2dx ds2dy dt2dx dt2dy
- * dr1dx dr1dy _____ _____ dr2dx dr2dy _____ _____
- * The second vector will be unused for 1d and 2d textures.
+ * Helper for building packed ddx/ddy vector for one coord (scalar per quad
+ * values). The vector will look like this (8-wide):
+ * dr1dx _____ -dr1dy _____ dr2dx _____ -dr2dy _____
+ * This only requires one shuffle instead of two for more straightforward packing.
  */
 LLVMValueRef
 lp_build_packed_ddx_ddy_onecoord(struct lp_build_context *bld,
@@ -96,19 +92,15 @@ lp_build_packed_ddx_ddy_onecoord(struct lp_build_context *bld,
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef vec1, vec2;
 
-   /* same packing as _twocoord, but can use aos swizzle helper */
+   /* use aos swizzle helper */
 
-   /*
-    * XXX could make swizzle1 a noop swizzle by using right top/bottom
-    * pair for ddy
-    */
-   static const unsigned char swizzle1[] = {
-      LP_BLD_QUAD_TOP_LEFT, LP_BLD_QUAD_TOP_LEFT,
-      LP_BLD_SWIZZLE_DONTCARE, LP_BLD_SWIZZLE_DONTCARE
+   static const unsigned char swizzle1[] = { /* no-op swizzle */
+      LP_BLD_QUAD_TOP_LEFT, LP_BLD_SWIZZLE_DONTCARE,
+      LP_BLD_QUAD_BOTTOM_LEFT, LP_BLD_SWIZZLE_DONTCARE
    };
    static const unsigned char swizzle2[] = {
-      LP_BLD_QUAD_TOP_RIGHT, LP_BLD_QUAD_BOTTOM_LEFT,
-      LP_BLD_SWIZZLE_DONTCARE, LP_BLD_SWIZZLE_DONTCARE
+      LP_BLD_QUAD_TOP_RIGHT, LP_BLD_SWIZZLE_DONTCARE,
+      LP_BLD_QUAD_TOP_LEFT, LP_BLD_SWIZZLE_DONTCARE
    };
 
    vec1 = lp_build_swizzle_aos(bld, a, swizzle1);
@@ -121,6 +113,12 @@ lp_build_packed_ddx_ddy_onecoord(struct lp_build_context *bld,
 }
 
 
+/*
+ * Helper for building packed ddx/ddy vector for one coord (scalar per quad
+ * values). The vector will look like this (8-wide):
+ * ds1dx ds1dy dt1dx dt1dy ds2dx ds2dy dt2dx dt2dy
+ * This only needs 2 (v)shufps.
+ */
 LLVMValueRef
 lp_build_packed_ddx_ddy_twocoord(struct lp_build_context *bld,
                                  LLVMValueRef a, LLVMValueRef b)

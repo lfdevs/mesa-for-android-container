@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "pipe/p_context.h"
@@ -85,6 +85,7 @@ nv50_vertex_state_create(struct pipe_context *pipe,
             case 4: fmt = PIPE_FORMAT_R32G32B32A32_FLOAT; break;
             default:
                 assert(0);
+                FREE(so);
                 return NULL;
             }
             so->element[i].state = nv50_format_table[fmt].vtx;
@@ -139,10 +140,20 @@ nv50_emit_vtxattr(struct nv50_context *nv50, struct pipe_vertex_buffer *vb,
    const void *data = (const uint8_t *)vb->user_buffer + ve->src_offset;
    float v[4];
    const unsigned nc = util_format_get_nr_components(ve->src_format);
+   const struct util_format_description *desc =
+      util_format_description(ve->src_format);
 
    assert(vb->user_buffer);
 
-   util_format_read_4f(ve->src_format, v, 0, data, 0, 0, 0, 1, 1);
+   if (desc->channel[0].pure_integer) {
+      if (desc->channel[0].type == UTIL_FORMAT_TYPE_SIGNED) {
+         desc->unpack_rgba_sint((int32_t *)v, 0, data, 0, 1, 1);
+      } else {
+         desc->unpack_rgba_uint((uint32_t *)v, 0, data, 0, 1, 1);
+      }
+   } else {
+      desc->unpack_rgba_float(v, 0, data, 0, 1, 1);
+   }
 
    switch (nc) {
    case 4:

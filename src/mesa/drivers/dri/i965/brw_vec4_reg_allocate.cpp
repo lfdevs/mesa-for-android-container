@@ -27,7 +27,6 @@ extern "C" {
 } /* extern "C" */
 
 #include "brw_vec4.h"
-#include "glsl/ir_print_visitor.h"
 
 using namespace brw;
 
@@ -112,6 +111,8 @@ brw_alloc_reg_set_for_classes(struct brw_context *brw,
    brw->vs.ra_reg_to_grf = ralloc_array(brw, uint8_t, ra_reg_count);
    ralloc_free(brw->vs.regs);
    brw->vs.regs = ra_alloc_reg_set(brw, ra_reg_count);
+   if (brw->gen >= 6)
+      ra_set_allocate_round_robin(brw->vs.regs);
    ralloc_free(brw->vs.classes);
    brw->vs.classes = ralloc_array(brw, int, class_count + 1);
 

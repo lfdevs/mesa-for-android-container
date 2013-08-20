@@ -5,7 +5,6 @@
 
 /*
  * Mesa 3-D graphics library
- * Version:  6.5.2
  *
  * Copyright (C) 1999-2006  Brian Paul   All Rights Reserved.
  *
@@ -22,9 +21,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -141,7 +141,6 @@ extern GLfloat _mesa_ubyte_to_float_color_tab[256];
  *** CLAMPED_FLOAT_TO_UBYTE: map float known to be in [0,1] to ubyte in [0,255]
  ***/
 #if defined(USE_IEEE) && !defined(DEBUG)
-#define IEEE_0996 0x3f7f0000	/* 0.996 or so */
 /* This function/macro is sensitive to precision.  Test very carefully
  * if you change it!
  */
@@ -151,7 +150,7 @@ extern GLfloat _mesa_ubyte_to_float_color_tab[256];
            __tmp.f = (F);						\
            if (__tmp.i < 0)						\
               UB = (GLubyte) 0;						\
-           else if (__tmp.i >= IEEE_0996)				\
+           else if (__tmp.i >= IEEE_ONE)				\
               UB = (GLubyte) 255;					\
            else {							\
               __tmp.f = __tmp.f * (255.0F/256.0F) + 32768.0F;		\
@@ -656,6 +655,12 @@ INTERP_4F(GLfloat t, GLfloat dst[4], const GLfloat out[4], const GLfloat in[4])
 #define MIN3( A, B, C ) ((A) < (B) ? MIN2(A, C) : MIN2(B, C))
 #define MAX3( A, B, C ) ((A) > (B) ? MAX2(A, C) : MAX2(B, C))
 
+static inline unsigned
+minify(unsigned value, unsigned levels)
+{
+    return MAX2(1, value >> levels);
+}
+
 /**
  * Align a value up to an alignment value
  *
@@ -765,6 +770,9 @@ DIFFERENT_SIGNS(GLfloat x, GLfloat y)
 #define ENUM_TO_FLOAT(E)   ((GLfloat)(GLint)(E))
 #define ENUM_TO_DOUBLE(E)  ((GLdouble)(GLint)(E))
 #define ENUM_TO_BOOLEAN(E) ((E) ? GL_TRUE : GL_FALSE)
+
+/* Compute the size of an array */
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
 
 #endif

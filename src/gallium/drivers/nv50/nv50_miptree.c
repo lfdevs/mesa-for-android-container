@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "pipe/p_state.h"
@@ -147,6 +147,10 @@ nv50_miptree_destroy(struct pipe_screen *pscreen, struct pipe_resource *pt)
    nouveau_fence_ref(NULL, &mt->base.fence);
    nouveau_fence_ref(NULL, &mt->base.fence_wr);
 
+   NOUVEAU_DRV_STAT(nouveau_screen(pscreen), tex_obj_current_count, -1);
+   NOUVEAU_DRV_STAT(nouveau_screen(pscreen), tex_obj_current_bytes,
+                    -(uint64_t)mt->total_size);
+
    FREE(mt);
 }
 
@@ -209,10 +213,11 @@ nv50_miptree_init_ms_mode(struct nv50_miptree *mt)
 }
 
 boolean
-nv50_miptree_init_layout_linear(struct nv50_miptree *mt)
+nv50_miptree_init_layout_linear(struct nv50_miptree *mt, unsigned pitch_align)
 {
    struct pipe_resource *pt = &mt->base.base;
    const unsigned blocksize = util_format_get_blocksize(pt->format);
+   unsigned h = pt->height0;
 
    if (util_format_is_depth_or_stencil(pt->format))
       return FALSE;
@@ -222,11 +227,37 @@ nv50_miptree_init_layout_linear(struct nv50_miptree *mt)
    if (mt->ms_x | mt->ms_y)
       return FALSE;
 
-   mt->level[0].pitch = align(pt->width0 * blocksize, 64);
+   mt->level[0].pitch = align(pt->width0 * blocksize, pitch_align);
 
-   mt->total_size = mt->level[0].pitch * pt->height0;
+   /* Account for very generous prefetch (allocate size as if tiled). */
+   h = MAX2(h, 8);
+   h = util_next_power_of_two(h);
+
+   mt->total_size = mt->level[0].pitch * h;
 
    return TRUE;
+}
+
+static void
+nv50_miptree_init_layout_video(struct nv50_miptree *mt)
+{
+   const struct pipe_resource *pt = &mt->base.base;
+   const unsigned blocksize = util_format_get_blocksize(pt->format);
+
+   assert(pt->last_level == 0);
+   assert(mt->ms_x == 0 && mt->ms_y == 0);
+   assert(!util_format_is_compressed(pt->format));
+
+   mt->layout_3d = pt->target == PIPE_TEXTURE_3D;
+
+   mt->level[0].tile_mode = 0x20;
+   mt->level[0].pitch = align(pt->width0 * blocksize, 64);
+   mt->total_size = align(pt->height0, 16) * mt->level[0].pitch * (mt->layout_3d ? pt->depth0 : 1);
+
+   if (pt->array_size > 1) {
+      mt->layer_stride = align(mt->total_size, NV50_TILE_SIZE(0x20));
+      mt->total_size = mt->layer_stride * pt->array_size;
+   }
 }
 
 static void
@@ -302,10 +333,15 @@ nv50_miptree_create(struct pipe_screen *pscreen,
       return NULL;
    }
 
+   if (unlikely(pt->flags & NV50_RESOURCE_FLAG_VIDEO)) {
+      nv50_miptree_init_layout_video(mt);
+      /* BO allocation done by client */
+      return pt;
+   } else
    if (bo_config.nv50.memtype != 0) {
       nv50_miptree_init_layout_tiled(mt);
    } else
-   if (!nv50_miptree_init_layout_linear(mt)) {
+   if (!nv50_miptree_init_layout_linear(mt, 64)) {
       FREE(mt);
       return NULL;
    }
@@ -406,6 +442,7 @@ nv50_surface_from_miptree(struct nv50_miptree *mt,
    pipe_resource_reference(&ps->texture, &mt->base.base);
 
    ps->format = templ->format;
+   ps->writable = templ->writable;
    ps->u.tex.level = templ->u.tex.level;
    ps->u.tex.first_layer = templ->u.tex.first_layer;
    ps->u.tex.last_layer = templ->u.tex.last_layer;

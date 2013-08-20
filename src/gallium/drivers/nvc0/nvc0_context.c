@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "pipe/p_defines.h"
@@ -34,7 +34,7 @@
 static void
 nvc0_flush(struct pipe_context *pipe,
            struct pipe_fence_handle **fence,
-           enum pipe_flush_flags flags)
+           unsigned flags)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nouveau_screen *screen = &nvc0->screen->base;
@@ -63,6 +63,7 @@ nvc0_context_unreference_resources(struct nvc0_context *nvc0)
 
    nouveau_bufctx_del(&nvc0->bufctx_3d);
    nouveau_bufctx_del(&nvc0->bufctx);
+   nouveau_bufctx_del(&nvc0->bufctx_cp);
 
    util_unreference_framebuffer_state(&nvc0->framebuffer);
 
@@ -71,7 +72,7 @@ nvc0_context_unreference_resources(struct nvc0_context *nvc0)
 
    pipe_resource_reference(&nvc0->idxbuf.buffer, NULL);
 
-   for (s = 0; s < 5; ++s) {
+   for (s = 0; s < 6; ++s) {
       for (i = 0; i < nvc0->num_textures[s]; ++i)
          pipe_sampler_view_reference(&nvc0->textures[s][i], NULL);
 
@@ -80,8 +81,21 @@ nvc0_context_unreference_resources(struct nvc0_context *nvc0)
             pipe_resource_reference(&nvc0->constbuf[s][i].u.buf, NULL);
    }
 
+   for (s = 0; s < 2; ++s) {
+      for (i = 0; i < NVC0_MAX_SURFACE_SLOTS; ++i)
+         pipe_surface_reference(&nvc0->surfaces[s][i], NULL);
+   }
+
    for (i = 0; i < nvc0->num_tfbbufs; ++i)
       pipe_so_target_reference(&nvc0->tfbbuf[i], NULL);
+
+   for (i = 0; i < nvc0->global_residents.size / sizeof(struct pipe_resource *);
+        ++i) {
+      struct pipe_resource **res = util_dynarray_element(
+         &nvc0->global_residents, struct pipe_resource *, i);
+      pipe_resource_reference(res, NULL);
+   }
+   util_dynarray_fini(&nvc0->global_residents);
 }
 
 static void
@@ -116,6 +130,7 @@ nvc0_default_kick_notify(struct nouveau_pushbuf *push)
       if (screen->cur_ctx)
          screen->cur_ctx->state.flushed = TRUE;
    }
+   NOUVEAU_DRV_STAT(&screen->base, pushbuf_count, 1);
 }
 
 static int
@@ -199,6 +214,10 @@ nvc0_invalidate_resource_storage(struct nouveau_context *ctx,
    return ref;
 }
 
+static void
+nvc0_context_get_sample_position(struct pipe_context *, unsigned, unsigned,
+                                 float *);
+
 struct pipe_context *
 nvc0_create(struct pipe_screen *pscreen, void *priv)
 {
@@ -219,10 +238,13 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
    nvc0->base.pushbuf = screen->base.pushbuf;
    nvc0->base.client = screen->base.client;
 
-   ret = nouveau_bufctx_new(screen->base.client, NVC0_BIND_COUNT,
-                            &nvc0->bufctx_3d);
+   ret = nouveau_bufctx_new(screen->base.client, 2, &nvc0->bufctx);
    if (!ret)
-      nouveau_bufctx_new(screen->base.client, 2, &nvc0->bufctx);
+      ret = nouveau_bufctx_new(screen->base.client, NVC0_BIND_3D_COUNT,
+                               &nvc0->bufctx_3d);
+   if (!ret)
+      ret = nouveau_bufctx_new(screen->base.client, NVC0_BIND_CP_COUNT,
+                               &nvc0->bufctx_cp);
    if (ret)
       goto out_err;
 
@@ -236,9 +258,12 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
 
    pipe->draw_vbo = nvc0_draw_vbo;
    pipe->clear = nvc0_clear;
+   if (nvc0->screen->base.class_3d >= NVE4_3D_CLASS)
+      pipe->launch_grid = nve4_launch_grid;
 
    pipe->flush = nvc0_flush;
    pipe->texture_barrier = nvc0_texture_barrier;
+   pipe->get_sample_position = nvc0_context_get_sample_position;
 
    if (!screen->cur_ctx) {
       screen->cur_ctx = nvc0;
@@ -274,16 +299,30 @@ nvc0_create(struct pipe_screen *pscreen, void *priv)
    BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->text);
    BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->uniform_bo);
    BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->txc);
+   if (screen->compute) {
+      BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->text);
+      BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->txc);
+      BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->parm);
+   }
+
+   flags = NOUVEAU_BO_VRAM | NOUVEAU_BO_RDWR;
+
    BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->poly_cache);
+   if (screen->compute)
+      BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->tls);
 
    flags = NOUVEAU_BO_GART | NOUVEAU_BO_WR;
 
    BCTX_REFN_bo(nvc0->bufctx_3d, SCREEN, flags, screen->fence.bo);
    BCTX_REFN_bo(nvc0->bufctx, FENCE, flags, screen->fence.bo);
+   if (screen->compute)
+      BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->fence.bo);
 
    nvc0->base.scratch.bo_size = 2 << 20;
 
    memset(nvc0->tex_handles, ~0, sizeof(nvc0->tex_handles));
+
+   util_dynarray_init(&nvc0->global_residents);
 
    return pipe;
 
@@ -291,6 +330,8 @@ out_err:
    if (nvc0) {
       if (nvc0->bufctx_3d)
          nouveau_bufctx_del(&nvc0->bufctx_3d);
+      if (nvc0->bufctx_cp)
+         nouveau_bufctx_del(&nvc0->bufctx_cp);
       if (nvc0->bufctx)
          nouveau_bufctx_del(&nvc0->bufctx);
       if (nvc0->blit)
@@ -306,11 +347,55 @@ nvc0_bufctx_fence(struct nvc0_context *nvc0, struct nouveau_bufctx *bufctx,
 {
    struct nouveau_list *list = on_flush ? &bufctx->current : &bufctx->pending;
    struct nouveau_list *it;
+   NOUVEAU_DRV_STAT_IFD(unsigned count = 0);
 
    for (it = list->next; it != list; it = it->next) {
       struct nouveau_bufref *ref = (struct nouveau_bufref *)it;
       struct nv04_resource *res = ref->priv;
       if (res)
          nvc0_resource_validate(res, (unsigned)ref->priv_data);
+      NOUVEAU_DRV_STAT_IFD(count++);
    }
+   NOUVEAU_DRV_STAT(&nvc0->screen->base, resource_validate_count, count);
+}
+
+static void
+nvc0_context_get_sample_position(struct pipe_context *pipe,
+                                 unsigned sample_count, unsigned sample_index,
+                                 float *xy)
+{
+   static const uint8_t ms1[1][2] = { { 0x8, 0x8 } };
+   static const uint8_t ms2[2][2] = {
+      { 0x4, 0x4 }, { 0xc, 0xc } }; /* surface coords (0,0), (1,0) */
+   static const uint8_t ms4[4][2] = {
+      { 0x6, 0x2 }, { 0xe, 0x6 },   /* (0,0), (1,0) */
+      { 0x2, 0xa }, { 0xa, 0xe } }; /* (0,1), (1,1) */
+   static const uint8_t ms8[8][2] = {
+      { 0x1, 0x7 }, { 0x5, 0x3 },   /* (0,0), (1,0) */
+      { 0x3, 0xd }, { 0x7, 0xb },   /* (0,1), (1,1) */
+      { 0x9, 0x5 }, { 0xf, 0x1 },   /* (2,0), (3,0) */
+      { 0xb, 0xf }, { 0xd, 0x9 } }; /* (2,1), (3,1) */
+#if 0
+   /* NOTE: there are alternative modes for MS2 and MS8, currently not used */
+   static const uint8_t ms8_alt[8][2] = {
+      { 0x9, 0x5 }, { 0x7, 0xb },   /* (2,0), (1,1) */
+      { 0xd, 0x9 }, { 0x5, 0x3 },   /* (3,1), (1,0) */
+      { 0x3, 0xd }, { 0x1, 0x7 },   /* (0,1), (0,0) */
+      { 0xb, 0xf }, { 0xf, 0x1 } }; /* (2,1), (3,0) */
+#endif
+
+   const uint8_t (*ptr)[2];
+
+   switch (sample_count) {
+   case 0:
+   case 1: ptr = ms1; break;
+   case 2: ptr = ms2; break;
+   case 4: ptr = ms4; break;
+   case 8: ptr = ms8; break;
+   default:
+      assert(0);
+      break;
+   }
+   xy[0] = ptr[sample_index][0] * 0.0625f;
+   xy[1] = ptr[sample_index][1] * 0.0625f;
 }

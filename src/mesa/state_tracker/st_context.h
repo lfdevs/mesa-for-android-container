@@ -34,7 +34,6 @@
 #include "main/fbobject.h"
 
 struct bitmap_cache;
-struct blit_state;
 struct dd_function_table;
 struct draw_context;
 struct draw_stage;
@@ -51,6 +50,8 @@ struct u_upload_mgr;
 #define ST_NEW_EDGEFLAGS_DATA          (1 << 4)
 #define ST_NEW_GEOMETRY_PROGRAM        (1 << 5)
 #define ST_NEW_VERTEX_ARRAYS           (1 << 6)
+#define ST_NEW_RASTERIZER              (1 << 7)
+#define ST_NEW_UNIFORM_BUFFER          (1 << 8)
 
 
 struct st_state_flags {
@@ -84,6 +85,11 @@ struct st_context
    GLboolean clamp_vert_color_in_shader;
    boolean has_stencil_export; /**< can do shader stencil export? */
    boolean has_time_elapsed;
+   boolean has_shader_model3;
+   boolean prefer_blit_based_texture_transfer;
+
+   boolean needs_texcoord_semantic;
+   boolean apply_texture_swizzle_to_border_color;
 
    /* On old libGL's for linux we need to invalidate the drawables
     * on glViewpport calls, this is set via a option.
@@ -126,7 +132,7 @@ struct st_context
    GLboolean missing_textures;
    GLboolean vertdata_edgeflags;
 
-   /** Mapping from VERT_RESULT_x to post-transformed vertex slot */
+   /** Mapping from VARYING_SLOT_x to post-transformed vertex slot */
    const GLuint *vertex_result_to_slot;
 
    struct st_vertex_program *vp;    /**< Currently bound vertex program */
@@ -181,7 +187,6 @@ struct st_context
 
    enum pipe_texture_target internal_target;
    struct gen_mipmap_state *gen_mipmap;
-   struct blit_state *blit;
 
    struct cso_context *cso_context;
 

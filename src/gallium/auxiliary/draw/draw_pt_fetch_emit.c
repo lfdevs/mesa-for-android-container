@@ -169,7 +169,7 @@ static void fetch_emit_prepare( struct draw_pt_middle_end *middle,
    for (i = 0; i < draw->pt.nr_vertex_buffers; i++) {
       feme->translate->set_buffer(feme->translate,
                                   i,
-                                  ((char *)draw->pt.user.vbuffer[i] +
+                                  ((char *)draw->pt.user.vbuffer[i].map +
                                    draw->pt.vertex_buffer[i].buffer_offset),
                                   draw->pt.vertex_buffer[i].stride,
                                   draw->pt.max_index);
@@ -210,6 +210,7 @@ static void fetch_emit_run( struct draw_pt_middle_end *middle,
    feme->translate->run_elts( feme->translate,
 			      fetch_elts,
 			      fetch_count,
+                              draw->start_instance,
                               draw->instance_id,
 			      hw_verts );
 
@@ -267,6 +268,7 @@ static void fetch_emit_run_linear( struct draw_pt_middle_end *middle,
    feme->translate->run( feme->translate,
                          start,
                          count,
+                         draw->start_instance,
                          draw->instance_id,
                          hw_verts );
 
@@ -326,6 +328,7 @@ static boolean fetch_emit_run_linear_elts( struct draw_pt_middle_end *middle,
    feme->translate->run( feme->translate,
                          start,
                          count,
+                         draw->start_instance,
                          draw->instance_id,
                          hw_verts );
 

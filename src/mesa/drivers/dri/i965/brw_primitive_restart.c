@@ -79,21 +79,10 @@ can_cut_index_handle_prims(struct gl_context *ctx,
                            GLuint nr_prims,
                            const struct _mesa_index_buffer *ib)
 {
-   struct intel_context *intel = intel_context(ctx);
    struct brw_context *brw = brw_context(ctx);
 
-   if (brw->sol.counting_primitives_generated ||
-       brw->sol.counting_primitives_written) {
-      /* Counting primitives generated in hardware is not currently
-       * supported, so take the software path. We need to investigate
-       * the *_PRIMITIVES_COUNT registers to allow this to be handled
-       * entirely in hardware.
-       */
-      return false;
-   }
-
    /* Otherwise Haswell can do it all. */
-   if (intel->is_haswell)
+   if (brw->gen >= 8 || brw->is_haswell)
       return true;
 
    if (!can_cut_index_handle_restart_index(ctx, ib)) {
@@ -194,11 +183,10 @@ brw_handle_primitive_restart(struct gl_context *ctx,
 static void
 haswell_upload_cut_index(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
 
    /* Don't trigger on Ivybridge */
-   if (!intel->is_haswell)
+   if (!brw->is_haswell)
       return;
 
    const unsigned cut_index_setting =

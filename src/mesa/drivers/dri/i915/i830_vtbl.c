@@ -179,8 +179,6 @@ i830_render_start(struct intel_context *intel)
        v2 != i830->state.Ctx[I830_CTXREG_VF2] ||
        mcsb1 != i830->state.Ctx[I830_CTXREG_MCSB1] ||
        index_bitset != i830->last_index_bitset) {
-      int k;
-
       I830_STATECHANGE(i830, I830_UPLOAD_CTX);
 
       /* Must do this *after* statechange, so as not to affect
@@ -199,8 +197,7 @@ i830_render_start(struct intel_context *intel)
       i830->state.Ctx[I830_CTXREG_MCSB1] = mcsb1;
       i830->last_index_bitset = index_bitset;
 
-      k = i830_check_vertex_size(intel, intel->vertex_size);
-      assert(k);
+      assert(i830_check_vertex_size(intel, intel->vertex_size));
    }
 }
 
@@ -369,7 +366,7 @@ i830_emit_invarient_state(struct intel_context *intel)
 
 
 #define emit( intel, state, size )			\
-   intel_batchbuffer_data(intel, state, size, false)
+   intel_batchbuffer_data(intel, state, size)
 
 static GLuint
 get_dirty(struct i830_hw_state *state)
@@ -434,8 +431,8 @@ i830_emit_state(struct intel_context *intel)
     * batchbuffer fills up.
     */
    intel_batchbuffer_require_space(intel,
-				   get_state_size(state) + INTEL_PRIM_EMIT_SIZE,
-				   false);
+				   get_state_size(state) +
+                                   INTEL_PRIM_EMIT_SIZE);
    count = 0;
  again:
    aper_count = 0;
@@ -881,12 +878,6 @@ i830_invalidate_state(struct intel_context *intel, GLuint new_state)
       i830_update_provoking_vertex(&intel->ctx);
 }
 
-static bool
-i830_is_hiz_depth_format(struct intel_context *intel, gl_format format)
-{
-   return false;
-}
-
 void
 i830InitVtbl(struct i830_context *i830)
 {
@@ -904,5 +895,4 @@ i830InitVtbl(struct i830_context *i830)
    i830->intel.vtbl.finish_batch = intel_finish_vb;
    i830->intel.vtbl.invalidate_state = i830_invalidate_state;
    i830->intel.vtbl.render_target_supported = i830_render_target_supported;
-   i830->intel.vtbl.is_hiz_depth_format = i830_is_hiz_depth_format;
 }

@@ -36,6 +36,7 @@
 
 #include "util/u_debug.h"
 #include "util/u_math.h"
+#include "util/u_prim.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
 #include "tgsi/tgsi_scan.h"
@@ -71,6 +72,7 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
           procType == TGSI_PROCESSOR_VERTEX ||
           procType == TGSI_PROCESSOR_GEOMETRY ||
           procType == TGSI_PROCESSOR_COMPUTE);
+   info->processor = procType;
 
 
    /**
@@ -186,6 +188,8 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                   }
                   else if (fulldecl->Semantic.Name == TGSI_SEMANTIC_VERTEXID) {
                      info->uses_vertexid = TRUE;
+                  } else if (fulldecl->Semantic.Name == TGSI_SEMANTIC_PRIMID) {
+                     info->uses_primid = TRUE;
                   }
                }
                else if (file == TGSI_FILE_OUTPUT) {
@@ -193,9 +197,13 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                   info->output_semantic_index[reg] = (ubyte)fulldecl->Semantic.Index;
                   info->num_outputs++;
 
-                  if (procType == TGSI_PROCESSOR_VERTEX &&
+                  if ((procType == TGSI_PROCESSOR_VERTEX || procType == TGSI_PROCESSOR_GEOMETRY) &&
                       fulldecl->Semantic.Name == TGSI_SEMANTIC_CLIPDIST) {
                      info->num_written_clipdistance += util_bitcount(fulldecl->Declaration.UsageMask);
+                  }
+                  if ((procType == TGSI_PROCESSOR_VERTEX || procType == TGSI_PROCESSOR_GEOMETRY) &&
+                      fulldecl->Semantic.Name == TGSI_SEMANTIC_CULLDIST) {
+                     info->num_written_culldistance += util_bitcount(fulldecl->Declaration.UsageMask);
                   }
                   /* extra info for special outputs */
                   if (procType == TGSI_PROCESSOR_FRAGMENT &&
@@ -207,6 +215,17 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
                   if (procType == TGSI_PROCESSOR_VERTEX &&
                       fulldecl->Semantic.Name == TGSI_SEMANTIC_EDGEFLAG) {
                      info->writes_edgeflag = TRUE;
+                  }
+
+                  if (procType == TGSI_PROCESSOR_GEOMETRY &&
+                      fulldecl->Semantic.Name ==
+                      TGSI_SEMANTIC_VIEWPORT_INDEX) {
+                     info->writes_viewport_index = TRUE;
+                  }
+                  if (procType == TGSI_PROCESSOR_GEOMETRY &&
+                      fulldecl->Semantic.Name ==
+                      TGSI_SEMANTIC_LAYER) {
+                     info->writes_layer = TRUE;
                   }
                }
 
@@ -244,8 +263,8 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
       }
    }
 
-   info->uses_kill = (info->opcode_count[TGSI_OPCODE_KIL] ||
-                      info->opcode_count[TGSI_OPCODE_KILP]);
+   info->uses_kill = (info->opcode_count[TGSI_OPCODE_KILL_IF] ||
+                      info->opcode_count[TGSI_OPCODE_KILL]);
 
    /* extract simple properties */
    for (i = 0; i < info->num_properties; ++i) {
@@ -258,6 +277,22 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
          break;
       case TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS:
          info->color0_writes_all_cbufs = info->properties[i].data[0];
+         break;
+      case TGSI_PROPERTY_GS_INPUT_PRIM:
+         /* The dimensions of the IN decleration in geometry shader have
+          * to be deduced from the type of the input primitive.
+          */
+         if (procType == TGSI_PROCESSOR_GEOMETRY) {
+            unsigned input_primitive = info->properties[i].data[0];
+            int num_verts = u_vertices_per_prim(input_primitive);
+            int j;
+            info->file_count[TGSI_FILE_INPUT] = num_verts;
+            info->file_max[TGSI_FILE_INPUT] =
+               MAX2(info->file_max[TGSI_FILE_INPUT], num_verts - 1);
+            for (j = 0; j < num_verts; ++j) {
+               info->file_mask[TGSI_FILE_INPUT] |= (1 << j);
+            }
+         }
          break;
       default:
          ;

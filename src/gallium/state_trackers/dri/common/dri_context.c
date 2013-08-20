@@ -52,10 +52,18 @@ dri_pp_query(struct dri_context *ctx)
 static void dri_fill_st_options(struct st_config_options *options,
                                 const struct driOptionCache * optionCache)
 {
-   options->force_glsl_extensions_warn =
-      driQueryOptionb(optionCache, "force_glsl_extensions_warn");
+   options->disable_blend_func_extended =
+      driQueryOptionb(optionCache, "disable_blend_func_extended");
    options->disable_glsl_line_continuations =
       driQueryOptionb(optionCache, "disable_glsl_line_continuations");
+   options->disable_shader_bit_encoding =
+      driQueryOptionb(optionCache, "disable_shader_bit_encoding");
+   options->force_glsl_extensions_warn =
+      driQueryOptionb(optionCache, "force_glsl_extensions_warn");
+   options->force_glsl_version =
+      driQueryOptioni(optionCache, "force_glsl_version");
+   options->force_s3tc_enable =
+      driQueryOptionb(optionCache, "force_s3tc_enable");
 }
 
 GLboolean
@@ -116,7 +124,8 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    ctx->sPriv = sPriv;
 
    driParseConfigFiles(&ctx->optionCache,
-		       &screen->optionCache, sPriv->myNum, driver_descriptor.name);
+		       &screen->optionCacheDefaults,
+                       sPriv->myNum, driver_descriptor.name);
 
    dri_fill_st_options(&attribs.options, &ctx->optionCache);
    dri_fill_st_visual(&attribs.visual, screen, visual);
@@ -156,6 +165,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
 
    if (ctx->st->cso_context) {
       ctx->pp = pp_init(ctx->st->pipe, ctx->pp_enabled, ctx->st->cso_context);
+      ctx->hud = hud_create(ctx->st->pipe, ctx->st->cso_context);
    }
 
    *error = __DRI_CTX_ERROR_SUCCESS;
@@ -174,9 +184,13 @@ dri_destroy_context(__DRIcontext * cPriv)
 {
    struct dri_context *ctx = dri_context(cPriv);
 
+   if (ctx->hud) {
+      hud_destroy(ctx->hud);
+   }
+
    /* note: we are freeing values and nothing more because
     * driParseConfigFiles allocated values only - the rest
-    * is owned by screen optionCache.
+    * is owned by screen optionCacheDefaults.
     */
    free(ctx->optionCache.values);
 

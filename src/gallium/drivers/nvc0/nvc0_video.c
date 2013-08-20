@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nvc0_video.h"
@@ -440,7 +440,7 @@ nvc0_create_decoder(struct pipe_context *context,
 
 #if NVC0_DEBUG_FENCE
    ret = nouveau_bo_new(screen->device, NOUVEAU_BO_GART|NOUVEAU_BO_MAP,
-                        0, 0x1000, &cfg, &dec->fence_bo);
+                        0, 0x1000, NULL, &dec->fence_bo);
    if (ret)
       goto fail;
 
@@ -450,36 +450,42 @@ nvc0_create_decoder(struct pipe_context *context,
    dec->comm = (struct comm *)(dec->fence_map + (COMM_OFFSET/sizeof(*dec->fence_map)));
 
    /* So lets test if the fence is working? */
+   nouveau_pushbuf_space(push[0], 6, 1, 0);
+   PUSH_REFN (push[0], dec->fence_bo, NOUVEAU_BO_GART|NOUVEAU_BO_RDWR);
    BEGIN_NVC0(push[0], SUBC_BSP(0x240), 3);
    PUSH_DATAh(push[0], dec->fence_bo->offset);
    PUSH_DATA (push[0], dec->fence_bo->offset);
    PUSH_DATA (push[0], dec->fence_seq);
 
    BEGIN_NVC0(push[0], SUBC_BSP(0x304), 1);
-   PUSH_DATA (push[0], 1);
+   PUSH_DATA (push[0], 0);
    PUSH_KICK (push[0]);
 
+   nouveau_pushbuf_space(push[1], 6, 1, 0);
+   PUSH_REFN (push[1], dec->fence_bo, NOUVEAU_BO_GART|NOUVEAU_BO_RDWR);
    BEGIN_NVC0(push[1], SUBC_VP(0x240), 3);
    PUSH_DATAh(push[1], (dec->fence_bo->offset + 0x10));
    PUSH_DATA (push[1], (dec->fence_bo->offset + 0x10));
    PUSH_DATA (push[1], dec->fence_seq);
 
    BEGIN_NVC0(push[1], SUBC_VP(0x304), 1);
-   PUSH_DATA (push[1], 1);
+   PUSH_DATA (push[1], 0);
    PUSH_KICK (push[1]);
 
+   nouveau_pushbuf_space(push[2], 6, 1, 0);
+   PUSH_REFN (push[2], dec->fence_bo, NOUVEAU_BO_GART|NOUVEAU_BO_RDWR);
    BEGIN_NVC0(push[2], SUBC_PPP(0x240), 3);
    PUSH_DATAh(push[2], (dec->fence_bo->offset + 0x20));
    PUSH_DATA (push[2], (dec->fence_bo->offset + 0x20));
    PUSH_DATA (push[2], dec->fence_seq);
 
    BEGIN_NVC0(push[2], SUBC_PPP(0x304), 1);
-   PUSH_DATA (push[2], 1);
+   PUSH_DATA (push[2], 0);
    PUSH_KICK (push[2]);
 
    usleep(100);
-   while (dec->fence_seq > dec->fence_map[0] &&
-          dec->fence_seq > dec->fence_map[4] &&
+   while (dec->fence_seq > dec->fence_map[0] ||
+          dec->fence_seq > dec->fence_map[4] ||
           dec->fence_seq > dec->fence_map[8]) {
       debug_printf("%u: %u %u %u\n", dec->fence_seq, dec->fence_map[0], dec->fence_map[4], dec->fence_map[8]);
       usleep(100);
@@ -571,15 +577,14 @@ nvc0_video_buffer_create(struct pipe_context *pipe,
    buffer->base.interlaced = true;
 
    memset(&templ, 0, sizeof(templ));
-   templ.target = PIPE_TEXTURE_3D;
-   templ.depth0 = 2;
+   templ.target = PIPE_TEXTURE_2D_ARRAY;
+   templ.depth0 = 1;
    templ.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
    templ.format = PIPE_FORMAT_R8_UNORM;
    templ.width0 = buffer->base.width;
    templ.height0 = (buffer->base.height + 1)/2;
    templ.flags = NVC0_RESOURCE_FLAG_VIDEO;
-   templ.last_level = 0;
-   templ.array_size = 1;
+   templ.array_size = 2;
 
    buffer->resources[0] = pipe->screen->resource_create(pipe->screen, &templ);
    if (!buffer->resources[0])

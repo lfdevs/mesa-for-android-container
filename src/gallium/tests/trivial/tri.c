@@ -152,7 +152,8 @@ static void init_prog(struct program *p)
 	/* rasterizer */
 	memset(&p->rasterizer, 0, sizeof(p->rasterizer));
 	p->rasterizer.cull_face = PIPE_FACE_NONE;
-	p->rasterizer.gl_rasterization_rules = 1;
+	p->rasterizer.half_pixel_center = 1;
+	p->rasterizer.bottom_edge_rule = 1;
 	p->rasterizer.depth_clip = 1;
 
 	surf_tmpl.format = PIPE_FORMAT_B8G8R8A8_UNORM;
@@ -217,7 +218,7 @@ static void init_prog(struct program *p)
 
 	/* fragment shader */
 	p->fs = util_make_fragment_passthrough_shader(p->pipe,
-                    TGSI_SEMANTIC_COLOR, TGSI_INTERPOLATE_PERSPECTIVE);
+                    TGSI_SEMANTIC_COLOR, TGSI_INTERPOLATE_PERSPECTIVE, TRUE);
 }
 
 static void close_prog(struct program *p)

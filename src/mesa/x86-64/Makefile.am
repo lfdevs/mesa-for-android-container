@@ -25,7 +25,6 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/mesa \
 	-I$(top_srcdir)/src/mapi \
-	$(API_DEFINES) \
 	$(DEFINES)
 
 noinst_PROGRAMS = gen_matypes
@@ -34,7 +33,17 @@ gen_matypes_SOURCES = ../x86/gen_matypes.c
 BUILT_SOURCES = matypes.h
 CLEANFILES = matypes.h
 
+if GEN_ASM_OFFSETS
+
+matypes.h: $(gen_matypes_SOURCES)
+	$(AM_V_GEN)$(COMPILE) $< -DASM_OFFSETS -S -o - | \
+		sed -n '/^->/{s:^->::;/[$$]/{s:^:#define :;s:[$$]::};p}' > $@
+
+else
+
 matypes.h: gen_matypes
 	$(AM_V_GEN)./gen_matypes > $@
+
+endif
 
 endif

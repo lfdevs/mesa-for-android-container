@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "pipe/p_defines.h"
@@ -25,34 +25,11 @@
 #include "nvc0_context.h"
 
 #include "nv50/codegen/nv50_ir_driver.h"
+#include "nve4_compute.h"
 
-/* If only they told use the actual semantic instead of just GENERIC ... */
-static void
-nvc0_mesa_varying_hack(struct nv50_ir_varying *var)
-{
-   unsigned c;
-
-   if (var->sn != TGSI_SEMANTIC_GENERIC)
-      return;
-
-   if (var->si <= 7) /* gl_TexCoord */
-      for (c = 0; c < 4; ++c)
-         var->slot[c] = (0x300 + var->si * 0x10 + c * 0x4) / 4;
-   else
-   if (var->si == 9) /* gl_PointCoord */
-      for (c = 0; c < 4; ++c)
-         var->slot[c] = (0x2e0 + c * 0x4) / 4;
-   else
-   if (var->si <= 39)
-      for (c = 0; c < 4; ++c) /* move down user varyings (first has index 8) */
-         var->slot[c] -= 0x80 / 4;
-   else {
-      NOUVEAU_ERR("too many varyings / invalid location: %u !\n", var->si);
-      for (c = 0; c < 4; ++c)
-         var->slot[c] = (0x270 + c * 0x4) / 4; /* catch invalid indices */
-   }
-}
-
+/* NOTE: Using a[0x270] in FP may cause an error even if we're using less than
+ * 124 scalar varying values.
+ */
 static uint32_t
 nvc0_shader_input_address(unsigned sn, unsigned si, unsigned ubase)
 {
@@ -62,17 +39,17 @@ nvc0_shader_input_address(unsigned sn, unsigned si, unsigned ubase)
    case TGSI_SEMANTIC_PSIZE:        return 0x06c;
    case TGSI_SEMANTIC_POSITION:     return 0x070;
    case TGSI_SEMANTIC_GENERIC:      return ubase + si * 0x10;
-   case TGSI_SEMANTIC_FOG:          return 0x270;
+   case TGSI_SEMANTIC_FOG:          return 0x2e8;
    case TGSI_SEMANTIC_COLOR:        return 0x280 + si * 0x10;
    case TGSI_SEMANTIC_BCOLOR:       return 0x2a0 + si * 0x10;
    case NV50_SEMANTIC_CLIPDISTANCE: return 0x2c0 + si * 0x4;
    case TGSI_SEMANTIC_CLIPDIST:     return 0x2c0 + si * 0x10;
-   case TGSI_SEMANTIC_CLIPVERTEX:   return 0x260;
-   case NV50_SEMANTIC_POINTCOORD:   return 0x2e0;
+   case TGSI_SEMANTIC_CLIPVERTEX:   return 0x270;
+   case TGSI_SEMANTIC_PCOORD:       return 0x2e0;
    case NV50_SEMANTIC_TESSCOORD:    return 0x2f0;
    case TGSI_SEMANTIC_INSTANCEID:   return 0x2f8;
    case TGSI_SEMANTIC_VERTEXID:     return 0x2fc;
-   case NV50_SEMANTIC_TEXCOORD:     return 0x300 + si * 0x10;
+   case TGSI_SEMANTIC_TEXCOORD:     return 0x300 + si * 0x10;
    case TGSI_SEMANTIC_FACE:         return 0x3fc;
    case NV50_SEMANTIC_INVOCATIONID: return ~0;
    default:
@@ -92,13 +69,13 @@ nvc0_shader_output_address(unsigned sn, unsigned si, unsigned ubase)
    case TGSI_SEMANTIC_PSIZE:         return 0x06c;
    case TGSI_SEMANTIC_POSITION:      return 0x070;
    case TGSI_SEMANTIC_GENERIC:       return ubase + si * 0x10;
-   case TGSI_SEMANTIC_FOG:           return 0x270;
+   case TGSI_SEMANTIC_FOG:           return 0x2e8;
    case TGSI_SEMANTIC_COLOR:         return 0x280 + si * 0x10;
    case TGSI_SEMANTIC_BCOLOR:        return 0x2a0 + si * 0x10;
    case NV50_SEMANTIC_CLIPDISTANCE:  return 0x2c0 + si * 0x4;
    case TGSI_SEMANTIC_CLIPDIST:      return 0x2c0 + si * 0x10;
-   case TGSI_SEMANTIC_CLIPVERTEX:    return 0x260;
-   case NV50_SEMANTIC_TEXCOORD:      return 0x300 + si * 0x10;
+   case TGSI_SEMANTIC_CLIPVERTEX:    return 0x270;
+   case TGSI_SEMANTIC_TEXCOORD:      return 0x300 + si * 0x10;
    case TGSI_SEMANTIC_EDGEFLAG:      return ~0;
    default:
       assert(!"invalid TGSI output semantic");
@@ -148,8 +125,6 @@ nvc0_sp_assign_input_slots(struct nv50_ir_prog_info *info)
 
       for (c = 0; c < 4; ++c)
          info->in[i].slot[c] = (offset + c * 0x4) / 4;
-
-      nvc0_mesa_varying_hack(&info->in[i]);
    }
 
    return 0;
@@ -193,8 +168,6 @@ nvc0_sp_assign_output_slots(struct nv50_ir_prog_info *info)
 
       for (c = 0; c < 4; ++c)
          info->out[i].slot[c] = (offset + c * 0x4) / 4;
-
-      nvc0_mesa_varying_hack(&info->out[i]);
    }
 
    return 0;
@@ -470,7 +443,7 @@ nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info *info)
          } else
          if (info->in[i].slot[0] >= (0x2c0 / 4) &&
              info->in[i].slot[0] <= (0x2fc / 4)) {
-            fp->hdr[14] |= (1 << (a - 0x280 / 4)) & 0x03ff0000;
+            fp->hdr[14] |= (1 << (a - 0x280 / 4)) & 0x07ff0000;
          } else {
             if (info->in[i].slot[c] < (0x040 / 4) ||
                 info->in[i].slot[c] > (0x380 / 4))
@@ -533,10 +506,11 @@ nvc0_program_dump(struct nvc0_program *prog)
 {
    unsigned pos;
 
-   for (pos = 0; pos < sizeof(prog->hdr) / sizeof(prog->hdr[0]); ++pos)
-      debug_printf("HDR[%02lx] = 0x%08x\n",
-                   pos * sizeof(prog->hdr[0]), prog->hdr[pos]);
-
+   if (prog->type != PIPE_SHADER_COMPUTE) {
+      for (pos = 0; pos < sizeof(prog->hdr) / sizeof(prog->hdr[0]); ++pos)
+         debug_printf("HDR[%02lx] = 0x%08x\n",
+                      pos * sizeof(prog->hdr[0]), prog->hdr[pos]);
+   }
    debug_printf("shader binary code (0x%x bytes):", prog->code_size);
    for (pos = 0; pos < prog->code_size / 4; ++pos) {
       if ((pos % 8) == 0)
@@ -564,7 +538,26 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset)
 
    info->io.genUserClip = prog->vp.num_ucps;
    info->io.ucpBase = 256;
-   info->io.ucpBinding = 15;
+   info->io.ucpCBSlot = 15;
+
+   if (prog->type == PIPE_SHADER_COMPUTE) {
+      if (chipset >= NVISA_GK104_CHIPSET) {
+         info->io.resInfoCBSlot = 0;
+         info->io.texBindBase = NVE4_CP_INPUT_TEX(0);
+         info->io.suInfoBase = NVE4_CP_INPUT_SUF(0);
+         info->prop.cp.gridInfoBase = NVE4_CP_INPUT_GRID_INFO(0);
+      }
+      info->io.msInfoCBSlot = 0;
+      info->io.msInfoBase = NVE4_CP_INPUT_MS_OFFSETS;
+   } else {
+      if (chipset >= NVISA_GK104_CHIPSET) {
+         info->io.resInfoCBSlot = 15;
+         info->io.texBindBase = 0x20;
+         info->io.suInfoBase = 0; /* TODO */
+      }
+      info->io.msInfoCBSlot = 15;
+      info->io.msInfoBase = 0; /* TODO */
+   }
 
    info->assignSlots = nvc0_program_assign_varying_slots;
 
@@ -580,14 +573,16 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset)
       NOUVEAU_ERR("shader translation failed: %i\n", ret);
       goto out;
    }
-   FREE(info->bin.syms);
+   if (prog->type != PIPE_SHADER_COMPUTE)
+      FREE(info->bin.syms);
 
    prog->code = info->bin.code;
    prog->code_size = info->bin.codeSize;
    prog->immd_data = info->immd.buf;
    prog->immd_size = info->immd.bufSize;
    prog->relocs = info->bin.relocData;
-   prog->max_gpr = MAX2(4, (info->bin.maxGPR + 1));
+   prog->num_gprs = MAX2(4, (info->bin.maxGPR + 1));
+   prog->num_barriers = info->numBarriers;
 
    prog->vp.need_vertex_id = info->io.vertexId < PIPE_MAX_SHADER_INPUTS;
 
@@ -614,6 +609,10 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset)
       break;
    case PIPE_SHADER_FRAGMENT:
       ret = nvc0_fp_gen_header(prog, info);
+      break;
+   case PIPE_SHADER_COMPUTE:
+      prog->cp.syms = info->bin.syms;
+      prog->cp.num_syms = info->bin.numSyms;
       break;
    default:
       ret = -1;
@@ -654,8 +653,9 @@ boolean
 nvc0_program_upload_code(struct nvc0_context *nvc0, struct nvc0_program *prog)
 {
    struct nvc0_screen *screen = nvc0->screen;
+   const boolean is_cp = prog->type == PIPE_SHADER_COMPUTE;
    int ret;
-   uint32_t size = prog->code_size + NVC0_SHADER_HEADER_SIZE;
+   uint32_t size = prog->code_size + (is_cp ? 0 : NVC0_SHADER_HEADER_SIZE);
    uint32_t lib_pos = screen->lib_code->start;
    uint32_t code_pos;
 
@@ -671,7 +671,7 @@ nvc0_program_upload_code(struct nvc0_context *nvc0, struct nvc0_program *prog)
     * latency information is expected only at certain positions.
     */
    if (screen->base.class_3d >= NVE4_3D_CLASS)
-      size = size + 0x70;
+      size = size + (is_cp ? 0x40 : 0x70);
    size = align(size, 0x40);
 
    ret = nouveau_heap_alloc(screen->text_heap, size, prog, &prog->mem);
@@ -696,18 +696,27 @@ nvc0_program_upload_code(struct nvc0_context *nvc0, struct nvc0_program *prog)
    assert((prog->immd_size == 0) || (prog->immd_base + prog->immd_size <=
                                      prog->mem->start + prog->mem->size));
 
-   if (screen->base.class_3d >= NVE4_3D_CLASS) {
-      switch (prog->mem->start & 0xff) {
-      case 0x40: prog->code_base += 0x70; break;
-      case 0x80: prog->code_base += 0x30; break;
-      case 0xc0: prog->code_base += 0x70; break;
-      default:
-         prog->code_base += 0x30;
-         assert((prog->mem->start & 0xff) == 0x00);
-         break;
+   if (!is_cp) {
+      if (screen->base.class_3d >= NVE4_3D_CLASS) {
+         switch (prog->mem->start & 0xff) {
+         case 0x40: prog->code_base += 0x70; break;
+         case 0x80: prog->code_base += 0x30; break;
+         case 0xc0: prog->code_base += 0x70; break;
+         default:
+            prog->code_base += 0x30;
+            assert((prog->mem->start & 0xff) == 0x00);
+            break;
+         }
       }
+      code_pos = prog->code_base + NVC0_SHADER_HEADER_SIZE;
+   } else {
+      if (screen->base.class_3d >= NVE4_3D_CLASS) {
+         if (prog->mem->start & 0x40)
+            prog->code_base += 0x40;
+         assert((prog->code_base & 0x7f) == 0x00);
+      }
+      code_pos = prog->code_base;
    }
-   code_pos = prog->code_base + NVC0_SHADER_HEADER_SIZE;
 
    if (prog->relocs)
       nv50_ir_relocate_code(prog->relocs, prog->code, code_pos, lib_pos, 0);
@@ -717,10 +726,10 @@ nvc0_program_upload_code(struct nvc0_context *nvc0, struct nvc0_program *prog)
       nvc0_program_dump(prog);
 #endif
 
-   nvc0->base.push_data(&nvc0->base, screen->text, prog->code_base,
-                        NOUVEAU_BO_VRAM, NVC0_SHADER_HEADER_SIZE, prog->hdr);
-   nvc0->base.push_data(&nvc0->base, screen->text,
-                        prog->code_base + NVC0_SHADER_HEADER_SIZE,
+   if (!is_cp)
+      nvc0->base.push_data(&nvc0->base, screen->text, prog->code_base,
+                           NOUVEAU_BO_VRAM, NVC0_SHADER_HEADER_SIZE, prog->hdr);
+   nvc0->base.push_data(&nvc0->base, screen->text, code_pos,
                         NOUVEAU_BO_VRAM, prog->code_size, prog->code);
    if (prog->immd_size)
       nvc0->base.push_data(&nvc0->base,
@@ -768,10 +777,12 @@ nvc0_program_destroy(struct nvc0_context *nvc0, struct nvc0_program *prog)
 
    if (prog->mem)
       nouveau_heap_free(&prog->mem);
-
-   FREE(prog->code);
+   if (prog->code)
+      FREE(prog->code); /* may be 0 for hardcoded shaders */
    FREE(prog->immd_data);
    FREE(prog->relocs);
+   if (prog->type == PIPE_SHADER_COMPUTE && prog->cp.syms)
+      FREE(prog->cp.syms);
    if (prog->tfb) {
       if (nvc0->state.tfb == prog->tfb)
          nvc0->state.tfb = NULL;
@@ -782,4 +793,19 @@ nvc0_program_destroy(struct nvc0_context *nvc0, struct nvc0_program *prog)
 
    prog->pipe = pipe;
    prog->type = type;
+}
+
+uint32_t
+nvc0_program_symbol_offset(const struct nvc0_program *prog, uint32_t label)
+{
+   const struct nv50_ir_prog_symbol *syms =
+      (const struct nv50_ir_prog_symbol *)prog->cp.syms;
+   unsigned base = 0;
+   unsigned i;
+   if (prog->type != PIPE_SHADER_COMPUTE)
+      base = NVC0_SHADER_HEADER_SIZE;
+   for (i = 0; i < prog->cp.num_syms; ++i)
+      if (syms[i].label == label)
+         return prog->code_base + base + syms[i].offset;
+   return prog->code_base; /* no symbols or symbol not found */
 }

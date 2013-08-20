@@ -70,11 +70,13 @@
  * this during ra_set_finalize().
  */
 
+#include <stdbool.h>
 #include <ralloc.h>
 
 #include "main/imports.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
+#include "main/bitset.h"
 #include "register_allocate.h"
 
 #define NO_REG ~0
@@ -92,6 +94,8 @@ struct ra_regs {
 
    struct ra_class **classes;
    unsigned int class_count;
+
+   bool round_robin;
 };
 
 struct ra_class {
@@ -118,8 +122,9 @@ struct ra_node {
     * List of which nodes this node interferes with.  This should be
     * symmetric with the other node.
     */
-   GLboolean *adjacency;
+   BITSET_WORD *adjacency;
    unsigned int *adjacency_list;
+   unsigned int adjacency_list_size;
    unsigned int adjacency_count;
    /** @} */
 
@@ -191,6 +196,22 @@ ra_alloc_reg_set(void *mem_ctx, unsigned int count)
    }
 
    return regs;
+}
+
+/**
+ * The register allocator by default prefers to allocate low register numbers,
+ * since it was written for hardware (gen4/5 Intel) that is limited in its
+ * multithreadedness by the number of registers used in a given shader.
+ *
+ * However, for hardware without that restriction, densely packed register
+ * allocation can put serious constraints on instruction scheduling.  This
+ * function tells the allocator to rotate around the registers if possible as
+ * it allocates the nodes.
+ */
+void
+ra_set_allocate_round_robin(struct ra_regs *regs)
+{
+   regs->round_robin = true;
 }
 
 static void
@@ -316,7 +337,16 @@ ra_set_finalize(struct ra_regs *regs, unsigned int **q_values)
 static void
 ra_add_node_adjacency(struct ra_graph *g, unsigned int n1, unsigned int n2)
 {
-   g->nodes[n1].adjacency[n2] = GL_TRUE;
+   BITSET_SET(g->nodes[n1].adjacency, n2);
+
+   if (g->nodes[n1].adjacency_count >=
+       g->nodes[n1].adjacency_list_size) {
+      g->nodes[n1].adjacency_list_size *= 2;
+      g->nodes[n1].adjacency_list = reralloc(g, g->nodes[n1].adjacency_list,
+                                             unsigned int,
+                                             g->nodes[n1].adjacency_list_size);
+   }
+
    g->nodes[n1].adjacency_list[g->nodes[n1].adjacency_count] = n2;
    g->nodes[n1].adjacency_count++;
 }
@@ -335,9 +365,14 @@ ra_alloc_interference_graph(struct ra_regs *regs, unsigned int count)
    g->stack = rzalloc_array(g, unsigned int, count);
 
    for (i = 0; i < count; i++) {
-      g->nodes[i].adjacency = rzalloc_array(g, GLboolean, count);
-      g->nodes[i].adjacency_list = ralloc_array(g, unsigned int, count);
+      int bitset_count = BITSET_WORDS(count);
+      g->nodes[i].adjacency = rzalloc_array(g, BITSET_WORD, bitset_count);
+
+      g->nodes[i].adjacency_list_size = 4;
+      g->nodes[i].adjacency_list =
+         ralloc_array(g, unsigned int, g->nodes[i].adjacency_list_size);
       g->nodes[i].adjacency_count = 0;
+
       ra_add_node_adjacency(g, i, i);
       g->nodes[i].reg = NO_REG;
    }
@@ -356,7 +391,7 @@ void
 ra_add_node_interference(struct ra_graph *g,
 			 unsigned int n1, unsigned int n2)
 {
-   if (!g->nodes[n1].adjacency[n2]) {
+   if (!BITSET_TEST(g->nodes[n1].adjacency, n2)) {
       ra_add_node_adjacency(g, n1, n2);
       ra_add_node_adjacency(g, n2, n1);
    }
@@ -412,7 +447,7 @@ ra_simplify(struct ra_graph *g)
    }
 
    for (i = 0; i < g->count; i++) {
-      if (!g->nodes[i].in_stack)
+      if (!g->nodes[i].in_stack && g->nodes[i].reg == -1)
 	 return GL_FALSE;
    }
 
@@ -430,16 +465,19 @@ GLboolean
 ra_select(struct ra_graph *g)
 {
    int i;
+   int start_search_reg = 0;
 
    while (g->stack_count != 0) {
-      unsigned int r;
+      unsigned int ri;
+      unsigned int r = -1;
       int n = g->stack[g->stack_count - 1];
       struct ra_class *c = g->regs->classes[g->nodes[n].class];
 
       /* Find the lowest-numbered reg which is not used by a member
        * of the graph adjacent to us.
        */
-      for (r = 0; r < g->regs->count; r++) {
+      for (ri = 0; ri < g->regs->count; ri++) {
+         r = (start_search_reg + ri) % g->regs->count;
 	 if (!c->regs[r])
 	    continue;
 
@@ -455,12 +493,15 @@ ra_select(struct ra_graph *g)
 	 if (i == g->nodes[n].adjacency_count)
 	    break;
       }
-      if (r == g->regs->count)
+      if (ri == g->regs->count)
 	 return GL_FALSE;
 
       g->nodes[n].reg = r;
       g->nodes[n].in_stack = GL_FALSE;
       g->stack_count--;
+
+      if (g->regs->round_robin)
+         start_search_reg = r + 1;
    }
 
    return GL_TRUE;
@@ -589,9 +630,10 @@ ra_get_best_spill_node(struct ra_graph *g)
     * colored that we couldn't manage to color in ra_select().
     */
    for (i = g->stack_optimistic_start; i < g->stack_count; i++) {
+      float cost, benefit;
+
       n = g->stack[i];
-      float cost = g->nodes[n].spill_cost;
-      float benefit;
+      cost = g->nodes[n].spill_cost;
 
       if (cost <= 0.0)
          continue;

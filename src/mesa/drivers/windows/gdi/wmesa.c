@@ -605,7 +605,6 @@ WMesaContext WMesaCreateContext(HDC hDC,
     _mesa_init_driver_functions(&functions);
     functions.GetString = wmesa_get_string;
     functions.UpdateState = wmesa_update_state;
-    functions.GetBufferSize = wmesa_get_buffer_size;
     functions.Flush = wmesa_flush;
     functions.Clear = clear;
     functions.ResizeBuffers = wmesa_resize_buffers;
@@ -620,11 +619,6 @@ WMesaContext WMesaCreateContext(HDC hDC,
     _mesa_destroy_visual(visual);
 
     _mesa_enable_sw_extensions(ctx);
-    _mesa_enable_1_3_extensions(ctx);
-    _mesa_enable_1_4_extensions(ctx);
-    _mesa_enable_1_5_extensions(ctx);
-    _mesa_enable_2_0_extensions(ctx);
-    _mesa_enable_2_1_extensions(ctx);
   
     _mesa_meta_init(ctx);
 

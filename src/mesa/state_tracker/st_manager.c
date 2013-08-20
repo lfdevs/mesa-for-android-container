@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.9
  *
  * Copyright (C) 2010 LunarG Inc.
  *
@@ -28,7 +27,6 @@
 
 #include "main/mtypes.h"
 #include "main/context.h"
-#include "main/mfeatures.h"
 #include "main/texobj.h"
 #include "main/teximage.h"
 #include "main/texstate.h"
@@ -170,9 +168,8 @@ st_context_validate(struct st_context *st,
 
 /**
  * Validate a framebuffer to make sure up-to-date pipe_textures are used.
- * The context we need to pass in is s dummy context needed only to be
- * able to get a pipe context to create pipe surfaces, and to have a
- * context to call _mesa_resize_framebuffer():
+ * The context is only used for creating pipe surfaces and for calling
+ * _mesa_resize_framebuffer().
  * (That should probably be rethought, since those surfaces become
  * drawable state, not context state, and can be freed by another pipe
  * context).
@@ -434,8 +431,6 @@ st_framebuffer_create(struct st_framebuffer_iface *stfbi)
    stfb->stamp = 0;
    st_framebuffer_update_attachments(stfb);
 
-   stfb->Base.Initialized = GL_TRUE;
-
    return stfb;
 }
 
@@ -455,7 +450,7 @@ st_context_flush(struct st_context_iface *stctxi, unsigned flags,
                  struct pipe_fence_handle **fence)
 {
    struct st_context *st = (struct st_context *) stctxi;
-   enum pipe_flush_flags pipe_flags = 0;
+   unsigned pipe_flags = 0;
 
    if (flags & ST_FLUSH_END_OF_FRAME) {
       pipe_flags |= PIPE_FLUSH_END_OF_FRAME;
@@ -469,7 +464,7 @@ st_context_flush(struct st_context_iface *stctxi, unsigned flags,
 static boolean
 st_context_teximage(struct st_context_iface *stctxi,
                     enum st_texture_type tex_type,
-                    int level, enum pipe_format internal_format,
+                    int level, enum pipe_format pipe_format,
                     struct pipe_resource *tex, boolean mipmap)
 {
    struct st_context *st = (struct st_context *) stctxi;
@@ -513,28 +508,12 @@ st_context_teximage(struct st_context_iface *stctxi,
    texImage = _mesa_get_tex_image(ctx, texObj, target, level);
    stImage = st_texture_image(texImage);
    if (tex) {
-      gl_format texFormat;
+      gl_format texFormat = st_pipe_format_to_mesa_format(pipe_format);
 
-      /*
-       * XXX When internal_format and tex->format differ, st_finalize_texture
-       * needs to allocate a new texture with internal_format and copy the
-       * texture here into the new one.  It will result in surface_copy being
-       * called on surfaces whose formats differ.
-       *
-       * To avoid that, internal_format is (wrongly) ignored here.  A sane fix
-       * is to use a sampler view.
-       */
-      if (!st_sampler_compat_formats(tex->format, internal_format))
-	 internal_format = tex->format;
-     
-      if (util_format_get_component_bits(internal_format,
-               UTIL_FORMAT_COLORSPACE_RGB, 3) > 0)
+      if (util_format_has_alpha(tex->format))
          internalFormat = GL_RGBA;
       else
          internalFormat = GL_RGB;
-
-      texFormat = st_ChooseTextureFormat(ctx, target, internalFormat,
-                                         GL_BGRA, GL_UNSIGNED_BYTE);
 
       _mesa_init_teximage_fields(ctx, texImage,
                                  tex->width0, tex->height0, 1, 0,
@@ -564,6 +543,7 @@ st_context_teximage(struct st_context_iface *stctxi,
    stObj->width0 = width;
    stObj->height0 = height;
    stObj->depth0 = depth;
+   stObj->surface_format = pipe_format;
 
    _mesa_dirty_texobj(ctx, texObj, GL_TRUE);
    _mesa_unlock_texture(ctx, texObj);
@@ -883,18 +863,12 @@ st_manager_add_color_renderbuffer(struct st_context *st,
 }
 
 static const struct st_api st_gl_api = {
-   "Mesa " MESA_VERSION_STRING,
+   "Mesa " PACKAGE_VERSION,
    ST_API_OPENGL,
-#if FEATURE_GL
    ST_PROFILE_DEFAULT_MASK |
    ST_PROFILE_OPENGL_CORE_MASK |
-#endif
-#if FEATURE_ES1
    ST_PROFILE_OPENGL_ES1_MASK |
-#endif
-#if FEATURE_ES2
    ST_PROFILE_OPENGL_ES2_MASK |
-#endif
    0,
    ST_API_FEATURE_MS_VISUALS_MASK,
    st_api_destroy,

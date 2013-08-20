@@ -47,8 +47,9 @@ void si_pm4_cmd_end(struct si_pm4_state *state, bool predicate)
 {
 	unsigned count;
 	count = state->ndw - state->last_pm4 - 2;
-	state->pm4[state->last_pm4] = PKT3(state->last_opcode,
-					   count, predicate);
+	state->pm4[state->last_pm4] =
+		PKT3(state->last_opcode, count, predicate)
+		   | PKT3_SHADER_TYPE_S(state->compute_pkt);
 
 	assert(state->ndw <= SI_PM4_MAX_DW);
 }
@@ -68,6 +69,10 @@ void si_pm4_set_reg(struct si_pm4_state *state, unsigned reg, uint32_t val)
 	} else if (reg >= SI_CONTEXT_REG_OFFSET && reg < SI_CONTEXT_REG_END) {
 		opcode = PKT3_SET_CONTEXT_REG;
 		reg -= SI_CONTEXT_REG_OFFSET;
+
+	} else if (reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END) {
+		opcode = PKT3_SET_UCONFIG_REG;
+		reg -= CIK_UCONFIG_REG_OFFSET;
 
 	} else {
 		R600_ERR("Invalid register offset %08x!\n", reg);
@@ -137,12 +142,7 @@ void si_pm4_inval_shader_cache(struct si_pm4_state *state)
 void si_pm4_inval_texture_cache(struct si_pm4_state *state)
 {
 	state->cp_coher_cntl |= S_0085F0_TC_ACTION_ENA(1);
-}
-
-void si_pm4_inval_vertex_cache(struct si_pm4_state *state)
-{
-        /* Some GPUs don't have the vertex cache and must use the texture cache instead. */
-	state->cp_coher_cntl |= S_0085F0_TC_ACTION_ENA(1);
+	state->cp_coher_cntl |= S_0085F0_TCL1_ACTION_ENA(1);
 }
 
 void si_pm4_inval_fb_cache(struct si_pm4_state *state, unsigned nr_cbufs)
@@ -173,6 +173,18 @@ void si_pm4_free_state(struct r600_context *rctx,
 	FREE(state);
 }
 
+struct si_pm4_state * si_pm4_alloc_state(struct r600_context *rctx)
+{
+	struct si_pm4_state *pm4 = CALLOC_STRUCT(si_pm4_state);
+
+        if (pm4 == NULL)
+                return NULL;
+
+	pm4->chip_class = rctx->chip_class;
+
+	return pm4;
+}
+
 uint32_t si_pm4_sync_flags(struct r600_context *rctx)
 {
 	uint32_t cp_coher_cntl = 0;
@@ -199,6 +211,12 @@ unsigned si_pm4_dirty_dw(struct r600_context *rctx)
 			continue;
 
 		count += state->ndw;
+#if R600_TRACE_CS
+		/* for tracing each states */
+		if (rctx->screen->trace_bo) {
+			count += R600_TRACE_CS_DWORDS;
+		}
+#endif
 	}
 
 	return count;
@@ -219,6 +237,12 @@ void si_pm4_emit(struct r600_context *rctx, struct si_pm4_state *state)
 	}
 
 	cs->cdw += state->ndw;
+
+#if R600_TRACE_CS
+	if (rctx->screen->trace_bo) {
+		r600_trace_emit(rctx);
+	}
+#endif
 }
 
 void si_pm4_emit_dirty(struct r600_context *rctx)

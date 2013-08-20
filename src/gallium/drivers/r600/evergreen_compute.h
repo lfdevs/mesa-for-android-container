@@ -26,13 +26,12 @@
 
 #ifndef EVERGREEN_COMPUTE_H
 #define EVERGREEN_COMPUTE_H
-#include "r600.h"
 #include "r600_pipe.h"
 
 struct r600_atom;
 struct evergreen_compute_resource;
 
-void *evergreen_create_compute_state(struct pipe_context *ctx, const const struct pipe_compute_state *cso);
+void *evergreen_create_compute_state(struct pipe_context *ctx, const struct pipe_compute_state *cso);
 void evergreen_delete_compute_state(struct pipe_context *ctx, void *state);
 void evergreen_compute_upload_input(struct pipe_context *context, const uint *block_layout, const uint *grid_layout, const void *input);
 void evergreen_init_atom_start_compute_cs(struct r600_context *rctx);
@@ -54,20 +53,16 @@ void r600_compute_global_transfer_inline_write( struct pipe_context *, struct pi
                                                 unsigned usage, const struct pipe_box *, const void *data, unsigned stride, unsigned layer_stride);
 
 
-static inline void COMPUTE_DBG(const char *fmt, ...)
+static inline void COMPUTE_DBG(struct r600_screen *rscreen, const char *fmt, ...)
 {
-   static bool check_debug = false, debug = false;
+	if (!(rscreen->debug_flags & DBG_COMPUTE)) {
+		return;
+	}
 
-   if (!check_debug) {
-		debug = debug_get_bool_option("R600_COMPUTE_DEBUG", FALSE);
-   }
-
-   if (debug) {
-      va_list ap;
-      va_start(ap, fmt);
-      _debug_vprintf(fmt, ap);
-      va_end(ap);
-   }
+	va_list ap;
+	va_start(ap, fmt);
+	_debug_vprintf(fmt, ap);
+	va_end(ap);
 }
 
 #endif

@@ -168,10 +168,9 @@ static void
 brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
 {
    struct brw_context *brw = cache->brw;
-   struct intel_context *intel = &brw->intel;
    drm_intel_bo *new_bo;
 
-   new_bo = drm_intel_bo_alloc(intel->bufmgr, "program cache", new_size, 64);
+   new_bo = drm_intel_bo_alloc(brw->bufmgr, "program cache", new_size, 64);
 
    /* Copy any existing data that needs to be saved. */
    if (cache->next_offset != 0) {
@@ -328,7 +327,6 @@ brw_upload_cache(struct brw_cache *cache,
 void
 brw_init_caches(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
    struct brw_cache *cache = &brw->cache;
 
    cache->brw = brw;
@@ -338,7 +336,7 @@ brw_init_caches(struct brw_context *brw)
    cache->items =
       calloc(1, cache->size * sizeof(struct brw_cache_item *));
 
-   cache->bo = drm_intel_bo_alloc(intel->bufmgr,
+   cache->bo = drm_intel_bo_alloc(brw->bufmgr,
 				  "program cache",
 				  4096, 64);
 
@@ -351,7 +349,6 @@ brw_init_caches(struct brw_context *brw)
 static void
 brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
 {
-   struct intel_context *intel = &brw->intel;
    struct brw_cache_item *c, *next;
    GLuint i;
 
@@ -383,7 +380,7 @@ brw_clear_cache(struct brw_context *brw, struct brw_cache *cache)
    brw->state.dirty.mesa |= ~0;
    brw->state.dirty.brw |= ~0;
    brw->state.dirty.cache |= ~0;
-   intel_batchbuffer_flush(intel);
+   intel_batchbuffer_flush(brw);
 }
 
 void

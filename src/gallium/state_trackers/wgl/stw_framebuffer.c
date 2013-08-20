@@ -31,6 +31,7 @@
 #include "pipe/p_screen.h"
 #include "util/u_format.h"
 #include "util/u_memory.h"
+#include "hud/hud_context.h"
 #include "state_tracker/st_api.h"
 
 #include "stw_icd.h"
@@ -138,6 +139,8 @@ stw_framebuffer_get_size( struct stw_framebuffer *fb )
    assert(client_rect.top == 0);
    width  = client_rect.right  - client_rect.left;
    height = client_rect.bottom - client_rect.top;
+
+   fb->minimized = width == 0 || height == 0;
 
    if (width <= 0 || height <= 0) {
       /*
@@ -529,15 +532,17 @@ DrvPresentBuffers(HDC hdc, PGLPRESENTBUFFERSDATA data)
       }
    }
 
-   if(fb->shared_surface) {
-      stw_dev->stw_winsys->compose(screen,
-                                   res,
-                                   fb->shared_surface,
-                                   &fb->client_rect,
-                                   data->PresentHistoryToken);
-   }
-   else {
-      stw_dev->stw_winsys->present( screen, res, hdc );
+   if (!fb->minimized) {
+      if (fb->shared_surface) {
+         stw_dev->stw_winsys->compose(screen,
+                                      res,
+                                      fb->shared_surface,
+                                      &fb->client_rect,
+                                      data->PresentHistoryToken);
+      }
+      else {
+         stw_dev->stw_winsys->present( screen, res, hdc );
+      }
    }
 
    stw_framebuffer_update(fb);
@@ -593,6 +598,7 @@ BOOL APIENTRY
 DrvSwapBuffers(
    HDC hdc )
 {
+   struct stw_context *ctx;
    struct stw_framebuffer *fb;
 
    if (!stw_dev)
@@ -605,6 +611,14 @@ DrvSwapBuffers(
    if (!(fb->pfi->pfd.dwFlags & PFD_DOUBLEBUFFER)) {
       stw_framebuffer_release(fb);
       return TRUE;
+   }
+
+   /* Display the HUD */
+   ctx = stw_current_context();
+   if (ctx && ctx->hud) {
+      struct pipe_resource *back =
+         stw_get_framebuffer_resource(fb->stfb, ST_ATTACHMENT_BACK_LEFT);
+      hud_draw(ctx->hud, back);
    }
 
    stw_flush_current_locked(fb);

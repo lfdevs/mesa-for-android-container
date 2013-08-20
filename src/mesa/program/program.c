@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  6.5.3
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
@@ -32,7 +32,6 @@
 #include "main/glheader.h"
 #include "main/context.h"
 #include "main/hash.h"
-#include "main/mfeatures.h"
 #include "program.h"
 #include "prog_cache.h"
 #include "prog_parameter.h"
@@ -738,7 +737,7 @@ _mesa_combine_programs(struct gl_context *ctx,
        * of progB_colorFile/progB_colorIndex below...
        */
       progB_colorFile = PROGRAM_INPUT;
-      progB_colorIndex = FRAG_ATTRIB_COL0;
+      progB_colorIndex = VARYING_SLOT_COL0;
 
       /*
        * The fragment program may get color from a state var rather than
@@ -754,7 +753,7 @@ _mesa_combine_programs(struct gl_context *ctx,
              p->StateIndexes[0] == STATE_INTERNAL &&
              p->StateIndexes[1] == STATE_CURRENT_ATTRIB &&
              (int) p->StateIndexes[2] == (int) VERT_ATTRIB_COLOR0) {
-            progB_inputsRead |= FRAG_BIT_COL0;
+            progB_inputsRead |= VARYING_BIT_COL0;
             progB_colorFile = PROGRAM_STATE_VAR;
             progB_colorIndex = i;
             break;
@@ -765,7 +764,7 @@ _mesa_combine_programs(struct gl_context *ctx,
        * new temporary register.
        */
       if ((progA->OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_COLOR)) &&
-          (progB_inputsRead & FRAG_BIT_COL0)) {
+          (progB_inputsRead & VARYING_BIT_COL0)) {
          GLint tempReg = _mesa_find_free_register(usedTemps, MAX_PROGRAM_TEMPS,
                                                   firstTemp);
          if (tempReg < 0) {
@@ -788,7 +787,7 @@ _mesa_combine_programs(struct gl_context *ctx,
       /* compute combined program's InputsRead */
       inputsB = progB_inputsRead;
       if (progA->OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_COLOR)) {
-         inputsB &= ~(1 << FRAG_ATTRIB_COL0);
+         inputsB &= ~(1 << VARYING_SLOT_COL0);
       }
       newProg->InputsRead = progA->InputsRead | inputsB;
       newProg->OutputsWritten = progB->OutputsWritten;
@@ -934,9 +933,9 @@ _mesa_valid_register_index(const struct gl_context *ctx,
       case MESA_SHADER_VERTEX:
          return index < VERT_ATTRIB_GENERIC0 + (GLint) c->MaxAttribs;
       case MESA_SHADER_FRAGMENT:
-         return index < FRAG_ATTRIB_VAR0 + (GLint) ctx->Const.MaxVarying;
+         return index < VARYING_SLOT_VAR0 + (GLint) ctx->Const.MaxVarying;
       case MESA_SHADER_GEOMETRY:
-         return index < GEOM_ATTRIB_VAR0 + (GLint) ctx->Const.MaxVarying;
+         return index < VARYING_SLOT_VAR0 + (GLint) ctx->Const.MaxVarying;
       default:
          return GL_FALSE;
       }
@@ -947,11 +946,11 @@ _mesa_valid_register_index(const struct gl_context *ctx,
 
       switch (shaderType) {
       case MESA_SHADER_VERTEX:
-         return index < VERT_RESULT_VAR0 + (GLint) ctx->Const.MaxVarying;
+         return index < VARYING_SLOT_VAR0 + (GLint) ctx->Const.MaxVarying;
       case MESA_SHADER_FRAGMENT:
          return index < FRAG_RESULT_DATA0 + (GLint) ctx->Const.MaxDrawBuffers;
       case MESA_SHADER_GEOMETRY:
-         return index < GEOM_RESULT_VAR0 + (GLint) ctx->Const.MaxVarying;
+         return index < VARYING_SLOT_VAR0 + (GLint) ctx->Const.MaxVarying;
       default:
          return GL_FALSE;
       }

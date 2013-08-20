@@ -56,7 +56,8 @@ struct lp_build_context;
  */
 struct lp_derivatives
 {
-   LLVMValueRef ddx_ddy[2];
+   LLVMValueRef ddx[3];
+   LLVMValueRef ddy[3];
 };
 
 
@@ -127,7 +128,7 @@ struct lp_sampler_dynamic_state
 {
    /* First callbacks for sampler view state */
 
-   /** Obtain the base texture width (returns int32) */
+   /** Obtain the base texture width (or number of elements) (returns int32) */
    LLVMValueRef
    (*width)( const struct lp_sampler_dynamic_state *state,
              struct gallivm_state *gallivm,
@@ -139,7 +140,7 @@ struct lp_sampler_dynamic_state
               struct gallivm_state *gallivm,
               unsigned texture_unit);
 
-   /** Obtain the base texture depth (returns int32) */
+   /** Obtain the base texture depth (or array size) (returns int32) */
    LLVMValueRef
    (*depth)( const struct lp_sampler_dynamic_state *state,
              struct gallivm_state *gallivm,
@@ -267,13 +268,13 @@ struct lp_build_sample_context
    struct lp_type texel_type;
    struct lp_build_context texel_bld;
 
-   /** Float per-quad type */
-   struct lp_type perquadf_type;
-   struct lp_build_context perquadf_bld;
+   /** Float level type */
+   struct lp_type levelf_type;
+   struct lp_build_context levelf_bld;
 
-   /** Int per-quad type */
-   struct lp_type perquadi_type;
-   struct lp_build_context perquadi_bld;
+   /** Int level type */
+   struct lp_type leveli_type;
+   struct lp_build_context leveli_bld;
 
    /* Common dynamic state values */
    LLVMValueRef row_stride_array;
@@ -366,6 +367,10 @@ void
 lp_build_lod_selector(struct lp_build_sample_context *bld,
                       unsigned texture_index,
                       unsigned sampler_index,
+                      LLVMValueRef s,
+                      LLVMValueRef t,
+                      LLVMValueRef r,
+                      LLVMValueRef cube_rho,
                       const struct lp_derivatives *derivs,
                       LLVMValueRef lod_bias, /* optional */
                       LLVMValueRef explicit_lod, /* optional */
@@ -428,9 +433,12 @@ lp_build_cube_lookup(struct lp_build_sample_context *bld,
                      LLVMValueRef s,
                      LLVMValueRef t,
                      LLVMValueRef r,
+                     const struct lp_derivatives *derivs, /* optional */
                      LLVMValueRef *face,
                      LLVMValueRef *face_s,
-                     LLVMValueRef *face_t);
+                     LLVMValueRef *face_t,
+                     LLVMValueRef *rho,
+                     boolean need_derivs);
 
 
 void
@@ -469,6 +477,7 @@ lp_build_sample_soa(struct gallivm_state *gallivm,
                     const struct lp_derivatives *derivs,
                     LLVMValueRef lod_bias,
                     LLVMValueRef explicit_lod,
+                    boolean scalar_lod,
                     LLVMValueRef texel_out[4]);
 
 
@@ -487,6 +496,7 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
                         struct lp_sampler_dynamic_state *dynamic_state,
                         struct lp_type int_type,
                         unsigned texture_unit,
+                        boolean need_nr_mips,
                         LLVMValueRef explicit_lod,
                         LLVMValueRef *sizes_out);
 

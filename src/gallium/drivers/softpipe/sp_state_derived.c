@@ -36,6 +36,7 @@
 #include "sp_screen.h"
 #include "sp_state.h"
 #include "sp_texture.h"
+#include "sp_tex_sample.h"
 #include "sp_tex_tile_cache.h"
 
 
@@ -126,7 +127,7 @@ softpipe_get_vertex_info(struct softpipe_context *softpipe)
          src = draw_find_shader_output(softpipe->draw,
                                        fsInfo->input_semantic_name[i],
                                        fsInfo->input_semantic_index[i]);
-	 if (fsInfo->input_semantic_name[i] == TGSI_SEMANTIC_COLOR && src == 0)
+	 if (fsInfo->input_semantic_name[i] == TGSI_SEMANTIC_COLOR && src == -1)
 	   /* try and find a bcolor */
 	   src = draw_find_shader_output(softpipe->draw,
 					 TGSI_SEMANTIC_BCOLOR, fsInfo->input_semantic_index[i]);
@@ -136,7 +137,7 @@ softpipe_get_vertex_info(struct softpipe_context *softpipe)
 
       softpipe->psize_slot = draw_find_shader_output(softpipe->draw,
                                                  TGSI_SEMANTIC_PSIZE, 0);
-      if (softpipe->psize_slot > 0) {
+      if (softpipe->psize_slot >= 0) {
          draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_CONSTANT,
                                softpipe->psize_slot);
       }
@@ -205,12 +206,32 @@ compute_cliprect(struct softpipe_context *sp)
 
 
 static void
+set_shader_sampler(struct softpipe_context *softpipe,
+                   unsigned shader,
+                   int max_sampler)
+{
+   int i;
+   for (i = 0; i <= max_sampler; i++) {
+      softpipe->tgsi.sampler[shader]->sp_sampler[i] =
+         (struct sp_sampler *)(softpipe->samplers[shader][i]);
+   }
+}
+
+static void
 update_tgsi_samplers( struct softpipe_context *softpipe )
 {
    unsigned i, sh;
 
-   softpipe_reset_sampler_variants( softpipe );
+   set_shader_sampler(softpipe, PIPE_SHADER_VERTEX,
+                      softpipe->vs->max_sampler);
+   set_shader_sampler(softpipe, PIPE_SHADER_FRAGMENT,
+                      softpipe->fs_variant->info.file_max[TGSI_FILE_SAMPLER]);
+   if (softpipe->gs) {
+      set_shader_sampler(softpipe, PIPE_SHADER_GEOMETRY,
+                         softpipe->gs->max_sampler);
+   }
 
+   /* XXX is this really necessary here??? */
    for (sh = 0; sh < Elements(softpipe->tex_cache); sh++) {
       for (i = 0; i < PIPE_MAX_SAMPLERS; i++) {
          struct softpipe_tex_tile_cache *tc = softpipe->tex_cache[sh][i];
@@ -246,8 +267,8 @@ update_fragment_shader(struct softpipe_context *softpipe, unsigned prim)
       /* prepare the TGSI interpreter for FS execution */
       softpipe->fs_variant->prepare(softpipe->fs_variant, 
                                     softpipe->fs_machine,
-                                    (struct tgsi_sampler **) softpipe->
-                                    tgsi.samplers_list[PIPE_SHADER_FRAGMENT]);
+                                    (struct tgsi_sampler *) softpipe->
+                                    tgsi.sampler[PIPE_SHADER_FRAGMENT]);
    }
    else {
       softpipe->fs_variant = NULL;
@@ -314,12 +335,9 @@ update_polygon_stipple_enable(struct softpipe_context *softpipe, unsigned prim)
       /* sampler state */
       softpipe->samplers[PIPE_SHADER_FRAGMENT][unit] = softpipe->pstipple.sampler;
 
-      /* sampler view */
-      pipe_sampler_view_reference(&softpipe->sampler_views[PIPE_SHADER_FRAGMENT][unit],
-                                  softpipe->pstipple.sampler_view);
-
-      sp_tex_tile_cache_set_sampler_view(softpipe->tex_cache[PIPE_SHADER_FRAGMENT][unit],
-                                         softpipe->pstipple.sampler_view);
+      /* sampler view state */
+      softpipe_set_sampler_views(&softpipe->pipe, PIPE_SHADER_FRAGMENT,
+                                 unit, 1, &softpipe->pstipple.sampler_view);
 
       softpipe->dirty |= SP_NEW_SAMPLER;
    }
@@ -358,6 +376,7 @@ softpipe_update_derived(struct softpipe_context *softpipe, unsigned prim)
       update_polygon_stipple_enable(softpipe, prim);
 #endif
 
+   /* TODO: this looks suboptimal */
    if (softpipe->dirty & (SP_NEW_SAMPLER |
                           SP_NEW_TEXTURE |
                           SP_NEW_FS | 

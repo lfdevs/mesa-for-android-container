@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50_ir.h"
@@ -132,7 +132,7 @@ const char *operationStr[OP_LAST + 1] =
    "join",
    "discard",
    "exit",
-   "barrier",
+   "membar",
    "vfetch",
    "pfetch",
    "export",
@@ -148,21 +148,48 @@ const char *operationStr[OP_LAST + 1] =
    "texgrad",
    "texgather",
    "texcsaa",
-   "suld",
-   "sust",
+   "texprep",
+   "suldb",
+   "suldp",
+   "sustb",
+   "sustp",
+   "suredb",
+   "suredp",
+   "sulea",
+   "subfm",
+   "suclamp",
+   "sueau",
+   "madsp",
+   "texbar",
    "dfdx",
    "dfdy",
    "rdsv",
    "wrsv",
-   "texprep",
    "quadop",
    "quadon",
    "quadpop",
    "popcnt",
    "insbf",
    "extbf",
-   "texbar",
+   "permt",
+   "atom",
+   "bar",
+   "vadd",
+   "vavg",
+   "vmin",
+   "vmax",
+   "vsad",
+   "vset",
+   "vshr",
+   "vshl",
+   "vsel",
+   "cctl",
    "(invalid)"
+};
+
+static const char *atomSubOpStr[] =
+{
+   "add", "min", "max", "inc", "dec", "and", "or", "xor", "cas", "exch"
 };
 
 static const char *DataTypeStr[] =
@@ -474,6 +501,10 @@ void Instruction::print() const
 
    if (asFlow()) {
       PRINT("%s", operationStr[op]);
+      if (asFlow()->indirect)
+         PRINT(" ind");
+      if (asFlow()->absolute)
+         PRINT(" abs");
       if (op == OP_CALL && asFlow()->builtin) {
          PRINT(" %sBUILTIN:%i", colour[TXT_BRA], asFlow()->target.builtin);
       } else
@@ -488,12 +519,23 @@ void Instruction::print() const
       PRINT("%s ", operationStr[op]);
       if (op == OP_LINTERP || op == OP_PINTERP)
          PRINT("%s ", interpStr[ipa]);
-      if (subOp)
-         PRINT("(SUBOP:%u) ", subOp);
+      switch (op) {
+      case OP_SUREDP:
+      case OP_ATOM:
+         if (subOp < Elements(atomSubOpStr))
+            PRINT("%s ", atomSubOpStr[subOp]);
+         break;
+      default:
+         if (subOp)
+            PRINT("(SUBOP:%u) ", subOp);
+         break;
+      }
       if (perPatch)
          PRINT("patch ");
       if (asTex())
-         PRINT("%s ", asTex()->tex.target.getName());
+         PRINT("%s %s$r%u $s%u %s", asTex()->tex.target.getName(),
+               colour[TXT_MEM], asTex()->tex.r, asTex()->tex.s,
+               colour[TXT_INSN]);
       if (postFactor)
          PRINT("x2^%i ", postFactor);
       PRINT("%s%s", dnz ? "dnz " : (ftz ? "ftz " : ""),  DataTypeStr[dType]);
@@ -561,7 +603,28 @@ private:
 bool
 PrintPass::visit(Function *fn)
 {
-   INFO("\n%s:%i\n", fn->getName(), fn->getLabel());
+   char str[16];
+
+   INFO("\n%s:%i (", fn->getName(), fn->getLabel());
+
+   if (!fn->outs.empty())
+      INFO("out");
+   for (std::deque<ValueRef>::iterator it = fn->outs.begin();
+        it != fn->outs.end();
+        ++it) {
+      it->get()->print(str, sizeof(str), typeOfSize(it->get()->reg.size));
+      INFO(" %s", str);
+   }
+
+   if (!fn->ins.empty())
+      INFO("%s%sin", colour[TXT_DEFAULT], fn->outs.empty() ? "" : ", ");
+   for (std::deque<ValueDef>::iterator it = fn->ins.begin();
+        it != fn->ins.end();
+        ++it) {
+      it->get()->print(str, sizeof(str), typeOfSize(it->get()->reg.size));
+      INFO(" %s", str);
+   }
+   INFO("%s)\n", colour[TXT_DEFAULT]);
 
    return true;
 }

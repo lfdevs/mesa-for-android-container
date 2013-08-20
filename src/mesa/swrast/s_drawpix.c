@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.1
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -429,7 +429,7 @@ draw_rgba_pixels( struct gl_context *ctx, GLint x, GLint y,
    INIT_SPAN(span, GL_BITMAP);
    _swrast_span_default_attribs(ctx, &span);
    span.arrayMask = SPAN_RGBA;
-   span.arrayAttribs = FRAG_BIT_COL0; /* we're fill in COL0 attrib values */
+   span.arrayAttribs = VARYING_BIT_COL0; /* we're fill in COL0 attrib values */
 
    if (ctx->DrawBuffer->_NumColorDrawBuffers > 0) {
       GLenum datatype = _mesa_get_format_datatype(
@@ -451,7 +451,7 @@ draw_rgba_pixels( struct gl_context *ctx, GLint x, GLint y,
          = _mesa_image_row_stride(unpack, width, format, type);
       GLint skipPixels = 0;
       /* use span array for temp color storage */
-      GLfloat *rgba = (GLfloat *) span.array->attribs[FRAG_ATTRIB_COL0];
+      GLfloat *rgba = (GLfloat *) span.array->attribs[VARYING_SLOT_COL0];
 
       /* if the span is wider than SWRAST_MAX_WIDTH we have to do it in chunks */
       while (skipPixels < width) {

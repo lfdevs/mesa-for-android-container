@@ -45,7 +45,7 @@
 
 static void brw_clip_line_alloc_regs( struct brw_clip_compile *c )
 {
-   struct intel_context *intel = &c->func.brw->intel;
+   struct brw_context *brw = c->func.brw;
    GLuint i = 0,j;
 
    /* Register usage is static, precompute here:
@@ -85,7 +85,7 @@ static void brw_clip_line_alloc_regs( struct brw_clip_compile *c )
       i++;
    }
 
-   if (intel->needs_ff_sync) {
+   if (brw->gen == 5) {
       c->reg.ff_sync = retype(brw_vec1_grf(i, 0), BRW_REGISTER_TYPE_UD);
       i++;
    }
@@ -125,6 +125,8 @@ static void brw_clip_line_alloc_regs( struct brw_clip_compile *c )
  */
 static void clip_and_emit_line( struct brw_clip_compile *c )
 {
+   /* FIXME: use VARYING_SLOT_CLIP_VERTEX if available for user clip planes. */
+
    struct brw_compile *p = &c->func;
    struct brw_context *brw = p->brw;
    struct brw_indirect vtx0     = brw_indirect(0, 0);
@@ -133,8 +135,7 @@ static void clip_and_emit_line( struct brw_clip_compile *c )
    struct brw_indirect newvtx1   = brw_indirect(3, 0);
    struct brw_indirect plane_ptr = brw_indirect(4, 0);
    struct brw_reg v1_null_ud = retype(vec1(brw_null_reg()), BRW_REGISTER_TYPE_UD);
-   GLuint hpos_offset = brw_vert_result_to_offset(&c->vue_map,
-                                                  VERT_RESULT_HPOS);
+   GLuint hpos_offset = brw_varying_to_offset(&c->vue_map, VARYING_SLOT_POS);
 
    brw_MOV(p, get_addr_reg(vtx0),      brw_address(c->reg.vertex[0]));
    brw_MOV(p, get_addr_reg(vtx1),      brw_address(c->reg.vertex[1]));

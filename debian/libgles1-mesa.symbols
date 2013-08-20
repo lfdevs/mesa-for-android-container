@@ -51,6 +51,7 @@ libGLESv1_CM.so.1 libgles1-mesa #MINVER# | libgles1
  glDepthRangexOES@Base 7.8.1
  glDisable@Base 7.8.1
  glDisableClientState@Base 7.8.1
+ glDiscardFramebufferEXT@Base 9.2~0
  glDrawArrays@Base 7.8.1
  glDrawElements@Base 7.8.1
  glDrawTexfOES@Base 7.8.1

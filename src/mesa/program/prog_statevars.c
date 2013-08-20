@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.1
  *
  * Copyright (C) 1999-2007  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /**
@@ -31,6 +31,7 @@
 
 #include "main/glheader.h"
 #include "main/context.h"
+#include "main/blend.h"
 #include "main/imports.h"
 #include "main/macros.h"
 #include "main/mtypes.h"
@@ -239,14 +240,14 @@ _mesa_fetch_state(struct gl_context *ctx, const gl_state_index state[],
       {
          /* state[1] is the texture unit */
          const GLuint unit = (GLuint) state[1];
-         if(ctx->Color._ClampFragmentColor)
+         if (_mesa_get_clamp_fragment_color(ctx))
             COPY_4V(value, ctx->Texture.Unit[unit].EnvColor);
          else
             COPY_4V(value, ctx->Texture.Unit[unit].EnvColorUnclamped);
       }
       return;
    case STATE_FOG_COLOR:
-      if(ctx->Color._ClampFragmentColor)
+      if (_mesa_get_clamp_fragment_color(ctx))
          COPY_4V(value, ctx->Fog.Color);
       else
          COPY_4V(value, ctx->Fog.ColorUnclamped);
@@ -870,6 +871,9 @@ append_token(char *dst, gl_state_index k)
       break;
    case STATE_CURRENT_ATTRIB:
       append(dst, "current");
+      break;
+   case STATE_CURRENT_ATTRIB_MAYBE_VP_CLAMPED:
+      append(dst, "currentAttribMaybeVPClamped");
       break;
    case STATE_NORMAL_SCALE:
       append(dst, "normalScale");

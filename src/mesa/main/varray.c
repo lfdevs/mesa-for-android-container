@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.6
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -33,7 +33,6 @@
 #include "hash.h"
 #include "image.h"
 #include "macros.h"
-#include "mfeatures.h"
 #include "mtypes.h"
 #include "varray.h"
 #include "arrayobj.h"
@@ -269,7 +268,6 @@ update_array(struct gl_context *ctx,
                                  ctx->Array.ArrayBufferObj);
 
    ctx->NewState |= _NEW_ARRAY;
-   ctx->Array.ArrayObj->NewArrays |= VERT_BIT(attrib);
 }
 
 
@@ -521,7 +519,6 @@ _mesa_EnableVertexAttribArray(GLuint index)
       FLUSH_VERTICES(ctx, _NEW_ARRAY);
       arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(index)].Enabled = GL_TRUE;
       arrayObj->_Enabled |= VERT_BIT_GENERIC(index);
-      arrayObj->NewArrays |= VERT_BIT_GENERIC(index);
    }
 }
 
@@ -547,7 +544,6 @@ _mesa_DisableVertexAttribArray(GLuint index)
       FLUSH_VERTICES(ctx, _NEW_ARRAY);
       arrayObj->VertexAttrib[VERT_ATTRIB_GENERIC(index)].Enabled = GL_FALSE;
       arrayObj->_Enabled &= ~VERT_BIT_GENERIC(index);
-      arrayObj->NewArrays |= VERT_BIT_GENERIC(index);
    }
 }
 
@@ -1147,7 +1143,6 @@ _mesa_VertexAttribDivisor(GLuint index, GLuint divisor)
    if (array->InstanceDivisor != divisor) {
       FLUSH_VERTICES(ctx, _NEW_ARRAY);
       array->InstanceDivisor = divisor;
-      ctx->Array.ArrayObj->NewArrays |= VERT_BIT(VERT_ATTRIB_GENERIC(index));
    }
 }
 

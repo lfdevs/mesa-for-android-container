@@ -211,7 +211,6 @@ lp_build_tgsi_inst_llvm(
    case TGSI_OPCODE_X2D:
    case TGSI_OPCODE_ARA:
    case TGSI_OPCODE_BRA:
-   case TGSI_OPCODE_DIV:
    case TGSI_OPCODE_PUSHA:
    case TGSI_OPCODE_POPA:
    case TGSI_OPCODE_SAD:
@@ -311,11 +310,43 @@ lp_build_emit_fetch(
    }
 
    if (reg->Register.Absolute) {
-      res = lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_ABS, res);
+      switch (stype) {
+      case TGSI_TYPE_FLOAT:
+      case TGSI_TYPE_DOUBLE:
+      case TGSI_TYPE_UNTYPED:
+          /* modifiers on movs assume data is float */
+         res = lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_ABS, res);
+         break;
+      case TGSI_TYPE_UNSIGNED:
+      case TGSI_TYPE_SIGNED:
+      case TGSI_TYPE_VOID:
+      default:
+         /* abs modifier is only legal on floating point types */
+         assert(0);
+         break;
+      }
    }
 
    if (reg->Register.Negate) {
-      res = lp_build_negate( &bld_base->base, res );
+      switch (stype) {
+      case TGSI_TYPE_FLOAT:
+      case TGSI_TYPE_UNTYPED:
+         /* modifiers on movs assume data is float */
+         res = lp_build_negate( &bld_base->base, res );
+         break;
+      case TGSI_TYPE_DOUBLE:
+         /* no double build context */
+         assert(0);
+         break;
+      case TGSI_TYPE_SIGNED:
+      case TGSI_TYPE_UNSIGNED:
+         res = lp_build_negate( &bld_base->int_bld, res );
+         break;
+      case TGSI_TYPE_VOID:
+      default:
+         assert(0);
+         break;
+      }
    }
 
    /*
@@ -359,11 +390,8 @@ lp_build_emit_fetch_texoffset(
    if (chan_index == LP_CHAN_ALL) {
       swizzle = ~0;
    } else {
+      assert(chan_index < TGSI_SWIZZLE_W);
       swizzle = tgsi_util_get_src_register_swizzle(&reg.Register, chan_index);
-      if (swizzle > 2) {
-         assert(0 && "invalid swizzle in emit_fetch_texoffset()");
-         return bld_base->base.undef;
-      }
    }
 
    assert(off->Index <= bld_base->info->file_max[off->File]);

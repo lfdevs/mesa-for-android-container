@@ -60,7 +60,7 @@ rbug_draw_block_locked(struct rbug_context *rb_pipe, int flag)
       rb_pipe->draw_blocked |= flag;
    } else if ((rb_pipe->draw_rule.blocker & flag) &&
               (rb_pipe->draw_blocker & RBUG_BLOCK_RULE)) {
-      int k;
+      unsigned k;
       boolean block = FALSE;
       unsigned sh;
 
@@ -693,28 +693,30 @@ rbug_set_polygon_stipple(struct pipe_context *_pipe,
 }
 
 static void
-rbug_set_scissor_state(struct pipe_context *_pipe,
-                       const struct pipe_scissor_state *scissor)
+rbug_set_scissor_states(struct pipe_context *_pipe,
+                        unsigned start_slot,
+                        unsigned num_scissors,
+                        const struct pipe_scissor_state *scissor)
 {
    struct rbug_context *rb_pipe = rbug_context(_pipe);
    struct pipe_context *pipe = rb_pipe->pipe;
 
    pipe_mutex_lock(rb_pipe->call_mutex);
-   pipe->set_scissor_state(pipe,
-                           scissor);
+   pipe->set_scissor_states(pipe, start_slot, num_scissors, scissor);
    pipe_mutex_unlock(rb_pipe->call_mutex);
 }
 
 static void
-rbug_set_viewport_state(struct pipe_context *_pipe,
-                        const struct pipe_viewport_state *viewport)
+rbug_set_viewport_states(struct pipe_context *_pipe,
+                         unsigned start_slot,
+                         unsigned num_viewports,
+                         const struct pipe_viewport_state *viewport)
 {
    struct rbug_context *rb_pipe = rbug_context(_pipe);
    struct pipe_context *pipe = rb_pipe->pipe;
 
    pipe_mutex_lock(rb_pipe->call_mutex);
-   pipe->set_viewport_state(pipe,
-                            viewport);
+   pipe->set_viewport_states(pipe, start_slot, num_viewports, viewport);
    pipe_mutex_unlock(rb_pipe->call_mutex);
 }
 
@@ -942,7 +944,7 @@ rbug_clear_depth_stencil(struct pipe_context *_pipe,
 static void
 rbug_flush(struct pipe_context *_pipe,
            struct pipe_fence_handle **fence,
-           enum pipe_flush_flags flags)
+           unsigned flags)
 {
    struct rbug_context *rb_pipe = rbug_context(_pipe);
    struct pipe_context *pipe = rb_pipe->pipe;
@@ -1171,8 +1173,8 @@ rbug_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    rb_pipe->base.set_constant_buffer = rbug_set_constant_buffer;
    rb_pipe->base.set_framebuffer_state = rbug_set_framebuffer_state;
    rb_pipe->base.set_polygon_stipple = rbug_set_polygon_stipple;
-   rb_pipe->base.set_scissor_state = rbug_set_scissor_state;
-   rb_pipe->base.set_viewport_state = rbug_set_viewport_state;
+   rb_pipe->base.set_scissor_states = rbug_set_scissor_states;
+   rb_pipe->base.set_viewport_states = rbug_set_viewport_states;
    rb_pipe->base.set_fragment_sampler_views = rbug_set_fragment_sampler_views;
    rb_pipe->base.set_vertex_sampler_views = rbug_set_vertex_sampler_views;
    rb_pipe->base.set_vertex_buffers = rbug_set_vertex_buffers;

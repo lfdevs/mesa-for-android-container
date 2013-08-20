@@ -101,12 +101,10 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
         case PIPE_CAP_CONDITIONAL_RENDER:
         case PIPE_CAP_TEXTURE_BARRIER:
-        case PIPE_CAP_TGSI_CAN_COMPACT_VARYINGS:
         case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
-        case PIPE_CAP_VERTEX_COLOR_CLAMPED:
         case PIPE_CAP_USER_INDEX_BUFFERS:
         case PIPE_CAP_USER_CONSTANT_BUFFERS:
-        case PIPE_CAP_DEPTH_CLIP_DISABLE: /* XXX implemented, but breaks Regnum Online */
+        case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
             return 1;
 
         case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
@@ -122,6 +120,11 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_SWIZZLE:
             return util_format_s3tc_enabled ? r300screen->caps.dxtc_swizzle : 1;
 
+        /* We don't support color clamping on r500, so that we can use color
+         * intepolators for generic varyings. */
+        case PIPE_CAP_VERTEX_COLOR_CLAMPED:
+            return !is_r500;
+
         /* Supported on r500 only. */
         case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
         case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
@@ -130,9 +133,11 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 
         /* Unsupported features. */
         case PIPE_CAP_QUERY_TIME_ELAPSED:
+        case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
         case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
         case PIPE_CAP_INDEP_BLEND_ENABLE:
         case PIPE_CAP_INDEP_BLEND_FUNC:
+        case PIPE_CAP_DEPTH_CLIP_DISABLE:
         case PIPE_CAP_SHADER_STENCIL_EXPORT:
         case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
         case PIPE_CAP_TGSI_INSTANCEID:
@@ -155,6 +160,9 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_MULTISAMPLE:
         case PIPE_CAP_CUBE_MAP_ARRAY:
         case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
+        case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
+        case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
+        case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
             return 0;
 
         /* SWTCL-only features. */
@@ -167,6 +175,8 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
         case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
             return r300screen->caps.has_tcl;
+	case PIPE_CAP_TGSI_TEXCOORD:
+            return 0;
 
         /* Texturing. */
         case PIPE_CAP_MAX_COMBINED_SAMPLERS:
@@ -180,6 +190,8 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         /* Render targets. */
         case PIPE_CAP_MAX_RENDER_TARGETS:
             return 4;
+	case PIPE_CAP_ENDIANNESS:
+            return PIPE_ENDIAN_LITTLE;
     }
     return 0;
 }
@@ -225,6 +237,7 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
            return r300screen->caps.num_tex_units;
         case PIPE_SHADER_CAP_MAX_ADDRS:
         case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
+        case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
         case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
         case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
         case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
@@ -273,6 +286,7 @@ static int r300_get_shader_param(struct pipe_screen *pscreen, unsigned shader, e
         case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
         case PIPE_SHADER_CAP_MAX_TEX_INDIRECTIONS:
         case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
+        case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
         case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
         case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
         case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
@@ -403,11 +417,13 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                             format == PIPE_FORMAT_A16_FLOAT ||
                             format == PIPE_FORMAT_L16_FLOAT ||
                             format == PIPE_FORMAT_L16A16_FLOAT ||
+                            format == PIPE_FORMAT_R16A16_FLOAT ||
                             format == PIPE_FORMAT_I16_FLOAT;
     boolean is_half_float = format == PIPE_FORMAT_R16_FLOAT ||
                             format == PIPE_FORMAT_R16G16_FLOAT ||
                             format == PIPE_FORMAT_R16G16B16_FLOAT ||
-                            format == PIPE_FORMAT_R16G16B16A16_FLOAT;
+                            format == PIPE_FORMAT_R16G16B16A16_FLOAT ||
+                            format == PIPE_FORMAT_R16G16B16X16_FLOAT;
     const struct util_format_description *desc;
 
     if (!util_format_is_supported(format, usage))
@@ -444,7 +460,8 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                 if (!util_format_is_depth_or_stencil(format) &&
                     !util_format_is_rgba8_variant(desc) &&
                     !util_format_is_rgba1010102_variant(desc) &&
-                    format != PIPE_FORMAT_R16G16B16A16_FLOAT) {
+                    format != PIPE_FORMAT_R16G16B16A16_FLOAT &&
+                    format != PIPE_FORMAT_R16G16B16X16_FLOAT) {
                     return FALSE;
                 }
             } else {
@@ -461,6 +478,9 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
 
     /* Check sampler format support. */
     if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
+        /* these two are broken for an unknown reason */
+        format != PIPE_FORMAT_R8G8B8X8_SNORM &&
+        format != PIPE_FORMAT_R16G16B16X16_SNORM &&
         /* ATI1N is r5xx-only. */
         (is_r500 || !is_ati1n) &&
         /* ATI2N is supported on r4xx-r5xx. */

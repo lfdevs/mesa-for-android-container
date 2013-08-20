@@ -40,6 +40,7 @@
 #include "util/u_memory.h"
 #include "util/u_pack_color.h"
 #include "draw/draw_pipe.h"
+#include "os/os_time.h"
 #include "lp_context.h"
 #include "lp_memory.h"
 #include "lp_scene.h"
@@ -155,6 +156,10 @@ lp_setup_rasterize_scene( struct lp_setup_context *setup )
    struct lp_scene *scene = setup->scene;
    struct llvmpipe_screen *screen = llvmpipe_screen(scene->pipe->screen);
 
+   scene->num_active_queries = setup->active_binned_queries;
+   memcpy(scene->active_queries, setup->active_queries,
+          scene->num_active_queries * sizeof(scene->active_queries[0]));
+
    lp_scene_end_binning(scene);
 
    lp_fence_reference(&setup->last_fence, scene->fence);
@@ -181,7 +186,6 @@ begin_binning( struct lp_setup_context *setup )
    struct lp_scene *scene = setup->scene;
    boolean need_zsload = FALSE;
    boolean ok;
-   unsigned i, j;
 
    assert(scene);
    assert(scene->fence == NULL);
@@ -191,15 +195,6 @@ begin_binning( struct lp_setup_context *setup )
    scene->fence = lp_fence_create(MAX2(1, setup->num_threads));
    if (!scene->fence)
       return FALSE;
-
-   /* Initialize the bin flags and x/y coords:
-    */
-   for (i = 0; i < scene->tiles_x; i++) {
-      for (j = 0; j < scene->tiles_y; j++) {
-         scene->tile[i][j].x = i;
-         scene->tile[i][j].y = j;
-      }
-   }
 
    ok = try_update_scene_state(setup);
    if (!ok)
@@ -239,19 +234,11 @@ begin_binning( struct lp_setup_context *setup )
       }
    }
 
-   for (i = 0; i < PIPE_QUERY_TYPES; ++i) {
-      if (setup->active_query[i]) {
-         ok = lp_scene_bin_everywhere( scene,
-                                       LP_RAST_OP_BEGIN_QUERY,
-                                       lp_rast_arg_query(setup->active_query[i]) );
-         if (!ok)
-            return FALSE;
-      }
-   }
-
    setup->clear.flags = 0;
    setup->clear.zsmask = 0;
    setup->clear.zsvalue = 0;
+
+   scene->had_queries = !!setup->active_binned_queries;
 
    LP_DBG(DEBUG_SETUP, "%s done\n", __FUNCTION__);
    return TRUE;
@@ -390,8 +377,8 @@ lp_setup_try_clear( struct lp_setup_context *setup,
                     unsigned stencil,
                     unsigned flags )
 {
-   uint32_t zsmask = 0;
-   uint32_t zsvalue = 0;
+   uint64_t zsmask = 0;
+   uint64_t zsvalue = 0;
    union lp_rast_cmd_arg color_arg;
    unsigned i;
 
@@ -404,16 +391,16 @@ lp_setup_try_clear( struct lp_setup_context *setup,
 
    if (flags & PIPE_CLEAR_DEPTHSTENCIL) {
       uint32_t zmask = (flags & PIPE_CLEAR_DEPTH) ? ~0 : 0;
-      uint32_t smask = (flags & PIPE_CLEAR_STENCIL) ? ~0 : 0;
+      uint8_t smask = (flags & PIPE_CLEAR_STENCIL) ? ~0 : 0;
 
-      zsvalue = util_pack_z_stencil(setup->fb.zsbuf->format,
-                                    depth,
-                                    stencil);
+      zsvalue = util_pack64_z_stencil(setup->fb.zsbuf->format,
+                                      depth,
+                                      stencil);
 
 
-      zsmask = util_pack_mask_z_stencil(setup->fb.zsbuf->format,
-                                        zmask,
-                                        smask);
+      zsmask = util_pack64_mask_z_stencil(setup->fb.zsbuf->format,
+                                          zmask,
+                                          smask);
 
       zsvalue &= zsmask;
    }
@@ -491,14 +478,16 @@ lp_setup_set_triangle_state( struct lp_setup_context *setup,
                              unsigned cull_mode,
                              boolean ccw_is_frontface,
                              boolean scissor,
-                             boolean gl_rasterization_rules)
+                             boolean half_pixel_center,
+                             boolean bottom_edge_rule)
 {
    LP_DBG(DEBUG_SETUP, "%s\n", __FUNCTION__);
 
    setup->ccw_is_frontface = ccw_is_frontface;
    setup->cullmode = cull_mode;
    setup->triangle = first_triangle;
-   setup->pixel_offset = gl_rasterization_rules ? 0.5f : 0.0f;
+   setup->pixel_offset = half_pixel_center ? 0.5f : 0.0f;
+   setup->bottom_edge_rule = bottom_edge_rule;
 
    if (setup->scissor_test != scissor) {
       setup->dirty |= LP_SETUP_NEW_SCISSOR;
@@ -614,17 +603,20 @@ lp_setup_set_blend_color( struct lp_setup_context *setup,
 
 
 void
-lp_setup_set_scissor( struct lp_setup_context *setup,
-                      const struct pipe_scissor_state *scissor )
+lp_setup_set_scissors( struct lp_setup_context *setup,
+                       const struct pipe_scissor_state *scissors )
 {
+   unsigned i;
    LP_DBG(DEBUG_SETUP, "%s\n", __FUNCTION__);
 
-   assert(scissor);
+   assert(scissors);
 
-   setup->scissor.x0 = scissor->minx;
-   setup->scissor.x1 = scissor->maxx-1;
-   setup->scissor.y0 = scissor->miny;
-   setup->scissor.y1 = scissor->maxy-1;
+   for (i = 0; i < PIPE_MAX_VIEWPORTS; ++i) {
+      setup->scissors[i].x0 = scissors[i].minx;
+      setup->scissors[i].x1 = scissors[i].maxx-1;
+      setup->scissors[i].y0 = scissors[i].miny;
+      setup->scissors[i].y1 = scissors[i].maxy-1;
+   }
    setup->dirty |= LP_SETUP_NEW_SCISSOR;
 }
 
@@ -674,70 +666,110 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
       struct pipe_sampler_view *view = i < num ? views[i] : NULL;
 
       if (view) {
-         struct pipe_resource *tex = view->texture;
-         struct llvmpipe_resource *lp_tex = llvmpipe_resource(tex);
+         struct pipe_resource *res = view->texture;
+         struct llvmpipe_resource *lp_tex = llvmpipe_resource(res);
          struct lp_jit_texture *jit_tex;
          jit_tex = &setup->fs.current.jit_context.textures[i];
-         jit_tex->width = tex->width0;
-         jit_tex->height = tex->height0;
-         jit_tex->first_level = view->u.tex.first_level;
-         jit_tex->last_level = tex->last_level;
-
-         if (tex->target == PIPE_TEXTURE_3D) {
-            jit_tex->depth = tex->depth0;
-         }
-         else {
-            jit_tex->depth = tex->array_size;
-         }
 
          /* We're referencing the texture's internal data, so save a
           * reference to it.
           */
-         pipe_resource_reference(&setup->fs.current_tex[i], tex);
+         pipe_resource_reference(&setup->fs.current_tex[i], res);
 
          if (!lp_tex->dt) {
             /* regular texture - setup array of mipmap level offsets */
             void *mip_ptr;
             int j;
-            /*
-             * XXX this is messed up we don't want to accidentally trigger
-             * tiled->linear conversion for levels we don't need.
-             * So ask for first_level data (which will allocate all levels)
-             * then if successful get base ptr.
-             */
-            mip_ptr = llvmpipe_get_texture_image_all(lp_tex, view->u.tex.first_level,
-                                                     LP_TEX_USAGE_READ,
-                                                     LP_TEX_LAYOUT_LINEAR);
+            unsigned first_level = 0;
+            unsigned last_level = 0;
+
+            if (llvmpipe_resource_is_texture(res)) {
+               first_level = view->u.tex.first_level;
+               last_level = view->u.tex.last_level;
+               assert(first_level <= last_level);
+               assert(last_level <= res->last_level);
+
+               /*
+                * The complexity here should no longer be necessary.
+                */
+               mip_ptr = llvmpipe_get_texture_image_all(lp_tex, first_level,
+                                                        LP_TEX_USAGE_READ);
+               jit_tex->base = lp_tex->linear_img.data;
+            }
+            else {
+               mip_ptr = lp_tex->data;
+               jit_tex->base = mip_ptr;
+            }
+
             if ((LP_PERF & PERF_TEX_MEM) || !mip_ptr) {
                /* out of memory - use dummy tile memory */
+               /* Note if using PERF_TEX_MEM will also skip tile conversion */
                jit_tex->base = lp_dummy_tile;
                jit_tex->width = TILE_SIZE/8;
                jit_tex->height = TILE_SIZE/8;
                jit_tex->depth = 1;
                jit_tex->first_level = 0;
                jit_tex->last_level = 0;
+               jit_tex->mip_offsets[0] = 0;
+               jit_tex->row_stride[0] = 0;
+               jit_tex->img_stride[0] = 0;
             }
             else {
-               jit_tex->base = lp_tex->linear_img.data;
-            }
-            for (j = view->u.tex.first_level; j <= tex->last_level; j++) {
-               mip_ptr = llvmpipe_get_texture_image_all(lp_tex, j,
-                                                        LP_TEX_USAGE_READ,
-                                                        LP_TEX_LAYOUT_LINEAR);
-               jit_tex->mip_offsets[j] = (uint8_t *)mip_ptr - (uint8_t *)jit_tex->base;
-               /*
-                * could get mip offset directly but need call above to
-                * invoke tiled->linear conversion.
-                */
-               assert(lp_tex->linear_mip_offsets[j] == jit_tex->mip_offsets[j]);
-               jit_tex->row_stride[j] = lp_tex->row_stride[j];
-               jit_tex->img_stride[j] = lp_tex->img_stride[j];
+               jit_tex->width = res->width0;
+               jit_tex->height = res->height0;
+               jit_tex->depth = res->depth0;
+               jit_tex->first_level = first_level;
+               jit_tex->last_level = last_level;
 
-               if (jit_tex->base == lp_dummy_tile) {
-                  /* out of memory - use dummy tile memory */
-                  jit_tex->mip_offsets[j] = 0;
-                  jit_tex->row_stride[j] = 0;
-                  jit_tex->img_stride[j] = 0;
+               if (llvmpipe_resource_is_texture(res)) {
+                  for (j = first_level; j <= last_level; j++) {
+                     mip_ptr = llvmpipe_get_texture_image_all(lp_tex, j,
+                                                              LP_TEX_USAGE_READ);
+                     jit_tex->mip_offsets[j] = (uint8_t *)mip_ptr - (uint8_t *)jit_tex->base;
+                     /*
+                      * could get mip offset directly but need call above to
+                      * invoke tiled->linear conversion.
+                      */
+                     assert(lp_tex->linear_mip_offsets[j] == jit_tex->mip_offsets[j]);
+                     jit_tex->row_stride[j] = lp_tex->row_stride[j];
+                     jit_tex->img_stride[j] = lp_tex->img_stride[j];
+                  }
+
+                  if (res->target == PIPE_TEXTURE_1D_ARRAY ||
+                      res->target == PIPE_TEXTURE_2D_ARRAY) {
+                     /*
+                      * For array textures, we don't have first_layer, instead
+                      * adjust last_layer (stored as depth) plus the mip level offsets
+                      * (as we have mip-first layout can't just adjust base ptr).
+                      * XXX For mip levels, could do something similar.
+                      */
+                     jit_tex->depth = view->u.tex.last_layer - view->u.tex.first_layer + 1;
+                     for (j = first_level; j <= last_level; j++) {
+                        jit_tex->mip_offsets[j] += view->u.tex.first_layer *
+                                                   lp_tex->img_stride[j];
+                     }
+                     assert(view->u.tex.first_layer <= view->u.tex.last_layer);
+                     assert(view->u.tex.last_layer < res->array_size);
+                  }
+               }
+               else {
+                  /*
+                   * For buffers, we don't have first_element, instead adjust
+                   * last_element (stored as width) plus the base pointer.
+                   */
+                  unsigned view_blocksize = util_format_get_blocksize(view->format);
+                  /* probably don't really need to fill that out */
+                  jit_tex->mip_offsets[0] = 0;
+                  jit_tex->row_stride[0] = 0;
+                  jit_tex->row_stride[0] = 0;
+
+                  /* everything specified in number of elements here. */
+                  jit_tex->width = view->u.buf.last_element - view->u.buf.first_element + 1;
+                  jit_tex->base = (uint8_t *)jit_tex->base + view->u.buf.first_element *
+                                  view_blocksize;
+                  /* XXX Unsure if we need to sanitize parameters? */
+                  assert(view->u.buf.first_element <= view->u.buf.last_element);
+                  assert(view->u.buf.last_element * view_blocksize < res->width0);
                }
             }
          }
@@ -746,13 +778,17 @@ lp_setup_set_fragment_sampler_views(struct lp_setup_context *setup,
             /*
              * XXX: Where should this be unmapped?
              */
-            struct llvmpipe_screen *screen = llvmpipe_screen(tex->screen);
+            struct llvmpipe_screen *screen = llvmpipe_screen(res->screen);
             struct sw_winsys *winsys = screen->winsys;
             jit_tex->base = winsys->displaytarget_map(winsys, lp_tex->dt,
                                                          PIPE_TRANSFER_READ);
             jit_tex->row_stride[0] = lp_tex->row_stride[0];
             jit_tex->img_stride[0] = lp_tex->img_stride[0];
             jit_tex->mip_offsets[0] = 0;
+            jit_tex->width = res->width0;
+            jit_tex->height = res->height0;
+            jit_tex->depth = res->depth0;
+            jit_tex->first_level = jit_tex->last_level = 0;
             assert(jit_tex->base);
          }
       }
@@ -963,11 +999,24 @@ try_update_scene_state( struct lp_setup_context *setup )
    }
 
    if (setup->dirty & LP_SETUP_NEW_SCISSOR) {
-      setup->draw_region = setup->framebuffer;
-      if (setup->scissor_test) {
-         u_rect_possible_intersection(&setup->scissor,
-                                      &setup->draw_region);
+      unsigned i;
+      for (i = 0; i < PIPE_MAX_VIEWPORTS; ++i) {
+         setup->draw_regions[i] = setup->framebuffer;
+         if (setup->scissor_test) {
+            u_rect_possible_intersection(&setup->scissors[i],
+                                         &setup->draw_regions[i]);
+         }
       }
+      /* If the framebuffer is large we have to think about fixed-point
+       * integer overflow.  For 2K by 2K images, coordinates need 15 bits
+       * (2^11 + 4 subpixel bits).  The product of two such numbers would
+       * use 30 bits.  Any larger and we could overflow a 32-bit int.
+       *
+       * To cope with this problem we check if triangles are large and
+       * subdivide them if needed.
+       */
+      setup->subdivide_large_triangles = (setup->fb.width > 2048 &&
+                                          setup->fb.height > 2048);
    }
                                       
    setup->dirty = 0;
@@ -1002,6 +1051,8 @@ lp_setup_update_state( struct lp_setup_context *setup,
        * to know about vertex shader point size attribute.
        */
       setup->psize = lp->psize_slot;
+      setup->viewport_index_slot = lp->viewport_index_slot;
+      setup->layer_slot = lp->layer_slot;
 
       assert(lp->dirty == 0);
 
@@ -1156,18 +1207,25 @@ void
 lp_setup_begin_query(struct lp_setup_context *setup,
                      struct llvmpipe_query *pq)
 {
-   /* init the query to its beginning state */
-   assert(setup->active_query[pq->type] == NULL);
 
    set_scene_state(setup, SETUP_ACTIVE, "begin_query");
-   
-   setup->active_query[pq->type] = pq;
 
-   /* XXX: It is possible that a query is created before the scene
-    * has been created. This means that setup->scene == NULL resulting
-    * in the query not being binned and thus is ignored.
-    */
+   if (!(pq->type == PIPE_QUERY_OCCLUSION_COUNTER ||
+         pq->type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+         pq->type == PIPE_QUERY_PIPELINE_STATISTICS))
+      return;
 
+   /* init the query to its beginning state */
+   assert(setup->active_binned_queries < LP_MAX_ACTIVE_BINNED_QUERIES);
+   /* exceeding list size so just ignore the query */
+   if (setup->active_binned_queries >= LP_MAX_ACTIVE_BINNED_QUERIES) {
+      return;
+   }
+   assert(setup->active_queries[setup->active_binned_queries] == NULL);
+   setup->active_queries[setup->active_binned_queries] = pq;
+   setup->active_binned_queries++;
+
+   assert(setup->scene);
    if (setup->scene) {
       if (!lp_scene_bin_everywhere(setup->scene,
                                    LP_RAST_OP_BEGIN_QUERY,
@@ -1182,6 +1240,7 @@ lp_setup_begin_query(struct lp_setup_context *setup,
             return;
          }
       }
+      setup->scene->had_queries |= TRUE;
    }
 }
 
@@ -1194,30 +1253,65 @@ lp_setup_end_query(struct lp_setup_context *setup, struct llvmpipe_query *pq)
 {
    set_scene_state(setup, SETUP_ACTIVE, "end_query");
 
-   if (pq->type != PIPE_QUERY_TIMESTAMP) {
-      assert(setup->active_query[pq->type] == pq);
-      setup->active_query[pq->type] = NULL;
-   }
-
-   /* Setup will automatically re-issue any query which carried over a
-    * scene boundary, and the rasterizer automatically "ends" queries
-    * which are active at the end of a scene, so there is no need to
-    * retry this commands on failure.
-    */
+   assert(setup->scene);
    if (setup->scene) {
       /* pq->fence should be the fence of the *last* scene which
        * contributed to the query result.
        */
       lp_fence_reference(&pq->fence, setup->scene->fence);
 
-      if (!lp_scene_bin_everywhere(setup->scene,
-                                   LP_RAST_OP_END_QUERY,
-                                   lp_rast_arg_query(pq))) {
-         lp_setup_flush(setup, NULL, __FUNCTION__);
+      if (pq->type == PIPE_QUERY_OCCLUSION_COUNTER ||
+          pq->type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+          pq->type == PIPE_QUERY_PIPELINE_STATISTICS ||
+          pq->type == PIPE_QUERY_TIMESTAMP) {
+         if (pq->type == PIPE_QUERY_TIMESTAMP &&
+               !(setup->scene->tiles_x | setup->scene->tiles_y)) {
+            /*
+             * If there's a zero width/height framebuffer, there's no bins and
+             * hence no rast task is ever run. So fill in something here instead.
+             */
+            pq->end[0] = os_time_get_nano();
+         }
+
+         if (!lp_scene_bin_everywhere(setup->scene,
+                                      LP_RAST_OP_END_QUERY,
+                                      lp_rast_arg_query(pq))) {
+            if (!lp_setup_flush_and_restart(setup))
+               goto fail;
+
+            if (!lp_scene_bin_everywhere(setup->scene,
+                                         LP_RAST_OP_END_QUERY,
+                                         lp_rast_arg_query(pq))) {
+               goto fail;
+            }
+         }
+         setup->scene->had_queries |= TRUE;
       }
    }
    else {
       lp_fence_reference(&pq->fence, setup->last_fence);
+   }
+
+fail:
+   /* Need to do this now not earlier since it still needs to be marked as
+    * active when binning it would cause a flush.
+    */
+   if (pq->type == PIPE_QUERY_OCCLUSION_COUNTER ||
+      pq->type == PIPE_QUERY_OCCLUSION_PREDICATE ||
+      pq->type == PIPE_QUERY_PIPELINE_STATISTICS) {
+      unsigned i;
+
+      /* remove from active binned query list */
+      for (i = 0; i < setup->active_binned_queries; i++) {
+         if (setup->active_queries[i] == pq)
+            break;
+      }
+      assert(i < setup->active_binned_queries);
+      if (i == setup->active_binned_queries)
+         return;
+      setup->active_binned_queries--;
+      setup->active_queries[i] = setup->active_queries[setup->active_binned_queries];
+      setup->active_queries[setup->active_binned_queries] = NULL;
    }
 }
 

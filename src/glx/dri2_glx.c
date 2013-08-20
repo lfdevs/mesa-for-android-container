@@ -205,6 +205,10 @@ dri2_create_context(struct glx_screen *base,
    __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) config_base;
    __DRIcontext *shared = NULL;
 
+   /* Check the renderType value */
+   if (!validate_renderType_against_config(config_base, renderType))
+       return NULL;
+
    if (shareList) {
       /* If the shareList context is not a DRI2 context, we cannot possibly
        * create a DRI2 context that shares it.
@@ -225,6 +229,8 @@ dri2_create_context(struct glx_screen *base,
       free(pcp);
       return NULL;
    }
+
+   pcp->base.renderType = renderType;
 
    pcp->driContext =
       (*psc->dri2->createNewContext) (psc->driScreen,
@@ -256,6 +262,7 @@ dri2_create_context_attribs(struct glx_screen *base,
 
    uint32_t minor_ver = 1;
    uint32_t major_ver = 2;
+   uint32_t renderType = GLX_RGBA_TYPE;
    uint32_t flags = 0;
    unsigned api;
    int reset = __DRI_CTX_RESET_NO_NOTIFICATION;
@@ -270,9 +277,13 @@ dri2_create_context_attribs(struct glx_screen *base,
    /* Remap the GLX tokens to DRI2 tokens.
     */
    if (!dri2_convert_glx_attribs(num_attribs, attribs,
-				 &major_ver, &minor_ver, &flags, &api, &reset,
-                                 error))
+                                 &major_ver, &minor_ver, &renderType, &flags,
+                                 &api, &reset, error))
       goto error_exit;
+
+   /* Check the renderType value */
+   if (!validate_renderType_against_config(config_base, renderType))
+       goto error_exit;
 
    if (shareList) {
       pcp_shared = (struct dri2_context *) shareList;
@@ -310,6 +321,11 @@ dri2_create_context_attribs(struct glx_screen *base,
        */
       ctx_attribs[num_ctx_attribs++] = flags;
    }
+
+   /* The renderType is retrieved from attribs, or set to default
+    *  of GLX_RGBA_TYPE.
+    */
+   pcp->base.renderType = renderType;
 
    pcp->driContext =
       (*psc->dri2->createContextAttribs) (psc->driScreen,
@@ -537,6 +553,32 @@ dri2Throttle(struct dri2_screen *psc,
    }
 }
 
+/**
+ * Asks the driver to flush any queued work necessary for serializing with the
+ * X command stream, and optionally the slightly more strict requirement of
+ * glFlush() equivalence (which would require flushing even if nothing had
+ * been drawn to a window system framebuffer, for example).
+ */
+static void
+dri2Flush(struct dri2_screen *psc,
+          __DRIcontext *ctx,
+          struct dri2_drawable *draw,
+          unsigned flags,
+          enum __DRI2throttleReason throttle_reason)
+{
+   if (ctx && psc->f && psc->f->base.version >= 4) {
+      psc->f->flush_with_flags(ctx, draw->driDrawable, flags, throttle_reason);
+   } else {
+      if (flags & __DRI2_FLUSH_CONTEXT)
+         glFlush();
+
+      if (psc->f)
+         psc->f->flush(draw->driDrawable);
+
+      dri2Throttle(psc, draw, throttle_reason);
+   }
+}
+
 static void
 __dri2CopySubBuffer(__GLXDRIdrawable *pdraw, int x, int y,
 		    int width, int height,
@@ -546,6 +588,8 @@ __dri2CopySubBuffer(__GLXDRIdrawable *pdraw, int x, int y,
    struct dri2_screen *psc = (struct dri2_screen *) pdraw->psc;
    XRectangle xrect;
    XserverRegion region;
+   __DRIcontext *ctx = dri2GetCurrentContext();
+   unsigned flags;
 
    /* Check we have the right attachments */
    if (!priv->have_back)
@@ -556,26 +600,10 @@ __dri2CopySubBuffer(__GLXDRIdrawable *pdraw, int x, int y,
    xrect.width = width;
    xrect.height = height;
 
-   if (psc->f && psc->f->base.version >= 4) {
-      unsigned flags = (flush ? __DRI2_FLUSH_CONTEXT : 0) |
-                       __DRI2_FLUSH_DRAWABLE;
-      __DRIcontext *ctx = dri2GetCurrentContext();
-
-      if (ctx) {
-         (*psc->f->flush_with_flags)(ctx, priv->driDrawable, flags, reason);
-      }
-   }
-   else {
-      if (flush) {
-         glFlush();
-      }
-
-      if (psc->f) {
-         (*psc->f->flush) (priv->driDrawable);
-      }
-
-      dri2Throttle(psc, priv, reason);
-   }
+   flags = __DRI2_FLUSH_DRAWABLE;
+   if (flush)
+      flags |= __DRI2_FLUSH_CONTEXT;
+   dri2Flush(psc, ctx, priv, flags, __DRI2_THROTTLE_SWAPBUFFER);
 
    region = XFixesCreateRegion(psc->base.dpy, &xrect, 1);
    DRI2CopyRegion(psc->base.dpy, pdraw->xDrawable, region,
@@ -645,6 +673,10 @@ dri2_wait_gl(struct glx_context *gc)
    dri2_copy_drawable(priv, DRI2BufferFrontLeft, DRI2BufferFakeFrontLeft);
 }
 
+/**
+ * Called by the driver when it needs to update the real front buffer with the
+ * contents of its fake front buffer.
+ */
 static void
 dri2FlushFrontBuffer(__DRIdrawable *driDrawable, void *loaderPrivate)
 {
@@ -817,31 +849,11 @@ dri2SwapBuffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
        __dri2CopySubBuffer(pdraw, 0, 0, priv->width, priv->height,
 			   __DRI2_THROTTLE_SWAPBUFFER, flush);
     } else {
-       if (psc->f && psc->f->base.version >= 4) {
-          unsigned flags = (flush ? __DRI2_FLUSH_CONTEXT : 0) |
-                           __DRI2_FLUSH_DRAWABLE;
-          __DRIcontext *ctx = dri2GetCurrentContext();
-
-          if (ctx) {
-             (*psc->f->flush_with_flags)(ctx, priv->driDrawable, flags,
-                                         __DRI2_THROTTLE_SWAPBUFFER);
-          }
-       }
-       else {
-          if (flush) {
-             glFlush();
-          }
-
-          if (psc->f) {
-             struct glx_context *gc = __glXGetCurrentContext();
-
-             if (gc) {
-                (*psc->f->flush)(priv->driDrawable);
-             }
-          }
-
-          dri2Throttle(psc, priv, __DRI2_THROTTLE_SWAPBUFFER);
-       }
+       __DRIcontext *ctx = dri2GetCurrentContext();
+       unsigned flags = __DRI2_FLUSH_DRAWABLE;
+       if (flush)
+          flags |= __DRI2_FLUSH_CONTEXT;
+       dri2Flush(psc, ctx, priv, flags, __DRI2_THROTTLE_SWAPBUFFER);
 
        ret = dri2XcbSwapBuffers(pdraw->psc->dpy, pdraw,
                                 target_msc, divisor, remainder);
@@ -1055,10 +1067,15 @@ static const struct glx_context_vtable dri2_context_vtable = {
 };
 
 static void
-dri2BindExtensions(struct dri2_screen *psc, const __DRIextension **extensions,
+dri2BindExtensions(struct dri2_screen *psc, struct glx_display * priv,
                    const char *driverName)
 {
+   const struct dri2_display *const pdp = (struct dri2_display *)
+      priv->dri2Display;
+   const __DRIextension **extensions;
    int i;
+
+   extensions = psc->core->getExtensions(psc->driScreen);
 
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_video_sync");
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_swap_control");
@@ -1070,10 +1087,15 @@ dri2BindExtensions(struct dri2_screen *psc, const __DRIextension **extensions,
     * currently unconditionally enabled. This completely breaks
     * systems running on drivers which don't support that extension.
     * There's no way to test for its presence on this side, so instead
-    * of disabling it uncondtionally, just disable it for drivers
-    * which are known to not support it.
+    * of disabling it unconditionally, just disable it for drivers
+    * which are known to not support it, or for DDX drivers supporting
+    * only an older (pre-ScheduleSwap) version of DRI2.
+    *
+    * This is a hack which is required until:
+    * http://lists.x.org/archives/xorg-devel/2013-February/035449.html
+    * is merged and updated xserver makes it's way into distros:
     */
-   if (strcmp(driverName, "vmwgfx") != 0) {
+   if (pdp->swapAvailable && strcmp(driverName, "vmwgfx") != 0) {
       __glXEnableDirectExtension(&psc->base, "GLX_INTEL_swap_event");
    }
 
@@ -1216,8 +1238,7 @@ dri2CreateScreen(int screen, struct glx_display * priv)
       goto handle_error;
    }
 
-   extensions = psc->core->getExtensions(psc->driScreen);
-   dri2BindExtensions(psc, extensions, driverName);
+   dri2BindExtensions(psc, priv, driverName);
 
    configs = driConvertConfigs(psc->core, psc->base.configs, driver_configs);
    visuals = driConvertConfigs(psc->core, psc->base.visuals, driver_configs);

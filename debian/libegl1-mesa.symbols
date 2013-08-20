@@ -3,19 +3,6 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
 # drivers.  Handle the dependency explicitly in the driver
 # package.
  (regex)"^_egl.*@Base$" 7.8.1
- dri2_add_config@Base 8.1~0
- dri2_create_image_khr@Base 8.1~0
- dri2_create_screen@Base 8.1~0
- (arch=linux-any)dri2_get_device_name_for_fd@Base 8.1~0
- (arch=linux-any)dri2_get_driver_for_fd@Base 8.1~0
- (arch=linux-any)dri2_initialize_drm@Base 8.1~0
- (arch=linux-any)dri2_initialize_wayland@Base 8.1~0
- dri2_initialize_x11@Base 8.1~0
- dri2_load_driver@Base 8.1~0
- dri2_load_driver_swrast@Base 8.1~0
- dri2_lookup_egl_image@Base 8.1~0
- dri2_setup_screen@Base 8.1~0
- dri2_to_egl_attribute_map@Base 8.1~0
  eglBindAPI@Base 7.8.1
  eglBindTexImage@Base 7.8.1
  eglBindWaylandDisplayWL@Base 7.11~0
@@ -71,17 +58,11 @@ libEGL.so.1 libegl1-mesa #MINVER# | libegl1-x11
  eglSurfaceAttrib@Base 7.8.1
  eglSwapBuffers@Base 7.8.1
  eglSwapBuffersRegionNOK@Base 7.9
+ eglSwapBuffersWithDamageEXT@Base 9.2~0
  eglSwapInterval@Base 7.8.1
  eglTerminate@Base 7.8.1
  eglUnbindWaylandDisplayWL@Base 7.11~0
  eglWaitClient@Base 7.8.1
  eglWaitGL@Base 7.8.1
  eglWaitNative@Base 7.8.1
- image_lookup_extension@Base 8.1~0
- use_invalidate@Base 8.1~0
- (arch=linux-any)wayland_buffer_is_drm@Base 8.1~0
- (arch=linux-any)wayland_drm_buffer_get_buffer@Base 8.1~0
- (arch=linux-any)wayland_drm_buffer_get_format@Base 8.1~0
- (arch=linux-any)wayland_drm_init@Base 8.1~0
- (arch=linux-any)wayland_drm_uninit@Base 8.1~0
  (arch=linux-any)wl_drm_interface@Base 8.0-2~

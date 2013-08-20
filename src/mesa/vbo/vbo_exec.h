@@ -34,7 +34,6 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef __VBO_EXEC_H__
 #define __VBO_EXEC_H__
 
-#include "main/mfeatures.h"
 #include "main/mtypes.h"
 #include "vbo.h"
 #include "vbo_attrib.h"
@@ -153,9 +152,6 @@ void vbo_exec_FlushVertices( struct gl_context *ctx, GLuint flags );
 
 /* Internal functions:
  */
-void vbo_exec_array_init( struct vbo_exec_context *exec );
-void vbo_exec_array_destroy( struct vbo_exec_context *exec );
-
 
 void vbo_exec_vtx_init( struct vbo_exec_context *exec );
 void vbo_exec_vtx_destroy( struct vbo_exec_context *exec );

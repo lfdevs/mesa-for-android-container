@@ -35,7 +35,6 @@
 #include "main/bufferobj.h"
 #include "main/format_pack.h"
 #include "main/macros.h"
-#include "main/mfeatures.h"
 #include "main/mtypes.h"
 #include "main/pack.h"
 #include "main/pbo.h"
@@ -87,7 +86,7 @@ is_passthrough_program(const struct gl_fragment_program *prog)
           inst[0].DstReg.Index == FRAG_RESULT_COLOR &&
           inst[0].DstReg.WriteMask == WRITEMASK_XYZW &&
           inst[0].SrcReg[0].File == PROGRAM_INPUT &&
-          inst[0].SrcReg[0].Index == FRAG_ATTRIB_COL0 &&
+          inst[0].SrcReg[0].Index == VARYING_SLOT_COL0 &&
           inst[0].SrcReg[0].Swizzle == SWIZZLE_XYZW) {
          return GL_TRUE;
       }
@@ -233,7 +232,7 @@ st_make_drawpix_z_stencil_program(struct st_context *st,
       p->Instructions[ic].DstReg.Index = FRAG_RESULT_DEPTH;
       p->Instructions[ic].DstReg.WriteMask = WRITEMASK_Z;
       p->Instructions[ic].SrcReg[0].File = PROGRAM_INPUT;
-      p->Instructions[ic].SrcReg[0].Index = FRAG_ATTRIB_TEX0;
+      p->Instructions[ic].SrcReg[0].Index = VARYING_SLOT_TEX0;
       p->Instructions[ic].TexSrcUnit = 0;
       p->Instructions[ic].TexSrcTarget = TEXTURE_2D_INDEX;
       ic++;
@@ -242,7 +241,7 @@ st_make_drawpix_z_stencil_program(struct st_context *st,
       p->Instructions[ic].DstReg.File = PROGRAM_OUTPUT;
       p->Instructions[ic].DstReg.Index = FRAG_RESULT_COLOR;
       p->Instructions[ic].SrcReg[0].File = PROGRAM_INPUT;
-      p->Instructions[ic].SrcReg[0].Index = FRAG_ATTRIB_COL0;
+      p->Instructions[ic].SrcReg[0].Index = VARYING_SLOT_COL0;
       ic++;
    }
 
@@ -253,7 +252,7 @@ st_make_drawpix_z_stencil_program(struct st_context *st,
       p->Instructions[ic].DstReg.Index = FRAG_RESULT_STENCIL;
       p->Instructions[ic].DstReg.WriteMask = WRITEMASK_Y;
       p->Instructions[ic].SrcReg[0].File = PROGRAM_INPUT;
-      p->Instructions[ic].SrcReg[0].Index = FRAG_ATTRIB_TEX0;
+      p->Instructions[ic].SrcReg[0].Index = VARYING_SLOT_TEX0;
       p->Instructions[ic].TexSrcUnit = 1;
       p->Instructions[ic].TexSrcTarget = TEXTURE_2D_INDEX;
       ic++;
@@ -264,7 +263,7 @@ st_make_drawpix_z_stencil_program(struct st_context *st,
 
    assert(ic == p->NumInstructions);
 
-   p->InputsRead = FRAG_BIT_TEX0 | FRAG_BIT_COL0;
+   p->InputsRead = VARYING_BIT_TEX0 | VARYING_BIT_COL0;
    p->OutputsWritten = 0;
    if (write_depth) {
       p->OutputsWritten |= BITFIELD64_BIT(FRAG_RESULT_DEPTH);
@@ -294,6 +293,9 @@ static void *
 make_passthrough_vertex_shader(struct st_context *st, 
                                GLboolean passColor)
 {
+   const unsigned texcoord_semantic = st->needs_texcoord_semantic ?
+      TGSI_SEMANTIC_TEXCOORD : TGSI_SEMANTIC_GENERIC;
+
    if (!st->drawpix.vert_shaders[passColor]) {
       struct ureg_program *ureg = ureg_create( TGSI_PROCESSOR_VERTEX );
 
@@ -307,7 +309,7 @@ make_passthrough_vertex_shader(struct st_context *st,
       
       /* MOV result.texcoord0, vertex.attr[1]; */
       ureg_MOV(ureg, 
-               ureg_DECL_output( ureg, TGSI_SEMANTIC_GENERIC, 0 ),
+               ureg_DECL_output( ureg, texcoord_semantic, 0 ),
                ureg_DECL_vs_input( ureg, 1 ));
       
       if (passColor) {
@@ -458,12 +460,12 @@ internal_format(struct gl_context *ctx, GLenum format, GLenum type)
  */
 static struct pipe_resource *
 alloc_texture(struct st_context *st, GLsizei width, GLsizei height,
-              enum pipe_format texFormat)
+              enum pipe_format texFormat, unsigned bind)
 {
    struct pipe_resource *pt;
 
    pt = st_texture_create(st, st->internal_target, texFormat, 0,
-                          width, height, 1, 1, PIPE_BIND_SAMPLER_VIEW);
+                          width, height, 1, 1, 0, bind);
 
    return pt;
 }
@@ -484,24 +486,36 @@ make_texture(struct st_context *st,
    gl_format mformat;
    struct pipe_resource *pt;
    enum pipe_format pipeFormat;
-   GLenum baseInternalFormat, intFormat;
+   GLenum baseInternalFormat;
 
-   intFormat = internal_format(ctx, format, type);
-   baseInternalFormat = _mesa_base_tex_format(ctx, intFormat);
+   /* Choose a pixel format for the temp texture which will hold the
+    * image to draw.
+    */
+   pipeFormat = st_choose_matching_format(pipe->screen, PIPE_BIND_SAMPLER_VIEW,
+                                          format, type, unpack->SwapBytes);
 
-   mformat = st_ChooseTextureFormat_renderable(ctx, intFormat,
-                                               format, type, GL_FALSE);
-   assert(mformat);
+   if (pipeFormat != PIPE_FORMAT_NONE) {
+      mformat = st_pipe_format_to_mesa_format(pipeFormat);
+      baseInternalFormat = _mesa_get_format_base_format(mformat);
+   }
+   else {
+      /* Use the generic approach. */
+      GLenum intFormat = internal_format(ctx, format, type);
 
-   pipeFormat = st_mesa_format_to_pipe_format(mformat);
-   assert(pipeFormat);
+      baseInternalFormat = _mesa_base_tex_format(ctx, intFormat);
+      pipeFormat = st_choose_format(st, intFormat, format, type,
+                                    PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW,
+                                    FALSE);
+      assert(pipeFormat != PIPE_FORMAT_NONE);
+      mformat = st_pipe_format_to_mesa_format(pipeFormat);
+   }
 
    pixels = _mesa_map_pbo_source(ctx, unpack, pixels);
    if (!pixels)
       return NULL;
 
    /* alloc temporary texture */
-   pt = alloc_texture(st, width, height, pipeFormat);
+   pt = alloc_texture(st, width, height, pipeFormat, PIPE_BIND_SAMPLER_VIEW);
    if (!pt) {
       _mesa_unmap_pbo_source(ctx, unpack);
       return NULL;
@@ -695,9 +709,9 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
       struct pipe_rasterizer_state rasterizer;
       memset(&rasterizer, 0, sizeof(rasterizer));
       rasterizer.clamp_fragment_color = !st->clamp_frag_color_in_shader &&
-                                        ctx->Color._ClampFragmentColor &&
-                                        !ctx->DrawBuffer->_IntegerColor;
-      rasterizer.gl_rasterization_rules = 1;
+                                        ctx->Color._ClampFragmentColor;
+      rasterizer.half_pixel_center = 1;
+      rasterizer.bottom_edge_rule = 1;
       rasterizer.depth_clip = !ctx->Transform.DepthClamp;
       rasterizer.scissor = ctx->Scissor.Enabled;
       cso_set_rasterizer(cso, &rasterizer);
@@ -1022,8 +1036,7 @@ get_color_fp_variant(struct st_context *st)
                        ctx->Pixel.AlphaScale != 1.0);
    key.pixelMaps = ctx->Pixel.MapColorFlag;
    key.clamp_color = st->clamp_frag_color_in_shader &&
-                     st->ctx->Color._ClampFragmentColor &&
-                     !st->ctx->DrawBuffer->_IntegerColor;
+                     st->ctx->Color._ClampFragmentColor;
 
    fpv = st_get_fp_variant(st, st->fp, &key);
 
@@ -1295,29 +1308,38 @@ st_get_color_read_renderbuffer(struct gl_context *ctx)
 }
 
 
-/** Do the src/dest regions overlap? */
-static GLboolean
-regions_overlap(GLint srcX, GLint srcY, GLint dstX, GLint dstY,
-                GLsizei width, GLsizei height)
+/**
+ * \return TRUE if two regions overlap, FALSE otherwise
+ */
+static boolean
+regions_overlap(int srcX0, int srcY0,
+                int srcX1, int srcY1,
+                int dstX0, int dstY0,
+                int dstX1, int dstY1)
 {
-   if (srcX + width <= dstX ||
-       dstX + width <= srcX ||
-       srcY + height <= dstY ||
-       dstY + height <= srcY)
-      return GL_FALSE;
-   else
-      return GL_TRUE;
+   if (MAX2(srcX0, srcX1) < MIN2(dstX0, dstX1))
+      return FALSE; /* src completely left of dst */
+
+   if (MAX2(dstX0, dstX1) < MIN2(srcX0, srcX1))
+      return FALSE; /* dst completely left of src */
+
+   if (MAX2(srcY0, srcY1) < MIN2(dstY0, dstY1))
+      return FALSE; /* src completely above dst */
+
+   if (MAX2(dstY0, dstY1) < MIN2(srcY0, srcY1))
+      return FALSE; /* dst completely above src */
+
+   return TRUE; /* some overlap */
 }
 
 
 /**
  * Try to do a glCopyPixels for simple cases with a blit by calling
- * pipe->resource_copy_region().
+ * pipe->blit().
  *
  * We can do this when we're copying color pixels (depth/stencil
  * eventually) with no pixel zoom, no pixel transfer ops, no
- * per-fragment ops, the src/dest regions don't overlap and the
- * src/dest pixel formats are the same.
+ * per-fragment ops, and the src/dest regions don't overlap.
  */
 static GLboolean
 blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
@@ -1326,8 +1348,9 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
 {
    struct st_context *st = st_context(ctx);
    struct pipe_context *pipe = st->pipe;
+   struct pipe_screen *screen = pipe->screen;
    struct gl_pixelstore_attrib pack, unpack;
-   GLint readX, readY, readW, readH;
+   GLint readX, readY, readW, readH, drawX, drawY, drawW, drawH;
 
    if (type == GL_COLOR &&
        ctx->Pixel.ZoomX == 1.0 &&
@@ -1341,11 +1364,10 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
        !ctx->FragmentProgram.Enabled &&
        !ctx->VertexProgram.Enabled &&
        !ctx->Shader.CurrentFragmentProgram &&
-       st_fb_orientation(ctx->ReadBuffer) == st_fb_orientation(ctx->DrawBuffer) &&
        ctx->DrawBuffer->_NumColorDrawBuffers == 1 &&
-       !ctx->Query.CondRenderQuery) {
+       !ctx->Query.CondRenderQuery &&
+       !ctx->Query.CurrentOcclusionObject) {
       struct st_renderbuffer *rbRead, *rbDraw;
-      GLint drawX, drawY;
 
       /*
        * Clip the read region against the src buffer bounds.
@@ -1372,29 +1394,65 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       readX = readX - pack.SkipPixels + unpack.SkipPixels;
       readY = readY - pack.SkipRows + unpack.SkipRows;
 
+      drawW = readW;
+      drawH = readH;
+
       rbRead = st_get_color_read_renderbuffer(ctx);
       rbDraw = st_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0]);
 
-      if ((rbRead != rbDraw ||
-           !regions_overlap(readX, readY, drawX, drawY, readW, readH)) &&
-          rbRead->Base.Format == rbDraw->Base.Format) {
-         struct pipe_box srcBox;
+      /* Flip src/dst position depending on the orientation of buffers. */
+      if (st_fb_orientation(ctx->ReadBuffer) == Y_0_TOP) {
+         readY = rbRead->Base.Height - readY;
+         readH = -readH;
+      }
 
-         /* flip src/dst position if needed */
-         if (st_fb_orientation(ctx->ReadBuffer) == Y_0_TOP) {
-            /* both buffers will have the same orientation */
-            readY = ctx->ReadBuffer->Height - readY - readH;
-            drawY = ctx->DrawBuffer->Height - drawY - readH;
+      if (st_fb_orientation(ctx->DrawBuffer) == Y_0_TOP) {
+         /* We can't flip the destination for pipe->blit, so we only adjust
+          * its position and flip the source.
+          */
+         drawY = rbDraw->Base.Height - drawY - drawH;
+         readY += readH;
+         readH = -readH;
+      }
+
+      if (rbRead != rbDraw ||
+          !regions_overlap(readX, readY, readX + readW, readY + readH,
+                           drawX, drawY, drawX + drawW, drawY + drawH)) {
+         struct pipe_blit_info blit;
+
+         memset(&blit, 0, sizeof(blit));
+         blit.src.resource = rbRead->texture;
+         blit.src.level = rbRead->rtt_level;
+         blit.src.format = rbRead->texture->format;
+         blit.src.box.x = readX;
+         blit.src.box.y = readY;
+         blit.src.box.z = rbRead->rtt_face + rbRead->rtt_slice;
+         blit.src.box.width = readW;
+         blit.src.box.height = readH;
+         blit.src.box.depth = 1;
+         blit.dst.resource = rbDraw->texture;
+         blit.dst.level = rbDraw->rtt_level;
+         blit.dst.format = rbDraw->texture->format;
+         blit.dst.box.x = drawX;
+         blit.dst.box.y = drawY;
+         blit.dst.box.z = rbDraw->rtt_face + rbDraw->rtt_slice;
+         blit.dst.box.width = drawW;
+         blit.dst.box.height = drawH;
+         blit.dst.box.depth = 1;
+         blit.mask = PIPE_MASK_RGBA;
+         blit.filter = PIPE_TEX_FILTER_NEAREST;
+
+         if (screen->is_format_supported(screen, blit.src.format,
+                                         blit.src.resource->target,
+                                         blit.src.resource->nr_samples,
+                                         PIPE_BIND_SAMPLER_VIEW) &&
+             screen->is_format_supported(screen, blit.dst.format,
+                                         blit.dst.resource->target,
+                                         blit.dst.resource->nr_samples,
+                                         PIPE_BIND_RENDER_TARGET)) {
+            pipe->blit(pipe, &blit);
+            return GL_TRUE;
          }
-
-         u_box_2d(readX, readY, readW, readH, &srcBox);
-
-         pipe->resource_copy_region(pipe,
-                                    rbDraw->texture,
-                                    rbDraw->rtt_level, drawX, drawY, 0,
-                                    rbRead->texture,
-                                    rbRead->rtt_level, &srcBox);
-         return GL_TRUE;
       }
    }
 
@@ -1416,10 +1474,10 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    struct pipe_sampler_view *sv[2];
    int num_sampler_view = 1;
    GLfloat *color;
-   enum pipe_format srcFormat, texFormat;
+   enum pipe_format srcFormat;
+   unsigned srcBind;
    GLboolean invertTex = GL_FALSE;
    GLint readX, readY, readW, readH;
-   GLuint sample_count;
    struct gl_pixelstore_attrib pack = ctx->DefaultPacking;
    struct st_fp_variant *fpv;
 
@@ -1462,8 +1520,8 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       driver_vp = make_passthrough_vertex_shader(st, GL_FALSE);
 
       if (st->pixel_xfer.pixelmap_enabled) {
-	  sv[1] = st->pixel_xfer.pixelmap_sampler_view;
-	  num_sampler_view++;
+         sv[1] = st->pixel_xfer.pixelmap_sampler_view;
+         num_sampler_view++;
       }
    }
    else {
@@ -1481,35 +1539,52 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    /* update fragment program constants */
    st_upload_constants(st, fpv->parameters, PIPE_SHADER_FRAGMENT);
 
-   sample_count = rbRead->texture->nr_samples;
-   /* I believe this would be legal, presumably would need to do a resolve
-      for color, and for depth/stencil spec says to just use one of the
-      depth/stencil samples per pixel? Need some transfer clarifications. */
-   assert(sample_count < 2);
-
+   /* Choose the format for the temporary texture. */
    srcFormat = rbRead->texture->format;
+   srcBind = PIPE_BIND_SAMPLER_VIEW |
+      (type == GL_COLOR ? PIPE_BIND_RENDER_TARGET : PIPE_BIND_DEPTH_STENCIL);
 
-   if (screen->is_format_supported(screen, srcFormat, st->internal_target,
-                                   sample_count,
-                                   PIPE_BIND_SAMPLER_VIEW)) {
-      texFormat = srcFormat;
-   }
-   else {
-      /* srcFormat can't be used as a texture format */
+   if (!screen->is_format_supported(screen, srcFormat, st->internal_target, 0,
+                                    srcBind)) {
+      /* srcFormat is non-renderable. Find a compatible renderable format. */
       if (type == GL_DEPTH) {
-         texFormat = st_choose_format(screen, GL_DEPTH_COMPONENT,
-                                      GL_NONE, GL_NONE, st->internal_target,
-                                      sample_count, PIPE_BIND_DEPTH_STENCIL,
-                                      FALSE);
-         assert(texFormat != PIPE_FORMAT_NONE);
+         srcFormat = st_choose_format(st, GL_DEPTH_COMPONENT, GL_NONE,
+                                      GL_NONE, st->internal_target, 0,
+                                      srcBind, FALSE);
       }
       else {
-         /* default color format */
-         texFormat = st_choose_format(screen, GL_RGBA,
-                                      GL_NONE, GL_NONE, st->internal_target,
-                                      sample_count, PIPE_BIND_SAMPLER_VIEW,
-                                      FALSE);
-         assert(texFormat != PIPE_FORMAT_NONE);
+         assert(type == GL_COLOR);
+
+         if (util_format_is_float(srcFormat)) {
+            srcFormat = st_choose_format(st, GL_RGBA32F, GL_NONE,
+                                         GL_NONE, st->internal_target, 0,
+                                         srcBind, FALSE);
+         }
+         else if (util_format_is_pure_sint(srcFormat)) {
+            srcFormat = st_choose_format(st, GL_RGBA32I, GL_NONE,
+                                         GL_NONE, st->internal_target, 0,
+                                         srcBind, FALSE);
+         }
+         else if (util_format_is_pure_uint(srcFormat)) {
+            srcFormat = st_choose_format(st, GL_RGBA32UI, GL_NONE,
+                                         GL_NONE, st->internal_target, 0,
+                                         srcBind, FALSE);
+         }
+         else if (util_format_is_snorm(srcFormat)) {
+            srcFormat = st_choose_format(st, GL_RGBA16_SNORM, GL_NONE,
+                                         GL_NONE, st->internal_target, 0,
+                                         srcBind, FALSE);
+         }
+         else {
+            srcFormat = st_choose_format(st, GL_RGBA, GL_NONE,
+                                         GL_NONE, st->internal_target, 0,
+                                         srcBind, FALSE);
+         }
+      }
+
+      if (srcFormat == PIPE_FORMAT_NONE) {
+         assert(0 && "cannot choose a format for src of CopyPixels");
+         return;
       }
    }
 
@@ -1541,8 +1616,8 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    readW = MAX2(0, readW);
    readH = MAX2(0, readH);
 
-   /* alloc temporary texture */
-   pt = alloc_texture(st, width, height, texFormat);
+   /* Allocate the temporary texture. */
+   pt = alloc_texture(st, width, height, srcFormat, srcBind);
    if (!pt)
       return;
 
@@ -1552,70 +1627,33 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       return;
    }
 
-   /* Make temporary texture which is a copy of the src region.
-    */
-   if (srcFormat == texFormat) {
-      struct pipe_box src_box;
-      u_box_2d(readX, readY, readW, readH, &src_box);
-      /* copy source framebuffer surface into mipmap/texture */
-      pipe->resource_copy_region(pipe,
-                                 pt,                                /* dest tex */
-                                 0,                                 /* dest lvl */
-                                 pack.SkipPixels, pack.SkipRows, 0, /* dest pos */
-                                 rbRead->texture,                   /* src tex */
-                                 rbRead->rtt_level,                 /* src lvl */
-                                 &src_box);
+   /* Copy the src region to the temporary texture. */
+   {
+      struct pipe_blit_info blit;
 
-   }
-   else {
-      /* CPU-based fallback/conversion */
-      struct pipe_transfer *ptRead;
-      void *mapRead =
-         pipe_transfer_map(st->pipe, rbRead->texture,
-                           rbRead->rtt_level,
-                           rbRead->rtt_face + rbRead->rtt_slice,
-                           PIPE_TRANSFER_READ,
-                           readX, readY, readW, readH, &ptRead);
-      struct pipe_transfer *ptTex;
-      void *mapTex;
-      enum pipe_transfer_usage transfer_usage;
+      memset(&blit, 0, sizeof(blit));
+      blit.src.resource = rbRead->texture;
+      blit.src.level = rbRead->rtt_level;
+      blit.src.format = rbRead->texture->format;
+      blit.src.box.x = readX;
+      blit.src.box.y = readY;
+      blit.src.box.z = rbRead->rtt_face + rbRead->rtt_slice;
+      blit.src.box.width = readW;
+      blit.src.box.height = readH;
+      blit.src.box.depth = 1;
+      blit.dst.resource = pt;
+      blit.dst.level = 0;
+      blit.dst.format = pt->format;
+      blit.dst.box.x = pack.SkipPixels;
+      blit.dst.box.y = pack.SkipRows;
+      blit.dst.box.z = 0;
+      blit.dst.box.width = readW;
+      blit.dst.box.height = readH;
+      blit.dst.box.depth = 1;
+      blit.mask = util_format_get_mask(pt->format) & ~PIPE_MASK_S;
+      blit.filter = PIPE_TEX_FILTER_NEAREST;
 
-      if (ST_DEBUG & DEBUG_FALLBACK)
-         debug_printf("%s: fallback processing\n", __FUNCTION__);
-
-      if (type == GL_DEPTH && util_format_is_depth_and_stencil(pt->format))
-         transfer_usage = PIPE_TRANSFER_READ_WRITE;
-      else
-         transfer_usage = PIPE_TRANSFER_WRITE;
-
-      mapTex = pipe_transfer_map(st->pipe, pt, 0, 0, transfer_usage,
-                                 0, 0, width, height, &ptTex);
-
-      /* copy image from ptRead surface to ptTex surface */
-      if (type == GL_COLOR) {
-         /* alternate path using get/put_tile() */
-         GLfloat *buf = malloc(width * height * 4 * sizeof(GLfloat));
-         enum pipe_format readFormat, drawFormat;
-         readFormat = util_format_linear(rbRead->texture->format);
-         drawFormat = util_format_linear(pt->format);
-         pipe_get_tile_rgba_format(ptRead, mapRead, 0, 0, readW, readH,
-                                   readFormat, buf);
-         pipe_put_tile_rgba_format(ptTex, mapTex, pack.SkipPixels,
-                                   pack.SkipRows,
-                                   readW, readH, drawFormat, buf);
-         free(buf);
-      }
-      else {
-         /* GL_DEPTH */
-         GLuint *buf = malloc(width * height * sizeof(GLuint));
-         pipe_get_tile_z(ptRead, mapRead, 0, 0, readW, readH, buf);
-         pipe_put_tile_z(ptTex, mapTex, pack.SkipPixels, pack.SkipRows,
-                         readW, readH, buf);
-         free(buf);
-      }
-
-      pipe->transfer_unmap(pipe, ptRead);
-      pipe->transfer_unmap(pipe, ptTex);
+      pipe->blit(pipe, &blit);
    }
 
    /* OK, the texture 'pt' contains the src image/pixels.  Now draw a

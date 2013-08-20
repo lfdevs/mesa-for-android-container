@@ -28,7 +28,6 @@
 
 #include "main/imports.h"
 #include "main/macros.h"
-#include "main/mfeatures.h"
 #include "main/mtypes.h"
 #include "main/enums.h"
 #include "main/fbobject.h"
@@ -622,38 +621,6 @@ radeon_alloc_window_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
    return GL_TRUE;
 }
 
-
-static void
-radeon_resize_buffers(struct gl_context *ctx, struct gl_framebuffer *fb,
-		     GLuint width, GLuint height)
-{
-     struct radeon_framebuffer *radeon_fb = (struct radeon_framebuffer*)fb;
-   int i;
-
-  radeon_print(RADEON_TEXTURE, RADEON_TRACE,
-		"%s(%p, fb %p) \n",
-		__func__, ctx, fb);
-
-   _mesa_resize_framebuffer(ctx, fb, width, height);
-
-   fb->Initialized = GL_TRUE; /* XXX remove someday */
-
-   if (fb->Name != 0) {
-      return;
-   }
-
-   /* Make sure all window system renderbuffers are up to date */
-   for (i = 0; i < 2; i++) {
-      struct gl_renderbuffer *rb = &radeon_fb->color_rb[i]->base.Base;
-
-      /* only resize if size is changing */
-      if (rb && (rb->Width != width || rb->Height != height)) {
-	 rb->AllocStorage(ctx, rb, rb->InternalFormat, width, height);
-      }
-   }
-}
-
-
 /** Dummy function for gl_renderbuffer::AllocStorage() */
 static GLboolean
 radeon_nop_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
@@ -783,44 +750,14 @@ radeon_update_wrapper(struct gl_context *ctx, struct radeon_renderbuffer *rrb,
 	return GL_TRUE;
 }
 
-
-static struct radeon_renderbuffer *
-radeon_wrap_texture(struct gl_context * ctx, struct gl_texture_image *texImage)
-{
-  const GLuint name = ~0;   /* not significant, but distinct for debugging */
-  struct radeon_renderbuffer *rrb;
-
-   /* make an radeon_renderbuffer to wrap the texture image */
-   rrb = CALLOC_STRUCT(radeon_renderbuffer);
-
-   radeon_print(RADEON_TEXTURE, RADEON_TRACE,
-		"%s(%p, rrb %p, texImage %p) \n",
-		__func__, ctx, rrb, texImage);
-
-   if (!rrb) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glFramebufferTexture");
-      return NULL;
-   }
-
-   _mesa_init_renderbuffer(&rrb->base.Base, name);
-   rrb->base.Base.ClassID = RADEON_RB_CLASS;
-
-   if (!radeon_update_wrapper(ctx, rrb, texImage)) {
-      free(rrb);
-      return NULL;
-   }
-
-   return rrb;
-  
-}
 static void
 radeon_render_texture(struct gl_context * ctx,
                      struct gl_framebuffer *fb,
                      struct gl_renderbuffer_attachment *att)
 {
-   struct gl_texture_image *newImage
-      = att->Texture->Image[att->CubeMapFace][att->TextureLevel];
-   struct radeon_renderbuffer *rrb = radeon_renderbuffer(att->Renderbuffer);
+   struct gl_renderbuffer *rb = att->Renderbuffer;
+   struct gl_texture_image *newImage = rb->TexImage;
+   struct radeon_renderbuffer *rrb = radeon_renderbuffer(rb);
    radeon_texture_image *radeon_image;
    GLuint imageOffset;
 
@@ -849,7 +786,7 @@ radeon_render_texture(struct gl_context * ctx,
    DBG("Begin render texture tid %lx tex=%u w=%d h=%d refcount=%d\n",
        _glthread_GetID(),
        att->Texture->Name, newImage->Width, newImage->Height,
-       rrb->base.Base.RefCount);
+       rb->RefCount);
 
    /* point the renderbufer's region to the texture image region */
    if (rrb->bo != radeon_image->mt->bo) {
@@ -881,14 +818,10 @@ radeon_render_texture(struct gl_context * ctx,
 }
 
 static void
-radeon_finish_render_texture(struct gl_context * ctx,
-                            struct gl_renderbuffer_attachment *att)
+radeon_finish_render_texture(struct gl_context *ctx, struct gl_renderbuffer *rb)
 {
-    struct gl_texture_object *tex_obj = att->Texture;
-    radeon_texture_image *radeon_image = NULL;
-
-    if (tex_obj)
-        radeon_image = (radeon_texture_image *)_mesa_get_attachment_teximage(att);
+    struct gl_texture_image *image = rb->TexImage;
+    radeon_texture_image *radeon_image = (radeon_texture_image *)image;
 
     if (radeon_image)
 	radeon_image->used_as_render_target = GL_FALSE;
@@ -914,7 +847,7 @@ radeon_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 		}
 
 		if (att->Type == GL_TEXTURE) {
-			mesa_format = att->Texture->Image[att->CubeMapFace][att->TextureLevel]->TexFormat;
+			mesa_format = att->Renderbuffer->TexImage->TexFormat;
 		} else {
 			/* All renderbuffer formats are renderable, but not sampable */
 			continue;
@@ -940,7 +873,6 @@ void radeon_fbo_init(struct radeon_context *radeon)
   radeon->glCtx.Driver.FramebufferRenderbuffer = radeon_framebuffer_renderbuffer;
   radeon->glCtx.Driver.RenderTexture = radeon_render_texture;
   radeon->glCtx.Driver.FinishRenderTexture = radeon_finish_render_texture;
-  radeon->glCtx.Driver.ResizeBuffers = radeon_resize_buffers;
   radeon->glCtx.Driver.ValidateFramebuffer = radeon_validate_framebuffer;
   radeon->glCtx.Driver.BlitFramebuffer = _mesa_meta_BlitFramebuffer;
   radeon->glCtx.Driver.EGLImageTargetRenderbufferStorage =

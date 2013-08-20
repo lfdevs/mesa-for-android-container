@@ -125,6 +125,7 @@ struct blitter_context
 
    struct pipe_query *saved_render_cond_query;
    uint saved_render_cond_mode;
+   boolean saved_render_cond_cond;
 };
 
 /**
@@ -183,9 +184,7 @@ void util_blitter_draw_rectangle(struct blitter_context *blitter,
  */
 void util_blitter_clear(struct blitter_context *blitter,
                         unsigned width, unsigned height,
-                        unsigned num_cbufs,
                         unsigned clear_buffers,
-                        enum pipe_format cbuf_format,
                         const union pipe_color_union *color,
                         double depth, unsigned stencil);
 
@@ -517,10 +516,12 @@ util_blitter_save_sample_mask(struct blitter_context *blitter,
 static INLINE void
 util_blitter_save_render_condition(struct blitter_context *blitter,
                                    struct pipe_query *query,
+                                   boolean condition,
                                    uint mode)
 {
    blitter->saved_render_cond_query = query;
    blitter->saved_render_cond_mode = mode;
+   blitter->saved_render_cond_cond = condition;
 }
 
 #ifdef __cplusplus

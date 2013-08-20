@@ -37,6 +37,8 @@
  * - POW_TO_EXP2
  * - LOG_TO_LOG2
  * - MOD_TO_FRACT
+ * - LRP_TO_ARITH
+ * - BITFIELD_INSERT_TO_BFM_BFI
  *
  * SUB_TO_ADD_NEG:
  * ---------------
@@ -79,12 +81,28 @@
  * Many GPUs don't have a MOD instruction (945 and 965 included), and
  * if we have to break it down like this anyway, it gives an
  * opportunity to do things like constant fold the (1.0 / op1) easily.
+ *
+ * LRP_TO_ARITH:
+ * -------------
+ * Converts ir_triop_lrp to (op0 * (1.0f - op2)) + (op1 * op2).
+ *
+ * BITFIELD_INSERT_TO_BFM_BFI:
+ * ---------------------------
+ * Breaks ir_quadop_bitfield_insert into ir_binop_bfm (bitfield mask) and
+ * ir_triop_bfi (bitfield insert).
+ *
+ * Many GPUs implement the bitfieldInsert() built-in from ARB_gpu_shader_5
+ * with a pair of instructions.
+ *
  */
 
 #include "main/core.h" /* for M_LOG2E */
 #include "glsl_types.h"
 #include "ir.h"
+#include "ir_builder.h"
 #include "ir_optimization.h"
+
+using namespace ir_builder;
 
 class lower_instructions_visitor : public ir_hierarchical_visitor {
 public:
@@ -105,6 +123,8 @@ private:
    void exp_to_exp2(ir_expression *);
    void pow_to_exp2(ir_expression *);
    void log_to_log2(ir_expression *);
+   void lrp_to_arith(ir_expression *);
+   void bitfield_insert_to_bfm_bfi(ir_expression *);
 };
 
 /**
@@ -268,6 +288,50 @@ lower_instructions_visitor::mod_to_fract(ir_expression *ir)
    this->progress = true;
 }
 
+void
+lower_instructions_visitor::lrp_to_arith(ir_expression *ir)
+{
+   /* (lrp x y a) -> x*(1-a) + y*a */
+
+   /* Save op2 */
+   ir_variable *temp = new(ir) ir_variable(ir->operands[2]->type, "lrp_factor",
+					   ir_var_temporary);
+   this->base_ir->insert_before(temp);
+   this->base_ir->insert_before(assign(temp, ir->operands[2]));
+
+   ir_constant *one = new(ir) ir_constant(1.0f);
+
+   ir->operation = ir_binop_add;
+   ir->operands[0] = mul(ir->operands[0], sub(one, temp));
+   ir->operands[1] = mul(ir->operands[1], temp);
+   ir->operands[2] = NULL;
+
+   this->progress = true;
+}
+
+void
+lower_instructions_visitor::bitfield_insert_to_bfm_bfi(ir_expression *ir)
+{
+   /* Translates
+    *    ir_quadop_bitfield_insert base insert offset bits
+    * into
+    *    ir_triop_bfi (ir_binop_bfm bits offset) insert base
+    */
+
+   ir_rvalue *base_expr = ir->operands[0];
+
+   ir->operation = ir_triop_bfi;
+   ir->operands[0] = new(ir) ir_expression(ir_binop_bfm,
+                                           ir->type->get_base_type(),
+                                           ir->operands[3],
+                                           ir->operands[2]);
+   /* ir->operands[1] is still the value to insert. */
+   ir->operands[2] = base_expr;
+   ir->operands[3] = NULL;
+
+   this->progress = true;
+}
+
 ir_visitor_status
 lower_instructions_visitor::visit_leave(ir_expression *ir)
 {
@@ -302,6 +366,16 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
    case ir_binop_pow:
       if (lowering(POW_TO_EXP2))
 	 pow_to_exp2(ir);
+      break;
+
+   case ir_triop_lrp:
+      if (lowering(LRP_TO_ARITH))
+	 lrp_to_arith(ir);
+      break;
+
+   case ir_quadop_bitfield_insert:
+      if (lowering(BITFIELD_INSERT_TO_BFM_BFI))
+         bitfield_insert_to_bfm_bfi(ir);
       break;
 
    default:

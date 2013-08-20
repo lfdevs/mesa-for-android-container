@@ -74,10 +74,8 @@ enum tgsi_file_type {
    TGSI_FILE_IMMEDIATE           =7,
    TGSI_FILE_PREDICATE           =8,
    TGSI_FILE_SYSTEM_VALUE        =9,
-   TGSI_FILE_IMMEDIATE_ARRAY     =10,
-   TGSI_FILE_TEMPORARY_ARRAY     =11,
-   TGSI_FILE_RESOURCE            =12,
-   TGSI_FILE_SAMPLER_VIEW        =13,
+   TGSI_FILE_RESOURCE            =10,
+   TGSI_FILE_SAMPLER_VIEW        =11,
    TGSI_FILE_COUNT      /**< how many TGSI_FILE_ types */
 };
 
@@ -121,7 +119,8 @@ struct tgsi_declaration
    unsigned Interpolate : 1;  /**< any interpolation info? */
    unsigned Invariant   : 1;  /**< invariant optimization? */
    unsigned Local       : 1;  /**< optimize as subroutine local variable? */
-   unsigned Padding     : 7;
+   unsigned Array       : 1;  /**< extra array info? */
+   unsigned Padding     : 6;
 };
 
 struct tgsi_declaration_range
@@ -163,7 +162,12 @@ struct tgsi_declaration_interp
 #define TGSI_SEMANTIC_BLOCK_ID   16 /**< id of the current block */
 #define TGSI_SEMANTIC_BLOCK_SIZE 17 /**< block size in threads */
 #define TGSI_SEMANTIC_THREAD_ID  18 /**< block-relative id of the current thread */
-#define TGSI_SEMANTIC_COUNT      19 /**< number of semantic values */
+#define TGSI_SEMANTIC_TEXCOORD   19 /**< texture or sprite coordinates */
+#define TGSI_SEMANTIC_PCOORD     20 /**< point sprite coordinate */
+#define TGSI_SEMANTIC_VIEWPORT_INDEX 21 /**< viewport index */
+#define TGSI_SEMANTIC_LAYER      22 /**< layer (rendertarget index) */
+#define TGSI_SEMANTIC_CULLDIST   23
+#define TGSI_SEMANTIC_COUNT      24 /**< number of semantic values */
 
 struct tgsi_declaration_semantic
 {
@@ -185,6 +189,11 @@ struct tgsi_declaration_sampler_view {
    unsigned ReturnTypeY : 6; /**< one of enum pipe_type */
    unsigned ReturnTypeZ : 6; /**< one of enum pipe_type */
    unsigned ReturnTypeW : 6; /**< one of enum pipe_type */
+};
+
+struct tgsi_declaration_array {
+   unsigned ArrayID : 10;
+   unsigned Padding : 22;
 };
 
 /*
@@ -275,7 +284,7 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_SUB                 17
 #define TGSI_OPCODE_LRP                 18
 #define TGSI_OPCODE_CND                 19
-                                /* gap */
+#define TGSI_OPCODE_SQRT                20
 #define TGSI_OPCODE_DP2A                21
                                 /* gap */
 #define TGSI_OPCODE_FRC                 24
@@ -293,7 +302,7 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_COS                 36
 #define TGSI_OPCODE_DDX                 37
 #define TGSI_OPCODE_DDY                 38
-#define TGSI_OPCODE_KILP                39  /* predicated kill */
+#define TGSI_OPCODE_KILL                39 /* unconditional */
 #define TGSI_OPCODE_PK2H                40
 #define TGSI_OPCODE_PK2US               41
 #define TGSI_OPCODE_PK4B                42
@@ -329,7 +338,7 @@ struct tgsi_property_data {
 #define TGSI_OPCODE_TXL                 72
 #define TGSI_OPCODE_BRK                 73
 #define TGSI_OPCODE_IF                  74
-                                /* gap */
+#define TGSI_OPCODE_UIF                 75
 #define TGSI_OPCODE_ELSE                77
 #define TGSI_OPCODE_ENDIF               78
                                 /* gap */
@@ -361,9 +370,9 @@ struct tgsi_property_data {
                                 /* gap */
 #define TGSI_OPCODE_NRM4                112
 #define TGSI_OPCODE_CALLNZ              113
-#define TGSI_OPCODE_IFC                 114
+                                /* gap */
 #define TGSI_OPCODE_BREAKC              115
-#define TGSI_OPCODE_KIL                 116  /* conditional kill */
+#define TGSI_OPCODE_KILL_IF             116  /* conditional kill */
 #define TGSI_OPCODE_END                 117  /* aka HALT */
                                 /* gap */
 #define TGSI_OPCODE_F2I                 119
@@ -559,7 +568,7 @@ struct tgsi_instruction_predicate
  *
  * Index specifies the element number of a register in the register file.
  *
- * If Indirect is TRUE, Index should be offset by the X component of a source
+ * If Indirect is TRUE, Index should be offset by the X component of the indirect
  * register that follows. The register can be now fetched into local storage
  * for further processing.
  *
@@ -585,14 +594,26 @@ struct tgsi_src_register
 };
 
 /**
- * If tgsi_src_register::Modifier is TRUE, tgsi_src_register_modifier follows.
- * 
- * Then, if tgsi_src_register::Indirect is TRUE, another tgsi_src_register
- * follows.
+ * If tgsi_src_register::Indirect is TRUE, tgsi_ind_register follows.
  *
- * Then, if tgsi_src_register::Dimension is TRUE, tgsi_dimension follows.
+ * File, Index and Swizzle are handled the same as in tgsi_src_register.
+ *
+ * If ArrayID is zero the whole register file might be is indirectly addressed,
+ * if not only the Declaration with this ArrayID is accessed by this operand.
+ *
  */
 
+struct tgsi_ind_register
+{
+   unsigned File    : 4;  /* TGSI_FILE_ */
+   int      Index   : 16; /* SINT */
+   unsigned Swizzle : 2;  /* TGSI_SWIZZLE_ */
+   unsigned ArrayID : 10; /* UINT */
+};
+
+/**
+ * If tgsi_src_register::Dimension is TRUE, tgsi_dimension follows.
+ */
 
 struct tgsi_dimension
 {

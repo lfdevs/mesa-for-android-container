@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.1
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  *
@@ -17,9 +16,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -29,7 +29,6 @@
 #include "get.h"
 #include "enums.h"
 #include "extensions.h"
-#include "mfeatures.h"
 #include "mtypes.h"
 
 
@@ -42,11 +41,6 @@ shading_language_version(struct gl_context *ctx)
    switch (ctx->API) {
    case API_OPENGL_COMPAT:
    case API_OPENGL_CORE:
-      if (!ctx->Extensions.ARB_shader_objects) {
-         _mesa_error(ctx, GL_INVALID_ENUM, "glGetString");
-         return (const GLubyte *) 0;
-      }
-
       switch (ctx->Const.GLSLVersion) {
       case 110:
          return (const GLubyte *) "1.10";
@@ -137,7 +131,7 @@ _mesa_GetString( GLenum name )
          if (ctx->API == API_OPENGLES)
             break;
 	 return shading_language_version(ctx);
-      case GL_PROGRAM_ERROR_STRING_NV:
+      case GL_PROGRAM_ERROR_STRING_ARB:
          if (ctx->API == API_OPENGL_COMPAT &&
              (ctx->Extensions.ARB_fragment_program ||
               ctx->Extensions.ARB_vertex_program)) {
@@ -268,7 +262,7 @@ _mesa_GetPointerv( GLenum pname, GLvoid **params )
       case GL_DEBUG_CALLBACK_USER_PARAM_ARB:
          if (!_mesa_is_desktop_gl(ctx))
             goto invalid_pname;
-         *params = ctx->Debug.CallbackData;
+         *params = (GLvoid *) ctx->Debug.CallbackData;
          break;
       default:
          goto invalid_pname;

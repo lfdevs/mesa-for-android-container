@@ -69,6 +69,8 @@ struct lp_build_blend_aos_context
 
    LLVMValueRef src;
    LLVMValueRef src_alpha;
+   LLVMValueRef src1;
+   LLVMValueRef src1_alpha;
    LLVMValueRef dst;
    LLVMValueRef const_;
    LLVMValueRef const_alpha;
@@ -93,6 +95,7 @@ lp_build_blend_factor_unswizzled(struct lp_build_blend_aos_context *bld,
                                  boolean alpha)
 {
    LLVMValueRef src_alpha = bld->src_alpha ? bld->src_alpha : bld->src;
+   LLVMValueRef src1_alpha = bld->src1_alpha ? bld->src1_alpha : bld->src1;
    LLVMValueRef const_alpha = bld->const_alpha ? bld->const_alpha : bld->const_;
 
    switch (factor) {
@@ -111,10 +114,20 @@ lp_build_blend_factor_unswizzled(struct lp_build_blend_aos_context *bld,
       if(alpha)
          return bld->base.one;
       else {
-         if(!bld->inv_dst)
-            bld->inv_dst = lp_build_comp(&bld->base, bld->dst);
-         if(!bld->saturate)
-            bld->saturate = lp_build_min(&bld->base, src_alpha, bld->inv_dst);
+         /*
+          * if there's separate src_alpha there's no dst alpha hence the complement
+          * is zero but for unclamped float inputs min can be non-zero (negative).
+          */
+         if (bld->src_alpha) {
+            if (!bld->saturate)
+               bld->saturate = lp_build_min(&bld->base, src_alpha, bld->base.zero);
+         }
+         else {
+            if(!bld->inv_dst)
+               bld->inv_dst = lp_build_comp(&bld->base, bld->dst);
+            if(!bld->saturate)
+               bld->saturate = lp_build_min(&bld->base, src_alpha, bld->inv_dst);
+         }
          return bld->saturate;
       }
    case PIPE_BLENDFACTOR_CONST_COLOR:
@@ -122,10 +135,9 @@ lp_build_blend_factor_unswizzled(struct lp_build_blend_aos_context *bld,
    case PIPE_BLENDFACTOR_CONST_ALPHA:
       return const_alpha;
    case PIPE_BLENDFACTOR_SRC1_COLOR:
+      return bld->src1;
    case PIPE_BLENDFACTOR_SRC1_ALPHA:
-      /* TODO */
-      assert(0);
-      return bld->base.zero;
+      return src1_alpha;
    case PIPE_BLENDFACTOR_INV_SRC_COLOR:
       if(!bld->inv_src)
          bld->inv_src = lp_build_comp(&bld->base, bld->src);
@@ -148,10 +160,9 @@ lp_build_blend_factor_unswizzled(struct lp_build_blend_aos_context *bld,
          bld->inv_const_alpha = lp_build_comp(&bld->base, const_alpha);
       return bld->inv_const_alpha;
    case PIPE_BLENDFACTOR_INV_SRC1_COLOR:
+      return lp_build_comp(&bld->base, bld->src1);
    case PIPE_BLENDFACTOR_INV_SRC1_ALPHA:
-      /* TODO */
-      assert(0);
-      return bld->base.zero;
+      return lp_build_comp(&bld->base, src1_alpha);
    default:
       assert(0);
       return bld->base.zero;
@@ -268,9 +279,13 @@ lp_build_blend_factor(struct lp_build_blend_aos_context *bld,
  * @param type          data type of the pixel vector
  * @param rt            render target index
  * @param src           blend src
+ * @param src_alpha     blend src alpha (if not included in src)
+ * @param src1          second blend src (for dual source blend)
+ * @param src1_alpha    second blend src alpha (if not included in src1)
  * @param dst           blend dst
  * @param mask          optional mask to apply to the blending result
  * @param const_        const blend color
+ * @param const_alpha   const blend color alpha (if not included in const_)
  * @param swizzle       swizzle values for RGBA
  *
  * @return the result of blending src and dst
@@ -278,11 +293,13 @@ lp_build_blend_factor(struct lp_build_blend_aos_context *bld,
 LLVMValueRef
 lp_build_blend_aos(struct gallivm_state *gallivm,
                    const struct pipe_blend_state *blend,
-                   const enum pipe_format cbuf_format,
+                   enum pipe_format cbuf_format,
                    struct lp_type type,
                    unsigned rt,
                    LLVMValueRef src,
                    LLVMValueRef src_alpha,
+                   LLVMValueRef src1,
+                   LLVMValueRef src1_alpha,
                    LLVMValueRef dst,
                    LLVMValueRef mask,
                    LLVMValueRef const_,
@@ -304,9 +321,11 @@ lp_build_blend_aos(struct gallivm_state *gallivm,
    memset(&bld, 0, sizeof bld);
    lp_build_context_init(&bld.base, gallivm, type);
    bld.src = src;
+   bld.src1 = src1;
    bld.dst = dst;
    bld.const_ = const_;
    bld.src_alpha = src_alpha;
+   bld.src1_alpha = src1_alpha;
    bld.const_alpha = const_alpha;
 
    /* Find the alpha channel if not provided seperately */

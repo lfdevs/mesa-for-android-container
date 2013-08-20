@@ -335,6 +335,10 @@ static const struct glx_context_vtable indirect_context_vtable = {
  * \todo Eliminate \c __glXInitVertexArrayState.  Replace it with a new
  * function called \c __glXAllocateClientState that allocates the memory and
  * does all the initialization (including the pixel pack / unpack).
+ *
+ * \note
+ * This function is \b not the place to validate the context creation
+ * parameters.  It is just the allocator for the \c glx_context.
  */
 _X_HIDDEN struct glx_context *
 indirect_create_context(struct glx_screen *psc,
@@ -362,6 +366,8 @@ indirect_create_context(struct glx_screen *psc,
    gc->isDirect = GL_FALSE;
    gc->vtable = &indirect_context_vtable;
    state = calloc(1, sizeof(struct __GLXattributeRec));
+   gc->renderType = renderType;
+
    if (state == NULL) {
       /* Out of memory */
       free(gc);
@@ -430,7 +436,7 @@ indirect_create_context(struct glx_screen *psc,
    return gc;
 }
 
-static struct glx_context *
+_X_HIDDEN struct glx_context *
 indirect_create_context_attribs(struct glx_screen *base,
 				struct glx_config *config_base,
 				struct glx_context *shareList,
@@ -438,18 +444,24 @@ indirect_create_context_attribs(struct glx_screen *base,
 				const uint32_t *attribs,
 				unsigned *error)
 {
-   /* All of the attribute validation for indirect contexts is handled on the
-    * server, so there's not much to do here.
-    */
-   (void) num_attribs;
-   (void) attribs;
+   int renderType = GLX_RGBA_TYPE;
+   unsigned i;
 
    /* The error parameter is only used on the server so that correct GLX
     * protocol errors can be generated.  On the client, it can be ignored.
     */
    (void) error;
 
-   return indirect_create_context(base, config_base, shareList, 0);
+   /* All of the attribute validation for indirect contexts is handled on the
+    * server, so there's not much to do here. Still, we need to parse the
+    * attributes to correctly set renderType.
+    */
+   for (i = 0; i < num_attribs; i++) {
+      if (attribs[i * 2] == GLX_RENDER_TYPE)
+         renderType = attribs[i * 2 + 1];
+   }
+
+   return indirect_create_context(base, config_base, shareList, renderType);
 }
 
 struct glx_screen_vtable indirect_screen_vtable = {

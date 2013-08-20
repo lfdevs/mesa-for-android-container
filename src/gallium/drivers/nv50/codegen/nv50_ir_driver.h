@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #ifndef __NV50_IR_DRIVER_H__
@@ -70,8 +70,6 @@ struct nv50_ir_varying
 #endif
 
 #define NV50_SEMANTIC_CLIPDISTANCE  (TGSI_SEMANTIC_COUNT + 0)
-#define NV50_SEMANTIC_TEXCOORD      (TGSI_SEMANTIC_COUNT + 1)
-#define NV50_SEMANTIC_POINTCOORD    (TGSI_SEMANTIC_COUNT + 2)
 #define NV50_SEMANTIC_VIEWPORTINDEX (TGSI_SEMANTIC_COUNT + 4)
 #define NV50_SEMANTIC_LAYER         (TGSI_SEMANTIC_COUNT + 5)
 #define NV50_SEMANTIC_INVOCATIONID  (TGSI_SEMANTIC_COUNT + 6)
@@ -161,7 +159,14 @@ struct nv50_ir_prog_info
          boolean separateFragData;
          boolean usesDiscard;
       } fp;
+      struct {
+         uint32_t inputOffset; /* base address for user args */
+         uint32_t sharedOffset; /* reserved space in s[] */
+         uint32_t gridInfoBase;  /* base address for NTID,NCTAID */
+      } cp;
    } prop;
+
+   uint8_t numBarriers;
 
    struct {
       uint8_t clipDistance;      /* index of first clip distance output */
@@ -169,7 +174,7 @@ struct nv50_ir_prog_info
       uint8_t cullDistanceMask;  /* clip distance mode (1 bit per output) */
       int8_t genUserClip;        /* request user clip planes for ClipVertex */
       uint16_t ucpBase;          /* base address for UCPs */
-      uint8_t ucpBinding;        /* constant buffer index of UCP data */
+      uint8_t ucpCBSlot;         /* constant buffer index of UCP data */
       uint8_t pointSize;         /* output index for PointSize */
       uint8_t instanceId;        /* system value index of InstanceID */
       uint8_t vertexId;          /* system value index of VertexID */
@@ -179,6 +184,12 @@ struct nv50_ir_prog_info
       uint8_t sampleMask;        /* output index of SampleMask */
       uint8_t backFaceColor[2];  /* input/output indices of back face colour */
       uint8_t globalAccess;      /* 1 for read, 2 for wr, 3 for rw */
+      boolean nv50styleSurfaces; /* generate gX[] access for raw buffers */
+      uint8_t resInfoCBSlot;     /* cX[] used for tex handles, surface info */
+      uint16_t texBindBase;      /* base address for tex handles (nve4) */
+      uint16_t suInfoBase;       /* base address for surface info (nve4) */
+      uint8_t msInfoCBSlot;      /* cX[] used for multisample info */
+      uint16_t msInfoBase;       /* base address for multisample info */
    } io;
 
    /* driver callback to assign input/output locations */

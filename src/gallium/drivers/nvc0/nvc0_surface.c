@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include <stdint.h>
@@ -206,12 +206,14 @@ nvc0_resource_copy_region(struct pipe_context *pipe,
    boolean m2mf;
    unsigned dst_layer = dstz, src_layer = src_box->z;
 
-   /* Fallback for buffers. */
    if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
-      util_resource_copy_region(pipe, dst, dst_level, dstx, dsty, dstz,
-                                src, src_level, src_box);
+      nouveau_copy_buffer(&nvc0->base,
+                          nv04_resource(dst), dstx,
+                          nv04_resource(src), src_box->x, src_box->width);
+      NOUVEAU_DRV_STAT(&nvc0->screen->base, buf_copy_bytes, src_box->width);
       return;
    }
+   NOUVEAU_DRV_STAT(&nvc0->screen->base, tex_copy_count, 1);
 
    /* 0 and 1 are equal, only supporting 0/1, 2, 4 and 8 */
    assert((src->nr_samples | 1) == (dst->nr_samples | 1));
@@ -477,6 +479,7 @@ struct nvc0_blitctx
    enum pipe_texture_target target;
    struct {
       struct pipe_framebuffer_state fb;
+      struct nvc0_rasterizer_stateobj *rast;
       struct nvc0_program *vp;
       struct nvc0_program *tcp;
       struct nvc0_program *tep;
@@ -488,6 +491,7 @@ struct nvc0_blitctx
       struct nv50_tsc_entry *sampler[2];
       uint32_t dirty;
    } saved;
+   struct nvc0_rasterizer_stateobj rast;
 };
 
 static void
@@ -520,7 +524,7 @@ nvc0_blitter_make_vp(struct nvc0_blitter *blit)
       blit->vp.code = (uint32_t *)code_nvc0; /* const_cast */
       blit->vp.code_size = sizeof(code_nvc0);
    }
-   blit->vp.max_gpr = 6;
+   blit->vp.num_gprs = 6;
    blit->vp.vp.edgeflag = PIPE_MAX_ATTRIBS;
 
    blit->vp.hdr[0]  = 0x00020461; /* vertprog magic */
@@ -632,6 +636,7 @@ nvc0_blit_set_src(struct nvc0_blitctx *ctx,
    }
 
    flags = res->last_level ? 0 : NV50_TEXVIEW_SCALED_COORDS;
+   flags |= NV50_TEXVIEW_ACCESS_RESOLVE;
    if (filter && res->nr_samples == 8)
       flags |= NV50_TEXVIEW_FILTER_MSAA8;
 
@@ -706,11 +711,15 @@ nvc0_blitctx_pre_blit(struct nvc0_blitctx *ctx)
    ctx->saved.fb.cbufs[0] = nvc0->framebuffer.cbufs[0];
    ctx->saved.fb.zsbuf = nvc0->framebuffer.zsbuf;
 
+   ctx->saved.rast = nvc0->rast;
+
    ctx->saved.vp = nvc0->vertprog;
    ctx->saved.tcp = nvc0->tctlprog;
    ctx->saved.tep = nvc0->tevlprog;
    ctx->saved.gp = nvc0->gmtyprog;
    ctx->saved.fp = nvc0->fragprog;
+
+   nvc0->rast = &ctx->rast;
 
    nvc0->vertprog = &blitter->vp;
    nvc0->tctlprog = NULL;
@@ -765,6 +774,8 @@ nvc0_blitctx_post_blit(struct nvc0_blitctx *blit)
    nvc0->framebuffer.cbufs[0] = blit->saved.fb.cbufs[0];
    nvc0->framebuffer.zsbuf = blit->saved.fb.zsbuf;
 
+   nvc0->rast = blit->saved.rast;
+
    nvc0->vertprog = blit->saved.vp;
    nvc0->tctlprog = blit->saved.tcp;
    nvc0->tevlprog = blit->saved.tep;
@@ -790,7 +801,7 @@ nvc0_blitctx_post_blit(struct nvc0_blitctx *blit)
 
    if (nvc0->cond_query)
       nvc0->base.pipe.render_condition(&nvc0->base.pipe, nvc0->cond_query,
-                                       nvc0->cond_mode);
+                                       nvc0->cond_cond, nvc0->cond_mode);
 
    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_FB);
    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_TEX(4, 0));
@@ -1028,8 +1039,8 @@ nvc0_blit_eng2d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
 
    if (src->base.base.nr_samples > dst->base.base.nr_samples) {
       /* center src coorinates for proper MS resolve filtering */
-      srcx += (int64_t)src->ms_x << 32;
-      srcy += (int64_t)src->ms_y << 32;
+      srcx += (int64_t)(src->ms_x + 0) << 32;
+      srcy += (int64_t)(src->ms_y + 1) << 31;
    }
 
    dstx = info->dst.box.x << dst->ms_x;
@@ -1098,7 +1109,8 @@ nvc0_blit_eng2d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
          PUSH_DATA (push, srcy >> 32);
       }
    }
-   nvc0_bufctx_fence(nvc0, nvc0->bufctx, FALSE);
+   nvc0_resource_validate(&dst->base, NOUVEAU_BO_WR);
+   nvc0_resource_validate(&src->base, NOUVEAU_BO_RD);
 
    nouveau_bufctx_reset(nvc0->bufctx, NVC0_BIND_2D);
 
@@ -1176,6 +1188,8 @@ nvc0_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
       nvc0_blit_eng2d(nvc0, info);
    else
       nvc0_blit_3d(nvc0, info);
+
+   NOUVEAU_DRV_STAT(&nvc0->screen->base, tex_blit_count, 1);
 }
 
 boolean
@@ -1226,6 +1240,8 @@ nvc0_blitctx_create(struct nvc0_context *nvc0)
    }
 
    nvc0->blit->nvc0 = nvc0;
+
+   nvc0->blit->rast.pipe.half_pixel_center = 1;
 
    return TRUE;
 }

@@ -36,6 +36,7 @@
 #include "lp_rast.h"
 #include "lp_state_fs.h"
 #include "lp_state_setup.h"
+#include "lp_context.h"
 
 #define NUM_CHANNELS 4
 
@@ -277,6 +278,7 @@ try_setup_line( struct lp_setup_context *setup,
                const float (*v1)[4],
                const float (*v2)[4])
 {
+   struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
    struct lp_scene *scene = setup->scene;
    const struct lp_setup_variant_key *key = &setup->setup.variant->key;
    struct lp_rast_triangle *line;
@@ -289,6 +291,8 @@ try_setup_line( struct lp_setup_context *setup,
    int y[4];
    int i;
    int nr_planes = 4;
+   unsigned scissor_index = 0;
+   unsigned layer = 0;
    
    /* linewidth should be interpreted as integer */
    int fixed_width = util_iround(width) * FIXED_ONE;
@@ -315,11 +319,19 @@ try_setup_line( struct lp_setup_context *setup,
 
    if (setup->scissor_test) {
       nr_planes = 8;
+      if (setup->viewport_index_slot > 0) {
+         unsigned *udata = (unsigned*)v1[setup->viewport_index_slot];
+         scissor_index = lp_clamp_scissor_idx(*udata);
+      }
    }
    else {
       nr_planes = 4;
    }
 
+   if (setup->layer_slot > 0) {
+      layer = *(unsigned*)v1[setup->layer_slot];
+      layer = MIN2(layer, scene->fb_max_layer);
+   }
 
    dx = v1[0][0] - v2[0][0];
    dy = v1[0][1] - v2[0][1];
@@ -531,11 +543,6 @@ try_setup_line( struct lp_setup_context *setup,
       y[3] = subpixel_snap(v1[0][1] + y_offset     - setup->pixel_offset);
    }
 
-
-
-   LP_COUNT(nr_tris);
-
- 
    /* Bounding rectangle (in pixels) */
    {
       /* Yes this is necessary to accurately calculate bounding boxes
@@ -563,7 +570,7 @@ try_setup_line( struct lp_setup_context *setup,
       return TRUE;
    }
 
-   if (!u_rect_test_intersection(&setup->draw_region, &bbox)) {
+   if (!u_rect_test_intersection(&setup->draw_regions[scissor_index], &bbox)) {
       if (0) debug_printf("offscreen\n");
       LP_COUNT(nr_culled_tris);
       return TRUE;
@@ -588,6 +595,12 @@ try_setup_line( struct lp_setup_context *setup,
    line->v[1][1] = v2[0][1];
 #endif
 
+   LP_COUNT(nr_tris);
+
+   if (lp_context->active_statistics_queries) {
+      lp_context->pipeline_statistics.c_primitives++;
+   }
+
    /* calculate the deltas */
    plane = GET_PLANES(line);
    plane[0].dcdy = x[0] - x[1];
@@ -611,6 +624,7 @@ try_setup_line( struct lp_setup_context *setup,
    line->inputs.frontfacing = TRUE;
    line->inputs.disable = FALSE;
    line->inputs.opaque = FALSE;
+   line->inputs.layer = layer;
 
    for (i = 0; i < 4; i++) {
 
@@ -621,17 +635,6 @@ try_setup_line( struct lp_setup_context *setup,
 
       
       /* correct for top-left vs. bottom-left fill convention.  
-       *
-       * note that we're overloading gl_rasterization_rules to mean
-       * both (0.5,0.5) pixel centers *and* bottom-left filling
-       * convention.
-       *
-       * GL actually has a top-left filling convention, but GL's
-       * notion of "top" differs from gallium's...
-       *
-       * Also, sometimes (in FBO cases) GL will render upside down
-       * to its usual method, in which case it will probably want
-       * to use the opposite, top-left convention.
        */         
       if (plane[i].dcdx < 0) {
          /* both fill conventions want this - adjust for left edges */
@@ -683,7 +686,8 @@ try_setup_line( struct lp_setup_context *setup,
     * these planes elsewhere.
     */
    if (nr_planes == 8) {
-      const struct u_rect *scissor = &setup->scissor;
+      const struct u_rect *scissor =
+         &setup->scissors[scissor_index];
 
       plane[4].dcdx = -1;
       plane[4].dcdy = 0;
@@ -706,7 +710,7 @@ try_setup_line( struct lp_setup_context *setup,
       plane[7].eo = 0;
    }
 
-   return lp_setup_bin_triangle(setup, line, &bbox, nr_planes);
+   return lp_setup_bin_triangle(setup, line, &bbox, nr_planes, scissor_index);
 }
 
 

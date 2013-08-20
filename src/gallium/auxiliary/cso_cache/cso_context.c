@@ -90,6 +90,9 @@ struct cso_context {
    struct pipe_vertex_buffer aux_vertex_buffer_saved;
    unsigned aux_vertex_buffer_index;
 
+   struct pipe_constant_buffer aux_constbuf_current[PIPE_SHADER_TYPES];
+   struct pipe_constant_buffer aux_constbuf_saved[PIPE_SHADER_TYPES];
+
    unsigned nr_so_targets;
    struct pipe_stream_output_target *so_targets[PIPE_MAX_SO_BUFFERS];
 
@@ -108,6 +111,7 @@ struct cso_context {
    void *velements, *velements_saved;
    struct pipe_query *render_condition, *render_condition_saved;
    uint render_condition_mode, render_condition_mode_saved;
+   boolean render_condition_cond, render_condition_cond_saved;
 
    struct pipe_clip_state clip;
    struct pipe_clip_state clip_saved;
@@ -328,6 +332,11 @@ void cso_release_all( struct cso_context *ctx )
 
    pipe_resource_reference(&ctx->aux_vertex_buffer_current.buffer, NULL);
    pipe_resource_reference(&ctx->aux_vertex_buffer_saved.buffer, NULL);
+
+   for (i = 0; i < PIPE_SHADER_TYPES; i++) {
+      pipe_resource_reference(&ctx->aux_constbuf_current[i].buffer, NULL);
+      pipe_resource_reference(&ctx->aux_constbuf_saved[i].buffer, NULL);
+   }
 
    for (i = 0; i < PIPE_MAX_SO_BUFFERS; i++) {
       pipe_so_target_reference(&ctx->so_targets[i], NULL);
@@ -644,7 +653,7 @@ void cso_set_viewport(struct cso_context *ctx,
 {
    if (memcmp(&ctx->vp, vp, sizeof(*vp))) {
       ctx->vp = *vp;
-      ctx->pipe->set_viewport_state(ctx->pipe, vp);
+      ctx->pipe->set_viewport_states(ctx->pipe, 0, 1, vp);
    }
 }
 
@@ -658,7 +667,7 @@ void cso_restore_viewport(struct cso_context *ctx)
 {
    if (memcmp(&ctx->vp, &ctx->vp_saved, sizeof(ctx->vp))) {
       ctx->vp = ctx->vp_saved;
-      ctx->pipe->set_viewport_state(ctx->pipe, &ctx->vp);
+      ctx->pipe->set_viewport_states(ctx->pipe, 0, 1, &ctx->vp);
    }
 }
 
@@ -715,13 +724,17 @@ void cso_restore_stencil_ref(struct cso_context *ctx)
 }
 
 void cso_set_render_condition(struct cso_context *ctx,
-                              struct pipe_query *query, uint mode)
+                              struct pipe_query *query,
+                              boolean condition, uint mode)
 {
    struct pipe_context *pipe = ctx->pipe;
 
-   if (ctx->render_condition != query || ctx->render_condition_mode != mode) {
-      pipe->render_condition(pipe, query, mode);
+   if (ctx->render_condition != query ||
+       ctx->render_condition_mode != mode ||
+       ctx->render_condition_cond != condition) {
+      pipe->render_condition(pipe, query, condition, mode);
       ctx->render_condition = query;
+      ctx->render_condition_cond = condition;
       ctx->render_condition_mode = mode;
    }
 }
@@ -729,12 +742,14 @@ void cso_set_render_condition(struct cso_context *ctx,
 void cso_save_render_condition(struct cso_context *ctx)
 {
    ctx->render_condition_saved = ctx->render_condition;
+   ctx->render_condition_cond_saved = ctx->render_condition_cond;
    ctx->render_condition_mode_saved = ctx->render_condition_mode;
 }
 
 void cso_restore_render_condition(struct cso_context *ctx)
 {
    cso_set_render_condition(ctx, ctx->render_condition_saved,
+                            ctx->render_condition_cond_saved,
                             ctx->render_condition_mode_saved);
 }
 
@@ -1316,6 +1331,57 @@ cso_restore_stream_outputs(struct cso_context *ctx)
 
    ctx->nr_so_targets = ctx->nr_so_targets_saved;
    ctx->nr_so_targets_saved = 0;
+}
+
+/* constant buffers */
+
+void
+cso_set_constant_buffer(struct cso_context *cso, unsigned shader_stage,
+                        unsigned index, struct pipe_constant_buffer *cb)
+{
+   struct pipe_context *pipe = cso->pipe;
+
+   pipe->set_constant_buffer(pipe, shader_stage, index, cb);
+
+   if (index == 0) {
+      util_copy_constant_buffer(&cso->aux_constbuf_current[shader_stage], cb);
+   }
+}
+
+void
+cso_set_constant_buffer_resource(struct cso_context *cso,
+                                 unsigned shader_stage,
+                                 unsigned index,
+                                 struct pipe_resource *buffer)
+{
+   if (buffer) {
+      struct pipe_constant_buffer cb;
+      cb.buffer = buffer;
+      cb.buffer_offset = 0;
+      cb.buffer_size = buffer->width0;
+      cb.user_buffer = NULL;
+      cso_set_constant_buffer(cso, shader_stage, index, &cb);
+   } else {
+      cso_set_constant_buffer(cso, shader_stage, index, NULL);
+   }
+}
+
+void
+cso_save_constant_buffer_slot0(struct cso_context *cso,
+                                  unsigned shader_stage)
+{
+   util_copy_constant_buffer(&cso->aux_constbuf_saved[shader_stage],
+                             &cso->aux_constbuf_current[shader_stage]);
+}
+
+void
+cso_restore_constant_buffer_slot0(struct cso_context *cso,
+                                     unsigned shader_stage)
+{
+   cso_set_constant_buffer(cso, shader_stage, 0,
+                           &cso->aux_constbuf_saved[shader_stage]);
+   pipe_resource_reference(&cso->aux_constbuf_saved[shader_stage].buffer,
+                           NULL);
 }
 
 /* drawing */

@@ -53,32 +53,42 @@
  * 256-bit increments.
  */
 uint32_t
-get_attr_override(struct brw_vue_map *vue_map, int urb_entry_read_offset,
+get_attr_override(const struct brw_vue_map *vue_map, int urb_entry_read_offset,
                   int fs_attr, bool two_side_color, uint32_t *max_source_attr)
 {
-   int vs_attr = _mesa_frag_attrib_to_vert_result(fs_attr);
-   if (vs_attr < 0 || vs_attr == VERT_RESULT_HPOS) {
-      /* These attributes will be overwritten by the fragment shader's
-       * interpolation code (see emit_interp() in brw_wm_fp.c), so just let
-       * them reference the first available attribute.
+   if (fs_attr == VARYING_SLOT_POS) {
+      /* This attribute will be overwritten by the fragment shader's
+       * interpolation code (see emit_interp() in brw_wm_fp.c), so just let it
+       * reference the first available attribute.
        */
       return 0;
    }
 
    /* Find the VUE slot for this attribute. */
-   int slot = vue_map->vert_result_to_slot[vs_attr];
+   int slot = vue_map->varying_to_slot[fs_attr];
 
    /* If there was only a back color written but not front, use back
     * as the color instead of undefined
     */
-   if (slot == -1 && vs_attr == VERT_RESULT_COL0)
-      slot = vue_map->vert_result_to_slot[VERT_RESULT_BFC0];
-   if (slot == -1 && vs_attr == VERT_RESULT_COL1)
-      slot = vue_map->vert_result_to_slot[VERT_RESULT_BFC1];
+   if (slot == -1 && fs_attr == VARYING_SLOT_COL0)
+      slot = vue_map->varying_to_slot[VARYING_SLOT_BFC0];
+   if (slot == -1 && fs_attr == VARYING_SLOT_COL1)
+      slot = vue_map->varying_to_slot[VARYING_SLOT_BFC1];
 
    if (slot == -1) {
       /* This attribute does not exist in the VUE--that means that the vertex
-       * shader did not write to it.  Behavior is undefined in this case, so
+       * shader did not write to it.  This means that either:
+       *
+       * (a) This attribute is a texture coordinate, and it is going to be
+       * replaced with point coordinates (as a consequence of a call to
+       * glTexEnvi(GL_POINT_SPRITE, GL_COORD_REPLACE, GL_TRUE)), so the
+       * hardware will ignore whatever attribute override we supply.
+       *
+       * (b) This attribute is read by the fragment shader but not written by
+       * the vertex shader, so its value is undefined.  Therefore the
+       * attribute override we supply doesn't matter.
+       *
+       * In either case the attribute override we supply doesn't matter, so
        * just reference the first available attribute.
        */
       return 0;
@@ -96,10 +106,10 @@ get_attr_override(struct brw_vue_map *vue_map, int urb_entry_read_offset,
     * do back-facing swizzling.
     */
    bool swizzling = two_side_color &&
-      ((vue_map->slot_to_vert_result[slot] == VERT_RESULT_COL0 &&
-        vue_map->slot_to_vert_result[slot+1] == VERT_RESULT_BFC0) ||
-       (vue_map->slot_to_vert_result[slot] == VERT_RESULT_COL1 &&
-        vue_map->slot_to_vert_result[slot+1] == VERT_RESULT_BFC1));
+      ((vue_map->slot_to_varying[slot] == VARYING_SLOT_COL0 &&
+        vue_map->slot_to_varying[slot+1] == VARYING_SLOT_BFC0) ||
+       (vue_map->slot_to_varying[slot] == VARYING_SLOT_COL1 &&
+        vue_map->slot_to_varying[slot+1] == VARYING_SLOT_BFC1));
 
    /* Update max_source_attr.  If swizzling, the SF will read this slot + 1. */
    if (*max_source_attr < source_attr + swizzling)
@@ -116,8 +126,7 @@ get_attr_override(struct brw_vue_map *vue_map, int urb_entry_read_offset,
 static void
 upload_sf_state(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-   struct gl_context *ctx = &intel->ctx;
+   struct gl_context *ctx = &brw->ctx;
    /* BRW_NEW_FRAGMENT_PROGRAM */
    uint32_t num_outputs = _mesa_bitcount_64(brw->fragment_program->Base.InputsRead);
    /* _NEW_LIGHT */
@@ -125,13 +134,13 @@ upload_sf_state(struct brw_context *brw)
    uint32_t dw1, dw2, dw3, dw4, dw16, dw17;
    int i;
    /* _NEW_BUFFER */
-   bool render_to_fbo = _mesa_is_user_fbo(brw->intel.ctx.DrawBuffer);
+   bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
    bool multisampled_fbo = ctx->DrawBuffer->Visual.samples > 1;
 
    int attr = 0, input_index = 0;
    int urb_entry_read_offset = 1;
    float point_size;
-   uint16_t attr_overrides[FRAG_ATTRIB_MAX];
+   uint16_t attr_overrides[VARYING_SLOT_MAX];
    uint32_t point_sprite_origin;
 
    dw1 = GEN6_SF_SWIZZLE_ENABLE | num_outputs << GEN6_SF_NUM_OUTPUTS_SHIFT;
@@ -271,22 +280,22 @@ upload_sf_state(struct brw_context *brw)
     * they source from.
     */
    uint32_t max_source_attr = 0;
-   for (; attr < FRAG_ATTRIB_MAX; attr++) {
+   for (; attr < VARYING_SLOT_MAX; attr++) {
       enum glsl_interp_qualifier interp_qualifier =
          brw->fragment_program->InterpQualifier[attr];
-      bool is_gl_Color = attr == FRAG_ATTRIB_COL0 || attr == FRAG_ATTRIB_COL1;
+      bool is_gl_Color = attr == VARYING_SLOT_COL0 || attr == VARYING_SLOT_COL1;
 
       if (!(brw->fragment_program->Base.InputsRead & BITFIELD64_BIT(attr)))
 	 continue;
 
       /* _NEW_POINT */
       if (ctx->Point.PointSprite &&
-	  (attr >= FRAG_ATTRIB_TEX0 && attr <= FRAG_ATTRIB_TEX7) &&
-	  ctx->Point.CoordReplace[attr - FRAG_ATTRIB_TEX0]) {
+	  (attr >= VARYING_SLOT_TEX0 && attr <= VARYING_SLOT_TEX7) &&
+	  ctx->Point.CoordReplace[attr - VARYING_SLOT_TEX0]) {
 	 dw16 |= (1 << input_index);
       }
 
-      if (attr == FRAG_ATTRIB_PNTC)
+      if (attr == VARYING_SLOT_PNTC)
 	 dw16 |= (1 << input_index);
 
       /* flat shading */
@@ -302,15 +311,15 @@ upload_sf_state(struct brw_context *brw)
        */
       assert(input_index < 16 || attr == input_index);
 
-      /* CACHE_NEW_VS_PROG | _NEW_LIGHT | _NEW_PROGRAM */
+      /* BRW_NEW_VUE_MAP_GEOM_OUT | _NEW_LIGHT | _NEW_PROGRAM */
       attr_overrides[input_index++] =
-         get_attr_override(&brw->vs.prog_data->vue_map,
+         get_attr_override(&brw->vue_map_geom_out,
 			   urb_entry_read_offset, attr,
                            ctx->VertexProgram._TwoSideEnabled,
                            &max_source_attr);
    }
 
-   for (; input_index < FRAG_ATTRIB_MAX; input_index++)
+   for (; input_index < VARYING_SLOT_MAX; input_index++)
       attr_overrides[input_index] = 0;
 
    /* From the Sandy Bridge PRM, Volume 2, Part 1, documentation for
@@ -360,8 +369,8 @@ const struct brw_tracked_state gen6_sf_state = {
 		_NEW_POINT |
                 _NEW_MULTISAMPLE),
       .brw   = (BRW_NEW_CONTEXT |
-		BRW_NEW_FRAGMENT_PROGRAM),
-      .cache = CACHE_NEW_VS_PROG
+		BRW_NEW_FRAGMENT_PROGRAM |
+                BRW_NEW_VUE_MAP_GEOM_OUT)
    },
    .emit = upload_sf_state,
 };

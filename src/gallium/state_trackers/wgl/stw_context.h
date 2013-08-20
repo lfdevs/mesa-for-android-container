@@ -30,6 +30,7 @@
 
 #include <windows.h>
 
+struct hud_context;
 struct stw_framebuffer;
 struct st_context_iface;
 
@@ -41,12 +42,16 @@ struct stw_context
    HDC hdc;
 
    struct stw_framebuffer *current_framebuffer;
+
+   struct hud_context *hud;
 };
 
 DHGLRC stw_create_context_attribs( HDC hdc, INT iLayerPlane, DHGLRC hShareContext,
                                    int majorVersion, int minorVersion, int contextFlags, int profileMask );
 
 DHGLRC stw_get_current_context( void );
+
+struct stw_context *stw_current_context(void);
 
 HDC stw_get_current_dc( void );
 

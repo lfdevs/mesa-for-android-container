@@ -47,7 +47,6 @@ static void r600_copy_to_staging_texture(struct pipe_context *ctx, struct r600_t
 				&transfer->box);
 }
 
-
 /* Copy from a transfer's staging texture to a full GPU one. */
 static void r600_copy_from_staging_texture(struct pipe_context *ctx, struct r600_transfer *rtransfer)
 {
@@ -152,12 +151,12 @@ static int r600_init_surface(struct r600_screen *rscreen,
 
 	if (!is_flushed_depth && is_depth) {
 		surface->flags |= RADEON_SURF_ZBUFFER;
-
 		if (is_stencil) {
 			surface->flags |= RADEON_SURF_SBUFFER |
 				RADEON_SURF_HAS_SBUFFER_MIPTREE;
 		}
 	}
+	surface->flags |= RADEON_SURF_HAS_TILE_MODE_INDEX;
 	return 0;
 }
 
@@ -312,7 +311,7 @@ static void *si_texture_transfer_map(struct pipe_context *ctx,
 		resource.flags = R600_RESOURCE_FLAG_TRANSFER;
 
 		/* We must set the correct texture target and dimensions if needed for a 3D transfer. */
-		if (box->depth > 1 && u_max_layer(texture, level) > 0)
+		if (box->depth > 1 && util_max_layer(texture, level) > 0)
 			resource.target = texture->target;
 		else
 			resource.target = PIPE_TEXTURE_2D;
@@ -530,7 +529,14 @@ struct pipe_resource *si_texture_create(struct pipe_screen *screen,
 
 	if (!(templ->flags & R600_RESOURCE_FLAG_TRANSFER) &&
 	    !(templ->bind & PIPE_BIND_SCANOUT)) {
-		array_mode = V_009910_ARRAY_1D_TILED_THIN1;
+		if (util_format_is_compressed(templ->format)) {
+			array_mode = V_009910_ARRAY_1D_TILED_THIN1;
+		} else {
+			if (rscreen->chip_class >= CIK)
+				array_mode = V_009910_ARRAY_1D_TILED_THIN1; /* XXX fix me */
+			else
+				array_mode = V_009910_ARRAY_2D_TILED_THIN1;
+		}
 	}
 
 	r = r600_init_surface(rscreen, &surface, templ, array_mode,
@@ -554,8 +560,8 @@ static struct pipe_surface *r600_create_surface(struct pipe_context *pipe,
 	struct r600_surface *surface = CALLOC_STRUCT(r600_surface);
 	unsigned level = surf_tmpl->u.tex.level;
 
-	assert(surf_tmpl->u.tex.first_layer <= u_max_layer(texture, surf_tmpl->u.tex.level));
-	assert(surf_tmpl->u.tex.last_layer <= u_max_layer(texture, surf_tmpl->u.tex.level));
+	assert(surf_tmpl->u.tex.first_layer <= util_max_layer(texture, surf_tmpl->u.tex.level));
+	assert(surf_tmpl->u.tex.last_layer <= util_max_layer(texture, surf_tmpl->u.tex.level));
 	assert(surf_tmpl->u.tex.first_layer == surf_tmpl->u.tex.last_layer);
 	if (surface == NULL)
 		return NULL;
@@ -620,6 +626,8 @@ struct pipe_resource *si_texture_from_handle(struct pipe_screen *screen,
 	if (r) {
 		return NULL;
 	}
+	/* always set the scanout flags */
+	surface.flags |= RADEON_SURF_SCANOUT;
 	return (struct pipe_resource *)r600_texture_create_object(screen, templ, array_mode,
 								  stride, 0, buf, FALSE, &surface);
 }

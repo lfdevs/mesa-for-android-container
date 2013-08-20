@@ -48,19 +48,18 @@ st_pipe_format_to_mesa_format(enum pipe_format pipeFormat);
 
 
 extern enum pipe_format
-st_choose_format(struct pipe_screen *screen, GLenum internalFormat,
+st_choose_format(struct st_context *st, GLenum internalFormat,
                  GLenum format, GLenum type,
                  enum pipe_texture_target target, unsigned sample_count,
                  unsigned bindings, boolean allow_dxt);
 
 extern enum pipe_format
-st_choose_renderbuffer_format(struct pipe_screen *screen,
+st_choose_renderbuffer_format(struct st_context *st,
                               GLenum internalFormat, unsigned sample_count);
 
-
-gl_format
-st_ChooseTextureFormat_renderable(struct gl_context *ctx, GLint internalFormat,
-				  GLenum format, GLenum type, GLboolean renderable);
+extern enum pipe_format
+st_choose_matching_format(struct pipe_screen *screen, unsigned bind,
+			  GLenum format, GLenum type, GLboolean swapBytes);
 
 extern gl_format
 st_ChooseTextureFormat(struct gl_context * ctx, GLenum target,
@@ -68,13 +67,9 @@ st_ChooseTextureFormat(struct gl_context * ctx, GLenum target,
                        GLenum format, GLenum type);
 
 size_t
-st_QuerySamplesForFormat(struct gl_context *ctx, GLenum internalFormat,
-                         int samples[16]);
+st_QuerySamplesForFormat(struct gl_context *ctx, GLenum target,
+                         GLenum internalFormat, int samples[16]);
 
-/* can we use a sampler view to translate these formats
-   only used to make TFP so far */
-extern GLboolean
-st_sampler_compat_formats(enum pipe_format format1, enum pipe_format format2);
 
 
 extern void

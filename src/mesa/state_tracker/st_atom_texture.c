@@ -152,7 +152,27 @@ st_create_texture_sampler_view_from_stobj(struct pipe_context *pipe,
    u_sampler_view_default_template(&templ,
                                    stObj->pt,
                                    format);
-   templ.u.tex.first_level = stObj->base.BaseLevel;
+
+   if (stObj->pt->target == PIPE_BUFFER) {
+      unsigned base, size;
+      unsigned f, n;
+      const struct util_format_description *desc
+         = util_format_description(templ.format);
+
+      base = stObj->base.BufferOffset;
+      if (base >= stObj->pt->width0)
+         return NULL;
+      size = MIN2(stObj->pt->width0 - base, (unsigned)stObj->base.BufferSize);
+
+      f = ((base * 8) / desc->block.bits) * desc->block.width;
+      n = ((size * 8) / desc->block.bits) * desc->block.width;
+      if (!n)
+         return NULL;
+      templ.u.buf.first_element = f;
+      templ.u.buf.last_element  = f + (n - 1);
+   } else {
+      templ.u.tex.first_level = stObj->base.BaseLevel;
+   }
 
    if (swizzle != SWIZZLE_NOOP) {
       templ.swizzle_r = GET_SWZ(swizzle, 0);
@@ -194,7 +214,7 @@ update_single_texture(struct st_context *st,
    const struct gl_sampler_object *samp;
    struct gl_texture_object *texObj;
    struct st_texture_object *stObj;
-   enum pipe_format st_view_format;
+   enum pipe_format view_format;
    GLboolean retval;
 
    samp = _mesa_get_samplerobj(ctx, texUnit);
@@ -214,32 +234,18 @@ update_single_texture(struct st_context *st,
    }
 
    /* Determine the format of the texture sampler view */
-   st_view_format = stObj->pt->format;
+   if (texObj->Target == GL_TEXTURE_BUFFER) {
+      view_format =
+         st_mesa_format_to_pipe_format(stObj->base._BufferObjectFormat);
+   }
+   else {
+      view_format =
+         stObj->surface_based ? stObj->surface_format : stObj->pt->format;
 
-   {
-      gl_format texFormat;
-      enum pipe_format firstImageFormat;
-
-      if (texObj->Target == GL_TEXTURE_BUFFER) {
-         texFormat = stObj->base._BufferObjectFormat;
-      } else {
-         const struct st_texture_image *firstImage =
-            st_texture_image(stObj->base.Image[0][stObj->base.BaseLevel]);
-         texFormat = firstImage->base.TexFormat;
+      /* If sRGB decoding is off, use the linear format */
+      if (samp->sRGBDecode == GL_SKIP_DECODE_EXT) {
+         view_format = util_format_linear(view_format);
       }
-      firstImageFormat = st_mesa_format_to_pipe_format(texFormat);
-      if ((samp->sRGBDecode == GL_SKIP_DECODE_EXT) &&
-	  (_mesa_get_format_color_encoding(texFormat) == GL_SRGB)) {
-         /* Don't do sRGB->RGB conversion.  Interpret the texture data as
-          * linear values.
-          */
-	 const gl_format linearFormat =
-	    _mesa_get_srgb_format_linear(texFormat);
-	 firstImageFormat = st_mesa_format_to_pipe_format(linearFormat);
-      }
-
-      if (firstImageFormat != stObj->pt->format)
-	 st_view_format = firstImageFormat;
    }
 
    /* if sampler view has changed dereference it */
@@ -247,7 +253,7 @@ update_single_texture(struct st_context *st,
       if (check_sampler_swizzle(stObj->sampler_view,
 				stObj->base._Swizzle,
 				stObj->base.DepthMode) ||
-	  (st_view_format != stObj->sampler_view->format) ||
+	  (view_format != stObj->sampler_view->format) ||
 	  stObj->base.BaseLevel != stObj->sampler_view->u.tex.first_level) {
 	 pipe_sampler_view_reference(&stObj->sampler_view, NULL);
       }
@@ -255,7 +261,7 @@ update_single_texture(struct st_context *st,
 
    *sampler_view = st_get_texture_sampler_view_from_stobj(stObj, pipe,
 							  samp,
-							  st_view_format);
+							  view_format);
    return GL_TRUE;
 }
 
@@ -320,11 +326,11 @@ update_vertex_textures(struct st_context *st)
 {
    const struct gl_context *ctx = st->ctx;
 
-   if (ctx->Const.MaxVertexTextureImageUnits > 0) {
+   if (ctx->Const.VertexProgram.MaxTextureImageUnits > 0) {
       update_textures(st,
                       PIPE_SHADER_VERTEX,
                       &ctx->VertexProgram._Current->Base,
-                      ctx->Const.MaxVertexTextureImageUnits,
+                      ctx->Const.VertexProgram.MaxTextureImageUnits,
                       st->state.sampler_views[PIPE_SHADER_VERTEX],
                       &st->state.num_sampler_views[PIPE_SHADER_VERTEX]);
    }
@@ -339,7 +345,7 @@ update_fragment_textures(struct st_context *st)
    update_textures(st,
                    PIPE_SHADER_FRAGMENT,
                    &ctx->FragmentProgram._Current->Base,
-                   ctx->Const.MaxTextureImageUnits,
+                   ctx->Const.FragmentProgram.MaxTextureImageUnits,
                    st->state.sampler_views[PIPE_SHADER_FRAGMENT],
                    &st->state.num_sampler_views[PIPE_SHADER_FRAGMENT]);
 }
@@ -354,7 +360,7 @@ update_geometry_textures(struct st_context *st)
       update_textures(st,
                       PIPE_SHADER_GEOMETRY,
                       &ctx->GeometryProgram._Current->Base,
-                      ctx->Const.MaxTextureImageUnits,
+                      ctx->Const.FragmentProgram.MaxTextureImageUnits,
                       st->state.sampler_views[PIPE_SHADER_GEOMETRY],
                       &st->state.num_sampler_views[PIPE_SHADER_GEOMETRY]);
    }

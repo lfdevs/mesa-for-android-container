@@ -32,6 +32,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include "main/macros.h"
 #include "main/mtypes.h"
 #include "main/cpuinfo.h"
 #include "main/extensions.h"
@@ -365,7 +366,6 @@ static const struct { unsigned int attrib, offset; } attribMap[] = {
     __ATTRIB(__DRI_ATTRIB_TRANSPARENT_GREEN_VALUE,	transparentGreen),
     __ATTRIB(__DRI_ATTRIB_TRANSPARENT_BLUE_VALUE,	transparentBlue),
     __ATTRIB(__DRI_ATTRIB_TRANSPARENT_ALPHA_VALUE,	transparentAlpha),
-    __ATTRIB(__DRI_ATTRIB_FLOAT_MODE,			floatMode),
     __ATTRIB(__DRI_ATTRIB_RED_MASK,			redMask),
     __ATTRIB(__DRI_ATTRIB_GREEN_MASK,			greenMask),
     __ATTRIB(__DRI_ATTRIB_BLUE_MASK,			blueMask),
@@ -390,8 +390,6 @@ static const struct { unsigned int attrib, offset; } attribMap[] = {
     __ATTRIB(__DRI_ATTRIB_CONFIG_CAVEAT,		level),
     __ATTRIB(__DRI_ATTRIB_SWAP_METHOD,			level)
 };
-
-#define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
 
 
 /**
@@ -418,11 +416,6 @@ driGetConfigAttribIndex(const __DRIconfig *config,
     case __DRI_ATTRIB_SWAP_METHOD:
         /* XXX no return value??? */
 	break;
-
-    case __DRI_ATTRIB_FLOAT_MODE:
-        /* this field is not int-sized */
-        *value = config->modes.floatMode;
-        break;
 
     default:
         /* any other int-sized field */

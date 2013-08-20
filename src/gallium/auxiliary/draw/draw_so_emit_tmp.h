@@ -10,9 +10,8 @@
    const unsigned prim = input_prims->prim;                       \
    const unsigned prim_flags = input_prims->flags;                \
    const boolean quads_flatshade_last = FALSE;                    \
-   const boolean last_vertex_last = TRUE;                         \
+   const boolean last_vertex_last = !so->draw->rasterizer->flatshade_first;  \
    do {                                                           \
-      debug_assert(input_prims->primitive_count == 1);            \
       switch (prim) {                                             \
       case PIPE_PRIM_LINES_ADJACENCY:                             \
       case PIPE_PRIM_LINE_STRIP_ADJACENCY:                        \

@@ -50,7 +50,6 @@
 static void compile_sf_prog( struct brw_context *brw,
 			     struct brw_sf_prog_key *key )
 {
-   struct intel_context *intel = &brw->intel;
    struct brw_sf_compile c;
    const GLuint *program;
    void *mem_ctx;
@@ -65,7 +64,7 @@ static void compile_sf_prog( struct brw_context *brw,
    brw_init_compile(brw, &c.func, mem_ctx);
 
    c.key = *key;
-   c.vue_map = brw->vs.prog_data->vue_map;
+   c.vue_map = brw->vue_map_geom_out;
    if (c.key.do_point_coord) {
       /*
        * gl_PointCoord is a FS instead of VS builtin variable, thus it's
@@ -73,10 +72,10 @@ static void compile_sf_prog( struct brw_context *brw,
        * it manually to let SF shader generate the needed interpolation
        * coefficient for FS shader.
        */
-      c.vue_map.vert_result_to_slot[BRW_VERT_RESULT_PNTC] = c.vue_map.num_slots;
-      c.vue_map.slot_to_vert_result[c.vue_map.num_slots++] = BRW_VERT_RESULT_PNTC;
+      c.vue_map.varying_to_slot[BRW_VARYING_SLOT_PNTC] = c.vue_map.num_slots;
+      c.vue_map.slot_to_varying[c.vue_map.num_slots++] = BRW_VARYING_SLOT_PNTC;
    }
-   c.urb_entry_read_offset = brw_sf_compute_urb_entry_read_offset(intel);
+   c.urb_entry_read_offset = BRW_SF_URB_ENTRY_READ_OFFSET;
    c.nr_attr_regs = (c.vue_map.num_slots + 1)/2 - c.urb_entry_read_offset;
    c.nr_setup_regs = c.nr_attr_regs;
 
@@ -118,7 +117,7 @@ static void compile_sf_prog( struct brw_context *brw,
       printf("sf:\n");
       for (i = 0; i < program_size / sizeof(struct brw_instruction); i++)
 	 brw_disasm(stdout, &((struct brw_instruction *)program)[i],
-		    intel->gen);
+		    brw->gen);
       printf("\n");
    }
 
@@ -135,7 +134,7 @@ static void compile_sf_prog( struct brw_context *brw,
 static void
 brw_upload_sf_prog(struct brw_context *brw)
 {
-   struct gl_context *ctx = &brw->intel.ctx;
+   struct gl_context *ctx = &brw->ctx;
    struct brw_sf_prog_key key;
    /* _NEW_BUFFERS */
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
@@ -144,18 +143,18 @@ brw_upload_sf_prog(struct brw_context *brw)
 
    /* Populate the key, noting state dependencies:
     */
-   /* CACHE_NEW_VS_PROG */
-   key.attrs = brw->vs.prog_data->outputs_written; 
+   /* BRW_NEW_VUE_MAP_GEOM_OUT */
+   key.attrs = brw->vue_map_geom_out.slots_valid;
 
    /* BRW_NEW_REDUCED_PRIMITIVE */
-   switch (brw->intel.reduced_primitive) {
+   switch (brw->reduced_primitive) {
    case GL_TRIANGLES: 
       /* NOTE: We just use the edgeflag attribute as an indicator that
        * unfilled triangles are active.  We don't actually do the
        * edgeflag testing here, it is already done in the clip
        * program.
        */
-      if (key.attrs & BITFIELD64_BIT(VERT_RESULT_EDGE))
+      if (key.attrs & BITFIELD64_BIT(VARYING_SLOT_EDGE))
 	 key.primitive = SF_UNFILLED_TRIS;
       else
 	 key.primitive = SF_TRIANGLES;
@@ -181,7 +180,7 @@ brw_upload_sf_prog(struct brw_context *brw)
 	    key.point_sprite_coord_replace |= (1 << i);
       }
    }
-   if (brw->fragment_program->Base.InputsRead & BITFIELD64_BIT(FRAG_ATTRIB_PNTC))
+   if (brw->fragment_program->Base.InputsRead & BITFIELD64_BIT(VARYING_SLOT_PNTC))
       key.do_point_coord = 1;
    /*
     * Window coordinates in a FBO are inverted, which means point
@@ -216,8 +215,7 @@ const struct brw_tracked_state brw_sf_prog = {
    .dirty = {
       .mesa  = (_NEW_HINT | _NEW_LIGHT | _NEW_POLYGON | _NEW_POINT |
                 _NEW_TRANSFORM | _NEW_BUFFERS | _NEW_PROGRAM),
-      .brw   = (BRW_NEW_REDUCED_PRIMITIVE),
-      .cache = CACHE_NEW_VS_PROG
+      .brw   = (BRW_NEW_REDUCED_PRIMITIVE | BRW_NEW_VUE_MAP_GEOM_OUT)
    },
    .emit = brw_upload_sf_prog
 };

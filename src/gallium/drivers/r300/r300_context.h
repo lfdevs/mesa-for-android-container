@@ -51,6 +51,8 @@ enum colormask_swizzle {
     COLORMASK_AAAA,
     COLORMASK_GRRG,
     COLORMASK_ARRA,
+    COLORMASK_BGRX,
+    COLORMASK_RGBX,
     COLORMASK_NUM_SWIZZLES
 };
 
@@ -80,6 +82,7 @@ struct r300_blend_state {
 
     uint32_t cb_clamp[COLORMASK_NUM_SWIZZLES][8];
     uint32_t cb_noclamp[8];
+    uint32_t cb_noclamp_noalpha[8];
     uint32_t cb_no_readwrite[8];
 };
 
@@ -576,6 +579,7 @@ struct r300_context {
     int sprite_coord_enable;
     /* Whether two-sided color selection is enabled (AKA light_twoside). */
     boolean two_sided_color;
+    boolean flatshade;
     /* Whether fast color clear is enabled. */
     boolean cbzb_clear;
     /* Whether fragment shader needs to be validated. */

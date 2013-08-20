@@ -35,15 +35,24 @@ extern "C" {
 #endif
 
 void
-brw_blorp_blit_miptrees(struct intel_context *intel,
+brw_blorp_blit_miptrees(struct brw_context *brw,
                         struct intel_mipmap_tree *src_mt,
                         unsigned src_level, unsigned src_layer,
                         struct intel_mipmap_tree *dst_mt,
                         unsigned dst_level, unsigned dst_layer,
-                        int src_x0, int src_y0,
-                        int dst_x0, int dst_y0,
-                        int dst_x1, int dst_y1,
+                        float src_x0, float src_y0,
+                        float src_x1, float src_y1,
+                        float dst_x0, float dst_y0,
+                        float dst_x1, float dst_y1,
                         bool mirror_x, bool mirror_y);
+
+bool
+brw_blorp_clear_color(struct brw_context *brw, struct gl_framebuffer *fb,
+                      bool partial_clear);
+
+void
+brw_blorp_resolve_color(struct brw_context *brw,
+                        struct intel_mipmap_tree *mt);
 
 #ifdef __cplusplus
 } /* end extern "C" */
@@ -67,6 +76,17 @@ public:
             unsigned int level, unsigned int layer);
 
    struct intel_mipmap_tree *mt;
+
+   /**
+    * The miplevel to use.
+    */
+   uint32_t level;
+
+   /**
+    * The 2D layer within the miplevel. Combined, level and layer define the
+    * 2D miptree slice to use.
+    */
+   uint32_t layer;
 
    /**
     * Width of the miplevel to be used.  For surfaces using
@@ -144,25 +164,29 @@ public:
 
 struct brw_blorp_coord_transform_params
 {
-   void setup(GLuint src0, GLuint dst0, GLuint dst1,
+   void setup(GLfloat src0, GLfloat src1, GLfloat dst0, GLfloat dst1,
               bool mirror);
 
-   int16_t multiplier;
-   int16_t offset;
+   float multiplier;
+   float offset;
 };
 
 
 struct brw_blorp_wm_push_constants
 {
-   uint16_t dst_x0;
-   uint16_t dst_x1;
-   uint16_t dst_y0;
-   uint16_t dst_y1;
+   uint32_t dst_x0;
+   uint32_t dst_x1;
+   uint32_t dst_y0;
+   uint32_t dst_y1;
+   /* Top right coordinates of the rectangular sample grid used for
+    * multisample scaled blitting.
+    */
+   float sample_grid_x1;
+   float sample_grid_y1;
    brw_blorp_coord_transform_params x_transform;
    brw_blorp_coord_transform_params y_transform;
-
    /* Pad out to an integral number of registers */
-   uint16_t pad[8];
+   uint32_t pad[6];
 };
 
 /* Every 32 bytes of push constant data constitutes one GEN register. */
@@ -179,6 +203,14 @@ struct brw_blorp_prog_data
     */
    bool persample_msaa_dispatch;
 };
+
+
+enum gen7_fast_clear_op {
+   GEN7_FAST_CLEAR_OP_NONE,
+   GEN7_FAST_CLEAR_OP_FAST_CLEAR,
+   GEN7_FAST_CLEAR_OP_RESOLVE,
+};
+
 
 class brw_blorp_params
 {
@@ -197,14 +229,16 @@ public:
    brw_blorp_surface_info src;
    brw_blorp_surface_info dst;
    enum gen6_hiz_op hiz_op;
+   enum gen7_fast_clear_op fast_clear_op;
    unsigned num_samples;
    bool use_wm_prog;
    brw_blorp_wm_push_constants wm_push_consts;
+   bool color_write_disable[4];
 };
 
 
 void
-brw_blorp_exec(struct intel_context *intel, const brw_blorp_params *params);
+brw_blorp_exec(struct brw_context *brw, const brw_blorp_params *params);
 
 
 /**
@@ -292,6 +326,15 @@ struct brw_blorp_blit_prog_key
     * than one sample per pixel.
     */
    bool persample_msaa_dispatch;
+
+   /* True for scaled blitting. */
+   bool blit_scaled;
+
+   /* Scale factors between the pixel grid and the grid of samples. We're
+    * using grid of samples for bilinear filetring in multisample scaled blits.
+    */
+   float x_scale;
+   float y_scale;
 };
 
 class brw_blorp_blit_params : public brw_blorp_params
@@ -302,9 +345,10 @@ public:
                          unsigned src_level, unsigned src_layer,
                          struct intel_mipmap_tree *dst_mt,
                          unsigned dst_level, unsigned dst_layer,
-                         GLuint src_x0, GLuint src_y0,
-                         GLuint dst_x0, GLuint dst_y0,
-                         GLuint width, GLuint height,
+                         GLfloat src_x0, GLfloat src_y0,
+                         GLfloat src_x1, GLfloat src_y1,
+                         GLfloat dst_x0, GLfloat dst_y0,
+                         GLfloat dst_x1, GLfloat dst_y1,
                          bool mirror_x, bool mirror_y);
 
    virtual uint32_t get_wm_prog(struct brw_context *brw,

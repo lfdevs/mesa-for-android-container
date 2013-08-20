@@ -57,6 +57,7 @@ struct radeon_bo {
     uint32_t name;
     uint64_t va;
     uint64_t va_size;
+    enum radeon_bo_domain initial_domain;
 
     /* how many command streams is this bo referenced in? */
     int num_cs_references;
@@ -77,5 +78,7 @@ void radeon_bo_reference(struct radeon_bo **dst, struct radeon_bo *src)
 {
     pb_reference((struct pb_buffer**)dst, (struct pb_buffer*)src);
 }
+
+void *radeon_bo_do_map(struct radeon_bo *bo);
 
 #endif

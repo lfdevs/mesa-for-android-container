@@ -1,6 +1,5 @@
 /*
  * Mesa 3-D graphics library
- * Version:  7.7
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (c) 2008-2009  VMware, Inc.
@@ -18,9 +17,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * BRIAN PAUL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
@@ -43,23 +43,24 @@
 #if DIM == 1
 
 #define TEXEL_ADDR( type, image, i, j, k, size ) \
-	((void) (j), (void) (k), ((type *)(image)->Map + (i) * (size)))
+	((void) (j), (void) (k), ((type *)(image)->ImageSlices[0] + (i) * (size)))
 
 #define FETCH(x) fetch_texel_1d_##x
 
 #elif DIM == 2
 
 #define TEXEL_ADDR( type, image, i, j, k, size )			\
-	((void) (k),							\
-	 ((type *)(image)->Map + ((image)->RowStride * (j) + (i)) * (size)))
+       ((void) (k),							\
+        ((type *)((GLubyte *) (image)->ImageSlices[0] + (image)->RowStride * (j)) + \
+          (i) * (size)))
 
 #define FETCH(x) fetch_texel_2d_##x
 
 #elif DIM == 3
 
 #define TEXEL_ADDR( type, image, i, j, k, size )			\
-	((type *)(image)->Map + ((image)->ImageOffsets[k]		\
-             + (image)->RowStride * (j) + (i)) * (size))
+        ((type *)((GLubyte *) (image)->ImageSlices[k] +                      \
+                  (image)->RowStride * (j)) + (i) * (size))
 
 #define FETCH(x) fetch_texel_3d_##x
 
@@ -797,7 +798,7 @@ static void FETCH(f_al88_rev)( const struct swrast_texture_image *texImage,
 
 
 
-/* MESA_FORMAT_RG1616 ********************************************************/
+/* MESA_FORMAT_GR1616 ********************************************************/
 
 /* Fetch texel from 1D, 2D or 3D rg1616 texture, return 4 GLchans */
 static void FETCH(f_rg1616)( const struct swrast_texture_image *texImage,
@@ -813,7 +814,7 @@ static void FETCH(f_rg1616)( const struct swrast_texture_image *texImage,
 
 
 
-/* MESA_FORMAT_RG1616_REV ****************************************************/
+/* MESA_FORMAT_RG1616 ****************************************************/
 
 /* Fetch texel from 1D, 2D or 3D rg1616_rev texture, return 4 GLchans */
 static void FETCH(f_rg1616_rev)( const struct swrast_texture_image *texImage,
@@ -1428,6 +1429,43 @@ FETCH(rgba_16)(const struct swrast_texture_image *texImage,
 }
 
 
+
+/* MESA_FORMAT_XBGR.... **********************************************/
+
+static void
+FETCH(xbgr16161616_unorm)(const struct swrast_texture_image *texImage,
+                          GLint i, GLint j, GLint k, GLfloat *texel)
+{
+   const GLushort *s = TEXEL_ADDR(GLushort, texImage, i, j, k, 4);
+   texel[RCOMP] = USHORT_TO_FLOAT(s[0]);
+   texel[GCOMP] = USHORT_TO_FLOAT(s[1]);
+   texel[BCOMP] = USHORT_TO_FLOAT(s[2]);
+   texel[ACOMP] = 1.0f;
+}
+
+static void
+FETCH(xbgr16161616_float)(const struct swrast_texture_image *texImage,
+                          GLint i, GLint j, GLint k, GLfloat *texel)
+{
+   const GLhalfARB *s = TEXEL_ADDR(GLhalfARB, texImage, i, j, k, 4);
+   texel[RCOMP] = _mesa_half_to_float(s[0]);
+   texel[GCOMP] = _mesa_half_to_float(s[1]);
+   texel[BCOMP] = _mesa_half_to_float(s[2]);
+   texel[ACOMP] = 1.0f;
+}
+
+static void
+FETCH(xbgr32323232_float)(const struct swrast_texture_image *texImage,
+                          GLint i, GLint j, GLint k, GLfloat *texel)
+{
+   const GLfloat *s = TEXEL_ADDR(GLfloat, texImage, i, j, k, 4);
+   texel[RCOMP] = s[0];
+   texel[GCOMP] = s[1];
+   texel[BCOMP] = s[2];
+   texel[ACOMP] = 1.0f;
+}
+
+/* XXX other XBGR formats need to be implemented here */
 
 
 

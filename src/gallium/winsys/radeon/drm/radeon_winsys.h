@@ -125,6 +125,9 @@ enum radeon_family {
     CHIP_VERDE,
     CHIP_OLAND,
     CHIP_HAINAN,
+    CHIP_BONAIRE,
+    CHIP_KAVERI,
+    CHIP_KABINI,
     CHIP_LAST,
 };
 
@@ -137,13 +140,22 @@ enum chip_class {
     R700,
     EVERGREEN,
     CAYMAN,
-    TAHITI,
+    SI,
+    CIK,
 };
 
 enum ring_type {
     RING_GFX = 0,
     RING_DMA,
+    RING_UVD,
     RING_LAST,
+};
+
+enum radeon_value_id {
+    RADEON_REQUESTED_VRAM_MEMORY,
+    RADEON_REQUESTED_GTT_MEMORY,
+    RADEON_BUFFER_WAIT_TIME_NS,
+    RADEON_TIMESTAMP
 };
 
 struct winsys_handle;
@@ -165,6 +177,8 @@ struct radeon_info {
     uint32_t                    drm_major; /* version */
     uint32_t                    drm_minor;
     uint32_t                    drm_patchlevel;
+
+    boolean                     has_uvd;
 
     uint32_t                    r300_num_gb_pipes;
     uint32_t                    r300_num_z_pipes;
@@ -359,8 +373,12 @@ struct radeon_winsys {
      * Create a command stream.
      *
      * \param ws        The winsys this function is called from.
+     * \param ring_type The ring type (GFX, DMA, UVD)
+     * \param trace_buf Trace buffer when tracing is enabled
      */
-    struct radeon_winsys_cs *(*cs_create)(struct radeon_winsys *ws, enum ring_type ring_type);
+    struct radeon_winsys_cs *(*cs_create)(struct radeon_winsys *ws,
+                                          enum ring_type ring_type,
+                                          struct radeon_winsys_cs_handle *trace_buf);
 
     /**
      * Destroy a command stream.
@@ -416,10 +434,11 @@ struct radeon_winsys {
     /**
      * Flush a command stream.
      *
-     * \param cs        A command stream to flush.
-     * \param flags,    RADEON_FLUSH_ASYNC or 0.
+     * \param cs          A command stream to flush.
+     * \param flags,      RADEON_FLUSH_ASYNC or 0.
+     * \param cs_trace_id A unique identifiant for the cs
      */
-    void (*cs_flush)(struct radeon_winsys_cs *cs, unsigned flags);
+    void (*cs_flush)(struct radeon_winsys_cs *cs, unsigned flags, uint32_t cs_trace_id);
 
     /**
      * Set a flush callback which is called from winsys when flush is
@@ -478,12 +497,8 @@ struct radeon_winsys {
     int (*surface_best)(struct radeon_winsys *ws,
                         struct radeon_surface *surf);
 
-    /**
-     * Return the current timestamp (gpu clock) on r600 and later GPUs.
-     *
-     * \param ws        The winsys this function is called from.
-     */
-    uint64_t (*query_timestamp)(struct radeon_winsys *ws);
+    uint64_t (*query_value)(struct radeon_winsys *ws,
+                            enum radeon_value_id value);
 };
 
 #endif

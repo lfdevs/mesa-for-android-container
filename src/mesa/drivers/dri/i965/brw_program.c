@@ -78,7 +78,7 @@ static struct gl_program *brwNewProgram( struct gl_context *ctx,
    case GL_VERTEX_PROGRAM_ARB: {
       struct brw_vertex_program *prog = CALLOC_STRUCT(brw_vertex_program);
       if (prog) {
-	 prog->id = get_new_program_id(brw->intel.intelScreen);
+	 prog->id = get_new_program_id(brw->intelScreen);
 
 	 return _mesa_init_vertex_program( ctx, &prog->program,
 					     target, id );
@@ -90,7 +90,7 @@ static struct gl_program *brwNewProgram( struct gl_context *ctx,
    case GL_FRAGMENT_PROGRAM_ARB: {
       struct brw_fragment_program *prog = CALLOC_STRUCT(brw_fragment_program);
       if (prog) {
-	 prog->id = get_new_program_id(brw->intel.intelScreen);
+	 prog->id = get_new_program_id(brw->intelScreen);
 
 	 return _mesa_init_fragment_program( ctx, &prog->program,
 					     target, id );
@@ -126,7 +126,8 @@ brwProgramStringNotify(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
 
-   if (target == GL_FRAGMENT_PROGRAM_ARB) {
+   switch (target) {
+   case GL_FRAGMENT_PROGRAM_ARB: {
       struct gl_fragment_program *fprog = (struct gl_fragment_program *) prog;
       struct brw_fragment_program *newFP = brw_fragment_program(fprog);
       const struct brw_fragment_program *curFP =
@@ -134,9 +135,10 @@ brwProgramStringNotify(struct gl_context *ctx,
 
       if (newFP == curFP)
 	 brw->state.dirty.brw |= BRW_NEW_FRAGMENT_PROGRAM;
-      newFP->id = get_new_program_id(brw->intel.intelScreen);
+      newFP->id = get_new_program_id(brw->intelScreen);
+      break;
    }
-   else if (target == GL_VERTEX_PROGRAM_ARB) {
+   case GL_VERTEX_PROGRAM_ARB: {
       struct gl_vertex_program *vprog = (struct gl_vertex_program *) prog;
       struct brw_vertex_program *newVP = brw_vertex_program(vprog);
       const struct brw_vertex_program *curVP =
@@ -147,11 +149,23 @@ brwProgramStringNotify(struct gl_context *ctx,
       if (newVP->program.IsPositionInvariant) {
 	 _mesa_insert_mvp_code(ctx, &newVP->program);
       }
-      newVP->id = get_new_program_id(brw->intel.intelScreen);
+      newVP->id = get_new_program_id(brw->intelScreen);
 
       /* Also tell tnl about it:
        */
       _tnl_program_string(ctx, target, prog);
+      break;
+   }
+   default:
+      /*
+       * driver->ProgramStringNotify is only called for ARB programs, fixed
+       * function vertex programs, and ir_to_mesa (which isn't used by the
+       * i965 back-end).  Therefore, even after geometry shaders are added,
+       * this function should only ever be called with a target of
+       * GL_VERTEX_PROGRAM_ARB or GL_FRAGMENT_PROGRAM_ARB.
+       */
+      assert(!"Unexpected target in brwProgramStringNotify");
+      break;
    }
 
    brw_add_texrect_params(prog);
@@ -191,7 +205,7 @@ brw_get_scratch_size(int size)
 }
 
 void
-brw_get_scratch_bo(struct intel_context *intel,
+brw_get_scratch_bo(struct brw_context *brw,
 		   drm_intel_bo **scratch_bo, int size)
 {
    drm_intel_bo *old_bo = *scratch_bo;
@@ -202,7 +216,7 @@ brw_get_scratch_bo(struct intel_context *intel,
    }
 
    if (!old_bo) {
-      *scratch_bo = drm_intel_bo_alloc(intel->bufmgr, "scratch bo", size, 4096);
+      *scratch_bo = drm_intel_bo_alloc(brw->bufmgr, "scratch bo", size, 4096);
    }
 }
 
@@ -224,12 +238,13 @@ void brwInitFragProgFuncs( struct dd_function_table *functions )
 void
 brw_init_shader_time(struct brw_context *brw)
 {
-   struct intel_context *intel = &brw->intel;
-
    const int max_entries = 4096;
-   brw->shader_time.bo = drm_intel_bo_alloc(intel->bufmgr, "shader time",
-                                            max_entries * 4, 4096);
-   brw->shader_time.programs = rzalloc_array(brw, struct gl_shader_program *,
+   brw->shader_time.bo = drm_intel_bo_alloc(brw->bufmgr, "shader time",
+                                            max_entries * SHADER_TIME_STRIDE,
+                                            4096);
+   brw->shader_time.shader_programs = rzalloc_array(brw, struct gl_shader_program *,
+                                                    max_entries);
+   brw->shader_time.programs = rzalloc_array(brw, struct gl_program *,
                                              max_entries);
    brw->shader_time.types = rzalloc_array(brw, enum shader_time_shader_type,
                                           max_entries);
@@ -274,13 +289,15 @@ get_written_and_reset(struct brw_context *brw, int i,
 }
 
 static void
-print_shader_time_line(const char *name, int shader_num,
-                       uint64_t time, uint64_t total)
+print_shader_time_line(const char *stage, const char *name,
+                       int shader_num, uint64_t time, uint64_t total)
 {
-   printf("%s", name);
-   for (int i = strlen(name); i < 10; i++)
-      printf(" ");
-   printf("%4d: ", shader_num);
+   printf("%-6s%-6s", stage, name);
+
+   if (shader_num != -1)
+      printf("%4d: ", shader_num);
+   else
+      printf("    : ");
 
    printf("%16lld (%7.2f Gcycles)      %4.1f%%\n",
           (long long)time,
@@ -359,8 +376,10 @@ brw_report_shader_time(struct brw_context *brw)
    qsort(sorted, brw->shader_time.num_entries, sizeof(sorted[0]), compare_time);
 
    printf("\n");
-   printf("type   ID      cycles spent                   %% of total\n");
+   printf("type          ID      cycles spent                   %% of total\n");
    for (int s = 0; s < brw->shader_time.num_entries; s++) {
+      const char *shader_name;
+      const char *stage;
       /* Work back from the sorted pointers times to a time to print. */
       int i = sorted[s] - scaled;
 
@@ -368,30 +387,55 @@ brw_report_shader_time(struct brw_context *brw)
          continue;
 
       int shader_num = -1;
-      if (brw->shader_time.programs[i]) {
-         shader_num = brw->shader_time.programs[i]->Name;
+      if (brw->shader_time.shader_programs[i]) {
+         shader_num = brw->shader_time.shader_programs[i]->Name;
+
+         /* The fixed function fragment shader generates GLSL IR with a Name
+          * of 0, and nothing else does.
+          */
+         if (shader_num == 0 &&
+             (brw->shader_time.types[i] == ST_FS8 ||
+              brw->shader_time.types[i] == ST_FS16)) {
+            shader_name = "ff";
+            shader_num = -1;
+         } else {
+            shader_name = "glsl";
+         }
+      } else if (brw->shader_time.programs[i]) {
+         shader_num = brw->shader_time.programs[i]->Id;
+         if (shader_num == 0) {
+            shader_name = "ff";
+            shader_num = -1;
+         } else {
+            shader_name = "prog";
+         }
+      } else {
+         shader_name = "other";
       }
 
       switch (brw->shader_time.types[i]) {
       case ST_VS:
-         print_shader_time_line("vs", shader_num, scaled[i], total);
+         stage = "vs";
          break;
       case ST_FS8:
-         print_shader_time_line("fs8", shader_num, scaled[i], total);
+         stage = "fs8";
          break;
       case ST_FS16:
-         print_shader_time_line("fs16", shader_num, scaled[i], total);
+         stage = "fs16";
          break;
       default:
-         print_shader_time_line("other", shader_num, scaled[i], total);
+         stage = "other";
          break;
       }
+
+      print_shader_time_line(stage, shader_name, shader_num,
+                             scaled[i], total);
    }
 
    printf("\n");
-   print_shader_time_line("total vs", -1, total_by_type[ST_VS], total);
-   print_shader_time_line("total fs8", -1, total_by_type[ST_FS8], total);
-   print_shader_time_line("total fs16", -1, total_by_type[ST_FS16], total);
+   print_shader_time_line("total", "vs", -1, total_by_type[ST_VS], total);
+   print_shader_time_line("total", "fs8", -1, total_by_type[ST_FS8], total);
+   print_shader_time_line("total", "fs16", -1, total_by_type[ST_FS16], total);
 }
 
 static void
@@ -409,7 +453,7 @@ brw_collect_shader_time(struct brw_context *brw)
    uint32_t *times = brw->shader_time.bo->virtual;
 
    for (int i = 0; i < brw->shader_time.num_entries; i++) {
-      brw->shader_time.cumulative[i] += times[i];
+      brw->shader_time.cumulative[i] += times[i * SHADER_TIME_STRIDE / 4];
    }
 
    /* Zero the BO out to clear it out for our next collection.
@@ -428,6 +472,36 @@ brw_collect_and_report_shader_time(struct brw_context *brw)
       brw_report_shader_time(brw);
       brw->shader_time.report_time = get_time();
    }
+}
+
+/**
+ * Chooses an index in the shader_time buffer and sets up tracking information
+ * for our printouts.
+ *
+ * Note that this holds on to references to the underlying programs, which may
+ * change their lifetimes compared to normal operation.
+ */
+int
+brw_get_shader_time_index(struct brw_context *brw,
+                          struct gl_shader_program *shader_prog,
+                          struct gl_program *prog,
+                          enum shader_time_shader_type type)
+{
+   struct gl_context *ctx = &brw->ctx;
+
+   int shader_time_index = brw->shader_time.num_entries++;
+   assert(shader_time_index < brw->shader_time.max_entries);
+   brw->shader_time.types[shader_time_index] = type;
+
+   _mesa_reference_shader_program(ctx,
+                                  &brw->shader_time.shader_programs[shader_time_index],
+                                  shader_prog);
+
+   _mesa_reference_program(ctx,
+                           &brw->shader_time.programs[shader_time_index],
+                           prog);
+
+   return shader_time_index;
 }
 
 void

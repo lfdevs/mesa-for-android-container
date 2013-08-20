@@ -1,5 +1,31 @@
---- a/src/mesa/drivers/osmesa/Makefile.am
-+++ b/src/mesa/drivers/osmesa/Makefile.am
+Index: mesa/src/gallium/targets/osmesa/Makefile.am
+===================================================================
+--- mesa.orig/src/gallium/targets/osmesa/Makefile.am	2013-08-20 11:44:50.981036890 +0000
++++ mesa/src/gallium/targets/osmesa/Makefile.am	2013-08-20 11:44:50.978136960 +0000
+@@ -38,7 +38,7 @@
+ 
+ lib@OSMESA_LIB@_la_SOURCES = target.c
+ 
+-lib@OSMESA_LIB@_la_LDFLAGS = -module -version-number @OSMESA_VERSION@ -no-undefined
++lib@OSMESA_LIB@_la_LDFLAGS = -module -version-number 6:5:3 -no-undefined
+ 
+ if HAVE_SHARED_GLAPI
+ GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
+@@ -82,8 +82,8 @@
+ 	$(MKDIR_P) $(top_builddir)/$(LIB_DIR);
+ 	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium;
+ 	ln -f .libs/lib@OSMESA_LIB@.so $(top_builddir)/$(LIB_DIR)/gallium/lib@OSMESA_LIB@.so;
+-	ln -f .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@ $(top_builddir)/$(LIB_DIR)/gallium/lib@OSMESA_LIB@.so.@OSMESA_VERSION@;
+-	cp .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@.0.0 $(top_builddir)/$(LIB_DIR)/gallium/
++	ln -f .libs/lib@OSMESA_LIB@.so.6 $(top_builddir)/$(LIB_DIR)/gallium/lib@OSMESA_LIB@.so.6;
++	cp .libs/lib@OSMESA_LIB@.so.6.5.3 $(top_builddir)/$(LIB_DIR)/gallium/
+ endif
+ 
+ # XXX fix-up?
+Index: mesa/src/mesa/drivers/osmesa/Makefile.am
+===================================================================
+--- mesa.orig/src/mesa/drivers/osmesa/Makefile.am	2013-08-20 11:44:50.981036890 +0000
++++ mesa/src/mesa/drivers/osmesa/Makefile.am	2013-08-20 11:44:50.978336955 +0000
 @@ -37,7 +37,7 @@
  nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy.cpp
  lib@OSMESA_LIB@_la_SOURCES = osmesa.c
@@ -7,8 +33,8 @@
 -lib@OSMESA_LIB@_la_LDFLAGS = -module -version-number @OSMESA_VERSION@ -no-undefined
 +lib@OSMESA_LIB@_la_LDFLAGS = -module -version-number 6:5:3 -no-undefined
  
+ GLAPI_LIB = $(top_builddir)/src/mapi/glapi/libglapi.la
  if HAVE_SHARED_GLAPI
- GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 @@ -55,7 +55,7 @@
  all-local: lib@OSMESA_LIB@.la
  	$(MKDIR_P) $(top_builddir)/$(LIB_DIR);
@@ -18,3 +44,49 @@
  endif
  
  pkgconfigdir = $(libdir)/pkgconfig
+Index: mesa/configure.ac
+===================================================================
+--- mesa.orig/configure.ac	2013-08-20 11:44:50.981036890 +0000
++++ mesa/configure.ac	2013-08-20 12:05:59.000000000 +0000
+@@ -769,11 +769,6 @@
+     GALLIUM_STATE_TRACKERS_DIRS="dri $GALLIUM_STATE_TRACKERS_DIRS"
+ fi
+ 
+-if test "x$enable_osmesa" = xyes; then
+-    GALLIUM_STATE_TRACKERS_DIRS="osmesa $GALLIUM_STATE_TRACKERS_DIRS"
+-    GALLIUM_TARGET_DIRS="$GALLIUM_TARGET_DIRS osmesa"
+-fi
+-
+ AC_SUBST([MESA_LLVM])
+ 
+ # Check for libdrm
+Index: mesa/src/gallium/state_trackers/Makefile.am
+===================================================================
+--- mesa.orig/src/gallium/state_trackers/Makefile.am	2013-08-20 07:05:41.097175049 +0000
++++ mesa/src/gallium/state_trackers/Makefile.am	2013-08-20 12:06:21.289668508 +0000
+@@ -25,10 +25,6 @@
+ SUBDIRS += glx
+ endif
+ 
+-if HAVE_OSMESA
+-SUBDIRS += osmesa
+-endif
+-
+ if HAVE_DRI
+ SUBDIRS += dri
+ endif
+Index: mesa/src/gallium/targets/Makefile.am
+===================================================================
+--- mesa.orig/src/gallium/targets/Makefile.am	2013-08-20 07:05:41.110674769 +0000
++++ mesa/src/gallium/targets/Makefile.am	2013-08-20 12:06:33.791167527 +0000
+@@ -26,10 +26,6 @@
+ SUBDIRS += libgl-xlib
+ endif
+ 
+-if HAVE_OSMESA
+-SUBDIRS += osmesa
+-endif
+-
+ if HAVE_GALLIUM_GBM
+ SUBDIRS += gbm
+ endif

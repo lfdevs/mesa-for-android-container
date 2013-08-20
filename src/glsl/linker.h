@@ -60,6 +60,14 @@ link_uniform_blocks(void *mem_ctx,
                     unsigned num_shaders,
                     struct gl_uniform_block **blocks_ret);
 
+bool
+validate_intrastage_interface_blocks(const gl_shader **shader_list,
+                                     unsigned num_shaders);
+
+bool
+validate_interstage_interface_blocks(const gl_shader *producer,
+                                     const gl_shader *consumer);
+
 /**
  * Class for processing all of the leaf fields of a variable that corresponds
  * to a program resource.
@@ -116,6 +124,19 @@ protected:
     * \param type  Type of the field.
     * \param name  Fully qualified name of the field.
     * \param row_major  For a matrix type, is it stored row-major.
+    * \param record_type  Type of the record containing the field.
+    *
+    * The default implementation just calls the other \c visit_field method.
+    */
+   virtual void visit_field(const glsl_type *type, const char *name,
+                            bool row_major, const glsl_type *record_type);
+
+   /**
+    * Method invoked for each leaf of the variable
+    *
+    * \param type  Type of the field.
+    * \param name  Fully qualified name of the field.
+    * \param row_major  For a matrix type, is it stored row-major.
     */
    virtual void visit_field(const glsl_type *type, const char *name,
                             bool row_major) = 0;
@@ -136,7 +157,7 @@ private:
     *                     terminating \c NUL character.
     */
    void recursion(const glsl_type *t, char **name, size_t name_length,
-                  bool row_major);
+                  bool row_major, const glsl_type *record_type);
 };
 
 void

@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors: Christoph Bumiller
  */
@@ -181,7 +181,6 @@ nv50_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
       nv50_query_get(push, q, 0x20, 0x05805002);
       nv50_query_get(push, q, 0x30, 0x06805002);
       break;
-   case PIPE_QUERY_TIMESTAMP_DISJOINT:
    case PIPE_QUERY_TIME_ELAPSED:
       nv50_query_get(push, q, 0x10, 0x00005002);
       break;
@@ -218,7 +217,6 @@ nv50_query_end(struct pipe_context *pipe, struct pipe_query *pq)
    case PIPE_QUERY_TIMESTAMP:
       q->sequence++;
       /* fall through */
-   case PIPE_QUERY_TIMESTAMP_DISJOINT:
    case PIPE_QUERY_TIME_ELAPSED:
       nv50_query_get(push, q, 0, 0x00005002);
       break;
@@ -228,6 +226,8 @@ nv50_query_end(struct pipe_context *pipe, struct pipe_query *pq)
       break;
    case NVA0_QUERY_STREAM_OUTPUT_BUFFER_OFFSET:
       nv50_query_get(push, q, 0, 0x0d005002 | (q->index << 5));
+      break;
+   case PIPE_QUERY_TIMESTAMP_DISJOINT:
       break;
    default:
       assert(0);
@@ -287,9 +287,9 @@ nv50_query_result(struct pipe_context *pipe, struct pipe_query *pq,
    case PIPE_QUERY_TIMESTAMP:
       res64[0] = data64[1];
       break;
-   case PIPE_QUERY_TIMESTAMP_DISJOINT: /* u32 sequence, u32 0, u64 time */
+   case PIPE_QUERY_TIMESTAMP_DISJOINT:
       res64[0] = 1000000000;
-      res8[8] = (data64[1] == data64[3]) ? FALSE : TRUE;
+      res8[8] = FALSE;
       break;
    case PIPE_QUERY_TIME_ELAPSED:
       res64[0] = data64[1] - data64[3];
@@ -321,13 +321,15 @@ nv84_query_fifo_wait(struct nouveau_pushbuf *push, struct pipe_query *pq)
 
 static void
 nv50_render_condition(struct pipe_context *pipe,
-                      struct pipe_query *pq, uint mode)
+                      struct pipe_query *pq,
+                      boolean condition, uint mode)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    struct nv50_query *q;
 
    nv50->cond_query = pq;
+   nv50->cond_cond = condition;
    nv50->cond_mode = mode;
 
    PUSH_SPACE(push, 6);

@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "nv50_ir.h"
@@ -103,19 +103,18 @@ BuildUtil::mkOp3(operation op, DataType ty, Value *dst,
    return insn;
 }
 
-LValue *
-BuildUtil::mkLoad(DataType ty, Symbol *mem, Value *ptr)
+Instruction *
+BuildUtil::mkLoad(DataType ty, Value *dst, Symbol *mem, Value *ptr)
 {
    Instruction *insn = new_Instruction(func, OP_LOAD, ty);
-   LValue *def = getScratch();
 
-   insn->setDef(0, def);
+   insn->setDef(0, dst);
    insn->setSrc(0, mem);
    if (ptr)
       insn->setIndirect(0, 0, ptr);
 
    insert(insn);
-   return def;
+   return insn;
 }
 
 Instruction *
@@ -241,15 +240,17 @@ BuildUtil::mkCmp(operation op, CondCode cc, DataType ty, Value *dst,
    return insn;
 }
 
-Instruction *
-BuildUtil::mkTex(operation op, TexTarget targ, uint8_t tic, uint8_t tsc,
-                 Value **def, Value **src)
+TexInstruction *
+BuildUtil::mkTex(operation op, TexTarget targ,
+                 uint16_t tic, uint16_t tsc,
+                 const std::vector<Value *> &def,
+                 const std::vector<Value *> &src)
 {
    TexInstruction *tex = new_TexInstruction(func, op);
 
-   for (int d = 0; d < 4 && def[d]; ++d)
+   for (size_t d = 0; d < def.size() && def[d]; ++d)
       tex->setDef(d, def[d]);
-   for (int s = 0; s < 4 && src[s]; ++s)
+   for (size_t s = 0; s < src.size() && src[s]; ++s)
       tex->setSrc(s, src[s]);
 
    tex->setTexture(targ, tic, tsc);
@@ -502,7 +503,7 @@ BuildUtil::DataArray::load(ValueMap &m, int i, int c, Value *ptr)
       if (!sym)
          sym = insert(m, i, c, mkSymbol(i, c));
 
-      return up->mkLoad(typeOfSize(eltSize), static_cast<Symbol *>(sym), ptr);
+      return up->mkLoadv(typeOfSize(eltSize), static_cast<Symbol *>(sym), ptr);
    }
 }
 
@@ -538,6 +539,76 @@ BuildUtil::DataArray::mkSymbol(int i, int c)
    sym->reg.type = typeOfSize(eltSize);
    sym->setAddress(baseSym, baseAddr + idx * eltSize);
    return sym;
+}
+
+
+Instruction *
+BuildUtil::split64BitOpPostRA(Function *fn, Instruction *i,
+                              Value *zero,
+                              Value *carry)
+{
+   DataType hTy;
+   int srcNr;
+
+   switch (i->dType) {
+   case TYPE_U64: hTy = TYPE_U32; break;
+   case TYPE_S64: hTy = TYPE_S32; break;
+   default:
+      return NULL;
+   }
+
+   switch (i->op) {
+   case OP_MOV: srcNr = 1; break;
+   case OP_ADD:
+   case OP_SUB:
+      if (!carry)
+         return NULL;
+      srcNr = 2;
+      break;
+   default:
+      // TODO when needed
+      return NULL;
+   }
+
+   i->setType(hTy);
+   i->setDef(0, cloneShallow(fn, i->getDef(0)));
+   i->getDef(0)->reg.size = 4;
+   Instruction *lo = i;
+   Instruction *hi = cloneForward(fn, i);
+   lo->bb->insertAfter(lo, hi);
+
+   hi->getDef(0)->reg.data.id++;
+
+   for (int s = 0; s < srcNr; ++s) {
+      if (lo->getSrc(s)->reg.size < 8) {
+         hi->setSrc(s, zero);
+      } else {
+         if (lo->getSrc(s)->refCount() > 1)
+            lo->setSrc(s, cloneShallow(fn, lo->getSrc(s)));
+         lo->getSrc(s)->reg.size /= 2;
+         hi->setSrc(s, cloneShallow(fn, lo->getSrc(s)));
+
+         switch (hi->src(s).getFile()) {
+         case FILE_IMMEDIATE:
+            hi->getSrc(s)->reg.data.u64 >>= 32;
+            break;
+         case FILE_MEMORY_CONST:
+         case FILE_MEMORY_SHARED:
+         case FILE_SHADER_INPUT:
+            hi->getSrc(s)->reg.data.offset += 4;
+            break;
+         default:
+            assert(hi->src(s).getFile() == FILE_GPR);
+            hi->getSrc(s)->reg.data.id++;
+            break;
+         }
+      }
+   }
+   if (srcNr == 2) {
+      lo->setDef(1, carry);
+      hi->setFlagsSrc(hi->srcCount(), carry);
+   }
+   return hi;
 }
 
 } // namespace nv50_ir

@@ -14,10 +14,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors: Ben Skeggs
  *
@@ -99,7 +99,7 @@ emit_vertices_i08(struct push_context *ctx, unsigned start, unsigned count)
 
       BEGIN_NI04(ctx->push, NV30_3D(VERTEX_DATA), size);
 
-      ctx->translate->run_elts8(ctx->translate, elts, nr, 0, ctx->push->cur);
+      ctx->translate->run_elts8(ctx->translate, elts, nr, 0, 0, ctx->push->cur);
 
       ctx->push->cur += size;
       count -= nr;
@@ -131,7 +131,7 @@ emit_vertices_i16(struct push_context *ctx, unsigned start, unsigned count)
 
       BEGIN_NI04(ctx->push, NV30_3D(VERTEX_DATA), size);
 
-      ctx->translate->run_elts16(ctx->translate, elts, nr, 0, ctx->push->cur);
+      ctx->translate->run_elts16(ctx->translate, elts, nr, 0, 0, ctx->push->cur);
 
       ctx->push->cur += size;
       count -= nr;
@@ -163,7 +163,7 @@ emit_vertices_i32(struct push_context *ctx, unsigned start, unsigned count)
 
       BEGIN_NI04(ctx->push, NV30_3D(VERTEX_DATA), size);
 
-      ctx->translate->run_elts(ctx->translate, elts, nr, 0, ctx->push->cur);
+      ctx->translate->run_elts(ctx->translate, elts, nr, 0, 0, ctx->push->cur);
 
       ctx->push->cur += size;
       count -= nr;
@@ -187,7 +187,7 @@ emit_vertices_seq(struct push_context *ctx, unsigned start, unsigned count)
 
       BEGIN_NI04(ctx->push, NV30_3D(VERTEX_DATA), size);
 
-      ctx->translate->run(ctx->translate, start, push, 0, ctx->push->cur);
+      ctx->translate->run(ctx->translate, start, push, 0, 0, ctx->push->cur);
       ctx->push->cur += size;
       count -= push;
       start += push;

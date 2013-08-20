@@ -121,23 +121,16 @@ tgsi_parse_token(
          next_token( ctx, &decl->Semantic );
       }
 
-      if (decl->Declaration.File == TGSI_FILE_IMMEDIATE_ARRAY) {
-         unsigned i, j;
-         decl->ImmediateData.u = (union tgsi_immediate_data*)
-                                 &ctx->Tokens[ctx->Position];
-         for (i = 0; i <= decl->Range.Last; ++i) {
-            for (j = 0; j < 4; ++j) {
-               ctx->Position++;
-            }
-         }
-      }
-
       if (decl->Declaration.File == TGSI_FILE_RESOURCE) {
          next_token(ctx, &decl->Resource);
       }
 
       if (decl->Declaration.File == TGSI_FILE_SAMPLER_VIEW) {
          next_token(ctx, &decl->SamplerView);
+      }
+
+      if( decl->Declaration.Array ) {
+         next_token(ctx, &decl->Array);
       }
 
       break;
@@ -207,15 +200,9 @@ tgsi_parse_token(
 
          next_token( ctx, &inst->Dst[i].Register );
 
-         if( inst->Dst[i].Register.Indirect ) {
+         if( inst->Dst[i].Register.Indirect )
             next_token( ctx, &inst->Dst[i].Indirect );
 
-            /*
-             * No support for indirect or multi-dimensional addressing.
-             */
-            assert( !inst->Dst[i].Indirect.Dimension );
-            assert( !inst->Dst[i].Indirect.Indirect );
-         }
          if( inst->Dst[i].Register.Dimension ) {
             next_token( ctx, &inst->Dst[i].Dimension );
 
@@ -224,15 +211,8 @@ tgsi_parse_token(
              */
             assert( !inst->Dst[i].Dimension.Dimension );
 
-            if( inst->Dst[i].Dimension.Indirect ) {
+            if( inst->Dst[i].Dimension.Indirect )
                next_token( ctx, &inst->Dst[i].DimIndirect );
-
-               /*
-                * No support for indirect or multi-dimensional addressing.
-                */
-               assert( !inst->Dst[i].Indirect.Indirect );
-               assert( !inst->Dst[i].Indirect.Dimension );
-            }
          }
       }
 
@@ -242,15 +222,8 @@ tgsi_parse_token(
 
          next_token( ctx, &inst->Src[i].Register );
 
-         if( inst->Src[i].Register.Indirect ) {
+         if( inst->Src[i].Register.Indirect )
             next_token( ctx, &inst->Src[i].Indirect );
-
-            /*
-             * No support for indirect or multi-dimensional addressing.
-             */
-            assert( !inst->Src[i].Indirect.Indirect );
-            assert( !inst->Src[i].Indirect.Dimension );
-         }
 
          if( inst->Src[i].Register.Dimension ) {
             next_token( ctx, &inst->Src[i].Dimension );
@@ -260,15 +233,8 @@ tgsi_parse_token(
              */
             assert( !inst->Src[i].Dimension.Dimension );
 
-            if( inst->Src[i].Dimension.Indirect ) {
+            if( inst->Src[i].Dimension.Indirect )
                next_token( ctx, &inst->Src[i].DimIndirect );
-
-               /*
-               * No support for indirect or multi-dimensional addressing.
-               */
-               assert( !inst->Src[i].Indirect.Indirect );
-               assert( !inst->Src[i].Indirect.Dimension );
-            }
          }
       }
 
