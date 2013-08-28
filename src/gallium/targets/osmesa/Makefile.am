@@ -40,10 +40,9 @@ lib@OSMESA_LIB@_la_SOURCES = target.c
 
 lib@OSMESA_LIB@_la_LDFLAGS = -module -version-number @OSMESA_VERSION@ -no-undefined
 
-if HAVE_SHARED_GLAPI
-GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
-else
 GLAPI_LIB = $(top_builddir)/src/mapi/glapi/libglapi.la
+if HAVE_SHARED_GLAPI
+GLAPI_LIB += $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 endif
 
 lib@OSMESA_LIB@_la_LIBADD = \
@@ -58,19 +57,12 @@ lib@OSMESA_LIB@_la_LIBADD = \
 	$(CLOCK_LIB)
 
 
+nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy.cpp
 
 if HAVE_MESA_LLVM
-lib@OSMESA_LIB@_la_LINK = $(CXXLINK) $(lib@OSMESA_LIB@_la_LDFLAGS)
-# Mention a dummy pure C++ file to trigger generation of the $(LINK) variable
-nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy-cpp.cpp
-
-lib@OSMESA_LIB@_la_LIBADD += $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
 AM_CPPFLAGS += -DGALLIUM_LLVMPIPE
 lib@OSMESA_LIB@_la_LDFLAGS += $(LLVM_LDFLAGS)
-else
-lib@OSMESA_LIB@_la_LINK = $(CXXLINK) $(lib@OSMESA_LIB@_la_LDFLAGS)
-# Mention a dummy pure C file to trigger generation of the $(LINK) variable
-nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy-c.c
+lib@OSMESA_LIB@_la_LIBADD += $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
 endif
 
 
@@ -83,9 +75,8 @@ all-local: lib@OSMESA_LIB@.la
 	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium;
 	ln -f .libs/lib@OSMESA_LIB@.so $(top_builddir)/$(LIB_DIR)/gallium/lib@OSMESA_LIB@.so;
 	ln -f .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@ $(top_builddir)/$(LIB_DIR)/gallium/lib@OSMESA_LIB@.so.@OSMESA_VERSION@;
-	cp .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@.0.0 $(top_builddir)/$(LIB_DIR)/gallium/
+	ln -f .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@.0.0 $(top_builddir)/$(LIB_DIR)/gallium/
 endif
 
-# XXX fix-up?
-#pkgconfigdir = $(libdir)/pkgconfig
-#pkgconfig_DATA = osmesa.pc
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = osmesa.pc

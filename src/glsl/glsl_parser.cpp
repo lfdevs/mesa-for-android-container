@@ -932,7 +932,7 @@ static const yytype_uint16 yyrline[] =
     1976,  1986,  1987,  1991,  1993,  1999,  2004,  2013,  2019,  2025,
     2031,  2037,  2046,  2047,  2048,  2049,  2053,  2067,  2071,  2082,
     2179,  2184,  2189,  2198,  2202,  2207,  2212,  2223,  2228,  2236,
-    2261
+    2260
 };
 #endif
 
@@ -5718,7 +5718,6 @@ yyreduce:
 
       (yyval.declarator_list) = new(ctx) ast_declarator_list(type);
       (yyval.declarator_list)->set_location(yylloc);
-      (yyval.declarator_list)->ubo_qualifiers_valid = true;
 
       (yyval.declarator_list)->declarations.push_degenerate_list_at_head(& (yyvsp[(2) - (3)].declaration)->link);
    }
@@ -5726,7 +5725,7 @@ yyreduce:
 
   case 340:
 /* Line 1787 of yacc.c  */
-#line 2262 "glsl_parser.yy"
+#line 2261 "glsl_parser.yy"
     {
       if (!state->default_uniform_qualifier->merge_qualifier(& (yylsp[(1) - (3)]), state, (yyvsp[(1) - (3)].type_qualifier))) {
          YYERROR;
@@ -5736,7 +5735,7 @@ yyreduce:
 
 
 /* Line 1787 of yacc.c  */
-#line 5740 "glsl_parser.cpp"
+#line 5739 "glsl_parser.cpp"
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires

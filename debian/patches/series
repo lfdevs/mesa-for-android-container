@@ -4,4 +4,3 @@
 06_kfreebsd-ftbfs.diff
 08-kfreebsd-gallium.diff
 #11-hurd-ftbfs-again.diff
-12_fix_glapi_gen.diff

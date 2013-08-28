@@ -4,7 +4,6 @@
 NOT_INSTALLED := \
 	dri/usr/include/GL/wglext.h \
 	dri/usr/include/GL/wmesa.h \
-	dri/usr/lib/*/pkgconfig/gl.pc \
 	usr/include/GL/glext.h \
 	usr/include/GL/gl.h \
 	usr/include/GL/gl_mangle.h \

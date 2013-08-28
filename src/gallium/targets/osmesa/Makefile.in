@@ -35,6 +35,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+
 VPATH = @srcdir@
 am__make_dryrun = \
   { \
@@ -73,11 +74,12 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
-	$(top_srcdir)/bin/depcomp \
+	$(srcdir)/osmesa.pc.in $(top_srcdir)/bin/depcomp \
 	$(top_srcdir)/src/gallium/Automake.inc
-@HAVE_MESA_LLVM_TRUE@am__append_1 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
+@HAVE_SHARED_GLAPI_TRUE@am__append_1 = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 @HAVE_MESA_LLVM_TRUE@am__append_2 = -DGALLIUM_LLVMPIPE
 @HAVE_MESA_LLVM_TRUE@am__append_3 = $(LLVM_LDFLAGS)
+@HAVE_MESA_LLVM_TRUE@am__append_4 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
 subdir = src/gallium/targets/osmesa
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_prog_bison.m4 \
@@ -92,7 +94,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ax_prog_bison.m4 \
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
-CONFIG_CLEAN_FILES =
+CONFIG_CLEAN_FILES = osmesa.pc
 CONFIG_CLEAN_VPATH_FILES =
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
@@ -121,7 +123,7 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-am__installdirs = "$(DESTDIR)$(libdir)"
+am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 @HAVE_MESA_LLVM_TRUE@am__DEPENDENCIES_2 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la \
@@ -137,6 +139,14 @@ lib@OSMESA_LIB@_la_DEPENDENCIES =  \
 	$(am__DEPENDENCIES_2)
 am_lib@OSMESA_LIB@_la_OBJECTS = target.lo
 lib@OSMESA_LIB@_la_OBJECTS = $(am_lib@OSMESA_LIB@_la_OBJECTS)
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
+am__v_lt_1 = 
+lib@OSMESA_LIB@_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
+	$(AM_CXXFLAGS) $(CXXFLAGS) $(lib@OSMESA_LIB@_la_LDFLAGS) \
+	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -155,10 +165,6 @@ am__depfiles_maybe = depfiles
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
-AM_V_lt = $(am__v_lt_@AM_V@)
-am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
-am__v_lt_0 = --silent
-am__v_lt_1 = 
 LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) \
 	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
@@ -201,6 +207,7 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
+DATA = $(pkgconfig_DATA)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -503,8 +510,7 @@ lib_LTLIBRARIES = lib@OSMESA_LIB@.la
 lib@OSMESA_LIB@_la_SOURCES = target.c
 lib@OSMESA_LIB@_la_LDFLAGS = -module -version-number @OSMESA_VERSION@ \
 	-no-undefined $(am__append_3)
-@HAVE_SHARED_GLAPI_FALSE@GLAPI_LIB = $(top_builddir)/src/mapi/glapi/libglapi.la
-@HAVE_SHARED_GLAPI_TRUE@GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
+GLAPI_LIB = $(top_builddir)/src/mapi/glapi/libglapi.la $(am__append_1)
 lib@OSMESA_LIB@_la_LIBADD =  \
 	$(top_builddir)/src/mesa/libmesagallium.la \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
@@ -512,13 +518,10 @@ lib@OSMESA_LIB@_la_LIBADD =  \
 	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
 	$(top_builddir)/src/gallium/drivers/softpipe/libsoftpipe.la \
 	$(top_builddir)/src/gallium/state_trackers/osmesa/libosmesa.la \
-	$(GLAPI_LIB) $(OSMESA_LIB_DEPS) $(CLOCK_LIB) $(am__append_1)
-@HAVE_MESA_LLVM_FALSE@lib@OSMESA_LIB@_la_LINK = $(CXXLINK) $(lib@OSMESA_LIB@_la_LDFLAGS)
-@HAVE_MESA_LLVM_TRUE@lib@OSMESA_LIB@_la_LINK = $(CXXLINK) $(lib@OSMESA_LIB@_la_LDFLAGS)
-# Mention a dummy pure C file to trigger generation of the $(LINK) variable
-@HAVE_MESA_LLVM_FALSE@nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy-c.c
-# Mention a dummy pure C++ file to trigger generation of the $(LINK) variable
-@HAVE_MESA_LLVM_TRUE@nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy-cpp.cpp
+	$(GLAPI_LIB) $(OSMESA_LIB_DEPS) $(CLOCK_LIB) $(am__append_4)
+nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy.cpp
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = osmesa.pc
 all: all-am
 
 .SUFFIXES:
@@ -554,6 +557,8 @@ $(top_srcdir)/configure:  $(am__configure_deps)
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
+osmesa.pc: $(top_builddir)/config.status $(srcdir)/osmesa.pc.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 install-libLTLIBRARIES: $(lib_LTLIBRARIES)
 	@$(NORMAL_INSTALL)
 	@list='$(lib_LTLIBRARIES)'; test -n "$(libdir)" || list=; \
@@ -589,7 +594,7 @@ clean-libLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 lib@OSMESA_LIB@.la: $(lib@OSMESA_LIB@_la_OBJECTS) $(lib@OSMESA_LIB@_la_DEPENDENCIES) $(EXTRA_lib@OSMESA_LIB@_la_DEPENDENCIES) 
-	$(AM_V_GEN)$(lib@OSMESA_LIB@_la_LINK) -rpath $(libdir) $(lib@OSMESA_LIB@_la_OBJECTS) $(lib@OSMESA_LIB@_la_LIBADD) $(LIBS)
+	$(AM_V_CXXLD)$(lib@OSMESA_LIB@_la_LINK) -rpath $(libdir) $(lib@OSMESA_LIB@_la_OBJECTS) $(lib@OSMESA_LIB@_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -597,8 +602,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy-c.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy-cpp.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dummy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/target.Plo@am__quote@
 
 .c.o:
@@ -648,6 +652,27 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+install-pkgconfigDATA: $(pkgconfig_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(pkgconfigdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(pkgconfigdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(pkgconfigdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(pkgconfigdir)" || exit $$?; \
+	done
+
+uninstall-pkgconfigDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkgconfig_DATA)'; test -n "$(pkgconfigdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(pkgconfigdir)'; $(am__uninstall_files_from_dir)
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
@@ -748,9 +773,9 @@ distdir: $(DISTFILES)
 check-am: all-am
 check: check-am
 @BUILD_SHARED_FALSE@all-local:
-all-am: Makefile $(LTLIBRARIES) all-local
+all-am: Makefile $(LTLIBRARIES) $(DATA) all-local
 installdirs:
-	for dir in "$(DESTDIR)$(libdir)"; do \
+	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -806,7 +831,7 @@ info: info-am
 
 info-am:
 
-install-data-am:
+install-data-am: install-pkgconfigDATA
 
 install-dvi: install-dvi-am
 
@@ -852,7 +877,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-libLTLIBRARIES
+uninstall-am: uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 
 .MAKE: install-am install-strip
 
@@ -864,11 +889,12 @@ uninstall-am: uninstall-libLTLIBRARIES
 	install-data-am install-dvi install-dvi-am install-exec \
 	install-exec-am install-html install-html-am install-info \
 	install-info-am install-libLTLIBRARIES install-man install-pdf \
-	install-pdf-am install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags uninstall uninstall-am uninstall-libLTLIBRARIES
+	install-pdf-am install-pkgconfigDATA install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags uninstall uninstall-am \
+	uninstall-libLTLIBRARIES uninstall-pkgconfigDATA
 
 
 # Provide compatibility with scripts for the old Mesa build system for
@@ -878,11 +904,7 @@ uninstall-am: uninstall-libLTLIBRARIES
 @BUILD_SHARED_TRUE@	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium;
 @BUILD_SHARED_TRUE@	ln -f .libs/lib@OSMESA_LIB@.so $(top_builddir)/$(LIB_DIR)/gallium/lib@OSMESA_LIB@.so;
 @BUILD_SHARED_TRUE@	ln -f .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@ $(top_builddir)/$(LIB_DIR)/gallium/lib@OSMESA_LIB@.so.@OSMESA_VERSION@;
-@BUILD_SHARED_TRUE@	cp .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@.0.0 $(top_builddir)/$(LIB_DIR)/gallium/
-
-# XXX fix-up?
-#pkgconfigdir = $(libdir)/pkgconfig
-#pkgconfig_DATA = osmesa.pc
+@BUILD_SHARED_TRUE@	ln -f .libs/lib@OSMESA_LIB@.so.@OSMESA_VERSION@.0.0 $(top_builddir)/$(LIB_DIR)/gallium/
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

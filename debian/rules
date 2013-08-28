@@ -147,6 +147,7 @@ confflags-swx11-i386-i686 = \
 	--with-gallium-drivers= \
 	--enable-xlib-glx \
 	--disable-egl \
+	--disable-shared-glapi \
 	--libdir=/usr/lib/$(DEB_HOST_MULTIARCH)/i686/cmov \
 	$(buildflags-i686)
 
@@ -272,12 +273,7 @@ binary-arch: install
 	dh_strip $(foreach p,$(nodbgpkg),-p$(p))
 	dh_compress -s
 	dh_fixperms -s
-ifeq (,$(filter sparc sparc64,$(DEB_HOST_ARCH)))
 	dh_makeshlibs -s -- -c4
-else
-	# Temporarily work around FTBFS on sparc, ignore new symbols:
-	dh_makeshlibs -s -- -c1
-endif
 	dh_installdeb -s
 	dh_shlibdeps -s
 	dh_gencontrol -s

@@ -1,3 +1,25 @@
+mesa (9.2-1) experimental; urgency=low
+
+  [ Jon Severinsson ]
+  * control: Recommend libtxc-dxtn-s2tc0 | libtxc-dxtn0, not just the virtual libtxc-dxtn0.
+  * control: Bump libdrm-dev build-dependency to 2.4.45.
+  * control: Add versioned libglapi-mesa dependency to libosmesa6.
+  * libgl1-mesa(-swx11)-dev.install.in: Install the correct pkgconfig/gl.pc files.
+  * rules: Add --disable-shared-glapi to the swx11-i386-i686 target.
+
+  [ Maarten Lankhorst ]
+  * Bump libdrm-dev to 2.4.46.
+
+  [ Sven Joachim ]
+  * Remove the workaround for sparc introduced in version 7.10-2.
+
+  [ Maarten Lankhorst ]
+  * New upstream release.
+  * Refresh 02_gbm_no_undefined.diff.
+  * Drop 12_fix_glapi_gen.diff, upstreamed.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 28 Aug 2013 10:28:20 +0200
+
 mesa (9.2~rc1-1) experimental; urgency=low
 
   * New upstream release.
