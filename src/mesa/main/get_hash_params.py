@@ -229,11 +229,6 @@ descriptor=[
 
 
 { "apis": ["GLES"], "params": [
-# XXX: OES_matrix_get
-  [ "MODELVIEW_MATRIX_FLOAT_AS_INT_BITS_OES", "" ],
-  [ "PROJECTION_MATRIX_FLOAT_AS_INT_BITS_OES", "" ],
-  [ "TEXTURE_MATRIX_FLOAT_AS_INT_BITS_OES", "" ],
-
 # OES_point_size_array
   [ "POINT_SIZE_ARRAY_OES", "ARRAY_FIELD(VertexAttrib[VERT_ATTRIB_POINT_SIZE].Enabled, TYPE_BOOLEAN)" ],
   [ "POINT_SIZE_ARRAY_TYPE_OES", "ARRAY_FIELD(VertexAttrib[VERT_ATTRIB_POINT_SIZE].Type, TYPE_ENUM)" ],
@@ -308,7 +303,7 @@ descriptor=[
   [ "MAX_VERTEX_UNIFORM_VECTORS", "LOC_CUSTOM, TYPE_INT, 0, extra_ARB_ES2_compatibility_api_es2" ],
   [ "MAX_FRAGMENT_UNIFORM_VECTORS", "LOC_CUSTOM, TYPE_INT, 0, extra_ARB_ES2_compatibility_api_es2" ],
   [ "NUM_SHADER_BINARY_FORMATS", "CONST(0), extra_ARB_ES2_compatibility_api_es2" ],
-  [ "SHADER_BINARY_FORMATS", "CONST(0), extra_ARB_ES2_compatibility_api_es2" ],
+  [ "SHADER_BINARY_FORMATS", "LOC_CUSTOM, TYPE_INVALID, 0, extra_ARB_ES2_compatibility_api_es2" ],
 
 # GL_ARB_get_program_binary / GL_OES_get_program_binary
   [ "NUM_PROGRAM_BINARY_FORMATS", "CONST(0), NO_EXTRA" ],
@@ -330,6 +325,7 @@ descriptor=[
   [ "MINOR_VERSION", "LOC_CUSTOM, TYPE_INT, 0, extra_gl30_es3" ],
 
   # GL 3.0 / GLES3
+  [ "MAX_VERTEX_OUTPUT_COMPONENTS", "LOC_CUSTOM, TYPE_INT, 0, extra_gl32_es3" ],
   [ "MAX_FRAGMENT_INPUT_COMPONENTS", "LOC_CUSTOM, TYPE_INT, 0, extra_gl32_es3" ],
 
 # GL_ARB_ES3_compatibility

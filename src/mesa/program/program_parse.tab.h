@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 2.6.1.  */
+/* A Bison parser, made by GNU Bison 2.7.12-4996.  */
 
 /* Bison interface for Yacc-like parsers in C
    
-      Copyright (C) 1984, 1989-1990, 2000-2012 Free Software Foundation, Inc.
+      Copyright (C) 1984, 1989-1990, 2000-2013 Free Software Foundation, Inc.
    
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -30,8 +30,8 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-#ifndef _MESA_PROGRAM_PROGRAM_PARSE_TAB_H
-# define _MESA_PROGRAM_PROGRAM_PARSE_TAB_H
+#ifndef YY__MESA_PROGRAM_PROGRAM_PARSE_TAB_H_INCLUDED
+# define YY__MESA_PROGRAM_PROGRAM_PARSE_TAB_H_INCLUDED
 /* Enabling traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -158,7 +158,7 @@ extern int _mesa_program_debug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
 {
-/* Line 2049 of yacc.c  */
+/* Line 2053 of yacc.c  */
 #line 124 "program_parse.y"
 
    struct asm_instruction *inst;
@@ -186,7 +186,7 @@ typedef union YYSTYPE
    } ext_swizzle;
 
 
-/* Line 2049 of yacc.c  */
+/* Line 2053 of yacc.c  */
 #line 191 "program_parse.tab.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
@@ -222,4 +222,4 @@ int _mesa_program_parse ();
 #endif
 #endif /* ! YYPARSE_PARAM */
 
-#endif /* !_MESA_PROGRAM_PROGRAM_PARSE_TAB_H  */
+#endif /* !YY__MESA_PROGRAM_PROGRAM_PARSE_TAB_H_INCLUDED  */

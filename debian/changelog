@@ -1,3 +1,9 @@
+mesa (9.2.1-1) experimental; urgency=low
+
+  * New upstream release.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 07 Oct 2013 10:00:39 +0200
+
 mesa (9.2-1) experimental; urgency=low
 
   [ Jon Severinsson ]

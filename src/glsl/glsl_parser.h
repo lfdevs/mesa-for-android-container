@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 2.6.1.  */
+/* A Bison parser, made by GNU Bison 2.7.12-4996.  */
 
 /* Bison interface for Yacc-like parsers in C
    
-      Copyright (C) 1984, 1989-1990, 2000-2012 Free Software Foundation, Inc.
+      Copyright (C) 1984, 1989-1990, 2000-2013 Free Software Foundation, Inc.
    
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -30,8 +30,8 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-#ifndef _MESA_GLSL_SRC_GLSL_GLSL_PARSER_H
-# define _MESA_GLSL_SRC_GLSL_GLSL_PARSER_H
+#ifndef YY__MESA_GLSL_SRC_GLSL_GLSL_PARSER_H_INCLUDED
+# define YY__MESA_GLSL_SRC_GLSL_GLSL_PARSER_H_INCLUDED
 /* Enabling traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -271,7 +271,7 @@ extern int _mesa_glsl_debug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
 {
-/* Line 2049 of yacc.c  */
+/* Line 2053 of yacc.c  */
 #line 65 "glsl_parser.yy"
 
    int n;
@@ -309,7 +309,7 @@ typedef union YYSTYPE
    } selection_rest_statement;
 
 
-/* Line 2049 of yacc.c  */
+/* Line 2053 of yacc.c  */
 #line 314 "../../src/glsl/glsl_parser.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
@@ -345,4 +345,4 @@ int _mesa_glsl_parse ();
 #endif
 #endif /* ! YYPARSE_PARAM */
 
-#endif /* !_MESA_GLSL_SRC_GLSL_GLSL_PARSER_H  */
+#endif /* !YY__MESA_GLSL_SRC_GLSL_GLSL_PARSER_H_INCLUDED  */

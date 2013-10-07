@@ -236,14 +236,21 @@ void r600_flush_emit(struct r600_context *rctx)
 	}
 
 	if (rctx->flags & R600_CONTEXT_INV_CONST_CACHE) {
-		cp_coher_cntl |= S_0085F0_SH_ACTION_ENA(1);
+		/* Direct constant addressing uses the shader cache.
+		 * Indirect contant addressing uses the vertex cache. */
+		cp_coher_cntl |= S_0085F0_SH_ACTION_ENA(1) |
+				 (rctx->has_vertex_cache ? S_0085F0_VC_ACTION_ENA(1)
+							 : S_0085F0_TC_ACTION_ENA(1));
 	}
 	if (rctx->flags & R600_CONTEXT_INV_VERTEX_CACHE) {
 		cp_coher_cntl |= rctx->has_vertex_cache ? S_0085F0_VC_ACTION_ENA(1)
 							: S_0085F0_TC_ACTION_ENA(1);
 	}
 	if (rctx->flags & R600_CONTEXT_INV_TEX_CACHE) {
-		cp_coher_cntl |= S_0085F0_TC_ACTION_ENA(1);
+		/* Textures use the texture cache.
+		 * Texture buffer objects use the vertex cache. */
+		cp_coher_cntl |= S_0085F0_TC_ACTION_ENA(1) |
+				 (rctx->has_vertex_cache ? S_0085F0_VC_ACTION_ENA(1) : 0);
 	}
 
 	/* Don't use the DB CP COHER logic on r6xx.

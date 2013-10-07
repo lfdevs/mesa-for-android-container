@@ -1,0 +1,10 @@
+# Already cherry picked without -x
+d8ac987f6ab228df1a478b36c3d889992754374f glsl: Disallow uniform block layout qualifiers on non-uniform block vars.
+
+# The bug fixed by this patch does not exist in 9.2.  Discussed with Marek and
+# Brian Paul on the mesa-stable mailing list.
+89a665eb5fa176f68223bf54a472d6a0567c3546 draw: fix segfaults with aaline and aapoint stages disabled
+
+# Previously cherry picked (patch originally appeared twice on master with a
+# revert in between)
+4e5eb8ba25054ede4798fa424e6f32b23aba0f98 i965/vec4: Only zero out unused message components when there are any.

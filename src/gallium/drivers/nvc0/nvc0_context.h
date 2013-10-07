@@ -96,6 +96,7 @@
 struct nvc0_blitctx;
 
 boolean nvc0_blitctx_create(struct nvc0_context *);
+void nvc0_blitctx_destroy(struct nvc0_context *);
 
 struct nvc0_context {
    struct nouveau_context base;
@@ -197,6 +198,7 @@ struct nvc0_context {
    struct pipe_surface *surfaces[2][NVC0_MAX_SURFACE_SLOTS];
    uint16_t surfaces_dirty[2];
    uint16_t surfaces_valid[2];
+   uint32_t vport_int[2];
 
    struct util_dynarray global_residents;
 

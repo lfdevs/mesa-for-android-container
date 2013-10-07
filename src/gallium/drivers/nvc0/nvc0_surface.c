@@ -948,8 +948,8 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
    /* restore viewport */
 
    BEGIN_NVC0(push, NVC0_3D(VIEWPORT_HORIZ(0)), 2);
-   PUSH_DATA (push, nvc0->framebuffer.width << 16);
-   PUSH_DATA (push, nvc0->framebuffer.height << 16);
+   PUSH_DATA (push, nvc0->vport_int[0]);
+   PUSH_DATA (push, nvc0->vport_int[1]);
    IMMED_NVC0(push, NVC0_3D(VIEWPORT_TRANSFORM_EN), 1);
 }
 
@@ -1244,6 +1244,13 @@ nvc0_blitctx_create(struct nvc0_context *nvc0)
    nvc0->blit->rast.pipe.half_pixel_center = 1;
 
    return TRUE;
+}
+
+void
+nvc0_blitctx_destroy(struct nvc0_context *nvc0)
+{
+   if (nvc0->blit)
+      FREE(nvc0->blit);
 }
 
 void
