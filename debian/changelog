@@ -1,3 +1,9 @@
+mesa (9.2.2-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 22 Oct 2013 10:59:20 +0200
+
 mesa (9.2.1-1) experimental; urgency=low
 
   * New upstream release.
@@ -39,6 +45,17 @@ mesa (9.2~rc1-1) experimental; urgency=low
   * Update symbols files.
 
  -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Tue, 20 Aug 2013 15:42:31 +0200
+
+mesa (9.1.7-1) unstable; urgency=low
+
+  [ Andreas Beckmann ]
+  * libgl1-mesa-glx: Add Breaks: glx-diversions (<< 0.4) because the old
+    versions were not aware of libGL.so.1.2.0.  (Closes: #720069)
+
+  [ Maarten Lankhorst ]
+  * New upstream release.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Mon, 07 Oct 2013 11:34:34 +0200
 
 mesa (9.1.6-2) unstable; urgency=low
 

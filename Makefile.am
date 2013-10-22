@@ -50,6 +50,7 @@ EXTRA_FILES = \
 	bin/install-sh					\
 	bin/ltmain.sh					\
 	bin/missing					\
+	bin/test-driver					\
 	bin/ylwrap					\
 	src/glsl/glsl_parser.cpp			\
 	src/glsl/glsl_parser.h				\

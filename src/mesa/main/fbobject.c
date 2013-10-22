@@ -3581,6 +3581,7 @@ invalidate_framebuffer_storage(GLenum target, GLsizei numAttachments,
                            "%s(attachment >= max. color attachments)", name);
                return;
             }
+            break;
          }
          default:
             goto invalid_enum;
