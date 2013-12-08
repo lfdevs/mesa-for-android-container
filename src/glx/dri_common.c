@@ -187,6 +187,35 @@ driOpenDriver(const char *driverName)
    return handle;
 }
 
+_X_HIDDEN const __DRIextension **
+driGetDriverExtensions(void *handle, const char *driver_name)
+{
+   const __DRIextension **extensions = NULL;
+   const __DRIextension **(*get_extensions)(void);
+   char *get_extensions_name;
+
+   if (asprintf(&get_extensions_name, "%s_%s",
+                __DRI_DRIVER_GET_EXTENSIONS, driver_name) != -1) {
+      get_extensions = dlsym(handle, get_extensions_name);
+      if (get_extensions) {
+         free(get_extensions_name);
+         return get_extensions();
+      } else {
+         InfoMessageF("driver does not expose %s(): %s\n",
+                      get_extensions_name, dlerror());
+         free(get_extensions_name);
+      }
+   }
+
+   extensions = dlsym(handle, __DRI_DRIVER_EXTENSIONS);
+   if (extensions == NULL) {
+      ErrorMessageF("driver exports no extensions (%s)\n", dlerror());
+      return NULL;
+   }
+
+   return extensions;
+}
+
 static GLboolean
 __driGetMSCRate(__DRIdrawable *draw,
 		int32_t * numerator, int32_t * denominator,

@@ -20,14 +20,13 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#ifndef __CORE_RESOURCE_HPP__
-#define __CORE_RESOURCE_HPP__
+#ifndef CLOVER_CORE_RESOURCE_HPP
+#define CLOVER_CORE_RESOURCE_HPP
 
 #include <list>
 
-#include "core/base.hpp"
 #include "core/memory.hpp"
-#include "core/geometry.hpp"
+#include "util/algebra.hpp"
 #include "pipe/p_state.h"
 
 namespace clover {
@@ -39,38 +38,41 @@ namespace clover {
    ///
    class resource {
    public:
-      typedef clover::point<size_t, 3> point;
+      typedef std::array<size_t, 3> vector;
 
-      resource(const resource &r) = delete;
       virtual ~resource();
 
-      void copy(command_queue &q, const point &origin, const point &region,
-                resource &src_resource, const point &src_origin);
+      resource(const resource &r) = delete;
+      resource &
+      operator=(const resource &r) = delete;
+
+      void copy(command_queue &q, const vector &origin, const vector &region,
+                resource &src_resource, const vector &src_origin);
 
       void *add_map(command_queue &q, cl_map_flags flags, bool blocking,
-                    const point &origin, const point &region);
+                    const vector &origin, const vector &region);
       void del_map(void *p);
       unsigned map_count() const;
 
-      clover::device &dev;
-      clover::memory_obj &obj;
+      device &dev;
+      memory_obj &obj;
 
       friend class sub_resource;
       friend class mapping;
-      friend struct ::_cl_kernel;
+      friend class kernel;
 
    protected:
-      resource(clover::device &dev, clover::memory_obj &obj);
+      resource(device &dev, memory_obj &obj);
 
-      pipe_sampler_view *bind_sampler_view(clover::command_queue &q);
-      void unbind_sampler_view(clover::command_queue &q,
+      pipe_sampler_view *bind_sampler_view(command_queue &q);
+      void unbind_sampler_view(command_queue &q,
                                pipe_sampler_view *st);
 
-      pipe_surface *bind_surface(clover::command_queue &q, bool rw);
-      void unbind_surface(clover::command_queue &q, pipe_surface *st);
+      pipe_surface *bind_surface(command_queue &q, bool rw);
+      void unbind_surface(command_queue &q, pipe_surface *st);
 
       pipe_resource *pipe;
-      point offset;
+      vector offset;
 
    private:
       std::list<mapping> maps;
@@ -82,10 +84,9 @@ namespace clover {
    ///
    class root_resource : public resource {
    public:
-      root_resource(clover::device &dev, clover::memory_obj &obj,
-                    clover::command_queue &q, const std::string &data);
-      root_resource(clover::device &dev, clover::memory_obj &obj,
-                    root_resource &r);
+      root_resource(device &dev, memory_obj &obj,
+                    command_queue &q, const std::string &data);
+      root_resource(device &dev, memory_obj &obj, root_resource &r);
       virtual ~root_resource();
    };
 
@@ -95,7 +96,7 @@ namespace clover {
    ///
    class sub_resource : public resource {
    public:
-      sub_resource(clover::resource &r, point offset);
+      sub_resource(resource &r, const vector &offset);
    };
 
    ///
@@ -105,18 +106,19 @@ namespace clover {
    class mapping {
    public:
       mapping(command_queue &q, resource &r, cl_map_flags flags,
-              bool blocking, const resource::point &origin,
-              const resource::point &region);
-      mapping(const mapping &m) = delete;
+              bool blocking, const resource::vector &origin,
+              const resource::vector &region);
       mapping(mapping &&m);
       ~mapping();
 
-      operator void *() {
-         return p;
-      }
+      mapping &
+      operator=(mapping m);
 
-      operator char *() {
-         return (char *)p;
+      mapping(const mapping &m) = delete;
+
+      template<typename T>
+      operator T *() const {
+         return (T *)p;
       }
 
    private:

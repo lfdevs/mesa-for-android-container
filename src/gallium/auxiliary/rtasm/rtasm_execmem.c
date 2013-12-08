@@ -38,7 +38,7 @@
 
 #include "rtasm_execmem.h"
 
-#if defined(PIPE_OS_BSD)
+#ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif
 
@@ -49,7 +49,7 @@
 #include <windows.h>
 #endif
 
-#if defined(PIPE_OS_LINUX) || defined(PIPE_OS_BSD) || defined(PIPE_OS_SOLARIS) || defined(PIPE_OS_HAIKU)
+#if defined(PIPE_OS_LINUX) || defined(PIPE_OS_BSD) || defined(PIPE_OS_SOLARIS) || defined(PIPE_OS_HAIKU) || defined(PIPE_OS_CYGWIN)
 
 
 /*

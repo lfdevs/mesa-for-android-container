@@ -44,6 +44,7 @@
 #include "main/glformats.h"
 #include "main/texcompress_etc.h"
 #include "main/teximage.h"
+#include "main/streaming-load-memcpy.h"
 
 #define FILE_DEBUG_FLAG DEBUG_MIPTREE
 
@@ -725,6 +726,67 @@ intel_miptree_create_for_dri2_buffer(struct brw_context *brw,
    return multisample_mt;
 }
 
+/**
+ * For a singlesample image buffer, this simply wraps the given region with a miptree.
+ *
+ * For a multisample image buffer, this wraps the given region with
+ * a singlesample miptree, then creates a multisample miptree into which the
+ * singlesample miptree is embedded as a child.
+ */
+struct intel_mipmap_tree*
+intel_miptree_create_for_image_buffer(struct brw_context *intel,
+                                      enum __DRIimageBufferMask buffer_type,
+                                      gl_format format,
+                                      uint32_t num_samples,
+                                      struct intel_region *region)
+{
+   struct intel_mipmap_tree *singlesample_mt = NULL;
+   struct intel_mipmap_tree *multisample_mt = NULL;
+
+   /* Only the front and back buffers, which are color buffers, are allocated
+    * through the image loader.
+    */
+   assert(_mesa_get_format_base_format(format) == GL_RGB ||
+          _mesa_get_format_base_format(format) == GL_RGBA);
+
+   singlesample_mt = intel_miptree_create_for_bo(intel,
+                                                 region->bo,
+                                                 format,
+                                                 0,
+                                                 region->width,
+                                                 region->height,
+                                                 region->pitch,
+                                                 region->tiling);
+   if (!singlesample_mt)
+      return NULL;
+
+   intel_region_reference(&singlesample_mt->region, region);
+
+   if (num_samples == 0)
+      return singlesample_mt;
+
+   multisample_mt = intel_miptree_create_for_renderbuffer(intel,
+                                                          format,
+                                                          region->width,
+                                                          region->height,
+                                                          num_samples);
+   if (!multisample_mt) {
+      intel_miptree_release(&singlesample_mt);
+      return NULL;
+   }
+
+   multisample_mt->singlesample_mt = singlesample_mt;
+   multisample_mt->need_downsample = false;
+
+   intel_region_reference(&multisample_mt->region, region);
+
+   if (intel->is_front_buffer_rendering && buffer_type == __DRI_IMAGE_BUFFER_FRONT) {
+      intel_miptree_upsample(intel, multisample_mt);
+   }
+
+   return multisample_mt;
+}
+
 struct intel_mipmap_tree*
 intel_miptree_create_for_renderbuffer(struct brw_context *brw,
                                       gl_format format,
@@ -1253,29 +1315,15 @@ intel_miptree_slice_enable_hiz(struct brw_context *brw,
    assert(mt->hiz_mt);
 
    if (brw->is_haswell) {
-      /* Disable HiZ for some slices to work around a hardware bug.
-       *
-       * Haswell hardware fails to respect
-       * 3DSTATE_DEPTH_BUFFER.Depth_Coordinate_Offset_X/Y when during HiZ
-       * ambiguate operations.  The failure is inconsistent and affected by
-       * other GPU contexts. Running a heavy GPU workload in a separate
-       * process causes the failure rate to drop to nearly 0.
-       *
-       * To workaround the bug, we enable HiZ only when we can guarantee that
-       * the Depth Coordinate Offset fields will be set to 0. The function
-       * brw_get_depthstencil_tile_masks() is used to calculate the fields,
-       * and the function is sometimes called in such a way that the presence
-       * of an attached stencil buffer changes the fuction's return value.
-       *
-       * The largest tile size considered by brw_get_depthstencil_tile_masks()
-       * is that of the stencil buffer. Therefore, if this hiz slice's
-       * corresponding depth slice has an offset that is aligned to the
-       * stencil buffer tile size, 64x64 pixels, then
-       * 3DSTATE_DEPTH_BUFFER.Depth_Coordinate_Offset_X/Y is set to 0.
+      const struct intel_mipmap_level *l = &mt->level[level];
+
+      /* Disable HiZ for LOD > 0 unless the width is 8 aligned
+       * and the height is 4 aligned. This allows our HiZ support
+       * to fulfill Haswell restrictions for HiZ ops. For LOD == 0,
+       * we can grow the width & height to allow the HiZ op to
+       * force the proper size alignments.
        */
-      uint32_t depth_x_offset = mt->level[level].slice[layer].x_offset;
-      uint32_t depth_y_offset = mt->level[level].slice[layer].y_offset;
-      if ((depth_x_offset & 63) || (depth_y_offset & 63)) {
+      if (level > 0 && ((l->width & 7) || (l->height & 3))) {
          return false;
       }
    }
@@ -1362,6 +1410,18 @@ intel_miptree_slice_set_needs_depth_resolve(struct intel_mipmap_tree *mt,
 
    intel_resolve_map_set(&mt->hiz_map,
 			 level, layer, GEN6_HIZ_OP_DEPTH_RESOLVE);
+}
+
+void
+intel_miptree_set_all_slices_need_depth_resolve(struct intel_mipmap_tree *mt,
+                                                uint32_t level)
+{
+   uint32_t layer;
+   uint32_t end_layer = mt->level[level].depth;
+
+   for (layer = 0; layer < end_layer; layer++) {
+      intel_miptree_slice_set_needs_depth_resolve(mt, level, layer);
+   }
 }
 
 static bool
@@ -1563,7 +1623,7 @@ intel_miptree_updownsample(struct brw_context *brw,
                            width, height,
                            dst_x0, dst_y0,
                            width, height,
-                           false, false /*mirror x, y*/);
+                           GL_NEAREST, false, false /*mirror x, y*/);
 
    if (src->stencil_mt) {
       brw_blorp_blit_miptrees(brw,
@@ -1573,7 +1633,7 @@ intel_miptree_updownsample(struct brw_context *brw,
                               width, height,
                               dst_x0, dst_y0,
                               width, height,
-                              false, false /*mirror x, y*/);
+                              GL_NEAREST, false, false /*mirror x, y*/);
    }
 }
 
@@ -1628,7 +1688,6 @@ intel_miptree_upsample(struct brw_context *brw,
 void *
 intel_miptree_map_raw(struct brw_context *brw, struct intel_mipmap_tree *mt)
 {
-   struct gl_context *ctx = &brw->ctx;
    /* CPU accesses to color buffers don't understand fast color clears, so
     * resolve any pending fast color clears before we map.
     */
@@ -1638,11 +1697,11 @@ intel_miptree_map_raw(struct brw_context *brw, struct intel_mipmap_tree *mt)
 
    if (unlikely(INTEL_DEBUG & DEBUG_PERF)) {
       if (drm_intel_bo_busy(bo)) {
-         perf_debug("Mapping a busy BO, causing a stall on the GPU.\n");
+         perf_debug("Mapping a busy miptree, causing a stall on the GPU.\n");
       }
    }
 
-   intel_flush(ctx);
+   intel_batchbuffer_flush(brw);
 
    if (mt->region->tiling != I915_TILING_NONE)
       drm_intel_gem_bo_map_gtt(bo);
@@ -1738,7 +1797,6 @@ intel_miptree_map_blit(struct brw_context *brw,
       goto fail;
    }
 
-   intel_batchbuffer_flush(brw);
    map->ptr = intel_miptree_map_raw(brw, map->mt);
 
    DBG("%s: %d,%d %dx%d from mt %p (%s) %d,%d = %p/%d\n", __FUNCTION__,
@@ -1777,6 +1835,82 @@ intel_miptree_unmap_blit(struct brw_context *brw,
 
    intel_miptree_release(&map->mt);
 }
+
+#ifdef __SSE4_1__
+/**
+ * "Map" a buffer by copying it to an untiled temporary using MOVNTDQA.
+ */
+static void
+intel_miptree_map_movntdqa(struct brw_context *brw,
+                           struct intel_mipmap_tree *mt,
+                           struct intel_miptree_map *map,
+                           unsigned int level, unsigned int slice)
+{
+   assert(map->mode & GL_MAP_READ_BIT);
+   assert(!(map->mode & GL_MAP_WRITE_BIT));
+
+   DBG("%s: %d,%d %dx%d from mt %p (%s) %d,%d = %p/%d\n", __FUNCTION__,
+       map->x, map->y, map->w, map->h,
+       mt, _mesa_get_format_name(mt->format),
+       level, slice, map->ptr, map->stride);
+
+   /* Map the original image */
+   uint32_t image_x;
+   uint32_t image_y;
+   intel_miptree_get_image_offset(mt, level, slice, &image_x, &image_y);
+   image_x += map->x;
+   image_y += map->y;
+
+   void *src = intel_miptree_map_raw(brw, mt);
+   if (!src)
+      return;
+   src += image_y * mt->region->pitch;
+   src += image_x * mt->region->cpp;
+
+   /* Due to the pixel offsets for the particular image being mapped, our
+    * src pointer may not be 16-byte aligned.  However, if the pitch is
+    * divisible by 16, then the amount by which it's misaligned will remain
+    * consistent from row to row.
+    */
+   assert((mt->region->pitch % 16) == 0);
+   const int misalignment = ((uintptr_t) src) & 15;
+
+   /* Create an untiled temporary buffer for the mapping. */
+   const unsigned width_bytes = _mesa_format_row_stride(mt->format, map->w);
+
+   map->stride = ALIGN(misalignment + width_bytes, 16);
+
+   map->buffer = malloc(map->stride * map->h);
+   /* Offset the destination so it has the same misalignment as src. */
+   map->ptr = map->buffer + misalignment;
+
+   assert((((uintptr_t) map->ptr) & 15) == misalignment);
+
+   for (uint32_t y = 0; y < map->h; y++) {
+      void *dst_ptr = map->ptr + y * map->stride;
+      void *src_ptr = src + y * mt->region->pitch;
+
+      _mesa_streaming_load_memcpy(dst_ptr, src_ptr, width_bytes);
+
+      dst_ptr += width_bytes;
+      src_ptr += width_bytes;
+   }
+
+   intel_miptree_unmap_raw(brw, mt);
+}
+
+static void
+intel_miptree_unmap_movntdqa(struct brw_context *brw,
+                             struct intel_mipmap_tree *mt,
+                             struct intel_miptree_map *map,
+                             unsigned int level,
+                             unsigned int slice)
+{
+   free(map->buffer);
+   map->buffer = NULL;
+   map->ptr = NULL;
+}
+#endif
 
 static void
 intel_miptree_map_s8(struct brw_context *brw,
@@ -2141,6 +2275,10 @@ intel_miptree_map_singlesample(struct brw_context *brw,
               mt->region->bo->size >= brw->max_gtt_map_object_size) {
       assert(mt->region->pitch < 32768);
       intel_miptree_map_blit(brw, mt, map, level, slice);
+#ifdef __SSE4_1__
+   } else if (!(mode & GL_MAP_WRITE_BIT) && !mt->compressed) {
+      intel_miptree_map_movntdqa(brw, mt, map, level, slice);
+#endif
    } else {
       intel_miptree_map_gtt(brw, mt, map, level, slice);
    }
@@ -2177,6 +2315,10 @@ intel_miptree_unmap_singlesample(struct brw_context *brw,
       intel_miptree_unmap_depthstencil(brw, mt, map, level, slice);
    } else if (map->mt) {
       intel_miptree_unmap_blit(brw, mt, map, level, slice);
+#ifdef __SSE4_1__
+   } else if (map->buffer) {
+      intel_miptree_unmap_movntdqa(brw, mt, map, level, slice);
+#endif
    } else {
       intel_miptree_unmap_gtt(brw, mt, map, level, slice);
    }

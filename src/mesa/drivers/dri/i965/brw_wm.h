@@ -65,11 +65,16 @@ struct brw_wm_prog_key {
    GLuint replicate_alpha:1;
    GLuint render_to_fbo:1;
    GLuint clamp_fragment_color:1;
+   GLuint compute_pos_offset:1;
+   GLuint compute_sample_id:1;
    GLuint line_aa:2;
+   GLuint high_quality_derivatives:1;
 
    GLushort drawable_height;
    GLbitfield64 input_slots_valid;
    GLuint program_string_id:32;
+   GLenum alpha_test_func;          /* < For Gen4/5 MRT alpha test */
+   float alpha_test_ref;
 
    struct brw_sampler_prog_key_data tex;
 };
@@ -82,6 +87,7 @@ struct brw_wm_compile {
    uint8_t source_w_reg;
    uint8_t aa_dest_stencil_reg;
    uint8_t dest_depth_reg;
+   uint8_t sample_pos_reg;
    uint8_t barycentric_coord_reg[BRW_WM_BARYCENTRIC_INTERP_MODE_COUNT];
    uint8_t nr_payload_regs;
    GLuint source_depth_to_render_target:1;
@@ -113,8 +119,7 @@ bool do_wm_prog(struct brw_context *brw,
 void brw_wm_debug_recompile(struct brw_context *brw,
                             struct gl_shader_program *prog,
                             const struct brw_wm_prog_key *key);
-bool brw_wm_prog_data_compare(const void *a, const void *b,
-                              int aux_size, const void *key);
+bool brw_wm_prog_data_compare(const void *a, const void *b);
 void brw_wm_prog_data_free(const void *in_prog_data);
 
 #endif

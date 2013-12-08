@@ -9,7 +9,7 @@
 #define FLEX_SCANNER
 #define YY_FLEX_MAJOR_VERSION 2
 #define YY_FLEX_MINOR_VERSION 5
-#define YY_FLEX_SUBMINOR_VERSION 35
+#define YY_FLEX_SUBMINOR_VERSION 36
 #if YY_FLEX_SUBMINOR_VERSION > 0
 #define FLEX_BETA
 #endif
@@ -159,15 +159,7 @@ typedef void* yyscan_t;
 
 /* Size of default input buffer. */
 #ifndef YY_BUF_SIZE
-#ifdef __ia64__
-/* On IA-64, the buffer size is 16k, not 8k.
- * Moreover, YY_BUF_SIZE is 2*YY_READ_BUF_SIZE in the general case.
- * Ditto for the __ia64__ case accordingly.
- */
-#define YY_BUF_SIZE 32768
-#else
 #define YY_BUF_SIZE 16384
-#endif /* __ia64__ */
 #endif
 
 /* The state buf must be large enough to hold one state per character in the main buffer.
@@ -177,6 +169,11 @@ typedef void* yyscan_t;
 #ifndef YY_TYPEDEF_YY_BUFFER_STATE
 #define YY_TYPEDEF_YY_BUFFER_STATE
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
+#endif
+
+#ifndef YY_TYPEDEF_YY_SIZE_T
+#define YY_TYPEDEF_YY_SIZE_T
+typedef size_t yy_size_t;
 #endif
 
 #define EOB_ACT_CONTINUE_SCAN 0
@@ -201,11 +198,6 @@ typedef struct yy_buffer_state *YY_BUFFER_STATE;
 
 #define unput(c) yyunput( c, yyg->yytext_ptr , yyscanner )
 
-#ifndef YY_TYPEDEF_YY_SIZE_T
-#define YY_TYPEDEF_YY_SIZE_T
-typedef size_t yy_size_t;
-#endif
-
 #ifndef YY_STRUCT_YY_BUFFER_STATE
 #define YY_STRUCT_YY_BUFFER_STATE
 struct yy_buffer_state
@@ -223,7 +215,7 @@ struct yy_buffer_state
 	/* Number of characters read into yy_ch_buf, not including EOB
 	 * characters.
 	 */
-	int yy_n_chars;
+	yy_size_t yy_n_chars;
 
 	/* Whether we "own" the buffer - i.e., we know we created it,
 	 * and can realloc() it to grow it, and should free() it to
@@ -302,7 +294,7 @@ static void _mesa_glsl_lexer__init_buffer (YY_BUFFER_STATE b,FILE *file ,yyscan_
 
 YY_BUFFER_STATE _mesa_glsl_lexer__scan_buffer (char *base,yy_size_t size ,yyscan_t yyscanner );
 YY_BUFFER_STATE _mesa_glsl_lexer__scan_string (yyconst char *yy_str ,yyscan_t yyscanner );
-YY_BUFFER_STATE _mesa_glsl_lexer__scan_bytes (yyconst char *bytes,int len ,yyscan_t yyscanner );
+YY_BUFFER_STATE _mesa_glsl_lexer__scan_bytes (yyconst char *bytes,yy_size_t len ,yyscan_t yyscanner );
 
 void *_mesa_glsl_lexer_alloc (yy_size_t ,yyscan_t yyscanner );
 void *_mesa_glsl_lexer_realloc (void *,yy_size_t ,yyscan_t yyscanner );
@@ -334,7 +326,7 @@ void _mesa_glsl_lexer_free (void * ,yyscan_t yyscanner );
 
 /* Begin user sect3 */
 
-#define _mesa_glsl_lexer_wrap(n) 1
+#define _mesa_glsl_lexer_wrap(yyscanner) 1
 #define YY_SKIP_YYWRAP
 
 typedef unsigned char YY_CHAR;
@@ -370,14 +362,14 @@ struct yy_trans_info
 static yyconst flex_int16_t yy_accept[960] =
     {   0,
         0,    0,   16,   16,    0,    0,  235,  233,    1,   21,
-      233,  233,  233,  233,  233,  233,  233,  233,  131,  129,
+      233,  233,  233,  233,  233,  233,  233,  233,  132,  130,
       233,  233,  233,  232,  233,  232,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  233,    1,  233,  234,   16,
-       20,  234,   19,   17,   18,   14,   13,    1,  113,  122,
-      114,  125,  119,  108,  121,  109,  128,  133,  120,  134,
-      131,    0,    0,  136,  131,    0,  129,  129,  117,  110,
-      112,  111,  118,  232,  126,  116,  232,  232,  232,  232,
+       20,  234,   19,   17,   18,   14,   13,    1,  114,  123,
+      115,  126,  120,  109,  122,  110,  129,  134,  121,  135,
+      132,    0,    0,  137,  132,    0,  130,  130,  118,  111,
+      113,  112,  119,  232,  127,  117,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,   30,  232,
 
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
@@ -385,9 +377,9 @@ static yyconst flex_int16_t yy_accept[960] =
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
-      127,  115,    1,    0,    0,    2,    0,    0,    0,    0,
-       16,   15,   19,   18,    0,  133,  132,    0,  134,    0,
-      135,  130,  123,  124,  232,  139,  232,  232,  232,  232,
+      128,  116,    1,    0,    0,    2,    0,    0,    0,    0,
+       16,   15,   19,   18,    0,  134,  133,    0,  135,    0,
+      136,  131,  124,  125,  232,  140,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,   33,
 
@@ -397,81 +389,81 @@ static yyconst flex_int16_t yy_accept[960] =
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,    0,    0,
-        0,    0,   15,    0,  133,    0,  132,    0,  134,  135,
-      130,  232,  232,  232,   24,  232,  232,  186,  179,  232,
+        0,    0,   15,    0,  134,    0,  133,    0,  135,  136,
+      131,  232,  232,  232,   24,  232,  232,  187,  180,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,   32,
-      142,  232,  232,  232,  232,   68,  232,  232,  147,  161,
+      143,  232,  232,  232,  232,   68,  232,  232,  148,  162,
 
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
-      232,  232,  158,  182,   49,   50,   51,  232,  232,  232,
+      232,  232,  159,  183,   49,   50,   51,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
-      232,  232,  145,  137,  232,  232,   27,  232,  232,  232,
-      232,  232,  232,  232,   46,   47,   48,  106,  232,  232,
-      232,    0,    0,    0,    0,    0,  132,  232,  232,  232,
-       28,   37,   38,   39,  232,  140,  232,  232,   23,  232,
-      232,  232,  232,  169,  170,  171,  232,  138,  232,  162,
-       25,  172,  173,  174,  184,  166,  167,  168,  232,  232,
+      232,  232,  146,  138,  232,  232,   27,  232,  232,  232,
+      232,  232,  232,  232,   46,   47,   48,  107,  232,  232,
+      232,    0,    0,    0,    0,    0,  133,  232,  232,  232,
+       28,   37,   38,   39,  232,  141,  232,  232,   23,  232,
+      232,  232,  232,  170,  171,  172,  232,  139,  232,  163,
+       25,  173,  174,  175,  185,  167,  168,  169,  232,  232,
 
-      232,   63,  164,  232,  232,  232,   40,   41,   42,  232,
+      232,   63,  165,  232,  232,  232,   40,   41,   42,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
-      229,  232,  232,  232,  232,  232,  232,  232,  232,  159,
+      229,  232,  232,  232,  232,  232,  232,  232,  232,  160,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
-      232,  141,  232,  232,  181,   43,   44,   45,  232,  232,
-       31,  232,    0,    0,    0,    0,  189,  232,  232,  232,
-      232,  187,  232,  232,  232,  160,  155,  192,  232,  232,
-      232,  232,  232,  232,  150,  232,  232,  232,  107,   52,
+      232,  142,  232,  232,  182,   43,   44,   45,  232,  232,
+       31,  232,    0,    0,    0,    0,  190,  232,  232,  232,
+      232,  188,  232,  232,  232,  161,  156,  193,  232,  232,
+      232,  232,  232,  232,  151,  232,  232,  232,  108,   52,
        53,   54,   55,   56,   57,   58,   59,   60,  232,  232,
-      232,  232,  165,  146,  232,  232,  153,  232,  232,  232,
+      232,  232,  166,  147,  232,  232,  154,  232,  232,  232,
 
-       36,  232,  230,  178,   69,  154,  105,  232,  190,  148,
+       36,  232,  230,  179,   69,  155,  106,  232,  191,  149,
       232,  232,  232,  232,  232,  232,  232,  232,  232,    0,
-        0,    0,    0,  232,  232,  232,  232,  232,  149,   35,
-      232,  232,  232,  232,  232,  232,  193,  194,  195,  232,
-      232,  232,  232,  232,  183,  232,  232,  232,  232,  232,
-      232,  232,  232,  232,  232,  232,  232,  143,  232,  232,
+        0,    0,    0,  232,  232,  232,  232,  232,  150,   35,
+      232,  232,  232,  232,  232,  232,  194,  195,  196,  232,
+      232,  232,  232,  232,  184,  232,  232,  232,  232,  232,
+      232,  232,  232,  232,  232,  232,  232,  144,  232,  232,
       232,  232,  232,   64,  232,  232,   65,  232,  232,    0,
-        0,    0,    0,    0,  232,  232,   66,  223,   29,  156,
-      197,  198,  199,  232,  232,  232,  232,  232,  232,  232,
-      232,  232,  232,  232,  232,  151,  232,  232,  232,  225,
+        0,    0,    0,    0,  232,  232,   66,  224,   29,  157,
+      198,  199,  200,  232,  232,  232,  232,  232,  232,  232,
+      232,  232,  232,  232,  232,  152,  232,  232,  232,  226,
 
-      227,  224,  232,  232,  232,  232,  232,  232,  232,  232,
-      144,  201,  202,  203,  232,  232,  163,  232,  152,  232,
+      228,  225,  232,  232,  232,  232,  232,  232,  232,  232,
+      145,  202,  203,  204,  232,  232,  164,  232,  153,  232,
         0,    0,    6,    0,    0,    0,   12,    3,  232,   22,
-      232,  232,  232,  232,  232,  232,  232,  232,  232,  196,
-      157,   67,  232,  232,  232,  232,  232,  180,  232,  188,
-      185,  218,   71,   72,   73,  232,  232,  232,  232,  232,
-      232,  232,  232,  232,  232,  232,  232,  232,  226,    0,
+      232,  232,  232,  232,  232,  232,  232,  232,  232,  197,
+      158,   67,  232,  232,  232,  232,  232,  181,  232,  189,
+      186,  219,   71,   72,   73,  232,  232,  232,  232,  232,
+      232,  232,  232,  232,  232,  232,  232,  232,  227,    0,
         0,    0,    0,    0,    0,    0,  232,  232,  232,  232,
-      200,  232,  232,  232,  232,  232,   82,   83,   84,  232,
+      201,  232,  232,  232,  232,  232,   82,   83,   84,  232,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
 
-      232,  232,  231,  232,  232,  232,  204,   88,   89,   90,
+      232,  232,  231,  232,  232,  232,  205,   88,   89,   90,
       232,  232,    4,    0,    5,    0,    0,    0,    0,    0,
-        0,  228,  232,  232,  232,  232,  232,  232,  232,  215,
+        0,  105,  232,  232,  232,  232,  232,  232,  232,  216,
       232,  232,  232,  232,  232,  232,  232,  232,  232,  232,
        94,  232,  232,  232,  232,   74,  232,  232,  232,  232,
       232,  232,  232,  232,  232,  232,    0,    0,    0,    0,
-      232,  232,  216,  205,  232,  206,  232,  232,  232,   95,
+      232,  232,  217,  206,  232,  207,  232,  232,  232,   95,
       232,  232,   85,  232,  232,  232,  232,  232,  232,  232,
-      232,  232,  232,  232,  232,  232,  232,  217,  232,  232,
-       96,  232,  232,   91,    0,    0,    0,  207,  208,  232,
+      232,  232,  232,  232,  232,  232,  232,  218,  232,  232,
+       96,  232,  232,   91,    0,    0,    0,  208,  209,  232,
 
-      211,  232,  212,  232,  232,  232,  232,  232,  232,   70,
-      232,  232,  232,  232,  175,  232,  176,  191,  232,  232,
-      232,  209,  210,  232,  232,  232,  232,  232,  232,    0,
-        0,    0,  232,  232,  232,  232,  232,  219,  221,  232,
+      212,  232,  213,  232,  232,  232,  232,  232,  232,   70,
+      232,  232,  232,  232,  176,  232,  177,  192,  232,  232,
+      232,  210,  211,  232,  232,  232,  232,  232,  232,    0,
+        0,    0,  232,  232,  232,  232,  232,  220,  222,  232,
        75,  232,   76,  232,  232,  232,  232,  232,  232,  232,
-      232,  232,  220,  222,  232,    0,    0,    0,    0,  232,
+      232,  232,  221,  223,  232,    0,    0,    0,    0,  232,
       232,   86,   87,  232,  232,  232,   77,  232,  232,  232,
        78,  232,  232,  232,   92,   93,  232,  232,    0,    0,
         0,    0,  232,  232,  232,  232,  232,  232,   97,  232,
       100,  232,  232,  232,  232,    0,    0,    0,    0,  232,
 
       232,   98,  101,  232,  232,  232,  232,   79,  232,   99,
-      102,    0,    0,    0,    7,    0,    0,  213,  214,  232,
+      102,    0,    0,    0,    7,    0,    0,  214,  215,  232,
       232,  232,  232,  104,    0,    0,    8,    0,    0,  232,
-      232,  177,  232,    0,    0,    0,   80,   81,  232,    0,
+      232,  178,  232,    0,    0,    0,   80,   81,  232,    0,
         0,    0,    9,  232,    0,    0,   10,  103,    0,    0,
         0,    0,    0,    0,    0,    0,    0,   11,    0
     } ;
@@ -1144,7 +1136,7 @@ static int classify_identifier(struct _mesa_glsl_parse_state *, const char *);
       } else if (yyextra->is_version(reserved_glsl,			\
                                      reserved_glsl_es)) {		\
 	 _mesa_glsl_error(yylloc, yyextra,				\
-			  "Illegal use of reserved word `%s'", yytext);	\
+			  "illegal use of reserved word `%s'", yytext);	\
 	 return ERROR_TOK;						\
       } else {								\
 	 yylval->identifier = strdup(yytext);				\
@@ -1160,7 +1152,7 @@ static int classify_identifier(struct _mesa_glsl_parse_state *, const char *);
    do {									\
       if (yyextra->is_version(0, 300)) {				\
 	 _mesa_glsl_error(yylloc, yyextra,				\
-			  "Illegal use of reserved word `%s'", yytext);	\
+			  "illegal use of reserved word `%s'", yytext);	\
 	 return ERROR_TOK;						\
       } else {								\
          return token;							\
@@ -1191,10 +1183,10 @@ literal_integer(char *text, int len, struct _mesa_glsl_parse_state *state,
       /* Note that signed 0xffffffff is valid, not out of range! */
       if (state->is_version(130, 300)) {
 	 _mesa_glsl_error(lloc, state,
-			  "Literal value `%s' out of range", text);
+			  "literal value `%s' out of range", text);
       } else {
 	 _mesa_glsl_warning(lloc, state,
-			    "Literal value `%s' out of range", text);
+			    "literal value `%s' out of range", text);
       }
    } else if (base == 10 && !is_uint && (unsigned)value > (unsigned)INT_MAX + 1) {
       /* Tries to catch unintentionally providing a negative value.
@@ -1202,7 +1194,7 @@ literal_integer(char *text, int len, struct _mesa_glsl_parse_state *state,
        * want to warn for INT_MAX.
        */
       _mesa_glsl_warning(lloc, state,
-			 "Signed literal value `%s' is interpreted as %d",
+			 "signed literal value `%s' is interpreted as %d",
 			 text, lval->n);
    }
    return is_uint ? UINTCONSTANT : INTCONSTANT;
@@ -1212,7 +1204,7 @@ literal_integer(char *text, int len, struct _mesa_glsl_parse_state *state,
    literal_integer(yytext, yyleng, yyextra, yylval, yylloc, base)
 
 
-#line 1216 "glsl_lexer.cpp"
+#line 1208 "glsl_lexer.cpp"
 
 #define INITIAL 0
 #define PP 1
@@ -1241,8 +1233,8 @@ struct yyguts_t
     size_t yy_buffer_stack_max; /**< capacity of stack. */
     YY_BUFFER_STATE * yy_buffer_stack; /**< Stack as an array. */
     char yy_hold_char;
-    int yy_n_chars;
-    int yyleng_r;
+    yy_size_t yy_n_chars;
+    yy_size_t yyleng_r;
     char *yy_c_buf_p;
     int yy_init;
     int yy_start;
@@ -1299,7 +1291,7 @@ FILE *_mesa_glsl_lexer_get_out (yyscan_t yyscanner );
 
 void _mesa_glsl_lexer_set_out  (FILE * out_str ,yyscan_t yyscanner );
 
-int _mesa_glsl_lexer_get_leng (yyscan_t yyscanner );
+yy_size_t _mesa_glsl_lexer_get_leng (yyscan_t yyscanner );
 
 char *_mesa_glsl_lexer_get_text (yyscan_t yyscanner );
 
@@ -1351,12 +1343,7 @@ static int input (yyscan_t yyscanner );
 
 /* Amount of stuff to slurp up with each read. */
 #ifndef YY_READ_BUF_SIZE
-#ifdef __ia64__
-/* On IA-64, the buffer size is 16k, not 8k */
-#define YY_READ_BUF_SIZE 16384
-#else
 #define YY_READ_BUF_SIZE 8192
-#endif /* __ia64__ */
 #endif
 
 /* Copy whatever the last rule matched to the standard output. */
@@ -1466,7 +1453,7 @@ YY_DECL
 #line 164 "glsl_lexer.ll"
 
 
-#line 1470 "glsl_lexer.cpp"
+#line 1457 "glsl_lexer.cpp"
 
     yylval = yylval_param;
 
@@ -2141,17 +2128,22 @@ YY_RULE_SETUP
 	YY_BREAK
 case 105:
 YY_RULE_SETUP
-#line 341 "glsl_lexer.ll"
-return STRUCT;
+#line 340 "glsl_lexer.ll"
+KEYWORD_WITH_ALT(420, 300, 420, 0, yyextra->ARB_shader_atomic_counters_enable, ATOMIC_UINT);
 	YY_BREAK
 case 106:
 YY_RULE_SETUP
 #line 342 "glsl_lexer.ll"
-return VOID_TOK;
+return STRUCT;
 	YY_BREAK
 case 107:
 YY_RULE_SETUP
-#line 344 "glsl_lexer.ll"
+#line 343 "glsl_lexer.ll"
+return VOID_TOK;
+	YY_BREAK
+case 108:
+YY_RULE_SETUP
+#line 345 "glsl_lexer.ll"
 {
 		  if ((yyextra->is_version(140, 300))
 		      || yyextra->AMD_conservative_depth_enable
@@ -2167,143 +2159,135 @@ YY_RULE_SETUP
 		   }
 		}
 	YY_BREAK
-case 108:
-YY_RULE_SETUP
-#line 359 "glsl_lexer.ll"
-return INC_OP;
-	YY_BREAK
 case 109:
 YY_RULE_SETUP
 #line 360 "glsl_lexer.ll"
-return DEC_OP;
+return INC_OP;
 	YY_BREAK
 case 110:
 YY_RULE_SETUP
 #line 361 "glsl_lexer.ll"
-return LE_OP;
+return DEC_OP;
 	YY_BREAK
 case 111:
 YY_RULE_SETUP
 #line 362 "glsl_lexer.ll"
-return GE_OP;
+return LE_OP;
 	YY_BREAK
 case 112:
 YY_RULE_SETUP
 #line 363 "glsl_lexer.ll"
-return EQ_OP;
+return GE_OP;
 	YY_BREAK
 case 113:
 YY_RULE_SETUP
 #line 364 "glsl_lexer.ll"
-return NE_OP;
+return EQ_OP;
 	YY_BREAK
 case 114:
 YY_RULE_SETUP
 #line 365 "glsl_lexer.ll"
-return AND_OP;
+return NE_OP;
 	YY_BREAK
 case 115:
 YY_RULE_SETUP
 #line 366 "glsl_lexer.ll"
-return OR_OP;
+return AND_OP;
 	YY_BREAK
 case 116:
 YY_RULE_SETUP
 #line 367 "glsl_lexer.ll"
-return XOR_OP;
+return OR_OP;
 	YY_BREAK
 case 117:
 YY_RULE_SETUP
 #line 368 "glsl_lexer.ll"
-return LEFT_OP;
+return XOR_OP;
 	YY_BREAK
 case 118:
 YY_RULE_SETUP
 #line 369 "glsl_lexer.ll"
-return RIGHT_OP;
+return LEFT_OP;
 	YY_BREAK
 case 119:
 YY_RULE_SETUP
-#line 371 "glsl_lexer.ll"
-return MUL_ASSIGN;
+#line 370 "glsl_lexer.ll"
+return RIGHT_OP;
 	YY_BREAK
 case 120:
 YY_RULE_SETUP
 #line 372 "glsl_lexer.ll"
-return DIV_ASSIGN;
+return MUL_ASSIGN;
 	YY_BREAK
 case 121:
 YY_RULE_SETUP
 #line 373 "glsl_lexer.ll"
-return ADD_ASSIGN;
+return DIV_ASSIGN;
 	YY_BREAK
 case 122:
 YY_RULE_SETUP
 #line 374 "glsl_lexer.ll"
-return MOD_ASSIGN;
+return ADD_ASSIGN;
 	YY_BREAK
 case 123:
 YY_RULE_SETUP
 #line 375 "glsl_lexer.ll"
-return LEFT_ASSIGN;
+return MOD_ASSIGN;
 	YY_BREAK
 case 124:
 YY_RULE_SETUP
 #line 376 "glsl_lexer.ll"
-return RIGHT_ASSIGN;
+return LEFT_ASSIGN;
 	YY_BREAK
 case 125:
 YY_RULE_SETUP
 #line 377 "glsl_lexer.ll"
-return AND_ASSIGN;
+return RIGHT_ASSIGN;
 	YY_BREAK
 case 126:
 YY_RULE_SETUP
 #line 378 "glsl_lexer.ll"
-return XOR_ASSIGN;
+return AND_ASSIGN;
 	YY_BREAK
 case 127:
 YY_RULE_SETUP
 #line 379 "glsl_lexer.ll"
-return OR_ASSIGN;
+return XOR_ASSIGN;
 	YY_BREAK
 case 128:
 YY_RULE_SETUP
 #line 380 "glsl_lexer.ll"
-return SUB_ASSIGN;
+return OR_ASSIGN;
 	YY_BREAK
 case 129:
 YY_RULE_SETUP
-#line 382 "glsl_lexer.ll"
+#line 381 "glsl_lexer.ll"
+return SUB_ASSIGN;
+	YY_BREAK
+case 130:
+YY_RULE_SETUP
+#line 383 "glsl_lexer.ll"
 {
 			    return LITERAL_INTEGER(10);
 			}
 	YY_BREAK
-case 130:
+case 131:
 YY_RULE_SETUP
-#line 385 "glsl_lexer.ll"
+#line 386 "glsl_lexer.ll"
 {
 			    return LITERAL_INTEGER(16);
 			}
 	YY_BREAK
-case 131:
+case 132:
 YY_RULE_SETUP
-#line 388 "glsl_lexer.ll"
+#line 389 "glsl_lexer.ll"
 {
 			    return LITERAL_INTEGER(8);
 			}
 	YY_BREAK
-case 132:
-YY_RULE_SETUP
-#line 392 "glsl_lexer.ll"
-{
-			    yylval->real = glsl_strtof(yytext, NULL);
-			    return FLOATCONSTANT;
-			}
-	YY_BREAK
 case 133:
 YY_RULE_SETUP
-#line 396 "glsl_lexer.ll"
+#line 393 "glsl_lexer.ll"
 {
 			    yylval->real = glsl_strtof(yytext, NULL);
 			    return FLOATCONSTANT;
@@ -2311,7 +2295,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 134:
 YY_RULE_SETUP
-#line 400 "glsl_lexer.ll"
+#line 397 "glsl_lexer.ll"
 {
 			    yylval->real = glsl_strtof(yytext, NULL);
 			    return FLOATCONSTANT;
@@ -2319,7 +2303,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 135:
 YY_RULE_SETUP
-#line 404 "glsl_lexer.ll"
+#line 401 "glsl_lexer.ll"
 {
 			    yylval->real = glsl_strtof(yytext, NULL);
 			    return FLOATCONSTANT;
@@ -2327,7 +2311,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 136:
 YY_RULE_SETUP
-#line 408 "glsl_lexer.ll"
+#line 405 "glsl_lexer.ll"
 {
 			    yylval->real = glsl_strtof(yytext, NULL);
 			    return FLOATCONSTANT;
@@ -2335,474 +2319,477 @@ YY_RULE_SETUP
 	YY_BREAK
 case 137:
 YY_RULE_SETUP
-#line 413 "glsl_lexer.ll"
+#line 409 "glsl_lexer.ll"
+{
+			    yylval->real = glsl_strtof(yytext, NULL);
+			    return FLOATCONSTANT;
+			}
+	YY_BREAK
+case 138:
+YY_RULE_SETUP
+#line 414 "glsl_lexer.ll"
 {
 			    yylval->n = 1;
 			    return BOOLCONSTANT;
 			}
 	YY_BREAK
-case 138:
+case 139:
 YY_RULE_SETUP
-#line 417 "glsl_lexer.ll"
+#line 418 "glsl_lexer.ll"
 {
 			    yylval->n = 0;
 			    return BOOLCONSTANT;
 			}
 	YY_BREAK
 /* Reserved words in GLSL 1.10. */
-case 139:
-YY_RULE_SETUP
-#line 424 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, ASM);
-	YY_BREAK
 case 140:
 YY_RULE_SETUP
 #line 425 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, CLASS);
+KEYWORD(110, 100, 0, 0, ASM);
 	YY_BREAK
 case 141:
 YY_RULE_SETUP
 #line 426 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, UNION);
+KEYWORD(110, 100, 0, 0, CLASS);
 	YY_BREAK
 case 142:
 YY_RULE_SETUP
 #line 427 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, ENUM);
+KEYWORD(110, 100, 0, 0, UNION);
 	YY_BREAK
 case 143:
 YY_RULE_SETUP
 #line 428 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, TYPEDEF);
+KEYWORD(110, 100, 0, 0, ENUM);
 	YY_BREAK
 case 144:
 YY_RULE_SETUP
 #line 429 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, TEMPLATE);
+KEYWORD(110, 100, 0, 0, TYPEDEF);
 	YY_BREAK
 case 145:
 YY_RULE_SETUP
 #line 430 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, THIS);
+KEYWORD(110, 100, 0, 0, TEMPLATE);
 	YY_BREAK
 case 146:
 YY_RULE_SETUP
 #line 431 "glsl_lexer.ll"
-KEYWORD_WITH_ALT(110, 100, 140, 300, yyextra->ARB_uniform_buffer_object_enable, PACKED_TOK);
+KEYWORD(110, 100, 0, 0, THIS);
 	YY_BREAK
 case 147:
 YY_RULE_SETUP
 #line 432 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, GOTO);
+KEYWORD_WITH_ALT(110, 100, 140, 300, yyextra->ARB_uniform_buffer_object_enable, PACKED_TOK);
 	YY_BREAK
 case 148:
 YY_RULE_SETUP
 #line 433 "glsl_lexer.ll"
-KEYWORD(110, 100, 130, 300, SWITCH);
+KEYWORD(110, 100, 0, 0, GOTO);
 	YY_BREAK
 case 149:
 YY_RULE_SETUP
 #line 434 "glsl_lexer.ll"
-KEYWORD(110, 100, 130, 300, DEFAULT);
+KEYWORD(110, 100, 130, 300, SWITCH);
 	YY_BREAK
 case 150:
 YY_RULE_SETUP
 #line 435 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, INLINE_TOK);
+KEYWORD(110, 100, 130, 300, DEFAULT);
 	YY_BREAK
 case 151:
 YY_RULE_SETUP
 #line 436 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, NOINLINE);
+KEYWORD(110, 100, 0, 0, INLINE_TOK);
 	YY_BREAK
 case 152:
 YY_RULE_SETUP
 #line 437 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, VOLATILE);
+KEYWORD(110, 100, 0, 0, NOINLINE);
 	YY_BREAK
 case 153:
 YY_RULE_SETUP
 #line 438 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, PUBLIC_TOK);
+KEYWORD(110, 100, 0, 0, VOLATILE);
 	YY_BREAK
 case 154:
 YY_RULE_SETUP
 #line 439 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, STATIC);
+KEYWORD(110, 100, 0, 0, PUBLIC_TOK);
 	YY_BREAK
 case 155:
 YY_RULE_SETUP
 #line 440 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, EXTERN);
+KEYWORD(110, 100, 0, 0, STATIC);
 	YY_BREAK
 case 156:
 YY_RULE_SETUP
 #line 441 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, EXTERNAL);
+KEYWORD(110, 100, 0, 0, EXTERN);
 	YY_BREAK
 case 157:
 YY_RULE_SETUP
 #line 442 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, INTERFACE);
+KEYWORD(110, 100, 0, 0, EXTERNAL);
 	YY_BREAK
 case 158:
 YY_RULE_SETUP
 #line 443 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, LONG_TOK);
+KEYWORD(110, 100, 0, 0, INTERFACE);
 	YY_BREAK
 case 159:
 YY_RULE_SETUP
 #line 444 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, SHORT_TOK);
+KEYWORD(110, 100, 0, 0, LONG_TOK);
 	YY_BREAK
 case 160:
 YY_RULE_SETUP
 #line 445 "glsl_lexer.ll"
-KEYWORD(110, 100, 400, 0, DOUBLE_TOK);
+KEYWORD(110, 100, 0, 0, SHORT_TOK);
 	YY_BREAK
 case 161:
 YY_RULE_SETUP
 #line 446 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, HALF);
+KEYWORD(110, 100, 400, 0, DOUBLE_TOK);
 	YY_BREAK
 case 162:
 YY_RULE_SETUP
 #line 447 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, FIXED_TOK);
+KEYWORD(110, 100, 0, 0, HALF);
 	YY_BREAK
 case 163:
 YY_RULE_SETUP
 #line 448 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, UNSIGNED);
+KEYWORD(110, 100, 0, 0, FIXED_TOK);
 	YY_BREAK
 case 164:
 YY_RULE_SETUP
 #line 449 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, INPUT_TOK);
+KEYWORD(110, 100, 0, 0, UNSIGNED);
 	YY_BREAK
 case 165:
 YY_RULE_SETUP
 #line 450 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, OUTPUT);
+KEYWORD(110, 100, 0, 0, INPUT_TOK);
 	YY_BREAK
 case 166:
 YY_RULE_SETUP
 #line 451 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, HVEC2);
+KEYWORD(110, 100, 0, 0, OUTPUT);
 	YY_BREAK
 case 167:
 YY_RULE_SETUP
 #line 452 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, HVEC3);
+KEYWORD(110, 100, 0, 0, HVEC2);
 	YY_BREAK
 case 168:
 YY_RULE_SETUP
 #line 453 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, HVEC4);
+KEYWORD(110, 100, 0, 0, HVEC3);
 	YY_BREAK
 case 169:
 YY_RULE_SETUP
 #line 454 "glsl_lexer.ll"
-KEYWORD(110, 100, 400, 0, DVEC2);
+KEYWORD(110, 100, 0, 0, HVEC4);
 	YY_BREAK
 case 170:
 YY_RULE_SETUP
 #line 455 "glsl_lexer.ll"
-KEYWORD(110, 100, 400, 0, DVEC3);
+KEYWORD(110, 100, 400, 0, DVEC2);
 	YY_BREAK
 case 171:
 YY_RULE_SETUP
 #line 456 "glsl_lexer.ll"
-KEYWORD(110, 100, 400, 0, DVEC4);
+KEYWORD(110, 100, 400, 0, DVEC3);
 	YY_BREAK
 case 172:
 YY_RULE_SETUP
 #line 457 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, FVEC2);
+KEYWORD(110, 100, 400, 0, DVEC4);
 	YY_BREAK
 case 173:
 YY_RULE_SETUP
 #line 458 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, FVEC3);
+KEYWORD(110, 100, 0, 0, FVEC2);
 	YY_BREAK
 case 174:
 YY_RULE_SETUP
 #line 459 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, FVEC4);
+KEYWORD(110, 100, 0, 0, FVEC3);
 	YY_BREAK
 case 175:
 YY_RULE_SETUP
 #line 460 "glsl_lexer.ll"
-DEPRECATED_ES_KEYWORD(SAMPLER2DRECT);
+KEYWORD(110, 100, 0, 0, FVEC4);
 	YY_BREAK
 case 176:
 YY_RULE_SETUP
 #line 461 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, SAMPLER3DRECT);
+DEPRECATED_ES_KEYWORD(SAMPLER2DRECT);
 	YY_BREAK
 case 177:
 YY_RULE_SETUP
 #line 462 "glsl_lexer.ll"
-DEPRECATED_ES_KEYWORD(SAMPLER2DRECTSHADOW);
+KEYWORD(110, 100, 0, 0, SAMPLER3DRECT);
 	YY_BREAK
 case 178:
 YY_RULE_SETUP
 #line 463 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, SIZEOF);
+DEPRECATED_ES_KEYWORD(SAMPLER2DRECTSHADOW);
 	YY_BREAK
 case 179:
 YY_RULE_SETUP
 #line 464 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, CAST);
+KEYWORD(110, 100, 0, 0, SIZEOF);
 	YY_BREAK
 case 180:
 YY_RULE_SETUP
 #line 465 "glsl_lexer.ll"
-KEYWORD(110, 100, 0, 0, NAMESPACE);
+KEYWORD(110, 100, 0, 0, CAST);
 	YY_BREAK
 case 181:
 YY_RULE_SETUP
 #line 466 "glsl_lexer.ll"
+KEYWORD(110, 100, 0, 0, NAMESPACE);
+	YY_BREAK
+case 182:
+YY_RULE_SETUP
+#line 467 "glsl_lexer.ll"
 KEYWORD(110, 100, 0, 0, USING);
 	YY_BREAK
 /* Additional reserved words in GLSL 1.20. */
-case 182:
-YY_RULE_SETUP
-#line 469 "glsl_lexer.ll"
-KEYWORD(120, 100, 130, 100, LOWP);
-	YY_BREAK
 case 183:
 YY_RULE_SETUP
 #line 470 "glsl_lexer.ll"
-KEYWORD(120, 100, 130, 100, MEDIUMP);
+KEYWORD(120, 100, 130, 100, LOWP);
 	YY_BREAK
 case 184:
 YY_RULE_SETUP
 #line 471 "glsl_lexer.ll"
-KEYWORD(120, 100, 130, 100, HIGHP);
+KEYWORD(120, 100, 130, 100, MEDIUMP);
 	YY_BREAK
 case 185:
 YY_RULE_SETUP
 #line 472 "glsl_lexer.ll"
+KEYWORD(120, 100, 130, 100, HIGHP);
+	YY_BREAK
+case 186:
+YY_RULE_SETUP
+#line 473 "glsl_lexer.ll"
 KEYWORD(120, 100, 130, 100, PRECISION);
 	YY_BREAK
 /* Additional reserved words in GLSL 1.30. */
-case 186:
-YY_RULE_SETUP
-#line 475 "glsl_lexer.ll"
-KEYWORD(130, 300, 130, 300, CASE);
-	YY_BREAK
 case 187:
 YY_RULE_SETUP
 #line 476 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, COMMON);
+KEYWORD(130, 300, 130, 300, CASE);
 	YY_BREAK
 case 188:
 YY_RULE_SETUP
 #line 477 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, PARTITION);
+KEYWORD(130, 300, 0, 0, COMMON);
 	YY_BREAK
 case 189:
 YY_RULE_SETUP
 #line 478 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, ACTIVE);
+KEYWORD(130, 300, 0, 0, PARTITION);
 	YY_BREAK
 case 190:
 YY_RULE_SETUP
 #line 479 "glsl_lexer.ll"
-KEYWORD(130, 100, 0, 0, SUPERP);
+KEYWORD(130, 300, 0, 0, ACTIVE);
 	YY_BREAK
 case 191:
 YY_RULE_SETUP
 #line 480 "glsl_lexer.ll"
-KEYWORD(130, 300, 140, 0, SAMPLERBUFFER);
+KEYWORD(130, 100, 0, 0, SUPERP);
 	YY_BREAK
 case 192:
 YY_RULE_SETUP
 #line 481 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, FILTER);
+KEYWORD(130, 300, 140, 0, SAMPLERBUFFER);
 	YY_BREAK
 case 193:
 YY_RULE_SETUP
 #line 482 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGE1D);
+KEYWORD(130, 300, 0, 0, FILTER);
 	YY_BREAK
 case 194:
 YY_RULE_SETUP
 #line 483 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGE2D);
+KEYWORD(130, 300, 0, 0, IMAGE1D);
 	YY_BREAK
 case 195:
 YY_RULE_SETUP
 #line 484 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGE3D);
+KEYWORD(130, 300, 0, 0, IMAGE2D);
 	YY_BREAK
 case 196:
 YY_RULE_SETUP
 #line 485 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGECUBE);
+KEYWORD(130, 300, 0, 0, IMAGE3D);
 	YY_BREAK
 case 197:
 YY_RULE_SETUP
 #line 486 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IIMAGE1D);
+KEYWORD(130, 300, 0, 0, IMAGECUBE);
 	YY_BREAK
 case 198:
 YY_RULE_SETUP
 #line 487 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IIMAGE2D);
+KEYWORD(130, 300, 0, 0, IIMAGE1D);
 	YY_BREAK
 case 199:
 YY_RULE_SETUP
 #line 488 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IIMAGE3D);
+KEYWORD(130, 300, 0, 0, IIMAGE2D);
 	YY_BREAK
 case 200:
 YY_RULE_SETUP
 #line 489 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IIMAGECUBE);
+KEYWORD(130, 300, 0, 0, IIMAGE3D);
 	YY_BREAK
 case 201:
 YY_RULE_SETUP
 #line 490 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, UIMAGE1D);
+KEYWORD(130, 300, 0, 0, IIMAGECUBE);
 	YY_BREAK
 case 202:
 YY_RULE_SETUP
 #line 491 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, UIMAGE2D);
+KEYWORD(130, 300, 0, 0, UIMAGE1D);
 	YY_BREAK
 case 203:
 YY_RULE_SETUP
 #line 492 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, UIMAGE3D);
+KEYWORD(130, 300, 0, 0, UIMAGE2D);
 	YY_BREAK
 case 204:
 YY_RULE_SETUP
 #line 493 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, UIMAGECUBE);
+KEYWORD(130, 300, 0, 0, UIMAGE3D);
 	YY_BREAK
 case 205:
 YY_RULE_SETUP
 #line 494 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGE1DARRAY);
+KEYWORD(130, 300, 0, 0, UIMAGECUBE);
 	YY_BREAK
 case 206:
 YY_RULE_SETUP
 #line 495 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGE2DARRAY);
+KEYWORD(130, 300, 0, 0, IMAGE1DARRAY);
 	YY_BREAK
 case 207:
 YY_RULE_SETUP
 #line 496 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IIMAGE1DARRAY);
+KEYWORD(130, 300, 0, 0, IMAGE2DARRAY);
 	YY_BREAK
 case 208:
 YY_RULE_SETUP
 #line 497 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IIMAGE2DARRAY);
+KEYWORD(130, 300, 0, 0, IIMAGE1DARRAY);
 	YY_BREAK
 case 209:
 YY_RULE_SETUP
 #line 498 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, UIMAGE1DARRAY);
+KEYWORD(130, 300, 0, 0, IIMAGE2DARRAY);
 	YY_BREAK
 case 210:
 YY_RULE_SETUP
 #line 499 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, UIMAGE2DARRAY);
+KEYWORD(130, 300, 0, 0, UIMAGE1DARRAY);
 	YY_BREAK
 case 211:
 YY_RULE_SETUP
 #line 500 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGE1DSHADOW);
+KEYWORD(130, 300, 0, 0, UIMAGE2DARRAY);
 	YY_BREAK
 case 212:
 YY_RULE_SETUP
 #line 501 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGE2DSHADOW);
+KEYWORD(130, 300, 0, 0, IMAGE1DSHADOW);
 	YY_BREAK
 case 213:
 YY_RULE_SETUP
 #line 502 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGE1DARRAYSHADOW);
+KEYWORD(130, 300, 0, 0, IMAGE2DSHADOW);
 	YY_BREAK
 case 214:
 YY_RULE_SETUP
 #line 503 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGE2DARRAYSHADOW);
+KEYWORD(130, 300, 0, 0, IMAGE1DARRAYSHADOW);
 	YY_BREAK
 case 215:
 YY_RULE_SETUP
 #line 504 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IMAGEBUFFER);
+KEYWORD(130, 300, 0, 0, IMAGE2DARRAYSHADOW);
 	YY_BREAK
 case 216:
 YY_RULE_SETUP
 #line 505 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, IIMAGEBUFFER);
+KEYWORD(130, 300, 0, 0, IMAGEBUFFER);
 	YY_BREAK
 case 217:
 YY_RULE_SETUP
 #line 506 "glsl_lexer.ll"
-KEYWORD(130, 300, 0, 0, UIMAGEBUFFER);
+KEYWORD(130, 300, 0, 0, IIMAGEBUFFER);
 	YY_BREAK
 case 218:
 YY_RULE_SETUP
 #line 507 "glsl_lexer.ll"
+KEYWORD(130, 300, 0, 0, UIMAGEBUFFER);
+	YY_BREAK
+case 219:
+YY_RULE_SETUP
+#line 508 "glsl_lexer.ll"
 KEYWORD_WITH_ALT(130, 0, 140, 0, yyextra->ARB_uniform_buffer_object_enable && !yyextra->es_shader, ROW_MAJOR);
 	YY_BREAK
 /* Additional reserved words in GLSL 1.40 */
-case 219:
-YY_RULE_SETUP
-#line 510 "glsl_lexer.ll"
-KEYWORD(140, 300, 140, 0, ISAMPLER2DRECT);
-	YY_BREAK
 case 220:
 YY_RULE_SETUP
 #line 511 "glsl_lexer.ll"
-KEYWORD(140, 300, 140, 0, USAMPLER2DRECT);
+KEYWORD(140, 300, 140, 0, ISAMPLER2DRECT);
 	YY_BREAK
 case 221:
 YY_RULE_SETUP
 #line 512 "glsl_lexer.ll"
-KEYWORD(140, 300, 140, 0, ISAMPLERBUFFER);
+KEYWORD(140, 300, 140, 0, USAMPLER2DRECT);
 	YY_BREAK
 case 222:
 YY_RULE_SETUP
 #line 513 "glsl_lexer.ll"
+KEYWORD(140, 300, 140, 0, ISAMPLERBUFFER);
+	YY_BREAK
+case 223:
+YY_RULE_SETUP
+#line 514 "glsl_lexer.ll"
 KEYWORD(140, 300, 140, 0, USAMPLERBUFFER);
 	YY_BREAK
 /* Additional reserved words in GLSL ES 3.00 */
-case 223:
-YY_RULE_SETUP
-#line 516 "glsl_lexer.ll"
-KEYWORD(0, 300, 0, 0, COHERENT);
-	YY_BREAK
 case 224:
 YY_RULE_SETUP
 #line 517 "glsl_lexer.ll"
-KEYWORD(0, 300, 0, 0, RESTRICT);
+KEYWORD(0, 300, 0, 0, COHERENT);
 	YY_BREAK
 case 225:
 YY_RULE_SETUP
 #line 518 "glsl_lexer.ll"
-KEYWORD(0, 300, 0, 0, READONLY);
+KEYWORD(0, 300, 0, 0, RESTRICT);
 	YY_BREAK
 case 226:
 YY_RULE_SETUP
 #line 519 "glsl_lexer.ll"
-KEYWORD(0, 300, 0, 0, WRITEONLY);
+KEYWORD(0, 300, 0, 0, READONLY);
 	YY_BREAK
 case 227:
 YY_RULE_SETUP
 #line 520 "glsl_lexer.ll"
-KEYWORD(0, 300, 0, 0, RESOURCE);
+KEYWORD(0, 300, 0, 0, WRITEONLY);
 	YY_BREAK
 case 228:
 YY_RULE_SETUP
 #line 521 "glsl_lexer.ll"
-KEYWORD(0, 300, 0, 0, ATOMIC_UINT);
+KEYWORD(0, 300, 0, 0, RESOURCE);
 	YY_BREAK
 case 229:
 YY_RULE_SETUP
@@ -2839,7 +2826,7 @@ YY_RULE_SETUP
 #line 536 "glsl_lexer.ll"
 ECHO;
 	YY_BREAK
-#line 2843 "glsl_lexer.cpp"
+#line 2830 "glsl_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(PP):
 case YY_STATE_EOF(PRAGMA):
@@ -3029,21 +3016,21 @@ static int yy_get_next_buffer (yyscan_t yyscanner)
 
 	else
 		{
-			int num_to_read =
+			yy_size_t num_to_read =
 			YY_CURRENT_BUFFER_LVALUE->yy_buf_size - number_to_move - 1;
 
 		while ( num_to_read <= 0 )
 			{ /* Not enough room in the buffer - grow it. */
 
 			/* just a shorter name for the current buffer */
-			YY_BUFFER_STATE b = YY_CURRENT_BUFFER;
+			YY_BUFFER_STATE b = YY_CURRENT_BUFFER_LVALUE;
 
 			int yy_c_buf_p_offset =
 				(int) (yyg->yy_c_buf_p - b->yy_ch_buf);
 
 			if ( b->yy_is_our_buffer )
 				{
-				int new_size = b->yy_buf_size * 2;
+				yy_size_t new_size = b->yy_buf_size * 2;
 
 				if ( new_size <= 0 )
 					b->yy_buf_size += b->yy_buf_size / 8;
@@ -3074,7 +3061,7 @@ static int yy_get_next_buffer (yyscan_t yyscanner)
 
 		/* Read in more data. */
 		YY_INPUT( (&YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[number_to_move]),
-			yyg->yy_n_chars, (size_t) num_to_read );
+			yyg->yy_n_chars, num_to_read );
 
 		YY_CURRENT_BUFFER_LVALUE->yy_n_chars = yyg->yy_n_chars;
 		}
@@ -3172,6 +3159,7 @@ static int yy_get_next_buffer (yyscan_t yyscanner)
 	yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
 	yy_is_jam = (yy_current_state == 959);
 
+	(void)yyg;
 	return yy_is_jam ? 0 : yy_current_state;
 }
 
@@ -3200,7 +3188,7 @@ static int yy_get_next_buffer (yyscan_t yyscanner)
 
 		else
 			{ /* need more input */
-			int offset = yyg->yy_c_buf_p - yyg->yytext_ptr;
+			yy_size_t offset = yyg->yy_c_buf_p - yyg->yytext_ptr;
 			++yyg->yy_c_buf_p;
 
 			switch ( yy_get_next_buffer( yyscanner ) )
@@ -3482,7 +3470,7 @@ void _mesa_glsl_lexer_pop_buffer_state (yyscan_t yyscanner)
  */
 static void _mesa_glsl_lexer_ensure_buffer_stack (yyscan_t yyscanner)
 {
-	int num_to_alloc;
+	yy_size_t num_to_alloc;
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
 	if (!yyg->yy_buffer_stack) {
@@ -3580,7 +3568,7 @@ YY_BUFFER_STATE _mesa_glsl_lexer__scan_string (yyconst char * yystr , yyscan_t y
  * @param yyscanner The scanner object.
  * @return the newly allocated buffer state object.
  */
-YY_BUFFER_STATE _mesa_glsl_lexer__scan_bytes  (yyconst char * yybytes, int  _yybytes_len , yyscan_t yyscanner)
+YY_BUFFER_STATE _mesa_glsl_lexer__scan_bytes  (yyconst char * yybytes, yy_size_t  _yybytes_len , yyscan_t yyscanner)
 {
 	YY_BUFFER_STATE b;
 	char *buf;
@@ -3695,7 +3683,7 @@ FILE *_mesa_glsl_lexer_get_out  (yyscan_t yyscanner)
 /** Get the length of the current token.
  * @param yyscanner The scanner object.
  */
-int _mesa_glsl_lexer_get_leng  (yyscan_t yyscanner)
+yy_size_t _mesa_glsl_lexer_get_leng  (yyscan_t yyscanner)
 {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     return yyleng;
@@ -3731,7 +3719,7 @@ void _mesa_glsl_lexer_set_lineno (int  line_number , yyscan_t yyscanner)
 
         /* lineno is only valid if an input buffer exists. */
         if (! YY_CURRENT_BUFFER )
-           yy_fatal_error( "_mesa_glsl_lexer_set_lineno called with no buffer" , yyscanner); 
+           YY_FATAL_ERROR( "_mesa_glsl_lexer_set_lineno called with no buffer" );
     
     yylineno = line_number;
 }
@@ -3746,7 +3734,7 @@ void _mesa_glsl_lexer_set_column (int  column_no , yyscan_t yyscanner)
 
         /* column is only valid if an input buffer exists. */
         if (! YY_CURRENT_BUFFER )
-           yy_fatal_error( "_mesa_glsl_lexer_set_column called with no buffer" , yyscanner); 
+           YY_FATAL_ERROR( "_mesa_glsl_lexer_set_column called with no buffer" );
     
     yycolumn = column_no;
 }

@@ -1141,7 +1141,7 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
 
    if (dims >= 3) {
       lp_build_sample_wrap_linear_int(bld,
-                                      bld->format_desc->block.height,
+                                      1, /* block length (depth) */
                                       r_ipart, &r_fpart, r_float,
                                       depth_vec, z_stride, offsets[2],
                                       bld->static_texture_state->pot_depth,
@@ -1233,7 +1233,7 @@ lp_build_sample_image_linear_afloat(struct lp_build_sample_context *bld,
 
       if (dims >= 3) {
          lp_build_sample_wrap_linear_float(bld,
-                                           bld->format_desc->block.height,
+                                           1, /* block length (depth) */
                                            r, depth_vec, offsets[2],
                                            bld->static_texture_state->pot_depth,
                                            bld->static_sampler_state->wrap_r,
@@ -1373,7 +1373,7 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
    lp_build_mipmap_level_sizes(bld, ilevel0,
                                &size0,
                                &row_stride0_vec, &img_stride0_vec);
-   if (bld->num_lods == 1) {
+   if (bld->num_mips == 1) {
       data_ptr0 = lp_build_get_mipmap_level(bld, ilevel0);
    }
    else {
@@ -1422,8 +1422,8 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
 
    if (mip_filter == PIPE_TEX_MIPFILTER_LINEAR) {
       LLVMValueRef h16vec_scale = lp_build_const_vec(bld->gallivm,
-                                                     bld->levelf_bld.type, 256.0);
-      LLVMTypeRef i32vec_type = bld->leveli_bld.vec_type;
+                                                     bld->lodf_bld.type, 256.0);
+      LLVMTypeRef i32vec_type = bld->lodi_bld.vec_type;
       struct lp_build_if_state if_ctx;
       LLVMValueRef need_lerp;
       unsigned num_quads = bld->coord_bld.type.length / 4;
@@ -1435,7 +1435,7 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
       /* need_lerp = lod_fpart > 0 */
       if (bld->num_lods == 1) {
          need_lerp = LLVMBuildICmp(builder, LLVMIntSGT,
-                                   lod_fpart, bld->leveli_bld.zero,
+                                   lod_fpart, bld->lodi_bld.zero,
                                    "need_lerp");
       }
       else {
@@ -1450,9 +1450,9 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
           * lod_fpart values have same sign.
           * We can however then skip the greater than comparison.
           */
-         lod_fpart = lp_build_max(&bld->leveli_bld, lod_fpart,
-                                  bld->leveli_bld.zero);
-         need_lerp = lp_build_any_true_range(&bld->leveli_bld, bld->num_lods, lod_fpart);
+         lod_fpart = lp_build_max(&bld->lodi_bld, lod_fpart,
+                                  bld->lodi_bld.zero);
+         need_lerp = lp_build_any_true_range(&bld->lodi_bld, bld->num_lods, lod_fpart);
       }
 
       lp_build_if(&if_ctx, bld->gallivm, need_lerp);
@@ -1465,7 +1465,7 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
          lp_build_mipmap_level_sizes(bld, ilevel1,
                                      &size1,
                                      &row_stride1_vec, &img_stride1_vec);
-         if (bld->num_lods == 1) {
+         if (bld->num_mips == 1) {
             data_ptr1 = lp_build_get_mipmap_level(bld, ilevel1);
          }
          else {
@@ -1524,7 +1524,7 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
          }
          else {
             unsigned num_chans_per_lod = 4 * bld->coord_type.length / bld->num_lods;
-            LLVMTypeRef tmp_vec_type = LLVMVectorType(u8n_bld.elem_type, bld->leveli_bld.type.length);
+            LLVMTypeRef tmp_vec_type = LLVMVectorType(u8n_bld.elem_type, bld->lodi_bld.type.length);
             LLVMValueRef shuffle[LP_MAX_VECTOR_LENGTH];
 
             /* Take the LSB of lod_fpart */
@@ -1562,13 +1562,12 @@ lp_build_sample_aos(struct lp_build_sample_context *bld,
                     LLVMValueRef t,
                     LLVMValueRef r,
                     const LLVMValueRef *offsets,
-                    LLVMValueRef lod_ipart,
+                    LLVMValueRef lod_positive,
                     LLVMValueRef lod_fpart,
                     LLVMValueRef ilevel0,
                     LLVMValueRef ilevel1,
                     LLVMValueRef texel_out[4])
 {
-   struct lp_build_context *int_bld = &bld->int_bld;
    LLVMBuilderRef builder = bld->gallivm->builder;
    const unsigned mip_filter = bld->static_sampler_state->min_mip_filter;
    const unsigned min_filter = bld->static_sampler_state->min_img_filter;
@@ -1608,26 +1607,20 @@ lp_build_sample_aos(struct lp_build_sample_context *bld,
        * depending on the lod being > 0 or <= 0, respectively.
        */
       struct lp_build_if_state if_ctx;
-      LLVMValueRef minify;
 
       /*
-       * XXX this should to all lods into account, if some are min
-       * some max probably could hack up the coords/weights in the linear
+       * FIXME this should take all lods into account, if some are min
+       * some max probably could hack up the weights in the linear
        * path with selects to work for nearest.
-       * If that's just two quads sitting next to each other it seems
-       * quite ok to do the same filtering method on both though, at
-       * least unless we have explicit lod (and who uses different
-       * min/mag filter with that?)
        */
       if (bld->num_lods > 1)
-         lod_ipart = LLVMBuildExtractElement(builder, lod_ipart,
-                                              lp_build_const_int32(bld->gallivm, 0), "");
+         lod_positive = LLVMBuildExtractElement(builder, lod_positive,
+                                                lp_build_const_int32(bld->gallivm, 0), "");
 
-      /* minify = lod >= 0.0 */
-      minify = LLVMBuildICmp(builder, LLVMIntSGE,
-                             lod_ipart, int_bld->zero, "");
+      lod_positive = LLVMBuildTrunc(builder, lod_positive,
+                                    LLVMInt1TypeInContext(bld->gallivm->context), "");
 
-      lp_build_if(&if_ctx, bld->gallivm, minify);
+      lp_build_if(&if_ctx, bld->gallivm, lod_positive);
       {
          /* Use the minification filter */
          lp_build_sample_mipmap(bld,

@@ -25,13 +25,16 @@ include $(top_srcdir)/src/gallium/Automake.inc
 AM_CFLAGS = \
 	$(GALLIUM_CFLAGS) \
 	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS)
+	$(EXPAT_CFLAGS) \
+	$(LIBDRM_CFLAGS) \
+	$(VISIBILITY_CFLAGS)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/winsys/sw/dri \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys \
 	-I$(top_srcdir)/src/mesa \
 	-I$(top_srcdir)/src/mapi \
+	-I$(top_builddir)/src/mesa/drivers/dri/common \
 	-DGALLIUM_RBUG \
 	-DGALLIUM_TRACE \
 	-DGALLIUM_SOFTPIPE \
@@ -43,10 +46,10 @@ dri_LTLIBRARIES = swrast_dri.la
 swrast_dri_la_SOURCES = \
 	swrast_drm_api.c \
 	$(top_srcdir)/src/mesa/drivers/dri/common/utils.c \
-	$(top_srcdir)/src/mesa/drivers/dri/common/drisw_util.c \
+	$(top_srcdir)/src/mesa/drivers/dri/common/dri_util.c \
 	$(top_srcdir)/src/mesa/drivers/dri/common/xmlconfig.c
 
-swrast_dri_la_LDFLAGS = -module -avoid-version -shared -no-undefined
+swrast_dri_la_LDFLAGS = $(DRI_DRIVER_LDFLAGS)
 
 swrast_dri_la_LIBADD = \
 	$(top_builddir)/src/mesa/libmesagallium.la \

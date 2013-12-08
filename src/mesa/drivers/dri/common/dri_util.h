@@ -57,6 +57,7 @@
 #include <GL/internal/dri_interface.h>
 #include "main/mtypes.h"
 #include "xmlconfig.h"
+#include <stdbool.h>
 
 /**
  * Extensions.
@@ -87,6 +88,7 @@ struct __DriverAPIRec {
 			       unsigned major_version,
 			       unsigned minor_version,
 			       uint32_t flags,
+                               bool notify_reset,
 			       unsigned *error,
                                void *sharedContextPrivate);
 
@@ -116,12 +118,18 @@ struct __DriverAPIRec {
 };
 
 extern const struct __DriverAPIRec driDriverAPI;
-
+extern const struct __DriverAPIRec *globalDriverAPI;
 
 /**
  * Per-screen private driver information.
  */
 struct __DRIscreenRec {
+    /**
+     * Driver-specific entrypoints provided by the driver's
+     * __DRIDriverVtableExtensionRec.
+     */
+    const struct __DriverAPIRec *driver;
+
     /**
      * Current screen's number
      */
@@ -151,6 +159,11 @@ struct __DRIscreenRec {
 
     void *loaderPrivate;
 
+    int max_gl_core_version;
+    int max_gl_compat_version;
+    int max_gl_es1_version;
+    int max_gl_es2_version;
+
     const __DRIextension **extensions;
 
     const __DRIswrastLoaderExtension *swrast_loader;
@@ -162,6 +175,10 @@ struct __DRIscreenRec {
 	__DRIimageLookupExtension *image;
 	__DRIuseInvalidateExtension *useInvalidate;
     } dri2;
+
+    struct {
+        __DRIimageLoaderExtension *loader;
+    } image;
 
     driOptionCache optionInfo;
     driOptionCache optionCache;
@@ -260,10 +277,18 @@ struct __DRIdrawableRec {
     } dri2;
 };
 
+extern uint32_t
+driGLFormatToImageFormat(gl_format format);
+
+extern gl_format
+driImageFormatToGLFormat(uint32_t image_format);
+
 extern void
 dri2InvalidateDrawable(__DRIdrawable *drawable);
 
 extern void
 driUpdateFramebufferSize(struct gl_context *ctx, const __DRIdrawable *dPriv);
+
+extern const __DRIimageDriverExtension driImageDriverExtension;
 
 #endif /* _DRI_UTIL_H_ */

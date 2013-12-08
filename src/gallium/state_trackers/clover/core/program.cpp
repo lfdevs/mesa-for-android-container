@@ -25,68 +25,80 @@
 
 using namespace clover;
 
-_cl_program::_cl_program(clover::context &ctx,
-                         const std::string &source) :
-   ctx(ctx), __source(source) {
+program::program(context &ctx, const std::string &source) :
+   ctx(ctx), _source(source) {
 }
 
-_cl_program::_cl_program(clover::context &ctx,
-                         const std::vector<clover::device *> &devs,
-                         const std::vector<clover::module> &binaries) :
+program::program(context &ctx,
+                 const ref_vector<device> &devs,
+                 const std::vector<module> &binaries) :
    ctx(ctx) {
-   for_each([&](clover::device *dev, const clover::module &bin) {
-         __binaries.insert({ dev, bin });
+   for_each([&](device &dev, const module &bin) {
+         _binaries.insert({ &dev, bin });
       },
-      devs.begin(), devs.end(), binaries.begin());
+      devs, binaries);
 }
 
 void
-_cl_program::build(const std::vector<clover::device *> &devs,
-                   const char *opts) {
+program::build(const ref_vector<device> &devs, const char *opts) {
+   for (auto &dev : devs) {
+      _binaries.erase(&dev);
+      _logs.erase(&dev);
+      _opts.erase(&dev);
 
-   for (auto dev : devs) {
-      __binaries.erase(dev);
-      __logs.erase(dev);
-      __opts.erase(dev);
+      _opts.insert({ &dev, opts });
 
-      __opts.insert({ dev, opts });
       try {
-         auto module = (dev->ir_format() == PIPE_SHADER_IR_TGSI ?
-                        compile_program_tgsi(__source) :
-                        compile_program_llvm(__source, dev->ir_format(),
-                        dev->ir_target(), build_opts(dev)));
-         __binaries.insert({ dev, module });
+         auto module = (dev.ir_format() == PIPE_SHADER_IR_TGSI ?
+                        compile_program_tgsi(_source) :
+                        compile_program_llvm(_source, dev.ir_format(),
+                                             dev.ir_target(), build_opts(dev)));
+         _binaries.insert({ &dev, module });
 
       } catch (build_error &e) {
-         __logs.insert({ dev, e.what() });
-         throw error(CL_BUILD_PROGRAM_FAILURE);
-      } catch (invalid_option_error &e) {
-         throw error(CL_INVALID_BUILD_OPTIONS);
+         _logs.insert({ &dev, e.what() });
+         throw;
       }
    }
 }
 
 const std::string &
-_cl_program::source() const {
-   return __source;
+program::source() const {
+   return _source;
 }
 
-const std::map<clover::device *, clover::module> &
-_cl_program::binaries() const {
-   return __binaries;
+program::device_range
+program::devices() const {
+   return map(derefs(), map(keys(), _binaries));
+}
+
+const module &
+program::binary(const device &dev) const {
+   return _binaries.find(const_cast<device *>(&dev))->second;
 }
 
 cl_build_status
-_cl_program::build_status(clover::device *dev) const {
-   return __binaries.count(dev) ? CL_BUILD_SUCCESS : CL_BUILD_NONE;
+program::build_status(const device &dev) const {
+   if (_binaries.count(const_cast<device *>(&dev)))
+      return CL_BUILD_SUCCESS;
+   else
+      return CL_BUILD_NONE;
 }
 
 std::string
-_cl_program::build_opts(clover::device *dev) const {
-   return __opts.count(dev) ? __opts.find(dev)->second : "";
+program::build_opts(const device &dev) const {
+   return _opts.count(&dev) ? _opts.find(&dev)->second : "";
 }
 
 std::string
-_cl_program::build_log(clover::device *dev) const {
-   return __logs.count(dev) ? __logs.find(dev)->second : "";
+program::build_log(const device &dev) const {
+   return _logs.count(&dev) ? _logs.find(&dev)->second : "";
+}
+
+const compat::vector<module::symbol> &
+program::symbols() const {
+   if (_binaries.empty())
+      throw error(CL_INVALID_PROGRAM_EXECUTABLE);
+
+   return _binaries.begin()->second.syms;
 }

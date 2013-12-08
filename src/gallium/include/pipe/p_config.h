@@ -58,6 +58,10 @@
 
 /*
  * Meaning of _MSC_VER value:
+ * - 1800: Visual Studio 2013
+ * - 1700: Visual Studio 2012
+ * - 1600: Visual Studio 2010
+ * - 1500: Visual Studio 2008
  * - 1400: Visual C++ 2005
  * - 1310: Visual C++ .NET 2003
  * - 1300: Visual C++ .NET 2002
@@ -186,7 +190,7 @@
 #define PIPE_OS_ANDROID
 #endif
 
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
 #define PIPE_OS_FREEBSD
 #define PIPE_OS_BSD
 #define PIPE_OS_UNIX

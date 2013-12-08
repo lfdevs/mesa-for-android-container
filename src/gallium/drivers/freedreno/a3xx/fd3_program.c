@@ -98,15 +98,8 @@ create_shader(struct pipe_context *pctx, const struct pipe_shader_state *cso,
 		tgsi_dump(cso->tokens, 0);
 	}
 
-	if (type == SHADER_FRAGMENT) {
-		/* we seem to get wrong colors (maybe swap/endianess or hw issue?)
-		 * with full precision color reg.  And blob driver only seems to
-		 * use half precision register for color output (that I can find
-		 * so far), even with highp precision.  So for force half precision
-		 * for frag shader:
-		 */
+	if ((type == SHADER_FRAGMENT) && (fd_mesa_debug & FD_DBG_FRAGHALF))
 		so->half_precision = true;
-	}
 
 	ret = fd3_compile_shader(so, cso->tokens);
 	if (ret) {
@@ -186,7 +179,8 @@ emit_shader(struct fd_ringbuffer *ring, struct fd3_shader_stateobj *so)
 {
 	struct ir3_shader_info *si = &so->info;
 	enum adreno_state_block sb;
-	uint32_t i, *bin;
+	enum adreno_state_src src;
+	uint32_t i, sz, *bin;
 
 	if (so->type == SHADER_VERTEX) {
 		sb = SB_VERT_SHADER;
@@ -194,17 +188,41 @@ emit_shader(struct fd_ringbuffer *ring, struct fd3_shader_stateobj *so)
 		sb = SB_FRAG_SHADER;
 	}
 
-	// XXX use SS_INDIRECT
-	bin = fd_bo_map(so->bo);
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + si->sizedwords);
+	if (fd_mesa_debug & FD_DBG_DIRECT) {
+		sz = si->sizedwords;
+		src = SS_DIRECT;
+		bin = fd_bo_map(so->bo);
+	} else {
+		sz = 0;
+		src = SS_INDIRECT;
+		bin = NULL;
+	}
+
+	OUT_PKT3(ring, CP_LOAD_STATE, 2 + sz);
 	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
-			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
+			CP_LOAD_STATE_0_STATE_SRC(src) |
 			CP_LOAD_STATE_0_STATE_BLOCK(sb) |
 			CP_LOAD_STATE_0_NUM_UNIT(so->instrlen));
-	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER) |
-			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
-	for (i = 0; i < si->sizedwords; i++)
+	if (bin) {
+		OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
+				CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER));
+	} else {
+		OUT_RELOC(ring, so->bo, 0,
+				CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER), 0);
+	}
+	for (i = 0; i < sz; i++) {
 		OUT_RING(ring, bin[i]);
+	}
+}
+
+static int
+find_output(struct fd3_shader_stateobj *so, fd3_semantic semantic)
+{
+	int j;
+	for (j = 0; j < so->outputs_count; j++)
+		if (so->outputs[j].semantic == semantic)
+			return j;
+	return 0;
 }
 
 void
@@ -223,6 +241,10 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 
 	OUT_PKT0(ring, REG_A3XX_HLSQ_CONTROL_0_REG, 6);
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_0_REG_FSTHREADSIZE(FOUR_QUADS) |
+			/* NOTE:  I guess SHADERRESTART and CONSTFULLUPDATE maybe
+			 * flush some caches? I think we only need to set those
+			 * bits if we have updated const or shader..
+			 */
 			A3XX_HLSQ_CONTROL_0_REG_SPSHADERRESTART |
 			A3XX_HLSQ_CONTROL_0_REG_SPCONSTFULLUPDATE);
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_1_REG_VSTHREADSIZE(TWO_QUADS) |
@@ -249,7 +271,7 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 	 */
 	for (i = 0; i < 6; i++) {
 		OUT_PKT0(ring, REG_A3XX_SP_PERFCOUNTER0_SELECT, 1);
-		OUT_RING(ring, 0x00000000);    /* SP_PERFCOUNTER4_SELECT */
+		OUT_RING(ring, 0x00000000);    /* SP_PERFCOUNTER0_SELECT */
 
 		OUT_PKT0(ring, REG_A3XX_SP_PERFCOUNTER4_SELECT, 1);
 		OUT_RING(ring, 0x00000000);    /* SP_PERFCOUNTER4_SELECT */
@@ -273,20 +295,21 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(MAX2(vsi->max_const, 0)));
 	OUT_RING(ring, A3XX_SP_VS_PARAM_REG_POSREGID(vp->pos_regid) |
 			A3XX_SP_VS_PARAM_REG_PSIZEREGID(vp->psize_regid) |
-			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(vp->outputs_count));
-
-	assert(vp->outputs_count >= fp->inputs_count);
+			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(fp->inputs_count));
 
 	for (i = 0; i < fp->inputs_count; ) {
 		uint32_t reg = 0;
+		int j;
 
 		OUT_PKT0(ring, REG_A3XX_SP_VS_OUT_REG(i/2), 1);
 
-		reg |= A3XX_SP_VS_OUT_REG_A_REGID(vp->outputs[i].regid);
+		j = find_output(vp, fp->inputs[i].semantic);
+		reg |= A3XX_SP_VS_OUT_REG_A_REGID(vp->outputs[j].regid);
 		reg |= A3XX_SP_VS_OUT_REG_A_COMPMASK(fp->inputs[i].compmask);
 		i++;
 
-		reg |= A3XX_SP_VS_OUT_REG_B_REGID(vp->outputs[i].regid);
+		j = find_output(vp, fp->inputs[i].semantic);
+		reg |= A3XX_SP_VS_OUT_REG_B_REGID(vp->outputs[j].regid);
 		reg |= A3XX_SP_VS_OUT_REG_B_COMPMASK(fp->inputs[i].compmask);
 		i++;
 
@@ -320,7 +343,7 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 	OUT_PKT0(ring, REG_A3XX_SP_VS_OBJ_OFFSET_REG, 2);
 	OUT_RING(ring, A3XX_SP_VS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(0) |
 			A3XX_SP_VS_OBJ_OFFSET_REG_SHADEROBJOFFSET(0));
-	OUT_RELOC(ring, vp->bo, 0, 0);    /* SP_VS_OBJ_START_REG */
+	OUT_RELOC(ring, vp->bo, 0, 0, 0);  /* SP_VS_OBJ_START_REG */
 #endif
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_LENGTH_REG, 1);
@@ -345,7 +368,7 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 	OUT_PKT0(ring, REG_A3XX_SP_FS_OBJ_OFFSET_REG, 2);
 	OUT_RING(ring, A3XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(128) |
 			A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(128 - fp->instrlen));
-	OUT_RELOC(ring, fp->bo, 0, 0);    /* SP_FS_OBJ_START_REG */
+	OUT_RELOC(ring, fp->bo, 0, 0, 0);  /* SP_FS_OBJ_START_REG */
 #endif
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_FLAT_SHAD_MODE_REG_0, 2);
@@ -495,6 +518,7 @@ create_blit_fp(struct pipe_context *pctx)
 	so->color_regid = regid(0,0);
 	so->half_precision = true;
 	so->inputs_count = 1;
+	so->inputs[0].semantic = fd3_semantic_name(TGSI_SEMANTIC_TEXCOORD, 0);
 	so->inputs[0].inloc = 8;
 	so->inputs[0].compmask = 0x3;
 	so->total_in = 2;
@@ -535,6 +559,7 @@ create_blit_vp(struct pipe_context *pctx)
 	so->inputs[1].compmask = 0xf;
 	so->total_in = 8;
 	so->outputs_count = 1;
+	so->outputs[0].semantic = fd3_semantic_name(TGSI_SEMANTIC_TEXCOORD, 0);
 	so->outputs[0].regid = regid(0,0);
 
 	fixup_vp_regfootprint(so);

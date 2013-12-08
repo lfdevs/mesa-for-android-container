@@ -44,7 +44,8 @@ pop_stack(exec_list *list)
    return block;
 }
 
-bblock_t::bblock_t()
+bblock_t::bblock_t() :
+   start_ip(0), end_ip(0), block_num(0)
 {
    start = NULL;
    end = NULL;
@@ -79,8 +80,9 @@ cfg_t::cfg_t(void *mem_ctx, exec_list *instructions)
 void
 cfg_t::create(void *parent_mem_ctx, exec_list *instructions)
 {
-   mem_ctx = ralloc_context(parent_mem_ctx);
+   mem_ctx = ralloc_context(NULL);
    block_list.make_empty();
+   blocks = NULL;
    num_blocks = 0;
    ip = 0;
    cur = NULL;

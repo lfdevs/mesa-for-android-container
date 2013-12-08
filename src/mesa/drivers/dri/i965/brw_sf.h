@@ -46,10 +46,10 @@
 
 struct brw_sf_prog_key {
    GLbitfield64 attrs;
+   struct interpolation_mode_map interpolation_mode;
    uint8_t point_sprite_coord_replace;
    GLuint primitive:2;
    GLuint do_twoside_color:1;
-   GLuint do_flat_shading:1;
    GLuint frontface_ccw:1;
    GLuint do_point_sprite:1;
    GLuint do_point_coord:1;
@@ -95,6 +95,7 @@ struct brw_sf_compile {
    int urb_entry_read_offset;
 
    struct brw_vue_map vue_map;
+   bool has_flat_shading;
 };
 
  
@@ -103,7 +104,5 @@ void brw_emit_line_setup( struct brw_sf_compile *c, bool allocate );
 void brw_emit_point_setup( struct brw_sf_compile *c, bool allocate );
 void brw_emit_point_sprite_setup( struct brw_sf_compile *c, bool allocate );
 void brw_emit_anyprim_setup( struct brw_sf_compile *c );
-
-#define BRW_SF_URB_ENTRY_READ_OFFSET 1
 
 #endif

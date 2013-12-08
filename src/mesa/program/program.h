@@ -44,6 +44,10 @@
 #include "main/mtypes.h"
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern struct gl_program _mesa_DummyProgram;
 
 
@@ -183,6 +187,9 @@ _mesa_valid_register_index(const struct gl_context *ctx,
 extern void
 _mesa_postprocess_program(struct gl_context *ctx, struct gl_program *prog);
 
+extern GLint
+_mesa_get_min_invocations_per_fragment(struct gl_context *ctx,
+                                       const struct gl_fragment_program *prog);
 
 static inline GLuint
 _mesa_program_target_to_index(GLenum v)
@@ -255,5 +262,9 @@ gl_geometry_program_const(const struct gl_program *prog)
    return (const struct gl_geometry_program *) prog;
 }
 
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif /* PROGRAM_H */

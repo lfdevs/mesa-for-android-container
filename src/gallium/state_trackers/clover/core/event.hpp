@@ -20,68 +20,71 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#ifndef __CORE_EVENT_HPP__
-#define __CORE_EVENT_HPP__
+#ifndef CLOVER_CORE_EVENT_HPP
+#define CLOVER_CORE_EVENT_HPP
 
 #include <functional>
 
-#include "core/base.hpp"
+#include "core/object.hpp"
 #include "core/queue.hpp"
+#include "core/timestamp.hpp"
+#include "util/lazy.hpp"
 
 namespace clover {
-   typedef struct _cl_event event;
-}
+   ///
+   /// Class that represents a task that might be executed
+   /// asynchronously at some point in the future.
+   ///
+   /// An event consists of a list of dependencies, a boolean
+   /// signalled() flag, and an associated task.  An event is
+   /// considered signalled as soon as all its dependencies (if any)
+   /// are signalled as well, and the trigger() method is called; at
+   /// that point the associated task will be started through the
+   /// specified \a action_ok.  If the abort() method is called
+   /// instead, the specified \a action_fail is executed and the
+   /// associated task will never be started.  Dependent events will
+   /// be aborted recursively.
+   ///
+   /// The execution status of the associated task can be queried
+   /// using the status() method, and it can be waited for completion
+   /// using the wait() method.
+   ///
+   class event : public ref_counter, public _cl_event {
+   public:
+      typedef std::function<void (event &)> action;
 
-///
-/// Class that represents a task that might be executed asynchronously
-/// at some point in the future.
-///
-/// An event consists of a list of dependencies, a boolean signalled()
-/// flag, and an associated task.  An event is considered signalled as
-/// soon as all its dependencies (if any) are signalled as well, and
-/// the trigger() method is called; at that point the associated task
-/// will be started through the specified \a action_ok.  If the
-/// abort() method is called instead, the specified \a action_fail is
-/// executed and the associated task will never be started.  Dependent
-/// events will be aborted recursively.
-///
-/// The execution status of the associated task can be queried using
-/// the status() method, and it can be waited for completion using the
-/// wait() method.
-///
-struct _cl_event : public clover::ref_counter {
-public:
-   typedef std::function<void (clover::event &)> action;
+      event(context &ctx, const ref_vector<event> &deps,
+            action action_ok, action action_fail);
+      virtual ~event();
 
-   _cl_event(clover::context &ctx, std::vector<clover::event *> deps,
-             action action_ok, action action_fail);
-   virtual ~_cl_event();
+      event(const event &ev) = delete;
+      event &
+      operator=(const event &ev) = delete;
 
-   void trigger();
-   void abort(cl_int status);
-   bool signalled() const;
+      void trigger();
+      void abort(cl_int status);
+      bool signalled() const;
 
-   virtual cl_int status() const = 0;
-   virtual cl_command_queue queue() const = 0;
-   virtual cl_command_type command() const = 0;
-   virtual void wait() const = 0;
+      virtual cl_int status() const = 0;
+      virtual command_queue *queue() const = 0;
+      virtual cl_command_type command() const = 0;
+      virtual void wait() const = 0;
 
-   clover::context &ctx;
+      context &ctx;
 
-protected:
-   void chain(clover::event *ev);
+   protected:
+      void chain(event *ev);
 
-   cl_int __status;
-   std::vector<clover::ref_ptr<clover::event>> deps;
+      cl_int _status;
+      std::vector<ref_ptr<event>> deps;
 
-private:
-   unsigned wait_count;
-   action action_ok;
-   action action_fail;
-   std::vector<clover::ref_ptr<clover::event>> __chain;
-};
+   private:
+      unsigned wait_count;
+      action action_ok;
+      action action_fail;
+      std::vector<ref_ptr<event>> _chain;
+   };
 
-namespace clover {
    ///
    /// Class that represents a task executed by a command queue.
    ///
@@ -96,24 +99,31 @@ namespace clover {
    ///
    class hard_event : public event {
    public:
-      hard_event(clover::command_queue &q, cl_command_type command,
-                 std::vector<clover::event *> deps,
+      hard_event(command_queue &q, cl_command_type command,
+                 const ref_vector<event> &deps,
                  action action = [](event &){});
       ~hard_event();
 
       virtual cl_int status() const;
-      virtual cl_command_queue queue() const;
+      virtual command_queue *queue() const;
       virtual cl_command_type command() const;
       virtual void wait() const;
 
-      friend class ::_cl_command_queue;
+      const lazy<cl_ulong> &time_queued() const;
+      const lazy<cl_ulong> &time_submit() const;
+      const lazy<cl_ulong> &time_start() const;
+      const lazy<cl_ulong> &time_end() const;
+
+      friend class command_queue;
 
    private:
       virtual void fence(pipe_fence_handle *fence);
+      action profile(command_queue &q, const action &action) const;
 
-      clover::command_queue &__queue;
-      cl_command_type __command;
-      pipe_fence_handle *__fence;
+      command_queue &_queue;
+      cl_command_type _command;
+      pipe_fence_handle *_fence;
+      lazy<cl_ulong> _time_queued, _time_submit, _time_start, _time_end;
    };
 
    ///
@@ -125,11 +135,11 @@ namespace clover {
    ///
    class soft_event : public event {
    public:
-      soft_event(clover::context &ctx, std::vector<clover::event *> deps,
+      soft_event(context &ctx, const ref_vector<event> &deps,
                  bool trigger, action action = [](event &){});
 
       virtual cl_int status() const;
-      virtual cl_command_queue queue() const;
+      virtual command_queue *queue() const;
       virtual cl_command_type command() const;
       virtual void wait() const;
    };

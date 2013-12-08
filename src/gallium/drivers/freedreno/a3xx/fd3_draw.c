@@ -80,12 +80,11 @@ fd3_draw(struct fd_context *ctx, const struct pipe_draw_info *info)
 	OUT_PKT0(ring, REG_A3XX_PC_VERTEX_REUSE_BLOCK_CNTL, 1);
 	OUT_RING(ring, 0x0000000b);                  /* PC_VERTEX_REUSE_BLOCK_CNTL */
 
-	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
-	OUT_RING(ring, 0x0000000);
+	OUT_WFI (ring);
 
 	OUT_PKT0(ring, REG_A3XX_VFD_INDEX_MIN, 4);
 	OUT_RING(ring, info->min_index);        /* VFD_INDEX_MIN */
-	OUT_RING(ring, info->max_index + 1);    /* VFD_INDEX_MAX */
+	OUT_RING(ring, info->max_index);        /* VFD_INDEX_MAX */
 	OUT_RING(ring, info->start_instance);   /* VFD_INSTANCEID_OFFSET */
 	OUT_RING(ring, info->start);            /* VFD_INDEX_OFFSET */
 
@@ -109,7 +108,8 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 			FD_DIRTY_FRAMEBUFFER | FD_DIRTY_SCISSOR));
 
 	OUT_PKT0(ring, REG_A3XX_RB_BLEND_ALPHA, 1);
-	OUT_RING(ring, 0X3c0000ff);
+	OUT_RING(ring, A3XX_RB_BLEND_ALPHA_UINT(0xff) |
+			A3XX_RB_BLEND_ALPHA_FLOAT(1.0));
 
 	fd3_emit_rbrc_draw_state(ring,
 			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(FUNC_NEVER));
@@ -123,6 +123,7 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 		OUT_PKT0(ring, REG_A3XX_GRAS_CL_VPORT_ZOFFSET, 2);
 		OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZOFFSET(0.0));
 		OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZSCALE(depth));
+		ctx->dirty |= FD_DIRTY_VIEWPORT;
 	} else {
 		OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
 		OUT_RING(ring, A3XX_RB_DEPTH_CONTROL_ZFUNC(FUNC_NEVER));
@@ -217,14 +218,10 @@ fd3_clear(struct fd_context *ctx, unsigned buffers,
 	OUT_PKT3(ring, CP_EVENT_WRITE, 1);
 	OUT_RING(ring, PERFCOUNTER_STOP);
 
-	OUT_PKT3(ring, CP_DRAW_INDX, 3);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX,
-			INDEX_SIZE_IGN, IGNORE_VISIBILITY));
-	OUT_RING(ring, 2);					/* NumIndices */
+	fd_draw(ctx, DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX, 2,
+			INDEX_SIZE_IGN, 0, 0, NULL);
 
-	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
-	OUT_RING(ring, 0x00000000);
+	OUT_WFI (ring);
 }
 
 void

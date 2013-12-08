@@ -10,14 +10,14 @@
 struct nouveau_video_buffer {
    struct pipe_video_buffer base;
    unsigned num_planes;
-   struct pipe_resource     *resources[3];
-   struct pipe_sampler_view *sampler_view_planes[3];
-   struct pipe_sampler_view *sampler_view_components[3];
-   struct pipe_surface      *surfaces[3];
+   struct pipe_resource     *resources[VL_NUM_COMPONENTS];
+   struct pipe_sampler_view *sampler_view_planes[VL_NUM_COMPONENTS];
+   struct pipe_sampler_view *sampler_view_components[VL_NUM_COMPONENTS];
+   struct pipe_surface      *surfaces[VL_NUM_COMPONENTS * 2];
 };
 
 struct nouveau_decoder {
-   struct pipe_video_decoder base;
+   struct pipe_video_codec base;
    struct nouveau_screen *screen;
    struct nouveau_pushbuf *push;
    struct nouveau_object *chan;

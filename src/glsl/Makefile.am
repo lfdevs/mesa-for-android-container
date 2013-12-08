@@ -19,8 +19,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-SUBDIRS = builtin_compiler
-
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/mapi \
@@ -34,8 +32,10 @@ AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS)
 include Makefile.sources
 
 TESTS = glcpp/tests/glcpp-test				\
+	tests/general-ir-test				\
 	tests/optimization-test				\
 	tests/ralloc-test				\
+	tests/sampler-types-test                        \
 	tests/uniform-initializer-test
 
 TESTS_ENVIRONMENT= \
@@ -46,8 +46,28 @@ noinst_LTLIBRARIES = libglsl.la libglcpp.la
 check_PROGRAMS =					\
 	glcpp/glcpp					\
 	glsl_test					\
+	tests/general-ir-test				\
 	tests/ralloc-test				\
+	tests/sampler-types-test			\
 	tests/uniform-initializer-test
+
+noinst_PROGRAMS = glsl_compiler
+
+tests_general_ir_test_SOURCES =		\
+	$(top_srcdir)/src/mesa/main/hash_table.c	\
+	$(top_srcdir)/src/mesa/main/imports.c		\
+	$(top_srcdir)/src/mesa/program/prog_hash_table.c\
+	$(top_srcdir)/src/mesa/program/symbol_table.c	\
+	$(GLSL_SRCDIR)/standalone_scaffolding.cpp \
+	tests/builtin_variable_test.cpp			\
+	tests/invalidate_locations_test.cpp		\
+	tests/general_ir_test.cpp
+tests_general_ir_test_CFLAGS =				\
+	$(PTHREAD_CFLAGS)
+tests_general_ir_test_LDADD =				\
+	$(top_builddir)/src/gtest/libgtest.la		\
+	$(top_builddir)/src/glsl/libglsl.la		\
+	$(PTHREAD_LIBS)
 
 tests_uniform_initializer_test_SOURCES =		\
 	$(top_srcdir)/src/mesa/main/hash_table.c	\
@@ -72,31 +92,41 @@ tests_ralloc_test_LDADD =				\
 	$(top_builddir)/src/gtest/libgtest.la		\
 	$(PTHREAD_LIBS)
 
-if CROSS_COMPILING
+tests_sampler_types_test_SOURCES =			\
+	$(top_srcdir)/src/mesa/program/prog_hash_table.c\
+	$(top_srcdir)/src/mesa/program/symbol_table.c	\
+	tests/sampler_types_test.cpp
+tests_sampler_types_test_CFLAGS =			\
+	$(PTHREAD_CFLAGS)
+tests_sampler_types_test_LDADD =			\
+	$(top_builddir)/src/gtest/libgtest.la		\
+	$(top_builddir)/src/glsl/libglsl.la		\
+	$(PTHREAD_LIBS)
+
 libglcpp_la_SOURCES =					\
 	glcpp/glcpp-lex.c				\
 	glcpp/glcpp-parse.c				\
 	$(LIBGLCPP_FILES)
-else
-libglcpp_la_LIBADD = builtin_compiler/libglcpp.la
-endif
 
 glcpp_glcpp_SOURCES =					\
 	glcpp/glcpp.c					\
 	$(top_srcdir)/src/mesa/program/prog_hash_table.c
 glcpp_glcpp_LDADD = libglcpp.la
 
-libglsl_la_SOURCES = builtin_function.cpp
 libglsl_la_LIBADD = libglcpp.la
-if CROSS_COMPILING
-libglsl_la_SOURCES +=					\
+libglsl_la_SOURCES =					\
 	glsl_lexer.cpp					\
 	glsl_parser.cpp					\
 	$(LIBGLSL_FILES)
-else
-libglsl_la_LIBADD +=					\
-	builtin_compiler/libglslcore.la
-endif
+
+glsl_compiler_SOURCES = \
+	$(top_srcdir)/src/mesa/main/hash_table.c \
+	$(top_srcdir)/src/mesa/main/imports.c \
+	$(top_srcdir)/src/mesa/program/prog_hash_table.c \
+	$(top_srcdir)/src/mesa/program/symbol_table.c \
+	$(GLSL_COMPILER_CXX_FILES)
+
+glsl_compiler_LDADD = libglsl.la
 
 glsl_test_SOURCES = \
 	$(top_srcdir)/src/mesa/main/hash_table.c \
@@ -168,6 +198,3 @@ CLEANFILES =						\
 	glcpp/glcpp-parse.h				\
 	glsl_parser.h					\
 	$(BUILT_SOURCES)
-
-builtin_function.cpp: $(srcdir)/builtins/profiles/* $(srcdir)/builtins/ir/* $(srcdir)/builtins/glsl/* $(srcdir)/builtins/tools/generate_builtins.py $(srcdir)/builtins/tools/texture_builtins.py $(builddir)/builtin_compiler/builtin_compiler$(BUILD_EXEEXT)
-	$(AM_V_GEN) $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/builtins/tools/generate_builtins.py $(builddir)/builtin_compiler/builtin_compiler$(BUILD_EXEEXT) > builtin_function.cpp || rm -f builtin_function.cpp

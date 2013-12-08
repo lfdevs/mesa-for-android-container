@@ -91,6 +91,9 @@ _mesa_GetTransformFeedbackVarying(GLuint program, GLuint index,
 
 
 /*** GL_ARB_transform_feedback2 ***/
+extern void
+_mesa_init_transform_feedback_object(struct gl_transform_feedback_object *obj,
+                                     GLuint name);
 
 struct gl_transform_feedback_object *
 _mesa_lookup_transform_feedback_object(struct gl_context *ctx, GLuint name);
@@ -119,5 +122,9 @@ _mesa_is_xfb_active_and_unpaused(const struct gl_context *ctx)
    return ctx->TransformFeedback.CurrentObject->Active &&
       !ctx->TransformFeedback.CurrentObject->Paused;
 }
+
+extern bool
+_mesa_transform_feedback_is_using_program(struct gl_context *ctx,
+                                          struct gl_shader_program *shProg);
 
 #endif /* TRANSFORM_FEEDBACK_H */

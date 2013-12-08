@@ -35,6 +35,7 @@
 #include "os/os_time.h"
 
 #include "lp_scene_queue.h"
+#include "lp_context.h"
 #include "lp_debug.h"
 #include "lp_fence.h"
 #include "lp_perf.h"
@@ -459,7 +460,7 @@ lp_rast_shade_quads_mask(struct lp_rasterizer_task *task,
    if ((x % TILE_SIZE) < task->width && (y % TILE_SIZE) < task->height) {
       /* not very accurate would need a popcount on the mask */
       /* always count this not worth bothering? */
-      task->ps_invocations++;
+      task->ps_invocations += 1 * variant->ps_inv_multiplier;
 
       /* run shader on 4x4 block */
       BEGIN_JIT_CALL(state, task);
@@ -697,12 +698,20 @@ lp_rast_queue_scene( struct lp_rasterizer *rast,
 
    if (rast->num_threads == 0) {
       /* no threading */
+      unsigned fpstate = util_fpstate_get();
+
+      /* Make sure that denorms are treated like zeros. This is 
+       * the behavior required by D3D10. OpenGL doesn't care.
+       */
+      util_fpstate_set_denorms_to_zero(fpstate);
 
       lp_rast_begin( rast, scene );
 
       rasterize_scene( &rast->tasks[0], scene );
 
       lp_rast_end( rast );
+
+      util_fpstate_set(fpstate);
 
       rast->curr_scene = NULL;
    }
@@ -906,14 +915,6 @@ void lp_rast_destroy( struct lp_rasterizer *rast )
    lp_scene_queue_destroy(rast->full_scenes);
 
    FREE(rast);
-}
-
-
-/** Return number of rasterization threads */
-unsigned
-lp_rast_get_num_threads( struct lp_rasterizer *rast )
-{
-   return rast->num_threads;
 }
 
 

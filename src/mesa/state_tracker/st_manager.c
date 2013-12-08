@@ -545,7 +545,7 @@ st_context_teximage(struct st_context_iface *stctxi,
    stObj->depth0 = depth;
    stObj->surface_format = pipe_format;
 
-   _mesa_dirty_texobj(ctx, texObj, GL_TRUE);
+   _mesa_dirty_texobj(ctx, texObj);
    _mesa_unlock_texture(ctx, texObj);
    
    return TRUE;
@@ -626,8 +626,12 @@ st_api_create_context(struct st_api *stapi, struct st_manager *smapi,
       return NULL;
    }
 
-   if (attribs->flags & ST_CONTEXT_FLAG_DEBUG)
+   st->ctx->Debug.DebugOutput = GL_FALSE;
+   if (attribs->flags & ST_CONTEXT_FLAG_DEBUG){
       st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_DEBUG_BIT;
+      st->ctx->Debug.DebugOutput = GL_TRUE;
+   }
+
    if (attribs->flags & ST_CONTEXT_FLAG_FORWARD_COMPATIBLE)
       st->ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
 

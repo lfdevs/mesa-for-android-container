@@ -59,6 +59,7 @@ struct xa_format_descriptor {
 };
 
 struct xa_surface {
+    int refcount;
     struct pipe_resource template;
     struct xa_tracker *xa;
     struct pipe_resource *tex;
@@ -205,6 +206,9 @@ struct xa_shader xa_shaders_get(struct xa_shaders *shaders,
 /*
  * xa_context.c
  */
+extern void
+xa_context_flush(struct xa_context *ctx);
+
 extern int
 xa_ctx_srf_create(struct xa_context *ctx, struct xa_surface *dst);
 

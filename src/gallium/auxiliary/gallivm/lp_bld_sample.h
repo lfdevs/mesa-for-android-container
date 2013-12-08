@@ -61,6 +61,13 @@ struct lp_derivatives
 };
 
 
+enum lp_sampler_lod_property {
+   LP_SAMPLER_LOD_SCALAR,
+   LP_SAMPLER_LOD_PER_ELEMENT,
+   LP_SAMPLER_LOD_PER_QUAD
+};
+
+
 /**
  * Texture static state.
  *
@@ -107,6 +114,7 @@ struct lp_static_sampler_state
    unsigned lod_bias_non_zero:1;
    unsigned apply_min_lod:1;  /**< min_lod > 0 ? */
    unsigned apply_max_lod:1;  /**< max_lod < last_level ? */
+   unsigned seamless_cube_map:1;
 
    /* Hacks */
    unsigned force_nearest_s:1;
@@ -226,7 +234,10 @@ struct lp_build_sample_context
    /** SIMD vector width */
    unsigned vector_width;
 
-   /** number of lod values (valid are 1, length/4, length) */
+   /** number of mipmaps (valid are 1, length/4, length) */
+   unsigned num_mips;
+
+   /** number of lod values (valid are 1, length/4, length) */
    unsigned num_lods;
 
    /** regular scalar float type */
@@ -276,6 +287,14 @@ struct lp_build_sample_context
    struct lp_type leveli_type;
    struct lp_build_context leveli_bld;
 
+   /** Float lod type */
+   struct lp_type lodf_type;
+   struct lp_build_context lodf_bld;
+
+   /** Int lod type */
+   struct lp_type lodi_type;
+   struct lp_build_context lodi_bld;
+
    /* Common dynamic state values */
    LLVMValueRef row_stride_array;
    LLVMValueRef img_stride_array;
@@ -284,6 +303,8 @@ struct lp_build_sample_context
 
    /** Integer vector with texture width, height, depth */
    LLVMValueRef int_size;
+
+   LLVMValueRef border_color_clamped;
 };
 
 
@@ -336,6 +357,9 @@ texture_dims(enum pipe_texture_target tex)
    case PIPE_TEXTURE_RECT:
    case PIPE_TEXTURE_CUBE:
       return 2;
+   case PIPE_TEXTURE_CUBE_ARRAY:
+      assert(0);
+      return 2;
    case PIPE_TEXTURE_3D:
       return 3;
    default:
@@ -376,13 +400,15 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
                       LLVMValueRef explicit_lod, /* optional */
                       unsigned mip_filter,
                       LLVMValueRef *out_lod_ipart,
-                      LLVMValueRef *out_lod_fpart);
+                      LLVMValueRef *out_lod_fpart,
+                      LLVMValueRef *out_lod_positive);
 
 void
 lp_build_nearest_mip_level(struct lp_build_sample_context *bld,
                            unsigned texture_unit,
                            LLVMValueRef lod,
-                           LLVMValueRef *level_out);
+                           LLVMValueRef *level_out,
+                           LLVMValueRef *out_of_bounds);
 
 void
 lp_build_linear_mip_levels(struct lp_build_sample_context *bld,
@@ -430,15 +456,24 @@ lp_build_unnormalized_coords(struct lp_build_sample_context *bld,
 
 void
 lp_build_cube_lookup(struct lp_build_sample_context *bld,
-                     LLVMValueRef s,
-                     LLVMValueRef t,
-                     LLVMValueRef r,
-                     const struct lp_derivatives *derivs, /* optional */
-                     LLVMValueRef *face,
-                     LLVMValueRef *face_s,
-                     LLVMValueRef *face_t,
+                     LLVMValueRef *coords,
+                     const struct lp_derivatives *derivs_in, /* optional */
                      LLVMValueRef *rho,
+                     struct lp_derivatives *derivs_out, /* optional */
                      boolean need_derivs);
+
+
+void
+lp_build_cube_new_coords(struct lp_build_context *ivec_bld,
+                         LLVMValueRef face,
+                         LLVMValueRef x0,
+                         LLVMValueRef x1,
+                         LLVMValueRef y0,
+                         LLVMValueRef y1,
+                         LLVMValueRef max_coord,
+                         LLVMValueRef new_faces[4],
+                         LLVMValueRef new_xcoords[4][2],
+                         LLVMValueRef new_ycoords[4][2]);
 
 
 void
@@ -477,7 +512,7 @@ lp_build_sample_soa(struct gallivm_state *gallivm,
                     const struct lp_derivatives *derivs,
                     LLVMValueRef lod_bias,
                     LLVMValueRef explicit_lod,
-                    boolean scalar_lod,
+                    enum lp_sampler_lod_property lod_property,
                     LLVMValueRef texel_out[4]);
 
 
@@ -496,7 +531,9 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
                         struct lp_sampler_dynamic_state *dynamic_state,
                         struct lp_type int_type,
                         unsigned texture_unit,
-                        boolean need_nr_mips,
+                        unsigned target,
+                        boolean is_sviewinfo,
+                        enum lp_sampler_lod_property lod_property,
                         LLVMValueRef explicit_lod,
                         LLVMValueRef *sizes_out);
 
@@ -510,7 +547,8 @@ lp_build_sample_nop(struct gallivm_state *gallivm,
 LLVMValueRef
 lp_build_minify(struct lp_build_context *bld,
                 LLVMValueRef base_size,
-                LLVMValueRef level);
+                LLVMValueRef level,
+                boolean lod_scalar);
 
 
 #endif /* LP_BLD_SAMPLE_H */

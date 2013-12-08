@@ -147,7 +147,8 @@ vl_video_buffer_surface_format(enum pipe_format format)
 boolean
 vl_video_buffer_is_format_supported(struct pipe_screen *screen,
                                     enum pipe_format format,
-                                    enum pipe_video_profile profile)
+                                    enum pipe_video_profile profile,
+                                    enum pipe_video_entrypoint entrypoint)
 {
    const enum pipe_format *resource_formats;
    unsigned i;
@@ -186,11 +187,11 @@ vl_video_buffer_max_size(struct pipe_screen *screen)
 
 void
 vl_video_buffer_set_associated_data(struct pipe_video_buffer *vbuf,
-                                    struct pipe_video_decoder *vdec,
+                                    struct pipe_video_codec *vcodec,
                                     void *associated_data,
                                     void (*destroy_associated_data)(void *))
 {
-   vbuf->decoder = vdec;
+   vbuf->codec = vcodec;
 
    if (vbuf->associated_data == associated_data)
       return;
@@ -204,9 +205,9 @@ vl_video_buffer_set_associated_data(struct pipe_video_buffer *vbuf,
 
 void *
 vl_video_buffer_get_associated_data(struct pipe_video_buffer *vbuf,
-                                    struct pipe_video_decoder *vdec)
+                                    struct pipe_video_codec *vcodec)
 {
-   if (vbuf->decoder == vdec)
+   if (vbuf->codec == vcodec)
       return vbuf->associated_data;
    else
       return NULL;
@@ -239,7 +240,7 @@ vl_video_buffer_template(struct pipe_resource *templ,
          templ->width0 /= 2;
          templ->height0 /= 2;
       } else if (tmpl->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_422) {
-         templ->height0 /= 2;
+         templ->width0 /= 2;
       }
    }
 }
@@ -258,7 +259,7 @@ vl_video_buffer_destroy(struct pipe_video_buffer *buffer)
       pipe_resource_reference(&buf->resources[i], NULL);
    }
 
-   for (i = 0; i < VL_NUM_COMPONENTS * 2; ++i)
+   for (i = 0; i < VL_MAX_SURFACES; ++i)
       pipe_surface_reference(&buf->surfaces[i], NULL);
 
    vl_video_buffer_set_associated_data(buffer, NULL, NULL, NULL);
@@ -364,7 +365,7 @@ vl_video_buffer_surfaces(struct pipe_video_buffer *buffer)
    array_size = buffer->interlaced ? 2 : 1;
    for (i = 0, surf = 0; i < VL_NUM_COMPONENTS; ++i) {
       for (j = 0; j < array_size; ++j, ++surf) {
-         assert(surf < (VL_NUM_COMPONENTS * 2));
+         assert(surf < VL_MAX_SURFACES);
 
          if (!buf->resources[i]) {
             pipe_surface_reference(&buf->surfaces[surf], NULL);
@@ -385,7 +386,7 @@ vl_video_buffer_surfaces(struct pipe_video_buffer *buffer)
    return buf->surfaces;
 
 error:
-   for (i = 0; i < (VL_NUM_COMPONENTS * 2); ++i )
+   for (i = 0; i < VL_MAX_SURFACES; ++i )
       pipe_surface_reference(&buf->surfaces[i], NULL);
 
    return NULL;
@@ -406,6 +407,7 @@ vl_video_buffer_create(struct pipe_context *pipe,
    (
       pipe->screen,
       PIPE_VIDEO_PROFILE_UNKNOWN,
+      PIPE_VIDEO_ENTRYPOINT_UNKNOWN,
       PIPE_VIDEO_CAP_NPOT_TEXTURES
    );
 
@@ -490,6 +492,8 @@ vl_video_buffer_create_ex2(struct pipe_context *pipe,
    unsigned i;
 
    buffer = CALLOC_STRUCT(vl_video_buffer);
+   if (!buffer)
+      return NULL;
 
    buffer->base = *tmpl;
    buffer->base.context = pipe;

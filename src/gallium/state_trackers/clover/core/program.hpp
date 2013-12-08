@@ -20,43 +20,54 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#ifndef __CORE_PROGRAM_HPP__
-#define __CORE_PROGRAM_HPP__
+#ifndef CLOVER_CORE_PROGRAM_HPP
+#define CLOVER_CORE_PROGRAM_HPP
 
 #include <map>
 
-#include "core/base.hpp"
+#include "core/object.hpp"
 #include "core/context.hpp"
 #include "core/module.hpp"
 
 namespace clover {
-   typedef struct _cl_program program;
+   class program : public ref_counter, public _cl_program {
+   private:
+      typedef adaptor_range<
+         derefs, adaptor_range<
+             keys, const std::map<device *, module> &>> device_range;
+
+   public:
+      program(context &ctx,
+              const std::string &source);
+      program(context &ctx,
+              const ref_vector<device> &devs,
+              const std::vector<module> &binaries);
+
+      program(const program &prog) = delete;
+      program &
+      operator=(const program &prog) = delete;
+
+      void build(const ref_vector<device> &devs, const char *opts);
+
+      const std::string &source() const;
+
+      device_range devices() const;
+
+      const module &binary(const device &dev) const;
+      cl_build_status build_status(const device &dev) const;
+      std::string build_opts(const device &dev) const;
+      std::string build_log(const device &dev) const;
+
+      const compat::vector<module::symbol> &symbols() const;
+
+      context &ctx;
+
+   private:
+      std::map<device *, module> _binaries;
+      std::map<const device *, std::string> _logs;
+      std::map<const device *, std::string> _opts;
+      std::string _source;
+   };
 }
-
-struct _cl_program : public clover::ref_counter {
-public:
-   _cl_program(clover::context &ctx,
-               const std::string &source);
-   _cl_program(clover::context &ctx,
-               const std::vector<clover::device *> &devs,
-               const std::vector<clover::module> &binaries);
-
-   void build(const std::vector<clover::device *> &devs, const char *opts);
-
-   const std::string &source() const;
-   const std::map<clover::device *, clover::module> &binaries() const;
-
-   cl_build_status build_status(clover::device *dev) const;
-   std::string build_opts(clover::device *dev) const;
-   std::string build_log(clover::device *dev) const;
-
-   clover::context &ctx;
-
-private:
-   std::map<clover::device *, clover::module> __binaries;
-   std::map<clover::device *, std::string> __logs;
-   std::map<clover::device *, std::string> __opts;
-   std::string __source;
-};
 
 #endif

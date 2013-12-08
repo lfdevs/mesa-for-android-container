@@ -544,6 +544,33 @@ util_format_is_depth_and_stencil(enum pipe_format format)
           util_format_has_stencil(desc);
 }
 
+
+/**
+ * Calculates the depth format type based upon the incoming format description.
+ */
+static INLINE unsigned
+util_get_depth_format_type(const struct util_format_description *desc)
+{
+   unsigned depth_channel = desc->swizzle[0];
+   if (desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS &&
+       depth_channel != UTIL_FORMAT_SWIZZLE_NONE) {
+      return desc->channel[depth_channel].type;
+   } else {
+      return UTIL_FORMAT_TYPE_VOID;
+   }
+}
+
+
+/**
+ * Calculates the MRD for the depth format. MRD is used in depth bias
+ * for UNORM and unbound depth buffers. When the depth buffer is floating
+ * point, the depth bias calculation does not use the MRD. However, the
+ * default MRD will be 1.0 / ((1 << 24) - 1).
+ */
+double
+util_get_depth_format_mrd(const struct util_format_description *desc);
+
+
 /**
  * Return whether this is an RGBA, Z, S, or combined ZS format.
  * Useful for initializing pipe_blit_info::mask.
@@ -685,6 +712,9 @@ util_format_is_rgba8_variant(const struct util_format_description *desc)
       if(desc->channel[chan].type != UTIL_FORMAT_TYPE_UNSIGNED &&
          desc->channel[chan].type != UTIL_FORMAT_TYPE_VOID)
          return FALSE;
+      if(desc->channel[chan].type == UTIL_FORMAT_TYPE_UNSIGNED &&
+         !desc->channel[chan].normalized)
+         return FALSE;
       if(desc->channel[chan].size != 8)
          return FALSE;
    }
@@ -716,10 +746,15 @@ static INLINE uint
 util_format_get_blocksize(enum pipe_format format)
 {
    uint bits = util_format_get_blocksizebits(format);
+   uint bytes = bits / 8;
 
    assert(bits % 8 == 0);
+   assert(bytes > 0);
+   if (bytes == 0) {
+      bytes = 1;
+   }
 
-   return bits / 8;
+   return bytes;
 }
 
 static INLINE uint

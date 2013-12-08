@@ -81,7 +81,7 @@ fd3_emit_constant(struct fd_ringbuffer *ring,
 	if (prsc) {
 		struct fd_bo *bo = fd_resource(prsc)->bo;
 		OUT_RELOC(ring, bo, offset,
-				CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS));
+				CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS), 0);
 	} else {
 		OUT_RING(ring, CP_LOAD_STATE_1_EXT_SRC_ADDR(0) |
 				CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS));
@@ -146,7 +146,7 @@ emit_constants(struct fd_ringbuffer *ring,
 
 #define VERT_TEX_OFF    0
 #define FRAG_TEX_OFF    16
-#define BASETABLE_SZ    14
+#define BASETABLE_SZ    A3XX_MAX_MIP_LEVELS
 
 static void
 emit_textures(struct fd_ringbuffer *ring,
@@ -163,62 +163,64 @@ emit_textures(struct fd_ringbuffer *ring,
 	};
 	unsigned i, j;
 
-	assert(tex->num_samplers == tex->num_textures);  // TODO check..
-
-	if (!tex->num_samplers)
-		return;
-
-	/* output sampler state: */
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + (2 * tex->num_samplers));
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(tex_off[sb]) |
-			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-			CP_LOAD_STATE_0_STATE_BLOCK(sb) |
-			CP_LOAD_STATE_0_NUM_UNIT(tex->num_samplers));
-	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER) |
-			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
-	for (i = 0; i < tex->num_samplers; i++) {
-		struct fd3_sampler_stateobj *sampler =
-				fd3_sampler_stateobj(tex->samplers[i]);
-		OUT_RING(ring, sampler->texsamp0);
-		OUT_RING(ring, sampler->texsamp1);
+	if (tex->num_samplers > 0) {
+		/* output sampler state: */
+		OUT_PKT3(ring, CP_LOAD_STATE, 2 + (2 * tex->num_samplers));
+		OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(tex_off[sb]) |
+				CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
+				CP_LOAD_STATE_0_STATE_BLOCK(sb) |
+				CP_LOAD_STATE_0_NUM_UNIT(tex->num_samplers));
+		OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER) |
+				CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+		for (i = 0; i < tex->num_samplers; i++) {
+			struct fd3_sampler_stateobj *sampler =
+					fd3_sampler_stateobj(tex->samplers[i]);
+			OUT_RING(ring, sampler->texsamp0);
+			OUT_RING(ring, sampler->texsamp1);
+		}
 	}
 
-	/* emit texture state: */
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + (4 * tex->num_textures));
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(tex_off[sb]) |
-			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-			CP_LOAD_STATE_0_STATE_BLOCK(sb) |
-			CP_LOAD_STATE_0_NUM_UNIT(tex->num_textures));
-	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
-			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
-	for (i = 0; i < tex->num_textures; i++) {
-		struct fd3_pipe_sampler_view *view =
-				fd3_pipe_sampler_view(tex->textures[i]);
-		OUT_RING(ring, view->texconst0);
-		OUT_RING(ring, view->texconst1);
-		OUT_RING(ring, view->texconst2 |
-				A3XX_TEX_CONST_2_INDX(BASETABLE_SZ * i));
-		OUT_RING(ring, view->texconst3);
-	}
+	if (tex->num_textures > 0) {
+		/* emit texture state: */
+		OUT_PKT3(ring, CP_LOAD_STATE, 2 + (4 * tex->num_textures));
+		OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(tex_off[sb]) |
+				CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
+				CP_LOAD_STATE_0_STATE_BLOCK(sb) |
+				CP_LOAD_STATE_0_NUM_UNIT(tex->num_textures));
+		OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
+				CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+		for (i = 0; i < tex->num_textures; i++) {
+			struct fd3_pipe_sampler_view *view =
+					fd3_pipe_sampler_view(tex->textures[i]);
+			OUT_RING(ring, view->texconst0);
+			OUT_RING(ring, view->texconst1);
+			OUT_RING(ring, view->texconst2 |
+					A3XX_TEX_CONST_2_INDX(BASETABLE_SZ * i));
+			OUT_RING(ring, view->texconst3);
+		}
 
-	/* emit mipaddrs: */
-	OUT_PKT3(ring, CP_LOAD_STATE, 2 + (BASETABLE_SZ * tex->num_textures));
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(BASETABLE_SZ * tex_off[sb]) |
-			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
-			CP_LOAD_STATE_0_STATE_BLOCK(mipaddr[sb]) |
-			CP_LOAD_STATE_0_NUM_UNIT(BASETABLE_SZ * tex->num_textures));
-	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
-			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
-	for (i = 0; i < tex->num_textures; i++) {
-		struct fd3_pipe_sampler_view *view =
-				fd3_pipe_sampler_view(tex->textures[i]);
-		OUT_RELOC(ring, view->tex_resource->bo, 0, 0);
-		/* I think each entry is a ptr to mipmap level.. for now, just
-		 * pad w/ null's until I get around to actually implementing
-		 * mipmap support..
-		 */
-		for (j = 1; j < BASETABLE_SZ; j++) {
-			OUT_RING(ring, 0x00000000);
+		/* emit mipaddrs: */
+		OUT_PKT3(ring, CP_LOAD_STATE, 2 + (BASETABLE_SZ * tex->num_textures));
+		OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(BASETABLE_SZ * tex_off[sb]) |
+				CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
+				CP_LOAD_STATE_0_STATE_BLOCK(mipaddr[sb]) |
+				CP_LOAD_STATE_0_NUM_UNIT(BASETABLE_SZ * tex->num_textures));
+		OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
+				CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+		for (i = 0; i < tex->num_textures; i++) {
+			struct fd3_pipe_sampler_view *view =
+					fd3_pipe_sampler_view(tex->textures[i]);
+			struct fd_resource *rsc = view->tex_resource;
+
+			for (j = 0; j < view->mipaddrs; j++) {
+				struct fd_resource_slice *slice = fd_resource_slice(rsc, j);
+				OUT_RELOC(ring, rsc->bo, slice->offset, 0, 0);
+			}
+
+			/* pad the remaining entries w/ null: */
+			for (; j < BASETABLE_SZ; j++) {
+				OUT_RING(ring, 0x00000000);
+			}
 		}
 	}
 }
@@ -231,7 +233,7 @@ emit_cache_flush(struct fd_ringbuffer *ring)
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(DI_PT_POINTLIST, DI_SRC_SEL_AUTO_INDEX,
+	OUT_RING(ring, DRAW(1, DI_SRC_SEL_AUTO_INDEX,
 			INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 	OUT_RING(ring, 0);					/* NumIndices */
 
@@ -241,8 +243,7 @@ emit_cache_flush(struct fd_ringbuffer *ring)
 	OUT_RING(ring, 0x00000000);
 	OUT_RING(ring, 0x00000000);
 
-	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
-	OUT_RING(ring, 0x00000000);
+	OUT_WFI (ring);
 }
 
 /* emit texture state for mem->gmem restore operation.. eventually it would
@@ -253,6 +254,7 @@ void
 fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring, struct pipe_surface *psurf)
 {
 	struct fd_resource *rsc = fd_resource(psurf->texture);
+	enum pipe_format format = fd3_gmem_restore_format(psurf->format);
 
 	/* output sampler state: */
 	OUT_PKT3(ring, CP_LOAD_STATE, 4);
@@ -278,13 +280,13 @@ fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring, struct pipe_surface *psurf
 	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
 			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
 	OUT_RING(ring, A3XX_TEX_CONST_0_FMT(fd3_pipe2tex(psurf->format)) |
-			0x40000000 | // XXX
-			fd3_tex_swiz(psurf->format,  PIPE_SWIZZLE_BLUE, PIPE_SWIZZLE_GREEN,
-					PIPE_SWIZZLE_RED, PIPE_SWIZZLE_ALPHA));
-	OUT_RING(ring, A3XX_TEX_CONST_1_FETCHSIZE(fd3_pipe2fetchsize(psurf->format)) |
+			A3XX_TEX_CONST_0_TYPE(A3XX_TEX_2D) |
+			fd3_tex_swiz(format,  PIPE_SWIZZLE_RED, PIPE_SWIZZLE_GREEN,
+					PIPE_SWIZZLE_BLUE, PIPE_SWIZZLE_ALPHA));
+	OUT_RING(ring, A3XX_TEX_CONST_1_FETCHSIZE(TFETCH_DISABLE) |
 			A3XX_TEX_CONST_1_WIDTH(psurf->width) |
 			A3XX_TEX_CONST_1_HEIGHT(psurf->height));
-	OUT_RING(ring, A3XX_TEX_CONST_2_PITCH(rsc->pitch * rsc->cpp) |
+	OUT_RING(ring, A3XX_TEX_CONST_2_PITCH(rsc->slices[0].pitch * rsc->cpp) |
 			A3XX_TEX_CONST_2_INDX(0));
 	OUT_RING(ring, 0x00000000);
 
@@ -296,7 +298,7 @@ fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring, struct pipe_surface *psurf
 			CP_LOAD_STATE_0_NUM_UNIT(1));
 	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
 			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
-	OUT_RELOC(ring, rsc->bo, 0, 0);
+	OUT_RELOC(ring, rsc->bo, 0, 0, 0);
 }
 
 void
@@ -322,7 +324,7 @@ fd3_emit_vertex_bufs(struct fd_ringbuffer *ring,
 				COND(switchnext, A3XX_VFD_FETCH_INSTR_0_SWITCHNEXT) |
 				A3XX_VFD_FETCH_INSTR_0_INDEXCODE(i) |
 				A3XX_VFD_FETCH_INSTR_0_STEPRATE(1));
-		OUT_RELOC(ring, rsc->bo, vbufs[i].offset, 0);
+		OUT_RELOC(ring, rsc->bo, vbufs[i].offset, 0, 0);
 
 		OUT_PKT0(ring, REG_A3XX_VFD_DECODE_INSTR(i), 1);
 		OUT_RING(ring, A3XX_VFD_DECODE_INSTR_CONSTFILL |
@@ -340,6 +342,8 @@ fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
 {
 	struct fd_ringbuffer *ring = ctx->ring;
 
+	emit_marker(ring, 5);
+
 	if (dirty & FD_DIRTY_SAMPLE_MASK) {
 		OUT_PKT0(ring, REG_A3XX_RB_MSAA_CONTROL, 1);
 		OUT_RING(ring, A3XX_RB_MSAA_CONTROL_DISABLE |
@@ -352,6 +356,9 @@ fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
 		struct pipe_stencil_ref *sr = &ctx->stencil_ref;
 
 		fd3_emit_rbrc_draw_state(ring, zsa->rb_render_control);
+
+		OUT_PKT0(ring, REG_A3XX_RB_ALPHA_REF, 1);
+		OUT_RING(ring, zsa->rb_alpha_ref);
 
 		OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
 		OUT_RING(ring, zsa->rb_depth_control);
@@ -452,6 +459,19 @@ fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
 		}
 	}
 
+	if (dirty & FD_DIRTY_BLEND_COLOR) {
+		struct pipe_blend_color *bcolor = &ctx->blend_color;
+		OUT_PKT0(ring, REG_A3XX_RB_BLEND_RED, 4);
+		OUT_RING(ring, A3XX_RB_BLEND_RED_UINT(bcolor->color[0] * 255.0) |
+				A3XX_RB_BLEND_RED_FLOAT(bcolor->color[0]));
+		OUT_RING(ring, A3XX_RB_BLEND_GREEN_UINT(bcolor->color[1] * 255.0) |
+				A3XX_RB_BLEND_GREEN_FLOAT(bcolor->color[1]));
+		OUT_RING(ring, A3XX_RB_BLEND_BLUE_UINT(bcolor->color[2] * 255.0) |
+				A3XX_RB_BLEND_BLUE_FLOAT(bcolor->color[2]));
+		OUT_RING(ring, A3XX_RB_BLEND_ALPHA_UINT(bcolor->color[3] * 255.0) |
+				A3XX_RB_BLEND_ALPHA_FLOAT(bcolor->color[3]));
+	}
+
 	if (dirty & FD_DIRTY_VERTTEX)
 		emit_textures(ring, SB_VERT_TEX, &ctx->verttex);
 
@@ -481,12 +501,12 @@ fd3_emit_restore(struct fd_context *ctx)
 
 	OUT_PKT0(ring, REG_A3XX_SP_VS_PVT_MEM_CTRL_REG, 3);
 	OUT_RING(ring, 0x08000001);                  /* SP_VS_PVT_MEM_CTRL_REG */
-	OUT_RELOC(ring, fd3_ctx->vs_pvt_mem, 0, 0);  /* SP_VS_PVT_MEM_ADDR_REG */
+	OUT_RELOC(ring, fd3_ctx->vs_pvt_mem, 0,0,0); /* SP_VS_PVT_MEM_ADDR_REG */
 	OUT_RING(ring, 0x00000000);                  /* SP_VS_PVT_MEM_SIZE_REG */
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_PVT_MEM_CTRL_REG, 3);
 	OUT_RING(ring, 0x08000001);                  /* SP_FS_PVT_MEM_CTRL_REG */
-	OUT_RELOC(ring, fd3_ctx->fs_pvt_mem, 0, 0);  /* SP_FS_PVT_MEM_ADDR_REG */
+	OUT_RELOC(ring, fd3_ctx->fs_pvt_mem, 0,0,0); /* SP_FS_PVT_MEM_ADDR_REG */
 	OUT_RING(ring, 0x00000000);                  /* SP_FS_PVT_MEM_SIZE_REG */
 
 	OUT_PKT0(ring, REG_A3XX_PC_VERTEX_REUSE_BLOCK_CNTL, 1);
@@ -536,8 +556,8 @@ fd3_emit_restore(struct fd_context *ctx)
 	OUT_PKT0(ring, REG_A3XX_UNKNOWN_0C3D, 1);
 	OUT_RING(ring, 0x00000001);        /* UNKNOWN_0C3D */
 
-	OUT_PKT0(ring, REG_A3XX_UNKNOWN_0E00, 1);
-	OUT_RING(ring, 0x00000000);        /* UNKNOWN_0E00 */
+	OUT_PKT0(ring, REG_A3XX_HLSQ_PERFCOUNTER0_SELECT, 1);
+	OUT_RING(ring, 0x00000000);        /* HLSQ_PERFCOUNTER0_SELECT */
 
 	OUT_PKT0(ring, REG_A3XX_HLSQ_CONST_VSPRESV_RANGE_REG, 2);
 	OUT_RING(ring, A3XX_HLSQ_CONST_VSPRESV_RANGE_REG_STARTENTRY(0) |
@@ -549,7 +569,7 @@ fd3_emit_restore(struct fd_context *ctx)
 	OUT_RING(ring, 0x00000001);        /* UCHE_CACHE_MODE_CONTROL_REG */
 
 	OUT_PKT0(ring, REG_A3XX_VSC_SIZE_ADDRESS, 1);
-	OUT_RELOC(ring, fd3_ctx->vsc_size_mem, 0, 0); /* VSC_SIZE_ADDRESS */
+	OUT_RELOC(ring, fd3_ctx->vsc_size_mem, 0, 0, 0); /* VSC_SIZE_ADDRESS */
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_CL_CLIP_CNTL, 1);
 	OUT_RING(ring, 0x00000000);                  /* GRAS_CL_CLIP_CNTL */
@@ -566,10 +586,14 @@ fd3_emit_restore(struct fd_context *ctx)
 			A3XX_PA_SC_WINDOW_OFFSET_Y(0));
 
 	OUT_PKT0(ring, REG_A3XX_RB_BLEND_RED, 4);
-	OUT_RING(ring, 0x00000000);        /* RB_BLEND_RED */
-	OUT_RING(ring, 0x00000000);        /* RB_BLEND_GREEN */
-	OUT_RING(ring, 0x00000000);        /* RB_BLEND_BLUE */
-	OUT_RING(ring, 0x3c0000ff);        /* RB_BLEND_ALPHA */
+	OUT_RING(ring, A3XX_RB_BLEND_RED_UINT(0) |
+			A3XX_RB_BLEND_RED_FLOAT(0.0));
+	OUT_RING(ring, A3XX_RB_BLEND_GREEN_UINT(0) |
+			A3XX_RB_BLEND_GREEN_FLOAT(0.0));
+	OUT_RING(ring, A3XX_RB_BLEND_BLUE_UINT(0) |
+			A3XX_RB_BLEND_BLUE_FLOAT(0.0));
+	OUT_RING(ring, A3XX_RB_BLEND_ALPHA_UINT(0xff) |
+			A3XX_RB_BLEND_ALPHA_FLOAT(1.0));
 
 	for (i = 0; i < 6; i++) {
 		OUT_PKT0(ring, REG_A3XX_GRAS_CL_USER_PLANE(i), 4);

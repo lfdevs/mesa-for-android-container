@@ -77,6 +77,7 @@ extern "C" {
 #define BRW_SWIZZLE_ZZZZ      BRW_SWIZZLE4(2,2,2,2)
 #define BRW_SWIZZLE_WWWW      BRW_SWIZZLE4(3,3,3,3)
 #define BRW_SWIZZLE_XYXY      BRW_SWIZZLE4(0,1,0,1)
+#define BRW_SWIZZLE_ZWZW      BRW_SWIZZLE4(2,3,2,3)
 
 static inline bool
 brw_is_single_value_swizzle(int swiz)
@@ -281,6 +282,25 @@ brw_vec1_reg(unsigned file, unsigned nr, unsigned subnr)
                   WRITEMASK_X);
 }
 
+static inline struct brw_reg
+brw_vecn_reg(unsigned width, unsigned file, unsigned nr, unsigned subnr)
+{
+   switch (width) {
+   case 1:
+      return brw_vec1_reg(file, nr, subnr);
+   case 2:
+      return brw_vec2_reg(file, nr, subnr);
+   case 4:
+      return brw_vec4_reg(file, nr, subnr);
+   case 8:
+      return brw_vec8_reg(file, nr, subnr);
+   case 16:
+      return brw_vec16_reg(file, nr, subnr);
+   default:
+      assert(!"Invalid register width");
+   }
+   unreachable();
+}
 
 static inline struct brw_reg
 retype(struct brw_reg reg, unsigned type)
@@ -569,6 +589,12 @@ brw_message_reg(unsigned nr)
    return brw_vec8_reg(BRW_MESSAGE_REGISTER_FILE, nr, 0);
 }
 
+static inline struct brw_reg
+brw_uvec_mrf(unsigned width, unsigned nr, unsigned subnr)
+{
+   return retype(brw_vecn_reg(width, BRW_MESSAGE_REGISTER_FILE, nr, subnr),
+                 BRW_REGISTER_TYPE_UD);
+}
 
 /* This is almost always called with a numeric constant argument, so
  * make things easy to evaluate at compile time:

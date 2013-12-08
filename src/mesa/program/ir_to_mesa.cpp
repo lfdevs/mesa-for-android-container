@@ -44,11 +44,11 @@
 
 #include "main/mtypes.h"
 #include "main/shaderobj.h"
+#include "main/uniforms.h"
 #include "program/hash_table.h"
 
 extern "C" {
 #include "main/shaderapi.h"
-#include "main/uniforms.h"
 #include "program/prog_instruction.h"
 #include "program/prog_optimize.h"
 #include "program/prog_print.h"
@@ -57,10 +57,12 @@ extern "C" {
 #include "program/sampler.h"
 }
 
+static int swizzle_for_size(int size);
+
+namespace {
+
 class src_reg;
 class dst_reg;
-
-static int swizzle_for_size(int size);
 
 /**
  * This struct is a corresponding struct to Mesa prog_src_register, with
@@ -129,6 +131,8 @@ public:
    src_reg *reladdr;
 };
 
+} /* anonymous namespace */
+
 src_reg::src_reg(dst_reg reg)
 {
    this->file = reg.file;
@@ -147,19 +151,11 @@ dst_reg::dst_reg(src_reg reg)
    this->reladdr = reg.reladdr;
 }
 
+namespace {
+
 class ir_to_mesa_instruction : public exec_node {
 public:
-   /* Callers of this ralloc-based new need not call delete. It's
-    * easier to just ralloc_free 'ctx' (or any of its ancestors). */
-   static void* operator new(size_t size, void *ctx)
-   {
-      void *node;
-
-      node = rzalloc_size(ctx, size);
-      assert(node != NULL);
-
-      return node;
-   }
+   DECLARE_RALLOC_CXX_OPERATORS(ir_to_mesa_instruction)
 
    enum prog_opcode op;
    dst_reg dst;
@@ -265,6 +261,8 @@ public:
    virtual void visit(ir_discard *);
    virtual void visit(ir_texture *);
    virtual void visit(ir_if *);
+   virtual void visit(ir_emit_vertex *);
+   virtual void visit(ir_end_primitive *);
    /*@}*/
 
    src_reg result;
@@ -323,6 +321,8 @@ public:
 
    void *mem_ctx;
 };
+
+} /* anonymous namespace */
 
 static src_reg undef_src = src_reg(PROGRAM_UNDEFINED, 0, NULL);
 
@@ -622,6 +622,7 @@ type_size(const struct glsl_type *type)
        * at link time.
        */
       return 1;
+   case GLSL_TYPE_ATOMIC_UINT:
    case GLSL_TYPE_VOID:
    case GLSL_TYPE_ERROR:
    case GLSL_TYPE_INTERFACE:
@@ -835,7 +836,7 @@ ir_to_mesa_visitor::visit(ir_function *ir)
       const ir_function_signature *sig;
       exec_list empty;
 
-      sig = ir->matching_signature(&empty);
+      sig = ir->matching_signature(NULL, &empty);
 
       assert(sig);
 
@@ -1490,10 +1491,16 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
 
    case ir_binop_vector_extract:
    case ir_binop_bfm:
+   case ir_triop_fma:
    case ir_triop_bfi:
    case ir_triop_bitfield_extract:
    case ir_triop_vector_insert:
    case ir_quadop_bitfield_insert:
+   case ir_binop_ldexp:
+   case ir_triop_csel:
+   case ir_binop_carry:
+   case ir_binop_borrow:
+   case ir_binop_imul_high:
       assert(!"not supported");
       break;
 
@@ -2063,6 +2070,12 @@ ir_to_mesa_visitor::visit(ir_texture *ir)
    case ir_lod:
       assert(!"Unexpected ir_lod opcode");
       break;
+   case ir_tg4:
+      assert(!"Unexpected ir_tg4 opcode");
+      break;
+   case ir_query_levels:
+      assert(!"Unexpected ir_query_levels opcode");
+      break;
    }
 
    const glsl_type *sampler_type = ir->sampler->type;
@@ -2249,7 +2262,19 @@ ir_to_mesa_visitor::visit(ir_if *ir)
       visit_exec_list(&ir->else_instructions, this);
    }
 
-   if_inst = emit(ir->condition, OPCODE_ENDIF);
+   emit(ir->condition, OPCODE_ENDIF);
+}
+
+void
+ir_to_mesa_visitor::visit(ir_emit_vertex *ir)
+{
+   assert(!"Geometry shaders not supported.");
+}
+
+void
+ir_to_mesa_visitor::visit(ir_end_primitive *ir)
+{
+   assert(!"Geometry shaders not supported.");
 }
 
 ir_to_mesa_visitor::ir_to_mesa_visitor()
@@ -2400,6 +2425,8 @@ print_program(struct prog_instruction *mesa_instructions,
    }
 }
 
+namespace {
+
 class add_uniform_to_shader : public program_resource_visitor {
 public:
    add_uniform_to_shader(struct gl_shader_program *shader_program,
@@ -2428,6 +2455,8 @@ private:
    int idx;
    gl_shader_type shader_type;
 };
+
+} /* anonymous namespace */
 
 void
 add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
@@ -2573,6 +2602,7 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
 	    format = uniform_native;
 	    columns = 1;
 	    break;
+         case GLSL_TYPE_ATOMIC_UINT:
          case GLSL_TYPE_ARRAY:
          case GLSL_TYPE_VOID:
          case GLSL_TYPE_STRUCT:
@@ -2961,7 +2991,7 @@ get_mesa_program(struct gl_context *ctx,
     */
    mesa_instructions = NULL;
 
-   do_set_program_inouts(shader->ir, prog, shader->Type == GL_FRAGMENT_SHADER);
+   do_set_program_inouts(shader->ir, prog, shader->Type);
 
    prog->SamplersUsed = shader->active_samplers;
    prog->ShadowSamplers = shader->shadow_samplers;
@@ -3073,10 +3103,7 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       linked_prog = get_mesa_program(ctx, prog, prog->_LinkedShaders[i]);
 
       if (linked_prog) {
-	 if (i == MESA_SHADER_VERTEX) {
-            ((struct gl_vertex_program *)linked_prog)->UsesClipDistance
-               = prog->Vert.UsesClipDistance;
-	 }
+         _mesa_copy_linked_program_data((gl_shader_type) i, prog, linked_prog);
 
 	 _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
 				 linked_prog);
@@ -3108,7 +3135,6 @@ _mesa_glsl_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
    for (i = 0; i < prog->NumShaders; i++) {
       if (!prog->Shaders[i]->CompileStatus) {
 	 linker_error(prog, "linking with uncompiled shader");
-	 prog->LinkStatus = GL_FALSE;
       }
    }
 

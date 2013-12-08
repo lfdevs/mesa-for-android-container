@@ -222,7 +222,7 @@ _mesa_is_valid_prim_mode(struct gl_context *ctx, GLenum mode)
    case GL_LINE_STRIP_ADJACENCY:
    case GL_TRIANGLES_ADJACENCY:
    case GL_TRIANGLE_STRIP_ADJACENCY:
-      return _mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_geometry_shader4;
+      return _mesa_has_geometry_shaders(ctx);
    default:
       return false;
    }
@@ -245,6 +245,74 @@ _mesa_valid_prim_mode(struct gl_context *ctx, GLenum mode, const char *name)
       return GL_FALSE;
    }
 
+   /* From the ARB_geometry_shader4 spec:
+    *
+    * The error INVALID_OPERATION is generated if Begin, or any command that
+    * implicitly calls Begin, is called when a geometry shader is active and:
+    *
+    * * the input primitive type of the current geometry shader is
+    *   POINTS and <mode> is not POINTS,
+    *
+    * * the input primitive type of the current geometry shader is
+    *   LINES and <mode> is not LINES, LINE_STRIP, or LINE_LOOP,
+    *
+    * * the input primitive type of the current geometry shader is
+    *   TRIANGLES and <mode> is not TRIANGLES, TRIANGLE_STRIP or
+    *   TRIANGLE_FAN,
+    *
+    * * the input primitive type of the current geometry shader is
+    *   LINES_ADJACENCY_ARB and <mode> is not LINES_ADJACENCY_ARB or
+    *   LINE_STRIP_ADJACENCY_ARB, or
+    *
+    * * the input primitive type of the current geometry shader is
+    *   TRIANGLES_ADJACENCY_ARB and <mode> is not
+    *   TRIANGLES_ADJACENCY_ARB or TRIANGLE_STRIP_ADJACENCY_ARB.
+    *
+   */
+   if (ctx->Shader.CurrentGeometryProgram) {
+      const GLenum geom_mode =
+         ctx->Shader.CurrentGeometryProgram->Geom.InputType;
+      switch (mode) {
+      case GL_POINTS:
+         valid_enum = (geom_mode == GL_POINTS);
+         break;
+      case GL_LINES:
+      case GL_LINE_LOOP:
+      case GL_LINE_STRIP:
+         valid_enum = (geom_mode == GL_LINES);
+         break;
+      case GL_TRIANGLES:
+      case GL_TRIANGLE_STRIP:
+      case GL_TRIANGLE_FAN:
+         valid_enum = (geom_mode == GL_TRIANGLES);
+         break;
+      case GL_QUADS:
+      case GL_QUAD_STRIP:
+      case GL_POLYGON:
+         valid_enum = false;
+         break;
+      case GL_LINES_ADJACENCY:
+      case GL_LINE_STRIP_ADJACENCY:
+         valid_enum = (geom_mode == GL_LINES_ADJACENCY);
+         break;
+      case GL_TRIANGLES_ADJACENCY:
+      case GL_TRIANGLE_STRIP_ADJACENCY:
+         valid_enum = (geom_mode == GL_TRIANGLES_ADJACENCY);
+         break;
+      default:
+         valid_enum = false;
+         break;
+      }
+      if (!valid_enum) {
+         _mesa_error(ctx, GL_INVALID_OPERATION,
+                     "%s(mode=%s vs geometry shader input %s)",
+                     name,
+                     _mesa_lookup_prim_by_nr(mode),
+                     _mesa_lookup_prim_by_nr(geom_mode));
+         return GL_FALSE;
+      }
+   }
+
    /* From the GL_EXT_transform_feedback spec:
     *
     *     "The error INVALID_OPERATION is generated if Begin, or any command
@@ -262,26 +330,43 @@ _mesa_valid_prim_mode(struct gl_context *ctx, GLenum mode, const char *name)
    if (_mesa_is_xfb_active_and_unpaused(ctx)) {
       GLboolean pass = GL_TRUE;
 
-      switch (mode) {
-      case GL_POINTS:
-         pass = ctx->TransformFeedback.Mode == GL_POINTS;
-	 break;
-      case GL_LINES:
-      case GL_LINE_STRIP:
-      case GL_LINE_LOOP:
-         pass = ctx->TransformFeedback.Mode == GL_LINES;
-	 break;
-      default:
-         pass = ctx->TransformFeedback.Mode == GL_TRIANGLES;
-	 break;
+      if(ctx->Shader.CurrentGeometryProgram) {
+         switch (ctx->Shader.CurrentGeometryProgram->Geom.OutputType) {
+         case GL_POINTS:
+            pass = ctx->TransformFeedback.Mode == GL_POINTS;
+            break;
+         case GL_LINE_STRIP:
+            pass = ctx->TransformFeedback.Mode == GL_LINES;
+            break;
+         case GL_TRIANGLE_STRIP:
+            pass = ctx->TransformFeedback.Mode == GL_TRIANGLES;
+            break;
+         default:
+            pass = GL_FALSE;
+         }
+      }
+      else {
+         switch (mode) {
+         case GL_POINTS:
+            pass = ctx->TransformFeedback.Mode == GL_POINTS;
+            break;
+         case GL_LINES:
+         case GL_LINE_STRIP:
+         case GL_LINE_LOOP:
+            pass = ctx->TransformFeedback.Mode == GL_LINES;
+            break;
+         default:
+            pass = ctx->TransformFeedback.Mode == GL_TRIANGLES;
+            break;
+         }
       }
       if (!pass) {
-	 _mesa_error(ctx, GL_INVALID_OPERATION,
-		     "%s(mode=%s vs transform feedback %s)",
-		     name,
-		     _mesa_lookup_prim_by_nr(mode),
-		     _mesa_lookup_prim_by_nr(ctx->TransformFeedback.Mode));
-	 return GL_FALSE;
+         _mesa_error(ctx, GL_INVALID_OPERATION,
+	                 "%s(mode=%s vs transform feedback %s)",
+	                 name,
+	                 _mesa_lookup_prim_by_nr(mode),
+	                 _mesa_lookup_prim_by_nr(ctx->TransformFeedback.Mode));
+         return GL_FALSE;
       }
    }
 
@@ -334,9 +419,8 @@ _mesa_validate_DrawElements(struct gl_context *ctx,
       return GL_FALSE;
    }
 
-   if (count <= 0) {
-      if (count < 0)
-	 _mesa_error(ctx, GL_INVALID_VALUE, "glDrawElements(count)" );
+   if (count < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glDrawElements(count)" );
       return GL_FALSE;
    }
 
@@ -368,6 +452,9 @@ _mesa_validate_DrawElements(struct gl_context *ctx,
    if (!check_index_bounds(ctx, count, type, indices, basevertex))
       return GL_FALSE;
 
+   if (count == 0)
+      return GL_FALSE;
+
    return GL_TRUE;
 }
 
@@ -388,10 +475,9 @@ _mesa_validate_MultiDrawElements(struct gl_context *ctx,
    FLUSH_CURRENT(ctx, 0);
 
    for (i = 0; i < primcount; i++) {
-      if (count[i] <= 0) {
-         if (count[i] < 0)
-            _mesa_error(ctx, GL_INVALID_VALUE,
-                        "glMultiDrawElements(count)" );
+      if (count[i] < 0) {
+         _mesa_error(ctx, GL_INVALID_VALUE,
+                     "glMultiDrawElements(count)" );
          return GL_FALSE;
       }
    }
@@ -463,9 +549,8 @@ _mesa_validate_DrawRangeElements(struct gl_context *ctx, GLenum mode,
       return GL_FALSE;
    }
 
-   if (count <= 0) {
-      if (count < 0)
-	 _mesa_error(ctx, GL_INVALID_VALUE, "glDrawRangeElements(count)" );
+   if (count < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glDrawRangeElements(count)" );
       return GL_FALSE;
    }
 
@@ -502,6 +587,9 @@ _mesa_validate_DrawRangeElements(struct gl_context *ctx, GLenum mode,
    if (!check_index_bounds(ctx, count, type, indices, basevertex))
       return GL_FALSE;
 
+   if (count == 0)
+      return GL_FALSE;
+
    return GL_TRUE;
 }
 
@@ -519,9 +607,8 @@ _mesa_validate_DrawArrays(struct gl_context *ctx,
       = ctx->TransformFeedback.CurrentObject;
    FLUSH_CURRENT(ctx, 0);
 
-   if (count <= 0) {
-      if (count < 0)
-         _mesa_error(ctx, GL_INVALID_VALUE, "glDrawArrays(count)" );
+   if (count < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "glDrawArrays(count)" );
       return GL_FALSE;
    }
 
@@ -560,6 +647,9 @@ _mesa_validate_DrawArrays(struct gl_context *ctx,
       xfb_obj->GlesRemainingPrims -= prim_count;
    }
 
+   if (count == 0)
+      return GL_FALSE;
+
    return GL_TRUE;
 }
 
@@ -572,10 +662,9 @@ _mesa_validate_DrawArraysInstanced(struct gl_context *ctx, GLenum mode, GLint fi
       = ctx->TransformFeedback.CurrentObject;
    FLUSH_CURRENT(ctx, 0);
 
-   if (count <= 0) {
-      if (count < 0)
-         _mesa_error(ctx, GL_INVALID_VALUE,
-                     "glDrawArraysInstanced(count=%d)", count);
+   if (count < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "glDrawArraysInstanced(count=%d)", count);
       return GL_FALSE;
    }
 
@@ -628,6 +717,9 @@ _mesa_validate_DrawArraysInstanced(struct gl_context *ctx, GLenum mode, GLint fi
       xfb_obj->GlesRemainingPrims -= prim_count;
    }
 
+   if (count == 0)
+      return GL_FALSE;
+
    return GL_TRUE;
 }
 
@@ -653,10 +745,9 @@ _mesa_validate_DrawElementsInstanced(struct gl_context *ctx,
       return GL_FALSE;
    }
 
-   if (count <= 0) {
-      if (count < 0)
-	 _mesa_error(ctx, GL_INVALID_VALUE,
-                     "glDrawElementsInstanced(count=%d)", count);
+   if (count < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "glDrawElementsInstanced(count=%d)", count);
       return GL_FALSE;
    }
 
@@ -692,6 +783,9 @@ _mesa_validate_DrawElementsInstanced(struct gl_context *ctx,
       if (!indices)
          return GL_FALSE;
    }
+
+   if (count == 0)
+      return GL_FALSE;
 
    if (!check_index_bounds(ctx, count, type, indices, basevertex))
       return GL_FALSE;

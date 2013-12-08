@@ -39,11 +39,17 @@
  */
 
 
+#include <stdbool.h>
+#ifndef __NOT_HAVE_DRM_H
 #include <xf86drm.h>
+#endif
 #include "dri_util.h"
 #include "utils.h"
 #include "xmlpool.h"
 #include "../glsl/glsl_parser_extras.h"
+#include "main/mtypes.h"
+#include "main/version.h"
+#include "main/macros.h"
 
 PUBLIC const char __dri2ConfigOptions[] =
    DRI_CONF_BEGIN
@@ -51,8 +57,6 @@ PUBLIC const char __dri2ConfigOptions[] =
          DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_DEF_INTERVAL_1)
       DRI_CONF_SECTION_END
    DRI_CONF_END;
-
-static const uint __dri2NConfigOptions = 1;
 
 /*****************************************************************/
 /** \name Screen handling functions                              */
@@ -72,31 +76,78 @@ setupLoaderExtensions(__DRIscreen *psp,
 	    psp->dri2.image = (__DRIimageLookupExtension *) extensions[i];
 	if (strcmp(extensions[i]->name, __DRI_USE_INVALIDATE) == 0)
 	    psp->dri2.useInvalidate = (__DRIuseInvalidateExtension *) extensions[i];
+	if (strcmp(extensions[i]->name, __DRI_SWRAST_LOADER) == 0)
+	    psp->swrast_loader = (__DRIswrastLoaderExtension *) extensions[i];
+        if (strcmp(extensions[i]->name, __DRI_IMAGE_LOADER) == 0)
+           psp->image.loader = (__DRIimageLoaderExtension *) extensions[i];
     }
 }
 
+/**
+ * This pointer determines which driver API we'll use in the case of the
+ * loader not passing us an explicit driver extensions list (that would,
+ * itself, contain a pointer to a driver API.)
+ *
+ * A driver's driDriverGetExtensions_drivername() can update this pointer to
+ * what it's returning, and a loader that is ignorant of createNewScreen2()
+ * will get the correct driver screen created, as long as no other
+ * driDriverGetExtensions() happened in between the first one and the
+ * createNewScreen().
+ *
+ * This allows the X Server to not require the significant dri_interface.h
+ * updates for doing createNewScreen2(), which would discourage backporting of
+ * the X Server patches to support the new loader interface.
+ */
+const struct __DriverAPIRec *globalDriverAPI = &driDriverAPI;
+
+/**
+ * This is the first entrypoint in the driver called by the DRI driver loader
+ * after dlopen()ing it.
+ *
+ * It's used to create global state for the driver across contexts on the same
+ * Display.
+ */
 static __DRIscreen *
-dri2CreateNewScreen(int scrn, int fd,
-		    const __DRIextension **extensions,
-		    const __DRIconfig ***driver_configs, void *data)
+driCreateNewScreen2(int scrn, int fd,
+                    const __DRIextension **extensions,
+                    const __DRIextension **driver_extensions,
+                    const __DRIconfig ***driver_configs, void *data)
 {
     static const __DRIextension *emptyExtensionList[] = { NULL };
     __DRIscreen *psp;
-    drmVersionPtr version;
 
     psp = calloc(1, sizeof(*psp));
     if (!psp)
 	return NULL;
 
+    /* By default, use the global driDriverAPI symbol (non-megadrivers). */
+    psp->driver = globalDriverAPI;
+
+    /* If the driver exposes its vtable through its extensions list
+     * (megadrivers), use that instead.
+     */
+    if (driver_extensions) {
+       for (int i = 0; driver_extensions[i]; i++) {
+          if (strcmp(driver_extensions[i]->name, __DRI_DRIVER_VTABLE) == 0) {
+             psp->driver =
+                ((__DRIDriverVtableExtension *)driver_extensions[i])->vtable;
+          }
+       }
+    }
+
     setupLoaderExtensions(psp, extensions);
 
-    version = drmGetVersion(fd);
-    if (version) {
-	psp->drm_version.major = version->version_major;
-	psp->drm_version.minor = version->version_minor;
-	psp->drm_version.patch = version->version_patchlevel;
-	drmFreeVersion(version);
+#ifndef __NOT_HAVE_DRM_H
+    if (fd != -1) {
+       drmVersionPtr version = drmGetVersion(fd);
+       if (version) {
+          psp->drm_version.major = version->version_major;
+          psp->drm_version.minor = version->version_minor;
+          psp->drm_version.patch = version->version_patchlevel;
+          drmFreeVersion(version);
+       }
     }
+#endif
 
     psp->loaderPrivate = data;
 
@@ -104,18 +155,63 @@ dri2CreateNewScreen(int scrn, int fd,
     psp->fd = fd;
     psp->myNum = scrn;
 
-    psp->api_mask = (1 << __DRI_API_OPENGL);
-
-    *driver_configs = driDriverAPI.InitScreen(psp);
+    *driver_configs = psp->driver->InitScreen(psp);
     if (*driver_configs == NULL) {
 	free(psp);
 	return NULL;
     }
 
-    driParseOptionInfo(&psp->optionInfo, __dri2ConfigOptions, __dri2NConfigOptions);
+    int gl_version_override = _mesa_get_gl_version_override();
+    if (gl_version_override >= 31) {
+       psp->max_gl_core_version = MAX2(psp->max_gl_core_version,
+                                       gl_version_override);
+    } else {
+       psp->max_gl_compat_version = MAX2(psp->max_gl_compat_version,
+                                         gl_version_override);
+    }
+
+    psp->api_mask = (1 << __DRI_API_OPENGL);
+    if (psp->max_gl_core_version > 0)
+       psp->api_mask |= (1 << __DRI_API_OPENGL_CORE);
+    if (psp->max_gl_es1_version > 0)
+       psp->api_mask |= (1 << __DRI_API_GLES);
+    if (psp->max_gl_es2_version > 0)
+       psp->api_mask |= (1 << __DRI_API_GLES2);
+    if (psp->max_gl_es2_version >= 30)
+       psp->api_mask |= (1 << __DRI_API_GLES3);
+
+    driParseOptionInfo(&psp->optionInfo, __dri2ConfigOptions);
     driParseConfigFiles(&psp->optionCache, &psp->optionInfo, psp->myNum, "dri2");
 
+
     return psp;
+}
+
+static __DRIscreen *
+dri2CreateNewScreen(int scrn, int fd,
+		    const __DRIextension **extensions,
+		    const __DRIconfig ***driver_configs, void *data)
+{
+   return driCreateNewScreen2(scrn, fd, extensions, NULL,
+                               driver_configs, data);
+}
+
+/** swrast driver createNewScreen entrypoint. */
+static __DRIscreen *
+driSWRastCreateNewScreen(int scrn, const __DRIextension **extensions,
+                         const __DRIconfig ***driver_configs, void *data)
+{
+   return driCreateNewScreen2(scrn, -1, extensions, NULL,
+                               driver_configs, data);
+}
+
+static __DRIscreen *
+driSWRastCreateNewScreen2(int scrn, const __DRIextension **extensions,
+                          const __DRIextension **driver_extensions,
+                          const __DRIconfig ***driver_configs, void *data)
+{
+   return driCreateNewScreen2(scrn, -1, extensions, driver_extensions,
+                               driver_configs, data);
 }
 
 /**
@@ -135,7 +231,7 @@ static void driDestroyScreen(__DRIscreen *psp)
 
        _mesa_destroy_shader_compiler();
 
-	driDriverAPI.DestroyScreen(psp);
+	psp->driver->DestroyScreen(psp);
 
 	driDestroyOptionCache(&psp->optionCache);
 	driDestroyOptionInfo(&psp->optionInfo);
@@ -152,19 +248,58 @@ static const __DRIextension **driGetExtensions(__DRIscreen *psp)
 /*@}*/
 
 
+static bool
+validate_context_version(__DRIscreen *screen,
+                         int mesa_api,
+                         unsigned major_version,
+                         unsigned minor_version,
+                         unsigned *dri_ctx_error)
+{
+   unsigned req_version = 10 * major_version + minor_version;
+   unsigned max_version = 0;
+
+   switch (mesa_api) {
+   case API_OPENGL_COMPAT:
+      max_version = screen->max_gl_compat_version;
+      break;
+   case API_OPENGL_CORE:
+      max_version = screen->max_gl_core_version;
+      break;
+   case API_OPENGLES:
+      max_version = screen->max_gl_es1_version;
+      break;
+   case API_OPENGLES2:
+      max_version = screen->max_gl_es2_version;
+      break;
+   default:
+      max_version = 0;
+      break;
+   }
+
+   if (max_version == 0) {
+      *dri_ctx_error = __DRI_CTX_ERROR_BAD_API;
+      return false;
+   } else if (req_version > max_version) {
+      *dri_ctx_error = __DRI_CTX_ERROR_BAD_VERSION;
+      return false;
+   }
+
+   return true;
+}
+
 /*****************************************************************/
 /** \name Context handling functions                             */
 /*****************************************************************/
 /*@{*/
 
 static __DRIcontext *
-dri2CreateContextAttribs(__DRIscreen *screen, int api,
-			 const __DRIconfig *config,
-			 __DRIcontext *shared,
-			 unsigned num_attribs,
-			 const uint32_t *attribs,
-			 unsigned *error,
-			 void *data)
+driCreateContextAttribs(__DRIscreen *screen, int api,
+                        const __DRIconfig *config,
+                        __DRIcontext *shared,
+                        unsigned num_attribs,
+                        const uint32_t *attribs,
+                        unsigned *error,
+                        void *data)
 {
     __DRIcontext *context;
     const struct gl_config *modes = (config != NULL) ? &config->modes : NULL;
@@ -173,6 +308,7 @@ dri2CreateContextAttribs(__DRIscreen *screen, int api,
     unsigned major_version = 1;
     unsigned minor_version = 0;
     uint32_t flags = 0;
+    bool notify_reset = false;
 
     assert((num_attribs == 0) || (attribs != NULL));
 
@@ -211,6 +347,10 @@ dri2CreateContextAttribs(__DRIscreen *screen, int api,
 	case __DRI_CTX_ATTRIB_FLAGS:
 	    flags = attribs[i * 2 + 1];
 	    break;
+        case __DRI_CTX_ATTRIB_RESET_STRATEGY:
+            notify_reset = (attribs[i * 2 + 1]
+                            != __DRI_CTX_RESET_NO_NOTIFICATION);
+            break;
 	default:
 	    /* We can't create a context that satisfies the requirements of an
 	     * attribute that we don't understand.  Return failure.
@@ -267,11 +407,17 @@ dri2CreateContextAttribs(__DRIscreen *screen, int api,
        mesa_api = API_OPENGL_CORE;
     }
 
-    if ((flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE))
-        != 0) {
+    const uint32_t allowed_flags = (__DRI_CTX_FLAG_DEBUG
+                                    | __DRI_CTX_FLAG_FORWARD_COMPATIBLE
+                                    | __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS);
+    if (flags & ~allowed_flags) {
 	*error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
 	return NULL;
     }
+
+    if (!validate_context_version(screen, mesa_api,
+                                  major_version, minor_version, error))
+       return NULL;
 
     context = calloc(1, sizeof *context);
     if (!context) {
@@ -285,11 +431,19 @@ dri2CreateContextAttribs(__DRIscreen *screen, int api,
     context->driDrawablePriv = NULL;
     context->driReadablePriv = NULL;
 
-    if (!driDriverAPI.CreateContext(mesa_api, modes, context,
-				    major_version, minor_version,
-				    flags, error, shareCtx) ) {
+    if (!screen->driver->CreateContext(mesa_api, modes, context,
+                                       major_version, minor_version,
+                                       flags, notify_reset, error, shareCtx)) {
         free(context);
         return NULL;
+    }
+
+    struct gl_context *ctx = context->driverPrivate;
+    if ((flags & __DRI_CTX_FLAG_FORWARD_COMPATIBLE) != 0)
+        ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT;
+    if ((flags & __DRI_CTX_FLAG_DEBUG) != 0) {
+        ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_DEBUG_BIT;
+        ctx->Debug.DebugOutput = GL_TRUE;
     }
 
     *error = __DRI_CTX_ERROR_SUCCESS;
@@ -297,22 +451,22 @@ dri2CreateContextAttribs(__DRIscreen *screen, int api,
 }
 
 static __DRIcontext *
-dri2CreateNewContextForAPI(__DRIscreen *screen, int api,
-			   const __DRIconfig *config,
-			   __DRIcontext *shared, void *data)
+driCreateNewContextForAPI(__DRIscreen *screen, int api,
+                          const __DRIconfig *config,
+                          __DRIcontext *shared, void *data)
 {
     unsigned error;
 
-    return dri2CreateContextAttribs(screen, api, config, shared, 0, NULL,
-				    &error, data);
+    return driCreateContextAttribs(screen, api, config, shared, 0, NULL,
+                                   &error, data);
 }
 
 static __DRIcontext *
-dri2CreateNewContext(__DRIscreen *screen, const __DRIconfig *config,
-		      __DRIcontext *shared, void *data)
+driCreateNewContext(__DRIscreen *screen, const __DRIconfig *config,
+                    __DRIcontext *shared, void *data)
 {
-    return dri2CreateNewContextForAPI(screen, __DRI_API_OPENGL,
-				      config, shared, data);
+    return driCreateNewContextForAPI(screen, __DRI_API_OPENGL,
+                                     config, shared, data);
 }
 
 /**
@@ -326,7 +480,7 @@ static void
 driDestroyContext(__DRIcontext *pcp)
 {
     if (pcp) {
-	driDriverAPI.DestroyContext(pcp);
+	pcp->driScreenPriv->driver->DestroyContext(pcp);
 	free(pcp);
     }
 }
@@ -379,7 +533,7 @@ static int driBindContext(__DRIcontext *pcp,
 	dri_get_drawable(prp);
     }
 
-    return driDriverAPI.MakeCurrent(pcp, pdp, prp);
+    return pcp->driScreenPriv->driver->MakeCurrent(pcp, pdp, prp);
 }
 
 /**
@@ -418,7 +572,7 @@ static int driUnbindContext(__DRIcontext *pcp)
     if (!pdp && !prp)
 	return GL_TRUE;
 
-    driDriverAPI.UnbindContext(pcp);
+    pcp->driScreenPriv->driver->UnbindContext(pcp);
 
     assert(pdp);
     if (pdp->refcount == 0) {
@@ -437,10 +591,6 @@ static int driUnbindContext(__DRIcontext *pcp)
 	dri_put_drawable(prp);
     }
 
-    /* XXX this is disabled so that if we call SwapBuffers on an unbound
-     * window we can determine the last context bound to the window and
-     * use that context's lock. (BrianP, 2-Dec-2000)
-     */
     pcp->driDrawablePriv = NULL;
     pcp->driReadablePriv = NULL;
 
@@ -462,15 +612,15 @@ static void dri_put_drawable(__DRIdrawable *pdp)
 	if (pdp->refcount)
 	    return;
 
-	driDriverAPI.DestroyBuffer(pdp);
+	pdp->driScreenPriv->driver->DestroyBuffer(pdp);
 	free(pdp);
     }
 }
 
 static __DRIdrawable *
-dri2CreateNewDrawable(__DRIscreen *screen,
-		      const __DRIconfig *config,
-		      void *data)
+driCreateNewDrawable(__DRIscreen *screen,
+                     const __DRIconfig *config,
+                     void *data)
 {
     __DRIdrawable *pdraw;
 
@@ -489,7 +639,8 @@ dri2CreateNewDrawable(__DRIscreen *screen,
 
     dri_get_drawable(pdraw);
 
-    if (!driDriverAPI.CreateBuffer(screen, pdraw, &config->modes, GL_FALSE)) {
+    if (!screen->driver->CreateBuffer(screen, pdraw, &config->modes,
+                                      GL_FALSE)) {
        free(pdraw);
        return NULL;
     }
@@ -510,14 +661,14 @@ dri2AllocateBuffer(__DRIscreen *screen,
 		   unsigned int attachment, unsigned int format,
 		   int width, int height)
 {
-    return driDriverAPI.AllocateBuffer(screen, attachment, format,
-				       width, height);
+    return screen->driver->AllocateBuffer(screen, attachment, format,
+                                          width, height);
 }
 
 static void
 dri2ReleaseBuffer(__DRIscreen *screen, __DRIbuffer *buffer)
 {
-    driDriverAPI.ReleaseBuffer(screen, buffer);
+    screen->driver->ReleaseBuffer(screen, buffer);
 }
 
 
@@ -556,11 +707,24 @@ dri2ConfigQueryf(__DRIscreen *screen, const char *var, GLfloat *val)
 }
 
 static unsigned int
-dri2GetAPIMask(__DRIscreen *screen)
+driGetAPIMask(__DRIscreen *screen)
 {
     return screen->api_mask;
 }
 
+/**
+ * swrast swapbuffers entrypoint.
+ *
+ * DRI2 implements this inside the loader with only flushes handled by the
+ * driver.
+ */
+static void
+driSwapBuffers(__DRIdrawable *pdp)
+{
+    assert(pdp->driScreenPriv->swrast_loader);
+
+    pdp->driScreenPriv->driver->SwapBuffers(pdp);
+}
 
 /** Core interface */
 const __DRIcoreExtension driCoreExtension = {
@@ -573,8 +737,8 @@ const __DRIcoreExtension driCoreExtension = {
     .indexConfigAttrib          = driIndexConfigAttrib,
     .createNewDrawable          = NULL,
     .destroyDrawable            = driDestroyDrawable,
-    .swapBuffers                = NULL,
-    .createNewContext           = NULL,
+    .swapBuffers                = driSwapBuffers, /* swrast */
+    .createNewContext           = driCreateNewContext, /* swrast */
     .copyContext                = driCopyContext,
     .destroyContext             = driDestroyContext,
     .bindContext                = driBindContext,
@@ -583,16 +747,26 @@ const __DRIcoreExtension driCoreExtension = {
 
 /** DRI2 interface */
 const __DRIdri2Extension driDRI2Extension = {
-    .base = { __DRI_DRI2, 3 },
+    .base = { __DRI_DRI2, 4 },
 
     .createNewScreen            = dri2CreateNewScreen,
-    .createNewDrawable          = dri2CreateNewDrawable,
-    .createNewContext           = dri2CreateNewContext,
-    .getAPIMask                 = dri2GetAPIMask,
-    .createNewContextForAPI     = dri2CreateNewContextForAPI,
+    .createNewDrawable          = driCreateNewDrawable,
+    .createNewContext           = driCreateNewContext,
+    .getAPIMask                 = driGetAPIMask,
+    .createNewContextForAPI     = driCreateNewContextForAPI,
     .allocateBuffer             = dri2AllocateBuffer,
     .releaseBuffer              = dri2ReleaseBuffer,
-    .createContextAttribs       = dri2CreateContextAttribs
+    .createContextAttribs       = driCreateContextAttribs,
+    .createNewScreen2           = driCreateNewScreen2,
+};
+
+const __DRIswrastExtension driSWRastExtension = {
+    { __DRI_SWRAST, 4 },
+    driSWRastCreateNewScreen,
+    driCreateNewDrawable,
+    driCreateNewContextForAPI,
+    driCreateContextAttribs,
+    driSWRastCreateNewScreen2,
 };
 
 const __DRI2configQueryExtension dri2ConfigQueryExtension = {
@@ -627,3 +801,75 @@ driUpdateFramebufferSize(struct gl_context *ctx, const __DRIdrawable *dPriv)
       assert(fb->Height == dPriv->h);
    }
 }
+
+uint32_t
+driGLFormatToImageFormat(gl_format format)
+{
+   switch (format) {
+   case MESA_FORMAT_RGB565:
+      return __DRI_IMAGE_FORMAT_RGB565;
+   case MESA_FORMAT_XRGB8888:
+      return __DRI_IMAGE_FORMAT_XRGB8888;
+   case MESA_FORMAT_ARGB2101010:
+      return __DRI_IMAGE_FORMAT_ARGB2101010;
+   case MESA_FORMAT_XRGB2101010_UNORM:
+      return __DRI_IMAGE_FORMAT_XRGB2101010;
+   case MESA_FORMAT_ARGB8888:
+      return __DRI_IMAGE_FORMAT_ARGB8888;
+   case MESA_FORMAT_RGBA8888_REV:
+      return __DRI_IMAGE_FORMAT_ABGR8888;
+   case MESA_FORMAT_RGBX8888_REV:
+      return __DRI_IMAGE_FORMAT_XBGR8888;
+   case MESA_FORMAT_R8:
+      return __DRI_IMAGE_FORMAT_R8;
+   case MESA_FORMAT_GR88:
+      return __DRI_IMAGE_FORMAT_GR88;
+   case MESA_FORMAT_NONE:
+      return __DRI_IMAGE_FORMAT_NONE;
+   case MESA_FORMAT_SARGB8:
+      return __DRI_IMAGE_FORMAT_SARGB8;
+   default:
+      return 0;
+   }
+}
+
+gl_format
+driImageFormatToGLFormat(uint32_t image_format)
+{
+   switch (image_format) {
+   case __DRI_IMAGE_FORMAT_RGB565:
+      return MESA_FORMAT_RGB565;
+   case __DRI_IMAGE_FORMAT_XRGB8888:
+      return MESA_FORMAT_XRGB8888;
+   case __DRI_IMAGE_FORMAT_ARGB2101010:
+      return MESA_FORMAT_ARGB2101010;
+   case __DRI_IMAGE_FORMAT_XRGB2101010:
+      return MESA_FORMAT_XRGB2101010_UNORM;
+   case __DRI_IMAGE_FORMAT_ARGB8888:
+      return MESA_FORMAT_ARGB8888;
+   case __DRI_IMAGE_FORMAT_ABGR8888:
+      return MESA_FORMAT_RGBA8888_REV;
+   case __DRI_IMAGE_FORMAT_XBGR8888:
+      return MESA_FORMAT_RGBX8888_REV;
+   case __DRI_IMAGE_FORMAT_R8:
+      return MESA_FORMAT_R8;
+   case __DRI_IMAGE_FORMAT_GR88:
+      return MESA_FORMAT_GR88;
+   case __DRI_IMAGE_FORMAT_SARGB8:
+      return MESA_FORMAT_SARGB8;
+   case __DRI_IMAGE_FORMAT_NONE:
+      return MESA_FORMAT_NONE;
+   default:
+      return MESA_FORMAT_NONE;
+   }
+}
+
+/** Image driver interface */
+const __DRIimageDriverExtension driImageDriverExtension = {
+    .base = { __DRI_IMAGE_DRIVER, __DRI_IMAGE_DRIVER_VERSION },
+
+    .createNewScreen2           = driCreateNewScreen2,
+    .createNewDrawable          = driCreateNewDrawable,
+    .getAPIMask                 = driGetAPIMask,
+    .createContextAttribs       = driCreateContextAttribs,
+};

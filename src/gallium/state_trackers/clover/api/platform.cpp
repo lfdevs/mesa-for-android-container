@@ -25,47 +25,96 @@
 
 using namespace clover;
 
-static platform __platform;
+namespace {
+   platform _clover_platform;
+}
 
-PUBLIC cl_int
-clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms,
-                 cl_uint *num_platforms) {
-   if ((!num_entries && platforms) ||
-       (!num_platforms && !platforms))
+CLOVER_API cl_int
+clGetPlatformIDs(cl_uint num_entries, cl_platform_id *rd_platforms,
+                 cl_uint *rnum_platforms) {
+   if ((!num_entries && rd_platforms) ||
+       (!rnum_platforms && !rd_platforms))
       return CL_INVALID_VALUE;
 
-   if (num_platforms)
-      *num_platforms = 1;
-   if (platforms)
-      *platforms = &__platform;
+   if (rnum_platforms)
+      *rnum_platforms = 1;
+   if (rd_platforms)
+      *rd_platforms = desc(_clover_platform);
 
    return CL_SUCCESS;
 }
 
-PUBLIC cl_int
-clGetPlatformInfo(cl_platform_id platform, cl_platform_info param_name,
-                  size_t size, void *buf, size_t *size_ret) {
-   if (platform != &__platform)
-      return CL_INVALID_PLATFORM;
+cl_int
+clover::GetPlatformInfo(cl_platform_id d_platform, cl_platform_info param,
+                        size_t size, void *r_buf, size_t *r_size) try {
+   property_buffer buf { r_buf, size, r_size };
 
-   switch (param_name) {
+   obj(d_platform);
+
+   switch (param) {
    case CL_PLATFORM_PROFILE:
-      return string_property(buf, size, size_ret, "FULL_PROFILE");
+      buf.as_string() = "FULL_PROFILE";
+      break;
 
    case CL_PLATFORM_VERSION:
-      return string_property(buf, size, size_ret,
-                             "OpenCL 1.1 MESA " PACKAGE_VERSION);
+      buf.as_string() = "OpenCL 1.1 MESA " PACKAGE_VERSION;
+      break;
 
    case CL_PLATFORM_NAME:
-      return string_property(buf, size, size_ret, "Default");
+      buf.as_string() = "Default";
+      break;
 
    case CL_PLATFORM_VENDOR:
-      return string_property(buf, size, size_ret, "Mesa");
+      buf.as_string() = "Mesa";
+      break;
 
    case CL_PLATFORM_EXTENSIONS:
-      return string_property(buf, size, size_ret, "");
+      buf.as_string() = "cl_khr_icd";
+      break;
+
+   case CL_PLATFORM_ICD_SUFFIX_KHR:
+      buf.as_string() = "MESA";
+      break;
 
    default:
-      return CL_INVALID_VALUE;
+      throw error(CL_INVALID_VALUE);
    }
+
+   return CL_SUCCESS;
+
+} catch (error &e) {
+   return e.get();
+}
+
+void *
+clover::GetExtensionFunctionAddress(const char *p_name) {
+   std::string name { p_name };
+
+   if (name == "clIcdGetPlatformIDsKHR")
+      return reinterpret_cast<void *>(IcdGetPlatformIDsKHR);
+   else
+      return NULL;
+}
+
+cl_int
+clover::IcdGetPlatformIDsKHR(cl_uint num_entries, cl_platform_id *rd_platforms,
+                             cl_uint *rnum_platforms) {
+   return clGetPlatformIDs(num_entries, rd_platforms, rnum_platforms);
+}
+
+CLOVER_ICD_API cl_int
+clGetPlatformInfo(cl_platform_id d_platform, cl_platform_info param,
+                  size_t size, void *r_buf, size_t *r_size) {
+   return GetPlatformInfo(d_platform, param, size, r_buf, r_size);
+}
+
+CLOVER_ICD_API void *
+clGetExtensionFunctionAddress(const char *p_name) {
+   return GetExtensionFunctionAddress(p_name);
+}
+
+CLOVER_ICD_API cl_int
+clIcdGetPlatformIDsKHR(cl_uint num_entries, cl_platform_id *rd_platforms,
+                       cl_uint *rnum_platforms) {
+   return IcdGetPlatformIDsKHR(num_entries, rd_platforms, rnum_platforms);
 }

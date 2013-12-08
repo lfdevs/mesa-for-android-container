@@ -46,6 +46,9 @@ struct gl_context;
  */
 
 extern struct gl_array_object *
+_mesa_lookup_arrayobj(struct gl_context *ctx, GLuint id);
+
+extern struct gl_array_object *
 _mesa_new_array_object( struct gl_context *ctx, GLuint name );
 
 extern void
@@ -74,6 +77,11 @@ _mesa_initialize_array_object( struct gl_context *ctx,
 extern void
 _mesa_update_array_object_max_element(struct gl_context *ctx,
                                       struct gl_array_object *arrayObj);
+
+extern void
+_mesa_update_array_object_client_arrays(struct gl_context *ctx,
+                                        struct gl_array_object *arrayObj);
+
 
 /** Returns the bitmask of all enabled arrays in fixed function mode.
  *

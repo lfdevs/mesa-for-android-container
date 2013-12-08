@@ -36,7 +36,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include "pipe/p_video_decoder.h"
+#include "pipe/p_video_codec.h"
 
 #include "util/u_memory.h"
 #include "util/u_video.h"
@@ -76,8 +76,8 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 	template.height = align(tmpl->height / array_size, VL_MACROBLOCK_HEIGHT);
 
 	vl_video_buffer_template(&templ, &template, resource_formats[0], 1, array_size, PIPE_USAGE_STATIC, 0);
-	if (ctx->chip_class < EVERGREEN || tmpl->interlaced)
-		templ.flags = R600_RESOURCE_FLAG_TRANSFER;
+	if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced)
+		templ.bind = PIPE_BIND_LINEAR;
 	resources[0] = (struct r600_texture *)
 		pipe->screen->resource_create(pipe->screen, &templ);
 	if (!resources[0])
@@ -85,8 +85,8 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 
 	if (resource_formats[1] != PIPE_FORMAT_NONE) {
 		vl_video_buffer_template(&templ, &template, resource_formats[1], 1, array_size, PIPE_USAGE_STATIC, 1);
-		if (ctx->chip_class < EVERGREEN || tmpl->interlaced)
-			templ.flags = R600_RESOURCE_FLAG_TRANSFER;
+		if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced)
+			templ.bind = PIPE_BIND_LINEAR;
 		resources[1] = (struct r600_texture *)
 			pipe->screen->resource_create(pipe->screen, &templ);
 		if (!resources[1])
@@ -95,8 +95,8 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 
 	if (resource_formats[2] != PIPE_FORMAT_NONE) {
 		vl_video_buffer_template(&templ, &template, resource_formats[2], 1, array_size, PIPE_USAGE_STATIC, 2);
-		if (ctx->chip_class < EVERGREEN || tmpl->interlaced)
-			templ.flags = R600_RESOURCE_FLAG_TRANSFER;
+		if (ctx->b.chip_class < EVERGREEN || tmpl->interlaced)
+			templ.bind = PIPE_BIND_LINEAR;
 		resources[2] = (struct r600_texture *)
 			pipe->screen->resource_create(pipe->screen, &templ);
 		if (!resources[2])
@@ -111,14 +111,14 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 		surfaces[i] = &resources[i]->surface;
 	}
 
-	ruvd_join_surfaces(ctx->ws, templ.bind, pbs, surfaces);
+	ruvd_join_surfaces(ctx->b.ws, templ.bind, pbs, surfaces);
 
 	for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
 		if (!resources[i])
 			continue;
 
 		/* recreate the CS handle */
-		resources[i]->resource.cs_buf = ctx->ws->buffer_get_cs_handle(
+		resources[i]->resource.cs_buf = ctx->b.ws->buffer_get_cs_handle(
 			resources[i]->resource.buf);
 	}
 
@@ -156,7 +156,7 @@ static struct radeon_winsys_cs_handle* r600_uvd_set_dtb(struct ruvd_msg *msg, st
 	struct r600_texture *chroma = (struct r600_texture *)buf->resources[1];
 
 	msg->body.decode.dt_field_mode = buf->base.interlaced;
-	msg->body.decode.dt_surf_tile_config |= RUVD_NUM_BANKS(eg_num_banks(rscreen->tiling_info.num_banks));
+	msg->body.decode.dt_surf_tile_config |= RUVD_NUM_BANKS(eg_num_banks(rscreen->b.tiling_info.num_banks));
 
 	ruvd_set_dt_surfaces(msg, &luma->surface, &chroma->surface);
 
@@ -164,41 +164,8 @@ static struct radeon_winsys_cs_handle* r600_uvd_set_dtb(struct ruvd_msg *msg, st
 }
 
 /* create decoder */
-struct pipe_video_decoder *r600_uvd_create_decoder(struct pipe_context *context,
-						   enum pipe_video_profile profile,
-						   enum pipe_video_entrypoint entrypoint,
-						   enum pipe_video_chroma_format chroma_format,
-						   unsigned width, unsigned height,
-						   unsigned max_references, bool expect_chunked_decode)
+struct pipe_video_codec *r600_uvd_create_decoder(struct pipe_context *context,
+						   const struct pipe_video_codec *templat)
 {
-	struct r600_context *ctx = (struct r600_context *)context;
-
-	return ruvd_create_decoder(context, profile, entrypoint, chroma_format,
-			 	   width, height, max_references, expect_chunked_decode,
-				   ctx->ws, r600_uvd_set_dtb);
-}
-
-int r600_uvd_get_video_param(struct pipe_screen *screen,
-			     enum pipe_video_profile profile,
-			     enum pipe_video_cap param)
-{
-	struct r600_screen *rscreen = (struct r600_screen *)screen;
-
-	/* UVD 2.x limits */
-	if (rscreen->family < CHIP_PALM) {
-		enum pipe_video_codec codec = u_reduce_video_profile(profile);
-		switch (param) {
-		case PIPE_VIDEO_CAP_SUPPORTED:
-			/* no support for MPEG4 */
-	    		return codec != PIPE_VIDEO_CODEC_MPEG4;
-        	case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-        	case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
-			/* and MPEG2 only with shaders */
-	    		return codec != PIPE_VIDEO_CODEC_MPEG12;
-		default:
-			break;
-		}
-	}
-
-	return ruvd_get_video_param(screen, profile, param);
+	return ruvd_create_decoder(context, templat, r600_uvd_set_dtb);
 }

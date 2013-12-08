@@ -201,6 +201,7 @@ GLboolean r200CreateContext( gl_api api,
 			     unsigned major_version,
 			     unsigned minor_version,
 			     uint32_t flags,
+                             bool notify_reset,
 			     unsigned *error,
 			     void *sharedContextPrivate)
 {
@@ -212,23 +213,15 @@ GLboolean r200CreateContext( gl_api api,
    int i;
    int tcl_mode;
 
-   switch (api) {
-   case API_OPENGL_COMPAT:
-      if (major_version > 1 || minor_version > 3) {
-         *error = __DRI_CTX_ERROR_BAD_VERSION;
-         return GL_FALSE;
-      }
-      break;
-   case API_OPENGLES:
-      break;
-   default:
-      *error = __DRI_CTX_ERROR_BAD_API;
-      return GL_FALSE;
+   if (flags & ~__DRI_CTX_FLAG_DEBUG) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
+      return false;
    }
 
-   /* Flag filtering is handled in dri2CreateContextAttribs.
-    */
-   (void) flags;
+   if (notify_reset) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+      return false;
+   }
 
    assert(glVisual);
    assert(driContextPriv);
@@ -376,6 +369,7 @@ GLboolean r200CreateContext( gl_api api,
    ctx->Extensions.ARB_texture_env_combine = true;
    ctx->Extensions.ARB_texture_env_dot3 = true;
    ctx->Extensions.ARB_texture_env_crossbar = true;
+   ctx->Extensions.ARB_texture_mirror_clamp_to_edge = true;
    ctx->Extensions.EXT_blend_color = true;
    ctx->Extensions.EXT_blend_minmax = true;
    ctx->Extensions.EXT_packed_depth_stencil = true;

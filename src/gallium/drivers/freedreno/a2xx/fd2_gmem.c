@@ -31,6 +31,7 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 
+#include "freedreno_draw.h"
 #include "freedreno_state.h"
 #include "freedreno_resource.h"
 
@@ -55,9 +56,10 @@ static uint32_t fmt2swap(enum pipe_format format)
 /* transfer from gmem to system memory (ie. normal RAM) */
 
 static void
-emit_gmem2mem_surf(struct fd_ringbuffer *ring, uint32_t base,
+emit_gmem2mem_surf(struct fd_context *ctx, uint32_t base,
 		struct pipe_surface *psurf)
 {
+	struct fd_ringbuffer *ring = ctx->ring;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	uint32_t swap = fmt2swap(psurf->format);
 
@@ -70,8 +72,8 @@ emit_gmem2mem_surf(struct fd_ringbuffer *ring, uint32_t base,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_COPY_CONTROL));
 	OUT_RING(ring, 0x00000000);             /* RB_COPY_CONTROL */
-	OUT_RELOC(ring, rsc->bo, 0, 0);         /* RB_COPY_DEST_BASE */
-	OUT_RING(ring, rsc->pitch >> 5);        /* RB_COPY_DEST_PITCH */
+	OUT_RELOCW(ring, rsc->bo, 0, 0, 0);     /* RB_COPY_DEST_BASE */
+	OUT_RING(ring, rsc->slices[0].pitch >> 5); /* RB_COPY_DEST_PITCH */
 	OUT_RING(ring,                          /* RB_COPY_DEST_INFO */
 			A2XX_RB_COPY_DEST_INFO_FORMAT(fd2_pipe2color(psurf->format)) |
 			A2XX_RB_COPY_DEST_INFO_LINEAR |
@@ -81,19 +83,15 @@ emit_gmem2mem_surf(struct fd_ringbuffer *ring, uint32_t base,
 			A2XX_RB_COPY_DEST_INFO_WRITE_BLUE |
 			A2XX_RB_COPY_DEST_INFO_WRITE_ALPHA);
 
-	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
-	OUT_RING(ring, 0x0000000);
+	OUT_WFI (ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_A2XX_VGT_MAX_VTX_INDX));
 	OUT_RING(ring, 3);                 /* VGT_MAX_VTX_INDX */
 	OUT_RING(ring, 0);                 /* VGT_MIN_VTX_INDX */
 
-	OUT_PKT3(ring, CP_DRAW_INDX, 3);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX,
-			INDEX_SIZE_IGN, IGNORE_VISIBILITY));
-	OUT_RING(ring, 3);					/* NumIndices */
+	fd_draw(ctx, DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX, 3,
+			INDEX_SIZE_IGN, 0, 0, NULL);
 }
 
 static void
@@ -163,10 +161,10 @@ fd2_emit_tile_gmem2mem(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 			A2XX_RB_COPY_DEST_OFFSET_Y(yoff));
 
 	if (ctx->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
-		emit_gmem2mem_surf(ring, bin_w * bin_h, pfb->zsbuf);
+		emit_gmem2mem_surf(ctx, bin_w * bin_h, pfb->zsbuf);
 
 	if (ctx->resolve & FD_BUFFER_COLOR)
-		emit_gmem2mem_surf(ring, 0, pfb->cbufs[0]);
+		emit_gmem2mem_surf(ctx, 0, pfb->cbufs[0]);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_MODECONTROL));
@@ -176,9 +174,10 @@ fd2_emit_tile_gmem2mem(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 /* transfer from system memory to gmem */
 
 static void
-emit_mem2gmem_surf(struct fd_ringbuffer *ring, uint32_t base,
+emit_mem2gmem_surf(struct fd_context *ctx, uint32_t base,
 		struct pipe_surface *psurf)
 {
+	struct fd_ringbuffer *ring = ctx->ring;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	uint32_t swiz;
 
@@ -197,9 +196,9 @@ emit_mem2gmem_surf(struct fd_ringbuffer *ring, uint32_t base,
 	OUT_RING(ring, A2XX_SQ_TEX_0_CLAMP_X(SQ_TEX_WRAP) |
 			A2XX_SQ_TEX_0_CLAMP_Y(SQ_TEX_WRAP) |
 			A2XX_SQ_TEX_0_CLAMP_Z(SQ_TEX_WRAP) |
-			A2XX_SQ_TEX_0_PITCH(rsc->pitch));
+			A2XX_SQ_TEX_0_PITCH(rsc->slices[0].pitch));
 	OUT_RELOC(ring, rsc->bo, 0,
-			fd2_pipe2surface(psurf->format) | 0x800);
+			fd2_pipe2surface(psurf->format) | 0x800, 0);
 	OUT_RING(ring, A2XX_SQ_TEX_2_WIDTH(psurf->width - 1) |
 			A2XX_SQ_TEX_2_HEIGHT(psurf->height - 1));
 	OUT_RING(ring, 0x01000000 | // XXX
@@ -214,11 +213,8 @@ emit_mem2gmem_surf(struct fd_ringbuffer *ring, uint32_t base,
 	OUT_RING(ring, 3);                 /* VGT_MAX_VTX_INDX */
 	OUT_RING(ring, 0);                 /* VGT_MIN_VTX_INDX */
 
-	OUT_PKT3(ring, CP_DRAW_INDX, 3);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX,
-			INDEX_SIZE_IGN, IGNORE_VISIBILITY));
-	OUT_RING(ring, 3);					/* NumIndices */
+	fd_draw(ctx, DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX, 3,
+			INDEX_SIZE_IGN, 0, 0, NULL);
 }
 
 static void
@@ -241,7 +237,7 @@ fd2_emit_tile_mem2gmem(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 	y0 = ((float)yoff) / ((float)pfb->height);
 	y1 = ((float)yoff + bin_h) / ((float)pfb->height);
 	OUT_PKT3(ring, CP_MEM_WRITE, 9);
-	OUT_RELOC(ring, fd_resource(fd2_ctx->solid_vertexbuf)->bo, 0x60, 0);
+	OUT_RELOC(ring, fd_resource(fd2_ctx->solid_vertexbuf)->bo, 0x60, 0, 0);
 	OUT_RING(ring, fui(x0));
 	OUT_RING(ring, fui(y0));
 	OUT_RING(ring, fui(x1));
@@ -322,10 +318,10 @@ fd2_emit_tile_mem2gmem(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 	OUT_RING(ring, 0x00000000);
 
 	if (ctx->restore & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
-		emit_mem2gmem_surf(ring, bin_w * bin_h, pfb->zsbuf);
+		emit_mem2gmem_surf(ctx, bin_w * bin_h, pfb->zsbuf);
 
 	if (ctx->restore & FD_BUFFER_COLOR)
-		emit_mem2gmem_surf(ring, 0, pfb->cbufs[0]);
+		emit_mem2gmem_surf(ctx, 0, pfb->cbufs[0]);
 
 	/* TODO blob driver seems to toss in a CACHE_FLUSH after each DRAW_INDX.. */
 }
@@ -337,7 +333,7 @@ fd2_emit_tile_init(struct fd_context *ctx)
 	struct fd_ringbuffer *ring = ctx->ring;
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
-	enum pipe_format format = pfb->cbufs[0]->format;
+	enum pipe_format format = pipe_surface_format(pfb->cbufs[0]);
 	uint32_t reg;
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
@@ -358,7 +354,7 @@ fd2_emit_tile_prep(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 {
 	struct fd_ringbuffer *ring = ctx->ring;
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
-	enum pipe_format format = pfb->cbufs[0]->format;
+	enum pipe_format format = pipe_surface_format(pfb->cbufs[0]);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_INFO));
@@ -379,7 +375,7 @@ fd2_emit_tile_renderprep(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 {
 	struct fd_ringbuffer *ring = ctx->ring;
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
-	enum pipe_format format = pfb->cbufs[0]->format;
+	enum pipe_format format = pipe_surface_format(pfb->cbufs[0]);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_INFO));

@@ -26,6 +26,7 @@
  * Code to initialize the binding table entries used by transform feedback.
  */
 
+#include "main/bufferobj.h"
 #include "main/macros.h"
 #include "brw_context.h"
 #include "intel_batchbuffer.h"
@@ -48,7 +49,7 @@ gen6_update_sol_surfaces(struct brw_context *brw)
    int i;
 
    for (i = 0; i < BRW_MAX_SOL_BINDINGS; ++i) {
-      const int surf_index = SURF_INDEX_SOL_BINDING(i);
+      const int surf_index = SURF_INDEX_GEN6_SOL_BINDING(i);
       if (_mesa_is_xfb_active_and_unpaused(ctx) &&
           i < linked_xfb_info->NumOutputs) {
          unsigned buffer = linked_xfb_info->Outputs[i].OutputBuffer;
@@ -56,11 +57,11 @@ gen6_update_sol_surfaces(struct brw_context *brw)
             xfb_obj->Offset[buffer] / 4 +
             linked_xfb_info->Outputs[i].DstOffset;
          brw_update_sol_surface(
-            brw, xfb_obj->Buffers[buffer], &brw->gs.surf_offset[surf_index],
+            brw, xfb_obj->Buffers[buffer], &brw->ff_gs.surf_offset[surf_index],
             linked_xfb_info->Outputs[i].NumComponents,
             linked_xfb_info->BufferStride[buffer], buffer_offset);
       } else {
-         brw->gs.surf_offset[surf_index] = 0;
+         brw->ff_gs.surf_offset[surf_index] = 0;
       }
    }
 
@@ -101,9 +102,9 @@ brw_gs_upload_binding_table(struct brw_context *brw)
 
    /* Skip making a binding table if we don't have anything to put in it. */
    if (!has_surfaces) {
-      if (brw->gs.bind_bo_offset != 0) {
+      if (brw->ff_gs.bind_bo_offset != 0) {
 	 brw->state.dirty.brw |= BRW_NEW_GS_BINDING_TABLE;
-	 brw->gs.bind_bo_offset = 0;
+	 brw->ff_gs.bind_bo_offset = 0;
       }
       return;
    }
@@ -112,11 +113,11 @@ brw_gs_upload_binding_table(struct brw_context *brw)
     * space for the binding table.
     */
    bind = brw_state_batch(brw, AUB_TRACE_BINDING_TABLE,
-			  sizeof(uint32_t) * BRW_MAX_GS_SURFACES,
-			  32, &brw->gs.bind_bo_offset);
+			  sizeof(uint32_t) * BRW_MAX_GEN6_GS_SURFACES,
+			  32, &brw->ff_gs.bind_bo_offset);
 
    /* BRW_NEW_SURFACES */
-   memcpy(bind, brw->gs.surf_offset, BRW_MAX_GS_SURFACES * sizeof(uint32_t));
+   memcpy(bind, brw->ff_gs.surf_offset, BRW_MAX_GEN6_GS_SURFACES * sizeof(uint32_t));
 
    brw->state.dirty.brw |= BRW_NEW_GS_BINDING_TABLE;
 }
@@ -131,6 +132,42 @@ const struct brw_tracked_state gen6_gs_binding_table = {
    },
    .emit = brw_gs_upload_binding_table,
 };
+
+struct gl_transform_feedback_object *
+brw_new_transform_feedback(struct gl_context *ctx, GLuint name)
+{
+   struct brw_context *brw = brw_context(ctx);
+   struct brw_transform_feedback_object *brw_obj =
+      CALLOC_STRUCT(brw_transform_feedback_object);
+   if (!brw_obj)
+      return NULL;
+
+   _mesa_init_transform_feedback_object(&brw_obj->base, name);
+
+   brw_obj->offset_bo =
+      drm_intel_bo_alloc(brw->bufmgr, "transform feedback offsets", 16, 64);
+   brw_obj->prim_count_bo =
+      drm_intel_bo_alloc(brw->bufmgr, "xfb primitive counts", 4096, 64);
+
+   return &brw_obj->base;
+}
+
+void
+brw_delete_transform_feedback(struct gl_context *ctx,
+                              struct gl_transform_feedback_object *obj)
+{
+   struct brw_transform_feedback_object *brw_obj =
+      (struct brw_transform_feedback_object *) obj;
+
+   for (unsigned i = 0; i < Elements(obj->Buffers); i++) {
+      _mesa_reference_buffer_object(ctx, &obj->Buffers[i], NULL);
+   }
+
+   drm_intel_bo_unreference(brw_obj->offset_bo);
+   drm_intel_bo_unreference(brw_obj->prim_count_bo);
+
+   free(brw_obj);
+}
 
 void
 brw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
@@ -152,6 +189,9 @@ brw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
    unsigned max_index
       = _mesa_compute_max_transform_feedback_vertices(xfb_obj,
                                                       linked_xfb_info);
+
+   /* 3DSTATE_GS_SVB_INDEX is non-pipelined. */
+   intel_emit_post_sync_nonzero_flush(brw);
 
    /* Initialize the SVBI 0 register to zero and set the maximum index. */
    BEGIN_BATCH(4);

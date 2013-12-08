@@ -128,11 +128,11 @@ static void draw( void )
 
    info.ctx->clear(info.ctx, PIPE_CLEAR_COLOR, &clear_color, 0, 0);
 
-   info.ctx->set_fragment_sampler_views(info.ctx, 1, &linear_sv);
+   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, &linear_sv);
    set_vertices(vertices1, 4);
    util_draw_arrays(info.ctx, PIPE_PRIM_QUADS, 0, 4);
 
-   info.ctx->set_fragment_sampler_views(info.ctx, 1, &srgb_sv);
+   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, &srgb_sv);
    set_vertices(vertices2, 4);
    util_draw_arrays(info.ctx, PIPE_PRIM_QUADS, 0, 4);
 
@@ -165,7 +165,8 @@ static void init_tex( void )
       sampler = graw_util_create_simple_sampler(&info,
                                                 PIPE_TEX_WRAP_REPEAT,
                                                 PIPE_TEX_FILTER_NEAREST);
-      info.ctx->bind_fragment_sampler_states(info.ctx, 1, &sampler);
+      info.ctx->bind_sampler_states(info.ctx, PIPE_SHADER_FRAGMENT,
+                                    0, 1, &sampler);
    }
 
    /* linear sampler view */

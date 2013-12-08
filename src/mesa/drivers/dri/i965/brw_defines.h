@@ -309,6 +309,7 @@
 #define BRW_SURFACEFORMAT_R16G16B16A16_USCALED           0x094
 #define BRW_SURFACEFORMAT_R32G32_SSCALED                 0x095
 #define BRW_SURFACEFORMAT_R32G32_USCALED                 0x096
+#define BRW_SURFACEFORMAT_R32G32_FLOAT_LD                0x097
 #define BRW_SURFACEFORMAT_R32G32_SFIXED                  0x0A0
 #define BRW_SURFACEFORMAT_R64_PASSTHRU                   0x0A1
 #define BRW_SURFACEFORMAT_B8G8R8A8_UNORM                 0x0C0
@@ -691,8 +692,6 @@ enum opcode {
    BRW_OPCODE_XOR =	7,
    BRW_OPCODE_SHR =	8,
    BRW_OPCODE_SHL =	9,
-   BRW_OPCODE_RSR =	10,
-   BRW_OPCODE_RSL =	11,
    BRW_OPCODE_ASR =	12,
    BRW_OPCODE_CMP =	16,
    BRW_OPCODE_CMPN =	17,
@@ -734,13 +733,14 @@ enum opcode {
    BRW_OPCODE_FBH =	75,
    BRW_OPCODE_FBL =	76,
    BRW_OPCODE_CBIT =	77,
+   BRW_OPCODE_ADDC =	78,
+   BRW_OPCODE_SUBB =	79,
    BRW_OPCODE_SAD2 =	80,
    BRW_OPCODE_SADA2 =	81,
    BRW_OPCODE_DP4 =	84,
    BRW_OPCODE_DPH =	85,
    BRW_OPCODE_DP3 =	86,
    BRW_OPCODE_DP2 =	87,
-   BRW_OPCODE_DPA2 =	88,
    BRW_OPCODE_LINE =	89,
    BRW_OPCODE_PLN =	90,
    BRW_OPCODE_MAD =	91,
@@ -770,8 +770,17 @@ enum opcode {
    FS_OPCODE_TXB,
    SHADER_OPCODE_TXF_MS,
    SHADER_OPCODE_LOD,
+   SHADER_OPCODE_TG4,
+   SHADER_OPCODE_TG4_OFFSET,
 
    SHADER_OPCODE_SHADER_TIME_ADD,
+
+   SHADER_OPCODE_UNTYPED_ATOMIC,
+   SHADER_OPCODE_UNTYPED_SURFACE_READ,
+
+   SHADER_OPCODE_GEN4_SCRATCH_READ,
+   SHADER_OPCODE_GEN4_SCRATCH_WRITE,
+   SHADER_OPCODE_GEN7_SCRATCH_READ,
 
    FS_OPCODE_DDX,
    FS_OPCODE_DDY,
@@ -779,14 +788,14 @@ enum opcode {
    FS_OPCODE_PIXEL_Y,
    FS_OPCODE_CINTERP,
    FS_OPCODE_LINTERP,
-   FS_OPCODE_SPILL,
-   FS_OPCODE_UNSPILL,
    FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD,
    FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GEN7,
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD,
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7,
    FS_OPCODE_MOV_DISPATCH_TO_FLAGS,
    FS_OPCODE_DISCARD_JUMP,
+   FS_OPCODE_SET_OMASK,
+   FS_OPCODE_SET_SAMPLE_ID,
    FS_OPCODE_SET_SIMD4X2_OFFSET,
    FS_OPCODE_PACK_HALF_2x16_SPLIT,
    FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X,
@@ -794,10 +803,86 @@ enum opcode {
    FS_OPCODE_PLACEHOLDER_HALT,
 
    VS_OPCODE_URB_WRITE,
-   VS_OPCODE_SCRATCH_READ,
-   VS_OPCODE_SCRATCH_WRITE,
    VS_OPCODE_PULL_CONSTANT_LOAD,
    VS_OPCODE_PULL_CONSTANT_LOAD_GEN7,
+   VS_OPCODE_UNPACK_FLAGS_SIMD4X2,
+
+   /**
+    * Write geometry shader output data to the URB.
+    *
+    * Unlike VS_OPCODE_URB_WRITE, this opcode doesn't do an implied move from
+    * R0 to the first MRF.  This allows the geometry shader to override the
+    * "Slot {0,1} Offset" fields in the message header.
+    */
+   GS_OPCODE_URB_WRITE,
+
+   /**
+    * Terminate the geometry shader thread by doing an empty URB write.
+    *
+    * This opcode doesn't do an implied move from R0 to the first MRF.  This
+    * allows the geometry shader to override the "GS Number of Output Vertices
+    * for Slot {0,1}" fields in the message header.
+    */
+   GS_OPCODE_THREAD_END,
+
+   /**
+    * Set the "Slot {0,1} Offset" fields of a URB_WRITE message header.
+    *
+    * - dst is the MRF containing the message header.
+    *
+    * - src0.x indicates which portion of the URB should be written to (e.g. a
+    *   vertex number)
+    *
+    * - src1 is an immediate multiplier which will be applied to src0
+    *   (e.g. the size of a single vertex in the URB).
+    *
+    * Note: the hardware will apply this offset *in addition to* the offset in
+    * vec4_instruction::offset.
+    */
+   GS_OPCODE_SET_WRITE_OFFSET,
+
+   /**
+    * Set the "GS Number of Output Vertices for Slot {0,1}" fields of a
+    * URB_WRITE message header.
+    *
+    * - dst is the MRF containing the message header.
+    *
+    * - src0.x is the vertex count.  The upper 16 bits will be ignored.
+    */
+   GS_OPCODE_SET_VERTEX_COUNT,
+
+   /**
+    * Set DWORD 2 of dst to the immediate value in src.  Used by geometry
+    * shaders to initialize DWORD 2 of R0, which needs to be 0 in order for
+    * scratch reads and writes to operate correctly.
+    */
+   GS_OPCODE_SET_DWORD_2_IMMED,
+
+   /**
+    * Prepare the dst register for storage in the "Channel Mask" fields of a
+    * URB_WRITE message header.
+    *
+    * DWORD 4 of dst is shifted left by 4 bits, so that later,
+    * GS_OPCODE_SET_CHANNEL_MASKS can OR DWORDs 0 and 4 together to form the
+    * final channel mask.
+    *
+    * Note: since GS_OPCODE_SET_CHANNEL_MASKS ORs DWORDs 0 and 4 together to
+    * form the final channel mask, DWORDs 0 and 4 of the dst register must not
+    * have any extraneous bits set prior to execution of this opcode (that is,
+    * they should be in the range 0x0 to 0xf).
+    */
+   GS_OPCODE_PREPARE_CHANNEL_MASKS,
+
+   /**
+    * Set the "Channel Mask" fields of a URB_WRITE message header.
+    *
+    * - dst is the MRF containing the message header.
+    *
+    * - src.x is the channel mask, as prepared by
+    *   GS_OPCODE_PREPARE_CHANNEL_MASKS.  DWORDs 0 and 4 are OR'ed together to
+    *   form the final channel mask.
+    */
+   GS_OPCODE_SET_CHANNEL_MASKS,
 };
 
 #define BRW_PREDICATE_NONE             0
@@ -967,8 +1052,12 @@ enum brw_message_target {
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_BIAS_COMPARE 5
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_LOD_COMPARE  6
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_LD           7
+#define GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4      8
 #define GEN5_SAMPLER_MESSAGE_LOD                 9
 #define GEN5_SAMPLER_MESSAGE_SAMPLE_RESINFO      10
+#define GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_C    16
+#define GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO   17
+#define GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C 18
 #define HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE 20
 #define GEN7_SAMPLER_MESSAGE_SAMPLE_LD_MCS       29
 #define GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS       30
@@ -1055,6 +1144,12 @@ enum brw_message_target {
 #define GEN7_DATAPORT_DC_BYTE_SCATTERED_WRITE                       12
 #define GEN7_DATAPORT_DC_UNTYPED_SURFACE_WRITE                      13
 
+#define GEN7_DATAPORT_SCRATCH_READ                            ((1 << 18) | \
+                                                               (0 << 17))
+#define GEN7_DATAPORT_SCRATCH_WRITE                           ((1 << 18) | \
+                                                               (1 << 17))
+#define GEN7_DATAPORT_SCRATCH_NUM_REGS_SHIFT                        12
+
 /* HSW */
 #define HSW_DATAPORT_DC_PORT0_OWORD_BLOCK_READ                      0
 #define HSW_DATAPORT_DC_PORT0_UNALIGNED_OWORD_BLOCK_READ            1
@@ -1123,7 +1218,8 @@ enum brw_message_target {
 #define BRW_MATH_DATA_VECTOR  0
 #define BRW_MATH_DATA_SCALAR  1
 
-#define BRW_URB_OPCODE_WRITE  0
+#define BRW_URB_OPCODE_WRITE_HWORD  0
+#define BRW_URB_OPCODE_WRITE_OWORD  1
 
 #define BRW_URB_SWIZZLE_NONE          0
 #define BRW_URB_SWIZZLE_INTERLEAVE    1
@@ -1231,7 +1327,13 @@ enum brw_message_target {
 # define GEN7_URB_ENTRY_SIZE_SHIFT                      16
 # define GEN7_URB_STARTING_ADDRESS_SHIFT                25
 
+/* "GS URB Entry Allocation Size" is a U9-1 field, so the maximum gs_size
+ * is 2^9, or 512.  It's counted in multiples of 64 bytes.
+ */
+#define GEN7_MAX_GS_URB_ENTRY_SIZE_BYTES		(512*64)
+
 #define _3DSTATE_PUSH_CONSTANT_ALLOC_VS         0x7912 /* GEN7+ */
+#define _3DSTATE_PUSH_CONSTANT_ALLOC_GS         0x7915 /* GEN7+ */
 #define _3DSTATE_PUSH_CONSTANT_ALLOC_PS         0x7916 /* GEN7+ */
 # define GEN7_PUSH_CONSTANT_BUFFER_OFFSET_SHIFT         16
 
@@ -1273,17 +1375,30 @@ enum brw_message_target {
 # define GEN6_GS_FLOATING_POINT_MODE_IEEE_754		(0 << 16)
 # define GEN6_GS_FLOATING_POINT_MODE_ALT		(1 << 16)
 /* DW4 */
+# define GEN7_GS_OUTPUT_VERTEX_SIZE_SHIFT		23
+# define GEN7_GS_OUTPUT_TOPOLOGY_SHIFT			17
 # define GEN6_GS_URB_READ_LENGTH_SHIFT			11
 # define GEN7_GS_INCLUDE_VERTEX_HANDLES		        (1 << 10)
 # define GEN6_GS_URB_ENTRY_READ_OFFSET_SHIFT		4
 # define GEN6_GS_DISPATCH_START_GRF_SHIFT		0
 /* DW5 */
 # define GEN6_GS_MAX_THREADS_SHIFT			25
+# define HSW_GS_MAX_THREADS_SHIFT			24
+# define IVB_GS_CONTROL_DATA_FORMAT_SHIFT		24
+# define GEN7_GS_CONTROL_DATA_FORMAT_GSCTL_CUT		0
+# define GEN7_GS_CONTROL_DATA_FORMAT_GSCTL_SID		1
+# define GEN7_GS_CONTROL_DATA_HEADER_SIZE_SHIFT		20
+# define GEN7_GS_DISPATCH_MODE_SINGLE			(0 << 11)
+# define GEN7_GS_DISPATCH_MODE_DUAL_INSTANCE		(1 << 11)
+# define GEN7_GS_DISPATCH_MODE_DUAL_OBJECT		(2 << 11)
 # define GEN6_GS_STATISTICS_ENABLE			(1 << 10)
 # define GEN6_GS_SO_STATISTICS_ENABLE			(1 << 9)
 # define GEN6_GS_RENDERING_ENABLE			(1 << 8)
+# define GEN7_GS_INCLUDE_PRIMITIVE_ID			(1 << 4)
+# define GEN7_GS_REORDER_TRAILING			(1 << 2)
 # define GEN7_GS_ENABLE					(1 << 0)
 /* DW6 */
+# define HSW_GS_CONTROL_DATA_FORMAT_SHIFT		31
 # define GEN6_GS_REORDER				(1 << 30)
 # define GEN6_GS_DISCARD_ADJACENCY			(1 << 29)
 # define GEN6_GS_SVBI_PAYLOAD_ENABLE			(1 << 28)
@@ -1294,6 +1409,11 @@ enum brw_message_target {
 
 # define BRW_GS_EDGE_INDICATOR_0			(1 << 8)
 # define BRW_GS_EDGE_INDICATOR_1			(1 << 9)
+
+/* 3DSTATE_GS "Output Vertex Size" has an effective maximum of 62.  It's
+ * counted in multiples of 16 bytes.
+ */
+#define GEN7_MAX_GS_OUTPUT_VERTEX_SIZE_BYTES		(62*16)
 
 #define _3DSTATE_HS                             0x781B /* GEN7+ */
 #define _3DSTATE_TE                             0x781C /* GEN7+ */
@@ -1402,6 +1522,10 @@ enum brw_message_target {
 # define ATTRIBUTE_0_OVERRIDE_Y				(1 << 13)
 # define ATTRIBUTE_0_OVERRIDE_X				(1 << 12)
 # define ATTRIBUTE_0_CONST_SOURCE_SHIFT			9
+#  define ATTRIBUTE_CONST_0000				0
+#  define ATTRIBUTE_CONST_0001_FLOAT			1
+#  define ATTRIBUTE_CONST_1111_FLOAT			2
+#  define ATTRIBUTE_CONST_PRIM_ID			3
 # define ATTRIBUTE_0_SWIZZLE_SHIFT			6
 # define ATTRIBUTE_0_SOURCE_SHIFT			0
 
@@ -1718,6 +1842,15 @@ enum brw_wm_barycentric_interp_mode {
 
 #define CMD_MI_FLUSH                  0x0200
 
+#define GEN5_MI_REPORT_PERF_COUNT ((0x26 << 23) | (3 - 2))
+/* DW0 */
+# define GEN5_MI_COUNTER_SET_0      (0 << 6)
+# define GEN5_MI_COUNTER_SET_1      (1 << 6)
+/* DW1 */
+# define MI_COUNTER_ADDRESS_GTT     (1 << 0)
+/* DW2: a user-defined report ID (written to the buffer but can be anything) */
+
+#define GEN6_MI_REPORT_PERF_COUNT ((0x28 << 23) | (3 - 2))
 
 /* Bitfields for the URB_WRITE message, DW2 of message header: */
 #define URB_WRITE_PRIM_END		0x1

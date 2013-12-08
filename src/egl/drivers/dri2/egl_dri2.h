@@ -37,7 +37,6 @@
 
 #ifdef HAVE_WAYLAND_PLATFORM
 #include <wayland-client.h>
-#include "wayland-drm.h"
 #include "wayland-egl-priv.h"
 #endif
 
@@ -118,7 +117,8 @@ struct dri2_egl_display
 
    __DRIdri2LoaderExtension    dri2_loader_extension;
    __DRIswrastLoaderExtension  swrast_loader_extension;
-   const __DRIextension     *extensions[4];
+   const __DRIextension     *extensions[5];
+   const __DRIextension    **driver_extensions;
 
 #ifdef HAVE_X11_PLATFORM
    xcb_connection_t         *conn;
@@ -189,7 +189,6 @@ struct dri2_egl_surface
 #ifdef HAVE_WAYLAND_PLATFORM
       struct wl_buffer   *wl_buffer;
       __DRIimage         *dri_image;
-      int                 pitch, name;
 #endif
 #ifdef HAVE_DRM_PLATFORM
       struct gbm_bo       *bo;
@@ -247,7 +246,7 @@ dri2_lookup_egl_image(__DRIscreen *screen, void *image, void *data);
 
 struct dri2_egl_config *
 dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
-		int depth, EGLint surface_type, const EGLint *attr_list,
+		EGLint surface_type, const EGLint *attr_list,
 		const unsigned int *rgba_masks);
 
 _EGLImage *

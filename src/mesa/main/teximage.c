@@ -661,22 +661,29 @@ _mesa_delete_texture_image(struct gl_context *ctx,
 GLboolean
 _mesa_is_proxy_texture(GLenum target)
 {
+   unsigned i;
+   static const GLenum targets[] = {
+      GL_PROXY_TEXTURE_1D,
+      GL_PROXY_TEXTURE_2D,
+      GL_PROXY_TEXTURE_3D,
+      GL_PROXY_TEXTURE_CUBE_MAP,
+      GL_PROXY_TEXTURE_RECTANGLE,
+      GL_PROXY_TEXTURE_1D_ARRAY,
+      GL_PROXY_TEXTURE_2D_ARRAY,
+      GL_PROXY_TEXTURE_CUBE_MAP_ARRAY,
+      GL_PROXY_TEXTURE_2D_MULTISAMPLE,
+      GL_PROXY_TEXTURE_2D_MULTISAMPLE_ARRAY
+   };
    /*
-    * NUM_TEXTURE_TARGETS should match number of terms below, except there's no
+    * NUM_TEXTURE_TARGETS should match number of terms above, except there's no
     * proxy for GL_TEXTURE_BUFFER and GL_TEXTURE_EXTERNAL_OES.
     */
-   assert(NUM_TEXTURE_TARGETS == 10 + 2);
+   STATIC_ASSERT(NUM_TEXTURE_TARGETS == Elements(targets) + 2);
 
-   return (target == GL_PROXY_TEXTURE_1D ||
-           target == GL_PROXY_TEXTURE_2D ||
-           target == GL_PROXY_TEXTURE_3D ||
-           target == GL_PROXY_TEXTURE_CUBE_MAP_ARB ||
-           target == GL_PROXY_TEXTURE_RECTANGLE_NV ||
-           target == GL_PROXY_TEXTURE_1D_ARRAY_EXT ||
-           target == GL_PROXY_TEXTURE_2D_ARRAY_EXT ||
-           target == GL_PROXY_TEXTURE_CUBE_MAP_ARRAY ||
-           target == GL_PROXY_TEXTURE_2D_MULTISAMPLE ||
-           target == GL_PROXY_TEXTURE_2D_MULTISAMPLE_ARRAY);
+   for (i = 0; i < Elements(targets); ++i)
+      if (target == targets[i])
+         return GL_TRUE;
+   return GL_FALSE;
 }
 
 
@@ -3139,7 +3146,7 @@ teximage(struct gl_context *ctx, GLboolean compressed, GLuint dims,
 
             _mesa_update_fbo_texture(ctx, texObj, face, level);
 
-            _mesa_dirty_texobj(ctx, texObj, GL_TRUE);
+            _mesa_dirty_texobj(ctx, texObj);
          }
       }
       _mesa_unlock_texture(ctx, texObj);
@@ -3258,7 +3265,7 @@ _mesa_EGLImageTargetTexture2DOES (GLenum target, GLeglImageOES image)
       ctx->Driver.EGLImageTargetTexture2D(ctx, target,
 					  texObj, texImage, image);
 
-      _mesa_dirty_texobj(ctx, texObj, GL_TRUE);
+      _mesa_dirty_texobj(ctx, texObj);
    }
    _mesa_unlock_texture(ctx, texObj);
 
@@ -3529,7 +3536,7 @@ copyteximage(struct gl_context *ctx, GLuint dims,
 
          _mesa_update_fbo_texture(ctx, texObj, face, level);
 
-         _mesa_dirty_texobj(ctx, texObj, GL_TRUE);
+         _mesa_dirty_texobj(ctx, texObj);
       }
    }
    _mesa_unlock_texture(ctx, texObj);
@@ -4348,7 +4355,7 @@ teximagemultisample(GLuint dims, GLenum target, GLsizei samples,
 
 void GLAPIENTRY
 _mesa_TexImage2DMultisample(GLenum target, GLsizei samples,
-                            GLint internalformat, GLsizei width,
+                            GLenum internalformat, GLsizei width,
                             GLsizei height, GLboolean fixedsamplelocations)
 {
    teximagemultisample(2, target, samples, internalformat,
@@ -4359,7 +4366,7 @@ _mesa_TexImage2DMultisample(GLenum target, GLsizei samples,
 
 void GLAPIENTRY
 _mesa_TexImage3DMultisample(GLenum target, GLsizei samples,
-                            GLint internalformat, GLsizei width,
+                            GLenum internalformat, GLsizei width,
                             GLsizei height, GLsizei depth,
                             GLboolean fixedsamplelocations)
 {

@@ -100,7 +100,7 @@ void vbo_exec_invalidate_state( struct gl_context *ctx, GLuint new_state )
    }
 
    if (new_state & _NEW_EVAL)
-      exec->eval.recalculate_maps = 1;
+      exec->eval.recalculate_maps = GL_TRUE;
 
    _ae_invalidate_state(ctx, new_state);
 }
@@ -148,6 +148,18 @@ vbo_count_tessellated_primitives(GLenum mode, GLuint count,
       break;
    case GL_QUADS:
       num_primitives = (count / 4) * 2;
+      break;
+   case GL_LINES_ADJACENCY:
+      num_primitives = count / 4;
+      break;
+   case GL_LINE_STRIP_ADJACENCY:
+      num_primitives = count >= 4 ? count - 3 : 0;
+      break;
+   case GL_TRIANGLES_ADJACENCY:
+      num_primitives = count / 6;
+      break;
+   case GL_TRIANGLE_STRIP_ADJACENCY:
+      num_primitives = count >= 6 ? (count - 4) / 2 : 0;
       break;
    default:
       assert(!"Unexpected primitive type in count_tessellated_primitives");

@@ -37,6 +37,7 @@
 #include "pipe/p_defines.h"
 #include "draw_private.h"
 #include "draw_pipe.h"
+#include "draw_fs.h"
 
 
 struct unfilled_stage {
@@ -47,6 +48,8 @@ struct unfilled_stage {
     * and PIPE_POLYGON_MODE_POINT,
     */
    unsigned mode[2];
+
+   int face_slot;
 };
 
 
@@ -55,8 +58,33 @@ static INLINE struct unfilled_stage *unfilled_stage( struct draw_stage *stage )
    return (struct unfilled_stage *)stage;
 }
 
+static void
+inject_front_face_info(struct draw_stage *stage,
+                       struct prim_header *header)
+{
+   struct unfilled_stage *unfilled = unfilled_stage(stage);
+   unsigned ccw = header->det < 0.0;
+   boolean is_front_face = (
+      (stage->draw->rasterizer->front_ccw && ccw) ||
+      (!stage->draw->rasterizer->front_ccw && !ccw));
+   int slot = unfilled->face_slot;
+   unsigned i;
 
+   /* In case the backend doesn't care about it */
+   if (slot < 0) {
+      return;
+   }
 
+   for (i = 0; i < 3; ++i) {
+      struct vertex_header *v = header->v[i];
+      v->data[slot][0] = is_front_face;
+      v->data[slot][1] = is_front_face;
+      v->data[slot][2] = is_front_face;
+      v->data[slot][3] = is_front_face;
+   }
+}
+
+   
 static void point( struct draw_stage *stage,
 		   struct vertex_header *v0 )
 {
@@ -83,6 +111,8 @@ static void points( struct draw_stage *stage,
    struct vertex_header *v1 = header->v[1];
    struct vertex_header *v2 = header->v[2];
 
+   inject_front_face_info(stage, header);
+
    if ((header->flags & DRAW_PIPE_EDGE_FLAG_0) && v0->edgeflag) point( stage, v0 );
    if ((header->flags & DRAW_PIPE_EDGE_FLAG_1) && v1->edgeflag) point( stage, v1 );
    if ((header->flags & DRAW_PIPE_EDGE_FLAG_2) && v2->edgeflag) point( stage, v2 );
@@ -98,6 +128,8 @@ static void lines( struct draw_stage *stage,
 
    if (header->flags & DRAW_PIPE_RESET_STIPPLE)
       stage->next->reset_stipple_counter( stage->next );
+
+   inject_front_face_info(stage, header);
 
    if ((header->flags & DRAW_PIPE_EDGE_FLAG_2) && v2->edgeflag) line( stage, v2, v0 );
    if ((header->flags & DRAW_PIPE_EDGE_FLAG_0) && v0->edgeflag) line( stage, v0, v1 );
@@ -192,6 +224,29 @@ static void unfilled_destroy( struct draw_stage *stage )
    FREE( stage );
 }
 
+/*
+ * Try to allocate an output slot which we can use
+ * to preserve the front face information.
+ */
+void
+draw_unfilled_prepare_outputs( struct draw_context *draw,
+                               struct draw_stage *stage )
+{
+   struct unfilled_stage *unfilled = unfilled_stage(stage);
+   const struct pipe_rasterizer_state *rast = draw ? draw->rasterizer : 0;
+   boolean is_unfilled = (rast &&
+                          (rast->fill_front != PIPE_POLYGON_MODE_FILL ||
+                           rast->fill_back != PIPE_POLYGON_MODE_FILL));
+   const struct draw_fragment_shader *fs = draw ? draw->fs.fragment_shader : 0;
+
+   if (is_unfilled && fs && fs->info.uses_frontface)  {
+      unfilled->face_slot = draw_alloc_extra_vertex_attrib(
+         stage->draw, TGSI_SEMANTIC_FACE, 0);
+   } else {
+      unfilled->face_slot = -1;
+   }
+}
+
 
 /**
  * Create unfilled triangle stage.
@@ -212,6 +267,8 @@ struct draw_stage *draw_unfilled_stage( struct draw_context *draw )
    unfilled->stage.flush = unfilled_flush;
    unfilled->stage.reset_stipple_counter = unfilled_reset_stipple_counter;
    unfilled->stage.destroy = unfilled_destroy;
+
+   unfilled->face_slot = -1;
 
    if (!draw_alloc_temp_verts( &unfilled->stage, 0 ))
       goto fail;

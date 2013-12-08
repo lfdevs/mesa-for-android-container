@@ -252,7 +252,6 @@ do_triangle_ccw(struct lp_setup_context *setup,
                 const float (*v2)[4],
                 boolean frontfacing )
 {
-   struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
    struct lp_scene *scene = setup->scene;
    const struct lp_setup_variant_key *key = &setup->setup.variant->key;
    struct lp_rast_triangle *tri;
@@ -339,10 +338,6 @@ do_triangle_ccw(struct lp_setup_context *setup,
 #endif
 
    LP_COUNT(nr_tris);
-
-   if (lp_context->active_statistics_queries) {
-      lp_context->pipeline_statistics.c_primitives++;
-   }
 
    /* Setup parameter interpolants:
     */
@@ -802,7 +797,6 @@ static void retry_triangle_ccw( struct lp_setup_context *setup,
    }
 }
 
-
 /**
  * Calculate fixed position data for a triangle
  */
@@ -908,7 +902,7 @@ subdiv_tri(struct lp_setup_context *setup,
    unsigned n = setup->fs.current.variant->shader->info.base.num_inputs + 1;
    const struct lp_shader_input *inputs =
       setup->fs.current.variant->shader->inputs;
-   float vmid[PIPE_MAX_ATTRIBS][4];
+   PIPE_ALIGN_VAR(LP_MIN_VECTOR_ALIGN) float vmid[PIPE_MAX_ATTRIBS][4];
    const float (*vm)[4] = (const float (*)[4]) vmid;
    unsigned i;
    float w0, w1, wm;
@@ -994,7 +988,7 @@ check_subdivide_triangle(struct lp_setup_context *setup,
                          const float (*v2)[4],
                          triangle_func_t tri)
 {
-   const float maxLen = 2048.0f;  /* longest permissible edge, in pixels */
+   const float maxLen = (float) MAX_FIXED_LENGTH;  /* longest permissible edge, in pixels */
    float dx10, dy10, len10;
    float dx21, dy21, len21;
    float dx02, dy02, len02;
@@ -1101,10 +1095,16 @@ static void triangle_both( struct lp_setup_context *setup,
 			   const float (*v2)[4] )
 {
    struct fixed_position position;
+   struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
 
    if (setup->subdivide_large_triangles &&
        check_subdivide_triangle(setup, v0, v1, v2, triangle_both))
       return;
+
+   if (lp_context->active_statistics_queries &&
+       !llvmpipe_rasterization_disabled(lp_context)) {
+      lp_context->pipeline_statistics.c_primitives++;
+   }
 
    calc_fixed_position(setup, &position, v0, v1, v2);
 

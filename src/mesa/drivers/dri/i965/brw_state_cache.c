@@ -50,6 +50,7 @@
 #include "brw_vs.h"
 #include "brw_wm.h"
 #include "brw_vs.h"
+#include "brw_vec4_gs.h"
 
 #define FILE_DEBUG_FLAG DEBUG_STATE
 
@@ -214,9 +215,7 @@ brw_try_upload_using_copy(struct brw_cache *cache,
 	 }
 
          if (cache->aux_compare[result_item->cache_id]) {
-            if (!cache->aux_compare[result_item->cache_id](item_aux, aux,
-                                                           item->aux_size,
-                                                           item->key))
+            if (!cache->aux_compare[result_item->cache_id](item_aux, aux))
                continue;
          } else if (memcmp(item_aux, aux, item->aux_size) != 0) {
 	    continue;
@@ -341,8 +340,10 @@ brw_init_caches(struct brw_context *brw)
 				  4096, 64);
 
    cache->aux_compare[BRW_VS_PROG] = brw_vs_prog_data_compare;
+   cache->aux_compare[BRW_GS_PROG] = brw_gs_prog_data_compare;
    cache->aux_compare[BRW_WM_PROG] = brw_wm_prog_data_compare;
    cache->aux_free[BRW_VS_PROG] = brw_vs_prog_data_free;
+   cache->aux_free[BRW_GS_PROG] = brw_gs_prog_data_free;
    cache->aux_free[BRW_WM_PROG] = brw_wm_prog_data_free;
 }
 

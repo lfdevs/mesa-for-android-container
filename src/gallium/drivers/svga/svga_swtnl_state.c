@@ -121,11 +121,17 @@ update_swtnl_draw( struct svga_context *svga,
                                 &svga->curr.rast->templ,
                                 (void *) svga->curr.rast);
 
+   /* Tell the draw module how deep the Z/depth buffer is.
+    *
+    * If no depth buffer is bound, send the utility function the
+    * format for no bound depth (PIPE_FORMAT_NONE).
+    */
    if (dirty & SVGA_NEW_FRAME_BUFFER)
-      draw_set_mrd(svga->swtnl.draw, 
-                   svga->curr.depthscale);
+      draw_set_zs_format(svga->swtnl.draw, 
+         (svga->curr.framebuffer.zsbuf) ?
+             svga->curr.framebuffer.zsbuf->format : PIPE_FORMAT_NONE);
 
-   return 0;
+   return PIPE_OK;
 }
 
 
@@ -162,6 +168,7 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
    memset(vinfo, 0, sizeof(*vinfo));
    memset(vdecl, 0, sizeof(vdecl));
 
+   draw_prepare_shader_outputs(draw);
    /* always add position */
    src = draw_find_shader_output(draw, TGSI_SEMANTIC_POSITION, 0);
    draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_LINEAR, src);
@@ -222,12 +229,12 @@ svga_swtnl_update_vdecl( struct svga_context *svga )
       vdecl[i].array.stride = offset;
 
    if (memcmp(svga_render->vdecl, vdecl, sizeof(vdecl)) == 0)
-      return 0;
+      return PIPE_OK;
 
    memcpy(svga_render->vdecl, vdecl, sizeof(vdecl));
    svga->swtnl.new_vdecl = TRUE;
 
-   return 0;
+   return PIPE_OK;
 }
 
 

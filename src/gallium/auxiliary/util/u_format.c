@@ -34,9 +34,9 @@
 
 #include "u_math.h"
 #include "u_memory.h"
-#include "u_rect.h"
 #include "u_format.h"
 #include "u_format_s3tc.h"
+#include "u_surface.h"
 
 #include "pipe/p_defines.h"
 
@@ -205,6 +205,43 @@ util_format_is_supported(enum pipe_format format, unsigned bind)
 #endif
 
    return TRUE;
+}
+
+
+/**
+ * Calculates the MRD for the depth format. MRD is used in depth bias
+ * for UNORM and unbound depth buffers. When the depth buffer is floating
+ * point, the depth bias calculation does not use the MRD. However, the
+ * default MRD will be 1.0 / ((1 << 24) - 1).
+ */
+double
+util_get_depth_format_mrd(const struct util_format_description *desc)
+{
+   /*
+    * Depth buffer formats without a depth component OR scenarios
+    * without a bound depth buffer default to D24.
+    */
+   double mrd = 1.0 / ((1 << 24) - 1);
+   unsigned depth_channel;
+
+   assert(desc);
+
+   /*
+    * Some depth formats do not store the depth component in the first
+    * channel, detect the format and adjust the depth channel. Get the
+    * swizzled depth component channel.
+    */
+   depth_channel = desc->swizzle[0];
+
+   if (desc->channel[depth_channel].type == UTIL_FORMAT_TYPE_UNSIGNED &&
+       desc->channel[depth_channel].normalized) {
+      int depth_bits;
+
+      depth_bits = desc->channel[depth_channel].size;
+      mrd = 1.0 / ((1ULL << depth_bits) - 1);
+   }
+
+   return mrd;
 }
 
 

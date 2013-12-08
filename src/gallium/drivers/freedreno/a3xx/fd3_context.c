@@ -40,7 +40,18 @@
 static void
 fd3_context_destroy(struct pipe_context *pctx)
 {
+	struct fd3_context *fd3_ctx = fd3_context(fd_context(pctx));
+
 	fd3_prog_fini(pctx);
+
+	fd_bo_del(fd3_ctx->vs_pvt_mem);
+	fd_bo_del(fd3_ctx->fs_pvt_mem);
+	fd_bo_del(fd3_ctx->vsc_size_mem);
+	fd_bo_del(fd3_ctx->vsc_pipe_mem);
+
+	pipe_resource_reference(&fd3_ctx->solid_vbuf, NULL);
+	pipe_resource_reference(&fd3_ctx->blit_texcoord_vbuf, NULL);
+
 	fd_context_destroy(pctx);
 }
 
@@ -71,6 +82,16 @@ create_blit_texcoord_vertexbuf(struct pipe_context *pctx)
 	return prsc;
 }
 
+static const uint8_t primtypes[PIPE_PRIM_MAX] = {
+		[PIPE_PRIM_POINTS]         = DI_PT_POINTLIST_A3XX,
+		[PIPE_PRIM_LINES]          = DI_PT_LINELIST,
+		[PIPE_PRIM_LINE_STRIP]     = DI_PT_LINESTRIP,
+		[PIPE_PRIM_LINE_LOOP]      = DI_PT_LINELOOP,
+		[PIPE_PRIM_TRIANGLES]      = DI_PT_TRILIST,
+		[PIPE_PRIM_TRIANGLE_STRIP] = DI_PT_TRISTRIP,
+		[PIPE_PRIM_TRIANGLE_FAN]   = DI_PT_TRIFAN,
+};
+
 struct pipe_context *
 fd3_context_create(struct pipe_screen *pscreen, void *priv)
 {
@@ -95,7 +116,7 @@ fd3_context_create(struct pipe_screen *pscreen, void *priv)
 	fd3_texture_init(pctx);
 	fd3_prog_init(pctx);
 
-	pctx = fd_context_init(&fd3_ctx->base, pscreen, priv);
+	pctx = fd_context_init(&fd3_ctx->base, pscreen, primtypes, priv);
 	if (!pctx)
 		return NULL;
 

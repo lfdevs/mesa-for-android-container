@@ -48,6 +48,7 @@ extern "C" {
 
 
 #include <math.h>
+#include <float.h>
 #include <stdarg.h>
 
 #ifdef PIPE_OS_UNIX
@@ -133,6 +134,9 @@ roundf(float x)
    return x >= 0.0f ? floorf(x + 0.5f) : ceilf(x - 0.5f);
 }
 
+#define INFINITY (DBL_MAX + DBL_MAX)
+#define NAN (INFINITY - INFINITY)
+
 #endif /* _MSC_VER */
 
 
@@ -158,7 +162,59 @@ float log2f(float f)
 #endif
 
 
+#if __STDC_VERSION__ < 199901L && (!defined(__cplusplus) || defined(_MSC_VER))
+static INLINE long int
+lrint(double d)
+{
+   long int rounded = (long int)(d + 0.5);
 
+   if (d - floor(d) == 0.5) {
+      if (rounded % 2 != 0)
+         rounded += (d > 0) ? -1 : 1;
+   }
+
+   return rounded;
+}
+
+static INLINE long int
+lrintf(float f)
+{
+   long int rounded = (long int)(f + 0.5f);
+
+   if (f - floorf(f) == 0.5f) {
+      if (rounded % 2 != 0)
+         rounded += (f > 0) ? -1 : 1;
+   }
+
+   return rounded;
+}
+
+static INLINE long long int
+llrint(double d)
+{
+   long long int rounded = (long long int)(d + 0.5);
+
+   if (d - floor(d) == 0.5) {
+      if (rounded % 2 != 0)
+         rounded += (d > 0) ? -1 : 1;
+   }
+
+   return rounded;
+}
+
+static INLINE long long int
+llrintf(float f)
+{
+   long long int rounded = (long long int)(f + 0.5f);
+
+   if (f - floorf(f) == 0.5f) {
+      if (rounded % 2 != 0)
+         rounded += (f > 0) ? -1 : 1;
+   }
+
+   return rounded;
+}
+#endif /* C99 */
 
 #define POW2_TABLE_SIZE_LOG2 9
 #define POW2_TABLE_SIZE (1 << POW2_TABLE_SIZE_LOG2)
@@ -187,6 +243,19 @@ union di {
    int64_t i;
    uint64_t ui;
 };
+
+
+/**
+ * Extract the IEEE float32 exponent.
+ */
+static INLINE signed
+util_get_float32_exponent(float x) {
+   union fi f;
+
+   f.f = x;
+
+   return ((f.ui >> 23) & 0xff) - 127;
+}
 
 
 /**

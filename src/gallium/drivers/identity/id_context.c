@@ -168,40 +168,7 @@ identity_bind_sampler_states(struct pipe_context *_pipe,
    struct identity_context *id_pipe = identity_context(_pipe);
    struct pipe_context *pipe = id_pipe->pipe;
 
-   /* remove this when we have pipe->bind_sampler_states(..., start, ...) */
-   assert(start == 0);
-
-   switch (shader) {
-   case PIPE_SHADER_VERTEX:
-      pipe->bind_vertex_sampler_states(pipe, num_samplers, samplers);
-      break;
-   case PIPE_SHADER_GEOMETRY:
-      pipe->bind_geometry_sampler_states(pipe, num_samplers, samplers);
-      break;
-   case PIPE_SHADER_FRAGMENT:
-      pipe->bind_fragment_sampler_states(pipe, num_samplers, samplers);
-      break;
-   default:
-      debug_error("Unexpected shader in identity_bind_sampler_states()");
-   }
-}
-
-static void
-identity_bind_fragment_sampler_states(struct pipe_context *_pipe,
-                                      unsigned num_samplers,
-                                      void **samplers)
-{
-   identity_bind_sampler_states(_pipe, PIPE_SHADER_FRAGMENT,
-                                0, num_samplers, samplers);
-}
-
-static void
-identity_bind_vertex_sampler_states(struct pipe_context *_pipe,
-                                    unsigned num_samplers,
-                                    void **samplers)
-{
-   identity_bind_sampler_states(_pipe, PIPE_SHADER_VERTEX,
-                                0, num_samplers, samplers);
+   pipe->bind_sampler_states(pipe, shader, start, num_samplers, samplers);
 }
 
 static void
@@ -519,50 +486,12 @@ identity_set_sampler_views(struct pipe_context *_pipe,
    struct identity_context *id_pipe = identity_context(_pipe);
    struct pipe_context *pipe = id_pipe->pipe;
    struct pipe_sampler_view *unwrapped_views[PIPE_MAX_SAMPLERS];
-   struct pipe_sampler_view **views = NULL;
    unsigned i;
 
-   /* remove this when we have pipe->set_sampler_views(..., start, ...) */
-   assert(start == 0);
+   for (i = 0; i < num; i++)
+      unwrapped_views[i] = identity_sampler_view_unwrap(_views[i]);
 
-   if (_views) {
-      for (i = 0; i < num; i++)
-         unwrapped_views[i] = identity_sampler_view_unwrap(_views[i]);
-      for (; i < PIPE_MAX_SAMPLERS; i++)
-         unwrapped_views[i] = NULL;
-
-      views = unwrapped_views;
-   }
-
-   switch (shader) {
-   case PIPE_SHADER_VERTEX:
-      pipe->set_vertex_sampler_views(pipe, num, views);
-      break;
-   case PIPE_SHADER_GEOMETRY:
-      pipe->set_geometry_sampler_views(pipe, num, views);
-      break;
-   case PIPE_SHADER_FRAGMENT:
-      pipe->set_fragment_sampler_views(pipe, num, views);
-      break;
-   default:
-      debug_error("Unexpected shader in identity_set_sampler_views()");
-   }
-}
-
-static void
-identity_set_fragment_sampler_views(struct pipe_context *_pipe,
-                                    unsigned num,
-                                    struct pipe_sampler_view **_views)
-{
-   identity_set_sampler_views(_pipe, PIPE_SHADER_FRAGMENT, 0, num, _views);
-}
-
-static void
-identity_set_vertex_sampler_views(struct pipe_context *_pipe,
-                                  unsigned num,
-                                  struct pipe_sampler_view **_views)
-{
-   identity_set_sampler_views(_pipe, PIPE_SHADER_VERTEX, 0, num, _views);
+   pipe->set_sampler_views(pipe, shader, start, num, unwrapped_views);
 }
 
 static void
@@ -646,6 +575,16 @@ identity_blit(struct pipe_context *_pipe,
    blit.dst.resource = identity_resource(blit.dst.resource)->resource;
 
    pipe->blit(pipe, &blit);
+}
+
+static void
+identity_flush_resource(struct pipe_context *_pipe,
+                        struct pipe_resource *resource)
+{
+   struct identity_context *id_pipe = identity_context(_pipe);
+   struct pipe_context *pipe = id_pipe->pipe;
+
+   pipe->flush_resource(pipe, resource);
 }
 
 static void
@@ -891,8 +830,7 @@ identity_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    id_pipe->base.bind_blend_state = identity_bind_blend_state;
    id_pipe->base.delete_blend_state = identity_delete_blend_state;
    id_pipe->base.create_sampler_state = identity_create_sampler_state;
-   id_pipe->base.bind_fragment_sampler_states = identity_bind_fragment_sampler_states;
-   id_pipe->base.bind_vertex_sampler_states = identity_bind_vertex_sampler_states;
+   id_pipe->base.bind_sampler_states = identity_bind_sampler_states;
    id_pipe->base.delete_sampler_state = identity_delete_sampler_state;
    id_pipe->base.create_rasterizer_state = identity_create_rasterizer_state;
    id_pipe->base.bind_rasterizer_state = identity_bind_rasterizer_state;
@@ -918,8 +856,7 @@ identity_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    id_pipe->base.set_polygon_stipple = identity_set_polygon_stipple;
    id_pipe->base.set_scissor_states = identity_set_scissor_states;
    id_pipe->base.set_viewport_states = identity_set_viewport_states;
-   id_pipe->base.set_fragment_sampler_views = identity_set_fragment_sampler_views;
-   id_pipe->base.set_vertex_sampler_views = identity_set_vertex_sampler_views;
+   id_pipe->base.set_sampler_views = identity_set_sampler_views;
    id_pipe->base.set_vertex_buffers = identity_set_vertex_buffers;
    id_pipe->base.set_index_buffer = identity_set_index_buffer;
    id_pipe->base.resource_copy_region = identity_resource_copy_region;
@@ -936,6 +873,7 @@ identity_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    id_pipe->base.transfer_flush_region = identity_context_transfer_flush_region;
    id_pipe->base.transfer_inline_write = identity_context_transfer_inline_write;
    id_pipe->base.blit = identity_blit;
+   id_pipe->base.flush_resource = identity_flush_resource;
 
    id_pipe->pipe = pipe;
 

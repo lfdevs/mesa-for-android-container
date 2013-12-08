@@ -664,11 +664,9 @@ driswCreateScreen(int screen, struct glx_display *priv)
    if (psc->driver == NULL)
       goto handle_error;
 
-   extensions = dlsym(psc->driver, __DRI_DRIVER_EXTENSIONS);
-   if (extensions == NULL) {
-      ErrorMessageF("driver exports no extensions (%s)\n", dlerror());
+   extensions = driGetDriverExtensions(psc->driver, SWRAST_DRIVER_NAME);
+   if (extensions == NULL)
       goto handle_error;
-   }
 
    for (i = 0; extensions[i]; i++) {
       if (strcmp(extensions[i]->name, __DRI_CORE) == 0)
@@ -682,9 +680,16 @@ driswCreateScreen(int screen, struct glx_display *priv)
       goto handle_error;
    }
 
-   psc->driScreen =
-      psc->swrast->createNewScreen(screen, loader_extensions,
-				   &driver_configs, psc);
+   if (psc->swrast->base.version >= 4) {
+      psc->driScreen =
+         psc->swrast->createNewScreen2(screen, loader_extensions,
+                                       extensions,
+                                       &driver_configs, psc);
+   } else {
+      psc->driScreen =
+         psc->swrast->createNewScreen(screen, loader_extensions,
+                                      &driver_configs, psc);
+   }
    if (psc->driScreen == NULL) {
       ErrorMessageF("failed to create dri screen\n");
       goto handle_error;

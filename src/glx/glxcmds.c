@@ -183,7 +183,7 @@ GetGLXPrivScreenConfig(Display * dpy, int scrn, struct glx_display ** ppriv,
 
    /* Check to see if the GL is supported on this screen */
    *ppsc = (*ppriv)->screens[scrn];
-   if ((*ppsc)->configs == NULL) {
+   if ((*ppsc)->configs == NULL && (*ppsc)->visuals == NULL) {
       /* No support for GL on this screen regardless of visual */
       return GLX_BAD_VISUAL;
    }
@@ -2602,6 +2602,12 @@ static const struct name_address_pair GLX_functions[] = {
 
    /*** GLX_ARB_create_context and GLX_ARB_create_context_profile ***/
    GLX_FUNCTION(glXCreateContextAttribsARB),
+
+   /*** GLX_MESA_query_renderer ***/
+   GLX_FUNCTION(glXQueryRendererIntegerMESA),
+   GLX_FUNCTION(glXQueryRendererStringMESA),
+   GLX_FUNCTION(glXQueryCurrentRendererIntegerMESA),
+   GLX_FUNCTION(glXQueryCurrentRendererStringMESA),
 
    {NULL, NULL}                 /* end of list */
 };

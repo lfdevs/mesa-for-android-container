@@ -92,13 +92,17 @@ can_cut_index_handle_prims(struct gl_context *ctx,
       return false;
    }
 
-   for ( ; nr_prims > 0; nr_prims--) {
-      switch(prim->mode) {
+   for (int i = 0; i < nr_prims; i++) {
+      switch (prim[i].mode) {
       case GL_POINTS:
       case GL_LINES:
       case GL_LINE_STRIP:
       case GL_TRIANGLES:
       case GL_TRIANGLE_STRIP:
+      case GL_LINES_ADJACENCY:
+      case GL_LINE_STRIP_ADJACENCY:
+      case GL_TRIANGLES_ADJACENCY:
+      case GL_TRIANGLE_STRIP_ADJACENCY:
          /* Cut index supports these primitive types */
          break;
       default:
@@ -123,7 +127,7 @@ can_cut_index_handle_prims(struct gl_context *ctx,
  */
 GLboolean
 brw_handle_primitive_restart(struct gl_context *ctx,
-                             const struct _mesa_prim *prim,
+                             const struct _mesa_prim *prims,
                              GLuint nr_prims,
                              const struct _mesa_index_buffer *ib)
 {
@@ -161,17 +165,17 @@ brw_handle_primitive_restart(struct gl_context *ctx,
     */
    brw->prim_restart.in_progress = true;
 
-   if (can_cut_index_handle_prims(ctx, prim, nr_prims, ib)) {
+   if (can_cut_index_handle_prims(ctx, prims, nr_prims, ib)) {
       /* Cut index should work for primitive restart, so use it
        */
       brw->prim_restart.enable_cut_index = true;
-      brw_draw_prims(ctx, prim, nr_prims, ib, GL_FALSE, -1, -1, NULL);
+      brw_draw_prims(ctx, prims, nr_prims, ib, GL_FALSE, -1, -1, NULL);
       brw->prim_restart.enable_cut_index = false;
    } else {
       /* Not all the primitive draw modes are supported by the cut index,
        * so take the software path
        */
-      vbo_sw_primitive_restart(ctx, prim, nr_prims, ib);
+      vbo_sw_primitive_restart(ctx, prims, nr_prims, ib);
    }
 
    brw->prim_restart.in_progress = false;

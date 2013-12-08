@@ -85,55 +85,59 @@ finalize_shader_states(struct ilo_context *ilo)
 }
 
 static void
+finalize_cbuf_state(struct ilo_context *ilo,
+                    struct ilo_cbuf_state *cbuf,
+                    const struct ilo_shader_state *sh)
+{
+   uint32_t upload_mask = cbuf->enabled_mask;
+
+   /* skip CBUF0 if the kernel does not need it */
+   upload_mask &=
+      ~ilo_shader_get_kernel_param(sh, ILO_KERNEL_SKIP_CBUF0_UPLOAD);
+
+   while (upload_mask) {
+      const enum pipe_format elem_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+      unsigned offset, i;
+
+      i = u_bit_scan(&upload_mask);
+      /* no need to upload */
+      if (cbuf->cso[i].resource)
+         continue;
+
+      u_upload_data(ilo->uploader, 0, cbuf->cso[i].user_buffer_size,
+            cbuf->cso[i].user_buffer, &offset, &cbuf->cso[i].resource);
+
+      ilo_gpe_init_view_surface_for_buffer(ilo->dev,
+            ilo_buffer(cbuf->cso[i].resource),
+            offset, cbuf->cso[i].user_buffer_size,
+            util_format_get_blocksize(elem_format), elem_format,
+            false, false, &cbuf->cso[i].surface);
+
+      ilo->dirty |= ILO_DIRTY_CBUF;
+   }
+}
+
+static void
 finalize_constant_buffers(struct ilo_context *ilo)
 {
-   int sh;
+   if (ilo->dirty & (ILO_DIRTY_CBUF | ILO_DIRTY_VS))
+      finalize_cbuf_state(ilo, &ilo->cbuf[PIPE_SHADER_VERTEX], ilo->vs);
 
-   if (!(ilo->dirty & ILO_DIRTY_CBUF))
-      return;
-
-   /* TODO push constants? */
-   for (sh = 0; sh < PIPE_SHADER_TYPES; sh++) {
-      unsigned enabled_mask = ilo->cbuf[sh].enabled_mask;
-
-      while (enabled_mask) {
-         struct ilo_cbuf_cso *cbuf;
-         int i;
-
-         i = u_bit_scan(&enabled_mask);
-         cbuf = &ilo->cbuf[sh].cso[i];
-
-         /* upload user buffer */
-         if (cbuf->user_buffer) {
-            const enum pipe_format elem_format =
-               PIPE_FORMAT_R32G32B32A32_FLOAT;
-            unsigned offset;
-
-            u_upload_data(ilo->uploader, 0, cbuf->user_buffer_size,
-                  cbuf->user_buffer, &offset, &cbuf->resource);
-
-            ilo_gpe_init_view_surface_for_buffer(ilo->dev,
-                  ilo_buffer(cbuf->resource),
-                  offset, cbuf->user_buffer_size,
-                  util_format_get_blocksize(elem_format), elem_format,
-                  false, false, &cbuf->surface);
-
-            cbuf->user_buffer = NULL;
-            cbuf->user_buffer_size = 0;
-         }
-      }
-   }
+   if (ilo->dirty & (ILO_DIRTY_CBUF | ILO_DIRTY_FS))
+      finalize_cbuf_state(ilo, &ilo->cbuf[PIPE_SHADER_FRAGMENT], ilo->fs);
 }
 
 static void
 finalize_index_buffer(struct ilo_context *ilo)
 {
-   const struct pipe_resource *current_hw_res = ilo->ib.hw_resource;
    const bool need_upload = (ilo->draw->indexed &&
          (ilo->ib.user_buffer || ilo->ib.offset % ilo->ib.index_size));
+   struct pipe_resource *current_hw_res = NULL;
 
    if (!(ilo->dirty & ILO_DIRTY_IB) && !need_upload)
       return;
+
+   pipe_resource_reference(&current_hw_res, ilo->ib.hw_resource);
 
    if (need_upload) {
       const unsigned offset = ilo->ib.index_size * ilo->draw->start;
@@ -175,6 +179,8 @@ finalize_index_buffer(struct ilo_context *ilo)
       ilo->dirty &= ~ILO_DIRTY_IB;
    else
       ilo->ib.hw_index_size = ilo->ib.index_size;
+
+   pipe_resource_reference(&current_hw_res, NULL);
 }
 
 /**
@@ -246,32 +252,25 @@ ilo_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
 {
    struct ilo_context *ilo = ilo_context(pipe);
    struct ilo_sampler_state *dst = &ilo->sampler[shader];
+   bool changed = false;
    unsigned i;
 
    assert(start + count <= Elements(dst->cso));
 
-   if (likely(shader != PIPE_SHADER_COMPUTE)) {
-      if (!samplers) {
-         start = 0;
-         count = 0;
-      }
-
-      /* samplers not in range are also unbound */
-      for (i = 0; i < start; i++)
-         dst->cso[i] = NULL;
-      for (; i < start + count; i++)
-         dst->cso[i] = samplers[i - start];
-      for (; i < dst->count; i++)
-         dst->cso[i] = NULL;
-
-      dst->count = start + count;
-
-      return;
-   }
-
    if (samplers) {
-      for (i = 0; i < count; i++)
-         dst->cso[start + i] = samplers[i];
+      for (i = 0; i < count; i++) {
+         if (dst->cso[start + i] != samplers[i]) {
+            dst->cso[start + i] = samplers[i];
+
+            /*
+             * This function is sometimes called to reduce the number of bound
+             * samplers.  Do not consider that as a state change (and create a
+             * new array of SAMPLER_STATE).
+             */
+            if (samplers[i])
+               changed = true;
+         }
+      }
    }
    else {
       for (i = 0; i < count; i++)
@@ -289,59 +288,23 @@ ilo_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
 
       dst->count = count;
    }
-}
 
-static void
-ilo_bind_fragment_sampler_states(struct pipe_context *pipe,
-                                 unsigned num_samplers,
-                                 void **samplers)
-{
-   struct ilo_context *ilo = ilo_context(pipe);
-
-   ilo_bind_sampler_states(pipe, PIPE_SHADER_FRAGMENT,
-         0, num_samplers, samplers);
-
-   ilo->dirty |= ILO_DIRTY_SAMPLER_FS;
-}
-
-static void
-ilo_bind_vertex_sampler_states(struct pipe_context *pipe,
-                               unsigned num_samplers,
-                               void **samplers)
-{
-   struct ilo_context *ilo = ilo_context(pipe);
-
-   ilo_bind_sampler_states(pipe, PIPE_SHADER_VERTEX,
-         0, num_samplers, samplers);
-
-   ilo->dirty |= ILO_DIRTY_SAMPLER_VS;
-}
-
-static void
-ilo_bind_geometry_sampler_states(struct pipe_context *pipe,
-                                 unsigned num_samplers,
-                                 void **samplers)
-{
-   struct ilo_context *ilo = ilo_context(pipe);
-
-   ilo_bind_sampler_states(pipe, PIPE_SHADER_GEOMETRY,
-         0, num_samplers, samplers);
-
-   ilo->dirty |= ILO_DIRTY_SAMPLER_GS;
-}
-
-static void
-ilo_bind_compute_sampler_states(struct pipe_context *pipe,
-                                unsigned start_slot,
-                                unsigned num_samplers,
-                                void **samplers)
-{
-   struct ilo_context *ilo = ilo_context(pipe);
-
-   ilo_bind_sampler_states(pipe, PIPE_SHADER_COMPUTE,
-         start_slot, num_samplers, samplers);
-
-   ilo->dirty |= ILO_DIRTY_SAMPLER_CS;
+   if (changed) {
+      switch (shader) {
+      case PIPE_SHADER_VERTEX:
+         ilo->dirty |= ILO_DIRTY_SAMPLER_VS;
+         break;
+      case PIPE_SHADER_GEOMETRY:
+         ilo->dirty |= ILO_DIRTY_SAMPLER_GS;
+         break;
+      case PIPE_SHADER_FRAGMENT:
+         ilo->dirty |= ILO_DIRTY_SAMPLER_FS;
+         break;
+      case PIPE_SHADER_COMPUTE:
+         ilo->dirty |= ILO_DIRTY_SAMPLER_CS;
+         break;
+      }
+   }
 }
 
 static void
@@ -574,7 +537,7 @@ ilo_set_stencil_ref(struct pipe_context *pipe,
    struct ilo_context *ilo = ilo_context(pipe);
 
    /* util_blitter may set this unnecessarily */
-   if (!memcpy(&ilo->stencil_ref, state, sizeof(*state)))
+   if (!memcmp(&ilo->stencil_ref, state, sizeof(*state)))
       return;
 
    ilo->stencil_ref = *state;
@@ -765,25 +728,6 @@ ilo_set_sampler_views(struct pipe_context *pipe, unsigned shader,
 
    assert(start + count <= Elements(dst->states));
 
-   if (likely(shader != PIPE_SHADER_COMPUTE)) {
-      if (!views) {
-         start = 0;
-         count = 0;
-      }
-
-      /* views not in range are also unbound */
-      for (i = 0; i < start; i++)
-         pipe_sampler_view_reference(&dst->states[i], NULL);
-      for (; i < start + count; i++)
-         pipe_sampler_view_reference(&dst->states[i], views[i - start]);
-      for (; i < dst->count; i++)
-         pipe_sampler_view_reference(&dst->states[i], NULL);
-
-      dst->count = start + count;
-
-      return;
-   }
-
    if (views) {
       for (i = 0; i < count; i++)
          pipe_sampler_view_reference(&dst->states[start + i], views[i]);
@@ -804,58 +748,21 @@ ilo_set_sampler_views(struct pipe_context *pipe, unsigned shader,
 
       dst->count = count;
    }
-}
 
-static void
-ilo_set_fragment_sampler_views(struct pipe_context *pipe,
-                               unsigned num_views,
-                               struct pipe_sampler_view **views)
-{
-   struct ilo_context *ilo = ilo_context(pipe);
-
-   ilo_set_sampler_views(pipe, PIPE_SHADER_FRAGMENT,
-         0, num_views, views);
-
-   ilo->dirty |= ILO_DIRTY_VIEW_FS;
-}
-
-static void
-ilo_set_vertex_sampler_views(struct pipe_context *pipe,
-                             unsigned num_views,
-                             struct pipe_sampler_view **views)
-{
-   struct ilo_context *ilo = ilo_context(pipe);
-
-   ilo_set_sampler_views(pipe, PIPE_SHADER_VERTEX,
-         0, num_views, views);
-
-   ilo->dirty |= ILO_DIRTY_VIEW_VS;
-}
-
-static void
-ilo_set_geometry_sampler_views(struct pipe_context *pipe,
-                               unsigned num_views,
-                               struct pipe_sampler_view **views)
-{
-   struct ilo_context *ilo = ilo_context(pipe);
-
-   ilo_set_sampler_views(pipe, PIPE_SHADER_GEOMETRY,
-         0, num_views, views);
-
-   ilo->dirty |= ILO_DIRTY_VIEW_GS;
-}
-
-static void
-ilo_set_compute_sampler_views(struct pipe_context *pipe,
-                              unsigned start_slot, unsigned num_views,
-                              struct pipe_sampler_view **views)
-{
-   struct ilo_context *ilo = ilo_context(pipe);
-
-   ilo_set_sampler_views(pipe, PIPE_SHADER_COMPUTE,
-         start_slot, num_views, views);
-
-   ilo->dirty |= ILO_DIRTY_VIEW_CS;
+   switch (shader) {
+   case PIPE_SHADER_VERTEX:
+      ilo->dirty |= ILO_DIRTY_VIEW_VS;
+      break;
+   case PIPE_SHADER_GEOMETRY:
+      ilo->dirty |= ILO_DIRTY_VIEW_GS;
+      break;
+   case PIPE_SHADER_FRAGMENT:
+      ilo->dirty |= ILO_DIRTY_VIEW_FS;
+      break;
+   case PIPE_SHADER_COMPUTE:
+      ilo->dirty |= ILO_DIRTY_VIEW_CS;
+      break;
+   }
 }
 
 static void
@@ -1225,10 +1132,7 @@ ilo_init_state_functions(struct ilo_context *ilo)
    ilo->base.bind_blend_state = ilo_bind_blend_state;
    ilo->base.delete_blend_state = ilo_delete_blend_state;
    ilo->base.create_sampler_state = ilo_create_sampler_state;
-   ilo->base.bind_fragment_sampler_states = ilo_bind_fragment_sampler_states;
-   ilo->base.bind_vertex_sampler_states = ilo_bind_vertex_sampler_states;
-   ilo->base.bind_geometry_sampler_states = ilo_bind_geometry_sampler_states;
-   ilo->base.bind_compute_sampler_states = ilo_bind_compute_sampler_states;
+   ilo->base.bind_sampler_states = ilo_bind_sampler_states;
    ilo->base.delete_sampler_state = ilo_delete_sampler_state;
    ilo->base.create_rasterizer_state = ilo_create_rasterizer_state;
    ilo->base.bind_rasterizer_state = ilo_bind_rasterizer_state;
@@ -1258,10 +1162,7 @@ ilo_init_state_functions(struct ilo_context *ilo)
    ilo->base.set_polygon_stipple = ilo_set_polygon_stipple;
    ilo->base.set_scissor_states = ilo_set_scissor_states;
    ilo->base.set_viewport_states = ilo_set_viewport_states;
-   ilo->base.set_fragment_sampler_views = ilo_set_fragment_sampler_views;
-   ilo->base.set_vertex_sampler_views = ilo_set_vertex_sampler_views;
-   ilo->base.set_geometry_sampler_views = ilo_set_geometry_sampler_views;
-   ilo->base.set_compute_sampler_views = ilo_set_compute_sampler_views;
+   ilo->base.set_sampler_views = ilo_set_sampler_views;
    ilo->base.set_shader_resources = ilo_set_shader_resources;
    ilo->base.set_vertex_buffers = ilo_set_vertex_buffers;
    ilo->base.set_index_buffer = ilo_set_index_buffer;
@@ -1446,4 +1347,56 @@ ilo_mark_states_with_resource_dirty(struct ilo_context *ilo,
    }
 
    ilo->dirty |= states;
+}
+
+void
+ilo_dump_dirty_flags(uint32_t dirty)
+{
+   static const char *state_names[ILO_STATE_COUNT] = {
+      [ILO_STATE_VB]              = "VB",
+      [ILO_STATE_VE]              = "VE",
+      [ILO_STATE_IB]              = "IB",
+      [ILO_STATE_VS]              = "VS",
+      [ILO_STATE_GS]              = "GS",
+      [ILO_STATE_SO]              = "SO",
+      [ILO_STATE_CLIP]            = "CLIP",
+      [ILO_STATE_VIEWPORT]        = "VIEWPORT",
+      [ILO_STATE_SCISSOR]         = "SCISSOR",
+      [ILO_STATE_RASTERIZER]      = "RASTERIZER",
+      [ILO_STATE_POLY_STIPPLE]    = "POLY_STIPPLE",
+      [ILO_STATE_SAMPLE_MASK]     = "SAMPLE_MASK",
+      [ILO_STATE_FS]              = "FS",
+      [ILO_STATE_DSA]             = "DSA",
+      [ILO_STATE_STENCIL_REF]     = "STENCIL_REF",
+      [ILO_STATE_BLEND]           = "BLEND",
+      [ILO_STATE_BLEND_COLOR]     = "BLEND_COLOR",
+      [ILO_STATE_FB]              = "FB",
+      [ILO_STATE_SAMPLER_VS]      = "SAMPLER_VS",
+      [ILO_STATE_SAMPLER_GS]      = "SAMPLER_GS",
+      [ILO_STATE_SAMPLER_FS]      = "SAMPLER_FS",
+      [ILO_STATE_SAMPLER_CS]      = "SAMPLER_CS",
+      [ILO_STATE_VIEW_VS]         = "VIEW_VS",
+      [ILO_STATE_VIEW_GS]         = "VIEW_GS",
+      [ILO_STATE_VIEW_FS]         = "VIEW_FS",
+      [ILO_STATE_VIEW_CS]         = "VIEW_CS",
+      [ILO_STATE_CBUF]            = "CBUF",
+      [ILO_STATE_RESOURCE]        = "RESOURCE",
+      [ILO_STATE_CS]              = "CS",
+      [ILO_STATE_CS_RESOURCE]     = "CS_RESOURCE",
+      [ILO_STATE_GLOBAL_BINDING]  = "GLOBAL_BINDING",
+   };
+
+   if (!dirty) {
+      ilo_printf("no state is dirty\n");
+      return;
+   }
+
+   dirty &= (1U << ILO_STATE_COUNT) - 1;
+
+   ilo_printf("%2d states are dirty:", util_bitcount(dirty));
+   while (dirty) {
+      const enum ilo_state state = u_bit_scan(&dirty);
+      ilo_printf(" %s", state_names[state]);
+   }
+   ilo_printf("\n");
 }

@@ -20,53 +20,59 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#ifndef __CORE_QUEUE_HPP__
-#define __CORE_QUEUE_HPP__
+#ifndef CLOVER_CORE_QUEUE_HPP
+#define CLOVER_CORE_QUEUE_HPP
 
-#include "core/base.hpp"
+#include <deque>
+
+#include "core/object.hpp"
 #include "core/context.hpp"
+#include "core/timestamp.hpp"
 #include "pipe/p_context.h"
 
 namespace clover {
-   typedef struct _cl_command_queue command_queue;
    class resource;
    class mapping;
    class hard_event;
+
+   class command_queue : public ref_counter, public _cl_command_queue {
+   public:
+      command_queue(context &ctx, device &dev,
+                    cl_command_queue_properties props);
+      ~command_queue();
+
+      command_queue(const command_queue &q) = delete;
+      command_queue &
+      operator=(const command_queue &q) = delete;
+
+      void flush();
+
+      cl_command_queue_properties props() const;
+      bool profiling_enabled() const;
+
+      context &ctx;
+      device &dev;
+
+      friend class resource;
+      friend class root_resource;
+      friend class mapping;
+      friend class hard_event;
+      friend class sampler;
+      friend class kernel;
+      friend class clover::timestamp::query;
+      friend class clover::timestamp::current;
+
+   private:
+      /// Serialize a hardware event with respect to the previous ones,
+      /// and push it to the pending list.
+      void sequence(hard_event *ev);
+
+      cl_command_queue_properties _props;
+      pipe_context *pipe;
+
+      typedef ref_ptr<hard_event> event_ptr;
+      std::deque<event_ptr> queued_events;
+   };
 }
-
-struct _cl_command_queue : public clover::ref_counter {
-public:
-   _cl_command_queue(clover::context &ctx, clover::device &dev,
-                     cl_command_queue_properties props);
-   _cl_command_queue(const _cl_command_queue &q) = delete;
-   ~_cl_command_queue();
-
-   void flush();
-
-   cl_command_queue_properties props() const {
-      return __props;
-   }
-
-   clover::context &ctx;
-   clover::device &dev;
-
-   friend class clover::resource;
-   friend class clover::root_resource;
-   friend class clover::mapping;
-   friend class clover::hard_event;
-   friend struct _cl_sampler;
-   friend struct _cl_kernel;
-
-private:
-   /// Serialize a hardware event with respect to the previous ones,
-   /// and push it to the pending list.
-   void sequence(clover::hard_event *ev);
-
-   cl_command_queue_properties __props;
-   pipe_context *pipe;
-
-   typedef clover::ref_ptr<clover::hard_event> event_ptr;
-   std::vector<event_ptr> queued_events;
-};
 
 #endif

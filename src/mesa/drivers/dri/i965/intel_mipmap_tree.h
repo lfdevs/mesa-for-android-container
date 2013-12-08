@@ -32,6 +32,7 @@
 
 #include "intel_regions.h"
 #include "intel_resolve_map.h"
+#include <GL/internal/dri_interface.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -529,6 +530,13 @@ intel_miptree_create_for_dri2_buffer(struct brw_context *brw,
                                      uint32_t num_samples,
                                      struct intel_region *region);
 
+struct intel_mipmap_tree*
+intel_miptree_create_for_image_buffer(struct brw_context *intel,
+                                     enum __DRIimageBufferMask buffer_type,
+                                     gl_format format,
+                                     uint32_t num_samples,
+                                     struct intel_region *region);
+
 /**
  * Create a miptree appropriate as the storage for a non-texture renderbuffer.
  * The miptree has the following properties:
@@ -629,6 +637,10 @@ void
 intel_miptree_slice_set_needs_depth_resolve(struct intel_mipmap_tree *mt,
                                             uint32_t level,
 					    uint32_t depth);
+
+void
+intel_miptree_set_all_slices_need_depth_resolve(struct intel_mipmap_tree *mt,
+                                                uint32_t level);
 
 /**
  * \return false if no resolve was needed

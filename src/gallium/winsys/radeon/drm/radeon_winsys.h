@@ -41,7 +41,7 @@
  */
 
 #include "pipebuffer/pb_buffer.h"
-#include "libdrm/radeon_surface.h"
+#include "radeon_surface.h"
 
 #define RADEON_MAX_CMDBUF_DWORDS (16 * 1024)
 
@@ -206,6 +206,11 @@ struct radeon_winsys {
      * Reference counting
      */
     struct pipe_reference reference;
+
+    /**
+     * The screen object this winsys was created for
+     */
+    struct pipe_screen *screen;
 
     /**
      * Destroy this winsys.
@@ -480,6 +485,29 @@ struct radeon_winsys {
     void (*cs_sync_flush)(struct radeon_winsys_cs *cs);
 
     /**
+     * Return a fence associated with the CS. The fence will be signalled
+     * once the CS is flushed and all commands in the CS are completed
+     * by the GPU.
+     */
+    struct pipe_fence_handle *(*cs_create_fence)(struct radeon_winsys_cs *cs);
+
+    /**
+     * Wait for the fence and return true if the fence has been signalled.
+     * The timeout of 0 will only return the status.
+     * The timeout of PIPE_TIMEOUT_INFINITE will always wait until the fence
+     * is signalled.
+     */
+    bool (*fence_wait)(struct radeon_winsys *ws,
+                       struct pipe_fence_handle *fence,
+                       uint64_t timeout);
+
+    /**
+     * Reference counting for fences.
+     */
+    void (*fence_reference)(struct pipe_fence_handle **dst,
+                            struct pipe_fence_handle *src);
+
+    /**
      * Initialize surface
      *
      * \param ws        The winsys this function is called from.
@@ -500,5 +528,27 @@ struct radeon_winsys {
     uint64_t (*query_value)(struct radeon_winsys *ws,
                             enum radeon_value_id value);
 };
+
+/**
+ * Decrement the winsys reference count.
+ *
+ * \param ws The winsys this function is called for.
+ */
+static INLINE boolean radeon_winsys_unref(struct radeon_winsys *ws)
+{
+   return pipe_reference(&ws->reference, NULL);
+}
+
+static INLINE void radeon_emit(struct radeon_winsys_cs *cs, uint32_t value)
+{
+    cs->buf[cs->cdw++] = value;
+}
+
+static INLINE void radeon_emit_array(struct radeon_winsys_cs *cs,
+				     const uint32_t *values, unsigned count)
+{
+    memcpy(cs->buf+cs->cdw, values, count * 4);
+    cs->cdw += count;
+}
 
 #endif

@@ -73,11 +73,14 @@
 /**
  * Generate min(a, b)
  * No checks for special case values of a or b = 1 or 0 are done.
+ * NaN's are handled according to the behavior specified by the
+ * nan_behavior argument.
  */
 static LLVMValueRef
 lp_build_min_simple(struct lp_build_context *bld,
                     LLVMValueRef a,
-                    LLVMValueRef b)
+                    LLVMValueRef b,
+                    enum gallivm_nan_behavior nan_behavior)
 {
    const struct lp_type type = bld->type;
    const char *intrinsic = NULL;
@@ -120,6 +123,8 @@ lp_build_min_simple(struct lp_build_context *bld,
       }
    }
    else if (type.floating && util_cpu_caps.has_altivec) {
+      debug_printf("%s: altivec doesn't support nan behavior modes\n",
+                   __FUNCTION__);
       if (type.width == 32 && type.length == 4) {
          intrinsic = "llvm.ppc.altivec.vminfp";
          intr_size = 128;
@@ -131,7 +136,7 @@ lp_build_min_simple(struct lp_build_context *bld,
           (gallivm_debug & GALLIVM_DEBUG_PERF)) {
          debug_printf("%s: inefficient code, bogus shuffle due to packing\n",
                       __FUNCTION__);
-         }
+      }
       if (type.width == 8 && !type.sign) {
          intrinsic = "llvm.x86.sse2.pminu.b";
       }
@@ -147,53 +152,111 @@ lp_build_min_simple(struct lp_build_context *bld,
          }
          if (type.width == 32 && !type.sign) {
             intrinsic = "llvm.x86.sse41.pminud";
-        }
+         }
          if (type.width == 32 && type.sign) {
             intrinsic = "llvm.x86.sse41.pminsd";
          }
       }
    } else if (util_cpu_caps.has_altivec) {
-     intr_size = 128;
-     if (type.width == 8) {
-       if (!type.sign) {
-         intrinsic = "llvm.ppc.altivec.vminub";
-       } else {
-         intrinsic = "llvm.ppc.altivec.vminsb";
-       }
-     } else if (type.width == 16) {
-       if (!type.sign) {
-         intrinsic = "llvm.ppc.altivec.vminuh";
-       } else {
-         intrinsic = "llvm.ppc.altivec.vminsh";
-       }
-     } else if (type.width == 32) {
-       if (!type.sign) {
-         intrinsic = "llvm.ppc.altivec.vminuw";
-       } else {
-         intrinsic = "llvm.ppc.altivec.vminsw";
-       }
-     }
+      intr_size = 128;
+      debug_printf("%s: altivec doesn't support nan behavior modes\n",
+                   __FUNCTION__);
+      if (type.width == 8) {
+         if (!type.sign) {
+            intrinsic = "llvm.ppc.altivec.vminub";
+         } else {
+            intrinsic = "llvm.ppc.altivec.vminsb";
+         }
+      } else if (type.width == 16) {
+         if (!type.sign) {
+            intrinsic = "llvm.ppc.altivec.vminuh";
+         } else {
+            intrinsic = "llvm.ppc.altivec.vminsh";
+         }
+      } else if (type.width == 32) {
+         if (!type.sign) {
+            intrinsic = "llvm.ppc.altivec.vminuw";
+         } else {
+            intrinsic = "llvm.ppc.altivec.vminsw";
+         }
+      }
    }
 
    if(intrinsic) {
-      return lp_build_intrinsic_binary_anylength(bld->gallivm, intrinsic,
-                                                 type,
-                                                 intr_size, a, b);
+      /* We need to handle nan's for floating point numbers. If one of the
+       * inputs is nan the other should be returned (required by both D3D10+
+       * and OpenCL).
+       * The sse intrinsics return the second operator in case of nan by
+       * default so we need to special code to handle those.
+       */
+      if (util_cpu_caps.has_sse && type.floating &&
+          nan_behavior != GALLIVM_NAN_BEHAVIOR_UNDEFINED &&
+          nan_behavior != GALLIVM_NAN_RETURN_SECOND) {
+         LLVMValueRef isnan, max;
+         max = lp_build_intrinsic_binary_anylength(bld->gallivm, intrinsic,
+                                                   type,
+                                                   intr_size, a, b);
+         if (nan_behavior == GALLIVM_NAN_RETURN_OTHER) {
+            isnan = lp_build_isnan(bld, b);
+            return lp_build_select(bld, isnan, a, max);
+         } else {
+            assert(nan_behavior == GALLIVM_NAN_RETURN_NAN);
+            isnan = lp_build_isnan(bld, a);
+            return lp_build_select(bld, isnan, a, max);
+         }
+      } else {
+         return lp_build_intrinsic_binary_anylength(bld->gallivm, intrinsic,
+                                                    type,
+                                                    intr_size, a, b);
+      }
    }
 
-   cond = lp_build_cmp(bld, PIPE_FUNC_LESS, a, b);
-   return lp_build_select(bld, cond, a, b);
+   if (type.floating) {
+      switch (nan_behavior) {
+      case GALLIVM_NAN_RETURN_NAN: {
+         LLVMValueRef isnan = lp_build_isnan(bld, b);
+         cond = lp_build_cmp(bld, PIPE_FUNC_LESS, a, b);
+         cond = LLVMBuildXor(bld->gallivm->builder, cond, isnan, "");
+         return lp_build_select(bld, cond, a, b);
+      }
+         break;
+      case GALLIVM_NAN_RETURN_OTHER: {
+         LLVMValueRef isnan = lp_build_isnan(bld, a);
+         cond = lp_build_cmp(bld, PIPE_FUNC_LESS, a, b);
+         cond = LLVMBuildXor(bld->gallivm->builder, cond, isnan, "");
+         return lp_build_select(bld, cond, a, b);
+      }
+         break;
+      case GALLIVM_NAN_RETURN_SECOND:
+         cond = lp_build_cmp_ordered(bld, PIPE_FUNC_LESS, a, b);
+         return lp_build_select(bld, cond, a, b);
+      case GALLIVM_NAN_BEHAVIOR_UNDEFINED:
+         cond = lp_build_cmp(bld, PIPE_FUNC_LESS, a, b);
+         return lp_build_select(bld, cond, a, b);
+         break;
+      default:
+         assert(0);
+         cond = lp_build_cmp(bld, PIPE_FUNC_LESS, a, b);
+         return lp_build_select(bld, cond, a, b);
+      }
+   } else {
+      cond = lp_build_cmp(bld, PIPE_FUNC_LESS, a, b);
+      return lp_build_select(bld, cond, a, b);
+   }
 }
 
 
 /**
  * Generate max(a, b)
  * No checks for special case values of a or b = 1 or 0 are done.
+ * NaN's are handled according to the behavior specified by the
+ * nan_behavior argument.
  */
 static LLVMValueRef
 lp_build_max_simple(struct lp_build_context *bld,
                     LLVMValueRef a,
-                    LLVMValueRef b)
+                    LLVMValueRef b,
+                    enum gallivm_nan_behavior nan_behavior)
 {
    const struct lp_type type = bld->type;
    const char *intrinsic = NULL;
@@ -236,6 +299,8 @@ lp_build_max_simple(struct lp_build_context *bld,
       }
    }
    else if (type.floating && util_cpu_caps.has_altivec) {
+      debug_printf("%s: altivec doesn't support nan behavior modes\n",
+                   __FUNCTION__);
       if (type.width == 32 || type.length == 4) {
          intrinsic = "llvm.ppc.altivec.vmaxfp";
          intr_size = 128;
@@ -271,6 +336,8 @@ lp_build_max_simple(struct lp_build_context *bld,
       }
    } else if (util_cpu_caps.has_altivec) {
      intr_size = 128;
+     debug_printf("%s: altivec doesn't support nan behavior modes\n",
+                  __FUNCTION__);
      if (type.width == 8) {
        if (!type.sign) {
          intrinsic = "llvm.ppc.altivec.vmaxub";
@@ -293,13 +360,60 @@ lp_build_max_simple(struct lp_build_context *bld,
    }
 
    if(intrinsic) {
-      return lp_build_intrinsic_binary_anylength(bld->gallivm, intrinsic,
-                                                 type,
-                                                 intr_size, a, b);
+      if (util_cpu_caps.has_sse && type.floating &&
+          nan_behavior != GALLIVM_NAN_BEHAVIOR_UNDEFINED &&
+          nan_behavior != GALLIVM_NAN_RETURN_SECOND) {
+         LLVMValueRef isnan, min;
+         min = lp_build_intrinsic_binary_anylength(bld->gallivm, intrinsic,
+                                                   type,
+                                                   intr_size, a, b);
+         if (nan_behavior == GALLIVM_NAN_RETURN_OTHER) {
+            isnan = lp_build_isnan(bld, b);
+            return lp_build_select(bld, isnan, a, min);
+         } else {
+            assert(nan_behavior == GALLIVM_NAN_RETURN_NAN);
+            isnan = lp_build_isnan(bld, a);
+            return lp_build_select(bld, isnan, a, min);
+         }
+      } else {
+         return lp_build_intrinsic_binary_anylength(bld->gallivm, intrinsic,
+                                                    type,
+                                                    intr_size, a, b);
+      }
    }
 
-   cond = lp_build_cmp(bld, PIPE_FUNC_GREATER, a, b);
-   return lp_build_select(bld, cond, a, b);
+   if (type.floating) {
+      switch (nan_behavior) {
+      case GALLIVM_NAN_RETURN_NAN: {
+         LLVMValueRef isnan = lp_build_isnan(bld, b);
+         cond = lp_build_cmp(bld, PIPE_FUNC_GREATER, a, b);
+         cond = LLVMBuildXor(bld->gallivm->builder, cond, isnan, "");
+         return lp_build_select(bld, cond, a, b);
+      }
+         break;
+      case GALLIVM_NAN_RETURN_OTHER: {
+         LLVMValueRef isnan = lp_build_isnan(bld, a);
+         cond = lp_build_cmp(bld, PIPE_FUNC_GREATER, a, b);
+         cond = LLVMBuildXor(bld->gallivm->builder, cond, isnan, "");
+         return lp_build_select(bld, cond, a, b);
+      }
+         break;
+      case GALLIVM_NAN_RETURN_SECOND:
+         cond = lp_build_cmp_ordered(bld, PIPE_FUNC_GREATER, a, b);
+         return lp_build_select(bld, cond, a, b);
+      case GALLIVM_NAN_BEHAVIOR_UNDEFINED:
+         cond = lp_build_cmp(bld, PIPE_FUNC_GREATER, a, b);
+         return lp_build_select(bld, cond, a, b);
+         break;
+      default:
+         assert(0);
+         cond = lp_build_cmp(bld, PIPE_FUNC_GREATER, a, b);
+         return lp_build_select(bld, cond, a, b);
+      }
+   } else {
+      cond = lp_build_cmp(bld, PIPE_FUNC_GREATER, a, b);
+      return lp_build_select(bld, cond, a, b);
+   }
 }
 
 
@@ -389,7 +503,7 @@ lp_build_add(struct lp_build_context *bld,
 
    /* TODO: handle signed case */
    if(type.norm && !type.floating && !type.fixed && !type.sign)
-      a = lp_build_min_simple(bld, a, lp_build_comp(bld, b));
+      a = lp_build_min_simple(bld, a, lp_build_comp(bld, b), GALLIVM_NAN_BEHAVIOR_UNDEFINED);
 
    if(LLVMIsConstant(a) && LLVMIsConstant(b))
       if (type.floating)
@@ -404,7 +518,7 @@ lp_build_add(struct lp_build_context *bld,
 
    /* clamp to ceiling of 1.0 */
    if(bld->type.norm && (bld->type.floating || bld->type.fixed))
-      res = lp_build_min_simple(bld, res, bld->one);
+      res = lp_build_min_simple(bld, res, bld->one, GALLIVM_NAN_BEHAVIOR_UNDEFINED);
 
    /* XXX clamp to floor of -1 or 0??? */
 
@@ -670,7 +784,7 @@ lp_build_sub(struct lp_build_context *bld,
 
    /* TODO: handle signed case */
    if(type.norm && !type.floating && !type.fixed && !type.sign)
-      a = lp_build_max_simple(bld, a, b);
+      a = lp_build_max_simple(bld, a, b, GALLIVM_NAN_BEHAVIOR_UNDEFINED);
 
    if(LLVMIsConstant(a) && LLVMIsConstant(b))
       if (type.floating)
@@ -684,7 +798,7 @@ lp_build_sub(struct lp_build_context *bld,
          res = LLVMBuildSub(builder, a, b, "");
 
    if(bld->type.norm && (bld->type.floating || bld->type.fixed))
-      res = lp_build_max_simple(bld, res, bld->zero);
+      res = lp_build_max_simple(bld, res, bld->zero, GALLIVM_NAN_BEHAVIOR_UNDEFINED);
 
    return res;
 }
@@ -1144,7 +1258,7 @@ lp_build_lerp_3d(struct lp_build_context *bld,
 
 /**
  * Generate min(a, b)
- * Do checks for special cases.
+ * Do checks for special cases but not for nans.
  */
 LLVMValueRef
 lp_build_min(struct lp_build_context *bld,
@@ -1172,13 +1286,48 @@ lp_build_min(struct lp_build_context *bld,
          return a;
    }
 
-   return lp_build_min_simple(bld, a, b);
+   return lp_build_min_simple(bld, a, b, GALLIVM_NAN_BEHAVIOR_UNDEFINED);
 }
 
 
 /**
+ * Generate min(a, b)
+ * NaN's are handled according to the behavior specified by the
+ * nan_behavior argument.
+ */
+LLVMValueRef
+lp_build_min_ext(struct lp_build_context *bld,
+                 LLVMValueRef a,
+                 LLVMValueRef b,
+                 enum gallivm_nan_behavior nan_behavior)
+{
+   assert(lp_check_value(bld->type, a));
+   assert(lp_check_value(bld->type, b));
+
+   if(a == bld->undef || b == bld->undef)
+      return bld->undef;
+
+   if(a == b)
+      return a;
+
+   if (bld->type.norm) {
+      if (!bld->type.sign) {
+         if (a == bld->zero || b == bld->zero) {
+            return bld->zero;
+         }
+      }
+      if(a == bld->one)
+         return b;
+      if(b == bld->one)
+         return a;
+   }
+
+   return lp_build_min_simple(bld, a, b, nan_behavior);
+}
+
+/**
  * Generate max(a, b)
- * Do checks for special cases.
+ * Do checks for special cases, but NaN behavior is undefined.
  */
 LLVMValueRef
 lp_build_max(struct lp_build_context *bld,
@@ -1207,9 +1356,46 @@ lp_build_max(struct lp_build_context *bld,
       }
    }
 
-   return lp_build_max_simple(bld, a, b);
+   return lp_build_max_simple(bld, a, b, GALLIVM_NAN_BEHAVIOR_UNDEFINED);
 }
 
+
+/**
+ * Generate max(a, b)
+ * Checks for special cases.
+ * NaN's are handled according to the behavior specified by the
+ * nan_behavior argument.
+ */
+LLVMValueRef
+lp_build_max_ext(struct lp_build_context *bld,
+                  LLVMValueRef a,
+                  LLVMValueRef b,
+                  enum gallivm_nan_behavior nan_behavior)
+{
+   assert(lp_check_value(bld->type, a));
+   assert(lp_check_value(bld->type, b));
+
+   if(a == bld->undef || b == bld->undef)
+      return bld->undef;
+
+   if(a == b)
+      return a;
+
+   if(bld->type.norm) {
+      if(a == bld->one || b == bld->one)
+         return bld->one;
+      if (!bld->type.sign) {
+         if (a == bld->zero) {
+            return b;
+         }
+         if (b == bld->zero) {
+            return a;
+         }
+      }
+   }
+
+   return lp_build_max_simple(bld, a, b, nan_behavior);
+}
 
 /**
  * Generate clamp(a, min, max)
@@ -2404,16 +2590,21 @@ lp_build_fast_rsqrt(struct lp_build_context *bld,
 
 
 /**
- * Generate sin(a) using SSE2
+ * Generate sin(a) or cos(a) using polynomial approximation.
+ * TODO: it might be worth recognizing sin and cos using same source
+ * (i.e. d3d10 sincos opcode). Obviously doing both at the same time
+ * would be way cheaper than calculating (nearly) everything twice...
+ * Not sure it's common enough to be worth bothering however, scs
+ * opcode could also benefit from calculating both though.
  */
-LLVMValueRef
-lp_build_sin(struct lp_build_context *bld,
-             LLVMValueRef a)
+static LLVMValueRef
+lp_build_sin_or_cos(struct lp_build_context *bld,
+                    LLVMValueRef a,
+                    boolean cos)
 {
    struct gallivm_state *gallivm = bld->gallivm;
-   LLVMBuilderRef builder = gallivm->builder;
+   LLVMBuilderRef b = gallivm->builder;
    struct lp_type int_type = lp_int_type(bld->type);
-   LLVMBuilderRef b = builder;
 
    /*
     *  take the absolute value,
@@ -2427,17 +2618,10 @@ lp_build_sin(struct lp_build_context *bld,
    LLVMValueRef x_abs = LLVMBuildBitCast(b, absi, bld->vec_type, "x_abs");
 
    /*
-    * extract the sign bit (upper one)
-    * sign_bit = _mm_and_ps(sign_bit, *(v4sf*)_ps_sign_mask);
-    */
-   LLVMValueRef sig_mask = lp_build_const_int_vec(gallivm, bld->type, 0x80000000);
-   LLVMValueRef sign_bit_i = LLVMBuildAnd(b, a_v4si, sig_mask, "sign_bit_i");
-
-   /*
     * scale by 4/Pi
     * y = _mm_mul_ps(x, *(v4sf*)_ps_cephes_FOPI);
     */
-   
+
    LLVMValueRef FOPi = lp_build_const_vec(gallivm, bld->type, 1.27323954473516);
    LLVMValueRef scale_y = LLVMBuildFMul(b, x_abs, FOPi, "scale_y");
 
@@ -2445,7 +2629,7 @@ lp_build_sin(struct lp_build_context *bld,
     * store the integer part of y in mm0
     * emm2 = _mm_cvttps_epi32(y);
     */
-   
+
    LLVMValueRef emm2_i = LLVMBuildFPToSI(b, scale_y, bld->int_vec_type, "emm2_i");
 
    /*
@@ -2466,37 +2650,40 @@ lp_build_sin(struct lp_build_context *bld,
     */
    LLVMValueRef y_2 = LLVMBuildSIToFP(b, emm2_and, bld->vec_type, "y_2");
 
-   /* get the swap sign flag
-    * emm0 = _mm_and_si128(emm2, *(v4si*)_pi32_4);
-    */
-   LLVMValueRef pi32_4 = lp_build_const_int_vec(gallivm, bld->type, 4);
-   LLVMValueRef emm0_and =  LLVMBuildAnd(b, emm2_add, pi32_4, "emm0_and");
-   
-   /*
-    * emm2 = _mm_slli_epi32(emm0, 29);
-    */  
+   LLVMValueRef const_2 = lp_build_const_int_vec(gallivm, bld->type, 2);
+   LLVMValueRef const_4 = lp_build_const_int_vec(gallivm, bld->type, 4);
    LLVMValueRef const_29 = lp_build_const_int_vec(gallivm, bld->type, 29);
-   LLVMValueRef swap_sign_bit = LLVMBuildShl(b, emm0_and, const_29, "swap_sign_bit");
+   LLVMValueRef sign_mask = lp_build_const_int_vec(gallivm, bld->type, 0x80000000);
 
    /*
-    * get the polynom selection mask 
+    * Argument used for poly selection and sign bit determination
+    * is different for sin vs. cos.
+    */
+   LLVMValueRef emm2_2 = cos ? LLVMBuildSub(b, emm2_and, const_2, "emm2_2") :
+                               emm2_and;
+
+   LLVMValueRef sign_bit = cos ? LLVMBuildShl(b, LLVMBuildAnd(b, const_4,
+                                                              LLVMBuildNot(b, emm2_2, ""), ""),
+                                              const_29, "sign_bit") :
+                                 LLVMBuildAnd(b, LLVMBuildXor(b, a_v4si,
+                                                              LLVMBuildShl(b, emm2_add,
+                                                                           const_29, ""), ""),
+                                              sign_mask, "sign_bit");
+
+   /*
+    * get the polynom selection mask
     * there is one polynom for 0 <= x <= Pi/4
     * and another one for Pi/4<x<=Pi/2
     * Both branches will be computed.
-    *  
+    *
     * emm2 = _mm_and_si128(emm2, *(v4si*)_pi32_2);
     * emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
     */
 
-   LLVMValueRef pi32_2 = lp_build_const_int_vec(gallivm, bld->type, 2);
-   LLVMValueRef emm2_3 =  LLVMBuildAnd(b, emm2_and, pi32_2, "emm2_3");
+   LLVMValueRef emm2_3 =  LLVMBuildAnd(b, emm2_2, const_2, "emm2_3");
    LLVMValueRef poly_mask = lp_build_compare(gallivm,
                                              int_type, PIPE_FUNC_EQUAL,
                                              emm2_3, lp_build_const_int_vec(gallivm, bld->type, 0));
-   /*
-    *   sign_bit = _mm_xor_ps(sign_bit, swap_sign_bit);
-    */
-   LLVMValueRef sign_bit_1 =  LLVMBuildXor(b, sign_bit_i, swap_sign_bit, "sign_bit");
 
    /*
     * _PS_CONST(minus_cephes_DP1, -0.78515625);
@@ -2508,8 +2695,8 @@ lp_build_sin(struct lp_build_context *bld,
    LLVMValueRef DP3 = lp_build_const_vec(gallivm, bld->type, -3.77489497744594108e-8);
 
    /*
-    * The magic pass: "Extended precision modular arithmetic" 
-    * x = ((x - y * DP1) - y * DP2) - y * DP3; 
+    * The magic pass: "Extended precision modular arithmetic"
+    * x = ((x - y * DP1) - y * DP2) - y * DP3;
     * xmm1 = _mm_mul_ps(y, xmm1);
     * xmm2 = _mm_mul_ps(y, xmm2);
     * xmm3 = _mm_mul_ps(y, xmm3);
@@ -2522,7 +2709,7 @@ lp_build_sin(struct lp_build_context *bld,
     * x = _mm_add_ps(x, xmm1);
     * x = _mm_add_ps(x, xmm2);
     * x = _mm_add_ps(x, xmm3);
-    */ 
+    */
 
    LLVMValueRef x_1 = LLVMBuildFAdd(b, x_abs, xmm1, "x_1");
    LLVMValueRef x_2 = LLVMBuildFAdd(b, x_1, xmm2, "x_2");
@@ -2560,7 +2747,7 @@ lp_build_sin(struct lp_build_context *bld,
     * tmp = _mm_mul_ps(z, *(v4sf*)_ps_0p5);
     * y = _mm_sub_ps(y, tmp);
     * y = _mm_add_ps(y, *(v4sf*)_ps_1);
-    */ 
+    */
    LLVMValueRef half = lp_build_const_vec(gallivm, bld->type, 0.5);
    LLVMValueRef tmp = LLVMBuildFMul(b, z, half, "tmp");
    LLVMValueRef y_9 = LLVMBuildFSub(b, y_8, tmp, "y_8");
@@ -2615,226 +2802,41 @@ lp_build_sin(struct lp_build_context *bld,
     * update the sign
     * y = _mm_xor_ps(y, sign_bit);
     */
-   LLVMValueRef y_sign = LLVMBuildXor(b, y_combine, sign_bit_1, "y_sin");
+   LLVMValueRef y_sign = LLVMBuildXor(b, y_combine, sign_bit, "y_sign");
    LLVMValueRef y_result = LLVMBuildBitCast(b, y_sign, bld->vec_type, "y_result");
+
+   LLVMValueRef isfinite = lp_build_isfinite(bld, a);
+
+   /* clamp output to be within [-1, 1] */
+   y_result = lp_build_clamp(bld, y_result,
+                             lp_build_const_vec(bld->gallivm, bld->type,  -1.f),
+                             lp_build_const_vec(bld->gallivm, bld->type,  1.f));
+   /* If a is -inf, inf or NaN then return NaN */
+   y_result = lp_build_select(bld, isfinite, y_result,
+                              lp_build_const_vec(bld->gallivm, bld->type,  NAN));
    return y_result;
 }
 
 
 /**
- * Generate cos(a) using SSE2
+ * Generate sin(a)
+ */
+LLVMValueRef
+lp_build_sin(struct lp_build_context *bld,
+             LLVMValueRef a)
+{
+   return lp_build_sin_or_cos(bld, a, FALSE);
+}
+
+
+/**
+ * Generate cos(a)
  */
 LLVMValueRef
 lp_build_cos(struct lp_build_context *bld,
              LLVMValueRef a)
 {
-   struct gallivm_state *gallivm = bld->gallivm;
-   LLVMBuilderRef builder = gallivm->builder;
-   struct lp_type int_type = lp_int_type(bld->type);
-   LLVMBuilderRef b = builder;
-
-   /*
-    *  take the absolute value,
-    *  x = _mm_and_ps(x, *(v4sf*)_ps_inv_sign_mask);
-    */
-
-   LLVMValueRef inv_sig_mask = lp_build_const_int_vec(gallivm, bld->type, ~0x80000000);
-   LLVMValueRef a_v4si = LLVMBuildBitCast(b, a, bld->int_vec_type, "a_v4si");
-
-   LLVMValueRef absi = LLVMBuildAnd(b, a_v4si, inv_sig_mask, "absi");
-   LLVMValueRef x_abs = LLVMBuildBitCast(b, absi, bld->vec_type, "x_abs");
-
-   /*
-    * scale by 4/Pi
-    * y = _mm_mul_ps(x, *(v4sf*)_ps_cephes_FOPI);
-    */
-   
-   LLVMValueRef FOPi = lp_build_const_vec(gallivm, bld->type, 1.27323954473516);
-   LLVMValueRef scale_y = LLVMBuildFMul(b, x_abs, FOPi, "scale_y");
-
-   /*
-    * store the integer part of y in mm0
-    * emm2 = _mm_cvttps_epi32(y);
-    */
-   
-   LLVMValueRef emm2_i = LLVMBuildFPToSI(b, scale_y, bld->int_vec_type, "emm2_i");
-
-   /*
-    * j=(j+1) & (~1) (see the cephes sources)
-    * emm2 = _mm_add_epi32(emm2, *(v4si*)_pi32_1);
-    */
-
-   LLVMValueRef all_one = lp_build_const_int_vec(gallivm, bld->type, 1);
-   LLVMValueRef emm2_add =  LLVMBuildAdd(b, emm2_i, all_one, "emm2_add");
-   /*
-    * emm2 = _mm_and_si128(emm2, *(v4si*)_pi32_inv1);
-    */
-   LLVMValueRef inv_one = lp_build_const_int_vec(gallivm, bld->type, ~1);
-   LLVMValueRef emm2_and =  LLVMBuildAnd(b, emm2_add, inv_one, "emm2_and");
-
-   /*
-    * y = _mm_cvtepi32_ps(emm2);
-    */
-   LLVMValueRef y_2 = LLVMBuildSIToFP(b, emm2_and, bld->vec_type, "y_2");
-
-
-   /*
-    * emm2 = _mm_sub_epi32(emm2, *(v4si*)_pi32_2);
-    */
-   LLVMValueRef const_2 = lp_build_const_int_vec(gallivm, bld->type, 2);
-   LLVMValueRef emm2_2 = LLVMBuildSub(b, emm2_and, const_2, "emm2_2");
-
-
-   /* get the swap sign flag
-    * emm0 = _mm_andnot_si128(emm2, *(v4si*)_pi32_4);
-    */
-   LLVMValueRef inv = lp_build_const_int_vec(gallivm, bld->type, ~0);
-   LLVMValueRef emm0_not = LLVMBuildXor(b, emm2_2, inv, "emm0_not");
-   LLVMValueRef pi32_4 = lp_build_const_int_vec(gallivm, bld->type, 4);
-   LLVMValueRef emm0_and =  LLVMBuildAnd(b, emm0_not, pi32_4, "emm0_and");
-   
-   /*
-    * emm2 = _mm_slli_epi32(emm0, 29);
-    */  
-   LLVMValueRef const_29 = lp_build_const_int_vec(gallivm, bld->type, 29);
-   LLVMValueRef sign_bit = LLVMBuildShl(b, emm0_and, const_29, "sign_bit");
-
-   /*
-    * get the polynom selection mask 
-    * there is one polynom for 0 <= x <= Pi/4
-    * and another one for Pi/4<x<=Pi/2
-    * Both branches will be computed.
-    *  
-    * emm2 = _mm_and_si128(emm2, *(v4si*)_pi32_2);
-    * emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
-    */
-
-   LLVMValueRef pi32_2 = lp_build_const_int_vec(gallivm, bld->type, 2);
-   LLVMValueRef emm2_3 =  LLVMBuildAnd(b, emm2_2, pi32_2, "emm2_3");
-   LLVMValueRef poly_mask = lp_build_compare(gallivm,
-                                             int_type, PIPE_FUNC_EQUAL,
-   				             emm2_3, lp_build_const_int_vec(gallivm, bld->type, 0));
-
-   /*
-    * _PS_CONST(minus_cephes_DP1, -0.78515625);
-    * _PS_CONST(minus_cephes_DP2, -2.4187564849853515625e-4);
-    * _PS_CONST(minus_cephes_DP3, -3.77489497744594108e-8);
-    */
-   LLVMValueRef DP1 = lp_build_const_vec(gallivm, bld->type, -0.78515625);
-   LLVMValueRef DP2 = lp_build_const_vec(gallivm, bld->type, -2.4187564849853515625e-4);
-   LLVMValueRef DP3 = lp_build_const_vec(gallivm, bld->type, -3.77489497744594108e-8);
-
-   /*
-    * The magic pass: "Extended precision modular arithmetic" 
-    * x = ((x - y * DP1) - y * DP2) - y * DP3; 
-    * xmm1 = _mm_mul_ps(y, xmm1);
-    * xmm2 = _mm_mul_ps(y, xmm2);
-    * xmm3 = _mm_mul_ps(y, xmm3);
-    */
-   LLVMValueRef xmm1 = LLVMBuildFMul(b, y_2, DP1, "xmm1");
-   LLVMValueRef xmm2 = LLVMBuildFMul(b, y_2, DP2, "xmm2");
-   LLVMValueRef xmm3 = LLVMBuildFMul(b, y_2, DP3, "xmm3");
-
-   /*
-    * x = _mm_add_ps(x, xmm1);
-    * x = _mm_add_ps(x, xmm2);
-    * x = _mm_add_ps(x, xmm3);
-    */ 
-
-   LLVMValueRef x_1 = LLVMBuildFAdd(b, x_abs, xmm1, "x_1");
-   LLVMValueRef x_2 = LLVMBuildFAdd(b, x_1, xmm2, "x_2");
-   LLVMValueRef x_3 = LLVMBuildFAdd(b, x_2, xmm3, "x_3");
-
-   /*
-    * Evaluate the first polynom  (0 <= x <= Pi/4)
-    *
-    * z = _mm_mul_ps(x,x);
-    */
-   LLVMValueRef z = LLVMBuildFMul(b, x_3, x_3, "z");
-
-   /*
-    * _PS_CONST(coscof_p0,  2.443315711809948E-005);
-    * _PS_CONST(coscof_p1, -1.388731625493765E-003);
-    * _PS_CONST(coscof_p2,  4.166664568298827E-002);
-    */
-   LLVMValueRef coscof_p0 = lp_build_const_vec(gallivm, bld->type, 2.443315711809948E-005);
-   LLVMValueRef coscof_p1 = lp_build_const_vec(gallivm, bld->type, -1.388731625493765E-003);
-   LLVMValueRef coscof_p2 = lp_build_const_vec(gallivm, bld->type, 4.166664568298827E-002);
-
-   /*
-    * y = *(v4sf*)_ps_coscof_p0;
-    * y = _mm_mul_ps(y, z);
-    */
-   LLVMValueRef y_3 = LLVMBuildFMul(b, z, coscof_p0, "y_3");
-   LLVMValueRef y_4 = LLVMBuildFAdd(b, y_3, coscof_p1, "y_4");
-   LLVMValueRef y_5 = LLVMBuildFMul(b, y_4, z, "y_5");
-   LLVMValueRef y_6 = LLVMBuildFAdd(b, y_5, coscof_p2, "y_6");
-   LLVMValueRef y_7 = LLVMBuildFMul(b, y_6, z, "y_7");
-   LLVMValueRef y_8 = LLVMBuildFMul(b, y_7, z, "y_8");
-
-
-   /*
-    * tmp = _mm_mul_ps(z, *(v4sf*)_ps_0p5);
-    * y = _mm_sub_ps(y, tmp);
-    * y = _mm_add_ps(y, *(v4sf*)_ps_1);
-    */ 
-   LLVMValueRef half = lp_build_const_vec(gallivm, bld->type, 0.5);
-   LLVMValueRef tmp = LLVMBuildFMul(b, z, half, "tmp");
-   LLVMValueRef y_9 = LLVMBuildFSub(b, y_8, tmp, "y_8");
-   LLVMValueRef one = lp_build_const_vec(gallivm, bld->type, 1.0);
-   LLVMValueRef y_10 = LLVMBuildFAdd(b, y_9, one, "y_9");
-
-   /*
-    * _PS_CONST(sincof_p0, -1.9515295891E-4);
-    * _PS_CONST(sincof_p1,  8.3321608736E-3);
-    * _PS_CONST(sincof_p2, -1.6666654611E-1);
-    */
-   LLVMValueRef sincof_p0 = lp_build_const_vec(gallivm, bld->type, -1.9515295891E-4);
-   LLVMValueRef sincof_p1 = lp_build_const_vec(gallivm, bld->type, 8.3321608736E-3);
-   LLVMValueRef sincof_p2 = lp_build_const_vec(gallivm, bld->type, -1.6666654611E-1);
-
-   /*
-    * Evaluate the second polynom  (Pi/4 <= x <= 0)
-    *
-    * y2 = *(v4sf*)_ps_sincof_p0;
-    * y2 = _mm_mul_ps(y2, z);
-    * y2 = _mm_add_ps(y2, *(v4sf*)_ps_sincof_p1);
-    * y2 = _mm_mul_ps(y2, z);
-    * y2 = _mm_add_ps(y2, *(v4sf*)_ps_sincof_p2);
-    * y2 = _mm_mul_ps(y2, z);
-    * y2 = _mm_mul_ps(y2, x);
-    * y2 = _mm_add_ps(y2, x);
-    */
-
-   LLVMValueRef y2_3 = LLVMBuildFMul(b, z, sincof_p0, "y2_3");
-   LLVMValueRef y2_4 = LLVMBuildFAdd(b, y2_3, sincof_p1, "y2_4");
-   LLVMValueRef y2_5 = LLVMBuildFMul(b, y2_4, z, "y2_5");
-   LLVMValueRef y2_6 = LLVMBuildFAdd(b, y2_5, sincof_p2, "y2_6");
-   LLVMValueRef y2_7 = LLVMBuildFMul(b, y2_6, z, "y2_7");
-   LLVMValueRef y2_8 = LLVMBuildFMul(b, y2_7, x_3, "y2_8");
-   LLVMValueRef y2_9 = LLVMBuildFAdd(b, y2_8, x_3, "y2_9");
-
-   /*
-    * select the correct result from the two polynoms
-    * xmm3 = poly_mask;
-    * y2 = _mm_and_ps(xmm3, y2); //, xmm3);
-    * y = _mm_andnot_ps(xmm3, y);
-    * y = _mm_or_ps(y,y2);
-    */
-   LLVMValueRef y2_i = LLVMBuildBitCast(b, y2_9, bld->int_vec_type, "y2_i");
-   LLVMValueRef y_i = LLVMBuildBitCast(b, y_10, bld->int_vec_type, "y_i");
-   LLVMValueRef y2_and = LLVMBuildAnd(b, y2_i, poly_mask, "y2_and");
-   LLVMValueRef poly_mask_inv = LLVMBuildNot(b, poly_mask, "poly_mask_inv");
-   LLVMValueRef y_and = LLVMBuildAnd(b, y_i, poly_mask_inv, "y_and");
-   LLVMValueRef y_combine = LLVMBuildOr(b, y_and, y2_and, "y_combine");
-
-   /*
-    * update the sign
-    * y = _mm_xor_ps(y, sign_bit);
-    */
-   LLVMValueRef y_sign = LLVMBuildXor(b, y_combine, sign_bit, "y_sin");
-   LLVMValueRef y_result = LLVMBuildBitCast(b, y_sign, bld->vec_type, "y_result");
-   return y_result;
+   return lp_build_sin_or_cos(bld, a, TRUE);
 }
 
 
@@ -2876,6 +2878,7 @@ lp_build_exp(struct lp_build_context *bld,
 
 /**
  * Generate log(x)
+ * Behavior is undefined with infs, 0s and nans
  */
 LLVMValueRef
 lp_build_log(struct lp_build_context *bld,
@@ -2888,6 +2891,22 @@ lp_build_log(struct lp_build_context *bld,
    assert(lp_check_value(bld->type, x));
 
    return lp_build_mul(bld, log2, lp_build_log2(bld, x));
+}
+
+/**
+ * Generate log(x) that handles edge cases (infs, 0s and nans)
+ */
+LLVMValueRef
+lp_build_log_safe(struct lp_build_context *bld,
+                  LLVMValueRef x)
+{
+   /* log(2) */
+   LLVMValueRef log2 = lp_build_const_vec(bld->gallivm, bld->type,
+                                          0.69314718055994529);
+
+   assert(lp_check_value(bld->type, x));
+
+   return lp_build_mul(bld, log2, lp_build_log2_safe(bld, x));
 }
 
 
@@ -2955,7 +2974,7 @@ lp_build_polynomial(struct lp_build_context *bld,
  */
 const double lp_build_exp2_polynomial[] = {
 #if EXP_POLY_DEGREE == 5
-   0.999999925063526176901,
+   1.000000000000000000000, /*XXX: was 0.999999925063526176901, recompute others */
    0.693153073200168932794,
    0.240153617044375388211,
    0.0558263180532956664775,
@@ -2982,12 +3001,9 @@ const double lp_build_exp2_polynomial[] = {
 };
 
 
-void
-lp_build_exp2_approx(struct lp_build_context *bld,
-                     LLVMValueRef x,
-                     LLVMValueRef *p_exp2_int_part,
-                     LLVMValueRef *p_frac_part,
-                     LLVMValueRef *p_exp2)
+LLVMValueRef
+lp_build_exp2(struct lp_build_context *bld,
+              LLVMValueRef x)
 {
    LLVMBuilderRef builder = bld->gallivm->builder;
    const struct lp_type type = bld->type;
@@ -3000,59 +3016,46 @@ lp_build_exp2_approx(struct lp_build_context *bld,
 
    assert(lp_check_value(bld->type, x));
 
-   if(p_exp2_int_part || p_frac_part || p_exp2) {
-      /* TODO: optimize the constant case */
-      if (gallivm_debug & GALLIVM_DEBUG_PERF &&
-          LLVMIsConstant(x)) {
-         debug_printf("%s: inefficient/imprecise constant arithmetic\n",
-                      __FUNCTION__);
-      }
 
-      assert(type.floating && type.width == 32);
-
-      x = lp_build_min(bld, x, lp_build_const_vec(bld->gallivm, type,  129.0));
-      x = lp_build_max(bld, x, lp_build_const_vec(bld->gallivm, type, -126.99999));
-
-      /* ipart = floor(x) */
-      /* fpart = x - ipart */
-      lp_build_ifloor_fract(bld, x, &ipart, &fpart);
+   /* TODO: optimize the constant case */
+   if (gallivm_debug & GALLIVM_DEBUG_PERF &&
+       LLVMIsConstant(x)) {
+      debug_printf("%s: inefficient/imprecise constant arithmetic\n",
+                   __FUNCTION__);
    }
 
-   if(p_exp2_int_part || p_exp2) {
-      /* expipart = (float) (1 << ipart) */
-      expipart = LLVMBuildAdd(builder, ipart,
-                              lp_build_const_int_vec(bld->gallivm, type, 127), "");
-      expipart = LLVMBuildShl(builder, expipart,
-                              lp_build_const_int_vec(bld->gallivm, type, 23), "");
-      expipart = LLVMBuildBitCast(builder, expipart, vec_type, "");
-   }
+   assert(type.floating && type.width == 32);
 
-   if(p_exp2) {
-      expfpart = lp_build_polynomial(bld, fpart, lp_build_exp2_polynomial,
-                                     Elements(lp_build_exp2_polynomial));
+   /* We want to preserve NaN and make sure than for exp2 if x > 128,
+    * the result is INF  and if it's smaller than -126.9 the result is 0 */
+   x = lp_build_min_ext(bld, lp_build_const_vec(bld->gallivm, type,  128.0), x,
+                        GALLIVM_NAN_RETURN_SECOND);
+   x = lp_build_max_ext(bld, lp_build_const_vec(bld->gallivm, type, -126.99999), x,
+                        GALLIVM_NAN_RETURN_SECOND);
 
-      res = LLVMBuildFMul(builder, expipart, expfpart, "");
-   }
-
-   if(p_exp2_int_part)
-      *p_exp2_int_part = expipart;
-
-   if(p_frac_part)
-      *p_frac_part = fpart;
-
-   if(p_exp2)
-      *p_exp2 = res;
-}
+   /* ipart = floor(x) */
+   /* fpart = x - ipart */
+   lp_build_ifloor_fract(bld, x, &ipart, &fpart);
 
 
-LLVMValueRef
-lp_build_exp2(struct lp_build_context *bld,
-              LLVMValueRef x)
-{
-   LLVMValueRef res;
-   lp_build_exp2_approx(bld, x, NULL, NULL, &res);
+
+   /* expipart = (float) (1 << ipart) */
+   expipart = LLVMBuildAdd(builder, ipart,
+                           lp_build_const_int_vec(bld->gallivm, type, 127), "");
+   expipart = LLVMBuildShl(builder, expipart,
+                           lp_build_const_int_vec(bld->gallivm, type, 23), "");
+   expipart = LLVMBuildBitCast(builder, expipart, vec_type, "");
+
+
+   expfpart = lp_build_polynomial(bld, fpart, lp_build_exp2_polynomial,
+                                  Elements(lp_build_exp2_polynomial));
+
+   res = LLVMBuildFMul(builder, expipart, expfpart, "");
+
+
    return res;
 }
+
 
 
 /**
@@ -3159,13 +3162,25 @@ const double lp_build_log2_polynomial[] = {
  * See http://www.devmaster.net/forums/showthread.php?p=43580
  * http://en.wikipedia.org/wiki/Logarithm#Calculation
  * http://www.nezumi.demon.co.uk/consult/logx.htm
+ *
+ * If handle_edge_cases is true the function will perform computations
+ * to match the required D3D10+ behavior for each of the edge cases.
+ * That means that if input is:
+ * - less than zero (to and including -inf) then NaN will be returned
+ * - equal to zero (-denorm, -0, +0 or +denorm), then -inf will be returned
+ * - +infinity, then +infinity will be returned
+ * - NaN, then NaN will be returned
+ *
+ * Those checks are fairly expensive so if you don't need them make sure
+ * handle_edge_cases is false.
  */
 void
 lp_build_log2_approx(struct lp_build_context *bld,
                      LLVMValueRef x,
                      LLVMValueRef *p_exp,
                      LLVMValueRef *p_floor_log2,
-                     LLVMValueRef *p_log2)
+                     LLVMValueRef *p_log2,
+                     boolean handle_edge_cases)
 {
    LLVMBuilderRef builder = bld->gallivm->builder;
    const struct lp_type type = bld->type;
@@ -3238,6 +3253,29 @@ lp_build_log2_approx(struct lp_build_context *bld,
       logmant = lp_build_mul(bld, y, logmant);
 
       res = lp_build_add(bld, logmant, logexp);
+
+      if (type.floating && handle_edge_cases) {
+         LLVMValueRef negmask, infmask,  zmask;
+         negmask = lp_build_cmp(bld, PIPE_FUNC_LESS, x,
+                                lp_build_const_vec(bld->gallivm, type,  0.0f));
+         zmask = lp_build_cmp(bld, PIPE_FUNC_EQUAL, x,
+                              lp_build_const_vec(bld->gallivm, type,  0.0f));
+         infmask = lp_build_cmp(bld, PIPE_FUNC_GEQUAL, x,
+                                lp_build_const_vec(bld->gallivm, type,  INFINITY));
+
+         /* If x is qual to inf make sure we return inf */
+         res = lp_build_select(bld, infmask,
+                               lp_build_const_vec(bld->gallivm, type,  INFINITY),
+                               res);
+         /* If x is qual to 0, return -inf */
+         res = lp_build_select(bld, zmask,
+                               lp_build_const_vec(bld->gallivm, type,  -INFINITY),
+                               res);
+         /* If x is nan or less than 0, return nan */
+         res = lp_build_select(bld, negmask,
+                               lp_build_const_vec(bld->gallivm, type,  NAN),
+                               res);
+      }
    }
 
    if(p_exp) {
@@ -3253,12 +3291,31 @@ lp_build_log2_approx(struct lp_build_context *bld,
 }
 
 
+/*
+ * log2 implementation which doesn't have special code to
+ * handle edge cases (-inf, 0, inf, NaN). It's faster but
+ * the results for those cases are undefined.
+ */
 LLVMValueRef
 lp_build_log2(struct lp_build_context *bld,
               LLVMValueRef x)
 {
    LLVMValueRef res;
-   lp_build_log2_approx(bld, x, NULL, NULL, &res);
+   lp_build_log2_approx(bld, x, NULL, NULL, &res, FALSE);
+   return res;
+}
+
+/*
+ * Version of log2 which handles all edge cases.
+ * Look at documentation of lp_build_log2_approx for
+ * description of the behavior for each of the edge cases.
+ */
+LLVMValueRef
+lp_build_log2_safe(struct lp_build_context *bld,
+                   LLVMValueRef x)
+{
+   LLVMValueRef res;
+   lp_build_log2_approx(bld, x, NULL, NULL, &res, TRUE);
    return res;
 }
 
@@ -3343,3 +3400,78 @@ lp_build_mod(struct lp_build_context *bld,
       res = LLVMBuildURem(builder, x, y, "");
    return res;
 }
+
+
+/*
+ * For floating inputs it creates and returns a mask
+ * which is all 1's for channels which are NaN.
+ * Channels inside x which are not NaN will be 0.
+ */
+LLVMValueRef
+lp_build_isnan(struct lp_build_context *bld,
+               LLVMValueRef x)
+{
+   LLVMValueRef mask;
+   LLVMTypeRef int_vec_type = lp_build_int_vec_type(bld->gallivm, bld->type);
+
+   assert(bld->type.floating);
+   assert(lp_check_value(bld->type, x));
+
+   mask = LLVMBuildFCmp(bld->gallivm->builder, LLVMRealOEQ, x, x,
+                        "isnotnan");
+   mask = LLVMBuildNot(bld->gallivm->builder, mask, "");
+   mask = LLVMBuildSExt(bld->gallivm->builder, mask, int_vec_type, "isnan");
+   return mask;
+}
+
+/* Returns all 1's for floating point numbers that are
+ * finite numbers and returns all zeros for -inf,
+ * inf and nan's */
+LLVMValueRef
+lp_build_isfinite(struct lp_build_context *bld,
+                  LLVMValueRef x)
+{
+   LLVMBuilderRef builder = bld->gallivm->builder;
+   LLVMTypeRef int_vec_type = lp_build_int_vec_type(bld->gallivm, bld->type);
+   struct lp_type int_type = lp_int_type(bld->type);
+   LLVMValueRef intx = LLVMBuildBitCast(builder, x, int_vec_type, "");
+   LLVMValueRef infornan32 = lp_build_const_int_vec(bld->gallivm, bld->type,
+                                                    0x7f800000);
+
+   if (!bld->type.floating) {
+      return lp_build_const_int_vec(bld->gallivm, bld->type, 0);
+   }
+   assert(bld->type.floating);
+   assert(lp_check_value(bld->type, x));
+   assert(bld->type.width == 32);
+
+   intx = LLVMBuildAnd(builder, intx, infornan32, "");
+   return lp_build_compare(bld->gallivm, int_type, PIPE_FUNC_NOTEQUAL,
+                           intx, infornan32);
+}
+
+/*
+ * Returns true if the number is nan or inf and false otherwise.
+ * The input has to be a floating point vector.
+ */
+LLVMValueRef
+lp_build_is_inf_or_nan(struct gallivm_state *gallivm,
+                       const struct lp_type type,
+                       LLVMValueRef x)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   struct lp_type int_type = lp_int_type(type);
+   LLVMValueRef const0 = lp_build_const_int_vec(gallivm, int_type,
+                                                0x7f800000);
+   LLVMValueRef ret;
+
+   assert(type.floating);
+
+   ret = LLVMBuildBitCast(builder, x, lp_build_vec_type(gallivm, int_type), "");
+   ret = LLVMBuildAnd(builder, ret, const0, "");
+   ret = lp_build_compare(gallivm, int_type, PIPE_FUNC_EQUAL,
+                          ret, const0);
+
+   return ret;
+}
+

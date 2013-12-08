@@ -92,7 +92,6 @@ struct llvmpipe_context {
    struct draw_so_target *so_targets[PIPE_MAX_SO_BUFFERS];
    int num_so_targets;
    struct pipe_query_data_so_statistics so_stats;
-   unsigned num_primitives_generated;
 
    struct pipe_query_data_pipeline_statistics pipeline_statistics;
    unsigned active_statistics_queries;
@@ -122,9 +121,13 @@ struct llvmpipe_context {
    /** Which geometry shader output slot contains layer */
    int layer_slot;
 
-   /**< minimum resolvable depth value, for polygon offset */   
-   double mrd;
-   
+   /** A fake frontface output for unfilled primitives */
+   int face_slot;
+
+   /** Depth format and bias settings. */
+   boolean floating_point_depth;
+   double mrd;   /**< minimum resolvable depth value, for polygon offset */
+
    /** The tiling engine */
    struct lp_setup_context *setup;
    struct lp_setup_variant setup_variant;

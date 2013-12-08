@@ -1094,10 +1094,6 @@ static boolean init_inputs( struct translate_sse *p,
                struct x86_reg tmp_EDX = p->tmp2_EDX;
                struct x86_reg tmp_ECX = p->src_ECX;
 
-               /* instance_num = instance_id - start_instance */
-               x86_mov(p->func, tmp_EDX, start_instance);
-               x86_sub(p->func, tmp_EAX, tmp_EDX);
-
                /* TODO: Add x86_shr() to rtasm and use it whenever
                 *       instance divisor is power of two.
                 */
@@ -1312,14 +1308,22 @@ static boolean build_vertex_emit( struct translate_sse *p,
    x86_push(p->func, p->outbuf_EBX);
    x86_push(p->func, p->count_EBP);
 
-/* on non-Win64 x86-64, these are already in the right registers */
+   /* on non-Win64 x86-64, these are already in the right registers */
    if(x86_target(p->func) != X86_64_STD_ABI)
    {
       x86_push(p->func, p->machine_EDI);
       x86_push(p->func, p->idx_ESI);
 
-      x86_mov(p->func, p->machine_EDI, x86_fn_arg(p->func, 1));
-      x86_mov(p->func, p->idx_ESI, x86_fn_arg(p->func, 2));
+      if(x86_target(p->func) != X86_32)
+      {
+        x64_mov64(p->func, p->machine_EDI, x86_fn_arg(p->func, 1));
+        x64_mov64(p->func, p->idx_ESI, x86_fn_arg(p->func, 2));
+      }
+      else
+      {
+        x86_mov(p->func, p->machine_EDI, x86_fn_arg(p->func, 1));
+        x86_mov(p->func, p->idx_ESI, x86_fn_arg(p->func, 2));
+      }
    }
 
    x86_mov(p->func, p->count_EBP, x86_fn_arg(p->func, 3));

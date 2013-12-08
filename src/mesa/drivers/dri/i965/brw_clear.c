@@ -109,6 +109,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
    struct intel_renderbuffer *depth_irb =
       intel_get_renderbuffer(fb, BUFFER_DEPTH);
    struct intel_mipmap_tree *mt = depth_irb->mt;
+   struct gl_renderbuffer_attachment *depth_att = &fb->Attachment[BUFFER_DEPTH];
 
    if (brw->gen < 6)
       return false;
@@ -180,8 +181,16 @@ brw_fast_clear_depth(struct gl_context *ctx)
     */
    intel_batchbuffer_emit_mi_flush(brw);
 
-   intel_hiz_exec(brw, mt, depth_irb->mt_level, depth_irb->mt_layer,
-		  GEN6_HIZ_OP_DEPTH_CLEAR);
+   if (fb->NumLayers > 0) {
+      assert(fb->NumLayers == depth_irb->mt->level[depth_irb->mt_level].depth);
+      for (unsigned layer = 0; layer < fb->NumLayers; layer++) {
+         intel_hiz_exec(brw, mt, depth_irb->mt_level, layer,
+                        GEN6_HIZ_OP_DEPTH_CLEAR);
+      }
+   } else {
+      intel_hiz_exec(brw, mt, depth_irb->mt_level, depth_irb->mt_layer,
+                     GEN6_HIZ_OP_DEPTH_CLEAR);
+   }
 
    if (brw->gen == 6) {
       /* From the Sandy Bridge PRM, volume 2 part 1, page 314:
@@ -196,7 +205,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
    /* Now, the HiZ buffer contains data that needs to be resolved to the depth
     * buffer.
     */
-   intel_renderbuffer_set_needs_depth_resolve(depth_irb);
+   intel_renderbuffer_att_set_needs_depth_resolve(depth_att);
 
    return true;
 }

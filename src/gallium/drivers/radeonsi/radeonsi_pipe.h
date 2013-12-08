@@ -26,9 +26,8 @@
 #ifndef RADEONSI_PIPE_H
 #define RADEONSI_PIPE_H
 
-#include "../../winsys/radeon/drm/radeon_winsys.h"
+#include "../radeon/r600_pipe_common.h"
 
-#include "pipe/p_state.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
 #include "util/u_format.h"
@@ -50,30 +49,14 @@
 #define R600_TRACE_CS 0
 #define R600_TRACE_CS_DWORDS		6
 
+#define SI_MAX_DRAW_CS_DWORDS 18
+
 struct si_pipe_compute;
 
-struct r600_pipe_fences {
-	struct si_resource		*bo;
-	unsigned			*data;
-	unsigned			next_index;
-	/* linked list of preallocated blocks */
-	struct list_head		blocks;
-	/* linked list of freed fences */
-	struct list_head		pool;
-	pipe_mutex			mutex;
-};
-
 struct r600_screen {
-	struct pipe_screen		screen;
-	struct radeon_winsys		*ws;
-	unsigned			family;
-	enum chip_class			chip_class;
-	struct radeon_info		info;
-	struct r600_tiling_info		tiling_info;
-	struct util_slab_mempool	pool_buffers;
-	struct r600_pipe_fences		fences;
+	struct r600_common_screen	b;
 #if R600_TRACE_CS
-	struct si_resource		*trace_bo;
+	struct r600_resource		*trace_bo;
 	uint32_t			*trace_ptr;
 	unsigned			cs_count;
 #endif
@@ -81,8 +64,9 @@ struct r600_screen {
 
 struct si_pipe_sampler_view {
 	struct pipe_sampler_view	base;
-	struct si_resource		*resource;
+	struct r600_resource		*resource;
 	uint32_t			state[8];
+	uint32_t			fmask_state[8];
 };
 
 struct si_pipe_sampler_state {
@@ -94,56 +78,48 @@ struct si_cs_shader_state {
 	struct si_pipe_compute		*program;
 };
 
-/* needed for blitter save */
-#define NUM_TEX_UNITS 16
-
 struct r600_textures_info {
-	struct si_pipe_sampler_view	*views[NUM_TEX_UNITS];
+	struct si_sampler_views		views;
 	struct si_pipe_sampler_state	*samplers[NUM_TEX_UNITS];
 	unsigned			n_views;
 	uint32_t			depth_texture_mask; /* which textures are depth */
+	uint32_t			compressed_colortex_mask;
 	unsigned			n_samplers;
-	bool				samplers_dirty;
-	bool				is_array_sampler[NUM_TEX_UNITS];
 };
 
-struct r600_fence {
-	struct pipe_reference		reference;
-	unsigned			index; /* in the shared bo */
-	struct si_resource            *sleep_bo;
-	struct list_head		head;
-};
-
-#define FENCE_BLOCK_SIZE 16
-
-struct r600_fence_block {
-	struct r600_fence		fences[FENCE_BLOCK_SIZE];
-	struct list_head		head;
-};
-
-#define R600_CONSTANT_ARRAY_SIZE 256
-#define R600_RESOURCE_ARRAY_SIZE 160
-
-struct r600_constbuf_state
-{
-	struct pipe_constant_buffer	cb[2];
-	uint32_t			enabled_mask;
-	uint32_t			dirty_mask;
-};
+#define SI_NUM_ATOMS(rctx) (sizeof((rctx)->atoms)/sizeof((rctx)->atoms.array[0]))
+#define SI_NUM_SHADERS (PIPE_SHADER_FRAGMENT+1)
 
 struct r600_context {
-	struct pipe_context		context;
+	struct r600_common_context	b;
 	struct blitter_context		*blitter;
-	enum radeon_family		family;
-	enum chip_class			chip_class;
-	void				*custom_dsa_flush_depth_stencil;
-	void				*custom_dsa_flush_depth;
-	void				*custom_dsa_flush_stencil;
+	void				*custom_dsa_flush_depth_stencil[8];
+	void				*custom_dsa_flush_depth[8];
+	void				*custom_dsa_flush_stencil[8];
 	void				*custom_dsa_flush_inplace;
+	void				*custom_blend_resolve;
+	void				*custom_blend_decompress;
 	struct r600_screen		*screen;
-	struct radeon_winsys		*ws;
+
+	union {
+		struct {
+			/* The order matters. */
+			struct r600_atom *const_buffers[SI_NUM_SHADERS];
+			struct r600_atom *sampler_views[SI_NUM_SHADERS];
+			struct r600_atom *streamout_buffers;
+			/* Caches must be flushed after resource descriptors are
+			 * updated in memory. */
+			struct r600_atom *cache_flush;
+			struct r600_atom *streamout_begin;
+		};
+		struct r600_atom *array[0];
+	} atoms;
+
 	struct si_vertex_element	*vertex_elements;
 	struct pipe_framebuffer_state	framebuffer;
+	unsigned			fb_log_samples;
+	unsigned			fb_cb0_is_integer;
+	unsigned			fb_compressed_cb_mask;
 	unsigned			pa_sc_line_stipple;
 	unsigned			pa_su_sc_mode_cntl;
 	/* for saving when using blitter */
@@ -160,10 +136,10 @@ struct r600_context {
 	/* shader information */
 	unsigned			sprite_coord_enable;
 	unsigned			export_16bpc;
-	struct r600_constbuf_state	constbuf_state[PIPE_SHADER_TYPES];
-	struct r600_textures_info	vs_samplers;
-	struct r600_textures_info	ps_samplers;
-	struct si_resource		*border_color_table;
+	struct si_buffer_resources	const_buffers[SI_NUM_SHADERS];
+	struct si_buffer_resources	streamout_buffers;
+	struct r600_textures_info	samplers[SI_NUM_SHADERS];
+	struct r600_resource		*border_color_table;
 	unsigned			border_color_offset;
 
 	struct u_upload_mgr	        *uploader;
@@ -173,26 +149,17 @@ struct r600_context {
 
 	/* Below are variables from the old r600_context.
 	 */
-	struct radeon_winsys_cs	*cs;
-
 	unsigned		pm4_dirty_cdwords;
 
 	/* The list of active queries. Only one query of each type can be active. */
-	struct list_head	active_query_list;
-	unsigned		num_cs_dw_queries_suspend;
-	unsigned		num_cs_dw_streamout_end;
+	struct list_head	active_nontimer_query_list;
+	unsigned		num_cs_dw_nontimer_queries_suspend;
+	/* If queries have been suspended. */
+	bool			nontimer_queries_suspended;
 
 	unsigned		backend_mask;
 	unsigned                max_db; /* for OQ */
-	unsigned		flags;
 	boolean                 predicate_drawing;
-
-	unsigned		num_so_targets;
-	struct r600_so_target	*so_targets[PIPE_MAX_SO_BUFFERS];
-	boolean			streamout_start;
-	unsigned		streamout_append_bitmask;
-	unsigned		*vs_so_stride_in_dw;
-	unsigned		*vs_shader_so_strides;
 
 	/* Vertex and index buffers. */
 	bool			vertex_buffers_dirty;
@@ -203,6 +170,8 @@ struct r600_context {
 	/* With rasterizer discard, there doesn't have to be a pixel shader.
 	 * In that case, we bind this one: */
 	struct si_pipe_shader	*dummy_pixel_shader;
+	struct r600_atom	cache_flush;
+	struct pipe_constant_buffer null_const_buf; /* used for set_constant_buffer(NULL) on CIK */
 
 	/* SI state handling */
 	union si_state	queued;
@@ -211,19 +180,12 @@ struct r600_context {
 
 /* r600_blit.c */
 void si_init_blit_functions(struct r600_context *rctx);
-void si_blit_uncompress_depth(struct pipe_context *ctx,
-		struct r600_resource_texture *texture,
-		struct r600_resource_texture *staging,
-		unsigned first_level, unsigned last_level,
-		unsigned first_layer, unsigned last_layer);
 void si_flush_depth_textures(struct r600_context *rctx,
 			     struct r600_textures_info *textures);
+void r600_decompress_color_textures(struct r600_context *rctx,
+				    struct r600_textures_info *textures);
 
 /* r600_buffer.c */
-bool si_init_resource(struct r600_screen *rscreen,
-		      struct si_resource *res,
-		      unsigned size, unsigned alignment,
-		      boolean use_reusable_pool, unsigned usage);
 struct pipe_resource *si_buffer_create(struct pipe_screen *screen,
 				       const struct pipe_resource *templ);
 void r600_upload_index_buffer(struct r600_context *rctx,
@@ -241,10 +203,6 @@ void r600_init_query_functions(struct r600_context *rctx);
 /* r600_resource.c */
 void r600_init_context_resource_functions(struct r600_context *r600);
 
-/* r600_texture.c */
-void r600_init_screen_texture_functions(struct pipe_screen *screen);
-void si_init_surface_functions(struct r600_context *r600);
-
 /* r600_translate.c */
 void r600_translate_index_buffer(struct r600_context *r600,
 				 struct pipe_index_buffer *ib,
@@ -258,12 +216,8 @@ void r600_trace_emit(struct r600_context *rctx);
 void si_init_compute_functions(struct r600_context *rctx);
 
 /* radeonsi_uvd.c */
-struct pipe_video_decoder *radeonsi_uvd_create_decoder(struct pipe_context *context,
-						       enum pipe_video_profile profile,
-						       enum pipe_video_entrypoint entrypoint,
-						       enum pipe_video_chroma_format chroma_format,
-						       unsigned width, unsigned height,
-						       unsigned max_references, bool expect_chunked_decode);
+struct pipe_video_codec *radeonsi_uvd_create_decoder(struct pipe_context *context,
+                                                     const struct pipe_video_codec *templ);
 
 struct pipe_video_buffer *radeonsi_video_buffer_create(struct pipe_context *pipe,
 						       const struct pipe_video_buffer *tmpl);
@@ -309,14 +263,6 @@ static INLINE unsigned r600_pack_float_12p4(float x)
 {
 	return x <= 0    ? 0 :
 	       x >= 4096 ? 0xffff : x * 16;
-}
-
-static INLINE uint64_t r600_resource_va(struct pipe_screen *screen, struct pipe_resource *resource)
-{
-	struct r600_screen *rscreen = (struct r600_screen*)screen;
-	struct si_resource *rresource = (struct si_resource*)resource;
-
-	return rscreen->ws->buffer_get_virtual_address(rresource->cs_buf);
 }
 
 #endif

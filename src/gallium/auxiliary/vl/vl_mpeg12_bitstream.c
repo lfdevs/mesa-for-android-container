@@ -26,7 +26,7 @@
  *
  **************************************************************************/
 
-#include "pipe/p_video_decoder.h"
+#include "pipe/p_video_codec.h"
 #include "util/u_memory.h"
 
 #include "vl_vlc.h"
@@ -814,7 +814,7 @@ decode_slice(struct vl_mpg12_bs *bs, struct pipe_video_buffer *target)
    signed x = -1;
 
    memset(&mb, 0, sizeof(mb));
-   mb.base.codec = PIPE_VIDEO_CODEC_MPEG12;
+   mb.base.codec = PIPE_VIDEO_FORMAT_MPEG12;
    mb.y = vl_vlc_get_uimsbf(&bs->vlc, 8) - 1;
    mb.blocks = dct_blocks;
 
@@ -965,7 +965,7 @@ decode_slice(struct vl_mpg12_bs *bs, struct pipe_video_buffer *target)
 }
 
 void
-vl_mpg12_bs_init(struct vl_mpg12_bs *bs, struct pipe_video_decoder *decoder)
+vl_mpg12_bs_init(struct vl_mpg12_bs *bs, struct pipe_video_codec *decoder)
 {
    static bool tables_initialized = false;
 
@@ -995,7 +995,7 @@ vl_mpg12_bs_decode(struct vl_mpg12_bs *bs,
    bs->intra_dct_tbl = picture->intra_vlc_format ? tbl_B15 : tbl_B14_AC;
 
    vl_vlc_init(&bs->vlc, num_buffers, buffers, sizes);
-   while (vl_vlc_bits_left(&bs->vlc) > 32) {
+   while (vl_vlc_search_byte(&bs->vlc, ~0, 0x00) && vl_vlc_bits_left(&bs->vlc) > 32) {
       uint32_t code = vl_vlc_peekbits(&bs->vlc, 32);
 
       if (code >= 0x101 && code <= 0x1AF) {

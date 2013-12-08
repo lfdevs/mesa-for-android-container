@@ -39,10 +39,12 @@
 static void
 brw_upload_vs_unit(struct brw_context *brw)
 {
+   struct brw_stage_state *stage_state = &brw->vs.base;
+
    struct brw_vs_unit_state *vs;
 
    vs = brw_state_batch(brw, AUB_TRACE_VS_STATE,
-			sizeof(*vs), 32, &brw->vs.state_offset);
+			sizeof(*vs), 32, &stage_state->state_offset);
    memset(vs, 0, sizeof(*vs));
 
    /* BRW_NEW_PROGRAM_CACHE | CACHE_NEW_VS_PROG */
@@ -50,9 +52,9 @@ brw_upload_vs_unit(struct brw_context *brw)
       ALIGN(brw->vs.prog_data->base.total_grf, 16) / 16 - 1;
    vs->thread0.kernel_start_pointer =
       brw_program_reloc(brw,
-			brw->vs.state_offset +
+			stage_state->state_offset +
 			offsetof(struct brw_vs_unit_state, thread0),
-			brw->vs.prog_offset +
+			stage_state->prog_offset +
 			(vs->thread0.grf_reg_count << 1)) >> 6;
 
    /* Use ALT floating point mode for ARB vertex programs, because they
@@ -77,11 +79,12 @@ brw_upload_vs_unit(struct brw_context *brw)
    */
    vs->thread1.single_program_flow = (brw->gen == 5);
 
-   vs->thread1.binding_table_entry_count = 0;
+   vs->thread1.binding_table_entry_count =
+      brw->vs.prog_data->base.base.binding_table.size_bytes / 4;
 
    if (brw->vs.prog_data->base.total_scratch != 0) {
       vs->thread2.scratch_space_base_pointer =
-	 brw->vs.scratch_bo->offset >> 10; /* reloc */
+	 stage_state->scratch_bo->offset >> 10; /* reloc */
       vs->thread2.per_thread_scratch_space =
 	 ffs(brw->vs.prog_data->base.total_scratch) - 11;
    } else {
@@ -92,7 +95,8 @@ brw_upload_vs_unit(struct brw_context *brw)
    vs->thread3.urb_entry_read_length = brw->vs.prog_data->base.urb_read_length;
    vs->thread3.const_urb_entry_read_length
       = brw->vs.prog_data->base.curb_read_length;
-   vs->thread3.dispatch_grf_start_reg = 1;
+   vs->thread3.dispatch_grf_start_reg =
+      brw->vs.prog_data->base.dispatch_grf_start_reg;
    vs->thread3.urb_entry_read_offset = 0;
 
    /* BRW_NEW_CURBE_OFFSETS, _NEW_TRANSFORM, BRW_NEW_VERTEX_PROGRAM */
@@ -142,7 +146,7 @@ brw_upload_vs_unit(struct brw_context *brw)
       vs->vs5.sampler_count = 0; /* hardware requirement */
    else {
       /* CACHE_NEW_SAMPLER */
-      vs->vs5.sampler_count = (brw->sampler.count + 3) / 4;
+      vs->vs5.sampler_count = (stage_state->sampler_count + 3) / 4;
    }
 
 
@@ -155,23 +159,24 @@ brw_upload_vs_unit(struct brw_context *brw)
 
    /* Set the sampler state pointer, and its reloc
     */
-   if (brw->sampler.count) {
+   if (stage_state->sampler_count) {
       vs->vs5.sampler_state_pointer =
-         (brw->batch.bo->offset + brw->sampler.offset) >> 5;
+         (brw->batch.bo->offset + stage_state->sampler_offset) >> 5;
       drm_intel_bo_emit_reloc(brw->batch.bo,
-                              brw->vs.state_offset +
+                              stage_state->state_offset +
                               offsetof(struct brw_vs_unit_state, vs5),
                               brw->batch.bo,
-                              brw->sampler.offset | vs->vs5.sampler_count,
+                              (stage_state->sampler_offset |
+                               vs->vs5.sampler_count),
                               I915_GEM_DOMAIN_INSTRUCTION, 0);
    }
 
    /* Emit scratch space relocation */
    if (brw->vs.prog_data->base.total_scratch != 0) {
       drm_intel_bo_emit_reloc(brw->batch.bo,
-			      brw->vs.state_offset +
+			      stage_state->state_offset +
 			      offsetof(struct brw_vs_unit_state, thread2),
-			      brw->vs.scratch_bo,
+			      stage_state->scratch_bo,
 			      vs->thread2.per_thread_scratch_space,
 			      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER);
    }

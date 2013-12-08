@@ -84,33 +84,6 @@ static void r600_add_gpr_array(struct r600_shader *ps, int start_gpr,
 	ps->arrays[n].gpr_count = size;
 }
 
-static unsigned tgsi_get_processor_type(const struct tgsi_token *tokens)
-{
-	struct tgsi_parse_context parse;
-
-	if (tgsi_parse_init( &parse, tokens ) != TGSI_PARSE_OK) {
-		debug_printf("tgsi_parse_init() failed in %s:%i!\n", __func__, __LINE__);
-		return ~0;
-	}
-	return parse.FullHeader.Processor.Processor;
-}
-
-static bool r600_can_dump_shader(struct r600_screen *rscreen, unsigned processor_type)
-{
-	switch (processor_type) {
-	case TGSI_PROCESSOR_VERTEX:
-		return (rscreen->debug_flags & DBG_VS) != 0;
-	case TGSI_PROCESSOR_GEOMETRY:
-		return (rscreen->debug_flags & DBG_GS) != 0;
-	case TGSI_PROCESSOR_FRAGMENT:
-		return (rscreen->debug_flags & DBG_PS) != 0;
-	case TGSI_PROCESSOR_COMPUTE:
-		return (rscreen->debug_flags & DBG_CS) != 0;
-	default:
-		return false;
-	}
-}
-
 static void r600_dump_streamout(struct pipe_stream_output_info *so)
 {
 	unsigned i;
@@ -139,9 +112,9 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 	struct r600_pipe_shader_selector *sel = shader->selector;
 	int r, i;
 	uint32_t *ptr;
-	bool dump = r600_can_dump_shader(rctx->screen, tgsi_get_processor_type(sel->tokens));
-	unsigned use_sb = rctx->screen->debug_flags & DBG_SB;
-	unsigned sb_disasm = use_sb || (rctx->screen->debug_flags & DBG_SB_DISASM);
+	bool dump = r600_can_dump_shader(&rctx->screen->b, sel->tokens);
+	unsigned use_sb = !(rctx->screen->b.debug_flags & DBG_NO_SB);
+	unsigned sb_disasm = use_sb || (rctx->screen->b.debug_flags & DBG_SB_DISASM);
 
 	shader->shader.bc.isa = rctx->isa;
 
@@ -191,7 +164,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		if (shader->bo == NULL) {
 			return -ENOMEM;
 		}
-		ptr = r600_buffer_mmap_sync_with_rings(rctx, shader->bo, PIPE_TRANSFER_WRITE);
+		ptr = r600_buffer_map_sync_with_rings(&rctx->b, shader->bo, PIPE_TRANSFER_WRITE);
 		if (R600_BIG_ENDIAN) {
 			for (i = 0; i < shader->shader.bc.ndw; ++i) {
 				ptr[i] = util_bswap32(shader->shader.bc.bytecode[i]);
@@ -199,20 +172,20 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		} else {
 			memcpy(ptr, shader->shader.bc.bytecode, shader->shader.bc.ndw * sizeof(*ptr));
 		}
-		rctx->ws->buffer_unmap(shader->bo->cs_buf);
+		rctx->b.ws->buffer_unmap(shader->bo->cs_buf);
 	}
 
 	/* Build state. */
 	switch (shader->shader.processor_type) {
 	case TGSI_PROCESSOR_VERTEX:
-		if (rctx->chip_class >= EVERGREEN) {
+		if (rctx->b.chip_class >= EVERGREEN) {
 			evergreen_update_vs_state(ctx, shader);
 		} else {
 			r600_update_vs_state(ctx, shader);
 		}
 		break;
 	case TGSI_PROCESSOR_FRAGMENT:
-		if (rctx->chip_class >= EVERGREEN) {
+		if (rctx->b.chip_class >= EVERGREEN) {
 			evergreen_update_ps_state(ctx, shader);
 		} else {
 			r600_update_ps_state(ctx, shader);
@@ -917,19 +890,20 @@ static int r600_shader_from_tgsi(struct r600_screen *rscreen,
 	unsigned output_done, noutput;
 	unsigned opcode;
 	int i, j, k, r = 0;
-	int next_pixel_base = 0, next_pos_base = 60, next_param_base = 0;
+	int next_pos_base = 60, next_param_base = 0;
+	int max_color_exports = MAX2(key.nr_cbufs, 1);
 	/* Declarations used by llvm code */
 	bool use_llvm = false;
 	bool indirect_gprs;
 
 #ifdef R600_USE_LLVM
-	use_llvm = !(rscreen->debug_flags & DBG_NO_LLVM);
+	use_llvm = !(rscreen->b.debug_flags & DBG_NO_LLVM);
 #endif
 	ctx.bc = &shader->bc;
 	ctx.shader = shader;
 	ctx.native_integers = true;
 
-	r600_bytecode_init(ctx.bc, rscreen->chip_class, rscreen->family,
+	r600_bytecode_init(ctx.bc, rscreen->b.chip_class, rscreen->b.family,
 			   rscreen->has_compressed_msaa_texturing);
 	ctx.tokens = tokens;
 	tgsi_scan_shader(tokens, &ctx.info);
@@ -1121,7 +1095,7 @@ static int r600_shader_from_tgsi(struct r600_screen *rscreen,
 	if (use_llvm) {
 		struct radeon_llvm_context radeon_llvm_ctx;
 		LLVMModuleRef mod;
-		bool dump = r600_can_dump_shader(rscreen, ctx.type);
+		bool dump = r600_can_dump_shader(&rscreen->b, tokens);
 		boolean use_kill = false;
 
 		memset(&radeon_llvm_ctx, 0, sizeof(radeon_llvm_ctx));
@@ -1130,16 +1104,19 @@ static int r600_shader_from_tgsi(struct r600_screen *rscreen,
 		radeon_llvm_ctx.face_gpr = ctx.face_gpr;
 		radeon_llvm_ctx.r600_inputs = ctx.shader->input;
 		radeon_llvm_ctx.r600_outputs = ctx.shader->output;
-		radeon_llvm_ctx.color_buffer_count = MAX2(key.nr_cbufs , 1);
+		radeon_llvm_ctx.color_buffer_count = max_color_exports;
 		radeon_llvm_ctx.chip_class = ctx.bc->chip_class;
-		radeon_llvm_ctx.fs_color_all = shader->fs_write_all && (rscreen->chip_class >= EVERGREEN);
+		radeon_llvm_ctx.fs_color_all = shader->fs_write_all && (rscreen->b.chip_class >= EVERGREEN);
 		radeon_llvm_ctx.stream_outputs = &so;
 		radeon_llvm_ctx.clip_vertex = ctx.cv_output;
 		radeon_llvm_ctx.alpha_to_one = key.alpha_to_one;
+		radeon_llvm_ctx.has_compressed_msaa_texturing =
+			ctx.bc->has_compressed_msaa_texturing;
 		mod = r600_tgsi_llvm(&radeon_llvm_ctx, tokens);
 		ctx.shader->has_txq_cube_array_z_comp = radeon_llvm_ctx.has_txq_cube_array_z_comp;
+		ctx.shader->uses_tex_buffers = radeon_llvm_ctx.uses_tex_buffers;
 
-		if (r600_llvm_compile(mod, rscreen->family, ctx.bc, &use_kill, dump)) {
+		if (r600_llvm_compile(mod, rscreen->b.family, ctx.bc, &use_kill, dump)) {
 			radeon_llvm_dispose(&radeon_llvm_ctx);
 			use_llvm = 0;
 			fprintf(stderr, "R600 LLVM backend failed to compile "
@@ -1155,7 +1132,7 @@ static int r600_shader_from_tgsi(struct r600_screen *rscreen,
 #endif
 /* End of LLVM backend setup */
 
-	if (shader->fs_write_all && rscreen->chip_class >= EVERGREEN)
+	if (shader->fs_write_all && rscreen->b.chip_class >= EVERGREEN)
 		shader->nr_ps_max_color_exports = 8;
 
 	if (!use_llvm) {
@@ -1440,17 +1417,17 @@ static int r600_shader_from_tgsi(struct r600_screen *rscreen,
 		case TGSI_PROCESSOR_FRAGMENT:
 			if (shader->output[i].name == TGSI_SEMANTIC_COLOR) {
 				/* never export more colors than the number of CBs */
-				if (next_pixel_base && next_pixel_base >= key.nr_cbufs) {
+				if (shader->output[i].sid >= max_color_exports) {
 					/* skip export */
 					j--;
 					continue;
 				}
 				output[j].swizzle_w = key.alpha_to_one ? 5 : 3;
-				output[j].array_base = next_pixel_base++;
+				output[j].array_base = shader->output[i].sid;
 				output[j].type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_PIXEL;
 				shader->nr_ps_color_exports++;
-				if (shader->fs_write_all && (rscreen->chip_class >= EVERGREEN)) {
-					for (k = 1; k < key.nr_cbufs; k++) {
+				if (shader->fs_write_all && (rscreen->b.chip_class >= EVERGREEN)) {
+					for (k = 1; k < max_color_exports; k++) {
 						j++;
 						memset(&output[j], 0, sizeof(struct r600_bytecode_output));
 						output[j].gpr = shader->output[i].gpr;
@@ -1461,7 +1438,7 @@ static int r600_shader_from_tgsi(struct r600_screen *rscreen,
 						output[j].swizzle_w = key.alpha_to_one ? 5 : 3;
 						output[j].burst_count = 1;
 						output[j].barrier = 1;
-						output[j].array_base = next_pixel_base++;
+						output[j].array_base = k;
 						output[j].op = CF_OP_EXPORT;
 						output[j].type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_PIXEL;
 						shader->nr_ps_color_exports++;
@@ -1532,7 +1509,7 @@ static int r600_shader_from_tgsi(struct r600_screen *rscreen,
 	}
 
 	/* add fake pixel export */
-	if (ctx.type == TGSI_PROCESSOR_FRAGMENT && next_pixel_base == 0) {
+	if (ctx.type == TGSI_PROCESSOR_FRAGMENT && shader->nr_ps_color_exports == 0) {
 		memset(&output[j], 0, sizeof(struct r600_bytecode_output));
 		output[j].gpr = 0;
 		output[j].elem_size = 3;
@@ -1661,15 +1638,22 @@ static int tgsi_op2_s(struct r600_shader_ctx *ctx, int swap, int trans_only)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bytecode_alu alu;
-	int i, j, r;
-	int lasti = tgsi_last_instruction(inst->Dst[0].Register.WriteMask);
+	unsigned write_mask = inst->Dst[0].Register.WriteMask;
+	int i, j, r, lasti = tgsi_last_instruction(write_mask);
+	/* use temp register if trans_only and more than one dst component */
+	int use_tmp = trans_only && (write_mask ^ (1 << lasti));
 
-	for (i = 0; i < lasti + 1; i++) {
-		if (!(inst->Dst[0].Register.WriteMask & (1 << i)))
+	for (i = 0; i <= lasti; i++) {
+		if (!(write_mask & (1 << i)))
 			continue;
 
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
-		tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+		if (use_tmp) {
+			alu.dst.sel = ctx->temp_reg;
+			alu.dst.chan = i;
+			alu.dst.write = 1;
+		} else
+			tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
 
 		alu.op = ctx->inst_info->op;
 		if (!swap) {
@@ -1697,6 +1681,25 @@ static int tgsi_op2_s(struct r600_shader_ctx *ctx, int swap, int trans_only)
 		r = r600_bytecode_add_alu(ctx->bc, &alu);
 		if (r)
 			return r;
+	}
+
+	if (use_tmp) {
+		/* move result from temp to dst */
+		for (i = 0; i <= lasti; i++) {
+			if (!(write_mask & (1 << i)))
+				continue;
+
+			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+			alu.op = ALU_OP1_MOV;
+			tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+			alu.src[0].sel = ctx->temp_reg;
+			alu.src[0].chan = i;
+			alu.last = (i == lasti);
+
+			r = r600_bytecode_add_alu(ctx->bc, &alu);
+			if (r)
+				return r;
+		}
 	}
 	return 0;
 }
@@ -3805,16 +3808,16 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		}
 	}
 
-	if (inst->Instruction.Opcode == TGSI_OPCODE_TXF) {
-		/* get offset values */
-		if (inst->Texture.NumOffsets) {
-			assert(inst->Texture.NumOffsets == 1);
+	/* get offset values */
+	if (inst->Texture.NumOffsets) {
+		assert(inst->Texture.NumOffsets == 1);
 
-			offset_x = ctx->literals[inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleX] << 1;
-			offset_y = ctx->literals[inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleY] << 1;
-			offset_z = ctx->literals[inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleZ] << 1;
-		}
-	} else if (inst->Instruction.Opcode == TGSI_OPCODE_TXD) {
+		offset_x = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleX] << 1;
+		offset_y = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleY] << 1;
+		offset_z = ctx->literals[4 * inst->TexOffsets[0].Index + inst->TexOffsets[0].SwizzleZ] << 1;
+	}
+
+	if (inst->Instruction.Opcode == TGSI_OPCODE_TXD) {
 		/* TGSI moves the sampler to src reg 3 for TXD */
 		sampler_src_reg = 3;
 
@@ -5743,11 +5746,10 @@ static struct r600_shader_tgsi_instruction r600_shader_tgsi_instruction[] = {
 	{105,			0, ALU_OP0_NOP, tgsi_unsupported},
 	{106,			0, ALU_OP0_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_NOP,	0, ALU_OP0_NOP, tgsi_unsupported},
-	/* gap */
-	{108,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{109,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{110,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{111,			0, ALU_OP0_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_FSEQ,	0, ALU_OP2_SETE_DX10, tgsi_op2},
+	{TGSI_OPCODE_FSGE,	0, ALU_OP2_SETGE_DX10, tgsi_op2},
+	{TGSI_OPCODE_FSLT,	0, ALU_OP2_SETGT_DX10, tgsi_op2_swap},
+	{TGSI_OPCODE_FSNE,	0, ALU_OP2_SETNE_DX10, tgsi_op2_swap},
 	{TGSI_OPCODE_NRM4,	0, ALU_OP0_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_CALLNZ,	0, ALU_OP0_NOP, tgsi_unsupported},
 	/* gap */
@@ -5936,11 +5938,10 @@ static struct r600_shader_tgsi_instruction eg_shader_tgsi_instruction[] = {
 	{105,			0, ALU_OP0_NOP, tgsi_unsupported},
 	{106,			0, ALU_OP0_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_NOP,	0, ALU_OP0_NOP, tgsi_unsupported},
-	/* gap */
-	{108,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{109,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{110,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{111,			0, ALU_OP0_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_FSEQ,	0, ALU_OP2_SETE_DX10, tgsi_op2},
+	{TGSI_OPCODE_FSGE,	0, ALU_OP2_SETGE_DX10, tgsi_op2},
+	{TGSI_OPCODE_FSLT,	0, ALU_OP2_SETGT_DX10, tgsi_op2_swap},
+	{TGSI_OPCODE_FSNE,	0, ALU_OP2_SETNE_DX10, tgsi_op2_swap},
 	{TGSI_OPCODE_NRM4,	0, ALU_OP0_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_CALLNZ,	0, ALU_OP0_NOP, tgsi_unsupported},
 	/* gap */
@@ -6130,10 +6131,10 @@ static struct r600_shader_tgsi_instruction cm_shader_tgsi_instruction[] = {
 	{106,			0, ALU_OP0_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_NOP,	0, ALU_OP0_NOP, tgsi_unsupported},
 	/* gap */
-	{108,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{109,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{110,			0, ALU_OP0_NOP, tgsi_unsupported},
-	{111,			0, ALU_OP0_NOP, tgsi_unsupported},
+	{TGSI_OPCODE_FSEQ,	0, ALU_OP2_SETE_DX10, tgsi_op2},
+	{TGSI_OPCODE_FSGE,	0, ALU_OP2_SETGE_DX10, tgsi_op2},
+	{TGSI_OPCODE_FSLT,	0, ALU_OP2_SETGT_DX10, tgsi_op2_swap},
+	{TGSI_OPCODE_FSNE,	0, ALU_OP2_SETNE_DX10, tgsi_op2_swap},
 	{TGSI_OPCODE_NRM4,	0, ALU_OP0_NOP, tgsi_unsupported},
 	{TGSI_OPCODE_CALLNZ,	0, ALU_OP0_NOP, tgsi_unsupported},
 	/* gap */

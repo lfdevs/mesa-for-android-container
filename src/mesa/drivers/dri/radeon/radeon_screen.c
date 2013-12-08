@@ -72,7 +72,9 @@ DRI_CONF_OPT_BEGIN_V(command_buffer_size,int,def, # min ":" # max ) \
 DRI_CONF_OPT_END
 
 #if defined(RADEON_R100)	/* R100 */
-PUBLIC const char __driConfigOptions[] =
+static const __DRIconfigOptionsExtension radeon_config_options = {
+   .base = { __DRI_CONFIG_OPTIONS, 1 },
+   .xml =
 DRI_CONF_BEGIN
     DRI_CONF_SECTION_PERFORMANCE
         DRI_CONF_TCL_MODE(DRI_CONF_TCL_CODEGEN)
@@ -94,12 +96,13 @@ DRI_CONF_BEGIN
     DRI_CONF_SECTION_DEBUG
         DRI_CONF_NO_RAST("false")
     DRI_CONF_SECTION_END
-DRI_CONF_END;
-static const GLuint __driNConfigOptions = 14;
+DRI_CONF_END
+};
 
 #elif defined(RADEON_R200)
-
-PUBLIC const char __driConfigOptions[] =
+static const __DRIconfigOptionsExtension radeon_config_options = {
+   .base = { __DRI_CONFIG_OPTIONS, 1 },
+   .xml =
 DRI_CONF_BEGIN
     DRI_CONF_SECTION_PERFORMANCE
         DRI_CONF_TCL_MODE(DRI_CONF_TCL_CODEGEN)
@@ -122,9 +125,8 @@ DRI_CONF_BEGIN
     DRI_CONF_SECTION_DEBUG
         DRI_CONF_NO_RAST("false")
     DRI_CONF_SECTION_END
-DRI_CONF_END;
-static const GLuint __driNConfigOptions = 15;
-
+DRI_CONF_END
+};
 #endif
 
 #ifndef RADEON_INFO_TILE_CONFIG
@@ -492,8 +494,7 @@ radeonCreateScreen2(__DRIscreen *sPriv)
    radeon_init_debug();
 
    /* parse information in __driConfigOptions */
-   driParseOptionInfo (&screen->optionCache,
-		       __driConfigOptions, __driNConfigOptions);
+   driParseOptionInfo (&screen->optionCache, radeon_config_options.xml);
 
    screen->chip_flags = 0;
 
@@ -722,6 +723,9 @@ __DRIconfig **radeonInitScreen2(__DRIscreen *psp)
    int color;
    __DRIconfig **configs = NULL;
 
+   psp->max_gl_compat_version = 13;
+   psp->max_gl_es1_version = 11;
+
    if (!radeonInitDriver(psp)) {
        return NULL;
     }
@@ -760,7 +764,7 @@ __DRIconfig **radeonInitScreen2(__DRIscreen *psp)
    return (const __DRIconfig **)configs;
 }
 
-const struct __DriverAPIRec driDriverAPI = {
+static const struct __DriverAPIRec radeon_driver_api = {
    .InitScreen      = radeonInitScreen2,
    .DestroyScreen   = radeonDestroyScreen,
 #if defined(RADEON_R200)
@@ -776,9 +780,32 @@ const struct __DriverAPIRec driDriverAPI = {
    .UnbindContext   = radeonUnbindContext,
 };
 
+static const struct __DRIDriverVtableExtensionRec radeon_vtable = {
+   .base = { __DRI_DRIVER_VTABLE, 1 },
+   .vtable = &radeon_driver_api,
+};
+
 /* This is the table of extensions that the loader will dlsym() for. */
-PUBLIC const __DRIextension *__driDriverExtensions[] = {
+static const __DRIextension *radeon_driver_extensions[] = {
     &driCoreExtension.base,
     &driDRI2Extension.base,
+    &radeon_config_options.base,
+    &radeon_vtable.base,
     NULL
 };
+
+#ifdef RADEON_R200
+PUBLIC const __DRIextension **__driDriverGetExtensions_r200(void)
+{
+   globalDriverAPI = &radeon_driver_api;
+
+   return radeon_driver_extensions;
+}
+#else
+PUBLIC const __DRIextension **__driDriverGetExtensions_radeon(void)
+{
+   globalDriverAPI = &radeon_driver_api;
+
+   return radeon_driver_extensions;
+}
+#endif

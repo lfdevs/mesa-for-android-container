@@ -126,7 +126,8 @@ static void tgsi_fetch_gs_input(struct draw_geometry_shader *shader,
                                 unsigned prim_idx)
 {
    struct tgsi_exec_machine *machine = shader->machine;
-   unsigned slot, vs_slot, i;
+   unsigned slot, i;
+   int vs_slot;
    unsigned input_vertex_stride = shader->input_vertex_stride;
    const float (*input_ptr)[4];
 
@@ -225,7 +226,8 @@ llvm_fetch_gs_input(struct draw_geometry_shader *shader,
                     unsigned num_vertices,
                     unsigned prim_idx)
 {
-   unsigned slot, vs_slot, i;
+   unsigned slot, i;
+   int vs_slot;
    unsigned input_vertex_stride = shader->input_vertex_stride;
    const float (*input_ptr)[4];
    float (*input_data)[6][PIPE_MAX_SHADER_INPUTS][TGSI_NUM_CHANNELS][TGSI_NUM_CHANNELS] = &shader->gs_input->data;
@@ -534,7 +536,7 @@ int draw_geometry_shader_run(struct draw_geometry_shader *shader,
 {
    const float (*input)[4] = (const float (*)[4])input_verts->verts->data;
    unsigned input_stride = input_verts->vertex_size;
-   unsigned num_outputs = shader->info.num_outputs;
+   unsigned num_outputs = draw_total_gs_outputs(shader->draw);
    unsigned vertex_size = sizeof(struct vertex_header) + num_outputs * 4 * sizeof(float);
    unsigned num_input_verts = input_prim->linear ?
       input_verts->count :

@@ -36,7 +36,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include "pipe/p_video_decoder.h"
+#include "pipe/p_video_codec.h"
 
 #include "util/u_memory.h"
 #include "util/u_video.h"
@@ -55,7 +55,7 @@ struct pipe_video_buffer *radeonsi_video_buffer_create(struct pipe_context *pipe
 						       const struct pipe_video_buffer *tmpl)
 {
 	struct r600_context *ctx = (struct r600_context *)pipe;
-	struct r600_resource_texture *resources[VL_NUM_COMPONENTS] = {};
+	struct r600_texture *resources[VL_NUM_COMPONENTS] = {};
 	struct radeon_surface *surfaces[VL_NUM_COMPONENTS] = {};
 	struct pb_buffer **pbs[VL_NUM_COMPONENTS] = {};
 	const enum pipe_format *resource_formats;
@@ -76,17 +76,17 @@ struct pipe_video_buffer *radeonsi_video_buffer_create(struct pipe_context *pipe
 	template.height = align(tmpl->height / array_size, VL_MACROBLOCK_HEIGHT);
 
 	vl_video_buffer_template(&templ, &template, resource_formats[0], 1, array_size, PIPE_USAGE_STATIC, 0);
-	/* TODO: Setting the transfer flag is only a workaround till we get tiling working */
-	templ.flags = R600_RESOURCE_FLAG_TRANSFER;
-	resources[0] = (struct r600_resource_texture *)
+	/* TODO: get tiling working */
+	templ.bind = PIPE_BIND_LINEAR;
+	resources[0] = (struct r600_texture *)
 		pipe->screen->resource_create(pipe->screen, &templ);
 	if (!resources[0])
 		goto error;
 
 	if (resource_formats[1] != PIPE_FORMAT_NONE) {
 		vl_video_buffer_template(&templ, &template, resource_formats[1], 1, array_size, PIPE_USAGE_STATIC, 1);
-		templ.flags = R600_RESOURCE_FLAG_TRANSFER;
-		resources[1] = (struct r600_resource_texture *)
+		templ.bind = PIPE_BIND_LINEAR;
+		resources[1] = (struct r600_texture *)
 			pipe->screen->resource_create(pipe->screen, &templ);
 		if (!resources[1])
 			goto error;
@@ -94,8 +94,8 @@ struct pipe_video_buffer *radeonsi_video_buffer_create(struct pipe_context *pipe
 
 	if (resource_formats[2] != PIPE_FORMAT_NONE) {
 		vl_video_buffer_template(&templ, &template, resource_formats[2], 1, array_size, PIPE_USAGE_STATIC, 2);
-		templ.flags = R600_RESOURCE_FLAG_TRANSFER;
-		resources[2] = (struct r600_resource_texture *)
+		templ.bind = PIPE_BIND_LINEAR;
+		resources[2] = (struct r600_texture *)
 			pipe->screen->resource_create(pipe->screen, &templ);
 		if (!resources[2])
 			goto error;
@@ -109,14 +109,14 @@ struct pipe_video_buffer *radeonsi_video_buffer_create(struct pipe_context *pipe
 		pbs[i] = &resources[i]->resource.buf;
 	}
 
-	ruvd_join_surfaces(ctx->ws, templ.bind, pbs, surfaces);
+	ruvd_join_surfaces(ctx->b.ws, templ.bind, pbs, surfaces);
 
 	for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
 		if (!resources[i])
 			continue;
 
 		/* recreate the CS handle */
-		resources[i]->resource.cs_buf = ctx->ws->buffer_get_cs_handle(
+		resources[i]->resource.cs_buf = ctx->b.ws->buffer_get_cs_handle(
 			resources[i]->resource.buf);
 	}
 
@@ -133,8 +133,8 @@ error:
 /* set the decoding target buffer offsets */
 static struct radeon_winsys_cs_handle* radeonsi_uvd_set_dtb(struct ruvd_msg *msg, struct vl_video_buffer *buf)
 {
-	struct r600_resource_texture *luma = (struct r600_resource_texture *)buf->resources[0];
-	struct r600_resource_texture *chroma = (struct r600_resource_texture *)buf->resources[1];
+	struct r600_texture *luma = (struct r600_texture *)buf->resources[0];
+	struct r600_texture *chroma = (struct r600_texture *)buf->resources[1];
 
 	msg->body.decode.dt_field_mode = buf->base.interlaced;
 
@@ -146,16 +146,8 @@ static struct radeon_winsys_cs_handle* radeonsi_uvd_set_dtb(struct ruvd_msg *msg
 /**
  * creates an UVD compatible decoder
  */
-struct pipe_video_decoder *radeonsi_uvd_create_decoder(struct pipe_context *context,
-						       enum pipe_video_profile profile,
-						       enum pipe_video_entrypoint entrypoint,
-						       enum pipe_video_chroma_format chroma_format,
-						       unsigned width, unsigned height,
-						       unsigned max_references, bool expect_chunked_decode)
+struct pipe_video_codec *radeonsi_uvd_create_decoder(struct pipe_context *context,
+						     const struct pipe_video_codec *templ)
 {
-	struct r600_context *ctx = (struct r600_context *)context;
-
-	return ruvd_create_decoder(context, profile, entrypoint, chroma_format,
-				   width, height, max_references, expect_chunked_decode,
-				   ctx->ws, radeonsi_uvd_set_dtb);
+	return ruvd_create_decoder(context, templ, radeonsi_uvd_set_dtb);
 }

@@ -31,6 +31,7 @@
 
 #include "draw/draw_context.h"
 #include "pipe/p_context.h"
+#include "indices/u_primconvert.h"
 #include "util/u_blitter.h"
 #include "util/u_slab.h"
 #include "util/u_string.h"
@@ -93,8 +94,16 @@ struct fd_context {
 
 	struct fd_screen *screen;
 	struct blitter_context *blitter;
+	struct primconvert_context *primconvert;
 
 	struct util_slab_mempool transfer_pool;
+
+	/* table with PIPE_PRIM_MAX entries mapping PIPE_PRIM_x to
+	 * DI_PT_x value to use for draw initiator.  There are some
+	 * slight differences between generation:
+	 */
+	const uint8_t *primtypes;
+	uint32_t primtype_mask;
 
 	/* shaders used by clear, and gmem->mem blits: */
 	struct fd_program_stateobj solid_prog; // TODO move to screen?
@@ -133,6 +142,18 @@ struct fd_context {
 		FD_GMEM_LOGICOP_ENABLED      = 0x20,
 	} gmem_reason;
 	unsigned num_draws;
+
+	/* we can't really sanely deal with wraparound point in ringbuffer
+	 * and because of the way tiling works we can't really flush at
+	 * arbitrary points (without a big performance hit).  When we get
+	 * too close to the end of the current ringbuffer, cycle to the next
+	 * one (and wait for pending rendering from next rb to complete).
+	 * We want the # of ringbuffers to be high enough that we don't
+	 * normally have to wait before resetting to the start of the next
+	 * rb.
+	 */
+	struct fd_ringbuffer *rings[4];
+	unsigned rings_idx;
 
 	struct fd_ringbuffer *ring;
 	struct fd_ringmarker *draw_start, *draw_end;
@@ -232,8 +253,15 @@ fd_context_get_scissor(struct fd_context *ctx)
 	return &ctx->disabled_scissor;
 }
 
+static INLINE bool
+fd_supported_prim(struct fd_context *ctx, unsigned prim)
+{
+	return (1 << prim) & ctx->primtype_mask;
+}
+
 struct pipe_context * fd_context_init(struct fd_context *ctx,
-		struct pipe_screen *pscreen, void *priv);
+		struct pipe_screen *pscreen, const uint8_t *primtypes,
+		void *priv);
 
 void fd_context_render(struct pipe_context *pctx);
 

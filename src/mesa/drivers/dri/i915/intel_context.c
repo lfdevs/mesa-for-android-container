@@ -58,40 +58,48 @@
 #include "utils.h"
 #include "../glsl/ralloc.h"
 
-#ifndef INTEL_DEBUG
 int INTEL_DEBUG = (0);
-#endif
 
+const char *const i915_vendor_string = "Intel Open Source Technology Center";
+
+const char *
+i915_get_renderer_string(unsigned deviceID)
+{
+   const char *chipset;
+   static char buffer[128];
+
+   switch (deviceID) {
+#undef CHIPSET
+#define CHIPSET(id, symbol, str) case id: chipset = str; break;
+#include "pci_ids/i915_pci_ids.h"
+   default:
+      chipset = "Unknown Intel Chipset";
+      break;
+   }
+
+   (void) driGetRendererString(buffer, chipset, 0);
+   return buffer;
+}
 
 static const GLubyte *
 intelGetString(struct gl_context * ctx, GLenum name)
 {
    const struct intel_context *const intel = intel_context(ctx);
-   const char *chipset;
-   static char buffer[128];
 
    switch (name) {
    case GL_VENDOR:
-      return (GLubyte *) "Intel Open Source Technology Center";
-      break;
+      return (GLubyte *) i915_vendor_string;
 
    case GL_RENDERER:
-      switch (intel->intelScreen->deviceID) {
-#undef CHIPSET
-#define CHIPSET(id, symbol, str) case id: chipset = str; break;
-#include "pci_ids/i915_pci_ids.h"
-      default:
-         chipset = "Unknown Intel Chipset";
-         break;
-      }
-
-      (void) driGetRendererString(buffer, chipset, 0);
-      return (GLubyte *) buffer;
+      return
+         (GLubyte *) i915_get_renderer_string(intel->intelScreen->deviceID);
 
    default:
       return NULL;
    }
 }
+
+#define flushFront(screen)      ((screen)->image.loader ? (screen)->image.loader->flushFrontBuffer : (screen)->dri2.loader->flushFrontBuffer)
 
 static void
 intel_flush_front(struct gl_context *ctx)
@@ -102,11 +110,10 @@ intel_flush_front(struct gl_context *ctx)
     __DRIscreen *const screen = intel->intelScreen->driScrnPriv;
 
     if (intel->front_buffer_dirty && _mesa_is_winsys_fbo(ctx->DrawBuffer)) {
-      if (screen->dri2.loader->flushFrontBuffer != NULL &&
+      if (flushFront(screen) && 
           driDrawable &&
           driDrawable->loaderPrivate) {
-         screen->dri2.loader->flushFrontBuffer(driDrawable,
-                                               driDrawable->loaderPrivate);
+         flushFront(screen)(driDrawable, driDrawable->loaderPrivate);
 
 	 /* We set the dirty bit in intel_prepare_render() if we're
 	  * front buffer rendering once we get there.
@@ -115,6 +122,9 @@ intel_flush_front(struct gl_context *ctx)
       }
    }
 }
+
+static void
+intel_update_image_buffers(struct intel_context *intel, __DRIdrawable *drawable);
 
 static unsigned
 intel_bits_per_pixel(const struct intel_renderbuffer *rb)
@@ -135,15 +145,58 @@ intel_process_dri2_buffer(struct intel_context *intel,
 			  struct intel_renderbuffer *rb,
 			  const char *buffer_name);
 
-void
-intel_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
+static void
+intel_update_dri2_buffers(struct intel_context *intel, __DRIdrawable *drawable)
 {
-   struct gl_framebuffer *fb = drawable->driverPrivate;
-   struct intel_renderbuffer *rb;
-   struct intel_context *intel = context->driverPrivate;
    __DRIbuffer *buffers = NULL;
    int i, count;
    const char *region_name;
+   struct intel_renderbuffer *rb;
+   struct gl_framebuffer *fb = drawable->driverPrivate;
+
+   intel_query_dri2_buffers(intel, drawable, &buffers, &count);
+
+   if (buffers == NULL)
+      return;
+
+   for (i = 0; i < count; i++) {
+      switch (buffers[i].attachment) {
+      case __DRI_BUFFER_FRONT_LEFT:
+         rb = intel_get_renderbuffer(fb, BUFFER_FRONT_LEFT);
+         region_name = "dri2 front buffer";
+         break;
+
+      case __DRI_BUFFER_FAKE_FRONT_LEFT:
+         rb = intel_get_renderbuffer(fb, BUFFER_FRONT_LEFT);
+         region_name = "dri2 fake front buffer";
+         break;
+
+      case __DRI_BUFFER_BACK_LEFT:
+         rb = intel_get_renderbuffer(fb, BUFFER_BACK_LEFT);
+         region_name = "dri2 back buffer";
+         break;
+
+      case __DRI_BUFFER_DEPTH:
+      case __DRI_BUFFER_HIZ:
+      case __DRI_BUFFER_DEPTH_STENCIL:
+      case __DRI_BUFFER_STENCIL:
+      case __DRI_BUFFER_ACCUM:
+      default:
+         fprintf(stderr,
+                 "unhandled buffer attach event, attachment type %d\n",
+                 buffers[i].attachment);
+         return;
+      }
+
+      intel_process_dri2_buffer(intel, drawable, &buffers[i], rb, region_name);
+   }
+}
+
+void
+intel_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
+{
+   struct intel_context *intel = context->driverPrivate;
+   __DRIscreen *screen = intel->intelScreen->driScrnPriv;
 
    /* Set this up front, so that in case our buffers get invalidated
     * while we're getting new buffers, we don't clobber the stamp and
@@ -153,42 +206,10 @@ intel_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable)
    if (unlikely(INTEL_DEBUG & DEBUG_DRI))
       fprintf(stderr, "enter %s, drawable %p\n", __func__, drawable);
 
-   intel_query_dri2_buffers(intel, drawable, &buffers, &count);
-
-   if (buffers == NULL)
-      return;
-
-   for (i = 0; i < count; i++) {
-       switch (buffers[i].attachment) {
-       case __DRI_BUFFER_FRONT_LEFT:
-	   rb = intel_get_renderbuffer(fb, BUFFER_FRONT_LEFT);
-	   region_name = "dri2 front buffer";
-	   break;
-
-       case __DRI_BUFFER_FAKE_FRONT_LEFT:
-	   rb = intel_get_renderbuffer(fb, BUFFER_FRONT_LEFT);
-	   region_name = "dri2 fake front buffer";
-	   break;
-
-       case __DRI_BUFFER_BACK_LEFT:
-	   rb = intel_get_renderbuffer(fb, BUFFER_BACK_LEFT);
-	   region_name = "dri2 back buffer";
-	   break;
-
-       case __DRI_BUFFER_DEPTH:
-       case __DRI_BUFFER_HIZ:
-       case __DRI_BUFFER_DEPTH_STENCIL:
-       case __DRI_BUFFER_STENCIL:
-       case __DRI_BUFFER_ACCUM:
-       default:
-	   fprintf(stderr,
-		   "unhandled buffer attach event, attachment type %d\n",
-		   buffers[i].attachment);
-	   return;
-       }
-
-       intel_process_dri2_buffer(intel, drawable, &buffers[i], rb, region_name);
-   }
+   if (screen->image.loader)
+      intel_update_image_buffers(intel, drawable);
+   else
+      intel_update_dri2_buffers(intel, drawable);
 
    driUpdateFramebufferSize(&intel->ctx, drawable);
 }
@@ -250,18 +271,34 @@ intel_prepare_render(struct intel_context *intel)
 }
 
 static void
-intel_viewport(struct gl_context *ctx, GLint x, GLint y, GLsizei w, GLsizei h)
+intel_noninvalidate_viewport(struct gl_context *ctx, GLint x, GLint y,
+                             GLsizei w, GLsizei h)
 {
     struct intel_context *intel = intel_context(ctx);
     __DRIcontext *driContext = intel->driContext;
 
-    if (intel->saved_viewport)
-	intel->saved_viewport(ctx, x, y, w, h);
+    (void) x;
+    (void) y;
+    (void) w;
+    (void) h;
+
+    intelCalcViewport(ctx);
 
     if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
        dri2InvalidateDrawable(driContext->driDrawablePriv);
        dri2InvalidateDrawable(driContext->driReadablePriv);
     }
+}
+
+static void
+intel_viewport(struct gl_context *ctx, GLint x, GLint y, GLsizei w, GLsizei h)
+{
+    (void) x;
+    (void) y;
+    (void) w;
+    (void) h;
+
+    intelCalcViewport(ctx);
 }
 
 static const struct dri_debug_control debug_control[] = {
@@ -367,45 +404,6 @@ intelInitDriverFunctions(struct dd_function_table *functions)
    intel_init_syncobj_functions(functions);
 }
 
-static bool
-validate_context_version(struct intel_screen *screen,
-                         int mesa_api,
-                         unsigned major_version,
-                         unsigned minor_version,
-                         unsigned *dri_ctx_error)
-{
-   unsigned req_version = 10 * major_version + minor_version;
-   unsigned max_version = 0;
-
-   switch (mesa_api) {
-   case API_OPENGL_COMPAT:
-      max_version = screen->max_gl_compat_version;
-      break;
-   case API_OPENGL_CORE:
-      max_version = screen->max_gl_core_version;
-      break;
-   case API_OPENGLES:
-      max_version = screen->max_gl_es1_version;
-      break;
-   case API_OPENGLES2:
-      max_version = screen->max_gl_es2_version;
-      break;
-   default:
-      max_version = 0;
-      break;
-   }
-
-   if (max_version == 0) {
-      *dri_ctx_error = __DRI_CTX_ERROR_BAD_API;
-      return false;
-   } else if (req_version > max_version) {
-      *dri_ctx_error = __DRI_CTX_ERROR_BAD_VERSION;
-      return false;
-   }
-
-   return true;
-}
-
 bool
 intelInitContext(struct intel_context *intel,
                  int api,
@@ -424,22 +422,11 @@ intelInitContext(struct intel_context *intel,
    int bo_reuse_mode;
    struct gl_config visual;
 
-   /* we can't do anything without a connection to the device */
-   if (intelScreen->bufmgr == NULL) {
-      *dri_ctx_error = __DRI_CTX_ERROR_NO_MEMORY;
-      return false;
-   }
-
-   if (!validate_context_version(intelScreen,
-                                 api, major_version, minor_version,
-                                 dri_ctx_error))
-      return false;
-
    /* Can't rely on invalidate events, fall back to glViewport hack */
-   if (!driContextPriv->driScreenPriv->dri2.useInvalidate) {
-      intel->saved_viewport = functions->Viewport;
+   if (!driContextPriv->driScreenPriv->dri2.useInvalidate)
+      functions->Viewport = intel_noninvalidate_viewport;
+   else
       functions->Viewport = intel_viewport;
-   }
 
    if (mesaVis == NULL) {
       memset(&visual, 0, sizeof visual);
@@ -830,4 +817,102 @@ intel_process_dri2_buffer(struct intel_context *intel,
                                                  intel_rb_format(rb),
                                                  region);
    intel_region_release(&region);
+}
+
+/**
+ * \brief Query DRI Image loader to obtain a DRIdrawable's buffers.
+ *
+ * To determine which DRI buffers to request, examine the renderbuffers
+ * attached to the drawable's framebuffer. Then request the buffers with
+ * dri3
+ *
+ * This is called from intel_update_renderbuffers().
+ *
+ * \param drawable      Drawable whose buffers are queried.
+ * \param buffers       [out] List of buffers returned by DRI2 query.
+ * \param buffer_count  [out] Number of buffers returned.
+ *
+ * \see intel_update_renderbuffers()
+ */
+
+static void
+intel_update_image_buffer(struct intel_context *intel,
+                          __DRIdrawable *drawable,
+                          struct intel_renderbuffer *rb,
+                          __DRIimage *buffer,
+                          enum __DRIimageBufferMask buffer_type)
+{
+   struct intel_region *region = buffer->region;
+
+   if (!rb || !region)
+      return;
+
+   unsigned num_samples = rb->Base.Base.NumSamples;
+
+   if (rb->mt &&
+       rb->mt->region &&
+       rb->mt->region == region)
+      return;
+
+   intel_miptree_release(&rb->mt);
+   rb->mt = intel_miptree_create_for_image_buffer(intel,
+                                                  buffer_type,
+                                                  intel_rb_format(rb),
+                                                  num_samples,
+                                                  region);
+}
+
+
+static void
+intel_update_image_buffers(struct intel_context *intel, __DRIdrawable *drawable)
+{
+   struct gl_framebuffer *fb = drawable->driverPrivate;
+   __DRIscreen *screen = intel->intelScreen->driScrnPriv;
+   struct intel_renderbuffer *front_rb;
+   struct intel_renderbuffer *back_rb;
+   struct __DRIimageList images;
+   unsigned int format;
+   uint32_t buffer_mask = 0;
+
+   front_rb = intel_get_renderbuffer(fb, BUFFER_FRONT_LEFT);
+   back_rb = intel_get_renderbuffer(fb, BUFFER_BACK_LEFT);
+
+   if (back_rb)
+      format = intel_rb_format(back_rb);
+   else if (front_rb)
+      format = intel_rb_format(front_rb);
+   else
+      return;
+
+   if ((intel->is_front_buffer_rendering || intel->is_front_buffer_reading || !back_rb) && front_rb)
+      buffer_mask |= __DRI_IMAGE_BUFFER_FRONT;
+
+   if (back_rb)
+      buffer_mask |= __DRI_IMAGE_BUFFER_BACK;
+
+   (*screen->image.loader->getBuffers) (drawable,
+                                        driGLFormatToImageFormat(format),
+                                        &drawable->dri2.stamp,
+                                        drawable->loaderPrivate,
+                                        buffer_mask,
+                                        &images);
+
+   if (images.image_mask & __DRI_IMAGE_BUFFER_FRONT) {
+      drawable->w = images.front->width;
+      drawable->h = images.front->height;
+      intel_update_image_buffer(intel,
+                                drawable,
+                                front_rb,
+                                images.front,
+                                __DRI_IMAGE_BUFFER_FRONT);
+   }
+   if (images.image_mask & __DRI_IMAGE_BUFFER_BACK) {
+      drawable->w = images.back->width;
+      drawable->h = images.back->height;
+      intel_update_image_buffer(intel,
+                                drawable,
+                                back_rb,
+                                images.back,
+                                __DRI_IMAGE_BUFFER_BACK);
+   }
 }

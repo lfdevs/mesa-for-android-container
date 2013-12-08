@@ -63,6 +63,7 @@ sources = [
     'indirect_vertex_program.c',
     'pixel.c',
     'pixelstore.c',
+    'query_renderer.c',
     'render2.c',
     'renderpix.c',
     'single2.c',
@@ -78,6 +79,9 @@ sources = [
     'glxhash.c',
     'dri2_glx.c',
     'dri2.c',
+    'dri2_query_renderer.c',
+    #'dri3_glx.c',
+    #'dri3_common.c',
     'applegl_glx.c',
 ]
 
@@ -92,39 +96,40 @@ libgl = env.SharedLibrary(
 # used by other targets as well.
 
 GLAPI = '#src/mapi/glapi/'
+sources = [GLAPI + 'gen/gl_API.xml'] + env.Glob(GLAPI + 'gen/*.xml')
 
 env.CodeGenerate(
     target = 'indirect.c',
     script = GLAPI + 'gen/glX_proto_send.py',
-    source = GLAPI + 'gen/gl_and_es_API.xml',
+    source = sources,
     command = python_cmd + ' $SCRIPT -f $SOURCE -m proto > $TARGET'
     )
 
 env.CodeGenerate(
     target = 'indirect_size.c', 
     script = GLAPI + 'gen/glX_proto_size.py',
-    source = GLAPI + 'gen/gl_API.xml',
+    source = sources,
     command = python_cmd + ' $SCRIPT -f $SOURCE -m size_c --only-set > $TARGET'
 )
 
 env.CodeGenerate(
     target = 'indirect_init.c', 
     script = GLAPI + 'gen/glX_proto_send.py',
-    source = GLAPI + 'gen/gl_API.xml',
+    source = sources,
     command = python_cmd + ' $SCRIPT -f $SOURCE -m init_c > $TARGET'
 )
 
 env.CodeGenerate(
     target = 'indirect_size.h',
     script = GLAPI + 'gen/glX_proto_size.py',
-    source = GLAPI + 'gen/gl_API.xml',
+    source = sources,
     command = python_cmd + ' $SCRIPT -f $SOURCE -m size_h --only-set -h _INDIRECT_SIZE_H > $TARGET'
 )
 
 env.CodeGenerate(
     target = 'indirect.h',
     script = GLAPI + 'gen/glX_proto_send.py',
-    source = GLAPI + 'gen/gl_API.xml',
+    source = sources,
     command = python_cmd + ' $SCRIPT -m init_h -f $SOURCE > $TARGET',
     )
 

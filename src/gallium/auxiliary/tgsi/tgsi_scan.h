@@ -59,6 +59,7 @@ struct tgsi_shader_info
    uint file_mask[TGSI_FILE_COUNT];  /**< bitmask of declared registers */
    uint file_count[TGSI_FILE_COUNT];  /**< number of declared registers */
    int file_max[TGSI_FILE_COUNT];  /**< highest index of declared registers */
+   int const_file_max[PIPE_MAX_CONSTANT_BUFFERS];
 
    uint immediate_count; /**< number of immediates declared */
    uint num_instructions;
@@ -74,11 +75,13 @@ struct tgsi_shader_info
    boolean uses_instanceid;
    boolean uses_vertexid;
    boolean uses_primid;
+   boolean uses_frontface;
    boolean origin_lower_left;
    boolean pixel_center_integer;
    boolean color0_writes_all_cbufs;
    boolean writes_viewport_index;
    boolean writes_layer;
+   boolean is_msaa_sampler[PIPE_MAX_SAMPLERS];
 
    unsigned num_written_culldistance;
    unsigned num_written_clipdistance;

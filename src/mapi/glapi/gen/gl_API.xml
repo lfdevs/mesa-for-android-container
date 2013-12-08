@@ -1107,6 +1107,7 @@
     <type name="void"    size="1"/>
 
     <type name="DEBUGPROCARB" size="4" pointer="true"/>
+    <type name="DEBUGPROC" size="4" pointer="true"/>
 
     <function name="NewList" offset="0" deprecated="3.1">
         <param name="list" type="GLuint"/>
@@ -5494,7 +5495,7 @@
     <function name="GetProgramiv" offset="assign" es2="2.0">
         <param name="program" type="GLuint"/>
         <param name="pname" type="GLenum"/>
-        <param name="params" type="GLint *"/>
+        <param name="params" type="GLint *" output="true"/>
         <glx ignore="true"/>
     </function>
 
@@ -8186,9 +8187,9 @@
 <xi:include href="ARB_draw_buffers_blend.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 <xi:include href="AMD_draw_buffers_blend.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
-<!-- 70. GL_ARB_sample_shading -->
+<xi:include href="ARB_sample_shading.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 <xi:include href="ARB_texture_cube_map_array.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
-<!-- 72. GL_ARB_texture_gather -->
+<xi:include href="ARB_texture_gather.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 <!-- 73. GL_ARB_texture_query_lod -->
 
 <!-- ARB extension number 74 is a WGL extension. -->
@@ -8307,9 +8308,161 @@
   <enum name="MIN_MAP_BUFFER_ALIGNMENT" value="0x90BC" />
 </category>
 
+<xi:include href="ARB_shader_atomic_counters.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
 <xi:include href="ARB_texture_storage.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
-<!-- ARB extensions #118...#126 -->
+<!-- ARB extension #118 -->
+
+<category name="GL_KHR_debug" number="119">
+  <enum name="DEBUG_OUTPUT"                               value="0x92E0"/>
+  <enum name="DEBUG_OUTPUT_SYNCHRONOUS"                   value="0x8242"/>
+
+  <enum name="CONTEXT_FLAG_DEBUG_BIT"                     value="0x00000002"/>
+
+  <enum name="MAX_DEBUG_MESSAGE_LENGTH" count="1"         value="0x9143">
+    <size name="Get" mode="get"/>
+  </enum>
+  <enum name="MAX_DEBUG_LOGGED_MESSAGES" count="1"        value="0x9144">
+    <size name="Get" mode="get"/>
+  </enum>
+  <enum name="DEBUG_LOGGED_MESSAGES" count="1"            value="0x9145">
+    <size name="Get" mode="get"/>
+  </enum>
+  <enum name="DEBUG_NEXT_LOGGED_MESSAGE_LENGTH" count="1" value="0x8243">
+    <size name="Get" mode="get"/>
+  </enum>
+  <enum name="MAX_DEBUG_GROUP_STACK_DEPTH" count="1"      value="0x826C">
+    <size name="Get" mode="get"/>
+  </enum>
+  <enum name="DEBUG_GROUP_STACK_DEPTH" count="1"          value="0x826D">
+    <size name="Get" mode="get"/>
+  </enum>
+  <enum name="MAX_LABEL_LENGTH" count="1"                 value="0x82E8">
+    <size name="Get" mode="get"/>
+  </enum>
+
+  <enum name="DEBUG_CALLBACK_FUNCTION" count="1"          value="0x8244">
+     <size name="GetPointerv" mode="get"/>
+  </enum>
+  <enum name="DEBUG_CALLBACK_USER_PARAM" count="1"        value="0x8245">
+    <size name="GetPointerv" mode="get"/>
+  </enum>
+
+  <enum name="DEBUG_SOURCE_API"                           value="0x8246"/>
+  <enum name="DEBUG_SOURCE_WINDOW_SYSTEM"                 value="0x8247"/>
+  <enum name="DEBUG_SOURCE_SHADER_COMPILER"               value="0x8248"/>
+  <enum name="DEBUG_SOURCE_THIRD_PARTY"                   value="0x8249"/>
+  <enum name="DEBUG_SOURCE_APPLICATION"                   value="0x824A"/>
+  <enum name="DEBUG_SOURCE_OTHER"                         value="0x824B"/>
+
+  <enum name="DEBUG_TYPE_ERROR"                           value="0x824C"/>
+  <enum name="DEBUG_TYPE_DEPRECATED_BEHAVIOR"             value="0x824D"/>
+  <enum name="DEBUG_TYPE_UNDEFINED_BEHAVIOR"              value="0x824E"/>
+  <enum name="DEBUG_TYPE_PORTABILITY"                     value="0x824F"/>
+  <enum name="DEBUG_TYPE_PERFORMANCE"                     value="0x8250"/>
+  <enum name="DEBUG_TYPE_OTHER"                           value="0x8251"/>
+  <enum name="DEBUG_TYPE_MARKER"                          value="0x8268"/>
+
+  <enum name="DEBUG_TYPE_PUSH_GROUP"                      value="0x8269"/>
+  <enum name="DEBUG_TYPE_POP_GROUP"                       value="0x826A"/>
+
+  <enum name="DEBUG_SEVERITY_HIGH"                        value="0x9146"/>
+  <enum name="DEBUG_SEVERITY_MEDIUM"                      value="0x9147"/>
+  <enum name="DEBUG_SEVERITY_LOW"                         value="0x9148"/>
+  <enum name="DEBUG_SEVERITY_NOTIFICATION"                value="0x826B"/>
+
+  <enum name="STACK_UNDERFLOW"                            value="0x0504"/>
+  <enum name="STACK_OVERFLOW"                             value="0x0503"/>
+
+  <enum name="BUFFER"                                     value="0x82E0"/>
+  <enum name="SHADER"                                     value="0x82E1"/>
+  <enum name="PROGRAM"                                    value="0x82E2"/>
+  <enum name="QUERY"                                      value="0x82E3"/>
+  <enum name="PROGRAM_PIPELINE"                           value="0x82E4"/>
+  <enum name="SAMPLER"                                    value="0x82E6"/>
+  <!-- Compatibility Profile -->
+  <enum name="DISPLAY_LIST"                               value="0x82E7"/>
+
+  <function name="DebugMessageControl" offset="assign">
+    <param name="source" type="GLenum"/>
+    <param name="type" type="GLenum"/>
+    <param name="severity" type="GLenum"/>
+    <param name="count" type="GLsizei" counter="true"/>
+    <param name="ids" type="const GLuint *" count="count"/>
+    <param name="enabled" type="GLboolean"/>
+  </function>
+
+  <function name="DebugMessageInsert" offset="assign">
+    <param name="source" type="GLenum"/>
+    <param name="type" type="GLenum"/>
+    <param name="id" type="GLuint"/>
+    <param name="severity" type="GLenum"/>
+    <param name="length" type="GLsizei"/>
+    <param name="buf" type="const GLchar *"/>
+  </function>
+
+  <function name="DebugMessageCallback" offset="assign">
+    <param name="callback" type="GLDEBUGPROC"/>
+    <param name="userParam" type="const GLvoid *"/>
+  </function>
+
+  <function name="GetDebugMessageLog" offset="assign">
+    <return type="GLuint"/>
+    <param name="count" type="GLuint"/>
+    <param name="bufsize" type="GLsizei"/>
+    <param name="sources" type="GLenum *" output="true"/>
+    <param name="types" type="GLenum *" output="true"/>
+    <param name="ids" type="GLuint *" output="true"/>
+    <param name="severities" type="GLenum *" output="true"/>
+    <param name="lengths" type="GLsizei *" output="true"/>
+    <param name="messageLog" type="GLchar *" output="true"/>
+  </function>
+
+  <function name="PushDebugGroup" offset="assign">
+    <param name="source" type="GLenum"/>
+    <param name="id" type="GLuint"/>
+    <param name="length" type="GLsizei"/>
+    <param name="message" type="const GLchar *"/>
+  </function>
+
+  <function name="PopDebugGroup" offset="assign"/>
+
+  <function name="ObjectLabel" offset="assign">
+    <param name="identifier" type="GLenum"/>
+    <param name="name" type="GLuint"/>
+    <param name="length" type="GLsizei"/>
+    <param name="label" type="const GLchar *"/>
+  </function>
+
+  <function name="GetObjectLabel" offset="assign">
+    <param name="identifier" type="GLenum"/>
+    <param name="name" type="GLuint"/>
+    <param name="bufSize" type="GLsizei"/>
+    <param name="length" type="GLsizei *"/>
+    <param name="label" type="GLchar *"/>
+  </function>
+
+  <function name="ObjectPtrLabel" offset="assign">
+    <param name="ptr" type="const GLvoid *"/>
+    <param name="length" type="GLsizei"/>
+    <param name="label" type="const GLchar *"/>
+  </function>
+
+  <function name="GetObjectPtrLabel" offset="assign">
+    <param name="ptr" type="const GLvoid *"/>
+    <param name="bufSize" type="GLsizei"/>
+    <param name="length" type="GLsizei *"/>
+    <param name="label" type="GLchar *"/>
+  </function>
+
+</category>
+
+<!-- ARB extensions #120...#124 -->
+
+<xi:include href="ARB_vertex_attrib_binding.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<!-- ARB extension #126 -->
 
 <xi:include href="ARB_ES3_compatibility.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
@@ -12743,6 +12896,8 @@
     <enum name="FRAMEBUFFER_SRGB_CAPABLE_EXT"      value="0x8DBA"/>
 </category>
 
+<xi:include href="AMD_performance_monitor.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
 <category name="GL_APPLE_texture_range" number="367">
     <enum name="TEXTURE_STORAGE_HINT_APPLE" count="1" value="0x85BC">
         <size name="TexParameteriv"/>
@@ -12878,38 +13033,6 @@
     <enum name="RGBA8_SNORM"                              value="0x8F97"/>
 </category>
 
-<category name="GL_MESA_shader_debug">
-    <enum name="DEBUG_OBJECT_MESA"                        value="0x8759"/>
-    <enum name="DEBUG_PRINT_MESA"                         value="0x875A"/>
-    <enum name="DEBUG_ASSERT_MESA"                        value="0x875B"/>
-    <function name="CreateDebugObjectMESA" exec="skip">
-        <return type="GLhandleARB"/>
-        <glx ignore="true"/>
-    </function>
-    <function name="ClearDebugLogMESA" exec="skip">
-        <param name="obj" type="GLhandleARB"/>
-        <param name="logType" type="GLenum"/>
-        <param name="shaderType" type="GLenum"/>
-        <glx ignore="true"/>
-    </function>
-    <function name="GetDebugLogMESA" exec="skip">
-        <param name="obj" type="GLhandleARB"/>
-        <param name="logType" type="GLenum"/>
-        <param name="shaderType" type="GLenum"/>
-        <param name="maxLength" type="GLsizei"/>
-        <param name="length" type="GLsizei *" output="true"/>
-        <param name="debugLog" type="GLcharARB *" output="true"/>
-        <glx ignore="true"/>
-    </function>
-    <function name="GetDebugLogLengthMESA" exec="skip">
-        <return type="GLsizei"/>
-        <param name="obj" type="GLhandleARB"/>
-        <param name="logType" type="GLenum"/>
-        <param name="shaderType" type="GLenum"/>
-        <glx ignore="true"/>
-    </function>
-</category>
-
 <category name="GL_SGIS_point_parameters">
     <enum name="POINT_SIZE_MIN_SGIS"           count="1"  value="0x8126">
         <size name="PointParameterfv"/>
@@ -13000,5 +13123,9 @@
 <xi:include href="NV_texture_barrier.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <xi:include href="EXT_transform_feedback.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<xi:include href="NV_vdpau_interop.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<xi:include href="GL4x.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 </OpenGLAPI>

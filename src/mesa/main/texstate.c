@@ -528,11 +528,17 @@ update_texture_state( struct gl_context *ctx )
    GLuint unit;
    struct gl_program *fprog = NULL;
    struct gl_program *vprog = NULL;
+   struct gl_program *gprog = NULL;
    GLbitfield enabledFragUnits = 0x0;
 
    if (ctx->Shader.CurrentVertexProgram &&
        ctx->Shader.CurrentVertexProgram->LinkStatus) {
       vprog = ctx->Shader.CurrentVertexProgram->_LinkedShaders[MESA_SHADER_VERTEX]->Program;
+   }
+
+   if (ctx->Shader.CurrentGeometryProgram &&
+       ctx->Shader.CurrentGeometryProgram->LinkStatus) {
+      gprog = ctx->Shader.CurrentGeometryProgram->_LinkedShaders[MESA_SHADER_GEOMETRY]->Program;
    }
 
    if (ctx->Shader.CurrentFragmentProgram &&
@@ -542,10 +548,6 @@ update_texture_state( struct gl_context *ctx )
    else if (ctx->FragmentProgram._Enabled) {
       fprog = &ctx->FragmentProgram.Current->Base;
    }
-
-   /* FINISHME: Geometry shader texture accesses should also be considered
-    * FINISHME: here.
-    */
 
    /* TODO: only set this if there are actual changes */
    ctx->NewState |= _NEW_TEXTURE;
@@ -562,6 +564,7 @@ update_texture_state( struct gl_context *ctx )
       struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
       GLbitfield enabledVertTargets = 0x0;
       GLbitfield enabledFragTargets = 0x0;
+      GLbitfield enabledGeomTargets = 0x0;
       GLbitfield enabledTargets = 0x0;
       GLuint texIndex;
 
@@ -575,6 +578,10 @@ update_texture_state( struct gl_context *ctx )
          enabledVertTargets |= vprog->TexturesUsed[unit];
       }
 
+      if (gprog) {
+         enabledGeomTargets |= gprog->TexturesUsed[unit];
+      }
+
       if (fprog) {
          enabledFragTargets |= fprog->TexturesUsed[unit];
       }
@@ -583,7 +590,8 @@ update_texture_state( struct gl_context *ctx )
          enabledFragTargets |= texUnit->Enabled;
       }
 
-      enabledTargets = enabledVertTargets | enabledFragTargets;
+      enabledTargets = enabledVertTargets | enabledFragTargets |
+                       enabledGeomTargets;
 
       texUnit->_ReallyEnabled = 0x0;
 
@@ -594,8 +602,8 @@ update_texture_state( struct gl_context *ctx )
 
       /* Look for the highest priority texture target that's enabled (or used
        * by the vert/frag shaders) and "complete".  That's the one we'll use
-       * for texturing.  If we're using vert/frag program we're guaranteed
-       * that bitcount(enabledBits) <= 1.
+       * for texturing.
+       *
        * Note that the TEXTURE_x_INDEX values are in high to low priority.
        */
       for (texIndex = 0; texIndex < NUM_TEXTURE_TARGETS; texIndex++) {
@@ -623,8 +631,6 @@ update_texture_state( struct gl_context *ctx )
              */
             struct gl_texture_object *texObj;
             gl_texture_index texTarget;
-
-            assert(_mesa_bitcount(enabledTargets) == 1);
 
             texTarget = (gl_texture_index) (ffs(enabledTargets) - 1);
             texObj = _mesa_get_fallback_texture(ctx, texTarget);
@@ -803,6 +809,14 @@ _mesa_init_texture(struct gl_context *ctx)
    /* Texture group */
    ctx->Texture.CurrentUnit = 0;      /* multitexture */
    ctx->Texture._EnabledUnits = 0x0;
+
+   /* Appendix F.2 of the OpenGL ES 3.0 spec says:
+    *
+    *     "OpenGL ES 3.0 requires that all cube map filtering be
+    *     seamless. OpenGL ES 2.0 specified that a single cube map face be
+    *     selected and used for filtering."
+    */
+   ctx->Texture.CubeMapSeamless = _mesa_is_gles3(ctx);
 
    for (u = 0; u < Elements(ctx->Texture.Unit); u++)
       init_texture_unit(ctx, u);

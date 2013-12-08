@@ -32,33 +32,28 @@
 #include <sys/time.h>
 #include "dri_util.h"
 #include "intel_bufmgr.h"
+#include "intel_chipset.h"
+#include "brw_device_info.h"
 #include "i915_drm.h"
 #include "xmlconfig.h"
 
 struct intel_screen
 {
    int deviceID;
-   int gen;
-
-   int max_gl_core_version;
-   int max_gl_compat_version;
-   int max_gl_es1_version;
-   int max_gl_es2_version;
+   const struct brw_device_info *devinfo;
 
    __DRIscreen *driScrnPriv;
 
    bool no_hw;
 
-   /*
-    * The hardware hiz and separate stencil fields are needed in intel_screen,
-    * rather than solely in brw_context, because glXCreatePbuffer and
-    * glXCreatePixmap are not passed a GLXContext.
-    */
-   bool hw_has_separate_stencil;
    bool hw_must_use_separate_stencil;
 
-   bool hw_has_llc;
    bool hw_has_swizzling;
+
+   /**
+    * Does the kernel support context reset notifications?
+    */
+   bool has_context_reset_notification;
 
    dri_bufmgr *bufmgr;
 
@@ -76,6 +71,8 @@ struct intel_screen
 extern void intelDestroyContext(__DRIcontext * driContextPriv);
 
 extern GLboolean intelUnbindContext(__DRIcontext * driContextPriv);
+
+PUBLIC const __DRIextension **__driDriverGetExtensions_i965(void);
 
 extern GLboolean
 intelMakeCurrent(__DRIcontext * driContextPriv,

@@ -112,8 +112,8 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 		assert(usage & PIPE_TRANSFER_WRITE);
 
 		/* Check if mapping this buffer would cause waiting for the GPU. */
-		if (r600_rings_is_buffer_referenced(rctx, rbuffer->cs_buf, RADEON_USAGE_READWRITE) ||
-		    rctx->ws->buffer_is_busy(rbuffer->buf, RADEON_USAGE_READWRITE)) {
+		if (r600_rings_is_buffer_referenced(&rctx->b, rbuffer->cs_buf, RADEON_USAGE_READWRITE) ||
+		    rctx->b.ws->buffer_is_busy(rbuffer->buf, RADEON_USAGE_READWRITE)) {
 			unsigned i, mask;
 
 			/* Discard the buffer. */
@@ -121,7 +121,7 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 
 			/* Create a new one in the same pipe_resource. */
 			/* XXX We probably want a different alignment for buffers and textures. */
-			r600_init_resource(rctx->screen, rbuffer, rbuffer->b.b.width0, 4096,
+			r600_init_resource(&rctx->screen->b, rbuffer, rbuffer->b.b.width0, 4096,
 					   TRUE, rbuffer->b.b.usage);
 
 			/* We changed the buffer, now we need to bind it where the old one was bound. */
@@ -135,13 +135,13 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 				}
 			}
 			/* Streamout buffers. */
-			for (i = 0; i < rctx->streamout.num_targets; i++) {
-				if (rctx->streamout.targets[i]->b.buffer == &rbuffer->b.b) {
-					if (rctx->streamout.begin_emitted) {
-						r600_emit_streamout_end(rctx);
+			for (i = 0; i < rctx->b.streamout.num_targets; i++) {
+				if (rctx->b.streamout.targets[i]->b.buffer == &rbuffer->b.b) {
+					if (rctx->b.streamout.begin_emitted) {
+						r600_emit_streamout_end(&rctx->b);
 					}
-					rctx->streamout.append_bitmask = rctx->streamout.enabled_mask;
-					r600_streamout_buffers_dirty(rctx);
+					rctx->b.streamout.append_bitmask = rctx->b.streamout.enabled_mask;
+					r600_streamout_buffers_dirty(&rctx->b);
 				}
 			}
 			/* Constant buffers. */
@@ -150,7 +150,7 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 	}
 	else if ((usage & PIPE_TRANSFER_DISCARD_RANGE) &&
 		 !(usage & PIPE_TRANSFER_UNSYNCHRONIZED) &&
-		 !(rctx->screen->debug_flags & DBG_NO_DISCARD_RANGE) &&
+		 !(rctx->screen->b.debug_flags & DBG_NO_DISCARD_RANGE) &&
 		 (rctx->screen->has_cp_dma ||
 		  (rctx->screen->has_streamout &&
 		   /* The buffer range must be aligned to 4 with streamout. */
@@ -158,8 +158,8 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 		assert(usage & PIPE_TRANSFER_WRITE);
 
 		/* Check if mapping this buffer would cause waiting for the GPU. */
-		if (r600_rings_is_buffer_referenced(rctx, rbuffer->cs_buf, RADEON_USAGE_READWRITE) ||
-		    rctx->ws->buffer_is_busy(rbuffer->buf, RADEON_USAGE_READWRITE)) {
+		if (r600_rings_is_buffer_referenced(&rctx->b, rbuffer->cs_buf, RADEON_USAGE_READWRITE) ||
+		    rctx->b.ws->buffer_is_busy(rbuffer->buf, RADEON_USAGE_READWRITE)) {
 			/* Do a wait-free write-only transfer using a temporary buffer. */
 			unsigned offset;
 			struct r600_resource *staging = NULL;
@@ -176,7 +176,7 @@ static void *r600_buffer_transfer_map(struct pipe_context *ctx,
 	}
 
 	/* mmap and synchronize with rings */
-	data = r600_buffer_mmap_sync_with_rings(rctx, rbuffer, usage);
+	data = r600_buffer_map_sync_with_rings(&rctx->b, rbuffer, usage);
 	if (!data) {
 		return NULL;
 	}
@@ -203,8 +203,8 @@ static void r600_buffer_transfer_unmap(struct pipe_context *pipe,
 		doffset = transfer->box.x;
 		soffset = rtransfer->offset + transfer->box.x % R600_MAP_BUFFER_ALIGNMENT;
 		/* Copy the staging buffer into the original one. */
-		if (rctx->rings.dma.cs && !(size % 4) && !(doffset % 4) && !(soffset % 4)) {
-			if (rctx->screen->chip_class >= EVERGREEN) {
+		if (rctx->b.rings.dma.cs && !(size % 4) && !(doffset % 4) && !(soffset % 4)) {
+			if (rctx->screen->b.chip_class >= EVERGREEN) {
 				evergreen_dma_copy(rctx, dst, src, doffset, soffset, size);
 			} else {
 				r600_dma_copy(rctx, dst, src, doffset, soffset, size);
@@ -235,60 +235,6 @@ static const struct u_resource_vtbl r600_buffer_vtbl =
 	NULL					/* transfer_inline_write */
 };
 
-bool r600_init_resource(struct r600_screen *rscreen,
-			struct r600_resource *res,
-			unsigned size, unsigned alignment,
-			bool use_reusable_pool, unsigned usage)
-{
-	uint32_t initial_domain, domains;
-
-	switch(usage) {
-	case PIPE_USAGE_STAGING:
-		/* Staging resources participate in transfers, i.e. are used
-		 * for uploads and downloads from regular resources.
-		 * We generate them internally for some transfers.
-		 */
-		initial_domain = RADEON_DOMAIN_GTT;
-		domains = RADEON_DOMAIN_GTT;
-		break;
-	case PIPE_USAGE_DYNAMIC:
-	case PIPE_USAGE_STREAM:
-		/* Default to GTT, but allow the memory manager to move it to VRAM. */
-		initial_domain = RADEON_DOMAIN_GTT;
-		domains = RADEON_DOMAIN_GTT | RADEON_DOMAIN_VRAM;
-		break;
-	case PIPE_USAGE_DEFAULT:
-	case PIPE_USAGE_STATIC:
-	case PIPE_USAGE_IMMUTABLE:
-	default:
-		/* Don't list GTT here, because the memory manager would put some
-		 * resources to GTT no matter what the initial domain is.
-		 * Not listing GTT in the domains improves performance a lot. */
-		initial_domain = RADEON_DOMAIN_VRAM;
-		domains = RADEON_DOMAIN_VRAM;
-		break;
-	}
-
-	res->buf = rscreen->ws->buffer_create(rscreen->ws, size, alignment,
-                                              use_reusable_pool,
-                                              initial_domain);
-	if (!res->buf) {
-		return false;
-	}
-
-	res->cs_buf = rscreen->ws->buffer_get_cs_handle(res->buf);
-	res->domains = domains;
-	util_range_set_empty(&res->valid_buffer_range);
-
-	if (rscreen->debug_flags & DBG_VM && res->b.b.target == PIPE_BUFFER) {
-		fprintf(stderr, "VM start=0x%llX  end=0x%llX | Buffer %u bytes\n",
-			r600_resource_va(&rscreen->screen, &res->b.b),
-			r600_resource_va(&rscreen->screen, &res->b.b) + res->buf->size,
-			res->buf->size);
-	}
-	return true;
-}
-
 struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 					 const struct pipe_resource *templ,
 					 unsigned alignment)
@@ -304,7 +250,7 @@ struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 	rbuffer->b.vtbl = &r600_buffer_vtbl;
 	util_range_init(&rbuffer->valid_buffer_range);
 
-	if (!r600_init_resource(rscreen, rbuffer, templ->width0, alignment, TRUE, templ->usage)) {
+	if (!r600_init_resource(&rscreen->b, rbuffer, templ->width0, alignment, TRUE, templ->usage)) {
 		FREE(rbuffer);
 		return NULL;
 	}

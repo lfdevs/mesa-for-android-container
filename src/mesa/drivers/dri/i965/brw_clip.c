@@ -70,6 +70,11 @@ static void compile_clip_prog( struct brw_context *brw,
    c.key = *key;
    c.vue_map = brw->vue_map_geom_out;
 
+   c.has_flat_shading =
+      brw_any_flat_varyings(&key->interpolation_mode);
+   c.has_noperspective_shading =
+      brw_any_noperspective_varyings(&key->interpolation_mode);
+
    /* nr_regs is the number of registers filled by reading data from the VUE.
     * This program accesses the entire VUE, so nr_regs needs to be the size of
     * the VUE (measured in pairs, since two slots are stored in each
@@ -141,15 +146,20 @@ brw_upload_clip_prog(struct brw_context *brw)
 
    /* Populate the key:
     */
+
+   /* BRW_NEW_INTERPOLATION_MAP */
+   key.interpolation_mode = brw->interpolation_mode;
+
    /* BRW_NEW_REDUCED_PRIMITIVE */
    key.primitive = brw->reduced_primitive;
    /* BRW_NEW_VUE_MAP_GEOM_OUT */
    key.attrs = brw->vue_map_geom_out.slots_valid;
+
    /* _NEW_LIGHT */
-   key.do_flat_shading = (ctx->Light.ShadeModel == GL_FLAT);
    key.pv_first = (ctx->Light.ProvokingVertex == GL_FIRST_VERTEX_CONVENTION);
    /* _NEW_TRANSFORM (also part of VUE map)*/
-   key.nr_userclip = _mesa_bitcount_64(ctx->Transform.ClipPlanesEnabled);
+   if (ctx->Transform.ClipPlanesEnabled)
+      key.nr_userclip = _mesa_logbase2(ctx->Transform.ClipPlanesEnabled) + 1;
 
    if (brw->gen == 5)
        key.clip_mode = BRW_CLIPMODE_KERNEL_CLIP;
@@ -256,7 +266,9 @@ const struct brw_tracked_state brw_clip_prog = {
 		_NEW_TRANSFORM |
 		_NEW_POLYGON | 
 		_NEW_BUFFERS),
-      .brw   = (BRW_NEW_REDUCED_PRIMITIVE | BRW_NEW_VUE_MAP_GEOM_OUT)
+      .brw   = (BRW_NEW_REDUCED_PRIMITIVE |
+                BRW_NEW_VUE_MAP_GEOM_OUT |
+                BRW_NEW_INTERPOLATION_MAP)
    },
    .emit = brw_upload_clip_prog
 };

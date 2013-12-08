@@ -69,6 +69,7 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_COMBINED_SAMPLERS:
       return 2 * PIPE_MAX_SAMPLERS;  /* VS + FS */
    case PIPE_CAP_NPOT_TEXTURES:
+   case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
       return 1;
    case PIPE_CAP_TWO_SIDED_STENCIL:
       return 1;
@@ -249,11 +250,12 @@ softpipe_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
 static int
 softpipe_get_video_param(struct pipe_screen *screen,
                          enum pipe_video_profile profile,
+			 enum pipe_video_entrypoint entrypoint,
                          enum pipe_video_cap param)
 {
    switch (param) {
    case PIPE_VIDEO_CAP_SUPPORTED:
-       return vl_profile_supported(screen, profile);
+       return vl_profile_supported(screen, profile, entrypoint);
    case PIPE_VIDEO_CAP_NPOT_TEXTURES:
       return 0;
    case PIPE_VIDEO_CAP_MAX_WIDTH:

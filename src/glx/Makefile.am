@@ -77,6 +77,7 @@ libglx_la_SOURCES = \
 	  indirect_vertex_program.c \
 	  pixel.c \
 	  pixelstore.c \
+	  query_renderer.c \
 	  render2.c \
 	  renderpix.c \
 	  single2.c \
@@ -92,6 +93,7 @@ libglx_la_SOURCES = \
 	  glxhash.c \
 	  dri2_glx.c \
 	  dri2.c \
+	  dri2_query_renderer.c \
 	  applegl_glx.c
 
 GL_LIBS = \

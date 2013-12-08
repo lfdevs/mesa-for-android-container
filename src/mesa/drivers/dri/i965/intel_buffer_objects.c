@@ -25,6 +25,11 @@
  * 
  **************************************************************************/
 
+/**
+ * @file intel_buffer_objects.c
+ *
+ * This provides core GL buffer object functionality.
+ */
 
 #include "main/imports.h"
 #include "main/mtypes.h"
@@ -35,14 +40,24 @@
 #include "intel_blit.h"
 #include "intel_buffer_objects.h"
 #include "intel_batchbuffer.h"
-#include "intel_fbo.h"
-#include "intel_mipmap_tree.h"
-#include "intel_regions.h"
-
-#include "brw_context.h"
 
 static GLboolean
 intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj);
+
+static void
+intel_bufferobj_mark_gpu_usage(struct intel_buffer_object *intel_obj,
+                               uint32_t offset, uint32_t size)
+{
+   intel_obj->gpu_active_start = MIN2(intel_obj->gpu_active_start, offset);
+   intel_obj->gpu_active_end = MAX2(intel_obj->gpu_active_end, offset + size);
+}
+
+static void
+intel_bufferobj_mark_inactive(struct intel_buffer_object *intel_obj)
+{
+   intel_obj->gpu_active_start = ~0;
+   intel_obj->gpu_active_end = 0;
+}
 
 /** Allocates a new drm_intel_bo to store the data for the buffer object. */
 static void
@@ -55,6 +70,8 @@ intel_bufferobj_alloc_buffer(struct brw_context *brw,
    /* the buffer might be bound as a uniform buffer, need to update it
     */
    brw->state.dirty.brw |= BRW_NEW_UNIFORM_BUFFER;
+
+   intel_bufferobj_mark_inactive(intel_obj);
 }
 
 static void
@@ -62,10 +79,13 @@ release_buffer(struct intel_buffer_object *intel_obj)
 {
    drm_intel_bo_unreference(intel_obj->buffer);
    intel_obj->buffer = NULL;
-   intel_obj->offset = 0;
 }
 
 /**
+ * The NewBufferObject() driver hook.
+ *
+ * Allocates a new intel_buffer_object structure and initializes it.
+ *
  * There is some duplication between mesa's bufferobjects and our
  * bufmgr buffers.  Both have an integer handle and a hashtable to
  * lookup an opaque structure.  It would be nice if the handles and
@@ -84,8 +104,9 @@ intel_bufferobj_alloc(struct gl_context * ctx, GLuint name, GLenum target)
 }
 
 /**
- * Deallocate/free a vertex/pixel buffer object.
- * Called via glDeleteBuffersARB().
+ * The DeleteBuffer() driver hook.
+ *
+ * Deletes a single OpenGL buffer object.  Used by glDeleteBuffers().
  */
 static void
 intel_bufferobj_free(struct gl_context * ctx, struct gl_buffer_object *obj)
@@ -106,12 +127,14 @@ intel_bufferobj_free(struct gl_context * ctx, struct gl_buffer_object *obj)
 }
 
 
-
 /**
- * Allocate space for and store data in a buffer object.  Any data that was
- * previously stored in the buffer object is lost.  If data is NULL,
- * memory will be allocated, but no copy will occur.
- * Called via ctx->Driver.BufferData().
+ * The BufferData() driver hook.
+ *
+ * Implements glBufferData(), which recreates a buffer object's data store
+ * and populates it with the given data, if present.
+ *
+ * Any data that was previously stored in the buffer object is lost.
+ *
  * \return true for success, false if out of memory
  */
 static GLboolean
@@ -150,10 +173,13 @@ intel_bufferobj_data(struct gl_context * ctx,
 
 
 /**
- * Replace data in a subrange of buffer object.  If the data range
- * specified by size + offset extends beyond the end of the buffer or
- * if data is NULL, no copy is performed.
- * Called via glBufferSubDataARB().
+ * The BufferSubData() driver hook.
+ *
+ * Implements glBufferSubData(), which replaces a portion of the data in a
+ * buffer object.
+ *
+ * If the data range specified by (size + offset) extends beyond the end of
+ * the buffer or if data is NULL, no copy is performed.
  */
 static void
 intel_bufferobj_subdata(struct gl_context * ctx,
@@ -170,20 +196,44 @@ intel_bufferobj_subdata(struct gl_context * ctx,
 
    assert(intel_obj);
 
+   /* See if we can unsynchronized write the data into the user's BO. This
+    * avoids GPU stalls in unfortunately common user patterns (uploading
+    * sequentially into a BO, with draw calls in between each upload).
+    *
+    * Once we've hit this path, we mark this GL BO as preferring stalling to
+    * blits, so that we can hopefully hit this path again in the future
+    * (otherwise, an app that might occasionally stall but mostly not will end
+    * up with blitting all the time, at the cost of bandwidth)
+    */
+   if (brw->has_llc) {
+      if (offset + size <= intel_obj->gpu_active_start ||
+          intel_obj->gpu_active_end <= offset) {
+         drm_intel_gem_bo_map_unsynchronized(intel_obj->buffer);
+         memcpy(intel_obj->buffer->virtual + offset, data, size);
+         drm_intel_bo_unmap(intel_obj->buffer);
+
+         if (intel_obj->gpu_active_end > intel_obj->gpu_active_start)
+            intel_obj->prefer_stall_to_blit = true;
+         return;
+      }
+   }
+
    busy =
       drm_intel_bo_busy(intel_obj->buffer) ||
       drm_intel_bo_references(brw->batch.bo, intel_obj->buffer);
 
    if (busy) {
       if (size == intel_obj->Base.Size) {
-	 /* Replace the current busy bo with fresh data. */
+	 /* Replace the current busy bo so the subdata doesn't stall. */
 	 drm_intel_bo_unreference(intel_obj->buffer);
 	 intel_bufferobj_alloc_buffer(brw, intel_obj);
-	 drm_intel_bo_subdata(intel_obj->buffer, 0, size, data);
-      } else {
-         perf_debug("Using a blit copy to avoid stalling on %ldb "
-                    "glBufferSubData() to a busy buffer object.\n",
-                    (long)size);
+      } else if (!intel_obj->prefer_stall_to_blit) {
+         perf_debug("Using a blit copy to avoid stalling on "
+                    "glBufferSubData(%ld, %ld) (%ldkb) to a busy "
+                    "(%d-%d) buffer object.\n",
+                    (long)offset, (long)offset + size, (long)(size/1024),
+                    intel_obj->gpu_active_start,
+                    intel_obj->gpu_active_end);
 	 drm_intel_bo *temp_bo =
 	    drm_intel_bo_alloc(brw->bufmgr, "subdata temp", size, 64);
 
@@ -195,15 +245,28 @@ intel_bufferobj_subdata(struct gl_context * ctx,
 				size);
 
 	 drm_intel_bo_unreference(temp_bo);
+         return;
+      } else {
+         perf_debug("Stalling on glBufferSubData(%ld, %ld) (%ldkb) to a busy "
+                    "(%d-%d) buffer object.  Use glMapBufferRange() to "
+                    "avoid this.\n",
+                    (long)offset, (long)offset + size, (long)(size/1024),
+                    intel_obj->gpu_active_start,
+                    intel_obj->gpu_active_end);
+         intel_batchbuffer_flush(brw);
       }
-   } else {
-      drm_intel_bo_subdata(intel_obj->buffer, offset, size, data);
    }
+
+   drm_intel_bo_subdata(intel_obj->buffer, offset, size, data);
+   intel_bufferobj_mark_inactive(intel_obj);
 }
 
 
 /**
- * Called via glGetBufferSubDataARB().
+ * The GetBufferSubData() driver hook.
+ *
+ * Implements glGetBufferSubData(), which copies a subrange of a buffer
+ * object into user memory.
  */
 static void
 intel_bufferobj_get_subdata(struct gl_context * ctx,
@@ -219,12 +282,15 @@ intel_bufferobj_get_subdata(struct gl_context * ctx,
       intel_batchbuffer_flush(brw);
    }
    drm_intel_bo_get_subdata(intel_obj->buffer, offset, size, data);
+
+   intel_bufferobj_mark_inactive(intel_obj);
 }
 
 
-
 /**
- * Called via glMapBufferRange and glMapBuffer
+ * The MapBufferRange() driver hook.
+ *
+ * This implements both glMapBufferRange() and glMapBuffer().
  *
  * The goal of this extension is to allow apps to accumulate their rendering
  * at the same time as they accumulate their buffer object.  Without it,
@@ -277,7 +343,7 @@ intel_bufferobj_map_range(struct gl_context * ctx,
 	 } else {
             perf_debug("Stalling on the GPU for mapping a busy buffer "
                        "object\n");
-	    intel_flush(ctx);
+	    intel_batchbuffer_flush(brw);
 	 }
       } else if (drm_intel_bo_busy(intel_obj->buffer) &&
 		 (access & GL_MAP_INVALIDATE_BUFFER_BIT)) {
@@ -315,15 +381,25 @@ intel_bufferobj_map_range(struct gl_context * ctx,
       drm_intel_gem_bo_map_unsynchronized(intel_obj->buffer);
    else if (!(access & GL_MAP_READ_BIT)) {
       drm_intel_gem_bo_map_gtt(intel_obj->buffer);
+      intel_bufferobj_mark_inactive(intel_obj);
    } else {
       drm_intel_bo_map(intel_obj->buffer, (access & GL_MAP_WRITE_BIT) != 0);
+      intel_bufferobj_mark_inactive(intel_obj);
    }
 
    obj->Pointer = intel_obj->buffer->virtual + offset;
    return obj->Pointer;
 }
 
-/* Ideally we'd use a BO to avoid taking up cache space for the temporary
+/**
+ * The FlushMappedBufferRange() driver hook.
+ *
+ * Implements glFlushMappedBufferRange(), which signifies that modifications
+ * have been made to a range of a mapped buffer, and it should be flushed.
+ *
+ * This is only used for buffers mapped with GL_MAP_FLUSH_EXPLICIT_BIT.
+ *
+ * Ideally we'd use a BO to avoid taking up cache space for the temporary
  * data, but FlushMappedBufferRange may be followed by further writes to
  * the pointer, so we would have to re-map after emitting our blit, which
  * would defeat the point.
@@ -354,13 +430,16 @@ intel_bufferobj_flush_mapped_range(struct gl_context *ctx,
 			  intel_obj->buffer, obj->Offset + offset,
 			  temp_bo, 0,
 			  length);
+   intel_bufferobj_mark_gpu_usage(intel_obj, obj->Offset + offset, length);
 
    drm_intel_bo_unreference(temp_bo);
 }
 
 
 /**
- * Called via glUnmapBuffer().
+ * The UnmapBuffer() driver hook.
+ *
+ * Implements glUnmapBuffer().
  */
 static GLboolean
 intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj)
@@ -386,6 +465,7 @@ intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj)
 			     intel_obj->buffer, obj->Offset,
 			     intel_obj->range_map_bo, 0,
 			     obj->Length);
+      intel_bufferobj_mark_gpu_usage(intel_obj, obj->Offset, obj->Length);
 
       /* Since we've emitted some blits to buffers that will (likely) be used
        * in rendering operations in other cache domains in this batch, emit a
@@ -406,159 +486,37 @@ intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj)
    return true;
 }
 
+/**
+ * Gets a pointer to the object's BO, and marks the given range as being used
+ * on the GPU.
+ *
+ * Anywhere that uses buffer objects in the pipeline should be using this to
+ * mark the range of the buffer that is being accessed by the pipeline.
+ */
 drm_intel_bo *
 intel_bufferobj_buffer(struct brw_context *brw,
                        struct intel_buffer_object *intel_obj,
-		       GLuint flag)
+                       uint32_t offset, uint32_t size)
 {
+   /* This is needed so that things like transform feedback and texture buffer
+    * objects that need a BO but don't want to check that they exist for
+    * draw-time validation can just always get a BO from a GL buffer object.
+    */
    if (intel_obj->buffer == NULL)
       intel_bufferobj_alloc_buffer(brw, intel_obj);
 
+   intel_bufferobj_mark_gpu_usage(intel_obj, offset, size);
+
    return intel_obj->buffer;
 }
 
-#define INTEL_UPLOAD_SIZE (64*1024)
-
-void
-intel_upload_finish(struct brw_context *brw)
-{
-   if (!brw->upload.bo)
-	   return;
-
-   if (brw->upload.buffer_len) {
-	   drm_intel_bo_subdata(brw->upload.bo,
-				brw->upload.buffer_offset,
-				brw->upload.buffer_len,
-				brw->upload.buffer);
-	   brw->upload.buffer_len = 0;
-   }
-
-   drm_intel_bo_unreference(brw->upload.bo);
-   brw->upload.bo = NULL;
-}
-
-static void wrap_buffers(struct brw_context *brw, GLuint size)
-{
-   intel_upload_finish(brw);
-
-   if (size < INTEL_UPLOAD_SIZE)
-      size = INTEL_UPLOAD_SIZE;
-
-   brw->upload.bo = drm_intel_bo_alloc(brw->bufmgr, "upload", size, 0);
-   brw->upload.offset = 0;
-}
-
-void intel_upload_data(struct brw_context *brw,
-		       const void *ptr, GLuint size, GLuint align,
-		       drm_intel_bo **return_bo,
-		       GLuint *return_offset)
-{
-   GLuint base, delta;
-
-   base = (brw->upload.offset + align - 1) / align * align;
-   if (brw->upload.bo == NULL || base + size > brw->upload.bo->size) {
-      wrap_buffers(brw, size);
-      base = 0;
-   }
-
-   drm_intel_bo_reference(brw->upload.bo);
-   *return_bo = brw->upload.bo;
-   *return_offset = base;
-
-   delta = base - brw->upload.offset;
-   if (brw->upload.buffer_len &&
-       brw->upload.buffer_len + delta + size > sizeof(brw->upload.buffer))
-   {
-      drm_intel_bo_subdata(brw->upload.bo,
-			   brw->upload.buffer_offset,
-			   brw->upload.buffer_len,
-			   brw->upload.buffer);
-      brw->upload.buffer_len = 0;
-   }
-
-   if (size < sizeof(brw->upload.buffer))
-   {
-      if (brw->upload.buffer_len == 0)
-	 brw->upload.buffer_offset = base;
-      else
-	 brw->upload.buffer_len += delta;
-
-      memcpy(brw->upload.buffer + brw->upload.buffer_len, ptr, size);
-      brw->upload.buffer_len += size;
-   }
-   else
-   {
-      drm_intel_bo_subdata(brw->upload.bo, base, size, ptr);
-   }
-
-   brw->upload.offset = base + size;
-}
-
-void *intel_upload_map(struct brw_context *brw, GLuint size, GLuint align)
-{
-   GLuint base, delta;
-   char *ptr;
-
-   base = (brw->upload.offset + align - 1) / align * align;
-   if (brw->upload.bo == NULL || base + size > brw->upload.bo->size) {
-      wrap_buffers(brw, size);
-      base = 0;
-   }
-
-   delta = base - brw->upload.offset;
-   if (brw->upload.buffer_len &&
-       brw->upload.buffer_len + delta + size > sizeof(brw->upload.buffer))
-   {
-      drm_intel_bo_subdata(brw->upload.bo,
-			   brw->upload.buffer_offset,
-			   brw->upload.buffer_len,
-			   brw->upload.buffer);
-      brw->upload.buffer_len = 0;
-   }
-
-   if (size <= sizeof(brw->upload.buffer)) {
-      if (brw->upload.buffer_len == 0)
-	 brw->upload.buffer_offset = base;
-      else
-	 brw->upload.buffer_len += delta;
-
-      ptr = brw->upload.buffer + brw->upload.buffer_len;
-      brw->upload.buffer_len += size;
-   } else
-      ptr = malloc(size);
-
-   return ptr;
-}
-
-void intel_upload_unmap(struct brw_context *brw,
-			const void *ptr, GLuint size, GLuint align,
-			drm_intel_bo **return_bo,
-			GLuint *return_offset)
-{
-   GLuint base;
-
-   base = (brw->upload.offset + align - 1) / align * align;
-   if (size > sizeof(brw->upload.buffer)) {
-      drm_intel_bo_subdata(brw->upload.bo, base, size, ptr);
-      free((void*)ptr);
-   }
-
-   drm_intel_bo_reference(brw->upload.bo);
-   *return_bo = brw->upload.bo;
-   *return_offset = base;
-
-   brw->upload.offset = base + size;
-}
-
-drm_intel_bo *
-intel_bufferobj_source(struct brw_context *brw,
-                       struct intel_buffer_object *intel_obj,
-		       GLuint align, GLuint *offset)
-{
-   *offset = intel_obj->offset;
-   return intel_obj->buffer;
-}
-
+/**
+ * The CopyBufferSubData() driver hook.
+ *
+ * Implements glCopyBufferSubData(), which copies a portion of one buffer
+ * object's data to another.  Independent source and destination offsets
+ * are allowed.
+ */
 static void
 intel_bufferobj_copy_subdata(struct gl_context *ctx,
 			     struct gl_buffer_object *src,
@@ -570,17 +528,16 @@ intel_bufferobj_copy_subdata(struct gl_context *ctx,
    struct intel_buffer_object *intel_src = intel_buffer_object(src);
    struct intel_buffer_object *intel_dst = intel_buffer_object(dst);
    drm_intel_bo *src_bo, *dst_bo;
-   GLuint src_offset;
 
    if (size == 0)
       return;
 
-   dst_bo = intel_bufferobj_buffer(brw, intel_dst, INTEL_WRITE_PART);
-   src_bo = intel_bufferobj_source(brw, intel_src, 64, &src_offset);
+   dst_bo = intel_bufferobj_buffer(brw, intel_dst, write_offset, size);
+   src_bo = intel_bufferobj_buffer(brw, intel_src, read_offset, size);
 
    intel_emit_linear_blit(brw,
 			  dst_bo, write_offset,
-			  src_bo, read_offset + src_offset, size);
+			  src_bo, read_offset, size);
 
    /* Since we've emitted some blits to buffers that will (likely) be used
     * in rendering operations in other cache domains in this batch, emit a
@@ -588,129 +545,6 @@ intel_bufferobj_copy_subdata(struct gl_context *ctx,
     * usage inside of a batchbuffer.
     */
    intel_batchbuffer_emit_mi_flush(brw);
-}
-
-static GLenum
-intel_buffer_purgeable(drm_intel_bo *buffer)
-{
-   int retained = 0;
-
-   if (buffer != NULL)
-      retained = drm_intel_bo_madvise (buffer, I915_MADV_DONTNEED);
-
-   return retained ? GL_VOLATILE_APPLE : GL_RELEASED_APPLE;
-}
-
-static GLenum
-intel_buffer_object_purgeable(struct gl_context * ctx,
-                              struct gl_buffer_object *obj,
-                              GLenum option)
-{
-   struct intel_buffer_object *intel_obj = intel_buffer_object (obj);
-
-   if (intel_obj->buffer != NULL)
-      return intel_buffer_purgeable(intel_obj->buffer);
-
-   if (option == GL_RELEASED_APPLE) {
-      return GL_RELEASED_APPLE;
-   } else {
-      /* XXX Create the buffer and madvise(MADV_DONTNEED)? */
-      struct brw_context *brw = brw_context(ctx);
-      drm_intel_bo *bo = intel_bufferobj_buffer(brw, intel_obj, INTEL_READ);
-
-      return intel_buffer_purgeable(bo);
-   }
-}
-
-static GLenum
-intel_texture_object_purgeable(struct gl_context * ctx,
-                               struct gl_texture_object *obj,
-                               GLenum option)
-{
-   struct intel_texture_object *intel;
-
-   (void) ctx;
-   (void) option;
-
-   intel = intel_texture_object(obj);
-   if (intel->mt == NULL || intel->mt->region == NULL)
-      return GL_RELEASED_APPLE;
-
-   return intel_buffer_purgeable(intel->mt->region->bo);
-}
-
-static GLenum
-intel_render_object_purgeable(struct gl_context * ctx,
-                              struct gl_renderbuffer *obj,
-                              GLenum option)
-{
-   struct intel_renderbuffer *intel;
-
-   (void) ctx;
-   (void) option;
-
-   intel = intel_renderbuffer(obj);
-   if (intel->mt == NULL)
-      return GL_RELEASED_APPLE;
-
-   return intel_buffer_purgeable(intel->mt->region->bo);
-}
-
-static GLenum
-intel_buffer_unpurgeable(drm_intel_bo *buffer)
-{
-   int retained;
-
-   retained = 0;
-   if (buffer != NULL)
-      retained = drm_intel_bo_madvise (buffer, I915_MADV_WILLNEED);
-
-   return retained ? GL_RETAINED_APPLE : GL_UNDEFINED_APPLE;
-}
-
-static GLenum
-intel_buffer_object_unpurgeable(struct gl_context * ctx,
-                                struct gl_buffer_object *obj,
-                                GLenum option)
-{
-   (void) ctx;
-   (void) option;
-
-   return intel_buffer_unpurgeable(intel_buffer_object (obj)->buffer);
-}
-
-static GLenum
-intel_texture_object_unpurgeable(struct gl_context * ctx,
-                                 struct gl_texture_object *obj,
-                                 GLenum option)
-{
-   struct intel_texture_object *intel;
-
-   (void) ctx;
-   (void) option;
-
-   intel = intel_texture_object(obj);
-   if (intel->mt == NULL || intel->mt->region == NULL)
-      return GL_UNDEFINED_APPLE;
-
-   return intel_buffer_unpurgeable(intel->mt->region->bo);
-}
-
-static GLenum
-intel_render_object_unpurgeable(struct gl_context * ctx,
-                                struct gl_renderbuffer *obj,
-                                GLenum option)
-{
-   struct intel_renderbuffer *intel;
-
-   (void) ctx;
-   (void) option;
-
-   intel = intel_renderbuffer(obj);
-   if (intel->mt == NULL)
-      return GL_UNDEFINED_APPLE;
-
-   return intel_buffer_unpurgeable(intel->mt->region->bo);
 }
 
 void
@@ -725,12 +559,4 @@ intelInitBufferObjectFuncs(struct dd_function_table *functions)
    functions->FlushMappedBufferRange = intel_bufferobj_flush_mapped_range;
    functions->UnmapBuffer = intel_bufferobj_unmap;
    functions->CopyBufferSubData = intel_bufferobj_copy_subdata;
-
-   functions->BufferObjectPurgeable = intel_buffer_object_purgeable;
-   functions->TextureObjectPurgeable = intel_texture_object_purgeable;
-   functions->RenderObjectPurgeable = intel_render_object_purgeable;
-
-   functions->BufferObjectUnpurgeable = intel_buffer_object_unpurgeable;
-   functions->TextureObjectUnpurgeable = intel_texture_object_unpurgeable;
-   functions->RenderObjectUnpurgeable = intel_render_object_unpurgeable;
 }

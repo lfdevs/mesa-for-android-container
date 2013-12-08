@@ -29,7 +29,7 @@
 #define vl_video_buffer_h
 
 #include "pipe/p_context.h"
-#include "pipe/p_video_decoder.h"
+#include "pipe/p_video_codec.h"
 
 #include "vl_defines.h"
 
@@ -73,14 +73,15 @@ vl_video_buffer_max_size(struct pipe_screen *screen);
 boolean
 vl_video_buffer_is_format_supported(struct pipe_screen *screen,
                                     enum pipe_format format,
-                                    enum pipe_video_profile profile);
+                                    enum pipe_video_profile profile,
+                                    enum pipe_video_entrypoint entrypoint);
 
 /*
  * set the associated data for the given video buffer
  */
 void
 vl_video_buffer_set_associated_data(struct pipe_video_buffer *vbuf,
-                                    struct pipe_video_decoder *vdec,
+                                    struct pipe_video_codec *vcodec,
                                     void *associated_data,
                                     void (*destroy_associated_data)(void *));
 
@@ -89,7 +90,7 @@ vl_video_buffer_set_associated_data(struct pipe_video_buffer *vbuf,
  */
 void *
 vl_video_buffer_get_associated_data(struct pipe_video_buffer *vbuf,
-                                    struct pipe_video_decoder *vdec);
+                                    struct pipe_video_codec *vcodec);
 
 /**
  * fill a resource template for the given plane

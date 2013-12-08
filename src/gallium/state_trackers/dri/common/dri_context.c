@@ -40,17 +40,8 @@
 #include "state_tracker/st_context.h"
 
 static void
-dri_pp_query(struct dri_context *ctx)
-{
-   unsigned int i;
-
-   for (i = 0; i < PP_FILTERS; i++) {
-      ctx->pp_enabled[i] = driQueryOptioni(&ctx->optionCache, pp_filters[i].name);
-   }
-}
-
-static void dri_fill_st_options(struct st_config_options *options,
-                                const struct driOptionCache * optionCache)
+dri_fill_st_options(struct st_config_options *options,
+                    const struct driOptionCache * optionCache)
 {
    options->disable_blend_func_extended =
       driQueryOptionb(optionCache, "disable_blend_func_extended");
@@ -72,6 +63,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
 		   unsigned major_version,
 		   unsigned minor_version,
 		   uint32_t flags,
+                   bool notify_reset,
 		   unsigned *error,
 		   void *sharedContextPrivate)
 {
@@ -109,6 +101,16 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       goto fail;
    }
 
+   if (flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE)) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
+      goto fail;
+   }
+
+   if (notify_reset) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+      goto fail;
+   }
+
    if (sharedContextPrivate) {
       st_share = ((struct dri_context *)sharedContextPrivate)->st;
    }
@@ -123,11 +125,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    ctx->cPriv = cPriv;
    ctx->sPriv = sPriv;
 
-   driParseConfigFiles(&ctx->optionCache,
-		       &screen->optionCacheDefaults,
-                       sPriv->myNum, driver_descriptor.name);
-
-   dri_fill_st_options(&attribs.options, &ctx->optionCache);
+   dri_fill_st_options(&attribs.options, &screen->optionCache);
    dri_fill_st_visual(&attribs.visual, screen, visual);
    ctx->st = stapi->create_context(stapi, &screen->base, &attribs, &ctx_err,
 				   st_share);
@@ -160,11 +158,8 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    ctx->st->st_manager_private = (void *) ctx;
    ctx->stapi = stapi;
 
-   // Context successfully created. See if post-processing is requested.
-   dri_pp_query(ctx);
-
    if (ctx->st->cso_context) {
-      ctx->pp = pp_init(ctx->st->pipe, ctx->pp_enabled, ctx->st->cso_context);
+      ctx->pp = pp_init(ctx->st->pipe, screen->pp_enabled, ctx->st->cso_context);
       ctx->hud = hud_create(ctx->st->pipe, ctx->st->cso_context);
    }
 
@@ -188,12 +183,6 @@ dri_destroy_context(__DRIcontext * cPriv)
       hud_destroy(ctx->hud);
    }
 
-   /* note: we are freeing values and nothing more because
-    * driParseConfigFiles allocated values only - the rest
-    * is owned by screen optionCacheDefaults.
-    */
-   free(ctx->optionCache.values);
-
    /* No particular reason to wait for command completion before
     * destroying a context, but we flush the context here
     * to avoid having to add code elsewhere to cope with flushing a
@@ -202,7 +191,8 @@ dri_destroy_context(__DRIcontext * cPriv)
    ctx->st->flush(ctx->st, 0, NULL);
    ctx->st->destroy(ctx->st);
 
-   if (ctx->pp) pp_free(ctx->pp);
+   if (ctx->pp)
+      pp_free(ctx->pp);
 
    free(ctx);
 }
@@ -280,7 +270,7 @@ dri_get_current(__DRIscreen *sPriv)
 
    st = stapi->get_current(stapi);
 
-   return (struct dri_context *) (st) ? st->st_manager_private : NULL;
+   return (struct dri_context *) st ? st->st_manager_private : NULL;
 }
 
 /* vim: set sw=3 ts=8 sts=3 expandtab: */

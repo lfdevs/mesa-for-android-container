@@ -24,90 +24,14 @@
 #define R600_RESOURCE_H
 
 #include "../../winsys/radeon/drm/radeon_winsys.h"
-#include "util/u_range.h"
+#include "../radeon/r600_pipe_common.h"
 
 struct r600_screen;
-
-/* flag to indicate a resource is to be used as a transfer so should not be tiled */
-#define R600_RESOURCE_FLAG_TRANSFER		PIPE_RESOURCE_FLAG_DRV_PRIV
-#define R600_RESOURCE_FLAG_FLUSHED_DEPTH	(PIPE_RESOURCE_FLAG_DRV_PRIV << 1)
-#define R600_RESOURCE_FLAG_FORCE_TILING		(PIPE_RESOURCE_FLAG_DRV_PRIV << 2)
-
-struct r600_resource {
-	struct u_resource		b;
-
-	/* Winsys objects. */
-	struct pb_buffer		*buf;
-	struct radeon_winsys_cs_handle	*cs_buf;
-
-	/* Resource state. */
-	enum radeon_bo_domain		domains;
-
-	/* The buffer range which is initialized (with a write transfer,
-	 * streamout, DMA, or as a random access target). The rest of
-	 * the buffer is considered invalid and can be mapped unsynchronized.
-	 *
-	 * This allows unsychronized mapping of a buffer range which hasn't
-	 * been used yet. It's for applications which forget to use
-	 * the unsynchronized map flag and expect the driver to figure it out.
-         */
-	struct util_range		valid_buffer_range;
-};
-
-struct r600_transfer {
-	struct pipe_transfer		transfer;
-	struct r600_resource		*staging;
-	unsigned			offset;
-};
-
 struct compute_memory_item;
 
 struct r600_resource_global {
 	struct r600_resource base;
 	struct compute_memory_item *chunk;
-};
-
-struct r600_texture {
-	struct r600_resource		resource;
-
-	unsigned			array_mode[PIPE_MAX_TEXTURE_LEVELS];
-	unsigned			pitch_override;
-	unsigned			size;
-	bool				non_disp_tiling;
-	bool				is_depth;
-	bool				is_rat;
-	unsigned			dirty_level_mask; /* each bit says if that mipmap is compressed */
-	struct r600_texture		*flushed_depth_texture;
-	boolean				is_flushing_texture;
-	struct radeon_surface		surface;
-
-	/* FMASK and CMASK can only be used with MSAA textures for now.
-	 * MSAA textures cannot have mipmaps. */
-	unsigned			fmask_offset, fmask_size, fmask_bank_height;
-	unsigned			fmask_slice_tile_max;
-	unsigned			cmask_offset, cmask_size;
-	unsigned			cmask_slice_tile_max;
-
-	struct r600_resource		*htile;
-	/* use htile only for first level */
-	float				depth_clear;
-
-	unsigned			color_clear_value[2];
-};
-
-#define R600_TEX_IS_TILED(tex, level) ((tex)->array_mode[level] != V_038000_ARRAY_LINEAR_GENERAL && (tex)->array_mode[level] != V_038000_ARRAY_LINEAR_ALIGNED)
-
-struct r600_fmask_info {
-	unsigned size;
-	unsigned alignment;
-	unsigned bank_height;
-	unsigned slice_tile_max;
-};
-
-struct r600_cmask_info {
-	unsigned size;
-	unsigned alignment;
-	unsigned slice_tile_max;
 };
 
 struct r600_surface {
@@ -164,28 +88,5 @@ static INLINE bool r600_can_read_depth(struct r600_texture *rtex)
 
 void r600_resource_destroy(struct pipe_screen *screen, struct pipe_resource *res);
 void r600_init_screen_resource_functions(struct pipe_screen *screen);
-
-/* r600_texture */
-void r600_texture_get_fmask_info(struct r600_screen *rscreen,
-				 struct r600_texture *rtex,
-				 unsigned nr_samples,
-				 struct r600_fmask_info *out);
-void r600_texture_get_cmask_info(struct r600_screen *rscreen,
-				 struct r600_texture *rtex,
-				 struct r600_cmask_info *out);
-struct pipe_resource *r600_texture_create(struct pipe_screen *screen,
-					const struct pipe_resource *templ);
-struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen,
-						const struct pipe_resource *base,
-						struct winsys_handle *whandle);
-
-static INLINE struct r600_resource *r600_resource(struct pipe_resource *r)
-{
-	return (struct r600_resource*)r;
-}
-
-bool r600_init_flushed_depth_texture(struct pipe_context *ctx,
-				     struct pipe_resource *texture,
-				     struct r600_texture **staging);
 
 #endif

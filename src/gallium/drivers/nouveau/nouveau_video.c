@@ -27,7 +27,7 @@
 #include "nouveau_context.h"
 #include "nouveau_video.h"
 
-#include "nouveau/nouveau_buffer.h"
+#include "nouveau_buffer.h"
 #include "util/u_video.h"
 #include "util/u_format.h"
 #include "util/u_sampler.h"
@@ -108,21 +108,10 @@ nouveau_vpe_mb_dct_blocks(struct nouveau_decoder *dec, const struct pipe_mpeg12_
    short *db = mb->blocks;
    for (cbb = 0x20; cbb > 0; cbb >>= 1) {
       if (cbb & cbp) {
-         static const int lookup[64] = {
-             0, 1, 8,16, 9, 2, 3,10,
-            17,24,32,25,18,11, 4, 5,
-            12,19,26,33,40,48,41,34,
-            27,20,13, 6, 7,14,21,28,
-            35,42,49,56,57,50,43,36,
-            29,22,15,23,30,37,44,51,
-            58,59,52,45,38,31,39,46,
-            53,60,61,54,47,55,62,63
-         };
-         int i, j = 0, found = 0;
+         int i, found = 0;
          for (i = 0; i < 64; ++i) {
-            if (!db[lookup[i]]) { j += 2; continue; }
-            dec->data[dec->data_pos++] = (db[lookup[i]] << 16) | j;
-            j = 0;
+            if (!db[i]) continue;
+            dec->data[dec->data_pos++] = (db[i] << 16) | (i * 2);
             found = 1;
          }
          if (found)
@@ -414,14 +403,14 @@ nouveau_decoder_surface_index(struct nouveau_decoder *dec,
 }
 
 static void
-nouveau_decoder_begin_frame(struct pipe_video_decoder *decoder,
+nouveau_decoder_begin_frame(struct pipe_video_codec *decoder,
                             struct pipe_video_buffer *target,
                             struct pipe_picture_desc *picture)
 {
 }
 
 static void
-nouveau_decoder_decode_macroblock(struct pipe_video_decoder *decoder,
+nouveau_decoder_decode_macroblock(struct pipe_video_codec *decoder,
                                   struct pipe_video_buffer *target,
                                   struct pipe_picture_desc *picture,
                                   const struct pipe_macroblock *pipe_mb,
@@ -443,6 +432,11 @@ nouveau_decoder_decode_macroblock(struct pipe_video_decoder *decoder,
       dec->past = nouveau_decoder_surface_index(dec, desc->ref[0]);
 
    if (nouveau_vpe_init(dec)) return;
+
+   /* initialize scan order */
+   nouveau_vpe_write(dec, 0x720000c0);
+   nouveau_vpe_write(dec, dec->data_pos);
+
    mb = (const struct pipe_mpeg12_macroblock *)pipe_mb;
    for (i = 0; i < num_macroblocks; ++i, mb++) {
       if (mb->macroblock_type & PIPE_MPEG12_MB_TYPE_INTRA) {
@@ -463,14 +457,14 @@ nouveau_decoder_decode_macroblock(struct pipe_video_decoder *decoder,
 }
 
 static void
-nouveau_decoder_end_frame(struct pipe_video_decoder *decoder,
+nouveau_decoder_end_frame(struct pipe_video_codec *decoder,
                           struct pipe_video_buffer *target,
                           struct pipe_picture_desc *picture)
 {
 }
 
 static void
-nouveau_decoder_flush(struct pipe_video_decoder *decoder)
+nouveau_decoder_flush(struct pipe_video_codec *decoder)
 {
    struct nouveau_decoder *dec = (struct nouveau_decoder *)decoder;
    if (dec->ofs)
@@ -478,7 +472,7 @@ nouveau_decoder_flush(struct pipe_video_decoder *decoder)
 }
 
 static void
-nouveau_decoder_destroy(struct pipe_video_decoder *decoder)
+nouveau_decoder_destroy(struct pipe_video_codec *decoder)
 {
    struct nouveau_decoder *dec = (struct nouveau_decoder*)decoder;
 
@@ -503,30 +497,29 @@ nouveau_decoder_destroy(struct pipe_video_decoder *decoder)
    FREE(dec);
 }
 
-static struct pipe_video_decoder *
+static struct pipe_video_codec *
 nouveau_create_decoder(struct pipe_context *context,
-                       struct nouveau_screen *screen,
-                       enum pipe_video_profile profile,
-                       enum pipe_video_entrypoint entrypoint,
-                       enum pipe_video_chroma_format chroma_format,
-                       unsigned width, unsigned height,
-                       unsigned max_references, bool expect_chunked_decode)
+                       const struct pipe_video_codec *templ,
+                       struct nouveau_screen *screen)
 {
    struct nv04_fifo nv04_data = { .vram = 0xbeef0201, .gart = 0xbeef0202 };
+   unsigned width = templ->width, height = templ->height;
    struct nouveau_object *mpeg = NULL;
    struct nouveau_decoder *dec;
    struct nouveau_pushbuf *push;
    int ret;
    bool is8274 = screen->device->chipset > 0x80;
 
-   debug_printf("Acceleration level: %s\n", entrypoint <= PIPE_VIDEO_ENTRYPOINT_BITSTREAM ? "bit":
-                                            entrypoint == PIPE_VIDEO_ENTRYPOINT_IDCT ? "IDCT" : "MC");
+   debug_printf("Acceleration level: %s\n", templ->entrypoint <= PIPE_VIDEO_ENTRYPOINT_BITSTREAM ? "bit":
+                                            templ->entrypoint == PIPE_VIDEO_ENTRYPOINT_IDCT ? "IDCT" : "MC");
 
    if (getenv("XVMC_VL"))
       goto vl;
-   if (u_reduce_video_profile(profile) != PIPE_VIDEO_CODEC_MPEG12)
+   if (u_reduce_video_profile(templ->profile) != PIPE_VIDEO_FORMAT_MPEG12)
       goto vl;
    if (screen->device->chipset >= 0x98 && screen->device->chipset != 0xa0)
+      goto vl;
+   if (screen->device->chipset < 0x40)
       goto vl;
 
    dec = CALLOC_STRUCT(nouveau_decoder);
@@ -564,13 +557,10 @@ nouveau_create_decoder(struct pipe_context *context,
    }
 
    dec->mpeg = mpeg;
+   dec->base = *templ;
    dec->base.context = context;
-   dec->base.profile = profile;
-   dec->base.entrypoint = entrypoint;
-   dec->base.chroma_format = chroma_format;
    dec->base.width = width;
    dec->base.height = height;
-   dec->base.max_references = max_references;
    dec->base.destroy = nouveau_decoder_destroy;
    dec->base.begin_frame = nouveau_decoder_begin_frame;
    dec->base.decode_macroblock = nouveau_decoder_decode_macroblock;
@@ -620,8 +610,7 @@ nouveau_create_decoder(struct pipe_context *context,
 
    BEGIN_NV04(push, NV31_MPEG(FORMAT), 2);
    PUSH_DATA (push, 0);
-   switch (entrypoint) {
-      case PIPE_VIDEO_ENTRYPOINT_BITSTREAM: PUSH_DATA (push, 0x100); break;
+   switch (templ->entrypoint) {
       case PIPE_VIDEO_ENTRYPOINT_IDCT: PUSH_DATA (push, 1); break;
       case PIPE_VIDEO_ENTRYPOINT_MC: PUSH_DATA (push, 0); break;
       default: assert(0);
@@ -649,9 +638,7 @@ fail:
 
 vl:
    debug_printf("Using g3dvl renderer\n");
-   return vl_create_decoder(context, profile, entrypoint,
-                            chroma_format, width, height,
-                            max_references, expect_chunked_decode);
+   return vl_create_decoder(context, templ);
 }
 
 static struct pipe_sampler_view **
@@ -793,7 +780,8 @@ nouveau_video_buffer_create(struct pipe_context *pipe,
     * and it only supports the NV12 format
     */
    if (templat->buffer_format != PIPE_FORMAT_NV12 || getenv("XVMC_VL") ||
-       (screen->device->chipset >= 0x98 && screen->device->chipset != 0xa0))
+       (screen->device->chipset >= 0x98 && screen->device->chipset != 0xa0) ||
+       screen->device->chipset < 0x40)
       return vl_video_buffer_create(pipe, templat);
 
    assert(templat->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420);
@@ -810,6 +798,7 @@ nouveau_video_buffer_create(struct pipe_context *pipe,
    buffer->base.get_sampler_view_components = nouveau_video_buffer_sampler_view_components;
    buffer->base.get_surfaces = nouveau_video_buffer_surfaces;
    buffer->base.chroma_format = templat->chroma_format;
+   buffer->base.buffer_format = templat->buffer_format;
    buffer->base.width = width;
    buffer->base.height = height;
    buffer->num_planes = 2;
@@ -844,11 +833,13 @@ error:
 static int
 nouveau_screen_get_video_param(struct pipe_screen *pscreen,
                                enum pipe_video_profile profile,
+			       enum pipe_video_entrypoint entrypoint,
                                enum pipe_video_cap param)
 {
    switch (param) {
    case PIPE_VIDEO_CAP_SUPPORTED:
-      return vl_profile_supported(pscreen, profile);
+      return entrypoint >= PIPE_VIDEO_ENTRYPOINT_IDCT &&
+         u_reduce_video_profile(profile) == PIPE_VIDEO_FORMAT_MPEG12;
    case PIPE_VIDEO_CAP_NPOT_TEXTURES:
       return 1;
    case PIPE_VIDEO_CAP_MAX_WIDTH:
@@ -862,6 +853,8 @@ nouveau_screen_get_video_param(struct pipe_screen *pscreen,
       return false;
    case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
       return true;
+   case PIPE_VIDEO_CAP_MAX_LEVEL:
+      return vl_level_supported(pscreen, profile);
    default:
       debug_printf("unknown video param: %d\n", param);
       return 0;
@@ -875,18 +868,12 @@ nouveau_screen_init_vdec(struct nouveau_screen *screen)
    screen->base.is_video_format_supported = vl_video_buffer_is_format_supported;
 }
 
-static struct pipe_video_decoder *
+static struct pipe_video_codec *
 nouveau_context_create_decoder(struct pipe_context *context,
-                               enum pipe_video_profile profile,
-                               enum pipe_video_entrypoint entrypoint,
-                               enum pipe_video_chroma_format chroma_format,
-                               unsigned width, unsigned height,
-                               unsigned max_references, bool expect_chunked_decode)
+                               const struct pipe_video_codec *templ)
 {
    struct nouveau_screen *screen = nouveau_context(context)->screen;
-   return nouveau_create_decoder(context, screen, profile, entrypoint,
-                                 chroma_format, width, height,
-                                 max_references, expect_chunked_decode);
+   return nouveau_create_decoder(context, templ, screen);
 }
 
 static struct pipe_video_buffer *
@@ -900,6 +887,6 @@ nouveau_context_video_buffer_create(struct pipe_context *pipe,
 void
 nouveau_context_init_vdec(struct nouveau_context *nv)
 {
-   nv->pipe.create_video_decoder = nouveau_context_create_decoder;
+   nv->pipe.create_video_codec = nouveau_context_create_decoder;
    nv->pipe.create_video_buffer = nouveau_context_video_buffer_create;
 }

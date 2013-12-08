@@ -167,12 +167,13 @@ static void init_tex( void )
                                     PIPE_FORMAT_B8G8R8A8_UNORM, tex2d);
 
    sv = graw_util_create_simple_sampler_view(&info, texture);
-   info.ctx->set_fragment_sampler_views(info.ctx, 1, &sv);
+   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, &sv);
 
    sampler = graw_util_create_simple_sampler(&info, 
                                              PIPE_TEX_WRAP_REPEAT,
                                              PIPE_TEX_FILTER_NEAREST);
-   info.ctx->bind_fragment_sampler_states(info.ctx, 1, &sampler);
+   info.ctx->bind_sampler_states(info.ctx, PIPE_SHADER_FRAGMENT,
+                                 0, 1, &sampler);
 }
 
 

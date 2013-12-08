@@ -278,8 +278,6 @@ struct intel_context
 
    __DRIcontext *driContext;
    struct intel_screen *intelScreen;
-   void (*saved_viewport)(struct gl_context * ctx,
-			  GLint x, GLint y, GLsizei width, GLsizei height);
 
    /**
     * Configuration cache
@@ -292,32 +290,6 @@ extern char *__progname;
 
 #define SUBPIXEL_X 0.125
 #define SUBPIXEL_Y 0.125
-
-/**
- * Align a value down to an alignment value
- *
- * If \c value is not already aligned to the requested alignment value, it
- * will be rounded down.
- *
- * \param value  Value to be rounded
- * \param alignment  Alignment value to be used.  This must be a power of two.
- *
- * \sa ALIGN()
- */
-#define ROUND_DOWN_TO(value, alignment) ((value) & ~(alignment - 1))
-
-static INLINE uint32_t
-U_FIXED(float value, uint32_t frac_bits)
-{
-   value *= (1 << frac_bits);
-   return value < 0 ? 0 : value;
-}
-
-static INLINE uint32_t
-S_FIXED(float value, uint32_t frac_bits)
-{
-   return value * (1 << frac_bits);
-}
 
 #define INTEL_FIREVERTICES(intel)		\
 do {						\
@@ -420,6 +392,10 @@ extern int INTEL_DEBUG;
 /* ================================================================
  * intel_context.c:
  */
+
+extern const char *const i915_vendor_string;
+
+extern const char *i915_get_renderer_string(unsigned deviceID);
 
 extern bool intelInitContext(struct intel_context *intel,
                              int api,

@@ -238,6 +238,8 @@ _mesa_delete_texture_object(struct gl_context *ctx,
    /* destroy the mutex -- it may have allocated memory (eg on bsd) */
    _glthread_DESTROY_MUTEX(texObj->Mutex);
 
+   free(texObj->Label);
+
    /* free this object */
    free(texObj);
 }
@@ -548,12 +550,13 @@ _mesa_test_texobj_completeness( const struct gl_context *ctx,
 
    ASSERT(maxLevels > 0);
 
-   t->_MaxLevel =
-      baseLevel + baseImage->MaxNumLevels - 1; /* 'p' in the GL spec */
-   t->_MaxLevel = MIN2(t->_MaxLevel, t->MaxLevel);
-   t->_MaxLevel = MIN2(t->_MaxLevel, maxLevels - 1); /* 'q' in the GL spec */
+   t->_MaxLevel = MIN3(t->MaxLevel,
+                       /* 'p' in the GL spec */
+                       baseLevel + baseImage->MaxNumLevels - 1,
+                       /* 'q' in the GL spec */
+                       maxLevels - 1);
 
-   /* Compute _MaxLambda = q - b (see the 1.2 spec) used during mipmapping */
+   /* Compute _MaxLambda = q - p in the spec used during mipmapping */
    t->_MaxLambda = (GLfloat) (t->_MaxLevel - baseLevel);
 
    if (t->Immutable) {
@@ -712,20 +715,17 @@ _mesa_cube_complete(const struct gl_texture_object *texObj)
 
 /**
  * Mark a texture object dirty.  It forces the object to be incomplete
- * and optionally forces the context to re-validate its state.
+ * and forces the context to re-validate its state.
  *
  * \param ctx GL context.
  * \param texObj texture object.
- * \param invalidate_state also invalidate context state.
  */
 void
-_mesa_dirty_texobj(struct gl_context *ctx, struct gl_texture_object *texObj,
-                   GLboolean invalidate_state)
+_mesa_dirty_texobj(struct gl_context *ctx, struct gl_texture_object *texObj)
 {
    texObj->_BaseComplete = GL_FALSE;
    texObj->_MipmapComplete = GL_FALSE;
-   if (invalidate_state)
-      ctx->NewState |= _NEW_TEXTURE;
+   ctx->NewState |= _NEW_TEXTURE;
 }
 
 

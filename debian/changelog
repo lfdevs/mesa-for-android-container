@@ -1,3 +1,23 @@
+mesa (10.0.0-1) experimental; urgency=low
+
+  [ Emilio Pozuelo Monfort ]
+  * debian/control:
+    + Let libegl1-mesa-dev depend on libwayland-dev as wayland-egl.pc
+      requires wayland-client.pc.
+
+  [ Maarten Lankhorst ]
+  * New upstream release.
+  * Refresh patches for 10.0-rc1.
+  * Bump libdrm-dev requirement to 2.4.48 for intel.
+  * Add breaks on xserver-xorg-core without support for loading megadriver.
+  * Cherry pick commit to hide some gbm symbols.
+  * Manually install *_dri.so to preserve mega-driver hardlinks.
+
+  [ Timo Aaltonen ]
+  * rules: Enable llvmpipe on armhf, should work now.
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 08 Dec 2013 15:17:17 +0100
+
 mesa (9.2.2-1) unstable; urgency=low
 
   * New upstream release.

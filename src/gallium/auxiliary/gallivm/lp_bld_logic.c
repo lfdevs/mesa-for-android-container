@@ -68,6 +68,157 @@
 /**
  * Build code to compare two values 'a' and 'b' of 'type' using the given func.
  * \param func  one of PIPE_FUNC_x
+ * If the ordered argument is true the function will use LLVM's ordered
+ * comparisons, otherwise unordered comparisons will be used.
+ * The result values will be 0 for false or ~0 for true.
+ */
+static LLVMValueRef
+lp_build_compare_ext(struct gallivm_state *gallivm,
+                     const struct lp_type type,
+                     unsigned func,
+                     LLVMValueRef a,
+                     LLVMValueRef b,
+                     boolean ordered)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMTypeRef int_vec_type = lp_build_int_vec_type(gallivm, type);
+   LLVMValueRef zeros = LLVMConstNull(int_vec_type);
+   LLVMValueRef ones = LLVMConstAllOnes(int_vec_type);
+   LLVMValueRef cond;
+   LLVMValueRef res;
+
+   assert(func >= PIPE_FUNC_NEVER);
+   assert(func <= PIPE_FUNC_ALWAYS);
+   assert(lp_check_value(type, a));
+   assert(lp_check_value(type, b));
+
+   if(func == PIPE_FUNC_NEVER)
+      return zeros;
+   if(func == PIPE_FUNC_ALWAYS)
+      return ones;
+
+   if(type.floating) {
+      LLVMRealPredicate op;
+      switch(func) {
+      case PIPE_FUNC_EQUAL:
+         op = ordered ? LLVMRealOEQ : LLVMRealUEQ;
+         break;
+      case PIPE_FUNC_NOTEQUAL:
+         op = ordered ? LLVMRealONE : LLVMRealUNE;
+         break;
+      case PIPE_FUNC_LESS:
+         op = ordered ? LLVMRealOLT : LLVMRealULT;
+         break;
+      case PIPE_FUNC_LEQUAL:
+         op = ordered ? LLVMRealOLE : LLVMRealULE;
+         break;
+      case PIPE_FUNC_GREATER:
+         op = ordered ? LLVMRealOGT : LLVMRealUGT;
+         break;
+      case PIPE_FUNC_GEQUAL:
+         op = ordered ? LLVMRealOGE : LLVMRealUGE;
+         break;
+      default:
+         assert(0);
+         return lp_build_undef(gallivm, type);
+      }
+
+#if HAVE_LLVM >= 0x0207
+      cond = LLVMBuildFCmp(builder, op, a, b, "");
+      res = LLVMBuildSExt(builder, cond, int_vec_type, "");
+#else
+      if (type.length == 1) {
+         cond = LLVMBuildFCmp(builder, op, a, b, "");
+         res = LLVMBuildSExt(builder, cond, int_vec_type, "");
+      }
+      else {
+         unsigned i;
+
+         res = LLVMGetUndef(int_vec_type);
+
+         debug_printf("%s: warning: using slow element-wise float"
+                      " vector comparison\n", __FUNCTION__);
+         for (i = 0; i < type.length; ++i) {
+            LLVMValueRef index = lp_build_const_int32(gallivm, i);
+            cond = LLVMBuildFCmp(builder, op,
+                                 LLVMBuildExtractElement(builder, a, index, ""),
+                                 LLVMBuildExtractElement(builder, b, index, ""),
+                                 "");
+            cond = LLVMBuildSelect(builder, cond,
+                                   LLVMConstExtractElement(ones, index),
+                                   LLVMConstExtractElement(zeros, index),
+                                   "");
+            res = LLVMBuildInsertElement(builder, res, cond, index, "");
+         }
+      }
+#endif
+   }
+   else {
+      LLVMIntPredicate op;
+      switch(func) {
+      case PIPE_FUNC_EQUAL:
+         op = LLVMIntEQ;
+         break;
+      case PIPE_FUNC_NOTEQUAL:
+         op = LLVMIntNE;
+         break;
+      case PIPE_FUNC_LESS:
+         op = type.sign ? LLVMIntSLT : LLVMIntULT;
+         break;
+      case PIPE_FUNC_LEQUAL:
+         op = type.sign ? LLVMIntSLE : LLVMIntULE;
+         break;
+      case PIPE_FUNC_GREATER:
+         op = type.sign ? LLVMIntSGT : LLVMIntUGT;
+         break;
+      case PIPE_FUNC_GEQUAL:
+         op = type.sign ? LLVMIntSGE : LLVMIntUGE;
+         break;
+      default:
+         assert(0);
+         return lp_build_undef(gallivm, type);
+      }
+
+#if HAVE_LLVM >= 0x0207
+      cond = LLVMBuildICmp(builder, op, a, b, "");
+      res = LLVMBuildSExt(builder, cond, int_vec_type, "");
+#else
+      if (type.length == 1) {
+         cond = LLVMBuildICmp(builder, op, a, b, "");
+         res = LLVMBuildSExt(builder, cond, int_vec_type, "");
+      }
+      else {
+         unsigned i;
+
+         res = LLVMGetUndef(int_vec_type);
+
+         if (gallivm_debug & GALLIVM_DEBUG_PERF) {
+            debug_printf("%s: using slow element-wise int"
+                         " vector comparison\n", __FUNCTION__);
+         }
+
+         for(i = 0; i < type.length; ++i) {
+            LLVMValueRef index = lp_build_const_int32(gallivm, i);
+            cond = LLVMBuildICmp(builder, op,
+                                 LLVMBuildExtractElement(builder, a, index, ""),
+                                 LLVMBuildExtractElement(builder, b, index, ""),
+                                 "");
+            cond = LLVMBuildSelect(builder, cond,
+                                   LLVMConstExtractElement(ones, index),
+                                   LLVMConstExtractElement(zeros, index),
+                                   "");
+            res = LLVMBuildInsertElement(builder, res, cond, index, "");
+         }
+      }
+#endif
+   }
+
+   return res;
+}
+
+/**
+ * Build code to compare two values 'a' and 'b' of 'type' using the given func.
+ * \param func  one of PIPE_FUNC_x
  * The result values will be 0 for false or ~0 for true.
  */
 LLVMValueRef
@@ -77,12 +228,9 @@ lp_build_compare(struct gallivm_state *gallivm,
                  LLVMValueRef a,
                  LLVMValueRef b)
 {
-   LLVMBuilderRef builder = gallivm->builder;
    LLVMTypeRef int_vec_type = lp_build_int_vec_type(gallivm, type);
    LLVMValueRef zeros = LLVMConstNull(int_vec_type);
    LLVMValueRef ones = LLVMConstAllOnes(int_vec_type);
-   LLVMValueRef cond;
-   LLVMValueRef res;
 
    assert(func >= PIPE_FUNC_NEVER);
    assert(func <= PIPE_FUNC_ALWAYS);
@@ -115,6 +263,9 @@ lp_build_compare(struct gallivm_state *gallivm,
 #if HAVE_LLVM < 0x0207
 #if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
    if(type.width * type.length == 128) {
+      LLVMBuilderRef builder = gallivm->builder;
+      LLVMValueRef cond;
+      LLVMValueRef res;
       if(type.floating && util_cpu_caps.has_sse) {
          /* float[4] comparison */
          LLVMTypeRef vec_type = lp_build_vec_type(gallivm, type);
@@ -241,138 +392,32 @@ lp_build_compare(struct gallivm_state *gallivm,
 #endif
 #endif /* HAVE_LLVM < 0x0207 */
 
-   /* XXX: It is not clear if we should use the ordered or unordered operators */
-
-   if(type.floating) {
-      LLVMRealPredicate op;
-      switch(func) {
-      case PIPE_FUNC_NEVER:
-         op = LLVMRealPredicateFalse;
-         break;
-      case PIPE_FUNC_ALWAYS:
-         op = LLVMRealPredicateTrue;
-         break;
-      case PIPE_FUNC_EQUAL:
-         op = LLVMRealUEQ;
-         break;
-      case PIPE_FUNC_NOTEQUAL:
-         op = LLVMRealUNE;
-         break;
-      case PIPE_FUNC_LESS:
-         op = LLVMRealULT;
-         break;
-      case PIPE_FUNC_LEQUAL:
-         op = LLVMRealULE;
-         break;
-      case PIPE_FUNC_GREATER:
-         op = LLVMRealUGT;
-         break;
-      case PIPE_FUNC_GEQUAL:
-         op = LLVMRealUGE;
-         break;
-      default:
-         assert(0);
-         return lp_build_undef(gallivm, type);
-      }
-
-#if HAVE_LLVM >= 0x0207
-      cond = LLVMBuildFCmp(builder, op, a, b, "");
-      res = LLVMBuildSExt(builder, cond, int_vec_type, "");
-#else
-      if (type.length == 1) {
-         cond = LLVMBuildFCmp(builder, op, a, b, "");
-         res = LLVMBuildSExt(builder, cond, int_vec_type, "");
-      }
-      else {
-         unsigned i;
-
-         res = LLVMGetUndef(int_vec_type);
-
-         debug_printf("%s: warning: using slow element-wise float"
-                      " vector comparison\n", __FUNCTION__);
-         for (i = 0; i < type.length; ++i) {
-            LLVMValueRef index = lp_build_const_int32(gallivm, i);
-            cond = LLVMBuildFCmp(builder, op,
-                                 LLVMBuildExtractElement(builder, a, index, ""),
-                                 LLVMBuildExtractElement(builder, b, index, ""),
-                                 "");
-            cond = LLVMBuildSelect(builder, cond,
-                                   LLVMConstExtractElement(ones, index),
-                                   LLVMConstExtractElement(zeros, index),
-                                   "");
-            res = LLVMBuildInsertElement(builder, res, cond, index, "");
-         }
-      }
-#endif
-   }
-   else {
-      LLVMIntPredicate op;
-      switch(func) {
-      case PIPE_FUNC_EQUAL:
-         op = LLVMIntEQ;
-         break;
-      case PIPE_FUNC_NOTEQUAL:
-         op = LLVMIntNE;
-         break;
-      case PIPE_FUNC_LESS:
-         op = type.sign ? LLVMIntSLT : LLVMIntULT;
-         break;
-      case PIPE_FUNC_LEQUAL:
-         op = type.sign ? LLVMIntSLE : LLVMIntULE;
-         break;
-      case PIPE_FUNC_GREATER:
-         op = type.sign ? LLVMIntSGT : LLVMIntUGT;
-         break;
-      case PIPE_FUNC_GEQUAL:
-         op = type.sign ? LLVMIntSGE : LLVMIntUGE;
-         break;
-      default:
-         assert(0);
-         return lp_build_undef(gallivm, type);
-      }
-
-#if HAVE_LLVM >= 0x0207
-      cond = LLVMBuildICmp(builder, op, a, b, "");
-      res = LLVMBuildSExt(builder, cond, int_vec_type, "");
-#else
-      if (type.length == 1) {
-         cond = LLVMBuildICmp(builder, op, a, b, "");
-         res = LLVMBuildSExt(builder, cond, int_vec_type, "");
-      }
-      else {
-         unsigned i;
-
-         res = LLVMGetUndef(int_vec_type);
-
-         if (gallivm_debug & GALLIVM_DEBUG_PERF) {
-            debug_printf("%s: using slow element-wise int"
-                         " vector comparison\n", __FUNCTION__);
-         }
-
-         for(i = 0; i < type.length; ++i) {
-            LLVMValueRef index = lp_build_const_int32(gallivm, i);
-            cond = LLVMBuildICmp(builder, op,
-                                 LLVMBuildExtractElement(builder, a, index, ""),
-                                 LLVMBuildExtractElement(builder, b, index, ""),
-                                 "");
-            cond = LLVMBuildSelect(builder, cond,
-                                   LLVMConstExtractElement(ones, index),
-                                   LLVMConstExtractElement(zeros, index),
-                                   "");
-            res = LLVMBuildInsertElement(builder, res, cond, index, "");
-         }
-      }
-#endif
-   }
-
-   return res;
+   return lp_build_compare_ext(gallivm, type, func, a, b, FALSE);
 }
-
-
 
 /**
  * Build code to compare two values 'a' and 'b' using the given func.
  * \param func  one of PIPE_FUNC_x
+ * If the operands are floating point numbers, the function will use
+ * ordered comparison which means that it will return true if both
+ * operands are not a NaN and the specified condition evaluates to true.
+ * The result values will be 0 for false or ~0 for true.
+ */
+LLVMValueRef
+lp_build_cmp_ordered(struct lp_build_context *bld,
+                     unsigned func,
+                     LLVMValueRef a,
+                     LLVMValueRef b)
+{
+   return lp_build_compare_ext(bld->gallivm, bld->type, func, a, b, TRUE);
+}
+
+/**
+ * Build code to compare two values 'a' and 'b' using the given func.
+ * \param func  one of PIPE_FUNC_x
+ * If the operands are floating point numbers, the function will use
+ * unordered comparison which means that it will return true if either
+ * operand is a NaN or the specified condition evaluates to true.
  * The result values will be 0 for false or ~0 for true.
  */
 LLVMValueRef

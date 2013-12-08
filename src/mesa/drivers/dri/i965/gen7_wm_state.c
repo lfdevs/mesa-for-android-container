@@ -27,6 +27,7 @@
 #include "brw_defines.h"
 #include "brw_util.h"
 #include "brw_wm.h"
+#include "program/program.h"
 #include "program/prog_parameter.h"
 #include "program/prog_statevars.h"
 #include "intel_batchbuffer.h"
@@ -60,17 +61,35 @@ upload_wm_state(struct brw_context *brw)
    if (fp->program.Base.InputsRead & VARYING_BIT_POS)
       dw1 |= GEN7_WM_USES_SOURCE_DEPTH | GEN7_WM_USES_SOURCE_W;
    if (fp->program.Base.OutputsWritten & BITFIELD64_BIT(FRAG_RESULT_DEPTH)) {
-      writes_depth = true;
-      dw1 |= GEN7_WM_PSCDEPTH_ON;
+      writes_depth = fp->program.FragDepthLayout != FRAG_DEPTH_LAYOUT_UNCHANGED;
+
+      switch (fp->program.FragDepthLayout) {
+         case FRAG_DEPTH_LAYOUT_NONE:
+         case FRAG_DEPTH_LAYOUT_ANY:
+            dw1 |= GEN7_WM_PSCDEPTH_ON;
+            break;
+         case FRAG_DEPTH_LAYOUT_GREATER:
+            dw1 |= GEN7_WM_PSCDEPTH_ON_GE;
+            break;
+         case FRAG_DEPTH_LAYOUT_LESS:
+            dw1 |= GEN7_WM_PSCDEPTH_ON_LE;
+            break;
+         case FRAG_DEPTH_LAYOUT_UNCHANGED:
+            break;
+      }
    }
    /* CACHE_NEW_WM_PROG */
    dw1 |= brw->wm.prog_data->barycentric_interp_modes <<
       GEN7_WM_BARYCENTRIC_INTERPOLATION_MODE_SHIFT;
 
    /* _NEW_COLOR, _NEW_MULTISAMPLE */
+   /* Enable if the pixel shader kernel generates and outputs oMask.
+    */
    if (fp->program.UsesKill || ctx->Color.AlphaEnabled ||
-       ctx->Multisample.SampleAlphaToCoverage)
+       ctx->Multisample.SampleAlphaToCoverage ||
+       brw->wm.prog_data->uses_omask) {
       dw1 |= GEN7_WM_KILL_ENABLE;
+   }
 
    /* _NEW_BUFFERS */
    if (brw_color_buffer_write_enabled(brw) || writes_depth ||
@@ -83,7 +102,11 @@ upload_wm_state(struct brw_context *brw)
          dw1 |= GEN7_WM_MSRAST_ON_PATTERN;
       else
          dw1 |= GEN7_WM_MSRAST_OFF_PIXEL;
-      dw2 |= GEN7_WM_MSDISPMODE_PERPIXEL;
+
+      if (_mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program) > 1)
+         dw2 |= GEN7_WM_MSDISPMODE_PERSAMPLE;
+      else
+         dw2 |= GEN7_WM_MSDISPMODE_PERPIXEL;
    } else {
       dw1 |= GEN7_WM_MSRAST_OFF_PIXEL;
       dw2 |= GEN7_WM_MSDISPMODE_PERSAMPLE;
@@ -119,56 +142,34 @@ upload_ps_state(struct brw_context *brw)
    /* BRW_NEW_PS_BINDING_TABLE */
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_BINDING_TABLE_POINTERS_PS << 16 | (2 - 2));
-   OUT_BATCH(brw->wm.bind_bo_offset);
+   OUT_BATCH(brw->wm.base.bind_bo_offset);
    ADVANCE_BATCH();
 
    /* CACHE_NEW_SAMPLER */
    BEGIN_BATCH(2);
    OUT_BATCH(_3DSTATE_SAMPLER_STATE_POINTERS_PS << 16 | (2 - 2));
-   OUT_BATCH(brw->sampler.offset);
+   OUT_BATCH(brw->wm.base.sampler_offset);
    ADVANCE_BATCH();
 
    /* CACHE_NEW_WM_PROG */
-   if (brw->wm.prog_data->nr_params == 0) {
-      /* Disable the push constant buffers. */
-      BEGIN_BATCH(7);
-      OUT_BATCH(_3DSTATE_CONSTANT_PS << 16 | (7 - 2));
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
-   } else {
-      uint8_t mocs = brw->is_haswell ? GEN7_MOCS_L3 : 0;
-
-      BEGIN_BATCH(7);
-      OUT_BATCH(_3DSTATE_CONSTANT_PS << 16 | (7 - 2));
-
-      OUT_BATCH(ALIGN(brw->wm.prog_data->nr_params,
-		      brw->wm.prog_data->dispatch_width) / 8);
-      OUT_BATCH(0);
-      /* Pointer to the WM constant buffer.  Covered by the set of
-       * state flags from gen6_upload_wm_push_constants.
-       */
-      OUT_BATCH(brw->wm.push_const_offset | mocs);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
-   }
+   gen7_upload_constant_state(brw, &brw->wm.base, true, _3DSTATE_CONSTANT_PS);
 
    dw2 = dw4 = dw5 = 0;
 
    /* CACHE_NEW_SAMPLER */
-   dw2 |= (ALIGN(brw->sampler.count, 4) / 4) << GEN7_PS_SAMPLER_COUNT_SHIFT;
+   dw2 |=
+      (ALIGN(brw->wm.base.sampler_count, 4) / 4) << GEN7_PS_SAMPLER_COUNT_SHIFT;
+
+   /* CACHE_NEW_WM_PROG */
+   dw2 |= ((brw->wm.prog_data->base.binding_table.size_bytes / 4) <<
+           GEN7_PS_BINDING_TABLE_ENTRY_COUNT_SHIFT);
 
    /* Use ALT floating point mode for ARB fragment programs, because they
     * require 0^0 == 1.  Even though _CurrentFragmentProgram is used for
     * rendering, CurrentFragmentProgram is used for this check to
     * differentiate between the GLSL and non-GLSL cases.
     */
+   /* BRW_NEW_FRAGMENT_PROGRAM */
    if (ctx->Shader.CurrentFragmentProgram == NULL)
       dw2 |= GEN7_PS_FLOATING_POINT_MODE_ALT;
 
@@ -181,6 +182,32 @@ upload_ps_state(struct brw_context *brw)
    if (brw->wm.prog_data->nr_params > 0)
       dw4 |= GEN7_PS_PUSH_CONSTANT_ENABLE;
 
+   /* From the IVB PRM, volume 2 part 1, page 287:
+    * "This bit is inserted in the PS payload header and made available to
+    * the DataPort (either via the message header or via header bypass) to
+    * indicate that oMask data (one or two phases) is included in Render
+    * Target Write messages. If present, the oMask data is used to mask off
+    * samples."
+    */
+   if (brw->wm.prog_data->uses_omask)
+      dw4 |= GEN7_PS_OMASK_TO_RENDER_TARGET;
+
+   /* From the IVB PRM, volume 2 part 1, page 287:
+    * "If the PS kernel does not need the Position XY Offsets to
+    * compute a Position Value, then this field should be programmed
+    * to POSOFFSET_NONE."
+    * "SW Recommendation: If the PS kernel needs the Position Offsets
+    * to compute a Position XY value, this field should match Position
+    * ZW Interpolation Mode to ensure a consistent position.xyzw
+    * computation."
+    * We only require XY sample offsets. So, this recommendation doesn't
+    * look useful at the moment. We might need this in future.
+    */
+   if (brw->wm.prog_data->uses_pos_offset)
+      dw4 |= GEN7_PS_POSOFFSET_SAMPLE;
+   else
+      dw4 |= GEN7_PS_POSOFFSET_NONE;
+
    /* CACHE_NEW_WM_PROG | _NEW_COLOR
     *
     * The hardware wedges if you have this bit set but don't turn on any dual
@@ -192,25 +219,46 @@ upload_ps_state(struct brw_context *brw)
       dw4 |= GEN7_PS_DUAL_SOURCE_BLEND_ENABLE;
    }
 
-   /* BRW_NEW_FRAGMENT_PROGRAM */
-   if (brw->fragment_program->Base.InputsRead != 0)
+   /* CACHE_NEW_WM_PROG */
+   if (brw->wm.prog_data->num_varying_inputs != 0)
       dw4 |= GEN7_PS_ATTRIBUTE_ENABLE;
 
-   dw4 |= GEN7_PS_8_DISPATCH_ENABLE;
-   if (brw->wm.prog_data->prog_offset_16)
-      dw4 |= GEN7_PS_16_DISPATCH_ENABLE;
+   /* In case of non 1x per sample shading, only one of SIMD8 and SIMD16
+    * should be enabled. We do 'SIMD16 only' dispatch if a SIMD16 shader
+    * is successfully compiled. In majority of the cases that bring us
+    * better performance than 'SIMD8 only' dispatch.
+    */
+   int min_inv_per_frag =
+      _mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program);
+   assert(min_inv_per_frag >= 1);
 
-   dw5 |= (brw->wm.prog_data->first_curbe_grf <<
-	   GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
-   dw5 |= (brw->wm.prog_data->first_curbe_grf_16 <<
-	   GEN7_PS_DISPATCH_START_GRF_SHIFT_2);
+   if (brw->wm.prog_data->prog_offset_16) {
+      dw4 |= GEN7_PS_16_DISPATCH_ENABLE;
+      if (min_inv_per_frag == 1) {
+         dw4 |= GEN7_PS_8_DISPATCH_ENABLE;
+         dw5 |= (brw->wm.prog_data->first_curbe_grf <<
+                 GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
+         dw5 |= (brw->wm.prog_data->first_curbe_grf_16 <<
+                 GEN7_PS_DISPATCH_START_GRF_SHIFT_2);
+      } else
+         dw5 |= (brw->wm.prog_data->first_curbe_grf_16 <<
+                 GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
+   }
+   else {
+      dw4 |= GEN7_PS_8_DISPATCH_ENABLE;
+      dw5 |= (brw->wm.prog_data->first_curbe_grf <<
+              GEN7_PS_DISPATCH_START_GRF_SHIFT_0);
+   }
 
    BEGIN_BATCH(8);
    OUT_BATCH(_3DSTATE_PS << 16 | (8 - 2));
-   OUT_BATCH(brw->wm.prog_offset);
+   if (brw->wm.prog_data->prog_offset_16 && min_inv_per_frag > 1)
+      OUT_BATCH(brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16);
+   else
+      OUT_BATCH(brw->wm.base.prog_offset);
    OUT_BATCH(dw2);
    if (brw->wm.prog_data->total_scratch) {
-      OUT_RELOC(brw->wm.scratch_bo,
+      OUT_RELOC(brw->wm.base.scratch_bo,
 		I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
 		ffs(brw->wm.prog_data->total_scratch) - 11);
    } else {
@@ -219,7 +267,7 @@ upload_ps_state(struct brw_context *brw)
    OUT_BATCH(dw4);
    OUT_BATCH(dw5);
    OUT_BATCH(0); /* kernel 1 pointer */
-   OUT_BATCH(brw->wm.prog_offset + brw->wm.prog_data->prog_offset_16);
+   OUT_BATCH(brw->wm.base.prog_offset + brw->wm.prog_data->prog_offset_16);
    ADVANCE_BATCH();
 }
 
@@ -229,7 +277,8 @@ const struct brw_tracked_state gen7_ps_state = {
 		_NEW_COLOR),
       .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
 		BRW_NEW_PS_BINDING_TABLE |
-		BRW_NEW_BATCH),
+		BRW_NEW_BATCH |
+                BRW_NEW_PUSH_CONSTANT_ALLOCATION),
       .cache = (CACHE_NEW_SAMPLER |
 		CACHE_NEW_WM_PROG)
    },

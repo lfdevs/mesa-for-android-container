@@ -20,36 +20,39 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#ifndef __CORE_SAMPLER_HPP__
-#define __CORE_SAMPLER_HPP__
+#ifndef CLOVER_CORE_SAMPLER_HPP
+#define CLOVER_CORE_SAMPLER_HPP
 
-#include "core/base.hpp"
+#include "core/object.hpp"
 #include "core/queue.hpp"
 
 namespace clover {
-   typedef struct _cl_sampler sampler;
+   class sampler : public ref_counter, public _cl_sampler {
+   public:
+      sampler(context &ctx, bool norm_mode,
+              cl_addressing_mode addr_mode,
+              cl_filter_mode filter_mode);
+
+      sampler(const sampler &s) = delete;
+      sampler &
+      operator=(const sampler &s) = delete;
+
+      bool norm_mode();
+      cl_addressing_mode addr_mode();
+      cl_filter_mode filter_mode();
+
+      context &ctx;
+
+      friend class kernel;
+
+   private:
+      void *bind(command_queue &q);
+      void unbind(command_queue &q, void *st);
+
+      bool _norm_mode;
+      cl_addressing_mode _addr_mode;
+      cl_filter_mode _filter_mode;
+   };
 }
-
-struct _cl_sampler : public clover::ref_counter {
-public:
-   _cl_sampler(clover::context &ctx, bool norm_mode,
-               cl_addressing_mode addr_mode, cl_filter_mode filter_mode);
-
-   bool norm_mode();
-   cl_addressing_mode addr_mode();
-   cl_filter_mode filter_mode();
-
-   clover::context &ctx;
-
-   friend class _cl_kernel;
-
-private:
-   void *bind(clover::command_queue &q);
-   void unbind(clover::command_queue &q, void *st);
-
-   bool __norm_mode;
-   cl_addressing_mode __addr_mode;
-   cl_filter_mode __filter_mode;
-};
 
 #endif

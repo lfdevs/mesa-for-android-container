@@ -50,6 +50,7 @@
 #include "xf86drm.h"
 #include "dri2.h"
 #include "dri_common.h"
+#include "dri2_priv.h"
 
 /* From xmlpool/options.h, user exposed so should be stable */
 #define DRI_CONF_VBLANK_NEVER 0
@@ -76,26 +77,6 @@ struct dri2_display
    __glxHashTable *dri2Hash;
 
    const __DRIextension *loader_extensions[4];
-};
-
-struct dri2_screen {
-   struct glx_screen base;
-
-   __DRIscreen *driScreen;
-   __GLXDRIscreen vtable;
-   const __DRIdri2Extension *dri2;
-   const __DRIcoreExtension *core;
-
-   const __DRI2flushExtension *f;
-   const __DRI2configQueryExtension *config;
-   const __DRItexBufferExtension *texBuffer;
-   const __DRI2throttleExtension *throttle;
-   const __DRIconfig **driver_configs;
-
-   void *driver;
-   int fd;
-
-   Bool show_fps;
 };
 
 struct dri2_context
@@ -764,6 +745,8 @@ unsigned dri2GetSwapEventType(Display* dpy, XID drawable)
 
 static void show_fps(struct dri2_drawable *draw)
 {
+   const int interval =
+      ((struct dri2_screen *) draw->base.psc)->show_fps_interval;
    struct timeval tv;
    uint64_t current_time;
 
@@ -772,7 +755,7 @@ static void show_fps(struct dri2_drawable *draw)
 
    draw->frames++;
 
-   if (draw->previous_time + 1000000 <= current_time) {
+   if (draw->previous_time + interval * 1000000 <= current_time) {
       if (draw->previous_time) {
          fprintf(stderr, "libGL: FPS = %.1f\n",
                  ((uint64_t)draw->frames * 1000000) /
@@ -859,7 +842,7 @@ dri2SwapBuffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
                                 target_msc, divisor, remainder);
     }
 
-    if (psc->show_fps) {
+    if (psc->show_fps_interval) {
        show_fps(priv);
     }
 
@@ -1134,12 +1117,23 @@ dri2BindExtensions(struct dri2_screen *psc, struct glx_display * priv,
           && strcmp(extensions[i]->name, __DRI2_ROBUSTNESS) == 0)
          __glXEnableDirectExtension(&psc->base,
                                     "GLX_ARB_create_context_robustness");
+
+      /* DRI2 version 3 is also required because GLX_MESA_query_renderer
+       * requires GLX_ARB_create_context_profile.
+       */
+      if (psc->dri2->base.version >= 3
+          && strcmp(extensions[i]->name, __DRI2_RENDERER_QUERY) == 0) {
+         psc->rendererQuery = (__DRI2rendererQueryExtension *) extensions[i];
+         __glXEnableDirectExtension(&psc->base, "GLX_MESA_query_renderer");
+      }
    }
 }
 
 static const struct glx_screen_vtable dri2_screen_vtable = {
    dri2_create_context,
-   dri2_create_context_attribs
+   dri2_create_context_attribs,
+   dri2_query_renderer_integer,
+   dri2_query_renderer_string,
 };
 
 static struct glx_screen *
@@ -1181,11 +1175,9 @@ dri2CreateScreen(int screen, struct glx_display * priv)
       goto handle_error;
    }
 
-   extensions = dlsym(psc->driver, __DRI_DRIVER_EXTENSIONS);
-   if (extensions == NULL) {
-      ErrorMessageF("driver exports no extensions (%s)\n", dlerror());
+   extensions = driGetDriverExtensions(psc->driver, driverName);
+   if (extensions == NULL)
       goto handle_error;
-   }
 
    for (i = 0; extensions[i]; i++) {
       if (strcmp(extensions[i]->name, __DRI_CORE) == 0)
@@ -1223,15 +1215,20 @@ dri2CreateScreen(int screen, struct glx_display * priv)
       goto handle_error;
    }
 
-   
-   /* If the server does not support the protocol for
-    * DRI2GetBuffersWithFormat, don't supply that interface to the driver.
-    */
-   psc->driScreen =
-      psc->dri2->createNewScreen(screen, psc->fd,
-				 (const __DRIextension **)
-				 &pdp->loader_extensions[0],
-				 &driver_configs, psc);
+   if (psc->dri2->base.version >= 4) {
+      psc->driScreen =
+         psc->dri2->createNewScreen2(screen, psc->fd,
+                                     (const __DRIextension **)
+                                     &pdp->loader_extensions[0],
+                                     extensions,
+                                     &driver_configs, psc);
+   } else {
+      psc->driScreen =
+         psc->dri2->createNewScreen(screen, psc->fd,
+                                    (const __DRIextension **)
+                                    &pdp->loader_extensions[0],
+                                    &driver_configs, psc);
+   }
 
    if (psc->driScreen == NULL) {
       ErrorMessageF("failed to create dri screen\n");
@@ -1283,7 +1280,9 @@ dri2CreateScreen(int screen, struct glx_display * priv)
    free(deviceName);
 
    tmp = getenv("LIBGL_SHOW_FPS");
-   psc->show_fps = tmp && strcmp(tmp, "1") == 0;
+   psc->show_fps_interval = (tmp) ? atoi(tmp) : 0;
+   if (psc->show_fps_interval < 0)
+      psc->show_fps_interval = 0;
 
    return &psc->base;
 

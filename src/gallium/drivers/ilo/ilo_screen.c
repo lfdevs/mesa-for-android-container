@@ -46,6 +46,8 @@ static const struct debug_named_value ilo_debug_flags[] = {
    { "gs",        ILO_DEBUG_GS,       "Dump geometry shaders" },
    { "fs",        ILO_DEBUG_FS,       "Dump fragment shaders" },
    { "cs",        ILO_DEBUG_CS,       "Dump compute shaders" },
+   { "draw",      ILO_DEBUG_DRAW,     "Show draw information" },
+   { "flush",     ILO_DEBUG_FLUSH,    "Show batch buffer flushes" },
    { "nohw",      ILO_DEBUG_NOHW,     "Do not send commands to HW" },
    { "nocache",   ILO_DEBUG_NOCACHE,  "Always invalidate HW caches" },
    DEBUG_NAMED_VALUE_END
@@ -152,11 +154,12 @@ ilo_get_shader_param(struct pipe_screen *screen, unsigned shader,
 static int
 ilo_get_video_param(struct pipe_screen *screen,
                     enum pipe_video_profile profile,
+                    enum pipe_video_entrypoint entrypoint,
                     enum pipe_video_cap param)
 {
    switch (param) {
    case PIPE_VIDEO_CAP_SUPPORTED:
-      return vl_profile_supported(screen, profile);
+      return vl_profile_supported(screen, profile, entrypoint);
    case PIPE_VIDEO_CAP_NPOT_TEXTURES:
       return 1;
    case PIPE_VIDEO_CAP_MAX_WIDTH:
@@ -170,7 +173,8 @@ ilo_get_video_param(struct pipe_screen *screen,
       return 1;
    case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
       return 0;
-
+   case PIPE_VIDEO_CAP_MAX_LEVEL:
+      return vl_level_supported(screen, profile);
    default:
       return 0;
    }
@@ -423,6 +427,8 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return ILO_MAX_VIEWPORTS;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_LITTLE;
+   case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
+      return true;
 
    default:
       return 0;

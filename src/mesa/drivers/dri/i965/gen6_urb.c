@@ -64,7 +64,7 @@ gen6_upload_urb( struct brw_context *brw )
    unsigned gs_size = vs_size;
 
    /* Calculate how many entries fit in each stage's section of the URB */
-   if (brw->gs.prog_active) {
+   if (brw->ff_gs.prog_active) {
       nr_vs_entries = (total_urb_size/2) / (vs_size * 128);
       nr_gs_entries = (total_urb_size/2) / (gs_size * 128);
    } else {
@@ -83,11 +83,11 @@ gen6_upload_urb( struct brw_context *brw )
    brw->urb.nr_vs_entries = ROUND_DOWN_TO(nr_vs_entries, 4);
    brw->urb.nr_gs_entries = ROUND_DOWN_TO(nr_gs_entries, 4);
 
-   assert(brw->urb.nr_vs_entries >= 24);
+   assert(brw->urb.nr_vs_entries >= brw->urb.min_vs_entries);
    assert(brw->urb.nr_vs_entries % 4 == 0);
    assert(brw->urb.nr_gs_entries % 4 == 0);
-   assert(vs_size < 5);
-   assert(gs_size < 5);
+   assert(vs_size <= 5);
+   assert(gs_size <= 5);
 
    BEGIN_BATCH(3);
    OUT_BATCH(_3DSTATE_URB << 16 | (3 - 2));
@@ -109,16 +109,16 @@ gen6_upload_urb( struct brw_context *brw )
     * doesn't exist on Gen6).  So for now we just do a full pipeline flush as
     * a workaround.
     */
-   if (brw->urb.gen6_gs_previously_active && !brw->gs.prog_active)
+   if (brw->urb.gen6_gs_previously_active && !brw->ff_gs.prog_active)
       intel_batchbuffer_emit_mi_flush(brw);
-   brw->urb.gen6_gs_previously_active = brw->gs.prog_active;
+   brw->urb.gen6_gs_previously_active = brw->ff_gs.prog_active;
 }
 
 const struct brw_tracked_state gen6_urb = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_CONTEXT,
-      .cache = (CACHE_NEW_VS_PROG | CACHE_NEW_GS_PROG),
+      .cache = (CACHE_NEW_VS_PROG | CACHE_NEW_FF_GS_PROG),
    },
    .emit = gen6_upload_urb,
 };

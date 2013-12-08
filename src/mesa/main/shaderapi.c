@@ -42,6 +42,7 @@
 #include "main/dispatch.h"
 #include "main/enums.h"
 #include "main/hash.h"
+#include "main/hash_table.h"
 #include "main/mtypes.h"
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"
@@ -71,7 +72,9 @@ get_shader_flags(void)
    const char *env = _mesa_getenv("MESA_GLSL");
 
    if (env) {
-      if (strstr(env, "dump"))
+      if (strstr(env, "dump_on_error"))
+         flags |= GLSL_DUMP_ON_ERROR;
+      else if (strstr(env, "dump"))
          flags |= GLSL_DUMP;
       if (strstr(env, "log"))
          flags |= GLSL_LOG;
@@ -177,7 +180,7 @@ validate_shader_target(const struct gl_context *ctx, GLenum type)
    case GL_VERTEX_SHADER:
       return ctx->Extensions.ARB_vertex_shader;
    case GL_GEOMETRY_SHADER_ARB:
-      return _mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_geometry_shader4;
+      return _mesa_has_geometry_shaders(ctx);
    default:
       return false;
    }
@@ -457,6 +460,31 @@ get_handle(struct gl_context *ctx, GLenum pname)
 
 
 /**
+ * Check if a geometry shader query is valid at this time.  If not, report an
+ * error and return false.
+ *
+ * From GL 3.2 section 6.1.16 (Shader and Program Queries):
+ *
+ *     "If GEOMETRY_VERTICES_OUT, GEOMETRY_INPUT_TYPE, or GEOMETRY_OUTPUT_TYPE
+ *     are queried for a program which has not been linked successfully, or
+ *     which does not contain objects to form a geometry shader, then an
+ *     INVALID_OPERATION error is generated."
+ */
+static bool
+check_gs_query(struct gl_context *ctx, const struct gl_shader_program *shProg)
+{
+   if (shProg->LinkStatus &&
+       shProg->_LinkedShaders[MESA_SHADER_GEOMETRY] != NULL) {
+      return true;
+   }
+
+   _mesa_error(ctx, GL_INVALID_OPERATION,
+               "glGetProgramv(linked geometry shader required)");
+   return false;
+}
+
+
+/**
  * glGetProgramiv() - get shader program state.
  * Note that this is for GLSL shader programs, not ARB vertex/fragment
  * programs (see glGetProgramivARB).
@@ -474,10 +502,10 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname, GLint *param
       || ctx->API == API_OPENGL_CORE
       || _mesa_is_gles3(ctx);
 
-   /* Are geometry shaders available in this context?
+   /* True if geometry shaders (of the form that was adopted into GLSL 1.50
+    * and GL 3.2) are available in this context
     */
-   const bool has_gs =
-      _mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_geometry_shader4;
+   const bool has_core_gs = _mesa_is_desktop_gl(ctx) && ctx->Version >= 32;
 
    /* Are uniform buffer objects available in this context?
     */
@@ -562,20 +590,23 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname, GLint *param
          break;
       *params = shProg->TransformFeedback.BufferMode;
       return;
-   case GL_GEOMETRY_VERTICES_OUT_ARB:
-      if (!has_gs)
+   case GL_GEOMETRY_VERTICES_OUT:
+      if (!has_core_gs)
          break;
-      *params = shProg->Geom.VerticesOut;
+      if (check_gs_query(ctx, shProg))
+         *params = shProg->Geom.VerticesOut;
       return;
-   case GL_GEOMETRY_INPUT_TYPE_ARB:
-      if (!has_gs)
+   case GL_GEOMETRY_INPUT_TYPE:
+      if (!has_core_gs)
          break;
-      *params = shProg->Geom.InputType;
+      if (check_gs_query(ctx, shProg))
+         *params = shProg->Geom.InputType;
       return;
-   case GL_GEOMETRY_OUTPUT_TYPE_ARB:
-      if (!has_gs)
+   case GL_GEOMETRY_OUTPUT_TYPE:
+      if (!has_core_gs)
          break;
-      *params = shProg->Geom.OutputType;
+      if (check_gs_query(ctx, shProg))
+         *params = shProg->Geom.OutputType;
       return;
    case GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH: {
       unsigned i;
@@ -616,6 +647,12 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname, GLint *param
       return;
    case GL_PROGRAM_BINARY_LENGTH:
       *params = 0;
+      return;
+   case GL_ACTIVE_ATOMIC_COUNTER_BUFFERS:
+      if (!ctx->Extensions.ARB_shader_atomic_counters)
+         break;
+
+      *params = shProg->NumAtomicBuffers;
       return;
    default:
       break;
@@ -783,10 +820,19 @@ compile_shader(struct gl_context *ctx, GLuint shaderObj)
 
    }
 
-   if (sh->CompileStatus == GL_FALSE && 
-       (ctx->Shader.Flags & GLSL_REPORT_ERRORS)) {
-      _mesa_debug(ctx, "Error compiling shader %u:\n%s\n",
-                  sh->Name, sh->InfoLog);
+   if (!sh->CompileStatus) {
+      if (ctx->Shader.Flags & GLSL_DUMP_ON_ERROR) {
+         fprintf(stderr, "GLSL source for %s shader %d:\n",
+                 _mesa_glsl_shader_target_name(sh->Type), sh->Name);
+         fprintf(stderr, "%s\n", sh->Source);
+         fprintf(stderr, "Info Log:\n%s\n", sh->InfoLog);
+         fflush(stderr);
+      }
+
+      if (ctx->Shader.Flags & GLSL_REPORT_ERRORS) {
+         _mesa_debug(ctx, "Error compiling shader %u:\n%s\n",
+                     sh->Name, sh->InfoLog);
+      }
    }
 }
 
@@ -798,19 +844,19 @@ static void
 link_program(struct gl_context *ctx, GLuint program)
 {
    struct gl_shader_program *shProg;
-   struct gl_transform_feedback_object *obj =
-      ctx->TransformFeedback.CurrentObject;
 
    shProg = _mesa_lookup_shader_program_err(ctx, program, "glLinkProgram");
    if (!shProg)
       return;
 
-   if (obj->Active
-       && (shProg == ctx->Shader.CurrentVertexProgram
-	   || shProg == ctx->Shader.CurrentGeometryProgram
-	   || shProg == ctx->Shader.CurrentFragmentProgram)) {
+   /* From the ARB_transform_feedback2 specification:
+    * "The error INVALID_OPERATION is generated by LinkProgram if <program> is
+    *  the name of a program being used by one or more transform feedback
+    *  objects, even if the objects are not currently bound or are paused."
+    */
+   if (_mesa_transform_feedback_is_using_program(ctx, shProg)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glLinkProgram(transform feedback active)");
+                  "glLinkProgram(transform feedback is using the program)");
       return;
    }
 
@@ -888,7 +934,7 @@ _mesa_active_program(struct gl_context *ctx, struct gl_shader_program *shProg,
 
 /**
  */
-static bool
+static void
 use_shader_program(struct gl_context *ctx, GLenum type,
 		   struct gl_shader_program *shProg)
 {
@@ -917,7 +963,7 @@ use_shader_program(struct gl_context *ctx, GLenum type,
       }
       break;
    default:
-      return false;
+      return;
    }
 
    if (*target != shProg) {
@@ -944,10 +990,8 @@ use_shader_program(struct gl_context *ctx, GLenum type,
       }
 
       _mesa_reference_shader_program(ctx, target, shProg);
-      return true;
+      return;
    }
-
-   return false;
 }
 
 /**
@@ -1622,55 +1666,6 @@ _mesa_ProgramParameteri(GLuint program, GLenum pname, GLint value)
       return;
 
    switch (pname) {
-   case GL_GEOMETRY_VERTICES_OUT_ARB:
-      if (!_mesa_is_desktop_gl(ctx) || !ctx->Extensions.ARB_geometry_shader4)
-         break;
-
-      if (value < 1 ||
-          (unsigned) value > ctx->Const.MaxGeometryOutputVertices) {
-         _mesa_error(ctx, GL_INVALID_VALUE,
-                     "glProgramParameteri(GL_GEOMETRY_VERTICES_OUT_ARB=%d",
-                     value);
-         return;
-      }
-      shProg->Geom.VerticesOut = value;
-      return;
-   case GL_GEOMETRY_INPUT_TYPE_ARB:
-      if (!_mesa_is_desktop_gl(ctx) || !ctx->Extensions.ARB_geometry_shader4)
-         break;
-
-      switch (value) {
-      case GL_POINTS:
-      case GL_LINES:
-      case GL_LINES_ADJACENCY_ARB:
-      case GL_TRIANGLES:
-      case GL_TRIANGLES_ADJACENCY_ARB:
-         shProg->Geom.InputType = value;
-         break;
-      default:
-         _mesa_error(ctx, GL_INVALID_VALUE,
-                     "glProgramParameteri(geometry input type = %s",
-                     _mesa_lookup_enum_by_nr(value));
-         return;
-      }
-      return;
-   case GL_GEOMETRY_OUTPUT_TYPE_ARB:
-      if (!_mesa_is_desktop_gl(ctx) || !ctx->Extensions.ARB_geometry_shader4)
-         break;
-
-      switch (value) {
-      case GL_POINTS:
-      case GL_LINE_STRIP:
-      case GL_TRIANGLE_STRIP:
-         shProg->Geom.OutputType = value;
-         break;
-      default:
-         _mesa_error(ctx, GL_INVALID_VALUE,
-                     "glProgramParameteri(geometry output type = %s",
-                     _mesa_lookup_enum_by_nr(value));
-         return;
-      }
-      return;
    case GL_PROGRAM_BINARY_RETRIEVABLE_HINT:
       /* This enum isn't part of the OES extension for OpenGL ES 2.0, but it
        * is part of OpenGL ES 3.0.  For the ES2 case, this function shouldn't
@@ -1833,4 +1828,33 @@ _mesa_CreateShaderProgramEXT(GLenum type, const GLchar *string)
    }
 
    return program;
+}
+
+
+/**
+ * Copy program-specific data generated by linking from the gl_shader_program
+ * object to a specific gl_program object.
+ */
+void
+_mesa_copy_linked_program_data(gl_shader_type type,
+                               const struct gl_shader_program *src,
+                               struct gl_program *dst)
+{
+   switch (type) {
+   case MESA_SHADER_VERTEX:
+      dst->UsesClipDistanceOut = src->Vert.UsesClipDistance;
+      break;
+   case MESA_SHADER_GEOMETRY: {
+      struct gl_geometry_program *dst_gp = (struct gl_geometry_program *) dst;
+      dst_gp->VerticesIn = src->Geom.VerticesIn;
+      dst_gp->VerticesOut = src->Geom.VerticesOut;
+      dst_gp->InputType = src->Geom.InputType;
+      dst_gp->OutputType = src->Geom.OutputType;
+      dst->UsesClipDistanceOut = src->Geom.UsesClipDistance;
+      dst_gp->UsesEndPrimitive = src->Geom.UsesEndPrimitive;
+   }
+      break;
+   default:
+      break;
+   }
 }

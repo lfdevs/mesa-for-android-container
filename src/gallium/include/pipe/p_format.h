@@ -340,6 +340,7 @@ enum pipe_format {
    PIPE_FORMAT_R16A16_SINT             = 250,
    PIPE_FORMAT_R32A32_UINT             = 251,
    PIPE_FORMAT_R32A32_SINT             = 252,
+   PIPE_FORMAT_R10G10B10A2_UINT        = 253,
 
    PIPE_FORMAT_COUNT
 };
@@ -367,6 +368,7 @@ enum pipe_format {
 
 enum pipe_video_chroma_format
 {
+   PIPE_VIDEO_CHROMA_FORMAT_400,
    PIPE_VIDEO_CHROMA_FORMAT_420,
    PIPE_VIDEO_CHROMA_FORMAT_422,
    PIPE_VIDEO_CHROMA_FORMAT_444

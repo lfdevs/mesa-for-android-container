@@ -102,6 +102,11 @@ get_buffer_target(struct gl_context *ctx, GLenum target)
          return &ctx->UniformBuffer;
       }
       break;
+   case GL_ATOMIC_COUNTER_BUFFER:
+      if (ctx->Extensions.ARB_shader_atomic_counters) {
+         return &ctx->AtomicBuffer;
+      }
+      break;
    default:
       return NULL;
    }
@@ -265,6 +270,7 @@ _mesa_delete_buffer_object(struct gl_context *ctx,
    bufObj->Name = ~0;
 
    _glthread_DESTROY_MUTEX(bufObj->Mutex);
+   free(bufObj->Label);
    free(bufObj);
 }
 
@@ -439,7 +445,6 @@ _mesa_buffer_data( struct gl_context *ctx, GLenum target, GLsizeiptrARB size,
  * Note that all GL error checking will have been done already.
  *
  * \param ctx     GL context.
- * \param target  Buffer object target on which to operate.
  * \param offset  Offset of the first byte to be modified.
  * \param size    Size, in bytes, of the data range.
  * \param data    Pointer to the data to store in the buffer object.
@@ -650,16 +655,17 @@ _mesa_free_buffer_objects( struct gl_context *ctx )
    }
 }
 
-static bool
-handle_bind_buffer_gen(struct gl_context *ctx,
-		       GLenum target,
-		       GLuint buffer,
-		       struct gl_buffer_object **buf_handle)
+bool
+_mesa_handle_bind_buffer_gen(struct gl_context *ctx,
+                             GLenum target,
+                             GLuint buffer,
+                             struct gl_buffer_object **buf_handle,
+                             const char *caller)
 {
    struct gl_buffer_object *buf = *buf_handle;
 
    if (!buf && ctx->API == API_OPENGL_CORE) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "glBindBuffer(non-gen name)");
+      _mesa_error(ctx, GL_INVALID_OPERATION, "%s(non-gen name)", caller);
       return false;
    }
 
@@ -670,7 +676,7 @@ handle_bind_buffer_gen(struct gl_context *ctx,
       ASSERT(ctx->Driver.NewBufferObject);
       buf = ctx->Driver.NewBufferObject(ctx, buffer, target);
       if (!buf) {
-	 _mesa_error(ctx, GL_OUT_OF_MEMORY, "glBindBufferARB");
+	 _mesa_error(ctx, GL_OUT_OF_MEMORY, "%s", caller);
 	 return false;
       }
       _mesa_HashInsert(ctx->Shared->BufferObjects, buffer, buf);
@@ -714,7 +720,8 @@ bind_buffer_object(struct gl_context *ctx, GLenum target, GLuint buffer)
    else {
       /* non-default buffer object */
       newBufObj = _mesa_lookup_bufferobj(ctx, buffer);
-      if (!handle_bind_buffer_gen(ctx, target, buffer, &newBufObj))
+      if (!_mesa_handle_bind_buffer_gen(ctx, target, buffer,
+                                        &newBufObj, "glBindBuffer"))
          return;
    }
    
@@ -857,8 +864,8 @@ _mesa_DeleteBuffers(GLsizei n, const GLuint *ids)
          }
 
          /* unbind any vertex pointers bound to this buffer */
-         for (j = 0; j < Elements(arrayObj->VertexAttrib); j++) {
-            unbind(ctx, &arrayObj->VertexAttrib[j].BufferObj, bufObj);
+         for (j = 0; j < Elements(arrayObj->VertexBinding); j++) {
+            unbind(ctx, &arrayObj->VertexBinding[j].BufferObj, bufObj);
          }
 
          if (ctx->Array.ArrayBufferObj == bufObj) {
@@ -2119,6 +2126,51 @@ bind_buffer_base_uniform_buffer(struct gl_context *ctx,
       set_ubo_binding(ctx, index, bufObj, 0, 0, GL_TRUE);
 }
 
+static void
+set_atomic_buffer_binding(struct gl_context *ctx,
+                          unsigned index,
+                          struct gl_buffer_object *bufObj,
+                          GLintptr offset,
+                          GLsizeiptr size,
+                          const char *name)
+{
+   struct gl_atomic_buffer_binding *binding;
+
+   if (index >= ctx->Const.MaxAtomicBufferBindings) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "%s(index=%d)", name, index);
+      return;
+   }
+
+   if (offset & (ATOMIC_COUNTER_SIZE - 1)) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "%s(offset misalgned %d/%d)", name, (int) offset,
+                  ATOMIC_COUNTER_SIZE);
+      return;
+   }
+
+   _mesa_reference_buffer_object(ctx, &ctx->AtomicBuffer, bufObj);
+
+   binding = &ctx->AtomicBufferBindings[index];
+   if (binding->BufferObject == bufObj &&
+       binding->Offset == offset &&
+       binding->Size == size) {
+      return;
+   }
+
+   FLUSH_VERTICES(ctx, 0);
+   ctx->NewDriverState |= ctx->DriverFlags.NewAtomicBuffer;
+
+   _mesa_reference_buffer_object(ctx, &binding->BufferObject, bufObj);
+
+   if (bufObj == ctx->Shared->NullBufferObj) {
+      binding->Offset = -1;
+      binding->Size = -1;
+   } else {
+      binding->Offset = offset;
+      binding->Size = size;
+   }
+}
+
 void GLAPIENTRY
 _mesa_BindBufferRange(GLenum target, GLuint index,
                       GLuint buffer, GLintptr offset, GLsizeiptr size)
@@ -2131,7 +2183,8 @@ _mesa_BindBufferRange(GLenum target, GLuint index,
    } else {
       bufObj = _mesa_lookup_bufferobj(ctx, buffer);
    }
-   if (!handle_bind_buffer_gen(ctx, target, buffer, &bufObj))
+   if (!_mesa_handle_bind_buffer_gen(ctx, target, buffer,
+                                     &bufObj, "glBindBufferRange"))
       return;
 
    if (!bufObj) {
@@ -2156,6 +2209,10 @@ _mesa_BindBufferRange(GLenum target, GLuint index,
    case GL_UNIFORM_BUFFER:
       bind_buffer_range_uniform_buffer(ctx, index, bufObj, offset, size);
       return;
+   case GL_ATOMIC_COUNTER_BUFFER:
+      set_atomic_buffer_binding(ctx, index, bufObj, offset, size,
+                                "glBindBufferRange");
+      return;
    default:
       _mesa_error(ctx, GL_INVALID_ENUM, "glBindBufferRange(target)");
       return;
@@ -2173,7 +2230,8 @@ _mesa_BindBufferBase(GLenum target, GLuint index, GLuint buffer)
    } else {
       bufObj = _mesa_lookup_bufferobj(ctx, buffer);
    }
-   if (!handle_bind_buffer_gen(ctx, target, buffer, &bufObj))
+   if (!_mesa_handle_bind_buffer_gen(ctx, target, buffer,
+                                     &bufObj, "glBindBufferBase"))
       return;
 
    if (!bufObj) {
@@ -2214,6 +2272,10 @@ _mesa_BindBufferBase(GLenum target, GLuint index, GLuint buffer)
       return;
    case GL_UNIFORM_BUFFER:
       bind_buffer_base_uniform_buffer(ctx, index, bufObj);
+      return;
+   case GL_ATOMIC_COUNTER_BUFFER:
+      set_atomic_buffer_binding(ctx, index, bufObj, 0, 0,
+                                "glBindBufferBase");
       return;
    default:
       _mesa_error(ctx, GL_INVALID_ENUM, "glBindBufferBase(target)");

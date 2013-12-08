@@ -22,7 +22,7 @@
 SUBDIRS =
 
 if HAVE_X11_DRIVER
-SUBDIRS += glx
+SUBDIRS += glx/xlib
 endif
 
 if HAVE_GALLIUM_OSMESA
@@ -39,10 +39,6 @@ endif
 
 if HAVE_GALLIUM_GBM
 SUBDIRS += gbm
-endif
-
-if HAVE_ST_XORG
-SUBDIRS += xorg
 endif
 
 if HAVE_ST_XA

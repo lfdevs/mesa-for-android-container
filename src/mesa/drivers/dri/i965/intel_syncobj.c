@@ -38,7 +38,6 @@
  * performance bottleneck, though.
  */
 
-#include "main/simple_list.h"
 #include "main/imports.h"
 
 #include "brw_context.h"
@@ -77,7 +76,7 @@ intel_fence_sync(struct gl_context *ctx, struct gl_sync_object *s,
    sync->bo = brw->batch.bo;
    drm_intel_bo_reference(sync->bo);
 
-   intel_flush(ctx);
+   intel_batchbuffer_flush(brw);
 }
 
 static void intel_client_wait_sync(struct gl_context *ctx, struct gl_sync_object *s,

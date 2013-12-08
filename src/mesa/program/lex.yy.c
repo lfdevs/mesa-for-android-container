@@ -1,6 +1,6 @@
-#line 2 "lex.yy.c"
+#line 2 "program/lex.yy.c"
 
-#line 4 "lex.yy.c"
+#line 4 "program/lex.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -9,7 +9,7 @@
 #define FLEX_SCANNER
 #define YY_FLEX_MAJOR_VERSION 2
 #define YY_FLEX_MINOR_VERSION 5
-#define YY_FLEX_SUBMINOR_VERSION 35
+#define YY_FLEX_SUBMINOR_VERSION 36
 #if YY_FLEX_SUBMINOR_VERSION > 0
 #define FLEX_BETA
 #endif
@@ -159,15 +159,7 @@ typedef void* yyscan_t;
 
 /* Size of default input buffer. */
 #ifndef YY_BUF_SIZE
-#ifdef __ia64__
-/* On IA-64, the buffer size is 16k, not 8k.
- * Moreover, YY_BUF_SIZE is 2*YY_READ_BUF_SIZE in the general case.
- * Ditto for the __ia64__ case accordingly.
- */
-#define YY_BUF_SIZE 32768
-#else
 #define YY_BUF_SIZE 16384
-#endif /* __ia64__ */
 #endif
 
 /* The state buf must be large enough to hold one state per character in the main buffer.
@@ -177,6 +169,11 @@ typedef void* yyscan_t;
 #ifndef YY_TYPEDEF_YY_BUFFER_STATE
 #define YY_TYPEDEF_YY_BUFFER_STATE
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
+#endif
+
+#ifndef YY_TYPEDEF_YY_SIZE_T
+#define YY_TYPEDEF_YY_SIZE_T
+typedef size_t yy_size_t;
 #endif
 
 #define EOB_ACT_CONTINUE_SCAN 0
@@ -201,11 +198,6 @@ typedef struct yy_buffer_state *YY_BUFFER_STATE;
 
 #define unput(c) yyunput( c, yyg->yytext_ptr , yyscanner )
 
-#ifndef YY_TYPEDEF_YY_SIZE_T
-#define YY_TYPEDEF_YY_SIZE_T
-typedef size_t yy_size_t;
-#endif
-
 #ifndef YY_STRUCT_YY_BUFFER_STATE
 #define YY_STRUCT_YY_BUFFER_STATE
 struct yy_buffer_state
@@ -223,7 +215,7 @@ struct yy_buffer_state
 	/* Number of characters read into yy_ch_buf, not including EOB
 	 * characters.
 	 */
-	int yy_n_chars;
+	yy_size_t yy_n_chars;
 
 	/* Whether we "own" the buffer - i.e., we know we created it,
 	 * and can realloc() it to grow it, and should free() it to
@@ -302,7 +294,7 @@ static void _mesa_program_lexer__init_buffer (YY_BUFFER_STATE b,FILE *file ,yysc
 
 YY_BUFFER_STATE _mesa_program_lexer__scan_buffer (char *base,yy_size_t size ,yyscan_t yyscanner );
 YY_BUFFER_STATE _mesa_program_lexer__scan_string (yyconst char *yy_str ,yyscan_t yyscanner );
-YY_BUFFER_STATE _mesa_program_lexer__scan_bytes (yyconst char *bytes,int len ,yyscan_t yyscanner );
+YY_BUFFER_STATE _mesa_program_lexer__scan_bytes (yyconst char *bytes,yy_size_t len ,yyscan_t yyscanner );
 
 void *_mesa_program_lexer_alloc (yy_size_t ,yyscan_t yyscanner );
 void *_mesa_program_lexer_realloc (void *,yy_size_t ,yyscan_t yyscanner );
@@ -334,7 +326,7 @@ void _mesa_program_lexer_free (void * ,yyscan_t yyscanner );
 
 /* Begin user sect3 */
 
-#define _mesa_program_lexer_wrap(n) 1
+#define _mesa_program_lexer_wrap(yyscanner) 1
 #define YY_SKIP_YYWRAP
 
 typedef unsigned char YY_CHAR;
@@ -1018,8 +1010,8 @@ static yyconst flex_int16_t yy_chk[1368] =
 #define yymore() yymore_used_but_not_detected
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
-#line 1 "program_lexer.l"
-#line 2 "program_lexer.l"
+#line 1 "program/program_lexer.l"
+#line 2 "program/program_lexer.l"
 /*
  * Copyright © 2009 Intel Corporation
  *
@@ -1174,7 +1166,7 @@ static keyword. Declare them here to avoid a compiler warning. */
 int _mesa_program_lexer_get_column  (yyscan_t yyscanner);
 void _mesa_program_lexer_set_column (int  column_no , yyscan_t yyscanner);
 
-#line 1178 "lex.yy.c"
+#line 1170 "program/lex.yy.c"
 
 #define INITIAL 0
 
@@ -1203,8 +1195,8 @@ struct yyguts_t
     size_t yy_buffer_stack_max; /**< capacity of stack. */
     YY_BUFFER_STATE * yy_buffer_stack; /**< Stack as an array. */
     char yy_hold_char;
-    int yy_n_chars;
-    int yyleng_r;
+    yy_size_t yy_n_chars;
+    yy_size_t yyleng_r;
     char *yy_c_buf_p;
     int yy_init;
     int yy_start;
@@ -1261,7 +1253,7 @@ FILE *_mesa_program_lexer_get_out (yyscan_t yyscanner );
 
 void _mesa_program_lexer_set_out  (FILE * out_str ,yyscan_t yyscanner );
 
-int _mesa_program_lexer_get_leng (yyscan_t yyscanner );
+yy_size_t _mesa_program_lexer_get_leng (yyscan_t yyscanner );
 
 char *_mesa_program_lexer_get_text (yyscan_t yyscanner );
 
@@ -1315,12 +1307,7 @@ static int input (yyscan_t yyscanner );
 
 /* Amount of stuff to slurp up with each read. */
 #ifndef YY_READ_BUF_SIZE
-#ifdef __ia64__
-/* On IA-64, the buffer size is 16k, not 8k */
-#define YY_READ_BUF_SIZE 16384
-#else
 #define YY_READ_BUF_SIZE 8192
-#endif /* __ia64__ */
 #endif
 
 /* Copy whatever the last rule matched to the standard output. */
@@ -1424,10 +1411,10 @@ YY_DECL
 	register int yy_act;
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
-#line 170 "program_lexer.l"
+#line 170 "program/program_lexer.l"
 
 
-#line 1431 "lex.yy.c"
+#line 1418 "program/lex.yy.c"
 
     yylval = yylval_param;
 
@@ -1516,17 +1503,17 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 172 "program_lexer.l"
+#line 172 "program/program_lexer.l"
 { return ARBvp_10; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 173 "program_lexer.l"
+#line 173 "program/program_lexer.l"
 { return ARBfp_10; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 174 "program_lexer.l"
+#line 174 "program/program_lexer.l"
 {
    yylval->integer = at_address;
    return_token_or_IDENTIFIER(require_ARB_vp, ADDRESS);
@@ -1534,692 +1521,692 @@ YY_RULE_SETUP
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 178 "program_lexer.l"
+#line 178 "program/program_lexer.l"
 { return ALIAS; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 179 "program_lexer.l"
+#line 179 "program/program_lexer.l"
 { return ATTRIB; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 180 "program_lexer.l"
+#line 180 "program/program_lexer.l"
 { return END; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 181 "program_lexer.l"
+#line 181 "program/program_lexer.l"
 { return OPTION; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 182 "program_lexer.l"
+#line 182 "program/program_lexer.l"
 { return OUTPUT; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 183 "program_lexer.l"
+#line 183 "program/program_lexer.l"
 { return PARAM; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 184 "program_lexer.l"
+#line 184 "program/program_lexer.l"
 { yylval->integer = at_temp; return TEMP; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 186 "program_lexer.l"
+#line 186 "program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, ABS, 3); }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 187 "program_lexer.l"
+#line 187 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, ADD, 3); }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 188 "program_lexer.l"
+#line 188 "program/program_lexer.l"
 { return_opcode(require_ARB_vp, ARL, ARL, 3); }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 190 "program_lexer.l"
+#line 190 "program/program_lexer.l"
 { return_opcode(require_ARB_fp, TRI_OP, CMP, 3); }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 191 "program_lexer.l"
+#line 191 "program/program_lexer.l"
 { return_opcode(require_ARB_fp, SCALAR_OP, COS, 3); }
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 193 "program_lexer.l"
+#line 193 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  VECTOR_OP, DDX, 3); }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 194 "program_lexer.l"
+#line 194 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  VECTOR_OP, DDY, 3); }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 195 "program_lexer.l"
+#line 195 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, DP3, 3); }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 196 "program_lexer.l"
+#line 196 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, DP4, 3); }
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 197 "program_lexer.l"
+#line 197 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, DPH, 3); }
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 198 "program_lexer.l"
+#line 198 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, DST, 3); }
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 200 "program_lexer.l"
+#line 200 "program/program_lexer.l"
 { return_opcode(             1, SCALAR_OP, EX2, 3); }
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 201 "program_lexer.l"
+#line 201 "program/program_lexer.l"
 { return_opcode(require_ARB_vp, SCALAR_OP, EXP, 3); }
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 203 "program_lexer.l"
+#line 203 "program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, FLR, 3); }
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 204 "program_lexer.l"
+#line 204 "program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, FRC, 3); }
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 206 "program_lexer.l"
+#line 206 "program/program_lexer.l"
 { return_opcode(require_ARB_fp, KIL, KIL, 3); }
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 208 "program_lexer.l"
+#line 208 "program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, LIT, 3); }
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 209 "program_lexer.l"
+#line 209 "program/program_lexer.l"
 { return_opcode(             1, SCALAR_OP, LG2, 3); }
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 210 "program_lexer.l"
+#line 210 "program/program_lexer.l"
 { return_opcode(require_ARB_vp, SCALAR_OP, LOG, 3); }
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 211 "program_lexer.l"
+#line 211 "program/program_lexer.l"
 { return_opcode(require_ARB_fp, TRI_OP, LRP, 3); }
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 213 "program_lexer.l"
+#line 213 "program/program_lexer.l"
 { return_opcode(             1, TRI_OP, MAD, 3); }
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 214 "program_lexer.l"
+#line 214 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, MAX, 3); }
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 215 "program_lexer.l"
+#line 215 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, MIN, 3); }
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 216 "program_lexer.l"
+#line 216 "program/program_lexer.l"
 { return_opcode(             1, VECTOR_OP, MOV, 3); }
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 217 "program_lexer.l"
+#line 217 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, MUL, 3); }
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 219 "program_lexer.l"
+#line 219 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  VECTOR_OP, PK2H, 4); }
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 220 "program_lexer.l"
+#line 220 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  VECTOR_OP, PK2US, 5); }
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 221 "program_lexer.l"
+#line 221 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  VECTOR_OP, PK4B, 4); }
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 222 "program_lexer.l"
+#line 222 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  VECTOR_OP, PK4UB, 5); }
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 223 "program_lexer.l"
+#line 223 "program/program_lexer.l"
 { return_opcode(             1, BINSC_OP, POW, 3); }
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 225 "program_lexer.l"
+#line 225 "program/program_lexer.l"
 { return_opcode(             1, SCALAR_OP, RCP, 3); }
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 226 "program_lexer.l"
+#line 226 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP,    RFL, 3); }
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 227 "program_lexer.l"
+#line 227 "program/program_lexer.l"
 { return_opcode(             1, SCALAR_OP, RSQ, 3); }
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 229 "program_lexer.l"
+#line 229 "program/program_lexer.l"
 { return_opcode(require_ARB_fp, SCALAR_OP, SCS, 3); }
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 230 "program_lexer.l"
+#line 230 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, SEQ, 3); }
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 231 "program_lexer.l"
+#line 231 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, SFL, 3); }
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 232 "program_lexer.l"
+#line 232 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, SGE, 3); }
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 233 "program_lexer.l"
+#line 233 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, SGT, 3); }
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 234 "program_lexer.l"
+#line 234 "program/program_lexer.l"
 { return_opcode(require_ARB_fp, SCALAR_OP, SIN, 3); }
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 235 "program_lexer.l"
+#line 235 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, SLE, 3); }
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 236 "program_lexer.l"
+#line 236 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, SLT, 3); }
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 237 "program_lexer.l"
+#line 237 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, SNE, 3); }
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 238 "program_lexer.l"
+#line 238 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  BIN_OP, STR, 3); }
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 239 "program_lexer.l"
+#line 239 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, SUB, 3); }
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 240 "program_lexer.l"
+#line 240 "program/program_lexer.l"
 { return_opcode(             1, SWZ, SWZ, 3); }
 	YY_BREAK
 case 56:
 YY_RULE_SETUP
-#line 242 "program_lexer.l"
+#line 242 "program/program_lexer.l"
 { return_opcode(require_ARB_fp, SAMPLE_OP, TEX, 3); }
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 243 "program_lexer.l"
+#line 243 "program/program_lexer.l"
 { return_opcode(require_ARB_fp, SAMPLE_OP, TXB, 3); }
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 244 "program_lexer.l"
+#line 244 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  TXD_OP, TXD, 3); }
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 245 "program_lexer.l"
+#line 245 "program/program_lexer.l"
 { return_opcode(require_ARB_fp, SAMPLE_OP, TXP, 3); }
 	YY_BREAK
 case 60:
 YY_RULE_SETUP
-#line 247 "program_lexer.l"
+#line 247 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  SCALAR_OP, UP2H, 4); }
 	YY_BREAK
 case 61:
 YY_RULE_SETUP
-#line 248 "program_lexer.l"
+#line 248 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  SCALAR_OP, UP2US, 5); }
 	YY_BREAK
 case 62:
 YY_RULE_SETUP
-#line 249 "program_lexer.l"
+#line 249 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  SCALAR_OP, UP4B, 4); }
 	YY_BREAK
 case 63:
 YY_RULE_SETUP
-#line 250 "program_lexer.l"
+#line 250 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  SCALAR_OP, UP4UB, 5); }
 	YY_BREAK
 case 64:
 YY_RULE_SETUP
-#line 252 "program_lexer.l"
+#line 252 "program/program_lexer.l"
 { return_opcode(require_NV_fp,  TRI_OP, X2D, 3); }
 	YY_BREAK
 case 65:
 YY_RULE_SETUP
-#line 253 "program_lexer.l"
+#line 253 "program/program_lexer.l"
 { return_opcode(             1, BIN_OP, XPD, 3); }
 	YY_BREAK
 case 66:
 YY_RULE_SETUP
-#line 255 "program_lexer.l"
+#line 255 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_vp, VERTEX); }
 	YY_BREAK
 case 67:
 YY_RULE_SETUP
-#line 256 "program_lexer.l"
+#line 256 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, FRAGMENT); }
 	YY_BREAK
 case 68:
 YY_RULE_SETUP
-#line 257 "program_lexer.l"
+#line 257 "program/program_lexer.l"
 { return PROGRAM; }
 	YY_BREAK
 case 69:
 YY_RULE_SETUP
-#line 258 "program_lexer.l"
+#line 258 "program/program_lexer.l"
 { return STATE; }
 	YY_BREAK
 case 70:
 YY_RULE_SETUP
-#line 259 "program_lexer.l"
+#line 259 "program/program_lexer.l"
 { return RESULT; }
 	YY_BREAK
 case 71:
 YY_RULE_SETUP
-#line 261 "program_lexer.l"
+#line 261 "program/program_lexer.l"
 { return AMBIENT; }
 	YY_BREAK
 case 72:
 YY_RULE_SETUP
-#line 262 "program_lexer.l"
+#line 262 "program/program_lexer.l"
 { return ATTENUATION; }
 	YY_BREAK
 case 73:
 YY_RULE_SETUP
-#line 263 "program_lexer.l"
+#line 263 "program/program_lexer.l"
 { return BACK; }
 	YY_BREAK
 case 74:
 YY_RULE_SETUP
-#line 264 "program_lexer.l"
+#line 264 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, CLIP); }
 	YY_BREAK
 case 75:
 YY_RULE_SETUP
-#line 265 "program_lexer.l"
+#line 265 "program/program_lexer.l"
 { return COLOR; }
 	YY_BREAK
 case 76:
 YY_RULE_SETUP
-#line 266 "program_lexer.l"
+#line 266 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_fp, DEPTH); }
 	YY_BREAK
 case 77:
 YY_RULE_SETUP
-#line 267 "program_lexer.l"
+#line 267 "program/program_lexer.l"
 { return DIFFUSE; }
 	YY_BREAK
 case 78:
 YY_RULE_SETUP
-#line 268 "program_lexer.l"
+#line 268 "program/program_lexer.l"
 { return DIRECTION; }
 	YY_BREAK
 case 79:
 YY_RULE_SETUP
-#line 269 "program_lexer.l"
+#line 269 "program/program_lexer.l"
 { return EMISSION; }
 	YY_BREAK
 case 80:
 YY_RULE_SETUP
-#line 270 "program_lexer.l"
+#line 270 "program/program_lexer.l"
 { return ENV; }
 	YY_BREAK
 case 81:
 YY_RULE_SETUP
-#line 271 "program_lexer.l"
+#line 271 "program/program_lexer.l"
 { return EYE; }
 	YY_BREAK
 case 82:
 YY_RULE_SETUP
-#line 272 "program_lexer.l"
+#line 272 "program/program_lexer.l"
 { return FOGCOORD; }
 	YY_BREAK
 case 83:
 YY_RULE_SETUP
-#line 273 "program_lexer.l"
+#line 273 "program/program_lexer.l"
 { return FOG; }
 	YY_BREAK
 case 84:
 YY_RULE_SETUP
-#line 274 "program_lexer.l"
+#line 274 "program/program_lexer.l"
 { return FRONT; }
 	YY_BREAK
 case 85:
 YY_RULE_SETUP
-#line 275 "program_lexer.l"
+#line 275 "program/program_lexer.l"
 { return HALF; }
 	YY_BREAK
 case 86:
 YY_RULE_SETUP
-#line 276 "program_lexer.l"
+#line 276 "program/program_lexer.l"
 { return INVERSE; }
 	YY_BREAK
 case 87:
 YY_RULE_SETUP
-#line 277 "program_lexer.l"
+#line 277 "program/program_lexer.l"
 { return INVTRANS; }
 	YY_BREAK
 case 88:
 YY_RULE_SETUP
-#line 278 "program_lexer.l"
+#line 278 "program/program_lexer.l"
 { return LIGHT; }
 	YY_BREAK
 case 89:
 YY_RULE_SETUP
-#line 279 "program_lexer.l"
+#line 279 "program/program_lexer.l"
 { return LIGHTMODEL; }
 	YY_BREAK
 case 90:
 YY_RULE_SETUP
-#line 280 "program_lexer.l"
+#line 280 "program/program_lexer.l"
 { return LIGHTPROD; }
 	YY_BREAK
 case 91:
 YY_RULE_SETUP
-#line 281 "program_lexer.l"
+#line 281 "program/program_lexer.l"
 { return LOCAL; }
 	YY_BREAK
 case 92:
 YY_RULE_SETUP
-#line 282 "program_lexer.l"
+#line 282 "program/program_lexer.l"
 { return MATERIAL; }
 	YY_BREAK
 case 93:
 YY_RULE_SETUP
-#line 283 "program_lexer.l"
+#line 283 "program/program_lexer.l"
 { return MAT_PROGRAM; }
 	YY_BREAK
 case 94:
 YY_RULE_SETUP
-#line 284 "program_lexer.l"
+#line 284 "program/program_lexer.l"
 { return MATRIX; }
 	YY_BREAK
 case 95:
 YY_RULE_SETUP
-#line 285 "program_lexer.l"
+#line 285 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, MATRIXINDEX); }
 	YY_BREAK
 case 96:
 YY_RULE_SETUP
-#line 286 "program_lexer.l"
+#line 286 "program/program_lexer.l"
 { return MODELVIEW; }
 	YY_BREAK
 case 97:
 YY_RULE_SETUP
-#line 287 "program_lexer.l"
+#line 287 "program/program_lexer.l"
 { return MVP; }
 	YY_BREAK
 case 98:
 YY_RULE_SETUP
-#line 288 "program_lexer.l"
+#line 288 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, NORMAL); }
 	YY_BREAK
 case 99:
 YY_RULE_SETUP
-#line 289 "program_lexer.l"
+#line 289 "program/program_lexer.l"
 { return OBJECT; }
 	YY_BREAK
 case 100:
 YY_RULE_SETUP
-#line 290 "program_lexer.l"
+#line 290 "program/program_lexer.l"
 { return PALETTE; }
 	YY_BREAK
 case 101:
 YY_RULE_SETUP
-#line 291 "program_lexer.l"
+#line 291 "program/program_lexer.l"
 { return PARAMS; }
 	YY_BREAK
 case 102:
 YY_RULE_SETUP
-#line 292 "program_lexer.l"
+#line 292 "program/program_lexer.l"
 { return PLANE; }
 	YY_BREAK
 case 103:
 YY_RULE_SETUP
-#line 293 "program_lexer.l"
+#line 293 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, POINT_TOK); }
 	YY_BREAK
 case 104:
 YY_RULE_SETUP
-#line 294 "program_lexer.l"
+#line 294 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, POINTSIZE); }
 	YY_BREAK
 case 105:
 YY_RULE_SETUP
-#line 295 "program_lexer.l"
+#line 295 "program/program_lexer.l"
 { return POSITION; }
 	YY_BREAK
 case 106:
 YY_RULE_SETUP
-#line 296 "program_lexer.l"
+#line 296 "program/program_lexer.l"
 { return PRIMARY; }
 	YY_BREAK
 case 107:
 YY_RULE_SETUP
-#line 297 "program_lexer.l"
+#line 297 "program/program_lexer.l"
 { return PROJECTION; }
 	YY_BREAK
 case 108:
 YY_RULE_SETUP
-#line 298 "program_lexer.l"
+#line 298 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_fp, RANGE); }
 	YY_BREAK
 case 109:
 YY_RULE_SETUP
-#line 299 "program_lexer.l"
+#line 299 "program/program_lexer.l"
 { return ROW; }
 	YY_BREAK
 case 110:
 YY_RULE_SETUP
-#line 300 "program_lexer.l"
+#line 300 "program/program_lexer.l"
 { return SCENECOLOR; }
 	YY_BREAK
 case 111:
 YY_RULE_SETUP
-#line 301 "program_lexer.l"
+#line 301 "program/program_lexer.l"
 { return SECONDARY; }
 	YY_BREAK
 case 112:
 YY_RULE_SETUP
-#line 302 "program_lexer.l"
+#line 302 "program/program_lexer.l"
 { return SHININESS; }
 	YY_BREAK
 case 113:
 YY_RULE_SETUP
-#line 303 "program_lexer.l"
+#line 303 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, SIZE_TOK); }
 	YY_BREAK
 case 114:
 YY_RULE_SETUP
-#line 304 "program_lexer.l"
+#line 304 "program/program_lexer.l"
 { return SPECULAR; }
 	YY_BREAK
 case 115:
 YY_RULE_SETUP
-#line 305 "program_lexer.l"
+#line 305 "program/program_lexer.l"
 { return SPOT; }
 	YY_BREAK
 case 116:
 YY_RULE_SETUP
-#line 306 "program_lexer.l"
+#line 306 "program/program_lexer.l"
 { return TEXCOORD; }
 	YY_BREAK
 case 117:
 YY_RULE_SETUP
-#line 307 "program_lexer.l"
+#line 307 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_fp, TEXENV); }
 	YY_BREAK
 case 118:
 YY_RULE_SETUP
-#line 308 "program_lexer.l"
+#line 308 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, TEXGEN); }
 	YY_BREAK
 case 119:
 YY_RULE_SETUP
-#line 309 "program_lexer.l"
+#line 309 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, TEXGEN_Q); }
 	YY_BREAK
 case 120:
 YY_RULE_SETUP
-#line 310 "program_lexer.l"
+#line 310 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, TEXGEN_S); }
 	YY_BREAK
 case 121:
 YY_RULE_SETUP
-#line 311 "program_lexer.l"
+#line 311 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, TEXGEN_T); }
 	YY_BREAK
 case 122:
 YY_RULE_SETUP
-#line 312 "program_lexer.l"
+#line 312 "program/program_lexer.l"
 { return TEXTURE; }
 	YY_BREAK
 case 123:
 YY_RULE_SETUP
-#line 313 "program_lexer.l"
+#line 313 "program/program_lexer.l"
 { return TRANSPOSE; }
 	YY_BREAK
 case 124:
 YY_RULE_SETUP
-#line 314 "program_lexer.l"
+#line 314 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, VTXATTRIB); }
 	YY_BREAK
 case 125:
 YY_RULE_SETUP
-#line 315 "program_lexer.l"
+#line 315 "program/program_lexer.l"
 { return_token_or_DOT(require_ARB_vp, WEIGHT); }
 	YY_BREAK
 case 126:
 YY_RULE_SETUP
-#line 317 "program_lexer.l"
+#line 317 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEXTURE_UNIT); }
 	YY_BREAK
 case 127:
 YY_RULE_SETUP
-#line 318 "program_lexer.l"
+#line 318 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEX_1D); }
 	YY_BREAK
 case 128:
 YY_RULE_SETUP
-#line 319 "program_lexer.l"
+#line 319 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEX_2D); }
 	YY_BREAK
 case 129:
 YY_RULE_SETUP
-#line 320 "program_lexer.l"
+#line 320 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEX_3D); }
 	YY_BREAK
 case 130:
 YY_RULE_SETUP
-#line 321 "program_lexer.l"
+#line 321 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp, TEX_CUBE); }
 	YY_BREAK
 case 131:
 YY_RULE_SETUP
-#line 322 "program_lexer.l"
+#line 322 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_rect, TEX_RECT); }
 	YY_BREAK
 case 132:
 YY_RULE_SETUP
-#line 323 "program_lexer.l"
+#line 323 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow, TEX_SHADOW1D); }
 	YY_BREAK
 case 133:
 YY_RULE_SETUP
-#line 324 "program_lexer.l"
+#line 324 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow, TEX_SHADOW2D); }
 	YY_BREAK
 case 134:
 YY_RULE_SETUP
-#line 325 "program_lexer.l"
+#line 325 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow && require_rect, TEX_SHADOWRECT); }
 	YY_BREAK
 case 135:
 YY_RULE_SETUP
-#line 326 "program_lexer.l"
+#line 326 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_texarray, TEX_ARRAY1D); }
 	YY_BREAK
 case 136:
 YY_RULE_SETUP
-#line 327 "program_lexer.l"
+#line 327 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_texarray, TEX_ARRAY2D); }
 	YY_BREAK
 case 137:
 YY_RULE_SETUP
-#line 328 "program_lexer.l"
+#line 328 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow && require_texarray, TEX_ARRAYSHADOW1D); }
 	YY_BREAK
 case 138:
 YY_RULE_SETUP
-#line 329 "program_lexer.l"
+#line 329 "program/program_lexer.l"
 { return_token_or_IDENTIFIER(require_ARB_fp && require_shadow && require_texarray, TEX_ARRAYSHADOW2D); }
 	YY_BREAK
 case 139:
 YY_RULE_SETUP
-#line 331 "program_lexer.l"
+#line 331 "program/program_lexer.l"
 { return handle_ident(yyextra, yytext, yylval); }
 	YY_BREAK
 case 140:
 YY_RULE_SETUP
-#line 333 "program_lexer.l"
+#line 333 "program/program_lexer.l"
 { return DOT_DOT; }
 	YY_BREAK
 case 141:
 YY_RULE_SETUP
-#line 335 "program_lexer.l"
+#line 335 "program/program_lexer.l"
 {
    yylval->integer = strtol(yytext, NULL, 10);
    return INTEGER;
@@ -2227,7 +2214,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 142:
 YY_RULE_SETUP
-#line 339 "program_lexer.l"
+#line 339 "program/program_lexer.l"
 {
    yylval->real = _mesa_strtof(yytext, NULL);
    return REAL;
@@ -2239,7 +2226,7 @@ case 143:
 yyg->yy_c_buf_p = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 343 "program_lexer.l"
+#line 343 "program/program_lexer.l"
 {
    yylval->real = _mesa_strtof(yytext, NULL);
    return REAL;
@@ -2247,7 +2234,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 144:
 YY_RULE_SETUP
-#line 347 "program_lexer.l"
+#line 347 "program/program_lexer.l"
 {
    yylval->real = _mesa_strtof(yytext, NULL);
    return REAL;
@@ -2255,7 +2242,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 145:
 YY_RULE_SETUP
-#line 351 "program_lexer.l"
+#line 351 "program/program_lexer.l"
 {
    yylval->real = _mesa_strtof(yytext, NULL);
    return REAL;
@@ -2263,7 +2250,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 146:
 YY_RULE_SETUP
-#line 356 "program_lexer.l"
+#line 356 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_NOOP;
    yylval->swiz_mask.mask = WRITEMASK_XYZW;
@@ -2272,7 +2259,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 147:
 YY_RULE_SETUP
-#line 362 "program_lexer.l"
+#line 362 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_XY
@@ -2282,7 +2269,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 148:
 YY_RULE_SETUP
-#line 368 "program_lexer.l"
+#line 368 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_XZW;
@@ -2291,7 +2278,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 149:
 YY_RULE_SETUP
-#line 373 "program_lexer.l"
+#line 373 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_YZW;
@@ -2300,7 +2287,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 150:
 YY_RULE_SETUP
-#line 379 "program_lexer.l"
+#line 379 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_X
@@ -2310,7 +2297,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 151:
 YY_RULE_SETUP
-#line 385 "program_lexer.l"
+#line 385 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_Y
@@ -2320,7 +2307,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 152:
 YY_RULE_SETUP
-#line 391 "program_lexer.l"
+#line 391 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_ZW;
@@ -2329,7 +2316,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 153:
 YY_RULE_SETUP
-#line 397 "program_lexer.l"
+#line 397 "program/program_lexer.l"
 {
    const unsigned s = swiz_from_char(yytext[1]);
    yylval->swiz_mask.swizzle = MAKE_SWIZZLE4(s, s, s, s);
@@ -2339,7 +2326,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 154:
 YY_RULE_SETUP
-#line 404 "program_lexer.l"
+#line 404 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = MAKE_SWIZZLE4(swiz_from_char(yytext[1]),
 					    swiz_from_char(yytext[2]),
@@ -2351,7 +2338,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 155:
 YY_RULE_SETUP
-#line 413 "program_lexer.l"
+#line 413 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_NOOP;
    yylval->swiz_mask.mask = WRITEMASK_XYZW;
@@ -2360,7 +2347,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 156:
 YY_RULE_SETUP
-#line 419 "program_lexer.l"
+#line 419 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_XY
@@ -2370,7 +2357,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 157:
 YY_RULE_SETUP
-#line 425 "program_lexer.l"
+#line 425 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_XZW;
@@ -2379,7 +2366,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 158:
 YY_RULE_SETUP
-#line 430 "program_lexer.l"
+#line 430 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_YZW;
@@ -2388,7 +2375,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 159:
 YY_RULE_SETUP
-#line 436 "program_lexer.l"
+#line 436 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_X
@@ -2398,7 +2385,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 160:
 YY_RULE_SETUP
-#line 442 "program_lexer.l"
+#line 442 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_Y
@@ -2408,7 +2395,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 161:
 YY_RULE_SETUP
-#line 448 "program_lexer.l"
+#line 448 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = SWIZZLE_INVAL;
    yylval->swiz_mask.mask = WRITEMASK_ZW;
@@ -2417,7 +2404,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 162:
 YY_RULE_SETUP
-#line 454 "program_lexer.l"
+#line 454 "program/program_lexer.l"
 {
    const unsigned s = swiz_from_char(yytext[1]);
    yylval->swiz_mask.swizzle = MAKE_SWIZZLE4(s, s, s, s);
@@ -2427,7 +2414,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 163:
 YY_RULE_SETUP
-#line 462 "program_lexer.l"
+#line 462 "program/program_lexer.l"
 {
    if (require_ARB_vp) {
       return TEXGEN_R;
@@ -2441,7 +2428,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 164:
 YY_RULE_SETUP
-#line 473 "program_lexer.l"
+#line 473 "program/program_lexer.l"
 {
    yylval->swiz_mask.swizzle = MAKE_SWIZZLE4(swiz_from_char(yytext[1]),
 					    swiz_from_char(yytext[2]),
@@ -2453,13 +2440,13 @@ YY_RULE_SETUP
 	YY_BREAK
 case 165:
 YY_RULE_SETUP
-#line 482 "program_lexer.l"
+#line 482 "program/program_lexer.l"
 { return DOT; }
 	YY_BREAK
 case 166:
 /* rule 166 can match eol */
 YY_RULE_SETUP
-#line 484 "program_lexer.l"
+#line 484 "program/program_lexer.l"
 {
    yylloc->first_line++;
    yylloc->first_column = 1;
@@ -2470,7 +2457,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 167:
 YY_RULE_SETUP
-#line 491 "program_lexer.l"
+#line 491 "program/program_lexer.l"
 /* eat whitespace */ ;
 	YY_BREAK
 case 168:
@@ -2478,20 +2465,20 @@ case 168:
 yyg->yy_c_buf_p = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 492 "program_lexer.l"
+#line 492 "program/program_lexer.l"
 /* eat comments */ ;
 	YY_BREAK
 case 169:
 YY_RULE_SETUP
-#line 493 "program_lexer.l"
+#line 493 "program/program_lexer.l"
 { return yytext[0]; }
 	YY_BREAK
 case 170:
 YY_RULE_SETUP
-#line 494 "program_lexer.l"
+#line 494 "program/program_lexer.l"
 ECHO;
 	YY_BREAK
-#line 2495 "lex.yy.c"
+#line 2482 "program/lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2678,21 +2665,21 @@ static int yy_get_next_buffer (yyscan_t yyscanner)
 
 	else
 		{
-			int num_to_read =
+			yy_size_t num_to_read =
 			YY_CURRENT_BUFFER_LVALUE->yy_buf_size - number_to_move - 1;
 
 		while ( num_to_read <= 0 )
 			{ /* Not enough room in the buffer - grow it. */
 
 			/* just a shorter name for the current buffer */
-			YY_BUFFER_STATE b = YY_CURRENT_BUFFER;
+			YY_BUFFER_STATE b = YY_CURRENT_BUFFER_LVALUE;
 
 			int yy_c_buf_p_offset =
 				(int) (yyg->yy_c_buf_p - b->yy_ch_buf);
 
 			if ( b->yy_is_our_buffer )
 				{
-				int new_size = b->yy_buf_size * 2;
+				yy_size_t new_size = b->yy_buf_size * 2;
 
 				if ( new_size <= 0 )
 					b->yy_buf_size += b->yy_buf_size / 8;
@@ -2723,7 +2710,7 @@ static int yy_get_next_buffer (yyscan_t yyscanner)
 
 		/* Read in more data. */
 		YY_INPUT( (&YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[number_to_move]),
-			yyg->yy_n_chars, (size_t) num_to_read );
+			yyg->yy_n_chars, num_to_read );
 
 		YY_CURRENT_BUFFER_LVALUE->yy_n_chars = yyg->yy_n_chars;
 		}
@@ -2820,6 +2807,7 @@ static int yy_get_next_buffer (yyscan_t yyscanner)
 	yy_current_state = yy_nxt[yy_base[yy_current_state] + (unsigned int) yy_c];
 	yy_is_jam = (yy_current_state == 849);
 
+	(void)yyg;
 	return yy_is_jam ? 0 : yy_current_state;
 }
 
@@ -2836,7 +2824,7 @@ static int yy_get_next_buffer (yyscan_t yyscanner)
 	if ( yy_cp < YY_CURRENT_BUFFER_LVALUE->yy_ch_buf + 2 )
 		{ /* need to shift things up to make room */
 		/* +2 for EOB chars. */
-		register int number_to_move = yyg->yy_n_chars + 2;
+		register yy_size_t number_to_move = yyg->yy_n_chars + 2;
 		register char *dest = &YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[
 					YY_CURRENT_BUFFER_LVALUE->yy_buf_size + 2];
 		register char *source =
@@ -2886,7 +2874,7 @@ static int yy_get_next_buffer (yyscan_t yyscanner)
 
 		else
 			{ /* need more input */
-			int offset = yyg->yy_c_buf_p - yyg->yytext_ptr;
+			yy_size_t offset = yyg->yy_c_buf_p - yyg->yytext_ptr;
 			++yyg->yy_c_buf_p;
 
 			switch ( yy_get_next_buffer( yyscanner ) )
@@ -3166,7 +3154,7 @@ void _mesa_program_lexer_pop_buffer_state (yyscan_t yyscanner)
  */
 static void _mesa_program_lexer_ensure_buffer_stack (yyscan_t yyscanner)
 {
-	int num_to_alloc;
+	yy_size_t num_to_alloc;
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
 	if (!yyg->yy_buffer_stack) {
@@ -3264,7 +3252,7 @@ YY_BUFFER_STATE _mesa_program_lexer__scan_string (yyconst char * yystr , yyscan_
  * @param yyscanner The scanner object.
  * @return the newly allocated buffer state object.
  */
-YY_BUFFER_STATE _mesa_program_lexer__scan_bytes  (yyconst char * yybytes, int  _yybytes_len , yyscan_t yyscanner)
+YY_BUFFER_STATE _mesa_program_lexer__scan_bytes  (yyconst char * yybytes, yy_size_t  _yybytes_len , yyscan_t yyscanner)
 {
 	YY_BUFFER_STATE b;
 	char *buf;
@@ -3379,7 +3367,7 @@ FILE *_mesa_program_lexer_get_out  (yyscan_t yyscanner)
 /** Get the length of the current token.
  * @param yyscanner The scanner object.
  */
-int _mesa_program_lexer_get_leng  (yyscan_t yyscanner)
+yy_size_t _mesa_program_lexer_get_leng  (yyscan_t yyscanner)
 {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     return yyleng;
@@ -3415,7 +3403,7 @@ void _mesa_program_lexer_set_lineno (int  line_number , yyscan_t yyscanner)
 
         /* lineno is only valid if an input buffer exists. */
         if (! YY_CURRENT_BUFFER )
-           yy_fatal_error( "_mesa_program_lexer_set_lineno called with no buffer" , yyscanner); 
+           YY_FATAL_ERROR( "_mesa_program_lexer_set_lineno called with no buffer" );
     
     yylineno = line_number;
 }
@@ -3430,7 +3418,7 @@ void _mesa_program_lexer_set_column (int  column_no , yyscan_t yyscanner)
 
         /* column is only valid if an input buffer exists. */
         if (! YY_CURRENT_BUFFER )
-           yy_fatal_error( "_mesa_program_lexer_set_column called with no buffer" , yyscanner); 
+           YY_FATAL_ERROR( "_mesa_program_lexer_set_column called with no buffer" );
     
     yycolumn = column_no;
 }
@@ -3666,7 +3654,7 @@ void _mesa_program_lexer_free (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 494 "program_lexer.l"
+#line 494 "program/program_lexer.l"
 
 
 

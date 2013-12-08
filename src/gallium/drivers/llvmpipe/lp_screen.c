@@ -109,6 +109,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_COMBINED_SAMPLERS:
       return 2 * PIPE_MAX_SAMPLERS;  /* VS + FS samplers */
    case PIPE_CAP_NPOT_TEXTURES:
+   case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
       return 1;
    case PIPE_CAP_TWO_SIDED_STENCIL:
       return 1;
@@ -163,7 +164,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_PRIMITIVE_RESTART:
       return 1;
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
-      return 0;
+      return 1;
    case PIPE_CAP_SHADER_STENCIL_EXPORT:
       return 0;
    case PIPE_CAP_TGSI_INSTANCEID:
@@ -175,7 +176,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
-      return 0;
+      return 1;
    case PIPE_CAP_SCALED_RESOLVE:
       return 0;
    /* this is a lie could support arbitrary large offsets */

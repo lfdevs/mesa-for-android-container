@@ -111,7 +111,7 @@ void draw_enable_line_stipple(struct draw_context *draw, boolean enable);
 
 void draw_enable_point_sprites(struct draw_context *draw, boolean enable);
 
-void draw_set_mrd(struct draw_context *draw, double mrd);
+void draw_set_zs_format(struct draw_context *draw, enum pipe_format format);
 
 boolean
 draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe);
@@ -126,13 +126,24 @@ draw_install_pstipple_stage(struct draw_context *draw, struct pipe_context *pipe
 struct tgsi_shader_info *
 draw_get_shader_info(const struct draw_context *draw);
 
+void
+draw_prepare_shader_outputs(struct draw_context *draw);
+
 int
 draw_find_shader_output(const struct draw_context *draw,
                         uint semantic_name, uint semantic_index);
 
+boolean
+draw_will_inject_frontface(const struct draw_context *draw);
+
 uint
 draw_num_shader_outputs(const struct draw_context *draw);
 
+uint
+draw_total_vs_outputs(const struct draw_context *draw);
+
+uint
+draw_total_gs_outputs(const struct draw_context *draw);
 
 void
 draw_texture_sampler(struct draw_context *draw,

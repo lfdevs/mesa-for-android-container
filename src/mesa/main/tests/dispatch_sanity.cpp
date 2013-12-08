@@ -542,7 +542,7 @@ const struct function gl_core_functions_possible[] = {
    { "glVertexAttribDivisor", 33, -1 },
 
    /* GL 4.0 */
-// { "glMinSampleShading", 40, -1 },                    // XXX: Add to xml
+   { "glMinSampleShading", 40, -1 },                    // XXX: Add to xml
 // { "glBlendEquationi", 40, -1 },                      // XXX: Add to xml
 // { "glBlendEquationSeparatei", 40, -1 },              // XXX: Add to xml
 // { "glBlendFunci", 40, -1 },                          // XXX: Add to xml
@@ -603,7 +603,7 @@ const struct function gl_core_functions_possible[] = {
    { "glBlendEquationSeparateiARB", 43, -1 },
    { "glBlendFunciARB", 43, -1 },
    { "glBlendFuncSeparateiARB", 43, -1 },
-// { "glMinSampleShadingARB", 43, -1 },                 // XXX: Add to xml
+   { "glMinSampleShadingARB", 43, -1 },                 // XXX: Add to xml
 // { "glNamedStringARB", 43, -1 },                      // XXX: Add to xml
 // { "glDeleteNamedStringARB", 43, -1 },                // XXX: Add to xml
 // { "glCompileShaderIncludeARB", 43, -1 },             // XXX: Add to xml
@@ -827,7 +827,7 @@ const struct function gl_core_functions_possible[] = {
    { "glDrawTransformFeedbackInstanced", 43, -1 },
    { "glDrawTransformFeedbackStreamInstanced", 43, -1 },
 // { "glGetInternalformativ", 43, -1 },                 // XXX: Add to xml
-// { "glGetActiveAtomicCounterBufferiv", 43, -1 },      // XXX: Add to xml
+   { "glGetActiveAtomicCounterBufferiv", 43, -1 },
 // { "glBindImageTexture", 43, -1 },                    // XXX: Add to xml
 // { "glMemoryBarrier", 43, -1 },                       // XXX: Add to xml
    { "glTexStorage1D", 43, -1 },
@@ -854,12 +854,12 @@ const struct function gl_core_functions_possible[] = {
 // { "glDispatchComputeIndirect", 43, -1 },             // XXX: Add to xml
 // { "glCopyImageSubData", 43, -1 },                    // XXX: Add to xml
 // { "glTextureView", 43, -1 },                         // XXX: Add to xml
-// { "glBindVertexBuffer", 43, -1 },                    // XXX: Add to xml
-// { "glVertexAttribFormat", 43, -1 },                  // XXX: Add to xml
-// { "glVertexAttribIFormat", 43, -1 },                 // XXX: Add to xml
-// { "glVertexAttribLFormat", 43, -1 },                 // XXX: Add to xml
-// { "glVertexAttribBinding", 43, -1 },                 // XXX: Add to xml
-// { "glVertexBindingDivisor", 43, -1 },                // XXX: Add to xml
+   { "glBindVertexBuffer", 43, -1 },
+   { "glVertexAttribFormat", 43, -1 },
+   { "glVertexAttribIFormat", 43, -1 },
+   { "glVertexAttribLFormat", 43, -1 },
+   { "glVertexAttribBinding", 43, -1 },
+   { "glVertexBindingDivisor", 43, -1 },
 // { "glVertexArrayBindVertexBufferEXT", 43, -1 },      // XXX: Add to xml
 // { "glVertexArrayVertexAttribFormatEXT", 43, -1 },    // XXX: Add to xml
 // { "glVertexArrayVertexAttribIFormatEXT", 43, -1 },   // XXX: Add to xml
@@ -895,6 +895,43 @@ const struct function gl_core_functions_possible[] = {
 
    /* GL_ARB_internalformat_query */
    { "glGetInternalformativ", 30, -1 },
+
+   /* GL_KHR_debug */
+   { "glPushDebugGroup", 11, -1 },
+   { "glPopDebugGroup", 11, -1 },
+   { "glDebugMessageCallback", 11, -1 },
+   { "glDebugMessageControl", 11, -1 },
+   { "glDebugMessageInsert", 11, -1 },
+   { "glGetDebugMessageLog", 11, -1 },
+   { "glGetObjectLabel", 11, -1 },
+   { "glGetObjectPtrLabel", 11, -1 },
+   { "glObjectLabel", 11, -1 },
+   { "glObjectPtrLabel", 11, -1 },
+
+   /* GL_AMD_performance_monitor */
+   { "glGetPerfMonitorGroupsAMD", 11, -1 },
+   { "glGetPerfMonitorCountersAMD", 11, -1 },
+   { "glGetPerfMonitorGroupStringAMD", 11, -1 },
+   { "glGetPerfMonitorCounterStringAMD", 11, -1 },
+   { "glGetPerfMonitorCounterInfoAMD", 11, -1 },
+   { "glGenPerfMonitorsAMD", 11, -1 },
+   { "glDeletePerfMonitorsAMD", 11, -1 },
+   { "glSelectPerfMonitorCountersAMD", 11, -1 },
+   { "glBeginPerfMonitorAMD", 11, -1 },
+   { "glEndPerfMonitorAMD", 11, -1 },
+   { "glGetPerfMonitorCounterDataAMD", 11, -1 },
+
+   /* GL_NV_vdpau_interop */
+   { "glVDPAUInitNV", 11, -1 },
+   { "glVDPAUFiniNV", 11, -1 },
+   { "glVDPAURegisterVideoSurfaceNV", 11, -1 },
+   { "glVDPAURegisterOutputSurfaceNV", 11, -1 },
+   { "glVDPAUIsSurfaceNV", 11, -1 },
+   { "glVDPAUUnregisterSurfaceNV", 11, -1 },
+   { "glVDPAUGetSurfaceivNV", 11, -1 },
+   { "glVDPAUSurfaceAccessNV", 11, -1 },
+   { "glVDPAUMapSurfacesNV", 11, -1 },
+   { "glVDPAUUnmapSurfacesNV", 11, -1 },
 
    { NULL, 0, -1 }
 };

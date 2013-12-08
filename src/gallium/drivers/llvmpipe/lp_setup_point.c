@@ -38,6 +38,7 @@
 #include "lp_state_setup.h"
 #include "lp_context.h"
 #include "tgsi/tgsi_scan.h"
+#include "draw/draw_context.h"
 
 #define NUM_CHANNELS 4
 
@@ -51,6 +52,8 @@ struct point_info {
    float (*a0)[4];
    float (*dadx)[4];
    float (*dady)[4];
+
+   boolean frontfacing;
 };   
 
 
@@ -276,7 +279,8 @@ setup_point_coefficients( struct lp_setup_context *setup,
       case LP_INTERP_FACING:
          for (i = 0; i < NUM_CHANNELS; i++)
             if (usage_mask & (1 << i))
-               constant_coef(setup, info, slot+1, 1.0, i);
+               constant_coef(setup, info, slot+1,
+                             info->frontfacing ? 1.0f : -1.0f, i);
          break;
 
       default:
@@ -380,8 +384,16 @@ try_setup_point( struct lp_setup_context *setup,
 
    LP_COUNT(nr_tris);
 
-   if (lp_context->active_statistics_queries) {
+   if (lp_context->active_statistics_queries &&
+       !llvmpipe_rasterization_disabled(lp_context)) {
       lp_context->pipeline_statistics.c_primitives++;
+   }
+
+   if (draw_will_inject_frontface(lp_context->draw) &&
+       setup->face_slot > 0) {
+      point->inputs.frontfacing = v0[setup->face_slot][0];
+   } else {
+      point->inputs.frontfacing = TRUE;
    }
 
    info.v0 = v0;
@@ -392,12 +404,12 @@ try_setup_point( struct lp_setup_context *setup,
    info.a0 = GET_A0(&point->inputs);
    info.dadx = GET_DADX(&point->inputs);
    info.dady = GET_DADY(&point->inputs);
+   info.frontfacing = point->inputs.frontfacing;
    
    /* Setup parameter interpolants:
     */
    setup_point_coefficients(setup, &info);
 
-   point->inputs.frontfacing = TRUE;
    point->inputs.disable = FALSE;
    point->inputs.opaque = FALSE;
    point->inputs.layer = layer;

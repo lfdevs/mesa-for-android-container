@@ -17,7 +17,7 @@ Status
 
 Version
 
-    Version 1, March 1, 2011
+    Version 5, July 16, 2013
 
 Number
 
@@ -57,7 +57,7 @@ New Procedures and Functions
                                          struct wl_display *display);
 
     EGLBoolean eglQueryWaylandBufferWL(EGLDisplay dpy,
-                                       struct wl_buffer *buffer,
+                                       struct wl_resource *buffer,
                                        EGLint attribute, EGLint *value);
 
 New Tokens
@@ -75,6 +75,11 @@ New Tokens
         EGL_TEXTURE_Y_U_V_WL                    0x31D7
         EGL_TEXTURE_Y_UV_WL                     0x31D8
         EGL_TEXTURE_Y_XUXV_WL                   0x31D9
+
+    Accepted in the <attribute> parameter of eglQueryWaylandBufferWL:
+
+        EGL_TEXTURE_FORMAT                      0x3080
+        EGL_WAYLAND_Y_INVERTED_WL               0x31DB
 
 
 Additions to the EGL 1.4 Specification:
@@ -157,6 +162,16 @@ Additions to the EGL 1.4 Specification:
     Further, eglQueryWaylandBufferWL accepts attributes EGL_WIDTH and
     EGL_HEIGHT to query the width and height of the wl_buffer.
 
+    Also, eglQueryWaylandBufferWL may accept
+    EGL_WAYLAND_Y_INVERTED_WL attribute to query orientation of
+    wl_buffer. If EGL_WAYLAND_Y_INVERTED_WL is supported
+    eglQueryWaylandBufferWL returns EGL_TRUE and value is a boolean
+    that tells if wl_buffer is y-inverted or not. If
+    EGL_WAYLAND_Y_INVERTED_WL is not supported
+    eglQueryWaylandBufferWL returns EGL_FALSE, in that case
+    wl_buffer should be treated as if value of
+    EGL_WAYLAND_Y_INVERTED_WL was EGL_TRUE.
+
 Issues
 
 Revision History
@@ -173,3 +188,10 @@ Revision History
         Use EGL_TEXTURE_FORMAT, EGL_TEXTURE_RGB, and EGL_TEXTURE_RGBA,
         and just define the new YUV texture formats.  Add support for
         EGL_WIDTH and EGL_HEIGHT in the query attributes (Kristian Høgsberg)
+    Version 5, July 16, 2013
+        Change eglQueryWaylandBufferWL to take a resource pointer to the
+        buffer instead of a pointer to a struct wl_buffer, as the latter has
+        been deprecated. (Ander Conselvan de Oliveira)
+    Version 6, September 16, 2013
+        Add EGL_WAYLAND_Y_INVERTED_WL attribute to allow specifying
+        wl_buffer's orientation.

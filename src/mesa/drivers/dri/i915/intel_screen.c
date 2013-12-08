@@ -27,6 +27,7 @@
 
 #include <errno.h>
 #include <time.h>
+#include <unistd.h>
 #include "main/glheader.h"
 #include "main/context.h"
 #include "main/framebuffer.h"
@@ -40,8 +41,11 @@
 #include "utils.h"
 #include "xmlpool.h"
 
-PUBLIC const char __driConfigOptions[] =
-   DRI_CONF_BEGIN
+static const __DRIconfigOptionsExtension i915_config_options = {
+   .base = { __DRI_CONFIG_OPTIONS, 1 },
+   .xml =
+
+DRI_CONF_BEGIN
    DRI_CONF_SECTION_PERFORMANCE
       DRI_CONF_VBLANK_MODE(DRI_CONF_VBLANK_ALWAYS_SYNC)
       /* Options correspond to DRI_CONF_BO_REUSE_DISABLED,
@@ -75,9 +79,8 @@ PUBLIC const char __driConfigOptions[] =
 	 DRI_CONF_DESC(en, "Perform code generation at shader link time.")
       DRI_CONF_OPT_END
    DRI_CONF_SECTION_END
-DRI_CONF_END;
-
-const GLuint __driNConfigOptions = 12;
+DRI_CONF_END
+};
 
 #include "intel_batchbuffer.h"
 #include "intel_buffers.h"
@@ -242,32 +245,9 @@ intel_allocate_image(int dri_format, void *loaderPrivate)
     image->dri_format = dri_format;
     image->offset = 0;
 
-    switch (dri_format) {
-    case __DRI_IMAGE_FORMAT_RGB565:
-       image->format = MESA_FORMAT_RGB565;
-       break;
-    case __DRI_IMAGE_FORMAT_XRGB8888:
-       image->format = MESA_FORMAT_XRGB8888;
-       break;
-    case __DRI_IMAGE_FORMAT_ARGB8888:
-       image->format = MESA_FORMAT_ARGB8888;
-       break;
-    case __DRI_IMAGE_FORMAT_ABGR8888:
-       image->format = MESA_FORMAT_RGBA8888_REV;
-       break;
-    case __DRI_IMAGE_FORMAT_XBGR8888:
-       image->format = MESA_FORMAT_RGBX8888_REV;
-       break;
-    case __DRI_IMAGE_FORMAT_R8:
-       image->format = MESA_FORMAT_R8;
-       break;
-    case __DRI_IMAGE_FORMAT_GR88:
-       image->format = MESA_FORMAT_GR88;
-       break;
-    case __DRI_IMAGE_FORMAT_NONE:
-       image->format = MESA_FORMAT_NONE;
-       break;
-    default:
+    image->format = driImageFormatToGLFormat(dri_format);
+    if (dri_format != __DRI_IMAGE_FORMAT_NONE &&
+        image->format == MESA_FORMAT_NONE) {
        free(image);
        return NULL;
     }
@@ -314,27 +294,6 @@ intel_setup_image_from_dimensions(__DRIimage *image)
    image->height   = image->region->height;
    image->tile_x = 0;
    image->tile_y = 0;
-}
-
-static inline uint32_t
-intel_dri_format(GLuint format)
-{
-   switch (format) {
-   case MESA_FORMAT_RGB565:
-      return __DRI_IMAGE_FORMAT_RGB565;
-   case MESA_FORMAT_XRGB8888:
-      return __DRI_IMAGE_FORMAT_XRGB8888;
-   case MESA_FORMAT_ARGB8888:
-      return __DRI_IMAGE_FORMAT_ARGB8888;
-   case MESA_FORMAT_RGBA8888_REV:
-      return __DRI_IMAGE_FORMAT_ABGR8888;
-   case MESA_FORMAT_R8:
-      return __DRI_IMAGE_FORMAT_R8;
-   case MESA_FORMAT_RG88:
-      return __DRI_IMAGE_FORMAT_GR88;
-   }
-
-   return MESA_FORMAT_NONE;
 }
 
 static __DRIimage *
@@ -394,7 +353,7 @@ intel_create_image_from_renderbuffer(__DRIcontext *context,
    image->data = loaderPrivate;
    intel_region_reference(&image->region, irb->mt->region);
    intel_setup_image_from_dimensions(image);
-   image->dri_format = intel_dri_format(image->format);
+   image->dri_format = driGLFormatToImageFormat(image->format);
 
    rb->NeedsFinishRenderTexture = true;
    return image;
@@ -448,7 +407,7 @@ intel_create_image_from_texture(__DRIcontext *context, int target,
    image->format = obj->Image[face][level]->TexFormat;
    image->data = loaderPrivate;
    intel_setup_image_from_mipmap_tree(intel, image, iobj->mt, level, zoffset);
-   image->dri_format = intel_dri_format(image->format);
+   image->dri_format = driGLFormatToImageFormat(image->format);
    if (image->dri_format == MESA_FORMAT_NONE) {
       *error = __DRI_IMAGE_ERROR_BAD_PARAMETER;
       free(image);
@@ -483,6 +442,9 @@ intel_create_image(__DRIscreen *screen,
 	 return NULL;
       tiling = I915_TILING_NONE;
    }
+
+   if (use & __DRI_IMAGE_USE_LINEAR)
+      tiling = I915_TILING_NONE;
 
    image = intel_allocate_image(format, loaderPrivate);
    if (image == NULL)
@@ -648,8 +610,8 @@ intel_create_image_from_fds(__DRIscreen *screen,
       return NULL;
 
    image->region = intel_region_alloc_for_fd(intelScreen,
-                                             1, width, height,
-                                             strides[0], fds[0], "image");
+                                             f->planes[0].cpp, width, height, strides[0],
+                                             height * strides[0], fds[0], "image");
    if (image->region == NULL) {
       free(image);
       return NULL;
@@ -738,6 +700,90 @@ static struct __DRIimageExtensionRec intelImageExtension = {
     .fromPlanar                         = intel_from_planar,
     .createImageFromTexture             = intel_create_image_from_texture,
     .createImageFromFds                 = intel_create_image_from_fds
+};
+
+static int
+i915_query_renderer_integer(__DRIscreen *psp, int param, unsigned int *value)
+{
+   const struct intel_screen *const intelScreen =
+      (struct intel_screen *) psp->driverPrivate;
+
+   switch (param) {
+   case __DRI2_RENDERER_VENDOR_ID:
+      value[0] = 0x8086;
+      return 0;
+   case __DRI2_RENDERER_DEVICE_ID:
+      value[0] = intelScreen->deviceID;
+      return 0;
+   case __DRI2_RENDERER_ACCELERATED:
+      value[0] = 1;
+      return 0;
+   case __DRI2_RENDERER_VIDEO_MEMORY: {
+      /* Once a batch uses more than 75% of the maximum mappable size, we
+       * assume that there's some fragmentation, and we start doing extra
+       * flushing, etc.  That's the big cliff apps will care about.
+       */
+      size_t aper_size;
+      size_t mappable_size;
+
+      drm_intel_get_aperture_sizes(psp->fd, &mappable_size, &aper_size);
+
+      const unsigned gpu_mappable_megabytes =
+         (aper_size / (1024 * 1024)) * 3 / 4;
+
+      const long system_memory_pages = sysconf(_SC_PHYS_PAGES);
+      const long system_page_size = sysconf(_SC_PAGE_SIZE);
+
+      if (system_memory_pages <= 0 || system_page_size <= 0)
+         return -1;
+
+      const uint64_t system_memory_bytes = (uint64_t) system_memory_pages
+         * (uint64_t) system_page_size;
+
+      const unsigned system_memory_megabytes =
+         (unsigned) (system_memory_bytes / 1024);
+
+      value[0] = MIN2(system_memory_megabytes, gpu_mappable_megabytes);
+      return 0;
+   }
+   case __DRI2_RENDERER_UNIFIED_MEMORY_ARCHITECTURE:
+      value[0] = 1;
+      return 0;
+   case __DRI2_RENDERER_PREFERRED_PROFILE:
+      value[0] = (1U << __DRI_API_OPENGL);
+      return 0;
+   default:
+      return driQueryRendererIntegerCommon(psp, param, value);
+   }
+
+   return -1;
+}
+
+static int
+i915_query_renderer_string(__DRIscreen *psp, int param, const char **value)
+{
+   const struct intel_screen *intelScreen =
+      (struct intel_screen *) psp->driverPrivate;
+
+   switch (param) {
+   case __DRI2_RENDERER_VENDOR_ID:
+      value[0] = i915_vendor_string;
+      return 0;
+   case __DRI2_RENDERER_DEVICE_ID:
+      value[0] = i915_get_renderer_string(intelScreen->deviceID);
+      return 0;
+   default:
+      break;
+   }
+
+   return -1;
+}
+
+static struct __DRI2rendererQueryExtensionRec intelRendererQueryExtension = {
+   .base = { __DRI2_RENDERER_QUERY, 1 },
+
+   .queryInteger = i915_query_renderer_integer,
+   .queryString = i915_query_renderer_string
 };
 
 static const __DRIextension *intelScreenExtensions[] = {
@@ -903,6 +949,7 @@ intelCreateContext(gl_api api,
 		   unsigned major_version,
 		   unsigned minor_version,
 		   uint32_t flags,
+                   bool notify_reset,
 		   unsigned *error,
                    void *sharedContextPrivate)
 {
@@ -910,6 +957,16 @@ intelCreateContext(gl_api api,
 
    __DRIscreen *sPriv = driContextPriv->driScreenPriv;
    struct intel_screen *intelScreen = sPriv->driverPrivate;
+
+   if (flags & ~__DRI_CTX_FLAG_DEBUG) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
+      return false;
+   }
+
+   if (notify_reset) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+      return false;
+   }
 
    if (IS_9XX(intelScreen->deviceID)) {
       success = i915CreateContext(api, mesaVis, driContextPriv,
@@ -1061,41 +1118,25 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
 static void
 set_max_gl_versions(struct intel_screen *screen)
 {
-   int gl_version_override = _mesa_get_gl_version_override();
+   __DRIscreen *psp = screen->driScrnPriv;
 
    switch (screen->gen) {
    case 3:
-      screen->max_gl_core_version = 0;
-      screen->max_gl_es1_version = 11;
-      screen->max_gl_compat_version = 21;
-      screen->max_gl_es2_version = 20;
+      psp->max_gl_core_version = 0;
+      psp->max_gl_es1_version = 11;
+      psp->max_gl_compat_version = 21;
+      psp->max_gl_es2_version = 20;
       break;
    case 2:
-      screen->max_gl_core_version = 0;
-      screen->max_gl_compat_version = 13;
-      screen->max_gl_es1_version = 11;
-      screen->max_gl_es2_version = 0;
+      psp->max_gl_core_version = 0;
+      psp->max_gl_compat_version = 13;
+      psp->max_gl_es1_version = 11;
+      psp->max_gl_es2_version = 0;
       break;
    default:
       assert(!"unrecognized intel_screen::gen");
       break;
    }
-
-   if (gl_version_override >= 31) {
-      screen->max_gl_core_version = MAX2(screen->max_gl_core_version,
-                                         gl_version_override);
-   } else {
-      screen->max_gl_compat_version = MAX2(screen->max_gl_compat_version,
-                                           gl_version_override);
-   }
-
-#ifndef FEATURE_ES1
-   screen->max_gl_es1_version = 0;
-#endif
-
-#ifndef FEATURE_ES2
-   screen->max_gl_es2_version = 0;
-#endif
 }
 
 /**
@@ -1124,8 +1165,7 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
       return false;
    }
    /* parse information in __driConfigOptions */
-   driParseOptionInfo(&intelScreen->optionCache,
-                      __driConfigOptions, __driNConfigOptions);
+   driParseOptionInfo(&intelScreen->optionCache, i915_config_options.xml);
 
    intelScreen->driScrnPriv = psp;
    psp->driverPrivate = (void *) intelScreen;
@@ -1144,16 +1184,6 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
    intelScreen->hw_has_swizzling = intel_detect_swizzling(intelScreen);
 
    set_max_gl_versions(intelScreen);
-
-   psp->api_mask = (1 << __DRI_API_OPENGL);
-   if (intelScreen->max_gl_core_version > 0)
-      psp->api_mask |= (1 << __DRI_API_OPENGL_CORE);
-   if (intelScreen->max_gl_es1_version > 0)
-      psp->api_mask |= (1 << __DRI_API_GLES);
-   if (intelScreen->max_gl_es2_version > 0)
-      psp->api_mask |= (1 << __DRI_API_GLES2);
-   if (intelScreen->max_gl_es2_version >= 30)
-      psp->api_mask |= (1 << __DRI_API_GLES3);
 
    psp->extensions = intelScreenExtensions;
 
@@ -1212,7 +1242,7 @@ intelReleaseBuffer(__DRIscreen *screen, __DRIbuffer *buffer)
 }
 
 
-const struct __DriverAPIRec driDriverAPI = {
+static const struct __DriverAPIRec i915_driver_api = {
    .InitScreen		 = intelInitScreen2,
    .DestroyScreen	 = intelDestroyScreen,
    .CreateContext	 = intelCreateContext,
@@ -1225,9 +1255,24 @@ const struct __DriverAPIRec driDriverAPI = {
    .ReleaseBuffer        = intelReleaseBuffer
 };
 
+static const struct __DRIDriverVtableExtensionRec i915_vtable = {
+   .base = { __DRI_DRIVER_VTABLE, 1 },
+   .vtable = &i915_driver_api,
+};
+
 /* This is the table of extensions that the loader will dlsym() for. */
-PUBLIC const __DRIextension *__driDriverExtensions[] = {
+static const __DRIextension *i915_driver_extensions[] = {
     &driCoreExtension.base,
+    &driImageDriverExtension.base,
     &driDRI2Extension.base,
+    &i915_vtable.base,
+    &i915_config_options.base,
     NULL
 };
+
+PUBLIC const __DRIextension **__driDriverGetExtensions_i915(void)
+{
+   globalDriverAPI = &i915_driver_api;
+
+   return i915_driver_extensions;
+}

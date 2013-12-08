@@ -30,7 +30,7 @@
 
 #include <X11/Xlibint.h>
 
-#include "pipe/p_video_decoder.h"
+#include "pipe/p_video_codec.h"
 #include "pipe/p_video_state.h"
 #include "pipe/p_state.h"
 
@@ -57,7 +57,7 @@ MacroBlocksToPipe(XvMCContextPrivate *context,
    assert(num_macroblocks);
 
    for (; num_macroblocks > 0; --num_macroblocks) {
-      mb->base.codec = PIPE_VIDEO_CODEC_MPEG12;
+      mb->base.codec = PIPE_VIDEO_FORMAT_MPEG12;
       mb->x = xvmc_mb->x;
       mb->y = xvmc_mb->y;
       mb->macroblock_type = xvmc_mb->macroblock_type;
@@ -177,7 +177,8 @@ Status XvMCCreateSurface(Display *dpy, XvMCContext *context, XvMCSurface *surfac
    tmpl.buffer_format = pipe->screen->get_video_param
    (
       pipe->screen,
-      PIPE_VIDEO_PROFILE_MPEG2_MAIN,
+      context_priv->decoder->profile,
+      context_priv->decoder->entrypoint,
       PIPE_VIDEO_CAP_PREFERED_FORMAT
    );
    tmpl.chroma_format = context_priv->decoder->chroma_format;
@@ -186,11 +187,16 @@ Status XvMCCreateSurface(Display *dpy, XvMCContext *context, XvMCSurface *surfac
    tmpl.interlaced = pipe->screen->get_video_param
    (
       pipe->screen,
-      PIPE_VIDEO_PROFILE_MPEG2_MAIN,
+      context_priv->decoder->profile,
+      context_priv->decoder->entrypoint,
       PIPE_VIDEO_CAP_PREFERS_INTERLACED
    );
 
    surface_priv->video_buffer = pipe->create_video_buffer(pipe, &tmpl);
+   if (!surface_priv->video_buffer) {
+      FREE(surface_priv);
+      return BadAlloc;
+   }
    surface_priv->context = context;
 
    surface->surface_id = XAllocID(dpy);
@@ -215,7 +221,7 @@ Status XvMCRenderSurface(Display *dpy, XvMCContext *context, unsigned int pictur
 )
 {
    struct pipe_mpeg12_macroblock mb[num_macroblocks];
-   struct pipe_video_decoder *decoder;
+   struct pipe_video_codec *decoder;
    struct pipe_mpeg12_picture_desc desc;
 
    XvMCContextPrivate *context_priv;

@@ -53,6 +53,8 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
    int vs_index;
    uint i;
 
+   draw_prepare_shader_outputs(llvmpipe->draw);
+
    llvmpipe->color_slot[0] = -1;
    llvmpipe->color_slot[1] = -1;
    llvmpipe->bcolor_slot[0] = -1;
@@ -67,8 +69,8 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
    vinfo->num_attribs = 0;
 
    vs_index = draw_find_shader_output(llvmpipe->draw,
-                                       TGSI_SEMANTIC_POSITION,
-                                       0);
+                                      TGSI_SEMANTIC_POSITION,
+                                      0);
 
    draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_PERSPECTIVE, vs_index);
 
@@ -87,12 +89,18 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
          llvmpipe->color_slot[idx] = (int)vinfo->num_attribs;
       }
 
-      /*
-       * Emit the requested fs attribute for all but position.
-       */
-      draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_PERSPECTIVE, vs_index);
+      if (lpfs->info.base.input_semantic_name[i] == TGSI_SEMANTIC_FACE) {
+         llvmpipe->face_slot = vinfo->num_attribs;
+         draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_CONSTANT, vs_index);
+      } else if (lpfs->info.base.input_semantic_name[i] == TGSI_SEMANTIC_PRIMID) {
+         draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_CONSTANT, vs_index);
+      } else {
+         /*
+          * Emit the requested fs attribute for all but position.
+          */
+         draw_emit_vertex_attr(vinfo, EMIT_4F, INTERP_PERSPECTIVE, vs_index);
+      }
    }
-
    /* Figure out if we need bcolor as well.
     */
    for (i = 0; i < 2; i++) {
@@ -138,7 +146,6 @@ compute_vertex_info(struct llvmpipe_context *llvmpipe)
       llvmpipe->layer_slot = 0;
    }
 
-
    draw_compute_vertex_size(vinfo);
    lp_setup_set_vertex_info(llvmpipe->setup, vinfo);
 }
@@ -179,7 +186,8 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
       llvmpipe_update_fs( llvmpipe );
 
    if (llvmpipe->dirty & (LP_NEW_FS |
-			  LP_NEW_RASTERIZER))
+                          LP_NEW_FRAMEBUFFER |
+                          LP_NEW_RASTERIZER))
       llvmpipe_update_setup( llvmpipe );
 
    if (llvmpipe->dirty & LP_NEW_BLEND_COLOR)

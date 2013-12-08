@@ -217,6 +217,34 @@ tgsi_util_get_inst_usage_mask(const struct tgsi_full_instruction *inst,
    case TGSI_OPCODE_OR:
    case TGSI_OPCODE_XOR:
    case TGSI_OPCODE_SAD:
+   case TGSI_OPCODE_FSEQ:
+   case TGSI_OPCODE_FSGE:
+   case TGSI_OPCODE_FSLT:
+   case TGSI_OPCODE_FSNE:
+   case TGSI_OPCODE_F2I:
+   case TGSI_OPCODE_IDIV:
+   case TGSI_OPCODE_IMAX:
+   case TGSI_OPCODE_IMIN:
+   case TGSI_OPCODE_INEG:
+   case TGSI_OPCODE_ISGE:
+   case TGSI_OPCODE_ISHR:
+   case TGSI_OPCODE_ISLT:
+   case TGSI_OPCODE_F2U:
+   case TGSI_OPCODE_U2F:
+   case TGSI_OPCODE_UADD:
+   case TGSI_OPCODE_UDIV:
+   case TGSI_OPCODE_UMAD:
+   case TGSI_OPCODE_UMAX:
+   case TGSI_OPCODE_UMIN:
+   case TGSI_OPCODE_UMOD:
+   case TGSI_OPCODE_UMUL:
+   case TGSI_OPCODE_USEQ:
+   case TGSI_OPCODE_USGE:
+   case TGSI_OPCODE_USHR:
+   case TGSI_OPCODE_USLT:
+   case TGSI_OPCODE_USNE:
+   case TGSI_OPCODE_IMUL_HI:
+   case TGSI_OPCODE_UMUL_HI:
       /* Channel-wise operations */
       read_mask = write_mask;
       break;
@@ -418,9 +446,11 @@ tgsi_util_get_texture_coord_dim(int tgsi_tex, int *shadow_or_sample)
       case TGSI_TEXTURE_SHADOW1D_ARRAY:
       case TGSI_TEXTURE_SHADOW2D_ARRAY:
       case TGSI_TEXTURE_SHADOWCUBE_ARRAY:
+         *shadow_or_sample = dim;
+         break;
       case TGSI_TEXTURE_2D_MSAA:
       case TGSI_TEXTURE_2D_ARRAY_MSAA:
-         *shadow_or_sample = dim;
+         *shadow_or_sample = 3;
          break;
       default:
          /* no shadow nor sample */

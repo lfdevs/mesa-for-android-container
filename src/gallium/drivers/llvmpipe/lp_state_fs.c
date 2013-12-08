@@ -876,7 +876,22 @@ lp_blend_type_from_format_desc(const struct util_format_description *format_desc
 
 
 /**
- * Scale a normalized value from src_bits to dst_bits
+ * Scale a normalized value from src_bits to dst_bits.
+ *
+ * The exact calculation is
+ *
+ *    dst = iround(src * dst_mask / src_mask)
+ *
+ *  or with integer rounding
+ *
+ *    dst = src * (2*dst_mask + sign(src)*src_mask) / (2*src_mask)
+ *
+ *  where
+ *
+ *    src_mask = (1 << src_bits) - 1
+ *    dst_mask = (1 << dst_bits) - 1
+ *
+ * but we try to avoid division and multiplication through shifts.
  */
 static INLINE LLVMValueRef
 scale_bits(struct gallivm_state *gallivm,
@@ -889,11 +904,68 @@ scale_bits(struct gallivm_state *gallivm,
    LLVMValueRef result = src;
 
    if (dst_bits < src_bits) {
-      /* Scale down by LShr */
-      result = LLVMBuildLShr(builder,
-                             src,
-                             lp_build_const_int_vec(gallivm, src_type, src_bits - dst_bits),
-                             "");
+      int delta_bits = src_bits - dst_bits;
+
+      if (delta_bits <= dst_bits) {
+         /*
+          * Approximate the rescaling with a single shift.
+          *
+          * This gives the wrong rounding.
+          */
+
+         result = LLVMBuildLShr(builder,
+                                src,
+                                lp_build_const_int_vec(gallivm, src_type, delta_bits),
+                                "");
+
+      } else {
+         /*
+          * Try more accurate rescaling.
+          */
+
+         /*
+          * Drop the least significant bits to make space for the multiplication.
+          *
+          * XXX: A better approach would be to use a wider integer type as intermediate.  But
+          * this is enough to convert alpha from 16bits -> 2 when rendering to
+          * PIPE_FORMAT_R10G10B10A2_UNORM.
+          */
+         result = LLVMBuildLShr(builder,
+                                src,
+                                lp_build_const_int_vec(gallivm, src_type, dst_bits),
+                                "");
+
+
+         result = LLVMBuildMul(builder,
+                               result,
+                               lp_build_const_int_vec(gallivm, src_type, (1LL << dst_bits) - 1),
+                               "");
+
+         /*
+          * Add a rounding term before the division.
+          *
+          * TODO: Handle signed integers too.
+          */
+         if (!src_type.sign) {
+            result = LLVMBuildAdd(builder,
+                                  result,
+                                  lp_build_const_int_vec(gallivm, src_type, (1LL << (delta_bits - 1))),
+                                  "");
+         }
+
+         /*
+          * Approximate the division by src_mask with a src_bits shift.
+          *
+          * Given the src has already been shifted by dst_bits, all we need
+          * to do is to shift by the difference.
+          */
+
+         result = LLVMBuildLShr(builder,
+                                result,
+                                lp_build_const_int_vec(gallivm, src_type, delta_bits),
+                                "");
+      }
+
    } else if (dst_bits > src_bits) {
       /* Scale up bits */
       int db = dst_bits - src_bits;
@@ -2361,7 +2433,14 @@ generate_variant(struct llvmpipe_context *lp,
          !key->alpha.enabled &&
          !key->depth.enabled &&
          !shader->info.base.uses_kill
-         ? TRUE : FALSE;
+      ? TRUE : FALSE;
+
+   if ((shader->info.base.num_tokens <= 1) &&
+       !key->depth.enabled && !key->stencil[0].enabled) {
+      variant->ps_inv_multiplier = 0;
+   } else {
+      variant->ps_inv_multiplier = 1;
+   }
 
    if ((LP_DEBUG & DEBUG_FS) || (gallivm_debug & GALLIVM_DEBUG_IR)) {
       lp_debug_fs_variant(variant);
@@ -2939,4 +3018,19 @@ llvmpipe_init_fs_funcs(struct llvmpipe_context *llvmpipe)
    llvmpipe->pipe.delete_fs_state = llvmpipe_delete_fs_state;
 
    llvmpipe->pipe.set_constant_buffer = llvmpipe_set_constant_buffer;
+}
+
+/*
+ * Rasterization is disabled if there is no pixel shader and
+ * both depth and stencil testing are disabled:
+ * http://msdn.microsoft.com/en-us/library/windows/desktop/bb205125
+ */
+boolean
+llvmpipe_rasterization_disabled(struct llvmpipe_context *lp)
+{
+   boolean null_fs = !lp->fs || lp->fs->info.base.num_tokens <= 1;
+
+   return (null_fs &&
+           !lp->depth_stencil->depth.enabled &&
+           !lp->depth_stencil->stencil[0].enabled);
 }

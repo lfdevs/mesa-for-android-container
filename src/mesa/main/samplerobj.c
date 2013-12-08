@@ -155,6 +155,7 @@ static void
 _mesa_delete_sampler_object(struct gl_context *ctx,
                             struct gl_sampler_object *sampObj)
 {
+   free(sampObj->Label);
    free(sampObj);
 }
 
@@ -304,7 +305,7 @@ validate_texture_wrap_mode(struct gl_context *ctx, GLenum wrap)
    case GL_MIRROR_CLAMP_EXT:
       return e->ATI_texture_mirror_once || e->EXT_texture_mirror_clamp;
    case GL_MIRROR_CLAMP_TO_EDGE_EXT:
-      return e->ATI_texture_mirror_once || e->EXT_texture_mirror_clamp;
+      return e->ATI_texture_mirror_once || e->EXT_texture_mirror_clamp || e->ARB_texture_mirror_clamp_to_edge;
    case GL_MIRROR_CLAMP_TO_BORDER_EXT:
       return e->EXT_texture_mirror_clamp;
    default:
@@ -568,7 +569,8 @@ static GLuint
 set_sampler_cube_map_seamless(struct gl_context *ctx,
                               struct gl_sampler_object *samp, GLboolean param)
 {
-   if (!ctx->Extensions.AMD_seamless_cubemap_per_texture)
+   if (!_mesa_is_desktop_gl(ctx)
+       || !ctx->Extensions.AMD_seamless_cubemap_per_texture)
       return INVALID_PNAME;
 
    if (samp->CubeMapSeamless == param)

@@ -41,6 +41,9 @@
 
 #include <xf86drm.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 /*
  * this are copy from radeon_drm, once an updated libdrm is released
@@ -427,11 +430,6 @@ static void radeon_winsys_destroy(struct radeon_winsys *rws)
         pipe_thread_wait(ws->thread);
     }
     pipe_semaphore_destroy(&ws->cs_queued);
-    pipe_condvar_destroy(ws->cs_queue_empty);
-
-    if (!pipe_reference(&ws->base.reference, NULL)) {
-        return;
-    }
 
     pipe_mutex_destroy(ws->hyperz_owner_mutex);
     pipe_mutex_destroy(ws->cmask_owner_mutex);
@@ -520,25 +518,36 @@ static uint64_t radeon_query_value(struct radeon_winsys *rws,
 
 static unsigned hash_fd(void *key)
 {
-    return pointer_to_intptr(key);
+    int fd = pointer_to_intptr(key);
+    struct stat stat;
+    fstat(fd, &stat);
+
+    return stat.st_dev ^ stat.st_ino ^ stat.st_rdev;
 }
 
 static int compare_fd(void *key1, void *key2)
 {
-    return pointer_to_intptr(key1) != pointer_to_intptr(key2);
+    int fd1 = pointer_to_intptr(key1);
+    int fd2 = pointer_to_intptr(key2);
+    struct stat stat1, stat2;
+    fstat(fd1, &stat1);
+    fstat(fd2, &stat2);
+
+    return stat1.st_dev != stat2.st_dev ||
+           stat1.st_ino != stat2.st_ino ||
+           stat1.st_rdev != stat2.st_rdev;
 }
 
 void radeon_drm_ws_queue_cs(struct radeon_drm_winsys *ws, struct radeon_drm_cs *cs)
 {
 retry:
     pipe_mutex_lock(ws->cs_stack_lock);
-    if (p_atomic_read(&ws->ncs) >= RING_LAST) {
+    if (ws->ncs >= RING_LAST) {
         /* no room left for a flush */
         pipe_mutex_unlock(ws->cs_stack_lock);
         goto retry;
     }
-    ws->cs_stack[p_atomic_read(&ws->ncs)] = cs;
-    p_atomic_inc(&ws->ncs);
+    ws->cs_stack[ws->ncs++] = cs;
     pipe_mutex_unlock(ws->cs_stack_lock);
     pipe_semaphore_signal(&ws->cs_queued);
 }
@@ -547,45 +556,31 @@ static PIPE_THREAD_ROUTINE(radeon_drm_cs_emit_ioctl, param)
 {
     struct radeon_drm_winsys *ws = (struct radeon_drm_winsys *)param;
     struct radeon_drm_cs *cs;
-    unsigned i, empty_stack;
+    unsigned i;
 
     while (1) {
         pipe_semaphore_wait(&ws->cs_queued);
         if (ws->kill_thread)
             break;
-next:
+
         pipe_mutex_lock(ws->cs_stack_lock);
         cs = ws->cs_stack[0];
+        for (i = 1; i < ws->ncs; i++)
+            ws->cs_stack[i - 1] = ws->cs_stack[i];
+        ws->cs_stack[--ws->ncs] = NULL;
         pipe_mutex_unlock(ws->cs_stack_lock);
 
         if (cs) {
             radeon_drm_cs_emit_ioctl_oneshot(cs, cs->cst);
-
-            pipe_mutex_lock(ws->cs_stack_lock);
-            for (i = 1; i < p_atomic_read(&ws->ncs); i++) {
-                ws->cs_stack[i - 1] = ws->cs_stack[i];
-            }
-            ws->cs_stack[p_atomic_read(&ws->ncs) - 1] = NULL;
-            empty_stack = p_atomic_dec_zero(&ws->ncs);
-            if (empty_stack) {
-                pipe_condvar_signal(ws->cs_queue_empty);
-            }
-            pipe_mutex_unlock(ws->cs_stack_lock);
-
             pipe_semaphore_signal(&cs->flush_completed);
-
-            if (!empty_stack) {
-                goto next;
-            }
         }
     }
     pipe_mutex_lock(ws->cs_stack_lock);
-    for (i = 0; i < p_atomic_read(&ws->ncs); i++) {
+    for (i = 0; i < ws->ncs; i++) {
         pipe_semaphore_signal(&ws->cs_stack[i]->flush_completed);
         ws->cs_stack[i] = NULL;
     }
-    p_atomic_set(&ws->ncs, 0);
-    pipe_condvar_signal(ws->cs_queue_empty);
+    ws->ncs = 0;
     pipe_mutex_unlock(ws->cs_stack_lock);
     return NULL;
 }
@@ -593,7 +588,7 @@ next:
 DEBUG_GET_ONCE_BOOL_OPTION(thread, "RADEON_THREAD", TRUE)
 static PIPE_THREAD_ROUTINE(radeon_drm_cs_emit_ioctl, param);
 
-struct radeon_winsys *radeon_drm_winsys_create(int fd)
+PUBLIC struct radeon_winsys *radeon_drm_winsys_create(int fd)
 {
     struct radeon_drm_winsys *ws;
 
@@ -649,9 +644,8 @@ struct radeon_winsys *radeon_drm_winsys_create(int fd)
     pipe_mutex_init(ws->cmask_owner_mutex);
     pipe_mutex_init(ws->cs_stack_lock);
 
-    p_atomic_set(&ws->ncs, 0);
+    ws->ncs = 0;
     pipe_semaphore_init(&ws->cs_queued, 0);
-    pipe_condvar_init(ws->cs_queue_empty);
     if (ws->num_cpus > 1 && debug_get_option_thread())
         ws->thread = pipe_thread_create(radeon_drm_cs_emit_ioctl, ws);
 

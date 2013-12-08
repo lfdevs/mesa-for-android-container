@@ -29,7 +29,6 @@
 
 enum register_file {
    BAD_FILE,
-   ARF,
    GRF,
    MRF,
    IMM,
@@ -38,16 +37,32 @@ enum register_file {
    UNIFORM, /* prog_data->params[reg] */
 };
 
+#ifdef __cplusplus
+
 class backend_instruction : public exec_node {
 public:
    bool is_tex();
    bool is_math();
    bool is_control_flow();
+   bool can_do_source_mods();
+
+   /**
+    * True if the instruction has side effects other than writing to
+    * its destination registers.  You are expected not to reorder or
+    * optimize these out unless you know what you are doing.
+    */
+   bool has_side_effects() const;
 
    enum opcode opcode; /* BRW_OPCODE_* or FS_OPCODE_* */
 
    uint32_t predicate;
    bool predicate_inverse;
+};
+
+enum instruction_scheduler_mode {
+   SCHEDULE_PRE_NON_LIFO,
+   SCHEDULE_PRE_LIFO,
+   SCHEDULE_POST,
 };
 
 class backend_visitor : public ir_visitor {
@@ -57,6 +72,8 @@ public:
    struct gl_context *ctx;
    struct brw_shader *shader;
    struct gl_shader_program *shader_prog;
+   struct gl_program *prog;
+   struct brw_stage_prog_data *stage_prog_data;
 
    /** ralloc context for temporary data used during compile */
    void *mem_ctx;
@@ -69,10 +86,15 @@ public:
 
    virtual void dump_instruction(backend_instruction *inst) = 0;
    void dump_instructions();
+
+   void assign_common_binding_table_offsets(uint32_t next_binding_table_offset);
 };
+
+uint32_t brw_texture_offset(struct gl_context *ctx, ir_constant *offset);
+
+#endif /* __cplusplus */
 
 int brw_type_for_base_type(const struct glsl_type *type);
 uint32_t brw_conditional_for_comparison(unsigned int op);
 uint32_t brw_math_function(enum opcode op);
-uint32_t brw_texture_offset(ir_constant *offset);
 const char *brw_instruction_name(enum opcode op);

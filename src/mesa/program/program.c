@@ -32,6 +32,7 @@
 #include "main/glheader.h"
 #include "main/context.h"
 #include "main/hash.h"
+#include "main/macros.h"
 #include "program.h"
 #include "prog_cache.h"
 #include "prog_parameter.h"
@@ -72,10 +73,10 @@ _mesa_init_program(struct gl_context *ctx)
    ASSERT(ctx->Const.FragmentProgram.MaxAddressOffset <= (1 << INST_INDEX_BITS));
 
    /* If this fails, increase prog_instruction::TexSrcUnit size */
-   ASSERT(MAX_TEXTURE_UNITS <= (1 << 5));
+   STATIC_ASSERT(MAX_TEXTURE_UNITS <= (1 << 5));
 
    /* If this fails, increase prog_instruction::TexSrcTarget size */
-   ASSERT(NUM_TEXTURE_TARGETS <= (1 << 4));
+   STATIC_ASSERT(NUM_TEXTURE_TARGETS <= (1 << 4));
 
    ctx->Program.ErrorPos = -1;
    ctx->Program.ErrorString = _mesa_strdup("");
@@ -476,7 +477,6 @@ _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog)
 
    if (prog->Parameters)
       clone->Parameters = _mesa_clone_parameter_list(prog->Parameters);
-   memcpy(clone->LocalParams, prog->LocalParams, sizeof(clone->LocalParams));
    memcpy(clone->LocalParams, prog->LocalParams, sizeof(clone->LocalParams));
    clone->IndirectRegisterFiles = prog->IndirectRegisterFiles;
    clone->NumInstructions = prog->NumInstructions;
@@ -1024,4 +1024,35 @@ _mesa_postprocess_program(struct gl_context *ctx, struct gl_program *prog)
       }
 
    }
+}
+
+/* Gets the minimum number of shader invocations per fragment.
+ * This function is useful to determine if we need to do per
+ * sample shading or per fragment shading.
+ */
+GLint
+_mesa_get_min_invocations_per_fragment(struct gl_context *ctx,
+                                       const struct gl_fragment_program *prog)
+{
+   /* From ARB_sample_shading specification:
+    * "Using gl_SampleID in a fragment shader causes the entire shader
+    *  to be evaluated per-sample."
+    *
+    * "Using gl_SamplePosition in a fragment shader causes the entire
+    *  shader to be evaluated per-sample."
+    *
+    * "If MULTISAMPLE or SAMPLE_SHADING_ARB is disabled, sample shading
+    *  has no effect."
+    */
+   if (ctx->Multisample.Enabled) {
+      if (prog->Base.SystemValuesRead & (SYSTEM_BIT_SAMPLE_ID |
+                                         SYSTEM_BIT_SAMPLE_POS))
+         return MAX2(ctx->DrawBuffer->Visual.samples, 1);
+      else if (ctx->Multisample.SampleShading)
+         return MAX2(ceil(ctx->Multisample.MinSampleShadingValue *
+                          ctx->DrawBuffer->Visual.samples), 1);
+      else
+         return 1;
+   }
+   return 1;
 }

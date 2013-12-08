@@ -42,10 +42,18 @@ static void r600_begin_query(struct pipe_context *ctx, struct pipe_query *query)
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_query *rquery = (struct r600_query *)query;
 
+	if (!si_query_needs_begin(rquery->type)) {
+		assert(0);
+		return;
+	}
+
 	memset(&rquery->result, 0, sizeof(rquery->result));
 	rquery->results_start = rquery->results_end;
 	r600_query_begin(rctx, (struct r600_query *)query);
-	LIST_ADDTAIL(&rquery->list, &rctx->active_query_list);
+
+	if (!si_is_timer_query(rquery->type)) {
+		LIST_ADDTAIL(&rquery->list, &rctx->active_nontimer_query_list);
+	}
 }
 
 static void r600_end_query(struct pipe_context *ctx, struct pipe_query *query)
@@ -53,8 +61,15 @@ static void r600_end_query(struct pipe_context *ctx, struct pipe_query *query)
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_query *rquery = (struct r600_query *)query;
 
+	if (!si_query_needs_begin(rquery->type)) {
+		memset(&rquery->result, 0, sizeof(rquery->result));
+	}
+
 	r600_query_end(rctx, rquery);
-	LIST_DELINIT(&rquery->list);
+
+	if (si_query_needs_begin(rquery->type) && !si_is_timer_query(rquery->type)) {
+		LIST_DELINIT(&rquery->list);
+	}
 }
 
 static boolean r600_get_query_result(struct pipe_context *ctx,
@@ -121,12 +136,12 @@ static void r600_render_condition(struct pipe_context *ctx,
 
 void r600_init_query_functions(struct r600_context *rctx)
 {
-	rctx->context.create_query = r600_create_query;
-	rctx->context.destroy_query = r600_destroy_query;
-	rctx->context.begin_query = r600_begin_query;
-	rctx->context.end_query = r600_end_query;
-	rctx->context.get_query_result = r600_get_query_result;
+	rctx->b.b.create_query = r600_create_query;
+	rctx->b.b.destroy_query = r600_destroy_query;
+	rctx->b.b.begin_query = r600_begin_query;
+	rctx->b.b.end_query = r600_end_query;
+	rctx->b.b.get_query_result = r600_get_query_result;
 
-	if (rctx->screen->info.r600_num_backends > 0)
-	    rctx->context.render_condition = r600_render_condition;
+	if (rctx->screen->b.info.r600_num_backends > 0)
+	    rctx->b.b.render_condition = r600_render_condition;
 }

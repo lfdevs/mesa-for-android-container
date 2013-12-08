@@ -40,7 +40,10 @@
 static const struct brw_tracked_state *gen4_atoms[] =
 {
    &brw_vs_prog, /* must do before GS prog, state base address. */
-   &brw_gs_prog, /* must do before state base address */
+   &brw_ff_gs_prog, /* must do before state base address */
+
+   &brw_interpolation_map,
+
    &brw_clip_prog, /* must do before state base address */
    &brw_sf_prog, /* must do before state base address */
    &brw_wm_prog, /* must do before state base address */
@@ -65,7 +68,8 @@ static const struct brw_tracked_state *gen4_atoms[] =
    &brw_vs_binding_table,
    &brw_wm_binding_table,
 
-   &brw_samplers,
+   &brw_fs_samplers,
+   &brw_vs_samplers,
 
    /* These set up state for brw_psp_urb_cbs */
    &brw_wm_unit,
@@ -104,7 +108,7 @@ static const struct brw_tracked_state *gen4_atoms[] =
 static const struct brw_tracked_state *gen6_atoms[] =
 {
    &brw_vs_prog, /* must do before state base address */
-   &brw_gs_prog, /* must do before state base address */
+   &brw_ff_gs_prog, /* must do before state base address */
    &brw_wm_prog, /* must do before state base address */
 
    &gen6_clip_vp,
@@ -140,7 +144,8 @@ static const struct brw_tracked_state *gen6_atoms[] =
    &gen6_gs_binding_table,
    &brw_wm_binding_table,
 
-   &brw_samplers,
+   &brw_fs_samplers,
+   &brw_vs_samplers,
    &gen6_sampler_state,
    &gen6_multisample_state,
 
@@ -172,6 +177,7 @@ static const struct brw_tracked_state *gen6_atoms[] =
 static const struct brw_tracked_state *gen7_atoms[] =
 {
    &brw_vs_prog,
+   &brw_gs_prog,
    &brw_wm_prog,
 
    /* Command packets: */
@@ -183,12 +189,14 @@ static const struct brw_tracked_state *gen7_atoms[] =
    &gen7_cc_viewport_state_pointer, /* must do after brw_cc_vp */
    &gen7_sf_clip_viewport,
 
+   &gen7_push_constant_space,
    &gen7_urb,
    &gen6_blend_state,		/* must do before cc unit */
    &gen6_color_calc_state,	/* must do before cc unit */
    &gen6_depth_stencil_state,	/* must do before cc unit */
 
    &gen6_vs_push_constants, /* Before vs_state */
+   &gen7_gs_push_constants, /* Before gs_state */
    &gen6_wm_push_constants, /* Before wm_surfaces and constant_buffer */
 
    /* Surface state setup.  Must come before the VS/WM unit.  The binding
@@ -196,18 +204,27 @@ static const struct brw_tracked_state *gen7_atoms[] =
     */
    &brw_vs_pull_constants,
    &brw_vs_ubo_surfaces,
+   &brw_vs_abo_surfaces,
+   &brw_gs_pull_constants,
+   &brw_gs_ubo_surfaces,
+   &brw_gs_abo_surfaces,
    &brw_wm_pull_constants,
    &brw_wm_ubo_surfaces,
+   &brw_wm_abo_surfaces,
    &gen6_renderbuffer_surfaces,
    &brw_texture_surfaces,
    &brw_vs_binding_table,
+   &brw_gs_binding_table,
    &brw_wm_binding_table,
 
-   &gen7_samplers,
+   &brw_fs_samplers,
+   &brw_vs_samplers,
+   &brw_gs_samplers,
    &gen6_multisample_state,
 
    &gen7_disable_stages,
    &gen7_vs_state,
+   &gen7_gs_state,
    &gen7_sol_state,
    &gen7_clip_state,
    &gen7_sbe_state,
@@ -245,14 +262,11 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
       return;
 
    brw_upload_invariant_state(brw);
-
-   if (brw->gen >= 7) {
-      gen7_allocate_push_constants(brw);
-   }
 }
 
 void brw_init_state( struct brw_context *brw )
 {
+   struct gl_context *ctx = &brw->ctx;
    const struct brw_tracked_state **atoms;
    int num_atoms;
 
@@ -281,6 +295,19 @@ void brw_init_state( struct brw_context *brw )
    }
 
    brw_upload_initial_gpu_state(brw);
+
+   brw->state.dirty.mesa = ~0;
+   brw->state.dirty.brw = ~0;
+
+   /* Make sure that brw->state.dirty.brw has enough bits to hold all possible
+    * dirty flags.
+    */
+   STATIC_ASSERT(BRW_NUM_STATE_BITS <= 8 * sizeof(brw->state.dirty.brw));
+
+   ctx->DriverFlags.NewTransformFeedback = BRW_NEW_TRANSFORM_FEEDBACK;
+   ctx->DriverFlags.NewRasterizerDiscard = BRW_NEW_RASTERIZER_DISCARD;
+   ctx->DriverFlags.NewUniformBuffer = BRW_NEW_UNIFORM_BUFFER;
+   ctx->DriverFlags.NewAtomicBuffer = BRW_NEW_ATOMIC_BUFFER;
 }
 
 
@@ -349,6 +376,7 @@ static struct dirty_bit_map mesa_bits[] = {
    DEFINE_BIT(_NEW_ARRAY),
    DEFINE_BIT(_NEW_RENDERMODE),
    DEFINE_BIT(_NEW_BUFFERS),
+   DEFINE_BIT(_NEW_CURRENT_ATTRIB),
    DEFINE_BIT(_NEW_MULTISAMPLE),
    DEFINE_BIT(_NEW_TRACK_MATRIX),
    DEFINE_BIT(_NEW_PROGRAM),
@@ -362,6 +390,7 @@ static struct dirty_bit_map mesa_bits[] = {
 static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_URB_FENCE),
    DEFINE_BIT(BRW_NEW_FRAGMENT_PROGRAM),
+   DEFINE_BIT(BRW_NEW_GEOMETRY_PROGRAM),
    DEFINE_BIT(BRW_NEW_VERTEX_PROGRAM),
    DEFINE_BIT(BRW_NEW_CURBE_OFFSETS),
    DEFINE_BIT(BRW_NEW_REDUCED_PRIMITIVE),
@@ -377,13 +406,19 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_BATCH),
    DEFINE_BIT(BRW_NEW_INDEX_BUFFER),
    DEFINE_BIT(BRW_NEW_VS_CONSTBUF),
+   DEFINE_BIT(BRW_NEW_GS_CONSTBUF),
    DEFINE_BIT(BRW_NEW_PROGRAM_CACHE),
    DEFINE_BIT(BRW_NEW_STATE_BASE_ADDRESS),
+   DEFINE_BIT(BRW_NEW_VUE_MAP_VS),
    DEFINE_BIT(BRW_NEW_VUE_MAP_GEOM_OUT),
    DEFINE_BIT(BRW_NEW_TRANSFORM_FEEDBACK),
    DEFINE_BIT(BRW_NEW_RASTERIZER_DISCARD),
+   DEFINE_BIT(BRW_NEW_STATS_WM),
    DEFINE_BIT(BRW_NEW_UNIFORM_BUFFER),
+   DEFINE_BIT(BRW_NEW_ATOMIC_BUFFER),
    DEFINE_BIT(BRW_NEW_META_IN_PROGRESS),
+   DEFINE_BIT(BRW_NEW_INTERPOLATION_MAP),
+   DEFINE_BIT(BRW_NEW_PUSH_CONSTANT_ALLOCATION),
    {0, 0, 0}
 };
 
@@ -391,6 +426,8 @@ static struct dirty_bit_map cache_bits[] = {
    DEFINE_BIT(CACHE_NEW_CC_VP),
    DEFINE_BIT(CACHE_NEW_CC_UNIT),
    DEFINE_BIT(CACHE_NEW_WM_PROG),
+   DEFINE_BIT(CACHE_NEW_BLORP_BLIT_PROG),
+   DEFINE_BIT(CACHE_NEW_BLORP_CONST_COLOR_PROG),
    DEFINE_BIT(CACHE_NEW_SAMPLER),
    DEFINE_BIT(CACHE_NEW_WM_UNIT),
    DEFINE_BIT(CACHE_NEW_SF_PROG),
@@ -398,7 +435,8 @@ static struct dirty_bit_map cache_bits[] = {
    DEFINE_BIT(CACHE_NEW_SF_UNIT),
    DEFINE_BIT(CACHE_NEW_VS_UNIT),
    DEFINE_BIT(CACHE_NEW_VS_PROG),
-   DEFINE_BIT(CACHE_NEW_GS_UNIT),
+   DEFINE_BIT(CACHE_NEW_FF_GS_UNIT),
+   DEFINE_BIT(CACHE_NEW_FF_GS_PROG),
    DEFINE_BIT(CACHE_NEW_GS_PROG),
    DEFINE_BIT(CACHE_NEW_CLIP_VP),
    DEFINE_BIT(CACHE_NEW_CLIP_UNIT),
@@ -451,7 +489,8 @@ void brw_upload_state(struct brw_context *brw)
    state->brw |= ctx->NewDriverState;
    ctx->NewDriverState = 0;
 
-   if (brw->emit_state_always) {
+   if (0) {
+      /* Always re-emit all state. */
       state->mesa |= ~0;
       state->brw |= ~0;
       state->cache |= ~0;
@@ -460,6 +499,11 @@ void brw_upload_state(struct brw_context *brw)
    if (brw->fragment_program != ctx->FragmentProgram._Current) {
       brw->fragment_program = ctx->FragmentProgram._Current;
       brw->state.dirty.brw |= BRW_NEW_FRAGMENT_PROGRAM;
+   }
+
+   if (brw->geometry_program != ctx->GeometryProgram._Current) {
+      brw->geometry_program = ctx->GeometryProgram._Current;
+      brw->state.dirty.brw |= BRW_NEW_GEOMETRY_PROGRAM;
    }
 
    if (brw->vertex_program != ctx->VertexProgram._Current) {
@@ -516,6 +560,9 @@ void brw_upload_state(struct brw_context *brw)
    }
 
    if (unlikely(INTEL_DEBUG & DEBUG_STATE)) {
+      STATIC_ASSERT(ARRAY_SIZE(brw_bits) == BRW_NUM_STATE_BITS + 1);
+      STATIC_ASSERT(ARRAY_SIZE(cache_bits) == BRW_MAX_CACHE + 1);
+
       brw_update_dirty_count(mesa_bits, state->mesa);
       brw_update_dirty_count(brw_bits, state->brw);
       brw_update_dirty_count(cache_bits, state->cache);

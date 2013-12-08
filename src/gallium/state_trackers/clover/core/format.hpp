@@ -20,12 +20,12 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#ifndef __CORE_FORMAT_HPP__
-#define __CORE_FORMAT_HPP__
+#ifndef CLOVER_CORE_FORMAT_HPP
+#define CLOVER_CORE_FORMAT_HPP
 
 #include <set>
 
-#include "core/base.hpp"
+#include "core/object.hpp"
 #include "pipe/p_defines.h"
 #include "pipe/p_format.h"
 
@@ -37,7 +37,7 @@ namespace clover {
    /// Return all the image formats supported by a given context for
    /// the given memory object type.
    ///
-   std::set<cl_image_format> supported_formats(cl_context ctx,
+   std::set<cl_image_format> supported_formats(const context &ctx,
                                                cl_mem_object_type type);
 }
 
@@ -46,6 +46,17 @@ operator<(const cl_image_format &a, const cl_image_format &b) {
    return (a.image_channel_order != b.image_channel_order ?
            a.image_channel_order < b.image_channel_order :
            a.image_channel_data_type < b.image_channel_data_type);
+}
+
+static inline bool
+operator==(const cl_image_format &a, const cl_image_format &b) {
+   return (a.image_channel_order == b.image_channel_order &&
+           a.image_channel_data_type == b.image_channel_data_type);
+}
+
+static inline bool
+operator!=(const cl_image_format &a, const cl_image_format &b) {
+   return !(a == b);
 }
 
 #endif

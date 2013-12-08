@@ -119,9 +119,12 @@ public:
 class dce_cleanup : public vpass {
 	using vpass::visit;
 
+	bool remove_unused;
+
 public:
 
-	dce_cleanup(shader &s) : vpass(s) {}
+	dce_cleanup(shader &s) : vpass(s),
+		remove_unused(s.dce_flags & DF_REMOVE_UNUSED) {}
 
 	virtual bool visit(node &n, bool enter);
 	virtual bool visit(alu_group_node &n, bool enter);
@@ -135,7 +138,7 @@ public:
 private:
 
 	void cleanup_dst(node &n);
-	void cleanup_dst_vec(vvec &vv);
+	bool cleanup_dst_vec(vvec &vv);
 
 };
 
@@ -704,6 +707,9 @@ public:
 
 	void update_ngpr(unsigned gpr);
 	void update_nstack(region_node *r, unsigned add = 0);
+
+	unsigned get_stack_depth(node *n, unsigned &loops, unsigned &ifs,
+	                         unsigned add = 0);
 
 	void cf_peephole();
 

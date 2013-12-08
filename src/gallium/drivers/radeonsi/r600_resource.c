@@ -29,7 +29,7 @@ static struct pipe_resource *r600_resource_create(struct pipe_screen *screen,
 	if (templ->target == PIPE_BUFFER) {
 		return si_buffer_create(screen, templ);
 	} else {
-		return si_texture_create(screen, templ);
+		return r600_texture_create(screen, templ);
 	}
 }
 
@@ -40,7 +40,7 @@ static struct pipe_resource *r600_resource_from_handle(struct pipe_screen * scre
 	if (templ->target == PIPE_BUFFER) {
 		return NULL;
 	} else {
-		return si_texture_from_handle(screen, templ, whandle);
+		return r600_texture_from_handle(screen, templ, whandle);
 	}
 }
 
@@ -54,8 +54,8 @@ void r600_init_screen_resource_functions(struct pipe_screen *screen)
 
 void r600_init_context_resource_functions(struct r600_context *r600)
 {
-	r600->context.transfer_map = u_transfer_map_vtbl;
-	r600->context.transfer_flush_region = u_transfer_flush_region_vtbl;
-	r600->context.transfer_unmap = u_transfer_unmap_vtbl;
-	r600->context.transfer_inline_write = u_default_transfer_inline_write;
+	r600->b.b.transfer_map = u_transfer_map_vtbl;
+	r600->b.b.transfer_flush_region = u_transfer_flush_region_vtbl;
+	r600->b.b.transfer_unmap = u_transfer_unmap_vtbl;
+	r600->b.b.transfer_inline_write = u_default_transfer_inline_write;
 }

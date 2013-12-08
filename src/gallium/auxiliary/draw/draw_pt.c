@@ -535,6 +535,7 @@ draw_vbo(struct draw_context *draw,
    }
 
    draw->pt.max_index = index_limit - 1;
+   draw->start_index = info->start;
 
    /*
     * TODO: We could use draw->pt.max_index to further narrow
@@ -542,11 +543,12 @@ draw_vbo(struct draw_context *draw,
     */
 
    for (instance = 0; instance < info->instance_count; instance++) {
-      draw->instance_id = instance + info->start_instance;
+      unsigned instance_idx = instance + info->start_instance;
       draw->start_instance = info->start_instance;
+      draw->instance_id = instance;
       /* check for overflow */
-      if (draw->instance_id < instance ||
-          draw->instance_id < info->start_instance) {
+      if (instance_idx < instance ||
+          instance_idx < draw->start_instance) {
          /* if we overflown just set the instance id to the max */
          draw->instance_id = 0xffffffff;
       }

@@ -79,7 +79,7 @@ void compute_memory_pool_delete(struct compute_memory_pool* pool)
 	COMPUTE_DBG(pool->screen, "* compute_memory_pool_delete()\n");
 	free(pool->shadow);
 	if (pool->bo) {
-		pool->screen->screen.resource_destroy((struct pipe_screen *)
+		pool->screen->b.b.resource_destroy((struct pipe_screen *)
 			pool->screen, (struct pipe_resource *)pool->bo);
 	}
 	free(pool);
@@ -161,8 +161,9 @@ struct compute_memory_item* compute_memory_postalloc_chunk(
 void compute_memory_grow_pool(struct compute_memory_pool* pool,
 	struct pipe_context * pipe, int new_size_in_dw)
 {
-	COMPUTE_DBG(pool->screen, "* compute_memory_grow_pool() new_size_in_dw = %d\n",
-		new_size_in_dw);
+	COMPUTE_DBG(pool->screen, "* compute_memory_grow_pool() "
+		"new_size_in_dw = %d (%d bytes)\n",
+		new_size_in_dw, new_size_in_dw * 4);
 
 	assert(new_size_in_dw >= pool->size_in_dw);
 
@@ -171,12 +172,13 @@ void compute_memory_grow_pool(struct compute_memory_pool* pool,
 	} else {
 		new_size_in_dw += 1024 - (new_size_in_dw % 1024);
 
-		COMPUTE_DBG(pool->screen, "  Aligned size = %d\n", new_size_in_dw);
+		COMPUTE_DBG(pool->screen, "  Aligned size = %d (%d bytes)\n",
+			new_size_in_dw, new_size_in_dw * 4);
 
 		compute_memory_shadow(pool, pipe, 1);
 		pool->shadow = realloc(pool->shadow, new_size_in_dw*4);
 		pool->size_in_dw = new_size_in_dw;
-		pool->screen->screen.resource_destroy(
+		pool->screen->b.b.resource_destroy(
 			(struct pipe_screen *)pool->screen,
 			(struct pipe_resource *)pool->bo);
 		pool->bo = (struct r600_resource*)r600_compute_buffer_alloc_vram(
@@ -337,14 +339,9 @@ void compute_memory_finalize_pending(struct compute_memory_pool* pool,
 				}
 			} else {
 				/* Add item to the front of the list */
-				item->next = pool->item_list->next;
-				if (pool->item_list->next) {
-					pool->item_list->next->prev = item;
-				}
+				item->next = pool->item_list;
 				item->prev = pool->item_list->prev;
-				if (pool->item_list->prev) {
-					pool->item_list->prev->next = item;
-				}
+				pool->item_list->prev = item;
 				pool->item_list = item;
 			}
 		}

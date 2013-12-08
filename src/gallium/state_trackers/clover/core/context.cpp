@@ -20,18 +20,31 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#include <algorithm>
-
 #include "core/context.hpp"
 
 using namespace clover;
 
-_cl_context::_cl_context(const std::vector<cl_context_properties> &props,
-                         const std::vector<device *> &devs) :
-   devs(devs), __props(props) {
+context::context(const property_list &props,
+                 const ref_vector<device> &devs) :
+   _props(props), _devs(map(addresses(), devs)) {
 }
 
 bool
-_cl_context::has_device(clover::device *dev) const {
-   return std::count(devs.begin(), devs.end(), dev);
+context::operator==(const context &ctx) const {
+   return this == &ctx;
+}
+
+bool
+context::operator!=(const context &ctx) const {
+   return this != &ctx;
+}
+
+const context::property_list &
+context::props() const {
+   return _props;
+}
+
+context::device_range
+context::devs() const {
+   return map(derefs(), _devs);
 }

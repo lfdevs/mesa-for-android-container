@@ -23,7 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-/** 
+/**
  * \file texparam.c
  *
  * glTexParameter-related functions
@@ -52,7 +52,7 @@
  * Check if a coordinate wrap mode is supported for the texture target.
  * \return GL_TRUE if legal, GL_FALSE otherwise
  */
-static GLboolean 
+static GLboolean
 validate_texture_wrap_mode(struct gl_context * ctx, GLenum target, GLenum wrap)
 {
    const struct gl_extensions * const e = & ctx->Extensions;
@@ -84,16 +84,22 @@ validate_texture_wrap_mode(struct gl_context * ctx, GLenum target, GLenum wrap)
       break;
 
    case GL_MIRROR_CLAMP_EXT:
-   case GL_MIRROR_CLAMP_TO_EDGE_EXT:
-      supported = is_desktop_gl 
+      supported = is_desktop_gl
          && (e->ATI_texture_mirror_once || e->EXT_texture_mirror_clamp)
-	 && (target != GL_TEXTURE_RECTANGLE_NV)
+         && (target != GL_TEXTURE_RECTANGLE_NV)
+         && (target != GL_TEXTURE_EXTERNAL_OES);
+      break;
+
+   case GL_MIRROR_CLAMP_TO_EDGE_EXT:
+      supported = is_desktop_gl
+         && (e->ATI_texture_mirror_once || e->EXT_texture_mirror_clamp || e->ARB_texture_mirror_clamp_to_edge)
+         && (target != GL_TEXTURE_RECTANGLE_NV)
          && (target != GL_TEXTURE_EXTERNAL_OES);
       break;
 
    case GL_MIRROR_CLAMP_TO_BORDER_EXT:
       supported = is_desktop_gl && e->EXT_texture_mirror_clamp
-	 && (target != GL_TEXTURE_RECTANGLE_NV)
+         && (target != GL_TEXTURE_RECTANGLE_NV)
          && (target != GL_TEXTURE_EXTERNAL_OES);
       break;
 
@@ -256,7 +262,7 @@ static inline void
 incomplete(struct gl_context *ctx, struct gl_texture_object *texObj)
 {
    FLUSH_VERTICES(ctx, _NEW_TEXTURE);
-   _mesa_dirty_texobj(ctx, texObj, GL_TRUE);
+   _mesa_dirty_texobj(ctx, texObj);
 }
 
 
@@ -386,7 +392,13 @@ set_tex_parameteri(struct gl_context *ctx,
          return GL_FALSE;
       }
       incomplete(ctx, texObj);
-      texObj->BaseLevel = params[0];
+
+      /** See note about ARB_texture_storage below */
+      if (texObj->Immutable)
+         texObj->BaseLevel = MIN2(texObj->ImmutableLevels - 1, params[0]);
+      else
+         texObj->BaseLevel = params[0];
+
       return GL_TRUE;
 
    case GL_TEXTURE_MAX_LEVEL:
@@ -399,7 +411,19 @@ set_tex_parameteri(struct gl_context *ctx,
          return GL_FALSE;
       }
       incomplete(ctx, texObj);
-      texObj->MaxLevel = params[0];
+
+      /** From ARB_texture_storage:
+       * However, if TEXTURE_IMMUTABLE_FORMAT is TRUE, then level_base is
+       * clamped to the range [0, <levels> - 1] and level_max is then clamped to
+       * the range [level_base, <levels> - 1], where <levels> is the parameter
+       * passed the call to TexStorage* for the texture object.
+       */
+      if (texObj->Immutable)
+          texObj->MaxLevel = CLAMP(params[0], texObj->BaseLevel,
+                                   texObj->ImmutableLevels - 1);
+      else
+         texObj->MaxLevel = params[0];
+
       return GL_TRUE;
 
    case GL_GENERATE_MIPMAP_SGIS:
@@ -660,11 +684,8 @@ set_tex_parameterf(struct gl_context *ctx,
       return GL_FALSE;
 
    case GL_TEXTURE_LOD_BIAS:
-      /* NOTE: this is really part of OpenGL 1.4, not EXT_texture_lod_bias.
-       * It was removed in core-profile, and it has never existed in OpenGL
-       * ES.
-       */
-      if (ctx->API != API_OPENGL_COMPAT)
+      /* NOTE: this is really part of OpenGL 1.4, not EXT_texture_lod_bias. */
+      if (_mesa_is_gles(ctx))
          goto invalid_pname;
 
       if (!target_allows_setting_sampler_parameters(texObj->Target))
@@ -1489,7 +1510,7 @@ _mesa_GetTexParameterfv( GLenum target, GLenum pname, GLfloat *params )
          *params = (GLfloat) obj->DepthMode;
          break;
       case GL_TEXTURE_LOD_BIAS:
-         if (ctx->API != API_OPENGL_COMPAT)
+         if (_mesa_is_gles(ctx))
             goto invalid_pname;
 
          *params = obj->Sampler.LodBias;
@@ -1677,10 +1698,13 @@ _mesa_GetTexParameteriv( GLenum target, GLenum pname, GLint *params )
          *params = (GLint) obj->DepthMode;
          break;
       case GL_TEXTURE_LOD_BIAS:
-         if (ctx->API != API_OPENGL_COMPAT)
+         if (_mesa_is_gles(ctx))
             goto invalid_pname;
 
-         *params = (GLint) obj->Sampler.LodBias;
+         /* GL spec 'Data Conversions' section specifies that floating-point
+          * value in integer Get function is rounded to nearest integer
+          */
+         *params = (GLint) roundf(obj->Sampler.LodBias);
          break;
       case GL_TEXTURE_CROP_RECT_OES:
          if (ctx->API != API_OPENGLES || !ctx->Extensions.OES_draw_texture)
@@ -1763,7 +1787,7 @@ _mesa_GetTexParameterIiv(GLenum target, GLenum pname, GLint *params)
    texObj = get_texobj(ctx, target, GL_TRUE);
    if (!texObj)
       return;
-   
+
    switch (pname) {
    case GL_TEXTURE_BORDER_COLOR:
       COPY_4V(params, texObj->Sampler.BorderColor.i);
@@ -1784,7 +1808,7 @@ _mesa_GetTexParameterIuiv(GLenum target, GLenum pname, GLuint *params)
    texObj = get_texobj(ctx, target, GL_TRUE);
    if (!texObj)
       return;
-   
+
    switch (pname) {
    case GL_TEXTURE_BORDER_COLOR:
       COPY_4V(params, texObj->Sampler.BorderColor.i);
@@ -1794,7 +1818,7 @@ _mesa_GetTexParameterIuiv(GLenum target, GLenum pname, GLuint *params)
          GLint ip[4];
          _mesa_GetTexParameteriv(target, pname, ip);
          params[0] = ip[0];
-         if (pname == GL_TEXTURE_SWIZZLE_RGBA_EXT || 
+         if (pname == GL_TEXTURE_SWIZZLE_RGBA_EXT ||
              pname == GL_TEXTURE_CROP_RECT_OES) {
             params[1] = ip[1];
             params[2] = ip[2];

@@ -124,17 +124,15 @@ static struct pipe_surface *noop_create_surface(struct pipe_context *ctx,
 	return surface;
 }
 
-static void noop_set_vs_sampler_view(struct pipe_context *ctx, unsigned count,
-					struct pipe_sampler_view **views)
+static void noop_set_sampler_views(struct pipe_context *ctx, unsigned shader,
+                                   unsigned start, unsigned count,
+                                   struct pipe_sampler_view **views)
 {
 }
 
-static void noop_set_ps_sampler_view(struct pipe_context *ctx, unsigned count,
-					struct pipe_sampler_view **views)
-{
-}
-
-static void noop_bind_sampler(struct pipe_context *ctx, unsigned count, void **states)
+static void noop_bind_sampler_states(struct pipe_context *ctx, unsigned shader,
+                                     unsigned start, unsigned count,
+                                     void **states)
 {
 }
 
@@ -295,11 +293,10 @@ void noop_init_state_functions(struct pipe_context *ctx)
 	ctx->create_vs_state = noop_create_shader_state;
 	ctx->bind_blend_state = noop_bind_state;
 	ctx->bind_depth_stencil_alpha_state = noop_bind_state;
-	ctx->bind_fragment_sampler_states = noop_bind_sampler;
+	ctx->bind_sampler_states = noop_bind_sampler_states;
 	ctx->bind_fs_state = noop_bind_state;
 	ctx->bind_rasterizer_state = noop_bind_state;
 	ctx->bind_vertex_elements_state = noop_bind_state;
-	ctx->bind_vertex_sampler_states = noop_bind_sampler;
 	ctx->bind_vs_state = noop_bind_state;
 	ctx->delete_blend_state = noop_delete_state;
 	ctx->delete_depth_stencil_alpha_state = noop_delete_state;
@@ -311,7 +308,7 @@ void noop_init_state_functions(struct pipe_context *ctx)
 	ctx->set_blend_color = noop_set_blend_color;
 	ctx->set_clip_state = noop_set_clip_state;
 	ctx->set_constant_buffer = noop_set_constant_buffer;
-	ctx->set_fragment_sampler_views = noop_set_ps_sampler_view;
+	ctx->set_sampler_views = noop_set_sampler_views;
 	ctx->set_framebuffer_state = noop_set_framebuffer_state;
 	ctx->set_polygon_stipple = noop_set_polygon_stipple;
 	ctx->set_sample_mask = noop_set_sample_mask;
@@ -319,7 +316,6 @@ void noop_init_state_functions(struct pipe_context *ctx)
 	ctx->set_stencil_ref = noop_set_stencil_ref;
 	ctx->set_vertex_buffers = noop_set_vertex_buffers;
 	ctx->set_index_buffer = noop_set_index_buffer;
-	ctx->set_vertex_sampler_views = noop_set_vs_sampler_view;
 	ctx->set_viewport_states = noop_set_viewport_states;
 	ctx->sampler_view_destroy = noop_sampler_view_destroy;
 	ctx->surface_destroy = noop_surface_destroy;

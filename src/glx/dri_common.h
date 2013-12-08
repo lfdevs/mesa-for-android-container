@@ -69,6 +69,9 @@ extern void CriticalErrorMessageF(const char *f, ...);
 
 extern void *driOpenDriver(const char *driverName);
 
+extern const __DRIextension **
+driGetDriverExtensions(void *handle, const char *driver_name);
+
 extern bool
 dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
                          unsigned *major_ver, unsigned *minor_ver,

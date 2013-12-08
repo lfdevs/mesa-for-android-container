@@ -32,6 +32,7 @@
 #include "util/u_memory.h"
 #include "util/u_sampler.h"
 #include "util/u_format.h"
+#include "util/u_surface.h"
 
 #include "vl/vl_csc.h"
 
@@ -441,7 +442,7 @@ vlVdpOutputSurfacePutBitsYCbCr(VdpOutputSurface surface,
    vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
    memset(&vtmpl, 0, sizeof(vtmpl));
    vtmpl.buffer_format = format;
-   vtmpl.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
+   vtmpl.chroma_format = FormatYCBCRToPipeChroma(source_ycbcr_format);
 
    if (destination_rect) {
       vtmpl.width = abs(destination_rect->x0-destination_rect->x1);
@@ -723,4 +724,19 @@ vlVdpOutputSurfaceRenderBitmapSurface(VdpOutputSurface destination_surface,
    pipe_mutex_unlock(dst_vlsurface->device->mutex);
 
    return VDP_STATUS_OK;
+}
+
+struct pipe_resource *vlVdpOutputSurfaceGallium(VdpOutputSurface surface)
+{
+   vlVdpOutputSurface *vlsurface;
+
+   vlsurface = vlGetDataHTAB(surface);
+   if (!vlsurface || !vlsurface->surface)
+      return NULL;
+
+   pipe_mutex_lock(vlsurface->device->mutex);
+   vlVdpResolveDelayedRendering(vlsurface->device, NULL, NULL);
+   pipe_mutex_unlock(vlsurface->device->mutex);
+
+   return vlsurface->surface->texture;
 }

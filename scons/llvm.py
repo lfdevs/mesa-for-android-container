@@ -190,13 +190,15 @@ def generate(env):
                 pass
             env.MergeFlags(cppflags)
 
+            # Match llvm --fno-rtti flag
+            cxxflags = env.backtick('llvm-config --cxxflags').split()
+            if '-fno-rtti' in cxxflags:
+                env.Append(CXXFLAGS = ['-fno-rtti'])
+
             components = ['engine', 'bitwriter', 'x86asmprinter']
 
             if llvm_version >= distutils.version.LooseVersion('3.1'):
                 components.append('mcjit')
-
-            if llvm_version >= distutils.version.LooseVersion('3.2'):
-                env.Append(CXXFLAGS = ('-fno-rtti',))
 
             env.ParseConfig('llvm-config --libs ' + ' '.join(components))
             env.ParseConfig('llvm-config --ldflags')

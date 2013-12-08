@@ -25,78 +25,86 @@
 
 using namespace clover;
 
-PUBLIC cl_command_queue
-clCreateCommandQueue(cl_context ctx, cl_device_id dev,
+CLOVER_API cl_command_queue
+clCreateCommandQueue(cl_context d_ctx, cl_device_id d_dev,
                      cl_command_queue_properties props,
-                     cl_int *errcode_ret) try {
-   if (!ctx)
-      throw error(CL_INVALID_CONTEXT);
+                     cl_int *r_errcode) try {
+   auto &ctx = obj(d_ctx);
+   auto &dev = obj(d_dev);
 
-   if (!ctx->has_device(dev))
+   if (!count(dev, ctx.devs()))
       throw error(CL_INVALID_DEVICE);
 
    if (props & ~(CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE |
                  CL_QUEUE_PROFILING_ENABLE))
       throw error(CL_INVALID_VALUE);
 
-   ret_error(errcode_ret, CL_SUCCESS);
-   return new command_queue(*ctx, *dev, props);
+   ret_error(r_errcode, CL_SUCCESS);
+   return new command_queue(ctx, dev, props);
 
 } catch (error &e) {
-   ret_error(errcode_ret, e);
+   ret_error(r_errcode, e);
    return NULL;
 }
 
-PUBLIC cl_int
-clRetainCommandQueue(cl_command_queue q) {
-   if (!q)
-      return CL_INVALID_COMMAND_QUEUE;
-
-   q->retain();
+CLOVER_API cl_int
+clRetainCommandQueue(cl_command_queue d_q) try {
+   obj(d_q).retain();
    return CL_SUCCESS;
+
+} catch (error &e) {
+   return e.get();
 }
 
-PUBLIC cl_int
-clReleaseCommandQueue(cl_command_queue q) {
-   if (!q)
-      return CL_INVALID_COMMAND_QUEUE;
-
-   if (q->release())
-      delete q;
+CLOVER_API cl_int
+clReleaseCommandQueue(cl_command_queue d_q) try {
+   if (obj(d_q).release())
+      delete pobj(d_q);
 
    return CL_SUCCESS;
+
+} catch (error &e) {
+   return e.get();
 }
 
-PUBLIC cl_int
-clGetCommandQueueInfo(cl_command_queue q, cl_command_queue_info param,
-                      size_t size, void *buf, size_t *size_ret) {
-   if (!q)
-      return CL_INVALID_COMMAND_QUEUE;
+CLOVER_API cl_int
+clGetCommandQueueInfo(cl_command_queue d_q, cl_command_queue_info param,
+                      size_t size, void *r_buf, size_t *r_size) try {
+   property_buffer buf { r_buf, size, r_size };
+   auto &q = obj(d_q);
 
    switch (param) {
    case CL_QUEUE_CONTEXT:
-      return scalar_property<cl_context>(buf, size, size_ret, &q->ctx);
+      buf.as_scalar<cl_context>() = desc(q.ctx);
+      break;
 
    case CL_QUEUE_DEVICE:
-      return scalar_property<cl_device_id>(buf, size, size_ret, &q->dev);
+      buf.as_scalar<cl_device_id>() = desc(q.dev);
+      break;
 
    case CL_QUEUE_REFERENCE_COUNT:
-      return scalar_property<cl_uint>(buf, size, size_ret, q->ref_count());
+      buf.as_scalar<cl_uint>() = q.ref_count();
+      break;
 
    case CL_QUEUE_PROPERTIES:
-      return scalar_property<cl_command_queue_properties>(buf, size, size_ret,
-                                                          q->props());
+      buf.as_scalar<cl_command_queue_properties>() = q.props();
+      break;
 
    default:
-      return CL_INVALID_VALUE;
+      throw error(CL_INVALID_VALUE);
    }
+
+   return CL_SUCCESS;
+
+} catch (error &e) {
+   return e.get();
 }
 
-PUBLIC cl_int
-clFlush(cl_command_queue q) {
-   if (!q)
-      return CL_INVALID_COMMAND_QUEUE;
-
-   q->flush();
+CLOVER_API cl_int
+clFlush(cl_command_queue d_q) try {
+   obj(d_q).flush();
    return CL_SUCCESS;
+
+} catch (error &e) {
+   return e.get();
 }

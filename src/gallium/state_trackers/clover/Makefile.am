@@ -1,5 +1,7 @@
 AUTOMAKE_OPTIONS = subdir-objects
 
+include Makefile.sources
+
 AM_CPPFLAGS = \
 	$(GALLIUM_PIPE_LOADER_DEFINES) \
 	-DPIPE_SEARCH_DIR=\"$(libdir)/gallium-pipe\" \
@@ -10,16 +12,33 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/winsys \
 	-I$(srcdir)
 
+if HAVE_CLOVER_ICD
+AM_CPPFLAGS += -DHAVE_CLOVER_ICD
+else
+# Only install the headers if we are building a stand-alone implementation
+cldir = $(includedir)/CL
+cl_HEADERS = \
+	$(top_srcdir)/include/CL/cl.h \
+	$(top_srcdir)/include/CL/cl_ext.h \
+	$(top_srcdir)/include/CL/cl_gl.h \
+	$(top_srcdir)/include/CL/cl_gl_ext.h \
+	$(top_srcdir)/include/CL/cl_platform.h \
+	$(top_srcdir)/include/CL/opencl.h \
+	$(top_srcdir)/include/CL/cl.hpp
+endif
+
 noinst_LTLIBRARIES = libclover.la libcltgsi.la libclllvm.la
 
 libcltgsi_la_CXXFLAGS = \
-	-std=c++0x
+	-std=c++0x \
+	$(VISIBILITY_CFLAGS)
 
 libcltgsi_la_SOURCES = \
 	tgsi/compiler.cpp
 
 libclllvm_la_CXXFLAGS = \
 	-std=c++98 \
+	$(VISIBILITY_CFLAGS) \
 	$(LLVM_CPPFLAGS) \
 	$(DEFINES) \
 	-DLIBCLC_INCLUDEDIR=\"$(LIBCLC_INCLUDEDIR)/\" \
@@ -30,58 +49,10 @@ libclllvm_la_SOURCES = \
 	llvm/invocation.cpp
 
 libclover_la_CXXFLAGS = \
-	-std=c++0x
+	-std=c++0x \
+	$(VISIBILITY_CFLAGS)
 
 libclover_la_LIBADD = \
 	libcltgsi.la libclllvm.la
 
-libclover_la_SOURCES = \
-	core/base.hpp \
-	core/compat.hpp \
-	core/compiler.hpp \
-	core/geometry.hpp \
-	core/device.hpp \
-	core/device.cpp \
-	core/context.hpp \
-	core/context.cpp \
-	core/queue.hpp \
-	core/queue.cpp \
-	core/format.hpp \
-	core/format.cpp \
-	core/memory.hpp \
-	core/memory.cpp \
-	core/platform.hpp \
-	core/platform.cpp \
-	core/resource.hpp \
-	core/resource.cpp \
-	core/sampler.hpp \
-	core/sampler.cpp \
-	core/event.hpp \
-	core/event.cpp \
-	core/program.hpp \
-	core/program.cpp \
-	core/kernel.hpp \
-	core/kernel.cpp \
-	core/module.hpp \
-	core/module.cpp \
-	api/util.hpp \
-	api/platform.cpp \
-	api/device.cpp \
-	api/context.cpp \
-	api/queue.cpp \
-	api/memory.cpp \
-	api/transfer.cpp \
-	api/sampler.cpp \
-	api/event.cpp \
-	api/program.cpp \
-	api/kernel.cpp
-
-cldir = $(includedir)/CL
-cl_HEADERS = \
-	$(top_srcdir)/include/CL/cl.h \
-	$(top_srcdir)/include/CL/cl_ext.h \
-	$(top_srcdir)/include/CL/cl_gl.h \
-	$(top_srcdir)/include/CL/cl_gl_ext.h \
-	$(top_srcdir)/include/CL/cl_platform.h \
-	$(top_srcdir)/include/CL/opencl.h \
-	$(top_srcdir)/include/CL/cl.hpp
+libclover_la_SOURCES = $(CPP_SOURCES)

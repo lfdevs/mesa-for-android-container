@@ -23,6 +23,7 @@
 
 #include "brw_vec4.h"
 #include "brw_cfg.h"
+#include "brw_vs.h"
 
 extern "C" {
 #include "main/macros.h"
@@ -221,6 +222,9 @@ vec4_visitor::can_do_source_mods(vec4_instruction *inst)
    if (inst->is_send_from_grf())
       return false;
 
+   if (!inst->can_do_source_mods())
+      return false;
+
    return true;
 }
 
@@ -254,10 +258,13 @@ vec4_visitor::implied_mrf_writes(vec4_instruction *inst)
       return 1;
    case VS_OPCODE_PULL_CONSTANT_LOAD:
       return 2;
-   case VS_OPCODE_SCRATCH_READ:
+   case SHADER_OPCODE_GEN4_SCRATCH_READ:
       return 2;
-   case VS_OPCODE_SCRATCH_WRITE:
+   case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
       return 3;
+   case GS_OPCODE_URB_WRITE:
+   case GS_OPCODE_THREAD_END:
+      return 0;
    case SHADER_OPCODE_SHADER_TIME_ADD:
       return 0;
    case SHADER_OPCODE_TEX:
@@ -266,7 +273,12 @@ vec4_visitor::implied_mrf_writes(vec4_instruction *inst)
    case SHADER_OPCODE_TXF:
    case SHADER_OPCODE_TXF_MS:
    case SHADER_OPCODE_TXS:
+   case SHADER_OPCODE_TG4:
+   case SHADER_OPCODE_TG4_OFFSET:
       return inst->header_present ? 1 : 0;
+   case SHADER_OPCODE_UNTYPED_ATOMIC:
+   case SHADER_OPCODE_UNTYPED_SURFACE_READ:
+      return 0;
    default:
       assert(!"not reached");
       return inst->mlen;
@@ -306,10 +318,23 @@ vec4_visitor::dead_code_eliminate()
    foreach_list_safe(node, &this->instructions) {
       vec4_instruction *inst = (vec4_instruction *)node;
 
-      if (inst->dst.file == GRF) {
+      if (inst->dst.file == GRF && !inst->has_side_effects()) {
          assert(this->virtual_grf_end[inst->dst.reg] >= pc);
          if (this->virtual_grf_end[inst->dst.reg] == pc) {
-            inst->remove();
+            /* Don't dead code eliminate instructions that write to the
+             * accumulator as a side-effect. Instead just set the destination
+             * to the null register to free it.
+             */
+            switch (inst->opcode) {
+            case BRW_OPCODE_ADDC:
+            case BRW_OPCODE_SUBB:
+            case BRW_OPCODE_MACH:
+               inst->dst = dst_reg(retype(brw_null_reg(), inst->dst.type));
+               break;
+            default:
+               inst->remove();
+               break;
+            }
             progress = true;
          }
       }
@@ -1163,12 +1188,32 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst)
    printf("\n");
 }
 
+
+static inline struct brw_reg
+attribute_to_hw_reg(int attr, bool interleaved)
+{
+   if (interleaved)
+      return stride(brw_vec4_grf(attr / 2, (attr % 2) * 4), 0, 4, 1);
+   else
+      return brw_vec8_grf(attr, 0);
+}
+
+
 /**
  * Replace each register of type ATTR in this->instructions with a reference
  * to a fixed HW register.
+ *
+ * If interleaved is true, then each attribute takes up half a register, with
+ * register N containing attribute 2*N in its first half and attribute 2*N+1
+ * in its second half (this corresponds to the payload setup used by geometry
+ * shaders in "single" or "dual instanced" dispatch mode).  If interleaved is
+ * false, then each attribute takes up a whole register, with register N
+ * containing attribute N (this corresponds to the payload setup used by
+ * vertex shaders, and by geometry shaders in "dual object" dispatch mode).
  */
 void
-vec4_visitor::lower_attributes_to_hw_regs(const int *attribute_map)
+vec4_visitor::lower_attributes_to_hw_regs(const int *attribute_map,
+                                          bool interleaved)
 {
    foreach_list(node, &this->instructions) {
       vec4_instruction *inst = (vec4_instruction *)node;
@@ -1182,7 +1227,7 @@ vec4_visitor::lower_attributes_to_hw_regs(const int *attribute_map)
           */
          assert(grf != 0);
 
-	 struct brw_reg reg = brw_vec8_grf(grf, 0);
+	 struct brw_reg reg = attribute_to_hw_reg(grf, interleaved);
 	 reg.type = inst->dst.type;
 	 reg.dw1.bits.writemask = inst->dst.writemask;
 
@@ -1201,7 +1246,7 @@ vec4_visitor::lower_attributes_to_hw_regs(const int *attribute_map)
           */
          assert(grf != 0);
 
-	 struct brw_reg reg = brw_vec8_grf(grf, 0);
+	 struct brw_reg reg = attribute_to_hw_reg(grf, interleaved);
 	 reg.dw1.bits.swizzle = inst->src[i].swizzle;
          reg.type = inst->src[i].type;
 	 if (inst->src[i].abs)
@@ -1239,7 +1284,7 @@ vec4_vs_visitor::setup_attributes(int payload_reg)
       nr_attributes++;
    }
 
-   lower_attributes_to_hw_regs(attribute_map);
+   lower_attributes_to_hw_regs(attribute_map, false /* interleaved */);
 
    /* The BSpec says we always have to read at least one thing from
     * the VF, and it appears that the hardware wedges otherwise.
@@ -1263,12 +1308,15 @@ vec4_vs_visitor::setup_attributes(int payload_reg)
 int
 vec4_visitor::setup_uniforms(int reg)
 {
+   prog_data->dispatch_grf_start_reg = reg;
+
    /* The pre-gen6 VS requires that some push constants get loaded no
     * matter what, or the GPU would hang.
     */
    if (brw->gen < 6 && this->uniforms == 0) {
       this->uniform_vector_size[this->uniforms] = 1;
 
+      prog_data->param = reralloc(NULL, prog_data->param, const float *, 4);
       for (unsigned int i = 0; i < 4; i++) {
 	 unsigned int slot = this->uniforms * 4 + i;
 	 static float zero = 0.0;
@@ -1283,13 +1331,13 @@ vec4_visitor::setup_uniforms(int reg)
 
    prog_data->nr_params = this->uniforms * 4;
 
-   prog_data->curb_read_length = reg - 1;
+   prog_data->curb_read_length = reg - prog_data->dispatch_grf_start_reg;
 
    return reg;
 }
 
 void
-vec4_visitor::setup_payload(void)
+vec4_vs_visitor::setup_payload(void)
 {
    int reg = 0;
 
@@ -1405,6 +1453,8 @@ vec4_visitor::run()
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       emit_shader_time_begin();
 
+   assign_common_binding_table_offsets(0);
+
    emit_prolog();
 
    /* Generate VS IR for main().  (the visitor only descends into
@@ -1417,7 +1467,7 @@ vec4_visitor::run()
    }
    base_ir = NULL;
 
-   if (key->userclip_active && !key->uses_clip_distance)
+   if (key->userclip_active && !prog->UsesClipDistanceOut)
       setup_uniform_clipplane_values();
 
    emit_thread_end();
@@ -1474,7 +1524,7 @@ vec4_visitor::run()
 
    while (!reg_allocate()) {
       if (failed)
-         break;
+         return false;
    }
 
    opt_schedule_instructions();
@@ -1546,7 +1596,7 @@ brw_vs_emit(struct brw_context *brw,
       return NULL;
    }
 
-   vec4_generator g(brw, prog, &c->vp->program.Base, mem_ctx,
+   vec4_generator g(brw, prog, &c->vp->program.Base, &prog_data->base, mem_ctx,
                     INTEL_DEBUG & DEBUG_VS);
    const unsigned *generated =g.generate_assembly(&v.instructions,
                                                   final_assembly_size);
@@ -1564,5 +1614,54 @@ brw_vs_emit(struct brw_context *brw,
 
    return generated;
 }
+
+
+void
+brw_vec4_setup_prog_key_for_precompile(struct gl_context *ctx,
+                                       struct brw_vec4_prog_key *key,
+                                       GLuint id, struct gl_program *prog)
+{
+   key->program_string_id = id;
+   key->clamp_vertex_color = ctx->API == API_OPENGL_COMPAT;
+
+   unsigned sampler_count = _mesa_fls(prog->SamplersUsed);
+   for (unsigned i = 0; i < sampler_count; i++) {
+      if (prog->ShadowSamplers & (1 << i)) {
+         /* Assume DEPTH_TEXTURE_MODE is the default: X, X, X, 1 */
+         key->tex.swizzles[i] =
+            MAKE_SWIZZLE4(SWIZZLE_X, SWIZZLE_X, SWIZZLE_X, SWIZZLE_ONE);
+      } else {
+         /* Color sampler: assume no swizzling. */
+         key->tex.swizzles[i] = SWIZZLE_XYZW;
+      }
+   }
+}
+
+
+bool
+brw_vec4_prog_data_compare(const struct brw_vec4_prog_data *a,
+                           const struct brw_vec4_prog_data *b)
+{
+   /* Compare all the struct (including the base) up to the pointers. */
+   if (memcmp(a, b, offsetof(struct brw_vec4_prog_data, param)))
+      return false;
+
+   if (memcmp(a->param, b->param, a->nr_params * sizeof(void *)))
+      return false;
+
+   if (memcmp(a->pull_param, b->pull_param, a->nr_pull_params * sizeof(void *)))
+      return false;
+
+   return true;
+}
+
+
+void
+brw_vec4_prog_data_free(const struct brw_vec4_prog_data *prog_data)
+{
+   ralloc_free((void *)prog_data->param);
+   ralloc_free((void *)prog_data->pull_param);
+}
+
 
 } /* extern "C" */

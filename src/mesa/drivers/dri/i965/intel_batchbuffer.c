@@ -41,8 +41,8 @@ struct cached_batch_item {
    uint16_t size;
 };
 
-static void
-clear_cache(struct brw_context *brw)
+void
+intel_batchbuffer_clear_cache(struct brw_context *brw)
 {
    struct cached_batch_item *item = brw->batch.cached_items;
 
@@ -70,6 +70,8 @@ intel_batchbuffer_init(struct brw_context *brw)
 						      4096, 4096);
    }
 
+   brw->batch.need_workaround_flush = true;
+
    if (!brw->has_llc) {
       brw->batch.cpu_map = malloc(BATCH_SZ);
       brw->batch.map = brw->batch.cpu_map;
@@ -85,7 +87,7 @@ intel_batchbuffer_reset(struct brw_context *brw)
    }
    brw->batch.last_bo = brw->batch.bo;
 
-   clear_cache(brw);
+   intel_batchbuffer_clear_cache(brw);
 
    brw->batch.bo = drm_intel_bo_alloc(brw->bufmgr, "batchbuffer",
 					BATCH_SZ, 4096);
@@ -118,7 +120,7 @@ intel_batchbuffer_reset_to_saved(struct brw_context *brw)
    /* Cached batch state is dead, since we just cleared some unknown part of the
     * batchbuffer.  Assume that the caller resets any other state necessary.
     */
-   clear_cache(brw);
+   intel_batchbuffer_clear_cache(brw);
 }
 
 void
@@ -128,7 +130,7 @@ intel_batchbuffer_free(struct brw_context *brw)
    drm_intel_bo_unreference(brw->batch.last_bo);
    drm_intel_bo_unreference(brw->batch.bo);
    drm_intel_bo_unreference(brw->batch.workaround_bo);
-   clear_cache(brw);
+   intel_batchbuffer_clear_cache(brw);
 }
 
 static void
@@ -167,6 +169,68 @@ do_batch_dump(struct brw_context *brw)
       drm_intel_bo_unmap(batch->bo);
 
       brw_debug_batch(brw);
+   }
+}
+
+/**
+ * Called when starting a new batch buffer.
+ */
+static void
+brw_new_batch(struct brw_context *brw)
+{
+   /* If the kernel supports hardware contexts, then most hardware state is
+    * preserved between batches; we only need to re-emit state that is required
+    * to be in every batch.  Otherwise we need to re-emit all the state that
+    * would otherwise be stored in the context (which for all intents and
+    * purposes means everything).
+    */
+   if (brw->hw_ctx == NULL)
+      brw->state.dirty.brw |= BRW_NEW_CONTEXT;
+
+   brw->state.dirty.brw |= BRW_NEW_BATCH;
+
+   /* Assume that the last command before the start of our batch was a
+    * primitive, for safety.
+    */
+   brw->batch.need_workaround_flush = true;
+
+   brw->state_batch_count = 0;
+
+   brw->ib.type = -1;
+
+   /* Mark that the current program cache BO has been used by the GPU.
+    * It will be reallocated if we need to put new programs in for the
+    * next batch.
+    */
+   brw->cache.bo_used_by_gpu = true;
+
+   /* We need to periodically reap the shader time results, because rollover
+    * happens every few seconds.  We also want to see results every once in a
+    * while, because many programs won't cleanly destroy our context, so the
+    * end-of-run printout may not happen.
+    */
+   if (INTEL_DEBUG & DEBUG_SHADER_TIME)
+      brw_collect_and_report_shader_time(brw);
+}
+
+/**
+ * Called from intel_batchbuffer_flush before emitting MI_BATCHBUFFER_END and
+ * sending it off.
+ *
+ * This function can emit state (say, to preserve registers that aren't saved
+ * between batches).  All of this state MUST fit in the reserved space at the
+ * end of the batchbuffer.  If you add more GPU state, increase the reserved
+ * space by updating the BATCH_RESERVED macro.
+ */
+static void
+brw_finish_batch(struct brw_context *brw)
+{
+   brw_emit_query_end(brw);
+
+   if (brw->curbe.curbe_bo) {
+      drm_intel_gem_bo_unmap_gtt(brw->curbe.curbe_bo);
+      drm_intel_bo_unreference(brw->curbe.curbe_bo);
+      brw->curbe.curbe_bo = NULL;
    }
 }
 
@@ -222,7 +286,7 @@ do_flush_locked(struct brw_context *brw)
       fprintf(stderr, "intel_do_flush_locked failed: %s\n", strerror(-ret));
       exit(1);
    }
-   brw->vtbl.new_batch(brw);
+   brw_new_batch(brw);
 
    return ret;
 }
@@ -241,14 +305,20 @@ _intel_batchbuffer_flush(struct brw_context *brw,
       drm_intel_bo_reference(brw->first_post_swapbuffers_batch);
    }
 
-   if (unlikely(INTEL_DEBUG & DEBUG_BATCH))
-      fprintf(stderr, "%s:%d: Batchbuffer flush with %db used\n", file, line,
-	      4*brw->batch.used);
+   if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
+      int bytes_for_commands = 4 * brw->batch.used;
+      int bytes_for_state = brw->batch.bo->size - brw->batch.state_batch_offset;
+      int total_bytes = bytes_for_commands + bytes_for_state;
+      fprintf(stderr, "%s:%d: Batchbuffer flush with %4db (pkt) + "
+              "%4db (state) = %4db (%0.1f%%)\n", file, line,
+              bytes_for_commands, bytes_for_state,
+              total_bytes,
+              100.0f * total_bytes / BATCH_SZ);
+   }
 
    brw->batch.reserved_space = 0;
 
-   if (brw->vtbl.finish_batch)
-      brw->vtbl.finish_batch(brw);
+   brw_finish_batch(brw);
 
    /* Mark the end of the buffer. */
    intel_batchbuffer_emit_dword(brw, MI_BATCH_BUFFER_END);
@@ -439,6 +509,36 @@ gen7_emit_vs_workaround_flush(struct brw_context *brw)
    OUT_BATCH(0); /* write data */
    ADVANCE_BATCH();
 }
+
+
+/**
+ * Emit a PIPE_CONTROL command for gen7 with the CS Stall bit set.
+ */
+void
+gen7_emit_cs_stall_flush(struct brw_context *brw)
+{
+   BEGIN_BATCH(4);
+   OUT_BATCH(_3DSTATE_PIPE_CONTROL | (4 - 2));
+   /* From p61 of the Ivy Bridge PRM (1.10.4 PIPE_CONTROL Command: DW1[20]
+    * CS Stall):
+    *
+    *     One of the following must also be set:
+    *     - Render Target Cache Flush Enable ([12] of DW1)
+    *     - Depth Cache Flush Enable ([0] of DW1)
+    *     - Stall at Pixel Scoreboard ([1] of DW1)
+    *     - Depth Stall ([13] of DW1)
+    *     - Post-Sync Operation ([13] of DW1)
+    *
+    * We choose to do a Post-Sync Operation (Write Immediate Data), since
+    * it seems like it will incur the least additional performance penalty.
+    */
+   OUT_BATCH(PIPE_CONTROL_CS_STALL | PIPE_CONTROL_WRITE_IMMEDIATE);
+   OUT_RELOC(brw->batch.workaround_bo,
+             I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION, 0);
+   OUT_BATCH(0);
+   ADVANCE_BATCH();
+}
+
 
 /**
  * Emits a PIPE_CONTROL with a non-zero post-sync operation, for

@@ -122,6 +122,11 @@ vlVdpVideoSurfaceQueryGetPutBitsYCbCrCapabilities(VdpDevice device, VdpChromaTyp
    pipe_mutex_lock(dev->mutex);
 
    switch(bits_ycbcr_format) {
+   case VDP_YCBCR_FORMAT_NV12:
+   case VDP_YCBCR_FORMAT_YV12:
+      *is_supported = surface_chroma_type == VDP_CHROMA_TYPE_420;
+      break;
+
    case VDP_YCBCR_FORMAT_UYVY:
    case VDP_YCBCR_FORMAT_YUYV:
       *is_supported = surface_chroma_type == VDP_CHROMA_TYPE_422;
@@ -133,7 +138,7 @@ vlVdpVideoSurfaceQueryGetPutBitsYCbCrCapabilities(VdpDevice device, VdpChromaTyp
       break;
 
    default:
-      *is_supported = true;
+      *is_supported = false;
       break;
    }
 
@@ -141,7 +146,8 @@ vlVdpVideoSurfaceQueryGetPutBitsYCbCrCapabilities(VdpDevice device, VdpChromaTyp
    (
       pscreen,
       FormatYCBCRToPipe(bits_ycbcr_format),
-      PIPE_VIDEO_PROFILE_UNKNOWN
+      PIPE_VIDEO_PROFILE_UNKNOWN,
+      PIPE_VIDEO_ENTRYPOINT_BITSTREAM
    );
    pipe_mutex_unlock(dev->mutex);
 
@@ -176,13 +182,17 @@ vlVdpDecoderQueryCapabilities(VdpDevice device, VdpDecoderProfile profile,
       *is_supported = false;
       return VDP_STATUS_OK;
    }
-   
+
    pipe_mutex_lock(dev->mutex);
-   *is_supported = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_CAP_SUPPORTED);
+   *is_supported = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                            PIPE_VIDEO_CAP_SUPPORTED);
    if (*is_supported) {
-      *max_width = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_CAP_MAX_WIDTH); 
-      *max_height = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_CAP_MAX_HEIGHT);
-      *max_level = 16;
+      *max_width = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                            PIPE_VIDEO_CAP_MAX_WIDTH);
+      *max_height = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                             PIPE_VIDEO_CAP_MAX_HEIGHT);
+      *max_level = pscreen->get_video_param(pscreen, p_profile, PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                            PIPE_VIDEO_CAP_MAX_LEVEL);
       *max_macroblocks = (*max_width/16)*(*max_height/16);
    } else {
       *max_width = 0;
@@ -387,7 +397,8 @@ vlVdpOutputSurfaceQueryPutBitsYCbCrCapabilities(VdpDevice device, VdpRGBAFormat 
    *is_supported &= pscreen->is_video_format_supported
    (
       pscreen, ycbcr_format,
-      PIPE_VIDEO_PROFILE_UNKNOWN
+      PIPE_VIDEO_PROFILE_UNKNOWN,
+      PIPE_VIDEO_ENTRYPOINT_BITSTREAM
    );
    pipe_mutex_unlock(dev->mutex);
 
@@ -500,7 +511,6 @@ vlVdpVideoMixerQueryParameterValueRange(VdpDevice device, VdpVideoMixerParameter
 {
    vlVdpDevice *dev = vlGetDataHTAB(device);
    struct pipe_screen *screen;
-   enum pipe_video_profile prof = PIPE_VIDEO_PROFILE_UNKNOWN;
 
    if (!dev)
       return VDP_STATUS_INVALID_HANDLE;
@@ -512,11 +522,15 @@ vlVdpVideoMixerQueryParameterValueRange(VdpDevice device, VdpVideoMixerParameter
    switch (parameter) {
    case VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_WIDTH:
       *(uint32_t*)min_value = 48;
-      *(uint32_t*)max_value = screen->get_video_param(screen, prof, PIPE_VIDEO_CAP_MAX_WIDTH);
+      *(uint32_t*)max_value = screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
+                                                      PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                                      PIPE_VIDEO_CAP_MAX_WIDTH);
       break;
    case VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_HEIGHT:
       *(uint32_t*)min_value = 48;
-      *(uint32_t*)max_value = screen->get_video_param(screen, prof, PIPE_VIDEO_CAP_MAX_HEIGHT);
+      *(uint32_t*)max_value = screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
+                                                      PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
+                                                      PIPE_VIDEO_CAP_MAX_HEIGHT);
       break;
 
    case VDP_VIDEO_MIXER_PARAMETER_LAYERS:

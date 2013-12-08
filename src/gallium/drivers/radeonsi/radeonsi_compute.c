@@ -1,5 +1,6 @@
 #include "util/u_memory.h"
 
+#include "../radeon/r600_cs.h"
 #include "radeonsi_pipe.h"
 #include "radeonsi_shader.h"
 
@@ -48,6 +49,7 @@ static void *radeonsi_create_compute_state(
 		LLVMModuleRef mod = radeon_llvm_get_kernel_module(i, code,
 							header->num_bytes);
 		si_compile_llvm(rctx, &program->kernels[i], mod);
+		LLVMDisposeModule(mod);
 	}
 
 	return program;
@@ -91,7 +93,7 @@ static void radeonsi_launch_grid(
 	struct r600_context *rctx = (struct r600_context*)ctx;
 	struct si_pipe_compute *program = rctx->cs_shader_state.program;
 	struct si_pm4_state *pm4 = CALLOC_STRUCT(si_pm4_state);
-	struct si_resource *kernel_args_buffer = NULL;
+	struct r600_resource *kernel_args_buffer = NULL;
 	unsigned kernel_args_size;
 	unsigned num_work_size_bytes = 36;
 	uint32_t kernel_args_offset = 0;
@@ -101,6 +103,7 @@ static void radeonsi_launch_grid(
 	unsigned arg_user_sgpr_count = 2;
 	unsigned i;
 	struct si_pipe_shader *shader = &program->kernels[pc];
+	unsigned lds_blocks;
 
 	pm4->compute_pkt = true;
 	si_cmd_context_control(pm4);
@@ -152,17 +155,26 @@ static void radeonsi_launch_grid(
 
 	/* Global buffers */
 	for (i = 0; i < MAX_GLOBAL_BUFFERS; i++) {
-		struct si_resource *buffer =
-				(struct si_resource*)program->global_buffers[i];
+		struct r600_resource *buffer =
+				(struct r600_resource*)program->global_buffers[i];
 		if (!buffer) {
 			continue;
 		}
 		si_pm4_add_bo(pm4, buffer, RADEON_USAGE_READWRITE);
 	}
 
-	/* XXX: This should be:
-	 * (number of compute units) * 4 * (waves per simd) - 1 */
-	si_pm4_set_reg(pm4, R_00B82C_COMPUTE_MAX_WAVE_ID, 0x190 /* Default value */);
+	/* This register has been moved to R_00CD20_COMPUTE_MAX_WAVE_ID
+	 * and is now per pipe, so it should be handled in the
+	 * kernel if we want to use something other than the default value,
+	 * which is now 0x22f.
+	 */
+	if (rctx->b.chip_class <= SI) {
+		/* XXX: This should be:
+		 * (number of compute units) * 4 * (waves per simd) - 1 */
+
+		si_pm4_set_reg(pm4, R_00B82C_COMPUTE_MAX_WAVE_ID,
+						0x190 /* Default value */);
+	}
 
 	shader_va = r600_resource_va(ctx->screen, (void *)shader->bo);
 	si_pm4_add_bo(pm4, shader->bo, RADEON_USAGE_READ);
@@ -183,6 +195,20 @@ static void radeonsi_launch_grid(
 		                        shader->num_sgprs)) - 1) / 8))
 		;
 
+	lds_blocks = shader->lds_size;
+	/* XXX: We are over allocating LDS.  For SI, the shader reports LDS in
+	 * blocks of 256 bytes, so if there are 4 bytes lds allocated in
+	 * the shader and 4 bytes allocated by the state tracker, then
+	 * we will set LDS_SIZE to 512 bytes rather than 256.
+	 */
+	if (rctx->b.chip_class <= SI) {
+		lds_blocks += align(program->local_size, 256) >> 8;
+	} else {
+		lds_blocks += align(program->local_size, 512) >> 9;
+	}
+
+	assert(lds_blocks <= 0xFF);
+
 	si_pm4_set_reg(pm4, R_00B84C_COMPUTE_PGM_RSRC2,
 		S_00B84C_SCRATCH_EN(0)
 		| S_00B84C_USER_SGPR(arg_user_sgpr_count)
@@ -191,7 +217,7 @@ static void radeonsi_launch_grid(
 		| S_00B84C_TGID_Z_EN(1)
 		| S_00B84C_TG_SIZE_EN(1)
 		| S_00B84C_TIDIG_COMP_CNT(2)
-		| S_00B84C_LDS_SIZE(shader->lds_size)
+		| S_00B84C_LDS_SIZE(lds_blocks)
 		| S_00B84C_EXCP_EN(0))
 		;
 	si_pm4_set_reg(pm4, R_00B854_COMPUTE_RESOURCE_LIMITS, 0);
@@ -230,36 +256,37 @@ static void radeonsi_launch_grid(
 	}
 #endif
 
-	rctx->ws->cs_flush(rctx->cs, RADEON_FLUSH_COMPUTE, 0);
-	rctx->ws->buffer_wait(shader->bo->buf, 0);
-
 	FREE(pm4);
 	FREE(kernel_args);
 }
 
 
-static void si_delete_compute_state(struct pipe_context *ctx, void* state){}
+static void si_delete_compute_state(struct pipe_context *ctx, void* state){
+	struct si_pipe_compute *program = (struct si_pipe_compute *)state;
+
+	if (!state) {
+		return;
+	}
+
+	if (program->kernels) {
+		FREE(program->kernels);
+	}
+
+	//And then free the program itself.
+	FREE(program);
+}
+
 static void si_set_compute_resources(struct pipe_context * ctx_,
 		unsigned start, unsigned count,
 		struct pipe_surface ** surfaces) { }
-static void si_set_cs_sampler_view(struct pipe_context *ctx_,
-		unsigned start_slot, unsigned count,
-		struct pipe_sampler_view **views) { }
 
-static void si_bind_compute_sampler_states(
-	struct pipe_context *ctx_,
-	unsigned start_slot,
-	unsigned num_samplers,
-	void **samplers_) { }
 void si_init_compute_functions(struct r600_context *rctx)
 {
-	rctx->context.create_compute_state = radeonsi_create_compute_state;
-	rctx->context.delete_compute_state = si_delete_compute_state;
-	rctx->context.bind_compute_state = radeonsi_bind_compute_state;
+	rctx->b.b.create_compute_state = radeonsi_create_compute_state;
+	rctx->b.b.delete_compute_state = si_delete_compute_state;
+	rctx->b.b.bind_compute_state = radeonsi_bind_compute_state;
 /*	 ctx->context.create_sampler_view = evergreen_compute_create_sampler_view; */
-	rctx->context.set_compute_resources = si_set_compute_resources;
-	rctx->context.set_compute_sampler_views = si_set_cs_sampler_view;
-	rctx->context.bind_compute_sampler_states = si_bind_compute_sampler_states;
-	rctx->context.set_global_binding = radeonsi_set_global_binding;
-	rctx->context.launch_grid = radeonsi_launch_grid;
+	rctx->b.b.set_compute_resources = si_set_compute_resources;
+	rctx->b.b.set_global_binding = radeonsi_set_global_binding;
+	rctx->b.b.launch_grid = radeonsi_launch_grid;
 }

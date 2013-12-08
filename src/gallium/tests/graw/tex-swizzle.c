@@ -146,13 +146,14 @@ init_tex(const unsigned swizzle[4])
    if (sv == NULL)
       exit(5);
 
-   info.ctx->set_fragment_sampler_views(info.ctx, 1, &sv);
+   info.ctx->set_sampler_views(info.ctx, PIPE_SHADER_FRAGMENT, 0, 1, &sv);
 
    sampler = graw_util_create_simple_sampler(&info,
                                              PIPE_TEX_WRAP_REPEAT,
                                              PIPE_TEX_FILTER_NEAREST);
 
-   info.ctx->bind_fragment_sampler_states(info.ctx, 1, &sampler);
+   info.ctx->bind_sampler_states(info.ctx, PIPE_SHADER_FRAGMENT,
+                                 0, 1, &sampler);
 #undef SIZE
 }
 

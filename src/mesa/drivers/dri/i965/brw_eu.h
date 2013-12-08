@@ -154,8 +154,6 @@ ALU2(OR)
 ALU2(XOR)
 ALU2(SHR)
 ALU2(SHL)
-ALU2(RSR)
-ALU2(RSL)
 ALU2(ASR)
 ALU1(F32TO16)
 ALU1(F16TO32)
@@ -183,6 +181,8 @@ ALU3(BFI2)
 ALU1(FBH)
 ALU1(FBL)
 ALU1(CBIT)
+ALU2(ADDC)
+ALU2(SUBB)
 
 ROUND(RNDZ)
 ROUND(RNDE)
@@ -228,16 +228,84 @@ void brw_set_dp_write_message(struct brw_compile *p,
 			      GLuint end_of_thread,
 			      GLuint send_commit_msg);
 
+enum brw_urb_write_flags {
+   BRW_URB_WRITE_NO_FLAGS = 0,
+
+   /**
+    * Causes a new URB entry to be allocated, and its address stored in the
+    * destination register (gen < 7).
+    */
+   BRW_URB_WRITE_ALLOCATE = 0x1,
+
+   /**
+    * Causes the current URB entry to be deallocated (gen < 7).
+    */
+   BRW_URB_WRITE_UNUSED = 0x2,
+
+   /**
+    * Causes the thread to terminate.
+    */
+   BRW_URB_WRITE_EOT = 0x4,
+
+   /**
+    * Indicates that the given URB entry is complete, and may be sent further
+    * down the 3D pipeline (gen < 7).
+    */
+   BRW_URB_WRITE_COMPLETE = 0x8,
+
+   /**
+    * Indicates that an additional offset (which may be different for the two
+    * vec4 slots) is stored in the message header (gen == 7).
+    */
+   BRW_URB_WRITE_PER_SLOT_OFFSET = 0x10,
+
+   /**
+    * Indicates that the channel masks in the URB_WRITE message header should
+    * not be overridden to 0xff (gen == 7).
+    */
+   BRW_URB_WRITE_USE_CHANNEL_MASKS = 0x20,
+
+   /**
+    * Indicates that the data should be sent to the URB using the
+    * URB_WRITE_OWORD message rather than URB_WRITE_HWORD (gen == 7).  This
+    * causes offsets to be interpreted as multiples of an OWORD instead of an
+    * HWORD, and only allows one OWORD to be written.
+    */
+   BRW_URB_WRITE_OWORD = 0x40,
+
+   /**
+    * Convenient combination of flags: end the thread while simultaneously
+    * marking the given URB entry as complete.
+    */
+   BRW_URB_WRITE_EOT_COMPLETE = BRW_URB_WRITE_EOT | BRW_URB_WRITE_COMPLETE,
+
+   /**
+    * Convenient combination of flags: mark the given URB entry as complete
+    * and simultaneously allocate a new one.
+    */
+   BRW_URB_WRITE_ALLOCATE_COMPLETE =
+      BRW_URB_WRITE_ALLOCATE | BRW_URB_WRITE_COMPLETE,
+};
+
+#ifdef __cplusplus
+/**
+ * Allow brw_urb_write_flags enums to be ORed together.
+ */
+inline brw_urb_write_flags
+operator|(brw_urb_write_flags x, brw_urb_write_flags y)
+{
+   return static_cast<brw_urb_write_flags>(static_cast<int>(x) |
+                                           static_cast<int>(y));
+}
+#endif
+
 void brw_urb_WRITE(struct brw_compile *p,
 		   struct brw_reg dest,
 		   GLuint msg_reg_nr,
 		   struct brw_reg src0,
-		   bool allocate,
-		   bool used,
+                   enum brw_urb_write_flags flags,
 		   GLuint msg_length,
 		   GLuint response_length,
-		   bool eot,
-		   bool writes_complete,
 		   GLuint offset,
 		   GLuint swizzle);
 
@@ -311,6 +379,11 @@ void brw_oword_block_write_scratch(struct brw_compile *p,
 				   int num_regs,
 				   GLuint offset);
 
+void gen7_block_read_scratch(struct brw_compile *p,
+                             struct brw_reg dest,
+                             int num_regs,
+                             GLuint offset);
+
 void brw_shader_time_add(struct brw_compile *p,
                          struct brw_reg payload,
                          uint32_t surf_index);
@@ -355,6 +428,23 @@ void brw_CMP(struct brw_compile *p,
 	     GLuint conditional,
 	     struct brw_reg src0,
 	     struct brw_reg src1);
+
+void
+brw_untyped_atomic(struct brw_compile *p,
+                   struct brw_reg dest,
+                   struct brw_reg mrf,
+                   GLuint atomic_op,
+                   GLuint bind_table_index,
+                   GLuint msg_length,
+                   GLuint response_length);
+
+void
+brw_untyped_surface_read(struct brw_compile *p,
+                         struct brw_reg dest,
+                         struct brw_reg mrf,
+                         GLuint bind_table_index,
+                         GLuint msg_length,
+                         GLuint response_length);
 
 /*********************************************************************** 
  * brw_eu_util.c:

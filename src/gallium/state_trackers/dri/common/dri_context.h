@@ -34,7 +34,6 @@
 
 #include "dri_util.h"
 #include "pipe/p_compiler.h"
-#include "postprocess/filters.h"
 #include "hud/hud_context.h"
 
 struct pipe_context;
@@ -51,15 +50,12 @@ struct dri_context
    __DRIdrawable *dPriv;
    __DRIdrawable *rPriv;
 
-   driOptionCache optionCache;
-
    unsigned int bind_count;
 
    /* gallium */
    struct st_api *stapi;
    struct st_context_iface *st;
    struct pp_queue_t *pp;
-   unsigned int pp_enabled[PP_FILTERS];
    struct hud_context *hud;
 };
 
@@ -93,6 +89,7 @@ dri_create_context(gl_api api,
 		   unsigned major_version,
 		   unsigned minor_version,
 		   uint32_t flags,
+		   bool notify_reset,
 		   unsigned *error,
 		   void *sharedContextPrivate);
 

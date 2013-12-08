@@ -36,16 +36,20 @@
 #include "brw_context.h"
 #include "brw_eu.h"
 
-#define MAX_VERTS (3+6+6)	
+/* Initial 3 verts, plus at most 6 additional verts from intersections
+ * with fixed planes, plus at most 8 additional verts from intersections
+ * with user clip planes
+ */
+#define MAX_VERTS (3+6+8)
 
 /* Note that if unfilled primitives are being emitted, we have to fix
  * up polygon offset and flatshading at this point:
  */
 struct brw_clip_prog_key {
    GLbitfield64 attrs;
+   struct interpolation_mode_map interpolation_mode;
    GLuint primitive:4;
    GLuint nr_userclip:4;
-   GLuint do_flat_shading:1;
    GLuint pv_first:1;
    GLuint do_unfilled:1;
    GLuint fill_cw:2;		/* includes cull information */
@@ -109,6 +113,9 @@ struct brw_clip_compile {
        * defined clipping plane.
        */
       struct brw_reg vertex_src_mask;
+
+      /* Offset into the vertex of the current plane's clipdistance value */
+      struct brw_reg clipdistance_offset;
    } reg;
 
    /* Number of registers storing VUE data */
@@ -120,6 +127,9 @@ struct brw_clip_compile {
    bool need_direction;
 
    struct brw_vue_map vue_map;
+
+   bool has_flat_shading;
+   bool has_noperspective_shading;
 };
 
 /**
@@ -163,8 +173,7 @@ void brw_clip_init_planes( struct brw_clip_compile *c );
 
 void brw_clip_emit_vue(struct brw_clip_compile *c, 
 		       struct brw_indirect vert,
-		       bool allocate,
-		       bool eot,
+                       enum brw_urb_write_flags flags,
 		       GLuint header);
 
 void brw_clip_kill_thread(struct brw_clip_compile *c);
@@ -172,8 +181,8 @@ void brw_clip_kill_thread(struct brw_clip_compile *c);
 struct brw_reg brw_clip_plane_stride( struct brw_clip_compile *c );
 struct brw_reg brw_clip_plane0_address( struct brw_clip_compile *c );
 
-void brw_clip_copy_colors( struct brw_clip_compile *c,
-			   GLuint to, GLuint from );
+void brw_clip_copy_flatshaded_attributes( struct brw_clip_compile *c,
+                                          GLuint to, GLuint from );
 
 void brw_clip_init_clipmask( struct brw_clip_compile *c );
 

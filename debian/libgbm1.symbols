@@ -5,7 +5,6 @@ libgbm.so.1 libgbm1 #MINVER#
  _gbm_mesa_get_device@Base 7.11~1
  _gbm_udev_device_new_from_fd@Base 7.11~1
  devices@Base 8.1~0
- dri2_loader_extension@Base 8.1~0
  dri_fd_get_driver_name@Base 8.1~0
  gbm_bo_create@Base 7.11~1
 #MISSING: 8.1~0 gbm_bo_create_from_egl_image@Base 7.11~1

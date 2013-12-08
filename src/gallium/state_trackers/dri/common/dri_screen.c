@@ -47,7 +47,10 @@
 
 #undef false
 
-PUBLIC const char __driConfigOptions[] =
+const __DRIconfigOptionsExtension gallium_config_options = {
+   .base = { __DRI_CONFIG_OPTIONS, 1 },
+   .xml =
+
    DRI_CONF_BEGIN
       DRI_CONF_SECTION_QUALITY
          DRI_CONF_FORCE_S3TC_ENABLE("false")
@@ -70,11 +73,10 @@ PUBLIC const char __driConfigOptions[] =
       DRI_CONF_SECTION_MISCELLANEOUS
          DRI_CONF_ALWAYS_HAVE_DEPTH_BUFFER("false")
       DRI_CONF_SECTION_END
-   DRI_CONF_END;
+   DRI_CONF_END
+};
 
 #define false 0
-
-static const uint __driNConfigOptions = 13;
 
 static const __DRIconfig **
 dri_fill_in_modes(struct dri_screen *screen)
@@ -384,6 +386,17 @@ dri_destroy_screen(__DRIscreen * sPriv)
    sPriv->extensions = NULL;
 }
 
+static void
+dri_postprocessing_init(struct dri_screen *screen)
+{
+   unsigned i;
+
+   for (i = 0; i < PP_FILTERS; i++) {
+      screen->pp_enabled[i] = driQueryOptioni(&screen->optionCache,
+                                              pp_filters[i].name);
+   }
+}
+
 const __DRIconfig **
 dri_init_screen_helper(struct dri_screen *screen,
                        struct pipe_screen *pscreen)
@@ -406,8 +419,7 @@ dri_init_screen_helper(struct dri_screen *screen,
    else
       screen->target = PIPE_TEXTURE_RECT;
 
-   driParseOptionInfo(&screen->optionCacheDefaults,
-                      __driConfigOptions, __driNConfigOptions);
+   driParseOptionInfo(&screen->optionCacheDefaults, gallium_config_options.xml);
 
    driParseConfigFiles(&screen->optionCache,
 		       &screen->optionCacheDefaults,
@@ -427,6 +439,21 @@ dri_init_screen_helper(struct dri_screen *screen,
 
       util_format_s3tc_enabled = TRUE;
    }
+
+   dri_postprocessing_init(screen);
+
+   /* gallium drivers don't declare what version of GL they support, so we
+    * check the computed Mesa context version after context creation and fail
+    * out then.
+    */
+   if (screen->st_api->profile_mask & ST_PROFILE_DEFAULT_MASK)
+      screen->sPriv->max_gl_compat_version = 30;
+   if (screen->st_api->profile_mask & ST_PROFILE_OPENGL_CORE_MASK)
+      screen->sPriv->max_gl_core_version = 32;
+   if (screen->st_api->profile_mask & ST_PROFILE_OPENGL_ES1_MASK)
+      screen->sPriv->max_gl_es1_version = 11;
+   if (screen->st_api->profile_mask & ST_PROFILE_OPENGL_ES2_MASK)
+      screen->sPriv->max_gl_es2_version = 30;
 
    return dri_fill_in_modes(screen);
 }

@@ -65,6 +65,7 @@
 #include "radeon_drm_cs.h"
 
 #include "util/u_memory.h"
+#include "os/os_time.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,7 +179,7 @@ static struct radeon_winsys_cs *radeon_drm_cs_create(struct radeon_winsys *rws,
     if (!cs) {
         return NULL;
     }
-    pipe_semaphore_init(&cs->flush_completed, 0);
+    pipe_semaphore_init(&cs->flush_completed, 1);
 
     cs->ws = ws;
     cs->trace_buf = (struct radeon_bo*)trace_buf;
@@ -453,9 +454,9 @@ void radeon_drm_cs_sync_flush(struct radeon_winsys_cs *rcs)
     struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
 
     /* Wait for any pending ioctl to complete. */
-    if (cs->ws->thread && cs->flush_started) {
+    if (cs->ws->thread) {
         pipe_semaphore_wait(&cs->flush_completed);
-        cs->flush_started = 0;
+        pipe_semaphore_signal(&cs->flush_completed);
     }
 }
 
@@ -490,9 +491,20 @@ static void radeon_drm_cs_flush(struct radeon_winsys_cs *rcs, unsigned flags, ui
 				    OUT_CS(&cs->base, 0xffff1000); /* type3 nop packet */
 		    }
 	    } else {
-		    while (rcs->cdw & 7)
-			    OUT_CS(&cs->base, 0x80000000); /* type2 nop packet */
+		    if (cs->ws->info.chip_class <= SI) {
+			    while (rcs->cdw & 7)
+				    OUT_CS(&cs->base, 0x80000000); /* type2 nop packet */
+		    } else {
+			    while (rcs->cdw & 7)
+				    OUT_CS(&cs->base, 0xffff1000); /* type3 nop packet */
+		    }
 	    }
+	    break;
+    case RING_UVD:
+            while (rcs->cdw & 15)
+		OUT_CS(&cs->base, 0x80000000); /* type2 nop packet */
+	    break;
+    default:
 	    break;
     }
 
@@ -560,17 +572,12 @@ static void radeon_drm_cs_flush(struct radeon_winsys_cs *rcs, unsigned flags, ui
             break;
         }
 
-        if (cs->ws->thread && (flags & RADEON_FLUSH_ASYNC)) {
-            cs->flush_started = 1;
+        if (cs->ws->thread) {
+            pipe_semaphore_wait(&cs->flush_completed);
             radeon_drm_ws_queue_cs(cs->ws, cs);
+            if (!(flags & RADEON_FLUSH_ASYNC))
+                radeon_drm_cs_sync_flush(rcs);
         } else {
-            pipe_mutex_lock(cs->ws->cs_stack_lock);
-            if (cs->ws->thread) {
-                while (p_atomic_read(&cs->ws->ncs)) {
-                    pipe_condvar_wait(cs->ws->cs_queue_empty, cs->ws->cs_stack_lock);
-                }
-            }
-            pipe_mutex_unlock(cs->ws->cs_stack_lock);
             radeon_drm_cs_emit_ioctl_oneshot(cs, cs->cst);
         }
     } else {
@@ -629,6 +636,58 @@ static boolean radeon_bo_is_referenced(struct radeon_winsys_cs *rcs,
     return FALSE;
 }
 
+/* FENCES */
+
+static struct pipe_fence_handle *
+radeon_cs_create_fence(struct radeon_winsys_cs *rcs)
+{
+    struct radeon_drm_cs *cs = radeon_drm_cs(rcs);
+    struct pb_buffer *fence;
+
+    /* Create a fence, which is a dummy BO. */
+    fence = cs->ws->base.buffer_create(&cs->ws->base, 1, 1, TRUE,
+                                       RADEON_DOMAIN_GTT);
+    /* Add the fence as a dummy relocation. */
+    cs->ws->base.cs_add_reloc(rcs, cs->ws->base.buffer_get_cs_handle(fence),
+                              RADEON_USAGE_READWRITE, RADEON_DOMAIN_GTT);
+    return (struct pipe_fence_handle*)fence;
+}
+
+static bool radeon_fence_wait(struct radeon_winsys *ws,
+                              struct pipe_fence_handle *fence,
+                              uint64_t timeout)
+{
+    struct pb_buffer *rfence = (struct pb_buffer*)fence;
+
+    if (timeout == 0)
+        return !ws->buffer_is_busy(rfence, RADEON_USAGE_READWRITE);
+
+    if (timeout != PIPE_TIMEOUT_INFINITE) {
+        int64_t start_time = os_time_get();
+
+        /* Convert to microseconds. */
+        timeout /= 1000;
+
+        /* Wait in a loop. */
+        while (ws->buffer_is_busy(rfence, RADEON_USAGE_READWRITE)) {
+            if (os_time_get() - start_time >= timeout) {
+                return FALSE;
+            }
+            os_time_sleep(10);
+        }
+        return TRUE;
+    }
+
+    ws->buffer_wait(rfence, RADEON_USAGE_READWRITE);
+    return TRUE;
+}
+
+static void radeon_fence_reference(struct pipe_fence_handle **dst,
+                                   struct pipe_fence_handle *src)
+{
+    pb_reference((struct pb_buffer**)dst, (struct pb_buffer*)src);
+}
+
 void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws)
 {
     ws->base.cs_create = radeon_drm_cs_create;
@@ -641,4 +700,7 @@ void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws)
     ws->base.cs_set_flush_callback = radeon_drm_cs_set_flush;
     ws->base.cs_is_buffer_referenced = radeon_bo_is_referenced;
     ws->base.cs_sync_flush = radeon_drm_cs_sync_flush;
+    ws->base.cs_create_fence = radeon_cs_create_fence;
+    ws->base.fence_wait = radeon_fence_wait;
+    ws->base.fence_reference = radeon_fence_reference;
 }

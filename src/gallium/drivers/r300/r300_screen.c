@@ -89,6 +89,7 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
     switch (param) {
         /* Supported features (boolean caps). */
         case PIPE_CAP_NPOT_TEXTURES:
+        case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
         case PIPE_CAP_TWO_SIDED_STENCIL:
         case PIPE_CAP_ANISOTROPIC_FILTER:
         case PIPE_CAP_POINT_SPRITE:
@@ -192,6 +193,9 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
             return 4;
 	case PIPE_CAP_ENDIANNESS:
             return PIPE_ENDIAN_LITTLE;
+
+        case PIPE_CAP_MAX_VIEWPORTS:
+            return 1;
     }
     return 0;
 }
@@ -341,11 +345,12 @@ static float r300_get_paramf(struct pipe_screen* pscreen,
 
 static int r300_get_video_param(struct pipe_screen *screen,
 				enum pipe_video_profile profile,
+				enum pipe_video_entrypoint entrypoint,
 				enum pipe_video_cap param)
 {
    switch (param) {
       case PIPE_VIDEO_CAP_SUPPORTED:
-         return vl_profile_supported(screen, profile);
+         return vl_profile_supported(screen, profile, entrypoint);
       case PIPE_VIDEO_CAP_NPOT_TEXTURES:
          return 0;
       case PIPE_VIDEO_CAP_MAX_WIDTH:
@@ -359,6 +364,8 @@ static int r300_get_video_param(struct pipe_screen *screen,
          return false;
       case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
          return true;
+      case PIPE_VIDEO_CAP_MAX_LEVEL:
+         return vl_level_supported(screen, profile);
       default:
          return 0;
    }
@@ -439,11 +446,6 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
         case 6:
             /* We need DRM 2.8.0. */
             if (!drm_2_8_0) {
-                return FALSE;
-            }
-            /* Only support R500, because I didn't test older chipsets,
-             * but MSAA should work there too. */
-            if (!is_r500 && !debug_get_bool_option("RADEON_MSAA", FALSE)) {
                 return FALSE;
             }
             /* No texturing and scanout. */
@@ -542,6 +544,9 @@ static void r300_destroy_screen(struct pipe_screen* pscreen)
     struct r300_screen* r300screen = r300_screen(pscreen);
     struct radeon_winsys *rws = radeon_winsys(pscreen);
 
+    if (rws && !radeon_winsys_unref(rws))
+      return;
+
     pipe_mutex_destroy(r300screen->cmask_mutex);
 
     if (rws)
@@ -554,17 +559,17 @@ static void r300_fence_reference(struct pipe_screen *screen,
                                  struct pipe_fence_handle **ptr,
                                  struct pipe_fence_handle *fence)
 {
-    pb_reference((struct pb_buffer**)ptr,
-                             (struct pb_buffer*)fence);
+    struct radeon_winsys *rws = r300_screen(screen)->rws;
+
+    rws->fence_reference(ptr, fence);
 }
 
 static boolean r300_fence_signalled(struct pipe_screen *screen,
                                     struct pipe_fence_handle *fence)
 {
     struct radeon_winsys *rws = r300_screen(screen)->rws;
-    struct pb_buffer *rfence = (struct pb_buffer*)fence;
 
-    return !rws->buffer_is_busy(rfence, RADEON_USAGE_READWRITE);
+    return rws->fence_wait(rws, fence, 0);
 }
 
 static boolean r300_fence_finish(struct pipe_screen *screen,
@@ -572,26 +577,8 @@ static boolean r300_fence_finish(struct pipe_screen *screen,
                                  uint64_t timeout)
 {
     struct radeon_winsys *rws = r300_screen(screen)->rws;
-    struct pb_buffer *rfence = (struct pb_buffer*)fence;
 
-    if (timeout != PIPE_TIMEOUT_INFINITE) {
-        int64_t start_time = os_time_get();
-
-        /* Convert to microseconds. */
-        timeout /= 1000;
-
-        /* Wait in a loop. */
-        while (rws->buffer_is_busy(rfence, RADEON_USAGE_READWRITE)) {
-            if (os_time_get() - start_time >= timeout) {
-                return FALSE;
-            }
-            os_time_sleep(10);
-        }
-        return TRUE;
-    }
-
-    rws->buffer_wait(rfence, RADEON_USAGE_READWRITE);
-    return TRUE;
+    return rws->fence_wait(rws, fence, timeout);
 }
 
 struct pipe_screen* r300_screen_create(struct radeon_winsys *rws)

@@ -295,8 +295,6 @@ def generate(env):
             cppdefines += ['_DEBUG']
     if platform == 'windows':
         cppdefines += ['PIPE_SUBSYSTEM_WINDOWS_USER']
-    if platform == 'haiku':
-        cppdefines += ['BEOS_THREADS']
     if env['embedded']:
         cppdefines += ['PIPE_SUBSYSTEM_EMBEDDED']
     if env['texture_float']:
@@ -506,6 +504,8 @@ def generate(env):
         libs += ['m', 'pthread', 'dl']
     if env['platform'] in ('linux',):
         libs += ['rt']
+    if env['platform'] in ('haiku'):
+        libs += ['root', 'be', 'network', 'translation']
     env.Append(LIBS = libs)
 
     # OpenMP

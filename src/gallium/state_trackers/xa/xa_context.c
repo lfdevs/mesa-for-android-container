@@ -34,6 +34,11 @@
 #include "util/u_surface.h"
 #include "pipe/p_context.h"
 
+XA_EXPORT void
+xa_context_flush(struct xa_context *ctx)
+{
+	ctx->pipe->flush(ctx->pipe, &ctx->last_fence, 0);
+}
 
 XA_EXPORT struct xa_context *
 xa_context_default(struct xa_tracker *xa)
@@ -118,8 +123,6 @@ xa_surface_dma(struct xa_context *ctx,
 			   0);
 	}
 	pipe->transfer_unmap(pipe, transfer);
-	if (to_surface)
-	    pipe->flush(pipe, &ctx->last_fence, 0);
     }
     return XA_ERR_NONE;
 }
@@ -139,9 +142,9 @@ xa_surface_map(struct xa_context *ctx,
 	return NULL;
 
     if (usage & XA_MAP_READ)
-	transfer_direction = PIPE_TRANSFER_READ;
+	transfer_direction |= PIPE_TRANSFER_READ;
     if (usage & XA_MAP_WRITE)
-	transfer_direction = PIPE_TRANSFER_WRITE;
+	transfer_direction |= PIPE_TRANSFER_WRITE;
 
     if (!transfer_direction)
 	return NULL;
@@ -243,10 +246,8 @@ XA_EXPORT void
 xa_copy_done(struct xa_context *ctx)
 {
     if (!ctx->simple_copy) {
-	   renderer_draw_flush(ctx);
-	   ctx->pipe->flush(ctx->pipe, &ctx->last_fence, 0);
-    } else
-	ctx->pipe->flush(ctx->pipe, &ctx->last_fence, 0);
+	renderer_draw_flush(ctx);
+    }
 }
 
 static void
@@ -325,8 +326,6 @@ XA_EXPORT void
 xa_solid_done(struct xa_context *ctx)
 {
     renderer_draw_flush(ctx);
-    ctx->pipe->flush(ctx->pipe, &ctx->last_fence, 0);
-
     ctx->comp = NULL;
     ctx->has_solid_color = FALSE;
     ctx->num_bound_samplers = 0;

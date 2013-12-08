@@ -141,6 +141,7 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_COMBINED_SAMPLERS:
       return 16;
    case PIPE_CAP_NPOT_TEXTURES:
+   case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
       return 1;
    case PIPE_CAP_TWO_SIDED_STENCIL:
       return 1;
@@ -153,11 +154,10 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_TEXCOORD:
       return 0;
    case PIPE_CAP_MAX_RENDER_TARGETS:
-      if(!sws->get_cap(sws, SVGA3D_DEVCAP_MAX_RENDER_TARGETS, &result))
-         return 1;
-      if(!result.u)
-         return 1;
-      return MIN2(result.u, PIPE_MAX_COLOR_BUFS);
+      /* The SVGA3D device always supports 4 targets at this time, regardless
+       * of what querying SVGA3D_DEVCAP_MAX_RENDER_TARGETS might return.
+       */
+      return 4;
    case PIPE_CAP_OCCLUSION_QUERY:
       return 1;
    case PIPE_CAP_QUERY_TIME_ELAPSED:
@@ -207,11 +207,13 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
       return 1;
-   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
-   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
       return 0;
+   case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
+      return 0;
+   case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
+      return 1;
 
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
       return 1; /* The color outputs of vertex shaders are not clamped */
@@ -227,12 +229,14 @@ svga_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 120;
 
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+      return 0;
+
+   case PIPE_CAP_SM3:
       return 1;
 
    /* Unsupported features */
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
-   case PIPE_CAP_SM3:
    case PIPE_CAP_SHADER_STENCIL_EXPORT:
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
@@ -318,7 +322,7 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_MAX_PREDS:
          return 1;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
-         return 1;
+         return 0;
       case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
          return 0;
       case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
@@ -332,7 +336,7 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
          return 16;
       default:
-         debug_printf("Unexpected vertex shader query %u\n", param);
+         debug_printf("Unexpected fragment shader query %u\n", param);
          return 0;
       }
       break;
@@ -365,7 +369,7 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       case PIPE_SHADER_CAP_MAX_PREDS:
          return 1;
       case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
-         return 1;
+         return 0;
       case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
          return 0;
       case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -387,7 +391,8 @@ static int svga_get_shader_param(struct pipe_screen *screen, unsigned shader, en
       }
       break;
    case PIPE_SHADER_GEOMETRY:
-      /* no support for geometry shaders at this time */
+   case PIPE_SHADER_COMPUTE:
+      /* no support for geometry or compute shaders at this time */
       return 0;
    default:
       debug_printf("Unexpected shader type (%u) query\n", shader);

@@ -44,6 +44,10 @@
 #define MI_STORE_REGISTER_MEM		(CMD_MI | (0x24 << 23))
 # define MI_STORE_REGISTER_MEM_USE_GGTT		(1 << 22)
 
+/* Load a value from memory into a register.  Only available on Gen7+. */
+#define GEN7_MI_LOAD_REGISTER_MEM	(CMD_MI | (0x29 << 23))
+# define MI_LOAD_REGISTER_MEM_USE_GGTT		(1 << 22)
+
 /** @{
  *
  * PIPE_CONTROL operation, a combination MI_FLUSH and register write with
@@ -109,17 +113,11 @@
 #define PS_INVOCATION_COUNT             0x2348
 #define PS_DEPTH_COUNT                  0x2350
 
-#define SO_NUM_PRIM_STORAGE_NEEDED	0x2280
-#define SO_PRIM_STORAGE_NEEDED0_IVB	0x5240
-#define SO_PRIM_STORAGE_NEEDED1_IVB	0x5248
-#define SO_PRIM_STORAGE_NEEDED2_IVB	0x5250
-#define SO_PRIM_STORAGE_NEEDED3_IVB	0x5258
+#define GEN6_SO_PRIM_STORAGE_NEEDED     0x2280
+#define GEN7_SO_PRIM_STORAGE_NEEDED(n)  (0x5240 + (n) * 8)
 
-#define SO_NUM_PRIMS_WRITTEN		0x2288
-#define SO_NUM_PRIMS_WRITTEN0_IVB	0x5200
-#define SO_NUM_PRIMS_WRITTEN1_IVB	0x5208
-#define SO_NUM_PRIMS_WRITTEN2_IVB	0x5210
-#define SO_NUM_PRIMS_WRITTEN3_IVB	0x5218
+#define GEN6_SO_NUM_PRIMS_WRITTEN       0x2288
+#define GEN7_SO_NUM_PRIMS_WRITTEN(n)    (0x5200 + (n) * 8)
 
 #define GEN7_SO_WRITE_OFFSET(n)         (0x5280 + (n) * 4)
 

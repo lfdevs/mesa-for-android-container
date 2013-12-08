@@ -29,8 +29,11 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/gallium/drivers/radeon \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/include \
-	$(GALLIUM_CFLAGS)
-AM_CFLAGS = $(LLVM_CFLAGS)
+	$(GALLIUM_CFLAGS) \
+	$(RADEON_CFLAGS)
+AM_CFLAGS = \
+	$(LLVM_CFLAGS) \
+	$(VISIBILITY_CFLAGS)
 
 libradeonsi_la_SOURCES = $(C_SOURCES)
 libradeonsi_la_LIBADD = \

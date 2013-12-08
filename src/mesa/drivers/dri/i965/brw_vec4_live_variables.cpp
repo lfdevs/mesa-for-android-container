@@ -35,7 +35,7 @@ using namespace brw;
  * Support for computing at the basic block level which variables
  * (virtual GRFs in our case) are live at entry and exit.
  *
- * See Muchnik's Advanced Compiler Design and Implementation, section
+ * See Muchnick's Advanced Compiler Design and Implementation, section
  * 14.1 (p444).
  */
 
@@ -83,8 +83,8 @@ vec4_live_variables::setup_def_use()
 
                for (int j = 0; j < 4; j++) {
                   int c = BRW_GET_SWZ(inst->src[i].swizzle, j);
-                  if (!bd[b].def[reg * 4 + c])
-                     bd[b].use[reg * 4 + c] = true;
+                  if (!BITSET_TEST(bd[b].def, reg * 4 + c))
+                     BITSET_SET(bd[b].use, reg * 4 + c);
                }
 	    }
 	 }
@@ -99,8 +99,8 @@ vec4_live_variables::setup_def_use()
             for (int c = 0; c < 4; c++) {
                if (inst->dst.writemask & (1 << c)) {
                   int reg = inst->dst.reg;
-                  if (!bd[b].use[reg * 4 + c])
-                     bd[b].def[reg * 4 + c] = true;
+                  if (!BITSET_TEST(bd[b].use, reg * 4 + c))
+                     BITSET_SET(bd[b].def, reg * 4 + c);
                }
             }
          }
@@ -126,12 +126,12 @@ vec4_live_variables::compute_live_variables()
 
       for (int b = 0; b < cfg->num_blocks; b++) {
 	 /* Update livein */
-	 for (int i = 0; i < num_vars; i++) {
-	    if (bd[b].use[i] || (bd[b].liveout[i] && !bd[b].def[i])) {
-	       if (!bd[b].livein[i]) {
-		  bd[b].livein[i] = true;
-		  cont = true;
-	       }
+	 for (int i = 0; i < bitset_words; i++) {
+            BITSET_WORD new_livein = (bd[b].use[i] |
+                                      (bd[b].liveout[i] & ~bd[b].def[i]));
+            if (new_livein & ~bd[b].livein[i]) {
+               bd[b].livein[i] |= new_livein;
+               cont = true;
 	    }
 	 }
 
@@ -140,9 +140,11 @@ vec4_live_variables::compute_live_variables()
 	    bblock_link *link = (bblock_link *)block_node;
 	    bblock_t *block = link->block;
 
-	    for (int i = 0; i < num_vars; i++) {
-	       if (bd[block->block_num].livein[i] && !bd[b].liveout[i]) {
-		  bd[b].liveout[i] = true;
+	    for (int i = 0; i < bitset_words; i++) {
+               BITSET_WORD new_liveout = (bd[block->block_num].livein[i] &
+                                          ~bd[b].liveout[i]);
+               if (new_liveout) {
+                  bd[b].liveout[i] |= new_liveout;
 		  cont = true;
 	       }
 	    }
@@ -154,16 +156,17 @@ vec4_live_variables::compute_live_variables()
 vec4_live_variables::vec4_live_variables(vec4_visitor *v, cfg_t *cfg)
    : v(v), cfg(cfg)
 {
-   mem_ctx = ralloc_context(cfg->mem_ctx);
+   mem_ctx = ralloc_context(NULL);
 
    num_vars = v->virtual_grf_count * 4;
    bd = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
 
+   bitset_words = BITSET_WORDS(num_vars);
    for (int i = 0; i < cfg->num_blocks; i++) {
-      bd[i].def = rzalloc_array(mem_ctx, bool, num_vars);
-      bd[i].use = rzalloc_array(mem_ctx, bool, num_vars);
-      bd[i].livein = rzalloc_array(mem_ctx, bool, num_vars);
-      bd[i].liveout = rzalloc_array(mem_ctx, bool, num_vars);
+      bd[i].def = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      bd[i].use = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      bd[i].livein = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
+      bd[i].liveout = rzalloc_array(mem_ctx, BITSET_WORD, bitset_words);
    }
 
    setup_def_use();
@@ -248,12 +251,12 @@ vec4_visitor::calculate_live_intervals()
 
    for (int b = 0; b < cfg.num_blocks; b++) {
       for (int i = 0; i < livevars.num_vars; i++) {
-	 if (livevars.bd[b].livein[i]) {
+	 if (BITSET_TEST(livevars.bd[b].livein, i)) {
 	    start[i / 4] = MIN2(start[i / 4], cfg.blocks[b]->start_ip);
 	    end[i / 4] = MAX2(end[i / 4], cfg.blocks[b]->start_ip);
 	 }
 
-	 if (livevars.bd[b].liveout[i]) {
+	 if (BITSET_TEST(livevars.bd[b].liveout, i)) {
 	    start[i / 4] = MIN2(start[i / 4], cfg.blocks[b]->end_ip);
 	    end[i / 4] = MAX2(end[i / 4], cfg.blocks[b]->end_ip);
 	 }

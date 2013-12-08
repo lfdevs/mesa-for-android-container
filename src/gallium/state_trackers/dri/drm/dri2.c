@@ -479,19 +479,23 @@ dri2_flush_frontbuffer(struct dri_context *ctx,
 {
    __DRIdrawable *dri_drawable = drawable->dPriv;
    struct __DRIdri2LoaderExtensionRec *loader = drawable->sPriv->dri2.loader;
+   struct pipe_context *pipe = ctx->st->pipe;
 
    if (statt != ST_ATTACHMENT_FRONT_LEFT)
       return;
 
    if (drawable->stvis.samples > 1) {
-      struct pipe_context *pipe = ctx->st->pipe;
-
       /* Resolve the front buffer. */
       dri_pipe_blit(ctx->st->pipe,
                     drawable->textures[ST_ATTACHMENT_FRONT_LEFT],
                     drawable->msaa_textures[ST_ATTACHMENT_FRONT_LEFT]);
-      pipe->flush(pipe, NULL, 0);
    }
+
+   if (drawable->textures[ST_ATTACHMENT_FRONT_LEFT]) {
+      pipe->flush_resource(pipe, drawable->textures[ST_ATTACHMENT_FRONT_LEFT]);
+   }
+
+   pipe->flush(pipe, NULL, 0);
 
    if (loader->flushFrontBuffer) {
       loader->flushFrontBuffer(dri_drawable, dri_drawable->loaderPrivate);
@@ -617,6 +621,8 @@ dri2_create_image(__DRIscreen *_screen,
       tex_usage |= PIPE_BIND_SCANOUT;
    if (use & __DRI_IMAGE_USE_SHARE)
       tex_usage |= PIPE_BIND_SHARED;
+   if (use & __DRI_IMAGE_USE_LINEAR)
+      tex_usage |= PIPE_BIND_LINEAR;
    if (use & __DRI_IMAGE_USE_CURSOR) {
       if (width != 64 || height != 64)
          return NULL;
@@ -891,14 +897,6 @@ dri2_init_screen(__DRIscreen * sPriv)
    if (!configs)
       goto fail;
 
-   sPriv->api_mask = 0;
-   if (screen->st_api->profile_mask & ST_PROFILE_DEFAULT_MASK)
-      sPriv->api_mask |= 1 << __DRI_API_OPENGL;
-   if (screen->st_api->profile_mask & ST_PROFILE_OPENGL_ES1_MASK)
-      sPriv->api_mask |= 1 << __DRI_API_GLES;
-   if (screen->st_api->profile_mask & ST_PROFILE_OPENGL_ES2_MASK)
-      sPriv->api_mask |= 1 << __DRI_API_GLES2;
-
    screen->auto_fake_front = dri_with_format(sPriv);
    screen->broken_invalidate = !sPriv->dri2.useInvalidate;
    screen->lookup_egl_image = dri2_lookup_egl_image;
@@ -952,6 +950,7 @@ const struct __DriverAPIRec driDriverAPI = {
 PUBLIC const __DRIextension *__driDriverExtensions[] = {
     &driCoreExtension.base,
     &driDRI2Extension.base,
+    &gallium_config_options.base,
     NULL
 };
 

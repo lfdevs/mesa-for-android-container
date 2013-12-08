@@ -35,6 +35,7 @@
 
 #include "pipe/p_compiler.h"
 #include "draw_private.h"       /* for sizeof(vertex_header) */
+#include "draw_context.h"
 
 
 /**
@@ -91,7 +92,6 @@ extern struct draw_stage *draw_wide_line_stage( struct draw_context *context );
 extern struct draw_stage *draw_wide_point_stage( struct draw_context *context );
 extern struct draw_stage *draw_validate_stage( struct draw_context *context );
 
-
 extern void draw_free_temp_verts( struct draw_stage *stage );
 extern boolean draw_alloc_temp_verts( struct draw_stage *stage, unsigned nr );
 
@@ -101,7 +101,12 @@ void draw_pipe_passthrough_tri(struct draw_stage *stage, struct prim_header *hea
 void draw_pipe_passthrough_line(struct draw_stage *stage, struct prim_header *header);
 void draw_pipe_passthrough_point(struct draw_stage *stage, struct prim_header *header);
 
-
+void draw_aapoint_prepare_outputs(struct draw_context *context,
+                                  struct draw_stage *stage);
+void draw_aaline_prepare_outputs(struct draw_context *context,
+                                 struct draw_stage *stage);
+void draw_unfilled_prepare_outputs(struct draw_context *context,
+                                   struct draw_stage *stage);
 
 /**
  * Get a writeable copy of a vertex.
@@ -117,7 +122,7 @@ dup_vert( struct draw_stage *stage,
 {   
    struct vertex_header *tmp = stage->tmp[idx];
    const uint vsize = sizeof(struct vertex_header)
-      + stage->draw->vs.num_vs_outputs * 4 * sizeof(float);
+      + draw_num_shader_outputs(stage->draw) * 4 * sizeof(float);
    memcpy(tmp, vert, vsize);
    tmp->vertex_id = UNDEFINED_VERTEX_ID;
    return tmp;

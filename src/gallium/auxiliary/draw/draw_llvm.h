@@ -263,7 +263,8 @@ typedef int
                       unsigned count,
                       unsigned stride,
                       struct pipe_vertex_buffer *vertex_buffers,
-                      unsigned instance_id);
+                      unsigned instance_id,
+                      unsigned vertex_id_offset);
 
 
 typedef int
@@ -275,7 +276,8 @@ typedef int
                            unsigned fetch_count,
                            unsigned stride,
                            struct pipe_vertex_buffer *vertex_buffers,
-                           unsigned instance_id);
+                           unsigned instance_id,
+                           unsigned vertex_id_offset);
 
 
 typedef int
@@ -299,12 +301,13 @@ struct draw_llvm_variant_key
    unsigned bypass_viewport:1;
    unsigned need_edgeflags:1;
    unsigned has_gs:1;
+   unsigned num_outputs:8;
    /*
     * it is important there are no holes in this struct
     * (and all padding gets zeroed).
     */
    unsigned ucp_enable:PIPE_MAX_CLIP_PLANES;
-   unsigned pad1:32-PIPE_MAX_CLIP_PLANES;
+   unsigned pad1:24-PIPE_MAX_CLIP_PLANES;
 
    /* Variable number of vertex elements:
     */
@@ -319,6 +322,7 @@ struct draw_gs_llvm_variant_key
 {
    unsigned nr_samplers:8;
    unsigned nr_sampler_views:8;
+   unsigned num_outputs:8;
 
    struct draw_sampler_static_state samplers[1];
 };

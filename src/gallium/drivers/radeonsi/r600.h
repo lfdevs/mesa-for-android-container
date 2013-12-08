@@ -32,16 +32,7 @@
 
 #include "radeonsi_resource.h"
 
-#define R600_ERR(fmt, args...) \
-	fprintf(stderr, "EE %s:%d %s - "fmt, __FILE__, __LINE__, __func__, ##args)
-
 struct winsys_handle;
-
-struct r600_tiling_info {
-	unsigned num_channels;
-	unsigned num_banks;
-	unsigned group_bytes;
-};
 
 /* R600/R700 STATES */
 struct r600_query {
@@ -62,30 +53,19 @@ struct r600_query {
 	/* The buffer where query results are stored. It's used as a ring,
 	 * data blocks for current query are stored sequentially from
 	 * results_start to results_end, with wrapping on the buffer end */
-	struct si_resource			*buffer;
+	struct r600_resource			*buffer;
 	/* The number of dwords for begin_query or end_query. */
 	unsigned				num_cs_dw;
 	/* linked list of queries */
 	struct list_head			list;
 };
 
-struct r600_so_target {
-	struct pipe_stream_output_target b;
-
-	/* The buffer where BUFFER_FILLED_SIZE is stored. */
-	struct si_resource	*filled_size;
-	unsigned		stride;
-	unsigned		so_index;
-};
-
-#define R600_CONTEXT_DST_CACHES_DIRTY	(1 << 1)
-#define R600_CONTEXT_CHECK_EVENT_FLUSH	(1 << 2)
-
 struct r600_context;
 struct r600_screen;
 
 void si_get_backend_mask(struct r600_context *ctx);
 void si_context_flush(struct r600_context *ctx, unsigned flags);
+void si_begin_new_cs(struct r600_context *ctx);
 
 struct r600_query *r600_context_query_create(struct r600_context *ctx, unsigned query_type);
 void r600_context_query_destroy(struct r600_context *ctx, struct r600_query *query);
@@ -98,10 +78,9 @@ void r600_context_queries_suspend(struct r600_context *ctx);
 void r600_context_queries_resume(struct r600_context *ctx);
 void r600_query_predication(struct r600_context *ctx, struct r600_query *query, int operation,
 			    int flag_wait);
-void si_context_emit_fence(struct r600_context *ctx, struct si_resource *fence,
-                           unsigned offset, unsigned value);
 
-void r600_context_draw_opaque_count(struct r600_context *ctx, struct r600_so_target *t);
+bool si_is_timer_query(unsigned type);
+bool si_query_needs_begin(unsigned type);
 void si_need_cs_space(struct r600_context *ctx, unsigned num_dw, boolean count_draw_in);
 
 int si_context_init(struct r600_context *ctx);

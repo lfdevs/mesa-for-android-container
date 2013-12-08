@@ -105,6 +105,7 @@
 #include "macros.h"
 #include "matrix.h"
 #include "multisample.h"
+#include "performance_monitor.h"
 #include "pixel.h"
 #include "pixelstore.h"
 #include "points.h"
@@ -478,18 +479,24 @@ init_program_limits(struct gl_context *ctx, GLenum type,
       prog->MaxAttribs = MAX_VERTEX_GENERIC_ATTRIBS;
       prog->MaxAddressRegs = MAX_VERTEX_PROGRAM_ADDRESS_REGS;
       prog->MaxUniformComponents = 4 * MAX_UNIFORMS;
+      prog->MaxInputComponents = 0; /* value not used */
+      prog->MaxOutputComponents = 16 * 4; /* old limit not to break tnl and swrast */
       break;
    case GL_FRAGMENT_PROGRAM_ARB:
       prog->MaxParameters = MAX_NV_FRAGMENT_PROGRAM_PARAMS;
       prog->MaxAttribs = MAX_NV_FRAGMENT_PROGRAM_INPUTS;
       prog->MaxAddressRegs = MAX_FRAGMENT_PROGRAM_ADDRESS_REGS;
       prog->MaxUniformComponents = 4 * MAX_UNIFORMS;
+      prog->MaxInputComponents = 16 * 4; /* old limit not to break tnl and swrast */
+      prog->MaxOutputComponents = 0; /* value not used */
       break;
    case MESA_GEOMETRY_PROGRAM:
       prog->MaxParameters = MAX_VERTEX_PROGRAM_PARAMS;
       prog->MaxAttribs = MAX_VERTEX_GENERIC_ATTRIBS;
       prog->MaxAddressRegs = MAX_VERTEX_PROGRAM_ADDRESS_REGS;
-      prog->MaxUniformComponents = MAX_GEOMETRY_UNIFORM_COMPONENTS;
+      prog->MaxUniformComponents = 4 * MAX_UNIFORMS;
+      prog->MaxInputComponents = 16 * 4; /* old limit not to break tnl and swrast */
+      prog->MaxOutputComponents = 16 * 4; /* old limit not to break tnl and swrast */
       break;
    default:
       assert(0 && "Bad program type in init_program_limits()");
@@ -530,6 +537,9 @@ init_program_limits(struct gl_context *ctx, GLenum type,
    prog->MaxCombinedUniformComponents = (prog->MaxUniformComponents +
                                          ctx->Const.MaxUniformBlockSize / 4 *
                                          prog->MaxUniformBlocks);
+
+   prog->MaxAtomicBuffers = 0;
+   prog->MaxAtomicCounters = 0;
 }
 
 
@@ -645,6 +655,10 @@ _mesa_init_constants(struct gl_context *ctx)
    ctx->Const.MinProgramTexelOffset = -8;
    ctx->Const.MaxProgramTexelOffset = 7;
 
+   /* GL_ARB_texture_gather */
+   ctx->Const.MinProgramTextureGatherOffset = -8;
+   ctx->Const.MaxProgramTextureGatherOffset = 7;
+
    /* GL_ARB_robustness */
    ctx->Const.ResetStrategy = GL_NO_RESET_NOTIFICATION_ARB;
 
@@ -658,6 +672,16 @@ _mesa_init_constants(struct gl_context *ctx)
    ctx->Const.MaxColorTextureSamples = 1;
    ctx->Const.MaxDepthTextureSamples = 1;
    ctx->Const.MaxIntegerSamples = 1;
+
+   /* GL_ARB_shader_atomic_counters */
+   ctx->Const.MaxAtomicBufferBindings = MAX_COMBINED_ATOMIC_BUFFERS;
+   ctx->Const.MaxAtomicBufferSize = MAX_ATOMIC_COUNTERS * ATOMIC_COUNTER_SIZE;
+   ctx->Const.MaxCombinedAtomicBuffers = MAX_COMBINED_ATOMIC_BUFFERS;
+   ctx->Const.MaxCombinedAtomicCounters = MAX_ATOMIC_COUNTERS;
+
+   /* GL_ARB_vertex_attrib_binding */
+   ctx->Const.MaxVertexAttribRelativeOffset = 2047;
+   ctx->Const.MaxVertexAttribBindings = MAX_VERTEX_GENERIC_ATTRIBS;
 }
 
 
@@ -758,6 +782,7 @@ init_attrib_groups(struct gl_context *ctx)
    _mesa_init_lighting( ctx );
    _mesa_init_matrix( ctx );
    _mesa_init_multisample( ctx );
+   _mesa_init_performance_monitors( ctx );
    _mesa_init_pixel( ctx );
    _mesa_init_pixelstore( ctx );
    _mesa_init_point( ctx );
@@ -783,7 +808,7 @@ init_attrib_groups(struct gl_context *ctx)
    ctx->NewState = _NEW_ALL;
    ctx->NewDriverState = ~0;
    ctx->ErrorValue = GL_NO_ERROR;
-   ctx->ResetStatus = GL_NO_ERROR;
+   ctx->ShareGroupReset = false;
    ctx->varying_vp_inputs = VERT_BIT_ALL;
 
    return GL_TRUE;

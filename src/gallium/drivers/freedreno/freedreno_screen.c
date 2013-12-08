@@ -60,6 +60,10 @@ static const struct debug_named_value debug_options[] = {
 		{"disasm",    FD_DBG_DISASM, "Dump TGSI and adreno shader disassembly"},
 		{"dclear",    FD_DBG_DCLEAR, "Mark all state dirty after clear"},
 		{"dgmem",     FD_DBG_DGMEM,  "Mark all state dirty after GMEM tile pass"},
+		{"dscis",     FD_DBG_DSCIS,  "Disable scissor optimization"},
+		{"direct",    FD_DBG_DIRECT, "Force inline (SS_DIRECT) state loads"},
+		{"dbypass",   FD_DBG_DBYPASS,"Disable GMEM bypass"},
+		{"fraghalf",  FD_DBG_FRAGHALF, "Use half-precision in fragment shader"},
 		DEBUG_NAMED_VALUE_END
 };
 
@@ -137,6 +141,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	switch (param) {
 	/* Supported features (boolean caps). */
 	case PIPE_CAP_NPOT_TEXTURES:
+	case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
 	case PIPE_CAP_TWO_SIDED_STENCIL:
 	case PIPE_CAP_ANISOTROPIC_FILTER:
 	case PIPE_CAP_POINT_SPRITE:
@@ -205,7 +210,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
 	case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
 	case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
-		return 14;
+		return MAX_MIP_LEVELS;
 	case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
 		return 9192;
 	case PIPE_CAP_MAX_COMBINED_SAMPLERS:
@@ -264,6 +269,8 @@ static int
 fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		enum pipe_shader_cap param)
 {
+	struct fd_screen *screen = fd_screen(pscreen);
+
 	switch(shader)
 	{
 	case PIPE_SHADER_FRAGMENT:
@@ -290,13 +297,13 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_MAX_INPUTS:
 		return 32;
 	case PIPE_SHADER_CAP_MAX_TEMPS:
-		return 256; /* Max native temporaries. */
+		return 64; /* Max native temporaries. */
 	case PIPE_SHADER_CAP_MAX_ADDRS:
-		/* XXX Isn't this equal to TEMPS? */
 		return 1; /* Max native address registers */
 	case PIPE_SHADER_CAP_MAX_CONSTS:
+		return (screen->gpu_id >= 300) ? 1024 : 64;
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
-		return 64;
+		return 1;
 	case PIPE_SHADER_CAP_MAX_PREDS:
 		return 0; /* nothing uses this */
 	case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
@@ -309,7 +316,11 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_SUBROUTINES:
 		return 0;
 	case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+		return 1;
 	case PIPE_SHADER_CAP_INTEGERS:
+		/* we should be able to support this on a3xx, but not
+		 * implemented yet:
+		 */
 		return 0;
 	case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
 		return 16;

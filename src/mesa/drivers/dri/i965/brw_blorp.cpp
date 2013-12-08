@@ -21,11 +21,13 @@
  * IN THE SOFTWARE.
  */
 
+#include <errno.h>
 #include "intel_batchbuffer.h"
 #include "intel_fbo.h"
 
 #include "brw_blorp.h"
 #include "brw_defines.h"
+#include "brw_state.h"
 #include "gen6_blorp.h"
 #include "gen7_blorp.h"
 
@@ -66,7 +68,8 @@ brw_blorp_mip_info::set(struct intel_mipmap_tree *mt,
 void
 brw_blorp_surface_info::set(struct brw_context *brw,
                             struct intel_mipmap_tree *mt,
-                            unsigned int level, unsigned int layer)
+                            unsigned int level, unsigned int layer,
+                            bool is_render_target)
 {
    brw_blorp_mip_info::set(mt, level, layer);
    this->num_samples = mt->num_samples;
@@ -84,32 +87,34 @@ brw_blorp_surface_info::set(struct brw_context *brw,
       this->brw_surfaceformat = BRW_SURFACEFORMAT_R8_UNORM;
       break;
    case MESA_FORMAT_X8_Z24:
-   case MESA_FORMAT_Z32_FLOAT:
-      /* The miptree consists of 32 bits per pixel, arranged either as 24-bit
-       * depth values interleaved with 8 "don't care" bits, or as 32-bit
-       * floating point depth values.  Since depth values don't require any
-       * blending, it doesn't matter how we interpret the bit pattern as long
-       * as we copy the right amount of data, so just map it as 8-bit BGRA.
+      /* It would make sense to use BRW_SURFACEFORMAT_R24_UNORM_X8_TYPELESS
+       * here, but unfortunately it isn't supported as a render target, which
+       * would prevent us from blitting to 24-bit depth.
+       *
+       * The miptree consists of 32 bits per pixel, arranged as 24-bit depth
+       * values interleaved with 8 "don't care" bits.  Since depth values don't
+       * require any blending, it doesn't matter how we interpret the bit
+       * pattern as long as we copy the right amount of data, so just map it
+       * as 8-bit BGRA.
        */
       this->brw_surfaceformat = BRW_SURFACEFORMAT_B8G8R8A8_UNORM;
       break;
+   case MESA_FORMAT_Z32_FLOAT:
+      this->brw_surfaceformat = BRW_SURFACEFORMAT_R32_FLOAT;
+      break;
    case MESA_FORMAT_Z16:
-      /* The miptree consists of 16 bits per pixel of depth data.  Since depth
-       * values don't require any blending, it doesn't matter how we interpret
-       * the bit pattern as long as we copy the right amount of data, so just
-       * map is as 8-bit RG.
-       */
-      this->brw_surfaceformat = BRW_SURFACEFORMAT_R8G8_UNORM;
+      this->brw_surfaceformat = BRW_SURFACEFORMAT_R16_UNORM;
       break;
-   default:
-      /* Blorp blits don't support any sort of format conversion (except
-       * between sRGB and linear), so we can safely assume that the format is
-       * supported as a render target, even if this is the source image.  So
-       * we can convert to a surface format using brw->render_target_format.
-       */
-      assert(brw->format_supported_as_render_target[mt->format]);
-      this->brw_surfaceformat = brw->render_target_format[mt->format];
+   default: {
+      gl_format linear_format = _mesa_get_srgb_format_linear(mt->format);
+      if (is_render_target) {
+         assert(brw->format_supported_as_render_target[linear_format]);
+         this->brw_surfaceformat = brw->render_target_format[linear_format];
+      } else {
+         this->brw_surfaceformat = brw_format_for_mesa_format(linear_format);
+      }
       break;
+   }
    }
 }
 
@@ -191,6 +196,26 @@ intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
 void
 brw_blorp_exec(struct brw_context *brw, const brw_blorp_params *params)
 {
+   struct gl_context *ctx = &brw->ctx;
+   uint32_t estimated_max_batch_usage = 1500;
+   bool check_aperture_failed_once = false;
+
+   /* Flush the sampler and render caches.  We definitely need to flush the
+    * sampler cache so that we get updated contents from the render cache for
+    * the glBlitFramebuffer() source.  Also, we are sometimes warned in the
+    * docs to flush the cache between reinterpretations of the same surface
+    * data with different formats, which blorp does for stencil and depth
+    * data.
+    */
+   intel_batchbuffer_emit_mi_flush(brw);
+
+retry:
+   intel_batchbuffer_require_space(brw, estimated_max_batch_usage, false);
+   intel_batchbuffer_save_state(brw);
+   drm_intel_bo *saved_bo = brw->batch.bo;
+   uint32_t saved_used = brw->batch.used;
+   uint32_t saved_state_batch_offset = brw->batch.state_batch_offset;
+
    switch (brw->gen) {
    case 6:
       gen6_blorp_exec(brw, params);
@@ -204,6 +229,35 @@ brw_blorp_exec(struct brw_context *brw, const brw_blorp_params *params)
       break;
    }
 
+   /* Make sure we didn't wrap the batch unintentionally, and make sure we
+    * reserved enough space that a wrap will never happen.
+    */
+   assert(brw->batch.bo == saved_bo);
+   assert((brw->batch.used - saved_used) * 4 +
+          (saved_state_batch_offset - brw->batch.state_batch_offset) <
+          estimated_max_batch_usage);
+   /* Shut up compiler warnings on release build */
+   (void)saved_bo;
+   (void)saved_used;
+   (void)saved_state_batch_offset;
+
+   /* Check if the blorp op we just did would make our batch likely to fail to
+    * map all the BOs into the GPU at batch exec time later.  If so, flush the
+    * batch and try again with nothing else in the batch.
+    */
+   if (dri_bufmgr_check_aperture_space(&brw->batch.bo, 1)) {
+      if (!check_aperture_failed_once) {
+         check_aperture_failed_once = true;
+         intel_batchbuffer_reset_to_saved(brw);
+         intel_batchbuffer_flush(brw);
+         goto retry;
+      } else {
+         int ret = intel_batchbuffer_flush(brw);
+         WARN_ONCE(ret == -ENOSPC,
+                   "i965: blorp emit exceeded available aperture space\n");
+      }
+   }
+
    if (unlikely(brw->always_flush_batch))
       intel_batchbuffer_flush(brw);
 
@@ -212,8 +266,9 @@ brw_blorp_exec(struct brw_context *brw, const brw_blorp_params *params)
     */
    brw->state.dirty.brw = ~0;
    brw->state.dirty.cache = ~0;
-   brw->state_batch_count = 0;
    brw->batch.need_workaround_flush = true;
+   brw->ib.type = -1;
+   intel_batchbuffer_clear_cache(brw);
 
    /* Flush the sampler cache so any texturing from the destination is
     * coherent.

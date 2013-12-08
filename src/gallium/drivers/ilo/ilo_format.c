@@ -589,6 +589,7 @@ ilo_translate_color_format(enum pipe_format format)
       [PIPE_FORMAT_R16A16_SINT]           = 0,
       [PIPE_FORMAT_R32A32_UINT]           = 0,
       [PIPE_FORMAT_R32A32_SINT]           = 0,
+      [PIPE_FORMAT_R10G10B10A2_UINT]      = BRW_SURFACEFORMAT_R10G10B10A2_UINT,
    };
    int sfmt = format_mapping[format];
 
@@ -671,9 +672,10 @@ ilo_is_format_supported(struct pipe_screen *screen,
 static boolean
 ilo_is_video_format_supported(struct pipe_screen *screen,
                               enum pipe_format format,
-                              enum pipe_video_profile profile)
+                              enum pipe_video_profile profile,
+                              enum pipe_video_entrypoint entrypoint)
 {
-   return vl_video_buffer_is_format_supported(screen, format, profile);
+   return vl_video_buffer_is_format_supported(screen, format, profile, entrypoint);
 }
 
 /**

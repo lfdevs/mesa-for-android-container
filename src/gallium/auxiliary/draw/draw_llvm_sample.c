@@ -238,7 +238,7 @@ draw_llvm_sampler_soa_emit_fetch_texel(const struct lp_build_sampler_soa *base,
                                        const struct lp_derivatives *derivs,
                                        LLVMValueRef lod_bias, /* optional */
                                        LLVMValueRef explicit_lod, /* optional */
-                                       boolean scalar_lod,
+                                       enum lp_sampler_lod_property lod_property,
                                        LLVMValueRef *texel)
 {
    struct draw_llvm_sampler_soa *sampler = (struct draw_llvm_sampler_soa *)base;
@@ -257,7 +257,7 @@ draw_llvm_sampler_soa_emit_fetch_texel(const struct lp_build_sampler_soa *base,
                        coords,
                        offsets,
                        derivs,
-                       lod_bias, explicit_lod, scalar_lod,
+                       lod_bias, explicit_lod, lod_property,
                        texel);
 }
 
@@ -270,7 +270,9 @@ draw_llvm_sampler_soa_emit_size_query(const struct lp_build_sampler_soa *base,
                                       struct gallivm_state *gallivm,
                                       struct lp_type type,
                                       unsigned texture_unit,
-                                      boolean need_nr_mips,
+                                      unsigned target,
+                                      boolean is_sviewinfo,
+                                      enum lp_sampler_lod_property lod_property,
                                       LLVMValueRef explicit_lod, /* optional */
                                       LLVMValueRef *sizes_out)
 {
@@ -283,7 +285,9 @@ draw_llvm_sampler_soa_emit_size_query(const struct lp_build_sampler_soa *base,
                            &sampler->dynamic_state.base,
                            type,
                            texture_unit,
-                           need_nr_mips,
+                           target,
+                           is_sviewinfo,
+                           lod_property,
                            explicit_lod,
                            sizes_out);
 }

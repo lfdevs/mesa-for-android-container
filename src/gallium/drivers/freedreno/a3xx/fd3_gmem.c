@@ -32,6 +32,7 @@
 #include "util/u_inlines.h"
 #include "util/u_format.h"
 
+#include "freedreno_draw.h"
 #include "freedreno_state.h"
 #include "freedreno_resource.h"
 
@@ -59,25 +60,27 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 	for (i = 0; i < 4; i++) {
 		enum a3xx_color_fmt format = 0;
 		enum a3xx_color_swap swap = WZYX;
-		struct fd_resource *res = NULL;
+		struct fd_resource *rsc = NULL;
+		struct fd_resource_slice *slice = NULL;
 		uint32_t stride = 0;
 		uint32_t base = 0;
 
 		if (i < nr_bufs) {
 			struct pipe_surface *psurf = bufs[i];
 
-			res = fd_resource(psurf->texture);
+			rsc = fd_resource(psurf->texture);
+			slice = &rsc->slices[psurf->u.tex.level];
 			format = fd3_pipe2color(psurf->format);
 			swap = fd3_pipe2swap(psurf->format);
 
 			if (bin_w) {
-				stride = bin_w * res->cpp;
+				stride = bin_w * rsc->cpp;
 
 				if (bases) {
-					base = bases[i] * res->cpp;
+					base = bases[i] * rsc->cpp;
 				}
 			} else {
-				stride = res->pitch * res->cpp;
+				stride = slice->pitch * rsc->cpp;
 			}
 		}
 
@@ -89,7 +92,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		if (bin_w || (i >= nr_bufs)) {
 			OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(base));
 		} else {
-			OUT_RELOCS(ring, res->bo, 0, 0, -1);
+			OUT_RELOCW(ring, rsc->bo, slice->offset, 0, -1);
 		}
 
 		OUT_PKT0(ring, REG_A3XX_SP_FS_IMAGE_OUTPUT_REG(i), 1);
@@ -106,29 +109,28 @@ depth_base(struct fd_gmem_stateobj *gmem)
 /* transfer from gmem to system memory (ie. normal RAM) */
 
 static void
-emit_gmem2mem_surf(struct fd_ringbuffer *ring,
+emit_gmem2mem_surf(struct fd_context *ctx,
 		enum adreno_rb_copy_control_mode mode,
 		uint32_t base, struct pipe_surface *psurf)
 {
+	struct fd_ringbuffer *ring = ctx->ring;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
+	struct fd_resource_slice *slice = &rsc->slices[psurf->u.tex.level];
 
 	OUT_PKT0(ring, REG_A3XX_RB_COPY_CONTROL, 4);
 	OUT_RING(ring, A3XX_RB_COPY_CONTROL_MSAA_RESOLVE(MSAA_ONE) |
 			A3XX_RB_COPY_CONTROL_MODE(mode) |
 			A3XX_RB_COPY_CONTROL_GMEM_BASE(base));
-	OUT_RELOCS(ring, rsc->bo, 0, 0, -1);    /* RB_COPY_DEST_BASE */
-	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(rsc->pitch * rsc->cpp));
+	OUT_RELOCW(ring, rsc->bo, slice->offset, 0, -1);    /* RB_COPY_DEST_BASE */
+	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch * rsc->cpp));
 	OUT_RING(ring, A3XX_RB_COPY_DEST_INFO_TILE(LINEAR) |
 			A3XX_RB_COPY_DEST_INFO_FORMAT(fd3_pipe2color(psurf->format)) |
 			A3XX_RB_COPY_DEST_INFO_COMPONENT_ENABLE(0xf) |
 			A3XX_RB_COPY_DEST_INFO_ENDIAN(ENDIAN_NONE) |
 			A3XX_RB_COPY_DEST_INFO_SWAP(fd3_pipe2swap(psurf->format)));
 
-	OUT_PKT3(ring, CP_DRAW_INDX, 3);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX,
-			INDEX_SIZE_IGN, IGNORE_VISIBILITY));
-	OUT_RING(ring, 2);					/* NumIndices */
+	fd_draw(ctx, DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX, 2,
+			INDEX_SIZE_IGN, 0, 0, NULL);
 }
 
 static void
@@ -168,6 +170,14 @@ fd3_emit_tile_gmem2mem(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 	OUT_PKT0(ring, REG_A3XX_GRAS_CL_CLIP_CNTL, 1);
 	OUT_RING(ring, 0x00000000);   /* GRAS_CL_CLIP_CNTL */
 
+	OUT_PKT0(ring, REG_A3XX_GRAS_CL_VPORT_XOFFSET, 6);
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_XOFFSET((float)pfb->width/2.0 - 0.5));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_XSCALE((float)pfb->width/2.0));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_YOFFSET((float)pfb->height/2.0 - 0.5));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_YSCALE(-(float)pfb->height/2.0));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZOFFSET(0.0));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZSCALE(1.0));
+
 	OUT_PKT0(ring, REG_A3XX_RB_MODE_CONTROL, 1);
 	OUT_RING(ring, A3XX_RB_MODE_CONTROL_RENDER_MODE(RB_RESOLVE_PASS) |
 			A3XX_RB_MODE_CONTROL_MARB_CACHE_SPLIT_MODE);
@@ -206,13 +216,17 @@ fd3_emit_tile_gmem2mem(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 		}, 1);
 
 	if (ctx->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL)) {
-		uint32_t base = depth_base(&ctx->gmem) *
-				fd_resource(pfb->cbufs[0]->texture)->cpp;
-		emit_gmem2mem_surf(ring, RB_COPY_DEPTH_STENCIL, base, pfb->zsbuf);
+		uint32_t base = 0;
+		if (pfb->cbufs[0]) {
+			struct fd_resource *rsc =
+					fd_resource(pfb->cbufs[0]->texture);
+			base = depth_base(&ctx->gmem) * rsc->cpp;
+		}
+		emit_gmem2mem_surf(ctx, RB_COPY_DEPTH_STENCIL, base, pfb->zsbuf);
 	}
 
 	if (ctx->resolve & FD_BUFFER_COLOR) {
-		emit_gmem2mem_surf(ring, RB_COPY_RESOLVE, 0, pfb->cbufs[0]);
+		emit_gmem2mem_surf(ctx, RB_COPY_RESOLVE, 0, pfb->cbufs[0]);
 	}
 
 	OUT_PKT0(ring, REG_A3XX_RB_MODE_CONTROL, 1);
@@ -228,18 +242,17 @@ fd3_emit_tile_gmem2mem(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 /* transfer from system memory to gmem */
 
 static void
-emit_mem2gmem_surf(struct fd_ringbuffer *ring, uint32_t base,
+emit_mem2gmem_surf(struct fd_context *ctx, uint32_t base,
 		struct pipe_surface *psurf, uint32_t bin_w)
 {
+	struct fd_ringbuffer *ring = ctx->ring;
+
 	emit_mrt(ring, 1, &psurf, &base, bin_w);
 
 	fd3_emit_gmem_restore_tex(ring, psurf);
 
-	OUT_PKT3(ring, CP_DRAW_INDX, 3);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX,
-			INDEX_SIZE_IGN, IGNORE_VISIBILITY));
-	OUT_RING(ring, 2);					/* NumIndices */
+	fd_draw(ctx, DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX, 2,
+			INDEX_SIZE_IGN, 0, 0, NULL);
 }
 
 static void
@@ -260,7 +273,7 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 	y1 = ((float)yoff + bin_h) / ((float)pfb->height);
 
 	OUT_PKT3(ring, CP_MEM_WRITE, 5);
-	OUT_RELOC(ring, fd_resource(fd3_ctx->blit_texcoord_vbuf)->bo, 0, 0);
+	OUT_RELOC(ring, fd_resource(fd3_ctx->blit_texcoord_vbuf)->bo, 0, 0, 0);
 	OUT_RING(ring, fui(x0));
 	OUT_RING(ring, fui(y0));
 	OUT_RING(ring, fui(x1));
@@ -356,10 +369,10 @@ fd3_emit_tile_mem2gmem(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
 	bin_h = gmem->bin_h;
 
 	if (ctx->restore & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
-		emit_mem2gmem_surf(ring, depth_base(gmem), pfb->zsbuf, bin_w);
+		emit_mem2gmem_surf(ctx, depth_base(gmem), pfb->zsbuf, bin_w);
 
 	if (ctx->restore & FD_BUFFER_COLOR)
-		emit_mem2gmem_surf(ring, 0, pfb->cbufs[0], bin_w);
+		emit_mem2gmem_surf(ctx, 0, pfb->cbufs[0], bin_w);
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_SC_CONTROL, 1);
 	OUT_RING(ring, A3XX_GRAS_SC_CONTROL_RENDER_MODE(RB_RENDERING_PASS) |
@@ -383,7 +396,7 @@ update_vsc_pipe(struct fd_context *ctx)
 			A3XX_VSC_PIPE_CONFIG_Y(0) |
 			A3XX_VSC_PIPE_CONFIG_W(gmem->nbins_x) |
 			A3XX_VSC_PIPE_CONFIG_H(gmem->nbins_y));
-	OUT_RELOC(ring, bo, 0, 0);              /* VSC_PIPE[0].DATA_ADDRESS */
+	OUT_RELOC(ring, bo, 0, 0, 0);           /* VSC_PIPE[0].DATA_ADDRESS */
 	OUT_RING(ring, fd_bo_size(bo) - 32);    /* VSC_PIPE[0].DATA_LENGTH */
 
 	for (i = 1; i < 8; i++) {
@@ -402,8 +415,11 @@ static void
 fd3_emit_sysmem_prep(struct fd_context *ctx)
 {
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
-	struct fd_resource *rsc = fd_resource(pfb->cbufs[0]->texture);
 	struct fd_ringbuffer *ring = ctx->ring;
+	uint32_t pitch = 0;
+
+	if (pfb->cbufs[0])
+		pitch = fd_resource(pfb->cbufs[0]->texture)->slices[0].pitch;
 
 	fd3_emit_restore(ctx);
 
@@ -414,7 +430,7 @@ fd3_emit_sysmem_prep(struct fd_context *ctx)
 	emit_mrt(ring, pfb->nr_cbufs, pfb->cbufs, NULL, 0);
 
 	fd3_emit_rbrc_tile_state(ring,
-			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(rsc->pitch));
+			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(pitch));
 
 	/* setup scissor/offset for current tile: */
 	OUT_PKT0(ring, REG_A3XX_PA_SC_WINDOW_OFFSET, 1);

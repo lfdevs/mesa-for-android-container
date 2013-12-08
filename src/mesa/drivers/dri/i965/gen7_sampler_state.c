@@ -25,6 +25,7 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
+#include "intel_mipmap_tree.h"
 
 #include "main/macros.h"
 #include "main/samplerobj.h"
@@ -34,7 +35,8 @@
  */
 static void
 gen7_update_sampler_state(struct brw_context *brw, int unit, int ss_index,
-			  struct gen7_sampler_state *sampler)
+			  struct gen7_sampler_state *sampler,
+                          uint32_t *sdc_offset)
 {
    struct gl_context *ctx = &brw->ctx;
    struct gl_texture_unit *texUnit = &ctx->Texture.Unit[unit];
@@ -112,7 +114,7 @@ gen7_update_sampler_state(struct brw_context *brw, int unit, int ss_index,
     */
    if (texObj->Target == GL_TEXTURE_CUBE_MAP ||
        texObj->Target == GL_TEXTURE_CUBE_MAP_ARRAY) {
-      if (ctx->Texture.CubeMapSeamless &&
+      if ((ctx->Texture.CubeMapSeamless || gl_sampler->CubeMapSeamless) &&
 	  (gl_sampler->MinFilter != GL_NEAREST ||
 	   gl_sampler->MagFilter != GL_NEAREST)) {
 	 sampler->ss3.r_wrap_mode = BRW_TEXCOORDMODE_CUBE;
@@ -149,13 +151,6 @@ gen7_update_sampler_state(struct brw_context *brw, int unit, int ss_index,
    sampler->ss0.lod_preclamp = 1; /* OpenGL mode */
    sampler->ss0.default_color_mode = 0; /* OpenGL/DX10 mode */
 
-   /* Set BaseMipLevel, MaxLOD, MinLOD:
-    *
-    * XXX: I don't think that using firstLevel, lastLevel works,
-    * because we always setup the surface state as if firstLevel ==
-    * level zero.  Probably have to subtract firstLevel from each of
-    * these:
-    */
    sampler->ss0.base_level = U_FIXED(0, 1);
 
    sampler->ss1.max_lod = U_FIXED(CLAMP(gl_sampler->MaxLod, 0, 13), 8);
@@ -168,9 +163,9 @@ gen7_update_sampler_state(struct brw_context *brw, int unit, int ss_index,
       sampler->ss3.non_normalized_coord = 1;
    }
 
-   upload_default_color(brw, gl_sampler, unit, ss_index);
+   upload_default_color(brw, gl_sampler, unit, sdc_offset);
 
-   sampler->ss2.default_color_pointer = brw->wm.sdc_offset[ss_index] >> 5;
+   sampler->ss2.default_color_pointer = *sdc_offset >> 5;
 
    if (sampler->ss0.min_filter != BRW_MAPFILTER_NEAREST)
       sampler->ss3.address_round |= BRW_ADDRESS_ROUNDING_ENABLE_U_MIN |
@@ -184,46 +179,39 @@ gen7_update_sampler_state(struct brw_context *brw, int unit, int ss_index,
 
 
 static void
-gen7_upload_samplers(struct brw_context *brw)
+gen7_upload_sampler_state_table(struct brw_context *brw,
+                                struct gl_program *prog,
+                                uint32_t sampler_count,
+                                uint32_t *sst_offset,
+                                uint32_t *sdc_offset)
 {
    struct gl_context *ctx = &brw->ctx;
    struct gen7_sampler_state *samplers;
 
-   /* BRW_NEW_VERTEX_PROGRAM and BRW_NEW_FRAGMENT_PROGRAM */
-   struct gl_program *vs = (struct gl_program *) brw->vertex_program;
-   struct gl_program *fs = (struct gl_program *) brw->fragment_program;
+   GLbitfield SamplersUsed = prog->SamplersUsed;
 
-   GLbitfield SamplersUsed = vs->SamplersUsed | fs->SamplersUsed;
-
-   brw->sampler.count = _mesa_fls(SamplersUsed);
-
-   if (brw->sampler.count == 0)
+   if (sampler_count == 0)
       return;
 
    samplers = brw_state_batch(brw, AUB_TRACE_SAMPLER_STATE,
-			      brw->sampler.count * sizeof(*samplers),
-			      32, &brw->sampler.offset);
-   memset(samplers, 0, brw->sampler.count * sizeof(*samplers));
+			      sampler_count * sizeof(*samplers),
+			      32, sst_offset);
+   memset(samplers, 0, sampler_count * sizeof(*samplers));
 
-   for (unsigned s = 0; s < brw->sampler.count; s++) {
+   for (unsigned s = 0; s < sampler_count; s++) {
       if (SamplersUsed & (1 << s)) {
-         const unsigned unit = (fs->SamplersUsed & (1 << s)) ?
-            fs->SamplerUnits[s] : vs->SamplerUnits[s];
+         const unsigned unit = prog->SamplerUnits[s];
          if (ctx->Texture.Unit[unit]._ReallyEnabled)
-            gen7_update_sampler_state(brw, unit, s, &samplers[s]);
+            gen7_update_sampler_state(brw, unit, s, &samplers[s],
+                                      &sdc_offset[s]);
       }
    }
 
    brw->state.dirty.cache |= CACHE_NEW_SAMPLER;
 }
 
-const struct brw_tracked_state gen7_samplers = {
-   .dirty = {
-      .mesa = _NEW_TEXTURE,
-      .brw = BRW_NEW_BATCH |
-             BRW_NEW_VERTEX_PROGRAM |
-             BRW_NEW_FRAGMENT_PROGRAM,
-      .cache = 0
-   },
-   .emit = gen7_upload_samplers,
-};
+void
+gen7_init_vtable_sampler_functions(struct brw_context *brw)
+{
+   brw->vtbl.upload_sampler_state_table = gen7_upload_sampler_state_table;
+}

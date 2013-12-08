@@ -263,32 +263,15 @@ rbug_create_sampler_state(struct pipe_context *_pipe,
 }
 
 static void
-rbug_bind_fragment_sampler_states(struct pipe_context *_pipe,
-                                  unsigned num_samplers,
-                                  void **samplers)
+rbug_bind_sampler_states(struct pipe_context *_pipe, unsigned shader,
+                         unsigned start, unsigned count,
+                         void **samplers)
 {
    struct rbug_context *rb_pipe = rbug_context(_pipe);
    struct pipe_context *pipe = rb_pipe->pipe;
 
    pipe_mutex_lock(rb_pipe->call_mutex);
-   pipe->bind_fragment_sampler_states(pipe,
-                                      num_samplers,
-                                      samplers);
-   pipe_mutex_unlock(rb_pipe->call_mutex);
-}
-
-static void
-rbug_bind_vertex_sampler_states(struct pipe_context *_pipe,
-                                unsigned num_samplers,
-                                void **samplers)
-{
-   struct rbug_context *rb_pipe = rbug_context(_pipe);
-   struct pipe_context *pipe = rb_pipe->pipe;
-
-   pipe_mutex_lock(rb_pipe->call_mutex);
-   pipe->bind_vertex_sampler_states(pipe,
-                                    num_samplers,
-                                    samplers);
+   pipe->bind_sampler_states(pipe, shader, start, count, samplers);
    pipe_mutex_unlock(rb_pipe->call_mutex);
 }
 
@@ -753,34 +736,9 @@ rbug_set_sampler_views(struct pipe_context *_pipe,
       views = unwrapped_views;
    }
 
-   switch (shader) {
-   case PIPE_SHADER_VERTEX:
-      pipe->set_vertex_sampler_views(pipe, num, views);
-      break;
-   case PIPE_SHADER_FRAGMENT:
-      pipe->set_fragment_sampler_views(pipe, num, views);
-      break;
-   default:
-      assert(0);
-   }
+   pipe->set_sampler_views(pipe, shader, start, num, views);
 
    pipe_mutex_unlock(rb_pipe->call_mutex);
-}
-
-static void
-rbug_set_vertex_sampler_views(struct pipe_context *_pipe,
-                              unsigned num,
-                              struct pipe_sampler_view **_views)
-{
-   rbug_set_sampler_views(_pipe, PIPE_SHADER_VERTEX, 0, num, _views);
-}
-
-static void
-rbug_set_fragment_sampler_views(struct pipe_context *_pipe,
-                                unsigned num,
-                                struct pipe_sampler_view **_views)
-{
-   rbug_set_sampler_views(_pipe, PIPE_SHADER_FRAGMENT, 0, num, _views);
 }
 
 static void
@@ -869,6 +827,20 @@ rbug_resource_copy_region(struct pipe_context *_pipe,
                               src,
                               src_level,
                               src_box);
+   pipe_mutex_unlock(rb_pipe->call_mutex);
+}
+
+static void
+rbug_flush_resource(struct pipe_context *_pipe,
+                    struct pipe_resource *_res)
+{
+   struct rbug_context *rb_pipe = rbug_context(_pipe);
+   struct rbug_resource *rb_resource_res = rbug_resource(_res);
+   struct pipe_context *pipe = rb_pipe->pipe;
+   struct pipe_resource *res = rb_resource_res->resource;
+
+   pipe_mutex_lock(rb_pipe->call_mutex);
+   pipe->flush_resource(pipe, res);
    pipe_mutex_unlock(rb_pipe->call_mutex);
 }
 
@@ -1146,8 +1118,7 @@ rbug_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    rb_pipe->base.bind_blend_state = rbug_bind_blend_state;
    rb_pipe->base.delete_blend_state = rbug_delete_blend_state;
    rb_pipe->base.create_sampler_state = rbug_create_sampler_state;
-   rb_pipe->base.bind_fragment_sampler_states = rbug_bind_fragment_sampler_states;
-   rb_pipe->base.bind_vertex_sampler_states = rbug_bind_vertex_sampler_states;
+   rb_pipe->base.bind_sampler_states = rbug_bind_sampler_states;
    rb_pipe->base.delete_sampler_state = rbug_delete_sampler_state;
    rb_pipe->base.create_rasterizer_state = rbug_create_rasterizer_state;
    rb_pipe->base.bind_rasterizer_state = rbug_bind_rasterizer_state;
@@ -1175,12 +1146,12 @@ rbug_context_create(struct pipe_screen *_screen, struct pipe_context *pipe)
    rb_pipe->base.set_polygon_stipple = rbug_set_polygon_stipple;
    rb_pipe->base.set_scissor_states = rbug_set_scissor_states;
    rb_pipe->base.set_viewport_states = rbug_set_viewport_states;
-   rb_pipe->base.set_fragment_sampler_views = rbug_set_fragment_sampler_views;
-   rb_pipe->base.set_vertex_sampler_views = rbug_set_vertex_sampler_views;
+   rb_pipe->base.set_sampler_views = rbug_set_sampler_views;
    rb_pipe->base.set_vertex_buffers = rbug_set_vertex_buffers;
    rb_pipe->base.set_index_buffer = rbug_set_index_buffer;
    rb_pipe->base.set_sample_mask = rbug_set_sample_mask;
    rb_pipe->base.resource_copy_region = rbug_resource_copy_region;
+   rb_pipe->base.flush_resource = rbug_flush_resource;
    rb_pipe->base.clear = rbug_clear;
    rb_pipe->base.clear_render_target = rbug_clear_render_target;
    rb_pipe->base.clear_depth_stencil = rbug_clear_depth_stencil;

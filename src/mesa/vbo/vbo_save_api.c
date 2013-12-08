@@ -41,7 +41,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  * example by building a list that consists of one very long primitive
  * (eg Begin(Triangles), 1000 vertices, End), and calling that list
  * from inside a different begin/end object (Begin(Lines), CallList,
- * End).  
+ * End).
  *
  * In that case the code will have to replay the list as individual
  * commands through the Exec dispatch table, or fix up the copied
@@ -60,7 +60,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  * The list compiler currently doesn't attempt to compile lists
  * containing EvalCoord or EvalPoint commands.  On encountering one of
- * these, compilation falls back to opcodes.  
+ * these, compilation falls back to opcodes.
  *
  * This could be improved to fallback only when a mix of EvalCoord and
  * Vertex commands are issued within a single primitive.
@@ -237,16 +237,31 @@ GLfloat *
 vbo_save_map_vertex_store(struct gl_context *ctx,
                           struct vbo_save_vertex_store *vertex_store)
 {
+   const GLbitfield access = (GL_MAP_WRITE_BIT |
+                              GL_MAP_INVALIDATE_RANGE_BIT |
+                              GL_MAP_UNSYNCHRONIZED_BIT |
+                              GL_MAP_FLUSH_EXPLICIT_BIT);
+
    assert(vertex_store->bufferobj);
-   assert(!vertex_store->buffer);
+   assert(!vertex_store->buffer);  /* the buffer should not be mapped */
+
    if (vertex_store->bufferobj->Size > 0) {
-      vertex_store->buffer =
-         (GLfloat *) ctx->Driver.MapBufferRange(ctx, 0,
-                                                vertex_store->bufferobj->Size,
-                                                GL_MAP_WRITE_BIT,  /* not used */
-                                                vertex_store->bufferobj);
-      assert(vertex_store->buffer);
-      return vertex_store->buffer + vertex_store->used;
+      /* Map the remaining free space in the VBO */
+      GLintptr offset = vertex_store->used * sizeof(GLfloat);
+      GLsizeiptr size = vertex_store->bufferobj->Size - offset;
+      GLfloat *range = (GLfloat *)
+         ctx->Driver.MapBufferRange(ctx, offset, size, access,
+                                    vertex_store->bufferobj);
+      if (range) {
+         /* compute address of start of whole buffer (needed elsewhere) */
+         vertex_store->buffer = range - vertex_store->used;
+         assert(vertex_store->buffer);
+         return range;
+      }
+      else {
+         vertex_store->buffer = NULL;
+         return NULL;
+      }
    }
    else {
       /* probably ran out of memory for buffers */
@@ -260,6 +275,14 @@ vbo_save_unmap_vertex_store(struct gl_context *ctx,
                             struct vbo_save_vertex_store *vertex_store)
 {
    if (vertex_store->bufferobj->Size > 0) {
+      GLintptr offset = 0;
+      GLsizeiptr length = vertex_store->used * sizeof(GLfloat)
+         - vertex_store->bufferobj->Offset;
+
+      /* Explicitly flush the region we wrote to */
+      ctx->Driver.FlushMappedBufferRange(ctx, offset, length,
+                                         vertex_store->bufferobj);
+
       ctx->Driver.UnmapBuffer(ctx, vertex_store->bufferobj);
    }
    vertex_store->buffer = NULL;
@@ -289,15 +312,15 @@ _save_reset_counters(struct gl_context *ctx)
    assert(save->buffer == save->buffer_ptr);
 
    if (save->vertex_size)
-      save->max_vert = ((VBO_SAVE_BUFFER_SIZE - save->vertex_store->used) /
-                        save->vertex_size);
+      save->max_vert = (VBO_SAVE_BUFFER_SIZE - save->vertex_store->used) /
+                        save->vertex_size;
    else
       save->max_vert = 0;
 
    save->vert_count = 0;
    save->prim_count = 0;
    save->prim_max = VBO_SAVE_PRIM_SIZE - save->prim_store->used;
-   save->dangling_attr_ref = 0;
+   save->dangling_attr_ref = GL_FALSE;
 }
 
 /**
@@ -410,7 +433,7 @@ _save_compile_vertex_list(struct gl_context *ctx)
    save->vertex_store->used += save->vertex_size * node->count;
    save->prim_store->used += node->prim_count;
 
-   /* Copy duplicated vertices 
+   /* Copy duplicated vertices
     */
    save->copied.nr = _save_copy_vertices(ctx, node, save->buffer);
 
@@ -514,7 +537,7 @@ _save_wrap_buffers(struct gl_context *ctx)
 
 /**
  * Called only when buffers are wrapped as the result of filling the
- * vertex_store struct.  
+ * vertex_store struct.
  */
 static void
 _save_wrap_filled_vertex(struct gl_context *ctx)
@@ -603,7 +626,7 @@ _save_upgrade_vertex(struct gl_context *ctx, GLuint attr, GLuint newsz)
 
    /* Do a COPY_TO_CURRENT to ensure back-copying works for the case
     * when the attribute already exists in the vertex and is having
-    * its size increased.  
+    * its size increased.
     */
    _save_copy_to_current(ctx);
 
@@ -856,7 +879,7 @@ dlist_fallback(struct gl_context *ctx)
        * unfortunately, otherwise this primitive won't be handled
        * properly:
        */
-      save->dangling_attr_ref = 1;
+      save->dangling_attr_ref = GL_TRUE;
 
       _save_compile_vertex_list(ctx);
    }
@@ -1433,13 +1456,13 @@ vbo_save_EndList(struct gl_context *ctx)
          GLint i = save->prim_count - 1;
          ctx->Driver.CurrentSavePrimitive = PRIM_OUTSIDE_BEGIN_END;
          save->prim[i].end = 0;
-         save->prim[i].count = (save->vert_count - save->prim[i].start);
+         save->prim[i].count = save->vert_count - save->prim[i].start;
       }
 
       /* Make sure this vertex list gets replayed by the "loopback"
        * mechanism:
        */
-      save->dangling_attr_ref = 1;
+      save->dangling_attr_ref = GL_TRUE;
       vbo_save_SaveFlushVertices(ctx);
 
       /* Swap out this vertex format while outside begin/end.  Any color,

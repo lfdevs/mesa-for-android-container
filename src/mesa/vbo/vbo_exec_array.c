@@ -318,8 +318,8 @@ check_draw_elements_data(struct gl_context *ctx, GLsizei count, GLenum elemType,
       }
 
       /* check element j of each enabled array */
-      for (k = 0; k < Elements(arrayObj->VertexAttrib); k++) {
-         check_array_data(ctx, &arrayObj->VertexAttrib[k], k, j);
+      for (k = 0; k < Elements(arrayObj->_VertexAttrib); k++) {
+         check_array_data(ctx, &arrayObj->_VertexAttrib[k], k, j);
       }
    }
 
@@ -327,8 +327,8 @@ check_draw_elements_data(struct gl_context *ctx, GLsizei count, GLenum elemType,
       ctx->Driver.UnmapBuffer(ctx, ctx->Array.ArrayObj->ElementArrayBufferObj);
    }
 
-   for (k = 0; k < Elements(arrayObj->VertexAttrib); k++) {
-      unmap_array_buffer(ctx, &arrayObj->VertexAttrib[k]);
+   for (k = 0; k < Elements(arrayObj->_VertexAttrib); k++) {
+      unmap_array_buffer(ctx, &arrayObj->_VertexAttrib[k]);
    }
 }
 
@@ -368,7 +368,7 @@ print_draw_arrays(struct gl_context *ctx,
 	     exec->array.inputs[i]->Size,
 	     stride,
 	     /*exec->array.inputs[i]->Enabled,*/
-	     arrayObj->VertexAttrib[VERT_ATTRIB_FF(i)].Enabled,
+	     arrayObj->_VertexAttrib[VERT_ATTRIB_FF(i)].Enabled,
 	     exec->array.inputs[i]->Ptr,
 	     bufName);
 
@@ -405,7 +405,7 @@ recalculate_input_bindings(struct gl_context *ctx)
 {
    struct vbo_context *vbo = vbo_context(ctx);
    struct vbo_exec_context *exec = &vbo->exec;
-   struct gl_client_array *vertexAttrib = ctx->Array.ArrayObj->VertexAttrib;
+   struct gl_client_array *vertexAttrib = ctx->Array.ArrayObj->_VertexAttrib;
    const struct gl_client_array **inputs = &exec->array.inputs[0];
    GLbitfield64 const_inputs = 0x0;
    GLuint i;
@@ -1334,6 +1334,16 @@ vbo_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
       }
    }
 
+   /* Draw primitives individually if one count is zero, so we can easily skip
+    * that primitive.
+    */
+   for (i = 0; i < primcount; i++) {
+      if (count[i] == 0) {
+         fallback = GL_TRUE;
+         break;
+      }
+   }
+
    /* If the index buffer isn't in a VBO, then treating the application's
     * subranges of the index buffer as one large index buffer may lead to
     * us reading unmapped memory.
@@ -1370,6 +1380,8 @@ vbo_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
    } else {
       /* render one prim at a time */
       for (i = 0; i < primcount; i++) {
+	 if (count[i] == 0)
+	    continue;
 	 ib.count = count[i];
 	 ib.type = type;
 	 ib.obj = ctx->Array.ArrayObj->ElementArrayBufferObj;
@@ -1449,6 +1461,16 @@ vbo_draw_transform_feedback(struct gl_context *ctx, GLenum mode,
 
    if (!_mesa_validate_DrawTransformFeedback(ctx, mode, obj, stream,
                                              numInstances)) {
+      return;
+   }
+
+   if (ctx->Driver.GetTransformFeedbackVertexCount &&
+       (ctx->Const.AlwaysUseGetTransformFeedbackVertexCount ||
+        (ctx->Const.PrimitiveRestartInSoftware &&
+         ctx->Array._PrimitiveRestart) ||
+        !vbo_all_varyings_in_vbos(exec->array.inputs))) {
+      GLsizei n = ctx->Driver.GetTransformFeedbackVertexCount(ctx, obj, stream);
+      vbo_draw_arrays(ctx, mode, 0, n, numInstances, 0);
       return;
    }
 

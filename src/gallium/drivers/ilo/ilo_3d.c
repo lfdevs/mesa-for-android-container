@@ -25,6 +25,7 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
+#include "util/u_prim.h"
 #include "intel_winsys.h"
 
 #include "ilo_3d_pipeline.h"
@@ -401,7 +402,7 @@ draw_vbo(struct ilo_3d *hw3d, const struct ilo_context *ilo,
    }
 
    if (max_len > ilo_cp_space(hw3d->cp)) {
-      ilo_cp_flush(hw3d->cp);
+      ilo_cp_flush(hw3d->cp, "out of space");
       need_flush = false;
       assert(max_len <= ilo_cp_space(hw3d->cp));
    }
@@ -701,6 +702,21 @@ ilo_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    struct ilo_3d *hw3d = ilo->hw3d;
    int prim_generated, prim_emitted;
 
+   if (ilo_debug & ILO_DEBUG_DRAW) {
+      if (info->indexed) {
+         ilo_printf("indexed draw %s: "
+               "index start %d, count %d, vertex range [%d, %d]\n",
+               u_prim_name(info->mode), info->start, info->count,
+               info->min_index, info->max_index);
+      }
+      else {
+         ilo_printf("draw %s: vertex start %d, count %d\n",
+               u_prim_name(info->mode), info->start, info->count);
+      }
+
+      ilo_dump_dirty_flags(ilo->dirty);
+   }
+
    if (!ilo_3d_pass_render_condition(ilo))
       return;
 
@@ -766,7 +782,7 @@ ilo_texture_barrier(struct pipe_context *pipe)
 
    /* don't know why */
    if (ilo->dev->gen >= ILO_GEN(7))
-      ilo_cp_flush(hw3d->cp);
+      ilo_cp_flush(hw3d->cp, "texture barrier");
 }
 
 static void

@@ -21,6 +21,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/ast_function.cpp \
 	$(GLSL_SRCDIR)/ast_to_hir.cpp \
 	$(GLSL_SRCDIR)/ast_type.cpp \
+	$(GLSL_SRCDIR)/builtin_functions.cpp \
 	$(GLSL_SRCDIR)/builtin_types.cpp \
 	$(GLSL_SRCDIR)/builtin_variables.cpp \
 	$(GLSL_SRCDIR)/glsl_parser_extras.cpp \
@@ -46,6 +47,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/ir_validate.cpp \
 	$(GLSL_SRCDIR)/ir_variable_refcount.cpp \
 	$(GLSL_SRCDIR)/linker.cpp \
+	$(GLSL_SRCDIR)/link_atomics.cpp \
 	$(GLSL_SRCDIR)/link_functions.cpp \
 	$(GLSL_SRCDIR)/link_interface_blocks.cpp \
 	$(GLSL_SRCDIR)/link_uniforms.cpp \
@@ -82,6 +84,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_constant_variable.cpp \
 	$(GLSL_SRCDIR)/opt_copy_propagation.cpp \
 	$(GLSL_SRCDIR)/opt_copy_propagation_elements.cpp \
+	$(GLSL_SRCDIR)/opt_cse.cpp \
 	$(GLSL_SRCDIR)/opt_dead_builtin_varyings.cpp \
 	$(GLSL_SRCDIR)/opt_dead_code.cpp \
 	$(GLSL_SRCDIR)/opt_dead_code_local.cpp \
@@ -104,20 +107,7 @@ GLSL_COMPILER_CXX_FILES = \
 	$(GLSL_SRCDIR)/standalone_scaffolding.cpp \
 	$(GLSL_SRCDIR)/main.cpp
 
-# builtin_compiler
-#
-# This is built before libglsl to generate builtin_function.cpp for libglsl.
-# For this to work, a dummy version of builtin_function.cpp,
-# builtin_stubs.cpp, is used.
-
-BUILTIN_COMPILER_CXX_FILES = \
-	$(GLSL_SRCDIR)/builtin_compiler/builtin_stubs.cpp
-
-BUILTIN_COMPILER_GENERATED_CXX_FILES = \
-	$(GLSL_BUILDDIR)/glsl_lexer.cpp \
-	$(GLSL_BUILDDIR)/glsl_parser.cpp
-
 # libglsl generated sources
 LIBGLSL_GENERATED_CXX_FILES = \
-	$(BUILTIN_COMPILER_GENERATED_CXX_FILES) \
-	$(GLSL_BUILDDIR)/builtin_function.cpp
+	$(GLSL_BUILDDIR)/glsl_lexer.cpp \
+	$(GLSL_BUILDDIR)/glsl_parser.cpp

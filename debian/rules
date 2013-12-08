@@ -83,8 +83,8 @@ else
   endif
 
 
-# Build the llvmpipe driver only on amd64, i386 until it's tested elsewhere
-  ifeq (,$(filter $(DEB_HOST_ARCH_CPU), amd64 i386))
+# Build the llvmpipe driver only on amd64, i386, and arm until it's tested elsewhere
+  ifeq (,$(filter $(DEB_HOST_ARCH_CPU), amd64 i386 arm))
 	DRI_DRIVERS += swrast
   else
 	GALLIUM_DRIVERS += swrast
@@ -250,12 +250,14 @@ binary-arch: install
 	set -e; for file in $(NOT_INSTALLED_EITHER); do rm -f debian/tmp/$$file; done
 	# No need for these .so, they're just convenience libraries:
 	rm debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/libglapi.so
-	rm -f debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/libdricore*.so
 	# purge .la files
 	find debian/tmp/ -name '*.la' -exec rm '{}' ';'
 
+	# Copy the hardlinked *_dri.so correctly.
+	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
+	mv debian/tmp/dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_dri.so \
+	   debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
 	dh_install -s --fail-missing
-
 	dh_installman -s
 	dh_lintian -s
 	dh_link -s

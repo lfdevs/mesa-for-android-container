@@ -7,7 +7,7 @@ i965_FILES = \
 	intel_blit.c \
 	intel_buffer_objects.c \
 	intel_buffers.c \
-	intel_context.c \
+	intel_debug.c \
 	intel_extensions.c \
 	intel_fbo.c \
 	intel_mipmap_tree.c \
@@ -26,6 +26,8 @@ i965_FILES = \
 	intel_tex_image.c \
 	intel_tex_subimage.c \
 	intel_tex_validate.c \
+	intel_upload.c \
+	brw_binding_tables.c \
 	brw_blorp.cpp \
 	brw_blorp_blit.cpp \
 	brw_blorp_clear.cpp \
@@ -42,6 +44,7 @@ i965_FILES = \
 	brw_context.c \
 	brw_cubemap_normalize.cpp \
 	brw_curbe.c \
+	brw_device_info.c \
 	brw_disasm.c \
 	brw_draw.c \
 	brw_draw_upload.c \
@@ -53,8 +56,8 @@ i965_FILES = \
 	brw_fs_channel_expressions.cpp \
 	brw_fs_copy_propagation.cpp \
 	brw_fs_cse.cpp \
-	brw_fs_emit.cpp \
 	brw_fs_fp.cpp \
+	brw_fs_generator.cpp \
 	brw_fs_live_variables.cpp \
 	brw_fs_reg_allocate.cpp \
 	brw_fs_vector_splitting.cpp \
@@ -62,11 +65,17 @@ i965_FILES = \
 	brw_gs.c \
 	brw_gs_emit.c \
 	brw_gs_state.c \
+	brw_gs_surface_state.c \
+	brw_interpolation_map.c \
 	brw_lower_texture_gradients.cpp \
+	brw_lower_offset_array.cpp \
+	brw_lower_unnormalized_offset.cpp \
 	brw_misc_state.c \
+	brw_object_purgeable.c \
 	brw_program.c \
 	brw_primitive_restart.c \
 	brw_queryobj.c \
+	brw_reset.c \
 	brw_schedule_instructions.cpp \
 	brw_sf.c \
 	brw_sf_emit.c \
@@ -83,15 +92,17 @@ i965_FILES = \
 	brw_util.c \
 	brw_vec4.cpp \
 	brw_vec4_copy_propagation.cpp \
-	brw_vec4_emit.cpp \
+	brw_vec4_generator.cpp \
+	brw_vec4_gs.c \
+	brw_vec4_gs_visitor.cpp \
 	brw_vec4_live_variables.cpp \
 	brw_vec4_reg_allocate.cpp \
 	brw_vec4_visitor.cpp \
 	brw_vec4_vp.cpp \
+	brw_vec4_vs_visitor.cpp \
 	brw_vs.c \
 	brw_vs_state.c \
 	brw_vs_surface_state.c \
-	brw_vtbl.c \
 	brw_wm.c \
 	brw_wm_iz.cpp \
 	brw_wm_sampler_state.c \
@@ -113,8 +124,8 @@ i965_FILES = \
 	gen6_vs_state.c \
 	gen6_wm_state.c \
 	gen7_blorp.cpp \
-	gen7_clip_state.c \
 	gen7_disable.c \
+        gen7_gs_state.c \
 	gen7_misc_state.c \
 	gen7_sampler_state.c \
 	gen7_sf_state.c \

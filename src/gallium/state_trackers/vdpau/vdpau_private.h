@@ -34,7 +34,9 @@
 #include <vdpau/vdpau_x11.h>
 
 #include "pipe/p_compiler.h"
-#include "pipe/p_video_decoder.h"
+#include "pipe/p_video_codec.h"
+
+#include "state_tracker/vdpau_interop.h"
 
 #include "util/u_debug.h"
 #include "util/u_rect.h"
@@ -87,6 +89,29 @@ PipeToChroma(enum pipe_video_chroma_format pipe_type)
    }
 
    return -1;
+}
+
+static inline enum pipe_video_chroma_format
+FormatYCBCRToPipeChroma(VdpYCbCrFormat vdpau_format)
+{
+   switch (vdpau_format) {
+      case VDP_YCBCR_FORMAT_NV12:
+         return PIPE_VIDEO_CHROMA_FORMAT_420;
+      case VDP_YCBCR_FORMAT_YV12:
+         return PIPE_VIDEO_CHROMA_FORMAT_420;
+      case VDP_YCBCR_FORMAT_UYVY:
+         return PIPE_VIDEO_CHROMA_FORMAT_422;
+      case VDP_YCBCR_FORMAT_YUYV:
+         return PIPE_VIDEO_CHROMA_FORMAT_422;
+      case VDP_YCBCR_FORMAT_Y8U8V8A8:
+         return PIPE_VIDEO_CHROMA_FORMAT_444;
+      case VDP_YCBCR_FORMAT_V8U8Y8A8:
+         return PIPE_VIDEO_CHROMA_FORMAT_444;
+      default:
+         assert(0);
+   }
+
+   return PIPE_FORMAT_NONE;
 }
 
 static inline enum pipe_format
@@ -387,7 +412,8 @@ typedef struct
 typedef struct
 {
    vlVdpDevice *device;
-   struct pipe_video_decoder *decoder;
+   pipe_mutex mutex;
+   struct pipe_video_codec *decoder;
 } vlVdpDecoder;
 
 typedef uint32_t vlHandle;
@@ -473,6 +499,10 @@ VdpVideoMixerGetParameterValues vlVdpVideoMixerGetParameterValues;
 VdpVideoMixerGetAttributeValues vlVdpVideoMixerGetAttributeValues;
 VdpVideoMixerDestroy vlVdpVideoMixerDestroy;
 VdpGenerateCSCMatrix vlVdpGenerateCSCMatrix;
+
+/* interop to mesa state tracker */
+VdpVideoSurfaceGallium vlVdpVideoSurfaceGallium;
+VdpOutputSurfaceGallium vlVdpOutputSurfaceGallium;
 
 #define VDPAU_OUT   0
 #define VDPAU_ERR   1

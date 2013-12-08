@@ -94,7 +94,6 @@ static unsigned translate_mip_filter( unsigned filter )
    }
 }
 
-
 /* None of this state is actually used for anything yet.
  */
 static void *
@@ -117,10 +116,10 @@ i915_create_blend_state(struct pipe_context *pipe,
        */
 
       if (srcA != srcRGB ||
-	  dstA != dstRGB ||
-	  eqA != eqRGB) {
+          dstA != dstRGB ||
+          eqA != eqRGB) {
 
-	 cso_data->iab = (_3DSTATE_INDEPENDENT_ALPHA_BLEND_CMD |
+         cso_data->iab = (_3DSTATE_INDEPENDENT_ALPHA_BLEND_CMD |
                           IAB_MODIFY_ENABLE |
                           IAB_ENABLE |
                           IAB_MODIFY_FUNC |
@@ -131,7 +130,7 @@ i915_create_blend_state(struct pipe_context *pipe,
                           (i915_translate_blend_func(eqA) << IAB_FUNC_SHIFT));
       }
       else {
-	 cso_data->iab = (_3DSTATE_INDEPENDENT_ALPHA_BLEND_CMD |
+         cso_data->iab = (_3DSTATE_INDEPENDENT_ALPHA_BLEND_CMD |
                           IAB_MODIFY_ENABLE |
                           0);
       }
@@ -147,7 +146,7 @@ i915_create_blend_state(struct pipe_context *pipe,
    if (blend->dither)
       cso_data->LIS5 |= S5_COLOR_DITHER_ENABLE;
 
-   /* XXX here take the target fixup into account */
+   /* We potentially do some fixup at emission for non-BGRA targets */
    if ((blend->rt[0].colormask & PIPE_MASK_R) == 0)
       cso_data->LIS5 |= S5_WRITEDISABLE_RED;
 
@@ -276,7 +275,7 @@ i915_create_sampler_state(struct pipe_context *pipe,
       maxlod = CLAMP(maxlod, 0, 16 * 11);
 
       if (minlod > maxlod)
-	 maxlod = minlod;
+         maxlod = minlod;
 
       cso->minlod = minlod;
       cso->maxlod = maxlod;
@@ -294,25 +293,31 @@ i915_create_sampler_state(struct pipe_context *pipe,
 
 static void
 i915_bind_vertex_sampler_states(struct pipe_context *pipe,
-                                unsigned num_samplers,
+                                unsigned start,
+                                unsigned num,
                                 void **samplers)
 {
    struct i915_context *i915 = i915_context(pipe);
    unsigned i;
 
-   assert(num_samplers <= Elements(i915->vertex_samplers));
+   assert(start + num <= Elements(i915->vertex_samplers));
 
    /* Check for no-op */
-   if (num_samplers == i915->num_vertex_samplers &&
-       !memcmp(i915->vertex_samplers, samplers, num_samplers * sizeof(void *)))
+   if (num == i915->num_vertex_samplers &&
+       !memcmp(i915->vertex_samplers + start, samplers,
+	       num * sizeof(void *)))
       return;
 
-   for (i = 0; i < num_samplers; ++i)
-      i915->vertex_samplers[i] = samplers[i];
-   for (i = num_samplers; i < Elements(i915->vertex_samplers); ++i)
-      i915->vertex_samplers[i] = NULL;
+   for (i = 0; i < num; ++i)
+      i915->vertex_samplers[i + start] = samplers[i];
 
-   i915->num_vertex_samplers = num_samplers;
+   /* find highest non-null samplers[] entry */
+   {
+      unsigned j = MAX2(i915->num_vertex_samplers, start + num);
+      while (j > 0 && i915->vertex_samplers[j - 1] == NULL)
+         j--;
+      i915->num_vertex_samplers = j;
+   }
 
    draw_set_samplers(i915->draw,
                      PIPE_SHADER_VERTEX,
@@ -323,25 +328,51 @@ i915_bind_vertex_sampler_states(struct pipe_context *pipe,
 
 
 static void i915_bind_fragment_sampler_states(struct pipe_context *pipe,
-                                     unsigned num, void **sampler)
+                                              unsigned start,
+                                              unsigned num,
+                                              void **samplers)
 {
    struct i915_context *i915 = i915_context(pipe);
    unsigned i;
 
    /* Check for no-op */
    if (num == i915->num_samplers &&
-       !memcmp(i915->sampler, sampler, num * sizeof(void *)))
+       !memcmp(i915->fragment_sampler + start, samplers,
+               num * sizeof(void *)))
       return;
 
    for (i = 0; i < num; ++i)
-      i915->sampler[i] = sampler[i];
-   for (i = num; i < PIPE_MAX_SAMPLERS; ++i)
-      i915->sampler[i] = NULL;
+      i915->fragment_sampler[i + start] = samplers[i];
 
-   i915->num_samplers = num;
+   /* find highest non-null samplers[] entry */
+   {
+      unsigned j = MAX2(i915->num_samplers, start + num);
+      while (j > 0 && i915->fragment_sampler[j - 1] == NULL)
+         j--;
+      i915->num_samplers = j;
+   }
 
    i915->dirty |= I915_NEW_SAMPLER;
 }
+
+
+static void
+i915_bind_sampler_states(struct pipe_context *pipe, unsigned shader,
+                         unsigned start, unsigned num_samplers,
+                         void **samplers)
+{
+   switch (shader) {
+   case PIPE_SHADER_VERTEX:
+      i915_bind_vertex_sampler_states(pipe, start, num_samplers, samplers);
+      break;
+   case PIPE_SHADER_FRAGMENT:
+      i915_bind_fragment_sampler_states(pipe, start, num_samplers, samplers);
+      break;
+   default:
+      ;
+   }
+}
+
 
 static void i915_delete_sampler_state(struct pipe_context *pipe,
                                       void *sampler)
@@ -499,7 +530,7 @@ i915_create_depth_stencil_state(struct pipe_context *pipe,
                           (func << S6_DEPTH_TEST_FUNC_SHIFT));
 
       if (depth_stencil->depth.writemask)
-	 cso->depth_LIS6 |= S6_DEPTH_WRITE_ENABLE;
+         cso->depth_LIS6 |= S6_DEPTH_WRITE_ENABLE;
    }
 
    if (depth_stencil->alpha.enabled) {
@@ -762,6 +793,25 @@ i915_set_vertex_sampler_views(struct pipe_context *pipe,
 }
 
 
+static void
+i915_set_sampler_views(struct pipe_context *pipe, unsigned shader,
+                       unsigned start, unsigned num,
+                       struct pipe_sampler_view **views)
+{
+   assert(start == 0);
+   switch (shader) {
+   case PIPE_SHADER_FRAGMENT:
+      i915_set_fragment_sampler_views(pipe, num, views);
+      break;
+   case PIPE_SHADER_VERTEX:
+      i915_set_vertex_sampler_views(pipe, num, views);
+      break;
+   default:
+      ;
+   }
+}
+
+
 static struct pipe_sampler_view *
 i915_create_sampler_view(struct pipe_context *pipe,
                          struct pipe_resource *texture,
@@ -1016,8 +1066,7 @@ i915_init_state_functions( struct i915_context *i915 )
    i915->base.delete_blend_state = i915_delete_blend_state;
 
    i915->base.create_sampler_state = i915_create_sampler_state;
-   i915->base.bind_fragment_sampler_states = i915_bind_fragment_sampler_states;
-   i915->base.bind_vertex_sampler_states = i915_bind_vertex_sampler_states;
+   i915->base.bind_sampler_states = i915_bind_sampler_states;
    i915->base.delete_sampler_state = i915_delete_sampler_state;
 
    i915->base.create_depth_stencil_alpha_state = i915_create_depth_stencil_state;
@@ -1046,8 +1095,7 @@ i915_init_state_functions( struct i915_context *i915 )
 
    i915->base.set_polygon_stipple = i915_set_polygon_stipple;
    i915->base.set_scissor_states = i915_set_scissor_states;
-   i915->base.set_fragment_sampler_views = i915_set_fragment_sampler_views;
-   i915->base.set_vertex_sampler_views = i915_set_vertex_sampler_views;
+   i915->base.set_sampler_views = i915_set_sampler_views;
    i915->base.create_sampler_view = i915_create_sampler_view;
    i915->base.sampler_view_destroy = i915_sampler_view_destroy;
    i915->base.set_viewport_states = i915_set_viewport_states;

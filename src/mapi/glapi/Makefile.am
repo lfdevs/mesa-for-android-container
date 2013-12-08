@@ -19,6 +19,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
+SUBDIRS = . tests
+
 TOP = $(top_srcdir)
 include Makefile.sources
 include ../Makefile.sources
@@ -31,10 +33,11 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/mesa
 
 if HAVE_X86_ASM
-GLAPI_ASM_SOURCES = $(X86_API)
-endif
 if HAVE_X86_64_ASM
 GLAPI_ASM_SOURCES = $(X86_64_API)
+else
+GLAPI_ASM_SOURCES = $(X86_API)
+endif
 endif
 if HAVE_SPARC_ASM
 GLAPI_ASM_SOURCES = $(SPARC_API)

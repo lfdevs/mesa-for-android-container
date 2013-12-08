@@ -39,25 +39,6 @@
 #include "freedreno_util.h"
 
 
-static enum pc_di_primtype
-mode2primtype(unsigned mode)
-{
-	switch (mode) {
-	case PIPE_PRIM_POINTS:         return DI_PT_POINTLIST;
-	case PIPE_PRIM_LINES:          return DI_PT_LINELIST;
-	case PIPE_PRIM_LINE_STRIP:     return DI_PT_LINESTRIP;
-	case PIPE_PRIM_TRIANGLES:      return DI_PT_TRILIST;
-	case PIPE_PRIM_TRIANGLE_STRIP: return DI_PT_TRISTRIP;
-	case PIPE_PRIM_TRIANGLE_FAN:   return DI_PT_TRIFAN;
-	case PIPE_PRIM_QUADS:          return DI_PT_QUADLIST;
-	case PIPE_PRIM_QUAD_STRIP:     return DI_PT_QUADSTRIP;
-	case PIPE_PRIM_POLYGON:        return DI_PT_POLYGON;
-	}
-	DBG("unsupported mode: (%s) %d", u_prim_name(mode), mode);
-	assert(0);
-	return DI_PT_NONE;
-}
-
 static enum pc_di_index_size
 size2indextype(unsigned index_size)
 {
@@ -75,7 +56,6 @@ size2indextype(unsigned index_size)
 void
 fd_draw_emit(struct fd_context *ctx, const struct pipe_draw_info *info)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
 	struct pipe_index_buffer *idx = &ctx->indexbuf;
 	struct fd_bo *idx_bo = NULL;
 	enum pc_di_index_size idx_type = INDEX_SIZE_IGN;
@@ -98,15 +78,8 @@ fd_draw_emit(struct fd_context *ctx, const struct pipe_draw_info *info)
 		src_sel = DI_SRC_SEL_AUTO_INDEX;
 	}
 
-	OUT_PKT3(ring, CP_DRAW_INDX, info->indexed ? 5 : 3);
-	OUT_RING(ring, 0x00000000);        /* viz query info. */
-	OUT_RING(ring, DRAW(mode2primtype(info->mode),
-			src_sel, idx_type, IGNORE_VISIBILITY));
-	OUT_RING(ring, info->count);       /* NumIndices */
-	if (info->indexed) {
-		OUT_RELOC(ring, idx_bo, idx_offset, 0);
-		OUT_RING (ring, idx_size);
-	}
+	fd_draw(ctx, ctx->primtypes[info->mode], src_sel, info->count,
+			idx_type, idx_size, idx_offset, idx_bo);
 }
 
 static void
@@ -120,6 +93,14 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	/* if we supported transform feedback, we'd have to disable this: */
 	if (((scissor->maxx - scissor->minx) *
 			(scissor->maxy - scissor->miny)) == 0) {
+		return;
+	}
+
+	/* emulate unsupported primitives: */
+	if (!fd_supported_prim(ctx, info->mode)) {
+		util_primconvert_save_index_buffer(ctx->primconvert, &ctx->indexbuf);
+		util_primconvert_save_rasterizer_state(ctx->primconvert, ctx->rasterizer);
+		util_primconvert_draw_vbo(ctx->primconvert, info);
 		return;
 	}
 
@@ -193,8 +174,8 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 	}
 
 	DBG("%x depth=%f, stencil=%u (%s/%s)", buffers, depth, stencil,
-			util_format_name(pfb->cbufs[0]->format),
-			pfb->zsbuf ? util_format_name(pfb->zsbuf->format) : "none");
+		util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
+		util_format_short_name(pipe_surface_format(pfb->zsbuf)));
 
 	ctx->clear(ctx, buffers, color, depth, stencil);
 

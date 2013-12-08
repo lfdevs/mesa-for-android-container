@@ -159,7 +159,7 @@ intel_unmap_renderbuffer(struct gl_context *ctx,
 unsigned
 intel_quantize_num_samples(struct intel_screen *intel, unsigned num_samples)
 {
-   switch (intel->gen) {
+   switch (intel->devinfo->gen) {
    case 6:
       /* Gen6 supports only 4x multisampling. */
       if (num_samples > 0)
@@ -260,6 +260,20 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
 					      screen->loaderPrivate);
    if (image == NULL)
       return;
+
+   if (image->planar_format && image->planar_format->nplanes > 1) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+            "glEGLImageTargetRenderbufferStorage(planar buffers are not "
+               "supported as render targets.");
+      return;
+   }
+
+   /* Buffers originating from outside are for read-only. */
+   if (image->dma_buf_imported) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+            "glEGLImageTargetRenderbufferStorage(dma buffers are read-only)");
+      return;
+   }
 
    /* __DRIimage is opaque to the core so it has to be checked here */
    switch (image->format) {
@@ -569,6 +583,22 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
    }
 
    if (depth_mt && stencil_mt) {
+      if (brw->gen >= 7) {
+         /* For gen >= 7, we are using the lod/minimum-array-element fields
+          * and supportting layered rendering. This means that we must restrict
+          * the depth & stencil attachments to match in various more retrictive
+          * ways. (width, height, depth, LOD and layer)
+          */
+	 if (depth_mt->physical_width0 != stencil_mt->physical_width0 ||
+             depth_mt->physical_height0 != stencil_mt->physical_height0 ||
+             depth_mt->physical_depth0 != stencil_mt->physical_depth0 ||
+             depthRb->mt_level != stencilRb->mt_level ||
+	     depthRb->mt_layer != stencilRb->mt_layer) {
+	    fbo_incomplete(fb,
+                           "FBO incomplete: depth and stencil must match in"
+                           "width, height, depth, LOD and layer\n");
+	 }
+      }
       if (depth_mt == stencil_mt) {
 	 /* For true packed depth/stencil (not faked on prefers-separate-stencil
 	  * hardware) we need to be sure they're the same level/layer, since
@@ -796,26 +826,6 @@ intel_renderbuffer_has_hiz(struct intel_renderbuffer *irb)
    return intel_miptree_slice_has_hiz(irb->mt, irb->mt_level, irb->mt_layer);
 }
 
-void
-intel_renderbuffer_set_needs_hiz_resolve(struct intel_renderbuffer *irb)
-{
-   if (irb->mt) {
-      intel_miptree_slice_set_needs_hiz_resolve(irb->mt,
-                                                irb->mt_level,
-                                                irb->mt_layer);
-   }
-}
-
-void
-intel_renderbuffer_set_needs_depth_resolve(struct intel_renderbuffer *irb)
-{
-   if (irb->mt) {
-      intel_miptree_slice_set_needs_depth_resolve(irb->mt,
-                                                  irb->mt_level,
-                                                  irb->mt_layer);
-   }
-}
-
 bool
 intel_renderbuffer_resolve_hiz(struct brw_context *brw,
 			       struct intel_renderbuffer *irb)
@@ -827,6 +837,21 @@ intel_renderbuffer_resolve_hiz(struct brw_context *brw,
                                              irb->mt_layer);
 
    return false;
+}
+
+void
+intel_renderbuffer_att_set_needs_depth_resolve(struct gl_renderbuffer_attachment *att)
+{
+   struct intel_renderbuffer *irb = intel_renderbuffer(att->Renderbuffer);
+   if (irb->mt) {
+      if (att->Layered) {
+         intel_miptree_set_all_slices_need_depth_resolve(irb->mt, irb->mt_level);
+      } else {
+         intel_miptree_slice_set_needs_depth_resolve(irb->mt,
+                                                     irb->mt_level,
+                                                     irb->mt_layer);
+      }
+   }
 }
 
 bool

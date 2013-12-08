@@ -20,8 +20,6 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#include <algorithm>
-
 #include "core/queue.hpp"
 #include "core/event.hpp"
 #include "pipe/p_screen.h"
@@ -29,39 +27,48 @@
 
 using namespace clover;
 
-_cl_command_queue::_cl_command_queue(context &ctx, device &dev,
-                                     cl_command_queue_properties props) :
-   ctx(ctx), dev(dev), __props(props) {
+command_queue::command_queue(context &ctx, device &dev,
+                             cl_command_queue_properties props) :
+   ctx(ctx), dev(dev), _props(props) {
    pipe = dev.pipe->context_create(dev.pipe, NULL);
    if (!pipe)
       throw error(CL_INVALID_DEVICE);
 }
 
-_cl_command_queue::~_cl_command_queue() {
+command_queue::~command_queue() {
    pipe->destroy(pipe);
 }
 
 void
-_cl_command_queue::flush() {
+command_queue::flush() {
    pipe_screen *screen = dev.pipe;
    pipe_fence_handle *fence = NULL;
 
    if (!queued_events.empty()) {
-      // Find out which events have already been signalled.
-      auto first = queued_events.begin();
-      auto last = std::find_if(queued_events.begin(), queued_events.end(),
-                               [](event_ptr &ev) { return !ev->signalled(); });
-
-      // Flush and fence them.
       pipe->flush(pipe, &fence, 0);
-      std::for_each(first, last, [&](event_ptr &ev) { ev->fence(fence); });
+
+      while (!queued_events.empty() &&
+             queued_events.front()->signalled()) {
+         queued_events.front()->fence(fence);
+         queued_events.pop_front();
+      }
+
       screen->fence_reference(screen, &fence, NULL);
-      queued_events.erase(first, last);
    }
 }
 
+cl_command_queue_properties
+command_queue::props() const {
+   return _props;
+}
+
+bool
+command_queue::profiling_enabled() const {
+   return _props & CL_QUEUE_PROFILING_ENABLE;
+}
+
 void
-_cl_command_queue::sequence(clover::hard_event *ev) {
+command_queue::sequence(hard_event *ev) {
    if (!queued_events.empty())
       queued_events.back()->chain(ev);
 

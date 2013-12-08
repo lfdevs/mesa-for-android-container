@@ -28,9 +28,66 @@
 #include "main/version.h"
 
 #include "brw_context.h"
-#include "intel_chipset.h"
+#include "intel_batchbuffer.h"
 #include "intel_reg.h"
 #include "utils.h"
+
+/**
+ * Test if we can use MI_LOAD_REGISTER_MEM from an untrusted batchbuffer.
+ *
+ * Some combinations of hardware and kernel versions allow this feature,
+ * while others don't.  Instead of trying to enumerate every case, just
+ * try and write a register and see if works.
+ */
+static bool
+can_do_pipelined_register_writes(struct brw_context *brw)
+{
+   /* We use SO_WRITE_OFFSET0 since you're supposed to write it (unlike the
+    * statistics registers), and we already reset it to zero before using it.
+    */
+   const int reg = GEN7_SO_WRITE_OFFSET(0);
+   const int expected_value = 0x1337d0d0;
+   const int offset = 100;
+
+   /* The register we picked only exists on Gen7+. */
+   assert(brw->gen >= 7);
+
+   uint32_t *data;
+   /* Set a value in a BO to a known quantity.  The workaround BO already
+    * exists and doesn't contain anything important, so we may as well use it.
+    */
+   drm_intel_bo_map(brw->batch.workaround_bo, true);
+   data = brw->batch.workaround_bo->virtual;
+   data[offset] = 0xffffffff;
+   drm_intel_bo_unmap(brw->batch.workaround_bo);
+
+   /* Write the register. */
+   BEGIN_BATCH(3);
+   OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
+   OUT_BATCH(reg);
+   OUT_BATCH(expected_value);
+   ADVANCE_BATCH();
+
+   intel_batchbuffer_emit_mi_flush(brw);
+
+   /* Save the register's value back to the buffer. */
+   BEGIN_BATCH(3);
+   OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
+   OUT_BATCH(reg);
+   OUT_RELOC(brw->batch.workaround_bo,
+             I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+             offset * sizeof(uint32_t));
+   ADVANCE_BATCH();
+
+   intel_batchbuffer_flush(brw);
+
+   /* Check whether the value got written. */
+   drm_intel_bo_map(brw->batch.workaround_bo, false);
+   bool success = data[offset] == expected_value;
+   drm_intel_bo_unmap(brw->batch.workaround_bo);
+
+   return success;
+}
 
 /**
  * Initializes potential list of extensions if ctx == NULL, or actually enables
@@ -75,6 +132,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.ARB_texture_env_crossbar = true;
    ctx->Extensions.ARB_texture_env_dot3 = true;
    ctx->Extensions.ARB_texture_float = true;
+   ctx->Extensions.ARB_texture_mirror_clamp_to_edge = true;
    ctx->Extensions.ARB_texture_non_power_of_two = true;
    ctx->Extensions.ARB_texture_rg = true;
    ctx->Extensions.ARB_texture_rgb10_a2ui = true;
@@ -106,6 +164,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.EXT_texture_swizzle = true;
    ctx->Extensions.EXT_stencil_two_side = true;
    ctx->Extensions.EXT_vertex_array_bgra = true;
+   ctx->Extensions.AMD_seamless_cubemap_per_texture = true;
    ctx->Extensions.APPLE_object_purgeable = true;
    ctx->Extensions.ATI_envmap_bumpmap = true;
    ctx->Extensions.ATI_separate_stencil = true;
@@ -122,8 +181,11 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.OES_EGL_image = true;
    ctx->Extensions.OES_draw_texture = true;
    ctx->Extensions.OES_standard_derivatives = true;
+   ctx->Extensions.OES_EGL_image_external = true;
 
-   if (brw->gen >= 6)
+   if (brw->gen >= 7)
+      ctx->Const.GLSLVersion = 330;
+   else if (brw->gen >= 6)
       ctx->Const.GLSLVersion = 140;
    else
       ctx->Const.GLSLVersion = 120;
@@ -142,10 +204,13 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_shading_language_420pack = true;
       ctx->Extensions.ARB_texture_buffer_object = true;
       ctx->Extensions.ARB_texture_buffer_object_rgb32 = true;
+      ctx->Extensions.ARB_texture_buffer_range = true;
       ctx->Extensions.ARB_texture_cube_map_array = true;
       ctx->Extensions.OES_depth_texture_cube_map = true;
       ctx->Extensions.ARB_shading_language_packing = true;
       ctx->Extensions.ARB_texture_multisample = true;
+      ctx->Extensions.ARB_sample_shading = true;
+      ctx->Extensions.ARB_vertex_type_10f_11f_11f_rev = true;
 
       /* Test if the kernel has the ioctl. */
       if (drm_intel_reg_read(brw->bufmgr, TIMESTAMP, &dummy) == 0)
@@ -155,6 +220,18 @@ intelInitExtensions(struct gl_context *ctx)
    if (brw->gen >= 5) {
       ctx->Extensions.ARB_texture_query_lod = true;
       ctx->Extensions.EXT_timer_query = true;
+      ctx->Extensions.EXT_shader_integer_mix = ctx->Const.GLSLVersion >= 130;
+      ctx->Extensions.ARB_texture_query_levels = ctx->Const.GLSLVersion >= 130;
+   }
+
+   if (brw->gen >= 7) {
+      ctx->Extensions.ARB_texture_gather = true;
+      ctx->Extensions.ARB_conservative_depth = true;
+      if (can_do_pipelined_register_writes(brw)) {
+         ctx->Extensions.ARB_transform_feedback2 = true;
+         ctx->Extensions.ARB_transform_feedback3 = true;
+         ctx->Extensions.ARB_transform_feedback_instanced = true;
+      }
    }
 
    if (ctx->API == API_OPENGL_CORE)
@@ -166,4 +243,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.EXT_texture_compression_s3tc = true;
 
    ctx->Extensions.ANGLE_texture_compression_dxt = true;
+
+   if (brw->gen >= 7)
+      ctx->Extensions.ARB_shader_atomic_counters = true;
 }

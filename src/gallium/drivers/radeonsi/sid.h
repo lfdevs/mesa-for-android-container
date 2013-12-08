@@ -103,6 +103,12 @@
 #define		WAIT_REG_MEM_EQUAL		3
 #define PKT3_MEM_WRITE                         0x3D /* not on CIK */
 #define PKT3_INDIRECT_BUFFER                   0x32
+#define PKT3_COPY_DATA			       0x40
+#define		COPY_DATA_SRC_SEL(x)		((x) & 0xf)
+#define			COPY_DATA_REG		0
+#define			COPY_DATA_MEM		1
+#define		COPY_DATA_DST_SEL(x)		(((x) & 0xf) << 8)
+#define		COPY_DATA_WR_CONFIRM		(1 << 20)
 #define PKT3_SURFACE_SYNC                      0x43 /* deprecated on CIK, use ACQUIRE_MEM */
 #define PKT3_ME_INITIALIZE                     0x44 /* not on CIK */
 #define PKT3_COND_WRITE                        0x45
@@ -132,7 +138,61 @@
 #define PKT3_PREDICATE(x)               (((x) >> 0) & 0x1)
 #define PKT3_SHADER_TYPE_S(x)           (((x) & 0x1) << 1)
 #define PKT0(index, count) (PKT_TYPE_S(0) | PKT0_BASE_INDEX_S(index) | PKT_COUNT_S(count))
-#define PKT3(op, count, predicate) (PKT_TYPE_S(3) | PKT3_IT_OPCODE_S(op) | PKT_COUNT_S(count) | PKT3_PREDICATE(predicate))
+#define PKT3(op, count, predicate) (PKT_TYPE_S(3) | PKT_COUNT_S(count) | PKT3_IT_OPCODE_S(op) | PKT3_PREDICATE(predicate))
+
+#define PKT3_CP_DMA					0x41
+/* 1. header
+ * 2. SRC_ADDR_LO [31:0] or DATA [31:0]
+ * 3. CP_SYNC [31] | SRC_SEL [30:29] | ENGINE [27] | DST_SEL [21:20] | SRC_ADDR_HI [15:0]
+ * 4. DST_ADDR_LO [31:0]
+ * 5. DST_ADDR_HI [15:0]
+ * 6. COMMAND [29:22] | BYTE_COUNT [20:0]
+ */
+#define PKT3_CP_DMA_CP_SYNC       (1 << 31)
+#define PKT3_CP_DMA_SRC_SEL(x)       ((x) << 29)
+/* 0 - SRC_ADDR
+ * 1 - GDS (program SAS to 1 as well)
+ * 2 - DATA
+ */
+#define PKT3_CP_DMA_DST_SEL(x)       ((x) << 20)
+/* 0 - DST_ADDR
+ * 1 - GDS (program DAS to 1 as well)
+ */
+/* COMMAND */
+#define PKT3_CP_DMA_CMD_SRC_SWAP(x) ((x) << 23)
+/* 0 - none
+ * 1 - 8 in 16
+ * 2 - 8 in 32
+ * 3 - 8 in 64
+ */
+#define PKT3_CP_DMA_CMD_DST_SWAP(x) ((x) << 24)
+/* 0 - none
+ * 1 - 8 in 16
+ * 2 - 8 in 32
+ * 3 - 8 in 64
+ */
+#define PKT3_CP_DMA_CMD_SAS       (1 << 26)
+/* 0 - memory
+ * 1 - register
+ */
+#define PKT3_CP_DMA_CMD_DAS       (1 << 27)
+/* 0 - memory
+ * 1 - register
+ */
+#define PKT3_CP_DMA_CMD_SAIC      (1 << 28)
+#define PKT3_CP_DMA_CMD_DAIC      (1 << 29)
+#define PKT3_CP_DMA_CMD_RAW_WAIT  (1 << 30)
+
+#define PKT3_DMA_DATA					0x50 /* new for CIK */
+/* 1. header
+ * 2. CP_SYNC [31] | SRC_SEL [30:29] | DST_SEL [21:20] | ENGINE [0]
+ * 2. SRC_ADDR_LO [31:0] or DATA [31:0]
+ * 3. SRC_ADDR_HI [31:0]
+ * 4. DST_ADDR_LO [31:0]
+ * 5. DST_ADDR_HI [31:0]
+ * 6. COMMAND [29:22] | BYTE_COUNT [20:0]
+ */
+
 
 #define R_0084FC_CP_STRMOUT_CNTL		                        0x0084FC
 #define   S_0084FC_OFFSET_UPDATE_DONE(x)		              (((x) & 0x1) << 0)
@@ -6546,6 +6606,16 @@
 #define   G_028800_DISABLE_COLOR_WRITES_ON_DEPTH_PASS(x)              (((x) >> 31) & 0x1)
 #define   C_028800_DISABLE_COLOR_WRITES_ON_DEPTH_PASS                 0x7FFFFFFF
 #define R_028804_DB_EQAA                                                0x028804
+#define   S_028804_MAX_ANCHOR_SAMPLES(x)		(((x) & 0x7) << 0)
+#define   S_028804_PS_ITER_SAMPLES(x)			(((x) & 0x7) << 4)
+#define   S_028804_MASK_EXPORT_NUM_SAMPLES(x)		(((x) & 0x7) << 8)
+#define   S_028804_ALPHA_TO_MASK_NUM_SAMPLES(x)		(((x) & 0x7) << 12)
+#define   S_028804_HIGH_QUALITY_INTERSECTIONS(x)	(((x) & 0x1) << 16)
+#define   S_028804_INCOHERENT_EQAA_READS(x)		(((x) & 0x1) << 17)
+#define   S_028804_INTERPOLATE_COMP_Z(x)		(((x) & 0x1) << 18)
+#define   S_028804_INTERPOLATE_SRC_Z(x)			(((x) & 0x1) << 19)
+#define   S_028804_STATIC_ANCHOR_ASSOCIATIONS(x)	(((x) & 0x1) << 20)
+#define   S_028804_ALPHA_TO_MASK_EQAA_DISABLE(x)	(((x) & 0x1) << 21)
 #define R_028808_CB_COLOR_CONTROL                                       0x028808
 #define   S_028808_DEGAMMA_ENABLE(x)                                  (((x) & 0x1) << 3)
 #define   G_028808_DEGAMMA_ENABLE(x)                                  (((x) >> 3) & 0x1)
@@ -7359,6 +7429,9 @@
 #define   S_028A6C_OUTPRIM_TYPE(x)                                    (((x) & 0x3F) << 0)
 #define   G_028A6C_OUTPRIM_TYPE(x)                                    (((x) >> 0) & 0x3F)
 #define   C_028A6C_OUTPRIM_TYPE                                       0xFFFFFFC0
+#define     V_028A6C_OUTPRIM_TYPE_POINTLIST            0
+#define     V_028A6C_OUTPRIM_TYPE_LINESTRIP            1
+#define     V_028A6C_OUTPRIM_TYPE_TRISTRIP             2
 #define   S_028A6C_OUTPRIM_TYPE_1(x)                                  (((x) & 0x3F) << 8)
 #define   G_028A6C_OUTPRIM_TYPE_1(x)                                  (((x) >> 8) & 0x3F)
 #define   C_028A6C_OUTPRIM_TYPE_1                                     0xFFFFC0FF
@@ -8457,6 +8530,7 @@
 #define   S_028C74_FMASK_TILE_MODE_INDEX(x)                           (((x) & 0x1F) << 5)
 #define   G_028C74_FMASK_TILE_MODE_INDEX(x)                           (((x) >> 5) & 0x1F)
 #define   C_028C74_FMASK_TILE_MODE_INDEX                              0xFFFFFC1F
+#define   S_028C74_FMASK_BANK_HEIGHT(x)				      (((x) & 0x3) << 10) /* SI errata */
 #define   S_028C74_NUM_SAMPLES(x)                                     (((x) & 0x07) << 12)
 #define   G_028C74_NUM_SAMPLES(x)                                     (((x) >> 12) & 0x07)
 #define   C_028C74_NUM_SAMPLES                                        0xFFFF8FFF

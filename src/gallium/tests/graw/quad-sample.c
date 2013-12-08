@@ -267,7 +267,7 @@ static void init_tex( void )
    if (sv == NULL)
       exit(5);
 
-   ctx->set_fragment_sampler_views(ctx, 1, &sv);
+   ctx->set_sampler_views(ctx, PIPE_SHADER_FRAGMENT, 0, 1, &sv);
    
 
    memset(&sampler_desc, 0, sizeof sampler_desc);
@@ -286,7 +286,7 @@ static void init_tex( void )
    if (sampler == NULL)
       exit(6);
 
-   ctx->bind_fragment_sampler_states(ctx, 1, &sampler);
+   ctx->bind_sampler_states(ctx, PIPE_SHADER_FRAGMENT, 0, 1, &sampler);
    
 }
 

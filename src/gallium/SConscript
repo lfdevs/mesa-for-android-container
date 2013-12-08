@@ -45,9 +45,6 @@ if not env['embedded']:
     if env['dri']:
         SConscript('state_trackers/dri/SConscript')
 
-    if env['dri'] and env['xorg']:
-        SConscript('state_trackers/xorg/SConscript')
-
     if env['platform'] == 'windows':
         SConscript('state_trackers/wgl/SConscript')
 
@@ -122,6 +119,7 @@ if not env['embedded']:
     if env['platform'] == 'haiku':
         SConscript([
             'targets/haiku-softpipe/SConscript',
+            'targets/libgl-haiku/SConscript',
         ])
 
     if env['dri']:
@@ -134,11 +132,6 @@ if not env['embedded']:
             SConscript([
                 'targets/dri-i915/SConscript',
             ])
-
-    if env['xorg'] and env['drm']:
-        SConscript([
-            #'targets/xorg-i915/SConscript',
-        ])
 
 
 #

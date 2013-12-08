@@ -24,7 +24,7 @@
 
 using namespace clover;
 
-_cl_platform_id::_cl_platform_id() {
+platform::platform() : adaptor_range(derefs(), devs) {
    int n = pipe_loader_probe(NULL, 0);
    std::vector<pipe_loader_device *> ldevs(n);
 
@@ -32,7 +32,9 @@ _cl_platform_id::_cl_platform_id() {
 
    for (pipe_loader_device *ldev : ldevs) {
       try {
-         devs.emplace_back(*this, ldev);
-      } catch (error &) {}
+         devs.push_back(transfer(new device(*this, ldev)));
+      } catch (error &) {
+         pipe_loader_release(&ldev, 1);
+      }
    }
 }

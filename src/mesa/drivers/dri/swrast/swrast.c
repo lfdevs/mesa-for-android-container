@@ -59,6 +59,7 @@
 #include "swrast_priv.h"
 #include "swrast/s_context.h"
 
+const __DRIextension **__driDriverGetExtensions_swrast(void);
 
 /**
  * Screen and config-related functions
@@ -199,6 +200,10 @@ dri_init_screen(__DRIscreen * psp)
     __DRIconfig **configs16, **configs24, **configs32;
 
     TRACE;
+
+    psp->max_gl_compat_version = 21;
+    psp->max_gl_es1_version = 11;
+    psp->max_gl_es2_version = 20;
 
     psp->extensions = dri_screen_extensions;
 
@@ -401,8 +406,8 @@ swrast_map_renderbuffer(struct gl_context *ctx,
 				     (char *) xrb->Base.Buffer,
 				     dPriv->loaderPrivate);
 
-      *out_map = xrb->Base.Buffer;
-      *out_stride = stride;
+      *out_map = xrb->Base.Buffer + (h - 1) * stride;
+      *out_stride = -stride;
       return;
    }
 
@@ -659,6 +664,7 @@ dri_create_context(gl_api api,
 		   unsigned major_version,
 		   unsigned minor_version,
 		   uint32_t flags,
+		   bool notify_reset,
 		   unsigned *error,
 		   void *sharedContextPrivate)
 {
@@ -673,22 +679,6 @@ dri_create_context(gl_api api,
     /* Flag filtering is handled in dri2CreateContextAttribs.
      */
     (void) flags;
-
-    switch (api) {
-    case API_OPENGL_COMPAT:
-        if (major_version > 2
-	    || (major_version == 2 && minor_version > 1)) {
-            *error = __DRI_CTX_ERROR_BAD_VERSION;
-            return GL_FALSE;
-        }
-        break;
-    case API_OPENGLES:
-    case API_OPENGLES2:
-        break;
-    case API_OPENGL_CORE:
-        *error = __DRI_CTX_ERROR_BAD_API;
-        return GL_FALSE;
-    }
 
     ctx = CALLOC_STRUCT(dri_context);
     if (ctx == NULL) {
@@ -831,7 +821,7 @@ dri_unbind_context(__DRIcontext * cPriv)
 }
 
 
-const struct __DriverAPIRec driDriverAPI = {
+static const struct __DriverAPIRec swrast_driver_api = {
     .InitScreen = dri_init_screen,
     .DestroyScreen = dri_destroy_screen,
     .CreateContext = dri_create_context,
@@ -843,9 +833,21 @@ const struct __DriverAPIRec driDriverAPI = {
     .UnbindContext = dri_unbind_context,
 };
 
-/* This is the table of extensions that the loader will dlsym() for. */
-PUBLIC const __DRIextension *__driDriverExtensions[] = {
+static const struct __DRIDriverVtableExtensionRec swrast_vtable = {
+   .base = { __DRI_DRIVER_VTABLE, 1 },
+   .vtable = &swrast_driver_api,
+};
+
+static const __DRIextension *swrast_driver_extensions[] = {
     &driCoreExtension.base,
     &driSWRastExtension.base,
+    &swrast_vtable.base,
     NULL
 };
+
+PUBLIC const __DRIextension **__driDriverGetExtensions_swrast(void)
+{
+   globalDriverAPI = &swrast_driver_api;
+
+   return swrast_driver_extensions;
+}

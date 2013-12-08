@@ -93,10 +93,6 @@ nouveau_init_screen2(__DRIscreen *dri_screen)
 	if (!screen)
 		return NULL;
 
-	dri_screen->driverPrivate = screen;
-	dri_screen->extensions = nouveau_screen_extensions;
-	screen->dri_screen = dri_screen;
-
 	/* Open the DRM device. */
 	ret = nouveau_device_wrap(dri_screen->fd, 0, &screen->device);
 	if (ret) {
@@ -118,6 +114,21 @@ nouveau_init_screen2(__DRIscreen *dri_screen)
 	default:
 		assert(0);
 	}
+
+	/* Compat version validation will occur at context init after
+	 * _mesa_compute_version().
+	 */
+	dri_screen->max_gl_compat_version = 15;
+
+	/* NV10 and NV20 can support OpenGL ES 1.0 only.  Older chips
+	 * cannot do even that.
+	 */
+	if ((screen->device->chipset & 0xf0) != 0x00)
+		dri_screen->max_gl_es1_version = 10;
+
+	dri_screen->driverPrivate = screen;
+	dri_screen->extensions = nouveau_screen_extensions;
+	screen->dri_screen = dri_screen;
 
 	configs = nouveau_get_configs();
 	if (!configs)
@@ -234,7 +245,7 @@ static const __DRIextension *nouveau_screen_extensions[] = {
     NULL
 };
 
-const struct __DriverAPIRec driDriverAPI = {
+const struct __DriverAPIRec nouveau_driver_api = {
 	.InitScreen      = nouveau_init_screen2,
 	.DestroyScreen   = nouveau_destroy_screen,
 	.CreateBuffer    = nouveau_create_buffer,
@@ -245,9 +256,22 @@ const struct __DriverAPIRec driDriverAPI = {
 	.UnbindContext   = nouveau_context_unbind,
 };
 
+static const struct __DRIDriverVtableExtensionRec nouveau_vtable = {
+   .base = { __DRI_DRIVER_VTABLE, 1 },
+   .vtable = &nouveau_driver_api,
+};
+
 /* This is the table of extensions that the loader will dlsym() for. */
-PUBLIC const __DRIextension *__driDriverExtensions[] = {
+static const __DRIextension *nouveau_driver_extensions[] = {
 	&driCoreExtension.base,
 	&driDRI2Extension.base,
+	&nouveau_vtable.base,
 	NULL
 };
+
+PUBLIC const __DRIextension **__driDriverGetExtensions_nouveau_vieux(void)
+{
+   globalDriverAPI = &nouveau_driver_api;
+
+   return nouveau_driver_extensions;
+}

@@ -30,24 +30,9 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa/ \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
+	-I$(top_builddir)/src/mesa/drivers/dri/common \
 	$(DEFINES) \
 	$(VISIBILITY_CFLAGS)
 
-dridir = $(DRI_DRIVER_INSTALL_DIR)
-
-if HAVE_SWRAST_DRI
-dri_LTLIBRARIES = swrast_dri.la
-endif
-
-swrast_dri_la_SOURCES = \
-	$(SWRAST_C_FILES)
-
-swrast_dri_la_LDFLAGS = -module -avoid-version -shared
-swrast_dri_la_LIBADD = \
-	$(DRI_LIB_DEPS)
-
-# Provide compatibility with scripts for the old Mesa build system for
-# a while by putting a link to the driver into /lib of the build tree.
-all-local: swrast_dri.la
-	$(MKDIR_P) $(top_builddir)/$(LIB_DIR);
-	ln -f .libs/swrast_dri.so $(top_builddir)/$(LIB_DIR)/swrast_dri.so;
+noinst_LTLIBRARIES = libswrast_dri.la
+libswrast_dri_la_SOURCES = $(SWRAST_C_FILES)

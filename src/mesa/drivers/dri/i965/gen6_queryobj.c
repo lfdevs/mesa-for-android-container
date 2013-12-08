@@ -98,31 +98,28 @@ write_depth_count(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
  * Write an arbitrary 64-bit register to a buffer via MI_STORE_REGISTER_MEM.
  *
  * Only TIMESTAMP and PS_DEPTH_COUNT have special PIPE_CONTROL support; other
- * counters have to be read via the generic MI_STORE_REGISTER_MEM.  This
- * function also performs a pipeline flush for proper synchronization.
+ * counters have to be read via the generic MI_STORE_REGISTER_MEM.
+ *
+ * Callers must explicitly flush the pipeline to ensure the desired value is
+ * available.
  */
-static void
-write_reg(struct brw_context *brw,
-          drm_intel_bo *query_bo, uint32_t reg, int idx)
+void
+brw_store_register_mem64(struct brw_context *brw,
+                         drm_intel_bo *bo, uint32_t reg, int idx)
 {
    assert(brw->gen >= 6);
-
-   intel_batchbuffer_emit_mi_flush(brw);
 
    /* MI_STORE_REGISTER_MEM only stores a single 32-bit value, so to
     * read a full 64-bit register, we need to do two of them.
     */
-   BEGIN_BATCH(3);
+   BEGIN_BATCH(6);
    OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
    OUT_BATCH(reg);
-   OUT_RELOC(query_bo, I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
+   OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
              idx * sizeof(uint64_t));
-   ADVANCE_BATCH();
-
-   BEGIN_BATCH(3);
    OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
    OUT_BATCH(reg + sizeof(uint32_t));
-   OUT_RELOC(query_bo, I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
+   OUT_RELOC(bo, I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
              sizeof(uint32_t) + idx * sizeof(uint64_t));
    ADVANCE_BATCH();
 }
@@ -131,17 +128,21 @@ static void
 write_primitives_generated(struct brw_context *brw,
                            drm_intel_bo *query_bo, int idx)
 {
-   write_reg(brw, query_bo, CL_INVOCATION_COUNT, idx);
+   intel_batchbuffer_emit_mi_flush(brw);
+
+   brw_store_register_mem64(brw, query_bo, CL_INVOCATION_COUNT, idx);
 }
 
 static void
 write_xfb_primitives_written(struct brw_context *brw,
-                             drm_intel_bo *query_bo, int idx)
+                             drm_intel_bo *bo, int idx)
 {
+   intel_batchbuffer_emit_mi_flush(brw);
+
    if (brw->gen >= 7) {
-      write_reg(brw, query_bo, SO_NUM_PRIMS_WRITTEN0_IVB, idx);
+      brw_store_register_mem64(brw, bo, GEN7_SO_NUM_PRIMS_WRITTEN(0), idx);
    } else {
-      write_reg(brw, query_bo, SO_NUM_PRIMS_WRITTEN, idx);
+      brw_store_register_mem64(brw, bo, GEN6_SO_NUM_PRIMS_WRITTEN, idx);
    }
 }
 

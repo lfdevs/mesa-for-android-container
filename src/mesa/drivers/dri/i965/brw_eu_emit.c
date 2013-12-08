@@ -126,6 +126,10 @@ brw_set_dest(struct brw_compile *p, struct brw_instruction *insn,
       else {
 	 insn->bits1.da16.dest_subreg_nr = dest.subnr / 16;
 	 insn->bits1.da16.dest_writemask = dest.dw1.bits.writemask;
+         if (dest.file == BRW_GENERAL_REGISTER_FILE ||
+             dest.file == BRW_MESSAGE_REGISTER_FILE) {
+            assert(dest.dw1.bits.writemask != 0);
+         }
 	 /* From the Ivybridge PRM, Vol 4, Part 3, Section 5.2.4.1:
 	  *    Although Dst.HorzStride is a don't care for Align16, HW needs
 	  *    this to be programmed as "01".
@@ -515,41 +519,44 @@ static void brw_set_ff_sync_message(struct brw_compile *p,
 
 static void brw_set_urb_message( struct brw_compile *p,
 				 struct brw_instruction *insn,
-				 bool allocate,
-				 bool used,
+                                 enum brw_urb_write_flags flags,
 				 GLuint msg_length,
 				 GLuint response_length,
-				 bool end_of_thread,
-				 bool complete,
 				 GLuint offset,
 				 GLuint swizzle_control )
 {
    struct brw_context *brw = p->brw;
 
    brw_set_message_descriptor(p, insn, BRW_SFID_URB,
-			      msg_length, response_length, true, end_of_thread);
+			      msg_length, response_length, true,
+                              flags & BRW_URB_WRITE_EOT);
    if (brw->gen == 7) {
-      insn->bits3.urb_gen7.opcode = 0;	/* URB_WRITE_HWORD */
+      if (flags & BRW_URB_WRITE_OWORD) {
+         assert(msg_length == 2); /* header + one OWORD of data */
+         insn->bits3.urb_gen7.opcode = BRW_URB_OPCODE_WRITE_OWORD;
+      } else {
+         insn->bits3.urb_gen7.opcode = BRW_URB_OPCODE_WRITE_HWORD;
+      }
       insn->bits3.urb_gen7.offset = offset;
       assert(swizzle_control != BRW_URB_SWIZZLE_TRANSPOSE);
       insn->bits3.urb_gen7.swizzle_control = swizzle_control;
-      /* per_slot_offset = 0 makes it ignore offsets in message header */
-      insn->bits3.urb_gen7.per_slot_offset = 0;
-      insn->bits3.urb_gen7.complete = complete;
+      insn->bits3.urb_gen7.per_slot_offset =
+         flags & BRW_URB_WRITE_PER_SLOT_OFFSET ? 1 : 0;
+      insn->bits3.urb_gen7.complete = flags & BRW_URB_WRITE_COMPLETE ? 1 : 0;
    } else if (brw->gen >= 5) {
       insn->bits3.urb_gen5.opcode = 0;	/* URB_WRITE */
       insn->bits3.urb_gen5.offset = offset;
       insn->bits3.urb_gen5.swizzle_control = swizzle_control;
-      insn->bits3.urb_gen5.allocate = allocate;
-      insn->bits3.urb_gen5.used = used;	/* ? */
-      insn->bits3.urb_gen5.complete = complete;
+      insn->bits3.urb_gen5.allocate = flags & BRW_URB_WRITE_ALLOCATE ? 1 : 0;
+      insn->bits3.urb_gen5.used = flags & BRW_URB_WRITE_UNUSED ? 0 : 1;
+      insn->bits3.urb_gen5.complete = flags & BRW_URB_WRITE_COMPLETE ? 1 : 0;
    } else {
       insn->bits3.urb.opcode = 0;	/* ? */
       insn->bits3.urb.offset = offset;
       insn->bits3.urb.swizzle_control = swizzle_control;
-      insn->bits3.urb.allocate = allocate;
-      insn->bits3.urb.used = used;	/* ? */
-      insn->bits3.urb.complete = complete;
+      insn->bits3.urb.allocate = flags & BRW_URB_WRITE_ALLOCATE ? 1 : 0;
+      insn->bits3.urb.used = flags & BRW_URB_WRITE_UNUSED ? 0 : 1;
+      insn->bits3.urb.complete = flags & BRW_URB_WRITE_COMPLETE ? 1 : 0;
    }
 }
 
@@ -938,8 +945,6 @@ ALU2(OR)
 ALU2(XOR)
 ALU2(SHR)
 ALU2(SHL)
-ALU2(RSR)
-ALU2(RSL)
 ALU2(ASR)
 ALU1(F32TO16)
 ALU1(F16TO32)
@@ -963,6 +968,8 @@ ALU3(BFI2)
 ALU1(FBH)
 ALU1(FBL)
 ALU1(CBIT)
+ALU2(ADDC)
+ALU2(SUBB)
 
 ROUND(RNDZ)
 ROUND(RNDE)
@@ -2048,6 +2055,48 @@ brw_oword_block_read_scratch(struct brw_compile *p,
    }
 }
 
+void
+gen7_block_read_scratch(struct brw_compile *p,
+                        struct brw_reg dest,
+                        int num_regs,
+                        GLuint offset)
+{
+   dest = retype(dest, BRW_REGISTER_TYPE_UW);
+
+   struct brw_instruction *insn = next_insn(p, BRW_OPCODE_SEND);
+
+   assert(insn->header.predicate_control == BRW_PREDICATE_NONE);
+   insn->header.compression_control = BRW_COMPRESSION_NONE;
+
+   brw_set_dest(p, insn, dest);
+
+   /* The HW requires that the header is present; this is to get the g0.5
+    * scratch offset.
+    */
+   bool header_present = true;
+   brw_set_src0(p, insn, brw_vec8_grf(0, 0));
+
+   brw_set_message_descriptor(p, insn,
+                              GEN7_SFID_DATAPORT_DATA_CACHE,
+                              1, /* mlen: just g0 */
+                              num_regs,
+                              header_present,
+                              false);
+
+   insn->bits3.ud |= GEN7_DATAPORT_SCRATCH_READ;
+
+   assert(num_regs == 1 || num_regs == 2 || num_regs == 4);
+   insn->bits3.ud |= (num_regs - 1) << GEN7_DATAPORT_SCRATCH_NUM_REGS_SHIFT;
+
+   /* According to the docs, offset is "A 12-bit HWord offset into the memory
+    * Immediate Memory buffer as specified by binding table 0xFF."  An HWORD
+    * is 32 bytes, which happens to be the size of a register.
+    */
+   offset /= REG_SIZE;
+   assert(offset < (1 << 12));
+   insn->bits3.ud |= offset;
+}
+
 /**
  * Read a float[4] vector from the data port Data Cache (const buffer).
  * Location (in buffer) should be a multiple of 16.
@@ -2186,11 +2235,27 @@ void brw_SAMPLE(struct brw_compile *p,
    struct brw_context *brw = p->brw;
    struct brw_instruction *insn;
 
-   gen6_resolve_implied_move(p, &src0, msg_reg_nr);
+   if (msg_reg_nr != -1)
+      gen6_resolve_implied_move(p, &src0, msg_reg_nr);
 
    insn = next_insn(p, BRW_OPCODE_SEND);
    insn->header.predicate_control = 0; /* XXX */
-   insn->header.compression_control = BRW_COMPRESSION_NONE;
+
+   /* From the 965 PRM (volume 4, part 1, section 14.2.41):
+    *
+    *    "Instruction compression is not allowed for this instruction (that
+    *     is, send). The hardware behavior is undefined if this instruction is
+    *     set as compressed. However, compress control can be set to "SecHalf"
+    *     to affect the EMask generation."
+    *
+    * No similar wording is found in later PRMs, but there are examples
+    * utilizing send with SecHalf.  More importantly, SIMD8 sampler messages
+    * are allowed in SIMD16 mode and they could not work without SecHalf.  For
+    * these reasons, we allow BRW_COMPRESSION_2NDHALF here.
+    */
+   if (insn->header.compression_control != BRW_COMPRESSION_2NDHALF)
+      insn->header.compression_control = BRW_COMPRESSION_NONE;
+
    if (brw->gen < 6)
       insn->header.destreg__conditionalmod = msg_reg_nr;
 
@@ -2215,12 +2280,9 @@ void brw_urb_WRITE(struct brw_compile *p,
 		   struct brw_reg dest,
 		   GLuint msg_reg_nr,
 		   struct brw_reg src0,
-		   bool allocate,
-		   bool used,
+                   enum brw_urb_write_flags flags,
 		   GLuint msg_length,
 		   GLuint response_length,
-		   bool eot,
-		   bool writes_complete,
 		   GLuint offset,
 		   GLuint swizzle)
 {
@@ -2229,7 +2291,7 @@ void brw_urb_WRITE(struct brw_compile *p,
 
    gen6_resolve_implied_move(p, &src0, msg_reg_nr);
 
-   if (brw->gen == 7) {
+   if (brw->gen == 7 && !(flags & BRW_URB_WRITE_USE_CHANNEL_MASKS)) {
       /* Enable Channel Masks in the URB_WRITE_HWORD message header */
       brw_push_insn_state(p);
       brw_set_access_mode(p, BRW_ALIGN_1);
@@ -2254,12 +2316,9 @@ void brw_urb_WRITE(struct brw_compile *p,
 
    brw_set_urb_message(p,
 		       insn,
-		       allocate,
-		       used,
+		       flags,
 		       msg_length,
 		       response_length, 
-		       eot, 
-		       writes_complete, 
 		       offset,
 		       swizzle);
 }
@@ -2468,6 +2527,124 @@ brw_svb_write(struct brw_compile *p,
                             send_commit_msg); /* send_commit_msg */
 }
 
+static void
+brw_set_dp_untyped_atomic_message(struct brw_compile *p,
+                                  struct brw_instruction *insn,
+                                  GLuint atomic_op,
+                                  GLuint bind_table_index,
+                                  GLuint msg_length,
+                                  GLuint response_length,
+                                  bool header_present)
+{
+   if (p->brw->is_haswell) {
+      brw_set_message_descriptor(p, insn, HSW_SFID_DATAPORT_DATA_CACHE_1,
+                                 msg_length, response_length,
+                                 header_present, false);
+
+
+      if (insn->header.access_mode == BRW_ALIGN_1) {
+         if (insn->header.execution_size != BRW_EXECUTE_16)
+            insn->bits3.ud |= 1 << 12; /* SIMD8 mode */
+
+         insn->bits3.gen7_dp.msg_type =
+            HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP;
+      } else {
+         insn->bits3.gen7_dp.msg_type =
+            HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2;
+      }
+
+   } else {
+      brw_set_message_descriptor(p, insn, GEN7_SFID_DATAPORT_DATA_CACHE,
+                                 msg_length, response_length,
+                                 header_present, false);
+
+      insn->bits3.gen7_dp.msg_type = GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP;
+
+      if (insn->header.execution_size != BRW_EXECUTE_16)
+         insn->bits3.ud |= 1 << 12; /* SIMD8 mode */
+   }
+
+   if (response_length)
+      insn->bits3.ud |= 1 << 13; /* Return data expected */
+
+   insn->bits3.gen7_dp.binding_table_index = bind_table_index;
+   insn->bits3.ud |= atomic_op << 8;
+}
+
+void
+brw_untyped_atomic(struct brw_compile *p,
+                   struct brw_reg dest,
+                   struct brw_reg mrf,
+                   GLuint atomic_op,
+                   GLuint bind_table_index,
+                   GLuint msg_length,
+                   GLuint response_length) {
+   struct brw_instruction *insn = brw_next_insn(p, BRW_OPCODE_SEND);
+
+   brw_set_dest(p, insn, retype(dest, BRW_REGISTER_TYPE_UD));
+   brw_set_src0(p, insn, retype(mrf, BRW_REGISTER_TYPE_UD));
+   brw_set_src1(p, insn, brw_imm_d(0));
+   brw_set_dp_untyped_atomic_message(
+      p, insn, atomic_op, bind_table_index, msg_length, response_length,
+      insn->header.access_mode == BRW_ALIGN_1);
+}
+
+static void
+brw_set_dp_untyped_surface_read_message(struct brw_compile *p,
+                                        struct brw_instruction *insn,
+                                        GLuint bind_table_index,
+                                        GLuint msg_length,
+                                        GLuint response_length,
+                                        bool header_present)
+{
+   const unsigned dispatch_width =
+      (insn->header.execution_size == BRW_EXECUTE_16 ? 16 : 8);
+   const unsigned num_channels = response_length / (dispatch_width / 8);
+
+   if (p->brw->is_haswell) {
+      brw_set_message_descriptor(p, insn, HSW_SFID_DATAPORT_DATA_CACHE_1,
+                                 msg_length, response_length,
+                                 header_present, false);
+
+      insn->bits3.gen7_dp.msg_type = HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ;
+   } else {
+      brw_set_message_descriptor(p, insn, GEN7_SFID_DATAPORT_DATA_CACHE,
+                                 msg_length, response_length,
+                                 header_present, false);
+
+      insn->bits3.gen7_dp.msg_type = GEN7_DATAPORT_DC_UNTYPED_SURFACE_READ;
+   }
+
+   if (insn->header.access_mode == BRW_ALIGN_1) {
+      if (dispatch_width == 16)
+         insn->bits3.ud |= 1 << 12; /* SIMD16 mode */
+      else
+         insn->bits3.ud |= 2 << 12; /* SIMD8 mode */
+   }
+
+   insn->bits3.gen7_dp.binding_table_index = bind_table_index;
+
+   /* Set mask of 32-bit channels to drop. */
+   insn->bits3.ud |= (0xf & (0xf << num_channels)) << 8;
+}
+
+void
+brw_untyped_surface_read(struct brw_compile *p,
+                         struct brw_reg dest,
+                         struct brw_reg mrf,
+                         GLuint bind_table_index,
+                         GLuint msg_length,
+                         GLuint response_length)
+{
+   struct brw_instruction *insn = next_insn(p, BRW_OPCODE_SEND);
+
+   brw_set_dest(p, insn, retype(dest, BRW_REGISTER_TYPE_UD));
+   brw_set_src0(p, insn, retype(mrf, BRW_REGISTER_TYPE_UD));
+   brw_set_dp_untyped_surface_read_message(
+      p, insn, bind_table_index, msg_length, response_length,
+      insn->header.access_mode == BRW_ALIGN_1);
+}
+
 /**
  * This instruction is generated as a single-channel align1 instruction by
  * both the VS and FS stages when using INTEL_DEBUG=shader_time.
@@ -2504,25 +2681,8 @@ void brw_shader_time_add(struct brw_compile *p,
                                       BRW_ARF_NULL, 0));
    brw_set_src0(p, send, brw_vec1_reg(payload.file,
                                       payload.nr, 0));
-
-   uint32_t sfid, msg_type;
-   if (brw->is_haswell) {
-      sfid = HSW_SFID_DATAPORT_DATA_CACHE_1;
-      msg_type = HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP;
-   } else {
-      sfid = GEN7_SFID_DATAPORT_DATA_CACHE;
-      msg_type = GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP;
-   }
-
-   bool header_present = false;
-   bool eot = false;
-   uint32_t mlen = 2; /* offset, value */
-   uint32_t rlen = 0;
-   brw_set_message_descriptor(p, send, sfid, mlen, rlen, header_present, eot);
-
-   send->bits3.ud |= msg_type << 14;
-   send->bits3.ud |= 0 << 13; /* no return data */
-   send->bits3.ud |= 1 << 12; /* SIMD8 mode */
-   send->bits3.ud |= BRW_AOP_ADD << 8;
-   send->bits3.ud |= surf_index << 0;
+   brw_set_dp_untyped_atomic_message(p, send, BRW_AOP_ADD, surf_index,
+                                     2 /* message length */,
+                                     0 /* response length */,
+                                     false /* header present */);
 }
