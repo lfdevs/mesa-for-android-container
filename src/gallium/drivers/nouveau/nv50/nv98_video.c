@@ -64,10 +64,6 @@ nv98_create_decoder(struct pipe_context *context,
    struct nouveau_vp3_decoder *dec;
    struct nouveau_pushbuf **push;
    struct nv04_fifo nv04_data = {.vram = 0xbeef0201, .gart = 0xbeef0202};
-   union nouveau_bo_config cfg;
-
-   cfg.nv50.tile_mode = 0x20;
-   cfg.nv50.memtype = 0x70;
 
    int ret, i;
    uint32_t codec = 1, ppp_codec = 3;
@@ -200,7 +196,7 @@ nv98_create_decoder(struct pipe_context *context,
    dec->ref_stride = mb(templ->width)*16 * (mb_half(templ->height)*32 + nouveau_vp3_video_align(templ->height)/2);
    ret = nouveau_bo_new(screen->device, NOUVEAU_BO_VRAM, 0,
                         dec->ref_stride * (templ->max_references+2) + tmp_size,
-                        &cfg, &dec->ref_bo);
+                        NULL, &dec->ref_bo);
    if (ret)
       goto fail;
 

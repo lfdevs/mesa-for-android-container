@@ -6,3 +6,8 @@ f0f202e6b764be803470e27cba9102f14361ae22 glx: conditionaly build dri3 and presen
 # issue can be resolved.  See
 # http://lists.freedesktop.org/archives/mesa-dev/2013-November/048899.html
 068a073c1d4853b5c8f33efdeb481026f42e23a5 meta: fix meta clear of layered framebuffers
+
+# This patch isn't actually necessary because that bug that it fixes isn't in
+# the 10.0 branch.  See
+# http://lists.freedesktop.org/archives/mesa-stable/2013-December/000500.html
+a057b837ddd1c725a7504eedc53c6df05a012773 egl: add HAVE_LIBDRM define, fix EGL X11 platform

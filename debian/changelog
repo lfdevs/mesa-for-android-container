@@ -1,3 +1,12 @@
+mesa (10.0.1-1) experimental; urgency=low
+
+  * New upstream release.
+  * Do not attempt to build i915 and i965 on arm.
+  * Enable radeonsi on arm.
+  * Disable llvmpipe on armhf, it regresses.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 18 Dec 2013 15:18:25 +0100
+
 mesa (10.0.0-1) experimental; urgency=low
 
   [ Emilio Pozuelo Monfort ]
