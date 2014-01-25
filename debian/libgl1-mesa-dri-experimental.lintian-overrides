@@ -1,3 +1,0 @@
-# virtual packages only:
-breaks-without-version libgl1-mesa-glx-no-multiarch
-breaks-without-version xserver-xorg-core-no-multiarch

@@ -205,7 +205,6 @@ clear_with_quad(struct gl_context *ctx,
    const GLfloat x1 = (GLfloat) ctx->DrawBuffer->_Xmax / fb_width * 2.0f - 1.0f;
    const GLfloat y0 = (GLfloat) ctx->DrawBuffer->_Ymin / fb_height * 2.0f - 1.0f;
    const GLfloat y1 = (GLfloat) ctx->DrawBuffer->_Ymax / fb_height * 2.0f - 1.0f;
-   union pipe_color_union clearColor;
 
    /*
    printf("%s %s%s%s %f,%f %f,%f\n", __FUNCTION__, 
@@ -308,18 +307,13 @@ clear_with_quad(struct gl_context *ctx,
    set_vertex_shader(st);
    cso_set_geometry_shader_handle(st->cso_context, NULL);
 
-   if (ctx->DrawBuffer->_ColorDrawBuffers[0]) {
-      struct gl_renderbuffer *rb = ctx->DrawBuffer->_ColorDrawBuffers[0];
-      GLboolean is_integer = _mesa_is_enum_format_integer(rb->InternalFormat);
-
-      st_translate_color(&ctx->Color.ClearColor,
-                         &clearColor,
-                         ctx->DrawBuffer->_ColorDrawBuffers[0]->_BaseFormat,
-                         is_integer);
-   }
+   /* We can't translate the clear color to the colorbuffer format,
+    * because different colorbuffers may have different formats.
+    */
 
    /* draw quad matching scissor rect */
-   draw_quad(st, x0, y0, x1, y1, (GLfloat) ctx->Depth.Clear, &clearColor);
+   draw_quad(st, x0, y0, x1, y1, (GLfloat) ctx->Depth.Clear,
+             (union pipe_color_union*)&ctx->Color.ClearColor);
 
    /* Restore pipe state */
    cso_restore_blend(st->cso_context);
@@ -450,19 +444,11 @@ st_Clear(struct gl_context *ctx, GLbitfield mask)
                       quad_buffers & PIPE_CLEAR_DEPTH,
                       quad_buffers & PIPE_CLEAR_STENCIL);
    } else if (clear_buffers) {
-      union pipe_color_union clearColor;
-
-      if (ctx->DrawBuffer->_ColorDrawBuffers[0]) {
-         struct gl_renderbuffer *rb = ctx->DrawBuffer->_ColorDrawBuffers[0];
-         GLboolean is_integer = _mesa_is_enum_format_integer(rb->InternalFormat);
-
-         st_translate_color(&ctx->Color.ClearColor,
-                            &clearColor,
-			    ctx->DrawBuffer->_ColorDrawBuffers[0]->_BaseFormat,
-			    is_integer);
-      }
-
-      st->pipe->clear(st->pipe, clear_buffers, &clearColor,
+      /* We can't translate the clear color to the colorbuffer format,
+       * because different colorbuffers may have different formats.
+       */
+      st->pipe->clear(st->pipe, clear_buffers,
+                      (union pipe_color_union*)&ctx->Color.ClearColor,
                       ctx->Depth.Clear, ctx->Stencil.Clear);
    }
    if (mask & BUFFER_BIT_ACCUM)

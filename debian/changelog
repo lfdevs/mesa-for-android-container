@@ -1,3 +1,18 @@
+mesa (10.0.2-1) experimental; urgency=low
+
+  [ Maarten Lankhorst ]
+  * Stop building libgl1-mesa-dri-experimental (Closes: #685104).
+    - It's been empty since 8.0.
+  [ Matthias Klose ]
+  * Move to llvm-3.4.
+
+  [ Julien Cristau ]
+  * Fix FTBFS on kfreebsd.
+  * ... and attempt to fix FTBFS on hurd.
+  * New upstream stable release.
+
+ -- Julien Cristau <jcristau@debian.org>  Sat, 25 Jan 2014 10:44:22 +0100
+
 mesa (10.0.1-1) experimental; urgency=low
 
   * New upstream release.
