@@ -194,6 +194,12 @@ do_gs_prog(struct brw_context *brw,
       c.prog_data.output_vertex_size_hwords * 32 * gp->program.VerticesOut;
    output_size_bytes += 32 * c.prog_data.control_data_header_size_hwords;
 
+   /* Broadwell stores "Vertex Count" as a full 8 DWord (32 byte) URB output,
+    * which comes before the control header.
+    */
+   if (brw->gen >= 8)
+      output_size_bytes += 32;
+
    assert(output_size_bytes >= 1);
    if (output_size_bytes > GEN7_MAX_GS_URB_ENTRY_SIZE_BYTES)
       return false;
@@ -290,8 +296,9 @@ brw_upload_gs_prog(struct brw_context *brw)
    if (!brw_search_cache(&brw->cache, BRW_GS_PROG,
                          &key, sizeof(key),
                          &stage_state->prog_offset, &brw->gs.prog_data)) {
-      bool success = do_gs_prog(brw, ctx->Shader.CurrentGeometryProgram,
-                                gp, &key);
+      bool success =
+         do_gs_prog(brw, ctx->Shader.CurrentProgram[MESA_SHADER_GEOMETRY], gp,
+                    &key);
       assert(success);
    }
    brw->gs.base.prog_data = &brw->gs.prog_data->base.base;

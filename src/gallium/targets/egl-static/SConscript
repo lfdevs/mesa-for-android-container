@@ -7,6 +7,7 @@ env = env.Clone()
 
 env.Append(CPPPATH = [
     '#/include',
+    '#/src/loader',
     '#/src/egl/main',
     '#/src/gallium/auxiliary',
     '#/src/gallium/drivers',
@@ -30,6 +31,7 @@ env.Prepend(LIBS = [
     rbug,
     trace,
     galahad,
+    libloader,
     gallium,
     egl,
     st_egl,

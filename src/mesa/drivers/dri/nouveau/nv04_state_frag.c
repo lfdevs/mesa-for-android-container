@@ -139,15 +139,15 @@ get_input_arg(struct combiner_state *rc, int arg, int flags)
 		int i = (source == GL_TEXTURE ?
 			 rc->unit : source - GL_TEXTURE0);
 		struct gl_texture_object *t = rc->ctx->Texture.Unit[i]._Current;
-		gl_format format = t->Image[0][t->BaseLevel]->TexFormat;
+		mesa_format format = t->Image[0][t->BaseLevel]->TexFormat;
 
-		if (format == MESA_FORMAT_A8) {
+		if (format == MESA_FORMAT_A_UNORM8) {
 			/* Emulated using I8. */
 			if (is_color_operand(operand))
 				return COMBINER_SOURCE(ZERO) |
 					get_input_mapping(rc, operand, flags);
 
-		} else if (format == MESA_FORMAT_L8) {
+		} else if (format == MESA_FORMAT_L_UNORM8) {
 			/* Emulated using I8. */
 			if (!is_color_operand(operand))
 				return COMBINER_SOURCE(ZERO) |
@@ -294,6 +294,6 @@ nv04_emit_tex_env(struct gl_context *ctx, int emit)
 	/* update calculated multitex state */
 	nv04->alpha[i] = rc_a.hw;
 	nv04->color[i] = rc_c.hw;
-	nv04->factor   = pack_rgba_f(MESA_FORMAT_ARGB8888,
+	nv04->factor   = pack_rgba_f(MESA_FORMAT_B8G8R8A8_UNORM,
 				     ctx->Texture.Unit[0].EnvColor);
 }

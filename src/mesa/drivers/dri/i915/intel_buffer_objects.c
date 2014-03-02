@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -336,20 +336,28 @@ intel_bufferobj_map_range(struct gl_context * ctx,
     */
    if ((access & GL_MAP_INVALIDATE_RANGE_BIT) &&
        drm_intel_bo_busy(intel_obj->buffer)) {
+      /* Ensure that the base alignment of the allocation meets the alignment
+       * guarantees the driver has advertised to the application.
+       */
+      const unsigned alignment = ctx->Const.MinMapBufferAlignment;
+      const unsigned extra = (uintptr_t) offset % alignment;
+
       if (access & GL_MAP_FLUSH_EXPLICIT_BIT) {
-	 intel_obj->range_map_buffer = malloc(length);
-	 obj->Pointer = intel_obj->range_map_buffer;
+         intel_obj->range_map_buffer = _mesa_align_malloc(length + extra,
+                                                          alignment);
+         obj->Pointer = intel_obj->range_map_buffer + extra;
       } else {
 	 intel_obj->range_map_bo = drm_intel_bo_alloc(intel->bufmgr,
 						      "range map",
-						      length, 64);
+                                                      length + extra,
+                                                      alignment);
 	 if (!(access & GL_MAP_READ_BIT)) {
 	    drm_intel_gem_bo_map_gtt(intel_obj->range_map_bo);
 	 } else {
 	    drm_intel_bo_map(intel_obj->range_map_bo,
 			     (access & GL_MAP_WRITE_BIT) != 0);
 	 }
-	 obj->Pointer = intel_obj->range_map_bo->virtual;
+	 obj->Pointer = intel_obj->range_map_bo->virtual + extra;
       }
       return obj->Pointer;
    }
@@ -391,7 +399,11 @@ intel_bufferobj_flush_mapped_range(struct gl_context *ctx,
 
    temp_bo = drm_intel_bo_alloc(intel->bufmgr, "range map flush", length, 64);
 
-   drm_intel_bo_subdata(temp_bo, 0, length, intel_obj->range_map_buffer);
+   /* Use obj->Pointer instead of intel_obj->range_map_buffer because the
+    * former points to the actual mapping while the latter may be offset to
+    * meet alignment guarantees.
+    */
+   drm_intel_bo_subdata(temp_bo, 0, length, obj->Pointer);
 
    intel_emit_linear_blit(intel,
 			  intel_obj->buffer, obj->Offset + offset,
@@ -422,14 +434,16 @@ intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj)
        * usage inside of a batchbuffer.
        */
       intel_batchbuffer_emit_mi_flush(intel);
-      free(intel_obj->range_map_buffer);
+      _mesa_align_free(intel_obj->range_map_buffer);
       intel_obj->range_map_buffer = NULL;
    } else if (intel_obj->range_map_bo != NULL) {
+      const unsigned extra = obj->Pointer - intel_obj->range_map_bo->virtual;
+
       drm_intel_bo_unmap(intel_obj->range_map_bo);
 
       intel_emit_linear_blit(intel,
 			     intel_obj->buffer, obj->Offset,
-			     intel_obj->range_map_bo, 0,
+			     intel_obj->range_map_bo, extra,
 			     obj->Length);
 
       /* Since we've emitted some blits to buffers that will (likely) be used
@@ -453,8 +467,7 @@ intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj)
 
 drm_intel_bo *
 intel_bufferobj_buffer(struct intel_context *intel,
-                       struct intel_buffer_object *intel_obj,
-		       GLuint flag)
+                       struct intel_buffer_object *intel_obj)
 {
    if (intel_obj->source)
       release_buffer(intel_obj);
@@ -613,7 +626,7 @@ intel_bufferobj_copy_subdata(struct gl_context *ctx,
 
    /* Otherwise, we have real BOs, so blit them. */
 
-   dst_bo = intel_bufferobj_buffer(intel, intel_dst, INTEL_WRITE_PART);
+   dst_bo = intel_bufferobj_buffer(intel, intel_dst);
    src_bo = intel_bufferobj_source(intel, intel_src, 64, &src_offset);
 
    intel_emit_linear_blit(intel,
@@ -657,7 +670,7 @@ intel_buffer_object_purgeable(struct gl_context * ctx,
    } else {
       /* XXX Create the buffer and madvise(MADV_DONTNEED)? */
       struct intel_context *intel = intel_context(ctx);
-      drm_intel_bo *bo = intel_bufferobj_buffer(intel, intel_obj, INTEL_READ);
+      drm_intel_bo *bo = intel_bufferobj_buffer(intel, intel_obj);
 
       return intel_buffer_purgeable(bo);
    }

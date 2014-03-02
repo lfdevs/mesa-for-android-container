@@ -33,18 +33,18 @@
 #include "nv10_driver.h"
 
 static inline unsigned
-get_rt_format(gl_format format)
+get_rt_format(mesa_format format)
 {
 	switch (format) {
-	case MESA_FORMAT_XRGB8888:
+	case MESA_FORMAT_B8G8R8X8_UNORM:
 		return NV10_3D_RT_FORMAT_COLOR_X8R8G8B8;
-	case MESA_FORMAT_ARGB8888:
+	case MESA_FORMAT_B8G8R8A8_UNORM:
 		return NV10_3D_RT_FORMAT_COLOR_A8R8G8B8;
-	case MESA_FORMAT_RGB565:
+	case MESA_FORMAT_B5G6R5_UNORM:
 		return NV10_3D_RT_FORMAT_COLOR_R5G6B5;
-	case MESA_FORMAT_Z16:
+	case MESA_FORMAT_Z_UNORM16:
 		return NV10_3D_RT_FORMAT_DEPTH_Z16;
-	case MESA_FORMAT_Z24_S8:
+	case MESA_FORMAT_S8_UINT_Z24_UNORM:
 		return NV10_3D_RT_FORMAT_DEPTH_Z24S8;
 	default:
 		assert(0);
@@ -106,7 +106,7 @@ nv10_emit_framebuffer(struct gl_context *ctx, int emit)
 
 	/* At least nv11 seems to get sad if we don't do this before
 	 * swapping RTs.*/
-	if (context_chipset(ctx) < 0x17) {
+	if (context_eng3d(ctx)->oclass < NV17_3D_CLASS) {
 		int i;
 
 		for (i = 0; i < 6; i++) {
@@ -140,7 +140,7 @@ nv10_emit_framebuffer(struct gl_context *ctx, int emit)
 		PUSH_MTHDl(push, NV10_3D(ZETA_OFFSET), BUFCTX_FB,
 				 s->bo, 0, bo_flags);
 
-		if (context_chipset(ctx) >= 0x17) {
+		if (context_eng3d(ctx)->oclass >= NV17_3D_CLASS) {
 			setup_hierz_buffer(ctx);
 			context_dirty(ctx, ZCLEAR);
 		}
@@ -176,7 +176,7 @@ void
 nv10_emit_viewport(struct gl_context *ctx, int emit)
 {
 	struct nouveau_pushbuf *push = context_push(ctx);
-	struct gl_viewport_attrib *vp = &ctx->Viewport;
+	struct gl_viewport_attrib *vp = &ctx->ViewportArray[0];
 	struct gl_framebuffer *fb = ctx->DrawBuffer;
 	float a[4] = {};
 

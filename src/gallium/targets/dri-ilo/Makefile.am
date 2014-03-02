@@ -24,15 +24,8 @@
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
-	$(GALLIUM_CFLAGS) \
-	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS)
+	$(GALLIUM_DRI_CFLAGS)
 AM_CPPFLAGS = \
-	-I$(top_srcdir)/src/gallium/drivers \
-	-I$(top_srcdir)/src/gallium/winsys \
-	-I$(top_srcdir)/src/mesa \
-	-I$(top_srcdir)/src/mapi \
-	-I$(top_builddir)/src/mesa/drivers/dri/common \
 	-DGALLIUM_RBUG \
 	-DGALLIUM_TRACE \
 	-DGALLIUM_GALAHAD
@@ -42,7 +35,7 @@ noinst_LTLIBRARIES = ilo_dri.la
 ilo_dri_la_SOURCES = target.c
 
 # need -rpath to create a noinst shared library
-ilo_dri_la_LDFLAGS = $(DRI_DRIVER_LDFLAGS) \
+ilo_dri_la_LDFLAGS = $(GALLIUM_DRI_LINKER_FLAGS) \
 		     -rpath $(abs_builddir)
 
 ilo_dri_la_LIBADD = \

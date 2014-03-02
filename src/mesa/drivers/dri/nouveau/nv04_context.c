@@ -37,8 +37,8 @@ texunit_needs_combiners(struct gl_texture_unit *u)
 	struct gl_texture_object *t = u->_Current;
 	struct gl_texture_image *ti = t->Image[0][t->BaseLevel];
 
-	return ti->TexFormat == MESA_FORMAT_A8 ||
-		ti->TexFormat == MESA_FORMAT_L8 ||
+	return ti->TexFormat == MESA_FORMAT_A_UNORM8 ||
+		ti->TexFormat == MESA_FORMAT_L_UNORM8 ||
 		u->EnvMode == GL_COMBINE ||
 		u->EnvMode == GL_COMBINE4_NV ||
 		u->EnvMode == GL_BLEND ||
@@ -114,7 +114,7 @@ init_dummy_texture(struct gl_context *ctx)
 
 	nouveau_surface_alloc(ctx, s, SWIZZLED,
 			      NOUVEAU_BO_MAP | NOUVEAU_BO_VRAM,
-			      MESA_FORMAT_ARGB8888, 1, 1);
+			      MESA_FORMAT_B8G8R8A8_UNORM, 1, 1);
 
 	nouveau_bo_map(s->bo, NOUVEAU_BO_WR, context_client(ctx));
 	*(uint32_t *)s->bo->map = 0xffffffff;
@@ -138,7 +138,8 @@ nv04_context_destroy(struct gl_context *ctx)
 }
 
 static struct gl_context *
-nv04_context_create(struct nouveau_screen *screen, const struct gl_config *visual,
+nv04_context_create(struct nouveau_screen *screen, gl_api api,
+		    const struct gl_config *visual,
 		    struct gl_context *share_ctx)
 {
 	struct nv04_context *nctx;
@@ -153,13 +154,13 @@ nv04_context_create(struct nouveau_screen *screen, const struct gl_config *visua
 	ctx = &nctx->base.base;
 	hw = &nctx->base.hw;
 
-	if (!nouveau_context_init(ctx, screen, visual, share_ctx))
+	if (!nouveau_context_init(ctx, api, screen, visual, share_ctx))
 		goto fail;
 
 	/* GL constants. */
 	ctx->Const.MaxTextureLevels = 11;
 	ctx->Const.MaxTextureCoordUnits = NV04_TEXTURE_UNITS;
-	ctx->Const.FragmentProgram.MaxTextureImageUnits = NV04_TEXTURE_UNITS;
+	ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits = NV04_TEXTURE_UNITS;
 	ctx->Const.MaxTextureUnits = NV04_TEXTURE_UNITS;
 	ctx->Const.MaxTextureMaxAnisotropy = 2;
 	ctx->Const.MaxTextureLodBias = 15;

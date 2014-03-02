@@ -33,17 +33,13 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
+#ifdef HAVE_LIBDRM
 #include <xf86drm.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 
 #include "egl_dri2.h"
-
-/* From xmlpool/options.h, user exposed so should be stable */
-#define DRI_CONF_VBLANK_NEVER 0
-#define DRI_CONF_VBLANK_DEF_INTERVAL_0 1
-#define DRI_CONF_VBLANK_DEF_INTERVAL_1 2
-#define DRI_CONF_VBLANK_ALWAYS_SYNC 3
 
 static void
 swrastCreateDrawable(struct dri2_egl_display * dri2_dpy,
@@ -606,6 +602,7 @@ dri2_x11_authenticate(_EGLDisplay *disp, uint32_t id)
 static EGLBoolean
 dri2_authenticate(_EGLDisplay *disp)
 {
+#ifdef HAVE_LIBDRM
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    drm_magic_t magic;
 
@@ -618,7 +615,7 @@ dri2_authenticate(_EGLDisplay *disp)
       _eglLog(_EGL_WARNING, "DRI2: failed to authenticate");
       return EGL_FALSE;
    }
-
+#endif
    return EGL_TRUE;
 }
 
@@ -1198,11 +1195,6 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
 
    dri2_setup_swap_interval(dri2_dpy);
 
-   if (dri2_dpy->conn) {
-      if (!dri2_add_configs_for_visuals(dri2_dpy, disp))
-	 goto cleanup_configs;
-   }
-
    disp->Extensions.KHR_image_pixmap = EGL_TRUE;
    disp->Extensions.NOK_swap_region = EGL_TRUE;
    disp->Extensions.NOK_texture_from_pixmap = EGL_TRUE;
@@ -1211,6 +1203,12 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
 #ifdef HAVE_WAYLAND_PLATFORM
    disp->Extensions.WL_bind_wayland_display = EGL_TRUE;
 #endif
+
+   if (dri2_dpy->conn) {
+      if (!dri2_add_configs_for_visuals(dri2_dpy, disp))
+	 goto cleanup_configs;
+   }
+
    dri2_dpy->authenticate = dri2_x11_authenticate;
 
    /* we're supporting EGL 1.4 */

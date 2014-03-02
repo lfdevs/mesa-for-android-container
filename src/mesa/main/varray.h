@@ -73,12 +73,13 @@ _mesa_update_array_max_element(struct gl_client_array *array)
  * a vertex buffer.
  */
 static inline const GLubyte *
-_mesa_vertex_attrib_address(struct gl_vertex_attrib_array *array,
-                            struct gl_vertex_buffer_binding *binding)
+_mesa_vertex_attrib_address(const struct gl_vertex_attrib_array *array,
+                            const struct gl_vertex_buffer_binding *binding)
 {
-   return (binding->BufferObj->Name == 0 ?
-           array->Ptr :
-           (const GLubyte *)(binding->Offset + array->RelativeOffset));
+   if (_mesa_is_bufferobj(binding->BufferObj))
+      return (const GLubyte *) (binding->Offset + array->RelativeOffset);
+   else
+      return array->Ptr;       
 }
 
 /**
@@ -88,8 +89,8 @@ _mesa_vertex_attrib_address(struct gl_vertex_attrib_array *array,
 static inline void
 _mesa_update_client_array(struct gl_context *ctx,
                           struct gl_client_array *dst,
-                          struct gl_vertex_attrib_array *src,
-                          struct gl_vertex_buffer_binding *binding)
+                          const struct gl_vertex_attrib_array *src,
+                          const struct gl_vertex_buffer_binding *binding)
 {
    dst->Size = src->Size;
    dst->Type = src->Type;
@@ -108,12 +109,6 @@ _mesa_update_client_array(struct gl_context *ctx,
 extern void GLAPIENTRY
 _mesa_VertexPointer(GLint size, GLenum type, GLsizei stride,
                     const GLvoid *ptr);
-
-extern void GLAPIENTRY
-_mesa_UnlockArraysEXT( void );
-
-extern void GLAPIENTRY
-_mesa_LockArraysEXT(GLint first, GLsizei count);
 
 
 extern void GLAPIENTRY

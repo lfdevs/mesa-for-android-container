@@ -58,32 +58,8 @@ struct fd3_vertex_buf {
 void fd3_emit_vertex_bufs(struct fd_ringbuffer *ring,
 		struct fd_program_stateobj *prog,
 		struct fd3_vertex_buf *vbufs, uint32_t n);
-void fd3_emit_state(struct fd_context *ctx, uint32_t dirty);
+void fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		struct fd_program_stateobj *prog, uint32_t dirty, bool binning);
 void fd3_emit_restore(struct fd_context *ctx);
-
-
-/* use RMW (read-modify-write) to update RB_RENDER_CONTROL since the
- * GMEM/binning code is deciding on the bin-width (and whether to
- * use binning) after the draw/clear state is emitted.
- */
-static inline void
-fd3_emit_rbrc_draw_state(struct fd_ringbuffer *ring, uint32_t val)
-{
-	OUT_PKT3(ring, CP_REG_RMW, 3);
-	OUT_RING(ring, REG_A3XX_RB_RENDER_CONTROL);
-	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH__MASK |
-			A3XX_RB_RENDER_CONTROL_ENABLE_GMEM);
-	OUT_RING(ring, val);
-}
-
-static inline void
-fd3_emit_rbrc_tile_state(struct fd_ringbuffer *ring, uint32_t val)
-{
-	OUT_PKT3(ring, CP_REG_RMW, 3);
-	OUT_RING(ring, REG_A3XX_RB_RENDER_CONTROL);
-	OUT_RING(ring, ~(A3XX_RB_RENDER_CONTROL_BIN_WIDTH__MASK |
-			A3XX_RB_RENDER_CONTROL_ENABLE_GMEM));
-	OUT_RING(ring, val);
-}
 
 #endif /* FD3_EMIT_H */

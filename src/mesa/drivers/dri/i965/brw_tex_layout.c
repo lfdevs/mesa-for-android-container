@@ -1,5 +1,5 @@
 /*
- * Copyright 2006 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2006 VMware, Inc.
  * Copyright © 2006 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -28,8 +28,8 @@
  *
  * Code to lay out images in a mipmap tree.
  *
- * \author Keith Whitwell <keith@tungstengraphics.com>
- * \author Michel Dänzer <michel@tungstengraphics.com>
+ * \author Keith Whitwell <keithw@vmware.com>
+ * \author Michel Dänzer <daenzer@vmware.com>
  */
 
 #include "intel_mipmap_tree.h"
@@ -40,7 +40,7 @@
 
 static unsigned int
 intel_horizontal_texture_alignment_unit(struct brw_context *brw,
-                                       gl_format format)
+                                       mesa_format format)
 {
    /**
     * From the "Alignment Unit Size" section of various specs, namely:
@@ -75,10 +75,10 @@ intel_horizontal_texture_alignment_unit(struct brw_context *brw,
       return i;
     }
 
-   if (format == MESA_FORMAT_S8)
+   if (format == MESA_FORMAT_S_UINT8)
       return 8;
 
-   if (brw->gen >= 7 && format == MESA_FORMAT_Z16)
+   if (brw->gen >= 7 && format == MESA_FORMAT_Z_UNORM16)
       return 8;
 
    return 4;
@@ -86,7 +86,7 @@ intel_horizontal_texture_alignment_unit(struct brw_context *brw,
 
 static unsigned int
 intel_vertical_texture_alignment_unit(struct brw_context *brw,
-                                      gl_format format, bool multisampled)
+                                      mesa_format format, bool multisampled)
 {
    /**
     * From the "Alignment Unit Size" section of various specs, namely:
@@ -105,17 +105,23 @@ intel_vertical_texture_alignment_unit(struct brw_context *brw,
     * | Depth Buffer                           |  2  |  2  |  2  |  4  |  4  |
     * | Separate Stencil Buffer                | N/A | N/A | N/A |  4  |  8  |
     * | Multisampled (4x or 8x) render target  | N/A | N/A | N/A |  4  |  4  |
-    * | All Others                             |  2  |  2  |  2  |  2  |  2  |
+    * | All Others                             |  2  |  2  |  2  |  *  |  *  |
     * +----------------------------------------------------------------------+
     *
-    * On SNB+, non-special cases can be overridden by setting the SURFACE_STATE
-    * "Surface Vertical Alignment" field to VALIGN_2 or VALIGN_4.
+    * Where "*" means either VALIGN_2 or VALIGN_4 depending on the setting of
+    * the SURFACE_STATE "Surface Vertical Alignment" field.
     */
    if (_mesa_is_format_compressed(format))
       return 4;
 
-   if (format == MESA_FORMAT_S8)
+   if (format == MESA_FORMAT_S_UINT8)
       return brw->gen >= 7 ? 8 : 4;
+
+   /* Broadwell only supports VALIGN of 4, 8, and 16.  The BSpec says 4
+    * should always be used, except for stencil buffers, which should be 8.
+    */
+   if (brw->gen >= 8)
+      return 4;
 
    if (multisampled)
       return 4;
@@ -125,6 +131,25 @@ intel_vertical_texture_alignment_unit(struct brw_context *brw,
    if (brw->gen >= 6 &&
        (base_format == GL_DEPTH_COMPONENT ||
 	base_format == GL_DEPTH_STENCIL)) {
+      return 4;
+   }
+
+   if (brw->gen == 7) {
+      /* On Gen7, we prefer a vertical alignment of 4 when possible, because
+       * that allows Y tiled render targets.
+       *
+       * From the Ivy Bridge PRM, Vol4 Part1 2.12.2.1 (SURFACE_STATE for most
+       * messages), on p64, under the heading "Surface Vertical Alignment":
+       *
+       *     Value of 1 [VALIGN_4] is not supported for format YCRCB_NORMAL
+       *     (0x182), YCRCB_SWAPUVY (0x183), YCRCB_SWAPUV (0x18f), YCRCB_SWAPY
+       *     (0x190)
+       *
+       *     VALIGN_4 is not supported for surface format R32G32B32_FLOAT.
+       */
+      if (base_format == GL_YCBCR_MESA || format == MESA_FORMAT_RGB_FLOAT32)
+         return 2;
+
       return 4;
    }
 
@@ -213,26 +238,25 @@ static void
 brw_miptree_layout_texture_array(struct brw_context *brw,
 				 struct intel_mipmap_tree *mt)
 {
-   unsigned qpitch = 0;
    int h0, h1;
 
    h0 = ALIGN(mt->physical_height0, mt->align_h);
    h1 = ALIGN(minify(mt->physical_height0, 1), mt->align_h);
    if (mt->array_spacing_lod0)
-      qpitch = h0;
+      mt->qpitch = h0;
    else
-      qpitch = (h0 + h1 + (brw->gen >= 7 ? 12 : 11) * mt->align_h);
-   if (mt->compressed)
-      qpitch /= 4;
+      mt->qpitch = (h0 + h1 + (brw->gen >= 7 ? 12 : 11) * mt->align_h);
+
+   int physical_qpitch = mt->compressed ? mt->qpitch / 4 : mt->qpitch;
 
    brw_miptree_layout_2d(mt);
 
    for (unsigned level = mt->first_level; level <= mt->last_level; level++) {
       for (int q = 0; q < mt->physical_depth0; q++) {
-	 intel_miptree_set_image_offset(mt, level, q, 0, q * qpitch);
+	 intel_miptree_set_image_offset(mt, level, q, 0, q * physical_qpitch);
       }
    }
-   mt->total_height = qpitch * mt->physical_depth0;
+   mt->total_height = physical_qpitch * mt->physical_depth0;
 
    align_cube(mt);
 }

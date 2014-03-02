@@ -20,17 +20,17 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+AUTOMAKE_OPTIONS = subdir-objects
+
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
-noinst_LTLIBRARIES = libnouveau.la
-
 AM_CPPFLAGS = \
-	-I$(top_srcdir)/src/gallium/drivers/nouveau/include \
-	$(GALLIUM_CFLAGS) \
+	$(GALLIUM_DRIVER_CFLAGS) \
 	$(LIBDRM_CFLAGS) \
-	$(NOUVEAU_CFLAGS) \
-	$(VISIBILITY_CFLAGS)
+	$(NOUVEAU_CFLAGS)
+
+noinst_LTLIBRARIES = libnouveau.la
 
 libnouveau_la_SOURCES = \
 	$(C_SOURCES) \

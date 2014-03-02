@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -57,6 +57,14 @@ struct llvm_middle_end {
    struct draw_llvm *llvm;
    struct draw_llvm_variant *current_variant;
 };
+
+
+/** cast wrapper */
+static INLINE struct llvm_middle_end *
+llvm_middle_end(struct draw_pt_middle_end *middle)
+{
+   return (struct llvm_middle_end *) middle;
+}
 
 
 static void
@@ -135,30 +143,25 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
                          unsigned opt,
                          unsigned *max_vertices )
 {
-   struct llvm_middle_end *fpme = (struct llvm_middle_end *)middle;
+   struct llvm_middle_end *fpme = llvm_middle_end(middle);
    struct draw_context *draw = fpme->draw;
    struct draw_vertex_shader *vs = draw->vs.vertex_shader;
    struct draw_geometry_shader *gs = draw->gs.geometry_shader;
    const unsigned out_prim = gs ? gs->output_primitive :
       u_assembled_prim(in_prim);
-   const unsigned nr = MAX2(vs->info.num_inputs,
-                            draw_total_vs_outputs(draw));
+   unsigned point_clip = draw->rasterizer->fill_front == PIPE_POLYGON_MODE_POINT ||
+                         out_prim == PIPE_PRIM_POINTS;
+   unsigned nr;
 
    fpme->input_prim = in_prim;
    fpme->opt = opt;
-
-   /* Always leave room for the vertex header whether we need it or
-    * not.  It's hard to get rid of it in particular because of the
-    * viewport code in draw_pt_post_vs.c.
-    */
-   fpme->vertex_size = sizeof(struct vertex_header) + nr * 4 * sizeof(float);
-
 
    draw_pt_post_vs_prepare( fpme->post_vs,
                             draw->clip_xy,
                             draw->clip_z,
                             draw->clip_user,
-                            draw->guard_band_xy,
+                            point_clip ? draw->guard_band_points_xy :
+                                         draw->guard_band_xy,
                             draw->identity_viewport,
                             draw->rasterizer->clip_halfz,
                             (draw->vs.edgeflag_output ? TRUE : FALSE) );
@@ -176,6 +179,30 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
       /* limit max fetches by limiting max_vertices */
       *max_vertices = 4096;
    }
+
+   /* Get the number of float[4] attributes per vertex.
+    * Note: this must be done after draw_pt_emit_prepare() since that
+    * can effect the vertex size.
+    */
+   nr = MAX2(vs->info.num_inputs, draw_total_vs_outputs(draw));
+
+   /* Always leave room for the vertex header whether we need it or
+    * not.  It's hard to get rid of it in particular because of the
+    * viewport code in draw_pt_post_vs.c.
+    */
+   fpme->vertex_size = sizeof(struct vertex_header) + nr * 4 * sizeof(float);
+
+   /* Get the number of float[4] attributes per vertex.
+    * Note: this must be done after draw_pt_emit_prepare() since that
+    * can effect the vertex size.
+    */
+   nr = MAX2(vs->info.num_inputs, draw_total_vs_outputs(draw));
+
+   /* Always leave room for the vertex header whether we need it or
+    * not.  It's hard to get rid of it in particular because of the
+    * viewport code in draw_pt_post_vs.c.
+    */
+   fpme->vertex_size = sizeof(struct vertex_header) + nr * 4 * sizeof(float);
 
    /* return even number */
    *max_vertices = *max_vertices & ~1;
@@ -257,15 +284,21 @@ llvm_middle_end_prepare( struct draw_pt_middle_end *middle,
 static void
 llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
 {
-   struct llvm_middle_end *fpme = (struct llvm_middle_end *)middle;
+   struct llvm_middle_end *fpme = llvm_middle_end(middle);
    struct draw_context *draw = fpme->draw;
    unsigned i;
 
    for (i = 0; i < Elements(fpme->llvm->jit_context.vs_constants); ++i) {
+      int num_consts =
+         draw->pt.user.vs_constants_size[i] / (sizeof(float) * 4);
       fpme->llvm->jit_context.vs_constants[i] = draw->pt.user.vs_constants[i];
+      fpme->llvm->jit_context.num_vs_constants[i] = num_consts;
    }
    for (i = 0; i < Elements(fpme->llvm->gs_jit_context.constants); ++i) {
+      int num_consts =
+         draw->pt.user.gs_constants_size[i] / (sizeof(float) * 4);
       fpme->llvm->gs_jit_context.constants[i] = draw->pt.user.gs_constants[i];
+      fpme->llvm->gs_jit_context.num_constants[i] = num_consts;
    }
 
    fpme->llvm->jit_context.planes =
@@ -278,9 +311,10 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
 }
 
 
-static void pipeline(struct llvm_middle_end *llvm,
-                     const struct draw_vertex_info *vert_info,
-                     const struct draw_prim_info *prim_info)
+static void
+pipeline(struct llvm_middle_end *llvm,
+         const struct draw_vertex_info *vert_info,
+         const struct draw_prim_info *prim_info)
 {
    if (prim_info->linear)
       draw_pipeline_run_linear( llvm->draw,
@@ -292,9 +326,11 @@ static void pipeline(struct llvm_middle_end *llvm,
                          prim_info );
 }
 
-static void emit(struct pt_emit *emit,
-                 const struct draw_vertex_info *vert_info,
-                 const struct draw_prim_info *prim_info)
+
+static void
+emit(struct pt_emit *emit,
+     const struct draw_vertex_info *vert_info,
+     const struct draw_prim_info *prim_info)
 {
    if (prim_info->linear) {
       draw_pt_emit_linear(emit, vert_info, prim_info);
@@ -304,12 +340,13 @@ static void emit(struct pt_emit *emit,
    }
 }
 
+
 static void
-llvm_pipeline_generic( struct draw_pt_middle_end *middle,
-                       const struct draw_fetch_info *fetch_info,
-                       const struct draw_prim_info *in_prim_info )
+llvm_pipeline_generic(struct draw_pt_middle_end *middle,
+                      const struct draw_fetch_info *fetch_info,
+                      const struct draw_prim_info *in_prim_info)
 {
-   struct llvm_middle_end *fpme = (struct llvm_middle_end *)middle;
+   struct llvm_middle_end *fpme = llvm_middle_end(middle);
    struct draw_context *draw = fpme->draw;
    struct draw_geometry_shader *gshader = draw->gs.geometry_shader;
    struct draw_prim_info gs_prim_info;
@@ -326,9 +363,9 @@ llvm_pipeline_generic( struct draw_pt_middle_end *middle,
    llvm_vert_info.count = fetch_info->count;
    llvm_vert_info.vertex_size = fpme->vertex_size;
    llvm_vert_info.stride = fpme->vertex_size;
-   llvm_vert_info.verts =
-      (struct vertex_header *)MALLOC(fpme->vertex_size *
-                                     align(fetch_info->count,  lp_native_vector_width / 32));
+   llvm_vert_info.verts = (struct vertex_header *)
+      MALLOC(fpme->vertex_size *
+             align(fetch_info->count, lp_native_vector_width / 32));
    if (!llvm_vert_info.verts) {
       assert(0);
       return;
@@ -368,7 +405,6 @@ llvm_pipeline_generic( struct draw_pt_middle_end *middle,
    fetch_info = NULL;
    vert_info = &llvm_vert_info;
 
-
    if ((opt & PT_SHADE) && gshader) {
       struct draw_vertex_shader *vshader = draw->vs.vertex_shader;
       draw_geometry_shader_run(gshader,
@@ -398,7 +434,7 @@ llvm_pipeline_generic( struct draw_pt_middle_end *middle,
    }
    if (prim_info->count == 0) {
       debug_printf("GS/IA didn't emit any vertices!\n");
-      
+
       FREE(vert_info->verts);
       if (free_prim_info) {
          FREE(prim_info->primitive_lengths);
@@ -439,14 +475,15 @@ llvm_pipeline_generic( struct draw_pt_middle_end *middle,
 }
 
 
-static void llvm_middle_end_run( struct draw_pt_middle_end *middle,
-                                 const unsigned *fetch_elts,
-                                 unsigned fetch_count,
-                                 const ushort *draw_elts,
-                                 unsigned draw_count,
-                                 unsigned prim_flags )
+static void
+llvm_middle_end_run(struct draw_pt_middle_end *middle,
+                    const unsigned *fetch_elts,
+                    unsigned fetch_count,
+                    const ushort *draw_elts,
+                    unsigned draw_count,
+                    unsigned prim_flags)
 {
-   struct llvm_middle_end *fpme = (struct llvm_middle_end *)middle;
+   struct llvm_middle_end *fpme = llvm_middle_end(middle);
    struct draw_fetch_info fetch_info;
    struct draw_prim_info prim_info;
 
@@ -468,12 +505,13 @@ static void llvm_middle_end_run( struct draw_pt_middle_end *middle,
 }
 
 
-static void llvm_middle_end_linear_run( struct draw_pt_middle_end *middle,
-                                       unsigned start,
-                                       unsigned count,
-                                       unsigned prim_flags)
+static void
+llvm_middle_end_linear_run(struct draw_pt_middle_end *middle,
+                           unsigned start,
+                           unsigned count,
+                           unsigned prim_flags)
 {
-   struct llvm_middle_end *fpme = (struct llvm_middle_end *)middle;
+   struct llvm_middle_end *fpme = llvm_middle_end(middle);
    struct draw_fetch_info fetch_info;
    struct draw_prim_info prim_info;
 
@@ -495,16 +533,15 @@ static void llvm_middle_end_linear_run( struct draw_pt_middle_end *middle,
 }
 
 
-
 static boolean
-llvm_middle_end_linear_run_elts( struct draw_pt_middle_end *middle,
-                                 unsigned start,
-                                 unsigned count,
-                                 const ushort *draw_elts,
-                                 unsigned draw_count,
-                                 unsigned prim_flags )
+llvm_middle_end_linear_run_elts(struct draw_pt_middle_end *middle,
+                                unsigned start,
+                                unsigned count,
+                                const ushort *draw_elts,
+                                unsigned draw_count,
+                                unsigned prim_flags)
 {
-   struct llvm_middle_end *fpme = (struct llvm_middle_end *)middle;
+   struct llvm_middle_end *fpme = llvm_middle_end(middle);
    struct draw_fetch_info fetch_info;
    struct draw_prim_info prim_info;
 
@@ -528,15 +565,17 @@ llvm_middle_end_linear_run_elts( struct draw_pt_middle_end *middle,
 }
 
 
-
-static void llvm_middle_end_finish( struct draw_pt_middle_end *middle )
+static void
+llvm_middle_end_finish(struct draw_pt_middle_end *middle)
 {
    /* nothing to do */
 }
 
-static void llvm_middle_end_destroy( struct draw_pt_middle_end *middle )
+
+static void
+llvm_middle_end_destroy(struct draw_pt_middle_end *middle)
 {
-   struct llvm_middle_end *fpme = (struct llvm_middle_end *)middle;
+   struct llvm_middle_end *fpme = llvm_middle_end(middle);
 
    if (fpme->fetch)
       draw_pt_fetch_destroy( fpme->fetch );

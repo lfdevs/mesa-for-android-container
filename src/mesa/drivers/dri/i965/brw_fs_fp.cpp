@@ -501,7 +501,7 @@ fs_visitor::emit_fragment_program_code()
 
          fs_inst *inst;
          if (brw->gen >= 7) {
-            inst = emit_texture_gen7(ir, dst, coordinate, shadow_c, lod, dpdy, sample_index);
+            inst = emit_texture_gen7(ir, dst, coordinate, shadow_c, lod, dpdy, sample_index, fs_reg(0u), fpi->TexSrcUnit);
          } else if (brw->gen >= 5) {
             inst = emit_texture_gen5(ir, dst, coordinate, shadow_c, lod, dpdy, sample_index);
          } else {
@@ -608,15 +608,15 @@ fs_visitor::setup_fp_regs()
          ir_variable *ir = new(mem_ctx) ir_variable(glsl_type::vec4_type,
                                                     "fp_input",
                                                     ir_var_shader_in);
-         ir->location = i;
+         ir->data.location = i;
 
          this->current_annotation = ralloc_asprintf(ctx, "interpolate input %d",
                                                     i);
 
          switch (i) {
          case VARYING_SLOT_POS:
-            ir->pixel_center_integer = fp->PixelCenterInteger;
-            ir->origin_upper_left = fp->OriginUpperLeft;
+            ir->data.pixel_center_integer = fp->PixelCenterInteger;
+            ir->data.origin_upper_left = fp->OriginUpperLeft;
             fp_input_regs[i] = *emit_fragcoord_interpolation(ir);
             break;
          case VARYING_SLOT_FACE:

@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -1306,20 +1306,22 @@ static void build_fog( struct tnl_program *p )
 
       switch (p->state->fog_distance_mode) {
       case FDM_EYE_RADIAL: /* Z = sqrt(Xe*Xe + Ye*Ye + Ze*Ze) */
-	input = get_eye_position(p);
-	emit_op2(p, OPCODE_DP3, fog, WRITEMASK_X, input, input);
-	emit_op1(p, OPCODE_RSQ, fog, WRITEMASK_X, fog);
-	emit_op1(p, OPCODE_RCP, fog, WRITEMASK_X, fog);
-	break;
+         input = get_eye_position(p);
+         emit_op2(p, OPCODE_DP3, fog, WRITEMASK_X, input, input);
+         emit_op1(p, OPCODE_RSQ, fog, WRITEMASK_X, fog);
+         emit_op1(p, OPCODE_RCP, fog, WRITEMASK_X, fog);
+         break;
       case FDM_EYE_PLANE: /* Z = Ze */
-	input = get_eye_position_z(p);
-	emit_op1(p, OPCODE_MOV, fog, WRITEMASK_X, input);
-	break;
+         input = get_eye_position_z(p);
+         emit_op1(p, OPCODE_MOV, fog, WRITEMASK_X, input);
+         break;
       case FDM_EYE_PLANE_ABS: /* Z = abs(Ze) */
-	input = get_eye_position_z(p);
-	emit_op1(p, OPCODE_ABS, fog, WRITEMASK_X, input);
-	break;
-      default: assert(0); break; /* can't happen */
+         input = get_eye_position_z(p);
+         emit_op1(p, OPCODE_ABS, fog, WRITEMASK_X, input);
+         break;
+      default:
+         assert(!"Bad fog mode in build_fog()");
+         break;
       }
 
    }
@@ -1674,8 +1676,8 @@ _mesa_get_fixed_func_vertex_program(struct gl_context *ctx)
          return NULL;
 
       create_new_program( &key, prog,
-                          ctx->ShaderCompilerOptions[MESA_SHADER_VERTEX].PreferDP4,
-                          ctx->Const.VertexProgram.MaxTemps );
+                          ctx->ShaderCompilerOptions[MESA_SHADER_VERTEX].OptimizeForAOS,
+                          ctx->Const.Program[MESA_SHADER_VERTEX].MaxTemps );
 
 #if 0
       if (ctx->Driver.ProgramStringNotify)

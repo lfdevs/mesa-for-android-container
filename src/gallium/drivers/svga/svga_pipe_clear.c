@@ -59,12 +59,12 @@ try_clear(struct svga_context *svga,
       }
    }
 
-   if ((buffers & PIPE_CLEAR_COLOR) && fb->cbufs[0]) {
+   if (buffers & PIPE_CLEAR_COLOR) {
       flags |= SVGA3D_CLEAR_COLOR;
       util_pack_color(color->f, PIPE_FORMAT_B8G8R8A8_UNORM, &uc);
 
-      rect.w = fb->cbufs[0]->width;
-      rect.h = fb->cbufs[0]->height;
+      rect.w = fb->width;
+      rect.h = fb->height;
    }
 
    if ((buffers & PIPE_CLEAR_DEPTHSTENCIL) && fb->zsbuf) {
@@ -111,9 +111,13 @@ svga_clear(struct pipe_context *pipe, unsigned buffers,
    struct svga_context *svga = svga_context( pipe );
    enum pipe_error ret;
 
-   if (buffers & PIPE_CLEAR_COLOR)
-      SVGA_DBG(DEBUG_DMA, "clear sid %p\n",
-               svga_surface(svga->curr.framebuffer.cbufs[0])->handle);
+   if (buffers & PIPE_CLEAR_COLOR) {
+      struct svga_winsys_surface *h = NULL;
+      if (svga->curr.framebuffer.cbufs[0]) {
+         h = svga_surface(svga->curr.framebuffer.cbufs[0])->handle;
+      }
+      SVGA_DBG(DEBUG_DMA, "clear sid %p\n", h);
+   }
 
    /* flush any queued prims (don't want them to appear after the clear!) */
    svga_hwtnl_flush_retry(svga);

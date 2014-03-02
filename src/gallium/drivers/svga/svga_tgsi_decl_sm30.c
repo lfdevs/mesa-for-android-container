@@ -319,6 +319,7 @@ ps30_input(struct svga_shader_emitter *emit,
 /**
  * Process a PS output declaration.
  * Note that we don't actually emit a SVGA3DOpDcl for PS outputs.
+ * \idx  register index, such as OUT[2] (not semantic index)
  */
 static boolean
 ps30_output(struct svga_shader_emitter *emit,
@@ -327,14 +328,35 @@ ps30_output(struct svga_shader_emitter *emit,
 {
    switch (semantic.Name) {
    case TGSI_SEMANTIC_COLOR:
-      if (emit->unit == PIPE_SHADER_FRAGMENT &&
-          emit->key.fkey.white_fragments) {
-
-         emit->output_map[idx] = dst_register( SVGA3DREG_TEMP,
-                                               emit->nr_hw_temp++ );
-         emit->temp_col[idx] = emit->output_map[idx];
-         emit->true_col[idx] = dst_register( SVGA3DREG_COLOROUT, 
-                                              semantic.Index );
+      if (emit->unit == PIPE_SHADER_FRAGMENT) {
+         if (emit->key.fkey.white_fragments) {
+            /* Used for XOR logicop mode */
+            emit->output_map[idx] = dst_register( SVGA3DREG_TEMP,
+                                                  emit->nr_hw_temp++ );
+            emit->temp_color_output[idx] = emit->output_map[idx];
+            emit->true_color_output[idx] = dst_register(SVGA3DREG_COLOROUT, 
+                                                        semantic.Index);
+         }
+         else if (emit->key.fkey.write_color0_to_n_cbufs) {
+            /* We'll write color output [0] to all render targets.
+             * Prepare all the output registers here, but only when the
+             * semantic.Index == 0 so we don't do this more than once.
+             */
+            if (semantic.Index == 0) {
+               unsigned i;
+               for (i = 0; i < emit->key.fkey.write_color0_to_n_cbufs; i++) {
+                  emit->output_map[idx+i] = dst_register(SVGA3DREG_TEMP,
+                                                     emit->nr_hw_temp++);
+                  emit->temp_color_output[i] = emit->output_map[idx+i];
+                  emit->true_color_output[i] = dst_register(SVGA3DREG_COLOROUT,
+                                                            i);
+               }
+            }
+         }
+         else {
+            emit->output_map[idx] =
+               dst_register(SVGA3DREG_COLOROUT, semantic.Index);
+         }
       }
       else {
          emit->output_map[idx] = dst_register( SVGA3DREG_COLOROUT, 

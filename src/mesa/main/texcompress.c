@@ -263,6 +263,43 @@ _mesa_get_compressed_formats(struct gl_context *ctx, GLint *formats)
       else {
          n += 3;
       }
+
+      /* The ES and desktop GL specs diverge here.
+       *
+       * In desktop OpenGL, the driver can perform online compression of
+       * uncompressed texture data.  GL_NUM_COMPRESSED_TEXTURE_FORMATS and
+       * GL_COMPRESSED_TEXTURE_FORMATS give the application a list of
+       * formats that it could ask the driver to compress with some
+       * expectation of quality.  The GL_ARB_texture_compression spec
+       * calls this "suitable for general-purpose usage."  As noted
+       * above, this means GL_COMPRESSED_RGBA_S3TC_DXT1_EXT is not
+       * included in the list.
+       *
+       * In OpenGL ES, the driver never performs compression.
+       * GL_NUM_COMPRESSED_TEXTURE_FORMATS and
+       * GL_COMPRESSED_TEXTURE_FORMATS give the application a list of
+       * formats that the driver can receive from the application.  It
+       * is the *complete* list of formats.  The
+       * GL_EXT_texture_compression_s3tc spec says:
+       *
+       *     "New State for OpenGL ES 2.0.25 and 3.0.2 Specifications
+       *
+       *         The queries for NUM_COMPRESSED_TEXTURE_FORMATS and
+       *         COMPRESSED_TEXTURE_FORMATS include
+       *         COMPRESSED_RGB_S3TC_DXT1_EXT,
+       *         COMPRESSED_RGBA_S3TC_DXT1_EXT,
+       *         COMPRESSED_RGBA_S3TC_DXT3_EXT, and
+       *         COMPRESSED_RGBA_S3TC_DXT5_EXT."
+       *
+       * Note that the addition is only to the OpenGL ES specification!
+       */
+      if (_mesa_is_gles(ctx)) {
+         if (formats) {
+            formats[n++] = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+         } else {
+            n += 1;
+         }
+      }
    }
 
    /* The GL_OES_compressed_ETC1_RGB8_texture spec says:
@@ -324,7 +361,7 @@ _mesa_get_compressed_formats(struct gl_context *ctx, GLint *formats)
 /**
  * Convert a compressed MESA_FORMAT_x to a GLenum.
  */
-gl_format
+mesa_format
 _mesa_glenum_to_compressed_format(GLenum format)
 {
    switch (format) {
@@ -356,23 +393,23 @@ _mesa_glenum_to_compressed_format(GLenum format)
       return MESA_FORMAT_SRGBA_DXT5;
 
    case GL_COMPRESSED_RED_RGTC1:
-      return MESA_FORMAT_RED_RGTC1;
+      return MESA_FORMAT_R_RGTC1_UNORM;
    case GL_COMPRESSED_SIGNED_RED_RGTC1:
-      return MESA_FORMAT_SIGNED_RED_RGTC1;
+      return MESA_FORMAT_R_RGTC1_SNORM;
    case GL_COMPRESSED_RG_RGTC2:
-      return MESA_FORMAT_RG_RGTC2;
+      return MESA_FORMAT_RG_RGTC2_UNORM;
    case GL_COMPRESSED_SIGNED_RG_RGTC2:
-      return MESA_FORMAT_SIGNED_RG_RGTC2;
+      return MESA_FORMAT_RG_RGTC2_SNORM;
 
    case GL_COMPRESSED_LUMINANCE_LATC1_EXT:
-      return MESA_FORMAT_L_LATC1;
+      return MESA_FORMAT_L_LATC1_UNORM;
    case GL_COMPRESSED_SIGNED_LUMINANCE_LATC1_EXT:
-      return MESA_FORMAT_SIGNED_L_LATC1;
+      return MESA_FORMAT_L_LATC1_SNORM;
    case GL_COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT:
    case GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI:
-      return MESA_FORMAT_LA_LATC2;
+      return MESA_FORMAT_LA_LATC2_UNORM;
    case GL_COMPRESSED_SIGNED_LUMINANCE_ALPHA_LATC2_EXT:
-      return MESA_FORMAT_SIGNED_LA_LATC2;
+      return MESA_FORMAT_LA_LATC2_SNORM;
 
    case GL_ETC1_RGB8_OES:
       return MESA_FORMAT_ETC1_RGB8;
@@ -414,7 +451,7 @@ _mesa_glenum_to_compressed_format(GLenum format)
  * internal format unchanged.
  */
 GLenum
-_mesa_compressed_format_to_glenum(struct gl_context *ctx, gl_format mesaFormat)
+_mesa_compressed_format_to_glenum(struct gl_context *ctx, mesa_format mesaFormat)
 {
    switch (mesaFormat) {
    case MESA_FORMAT_RGB_FXT1:
@@ -437,22 +474,22 @@ _mesa_compressed_format_to_glenum(struct gl_context *ctx, gl_format mesaFormat)
       return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT;
    case MESA_FORMAT_SRGBA_DXT5:
       return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
-   case MESA_FORMAT_RED_RGTC1:
+   case MESA_FORMAT_R_RGTC1_UNORM:
       return GL_COMPRESSED_RED_RGTC1;
-   case MESA_FORMAT_SIGNED_RED_RGTC1:
+   case MESA_FORMAT_R_RGTC1_SNORM:
       return GL_COMPRESSED_SIGNED_RED_RGTC1;
-   case MESA_FORMAT_RG_RGTC2:
+   case MESA_FORMAT_RG_RGTC2_UNORM:
       return GL_COMPRESSED_RG_RGTC2;
-   case MESA_FORMAT_SIGNED_RG_RGTC2:
+   case MESA_FORMAT_RG_RGTC2_SNORM:
       return GL_COMPRESSED_SIGNED_RG_RGTC2;
 
-   case MESA_FORMAT_L_LATC1:
+   case MESA_FORMAT_L_LATC1_UNORM:
       return GL_COMPRESSED_LUMINANCE_LATC1_EXT;
-   case MESA_FORMAT_SIGNED_L_LATC1:
+   case MESA_FORMAT_L_LATC1_SNORM:
       return GL_COMPRESSED_SIGNED_LUMINANCE_LATC1_EXT;
-   case MESA_FORMAT_LA_LATC2:
+   case MESA_FORMAT_LA_LATC2_UNORM:
       return GL_COMPRESSED_LUMINANCE_ALPHA_LATC2_EXT;
-   case MESA_FORMAT_SIGNED_LA_LATC2:
+   case MESA_FORMAT_LA_LATC2_SNORM:
       return GL_COMPRESSED_SIGNED_LUMINANCE_ALPHA_LATC2_EXT;
 
    case MESA_FORMAT_ETC1_RGB8:
@@ -498,7 +535,7 @@ _mesa_compressed_format_to_glenum(struct gl_context *ctx, gl_format mesaFormat)
  */
 GLubyte *
 _mesa_compressed_image_address(GLint col, GLint row, GLint img,
-                               gl_format mesaFormat,
+                               mesa_format mesaFormat,
                                GLsizei width, const GLubyte *image)
 {
    /* XXX only 2D images implemented, not 3D */
@@ -523,7 +560,7 @@ _mesa_compressed_image_address(GLint col, GLint row, GLint img,
  * invalid format.
  */
 compressed_fetch_func
-_mesa_get_compressed_fetch_func(gl_format format)
+_mesa_get_compressed_fetch_func(mesa_format format)
 {
    switch (format) {
    case MESA_FORMAT_RGB_DXT1:
@@ -538,14 +575,14 @@ _mesa_get_compressed_fetch_func(gl_format format)
    case MESA_FORMAT_RGB_FXT1:
    case MESA_FORMAT_RGBA_FXT1:
       return _mesa_get_fxt_fetch_func(format);
-   case MESA_FORMAT_RED_RGTC1:
-   case MESA_FORMAT_L_LATC1:
-   case MESA_FORMAT_SIGNED_RED_RGTC1:
-   case MESA_FORMAT_SIGNED_L_LATC1:
-   case MESA_FORMAT_RG_RGTC2:
-   case MESA_FORMAT_LA_LATC2:
-   case MESA_FORMAT_SIGNED_RG_RGTC2:
-   case MESA_FORMAT_SIGNED_LA_LATC2:
+   case MESA_FORMAT_R_RGTC1_UNORM:
+   case MESA_FORMAT_L_LATC1_UNORM:
+   case MESA_FORMAT_R_RGTC1_SNORM:
+   case MESA_FORMAT_L_LATC1_SNORM:
+   case MESA_FORMAT_RG_RGTC2_UNORM:
+   case MESA_FORMAT_LA_LATC2_UNORM:
+   case MESA_FORMAT_RG_RGTC2_SNORM:
+   case MESA_FORMAT_LA_LATC2_SNORM:
       return _mesa_get_compressed_rgtc_func(format);
    case MESA_FORMAT_ETC1_RGB8:
       return _mesa_get_etc_fetch_func(format);
@@ -561,7 +598,7 @@ _mesa_get_compressed_fetch_func(gl_format format)
  *                      compressed source image.
  */
 void
-_mesa_decompress_image(gl_format format, GLuint width, GLuint height,
+_mesa_decompress_image(mesa_format format, GLuint width, GLuint height,
                        const GLubyte *src, GLint srcRowStride,
                        GLfloat *dest)
 {

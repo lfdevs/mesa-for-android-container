@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2008 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -32,16 +32,8 @@
 #include "tgsi/tgsi_dump.h"
 
 #include "tr_dump.h"
+#include "tr_dump_defines.h"
 #include "tr_dump_state.h"
-
-
-void trace_dump_format(enum pipe_format format)
-{
-   if (!trace_dumping_enabled_locked())
-      return;
-
-   trace_dump_enum(util_format_name(format) );
-}
 
 
 void trace_dump_resource_template(const struct pipe_resource *templat)
@@ -135,23 +127,31 @@ void trace_dump_rasterizer_state(const struct pipe_rasterizer_state *state)
    trace_dump_member(bool, state, poly_smooth);
    trace_dump_member(bool, state, poly_stipple_enable);
    trace_dump_member(bool, state, point_smooth);
-   trace_dump_member(uint, state, sprite_coord_enable);
    trace_dump_member(bool, state, sprite_coord_mode);
    trace_dump_member(bool, state, point_quad_rasterization);
    trace_dump_member(bool, state, point_size_per_vertex);
    trace_dump_member(bool, state, multisample);
    trace_dump_member(bool, state, line_smooth);
    trace_dump_member(bool, state, line_stipple_enable);
-   trace_dump_member(uint, state, line_stipple_factor);
-   trace_dump_member(uint, state, line_stipple_pattern);
    trace_dump_member(bool, state, line_last_pixel);
+
    trace_dump_member(bool, state, flatshade_first);
+
    trace_dump_member(bool, state, half_pixel_center);
    trace_dump_member(bool, state, bottom_edge_rule);
+
    trace_dump_member(bool, state, rasterizer_discard);
+
    trace_dump_member(bool, state, depth_clip);
+
    trace_dump_member(bool, state, clip_halfz);
+
    trace_dump_member(uint, state, clip_plane_enable);
+
+   trace_dump_member(uint, state, line_stipple_factor);
+   trace_dump_member(uint, state, line_stipple_pattern);
+
+   trace_dump_member(uint, state, sprite_coord_enable);
 
    trace_dump_member(float, state, line_width);
    trace_dump_member(float, state, point_size);
@@ -478,6 +478,7 @@ void trace_dump_sampler_state(const struct pipe_sampler_state *state)
    trace_dump_member(uint, state, compare_func);
    trace_dump_member(bool, state, normalized_coords);
    trace_dump_member(uint, state, max_anisotropy);
+   trace_dump_member(bool, state, seamless_cube_map);
    trace_dump_member(float, state, lod_bias);
    trace_dump_member(float, state, min_lod);
    trace_dump_member(float, state, max_lod);
@@ -619,6 +620,7 @@ void trace_dump_vertex_buffer(const struct pipe_vertex_buffer *state)
    trace_dump_member(uint, state, stride);
    trace_dump_member(uint, state, buffer_offset);
    trace_dump_member(resource_ptr, state, buffer);
+   trace_dump_member(ptr, state, user_buffer);
 
    trace_dump_struct_end();
 }
@@ -639,6 +641,7 @@ void trace_dump_index_buffer(const struct pipe_index_buffer *state)
    trace_dump_member(uint, state, index_size);
    trace_dump_member(uint, state, offset);
    trace_dump_member(resource_ptr, state, buffer);
+   trace_dump_member(ptr, state, user_buffer);
 
    trace_dump_struct_end();
 }
@@ -772,4 +775,68 @@ void trace_dump_blit_info(const struct pipe_blit_info *info)
    trace_dump_member_end();
 
    trace_dump_struct_end();
+}
+
+void
+trace_dump_query_result(unsigned query_type,
+                        const union pipe_query_result *result)
+{
+   if (!trace_dumping_enabled_locked())
+      return;
+
+   if (!result) {
+      trace_dump_null();
+      return;
+   }
+
+   switch (query_type) {
+   case PIPE_QUERY_OCCLUSION_PREDICATE:
+   case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+   case PIPE_QUERY_GPU_FINISHED:
+      trace_dump_bool(result->b);
+      break;
+
+   case PIPE_QUERY_OCCLUSION_COUNTER:
+   case PIPE_QUERY_TIMESTAMP:
+   case PIPE_QUERY_TIME_ELAPSED:
+   case PIPE_QUERY_PRIMITIVES_GENERATED:
+   case PIPE_QUERY_PRIMITIVES_EMITTED:
+      trace_dump_uint(result->u64);
+      break;
+
+   case PIPE_QUERY_SO_STATISTICS:
+      trace_dump_struct_begin("pipe_query_data_so_statistics");
+      trace_dump_member(uint, &result->so_statistics, num_primitives_written);
+      trace_dump_member(uint, &result->so_statistics, primitives_storage_needed);
+      trace_dump_struct_end();
+      break;
+
+   case PIPE_QUERY_TIMESTAMP_DISJOINT:
+      trace_dump_struct_begin("pipe_query_data_timestamp_disjoint");
+      trace_dump_member(uint, &result->timestamp_disjoint, frequency);
+      trace_dump_member(bool, &result->timestamp_disjoint, disjoint);
+      trace_dump_struct_end();
+      break;
+
+   case PIPE_QUERY_PIPELINE_STATISTICS:
+      trace_dump_struct_begin("pipe_query_data_pipeline_statistics");
+      trace_dump_member(uint, &result->pipeline_statistics, ia_vertices);
+      trace_dump_member(uint, &result->pipeline_statistics, ia_primitives);
+      trace_dump_member(uint, &result->pipeline_statistics, vs_invocations);
+      trace_dump_member(uint, &result->pipeline_statistics, gs_invocations);
+      trace_dump_member(uint, &result->pipeline_statistics, gs_primitives);
+      trace_dump_member(uint, &result->pipeline_statistics, c_invocations);
+      trace_dump_member(uint, &result->pipeline_statistics, c_primitives);
+      trace_dump_member(uint, &result->pipeline_statistics, ps_invocations);
+      trace_dump_member(uint, &result->pipeline_statistics, hs_invocations);
+      trace_dump_member(uint, &result->pipeline_statistics, ds_invocations);
+      trace_dump_member(uint, &result->pipeline_statistics, cs_invocations);
+      trace_dump_struct_end();
+      break;
+
+   default:
+      assert(query_type >= PIPE_QUERY_DRIVER_SPECIFIC);
+      trace_dump_uint(result->u64);
+      break;
+   }
 }

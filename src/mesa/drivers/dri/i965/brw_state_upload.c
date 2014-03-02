@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,13 +22,13 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
-       
+
 
 
 #include "brw_context.h"
@@ -77,7 +77,7 @@ static const struct brw_tracked_state *gen4_atoms[] =
    &brw_sf_unit,
    &brw_vs_unit,		/* always required, enabled or not */
    &brw_clip_unit,
-   &brw_gs_unit,  
+   &brw_gs_unit,
 
    /* Command packets:
     */
@@ -251,6 +251,86 @@ static const struct brw_tracked_state *gen7_atoms[] =
    &haswell_cut_index,
 };
 
+static const struct brw_tracked_state *gen8_atoms[] =
+{
+   &brw_vs_prog,
+   &brw_gs_prog,
+   &brw_wm_prog,
+
+   /* Command packets: */
+   &gen8_state_base_address,
+
+   &brw_cc_vp,
+   &gen7_cc_viewport_state_pointer, /* must do after brw_cc_vp */
+   &gen8_sf_clip_viewport,
+
+   &gen7_push_constant_space,
+   &gen7_urb,
+   &gen8_blend_state,
+   &gen6_color_calc_state,
+
+   &gen6_vs_push_constants, /* Before vs_state */
+   &gen7_gs_push_constants, /* Before gs_state */
+   &gen6_wm_push_constants, /* Before wm_surfaces and constant_buffer */
+
+   /* Surface state setup.  Must come before the VS/WM unit.  The binding
+    * table upload must be last.
+    */
+   &brw_vs_pull_constants,
+   &brw_vs_ubo_surfaces,
+   &brw_vs_abo_surfaces,
+   &brw_gs_pull_constants,
+   &brw_gs_ubo_surfaces,
+   &brw_gs_abo_surfaces,
+   &brw_wm_pull_constants,
+   &brw_wm_ubo_surfaces,
+   &brw_wm_abo_surfaces,
+   &gen6_renderbuffer_surfaces,
+   &brw_texture_surfaces,
+   &brw_vs_binding_table,
+   &brw_gs_binding_table,
+   &brw_wm_binding_table,
+
+   &brw_fs_samplers,
+   &brw_vs_samplers,
+   &brw_gs_samplers,
+   &gen8_multisample_state,
+
+   &gen8_disable_stages,
+   &gen8_vs_state,
+   &gen8_gs_state,
+   &gen8_sol_state,
+   &gen6_clip_state,
+   &gen8_raster_state,
+   &gen8_sbe_state,
+   &gen8_sf_state,
+   &gen8_ps_blend,
+   &gen8_ps_extra,
+   &gen8_ps_state,
+   &gen8_wm_depth_stencil,
+   &gen8_wm_state,
+
+   &gen6_scissor_state,
+
+   &gen7_depthbuffer,
+
+   &brw_polygon_stipple,
+   &brw_polygon_stipple_offset,
+
+   &brw_line_stipple,
+   &brw_aa_line_parameters,
+
+   &brw_drawing_rect,
+
+   &gen8_vf_topology,
+
+   &brw_indices,
+   &gen8_index_buffer,
+   &gen8_vertices,
+
+   &haswell_cut_index,
+};
+
 static void
 brw_upload_initial_gpu_state(struct brw_context *brw)
 {
@@ -262,6 +342,10 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
       return;
 
    brw_upload_invariant_state(brw);
+
+   if (brw->gen >= 8) {
+      gen8_emit_3dstate_sample_pattern(brw);
+   }
 }
 
 void brw_init_state( struct brw_context *brw )
@@ -272,7 +356,10 @@ void brw_init_state( struct brw_context *brw )
 
    brw_init_caches(brw);
 
-   if (brw->gen >= 7) {
+   if (brw->gen >= 8) {
+      atoms = gen8_atoms;
+      num_atoms = ARRAY_SIZE(gen8_atoms);
+   } else if (brw->gen == 7) {
       atoms = gen7_atoms;
       num_atoms = ARRAY_SIZE(gen7_atoms);
    } else if (brw->gen == 6) {
@@ -305,6 +392,7 @@ void brw_init_state( struct brw_context *brw )
    STATIC_ASSERT(BRW_NUM_STATE_BITS <= 8 * sizeof(brw->state.dirty.brw));
 
    ctx->DriverFlags.NewTransformFeedback = BRW_NEW_TRANSFORM_FEEDBACK;
+   ctx->DriverFlags.NewTransformFeedbackProg = BRW_NEW_TRANSFORM_FEEDBACK;
    ctx->DriverFlags.NewRasterizerDiscard = BRW_NEW_RASTERIZER_DISCARD;
    ctx->DriverFlags.NewUniformBuffer = BRW_NEW_UNIFORM_BUFFER;
    ctx->DriverFlags.NewAtomicBuffer = BRW_NEW_ATOMIC_BUFFER;
@@ -526,7 +614,7 @@ void brw_upload_state(struct brw_context *brw)
        * state flags which are generated and checked to help ensure
        * state atoms are ordered correctly in the list.
        */
-      struct brw_state_flags examined, prev;      
+      struct brw_state_flags examined, prev;
       memset(&examined, 0, sizeof(examined));
       prev = *state;
 
@@ -573,6 +661,20 @@ void brw_upload_state(struct brw_context *brw)
 	 fprintf(stderr, "\n");
       }
    }
+}
 
+
+/**
+ * Clear dirty bits to account for the fact that the state emitted by
+ * brw_upload_state() has been committed to the hardware.  This is a separate
+ * call from brw_upload_state() because it's possible that after the call to
+ * brw_upload_state(), we will discover that we've run out of aperture space,
+ * and need to rewind the batch buffer to the state it had before the
+ * brw_upload_state() call.
+ */
+void
+brw_clear_dirty_bits(struct brw_context *brw)
+{
+   struct brw_state_flags *state = &brw->state.dirty;
    memset(state, 0, sizeof(*state));
 }

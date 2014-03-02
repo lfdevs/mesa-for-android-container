@@ -29,6 +29,7 @@
 #include "intel_winsys.h"
 
 #include "ilo_3d_pipeline.h"
+#include "ilo_blit.h"
 #include "ilo_context.h"
 #include "ilo_cp.h"
 #include "ilo_query.h"
@@ -156,7 +157,7 @@ ilo_3d_release_render_ring(struct ilo_cp *cp, void *data)
    ilo_3d_pause_queries(hw3d);
 }
 
-static void
+void
 ilo_3d_own_render_ring(struct ilo_3d *hw3d)
 {
    ilo_cp_set_ring(hw3d->cp, ILO_CP_RING_RENDER);
@@ -736,6 +737,8 @@ ilo_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
 
    if (!upload_shaders(hw3d, ilo->shader_cache))
       return;
+
+   ilo_blit_resolve_framebuffer(ilo);
 
    /* If draw_vbo ever fails, return immediately. */
    if (!draw_vbo(hw3d, ilo, &prim_generated, &prim_emitted))

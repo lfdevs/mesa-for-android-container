@@ -52,6 +52,9 @@ nv50_vertprog_assign_slots(struct nv50_ir_prog_info *info)
       for (c = 0; c < 4; ++c)
          if (info->in[i].mask & (1 << c))
             info->in[i].slot[c] = n++;
+
+      if (info->in[i].sn == TGSI_SEMANTIC_PRIMID)
+         prog->vp.attrs[2] |= NV50_3D_VP_GP_BUILTIN_ATTR_EN_PRIMITIVE_ID;
    }
    prog->in_nr = info->numInputs;
 
@@ -100,6 +103,10 @@ nv50_vertprog_assign_slots(struct nv50_ir_prog_info *info)
       case TGSI_SEMANTIC_BCOLOR:
          prog->vp.bfc[info->out[i].si] = i;
          break;
+      case TGSI_SEMANTIC_LAYER:
+         prog->gp.has_layer = TRUE;
+         prog->gp.layerid = n;
+         break;
       default:
          break;
       }
@@ -115,6 +122,8 @@ nv50_vertprog_assign_slots(struct nv50_ir_prog_info *info)
    }
    prog->out_nr = info->numOutputs;
    prog->max_out = n;
+   if (!prog->max_out)
+      prog->max_out = 1;
 
    if (prog->vp.psiz < info->numOutputs)
       prog->vp.psiz = prog->out[prog->vp.psiz].hw;
@@ -161,6 +170,8 @@ nv50_fragprog_assign_slots(struct nv50_ir_prog_info *info)
 
          if (info->in[i].sn == TGSI_SEMANTIC_COLOR)
             prog->vp.bfc[info->in[i].si] = j;
+         else if (info->in[i].sn == TGSI_SEMANTIC_PRIMID)
+            prog->vp.attrs[2] |= NV50_3D_VP_GP_BUILTIN_ATTR_EN_PRIMITIVE_ID;
 
          prog->in[j].id = i;
          prog->in[j].mask = info->in[i].mask;
@@ -316,8 +327,13 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset)
    info->bin.source = (void *)prog->pipe.tokens;
 
    info->io.ucpCBSlot = 15;
-   info->io.ucpBase = 0;
+   info->io.ucpBase = NV50_CB_AUX_UCP_OFFSET;
    info->io.genUserClip = prog->vp.clpd_nr;
+
+   info->io.resInfoCBSlot = 15;
+   info->io.suInfoBase = NV50_CB_AUX_TEX_MS_OFFSET;
+   info->io.msInfoCBSlot = 15;
+   info->io.msInfoBase = NV50_CB_AUX_MS_OFFSET;
 
    info->assignSlots = nv50_program_assign_varying_slots;
 
@@ -327,7 +343,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset)
    prog->vp.clpd[0] = map_undef;
    prog->vp.clpd[1] = map_undef;
    prog->vp.psiz = map_undef;
-   prog->gp.primid = 0x80;
+   prog->gp.has_layer = 0;
 
    info->driverPriv = prog;
 
@@ -358,6 +374,22 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset)
       }
       if (info->prop.fp.usesDiscard)
          prog->fp.flags[0] |= NV50_3D_FP_CONTROL_USES_KIL;
+   } else
+   if (prog->type == PIPE_SHADER_GEOMETRY) {
+      switch (info->prop.gp.outputPrim) {
+      case PIPE_PRIM_LINE_STRIP:
+         prog->gp.prim_type = NV50_3D_GP_OUTPUT_PRIMITIVE_TYPE_LINE_STRIP;
+         break;
+      case PIPE_PRIM_TRIANGLE_STRIP:
+         prog->gp.prim_type = NV50_3D_GP_OUTPUT_PRIMITIVE_TYPE_TRIANGLE_STRIP;
+         break;
+      case PIPE_PRIM_POINTS:
+      default:
+         assert(info->prop.gp.outputPrim == PIPE_PRIM_POINTS);
+         prog->gp.prim_type = NV50_3D_GP_OUTPUT_PRIMITIVE_TYPE_POINTS;
+         break;
+      }
+      prog->gp.vert_count = info->prop.gp.maxVertices;
    }
 
    if (prog->pipe.stream_output.num_outputs)
@@ -405,8 +437,10 @@ nv50_program_upload_code(struct nv50_context *nv50, struct nv50_program *prog)
    prog->code_base = prog->mem->start;
 
    ret = nv50_tls_realloc(nv50->screen, prog->tls_space);
-   if (ret < 0)
+   if (ret < 0) {
+      nouveau_heap_free(&prog->mem);
       return FALSE;
+   }
    if (ret > 0)
       nv50->state.new_tls_space = TRUE;
 

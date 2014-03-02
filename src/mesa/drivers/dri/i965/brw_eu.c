@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,13 +22,13 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
-  
+
 
 #include "brw_context.h"
 #include "brw_defines.h"
@@ -63,7 +63,7 @@ brw_swap_cmod(uint32_t cmod)
 /* How does predicate control work when execution_size != 8?  Do I
  * need to test/set for 0xffff when execution_size is 16?
  */
-void brw_set_predicate_control_flag_value( struct brw_compile *p, GLuint value )
+void brw_set_predicate_control_flag_value( struct brw_compile *p, unsigned value )
 {
    p->current->header.predicate_control = BRW_PREDICATE_NONE;
 
@@ -76,10 +76,10 @@ void brw_set_predicate_control_flag_value( struct brw_compile *p, GLuint value )
       }
 
       p->current->header.predicate_control = BRW_PREDICATE_NORMAL;
-   }   
+   }
 }
 
-void brw_set_predicate_control( struct brw_compile *p, GLuint pc )
+void brw_set_predicate_control( struct brw_compile *p, unsigned pc )
 {
    p->current->header.predicate_control = pc;
 }
@@ -89,7 +89,7 @@ void brw_set_predicate_inverse(struct brw_compile *p, bool predicate_inverse)
    p->current->header.predicate_inverse = predicate_inverse;
 }
 
-void brw_set_conditionalmod( struct brw_compile *p, GLuint conditional )
+void brw_set_conditionalmod( struct brw_compile *p, unsigned conditional )
 {
    p->current->header.destreg__conditionalmod = conditional;
 }
@@ -100,7 +100,7 @@ void brw_set_flag_reg(struct brw_compile *p, int reg, int subreg)
    p->current->bits2.da1.flag_subreg_nr = subreg;
 }
 
-void brw_set_access_mode( struct brw_compile *p, GLuint access_mode )
+void brw_set_access_mode( struct brw_compile *p, unsigned access_mode )
 {
    p->current->header.access_mode = access_mode;
 }
@@ -112,7 +112,7 @@ brw_set_compression_control(struct brw_compile *p,
    p->compressed = (compression_control == BRW_COMPRESSION_COMPRESSED);
 
    if (p->brw->gen >= 6) {
-      /* Since we don't use the 32-wide support in gen6, we translate
+      /* Since we don't use the SIMD32 support in gen6, we translate
        * the pre-gen6 compression control here.
        */
       switch (compression_control) {
@@ -123,12 +123,12 @@ brw_set_compression_control(struct brw_compile *p,
 	 p->current->header.compression_control = GEN6_COMPRESSION_1Q;
 	 break;
       case BRW_COMPRESSION_2NDHALF:
-	 /* For 8-wide, this is "use the second set of 8 bits." */
+	 /* For SIMD8, this is "use the second set of 8 bits." */
 	 p->current->header.compression_control = GEN6_COMPRESSION_2Q;
 	 break;
       case BRW_COMPRESSION_COMPRESSED:
-	 /* For 16-wide instruction compression, use the first set of 16 bits
-	  * since we don't do 32-wide dispatch.
+	 /* For SIMD16 instruction compression, use the first set of 16 bits
+	  * since we don't do SIMD32 dispatch.
 	  */
 	 p->current->header.compression_control = GEN6_COMPRESSION_1H;
 	 break;
@@ -142,7 +142,7 @@ brw_set_compression_control(struct brw_compile *p,
    }
 }
 
-void brw_set_mask_control( struct brw_compile *p, GLuint value )
+void brw_set_mask_control( struct brw_compile *p, unsigned value )
 {
    p->current->header.mask_control = value;
 }
@@ -152,7 +152,7 @@ void brw_set_saturate( struct brw_compile *p, bool enable )
    p->current->header.saturate = enable;
 }
 
-void brw_set_acc_write_control(struct brw_compile *p, GLuint value)
+void brw_set_acc_write_control(struct brw_compile *p, unsigned value)
 {
    if (p->brw->gen >= 6)
       p->current->header.acc_wr_control = value;
@@ -163,7 +163,7 @@ void brw_push_insn_state( struct brw_compile *p )
    assert(p->current != &p->stack[BRW_EU_MAX_INSN_STACK-1]);
    memcpy(p->current+1, p->current, sizeof(struct brw_instruction));
    p->compressed_stack[p->current - p->stack] = p->compressed;
-   p->current++;   
+   p->current++;
 }
 
 void brw_pop_insn_state( struct brw_compile *p )
@@ -201,7 +201,7 @@ brw_init_compile(struct brw_context *brw, struct brw_compile *p, void *mem_ctx)
    brw_set_mask_control(p, BRW_MASK_ENABLE); /* what does this do? */
    brw_set_saturate(p, 0);
    brw_set_compression_control(p, BRW_COMPRESSION_NONE);
-   brw_set_predicate_control_flag_value(p, 0xff); 
+   brw_set_predicate_control_flag_value(p, 0xff);
 
    /* Set up control flow stack */
    p->if_stack_depth = 0;
@@ -217,13 +217,13 @@ brw_init_compile(struct brw_context *brw, struct brw_compile *p, void *mem_ctx)
 }
 
 
-const GLuint *brw_get_program( struct brw_compile *p,
-			       GLuint *sz )
+const unsigned *brw_get_program( struct brw_compile *p,
+			       unsigned *sz )
 {
    brw_compact_instructions(p);
 
    *sz = p->next_insn_offset;
-   return (const GLuint *)p->store;
+   return (const unsigned *)p->store;
 }
 
 void
@@ -236,14 +236,14 @@ brw_dump_compile(struct brw_compile *p, FILE *out, int start, int end)
    for (int offset = start; offset < end;) {
       struct brw_instruction *insn = store + offset;
       struct brw_instruction uncompacted;
-      printf("0x%08x: ", offset);
+      fprintf(out, "0x%08x: ", offset);
 
       if (insn->header.cmpt_control) {
 	 struct brw_compact_instruction *compacted = (void *)insn;
 	 if (dump_hex) {
-	    printf("0x%08x 0x%08x                       ",
-		   ((uint32_t *)insn)[1],
-		   ((uint32_t *)insn)[0]);
+	    fprintf(out, "0x%08x 0x%08x                       ",
+		    ((uint32_t *)insn)[1],
+		    ((uint32_t *)insn)[0]);
 	 }
 
 	 brw_uncompact_instruction(brw, &uncompacted, compacted);
@@ -251,15 +251,15 @@ brw_dump_compile(struct brw_compile *p, FILE *out, int start, int end)
 	 offset += 8;
       } else {
 	 if (dump_hex) {
-	    printf("0x%08x 0x%08x 0x%08x 0x%08x ",
-		   ((uint32_t *)insn)[3],
-		   ((uint32_t *)insn)[2],
-		   ((uint32_t *)insn)[1],
-		   ((uint32_t *)insn)[0]);
+	    fprintf(out, "0x%08x 0x%08x 0x%08x 0x%08x ",
+		    ((uint32_t *)insn)[3],
+		    ((uint32_t *)insn)[2],
+		    ((uint32_t *)insn)[1],
+		    ((uint32_t *)insn)[0]);
 	 }
 	 offset += 16;
       }
 
-      brw_disasm(stdout, insn, p->brw->gen);
+      brw_disasm(out, insn, p->brw->gen);
    }
 }

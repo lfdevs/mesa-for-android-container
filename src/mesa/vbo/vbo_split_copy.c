@@ -23,7 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors:
- *    Keith Whitwell <keith@tungstengraphics.com>
+ *    Keith Whitwell <keithw@vmware.com>
  */
 
 /* Split indexed primitives with per-vertex copying.
@@ -201,7 +201,7 @@ flush( struct copy_context *copy )
 	       GL_TRUE,
 	       0,
 	       copy->dstbuf_nr - 1,
-	       NULL );
+	       NULL, NULL );
 
    ctx->Array._DrawArrays = saved_arrays;
    ctx->NewDriverState |= ctx->DriverFlags.NewArray;

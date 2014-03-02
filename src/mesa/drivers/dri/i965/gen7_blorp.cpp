@@ -176,7 +176,7 @@ gen7_blorp_emit_surface_state(struct brw_context *brw,
 
    /* reloc */
    surf[1] =
-      surface->compute_tile_offsets(&tile_x, &tile_y) + region->bo->offset;
+      surface->compute_tile_offsets(&tile_x, &tile_y) + region->bo->offset64;
 
    /* Note that the low bits of these fields are missing, so
     * there's the possibility of getting in trouble.
@@ -214,7 +214,7 @@ gen7_blorp_emit_surface_state(struct brw_context *brw,
    drm_intel_bo_emit_reloc(brw->batch.bo,
                            wm_surf_offset + 4,
                            region->bo,
-                           surf[1] - region->bo->offset,
+                           surf[1] - region->bo->offset64,
                            read_domains, write_domain);
 
    gen7_check_surface_setup(surf, is_render_target);
@@ -248,14 +248,14 @@ gen7_blorp_emit_sampler_state(struct brw_context *brw,
 
    //   sampler->ss0.min_mag_neq = 1;
 
-   /* Set LOD bias: 
+   /* Set LOD bias:
     */
    sampler->ss0.lod_bias = 0;
 
    sampler->ss0.lod_preclamp = 1; /* OpenGL mode */
    sampler->ss0.default_color_mode = 0; /* OpenGL/DX10 mode */
 
-   /* Set BaseMipLevel, MaxLOD, MinLOD: 
+   /* Set BaseMipLevel, MaxLOD, MinLOD:
     *
     * XXX: I don't think that using firstLevel, lastLevel works,
     * because we always setup the surface state as if firstLevel ==
@@ -472,7 +472,7 @@ gen7_blorp_emit_sf_config(struct brw_context *brw,
       OUT_BATCH(_3DSTATE_SF << 16 | (7 - 2));
       OUT_BATCH(params->depth_format <<
                 GEN7_SF_DEPTH_BUFFER_SURFACE_FORMAT_SHIFT);
-      OUT_BATCH(params->num_samples > 1 ? GEN6_SF_MSRAST_ON_PATTERN : 0);
+      OUT_BATCH(params->dst.num_samples > 1 ? GEN6_SF_MSRAST_ON_PATTERN : 0);
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
@@ -528,7 +528,7 @@ gen7_blorp_emit_wm_config(struct brw_context *brw,
       dw1 |= GEN7_WM_DISPATCH_ENABLE; /* We are rendering */
    }
 
-      if (params->num_samples > 1) {
+      if (params->dst.num_samples > 1) {
          dw1 |= GEN7_WM_MSRAST_ON_PATTERN;
          if (prog_data && prog_data->persample_msaa_dispatch)
             dw2 |= GEN7_WM_MSDISPMODE_PERSAMPLE;
@@ -851,6 +851,9 @@ void
 gen7_blorp_exec(struct brw_context *brw,
                 const brw_blorp_params *params)
 {
+   if (brw->gen >= 8)
+      return;
+
    brw_blorp_prog_data *prog_data = NULL;
    uint32_t cc_blend_state_offset = 0;
    uint32_t cc_state_offset = 0;
@@ -860,8 +863,10 @@ gen7_blorp_exec(struct brw_context *brw,
    uint32_t sampler_offset = 0;
 
    uint32_t prog_offset = params->get_wm_prog(brw, &prog_data);
-   gen6_emit_3dstate_multisample(brw, params->num_samples);
-   gen6_emit_3dstate_sample_mask(brw, params->num_samples, 1.0, false, ~0u);
+   gen6_emit_3dstate_multisample(brw, params->dst.num_samples);
+   gen6_emit_3dstate_sample_mask(brw,
+                                 params->dst.num_samples > 1 ?
+                                 (1 << params->dst.num_samples) - 1 : 1);
    gen6_blorp_emit_state_base_address(brw, params);
    gen6_blorp_emit_vertices(brw, params);
    gen7_blorp_emit_urb_config(brw, params);

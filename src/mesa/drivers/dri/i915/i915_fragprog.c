@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -161,17 +161,6 @@ src_vector(struct i915_fragment_program *p,
       /* Various paramters and env values.  All emitted to
        * hardware as program constants.
        */
-   case PROGRAM_LOCAL_PARAM:
-      src = i915_emit_param4fv(p, program->Base.LocalParams[source->Index]);
-      break;
-
-   case PROGRAM_ENV_PARAM:
-      src =
-         i915_emit_param4fv(p,
-                            p->ctx->FragmentProgram.Parameters[source->
-                                                               Index]);
-      break;
-
    case PROGRAM_CONSTANT:
    case PROGRAM_STATE_VAR:
    case PROGRAM_UNIFORM:

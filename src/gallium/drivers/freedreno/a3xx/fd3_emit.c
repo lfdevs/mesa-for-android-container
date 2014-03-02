@@ -64,15 +64,6 @@ fd3_emit_constant(struct fd_ringbuffer *ring,
 		src = SS_DIRECT;
 	}
 
-	/* we have this sometimes, not others.. perhaps we could be clever
-	 * and figure out actually when we need to invalidate cache:
-	 */
-	OUT_PKT0(ring, REG_A3XX_UCHE_CACHE_INVALIDATE0_REG, 2);
-	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE0_REG_ADDR(0));
-	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE1_REG_ADDR(0) |
-			A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE(INVALIDATE) |
-			A3XX_UCHE_CACHE_INVALIDATE1_REG_ENTIRE_CACHE);
-
 	OUT_PKT3(ring, CP_LOAD_STATE, 2 + sz);
 	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(regid/2) |
 			CP_LOAD_STATE_0_STATE_SRC(src) |
@@ -115,12 +106,10 @@ emit_constants(struct fd_ringbuffer *ring,
 		// I expect that size should be a multiple of vec4's:
 		assert(size == align(size, 4));
 
-		/* gallium could have const-buffer still bound, even though the
-		 * shader is not using it.  Writing consts above constlen (or
-		 * rather, HLSQ_{VS,FS}_CONTROL_REG.CONSTLENGTH) will cause a
-		 * hang.
+		/* gallium could leave const buffers bound above what the
+		 * current shader uses.. don't let that confuse us.
 		 */
-		if ((base / 4) >= shader->constlen)
+		if (base >= (4 * shader->first_immediate))
 			break;
 
 		if (constbuf->dirty_mask & (1 << index)) {
@@ -137,9 +126,11 @@ emit_constants(struct fd_ringbuffer *ring,
 	/* emit shader immediates: */
 	if (shader) {
 		for (i = 0; i < shader->immediates_count; i++) {
-			fd3_emit_constant(ring, sb,
-					4 * (shader->first_immediate + i),
-					0, 4, shader->immediates[i].val, NULL);
+			base = 4 * (shader->first_immediate + i);
+			if (base >= (4 * shader->constlen))
+				break;
+			fd3_emit_constant(ring, sb, base,
+				0, 4, shader->immediates[i].val, NULL);
 		}
 	}
 }
@@ -231,6 +222,7 @@ emit_cache_flush(struct fd_ringbuffer *ring)
 	OUT_PKT3(ring, CP_EVENT_WRITE, 1);
 	OUT_RING(ring, CACHE_FLUSH);
 
+	/* probably only really needed on a320: */
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
 	OUT_RING(ring, DRAW(1, DI_SRC_SEL_AUTO_INDEX,
@@ -242,8 +234,6 @@ emit_cache_flush(struct fd_ringbuffer *ring)
 	OUT_RING(ring, 0x00000000);
 	OUT_RING(ring, 0x00000000);
 	OUT_RING(ring, 0x00000000);
-
-	OUT_WFI (ring);
 }
 
 /* emit texture state for mem->gmem restore operation.. eventually it would
@@ -338,10 +328,9 @@ fd3_emit_vertex_bufs(struct fd_ringbuffer *ring,
 }
 
 void
-fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
+fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		struct fd_program_stateobj *prog, uint32_t dirty, bool binning)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
-
 	emit_marker(ring, 5);
 
 	if (dirty & FD_DIRTY_SAMPLE_MASK) {
@@ -355,13 +344,22 @@ fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
 		struct fd3_zsa_stateobj *zsa = fd3_zsa_stateobj(ctx->zsa);
 		struct pipe_stencil_ref *sr = &ctx->stencil_ref;
 
-		fd3_emit_rbrc_draw_state(ring, zsa->rb_render_control);
+		if (!binning) {
+			struct fd3_context *fd3_ctx = fd3_context(ctx);
+
+			/* I suppose if we needed to (which I don't *think* we need
+			 * to), we could emit this for binning pass too.  But we
+			 * would need to keep a different patch-list for binning
+			 * vs render pass.
+			 */
+
+			OUT_PKT0(ring, REG_A3XX_RB_RENDER_CONTROL, 1);
+			OUT_RINGP(ring, zsa->rb_render_control,
+					&fd3_ctx->rbrc_patches);
+		}
 
 		OUT_PKT0(ring, REG_A3XX_RB_ALPHA_REF, 1);
 		OUT_RING(ring, zsa->rb_alpha_ref);
-
-		OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
-		OUT_RING(ring, zsa->rb_depth_control);
 
 		OUT_PKT0(ring, REG_A3XX_RB_STENCIL_CONTROL, 1);
 		OUT_RING(ring, zsa->rb_stencil_control);
@@ -371,6 +369,17 @@ fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
 				A3XX_RB_STENCILREFMASK_STENCILREF(sr->ref_value[0]));
 		OUT_RING(ring, zsa->rb_stencilrefmask_bf |
 				A3XX_RB_STENCILREFMASK_BF_STENCILREF(sr->ref_value[1]));
+	}
+
+	if (dirty & (FD_DIRTY_ZSA | FD_DIRTY_PROG)) {
+		struct fd3_shader_stateobj *fp = prog->fp;
+		uint32_t val = fd3_zsa_stateobj(ctx->zsa)->rb_depth_control;
+		if (fp->writes_pos) {
+			val |= A3XX_RB_DEPTH_CONTROL_FRAG_WRITES_Z;
+			val |= A3XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE;
+		}
+		OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
+		OUT_RING(ring, val);
 	}
 
 	if (dirty & FD_DIRTY_RASTERIZER) {
@@ -387,15 +396,23 @@ fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
 		OUT_PKT0(ring, REG_A3XX_GRAS_SU_POLY_OFFSET_SCALE, 2);
 		OUT_RING(ring, rasterizer->gras_su_poly_offset_scale);
 		OUT_RING(ring, rasterizer->gras_su_poly_offset_offset);
+	}
 
+	if (dirty & (FD_DIRTY_RASTERIZER | FD_DIRTY_PROG)) {
+		struct fd3_shader_stateobj *fp = prog->fp;
+		uint32_t val = fd3_rasterizer_stateobj(ctx->rasterizer)
+				->gras_cl_clip_cntl;
+		if (fp->writes_pos) {
+			val |= A3XX_GRAS_CL_CLIP_CNTL_ZCLIP_DISABLE;
+		}
 		OUT_PKT0(ring, REG_A3XX_GRAS_CL_CLIP_CNTL, 1);
-		OUT_RING(ring, rasterizer->gras_cl_clip_cntl);
+		OUT_RING(ring, val);
 	}
 
 	if (dirty & (FD_DIRTY_RASTERIZER | FD_DIRTY_PROG)) {
 		struct fd3_rasterizer_stateobj *rasterizer =
 				fd3_rasterizer_stateobj(ctx->rasterizer);
-		struct fd3_shader_stateobj *fp = ctx->prog.fp;
+		struct fd3_shader_stateobj *fp = prog->fp;
 		uint32_t stride_in_vpc;
 
 		stride_in_vpc = align(fp->total_in, 4) / 4;
@@ -432,12 +449,18 @@ fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
 		OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZSCALE(ctx->viewport.scale[2]));
 	}
 
-	if (dirty & FD_DIRTY_PROG)
-		fd3_program_emit(ring, &ctx->prog);
+	if (dirty & FD_DIRTY_PROG) {
+		fd_wfi(ctx, ring);
+		fd3_program_emit(ring, prog, binning);
+	}
 
-	if (dirty & (FD_DIRTY_PROG | FD_DIRTY_CONSTBUF)) {
-		struct fd_program_stateobj *prog = &ctx->prog;
+	OUT_PKT3(ring, CP_EVENT_WRITE, 1);
+	OUT_RING(ring, HLSQ_FLUSH);
 
+	if ((dirty & (FD_DIRTY_PROG | FD_DIRTY_CONSTBUF)) &&
+			/* evil hack to deal sanely with clear path: */
+			(prog == &ctx->prog)) {
+		fd_wfi(ctx, ring);
 		emit_constants(ring,  SB_VERT_SHADER,
 				&ctx->constbuf[PIPE_SHADER_VERTEX],
 				(prog->dirty & FD_SHADER_DIRTY_VP) ? prog->vp : NULL);
@@ -446,7 +469,7 @@ fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
 				(prog->dirty & FD_SHADER_DIRTY_FP) ? prog->fp : NULL);
 	}
 
-	if (dirty & FD_DIRTY_BLEND) {
+	if ((dirty & FD_DIRTY_BLEND) && ctx->blend) {
 		struct fd3_blend_stateobj *blend = fd3_blend_stateobj(ctx->blend);
 		uint32_t i;
 
@@ -472,6 +495,9 @@ fd3_emit_state(struct fd_context *ctx, uint32_t dirty)
 				A3XX_RB_BLEND_ALPHA_FLOAT(bcolor->color[3]));
 	}
 
+	if (dirty & (FD_DIRTY_VERTTEX | FD_DIRTY_FRAGTEX))
+		fd_wfi(ctx, ring);
+
 	if (dirty & FD_DIRTY_VERTTEX)
 		emit_textures(ring, SB_VERT_TEX, &ctx->verttex);
 
@@ -491,20 +517,22 @@ fd3_emit_restore(struct fd_context *ctx)
 	struct fd_ringbuffer *ring = ctx->ring;
 	int i;
 
-	OUT_PKT3(ring, CP_REG_RMW, 3);
-	OUT_RING(ring, REG_A3XX_RBBM_CLOCK_CTL);
-	OUT_RING(ring, 0xfffcffff);
-	OUT_RING(ring, 0x00000000);
+	if (ctx->screen->gpu_id == 320) {
+		OUT_PKT3(ring, CP_REG_RMW, 3);
+		OUT_RING(ring, REG_A3XX_RBBM_CLOCK_CTL);
+		OUT_RING(ring, 0xfffcffff);
+		OUT_RING(ring, 0x00000000);
+	}
 
 	OUT_PKT3(ring, CP_INVALIDATE_STATE, 1);
 	OUT_RING(ring, 0x00007fff);
 
-	OUT_PKT0(ring, REG_A3XX_SP_VS_PVT_MEM_CTRL_REG, 3);
+	OUT_PKT0(ring, REG_A3XX_SP_VS_PVT_MEM_PARAM_REG, 3);
 	OUT_RING(ring, 0x08000001);                  /* SP_VS_PVT_MEM_CTRL_REG */
 	OUT_RELOC(ring, fd3_ctx->vs_pvt_mem, 0,0,0); /* SP_VS_PVT_MEM_ADDR_REG */
 	OUT_RING(ring, 0x00000000);                  /* SP_VS_PVT_MEM_SIZE_REG */
 
-	OUT_PKT0(ring, REG_A3XX_SP_FS_PVT_MEM_CTRL_REG, 3);
+	OUT_PKT0(ring, REG_A3XX_SP_FS_PVT_MEM_PARAM_REG, 3);
 	OUT_RING(ring, 0x08000001);                  /* SP_FS_PVT_MEM_CTRL_REG */
 	OUT_RELOC(ring, fd3_ctx->fs_pvt_mem, 0,0,0); /* SP_FS_PVT_MEM_ADDR_REG */
 	OUT_RING(ring, 0x00000000);                  /* SP_FS_PVT_MEM_SIZE_REG */
@@ -521,14 +549,14 @@ fd3_emit_restore(struct fd_context *ctx)
 	OUT_RING(ring, A3XX_RB_MSAA_CONTROL_DISABLE |
 			A3XX_RB_MSAA_CONTROL_SAMPLES(MSAA_ONE) |
 			A3XX_RB_MSAA_CONTROL_SAMPLE_MASK(0xffff));
-	OUT_RING(ring, 0x00000000);        /* UNKNOWN_20C3 */
+	OUT_RING(ring, 0x00000000);        /* RB_ALPHA_REF */
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_CL_GB_CLIP_ADJ, 1);
 	OUT_RING(ring, A3XX_GRAS_CL_GB_CLIP_ADJ_HORZ(0) |
 			A3XX_GRAS_CL_GB_CLIP_ADJ_VERT(0));
 
-	OUT_PKT0(ring, REG_A3XX_UNKNOWN_0C81, 1);
-	OUT_RING(ring, 0x00000001);        /* UNKNOWN_0C81 */
+	OUT_PKT0(ring, REG_A3XX_GRAS_TSE_DEBUG_ECO, 1);
+	OUT_RING(ring, 0x00000001);        /* GRAS_TSE_DEBUG_ECO */
 
 	OUT_PKT0(ring, REG_A3XX_TPL1_TP_VS_TEX_OFFSET, 1);
 	OUT_RING(ring, A3XX_TPL1_TP_VS_TEX_OFFSET_SAMPLEROFFSET(VERT_TEX_OFF) |
@@ -565,11 +593,11 @@ fd3_emit_restore(struct fd_context *ctx)
 	OUT_RING(ring, A3XX_HLSQ_CONST_FSPRESV_RANGE_REG_STARTENTRY(0) |
 			A3XX_HLSQ_CONST_FSPRESV_RANGE_REG_ENDENTRY(0));
 
-	OUT_PKT0(ring, REG_A3XX_UCHE_CACHE_MODE_CONTROL_REG, 1);
-	OUT_RING(ring, 0x00000001);        /* UCHE_CACHE_MODE_CONTROL_REG */
-
-	OUT_PKT0(ring, REG_A3XX_VSC_SIZE_ADDRESS, 1);
-	OUT_RELOC(ring, fd3_ctx->vsc_size_mem, 0, 0, 0); /* VSC_SIZE_ADDRESS */
+	OUT_PKT0(ring, REG_A3XX_UCHE_CACHE_INVALIDATE0_REG, 2);
+	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE0_REG_ADDR(0));
+	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE1_REG_ADDR(0) |
+			A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE(INVALIDATE) |
+			A3XX_UCHE_CACHE_INVALIDATE1_REG_ENTIRE_CACHE);
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_CL_CLIP_CNTL, 1);
 	OUT_RING(ring, 0x00000000);                  /* GRAS_CL_CLIP_CNTL */
@@ -581,9 +609,9 @@ fd3_emit_restore(struct fd_context *ctx)
 	OUT_PKT0(ring, REG_A3XX_PC_RESTART_INDEX, 1);
 	OUT_RING(ring, 0xffffffff);        /* PC_RESTART_INDEX */
 
-	OUT_PKT0(ring, REG_A3XX_PA_SC_WINDOW_OFFSET, 1);
-	OUT_RING(ring, A3XX_PA_SC_WINDOW_OFFSET_X(0) |
-			A3XX_PA_SC_WINDOW_OFFSET_Y(0));
+	OUT_PKT0(ring, REG_A3XX_RB_WINDOW_OFFSET, 1);
+	OUT_RING(ring, A3XX_RB_WINDOW_OFFSET_X(0) |
+			A3XX_RB_WINDOW_OFFSET_Y(0));
 
 	OUT_PKT0(ring, REG_A3XX_RB_BLEND_RED, 4);
 	OUT_RING(ring, A3XX_RB_BLEND_RED_UINT(0) |
@@ -603,5 +631,9 @@ fd3_emit_restore(struct fd_context *ctx)
 		OUT_RING(ring, 0x00000000);    /* GRAS_CL_USER_PLANE[i].W */
 	}
 
+	OUT_PKT0(ring, REG_A3XX_PC_VSTREAM_CONTROL, 1);
+	OUT_RING(ring, 0x00000000);
+
 	emit_cache_flush(ring);
+	fd_wfi(ctx, ring);
 }

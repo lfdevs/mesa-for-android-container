@@ -47,6 +47,7 @@
 #include "freedreno_screen.h"
 #include "freedreno_resource.h"
 #include "freedreno_fence.h"
+#include "freedreno_query.h"
 #include "freedreno_util.h"
 
 #include "fd2_screen.h"
@@ -64,12 +65,15 @@ static const struct debug_named_value debug_options[] = {
 		{"direct",    FD_DBG_DIRECT, "Force inline (SS_DIRECT) state loads"},
 		{"dbypass",   FD_DBG_DBYPASS,"Disable GMEM bypass"},
 		{"fraghalf",  FD_DBG_FRAGHALF, "Use half-precision in fragment shader"},
+		{"binning",   FD_DBG_BINNING,  "Enable hw binning"},
+		{"dbinning",  FD_DBG_DBINNING, "Disable hw binning"},
 		DEBUG_NAMED_VALUE_END
 };
 
 DEBUG_GET_ONCE_FLAGS_OPTION(fd_mesa_debug, "FD_MESA_DEBUG", debug_options, 0)
 
 int fd_mesa_debug = 0;
+bool fd_binning_enabled = false; /* default to off for now */
 
 static const char *
 fd_screen_get_name(struct pipe_screen *pscreen)
@@ -149,7 +153,6 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
 	case PIPE_CAP_BLEND_EQUATION_SEPARATE:
 	case PIPE_CAP_TEXTURE_SWIZZLE:
-	case PIPE_CAP_SHADER_STENCIL_EXPORT:
 	case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
 	case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
@@ -172,6 +175,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_USER_CONSTANT_BUFFERS:
 		return 1;
 
+	case PIPE_CAP_SHADER_STENCIL_EXPORT:
 	case PIPE_CAP_TGSI_TEXCOORD:
 	case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
 		return 0;
@@ -189,7 +193,6 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
 	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
-	case PIPE_CAP_SCALED_RESOLVE:
 	case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
 	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
 	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
@@ -197,6 +200,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_USER_INDEX_BUFFERS:
 	case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
 	case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
+        case PIPE_CAP_TGSI_VS_LAYER:
 		return 0;
 
 	/* Stream output. */
@@ -204,6 +208,11 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
 	case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
 	case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
+		return 0;
+
+	/* Geometry shader output, unsupported. */
+	case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
+	case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
 		return 0;
 
 	/* Texturing. */
@@ -234,6 +243,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
 	case PIPE_CAP_ENDIANNESS:
 		return PIPE_ENDIAN_LITTLE;
+
+        case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
+		return 64;
 
 	default:
 		DBG("unknown param %d", param);
@@ -323,6 +335,7 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		 */
 		return 0;
 	case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+	case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
 		return 16;
 	case PIPE_SHADER_CAP_PREFERRED_IR:
 		return PIPE_SHADER_IR_TGSI;
@@ -359,6 +372,11 @@ fd_screen_bo_from_handle(struct pipe_screen *pscreen,
 	struct fd_screen *screen = fd_screen(pscreen);
 	struct fd_bo *bo;
 
+	if (whandle->type != DRM_API_HANDLE_TYPE_SHARED) {
+		DBG("Attempt to import unsupported handle type %d", whandle->type);
+		return NULL;
+	}
+
 	bo = fd_bo_from_name(screen->dev, whandle->handle);
 	if (!bo) {
 		DBG("ref name 0x%08x failed", whandle->handle);
@@ -378,6 +396,12 @@ fd_screen_create(struct fd_device *dev)
 	uint64_t val;
 
 	fd_mesa_debug = debug_get_option_fd_mesa_debug();
+
+	if (fd_mesa_debug & FD_DBG_BINNING)
+		fd_binning_enabled = true;
+
+	if (fd_mesa_debug & FD_DBG_DBINNING)
+		fd_binning_enabled = false;
 
 	if (!screen)
 		return NULL;
@@ -427,6 +451,7 @@ fd_screen_create(struct fd_device *dev)
 		fd2_screen_init(pscreen);
 		break;
 	case 320:
+	case 330:
 		fd3_screen_init(pscreen);
 		break;
 	default:
@@ -440,6 +465,7 @@ fd_screen_create(struct fd_device *dev)
 	pscreen->get_shader_param = fd_screen_get_shader_param;
 
 	fd_resource_screen_init(pscreen);
+	fd_query_screen_init(pscreen);
 
 	pscreen->get_name = fd_screen_get_name;
 	pscreen->get_vendor = fd_screen_get_vendor;

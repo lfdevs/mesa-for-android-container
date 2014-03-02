@@ -37,7 +37,9 @@
 #include "macros.h"
 #include "teximage.h"
 #include "texobj.h"
+#include "mipmap.h"
 #include "texstorage.h"
+#include "textureview.h"
 #include "mtypes.h"
 
 
@@ -73,8 +75,7 @@ legal_texobj_target(struct gl_context *ctx, GLuint dims, GLenum target)
          return ctx->Extensions.NV_texture_rectangle;
       case GL_TEXTURE_1D_ARRAY:
       case GL_PROXY_TEXTURE_1D_ARRAY:
-         return (ctx->Extensions.MESA_texture_array ||
-                 ctx->Extensions.EXT_texture_array);
+         return ctx->Extensions.EXT_texture_array;
       default:
          return GL_FALSE;
       }
@@ -85,8 +86,7 @@ legal_texobj_target(struct gl_context *ctx, GLuint dims, GLenum target)
          return GL_TRUE;
       case GL_TEXTURE_2D_ARRAY:
       case GL_PROXY_TEXTURE_2D_ARRAY:
-         return (ctx->Extensions.MESA_texture_array ||
-                 ctx->Extensions.EXT_texture_array);
+         return ctx->Extensions.EXT_texture_array;
       case GL_TEXTURE_CUBE_MAP_ARRAY:
       case GL_PROXY_TEXTURE_CUBE_MAP_ARRAY:
          return ctx->Extensions.ARB_texture_cube_map_array;
@@ -96,27 +96,6 @@ legal_texobj_target(struct gl_context *ctx, GLuint dims, GLenum target)
    default:
       _mesa_problem(ctx, "invalid dims=%u in legal_texobj_target()", dims);
       return GL_FALSE;
-   }
-}
-
-
-/**
- * Compute the size of the next mipmap level.
- */
-static void
-next_mipmap_level_size(GLenum target,
-                       GLint *width, GLint *height, GLint *depth)
-{
-   if (*width > 1) {
-      *width /= 2;
-   }
-
-   if ((*height > 1) && (target != GL_TEXTURE_1D_ARRAY)) {
-      *height /= 2;
-   }
-
-   if ((*depth > 1) && (target != GL_TEXTURE_2D_ARRAY)) {
-      *depth /= 2;
    }
 }
 
@@ -141,7 +120,7 @@ initialize_texture_fields(struct gl_context *ctx,
                           struct gl_texture_object *texObj,
                           GLint levels,
                           GLsizei width, GLsizei height, GLsizei depth,
-                          GLenum internalFormat, gl_format texFormat)
+                          GLenum internalFormat, mesa_format texFormat)
 {
    const GLenum target = texObj->Target;
    const GLuint numFaces = _mesa_num_tex_faces(target);
@@ -164,16 +143,16 @@ initialize_texture_fields(struct gl_context *ctx,
                                     0, internalFormat, texFormat);
       }
 
-      next_mipmap_level_size(target, &levelWidth, &levelHeight, &levelDepth);
+      _mesa_next_mipmap_level_size(target, 0, levelWidth, levelHeight, levelDepth,
+                                   &levelWidth, &levelHeight, &levelDepth);
    }
    return GL_TRUE;
 }
 
 
 /**
- * Clear all fields of texture object to zeros.  Used for proxy texture tests.
- * Used for proxy texture tests (and to clean up when a texture memory
- * allocation fails).
+ * Clear all fields of texture object to zeros.  Used for proxy texture tests
+ * and to clean up when a texture memory allocation fails.
  */
 static void
 clear_texture_fields(struct gl_context *ctx,
@@ -264,6 +243,10 @@ _mesa_alloc_texture_storage(struct gl_context *ctx,
    int face;
    int level;
 
+   (void) width;
+   (void) height;
+   (void) depth;
+
    for (face = 0; face < numFaces; face++) {
       for (level = 0; level < levels; level++) {
          struct gl_texture_image *const texImage = texObj->Image[face][level];
@@ -348,6 +331,11 @@ tex_storage_error_check(struct gl_context *ctx, GLuint dims, GLenum target,
       return GL_TRUE;
    }
 
+   /* additional checks for depth textures */
+   if (!_mesa_legal_texture_base_format_for_target(ctx, target, internalformat,
+                                                   dims, "glTexStorage"))
+      return GL_TRUE;
+
    return GL_FALSE;
 }
 
@@ -361,9 +349,16 @@ texstorage(GLuint dims, GLenum target, GLsizei levels, GLenum internalformat,
 {
    struct gl_texture_object *texObj;
    GLboolean sizeOK, dimensionsOK;
-   gl_format texFormat;
+   mesa_format texFormat;
 
    GET_CURRENT_CONTEXT(ctx);
+
+   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
+      _mesa_debug(ctx, "glTexStorage%uD %s %d %s %d %d %d\n",
+                  dims,
+                  _mesa_lookup_enum_by_nr(target), levels,
+                  _mesa_lookup_enum_by_nr(internalformat),
+                  width, height, depth);
 
    if (tex_storage_error_check(ctx, dims, target, levels,
                                internalformat, width, height, depth)) {
@@ -429,8 +424,8 @@ texstorage(GLuint dims, GLenum target, GLsizei levels, GLenum internalformat,
          return;
       }
 
-      texObj->Immutable = GL_TRUE;
-      texObj->ImmutableLevels = levels;
+      _mesa_set_texture_view_state(ctx, texObj, target, levels);
+
    }
 }
 
@@ -473,7 +468,16 @@ _mesa_TextureStorage1DEXT(GLuint texture, GLenum target, GLsizei levels,
                           GLenum internalformat,
                           GLsizei width)
 {
-   /* no-op */
+   GET_CURRENT_CONTEXT(ctx);
+
+   (void) texture;
+   (void) target;
+   (void) levels;
+   (void) internalformat;
+   (void) width;
+
+   _mesa_error(ctx, GL_INVALID_OPERATION,
+               "glTextureStorage1DEXT not supported");
 }
 
 
@@ -482,7 +486,17 @@ _mesa_TextureStorage2DEXT(GLuint texture, GLenum target, GLsizei levels,
                           GLenum internalformat,
                           GLsizei width, GLsizei height)
 {
-   /* no-op */
+   GET_CURRENT_CONTEXT(ctx);
+
+   (void) texture;
+   (void) target;
+   (void) levels;
+   (void) internalformat;
+   (void) width;
+   (void) height;
+
+   _mesa_error(ctx, GL_INVALID_OPERATION,
+               "glTextureStorage2DEXT not supported");
 }
 
 
@@ -492,5 +506,16 @@ _mesa_TextureStorage3DEXT(GLuint texture, GLenum target, GLsizei levels,
                           GLenum internalformat,
                           GLsizei width, GLsizei height, GLsizei depth)
 {
-   /* no-op */
+   GET_CURRENT_CONTEXT(ctx);
+
+   (void) texture;
+   (void) target;
+   (void) levels;
+   (void) internalformat;
+   (void) width;
+   (void) height;
+   (void) depth;
+
+   _mesa_error(ctx, GL_INVALID_OPERATION,
+               "glTextureStorage3DEXT not supported");
 }

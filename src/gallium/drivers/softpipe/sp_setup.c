@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -28,7 +28,7 @@
 /**
  * \brief  Primitive rasterization/rendering (points, lines, triangles)
  *
- * \author  Keith Whitwell <keith@tungstengraphics.com>
+ * \author  Keith Whitwell <keithw@vmware.com>
  * \author  Brian Paul
  */
 
@@ -511,14 +511,6 @@ tri_linear_coeff(struct setup_context *setup,
    coef->a0[i] = (v[0] -
                   (dadx * (setup->vmin[0][0] - setup->pixel_offset) +
                    dady * (setup->vmin[0][1] - setup->pixel_offset)));
-
-   /*
-   debug_printf("attr[%d].%c: %f dx:%f dy:%f\n",
-		slot, "xyzw"[i],
-		setup->coef[slot].a0[i],
-		setup->coef[slot].dadx[i],
-		setup->coef[slot].dady[i]);
-   */
 }
 
 
@@ -549,13 +541,6 @@ tri_persp_coeff(struct setup_context *setup,
    float dadx = a * setup->oneoverarea;
    float dady = b * setup->oneoverarea;
 
-   /*
-   debug_printf("tri persp %d,%d: %f %f %f\n", vertSlot, i,
-          	setup->vmin[vertSlot][i],
-          	setup->vmid[vertSlot][i],
-       		setup->vmax[vertSlot][i]
-          );
-   */
    assert(i <= 3);
 
    coef->dadx[i] = dadx;
@@ -667,6 +652,16 @@ setup_tri_coefficients(struct setup_context *setup)
          setup->coef[fragSlot].a0[0] = setup->facing * -2.0f + 1.0f;
          setup->coef[fragSlot].dadx[0] = 0.0;
          setup->coef[fragSlot].dady[0] = 0.0;
+      }
+
+      if (0) {
+         for (j = 0; j < TGSI_NUM_CHANNELS; j++) {
+            debug_printf("attr[%d].%c: a0:%f dx:%f dy:%f\n",
+                         fragSlot, "xyzw"[j],
+                         setup->coef[fragSlot].a0[j],
+                         setup->coef[fragSlot].dadx[j],
+                         setup->coef[fragSlot].dady[j]);
+         }
       }
    }
 }

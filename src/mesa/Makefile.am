@@ -36,18 +36,18 @@ endif
 gldir = $(includedir)/GL
 gl_HEADERS = $(top_srcdir)/include/GL/*.h
 
-.PHONY: main/git_sha1.h.tmp
-main/git_sha1.h.tmp:
+.PHONY: $(BUILDDIR)main/git_sha1.h.tmp
+$(BUILDDIR)main/git_sha1.h.tmp:
 	@touch main/git_sha1.h.tmp
-	@if test -d ../../.git; then \
+	@if test -d $(top_srcdir)/.git; then \
 		if which git > /dev/null; then \
-		    git log -n 1 --oneline | \
+		    git --git-dir=$(top_srcdir)/.git log -n 1 --oneline | \
 			sed 's/^\([^ ]*\) .*/#define MESA_GIT_SHA1 "git-\1"/' \
 			> main/git_sha1.h.tmp ; \
 		fi \
 	fi
 
-main/git_sha1.h: main/git_sha1.h.tmp
+$(BUILDDIR)main/git_sha1.h: $(BUILDDIR)main/git_sha1.h.tmp
 	@echo "updating main/git_sha1.h"
 	@if ! cmp -s main/git_sha1.h.tmp main/git_sha1.h; then \
 		mv main/git_sha1.h.tmp main/git_sha1.h ;\
@@ -63,8 +63,8 @@ BUILDDIR = $(builddir)/
 include Makefile.sources
 
 BUILT_SOURCES = \
-	main/git_sha1.h \
 	main/get_hash.h \
+	$(BUILDDIR)main/git_sha1.h \
 	$(BUILDDIR)program/program_parse.tab.c \
 	$(BUILDDIR)program/lex.yy.c
 CLEANFILES = \
@@ -95,6 +95,12 @@ AM_CPPFLAGS = $(DEFINES) $(INCLUDE_DIRS)
 AM_CFLAGS = $(LLVM_CFLAGS) $(VISIBILITY_CFLAGS)
 AM_CXXFLAGS = $(LLVM_CFLAGS) $(VISIBILITY_CXXFLAGS)
 
+ARCH_LIBS =
+
+if SSE41_SUPPORTED
+ARCH_LIBS += libmesa_sse41.la
+endif
+
 MESA_ASM_FILES_FOR_ARCH =
 
 if HAVE_X86_ASM
@@ -102,8 +108,6 @@ noinst_PROGRAMS = gen_matypes
 
 gen_matypes_SOURCES = x86/gen_matypes.c
 BUILT_SOURCES += matypes.h
-
-ARCH_LIBS = libmesa_sse41.la
 
 if HAVE_X86_64_ASM
 MESA_ASM_FILES_FOR_ARCH += $(X86_64_FILES)

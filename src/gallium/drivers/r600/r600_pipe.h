@@ -34,12 +34,11 @@
 #include "r600_resource.h"
 
 #include "util/u_blitter.h"
-#include "util/u_slab.h"
 #include "util/u_suballoc.h"
 #include "util/u_double_list.h"
 #include "util/u_transfer.h"
 
-#define R600_NUM_ATOMS 41
+#define R600_NUM_ATOMS 42
 
 /* the number of CS dwords for flushing and drawing */
 #define R600_MAX_FLUSH_CS_DWORDS	16
@@ -47,13 +46,14 @@
 #define R600_TRACE_CS_DWORDS		7
 
 #define R600_MAX_USER_CONST_BUFFERS 13
-#define R600_MAX_DRIVER_CONST_BUFFERS 3
+#define R600_MAX_DRIVER_CONST_BUFFERS 4
 #define R600_MAX_CONST_BUFFERS (R600_MAX_USER_CONST_BUFFERS + R600_MAX_DRIVER_CONST_BUFFERS)
 
 /* start driver buffers after user buffers */
 #define R600_UCP_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS)
 #define R600_TXQ_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 1)
 #define R600_BUFFER_INFO_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 2)
+#define R600_GS_RING_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS + 3)
 
 #define R600_MAX_CONST_BUFFER_SIZE 4096
 
@@ -62,13 +62,6 @@
 #else
 #define R600_BIG_ENDIAN 0
 #endif
-
-#define R600_MAP_BUFFER_ALIGNMENT 64
-
-#define R600_QUERY_DRAW_CALLS		(PIPE_QUERY_DRIVER_SPECIFIC + 0)
-#define R600_QUERY_REQUESTED_VRAM	(PIPE_QUERY_DRIVER_SPECIFIC + 1)
-#define R600_QUERY_REQUESTED_GTT	(PIPE_QUERY_DRIVER_SPECIFIC + 2)
-#define R600_QUERY_BUFFER_WAIT_TIME	(PIPE_QUERY_DRIVER_SPECIFIC + 3)
 
 struct r600_context;
 struct r600_bytecode;
@@ -167,6 +160,7 @@ struct r600_sample_mask {
 struct r600_config_state {
 	struct r600_atom atom;
 	unsigned sq_gpr_resource_mgmt_1;
+	unsigned sq_gpr_resource_mgmt_2;
 };
 
 struct r600_stencil_ref
@@ -187,12 +181,23 @@ struct r600_viewport_state {
 	struct pipe_viewport_state state;
 };
 
+struct r600_shader_stages_state {
+	struct r600_atom atom;
+	unsigned geom_enable;
+};
+
+struct r600_gs_rings_state {
+	struct r600_atom atom;
+	unsigned enable;
+	struct pipe_constant_buffer esgs_ring;
+	struct pipe_constant_buffer gsvs_ring;
+};
+
 /* This must start from 16. */
 /* features */
 #define DBG_NO_LLVM		(1 << 17)
 #define DBG_NO_CP_DMA		(1 << 18)
 #define DBG_NO_ASYNC_DMA	(1 << 19)
-#define DBG_NO_DISCARD_RANGE	(1 << 20)
 /* shader backend */
 #define DBG_NO_SB		(1 << 21)
 #define DBG_SB_CS		(1 << 22)
@@ -205,9 +210,7 @@ struct r600_viewport_state {
 
 struct r600_screen {
 	struct r600_common_screen	b;
-	bool				has_streamout;
 	bool				has_msaa;
-	bool				has_cp_dma;
 	bool				has_compressed_msaa_texturing;
 
 	/*for compute global memory binding, we allocate stuff here, instead of
@@ -215,9 +218,6 @@ struct r600_screen {
 	 * XXX: Not sure if this is the best place for global_pool.  Also,
 	 * it's not thread safe, so it won't work with multiple contexts. */
 	struct compute_memory_pool *global_pool;
-	struct r600_resource		*trace_bo;
-	uint32_t			*trace_ptr;
-	unsigned			cs_count;
 };
 
 struct r600_pipe_sampler_view {
@@ -367,53 +367,20 @@ struct r600_fetch_shader {
 
 struct r600_shader_state {
 	struct r600_atom		atom;
-	struct r600_pipe_shader_selector *shader;
-};
-
-struct r600_query_buffer {
-	/* The buffer where query results are stored. */
-	struct r600_resource			*buf;
-	/* Offset of the next free result after current query data */
-	unsigned				results_end;
-	/* If a query buffer is full, a new buffer is created and the old one
-	 * is put in here. When we calculate the result, we sum up the samples
-	 * from all buffers. */
-	struct r600_query_buffer		*previous;
-};
-
-struct r600_query {
-	/* The query buffer and how many results are in it. */
-	struct r600_query_buffer		buffer;
-	/* The type of query */
-	unsigned				type;
-	/* Size of the result in memory for both begin_query and end_query,
-	 * this can be one or two numbers, or it could even be a size of a structure. */
-	unsigned				result_size;
-	/* The number of dwords for begin_query or end_query. */
-	unsigned				num_cs_dw;
-	/* linked list of queries */
-	struct list_head			list;
-	/* for custom non-GPU queries */
-	uint64_t begin_result;
-	uint64_t end_result;
+	struct r600_pipe_shader *shader;
 };
 
 struct r600_context {
 	struct r600_common_context	b;
 	struct r600_screen		*screen;
 	struct blitter_context		*blitter;
-	struct u_upload_mgr		*uploader;
 	struct u_suballocator		*allocator_fetch_shader;
-	struct util_slab_mempool	pool_transfers;
-	unsigned			initial_gfx_cs_size;
 
 	/* Hardware info. */
 	boolean				has_vertex_cache;
 	boolean				keep_tiling_flags;
 	unsigned			default_ps_gprs, default_vs_gprs;
 	unsigned			r6xx_num_clause_temp_gprs;
-	unsigned			backend_mask;
-	unsigned			max_db; /* for OQ */
 
 	/* Miscellaneous state objects. */
 	void				*custom_dsa_flush;
@@ -461,7 +428,11 @@ struct r600_context {
 	struct r600_cso_state		vertex_fetch_shader;
 	struct r600_shader_state	vertex_shader;
 	struct r600_shader_state	pixel_shader;
+	struct r600_shader_state	geometry_shader;
+	struct r600_shader_state	export_shader;
 	struct r600_cs_shader_state	cs_shader_state;
+	struct r600_shader_stages_state shader_stages;
+	struct r600_gs_rings_state	gs_rings;
 	struct r600_constbuf_state	constbuf_state[PIPE_SHADER_TYPES];
 	struct r600_textures_info	samplers[PIPE_SHADER_TYPES];
 	/** Vertex buffers for fetch shaders */
@@ -473,6 +444,7 @@ struct r600_context {
 	unsigned			compute_cb_target_mask;
 	struct r600_pipe_shader_selector *ps_shader;
 	struct r600_pipe_shader_selector *vs_shader;
+	struct r600_pipe_shader_selector *gs_shader;
 	struct r600_rasterizer_state	*rasterizer;
 	bool				alpha_to_one;
 	bool				force_blend_disable;
@@ -486,37 +458,8 @@ struct r600_context {
 	int				last_primitive_type; /* Last primitive type used in draw_vbo. */
 	int				last_start_instance;
 
-	/* Queries. */
-	/* The list of active queries. Only one query of each type can be active. */
-	int				num_occlusion_queries;
-	int				num_pipelinestat_queries;
-	/* Keep track of non-timer queries, because they should be suspended
-	 * during context flushing.
-	 * The timer queries (TIME_ELAPSED) shouldn't be suspended. */
-	struct list_head		active_nontimer_queries;
-	unsigned			num_cs_dw_nontimer_queries_suspend;
-	/* If queries have been suspended. */
-	bool				nontimer_queries_suspended;
-	unsigned			num_draw_calls;
-
-	/* Render condition. */
-	struct pipe_query		*current_render_cond;
-	unsigned			current_render_cond_mode;
-	boolean				current_render_cond_cond;
-	boolean				predicate_drawing;
-
 	void				*sb_context;
 	struct r600_isa		*isa;
-
-	/* Work-around for flushing problems with compute shaders on Cayman:
-	 * Emitting a SURFACE_SYNC packet with any of the CB*_DEST_BASE_ENA
-	 * or DB_DEST_BASE_ENA bits set after dispatching a compute shader
-	 * hangs the GPU.
-	 *
-	 * Setting this to true will prevent r600_flush_emit() from emitting
-	 * a SURFACE_SYNC packet.  This field will be cleared by
-	 * by r600_context_flush() after flushing the command stream. */
-	boolean				skip_surface_sync_on_next_cs_flush;
 };
 
 static INLINE void r600_emit_command_buffer(struct radeon_winsys_cs *cs,
@@ -533,7 +476,7 @@ static INLINE void r600_emit_atom(struct r600_context *rctx, struct r600_atom *a
 {
 	atom->emit(&rctx->b, atom);
 	atom->dirty = false;
-	if (rctx->screen->trace_bo) {
+	if (rctx->screen->b.trace_bo) {
 		r600_trace_emit(rctx);
 	}
 }
@@ -581,6 +524,8 @@ void cayman_init_common_regs(struct r600_command_buffer *cb,
 void evergreen_init_state_functions(struct r600_context *rctx);
 void evergreen_init_atom_start_cs(struct r600_context *rctx);
 void evergreen_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
+void evergreen_update_es_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
+void evergreen_update_gs_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
 void evergreen_update_vs_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
 void *evergreen_create_db_flush_dsa(struct r600_context *rctx);
 void *evergreen_create_resolve_blend(struct r600_context *rctx);
@@ -598,30 +543,11 @@ void evergreen_init_color_surface_rat(struct r600_context *rctx,
 void evergreen_update_db_shader_control(struct r600_context * rctx);
 
 /* r600_blit.c */
-void r600_copy_buffer(struct pipe_context *ctx, struct pipe_resource *dst, unsigned dstx,
-		      struct pipe_resource *src, const struct pipe_box *src_box);
 void r600_init_blit_functions(struct r600_context *rctx);
 void r600_decompress_depth_textures(struct r600_context *rctx,
 				    struct r600_samplerview_state *textures);
 void r600_decompress_color_textures(struct r600_context *rctx,
 				    struct r600_samplerview_state *textures);
-
-/* r600_buffer.c */
-struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
-					 const struct pipe_resource *templ,
-					 unsigned alignment);
-
-/* r600_pipe.c */
-const char * r600_llvm_gpu_string(enum radeon_family family);
-
-
-/* r600_query.c */
-void r600_init_query_functions(struct r600_context *rctx);
-void r600_suspend_nontimer_queries(struct r600_context *ctx);
-void r600_resume_nontimer_queries(struct r600_context *ctx);
-
-/* r600_resource.c */
-void r600_init_context_resource_functions(struct r600_context *r600);
 
 /* r600_shader.c */
 int r600_pipe_shader_create(struct pipe_context *ctx,
@@ -639,6 +565,8 @@ r600_create_sampler_view_custom(struct pipe_context *ctx,
 void r600_init_state_functions(struct r600_context *rctx);
 void r600_init_atom_start_cs(struct r600_context *rctx);
 void r600_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
+void r600_update_es_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
+void r600_update_gs_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
 void r600_update_vs_state(struct pipe_context *ctx, struct r600_pipe_shader *shader);
 void *r600_create_db_flush_dsa(struct r600_context *rctx);
 void *r600_create_resolve_blend(struct r600_context *rctx);
@@ -653,7 +581,6 @@ boolean r600_is_format_supported(struct pipe_screen *screen,
 void r600_update_db_shader_control(struct r600_context * rctx);
 
 /* r600_hw_context.c */
-void r600_get_backend_mask(struct r600_context *ctx);
 void r600_context_flush(struct r600_context *ctx, unsigned flags);
 void r600_begin_new_cs(struct r600_context *ctx);
 void r600_flush_emit(struct r600_context *ctx);

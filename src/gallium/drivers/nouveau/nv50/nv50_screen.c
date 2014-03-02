@@ -105,13 +105,12 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_NPOT_TEXTURES:
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
    case PIPE_CAP_ANISOTROPIC_FILTER:
-   case PIPE_CAP_SCALED_RESOLVE:
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 1;
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
       return 65536;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
-      return nv50_screen(pscreen)->tesla->oclass >= NVA0_3D_CLASS;
+      return 1; /* nv50_screen(pscreen)->tesla->oclass >= NVA0_3D_CLASS; */
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
       return 0;
    case PIPE_CAP_CUBE_MAP_ARRAY:
@@ -126,7 +125,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SM3:
       return 1;
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
-      return 140;
+      return 330;
    case PIPE_CAP_MAX_RENDER_TARGETS:
       return 8;
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
@@ -144,6 +143,9 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
    case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
       return 64;
+   case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
+   case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+      return 1024;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
       return (class_3d >= NVA0_3D_CLASS) ? 1 : 0;
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
@@ -184,8 +186,9 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_TGSI_TEXCOORD:
-   case PIPE_CAP_TEXTURE_MULTISAMPLE:
       return 0;
+   case PIPE_CAP_TEXTURE_MULTISAMPLE:
+      return 1;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return 1;
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
@@ -194,6 +197,8 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_LITTLE;
+   case PIPE_CAP_TGSI_VS_LAYER:
+      return 0;
    default:
       NOUVEAU_ERR("unknown PIPE_CAP %d\n", param);
       return 0;
@@ -250,6 +255,8 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
    case PIPE_SHADER_CAP_INTEGERS:
       return 1;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+      /* The chip could handle more sampler views than samplers */
+   case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
       return MIN2(32, PIPE_MAX_SAMPLERS);
    default:
       NOUVEAU_ERR("unknown PIPE_SHADER_CAP %d\n", param);
@@ -468,7 +475,7 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
    BEGIN_NV04(push, NV50_3D(CB_DEF_ADDRESS_HIGH), 3);
    PUSH_DATAh(push, screen->uniforms->offset + (3 << 16));
    PUSH_DATA (push, screen->uniforms->offset + (3 << 16));
-   PUSH_DATA (push, (NV50_CB_AUX << 16) | 0x0200);
+   PUSH_DATA (push, (NV50_CB_AUX << 16) | (NV50_CB_AUX_SIZE & 0xffff));
 
    BEGIN_NI04(push, NV50_3D(SET_PROGRAM_CB), 3);
    PUSH_DATA (push, (NV50_CB_AUX << 12) | 0xf01);
@@ -477,15 +484,17 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
 
    /* return { 0.0, 0.0, 0.0, 0.0 } on out-of-bounds vtxbuf access */
    BEGIN_NV04(push, NV50_3D(CB_ADDR), 1);
-   PUSH_DATA (push, ((1 << 9) << 6) | NV50_CB_AUX);
+   PUSH_DATA (push, (NV50_CB_AUX_RUNOUT_OFFSET << (8 - 2)) | NV50_CB_AUX);
    BEGIN_NI04(push, NV50_3D(CB_DATA(0)), 4);
    PUSH_DATAf(push, 0.0f);
    PUSH_DATAf(push, 0.0f);
    PUSH_DATAf(push, 0.0f);
    PUSH_DATAf(push, 0.0f);
    BEGIN_NV04(push, NV50_3D(VERTEX_RUNOUT_ADDRESS_HIGH), 2);
-   PUSH_DATAh(push, screen->uniforms->offset + (3 << 16) + (1 << 9));
-   PUSH_DATA (push, screen->uniforms->offset + (3 << 16) + (1 << 9));
+   PUSH_DATAh(push, screen->uniforms->offset + (3 << 16) + NV50_CB_AUX_RUNOUT_OFFSET);
+   PUSH_DATA (push, screen->uniforms->offset + (3 << 16) + NV50_CB_AUX_RUNOUT_OFFSET);
+
+   nv50_upload_ms_info(push);
 
    /* max TIC (bits 4:8) & TSC bindings, per program type */
    for (i = 0; i < 3; ++i) {
@@ -735,8 +744,13 @@ nv50_screen_create(struct nouveau_device *dev)
       goto fail;
    }
 
+   /* This over-allocates by a page. The GP, which would execute at the end of
+    * the last page, would trigger faults. The going theory is that it
+    * prefetches up to a certain amount.
+    */
    ret = nouveau_bo_new(dev, NOUVEAU_BO_VRAM, 1 << 16,
-                        3 << NV50_CODE_BO_SIZE_LOG2, NULL, &screen->code);
+                        (3 << NV50_CODE_BO_SIZE_LOG2) + 0x1000,
+                        NULL, &screen->code);
    if (ret) {
       NOUVEAU_ERR("Failed to allocate code bo: %d\n", ret);
       goto fail;

@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * Copyright (c) 2010 VMware, Inc.
  * All Rights Reserved.
  * 
@@ -19,7 +19,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -41,9 +41,9 @@ struct pipe_screen;
 
 
 extern enum pipe_format
-st_mesa_format_to_pipe_format(gl_format mesaFormat);
+st_mesa_format_to_pipe_format(mesa_format mesaFormat);
 
-extern gl_format
+extern mesa_format
 st_pipe_format_to_mesa_format(enum pipe_format pipeFormat);
 
 
@@ -61,7 +61,7 @@ extern enum pipe_format
 st_choose_matching_format(struct pipe_screen *screen, unsigned bind,
 			  GLenum format, GLenum type, GLboolean swapBytes);
 
-extern gl_format
+extern mesa_format
 st_ChooseTextureFormat(struct gl_context * ctx, GLenum target,
                        GLint internalFormat,
                        GLenum format, GLenum type);
@@ -73,7 +73,7 @@ st_QuerySamplesForFormat(struct gl_context *ctx, GLenum target,
 
 
 extern void
-st_translate_color(union gl_color_union *colorIn,
+st_translate_color(const union gl_color_union *colorIn,
                    union pipe_color_union *colorOut,
                    GLenum baseFormat, GLboolean is_integer);
 

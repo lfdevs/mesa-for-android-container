@@ -70,9 +70,7 @@ extern "C" {
 }
 
 #define PROGRAM_IMMEDIATE PROGRAM_FILE_MAX
-#define PROGRAM_ANY_CONST ((1 << PROGRAM_LOCAL_PARAM) |  \
-                           (1 << PROGRAM_ENV_PARAM) |    \
-                           (1 << PROGRAM_STATE_VAR) |    \
+#define PROGRAM_ANY_CONST ((1 << PROGRAM_STATE_VAR) |    \
                            (1 << PROGRAM_CONSTANT) |     \
                            (1 << PROGRAM_UNIFORM))
 
@@ -565,8 +563,6 @@ glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
    /* Update indirect addressing status used by TGSI */
    if (dst.reladdr) {
       switch(dst.file) {
-      case PROGRAM_LOCAL_PARAM:
-      case PROGRAM_ENV_PARAM:
       case PROGRAM_STATE_VAR:
       case PROGRAM_CONSTANT:
       case PROGRAM_UNIFORM:
@@ -583,8 +579,6 @@ glsl_to_tgsi_visitor::emit(ir_instruction *ir, unsigned op,
       for (i=0; i<3; i++) {
          if(inst->src[i].reladdr) {
             switch(inst->src[i].file) {
-            case PROGRAM_LOCAL_PARAM:
-            case PROGRAM_ENV_PARAM:
             case PROGRAM_STATE_VAR:
             case PROGRAM_CONSTANT:
             case PROGRAM_UNIFORM:
@@ -903,8 +897,8 @@ glsl_to_tgsi_visitor::add_constant(gl_register_file file,
       /* Search immediate storage to see if we already have an identical
        * immediate that we can use instead of adding a duplicate entry.
        */
-      foreach_iter(exec_list_iterator, iter, this->immediates) {
-         entry = (immediate_storage *)iter.get();
+      foreach_list(node, &this->immediates) {
+         entry = (immediate_storage *) node;
          
          if (entry->size == size &&
              entry->type == datatype &&
@@ -1046,8 +1040,8 @@ glsl_to_tgsi_visitor::find_variable_storage(ir_variable *var)
    
    variable_storage *entry;
 
-   foreach_iter(exec_list_iterator, iter, this->variables) {
-      entry = (variable_storage *)iter.get();
+   foreach_list(node, &this->variables) {
+      entry = (variable_storage *) node;
 
       if (entry->var == var)
          return entry;
@@ -1062,11 +1056,11 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
    if (strcmp(ir->name, "gl_FragCoord") == 0) {
       struct gl_fragment_program *fp = (struct gl_fragment_program *)this->prog;
 
-      fp->OriginUpperLeft = ir->origin_upper_left;
-      fp->PixelCenterInteger = ir->pixel_center_integer;
+      fp->OriginUpperLeft = ir->data.origin_upper_left;
+      fp->PixelCenterInteger = ir->data.pixel_center_integer;
    }
 
-   if (ir->mode == ir_var_uniform && strncmp(ir->name, "gl_", 3) == 0) {
+   if (ir->data.mode == ir_var_uniform && strncmp(ir->name, "gl_", 3) == 0) {
       unsigned int i;
       const ir_state_slot *const slots = ir->state_slots;
       assert(ir->state_slots != NULL);
@@ -1143,52 +1137,9 @@ glsl_to_tgsi_visitor::visit(ir_variable *ir)
 void
 glsl_to_tgsi_visitor::visit(ir_loop *ir)
 {
-   ir_dereference_variable *counter = NULL;
-
-   if (ir->counter != NULL)
-      counter = new(ir) ir_dereference_variable(ir->counter);
-
-   if (ir->from != NULL) {
-      assert(ir->counter != NULL);
-
-      ir_assignment *a = new(ir) ir_assignment(counter, ir->from, NULL);
-
-      a->accept(this);
-      delete a;
-   }
-
    emit(NULL, TGSI_OPCODE_BGNLOOP);
 
-   if (ir->to) {
-      ir_expression *e =
-         new(ir) ir_expression(ir->cmp, glsl_type::bool_type,
-        		       counter, ir->to);
-      ir_if *if_stmt =  new(ir) ir_if(e);
-
-      ir_loop_jump *brk = new(ir) ir_loop_jump(ir_loop_jump::jump_break);
-
-      if_stmt->then_instructions.push_tail(brk);
-
-      if_stmt->accept(this);
-
-      delete if_stmt;
-      delete e;
-      delete brk;
-   }
-
    visit_exec_list(&ir->body_instructions, this);
-
-   if (ir->increment) {
-      ir_expression *e =
-         new(ir) ir_expression(ir_binop_add, counter->type,
-        		       counter, ir->increment);
-
-      ir_assignment *a = new(ir) ir_assignment(counter, e, NULL);
-
-      a->accept(this);
-      delete a;
-      delete e;
-   }
 
    emit(NULL, TGSI_OPCODE_ENDLOOP);
 }
@@ -1228,8 +1179,8 @@ glsl_to_tgsi_visitor::visit(ir_function *ir)
 
       assert(sig);
 
-      foreach_iter(exec_list_iterator, iter, sig->body) {
-         ir_instruction *ir = (ir_instruction *)iter.get();
+      foreach_list(node, &sig->body) {
+         ir_instruction *ir = (ir_instruction *) node;
 
          ir->accept(this);
       }
@@ -2069,10 +2020,10 @@ glsl_to_tgsi_visitor::visit(ir_dereference_variable *ir)
    ir_variable *var = ir->var;
 
    if (!entry) {
-      switch (var->mode) {
+      switch (var->data.mode) {
       case ir_var_uniform:
          entry = new(mem_ctx) variable_storage(var, PROGRAM_UNIFORM,
-        				       var->location);
+        				       var->data.location);
          this->variables.push_tail(entry);
          break;
       case ir_var_shader_in:
@@ -2081,21 +2032,22 @@ glsl_to_tgsi_visitor::visit(ir_dereference_variable *ir)
           * generic attributes (glBindVertexLocation), and
           * user-defined varyings.
           */
-         assert(var->location != -1);
+         assert(var->data.location != -1);
          entry = new(mem_ctx) variable_storage(var,
                                                PROGRAM_INPUT,
-                                               var->location);
+                                               var->data.location);
          break;
       case ir_var_shader_out:
-         assert(var->location != -1);
+         assert(var->data.location != -1);
          entry = new(mem_ctx) variable_storage(var,
                                                PROGRAM_OUTPUT,
-                                               var->location + var->index);
+                                               var->data.location
+                                               + var->data.index);
          break;
       case ir_var_system_value:
          entry = new(mem_ctx) variable_storage(var,
                                                PROGRAM_SYSTEM_VALUE,
-                                               var->location);
+                                               var->data.location);
          break;
       case ir_var_auto:
       case ir_var_temporary:
@@ -2394,7 +2346,7 @@ glsl_to_tgsi_visitor::visit(ir_assignment *ir)
       assert(!ir->lhs->type->is_scalar() && !ir->lhs->type->is_vector());
       l.writemask = WRITEMASK_XYZW;
    } else if (ir->lhs->type->is_scalar() &&
-              ir->lhs->variable_referenced()->mode == ir_var_shader_out) {
+              ir->lhs->variable_referenced()->data.mode == ir_var_shader_out) {
       /* FINISHME: This hack makes writing to gl_FragDepth, which lives in the
        * FINISHME: W component of fragment shader output zero, work correctly.
        */
@@ -2503,8 +2455,8 @@ glsl_to_tgsi_visitor::visit(ir_constant *ir)
       st_src_reg temp_base = get_temp(ir->type);
       st_dst_reg temp = st_dst_reg(temp_base);
 
-      foreach_iter(exec_list_iterator, iter, ir->components) {
-         ir_constant *field_value = (ir_constant *)iter.get();
+      foreach_list(node, &ir->components) {
+         ir_constant *field_value = (ir_constant *) node;
          int size = type_size(field_value->type);
 
          assert(size > 0);
@@ -2620,8 +2572,8 @@ glsl_to_tgsi_visitor::get_function_signature(ir_function_signature *sig)
 {
    function_entry *entry;
 
-   foreach_iter(exec_list_iterator, iter, this->function_signatures) {
-      entry = (function_entry *)iter.get();
+   foreach_list(node, &this->function_signatures) {
+      entry = (function_entry *) node;
 
       if (entry->sig == sig)
          return entry;
@@ -2633,8 +2585,8 @@ glsl_to_tgsi_visitor::get_function_signature(ir_function_signature *sig)
    entry->bgn_inst = NULL;
 
    /* Allocate storage for all the parameters. */
-   foreach_iter(exec_list_iterator, iter, sig->parameters) {
-      ir_variable *param = (ir_variable *)iter.get();
+   foreach_list(node, &sig->parameters) {
+      ir_variable *param = (ir_variable *) node;
       variable_storage *storage;
 
       storage = find_variable_storage(param);
@@ -2665,13 +2617,13 @@ glsl_to_tgsi_visitor::visit(ir_call *ir)
    int i;
 
    /* Process in parameters. */
-   exec_list_iterator sig_iter = sig->parameters.iterator();
-   foreach_iter(exec_list_iterator, iter, *ir) {
-      ir_rvalue *param_rval = (ir_rvalue *)iter.get();
-      ir_variable *param = (ir_variable *)sig_iter.get();
+   foreach_two_lists(formal_node, &sig->parameters,
+                     actual_node, &ir->actual_parameters) {
+      ir_rvalue *param_rval = (ir_rvalue *) actual_node;
+      ir_variable *param = (ir_variable *) formal_node;
 
-      if (param->mode == ir_var_function_in ||
-          param->mode == ir_var_function_inout) {
+      if (param->data.mode == ir_var_function_in ||
+          param->data.mode == ir_var_function_inout) {
          variable_storage *storage = find_variable_storage(param);
          assert(storage);
 
@@ -2691,23 +2643,20 @@ glsl_to_tgsi_visitor::visit(ir_call *ir)
             r.index++;
          }
       }
-
-      sig_iter.next();
    }
-   assert(!sig_iter.has_next());
 
    /* Emit call instruction */
    call_inst = emit(ir, TGSI_OPCODE_CAL);
    call_inst->function = entry;
 
    /* Process out parameters. */
-   sig_iter = sig->parameters.iterator();
-   foreach_iter(exec_list_iterator, iter, *ir) {
-      ir_rvalue *param_rval = (ir_rvalue *)iter.get();
-      ir_variable *param = (ir_variable *)sig_iter.get();
+   foreach_two_lists(formal_node, &sig->parameters,
+                     actual_node, &ir->actual_parameters) {
+      ir_rvalue *param_rval = (ir_rvalue *) actual_node;
+      ir_variable *param = (ir_variable *) formal_node;
 
-      if (param->mode == ir_var_function_out ||
-          param->mode == ir_var_function_inout) {
+      if (param->data.mode == ir_var_function_out ||
+          param->data.mode == ir_var_function_inout) {
          variable_storage *storage = find_variable_storage(param);
          assert(storage);
 
@@ -2727,10 +2676,7 @@ glsl_to_tgsi_visitor::visit(ir_call *ir)
             r.index++;
          }
       }
-
-      sig_iter.next();
    }
-   assert(!sig_iter.has_next());
 
    /* Process return value. */
    this->result = entry->return_reg;
@@ -3118,8 +3064,8 @@ count_resources(glsl_to_tgsi_visitor *v, gl_program *prog)
 {
    v->samplers_used = 0;
 
-   foreach_iter(exec_list_iterator, iter, v->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &v->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
 
       if (is_tex_instruction(inst->op)) {
          v->samplers_used |= 1 << inst->sampler;
@@ -3264,8 +3210,8 @@ glsl_to_tgsi_visitor::simplify_cmp(void)
    memset(tempWrites, 0, sizeof(unsigned) * MAX_TEMPS);
    memset(outputWrites, 0, sizeof(outputWrites));
 
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
       unsigned prevWriteMask = 0;
 
       /* Give up if we encounter relative addressing or flow control. */
@@ -3310,8 +3256,8 @@ glsl_to_tgsi_visitor::simplify_cmp(void)
 void
 glsl_to_tgsi_visitor::rename_temp_register(int index, int new_index)
 {
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
       unsigned j;
       
       for (j=0; j < num_inst_src_regs(inst->op); j++) {
@@ -3334,8 +3280,8 @@ glsl_to_tgsi_visitor::get_first_temp_read(int index)
    int loop_start = -1; /* index of the first active BGNLOOP (if any) */
    unsigned i = 0, j;
    
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
       
       for (j=0; j < num_inst_src_regs(inst->op); j++) {
          if (inst->src[j].file == PROGRAM_TEMPORARY && 
@@ -3366,8 +3312,8 @@ glsl_to_tgsi_visitor::get_first_temp_write(int index)
    int loop_start = -1; /* index of the first active BGNLOOP (if any) */
    int i = 0;
    
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
       
       if (inst->dst.file == PROGRAM_TEMPORARY && inst->dst.index == index) {
          return (depth == 0) ? i : loop_start;
@@ -3395,8 +3341,8 @@ glsl_to_tgsi_visitor::get_last_temp_read(int index)
    int last = -1; /* index of last instruction that reads the temporary */
    unsigned i = 0, j;
    
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
       
       for (j=0; j < num_inst_src_regs(inst->op); j++) {
          if (inst->src[j].file == PROGRAM_TEMPORARY && 
@@ -3426,8 +3372,8 @@ glsl_to_tgsi_visitor::get_last_temp_write(int index)
    int last = -1; /* index of last instruction that writes to the temporary */
    int i = 0;
    
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
       
       if (inst->dst.file == PROGRAM_TEMPORARY && inst->dst.index == index)
          last = (depth == 0) ? i : -2;
@@ -3475,8 +3421,8 @@ glsl_to_tgsi_visitor::copy_propagate(void)
    int *acp_level = rzalloc_array(mem_ctx, int, this->next_temp * 4);
    int level = 0;
 
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
 
       assert(inst->dst.file != PROGRAM_TEMPORARY
              || inst->dst.index < this->next_temp);
@@ -3672,13 +3618,13 @@ glsl_to_tgsi_visitor::eliminate_dead_code(void)
       int last_read = get_last_temp_read(i);
       int j = 0;
       
-      foreach_iter(exec_list_iterator, iter, this->instructions) {
-         glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+      foreach_list_safe(node, &this->instructions) {
+         glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
 
          if (inst->dst.file == PROGRAM_TEMPORARY && inst->dst.index == i &&
              j > last_read)
          {
-            iter.remove();
+            inst->remove();
             delete inst;
          }
          
@@ -3709,8 +3655,8 @@ glsl_to_tgsi_visitor::eliminate_dead_code_advanced(void)
    int level = 0;
    int removed = 0;
 
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
 
       assert(inst->dst.file != PROGRAM_TEMPORARY
              || inst->dst.index < this->next_temp);
@@ -3817,13 +3763,13 @@ glsl_to_tgsi_visitor::eliminate_dead_code_advanced(void)
    /* Now actually remove the instructions that are completely dead and update
     * the writemask of other instructions with dead channels.
     */
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list_safe(node, &this->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
       
       if (!inst->dead_mask || !inst->dst.writemask)
          continue;
       else if ((inst->dst.writemask & ~inst->dead_mask) == 0) {
-         iter.remove();
+         inst->remove();
          delete inst;
          removed++;
       } else
@@ -4004,8 +3950,8 @@ get_pixel_transfer_visitor(struct st_fragment_program *fp,
 
    /* Now copy the instructions from the original glsl_to_tgsi_visitor into the
     * new visitor. */
-   foreach_iter(exec_list_iterator, iter, original->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &original->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
       glsl_to_tgsi_instruction *newinst;
       st_src_reg src_regs[3];
 
@@ -4088,8 +4034,8 @@ get_bitmap_visitor(struct st_fragment_program *fp,
 
    /* Now copy the instructions from the original glsl_to_tgsi_visitor into the
     * new visitor. */
-   foreach_iter(exec_list_iterator, iter, original->instructions) {
-      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *)iter.get();
+   foreach_list(node, &original->instructions) {
+      glsl_to_tgsi_instruction *inst = (glsl_to_tgsi_instruction *) node;
       glsl_to_tgsi_instruction *newinst;
       st_src_reg src_regs[3];
 
@@ -4311,8 +4257,6 @@ src_register(struct st_translate *t,
    case PROGRAM_ARRAY:
       return ureg_src(dst_register(t, file, index));
 
-   case PROGRAM_ENV_PARAM:
-   case PROGRAM_LOCAL_PARAM:
    case PROGRAM_UNIFORM:
       assert(index >= 0);
       return t->constants[index];
@@ -4897,6 +4841,13 @@ st_translate_program(
          t->outputs[i] = ureg_DECL_output(ureg,
                                           outputSemanticName[i],
                                           outputSemanticIndex[i]);
+         if (outputSemanticName[i] == TGSI_SEMANTIC_FOG) {
+            /* force register to contain a fog coordinate in the form (F, 0, 0, 1). */
+            ureg_MOV(ureg,
+                     ureg_writemask(t->outputs[i], TGSI_WRITEMASK_YZW),
+                     ureg_imm4f(ureg, 0.0f, 0.0f, 0.0f, 1.0f));
+            t->outputs[i] = ureg_writemask(t->outputs[i], TGSI_WRITEMASK_X);
+	 }
       }
       if (passthrough_edgeflags)
          emit_edgeflags(t);
@@ -4962,8 +4913,6 @@ st_translate_program(
 
       for (i = 0; i < proginfo->Parameters->NumParameters; i++) {
          switch (proginfo->Parameters->Parameters[i].Type) {
-         case PROGRAM_ENV_PARAM:
-         case PROGRAM_LOCAL_PARAM:
          case PROGRAM_STATE_VAR:
          case PROGRAM_UNIFORM:
             t->constants[i] = ureg_DECL_constant(ureg, i);
@@ -5007,15 +4956,15 @@ st_translate_program(
       goto out;
    }
    i = 0;
-   foreach_iter(exec_list_iterator, iter, program->immediates) {
-      immediate_storage *imm = (immediate_storage *)iter.get();
+   foreach_list(node, &program->immediates) {
+      immediate_storage *imm = (immediate_storage *) node;
       assert(i < program->num_immediates);
       t->immediates[i++] = emit_immediate(t, imm->values, imm->type, imm->size);
    }
    assert(i == program->num_immediates);
 
    /* texture samplers */
-   for (i = 0; i < ctx->Const.FragmentProgram.MaxTextureImageUnits; i++) {
+   for (i = 0; i < ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits; i++) {
       if (program->samplers_used & (1 << i)) {
          t->samplers[i] = ureg_DECL_sampler(ureg, i);
       }
@@ -5023,10 +4972,9 @@ st_translate_program(
 
    /* Emit each instruction in turn:
     */
-   foreach_iter(exec_list_iterator, iter, program->instructions) {
+   foreach_list(n, &program->instructions) {
       set_insn_start(t, ureg_get_instruction_number(ureg));
-      compile_tgsi_instruction(t, (glsl_to_tgsi_instruction *)iter.get(),
-                               clamp_color);
+      compile_tgsi_instruction(t, (glsl_to_tgsi_instruction *) n, clamp_color);
    }
 
    /* Fix up all emitted labels:
@@ -5041,7 +4989,7 @@ st_translate_program(
        * prog->ParameterValues to get reallocated (e.g., anything that adds a
        * program constant) has to happen before creating this linkage.
        */
-      for (unsigned i = 0; i < MESA_SHADER_TYPES; i++) {
+      for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
          if (program->shader_program->_LinkedShaders[i] == NULL)
             continue;
 
@@ -5068,6 +5016,24 @@ out:
 }
 /* ----------------------------- End TGSI code ------------------------------ */
 
+
+static unsigned
+shader_stage_to_ptarget(gl_shader_stage stage)
+{
+   switch (stage) {
+   case MESA_SHADER_VERTEX:
+      return PIPE_SHADER_VERTEX;
+   case MESA_SHADER_FRAGMENT:
+      return PIPE_SHADER_FRAGMENT;
+   case MESA_SHADER_GEOMETRY:
+      return PIPE_SHADER_GEOMETRY;
+   }
+
+   assert(!"should not be reached");
+   return PIPE_SHADER_VERTEX;
+}
+
+
 /**
  * Convert a shader's GLSL IR into a Mesa gl_program, although without 
  * generating Mesa IR.
@@ -5079,30 +5045,12 @@ get_mesa_program(struct gl_context *ctx,
 {
    glsl_to_tgsi_visitor* v;
    struct gl_program *prog;
-   GLenum target;
+   GLenum target = _mesa_shader_stage_to_program(shader->Stage);
    bool progress;
    struct gl_shader_compiler_options *options =
-         &ctx->ShaderCompilerOptions[_mesa_shader_type_to_index(shader->Type)];
+         &ctx->ShaderCompilerOptions[_mesa_shader_enum_to_shader_stage(shader->Type)];
    struct pipe_screen *pscreen = ctx->st->pipe->screen;
-   unsigned ptarget;
-
-   switch (shader->Type) {
-   case GL_VERTEX_SHADER:
-      target = GL_VERTEX_PROGRAM_ARB;
-      ptarget = PIPE_SHADER_VERTEX;
-      break;
-   case GL_FRAGMENT_SHADER:
-      target = GL_FRAGMENT_PROGRAM_ARB;
-      ptarget = PIPE_SHADER_FRAGMENT;
-      break;
-   case GL_GEOMETRY_SHADER:
-      target = GL_GEOMETRY_PROGRAM_NV;
-      ptarget = PIPE_SHADER_GEOMETRY;
-      break;
-   default:
-      assert(!"should not be reached");
-      return NULL;
-   }
+   unsigned ptarget = shader_stage_to_ptarget(shader->Stage);
 
    validate_ir_tree(shader->ir);
 
@@ -5134,8 +5082,8 @@ get_mesa_program(struct gl_context *ctx,
    do {
       progress = GL_FALSE;
 
-      foreach_iter(exec_list_iterator, iter, v->function_signatures) {
-         function_entry *entry = (function_entry *)iter.get();
+      foreach_list(node, &v->function_signatures) {
+         function_entry *entry = (function_entry *) node;
 
          if (!entry->bgn_inst) {
             v->current_function = entry;
@@ -5188,7 +5136,7 @@ get_mesa_program(struct gl_context *ctx,
    if (ctx->Shader.Flags & GLSL_DUMP) {
       printf("\n");
       printf("GLSL IR for linked %s program %d:\n",
-             _mesa_glsl_shader_target_name(shader->Type),
+             _mesa_shader_stage_to_string(shader->Stage),
              shader_program->Name);
       _mesa_print_ir(shader->ir, NULL);
       printf("\n");
@@ -5199,7 +5147,7 @@ get_mesa_program(struct gl_context *ctx,
    prog->Instructions = NULL;
    prog->NumInstructions = 0;
 
-   do_set_program_inouts(shader->ir, prog, shader->Type);
+   do_set_program_inouts(shader->ir, prog, shader->Stage);
    count_resources(v, prog);
 
    _mesa_reference_program(ctx, &shader->Program, prog);
@@ -5252,6 +5200,7 @@ st_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
    shader = rzalloc(NULL, struct gl_shader);
    if (shader) {
       shader->Type = type;
+      shader->Stage = _mesa_shader_enum_to_shader_stage(type);
       shader->Name = name;
       _mesa_init_shader(ctx, shader);
    }
@@ -5281,14 +5230,14 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 {
    assert(prog->LinkStatus);
 
-   for (unsigned i = 0; i < MESA_SHADER_TYPES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       if (prog->_LinkedShaders[i] == NULL)
          continue;
 
       bool progress;
       exec_list *ir = prog->_LinkedShaders[i]->ir;
       const struct gl_shader_compiler_options *options =
-            &ctx->ShaderCompilerOptions[_mesa_shader_type_to_index(prog->_LinkedShaders[i]->Type)];
+            &ctx->ShaderCompilerOptions[_mesa_shader_enum_to_shader_stage(prog->_LinkedShaders[i]->Type)];
 
       /* If there are forms of indirect addressing that the driver
        * cannot handle, perform the lowering pass.
@@ -5351,7 +5300,7 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       validate_ir_tree(ir);
    }
 
-   for (unsigned i = 0; i < MESA_SHADER_TYPES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       struct gl_program *linked_prog;
 
       if (prog->_LinkedShaders[i] == NULL)
@@ -5363,7 +5312,7 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 	 _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
 				 linked_prog);
          if (!ctx->Driver.ProgramStringNotify(ctx,
-                                              _mesa_program_index_to_target(i),
+                                              _mesa_shader_stage_to_program(i),
                                               linked_prog)) {
 	    _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
 				    NULL);

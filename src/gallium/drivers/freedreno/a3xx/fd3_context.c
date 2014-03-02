@@ -44,10 +44,11 @@ fd3_context_destroy(struct pipe_context *pctx)
 
 	fd3_prog_fini(pctx);
 
+	util_dynarray_fini(&fd3_ctx->rbrc_patches);
+
 	fd_bo_del(fd3_ctx->vs_pvt_mem);
 	fd_bo_del(fd3_ctx->fs_pvt_mem);
 	fd_bo_del(fd3_ctx->vsc_size_mem);
-	fd_bo_del(fd3_ctx->vsc_pipe_mem);
 
 	pipe_resource_reference(&fd3_ctx->solid_vbuf, NULL);
 	pipe_resource_reference(&fd3_ctx->blit_texcoord_vbuf, NULL);
@@ -104,6 +105,7 @@ fd3_context_create(struct pipe_screen *pscreen, void *priv)
 
 	pctx = &fd3_ctx->base.base;
 
+	fd3_ctx->base.dev = fd_device_ref(screen->dev);
 	fd3_ctx->base.screen = fd_screen(pscreen);
 
 	pctx->destroy = fd3_context_destroy;
@@ -120,6 +122,8 @@ fd3_context_create(struct pipe_screen *pscreen, void *priv)
 	if (!pctx)
 		return NULL;
 
+	util_dynarray_init(&fd3_ctx->rbrc_patches);
+
 	fd3_ctx->vs_pvt_mem = fd_bo_new(screen->dev, 0x2000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
@@ -127,9 +131,6 @@ fd3_context_create(struct pipe_screen *pscreen, void *priv)
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
 	fd3_ctx->vsc_size_mem = fd_bo_new(screen->dev, 0x1000,
-			DRM_FREEDRENO_GEM_TYPE_KMEM);
-
-	fd3_ctx->vsc_pipe_mem = fd_bo_new(screen->dev, 0x40000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
 	fd3_ctx->solid_vbuf = create_solid_vertexbuf(pctx);

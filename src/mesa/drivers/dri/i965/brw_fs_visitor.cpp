@@ -56,7 +56,7 @@ fs_visitor::visit(ir_variable *ir)
    if (variable_storage(ir))
       return;
 
-   if (ir->mode == ir_var_shader_in) {
+   if (ir->data.mode == ir_var_shader_in) {
       if (!strcmp(ir->name, "gl_FragCoord")) {
 	 reg = emit_fragcoord_interpolation(ir);
       } else if (!strcmp(ir->name, "gl_FrontFacing")) {
@@ -67,27 +67,27 @@ fs_visitor::visit(ir_variable *ir)
       assert(reg);
       hash_table_insert(this->variable_ht, reg, ir);
       return;
-   } else if (ir->mode == ir_var_shader_out) {
+   } else if (ir->data.mode == ir_var_shader_out) {
       reg = new(this->mem_ctx) fs_reg(this, ir->type);
 
-      if (ir->index > 0) {
-	 assert(ir->location == FRAG_RESULT_DATA0);
-	 assert(ir->index == 1);
+      if (ir->data.index > 0) {
+	 assert(ir->data.location == FRAG_RESULT_DATA0);
+	 assert(ir->data.index == 1);
 	 this->dual_src_output = *reg;
-      } else if (ir->location == FRAG_RESULT_COLOR) {
+      } else if (ir->data.location == FRAG_RESULT_COLOR) {
 	 /* Writing gl_FragColor outputs to all color regions. */
 	 for (unsigned int i = 0; i < MAX2(c->key.nr_color_regions, 1); i++) {
 	    this->outputs[i] = *reg;
 	    this->output_components[i] = 4;
 	 }
-      } else if (ir->location == FRAG_RESULT_DEPTH) {
+      } else if (ir->data.location == FRAG_RESULT_DEPTH) {
 	 this->frag_depth = *reg;
-      } else if (ir->location == FRAG_RESULT_SAMPLE_MASK) {
+      } else if (ir->data.location == FRAG_RESULT_SAMPLE_MASK) {
          this->sample_mask = *reg;
       } else {
 	 /* gl_FragData or a user-defined FS output */
-	 assert(ir->location >= FRAG_RESULT_DATA0 &&
-		ir->location < FRAG_RESULT_DATA0 + BRW_MAX_DRAW_BUFFERS);
+	 assert(ir->data.location >= FRAG_RESULT_DATA0 &&
+		ir->data.location < FRAG_RESULT_DATA0 + BRW_MAX_DRAW_BUFFERS);
 
 	 int vector_elements =
 	    ir->type->is_array() ? ir->type->fields.array->vector_elements
@@ -95,13 +95,13 @@ fs_visitor::visit(ir_variable *ir)
 
 	 /* General color output. */
 	 for (unsigned int i = 0; i < MAX2(1, ir->type->length); i++) {
-	    int output = ir->location - FRAG_RESULT_DATA0 + i;
+	    int output = ir->data.location - FRAG_RESULT_DATA0 + i;
 	    this->outputs[output] = *reg;
 	    this->outputs[output].reg_offset += vector_elements * i;
 	    this->output_components[output] = vector_elements;
 	 }
       }
-   } else if (ir->mode == ir_var_uniform) {
+   } else if (ir->data.mode == ir_var_uniform) {
       int param_index = c->prog_data.nr_params;
 
       /* Thanks to the lower_ubo_reference pass, we will see only
@@ -116,7 +116,7 @@ fs_visitor::visit(ir_variable *ir)
 
       if (dispatch_width == 16) {
 	 if (!variable_storage(ir)) {
-	    fail("Failed to find uniform '%s' in 16-wide\n", ir->name);
+	    fail("Failed to find uniform '%s' in SIMD16\n", ir->name);
 	 }
 	 return;
       }
@@ -131,11 +131,13 @@ fs_visitor::visit(ir_variable *ir)
       reg = new(this->mem_ctx) fs_reg(UNIFORM, param_index);
       reg->type = brw_type_for_base_type(ir->type);
 
-   } else if (ir->mode == ir_var_system_value) {
-      if (ir->location == SYSTEM_VALUE_SAMPLE_POS) {
+   } else if (ir->data.mode == ir_var_system_value) {
+      if (ir->data.location == SYSTEM_VALUE_SAMPLE_POS) {
 	 reg = emit_samplepos_setup(ir);
-      } else if (ir->location == SYSTEM_VALUE_SAMPLE_ID) {
+      } else if (ir->data.location == SYSTEM_VALUE_SAMPLE_ID) {
 	 reg = emit_sampleid_setup(ir);
+      } else if (ir->data.location == SYSTEM_VALUE_SAMPLE_MASK_IN) {
+         reg = emit_samplemaskin_setup(ir);
       }
    }
 
@@ -382,18 +384,34 @@ fs_visitor::visit(ir_expression *ir)
       emit(MOV(this->result, op[0]));
       break;
    case ir_unop_sign:
-      temp = fs_reg(this, ir->type);
+      if (ir->type->is_float()) {
+         /* AND(val, 0x80000000) gives the sign bit.
+          *
+          * Predicated OR ORs 1.0 (0x3f800000) with the sign bit if val is not
+          * zero.
+          */
+         emit(CMP(reg_null_f, op[0], fs_reg(0.0f), BRW_CONDITIONAL_NZ));
 
-      emit(MOV(this->result, fs_reg(0.0f)));
+         op[0].type = BRW_REGISTER_TYPE_UD;
+         this->result.type = BRW_REGISTER_TYPE_UD;
+         emit(AND(this->result, op[0], fs_reg(0x80000000u)));
 
-      emit(CMP(reg_null_f, op[0], fs_reg(0.0f), BRW_CONDITIONAL_G));
-      inst = emit(MOV(this->result, fs_reg(1.0f)));
-      inst->predicate = BRW_PREDICATE_NORMAL;
+         inst = emit(OR(this->result, this->result, fs_reg(0x3f800000u)));
+         inst->predicate = BRW_PREDICATE_NORMAL;
 
-      emit(CMP(reg_null_f, op[0], fs_reg(0.0f), BRW_CONDITIONAL_L));
-      inst = emit(MOV(this->result, fs_reg(-1.0f)));
-      inst->predicate = BRW_PREDICATE_NORMAL;
+         this->result.type = BRW_REGISTER_TYPE_F;
+      } else {
+         /*  ASR(val, 31) -> negative val generates 0xffffffff (signed -1).
+          *               -> non-negative val generates 0x00000000.
+          *  Predicated OR sets 1 if val is positive.
+          */
+         emit(CMP(reg_null_d, op[0], fs_reg(0), BRW_CONDITIONAL_G));
 
+         emit(ASR(this->result, op[0], fs_reg(31)));
+
+         inst = emit(OR(this->result, this->result, fs_reg(1)));
+         inst->predicate = BRW_PREDICATE_NORMAL;
+      }
       break;
    case ir_unop_rcp:
       emit_math(SHADER_OPCODE_RCP, this->result, op[0]);
@@ -433,7 +451,7 @@ fs_visitor::visit(ir_expression *ir)
       break;
 
    case ir_binop_mul:
-      if (ir->type->is_integer()) {
+      if (brw->gen < 8 && ir->type->is_integer()) {
 	 /* For integer multiplication, the MUL uses the low 16 bits
 	  * of one of the operands (src0 on gen6, src1 on gen7).  The
 	  * MACH accumulates in the contribution of the upper 16 bits
@@ -443,7 +461,7 @@ fs_visitor::visit(ir_expression *ir)
 	  * enough.
 	  */
 	 if (brw->gen >= 7 && dispatch_width == 16)
-	    fail("16-wide explicit accumulator operands unsupported\n");
+	    fail("SIMD16 explicit accumulator operands unsupported\n");
 
 	 struct brw_reg acc = retype(brw_acc_reg(), this->result.type);
 
@@ -456,7 +474,7 @@ fs_visitor::visit(ir_expression *ir)
       break;
    case ir_binop_imul_high: {
       if (brw->gen >= 7 && dispatch_width == 16)
-         fail("16-wide explicit accumulator operands unsupported\n");
+         fail("SIMD16 explicit accumulator operands unsupported\n");
 
       struct brw_reg acc = retype(brw_acc_reg(), this->result.type);
 
@@ -471,7 +489,7 @@ fs_visitor::visit(ir_expression *ir)
       break;
    case ir_binop_carry: {
       if (brw->gen >= 7 && dispatch_width == 16)
-         fail("16-wide explicit accumulator operands unsupported\n");
+         fail("SIMD16 explicit accumulator operands unsupported\n");
 
       struct brw_reg acc = retype(brw_acc_reg(), BRW_REGISTER_TYPE_UD);
 
@@ -481,7 +499,7 @@ fs_visitor::visit(ir_expression *ir)
    }
    case ir_binop_borrow: {
       if (brw->gen >= 7 && dispatch_width == 16)
-         fail("16-wide explicit accumulator operands unsupported\n");
+         fail("SIMD16 explicit accumulator operands unsupported\n");
 
       struct brw_reg acc = retype(brw_acc_reg(), BRW_REGISTER_TYPE_UD);
 
@@ -1196,7 +1214,7 @@ fs_visitor::emit_texture_gen5(ir_texture *ir, fs_reg dst, fs_reg coordinate,
       /* sample index */
       emit(MOV(fs_reg(MRF, base_mrf + mlen, BRW_REGISTER_TYPE_UD), sample_index));
       mlen += reg_width;
-      inst = emit(SHADER_OPCODE_TXF_MS, dst);
+      inst = emit(SHADER_OPCODE_TXF_CMS, dst);
       break;
    case ir_lod:
       inst = emit(SHADER_OPCODE_LOD, dst);
@@ -1213,8 +1231,9 @@ fs_visitor::emit_texture_gen5(ir_texture *ir, fs_reg dst, fs_reg coordinate,
    inst->header_present = header_present;
    inst->regs_written = 4;
 
-   if (mlen > 11) {
-      fail("Message length >11 disallowed by hardware\n");
+   if (mlen > MAX_SAMPLER_MESSAGE_SIZE) {
+      fail("Message length >" STRINGIFY(MAX_SAMPLER_MESSAGE_SIZE)
+           " disallowed by hardware\n");
    }
 
    return inst;
@@ -1223,7 +1242,7 @@ fs_visitor::emit_texture_gen5(ir_texture *ir, fs_reg dst, fs_reg coordinate,
 fs_inst *
 fs_visitor::emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
                               fs_reg shadow_c, fs_reg lod, fs_reg lod2,
-                              fs_reg sample_index)
+                              fs_reg sample_index, fs_reg mcs, int sampler)
 {
    int reg_width = dispatch_width / 8;
    bool header_present = false;
@@ -1231,13 +1250,16 @@ fs_visitor::emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
    fs_reg payload = fs_reg(this, glsl_type::float_type);
    fs_reg next = payload;
 
-   if (ir->op == ir_tg4 || (ir->offset && ir->op != ir_txf)) {
+   if (ir->op == ir_tg4 || (ir->offset && ir->op != ir_txf) || sampler >= 16) {
       /* For general texture offsets (no txf workaround), we need a header to
-       * put them in.  Note that for 16-wide we're making space for two actual
+       * put them in.  Note that for SIMD16 we're making space for two actual
        * hardware registers here, so the emit will have to fix up for this.
        *
        * * ir4_tg4 needs to place its channel select in the header,
        * for interaction with ARB_texture_swizzle
+       *
+       * The sampler index is only 4-bits, so for larger sampler numbers we
+       * need to offset the Sampler State Pointer in the header.
        */
       header_present = true;
       next.reg_offset++;
@@ -1322,11 +1344,8 @@ fs_visitor::emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
       emit(MOV(next.retype(BRW_REGISTER_TYPE_UD), sample_index));
       next.reg_offset++;
 
-      /* constant zero MCS; we arrange to never actually have a compressed
-       * multisample surface here for now. TODO: issue ld_mcs to get this first,
-       * if we ever support texturing from compressed multisample surfaces
-       */
-      emit(MOV(next.retype(BRW_REGISTER_TYPE_UD), fs_reg(0u)));
+      /* data from the multisample control surface */
+      emit(MOV(next.retype(BRW_REGISTER_TYPE_UD), mcs));
       next.reg_offset++;
 
       /* there is no offsetting for this message; just copy in the integer
@@ -1389,7 +1408,7 @@ fs_visitor::emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
    case ir_txl: inst = emit(SHADER_OPCODE_TXL, dst, payload); break;
    case ir_txd: inst = emit(SHADER_OPCODE_TXD, dst, payload); break;
    case ir_txf: inst = emit(SHADER_OPCODE_TXF, dst, payload); break;
-   case ir_txf_ms: inst = emit(SHADER_OPCODE_TXF_MS, dst, payload); break;
+   case ir_txf_ms: inst = emit(SHADER_OPCODE_TXF_CMS, dst, payload); break;
    case ir_txs: inst = emit(SHADER_OPCODE_TXS, dst, payload); break;
    case ir_query_levels: inst = emit(SHADER_OPCODE_TXS, dst, payload); break;
    case ir_lod: inst = emit(SHADER_OPCODE_LOD, dst, payload); break;
@@ -1409,8 +1428,9 @@ fs_visitor::emit_texture_gen7(ir_texture *ir, fs_reg dst, fs_reg coordinate,
    inst->regs_written = 4;
 
    virtual_grf_sizes[payload.reg] = next.reg_offset;
-   if (inst->mlen > 11) {
-      fail("Message length >11 disallowed by hardware\n");
+   if (inst->mlen > MAX_SAMPLER_MESSAGE_SIZE) {
+      fail("Message length >" STRINGIFY(MAX_SAMPLER_MESSAGE_SIZE)
+           " disallowed by hardware\n");
    }
 
    return inst;
@@ -1442,7 +1462,7 @@ fs_visitor::rescale_texcoord(ir_texture *ir, fs_reg coordinate,
       };
 
       if (dispatch_width == 16) {
-	 fail("rectangle scale uniform setup not supported on 16-wide\n");
+	 fail("rectangle scale uniform setup not supported on SIMD16\n");
 	 return coordinate;
       }
 
@@ -1517,6 +1537,35 @@ fs_visitor::rescale_texcoord(ir_texture *ir, fs_reg coordinate,
    return coordinate;
 }
 
+/* Sample from the MCS surface attached to this multisample texture. */
+fs_reg
+fs_visitor::emit_mcs_fetch(ir_texture *ir, fs_reg coordinate, int sampler)
+{
+   int reg_width = dispatch_width / 8;
+   fs_reg payload = fs_reg(this, glsl_type::float_type);
+   fs_reg dest = fs_reg(this, glsl_type::uvec4_type);
+   fs_reg next = payload;
+
+   /* parameters are: u, v, r, lod; missing parameters are treated as zero */
+   for (int i = 0; i < ir->coordinate->type->vector_elements; i++) {
+      emit(MOV(next.retype(BRW_REGISTER_TYPE_D), coordinate));
+      coordinate.reg_offset++;
+      next.reg_offset++;
+   }
+
+   fs_inst *inst = emit(SHADER_OPCODE_TXF_MCS, dest, payload);
+   virtual_grf_sizes[payload.reg] = next.reg_offset;
+   inst->base_mrf = -1;
+   inst->mlen = next.reg_offset * reg_width;
+   inst->header_present = false;
+   inst->regs_written = 4 * reg_width; /* we only care about one reg of response,
+                                        * but the sampler always writes 4/8
+                                        */
+   inst->sampler = sampler;
+
+   return dest;
+}
+
 void
 fs_visitor::visit(ir_texture *ir)
 {
@@ -1575,7 +1624,7 @@ fs_visitor::visit(ir_texture *ir)
       shadow_comparitor = this->result;
    }
 
-   fs_reg lod, lod2, sample_index;
+   fs_reg lod, lod2, sample_index, mcs;
    switch (ir->op) {
    case ir_tex:
    case ir_lod:
@@ -1602,6 +1651,11 @@ fs_visitor::visit(ir_texture *ir)
    case ir_txf_ms:
       ir->lod_info.sample_index->accept(this);
       sample_index = this->result;
+
+      if (brw->gen >= 7 && c->key.tex.compressed_multisample_layout_mask & (1<<sampler))
+         mcs = emit_mcs_fetch(ir, coordinate, sampler);
+      else
+         mcs = fs_reg(0u);
       break;
    default:
       assert(!"Unrecognized texture opcode");
@@ -1614,7 +1668,7 @@ fs_visitor::visit(ir_texture *ir)
 
    if (brw->gen >= 7) {
       inst = emit_texture_gen7(ir, dst, coordinate, shadow_comparitor,
-                               lod, lod2, sample_index);
+                               lod, lod2, sample_index, mcs, sampler);
    } else if (brw->gen >= 5) {
       inst = emit_texture_gen5(ir, dst, coordinate, shadow_comparitor,
                                lod, lod2, sample_index);
@@ -2093,7 +2147,7 @@ void
 fs_visitor::visit(ir_if *ir)
 {
    if (brw->gen < 6 && dispatch_width == 16) {
-      fail("Can't support (non-uniform) control flow on 16-wide\n");
+      fail("Can't support (non-uniform) control flow on SIMD16\n");
    }
 
    /* Don't point the annotation at the if statement, because then it plus
@@ -2135,50 +2189,18 @@ fs_visitor::visit(ir_if *ir)
 void
 fs_visitor::visit(ir_loop *ir)
 {
-   fs_reg counter = reg_undef;
-
    if (brw->gen < 6 && dispatch_width == 16) {
-      fail("Can't support (non-uniform) control flow on 16-wide\n");
-   }
-
-   if (ir->counter) {
-      this->base_ir = ir->counter;
-      ir->counter->accept(this);
-      counter = *(variable_storage(ir->counter));
-
-      if (ir->from) {
-	 this->base_ir = ir->from;
-	 ir->from->accept(this);
-
-	 emit(MOV(counter, this->result));
-      }
+      fail("Can't support (non-uniform) control flow on SIMD16\n");
    }
 
    this->base_ir = NULL;
    emit(BRW_OPCODE_DO);
-
-   if (ir->to) {
-      this->base_ir = ir->to;
-      ir->to->accept(this);
-
-      emit(CMP(reg_null_d, counter, this->result,
-               brw_conditional_for_comparison(ir->cmp)));
-
-      fs_inst *inst = emit(BRW_OPCODE_BREAK);
-      inst->predicate = BRW_PREDICATE_NORMAL;
-   }
 
    foreach_list(node, &ir->body_instructions) {
       ir_instruction *ir = (ir_instruction *)node;
 
       this->base_ir = ir;
       ir->accept(this);
-   }
-
-   if (ir->increment) {
-      this->base_ir = ir->increment;
-      ir->increment->accept(this);
-      emit(ADD(counter, counter, this->result));
    }
 
    this->base_ir = NULL;
@@ -2205,7 +2227,7 @@ fs_visitor::visit_atomic_counter_intrinsic(ir_call *ir)
       ir->actual_parameters.get_head());
    ir_variable *location = deref->variable_referenced();
    unsigned surf_index = (c->prog_data.base.binding_table.abo_start +
-                          location->atomic.buffer_index);
+                          location->data.atomic.buffer_index);
 
    /* Calculate the surface offset */
    fs_reg offset(this, glsl_type::uint_type);
@@ -2216,9 +2238,9 @@ fs_visitor::visit_atomic_counter_intrinsic(ir_call *ir)
 
       fs_reg tmp(this, glsl_type::uint_type);
       emit(MUL(tmp, this->result, ATOMIC_COUNTER_SIZE));
-      emit(ADD(offset, tmp, location->atomic.offset));
+      emit(ADD(offset, tmp, location->data.atomic.offset));
    } else {
-      offset = location->atomic.offset;
+      offset = location->data.atomic.offset;
    }
 
    /* Emit the appropriate machine instruction */
@@ -2393,8 +2415,6 @@ fs_visitor::emit(fs_inst *inst)
 {
    if (force_uncompressed_stack > 0)
       inst->force_uncompressed = true;
-   else if (force_sechalf_stack > 0)
-      inst->force_sechalf = true;
 
    inst->annotation = this->current_annotation;
    inst->ir = this->base_ir;
@@ -2599,12 +2619,11 @@ fs_visitor::emit_color_write(int target, int index, int first_color_mrf)
 	 inst->saturate = c->key.clamp_fragment_color;
 	 pop_force_uncompressed();
 
-	 push_force_sechalf();
 	 color.sechalf = true;
 	 inst = emit(MOV(fs_reg(MRF, first_color_mrf + index + 4, color.type),
                          color));
+	 inst->force_sechalf = true;
 	 inst->saturate = c->key.clamp_fragment_color;
-	 pop_force_sechalf();
 	 color.sechalf = false;
       }
    }
@@ -2679,7 +2698,7 @@ fs_visitor::emit_fb_writes()
    bool src0_alpha_to_render_target = false;
 
    if (dispatch_width == 16 && do_dual_src) {
-      fail("GL_ARB_blend_func_extended not yet supported in 16-wide.");
+      fail("GL_ARB_blend_func_extended not yet supported in SIMD16.");
       do_dual_src = false;
    }
 
@@ -2733,7 +2752,7 @@ fs_visitor::emit_fb_writes()
    if (c->source_depth_to_render_target) {
       if (brw->gen == 6 && dispatch_width == 16) {
 	 /* For outputting oDepth on gen6, SIMD8 writes have to be
-	  * used.  This would require 8-wide moves of each half to
+	  * used.  This would require SIMD8 moves of each half to
 	  * message regs, kind of like pre-gen5 SIMD16 FB writes.
 	  * Just bail on doing so for now.
 	  */
@@ -2918,12 +2937,12 @@ fs_visitor::fs_visitor(struct brw_context *brw,
    this->virtual_grf_start = NULL;
    this->virtual_grf_end = NULL;
    this->live_intervals = NULL;
+   this->regs_live_at_ip = NULL;
 
    this->params_remap = NULL;
    this->nr_params_remap = 0;
 
    this->force_uncompressed_stack = 0;
-   this->force_sechalf_stack = 0;
 
    this->spilled_any_registers = false;
 

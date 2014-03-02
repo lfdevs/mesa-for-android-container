@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -32,7 +32,7 @@
  * glDrawElements, glEvalMesh, or glCalList, etc.
  *
  * Authors:
- *   Keith Whitwell <keith@tungstengraphics.com>
+ *   Keith Whitwell <keithw@vmware.com>
  */
 
 
@@ -131,11 +131,7 @@ setup_index_buffer(struct st_context *st,
 static void
 check_uniforms(struct gl_context *ctx)
 {
-   struct gl_shader_program *shProg[3] = {
-      ctx->Shader.CurrentVertexProgram,
-      ctx->Shader.CurrentGeometryProgram,
-      ctx->Shader.CurrentFragmentProgram,
-   };
+   struct gl_shader_program **shProg = ctx->Shader.CurrentProgram;
    unsigned j;
 
    for (j = 0; j < 3; j++) {
@@ -195,7 +191,8 @@ st_draw_vbo(struct gl_context *ctx,
 	    GLboolean index_bounds_valid,
             GLuint min_index,
             GLuint max_index,
-            struct gl_transform_feedback_object *tfb_vertcount)
+            struct gl_transform_feedback_object *tfb_vertcount,
+            struct gl_buffer_object *indirect)
 {
    struct st_context *st = st_context(ctx);
    struct pipe_index_buffer ibuffer = {0};

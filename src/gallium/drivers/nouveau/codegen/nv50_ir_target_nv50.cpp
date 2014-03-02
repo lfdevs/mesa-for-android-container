@@ -130,7 +130,8 @@ void TargetNV50::initOpInfo()
    };
    static const operation noPredList[] =
    {
-      OP_CALL, OP_PREBREAK, OP_PRERET, OP_QUADON, OP_QUADPOP, OP_JOINAT
+      OP_CALL, OP_PREBREAK, OP_PRERET, OP_QUADON, OP_QUADPOP, OP_JOINAT,
+      OP_EMIT, OP_RESTART
    };
 
    for (i = 0; i < DATA_FILE_COUNT; ++i)
@@ -237,6 +238,9 @@ TargetNV50::getSVAddress(DataFile shaderFile, const Symbol *sym) const
             addr += 4;
       return addr;
    }
+   case SV_PRIMITIVE_ID:
+      return shaderFile == FILE_SHADER_INPUT ? 0x18 :
+         sysvalLocation[sym->reg.data.sv.sv];
    case SV_NCTAID:
       return 0x8 + 2 * sym->reg.data.sv.index;
    case SV_CTAID:
@@ -299,14 +303,20 @@ TargetNV50::insnCanLoad(const Instruction *i, int s,
    case 0x01:
    case 0x03:
    case 0x08:
-   case 0x09:
    case 0x0c:
    case 0x20:
    case 0x21:
       break;
+   case 0x09:
+      // Shader inputs get transformed to p[] in geometry shaders, and those
+      // aren't allowed to be used at the same time as c[].
+      if (ld->bb->getProgram()->getType() == Program::TYPE_GEOMETRY)
+         return false;
+      break;
    case 0x0d:
       if (ld->bb->getProgram()->getType() != Program::TYPE_GEOMETRY)
          return false;
+      break;
    default:
       return false;
    }
@@ -380,7 +390,7 @@ TargetNV50::isOpSupported(operation op, DataType ty) const
    case OP_PRERET:
       return chipset >= 0xa0;
    case OP_TXG:
-      return chipset >= 0xa3;
+      return chipset >= 0xa3 && chipset != 0xaa && chipset != 0xac;
    case OP_POW:
    case OP_SQRT:
    case OP_DIV:
@@ -522,7 +532,7 @@ recordLocation(uint16_t *locs, uint8_t *masks,
    case TGSI_SEMANTIC_INSTANCEID: locs[SV_INSTANCE_ID] = addr; break;
    case TGSI_SEMANTIC_VERTEXID: locs[SV_VERTEX_ID] = addr; break;
    case TGSI_SEMANTIC_PRIMID: locs[SV_PRIMITIVE_ID] = addr; break;
-   case NV50_SEMANTIC_LAYER: locs[SV_LAYER] = addr; break;
+   case TGSI_SEMANTIC_LAYER: locs[SV_LAYER] = addr; break;
    case NV50_SEMANTIC_VIEWPORTINDEX: locs[SV_VIEWPORT_INDEX] = addr; break;
    default:
       break;

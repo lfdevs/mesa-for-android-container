@@ -20,15 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+# Note: Make sure VDPAU_EXPORTS is defined before including Automake.inc
+VDPAU_EXPORTS = '^(vdp_imp_device_create_x11|nouveau_drm_screen_create)$$'
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
-	$(GALLIUM_CFLAGS) \
-	$(PTHREAD_CFLAGS) \
-	$(LIBDRM_CFLAGS)
-AM_CPPFLAGS = \
-	-I$(top_srcdir)/src/gallium/drivers \
-	-I$(top_srcdir)/src/gallium/winsys
+	$(GALLIUM_VIDEO_CFLAGS)
 
 vdpaudir = $(VDPAU_LIB_INSTALL_DIR)
 vdpau_LTLIBRARIES = libvdpau_nouveau.la
@@ -39,20 +36,13 @@ libvdpau_nouveau_la_SOURCES = \
 	$(top_srcdir)/src/gallium/auxiliary/vl/vl_winsys_dri.c
 
 libvdpau_nouveau_la_LDFLAGS = \
-	-module \
-	-version-number $(VDPAU_MAJOR):$(VDPAU_MINOR) \
-	-shared \
-	-no-undefined
+	$(GALLIUM_VDPAU_LINKER_FLAGS)
 
 libvdpau_nouveau_la_LIBADD = \
-	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/state_trackers/vdpau/libvdpautracker.la \
 	$(top_builddir)/src/gallium/winsys/nouveau/drm/libnouveaudrm.la \
 	$(top_builddir)/src/gallium/drivers/nouveau/libnouveau.la \
-	$(top_builddir)/src/gallium/drivers/trace/libtrace.la \
+	$(GALLIUM_VDPAU_LIB_DEPS) \
 	$(GALLIUM_DRI_LIB_DEPS) \
-	$(VDPAU_LIBS) \
-	$(LIBDRM_LIBS) \
 	$(NOUVEAU_LIBS)
 
 if HAVE_MESA_LLVM

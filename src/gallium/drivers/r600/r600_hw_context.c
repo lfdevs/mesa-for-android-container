@@ -29,94 +29,11 @@
 #include <errno.h>
 #include <unistd.h>
 
-/* Get backends mask */
-void r600_get_backend_mask(struct r600_context *ctx)
-{
-	struct radeon_winsys_cs *cs = ctx->b.rings.gfx.cs;
-	struct r600_resource *buffer;
-	uint32_t *results;
-	unsigned num_backends = ctx->screen->b.info.r600_num_backends;
-	unsigned i, mask = 0;
-	uint64_t va;
-
-	/* if backend_map query is supported by the kernel */
-	if (ctx->screen->b.info.r600_backend_map_valid) {
-		unsigned num_tile_pipes = ctx->screen->b.info.r600_num_tile_pipes;
-		unsigned backend_map = ctx->screen->b.info.r600_backend_map;
-		unsigned item_width, item_mask;
-
-		if (ctx->b.chip_class >= EVERGREEN) {
-			item_width = 4;
-			item_mask = 0x7;
-		} else {
-			item_width = 2;
-			item_mask = 0x3;
-		}
-
-		while(num_tile_pipes--) {
-			i = backend_map & item_mask;
-			mask |= (1<<i);
-			backend_map >>= item_width;
-		}
-		if (mask != 0) {
-			ctx->backend_mask = mask;
-			return;
-		}
-	}
-
-	/* otherwise backup path for older kernels */
-
-	/* create buffer for event data */
-	buffer = (struct r600_resource*)
-		pipe_buffer_create(&ctx->screen->b.b, PIPE_BIND_CUSTOM,
-				   PIPE_USAGE_STAGING, ctx->max_db*16);
-	if (!buffer)
-		goto err;
-	va = r600_resource_va(&ctx->screen->b.b, (void*)buffer);
-
-	/* initialize buffer with zeroes */
-	results = r600_buffer_map_sync_with_rings(&ctx->b, buffer, PIPE_TRANSFER_WRITE);
-	if (results) {
-		memset(results, 0, ctx->max_db * 4 * 4);
-		ctx->b.ws->buffer_unmap(buffer->cs_buf);
-
-		/* emit EVENT_WRITE for ZPASS_DONE */
-		cs->buf[cs->cdw++] = PKT3(PKT3_EVENT_WRITE, 2, 0);
-		cs->buf[cs->cdw++] = EVENT_TYPE(EVENT_TYPE_ZPASS_DONE) | EVENT_INDEX(1);
-		cs->buf[cs->cdw++] = va;
-		cs->buf[cs->cdw++] = (va >> 32UL) & 0xFF;
-
-		cs->buf[cs->cdw++] = PKT3(PKT3_NOP, 0, 0);
-		cs->buf[cs->cdw++] = r600_context_bo_reloc(&ctx->b, &ctx->b.rings.gfx, buffer, RADEON_USAGE_WRITE);
-
-		/* analyze results */
-		results = r600_buffer_map_sync_with_rings(&ctx->b, buffer, PIPE_TRANSFER_READ);
-		if (results) {
-			for(i = 0; i < ctx->max_db; i++) {
-				/* at least highest bit will be set if backend is used */
-				if (results[i*4 + 1])
-					mask |= (1<<i);
-			}
-			ctx->b.ws->buffer_unmap(buffer->cs_buf);
-		}
-	}
-
-	pipe_resource_reference((struct pipe_resource**)&buffer, NULL);
-
-	if (mask != 0) {
-		ctx->backend_mask = mask;
-		return;
-	}
-
-err:
-	/* fallback to old method - set num_backends lower bits to 1 */
-	ctx->backend_mask = (~((uint32_t)0))>>(32-num_backends);
-	return;
-}
 
 void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 			boolean count_draw_in)
 {
+
 	if (!ctx->b.ws->cs_memory_below_limit(ctx->b.rings.gfx.cs, ctx->b.vram, ctx->b.gtt)) {
 		ctx->b.gtt = 0;
 		ctx->b.vram = 0;
@@ -137,7 +54,7 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 		for (i = 0; i < R600_NUM_ATOMS; i++) {
 			if (ctx->atoms[i] && ctx->atoms[i]->dirty) {
 				num_dw += ctx->atoms[i]->num_dw;
-				if (ctx->screen->trace_bo) {
+				if (ctx->screen->b.trace_bo) {
 					num_dw += R600_TRACE_CS_DWORDS;
 				}
 			}
@@ -145,13 +62,13 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 
 		/* The upper-bound of how much space a draw command would take. */
 		num_dw += R600_MAX_FLUSH_CS_DWORDS + R600_MAX_DRAW_CS_DWORDS;
-		if (ctx->screen->trace_bo) {
+		if (ctx->screen->b.trace_bo) {
 			num_dw += R600_TRACE_CS_DWORDS;
 		}
 	}
 
 	/* Count in queries_suspend. */
-	num_dw += ctx->num_cs_dw_nontimer_queries_suspend;
+	num_dw += ctx->b.num_cs_dw_nontimer_queries_suspend;
 
 	/* Count in streamout_end at the end of CS. */
 	if (ctx->b.streamout.begin_emitted) {
@@ -159,7 +76,7 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 	}
 
 	/* Count in render_condition(NULL) at the end of CS. */
-	if (ctx->predicate_drawing) {
+	if (ctx->b.predicate_drawing) {
 		num_dw += 3;
 	}
 
@@ -293,7 +210,7 @@ void r600_flush_emit(struct r600_context *rctx)
 				S_0085F0_SMX_ACTION_ENA(1);
 	}
 
-	if (cp_coher_cntl && !rctx->skip_surface_sync_on_next_cs_flush) {
+	if (cp_coher_cntl) {
 		cs->buf[cs->cdw++] = PKT3(PKT3_SURFACE_SYNC, 3, 0);
 		cs->buf[cs->cdw++] = cp_coher_cntl;   /* CP_COHER_CNTL */
 		cs->buf[cs->cdw++] = 0xffffffff;      /* CP_COHER_SIZE */
@@ -317,13 +234,13 @@ void r600_context_flush(struct r600_context *ctx, unsigned flags)
 {
 	struct radeon_winsys_cs *cs = ctx->b.rings.gfx.cs;
 
-	ctx->nontimer_queries_suspended = false;
+	ctx->b.nontimer_queries_suspended = false;
 	ctx->b.streamout.suspended = false;
 
 	/* suspend queries */
-	if (ctx->num_cs_dw_nontimer_queries_suspend) {
-		r600_suspend_nontimer_queries(ctx);
-		ctx->nontimer_queries_suspended = true;
+	if (ctx->b.num_cs_dw_nontimer_queries_suspend) {
+		r600_suspend_nontimer_queries(&ctx->b);
+		ctx->b.nontimer_queries_suspended = true;
 	}
 
 	if (ctx->b.streamout.begin_emitted) {
@@ -353,9 +270,7 @@ void r600_context_flush(struct r600_context *ctx, unsigned flags)
 	}
 
 	/* Flush the CS. */
-	ctx->b.ws->cs_flush(ctx->b.rings.gfx.cs, flags, ctx->screen->cs_count++);
-
-	ctx->skip_surface_sync_on_next_cs_flush = false;
+	ctx->b.ws->cs_flush(ctx->b.rings.gfx.cs, flags, ctx->screen->b.cs_count++);
 }
 
 void r600_begin_new_cs(struct r600_context *ctx)
@@ -386,6 +301,12 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	ctx->config_state.atom.dirty = true;
 	ctx->stencil_ref.atom.dirty = true;
 	ctx->vertex_fetch_shader.atom.dirty = true;
+	ctx->export_shader.atom.dirty = true;
+	if (ctx->gs_shader) {
+		ctx->geometry_shader.atom.dirty = true;
+		ctx->shader_stages.atom.dirty = true;
+		ctx->gs_rings.atom.dirty = true;
+	}
 	ctx->vertex_shader.atom.dirty = true;
 	ctx->viewport.atom.dirty = true;
 
@@ -423,15 +344,15 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	}
 
 	/* resume queries */
-	if (ctx->nontimer_queries_suspended) {
-		r600_resume_nontimer_queries(ctx);
+	if (ctx->b.nontimer_queries_suspended) {
+		r600_resume_nontimer_queries(&ctx->b);
 	}
 
 	/* Re-emit the draw state. */
 	ctx->last_primitive_type = -1;
 	ctx->last_start_instance = -1;
 
-	ctx->initial_gfx_cs_size = ctx->b.rings.gfx.cs->cdw;
+	ctx->b.initial_gfx_cs_size = ctx->b.rings.gfx.cs->cdw;
 }
 
 /* The max number of bytes to copy per packet. */
@@ -445,7 +366,13 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 	struct radeon_winsys_cs *cs = rctx->b.rings.gfx.cs;
 
 	assert(size);
-	assert(rctx->screen->has_cp_dma);
+	assert(rctx->screen->b.has_cp_dma);
+
+	/* Mark the buffer range of destination as valid (initialized),
+	 * so that transfer_map knows it should wait for the GPU when mapping
+	 * that range. */
+	util_range_add(&r600_resource(dst)->valid_buffer_range, dst_offset,
+		       dst_offset + size);
 
 	dst_offset += r600_resource_va(&rctx->screen->b.b, dst);
 	src_offset += r600_resource_va(&rctx->screen->b.b, src);
@@ -506,9 +433,6 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 	rctx->b.flags |= R600_CONTEXT_INV_CONST_CACHE |
 			 R600_CONTEXT_INV_VERTEX_CACHE |
 			 R600_CONTEXT_INV_TEX_CACHE;
-
-	util_range_add(&r600_resource(dst)->valid_buffer_range, dst_offset,
-		       dst_offset + size);
 }
 
 void r600_need_dma_space(struct r600_context *ctx, unsigned num_dw)
@@ -533,6 +457,12 @@ void r600_dma_copy(struct r600_context *rctx,
 	struct r600_resource *rdst = (struct r600_resource*)dst;
 	struct r600_resource *rsrc = (struct r600_resource*)src;
 
+	/* Mark the buffer range of destination as valid (initialized),
+	 * so that transfer_map knows it should wait for the GPU when mapping
+	 * that range. */
+	util_range_add(&rdst->valid_buffer_range, dst_offset,
+		       dst_offset + size);
+
 	/* make sure that the dma ring is only one active */
 	rctx->b.rings.gfx.flush(rctx, RADEON_FLUSH_ASYNC);
 
@@ -555,7 +485,4 @@ void r600_dma_copy(struct r600_context *rctx,
 		src_offset += csize << shift;
 		size -= csize;
 	}
-
-	util_range_add(&rdst->valid_buffer_range, dst_offset,
-		       dst_offset + size);
 }

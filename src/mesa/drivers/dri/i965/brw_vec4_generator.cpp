@@ -142,8 +142,6 @@ vec4_generator::vec4_generator(struct brw_context *brw,
    : brw(brw), shader_prog(shader_prog), prog(prog), prog_data(prog_data),
      mem_ctx(mem_ctx), debug_flag(debug_flag)
 {
-   shader = shader_prog ? shader_prog->_LinkedShaders[MESA_SHADER_VERTEX] : NULL;
-
    p = rzalloc(mem_ctx, struct brw_compile);
    brw_init_compile(brw, p, mem_ctx);
 }
@@ -299,11 +297,15 @@ vec4_generator::generate_tex(vec4_instruction *inst,
       case SHADER_OPCODE_TXF:
 	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
 	 break;
-      case SHADER_OPCODE_TXF_MS:
+      case SHADER_OPCODE_TXF_CMS:
          if (brw->gen >= 7)
             msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS;
          else
             msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
+         break;
+      case SHADER_OPCODE_TXF_MCS:
+         assert(brw->gen >= 7);
+         msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD_MCS;
          break;
       case SHADER_OPCODE_TXS:
 	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_RESINFO;
@@ -323,7 +325,7 @@ vec4_generator::generate_tex(vec4_instruction *inst,
          }
          break;
       default:
-	 assert(!"should not get here: invalid VS texture opcode");
+	 assert(!"should not get here: invalid vec4 texture opcode");
 	 break;
       }
    } else {
@@ -352,7 +354,7 @@ vec4_generator::generate_tex(vec4_instruction *inst,
 	 assert(inst->mlen == 2);
 	 break;
       default:
-	 assert(!"should not get here: invalid VS texture opcode");
+	 assert(!"should not get here: invalid vec4 texture opcode");
 	 break;
       }
    }
@@ -363,23 +365,45 @@ vec4_generator::generate_tex(vec4_instruction *inst,
     * to set it up explicitly and load the offset bitfield.  Otherwise, we can
     * use an implied move from g0 to the first message register.
     */
-   if (inst->texture_offset) {
-      /* Explicitly set up the message header by copying g0 to the MRF. */
-      brw_push_insn_state(p);
-      brw_set_mask_control(p, BRW_MASK_DISABLE);
-      brw_MOV(p, retype(brw_message_reg(inst->base_mrf), BRW_REGISTER_TYPE_UD),
-	         retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
+   if (inst->header_present) {
+      if (brw->gen < 6 && !inst->texture_offset) {
+         /* Set up an implied move from g0 to the MRF. */
+         src = brw_vec8_grf(0, 0);
+      } else {
+         struct brw_reg header =
+            retype(brw_message_reg(inst->base_mrf), BRW_REGISTER_TYPE_UD);
 
-      /* Then set the offset bits in DWord 2. */
-      brw_set_access_mode(p, BRW_ALIGN_1);
-      brw_MOV(p,
-	      retype(brw_vec1_reg(BRW_MESSAGE_REGISTER_FILE, inst->base_mrf, 2),
-		     BRW_REGISTER_TYPE_UD),
-	      brw_imm_ud(inst->texture_offset));
-      brw_pop_insn_state(p);
-   } else if (inst->header_present) {
-      /* Set up an implied move from g0 to the MRF. */
-      src = brw_vec8_grf(0, 0);
+         /* Explicitly set up the message header by copying g0 to the MRF. */
+         brw_push_insn_state(p);
+         brw_set_mask_control(p, BRW_MASK_DISABLE);
+         brw_MOV(p, header, retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UD));
+
+         brw_set_access_mode(p, BRW_ALIGN_1);
+
+         if (inst->texture_offset) {
+            /* Set the texel offset bits in DWord 2. */
+            brw_MOV(p, get_element_ud(header, 2),
+                    brw_imm_ud(inst->texture_offset));
+         }
+
+         if (inst->sampler >= 16) {
+            /* The "Sampler Index" field can only store values between 0 and 15.
+             * However, we can add an offset to the "Sampler State Pointer"
+             * field, effectively selecting a different set of 16 samplers.
+             *
+             * The "Sampler State Pointer" needs to be aligned to a 32-byte
+             * offset, and each sampler state is only 16-bytes, so we can't
+             * exclusively use the offset - we have to use both.
+             */
+            assert(brw->is_haswell); /* field only exists on Haswell */
+            brw_ADD(p,
+                    get_element_ud(header, 3),
+                    get_element_ud(brw_vec8_grf(0, 0), 3),
+                    brw_imm_ud(16 * (inst->sampler / 16) *
+                               sizeof(gen7_sampler_state)));
+         }
+         brw_pop_insn_state(p);
+      }
    }
 
    uint32_t return_format;
@@ -406,7 +430,7 @@ vec4_generator::generate_tex(vec4_instruction *inst,
 	      inst->base_mrf,
 	      src,
               surface_index,
-	      inst->sampler,
+	      inst->sampler % 16,
 	      msg_type,
 	      1, /* response length */
 	      inst->mlen,
@@ -1137,7 +1161,8 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
    case SHADER_OPCODE_TEX:
    case SHADER_OPCODE_TXD:
    case SHADER_OPCODE_TXF:
-   case SHADER_OPCODE_TXF_MS:
+   case SHADER_OPCODE_TXF_CMS:
+   case SHADER_OPCODE_TXF_MCS:
    case SHADER_OPCODE_TXL:
    case SHADER_OPCODE_TXS:
    case SHADER_OPCODE_TG4:
@@ -1213,10 +1238,10 @@ vec4_generator::generate_vec4_instruction(vec4_instruction *instruction,
 
    default:
       if (inst->opcode < (int) ARRAY_SIZE(opcode_descs)) {
-         _mesa_problem(&brw->ctx, "Unsupported opcode in `%s' in VS\n",
+         _mesa_problem(&brw->ctx, "Unsupported opcode in `%s' in vec4\n",
                        opcode_descs[inst->opcode].name);
       } else {
-         _mesa_problem(&brw->ctx, "Unsupported opcode %d in VS", inst->opcode);
+         _mesa_problem(&brw->ctx, "Unsupported opcode %d in vec4", inst->opcode);
       }
       abort();
    }
@@ -1230,7 +1255,7 @@ vec4_generator::generate_code(exec_list *instructions)
    const void *last_annotation_ir = NULL;
 
    if (unlikely(debug_flag)) {
-      if (shader) {
+      if (prog) {
          printf("Native code for vertex shader %d:\n", shader_prog->Name);
       } else {
          printf("Native code for vertex program %d:\n", prog->Id);
@@ -1246,7 +1271,7 @@ vec4_generator::generate_code(exec_list *instructions)
 	    last_annotation_ir = inst->ir;
 	    if (last_annotation_ir) {
 	       printf("   ");
-               if (shader) {
+               if (prog) {
                   ((ir_instruction *) last_annotation_ir)->print();
                } else {
                   const prog_instruction *vpi;

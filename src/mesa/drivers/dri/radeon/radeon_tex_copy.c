@@ -50,8 +50,8 @@ do_copy_texsubimage(struct gl_context *ctx,
     const GLuint level = timg->base.Base.Level;
     unsigned src_bpp;
     unsigned dst_bpp;
-    gl_format src_mesaformat;
-    gl_format dst_mesaformat;
+    mesa_format src_mesaformat;
+    mesa_format dst_mesaformat;
     unsigned flip_y;
 
     if (!radeon->vtbl.blit) {
@@ -108,16 +108,16 @@ do_copy_texsubimage(struct gl_context *ctx,
 
 	    switch (dst_bpp) {
 	    case 2:
-		    src_mesaformat = MESA_FORMAT_RGB565;
-		    dst_mesaformat = MESA_FORMAT_RGB565;
+		    src_mesaformat = MESA_FORMAT_B5G6R5_UNORM;
+		    dst_mesaformat = MESA_FORMAT_B5G6R5_UNORM;
 		    break;
 	    case 4:
-		    src_mesaformat = MESA_FORMAT_ARGB8888;
-		    dst_mesaformat = MESA_FORMAT_ARGB8888;
+		    src_mesaformat = MESA_FORMAT_B8G8R8A8_UNORM;
+		    dst_mesaformat = MESA_FORMAT_B8G8R8A8_UNORM;
 		    break;
 	    case 1:
-		    src_mesaformat = MESA_FORMAT_A8;
-		    dst_mesaformat = MESA_FORMAT_A8;
+		    src_mesaformat = MESA_FORMAT_A_UNORM8;
+		    dst_mesaformat = MESA_FORMAT_A_UNORM8;
 		    break;
 	    default:
 		    return GL_FALSE;

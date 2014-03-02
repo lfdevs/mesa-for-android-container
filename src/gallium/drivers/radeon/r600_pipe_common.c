@@ -24,10 +24,103 @@
  *
  */
 
+#include "radeon/radeon_uvd.h"
 #include "r600_pipe_common.h"
 #include "r600_cs.h"
 #include "tgsi/tgsi_parse.h"
+#include "util/u_memory.h"
 #include "util/u_format_s3tc.h"
+#include "util/u_upload_mgr.h"
+#include "vl/vl_decoder.h"
+#include "vl/vl_video_buffer.h"
+#include <inttypes.h>
+
+/*
+ * pipe_context
+ */
+
+bool r600_common_context_init(struct r600_common_context *rctx,
+			      struct r600_common_screen *rscreen)
+{
+	util_slab_create(&rctx->pool_transfers,
+			 sizeof(struct r600_transfer), 64,
+			 UTIL_SLAB_SINGLETHREADED);
+
+	rctx->screen = rscreen;
+	rctx->ws = rscreen->ws;
+	rctx->family = rscreen->family;
+	rctx->chip_class = rscreen->chip_class;
+	rctx->max_db = rscreen->chip_class >= EVERGREEN ? 8 : 4;
+
+	rctx->b.transfer_map = u_transfer_map_vtbl;
+	rctx->b.transfer_flush_region = u_default_transfer_flush_region;
+	rctx->b.transfer_unmap = u_transfer_unmap_vtbl;
+	rctx->b.transfer_inline_write = u_default_transfer_inline_write;
+
+	r600_streamout_init(rctx);
+	r600_query_init(rctx);
+
+	rctx->allocator_so_filled_size = u_suballocator_create(&rctx->b, 4096, 4,
+							       0, PIPE_USAGE_STATIC, TRUE);
+	if (!rctx->allocator_so_filled_size)
+		return false;
+
+	rctx->uploader = u_upload_create(&rctx->b, 1024 * 1024, 256,
+					PIPE_BIND_INDEX_BUFFER |
+					PIPE_BIND_CONSTANT_BUFFER);
+	if (!rctx->uploader)
+		return false;
+
+	return true;
+}
+
+void r600_common_context_cleanup(struct r600_common_context *rctx)
+{
+	if (rctx->rings.gfx.cs) {
+		rctx->ws->cs_destroy(rctx->rings.gfx.cs);
+	}
+	if (rctx->rings.dma.cs) {
+		rctx->ws->cs_destroy(rctx->rings.dma.cs);
+	}
+
+	if (rctx->uploader) {
+		u_upload_destroy(rctx->uploader);
+	}
+
+	util_slab_destroy(&rctx->pool_transfers);
+
+	if (rctx->allocator_so_filled_size) {
+		u_suballocator_destroy(rctx->allocator_so_filled_size);
+	}
+}
+
+void r600_context_add_resource_size(struct pipe_context *ctx, struct pipe_resource *r)
+{
+	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
+	struct r600_resource *rr = (struct r600_resource *)r;
+
+	if (r == NULL) {
+		return;
+	}
+
+	/*
+	 * The idea is to compute a gross estimate of memory requirement of
+	 * each draw call. After each draw call, memory will be precisely
+	 * accounted. So the uncertainty is only on the current draw call.
+	 * In practice this gave very good estimate (+/- 10% of the target
+	 * memory limit).
+	 */
+	if (rr->domains & RADEON_DOMAIN_GTT) {
+		rctx->gtt += rr->buf->size;
+	}
+	if (rr->domains & RADEON_DOMAIN_VRAM) {
+		rctx->vram += rr->buf->size;
+	}
+}
+
+/*
+ * pipe_screen
+ */
 
 static const struct debug_named_value common_debug_options[] = {
 	/* logging */
@@ -44,8 +137,304 @@ static const struct debug_named_value common_debug_options[] = {
 	{ "ps", DBG_PS, "Print pixel shaders" },
 	{ "cs", DBG_CS, "Print compute shaders" },
 
+	{ "hyperz", DBG_HYPERZ, "Enable Hyper-Z" },
+	/* GL uses the word INVALIDATE, gallium uses the word DISCARD */
+	{ "noinvalrange", DBG_NO_DISCARD_RANGE, "Disable handling of INVALIDATE_RANGE map flags" },
+
 	DEBUG_NAMED_VALUE_END /* must be last */
 };
+
+static const char* r600_get_vendor(struct pipe_screen* pscreen)
+{
+	return "X.Org";
+}
+
+static const char* r600_get_name(struct pipe_screen* pscreen)
+{
+	struct r600_common_screen *rscreen = (struct r600_common_screen*)pscreen;
+
+	switch (rscreen->family) {
+	case CHIP_R600: return "AMD R600";
+	case CHIP_RV610: return "AMD RV610";
+	case CHIP_RV630: return "AMD RV630";
+	case CHIP_RV670: return "AMD RV670";
+	case CHIP_RV620: return "AMD RV620";
+	case CHIP_RV635: return "AMD RV635";
+	case CHIP_RS780: return "AMD RS780";
+	case CHIP_RS880: return "AMD RS880";
+	case CHIP_RV770: return "AMD RV770";
+	case CHIP_RV730: return "AMD RV730";
+	case CHIP_RV710: return "AMD RV710";
+	case CHIP_RV740: return "AMD RV740";
+	case CHIP_CEDAR: return "AMD CEDAR";
+	case CHIP_REDWOOD: return "AMD REDWOOD";
+	case CHIP_JUNIPER: return "AMD JUNIPER";
+	case CHIP_CYPRESS: return "AMD CYPRESS";
+	case CHIP_HEMLOCK: return "AMD HEMLOCK";
+	case CHIP_PALM: return "AMD PALM";
+	case CHIP_SUMO: return "AMD SUMO";
+	case CHIP_SUMO2: return "AMD SUMO2";
+	case CHIP_BARTS: return "AMD BARTS";
+	case CHIP_TURKS: return "AMD TURKS";
+	case CHIP_CAICOS: return "AMD CAICOS";
+	case CHIP_CAYMAN: return "AMD CAYMAN";
+	case CHIP_ARUBA: return "AMD ARUBA";
+	case CHIP_TAHITI: return "AMD TAHITI";
+	case CHIP_PITCAIRN: return "AMD PITCAIRN";
+	case CHIP_VERDE: return "AMD CAPE VERDE";
+	case CHIP_OLAND: return "AMD OLAND";
+	case CHIP_HAINAN: return "AMD HAINAN";
+	case CHIP_BONAIRE: return "AMD BONAIRE";
+	case CHIP_KAVERI: return "AMD KAVERI";
+	case CHIP_KABINI: return "AMD KABINI";
+	case CHIP_HAWAII: return "AMD HAWAII";
+	default: return "AMD unknown";
+	}
+}
+
+static float r600_get_paramf(struct pipe_screen* pscreen,
+			     enum pipe_capf param)
+{
+	struct r600_common_screen *rscreen = (struct r600_common_screen *)pscreen;
+
+	switch (param) {
+	case PIPE_CAPF_MAX_LINE_WIDTH:
+	case PIPE_CAPF_MAX_LINE_WIDTH_AA:
+	case PIPE_CAPF_MAX_POINT_WIDTH:
+	case PIPE_CAPF_MAX_POINT_WIDTH_AA:
+		if (rscreen->family >= CHIP_CEDAR)
+			return 16384.0f;
+		else
+			return 8192.0f;
+	case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
+		return 16.0f;
+	case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
+		return 16.0f;
+	case PIPE_CAPF_GUARD_BAND_LEFT:
+	case PIPE_CAPF_GUARD_BAND_TOP:
+	case PIPE_CAPF_GUARD_BAND_RIGHT:
+	case PIPE_CAPF_GUARD_BAND_BOTTOM:
+		return 0.0f;
+	}
+	return 0.0f;
+}
+
+static int r600_get_video_param(struct pipe_screen *screen,
+				enum pipe_video_profile profile,
+				enum pipe_video_entrypoint entrypoint,
+				enum pipe_video_cap param)
+{
+	switch (param) {
+	case PIPE_VIDEO_CAP_SUPPORTED:
+		return vl_profile_supported(screen, profile, entrypoint);
+	case PIPE_VIDEO_CAP_NPOT_TEXTURES:
+		return 1;
+	case PIPE_VIDEO_CAP_MAX_WIDTH:
+	case PIPE_VIDEO_CAP_MAX_HEIGHT:
+		return vl_video_buffer_max_size(screen);
+	case PIPE_VIDEO_CAP_PREFERED_FORMAT:
+		return PIPE_FORMAT_NV12;
+	case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
+		return false;
+	case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
+		return false;
+	case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
+		return true;
+	case PIPE_VIDEO_CAP_MAX_LEVEL:
+		return vl_level_supported(screen, profile);
+	default:
+		return 0;
+	}
+}
+
+const char *r600_get_llvm_processor_name(enum radeon_family family)
+{
+	switch (family) {
+	case CHIP_R600:
+	case CHIP_RV630:
+	case CHIP_RV635:
+	case CHIP_RV670:
+		return "r600";
+	case CHIP_RV610:
+	case CHIP_RV620:
+	case CHIP_RS780:
+	case CHIP_RS880:
+		return "rs880";
+	case CHIP_RV710:
+		return "rv710";
+	case CHIP_RV730:
+		return "rv730";
+	case CHIP_RV740:
+	case CHIP_RV770:
+		return "rv770";
+	case CHIP_PALM:
+	case CHIP_CEDAR:
+		return "cedar";
+	case CHIP_SUMO:
+	case CHIP_SUMO2:
+		return "sumo";
+	case CHIP_REDWOOD:
+		return "redwood";
+	case CHIP_JUNIPER:
+		return "juniper";
+	case CHIP_HEMLOCK:
+	case CHIP_CYPRESS:
+		return "cypress";
+	case CHIP_BARTS:
+		return "barts";
+	case CHIP_TURKS:
+		return "turks";
+	case CHIP_CAICOS:
+		return "caicos";
+	case CHIP_CAYMAN:
+        case CHIP_ARUBA:
+		return "cayman";
+
+	case CHIP_TAHITI: return "tahiti";
+	case CHIP_PITCAIRN: return "pitcairn";
+	case CHIP_VERDE: return "verde";
+	case CHIP_OLAND: return "oland";
+#if HAVE_LLVM <= 0x0303
+	default:
+		fprintf(stderr, "%s: Unknown chipset = %i, defaulting to Southern Islands\n",
+			__func__, family);
+		return "SI";
+#else
+	case CHIP_HAINAN: return "hainan";
+	case CHIP_BONAIRE: return "bonaire";
+	case CHIP_KABINI: return "kabini";
+	case CHIP_KAVERI: return "kaveri";
+	case CHIP_HAWAII: return "hawaii";
+	default: return "";
+#endif
+	}
+}
+
+static int r600_get_compute_param(struct pipe_screen *screen,
+        enum pipe_compute_cap param,
+        void *ret)
+{
+	struct r600_common_screen *rscreen = (struct r600_common_screen *)screen;
+
+	//TODO: select these params by asic
+	switch (param) {
+	case PIPE_COMPUTE_CAP_IR_TARGET: {
+		const char *gpu = r600_get_llvm_processor_name(rscreen->family);
+		if (ret) {
+			sprintf(ret, "%s-r600--", gpu);
+		}
+		return (8 + strlen(gpu)) * sizeof(char);
+	}
+	case PIPE_COMPUTE_CAP_GRID_DIMENSION:
+		if (ret) {
+			uint64_t *grid_dimension = ret;
+			grid_dimension[0] = 3;
+		}
+		return 1 * sizeof(uint64_t);
+
+	case PIPE_COMPUTE_CAP_MAX_GRID_SIZE:
+		if (ret) {
+			uint64_t *grid_size = ret;
+			grid_size[0] = 65535;
+			grid_size[1] = 65535;
+			grid_size[2] = 1;
+		}
+		return 3 * sizeof(uint64_t) ;
+
+	case PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE:
+		if (ret) {
+			uint64_t *block_size = ret;
+			block_size[0] = 256;
+			block_size[1] = 256;
+			block_size[2] = 256;
+		}
+		return 3 * sizeof(uint64_t);
+
+	case PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK:
+		if (ret) {
+			uint64_t *max_threads_per_block = ret;
+			*max_threads_per_block = 256;
+		}
+		return sizeof(uint64_t);
+
+	case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:
+		if (ret) {
+			uint64_t *max_global_size = ret;
+			/* XXX: This is what the proprietary driver reports, we
+			 * may want to use a different value. */
+			/* XXX: Not sure what to put here for SI. */
+			if (rscreen->chip_class >= SI)
+				*max_global_size = 2000000000;
+			else
+				*max_global_size = 201326592;
+		}
+		return sizeof(uint64_t);
+
+	case PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE:
+		if (ret) {
+			uint64_t *max_local_size = ret;
+			/* Value reported by the closed source driver. */
+			*max_local_size = 32768;
+		}
+		return sizeof(uint64_t);
+
+	case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE:
+		if (ret) {
+			uint64_t *max_input_size = ret;
+			/* Value reported by the closed source driver. */
+			*max_input_size = 1024;
+		}
+		return sizeof(uint64_t);
+
+	case PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE:
+		if (ret) {
+			uint64_t max_global_size;
+			uint64_t *max_mem_alloc_size = ret;
+			r600_get_compute_param(screen, PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE, &max_global_size);
+			/* OpenCL requres this value be at least
+			 * max(MAX_GLOBAL_SIZE / 4, 128 * 1024 *1024)
+			 * I'm really not sure what value to report here, but
+			 * MAX_GLOBAL_SIZE / 4 seems resonable.
+			 */
+			*max_mem_alloc_size = max_global_size / 4;
+		}
+		return sizeof(uint64_t);
+
+	default:
+		fprintf(stderr, "unknown PIPE_COMPUTE_CAP %d\n", param);
+		return 0;
+	}
+}
+
+static uint64_t r600_get_timestamp(struct pipe_screen *screen)
+{
+	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
+
+	return 1000000 * rscreen->ws->query_value(rscreen->ws, RADEON_TIMESTAMP) /
+			rscreen->info.r600_clock_crystal_freq;
+}
+
+static int r600_get_driver_query_info(struct pipe_screen *screen,
+				      unsigned index,
+				      struct pipe_driver_query_info *info)
+{
+	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
+	struct pipe_driver_query_info list[] = {
+		{"draw-calls", R600_QUERY_DRAW_CALLS, 0},
+		{"requested-VRAM", R600_QUERY_REQUESTED_VRAM, rscreen->info.vram_size, TRUE},
+		{"requested-GTT", R600_QUERY_REQUESTED_GTT, rscreen->info.gart_size, TRUE},
+		{"buffer-wait-time", R600_QUERY_BUFFER_WAIT_TIME, 0, FALSE}
+	};
+
+	if (!info)
+		return Elements(list);
+
+	if (index >= Elements(list))
+		return 0;
+
+	*info = list[index];
+	return 1;
+}
 
 static void r600_fence_reference(struct pipe_screen *screen,
 				 struct pipe_fence_handle **ptr,
@@ -185,14 +574,41 @@ static bool r600_init_tiling(struct r600_common_screen *rscreen)
 	}
 }
 
+struct pipe_resource *r600_resource_create_common(struct pipe_screen *screen,
+						  const struct pipe_resource *templ)
+{
+	if (templ->target == PIPE_BUFFER) {
+		return r600_buffer_create(screen, templ, 4096);
+	} else {
+		return r600_texture_create(screen, templ);
+	}
+}
+
 bool r600_common_screen_init(struct r600_common_screen *rscreen,
 			     struct radeon_winsys *ws)
 {
 	ws->query_info(ws, &rscreen->info);
 
+	rscreen->b.get_name = r600_get_name;
+	rscreen->b.get_vendor = r600_get_vendor;
+	rscreen->b.get_compute_param = r600_get_compute_param;
+	rscreen->b.get_paramf = r600_get_paramf;
+	rscreen->b.get_driver_query_info = r600_get_driver_query_info;
+	rscreen->b.get_timestamp = r600_get_timestamp;
 	rscreen->b.fence_finish = r600_fence_finish;
 	rscreen->b.fence_reference = r600_fence_reference;
 	rscreen->b.fence_signalled = r600_fence_signalled;
+	rscreen->b.resource_destroy = u_resource_destroy_vtbl;
+
+	if (rscreen->info.has_uvd) {
+		rscreen->b.get_video_param = ruvd_get_video_param;
+		rscreen->b.is_video_format_supported = ruvd_is_format_supported;
+	} else {
+		rscreen->b.get_video_param = r600_get_video_param;
+		rscreen->b.is_video_format_supported = vl_video_buffer_is_format_supported;
+	}
+
+	r600_init_texture_functions(rscreen);
 
 	rscreen->ws = ws;
 	rscreen->family = rscreen->info.family;
@@ -202,65 +618,35 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	if (!r600_init_tiling(rscreen)) {
 		return false;
 	}
-
 	util_format_s3tc_init();
-
 	pipe_mutex_init(rscreen->aux_context_lock);
+
+	if (rscreen->info.drm_minor >= 28 && (rscreen->debug_flags & DBG_TRACE_CS)) {
+		rscreen->trace_bo = (struct r600_resource*)pipe_buffer_create(&rscreen->b,
+										PIPE_BIND_CUSTOM,
+										PIPE_USAGE_STAGING,
+										4096);
+		if (rscreen->trace_bo) {
+			rscreen->trace_ptr = rscreen->ws->buffer_map(rscreen->trace_bo->cs_buf, NULL,
+									PIPE_TRANSFER_UNSYNCHRONIZED);
+		}
+	}
+
 	return true;
 }
 
-void r600_common_screen_cleanup(struct r600_common_screen *rscreen)
+void r600_destroy_common_screen(struct r600_common_screen *rscreen)
 {
 	pipe_mutex_destroy(rscreen->aux_context_lock);
 	rscreen->aux_context->destroy(rscreen->aux_context);
-}
 
-bool r600_common_context_init(struct r600_common_context *rctx,
-			      struct r600_common_screen *rscreen)
-{
-	rctx->ws = rscreen->ws;
-	rctx->family = rscreen->family;
-	rctx->chip_class = rscreen->chip_class;
-
-	r600_streamout_init(rctx);
-
-	rctx->allocator_so_filled_size = u_suballocator_create(&rctx->b, 4096, 4,
-							       0, PIPE_USAGE_STATIC, TRUE);
-	if (!rctx->allocator_so_filled_size)
-		return false;
-
-	return true;
-}
-
-void r600_common_context_cleanup(struct r600_common_context *rctx)
-{
-	if (rctx->allocator_so_filled_size) {
-		u_suballocator_destroy(rctx->allocator_so_filled_size);
-	}
-}
-
-void r600_context_add_resource_size(struct pipe_context *ctx, struct pipe_resource *r)
-{
-	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
-	struct r600_resource *rr = (struct r600_resource *)r;
-
-	if (r == NULL) {
-		return;
+	if (rscreen->trace_bo) {
+		rscreen->ws->buffer_unmap(rscreen->trace_bo->cs_buf);
+		pipe_resource_reference((struct pipe_resource**)&rscreen->trace_bo, NULL);
 	}
 
-	/*
-	 * The idea is to compute a gross estimate of memory requirement of
-	 * each draw call. After each draw call, memory will be precisely
-	 * accounted. So the uncertainty is only on the current draw call.
-	 * In practice this gave very good estimate (+/- 10% of the target
-	 * memory limit).
-	 */
-	if (rr->domains & RADEON_DOMAIN_GTT) {
-		rctx->gtt += rr->buf->size;
-	}
-	if (rr->domains & RADEON_DOMAIN_VRAM) {
-		rctx->vram += rr->buf->size;
-	}
+	rscreen->ws->destroy(rscreen->ws);
+	FREE(rscreen);
 }
 
 static unsigned tgsi_get_processor_type(const struct tgsi_token *tokens)
@@ -304,124 +690,4 @@ void r600_screen_clear_buffer(struct r600_common_screen *rscreen, struct pipe_re
 	rctx->clear_buffer(&rctx->b, dst, offset, size, value);
 	rscreen->aux_context->flush(rscreen->aux_context, NULL, 0);
 	pipe_mutex_unlock(rscreen->aux_context_lock);
-}
-
-boolean r600_rings_is_buffer_referenced(struct r600_common_context *ctx,
-					struct radeon_winsys_cs_handle *buf,
-					enum radeon_bo_usage usage)
-{
-	if (ctx->ws->cs_is_buffer_referenced(ctx->rings.gfx.cs, buf, usage)) {
-		return TRUE;
-	}
-	if (ctx->rings.dma.cs &&
-	    ctx->ws->cs_is_buffer_referenced(ctx->rings.dma.cs, buf, usage)) {
-		return TRUE;
-	}
-	return FALSE;
-}
-
-void *r600_buffer_map_sync_with_rings(struct r600_common_context *ctx,
-                                      struct r600_resource *resource,
-                                      unsigned usage)
-{
-	enum radeon_bo_usage rusage = RADEON_USAGE_READWRITE;
-
-	if (usage & PIPE_TRANSFER_UNSYNCHRONIZED) {
-		return ctx->ws->buffer_map(resource->cs_buf, NULL, usage);
-	}
-
-	if (!(usage & PIPE_TRANSFER_WRITE)) {
-		/* have to wait for the last write */
-		rusage = RADEON_USAGE_WRITE;
-	}
-
-	if (ctx->rings.gfx.cs->cdw &&
-	    ctx->ws->cs_is_buffer_referenced(ctx->rings.gfx.cs,
-					     resource->cs_buf, rusage)) {
-		if (usage & PIPE_TRANSFER_DONTBLOCK) {
-			ctx->rings.gfx.flush(ctx, RADEON_FLUSH_ASYNC);
-			return NULL;
-		} else {
-			ctx->rings.gfx.flush(ctx, 0);
-		}
-	}
-	if (ctx->rings.dma.cs &&
-	    ctx->rings.dma.cs->cdw &&
-	    ctx->ws->cs_is_buffer_referenced(ctx->rings.dma.cs,
-					     resource->cs_buf, rusage)) {
-		if (usage & PIPE_TRANSFER_DONTBLOCK) {
-			ctx->rings.dma.flush(ctx, RADEON_FLUSH_ASYNC);
-			return NULL;
-		} else {
-			ctx->rings.dma.flush(ctx, 0);
-		}
-	}
-
-	if (ctx->ws->buffer_is_busy(resource->buf, rusage)) {
-		if (usage & PIPE_TRANSFER_DONTBLOCK) {
-			return NULL;
-		} else {
-			/* We will be wait for the GPU. Wait for any offloaded
-			 * CS flush to complete to avoid busy-waiting in the winsys. */
-			ctx->ws->cs_sync_flush(ctx->rings.gfx.cs);
-			if (ctx->rings.dma.cs)
-				ctx->ws->cs_sync_flush(ctx->rings.dma.cs);
-		}
-	}
-
-	return ctx->ws->buffer_map(resource->cs_buf, NULL, usage);
-}
-
-bool r600_init_resource(struct r600_common_screen *rscreen,
-			struct r600_resource *res,
-			unsigned size, unsigned alignment,
-			bool use_reusable_pool, unsigned usage)
-{
-	uint32_t initial_domain, domains;
-
-	switch(usage) {
-	case PIPE_USAGE_STAGING:
-		/* Staging resources participate in transfers, i.e. are used
-		 * for uploads and downloads from regular resources.
-		 * We generate them internally for some transfers.
-		 */
-		initial_domain = RADEON_DOMAIN_GTT;
-		domains = RADEON_DOMAIN_GTT;
-		break;
-	case PIPE_USAGE_DYNAMIC:
-	case PIPE_USAGE_STREAM:
-		/* Default to GTT, but allow the memory manager to move it to VRAM. */
-		initial_domain = RADEON_DOMAIN_GTT;
-		domains = RADEON_DOMAIN_GTT | RADEON_DOMAIN_VRAM;
-		break;
-	case PIPE_USAGE_DEFAULT:
-	case PIPE_USAGE_STATIC:
-	case PIPE_USAGE_IMMUTABLE:
-	default:
-		/* Don't list GTT here, because the memory manager would put some
-		 * resources to GTT no matter what the initial domain is.
-		 * Not listing GTT in the domains improves performance a lot. */
-		initial_domain = RADEON_DOMAIN_VRAM;
-		domains = RADEON_DOMAIN_VRAM;
-		break;
-	}
-
-	res->buf = rscreen->ws->buffer_create(rscreen->ws, size, alignment,
-                                              use_reusable_pool,
-                                              initial_domain);
-	if (!res->buf) {
-		return false;
-	}
-
-	res->cs_buf = rscreen->ws->buffer_get_cs_handle(res->buf);
-	res->domains = domains;
-	util_range_set_empty(&res->valid_buffer_range);
-
-	if (rscreen->debug_flags & DBG_VM && res->b.b.target == PIPE_BUFFER) {
-		fprintf(stderr, "VM start=0x%llX  end=0x%llX | Buffer %u bytes\n",
-			r600_resource_va(&rscreen->b, &res->b.b),
-			r600_resource_va(&rscreen->b, &res->b.b) + res->buf->size,
-			res->buf->size);
-	}
-	return true;
 }

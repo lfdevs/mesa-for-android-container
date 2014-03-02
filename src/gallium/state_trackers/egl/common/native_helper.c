@@ -244,7 +244,7 @@ resource_surface_present(struct resource_surface *rsurf,
       return TRUE;
 
    rsurf->screen->flush_frontbuffer(rsurf->screen,
-         pres, 0, 0, winsys_drawable_handle);
+         pres, 0, 0, winsys_drawable_handle, NULL);
 
    return TRUE;
 }
@@ -341,6 +341,21 @@ resource_surface_throttle(struct resource_surface *rsurf)
 }
 
 boolean
+resource_surface_flush_resource(struct resource_surface *rsurf,
+                                struct native_display *ndpy,
+                                enum native_attachment which)
+{
+   struct pipe_context *pipe = ndpy_get_copy_context(ndpy);
+
+   if (!pipe)
+      return FALSE;
+
+   pipe->flush_resource(pipe, rsurf->resources[which]);
+
+   return TRUE;
+}
+
+boolean
 resource_surface_flush(struct resource_surface *rsurf,
 		       struct native_display *ndpy)
 {
@@ -427,6 +442,7 @@ drm_display_import_native_buffer(struct native_display *ndpy,
 
          memset(&wsh, 0, sizeof(wsh));
          wsh.handle = nbuf->u.drm.name;
+         wsh.type = DRM_API_HANDLE_TYPE_SHARED;
          wsh.stride = nbuf->u.drm.stride;
 
          res = screen->resource_from_handle(screen, &nbuf->u.drm.templ, &wsh);

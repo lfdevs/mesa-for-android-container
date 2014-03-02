@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,13 +22,13 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
-  
+
 #include <pthread.h>
 #include "main/imports.h"
 #include "main/enums.h"
@@ -53,13 +53,13 @@ get_new_program_id(struct intel_screen *screen)
 }
 
 static void brwBindProgram( struct gl_context *ctx,
-			    GLenum target, 
+			    GLenum target,
 			    struct gl_program *prog )
 {
    struct brw_context *brw = brw_context(ctx);
 
    switch (target) {
-   case GL_VERTEX_PROGRAM_ARB: 
+   case GL_VERTEX_PROGRAM_ARB:
       brw->state.dirty.brw |= BRW_NEW_VERTEX_PROGRAM;
       break;
    case MESA_GEOMETRY_PROGRAM:
@@ -72,7 +72,7 @@ static void brwBindProgram( struct gl_context *ctx,
 }
 
 static struct gl_program *brwNewProgram( struct gl_context *ctx,
-				      GLenum target, 
+				      GLenum target,
 				      GLuint id )
 {
    struct brw_context *brw = brw_context(ctx);
@@ -237,7 +237,7 @@ brw_get_scratch_bo(struct brw_context *brw,
 
 void brwInitFragProgFuncs( struct dd_function_table *functions )
 {
-   assert(functions->ProgramStringNotify == _tnl_program_string); 
+   assert(functions->ProgramStringNotify == _tnl_program_string);
 
    functions->BindProgram = brwBindProgram;
    functions->NewProgram = brwNewProgram;
@@ -288,7 +288,7 @@ get_written_and_reset(struct brw_context *brw, int i,
                       uint64_t *written, uint64_t *reset)
 {
    enum shader_time_shader_type type = brw->shader_time.types[i];
-   assert(type == ST_VS || type == ST_FS8 || type == ST_FS16);
+   assert(type == ST_VS || type == ST_GS || type == ST_FS8 || type == ST_FS16);
 
    /* Find where we recorded written and reset. */
    int wi, ri;
@@ -340,6 +340,8 @@ brw_report_shader_time(struct brw_context *brw)
       switch (type) {
       case ST_VS_WRITTEN:
       case ST_VS_RESET:
+      case ST_GS_WRITTEN:
+      case ST_GS_RESET:
       case ST_FS8_WRITTEN:
       case ST_FS8_RESET:
       case ST_FS16_WRITTEN:
@@ -349,6 +351,7 @@ brw_report_shader_time(struct brw_context *brw)
          continue;
 
       case ST_VS:
+      case ST_GS:
       case ST_FS8:
       case ST_FS16:
          get_written_and_reset(brw, i, &written, &reset);
@@ -372,6 +375,7 @@ brw_report_shader_time(struct brw_context *brw)
 
       switch (type) {
       case ST_VS:
+      case ST_GS:
       case ST_FS8:
       case ST_FS16:
          total_by_type[type] += scaled[i];
@@ -432,6 +436,9 @@ brw_report_shader_time(struct brw_context *brw)
       case ST_VS:
          stage = "vs";
          break;
+      case ST_GS:
+         stage = "gs";
+         break;
       case ST_FS8:
          stage = "fs8";
          break;
@@ -449,6 +456,7 @@ brw_report_shader_time(struct brw_context *brw)
 
    printf("\n");
    print_shader_time_line("total", "vs", -1, total_by_type[ST_VS], total);
+   print_shader_time_line("total", "gs", -1, total_by_type[ST_GS], total);
    print_shader_time_line("total", "fs8", -1, total_by_type[ST_FS8], total);
    print_shader_time_line("total", "fs16", -1, total_by_type[ST_FS16], total);
 }

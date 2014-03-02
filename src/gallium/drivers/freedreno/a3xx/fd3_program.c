@@ -34,8 +34,11 @@
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_parse.h"
 
+#include "freedreno_lowering.h"
+
 #include "fd3_program.h"
 #include "fd3_compiler.h"
+#include "fd3_emit.h"
 #include "fd3_texture.h"
 #include "fd3_util.h"
 
@@ -56,7 +59,7 @@ assemble_shader(struct pipe_context *pctx, struct fd3_shader_stateobj *so)
 	bin = ir3_shader_assemble(so->ir, &so->info);
 	sz = so->info.sizedwords * 4;
 
-	so->bo = fd_bo_new(ctx->screen->dev, sz,
+	so->bo = fd_bo_new(ctx->dev, sz,
 			DRM_FREEDRENO_GEM_CACHE_WCOMBINE |
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
@@ -86,6 +89,7 @@ create_shader(struct pipe_context *pctx, const struct pipe_shader_state *cso,
 		enum shader_t type)
 {
 	struct fd3_shader_stateobj *so = CALLOC_STRUCT(fd3_shader_stateobj);
+	const struct tgsi_token *tokens = fd_transform_lowering(cso->tokens);
 	int ret;
 
 	if (!so)
@@ -95,13 +99,13 @@ create_shader(struct pipe_context *pctx, const struct pipe_shader_state *cso,
 
 	if (fd_mesa_debug & FD_DBG_DISASM) {
 		DBG("dump tgsi: type=%d", so->type);
-		tgsi_dump(cso->tokens, 0);
+		tgsi_dump(tokens, 0);
 	}
 
 	if ((type == SHADER_FRAGMENT) && (fd_mesa_debug & FD_DBG_FRAGHALF))
 		so->half_precision = true;
 
-	ret = fd3_compile_shader(so, cso->tokens);
+	ret = fd3_compile_shader(so, tokens);
 	if (ret) {
 		debug_error("compile failed!");
 		goto fail;
@@ -175,9 +179,9 @@ fd3_vp_state_bind(struct pipe_context *pctx, void *hwcso)
 }
 
 static void
-emit_shader(struct fd_ringbuffer *ring, struct fd3_shader_stateobj *so)
+emit_shader(struct fd_ringbuffer *ring, const struct fd3_shader_stateobj *so)
 {
-	struct ir3_shader_info *si = &so->info;
+	const struct ir3_shader_info *si = &so->info;
 	enum adreno_state_block sb;
 	enum adreno_state_src src;
 	uint32_t i, sz, *bin;
@@ -216,7 +220,7 @@ emit_shader(struct fd_ringbuffer *ring, struct fd3_shader_stateobj *so)
 }
 
 static int
-find_output(struct fd3_shader_stateobj *so, fd3_semantic semantic)
+find_output(const struct fd3_shader_stateobj *so, fd3_semantic semantic)
 {
 	int j;
 	for (j = 0; j < so->outputs_count; j++)
@@ -225,15 +229,42 @@ find_output(struct fd3_shader_stateobj *so, fd3_semantic semantic)
 	return 0;
 }
 
+static uint32_t
+find_regid(const struct fd3_shader_stateobj *so, fd3_semantic semantic)
+{
+	int j;
+	for (j = 0; j < so->outputs_count; j++)
+		if (so->outputs[j].semantic == semantic)
+			return so->outputs[j].regid;
+	return regid(63, 0);
+}
+
 void
 fd3_program_emit(struct fd_ringbuffer *ring,
-		struct fd_program_stateobj *prog)
+		struct fd_program_stateobj *prog, bool binning)
 {
-	struct fd3_shader_stateobj *vp = prog->vp;
-	struct fd3_shader_stateobj *fp = prog->fp;
-	struct ir3_shader_info *vsi = &vp->info;
-	struct ir3_shader_info *fsi = &fp->info;
+	const struct fd3_shader_stateobj *vp = prog->vp;
+	const struct fd3_shader_stateobj *fp = prog->fp;
+	const struct ir3_shader_info *vsi = &vp->info;
+	const struct ir3_shader_info *fsi = &fp->info;
+	uint32_t pos_regid, posz_regid, psize_regid, color_regid;
 	int i;
+
+	if (binning) {
+		/* use dummy stateobj to simplify binning vs non-binning: */
+		static const struct fd3_shader_stateobj binning_fp = {};
+		fp = &binning_fp;
+		fsi = &fp->info;
+	}
+
+	pos_regid = find_regid(vp,
+		fd3_semantic_name(TGSI_SEMANTIC_POSITION, 0));
+	posz_regid = find_regid(fp,
+		fd3_semantic_name(TGSI_SEMANTIC_POSITION, 0));
+	psize_regid = find_regid(vp,
+		fd3_semantic_name(TGSI_SEMANTIC_PSIZE, 0));
+	color_regid = find_regid(fp,
+		fd3_semantic_name(TGSI_SEMANTIC_COLOR, 0));
 
 	/* we could probably divide this up into things that need to be
 	 * emitted if frag-prog is dirty vs if vert-prog is dirty..
@@ -260,22 +291,9 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 
 	OUT_PKT0(ring, REG_A3XX_SP_SP_CTRL_REG, 1);
 	OUT_RING(ring, A3XX_SP_SP_CTRL_REG_CONSTMODE(0) |
+			COND(binning, A3XX_SP_SP_CTRL_REG_BINNING) |
 			A3XX_SP_SP_CTRL_REG_SLEEPMODE(1) |
-			// XXX "resolve" (?) bit set on gmem->mem pass..
-//			COND(!uniforms, A3XX_SP_SP_CTRL_REG_RESOLVE) |
-			// XXX sometimes 0, sometimes 1:
-			A3XX_SP_SP_CTRL_REG_LOMODE(1));
-
-	/* emit unknown sequence of perfcounter disables that the blob
-	 * emits as part of the program state..
-	 */
-	for (i = 0; i < 6; i++) {
-		OUT_PKT0(ring, REG_A3XX_SP_PERFCOUNTER0_SELECT, 1);
-		OUT_RING(ring, 0x00000000);    /* SP_PERFCOUNTER0_SELECT */
-
-		OUT_PKT0(ring, REG_A3XX_SP_PERFCOUNTER4_SELECT, 1);
-		OUT_RING(ring, 0x00000000);    /* SP_PERFCOUNTER4_SELECT */
-	}
+			A3XX_SP_SP_CTRL_REG_L0MODE(0));
 
 	OUT_PKT0(ring, REG_A3XX_SP_VS_LENGTH_REG, 1);
 	OUT_RING(ring, A3XX_SP_VS_LENGTH_REG_SHADERLENGTH(vp->instrlen));
@@ -283,6 +301,7 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 	OUT_PKT0(ring, REG_A3XX_SP_VS_CTRL_REG0, 3);
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG0_THREADMODE(MULTI) |
 			A3XX_SP_VS_CTRL_REG0_INSTRBUFFERMODE(BUFFER) |
+			A3XX_SP_VS_CTRL_REG0_CACHEINVALID |
 			A3XX_SP_VS_CTRL_REG0_HALFREGFOOTPRINT(vsi->max_half_reg + 1) |
 			A3XX_SP_VS_CTRL_REG0_FULLREGFOOTPRINT(vsi->max_reg + 1) |
 			A3XX_SP_VS_CTRL_REG0_INOUTREGOVERLAP(0) |
@@ -293,8 +312,8 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG1_CONSTLENGTH(vp->constlen) |
 			A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(vp->total_in) |
 			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(MAX2(vsi->max_const, 0)));
-	OUT_RING(ring, A3XX_SP_VS_PARAM_REG_POSREGID(vp->pos_regid) |
-			A3XX_SP_VS_PARAM_REG_PSIZEREGID(vp->psize_regid) |
+	OUT_RING(ring, A3XX_SP_VS_PARAM_REG_POSREGID(pos_regid) |
+			A3XX_SP_VS_PARAM_REG_PSIZEREGID(psize_regid) |
 			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(fp->inputs_count));
 
 	for (i = 0; i < fp->inputs_count; ) {
@@ -329,80 +348,88 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 		OUT_RING(ring, reg);
 	}
 
-#if 0
-	/* for some reason, when I write SP_{VS,FS}_OBJ_START_REG I get:
-[  666.663665] kgsl kgsl-3d0: |a3xx_err_callback| RBBM | AHB bus error | READ | addr=201 | ports=1:3
-[  666.664001] kgsl kgsl-3d0: |a3xx_err_callback| ringbuffer AHB error interrupt
-[  670.680909] kgsl kgsl-3d0: |adreno_idle| spun too long waiting for RB to idle
-[  670.681062] kgsl kgsl-3d0: |kgsl-3d0| Dump Started
-[  670.681123] kgsl kgsl-3d0: POWER: FLAGS = 00000007 | ACTIVE POWERLEVEL = 00000001
-[  670.681214] kgsl kgsl-3d0: POWER: INTERVAL TIMEOUT = 0000000A
-[  670.681367] kgsl kgsl-3d0: GRP_CLK = 325000000
-[  670.681489] kgsl kgsl-3d0: BUS CLK = 0
-	 */
 	OUT_PKT0(ring, REG_A3XX_SP_VS_OBJ_OFFSET_REG, 2);
 	OUT_RING(ring, A3XX_SP_VS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(0) |
 			A3XX_SP_VS_OBJ_OFFSET_REG_SHADEROBJOFFSET(0));
 	OUT_RELOC(ring, vp->bo, 0, 0, 0);  /* SP_VS_OBJ_START_REG */
-#endif
 
-	OUT_PKT0(ring, REG_A3XX_SP_FS_LENGTH_REG, 1);
-	OUT_RING(ring, A3XX_SP_FS_LENGTH_REG_SHADERLENGTH(fp->instrlen));
+	if (binning) {
+		OUT_PKT0(ring, REG_A3XX_SP_FS_LENGTH_REG, 1);
+		OUT_RING(ring, 0x00000000);
 
-	OUT_PKT0(ring, REG_A3XX_SP_FS_CTRL_REG0, 2);
-	OUT_RING(ring, A3XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
-			A3XX_SP_FS_CTRL_REG0_INSTRBUFFERMODE(BUFFER) |
-			A3XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(fsi->max_half_reg + 1) |
-			A3XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(fsi->max_reg + 1) |
-			A3XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
-			A3XX_SP_FS_CTRL_REG0_THREADSIZE(FOUR_QUADS) |
-			A3XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |
-			COND(fp->samplers_count > 0, A3XX_SP_FS_CTRL_REG0_PIXLODENABLE) |
-			A3XX_SP_FS_CTRL_REG0_LENGTH(fp->instrlen));
-	OUT_RING(ring, A3XX_SP_FS_CTRL_REG1_CONSTLENGTH(fp->constlen) |
-			A3XX_SP_FS_CTRL_REG1_INITIALOUTSTANDING(fp->total_in) |
-			A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(MAX2(fsi->max_const, 0)) |
-			A3XX_SP_FS_CTRL_REG1_HALFPRECVAROFFSET(63));
+		OUT_PKT0(ring, REG_A3XX_SP_FS_CTRL_REG0, 2);
+		OUT_RING(ring, A3XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
+				A3XX_SP_FS_CTRL_REG0_INSTRBUFFERMODE(BUFFER));
+		OUT_RING(ring, 0x00000000);
+	} else {
+		OUT_PKT0(ring, REG_A3XX_SP_FS_LENGTH_REG, 1);
+		OUT_RING(ring, A3XX_SP_FS_LENGTH_REG_SHADERLENGTH(fp->instrlen));
 
-#if 0
-	OUT_PKT0(ring, REG_A3XX_SP_FS_OBJ_OFFSET_REG, 2);
-	OUT_RING(ring, A3XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(128) |
-			A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(128 - fp->instrlen));
-	OUT_RELOC(ring, fp->bo, 0, 0, 0);  /* SP_FS_OBJ_START_REG */
-#endif
+		OUT_PKT0(ring, REG_A3XX_SP_FS_CTRL_REG0, 2);
+		OUT_RING(ring, A3XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
+				A3XX_SP_FS_CTRL_REG0_INSTRBUFFERMODE(BUFFER) |
+				A3XX_SP_FS_CTRL_REG0_CACHEINVALID |
+				A3XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(fsi->max_half_reg + 1) |
+				A3XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(fsi->max_reg + 1) |
+				A3XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
+				A3XX_SP_FS_CTRL_REG0_THREADSIZE(FOUR_QUADS) |
+				A3XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |
+				COND(fp->samplers_count > 0, A3XX_SP_FS_CTRL_REG0_PIXLODENABLE) |
+				A3XX_SP_FS_CTRL_REG0_LENGTH(fp->instrlen));
+		OUT_RING(ring, A3XX_SP_FS_CTRL_REG1_CONSTLENGTH(fp->constlen) |
+				A3XX_SP_FS_CTRL_REG1_INITIALOUTSTANDING(fp->total_in) |
+				A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(MAX2(fsi->max_const, 0)) |
+				A3XX_SP_FS_CTRL_REG1_HALFPRECVAROFFSET(63));
+		OUT_PKT0(ring, REG_A3XX_SP_FS_OBJ_OFFSET_REG, 2);
+		OUT_RING(ring, A3XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(128) |
+				A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(0));
+		OUT_RELOC(ring, fp->bo, 0, 0, 0);  /* SP_FS_OBJ_START_REG */
+	}
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_FLAT_SHAD_MODE_REG_0, 2);
 	OUT_RING(ring, 0x00000000);        /* SP_FS_FLAT_SHAD_MODE_REG_0 */
 	OUT_RING(ring, 0x00000000);        /* SP_FS_FLAT_SHAD_MODE_REG_1 */
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_OUTPUT_REG, 1);
-	OUT_RING(ring, 0x00000000);        /* SP_FS_OUTPUT_REG */
+	if (fp->writes_pos) {
+		OUT_RING(ring, A3XX_SP_FS_OUTPUT_REG_DEPTH_ENABLE |
+				A3XX_SP_FS_OUTPUT_REG_DEPTH_REGID(posz_regid));
+	} else {
+		OUT_RING(ring, 0x00000000);
+	}
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_MRT_REG(0), 4);
-	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(fp->color_regid) |
+	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(color_regid) |
 			COND(fp->half_precision, A3XX_SP_FS_MRT_REG_HALF_PRECISION));
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));
 
-	OUT_PKT0(ring, REG_A3XX_VPC_ATTR, 2);
-	OUT_RING(ring, A3XX_VPC_ATTR_TOTALATTR(fp->total_in) |
-			A3XX_VPC_ATTR_THRDASSIGN(1) |
-			A3XX_VPC_ATTR_LMSIZE(1));
-	OUT_RING(ring, A3XX_VPC_PACK_NUMFPNONPOSVAR(fp->total_in) |
-			A3XX_VPC_PACK_NUMNONPOSVSVAR(fp->total_in));
+	if (binning) {
+		OUT_PKT0(ring, REG_A3XX_VPC_ATTR, 2);
+		OUT_RING(ring, A3XX_VPC_ATTR_THRDASSIGN(1) |
+				A3XX_VPC_ATTR_LMSIZE(1));
+		OUT_RING(ring, 0x00000000);
+	} else {
+		OUT_PKT0(ring, REG_A3XX_VPC_ATTR, 2);
+		OUT_RING(ring, A3XX_VPC_ATTR_TOTALATTR(fp->total_in) |
+				A3XX_VPC_ATTR_THRDASSIGN(1) |
+				A3XX_VPC_ATTR_LMSIZE(1));
+		OUT_RING(ring, A3XX_VPC_PACK_NUMFPNONPOSVAR(fp->total_in) |
+				A3XX_VPC_PACK_NUMNONPOSVSVAR(fp->total_in));
 
-	OUT_PKT0(ring, REG_A3XX_VPC_VARYING_INTERP_MODE(0), 4);
-	OUT_RING(ring, fp->vinterp[0]);    /* VPC_VARYING_INTERP[0].MODE */
-	OUT_RING(ring, fp->vinterp[1]);    /* VPC_VARYING_INTERP[1].MODE */
-	OUT_RING(ring, fp->vinterp[2]);    /* VPC_VARYING_INTERP[2].MODE */
-	OUT_RING(ring, fp->vinterp[3]);    /* VPC_VARYING_INTERP[3].MODE */
+		OUT_PKT0(ring, REG_A3XX_VPC_VARYING_INTERP_MODE(0), 4);
+		OUT_RING(ring, fp->vinterp[0]);    /* VPC_VARYING_INTERP[0].MODE */
+		OUT_RING(ring, fp->vinterp[1]);    /* VPC_VARYING_INTERP[1].MODE */
+		OUT_RING(ring, fp->vinterp[2]);    /* VPC_VARYING_INTERP[2].MODE */
+		OUT_RING(ring, fp->vinterp[3]);    /* VPC_VARYING_INTERP[3].MODE */
 
-	OUT_PKT0(ring, REG_A3XX_VPC_VARYING_PS_REPL_MODE(0), 4);
-	OUT_RING(ring, fp->vpsrepl[0]);    /* VPC_VARYING_PS_REPL[0].MODE */
-	OUT_RING(ring, fp->vpsrepl[1]);    /* VPC_VARYING_PS_REPL[1].MODE */
-	OUT_RING(ring, fp->vpsrepl[2]);    /* VPC_VARYING_PS_REPL[2].MODE */
-	OUT_RING(ring, fp->vpsrepl[3]);    /* VPC_VARYING_PS_REPL[3].MODE */
+		OUT_PKT0(ring, REG_A3XX_VPC_VARYING_PS_REPL_MODE(0), 4);
+		OUT_RING(ring, fp->vpsrepl[0]);    /* VPC_VARYING_PS_REPL[0].MODE */
+		OUT_RING(ring, fp->vpsrepl[1]);    /* VPC_VARYING_PS_REPL[1].MODE */
+		OUT_RING(ring, fp->vpsrepl[2]);    /* VPC_VARYING_PS_REPL[2].MODE */
+		OUT_RING(ring, fp->vpsrepl[3]);    /* VPC_VARYING_PS_REPL[3].MODE */
+	}
 
 	OUT_PKT0(ring, REG_A3XX_VFD_VS_THREADING_THRESHOLD, 1);
 	OUT_RING(ring, A3XX_VFD_VS_THREADING_THRESHOLD_REGID_THRESHOLD(15) |
@@ -413,10 +440,12 @@ fd3_program_emit(struct fd_ringbuffer *ring,
 	OUT_PKT0(ring, REG_A3XX_VFD_PERFCOUNTER0_SELECT, 1);
 	OUT_RING(ring, 0x00000000);        /* VFD_PERFCOUNTER0_SELECT */
 
-	emit_shader(ring, fp);
+	if (!binning) {
+		emit_shader(ring, fp);
 
-	OUT_PKT0(ring, REG_A3XX_VFD_PERFCOUNTER0_SELECT, 1);
-	OUT_RING(ring, 0x00000000);        /* VFD_PERFCOUNTER0_SELECT */
+		OUT_PKT0(ring, REG_A3XX_VFD_PERFCOUNTER0_SELECT, 1);
+		OUT_RING(ring, 0x00000000);        /* VFD_PERFCOUNTER0_SELECT */
+	}
 
 	OUT_PKT0(ring, REG_A3XX_VFD_CONTROL_0, 2);
 	OUT_RING(ring, A3XX_VFD_CONTROL_0_TOTALATTRTOVS(vp->total_in) |
@@ -515,13 +544,17 @@ create_blit_fp(struct pipe_context *pctx)
 	if (!so)
 		return NULL;
 
-	so->color_regid = regid(0,0);
 	so->half_precision = true;
 	so->inputs_count = 1;
-	so->inputs[0].semantic = fd3_semantic_name(TGSI_SEMANTIC_TEXCOORD, 0);
+	so->inputs[0].semantic =
+		fd3_semantic_name(TGSI_SEMANTIC_TEXCOORD, 0);
 	so->inputs[0].inloc = 8;
 	so->inputs[0].compmask = 0x3;
 	so->total_in = 2;
+	so->outputs_count = 1;
+	so->outputs[0].semantic =
+		fd3_semantic_name(TGSI_SEMANTIC_COLOR, 0);
+	so->outputs[0].regid = regid(0,0);
 	so->samplers_count = 1;
 
 	so->vpsrepl[0] = 0x99999999;
@@ -550,17 +583,19 @@ create_blit_vp(struct pipe_context *pctx)
 	if (!so)
 		return NULL;
 
-	so->pos_regid = regid(1,0);
-	so->psize_regid = regid(63,0);
 	so->inputs_count = 2;
 	so->inputs[0].regid = regid(0,0);
 	so->inputs[0].compmask = 0xf;
 	so->inputs[1].regid = regid(1,0);
 	so->inputs[1].compmask = 0xf;
 	so->total_in = 8;
-	so->outputs_count = 1;
-	so->outputs[0].semantic = fd3_semantic_name(TGSI_SEMANTIC_TEXCOORD, 0);
+	so->outputs_count = 2;
+	so->outputs[0].semantic =
+		fd3_semantic_name(TGSI_SEMANTIC_TEXCOORD, 0);
 	so->outputs[0].regid = regid(0,0);
+	so->outputs[1].semantic =
+		fd3_semantic_name(TGSI_SEMANTIC_POSITION, 0);
+	so->outputs[1].regid = regid(1,0);
 
 	fixup_vp_regfootprint(so);
 
@@ -596,9 +631,12 @@ create_solid_fp(struct pipe_context *pctx)
 	if (!so)
 		return NULL;
 
-	so->color_regid = regid(0,0);
 	so->half_precision = true;
 	so->inputs_count = 0;
+	so->outputs_count = 1;
+	so->outputs[0].semantic =
+		fd3_semantic_name(TGSI_SEMANTIC_COLOR, 0);
+	so->outputs[0].regid = regid(0, 0);
 	so->total_in = 0;
 
 	return so;
@@ -623,13 +661,15 @@ create_solid_vp(struct pipe_context *pctx)
 	if (!so)
 		return NULL;
 
-	so->pos_regid = regid(0,0);
-	so->psize_regid = regid(63,0);
 	so->inputs_count = 1;
 	so->inputs[0].regid = regid(0,0);
 	so->inputs[0].compmask = 0xf;
 	so->total_in = 4;
-	so->outputs_count = 0;
+
+	so->outputs_count = 1;
+	so->outputs[0].semantic =
+		fd3_semantic_name(TGSI_SEMANTIC_POSITION, 0);
+	so->outputs[0].regid = regid(0,0);
 
 	fixup_vp_regfootprint(so);
 

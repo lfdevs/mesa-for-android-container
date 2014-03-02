@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,13 +22,13 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
- 
+
 
 
 #include "intel_batchbuffer.h"
@@ -120,12 +120,12 @@ const struct brw_tracked_state brw_psp_urb_cbs = {
       .brw = (BRW_NEW_URB_FENCE |
 	      BRW_NEW_BATCH |
 	      BRW_NEW_STATE_BASE_ADDRESS),
-      .cache = (CACHE_NEW_VS_UNIT | 
-		CACHE_NEW_FF_GS_UNIT | 
-		CACHE_NEW_FF_GS_PROG | 
-		CACHE_NEW_CLIP_UNIT | 
-		CACHE_NEW_SF_UNIT | 
-		CACHE_NEW_WM_UNIT | 
+      .cache = (CACHE_NEW_VS_UNIT |
+		CACHE_NEW_FF_GS_UNIT |
+		CACHE_NEW_FF_GS_PROG |
+		CACHE_NEW_CLIP_UNIT |
+		CACHE_NEW_SF_UNIT |
+		CACHE_NEW_WM_UNIT |
 		CACHE_NEW_CC_UNIT)
    },
    .emit = upload_psp_urb_cbs,
@@ -142,8 +142,8 @@ brw_depthbuffer_format(struct brw_context *brw)
    if (!drb &&
        (srb = intel_get_renderbuffer(fb, BUFFER_STENCIL)) &&
        !srb->mt->stencil_mt &&
-       (intel_rb_format(srb) == MESA_FORMAT_S8_Z24 ||
-	intel_rb_format(srb) == MESA_FORMAT_Z32_FLOAT_X24S8)) {
+       (intel_rb_format(srb) == MESA_FORMAT_Z24_UNORM_S8_UINT ||
+	intel_rb_format(srb) == MESA_FORMAT_Z32_FLOAT_S8X24_UINT)) {
       drb = srb;
    }
 
@@ -151,11 +151,11 @@ brw_depthbuffer_format(struct brw_context *brw)
       return BRW_DEPTHFORMAT_D32_FLOAT;
 
    switch (drb->mt->format) {
-   case MESA_FORMAT_Z16:
+   case MESA_FORMAT_Z_UNORM16:
       return BRW_DEPTHFORMAT_D16_UNORM;
-   case MESA_FORMAT_Z32_FLOAT:
+   case MESA_FORMAT_Z_FLOAT32:
       return BRW_DEPTHFORMAT_D32_FLOAT;
-   case MESA_FORMAT_X8_Z24:
+   case MESA_FORMAT_Z24_UNORM_X8_UINT:
       if (brw->gen >= 6) {
 	 return BRW_DEPTHFORMAT_D24_UNORM_X8_UINT;
       } else {
@@ -173,9 +173,9 @@ brw_depthbuffer_format(struct brw_context *brw)
 	  */
 	 return BRW_DEPTHFORMAT_D24_UNORM_S8_UINT;
       }
-   case MESA_FORMAT_S8_Z24:
+   case MESA_FORMAT_Z24_UNORM_S8_UINT:
       return BRW_DEPTHFORMAT_D24_UNORM_S8_UINT;
-   case MESA_FORMAT_Z32_FLOAT_X24S8:
+   case MESA_FORMAT_Z32_FLOAT_S8X24_UINT:
       return BRW_DEPTHFORMAT_D32_FLOAT_S8X24_UINT;
    default:
       _mesa_problem(ctx, "Unexpected depth format %s\n",
@@ -230,7 +230,7 @@ brw_get_depthstencil_tile_masks(struct intel_mipmap_tree *depth_mt,
       if (stencil_mt->stencil_mt)
 	 stencil_mt = stencil_mt->stencil_mt;
 
-      if (stencil_mt->format == MESA_FORMAT_S8) {
+      if (stencil_mt->format == MESA_FORMAT_S_UINT8) {
          /* Separate stencil buffer uses 64x64 tiles. */
          tile_mask_x |= 63;
          tile_mask_y |= 63;
@@ -494,7 +494,7 @@ brw_workaround_depthstencil_alignment(struct brw_context *brw,
       stencil_mt = get_stencil_miptree(stencil_irb);
 
       brw->depthstencil.stencil_mt = stencil_mt;
-      if (stencil_mt->format == MESA_FORMAT_S8) {
+      if (stencil_mt->format == MESA_FORMAT_S_UINT8) {
          /* Note: we can't compute the stencil offset using
           * intel_region_get_aligned_offset(), because stencil_region claims
           * that the region is untiled even though it's W tiled.
@@ -526,7 +526,7 @@ brw_emit_depthbuffer(struct brw_context *brw)
    uint32_t width = 1, height = 1;
 
    if (stencil_mt) {
-      separate_stencil = stencil_mt->format == MESA_FORMAT_S8;
+      separate_stencil = stencil_mt->format == MESA_FORMAT_S_UINT8;
 
       /* Gen7 supports only separate stencil */
       assert(separate_stencil || brw->gen < 7);
@@ -778,7 +778,7 @@ static void upload_polygon_stipple(struct brw_context *brw)
       for (i = 0; i < 32; i++)
 	 OUT_BATCH(ctx->PolygonStipple[i]);
    }
-   CACHED_BATCH();
+   ADVANCE_BATCH();
 }
 
 const struct brw_tracked_state brw_polygon_stipple = {
@@ -822,7 +822,7 @@ static void upload_polygon_stipple_offset(struct brw_context *brw)
       OUT_BATCH((32 - (ctx->DrawBuffer->Height & 31)) & 31);
    else
       OUT_BATCH(0);
-   CACHED_BATCH();
+   ADVANCE_BATCH();
 }
 
 const struct brw_tracked_state brw_polygon_stipple_offset = {
@@ -852,11 +852,12 @@ static void upload_aa_line_parameters(struct brw_context *brw)
    if (brw->gen == 6)
       intel_emit_post_sync_nonzero_flush(brw);
 
+   BEGIN_BATCH(3);
    OUT_BATCH(_3DSTATE_AA_LINE_PARAMETERS << 16 | (3 - 2));
    /* use legacy aa line coverage computation */
    OUT_BATCH(0);
    OUT_BATCH(0);
-   CACHED_BATCH();
+   ADVANCE_BATCH();
 }
 
 const struct brw_tracked_state brw_aa_line_parameters = {
@@ -901,7 +902,7 @@ static void upload_line_stipple(struct brw_context *brw)
       OUT_BATCH(tmpi << 16 | ctx->Line.StippleFactor);
    }
 
-   CACHED_BATCH();
+   ADVANCE_BATCH();
 }
 
 const struct brw_tracked_state brw_line_stipple = {
@@ -938,10 +939,18 @@ brw_upload_invariant_state(struct brw_context *brw)
       ADVANCE_BATCH();
    }
 
-   BEGIN_BATCH(2);
-   OUT_BATCH(CMD_STATE_SIP << 16 | (2 - 2));
-   OUT_BATCH(0);
-   ADVANCE_BATCH();
+   if (brw->gen >= 8) {
+      BEGIN_BATCH(3);
+      OUT_BATCH(CMD_STATE_SIP << 16 | (3 - 2));
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      ADVANCE_BATCH();
+   } else {
+      BEGIN_BATCH(2);
+      OUT_BATCH(CMD_STATE_SIP << 16 | (2 - 2));
+      OUT_BATCH(0);
+      ADVANCE_BATCH();
+   }
 
    BEGIN_BATCH(1);
    OUT_BATCH(brw->CMD_VF_STATISTICS << 16 |

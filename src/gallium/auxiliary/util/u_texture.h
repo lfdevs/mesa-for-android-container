@@ -17,7 +17,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -26,6 +26,8 @@
 
 #ifndef U_TEXTURE_H
 #define U_TEXTURE_H
+
+#include "pipe/p_compiler.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,7 +46,8 @@ extern "C" {
  */
 void util_map_texcoords2d_onto_cubemap(unsigned face,
                                        const float *in_st, unsigned in_stride,
-                                       float *out_str, unsigned out_stride);
+                                       float *out_str, unsigned out_stride,
+                                       boolean allow_scale);
 
 
 #ifdef __cplusplus

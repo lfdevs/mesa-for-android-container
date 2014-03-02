@@ -31,8 +31,18 @@
 #include "intel_winsys.h"
 
 #include "ilo_common.h"
+#include "ilo_screen.h"
 
-struct ilo_screen;
+enum ilo_texture_flags {
+   ILO_TEXTURE_RENDER_WRITE   = 1 << 0,
+   ILO_TEXTURE_BLT_WRITE      = 1 << 1,
+   ILO_TEXTURE_CPU_WRITE      = 1 << 2,
+   ILO_TEXTURE_RENDER_READ    = 1 << 3,
+   ILO_TEXTURE_BLT_READ       = 1 << 4,
+   ILO_TEXTURE_CPU_READ       = 1 << 5,
+   ILO_TEXTURE_CLEAR          = 1 << 6,
+   ILO_TEXTURE_HIZ            = 1 << 7,
+};
 
 struct ilo_buffer {
    struct pipe_resource base;
@@ -40,6 +50,15 @@ struct ilo_buffer {
    struct intel_bo *bo;
    unsigned bo_size;
    unsigned bo_flags;
+};
+
+/**
+ * A 3D image slice, cube face, or array layer.
+ */
+struct ilo_texture_slice {
+   /* 2D offset to the slice */
+   unsigned x, y;
+   unsigned flags;
 };
 
 struct ilo_texture {
@@ -73,13 +92,14 @@ struct ilo_texture {
    /* true if samples are interleaved */
    bool interleaved;
 
-   /* 2D offsets into a layer/slice/face */
-   struct ilo_texture_slice {
-      unsigned x;
-      unsigned y;
-   } *slice_offsets[PIPE_MAX_TEXTURE_LEVELS];
+   struct ilo_texture_slice *slices[PIPE_MAX_TEXTURE_LEVELS];
 
    struct ilo_texture *separate_s8;
+
+   struct {
+      struct intel_bo *bo;
+      int bo_stride;
+   } hiz;
 };
 
 static inline struct ilo_buffer *
@@ -105,9 +125,61 @@ ilo_buffer_alloc_bo(struct ilo_buffer *buf);
 bool
 ilo_texture_alloc_bo(struct ilo_texture *tex);
 
+static inline struct ilo_texture_slice *
+ilo_texture_get_slice(const struct ilo_texture *tex,
+                      unsigned level, unsigned slice)
+{
+   assert(level <= tex->base.last_level);
+   assert(slice < ((tex->base.target == PIPE_TEXTURE_3D) ?
+         u_minify(tex->base.depth0, level) : tex->base.array_size));
+
+   return &tex->slices[level][slice];
+}
+
 unsigned
 ilo_texture_get_slice_offset(const struct ilo_texture *tex,
-                             int level, int slice,
+                             unsigned level, unsigned slice,
                              unsigned *x_offset, unsigned *y_offset);
+
+static inline void
+ilo_texture_set_slice_flags(struct ilo_texture *tex, unsigned level,
+                            unsigned first_slice, unsigned num_slices,
+                            unsigned mask, unsigned value)
+{
+   const struct ilo_texture_slice *last =
+      ilo_texture_get_slice(tex, level, first_slice + num_slices - 1);
+   struct ilo_texture_slice *slice =
+      ilo_texture_get_slice(tex, level, first_slice);
+
+   while (slice <= last) {
+      slice->flags = (slice->flags & ~mask) | (value & mask);
+      slice++;
+   }
+}
+
+static inline bool
+ilo_texture_can_enable_hiz(const struct ilo_texture *tex, unsigned level,
+                           unsigned first_slice, unsigned num_slices)
+{
+   const struct ilo_screen *is = ilo_screen(tex->base.screen);
+   const struct ilo_texture_slice *slice =
+      ilo_texture_get_slice(tex, level, first_slice);
+
+   if (!tex->hiz.bo)
+      return false;
+
+   /* we can adjust 3DSTATE_DEPTH_BUFFER for the first slice */
+   if (level == 0 && first_slice == 0 && num_slices == 1)
+      return true;
+
+   /* HiZ is non-mipmapped and non-array on GEN6 */
+   assert(is->dev.gen > ILO_GEN(6));
+
+   /*
+    * Either all or none of the slices in the same level have ILO_TEXTURE_HIZ
+    * set.  It suffices to check only the first slice.
+    */
+   return (slice->flags & ILO_TEXTURE_HIZ);
+}
 
 #endif /* ILO_RESOURCE_H */

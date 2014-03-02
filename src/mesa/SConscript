@@ -18,9 +18,6 @@ env.Append(CPPPATH = [
     Dir('.'), # src/mesa build path
 ])
 
-enabled_apis = []
-enabled_apis += ['GL']
-
 if env['platform'] == 'windows':
     env.Append(CPPDEFINES = [
         '_GDI32_', # prevent gl* being declared __declspec(dllimport) in MS headers
@@ -49,6 +46,7 @@ main_sources = [
     'main/attrib.c',
     'main/arrayobj.c',
     'main/blend.c',
+    'main/blit.c',
     'main/bufferobj.c',
     'main/buffers.c',
     'main/clear.c',
@@ -80,6 +78,7 @@ main_sources = [
     'main/format_pack.c',
     'main/format_unpack.c',
     'main/framebuffer.c',
+    'main/genmipmap.c',
     'main/getstring.c',
     'main/glformats.c',
     'main/hash.c',
@@ -113,6 +112,7 @@ main_sources = [
     'main/scissor.c',
     'main/set.c',
     'main/shaderapi.c',
+    'main/shaderimage.c',
     'main/shaderobj.c',
     'main/shader_query.cpp',
     'main/shared.c',
@@ -136,6 +136,7 @@ main_sources = [
     'main/texstorage.c',
     'main/texstore.c',
     'main/texturebarrier.c',
+    'main/textureview.c',
     'main/transformfeedback.c',
     'main/uniform_query.cpp',
     'main/uniforms.c',
@@ -339,10 +340,6 @@ mesa_sources = (
 )
 
 GLAPI = '#src/mapi/glapi/'
-
-if env['gles']:
-
-    enabled_apis += ['ES1', 'ES2']
 
 get_hash_header = env.CodeGenerate(
       target = 'main/get_hash.h',

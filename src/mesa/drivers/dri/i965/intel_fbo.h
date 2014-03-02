@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
- * Copyright 2006 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2006 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,19 +10,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #ifndef INTEL_FBO_H
@@ -63,6 +63,11 @@ struct intel_renderbuffer
     *
     * For renderbuffers not created with glFramebufferTexture*(), mt_level and
     * mt_layer are 0.
+    *
+    * Note: for a 2D multisample array texture on Gen7+ using
+    * INTEL_MSAA_LAYOUT_UMS or INTEL_MSAA_LAYOUT_CMS, mt_layer is the physical
+    * layer holding sample 0.  So, for example, if mt->num_samples == 4, then
+    * logical layer n corresponds to mt_layer == 4*n.
     */
    unsigned int mt_level;
    unsigned int mt_layer;
@@ -84,7 +89,7 @@ struct intel_renderbuffer
  * NULL will be returned if the rb isn't really an intel_renderbuffer.
  * This is determined by checking the ClassID.
  */
-static INLINE struct intel_renderbuffer *
+static inline struct intel_renderbuffer *
 intel_renderbuffer(struct gl_renderbuffer *rb)
 {
    struct intel_renderbuffer *irb = (struct intel_renderbuffer *) rb;
@@ -105,7 +110,7 @@ intel_renderbuffer(struct gl_renderbuffer *rb)
  * If the attached renderbuffer is a wrapper, then return wrapped
  * renderbuffer.
  */
-static INLINE struct intel_renderbuffer *
+static inline struct intel_renderbuffer *
 intel_get_renderbuffer(struct gl_framebuffer *fb, gl_buffer_index attIndex)
 {
    struct gl_renderbuffer *rb;
@@ -120,22 +125,22 @@ intel_get_renderbuffer(struct gl_framebuffer *fb, gl_buffer_index attIndex)
 }
 
 
-static INLINE gl_format
+static inline mesa_format
 intel_rb_format(const struct intel_renderbuffer *rb)
 {
    return rb->Base.Base.Format;
 }
 
 extern struct intel_renderbuffer *
-intel_create_renderbuffer(gl_format format, unsigned num_samples);
+intel_create_renderbuffer(mesa_format format, unsigned num_samples);
 
 struct intel_renderbuffer *
-intel_create_private_renderbuffer(gl_format format, unsigned num_samples);
+intel_create_private_renderbuffer(mesa_format format, unsigned num_samples);
 
 struct gl_renderbuffer*
 intel_create_wrapped_renderbuffer(struct gl_context * ctx,
 				  int width, int height,
-				  gl_format format);
+				  mesa_format format);
 
 extern void
 intel_fbo_init(struct brw_context *brw);

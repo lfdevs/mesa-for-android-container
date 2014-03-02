@@ -138,9 +138,7 @@ struct save_state
    GLboolean FragmentProgramEnabled;
    struct gl_fragment_program *FragmentProgram;
    GLboolean ATIFragmentShaderEnabled;
-   struct gl_shader_program *VertexShader;
-   struct gl_shader_program *GeometryShader;
-   struct gl_shader_program *FragmentShader;
+   struct gl_shader_program *Shader[MESA_SHADER_STAGES];
    struct gl_shader_program *ActiveShader;
 
    /** MESA_META_STENCIL_TEST */
@@ -170,7 +168,7 @@ struct save_state
    struct gl_buffer_object *ArrayBufferObj;
 
    /** MESA_META_VIEWPORT */
-   GLint ViewportX, ViewportY, ViewportW, ViewportH;
+   GLfloat ViewportX, ViewportY, ViewportW, ViewportH;
    GLclampd DepthNear, DepthFar;
 
    /** MESA_META_CLAMP_FRAGMENT_COLOR */
@@ -241,9 +239,11 @@ struct clear_state
    GLuint VBO;
    GLuint ShaderProg;
    GLint ColorLocation;
+   GLint LayerLocation;
 
    GLuint IntegerShaderProg;
    GLint IntegerColorLocation;
+   GLint IntegerLayerLocation;
 };
 
 
@@ -350,11 +350,12 @@ struct gl_meta_state
    struct drawtex_state DrawTex;  /**< For _mesa_meta_DrawTex() */
 };
 
-static void meta_glsl_blit_cleanup(struct gl_context *ctx, struct blit_state *blit);
-static void cleanup_temp_texture(struct gl_context *ctx, struct temp_texture *tex);
-static void meta_glsl_clear_cleanup(struct gl_context *ctx, struct clear_state *clear);
-static void meta_glsl_generate_mipmap_cleanup(struct gl_context *ctx,
-                                              struct gen_mipmap_state *mipmap);
+static void meta_glsl_blit_cleanup(struct blit_state *blit);
+static void cleanup_temp_texture(struct temp_texture *tex);
+static void meta_glsl_clear_cleanup(struct clear_state *clear);
+static void meta_glsl_generate_mipmap_cleanup(struct gen_mipmap_state *mipmap);
+static void meta_decompress_cleanup(struct decompress_state *decompress);
+static void meta_drawpix_cleanup(struct drawpix_state *drawpix);
 
 static GLuint
 compile_shader_with_debug(struct gl_context *ctx, GLenum target, const GLcharARB *source)
@@ -445,10 +446,12 @@ _mesa_meta_free(struct gl_context *ctx)
 {
    GET_CURRENT_CONTEXT(old_context);
    _mesa_make_current(ctx, NULL, NULL);
-   meta_glsl_blit_cleanup(ctx, &ctx->Meta->Blit);
-   meta_glsl_clear_cleanup(ctx, &ctx->Meta->Clear);
-   meta_glsl_generate_mipmap_cleanup(ctx, &ctx->Meta->Mipmap);
-   cleanup_temp_texture(ctx, &ctx->Meta->TempTex);
+   meta_glsl_blit_cleanup(&ctx->Meta->Blit);
+   meta_glsl_clear_cleanup(&ctx->Meta->Clear);
+   meta_glsl_generate_mipmap_cleanup(&ctx->Meta->Mipmap);
+   cleanup_temp_texture(&ctx->Meta->TempTex);
+   meta_decompress_cleanup(&ctx->Meta->Decompress);
+   meta_drawpix_cleanup(&ctx->Meta->DrawPix);
    if (old_context)
       _mesa_make_current(old_context, old_context->WinSysDrawBuffer, old_context->WinSysReadBuffer);
    else
@@ -596,6 +599,8 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
    }
 
    if (state & MESA_META_SHADER) {
+      int i;
+
       if (ctx->API == API_OPENGL_COMPAT && ctx->Extensions.ARB_vertex_program) {
          save->VertexProgramEnabled = ctx->VertexProgram.Enabled;
          _mesa_reference_vertprog(ctx, &save->VertexProgram,
@@ -615,12 +620,10 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
          _mesa_set_enable(ctx, GL_FRAGMENT_SHADER_ATI, GL_FALSE);
       }
 
-      _mesa_reference_shader_program(ctx, &save->VertexShader,
-                                     ctx->Shader.CurrentVertexProgram);
-      _mesa_reference_shader_program(ctx, &save->GeometryShader,
-                                     ctx->Shader.CurrentGeometryProgram);
-      _mesa_reference_shader_program(ctx, &save->FragmentShader,
-                                     ctx->Shader.CurrentFragmentProgram);
+      for (i = 0; i < MESA_SHADER_STAGES; i++) {
+         _mesa_reference_shader_program(ctx, &save->Shader[i],
+                                     ctx->Shader.CurrentProgram[i]);
+      }
       _mesa_reference_shader_program(ctx, &save->ActiveShader,
                                      ctx->Shader.ActiveProgram);
 
@@ -735,21 +738,21 @@ _mesa_meta_begin(struct gl_context *ctx, GLbitfield state)
 
    if (state & MESA_META_VIEWPORT) {
       /* save viewport state */
-      save->ViewportX = ctx->Viewport.X;
-      save->ViewportY = ctx->Viewport.Y;
-      save->ViewportW = ctx->Viewport.Width;
-      save->ViewportH = ctx->Viewport.Height;
+      save->ViewportX = ctx->ViewportArray[0].X;
+      save->ViewportY = ctx->ViewportArray[0].Y;
+      save->ViewportW = ctx->ViewportArray[0].Width;
+      save->ViewportH = ctx->ViewportArray[0].Height;
       /* set viewport to match window size */
-      if (ctx->Viewport.X != 0 ||
-          ctx->Viewport.Y != 0 ||
-          ctx->Viewport.Width != ctx->DrawBuffer->Width ||
-          ctx->Viewport.Height != ctx->DrawBuffer->Height) {
-         _mesa_set_viewport(ctx, 0, 0,
+      if (ctx->ViewportArray[0].X != 0 ||
+          ctx->ViewportArray[0].Y != 0 ||
+          ctx->ViewportArray[0].Width != (float) ctx->DrawBuffer->Width ||
+          ctx->ViewportArray[0].Height != (float) ctx->DrawBuffer->Height) {
+         _mesa_set_viewport(ctx, 0, 0, 0,
                             ctx->DrawBuffer->Width, ctx->DrawBuffer->Height);
       }
       /* save depth range state */
-      save->DepthNear = ctx->Viewport.Near;
-      save->DepthFar = ctx->Viewport.Far;
+      save->DepthNear = ctx->ViewportArray[0].Near;
+      save->DepthFar = ctx->ViewportArray[0].Far;
       /* set depth range to default */
       _mesa_DepthRange(0.0, 1.0);
    }
@@ -827,6 +830,7 @@ _mesa_meta_end(struct gl_context *ctx)
 {
    struct save_state *save = &ctx->Meta->Save[ctx->Meta->SaveStackDepth - 1];
    const GLbitfield state = save->SavedState;
+   int i;
 
    /* After starting a new occlusion query, initialize the results to the
     * values saved previously. The driver will then continue to increment
@@ -931,9 +935,17 @@ _mesa_meta_end(struct gl_context *ctx)
    }
 
    if (state & MESA_META_SCISSOR) {
-      _mesa_set_enable(ctx, GL_SCISSOR_TEST, save->Scissor.Enabled);
-      _mesa_Scissor(save->Scissor.X, save->Scissor.Y,
-                    save->Scissor.Width, save->Scissor.Height);
+      unsigned i;
+
+      for (i = 0; i < ctx->Const.MaxViewports; i++) {
+         _mesa_set_scissor(ctx, i,
+                           save->Scissor.ScissorArray[i].X,
+                           save->Scissor.ScissorArray[i].Y,
+                           save->Scissor.ScissorArray[i].Width,
+                           save->Scissor.ScissorArray[i].Height);
+         _mesa_set_enablei(ctx, GL_SCISSOR_TEST, i,
+                           (save->Scissor.EnableFlags >> i) & 1);
+      }
    }
 
    if (state & MESA_META_SHADER) {
@@ -958,23 +970,24 @@ _mesa_meta_end(struct gl_context *ctx)
                           save->ATIFragmentShaderEnabled);
       }
 
-      if (ctx->Extensions.ARB_vertex_shader)
-	 _mesa_use_shader_program(ctx, GL_VERTEX_SHADER, save->VertexShader);
+      if (ctx->Extensions.ARB_vertex_shader) {
+	 _mesa_use_shader_program(ctx, GL_VERTEX_SHADER,
+                                  save->Shader[MESA_SHADER_VERTEX]);
+      }
 
       if (_mesa_has_geometry_shaders(ctx))
 	 _mesa_use_shader_program(ctx, GL_GEOMETRY_SHADER_ARB,
-				  save->GeometryShader);
+				  save->Shader[MESA_SHADER_GEOMETRY]);
 
       if (ctx->Extensions.ARB_fragment_shader)
 	 _mesa_use_shader_program(ctx, GL_FRAGMENT_SHADER,
-				  save->FragmentShader);
+				  save->Shader[MESA_SHADER_FRAGMENT]);
 
       _mesa_reference_shader_program(ctx, &ctx->Shader.ActiveProgram,
 				     save->ActiveShader);
 
-      _mesa_reference_shader_program(ctx, &save->VertexShader, NULL);
-      _mesa_reference_shader_program(ctx, &save->GeometryShader, NULL);
-      _mesa_reference_shader_program(ctx, &save->FragmentShader, NULL);
+      for (i = 0; i < MESA_SHADER_STAGES; i++)
+         _mesa_reference_shader_program(ctx, &save->Shader[i], NULL);
       _mesa_reference_shader_program(ctx, &save->ActiveShader, NULL);
    }
 
@@ -1087,11 +1100,11 @@ _mesa_meta_end(struct gl_context *ctx)
    }
 
    if (state & MESA_META_VIEWPORT) {
-      if (save->ViewportX != ctx->Viewport.X ||
-          save->ViewportY != ctx->Viewport.Y ||
-          save->ViewportW != ctx->Viewport.Width ||
-          save->ViewportH != ctx->Viewport.Height) {
-         _mesa_set_viewport(ctx, save->ViewportX, save->ViewportY,
+      if (save->ViewportX != ctx->ViewportArray[0].X ||
+          save->ViewportY != ctx->ViewportArray[0].Y ||
+          save->ViewportW != ctx->ViewportArray[0].Width ||
+          save->ViewportH != ctx->ViewportArray[0].Height) {
+         _mesa_set_viewport(ctx, 0, save->ViewportX, save->ViewportY,
                             save->ViewportW, save->ViewportH);
       }
       _mesa_DepthRange(save->DepthNear, save->DepthFar);
@@ -1198,7 +1211,7 @@ init_temp_texture(struct gl_context *ctx, struct temp_texture *tex)
 }
 
 static void
-cleanup_temp_texture(struct gl_context *ctx, struct temp_texture *tex)
+cleanup_temp_texture(struct temp_texture *tex)
 {
    if (!tex->TexObj)
      return;
@@ -1443,8 +1456,7 @@ init_blit_depth_pixels(struct gl_context *ctx)
 }
 
 static void
-setup_ff_blit_framebuffer(struct gl_context *ctx,
-                          struct blit_state *blit)
+setup_ff_blit_framebuffer(struct blit_state *blit)
 {
    struct vertex {
       GLfloat x, y, s, t;
@@ -1672,7 +1684,7 @@ blitframebuffer_texture(struct gl_context *ctx,
                _mesa_UseProgram(blit->RectShaderProg);
          }
          else {
-            setup_ff_blit_framebuffer(ctx, &ctx->Meta->Blit);
+            setup_ff_blit_framebuffer(&ctx->Meta->Blit);
          }
 
          _mesa_BindVertexArray(blit->ArrayObj);
@@ -1759,7 +1771,7 @@ blitframebuffer_texture(struct gl_context *ctx,
          }
 
          /* setup viewport */
-         _mesa_set_viewport(ctx, dstX, dstY, dstW, dstH);
+         _mesa_set_viewport(ctx, 0, dstX, dstY, dstW, dstH);
          _mesa_ColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
          _mesa_DepthMask(GL_FALSE);
          _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);
@@ -1857,7 +1869,7 @@ _mesa_meta_BlitFramebuffer(struct gl_context *ctx,
          _mesa_UseProgram(blit->RectShaderProg);
    }
    else {
-      setup_ff_blit_framebuffer(ctx, blit);
+      setup_ff_blit_framebuffer(blit);
    }
 
    _mesa_BindVertexArray(blit->ArrayObj);
@@ -1914,7 +1926,7 @@ _mesa_meta_BlitFramebuffer(struct gl_context *ctx,
          _mesa_BufferSubData(GL_ARRAY_BUFFER_ARB, 0, sizeof(verts), verts);
       }
 
-      _mesa_set_viewport(ctx, dstX, dstY, dstW, dstH);
+      _mesa_set_viewport(ctx, 0, dstX, dstY, dstW, dstH);
       _mesa_ColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
       _mesa_set_enable(ctx, GL_DEPTH_TEST, GL_FALSE);
       _mesa_DepthMask(GL_FALSE);
@@ -1963,7 +1975,7 @@ _mesa_meta_BlitFramebuffer(struct gl_context *ctx,
          _mesa_DepthFunc(GL_ALWAYS);
          _mesa_DepthMask(GL_TRUE);
 
-         _mesa_set_viewport(ctx, dstX, dstY, dstW, dstH);
+         _mesa_set_viewport(ctx, 0, dstX, dstY, dstW, dstH);
          _mesa_BufferSubData(GL_ARRAY_BUFFER_ARB, 0, sizeof(verts), verts);
          _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);
          mask &= ~GL_DEPTH_BUFFER_BIT;
@@ -1988,7 +2000,7 @@ _mesa_meta_BlitFramebuffer(struct gl_context *ctx,
 }
 
 static void
-meta_glsl_blit_cleanup(struct gl_context *ctx, struct blit_state *blit)
+meta_glsl_blit_cleanup(struct blit_state *blit)
 {
    if (blit->ArrayObj) {
       _mesa_DeleteVertexArrays(1, &blit->ArrayObj);
@@ -2145,6 +2157,19 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
       "{\n"
       "   gl_Position = position;\n"
       "}\n";
+   const char *gs_source =
+      "#version 150\n"
+      "layout(triangles) in;\n"
+      "layout(triangle_strip, max_vertices = 4) out;\n"
+      "uniform int layer;\n"
+      "void main()\n"
+      "{\n"
+      "  for (int i = 0; i < 3; i++) {\n"
+      "    gl_Layer = layer;\n"
+      "    gl_Position = gl_in[i].gl_Position;\n"
+      "    EmitVertex();\n"
+      "  }\n"
+      "}\n";
    const char *fs_source =
       "#ifdef GL_ES\n"
       "precision highp float;\n"
@@ -2154,7 +2179,7 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
       "{\n"
       "   gl_FragColor = color;\n"
       "}\n";
-   GLuint vs, fs;
+   GLuint vs, gs = 0, fs;
    bool has_integer_textures;
 
    if (clear->ArrayObj != 0)
@@ -2176,6 +2201,12 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
    _mesa_ShaderSource(vs, 1, &vs_source, NULL);
    _mesa_CompileShader(vs);
 
+   if (_mesa_has_geometry_shaders(ctx)) {
+      gs = _mesa_CreateShaderObjectARB(GL_GEOMETRY_SHADER);
+      _mesa_ShaderSource(gs, 1, &gs_source, NULL);
+      _mesa_CompileShader(gs);
+   }
+
    fs = _mesa_CreateShaderObjectARB(GL_FRAGMENT_SHADER);
    _mesa_ShaderSource(fs, 1, &fs_source, NULL);
    _mesa_CompileShader(fs);
@@ -2183,6 +2214,8 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
    clear->ShaderProg = _mesa_CreateProgramObjectARB();
    _mesa_AttachShader(clear->ShaderProg, fs);
    _mesa_DeleteObjectARB(fs);
+   if (gs != 0)
+      _mesa_AttachShader(clear->ShaderProg, gs);
    _mesa_AttachShader(clear->ShaderProg, vs);
    _mesa_DeleteObjectARB(vs);
    _mesa_BindAttribLocation(clear->ShaderProg, 0, "position");
@@ -2190,6 +2223,10 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
 
    clear->ColorLocation = _mesa_GetUniformLocation(clear->ShaderProg,
 						      "color");
+   if (gs != 0) {
+      clear->LayerLocation = _mesa_GetUniformLocation(clear->ShaderProg,
+						      "layer");
+   }
 
    has_integer_textures = _mesa_is_gles3(ctx) ||
       (_mesa_is_desktop_gl(ctx) && ctx->Const.GLSLVersion >= 130);
@@ -2227,6 +2264,8 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
       clear->IntegerShaderProg = _mesa_CreateProgramObjectARB();
       _mesa_AttachShader(clear->IntegerShaderProg, fs);
       _mesa_DeleteObjectARB(fs);
+      if (gs != 0)
+         _mesa_AttachShader(clear->IntegerShaderProg, gs);
       _mesa_AttachShader(clear->IntegerShaderProg, vs);
       _mesa_DeleteObjectARB(vs);
       _mesa_BindAttribLocation(clear->IntegerShaderProg, 0, "position");
@@ -2240,11 +2279,17 @@ meta_glsl_clear_init(struct gl_context *ctx, struct clear_state *clear)
 
       clear->IntegerColorLocation =
 	 _mesa_GetUniformLocation(clear->IntegerShaderProg, "color");
+      if (gs != 0) {
+         clear->IntegerLayerLocation =
+            _mesa_GetUniformLocation(clear->IntegerShaderProg, "layer");
+      }
    }
+   if (gs != 0)
+      _mesa_DeleteObjectARB(gs);
 }
 
 static void
-meta_glsl_clear_cleanup(struct gl_context *ctx, struct clear_state *clear)
+meta_glsl_clear_cleanup(struct clear_state *clear)
 {
    if (clear->ArrayObj == 0)
       return;
@@ -2371,8 +2416,19 @@ _mesa_meta_glsl_Clear(struct gl_context *ctx, GLbitfield buffers)
    _mesa_BufferData(GL_ARRAY_BUFFER_ARB, sizeof(verts), verts,
 		       GL_DYNAMIC_DRAW_ARB);
 
-   /* draw quad */
-   _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);
+   /* draw quad(s) */
+   if (fb->MaxNumLayers > 0) {
+      unsigned layer;
+      for (layer = 0; layer < fb->MaxNumLayers; layer++) {
+         if (fb->_IntegerColor)
+            _mesa_Uniform1i(clear->IntegerLayerLocation, layer);
+         else
+            _mesa_Uniform1i(clear->LayerLocation, layer);
+         _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);
+      }
+   } else {
+      _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);
+   }
 
    _mesa_meta_end(ctx);
 }
@@ -2489,7 +2545,24 @@ _mesa_meta_CopyPixels(struct gl_context *ctx, GLint srcX, GLint srcY,
    _mesa_meta_end(ctx);
 }
 
+static void
+meta_drawpix_cleanup(struct drawpix_state *drawpix)
+{
+   if (drawpix->ArrayObj != 0) {
+      _mesa_DeleteVertexArrays(1, &drawpix->ArrayObj);
+      drawpix->ArrayObj = 0;
+   }
 
+   if (drawpix->StencilFP != 0) {
+      _mesa_DeleteProgramsARB(1, &drawpix->StencilFP);
+      drawpix->StencilFP = 0;
+   }
+
+   if (drawpix->DepthFP != 0) {
+      _mesa_DeleteProgramsARB(1, &drawpix->DepthFP);
+      drawpix->DepthFP = 0;
+   }
+}
 
 /**
  * When the glDrawPixels() image size is greater than the max rectangle
@@ -2951,8 +3024,8 @@ _mesa_meta_Bitmap(struct gl_context *ctx,
       /* one-time setup */
 
       /* create vertex array object */
-      _mesa_GenVertexArraysAPPLE(1, &bitmap->ArrayObj);
-      _mesa_BindVertexArrayAPPLE(bitmap->ArrayObj);
+      _mesa_GenVertexArrays(1, &bitmap->ArrayObj);
+      _mesa_BindVertexArray(bitmap->ArrayObj);
 
       /* create vertex array buffer */
       _mesa_GenBuffers(1, &bitmap->VBO);
@@ -3307,8 +3380,7 @@ setup_texture_coords(GLenum faceTarget,
 
 
 static void
-setup_ff_generate_mipmap(struct gl_context *ctx,
-                         struct gen_mipmap_state *mipmap)
+setup_ff_generate_mipmap(struct gen_mipmap_state *mipmap)
 {
    struct vertex {
       GLfloat x, y, tex[3];
@@ -3317,8 +3389,8 @@ setup_ff_generate_mipmap(struct gl_context *ctx,
    if (mipmap->ArrayObj == 0) {
       /* one-time setup */
       /* create vertex array object */
-      _mesa_GenVertexArraysAPPLE(1, &mipmap->ArrayObj);
-      _mesa_BindVertexArrayAPPLE(mipmap->ArrayObj);
+      _mesa_GenVertexArrays(1, &mipmap->ArrayObj);
+      _mesa_BindVertexArray(mipmap->ArrayObj);
 
       /* create vertex array buffer */
       _mesa_GenBuffers(1, &mipmap->VBO);
@@ -3498,8 +3570,7 @@ setup_glsl_generate_mipmap(struct gl_context *ctx,
 
 
 static void
-meta_glsl_generate_mipmap_cleanup(struct gl_context *ctx,
-                                 struct gen_mipmap_state *mipmap)
+meta_glsl_generate_mipmap_cleanup(struct gen_mipmap_state *mipmap)
 {
    if (mipmap->ArrayObj == 0)
       return;
@@ -3576,7 +3647,7 @@ _mesa_meta_GenerateMipmap(struct gl_context *ctx, GLenum target,
       _mesa_UseProgram(mipmap->ShaderProg);
    }
    else {
-      setup_ff_generate_mipmap(ctx, mipmap);
+      setup_ff_generate_mipmap(mipmap);
       _mesa_set_enable(ctx, target, GL_TRUE);
    }
 
@@ -3736,7 +3807,7 @@ _mesa_meta_GenerateMipmap(struct gl_context *ctx, GLenum target,
       assert(dstHeight == ctx->DrawBuffer->Height);
 
       /* setup viewport */
-      _mesa_set_viewport(ctx, 0, 0, dstWidth, dstHeight);
+      _mesa_set_viewport(ctx, 0, 0, 0, dstWidth, dstHeight);
 
       _mesa_DrawArrays(GL_TRIANGLE_FAN, 0, 4);
    }
@@ -3760,7 +3831,7 @@ _mesa_meta_GenerateMipmap(struct gl_context *ctx, GLenum target,
  * ReadPixels() and passed to Tex[Sub]Image().
  */
 static GLenum
-get_temp_image_type(struct gl_context *ctx, gl_format format)
+get_temp_image_type(struct gl_context *ctx, mesa_format format)
 {
    GLenum baseFormat;
 
@@ -3891,6 +3962,25 @@ _mesa_meta_CopyTexSubImage(struct gl_context *ctx, GLuint dims,
 }
 
 
+static void
+meta_decompress_cleanup(struct decompress_state *decompress)
+{
+   if (decompress->FBO != 0) {
+      _mesa_DeleteFramebuffers(1, &decompress->FBO);
+      _mesa_DeleteRenderbuffers(1, &decompress->RBO);
+   }
+
+   if (decompress->ArrayObj != 0) {
+      _mesa_DeleteVertexArrays(1, &decompress->ArrayObj);
+      _mesa_DeleteBuffers(1, &decompress->VBO);
+   }
+
+   if (decompress->Sampler != 0)
+      _mesa_DeleteSamplers(1, &decompress->Sampler);
+
+   memset(decompress, 0, sizeof(*decompress));
+}
+
 /**
  * Decompress a texture image by drawing a quad with the compressed
  * texture and reading the pixels out of the color buffer.
@@ -3927,11 +4017,28 @@ decompress_texture_image(struct gl_context *ctx,
              target == GL_TEXTURE_2D_ARRAY);
    }
 
-   if (target == GL_TEXTURE_CUBE_MAP) {
+   switch (target) {
+   case GL_TEXTURE_1D:
+   case GL_TEXTURE_1D_ARRAY:
+      assert(!"No compressed 1D textures.");
+      return;
+
+   case GL_TEXTURE_3D:
+      assert(!"No compressed 3D textures.");
+      return;
+
+   case GL_TEXTURE_2D_ARRAY:
+   case GL_TEXTURE_CUBE_MAP_ARRAY:
+      /* These targets are just broken currently. */
+      return;
+
+   case GL_TEXTURE_CUBE_MAP:
       faceTarget = GL_TEXTURE_CUBE_MAP_POSITIVE_X + texImage->Face;
-   }
-   else {
+      break;
+
+   default:
       faceTarget = target;
+      break;
    }
 
    /* save fbo bindings (not saved by _mesa_meta_begin()) */
@@ -4014,19 +4121,18 @@ decompress_texture_image(struct gl_context *ctx,
                         verts[3].tex);
 
    /* setup vertex positions */
-   verts[0].x = 0.0F;
-   verts[0].y = 0.0F;
-   verts[1].x = width;
-   verts[1].y = 0.0F;
-   verts[2].x = width;
-   verts[2].y = height;
-   verts[3].x = 0.0F;
-   verts[3].y = height;
+   verts[0].x = -1.0F;
+   verts[0].y = -1.0F;
+   verts[1].x =  1.0F;
+   verts[1].y = -1.0F;
+   verts[2].x =  1.0F;
+   verts[2].y =  1.0F;
+   verts[3].x = -1.0F;
+   verts[3].y =  1.0F;
 
    _mesa_MatrixMode(GL_PROJECTION);
    _mesa_LoadIdentity();
-   _mesa_Ortho(0.0, width, 0.0, height, -1.0, 1.0);
-   _mesa_set_viewport(ctx, 0, 0, width, height);
+   _mesa_set_viewport(ctx, 0, 0, 0, width, height);
 
    /* upload new vertex data */
    _mesa_BufferSubData(GL_ARRAY_BUFFER_ARB, 0, sizeof(verts), verts);
@@ -4125,7 +4231,8 @@ _mesa_meta_GetTexImage(struct gl_context *ctx,
     * unsigned, normalized values.  We could handle signed and unnormalized 
     * with floating point renderbuffers...
     */
-   if (_mesa_is_format_compressed(texImage->TexFormat) &&
+   if (texImage->TexObject->Target != GL_TEXTURE_CUBE_MAP_ARRAY
+       && _mesa_is_format_compressed(texImage->TexFormat) &&
        _mesa_get_format_datatype(texImage->TexFormat)
        == GL_UNSIGNED_NORMALIZED) {
       struct gl_texture_object *texObj = texImage->TexObject;

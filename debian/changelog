@@ -1,3 +1,37 @@
+mesa (10.1.0~rc2-1) experimental; urgency=medium
+
+  [ Maarten Lankhorst ]
+  * Add missing depends to keep lib(e)gl1-dev usable.
+  * Bump to rc2.
+
+  [ Emilio Pozuelo Monfort ]
+  * Update build dependencies and dependencies minimum versions. Thanks to
+    Fabio Pedretti <fabio.ped@libero.it> for the patch.
+
+  [ Andreas Boll ]
+  * Attempt to fix FTBFS on hurd.
+  * Cherry pick some fixes for GLX fbconfig. (Closes: #739691)
+
+  [ Samuel Thibault ]
+  * Enable egl and gles on hurd (closes: #729260)
+
+  [ Julien Cristau ]
+  * libgbm1.symbols: try to avoid listing private symbols.
+  * Enable radeon/r200/r300/r600/radeonsi on kfreebsd (closes: #732337).
+    Thanks, Robert Millan!
+  * gallium: fix build failure on powerpcspe (closes: #695746).  Thanks, Roland
+    Stigge!
+
+ -- Julien Cristau <jcristau@debian.org>  Sun, 02 Mar 2014 20:22:47 +0100
+
+mesa (10.1.0~rc1-1) experimental; urgency=low
+
+  * New upstream release.
+  * Add new build-depends for dri3.
+  * Refresh libegl1-mesa and gbm symbols.
+
+ -- Maarten Lankhorst <maarten.lankhorst@ubuntu.com>  Wed, 12 Feb 2014 11:50:39 +0100
+
 mesa (10.0.2-1) experimental; urgency=low
 
   [ Maarten Lankhorst ]

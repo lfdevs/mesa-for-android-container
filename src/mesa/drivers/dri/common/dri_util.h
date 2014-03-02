@@ -66,7 +66,7 @@ extern const __DRIcoreExtension driCoreExtension;
 extern const __DRIswrastExtension driSWRastExtension;
 extern const __DRIdri2Extension driDRI2Extension;
 extern const __DRI2configQueryExtension dri2ConfigQueryExtension;
-
+extern const __DRIcopySubBufferExtension driCopySubBufferExtension;
 /**
  * Driver callback functions.
  *
@@ -115,6 +115,9 @@ struct __DriverAPIRec {
                                     int width, int height);
 
     void (*ReleaseBuffer) (__DRIscreen *screenPrivate, __DRIbuffer *buffer);
+
+    void (*CopySubBuffer)(__DRIdrawable *driDrawPriv, int x, int y,
+                          int w, int h);
 };
 
 extern const struct __DriverAPIRec driDriverAPI;
@@ -278,9 +281,9 @@ struct __DRIdrawableRec {
 };
 
 extern uint32_t
-driGLFormatToImageFormat(gl_format format);
+driGLFormatToImageFormat(mesa_format format);
 
-extern gl_format
+extern mesa_format
 driImageFormatToGLFormat(uint32_t image_format);
 
 extern void

@@ -63,7 +63,7 @@ nv10_use_viewport_zclear(struct gl_context *ctx)
 	struct gl_framebuffer *fb = ctx->DrawBuffer;
 	struct gl_renderbuffer *depthRb = fb->Attachment[BUFFER_DEPTH].Renderbuffer;
 
-	return context_chipset(ctx) < 0x17 &&
+	return context_eng3d(ctx)->oclass < NV17_3D_CLASS &&
 		!nctx->hierz.clear_blocked && depthRb &&
 		(_mesa_get_format_bits(depthRb->Format,
 				       GL_DEPTH_BITS) >= 24);
@@ -184,7 +184,7 @@ nv10_clear(struct gl_context *ctx, GLbitfield buffers)
 	}
 
 	if ((buffers & BUFFER_BIT_DEPTH) && ctx->Depth.Mask) {
-		if (context_chipset(ctx) >= 0x17)
+		if (context_eng3d(ctx)->oclass >= NV17_3D_CLASS)
 			nv17_zclear(ctx, &buffers);
 		else
 			nv10_zclear(ctx, &buffers);
@@ -245,7 +245,7 @@ nv10_hwctx_init(struct gl_context *ctx)
 	BEGIN_NV04(push, NV04_GRAPH(3D, NOP), 1);
 	PUSH_DATA (push, 0);
 
-	if (context_chipset(ctx) >= 0x17) {
+	if (context_eng3d(ctx)->oclass >= NV17_3D_CLASS) {
 		BEGIN_NV04(push, NV17_3D(UNK01AC), 2);
 		PUSH_DATA (push, fifo->vram);
 		PUSH_DATA (push, fifo->vram);
@@ -257,7 +257,7 @@ nv10_hwctx_init(struct gl_context *ctx)
 		PUSH_DATA (push, 1);
 	}
 
-	if (context_chipset(ctx) >= 0x11) {
+	if (context_eng3d(ctx)->oclass >= NV15_3D_CLASS) {
 		BEGIN_NV04(push, SUBC_3D(0x120), 3);
 		PUSH_DATA (push, 0);
 		PUSH_DATA (push, 1);
@@ -427,7 +427,8 @@ nv10_context_destroy(struct gl_context *ctx)
 }
 
 static struct gl_context *
-nv10_context_create(struct nouveau_screen *screen, const struct gl_config *visual,
+nv10_context_create(struct nouveau_screen *screen, gl_api api,
+		    const struct gl_config *visual,
 		    struct gl_context *share_ctx)
 {
 	struct nouveau_context *nctx;
@@ -441,7 +442,7 @@ nv10_context_create(struct nouveau_screen *screen, const struct gl_config *visua
 
 	ctx = &nctx->base;
 
-	if (!nouveau_context_init(ctx, screen, visual, share_ctx))
+	if (!nouveau_context_init(ctx, api, screen, visual, share_ctx))
 		goto fail;
 
 	ctx->Extensions.ARB_texture_env_crossbar = true;
@@ -457,7 +458,7 @@ nv10_context_create(struct nouveau_screen *screen, const struct gl_config *visua
 	/* GL constants. */
 	ctx->Const.MaxTextureLevels = 12;
 	ctx->Const.MaxTextureCoordUnits = NV10_TEXTURE_UNITS;
-	ctx->Const.FragmentProgram.MaxTextureImageUnits = NV10_TEXTURE_UNITS;
+	ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits = NV10_TEXTURE_UNITS;
 	ctx->Const.MaxTextureUnits = NV10_TEXTURE_UNITS;
 	ctx->Const.MaxTextureMaxAnisotropy = 2;
 	ctx->Const.MaxTextureLodBias = 15;

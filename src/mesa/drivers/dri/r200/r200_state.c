@@ -30,7 +30,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /*
  * Authors:
- *   Keith Whitwell <keith@tungstengraphics.com>
+ *   Keith Whitwell <keithw@vmware.com>
  */
 
 #include "main/glheader.h"
@@ -1544,7 +1544,7 @@ void r200UpdateWindow( struct gl_context *ctx )
    __DRIdrawable *dPriv = radeon_get_drawable(&rmesa->radeon);
    GLfloat xoffset = 0;
    GLfloat yoffset = dPriv ? (GLfloat) dPriv->h : 0;
-   const GLfloat *v = ctx->Viewport._WindowMap.m;
+   const GLfloat *v = ctx->ViewportArray[0]._WindowMap.m;
    const GLboolean render_to_fbo = (ctx->DrawBuffer ? _mesa_is_user_fbo(ctx->DrawBuffer) : 0);
    const GLfloat depthScale = 1.0F / ctx->DrawBuffer->_DepthMaxF;
    GLfloat y_scale, y_bias;
@@ -1600,14 +1600,8 @@ void r200_vtbl_update_scissor( struct gl_context *ctx )
 }
 
 
-static void r200Viewport( struct gl_context *ctx, GLint x, GLint y,
-			    GLsizei width, GLsizei height )
+static void r200Viewport(struct gl_context *ctx)
 {
-   (void) x;
-   (void) y;
-   (void) width;
-   (void) height;
-
    /* Don't pipeline viewport changes, conflict with window offset
     * setting below.  Could apply deltas to rescue pipelined viewport
     * values, or keep the originals hanging around.
@@ -1617,8 +1611,7 @@ static void r200Viewport( struct gl_context *ctx, GLint x, GLint y,
    radeon_viewport(ctx);
 }
 
-static void r200DepthRange( struct gl_context *ctx, GLclampd nearval,
-			      GLclampd farval )
+static void r200DepthRange(struct gl_context *ctx)
 {
    r200UpdateWindow( ctx );
 }
@@ -1629,7 +1622,7 @@ void r200UpdateViewportOffset( struct gl_context *ctx )
    __DRIdrawable *dPriv = radeon_get_drawable(&rmesa->radeon);
    GLfloat xoffset = (GLfloat)0;
    GLfloat yoffset = (GLfloat)dPriv->h;
-   const GLfloat *v = ctx->Viewport._WindowMap.m;
+   const GLfloat *v = ctx->ViewportArray[0]._WindowMap.m;
 
    float_ui32_type tx;
    float_ui32_type ty;
@@ -2243,7 +2236,7 @@ static GLboolean r200ValidateBuffers(struct gl_context *ctx)
 				       0, RADEON_GEM_DOMAIN_VRAM);
    }
 
-   for (i = 0; i < ctx->Const.FragmentProgram.MaxTextureImageUnits; ++i) {
+   for (i = 0; i < ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits; ++i) {
       radeonTexObj *t;
 
       if (!ctx->Texture.Unit[i]._ReallyEnabled)

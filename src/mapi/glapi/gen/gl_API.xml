@@ -8241,6 +8241,8 @@
 
 <!-- ARB extensions #86...#93 -->
 
+<xi:include href="ARB_draw_indirect.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
 <category name="GL_ARB_transform_feedback3" number="94">
   <enum name="MAX_TRANSFORM_FEEDBACK_BUFFERS" value="0x8E70"/>
   <enum name="MAX_VERTEX_STREAMS"             value="0x8E71"/>
@@ -8309,6 +8311,8 @@
 </category>
 
 <xi:include href="ARB_shader_atomic_counters.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<xi:include href="ARB_shader_image_load_store.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <xi:include href="ARB_texture_storage.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
@@ -8458,7 +8462,13 @@
 
 </category>
 
-<!-- ARB extensions #120...#124 -->
+<!-- ARB extension #120 -->
+
+<xi:include href="ARB_clear_buffer_object.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
+
+<!-- ARB extensions #122...#123 -->
+
+<xi:include href="ARB_texture_view.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <xi:include href="ARB_vertex_attrib_binding.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
@@ -8470,7 +8480,7 @@
 
 <xi:include href="ARB_invalidate_subdata.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
-<!-- ARB extensions #133...#138 -->
+<!-- ARB extensions #134...#138 -->
 
 <xi:include href="ARB_texture_buffer_range.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
@@ -9916,7 +9926,7 @@
 </category>
 
 <!-- Extension number 99 is not listed in the extension registry. -->
-<!-- Extension number 100 is a GLU extension. -->
+<xi:include href="ARB_viewport_array.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <!-- Shouldn't this be EXT_fragment_lighting? -->
 <category name="GL_SGIX_fragment_lighting" number="102">

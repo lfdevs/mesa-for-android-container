@@ -58,7 +58,10 @@ int bc_parser::decode() {
 	if (pshader) {
 		switch (bc->type) {
 		case TGSI_PROCESSOR_FRAGMENT: t = TARGET_PS; break;
-		case TGSI_PROCESSOR_VERTEX: t = TARGET_VS; break;
+		case TGSI_PROCESSOR_VERTEX:
+			t = pshader->vs_as_es ? TARGET_ES : TARGET_VS;
+			break;
+		case TGSI_PROCESSOR_GEOMETRY: t = TARGET_GS; break;
 		case TGSI_PROCESSOR_COMPUTE: t = TARGET_COMPUTE; break;
 		default: assert(!"unknown shader target"); return -1; break;
 		}
@@ -134,8 +137,12 @@ int bc_parser::parse_decls() {
 		}
 	}
 
-	if (sh->target == TARGET_VS)
+	if (sh->target == TARGET_VS || sh->target == TARGET_ES)
 		sh->add_input(0, 1, 0x0F);
+	else if (sh->target == TARGET_GS) {
+		sh->add_input(0, 1, 0x0F);
+		sh->add_input(1, 1, 0x0F);
+	}
 
 	bool ps_interp = ctx.hw_class >= HW_CLASS_EVERGREEN
 			&& sh->target == TARGET_PS;
@@ -202,7 +209,7 @@ int bc_parser::decode_cf(unsigned &i, bool &eop) {
 		if (cf->bc.rw_rel)
 			gpr_reladdr = true;
 		assert(!cf->bc.rw_rel);
-	} else if (flags & (CF_STRM | CF_RAT)) {
+	} else if (flags & CF_MEM) {
 		if (cf->bc.rw_rel)
 			gpr_reladdr = true;
 		assert(!cf->bc.rw_rel);
@@ -676,7 +683,7 @@ int bc_parser::prepare_ir() {
 			} while (1);
 
 			c->bc.end_of_program = eop;
-		} else if (flags & (CF_STRM | CF_RAT)) {
+		} else if (flags & CF_MEM) {
 
 			unsigned burst_count = c->bc.burst_count;
 			unsigned eop = c->bc.end_of_program;
@@ -694,7 +701,7 @@ int bc_parser::prepare_ir() {
 								sh->get_gpr_value(true, c->bc.rw_gpr, s, false);
 				}
 
-				if ((flags & CF_RAT) && (c->bc.type & 1)) { // indexed write
+				if (((flags & CF_RAT) || (!(flags & CF_STRM))) && (c->bc.type & 1)) { // indexed write
 					c->src.resize(8);
 					for(int s = 0; s < 3; ++s) {
 						c->src[4 + s] =

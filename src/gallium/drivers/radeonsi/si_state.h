@@ -27,7 +27,7 @@
 #ifndef SI_STATE_H
 #define SI_STATE_H
 
-#include "radeonsi_pm4.h"
+#include "si_pm4.h"
 #include "../radeon/r600_pipe_common.h"
 
 struct si_state_blend {
@@ -61,7 +61,6 @@ struct si_state_dsa {
 	struct si_pm4_state	pm4;
 	float			alpha_ref;
 	unsigned		alpha_func;
-	unsigned		db_render_override;
 	unsigned		db_render_control;
 	uint8_t			valuemask[2];
 	uint8_t			writemask[2];
@@ -89,6 +88,11 @@ union si_state {
 		struct si_pm4_state		*fb_rs;
 		struct si_pm4_state		*fb_blend;
 		struct si_pm4_state		*dsa_stencil_ref;
+		struct si_pm4_state		*es;
+		struct si_pm4_state		*gs;
+		struct si_pm4_state		*gs_rings;
+		struct si_pm4_state		*gs_sampler;
+		struct si_pm4_state		*gs_onoff;
 		struct si_pm4_state		*vs;
 		struct si_pm4_state		*vs_sampler;
 		struct si_pm4_state		*ps;
@@ -110,8 +114,11 @@ union si_state {
 #define NUM_SAMPLER_VIEWS	(FMASK_TEX_OFFSET+NUM_TEX_UNITS)
 #define NUM_SAMPLER_STATES	NUM_TEX_UNITS
 
-#define NUM_PIPE_CONST_BUFFERS 16
-#define NUM_CONST_BUFFERS 17
+#define NUM_PIPE_CONST_BUFFERS	16
+#define NUM_CONST_BUFFERS	(NUM_PIPE_CONST_BUFFERS + 1)
+
+#define SI_RING_ESGS		0
+#define SI_RING_GSVS		1
 
 /* This represents resource descriptors in memory, such as buffer resources,
  * image resources, and sampler states.
@@ -163,43 +170,54 @@ struct si_buffer_resources {
 #define si_pm4_block_idx(member) \
 	(offsetof(union si_state, named.member) / sizeof(struct si_pm4_state *))
 
-#define si_pm4_state_changed(rctx, member) \
-	((rctx)->queued.named.member != (rctx)->emitted.named.member)
+#define si_pm4_state_changed(sctx, member) \
+	((sctx)->queued.named.member != (sctx)->emitted.named.member)
 
-#define si_pm4_bind_state(rctx, member, value) \
+#define si_pm4_bind_state(sctx, member, value) \
 	do { \
-		(rctx)->queued.named.member = (value); \
+		(sctx)->queued.named.member = (value); \
 	} while(0)
 
-#define si_pm4_delete_state(rctx, member, value) \
+#define si_pm4_delete_state(sctx, member, value) \
 	do { \
-		if ((rctx)->queued.named.member == (value)) { \
-			(rctx)->queued.named.member = NULL; \
+		if ((sctx)->queued.named.member == (value)) { \
+			(sctx)->queued.named.member = NULL; \
 		} \
-		si_pm4_free_state(rctx, (struct si_pm4_state *)(value), \
+		si_pm4_free_state(sctx, (struct si_pm4_state *)(value), \
 				  si_pm4_block_idx(member)); \
 	} while(0)
 
-#define si_pm4_set_state(rctx, member, value) \
+#define si_pm4_set_state(sctx, member, value) \
 	do { \
-		if ((rctx)->queued.named.member != (value)) { \
-			si_pm4_free_state(rctx, \
-				(struct si_pm4_state *)(rctx)->queued.named.member, \
+		if ((sctx)->queued.named.member != (value)) { \
+			si_pm4_free_state(sctx, \
+				(struct si_pm4_state *)(sctx)->queued.named.member, \
 				si_pm4_block_idx(member)); \
-			(rctx)->queued.named.member = (value); \
+			(sctx)->queued.named.member = (value); \
 		} \
 	} while(0)
 
 /* si_descriptors.c */
-void si_set_sampler_view(struct r600_context *rctx, unsigned shader,
+void si_set_sampler_view(struct si_context *sctx, unsigned shader,
 			 unsigned slot, struct pipe_sampler_view *view,
 			 unsigned *view_desc);
-void si_init_all_descriptors(struct r600_context *rctx);
-void si_release_all_descriptors(struct r600_context *rctx);
-void si_all_descriptors_begin_new_cs(struct r600_context *rctx);
+void si_set_ring_buffer(struct pipe_context *ctx, uint shader, uint slot,
+			struct pipe_constant_buffer *input,
+			unsigned stride, unsigned num_records,
+			bool add_tid, bool swizzle,
+			unsigned element_size, unsigned index_stride);
+void si_init_all_descriptors(struct si_context *sctx);
+void si_release_all_descriptors(struct si_context *sctx);
+void si_all_descriptors_begin_new_cs(struct si_context *sctx);
+void si_copy_buffer(struct si_context *sctx,
+		    struct pipe_resource *dst, struct pipe_resource *src,
+		    uint64_t dst_offset, uint64_t src_offset, unsigned size);
+void si_upload_const_buffer(struct si_context *sctx, struct r600_resource **rbuffer,
+			    const uint8_t *ptr, unsigned size, uint32_t *const_offset);
 
 /* si_state.c */
 struct si_pipe_shader_selector;
+struct si_surface;
 
 boolean si_is_format_supported(struct pipe_screen *screen,
                                enum pipe_format format,
@@ -207,14 +225,13 @@ boolean si_is_format_supported(struct pipe_screen *screen,
                                unsigned sample_count,
                                unsigned usage);
 int si_shader_select(struct pipe_context *ctx,
-		     struct si_pipe_shader_selector *sel,
-		     unsigned *dirty);
-void si_init_state_functions(struct r600_context *rctx);
-void si_init_config(struct r600_context *rctx);
+		     struct si_pipe_shader_selector *sel);
+void si_init_state_functions(struct si_context *sctx);
+void si_init_config(struct si_context *sctx);
 
 /* si_state_draw.c */
 extern const struct r600_atom si_atom_cache_flush;
-void si_emit_cache_flush(struct r600_common_context *rctx, struct r600_atom *atom);
+void si_emit_cache_flush(struct r600_common_context *sctx, struct r600_atom *atom);
 void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *dinfo);
 
 /* si_commands.c */

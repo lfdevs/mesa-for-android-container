@@ -1,5 +1,5 @@
 /*
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2003 VMware, Inc.
  * Copyright © 2007 Intel Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -35,10 +35,10 @@ extern int INTEL_DEBUG;
 
 #define DEBUG_TEXTURE	  0x1
 #define DEBUG_STATE	  0x2
-#define DEBUG_IOCTL	  0x4
 #define DEBUG_BLIT	  0x8
 #define DEBUG_MIPTREE     0x10
 #define DEBUG_PERF	  0x20
+#define DEBUG_PERFMON     0x40
 #define DEBUG_BATCH       0x80
 #define DEBUG_PIXEL       0x100
 #define DEBUG_BUFMGR      0x200

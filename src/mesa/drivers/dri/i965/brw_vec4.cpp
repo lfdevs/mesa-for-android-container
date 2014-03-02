@@ -24,6 +24,7 @@
 #include "brw_vec4.h"
 #include "brw_cfg.h"
 #include "brw_vs.h"
+#include "brw_dead_control_flow.h"
 
 extern "C" {
 #include "main/macros.h"
@@ -271,7 +272,8 @@ vec4_visitor::implied_mrf_writes(vec4_instruction *inst)
    case SHADER_OPCODE_TXL:
    case SHADER_OPCODE_TXD:
    case SHADER_OPCODE_TXF:
-   case SHADER_OPCODE_TXF_MS:
+   case SHADER_OPCODE_TXF_CMS:
+   case SHADER_OPCODE_TXF_MCS:
    case SHADER_OPCODE_TXS:
    case SHADER_OPCODE_TG4:
    case SHADER_OPCODE_TG4_OFFSET:
@@ -343,7 +345,7 @@ vec4_visitor::dead_code_eliminate()
    }
 
    if (progress)
-      live_intervals_valid = false;
+      invalidate_live_intervals();
 
    return progress;
 }
@@ -554,7 +556,7 @@ vec4_visitor::opt_algebraic()
    }
 
    if (progress)
-      this->live_intervals_valid = false;
+      invalidate_live_intervals();
 
    return progress;
 }
@@ -667,7 +669,7 @@ vec4_visitor::opt_set_dependency_control()
    vec4_instruction *last_mrf_write[BRW_MAX_GRF];
    uint8_t mrf_channels_written[BRW_MAX_GRF];
 
-   cfg_t cfg(this);
+   cfg_t cfg(&instructions);
 
    assert(prog_data->total_grf ||
           !"Must be called after register allocation");
@@ -1017,7 +1019,7 @@ vec4_visitor::opt_register_coalesce()
    }
 
    if (progress)
-      live_intervals_valid = false;
+      invalidate_live_intervals();
 
    return progress;
 }
@@ -1100,7 +1102,7 @@ vec4_visitor::split_virtual_grfs()
          }
       }
    }
-   this->live_intervals_valid = false;
+   invalidate_live_intervals();
 }
 
 void
@@ -1108,7 +1110,11 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst)
 {
    vec4_instruction *inst = (vec4_instruction *)be_inst;
 
-   printf("%s ", brw_instruction_name(inst->opcode));
+   printf("%s", brw_instruction_name(inst->opcode));
+   if (inst->conditional_mod) {
+      printf("%s", conditional_modifier[inst->conditional_mod]);
+   }
+   printf(" ");
 
    switch (inst->dst.file) {
    case GRF:
@@ -1116,6 +1122,33 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst)
       break;
    case MRF:
       printf("m%d", inst->dst.reg);
+      break;
+   case HW_REG:
+      if (inst->dst.fixed_hw_reg.file == BRW_ARCHITECTURE_REGISTER_FILE) {
+         switch (inst->dst.fixed_hw_reg.nr) {
+         case BRW_ARF_NULL:
+            printf("null");
+            break;
+         case BRW_ARF_ADDRESS:
+            printf("a0.%d", inst->dst.fixed_hw_reg.subnr);
+            break;
+         case BRW_ARF_ACCUMULATOR:
+            printf("acc%d", inst->dst.fixed_hw_reg.subnr);
+            break;
+         case BRW_ARF_FLAG:
+            printf("f%d.%d", inst->dst.fixed_hw_reg.nr & 0xf,
+                             inst->dst.fixed_hw_reg.subnr);
+            break;
+         default:
+            printf("arf%d.%d", inst->dst.fixed_hw_reg.nr & 0xf,
+                               inst->dst.fixed_hw_reg.subnr);
+            break;
+         }
+      } else {
+         printf("hw_reg%d", inst->dst.fixed_hw_reg.nr);
+      }
+      if (inst->dst.fixed_hw_reg.subnr)
+         printf("+%d", inst->dst.fixed_hw_reg.subnr);
       break;
    case BAD_FILE:
       printf("(null)");
@@ -1135,9 +1168,13 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst)
       if (inst->dst.writemask & 8)
          printf("w");
    }
-   printf(", ");
+   printf(":%s, ", reg_encoding[inst->dst.type]);
 
-   for (int i = 0; i < 3; i++) {
+   for (int i = 0; i < 3 && inst->src[i].file != BAD_FILE; i++) {
+      if (inst->src[i].negate)
+         printf("-");
+      if (inst->src[i].abs)
+         printf("|");
       switch (inst->src[i].file) {
       case GRF:
          printf("vgrf%d", inst->src[i].reg);
@@ -1164,6 +1201,39 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst)
             break;
          }
          break;
+      case HW_REG:
+         if (inst->src[i].fixed_hw_reg.negate)
+            printf("-");
+         if (inst->src[i].fixed_hw_reg.abs)
+            printf("|");
+         if (inst->src[i].fixed_hw_reg.file == BRW_ARCHITECTURE_REGISTER_FILE) {
+            switch (inst->src[i].fixed_hw_reg.nr) {
+            case BRW_ARF_NULL:
+               printf("null");
+               break;
+            case BRW_ARF_ADDRESS:
+               printf("a0.%d", inst->src[i].fixed_hw_reg.subnr);
+               break;
+            case BRW_ARF_ACCUMULATOR:
+               printf("acc%d", inst->src[i].fixed_hw_reg.subnr);
+               break;
+            case BRW_ARF_FLAG:
+               printf("f%d.%d", inst->src[i].fixed_hw_reg.nr & 0xf,
+                                inst->src[i].fixed_hw_reg.subnr);
+               break;
+            default:
+               printf("arf%d.%d", inst->src[i].fixed_hw_reg.nr & 0xf,
+                                  inst->src[i].fixed_hw_reg.subnr);
+               break;
+            }
+         } else {
+            printf("hw_reg%d", inst->src[i].fixed_hw_reg.nr);
+         }
+         if (inst->src[i].fixed_hw_reg.subnr)
+            printf("+%d", inst->src[i].fixed_hw_reg.subnr);
+         if (inst->src[i].fixed_hw_reg.abs)
+            printf("|");
+         break;
       case BAD_FILE:
          printf("(null)");
          break;
@@ -1172,16 +1242,25 @@ vec4_visitor::dump_instruction(backend_instruction *be_inst)
          break;
       }
 
-      if (inst->src[i].reg_offset)
+      if (virtual_grf_sizes[inst->src[i].reg] != 1)
          printf(".%d", inst->src[i].reg_offset);
 
-      static const char *chans[4] = {"x", "y", "z", "w"};
-      printf(".");
-      for (int c = 0; c < 4; c++) {
-         printf("%s", chans[BRW_GET_SWZ(inst->src[i].swizzle, c)]);
+      if (inst->src[i].file != IMM) {
+         static const char *chans[4] = {"x", "y", "z", "w"};
+         printf(".");
+         for (int c = 0; c < 4; c++) {
+            printf("%s", chans[BRW_GET_SWZ(inst->src[i].swizzle, c)]);
+         }
       }
 
-      if (i < 3)
+      if (inst->src[i].abs)
+         printf("|");
+
+      if (inst->src[i].file != IMM) {
+         printf(":%s", reg_encoding[inst->src[i].type]);
+      }
+
+      if (i < 2 && inst->src[i + 1].file != BAD_FILE)
          printf(", ");
    }
 
@@ -1415,10 +1494,10 @@ vec4_visitor::emit_shader_time_end()
     */
    emit(ADD(diff, src_reg(diff), src_reg(-2u)));
 
-   emit_shader_time_write(ST_VS, src_reg(diff));
-   emit_shader_time_write(ST_VS_WRITTEN, src_reg(1u));
+   emit_shader_time_write(st_base, src_reg(diff));
+   emit_shader_time_write(st_written, src_reg(1u));
    emit(BRW_OPCODE_ELSE);
-   emit_shader_time_write(ST_VS_RESET, src_reg(1u));
+   emit_shader_time_write(st_reset, src_reg(1u));
    emit(BRW_OPCODE_ENDIF);
 }
 
@@ -1461,7 +1540,7 @@ vec4_visitor::run()
     * functions called "main").
     */
    if (shader) {
-      visit_instructions(shader->ir);
+      visit_instructions(shader->base.ir);
    } else {
       emit_program_code();
    }
@@ -1498,6 +1577,7 @@ vec4_visitor::run()
    do {
       progress = false;
       progress = dead_code_eliminate() || progress;
+      progress = dead_control_flow_eliminate(this) || progress;
       progress = opt_copy_propagation() || progress;
       progress = opt_algebraic() || progress;
       progress = opt_register_coalesce() || progress;
@@ -1574,7 +1654,7 @@ brw_vs_emit(struct brw_context *brw,
    if (unlikely(INTEL_DEBUG & DEBUG_VS)) {
       if (prog) {
          printf("GLSL IR for native vertex shader %d:\n", prog->Name);
-         _mesa_print_ir(shader->ir, NULL);
+         _mesa_print_ir(shader->base.ir, NULL);
          printf("\n\n");
       } else {
          printf("ARB_vertex_program %d for native vertex shader\n",
@@ -1596,10 +1676,16 @@ brw_vs_emit(struct brw_context *brw,
       return NULL;
    }
 
-   vec4_generator g(brw, prog, &c->vp->program.Base, &prog_data->base, mem_ctx,
-                    INTEL_DEBUG & DEBUG_VS);
-   const unsigned *generated =g.generate_assembly(&v.instructions,
-                                                  final_assembly_size);
+   const unsigned *assembly = NULL;
+   if (brw->gen >= 8) {
+      gen8_vec4_generator g(brw, prog, &c->vp->program.Base, &prog_data->base,
+                            mem_ctx, INTEL_DEBUG & DEBUG_VS);
+      assembly = g.generate_assembly(&v.instructions, final_assembly_size);
+   } else {
+      vec4_generator g(brw, prog, &c->vp->program.Base, &prog_data->base,
+                       mem_ctx, INTEL_DEBUG & DEBUG_VS);
+      assembly = g.generate_assembly(&v.instructions, final_assembly_size);
+   }
 
    if (unlikely(brw->perf_debug) && shader) {
       if (shader->compiled_once) {
@@ -1612,7 +1698,7 @@ brw_vs_emit(struct brw_context *brw,
       shader->compiled_once = true;
    }
 
-   return generated;
+   return assembly;
 }
 
 

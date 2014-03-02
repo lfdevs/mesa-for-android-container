@@ -54,11 +54,12 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
 
-	r600_suspend_nontimer_queries(rctx);
+	r600_suspend_nontimer_queries(&rctx->b);
 
 	util_blitter_save_vertex_buffer_slot(rctx->blitter, rctx->vertex_buffer_state.vb);
 	util_blitter_save_vertex_elements(rctx->blitter, rctx->vertex_fetch_shader.cso);
 	util_blitter_save_vertex_shader(rctx->blitter, rctx->vs_shader);
+	util_blitter_save_geometry_shader(rctx->blitter, rctx->gs_shader);
 	util_blitter_save_so_targets(rctx->blitter, rctx->b.streamout.num_targets,
 				     (struct pipe_stream_output_target**)rctx->b.streamout.targets);
 	util_blitter_save_rasterizer(rctx->blitter, rctx->rasterizer_state.cso);
@@ -86,18 +87,18 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 			(struct pipe_sampler_view**)rctx->samplers[PIPE_SHADER_FRAGMENT].views.views);
 	}
 
-	if ((op & R600_DISABLE_RENDER_COND) && rctx->current_render_cond) {
+	if ((op & R600_DISABLE_RENDER_COND) && rctx->b.current_render_cond) {
            util_blitter_save_render_condition(rctx->blitter,
-                                              rctx->current_render_cond,
-                                              rctx->current_render_cond_cond,
-                                              rctx->current_render_cond_mode);
+                                              rctx->b.current_render_cond,
+                                              rctx->b.current_render_cond_cond,
+                                              rctx->b.current_render_cond_mode);
         }
 }
 
 static void r600_blitter_end(struct pipe_context *ctx)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
-        r600_resume_nontimer_queries(rctx);
+        r600_resume_nontimer_queries(&rctx->b);
 }
 
 static unsigned u_max_sample(struct pipe_resource *r)
@@ -385,33 +386,6 @@ static bool r600_decompress_subresource(struct pipe_context *ctx,
 	return true;
 }
 
-static boolean is_simple_msaa_resolve(const struct pipe_blit_info *info)
-{
-	unsigned dst_width = u_minify(info->dst.resource->width0, info->dst.level);
-	unsigned dst_height = u_minify(info->dst.resource->height0, info->dst.level);
-	struct r600_texture *dst = (struct r600_texture*)info->dst.resource;
-	unsigned dst_tile_mode = dst->surface.level[info->dst.level].mode;
-
-	return info->dst.resource->format == info->src.resource->format &&
-		info->dst.resource->format == info->dst.format &&
-		info->src.resource->format == info->src.format &&
-		!info->scissor_enable &&
-		info->mask == PIPE_MASK_RGBA &&
-		dst_width == info->src.resource->width0 &&
-		dst_height == info->src.resource->height0 &&
-		info->dst.box.x == 0 &&
-		info->dst.box.y == 0 &&
-		info->dst.box.width == dst_width &&
-		info->dst.box.height == dst_height &&
-		info->src.box.x == 0 &&
-		info->src.box.y == 0 &&
-		info->src.box.width == dst_width &&
-		info->src.box.height == dst_height &&
-		/* Dst must be tiled. If it's not, we have to use a temporary
-		 * resource which is tiled. */
-		dst_tile_mode >= RADEON_SURF_MODE_1D;
-}
-
 static void r600_clear_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
 			      unsigned offset, unsigned size, unsigned value);
 
@@ -455,48 +429,61 @@ static void evergreen_check_alloc_cmask(struct pipe_context *ctx,
         }
 }
 
-static bool can_fast_clear_color(struct pipe_context *ctx)
+static void r600_try_fast_color_clear(struct r600_context *rctx, unsigned *buffers,
+				      const union pipe_color_union *color)
 {
-	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct pipe_framebuffer_state *fb = &rctx->framebuffer.state;
 	int i;
 
-	if (rctx->b.chip_class < EVERGREEN) {
-		return false;
-	}
-
 	for (i = 0; i < fb->nr_cbufs; i++) {
-		struct r600_texture *tex = (struct r600_texture *)fb->cbufs[i]->texture;
+		struct r600_texture *tex;
+		unsigned clear_bit = PIPE_CLEAR_COLOR0 << i;
 
-		/* 128-bit formats are unuspported */
+		if (!fb->cbufs[i])
+			continue;
+
+		/* if this colorbuffer is not being cleared */
+		if (!(*buffers & clear_bit))
+			continue;
+
+		tex = (struct r600_texture *)fb->cbufs[i]->texture;
+
+		/* 128-bit formats are unusupported */
 		if (util_format_get_blocksizebits(fb->cbufs[i]->format) > 64) {
-			return false;
+			continue;
 		}
 
 		/* the clear is allowed if all layers are bound */
 		if (fb->cbufs[i]->u.tex.first_layer != 0 ||
 		    fb->cbufs[i]->u.tex.last_layer != util_max_layer(&tex->resource.b.b, 0)) {
-			return false;
+			continue;
 		}
 
 		/* cannot clear mipmapped textures */
 		if (fb->cbufs[i]->texture->last_level != 0) {
-			return false;
+			continue;
 		}
 
 		/* only supported on tiled surfaces */
 		if (tex->surface.level[0].mode < RADEON_SURF_MODE_1D) {
-		    return false;
+			continue;
 		}
 
 		/* ensure CMASK is enabled */
-		evergreen_check_alloc_cmask(ctx, fb->cbufs[i]);
+		evergreen_check_alloc_cmask(&rctx->b.b, fb->cbufs[i]);
 		if (tex->cmask.size == 0) {
-			return false;
+			continue;
 		}
-	}
 
-	return true;
+		/* Do the fast clear. */
+		evergreen_set_clear_color(fb->cbufs[i], color);
+		r600_clear_buffer(&rctx->b.b, &tex->cmask_buffer->b.b,
+				  tex->cmask.offset, tex->cmask.size, 0);
+
+		tex->dirty_level_mask |= 1 << fb->cbufs[i]->u.tex.level;
+		rctx->framebuffer.atom.dirty = true;
+		*buffers &= ~clear_bit;
+	}
 }
 
 static void r600_clear(struct pipe_context *ctx, unsigned buffers,
@@ -506,32 +493,27 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct pipe_framebuffer_state *fb = &rctx->framebuffer.state;
 
-	/* fast clear on colorbuffers (EG+) */
-	if ((buffers & PIPE_CLEAR_COLOR) && can_fast_clear_color(ctx)) {
+	if (buffers & PIPE_CLEAR_COLOR && rctx->b.chip_class >= EVERGREEN) {
+		r600_try_fast_color_clear(rctx, &buffers, color);
+	}
+
+	if (buffers & PIPE_CLEAR_COLOR) {
 		int i;
 
+		/* These buffers cannot use fast clear, make sure to disable expansion. */
 		for (i = 0; i < fb->nr_cbufs; i++) {
-			struct r600_texture *tex = (struct r600_texture *)fb->cbufs[i]->texture;
+			struct r600_texture *tex;
 
-			evergreen_set_clear_color(fb->cbufs[i], color);
-			r600_clear_buffer(ctx, &tex->cmask_buffer->b.b,
-					tex->cmask.offset, tex->cmask.size, 0);
-			tex->dirty_level_mask |= 1 << fb->cbufs[i]->u.tex.level;
-		}
+			/* If not clearing this buffer, skip. */
+			if (!(buffers & (PIPE_CLEAR_COLOR0 << i)))
+				continue;
 
-		rctx->framebuffer.atom.dirty = true;
+			if (!fb->cbufs[i])
+				continue;
 
-		buffers &= ~PIPE_CLEAR_COLOR;
-		if (!buffers)
-			return;
-	} else if (buffers & PIPE_CLEAR_COLOR) {
-		int i;
-
-		/* cannot use fast clear, make sure to disable expansion */
-		for (i = 0; i < fb->nr_cbufs; i++) {
-			struct r600_texture *tex = (struct r600_texture *)fb->cbufs[i]->texture;
+			tex = (struct r600_texture *)fb->cbufs[i]->texture;
 			if (tex->fmask.size == 0)
-			    tex->dirty_level_mask &= ~(1 << fb->cbufs[i]->u.tex.level);
+				tex->dirty_level_mask &= ~(1 << fb->cbufs[i]->u.tex.level);
 		}
 	}
 
@@ -547,9 +529,9 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 		 * disable fast clear for texture array.
 		 */
 		/* Only use htile for first level */
-		if (rtex->htile && !level && rtex->surface.array_size == 1) {
-			if (rtex->depth_clear != depth) {
-				rtex->depth_clear = depth;
+		if (rtex->htile_buffer && !level && rtex->surface.array_size == 1) {
+			if (rtex->depth_clear_value != depth) {
+				rtex->depth_clear_value = depth;
 				rctx->db_state.atom.dirty = true;
 			}
 			rctx->db_misc_state.htile_clear = true;
@@ -558,7 +540,7 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 	}
 
 	r600_blitter_begin(ctx, R600_CLEAR);
-	util_blitter_clear(rctx->blitter, fb->width, fb->height,
+	util_blitter_clear(rctx->blitter, fb->width, fb->height, 1,
 			   buffers, color, depth, stencil);
 	r600_blitter_end(ctx);
 
@@ -599,15 +581,15 @@ static void r600_clear_depth_stencil(struct pipe_context *ctx,
 	r600_blitter_end(ctx);
 }
 
-void r600_copy_buffer(struct pipe_context *ctx, struct pipe_resource *dst, unsigned dstx,
-		      struct pipe_resource *src, const struct pipe_box *src_box)
+static void r600_copy_buffer(struct pipe_context *ctx, struct pipe_resource *dst, unsigned dstx,
+			     struct pipe_resource *src, const struct pipe_box *src_box)
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
 
-	if (rctx->screen->has_cp_dma) {
+	if (rctx->screen->b.has_cp_dma) {
 		r600_cp_dma_copy_buffer(rctx, dst, dstx, src, src_box->x, src_box->width);
 	}
-	else if (rctx->screen->has_streamout &&
+	else if (rctx->screen->b.has_streamout &&
 		 /* Require 4-byte alignment. */
 		 dstx % 4 == 0 && src_box->x % 4 == 0 && src_box->width % 4 == 0) {
 
@@ -654,11 +636,11 @@ static void r600_clear_buffer(struct pipe_context *ctx, struct pipe_resource *ds
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
 
-	if (rctx->screen->has_cp_dma &&
+	if (rctx->screen->b.has_cp_dma &&
 	    rctx->b.chip_class >= EVERGREEN &&
 	    offset % 4 == 0 && size % 4 == 0) {
 		evergreen_cp_dma_clear_buffer(rctx, dst, offset, size, value);
-	} else if (rctx->screen->has_streamout && offset % 4 == 0 && size % 4 == 0) {
+	} else if (rctx->screen->b.has_streamout && offset % 4 == 0 && size % 4 == 0) {
 		union pipe_color_union clear_value;
 		clear_value.ui[0] = value;
 
@@ -755,8 +737,7 @@ static void r600_resource_copy_region(struct pipe_context *ctx,
 		sbox.height = util_format_get_nblocksy(src->format, src_box->height);
 		sbox.depth = src_box->depth;
 		src_box = &sbox;
-	} else if (!util_blitter_is_copy_supported(rctx->blitter, dst, src,
-						   PIPE_MASK_RGBAZS)) {
+	} else if (!util_blitter_is_copy_supported(rctx->blitter, dst, src)) {
 		if (util_format_is_subsampled_2x1_32bpp(src->format)) {
 
 			src_templ.format = PIPE_FORMAT_R8G8B8A8_UINT;
@@ -821,8 +802,7 @@ static void r600_resource_copy_region(struct pipe_context *ctx,
 	r600_blitter_begin(ctx, R600_COPY_TEXTURE);
 	util_blitter_blit_generic(rctx->blitter, dst_view, &dstbox,
 				  src_view, src_box, src_width0, src_height0,
-				  PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL,
-				  TRUE);
+				  PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL);
 	r600_blitter_end(ctx);
 
 	pipe_surface_reference(&dst_view, NULL);
@@ -865,67 +845,51 @@ static enum pipe_format int_to_norm_format(enum pipe_format format)
 	}
 }
 
-static void r600_msaa_color_resolve(struct pipe_context *ctx,
-			      const struct pipe_blit_info *info)
+static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
+				     const struct pipe_blit_info *info)
 {
-	struct r600_context *rctx = (struct r600_context *)ctx;
-	struct pipe_screen *screen = ctx->screen;
-	struct pipe_resource *tmp, templ;
-	struct pipe_blit_info blit;
+	struct r600_context *rctx = (struct r600_context*)ctx;
+	struct r600_texture *dst = (struct r600_texture*)info->dst.resource;
+	unsigned dst_width = u_minify(info->dst.resource->width0, info->dst.level);
+	unsigned dst_height = u_minify(info->dst.resource->height0, info->dst.level);
+	enum pipe_format format = int_to_norm_format(info->dst.format);
 	unsigned sample_mask =
 		rctx->b.chip_class == CAYMAN ? ~0 :
 		((1ull << MAX2(1, info->src.resource->nr_samples)) - 1);
 
-	assert(info->src.level == 0);
-	assert(info->src.box.depth == 1);
-	assert(info->dst.box.depth == 1);
-
-	if (is_simple_msaa_resolve(info)) {
+	if (info->src.resource->nr_samples > 1 &&
+	    info->dst.resource->nr_samples <= 1 &&
+	    util_max_layer(info->src.resource, 0) == 0 &&
+	    util_max_layer(info->dst.resource, info->dst.level) == 0 &&
+	    info->dst.format == info->src.format &&
+	    !util_format_is_pure_integer(format) &&
+	    !util_format_is_depth_or_stencil(format) &&
+	    !info->scissor_enable &&
+	    (info->mask & PIPE_MASK_RGBA) == PIPE_MASK_RGBA &&
+	    dst_width == info->src.resource->width0 &&
+	    dst_height == info->src.resource->height0 &&
+	    info->dst.box.x == 0 &&
+	    info->dst.box.y == 0 &&
+	    info->dst.box.width == dst_width &&
+	    info->dst.box.height == dst_height &&
+	    info->dst.box.depth == 1 &&
+	    info->src.box.x == 0 &&
+	    info->src.box.y == 0 &&
+	    info->src.box.width == dst_width &&
+	    info->src.box.height == dst_height &&
+	    info->src.box.depth == 1 &&
+	    dst->surface.level[info->dst.level].mode >= RADEON_SURF_MODE_1D) {
 		r600_blitter_begin(ctx, R600_COLOR_RESOLVE);
 		util_blitter_custom_resolve_color(rctx->blitter,
 						  info->dst.resource, info->dst.level,
 						  info->dst.box.z,
 						  info->src.resource, info->src.box.z,
 						  sample_mask, rctx->custom_blend_resolve,
-                                                  int_to_norm_format(info->dst.format));
+						  format);
 		r600_blitter_end(ctx);
-		return;
+		return true;
 	}
-
-	/* resolve into a temporary texture, then blit */
-	templ.target = PIPE_TEXTURE_2D;
-	templ.format = info->src.resource->format;
-	templ.width0 = info->src.resource->width0;
-	templ.height0 = info->src.resource->height0;
-	templ.depth0 = 1;
-	templ.array_size = 1;
-	templ.last_level = 0;
-	templ.nr_samples = 0;
-	templ.usage = PIPE_USAGE_STATIC;
-	templ.bind = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;
-	templ.flags = R600_RESOURCE_FLAG_FORCE_TILING; /* dst must not have a linear layout */
-
-	tmp = screen->resource_create(screen, &templ);
-
-	/* resolve */
-	r600_blitter_begin(ctx, R600_COLOR_RESOLVE);
-	util_blitter_custom_resolve_color(rctx->blitter,
-					  tmp, 0, 0,
-					  info->src.resource, info->src.box.z,
-					  sample_mask, rctx->custom_blend_resolve,
-                                          int_to_norm_format(tmp->format));
-	r600_blitter_end(ctx);
-
-	/* blit */
-	blit = *info;
-	blit.src.resource = tmp;
-	blit.src.box.z = 0;
-
-	r600_blitter_begin(ctx, R600_BLIT);
-	util_blitter_blit(rctx->blitter, &blit);
-	r600_blitter_end(ctx);
-
-	pipe_resource_reference(&tmp, NULL);
+	return false;
 }
 
 static void r600_blit(struct pipe_context *ctx,
@@ -933,15 +897,11 @@ static void r600_blit(struct pipe_context *ctx,
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
 
-	assert(util_blitter_is_blit_supported(rctx->blitter, info));
-
-	if (info->src.resource->nr_samples > 1 &&
-	    info->dst.resource->nr_samples <= 1 &&
-	    !util_format_is_depth_or_stencil(info->src.resource->format) &&
-	    !util_format_is_pure_integer(int_to_norm_format(info->src.resource->format))) {
-		r600_msaa_color_resolve(ctx, info);
+	if (do_hardware_msaa_resolve(ctx, info)) {
 		return;
 	}
+
+	assert(util_blitter_is_blit_supported(rctx->blitter, info));
 
 	/* The driver doesn't decompress resources automatically while
 	 * u_blitter is rendering. */

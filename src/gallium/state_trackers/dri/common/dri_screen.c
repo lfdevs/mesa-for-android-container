@@ -81,17 +81,17 @@ const __DRIconfigOptionsExtension gallium_config_options = {
 static const __DRIconfig **
 dri_fill_in_modes(struct dri_screen *screen)
 {
-   static const gl_format mesa_formats[3] = {
-      MESA_FORMAT_ARGB8888,
-      MESA_FORMAT_XRGB8888,
-      MESA_FORMAT_RGB565,
+   static const mesa_format mesa_formats[3] = {
+      MESA_FORMAT_B8G8R8A8_UNORM,
+      MESA_FORMAT_B8G8R8X8_UNORM,
+      MESA_FORMAT_B5G6R5_UNORM,
    };
    static const enum pipe_format pipe_formats[3] = {
       PIPE_FORMAT_BGRA8888_UNORM,
       PIPE_FORMAT_BGRX8888_UNORM,
       PIPE_FORMAT_B5G6R5_UNORM,
    };
-   gl_format format;
+   mesa_format format;
    __DRIconfig **configs = NULL;
    uint8_t depth_bits_array[5];
    uint8_t stencil_bits_array[5];
@@ -360,6 +360,12 @@ dri_destroy_option_cache(struct dri_screen * screen)
    }
 
    free(screen->optionCache.values);
+
+   /* Default values are copied to screen->optionCache->values in
+    * initOptionCache. The info field, however, is a pointer copy, so don't free
+    * that twice.
+    */
+   free(screen->optionCacheDefaults.values);
 }
 
 void
@@ -449,7 +455,7 @@ dri_init_screen_helper(struct dri_screen *screen,
    if (screen->st_api->profile_mask & ST_PROFILE_DEFAULT_MASK)
       screen->sPriv->max_gl_compat_version = 30;
    if (screen->st_api->profile_mask & ST_PROFILE_OPENGL_CORE_MASK)
-      screen->sPriv->max_gl_core_version = 32;
+      screen->sPriv->max_gl_core_version = 33;
    if (screen->st_api->profile_mask & ST_PROFILE_OPENGL_ES1_MASK)
       screen->sPriv->max_gl_es1_version = 11;
    if (screen->st_api->profile_mask & ST_PROFILE_OPENGL_ES2_MASK)

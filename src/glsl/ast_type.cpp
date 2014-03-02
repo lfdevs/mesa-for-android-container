@@ -32,14 +32,8 @@ ast_type_specifier::print(void) const
       printf("%s ", type_name);
    }
 
-   if (is_array) {
-      printf("[ ");
-
-      if (array_size) {
-	 array_size->print();
-      }
-
-      printf("] ");
+   if (array_specifier) {
+      array_specifier->print();
    }
 }
 
@@ -90,7 +84,8 @@ ast_type_qualifier::has_storage() const
 bool
 ast_type_qualifier::has_auxiliary_storage() const
 {
-   return this->flags.q.centroid;
+   return this->flags.q.centroid
+          || this->flags.q.sample;
 }
 
 const char*
@@ -123,6 +118,7 @@ ast_type_qualifier::merge_qualifier(YYLTYPE *loc,
    ubo_layout_mask.flags.q.shared = 1;
 
    ast_type_qualifier ubo_binding_mask;
+   ubo_binding_mask.flags.i = 0;
    ubo_binding_mask.flags.q.explicit_binding = 1;
    ubo_binding_mask.flags.q.explicit_offset = 1;
 

@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -84,8 +84,7 @@ i915_surface_copy_render(struct pipe_context *pipe,
       return;
    }
 
-   if (!util_blitter_is_copy_supported(i915->blitter, dst, src,
-                                       PIPE_MASK_RGBAZS)) {
+   if (!util_blitter_is_copy_supported(i915->blitter, dst, src)) {
       util_resource_copy_region(pipe, dst, dst_level, dstx, dsty, dstz,
                                 src, src_level, src_box);
       return;
@@ -94,7 +93,7 @@ i915_surface_copy_render(struct pipe_context *pipe,
    i915_util_blitter_save_states(i915);
 
    util_blitter_copy_texture(i915->blitter, dst, dst_level, dstx, dsty, dstz,
-                            src, src_level, src_box, PIPE_MASK_RGBAZS, TRUE);
+                            src, src_level, src_box);
 }
 
 static void

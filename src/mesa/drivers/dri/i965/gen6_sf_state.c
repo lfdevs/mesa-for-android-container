@@ -143,6 +143,9 @@ calculate_attr_overrides(const struct brw_context *brw,
    const int urb_entry_read_offset = BRW_SF_URB_ENTRY_READ_OFFSET;
    uint32_t max_source_attr = 0;
 
+   *point_sprite_enables = 0;
+   *flat_enables = 0;
+
    /* _NEW_LIGHT */
    bool shade_model_flat = brw->ctx.Light.ShadeModel == GL_FLAT;
 
@@ -224,7 +227,9 @@ upload_sf_state(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
    /* CACHE_NEW_WM_PROG */
    uint32_t num_outputs = brw->wm.prog_data->num_varying_inputs;
-   uint32_t dw1, dw2, dw3, dw4, dw16, dw17;
+   uint32_t dw1, dw2, dw3, dw4;
+   uint32_t point_sprite_enables;
+   uint32_t flat_enables;
    int i;
    /* _NEW_BUFFER */
    bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
@@ -242,8 +247,6 @@ upload_sf_state(struct brw_context *brw)
 
    dw3 = 0;
    dw4 = 0;
-   dw16 = 0;
-   dw17 = 0;
 
    /* _NEW_POLYGON */
    if ((ctx->Polygon.FrontFace == GL_CCW) ^ render_to_fbo)
@@ -295,7 +298,7 @@ upload_sf_state(struct brw_context *brw)
    }
 
    /* _NEW_SCISSOR */
-   if (ctx->Scissor.Enabled)
+   if (ctx->Scissor.EnableFlags)
       dw3 |= GEN6_SF_SCISSOR_ENABLE;
 
    /* _NEW_POLYGON */
@@ -372,8 +375,8 @@ upload_sf_state(struct brw_context *brw)
     * CACHE_NEW_WM_PROG
     */
    uint32_t urb_entry_read_length;
-   calculate_attr_overrides(brw, attr_overrides, &dw16, &dw17,
-                            &urb_entry_read_length);
+   calculate_attr_overrides(brw, attr_overrides, &point_sprite_enables,
+                            &flat_enables, &urb_entry_read_length);
    dw1 |= (urb_entry_read_length << GEN6_SF_URB_ENTRY_READ_LENGTH_SHIFT |
            urb_entry_read_offset << GEN6_SF_URB_ENTRY_READ_OFFSET_SHIFT);
 
@@ -389,8 +392,8 @@ upload_sf_state(struct brw_context *brw)
    for (i = 0; i < 8; i++) {
       OUT_BATCH(attr_overrides[i * 2] | attr_overrides[i * 2 + 1] << 16);
    }
-   OUT_BATCH(dw16); /* point sprite texcoord bitmask */
-   OUT_BATCH(dw17); /* constant interp bitmask */
+   OUT_BATCH(point_sprite_enables); /* dw16 */
+   OUT_BATCH(flat_enables);
    OUT_BATCH(0); /* wrapshortest enables 0-7 */
    OUT_BATCH(0); /* wrapshortest enables 8-15 */
    ADVANCE_BATCH();

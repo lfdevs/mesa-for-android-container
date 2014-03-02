@@ -1397,12 +1397,29 @@ ir_expression::constant_expression_value(struct hash_table *variable_context)
       break;
    }
 
+   case ir_binop_bfm: {
+      int bits = op[0]->value.i[0];
+      int offset = op[1]->value.i[0];
+
+      for (unsigned c = 0; c < components; c++) {
+         if (bits == 0)
+            data.u[c] = op[0]->value.u[c];
+         else if (offset < 0 || bits < 0)
+            data.u[c] = 0; /* Undefined for bitfieldInsert, per spec. */
+         else if (offset + bits > 32)
+            data.u[c] = 0; /* Undefined for bitfieldInsert, per spec. */
+         else
+            data.u[c] = ((1 << bits) - 1) << offset;
+      }
+      break;
+   }
+
    case ir_binop_ldexp:
       for (unsigned c = 0; c < components; c++) {
          data.f[c] = ldexp(op[0]->value.f[c], op[1]->value.i[c]);
          /* Flush subnormal values to zero. */
          if (!isnormal(data.f[c]))
-            data.f[c] = copysign(0.0, op[0]->value.f[c]);
+            data.f[c] = copysign(0.0f, op[0]->value.f[c]);
       }
       break;
 
@@ -1583,7 +1600,7 @@ ir_dereference_variable::constant_expression_value(struct hash_table *variable_c
    /* The constant_value of a uniform variable is its initializer,
     * not the lifetime constant value of the uniform.
     */
-   if (var->mode == ir_var_uniform)
+   if (var->data.mode == ir_var_uniform)
       return NULL;
 
    if (!var->constant_value)

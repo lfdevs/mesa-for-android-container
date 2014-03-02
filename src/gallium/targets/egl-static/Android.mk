@@ -39,15 +39,14 @@ LOCAL_C_INCLUDES := \
 	$(GALLIUM_TOP)/state_trackers/vega \
 	$(GALLIUM_TOP)/state_trackers/egl \
 	$(MESA_TOP)/src/egl/main \
+	$(MESA_TOP)/src/loader \
 	$(MESA_TOP)/src/mesa
 
 # swrast
 LOCAL_CFLAGS += -DGALLIUM_SOFTPIPE
 
-# swrast only
-ifeq ($(MESA_GPU_DRIVERS),swrast)
-LOCAL_CFLAGS += -D_EGL_NO_DRM
-else
+# !swrast only
+ifneq ($(MESA_GPU_DRIVERS),swrast)
 LOCAL_C_INCLUDES += \
 	$(DRM_TOP)/include/drm \
 	$(DRM_TOP)

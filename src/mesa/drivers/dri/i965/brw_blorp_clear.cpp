@@ -147,7 +147,7 @@ brw_blorp_const_color_program::~brw_blorp_const_color_program()
  */
 static bool
 is_color_fast_clear_compatible(struct brw_context *brw,
-                               gl_format format,
+                               mesa_format format,
                                const union gl_color_union *color)
 {
    if (_mesa_is_format_integer_color(format))
@@ -193,7 +193,7 @@ brw_blorp_clear_params::brw_blorp_clear_params(struct brw_context *brw,
    dst.set(brw, irb->mt, irb->mt_level, layer, true);
 
    /* Override the surface format according to the context's sRGB rules. */
-   gl_format format = _mesa_get_render_format(ctx, irb->mt->format);
+   mesa_format format = _mesa_get_render_format(ctx, irb->mt->format);
    dst.brw_surfaceformat = brw->render_target_format[format];
 
    x0 = fb->_Xmin;
@@ -238,62 +238,121 @@ brw_blorp_clear_params::brw_blorp_clear_params(struct brw_context *brw,
       }
    }
 
-   /* If we can do this as a fast color clear, do so. */
-   if (irb->mt->mcs_state != INTEL_MCS_STATE_NONE && !partial_clear &&
-       wm_prog_key.use_simd16_replicated_data &&
+   /* If we can do this as a fast color clear, do so.
+    *
+    * Note that the condition "!partial_clear" means we only try to do full
+    * buffer clears using fast color clear logic.  This is necessary because
+    * the fast color clear alignment requirements mean that we typically have
+    * to clear a larger rectangle than (x0, y0) to (x1, y1).  Restricting fast
+    * color clears to the full-buffer condition guarantees that the extra
+    * memory locations that get written to are outside the image boundary (and
+    * hence irrelevant).  Note that the rectangle alignment requirements are
+    * never larger than the size of a tile, so there is no danger of
+    * overflowing beyond the memory belonging to the region.
+    */
+   if (irb->mt->fast_clear_state != INTEL_FAST_CLEAR_STATE_NO_MCS &&
+       !partial_clear && wm_prog_key.use_simd16_replicated_data &&
        is_color_fast_clear_compatible(brw, format, &ctx->Color.ClearColor)) {
       memset(push_consts, 0xff, 4*sizeof(float));
       fast_clear_op = GEN7_FAST_CLEAR_OP_FAST_CLEAR;
 
-      /* From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render
-       * Target(s)", beneath the "Fast Color Clear" bullet (p327):
-       *
-       *     Clear pass must have a clear rectangle that must follow alignment
-       *     rules in terms of pixels and lines as shown in the table
-       *     below. Further, the clear-rectangle height and width must be
-       *     multiple of the following dimensions. If the height and width of
-       *     the render target being cleared do not meet these requirements,
-       *     an MCS buffer can be created such that it follows the requirement
-       *     and covers the RT.
-       *
-       * The alignment size in the table that follows is related to the
-       * alignment size returned by intel_get_non_msrt_mcs_alignment(), but
-       * with X alignment multiplied by 16 and Y alignment multiplied by 32.
+      /* Figure out what the clear rectangle needs to be aligned to, and how
+       * much it needs to be scaled down.
        */
-      unsigned x_align, y_align;
-      intel_get_non_msrt_mcs_alignment(brw, irb->mt, &x_align, &y_align);
-      x_align *= 16;
-      y_align *= 32;
+      unsigned x_align, y_align, x_scaledown, y_scaledown;
 
-      /* From BSpec: 3D-Media-GPGPU Engine > 3D Pipeline > Pixel > Pixel
-       * Backend > MCS Buffer for Render Target(s) [DevIVB+] > Table "Color
-       * Clear of Non-MultiSampled Render Target Restrictions":
-       *
-       *   Clear rectangle must be aligned to two times the number of pixels in
-       *   the table shown below due to 16x16 hashing across the slice.
-       */
-      x0 = ROUND_DOWN_TO(x0, 2 * x_align);
-      y0 = ROUND_DOWN_TO(y0, 2 * y_align);
-      x1 = ALIGN(x1, 2 * x_align);
-      y1 = ALIGN(y1, 2 * y_align);
+      if (irb->mt->msaa_layout == INTEL_MSAA_LAYOUT_NONE) {
+         /* From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render
+          * Target(s)", beneath the "Fast Color Clear" bullet (p327):
+          *
+          *     Clear pass must have a clear rectangle that must follow
+          *     alignment rules in terms of pixels and lines as shown in the
+          *     table below. Further, the clear-rectangle height and width
+          *     must be multiple of the following dimensions. If the height
+          *     and width of the render target being cleared do not meet these
+          *     requirements, an MCS buffer can be created such that it
+          *     follows the requirement and covers the RT.
+          *
+          * The alignment size in the table that follows is related to the
+          * alignment size returned by intel_get_non_msrt_mcs_alignment(), but
+          * with X alignment multiplied by 16 and Y alignment multiplied by 32.
+          */
+         intel_get_non_msrt_mcs_alignment(brw, irb->mt, &x_align, &y_align);
+         x_align *= 16;
+         y_align *= 32;
 
-      /* From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render
-       * Target(s)", beneath the "Fast Color Clear" bullet (p327):
-       *
-       *     In order to optimize the performance MCS buffer (when bound to 1X
-       *     RT) clear similarly to MCS buffer clear for MSRT case, clear rect
-       *     is required to be scaled by the following factors in the
-       *     horizontal and vertical directions:
-       *
-       * The X and Y scale down factors in the table that follows are each
-       * equal to half the alignment value computed above.
-       */
-      unsigned x_scaledown = x_align / 2;
-      unsigned y_scaledown = y_align / 2;
-      x0 /= x_scaledown;
-      y0 /= y_scaledown;
-      x1 /= x_scaledown;
-      y1 /= y_scaledown;
+         /* From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render
+          * Target(s)", beneath the "Fast Color Clear" bullet (p327):
+          *
+          *     In order to optimize the performance MCS buffer (when bound to
+          *     1X RT) clear similarly to MCS buffer clear for MSRT case,
+          *     clear rect is required to be scaled by the following factors
+          *     in the horizontal and vertical directions:
+          *
+          * The X and Y scale down factors in the table that follows are each
+          * equal to half the alignment value computed above.
+          */
+         x_scaledown = x_align / 2;
+         y_scaledown = y_align / 2;
+
+         /* From BSpec: 3D-Media-GPGPU Engine > 3D Pipeline > Pixel > Pixel
+          * Backend > MCS Buffer for Render Target(s) [DevIVB+] > Table "Color
+          * Clear of Non-MultiSampled Render Target Restrictions":
+          *
+          *   Clear rectangle must be aligned to two times the number of
+          *   pixels in the table shown below due to 16x16 hashing across the
+          *   slice.
+          */
+         x_align *= 2;
+         y_align *= 2;
+      } else {
+         /* From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render
+          * Target(s)", beneath the "MSAA Compression" bullet (p326):
+          *
+          *     Clear pass for this case requires that scaled down primitive
+          *     is sent down with upper left co-ordinate to coincide with
+          *     actual rectangle being cleared. For MSAA, clear rectangle’s
+          *     height and width need to as show in the following table in
+          *     terms of (width,height) of the RT.
+          *
+          *     MSAA  Width of Clear Rect  Height of Clear Rect
+          *      4X     Ceil(1/8*width)      Ceil(1/2*height)
+          *      8X     Ceil(1/2*width)      Ceil(1/2*height)
+          *
+          * The text "with upper left co-ordinate to coincide with actual
+          * rectangle being cleared" is a little confusing--it seems to imply
+          * that to clear a rectangle from (x,y) to (x+w,y+h), one needs to
+          * feed the pipeline using the rectangle (x,y) to
+          * (x+Ceil(w/N),y+Ceil(h/2)), where N is either 2 or 8 depending on
+          * the number of samples.  Experiments indicate that this is not
+          * quite correct; actually, what the hardware appears to do is to
+          * align whatever rectangle is sent down the pipeline to the nearest
+          * multiple of 2x2 blocks, and then scale it up by a factor of N
+          * horizontally and 2 vertically.  So the resulting alignment is 4
+          * vertically and either 4 or 16 horizontally, and the scaledown
+          * factor is 2 vertically and either 2 or 8 horizontally.
+          */
+         switch (irb->mt->num_samples) {
+         case 4:
+            x_scaledown = 8;
+            break;
+         case 8:
+            x_scaledown = 2;
+            break;
+         default:
+            assert(!"Unexpected sample count for fast clear");
+            break;
+         }
+         y_scaledown = 2;
+         x_align = x_scaledown * 2;
+         y_align = y_scaledown * 2;
+      }
+
+      /* Do the alignment and scaledown. */
+      x0 = ROUND_DOWN_TO(x0,  x_align) / x_scaledown;
+      y0 = ROUND_DOWN_TO(y0, y_align) / y_scaledown;
+      x1 = ALIGN(x1, x_align) / x_scaledown;
+      y1 = ALIGN(y1, y_align) / y_scaledown;
    }
 }
 
@@ -460,10 +519,10 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
          brw->state.dirty.brw |= BRW_NEW_SURFACES;
       }
 
-      /* If the buffer is already in INTEL_MCS_STATE_CLEAR, the clear is
-       * redundant and can be skipped.
+      /* If the buffer is already in INTEL_FAST_CLEAR_STATE_CLEAR, the clear
+       * is redundant and can be skipped.
        */
-      if (irb->mt->mcs_state == INTEL_MCS_STATE_CLEAR)
+      if (irb->mt->fast_clear_state == INTEL_FAST_CLEAR_STATE_CLEAR)
          return true;
 
       /* If the MCS buffer hasn't been allocated yet, we need to allocate
@@ -488,10 +547,10 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
 
    if (is_fast_clear) {
       /* Now that the fast clear has occurred, put the buffer in
-       * INTEL_MCS_STATE_CLEAR so that we won't waste time doing redundant
-       * clears.
+       * INTEL_FAST_CLEAR_STATE_CLEAR so that we won't waste time doing
+       * redundant clears.
        */
-      irb->mt->mcs_state = INTEL_MCS_STATE_CLEAR;
+      irb->mt->fast_clear_state = INTEL_FAST_CLEAR_STATE_CLEAR;
    }
 
    return true;
@@ -503,21 +562,6 @@ bool
 brw_blorp_clear_color(struct brw_context *brw, struct gl_framebuffer *fb,
                       bool partial_clear)
 {
-   /* The constant color clear code doesn't work for multisampled surfaces, so
-    * we need to support falling back to other clear mechanisms.
-    * Unfortunately, our clear code is based on a bitmask that doesn't
-    * distinguish individual color attachments, so we walk the attachments to
-    * see if any require fallback, and fall back for all if any of them need
-    * to.
-    */
-   for (unsigned buf = 0; buf < fb->_NumColorDrawBuffers; buf++) {
-      struct gl_renderbuffer *rb = fb->_ColorDrawBuffers[buf];
-      struct intel_renderbuffer *irb = intel_renderbuffer(rb);
-
-      if (irb && irb->mt->msaa_layout != INTEL_MSAA_LAYOUT_NONE)
-         return false;
-   }
-
    for (unsigned buf = 0; buf < fb->_NumColorDrawBuffers; buf++) {
       struct gl_renderbuffer *rb = fb->_ColorDrawBuffers[buf];
       struct intel_renderbuffer *irb = intel_renderbuffer(rb);
@@ -529,17 +573,26 @@ brw_blorp_clear_color(struct brw_context *brw, struct gl_framebuffer *fb,
       if (rb == NULL)
          continue;
 
-      if (fb->NumLayers > 0) {
-         assert(fb->NumLayers == irb->mt->level[irb->mt_level].depth);
-         for (unsigned layer = 0; layer < fb->NumLayers; layer++) {
-            if (!do_single_blorp_clear(brw, fb, rb, buf, partial_clear, layer))
+      if (fb->MaxNumLayers > 0) {
+         unsigned layer_multiplier =
+            (irb->mt->msaa_layout == INTEL_MSAA_LAYOUT_UMS ||
+             irb->mt->msaa_layout == INTEL_MSAA_LAYOUT_CMS) ?
+            irb->mt->num_samples : 1;
+         unsigned num_layers =
+            irb->mt->level[irb->mt_level].depth / layer_multiplier;
+         for (unsigned layer = 0; layer < num_layers; layer++) {
+            if (!do_single_blorp_clear(brw, fb, rb, buf, partial_clear,
+                                       layer * layer_multiplier)) {
                return false;
+            }
          }
       } else {
          unsigned layer = irb->mt_layer;
          if (!do_single_blorp_clear(brw, fb, rb, buf, partial_clear, layer))
             return false;
       }
+
+      intel_renderbuffer_set_needs_downsample(irb);
    }
 
    return true;
@@ -552,7 +605,7 @@ brw_blorp_resolve_color(struct brw_context *brw, struct intel_mipmap_tree *mt)
 
    brw_blorp_rt_resolve_params params(brw, mt);
    brw_blorp_exec(brw, &params);
-   mt->mcs_state = INTEL_MCS_STATE_RESOLVED;
+   mt->fast_clear_state = INTEL_FAST_CLEAR_STATE_RESOLVED;
 }
 
 } /* extern "C" */

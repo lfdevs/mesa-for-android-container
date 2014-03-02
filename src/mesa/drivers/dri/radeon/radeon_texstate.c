@@ -63,18 +63,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define RADEON_TXFORMAT_RGBA_DXT3 RADEON_TXFORMAT_DXT23
 #define RADEON_TXFORMAT_RGBA_DXT5 RADEON_TXFORMAT_DXT45
 
-#define _COLOR(f) \
-    [ MESA_FORMAT_ ## f ] = { RADEON_TXFORMAT_ ## f, 0 }
-#define _COLOR_REV(f) \
-    [ MESA_FORMAT_ ## f ## _REV ] = { RADEON_TXFORMAT_ ## f, 0 }
-#define _ALPHA(f) \
-    [ MESA_FORMAT_ ## f ] = { RADEON_TXFORMAT_ ## f | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 }
-#define _ALPHA_REV(f) \
-    [ MESA_FORMAT_ ## f ## _REV ] = { RADEON_TXFORMAT_ ## f | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 }
-#define _YUV(f) \
-   [ MESA_FORMAT_ ## f ] = { RADEON_TXFORMAT_ ## f, RADEON_YUV_TO_RGB }
-#define _INVALID(f) \
-    [ MESA_FORMAT_ ## f ] = { 0xffffffff, 0 }
 #define VALID_FORMAT(f) ( ((f) <= MESA_FORMAT_RGBA_DXT5) \
 			     && (tx_table[f].format != 0xffffffff) )
 
@@ -85,36 +73,32 @@ struct tx_table {
 /* XXX verify this table against MESA_FORMAT_x values */
 static const struct tx_table tx_table[] =
 {
-   _INVALID(NONE), /* MESA_FORMAT_NONE */
-   _ALPHA(RGBA8888),
-   _ALPHA_REV(RGBA8888),
-   _ALPHA(ARGB8888),
-   _ALPHA_REV(ARGB8888),
-   [ MESA_FORMAT_RGB888 ] = { RADEON_TXFORMAT_ARGB8888, 0 },
-   _COLOR(RGB565),
-   _COLOR_REV(RGB565),
-   _ALPHA(ARGB4444),
-   _ALPHA_REV(ARGB4444),
-   _ALPHA(ARGB1555),
-   _ALPHA_REV(ARGB1555),
-   _ALPHA(AL88),
-   _ALPHA_REV(AL88),
-   _ALPHA(A8),
-   _COLOR(L8),
-   _ALPHA(I8),
-   _YUV(YCBCR),
-   _YUV(YCBCR_REV),
-   _INVALID(RGB_FXT1),
-   _INVALID(RGBA_FXT1),
-   _COLOR(RGB_DXT1),
-   _ALPHA(RGBA_DXT1),
-   _ALPHA(RGBA_DXT3),
-   _ALPHA(RGBA_DXT5),
+   [ MESA_FORMAT_NONE ] = { 0xffffffff, 0 },
+   [ MESA_FORMAT_A8B8G8R8_UNORM ] = { RADEON_TXFORMAT_RGBA8888 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_R8G8B8A8_UNORM ] = { RADEON_TXFORMAT_RGBA8888 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_B8G8R8A8_UNORM ] = { RADEON_TXFORMAT_ARGB8888 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_A8R8G8B8_UNORM ] = { RADEON_TXFORMAT_ARGB8888 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_BGR_UNORM8 ] = { RADEON_TXFORMAT_ARGB8888, 0 },
+   [ MESA_FORMAT_B5G6R5_UNORM ] = { RADEON_TXFORMAT_RGB565, 0 },
+   [ MESA_FORMAT_R5G6B5_UNORM ] = { RADEON_TXFORMAT_RGB565, 0 },
+   [ MESA_FORMAT_B4G4R4A4_UNORM ] = { RADEON_TXFORMAT_ARGB4444 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_A4R4G4B4_UNORM ] = { RADEON_TXFORMAT_ARGB4444 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_B5G5R5A1_UNORM ] = { RADEON_TXFORMAT_ARGB1555 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_A1R5G5B5_UNORM ] = { RADEON_TXFORMAT_ARGB1555 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_L8A8_UNORM ] = { RADEON_TXFORMAT_AL88 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_A8L8_UNORM ] = { RADEON_TXFORMAT_AL88 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_A_UNORM8 ] = { RADEON_TXFORMAT_A8 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_L_UNORM8 ] = { RADEON_TXFORMAT_L8, 0 },
+   [ MESA_FORMAT_I_UNORM8 ] = { RADEON_TXFORMAT_I8 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_YCBCR ] = { RADEON_TXFORMAT_YCBCR, RADEON_YUV_TO_RGB },
+   [ MESA_FORMAT_YCBCR_REV ] = { RADEON_TXFORMAT_YCBCR_REV, RADEON_YUV_TO_RGB },
+   [ MESA_FORMAT_RGB_FXT1 ] = { 0xffffffff, 0 },
+   [ MESA_FORMAT_RGBA_FXT1 ] = { 0xffffffff, 0 },
+   [ MESA_FORMAT_RGB_DXT1 ] = { RADEON_TXFORMAT_RGB_DXT1, 0 },
+   [ MESA_FORMAT_RGBA_DXT1 ] = { RADEON_TXFORMAT_RGBA_DXT1 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_RGBA_DXT3 ] = { RADEON_TXFORMAT_RGBA_DXT3 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
+   [ MESA_FORMAT_RGBA_DXT5 ] = { RADEON_TXFORMAT_RGBA_DXT5 | RADEON_TXFORMAT_ALPHA_IN_MAP, 0 },
 };
-
-#undef _COLOR
-#undef _ALPHA
-#undef _INVALID
 
 /* ================================================================
  * Texture combine functions
@@ -605,7 +589,6 @@ static GLboolean radeonUpdateTextureEnv( struct gl_context *ctx, int unit )
 void radeonSetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_format,
 			 __DRIdrawable *dPriv)
 {
-	struct gl_texture_unit *texUnit;
 	struct gl_texture_object *texObj;
 	struct gl_texture_image *texImage;
 	struct radeon_renderbuffer *rb;
@@ -614,14 +597,13 @@ void radeonSetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_form
 	struct radeon_framebuffer *rfb;
 	radeonTexObjPtr t;
 	uint32_t pitch_val;
-	gl_format texFormat;
+	mesa_format texFormat;
 
 	radeon = pDRICtx->driverPrivate;
 
 	rfb = dPriv->driverPrivate;
-        texUnit = _mesa_get_current_tex_unit(&radeon->glCtx);
-	texObj = _mesa_select_tex_object(&radeon->glCtx, texUnit, target);
-        texImage = _mesa_get_tex_image(&radeon->glCtx, texObj, target, 0);
+	texObj = _mesa_get_current_tex_object(&radeon->glCtx, target);
+	texImage = _mesa_get_tex_image(&radeon->glCtx, texObj, target, 0);
 
 	rImage = get_radeon_texture_image(texImage);
 	t = radeon_tex_obj(texObj);
@@ -659,25 +641,25 @@ void radeonSetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_form
 	switch (rb->cpp) {
 	case 4:
 		if (texture_format == __DRI_TEXTURE_FORMAT_RGB) {
-			t->pp_txformat = tx_table[MESA_FORMAT_RGB888].format;
-			texFormat = MESA_FORMAT_RGB888;
+			t->pp_txformat = tx_table[MESA_FORMAT_BGR_UNORM8].format;
+			texFormat = MESA_FORMAT_BGR_UNORM8;
 		}
 		else {
-			t->pp_txformat = tx_table[MESA_FORMAT_ARGB8888].format;
-			texFormat = MESA_FORMAT_ARGB8888;
+			t->pp_txformat = tx_table[MESA_FORMAT_B8G8R8A8_UNORM].format;
+			texFormat = MESA_FORMAT_B8G8R8A8_UNORM;
 		}
-		t->pp_txfilter |= tx_table[MESA_FORMAT_ARGB8888].filter;
+		t->pp_txfilter |= tx_table[MESA_FORMAT_B8G8R8A8_UNORM].filter;
 		break;
 	case 3:
 	default:
-		texFormat = MESA_FORMAT_RGB888;
-		t->pp_txformat = tx_table[MESA_FORMAT_RGB888].format;
-		t->pp_txfilter |= tx_table[MESA_FORMAT_RGB888].filter;
+		texFormat = MESA_FORMAT_BGR_UNORM8;
+		t->pp_txformat = tx_table[MESA_FORMAT_BGR_UNORM8].format;
+		t->pp_txfilter |= tx_table[MESA_FORMAT_BGR_UNORM8].filter;
 		break;
 	case 2:
-		texFormat = MESA_FORMAT_RGB565;
-		t->pp_txformat = tx_table[MESA_FORMAT_RGB565].format;
-		t->pp_txfilter |= tx_table[MESA_FORMAT_RGB565].filter;
+		texFormat = MESA_FORMAT_B5G6R5_UNORM;
+		t->pp_txformat = tx_table[MESA_FORMAT_B5G6R5_UNORM].format;
+		t->pp_txfilter |= tx_table[MESA_FORMAT_B5G6R5_UNORM].filter;
 		break;
 	}
 

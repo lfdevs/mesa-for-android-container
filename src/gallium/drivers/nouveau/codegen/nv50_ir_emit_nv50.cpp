@@ -87,6 +87,7 @@ private:
    void emitLOAD(const Instruction *);
    void emitSTORE(const Instruction *);
    void emitMOV(const Instruction *);
+   void emitRDSV(const Instruction *);
    void emitNOP();
    void emitINTERP(const Instruction *);
    void emitPFETCH(const Instruction *);
@@ -380,7 +381,7 @@ CodeEmitterNV50::setSrcFileBits(const Instruction *i, int enc)
    case 0x00: // rrr
       break;
    case 0x01: // arr/grr
-      if (progType == Program::TYPE_GEOMETRY) {
+      if (progType == Program::TYPE_GEOMETRY && i->src(0).isIndirect(0)) {
          code[0] |= 0x01800000;
          if (enc == NV50_OP_ENC_LONG || enc == NV50_OP_ENC_LONG_ALT)
             code[1] |= 0x00200000;
@@ -397,16 +398,21 @@ CodeEmitterNV50::setSrcFileBits(const Instruction *i, int enc)
    case 0x0c: // rir
       break;
    case 0x0d: // gir
-      code[0] |= 0x01000000;
       assert(progType == Program::TYPE_GEOMETRY ||
              progType == Program::TYPE_COMPUTE);
+      code[0] |= 0x01000000;
+      if (progType == Program::TYPE_GEOMETRY && i->src(0).isIndirect(0)) {
+         int reg = i->src(0).getIndirect(0)->rep()->reg.data.id;
+         assert(reg < 3);
+         code[0] |= (reg + 1) << 26;
+      }
       break;
    case 0x08: // rcr
       code[0] |= (enc == NV50_OP_ENC_LONG_ALT) ? 0x01000000 : 0x00800000;
       code[1] |= (i->getSrc(1)->reg.fileIndex << 22);
       break;
    case 0x09: // acr/gcr
-      if (progType == Program::TYPE_GEOMETRY) {
+      if (progType == Program::TYPE_GEOMETRY && i->src(0).isIndirect(0)) {
          code[0] |= 0x01800000;
       } else {
          code[0] |= (enc == NV50_OP_ENC_LONG_ALT) ? 0x01000000 : 0x00800000;
@@ -492,7 +498,12 @@ CodeEmitterNV50::emitForm_MAD(const Instruction *i)
    setSrc(i, 1, 1);
    setSrc(i, 2, 2);
 
-   setAReg16(i, 1);
+   if (i->getIndirect(0, 0)) {
+      assert(!i->getIndirect(1, 0));
+      setAReg16(i, 0);
+   } else {
+      setAReg16(i, 1);
+   }
 }
 
 // like default form, but 2nd source in slot 2, and no 3rd source
@@ -511,7 +522,12 @@ CodeEmitterNV50::emitForm_ADD(const Instruction *i)
    setSrc(i, 0, 0);
    setSrc(i, 1, 2);
 
-   setAReg16(i, 1);
+   if (i->getIndirect(0, 0)) {
+      assert(!i->getIndirect(1, 0));
+      setAReg16(i, 0);
+   } else {
+      setAReg16(i, 1);
+   }
 }
 
 // default short form (rr, ar, rc, gr)
@@ -601,8 +617,11 @@ CodeEmitterNV50::emitLOAD(const Instruction *i)
 
    switch (sf) {
    case FILE_SHADER_INPUT:
-      // use 'mov' where we can
-      code[0] = i->src(0).isIndirect(0) ? 0x00000001 : 0x10000001;
+      if (progType == Program::TYPE_GEOMETRY && i->src(0).isIndirect(0))
+         code[0] = 0x11800001;
+      else
+         // use 'mov' where we can
+         code[0] = i->src(0).isIndirect(0) ? 0x00000001 : 0x10000001;
       code[1] = 0x00200000 | (i->lanes << 14);
       if (typeSizeof(i->dType) == 4)
          code[1] |= 0x04000000;
@@ -772,6 +791,29 @@ CodeEmitterNV50::emitMOV(const Instruction *i)
    }
 }
 
+static inline uint8_t getSRegEncoding(const ValueRef &ref)
+{
+   switch (SDATA(ref).sv.sv) {
+   case SV_PHYSID:        return 0;
+   case SV_CLOCK:         return 1;
+   case SV_VERTEX_STRIDE: return 3;
+// case SV_PM_COUNTER:    return 4 + SDATA(ref).sv.index;
+   case SV_SAMPLE_INDEX:  return 8;
+   default:
+      assert(!"no sreg for system value");
+      return 0;
+   }
+}
+
+void
+CodeEmitterNV50::emitRDSV(const Instruction *i)
+{
+   code[0] = 0x00000001;
+   code[1] = 0x60000000 | (getSRegEncoding(i->src(0)) << 14);
+   defId(i->def(0), 2);
+   emitFlagsRd(i);
+}
+
 void
 CodeEmitterNV50::emitNOP()
 {
@@ -794,15 +836,40 @@ CodeEmitterNV50::emitQUADOP(const Instruction *i, uint8_t lane, uint8_t quOp)
       srcId(i->src(0), 32 + 14);
 }
 
+/* NOTE: This returns the base address of a vertex inside the primitive.
+ * src0 is an immediate, the index (not offset) of the vertex
+ * inside the primitive. XXX: signed or unsigned ?
+ * src1 (may be NULL) should use whatever units the hardware requires
+ * (on nv50 this is bytes, so, relative index * 4; signed 16 bit value).
+ */
 void
 CodeEmitterNV50::emitPFETCH(const Instruction *i)
 {
-   code[0] = 0x11800001;
-   code[1] = 0x04200000 | (0xf << 14);
+   const uint32_t prim = i->src(0).get()->reg.data.u32;
+   assert(prim <= 127);
 
-   defId(i->def(0), 2);
-   srcAddr8(i->src(0), 9);
-   setAReg16(i, 0);
+   if (i->def(0).getFile() == FILE_ADDRESS) {
+      // shl $aX a[] 0
+      code[0] = 0x00000001 | ((DDATA(i->def(0)).id + 1) << 2);
+      code[1] = 0xc0200000;
+      code[0] |= prim << 9;
+      assert(!i->srcExists(1));
+   } else
+   if (i->srcExists(1)) {
+      // ld b32 $rX a[$aX+base]
+      code[0] = 0x00000001;
+      code[1] = 0x04200000 | (0xf << 14);
+      defId(i->def(0), 2);
+      code[0] |= prim << 9;
+      setARegBits(SDATA(i->src(1)).id + 1);
+   } else {
+      // mov b32 $rX a[]
+      code[0] = 0x10000001;
+      code[1] = 0x04200000 | (0xf << 14);
+      defId(i->def(0), 2);
+      code[0] |= prim << 9;
+   }
+   emitFlagsRd(i);
 }
 
 void
@@ -1106,6 +1173,7 @@ CodeEmitterNV50::emitCVT(const Instruction *i)
 {
    const bool f2f = isFloatType(i->dType) && isFloatType(i->sType);
    RoundMode rnd;
+   DataType dType;
 
    switch (i->op) {
    case OP_CEIL:  rnd = f2f ? ROUND_PI : ROUND_P; break;
@@ -1116,9 +1184,14 @@ CodeEmitterNV50::emitCVT(const Instruction *i)
       break;
    }
 
+   if (i->op == OP_NEG && i->dType == TYPE_U32)
+      dType = TYPE_S32;
+   else
+      dType = i->dType;
+
    code[0] = 0xa0000000;
 
-   switch (i->dType) {
+   switch (dType) {
    case TYPE_F64:
       switch (i->sType) {
       case TYPE_F64: code[1] = 0xc4404000; break;
@@ -1159,6 +1232,7 @@ CodeEmitterNV50::emitCVT(const Instruction *i)
       case TYPE_S32: code[1] = 0x44014000; break;
       case TYPE_U32: code[1] = 0x44004000; break;
       case TYPE_F16: code[1] = 0xc4000000; break;
+      case TYPE_U16: code[1] = 0x44000000; break;
       default:
          assert(0);
          break;
@@ -1350,8 +1424,8 @@ CodeEmitterNV50::emitShift(const Instruction *i)
 void
 CodeEmitterNV50::emitOUT(const Instruction *i)
 {
-   code[0] = (i->op == OP_EMIT) ? 0xf0000200 : 0xf0000400;
-   code[1] = 0xc0000001;
+   code[0] = (i->op == OP_EMIT) ? 0xf0000201 : 0xf0000401;
+   code[1] = 0xc0000000;
 
    emitFlagsRd(i);
 }
@@ -1619,6 +1693,9 @@ CodeEmitterNV50::emitInstruction(Instruction *insn)
       break;
    case OP_PFETCH:
       emitPFETCH(insn);
+      break;
+   case OP_RDSV:
+      emitRDSV(insn);
       break;
    case OP_LINTERP:
    case OP_PINTERP:

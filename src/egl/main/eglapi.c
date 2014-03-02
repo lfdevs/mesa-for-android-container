@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2008 VMware, Inc.
  * Copyright 2009-2010 Chia-I Wu <olvaffe@gmail.com>
  * Copyright 2010-2011 LunarG, Inc.
  * All Rights Reserved.
@@ -87,6 +87,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "eglglobals.h"
 #include "eglcontext.h"
 #include "egldisplay.h"
 #include "egltypedefs.h"
@@ -354,10 +355,15 @@ eglTerminate(EGLDisplay dpy)
 const char * EGLAPIENTRY
 eglQueryString(EGLDisplay dpy, EGLint name)
 {
-   _EGLDisplay *disp = _eglLockDisplay(dpy);
+   _EGLDisplay *disp;
    _EGLDriver *drv;
    const char *ret;
 
+   if (dpy == EGL_NO_DISPLAY && name == EGL_EXTENSIONS) {
+      RETURN_EGL_SUCCESS(NULL, _eglGlobal.ClientExtensionString);
+   }
+
+   disp = _eglLockDisplay(dpy);
    _EGL_CHECK_DISPLAY(disp, NULL, drv);
    ret = drv->API.QueryString(drv, disp, name);
 
@@ -966,6 +972,9 @@ eglGetProcAddress(const char *procname)
       { "eglBindWaylandDisplayWL", (_EGLProc) eglBindWaylandDisplayWL },
       { "eglUnbindWaylandDisplayWL", (_EGLProc) eglUnbindWaylandDisplayWL },
       { "eglQueryWaylandBufferWL", (_EGLProc) eglQueryWaylandBufferWL },
+#endif
+#ifdef EGL_WL_create_wayland_buffer_from_image
+      { "eglCreateWaylandBufferFromImageWL", (_EGLProc) eglCreateWaylandBufferFromImageWL },
 #endif
       { "eglPostSubBufferNV", (_EGLProc) eglPostSubBufferNV },
 #ifdef EGL_EXT_swap_buffers_with_damage
@@ -1595,6 +1604,28 @@ eglQueryWaylandBufferWL(EGLDisplay dpy, struct wl_resource *buffer,
 }
 #endif
 
+#ifdef EGL_WL_create_wayland_buffer_from_image
+struct wl_buffer * EGLAPIENTRY
+eglCreateWaylandBufferFromImageWL(EGLDisplay dpy, EGLImageKHR image)
+{
+   _EGLDisplay *disp = _eglLockDisplay(dpy);
+   _EGLImage *img;
+   _EGLDriver *drv;
+   struct wl_buffer *ret;
+
+   _EGL_CHECK_DISPLAY(disp, NULL, drv);
+   assert(disp->Extensions.WL_create_wayland_buffer_from_image);
+
+   img = _eglLookupImage(image, disp);
+
+   if (!img)
+      RETURN_EGL_ERROR(disp, EGL_BAD_PARAMETER, NULL);
+
+   ret = drv->API.CreateWaylandBufferFromImageWL(drv, disp, img);
+
+   RETURN_EGL_EVAL(disp, ret);
+}
+#endif
 
 EGLBoolean EGLAPIENTRY
 eglPostSubBufferNV(EGLDisplay dpy, EGLSurface surface,

@@ -8,14 +8,15 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml              (    327 bytes, from 2013-07-05 19:21:12)
-- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/a2xx/a2xx.xml           (  32800 bytes, from 2013-11-01 23:57:26)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   8900 bytes, from 2013-10-22 23:57:49)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (  10345 bytes, from 2013-10-25 14:31:35)
-- /home/robclark/src/freedreno/envytools/rnndb/a3xx/a3xx.xml           (  52925 bytes, from 2013-11-01 23:57:26)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    364 bytes, from 2013-11-30 14:47:15)
+- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1453 bytes, from 2013-03-31 16:51:27)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32840 bytes, from 2014-01-05 14:44:21)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (   9009 bytes, from 2014-01-11 16:56:35)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  12362 bytes, from 2014-01-07 14:47:36)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  55460 bytes, from 2014-01-14 23:57:14)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (   8344 bytes, from 2013-11-30 14:49:47)
 
-Copyright (C) 2013 by the following authors:
+Copyright (C) 2013-2014 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -188,6 +189,25 @@ enum a3xx_sp_perfcounter_select {
 	SP_FS_FULL_ALU_INSTRUCTIONS = 14,
 	SP0_ICL1_MISSES = 26,
 	SP_ALU_ACTIVE_CYCLES = 29,
+};
+
+enum a3xx_rop_code {
+	ROP_CLEAR = 0,
+	ROP_NOR = 1,
+	ROP_AND_INVERTED = 2,
+	ROP_COPY_INVERTED = 3,
+	ROP_AND_REVERSE = 4,
+	ROP_INVERT = 5,
+	ROP_XOR = 6,
+	ROP_NAND = 7,
+	ROP_AND = 8,
+	ROP_EQUIV = 9,
+	ROP_NOOP = 10,
+	ROP_OR_INVERTED = 11,
+	ROP_COPY = 12,
+	ROP_OR_REVERSE = 13,
+	ROP_OR = 14,
+	ROP_SET = 15,
 };
 
 enum adreno_rb_copy_control_mode {
@@ -555,6 +575,7 @@ static inline uint32_t REG_A3XX_CP_PROTECT_REG(uint32_t i0) { return 0x00000460 
 #define A3XX_GRAS_CL_CLIP_CNTL_VP_CLIP_CODE_IGNORE		0x00080000
 #define A3XX_GRAS_CL_CLIP_CNTL_VP_XFORM_DISABLE			0x00100000
 #define A3XX_GRAS_CL_CLIP_CNTL_PERSP_DIVISION_DISABLE		0x00200000
+#define A3XX_GRAS_CL_CLIP_CNTL_ZCLIP_DISABLE			0x02000000
 
 #define REG_A3XX_GRAS_CL_GB_CLIP_ADJ				0x00002044
 #define A3XX_GRAS_CL_GB_CLIP_ADJ_HORZ__MASK			0x000003ff
@@ -795,7 +816,7 @@ static inline uint32_t REG_A3XX_RB_MRT_CONTROL(uint32_t i0) { return 0x000020c4 
 #define A3XX_RB_MRT_CONTROL_BLEND2				0x00000020
 #define A3XX_RB_MRT_CONTROL_ROP_CODE__MASK			0x00000f00
 #define A3XX_RB_MRT_CONTROL_ROP_CODE__SHIFT			8
-static inline uint32_t A3XX_RB_MRT_CONTROL_ROP_CODE(uint32_t val)
+static inline uint32_t A3XX_RB_MRT_CONTROL_ROP_CODE(enum a3xx_rop_code val)
 {
 	return ((val) << A3XX_RB_MRT_CONTROL_ROP_CODE__SHIFT) & A3XX_RB_MRT_CONTROL_ROP_CODE__MASK;
 }
@@ -941,13 +962,13 @@ static inline uint32_t A3XX_RB_BLEND_ALPHA_FLOAT(float val)
 	return ((util_float_to_half(val)) << A3XX_RB_BLEND_ALPHA_FLOAT__SHIFT) & A3XX_RB_BLEND_ALPHA_FLOAT__MASK;
 }
 
-#define REG_A3XX_UNKNOWN_20E8					0x000020e8
+#define REG_A3XX_RB_CLEAR_COLOR_DW0				0x000020e8
 
-#define REG_A3XX_UNKNOWN_20E9					0x000020e9
+#define REG_A3XX_RB_CLEAR_COLOR_DW1				0x000020e9
 
-#define REG_A3XX_UNKNOWN_20EA					0x000020ea
+#define REG_A3XX_RB_CLEAR_COLOR_DW2				0x000020ea
 
-#define REG_A3XX_UNKNOWN_20EB					0x000020eb
+#define REG_A3XX_RB_CLEAR_COLOR_DW3				0x000020eb
 
 #define REG_A3XX_RB_COPY_CONTROL				0x000020ec
 #define A3XX_RB_COPY_CONTROL_MSAA_RESOLVE__MASK			0x00000003
@@ -962,11 +983,11 @@ static inline uint32_t A3XX_RB_COPY_CONTROL_MODE(enum adreno_rb_copy_control_mod
 {
 	return ((val) << A3XX_RB_COPY_CONTROL_MODE__SHIFT) & A3XX_RB_COPY_CONTROL_MODE__MASK;
 }
-#define A3XX_RB_COPY_CONTROL_GMEM_BASE__MASK			0xfffffc00
-#define A3XX_RB_COPY_CONTROL_GMEM_BASE__SHIFT			10
+#define A3XX_RB_COPY_CONTROL_GMEM_BASE__MASK			0xffffc000
+#define A3XX_RB_COPY_CONTROL_GMEM_BASE__SHIFT			14
 static inline uint32_t A3XX_RB_COPY_CONTROL_GMEM_BASE(uint32_t val)
 {
-	return ((val >> 10) << A3XX_RB_COPY_CONTROL_GMEM_BASE__SHIFT) & A3XX_RB_COPY_CONTROL_GMEM_BASE__MASK;
+	return ((val >> 14) << A3XX_RB_COPY_CONTROL_GMEM_BASE__SHIFT) & A3XX_RB_COPY_CONTROL_GMEM_BASE__MASK;
 }
 
 #define REG_A3XX_RB_COPY_DEST_BASE				0x000020ed
@@ -1018,6 +1039,7 @@ static inline uint32_t A3XX_RB_COPY_DEST_INFO_ENDIAN(enum adreno_rb_surface_endi
 }
 
 #define REG_A3XX_RB_DEPTH_CONTROL				0x00002100
+#define A3XX_RB_DEPTH_CONTROL_FRAG_WRITES_Z			0x00000001
 #define A3XX_RB_DEPTH_CONTROL_Z_ENABLE				0x00000002
 #define A3XX_RB_DEPTH_CONTROL_Z_WRITE_ENABLE			0x00000004
 #define A3XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE			0x00000008
@@ -1030,7 +1052,7 @@ static inline uint32_t A3XX_RB_DEPTH_CONTROL_ZFUNC(enum adreno_compare_func val)
 #define A3XX_RB_DEPTH_CONTROL_BF_ENABLE				0x00000080
 #define A3XX_RB_DEPTH_CONTROL_Z_TEST_ENABLE			0x80000000
 
-#define REG_A3XX_UNKNOWN_2101					0x00002101
+#define REG_A3XX_RB_DEPTH_CLEAR					0x00002101
 
 #define REG_A3XX_RB_DEPTH_INFO					0x00002102
 #define A3XX_RB_DEPTH_INFO_DEPTH_FORMAT__MASK			0x00000001
@@ -1107,11 +1129,11 @@ static inline uint32_t A3XX_RB_STENCIL_CONTROL_ZFAIL_BF(enum adreno_stencil_op v
 	return ((val) << A3XX_RB_STENCIL_CONTROL_ZFAIL_BF__SHIFT) & A3XX_RB_STENCIL_CONTROL_ZFAIL_BF__MASK;
 }
 
-#define REG_A3XX_UNKNOWN_2105					0x00002105
+#define REG_A3XX_RB_STENCIL_CLEAR				0x00002105
 
-#define REG_A3XX_UNKNOWN_2106					0x00002106
+#define REG_A3XX_RB_STENCIL_BUF_INFO				0x00002106
 
-#define REG_A3XX_UNKNOWN_2107					0x00002107
+#define REG_A3XX_RB_STENCIL_BUF_PITCH				0x00002107
 
 #define REG_A3XX_RB_STENCILREFMASK				0x00002108
 #define A3XX_RB_STENCILREFMASK_STENCILREF__MASK			0x000000ff
@@ -1153,21 +1175,48 @@ static inline uint32_t A3XX_RB_STENCILREFMASK_BF_STENCILWRITEMASK(uint32_t val)
 	return ((val) << A3XX_RB_STENCILREFMASK_BF_STENCILWRITEMASK__SHIFT) & A3XX_RB_STENCILREFMASK_BF_STENCILWRITEMASK__MASK;
 }
 
-#define REG_A3XX_PA_SC_WINDOW_OFFSET				0x0000210e
-#define A3XX_PA_SC_WINDOW_OFFSET_X__MASK			0x0000ffff
-#define A3XX_PA_SC_WINDOW_OFFSET_X__SHIFT			0
-static inline uint32_t A3XX_PA_SC_WINDOW_OFFSET_X(uint32_t val)
+#define REG_A3XX_RB_LRZ_VSC_CONTROL				0x0000210c
+#define A3XX_RB_LRZ_VSC_CONTROL_BINNING_ENABLE			0x00000002
+
+#define REG_A3XX_RB_WINDOW_OFFSET				0x0000210e
+#define A3XX_RB_WINDOW_OFFSET_X__MASK				0x0000ffff
+#define A3XX_RB_WINDOW_OFFSET_X__SHIFT				0
+static inline uint32_t A3XX_RB_WINDOW_OFFSET_X(uint32_t val)
 {
-	return ((val) << A3XX_PA_SC_WINDOW_OFFSET_X__SHIFT) & A3XX_PA_SC_WINDOW_OFFSET_X__MASK;
+	return ((val) << A3XX_RB_WINDOW_OFFSET_X__SHIFT) & A3XX_RB_WINDOW_OFFSET_X__MASK;
 }
-#define A3XX_PA_SC_WINDOW_OFFSET_Y__MASK			0xffff0000
-#define A3XX_PA_SC_WINDOW_OFFSET_Y__SHIFT			16
-static inline uint32_t A3XX_PA_SC_WINDOW_OFFSET_Y(uint32_t val)
+#define A3XX_RB_WINDOW_OFFSET_Y__MASK				0xffff0000
+#define A3XX_RB_WINDOW_OFFSET_Y__SHIFT				16
+static inline uint32_t A3XX_RB_WINDOW_OFFSET_Y(uint32_t val)
 {
-	return ((val) << A3XX_PA_SC_WINDOW_OFFSET_Y__SHIFT) & A3XX_PA_SC_WINDOW_OFFSET_Y__MASK;
+	return ((val) << A3XX_RB_WINDOW_OFFSET_Y__SHIFT) & A3XX_RB_WINDOW_OFFSET_Y__MASK;
 }
 
+#define REG_A3XX_RB_SAMPLE_COUNT_CONTROL			0x00002110
+
+#define REG_A3XX_RB_SAMPLE_COUNT_ADDR				0x00002111
+
+#define REG_A3XX_RB_Z_CLAMP_MIN					0x00002114
+
+#define REG_A3XX_RB_Z_CLAMP_MAX					0x00002115
+
+#define REG_A3XX_VGT_BIN_BASE					0x000021e1
+
+#define REG_A3XX_VGT_BIN_SIZE					0x000021e2
+
 #define REG_A3XX_PC_VSTREAM_CONTROL				0x000021e4
+#define A3XX_PC_VSTREAM_CONTROL_SIZE__MASK			0x003f0000
+#define A3XX_PC_VSTREAM_CONTROL_SIZE__SHIFT			16
+static inline uint32_t A3XX_PC_VSTREAM_CONTROL_SIZE(uint32_t val)
+{
+	return ((val) << A3XX_PC_VSTREAM_CONTROL_SIZE__SHIFT) & A3XX_PC_VSTREAM_CONTROL_SIZE__MASK;
+}
+#define A3XX_PC_VSTREAM_CONTROL_N__MASK				0x07c00000
+#define A3XX_PC_VSTREAM_CONTROL_N__SHIFT			22
+static inline uint32_t A3XX_PC_VSTREAM_CONTROL_N(uint32_t val)
+{
+	return ((val) << A3XX_PC_VSTREAM_CONTROL_N__SHIFT) & A3XX_PC_VSTREAM_CONTROL_N__MASK;
+}
 
 #define REG_A3XX_PC_VERTEX_REUSE_BLOCK_CNTL			0x000021ea
 
@@ -1312,6 +1361,8 @@ static inline uint32_t A3XX_HLSQ_CONST_FSPRESV_RANGE_REG_ENDENTRY(uint32_t val)
 #define REG_A3XX_HLSQ_CL_KERNEL_CONST_REG			0x00002214
 
 #define REG_A3XX_HLSQ_CL_KERNEL_GROUP_X_REG			0x00002215
+
+#define REG_A3XX_HLSQ_CL_KERNEL_GROUP_Y_REG			0x00002216
 
 #define REG_A3XX_HLSQ_CL_KERNEL_GROUP_Z_REG			0x00002217
 
@@ -1495,23 +1546,24 @@ static inline uint32_t REG_A3XX_VPC_VARYING_PS_REPL_MODE(uint32_t i0) { return 0
 
 #define REG_A3XX_SP_SP_CTRL_REG					0x000022c0
 #define A3XX_SP_SP_CTRL_REG_RESOLVE				0x00010000
-#define A3XX_SP_SP_CTRL_REG_CONSTMODE__MASK			0x000c0000
+#define A3XX_SP_SP_CTRL_REG_CONSTMODE__MASK			0x00040000
 #define A3XX_SP_SP_CTRL_REG_CONSTMODE__SHIFT			18
 static inline uint32_t A3XX_SP_SP_CTRL_REG_CONSTMODE(uint32_t val)
 {
 	return ((val) << A3XX_SP_SP_CTRL_REG_CONSTMODE__SHIFT) & A3XX_SP_SP_CTRL_REG_CONSTMODE__MASK;
 }
+#define A3XX_SP_SP_CTRL_REG_BINNING				0x00080000
 #define A3XX_SP_SP_CTRL_REG_SLEEPMODE__MASK			0x00300000
 #define A3XX_SP_SP_CTRL_REG_SLEEPMODE__SHIFT			20
 static inline uint32_t A3XX_SP_SP_CTRL_REG_SLEEPMODE(uint32_t val)
 {
 	return ((val) << A3XX_SP_SP_CTRL_REG_SLEEPMODE__SHIFT) & A3XX_SP_SP_CTRL_REG_SLEEPMODE__MASK;
 }
-#define A3XX_SP_SP_CTRL_REG_LOMODE__MASK			0x00c00000
-#define A3XX_SP_SP_CTRL_REG_LOMODE__SHIFT			22
-static inline uint32_t A3XX_SP_SP_CTRL_REG_LOMODE(uint32_t val)
+#define A3XX_SP_SP_CTRL_REG_L0MODE__MASK			0x00c00000
+#define A3XX_SP_SP_CTRL_REG_L0MODE__SHIFT			22
+static inline uint32_t A3XX_SP_SP_CTRL_REG_L0MODE(uint32_t val)
 {
-	return ((val) << A3XX_SP_SP_CTRL_REG_LOMODE__SHIFT) & A3XX_SP_SP_CTRL_REG_LOMODE__MASK;
+	return ((val) << A3XX_SP_SP_CTRL_REG_L0MODE__SHIFT) & A3XX_SP_SP_CTRL_REG_L0MODE__MASK;
 }
 
 #define REG_A3XX_SP_VS_CTRL_REG0				0x000022c4
@@ -1673,7 +1725,7 @@ static inline uint32_t A3XX_SP_VS_OBJ_OFFSET_REG_SHADEROBJOFFSET(uint32_t val)
 
 #define REG_A3XX_SP_VS_OBJ_START_REG				0x000022d5
 
-#define REG_A3XX_SP_VS_PVT_MEM_CTRL_REG				0x000022d6
+#define REG_A3XX_SP_VS_PVT_MEM_PARAM_REG			0x000022d6
 
 #define REG_A3XX_SP_VS_PVT_MEM_ADDR_REG				0x000022d7
 
@@ -1776,7 +1828,7 @@ static inline uint32_t A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(uint32_t val)
 
 #define REG_A3XX_SP_FS_OBJ_START_REG				0x000022e3
 
-#define REG_A3XX_SP_FS_PVT_MEM_CTRL_REG				0x000022e4
+#define REG_A3XX_SP_FS_PVT_MEM_PARAM_REG			0x000022e4
 
 #define REG_A3XX_SP_FS_PVT_MEM_ADDR_REG				0x000022e5
 
@@ -1787,6 +1839,13 @@ static inline uint32_t A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(uint32_t val)
 #define REG_A3XX_SP_FS_FLAT_SHAD_MODE_REG_1			0x000022e9
 
 #define REG_A3XX_SP_FS_OUTPUT_REG				0x000022ec
+#define A3XX_SP_FS_OUTPUT_REG_DEPTH_ENABLE			0x00000080
+#define A3XX_SP_FS_OUTPUT_REG_DEPTH_REGID__MASK			0x0000ff00
+#define A3XX_SP_FS_OUTPUT_REG_DEPTH_REGID__SHIFT		8
+static inline uint32_t A3XX_SP_FS_OUTPUT_REG_DEPTH_REGID(uint32_t val)
+{
+	return ((val) << A3XX_SP_FS_OUTPUT_REG_DEPTH_REGID__SHIFT) & A3XX_SP_FS_OUTPUT_REG_DEPTH_REGID__MASK;
+}
 
 static inline uint32_t REG_A3XX_SP_FS_MRT(uint32_t i0) { return 0x000022f0 + 0x1*i0; }
 
@@ -1947,6 +2006,9 @@ static inline uint32_t REG_A3XX_VSC_PIPE_DATA_ADDRESS(uint32_t i0) { return 0x00
 
 static inline uint32_t REG_A3XX_VSC_PIPE_DATA_LENGTH(uint32_t i0) { return 0x00000c08 + 0x3*i0; }
 
+#define REG_A3XX_VSC_BIN_CONTROL				0x00000c3c
+#define A3XX_VSC_BIN_CONTROL_BINNING_ENABLE			0x00000001
+
 #define REG_A3XX_UNKNOWN_0C3D					0x00000c3d
 
 #define REG_A3XX_PC_PERFCOUNTER0_SELECT				0x00000c48
@@ -1957,7 +2019,7 @@ static inline uint32_t REG_A3XX_VSC_PIPE_DATA_LENGTH(uint32_t i0) { return 0x000
 
 #define REG_A3XX_PC_PERFCOUNTER3_SELECT				0x00000c4b
 
-#define REG_A3XX_UNKNOWN_0C81					0x00000c81
+#define REG_A3XX_GRAS_TSE_DEBUG_ECO				0x00000c81
 
 #define REG_A3XX_GRAS_PERFCOUNTER0_SELECT			0x00000c88
 
@@ -1979,22 +2041,24 @@ static inline uint32_t REG_A3XX_GRAS_CL_USER_PLANE_W(uint32_t i0) { return 0x000
 
 #define REG_A3XX_RB_GMEM_BASE_ADDR				0x00000cc0
 
+#define REG_A3XX_RB_DEBUG_ECO_CONTROLS_ADDR			0x00000cc1
+
 #define REG_A3XX_RB_PERFCOUNTER0_SELECT				0x00000cc6
 
 #define REG_A3XX_RB_PERFCOUNTER1_SELECT				0x00000cc7
 
-#define REG_A3XX_RB_WINDOW_SIZE					0x00000ce0
-#define A3XX_RB_WINDOW_SIZE_WIDTH__MASK				0x00003fff
-#define A3XX_RB_WINDOW_SIZE_WIDTH__SHIFT			0
-static inline uint32_t A3XX_RB_WINDOW_SIZE_WIDTH(uint32_t val)
+#define REG_A3XX_RB_FRAME_BUFFER_DIMENSION			0x00000ce0
+#define A3XX_RB_FRAME_BUFFER_DIMENSION_WIDTH__MASK		0x00003fff
+#define A3XX_RB_FRAME_BUFFER_DIMENSION_WIDTH__SHIFT		0
+static inline uint32_t A3XX_RB_FRAME_BUFFER_DIMENSION_WIDTH(uint32_t val)
 {
-	return ((val) << A3XX_RB_WINDOW_SIZE_WIDTH__SHIFT) & A3XX_RB_WINDOW_SIZE_WIDTH__MASK;
+	return ((val) << A3XX_RB_FRAME_BUFFER_DIMENSION_WIDTH__SHIFT) & A3XX_RB_FRAME_BUFFER_DIMENSION_WIDTH__MASK;
 }
-#define A3XX_RB_WINDOW_SIZE_HEIGHT__MASK			0x0fffc000
-#define A3XX_RB_WINDOW_SIZE_HEIGHT__SHIFT			14
-static inline uint32_t A3XX_RB_WINDOW_SIZE_HEIGHT(uint32_t val)
+#define A3XX_RB_FRAME_BUFFER_DIMENSION_HEIGHT__MASK		0x0fffc000
+#define A3XX_RB_FRAME_BUFFER_DIMENSION_HEIGHT__SHIFT		14
+static inline uint32_t A3XX_RB_FRAME_BUFFER_DIMENSION_HEIGHT(uint32_t val)
 {
-	return ((val) << A3XX_RB_WINDOW_SIZE_HEIGHT__SHIFT) & A3XX_RB_WINDOW_SIZE_HEIGHT__MASK;
+	return ((val) << A3XX_RB_FRAME_BUFFER_DIMENSION_HEIGHT__SHIFT) & A3XX_RB_FRAME_BUFFER_DIMENSION_HEIGHT__MASK;
 }
 
 #define REG_A3XX_HLSQ_PERFCOUNTER0_SELECT			0x00000e00
@@ -2060,6 +2124,8 @@ static inline uint32_t A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE(enum a3xx_cache_op
 }
 #define A3XX_UCHE_CACHE_INVALIDATE1_REG_ENTIRE_CACHE		0x80000000
 
+#define REG_A3XX_UNKNOWN_0EA6					0x00000ea6
+
 #define REG_A3XX_SP_PERFCOUNTER0_SELECT				0x00000ec4
 
 #define REG_A3XX_SP_PERFCOUNTER1_SELECT				0x00000ec5
@@ -2097,6 +2163,39 @@ static inline uint32_t A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE(enum a3xx_cache_op
 #define REG_A3XX_VGT_EVENT_INITIATOR				0x000021f9
 
 #define REG_A3XX_VGT_DRAW_INITIATOR				0x000021fc
+#define A3XX_VGT_DRAW_INITIATOR_PRIM_TYPE__MASK			0x0000003f
+#define A3XX_VGT_DRAW_INITIATOR_PRIM_TYPE__SHIFT		0
+static inline uint32_t A3XX_VGT_DRAW_INITIATOR_PRIM_TYPE(enum pc_di_primtype val)
+{
+	return ((val) << A3XX_VGT_DRAW_INITIATOR_PRIM_TYPE__SHIFT) & A3XX_VGT_DRAW_INITIATOR_PRIM_TYPE__MASK;
+}
+#define A3XX_VGT_DRAW_INITIATOR_SOURCE_SELECT__MASK		0x000000c0
+#define A3XX_VGT_DRAW_INITIATOR_SOURCE_SELECT__SHIFT		6
+static inline uint32_t A3XX_VGT_DRAW_INITIATOR_SOURCE_SELECT(enum pc_di_src_sel val)
+{
+	return ((val) << A3XX_VGT_DRAW_INITIATOR_SOURCE_SELECT__SHIFT) & A3XX_VGT_DRAW_INITIATOR_SOURCE_SELECT__MASK;
+}
+#define A3XX_VGT_DRAW_INITIATOR_VIS_CULL__MASK			0x00000600
+#define A3XX_VGT_DRAW_INITIATOR_VIS_CULL__SHIFT			9
+static inline uint32_t A3XX_VGT_DRAW_INITIATOR_VIS_CULL(enum pc_di_vis_cull_mode val)
+{
+	return ((val) << A3XX_VGT_DRAW_INITIATOR_VIS_CULL__SHIFT) & A3XX_VGT_DRAW_INITIATOR_VIS_CULL__MASK;
+}
+#define A3XX_VGT_DRAW_INITIATOR_INDEX_SIZE__MASK		0x00000800
+#define A3XX_VGT_DRAW_INITIATOR_INDEX_SIZE__SHIFT		11
+static inline uint32_t A3XX_VGT_DRAW_INITIATOR_INDEX_SIZE(enum pc_di_index_size val)
+{
+	return ((val) << A3XX_VGT_DRAW_INITIATOR_INDEX_SIZE__SHIFT) & A3XX_VGT_DRAW_INITIATOR_INDEX_SIZE__MASK;
+}
+#define A3XX_VGT_DRAW_INITIATOR_NOT_EOP				0x00001000
+#define A3XX_VGT_DRAW_INITIATOR_SMALL_INDEX			0x00002000
+#define A3XX_VGT_DRAW_INITIATOR_PRE_DRAW_INITIATOR_ENABLE	0x00004000
+#define A3XX_VGT_DRAW_INITIATOR_NUM_INDICES__MASK		0xffff0000
+#define A3XX_VGT_DRAW_INITIATOR_NUM_INDICES__SHIFT		16
+static inline uint32_t A3XX_VGT_DRAW_INITIATOR_NUM_INDICES(uint32_t val)
+{
+	return ((val) << A3XX_VGT_DRAW_INITIATOR_NUM_INDICES__SHIFT) & A3XX_VGT_DRAW_INITIATOR_NUM_INDICES__MASK;
+}
 
 #define REG_A3XX_VGT_IMMED_DATA					0x000021fd
 

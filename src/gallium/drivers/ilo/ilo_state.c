@@ -25,7 +25,6 @@
  *    Chia-I Wu <olv@lunarg.com>
  */
 
-#include "util/u_framebuffer.h"
 #include "util/u_helpers.h"
 #include "util/u_upload_mgr.h"
 
@@ -645,17 +644,7 @@ ilo_set_framebuffer_state(struct pipe_context *pipe,
 {
    struct ilo_context *ilo = ilo_context(pipe);
 
-   util_copy_framebuffer_state(&ilo->fb.state, state);
-
-   if (state->nr_cbufs)
-      ilo->fb.num_samples = state->cbufs[0]->texture->nr_samples;
-   else if (state->zsbuf)
-      ilo->fb.num_samples = state->zsbuf->texture->nr_samples;
-   else
-      ilo->fb.num_samples = 1;
-
-   if (!ilo->fb.num_samples)
-      ilo->fb.num_samples = 1;
+   ilo_gpe_set_fb(ilo->dev, state, &ilo->fb);
 
    ilo->dirty |= ILO_DIRTY_FB;
 }
@@ -991,7 +980,7 @@ ilo_create_surface(struct pipe_context *pipe,
             templ->format, templ->u.tex.level, 1,
             templ->u.tex.first_layer,
             templ->u.tex.last_layer - templ->u.tex.first_layer + 1,
-            true, true, &surf->u.rt);
+            true, false, &surf->u.rt);
    }
    else {
       assert(res->target != PIPE_BUFFER);
@@ -1000,7 +989,7 @@ ilo_create_surface(struct pipe_context *pipe,
             templ->format, templ->u.tex.level,
             templ->u.tex.first_layer,
             templ->u.tex.last_layer - templ->u.tex.first_layer + 1,
-            &surf->u.zs);
+            false, &surf->u.zs);
    }
 
    return &surf->base;
@@ -1189,8 +1178,8 @@ ilo_init_states(struct ilo_context *ilo)
 {
    ilo_gpe_set_scissor_null(ilo->dev, &ilo->scissor);
 
-   ilo_gpe_init_zs_surface(ilo->dev, NULL,
-         PIPE_FORMAT_NONE, 0, 0, 1, &ilo->fb.null_zs);
+   ilo_gpe_init_zs_surface(ilo->dev, NULL, PIPE_FORMAT_NONE,
+         0, 0, 1, false, &ilo->fb.null_zs);
 
    ilo->dirty = ILO_DIRTY_ALL;
 }
@@ -1321,7 +1310,8 @@ ilo_mark_states_with_resource_dirty(struct ilo_context *ilo,
    /* for now? */
    if (res->target != PIPE_BUFFER) {
       for (i = 0; i < ilo->fb.state.nr_cbufs; i++) {
-         if (ilo->fb.state.cbufs[i]->texture == res) {
+         const struct pipe_surface *surf = ilo->fb.state.cbufs[i];
+         if (surf && surf->texture == res) {
             states |= ILO_DIRTY_FB;
             break;
          }

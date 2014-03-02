@@ -160,7 +160,6 @@ struct dri2_egl_surface
    __DRIbuffer          buffers[5];
    int                  buffer_count;
    int                  have_fake_front;
-   int                  swap_interval;
 
 #ifdef HAVE_X11_PLATFORM
    xcb_drawable_t       drawable;
@@ -175,7 +174,7 @@ struct dri2_egl_surface
    struct wl_egl_window  *wl_win;
    int                    dx;
    int                    dy;
-   struct wl_callback    *frame_callback;
+   struct wl_callback    *throttle_callback;
    int			  format;
 #endif
 
@@ -195,7 +194,7 @@ struct dri2_egl_surface
 #endif
       int                 locked;
       int                 age;
-   } color_buffers[3], *back, *current;
+   } color_buffers[4], *back, *current;
 #endif
 
 #ifdef HAVE_ANDROID_PLATFORM
@@ -220,6 +219,12 @@ struct dri2_egl_image
    _EGLImage   base;
    __DRIimage *dri_image;
 };
+
+/* From xmlpool/options.h, user exposed so should be stable */
+#define DRI_CONF_VBLANK_NEVER 0
+#define DRI_CONF_VBLANK_DEF_INTERVAL_0 1
+#define DRI_CONF_VBLANK_DEF_INTERVAL_1 2
+#define DRI_CONF_VBLANK_ALWAYS_SYNC 3
 
 /* standard typecasts */
 _EGL_DRIVER_STANDARD_TYPECASTS(dri2_egl)
@@ -265,10 +270,5 @@ dri2_initialize_wayland(_EGLDriver *drv, _EGLDisplay *disp);
 
 EGLBoolean
 dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp);
-
-char *
-dri2_get_driver_for_fd(int fd);
-char *
-dri2_get_device_name_for_fd(int fd);
 
 #endif /* EGL_DRI2_INCLUDED */

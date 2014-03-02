@@ -47,6 +47,7 @@
 #define LP_SETUP_NEW_CONSTANTS   0x02
 #define LP_SETUP_NEW_BLEND_COLOR 0x04
 #define LP_SETUP_NEW_SCISSOR     0x08
+#define LP_SETUP_NEW_VIEWPORTS   0x10
 
 
 struct lp_setup_variant;
@@ -92,7 +93,6 @@ struct lp_setup_context
    struct llvmpipe_query *active_queries[LP_MAX_ACTIVE_BINNED_QUERIES];
    unsigned active_binned_queries;
 
-   boolean subdivide_large_triangles;
    boolean flatshade_first;
    boolean ccw_is_frontface;
    boolean scissor_test;
@@ -112,6 +112,7 @@ struct lp_setup_context
    struct u_rect framebuffer;
    struct u_rect scissors[PIPE_MAX_VIEWPORTS];
    struct u_rect draw_regions[PIPE_MAX_VIEWPORTS];   /* intersection of fb & scissor */
+   struct lp_jit_viewport viewports[PIPE_MAX_VIEWPORTS];
 
    struct {
       unsigned flags;

@@ -46,71 +46,34 @@
 /**
  * Emit PIPE_CONTROLs to write the current GPU timestamp into a buffer.
  */
-static void
-write_timestamp(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
+void
+brw_write_timestamp(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
 {
-   if (brw->gen >= 6) {
-      /* Emit workaround flushes: */
-      if (brw->gen == 6) {
-         /* The timestamp write below is a non-zero post-sync op, which on
-          * Gen6 necessitates a CS stall.  CS stalls need stall at scoreboard
-          * set.  See the comments for intel_emit_post_sync_nonzero_flush().
-          */
-         BEGIN_BATCH(4);
-         OUT_BATCH(_3DSTATE_PIPE_CONTROL | (4 - 2));
-         OUT_BATCH(PIPE_CONTROL_CS_STALL | PIPE_CONTROL_STALL_AT_SCOREBOARD);
-         OUT_BATCH(0);
-         OUT_BATCH(0);
-         ADVANCE_BATCH();
-      }
-
-      BEGIN_BATCH(5);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | (5 - 2));
-      OUT_BATCH(PIPE_CONTROL_WRITE_TIMESTAMP);
-      OUT_RELOC(query_bo,
-                I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                PIPE_CONTROL_GLOBAL_GTT_WRITE |
-                idx * sizeof(uint64_t));
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
-   } else {
-      BEGIN_BATCH(4);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | (4 - 2) |
-                PIPE_CONTROL_WRITE_TIMESTAMP);
-      OUT_RELOC(query_bo,
-                I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                PIPE_CONTROL_GLOBAL_GTT_WRITE |
-                idx * sizeof(uint64_t));
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      ADVANCE_BATCH();
+   if (brw->gen == 6) {
+      /* Emit Sandybridge workaround flush: */
+      brw_emit_pipe_control_flush(brw,
+                                  PIPE_CONTROL_CS_STALL |
+                                  PIPE_CONTROL_STALL_AT_SCOREBOARD);
    }
+
+   brw_emit_pipe_control_write(brw, PIPE_CONTROL_WRITE_TIMESTAMP,
+                               query_bo, idx * sizeof(uint64_t), 0, 0);
 }
 
 /**
  * Emit PIPE_CONTROLs to write the PS_DEPTH_COUNT register into a buffer.
  */
-static void
-write_depth_count(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
+void
+brw_write_depth_count(struct brw_context *brw, drm_intel_bo *query_bo, int idx)
 {
-   assert(brw->gen < 6);
+   /* Emit Sandybridge workaround flush: */
+   if (brw->gen == 6)
+      intel_emit_post_sync_nonzero_flush(brw);
 
-   BEGIN_BATCH(4);
-   OUT_BATCH(_3DSTATE_PIPE_CONTROL | (4 - 2) |
-             PIPE_CONTROL_DEPTH_STALL | PIPE_CONTROL_WRITE_DEPTH_COUNT);
-   /* This object could be mapped cacheable, but we don't have an exposed
-    * mechanism to support that.  Since it's going uncached, tell GEM that
-    * we're writing to it.  The usual clflush should be all that's required
-    * to pick up the results.
-    */
-   OUT_RELOC(query_bo,
-             I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-             PIPE_CONTROL_GLOBAL_GTT_WRITE |
-             (idx * sizeof(uint64_t)));
-   OUT_BATCH(0);
-   OUT_BATCH(0);
-   ADVANCE_BATCH();
+   brw_emit_pipe_control_write(brw,
+                               PIPE_CONTROL_WRITE_DEPTH_COUNT
+                               | PIPE_CONTROL_DEPTH_STALL,
+                               query_bo, idx * sizeof(uint64_t), 0, 0);
 }
 
 /**
@@ -269,7 +232,7 @@ brw_begin_query(struct gl_context *ctx, struct gl_query_object *q)
        */
       drm_intel_bo_unreference(query->bo);
       query->bo = drm_intel_bo_alloc(brw->bufmgr, "timer query", 4096, 4096);
-      write_timestamp(brw, query->bo, 0);
+      brw_write_timestamp(brw, query->bo, 0);
       break;
 
    case GL_ANY_SAMPLES_PASSED:
@@ -321,7 +284,7 @@ brw_end_query(struct gl_context *ctx, struct gl_query_object *q)
    switch (query->Base.Target) {
    case GL_TIME_ELAPSED_EXT:
       /* Write the final timestamp. */
-      write_timestamp(brw, query->bo, 1);
+      brw_write_timestamp(brw, query->bo, 1);
       break;
 
    case GL_ANY_SAMPLES_PASSED:
@@ -470,7 +433,7 @@ brw_emit_query_begin(struct brw_context *brw)
 
    ensure_bo_has_space(ctx, query);
 
-   write_depth_count(brw, query->bo, query->last_index * 2);
+   brw_write_depth_count(brw, query->bo, query->last_index * 2);
 
    brw->query.begin_emitted = true;
 }
@@ -492,7 +455,7 @@ brw_emit_query_end(struct brw_context *brw)
    if (!brw->query.begin_emitted)
       return;
 
-   write_depth_count(brw, query->bo, query->last_index * 2 + 1);
+   brw_write_depth_count(brw, query->bo, query->last_index * 2 + 1);
 
    brw->query.begin_emitted = false;
    query->last_index++;
@@ -515,7 +478,7 @@ brw_query_counter(struct gl_context *ctx, struct gl_query_object *q)
 
    drm_intel_bo_unreference(query->bo);
    query->bo = drm_intel_bo_alloc(brw->bufmgr, "timestamp query", 4096, 4096);
-   write_timestamp(brw, query->bo, 0);
+   brw_write_timestamp(brw, query->bo, 0);
 }
 
 /**

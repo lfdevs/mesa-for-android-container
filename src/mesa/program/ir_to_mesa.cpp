@@ -665,8 +665,8 @@ ir_to_mesa_visitor::find_variable_storage(ir_variable *var)
    
    variable_storage *entry;
 
-   foreach_iter(exec_list_iterator, iter, this->variables) {
-      entry = (variable_storage *)iter.get();
+   foreach_list(node, &this->variables) {
+      entry = (variable_storage *) node;
 
       if (entry->var == var)
 	 return entry;
@@ -681,11 +681,11 @@ ir_to_mesa_visitor::visit(ir_variable *ir)
    if (strcmp(ir->name, "gl_FragCoord") == 0) {
       struct gl_fragment_program *fp = (struct gl_fragment_program *)this->prog;
 
-      fp->OriginUpperLeft = ir->origin_upper_left;
-      fp->PixelCenterInteger = ir->pixel_center_integer;
+      fp->OriginUpperLeft = ir->data.origin_upper_left;
+      fp->PixelCenterInteger = ir->data.pixel_center_integer;
    }
 
-   if (ir->mode == ir_var_uniform && strncmp(ir->name, "gl_", 3) == 0) {
+   if (ir->data.mode == ir_var_uniform && strncmp(ir->name, "gl_", 3) == 0) {
       unsigned int i;
       const ir_state_slot *const slots = ir->state_slots;
       assert(ir->state_slots != NULL);
@@ -759,48 +759,9 @@ ir_to_mesa_visitor::visit(ir_variable *ir)
 void
 ir_to_mesa_visitor::visit(ir_loop *ir)
 {
-   ir_dereference_variable *counter = NULL;
-
-   if (ir->counter != NULL)
-      counter = new(mem_ctx) ir_dereference_variable(ir->counter);
-
-   if (ir->from != NULL) {
-      assert(ir->counter != NULL);
-
-      ir_assignment *a =
-	new(mem_ctx) ir_assignment(counter, ir->from, NULL);
-
-      a->accept(this);
-   }
-
    emit(NULL, OPCODE_BGNLOOP);
 
-   if (ir->to) {
-      ir_expression *e =
-	 new(mem_ctx) ir_expression(ir->cmp, glsl_type::bool_type,
-					  counter, ir->to);
-      ir_if *if_stmt =  new(mem_ctx) ir_if(e);
-
-      ir_loop_jump *brk =
-	new(mem_ctx) ir_loop_jump(ir_loop_jump::jump_break);
-
-      if_stmt->then_instructions.push_tail(brk);
-
-      if_stmt->accept(this);
-   }
-
    visit_exec_list(&ir->body_instructions, this);
-
-   if (ir->increment) {
-      ir_expression *e =
-	 new(mem_ctx) ir_expression(ir_binop_add, counter->type,
-					  counter, ir->increment);
-
-      ir_assignment *a =
-	new(mem_ctx) ir_assignment(counter, e, NULL);
-
-      a->accept(this);
-   }
 
    emit(NULL, OPCODE_ENDLOOP);
 }
@@ -840,8 +801,8 @@ ir_to_mesa_visitor::visit(ir_function *ir)
 
       assert(sig);
 
-      foreach_iter(exec_list_iterator, iter, sig->body) {
-	 ir_instruction *ir = (ir_instruction *)iter.get();
+      foreach_list(node, &sig->body) {
+	 ir_instruction *ir = (ir_instruction *) node;
 
 	 ir->accept(this);
       }
@@ -1567,10 +1528,10 @@ ir_to_mesa_visitor::visit(ir_dereference_variable *ir)
    ir_variable *var = ir->var;
 
    if (!entry) {
-      switch (var->mode) {
+      switch (var->data.mode) {
       case ir_var_uniform:
 	 entry = new(mem_ctx) variable_storage(var, PROGRAM_UNIFORM,
-					       var->location);
+					       var->data.location);
 	 this->variables.push_tail(entry);
 	 break;
       case ir_var_shader_in:
@@ -1579,21 +1540,21 @@ ir_to_mesa_visitor::visit(ir_dereference_variable *ir)
 	  * user-assigned generic attributes (glBindVertexLocation),
 	  * and user-defined varyings.
 	  */
-	 assert(var->location != -1);
+	 assert(var->data.location != -1);
          entry = new(mem_ctx) variable_storage(var,
                                                PROGRAM_INPUT,
-                                               var->location);
+                                               var->data.location);
          break;
       case ir_var_shader_out:
-	 assert(var->location != -1);
+	 assert(var->data.location != -1);
          entry = new(mem_ctx) variable_storage(var,
                                                PROGRAM_OUTPUT,
-                                               var->location);
+                                               var->data.location);
 	 break;
       case ir_var_system_value:
          entry = new(mem_ctx) variable_storage(var,
                                                PROGRAM_SYSTEM_VALUE,
-                                               var->location);
+                                               var->data.location);
          break;
       case ir_var_auto:
       case ir_var_temporary:
@@ -1907,8 +1868,8 @@ ir_to_mesa_visitor::visit(ir_constant *ir)
       src_reg temp_base = get_temp(ir->type);
       dst_reg temp = dst_reg(temp_base);
 
-      foreach_iter(exec_list_iterator, iter, ir->components) {
-	 ir_constant *field_value = (ir_constant *)iter.get();
+      foreach_list(node, &ir->components) {
+	 ir_constant *field_value = (ir_constant *) node;
 	 int size = type_size(field_value->type);
 
 	 assert(size > 0);
@@ -2377,8 +2338,8 @@ set_branchtargets(ir_to_mesa_visitor *v,
 	 mesa_instructions[loop_stack[loop_stack_pos]].BranchTarget = i;
 	 break;
       case OPCODE_CAL:
-	 foreach_iter(exec_list_iterator, iter, v->function_signatures) {
-	    function_entry *entry = (function_entry *)iter.get();
+	 foreach_list(n, &v->function_signatures) {
+	    function_entry *entry = (function_entry *) n;
 
 	    if (entry->sig_id == mesa_instructions[i].BranchTarget) {
 	       mesa_instructions[i].BranchTarget = entry->inst;
@@ -2431,7 +2392,7 @@ class add_uniform_to_shader : public program_resource_visitor {
 public:
    add_uniform_to_shader(struct gl_shader_program *shader_program,
 			 struct gl_program_parameter_list *params,
-                         gl_shader_type shader_type)
+                         gl_shader_stage shader_type)
       : shader_program(shader_program), params(params), idx(-1),
         shader_type(shader_type)
    {
@@ -2443,7 +2404,7 @@ public:
       this->idx = -1;
       this->program_resource_visitor::process(var);
 
-      var->location = this->idx;
+      var->data.location = this->idx;
    }
 
 private:
@@ -2453,7 +2414,7 @@ private:
    struct gl_shader_program *shader_program;
    struct gl_program_parameter_list *params;
    int idx;
-   gl_shader_type shader_type;
+   gl_shader_stage shader_type;
 };
 
 } /* anonymous namespace */
@@ -2532,13 +2493,12 @@ _mesa_generate_parameters_list_for_uniforms(struct gl_shader_program
 					    struct gl_program_parameter_list
 					    *params)
 {
-   add_uniform_to_shader add(shader_program, params,
-                             _mesa_shader_type_to_index(sh->Type));
+   add_uniform_to_shader add(shader_program, params, sh->Stage);
 
    foreach_list(node, sh->ir) {
       ir_variable *var = ((ir_instruction *) node)->as_variable();
 
-      if ((var == NULL) || (var->mode != ir_var_uniform)
+      if ((var == NULL) || (var->data.mode != ir_var_uniform)
 	  || var->is_in_uniform_block() || (strncmp(var->name, "gl_", 3) == 0))
 	 continue;
 
@@ -2660,8 +2620,8 @@ ir_to_mesa_visitor::copy_propagate(void)
    int *acp_level = rzalloc_array(mem_ctx, int, this->next_temp * 4);
    int level = 0;
 
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      ir_to_mesa_instruction *inst = (ir_to_mesa_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      ir_to_mesa_instruction *inst = (ir_to_mesa_instruction *) node;
 
       assert(inst->dst.file != PROGRAM_TEMPORARY
 	     || inst->dst.index < this->next_temp);
@@ -2839,25 +2799,10 @@ get_mesa_program(struct gl_context *ctx,
    ir_instruction **mesa_instruction_annotation;
    int i;
    struct gl_program *prog;
-   GLenum target;
-   const char *target_string = _mesa_glsl_shader_target_name(shader->Type);
+   GLenum target = _mesa_shader_stage_to_program(shader->Stage);
+   const char *target_string = _mesa_shader_stage_to_string(shader->Stage);
    struct gl_shader_compiler_options *options =
-         &ctx->ShaderCompilerOptions[_mesa_shader_type_to_index(shader->Type)];
-
-   switch (shader->Type) {
-   case GL_VERTEX_SHADER:
-      target = GL_VERTEX_PROGRAM_ARB;
-      break;
-   case GL_FRAGMENT_SHADER:
-      target = GL_FRAGMENT_PROGRAM_ARB;
-      break;
-   case GL_GEOMETRY_SHADER:
-      target = GL_GEOMETRY_PROGRAM_NV;
-      break;
-   default:
-      assert(!"should not be reached");
-      return NULL;
-   }
+         &ctx->ShaderCompilerOptions[shader->Stage];
 
    validate_ir_tree(shader->ir);
 
@@ -2880,7 +2825,7 @@ get_mesa_program(struct gl_context *ctx,
    prog->NumTemporaries = v.next_temp;
 
    int num_instructions = 0;
-   foreach_iter(exec_list_iterator, iter, v.instructions) {
+   foreach_list(node, &v.instructions) {
       num_instructions++;
    }
 
@@ -2896,8 +2841,8 @@ get_mesa_program(struct gl_context *ctx,
     */
    mesa_inst = mesa_instructions;
    i = 0;
-   foreach_iter(exec_list_iterator, iter, v.instructions) {
-      const ir_to_mesa_instruction *inst = (ir_to_mesa_instruction *)iter.get();
+   foreach_list(node, &v.instructions) {
+      const ir_to_mesa_instruction *inst = (ir_to_mesa_instruction *) node;
 
       mesa_inst->Opcode = inst->op;
       mesa_inst->CondUpdate = inst->cond_update;
@@ -2991,7 +2936,7 @@ get_mesa_program(struct gl_context *ctx,
     */
    mesa_instructions = NULL;
 
-   do_set_program_inouts(shader->ir, prog, shader->Type);
+   do_set_program_inouts(shader->ir, prog, shader->Stage);
 
    prog->SamplersUsed = shader->active_samplers;
    prog->ShadowSamplers = shader->shadow_samplers;
@@ -3039,14 +2984,14 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 {
    assert(prog->LinkStatus);
 
-   for (unsigned i = 0; i < MESA_SHADER_TYPES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       if (prog->_LinkedShaders[i] == NULL)
 	 continue;
 
       bool progress;
       exec_list *ir = prog->_LinkedShaders[i]->ir;
       const struct gl_shader_compiler_options *options =
-            &ctx->ShaderCompilerOptions[_mesa_shader_type_to_index(prog->_LinkedShaders[i]->Type)];
+            &ctx->ShaderCompilerOptions[prog->_LinkedShaders[i]->Stage];
 
       do {
 	 progress = false;
@@ -3094,7 +3039,7 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       validate_ir_tree(ir);
    }
 
-   for (unsigned i = 0; i < MESA_SHADER_TYPES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       struct gl_program *linked_prog;
 
       if (prog->_LinkedShaders[i] == NULL)
@@ -3103,12 +3048,12 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       linked_prog = get_mesa_program(ctx, prog, prog->_LinkedShaders[i]);
 
       if (linked_prog) {
-         _mesa_copy_linked_program_data((gl_shader_type) i, prog, linked_prog);
+         _mesa_copy_linked_program_data((gl_shader_stage) i, prog, linked_prog);
 
 	 _mesa_reference_program(ctx, &prog->_LinkedShaders[i]->Program,
 				 linked_prog);
          if (!ctx->Driver.ProgramStringNotify(ctx,
-                                              _mesa_program_index_to_target(i),
+                                              _mesa_shader_stage_to_program(i),
                                               linked_prog)) {
             return GL_FALSE;
          }

@@ -22,6 +22,7 @@
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/egl/main \
+	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gbm/main \
 	-I$(top_srcdir)/src/gbm/backends/dri \
 	-I$(top_srcdir)/src/egl/wayland/wayland-egl \
@@ -37,10 +38,10 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libegl_dri2.la
 
 libegl_dri2_la_SOURCES = \
-	egl_dri2.c \
-	common.c
+	egl_dri2.c
 
 libegl_dri2_la_LIBADD = \
+	$(top_builddir)/src/loader/libloader.la \
 	$(EGL_LIB_DEPS)
 
 if HAVE_SHARED_GLAPI

@@ -51,19 +51,16 @@ include /usr/share/quilt/quilt.make
 
 DRI_DRIVERS =
 GALLIUM_DRIVERS =
+EGL_DISPLAYS = x11
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	confflags_DIRECT_RENDERING = --disable-driglx-direct
-	confflags_EGL = --disable-egl
-	confflags_GALLIUM = --with-gallium-drivers=
 	DRI_DRIVERS += swrast
 else
-	EGL_DISPLAYS = x11
-
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 # Gallium drivers require libdrm-{nouveau,radeon}, only available on Linux
-	GALLIUM_DRIVERS += nouveau r600 r300 svga
+	GALLIUM_DRIVERS += nouveau svga
 #
 # Although the KMS egl drivers will probably build on kfreebsd & hurd
 # only linux actually has KMS drivers implemented at this point.
@@ -71,12 +68,7 @@ else
 # Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
 	EGL_DISPLAYS += wayland
     ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
-	DRI_DRIVERS += r200 radeon nouveau
-    endif
-    ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 armhf))
-	# Radeonsi needs LLVM, so only build it on the subset of archs
-	# where we have LLVM enabled.
-	GALLIUM_DRIVERS += radeonsi
+	DRI_DRIVERS += nouveau
     endif
   endif
 
@@ -92,6 +84,16 @@ else
 	DRI_DRIVERS += swrast
   endif
 
+  ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
+    DRI_DRIVERS += r200 radeon
+    GALLIUM_DRIVERS += r600 r300
+  endif
+  ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 armhf))
+    # Radeonsi needs LLVM, so only build it on the subset of archs
+    # where we have LLVM enabled.
+    GALLIUM_DRIVERS += radeonsi
+  endif
+
   # LLVM is required for r300g and llvmpipe:
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf))
 	confflags_GALLIUM += --enable-gallium-llvm
@@ -99,11 +101,11 @@ else
   endif
 
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
-	confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
-	confflags_GALLIUM += --with-gallium-drivers="$(GALLIUM_DRIVERS)"
-	confflags_GLES = --enable-gles1 --enable-gles2
 	confflags_OPENVG = --enable-openvg --enable-gallium-egl
 endif
+confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
+confflags_GLES = --enable-gles1 --enable-gles2
+confflags_GALLIUM += --with-gallium-drivers="$(GALLIUM_DRIVERS)"
 
 confflags-dri = \
 	--enable-dri \

@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -26,7 +26,7 @@
  **************************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   *   Brian Paul
   */
 
@@ -256,6 +256,10 @@ st_prepare_vertex_program(struct gl_context *ctx,
             break;
          case VARYING_SLOT_CLIP_VERTEX:
             stvp->output_semantic_name[slot] = TGSI_SEMANTIC_CLIPVERTEX;
+            stvp->output_semantic_index[slot] = 0;
+            break;
+         case VARYING_SLOT_LAYER:
+            stvp->output_semantic_name[slot] = TGSI_SEMANTIC_LAYER;
             stvp->output_semantic_index[slot] = 0;
             break;
 
@@ -560,6 +564,11 @@ st_translate_fragment_program(struct st_context *st,
             break;
          case VARYING_SLOT_FACE:
             input_semantic_name[slot] = TGSI_SEMANTIC_FACE;
+            input_semantic_index[slot] = 0;
+            interpMode[slot] = TGSI_INTERPOLATE_CONSTANT;
+            break;
+         case VARYING_SLOT_PRIMITIVE_ID:
+            input_semantic_name[slot] = TGSI_SEMANTIC_PRIMID;
             input_semantic_index[slot] = 0;
             interpMode[slot] = TGSI_INTERPOLATE_CONSTANT;
             break;
@@ -935,17 +944,16 @@ st_translate_geometry_program(struct st_context *st,
          case VARYING_SLOT_TEX5:
          case VARYING_SLOT_TEX6:
          case VARYING_SLOT_TEX7:
-            stgp->input_semantic_name[slot] = TGSI_SEMANTIC_GENERIC;
+            stgp->input_semantic_name[slot] = st->needs_texcoord_semantic ?
+               TGSI_SEMANTIC_TEXCOORD : TGSI_SEMANTIC_GENERIC;
             stgp->input_semantic_index[slot] = (attr - VARYING_SLOT_TEX0);
             break;
          case VARYING_SLOT_VAR0:
          default:
             assert(attr >= VARYING_SLOT_VAR0 && attr < VARYING_SLOT_MAX);
             stgp->input_semantic_name[slot] = TGSI_SEMANTIC_GENERIC;
-            stgp->input_semantic_index[slot] = (VARYING_SLOT_VAR0 -
-                                                VARYING_SLOT_TEX0 +
-                                                attr -
-                                                VARYING_SLOT_VAR0);
+            stgp->input_semantic_index[slot] = st->needs_texcoord_semantic ?
+               (attr - VARYING_SLOT_VAR0) : (attr - VARYING_SLOT_TEX0);
          break;
          }
       }
@@ -1027,7 +1035,8 @@ st_translate_geometry_program(struct st_context *st,
          case VARYING_SLOT_TEX5:
          case VARYING_SLOT_TEX6:
          case VARYING_SLOT_TEX7:
-            gs_output_semantic_name[slot] = TGSI_SEMANTIC_GENERIC;
+            gs_output_semantic_name[slot] = st->needs_texcoord_semantic ?
+               TGSI_SEMANTIC_TEXCOORD : TGSI_SEMANTIC_GENERIC;
             gs_output_semantic_index[slot] = (attr - VARYING_SLOT_TEX0);
             break;
          case VARYING_SLOT_VAR0:
@@ -1035,10 +1044,9 @@ st_translate_geometry_program(struct st_context *st,
             assert(slot < Elements(gs_output_semantic_name));
             assert(attr >= VARYING_SLOT_VAR0);
             gs_output_semantic_name[slot] = TGSI_SEMANTIC_GENERIC;
-            gs_output_semantic_index[slot] = (VARYING_SLOT_VAR0 -
-                                              VARYING_SLOT_TEX0 +
-                                              attr - 
-                                              VARYING_SLOT_VAR0);
+            gs_output_semantic_index[slot] = st->needs_texcoord_semantic ?
+               (attr - VARYING_SLOT_VAR0) : (attr - VARYING_SLOT_TEX0);
+         break;
          }
       }
    }
@@ -1186,11 +1194,7 @@ st_get_gp_variant(struct st_context *st,
 void
 st_print_shaders(struct gl_context *ctx)
 {
-   struct gl_shader_program *shProg[3] = {
-      ctx->Shader.CurrentVertexProgram,
-      ctx->Shader.CurrentGeometryProgram,
-      ctx->Shader.CurrentFragmentProgram,
-   };
+   struct gl_shader_program **shProg = ctx->Shader.CurrentProgram;
    unsigned j;
 
    for (j = 0; j < 3; j++) {

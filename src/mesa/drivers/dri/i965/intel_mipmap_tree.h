@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
- * Copyright 2006 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2006 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,19 +10,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #ifndef INTEL_MIPMAP_TREE_H
@@ -42,7 +42,7 @@ extern "C" {
  *
  * - Code to size and layout a region to hold a set of mipmaps.
  * - Query to determine if a new image fits in an existing tree.
- * - More refcounting 
+ * - More refcounting
  *     - maybe able to remove refcounting from intel_region?
  * - ?
  *
@@ -57,8 +57,8 @@ extern "C" {
  * the texture object would slot into the tree as they arrive.  The
  * reality can be a little messier, as images can arrive from the user
  * with sizes that don't fit in the existing tree, or in an order
- * where the tree layout cannot be guessed immediately.  
- * 
+ * where the tree layout cannot be guessed immediately.
+ *
  * This structure encodes an idealized mipmap tree.  The GL image
  * commands build these where possible, otherwise store the images in
  * temporary system buffers.
@@ -203,8 +203,8 @@ enum intel_msaa_layout
 
 
 /**
- * Enum for keeping track of the state of an MCS buffer associated with a
- * miptree.  This determines when fast clear related operations are needed.
+ * Enum for keeping track of the fast clear state of a buffer associated with
+ * a miptree.
  *
  * Fast clear works by deferring the memory writes that would be used to clear
  * the buffer, so that instead of performing them at the time of the clear
@@ -212,23 +212,18 @@ enum intel_msaa_layout
  * buffer is later accessed for rendering.  The MCS buffer keeps track of
  * which regions of the buffer still have pending clear writes.
  *
- * This enum keeps track of the driver's knowledge of the state of the MCS
- * buffer.
+ * This enum keeps track of the driver's knowledge of pending fast clears in
+ * the MCS buffer.
  *
  * MCS buffers only exist on Gen7+.
  */
-enum intel_mcs_state
+enum intel_fast_clear_state
 {
    /**
     * There is no MCS buffer for this miptree, and one should never be
     * allocated.
     */
-   INTEL_MCS_STATE_NONE,
-
-   /**
-    * An MCS buffer exists for this miptree, and it is used for MSAA purposes.
-    */
-   INTEL_MCS_STATE_MSAA,
+   INTEL_FAST_CLEAR_STATE_NO_MCS,
 
    /**
     * No deferred clears are pending for this miptree, and the contents of the
@@ -239,8 +234,11 @@ enum intel_mcs_state
     *
     * In this state, the color buffer can be used for purposes other than
     * rendering without needing a render target resolve.
+    *
+    * Since there is no such thing as a "fast color clear resolve" for MSAA
+    * buffers, an MSAA buffer will never be in this state.
     */
-   INTEL_MCS_STATE_RESOLVED,
+   INTEL_FAST_CLEAR_STATE_RESOLVED,
 
    /**
     * An MCS buffer exists for this miptree, and deferred clears are pending
@@ -248,23 +246,23 @@ enum intel_mcs_state
     * The contents of the color buffer are only correct for the regions where
     * the MCS buffer doesn't indicate a deferred clear.
     *
-    * In this state, a render target resolve must be performed before the
-    * color buffer can be used for purposes other than rendering.
+    * If a single-sample buffer is in this state, a render target resolve must
+    * be performed before it can be used for purposes other than rendering.
     */
-   INTEL_MCS_STATE_UNRESOLVED,
+   INTEL_FAST_CLEAR_STATE_UNRESOLVED,
 
    /**
     * An MCS buffer exists for this miptree, and deferred clears are pending
     * for the entire color buffer, and the contents of the MCS buffer reflect
     * this.  The contents of the color buffer are undefined.
     *
-    * In this state, a render target resolve must be performed before the
-    * color buffer can be used for purposes other than rendering.
+    * If a single-sample buffer is in this state, a render target resolve must
+    * be performed before it can be used for purposes other than rendering.
     *
     * If the client attempts to clear a buffer which is already in this state,
     * the clear can be safely skipped, since the buffer is already clear.
     */
-   INTEL_MCS_STATE_CLEAR,
+   INTEL_FAST_CLEAR_STATE_CLEAR,
 };
 
 struct intel_mipmap_tree
@@ -280,17 +278,17 @@ struct intel_mipmap_tree
     * However, for textures and renderbuffers with packed depth/stencil formats
     * on hardware where we want or need to use separate stencil, there will be
     * two miptrees for storing the data.  If the depthstencil texture or rb is
-    * MESA_FORMAT_Z32_FLOAT_X24S8, then mt->format will be
-    * MESA_FORMAT_Z32_FLOAT, otherwise for MESA_FORMAT_S8_Z24 objects it will be
-    * MESA_FORMAT_X8_Z24.
+    * MESA_FORMAT_Z32_FLOAT_S8X24_UINT, then mt->format will be
+    * MESA_FORMAT_Z_FLOAT32, otherwise for MESA_FORMAT_Z24_UNORM_S8_UINT objects it will be
+    * MESA_FORMAT_Z24_UNORM_X8_UINT.
     *
     * For ETC1/ETC2 textures, this is one of the uncompressed mesa texture
     * formats if the hardware lacks support for ETC1/ETC2. See @ref wraps_etc.
     */
-   gl_format format;
+   mesa_format format;
 
    /** This variable stores the value of ETC compressed texture format */
-   gl_format etc_format;
+   mesa_format etc_format;
 
    /**
     * The X offset of each image in the miptree must be aligned to this.
@@ -334,6 +332,14 @@ struct intel_mipmap_tree
     * Corresponds to the surface_array_spacing bit in gen7_surface_state.
     */
    bool array_spacing_lod0;
+
+   /**
+    * The distance in rows between array slices in an uncompressed surface.
+    *
+    * For compressed surfaces, slices are stored closer together physically;
+    * the real distance is (qpitch / block height).
+    */
+   uint32_t qpitch;
 
    /**
     * MSAA layout used by this buffer.
@@ -452,9 +458,9 @@ struct intel_mipmap_tree
    struct intel_mipmap_tree *mcs_mt;
 
    /**
-    * MCS state for this buffer.
+    * Fast clear state for this buffer.
     */
-   enum intel_mcs_state mcs_state;
+   enum intel_fast_clear_state fast_clear_state;
 
    /**
     * The SURFACE_STATE bits associated with the last fast color clear to this
@@ -491,7 +497,7 @@ intel_miptree_alloc_non_msrt_mcs(struct brw_context *brw,
 
 struct intel_mipmap_tree *intel_miptree_create(struct brw_context *brw,
                                                GLenum target,
-					       gl_format format,
+					       mesa_format format,
                                                GLuint first_level,
                                                GLuint last_level,
                                                GLuint width0,
@@ -504,7 +510,7 @@ struct intel_mipmap_tree *intel_miptree_create(struct brw_context *brw,
 struct intel_mipmap_tree *
 intel_miptree_create_layout(struct brw_context *brw,
                             GLenum target,
-                            gl_format format,
+                            mesa_format format,
                             GLuint first_level,
                             GLuint last_level,
                             GLuint width0,
@@ -516,7 +522,7 @@ intel_miptree_create_layout(struct brw_context *brw,
 struct intel_mipmap_tree *
 intel_miptree_create_for_bo(struct brw_context *brw,
                             drm_intel_bo *bo,
-                            gl_format format,
+                            mesa_format format,
                             uint32_t offset,
                             uint32_t width,
                             uint32_t height,
@@ -526,14 +532,14 @@ intel_miptree_create_for_bo(struct brw_context *brw,
 struct intel_mipmap_tree*
 intel_miptree_create_for_dri2_buffer(struct brw_context *brw,
                                      unsigned dri_attachment,
-                                     gl_format format,
+                                     mesa_format format,
                                      uint32_t num_samples,
                                      struct intel_region *region);
 
 struct intel_mipmap_tree*
 intel_miptree_create_for_image_buffer(struct brw_context *intel,
                                      enum __DRIimageBufferMask buffer_type,
-                                     gl_format format,
+                                     mesa_format format,
                                      uint32_t num_samples,
                                      struct intel_region *region);
 
@@ -546,7 +552,7 @@ intel_miptree_create_for_image_buffer(struct brw_context *intel,
  */
 struct intel_mipmap_tree*
 intel_miptree_create_for_renderbuffer(struct brw_context *brw,
-                                      gl_format format,
+                                      mesa_format format,
                                       uint32_t width,
                                       uint32_t height,
                                       uint32_t num_samples);
@@ -687,8 +693,8 @@ intel_miptree_used_for_rendering(struct intel_mipmap_tree *mt)
     * unresolved state, since it won't be guaranteed to be clear after
     * rendering occurs.
     */
-   if (mt->mcs_state == INTEL_MCS_STATE_CLEAR)
-      mt->mcs_state = INTEL_MCS_STATE_UNRESOLVED;
+   if (mt->fast_clear_state == INTEL_FAST_CLEAR_STATE_CLEAR)
+      mt->fast_clear_state = INTEL_FAST_CLEAR_STATE_UNRESOLVED;
 }
 
 void

@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,19 +10,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #include "main/glheader.h"
@@ -229,7 +229,7 @@ brw_get_vertex_surface_type(struct brw_context *brw,
    int size = glarray->Size;
 
    if (unlikely(INTEL_DEBUG & DEBUG_VERTS))
-      printf("type %s size %d normalized %d\n", 
+      printf("type %s size %d normalized %d\n",
              _mesa_lookup_enum_by_nr(glarray->Type),
              glarray->Size, glarray->Normalized);
 
@@ -400,7 +400,8 @@ copy_array_to_vbo_array(struct brw_context *brw,
    buffer->stride = dst_stride;
 }
 
-static void brw_prepare_vertices(struct brw_context *brw)
+void
+brw_prepare_vertices(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    /* CACHE_NEW_VS_PROG */
@@ -609,6 +610,7 @@ static void brw_prepare_vertices(struct brw_context *brw)
 
 static void brw_emit_vertices(struct brw_context *brw)
 {
+   struct gl_context *ctx = &brw->ctx;
    GLuint i, nr_elements;
 
    brw_prepare_vertices(brw);
@@ -642,7 +644,7 @@ static void brw_emit_vertices(struct brw_context *brw)
 		(BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_1_SHIFT) |
 		(BRW_VE1_COMPONENT_STORE_0 << BRW_VE1_COMPONENT_2_SHIFT) |
 		(BRW_VE1_COMPONENT_STORE_1_FLT << BRW_VE1_COMPONENT_3_SHIFT));
-      CACHED_BATCH();
+      ADVANCE_BATCH();
       return;
    }
 
@@ -680,6 +682,9 @@ static void brw_emit_vertices(struct brw_context *brw)
          if (brw->gen == 7)
 	    dw0 |= GEN7_MOCS_L3 << 16;
 
+         WARN_ONCE(buffer->stride >= (brw->gen >= 5 ? 2048 : 2047),
+                   "VBO stride %d too large, bad rendering may occur\n",
+                   buffer->stride);
 	 OUT_BATCH(dw0 | (buffer->stride << BRW_VB0_PITCH_SHIFT));
 	 OUT_RELOC(buffer->bo, I915_GEM_DOMAIN_VERTEX, 0, buffer->offset);
 	 if (brw->gen >= 5) {
@@ -804,7 +809,7 @@ static void brw_emit_vertices(struct brw_context *brw)
       OUT_BATCH(dw1);
    }
 
-   CACHED_BATCH();
+   ADVANCE_BATCH();
 }
 
 const struct brw_tracked_state brw_vertices = {

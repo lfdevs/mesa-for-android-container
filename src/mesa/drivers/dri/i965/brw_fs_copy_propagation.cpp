@@ -344,9 +344,10 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
          progress = true;
          break;
 
+      case BRW_OPCODE_BFI1:
+      case BRW_OPCODE_ASR:
       case BRW_OPCODE_SHL:
       case BRW_OPCODE_SHR:
-      case BRW_OPCODE_ADDC:
       case BRW_OPCODE_SUBB:
          if (i == 1) {
             inst->src[i] = entry->src;
@@ -360,6 +361,7 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
       case BRW_OPCODE_OR:
       case BRW_OPCODE_AND:
       case BRW_OPCODE_XOR:
+      case BRW_OPCODE_ADDC:
          if (i == 1) {
             inst->src[i] = entry->src;
             progress = true;
@@ -525,7 +527,7 @@ fs_visitor::opt_copy_propagate()
 {
    bool progress = false;
    void *mem_ctx = ralloc_context(this->mem_ctx);
-   cfg_t cfg(this);
+   cfg_t cfg(&instructions);
    exec_list *out_acp[cfg.num_blocks];
    for (int i = 0; i < cfg.num_blocks; i++)
       out_acp[i] = new exec_list [ACP_HASH_SIZE];

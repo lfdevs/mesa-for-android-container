@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * Copyright (c) 2008 VMware, Inc.
  * All Rights Reserved.
  * 
@@ -19,7 +19,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -155,15 +155,15 @@ void st_init_limits(struct st_context *st)
 
       switch (sh) {
       case PIPE_SHADER_FRAGMENT:
-         pc = &c->FragmentProgram;
+         pc = &c->Program[MESA_SHADER_FRAGMENT];
          options = &st->ctx->ShaderCompilerOptions[MESA_SHADER_FRAGMENT];
          break;
       case PIPE_SHADER_VERTEX:
-         pc = &c->VertexProgram;
+         pc = &c->Program[MESA_SHADER_VERTEX];
          options = &st->ctx->ShaderCompilerOptions[MESA_SHADER_VERTEX];
          break;
       case PIPE_SHADER_GEOMETRY:
-         pc = &c->GeometryProgram;
+         pc = &c->Program[MESA_SHADER_GEOMETRY];
          options = &st->ctx->ShaderCompilerOptions[MESA_SHADER_GEOMETRY];
          break;
       default:
@@ -245,21 +245,23 @@ void st_init_limits(struct st_context *st)
 
    /* This depends on program constants. */
    c->MaxTextureCoordUnits
-      = _min(c->FragmentProgram.MaxTextureImageUnits, MAX_TEXTURE_COORD_UNITS);
+      = _min(c->Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits, MAX_TEXTURE_COORD_UNITS);
 
-   c->MaxTextureUnits = _min(c->FragmentProgram.MaxTextureImageUnits, c->MaxTextureCoordUnits);
+   c->MaxTextureUnits = _min(c->Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits, c->MaxTextureCoordUnits);
 
-   c->VertexProgram.MaxAttribs = MIN2(c->VertexProgram.MaxAttribs, 16);
+   c->Program[MESA_SHADER_VERTEX].MaxAttribs = MIN2(c->Program[MESA_SHADER_VERTEX].MaxAttribs, 16);
 
    /* PIPE_SHADER_CAP_MAX_INPUTS for the FS specifies the maximum number
     * of inputs. It's always 2 colors + N generic inputs. */
    c->MaxVarying = screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT,
                                             PIPE_SHADER_CAP_MAX_INPUTS);
    c->MaxVarying = MIN2(c->MaxVarying, MAX_VARYING);
-   c->FragmentProgram.MaxInputComponents = c->MaxVarying * 4;
-   c->VertexProgram.MaxOutputComponents = c->MaxVarying * 4;
-   c->GeometryProgram.MaxInputComponents = c->MaxVarying * 4;
-   c->GeometryProgram.MaxOutputComponents = c->MaxVarying * 4;
+   c->Program[MESA_SHADER_FRAGMENT].MaxInputComponents = c->MaxVarying * 4;
+   c->Program[MESA_SHADER_VERTEX].MaxOutputComponents = c->MaxVarying * 4;
+   c->Program[MESA_SHADER_GEOMETRY].MaxInputComponents = c->MaxVarying * 4;
+   c->Program[MESA_SHADER_GEOMETRY].MaxOutputComponents = c->MaxVarying * 4;
+   c->MaxGeometryOutputVertices = screen->get_param(screen, PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES);
+   c->MaxGeometryTotalOutputComponents = screen->get_param(screen, PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS);
 
    c->MinProgramTexelOffset = screen->get_param(screen, PIPE_CAP_MIN_TEXEL_OFFSET);
    c->MaxProgramTexelOffset = screen->get_param(screen, PIPE_CAP_MAX_TEXEL_OFFSET);
@@ -284,9 +286,9 @@ void st_init_limits(struct st_context *st)
       c->UniformBufferOffsetAlignment =
          screen->get_param(screen, PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT);
       c->MaxCombinedUniformBlocks = c->MaxUniformBufferBindings =
-         c->VertexProgram.MaxUniformBlocks +
-         c->GeometryProgram.MaxUniformBlocks +
-         c->FragmentProgram.MaxUniformBlocks;
+         c->Program[MESA_SHADER_VERTEX].MaxUniformBlocks +
+         c->Program[MESA_SHADER_GEOMETRY].MaxUniformBlocks +
+         c->Program[MESA_SHADER_FRAGMENT].MaxUniformBlocks;
       assert(c->MaxCombinedUniformBlocks <= MAX_COMBINED_UNIFORM_BUFFERS);
    }
 }
@@ -406,7 +408,6 @@ void st_init_extensions(struct st_context *st)
       { o(NV_texture_barrier),               PIPE_CAP_TEXTURE_BARRIER                  },
       /* GL_NV_point_sprite is not supported by gallium because we don't
        * support the GL_POINT_SPRITE_R_MODE_NV option. */
-      { o(MESA_texture_array),               PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS         },
 
       { o(OES_standard_derivatives),         PIPE_CAP_SM3                              },
       { o(ARB_texture_cube_map_array),       PIPE_CAP_CUBE_MAP_ARRAY                   },
@@ -420,7 +421,9 @@ void st_init_extensions(struct st_context *st)
           PIPE_FORMAT_R16G16B16A16_FLOAT } },
 
       { { o(ARB_texture_rgb10_a2ui) },
-        { PIPE_FORMAT_B10G10R10A2_UINT } },
+        { PIPE_FORMAT_R10G10B10A2_UINT,
+          PIPE_FORMAT_B10G10R10A2_UINT },
+         GL_TRUE }, /* at least one format must be supported */
 
       { { o(EXT_framebuffer_sRGB) },
         { PIPE_FORMAT_A8B8G8R8_SRGB,
@@ -444,11 +447,6 @@ void st_init_extensions(struct st_context *st)
       { { o(ARB_depth_buffer_float) },
         { PIPE_FORMAT_Z32_FLOAT,
           PIPE_FORMAT_Z32_FLOAT_S8X24_UINT } },
-
-      { { o(EXT_packed_depth_stencil) },
-        { PIPE_FORMAT_S8_UINT_Z24_UNORM,
-          PIPE_FORMAT_Z24_UNORM_S8_UINT },
-        GL_TRUE }, /* at least one format must be supported */
    };
 
    /* Required: sampler support */
@@ -543,7 +541,6 @@ void st_init_extensions(struct st_context *st)
    ctx->Extensions.EXT_blend_color = GL_TRUE;
    ctx->Extensions.EXT_blend_func_separate = GL_TRUE;
    ctx->Extensions.EXT_blend_minmax = GL_TRUE;
-   ctx->Extensions.EXT_framebuffer_blit = GL_TRUE;
    ctx->Extensions.EXT_gpu_program_parameters = GL_TRUE;
    ctx->Extensions.EXT_pixel_buffer_object = GL_TRUE;
    ctx->Extensions.EXT_point_parameters = GL_TRUE;
@@ -594,19 +591,22 @@ void st_init_extensions(struct st_context *st)
    /* Figure out GLSL support. */
    glsl_feature_level = screen->get_param(screen, PIPE_CAP_GLSL_FEATURE_LEVEL);
 
-   if (glsl_feature_level >= 140) {
-      ctx->Const.GLSLVersion = 140;
-   } else if (glsl_feature_level >= 130) {
-      ctx->Const.GLSLVersion = 130;
-   } else {
-      ctx->Const.GLSLVersion = 120;
-   }
+   ctx->Const.GLSLVersion = glsl_feature_level;
+   if (glsl_feature_level >= 330)
+      ctx->Const.GLSLVersion = 330;
 
    _mesa_override_glsl_version(st->ctx);
 
    if (st->options.force_glsl_version > 0 &&
        st->options.force_glsl_version <= ctx->Const.GLSLVersion) {
       ctx->Const.ForceGLSLVersion = st->options.force_glsl_version;
+   }
+
+   /* This extension needs full OpenGL 3.2, but we don't know if that's
+    * supported at this point. Only check the GLSL version. */
+   if (ctx->Const.GLSLVersion >= 150 &&
+       screen->get_param(screen, PIPE_CAP_TGSI_VS_LAYER)) {
+      ctx->Extensions.AMD_vertex_shader_layer = GL_TRUE;
    }
 
    if (ctx->Const.GLSLVersion >= 130) {
@@ -743,9 +743,7 @@ void st_init_extensions(struct st_context *st)
 
    ctx->Const.MinMapBufferAlignment =
       screen->get_param(screen, PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT);
-   if (ctx->Const.MinMapBufferAlignment >= 64) {
-      ctx->Extensions.ARB_map_buffer_alignment = GL_TRUE;
-   }
+
    if (screen->get_param(screen, PIPE_CAP_TEXTURE_BUFFER_OBJECTS)) {
       ctx->Extensions.ARB_texture_buffer_object = GL_TRUE;
 
@@ -762,8 +760,7 @@ void st_init_extensions(struct st_context *st)
                              PIPE_BUFFER, PIPE_BIND_SAMPLER_VIEW);
    }
 
-   if (screen->get_param(screen, PIPE_CAP_MIXED_FRAMEBUFFER_SIZES) &&
-       ctx->Extensions.EXT_packed_depth_stencil) {
+   if (screen->get_param(screen, PIPE_CAP_MIXED_FRAMEBUFFER_SIZES)) {
       ctx->Extensions.ARB_framebuffer_object = GL_TRUE;
    }
 

@@ -56,9 +56,6 @@ struct fd3_shader_stateobj {
 	 */
 	bool half_precision;
 
-	/* special output register locations: */
-	uint8_t pos_regid, psize_regid, color_regid;
-
 	/* the instructions length is in units of instruction groups
 	 * (4 instructions, 8 dwords):
 	 */
@@ -84,6 +81,7 @@ struct fd3_shader_stateobj {
 		fd3_semantic semantic;
 		uint8_t regid;
 	} outputs[16];
+	bool writes_pos;
 
 	/* vertices/inputs: */
 	unsigned inputs_count;
@@ -117,7 +115,7 @@ struct fd3_shader_stateobj {
 };
 
 void fd3_program_emit(struct fd_ringbuffer *ring,
-		struct fd_program_stateobj *prog);
+		struct fd_program_stateobj *prog, bool binning);
 
 void fd3_prog_init(struct pipe_context *pctx);
 void fd3_prog_fini(struct pipe_context *pctx);

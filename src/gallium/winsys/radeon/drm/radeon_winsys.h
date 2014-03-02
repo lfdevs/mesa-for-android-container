@@ -128,6 +128,7 @@ enum radeon_family {
     CHIP_BONAIRE,
     CHIP_KAVERI,
     CHIP_KABINI,
+    CHIP_HAWAII,
     CHIP_LAST,
 };
 
@@ -194,6 +195,12 @@ struct radeon_info {
     boolean                     r600_backend_map_valid;
     boolean                     r600_virtual_address;
     boolean                     r600_has_dma;
+
+    boolean                     si_tile_mode_array_valid;
+    uint32_t                    si_tile_mode_array[32];
+
+    boolean                     cik_macrotile_mode_array_valid;
+    uint32_t                    cik_macrotile_mode_array[16];
 };
 
 enum radeon_feature_id {
@@ -310,7 +317,8 @@ struct radeon_winsys {
                               unsigned *bankw, unsigned *bankh,
                               unsigned *tile_split,
                               unsigned *stencil_tile_split,
-                              unsigned *mtilea);
+                              unsigned *mtilea,
+                              bool *scanout);
 
     /**
      * Set tiling flags describing a memory layout of a buffer object.
@@ -331,7 +339,8 @@ struct radeon_winsys {
                               unsigned tile_split,
                               unsigned stencil_tile_split,
                               unsigned mtilea,
-                              unsigned stride);
+                              unsigned stride,
+                              bool scanout);
 
     /**
      * Get a winsys buffer from a winsys handle. The internal structure

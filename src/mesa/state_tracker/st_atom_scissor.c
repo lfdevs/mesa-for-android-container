@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -27,7 +27,7 @@
 
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
  
 
@@ -53,15 +53,15 @@ update_scissor( struct st_context *st )
    scissor.maxx = fb->Width;
    scissor.maxy = fb->Height;
 
-   if (ctx->Scissor.Enabled) {
+   if (ctx->Scissor.EnableFlags & 1) {
       /* need to be careful here with xmax or ymax < 0 */
-      GLint xmax = MAX2(0, ctx->Scissor.X + ctx->Scissor.Width);
-      GLint ymax = MAX2(0, ctx->Scissor.Y + ctx->Scissor.Height);
+      GLint xmax = MAX2(0, ctx->Scissor.ScissorArray[0].X + ctx->Scissor.ScissorArray[0].Width);
+      GLint ymax = MAX2(0, ctx->Scissor.ScissorArray[0].Y + ctx->Scissor.ScissorArray[0].Height);
 
-      if (ctx->Scissor.X > (GLint)scissor.minx)
-         scissor.minx = ctx->Scissor.X;
-      if (ctx->Scissor.Y > (GLint)scissor.miny)
-         scissor.miny = ctx->Scissor.Y;
+      if (ctx->Scissor.ScissorArray[0].X > (GLint)scissor.minx)
+         scissor.minx = ctx->Scissor.ScissorArray[0].X;
+      if (ctx->Scissor.ScissorArray[0].Y > (GLint)scissor.miny)
+         scissor.miny = ctx->Scissor.ScissorArray[0].Y;
 
       if (xmax < (GLint) scissor.maxx)
          scissor.maxx = xmax;

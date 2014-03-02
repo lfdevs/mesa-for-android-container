@@ -51,6 +51,7 @@
 #include "dri2.h"
 #include "dri_common.h"
 #include "dri2_priv.h"
+#include "loader.h"
 
 /* From xmlpool/options.h, user exposed so should be stable */
 #define DRI_CONF_VBLANK_NEVER 0
@@ -140,6 +141,7 @@ dri2_bind_context(struct glx_context *context, struct glx_context *old,
    struct dri2_context *pcp = (struct dri2_context *) context;
    struct dri2_screen *psc = (struct dri2_screen *) pcp->base.psc;
    struct dri2_drawable *pdraw, *pread;
+   __DRIdrawable *dri_draw = NULL, *dri_read = NULL;
    struct dri2_display *pdp;
 
    pdraw = (struct dri2_drawable *) driFetchDrawable(context, draw);
@@ -147,20 +149,26 @@ dri2_bind_context(struct glx_context *context, struct glx_context *old,
 
    driReleaseDrawables(&pcp->base);
 
-   if (pdraw == NULL || pread == NULL)
+   if (pdraw)
+      dri_draw = pdraw->driDrawable;
+   else if (draw != None)
       return GLXBadDrawable;
 
-   if (!(*psc->core->bindContext) (pcp->driContext,
-				   pdraw->driDrawable, pread->driDrawable))
+   if (pread)
+      dri_read = pread->driDrawable;
+   else if (read != None)
+      return GLXBadDrawable;
+
+   if (!(*psc->core->bindContext) (pcp->driContext, dri_draw, dri_read))
       return GLXBadContext;
 
    /* If the server doesn't send invalidate events, we may miss a
     * resize before the rendering starts.  Invalidate the buffers now
     * so the driver will recheck before rendering starts. */
    pdp = (struct dri2_display *) psc->base.display;
-   if (!pdp->invalidateAvailable) {
+   if (!pdp->invalidateAvailable && pdraw) {
       dri2InvalidateBuffers(psc->base.dpy, pdraw->base.xDrawable);
-      if (pread != pdraw)
+      if (pread != pdraw && pread)
 	 dri2InvalidateBuffers(psc->base.dpy, pread->base.xDrawable);
    }
 
@@ -366,6 +374,10 @@ dri2CreateDrawable(struct glx_screen *base, XID xDrawable,
    struct dri2_display *pdp;
    GLint vblank_mode = DRI_CONF_VBLANK_DEF_INTERVAL_1;
 
+   dpyPriv = __glXInitialize(psc->base.dpy);
+   if (dpyPriv == NULL)
+      return NULL;
+
    pdraw = calloc(1, sizeof(*pdraw));
    if (!pdraw)
       return NULL;
@@ -395,8 +407,6 @@ dri2CreateDrawable(struct glx_screen *base, XID xDrawable,
    }
 
    DRI2CreateDrawable(psc->base.dpy, xDrawable);
-
-   dpyPriv = __glXInitialize(psc->base.dpy);
    pdp = (struct dri2_display *)dpyPriv->dri2Display;;
    /* Create a new drawable */
    pdraw->driDrawable =
@@ -676,6 +686,10 @@ dri2FlushFrontBuffer(__DRIdrawable *driDrawable, void *loaderPrivate)
    psc = (struct dri2_screen *) pdraw->base.psc;
 
    priv = __glXInitialize(psc->base.dpy);
+
+   if (priv == NULL)
+       return;
+
    pdp = (struct dri2_display *) priv->dri2Display;
    gc = __glXGetCurrentContext();
 
@@ -985,9 +999,13 @@ dri2_bind_tex_image(Display * dpy,
    __GLXDRIdrawable *base = GetGLXDRIDrawable(dpy, drawable);
    struct glx_display *dpyPriv = __glXInitialize(dpy);
    struct dri2_drawable *pdraw = (struct dri2_drawable *) base;
-   struct dri2_display *pdp =
-      (struct dri2_display *) dpyPriv->dri2Display;
+   struct dri2_display *pdp;
    struct dri2_screen *psc;
+
+   if (dpyPriv == NULL)
+       return;
+
+   pdp = (struct dri2_display *) dpyPriv->dri2Display;
 
    if (pdraw != NULL) {
       psc = (struct dri2_screen *) base->psc;
@@ -1146,7 +1164,7 @@ dri2CreateScreen(int screen, struct glx_display * priv)
    struct dri2_screen *psc;
    __GLXDRIscreen *psp;
    struct glx_config *configs = NULL, *visuals = NULL;
-   char *driverName, *deviceName, *tmp;
+   char *driverName = NULL, *loader_driverName, *deviceName, *tmp;
    drm_magic_t magic;
    int i;
 
@@ -1169,6 +1187,29 @@ dri2CreateScreen(int screen, struct glx_display * priv)
       return NULL;
    }
 
+#ifdef O_CLOEXEC
+   psc->fd = open(deviceName, O_RDWR | O_CLOEXEC);
+   if (psc->fd == -1 && errno == EINVAL)
+#endif
+   {
+      psc->fd = open(deviceName, O_RDWR);
+      if (psc->fd != -1)
+         fcntl(psc->fd, F_SETFD, fcntl(psc->fd, F_GETFD) | FD_CLOEXEC);
+   }
+   if (psc->fd < 0) {
+      ErrorMessageF("failed to open drm device: %s\n", strerror(errno));
+      goto handle_error;
+   }
+
+   /* If Mesa knows about the appropriate driver for this fd, then trust it.
+    * Otherwise, default to the server's value.
+    */
+   loader_driverName = loader_get_driver_for_fd(psc->fd, 0);
+   if (loader_driverName) {
+      free(driverName);
+      driverName = loader_driverName;
+   }
+
    psc->driver = driOpenDriver(driverName);
    if (psc->driver == NULL) {
       ErrorMessageF("driver pointer missing\n");
@@ -1188,20 +1229,6 @@ dri2CreateScreen(int screen, struct glx_display * priv)
 
    if (psc->core == NULL || psc->dri2 == NULL) {
       ErrorMessageF("core dri or dri2 extension not found\n");
-      goto handle_error;
-   }
-
-#ifdef O_CLOEXEC
-   psc->fd = open(deviceName, O_RDWR | O_CLOEXEC);
-   if (psc->fd == -1 && errno == EINVAL)
-#endif
-   {
-      psc->fd = open(deviceName, O_RDWR);
-      if (psc->fd != -1)
-         fcntl(psc->fd, F_SETFD, fcntl(psc->fd, F_GETFD) | FD_CLOEXEC);
-   }
-   if (psc->fd < 0) {
-      ErrorMessageF("failed to open drm device: %s\n", strerror(errno));
       goto handle_error;
    }
 

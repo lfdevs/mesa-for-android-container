@@ -1767,8 +1767,8 @@ _mesa_generate_mipmap_level(GLenum target,
  * compute next (level+1) image size
  * \return GL_FALSE if no smaller size can be generated (eg. src is 1x1x1 size)
  */
-static GLboolean
-next_mipmap_level_size(GLenum target, GLint border,
+GLboolean
+_mesa_next_mipmap_level_size(GLenum target, GLint border,
                        GLint srcWidth, GLint srcHeight, GLint srcDepth,
                        GLint *dstWidth, GLint *dstHeight, GLint *dstDepth)
 {
@@ -1816,7 +1816,7 @@ GLboolean
 _mesa_prepare_mipmap_level(struct gl_context *ctx,
                            struct gl_texture_object *texObj, GLuint level,
                            GLsizei width, GLsizei height, GLsizei depth,
-                           GLsizei border, GLenum intFormat, gl_format format)
+                           GLsizei border, GLenum intFormat, mesa_format format)
 {
    const GLuint numFaces = _mesa_num_tex_faces(texObj->Target);
    GLuint face;
@@ -1911,7 +1911,7 @@ generate_mipmap_uncompressed(struct gl_context *ctx, GLenum target,
       srcDepth = srcImage->Depth;
       border = srcImage->Border;
 
-      nextLevel = next_mipmap_level_size(target, border,
+      nextLevel = _mesa_next_mipmap_level_size(target, border,
                                          srcWidth, srcHeight, srcDepth,
                                          &dstWidth, &dstHeight, &dstDepth);
       if (!nextLevel)
@@ -2018,7 +2018,7 @@ generate_mipmap_compressed(struct gl_context *ctx, GLenum target,
 			   GLuint maxLevel)
 {
    GLuint level;
-   gl_format temp_format;
+   mesa_format temp_format;
    GLint components;
    GLuint temp_src_row_stride, temp_src_img_stride; /* in bytes */
    GLubyte *temp_src = NULL, *temp_dst = NULL;
@@ -2102,7 +2102,7 @@ generate_mipmap_compressed(struct gl_context *ctx, GLenum target,
       srcDepth = srcImage->Depth;
       border = srcImage->Border;
 
-      nextLevel = next_mipmap_level_size(target, border,
+      nextLevel = _mesa_next_mipmap_level_size(target, border,
                                          srcWidth, srcHeight, srcDepth,
                                          &dstWidth, &dstHeight, &dstDepth);
       if (!nextLevel)

@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,13 +22,13 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
-     
+
 
 #include "brw_context.h"
 #include "brw_defines.h"
@@ -61,7 +61,7 @@ static void guess_execution_size(struct brw_compile *p,
 void
 gen6_resolve_implied_move(struct brw_compile *p,
 			  struct brw_reg *src,
-			  GLuint msg_reg_nr)
+			  unsigned msg_reg_nr)
 {
    struct brw_context *brw = p->brw;
    if (brw->gen < 6)
@@ -99,6 +99,61 @@ gen7_convert_mrf_to_grf(struct brw_compile *p, struct brw_reg *reg)
    }
 }
 
+/**
+ * Convert a brw_reg_type enumeration value into the hardware representation.
+ *
+ * The hardware encoding may depend on whether the value is an immediate.
+ */
+unsigned
+brw_reg_type_to_hw_type(const struct brw_context *brw,
+                        enum brw_reg_type type, unsigned file)
+{
+   if (file == BRW_IMMEDIATE_VALUE) {
+      const static int imm_hw_types[] = {
+         [BRW_REGISTER_TYPE_UD] = BRW_HW_REG_TYPE_UD,
+         [BRW_REGISTER_TYPE_D]  = BRW_HW_REG_TYPE_D,
+         [BRW_REGISTER_TYPE_UW] = BRW_HW_REG_TYPE_UW,
+         [BRW_REGISTER_TYPE_W]  = BRW_HW_REG_TYPE_W,
+         [BRW_REGISTER_TYPE_F]  = BRW_HW_REG_TYPE_F,
+         [BRW_REGISTER_TYPE_UB] = -1,
+         [BRW_REGISTER_TYPE_B]  = -1,
+         [BRW_REGISTER_TYPE_UV] = BRW_HW_REG_IMM_TYPE_UV,
+         [BRW_REGISTER_TYPE_VF] = BRW_HW_REG_IMM_TYPE_VF,
+         [BRW_REGISTER_TYPE_V]  = BRW_HW_REG_IMM_TYPE_V,
+         [BRW_REGISTER_TYPE_DF] = GEN8_HW_REG_IMM_TYPE_DF,
+         [BRW_REGISTER_TYPE_HF] = GEN8_HW_REG_IMM_TYPE_HF,
+         [BRW_REGISTER_TYPE_UQ] = GEN8_HW_REG_TYPE_UQ,
+         [BRW_REGISTER_TYPE_Q]  = GEN8_HW_REG_TYPE_Q,
+      };
+      assert(type < ARRAY_SIZE(imm_hw_types));
+      assert(imm_hw_types[type] != -1);
+      assert(brw->gen >= 8 || type < BRW_REGISTER_TYPE_DF);
+      return imm_hw_types[type];
+   } else {
+      /* Non-immediate registers */
+      const static int hw_types[] = {
+         [BRW_REGISTER_TYPE_UD] = BRW_HW_REG_TYPE_UD,
+         [BRW_REGISTER_TYPE_D]  = BRW_HW_REG_TYPE_D,
+         [BRW_REGISTER_TYPE_UW] = BRW_HW_REG_TYPE_UW,
+         [BRW_REGISTER_TYPE_W]  = BRW_HW_REG_TYPE_W,
+         [BRW_REGISTER_TYPE_UB] = BRW_HW_REG_NON_IMM_TYPE_UB,
+         [BRW_REGISTER_TYPE_B]  = BRW_HW_REG_NON_IMM_TYPE_B,
+         [BRW_REGISTER_TYPE_F]  = BRW_HW_REG_TYPE_F,
+         [BRW_REGISTER_TYPE_UV] = -1,
+         [BRW_REGISTER_TYPE_VF] = -1,
+         [BRW_REGISTER_TYPE_V]  = -1,
+         [BRW_REGISTER_TYPE_DF] = GEN7_HW_REG_NON_IMM_TYPE_DF,
+         [BRW_REGISTER_TYPE_HF] = GEN8_HW_REG_NON_IMM_TYPE_HF,
+         [BRW_REGISTER_TYPE_UQ] = GEN8_HW_REG_TYPE_UQ,
+         [BRW_REGISTER_TYPE_Q]  = GEN8_HW_REG_TYPE_Q,
+      };
+      assert(type < ARRAY_SIZE(hw_types));
+      assert(hw_types[type] != -1);
+      assert(brw->gen >= 7 || type < BRW_REGISTER_TYPE_DF);
+      assert(brw->gen >= 8 || type < BRW_REGISTER_TYPE_HF);
+      return hw_types[type];
+   }
+}
 
 void
 brw_set_dest(struct brw_compile *p, struct brw_instruction *insn,
@@ -111,10 +166,11 @@ brw_set_dest(struct brw_compile *p, struct brw_instruction *insn,
    gen7_convert_mrf_to_grf(p, &dest);
 
    insn->bits1.da1.dest_reg_file = dest.file;
-   insn->bits1.da1.dest_reg_type = dest.type;
+   insn->bits1.da1.dest_reg_type =
+      brw_reg_type_to_hw_type(p->brw, dest.type, dest.file);
    insn->bits1.da1.dest_address_mode = dest.address_mode;
 
-   if (dest.address_mode == BRW_ADDRESS_DIRECT) {   
+   if (dest.address_mode == BRW_ADDRESS_DIRECT) {
       insn->bits1.da1.dest_reg_nr = dest.nr;
 
       if (insn->header.access_mode == BRW_ALIGN_1) {
@@ -264,20 +320,21 @@ brw_set_src0(struct brw_compile *p, struct brw_instruction *insn,
    validate_reg(insn, reg);
 
    insn->bits1.da1.src0_reg_file = reg.file;
-   insn->bits1.da1.src0_reg_type = reg.type;
+   insn->bits1.da1.src0_reg_type =
+      brw_reg_type_to_hw_type(brw, reg.type, reg.file);
    insn->bits2.da1.src0_abs = reg.abs;
    insn->bits2.da1.src0_negate = reg.negate;
    insn->bits2.da1.src0_address_mode = reg.address_mode;
 
    if (reg.file == BRW_IMMEDIATE_VALUE) {
       insn->bits3.ud = reg.dw1.ud;
-   
+
       /* Required to set some fields in src1 as well:
        */
       insn->bits1.da1.src1_reg_file = 0; /* arf */
-      insn->bits1.da1.src1_reg_type = reg.type;
+      insn->bits1.da1.src1_reg_type = insn->bits1.da1.src0_reg_type;
    }
-   else 
+   else
    {
       if (reg.address_mode == BRW_ADDRESS_DIRECT) {
 	 if (insn->header.access_mode == BRW_ALIGN_1) {
@@ -293,7 +350,7 @@ brw_set_src0(struct brw_compile *p, struct brw_instruction *insn,
 	 insn->bits2.ia1.src0_subreg_nr = reg.subnr;
 
 	 if (insn->header.access_mode == BRW_ALIGN_1) {
-	    insn->bits2.ia1.src0_indirect_offset = reg.dw1.bits.indirect_offset; 
+	    insn->bits2.ia1.src0_indirect_offset = reg.dw1.bits.indirect_offset;
 	 }
 	 else {
 	    insn->bits2.ia16.src0_subreg_nr = reg.dw1.bits.indirect_offset;
@@ -301,7 +358,7 @@ brw_set_src0(struct brw_compile *p, struct brw_instruction *insn,
       }
 
       if (insn->header.access_mode == BRW_ALIGN_1) {
-	 if (reg.width == BRW_WIDTH_1 && 
+	 if (reg.width == BRW_WIDTH_1 &&
 	     insn->header.execution_size == BRW_EXECUTE_1) {
 	    insn->bits2.da1.src0_horiz_stride = BRW_HORIZONTAL_STRIDE_0;
 	    insn->bits2.da1.src0_width = BRW_WIDTH_1;
@@ -345,7 +402,8 @@ void brw_set_src1(struct brw_compile *p,
    validate_reg(insn, reg);
 
    insn->bits1.da1.src1_reg_file = reg.file;
-   insn->bits1.da1.src1_reg_type = reg.type;
+   insn->bits1.da1.src1_reg_type =
+      brw_reg_type_to_hw_type(p->brw, reg.type, reg.file);
    insn->bits3.da1.src1_abs = reg.abs;
    insn->bits3.da1.src1_negate = reg.negate;
 
@@ -373,7 +431,7 @@ void brw_set_src1(struct brw_compile *p,
       }
 
       if (insn->header.access_mode == BRW_ALIGN_1) {
-	 if (reg.width == BRW_WIDTH_1 && 
+	 if (reg.width == BRW_WIDTH_1 &&
 	     insn->header.execution_size == BRW_EXECUTE_1) {
 	    insn->bits3.da1.src1_horiz_stride = BRW_HORIZONTAL_STRIDE_0;
 	    insn->bits3.da1.src1_width = BRW_WIDTH_1;
@@ -447,10 +505,10 @@ brw_set_message_descriptor(struct brw_compile *p,
 
 static void brw_set_math_message( struct brw_compile *p,
 				  struct brw_instruction *insn,
-				  GLuint function,
-				  GLuint integer_type,
+				  unsigned function,
+				  unsigned integer_type,
 				  bool low_precision,
-				  GLuint dataType )
+				  unsigned dataType )
 {
    struct brw_context *brw = p->brw;
    unsigned msg_length;
@@ -504,7 +562,7 @@ static void brw_set_math_message( struct brw_compile *p,
 static void brw_set_ff_sync_message(struct brw_compile *p,
 				    struct brw_instruction *insn,
 				    bool allocate,
-				    GLuint response_length,
+				    unsigned response_length,
 				    bool end_of_thread)
 {
    brw_set_message_descriptor(p, insn, BRW_SFID_URB,
@@ -520,10 +578,10 @@ static void brw_set_ff_sync_message(struct brw_compile *p,
 static void brw_set_urb_message( struct brw_compile *p,
 				 struct brw_instruction *insn,
                                  enum brw_urb_write_flags flags,
-				 GLuint msg_length,
-				 GLuint response_length,
-				 GLuint offset,
-				 GLuint swizzle_control )
+				 unsigned msg_length,
+				 unsigned response_length,
+				 unsigned offset,
+				 unsigned swizzle_control )
 {
    struct brw_context *brw = p->brw;
 
@@ -563,15 +621,15 @@ static void brw_set_urb_message( struct brw_compile *p,
 void
 brw_set_dp_write_message(struct brw_compile *p,
 			 struct brw_instruction *insn,
-			 GLuint binding_table_index,
-			 GLuint msg_control,
-			 GLuint msg_type,
-			 GLuint msg_length,
+			 unsigned binding_table_index,
+			 unsigned msg_control,
+			 unsigned msg_type,
+			 unsigned msg_length,
 			 bool header_present,
-			 GLuint last_render_target,
-			 GLuint response_length,
-			 GLuint end_of_thread,
-			 GLuint send_commit_msg)
+			 unsigned last_render_target,
+			 unsigned response_length,
+			 unsigned end_of_thread,
+			 unsigned send_commit_msg)
 {
    struct brw_context *brw = p->brw;
    unsigned sfid;
@@ -621,13 +679,13 @@ brw_set_dp_write_message(struct brw_compile *p,
 void
 brw_set_dp_read_message(struct brw_compile *p,
 			struct brw_instruction *insn,
-			GLuint binding_table_index,
-			GLuint msg_control,
-			GLuint msg_type,
-			GLuint target_cache,
-			GLuint msg_length,
+			unsigned binding_table_index,
+			unsigned msg_control,
+			unsigned msg_type,
+			unsigned target_cache,
+			unsigned msg_length,
                         bool header_present,
-			GLuint response_length)
+			unsigned response_length)
 {
    struct brw_context *brw = p->brw;
    unsigned sfid;
@@ -678,14 +736,14 @@ brw_set_dp_read_message(struct brw_compile *p,
 void
 brw_set_sampler_message(struct brw_compile *p,
                         struct brw_instruction *insn,
-                        GLuint binding_table_index,
-                        GLuint sampler,
-                        GLuint msg_type,
-                        GLuint response_length,
-                        GLuint msg_length,
-                        GLuint header_present,
-                        GLuint simd_mode,
-                        GLuint return_format)
+                        unsigned binding_table_index,
+                        unsigned sampler,
+                        unsigned msg_type,
+                        unsigned response_length,
+                        unsigned msg_length,
+                        unsigned header_present,
+                        unsigned simd_mode,
+                        unsigned return_format)
 {
    struct brw_context *brw = p->brw;
 
@@ -717,7 +775,7 @@ brw_set_sampler_message(struct brw_compile *p,
 
 #define next_insn brw_next_insn
 struct brw_instruction *
-brw_next_insn(struct brw_compile *p, GLuint opcode)
+brw_next_insn(struct brw_compile *p, unsigned opcode)
 {
    struct brw_instruction *insn;
 
@@ -735,7 +793,7 @@ brw_next_insn(struct brw_compile *p, GLuint opcode)
    insn = &p->store[p->nr_insn++];
    memcpy(insn, p->current, sizeof(*insn));
 
-   /* Reset this one-shot flag: 
+   /* Reset this one-shot flag:
     */
 
    if (p->current->header.destreg__conditionalmod) {
@@ -748,7 +806,7 @@ brw_next_insn(struct brw_compile *p, GLuint opcode)
 }
 
 static struct brw_instruction *brw_alu1( struct brw_compile *p,
-					 GLuint opcode,
+					 unsigned opcode,
 					 struct brw_reg dest,
 					 struct brw_reg src )
 {
@@ -759,12 +817,12 @@ static struct brw_instruction *brw_alu1( struct brw_compile *p,
 }
 
 static struct brw_instruction *brw_alu2(struct brw_compile *p,
-					GLuint opcode,
+					unsigned opcode,
 					struct brw_reg dest,
 					struct brw_reg src0,
 					struct brw_reg src1 )
 {
-   struct brw_instruction *insn = next_insn(p, opcode);   
+   struct brw_instruction *insn = next_insn(p, opcode);
    brw_set_dest(p, insn, dest);
    brw_set_src0(p, insn, src0);
    brw_set_src1(p, insn, src1);
@@ -783,7 +841,7 @@ get_3src_subreg_nr(struct brw_reg reg)
 }
 
 static struct brw_instruction *brw_alu3(struct brw_compile *p,
-					GLuint opcode,
+					unsigned opcode,
 					struct brw_reg dest,
 					struct brw_reg src0,
 					struct brw_reg src1,
@@ -1058,7 +1116,7 @@ struct brw_instruction *brw_MUL(struct brw_compile *p,
 
 void brw_NOP(struct brw_compile *p)
 {
-   struct brw_instruction *insn = next_insn(p, BRW_OPCODE_NOP);   
+   struct brw_instruction *insn = next_insn(p, BRW_OPCODE_NOP);
    brw_set_dest(p, insn, retype(brw_vec4_grf(0,0), BRW_REGISTER_TYPE_UD));
    brw_set_src0(p, insn, retype(brw_vec4_grf(0,0), BRW_REGISTER_TYPE_UD));
    brw_set_src1(p, insn, brw_imm_ud(0x0));
@@ -1072,7 +1130,7 @@ void brw_NOP(struct brw_compile *p)
  * Comparisons, if/else/endif
  */
 
-struct brw_instruction *brw_JMPI(struct brw_compile *p, 
+struct brw_instruction *brw_JMPI(struct brw_compile *p,
                                  struct brw_reg dest,
                                  struct brw_reg src0,
                                  struct brw_reg src1)
@@ -1144,7 +1202,7 @@ get_inner_do_insn(struct brw_compile *p)
  * popped off.  If the stack is now empty, normal execution resumes.
  */
 struct brw_instruction *
-brw_IF(struct brw_compile *p, GLuint execute_size)
+brw_IF(struct brw_compile *p, unsigned execute_size)
 {
    struct brw_context *brw = p->brw;
    struct brw_instruction *insn;
@@ -1546,7 +1604,7 @@ struct brw_instruction *gen6_HALT(struct brw_compile *p)
  * For gen6, there's no more mask stack, so no need for DO.  WHILE
  * just points back to the first instruction of the loop.
  */
-struct brw_instruction *brw_DO(struct brw_compile *p, GLuint execute_size)
+struct brw_instruction *brw_DO(struct brw_compile *p, unsigned execute_size)
 {
    struct brw_context *brw = p->brw;
 
@@ -1608,7 +1666,7 @@ struct brw_instruction *brw_WHILE(struct brw_compile *p)
 {
    struct brw_context *brw = p->brw;
    struct brw_instruction *insn, *do_insn;
-   GLuint br = 1;
+   unsigned br = 1;
 
    if (brw->gen >= 5)
       br = 2;
@@ -1675,7 +1733,7 @@ void brw_land_fwd_jump(struct brw_compile *p, int jmp_insn_idx)
 {
    struct brw_context *brw = p->brw;
    struct brw_instruction *jmp_insn = &p->store[jmp_insn_idx];
-   GLuint jmpi = 1;
+   unsigned jmpi = 1;
 
    if (brw->gen >= 5)
       jmpi = 2;
@@ -1694,7 +1752,7 @@ void brw_land_fwd_jump(struct brw_compile *p, int jmp_insn_idx)
  */
 void brw_CMP(struct brw_compile *p,
 	     struct brw_reg dest,
-	     GLuint conditional,
+	     unsigned conditional,
 	     struct brw_reg src0,
 	     struct brw_reg src1)
 {
@@ -1711,7 +1769,7 @@ void brw_CMP(struct brw_compile *p,
 
    /* Make it so that future instructions will use the computed flag
     * value until brw_set_predicate_control_flag_value() is called
-    * again.  
+    * again.
     */
    if (dest.file == BRW_ARCHITECTURE_REGISTER_FILE &&
        dest.nr == 0) {
@@ -1758,11 +1816,11 @@ void brw_WAIT (struct brw_compile *p)
  */
 void brw_math( struct brw_compile *p,
 	       struct brw_reg dest,
-	       GLuint function,
-	       GLuint msg_reg_nr,
+	       unsigned function,
+	       unsigned msg_reg_nr,
 	       struct brw_reg src,
-	       GLuint data_type,
-	       GLuint precision )
+	       unsigned data_type,
+	       unsigned precision )
 {
    struct brw_context *brw = p->brw;
 
@@ -1823,7 +1881,7 @@ void brw_math( struct brw_compile *p,
  */
 void brw_math2(struct brw_compile *p,
 	       struct brw_reg dest,
-	       GLuint function,
+	       unsigned function,
 	       struct brw_reg src0,
 	       struct brw_reg src1)
 {
@@ -1880,7 +1938,7 @@ void brw_math2(struct brw_compile *p,
 void brw_oword_block_write_scratch(struct brw_compile *p,
 				   struct brw_reg mrf,
 				   int num_regs,
-				   GLuint offset)
+				   unsigned offset)
 {
    struct brw_context *brw = p->brw;
    uint32_t msg_control, msg_type;
@@ -1992,7 +2050,7 @@ brw_oword_block_read_scratch(struct brw_compile *p,
 			     struct brw_reg dest,
 			     struct brw_reg mrf,
 			     int num_regs,
-			     GLuint offset)
+			     unsigned offset)
 {
    struct brw_context *brw = p->brw;
    uint32_t msg_control;
@@ -2059,7 +2117,7 @@ void
 gen7_block_read_scratch(struct brw_compile *p,
                         struct brw_reg dest,
                         int num_regs,
-                        GLuint offset)
+                        unsigned offset)
 {
    dest = retype(dest, BRW_REGISTER_TYPE_UW);
 
@@ -2159,18 +2217,18 @@ void brw_oword_block_read(struct brw_compile *p,
 
 void brw_fb_WRITE(struct brw_compile *p,
 		  int dispatch_width,
-                  GLuint msg_reg_nr,
+                  unsigned msg_reg_nr,
                   struct brw_reg src0,
-                  GLuint msg_control,
-                  GLuint binding_table_index,
-                  GLuint msg_length,
-                  GLuint response_length,
+                  unsigned msg_control,
+                  unsigned binding_table_index,
+                  unsigned msg_length,
+                  unsigned response_length,
                   bool eot,
                   bool header_present)
 {
    struct brw_context *brw = p->brw;
    struct brw_instruction *insn;
-   GLuint msg_type;
+   unsigned msg_type;
    struct brw_reg dest;
 
    if (dispatch_width == 16)
@@ -2221,16 +2279,16 @@ void brw_fb_WRITE(struct brw_compile *p,
  */
 void brw_SAMPLE(struct brw_compile *p,
 		struct brw_reg dest,
-		GLuint msg_reg_nr,
+		unsigned msg_reg_nr,
 		struct brw_reg src0,
-		GLuint binding_table_index,
-		GLuint sampler,
-		GLuint msg_type,
-		GLuint response_length,
-		GLuint msg_length,
-		GLuint header_present,
-		GLuint simd_mode,
-		GLuint return_format)
+		unsigned binding_table_index,
+		unsigned sampler,
+		unsigned msg_type,
+		unsigned response_length,
+		unsigned msg_length,
+		unsigned header_present,
+		unsigned simd_mode,
+		unsigned return_format)
 {
    struct brw_context *brw = p->brw;
    struct brw_instruction *insn;
@@ -2278,13 +2336,13 @@ void brw_SAMPLE(struct brw_compile *p,
  */
 void brw_urb_WRITE(struct brw_compile *p,
 		   struct brw_reg dest,
-		   GLuint msg_reg_nr,
+		   unsigned msg_reg_nr,
 		   struct brw_reg src0,
                    enum brw_urb_write_flags flags,
-		   GLuint msg_length,
-		   GLuint response_length,
-		   GLuint offset,
-		   GLuint swizzle)
+		   unsigned msg_length,
+		   unsigned response_length,
+		   unsigned offset,
+		   unsigned swizzle)
 {
    struct brw_context *brw = p->brw;
    struct brw_instruction *insn;
@@ -2318,7 +2376,7 @@ void brw_urb_WRITE(struct brw_compile *p,
 		       insn,
 		       flags,
 		       msg_length,
-		       response_length, 
+		       response_length,
 		       offset,
 		       swizzle);
 }
@@ -2462,10 +2520,10 @@ brw_set_uip_jip(struct brw_compile *p)
 
 void brw_ff_sync(struct brw_compile *p,
 		   struct brw_reg dest,
-		   GLuint msg_reg_nr,
+		   unsigned msg_reg_nr,
 		   struct brw_reg src0,
 		   bool allocate,
-		   GLuint response_length,
+		   unsigned response_length,
 		   bool eot)
 {
    struct brw_context *brw = p->brw;
@@ -2502,9 +2560,9 @@ void brw_ff_sync(struct brw_compile *p,
 void
 brw_svb_write(struct brw_compile *p,
               struct brw_reg dest,
-              GLuint msg_reg_nr,
+              unsigned msg_reg_nr,
               struct brw_reg src0,
-              GLuint binding_table_index,
+              unsigned binding_table_index,
               bool   send_commit_msg)
 {
    struct brw_instruction *insn;
@@ -2530,10 +2588,10 @@ brw_svb_write(struct brw_compile *p,
 static void
 brw_set_dp_untyped_atomic_message(struct brw_compile *p,
                                   struct brw_instruction *insn,
-                                  GLuint atomic_op,
-                                  GLuint bind_table_index,
-                                  GLuint msg_length,
-                                  GLuint response_length,
+                                  unsigned atomic_op,
+                                  unsigned bind_table_index,
+                                  unsigned msg_length,
+                                  unsigned response_length,
                                   bool header_present)
 {
    if (p->brw->is_haswell) {
@@ -2575,10 +2633,10 @@ void
 brw_untyped_atomic(struct brw_compile *p,
                    struct brw_reg dest,
                    struct brw_reg mrf,
-                   GLuint atomic_op,
-                   GLuint bind_table_index,
-                   GLuint msg_length,
-                   GLuint response_length) {
+                   unsigned atomic_op,
+                   unsigned bind_table_index,
+                   unsigned msg_length,
+                   unsigned response_length) {
    struct brw_instruction *insn = brw_next_insn(p, BRW_OPCODE_SEND);
 
    brw_set_dest(p, insn, retype(dest, BRW_REGISTER_TYPE_UD));
@@ -2592,9 +2650,9 @@ brw_untyped_atomic(struct brw_compile *p,
 static void
 brw_set_dp_untyped_surface_read_message(struct brw_compile *p,
                                         struct brw_instruction *insn,
-                                        GLuint bind_table_index,
-                                        GLuint msg_length,
-                                        GLuint response_length,
+                                        unsigned bind_table_index,
+                                        unsigned msg_length,
+                                        unsigned response_length,
                                         bool header_present)
 {
    const unsigned dispatch_width =
@@ -2632,9 +2690,9 @@ void
 brw_untyped_surface_read(struct brw_compile *p,
                          struct brw_reg dest,
                          struct brw_reg mrf,
-                         GLuint bind_table_index,
-                         GLuint msg_length,
-                         GLuint response_length)
+                         unsigned bind_table_index,
+                         unsigned msg_length,
+                         unsigned response_length)
 {
    struct brw_instruction *insn = next_insn(p, BRW_OPCODE_SEND);
 

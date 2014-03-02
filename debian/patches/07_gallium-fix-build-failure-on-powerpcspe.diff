@@ -1,0 +1,40 @@
+From a4f14e7239780b02af8d74669c5458d4b0957d4d Mon Sep 17 00:00:00 2001
+From: Roland Stigge <stigge@antcom.de>
+Date: Sun, 2 Mar 2014 19:52:56 +0100
+Subject: [PATCH] gallium: fix build failure on powerpcspe
+
+In the case of powerpc, mesa activates some altivec instructions
+that are unknown on the powerpcspe architecture (see
+https://wiki.debian.org/PowerPCSPEPort), causing a build failure as the
+'vand' opcode is not recognized by the assembler.
+
+This patch fixes this by preventing the PPC-specialcasing in case of
+powerpcspe (__NO_FPRS__ is only defined there).
+
+https://bugs.debian.org/695746
+---
+ src/gallium/include/pipe/p_config.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/gallium/include/pipe/p_config.h b/src/gallium/include/pipe/p_config.h
+index d603681..8189a73 100644
+--- a/src/gallium/include/pipe/p_config.h
++++ b/src/gallium/include/pipe/p_config.h
+@@ -107,12 +107,14 @@
+ #endif
+ #endif
+ 
++#ifndef __NO_FPRS__
+ #if defined(__ppc__) || defined(__ppc64__) || defined(__PPC__)
+ #define PIPE_ARCH_PPC
+ #if defined(__ppc64__) || defined(__PPC64__)
+ #define PIPE_ARCH_PPC_64
+ #endif
+ #endif
++#endif
+ 
+ #if defined(__s390x__)
+ #define PIPE_ARCH_S390
+-- 
+1.9.0
+

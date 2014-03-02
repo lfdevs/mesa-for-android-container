@@ -30,6 +30,7 @@ i965_FILES = \
 	brw_binding_tables.c \
 	brw_blorp.cpp \
 	brw_blorp_blit.cpp \
+	brw_blorp_blit_eu.cpp \
 	brw_blorp_clear.cpp \
 	brw_cc.c \
 	brw_cfg.cpp \
@@ -44,6 +45,7 @@ i965_FILES = \
 	brw_context.c \
 	brw_cubemap_normalize.cpp \
 	brw_curbe.c \
+	brw_dead_control_flow.cpp \
 	brw_device_info.c \
 	brw_disasm.c \
 	brw_draw.c \
@@ -59,7 +61,10 @@ i965_FILES = \
 	brw_fs_fp.cpp \
 	brw_fs_generator.cpp \
 	brw_fs_live_variables.cpp \
+	brw_fs_peephole_predicated_break.cpp \
 	brw_fs_reg_allocate.cpp \
+	brw_fs_saturate_propagation.cpp \
+	brw_fs_sel_peephole.cpp \
 	brw_fs_vector_splitting.cpp \
 	brw_fs_visitor.cpp \
 	brw_gs.c \
@@ -72,6 +77,7 @@ i965_FILES = \
 	brw_lower_unnormalized_offset.cpp \
 	brw_misc_state.c \
 	brw_object_purgeable.c \
+	brw_performance_monitor.c \
 	brw_program.c \
 	brw_primitive_restart.c \
 	brw_queryobj.c \
@@ -135,4 +141,23 @@ i965_FILES = \
 	gen7_vs_state.c \
 	gen7_wm_state.c \
 	gen7_wm_surface_state.c \
+	gen8_blend_state.c \
+	gen8_disasm.c \
+	gen8_depth_state.c \
+	gen8_disable.c \
+	gen8_draw_upload.c \
+	gen8_fs_generator.cpp \
+	gen8_generator.cpp \
+	gen8_instruction.c \
+	gen8_gs_state.c \
+	gen8_misc_state.c \
+	gen8_multisample_state.c \
+	gen8_sf_state.c \
+	gen8_sol_state.c \
+	gen8_surface_state.c \
+	gen8_vec4_generator.cpp \
+	gen8_viewport_state.c \
+	gen8_vs_state.c \
+	gen8_wm_depth_stencil.c \
+	gen8_ps_state.c \
         $()

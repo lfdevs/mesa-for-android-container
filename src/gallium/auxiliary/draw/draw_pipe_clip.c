@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -28,7 +28,7 @@
 /**
  * \brief  Clipping stage
  *
- * \author  Keith Whitwell <keith@tungstengraphics.com>
+ * \author  Keith Whitwell <keithw@vmware.com>
  */
 
 
@@ -588,7 +588,12 @@ do_clip_line( struct draw_stage *stage,
 
    if (v0->clipmask) {
       interp( clipper, stage->tmp[0], t0, v0, v1, viewport_index );
-      copy_flat(stage, stage->tmp[0], v0);
+      if (stage->draw->rasterizer->flatshade_first) {
+         copy_flat(stage, stage->tmp[0], v0);  /* copy v0 color to tmp[0] */
+      }
+      else {
+         copy_flat(stage, stage->tmp[0], v1);  /* copy v1 color to tmp[0] */
+      }
       newprim.v[0] = stage->tmp[0];
    }
    else {
@@ -597,6 +602,12 @@ do_clip_line( struct draw_stage *stage,
 
    if (v1->clipmask) {
       interp( clipper, stage->tmp[1], t1, v1, v0, viewport_index );
+      if (stage->draw->rasterizer->flatshade_first) {
+         copy_flat(stage, stage->tmp[1], v0);  /* copy v0 color to tmp[1] */
+      }
+      else {
+         copy_flat(stage, stage->tmp[1], v1);  /* copy v1 color to tmp[1] */
+      }
       newprim.v[1] = stage->tmp[1];
    }
    else {
@@ -609,10 +620,53 @@ do_clip_line( struct draw_stage *stage,
 
 static void
 clip_point( struct draw_stage *stage, 
-	    struct prim_header *header )
+            struct prim_header *header )
 {
-   if (header->v[0]->clipmask == 0) 
+   if (header->v[0]->clipmask == 0)
       stage->next->point( stage->next, header );
+}
+
+
+/*
+ * Clip points but ignore the first 4 (xy) clip planes.
+ * (Because the generated clip mask is completely unaffacted by guard band,
+ * we still need to manually evaluate the x/y planes if they are outside
+ * the guard band and not just outside the vp.)
+ */
+static void
+clip_point_guard_xy( struct draw_stage *stage,
+                     struct prim_header *header )
+{
+   unsigned clipmask = header->v[0]->clipmask;
+   if ((clipmask & 0xffffffff) == 0)
+      stage->next->point(stage->next, header);
+   else if ((clipmask & 0xfffffff0) == 0) {
+      while (clipmask) {
+         const unsigned plane_idx = ffs(clipmask)-1;
+         clipmask &= ~(1 << plane_idx);  /* turn off this plane's bit */
+         /* TODO: this should really do proper guardband clipping,
+          * currently just throw out infs/nans.
+          * Also note that vertices with negative w values MUST be tossed
+          * out (not sure if proper guardband clipping would do this
+          * automatically). These would usually be captured by depth clip
+          * too but this can be disabled.
+          */
+         if (header->v[0]->clip[3] <= 0.0f ||
+             util_is_inf_or_nan(header->v[0]->clip[0]) ||
+             util_is_inf_or_nan(header->v[0]->clip[1]))
+            return;
+      }
+      stage->next->point(stage->next, header);
+   }
+}
+
+
+static void
+clip_first_point( struct draw_stage *stage,
+                  struct prim_header *header )
+{
+   stage->point = stage->draw->guard_band_points_xy ? clip_point_guard_xy : clip_point;
+   stage->point(stage, header);
 }
 
 
@@ -637,7 +691,7 @@ clip_line( struct draw_stage *stage,
 
 static void
 clip_tri( struct draw_stage *stage,
-	  struct prim_header *header )
+          struct prim_header *header )
 {
    unsigned clipmask = (header->v[0]->clipmask | 
                         header->v[1]->clipmask | 
@@ -822,7 +876,7 @@ struct draw_stage *draw_clip_stage( struct draw_context *draw )
 
    clipper->stage.draw = draw;
    clipper->stage.name = "clipper";
-   clipper->stage.point = clip_point;
+   clipper->stage.point = clip_first_point;
    clipper->stage.line = clip_first_line;
    clipper->stage.tri = clip_first_tri;
    clipper->stage.flush = clip_flush;

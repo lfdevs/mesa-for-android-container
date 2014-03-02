@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2008 VMware, Inc.
  * Copyright 2009-2010 Chia-I Wu <olvaffe@gmail.com>
  * Copyright 2010-2011 LunarG, Inc.
  * All Rights Reserved.
@@ -126,6 +126,10 @@ typedef EGLBoolean (*UnbindWaylandDisplayWL_t)(_EGLDriver *drv, _EGLDisplay *dis
 typedef EGLBoolean (*QueryWaylandBufferWL_t)(_EGLDriver *drv, _EGLDisplay *displ, struct wl_resource *buffer, EGLint attribute, EGLint *value);
 #endif
 
+#ifdef EGL_WL_create_wayland_buffer_from_image
+typedef struct wl_buffer * (*CreateWaylandBufferFromImageWL_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *img);
+#endif
+
 typedef EGLBoolean (*PostSubBufferNV_t)(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surface, EGLint x, EGLint y, EGLint width, EGLint height);
 
 typedef EGLint (*QueryBufferAge_t)(_EGLDriver *drv,
@@ -208,6 +212,10 @@ struct _egl_api
    BindWaylandDisplayWL_t BindWaylandDisplayWL;
    UnbindWaylandDisplayWL_t UnbindWaylandDisplayWL;
    QueryWaylandBufferWL_t QueryWaylandBufferWL;
+#endif
+
+#ifdef EGL_WL_create_wayland_buffer_from_image
+   CreateWaylandBufferFromImageWL_t CreateWaylandBufferFromImageWL;
 #endif
 
 #ifdef EGL_EXT_swap_buffers_with_damage

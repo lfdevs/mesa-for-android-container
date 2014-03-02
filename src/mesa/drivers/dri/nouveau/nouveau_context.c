@@ -72,7 +72,7 @@ nouveau_context_create(gl_api api,
 		return false;
 	}
 
-	ctx = screen->driver->context_create(screen, visual, share_ctx);
+	ctx = screen->driver->context_create(screen, api, visual, share_ctx);
 	if (!ctx) {
 		*error = __DRI_CTX_ERROR_NO_MEMORY;
 		return GL_FALSE;
@@ -107,7 +107,8 @@ nouveau_context_create(gl_api api,
 }
 
 GLboolean
-nouveau_context_init(struct gl_context *ctx, struct nouveau_screen *screen,
+nouveau_context_init(struct gl_context *ctx, gl_api api,
+		     struct nouveau_screen *screen,
 		     const struct gl_config *visual, struct gl_context *share_ctx)
 {
 	struct nouveau_context *nctx = to_nouveau_context(ctx);
@@ -125,7 +126,7 @@ nouveau_context_init(struct gl_context *ctx, struct nouveau_screen *screen,
 	nouveau_fbo_functions_init(&functions);
 
 	/* Initialize the mesa context. */
-	_mesa_initialize_context(ctx, API_OPENGL_COMPAT, visual,
+	_mesa_initialize_context(ctx, api, visual,
                                  share_ctx, &functions);
 
 	nouveau_state_init(ctx);
@@ -184,10 +185,9 @@ nouveau_context_init(struct gl_context *ctx, struct nouveau_screen *screen,
 	/* Enable any supported extensions. */
 	ctx->Extensions.EXT_blend_color = true;
 	ctx->Extensions.EXT_blend_minmax = true;
-	ctx->Extensions.EXT_framebuffer_blit = true;
-	ctx->Extensions.EXT_packed_depth_stencil = true;
 	ctx->Extensions.EXT_texture_filter_anisotropic = true;
 	ctx->Extensions.NV_texture_env_combine4 = true;
+	ctx->Const.MaxColorAttachments = 1;
 
 	return GL_TRUE;
 }

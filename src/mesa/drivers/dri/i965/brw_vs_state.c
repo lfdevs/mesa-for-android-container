@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,13 +22,13 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
-            
+
 
 
 #include "brw_context.h"
@@ -60,7 +60,7 @@ brw_upload_vs_unit(struct brw_context *brw)
    /* Use ALT floating point mode for ARB vertex programs, because they
     * require 0^0 == 1.
     */
-   if (brw->ctx.Shader.CurrentVertexProgram == NULL)
+   if (brw->ctx.Shader.CurrentProgram[MESA_SHADER_VERTEX] == NULL)
       vs->thread1.floating_point_mode = BRW_FLOATING_POINT_NON_IEEE_754;
    else
       vs->thread1.floating_point_mode = BRW_FLOATING_POINT_IEEE_754;
@@ -84,7 +84,7 @@ brw_upload_vs_unit(struct brw_context *brw)
 
    if (brw->vs.prog_data->base.total_scratch != 0) {
       vs->thread2.scratch_space_base_pointer =
-	 stage_state->scratch_bo->offset >> 10; /* reloc */
+	 stage_state->scratch_bo->offset64 >> 10; /* reloc */
       vs->thread2.per_thread_scratch_space =
 	 ffs(brw->vs.prog_data->base.total_scratch) - 11;
    } else {
@@ -161,7 +161,7 @@ brw_upload_vs_unit(struct brw_context *brw)
     */
    if (stage_state->sampler_count) {
       vs->vs5.sampler_state_pointer =
-         (brw->batch.bo->offset + stage_state->sampler_offset) >> 5;
+         (brw->batch.bo->offset64 + stage_state->sampler_offset) >> 5;
       drm_intel_bo_emit_reloc(brw->batch.bo,
                               stage_state->state_offset +
                               offsetof(struct brw_vs_unit_state, vs5),

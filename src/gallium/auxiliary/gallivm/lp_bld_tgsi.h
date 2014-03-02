@@ -225,6 +225,7 @@ lp_build_tgsi_soa(struct gallivm_state *gallivm,
                   struct lp_type type,
                   struct lp_build_mask_context *mask,
                   LLVMValueRef consts_ptr,
+                  LLVMValueRef const_sizes_ptr,
                   const struct lp_bld_tgsi_system_values *system_values,
                   const LLVMValueRef (*inputs)[4],
                   LLVMValueRef (*outputs)[4],
@@ -316,7 +317,7 @@ unsigned lp_bld_tgsi_list_init(struct lp_build_tgsi_context * bld_base);
 
 unsigned lp_bld_tgsi_add_instruction(
    struct lp_build_tgsi_context * bld_base,
-   struct tgsi_full_instruction *inst_to_add);
+   const struct tgsi_full_instruction *inst_to_add);
 
 
 struct lp_build_tgsi_context;
@@ -351,6 +352,11 @@ struct lp_build_tgsi_context
 
    LLVMValueRef (*emit_swizzle)(struct lp_build_tgsi_context *,
                          LLVMValueRef, unsigned, unsigned, unsigned, unsigned);
+
+
+   void (*emit_debug)(struct lp_build_tgsi_context *,
+                      const struct tgsi_full_instruction *,
+                      const struct tgsi_opcode_info *);
 
    void (*emit_store)(struct lp_build_tgsi_context *,
                       const struct tgsi_full_instruction *,
@@ -428,6 +434,7 @@ struct lp_build_tgsi_soa_context
    LLVMValueRef max_output_vertices_vec;
 
    LLVMValueRef consts_ptr;
+   LLVMValueRef const_sizes_ptr;
    const LLVMValueRef (*inputs)[TGSI_NUM_CHANNELS];
    LLVMValueRef (*outputs)[TGSI_NUM_CHANNELS];
 

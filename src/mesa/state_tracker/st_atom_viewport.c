@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -62,12 +62,12 @@ update_viewport( struct st_context *st )
    /* _NEW_VIEWPORT 
     */
    {
-      GLfloat x = (GLfloat)ctx->Viewport.X;
-      GLfloat y = (GLfloat)ctx->Viewport.Y;
-      GLfloat z = ctx->Viewport.Near;
-      GLfloat half_width = (GLfloat)ctx->Viewport.Width * 0.5f;
-      GLfloat half_height = (GLfloat)ctx->Viewport.Height * 0.5f;
-      GLfloat half_depth = (GLfloat)(ctx->Viewport.Far - ctx->Viewport.Near) * 0.5f;
+      GLfloat x = ctx->ViewportArray[0].X;
+      GLfloat y = ctx->ViewportArray[0].Y;
+      GLfloat z = ctx->ViewportArray[0].Near;
+      GLfloat half_width = ctx->ViewportArray[0].Width * 0.5f;
+      GLfloat half_height = ctx->ViewportArray[0].Height * 0.5f;
+      GLfloat half_depth = (GLfloat)(ctx->ViewportArray[0].Far - ctx->ViewportArray[0].Near) * 0.5f;
       
       st->state.viewport.scale[0] = half_width;
       st->state.viewport.scale[1] = half_height * yScale;

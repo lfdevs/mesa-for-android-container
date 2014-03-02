@@ -37,6 +37,8 @@
 #include "util/u_string.h"
 
 #include "freedreno_screen.h"
+#include "freedreno_gmem.h"
+#include "freedreno_util.h"
 
 struct fd_vertex_stateobj;
 
@@ -80,18 +82,10 @@ struct fd_vertex_stateobj {
 	unsigned num_elements;
 };
 
-struct fd_gmem_stateobj {
-	struct pipe_scissor_state scissor;
-	uint cpp;
-	uint16_t minx, miny;
-	uint16_t bin_h, nbins_y;
-	uint16_t bin_w, nbins_x;
-	uint16_t width, height;
-};
-
 struct fd_context {
 	struct pipe_context base;
 
+	struct fd_device *dev;
 	struct fd_screen *screen;
 	struct blitter_context *blitter;
 	struct primconvert_context *primconvert;
@@ -118,7 +112,7 @@ struct fd_context {
 	 */
 	enum {
 		/* align bitmask values w/ PIPE_CLEAR_*.. since that is convenient.. */
-		FD_BUFFER_COLOR   = PIPE_CLEAR_COLOR,
+		FD_BUFFER_COLOR   = PIPE_CLEAR_COLOR0,
 		FD_BUFFER_DEPTH   = PIPE_CLEAR_DEPTH,
 		FD_BUFFER_STENCIL = PIPE_CLEAR_STENCIL,
 		FD_BUFFER_ALL     = FD_BUFFER_COLOR | FD_BUFFER_DEPTH | FD_BUFFER_STENCIL,
@@ -141,7 +135,15 @@ struct fd_context {
 		FD_GMEM_BLEND_ENABLED        = 0x10,
 		FD_GMEM_LOGICOP_ENABLED      = 0x20,
 	} gmem_reason;
-	unsigned num_draws;
+	unsigned num_draws;   /* number of draws in current batch */
+
+	/* Stats/counters:
+	 */
+	struct {
+		uint64_t prims_emitted;
+		uint64_t draw_calls;
+		uint64_t batch_total, batch_sysmem, batch_gmem, batch_restore;
+	} stats;
 
 	/* we can't really sanely deal with wraparound point in ringbuffer
 	 * and because of the way tiling works we can't really flush at
@@ -155,8 +157,23 @@ struct fd_context {
 	struct fd_ringbuffer *rings[4];
 	unsigned rings_idx;
 
+	/* normal draw/clear cmds: */
 	struct fd_ringbuffer *ring;
 	struct fd_ringmarker *draw_start, *draw_end;
+
+	/* binning pass draw/clear cmds: */
+	struct fd_ringbuffer *binning_ring;
+	struct fd_ringmarker *binning_start, *binning_end;
+
+	/* Keep track if WAIT_FOR_IDLE is needed for registers we need
+	 * to update via RMW:
+	 */
+	bool needs_wfi;
+
+	/* Keep track of DRAW initiators that need to be patched up depending
+	 * on whether we using binning or not:
+	 */
+	struct util_dynarray draw_patches;
 
 	struct pipe_scissor_state scissor;
 
@@ -176,6 +193,8 @@ struct fd_context {
 	 * if out of date with current maximal-scissor/cpp:
 	 */
 	struct fd_gmem_stateobj gmem;
+	struct fd_vsc_pipe      pipe[8];
+	struct fd_tile          tile[64];
 
 	/* which state objects need to be re-emit'd: */
 	enum {
@@ -221,14 +240,10 @@ struct fd_context {
 
 	/* GMEM/tile handling fxns: */
 	void (*emit_tile_init)(struct fd_context *ctx);
-	void (*emit_tile_prep)(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
-			uint32_t bin_w, uint32_t bin_h);
-	void (*emit_tile_mem2gmem)(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
-			uint32_t bin_w, uint32_t bin_h);
-	void (*emit_tile_renderprep)(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
-			uint32_t bin_w, uint32_t bin_h);
-	void (*emit_tile_gmem2mem)(struct fd_context *ctx, uint32_t xoff, uint32_t yoff,
-			uint32_t bin_w, uint32_t bin_h);
+	void (*emit_tile_prep)(struct fd_context *ctx, struct fd_tile *tile);
+	void (*emit_tile_mem2gmem)(struct fd_context *ctx, struct fd_tile *tile);
+	void (*emit_tile_renderprep)(struct fd_context *ctx, struct fd_tile *tile);
+	void (*emit_tile_gmem2mem)(struct fd_context *ctx, struct fd_tile *tile);
 
 	/* optional, for GMEM bypass: */
 	void (*emit_sysmem_prep)(struct fd_context *ctx);
@@ -257,6 +272,24 @@ static INLINE bool
 fd_supported_prim(struct fd_context *ctx, unsigned prim)
 {
 	return (1 << prim) & ctx->primtype_mask;
+}
+
+static INLINE void
+fd_reset_wfi(struct fd_context *ctx)
+{
+	ctx->needs_wfi = true;
+}
+
+/* emit a WAIT_FOR_IDLE only if needed, ie. if there has not already
+ * been one since last draw:
+ */
+static inline void
+fd_wfi(struct fd_context *ctx, struct fd_ringbuffer *ring)
+{
+	if (ctx->needs_wfi) {
+		OUT_WFI(ring);
+		ctx->needs_wfi = false;
+	}
 }
 
 struct pipe_context * fd_context_init(struct fd_context *ctx,

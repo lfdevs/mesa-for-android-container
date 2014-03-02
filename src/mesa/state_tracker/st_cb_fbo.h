@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -58,8 +58,10 @@ struct st_renderbuffer
    boolean software;
    void *data;
 
-   struct st_texture_object *rtt;  /**< GL render to texture's texture */
-   unsigned rtt_level, rtt_face, rtt_slice;
+   /* Inputs from Driver.RenderTexture, don't use directly. */
+   boolean is_rtt; /**< whether Driver.RenderTexture was called */
+   unsigned rtt_face, rtt_slice;
+   boolean rtt_layered; /**< whether glFramebufferTexture was called */
 };
 
 
@@ -72,6 +74,10 @@ st_renderbuffer(struct gl_renderbuffer *rb)
 
 extern struct gl_renderbuffer *
 st_new_renderbuffer_fb(enum pipe_format format, int samples, boolean sw);
+
+extern void
+st_update_renderbuffer_surface(struct st_context *st,
+                               struct st_renderbuffer *strb);
 
 extern void
 st_init_fbo_functions(struct dd_function_table *functions);

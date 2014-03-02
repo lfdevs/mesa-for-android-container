@@ -18,6 +18,7 @@ MAIN_FILES = \
 	$(SRCDIR)main/attrib.c \
 	$(SRCDIR)main/arrayobj.c \
 	$(SRCDIR)main/blend.c \
+	$(SRCDIR)main/blit.c \
 	$(SRCDIR)main/bufferobj.c \
 	$(SRCDIR)main/buffers.c \
 	$(SRCDIR)main/clear.c \
@@ -48,6 +49,7 @@ MAIN_FILES = \
 	$(SRCDIR)main/format_unpack.c \
 	$(SRCDIR)main/framebuffer.c \
 	$(SRCDIR)main/get.c \
+	$(SRCDIR)main/genmipmap.c \
 	$(SRCDIR)main/getstring.c \
 	$(SRCDIR)main/glformats.c \
 	$(SRCDIR)main/hash.c \
@@ -81,6 +83,7 @@ MAIN_FILES = \
 	$(SRCDIR)main/scissor.c \
 	$(SRCDIR)main/set.c \
 	$(SRCDIR)main/shaderapi.c \
+	$(SRCDIR)main/shaderimage.c \
 	$(SRCDIR)main/shaderobj.c \
 	$(SRCDIR)main/shader_query.cpp \
 	$(SRCDIR)main/shared.c \
@@ -103,6 +106,7 @@ MAIN_FILES = \
 	$(SRCDIR)main/texstate.c \
 	$(SRCDIR)main/texstorage.c \
 	$(SRCDIR)main/texstore.c \
+        $(SRCDIR)main/textureview.c \
 	$(SRCDIR)main/texturebarrier.c \
 	$(SRCDIR)main/transformfeedback.c \
 	$(SRCDIR)main/uniforms.c \

@@ -418,7 +418,7 @@ CallCreateNewScreen(Display *dpy, int scrn, struct dri_screen *psc,
                              &framebuffer.size, &framebuffer.stride,
                              &framebuffer.dev_priv_size,
                              &framebuffer.dev_priv)) {
-      ErrorMessageF("XF86DRIGetDeviceInfo failed");
+      ErrorMessageF("XF86DRIGetDeviceInfo failed\n");
       goto handle_error;
    }
 
@@ -429,7 +429,7 @@ CallCreateNewScreen(Display *dpy, int scrn, struct dri_screen *psc,
    status = drmMap(fd, hFB, framebuffer.size,
                    (drmAddressPtr) & framebuffer.base);
    if (status != 0) {
-      ErrorMessageF("drmMap of framebuffer failed (%s)", strerror(-status));
+      ErrorMessageF("drmMap of framebuffer failed (%s)\n", strerror(-status));
       goto handle_error;
    }
 
@@ -438,7 +438,7 @@ CallCreateNewScreen(Display *dpy, int scrn, struct dri_screen *psc,
     */
    status = drmMap(fd, hSAREA, SAREA_MAX, &pSAREA);
    if (status != 0) {
-      ErrorMessageF("drmMap of SAREA failed (%s)", strerror(-status));
+      ErrorMessageF("drmMap of SAREA failed (%s)\n", strerror(-status));
       goto handle_error;
    }
 
@@ -453,7 +453,7 @@ CallCreateNewScreen(Display *dpy, int scrn, struct dri_screen *psc,
                                           &driver_configs, psc);
 
    if (psp == NULL) {
-      ErrorMessageF("Calling driver entry point failed");
+      ErrorMessageF("Calling driver entry point failed\n");
       goto handle_error;
    }
 
@@ -747,13 +747,15 @@ static int
 driSetSwapInterval(__GLXDRIdrawable *pdraw, int interval)
 {
    struct dri_drawable *pdp = (struct dri_drawable *) pdraw;
-   struct dri_screen *psc = (struct dri_screen *) pdraw->psc;
 
-   if (psc->swapControl != NULL && pdraw != NULL) {
-      psc->swapControl->setSwapInterval(pdp->driDrawable, interval);
-      return 0;
+   if (pdraw != NULL) {
+      struct dri_screen *psc = (struct dri_screen *) pdraw->psc;
+
+      if (psc->swapControl != NULL) {
+         psc->swapControl->setSwapInterval(pdp->driDrawable, interval);
+         return 0;
+      }
    }
-
    return GLX_BAD_CONTEXT;
 }
 
@@ -761,11 +763,13 @@ static int
 driGetSwapInterval(__GLXDRIdrawable *pdraw)
 {
    struct dri_drawable *pdp = (struct dri_drawable *) pdraw;
-   struct dri_screen *psc = (struct dri_screen *) pdraw->psc;
 
-   if (psc->swapControl != NULL && pdraw != NULL)
-      return psc->swapControl->getSwapInterval(pdp->driDrawable);
+   if (pdraw != NULL) {
+      struct dri_screen *psc = (struct dri_screen *) pdraw->psc;
 
+      if (psc->swapControl != NULL)
+         return psc->swapControl->getSwapInterval(pdp->driDrawable);
+   }
    return 0;
 }
 

@@ -28,6 +28,7 @@
 #include "pipe/p_compiler.h"
 
 #include "postprocess/filters.h"
+#include "postprocess/pp_private.h"
 
 #include "pipe/p_screen.h"
 #include "util/u_inlines.h"
@@ -169,11 +170,12 @@ pp_free(struct pp_queue_t *ppq)
 {
    unsigned int i, j;
 
-   if (ppq) {
-      pp_free_fbos(ppq);
-   }
+   if (!ppq)
+      return;
 
-   if (ppq && ppq->p) {
+   pp_free_fbos(ppq);
+
+   if (ppq->p) {
       if (ppq->p->pipe && ppq->filters && ppq->shaders) {
          for (i = 0; i < ppq->n_filters; i++) {
             unsigned int filter = ppq->filters[i];
@@ -221,17 +223,15 @@ pp_free(struct pp_queue_t *ppq)
       FREE(ppq->p);
    }
 
-   if (ppq) {
-      /*
-       * Handle partial initialization for common resource destruction
-       * in the create path.
-       */
-      FREE(ppq->filters);
-      FREE(ppq->shaders);
-      FREE(ppq->pp_queue);
+   /*
+    * Handle partial initialization for common resource destruction
+    * in the create path.
+    */
+   FREE(ppq->filters);
+   FREE(ppq->shaders);
+   FREE(ppq->pp_queue);
   
-      FREE(ppq);
-   }
+   FREE(ppq);
 
    pp_debug("Queue taken down.\n");
 }
@@ -256,7 +256,7 @@ pp_init_fbos(struct pp_queue_t *ppq, unsigned int w,
              unsigned int h)
 {
 
-   struct program *p = ppq->p;  /* The lazy will inherit the earth */
+   struct pp_program *p = ppq->p;  /* The lazy will inherit the earth */
 
    unsigned int i;
    struct pipe_resource tmp_res;

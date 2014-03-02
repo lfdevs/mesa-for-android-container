@@ -213,7 +213,7 @@ radeon_unmap_texture_image(struct gl_context *ctx,
 }
 
 /* try to find a format which will only need a memcopy */
-static gl_format radeonChoose8888TexFormat(radeonContextPtr rmesa,
+static mesa_format radeonChoose8888TexFormat(radeonContextPtr rmesa,
 					   GLenum srcFormat,
 					   GLenum srcType, GLboolean fbo)
 {
@@ -231,18 +231,18 @@ static gl_format radeonChoose8888TexFormat(radeonContextPtr rmesa,
 	    (srcFormat == GL_RGBA && srcType == GL_UNSIGNED_BYTE && !littleEndian) ||
 	    (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_INT_8_8_8_8_REV) ||
 	    (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_BYTE && littleEndian)) {
-		return MESA_FORMAT_RGBA8888;
+		return MESA_FORMAT_A8B8G8R8_UNORM;
 	} else if ((srcFormat == GL_RGBA && srcType == GL_UNSIGNED_INT_8_8_8_8_REV) ||
 		   (srcFormat == GL_RGBA && srcType == GL_UNSIGNED_BYTE && littleEndian) ||
 		   (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_INT_8_8_8_8) ||
 		   (srcFormat == GL_ABGR_EXT && srcType == GL_UNSIGNED_BYTE && !littleEndian)) {
-		return MESA_FORMAT_RGBA8888_REV;
+		return MESA_FORMAT_R8G8B8A8_UNORM;
 	} else
 		return _radeon_texformat_argb8888;
 #endif
 }
 
-gl_format radeonChooseTextureFormat_mesa(struct gl_context * ctx,
+mesa_format radeonChooseTextureFormat_mesa(struct gl_context * ctx,
 					 GLenum target,
 					 GLint internalFormat,
 					 GLenum format,
@@ -252,7 +252,7 @@ gl_format radeonChooseTextureFormat_mesa(struct gl_context * ctx,
 					 type, 0);
 }
 
-gl_format radeonChooseTextureFormat(struct gl_context * ctx,
+mesa_format radeonChooseTextureFormat(struct gl_context * ctx,
 				    GLint internalFormat,
 				    GLenum format,
 				    GLenum type, GLboolean fbo)
@@ -349,7 +349,7 @@ gl_format radeonChooseTextureFormat(struct gl_context * ctx,
 		   in wrong rgb values (same as alpha value instead of 0). */
 		return _radeon_texformat_al88;
 #else
-		return MESA_FORMAT_A8;
+		return MESA_FORMAT_A_UNORM8;
 #endif
 	case 1:
 	case GL_LUMINANCE:
@@ -358,7 +358,7 @@ gl_format radeonChooseTextureFormat(struct gl_context * ctx,
 	case GL_LUMINANCE12:
 	case GL_LUMINANCE16:
 	case GL_COMPRESSED_LUMINANCE:
-		return MESA_FORMAT_L8;
+		return MESA_FORMAT_L_UNORM8;
 
 	case 2:
 	case GL_LUMINANCE_ALPHA:
@@ -377,7 +377,7 @@ gl_format radeonChooseTextureFormat(struct gl_context * ctx,
 	case GL_INTENSITY12:
 	case GL_INTENSITY16:
 	case GL_COMPRESSED_INTENSITY:
-		return MESA_FORMAT_I8;
+		return MESA_FORMAT_I_UNORM8;
 
 	case GL_YCBCR_MESA:
 		if (type == GL_UNSIGNED_SHORT_8_8_APPLE ||
@@ -403,21 +403,21 @@ gl_format radeonChooseTextureFormat(struct gl_context * ctx,
 		return MESA_FORMAT_RGBA_DXT5;
 
 	case GL_ALPHA16F_ARB:
-		return MESA_FORMAT_ALPHA_FLOAT16;
+		return MESA_FORMAT_A_FLOAT16;
 	case GL_ALPHA32F_ARB:
-		return MESA_FORMAT_ALPHA_FLOAT32;
+		return MESA_FORMAT_A_FLOAT32;
 	case GL_LUMINANCE16F_ARB:
-		return MESA_FORMAT_LUMINANCE_FLOAT16;
+		return MESA_FORMAT_L_FLOAT16;
 	case GL_LUMINANCE32F_ARB:
-		return MESA_FORMAT_LUMINANCE_FLOAT32;
+		return MESA_FORMAT_L_FLOAT32;
 	case GL_LUMINANCE_ALPHA16F_ARB:
-		return MESA_FORMAT_LUMINANCE_ALPHA_FLOAT16;
+		return MESA_FORMAT_LA_FLOAT16;
 	case GL_LUMINANCE_ALPHA32F_ARB:
-		return MESA_FORMAT_LUMINANCE_ALPHA_FLOAT32;
+		return MESA_FORMAT_LA_FLOAT32;
 	case GL_INTENSITY16F_ARB:
-		return MESA_FORMAT_INTENSITY_FLOAT16;
+		return MESA_FORMAT_I_FLOAT16;
 	case GL_INTENSITY32F_ARB:
-		return MESA_FORMAT_INTENSITY_FLOAT32;
+		return MESA_FORMAT_I_FLOAT32;
 	case GL_RGB16F_ARB:
 		return MESA_FORMAT_RGBA_FLOAT16;
 	case GL_RGB32F_ARB:
@@ -433,7 +433,7 @@ gl_format radeonChooseTextureFormat(struct gl_context * ctx,
 	case GL_DEPTH_COMPONENT32:
 	case GL_DEPTH_STENCIL_EXT:
 	case GL_DEPTH24_STENCIL8_EXT:
-		return MESA_FORMAT_S8_Z24;
+		return MESA_FORMAT_Z24_UNORM_S8_UINT;
 
 	/* EXT_texture_sRGB */
 	case GL_SRGB:
@@ -442,17 +442,17 @@ gl_format radeonChooseTextureFormat(struct gl_context * ctx,
 	case GL_SRGB8_ALPHA8:
 	case GL_COMPRESSED_SRGB:
 	case GL_COMPRESSED_SRGB_ALPHA:
-		return MESA_FORMAT_SARGB8;
+		return MESA_FORMAT_B8G8R8A8_SRGB;
 
 	case GL_SLUMINANCE:
 	case GL_SLUMINANCE8:
 	case GL_COMPRESSED_SLUMINANCE:
-		return MESA_FORMAT_SL8;
+		return MESA_FORMAT_L_SRGB8;
 
 	case GL_SLUMINANCE_ALPHA:
 	case GL_SLUMINANCE8_ALPHA8:
 	case GL_COMPRESSED_SLUMINANCE_ALPHA:
-		return MESA_FORMAT_SLA8;
+      return MESA_FORMAT_L8A8_SRGB;
 
 	case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
 		return MESA_FORMAT_SRGB_DXT1;
@@ -504,7 +504,7 @@ static void teximage_assign_miptree(radeonContextPtr rmesa,
 				"%s Failed to allocate miptree.\n", __func__);
 }
 
-unsigned radeonIsFormatRenderable(gl_format mesa_format)
+unsigned radeonIsFormatRenderable(mesa_format mesa_format)
 {
 	if (mesa_format == _radeon_texformat_argb8888 || mesa_format == _radeon_texformat_rgb565 ||
 		mesa_format == _radeon_texformat_argb1555 || mesa_format == _radeon_texformat_argb4444)
@@ -512,8 +512,8 @@ unsigned radeonIsFormatRenderable(gl_format mesa_format)
 
 	switch (mesa_format)
 	{
-		case MESA_FORMAT_Z16:
-		case MESA_FORMAT_S8_Z24:
+		case MESA_FORMAT_Z_UNORM16:
+		case MESA_FORMAT_Z24_UNORM_S8_UINT:
 			return 1;
 		default:
 			return 0;
@@ -579,12 +579,12 @@ void radeon_image_target_texture_2d(struct gl_context *ctx, GLenum target,
 		fprintf(stderr, "miptree doesn't match image\n");
 }
 
-gl_format _radeon_texformat_rgba8888 = MESA_FORMAT_NONE;
-gl_format _radeon_texformat_argb8888 = MESA_FORMAT_NONE;
-gl_format _radeon_texformat_rgb565 = MESA_FORMAT_NONE;
-gl_format _radeon_texformat_argb4444 = MESA_FORMAT_NONE;
-gl_format _radeon_texformat_argb1555 = MESA_FORMAT_NONE;
-gl_format _radeon_texformat_al88 = MESA_FORMAT_NONE;
+mesa_format _radeon_texformat_rgba8888 = MESA_FORMAT_NONE;
+mesa_format _radeon_texformat_argb8888 = MESA_FORMAT_NONE;
+mesa_format _radeon_texformat_rgb565 = MESA_FORMAT_NONE;
+mesa_format _radeon_texformat_argb4444 = MESA_FORMAT_NONE;
+mesa_format _radeon_texformat_argb1555 = MESA_FORMAT_NONE;
+mesa_format _radeon_texformat_al88 = MESA_FORMAT_NONE;
 /*@}*/
 
 
@@ -592,20 +592,20 @@ static void
 radeonInitTextureFormats(void)
 {
    if (_mesa_little_endian()) {
-      _radeon_texformat_rgba8888	= MESA_FORMAT_RGBA8888;
-      _radeon_texformat_argb8888	= MESA_FORMAT_ARGB8888;
-      _radeon_texformat_rgb565		= MESA_FORMAT_RGB565;
-      _radeon_texformat_argb4444	= MESA_FORMAT_ARGB4444;
-      _radeon_texformat_argb1555	= MESA_FORMAT_ARGB1555;
-      _radeon_texformat_al88		= MESA_FORMAT_AL88;
+      _radeon_texformat_rgba8888	= MESA_FORMAT_A8B8G8R8_UNORM;
+      _radeon_texformat_argb8888	= MESA_FORMAT_B8G8R8A8_UNORM;
+      _radeon_texformat_rgb565		= MESA_FORMAT_B5G6R5_UNORM;
+      _radeon_texformat_argb4444	= MESA_FORMAT_B4G4R4A4_UNORM;
+      _radeon_texformat_argb1555	= MESA_FORMAT_B5G5R5A1_UNORM;
+      _radeon_texformat_al88		= MESA_FORMAT_L8A8_UNORM;
    }
    else {
-      _radeon_texformat_rgba8888	= MESA_FORMAT_RGBA8888_REV;
-      _radeon_texformat_argb8888	= MESA_FORMAT_ARGB8888_REV;
-      _radeon_texformat_rgb565		= MESA_FORMAT_RGB565_REV;
-      _radeon_texformat_argb4444	= MESA_FORMAT_ARGB4444_REV;
-      _radeon_texformat_argb1555	= MESA_FORMAT_ARGB1555_REV;
-      _radeon_texformat_al88		= MESA_FORMAT_AL88_REV;
+      _radeon_texformat_rgba8888	= MESA_FORMAT_R8G8B8A8_UNORM;
+      _radeon_texformat_argb8888	= MESA_FORMAT_A8R8G8B8_UNORM;
+      _radeon_texformat_rgb565		= MESA_FORMAT_R5G6B5_UNORM;
+      _radeon_texformat_argb4444	= MESA_FORMAT_A4R4G4B4_UNORM;
+      _radeon_texformat_argb1555	= MESA_FORMAT_A1R5G5B5_UNORM;
+      _radeon_texformat_al88		= MESA_FORMAT_A8L8_UNORM;
    }
 }
 

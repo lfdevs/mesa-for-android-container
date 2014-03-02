@@ -46,8 +46,6 @@ fs_generator::fs_generator(struct brw_context *brw,
 {
    ctx = &brw->ctx;
 
-   shader = prog ? prog->_LinkedShaders[MESA_SHADER_FRAGMENT] : NULL;
-
    mem_ctx = c;
 
    p = rzalloc(mem_ctx, struct brw_compile);
@@ -116,7 +114,7 @@ fs_generator::generate_fb_write(fs_inst *inst)
    brw_set_mask_control(p, BRW_MASK_DISABLE);
    brw_set_compression_control(p, BRW_COMPRESSION_NONE);
 
-   if (fp->UsesKill || c->key.alpha_test_func) {
+   if ((fp && fp->UsesKill) || c->key.alpha_test_func) {
       struct brw_reg pixel_mask;
 
       if (brw->gen >= 6)
@@ -190,6 +188,21 @@ fs_generator::generate_fb_write(fs_inst *inst)
    mark_surface_used(surf_index);
 }
 
+void
+fs_generator::generate_blorp_fb_write(fs_inst *inst)
+{
+   brw_fb_WRITE(p,
+                16 /* dispatch_width */,
+                inst->base_mrf,
+                brw_reg_from_fs_reg(&inst->src[0]),
+                BRW_DATAPORT_RENDER_TARGET_WRITE_SIMD16_SINGLE_SOURCE,
+                inst->target,
+                inst->mlen,
+                0,
+                true,
+                inst->header_present);
+}
+
 /* Computes the integer pixel x,y values from the origin.
  *
  * This is the basis of gl_FragCoord computation, but is also used
@@ -215,8 +228,8 @@ fs_generator::generate_pixel_xy(struct brw_reg dst, bool is_x)
       dst = vec16(dst);
    }
 
-   /* We do this 8 or 16-wide, but since the destination is UW we
-    * don't do compression in the 16-wide case.
+   /* We do this SIMD8 or SIMD16, but since the destination is UW we
+    * don't do compression in the SIMD16 case.
     */
    brw_push_insn_state(p);
    brw_set_compression_control(p, BRW_COMPRESSION_NONE);
@@ -425,11 +438,19 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
       case SHADER_OPCODE_TXF:
 	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
 	 break;
-      case SHADER_OPCODE_TXF_MS:
+      case SHADER_OPCODE_TXF_CMS:
          if (brw->gen >= 7)
             msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS;
          else
             msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
+         break;
+      case SHADER_OPCODE_TXF_UMS:
+         assert(brw->gen >= 7);
+         msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DSS;
+         break;
+      case SHADER_OPCODE_TXF_MCS:
+         assert(brw->gen >= 7);
+         msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD_MCS;
          break;
       case SHADER_OPCODE_LOD:
          msg_type = GEN5_SAMPLER_MESSAGE_LOD;
@@ -517,7 +538,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
    }
 
    if (brw->gen >= 7 && inst->header_present && dispatch_width == 16) {
-      /* The send-from-GRF for 16-wide texturing with a header has an extra
+      /* The send-from-GRF for SIMD16 texturing with a header has an extra
        * hardware register allocated to it, which we need to skip over (since
        * our coordinates in the payload are in the even-numbered registers,
        * and the header comes right before the first one).
@@ -530,37 +551,49 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
     * we need to set it up explicitly and load the offset bitfield.
     * Otherwise, we can use an implied move from g0 to the first message reg.
     */
-   if (inst->texture_offset) {
-      struct brw_reg header_reg;
-
-      if (brw->gen >= 7) {
-         header_reg = src;
+   if (inst->header_present) {
+      if (brw->gen < 6 && !inst->texture_offset) {
+         /* Set up an implied move from g0 to the MRF. */
+         src = retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UW);
       } else {
-         assert(inst->base_mrf != -1);
-         header_reg = brw_message_reg(inst->base_mrf);
-      }
-      brw_push_insn_state(p);
-      brw_set_mask_control(p, BRW_MASK_DISABLE);
-      brw_set_compression_control(p, BRW_COMPRESSION_NONE);
-      /* Explicitly set up the message header by copying g0 to the MRF. */
-      brw_MOV(p, header_reg, brw_vec8_grf(0, 0));
+         struct brw_reg header_reg;
 
-      /* Then set the offset bits in DWord 2. */
-      brw_MOV(p, retype(brw_vec1_reg(header_reg.file,
-                                     header_reg.nr, 2), BRW_REGISTER_TYPE_UD),
-                 brw_imm_ud(inst->texture_offset));
-      brw_pop_insn_state(p);
-   } else if (inst->header_present) {
-      if (brw->gen >= 7) {
-         /* Explicitly set up the message header by copying g0 to the MRF. */
+         if (brw->gen >= 7) {
+            header_reg = src;
+         } else {
+            assert(inst->base_mrf != -1);
+            header_reg = brw_message_reg(inst->base_mrf);
+         }
+
          brw_push_insn_state(p);
          brw_set_mask_control(p, BRW_MASK_DISABLE);
          brw_set_compression_control(p, BRW_COMPRESSION_NONE);
-         brw_MOV(p, src, brw_vec8_grf(0, 0));
+         /* Explicitly set up the message header by copying g0 to the MRF. */
+         brw_MOV(p, header_reg, brw_vec8_grf(0, 0));
+
+         if (inst->texture_offset) {
+            /* Set the offset bits in DWord 2. */
+            brw_MOV(p, get_element_ud(header_reg, 2),
+                       brw_imm_ud(inst->texture_offset));
+         }
+
+         if (inst->sampler >= 16) {
+            /* The "Sampler Index" field can only store values between 0 and 15.
+             * However, we can add an offset to the "Sampler State Pointer"
+             * field, effectively selecting a different set of 16 samplers.
+             *
+             * The "Sampler State Pointer" needs to be aligned to a 32-byte
+             * offset, and each sampler state is only 16-bytes, so we can't
+             * exclusively use the offset - we have to use both.
+             */
+            assert(brw->is_haswell); /* field only exists on Haswell */
+            brw_ADD(p,
+                    get_element_ud(header_reg, 3),
+                    get_element_ud(brw_vec8_grf(0, 0), 3),
+                    brw_imm_ud(16 * (inst->sampler / 16) *
+                               sizeof(gen7_sampler_state)));
+         }
          brw_pop_insn_state(p);
-      } else {
-         /* Set up an implied move from g0 to the MRF. */
-         src = retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UW);
       }
    }
 
@@ -574,7 +607,7 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
 	      inst->base_mrf,
 	      src,
               surface_index,
-	      inst->sampler,
+	      inst->sampler % 16,
 	      msg_type,
 	      rlen,
 	      inst->mlen,
@@ -1290,25 +1323,28 @@ fs_generator::generate_untyped_surface_read(fs_inst *inst, struct brw_reg dst,
 }
 
 void
-fs_generator::generate_code(exec_list *instructions)
+fs_generator::generate_code(exec_list *instructions, FILE *dump_file)
 {
    int last_native_insn_offset = p->next_insn_offset;
    const char *last_annotation_string = NULL;
    const void *last_annotation_ir = NULL;
 
    if (unlikely(INTEL_DEBUG & DEBUG_WM)) {
-      if (shader) {
-         printf("Native code for fragment shader %d (%d-wide dispatch):\n",
+      if (prog) {
+         printf("Native code for fragment shader %d (SIMD%d dispatch):\n",
                 prog->Name, dispatch_width);
-      } else {
-         printf("Native code for fragment program %d (%d-wide dispatch):\n",
+      } else if (fp) {
+         printf("Native code for fragment program %d (SIMD%d dispatch):\n",
                 fp->Base.Id, dispatch_width);
+      } else {
+         printf("Native code for blorp program (SIMD%d dispatch):\n",
+                dispatch_width);
       }
    }
 
    cfg_t *cfg = NULL;
    if (unlikely(INTEL_DEBUG & DEBUG_WM))
-      cfg = new(mem_ctx) cfg_t(mem_ctx, instructions);
+      cfg = new(mem_ctx) cfg_t(instructions);
 
    foreach_list(node, instructions) {
       fs_inst *inst = (fs_inst *)node;
@@ -1335,12 +1371,12 @@ fs_generator::generate_code(exec_list *instructions)
 	    last_annotation_ir = inst->ir;
 	    if (last_annotation_ir) {
 	       printf("   ");
-               if (shader)
+               if (prog)
                   ((ir_instruction *)inst->ir)->print();
                else {
                   const prog_instruction *fpi;
                   fpi = (const prog_instruction *)inst->ir;
-                  printf("%d: ", (int)(fpi - fp->Base.Instructions));
+                  printf("%d: ", (int)(fpi - (fp ? fp->Base.Instructions : 0)));
                   _mesa_fprint_instruction_opt(stdout,
                                                fpi,
                                                0, PROG_PRINT_DEBUG, NULL);
@@ -1395,6 +1431,9 @@ fs_generator::generate_code(exec_list *instructions)
       case BRW_OPCODE_MUL:
 	 brw_MUL(p, dst, src[0], src[1]);
 	 break;
+      case BRW_OPCODE_AVG:
+	 brw_AVG(p, dst, src[0], src[1]);
+	 break;
       case BRW_OPCODE_MACH:
 	 brw_set_acc_write_control(p, 1);
 	 brw_MACH(p, dst, src[0], src[1]);
@@ -1404,7 +1443,7 @@ fs_generator::generate_code(exec_list *instructions)
       case BRW_OPCODE_MAD:
          assert(brw->gen >= 6);
 	 brw_set_access_mode(p, BRW_ALIGN_16);
-	 if (dispatch_width == 16) {
+         if (dispatch_width == 16 && !brw->is_haswell) {
 	    brw_set_compression_control(p, BRW_COMPRESSION_NONE);
 	    brw_MAD(p, dst, src[0], src[1], src[2]);
 	    brw_set_compression_control(p, BRW_COMPRESSION_2NDHALF);
@@ -1419,7 +1458,7 @@ fs_generator::generate_code(exec_list *instructions)
       case BRW_OPCODE_LRP:
          assert(brw->gen >= 6);
 	 brw_set_access_mode(p, BRW_ALIGN_16);
-	 if (dispatch_width == 16) {
+         if (dispatch_width == 16 && !brw->is_haswell) {
 	    brw_set_compression_control(p, BRW_COMPRESSION_NONE);
 	    brw_LRP(p, dst, src[0], src[1], src[2]);
 	    brw_set_compression_control(p, BRW_COMPRESSION_2NDHALF);
@@ -1516,7 +1555,7 @@ fs_generator::generate_code(exec_list *instructions)
       case BRW_OPCODE_BFE:
          assert(brw->gen >= 7);
          brw_set_access_mode(p, BRW_ALIGN_16);
-         if (dispatch_width == 16) {
+         if (dispatch_width == 16 && !brw->is_haswell) {
             brw_set_compression_control(p, BRW_COMPRESSION_NONE);
             brw_BFE(p, dst, src[0], src[1], src[2]);
             brw_set_compression_control(p, BRW_COMPRESSION_2NDHALF);
@@ -1530,11 +1569,32 @@ fs_generator::generate_code(exec_list *instructions)
 
       case BRW_OPCODE_BFI1:
          assert(brw->gen >= 7);
-         brw_BFI1(p, dst, src[0], src[1]);
+         /* The Haswell WaForceSIMD8ForBFIInstruction workaround says that we
+          * should
+          *
+          *    "Force BFI instructions to be executed always in SIMD8."
+          */
+         if (dispatch_width == 16 && brw->is_haswell) {
+            brw_set_compression_control(p, BRW_COMPRESSION_NONE);
+            brw_BFI1(p, dst, src[0], src[1]);
+            brw_set_compression_control(p, BRW_COMPRESSION_2NDHALF);
+            brw_BFI1(p, sechalf(dst), sechalf(src[0]), sechalf(src[1]));
+            brw_set_compression_control(p, BRW_COMPRESSION_COMPRESSED);
+         } else {
+            brw_BFI1(p, dst, src[0], src[1]);
+         }
          break;
       case BRW_OPCODE_BFI2:
          assert(brw->gen >= 7);
          brw_set_access_mode(p, BRW_ALIGN_16);
+         /* The Haswell WaForceSIMD8ForBFIInstruction workaround says that we
+          * should
+          *
+          *    "Force BFI instructions to be executed always in SIMD8."
+          *
+          * Otherwise we would be able to emit compressed instructions like we
+          * do for the other three-source instructions.
+          */
          if (dispatch_width == 16) {
             brw_set_compression_control(p, BRW_COMPRESSION_NONE);
             brw_BFI2(p, dst, src[0], src[1], src[2]);
@@ -1629,7 +1689,9 @@ fs_generator::generate_code(exec_list *instructions)
       case FS_OPCODE_TXB:
       case SHADER_OPCODE_TXD:
       case SHADER_OPCODE_TXF:
-      case SHADER_OPCODE_TXF_MS:
+      case SHADER_OPCODE_TXF_CMS:
+      case SHADER_OPCODE_TXF_UMS:
+      case SHADER_OPCODE_TXF_MCS:
       case SHADER_OPCODE_TXL:
       case SHADER_OPCODE_TXS:
       case SHADER_OPCODE_LOD:
@@ -1678,6 +1740,10 @@ fs_generator::generate_code(exec_list *instructions)
 
       case FS_OPCODE_FB_WRITE:
 	 generate_fb_write(inst);
+	 break;
+
+      case FS_OPCODE_BLORP_FB_WRITE:
+	 generate_blorp_fb_write(inst);
 	 break;
 
       case FS_OPCODE_MOV_DISPATCH_TO_FLAGS:
@@ -1773,18 +1839,23 @@ fs_generator::generate_code(exec_list *instructions)
     * which is often something we want to debug.  So this is here in
     * case you're doing that.
     */
-   if (0) {
-      brw_dump_compile(p, stdout, 0, p->next_insn_offset);
+   if (dump_file) {
+      brw_dump_compile(p, dump_file, 0, p->next_insn_offset);
    }
 }
 
 const unsigned *
 fs_generator::generate_assembly(exec_list *simd8_instructions,
                                 exec_list *simd16_instructions,
-                                unsigned *assembly_size)
+                                unsigned *assembly_size,
+                                FILE *dump_file)
 {
-   dispatch_width = 8;
-   generate_code(simd8_instructions);
+   assert(simd8_instructions || simd16_instructions);
+
+   if (simd8_instructions) {
+      dispatch_width = 8;
+      generate_code(simd8_instructions, dump_file);
+   }
 
    if (simd16_instructions) {
       /* We have to do a compaction pass now, or the one at the end of
@@ -1798,13 +1869,13 @@ fs_generator::generate_assembly(exec_list *simd8_instructions,
          brw_NOP(p);
       }
 
-      /* Save off the start of this 16-wide program */
+      /* Save off the start of this SIMD16 program */
       c->prog_data.prog_offset_16 = p->nr_insn * sizeof(struct brw_instruction);
 
       brw_set_compression_control(p, BRW_COMPRESSION_COMPRESSED);
 
       dispatch_width = 16;
-      generate_code(simd16_instructions);
+      generate_code(simd16_instructions, dump_file);
    }
 
    return brw_get_program(p, assembly_size);

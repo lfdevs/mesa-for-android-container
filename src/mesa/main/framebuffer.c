@@ -357,6 +357,56 @@ update_framebuffer_size(struct gl_context *ctx, struct gl_framebuffer *fb)
 
 
 /**
+ * Calculate the inclusive bounding box for the scissor of a specific viewport
+ *
+ * \param ctx     GL context.
+ * \param buffer  Framebuffer to be checked against
+ * \param idx     Index of the desired viewport
+ * \param bbox    Bounding box for the scissored viewport.  Stored as xmin,
+ *                xmax, ymin, ymax.
+ *
+ * \warning This function assumes that the framebuffer dimensions are up to
+ * date (e.g., update_framebuffer_size has been recently called on \c buffer).
+ *
+ * \sa _mesa_clip_to_region
+ */
+void
+_mesa_scissor_bounding_box(const struct gl_context *ctx,
+                           const struct gl_framebuffer *buffer,
+                           unsigned idx, int *bbox)
+{
+   bbox[0] = 0;
+   bbox[2] = 0;
+   bbox[1] = buffer->Width;
+   bbox[3] = buffer->Height;
+
+   if (ctx->Scissor.EnableFlags & (1u << idx)) {
+      if (ctx->Scissor.ScissorArray[idx].X > bbox[0]) {
+         bbox[0] = ctx->Scissor.ScissorArray[idx].X;
+      }
+      if (ctx->Scissor.ScissorArray[idx].Y > bbox[2]) {
+         bbox[2] = ctx->Scissor.ScissorArray[idx].Y;
+      }
+      if (ctx->Scissor.ScissorArray[idx].X + ctx->Scissor.ScissorArray[idx].Width < bbox[1]) {
+         bbox[1] = ctx->Scissor.ScissorArray[idx].X + ctx->Scissor.ScissorArray[idx].Width;
+      }
+      if (ctx->Scissor.ScissorArray[idx].Y + ctx->Scissor.ScissorArray[idx].Height < bbox[3]) {
+         bbox[3] = ctx->Scissor.ScissorArray[idx].Y + ctx->Scissor.ScissorArray[idx].Height;
+      }
+      /* finally, check for empty region */
+      if (bbox[0] > bbox[1]) {
+         bbox[0] = bbox[1];
+      }
+      if (bbox[2] > bbox[3]) {
+         bbox[2] = bbox[3];
+      }
+   }
+
+   ASSERT(bbox[0] <= bbox[1]);
+   ASSERT(bbox[2] <= bbox[3]);
+}
+
+/**
  * Update the context's current drawing buffer's Xmin, Xmax, Ymin, Ymax fields.
  * These values are computed from the buffer's width and height and
  * the scissor box, if it's enabled.
@@ -366,6 +416,7 @@ void
 _mesa_update_draw_buffer_bounds(struct gl_context *ctx)
 {
    struct gl_framebuffer *buffer = ctx->DrawBuffer;
+   int bbox[4];
 
    if (!buffer)
       return;
@@ -375,35 +426,12 @@ _mesa_update_draw_buffer_bounds(struct gl_context *ctx)
       update_framebuffer_size(ctx, buffer);
    }
 
-   buffer->_Xmin = 0;
-   buffer->_Ymin = 0;
-   buffer->_Xmax = buffer->Width;
-   buffer->_Ymax = buffer->Height;
-
-   if (ctx->Scissor.Enabled) {
-      if (ctx->Scissor.X > buffer->_Xmin) {
-	 buffer->_Xmin = ctx->Scissor.X;
-      }
-      if (ctx->Scissor.Y > buffer->_Ymin) {
-	 buffer->_Ymin = ctx->Scissor.Y;
-      }
-      if (ctx->Scissor.X + ctx->Scissor.Width < buffer->_Xmax) {
-	 buffer->_Xmax = ctx->Scissor.X + ctx->Scissor.Width;
-      }
-      if (ctx->Scissor.Y + ctx->Scissor.Height < buffer->_Ymax) {
-	 buffer->_Ymax = ctx->Scissor.Y + ctx->Scissor.Height;
-      }
-      /* finally, check for empty region */
-      if (buffer->_Xmin > buffer->_Xmax) {
-         buffer->_Xmin = buffer->_Xmax;
-      }
-      if (buffer->_Ymin > buffer->_Ymax) {
-         buffer->_Ymin = buffer->_Ymax;
-      }
-   }
-
-   ASSERT(buffer->_Xmin <= buffer->_Xmax);
-   ASSERT(buffer->_Ymin <= buffer->_Ymax);
+   /* Default to the first scissor as that's always valid */
+   _mesa_scissor_bounding_box(ctx, buffer, 0, bbox);
+   buffer->_Xmin = bbox[0];
+   buffer->_Ymin = bbox[2];
+   buffer->_Xmax = bbox[1];
+   buffer->_Ymax = bbox[3];
 }
 
 
@@ -441,7 +469,7 @@ _mesa_update_framebuffer_visual(struct gl_context *ctx,
       if (fb->Attachment[i].Renderbuffer) {
          const struct gl_renderbuffer *rb = fb->Attachment[i].Renderbuffer;
          const GLenum baseFormat = _mesa_get_format_base_format(rb->Format);
-         const gl_format fmt = rb->Format;
+         const mesa_format fmt = rb->Format;
 
          /* Grab samples and sampleBuffers from any attachment point (assuming
           * the framebuffer is complete, we'll get the same answer from all
@@ -468,7 +496,7 @@ _mesa_update_framebuffer_visual(struct gl_context *ctx,
    for (i = 0; i < BUFFER_COUNT; i++) {
       if (fb->Attachment[i].Renderbuffer) {
          const struct gl_renderbuffer *rb = fb->Attachment[i].Renderbuffer;
-         const gl_format fmt = rb->Format;
+         const mesa_format fmt = rb->Format;
 
          if (_mesa_get_format_datatype(fmt) == GL_FLOAT) {
             fb->Visual.floatMode = GL_TRUE;
@@ -480,7 +508,7 @@ _mesa_update_framebuffer_visual(struct gl_context *ctx,
    if (fb->Attachment[BUFFER_DEPTH].Renderbuffer) {
       const struct gl_renderbuffer *rb =
          fb->Attachment[BUFFER_DEPTH].Renderbuffer;
-      const gl_format fmt = rb->Format;
+      const mesa_format fmt = rb->Format;
       fb->Visual.haveDepthBuffer = GL_TRUE;
       fb->Visual.depthBits = _mesa_get_format_bits(fmt, GL_DEPTH_BITS);
    }
@@ -488,7 +516,7 @@ _mesa_update_framebuffer_visual(struct gl_context *ctx,
    if (fb->Attachment[BUFFER_STENCIL].Renderbuffer) {
       const struct gl_renderbuffer *rb =
          fb->Attachment[BUFFER_STENCIL].Renderbuffer;
-      const gl_format fmt = rb->Format;
+      const mesa_format fmt = rb->Format;
       fb->Visual.haveStencilBuffer = GL_TRUE;
       fb->Visual.stencilBits = _mesa_get_format_bits(fmt, GL_STENCIL_BITS);
    }
@@ -496,7 +524,7 @@ _mesa_update_framebuffer_visual(struct gl_context *ctx,
    if (fb->Attachment[BUFFER_ACCUM].Renderbuffer) {
       const struct gl_renderbuffer *rb =
          fb->Attachment[BUFFER_ACCUM].Renderbuffer;
-      const gl_format fmt = rb->Format;
+      const mesa_format fmt = rb->Format;
       fb->Visual.haveAccumBuffer = GL_TRUE;
       fb->Visual.accumRedBits = _mesa_get_format_bits(fmt, GL_RED_BITS);
       fb->Visual.accumGreenBits = _mesa_get_format_bits(fmt, GL_GREEN_BITS);
@@ -812,9 +840,9 @@ _mesa_get_color_read_format(struct gl_context *ctx)
       const GLenum format = ctx->ReadBuffer->_ColorReadBuffer->Format;
       const GLenum data_type = _mesa_get_format_datatype(format);
 
-      if (format == MESA_FORMAT_ARGB8888)
+      if (format == MESA_FORMAT_B8G8R8A8_UNORM)
          return GL_BGRA;
-      else if (format == MESA_FORMAT_RGB565)
+      else if (format == MESA_FORMAT_B5G6R5_UNORM)
          return GL_BGR;
 
       switch (data_type) {
@@ -847,7 +875,7 @@ _mesa_get_color_read_type(struct gl_context *ctx)
       const GLenum format = ctx->ReadBuffer->_ColorReadBuffer->Format;
       const GLenum data_type = _mesa_get_format_datatype(format);
 
-      if (format == MESA_FORMAT_RGB565)
+      if (format == MESA_FORMAT_B5G6R5_UNORM)
          return GL_UNSIGNED_SHORT_5_6_5_REV;
 
       switch (data_type) {

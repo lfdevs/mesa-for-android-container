@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,13 +22,13 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
-           
+
 
 #include "main/compiler.h"
 #include "brw_context.h"
@@ -60,10 +60,10 @@ brw_compute_vue_map(struct brw_context *brw, struct brw_vue_map *vue_map,
    vue_map->slots_valid = slots_valid;
    int i;
 
-   /* gl_Layer doesn't get its own varying slot--it's stored in the virst VUE
-    * slot (VARYING_SLOT_PSIZ).
+   /* gl_Layer and gl_ViewportIndex don't get their own varying slots -- they
+    * are stored in the virst VUE slot (VARYING_SLOT_PSIZ).
     */
-   slots_valid &= ~VARYING_BIT_LAYER;
+   slots_valid &= ~(VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT);
 
    /* Make sure that the values we store in vue_map->varying_to_slot and
     * vue_map->slot_to_varying won't overflow the signed chars that are used
@@ -99,6 +99,7 @@ brw_compute_vue_map(struct brw_context *brw, struct brw_vue_map *vue_map,
       break;
    case 6:
    case 7:
+   case 8:
       /* There are 8 or 16 DWs (D0-D15) in VUE header on Sandybridge:
        * dword 0-3 of the header is indices, point width, clip flags.
        * dword 4-7 is the 4D space position
@@ -155,7 +156,7 @@ brw_compute_vue_map(struct brw_context *brw, struct brw_vue_map *vue_map,
  */
 gl_clip_plane *brw_select_clip_planes(struct gl_context *ctx)
 {
-   if (ctx->Shader.CurrentVertexProgram) {
+   if (ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX]) {
       /* There is currently a GLSL vertex shader, so clip according to GLSL
        * rules, which means compare gl_ClipVertex (or gl_Position, if
        * gl_ClipVertex wasn't assigned) against the eye-coordinate clip planes
@@ -406,7 +407,7 @@ static void brw_upload_vs_prog(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
    struct brw_vs_prog_key key;
    /* BRW_NEW_VERTEX_PROGRAM */
-   struct brw_vertex_program *vp = 
+   struct brw_vertex_program *vp =
       (struct brw_vertex_program *)brw->vertex_program;
    struct gl_program *prog = (struct gl_program *) brw->vertex_program;
    int i;
@@ -481,8 +482,9 @@ static void brw_upload_vs_prog(struct brw_context *brw)
    if (!brw_search_cache(&brw->cache, BRW_VS_PROG,
 			 &key, sizeof(key),
 			 &brw->vs.base.prog_offset, &brw->vs.prog_data)) {
-      bool success = do_vs_prog(brw, ctx->Shader.CurrentVertexProgram,
-				vp, &key);
+      bool success =
+         do_vs_prog(brw, ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX], vp,
+                    &key);
       (void) success;
       assert(success);
    }

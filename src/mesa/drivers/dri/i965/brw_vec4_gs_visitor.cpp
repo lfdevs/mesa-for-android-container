@@ -41,7 +41,8 @@ vec4_gs_visitor::vec4_gs_visitor(struct brw_context *brw,
                                  bool no_spills)
    : vec4_visitor(brw, &c->base, &c->gp->program.Base, &c->key.base,
                   &c->prog_data.base, prog, shader, mem_ctx,
-                  INTEL_DEBUG & DEBUG_GS, no_spills),
+                  INTEL_DEBUG & DEBUG_GS, no_spills,
+                  ST_GS, ST_GS_WRITTEN, ST_GS_RESET),
      c(c)
 {
 }
@@ -267,6 +268,13 @@ vec4_gs_visitor::emit_urb_write_opcode(bool complete)
 
    vec4_instruction *inst = emit(GS_OPCODE_URB_WRITE);
    inst->offset = c->prog_data.control_data_header_size_hwords;
+
+   /* We need to increment Global Offset by 1 to make room for Broadwell's
+    * extra "Vertex Count" payload at the beginning of the URB entry.
+    */
+   if (brw->gen >= 8)
+      inst->offset++;
+
    inst->urb_write_flags = BRW_URB_WRITE_PER_SLOT_OFFSET;
    return inst;
 }
@@ -283,7 +291,7 @@ vec4_gs_visitor::compute_array_stride(ir_dereference_array *ir)
     * setup_attributes() will remap our accesses to the actual input array.
     */
    ir_dereference_variable *deref_var = ir->array->as_dereference_variable();
-   if (deref_var && deref_var->var->mode == ir_var_shader_in)
+   if (deref_var && deref_var->var->data.mode == ir_var_shader_in)
       return BRW_VARYING_SLOT_COUNT;
    else
       return vec4_visitor::compute_array_stride(ir);
@@ -533,6 +541,25 @@ vec4_gs_visitor::visit(ir_end_primitive *)
    emit(OR(dst_reg(this->control_data_bits), this->control_data_bits, mask));
 }
 
+static const unsigned *
+generate_assembly(struct brw_context *brw,
+                  struct gl_shader_program *shader_prog,
+                  struct gl_program *prog,
+                  struct brw_vec4_prog_data *prog_data,
+                  void *mem_ctx,
+                  exec_list *instructions,
+                  unsigned *final_assembly_size)
+{
+   if (brw->gen >= 8) {
+      gen8_vec4_generator g(brw, shader_prog, prog, prog_data, mem_ctx,
+                            INTEL_DEBUG & DEBUG_GS);
+      return g.generate_assembly(instructions, final_assembly_size);
+   } else {
+      vec4_generator g(brw, shader_prog, prog, prog_data, mem_ctx,
+                       INTEL_DEBUG & DEBUG_GS);
+      return g.generate_assembly(instructions, final_assembly_size);
+   }
+}
 
 extern "C" const unsigned *
 brw_gs_emit(struct brw_context *brw,
@@ -546,7 +573,7 @@ brw_gs_emit(struct brw_context *brw,
 
    if (unlikely(INTEL_DEBUG & DEBUG_GS)) {
       printf("GLSL IR for native geometry shader %d:\n", prog->Name);
-      _mesa_print_ir(shader->ir, NULL);
+      _mesa_print_ir(shader->base.ir, NULL);
       printf("\n\n");
    }
 
@@ -558,12 +585,9 @@ brw_gs_emit(struct brw_context *brw,
 
       vec4_gs_visitor v(brw, c, prog, shader, mem_ctx, true /* no_spills */);
       if (v.run()) {
-         vec4_generator g(brw, prog, &c->gp->program.Base, &c->prog_data.base,
-                          mem_ctx, INTEL_DEBUG & DEBUG_GS);
-         const unsigned *generated =
-            g.generate_assembly(&v.instructions, final_assembly_size);
-
-         return generated;
+         return generate_assembly(brw, prog, &c->gp->program.Base,
+                                  &c->prog_data.base, mem_ctx, &v.instructions,
+                                  final_assembly_size);
       }
    }
 
@@ -586,12 +610,8 @@ brw_gs_emit(struct brw_context *brw,
       return NULL;
    }
 
-   vec4_generator g(brw, prog, &c->gp->program.Base, &c->prog_data.base,
-                    mem_ctx, INTEL_DEBUG & DEBUG_GS);
-   const unsigned *generated =
-      g.generate_assembly(&v.instructions, final_assembly_size);
-
-   return generated;
+   return generate_assembly(brw, prog, &c->gp->program.Base, &c->prog_data.base,
+                            mem_ctx, &v.instructions, final_assembly_size);
 }
 
 

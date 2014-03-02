@@ -1,6 +1,6 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
 
  Permission is hereby granted, free of charge, to any person obtaining
@@ -26,7 +26,7 @@
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
 
 #include "main/mtypes.h"
@@ -130,7 +130,8 @@ brw_upload_vs_ubo_surfaces(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    /* _NEW_PROGRAM */
-   struct gl_shader_program *prog = ctx->Shader.CurrentVertexProgram;
+   struct gl_shader_program *prog =
+      ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX];
 
    if (!prog)
       return;
@@ -154,7 +155,8 @@ brw_upload_vs_abo_surfaces(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
    /* _NEW_PROGRAM */
-   struct gl_shader_program *prog = ctx->Shader.CurrentVertexProgram;
+   struct gl_shader_program *prog =
+      ctx->Shader.CurrentProgram[MESA_SHADER_VERTEX];
 
    if (prog) {
       /* CACHE_NEW_VS_PROG */

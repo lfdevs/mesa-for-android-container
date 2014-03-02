@@ -50,6 +50,7 @@ static const struct debug_named_value ilo_debug_flags[] = {
    { "flush",     ILO_DEBUG_FLUSH,    "Show batch buffer flushes" },
    { "nohw",      ILO_DEBUG_NOHW,     "Do not send commands to HW" },
    { "nocache",   ILO_DEBUG_NOCACHE,  "Always invalidate HW caches" },
+   { "nohiz",     ILO_DEBUG_NOHIZ,    "Disable HiZ" },
    DEBUG_NAMED_VALUE_END
 };
 
@@ -141,6 +142,8 @@ ilo_get_shader_param(struct pipe_screen *screen, unsigned shader,
       return 1;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       return ILO_MAX_SAMPLERS;
+   case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
+      return ILO_MAX_SAMPLER_VIEWS;
    case PIPE_SHADER_CAP_PREFERRED_IR:
       return PIPE_SHADER_IR_TGSI;
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
@@ -359,7 +362,6 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return true;
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
-   case PIPE_CAP_SCALED_RESOLVE:
       return true;
    case PIPE_CAP_MIN_TEXEL_OFFSET:
       return -8;
@@ -372,6 +374,9 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return ILO_MAX_SO_BINDINGS / ILO_MAX_SO_BUFFERS;
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
       return ILO_MAX_SO_BINDINGS;
+   case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
+   case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+      return 0;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
       if (is->dev.gen >= ILO_GEN(7))
          return is->dev.has_gen7_sol_reset;
@@ -406,7 +411,7 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
       return false; /* TODO */
    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
-      return 0;
+      return 64;
    case PIPE_CAP_CUBE_MAP_ARRAY:
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return true;
@@ -429,6 +434,8 @@ ilo_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return PIPE_ENDIAN_LITTLE;
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
       return true;
+   case PIPE_CAP_TGSI_VS_LAYER:
+      return 0;
 
    default:
       return 0;

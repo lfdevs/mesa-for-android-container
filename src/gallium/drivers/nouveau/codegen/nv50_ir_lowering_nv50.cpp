@@ -278,9 +278,23 @@ NV50LegalizeSSA::propagateWriteToOutput(Instruction *st)
    // TODO: move exports (if beneficial) in common opt pass
    if (di->isPseudo() || isTextureOp(di->op) || di->defCount(0xff, true) > 1)
       return;
+
    for (int s = 0; di->srcExists(s); ++s)
       if (di->src(s).getFile() == FILE_IMMEDIATE)
          return;
+
+   if (prog->getType() == Program::TYPE_GEOMETRY) {
+      // Only propagate output writes in geometry shaders when we can be sure
+      // that we are propagating to the same output vertex.
+      if (di->bb != st->bb)
+         return;
+      Instruction *i;
+      for (i = di; i != st; i = i->next) {
+         if (i->op == OP_EMIT || i->op == OP_RESTART)
+            return;
+      }
+      assert(i); // st after di
+   }
 
    // We cannot set defs to non-lvalues before register allocation, so
    // save & remove (to save registers) the exports and replace later.
@@ -307,6 +321,9 @@ NV50LegalizeSSA::handleAddrDef(Instruction *i)
 
    i->getDef(0)->reg.size = 2; // $aX are only 16 bit
 
+   // PFETCH can always write to $a
+   if (i->op == OP_PFETCH)
+      return;
    // only ADDR <- SHL(GPR, IMM) and ADDR <- ADD(ADDR, IMM) are valid
    if (i->srcExists(1) && i->src(1).getFile() == FILE_IMMEDIATE) {
       if (i->op == OP_SHL && i->src(0).getFile() == FILE_GPR)
@@ -473,6 +490,9 @@ NV50LegalizeSSA::visit(BasicBlock *bb)
    for (insn = bb->getEntry(); insn; insn = next) {
       next = insn->next;
 
+      if (insn->defExists(0) && insn->getDef(0)->reg.file == FILE_ADDRESS)
+         handleAddrDef(insn);
+
       switch (insn->op) {
       case OP_EXPORT:
          if (outWrites)
@@ -491,9 +511,6 @@ NV50LegalizeSSA::visit(BasicBlock *bb)
       default:
          break;
       }
-
-      if (insn->defExists(0) && insn->getDef(0)->reg.file == FILE_ADDRESS)
-         handleAddrDef(insn);
    }
    return true;
 }
@@ -510,7 +527,9 @@ private:
    bool handleRDSV(Instruction *);
    bool handleWRSV(Instruction *);
 
+   bool handlePFETCH(Instruction *);
    bool handleEXPORT(Instruction *);
+   bool handleLOAD(Instruction *);
 
    bool handleDIV(Instruction *);
    bool handleSQRT(Instruction *);
@@ -530,6 +549,8 @@ private:
    bool handleCONT(Instruction *);
 
    void checkPredicate(Instruction *);
+   void loadTexMsInfo(uint32_t off, Value **ms, Value **ms_x, Value **ms_y);
+   void loadMsInfo(Value *ms, Value *s, Value **dx, Value **dy);
 
 private:
    const Target *const targ;
@@ -563,6 +584,41 @@ NV50LoweringPreSSA::visit(Function *f)
    return true;
 }
 
+void NV50LoweringPreSSA::loadTexMsInfo(uint32_t off, Value **ms,
+                                       Value **ms_x, Value **ms_y) {
+   // This loads the texture-indexed ms setting from the constant buffer
+   Value *tmp = new_LValue(func, FILE_GPR);
+   uint8_t b = prog->driver->io.resInfoCBSlot;
+   off += prog->driver->io.suInfoBase;
+   *ms_x = bld.mkLoadv(TYPE_U32, bld.mkSymbol(
+                             FILE_MEMORY_CONST, b, TYPE_U32, off + 0), NULL);
+   *ms_y = bld.mkLoadv(TYPE_U32, bld.mkSymbol(
+                             FILE_MEMORY_CONST, b, TYPE_U32, off + 4), NULL);
+   *ms = bld.mkOp2v(OP_ADD, TYPE_U32, tmp, *ms_x, *ms_y);
+}
+
+void NV50LoweringPreSSA::loadMsInfo(Value *ms, Value *s, Value **dx, Value **dy) {
+   // Given a MS level, and a sample id, compute the delta x/y
+   uint8_t b = prog->driver->io.msInfoCBSlot;
+   Value *off = new_LValue(func, FILE_ADDRESS), *t = new_LValue(func, FILE_GPR);
+
+   // The required information is at mslevel * 16 * 4 + sample * 8
+   // = (mslevel * 8 + sample) * 8
+   bld.mkOp2(OP_SHL,
+             TYPE_U32,
+             off,
+             bld.mkOp2v(OP_ADD, TYPE_U32, t,
+                        bld.mkOp2v(OP_SHL, TYPE_U32, t, ms, bld.mkImm(3)),
+                        s),
+             bld.mkImm(3));
+   *dx = bld.mkLoadv(TYPE_U32, bld.mkSymbol(
+                           FILE_MEMORY_CONST, b, TYPE_U32,
+                           prog->driver->io.msInfoBase), off);
+   *dy = bld.mkLoadv(TYPE_U32, bld.mkSymbol(
+                           FILE_MEMORY_CONST, b, TYPE_U32,
+                           prog->driver->io.msInfoBase + 4), off);
+}
+
 bool
 NV50LoweringPreSSA::handleTEX(TexInstruction *i)
 {
@@ -570,19 +626,44 @@ NV50LoweringPreSSA::handleTEX(TexInstruction *i)
    const int dref = arg;
    const int lod = i->tex.target.isShadow() ? (arg + 1) : arg;
 
+   // handle MS, which means looking up the MS params for this texture, and
+   // adjusting the input coordinates to point at the right sample.
+   if (i->tex.target.isMS()) {
+      Value *x = i->getSrc(0);
+      Value *y = i->getSrc(1);
+      Value *s = i->getSrc(arg - 1);
+      Value *tx = new_LValue(func, FILE_GPR), *ty = new_LValue(func, FILE_GPR),
+         *ms, *ms_x, *ms_y, *dx, *dy;
+
+      i->tex.target.clearMS();
+
+      loadTexMsInfo(i->tex.r * 4 * 2, &ms, &ms_x, &ms_y);
+      loadMsInfo(ms, s, &dx, &dy);
+
+      bld.mkOp2(OP_SHL, TYPE_U32, tx, x, ms_x);
+      bld.mkOp2(OP_SHL, TYPE_U32, ty, y, ms_y);
+      bld.mkOp2(OP_ADD, TYPE_U32, tx, tx, dx);
+      bld.mkOp2(OP_ADD, TYPE_U32, ty, ty, dy);
+      i->setSrc(0, tx);
+      i->setSrc(1, ty);
+      i->setSrc(arg - 1, bld.loadImm(NULL, 0));
+   }
+
    // dref comes before bias/lod
    if (i->tex.target.isShadow())
       if (i->op == OP_TXB || i->op == OP_TXL)
          i->swapSources(dref, lod);
 
-   // array index must be converted to u32
    if (i->tex.target.isArray()) {
-      Value *layer = i->getSrc(arg - 1);
-      LValue *src = new_LValue(func, FILE_GPR);
-      bld.mkCvt(OP_CVT, TYPE_U32, src, TYPE_F32, layer);
-      bld.mkOp2(OP_MIN, TYPE_U32, src, src, bld.loadImm(NULL, 511));
-      i->setSrc(arg - 1, src);
-
+      if (i->op != OP_TXF) {
+         // array index must be converted to u32, but it's already an integer
+         // for TXF
+         Value *layer = i->getSrc(arg - 1);
+         LValue *src = new_LValue(func, FILE_GPR);
+         bld.mkCvt(OP_CVT, TYPE_U32, src, TYPE_F32, layer);
+         bld.mkOp2(OP_MIN, TYPE_U32, src, src, bld.loadImm(NULL, 511));
+         i->setSrc(arg - 1, src);
+      }
       if (i->tex.target.isCube()) {
          std::vector<Value *> acube, a2d;
          int c;
@@ -1000,6 +1081,81 @@ NV50LoweringPreSSA::handleEXPORT(Instruction *i)
    return true;
 }
 
+// Handle indirect addressing in geometry shaders:
+//
+// ld $r0 a[$a1][$a2+k] ->
+// ld $r0 a[($a1 + $a2 * $vstride) + k], where k *= $vstride is implicit
+//
+bool
+NV50LoweringPreSSA::handleLOAD(Instruction *i)
+{
+   ValueRef src = i->src(0);
+
+   if (src.isIndirect(1)) {
+      assert(prog->getType() == Program::TYPE_GEOMETRY);
+      Value *addr = i->getIndirect(0, 1);
+
+      if (src.isIndirect(0)) {
+         // base address is in an address register, so move to a GPR
+         Value *base = bld.getScratch();
+         bld.mkMov(base, addr);
+
+         Symbol *sv = bld.mkSysVal(SV_VERTEX_STRIDE, 0);
+         Value *vstride = bld.mkOp1v(OP_RDSV, TYPE_U32, bld.getSSA(), sv);
+         Value *attrib = bld.mkOp2v(OP_SHL, TYPE_U32, bld.getSSA(),
+                                    i->getIndirect(0, 0), bld.mkImm(2));
+
+         // Calculate final address: addr = base + attr*vstride; use 16-bit
+         // multiplication since 32-bit would be lowered to multiple
+         // instructions, and we only need the low 16 bits of the result
+         Value *a[2], *b[2];
+         bld.mkSplit(a, 2, attrib);
+         bld.mkSplit(b, 2, vstride);
+         Value *sum = bld.mkOp3v(OP_MAD, TYPE_U16, bld.getSSA(), a[0], b[0],
+                                 base);
+
+         // move address from GPR into an address register
+         addr = bld.getSSA(2, FILE_ADDRESS);
+         bld.mkMov(addr, sum);
+      }
+
+      i->setIndirect(0, 1, NULL);
+      i->setIndirect(0, 0, addr);
+   }
+
+   return true;
+}
+
+bool
+NV50LoweringPreSSA::handlePFETCH(Instruction *i)
+{
+   assert(prog->getType() == Program::TYPE_GEOMETRY);
+
+   // NOTE: cannot use getImmediate here, not in SSA form yet, move to
+   // later phase if that assertion ever triggers:
+
+   ImmediateValue *imm = i->getSrc(0)->asImm();
+   assert(imm);
+
+   assert(imm->reg.data.u32 <= 127); // TODO: use address reg if that happens
+
+   if (i->srcExists(1)) {
+      // indirect addressing of vertex in primitive space
+
+      LValue *val = bld.getScratch();
+      Value *ptr = bld.getSSA(2, FILE_ADDRESS);
+      bld.mkOp2v(OP_SHL, TYPE_U32, ptr, i->getSrc(1), bld.mkImm(2));
+      bld.mkOp2v(OP_PFETCH, TYPE_U32, val, imm, ptr);
+
+      // NOTE: PFETCH directly to an $aX only works with direct addressing
+      i->op = OP_SHL;
+      i->setSrc(0, val);
+      i->setSrc(1, bld.mkImm(0));
+   }
+
+   return true;
+}
+
 // Set flags according to predicate and make the instruction read $cX.
 void
 NV50LoweringPreSSA::checkPredicate(Instruction *insn)
@@ -1058,6 +1214,8 @@ NV50LoweringPreSSA::visit(Instruction *i)
       return handleSQRT(i);
    case OP_EXPORT:
       return handleEXPORT(i);
+   case OP_LOAD:
+      return handleLOAD(i);
    case OP_RDSV:
       return handleRDSV(i);
    case OP_WRSV:
@@ -1068,6 +1226,8 @@ NV50LoweringPreSSA::visit(Instruction *i)
       return handlePRECONT(i);
    case OP_CONT:
       return handleCONT(i);
+   case OP_PFETCH:
+      return handlePFETCH(i);
    default:
       break;
    }

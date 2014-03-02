@@ -35,10 +35,12 @@ struct tex_layout {
    const struct ilo_dev_info *dev;
    const struct pipe_resource *templ;
 
+   bool has_depth, has_stencil;
+   bool hiz, separate_stencil;
+
    enum pipe_format format;
    unsigned block_width, block_height, block_size;
    bool compressed;
-   bool has_depth, has_stencil, separate_stencil;
 
    enum intel_tiling_mode tiling;
    bool can_be_linear;
@@ -227,17 +229,7 @@ tex_layout_init_alignments(struct tex_layout *layout)
             layout->align_j = 8;
             break;
          default:
-            /*
-             * From the Ivy Bridge PRM, volume 2 part 1, page 319:
-             *
-             *     "The 3 LSBs of both offsets (Depth Coordinate Offset Y and
-             *      Depth Coordinate Offset X) must be zero to ensure correct
-             *      alignment"
-             *
-             * We will make use of them and setting align_i to 8 help us meet
-             * the requirement.
-             */
-            layout->align_i = (templ->last_level > 0) ? 8 : 4;
+            layout->align_i = 4;
             layout->align_j = 4;
             break;
          }
@@ -570,33 +562,22 @@ tex_layout_init_format(struct tex_layout *layout)
 {
    const struct pipe_resource *templ = layout->templ;
    enum pipe_format format;
-   const struct util_format_description *desc;
-   bool separate_stencil;
-
-   /* GEN7+ requires separate stencil buffers */
-   separate_stencil = (layout->dev->gen >= ILO_GEN(7));
 
    switch (templ->format) {
    case PIPE_FORMAT_ETC1_RGB8:
       format = PIPE_FORMAT_R8G8B8X8_UNORM;
       break;
    case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-      if (separate_stencil) {
+      if (layout->separate_stencil)
          format = PIPE_FORMAT_Z24X8_UNORM;
-         layout->separate_stencil = true;
-      }
-      else {
+      else
          format = templ->format;
-      }
       break;
    case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
-      if (separate_stencil) {
+      if (layout->separate_stencil)
          format = PIPE_FORMAT_Z32_FLOAT;
-         layout->separate_stencil = true;
-      }
-      else {
+      else
          format = templ->format;
-      }
       break;
    default:
       format = templ->format;
@@ -609,10 +590,66 @@ tex_layout_init_format(struct tex_layout *layout)
    layout->block_height = util_format_get_blockheight(format);
    layout->block_size = util_format_get_blocksize(format);
    layout->compressed = util_format_is_compressed(format);
+}
 
-   desc = util_format_description(format);
+static void
+tex_layout_init_hiz(struct tex_layout *layout)
+{
+   const struct pipe_resource *templ = layout->templ;
+   const struct util_format_description *desc;
+
+   desc = util_format_description(templ->format);
    layout->has_depth = util_format_has_depth(desc);
    layout->has_stencil = util_format_has_stencil(desc);
+
+   if (!layout->has_depth)
+      return;
+
+   layout->hiz = true;
+
+   /* no point in having HiZ */
+   if (templ->usage & PIPE_USAGE_STAGING)
+      layout->hiz = false;
+
+   if (layout->dev->gen == ILO_GEN(6)) {
+      /*
+       * From the Sandy Bridge PRM, volume 2 part 1, page 312:
+       *
+       *     "The hierarchical depth buffer does not support the LOD field, it
+       *      is assumed by hardware to be zero. A separate hierarachical
+       *      depth buffer is required for each LOD used, and the
+       *      corresponding buffer's state delivered to hardware each time a
+       *      new depth buffer state with modified LOD is delivered."
+       *
+       * But we have a stronger requirement.  Because of layer offsetting
+       * (check out the callers of ilo_texture_get_slice_offset()), we already
+       * have to require the texture to be non-mipmapped and non-array.
+       */
+      if (templ->last_level > 0 || templ->array_size > 1 || templ->depth0 > 1)
+         layout->hiz = false;
+   }
+
+   if (ilo_debug & ILO_DEBUG_NOHIZ)
+      layout->hiz = false;
+
+   if (layout->has_stencil) {
+      /*
+       * From the Sandy Bridge PRM, volume 2 part 1, page 317:
+       *
+       *     "This field (Separate Stencil Buffer Enable) must be set to the
+       *      same value (enabled or disabled) as Hierarchical Depth Buffer
+       *      Enable."
+       *
+       * GEN7+ requires separate stencil buffers.
+       */
+      if (layout->dev->gen >= ILO_GEN(7))
+         layout->separate_stencil = true;
+      else
+         layout->separate_stencil = layout->hiz;
+
+      if (layout->separate_stencil)
+         layout->has_stencil = false;
+   }
 }
 
 static void
@@ -629,6 +666,7 @@ tex_layout_init(struct tex_layout *layout,
    layout->templ = templ;
 
    /* note that there are dependencies between these functions */
+   tex_layout_init_hiz(layout);
    tex_layout_init_format(layout);
    tex_layout_init_tiling(layout);
    tex_layout_init_spacing(layout);
@@ -814,6 +852,16 @@ tex_layout_validate(struct tex_layout *layout)
       layout->height = align(layout->height, 64);
    }
 
+   /*
+    * Depth Buffer Clear/Resolve works in 8x4 sample blocks.  In
+    * ilo_texture_can_enable_hiz(), we always return true for the first slice.
+    * To avoid out-of-bound access, we have to pad.
+    */
+   if (layout->hiz) {
+      layout->width = align(layout->width, 8);
+      layout->height = align(layout->height, 4);
+   }
+
    assert(layout->width % layout->block_width == 0);
    assert(layout->height % layout->block_height == 0);
    assert(layout->qpitch % layout->block_height == 0);
@@ -868,7 +916,7 @@ tex_layout_apply(const struct tex_layout *layout, struct ilo_texture *tex)
 static void
 tex_free_slices(struct ilo_texture *tex)
 {
-   FREE(tex->slice_offsets[0]);
+   FREE(tex->slices[0]);
 }
 
 static bool
@@ -892,11 +940,11 @@ tex_alloc_slices(struct ilo_texture *tex)
    if (!slices)
       return false;
 
-   tex->slice_offsets[0] = slices;
+   tex->slices[0] = slices;
 
    /* point to the respective positions in the buffer */
    for (lv = 1; lv <= templ->last_level; lv++) {
-      tex->slice_offsets[lv] = tex->slice_offsets[lv - 1] +
+      tex->slices[lv] = tex->slices[lv - 1] +
          u_minify(templ->depth0, lv - 1) * templ->array_size;
    }
 
@@ -969,9 +1017,160 @@ tex_create_bo(struct ilo_texture *tex,
    return true;
 }
 
+static bool
+tex_create_separate_stencil(struct ilo_texture *tex)
+{
+   struct pipe_resource templ = tex->base;
+   struct pipe_resource *s8;
+
+   /*
+    * Unless PIPE_BIND_DEPTH_STENCIL is set, the resource may have other
+    * tilings.  But that should be fine since it will never be bound as the
+    * stencil buffer, and our transfer code can handle all tilings.
+    */
+   templ.format = PIPE_FORMAT_S8_UINT;
+
+   s8 = tex->base.screen->resource_create(tex->base.screen, &templ);
+   if (!s8)
+      return false;
+
+   tex->separate_s8 = ilo_texture(s8);
+
+   assert(tex->separate_s8->bo_format == PIPE_FORMAT_S8_UINT);
+
+   return true;
+}
+
+static bool
+tex_create_hiz(struct ilo_texture *tex, const struct tex_layout *layout)
+{
+   struct ilo_screen *is = ilo_screen(tex->base.screen);
+   const struct pipe_resource *templ = layout->templ;
+   const int hz_align_j = 8;
+   unsigned hz_width, hz_height, lv;
+   unsigned long pitch;
+
+   /*
+    * See the Sandy Bridge PRM, volume 2 part 1, page 312, and the Ivy Bridge
+    * PRM, volume 2 part 1, page 312-313.
+    *
+    * It seems HiZ buffer is aligned to 8x8, with every two rows packed into a
+    * memory row.
+    */
+
+   hz_width = align(layout->levels[0].w, 16);
+
+   if (templ->target == PIPE_TEXTURE_3D) {
+      hz_height = 0;
+
+      for (lv = 0; lv <= templ->last_level; lv++) {
+         const unsigned h = align(layout->levels[lv].h, hz_align_j);
+         hz_height += h * layout->levels[lv].d;
+      }
+
+      hz_height /= 2;
+   }
+   else {
+      const unsigned h0 = align(layout->levels[0].h, hz_align_j);
+      unsigned hz_qpitch = h0;
+
+      if (layout->array_spacing_full) {
+         const unsigned h1 = align(layout->levels[1].h, hz_align_j);
+         const unsigned htail =
+            ((layout->dev->gen >= ILO_GEN(7)) ? 12 : 11) * hz_align_j;
+
+         hz_qpitch += h1 + htail;
+      }
+
+      hz_height = hz_qpitch * templ->array_size / 2;
+
+      if (layout->dev->gen >= ILO_GEN(7))
+         hz_height = align(hz_height, 8);
+   }
+
+   tex->hiz.bo = intel_winsys_alloc_texture(is->winsys,
+         "hiz texture", hz_width, hz_height, 1,
+         INTEL_TILING_Y, INTEL_ALLOC_FOR_RENDER, &pitch);
+   if (!tex->hiz.bo)
+      return false;
+
+   tex->hiz.bo_stride = pitch;
+
+   /*
+    * From the Sandy Bridge PRM, volume 2 part 1, page 313-314:
+    *
+    *     "A rectangle primitive representing the clear area is delivered. The
+    *      primitive must adhere to the following restrictions on size:
+    *
+    *      - If Number of Multisamples is NUMSAMPLES_1, the rectangle must be
+    *        aligned to an 8x4 pixel block relative to the upper left corner
+    *        of the depth buffer, and contain an integer number of these pixel
+    *        blocks, and all 8x4 pixels must be lit.
+    *
+    *      - If Number of Multisamples is NUMSAMPLES_4, the rectangle must be
+    *        aligned to a 4x2 pixel block (8x4 sample block) relative to the
+    *        upper left corner of the depth buffer, and contain an integer
+    *        number of these pixel blocks, and all samples of the 4x2 pixels
+    *        must be lit
+    *
+    *      - If Number of Multisamples is NUMSAMPLES_8, the rectangle must be
+    *        aligned to a 2x2 pixel block (8x4 sample block) relative to the
+    *        upper left corner of the depth buffer, and contain an integer
+    *        number of these pixel blocks, and all samples of the 2x2 pixels
+    *        must be list."
+    *
+    *     "The following is required when performing a depth buffer resolve:
+    *
+    *      - A rectangle primitive of the same size as the previous depth
+    *        buffer clear operation must be delivered, and depth buffer state
+    *        cannot have changed since the previous depth buffer clear
+    *        operation."
+    *
+    * Experiments on Haswell show that depth buffer resolves have the same
+    * alignment requirements, and aligning the RECTLIST primitive and
+    * 3DSTATE_DRAWING_RECTANGLE alone are not enough.  The mipmap size must be
+    * aligned.
+    */
+   for (lv = 0; lv <= templ->last_level; lv++) {
+      unsigned align_w = 8, align_h = 4;
+
+      switch (templ->nr_samples) {
+      case 0:
+      case 1:
+         break;
+      case 2:
+         align_w /= 2;
+         break;
+      case 4:
+         align_w /= 2;
+         align_h /= 2;
+         break;
+      case 8:
+      default:
+         align_w /= 4;
+         align_h /= 2;
+         break;
+      }
+
+      if (u_minify(templ->width0, lv) % align_w == 0 &&
+          u_minify(templ->height0, lv) % align_h == 0) {
+         const unsigned num_slices = (templ->target == PIPE_TEXTURE_3D) ?
+            u_minify(templ->depth0, lv) : templ->array_size;
+
+         ilo_texture_set_slice_flags(tex, lv, 0, num_slices,
+               ILO_TEXTURE_HIZ, ILO_TEXTURE_HIZ);
+      }
+   }
+
+   return true;
+}
+
 static void
 tex_destroy(struct ilo_texture *tex)
 {
+   if (tex->hiz.bo)
+      intel_bo_unreference(tex->hiz.bo);
+
    if (tex->separate_s8)
       tex_destroy(tex->separate_s8);
 
@@ -1007,7 +1206,7 @@ tex_create(struct pipe_screen *screen,
                          PIPE_BIND_RENDER_TARGET))
       tex->bo_flags |= INTEL_ALLOC_FOR_RENDER;
 
-   tex_layout_init(&layout, screen, templ, tex->slice_offsets);
+   tex_layout_init(&layout, screen, templ, tex->slices);
 
    switch (templ->target) {
    case PIPE_TEXTURE_1D:
@@ -1053,26 +1252,17 @@ tex_create(struct pipe_screen *screen,
    }
 
    /* allocate separate stencil resource */
-   if (layout.separate_stencil) {
-      struct pipe_resource s8_templ = *layout.templ;
-      struct pipe_resource *s8;
+   if (layout.separate_stencil && !tex_create_separate_stencil(tex)) {
+      tex_destroy(tex);
+      return NULL;
+   }
 
-      /*
-       * Unless PIPE_BIND_DEPTH_STENCIL is set, the resource may have other
-       * tilings.  But that should be fine since it will never be bound as the
-       * stencil buffer, and our transfer code can handle all tilings.
-       */
-      s8_templ.format = PIPE_FORMAT_S8_UINT;
-
-      s8 = screen->resource_create(screen, &s8_templ);
-      if (!s8) {
+   if (layout.hiz && !tex_create_hiz(tex, &layout)) {
+      /* Separate Stencil Buffer requires HiZ to be enabled */
+      if (layout.dev->gen == ILO_GEN(6) && layout.separate_stencil) {
          tex_destroy(tex);
          return NULL;
       }
-
-      tex->separate_s8 = ilo_texture(s8);
-
-      assert(tex->separate_s8->bo_format == PIPE_FORMAT_S8_UINT);
    }
 
    return &tex->base;
@@ -1297,9 +1487,11 @@ ilo_texture_alloc_bo(struct ilo_texture *tex)
  */
 unsigned
 ilo_texture_get_slice_offset(const struct ilo_texture *tex,
-                             int level, int slice,
+                             unsigned level, unsigned slice,
                              unsigned *x_offset, unsigned *y_offset)
 {
+   const struct ilo_texture_slice *s =
+      ilo_texture_get_slice(tex, level, slice);
    unsigned tile_w, tile_h, tile_size, row_size;
    unsigned x, y, slice_offset;
 
@@ -1336,8 +1528,8 @@ ilo_texture_get_slice_offset(const struct ilo_texture *tex,
    row_size = tex->bo_stride * tile_h;
 
    /* in bytes */
-   x = tex->slice_offsets[level][slice].x / tex->block_width * tex->bo_cpp;
-   y = tex->slice_offsets[level][slice].y / tex->block_height;
+   x = s->x / tex->block_width * tex->bo_cpp;
+   y = s->y / tex->block_height;
    slice_offset = row_size * (y / tile_h) + tile_size * (x / tile_w);
 
    /*

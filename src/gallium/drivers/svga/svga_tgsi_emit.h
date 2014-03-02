@@ -85,8 +85,8 @@ struct svga_shader_emitter
 
    boolean in_main_func;
 
-   boolean created_zero_immediate;
-   int zero_immediate_idx;
+   boolean created_common_immediate;
+   int common_immediate_idx;
 
    boolean created_loop_const;
    int loop_const_idx;
@@ -99,6 +99,7 @@ struct svga_shader_emitter
    unsigned label[32];
    unsigned nr_labels;
 
+   /** input/output register mappings, indexed by register number */
    struct src_register input_map[PIPE_MAX_ATTRIBS];
    SVGA3dShaderDestToken output_map[PIPE_MAX_ATTRIBS];
 
@@ -119,8 +120,9 @@ struct svga_shader_emitter
    /* shared output for depth and fog */
    SVGA3dShaderDestToken vs_depth_fog;
 
-   SVGA3dShaderDestToken temp_col[PIPE_MAX_COLOR_BUFS];
-   SVGA3dShaderDestToken true_col[PIPE_MAX_COLOR_BUFS];
+   /* PS output colors (indexed by color semantic index) */
+   SVGA3dShaderDestToken temp_color_output[PIPE_MAX_COLOR_BUFS];
+   SVGA3dShaderDestToken true_color_output[PIPE_MAX_COLOR_BUFS];
 
    SVGA3dShaderDestToken temp_psiz;
    SVGA3dShaderDestToken true_psiz;

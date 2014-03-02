@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -271,16 +271,10 @@ intel_prepare_render(struct intel_context *intel)
 }
 
 static void
-intel_noninvalidate_viewport(struct gl_context *ctx, GLint x, GLint y,
-                             GLsizei w, GLsizei h)
+intel_noninvalidate_viewport(struct gl_context *ctx)
 {
     struct intel_context *intel = intel_context(ctx);
     __DRIcontext *driContext = intel->driContext;
-
-    (void) x;
-    (void) y;
-    (void) w;
-    (void) h;
 
     intelCalcViewport(ctx);
 
@@ -291,13 +285,8 @@ intel_noninvalidate_viewport(struct gl_context *ctx, GLint x, GLint y,
 }
 
 static void
-intel_viewport(struct gl_context *ctx, GLint x, GLint y, GLsizei w, GLsizei h)
+intel_viewport(struct gl_context *ctx)
 {
-    (void) x;
-    (void) y;
-    (void) w;
-    (void) h;
-
     intelCalcViewport(ctx);
 }
 

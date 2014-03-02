@@ -63,7 +63,7 @@ int bc_finalizer::run() {
 
 	// workaround for some problems on r6xx/7xx
 	// add ALU NOP to each vertex shader
-	if (!ctx.is_egcm() && sh.target == TARGET_VS) {
+	if (!ctx.is_egcm() && (sh.target == TARGET_VS || sh.target == TARGET_ES)) {
 		cf_node *c = sh.create_clause(NST_ALU_CLAUSE);
 
 		alu_group_node *g = sh.create_alu_group();
@@ -695,7 +695,7 @@ void bc_finalizer::finalize_cf(cf_node* c) {
 		c->bc.rw_gpr = reg >= 0 ? reg : 0;
 		c->bc.comp_mask = mask;
 
-		if ((flags & CF_RAT) && (c->bc.type & 1)) {
+		if (((flags & CF_RAT) || (!(flags & CF_STRM))) && (c->bc.type & 1)) {
 
 			reg = -1;
 

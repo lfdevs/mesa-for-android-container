@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2008 VMware, Inc.
  * Copyright 2009-2010 Chia-I Wu <olvaffe@gmail.com>
  * Copyright 2010 LunarG, Inc.
  * All Rights Reserved.
@@ -57,7 +57,7 @@
 
 
 /* ugh, no atomic op? */
-static _EGL_DECLARE_MUTEX(_eglNextScreenHandleMutex);
+static _EGLMutex _eglNextScreenHandleMutex = _EGL_MUTEX_INITIALIZER;
 static EGLScreenMESA _eglNextScreenHandle = 1;
 
 

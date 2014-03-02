@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -27,7 +27,7 @@
 
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   *   Brian Paul
   */
 
@@ -326,11 +326,11 @@ update_vertex_textures(struct st_context *st)
 {
    const struct gl_context *ctx = st->ctx;
 
-   if (ctx->Const.VertexProgram.MaxTextureImageUnits > 0) {
+   if (ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits > 0) {
       update_textures(st,
                       PIPE_SHADER_VERTEX,
                       &ctx->VertexProgram._Current->Base,
-                      ctx->Const.VertexProgram.MaxTextureImageUnits,
+                      ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits,
                       st->state.sampler_views[PIPE_SHADER_VERTEX],
                       &st->state.num_sampler_views[PIPE_SHADER_VERTEX]);
    }
@@ -345,7 +345,7 @@ update_fragment_textures(struct st_context *st)
    update_textures(st,
                    PIPE_SHADER_FRAGMENT,
                    &ctx->FragmentProgram._Current->Base,
-                   ctx->Const.FragmentProgram.MaxTextureImageUnits,
+                   ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits,
                    st->state.sampler_views[PIPE_SHADER_FRAGMENT],
                    &st->state.num_sampler_views[PIPE_SHADER_FRAGMENT]);
 }
@@ -360,7 +360,7 @@ update_geometry_textures(struct st_context *st)
       update_textures(st,
                       PIPE_SHADER_GEOMETRY,
                       &ctx->GeometryProgram._Current->Base,
-                      ctx->Const.FragmentProgram.MaxTextureImageUnits,
+                      ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits,
                       st->state.sampler_views[PIPE_SHADER_GEOMETRY],
                       &st->state.num_sampler_views[PIPE_SHADER_GEOMETRY]);
    }

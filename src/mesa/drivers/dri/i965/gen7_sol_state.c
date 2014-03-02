@@ -39,14 +39,11 @@ static void
 upload_3dstate_so_buffers(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
-   /* BRW_NEW_VERTEX_PROGRAM */
-   const struct gl_shader_program *vs_prog =
-      ctx->Shader.CurrentVertexProgram;
-   const struct gl_transform_feedback_info *linked_xfb_info =
-      &vs_prog->LinkedTransformFeedback;
    /* BRW_NEW_TRANSFORM_FEEDBACK */
    struct gl_transform_feedback_object *xfb_obj =
       ctx->TransformFeedback.CurrentObject;
+   const struct gl_transform_feedback_info *linked_xfb_info =
+      &xfb_obj->shader_program->LinkedTransformFeedback;
    int i;
 
    /* Set up the up to 4 output buffers.  These are the ranges defined in the
@@ -102,12 +99,11 @@ gen7_upload_3dstate_so_decl_list(struct brw_context *brw,
                                  const struct brw_vue_map *vue_map)
 {
    struct gl_context *ctx = &brw->ctx;
-   /* BRW_NEW_VERTEX_PROGRAM */
-   const struct gl_shader_program *vs_prog =
-      ctx->Shader.CurrentVertexProgram;
    /* BRW_NEW_TRANSFORM_FEEDBACK */
+   struct gl_transform_feedback_object *xfb_obj =
+      ctx->TransformFeedback.CurrentObject;
    const struct gl_transform_feedback_info *linked_xfb_info =
-      &vs_prog->LinkedTransformFeedback;
+      &xfb_obj->shader_program->LinkedTransformFeedback;
    uint16_t so_decl[128];
    int buffer_mask = 0;
    int next_offset[4] = {0, 0, 0, 0};
@@ -260,7 +256,6 @@ const struct brw_tracked_state gen7_sol_state = {
    .dirty = {
       .mesa  = (_NEW_LIGHT),
       .brw   = (BRW_NEW_BATCH |
-		BRW_NEW_VERTEX_PROGRAM |
                 BRW_NEW_VUE_MAP_GEOM_OUT |
                 BRW_NEW_TRANSFORM_FEEDBACK)
    },
@@ -414,8 +409,13 @@ gen7_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
 
-   intel_batchbuffer_flush(brw);
-   brw->batch.needs_sol_reset = true;
+   /* Reset the SO buffer offsets to 0. */
+   if (brw->gen >= 8) {
+      brw_obj->zero_offsets = true;
+   } else {
+      intel_batchbuffer_flush(brw);
+      brw->batch.needs_sol_reset = true;
+   }
 
    /* We're about to lose the information needed to compute the number of
     * vertices written during the last Begin/EndTransformFeedback section,
@@ -471,14 +471,16 @@ gen7_pause_transform_feedback(struct gl_context *ctx,
    intel_batchbuffer_emit_mi_flush(brw);
 
    /* Save the SOL buffer offset register values. */
-   for (int i = 0; i < 4; i++) {
-      BEGIN_BATCH(3);
-      OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
-      OUT_BATCH(GEN7_SO_WRITE_OFFSET(i));
-      OUT_RELOC(brw_obj->offset_bo,
-                I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                i * sizeof(uint32_t));
-      ADVANCE_BATCH();
+   if (brw->gen < 8) {
+      for (int i = 0; i < 4; i++) {
+         BEGIN_BATCH(3);
+         OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
+         OUT_BATCH(GEN7_SO_WRITE_OFFSET(i));
+         OUT_RELOC(brw_obj->offset_bo,
+                   I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                   i * sizeof(uint32_t));
+         ADVANCE_BATCH();
+      }
    }
 
    /* Store the temporary ending value of the SO_NUM_PRIMS_WRITTEN counters.
@@ -498,14 +500,16 @@ gen7_resume_transform_feedback(struct gl_context *ctx,
       (struct brw_transform_feedback_object *) obj;
 
    /* Reload the SOL buffer offset registers. */
-   for (int i = 0; i < 4; i++) {
-      BEGIN_BATCH(3);
-      OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
-      OUT_BATCH(GEN7_SO_WRITE_OFFSET(i));
-      OUT_RELOC(brw_obj->offset_bo,
-                I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
-                i * sizeof(uint32_t));
-      ADVANCE_BATCH();
+   if (brw->gen < 8) {
+      for (int i = 0; i < 4; i++) {
+         BEGIN_BATCH(3);
+         OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
+         OUT_BATCH(GEN7_SO_WRITE_OFFSET(i));
+         OUT_RELOC(brw_obj->offset_bo,
+                   I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+                   i * sizeof(uint32_t));
+         ADVANCE_BATCH();
+      }
    }
 
    /* Store the new starting value of the SO_NUM_PRIMS_WRITTEN counters. */

@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
- * Copyright 2006 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2006 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,19 +10,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portionsalloc
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #include "main/blend.h"
@@ -104,7 +104,7 @@ static void set_bit( GLubyte *dest, GLuint bit )
 static GLuint get_bitmap_rect(GLsizei width, GLsizei height,
 			      const struct gl_pixelstore_attrib *unpack,
 			      const GLubyte *bitmap,
-			      GLuint x, GLuint y, 
+			      GLuint x, GLuint y,
 			      GLuint w, GLuint h,
 			      GLubyte *dest,
 			      GLuint row_align,
@@ -135,9 +135,9 @@ static GLuint get_bitmap_rect(GLsizei width, GLsizei height,
    /* Require that dest be pre-zero'd.
     */
    for (row = first; row != (last+incr); row += incr) {
-      const GLubyte *rowsrc = _mesa_image_address2d(unpack, bitmap, 
-						    width, height, 
-						    GL_COLOR_INDEX, GL_BITMAP, 
+      const GLubyte *rowsrc = _mesa_image_address2d(unpack, bitmap,
+						    width, height,
+						    GL_COLOR_INDEX, GL_BITMAP,
 						    y + row, x);
 
       for (col = 0; col < w; col++, bit++) {
@@ -158,7 +158,7 @@ static GLuint get_bitmap_rect(GLsizei width, GLsizei height,
  * Returns the low Y value of the vertical range given, flipped according to
  * whether the framebuffer is or not.
  */
-static INLINE int
+static inline int
 y_flip(struct gl_framebuffer *fb, int y, int height)
 {
    if (_mesa_is_user_fbo(fb))
@@ -171,7 +171,7 @@ y_flip(struct gl_framebuffer *fb, int y, int height)
  * Render a bitmap.
  */
 static bool
-do_blit_bitmap( struct gl_context *ctx, 
+do_blit_bitmap( struct gl_context *ctx,
 		GLint dstx, GLint dsty,
 		GLsizei width, GLsizei height,
 		const struct gl_pixelstore_attrib *unpack,
@@ -229,11 +229,11 @@ do_blit_bitmap( struct gl_context *ctx,
    UNCLAMPED_FLOAT_TO_UBYTE(ubcolor[3], tmpColor[3]);
 
    switch (_mesa_get_render_format(ctx, intel_rb_format(irb))) {
-   case MESA_FORMAT_ARGB8888:
-   case MESA_FORMAT_XRGB8888:
+   case MESA_FORMAT_B8G8R8A8_UNORM:
+   case MESA_FORMAT_B8G8R8X8_UNORM:
       color = PACK_COLOR_8888(ubcolor[3], ubcolor[0], ubcolor[1], ubcolor[2]);
       break;
-   case MESA_FORMAT_RGB565:
+   case MESA_FORMAT_B5G6R5_UNORM:
       color = PACK_COLOR_565(ubcolor[0], ubcolor[1], ubcolor[2]);
       break;
    default:
@@ -329,14 +329,14 @@ out:
 /* There are a large number of possible ways to implement bitmap on
  * this hardware, most of them have some sort of drawback.  Here are a
  * few that spring to mind:
- * 
+ *
  * Blit:
  *    - XY_MONO_SRC_BLT_CMD
  *         - use XY_SETUP_CLIP_BLT for cliprect clipping.
  *    - XY_TEXT_BLT
  *    - XY_TEXT_IMMEDIATE_BLT
  *         - blit per cliprect, subject to maximum immediate data size.
- *    - XY_COLOR_BLT 
+ *    - XY_COLOR_BLT
  *         - per pixel or run of pixels
  *    - XY_PIXEL_BLT
  *         - good for sparse bitmaps

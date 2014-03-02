@@ -27,6 +27,8 @@
  **************************************************************************/
 
 #include "postprocess/postprocess.h"
+#include "postprocess/pp_private.h"
+
 #include "cso_cache/cso_context.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
@@ -37,17 +39,17 @@
 #include "util/u_memory.h"
 
 /** Initialize the internal details */
-struct program *
+struct pp_program *
 pp_init_prog(struct pp_queue_t *ppq, struct pipe_context *pipe,
              struct cso_context *cso)
 {
-   struct program *p;
+   struct pp_program *p;
 
    pp_debug("Initializing program\n");
    if (!pipe)
       return NULL;
 
-   p = CALLOC(1, sizeof(struct program));
+   p = CALLOC(1, sizeof(struct pp_program));
    if (!p)
       return NULL;
 

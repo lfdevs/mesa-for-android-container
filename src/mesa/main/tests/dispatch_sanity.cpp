@@ -667,8 +667,8 @@ const struct function gl_core_functions_possible[] = {
    { "glVertexAttribP3uiv", 43, -1 },
    { "glVertexAttribP4ui", 43, -1 },
    { "glVertexAttribP4uiv", 43, -1 },
-// { "glDrawArraysIndirect", 43, -1 },                  // XXX: Add to xml
-// { "glDrawElementsIndirect", 43, -1 },                // XXX: Add to xml
+   { "glDrawArraysIndirect", 43, -1 },
+   { "glDrawElementsIndirect", 43, -1 },
 // { "glUniform1d", 43, -1 },                           // XXX: Add to xml
 // { "glUniform2d", 43, -1 },                           // XXX: Add to xml
 // { "glUniform3d", 43, -1 },                           // XXX: Add to xml
@@ -786,16 +786,16 @@ const struct function gl_core_functions_possible[] = {
 // { "glVertexAttribL4dv", 43, -1 },                    // XXX: Add to xml
 // { "glVertexAttribLPointer", 43, -1 },                // XXX: Add to xml
 // { "glGetVertexAttribLdv", 43, -1 },                  // XXX: Add to xml
-// { "glViewportArrayv", 43, -1 },                      // XXX: Add to xml
-// { "glViewportIndexedf", 43, -1 },                    // XXX: Add to xml
-// { "glViewportIndexedfv", 43, -1 },                   // XXX: Add to xml
-// { "glScissorArrayv", 43, -1 },                       // XXX: Add to xml
-// { "glScissorIndexed", 43, -1 },                      // XXX: Add to xml
-// { "glScissorIndexedv", 43, -1 },                     // XXX: Add to xml
-// { "glDepthRangeArrayv", 43, -1 },                    // XXX: Add to xml
-// { "glDepthRangeIndexed", 43, -1 },                   // XXX: Add to xml
-// { "glGetFloati_v", 43, -1 },                         // XXX: Add to xml
-// { "glGetDoublei_v", 43, -1 },                        // XXX: Add to xml
+   { "glViewportArrayv", 43, -1 },
+   { "glViewportIndexedf", 43, -1 },
+   { "glViewportIndexedfv", 43, -1 },
+   { "glScissorArrayv", 43, -1 },
+   { "glScissorIndexed", 43, -1 },
+   { "glScissorIndexedv", 43, -1 },
+   { "glDepthRangeArrayv", 43, -1 },
+   { "glDepthRangeIndexed", 43, -1 },
+   { "glGetFloati_v", 43, -1 },
+   { "glGetDoublei_v", 43, -1 },
 // { "glCreateSyncFromCLeventARB", 43, -1 },            // XXX: Add to xml
    { "glDebugMessageControlARB", 43, -1 },
    { "glDebugMessageInsertARB", 43, -1 },
@@ -828,8 +828,8 @@ const struct function gl_core_functions_possible[] = {
    { "glDrawTransformFeedbackStreamInstanced", 43, -1 },
 // { "glGetInternalformativ", 43, -1 },                 // XXX: Add to xml
    { "glGetActiveAtomicCounterBufferiv", 43, -1 },
-// { "glBindImageTexture", 43, -1 },                    // XXX: Add to xml
-// { "glMemoryBarrier", 43, -1 },                       // XXX: Add to xml
+   { "glBindImageTexture", 43, -1 },
+   { "glMemoryBarrier", 43, -1 },
    { "glTexStorage1D", 43, -1 },
    { "glTexStorage2D", 43, -1 },
    { "glTexStorage3D", 43, -1 },
@@ -846,14 +846,14 @@ const struct function gl_core_functions_possible[] = {
 // { "glGetObjectLabel", 43, -1 },                      // XXX: Add to xml
 // { "glObjectPtrLabel", 43, -1 },                      // XXX: Add to xml
 // { "glGetObjectPtrLabel", 43, -1 },                   // XXX: Add to xml
-// { "glClearBufferData", 43, -1 },                     // XXX: Add to xml
-// { "glClearBufferSubData", 43, -1 },                  // XXX: Add to xml
+   { "glClearBufferData", 43, -1 },
+   { "glClearBufferSubData", 43, -1 },
 // { "glClearNamedBufferDataEXT", 43, -1 },             // XXX: Add to xml
 // { "glClearNamedBufferSubDataEXT", 43, -1 },          // XXX: Add to xml
 // { "glDispatchCompute", 43, -1 },                     // XXX: Add to xml
 // { "glDispatchComputeIndirect", 43, -1 },             // XXX: Add to xml
 // { "glCopyImageSubData", 43, -1 },                    // XXX: Add to xml
-// { "glTextureView", 43, -1 },                         // XXX: Add to xml
+   { "glTextureView", 43, -1 },
    { "glBindVertexBuffer", 43, -1 },
    { "glVertexAttribFormat", 43, -1 },
    { "glVertexAttribIFormat", 43, -1 },
@@ -877,8 +877,8 @@ const struct function gl_core_functions_possible[] = {
    { "glInvalidateBufferData", 43, -1 },
    { "glInvalidateFramebuffer", 43, -1 },
    { "glInvalidateSubFramebuffer", 43, -1 },
-// { "glMultiDrawArraysIndirect", 43, -1 },             // XXX: Add to xml
-// { "glMultiDrawElementsIndirect", 43, -1 },           // XXX: Add to xml
+   { "glMultiDrawArraysIndirect", 43, -1 },
+   { "glMultiDrawElementsIndirect", 43, -1 },
 // { "glGetProgramInterfaceiv", 43, -1 },               // XXX: Add to xml
 // { "glGetProgramResourceIndex", 43, -1 },             // XXX: Add to xml
 // { "glGetProgramResourceName", 43, -1 },              // XXX: Add to xml

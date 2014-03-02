@@ -137,10 +137,10 @@ upload_wm_state(struct brw_context *brw)
 
    /* Use ALT floating point mode for ARB fragment programs, because they
     * require 0^0 == 1.  Even though _CurrentFragmentProgram is used for
-    * rendering, CurrentFragmentProgram is used for this check to
-    * differentiate between the GLSL and non-GLSL cases.
+    * rendering, CurrentProgram[MESA_SHADER_FRAGMENT] is used for this check
+    * to differentiate between the GLSL and non-GLSL cases.
     */
-   if (ctx->Shader.CurrentFragmentProgram == NULL)
+   if (ctx->Shader.CurrentProgram[MESA_SHADER_FRAGMENT] == NULL)
       dw2 |= GEN6_WM_FLOATING_POINT_MODE_ALT;
 
    /* CACHE_NEW_SAMPLER */
@@ -161,7 +161,7 @@ upload_wm_state(struct brw_context *brw)
     * better performance than 'SIMD8 only' dispatch.
     */
    int min_inv_per_frag =
-      _mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program);
+      _mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program, false);
    assert(min_inv_per_frag >= 1);
 
    if (brw->wm.prog_data->prog_offset_16) {

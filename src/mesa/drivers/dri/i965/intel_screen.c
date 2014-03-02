@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,19 +10,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #include <errno.h>
@@ -135,8 +135,8 @@ aub_dump_bmp(struct gl_context *ctx)
 	 enum aub_dump_bmp_format format;
 
 	 switch (irb->Base.Base.Format) {
-	 case MESA_FORMAT_ARGB8888:
-	 case MESA_FORMAT_XRGB8888:
+	 case MESA_FORMAT_B8G8R8A8_UNORM:
+	 case MESA_FORMAT_B8G8R8X8_UNORM:
 	    format = AUB_DUMP_BMP_FORMAT_ARGB_8888;
 	    break;
 	 default:
@@ -219,6 +219,9 @@ static const struct __DRI2flushExtensionRec intelFlushExtension = {
 static struct intel_image_format intel_image_formats[] = {
    { __DRI_IMAGE_FOURCC_ARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
+
+   { __DRI_IMAGE_FOURCC_SARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_SARGB8, 4 } } },
 
    { __DRI_IMAGE_FOURCC_XRGB8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB8888, 4 }, } },
@@ -517,7 +520,7 @@ intel_create_image(__DRIscreen *screen,
       free(image);
       return NULL;
    }
-   
+
    intel_setup_image_from_dimensions(image);
 
    return image;
@@ -962,7 +965,7 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
 {
    struct intel_renderbuffer *rb;
    struct intel_screen *screen = (struct intel_screen*) driScrnPriv->driverPrivate;
-   gl_format rgbFormat;
+   mesa_format rgbFormat;
    unsigned num_samples = intel_quantize_num_samples(screen, mesaVis->samples);
    struct gl_framebuffer *fb;
 
@@ -976,13 +979,13 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
    _mesa_initialize_window_framebuffer(fb, mesaVis);
 
    if (mesaVis->redBits == 5)
-      rgbFormat = MESA_FORMAT_RGB565;
+      rgbFormat = MESA_FORMAT_B5G6R5_UNORM;
    else if (mesaVis->sRGBCapable)
-      rgbFormat = MESA_FORMAT_SARGB8;
+      rgbFormat = MESA_FORMAT_B8G8R8A8_SRGB;
    else if (mesaVis->alphaBits == 0)
-      rgbFormat = MESA_FORMAT_XRGB8888;
+      rgbFormat = MESA_FORMAT_B8G8R8X8_UNORM;
    else {
-      rgbFormat = MESA_FORMAT_SARGB8;
+      rgbFormat = MESA_FORMAT_B8G8R8A8_SRGB;
       fb->Visual.sRGBCapable = true;
    }
 
@@ -1004,10 +1007,10 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
       assert(mesaVis->stencilBits == 8);
 
       if (screen->devinfo->has_hiz_and_separate_stencil) {
-         rb = intel_create_private_renderbuffer(MESA_FORMAT_X8_Z24,
+         rb = intel_create_private_renderbuffer(MESA_FORMAT_Z24_UNORM_X8_UINT,
                                                 num_samples);
          _mesa_add_renderbuffer(fb, BUFFER_DEPTH, &rb->Base.Base);
-         rb = intel_create_private_renderbuffer(MESA_FORMAT_S8,
+         rb = intel_create_private_renderbuffer(MESA_FORMAT_S_UINT8,
                                                 num_samples);
          _mesa_add_renderbuffer(fb, BUFFER_STENCIL, &rb->Base.Base);
       } else {
@@ -1015,7 +1018,7 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
           * Use combined depth/stencil. Note that the renderbuffer is
           * attached to two attachment points.
           */
-         rb = intel_create_private_renderbuffer(MESA_FORMAT_S8_Z24,
+         rb = intel_create_private_renderbuffer(MESA_FORMAT_Z24_UNORM_S8_UINT,
                                                 num_samples);
          _mesa_add_renderbuffer(fb, BUFFER_DEPTH, &rb->Base.Base);
          _mesa_add_renderbuffer(fb, BUFFER_STENCIL, &rb->Base.Base);
@@ -1023,7 +1026,7 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
    }
    else if (mesaVis->depthBits == 16) {
       assert(mesaVis->stencilBits == 0);
-      rb = intel_create_private_renderbuffer(MESA_FORMAT_Z16,
+      rb = intel_create_private_renderbuffer(MESA_FORMAT_Z_UNORM16,
                                              num_samples);
       _mesa_add_renderbuffer(fb, BUFFER_DEPTH, &rb->Base.Base);
    }
@@ -1049,7 +1052,7 @@ static void
 intelDestroyBuffer(__DRIdrawable * driDrawPriv)
 {
     struct gl_framebuffer *fb = driDrawPriv->driverPrivate;
-  
+
     _mesa_reference_framebuffer(&fb, NULL);
 }
 
@@ -1101,12 +1104,32 @@ intel_detect_swizzling(struct intel_screen *screen)
       return true;
 }
 
+/**
+ * Return array of MSAA modes supported by the hardware. The array is
+ * zero-terminated and sorted in decreasing order.
+ */
+const int*
+intel_supported_msaa_modes(const struct intel_screen  *screen)
+{
+   static const int gen7_modes[] = {8, 4, 0, -1};
+   static const int gen6_modes[] = {4, 0, -1};
+   static const int gen4_modes[] = {0, -1};
+
+   if (screen->devinfo->gen >= 7) {
+      return gen7_modes;
+   } else if (screen->devinfo->gen == 6) {
+      return gen6_modes;
+   } else {
+      return gen4_modes;
+   }
+}
+
 static __DRIconfig**
 intel_screen_make_configs(__DRIscreen *dri_screen)
 {
-   static const gl_format formats[] = {
-      MESA_FORMAT_RGB565,
-      MESA_FORMAT_ARGB8888
+   static const mesa_format formats[] = {
+      MESA_FORMAT_B5G6R5_UNORM,
+      MESA_FORMAT_B8G8R8A8_UNORM
    };
 
    /* GLX_SWAP_COPY_OML is not supported due to page flipping. */
@@ -1134,7 +1157,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       depth_bits[0] = 0;
       stencil_bits[0] = 0;
 
-      if (formats[i] == MESA_FORMAT_RGB565) {
+      if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
          depth_bits[1] = 16;
          stencil_bits[1] = 0;
          if (devinfo->gen >= 6) {
@@ -1163,7 +1186,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
    for (int i = 0; i < ARRAY_SIZE(formats); i++) {
       __DRIconfig **new_configs;
 
-      if (formats[i] == MESA_FORMAT_RGB565) {
+      if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
          depth_bits[0] = 16;
          stencil_bits[0] = 0;
       } else {
@@ -1203,7 +1226,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       depth_bits[0] = 0;
       stencil_bits[0] = 0;
 
-      if (formats[i] == MESA_FORMAT_RGB565) {
+      if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
          depth_bits[1] = 16;
          stencil_bits[1] = 0;
       } else {
@@ -1242,6 +1265,7 @@ set_max_gl_versions(struct intel_screen *screen)
    __DRIscreen *psp = screen->driScrnPriv;
 
    switch (screen->devinfo->gen) {
+   case 8:
    case 7:
       psp->max_gl_core_version = 33;
       psp->max_gl_compat_version = 30;
@@ -1358,12 +1382,12 @@ intelAllocateBuffer(__DRIscreen *screen,
                                             width,
                                             height,
                                             true);
-   
+
    if (intelBuffer->region == NULL) {
 	   free(intelBuffer);
 	   return NULL;
    }
-   
+
    intel_region_flink(intelBuffer->region, &intelBuffer->base.name);
 
    intelBuffer->base.attachment = attachment;

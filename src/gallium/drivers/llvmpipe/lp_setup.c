@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -66,9 +66,6 @@ static boolean try_update_scene_state( struct lp_setup_context *setup );
 static void
 lp_setup_get_empty_scene(struct lp_setup_context *setup)
 {
-   struct llvmpipe_context *lp = llvmpipe_context(setup->pipe);
-   boolean discard = lp->rasterizer ? lp->rasterizer->rasterizer_discard : FALSE;
-
    assert(setup->scene == NULL);
 
    setup->scene_idx++;
@@ -84,8 +81,8 @@ lp_setup_get_empty_scene(struct lp_setup_context *setup)
       lp_fence_wait(setup->scene->fence);
    }
 
-   lp_scene_begin_binning(setup->scene, &setup->fb, discard);
-   
+   lp_scene_begin_binning(setup->scene, &setup->fb, setup->rasterizer_discard);
+
 }
 
 
@@ -649,6 +646,48 @@ lp_setup_set_vertex_info( struct lp_setup_context *setup,
 
 
 /**
+ * Called during state validation when LP_NEW_VIEWPORT is set.
+ */
+void
+lp_setup_set_viewports(struct lp_setup_context *setup,
+                       unsigned num_viewports,
+                       const struct pipe_viewport_state *viewports)
+{
+   struct llvmpipe_context *lp = llvmpipe_context(setup->pipe);
+   unsigned i;
+
+   LP_DBG(DEBUG_SETUP, "%s\n", __FUNCTION__);
+
+   assert(num_viewports <= PIPE_MAX_VIEWPORTS);
+   assert(viewports);
+
+   /*
+    * For use in lp_state_fs.c, propagate the viewport values for all viewports.
+    */
+   for (i = 0; i < num_viewports; i++) {
+      float min_depth;
+      float max_depth;
+
+      if (lp->rasterizer->clip_halfz == 0) {
+         float half_depth = viewports[i].scale[2];
+         min_depth = viewports[i].translate[2] - half_depth;
+         max_depth = min_depth + half_depth * 2.0f;
+      } else {
+         min_depth = viewports[i].translate[2];
+         max_depth = min_depth + viewports[i].scale[2];
+      }
+
+      if (setup->viewports[i].min_depth != min_depth ||
+          setup->viewports[i].max_depth != max_depth) {
+          setup->viewports[i].min_depth = min_depth;
+          setup->viewports[i].max_depth = max_depth;
+          setup->dirty |= LP_SETUP_NEW_VIEWPORTS;
+      }
+   }
+}
+
+
+/**
  * Called during state validation when LP_NEW_SAMPLER_VIEW is set.
  */
 void
@@ -843,7 +882,7 @@ lp_setup_is_resource_referenced( const struct lp_setup_context *setup,
 
    /* check the render targets */
    for (i = 0; i < setup->fb.nr_cbufs; i++) {
-      if (setup->fb.cbufs[i]->texture == texture)
+      if (setup->fb.cbufs[i] && setup->fb.cbufs[i]->texture == texture)
          return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
    }
    if (setup->fb.zsbuf && setup->fb.zsbuf->texture == texture) {
@@ -863,6 +902,15 @@ lp_setup_is_resource_referenced( const struct lp_setup_context *setup,
 
 /**
  * Called by vbuf code when we're about to draw something.
+ *
+ * This function stores all dirty state in the current scene's display list
+ * memory, via lp_scene_alloc().  We can not pass pointers of mutable state to
+ * the JIT functions, as the JIT functions will be called later on, most likely
+ * on a different thread.
+ *
+ * When processing dirty state it is imperative that we don't refer to any
+ * pointers previously allocated with lp_scene_alloc() in this function (or any
+ * function) as they may belong to a scene freed since then.
  */
 static boolean
 try_update_scene_state( struct lp_setup_context *setup )
@@ -872,6 +920,29 @@ try_update_scene_state( struct lp_setup_context *setup )
    unsigned i;
 
    assert(scene);
+
+   if (setup->dirty & LP_SETUP_NEW_VIEWPORTS) {
+      /*
+       * Record new depth range state for changes due to viewport updates.
+       *
+       * TODO: Collapse the existing viewport and depth range information
+       *       into one structure, for access by JIT.
+       */
+      struct lp_jit_viewport *stored;
+
+      stored = (struct lp_jit_viewport *)
+         lp_scene_alloc(scene, sizeof setup->viewports);
+
+      if (!stored) {
+         assert(!new_scene);
+         return FALSE;
+      }
+
+      memcpy(stored, setup->viewports, sizeof setup->viewports);
+
+      setup->fs.current.jit_context.viewports = stored;
+      setup->dirty |= LP_SETUP_NEW_FS;
+   }
 
    if(setup->dirty & LP_SETUP_NEW_BLEND_COLOR) {
       uint8_t *stored;
@@ -913,6 +984,7 @@ try_update_scene_state( struct lp_setup_context *setup )
          struct pipe_resource *buffer = setup->constants[i].current.buffer;
          const unsigned current_size = setup->constants[i].current.buffer_size;
          const ubyte *current_data = NULL;
+         int num_constants;
 
          if (buffer) {
             /* resource buffer */
@@ -953,7 +1025,11 @@ try_update_scene_state( struct lp_setup_context *setup )
             setup->constants[i].stored_data = NULL;
          }
 
-         setup->fs.current.jit_context.constants[i] = setup->constants[i].stored_data;
+         setup->fs.current.jit_context.constants[i] =
+            setup->constants[i].stored_data;
+         num_constants =
+            setup->constants[i].stored_size / (sizeof(float) * 4);
+         setup->fs.current.jit_context.num_constants[i] = num_constants;
          setup->dirty |= LP_SETUP_NEW_FS;
       }
    }
@@ -1007,14 +1083,8 @@ try_update_scene_state( struct lp_setup_context *setup )
                                          &setup->draw_regions[i]);
          }
       }
-      /*
-       * Subdivide triangles if the framebuffer is larger than the
-       * MAX_FIXED_LENGTH.
-       */
-      setup->subdivide_large_triangles = (setup->fb.width > MAX_FIXED_LENGTH ||
-                                          setup->fb.height > MAX_FIXED_LENGTH);
    }
-                                      
+
    setup->dirty = 0;
 
    assert(setup->fs.stored);

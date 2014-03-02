@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -28,7 +28,7 @@
 /**
  * \brief  polygon offset state
  *
- * \author  Keith Whitwell <keith@tungstengraphics.com>
+ * \author  Keith Whitwell <keithw@vmware.com>
  * \author  Brian Paul
  */
 
@@ -90,18 +90,23 @@ static void do_offset_tri( struct draw_stage *stage,
    float dzdx = fabsf(a * inv_det);
    float dzdy = fabsf(b * inv_det);
 
-   float zoffset, maxz, bias, mult;
+   float zoffset, mult;
 
    mult = MAX2(dzdx, dzdy) * offset->scale;
 
    if (stage->draw->floating_point_depth) {
-      maxz = MAX3(v0[2], v1[2], v2[2]);
+      float bias;
+      union fi maxz;
+      maxz.f = MAX3(v0[2], v1[2], v2[2]);
+      /* just do the math directly on shifted number */
+      maxz.ui &= 0xff << 23;
+      maxz.i -= 23 << 23;
+      /* Clamping to zero means mrd will be zero for very small numbers,
+       * but specs do not indicate this should be prevented by clamping
+       * mrd to smallest normal number instead. */
+      maxz.i = MAX2(maxz.i, 0);
 
-      /**
-       * XXX: TODO optimize this to quickly resolve a pow2 number through
-       *      an exponent only operation.
-       */
-      bias = offset->units * util_fast_exp2(util_get_float32_exponent(maxz) - 23);
+      bias = offset->units * maxz.f;
       zoffset = bias + mult;
    } else {
       zoffset = offset->units + mult;

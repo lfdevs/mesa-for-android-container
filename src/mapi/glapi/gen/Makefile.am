@@ -98,6 +98,7 @@ API_XML = \
 	ARB_draw_buffers.xml \
 	ARB_draw_buffers_blend.xml \
 	ARB_draw_elements_base_vertex.xml \
+	ARB_draw_indirect.xml \
 	ARB_draw_instanced.xml \
 	ARB_ES2_compatibility.xml \
 	ARB_ES3_compatibility.xml \
@@ -112,6 +113,7 @@ API_XML = \
 	ARB_sampler_objects.xml \
 	ARB_seamless_cube_map.xml \
 	ARB_shader_atomic_counters.xml \
+	ARB_shader_image_load_store.xml \
 	ARB_sync.xml \
 	ARB_texture_buffer_object.xml \
 	ARB_texture_buffer_range.xml \
@@ -124,8 +126,10 @@ API_XML = \
 	ARB_texture_rg.xml \
 	ARB_texture_storage_multisample.xml \
 	ARB_texture_storage.xml \
+	ARB_texture_view.xml \
 	ARB_vertex_array_object.xml \
 	ARB_vertex_attrib_binding.xml \
+	ARB_viewport_array.xml \
 	AMD_draw_buffers_blend.xml \
 	AMD_performance_monitor.xml \
 	ARB_vertex_type_2_10_10_10_rev.xml \

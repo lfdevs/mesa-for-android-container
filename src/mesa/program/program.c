@@ -56,21 +56,21 @@ _mesa_init_program(struct gl_context *ctx)
     * If this assertion fails, we need to increase the field
     * size for register indexes (see INST_INDEX_BITS).
     */
-   ASSERT(ctx->Const.VertexProgram.MaxUniformComponents / 4
+   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxUniformComponents / 4
           <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.FragmentProgram.MaxUniformComponents / 4
+   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxUniformComponents / 4
           <= (1 << INST_INDEX_BITS));
 
-   ASSERT(ctx->Const.VertexProgram.MaxTemps <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.VertexProgram.MaxLocalParams <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.FragmentProgram.MaxTemps <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.FragmentProgram.MaxLocalParams <= (1 << INST_INDEX_BITS));
+   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxTemps <= (1 << INST_INDEX_BITS));
+   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxLocalParams <= (1 << INST_INDEX_BITS));
+   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTemps <= (1 << INST_INDEX_BITS));
+   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxLocalParams <= (1 << INST_INDEX_BITS));
 
-   ASSERT(ctx->Const.VertexProgram.MaxUniformComponents <= 4 * MAX_UNIFORMS);
-   ASSERT(ctx->Const.FragmentProgram.MaxUniformComponents <= 4 * MAX_UNIFORMS);
+   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxUniformComponents <= 4 * MAX_UNIFORMS);
+   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxUniformComponents <= 4 * MAX_UNIFORMS);
 
-   ASSERT(ctx->Const.VertexProgram.MaxAddressOffset <= (1 << INST_INDEX_BITS));
-   ASSERT(ctx->Const.FragmentProgram.MaxAddressOffset <= (1 << INST_INDEX_BITS));
+   ASSERT(ctx->Const.Program[MESA_SHADER_VERTEX].MaxAddressOffset <= (1 << INST_INDEX_BITS));
+   ASSERT(ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxAddressOffset <= (1 << INST_INDEX_BITS));
 
    /* If this fails, increase prog_instruction::TexSrcUnit size */
    STATIC_ASSERT(MAX_TEXTURE_UNITS <= (1 << 5));
@@ -349,6 +349,7 @@ _mesa_delete_program(struct gl_context *ctx, struct gl_program *prog)
       return;
 
    free(prog->String);
+   free(prog->LocalParams);
 
    if (prog->Instructions) {
       _mesa_free_instructions(prog->Instructions, prog->NumInstructions);
@@ -477,7 +478,16 @@ _mesa_clone_program(struct gl_context *ctx, const struct gl_program *prog)
 
    if (prog->Parameters)
       clone->Parameters = _mesa_clone_parameter_list(prog->Parameters);
-   memcpy(clone->LocalParams, prog->LocalParams, sizeof(clone->LocalParams));
+   if (prog->LocalParams) {
+      clone->LocalParams = malloc(MAX_PROGRAM_LOCAL_PARAMS *
+                                  sizeof(float[4]));
+      if (!clone->LocalParams) {
+         _mesa_reference_program(ctx, &clone, NULL);
+         return NULL;
+      }
+      memcpy(clone->LocalParams, prog->LocalParams,
+             MAX_PROGRAM_LOCAL_PARAMS * sizeof(float[4]));
+   }
    clone->IndirectRegisterFiles = prog->IndirectRegisterFiles;
    clone->NumInstructions = prog->NumInstructions;
    clone->NumTemporaries = prog->NumTemporaries;
@@ -881,26 +891,13 @@ _mesa_find_free_register(const GLboolean used[],
  */
 GLboolean
 _mesa_valid_register_index(const struct gl_context *ctx,
-                           gl_shader_type shaderType,
+                           gl_shader_stage shaderType,
                            gl_register_file file, GLint index)
 {
    const struct gl_program_constants *c;
 
-   switch (shaderType) {
-   case MESA_SHADER_VERTEX:
-      c = &ctx->Const.VertexProgram;
-      break;
-   case MESA_SHADER_FRAGMENT:
-      c = &ctx->Const.FragmentProgram;
-      break;
-   case MESA_SHADER_GEOMETRY:
-      c = &ctx->Const.GeometryProgram;
-      break;
-   default:
-      _mesa_problem(ctx,
-                    "unexpected shader type in _mesa_valid_register_index()");
-      return GL_FALSE;
-   }
+   assert(0 <= shaderType && shaderType < MESA_SHADER_STAGES);
+   c = &ctx->Const.Program[shaderType];
 
    switch (file) {
    case PROGRAM_UNDEFINED:
@@ -908,12 +905,6 @@ _mesa_valid_register_index(const struct gl_context *ctx,
 
    case PROGRAM_TEMPORARY:
       return index >= 0 && index < (GLint) c->MaxTemps;
-
-   case PROGRAM_ENV_PARAM:
-      return index >= 0 && index < (GLint) c->MaxEnvParams;
-
-   case PROGRAM_LOCAL_PARAM:
-      return index >= 0 && index < (GLint) c->MaxLocalParams;
 
    case PROGRAM_UNIFORM:
    case PROGRAM_STATE_VAR:
@@ -1032,7 +1023,8 @@ _mesa_postprocess_program(struct gl_context *ctx, struct gl_program *prog)
  */
 GLint
 _mesa_get_min_invocations_per_fragment(struct gl_context *ctx,
-                                       const struct gl_fragment_program *prog)
+                                       const struct gl_fragment_program *prog,
+                                       bool ignore_sample_qualifier)
 {
    /* From ARB_sample_shading specification:
     * "Using gl_SampleID in a fragment shader causes the entire shader
@@ -1045,6 +1037,14 @@ _mesa_get_min_invocations_per_fragment(struct gl_context *ctx,
     *  has no effect."
     */
    if (ctx->Multisample.Enabled) {
+      /* The ARB_gpu_shader5 specification says:
+       *
+       * "Use of the "sample" qualifier on a fragment shader input
+       *  forces per-sample shading"
+       */
+      if (prog->IsSample && !ignore_sample_qualifier)
+         return MAX2(ctx->DrawBuffer->Visual.samples, 1);
+
       if (prog->Base.SystemValuesRead & (SYSTEM_BIT_SAMPLE_ID |
                                          SYSTEM_BIT_SAMPLE_POS))
          return MAX2(ctx->DrawBuffer->Visual.samples, 1);

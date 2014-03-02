@@ -33,6 +33,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/ir_clone.cpp \
 	$(GLSL_SRCDIR)/ir_constant_expression.cpp \
 	$(GLSL_SRCDIR)/ir.cpp \
+	$(GLSL_SRCDIR)/ir_equals.cpp \
 	$(GLSL_SRCDIR)/ir_expression_flattening.cpp \
 	$(GLSL_SRCDIR)/ir_function_can_inline.cpp \
 	$(GLSL_SRCDIR)/ir_function_detect_recursion.cpp \
@@ -98,6 +99,7 @@ LIBGLSL_FILES = \
 	$(GLSL_SRCDIR)/opt_structure_splitting.cpp \
 	$(GLSL_SRCDIR)/opt_swizzle_swizzle.cpp \
 	$(GLSL_SRCDIR)/opt_tree_grafting.cpp \
+	$(GLSL_SRCDIR)/opt_vectorize.cpp \
 	$(GLSL_SRCDIR)/s_expression.cpp \
 	$(GLSL_SRCDIR)/strtod.c
 

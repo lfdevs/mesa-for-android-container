@@ -921,6 +921,7 @@ void
 CodeEmitterNVC0::emitCVT(Instruction *i)
 {
    const bool f2f = isFloatType(i->dType) && isFloatType(i->sType);
+   DataType dType;
 
    switch (i->op) {
    case OP_CEIL:  i->rnd = f2f ? ROUND_PI : ROUND_P; break;
@@ -934,13 +935,18 @@ CodeEmitterNVC0::emitCVT(Instruction *i)
    const bool abs = (i->op == OP_ABS) || i->src(0).mod.abs();
    const bool neg = (i->op == OP_NEG) || i->src(0).mod.neg();
 
+   if (i->op == OP_NEG && i->dType == TYPE_U32)
+      dType = TYPE_S32;
+   else
+      dType = i->dType;
+
    if (i->encSize == 8) {
       emitForm_B(i, HEX64(10000000, 00000004));
 
       roundMode_C(i);
 
       // cvt u16 f32 sets high bits to 0, so we don't have to use Value::Size()
-      code[0] |= util_logbase2(typeSizeof(i->dType)) << 20;
+      code[0] |= util_logbase2(typeSizeof(dType)) << 20;
       code[0] |= util_logbase2(typeSizeof(i->sType)) << 23;
 
       if (sat)
@@ -953,12 +959,12 @@ CodeEmitterNVC0::emitCVT(Instruction *i)
       if (i->ftz)
          code[1] |= 1 << 23;
 
-      if (isSignedIntType(i->dType))
+      if (isSignedIntType(dType))
          code[0] |= 0x080;
       if (isSignedIntType(i->sType))
          code[0] |= 0x200;
 
-      if (isFloatType(i->dType)) {
+      if (isFloatType(dType)) {
          if (!isFloatType(i->sType))
             code[1] |= 0x08000000;
       } else {
@@ -971,7 +977,7 @@ CodeEmitterNVC0::emitCVT(Instruction *i)
       if (i->op == OP_CEIL || i->op == OP_FLOOR || i->op == OP_TRUNC) {
          code[0] = 0x298;
       } else
-      if (isFloatType(i->dType)) {
+      if (isFloatType(dType)) {
          if (isFloatType(i->sType))
             code[0] = 0x098;
          else
@@ -1482,8 +1488,13 @@ CodeEmitterNVC0::emitOUT(const Instruction *i)
 
    // vertex stream
    if (i->src(1).getFile() == FILE_IMMEDIATE) {
-      code[1] |= 0xc000;
-      code[0] |= SDATA(i->src(1)).u32 << 26;
+      // Using immediate encoding here triggers an invalid opcode error
+      // or random results when error reporting is disabled.
+      // TODO: figure this out when we get multiple vertex streams
+      assert(SDATA(i->src(1)).u32 == 0);
+      srcId(NULL, 26);
+      // code[1] |= 0xc000;
+      // code[0] |= SDATA(i->src(1)).u32 << 26;
    } else {
       srcId(i->src(1), 26);
    }

@@ -38,16 +38,16 @@
 #include "radeon_debug.h"
 #include "radeon_mipmap_tree.h"
 
-static gl_format gl_format_and_type_to_mesa_format(GLenum format, GLenum type)
+static mesa_format gl_format_and_type_to_mesa_format(GLenum format, GLenum type)
 {
     switch (format)
     {
         case GL_RGB:
             switch (type) {
                 case GL_UNSIGNED_SHORT_5_6_5:
-                    return MESA_FORMAT_RGB565;
+                    return MESA_FORMAT_B5G6R5_UNORM;
                 case GL_UNSIGNED_SHORT_5_6_5_REV:
-                    return MESA_FORMAT_RGB565_REV;
+                    return MESA_FORMAT_R5G6B5_UNORM;
             }
             break;
         case GL_RGBA:
@@ -55,29 +55,29 @@ static gl_format gl_format_and_type_to_mesa_format(GLenum format, GLenum type)
                 case GL_FLOAT:
                     return MESA_FORMAT_RGBA_FLOAT32;
                 case GL_UNSIGNED_SHORT_5_5_5_1:
-                    return MESA_FORMAT_RGBA5551;
+                    return MESA_FORMAT_A1B5G5R5_UNORM;
                 case GL_UNSIGNED_INT_8_8_8_8:
-                    return MESA_FORMAT_RGBA8888;
+                    return MESA_FORMAT_A8B8G8R8_UNORM;
                 case GL_UNSIGNED_BYTE:
                 case GL_UNSIGNED_INT_8_8_8_8_REV:
-                    return MESA_FORMAT_RGBA8888_REV;
+                    return MESA_FORMAT_R8G8B8A8_UNORM;
             }
             break;
         case GL_BGRA:
             switch (type) {
                 case GL_UNSIGNED_SHORT_4_4_4_4:
-                    return MESA_FORMAT_ARGB4444_REV;
+                    return MESA_FORMAT_A4R4G4B4_UNORM;
                 case GL_UNSIGNED_SHORT_4_4_4_4_REV:
-                    return MESA_FORMAT_ARGB4444;
+                    return MESA_FORMAT_B4G4R4A4_UNORM;
                 case GL_UNSIGNED_SHORT_5_5_5_1:
-                    return MESA_FORMAT_ARGB1555_REV;
+                    return MESA_FORMAT_A1R5G5B5_UNORM;
                 case GL_UNSIGNED_SHORT_1_5_5_5_REV:
-                    return MESA_FORMAT_ARGB1555;
+                    return MESA_FORMAT_B5G5R5A1_UNORM;
                 case GL_UNSIGNED_INT_8_8_8_8:
-                    return MESA_FORMAT_ARGB8888_REV;
+                    return MESA_FORMAT_A8R8G8B8_UNORM;
                 case GL_UNSIGNED_BYTE:
                 case GL_UNSIGNED_INT_8_8_8_8_REV:
-                    return MESA_FORMAT_ARGB8888;
+                    return MESA_FORMAT_B8G8R8A8_UNORM;
 
             }
             break;
@@ -94,7 +94,7 @@ do_blit_readpixels(struct gl_context * ctx,
 {
     radeonContextPtr radeon = RADEON_CONTEXT(ctx);
     const struct radeon_renderbuffer *rrb = radeon_renderbuffer(ctx->ReadBuffer->_ColorReadBuffer);
-    const gl_format dst_format = gl_format_and_type_to_mesa_format(format, type);
+    const mesa_format dst_format = gl_format_and_type_to_mesa_format(format, type);
     unsigned dst_rowstride, dst_imagesize, aligned_rowstride, flip_y;
     struct radeon_bo *dst_buffer;
     GLint dst_x = 0, dst_y = 0;

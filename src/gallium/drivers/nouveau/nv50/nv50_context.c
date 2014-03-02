@@ -80,12 +80,14 @@ nv50_context_unreference_resources(struct nv50_context *nv50)
 
    util_unreference_framebuffer_state(&nv50->framebuffer);
 
+   assert(nv50->num_vtxbufs <= PIPE_MAX_ATTRIBS);
    for (i = 0; i < nv50->num_vtxbufs; ++i)
       pipe_resource_reference(&nv50->vtxbuf[i].buffer, NULL);
 
    pipe_resource_reference(&nv50->idxbuf.buffer, NULL);
 
    for (s = 0; s < 3; ++s) {
+      assert(nv50->num_textures[s] <= PIPE_MAX_SAMPLERS);
       for (i = 0; i < nv50->num_textures[s]; ++i)
          pipe_sampler_view_reference(&nv50->textures[s][i], NULL);
 
@@ -128,6 +130,7 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
    unsigned s, i;
 
    if (res->bind & PIPE_BIND_RENDER_TARGET) {
+      assert(nv50->framebuffer.nr_cbufs <= PIPE_MAX_COLOR_BUFS);
       for (i = 0; i < nv50->framebuffer.nr_cbufs; ++i) {
          if (nv50->framebuffer.cbufs[i] &&
              nv50->framebuffer.cbufs[i]->texture == res) {
@@ -149,6 +152,7 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
    }
 
    if (res->bind & PIPE_BIND_VERTEX_BUFFER) {
+      assert(nv50->num_vtxbufs <= PIPE_MAX_ATTRIBS);
       for (i = 0; i < nv50->num_vtxbufs; ++i) {
          if (nv50->vtxbuf[i].buffer == res) {
             nv50->dirty |= NV50_NEW_ARRAYS;
@@ -165,7 +169,8 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
    }
 
    if (res->bind & PIPE_BIND_SAMPLER_VIEW) {
-      for (s = 0; s < 5; ++s) {
+      for (s = 0; s < 3; ++s) {
+      assert(nv50->num_textures[s] <= PIPE_MAX_SAMPLERS);
       for (i = 0; i < nv50->num_textures[s]; ++i) {
          if (nv50->textures[s][i] &&
              nv50->textures[s][i]->texture == res) {
@@ -179,7 +184,8 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
    }
 
    if (res->bind & PIPE_BIND_CONSTANT_BUFFER) {
-      for (s = 0; s < 5; ++s) {
+      for (s = 0; s < 3; ++s) {
+      assert(nv50->num_vtxbufs <= NV50_MAX_PIPE_CONSTBUFS);
       for (i = 0; i < nv50->num_vtxbufs; ++i) {
          if (!nv50->constbuf[s][i].user &&
              nv50->constbuf[s][i].u.buf == res) {
@@ -195,6 +201,10 @@ nv50_invalidate_resource_storage(struct nouveau_context *ctx,
 
    return ref;
 }
+
+static void
+nv50_context_get_sample_position(struct pipe_context *, unsigned, unsigned,
+                                 float *);
 
 struct pipe_context *
 nv50_create(struct pipe_screen *pscreen, void *priv)
@@ -239,6 +249,7 @@ nv50_create(struct pipe_screen *pscreen, void *priv)
 
    pipe->flush = nv50_flush;
    pipe->texture_barrier = nv50_texture_barrier;
+   pipe->get_sample_position = nv50_context_get_sample_position;
 
    if (!screen->cur_ctx) {
       screen->cur_ctx = nv50;
@@ -292,15 +303,13 @@ nv50_create(struct pipe_screen *pscreen, void *priv)
    return pipe;
 
 out_err:
-   if (nv50) {
-      if (nv50->bufctx_3d)
-         nouveau_bufctx_del(&nv50->bufctx_3d);
-      if (nv50->bufctx)
-         nouveau_bufctx_del(&nv50->bufctx);
-      if (nv50->blit)
-         FREE(nv50->blit);
-      FREE(nv50);
-   }
+   if (nv50->bufctx_3d)
+      nouveau_bufctx_del(&nv50->bufctx_3d);
+   if (nv50->bufctx)
+      nouveau_bufctx_del(&nv50->bufctx);
+   if (nv50->blit)
+      FREE(nv50->blit);
+   FREE(nv50);
    return NULL;
 }
 
@@ -316,4 +325,45 @@ nv50_bufctx_fence(struct nouveau_bufctx *bufctx, boolean on_flush)
       if (res)
          nv50_resource_validate(res, (unsigned)ref->priv_data);
    }
+}
+
+static void
+nv50_context_get_sample_position(struct pipe_context *pipe,
+                                 unsigned sample_count, unsigned sample_index,
+                                 float *xy)
+{
+   static const uint8_t ms1[1][2] = { { 0x8, 0x8 } };
+   static const uint8_t ms2[2][2] = {
+      { 0x4, 0x4 }, { 0xc, 0xc } }; /* surface coords (0,0), (1,0) */
+   static const uint8_t ms4[4][2] = {
+      { 0x6, 0x2 }, { 0xe, 0x6 },   /* (0,0), (1,0) */
+      { 0x2, 0xa }, { 0xa, 0xe } }; /* (0,1), (1,1) */
+   static const uint8_t ms8[8][2] = {
+      { 0x1, 0x7 }, { 0x5, 0x3 },   /* (0,0), (1,0) */
+      { 0x3, 0xd }, { 0x7, 0xb },   /* (0,1), (1,1) */
+      { 0x9, 0x5 }, { 0xf, 0x1 },   /* (2,0), (3,0) */
+      { 0xb, 0xf }, { 0xd, 0x9 } }; /* (2,1), (3,1) */
+#if 0
+   /* NOTE: there are alternative modes for MS2 and MS8, currently not used */
+   static const uint8_t ms8_alt[8][2] = {
+      { 0x9, 0x5 }, { 0x7, 0xb },   /* (2,0), (1,1) */
+      { 0xd, 0x9 }, { 0x5, 0x3 },   /* (3,1), (1,0) */
+      { 0x3, 0xd }, { 0x1, 0x7 },   /* (0,1), (0,0) */
+      { 0xb, 0xf }, { 0xf, 0x1 } }; /* (2,1), (3,0) */
+#endif
+
+   const uint8_t (*ptr)[2];
+
+   switch (sample_count) {
+   case 0:
+   case 1: ptr = ms1; break;
+   case 2: ptr = ms2; break;
+   case 4: ptr = ms4; break;
+   case 8: ptr = ms8; break;
+   default:
+      assert(0);
+      return; /* bad sample count -> undefined locations */
+   }
+   xy[0] = ptr[sample_index][0] * 0.0625f;
+   xy[1] = ptr[sample_index][1] * 0.0625f;
 }

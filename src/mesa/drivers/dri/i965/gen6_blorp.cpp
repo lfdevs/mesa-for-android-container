@@ -254,26 +254,6 @@ gen6_blorp_emit_blend_state(struct brw_context *brw,
    blend->blend1.write_disable_b = params->color_write_disable[2];
    blend->blend1.write_disable_a = params->color_write_disable[3];
 
-   /* When blitting from an XRGB source to a ARGB destination, we need to
-    * interpret the missing channel as 1.0.  Blending can do that for us:
-    * we simply use the RGB values from the fragment shader ("source RGB"),
-    * but smash the alpha channel to 1.
-    */
-   if (params->src.mt &&
-       _mesa_get_format_bits(params->dst.mt->format, GL_ALPHA_BITS) > 0 &&
-       _mesa_get_format_bits(params->src.mt->format, GL_ALPHA_BITS) == 0) {
-      blend->blend0.blend_enable = 1;
-      blend->blend0.ia_blend_enable = 1;
-
-      blend->blend0.blend_func = BRW_BLENDFUNCTION_ADD;
-      blend->blend0.ia_blend_func = BRW_BLENDFUNCTION_ADD;
-
-      blend->blend0.source_blend_factor = BRW_BLENDFACTOR_SRC_COLOR;
-      blend->blend0.dest_blend_factor = BRW_BLENDFACTOR_ZERO;
-      blend->blend0.ia_source_blend_factor = BRW_BLENDFACTOR_ONE;
-      blend->blend0.ia_dest_blend_factor = BRW_BLENDFACTOR_ZERO;
-   }
-
    return cc_blend_state_offset;
 }
 
@@ -401,7 +381,7 @@ gen6_blorp_emit_surface_state(struct brw_context *brw,
 
    /* reloc */
    surf[1] = (surface->compute_tile_offsets(&tile_x, &tile_y) +
-              region->bo->offset);
+              region->bo->offset64);
 
    surf[2] = (0 << BRW_SURFACE_LOD_SHIFT |
               (width - 1) << BRW_SURFACE_WIDTH_SHIFT |
@@ -433,7 +413,7 @@ gen6_blorp_emit_surface_state(struct brw_context *brw,
    drm_intel_bo_emit_reloc(brw->batch.bo,
                            wm_surf_offset + 4,
                            region->bo,
-                           surf[1] - region->bo->offset,
+                           surf[1] - region->bo->offset64,
                            read_domains, write_domain);
 
    return wm_surf_offset;
@@ -487,14 +467,14 @@ gen6_blorp_emit_sampler_state(struct brw_context *brw,
 
    sampler->ss0.min_mag_neq = 1;
 
-   /* Set LOD bias: 
+   /* Set LOD bias:
     */
    sampler->ss0.lod_bias = 0;
 
    sampler->ss0.lod_preclamp = 1; /* OpenGL mode */
    sampler->ss0.default_color_mode = 0; /* OpenGL/DX10 mode */
 
-   /* Set BaseMipLevel, MaxLOD, MinLOD: 
+   /* Set BaseMipLevel, MaxLOD, MinLOD:
     *
     * XXX: I don't think that using firstLevel, lastLevel works,
     * because we always setup the surface state as if firstLevel ==
@@ -664,7 +644,7 @@ gen6_blorp_emit_sf_config(struct brw_context *brw,
              1 << GEN6_SF_URB_ENTRY_READ_LENGTH_SHIFT |
              0 << GEN6_SF_URB_ENTRY_READ_OFFSET_SHIFT);
    OUT_BATCH(0); /* dw2 */
-   OUT_BATCH(params->num_samples > 1 ? GEN6_SF_MSRAST_ON_PATTERN : 0);
+   OUT_BATCH(params->dst.num_samples > 1 ? GEN6_SF_MSRAST_ON_PATTERN : 0);
    for (int i = 0; i < 16; ++i)
       OUT_BATCH(0);
    ADVANCE_BATCH();
@@ -721,7 +701,7 @@ gen6_blorp_emit_wm_config(struct brw_context *brw,
       dw5 |= GEN6_WM_DISPATCH_ENABLE; /* We are rendering */
    }
 
-   if (params->num_samples > 1) {
+   if (params->dst.num_samples > 1) {
       dw6 |= GEN6_WM_MSRAST_ON_PATTERN;
       if (prog_data && prog_data->persample_msaa_dispatch)
          dw6 |= GEN6_WM_MSDISPMODE_PERSAMPLE;
@@ -1010,20 +990,9 @@ gen6_blorp_emit_primitive(struct brw_context *brw,
    OUT_BATCH(0);
    OUT_BATCH(0);
    ADVANCE_BATCH();
-}
 
-static void
-gen6_emit_hiz_workaround(struct brw_context *brw, enum gen6_hiz_op hiz_op)
-{
-   /* This fixes a HiZ hang in WebGL Google Maps. A more minimal fix likely
-    * exists, but this gets the job done.
-    */
-   if (hiz_op == GEN6_HIZ_OP_DEPTH_RESOLVE ||
-       hiz_op == GEN6_HIZ_OP_HIZ_RESOLVE) {
-      brw->batch.need_workaround_flush = true;
-      intel_emit_post_sync_nonzero_flush(brw);
-      intel_emit_depth_stall_flushes(brw);
-   }
+   /* Only used on Sandybridge; harmless to set elsewhere. */
+   brw->batch.need_workaround_flush = true;
 }
 
 /**
@@ -1048,9 +1017,13 @@ gen6_blorp_exec(struct brw_context *brw,
 
    uint32_t prog_offset = params->get_wm_prog(brw, &prog_data);
 
-   gen6_emit_hiz_workaround(brw, params->hiz_op);
-   gen6_emit_3dstate_multisample(brw, params->num_samples);
-   gen6_emit_3dstate_sample_mask(brw, params->num_samples, 1.0, false, ~0u);
+   /* Emit workaround flushes when we switch from drawing to blorping. */
+   brw->batch.need_workaround_flush = true;
+
+   gen6_emit_3dstate_multisample(brw, params->dst.num_samples);
+   gen6_emit_3dstate_sample_mask(brw,
+                                 params->dst.num_samples > 1 ?
+                                 (1 << params->dst.num_samples) - 1 : 1);
    gen6_blorp_emit_state_base_address(brw, params);
    gen6_blorp_emit_vertices(brw, params);
    gen6_blorp_emit_urb_config(brw, params);

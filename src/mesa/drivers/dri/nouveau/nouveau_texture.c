@@ -160,7 +160,7 @@ nouveau_unmap_texture_image(struct gl_context *ctx, struct gl_texture_image *ti,
 	}
 }
 
-static gl_format
+static mesa_format
 nouveau_choose_tex_format(struct gl_context *ctx, GLenum target,
                           GLint internalFormat,
 			  GLenum srcFormat, GLenum srcType)
@@ -175,9 +175,9 @@ nouveau_choose_tex_format(struct gl_context *ctx, GLenum target,
 	case GL_RGBA16:
 	case GL_RGB10_A2:
 	case GL_COMPRESSED_RGBA:
-		return MESA_FORMAT_ARGB8888;
+		return MESA_FORMAT_B8G8R8A8_UNORM;
 	case GL_RGB5_A1:
-		return MESA_FORMAT_ARGB1555;
+		return MESA_FORMAT_B5G5R5A1_UNORM;
 
 	case GL_RGB:
 	case GL_RGB8:
@@ -185,12 +185,12 @@ nouveau_choose_tex_format(struct gl_context *ctx, GLenum target,
 	case GL_RGB12:
 	case GL_RGB16:
 	case GL_COMPRESSED_RGB:
-		return MESA_FORMAT_XRGB8888;
+		return MESA_FORMAT_B8G8R8X8_UNORM;
 	case 3:
 	case GL_R3_G3_B2:
 	case GL_RGB4:
 	case GL_RGB5:
-		return MESA_FORMAT_RGB565;
+		return MESA_FORMAT_B5G6R5_UNORM;
 
 	case 2:
 	case GL_LUMINANCE_ALPHA:
@@ -201,7 +201,7 @@ nouveau_choose_tex_format(struct gl_context *ctx, GLenum target,
 	case GL_LUMINANCE16_ALPHA16:
 	case GL_LUMINANCE8_ALPHA8:
 	case GL_COMPRESSED_LUMINANCE_ALPHA:
-		return MESA_FORMAT_ARGB8888;
+		return MESA_FORMAT_B8G8R8A8_UNORM;
 
 	case 1:
 	case GL_LUMINANCE:
@@ -210,7 +210,7 @@ nouveau_choose_tex_format(struct gl_context *ctx, GLenum target,
 	case GL_LUMINANCE16:
 	case GL_LUMINANCE8:
 	case GL_COMPRESSED_LUMINANCE:
-		return MESA_FORMAT_L8;
+		return MESA_FORMAT_L_UNORM8;
 
 	case GL_ALPHA:
 	case GL_ALPHA4:
@@ -218,14 +218,14 @@ nouveau_choose_tex_format(struct gl_context *ctx, GLenum target,
 	case GL_ALPHA16:
 	case GL_ALPHA8:
 	case GL_COMPRESSED_ALPHA:
-		return MESA_FORMAT_A8;
+		return MESA_FORMAT_A_UNORM8;
 
 	case GL_INTENSITY:
 	case GL_INTENSITY4:
 	case GL_INTENSITY12:
 	case GL_INTENSITY16:
 	case GL_INTENSITY8:
-		return MESA_FORMAT_I8;
+		return MESA_FORMAT_I_UNORM8;
 
 	case GL_RGB_S3TC:
 	case GL_RGB4_S3TC:
@@ -398,9 +398,9 @@ nouveau_texture_reallocate(struct gl_context *ctx, struct gl_texture_object *t)
 static unsigned
 get_teximage_placement(struct gl_texture_image *ti)
 {
-	if (ti->TexFormat == MESA_FORMAT_A8 ||
-	    ti->TexFormat == MESA_FORMAT_L8 ||
-	    ti->TexFormat == MESA_FORMAT_I8)
+	if (ti->TexFormat == MESA_FORMAT_A_UNORM8 ||
+	    ti->TexFormat == MESA_FORMAT_L_UNORM8 ||
+	    ti->TexFormat == MESA_FORMAT_I_UNORM8)
 		/* 1 cpp formats will have to be swizzled by the CPU,
 		 * so leave them in system RAM for now. */
 		return NOUVEAU_BO_MAP;
@@ -581,7 +581,7 @@ nouveau_bind_texture(struct gl_context *ctx, GLenum target,
 	context_dirty_i(ctx, TEX_ENV, ctx->Texture.CurrentUnit);
 }
 
-static gl_format
+static mesa_format
 get_texbuffer_format(struct gl_renderbuffer *rb, GLint format)
 {
 	struct nouveau_surface *s = &to_nouveau_renderbuffer(rb)->surface;
@@ -589,9 +589,9 @@ get_texbuffer_format(struct gl_renderbuffer *rb, GLint format)
 	if (s->cpp < 4)
 		return s->format;
 	else if (format == __DRI_TEXTURE_FORMAT_RGBA)
-		return MESA_FORMAT_ARGB8888;
+		return MESA_FORMAT_B8G8R8A8_UNORM;
 	else
-		return MESA_FORMAT_XRGB8888;
+		return MESA_FORMAT_B8G8R8X8_UNORM;
 }
 
 void

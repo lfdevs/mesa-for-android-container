@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,13 +22,13 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
-                   
+
 
 
 #include "intel_fbo.h"
@@ -112,10 +112,10 @@ brw_upload_wm_unit(struct brw_context *brw)
    wm->thread1.depth_coef_urb_read_offset = 1;
    /* Use ALT floating point mode for ARB fragment programs, because they
     * require 0^0 == 1.  Even though _CurrentFragmentProgram is used for
-    * rendering, CurrentFragmentProgram is used for this check to
-    * differentiate between the GLSL and non-GLSL cases.
+    * rendering, CurrentProgram[MESA_SHADER_FRAGMENT] is used for this check
+    * to differentiate between the GLSL and non-GLSL cases.
     */
-   if (ctx->Shader.CurrentFragmentProgram == NULL)
+   if (ctx->Shader.CurrentProgram[MESA_SHADER_FRAGMENT] == NULL)
       wm->thread1.floating_point_mode = BRW_FLOATING_POINT_NON_IEEE_754;
    else
       wm->thread1.floating_point_mode = BRW_FLOATING_POINT_IEEE_754;
@@ -125,7 +125,7 @@ brw_upload_wm_unit(struct brw_context *brw)
 
    if (brw->wm.prog_data->total_scratch != 0) {
       wm->thread2.scratch_space_base_pointer =
-	 brw->wm.base.scratch_bo->offset >> 10; /* reloc */
+	 brw->wm.base.scratch_bo->offset64 >> 10; /* reloc */
       wm->thread2.per_thread_scratch_space =
 	 ffs(brw->wm.prog_data->total_scratch) - 11;
    } else {
@@ -151,7 +151,7 @@ brw_upload_wm_unit(struct brw_context *brw)
 
    if (brw->wm.base.sampler_count) {
       /* reloc */
-      wm->wm4.sampler_state_pointer = (brw->batch.bo->offset +
+      wm->wm4.sampler_state_pointer = (brw->batch.bo->offset64 +
 				       brw->wm.base.sampler_offset) >> 5;
    } else {
       wm->wm4.sampler_state_pointer = 0;
@@ -242,9 +242,9 @@ brw_upload_wm_unit(struct brw_context *brw)
 
 const struct brw_tracked_state brw_wm_unit = {
    .dirty = {
-      .mesa = (_NEW_POLYGON | 
-	       _NEW_POLYGONSTIPPLE | 
-	       _NEW_LINE | 
+      .mesa = (_NEW_POLYGON |
+	       _NEW_POLYGONSTIPPLE |
+	       _NEW_LINE |
 	       _NEW_COLOR |
 	       _NEW_BUFFERS),
 

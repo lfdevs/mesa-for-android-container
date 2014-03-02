@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -310,12 +310,12 @@ radeon_map_renderbuffer(struct gl_context *ctx,
    }
 
    if ((rmesa->radeonScreen->chip_flags & RADEON_CHIPSET_DEPTH_ALWAYS_TILED) && !rrb->has_surface) {
-       if (rb->Format == MESA_FORMAT_S8_Z24 || rb->Format == MESA_FORMAT_X8_Z24) {
+       if (rb->Format == MESA_FORMAT_Z24_UNORM_S8_UINT || rb->Format == MESA_FORMAT_Z24_UNORM_X8_UINT) {
 	   radeon_map_renderbuffer_s8z24(ctx, rb, x, y, w, h,
 					 mode, out_map, out_stride);
 	   return;
        }
-       if (rb->Format == MESA_FORMAT_Z16) {
+       if (rb->Format == MESA_FORMAT_Z_UNORM16) {
 	   radeon_map_renderbuffer_z16(ctx, rb, x, y, w, h,
 				       mode, out_map, out_stride);
 	   return;
@@ -419,11 +419,11 @@ radeon_unmap_renderbuffer(struct gl_context *ctx,
    GLboolean ok;
 
    if ((rmesa->radeonScreen->chip_flags & RADEON_CHIPSET_DEPTH_ALWAYS_TILED) && !rrb->has_surface) {
-       if (rb->Format == MESA_FORMAT_S8_Z24 || rb->Format == MESA_FORMAT_X8_Z24) {
+       if (rb->Format == MESA_FORMAT_Z24_UNORM_S8_UINT || rb->Format == MESA_FORMAT_Z24_UNORM_X8_UINT) {
 	   radeon_unmap_renderbuffer_s8z24(ctx, rb);
 	   return;
        }
-       if (rb->Format == MESA_FORMAT_Z16) {
+       if (rb->Format == MESA_FORMAT_Z_UNORM16) {
 	   radeon_unmap_renderbuffer_z16(ctx, rb);
 	   return;
        }
@@ -507,22 +507,22 @@ radeon_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffe
    case GL_STENCIL_INDEX8_EXT:
    case GL_STENCIL_INDEX16_EXT:
       /* alloc a depth+stencil buffer */
-      rb->Format = MESA_FORMAT_S8_Z24;
+      rb->Format = MESA_FORMAT_Z24_UNORM_S8_UINT;
       cpp = 4;
       break;
    case GL_DEPTH_COMPONENT16:
-      rb->Format = MESA_FORMAT_Z16;
+      rb->Format = MESA_FORMAT_Z_UNORM16;
       cpp = 2;
       break;
    case GL_DEPTH_COMPONENT:
    case GL_DEPTH_COMPONENT24:
    case GL_DEPTH_COMPONENT32:
-      rb->Format = MESA_FORMAT_X8_Z24;
+      rb->Format = MESA_FORMAT_Z24_UNORM_X8_UINT;
       cpp = 4;
       break;
    case GL_DEPTH_STENCIL_EXT:
    case GL_DEPTH24_STENCIL8_EXT:
-      rb->Format = MESA_FORMAT_S8_Z24;
+      rb->Format = MESA_FORMAT_Z24_UNORM_S8_UINT;
       cpp = 4;
       break;
    default:
@@ -636,7 +636,7 @@ radeon_nop_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
  * Not used for user-created renderbuffers.
  */
 struct radeon_renderbuffer *
-radeon_create_renderbuffer(gl_format format, __DRIdrawable *driDrawPriv)
+radeon_create_renderbuffer(mesa_format format, __DRIdrawable *driDrawPriv)
 {
     struct radeon_renderbuffer *rrb;
     struct gl_renderbuffer *rb;
@@ -833,7 +833,7 @@ static void
 radeon_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 {
 	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
-	gl_format mesa_format;
+	mesa_format mesa_format;
 	int i;
 
 	for (i = -2; i < (GLint) ctx->Const.MaxColorAttachments; i++) {

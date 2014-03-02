@@ -17,7 +17,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -42,11 +42,15 @@ util_clear(struct pipe_context *pipe,
            struct pipe_framebuffer_state *framebuffer, unsigned buffers,
            const union pipe_color_union *color, double depth, unsigned stencil)
 {
-   if (buffers & PIPE_CLEAR_COLOR) {
-      unsigned i;
-      for (i = 0; i < framebuffer->nr_cbufs; i++) {
+   unsigned i;
+
+   for (i = 0; i < framebuffer->nr_cbufs; i++) {
+      if (buffers & (PIPE_CLEAR_COLOR0 << i)) {
          struct pipe_surface *ps = framebuffer->cbufs[i];
-         pipe->clear_render_target(pipe, ps, color, 0, 0, ps->width, ps->height);
+
+         if (ps) {
+            pipe->clear_render_target(pipe, ps, color, 0, 0, ps->width, ps->height);
+         }
       }
    }
 

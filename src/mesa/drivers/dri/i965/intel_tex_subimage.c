@@ -1,9 +1,9 @@
 
 /**************************************************************************
- * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -11,19 +11,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #include "main/bufferobj.h"
@@ -549,7 +549,7 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
    uint32_t cpp;
    mem_copy_fn mem_copy = NULL;
 
-   /* This fastpath is restricted to specific texture types: level 0 of
+   /* This fastpath is restricted to specific texture types:
     * a 2D BGRA, RGBA, L8 or A8 texture. It could be generalized to support
     * more types.
     *
@@ -561,7 +561,6 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
    if (!brw->has_llc ||
        type != GL_UNSIGNED_BYTE ||
        texImage->TexObject->Target != GL_TEXTURE_2D ||
-       texImage->Level != 0 ||
        pixels == NULL ||
        _mesa_is_bufferobj(packing->BufferObj) ||
        packing->Alignment > 4 ||
@@ -573,11 +572,12 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
        packing->Invert)
       return false;
 
-   if ((texImage->TexFormat == MESA_FORMAT_L8 && format == GL_LUMINANCE) ||
-       (texImage->TexFormat == MESA_FORMAT_A8 && format == GL_ALPHA)) {
+   if ((texImage->TexFormat == MESA_FORMAT_L_UNORM8 && format == GL_LUMINANCE) ||
+       (texImage->TexFormat == MESA_FORMAT_A_UNORM8 && format == GL_ALPHA)) {
       cpp = 1;
       mem_copy = memcpy;
-   } else if (texImage->TexFormat == MESA_FORMAT_ARGB8888) {
+   } else if ((texImage->TexFormat == MESA_FORMAT_B8G8R8A8_UNORM) ||
+              (texImage->TexFormat == MESA_FORMAT_B8G8R8X8_UNORM)) {
       cpp = 4;
       if (format == GL_BGRA) {
          mem_copy = memcpy;
@@ -628,13 +628,17 @@ intel_texsubimage_tiled_memcpy(struct gl_context * ctx,
     * the function.
     */
    DBG("%s: level=%d offset=(%d,%d) (w,h)=(%d,%d) format=0x%x type=0x%x "
-       "gl_format=0x%x tiling=%d "
+       "mesa_format=0x%x tiling=%d "
        "packing=(alignment=%d row_length=%d skip_pixels=%d skip_rows=%d) "
        "for_glTexImage=%d\n",
        __FUNCTION__, texImage->Level, xoffset, yoffset, width, height,
        format, type, texImage->TexFormat, image->mt->region->tiling,
        packing->Alignment, packing->RowLength, packing->SkipPixels,
        packing->SkipRows, for_glTexImage);
+
+   /* Adjust x and y offset based on miplevel */
+   xoffset += image->mt->level[texImage->Level].level_x;
+   yoffset += image->mt->level[texImage->Level].level_y;
 
    linear_to_tiled(
       xoffset * cpp, (xoffset + width) * cpp,

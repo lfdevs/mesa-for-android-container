@@ -557,6 +557,7 @@ nv50_sampler_state_delete(struct pipe_context *pipe, void *hwcso)
    unsigned s, i;
 
    for (s = 0; s < 3; ++s)
+      assert(nv50_context(pipe)->num_samplers[s] <= PIPE_MAX_SAMPLERS);
       for (i = 0; i < nv50_context(pipe)->num_samplers[s]; ++i)
          if (nv50_context(pipe)->samplers[s][i] == hwcso)
             nv50_context(pipe)->samplers[s][i] = NULL;
@@ -572,6 +573,7 @@ nv50_stage_sampler_states_bind(struct nv50_context *nv50, int s,
 {
    unsigned i;
 
+   assert(nr <= PIPE_MAX_SAMPLERS);
    for (i = 0; i < nr; ++i) {
       struct nv50_tsc_entry *old = nv50->samplers[s][i];
 
@@ -579,6 +581,7 @@ nv50_stage_sampler_states_bind(struct nv50_context *nv50, int s,
       if (old)
          nv50_screen_tsc_unlock(nv50->screen, old);
    }
+   assert(nv50->num_samplers[s] <= PIPE_MAX_SAMPLERS);
    for (; i < nv50->num_samplers[s]; ++i)
       if (nv50->samplers[s][i])
          nv50_screen_tsc_unlock(nv50->screen, nv50->samplers[s][i]);
@@ -646,6 +649,7 @@ nv50_stage_set_sampler_views(struct nv50_context *nv50, int s,
 {
    unsigned i;
 
+   assert(nr <= PIPE_MAX_SAMPLERS);
    for (i = 0; i < nr; ++i) {
       struct nv50_tic_entry *old = nv50_tic_entry(nv50->textures[s][i]);
       if (old)
@@ -654,6 +658,7 @@ nv50_stage_set_sampler_views(struct nv50_context *nv50, int s,
       pipe_sampler_view_reference(&nv50->textures[s][i], views[i]);
    }
 
+   assert(nv50->num_textures[s] <= PIPE_MAX_SAMPLERS);
    for (i = nr; i < nv50->num_textures[s]; ++i) {
       struct nv50_tic_entry *old = nv50_tic_entry(nv50->textures[s][i]);
       if (!old)
@@ -786,6 +791,7 @@ nv50_set_constant_buffer(struct pipe_context *pipe, uint shader, uint index,
    if (shader == PIPE_SHADER_COMPUTE)
       return;
 
+   assert(i < NV50_MAX_PIPE_CONSTBUFS);
    if (nv50->constbuf[s][i].user)
       nv50->constbuf[s][i].u.buf = NULL;
    else
@@ -1123,4 +1129,6 @@ nv50_init_state_functions(struct nv50_context *nv50)
    pipe->create_stream_output_target = nv50_so_target_create;
    pipe->stream_output_target_destroy = nv50_so_target_destroy;
    pipe->set_stream_output_targets = nv50_set_stream_output_targets;
+
+   nv50->sample_mask = ~0;
 }

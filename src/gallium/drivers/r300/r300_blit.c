@@ -130,7 +130,7 @@ static boolean r300_cbzb_clear_allowed(struct r300_context *r300,
         (struct pipe_framebuffer_state*)r300->fb_state.state;
 
     /* Only color clear allowed, and only one colorbuffer. */
-    if (clear_buffers != PIPE_CLEAR_COLOR || fb->nr_cbufs != 1)
+    if ((clear_buffers & ~PIPE_CLEAR_COLOR) != 0 || fb->nr_cbufs != 1)
         return FALSE;
 
     return r300_surface(fb->cbufs[0])->cbzb_allowed;
@@ -365,9 +365,7 @@ static void r300_clear(struct pipe_context* pipe,
     if (buffers) {
         /* Clear using the blitter. */
         r300_blitter_begin(r300, R300_CLEAR);
-        util_blitter_clear(r300->blitter,
-                           width,
-                           height,
+        util_blitter_clear(r300->blitter, width, height, 1,
                            buffers, color, depth, stencil);
         r300_blitter_end(r300);
     } else if (r300->zmask_clear.dirty ||
@@ -669,8 +667,7 @@ static void r300_resource_copy_region(struct pipe_context *pipe,
     r300_blitter_begin(r300, R300_COPY);
     util_blitter_blit_generic(r300->blitter, dst_view, &dstbox,
                               src_view, src_box, src_width0, src_height0,
-                              PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL,
-                              FALSE);
+                              PIPE_MASK_RGBAZS, PIPE_TEX_FILTER_NEAREST, NULL);
     r300_blitter_end(r300);
 
     pipe_surface_reference(&dst_view, NULL);

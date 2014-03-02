@@ -97,7 +97,7 @@ struct lp_rasterizer_task
    /** "my" index */
    unsigned thread_index;
 
-   /* occlude counter for visible pixels */
+   /** Non-interpolated passthru state and occlude counter for visible pixels */
    struct lp_jit_thread_data thread_data;
    uint64_t ps_invocations;
    uint8_t ps_inv_multiplier;
@@ -293,8 +293,15 @@ lp_rast_shade_quads_all( struct lp_rasterizer_task *task,
 
    /* color buffer */
    for (i = 0; i < scene->fb.nr_cbufs; i++) {
-      stride[i] = scene->cbufs[i].stride;
-      color[i] = lp_rast_get_unswizzled_color_block_pointer(task, i, x, y, inputs->layer);
+      if (scene->fb.cbufs[i]) {
+         stride[i] = scene->cbufs[i].stride;
+         color[i] = lp_rast_get_unswizzled_color_block_pointer(task, i, x, y,
+                                                               inputs->layer);
+      }
+      else {
+         stride[i] = 0;
+         color[i] = NULL;
+      }
    }
 
    if (scene->zsbuf.map) {
@@ -310,6 +317,9 @@ lp_rast_shade_quads_all( struct lp_rasterizer_task *task,
       /* not very accurate would need a popcount on the mask */
       /* always count this not worth bothering? */
       task->ps_invocations += 1 * variant->ps_inv_multiplier;
+
+      /* Propagate non-interpolated raster state. */
+      task->thread_data.raster_state.viewport_index = inputs->viewport_index;
 
       /* run shader on 4x4 block */
       BEGIN_JIT_CALL(state, task);
@@ -353,6 +363,33 @@ void lp_rast_triangle_3_16( struct lp_rasterizer_task *,
                             const union lp_rast_cmd_arg );
 
 void lp_rast_triangle_4_16( struct lp_rasterizer_task *, 
+                            const union lp_rast_cmd_arg );
+
+
+void lp_rast_triangle_32_1( struct lp_rasterizer_task *, 
+                         const union lp_rast_cmd_arg );
+void lp_rast_triangle_32_2( struct lp_rasterizer_task *, 
+                         const union lp_rast_cmd_arg );
+void lp_rast_triangle_32_3( struct lp_rasterizer_task *, 
+                         const union lp_rast_cmd_arg );
+void lp_rast_triangle_32_4( struct lp_rasterizer_task *, 
+                         const union lp_rast_cmd_arg );
+void lp_rast_triangle_32_5( struct lp_rasterizer_task *, 
+                         const union lp_rast_cmd_arg );
+void lp_rast_triangle_32_6( struct lp_rasterizer_task *, 
+                         const union lp_rast_cmd_arg );
+void lp_rast_triangle_32_7( struct lp_rasterizer_task *, 
+                         const union lp_rast_cmd_arg );
+void lp_rast_triangle_32_8( struct lp_rasterizer_task *, 
+                         const union lp_rast_cmd_arg );
+
+void lp_rast_triangle_32_3_4(struct lp_rasterizer_task *,
+			  const union lp_rast_cmd_arg );
+
+void lp_rast_triangle_32_3_16( struct lp_rasterizer_task *, 
+                            const union lp_rast_cmd_arg );
+
+void lp_rast_triangle_32_4_16( struct lp_rasterizer_task *, 
                             const union lp_rast_cmd_arg );
 
 void

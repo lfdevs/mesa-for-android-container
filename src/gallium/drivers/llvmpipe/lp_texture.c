@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2006 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2006 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -26,8 +26,8 @@
  **************************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
-  *   Michel Dänzer <michel@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
+  *   Michel Dänzer <daenzer@vmware.com>
   */
 
 #include <stdio.h>
@@ -200,7 +200,7 @@ llvmpipe_displaytarget_layout(struct llvmpipe_screen *screen,
                                           lpr->base.bind,
                                           lpr->base.format,
                                           width, height,
-                                          16,
+                                          64,
                                           &lpr->row_stride[0] );
 
    if (lpr->dt == NULL)
@@ -261,7 +261,7 @@ llvmpipe_resource_create(struct pipe_screen *_screen,
        * read/write always LP_RASTER_BLOCK_SIZE pixels, but the element
        * offset doesn't need to be aligned to LP_RASTER_BLOCK_SIZE.
        */
-      lpr->data = align_malloc(bytes + (LP_RASTER_BLOCK_SIZE - 1) * 4 * sizeof(float), 16);
+      lpr->data = align_malloc(bytes + (LP_RASTER_BLOCK_SIZE - 1) * 4 * sizeof(float), 64);
       /*
        * buffers don't really have stride but it's probably safer
        * (for code doing same calculations for buffers and textures)
@@ -746,7 +746,7 @@ llvmpipe_get_texture_image_address(struct llvmpipe_resource *lpr,
 static void
 alloc_image_data(struct llvmpipe_resource *lpr)
 {
-   uint alignment = MAX2(16, util_cpu_caps.cacheline);
+   uint alignment = MAX2(64, util_cpu_caps.cacheline);
    uint level;
    uint offset = 0;
 

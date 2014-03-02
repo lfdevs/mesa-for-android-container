@@ -118,14 +118,15 @@ validate_texture_wrap_mode(struct gl_context * ctx, GLenum target, GLenum wrap)
 /**
  * Get current texture object for given target.
  * Return NULL if any error (and record the error).
- * Note that this is different from _mesa_select_tex_object() in that proxy
- * targets are not accepted.
+ * Note that this is different from _mesa_get_current_tex_object() in that
+ * proxy targets are not accepted.
  * Only the glGetTexLevelParameter() functions accept proxy targets.
  */
 static struct gl_texture_object *
 get_texobj(struct gl_context *ctx, GLenum target, GLboolean get)
 {
    struct gl_texture_unit *texUnit;
+   int targetIndex;
 
    if (ctx->Texture.CurrentUnit >= ctx->Const.MaxCombinedTextureImageUnits) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
@@ -135,69 +136,15 @@ get_texobj(struct gl_context *ctx, GLenum target, GLboolean get)
 
    texUnit = _mesa_get_current_tex_unit(ctx);
 
-   switch (target) {
-   case GL_TEXTURE_1D:
-      if (_mesa_is_desktop_gl(ctx))
-         return texUnit->CurrentTex[TEXTURE_1D_INDEX];
-      break;
-   case GL_TEXTURE_2D:
-      return texUnit->CurrentTex[TEXTURE_2D_INDEX];
-   case GL_TEXTURE_3D:
-      if (ctx->API != API_OPENGLES)
-         return texUnit->CurrentTex[TEXTURE_3D_INDEX];
-      break;
-   case GL_TEXTURE_CUBE_MAP:
-      if (ctx->Extensions.ARB_texture_cube_map) {
-         return texUnit->CurrentTex[TEXTURE_CUBE_INDEX];
-      }
-      break;
-   case GL_TEXTURE_RECTANGLE_NV:
-      if (_mesa_is_desktop_gl(ctx)
-          && ctx->Extensions.NV_texture_rectangle) {
-         return texUnit->CurrentTex[TEXTURE_RECT_INDEX];
-      }
-      break;
-   case GL_TEXTURE_1D_ARRAY_EXT:
-      if (_mesa_is_desktop_gl(ctx)
-          && (ctx->Extensions.MESA_texture_array ||
-              ctx->Extensions.EXT_texture_array)) {
-         return texUnit->CurrentTex[TEXTURE_1D_ARRAY_INDEX];
-      }
-      break;
-   case GL_TEXTURE_2D_ARRAY_EXT:
-      if ((_mesa_is_desktop_gl(ctx) || _mesa_is_gles3(ctx))
-          && (ctx->Extensions.MESA_texture_array ||
-              ctx->Extensions.EXT_texture_array)) {
-         return texUnit->CurrentTex[TEXTURE_2D_ARRAY_INDEX];
-      }
-      break;
-   case GL_TEXTURE_EXTERNAL_OES:
-      if (_mesa_is_gles(ctx) && ctx->Extensions.OES_EGL_image_external) {
-         return texUnit->CurrentTex[TEXTURE_EXTERNAL_INDEX];
-      }
-      break;
-   case GL_TEXTURE_CUBE_MAP_ARRAY:
-      if (ctx->Extensions.ARB_texture_cube_map_array) {
-         return texUnit->CurrentTex[TEXTURE_CUBE_ARRAY_INDEX];
-      }
-      break;
-   case GL_TEXTURE_2D_MULTISAMPLE:
-      if (ctx->Extensions.ARB_texture_multisample) {
-         return texUnit->CurrentTex[TEXTURE_2D_MULTISAMPLE_INDEX];
-      }
-      break;
-   case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
-      if (ctx->Extensions.ARB_texture_multisample) {
-         return texUnit->CurrentTex[TEXTURE_2D_MULTISAMPLE_ARRAY_INDEX];
-      }
-      break;
-   default:
-      ;
-   }
-
-   _mesa_error(ctx, GL_INVALID_ENUM,
+   targetIndex = _mesa_tex_target_to_index(ctx, target);
+   if (targetIndex < 0 || targetIndex == TEXTURE_BUFFER_INDEX) {
+      _mesa_error(ctx, GL_INVALID_ENUM,
                   "gl%sTexParameter(target)", get ? "Get" : "");
-   return NULL;
+      return NULL;
+   }
+   assert(targetIndex < NUM_TEXTURE_TARGETS);
+
+   return texUnit->CurrentTex[targetIndex];
 }
 
 
@@ -787,7 +734,7 @@ _mesa_TexParameterf(GLenum target, GLenum pname, GLfloat param)
    }
 
    if (ctx->Driver.TexParameter && need_update) {
-      ctx->Driver.TexParameter(ctx, target, texObj, pname, &param);
+      ctx->Driver.TexParameter(ctx, texObj, pname, &param);
    }
 }
 
@@ -858,7 +805,7 @@ _mesa_TexParameterfv(GLenum target, GLenum pname, const GLfloat *params)
    }
 
    if (ctx->Driver.TexParameter && need_update) {
-      ctx->Driver.TexParameter(ctx, target, texObj, pname, params);
+      ctx->Driver.TexParameter(ctx, texObj, pname, params);
    }
 }
 
@@ -901,7 +848,7 @@ _mesa_TexParameteri(GLenum target, GLenum pname, GLint param)
 
    if (ctx->Driver.TexParameter && need_update) {
       GLfloat fparam = (GLfloat) param;
-      ctx->Driver.TexParameter(ctx, target, texObj, pname, &fparam);
+      ctx->Driver.TexParameter(ctx, texObj, pname, &fparam);
    }
 }
 
@@ -957,7 +904,7 @@ _mesa_TexParameteriv(GLenum target, GLenum pname, const GLint *params)
          fparams[2] = INT_TO_FLOAT(params[2]);
          fparams[3] = INT_TO_FLOAT(params[3]);
       }
-      ctx->Driver.TexParameter(ctx, target, texObj, pname, fparams);
+      ctx->Driver.TexParameter(ctx, texObj, pname, fparams);
    }
 }
 
@@ -1039,6 +986,9 @@ legal_get_tex_level_parameter_target(struct gl_context *ctx, GLenum target)
    case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_ARB:
    case GL_PROXY_TEXTURE_CUBE_MAP_ARB:
       return ctx->Extensions.ARB_texture_cube_map;
+   case GL_TEXTURE_CUBE_MAP_ARRAY_ARB:
+   case GL_PROXY_TEXTURE_CUBE_MAP_ARRAY_ARB:
+      return ctx->Extensions.ARB_texture_cube_map_array;
    case GL_TEXTURE_RECTANGLE_NV:
    case GL_PROXY_TEXTURE_RECTANGLE_NV:
       return ctx->Extensions.NV_texture_rectangle;
@@ -1046,8 +996,7 @@ legal_get_tex_level_parameter_target(struct gl_context *ctx, GLenum target)
    case GL_PROXY_TEXTURE_1D_ARRAY_EXT:
    case GL_TEXTURE_2D_ARRAY_EXT:
    case GL_PROXY_TEXTURE_2D_ARRAY_EXT:
-      return (ctx->Extensions.MESA_texture_array ||
-              ctx->Extensions.EXT_texture_array);
+      return ctx->Extensions.EXT_texture_array;
    case GL_TEXTURE_BUFFER:
       /* GetTexLevelParameter accepts GL_TEXTURE_BUFFER in GL 3.1+ contexts,
        * but not in earlier versions that expose ARB_texture_buffer_object.
@@ -1085,7 +1034,7 @@ get_tex_level_parameter_image(struct gl_context *ctx,
                               GLenum pname, GLint *params)
 {
    const struct gl_texture_image *img = NULL;
-   gl_format texFormat;
+   mesa_format texFormat;
 
    img = _mesa_select_tex_image(ctx, texObj, target, level);
    if (!img || img->TexFormat == MESA_FORMAT_NONE) {
@@ -1166,17 +1115,14 @@ get_tex_level_parameter_image(struct gl_context *ctx,
             goto invalid_pname;
          *params = _mesa_get_format_bits(texFormat, pname);
          break;
-      case GL_TEXTURE_STENCIL_SIZE_EXT:
-         if (!ctx->Extensions.EXT_packed_depth_stencil &&
-             !ctx->Extensions.ARB_framebuffer_object)
-            goto invalid_pname;
+      case GL_TEXTURE_STENCIL_SIZE:
          *params = _mesa_get_format_bits(texFormat, pname);
          break;
       case GL_TEXTURE_SHARED_SIZE:
          if (ctx->Version < 30 &&
              !ctx->Extensions.EXT_texture_shared_exponent)
             goto invalid_pname;
-         *params = texFormat == MESA_FORMAT_RGB9_E5_FLOAT ? 5 : 0;
+         *params = texFormat == MESA_FORMAT_R9G9B9E5_FLOAT ? 5 : 0;
          break;
 
       /* GL_ARB_texture_compression */
@@ -1244,7 +1190,7 @@ get_tex_level_parameter_buffer(struct gl_context *ctx,
                                GLenum pname, GLint *params)
 {
    const struct gl_buffer_object *bo = texObj->BufferObject;
-   gl_format texFormat = texObj->_BufferObjectFormat;
+   mesa_format texFormat = texObj->_BufferObjectFormat;
    GLenum internalFormat = texObj->BufferObjectFormat;
    GLenum baseFormat = _mesa_get_format_base_format(texFormat);
 
@@ -1363,7 +1309,6 @@ void GLAPIENTRY
 _mesa_GetTexLevelParameteriv( GLenum target, GLint level,
                               GLenum pname, GLint *params )
 {
-   const struct gl_texture_unit *texUnit;
    struct gl_texture_object *texObj;
    GLint maxLevels;
    GET_CURRENT_CONTEXT(ctx);
@@ -1373,8 +1318,6 @@ _mesa_GetTexLevelParameteriv( GLenum target, GLint level,
                   "glGetTexLevelParameteriv(current unit)");
       return;
    }
-
-   texUnit = _mesa_get_current_tex_unit(ctx);
 
    if (!legal_get_tex_level_parameter_target(ctx, target)) {
       _mesa_error(ctx, GL_INVALID_ENUM,
@@ -1390,7 +1333,7 @@ _mesa_GetTexLevelParameteriv( GLenum target, GLint level,
       return;
    }
 
-   texObj = _mesa_select_tex_object(ctx, texUnit, target);
+   texObj = _mesa_get_current_tex_object(ctx, target);
 
    if (target == GL_TEXTURE_BUFFER)
       get_tex_level_parameter_buffer(ctx, texObj, pname, params);
@@ -1562,9 +1505,35 @@ _mesa_GetTexParameterfv( GLenum target, GLenum pname, GLfloat *params )
          break;
 
       case GL_TEXTURE_IMMUTABLE_LEVELS:
-         if (!_mesa_is_gles3(ctx))
+         if (_mesa_is_gles3(ctx) ||
+             (_mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_texture_view))
+            *params = (GLfloat) obj->ImmutableLevels;
+         else
             goto invalid_pname;
-         *params = (GLfloat) obj->ImmutableLevels;
+         break;
+
+      case GL_TEXTURE_VIEW_MIN_LEVEL:
+         if (!ctx->Extensions.ARB_texture_view)
+            goto invalid_pname;
+         *params = (GLfloat) obj->MinLevel;
+         break;
+
+      case GL_TEXTURE_VIEW_NUM_LEVELS:
+         if (!ctx->Extensions.ARB_texture_view)
+            goto invalid_pname;
+         *params = (GLfloat) obj->NumLevels;
+         break;
+
+      case GL_TEXTURE_VIEW_MIN_LAYER:
+         if (!ctx->Extensions.ARB_texture_view)
+            goto invalid_pname;
+         *params = (GLfloat) obj->MinLayer;
+         break;
+
+      case GL_TEXTURE_VIEW_NUM_LAYERS:
+         if (!ctx->Extensions.ARB_texture_view)
+            goto invalid_pname;
+         *params = (GLfloat) obj->NumLayers;
          break;
 
       case GL_REQUIRED_TEXTURE_IMAGE_UNITS_OES:
@@ -1704,7 +1673,7 @@ _mesa_GetTexParameteriv( GLenum target, GLenum pname, GLint *params )
          /* GL spec 'Data Conversions' section specifies that floating-point
           * value in integer Get function is rounded to nearest integer
           */
-         *params = (GLint) roundf(obj->Sampler.LodBias);
+         *params = IROUND(obj->Sampler.LodBias);
          break;
       case GL_TEXTURE_CROP_RECT_OES:
          if (ctx->API != API_OPENGLES || !ctx->Extensions.OES_draw_texture)
@@ -1746,9 +1715,35 @@ _mesa_GetTexParameteriv( GLenum target, GLenum pname, GLint *params )
          break;
 
       case GL_TEXTURE_IMMUTABLE_LEVELS:
-         if (!_mesa_is_gles3(ctx))
+         if (_mesa_is_gles3(ctx) ||
+             (_mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_texture_view))
+            *params = obj->ImmutableLevels;
+         else
             goto invalid_pname;
-         *params = obj->ImmutableLevels;
+         break;
+
+      case GL_TEXTURE_VIEW_MIN_LEVEL:
+         if (!ctx->Extensions.ARB_texture_view)
+            goto invalid_pname;
+         *params = (GLint) obj->MinLevel;
+         break;
+
+      case GL_TEXTURE_VIEW_NUM_LEVELS:
+         if (!ctx->Extensions.ARB_texture_view)
+            goto invalid_pname;
+         *params = (GLint) obj->NumLevels;
+         break;
+
+      case GL_TEXTURE_VIEW_MIN_LAYER:
+         if (!ctx->Extensions.ARB_texture_view)
+            goto invalid_pname;
+         *params = (GLint) obj->MinLayer;
+         break;
+
+      case GL_TEXTURE_VIEW_NUM_LAYERS:
+         if (!ctx->Extensions.ARB_texture_view)
+            goto invalid_pname;
+         *params = (GLint) obj->NumLayers;
          break;
 
       case GL_REQUIRED_TEXTURE_IMAGE_UNITS_OES:
@@ -1761,6 +1756,12 @@ _mesa_GetTexParameteriv( GLenum target, GLenum pname, GLint *params )
          if (!ctx->Extensions.EXT_texture_sRGB_decode)
             goto invalid_pname;
          *params = obj->Sampler.sRGBDecode;
+         break;
+
+      case GL_IMAGE_FORMAT_COMPATIBILITY_TYPE:
+         if (!ctx->Extensions.ARB_shader_image_load_store)
+            goto invalid_pname;
+         *params = obj->ImageFormatCompatibilityType;
          break;
 
       default:

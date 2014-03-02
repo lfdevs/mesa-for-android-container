@@ -193,7 +193,6 @@ int r600_bytecode_add_output(struct r600_bytecode *bc,
 		if ((output->gpr + output->burst_count) == bc->cf_last->output.gpr &&
 			(output->array_base + output->burst_count) == bc->cf_last->output.array_base) {
 
-			bc->cf_last->output.end_of_program |= output->end_of_program;
 			bc->cf_last->op = bc->cf_last->output.op = output->op;
 			bc->cf_last->output.gpr = output->gpr;
 			bc->cf_last->output.array_base = output->array_base;
@@ -203,7 +202,6 @@ int r600_bytecode_add_output(struct r600_bytecode *bc,
 		} else if (output->gpr == (bc->cf_last->output.gpr + bc->cf_last->output.burst_count) &&
 			output->array_base == (bc->cf_last->output.array_base + bc->cf_last->output.burst_count)) {
 
-			bc->cf_last->output.end_of_program |= output->end_of_program;
 			bc->cf_last->op = bc->cf_last->output.op = output->op;
 			bc->cf_last->output.burst_count += output->burst_count;
 			return 0;
@@ -215,6 +213,7 @@ int r600_bytecode_add_output(struct r600_bytecode *bc,
 		return r;
 	bc->cf_last->op = output->op;
 	memcpy(&bc->cf_last->output, output, sizeof(struct r600_bytecode_output));
+	bc->cf_last->barrier = 1;
 	return 0;
 }
 
@@ -387,7 +386,7 @@ static int reserve_cfile(struct r600_bytecode *bc, struct alu_bank_swizzle *bs, 
 
 static int is_gpr(unsigned sel)
 {
-	return (sel >= 0 && sel <= 127);
+	return (sel <= 127);
 }
 
 /* CB constants start at 512, and get translated to a kcache index when ALU
@@ -1526,24 +1525,26 @@ static int r600_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode
 		bc->bytecode[id++] = S_SQ_CF_ALLOC_EXPORT_WORD0_RW_GPR(cf->output.gpr) |
 			S_SQ_CF_ALLOC_EXPORT_WORD0_ELEM_SIZE(cf->output.elem_size) |
 			S_SQ_CF_ALLOC_EXPORT_WORD0_ARRAY_BASE(cf->output.array_base) |
-			S_SQ_CF_ALLOC_EXPORT_WORD0_TYPE(cf->output.type);
+			S_SQ_CF_ALLOC_EXPORT_WORD0_TYPE(cf->output.type) |
+			S_SQ_CF_ALLOC_EXPORT_WORD0_INDEX_GPR(cf->output.index_gpr);
 		bc->bytecode[id++] = S_SQ_CF_ALLOC_EXPORT_WORD1_BURST_COUNT(cf->output.burst_count - 1) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_X(cf->output.swizzle_x) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_Y(cf->output.swizzle_y) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_Z(cf->output.swizzle_z) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_SWIZ_SEL_W(cf->output.swizzle_w) |
-			S_SQ_CF_ALLOC_EXPORT_WORD1_BARRIER(cf->output.barrier) |
+			S_SQ_CF_ALLOC_EXPORT_WORD1_BARRIER(cf->barrier) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(opcode) |
-			S_SQ_CF_ALLOC_EXPORT_WORD1_END_OF_PROGRAM(cf->output.end_of_program);
-	} else if (cfop->flags & CF_STRM) {
+			S_SQ_CF_ALLOC_EXPORT_WORD1_END_OF_PROGRAM(cf->end_of_program);
+	} else if (cfop->flags & CF_MEM) {
 		bc->bytecode[id++] = S_SQ_CF_ALLOC_EXPORT_WORD0_RW_GPR(cf->output.gpr) |
 			S_SQ_CF_ALLOC_EXPORT_WORD0_ELEM_SIZE(cf->output.elem_size) |
 			S_SQ_CF_ALLOC_EXPORT_WORD0_ARRAY_BASE(cf->output.array_base) |
-			S_SQ_CF_ALLOC_EXPORT_WORD0_TYPE(cf->output.type);
+			S_SQ_CF_ALLOC_EXPORT_WORD0_TYPE(cf->output.type) |
+			S_SQ_CF_ALLOC_EXPORT_WORD0_INDEX_GPR(cf->output.index_gpr);
 		bc->bytecode[id++] = S_SQ_CF_ALLOC_EXPORT_WORD1_BURST_COUNT(cf->output.burst_count - 1) |
-			S_SQ_CF_ALLOC_EXPORT_WORD1_BARRIER(cf->output.barrier) |
+			S_SQ_CF_ALLOC_EXPORT_WORD1_BARRIER(cf->barrier) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_CF_INST(opcode) |
-			S_SQ_CF_ALLOC_EXPORT_WORD1_END_OF_PROGRAM(cf->output.end_of_program) |
+			S_SQ_CF_ALLOC_EXPORT_WORD1_END_OF_PROGRAM(cf->end_of_program) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_BUF_ARRAY_SIZE(cf->output.array_size) |
 			S_SQ_CF_ALLOC_EXPORT_WORD1_BUF_COMP_MASK(cf->output.comp_mask);
 	} else {
@@ -1551,7 +1552,8 @@ static int r600_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode
 		bc->bytecode[id++] = S_SQ_CF_WORD1_CF_INST(opcode) |
 					S_SQ_CF_WORD1_BARRIER(1) |
 			                S_SQ_CF_WORD1_COND(cf->cond) |
-			                S_SQ_CF_WORD1_POP_COUNT(cf->pop_count);
+			                S_SQ_CF_WORD1_POP_COUNT(cf->pop_count) |
+					S_SQ_CF_WORD1_END_OF_PROGRAM(cf->end_of_program);
 	}
 	return 0;
 }
@@ -1932,12 +1934,12 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 				print_indent(o, 67);
 
 				fprintf(stderr, " ES:%X ", cf->output.elem_size);
-				if (!cf->output.barrier)
+				if (!cf->barrier)
 					fprintf(stderr, "NO_BARRIER ");
-				if (cf->output.end_of_program)
+				if (cf->end_of_program)
 					fprintf(stderr, "EOP ");
 				fprintf(stderr, "\n");
-			} else if (r600_isa_cf(cf->op)->flags & CF_STRM) {
+			} else if (r600_isa_cf(cf->op)->flags & CF_MEM) {
 				int o = 0;
 				const char *exp_type[] = {"WRITE", "WRITE_IND", "WRITE_ACK",
 						"WRITE_IND_ACK"};
@@ -1963,14 +1965,17 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 						o += print_swizzle(7);
 				}
 
+				if (cf->output.type == V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_IND)
+					o += fprintf(stderr, " R%d", cf->output.index_gpr);
+
 				o += print_indent(o, 67);
 
 				fprintf(stderr, " ES:%i ", cf->output.elem_size);
 				if (cf->output.array_size != 0xFFF)
 					fprintf(stderr, "AS:%i ", cf->output.array_size);
-				if (!cf->output.barrier)
+				if (!cf->barrier)
 					fprintf(stderr, "NO_BARRIER ");
-				if (cf->output.end_of_program)
+				if (cf->end_of_program)
 					fprintf(stderr, "EOP ");
 				fprintf(stderr, "\n");
 			} else {
@@ -2486,6 +2491,7 @@ void r600_bytecode_alu_read(struct r600_bytecode *bc,
 	}
 }
 
+#if 0
 void r600_bytecode_export_read(struct r600_bytecode *bc,
 		struct r600_bytecode_output *output, uint32_t word0, uint32_t word1)
 {
@@ -2506,3 +2512,4 @@ void r600_bytecode_export_read(struct r600_bytecode *bc,
 	output->array_size = G_SQ_CF_ALLOC_EXPORT_WORD1_BUF_ARRAY_SIZE(word1);
 	output->comp_mask = G_SQ_CF_ALLOC_EXPORT_WORD1_BUF_COMP_MASK(word1);
 }
+#endif

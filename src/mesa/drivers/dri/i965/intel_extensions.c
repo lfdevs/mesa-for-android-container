@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,19 +10,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #include "main/version.h"
@@ -42,6 +42,10 @@
 static bool
 can_do_pipelined_register_writes(struct brw_context *brw)
 {
+   /* Supposedly, Broadwell just works. */
+   if (brw->gen >= 8)
+      return true;
+
    /* We use SO_WRITE_OFFSET0 since you're supposed to write it (unlike the
     * statistics registers), and we already reset it to zero before using it.
     */
@@ -50,7 +54,7 @@ can_do_pipelined_register_writes(struct brw_context *brw)
    const int offset = 100;
 
    /* The register we picked only exists on Gen7+. */
-   assert(brw->gen >= 7);
+   assert(brw->gen == 7);
 
    uint32_t *data;
    /* Set a value in a BO to a known quantity.  The workaround BO already
@@ -77,6 +81,64 @@ can_do_pipelined_register_writes(struct brw_context *brw)
    OUT_RELOC(brw->batch.workaround_bo,
              I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
              offset * sizeof(uint32_t));
+   ADVANCE_BATCH();
+
+   intel_batchbuffer_flush(brw);
+
+   /* Check whether the value got written. */
+   drm_intel_bo_map(brw->batch.workaround_bo, false);
+   bool success = data[offset] == expected_value;
+   drm_intel_bo_unmap(brw->batch.workaround_bo);
+
+   return success;
+}
+
+static bool
+can_write_oacontrol(struct brw_context *brw)
+{
+   if (brw->gen < 6 || brw->gen >= 8)
+      return false;
+
+   /* Set "Select Context ID" to a particular address (which is likely not a
+    * context), but leave all counting disabled.  This should be harmless.
+    */
+   const int expected_value = 0x31337000;
+   const int offset = 110;
+
+   uint32_t *data;
+   /* Set a value in a BO to a known quantity.  The workaround BO already
+    * exists and doesn't contain anything important, so we may as well use it.
+    */
+   drm_intel_bo_map(brw->batch.workaround_bo, true);
+   data = brw->batch.workaround_bo->virtual;
+   data[offset] = 0xffffffff;
+   drm_intel_bo_unmap(brw->batch.workaround_bo);
+
+   /* Write OACONTROL. */
+   BEGIN_BATCH(3);
+   OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
+   OUT_BATCH(OACONTROL);
+   OUT_BATCH(expected_value);
+   ADVANCE_BATCH();
+
+   intel_batchbuffer_emit_mi_flush(brw);
+
+   /* Save the register's value back to the buffer. */
+   BEGIN_BATCH(3);
+   OUT_BATCH(MI_STORE_REGISTER_MEM | (3 - 2));
+   OUT_BATCH(OACONTROL);
+   OUT_RELOC(brw->batch.workaround_bo,
+             I915_GEM_DOMAIN_INSTRUCTION, I915_GEM_DOMAIN_INSTRUCTION,
+             offset * sizeof(uint32_t));
+   ADVANCE_BATCH();
+
+   intel_batchbuffer_emit_mi_flush(brw);
+
+   /* Set OACONTROL back to zero (everything off). */
+   BEGIN_BATCH(3);
+   OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
+   OUT_BATCH(OACONTROL);
+   OUT_BATCH(0);
    ADVANCE_BATCH();
 
    intel_batchbuffer_flush(brw);
@@ -144,10 +206,8 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.EXT_blend_func_separate = true;
    ctx->Extensions.EXT_blend_minmax = true;
    ctx->Extensions.EXT_draw_buffers2 = true;
-   ctx->Extensions.EXT_framebuffer_blit = true;
    ctx->Extensions.EXT_framebuffer_sRGB = true;
    ctx->Extensions.EXT_gpu_program_parameters = true;
-   ctx->Extensions.EXT_packed_depth_stencil = true;
    ctx->Extensions.EXT_packed_float = true;
    ctx->Extensions.EXT_pixel_buffer_object = true;
    ctx->Extensions.EXT_point_parameters = true;
@@ -170,7 +230,6 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.ATI_separate_stencil = true;
    ctx->Extensions.ATI_texture_env_combine3 = true;
    ctx->Extensions.MESA_pack_invert = true;
-   ctx->Extensions.MESA_texture_array = true;
    ctx->Extensions.MESA_ycbcr_texture = true;
    ctx->Extensions.NV_conditional_render = true;
    ctx->Extensions.NV_primitive_restart = true;
@@ -227,12 +286,23 @@ intelInitExtensions(struct gl_context *ctx)
    if (brw->gen >= 7) {
       ctx->Extensions.ARB_texture_gather = true;
       ctx->Extensions.ARB_conservative_depth = true;
+      ctx->Extensions.AMD_vertex_shader_layer = true;
       if (can_do_pipelined_register_writes(brw)) {
          ctx->Extensions.ARB_transform_feedback2 = true;
          ctx->Extensions.ARB_transform_feedback3 = true;
          ctx->Extensions.ARB_transform_feedback_instanced = true;
+         ctx->Extensions.ARB_draw_indirect = true;
       }
+
+      /* Only enable this in core profile because other parts of Mesa behave
+       * slightly differently when the extension is enabled.
+       */
+      if (ctx->API == API_OPENGL_CORE)
+         ctx->Extensions.ARB_viewport_array = true;
    }
+
+   if (brw->gen == 5 || can_write_oacontrol(brw))
+      ctx->Extensions.AMD_performance_monitor = true;
 
    if (ctx->API == API_OPENGL_CORE)
       ctx->Extensions.ARB_base_instance = true;

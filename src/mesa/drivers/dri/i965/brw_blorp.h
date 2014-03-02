@@ -85,6 +85,11 @@ public:
    /**
     * The 2D layer within the miplevel. Combined, level and layer define the
     * 2D miptree slice to use.
+    *
+    * Note: if mt is a 2D multisample array texture on Gen7+ using
+    * INTEL_MSAA_LAYOUT_UMS or INTEL_MSAA_LAYOUT_CMS, layer is the physical
+    * layer holding sample 0.  So, for example, if mt->num_samples == 4, then
+    * logical layer n corresponds to layer == 4*n.
     */
    uint32_t layer;
 
@@ -129,11 +134,11 @@ public:
 
    /* Setting this flag indicates that the buffer's contents are W-tiled
     * stencil data, but the surface state should be set up for Y tiled
-    * MESA_FORMAT_R8 data (this is necessary because surface states don't
+    * MESA_FORMAT_R_UNORM8 data (this is necessary because surface states don't
     * support W tiling).
     *
     * Since W tiles are 64 pixels wide by 64 pixels high, whereas Y tiles of
-    * MESA_FORMAT_R8 data are 128 pixels wide by 32 pixels high, the width and
+    * MESA_FORMAT_R_UNORM8 data are 128 pixels wide by 32 pixels high, the width and
     * pitch stored in the surface state will be multiplied by 2, and the
     * height will be halved.  Also, since W and Y tiles store their data in a
     * different order, the width and height will be rounded up to a multiple
@@ -229,7 +234,6 @@ public:
    brw_blorp_surface_info dst;
    enum gen6_hiz_op hiz_op;
    enum gen7_fast_clear_op fast_clear_op;
-   unsigned num_samples;
    bool use_wm_prog;
    brw_blorp_wm_push_constants wm_push_consts;
    bool color_write_disable[4];

@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2008 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -30,13 +30,12 @@
 #include "util/u_simple_list.h"
 
 #include "tr_dump.h"
+#include "tr_dump_defines.h"
 #include "tr_dump_state.h"
 #include "tr_texture.h"
 #include "tr_context.h"
 #include "tr_screen.h"
 #include "tr_public.h"
-
-#include "pipe/p_format.h"
 
 
 static boolean trace = FALSE;
@@ -210,7 +209,8 @@ static void
 trace_screen_flush_frontbuffer(struct pipe_screen *_screen,
                                struct pipe_resource *_resource,
                                unsigned level, unsigned layer,
-                               void *context_private)
+                               void *context_private,
+                               struct pipe_box *sub_box)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
    struct trace_resource *tr_res = trace_resource(_resource);
@@ -227,7 +227,7 @@ trace_screen_flush_frontbuffer(struct pipe_screen *_screen,
    trace_dump_arg(ptr, context_private);
    */
 
-   screen->flush_frontbuffer(screen, resource, level, layer, context_private);
+   screen->flush_frontbuffer(screen, resource, level, layer, context_private, sub_box);
 
    trace_dump_call_end();
 }

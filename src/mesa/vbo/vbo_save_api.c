@@ -1,6 +1,6 @@
 /**************************************************************************
 
-Copyright 2002-2008 Tungsten Graphics Inc., Cedar Park, Texas.
+Copyright 2002-2008 VMware, Inc.
 
 All Rights Reserved.
 
@@ -18,7 +18,7 @@ Software.
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
-TUNGSTEN GRAPHICS AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
+VMWARE AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -27,7 +27,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /*
  * Authors:
- *   Keith Whitwell <keith@tungstengraphics.com>
+ *   Keith Whitwell <keithw@vmware.com>
  */
 
 
@@ -531,6 +531,7 @@ _save_wrap_buffers(struct gl_context *ctx)
    save->prim[0].count = 0;
    save->prim[0].num_instances = 1;
    save->prim[0].base_instance = 0;
+   save->prim[0].is_indirect = 0;
    save->prim_count = 1;
 }
 
@@ -986,6 +987,7 @@ vbo_save_NotifyBegin(struct gl_context *ctx, GLenum mode)
    save->prim[i].count = 0;
    save->prim[i].num_instances = 1;
    save->prim[i].base_instance = 0;
+   save->prim[i].is_indirect = 0;
 
    if (save->out_of_memory) {
       _mesa_install_save_vtxfmt(ctx, &save->vtxfmt_noop);

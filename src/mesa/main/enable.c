@@ -659,10 +659,15 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
          ctx->Transform.RescaleNormals = state;
          break;
       case GL_SCISSOR_TEST:
-         if (ctx->Scissor.Enabled == state)
-            return;
-         FLUSH_VERTICES(ctx, _NEW_SCISSOR);
-         ctx->Scissor.Enabled = state;
+         {
+            /* Must expand glEnable to all scissors */
+            GLbitfield newEnabled =
+               state * ((1 << ctx->Const.MaxViewports) - 1);
+            if (newEnabled != ctx->Scissor.EnableFlags) {
+               FLUSH_VERTICES(ctx, _NEW_SCISSOR);
+               ctx->Scissor.EnableFlags = newEnabled;
+            }
+         }
          break;
       case GL_STENCIL_TEST:
          if (ctx->Stencil.Enabled == state)
@@ -762,7 +767,6 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
       case GL_COLOR_SUM_EXT:
          if (ctx->API != API_OPENGL_COMPAT)
             goto invalid_enum_error;
-         CHECK_EXTENSION(ARB_vertex_program, cap);
          if (ctx->Fog.ColorSumEnabled == state)
             return;
          FLUSH_VERTICES(ctx, _NEW_FOG);
@@ -934,25 +938,6 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
 	ctx->ATIFragmentShader.Enabled = state;
         break;
 
-      /* GL_MESA_texture_array */
-      case GL_TEXTURE_1D_ARRAY_EXT:
-         if (ctx->API != API_OPENGL_COMPAT)
-            goto invalid_enum_error;
-         CHECK_EXTENSION(MESA_texture_array, cap);
-         if (!enable_texture(ctx, state, TEXTURE_1D_ARRAY_BIT)) {
-            return;
-         }
-         break;
-
-      case GL_TEXTURE_2D_ARRAY_EXT:
-         if (ctx->API != API_OPENGL_COMPAT)
-            goto invalid_enum_error;
-         CHECK_EXTENSION(MESA_texture_array, cap);
-         if (!enable_texture(ctx, state, TEXTURE_2D_ARRAY_BIT)) {
-            return;
-         }
-         break;
-
       case GL_TEXTURE_CUBE_MAP_SEAMLESS:
          if (!_mesa_is_desktop_gl(ctx))
             goto invalid_enum_error;
@@ -1096,6 +1081,20 @@ _mesa_set_enablei(struct gl_context *ctx, GLenum cap,
             ctx->Color.BlendEnabled &= ~(1 << index);
       }
       break;
+   case GL_SCISSOR_TEST:
+      if (index >= ctx->Const.MaxViewports) {
+         _mesa_error(ctx, GL_INVALID_VALUE, "%s(index=%u)",
+                     state ? "glEnablei" : "glDisablei", index);
+         return;
+      }
+      if (((ctx->Scissor.EnableFlags >> index) & 1) != state) {
+         FLUSH_VERTICES(ctx, _NEW_SCISSOR);
+         if (state)
+            ctx->Scissor.EnableFlags |= (1 << index);
+         else
+            ctx->Scissor.EnableFlags &= ~(1 << index);
+      }
+      break;
    default:
       goto invalid_enum_error;
    }
@@ -1137,6 +1136,13 @@ _mesa_IsEnabledi( GLenum cap, GLuint index )
          return GL_FALSE;
       }
       return (ctx->Color.BlendEnabled >> index) & 1;
+   case GL_SCISSOR_TEST:
+      if (index >= ctx->Const.MaxViewports) {
+         _mesa_error(ctx, GL_INVALID_VALUE, "glIsEnabledIndexed(index=%u)",
+                     index);
+         return GL_FALSE;
+      }
+      return (ctx->Scissor.EnableFlags >> index) & 1;
    default:
       _mesa_error(ctx, GL_INVALID_ENUM, "glIsEnabledIndexed(cap=%s)",
                   _mesa_lookup_enum_by_nr(cap));
@@ -1369,7 +1375,7 @@ _mesa_IsEnabled( GLenum cap )
             goto invalid_enum_error;
          return ctx->Transform.RescaleNormals;
       case GL_SCISSOR_TEST:
-	 return ctx->Scissor.Enabled;
+	 return ctx->Scissor.EnableFlags & 1;  /* return state for index 0 */
       case GL_STENCIL_TEST:
 	 return ctx->Stencil.Enabled;
       case GL_TEXTURE_1D:
@@ -1462,7 +1468,6 @@ _mesa_IsEnabled( GLenum cap )
       case GL_COLOR_SUM_EXT:
          if (ctx->API != API_OPENGL_COMPAT)
             goto invalid_enum_error;
-         CHECK_EXTENSION(ARB_vertex_program);
          return ctx->Fog.ColorSumEnabled;
 
       /* GL_ARB_multisample */

@@ -40,6 +40,7 @@ brw_new_shader(struct gl_context *ctx, GLuint name, GLuint type)
    shader = rzalloc(NULL, struct brw_shader);
    if (shader) {
       shader->base.Type = type;
+      shader->base.Stage = _mesa_shader_enum_to_shader_stage(type);
       shader->base.Name = name;
       _mesa_init_shader(ctx, &shader->base);
    }
@@ -82,7 +83,7 @@ brw_shader_precompile(struct gl_context *ctx, struct gl_shader_program *prog)
 
 static void
 brw_lower_packing_builtins(struct brw_context *brw,
-                           gl_shader_type shader_type,
+                           gl_shader_stage shader_type,
                            exec_list *ir)
 {
    int ops = LOWER_PACK_SNORM_2x16
@@ -126,32 +127,26 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 	 continue;
 
       struct gl_program *prog =
-	 ctx->Driver.NewProgram(ctx, _mesa_program_index_to_target(stage),
+	 ctx->Driver.NewProgram(ctx, _mesa_shader_stage_to_program(stage),
                                 shader->base.Name);
       if (!prog)
 	return false;
       prog->Parameters = _mesa_new_parameter_list();
 
-      _mesa_copy_linked_program_data((gl_shader_type) stage, shProg, prog);
+      _mesa_copy_linked_program_data((gl_shader_stage) stage, shProg, prog);
 
-      void *mem_ctx = ralloc_context(NULL);
       bool progress;
-
-      if (shader->ir)
-	 ralloc_free(shader->ir);
-      shader->ir = new(shader) exec_list;
-      clone_ir_list(mem_ctx, shader->ir, shader->base.ir);
 
       /* lower_packing_builtins() inserts arithmetic instructions, so it
        * must precede lower_instructions().
        */
-      brw_lower_packing_builtins(brw, (gl_shader_type) stage, shader->ir);
-      do_mat_op_to_vec(shader->ir);
+      brw_lower_packing_builtins(brw, (gl_shader_stage) stage, shader->base.ir);
+      do_mat_op_to_vec(shader->base.ir);
       const int bitfield_insert = brw->gen >= 7
                                   ? BITFIELD_INSERT_TO_BFM_BFI
                                   : 0;
       const int lrp_to_arith = brw->gen < 6 ? LRP_TO_ARITH : 0;
-      lower_instructions(shader->ir,
+      lower_instructions(shader->base.ir,
 			 MOD_TO_FRACT |
 			 DIV_TO_MUL_RCP |
 			 SUB_TO_ADD_NEG |
@@ -165,17 +160,17 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
        * if-statements need to be flattened.
        */
       if (brw->gen < 6)
-	 lower_if_to_cond_assign(shader->ir, 16);
+	 lower_if_to_cond_assign(shader->base.ir, 16);
 
-      do_lower_texture_projection(shader->ir);
-      brw_lower_texture_gradients(brw, shader->ir);
-      do_vec_index_to_cond_assign(shader->ir);
-      lower_vector_insert(shader->ir, true);
-      brw_do_cubemap_normalize(shader->ir);
-      brw_do_lower_offset_arrays(shader->ir);
-      brw_do_lower_unnormalized_offset(shader->ir);
-      lower_noise(shader->ir);
-      lower_quadop_vector(shader->ir, false);
+      do_lower_texture_projection(shader->base.ir);
+      brw_lower_texture_gradients(brw, shader->base.ir);
+      do_vec_index_to_cond_assign(shader->base.ir);
+      lower_vector_insert(shader->base.ir, true);
+      brw_do_cubemap_normalize(shader->base.ir);
+      brw_do_lower_offset_arrays(shader->base.ir);
+      brw_do_lower_unnormalized_offset(shader->base.ir);
+      lower_noise(shader->base.ir);
+      lower_quadop_vector(shader->base.ir, false);
 
       bool input = true;
       bool output = stage == MESA_SHADER_FRAGMENT;
@@ -183,7 +178,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       bool uniform = false;
 
       bool lowered_variable_indexing =
-         lower_variable_index_to_cond_assign(shader->ir,
+         lower_variable_index_to_cond_assign(shader->base.ir,
                                              input, output, temp, uniform);
 
       if (unlikely(brw->perf_debug && lowered_variable_indexing)) {
@@ -192,23 +187,23 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       }
 
       /* FINISHME: Do this before the variable index lowering. */
-      lower_ubo_reference(&shader->base, shader->ir);
+      lower_ubo_reference(&shader->base, shader->base.ir);
 
       do {
 	 progress = false;
 
 	 if (stage == MESA_SHADER_FRAGMENT) {
-	    brw_do_channel_expressions(shader->ir);
-	    brw_do_vector_splitting(shader->ir);
+	    brw_do_channel_expressions(shader->base.ir);
+	    brw_do_vector_splitting(shader->base.ir);
 	 }
 
-	 progress = do_lower_jumps(shader->ir, true, true,
+	 progress = do_lower_jumps(shader->base.ir, true, true,
 				   true, /* main return */
 				   false, /* continue */
 				   false /* loops */
 				   ) || progress;
 
-	 progress = do_common_optimization(shader->ir, true, true, 32,
+	 progress = do_common_optimization(shader->base.ir, true, true, 32,
                                            &ctx->ShaderCompilerOptions[stage])
 	   || progress;
       } while (progress);
@@ -220,10 +215,10 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
        * too late.  At that point, the values for the built-in uniforms won't
        * get sent to the shader.
        */
-      foreach_list(node, shader->ir) {
+      foreach_list(node, shader->base.ir) {
 	 ir_variable *var = ((ir_instruction *) node)->as_variable();
 
-	 if ((var == NULL) || (var->mode != ir_var_uniform)
+	 if ((var == NULL) || (var->data.mode != ir_var_uniform)
 	     || (strncmp(var->name, "gl_", 3) != 0))
 	    continue;
 
@@ -236,12 +231,9 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 	 }
       }
 
-      validate_ir_tree(shader->ir);
+      validate_ir_tree(shader->base.ir);
 
-      reparent_ir(shader->ir, shader->ir);
-      ralloc_free(mem_ctx);
-
-      do_set_program_inouts(shader->ir, prog, shader->base.Type);
+      do_set_program_inouts(shader->base.ir, prog, shader->base.Stage);
 
       prog->SamplersUsed = shader->base.active_samplers;
       _mesa_update_shader_textures_used(shProg, prog);
@@ -261,7 +253,8 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       if (ctx->Shader.Flags & GLSL_DUMP) {
          printf("\n");
          printf("GLSL IR for linked %s program %d:\n",
-                _mesa_glsl_shader_target_name(shader->base.Type), shProg->Name);
+                _mesa_shader_stage_to_string(shader->base.Stage),
+                shProg->Name);
          _mesa_print_ir(shader->base.ir, NULL);
          printf("\n");
       }
@@ -274,7 +267,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
             continue;
 
          printf("GLSL %s shader %d source for linked program %d:\n",
-                _mesa_glsl_shader_target_name(sh->Type),
+                _mesa_shader_stage_to_string(sh->Stage),
                 i,
                 shProg->Name);
          printf("%s", sh->Source);
@@ -413,6 +406,8 @@ brw_instruction_name(enum opcode op)
    switch (op) {
    case FS_OPCODE_FB_WRITE:
       return "fb_write";
+   case FS_OPCODE_BLORP_FB_WRITE:
+      return "blorp_fb_write";
 
    case SHADER_OPCODE_RCP:
       return "rcp";
@@ -447,8 +442,12 @@ brw_instruction_name(enum opcode op)
       return "txs";
    case FS_OPCODE_TXB:
       return "txb";
-   case SHADER_OPCODE_TXF_MS:
-      return "txf_ms";
+   case SHADER_OPCODE_TXF_CMS:
+      return "txf_cms";
+   case SHADER_OPCODE_TXF_UMS:
+      return "txf_ums";
+   case SHADER_OPCODE_TXF_MCS:
+      return "txf_mcs";
    case SHADER_OPCODE_TG4:
       return "tg4";
    case SHADER_OPCODE_TG4_OFFSET:
@@ -543,7 +542,9 @@ backend_instruction::is_tex()
            opcode == FS_OPCODE_TXB ||
            opcode == SHADER_OPCODE_TXD ||
            opcode == SHADER_OPCODE_TXF ||
-           opcode == SHADER_OPCODE_TXF_MS ||
+           opcode == SHADER_OPCODE_TXF_CMS ||
+           opcode == SHADER_OPCODE_TXF_UMS ||
+           opcode == SHADER_OPCODE_TXF_MCS ||
            opcode == SHADER_OPCODE_TXL ||
            opcode == SHADER_OPCODE_TXS ||
            opcode == SHADER_OPCODE_LOD ||
@@ -599,6 +600,50 @@ backend_instruction::can_do_source_mods()
       return false;
    default:
       return true;
+   }
+}
+
+bool
+backend_instruction::can_do_saturate()
+{
+   switch (opcode) {
+   case BRW_OPCODE_ADD:
+   case BRW_OPCODE_ASR:
+   case BRW_OPCODE_AVG:
+   case BRW_OPCODE_DP2:
+   case BRW_OPCODE_DP3:
+   case BRW_OPCODE_DP4:
+   case BRW_OPCODE_DPH:
+   case BRW_OPCODE_F16TO32:
+   case BRW_OPCODE_F32TO16:
+   case BRW_OPCODE_LINE:
+   case BRW_OPCODE_LRP:
+   case BRW_OPCODE_MAC:
+   case BRW_OPCODE_MACH:
+   case BRW_OPCODE_MAD:
+   case BRW_OPCODE_MATH:
+   case BRW_OPCODE_MOV:
+   case BRW_OPCODE_MUL:
+   case BRW_OPCODE_PLN:
+   case BRW_OPCODE_RNDD:
+   case BRW_OPCODE_RNDE:
+   case BRW_OPCODE_RNDU:
+   case BRW_OPCODE_RNDZ:
+   case BRW_OPCODE_SEL:
+   case BRW_OPCODE_SHL:
+   case BRW_OPCODE_SHR:
+   case FS_OPCODE_LINTERP:
+   case SHADER_OPCODE_COS:
+   case SHADER_OPCODE_EXP2:
+   case SHADER_OPCODE_LOG2:
+   case SHADER_OPCODE_POW:
+   case SHADER_OPCODE_RCP:
+   case SHADER_OPCODE_RSQ:
+   case SHADER_OPCODE_SIN:
+   case SHADER_OPCODE_SQRT:
+      return true;
+   default:
+      return false;
    }
 }
 

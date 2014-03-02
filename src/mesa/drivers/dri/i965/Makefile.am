@@ -38,6 +38,8 @@ AM_CFLAGS = \
 
 AM_CXXFLAGS = $(AM_CFLAGS)
 
+gen8_instruction_CFLAGS = $(AM_CFLAGS) -fkeep-inline-functions
+
 noinst_LTLIBRARIES = libi965_dri.la
 libi965_dri_la_SOURCES = $(i965_FILES)
 libi965_dri_la_LIBADD = $(INTEL_LIBS)
@@ -53,7 +55,9 @@ TEST_LIBS = \
 
 TESTS = \
         test_eu_compact \
-        test_vec4_register_coalesce
+        test_vec4_register_coalesce \
+        test_blorp_blit_eu_gen
+
 check_PROGRAMS = $(TESTS)
 
 test_vec4_register_coalesce_SOURCES = \
@@ -66,3 +70,7 @@ test_eu_compact_SOURCES = \
 	test_eu_compact.c
 nodist_EXTRA_test_eu_compact_SOURCES = dummy.cpp
 test_eu_compact_LDADD = $(TEST_LIBS)
+
+test_blorp_blit_eu_gen_SOURCES = \
+        test_blorp_blit_eu_gen.cpp
+test_blorp_blit_eu_gen_LDADD = $(TEST_LIBS)

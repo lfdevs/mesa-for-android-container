@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,11 +22,11 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
 
 
@@ -45,16 +45,21 @@ brw_upload_cc_vp(struct brw_context *brw)
    struct brw_cc_viewport *ccv;
 
    ccv = brw_state_batch(brw, AUB_TRACE_CC_VP_STATE,
-			 sizeof(*ccv), 32, &brw->cc.vp_offset);
+			 sizeof(*ccv) * ctx->Const.MaxViewports, 32,
+                         &brw->cc.vp_offset);
 
    /* _NEW_TRANSFORM */
-   if (ctx->Transform.DepthClamp) {
-      /* _NEW_VIEWPORT */
-      ccv->min_depth = MIN2(ctx->Viewport.Near, ctx->Viewport.Far);
-      ccv->max_depth = MAX2(ctx->Viewport.Near, ctx->Viewport.Far);
-   } else {
-      ccv->min_depth = 0.0;
-      ccv->max_depth = 1.0;
+   for (unsigned i = 0; i < ctx->Const.MaxViewports; i++) {
+      if (ctx->Transform.DepthClamp) {
+         /* _NEW_VIEWPORT */
+         ccv[i].min_depth = MIN2(ctx->ViewportArray[i].Near,
+                                 ctx->ViewportArray[i].Far);
+         ccv[i].max_depth = MAX2(ctx->ViewportArray[i].Near,
+                                 ctx->ViewportArray[i].Far);
+      } else {
+         ccv[i].min_depth = 0.0;
+         ccv[i].max_depth = 1.0;
+      }
    }
 
    brw->state.dirty.cache |= CACHE_NEW_CC_VP;
@@ -215,7 +220,7 @@ static void upload_cc_unit(struct brw_context *brw)
       cc->cc5.statistics_enable = 1;
 
    /* CACHE_NEW_CC_VP */
-   cc->cc4.cc_viewport_state_offset = (brw->batch.bo->offset +
+   cc->cc4.cc_viewport_state_offset = (brw->batch.bo->offset64 +
 				       brw->cc.vp_offset) >> 5; /* reloc */
 
    brw->state.dirty.cache |= CACHE_NEW_CC_UNIT;
@@ -247,7 +252,7 @@ static void upload_blend_constant_color(struct brw_context *brw)
    OUT_BATCH_F(ctx->Color.BlendColorUnclamped[1]);
    OUT_BATCH_F(ctx->Color.BlendColorUnclamped[2]);
    OUT_BATCH_F(ctx->Color.BlendColorUnclamped[3]);
-   CACHED_BATCH();
+   ADVANCE_BATCH();
 }
 
 const struct brw_tracked_state brw_blend_constant_color = {

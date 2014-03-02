@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -124,8 +124,8 @@ aub_dump_bmp(struct gl_context *ctx)
 	 enum aub_dump_bmp_format format;
 
 	 switch (irb->Base.Base.Format) {
-	 case MESA_FORMAT_ARGB8888:
-	 case MESA_FORMAT_XRGB8888:
+	 case MESA_FORMAT_B8G8R8A8_UNORM:
+	 case MESA_FORMAT_B8G8R8X8_UNORM:
 	    format = AUB_DUMP_BMP_FORMAT_ARGB_8888;
 	    break;
 	 default:
@@ -183,6 +183,9 @@ static const struct __DRI2flushExtensionRec intelFlushExtension = {
 static struct intel_image_format intel_image_formats[] = {
    { __DRI_IMAGE_FOURCC_ARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
+
+   { __DRI_IMAGE_FOURCC_SARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_SARGB8, 4 } } },
 
    { __DRI_IMAGE_FOURCC_XRGB8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB8888, 4 }, } },
@@ -790,6 +793,7 @@ static const __DRIextension *intelScreenExtensions[] = {
     &intelTexBufferExtension.base,
     &intelFlushExtension.base,
     &intelImageExtension.base,
+    &intelRendererQueryExtension.base,
     &dri2ConfigQueryExtension.base,
     NULL
 };
@@ -843,7 +847,7 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
                   const struct gl_config * mesaVis, GLboolean isPixmap)
 {
    struct intel_renderbuffer *rb;
-   gl_format rgbFormat;
+   mesa_format rgbFormat;
    struct gl_framebuffer *fb;
 
    if (isPixmap)
@@ -856,13 +860,13 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
    _mesa_initialize_window_framebuffer(fb, mesaVis);
 
    if (mesaVis->redBits == 5)
-      rgbFormat = MESA_FORMAT_RGB565;
+      rgbFormat = MESA_FORMAT_B5G6R5_UNORM;
    else if (mesaVis->sRGBCapable)
-      rgbFormat = MESA_FORMAT_SARGB8;
+      rgbFormat = MESA_FORMAT_B8G8R8A8_SRGB;
    else if (mesaVis->alphaBits == 0)
-      rgbFormat = MESA_FORMAT_XRGB8888;
+      rgbFormat = MESA_FORMAT_B8G8R8X8_UNORM;
    else
-      rgbFormat = MESA_FORMAT_ARGB8888;
+      rgbFormat = MESA_FORMAT_B8G8R8A8_UNORM;
 
    /* setup the hardware-based renderbuffers */
    rb = intel_create_renderbuffer(rgbFormat);
@@ -885,13 +889,13 @@ intelCreateBuffer(__DRIscreen * driScrnPriv,
        * Use combined depth/stencil. Note that the renderbuffer is
        * attached to two attachment points.
        */
-      rb = intel_create_private_renderbuffer(MESA_FORMAT_S8_Z24);
+      rb = intel_create_private_renderbuffer(MESA_FORMAT_Z24_UNORM_S8_UINT);
       _mesa_add_renderbuffer(fb, BUFFER_DEPTH, &rb->Base.Base);
       _mesa_add_renderbuffer(fb, BUFFER_STENCIL, &rb->Base.Base);
    }
    else if (mesaVis->depthBits == 16) {
       assert(mesaVis->stencilBits == 0);
-      rb = intel_create_private_renderbuffer(MESA_FORMAT_Z16);
+      rb = intel_create_private_renderbuffer(MESA_FORMAT_Z_UNORM16);
       _mesa_add_renderbuffer(fb, BUFFER_DEPTH, &rb->Base.Base);
    }
    else {
@@ -1041,9 +1045,9 @@ intel_detect_swizzling(struct intel_screen *screen)
 static __DRIconfig**
 intel_screen_make_configs(__DRIscreen *dri_screen)
 {
-   static const gl_format formats[] = {
-      MESA_FORMAT_RGB565,
-      MESA_FORMAT_ARGB8888
+   static const mesa_format formats[] = {
+      MESA_FORMAT_B5G6R5_UNORM,
+      MESA_FORMAT_B8G8R8A8_UNORM
    };
 
    /* GLX_SWAP_COPY_OML is not supported due to page flipping. */
@@ -1068,7 +1072,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       depth_bits[0] = 0;
       stencil_bits[0] = 0;
 
-      if (formats[i] == MESA_FORMAT_RGB565) {
+      if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
          depth_bits[1] = 16;
          stencil_bits[1] = 0;
       } else {
@@ -1092,7 +1096,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
    for (int i = 0; i < ARRAY_SIZE(formats); i++) {
       __DRIconfig **new_configs;
 
-      if (formats[i] == MESA_FORMAT_RGB565) {
+      if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
          depth_bits[0] = 16;
          stencil_bits[0] = 0;
       } else {

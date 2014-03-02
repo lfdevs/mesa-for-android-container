@@ -78,6 +78,7 @@
 #include "xf86drm.h"
 #include "dri_common.h"
 #include "dri3_priv.h"
+#include "loader.h"
 
 static const struct glx_context_vtable dri3_context_vtable;
 
@@ -266,13 +267,35 @@ dri3_create_context(struct glx_screen *base,
 }
 
 static void
+dri3_free_render_buffer(struct dri3_drawable *pdraw, struct dri3_buffer *buffer);
+
+static void
+dri3_update_num_back(struct dri3_drawable *priv)
+{
+   priv->num_back = 1;
+   if (priv->flipping)
+      priv->num_back++;
+   if (priv->swap_interval == 0)
+      priv->num_back++;
+}
+
+static void
 dri3_destroy_drawable(__GLXDRIdrawable *base)
 {
    struct dri3_screen *psc = (struct dri3_screen *) base->psc;
    struct dri3_drawable *pdraw = (struct dri3_drawable *) base;
+   xcb_connection_t     *c = XGetXCBConnection(pdraw->base.psc->dpy);
+   int i;
 
    (*psc->core->destroyDrawable) (pdraw->driDrawable);
 
+   for (i = 0; i < DRI3_NUM_BUFFERS; i++) {
+      if (pdraw->buffers[i])
+         dri3_free_render_buffer(pdraw, pdraw->buffers[i]);
+   }
+
+   if (pdraw->special_event)
+      xcb_unregister_for_special_event(c, pdraw->special_event);
    free(pdraw);
 }
 
@@ -313,6 +336,8 @@ dri3_create_drawable(struct glx_screen *base, XID xDrawable,
       break;
    }
 
+   dri3_update_num_back(pdraw);
+
    (void) __glXInitialize(psc->base.dpy);
 
    /* Create a new drawable */
@@ -352,10 +377,26 @@ dri3_handle_present_event(struct dri3_drawable *priv, xcb_present_generic_event_
    case XCB_PRESENT_COMPLETE_NOTIFY: {
       xcb_present_complete_notify_event_t *ce = (void *) ge;
 
-      if (ce->kind == XCB_PRESENT_COMPLETE_KIND_PIXMAP)
-         priv->present_event_serial = ce->serial;
-      else
-         priv->present_msc_event_serial = ce->serial;
+      /* Compute the processed SBC number from the received 32-bit serial number merged
+       * with the upper 32-bits of the sent 64-bit serial number while checking for
+       * wrap
+       */
+      if (ce->kind == XCB_PRESENT_COMPLETE_KIND_PIXMAP) {
+         priv->recv_sbc = (priv->send_sbc & 0xffffffff00000000LL) | ce->serial;
+         if (priv->recv_sbc > priv->send_sbc)
+            priv->recv_sbc -= 0x100000000;
+         switch (ce->mode) {
+         case XCB_PRESENT_COMPLETE_MODE_FLIP:
+            priv->flipping = true;
+            break;
+         case XCB_PRESENT_COMPLETE_MODE_COPY:
+            priv->flipping = false;
+            break;
+         }
+         dri3_update_num_back(priv);
+      } else {
+         priv->recv_msc_serial = ce->serial;
+      }
       priv->ust = ce->ust;
       priv->msc = ce->msc;
       break;
@@ -369,6 +410,10 @@ dri3_handle_present_event(struct dri3_drawable *priv, xcb_present_generic_event_
 
          if (buf && buf->pixmap == ie->pixmap) {
             buf->busy = 0;
+            if (priv->num_back <= b && b < DRI3_MAX_BACK) {
+               dri3_free_render_buffer(priv, buf);
+               priv->buffers[b] = NULL;
+            }
             break;
          }
       }
@@ -378,20 +423,41 @@ dri3_handle_present_event(struct dri3_drawable *priv, xcb_present_generic_event_
    free(ge);
 }
 
-static int
-dri3_wait_for_msc(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
-                  int64_t remainder, int64_t *ust, int64_t *msc, int64_t *sbc)
+static bool
+dri3_wait_for_event(__GLXDRIdrawable *pdraw)
 {
    xcb_connection_t *c = XGetXCBConnection(pdraw->psc->dpy);
    struct dri3_drawable *priv = (struct dri3_drawable *) pdraw;
    xcb_generic_event_t *ev;
    xcb_present_generic_event_t *ge;
 
+   xcb_flush(c);
+   ev = xcb_wait_for_special_event(c, priv->special_event);
+   if (!ev)
+      return false;
+   ge = (void *) ev;
+   dri3_handle_present_event(priv, ge);
+   return true;
+}
+
+/** dri3_wait_for_msc
+ *
+ * Get the X server to send an event when the target msc/divisor/remainder is
+ * reached.
+ */
+static int
+dri3_wait_for_msc(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
+                  int64_t remainder, int64_t *ust, int64_t *msc, int64_t *sbc)
+{
+   xcb_connection_t *c = XGetXCBConnection(pdraw->psc->dpy);
+   struct dri3_drawable *priv = (struct dri3_drawable *) pdraw;
+   uint32_t msc_serial;
+
    /* Ask for the an event for the target MSC */
-   ++priv->present_msc_request_serial;
+   msc_serial = ++priv->send_msc_serial;
    xcb_present_notify_msc(c,
                           priv->base.xDrawable,
-                          priv->present_msc_request_serial,
+                          msc_serial,
                           target_msc,
                           divisor,
                           remainder);
@@ -400,22 +466,24 @@ dri3_wait_for_msc(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
 
    /* Wait for the event */
    if (priv->special_event) {
-      while (priv->present_msc_request_serial != priv->present_msc_event_serial) {
-         ev = xcb_wait_for_special_event(c, priv->special_event);
-         if (!ev)
-            break;
-         ge = (void *) ev;
-         dri3_handle_present_event(priv, ge);
+      while ((int32_t) (msc_serial - priv->recv_msc_serial) > 0) {
+         if (!dri3_wait_for_event(pdraw))
+            return 0;
       }
    }
 
    *ust = priv->ust;
    *msc = priv->msc;
-   *sbc = priv->sbc;
+   *sbc = priv->recv_sbc;
 
    return 1;
 }
 
+/** dri3_drawable_get_msc
+ *
+ * Return the current UST/MSC/SBC triplet by asking the server
+ * for an event
+ */
 static int
 dri3_drawable_get_msc(struct glx_screen *psc, __GLXDRIdrawable *pdraw,
                       int64_t *ust, int64_t *msc, int64_t *sbc)
@@ -425,12 +493,9 @@ dri3_drawable_get_msc(struct glx_screen *psc, __GLXDRIdrawable *pdraw,
 
 /** dri3_wait_for_sbc
  *
- * Wait for the swap buffer count to increase. The only way this
- * can happen is if some other thread is doing swap buffers as
- * we no longer share swap buffer counts with other processes.
- *
- * I'm not sure this is actually useful as such, and so this
- * implementation is a kludge that just polls once a second
+ * Wait for the completed swap buffer count to reach the specified
+ * target. Presumably the application knows that this will be reached with
+ * outstanding complete events, or we're going to be here awhile.
  */
 static int
 dri3_wait_for_sbc(__GLXDRIdrawable *pdraw, int64_t target_sbc, int64_t *ust,
@@ -438,10 +503,15 @@ dri3_wait_for_sbc(__GLXDRIdrawable *pdraw, int64_t target_sbc, int64_t *ust,
 {
    struct dri3_drawable *priv = (struct dri3_drawable *) pdraw;
 
-   while (priv->sbc < target_sbc) {
-      sleep(1);
+   while (priv->recv_sbc < target_sbc) {
+      if (!dri3_wait_for_event(pdraw))
+         return 0;
    }
-   return dri3_wait_for_msc(pdraw, 0, 0, 0, ust, msc, sbc);
+
+   *ust = priv->ust;
+   *msc = priv->msc;
+   *sbc = priv->recv_sbc;
+   return 1;
 }
 
 /**
@@ -676,7 +746,7 @@ dri3_alloc_render_buffer(struct glx_screen *glx_screen, Drawable draw,
    xcb_connection_t *c = XGetXCBConnection(dpy);
    xcb_pixmap_t pixmap;
    xcb_sync_fence_t sync_fence;
-   int32_t *shm_fence;
+   struct xshmfence *shm_fence;
    int buffer_fd, fence_fd;
    int stride;
 
@@ -736,6 +806,7 @@ dri3_alloc_render_buffer(struct glx_screen *glx_screen, Drawable draw,
                           fence_fd);
 
    buffer->pixmap = pixmap;
+   buffer->own_pixmap = true;
    buffer->sync_fence = sync_fence;
    buffer->shm_fence = shm_fence;
    buffer->width = width;
@@ -769,7 +840,8 @@ dri3_free_render_buffer(struct dri3_drawable *pdraw, struct dri3_buffer *buffer)
    struct dri3_screen   *psc = (struct dri3_screen *) pdraw->base.psc;
    xcb_connection_t     *c = XGetXCBConnection(pdraw->base.psc->dpy);
 
-   xcb_free_pixmap(c, buffer->pixmap);
+   if (buffer->own_pixmap)
+      xcb_free_pixmap(c, buffer->pixmap);
    xcb_sync_destroy_fence(c, buffer->sync_fence);
    xshmfence_unmap_shm(buffer->shm_fence);
    (*psc->image->destroyImage)(buffer->image);
@@ -890,6 +962,7 @@ image_format_to_fourcc(int format)
 
    /* Convert from __DRI_IMAGE_FORMAT to __DRI_IMAGE_FOURCC (sigh) */
    switch (format) {
+   case __DRI_IMAGE_FORMAT_SARGB8: return __DRI_IMAGE_FOURCC_SARGB8888;
    case __DRI_IMAGE_FORMAT_RGB565: return __DRI_IMAGE_FOURCC_RGB565;
    case __DRI_IMAGE_FORMAT_XRGB8888: return __DRI_IMAGE_FOURCC_XRGB8888;
    case __DRI_IMAGE_FORMAT_ARGB8888: return __DRI_IMAGE_FOURCC_ARGB8888;
@@ -921,7 +994,7 @@ dri3_get_pixmap_buffer(__DRIdrawable *driDrawable,
    struct dri3_screen                   *psc;
    xcb_connection_t                     *c;
    xcb_sync_fence_t                     sync_fence;
-   int32_t                              *shm_fence;
+   struct xshmfence                     *shm_fence;
    int                                  fence_fd;
    __DRIimage                           *image_planar;
    int                                  stride, offset;
@@ -987,6 +1060,7 @@ dri3_get_pixmap_buffer(__DRIdrawable *driDrawable,
       goto no_image;
 
    buffer->pixmap = pixmap;
+   buffer->own_pixmap = false;
    buffer->width = bp_reply->width;
    buffer->height = bp_reply->height;
    buffer->buffer_type = buffer_type;
@@ -1018,16 +1092,16 @@ dri3_find_back(xcb_connection_t *c, struct dri3_drawable *priv)
    xcb_present_generic_event_t *ge;
 
    for (;;) {
-
-      for (b = 0; b < DRI3_MAX_BACK; b++) {
-         int                    id = DRI3_BACK_ID(b);
-         struct dri3_buffer        *buffer = priv->buffers[id];
+      for (b = 0; b < priv->num_back; b++) {
+         int id = DRI3_BACK_ID(b);
+         struct dri3_buffer *buffer = priv->buffers[id];
 
          if (!buffer)
             return b;
          if (!buffer->busy)
             return b;
       }
+      xcb_flush(c);
       ev = xcb_wait_for_special_event(c, priv->special_event);
       if (!ev)
          return -1;
@@ -1266,15 +1340,15 @@ dri3_swap_buffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
       /* Compute when we want the frame shown by taking the last known successful
        * MSC and adding in a swap interval for each outstanding swap request
        */
-      ++priv->present_request_serial;
+      ++priv->send_sbc;
       if (target_msc == 0)
-         target_msc = priv->msc + priv->swap_interval * (priv->present_request_serial - priv->present_event_serial);
+         target_msc = priv->msc + priv->swap_interval * (priv->send_sbc - priv->recv_sbc);
 
       priv->buffers[buf_id]->busy = 1;
       xcb_present_pixmap(c,
                          priv->base.xDrawable,
                          priv->buffers[buf_id]->pixmap,
-                         priv->present_request_serial,
+                         (uint32_t) priv->send_sbc,
                          0,                                    /* valid */
                          0,                                    /* update */
                          0,                                    /* x_off */
@@ -1286,7 +1360,7 @@ dri3_swap_buffers(__GLXDRIdrawable *pdraw, int64_t target_msc, int64_t divisor,
                          target_msc,
                          divisor,
                          remainder, 0, NULL);
-      ret = ++priv->sbc;
+      ret = (int64_t) priv->send_sbc;
 
       /* If there's a fake front, then copy the source back buffer
        * to the fake front to keep it up to date. This needs
@@ -1322,14 +1396,13 @@ dri3_open(Display *dpy,
    xcb_dri3_open_cookie_t       cookie;
    xcb_dri3_open_reply_t        *reply;
    xcb_connection_t             *c = XGetXCBConnection(dpy);
-   xcb_generic_error_t          *error;
    int                          fd;
 
    cookie = xcb_dri3_open(c,
                           root,
                           provider);
 
-   reply = xcb_dri3_open_reply(c, cookie, &error);
+   reply = xcb_dri3_open_reply(c, cookie, NULL);
    if (!reply)
       return -1;
 
@@ -1388,6 +1461,7 @@ dri3_set_swap_interval(__GLXDRIdrawable *pdraw, int interval)
    }
 
    priv->swap_interval = interval;
+   dri3_update_num_back(priv);
 
    return 0;
 }
@@ -1478,23 +1552,7 @@ dri3_bind_extensions(struct dri3_screen *psc, struct glx_display * priv,
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_swap_control");
    __glXEnableDirectExtension(&psc->base, "GLX_MESA_swap_control");
    __glXEnableDirectExtension(&psc->base, "GLX_SGI_make_current_read");
-
-   /*
-    * GLX_INTEL_swap_event is broken on the server side, where it's
-    * currently unconditionally enabled. This completely breaks
-    * systems running on drivers which don't support that extension.
-    * There's no way to test for its presence on this side, so instead
-    * of disabling it unconditionally, just disable it for drivers
-    * which are known to not support it, or for DDX drivers supporting
-    * only an older (pre-ScheduleSwap) version of DRI2.
-    *
-    * This is a hack which is required until:
-    * http://lists.x.org/archives/xorg-devel/2013-February/035449.html
-    * is merged and updated xserver makes it's way into distros:
-    */
-//   if (pdp->swapAvailable && strcmp(driverName, "vmwgfx") != 0) {
-//      __glXEnableDirectExtension(&psc->base, "GLX_INTEL_swap_event");
-//   }
+   __glXEnableDirectExtension(&psc->base, "GLX_INTEL_swap_event");
 
    mask = psc->image_driver->getAPIMask(psc->driScreen);
 
@@ -1582,7 +1640,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
    }
    deviceName = NULL;
 
-   driverName = dri3_get_driver_for_fd(psc->fd);
+   driverName = loader_get_driver_for_fd(psc->fd, 0);
    if (!driverName) {
       ErrorMessageF("No driver found\n");
       goto handle_error;
@@ -1783,10 +1841,12 @@ dri3_create_display(Display * dpy)
    }
    pdp->presentMajor = present_reply->major_version;
    pdp->presentMinor = present_reply->minor_version;
+   free(present_reply);
 
    pdp->base.destroyDisplay = dri3_destroy_display;
    pdp->base.createScreen = dri3_create_screen;
 
+   loader_set_logger(dri_message);
    i = 0;
 
    pdp->loader_extensions[i++] = &imageLoaderExtension.base;

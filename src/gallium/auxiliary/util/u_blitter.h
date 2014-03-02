@@ -17,7 +17,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -183,7 +183,7 @@ void util_blitter_draw_rectangle(struct blitter_context *blitter,
  * - blend state
  */
 void util_blitter_clear(struct blitter_context *blitter,
-                        unsigned width, unsigned height,
+                        unsigned width, unsigned height, unsigned num_layers,
                         unsigned clear_buffers,
                         const union pipe_color_union *color,
                         double depth, unsigned stencil);
@@ -191,13 +191,10 @@ void util_blitter_clear(struct blitter_context *blitter,
 /**
  * Check if the blitter (with the help of the driver) can blit between
  * the two resources.
- * The mask is a combination of the PIPE_MASK_* flags.
- * Set to PIPE_MASK_RGBAZS if unsure.
  */
 boolean util_blitter_is_copy_supported(struct blitter_context *blitter,
                                        const struct pipe_resource *dst,
-                                       const struct pipe_resource *src,
-                                       unsigned mask);
+                                       const struct pipe_resource *src);
 
 boolean util_blitter_is_blit_supported(struct blitter_context *blitter,
 				       const struct pipe_blit_info *info);
@@ -221,8 +218,7 @@ void util_blitter_copy_texture(struct blitter_context *blitter,
                                unsigned dstx, unsigned dsty, unsigned dstz,
                                struct pipe_resource *src,
                                unsigned src_level,
-                               const struct pipe_box *srcbox, unsigned mask,
-                               boolean copy_all_samples);
+                               const struct pipe_box *srcbox);
 
 /**
  * This is a generic implementation of pipe->blit, which accepts
@@ -250,8 +246,7 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
                                const struct pipe_box *srcbox,
                                unsigned src_width0, unsigned src_height0,
                                unsigned mask, unsigned filter,
-                               const struct pipe_scissor_state *scissor,
-                               boolean copy_all_samples);
+                               const struct pipe_scissor_state *scissor);
 
 void util_blitter_blit(struct blitter_context *blitter,
 		       const struct pipe_blit_info *info);

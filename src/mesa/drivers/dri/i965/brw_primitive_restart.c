@@ -129,7 +129,8 @@ GLboolean
 brw_handle_primitive_restart(struct gl_context *ctx,
                              const struct _mesa_prim *prims,
                              GLuint nr_prims,
-                             const struct _mesa_index_buffer *ib)
+                             const struct _mesa_index_buffer *ib,
+                             struct gl_buffer_object *indirect)
 {
    struct brw_context *brw = brw_context(ctx);
 
@@ -169,13 +170,13 @@ brw_handle_primitive_restart(struct gl_context *ctx,
       /* Cut index should work for primitive restart, so use it
        */
       brw->prim_restart.enable_cut_index = true;
-      brw_draw_prims(ctx, prims, nr_prims, ib, GL_FALSE, -1, -1, NULL);
+      brw_draw_prims(ctx, prims, nr_prims, ib, GL_FALSE, -1, -1, NULL, indirect);
       brw->prim_restart.enable_cut_index = false;
    } else {
       /* Not all the primitive draw modes are supported by the cut index,
        * so take the software path
        */
-      vbo_sw_primitive_restart(ctx, prims, nr_prims, ib);
+      vbo_sw_primitive_restart(ctx, prims, nr_prims, ib, indirect);
    }
 
    brw->prim_restart.in_progress = false;
@@ -190,7 +191,7 @@ haswell_upload_cut_index(struct brw_context *brw)
    struct gl_context *ctx = &brw->ctx;
 
    /* Don't trigger on Ivybridge */
-   if (!brw->is_haswell)
+   if (brw->gen < 8 && !brw->is_haswell)
       return;
 
    const unsigned cut_index_setting =

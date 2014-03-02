@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -404,21 +404,21 @@ intelCalcViewport(struct gl_context * ctx)
 
    if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
       _math_matrix_viewport(&intel->ViewportMatrix,
-			    ctx->Viewport.X,
-			    ctx->DrawBuffer->Height - ctx->Viewport.Y,
-			    ctx->Viewport.Width,
-			    -ctx->Viewport.Height,
-			    ctx->Viewport.Near,
-			    ctx->Viewport.Far,
+			    ctx->ViewportArray[0].X,
+			    ctx->DrawBuffer->Height - ctx->ViewportArray[0].Y,
+			    ctx->ViewportArray[0].Width,
+			    -ctx->ViewportArray[0].Height,
+			    ctx->ViewportArray[0].Near,
+			    ctx->ViewportArray[0].Far,
 			    1.0);
    } else {
       _math_matrix_viewport(&intel->ViewportMatrix,
-			    ctx->Viewport.X,
-			    ctx->Viewport.Y,
-			    ctx->Viewport.Width,
-			    ctx->Viewport.Height,
-			    ctx->Viewport.Near,
-			    ctx->Viewport.Far,
+			    ctx->ViewportArray[0].X,
+			    ctx->ViewportArray[0].Y,
+			    ctx->ViewportArray[0].Width,
+			    ctx->ViewportArray[0].Height,
+			    ctx->ViewportArray[0].Near,
+			    ctx->ViewportArray[0].Far,
 			    1.0);
    }
 }
@@ -426,7 +426,7 @@ intelCalcViewport(struct gl_context * ctx)
 
 /** Called from ctx->Driver.DepthRange() */
 static void
-i915DepthRange(struct gl_context * ctx, GLclampd nearval, GLclampd farval)
+i915DepthRange(struct gl_context *ctx)
 {
    intelCalcViewport(ctx);
 }
@@ -501,7 +501,7 @@ i915PolygonStipple(struct gl_context * ctx, const GLubyte * mask)
  * Hardware clipping
  */
 static void
-i915Scissor(struct gl_context * ctx, GLint x, GLint y, GLsizei w, GLsizei h)
+i915Scissor(struct gl_context * ctx)
 {
    struct i915_context *i915 = I915_CONTEXT(ctx);
    int x1, y1, x2, y2;
@@ -509,22 +509,28 @@ i915Scissor(struct gl_context * ctx, GLint x, GLint y, GLsizei w, GLsizei h)
    if (!ctx->DrawBuffer)
       return;
 
-   DBG("%s %d,%d %dx%d\n", __FUNCTION__, x, y, w, h);
+   DBG("%s %d,%d %dx%d\n", __FUNCTION__,
+       ctx->Scissor.ScissorArray[0].X,     ctx->Scissor.ScissorArray[0].Y,
+       ctx->Scissor.ScissorArray[0].Width, ctx->Scissor.ScissorArray[0].Height);
 
    if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
-      x1 = x;
-      y1 = ctx->DrawBuffer->Height - (y + h);
-      x2 = x + w - 1;
-      y2 = y1 + h - 1;
+      x1 = ctx->Scissor.ScissorArray[0].X;
+      y1 = ctx->DrawBuffer->Height - (ctx->Scissor.ScissorArray[0].Y
+                                      + ctx->Scissor.ScissorArray[0].Height);
+      x2 = ctx->Scissor.ScissorArray[0].X
+         + ctx->Scissor.ScissorArray[0].Width - 1;
+      y2 = y1 + ctx->Scissor.ScissorArray[0].Height - 1;
       DBG("%s %d..%d,%d..%d (inverted)\n", __FUNCTION__, x1, x2, y1, y2);
    }
    else {
       /* FBO - not inverted
        */
-      x1 = x;
-      y1 = y;
-      x2 = x + w - 1;
-      y2 = y + h - 1;
+      x1 = ctx->Scissor.ScissorArray[0].X;
+      y1 = ctx->Scissor.ScissorArray[0].Y;
+      x2 = ctx->Scissor.ScissorArray[0].X
+         + ctx->Scissor.ScissorArray[0].Width - 1;
+      y2 = ctx->Scissor.ScissorArray[0].Y
+         + ctx->Scissor.ScissorArray[0].Height - 1;
       DBG("%s %d..%d,%d..%d (not inverted)\n", __FUNCTION__, x1, x2, y1, y2);
    }
    

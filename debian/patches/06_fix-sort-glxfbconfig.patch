@@ -1,0 +1,58 @@
+From patchwork Mon Feb 17 22:47:32 2014
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [Mesa-dev] glx: Fix the GLXFBConfig attrib sort priorities
+From: =?utf-8?q?Fredrik_H=C3=B6glund?= <fredrik@kde.org>
+X-Patchwork-Id: 20464
+Message-Id: <1392677252-18889-1-git-send-email-fredrik@kde.org>
+To: mesa-dev@lists.freedesktop.org
+Cc: "9.2 10.0 10.1" <mesa-stable@lists.freedesktop.org>
+Date: Mon, 17 Feb 2014 23:47:32 +0100
+
+The sort priorites for GLX_SAMPLES and GLX_SAMPLE_BUFFERS are
+not defined in GL_ARB_multisample, but they are defined in
+the GLX 1.4 specification.
+
+Cc: "9.2 10.0 10.1" <mesa-stable@lists.freedesktop.org>
+
+---
+src/glx/glxcmds.c | 11 ++++-------
+ 1 file changed, 4 insertions(+), 7 deletions(-)
+
+diff --git a/src/glx/glxcmds.c b/src/glx/glxcmds.c
+index 43c473b..837d8a2 100644
+--- a/src/glx/glxcmds.c
++++ b/src/glx/glxcmds.c
+@@ -1105,7 +1105,7 @@ static int
+ fbconfig_compare(struct glx_config **a, struct glx_config **b)
+ {
+    /* The order of these comparisons must NOT change.  It is defined by
+-    * the GLX 1.3 spec and ARB_multisample.
++    * the GLX 1.4 specification.
+     */
+ 
+    PREFER_SMALLER(visualSelectGroup);
+@@ -1134,6 +1134,9 @@ fbconfig_compare(struct glx_config **a, struct glx_config **b)
+ 
+    PREFER_SMALLER(numAuxBuffers);
+ 
++   PREFER_SMALLER(sampleBuffers);
++   PREFER_SMALLER(samples);
++
+    PREFER_LARGER_OR_ZERO(depthBits);
+    PREFER_SMALLER(stencilBits);
+ 
+@@ -1147,12 +1150,6 @@ fbconfig_compare(struct glx_config **a, struct glx_config **b)
+ 
+    PREFER_SMALLER(visualType);
+ 
+-   /* None of the multisample specs say where this comparison should happen,
+-    * so I put it near the end.
+-    */
+-   PREFER_SMALLER(sampleBuffers);
+-   PREFER_SMALLER(samples);
+-
+    /* None of the pbuffer or fbconfig specs say that this comparison needs
+     * to happen at all, but it seems like it should.
+     */

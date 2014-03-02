@@ -23,7 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors:
- *    Keith Whitwell <keith@tungstengraphics.com>
+ *    Keith Whitwell <keithw@vmware.com>
  */
 
 /* Helper for drivers which find themselves rendering a range of
@@ -237,7 +237,7 @@ void vbo_rebase_prims( struct gl_context *ctx,
 	 GL_TRUE,
 	 0, 
 	 max_index - min_index,
-	 NULL );
+	 NULL, NULL );
 
    ctx->Array._DrawArrays = saved_arrays;
    ctx->NewDriverState |= ctx->DriverFlags.NewArray;

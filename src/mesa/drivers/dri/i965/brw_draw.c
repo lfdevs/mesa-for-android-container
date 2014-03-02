@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,19 +10,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 #include <sys/errno.h>
@@ -51,6 +51,7 @@
 #include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
 #include "intel_regions.h"
+#include "intel_buffer_objects.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PRIMS
 
@@ -72,7 +73,7 @@ const GLuint prim_to_hw_prim[GL_TRIANGLE_STRIP_ADJACENCY+1] = {
 };
 
 
-static const GLenum reduced_prim[GL_POLYGON+1] = {  
+static const GLenum reduced_prim[GL_POLYGON+1] = {
    GL_POINTS,
    GL_LINES,
    GL_LINES,
@@ -155,7 +156,7 @@ static GLuint trim(GLenum prim, GLuint length)
       return length > 3 ? (length - length % 2) : 0;
    else if (prim == GL_QUADS)
       return length - length % 4;
-   else 
+   else
       return length;
 }
 
@@ -168,6 +169,7 @@ static void brw_emit_prim(struct brw_context *brw,
    int vertex_access_type;
    int start_vertex_location;
    int base_vertex_location;
+   int indirect_flag;
 
    DBG("PRIM: %s %d %d\n", _mesa_lookup_enum_by_nr(prim->mode),
        prim->start, prim->count);
@@ -194,7 +196,7 @@ static void brw_emit_prim(struct brw_context *brw,
       verts_per_instance = prim->count;
 
    /* If nothing to emit, just return. */
-   if (verts_per_instance == 0)
+   if (verts_per_instance == 0 && !prim->is_indirect)
       return;
 
    /* If we're set to always flush, do it before and after the primitive emit.
@@ -206,9 +208,60 @@ static void brw_emit_prim(struct brw_context *brw,
       intel_batchbuffer_emit_mi_flush(brw);
    }
 
+   /* If indirect, emit a bunch of loads from the indirect BO. */
+   if (prim->is_indirect) {
+      struct gl_buffer_object *indirect_buffer = brw->ctx.DrawIndirectBuffer;
+      drm_intel_bo *bo = intel_bufferobj_buffer(brw,
+            intel_buffer_object(indirect_buffer),
+            prim->indirect_offset, 5 * sizeof(GLuint));
+
+      indirect_flag = GEN7_3DPRIM_INDIRECT_PARAMETER_ENABLE;
+
+      BEGIN_BATCH(15);
+
+      OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
+      OUT_BATCH(GEN7_3DPRIM_VERTEX_COUNT);
+      OUT_RELOC(bo, I915_GEM_DOMAIN_VERTEX, 0,
+            prim->indirect_offset + 0);
+      OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
+      OUT_BATCH(GEN7_3DPRIM_INSTANCE_COUNT);
+      OUT_RELOC(bo, I915_GEM_DOMAIN_VERTEX, 0,
+            prim->indirect_offset + 4);
+      OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
+      OUT_BATCH(GEN7_3DPRIM_START_VERTEX);
+      OUT_RELOC(bo, I915_GEM_DOMAIN_VERTEX, 0,
+            prim->indirect_offset + 8);
+
+      if (prim->indexed) {
+         OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
+         OUT_BATCH(GEN7_3DPRIM_BASE_VERTEX);
+         OUT_RELOC(bo, I915_GEM_DOMAIN_VERTEX, 0,
+               prim->indirect_offset + 12);
+         OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
+         OUT_BATCH(GEN7_3DPRIM_START_INSTANCE);
+         OUT_RELOC(bo, I915_GEM_DOMAIN_VERTEX, 0,
+               prim->indirect_offset + 16);
+      }
+      else {
+         OUT_BATCH(GEN7_MI_LOAD_REGISTER_MEM | (3 - 2));
+         OUT_BATCH(GEN7_3DPRIM_START_INSTANCE);
+         OUT_RELOC(bo, I915_GEM_DOMAIN_VERTEX, 0,
+               prim->indirect_offset + 12);
+         OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
+         OUT_BATCH(GEN7_3DPRIM_BASE_VERTEX);
+         OUT_BATCH(0);
+      }
+
+      ADVANCE_BATCH();
+   }
+   else {
+      indirect_flag = 0;
+   }
+
+
    if (brw->gen >= 7) {
       BEGIN_BATCH(7);
-      OUT_BATCH(CMD_3D_PRIM << 16 | (7 - 2));
+      OUT_BATCH(CMD_3D_PRIM << 16 | (7 - 2) | indirect_flag);
       OUT_BATCH(hw_prim | vertex_access_type);
    } else {
       BEGIN_BATCH(6);
@@ -323,7 +376,8 @@ static bool brw_try_draw_prims( struct gl_context *ctx,
 				     GLuint nr_prims,
 				     const struct _mesa_index_buffer *ib,
 				     GLuint min_index,
-				     GLuint max_index )
+				     GLuint max_index,
+				     struct gl_buffer_object *indirect)
 {
    struct brw_context *brw = brw_context(ctx);
    bool retval = true;
@@ -347,7 +401,7 @@ static bool brw_try_draw_prims( struct gl_context *ctx,
    /* We have to validate the textures *before* checking for fallbacks;
     * otherwise, the software fallback won't be able to rely on the
     * texture state, the firstLevel and lastLevel fields won't be
-    * set in the intel texture object (they'll both be 0), and the 
+    * set in the intel texture object (they'll both be 0), and the
     * software fallback will segfault if it attempts to access any
     * texture level other than level 0.
     */
@@ -392,7 +446,7 @@ static bool brw_try_draw_prims( struct gl_context *ctx,
        * we've got validated state that needs to be in the same batch as the
        * primitives.
        */
-      intel_batchbuffer_require_space(brw, estimated_max_prim_size, false);
+      intel_batchbuffer_require_space(brw, estimated_max_prim_size, RENDER_RING);
       intel_batchbuffer_save_state(brw);
 
       if (brw->num_instances != prims[i].num_instances) {
@@ -445,6 +499,12 @@ retry:
 	    }
 	 }
       }
+
+      /* Now that we know we haven't run out of aperture space, we can safely
+       * reset the dirty bits.
+       */
+      if (brw->state.dirty.brw)
+         brw_clear_dirty_bits(brw);
    }
 
    if (brw->always_flush_batch)
@@ -463,7 +523,8 @@ void brw_draw_prims( struct gl_context *ctx,
 		     GLboolean index_bounds_valid,
 		     GLuint min_index,
 		     GLuint max_index,
-		     struct gl_transform_feedback_object *unused_tfb_object)
+		     struct gl_transform_feedback_object *unused_tfb_object,
+		     struct gl_buffer_object *indirect )
 {
    struct brw_context *brw = brw_context(ctx);
    const struct gl_client_array **arrays = ctx->Array._DrawArrays;
@@ -474,7 +535,7 @@ void brw_draw_prims( struct gl_context *ctx,
       return;
 
    /* Handle primitive restart if needed */
-   if (brw_handle_primitive_restart(ctx, prims, nr_prims, ib)) {
+   if (brw_handle_primitive_restart(ctx, prims, nr_prims, ib, indirect)) {
       /* The draw was handled, so we can exit now */
       return;
    }
@@ -505,7 +566,7 @@ void brw_draw_prims( struct gl_context *ctx,
     * manage it.  swrast doesn't support our featureset, so we can't fall back
     * to it.
     */
-   brw_try_draw_prims(ctx, arrays, prims, nr_prims, ib, min_index, max_index);
+   brw_try_draw_prims(ctx, arrays, prims, nr_prims, ib, min_index, max_index, indirect);
 }
 
 void brw_draw_init( struct brw_context *brw )
@@ -514,7 +575,7 @@ void brw_draw_init( struct brw_context *brw )
    struct vbo_context *vbo = vbo_context(ctx);
    int i;
 
-   /* Register our drawing function: 
+   /* Register our drawing function:
     */
    vbo->draw_prims = brw_draw_prims;
 

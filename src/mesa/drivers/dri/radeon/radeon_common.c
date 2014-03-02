@@ -30,7 +30,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /*
  * Authors:
- *   Keith Whitwell <keith@tungstengraphics.com>
+ *   Keith Whitwell <keithw@vmware.com>
  */
 
 /*
@@ -105,8 +105,8 @@ void radeonSetCliprects(radeonContextPtr radeon)
 void radeonUpdateScissor( struct gl_context *ctx )
 {
 	radeonContextPtr rmesa = RADEON_CONTEXT(ctx);
-	GLint x = ctx->Scissor.X, y = ctx->Scissor.Y;
-	GLsizei w = ctx->Scissor.Width, h = ctx->Scissor.Height;
+	GLint x = ctx->Scissor.ScissorArray[0].X, y = ctx->Scissor.ScissorArray[0].Y;
+	GLsizei w = ctx->Scissor.ScissorArray[0].Width, h = ctx->Scissor.ScissorArray[0].Height;
 	int x1, y1, x2, y2;
 	int min_x, min_y, max_x, max_y;
 
@@ -142,10 +142,10 @@ void radeonUpdateScissor( struct gl_context *ctx )
  * Scissoring
  */
 
-void radeonScissor(struct gl_context* ctx, GLint x, GLint y, GLsizei w, GLsizei h)
+void radeonScissor(struct gl_context *ctx)
 {
 	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
-	if (ctx->Scissor.Enabled) {
+	if (ctx->Scissor.EnableFlags) {
 		/* We don't pipeline cliprect changes */
 		radeon_firevertices(radeon);
 		radeonUpdateScissor(ctx);
@@ -233,9 +233,9 @@ void radeon_draw_buffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 		return;
 	}
 
-	if (fb->Name)
+	if (fb->Name) {
 		;/* do something depthy/stencily TODO */
-
+        }
 
 		/* none */
 	if (fb->Name == 0) {
@@ -317,15 +317,6 @@ void radeon_draw_buffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 	_mesa_reference_renderbuffer(&radeon->state.color.rb, &rrbColor->base.Base);
 	radeon->state.color.draw_offset = offset;
 
-#if 0
-	/* update viewport since it depends on window size */
-	if (ctx->Driver.Viewport) {
-		ctx->Driver.Viewport(ctx, ctx->Viewport.X, ctx->Viewport.Y,
-				     ctx->Viewport.Width, ctx->Viewport.Height);
-	} else {
-
-	}
-#endif
 	ctx->NewState |= _NEW_VIEWPORT;
 
 	/* Set state we know depends on drawable parameters:
@@ -334,9 +325,7 @@ void radeon_draw_buffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 	radeon->NewGLState |= _NEW_SCISSOR;
 
 	if (ctx->Driver.DepthRange)
-		ctx->Driver.DepthRange(ctx,
-				       ctx->Viewport.Near,
-				       ctx->Viewport.Far);
+		ctx->Driver.DepthRange(ctx);
 
 	/* Update culling direction which changes depending on the
 	 * orientation of the buffer:
@@ -411,8 +400,7 @@ void radeon_viewport(struct gl_context *ctx)
 {
 	radeonContextPtr radeon = RADEON_CONTEXT(ctx);
 	__DRIcontext *driContext = radeon->dri.context;
-	void (*old_viewport)(struct gl_context *ctx, GLint x, GLint y,
-			     GLsizei w, GLsizei h);
+	void (*old_viewport)(struct gl_context *ctx);
 
 	if (_mesa_is_winsys_fbo(ctx->DrawBuffer)) {
 		if (radeon->is_front_buffer_rendering) {
@@ -511,7 +499,7 @@ static INLINE void radeon_emit_atom(radeonContextPtr radeon, struct radeon_state
 		if (atom->emit) {
 			(*atom->emit)(&radeon->glCtx, atom);
 		} else {
-			BEGIN_BATCH_NO_AUTOSTATE(dwords);
+			BEGIN_BATCH(dwords);
 			OUT_BATCH_TABLE(atom->cmd, dwords);
 			END_BATCH();
 		}
@@ -771,7 +759,6 @@ void rcommonDestroyCmdBuf(radeonContextPtr rmesa)
 }
 
 void rcommonBeginBatch(radeonContextPtr rmesa, int n,
-		       int dostate,
 		       const char *file,
 		       const char *function,
 		       int line)

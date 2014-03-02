@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
- * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2003 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,19 +10,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 /**
@@ -357,22 +357,31 @@ intel_bufferobj_map_range(struct gl_context * ctx,
     * BO, and we'll copy what they put in there out at unmap or
     * FlushRange time.
     */
-   if ((access & GL_MAP_INVALIDATE_RANGE_BIT) &&
+   if (!(access & GL_MAP_UNSYNCHRONIZED_BIT) &&
+       (access & GL_MAP_INVALIDATE_RANGE_BIT) &&
        drm_intel_bo_busy(intel_obj->buffer)) {
+      /* Ensure that the base alignment of the allocation meets the alignment
+       * guarantees the driver has advertised to the application.
+       */
+      const unsigned alignment = ctx->Const.MinMapBufferAlignment;
+      const unsigned extra = (uintptr_t) offset % alignment;
+
       if (access & GL_MAP_FLUSH_EXPLICIT_BIT) {
-	 intel_obj->range_map_buffer = malloc(length);
-	 obj->Pointer = intel_obj->range_map_buffer;
+         intel_obj->range_map_buffer = _mesa_align_malloc(length + extra,
+                                                          alignment);
+         obj->Pointer = intel_obj->range_map_buffer + extra;
       } else {
 	 intel_obj->range_map_bo = drm_intel_bo_alloc(brw->bufmgr,
 						      "range map",
-						      length, 64);
+                                                      length + extra,
+                                                      alignment);
 	 if (!(access & GL_MAP_READ_BIT)) {
 	    drm_intel_gem_bo_map_gtt(intel_obj->range_map_bo);
 	 } else {
 	    drm_intel_bo_map(intel_obj->range_map_bo,
 			     (access & GL_MAP_WRITE_BIT) != 0);
 	 }
-	 obj->Pointer = intel_obj->range_map_bo->virtual;
+	 obj->Pointer = intel_obj->range_map_bo->virtual + extra;
       }
       return obj->Pointer;
    }
@@ -424,7 +433,11 @@ intel_bufferobj_flush_mapped_range(struct gl_context *ctx,
 
    temp_bo = drm_intel_bo_alloc(brw->bufmgr, "range map flush", length, 64);
 
-   drm_intel_bo_subdata(temp_bo, 0, length, intel_obj->range_map_buffer);
+   /* Use obj->Pointer instead of intel_obj->range_map_buffer because the
+    * former points to the actual mapping while the latter may be offset to
+    * meet alignment guarantees.
+    */
+   drm_intel_bo_subdata(temp_bo, 0, length, obj->Pointer);
 
    intel_emit_linear_blit(brw,
 			  intel_obj->buffer, obj->Offset + offset,
@@ -456,14 +469,16 @@ intel_bufferobj_unmap(struct gl_context * ctx, struct gl_buffer_object *obj)
        * usage inside of a batchbuffer.
        */
       intel_batchbuffer_emit_mi_flush(brw);
-      free(intel_obj->range_map_buffer);
+      _mesa_align_free(intel_obj->range_map_buffer);
       intel_obj->range_map_buffer = NULL;
    } else if (intel_obj->range_map_bo != NULL) {
+      const unsigned extra = obj->Pointer - intel_obj->range_map_bo->virtual;
+
       drm_intel_bo_unmap(intel_obj->range_map_bo);
 
       intel_emit_linear_blit(brw,
 			     intel_obj->buffer, obj->Offset,
-			     intel_obj->range_map_bo, 0,
+			     intel_obj->range_map_bo, extra,
 			     obj->Length);
       intel_bufferobj_mark_gpu_usage(intel_obj, obj->Offset, obj->Length);
 

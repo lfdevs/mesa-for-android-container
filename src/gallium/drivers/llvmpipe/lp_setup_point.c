@@ -302,6 +302,24 @@ subpixel_snap(float a)
    return util_iround(FIXED_ONE * a);
 }
 
+/**
+ * Print point vertex attribs (for debug).
+ */
+static void
+print_point(struct lp_setup_context *setup,
+            const float (*v0)[4],
+            const float size)
+{
+   const struct lp_setup_variant_key *key = &setup->setup.variant->key;
+   uint i;
+
+   debug_printf("llvmpipe point, width %f\n", size);
+   for (i = 0; i < 1 + key->num_inputs; i++) {
+      debug_printf("  v0[%d]:  %f %f %f %f\n", i,
+                   v0[i][0], v0[i][1], v0[i][2], v0[i][3]);
+   }
+}
+
 
 static boolean
 try_setup_point( struct lp_setup_context *setup,
@@ -314,61 +332,117 @@ try_setup_point( struct lp_setup_context *setup,
    const float size
       = (setup->point_size_per_vertex && sizeAttr > 0) ? v0[sizeAttr][0]
       : setup->point_size;
-   
-   /* Point size as fixed point integer, remove rounding errors 
-    * and gives minimum width for very small points
-    */
-   int fixed_width = MAX2(FIXED_ONE,
-                          (subpixel_snap(size) + FIXED_ONE/2 - 1) & ~(FIXED_ONE-1));
 
-   const int x0 = subpixel_snap(v0[0][0] - setup->pixel_offset) - fixed_width/2;
-   const int y0 = subpixel_snap(v0[0][1] - setup->pixel_offset) - fixed_width/2;
-     
+   /* Yes this is necessary to accurately calculate bounding boxes
+    * with the two fill-conventions we support.  GL (normally) ends
+    * up needing a bottom-left fill convention, which requires
+    * slightly different rounding.
+    */
+   int adj = (setup->bottom_edge_rule != 0) ? 1 : 0;
+
    struct lp_scene *scene = setup->scene;
    struct lp_rast_triangle *point;
    unsigned bytes;
    struct u_rect bbox;
    unsigned nr_planes = 4;
    struct point_info info;
-   unsigned scissor_index = 0;
+   unsigned viewport_index = 0;
    unsigned layer = 0;
+   int fixed_width;
 
    if (setup->viewport_index_slot > 0) {
       unsigned *udata = (unsigned*)v0[setup->viewport_index_slot];
-      scissor_index = lp_clamp_scissor_idx(*udata);
+      viewport_index = lp_clamp_viewport_idx(*udata);
    }
    if (setup->layer_slot > 0) {
       layer = *(unsigned*)v0[setup->layer_slot];
       layer = MIN2(layer, scene->fb_max_layer);
    }
 
-   /* Bounding rectangle (in pixels) */
-   {
-      /* Yes this is necessary to accurately calculate bounding boxes
-       * with the two fill-conventions we support.  GL (normally) ends
-       * up needing a bottom-left fill convention, which requires
-       * slightly different rounding.
-       */
-      int adj = (setup->pixel_offset != 0) ? 1 : 0;
+   if (0)
+      print_point(setup, v0, size);
 
-      bbox.x0 = (x0 + (FIXED_ONE-1) + adj) >> FIXED_ORDER;
-      bbox.x1 = (x0 + fixed_width + (FIXED_ONE-1) + adj) >> FIXED_ORDER;
-      bbox.y0 = (y0 + (FIXED_ONE-1)) >> FIXED_ORDER;
-      bbox.y1 = (y0 + fixed_width + (FIXED_ONE-1)) >> FIXED_ORDER;
+   /* Bounding rectangle (in pixels) */
+   if (!lp_context->rasterizer ||
+       lp_context->rasterizer->point_quad_rasterization) {
+      /*
+       * Rasterize points as quads.
+       */
+      int x0, y0;
+      /* Point size as fixed point integer, remove rounding errors
+       * and gives minimum width for very small points.
+       */
+      fixed_width = MAX2(FIXED_ONE, subpixel_snap(size));
+
+      x0 = subpixel_snap(v0[0][0] - setup->pixel_offset) - fixed_width/2;
+      y0 = subpixel_snap(v0[0][1] - setup->pixel_offset) - fixed_width/2;
+
+      bbox.x0 = (x0 + (FIXED_ONE-1)) >> FIXED_ORDER;
+      bbox.x1 = (x0 + fixed_width + (FIXED_ONE-1)) >> FIXED_ORDER;
+      bbox.y0 = (y0 + (FIXED_ONE-1) + adj) >> FIXED_ORDER;
+      bbox.y1 = (y0 + fixed_width + (FIXED_ONE-1) + adj) >> FIXED_ORDER;
 
       /* Inclusive coordinates:
        */
       bbox.x1--;
       bbox.y1--;
+   } else {
+      /*
+       * OpenGL legacy rasterization rules for non-sprite points.
+       *
+       * Per OpenGL 2.1 spec, section 3.3.1, "Basic Point Rasterization".
+       *
+       * This type of point rasterization is only available in pre 3.0 contexts
+       * (or compatibilility contexts which we don't support) anyway.
+       */
+
+      const int x0 = subpixel_snap(v0[0][0]);
+      const int y0 = subpixel_snap(v0[0][1]) - adj;
+
+      int int_width;
+      /* Point size as fixed point integer. For GL legacy points
+       * the point size is always a whole integer.
+       */
+      fixed_width = MAX2(FIXED_ONE,
+                         (subpixel_snap(size) + FIXED_ONE/2 - 1) & ~(FIXED_ONE-1));
+      int_width = fixed_width >> FIXED_ORDER;
+
+      assert(setup->pixel_offset != 0);
+
+      if (int_width == 1) {
+         bbox.x0 = x0 >> FIXED_ORDER;
+         bbox.y0 = y0 >> FIXED_ORDER;
+         bbox.x1 = bbox.x0;
+         bbox.y1 = bbox.y0;
+      } else {
+         if (int_width & 1) {
+            /* Odd width */
+            bbox.x0 = (x0 >> FIXED_ORDER) - (int_width - 1)/2;
+            bbox.y0 = (y0 >> FIXED_ORDER) - (int_width - 1)/2;
+         } else {
+            /* Even width */
+            bbox.x0 = ((x0 + FIXED_ONE/2) >> FIXED_ORDER) - int_width/2;
+            bbox.y0 = ((y0 + FIXED_ONE/2) >> FIXED_ORDER) - int_width/2;
+         }
+
+         bbox.x1 = bbox.x0 + int_width - 1;
+         bbox.y1 = bbox.y0 + int_width - 1;
+      }
    }
-   
-   if (!u_rect_test_intersection(&setup->draw_regions[scissor_index], &bbox)) {
+
+   if (0) {
+      debug_printf("  bbox: (%i, %i) - (%i, %i)\n",
+                   bbox.x0, bbox.y0,
+                   bbox.x1, bbox.y1);
+   }
+
+   if (!u_rect_test_intersection(&setup->draw_regions[viewport_index], &bbox)) {
       if (0) debug_printf("offscreen\n");
       LP_COUNT(nr_culled_tris);
       return TRUE;
    }
 
-   u_rect_find_intersection(&setup->draw_regions[scissor_index], &bbox);
+   u_rect_find_intersection(&setup->draw_regions[viewport_index], &bbox);
 
    point = lp_setup_alloc_triangle(scene,
                                    key->num_inputs,
@@ -413,6 +487,7 @@ try_setup_point( struct lp_setup_context *setup,
    point->inputs.disable = FALSE;
    point->inputs.opaque = FALSE;
    point->inputs.layer = layer;
+   point->inputs.viewport_index = viewport_index;
 
    {
       struct lp_rast_plane *plane = GET_PLANES(point);
@@ -438,7 +513,7 @@ try_setup_point( struct lp_setup_context *setup,
       plane[3].eo = 0;
    }
 
-   return lp_setup_bin_triangle(setup, point, &bbox, nr_planes, scissor_index);
+   return lp_setup_bin_triangle(setup, point, &bbox, nr_planes, viewport_index);
 }
 
 

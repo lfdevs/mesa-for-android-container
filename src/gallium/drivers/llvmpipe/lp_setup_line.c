@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -294,7 +294,7 @@ try_setup_line( struct lp_setup_context *setup,
    int y[4];
    int i;
    int nr_planes = 4;
-   unsigned scissor_index = 0;
+   unsigned viewport_index = 0;
    unsigned layer = 0;
    
    /* linewidth should be interpreted as integer */
@@ -324,7 +324,7 @@ try_setup_line( struct lp_setup_context *setup,
       nr_planes = 8;
       if (setup->viewport_index_slot > 0) {
          unsigned *udata = (unsigned*)v1[setup->viewport_index_slot];
-         scissor_index = lp_clamp_scissor_idx(*udata);
+         viewport_index = lp_clamp_viewport_idx(*udata);
       }
    }
    else {
@@ -553,7 +553,7 @@ try_setup_line( struct lp_setup_context *setup,
        * up needing a bottom-left fill convention, which requires
        * slightly different rounding.
        */
-      int adj = (setup->pixel_offset != 0) ? 1 : 0;
+      int adj = (setup->bottom_edge_rule != 0) ? 1 : 0;
 
       bbox.x0 = (MIN4(x[0], x[1], x[2], x[3]) + (FIXED_ONE-1)) >> FIXED_ORDER;
       bbox.x1 = (MAX4(x[0], x[1], x[2], x[3]) + (FIXED_ONE-1)) >> FIXED_ORDER;
@@ -573,7 +573,7 @@ try_setup_line( struct lp_setup_context *setup,
       return TRUE;
    }
 
-   if (!u_rect_test_intersection(&setup->draw_regions[scissor_index], &bbox)) {
+   if (!u_rect_test_intersection(&setup->draw_regions[viewport_index], &bbox)) {
       if (0) debug_printf("offscreen\n");
       LP_COUNT(nr_culled_tris);
       return TRUE;
@@ -635,13 +635,14 @@ try_setup_line( struct lp_setup_context *setup,
    line->inputs.disable = FALSE;
    line->inputs.opaque = FALSE;
    line->inputs.layer = layer;
+   line->inputs.viewport_index = viewport_index;
 
    for (i = 0; i < 4; i++) {
 
       /* half-edge constants, will be interated over the whole render
        * target.
        */
-      plane[i].c = plane[i].dcdx * x[i] - plane[i].dcdy * y[i];
+      plane[i].c = IMUL64(plane[i].dcdx, x[i]) - IMUL64(plane[i].dcdy, y[i]);
 
       
       /* correct for top-left vs. bottom-left fill convention.  
@@ -697,7 +698,7 @@ try_setup_line( struct lp_setup_context *setup,
     */
    if (nr_planes == 8) {
       const struct u_rect *scissor =
-         &setup->scissors[scissor_index];
+         &setup->scissors[viewport_index];
 
       plane[4].dcdx = -1;
       plane[4].dcdy = 0;
@@ -720,7 +721,7 @@ try_setup_line( struct lp_setup_context *setup,
       plane[7].eo = 0;
    }
 
-   return lp_setup_bin_triangle(setup, line, &bbox, nr_planes, scissor_index);
+   return lp_setup_bin_triangle(setup, line, &bbox, nr_planes, viewport_index);
 }
 
 

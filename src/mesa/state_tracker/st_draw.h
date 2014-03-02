@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2004 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2004 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -27,7 +27,7 @@
 
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
     
 
@@ -55,7 +55,8 @@ st_draw_vbo(struct gl_context *ctx,
 	    GLboolean index_bounds_valid,
             GLuint min_index,
             GLuint max_index,
-            struct gl_transform_feedback_object *tfb_vertcount);
+            struct gl_transform_feedback_object *tfb_vertcount,
+            struct gl_buffer_object *indirect);
 
 extern void
 st_feedback_draw_vbo(struct gl_context *ctx,
@@ -65,7 +66,8 @@ st_feedback_draw_vbo(struct gl_context *ctx,
 		     GLboolean index_bounds_valid,
                      GLuint min_index,
                      GLuint max_index,
-                     struct gl_transform_feedback_object *tfb_vertcount);
+                     struct gl_transform_feedback_object *tfb_vertcount,
+                     struct gl_buffer_object *indirect);
 
 /**
  * When drawing with VBOs, the addresses specified with

@@ -21,17 +21,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+AUTOMAKE_OPTIONS = subdir-objects
+
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
-noinst_LTLIBRARIES = libilo.la
-
 AM_CPPFLAGS = \
-	-I$(srcdir)/include \
 	-I$(top_srcdir)/src/gallium/winsys/intel \
-	$(GALLIUM_CFLAGS)
+	$(GALLIUM_DRIVER_CFLAGS)
 
-AM_CFLAGS = \
-	$(VISIBILITY_CFLAGS)
+noinst_LTLIBRARIES = libilo.la
 
 libilo_la_SOURCES = $(C_SOURCES)

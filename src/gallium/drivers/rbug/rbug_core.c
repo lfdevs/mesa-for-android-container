@@ -320,7 +320,7 @@ rbug_context_info(struct rbug_rbug *tr_rbug, struct rbug_header *header, uint32_
    struct rbug_screen *rb_screen = tr_rbug->rb_screen;
    struct rbug_context *rb_context = NULL;
    rbug_texture_t cbufs[PIPE_MAX_COLOR_BUFS];
-   rbug_texture_t texs[PIPE_MAX_SAMPLERS];
+   rbug_texture_t texs[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    unsigned i;
 
    pipe_mutex_lock(rb_screen->list_mutex);
@@ -810,7 +810,7 @@ PIPE_THREAD_ROUTINE(rbug_thread, void_tr_rbug)
 
    if (s < 0) {
       debug_printf("rbug_rbug - failed to listen\n");
-      return NULL;
+      return 0;
    }
 
    u_socket_block(s, false);
@@ -836,7 +836,7 @@ PIPE_THREAD_ROUTINE(rbug_thread, void_tr_rbug)
 
    u_socket_stop();
 
-   return NULL;
+   return 0;
 }
 
 /**********************************************************

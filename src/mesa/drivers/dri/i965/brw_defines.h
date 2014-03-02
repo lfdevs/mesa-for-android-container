@@ -1,8 +1,8 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
- 
+
  Permission is hereby granted, free of charge, to any person obtaining
  a copy of this software and associated documentation files (the
  "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  distribute, sublicense, and/or sell copies of the Software, and to
  permit persons to whom the Software is furnished to do so, subject to
  the following conditions:
- 
+
  The above copyright notice and this permission notice (including the
  next paragraph) shall be included in all copies or substantial
  portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -22,15 +22,22 @@
  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- 
+
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
 
 #define INTEL_MASK(high, low) (((1<<((high)-(low)+1))-1)<<(low))
-#define SET_FIELD(value, field) (((value) << field ## _SHIFT) & field ## _MASK)
+/* Using the GNU statement expression extension */
+#define SET_FIELD(value, field)                                         \
+   ({                                                                   \
+      uint32_t fieldval = (value) << field ## _SHIFT;                   \
+      assert((fieldval & ~ field ## _MASK) == 0);                       \
+      fieldval & field ## _MASK;                                        \
+   })
+
 #define GET_FIELD(word, field) (((word)  & field ## _MASK) >> field ## _SHIFT)
 
 #ifndef BRW_DEFINES_H
@@ -38,19 +45,12 @@
 
 /* 3D state:
  */
-#define PIPE_CONTROL_NOWRITE          0x00
-#define PIPE_CONTROL_WRITEIMMEDIATE   0x01
-#define PIPE_CONTROL_WRITEDEPTH       0x02
-#define PIPE_CONTROL_WRITETIMESTAMP   0x03
-
-#define PIPE_CONTROL_GTTWRITE_PROCESS_LOCAL 0x00
-#define PIPE_CONTROL_GTTWRITE_GLOBAL        0x01
-
 #define CMD_3D_PRIM                                 0x7b00 /* 3DPRIMITIVE */
 /* DW0 */
 # define GEN4_3DPRIM_TOPOLOGY_TYPE_SHIFT            10
 # define GEN4_3DPRIM_VERTEXBUFFER_ACCESS_SEQUENTIAL (0 << 15)
 # define GEN4_3DPRIM_VERTEXBUFFER_ACCESS_RANDOM     (1 << 15)
+# define GEN7_3DPRIM_INDIRECT_PARAMETER_ENABLE      (1 << 10)
 /* DW1 */
 # define GEN7_3DPRIM_VERTEXBUFFER_ACCESS_SEQUENTIAL (0 << 8)
 # define GEN7_3DPRIM_VERTEXBUFFER_ACCESS_RANDOM     (1 << 8)
@@ -256,6 +256,16 @@
 #define BRW_STENCILOP_INVERT             7
 
 /* Surface state DW0 */
+#define GEN8_SURFACE_IS_ARRAY                       (1 << 28)
+#define GEN8_SURFACE_VALIGN_4                       (1 << 16)
+#define GEN8_SURFACE_VALIGN_8                       (2 << 16)
+#define GEN8_SURFACE_VALIGN_16                      (3 << 16)
+#define GEN8_SURFACE_HALIGN_4                       (1 << 14)
+#define GEN8_SURFACE_HALIGN_8                       (2 << 14)
+#define GEN8_SURFACE_HALIGN_16                      (3 << 14)
+#define GEN8_SURFACE_TILING_NONE                    (0 << 12)
+#define GEN8_SURFACE_TILING_X                       (2 << 12)
+#define GEN8_SURFACE_TILING_Y                       (3 << 12)
 #define BRW_SURFACE_RC_READ_WRITE	(1 << 8)
 #define BRW_SURFACE_MIPLAYOUT_SHIFT	10
 #define BRW_SURFACE_MIPMAPLAYOUT_BELOW   0
@@ -536,12 +546,16 @@
 #define BRW_SURFACE_MULTISAMPLECOUNT_1  (0 << 4)
 #define BRW_SURFACE_MULTISAMPLECOUNT_4  (2 << 4)
 #define GEN7_SURFACE_MULTISAMPLECOUNT_1         (0 << 3)
+#define GEN8_SURFACE_MULTISAMPLECOUNT_2         (1 << 3)
 #define GEN7_SURFACE_MULTISAMPLECOUNT_4         (2 << 3)
 #define GEN7_SURFACE_MULTISAMPLECOUNT_8         (3 << 3)
+#define GEN8_SURFACE_MULTISAMPLECOUNT_16        (4 << 3)
 #define GEN7_SURFACE_MSFMT_MSS                  (0 << 6)
 #define GEN7_SURFACE_MSFMT_DEPTH_STENCIL        (1 << 6)
 #define GEN7_SURFACE_MIN_ARRAY_ELEMENT_SHIFT	18
+#define GEN7_SURFACE_MIN_ARRAY_ELEMENT_MASK     INTEL_MASK(28, 18)
 #define GEN7_SURFACE_RENDER_TARGET_VIEW_EXTENT_SHIFT	7
+#define GEN7_SURFACE_RENDER_TARGET_VIEW_EXTENT_MASK   INTEL_MASK(17, 7)
 
 /* Surface state DW5 */
 #define BRW_SURFACE_X_OFFSET_SHIFT		25
@@ -551,6 +565,8 @@
 #define BRW_SURFACE_Y_OFFSET_MASK		INTEL_MASK(23, 20)
 #define GEN7_SURFACE_MIN_LOD_SHIFT              4
 #define GEN7_SURFACE_MIN_LOD_MASK               INTEL_MASK(7, 4)
+#define GEN8_SURFACE_Y_OFFSET_SHIFT		21
+#define GEN8_SURFACE_Y_OFFSET_MASK		INTEL_MASK(23, 21)
 
 #define GEN7_SURFACE_MOCS_SHIFT                 16
 #define GEN7_SURFACE_MOCS_MASK                  INTEL_MASK(19, 16)
@@ -751,6 +767,7 @@ enum opcode {
     * instructions.
     */
    FS_OPCODE_FB_WRITE = 128,
+   FS_OPCODE_BLORP_FB_WRITE,
    SHADER_OPCODE_RCP,
    SHADER_OPCODE_RSQ,
    SHADER_OPCODE_SQRT,
@@ -768,7 +785,9 @@ enum opcode {
    SHADER_OPCODE_TXL,
    SHADER_OPCODE_TXS,
    FS_OPCODE_TXB,
-   SHADER_OPCODE_TXF_MS,
+   SHADER_OPCODE_TXF_CMS,
+   SHADER_OPCODE_TXF_UMS,
+   SHADER_OPCODE_TXF_MCS,
    SHADER_OPCODE_LOD,
    SHADER_OPCODE_TG4,
    SHADER_OPCODE_TG4_OFFSET,
@@ -885,6 +904,77 @@ enum opcode {
    GS_OPCODE_SET_CHANNEL_MASKS,
 };
 
+enum brw_urb_write_flags {
+   BRW_URB_WRITE_NO_FLAGS = 0,
+
+   /**
+    * Causes a new URB entry to be allocated, and its address stored in the
+    * destination register (gen < 7).
+    */
+   BRW_URB_WRITE_ALLOCATE = 0x1,
+
+   /**
+    * Causes the current URB entry to be deallocated (gen < 7).
+    */
+   BRW_URB_WRITE_UNUSED = 0x2,
+
+   /**
+    * Causes the thread to terminate.
+    */
+   BRW_URB_WRITE_EOT = 0x4,
+
+   /**
+    * Indicates that the given URB entry is complete, and may be sent further
+    * down the 3D pipeline (gen < 7).
+    */
+   BRW_URB_WRITE_COMPLETE = 0x8,
+
+   /**
+    * Indicates that an additional offset (which may be different for the two
+    * vec4 slots) is stored in the message header (gen == 7).
+    */
+   BRW_URB_WRITE_PER_SLOT_OFFSET = 0x10,
+
+   /**
+    * Indicates that the channel masks in the URB_WRITE message header should
+    * not be overridden to 0xff (gen == 7).
+    */
+   BRW_URB_WRITE_USE_CHANNEL_MASKS = 0x20,
+
+   /**
+    * Indicates that the data should be sent to the URB using the
+    * URB_WRITE_OWORD message rather than URB_WRITE_HWORD (gen == 7).  This
+    * causes offsets to be interpreted as multiples of an OWORD instead of an
+    * HWORD, and only allows one OWORD to be written.
+    */
+   BRW_URB_WRITE_OWORD = 0x40,
+
+   /**
+    * Convenient combination of flags: end the thread while simultaneously
+    * marking the given URB entry as complete.
+    */
+   BRW_URB_WRITE_EOT_COMPLETE = BRW_URB_WRITE_EOT | BRW_URB_WRITE_COMPLETE,
+
+   /**
+    * Convenient combination of flags: mark the given URB entry as complete
+    * and simultaneously allocate a new one.
+    */
+   BRW_URB_WRITE_ALLOCATE_COMPLETE =
+      BRW_URB_WRITE_ALLOCATE | BRW_URB_WRITE_COMPLETE,
+};
+
+#ifdef __cplusplus
+/**
+ * Allow brw_urb_write_flags enums to be ORed together.
+ */
+inline brw_urb_write_flags
+operator|(brw_urb_write_flags x, brw_urb_write_flags y)
+{
+   return static_cast<brw_urb_write_flags>(static_cast<int>(x) |
+                                           static_cast<int>(y));
+}
+#endif
+
 #define BRW_PREDICATE_NONE             0
 #define BRW_PREDICATE_NORMAL           1
 #define BRW_PREDICATE_ALIGN1_ANYV             2
@@ -909,16 +999,24 @@ enum opcode {
 #define BRW_MESSAGE_REGISTER_FILE         2
 #define BRW_IMMEDIATE_VALUE               3
 
-#define BRW_REGISTER_TYPE_UD  0
-#define BRW_REGISTER_TYPE_D   1
-#define BRW_REGISTER_TYPE_UW  2
-#define BRW_REGISTER_TYPE_W   3
-#define BRW_REGISTER_TYPE_UB  4
-#define BRW_REGISTER_TYPE_B   5
-#define BRW_REGISTER_TYPE_VF  5	/* packed float vector, immediates only? */
-#define BRW_REGISTER_TYPE_HF  6
-#define BRW_REGISTER_TYPE_V   6	/* packed int vector, immediates only, uword dest only */
-#define BRW_REGISTER_TYPE_F   7
+#define BRW_HW_REG_TYPE_UD  0
+#define BRW_HW_REG_TYPE_D   1
+#define BRW_HW_REG_TYPE_UW  2
+#define BRW_HW_REG_TYPE_W   3
+#define BRW_HW_REG_TYPE_F   7
+#define GEN8_HW_REG_TYPE_UQ 8
+#define GEN8_HW_REG_TYPE_Q  9
+
+#define BRW_HW_REG_NON_IMM_TYPE_UB  4
+#define BRW_HW_REG_NON_IMM_TYPE_B   5
+#define GEN7_HW_REG_NON_IMM_TYPE_DF 6
+#define GEN8_HW_REG_NON_IMM_TYPE_HF 10
+
+#define BRW_HW_REG_IMM_TYPE_UV  4 /* Gen6+ packed unsigned immediate vector */
+#define BRW_HW_REG_IMM_TYPE_VF  5 /* packed float immediate vector */
+#define BRW_HW_REG_IMM_TYPE_V   6 /* packed int imm. vector; uword dest only */
+#define GEN8_HW_REG_IMM_TYPE_DF 10
+#define GEN8_HW_REG_IMM_TYPE_HF 11
 
 /* SNB adds 3-src instructions (MAD and LRP) that only operate on floats, so
  * the types were implied. IVB adds BFE and BFI2 that operate on doublewords
@@ -1010,13 +1108,16 @@ enum brw_message_target {
    BRW_SFID_DATAPORT_WRITE           = 5,
    BRW_SFID_URB                      = 6,
    BRW_SFID_THREAD_SPAWNER           = 7,
+   BRW_SFID_VME                      = 8,
 
    GEN6_SFID_DATAPORT_SAMPLER_CACHE  = 4,
    GEN6_SFID_DATAPORT_RENDER_CACHE   = 5,
    GEN6_SFID_DATAPORT_CONSTANT_CACHE = 9,
 
    GEN7_SFID_DATAPORT_DATA_CACHE     = 10,
+   GEN7_SFID_PIXEL_INTERPOLATOR      = 11,
    HSW_SFID_DATAPORT_DATA_CACHE_1    = 12,
+   HSW_SFID_CRE                      = 13,
 };
 
 #define GEN7_MESSAGE_TARGET_DP_DATA_CACHE     10
@@ -1205,6 +1306,8 @@ enum brw_message_target {
 #define BRW_MATH_FUNCTION_INT_DIV_QUOTIENT_AND_REMAINDER   11
 #define BRW_MATH_FUNCTION_INT_DIV_QUOTIENT                 12
 #define BRW_MATH_FUNCTION_INT_DIV_REMAINDER                13
+#define GEN8_MATH_FUNCTION_INVM                            14
+#define GEN8_MATH_FUNCTION_RSQRTM                          15
 
 #define BRW_MATH_INTEGER_UNSIGNED     0
 #define BRW_MATH_INTEGER_SIGNED       1
@@ -1320,6 +1423,21 @@ enum brw_message_target {
 #define _3DSTATE_VF                             0x780c /* GEN7.5+ */
 #define HSW_CUT_INDEX_ENABLE                            (1 << 8)
 
+#define _3DSTATE_VF_INSTANCING                  0x7849 /* GEN8+ */
+# define GEN8_VF_INSTANCING_ENABLE                      (1 << 8)
+
+#define _3DSTATE_VF_SGVS                        0x784a /* GEN8+ */
+# define GEN8_SGVS_ENABLE_INSTANCE_ID                   (1 << 31)
+# define GEN8_SGVS_INSTANCE_ID_COMPONENT_SHIFT          29
+# define GEN8_SGVS_INSTANCE_ID_ELEMENT_OFFSET_SHIFT     16
+# define GEN8_SGVS_ENABLE_VERTEX_ID                     (1 << 15)
+# define GEN8_SGVS_VERTEX_ID_COMPONENT_SHIFT            13
+# define GEN8_SGVS_VERTEX_ID_ELEMENT_OFFSET_SHIFT       0
+
+#define _3DSTATE_VF_TOPOLOGY                    0x784b /* GEN8+ */
+
+#define _3DSTATE_WM_CHROMAKEY			0x784c /* GEN8+ */
+
 #define _3DSTATE_URB_VS                         0x7830 /* GEN7+ */
 #define _3DSTATE_URB_HS                         0x7831 /* GEN7+ */
 #define _3DSTATE_URB_DS                         0x7832 /* GEN7+ */
@@ -1341,6 +1459,7 @@ enum brw_message_target {
 # define GEN6_CC_VIEWPORT_MODIFY			(1 << 12)
 # define GEN6_SF_VIEWPORT_MODIFY			(1 << 11)
 # define GEN6_CLIP_VIEWPORT_MODIFY			(1 << 10)
+# define GEN7_NUM_VIEWPORTS				16
 
 #define _3DSTATE_VIEWPORT_STATE_POINTERS_CC	0x7823 /* GEN7+ */
 #define _3DSTATE_VIEWPORT_STATE_POINTERS_SF_CL	0x7821 /* GEN7+ */
@@ -1365,6 +1484,10 @@ enum brw_message_target {
 # define GEN6_VS_STATISTICS_ENABLE			(1 << 10)
 # define GEN6_VS_CACHE_DISABLE				(1 << 1)
 # define GEN6_VS_ENABLE					(1 << 0)
+/* Gen8+ DW8 */
+# define GEN8_VS_URB_ENTRY_OUTPUT_OFFSET_SHIFT          21
+# define GEN8_VS_URB_OUTPUT_LENGTH_SHIFT                16
+# define GEN8_VS_USER_CLIP_DISTANCE_SHIFT               8
 
 #define _3DSTATE_GS		      		0x7811 /* GEN6+ */
 /* DW2 */
@@ -1406,6 +1529,11 @@ enum brw_message_target {
 # define GEN6_GS_SVBI_POSTINCREMENT_VALUE_SHIFT		16
 # define GEN6_GS_SVBI_POSTINCREMENT_VALUE_MASK		INTEL_MASK(25, 16)
 # define GEN6_GS_ENABLE					(1 << 15)
+
+/* Gen8+ DW9 */
+# define GEN8_GS_URB_ENTRY_OUTPUT_OFFSET_SHIFT          21
+# define GEN8_GS_URB_OUTPUT_LENGTH_SHIFT                16
+# define GEN8_GS_USER_CLIP_DISTANCE_SHIFT               8
 
 # define BRW_GS_EDGE_INDICATOR_0			(1 << 8)
 # define BRW_GS_EDGE_INDICATOR_1			(1 << 9)
@@ -1457,6 +1585,7 @@ enum brw_message_target {
 # define GEN6_CLIP_MIN_POINT_WIDTH_SHIFT		17
 # define GEN6_CLIP_MAX_POINT_WIDTH_SHIFT		6
 # define GEN6_CLIP_FORCE_ZERO_RTAINDEX			(1 << 5)
+# define GEN6_CLIP_MAX_VP_INDEX_MASK			INTEL_MASK(3, 0)
 
 #define _3DSTATE_SF				0x7813 /* GEN6+ */
 /* DW1 (for gen6) */
@@ -1549,19 +1678,143 @@ enum brw_message_target {
 /* GEN7/DW2: */
 # define HSW_SF_LINE_STIPPLE_ENABLE			14
 
+# define GEN8_SF_SMOOTH_POINT_ENABLE                    (1 << 13)
+
 #define _3DSTATE_SBE				0x781F /* GEN7+ */
 /* DW1 */
+# define GEN8_SBE_FORCE_URB_ENTRY_READ_LENGTH           (1 << 29)
+# define GEN8_SBE_FORCE_URB_ENTRY_READ_OFFSET           (1 << 28)
 # define GEN7_SBE_SWIZZLE_CONTROL_MODE			(1 << 28)
 # define GEN7_SBE_NUM_OUTPUTS_SHIFT			22
 # define GEN7_SBE_SWIZZLE_ENABLE			(1 << 21)
 # define GEN7_SBE_POINT_SPRITE_LOWERLEFT		(1 << 20)
 # define GEN7_SBE_URB_ENTRY_READ_LENGTH_SHIFT		11
 # define GEN7_SBE_URB_ENTRY_READ_OFFSET_SHIFT		4
+# define GEN8_SBE_URB_ENTRY_READ_OFFSET_SHIFT		5
 /* DW2-9: Attribute setup (same as DW8-15 of gen6 _3DSTATE_SF) */
 /* DW10: Point sprite texture coordinate enables */
 /* DW11: Constant interpolation enables */
 /* DW12: attr 0-7 wrap shortest enables */
 /* DW13: attr 8-16 wrap shortest enables */
+
+#define _3DSTATE_SBE_SWIZ                       0x7851 /* GEN8+ */
+
+#define _3DSTATE_RASTER                         0x7850 /* GEN8+ */
+/* DW1 */
+# define GEN8_RASTER_FRONT_WINDING_CCW                  (1 << 21)
+# define GEN8_RASTER_CULL_BOTH                          (0 << 16)
+# define GEN8_RASTER_CULL_NONE                          (1 << 16)
+# define GEN8_RASTER_CULL_FRONT                         (2 << 16)
+# define GEN8_RASTER_CULL_BACK                          (3 << 16)
+# define GEN8_RASTER_SMOOTH_POINT_ENABLE                (1 << 13)
+# define GEN8_RASTER_LINE_AA_ENABLE                     (1 << 2)
+# define GEN8_RASTER_SCISSOR_ENABLE                     (1 << 1)
+# define GEN8_RASTER_VIEWPORT_Z_CLIP_TEST_ENABLE        (1 << 0)
+
+/* Gen8 BLEND_STATE */
+/* DW0 */
+#define GEN8_BLEND_ALPHA_TO_COVERAGE_ENABLE             (1 << 31)
+#define GEN8_BLEND_INDEPENDENT_ALPHA_BLEND_ENABLE       (1 << 30)
+#define GEN8_BLEND_ALPHA_TO_ONE_ENABLE                  (1 << 29)
+#define GEN8_BLEND_ALPHA_TO_COVERAGE_DITHER_ENABLE      (1 << 28)
+#define GEN8_BLEND_ALPHA_TEST_ENABLE                    (1 << 27)
+#define GEN8_BLEND_ALPHA_TEST_FUNCTION_MASK             INTEL_MASK(26, 24)
+#define GEN8_BLEND_ALPHA_TEST_FUNCTION_SHIFT            24
+#define GEN8_BLEND_COLOR_DITHER_ENABLE                  (1 << 23)
+#define GEN8_BLEND_X_DITHER_OFFSET_MASK                 INTEL_MASK(22, 21)
+#define GEN8_BLEND_X_DITHER_OFFSET_SHIFT                21
+#define GEN8_BLEND_Y_DITHER_OFFSET_MASK                 INTEL_MASK(20, 19)
+#define GEN8_BLEND_Y_DITHER_OFFSET_SHIFT                19
+/* DW1 + 2n */
+#define GEN8_BLEND_COLOR_BUFFER_BLEND_ENABLE            (1 << 31)
+#define GEN8_BLEND_SRC_BLEND_FACTOR_MASK                INTEL_MASK(30, 26)
+#define GEN8_BLEND_SRC_BLEND_FACTOR_SHIFT               26
+#define GEN8_BLEND_DST_BLEND_FACTOR_MASK                INTEL_MASK(25, 21)
+#define GEN8_BLEND_DST_BLEND_FACTOR_SHIFT               21
+#define GEN8_BLEND_COLOR_BLEND_FUNCTION_MASK            INTEL_MASK(20, 18)
+#define GEN8_BLEND_COLOR_BLEND_FUNCTION_SHIFT           18
+#define GEN8_BLEND_SRC_ALPHA_BLEND_FACTOR_MASK          INTEL_MASK(17, 13)
+#define GEN8_BLEND_SRC_ALPHA_BLEND_FACTOR_SHIFT         13
+#define GEN8_BLEND_DST_ALPHA_BLEND_FACTOR_MASK          INTEL_MASK(12, 8)
+#define GEN8_BLEND_DST_ALPHA_BLEND_FACTOR_SHIFT         8
+#define GEN8_BLEND_ALPHA_BLEND_FUNCTION_MASK            INTEL_MASK(7, 5)
+#define GEN8_BLEND_ALPHA_BLEND_FUNCTION_SHIFT           5
+#define GEN8_BLEND_WRITE_DISABLE_ALPHA                  (1 << 3)
+#define GEN8_BLEND_WRITE_DISABLE_RED                    (1 << 2)
+#define GEN8_BLEND_WRITE_DISABLE_GREEN                  (1 << 1)
+#define GEN8_BLEND_WRITE_DISABLE_BLUE                   (1 << 0)
+/* DW1 + 2n + 1 */
+#define GEN8_BLEND_LOGIC_OP_ENABLE                      (1 << 31)
+#define GEN8_BLEND_LOGIC_OP_FUNCTION_MASK               INTEL_MASK(30, 27)
+#define GEN8_BLEND_LOGIC_OP_FUNCTION_SHIFT              27
+#define GEN8_BLEND_PRE_BLEND_SRC_ONLY_CLAMP_ENABLE      (1 << 4)
+#define GEN8_BLEND_COLOR_CLAMP_RANGE_RTFORMAT           (2 << 2)
+#define GEN8_BLEND_PRE_BLEND_COLOR_CLAMP_ENABLE         (1 << 1)
+#define GEN8_BLEND_POST_BLEND_COLOR_CLAMP_ENABLE        (1 << 0)
+
+#define _3DSTATE_WM_HZ_OP                       0x7852 /* GEN8+ */
+
+#define _3DSTATE_PS_BLEND                       0x784D /* GEN8+ */
+/* DW1 */
+# define GEN8_PS_BLEND_ALPHA_TO_COVERAGE_ENABLE         (1 << 31)
+# define GEN8_PS_BLEND_HAS_WRITEABLE_RT                 (1 << 30)
+# define GEN8_PS_BLEND_COLOR_BUFFER_BLEND_ENABLE        (1 << 29)
+# define GEN8_PS_BLEND_SRC_ALPHA_BLEND_FACTOR_MASK      INTEL_MASK(28, 24)
+# define GEN8_PS_BLEND_SRC_ALPHA_BLEND_FACTOR_SHIFT     24
+# define GEN8_PS_BLEND_DST_ALPHA_BLEND_FACTOR_MASK      INTEL_MASK(23, 19)
+# define GEN8_PS_BLEND_DST_ALPHA_BLEND_FACTOR_SHIFT     19
+# define GEN8_PS_BLEND_SRC_BLEND_FACTOR_MASK            INTEL_MASK(18, 14)
+# define GEN8_PS_BLEND_SRC_BLEND_FACTOR_SHIFT           14
+# define GEN8_PS_BLEND_DST_BLEND_FACTOR_MASK            INTEL_MASK(13, 9)
+# define GEN8_PS_BLEND_DST_BLEND_FACTOR_SHIFT           9
+# define GEN8_PS_BLEND_ALPHA_TEST_ENABLE                (1 << 8)
+# define GEN8_PS_BLEND_INDEPENDENT_ALPHA_BLEND_ENABLE   (1 << 7)
+
+#define _3DSTATE_WM_DEPTH_STENCIL               0x784E /* GEN8+ */
+/* DW1 */
+# define GEN8_WM_DS_STENCIL_FAIL_OP_SHIFT               29
+# define GEN8_WM_DS_Z_FAIL_OP_SHIFT                     26
+# define GEN8_WM_DS_Z_PASS_OP_SHIFT                     23
+# define GEN8_WM_DS_BF_STENCIL_FUNC_SHIFT               20
+# define GEN8_WM_DS_BF_STENCIL_FAIL_OP_SHIFT            17
+# define GEN8_WM_DS_BF_Z_FAIL_OP_SHIFT                  14
+# define GEN8_WM_DS_BF_Z_PASS_OP_SHIFT                  11
+# define GEN8_WM_DS_STENCIL_FUNC_SHIFT                  8
+# define GEN8_WM_DS_DEPTH_FUNC_SHIFT                    5
+# define GEN8_WM_DS_DOUBLE_SIDED_STENCIL_ENABLE         (1 << 4)
+# define GEN8_WM_DS_STENCIL_TEST_ENABLE                 (1 << 3)
+# define GEN8_WM_DS_STENCIL_BUFFER_WRITE_ENABLE         (1 << 2)
+# define GEN8_WM_DS_DEPTH_TEST_ENABLE                   (1 << 1)
+# define GEN8_WM_DS_DEPTH_BUFFER_WRITE_ENABLE           (1 << 0)
+/* DW2 */
+# define GEN8_WM_DS_STENCIL_TEST_MASK_MASK              INTEL_MASK(31, 24)
+# define GEN8_WM_DS_STENCIL_TEST_MASK_SHIFT             24
+# define GEN8_WM_DS_STENCIL_WRITE_MASK_MASK             INTEL_MASK(23, 16)
+# define GEN8_WM_DS_STENCIL_WRITE_MASK_SHIFT            16
+# define GEN8_WM_DS_BF_STENCIL_TEST_MASK_MASK           INTEL_MASK(15, 8)
+# define GEN8_WM_DS_BF_STENCIL_TEST_MASK_SHIFT          8
+# define GEN8_WM_DS_BF_STENCIL_WRITE_MASK_MASK          INTEL_MASK(7, 0)
+# define GEN8_WM_DS_BF_STENCIL_WRITE_MASK_SHIFT         0
+
+#define _3DSTATE_PS_EXTRA                       0x784F /* GEN8+ */
+/* DW1 */
+# define GEN8_PSX_PIXEL_SHADER_VALID                    (1 << 31)
+# define GEN8_PSX_PIXEL_SHADER_NO_RT_WRITE              (1 << 30)
+# define GEN8_PSX_OMASK_TO_RENDER_TARGET                (1 << 29)
+# define GEN8_PSX_KILL_ENABLE                           (1 << 28)
+# define GEN8_PSX_PSCDEPTH_OFF                          (0 << 26)
+# define GEN8_PSX_PSCDEPTH_ON                           (1 << 26)
+# define GEN8_PSX_PSCDEPTH_ON_GE                        (2 << 26)
+# define GEN8_PSX_PSCDEPTH_ON_LE                        (3 << 26)
+# define GEN8_PSX_FORCE_COMPUTED_DEPTH                  (1 << 25)
+# define GEN8_PSX_USES_SOURCE_DEPTH                     (1 << 24)
+# define GEN8_PSX_USES_SOURCE_W                         (1 << 23)
+# define GEN8_PSX_ATTRIBUTE_ENABLE                      (1 << 8)
+# define GEN8_PSX_SHADER_DISABLES_ALPHA_TO_COVERAGE     (1 << 7)
+# define GEN8_PSX_SHADER_IS_PER_SAMPLE                  (1 << 6)
+# define GEN8_PSX_SHADER_COMPUTES_STENCIL               (1 << 5)
+# define GEN8_PSX_SHADER_HAS_UAV                        (1 << 2)
+# define GEN8_PSX_SHADER_USES_INPUT_COVERAGE_MASK       (1 << 1)
 
 enum brw_wm_barycentric_interp_mode {
    BRW_WM_PERSPECTIVE_PIXEL_BARYCENTRIC		= 0,
@@ -1778,12 +2031,17 @@ enum brw_wm_barycentric_interp_mode {
 /* DW3: SVB maximum index */
 
 #define _3DSTATE_MULTISAMPLE			0x790d /* GEN6+ */
+#define GEN8_3DSTATE_MULTISAMPLE		0x780d /* GEN8+ */
 /* DW1 */
 # define MS_PIXEL_LOCATION_CENTER			(0 << 4)
 # define MS_PIXEL_LOCATION_UPPER_LEFT			(1 << 4)
 # define MS_NUMSAMPLES_1				(0 << 1)
+# define MS_NUMSAMPLES_2				(1 << 1)
 # define MS_NUMSAMPLES_4				(2 << 1)
 # define MS_NUMSAMPLES_8				(3 << 1)
+# define MS_NUMSAMPLES_16				(4 << 1)
+
+#define _3DSTATE_SAMPLE_PATTERN                 0x791c
 
 #define _3DSTATE_STENCIL_BUFFER			0x790e /* ILK, SNB */
 #define _3DSTATE_HIER_DEPTH_BUFFER		0x790f /* ILK, SNB */
@@ -1831,16 +2089,22 @@ enum brw_wm_barycentric_interp_mode {
 
 #define _3DSTATE_SO_BUFFER                    0x7918 /* GEN7+ */
 /* DW1 */
+# define GEN8_SO_BUFFER_ENABLE                          (1 << 31)
 # define SO_BUFFER_INDEX_SHIFT				29
 # define SO_BUFFER_INDEX_MASK				INTEL_MASK(30, 29)
+# define GEN8_SO_BUFFER_OFFSET_WRITE_ENABLE             (1 << 21)
+# define GEN8_SO_BUFFER_OFFSET_ADDRESS_ENABLE           (1 << 20)
 # define SO_BUFFER_PITCH_SHIFT				0
 # define SO_BUFFER_PITCH_MASK				INTEL_MASK(11, 0)
 /* DW2: start address */
 /* DW3: end address. */
 
-#define CMD_PIPE_CONTROL              0x7a00
-
 #define CMD_MI_FLUSH                  0x0200
+
+# define BLT_X_SHIFT					0
+# define BLT_X_MASK					INTEL_MASK(15, 0)
+# define BLT_Y_SHIFT					16
+# define BLT_Y_MASK					INTEL_MASK(31, 16)
 
 #define GEN5_MI_REPORT_PERF_COUNT ((0x26 << 23) | (3 - 2))
 /* DW0 */

@@ -28,7 +28,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /*
  * Authors:
- *   Keith Whitwell <keith@tungstengraphics.com>
+ *   Keith Whitwell <keithw@vmware.com>
  */
 
 #include "main/glheader.h"
@@ -293,7 +293,7 @@ VP_CHECK( tcl_vpp_size_add4, ctx->VertexProgram.Current->Base.NumNativeParameter
     _start = h.veclinear.addr_lo | (h.veclinear.addr_hi << 8);		\
     _sz = h.veclinear.count * 4;					\
     if (_sz) {								\
-    BEGIN_BATCH_NO_AUTOSTATE(dwords); \
+    BEGIN_BATCH(dwords); \
     OUT_BATCH(CP_PACKET0(RADEON_SE_TCL_STATE_FLUSH, 0));		\
     OUT_BATCH(0);							\
     OUT_BATCH(CP_PACKET0(R200_SE_TCL_VECTOR_INDX_REG, 0));		\
@@ -346,7 +346,7 @@ static void mtl_emit(struct gl_context *ctx, struct radeon_state_atom *atom)
    BATCH_LOCALS(&r200->radeon);
    uint32_t dwords = atom->check(ctx, atom);
 
-   BEGIN_BATCH_NO_AUTOSTATE(dwords);
+   BEGIN_BATCH(dwords);
    OUT_VEC(atom->cmd[MTL_CMD_0], (atom->cmd+1));
    OUT_SCL2(atom->cmd[MTL_CMD_1], (atom->cmd + 18));
    END_BATCH();
@@ -358,7 +358,7 @@ static void lit_emit(struct gl_context *ctx, struct radeon_state_atom *atom)
    BATCH_LOCALS(&r200->radeon);
    uint32_t dwords = atom->check(ctx, atom);
 
-   BEGIN_BATCH_NO_AUTOSTATE(dwords);
+   BEGIN_BATCH(dwords);
    OUT_VEC(atom->cmd[LIT_CMD_0], atom->cmd+1);
    OUT_SCL(atom->cmd[LIT_CMD_1], atom->cmd+LIT_CMD_1+1);
    END_BATCH();
@@ -370,7 +370,7 @@ static void ptp_emit(struct gl_context *ctx, struct radeon_state_atom *atom)
    BATCH_LOCALS(&r200->radeon);
    uint32_t dwords = atom->check(ctx, atom);
 
-   BEGIN_BATCH_NO_AUTOSTATE(dwords);
+   BEGIN_BATCH(dwords);
    OUT_VEC(atom->cmd[PTP_CMD_0], atom->cmd+1);
    OUT_VEC(atom->cmd[PTP_CMD_1], atom->cmd+PTP_CMD_1+1);
    END_BATCH();
@@ -391,7 +391,7 @@ static void scl_emit(struct gl_context *ctx, struct radeon_state_atom *atom)
    BATCH_LOCALS(&r200->radeon);
    uint32_t dwords = atom->check(ctx, atom);
 
-   BEGIN_BATCH_NO_AUTOSTATE(dwords);
+   BEGIN_BATCH(dwords);
    OUT_SCL(atom->cmd[0], atom->cmd+1);
    END_BATCH();
 }
@@ -403,7 +403,7 @@ static void vec_emit(struct gl_context *ctx, struct radeon_state_atom *atom)
    BATCH_LOCALS(&r200->radeon);
    uint32_t dwords = atom->check(ctx, atom);
 
-   BEGIN_BATCH_NO_AUTOSTATE(dwords);
+   BEGIN_BATCH(dwords);
    OUT_VEC(atom->cmd[0], atom->cmd+1);
    END_BATCH();
 }
@@ -452,13 +452,13 @@ static void ctx_emit_cs(struct gl_context *ctx, struct radeon_state_atom *atom)
    if (rrb->cpp == 4)
 	atom->cmd[CTX_RB3D_CNTL] |= RADEON_COLOR_FORMAT_ARGB8888;
    else switch (rrb->base.Base.Format) {
-   case MESA_FORMAT_RGB565:
+   case MESA_FORMAT_B5G6R5_UNORM:
 	atom->cmd[CTX_RB3D_CNTL] |= RADEON_COLOR_FORMAT_RGB565;
 	break;
-   case MESA_FORMAT_ARGB4444:
+   case MESA_FORMAT_B4G4R4A4_UNORM:
 	atom->cmd[CTX_RB3D_CNTL] |= RADEON_COLOR_FORMAT_ARGB4444;
 	break;
-   case MESA_FORMAT_ARGB1555:
+   case MESA_FORMAT_B5G5R5A1_UNORM:
 	atom->cmd[CTX_RB3D_CNTL] |= RADEON_COLOR_FORMAT_ARGB1555;
 	break;
    default:
@@ -484,7 +484,7 @@ static void ctx_emit_cs(struct gl_context *ctx, struct radeon_state_atom *atom)
    }
 
    /* output the first 7 bytes of context */
-   BEGIN_BATCH_NO_AUTOSTATE(dwords);
+   BEGIN_BATCH(dwords);
 
    /* In the CS case we need to split this up */
    OUT_BATCH(CP_PACKET0(packet[0].start, 3));
@@ -569,7 +569,7 @@ static void tex_emit_mm(struct gl_context *ctx, struct radeon_state_atom *atom)
 
    if (!r200->state.texture.unit[i].unitneeded && !(dwords <= atom->cmd_size))
         dwords -= 4;
-   BEGIN_BATCH_NO_AUTOSTATE(dwords);
+   BEGIN_BATCH(dwords);
 
    OUT_BATCH(CP_PACKET0(R200_PP_TXFILTER_0 + (32 * i), 7));
    OUT_BATCH_TABLE((atom->cmd + 1), 8);
@@ -599,7 +599,7 @@ static void cube_emit_cs(struct gl_context *ctx, struct radeon_state_atom *atom)
    if (!(t && !t->image_override))
      dwords = 2;
 
-   BEGIN_BATCH_NO_AUTOSTATE(dwords);
+   BEGIN_BATCH(dwords);
    OUT_BATCH_TABLE(atom->cmd, 2);
 
    if (t && !t->image_override) {

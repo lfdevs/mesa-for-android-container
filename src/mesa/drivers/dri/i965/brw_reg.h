@@ -1,6 +1,6 @@
 /*
  Copyright (C) Intel Corp.  2006.  All Rights Reserved.
- Intel funded Tungsten Graphics (http://www.tungstengraphics.com) to
+ Intel funded Tungsten Graphics to
  develop this 3D driver.
 
  Permission is hereby granted, free of charge, to any person obtaining
@@ -26,7 +26,7 @@
  **********************************************************************/
  /*
   * Authors:
-  *   Keith Whitwell <keith@tungstengraphics.com>
+  *   Keith Whitwell <keithw@vmware.com>
   */
 
 /** @file brw_reg.h
@@ -88,6 +88,35 @@ brw_is_single_value_swizzle(int swiz)
            swiz == BRW_SWIZZLE_WWWW);
 }
 
+enum brw_reg_type {
+   BRW_REGISTER_TYPE_UD = 0,
+   BRW_REGISTER_TYPE_D,
+   BRW_REGISTER_TYPE_UW,
+   BRW_REGISTER_TYPE_W,
+   BRW_REGISTER_TYPE_F,
+
+   /** Non-immediates only: @{ */
+   BRW_REGISTER_TYPE_UB,
+   BRW_REGISTER_TYPE_B,
+   /** @} */
+
+   /** Immediates only: @{ */
+   BRW_REGISTER_TYPE_UV,
+   BRW_REGISTER_TYPE_V,
+   BRW_REGISTER_TYPE_VF,
+   /** @} */
+
+   BRW_REGISTER_TYPE_DF, /* Gen7+ (no immediates until Gen8+) */
+
+   /* Gen8+ */
+   BRW_REGISTER_TYPE_HF,
+   BRW_REGISTER_TYPE_UQ,
+   BRW_REGISTER_TYPE_Q,
+};
+
+unsigned brw_reg_type_to_hw_type(const struct brw_context *brw,
+                                 enum brw_reg_type type, unsigned file);
+
 #define REG_SIZE (8*4)
 
 /* These aren't hardware structs, just something useful for us to pass around:
@@ -139,7 +168,6 @@ type_sz(unsigned type)
    case BRW_REGISTER_TYPE_D:
    case BRW_REGISTER_TYPE_F:
       return 4;
-   case BRW_REGISTER_TYPE_HF:
    case BRW_REGISTER_TYPE_UW:
    case BRW_REGISTER_TYPE_W:
       return 2;

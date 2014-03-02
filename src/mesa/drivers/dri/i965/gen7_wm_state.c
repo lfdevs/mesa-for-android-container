@@ -103,13 +103,17 @@ upload_wm_state(struct brw_context *brw)
       else
          dw1 |= GEN7_WM_MSRAST_OFF_PIXEL;
 
-      if (_mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program) > 1)
+      if (_mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program, false) > 1)
          dw2 |= GEN7_WM_MSDISPMODE_PERSAMPLE;
       else
          dw2 |= GEN7_WM_MSDISPMODE_PERPIXEL;
    } else {
       dw1 |= GEN7_WM_MSRAST_OFF_PIXEL;
       dw2 |= GEN7_WM_MSDISPMODE_PERSAMPLE;
+   }
+
+   if (fp->program.Base.SystemValuesRead & SYSTEM_BIT_SAMPLE_MASK_IN) {
+      dw1 |= GEN7_WM_USES_INPUT_COVERAGE_MASK;
    }
 
    BEGIN_BATCH(3);
@@ -166,15 +170,18 @@ upload_ps_state(struct brw_context *brw)
 
    /* Use ALT floating point mode for ARB fragment programs, because they
     * require 0^0 == 1.  Even though _CurrentFragmentProgram is used for
-    * rendering, CurrentFragmentProgram is used for this check to
-    * differentiate between the GLSL and non-GLSL cases.
+    * rendering, CurrentProgram[MESA_SHADER_FRAGMENT] is used for this check
+    * to differentiate between the GLSL and non-GLSL cases.
     */
    /* BRW_NEW_FRAGMENT_PROGRAM */
-   if (ctx->Shader.CurrentFragmentProgram == NULL)
+   if (ctx->Shader.CurrentProgram[MESA_SHADER_FRAGMENT] == NULL)
       dw2 |= GEN7_PS_FLOATING_POINT_MODE_ALT;
 
+   /* Haswell requires the sample mask to be set in this packet as well as
+    * in 3DSTATE_SAMPLE_MASK; the values should match. */
+   /* _NEW_BUFFERS, _NEW_MULTISAMPLE */
    if (brw->is_haswell)
-      dw4 |= SET_FIELD(1, HSW_PS_SAMPLE_MASK); /* 1 sample for now */
+      dw4 |= SET_FIELD(gen6_determine_sample_mask(brw), HSW_PS_SAMPLE_MASK);
 
    dw4 |= (brw->max_wm_threads - 1) << max_threads_shift;
 
@@ -229,7 +236,7 @@ upload_ps_state(struct brw_context *brw)
     * better performance than 'SIMD8 only' dispatch.
     */
    int min_inv_per_frag =
-      _mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program);
+      _mesa_get_min_invocations_per_fragment(ctx, brw->fragment_program, false);
    assert(min_inv_per_frag >= 1);
 
    if (brw->wm.prog_data->prog_offset_16) {
@@ -274,7 +281,9 @@ upload_ps_state(struct brw_context *brw)
 const struct brw_tracked_state gen7_ps_state = {
    .dirty = {
       .mesa  = (_NEW_PROGRAM_CONSTANTS |
-		_NEW_COLOR),
+		_NEW_COLOR |
+                _NEW_BUFFERS |
+                _NEW_MULTISAMPLE),
       .brw   = (BRW_NEW_FRAGMENT_PROGRAM |
 		BRW_NEW_PS_BINDING_TABLE |
 		BRW_NEW_BATCH |

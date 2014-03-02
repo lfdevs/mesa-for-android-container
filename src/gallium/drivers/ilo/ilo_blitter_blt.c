@@ -31,6 +31,7 @@
 #include "ilo_3d.h"
 #include "ilo_context.h"
 #include "ilo_cp.h"
+#include "ilo_blit.h"
 #include "ilo_resource.h"
 #include "ilo_blitter.h"
 
@@ -527,7 +528,7 @@ tex_clear_region(struct ilo_blitter *blitter,
 
    for (slice = 0; slice < dst_box->depth; slice++) {
       const struct ilo_texture_slice *dst_slice =
-         &dst->slice_offsets[dst_level][dst_box->z + slice];
+         ilo_texture_get_slice(dst, dst_level, dst_box->z + slice);
       unsigned x1, y1, x2, y2;
 
       x1 = dst_slice->x + dst_box->x;
@@ -607,9 +608,9 @@ tex_copy_region(struct ilo_blitter *blitter,
 
    for (slice = 0; slice < src_box->depth; slice++) {
       const struct ilo_texture_slice *dst_slice =
-         &dst->slice_offsets[dst_level][dst_z + slice];
+         ilo_texture_get_slice(dst, dst_level, dst_z + slice);
       const struct ilo_texture_slice *src_slice =
-         &src->slice_offsets[src_level][src_box->z + slice];
+         ilo_texture_get_slice(src, src_level, src_box->z + slice);
       unsigned x1, y1, x2, y2, src_x, src_y;
 
       x1 = (dst_slice->x + dst_x) * xscale;
@@ -653,6 +654,11 @@ ilo_blitter_blt_copy_resource(struct ilo_blitter *blitter,
                               const struct pipe_box *src_box)
 {
    bool success;
+
+   ilo_blit_resolve_slices(blitter->ilo, src, src_level,
+         src_box->z, src_box->depth, ILO_TEXTURE_BLT_READ);
+   ilo_blit_resolve_slices(blitter->ilo, dst, dst_level,
+         dst_z, src_box->depth, ILO_TEXTURE_BLT_WRITE);
 
    if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
       const unsigned dst_offset = dst_x;
@@ -714,6 +720,8 @@ ilo_blitter_blt_clear_rt(struct ilo_blitter *blitter,
    if (util_format_is_pure_integer(rt->format) ||
        util_format_is_compressed(rt->format))
       return false;
+
+   ilo_blit_resolve_surface(blitter->ilo, rt, ILO_TEXTURE_BLT_WRITE);
 
    util_pack_color(color->f, rt->format, &packed);
 
@@ -799,6 +807,8 @@ ilo_blitter_blt_clear_zs(struct ilo_blitter *blitter,
       return false;
       break;
    }
+
+   ilo_blit_resolve_surface(blitter->ilo, zs, ILO_TEXTURE_BLT_WRITE);
 
    val = util_pack_z_stencil(zs->format, depth, stencil);
 

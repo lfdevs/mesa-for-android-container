@@ -1,8 +1,8 @@
 /**************************************************************************
- * 
- * Copyright 2006 Tungsten Graphics, Inc., Cedar Park, Texas.
+ *
+ * Copyright 2006 VMware, Inc.
  * All Rights Reserved.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,19 +10,19 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 
@@ -46,6 +46,7 @@
 #include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
 #include "intel_regions.h"
+#include "intel_screen.h"
 #include "intel_tex.h"
 #include "brw_context.h"
 
@@ -159,26 +160,17 @@ intel_unmap_renderbuffer(struct gl_context *ctx,
 unsigned
 intel_quantize_num_samples(struct intel_screen *intel, unsigned num_samples)
 {
-   switch (intel->devinfo->gen) {
-   case 6:
-      /* Gen6 supports only 4x multisampling. */
-      if (num_samples > 0)
-         return 4;
+   const int *msaa_modes = intel_supported_msaa_modes(intel);
+   int quantized_samples = 0;
+
+   for (int i = 0; msaa_modes[i] != -1; ++i) {
+      if (msaa_modes[i] >= num_samples)
+         quantized_samples = msaa_modes[i];
       else
-         return 0;
-   case 7:
-      /* Gen7 supports 4x and 8x multisampling. */
-      if (num_samples > 4)
-         return 8;
-      else if (num_samples > 0)
-         return 4;
-      else
-         return 0;
-      return 0;
-   default:
-      /* MSAA unsupported. */
-      return 0;
+         break;
    }
+
+   return quantized_samples;
 }
 
 
@@ -214,10 +206,10 @@ intel_alloc_renderbuffer_storage(struct gl_context * ctx, struct gl_renderbuffer
    case GL_STENCIL_INDEX16_EXT:
       /* These aren't actual texture formats, so force them here. */
       if (brw->has_separate_stencil) {
-	 rb->Format = MESA_FORMAT_S8;
+	 rb->Format = MESA_FORMAT_S_UINT8;
       } else {
 	 assert(!brw->must_use_separate_stencil);
-	 rb->Format = MESA_FORMAT_S8_Z24;
+	 rb->Format = MESA_FORMAT_Z24_UNORM_S8_UINT;
       }
       break;
    }
@@ -277,7 +269,7 @@ intel_image_target_renderbuffer_storage(struct gl_context *ctx,
 
    /* __DRIimage is opaque to the core so it has to be checked here */
    switch (image->format) {
-   case MESA_FORMAT_RGBA8888_REV:
+   case MESA_FORMAT_R8G8B8A8_UNORM:
       _mesa_error(ctx, GL_INVALID_OPERATION,
             "glEGLImageTargetRenderbufferStorage(unsupported image format");
       return;
@@ -343,7 +335,7 @@ intel_nop_alloc_storage(struct gl_context * ctx, struct gl_renderbuffer *rb,
  * \param num_samples must be quantized.
  */
 struct intel_renderbuffer *
-intel_create_renderbuffer(gl_format format, unsigned num_samples)
+intel_create_renderbuffer(mesa_format format, unsigned num_samples)
 {
    struct intel_renderbuffer *irb;
    struct gl_renderbuffer *rb;
@@ -381,7 +373,7 @@ intel_create_renderbuffer(gl_format format, unsigned num_samples)
  * \param num_samples must be quantized.
  */
 struct intel_renderbuffer *
-intel_create_private_renderbuffer(gl_format format, unsigned num_samples)
+intel_create_private_renderbuffer(mesa_format format, unsigned num_samples)
 {
    struct intel_renderbuffer *irb;
 
@@ -430,8 +422,6 @@ intel_renderbuffer_update_wrapper(struct brw_context *brw,
    struct intel_texture_image *intel_image = intel_texture_image(image);
    struct intel_mipmap_tree *mt = intel_image->mt;
    int level = image->Level;
-
-   rb->Depth = image->Depth;
 
    rb->AllocStorage = intel_nop_alloc_storage;
 
@@ -619,7 +609,7 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 	    fbo_incomplete(fb, "FBO incomplete: separate stencil "
                            "unsupported\n");
 	 }
-	 if (stencil_mt->format != MESA_FORMAT_S8) {
+	 if (stencil_mt->format != MESA_FORMAT_S_UINT8) {
 	    fbo_incomplete(fb, "FBO incomplete: separate stencil is %s "
                            "instead of S8\n",
                            _mesa_get_format_name(stencil_mt->format));
@@ -725,7 +715,7 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
             srcY0 >= 0 && srcY1 <= readFb->Height &&
             dstX0 >= 0 && dstX1 <= drawFb->Width &&
             dstY0 >= 0 && dstY1 <= drawFb->Height &&
-            !ctx->Scissor.Enabled)) {
+            !(ctx->Scissor.EnableFlags))) {
          perf_debug("glBlitFramebuffer(): non-1:1 blit.  "
                     "Falling back to software rendering.\n");
          return mask;
@@ -749,8 +739,8 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
             return mask;
          }
 
-         gl_format src_format = _mesa_get_srgb_format_linear(src_rb->Format);
-         gl_format dst_format = _mesa_get_srgb_format_linear(dst_rb->Format);
+         mesa_format src_format = _mesa_get_srgb_format_linear(src_rb->Format);
+         mesa_format dst_format = _mesa_get_srgb_format_linear(dst_rb->Format);
          if (src_format != dst_format) {
             perf_debug("glBlitFramebuffer(): unsupported blit from %s to %s.  "
                        "Falling back to software rendering.\n",

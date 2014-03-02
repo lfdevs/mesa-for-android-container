@@ -11,6 +11,7 @@ env.Prepend(CPPPATH = [
 	'.',           # the build/<platform>/glx/ directory
 	'#include',
 	'#include/GL/internal',
+	'#src/loader',
 	'#src/mesa',
 	'#src/mapi',
 	'#src/mapi/glapi',
@@ -26,6 +27,7 @@ env.Append(CPPDEFINES = [
 ])
 
 env.Prepend(LIBS = [
+    libloader,
     glapi
 ])
 
@@ -81,7 +83,6 @@ sources = [
     'dri2.c',
     'dri2_query_renderer.c',
     #'dri3_glx.c',
-    #'dri3_common.c',
     'applegl_glx.c',
 ]
 

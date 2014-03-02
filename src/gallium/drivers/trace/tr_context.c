@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2008 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -33,6 +33,7 @@
 #include "pipe/p_screen.h"
 
 #include "tr_dump.h"
+#include "tr_dump_defines.h"
 #include "tr_dump_state.h"
 #include "tr_public.h"
 #include "tr_screen.h"
@@ -40,7 +41,29 @@
 #include "tr_context.h"
 
 
+struct trace_query
+{
+   unsigned type;
 
+   struct pipe_query *query;
+};
+
+
+static INLINE struct trace_query *
+trace_query(struct pipe_query *query) {
+   return (struct trace_query *)query;
+}
+
+
+static INLINE struct pipe_query *
+trace_query_unwrap(struct pipe_query *query)
+{
+   if (query) {
+      return trace_query(query)->query;
+   } else {
+      return NULL;
+   }
+}
 
 
 static INLINE struct pipe_resource *
@@ -108,29 +131,46 @@ trace_context_create_query(struct pipe_context *_pipe,
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
-   struct pipe_query *result;
+   struct pipe_query *query;
 
    trace_dump_call_begin("pipe_context", "create_query");
 
    trace_dump_arg(ptr, pipe);
-   trace_dump_arg(uint, query_type);
+   trace_dump_arg(query_type, query_type);
 
-   result = pipe->create_query(pipe, query_type);
+   query = pipe->create_query(pipe, query_type);
 
-   trace_dump_ret(ptr, result);
+   trace_dump_ret(ptr, query);
 
    trace_dump_call_end();
 
-   return result;
+   /* Wrap query object. */
+   if (query) {
+      struct trace_query *tr_query = CALLOC_STRUCT(trace_query);
+      if (tr_query) {
+         tr_query->type = query_type;
+         tr_query->query = query;
+         query = (struct pipe_query *)tr_query;
+      } else {
+         pipe->destroy_query(pipe, query);
+         query = NULL;
+      }
+   }
+
+   return query;
 }
 
 
 static INLINE void
 trace_context_destroy_query(struct pipe_context *_pipe,
-                            struct pipe_query *query)
+                            struct pipe_query *_query)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
+   struct trace_query *tr_query = trace_query(_query);
+   struct pipe_query *query = tr_query->query;
+
+   FREE(tr_query);
 
    trace_dump_call_begin("pipe_context", "destroy_query");
 
@@ -150,6 +190,8 @@ trace_context_begin_query(struct pipe_context *_pipe,
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
 
+   query = trace_query_unwrap(query);
+
    trace_dump_call_begin("pipe_context", "begin_query");
 
    trace_dump_arg(ptr, pipe);
@@ -168,6 +210,8 @@ trace_context_end_query(struct pipe_context *_pipe,
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
 
+   query = trace_query_unwrap(query);
+
    trace_dump_call_begin("pipe_context", "end_query");
 
    trace_dump_arg(ptr, pipe);
@@ -181,29 +225,36 @@ trace_context_end_query(struct pipe_context *_pipe,
 
 static INLINE boolean
 trace_context_get_query_result(struct pipe_context *_pipe,
-                               struct pipe_query *query,
+                               struct pipe_query *_query,
                                boolean wait,
-                               union pipe_query_result *presult)
+                               union pipe_query_result *result)
 {
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
-   uint64_t result;
-   boolean _result;
+   struct trace_query *tr_query = trace_query(_query);
+   struct pipe_query *query = tr_query->query;
+   boolean ret;
 
    trace_dump_call_begin("pipe_context", "get_query_result");
 
    trace_dump_arg(ptr, pipe);
+   trace_dump_arg(ptr, query);
 
-   _result = pipe->get_query_result(pipe, query, wait, presult);
-   /* XXX this depends on the query type */
-   result = *((uint64_t*)presult);
+   ret = pipe->get_query_result(pipe, query, wait, result);
 
-   trace_dump_arg(uint, result);
-   trace_dump_ret(bool, _result);
+   trace_dump_arg_begin("result");
+   if (ret) {
+      trace_dump_query_result(tr_query->type, result);
+   } else {
+      trace_dump_null();
+   }
+   trace_dump_arg_end();
+
+   trace_dump_ret(bool, ret);
 
    trace_dump_call_end();
 
-   return _result;
+   return ret;
 }
 
 
@@ -891,7 +942,7 @@ trace_context_set_sampler_views(struct pipe_context *_pipe,
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct trace_sampler_view *tr_view;
    struct pipe_context *pipe = tr_ctx->pipe;
-   struct pipe_sampler_view *unwrapped_views[PIPE_MAX_SAMPLERS];
+   struct pipe_sampler_view *unwrapped_views[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    unsigned i;
 
    /* remove this when we have pipe->set_sampler_views(..., start, ...) */
@@ -1407,6 +1458,8 @@ static void trace_context_render_condition(struct pipe_context *_context,
 {
    struct trace_context *tr_context = trace_context(_context);
    struct pipe_context *context = tr_context->pipe;
+
+   query = trace_query_unwrap(query);
 
    trace_dump_call_begin("pipe_context", "render_condition");
 

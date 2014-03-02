@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright 2007 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -53,27 +53,37 @@ struct fetch_pipeline_middle_end {
 };
 
 
+/** cast wrapper */
+static INLINE struct fetch_pipeline_middle_end *
+fetch_pipeline_middle_end(struct draw_pt_middle_end *middle)
+{
+   return (struct fetch_pipeline_middle_end *) middle;
+}
+
+
 /**
  * Prepare/validate middle part of the vertex pipeline.
  * NOTE: if you change this function, also look at the LLVM
  * function llvm_middle_end_prepare() for similar changes.
  */
-static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
-                                    unsigned prim,
-				    unsigned opt,
-                                    unsigned *max_vertices )
+static void
+fetch_pipeline_prepare(struct draw_pt_middle_end *middle,
+                       unsigned prim,
+                       unsigned opt,
+                       unsigned *max_vertices)
 {
-   struct fetch_pipeline_middle_end *fpme = (struct fetch_pipeline_middle_end *)middle;
+   struct fetch_pipeline_middle_end *fpme = fetch_pipeline_middle_end(middle);
    struct draw_context *draw = fpme->draw;
    struct draw_vertex_shader *vs = draw->vs.vertex_shader;
    struct draw_geometry_shader *gs = draw->gs.geometry_shader;
    unsigned i;
    unsigned instance_id_index = ~0;
-
    const unsigned gs_out_prim = (gs ? gs->output_primitive :
                                  u_assembled_prim(prim));
-   unsigned nr = MAX2( vs->info.num_inputs,
-		       draw_total_vs_outputs(draw) );
+   unsigned nr_vs_outputs = draw_total_vs_outputs(draw);
+   unsigned nr = MAX2(vs->info.num_inputs, nr_vs_outputs);
+   unsigned point_clip = draw->rasterizer->fill_front == PIPE_POLYGON_MODE_POINT ||
+                         gs_out_prim == PIPE_PRIM_POINTS;
 
    if (gs) {
       nr = MAX2(nr, gs->info.num_outputs + 1);
@@ -93,13 +103,11 @@ static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
 
    /* Always leave room for the vertex header whether we need it or
     * not.  It's hard to get rid of it in particular because of the
-    * viewport code in draw_pt_post_vs.c.  
+    * viewport code in draw_pt_post_vs.c.
     */
    fpme->vertex_size = sizeof(struct vertex_header) + nr * 4 * sizeof(float);
 
-   
-
-   draw_pt_fetch_prepare( fpme->fetch, 
+   draw_pt_fetch_prepare( fpme->fetch,
                           vs->info.num_inputs,
                           fpme->vertex_size,
                           instance_id_index );
@@ -107,7 +115,8 @@ static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
                             draw->clip_xy,
                             draw->clip_z,
                             draw->clip_user,
-                            draw->guard_band_xy,
+                            point_clip ? draw->guard_band_points_xy :
+                                         draw->guard_band_xy,
                             draw->identity_viewport,
                             draw->rasterizer->clip_halfz,
                             (draw->vs.edgeflag_output ? TRUE : FALSE) );
@@ -129,6 +138,9 @@ static void fetch_pipeline_prepare( struct draw_pt_middle_end *middle,
    /* No need to prepare the shader.
     */
    vs->prepare(vs, draw);
+
+   /* Make sure that the vertex size didn't change at any point above */
+   assert(nr_vs_outputs == draw_total_vs_outputs(draw));
 }
 
 
@@ -174,9 +186,11 @@ static void pipeline(struct fetch_pipeline_middle_end *fpme,
                          prim_info );
 }
 
-static void emit(struct pt_emit *emit,
-                 const struct draw_vertex_info *vert_info,
-                 const struct draw_prim_info *prim_info)
+
+static void
+emit(struct pt_emit *emit,
+     const struct draw_vertex_info *vert_info,
+     const struct draw_prim_info *prim_info)
 {
    if (prim_info->linear) {
       draw_pt_emit_linear(emit, vert_info, prim_info);
@@ -187,11 +201,12 @@ static void emit(struct pt_emit *emit,
 }
 
 
-static void draw_vertex_shader_run(struct draw_vertex_shader *vshader,
-                                   const void *constants[PIPE_MAX_CONSTANT_BUFFERS], 
-                                   unsigned const_size[PIPE_MAX_CONSTANT_BUFFERS],
-                                   const struct draw_vertex_info *input_verts,
-                                   struct draw_vertex_info *output_verts )
+static void
+draw_vertex_shader_run(struct draw_vertex_shader *vshader,
+                       const void *constants[PIPE_MAX_CONSTANT_BUFFERS],
+                       unsigned const_size[PIPE_MAX_CONSTANT_BUFFERS],
+                       const struct draw_vertex_info *input_verts,
+                       struct draw_vertex_info *output_verts)
 {
    output_verts->vertex_size = input_verts->vertex_size;
    output_verts->stride = input_verts->vertex_size;
@@ -210,11 +225,13 @@ static void draw_vertex_shader_run(struct draw_vertex_shader *vshader,
                        input_verts->vertex_size);
 }
 
-static void fetch_pipeline_generic( struct draw_pt_middle_end *middle,
-                                    const struct draw_fetch_info *fetch_info,
-                                    const struct draw_prim_info *in_prim_info )
+
+static void
+fetch_pipeline_generic(struct draw_pt_middle_end *middle,
+                       const struct draw_fetch_info *fetch_info,
+                       const struct draw_prim_info *in_prim_info)
 {
-   struct fetch_pipeline_middle_end *fpme = (struct fetch_pipeline_middle_end *)middle;
+   struct fetch_pipeline_middle_end *fpme = fetch_pipeline_middle_end(middle);
    struct draw_context *draw = fpme->draw;
    struct draw_vertex_shader *vshader = draw->vs.vertex_shader;
    struct draw_geometry_shader *gshader = draw->gs.geometry_shader;
@@ -297,7 +314,7 @@ static void fetch_pipeline_generic( struct draw_pt_middle_end *middle,
    }
    if (prim_info->count == 0) {
       debug_printf("GS/IA didn't emit any vertices!\n");
-      
+
       FREE(vert_info->verts);
       if (free_prim_info) {
          FREE(prim_info->primitive_lengths);
@@ -341,14 +358,16 @@ static void fetch_pipeline_generic( struct draw_pt_middle_end *middle,
    }
 }
 
-static void fetch_pipeline_run( struct draw_pt_middle_end *middle,
-                                const unsigned *fetch_elts,
-                                unsigned fetch_count,
-                                const ushort *draw_elts,
-                                unsigned draw_count,
-                                unsigned prim_flags )
+
+static void
+fetch_pipeline_run(struct draw_pt_middle_end *middle,
+                   const unsigned *fetch_elts,
+                   unsigned fetch_count,
+                   const ushort *draw_elts,
+                   unsigned draw_count,
+                   unsigned prim_flags)
 {
-   struct fetch_pipeline_middle_end *fpme = (struct fetch_pipeline_middle_end *)middle;
+   struct fetch_pipeline_middle_end *fpme = fetch_pipeline_middle_end(middle);
    struct draw_fetch_info fetch_info;
    struct draw_prim_info prim_info;
 
@@ -370,12 +389,13 @@ static void fetch_pipeline_run( struct draw_pt_middle_end *middle,
 }
 
 
-static void fetch_pipeline_linear_run( struct draw_pt_middle_end *middle,
-                                       unsigned start,
-                                       unsigned count,
-                                       unsigned prim_flags)
+static void
+fetch_pipeline_linear_run(struct draw_pt_middle_end *middle,
+                          unsigned start,
+                          unsigned count,
+                          unsigned prim_flags)
 {
-   struct fetch_pipeline_middle_end *fpme = (struct fetch_pipeline_middle_end *)middle;
+   struct fetch_pipeline_middle_end *fpme = fetch_pipeline_middle_end(middle);
    struct draw_fetch_info fetch_info;
    struct draw_prim_info prim_info;
 
@@ -398,14 +418,15 @@ static void fetch_pipeline_linear_run( struct draw_pt_middle_end *middle,
 
 
 
-static boolean fetch_pipeline_linear_run_elts( struct draw_pt_middle_end *middle,
-                                               unsigned start,
-                                               unsigned count,
-                                               const ushort *draw_elts,
-                                               unsigned draw_count,
-                                               unsigned prim_flags )
+static boolean
+fetch_pipeline_linear_run_elts(struct draw_pt_middle_end *middle,
+                               unsigned start,
+                               unsigned count,
+                               const ushort *draw_elts,
+                               unsigned draw_count,
+                               unsigned prim_flags )
 {
-   struct fetch_pipeline_middle_end *fpme = (struct fetch_pipeline_middle_end *)middle;
+   struct fetch_pipeline_middle_end *fpme = fetch_pipeline_middle_end(middle);
    struct draw_fetch_info fetch_info;
    struct draw_prim_info prim_info;
 
@@ -429,15 +450,17 @@ static boolean fetch_pipeline_linear_run_elts( struct draw_pt_middle_end *middle
 }
 
 
-
-static void fetch_pipeline_finish( struct draw_pt_middle_end *middle )
+static void
+fetch_pipeline_finish( struct draw_pt_middle_end *middle )
 {
    /* nothing to do */
 }
 
-static void fetch_pipeline_destroy( struct draw_pt_middle_end *middle )
+
+static void
+fetch_pipeline_destroy( struct draw_pt_middle_end *middle )
 {
-   struct fetch_pipeline_middle_end *fpme = (struct fetch_pipeline_middle_end *)middle;
+   struct fetch_pipeline_middle_end *fpme = fetch_pipeline_middle_end(middle);
 
    if (fpme->fetch)
       draw_pt_fetch_destroy( fpme->fetch );
@@ -455,9 +478,11 @@ static void fetch_pipeline_destroy( struct draw_pt_middle_end *middle )
 }
 
 
-struct draw_pt_middle_end *draw_pt_fetch_pipeline_or_emit( struct draw_context *draw )
+struct draw_pt_middle_end *
+draw_pt_fetch_pipeline_or_emit(struct draw_context *draw)
 {
-   struct fetch_pipeline_middle_end *fpme = CALLOC_STRUCT( fetch_pipeline_middle_end );
+   struct fetch_pipeline_middle_end *fpme =
+      CALLOC_STRUCT( fetch_pipeline_middle_end );
    if (!fpme)
       goto fail;
 

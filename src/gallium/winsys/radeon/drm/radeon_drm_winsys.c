@@ -330,6 +330,7 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     case CHIP_BONAIRE:
     case CHIP_KAVERI:
     case CHIP_KABINI:
+    case CHIP_HAWAII:
         ws->info.chip_class = CIK;
         break;
     }
@@ -416,6 +417,16 @@ static boolean do_winsys_init(struct radeon_drm_winsys *ws)
     ws->info.r600_max_pipes = 2;
     radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_PIPES, NULL,
                          &ws->info.r600_max_pipes);
+
+    if (radeon_get_drm_value(ws->fd, RADEON_INFO_SI_TILE_MODE_ARRAY, NULL,
+                             ws->info.si_tile_mode_array)) {
+        ws->info.si_tile_mode_array_valid = TRUE;
+    }
+
+    if (radeon_get_drm_value(ws->fd, RADEON_INFO_CIK_MACROTILE_MODE_ARRAY, NULL,
+                             ws->info.cik_macrotile_mode_array)) {
+        ws->info.cik_macrotile_mode_array_valid = TRUE;
+    }
 
     return TRUE;
 }
@@ -582,7 +593,7 @@ static PIPE_THREAD_ROUTINE(radeon_drm_cs_emit_ioctl, param)
     }
     ws->ncs = 0;
     pipe_mutex_unlock(ws->cs_stack_lock);
-    return NULL;
+    return 0;
 }
 
 DEBUG_GET_ONCE_BOOL_OPTION(thread, "RADEON_THREAD", TRUE)

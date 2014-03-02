@@ -56,8 +56,8 @@ vec4_visitor::reg_allocate_trivial()
       virtual_grf_used[i] = false;
    }
 
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      vec4_instruction *inst = (vec4_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      vec4_instruction *inst = (vec4_instruction *) node;
 
       if (inst->dst.file == GRF)
 	 virtual_grf_used[inst->dst.reg] = true;
@@ -78,8 +78,8 @@ vec4_visitor::reg_allocate_trivial()
    }
    prog_data->total_grf = next;
 
-   foreach_iter(exec_list_iterator, iter, this->instructions) {
-      vec4_instruction *inst = (vec4_instruction *)iter.get();
+   foreach_list(node, &this->instructions) {
+      vec4_instruction *inst = (vec4_instruction *) node;
 
       assign(hw_reg_mapping, &inst->dst);
       assign(hw_reg_mapping, &inst->src[0]);
@@ -359,7 +359,7 @@ vec4_visitor::spill_reg(int spill_reg_nr)
       }
    }
 
-   this->live_intervals_valid = false;
+   invalidate_live_intervals();
 }
 
 } /* namespace brw */

@@ -1,6 +1,6 @@
 /**************************************************************************
  * 
- * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright 2008 VMware, Inc.
  * All Rights Reserved.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,7 +18,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL TUNGSTEN GRAPHICS AND/OR ITS SUPPLIERS BE LIABLE FOR
+ * IN NO EVENT SHALL VMWARE AND/OR ITS SUPPLIERS BE LIABLE FOR
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
@@ -177,8 +177,6 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
       return 1;
-   case PIPE_CAP_SCALED_RESOLVE:
-      return 0;
    /* this is a lie could support arbitrary large offsets */
    case PIPE_CAP_MIN_TEXEL_OFFSET:
       return -8;
@@ -191,6 +189,9 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
       return 16*4;
+   case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
+   case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+      return 1024;
    case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
       return 1;
    case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
@@ -219,9 +220,10 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 16;
    case PIPE_CAP_START_INSTANCE:
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
-   case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
    case PIPE_CAP_CUBE_MAP_ARRAY:
       return 0;
+   case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
+      return 64;
    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
       return 1;
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
@@ -234,6 +236,8 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return PIPE_MAX_VIEWPORTS;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_NATIVE;
+   case PIPE_CAP_TGSI_VS_LAYER:
+      return 0;
    }
    /* should only get here on unhandled cases */
    debug_printf("Unexpected PIPE_CAP %d query\n", param);
@@ -260,6 +264,11 @@ llvmpipe_get_shader_param(struct pipe_screen *screen, unsigned shader, enum pipe
           */
          if (debug_get_bool_option("DRAW_USE_LLVM", TRUE))
             return PIPE_MAX_SAMPLERS;
+         else
+            return 0;
+      case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
+         if (debug_get_bool_option("DRAW_USE_LLVM", TRUE))
+            return PIPE_MAX_SHADER_SAMPLER_VIEWS;
          else
             return 0;
       default:
@@ -404,7 +413,8 @@ static void
 llvmpipe_flush_frontbuffer(struct pipe_screen *_screen,
                            struct pipe_resource *resource,
                            unsigned level, unsigned layer,
-                           void *context_private)
+                           void *context_private,
+                           struct pipe_box *sub_box)
 {
    struct llvmpipe_screen *screen = llvmpipe_screen(_screen);
    struct sw_winsys *winsys = screen->winsys;
@@ -412,9 +422,8 @@ llvmpipe_flush_frontbuffer(struct pipe_screen *_screen,
 
    assert(texture->dt);
    if (texture->dt)
-      winsys->displaytarget_display(winsys, texture->dt, context_private);
+      winsys->displaytarget_display(winsys, texture->dt, context_private, sub_box);
 }
-
 
 static void
 llvmpipe_destroy_screen( struct pipe_screen *_screen )

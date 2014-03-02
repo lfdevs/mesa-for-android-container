@@ -259,7 +259,7 @@ static void evergreen_bind_compute_state(struct pipe_context *ctx_, void *state)
 }
 
 /* The kernel parameters are stored a vtx buffer (ID=0), besides the explicit
- * kernel parameters there are inplicit parameters that need to be stored
+ * kernel parameters there are implicit parameters that need to be stored
  * in the vertex buffer as well.  Here is how these parameters are organized in
  * the buffer:
  *
@@ -489,7 +489,14 @@ static void compute_emit_cs(struct r600_context *ctx, const uint *block_layout,
 	ctx->b.flags = 0;
 
 	if (ctx->b.chip_class >= CAYMAN) {
-		ctx->skip_surface_sync_on_next_cs_flush = true;
+		cs->buf[cs->cdw++] = PKT3(PKT3_EVENT_WRITE, 0, 0);
+		cs->buf[cs->cdw++] = EVENT_TYPE(EVENT_TYPE_CS_PARTIAL_FLUSH) | EVENT_INDEX(4);
+		/* DEALLOC_STATE prevents the GPU from hanging when a
+		 * SURFACE_SYNC packet is emitted some time after a DISPATCH_DIRECT
+		 * with any of the CB*_DEST_BASE_ENA or DB_DEST_BASE_ENA bits set.
+		 */
+		cs->buf[cs->cdw++] = PKT3C(PKT3_DEALLOC_STATE, 0, 0);
+		cs->buf[cs->cdw++] = 0;
 	}
 
 #if 0

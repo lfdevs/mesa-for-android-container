@@ -3,6 +3,7 @@ AUTOMAKE_OPTIONS = subdir-objects
 AM_CPPFLAGS = $(DEFINES) \
 	$(GALLIUM_PIPE_LOADER_DEFINES) \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/src/loader \
 	-I$(top_srcdir)/src/gallium/include \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/winsys
@@ -19,7 +20,12 @@ libpipe_loader_la_SOURCES = \
 	pipe_loader_sw.c
 
 if HAVE_DRM_LOADER_GALLIUM
-libpipe_loader_la_SOURCES += pipe_loader_drm.c
 AM_CFLAGS = $(LIBDRM_CFLAGS)
+
+libpipe_loader_la_SOURCES += pipe_loader_drm.c
+
+libpipe_loader_la_LIBADD = \
+	$(top_builddir)/src/loader/libloader.la
+
 endif
 endif

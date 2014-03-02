@@ -87,9 +87,10 @@ struct nv50_program {
    } fp;
 
    struct {
-      ubyte primid; /* primitive id output register */
-      uint8_t vert_count;
+      uint32_t vert_count;
       uint8_t prim_type; /* point, line strip or tri strip */
+      uint8_t has_layer;
+      ubyte layerid; /* hw value of layer output */
    } gp;
 
    void *fixups; /* relocation records */

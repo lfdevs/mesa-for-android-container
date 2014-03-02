@@ -225,7 +225,7 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
                         GLbitfield transferOps)
 {
    /* don't want to apply sRGB -> RGB conversion here so override the format */
-   const gl_format texFormat =
+   const mesa_format texFormat =
       _mesa_get_srgb_format_linear(texImage->TexFormat);
    const GLenum baseFormat = _mesa_get_format_base_format(texFormat);
    const GLenum destBaseFormat = _mesa_base_tex_format(ctx, format);
@@ -360,7 +360,7 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
                           GLbitfield transferOps)
 {
    /* don't want to apply sRGB -> RGB conversion here so override the format */
-   const gl_format texFormat =
+   const mesa_format texFormat =
       _mesa_get_srgb_format_linear(texImage->TexFormat);
    const GLuint width = texImage->Width;
    GLenum destBaseFormat = _mesa_base_pack_format(format);
@@ -759,8 +759,7 @@ legal_getteximage_target(struct gl_context *ctx, GLenum target)
       return ctx->Extensions.NV_texture_rectangle;
    case GL_TEXTURE_1D_ARRAY_EXT:
    case GL_TEXTURE_2D_ARRAY_EXT:
-      return (ctx->Extensions.MESA_texture_array ||
-              ctx->Extensions.EXT_texture_array);
+      return ctx->Extensions.EXT_texture_array;
    case GL_TEXTURE_CUBE_MAP_ARRAY:
       return ctx->Extensions.ARB_texture_cube_map_array;
    default:

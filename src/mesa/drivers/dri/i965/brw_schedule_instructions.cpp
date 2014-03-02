@@ -431,8 +431,8 @@ public:
     * Returns how many cycles it takes the instruction to issue.
     *
     * Instructions in gen hardware are handled one simd4 vector at a time,
-    * with 1 cycle per vector dispatched.  Thus 8-wide pixel shaders take 2
-    * cycles to dispatch and 16-wide (compressed) instructions take 4.
+    * with 1 cycle per vector dispatched.  Thus SIMD8 pixel shaders take 2
+    * cycles to dispatch and SIMD16 (compressed) instructions take 4.
     */
    virtual int issue_time(backend_instruction *inst) = 0;
 
@@ -610,6 +610,7 @@ schedule_node::schedule_node(backend_instruction *inst,
    this->parent_count = 0;
    this->unblocked_time = 0;
    this->cand_generation = 0;
+   this->delay = 0;
 
    /* We can't measure Gen6 timings directly but expect them to be much
     * closer to Gen7 than Gen4.
@@ -1139,10 +1140,10 @@ fs_instruction_scheduler::choose_instruction_to_schedule()
 {
    schedule_node *chosen = NULL;
 
-   if (post_reg_alloc) {
+   if (mode == SCHEDULE_PRE || mode == SCHEDULE_POST) {
       int chosen_time = 0;
 
-      /* Of the instructions closest ready to execute or the closest to
+      /* Of the instructions ready to execute or the closest to
        * being ready, choose the oldest one.
        */
       foreach_list(node, &instructions) {
@@ -1156,7 +1157,7 @@ fs_instruction_scheduler::choose_instruction_to_schedule()
    } else {
       /* Before register allocation, we don't care about the latencies of
        * instructions.  All we care about is reducing live intervals of
-       * variables so that we can avoid register spilling, or get 16-wide
+       * variables so that we can avoid register spilling, or get SIMD16
        * shaders which naturally do a better job of hiding instruction
        * latency.
        */
@@ -1445,5 +1446,5 @@ vec4_visitor::opt_schedule_instructions()
       printf("vec4 estimated execution time: %d cycles\n", sched.time);
    }
 
-   this->live_intervals_valid = false;
+   invalidate_live_intervals();
 }

@@ -107,7 +107,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SM3:
       return 1;
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
-      return 150;
+      return 330;
    case PIPE_CAP_MAX_RENDER_TARGETS:
       return 8;
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
@@ -127,6 +127,9 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
       return 128;
+   case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
+   case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+      return 1024;
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_INDEP_BLEND_ENABLE:
    case PIPE_CAP_INDEP_BLEND_FUNC:
@@ -172,6 +175,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_LITTLE;
+   case PIPE_CAP_TGSI_VS_LAYER:
+      return 0;
    default:
       NOUVEAU_ERR("unknown PIPE_CAP %d\n", param);
       return 0;
@@ -253,10 +258,8 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
       return 1;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       return 16; /* would be 32 in linked (OpenGL-style) mode */
-      /*
-   case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLER_VIEWS:
-      return 32;
-      */
+   case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
+      return 16; /* XXX not sure if more are really safe */
    default:
       NOUVEAU_ERR("unknown PIPE_SHADER_CAP %d\n", param);
       return 0;
@@ -478,7 +481,7 @@ nvc0_screen_init_compute(struct nvc0_screen *screen)
 {
    screen->base.base.get_compute_param = nvc0_screen_get_compute_param;
 
-   switch (screen->base.device->chipset & 0xf0) {
+   switch (screen->base.device->chipset & ~0xf) {
    case 0xc0:
    case 0xd0:
       /* Using COMPUTE has weird effects on 3D state, we need to
@@ -489,6 +492,7 @@ nvc0_screen_init_compute(struct nvc0_screen *screen)
       return 0;
    case 0xe0:
    case 0xf0:
+   case 0x100:
       return nve4_screen_compute_setup(screen, screen->base.pushbuf);
    default:
       return -1;
@@ -550,6 +554,7 @@ nvc0_screen_create(struct nouveau_device *dev)
    case 0xd0:
    case 0xe0:
    case 0xf0:
+   case 0x100:
       break;
    default:
       return NULL;
@@ -597,7 +602,8 @@ nvc0_screen_create(struct nouveau_device *dev)
    screen->base.fence.emit = nvc0_screen_fence_emit;
    screen->base.fence.update = nvc0_screen_fence_update;
 
-   switch (dev->chipset & 0xf0) {
+   switch (dev->chipset & ~0xf) {
+   case 0x100:
    case 0xf0:
       obj_class = NVF0_P2MF_CLASS;
       break;
@@ -644,7 +650,8 @@ nvc0_screen_create(struct nouveau_device *dev)
    PUSH_DATAh(push, screen->fence.bo->offset + 16);
    PUSH_DATA (push, screen->fence.bo->offset + 16);
 
-   switch (dev->chipset & 0xf0) {
+   switch (dev->chipset & ~0xf) {
+   case 0x100:
    case 0xf0:
       obj_class = NVF0_3D_CLASS;
       break;
@@ -652,10 +659,11 @@ nvc0_screen_create(struct nouveau_device *dev)
       obj_class = NVE4_3D_CLASS;
       break;
    case 0xd0:
+      obj_class = NVC8_3D_CLASS;
+      break;
    case 0xc0:
    default:
       switch (dev->chipset) {
-      case 0xd9:
       case 0xc8:
          obj_class = NVC8_3D_CLASS;
          break;
@@ -742,6 +750,8 @@ nvc0_screen_create(struct nouveau_device *dev)
                         &screen->uniform_bo);
    if (ret)
       goto fail;
+
+   PUSH_REFN (push, screen->uniform_bo, NOUVEAU_BO_VRAM | NOUVEAU_BO_WR);
 
    for (i = 0; i < 5; ++i) {
       /* TIC and TSC entries for each unit (nve4+ only) */

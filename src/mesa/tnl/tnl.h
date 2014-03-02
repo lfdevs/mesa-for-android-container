@@ -22,7 +22,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  * Authors:
- *    Keith Whitwell <keith@tungstengraphics.com>
+ *    Keith Whitwell <keithw@vmware.com>
  */
 
 #ifndef _TNL_H
@@ -92,7 +92,8 @@ _tnl_vbo_draw_prims( struct gl_context *ctx,
 		     GLboolean index_bounds_valid,
 		     GLuint min_index,
 		     GLuint max_index,
-		     struct gl_transform_feedback_object *tfb_vertcount );
+		     struct gl_transform_feedback_object *tfb_vertcount,
+		     struct gl_buffer_object *indirect );
 
 extern void
 _tnl_RasterPos(struct gl_context *ctx, const GLfloat vObj[4]);
