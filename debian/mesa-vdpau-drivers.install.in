@@ -1,0 +1,1 @@
+dri/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/*.so* usr/lib/${DEB_HOST_MULTIARCH}/vdpau/

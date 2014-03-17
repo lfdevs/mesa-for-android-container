@@ -36,8 +36,10 @@
 
 #include "tgsi/tgsi_scan.h"
 
+#include "svga_screen.h"
 #include "svga_state.h"
 #include "svga_tgsi.h"
+#include "svga_winsys.h"
 #include "svga_hw_reg.h"
 #include "svga3d_shaderdefs.h"
 
@@ -217,7 +219,7 @@ struct svga_state
 
    struct pipe_vertex_buffer vb[PIPE_MAX_ATTRIBS];
    struct pipe_index_buffer ib;
-   struct pipe_resource *cb[PIPE_SHADER_TYPES];
+   struct pipe_constant_buffer cbufs[PIPE_SHADER_TYPES];
 
    struct pipe_framebuffer_state framebuffer;
    float depthscale;
@@ -285,6 +287,11 @@ struct svga_hw_draw_state
    unsigned ts[SVGA3D_PIXEL_SAMPLERREG_MAX][SVGA3D_TS_MAX];
    float cb[PIPE_SHADER_TYPES][SVGA3D_CONSTREG_MAX][4];
 
+   /**
+    * For guest backed shader constants only.
+    */
+   struct svga_winsys_surface *hw_cb[PIPE_SHADER_TYPES];
+
    struct svga_shader_variant *fs;
    struct svga_shader_variant *vs;
    struct svga_hw_view_state views[PIPE_MAX_SAMPLERS];
@@ -347,8 +354,7 @@ struct svga_context
    } swtnl;
 
    /* Bitmask of used shader IDs */
-   struct util_bitmask *fs_bm;
-   struct util_bitmask *vs_bm;
+   struct util_bitmask *shader_id_bm;
 
    struct {
       unsigned dirty[SVGA_STATE_MAX];
@@ -368,6 +374,8 @@ struct svga_context
    struct {
       unsigned rendertargets:1;
       unsigned texture_samplers:1;
+      unsigned vs:1;
+      unsigned fs:1;
    } rebind;
 
    struct svga_hwtnl *hwtnl;
@@ -481,6 +489,18 @@ svga_context( struct pipe_context *pipe )
    return (struct svga_context *)pipe;
 }
 
+
+static INLINE boolean
+svga_have_gb_objects(const struct svga_context *svga)
+{
+   return svga_screen(svga->pipe.screen)->sws->have_gb_objects;
+}
+
+static INLINE boolean
+svga_have_gb_dma(const struct svga_context *svga)
+{
+   return svga_screen(svga->pipe.screen)->sws->have_gb_dma;
+}
 
 
 #endif

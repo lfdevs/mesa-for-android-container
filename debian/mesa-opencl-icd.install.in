@@ -1,0 +1,2 @@
+dri/etc/OpenCL/vendors/mesa.icd etc/OpenCL/vendors
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libMesaOpenCL* usr/lib/${DEB_HOST_MULTIARCH}

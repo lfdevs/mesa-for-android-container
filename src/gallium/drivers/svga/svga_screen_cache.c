@@ -210,7 +210,6 @@ svga_screen_cache_add(struct svga_screen *svgascreen,
    
    assert(key->cachable);
 
-   assert(handle);
    if (!handle)
       return;
    
@@ -450,6 +449,8 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
       handle = sws->surface_create(sws,
                                    key->flags,
                                    key->format,
+                                   key->cachable ?
+                                   0 : SVGA_SURFACE_USAGE_SHARED,
                                    key->size,
                                    key->numFaces,
                                    key->numMipLevels);

@@ -53,12 +53,15 @@ DRI_DRIVERS =
 GALLIUM_DRIVERS =
 EGL_DISPLAYS = x11
 
+confflags_DRI3 = --disable-dri3
+
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	confflags_DIRECT_RENDERING = --disable-driglx-direct
 	DRI_DRIVERS += swrast
 else
   ifeq ($(DEB_HOST_ARCH_OS), linux)
+	confflags_DRI3 = --enable-dri3
 # Gallium drivers require libdrm-{nouveau,radeon}, only available on Linux
 	GALLIUM_DRIVERS += nouveau svga
 #
@@ -67,6 +70,9 @@ else
 	EGL_DISPLAYS += drm
 # Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
 	EGL_DISPLAYS += wayland
+# < aboll> opencl needs gallium-pipe-loader which needs udev
+# so no opencl for kbsd
+	confflags_GALLIUM += --enable-opencl --enable-opencl-icd
     ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
 	DRI_DRIVERS += nouveau
     endif
@@ -102,6 +108,7 @@ else
 
 	confflags_DIRECT_RENDERING = --enable-driglx-direct
 	confflags_OPENVG = --enable-openvg --enable-gallium-egl
+	confflags_GALLIUM += --enable-vdpau
 endif
 confflags_EGL = --with-egl-platforms="$(EGL_DISPLAYS)"
 confflags_GLES = --enable-gles1 --enable-gles2
@@ -117,8 +124,9 @@ confflags-dri = \
 	--enable-shared-glapi \
 	--enable-texture-float \
 	--enable-xa \
-	--disable-xvmc --disable-vdpau \
+	--disable-xvmc \
 	$(confflags_DIRECT_RENDERING) \
+	$(confflags_DRI3) \
 	$(confflags_EGL) \
 	$(confflags_GALLIUM) \
 	$(confflags_GLES) \

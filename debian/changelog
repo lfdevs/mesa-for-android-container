@@ -1,3 +1,25 @@
+mesa (10.1.0-2) experimental; urgency=medium
+
+  [ Sjoerd Simons ]
+  * Install libwayland-egl in a separate library package (libwayland-egl1-mesa)
+    and provide a virtual libwayland-egl1 package. (Closes: #739269).
+
+ -- Julien Cristau <jcristau@debian.org>  Mon, 17 Mar 2014 23:11:14 +0100
+
+mesa (10.1.0-1) experimental; urgency=low
+
+  [ Andreas Boll ]
+  * Disable dri3 on !linux
+  * Enable building drivers for libvdpau1 (Closes: #705558).
+  * New upstream release.
+  * Drop 01-hurd.diff, upstream in 10.1.0.
+  * Next attempt to fix FTBFS on hurd
+
+  [ Sven Joachim ]
+  * Drop dependency of libegl1-mesa-drivers on libgl1-mesa-dri.
+
+ -- Julien Cristau <jcristau@debian.org>  Fri, 07 Mar 2014 22:16:32 +0100
+
 mesa (10.1.0~rc2-1) experimental; urgency=medium
 
   [ Maarten Lankhorst ]

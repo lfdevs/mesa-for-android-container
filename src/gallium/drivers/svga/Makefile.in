@@ -104,14 +104,15 @@ am__objects_1 = svgadump/svga_shader_dump.lo \
 	svga_pipe_fs.lo svga_pipe_misc.lo svga_pipe_query.lo \
 	svga_pipe_rasterizer.lo svga_pipe_sampler.lo \
 	svga_pipe_vertex.lo svga_pipe_vs.lo svga_screen.lo \
-	svga_screen_cache.lo svga_state.lo svga_state_need_swtnl.lo \
-	svga_state_constants.lo svga_state_framebuffer.lo \
-	svga_state_rss.lo svga_state_tss.lo svga_state_vdecl.lo \
-	svga_state_fs.lo svga_state_vs.lo svga_swtnl_backend.lo \
-	svga_swtnl_draw.lo svga_swtnl_state.lo svga_tgsi.lo \
-	svga_tgsi_decl_sm30.lo svga_tgsi_insn.lo svga_sampler_view.lo \
-	svga_surface.lo svga_resource.lo svga_resource_texture.lo \
-	svga_resource_buffer.lo svga_resource_buffer_upload.lo
+	svga_screen_cache.lo svga_shader.lo svga_state.lo \
+	svga_state_need_swtnl.lo svga_state_constants.lo \
+	svga_state_framebuffer.lo svga_state_rss.lo svga_state_tss.lo \
+	svga_state_vdecl.lo svga_state_fs.lo svga_state_vs.lo \
+	svga_swtnl_backend.lo svga_swtnl_draw.lo svga_swtnl_state.lo \
+	svga_tgsi.lo svga_tgsi_decl_sm30.lo svga_tgsi_insn.lo \
+	svga_sampler_view.lo svga_surface.lo svga_resource.lo \
+	svga_resource_texture.lo svga_resource_buffer.lo \
+	svga_resource_buffer_upload.lo
 am_libsvga_la_OBJECTS = $(am__objects_1)
 libsvga_la_OBJECTS = $(am_libsvga_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -455,6 +456,7 @@ C_SOURCES := \
 	svga_pipe_vs.c \
 	svga_screen.c \
 	svga_screen_cache.c \
+	svga_shader.c \
 	svga_state.c \
 	svga_state_need_swtnl.c \
 	svga_state_constants.c \
@@ -672,6 +674,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_sampler_view.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_screen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_screen_cache.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_constants.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/svga_state_framebuffer.Plo@am__quote@

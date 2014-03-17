@@ -35,6 +35,7 @@
 #include "svga_context.h"
 #include "svga_state.h"
 #include "svga_cmd.h"
+#include "svga_shader.h"
 #include "svga_tgsi.h"
 
 #include "svga_hw_reg.h"
@@ -128,30 +129,21 @@ compile_vs(struct svga_context *svga,
       }
    }
 
-   variant->id = util_bitmask_add(svga->vs_bm);
-   if(variant->id == UTIL_BITMASK_INVALID_INDEX) {
-      ret = PIPE_ERROR_OUT_OF_MEMORY;
-      goto fail;
-   }
-
-   ret = SVGA3D_DefineShader(svga->swc, 
-                             variant->id,
-                             SVGA3D_SHADERTYPE_VS,
-                             variant->tokens, 
-                             variant->nr_tokens * sizeof variant->tokens[0]);
+   ret = svga_define_shader(svga, SVGA3D_SHADERTYPE_VS, variant);
    if (ret != PIPE_OK)
       goto fail;
 
    *out_variant = variant;
+
+   /* insert variants at head of linked list */
    variant->next = vs->base.variants;
    vs->base.variants = variant;
+
    return PIPE_OK;
 
 fail:
    if (variant) {
-      if (variant->id != UTIL_BITMASK_INVALID_INDEX)
-         util_bitmask_clear( svga->vs_bm, variant->id );
-      svga_destroy_shader_variant( variant );
+      svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_VS, variant);
    }
    return ret;
 }
@@ -170,12 +162,32 @@ make_vs_key(struct svga_context *svga, struct svga_vs_compile_key *key)
 }
 
 
+/**
+ * svga_reemit_vs_bindings - Reemit the vertex shader bindings
+ */
+enum pipe_error
+svga_reemit_vs_bindings(struct svga_context *svga)
+{
+   enum pipe_error ret;
+   struct svga_winsys_gb_shader *gbshader =
+      svga->state.hw_draw.vs ? svga->state.hw_draw.vs->gb_shader : NULL;
+
+   assert(svga->rebind.vs);
+   assert(svga_have_gb_objects(svga));
+
+   ret = SVGA3D_SetGBShader(svga->swc, SVGA3D_SHADERTYPE_VS, gbshader);
+   if (ret != PIPE_OK)
+      return ret;
+
+   svga->rebind.vs = FALSE;
+   return PIPE_OK;
+}
+
 
 static enum pipe_error
 emit_hw_vs(struct svga_context *svga, unsigned dirty)
 {
    struct svga_shader_variant *variant = NULL;
-   unsigned id = SVGA3D_INVALID_ID;
    enum pipe_error ret = PIPE_OK;
 
    /* SVGA_NEW_NEED_SWTNL */
@@ -192,16 +204,36 @@ emit_hw_vs(struct svga_context *svga, unsigned dirty)
             return ret;
       }
 
-      assert (variant);
-      id = variant->id;
+      assert(variant);
    }
 
    if (variant != svga->state.hw_draw.vs) {
-      ret = SVGA3D_SetShader(svga->swc,
-                             SVGA3D_SHADERTYPE_VS,
-                             id );
-      if (ret != PIPE_OK)
-         return ret;
+      if (svga_have_gb_objects(svga)) {
+         struct svga_winsys_gb_shader *gbshader =
+            variant ? variant->gb_shader : NULL;
+
+         /*
+          * Bind is necessary here only because pipebuffer_fenced may move
+          * the shader contents around....
+          */
+         if (gbshader) {
+            ret = SVGA3D_BindGBShader(svga->swc, gbshader);
+            if (ret != PIPE_OK)
+               return ret;
+         }
+
+         ret = SVGA3D_SetGBShader(svga->swc, SVGA3D_SHADERTYPE_VS, gbshader);
+         if (ret != PIPE_OK)
+            return ret;
+
+         svga->rebind.vs = FALSE;
+      }
+      else {
+         unsigned id = variant ? variant->id : SVGA_ID_INVALID;
+         ret = SVGA3D_SetShader(svga->swc, SVGA3D_SHADERTYPE_VS, id);
+         if (ret != PIPE_OK)
+            return ret;
+      }
 
       svga->dirty |= SVGA_NEW_VS_VARIANT;
       svga->state.hw_draw.vs = variant;      

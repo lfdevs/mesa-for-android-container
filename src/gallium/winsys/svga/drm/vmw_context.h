@@ -62,4 +62,12 @@ struct pipe_screen;
 struct svga_winsys_context *
 vmw_svga_winsys_context_create(struct svga_winsys_screen *sws);
 
+struct vmw_svga_winsys_surface;
+
+
+void
+vmw_swc_surface_clear_reference(struct svga_winsys_context *swc,
+                                struct vmw_svga_winsys_surface *vsurf);
+
+
 #endif /* VMW_CONTEXT_H_ */

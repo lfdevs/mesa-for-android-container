@@ -1,6 +1,2 @@
 # OS-independent part (from libegl1-mesa-drivers.install.in):
 dri/usr/lib/${DEB_HOST_MULTIARCH}/egl/egl_gallium.so usr/lib/${DEB_HOST_MULTIARCH}/egl
-
-# Wayland support, only on Linux:
-dri/usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so.1 usr/lib/${DEB_HOST_MULTIARCH}
-dri/usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so.1.0.0 usr/lib/${DEB_HOST_MULTIARCH}

@@ -121,11 +121,11 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	tgsi/tgsi_transform.c tgsi/tgsi_ureg.c tgsi/tgsi_util.c \
 	translate/translate.c translate/translate_cache.c \
 	translate/translate_generic.c translate/translate_sse.c \
-	util/u_debug.c util/u_debug_describe.c util/u_debug_memory.c \
-	util/u_debug_refcnt.c util/u_debug_stack.c \
-	util/u_debug_symbol.c util/u_dump_defines.c \
-	util/u_dump_state.c util/u_bitmask.c util/u_blit.c \
-	util/u_blitter.c util/u_cache.c util/u_caps.c \
+	util/u_debug.c util/u_debug_describe.c util/u_debug_flush.c \
+	util/u_debug_memory.c util/u_debug_refcnt.c \
+	util/u_debug_stack.c util/u_debug_symbol.c \
+	util/u_dump_defines.c util/u_dump_state.c util/u_bitmask.c \
+	util/u_blit.c util/u_blitter.c util/u_cache.c util/u_caps.c \
 	util/u_cpu_detect.c util/u_dl.c util/u_draw.c \
 	util/u_draw_quad.c util/u_format.c util/u_format_other.c \
 	util/u_format_latc.c util/u_format_s3tc.c util/u_format_rgtc.c \
@@ -204,22 +204,22 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	tgsi/tgsi_util.lo translate/translate.lo \
 	translate/translate_cache.lo translate/translate_generic.lo \
 	translate/translate_sse.lo util/u_debug.lo \
-	util/u_debug_describe.lo util/u_debug_memory.lo \
-	util/u_debug_refcnt.lo util/u_debug_stack.lo \
-	util/u_debug_symbol.lo util/u_dump_defines.lo \
-	util/u_dump_state.lo util/u_bitmask.lo util/u_blit.lo \
-	util/u_blitter.lo util/u_cache.lo util/u_caps.lo \
-	util/u_cpu_detect.lo util/u_dl.lo util/u_draw.lo \
-	util/u_draw_quad.lo util/u_format.lo util/u_format_other.lo \
-	util/u_format_latc.lo util/u_format_s3tc.lo \
-	util/u_format_rgtc.lo util/u_format_etc.lo \
-	util/u_format_tests.lo util/u_format_yuv.lo \
-	util/u_format_zs.lo util/u_framebuffer.lo util/u_gen_mipmap.lo \
-	util/u_handle_table.lo util/u_hash.lo util/u_hash_table.lo \
-	util/u_helpers.lo util/u_index_modify.lo util/u_keymap.lo \
-	util/u_linear.lo util/u_linkage.lo util/u_network.lo \
-	util/u_math.lo util/u_mm.lo util/u_pstipple.lo \
-	util/u_ringbuffer.lo util/u_sampler.lo \
+	util/u_debug_describe.lo util/u_debug_flush.lo \
+	util/u_debug_memory.lo util/u_debug_refcnt.lo \
+	util/u_debug_stack.lo util/u_debug_symbol.lo \
+	util/u_dump_defines.lo util/u_dump_state.lo util/u_bitmask.lo \
+	util/u_blit.lo util/u_blitter.lo util/u_cache.lo \
+	util/u_caps.lo util/u_cpu_detect.lo util/u_dl.lo \
+	util/u_draw.lo util/u_draw_quad.lo util/u_format.lo \
+	util/u_format_other.lo util/u_format_latc.lo \
+	util/u_format_s3tc.lo util/u_format_rgtc.lo \
+	util/u_format_etc.lo util/u_format_tests.lo \
+	util/u_format_yuv.lo util/u_format_zs.lo util/u_framebuffer.lo \
+	util/u_gen_mipmap.lo util/u_handle_table.lo util/u_hash.lo \
+	util/u_hash_table.lo util/u_helpers.lo util/u_index_modify.lo \
+	util/u_keymap.lo util/u_linear.lo util/u_linkage.lo \
+	util/u_network.lo util/u_math.lo util/u_mm.lo \
+	util/u_pstipple.lo util/u_ringbuffer.lo util/u_sampler.lo \
 	util/u_simple_shaders.lo util/u_slab.lo util/u_snprintf.lo \
 	util/u_staging.lo util/u_suballoc.lo util/u_surface.lo \
 	util/u_surfaces.lo util/u_texture.lo util/u_tile.lo \
@@ -715,6 +715,7 @@ C_SOURCES := \
 	translate/translate_sse.c \
 	util/u_debug.c \
 	util/u_debug_describe.c \
+	util/u_debug_flush.c \
 	util/u_debug_memory.c \
 	util/u_debug_refcnt.c \
 	util/u_debug_stack.c \
@@ -1205,6 +1206,8 @@ util/$(DEPDIR)/$(am__dirstamp):
 util/u_debug.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_debug_describe.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
+util/u_debug_flush.lo: util/$(am__dirstamp) \
+	util/$(DEPDIR)/$(am__dirstamp)
 util/u_debug_memory.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_debug_refcnt.lo: util/$(am__dirstamp) \
@@ -1570,6 +1573,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_cpu_detect.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_describe.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_flush.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_memory.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_refcnt.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_stack.Plo@am__quote@

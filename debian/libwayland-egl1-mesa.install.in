@@ -1,0 +1,3 @@
+# Wayland support, only on Linux:
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so.1 usr/lib/${DEB_HOST_MULTIARCH}
+dri/usr/lib/${DEB_HOST_MULTIARCH}/libwayland-egl.so.1.0.0 usr/lib/${DEB_HOST_MULTIARCH}

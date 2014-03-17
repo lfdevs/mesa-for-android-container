@@ -917,13 +917,10 @@ init_fbconfig_for_chooser(struct glx_config * config,
    if (fbconfig_style_tags) {
       config->rgbMode = GL_TRUE;
       config->doubleBufferMode = GLX_DONT_CARE;
-      /* allow any kind of drawable, including those for off-screen buffers */
-      config->drawableType = 0;
-   } else {
-       /* allow configs which support on-screen drawing */
-       config->drawableType = GLX_WINDOW_BIT;
+      config->renderType = GLX_RGBA_BIT;
    }
 
+   config->drawableType = GLX_WINDOW_BIT;
    config->visualRating = GLX_DONT_CARE;
    config->transparentPixel = GLX_NONE;
    config->transparentRed = GLX_DONT_CARE;
@@ -932,8 +929,6 @@ init_fbconfig_for_chooser(struct glx_config * config,
    config->transparentAlpha = GLX_DONT_CARE;
    config->transparentIndex = GLX_DONT_CARE;
 
-   /* Set GLX_RENDER_TYPE property to not expect any flags by default. */
-   config->renderType = 0;
    config->xRenderable = GLX_DONT_CARE;
    config->fbconfigID = (GLXFBConfigID) (GLX_DONT_CARE);
 
@@ -1102,7 +1097,7 @@ static int
 fbconfig_compare(struct glx_config **a, struct glx_config **b)
 {
    /* The order of these comparisons must NOT change.  It is defined by
-    * the GLX 1.3 spec and ARB_multisample.
+    * the GLX 1.4 specification.
     */
 
    PREFER_SMALLER(visualSelectGroup);
@@ -1131,6 +1126,9 @@ fbconfig_compare(struct glx_config **a, struct glx_config **b)
 
    PREFER_SMALLER(numAuxBuffers);
 
+   PREFER_SMALLER(sampleBuffers);
+   PREFER_SMALLER(samples);
+
    PREFER_LARGER_OR_ZERO(depthBits);
    PREFER_SMALLER(stencilBits);
 
@@ -1143,12 +1141,6 @@ fbconfig_compare(struct glx_config **a, struct glx_config **b)
    PREFER_LARGER_OR_ZERO(accumAlphaBits);
 
    PREFER_SMALLER(visualType);
-
-   /* None of the multisample specs say where this comparison should happen,
-    * so I put it near the end.
-    */
-   PREFER_SMALLER(sampleBuffers);
-   PREFER_SMALLER(samples);
 
    /* None of the pbuffer or fbconfig specs say that this comparison needs
     * to happen at all, but it seems like it should.

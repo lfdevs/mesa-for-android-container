@@ -142,6 +142,30 @@ public:
    src_reg *reladdr;
 };
 
+/**
+ * Reswizzle a given source register.
+ * \sa brw_swizzle().
+ */
+static inline src_reg
+swizzle(src_reg reg, unsigned swizzle)
+{
+   assert(reg.file != HW_REG);
+   reg.swizzle = BRW_SWIZZLE4(
+      BRW_GET_SWZ(reg.swizzle, BRW_GET_SWZ(swizzle, 0)),
+      BRW_GET_SWZ(reg.swizzle, BRW_GET_SWZ(swizzle, 1)),
+      BRW_GET_SWZ(reg.swizzle, BRW_GET_SWZ(swizzle, 2)),
+      BRW_GET_SWZ(reg.swizzle, BRW_GET_SWZ(swizzle, 3)));
+   return reg;
+}
+
+static inline src_reg
+negate(src_reg reg)
+{
+   assert(reg.file != HW_REG && reg.file != IMM);
+   reg.negate = !reg.negate;
+   return reg;
+}
+
 class dst_reg : public reg
 {
 public:
@@ -329,8 +353,9 @@ public:
     */
    dst_reg output_reg[BRW_VARYING_SLOT_COUNT];
    const char *output_reg_annotation[BRW_VARYING_SLOT_COUNT];
-   int uniform_size[MAX_UNIFORMS];
-   int uniform_vector_size[MAX_UNIFORMS];
+   int *uniform_size;
+   int *uniform_vector_size;
+   int uniform_array_size; /*< Size of uniform_[vector_]size arrays */
    int uniforms;
 
    src_reg shader_start_time;
@@ -447,6 +472,9 @@ public:
    void emit_if_gen6(ir_if *ir);
 
    void emit_minmax(uint32_t condmod, dst_reg dst, src_reg src0, src_reg src1);
+
+   void emit_lrp(const dst_reg &dst,
+                 const src_reg &x, const src_reg &y, const src_reg &a);
 
    void emit_block_move(dst_reg *dst, src_reg *src,
 			const struct glsl_type *type, uint32_t predicate);

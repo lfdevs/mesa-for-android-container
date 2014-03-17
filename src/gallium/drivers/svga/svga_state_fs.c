@@ -33,6 +33,7 @@
 #include "svga_context.h"
 #include "svga_state.h"
 #include "svga_cmd.h"
+#include "svga_shader.h"
 #include "svga_resource_texture.h"
 #include "svga_tgsi.h"
 
@@ -75,12 +76,18 @@ search_fs_key(const struct svga_fragment_shader *fs,
 /**
  * If we fail to compile a fragment shader (because it uses too many
  * registers, for example) we'll use a dummy/fallback shader that
- * simply emits a constant color.
+ * simply emits a constant color (red for debug, black for release).
+ * We hit this with the Unigine/Heaven demo when Shaders = High.
+ * With black, the demo still looks good.
  */
 static const struct tgsi_token *
 get_dummy_fragment_shader(void)
 {
-   static const float red[4] = { 1.0, 0.0, 0.0, 0.0 };
+#ifdef DEBUG
+   static const float color[4] = { 1.0, 0.0, 0.0, 0.0 }; /* red */
+#else
+   static const float color[4] = { 0.0, 0.0, 0.0, 0.0 }; /* black */
+#endif
    struct ureg_program *ureg;
    const struct tgsi_token *tokens;
    struct ureg_src src;
@@ -92,7 +99,7 @@ get_dummy_fragment_shader(void)
       return NULL;
 
    dst = ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 0);
-   src = ureg_DECL_immediate(ureg, red, 4);
+   src = ureg_DECL_immediate(ureg, color, 4);
    ureg_MOV(ureg, dst, src);
    ureg_END(ureg);
 
@@ -101,6 +108,29 @@ get_dummy_fragment_shader(void)
    ureg_destroy(ureg);
 
    return tokens;
+}
+
+
+/**
+ * Replace the given shader's instruction with a simple constant-color
+ * shader.  We use this when normal shader translation fails.
+ */
+static struct svga_shader_variant *
+get_compiled_dummy_shader(struct svga_fragment_shader *fs,
+                          const struct svga_fs_compile_key *key)
+{
+   const struct tgsi_token *dummy = get_dummy_fragment_shader();
+   struct svga_shader_variant *variant;
+
+   if (!dummy) {
+      return NULL;
+   }
+
+   FREE((void *) fs->base.tokens);
+   fs->base.tokens = dummy;
+
+   variant = svga_translate_fragment_program(fs, key);
+   return variant;
 }
 
 
@@ -118,46 +148,44 @@ compile_fs(struct svga_context *svga,
 
    variant = svga_translate_fragment_program( fs, key );
    if (variant == NULL) {
-      /* some problem during translation, try the dummy shader */
-      const struct tgsi_token *dummy = get_dummy_fragment_shader();
-      if (!dummy) {
-         ret = PIPE_ERROR_OUT_OF_MEMORY;
-         goto fail;
-      }
-      debug_printf("Failed to compile fragment shader, using dummy shader instead.\n");
-      FREE((void *) fs->base.tokens);
-      fs->base.tokens = dummy;
-      variant = svga_translate_fragment_program(fs, key);
-      if (variant == NULL) {
+      debug_printf("Failed to compile fragment shader,"
+                   " using dummy shader instead.\n");
+      variant = get_compiled_dummy_shader(fs, key);
+      if (!variant) {
          ret = PIPE_ERROR;
          goto fail;
       }
    }
 
-   variant->id = util_bitmask_add(svga->fs_bm);
-   if(variant->id == UTIL_BITMASK_INVALID_INDEX) {
-      ret = PIPE_ERROR_OUT_OF_MEMORY;
-      goto fail;
+   if (variant->nr_tokens * sizeof(variant->tokens[0])
+       + sizeof(SVGA3dCmdDefineShader) + sizeof(SVGA3dCmdHeader)
+       >= SVGA_CB_MAX_COMMAND_SIZE) {
+      /* too big, use dummy shader */
+      debug_printf("Shader too large (%lu bytes),"
+                   " using dummy shader instead.\n",
+                   (unsigned long ) variant->nr_tokens * sizeof(variant->tokens[0]));
+      variant = get_compiled_dummy_shader(fs, key);
+      if (!variant) {
+         ret = PIPE_ERROR;
+         goto fail;
+      }
    }
 
-   ret = SVGA3D_DefineShader(svga->swc, 
-                             variant->id,
-                             SVGA3D_SHADERTYPE_PS,
-                             variant->tokens, 
-                             variant->nr_tokens * sizeof variant->tokens[0]);
+   ret = svga_define_shader(svga, SVGA3D_SHADERTYPE_PS, variant);
    if (ret != PIPE_OK)
       goto fail;
 
    *out_variant = variant;
+
+   /* insert variants at head of linked list */
    variant->next = fs->base.variants;
    fs->base.variants = variant;
+
    return PIPE_OK;
 
 fail:
    if (variant) {
-      if (variant->id != UTIL_BITMASK_INVALID_INDEX)
-         util_bitmask_clear( svga->fs_bm, variant->id );
-      svga_destroy_shader_variant( variant );
+      svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_PS, variant);
    }
    return ret;
 }
@@ -293,13 +321,36 @@ make_fs_key(const struct svga_context *svga,
 }
 
 
+/**
+ * svga_reemit_fs_bindings - Reemit the fragment shader bindings
+ */
+enum pipe_error
+svga_reemit_fs_bindings(struct svga_context *svga)
+{
+   enum pipe_error ret;
+
+   assert(svga->rebind.fs);
+   assert(svga_have_gb_objects(svga));
+
+   if (!svga->state.hw_draw.fs)
+      return PIPE_OK;
+
+   ret = SVGA3D_SetGBShader(svga->swc, SVGA3D_SHADERTYPE_PS,
+                            svga->state.hw_draw.fs->gb_shader);
+   if (ret != PIPE_OK)
+      return ret;
+
+   svga->rebind.fs = FALSE;
+   return PIPE_OK;
+}
+
+
+
 static enum pipe_error
 emit_hw_fs(struct svga_context *svga, unsigned dirty)
 {
    struct svga_shader_variant *variant = NULL;
-   unsigned id = SVGA3D_INVALID_ID;
    enum pipe_error ret = PIPE_OK;
-
    struct svga_fragment_shader *fs = svga->curr.fs;
    struct svga_fs_compile_key key;
 
@@ -321,17 +372,30 @@ emit_hw_fs(struct svga_context *svga, unsigned dirty)
          return ret;
    }
 
-   assert (variant);
-   id = variant->id;
-
-   assert(id != SVGA3D_INVALID_ID);
+   assert(variant);
 
    if (variant != svga->state.hw_draw.fs) {
-      ret = SVGA3D_SetShader(svga->swc,
-                             SVGA3D_SHADERTYPE_PS,
-                             id );
-      if (ret != PIPE_OK)
-         return ret;
+      if (svga_have_gb_objects(svga)) {
+         /*
+          * Bind is necessary here only because pipebuffer_fenced may move
+          * the shader contents around....
+          */
+         ret = SVGA3D_BindGBShader(svga->swc, variant->gb_shader);
+         if (ret != PIPE_OK)
+            return ret;
+
+         ret = SVGA3D_SetGBShader(svga->swc, SVGA3D_SHADERTYPE_PS,
+                                  variant->gb_shader);
+         if (ret != PIPE_OK)
+            return ret;
+
+         svga->rebind.fs = FALSE;
+      }
+      else {
+         ret = SVGA3D_SetShader(svga->swc, SVGA3D_SHADERTYPE_PS, variant->id);
+         if (ret != PIPE_OK)
+            return ret;
+      }
 
       svga->dirty |= SVGA_NEW_FS_VARIANT;
       svga->state.hw_draw.fs = variant;      

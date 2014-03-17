@@ -244,6 +244,15 @@ do_vs_prog(struct brw_context *brw,
    prog_data.base.param = rzalloc_array(NULL, const float *, param_count);
    prog_data.base.pull_param = rzalloc_array(NULL, const float *, param_count);
 
+   /* Setting nr_params here NOT to the size of the param and pull_param
+    * arrays, but to the number of uniform components vec4_visitor
+    * needs. vec4_visitor::setup_uniforms() will set it back to a proper value.
+    */
+   prog_data.base.nr_params = ALIGN(param_count, 4) / 4;
+   if (vs) {
+      prog_data.base.nr_params += vs->num_samplers;
+   }
+
    GLbitfield64 outputs_written = vp->program.Base.OutputsWritten;
    prog_data.inputs_read = vp->program.Base.InputsRead;
 

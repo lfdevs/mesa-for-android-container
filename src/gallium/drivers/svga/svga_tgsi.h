@@ -106,6 +106,9 @@ struct svga_shader_variant
     */
    unsigned id;
    
+   /* GB object buffer containing the bytecode */
+   struct svga_winsys_gb_shader *gb_shader;
+
    /** Next variant */
    struct svga_shader_variant *next;
 };
@@ -153,9 +156,6 @@ struct svga_shader_variant *
 svga_translate_vertex_program( const struct svga_vertex_shader *fs,
                                const struct svga_vs_compile_key *vkey );
 
-
-void
-svga_destroy_shader_variant(struct svga_shader_variant *variant);
 
 unsigned
 svga_get_generic_inputs_mask(const struct tgsi_shader_info *info);

@@ -213,6 +213,20 @@ svga_hwtnl_flush(struct svga_hwtnl *hwtnl)
          }
       }
 
+      if (svga->rebind.vs) {
+         ret = svga_reemit_vs_bindings(svga);
+         if (ret != PIPE_OK) {
+            return ret;
+         }
+      }
+
+      if (svga->rebind.fs) {
+         ret = svga_reemit_fs_bindings(svga);
+         if (ret != PIPE_OK) {
+            return ret;
+         }
+      }
+
       SVGA_DBG(DEBUG_DMA, "draw to sid %p, %d prims\n",
                svga->curr.framebuffer.cbufs[0] ?
                svga_surface(svga->curr.framebuffer.cbufs[0])->handle : NULL,
@@ -240,7 +254,7 @@ svga_hwtnl_flush(struct svga_hwtnl *hwtnl)
             vdecl[i].rangeHint.last = 0;
          }
 
-         swc->surface_relocation(swc, &vdecl[i].array.surfaceId,
+         swc->surface_relocation(swc, &vdecl[i].array.surfaceId, NULL,
                                  vb_handle[i], SVGA_RELOC_READ);
       }
 
@@ -248,7 +262,7 @@ svga_hwtnl_flush(struct svga_hwtnl *hwtnl)
              hwtnl->cmd.prim_count * sizeof hwtnl->cmd.prim[0]);
 
       for (i = 0; i < hwtnl->cmd.prim_count; i++) {
-         swc->surface_relocation(swc, &prim[i].indexArray.surfaceId,
+         swc->surface_relocation(swc, &prim[i].indexArray.surfaceId, NULL,
                                  ib_handle[i], SVGA_RELOC_READ);
          pipe_resource_reference(&hwtnl->cmd.prim_ib[i], NULL);
       }

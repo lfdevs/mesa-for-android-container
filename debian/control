@@ -17,6 +17,7 @@ Build-Depends:
  libxfixes-dev,
  libxdamage-dev,
  libxext-dev,
+ libvdpau-dev [linux-any kfreebsd-any],
  autoconf,
  automake,
  libtool,
@@ -40,6 +41,8 @@ Build-Depends:
  llvm-3.4-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
  libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
  libwayland-dev (>= 1.2.0) [linux-any],
+ libclang-3.4-dev [linux-any],
+ libclc-dev [linux-any],
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.sourceforge.net/
@@ -319,6 +322,7 @@ Depends:
  ${misc:Depends},
  libegl1-mesa (= ${binary:Version}),
  libglapi-mesa (= ${binary:Version}),
+ libwayland-egl1-mesa (= ${binary:Version}),
 # for libllvmradeon
  libgl1-mesa-dri (= ${binary:Version}) [any-i386 any-amd64],
 Pre-Depends: ${misc:Pre-Depends}
@@ -346,6 +350,35 @@ Description: free implementation of the EGL API -- driver debugging symbols
  .
  This package contains the debugging symbols for the drivers required for
  hardware accelerated rendering of EGL-based graphics libraries.
+
+Package: libwayland-egl1-mesa
+Section: libs
+Architecture: linux-any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ libegl1-mesa (= ${binary:Version})
+Recommends: libegl1-mesa-drivers
+Provides: libwayland-egl1
+Conflicts: libwayland-egl1
+Replaces: libwayland-egl1, libegl1-mesa-drivers  (<< 10.1.0-2)
+Breaks: libegl1-mesa-drivers (<< 10.1.0-2)
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: implementation of the Wayland EGL platform -- runtime
+ This package contains the mesa implementation of the Wayland EGL platform
+
+Package: libwayland-egl1-mesa-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any
+Depends:
+ libwayland-egl1-mesa (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: implementation of the Wayland EGL platform -- debugging symbols
+ This package contains the debugging symbols for the mesa implementation of the
+ Wayland EGL platform
 
 Package: libopenvg1-mesa
 Section: libs
@@ -749,5 +782,71 @@ Description: Mesa Off-screen rendering extension -- development files
  that use the off-screen rendering extension of Mesa.
  .
  For more information on OSmesa see the libosmesa6 package.
+
+Package: mesa-vdpau-drivers
+Section: libs
+Architecture: linux-any kfreebsd-any
+Depends:
+ libvdpau1,
+ ${shlibs:Depends},
+ ${misc:Depends},
+Enhances:
+ libvdpau1,
+Provides:
+ vdpau-driver,
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Description: Mesa VDPAU video acceleration drivers
+ These libraries provide the Video Decode and Presentation API for Unix.
+ They provide accelerated video playback (incl. H.264) and video
+ post-processing for the supported graphics cards.
+ .
+ This package enables support for VDPAU for some gallium drivers.
+
+Package: mesa-vdpau-drivers-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any kfreebsd-any
+Depends:
+ mesa-vdpau-drivers (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Description: Debugging symbols for the Mesa VDPAU video acceleration drivers
+ These libraries provide the Video Decode and Presentation API for Unix.
+ They provide accelerated video playback (incl. H.264) and video
+ post-processing for the supported graphics cards.
+ .
+ This package contains the debugging symbols for the VDPAU drivers.
+
+Package: mesa-opencl-icd
+Section: libs
+Architecture: linux-any
+Depends:
+ libclc-r600,
+ ocl-icd-libopencl1,
+ ${shlibs:Depends},
+ ${misc:Depends},
+Provides: opencl-icd
+Description: free implementation of the OpenCL API -- ICD runtime
+ This package contains the mesa implementation of the OpenCL (Open Compute
+ Language) library, which is intended for use with an ICD loader. OpenCL
+ provides a standardized interface for computational analysis on graphical
+ processing units.
+
+Package: mesa-opencl-icd-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any
+Depends:
+ mesa-opencl-icd (= ${binary:Version}),
+ ${misc:Depends},
+Description: free implementation of the OpenCL API -- debugging symbols
+ This package contains the mesa implementation of the OpenCL (Open Compute
+ Language) library, which is intended for use with an ICD loader. OpenCL
+ provides a standardized interface for computational analysis on graphical
+ processing units.
+ .
+ This package contains the debugging symbols for the mesa OpenCL ICD library.
 
 # vim: tw=0

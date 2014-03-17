@@ -96,7 +96,8 @@ LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsvgadrm_la_LIBADD =
 am__objects_1 = vmw_buffer.lo vmw_context.lo vmw_fence.lo \
 	vmw_screen.lo vmw_screen_dri.lo vmw_screen_ioctl.lo \
-	vmw_screen_pools.lo vmw_screen_svga.lo vmw_surface.lo
+	vmw_screen_pools.lo vmw_screen_svga.lo vmw_surface.lo \
+	vmw_shader.lo pb_buffer_simple_fenced.lo
 am_libsvgadrm_la_OBJECTS = $(am__objects_1)
 libsvgadrm_la_OBJECTS = $(am_libsvgadrm_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -422,7 +423,9 @@ C_SOURCES := \
         vmw_screen_ioctl.c  \
         vmw_screen_pools.c  \
         vmw_screen_svga.c  \
-        vmw_surface.c
+        vmw_surface.c \
+        vmw_shader.c \
+        pb_buffer_simple_fenced.c
 
 GALLIUM_CFLAGS = \
 	-I$(top_srcdir)/include \
@@ -582,6 +585,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pb_buffer_simple_fenced.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vmw_buffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vmw_context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vmw_fence.Plo@am__quote@
@@ -590,6 +594,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vmw_screen_ioctl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vmw_screen_pools.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vmw_screen_svga.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vmw_shader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vmw_surface.Plo@am__quote@
 
 .c.o:
