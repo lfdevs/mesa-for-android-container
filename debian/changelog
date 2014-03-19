@@ -1,3 +1,19 @@
+mesa (10.1.0-3) unstable; urgency=medium
+
+  [ Andreas Boll ]
+  * Build OpenCL only on architectures where we have LLVM enabled.
+  * Actually enable radeonsi on kfreebsd.
+
+  [ Sven Joachim ]
+  * Drop dependency of libegl1-mesa-drivers on libgl1-mesa-dri again.
+
+  [ Julien Cristau ]
+  * Steal Ubuntu patch to work around build failure on armhf
+    (https://bugs.freedesktop.org/show_bug.cgi?id=72064)
+  * Upload to unstable.
+
+ -- Julien Cristau <jcristau@debian.org>  Wed, 19 Mar 2014 22:48:14 +0100
+
 mesa (10.1.0-2) experimental; urgency=medium
 
   [ Sjoerd Simons ]

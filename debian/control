@@ -41,8 +41,8 @@ Build-Depends:
  llvm-3.4-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
  libelf-dev [amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf],
  libwayland-dev (>= 1.2.0) [linux-any],
- libclang-3.4-dev [linux-any],
- libclc-dev [linux-any],
+ libclang-3.4-dev [amd64 i386 armhf],
+ libclc-dev [amd64 i386 armhf],
 Vcs-Git: git://git.debian.org/git/pkg-xorg/lib/mesa
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/lib/mesa.git
 Homepage: http://mesa3d.sourceforge.net/
@@ -323,8 +323,6 @@ Depends:
  libegl1-mesa (= ${binary:Version}),
  libglapi-mesa (= ${binary:Version}),
  libwayland-egl1-mesa (= ${binary:Version}),
-# for libllvmradeon
- libgl1-mesa-dri (= ${binary:Version}) [any-i386 any-amd64],
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: free implementation of the EGL API -- hardware drivers
@@ -821,7 +819,7 @@ Description: Debugging symbols for the Mesa VDPAU video acceleration drivers
 
 Package: mesa-opencl-icd
 Section: libs
-Architecture: linux-any
+Architecture: amd64 i386 armhf
 Depends:
  libclc-r600,
  ocl-icd-libopencl1,
@@ -837,7 +835,7 @@ Description: free implementation of the OpenCL API -- ICD runtime
 Package: mesa-opencl-icd-dbg
 Section: debug
 Priority: extra
-Architecture: linux-any
+Architecture: amd64 i386 armhf
 Depends:
  mesa-opencl-icd (= ${binary:Version}),
  ${misc:Depends},

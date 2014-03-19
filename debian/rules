@@ -23,8 +23,14 @@ else
 	confflags += --build=$(DEB_BUILD_GNU_TYPE) --host=$(DEB_HOST_GNU_TYPE)
 endif
 
+ifeq (,$(filter $(DEB_HOST_ARCH), armhf))
 buildflags = \
 	$(shell DEB_CFLAGS_MAINT_APPEND=-Wall DEB_CXXFLAGS_MAINT_APPEND=-Wall dpkg-buildflags --export=configure)
+else
+# Workaround for a variant of LP: #725126
+buildflags = \
+	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -fno-optimize-sibling-calls" DEB_CXXFLAGS_MAINT_APPEND="-Wall -fno-optimize-sibling-calls" dpkg-buildflags --export=configure)
+endif
 
 buildflags-i686 = \
 	$(shell DEB_CFLAGS_MAINT_APPEND="-Wall -march=i686" DEB_CXXFLAGS_MAINT_APPEND="-Wall -march=i686" dpkg-buildflags --export=configure)
@@ -70,9 +76,6 @@ else
 	EGL_DISPLAYS += drm
 # Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
 	EGL_DISPLAYS += wayland
-# < aboll> opencl needs gallium-pipe-loader which needs udev
-# so no opencl for kbsd
-	confflags_GALLIUM += --enable-opencl --enable-opencl-icd
     ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
 	DRI_DRIVERS += nouveau
     endif
@@ -95,13 +98,16 @@ else
     GALLIUM_DRIVERS += r600 r300
   endif
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 armhf))
-    # Radeonsi needs LLVM, so only build it on the subset of archs
-    # where we have LLVM enabled.
-    GALLIUM_DRIVERS += radeonsi
+	# opencl needs gallium-pipe-loader which needs udev,
+	# so no opencl on kfreebsd.
+	# opencl needs LLVM and Clang, so only build it on the subset
+	# of arches where we have LLVM enabled.
+	confflags_GALLIUM += --enable-opencl --enable-opencl-icd
   endif
 
-  # LLVM is required for r300g and llvmpipe:
+  # LLVM is required for r300g, radeonsi and llvmpipe:
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 armhf))
+	GALLIUM_DRIVERS += radeonsi
 	confflags_GALLIUM += --enable-gallium-llvm
 	confflags_GALLIUM += --with-llvm-shared-libs
   endif
