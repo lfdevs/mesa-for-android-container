@@ -303,7 +303,7 @@ Depends:
  libxcb-sync-dev,
  libxshmfence-dev,
  libx11-xcb-dev,
- libwayland-dev (>= 1.2.0),
+ libwayland-dev (>= 1.2.0) [linux-any],
  ${misc:Depends},
 Description: free implementation of the EGL API -- development files
  This package contains the development environment required for compiling
@@ -322,7 +322,7 @@ Depends:
  ${misc:Depends},
  libegl1-mesa (= ${binary:Version}),
  libglapi-mesa (= ${binary:Version}),
- libwayland-egl1-mesa (= ${binary:Version}),
+ libwayland-egl1-mesa (= ${binary:Version}) [linux-any],
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: free implementation of the EGL API -- hardware drivers
