@@ -1,3 +1,15 @@
+mesa (10.1.0-5) unstable; urgency=low
+
+  [ Maarten Lankhorst ]
+  * Add explicit libudev1 dependency (LP: #1296947)
+    - libudev is being dlopened now, but still a dependency.
+
+  [ Julien Cristau ]
+  * Fix libegl1-mesa-dev installability on hurd, which doesn't have
+    libegl1-mesa-drivers (closes: #742335).  Thanks, Pino Toscano!
+
+ -- Julien Cristau <jcristau@debian.org>  Mon, 31 Mar 2014 15:58:53 +0200
+
 mesa (10.1.0-4) unstable; urgency=medium
 
   [ Andreas Boll ]
